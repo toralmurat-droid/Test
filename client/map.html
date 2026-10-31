@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Oakvale Map Viewer</title>
+  <style>
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; background: #1b1b24; color: #eee; font: 13px/1.4 monospace; }
+    header { position: sticky; top: 0; z-index: 1; display: flex; flex-wrap: wrap; gap: 12px; align-items: center;
+      padding: 8px 16px; background: #2a2a3a; border-bottom: 2px solid #555a7a; }
+    header h1 { margin: 0; font-size: 15px; color: #ffd166; }
+    label { cursor: pointer; }
+    #info { margin-left: auto; color: #aaa; }
+    main { overflow: auto; height: calc(100% - 44px); padding: 16px; }
+    canvas { image-rendering: pixelated; display: block; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Oakvale — map viewer</h1>
+    <label>Zoom <select id="zoom"><option value="0.5">50%</option><option value="1" selected>100%</option><option value="2">200%</option><option value="3">300%</option></select></label>
+    <label><input type="checkbox" id="areas" checked /> Areas</label>
+    <label><input type="checkbox" id="solid" /> Collision</label>
+    <label><input type="checkbox" id="grid" /> Grid</label>
+    <span id="info"></span>
+  </header>
+  <main><canvas id="map"></canvas></main>
+  <script type="module" src="/src/mapview.ts"></script>
+</body>
+</html>
