@@ -22,6 +22,7 @@ Gameplay:
   - **Knight:** most HP, slow, strong sword. Skill *Shield*: blocks 70% damage and knockback for 2s.
   - **Ninja:** fast, low HP, rapid strikes. Skill *Dash*: blink forward, untouchable for a moment.
   - **Wizard:** ranged fireballs. Skill *Nova*: blast everything around you.
+- **Combos:** each class has a 3-hit attack chain (press attack again within 0.7s). The 3rd hit is a finisher: Knight wide slam, Ninja lunge, Wizard big fireball. Tuned in `combo` in `shared/classes.ts`.
 - **Levels:** XP from monsters and PvP kills. Each level adds HP and damage and fully heals you.
 - **Loot** (`shared/items.ts`): monsters drop gold and health potions; walk over them to pick up. Potions (max 5) heal 40% HP. Killed by a player? You drop half your gold.
 - **Regen:** HP regenerates after 5s without taking damage, much faster on the Market Square.
