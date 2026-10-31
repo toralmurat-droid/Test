@@ -1,13 +1,14 @@
 import Phaser from "phaser";
 import { Client, Room } from "colyseus.js";
 import { InputState, MAP_H, MAP_W, MAX_HP, TILE } from "../../shared/constants";
-import { TOWN_MAP } from "../../shared/map";
+import { isSafeZone, TOWN_MAP } from "../../shared/map";
 import { moveStep } from "../../shared/movement";
-import { makeTileset, personaTexture } from "./textures";
+import { makeTileset, mobTexture, personaTexture } from "./textures";
 
 interface Entity {
   sprite: Phaser.GameObjects.Sprite;
-  label: Phaser.GameObjects.Text;
+  label?: Phaser.GameObjects.Text;
+  mob: boolean;
   bar: Phaser.GameObjects.Graphics;
   bubble?: Phaser.GameObjects.Text;
   tx: number; ty: number; // server target position
@@ -73,15 +74,29 @@ export class TownScene extends Phaser.Scene {
     });
     players.onRemove((_p: any, id: string) => this.removeEntity(id));
 
+    const mobs = (this.room.state as any).mobs;
+    mobs.onAdd((m: any, id: string) => {
+      this.addEntity(id, m, true);
+      m.onChange(() => {
+        const e = this.entities.get(id);
+        if (!e) return;
+        e.tx = m.x; e.ty = m.y;
+        if (Math.hypot(e.sprite.x - m.x, e.sprite.y - m.y) > 48) e.sprite.setPosition(m.x, m.y);
+      });
+    });
+    mobs.onRemove((_m: any, id: string) => this.removeEntity(id));
+
     this.room.onMessage("swing", ({ id }) => this.showSwing(id));
-    this.room.onMessage("hit", ({ id }) => {
+    this.room.onMessage("hit", ({ id, dmg }) => {
       const e = this.entities.get(id);
       if (!e) return;
+      this.floatText(e.sprite.x, e.sprite.y - 14, `-${dmg}`, id === this.me ? "#ff5d5d" : "#ffffff");
       e.sprite.setTintFill(0xffffff);
       this.time.delayedCall(80, () => e.sprite.clearTint());
       if (id === this.me) this.cameras.main.shake(100, 0.004);
     });
     this.room.onMessage("kill", ({ killer, victim }) => this.feed(`${killer} ⚔ ${victim}`));
+    this.room.onMessage("xp", ({ amount, x, y }) => this.floatText(x, y - 10, `+${amount} XP`, "#ffd166"));
     this.room.onMessage("chat", ({ id, name, text }) => this.chatMessage(id, name, text));
     this.room.onLeave(() => this.feed("Disconnected from server"));
   }
@@ -103,21 +118,33 @@ export class TownScene extends Phaser.Scene {
     });
   }
 
-  private addEntity(id: string, p: any) {
-    const sprite = this.add.sprite(p.x, p.y, personaTexture(this, p.color), 0).setOrigin(0.5, 0.85);
+  private floatText(x: number, y: number, text: string, color: string) {
+    const t = this.add.text(x, y, text, {
+      fontFamily: "monospace", fontSize: "16px", color, stroke: "#000", strokeThickness: 3,
+    }).setOrigin(0.5, 1).setScale(0.25).setResolution(2).setDepth(30000);
+    this.tweens.add({ targets: t, y: y - 10, alpha: 0, duration: 800, onComplete: () => t.destroy() });
+  }
+
+  private addEntity(id: string, p: any, mob = false) {
+    const tex = mob ? mobTexture(this, p.kind) : personaTexture(this, p.color);
+    const sprite = this.add.sprite(p.x, p.y, tex, 0).setOrigin(0.5, 0.85);
+    if (mob) {
+      this.entities.set(id, { sprite, bar: this.add.graphics(), tx: p.x, ty: p.y, state: p, mob });
+      return;
+    }
     const label = this.add.text(p.x, p.y, p.name, {
       fontFamily: "monospace", fontSize: "16px", color: id === this.me ? "#ffd166" : "#ffffff",
       stroke: "#000", strokeThickness: 3,
     }).setOrigin(0.5, 1).setScale(0.25).setResolution(2);
     const bar = this.add.graphics();
-    this.entities.set(id, { sprite, label, bar, tx: p.x, ty: p.y, state: p });
+    this.entities.set(id, { sprite, label, bar, tx: p.x, ty: p.y, state: p, mob });
     if (id === this.me) this.cameras.main.startFollow(sprite, true, 0.15, 0.15);
   }
 
   private removeEntity(id: string) {
     const e = this.entities.get(id);
     if (!e) return;
-    e.sprite.destroy(); e.label.destroy(); e.bar.destroy(); e.bubble?.destroy();
+    e.sprite.destroy(); e.label?.destroy(); e.bar.destroy(); e.bubble?.destroy();
     this.entities.delete(id);
   }
 
@@ -193,24 +220,29 @@ export class TownScene extends Phaser.Scene {
       const step = moving ? Math.floor(now / 150) % 2 : 0;
       e.sprite.setFrame(FRAME_BASE[p.dir] + step);
       e.sprite.setFlipX(p.dir === "left");
-      e.sprite.setAlpha(p.dead ? 0.35 : 1).setAngle(p.dead ? 90 : 0);
+      if (e.mob) e.sprite.setVisible(!p.dead);
+      else e.sprite.setAlpha(p.dead ? 0.35 : 1).setAngle(p.dead ? 90 : 0);
       e.sprite.setDepth(e.sprite.y);
 
       const x = Math.round(e.sprite.x), y = Math.round(e.sprite.y);
-      e.label.setPosition(x, y - 16).setDepth(e.sprite.y + 1);
+      e.label?.setPosition(x, y - 16).setDepth(e.sprite.y + 1);
       e.bubble?.setPosition(x, y - 21);
       e.bar.clear().setDepth(e.sprite.y + 1);
-      if (!p.dead && p.hp < MAX_HP) {
+      const maxHp = e.mob ? p.maxHp : MAX_HP;
+      if (!p.dead && p.hp < maxHp) {
         e.bar.fillStyle(0x000000).fillRect(x - 7, y + 3, 14, 2);
-        e.bar.fillStyle(0xe63946).fillRect(x - 7, y + 3, 14 * (p.hp / MAX_HP), 2);
+        e.bar.fillStyle(e.mob ? 0xf4a261 : 0xe63946).fillRect(x - 7, y + 3, 14 * (p.hp / maxHp), 2);
       }
     }
 
-    const mine = this.entities.get(this.me)?.state;
+    const meEnt = this.entities.get(this.me);
+    const mine = meEnt?.state;
     if (mine) {
+      const online = [...this.entities.values()].filter((x) => !x.mob).length;
+      const safe = isSafeZone(meEnt.sprite.x, meEnt.sprite.y) ? "🛡 Safe zone · " : "";
       (document.getElementById("hpfill") as HTMLElement).style.width = `${(mine.hp / MAX_HP) * 100}%`;
       document.getElementById("stats")!.textContent =
-        `${mine.dead ? "Respawning… " : ""}Kills: ${mine.kills} · Online: ${this.entities.size}`;
+        `${mine.dead ? "Respawning… " : safe}XP: ${mine.xp} · Kills: ${mine.kills} · Online: ${online}`;
     }
   }
 }

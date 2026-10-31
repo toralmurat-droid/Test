@@ -18,3 +18,24 @@ export interface InputState {
   left: boolean;
   right: boolean;
 }
+
+export type MobKind = "slime" | "skeleton";
+
+export interface MobDef {
+  name: string;
+  maxHp: number;
+  speed: number; // px per second
+  damage: number;
+  attackCooldownMs: number;
+  aggroRange: number; // px
+  leash: number; // max chase distance from home, px
+  xp: number;
+  count: number; // how many live in the world
+  respawnMs: number;
+}
+
+export const MOBS: Record<MobKind, MobDef> = {
+  slime: { name: "Slime", maxHp: 40, speed: 45, damage: 8, attackCooldownMs: 1000, aggroRange: 80, leash: 140, xp: 10, count: 14, respawnMs: 8000 },
+  skeleton: { name: "Skeleton", maxHp: 80, speed: 62, damage: 14, attackCooldownMs: 900, aggroRange: 110, leash: 200, xp: 25, count: 6, respawnMs: 12000 },
+};
+export const MOB_ATTACK_RANGE = 14; // px

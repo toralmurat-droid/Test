@@ -101,3 +101,21 @@ export function randomSpawn(): { x: number; y: number } {
   const y = (20 + Math.random() * 7) * TILE;
   return { x, y };
 }
+
+/** The plaza is a safe zone: no damage there, and monsters will not enter. */
+export function isSafeZone(px: number, py: number): boolean {
+  const tx = Math.floor(px / TILE), ty = Math.floor(py / TILE);
+  return tx >= 0 && ty >= 0 && tx < MAP_W && ty < MAP_H && TOWN_MAP[ty][tx] === T.PLAZA;
+}
+
+/** Random walkable point in the outskirts (outside the ring road), where monsters live. */
+export function randomOutskirtsPoint(): { x: number; y: number } {
+  for (;;) {
+    const tx = 2 + Math.floor(Math.random() * (MAP_W - 4));
+    const ty = 2 + Math.floor(Math.random() * (MAP_H - 4));
+    const inside = tx >= 7 && tx <= 56 && ty >= 7 && ty <= 39;
+    if (inside) continue;
+    const x = (tx + 0.5) * TILE, y = (ty + 0.5) * TILE;
+    if (!isSolidAt(x - 6, y - 6) && !isSolidAt(x + 6, y + 6) && !isSolidAt(x - 6, y + 6) && !isSolidAt(x + 6, y - 6)) return { x, y };
+  }
+}

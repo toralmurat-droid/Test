@@ -57,14 +57,32 @@ function shade(c: number, f: number) {
 
 /** Builds (once per color) a 6-frame persona sprite sheet tinted by shirt color. */
 export function personaTexture(scene: Phaser.Scene, color: number): string {
-  const key = `persona_${color}`;
-  if (scene.textures.exists(key)) return key;
-  const tex = scene.textures.createCanvas(key, PW * FRAMES.length, PH)!;
-  const ctx = tex.getContext();
-  const pal: Record<string, number> = {
+  return drawSheet(scene, `persona_${color}`, FRAMES, {
     H: 0x4e342e, K: 0xf2c79b, E: 0x1a1a1a, S: color, B: shade(color, 0.5), P: 0x2c3e70, D: 0x1a1a1a,
-  };
-  FRAMES.forEach((rows, f) => {
+  });
+}
+
+// Slime: frames alternate normal / squished (6 frames so it shares the persona frame layout)
+const SLIME_A = [..."............|............|............|............|............|............|.....GG.....|...GGGGGG...|..GLLGGGGG..|.GLLGGGGGGG.|.GGGEGGEGGG.|.GGGGGGGGGG.|GGGGGGGGGGGG|GGGGGGGGGGGG|.DDDDDDDDDD.|............".split("|")];
+const SLIME_B = [..."............|............|............|............|............|............|............|....GGGG....|..GGGGGGGG..|.GLLGGGGGGG.|GLLGEGGEGGGG|GGGGGGGGGGGG|GGGGGGGGGGGG|GGGGGGGGGGGG|DDDDDDDDDDDD|............".split("|")];
+
+/** Monster sprite sheets, same 6-frame layout as personas. */
+export function mobTexture(scene: Phaser.Scene, kind: string): string {
+  if (kind === "slime") {
+    return drawSheet(scene, "mob_slime", [SLIME_A, SLIME_B, SLIME_A, SLIME_B, SLIME_A, SLIME_B], {
+      G: 0x7bd36b, L: 0xc8f5b8, E: 0x14301a, D: 0x3f8a3a,
+    });
+  }
+  return drawSheet(scene, "mob_skeleton", FRAMES, {
+    H: 0xe8e6d6, K: 0xe8e6d6, E: 0x111111, S: 0x4a4a52, B: 0x2a2a2a, P: 0xd2d0c0, D: 0x9a988a,
+  });
+}
+
+function drawSheet(scene: Phaser.Scene, key: string, frames: string[][], pal: Record<string, number>): string {
+  if (scene.textures.exists(key)) return key;
+  const tex = scene.textures.createCanvas(key, PW * frames.length, PH)!;
+  const ctx = tex.getContext();
+  frames.forEach((rows, f) => {
     rows.forEach((row, y) => [...row].forEach((ch, x) => {
       const c = pal[ch];
       if (c === undefined) return;

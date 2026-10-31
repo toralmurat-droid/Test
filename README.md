@@ -17,6 +17,11 @@ Open http://localhost:5173 in two browser tabs to see the multiplayer. The game 
 
 Controls: WASD/arrows to move, Space to attack, Enter to chat.
 
+Gameplay:
+- **PvP:** players can fight each other anywhere except the stone **plaza**, which is a safe zone.
+- **Monsters:** slimes and skeletons roam the outskirts. They chase nearby players, fight back when hit, and give XP when killed. They respawn after a few seconds. They can't enter the plaza and give up the chase if pulled too far from home.
+- Monster stats live in `shared/constants.ts` (`MOBS`).
+
 ## Production
 
 ```bash
@@ -37,5 +42,5 @@ client/   index.html, style.css, src/ (main.ts, TownScene.ts, textures.ts)
 ## Next steps
 - Replace the procedural art with real sprites/tilesets (Aseprite, Tiled)
 - Accounts and persistence (PostgreSQL)
-- NPCs/mobs, items, XP/levels
+- Levels from XP, items/loot, NPCs
 - Input-sequence reconciliation and area-of-interest filtering for scale
