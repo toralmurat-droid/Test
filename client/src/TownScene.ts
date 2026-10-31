@@ -214,6 +214,7 @@ export class TownScene extends Phaser.Scene {
   private showSpecial(msg: { id: string; kind: string; x?: number; y?: number; fromX?: number; fromY?: number; r?: number }) {
     const e = this.entities.get(msg.id);
     if (msg.id === this.me) this.lastSpecial = this.time.now;
+    if (e?.hero) playCharAnim(e.sprite, e.hero, "skill", e.state.dir);
     if (msg.kind === "nova") {
       const g = this.add.circle(msg.x!, msg.y! - 4, msg.r!, 0x9b5de5, 0.25).setStrokeStyle(2, 0xc77dff).setDepth(10000).setScale(0.2);
       this.tweens.add({ targets: g, scale: 1, alpha: 0, duration: 350, onComplete: () => g.destroy() });
@@ -299,9 +300,9 @@ export class TownScene extends Phaser.Scene {
 
       const moving = id === this.me ? (this.input_.up || this.input_.down || this.input_.left || this.input_.right) : p.moving;
       if (e.hero) {
-        // Let one-shot attack/hit animations finish before going back to walk/idle
+        // Let one-shot attack/hit/skill animations finish before going back to walk/idle
         const key = e.sprite.anims.currentAnim?.key ?? "";
-        const oneShot = e.sprite.anims.isPlaying && (key.includes("_attack_") || key.includes("_hit_"));
+        const oneShot = e.sprite.anims.isPlaying && /_(attack|hit|skill)_/.test(key);
         if (p.dead) {
           if (!key.includes("_ko_")) playCharAnim(e.sprite, e.hero, "ko", p.dir);
         } else if (!oneShot) {
