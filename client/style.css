@@ -1,0 +1,22 @@
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: #1b1b24; color: #eee; font: 14px/1.4 monospace; overflow: hidden; }
+#game { position: fixed; inset: 0; }
+#game canvas { image-rendering: pixelated; }
+#join { position: fixed; inset: 0; display: grid; place-items: center; background: rgba(10,10,20,.75); z-index: 10; padding: 16px; }
+.panel { background: #2a2a3a; border: 3px solid #555a7a; padding: 24px; width: min(360px, 100%); text-align: center; }
+.panel h1 { margin: 0 0 16px; font-size: 22px; color: #ffd166; }
+.panel input { width: 100%; padding: 8px; font: inherit; background: #15151f; color: #eee; border: 2px solid #555a7a; }
+#colors { display: flex; gap: 6px; justify-content: center; margin: 12px 0; flex-wrap: wrap; }
+#colors button { width: 28px; height: 28px; border: 3px solid transparent; cursor: pointer; }
+#colors button.sel { border-color: #fff; }
+#play { width: 100%; padding: 10px; font: inherit; font-weight: bold; background: #06d6a0; border: 0; cursor: pointer; }
+.help { color: #aaa; font-size: 12px; }
+#status { color: #ef476f; min-height: 1em; }
+#hud { position: fixed; inset: 0; pointer-events: none; z-index: 5; }
+#hpbar { position: absolute; top: 12px; left: 12px; width: 200px; height: 14px; background: #400; border: 2px solid #000; }
+#hpfill { height: 100%; width: 100%; background: #e63946; transition: width .15s; }
+#stats { position: absolute; top: 34px; left: 12px; text-shadow: 1px 1px #000; }
+#feed { position: absolute; top: 12px; right: 12px; text-align: right; text-shadow: 1px 1px #000; }
+#chatlog { position: absolute; bottom: 44px; left: 12px; width: min(400px, calc(100% - 24px)); text-shadow: 1px 1px #000; }
+#chat { position: absolute; bottom: 12px; left: 12px; width: min(400px, calc(100% - 24px)); padding: 6px; font: inherit;
+  background: rgba(0,0,0,.5); color: #fff; border: 1px solid #555; pointer-events: auto; }

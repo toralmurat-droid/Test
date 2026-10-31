@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Pixel Town Brawl</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <div id="game"></div>
+
+  <div id="join">
+    <div class="panel">
+      <h1>Pixel Town Brawl</h1>
+      <input id="name" maxlength="16" placeholder="Your name" autocomplete="off" />
+      <div id="colors"></div>
+      <button id="play">Play</button>
+      <p class="help">Move: WASD / Arrows &nbsp;·&nbsp; Attack: Space &nbsp;·&nbsp; Chat: Enter</p>
+      <p id="status"></p>
+    </div>
+  </div>
+
+  <div id="hud" hidden>
+    <div id="hpbar"><div id="hpfill"></div></div>
+    <div id="stats"></div>
+    <div id="feed"></div>
+    <div id="chatlog"></div>
+    <input id="chat" maxlength="120" placeholder="Press Enter to chat" autocomplete="off" />
+  </div>
+
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
