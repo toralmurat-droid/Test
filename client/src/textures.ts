@@ -75,6 +75,31 @@ export function heroTexture(scene: Phaser.Scene, cls: string, color: number): st
   return drawSheet(scene, `hero_${cls}_${color}`, FRAMES, pal[cls] ?? pal.knight);
 }
 
+// Ground items, 8x8. C coin, c coin shade, R potion red, r highlight, G glass, W cork
+const ITEM_ART: Record<string, { rows: string[]; pal: Record<string, number> }> = {
+  gold: { rows: ["..CCCC..", ".CCrrCC.", "CCrCCcCC", "CCCCCcCC", "CCCCCcCC", "CCCcccCC", ".CCCCCC.", "..CCCC.."],
+    pal: { C: 0xffc93c, c: 0xd99a1e, r: 0xfff3b0 } },
+  potion: { rows: ["...WW...", "...GG...", "..GRRG..", ".GRrRRG.", ".GRRRRG.", ".GRRRRG.", "..GGGG..", "........"],
+    pal: { W: 0x8d6e63, G: 0xcfe8ff, R: 0xe63946, r: 0xffb3b3 } },
+};
+
+/** Ground item texture by `Item.kind` (single frame). */
+export function itemTexture(scene: Phaser.Scene, kind: string): string {
+  const key = `item_${kind}`;
+  if (scene.textures.exists(key)) return key;
+  const art = ITEM_ART[kind] ?? ITEM_ART.gold;
+  const tex = scene.textures.createCanvas(key, 8, 8)!;
+  const ctx = tex.getContext();
+  art.rows.forEach((row, y) => [...row].forEach((ch, x) => {
+    const c = art.pal[ch];
+    if (c === undefined) return;
+    ctx.fillStyle = hex(c);
+    ctx.fillRect(x, y, 1, 1);
+  }));
+  tex.refresh();
+  return key;
+}
+
 // Slime: frames alternate normal / squished (6 frames so it shares the persona frame layout)
 const SLIME_A = [..."............|............|............|............|............|............|.....GG.....|...GGGGGG...|..GLLGGGGG..|.GLLGGGGGGG.|.GGGEGGEGGG.|.GGGGGGGGGG.|GGGGGGGGGGGG|GGGGGGGGGGGG|.DDDDDDDDDD.|............".split("|")];
 const SLIME_B = [..."............|............|............|............|............|............|............|....GGGG....|..GGGGGGGG..|.GLLGGGGGGG.|GLLGEGGEGGGG|GGGGGGGGGGGG|GGGGGGGGGGGG|GGGGGGGGGGGG|DDDDDDDDDDDD|............".split("|")];

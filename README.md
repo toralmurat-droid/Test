@@ -15,7 +15,7 @@ npm run dev
 
 Open http://localhost:5173 in two browser tabs to see the multiplayer. The game server runs on port 2567.
 
-Controls: WASD/arrows to move, Space to attack, E or Shift for your class skill, Enter to chat.
+Controls: WASD/arrows to move, Space to attack, E or Shift for your class skill, Q to drink a potion, Enter to chat.
 
 Gameplay:
 - **Classes** (`shared/classes.ts`):
@@ -23,6 +23,7 @@ Gameplay:
   - **Ninja:** fast, low HP, rapid strikes. Skill *Dash*: blink forward, untouchable for a moment.
   - **Wizard:** ranged fireballs. Skill *Nova*: blast everything around you.
 - **Levels:** XP from monsters and PvP kills. Each level adds HP and damage and fully heals you.
+- **Loot** (`shared/items.ts`): monsters drop gold and health potions; walk over them to pick up. Potions (max 5) heal 40% HP. Killed by a player? You drop half your gold.
 - **Regen:** HP regenerates after 5s without taking damage, much faster on the plaza.
 - **PvP:** players can fight each other anywhere except the stone **plaza**, which is a safe zone.
 - **Monsters:** slimes and skeletons roam the outskirts. They chase nearby players, fight back when hit, and give XP when killed. They respawn after a few seconds. They can't enter the plaza and give up the chase if pulled too far from home.
@@ -48,5 +49,5 @@ client/   index.html, style.css, src/ (main.ts, TownScene.ts, textures.ts)
 ## Next steps
 - Replace the procedural art with real sprites/tilesets (Aseprite, Tiled)
 - Accounts and persistence (PostgreSQL)
-- Items/loot, NPCs
+- Shop / NPCs to spend gold, gear
 - Input-sequence reconciliation and area-of-interest filtering for scale
