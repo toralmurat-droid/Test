@@ -33,11 +33,11 @@ export class TownScene extends Phaser.Scene {
   private input_: InputState = { up: false, down: false, left: false, right: false };
   private seq = 0;
   private chatEl = document.getElementById("chat") as HTMLInputElement;
-  private shots = new Map<string, { g: Phaser.GameObjects.Arc; tx: number; ty: number }>();
-  private lastSpecial = -Infinity; // local clock (ms) of my last special, for the cooldown bar
   private minimap?: Minimap;
   private areaName = "";
   private areaTimer?: number;
+  private shots = new Map<string, { g: Phaser.GameObjects.Arc; tx: number; ty: number }>();
+  private lastSpecial = -Infinity; // local clock (ms) of my last special, for the cooldown bar
 
   constructor(private opts: { name: string; color: number; cls: ClassKind }) {
     super("town");

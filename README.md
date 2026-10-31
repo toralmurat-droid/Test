@@ -23,7 +23,7 @@ Gameplay:
   - **Ninja:** fast, low HP, rapid strikes. Skill *Dash*: blink forward, untouchable for a moment.
   - **Wizard:** ranged fireballs. Skill *Nova*: blast everything around you.
 - **Levels:** XP from monsters and PvP kills. Each level adds HP and damage and fully heals you.
-- **Regen:** HP regenerates after 5s without taking damage, much faster in the Market Square.
+- **Regen:** HP regenerates after 5s without taking damage, much faster on the Market Square.
 - **PvP:** players can fight each other anywhere except the cobbled **Market Square**, which is a safe zone.
 - **Monsters:** slimes and skeletons roam the outskirts outside the palisade. They chase nearby players, fight back when hit, and give XP when killed. They respawn after a few seconds. They can't enter the square and give up the chase if pulled too far from home.
 - Monster stats live in `shared/constants.ts` (`MOBS`).
