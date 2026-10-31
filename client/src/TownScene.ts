@@ -1,9 +1,10 @@
 import Phaser from "phaser";
 import { Client, Room } from "colyseus.js";
-import { InputState, MAP_H, MAP_W, MAX_HP, TILE } from "../../shared/constants";
+import { InputState, MAP_H, MAP_W, TILE } from "../../shared/constants";
+import { CLASSES, ClassKind, xpForLevel } from "../../shared/classes";
 import { GROUND, OBJECTS, areaAt, isSafeZone } from "../../shared/map";
 import { moveStep } from "../../shared/movement";
-import { makeTileset, mobTexture, personaTexture } from "./textures";
+import { heroTexture, makeTileset, mobTexture } from "./textures";
 import { Minimap } from "./minimap";
 
 interface Entity {
@@ -12,6 +13,7 @@ interface Entity {
   mob: boolean;
   bar: Phaser.GameObjects.Graphics;
   bubble?: Phaser.GameObjects.Text;
+  shield?: Phaser.GameObjects.Graphics;
   tx: number; ty: number; // server target position
   state: any;
 }
@@ -29,8 +31,10 @@ export class TownScene extends Phaser.Scene {
   private minimap?: Minimap;
   private areaName = "";
   private areaTimer?: number;
+  private shots = new Map<string, { g: Phaser.GameObjects.Arc; tx: number; ty: number }>();
+  private lastSpecial = -Infinity; // local clock (ms) of my last special, for the cooldown bar
 
-  constructor(private opts: { name: string; color: number }) {
+  constructor(private opts: { name: string; color: number; cls: ClassKind }) {
     super("town");
   }
 
@@ -47,8 +51,11 @@ export class TownScene extends Phaser.Scene {
     cam.roundPixels = true;
 
     // Keys without capture so typing in chat still works
-    this.keys = this.input.keyboard!.addKeys("W,A,S,D,UP,DOWN,LEFT,RIGHT,SPACE", false) as any;
+    this.keys = this.input.keyboard!.addKeys("W,A,S,D,UP,DOWN,LEFT,RIGHT,SPACE,E,SHIFT", false) as any;
     this.input.keyboard!.on("keydown-SPACE", () => { if (!this.chatting()) this.room?.send("attack"); });
+    const special = () => { if (!this.chatting()) this.room?.send("special"); };
+    this.input.keyboard!.on("keydown-E", special);
+    this.input.keyboard!.on("keydown-SHIFT", special);
     this.setupChat();
 
     const proto = location.protocol === "https:" ? "wss" : "ws";
@@ -92,11 +99,27 @@ export class TownScene extends Phaser.Scene {
     });
     mobs.onRemove((_m: any, id: string) => this.removeEntity(id));
 
+    const shots = (this.room.state as any).projectiles;
+    shots.onAdd((s: any, id: string) => {
+      const g = this.add.circle(s.x, s.y, 2.5, 0xff9f1c).setStrokeStyle(1, 0xffe066).setDepth(9000);
+      const shot = { g, tx: s.x, ty: s.y };
+      this.shots.set(id, shot);
+      s.onChange(() => { shot.tx = s.x; shot.ty = s.y; });
+    });
+    shots.onRemove((_s: any, id: string) => { this.shots.get(id)?.g.destroy(); this.shots.delete(id); });
+
     this.room.onMessage("swing", ({ id }) => this.showSwing(id));
-    this.room.onMessage("hit", ({ id, dmg }) => {
+    this.room.onMessage("special", (msg) => this.showSpecial(msg));
+    this.room.onMessage("boom", ({ x, y }) => this.burst(x, y, 6, 0xff9f1c, 200));
+    this.room.onMessage("levelup", ({ id, level }) => {
+      const e = this.entities.get(id);
+      if (e) this.floatText(e.sprite.x, e.sprite.y - 20, `LEVEL ${level}!`, "#7cfc00");
+      if (id === this.me) this.feed(`You reached level ${level}`);
+    });
+    this.room.onMessage("hit", ({ id, dmg, blocked }) => {
       const e = this.entities.get(id);
       if (!e) return;
-      this.floatText(e.sprite.x, e.sprite.y - 14, `-${dmg}`, id === this.me ? "#ff5d5d" : "#ffffff");
+      this.floatText(e.sprite.x, e.sprite.y - 14, `-${dmg}`, blocked ? "#9ad1ff" : id === this.me ? "#ff5d5d" : "#ffffff");
       e.sprite.setTintFill(0xffffff);
       this.time.delayedCall(80, () => e.sprite.clearTint());
       if (id === this.me) this.cameras.main.shake(100, 0.004);
@@ -132,7 +155,7 @@ export class TownScene extends Phaser.Scene {
   }
 
   private addEntity(id: string, p: any, mob = false) {
-    const tex = mob ? mobTexture(this, p.kind) : personaTexture(this, p.color);
+    const tex = mob ? mobTexture(this, p.kind) : heroTexture(this, p.cls, p.color);
     const sprite = this.add.sprite(p.x, p.y, tex, 0).setOrigin(0.5, 0.85);
     if (mob) {
       this.entities.set(id, { sprite, bar: this.add.graphics(), tx: p.x, ty: p.y, state: p, mob });
@@ -150,7 +173,7 @@ export class TownScene extends Phaser.Scene {
   private removeEntity(id: string) {
     const e = this.entities.get(id);
     if (!e) return;
-    e.sprite.destroy(); e.label?.destroy(); e.bar.destroy(); e.bubble?.destroy();
+    e.sprite.destroy(); e.label?.destroy(); e.bar.destroy(); e.bubble?.destroy(); e.shield?.destroy();
     this.entities.delete(id);
   }
 
@@ -165,6 +188,30 @@ export class TownScene extends Phaser.Scene {
     g.beginPath(); g.arc(0, 0, 8, a - 1, a + 1); g.strokePath();
     g.setDepth(10000);
     this.tweens.add({ targets: g, alpha: 0, scale: 1.4, duration: 180, onComplete: () => g.destroy() });
+  }
+
+  private burst(x: number, y: number, r: number, color: number, ms: number) {
+    const g = this.add.circle(x, y, r, color, 0.5).setStrokeStyle(1, color).setDepth(10000);
+    this.tweens.add({ targets: g, scale: 1.8, alpha: 0, duration: ms, onComplete: () => g.destroy() });
+  }
+
+  private showSpecial(msg: { id: string; kind: string; x?: number; y?: number; fromX?: number; fromY?: number; r?: number }) {
+    const e = this.entities.get(msg.id);
+    if (msg.id === this.me) this.lastSpecial = this.time.now;
+    if (msg.kind === "nova") {
+      const g = this.add.circle(msg.x!, msg.y! - 4, msg.r!, 0x9b5de5, 0.25).setStrokeStyle(2, 0xc77dff).setDepth(10000).setScale(0.2);
+      this.tweens.add({ targets: g, scale: 1, alpha: 0, duration: 350, onComplete: () => g.destroy() });
+    } else if (msg.kind === "dash") {
+      // Afterimages along the dash path
+      for (let i = 0; i < 4; i++) {
+        const t = i / 4;
+        const ghost = this.add.circle(msg.fromX! + (msg.x! - msg.fromX!) * t, msg.fromY! - 6 + (msg.y! - msg.fromY!) * t, 4, 0xffffff, 0.4).setDepth(9000);
+        this.tweens.add({ targets: ghost, alpha: 0, duration: 250 + i * 40, onComplete: () => ghost.destroy() });
+      }
+      if (e) { e.sprite.setPosition(msg.x!, msg.y!); e.tx = msg.x!; e.ty = msg.y!; }
+    } else if (msg.kind === "guard" && e) {
+      this.burst(e.sprite.x, e.sprite.y - 6, 8, 0x9ad1ff, 250);
+    }
   }
 
   private feed(text: string) {
@@ -222,7 +269,7 @@ export class TownScene extends Phaser.Scene {
       const p = e.state;
       if (id === this.me && !p.dead) {
         // Client-side prediction with the same movement code the server runs
-        const r = moveStep(e.sprite.x, e.sprite.y, this.input_, dtMs / 1000);
+        const r = moveStep(e.sprite.x, e.sprite.y, this.input_, dtMs / 1000, CLASSES[p.cls as ClassKind].speed);
         e.sprite.setPosition(r.x, r.y);
         if (!r.moving) {
           // Ease toward authoritative position while idle
@@ -246,11 +293,22 @@ export class TownScene extends Phaser.Scene {
       e.label?.setPosition(x, y - 16).setDepth(e.sprite.y + 1);
       e.bubble?.setPosition(x, y - 21);
       e.bar.clear().setDepth(e.sprite.y + 1);
-      const maxHp = e.mob ? p.maxHp : MAX_HP;
+      const maxHp = p.maxHp;
+      if (!e.mob) {
+        if (p.guarding && !p.dead) {
+          e.shield ??= this.add.graphics();
+          e.shield.clear().lineStyle(1, 0x9ad1ff, 0.9).strokeCircle(x, y - 6, 9).setDepth(e.sprite.y + 2);
+        } else if (e.shield) { e.shield.destroy(); e.shield = undefined; }
+      }
       if (!p.dead && p.hp < maxHp) {
         e.bar.fillStyle(0x000000).fillRect(x - 7, y + 3, 14, 2);
         e.bar.fillStyle(e.mob ? 0xf4a261 : 0xe63946).fillRect(x - 7, y + 3, 14 * (p.hp / maxHp), 2);
       }
+    }
+
+    for (const shot of this.shots.values()) {
+      shot.g.x += (shot.tx - shot.g.x) * 0.5;
+      shot.g.y += (shot.ty - shot.g.y) * 0.5;
     }
 
     const meEnt = this.entities.get(this.me);
@@ -262,9 +320,15 @@ export class TownScene extends Phaser.Scene {
     if (mine) {
       const online = [...this.entities.values()].filter((x) => !x.mob).length;
       const safe = isSafeZone(meEnt.sprite.x, meEnt.sprite.y) ? "🛡 Safe zone · " : "";
-      (document.getElementById("hpfill") as HTMLElement).style.width = `${(mine.hp / MAX_HP) * 100}%`;
+      (document.getElementById("hpfill") as HTMLElement).style.width = `${(mine.hp / mine.maxHp) * 100}%`;
+      const next = xpForLevel(mine.level + 1), cur = xpForLevel(mine.level);
       document.getElementById("stats")!.textContent =
-        `${mine.dead ? "Respawning… " : safe}XP: ${mine.xp} · Kills: ${mine.kills} · Online: ${online}`;
+        `${mine.dead ? "Respawning… " : safe}Lv ${mine.level} ${CLASSES[mine.cls as ClassKind].name} · ` +
+        `XP ${mine.xp - cur}/${next - cur} · Kills: ${mine.kills} · Online: ${online}`;
+      const sp = CLASSES[mine.cls as ClassKind].special;
+      const left = Math.max(0, sp.cooldownMs - (now - this.lastSpecial));
+      (document.getElementById("skillfill") as HTMLElement).style.width = `${(1 - left / sp.cooldownMs) * 100}%`;
+      document.getElementById("skilltext")!.textContent = left > 0 ? `${sp.name} ${(left / 1000).toFixed(1)}s` : `${sp.name} ready [E]`;
     }
   }
 }

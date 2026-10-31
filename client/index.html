@@ -13,9 +13,11 @@
     <div class="panel">
       <h1>Pixel Town Brawl</h1>
       <input id="name" maxlength="16" placeholder="Your name" autocomplete="off" />
+      <div id="classes"></div>
+      <p id="classinfo" class="help"></p>
       <div id="colors"></div>
       <button id="play">Play</button>
-      <p class="help">Move: WASD / Arrows &nbsp;·&nbsp; Attack: Space &nbsp;·&nbsp; Chat: Enter</p>
+      <p class="help">Move: WASD / Arrows &nbsp;·&nbsp; Attack: Space &nbsp;·&nbsp; Skill: E / Shift &nbsp;·&nbsp; Chat: Enter</p>
       <p id="status"></p>
     </div>
   </div>
@@ -25,6 +27,7 @@
     <div id="stats"></div>
     <div id="mapbox"><canvas id="minimap"></canvas><div id="location"></div></div>
     <div id="area"></div>
+    <div id="skill"><div id="skillfill"></div><span id="skilltext"></span></div>
     <div id="feed"></div>
     <div id="chatlog"></div>
     <input id="chat" maxlength="120" placeholder="Press Enter to chat" autocomplete="off" />

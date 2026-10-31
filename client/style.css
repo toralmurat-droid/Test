@@ -9,6 +9,13 @@ html, body { margin: 0; height: 100%; background: #1b1b24; color: #eee; font: 14
 #colors { display: flex; gap: 6px; justify-content: center; margin: 12px 0; flex-wrap: wrap; }
 #colors button { width: 28px; height: 28px; border: 3px solid transparent; cursor: pointer; }
 #colors button.sel { border-color: #fff; }
+#classes { display: flex; gap: 6px; margin: 12px 0 4px; }
+#classes button { flex: 1; padding: 8px 4px; font: inherit; background: #15151f; color: #eee; border: 2px solid #555a7a; cursor: pointer; }
+#classes button.sel { border-color: #ffd166; color: #ffd166; }
+#classinfo { min-height: 2.8em; margin: 4px 0; }
+#skill { position: absolute; top: 56px; left: 12px; width: 200px; height: 14px; background: #222; border: 2px solid #000; }
+#skillfill { position: absolute; inset: 0 auto 0 0; width: 100%; background: #4cc9f0; }
+#skilltext { position: relative; font-size: 11px; padding-left: 4px; line-height: 10px; text-shadow: 1px 1px #000; }
 #play { width: 100%; padding: 10px; font: inherit; font-weight: bold; background: #06d6a0; border: 0; cursor: pointer; }
 .help { color: #aaa; font-size: 12px; }
 #status { color: #ef476f; min-height: 1em; }
