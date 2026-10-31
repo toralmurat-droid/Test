@@ -2,7 +2,7 @@ import { Canvas, shade } from "./canvas";
 
 export type Dir = "down" | "up" | "right";
 export const DIRS: Dir[] = ["down", "up", "right"];
-export const FW = 32, FH = 32, COLS = 4;
+export const FW = 32, FH = 32, COLS = 6;
 const OUTLINE = 0x1a1420;
 
 export interface Pose {
@@ -13,15 +13,19 @@ export interface Pose {
   lean: number;       // whole-body x push (hit knockback), in facing-space
   crouch: number;     // KO kneel
   attack: number;     // -1 none, 0 windup, 1 swing, 2 impact, 3 recover
+  move?: MoveId;      // which attack in the combo (default a1)
   expr: "n" | "squint" | "x";
 }
 
 export const ANIMS: { name: string; frames: number; fps: number; loop: boolean }[] = [
   { name: "idle", frames: 4, fps: 4, loop: true },
-  { name: "walk", frames: 4, fps: 8, loop: true },
+  { name: "walk", frames: 6, fps: 11, loop: true },
   { name: "attack", frames: 4, fps: 14, loop: false },
+  { name: "attack2", frames: 4, fps: 14, loop: false },
+  { name: "attack3", frames: 4, fps: 12, loop: false },
   { name: "hit", frames: 2, fps: 10, loop: false },
   { name: "ko", frames: 4, fps: 6, loop: false },
+  { name: "skill", frames: 4, fps: 10, loop: false },
 ];
 
 interface D {
@@ -38,6 +42,9 @@ const FACE: Record<Dir, [number, number]> = { down: [0, 1], up: [0, -1], right: 
 const FACE_ANGLE: Record<Dir, number> = { down: 90, up: -90, right: 0 };
 const rad = (d: number) => (d * Math.PI) / 180;
 
+export type MoveId = "a1" | "a2" | "a3";
+type MoveKind = "slash" | "thrust" | "spin" | "bash" | "slam" | "cast" | "double" | "charged" | "bonk" | "shot";
+interface Move { swing: number[]; reach?: number[]; lift?: number[]; abs?: boolean; kind: MoveKind; fx?: number }
 interface Hero {
   name: string;
   legs(d: D, legTop: number): void;
@@ -49,6 +56,9 @@ interface Hero {
   /** effects painted after the outline (slashes, magic) */
   fx?(d: D, hand: [number, number], angle: number): void;
   swing: number[]; // weapon angles relative to facing for attack phases 0..3
+  kind1?: MoveKind;
+  moves?: { a2: Move; a3: Move };
+  aura?: number;   // skill glow colour
   idleAngle: Record<Dir, number>;
 }
 
@@ -89,7 +99,8 @@ function handPos(p: Pose, hero: Hero): [number, number] {
   const base: Record<Dir, [number, number]> = { down: [hero.name === "wizard" ? 9 : 10, 22], up: [21, 22], right: [16, 22] };
   let [x, y] = base[p.dir];
   if (p.attack >= 0) {
-    const reach = [0, 3, 4, 2][p.attack], lift = [5, 2, 0, 0][p.attack];
+    const mv = moveOf(hero, p);
+    const reach = (mv.reach ?? [0, 3, 4, 2])[p.attack], lift = (mv.lift ?? [5, 2, 0, 0])[p.attack];
     x += fx * reach; y += fy * reach - lift;
     if (p.dir === "down") x += [1, 2, 3, 2][p.attack];
   } else if (p.dir === "right") {
@@ -100,9 +111,16 @@ function handPos(p: Pose, hero: Hero): [number, number] {
   return [x + p.lean * (p.dir === "right" ? 1 : 0), y + p.bob + p.crouch];
 }
 
+function moveOf(hero: Hero, p: Pose): Move {
+  if (!p.move || p.move === "a1" || !hero.moves) return { swing: hero.swing, kind: hero.kind1 ?? "slash" };
+  return hero.moves[p.move];
+}
+
 function weaponAngle(p: Pose, hero: Hero) {
   if (p.attack < 0) return hero.idleAngle[p.dir];
-  let a = hero.swing[p.attack];
+  const mv = moveOf(hero, p);
+  let a = mv.swing[p.attack];
+  if (mv.abs) return a;
   if (p.dir === "up") a = -a; // sweep the other way so it reads the same
   return FACE_ANGLE[p.dir] + a;
 }
@@ -113,6 +131,11 @@ const ninja: Hero = {
   name: "ninja",
   swing: [-130, -40, 35, 60],
   idleAngle: { down: 115, up: 120, right: 110 },
+  aura: 0x9fb6ff,
+  moves: {
+    a2: { swing: [0, 0, 0, 0], reach: [-3, 5, 7, 3], lift: [1, 0, 0, 0], kind: "thrust" },
+    a3: { swing: [-20, -20, -20, -20], reach: [2, 3, 3, 2], lift: [2, 2, 2, 2], kind: "spin" },
+  },
   legs(d, top) { standardLegs(d, top, NJ.suit, NJ.boot); if (d.p.dir !== "right") { d.c.rect(12 + d.lx, 25, 3, 1, NJ.wrap); d.c.rect(17 + d.lx, 25, 3, 1, NJ.wrap); } },
   torso(d) {
     if (d.p.dir === "right") { d.U(12, 16, 8, 8, NJ.suit, true); d.Ur(12, 21, 8, 1, NJ.sash); d.Ur(11, 21, 1, 2, NJ.sash); }
@@ -170,6 +193,11 @@ const knight: Hero = {
   name: "knight",
   swing: [-120, -30, 40, 70],
   idleAngle: { down: 100, up: 110, right: 70 },
+  aura: 0xffd166,
+  moves: {
+    a2: { swing: [110, 40, -35, -60], reach: [0, 3, 4, 2], lift: [0, 1, 0, 0], kind: "slash", fx: 0xfff6c8 },
+    a3: { swing: [140, 140, 140, 140], reach: [-1, 1, 1, 0], lift: [0, 0, 0, 0], kind: "bash" },
+  },
   legs(d, top) { standardLegs(d, top, KN.mail, KN.boot); if (d.p.dir !== "right") { d.c.rect(12 + d.lx, top, 3, 1, KN.steel); d.c.rect(17 + d.lx, top, 3, 1, KN.steel); } },
   torso(d) {
     if (d.p.dir === "right") {
@@ -241,6 +269,12 @@ const wizard: Hero = {
   name: "wizard",
   swing: [-110, -55, -25, -15],
   idleAngle: { down: -97, up: -83, right: -78 },
+  kind1: "shot",
+  aura: 0x5ee6ff,
+  moves: {
+    a2: { swing: [-150, -70, 20, 45], reach: [0, 3, 4, 2], lift: [5, 2, 0, 0], kind: "bonk", fx: 0xc8fbff },
+    a3: { swing: [-90, -90, -90, -90], abs: true, reach: [0, 0, 0, 0], lift: [3, 6, 6, 3], kind: "cast" },
+  },
   legs(d, top) {
     // robe skirt covers legs; feet peek out
     const s = d.p.stride, x0 = d.lx;
@@ -339,7 +373,242 @@ function slash(d: D, [hx, hy]: [number, number], a: number, col: number, r: numb
   }
 }
 
-export const HEROES: Hero[] = [ninja, wizard, knight];
+// ---------- generic humans (archer, barbarian, NPCs) ----------
+interface HumanOpts {
+  name: string;
+  skin: number; hair: number; eye?: number;
+  hairStyle: "short" | "long" | "bald" | "ponytail";
+  beard?: number;                 // beard colour
+  hat?: { kind: "hood" | "horned" | "cap" | "helm" | "bandana" | "wide"; col: number; trim?: number };
+  shirt: number; pants: number; boots: number; belt?: number;
+  bareChest?: boolean;
+  apron?: number; vest?: number; tabard?: { col: number; emblem: number };
+  sleeve?: number;
+  weapon: "bow" | "axe" | "hammer" | "spear" | "dagger" | "none";
+  quiver?: boolean;
+  fxCol?: number;
+  aura?: number;
+}
+
+function human(o: HumanOpts): Hero {
+  const eye = o.eye ?? 0x111111;
+  const sleeve = o.bareChest ? o.skin : o.sleeve ?? o.shirt;
+  const swing: Record<HumanOpts["weapon"], number[]> = {
+    bow: [0, 0, 0, 0], axe: [-140, -50, 30, 60], hammer: [-150, -70, 10, 40], spear: [-20, 0, 0, 0], dagger: [-90, -20, 30, 50], none: [-60, -10, 20, 30],
+  };
+  const idle: Record<HumanOpts["weapon"], Record<Dir, number>> = {
+    bow: { down: 180, up: 0, right: 0 }, axe: { down: 100, up: 110, right: 75 }, hammer: { down: 100, up: 110, right: 80 },
+    spear: { down: -95, up: -85, right: -80 }, dagger: { down: 110, up: 110, right: 100 }, none: { down: 90, up: 90, right: 90 },
+  };
+  const hat = o.hat;
+  const backhand = (sw: number[]): Move => ({ swing: [-sw[0] * 0.8, -sw[1], -sw[2], -sw[3]], kind: "slash", fx: o.fxCol });
+  const moves: Record<HumanOpts["weapon"], { a2: Move; a3: Move }> = {
+    bow: { a2: { swing: [0, 0, 0, 0], reach: [0, 1, 1, 0], lift: [1, 1, 1, 1], kind: "double" }, a3: { swing: [0, 0, 0, 0], reach: [-2, -3, 1, 0], lift: [1, 1, 0, 0], kind: "charged" } },
+    axe: { a2: backhand(swing.axe), a3: { swing: [-160, -95, 30, 40], reach: [-1, 0, 4, 3], lift: [7, 8, -1, -1], kind: "slam" } },
+    hammer: { a2: backhand(swing.hammer), a3: { swing: [-160, -95, 30, 40], reach: [-1, 0, 4, 3], lift: [7, 8, -1, -1], kind: "slam" } },
+    spear: { a2: { swing: [-70, -30, 35, 55], kind: "slash" }, a3: { swing: [0, 0, 0, 0], reach: [-4, 4, 7, 2], lift: [0, 0, 0, 0], kind: "thrust" } },
+    dagger: { a2: { swing: [0, 0, 0, 0], reach: [-3, 4, 6, 2], lift: [1, 0, 0, 0], kind: "thrust" }, a3: backhand(swing.dagger) },
+    none: { a2: { swing: [0, 0, 0, 0], reach: [-2, 4, 5, 2], lift: [1, 0, 0, 0], kind: "thrust" }, a3: { swing: [0, 0, 0, 0], reach: [-1, 3, 5, 1], lift: [0, 0, 0, 0], kind: "bash" } },
+  };
+  const H: Hero = {
+    name: o.name,
+    swing: swing[o.weapon],
+    kind1: o.weapon === "bow" ? "shot" : o.weapon === "spear" ? "thrust" : "slash",
+    moves: moves[o.weapon],
+    aura: o.aura,
+    idleAngle: idle[o.weapon],
+    legs(d, top) { standardLegs(d, top, o.pants, o.boots); },
+    torso(d) {
+      const dir = d.p.dir;
+      const top = o.bareChest ? o.skin : o.shirt;
+      if (dir === "right") {
+        if (o.quiver) { d.U(9, 14, 3, 8, 0x8b5a2b); d.Ur(9, 12, 1, 2, 0xf3ead8); d.Ur(10, 12, 1, 2, 0xd62839); d.Ur(11, 13, 1, 1, 0xf3ead8); }
+        d.U(12, 16, 8, 8, top, true);
+        if (o.bareChest) { d.Ur(17, 18, 2, 1, shade(o.skin, 0.8)); d.Ur(12, 16, 8, 1, 0x7a5230); }
+        if (o.vest) d.Ur(12, 16, 4, 6, o.vest);
+        if (o.apron) d.Ur(16, 17, 4, 7, o.apron);
+        if (o.tabard) d.Ur(14, 17, 5, 7, o.tabard.col);
+        if (o.belt) d.Ur(12, 21, 8, 1, o.belt);
+      } else {
+        if (o.quiver && dir === "up") { d.U(17, 13, 3, 9, 0x8b5a2b); d.Ur(17, 12, 1, 1, 0xf3ead8); d.Ur(18, 11, 1, 2, 0xd62839); d.Ur(19, 12, 1, 1, 0xf3ead8); }
+        d.U(11, 16, 10, 8, top, true);
+        if (o.bareChest && dir === "down") { d.Ur(13, 18, 2, 1, shade(o.skin, 0.8)); d.Ur(17, 18, 2, 1, shade(o.skin, 0.8)); d.Ur(15, 20, 2, 1, shade(o.skin, 0.85)); }
+        if (o.bareChest) d.c.line(11 + d.ux, 16 + d.uy, 20 + d.ux, 22 + d.uy, 0x7a5230);
+        if (o.quiver && dir === "down") d.c.line(20 + d.ux, 16 + d.uy, 12 + d.ux, 21 + d.uy, 0x8b5a2b);
+        if (o.vest && dir === "down") { d.Ur(11, 16, 3, 7, o.vest); d.Ur(18, 16, 3, 7, o.vest); }
+        if (o.vest && dir === "up") d.Ur(11, 16, 10, 7, o.vest);
+        if (o.apron && dir === "down") { d.Ur(12, 17, 8, 7, o.apron); d.Ur(13, 16, 1, 1, o.apron); d.Ur(18, 16, 1, 1, o.apron); d.Ur(14, 19, 4, 2, shade(o.apron, 0.8)); }
+        if (o.apron && dir === "up") d.Ur(11, 20, 10, 1, o.apron);
+        if (o.tabard && dir === "down") { d.Ur(12, 17, 8, 7, o.tabard.col); d.Ur(15, 18, 2, 4, o.tabard.emblem); d.Ur(14, 19, 4, 1, o.tabard.emblem); }
+        if (o.tabard && dir === "up") d.Ur(12, 17, 8, 7, o.tabard.col);
+        if (o.belt) { d.Ur(11, 21, 10, 1, o.belt); if (dir === "down") d.Up(15, 21, 0xf2c14e); }
+      }
+    },
+    head(d) {
+      const dir = d.p.dir, hr = o.hair, sk = o.skin;
+      if (dir === "right") {
+        d.U(11, 5, 10, 11, sk, true);
+        if (o.hairStyle !== "bald") {
+          d.Ur(11, 5, 10, 3, hr); d.Ur(11, 8, 4, o.hairStyle === "long" ? 7 : 4, hr); d.Ur(15, 8, 1, 1, hr);
+          if (o.hairStyle === "ponytail") { d.Ur(9, 8, 2, 2, hr); d.Ur(8, 10, 2, 3, hr); d.Up(8, 13, hr); }
+          d.Up(12, 6, shade(hr, 1.25)); d.Up(14, 5, shade(hr, 1.25));
+        }
+        d.Ur(14, 10, 1, 2, shade(sk, 0.85)); // ear
+        eyes(d, [18], 10, eye); d.Up(21, 11, sk);
+        if (o.beard !== undefined) { d.Ur(15, 12, 6, 3, o.beard); d.Ur(16, 15, 4, 1, o.beard); }
+      } else if (dir === "down") {
+        d.U(10, 5, 12, 11, sk, true);
+        if (o.hairStyle !== "bald") {
+          d.Ur(10, 5, 12, 3, hr); d.Ur(10, 8, 1, o.hairStyle === "long" ? 7 : 3, hr); d.Ur(21, 8, 1, o.hairStyle === "long" ? 7 : 3, hr);
+          d.Ur(11, 8, 3, 1, hr); d.Up(18, 8, hr); d.Ur(12, 5, 3, 1, shade(hr, 1.25));
+        }
+        eyes(d, [13, 18], 10, eye);
+        d.Up(10, 11, shade(sk, 0.85)); d.Up(21, 11, shade(sk, 0.85));
+        if (o.beard !== undefined) { d.Ur(11, 12, 10, 3, o.beard); d.Ur(12, 15, 8, 1, o.beard); d.Ur(14, 13, 4, 1, shade(sk, 0.7)); }
+        else d.Ur(15, 13, 2, 1, shade(sk, 0.75));
+      } else {
+        d.U(10, 5, 12, 11, o.hairStyle === "bald" ? sk : hr, true);
+        if (o.hairStyle === "bald") d.Ur(10, 13, 12, 1, shade(sk, 0.85));
+        else if (o.hairStyle !== "long") d.Ur(11, 14, 10, 2, sk);
+        if (o.hairStyle === "ponytail") { d.Ur(15, 13, 2, 4, hr); }
+        if (o.hairStyle !== "bald") for (const x of [13, 16, 19]) d.Ur(x, 7, 1, 5, shade(hr, 0.82));
+      }
+      if (!hat) return;
+      const hc = hat.col, tr = hat.trim ?? shade(hc, 0.75);
+      if (hat.kind === "hood") {
+        if (dir === "right") { d.U(10, 4, 11, 5, hc, true); d.Ur(10, 9, 5, 7, hc); d.Ur(9, 9, 2, 6, hc); d.Ur(20, 6, 1, 3, tr); }
+        else if (dir === "down") { d.U(9, 4, 14, 4, hc, true); d.Ur(9, 8, 2, 8, hc); d.Ur(21, 8, 2, 8, hc); d.Ur(11, 8, 10, 1, tr); }
+        else { d.U(9, 4, 14, 12, hc, true); d.Ur(15, 6, 2, 9, tr); }
+      } else if (hat.kind === "horned") {
+        const horn = 0xefe3c8;
+        if (dir === "right") { d.U(11, 4, 10, 4, hc, true); d.Ur(11, 7, 10, 1, tr); for (const [x, y] of [[13, 3], [12, 2], [12, 1], [13, 0]]) d.Up(x, y, horn); }
+        else { d.U(10, 4, 12, 4, hc, true); d.Ur(10, 7, 12, 1, tr); if (dir === "down") d.Ur(15, 4, 2, 4, tr);
+          for (const [x, y] of [[9, 5], [8, 4], [7, 3], [7, 2], [8, 1], [22, 5], [23, 4], [24, 3], [24, 2], [23, 1]]) d.Up(x, y, horn); }
+      } else if (hat.kind === "cap") {
+        if (dir === "right") { d.U(11, 3, 9, 4, hc, true); d.Ur(19, 6, 4, 1, tr); if (hat.trim) d.Ur(11, 6, 8, 1, hat.trim); d.Up(13, 2, 0xd62839); d.Up(12, 1, 0xd62839); }
+        else { d.U(10, 3, 12, 4, hc, true); d.Ur(10, 6, 12, 1, tr); if (dir === "down") { d.Up(18, 2, 0xd62839); d.Up(19, 1, 0xd62839); } }
+      } else if (hat.kind === "helm") {
+        if (dir === "right") { d.U(11, 3, 10, 6, hc, true); d.Ur(11, 8, 10, 1, tr); d.Ur(19, 8, 1, 4, tr); }
+        else { d.U(10, 3, 12, 6, hc, true); d.Ur(10, 8, 12, 1, tr); if (dir === "down") d.Ur(15, 8, 2, 4, tr); }
+        d.Ur(15, 2, 2, 1, tr);
+      } else if (hat.kind === "bandana") {
+        if (dir === "right") { d.Ur(11, 5, 10, 3, hc); d.Ur(9, 7, 2, 2, hc); d.Up(8, 9, hc); }
+        else { d.Ur(10, 5, 12, 3, hc); d.Up(12, 6, tr); d.Up(17, 6, tr); if (dir === "up") { d.Ur(15, 8, 2, 3, hc); } }
+      } else if (hat.kind === "wide") {
+        if (dir === "right") { d.U(12, 2, 8, 4, hc, true); d.U(8, 5, 16, 2, hc); d.Ur(12, 4, 8, 1, tr); }
+        else { d.U(11, 1, 10, 5, hc, true); d.U(7, 5, 18, 2, hc); d.Ur(11, 4, 10, 1, tr); }
+      }
+    },
+    arm(d, which, [hx, hy]) {
+      const p = d.p;
+      if (p.dir === "right") {
+        if (which === "far") { d.c.box(17 + d.ux - (p.attack >= 0 ? 0 : Math.round(p.stride * 1.5)), 17 + d.uy, 2, 5, shade(sleeve, 0.75)); return; }
+        armTo(d, 15, 17, hx, hy, sleeve, o.skin);
+        return;
+      }
+      if (which === "far") {
+        const x = p.dir === "down" ? 21 : 9, sw = p.attack >= 0 ? 0 : (p.dir === "down" ? p.stride : -p.stride);
+        if (o.weapon === "bow" && p.attack >= 0) return; // both hands on the bow
+        d.c.box(x + d.ux, 17 + d.uy, 2, 5 + sw, sleeve); d.c.rect(x + d.ux, 22 + d.uy + sw, 2, 1, o.skin); return;
+      }
+      armTo(d, p.dir === "down" ? 9 : 21, 17, hx, hy, sleeve, o.skin);
+    },
+    weapon(d, [hx, hy], a) {
+      const ux = Math.cos(rad(a)), uy = Math.sin(rad(a)), nx = -uy, ny = ux;
+      const W = 0x8b5a2b, STEEL = 0xd5dce4;
+      switch (o.weapon) {
+        case "bow": {
+          const ph = d.p.attack, ch = d.p.move === "a3", pull = ph === 0 ? (ch ? 4 : 2) : ph === 1 ? (ch ? 5 : 4) : 0;
+          const pts: [number, number][] = [];
+          for (let t = -7; t <= 7; t++) { const bend = 3 * (1 - (t / 7) ** 2); pts.push([hx + nx * t + ux * bend, hy + ny * t + uy * bend]); }
+          for (let i = 1; i < pts.length; i++) d.c.line(pts[i - 1][0], pts[i - 1][1], pts[i][0], pts[i][1], i === 1 || i === pts.length - 1 ? shade(W, 0.7) : W);
+          const sx = hx - ux * pull, sy = hy - uy * pull;
+          d.c.line(pts[0][0], pts[0][1], sx, sy, 0xf3ead8, 200); d.c.line(pts[pts.length - 1][0], pts[pts.length - 1][1], sx, sy, 0xf3ead8, 200);
+          if (ph === 0 || ph === 1) { d.c.line(sx, sy, sx + ux * 10, sy + uy * 10, 0xc9a26a); d.c.px(sx + ux * 11, sy + uy * 11, STEEL); d.c.px(sx, sy, 0xd62839); }
+          break;
+        }
+        case "axe": {
+          d.c.line(hx - ux * 2, hy - uy * 2, hx + ux * 10, hy + uy * 10, W);
+          const bx = hx + ux * 8, by = hy + uy * 8;
+          for (let t = 1; t <= 4; t++) d.c.line(bx + nx * t, by + ny * t, bx + nx * t + ux * (3 + (t > 2 ? 1 : 0)), by + ny * t + uy * (3 + (t > 2 ? 1 : 0)), t === 4 ? 0xf3f6f9 : STEEL);
+          d.c.line(bx - nx, by - ny, bx - nx + ux * 2, by - ny + uy * 2, shade(STEEL, 0.7));
+          break;
+        }
+        case "hammer": {
+          d.c.line(hx - ux * 2, hy - uy * 2, hx + ux * 8, hy + uy * 8, W);
+          const bx = hx + ux * 8, by = hy + uy * 8;
+          for (let t = -2; t <= 2; t++) d.c.line(bx + nx * t, by + ny * t, bx + nx * t + ux * 2, by + ny * t + uy * 2, t === -2 ? 0x8a939b : 0x5b6470);
+          break;
+        }
+        case "spear": {
+          d.c.line(hx - ux * 6, hy - uy * 6, hx + ux * 14, hy + uy * 14, W);
+          const tx = hx + ux * 14, ty = hy + uy * 14;
+          d.c.line(tx, ty, tx + ux * 4, ty + uy * 4, STEEL); d.c.px(tx + nx, ty + ny, STEEL); d.c.px(tx - nx, ty - ny, STEEL);
+          d.c.px(tx - ux, ty - uy, 0xd62839);
+          break;
+        }
+        case "dagger": {
+          d.c.line(hx - ux * 1, hy - uy * 1, hx, hy, 0x5a3a22);
+          d.c.line(hx + ux, hy + uy, hx + ux * 6, hy + uy * 6, STEEL);
+          break;
+        }
+        case "none": break;
+      }
+    },
+    fx(d, hand, a) {
+      const ph = d.p.attack;
+      if (o.weapon === "bow") {
+        if (ph === 2 || ph === 3) {
+          const ux = Math.cos(rad(a)), uy = Math.sin(rad(a)), [hx, hy] = hand, k = ph === 2 ? 8 : 13;
+          d.c.line(hx + ux * k, hy + uy * k, hx + ux * (k + 7), hy + uy * (k + 7), 0xc9a26a);
+          d.c.px(hx + ux * (k + 8), hy + uy * (k + 8), 0xffffff);
+          d.c.line(hx + ux * (k - 3), hy + uy * (k - 3), hx + ux * (k - 1), hy + uy * (k - 1), 0xffffff, 120);
+        }
+        return;
+      }
+      if (o.weapon === "spear" && ph === 2) {
+        const ux = Math.cos(rad(a)), uy = Math.sin(rad(a)), [hx, hy] = hand;
+        for (const k of [20, 22]) d.c.px(hx + ux * k, hy + uy * k, 0xffffff, 200);
+        return;
+      }
+      if (o.weapon !== "none" && ph === 2) slash(d, hand, a, o.fxCol ?? 0xffffff, o.weapon === "dagger" ? 9 : 12);
+    },
+  };
+  return H;
+}
+
+const archer = human({
+  name: "archer", skin: 0xf1c27d, hair: 0xc8792b, hairStyle: "ponytail",
+  hat: { kind: "hood", col: 0x3f7d3a, trim: 0x2c5a29 }, shirt: 0x5b9a45, sleeve: 0x4a7f38, pants: 0x6b4a2e, boots: 0x3d2a1a, belt: 0x5a3a22,
+  vest: 0x6e4526, weapon: "bow", quiver: true, aura: 0x9be564,
+});
+const barbarian = human({
+  name: "barbarian", skin: 0xe0a77a, hair: 0xd9792b, hairStyle: "long", beard: 0xd9792b,
+  hat: { kind: "horned", col: 0x8a939b, trim: 0x5b6470 }, shirt: 0, bareChest: true, pants: 0x7a5230, boots: 0x4a3020, belt: 0x3a2a1a,
+  weapon: "axe", fxCol: 0xffe0c0, aura: 0xff5a3c,
+});
+const blacksmith = human({
+  name: "blacksmith", skin: 0xd99a6c, hair: 0x2b2b2b, hairStyle: "bald", beard: 0x2b2b2b,
+  shirt: 0xb8a48a, pants: 0x4a4a52, boots: 0x2a2a2a, apron: 0x6e4526, weapon: "hammer", fxCol: 0xffb703,
+});
+const merchant = human({
+  name: "merchant", skin: 0xf1c8a0, hair: 0x6b4a2e, hairStyle: "short", beard: 0x6b4a2e,
+  hat: { kind: "wide", col: 0x7a2e5a, trim: 0xf2c14e }, shirt: 0xe9dcc2, vest: 0x9c2f5a, pants: 0x3d4a6b, boots: 0x3d2a1a, belt: 0xf2c14e,
+  weapon: "none",
+});
+const villager = human({
+  name: "villager", skin: 0xf1c27d, hair: 0x8b4a2b, hairStyle: "long",
+  hat: { kind: "bandana", col: 0xd9c08a, trim: 0xb89a5e }, shirt: 0x8fb3d9, pants: 0x6b5a45, boots: 0x4a3828, apron: 0xf3ead8,
+  weapon: "none",
+});
+const guard = human({
+  name: "guard", skin: 0xf1c27d, hair: 0x4e342e, hairStyle: "short",
+  hat: { kind: "helm", col: 0xa7b0ba, trim: 0x6f7883 }, shirt: 0x8a939b, pants: 0x4a3828, boots: 0x2e2a28, belt: 0x5a3a22,
+  tabard: { col: 0xb5262f, emblem: 0xf2c14e }, weapon: "spear",
+});
+
+export const HEROES: Hero[] = [ninja, wizard, knight, archer, barbarian];
+export const NPCS: Hero[] = [blacksmith, merchant, villager, guard];
 
 /** Render one frame into a fresh 32x32 canvas. */
 export function renderFrame(hero: Hero, p: Pose, withShadow = true, flash = 0): Canvas {
@@ -358,28 +627,116 @@ export function renderFrame(hero: Hero, p: Pose, withShadow = true, flash = 0): 
   const hand: [number, number] = [hp[0] + d.ux, hp[1] + ly];
   const ang = weaponAngle(p, hero);
   const legTop = 24 + p.crouch;
+  const mv = moveOf(hero, p);
+  const shieldAt = () => {
+    if (!hero.shield) return;
+    const push = mv.kind === "bash" && p.attack >= 0 ? (p.dir === "right" ? [-1, 2, 2, 1] : [-1, 3, 4, 2])[p.attack] : 0;
+    const [sx, sy] = [FACE[p.dir][0] * push, FACE[p.dir][1] * push];
+    d.ux += sx; d.uy += sy; hero.shield(d); d.ux -= sx; d.uy -= sy;
+  };
   const weaponBehind = p.dir === "up" ? p.attack < 1 || p.attack === 3 : hero.name === "wizard" && p.dir === "right" && p.attack < 0 ? false : false;
 
   if (p.dir === "up") {
     if (weaponBehind) hero.weapon(d, hand, ang);
     hero.legs(d, legTop); hero.torso(d);
-    hero.arm(d, "far", hand); hero.shield?.(d); hero.arm(d, "near", hand);
+    hero.arm(d, "far", hand); shieldAt(); hero.arm(d, "near", hand);
     hero.head(d);
     if (!weaponBehind) hero.weapon(d, hand, ang);
   } else if (p.dir === "down") {
     hero.legs(d, legTop); hero.torso(d); hero.head(d);
-    hero.arm(d, "far", hand); hero.shield?.(d);
+    hero.arm(d, "far", hand); shieldAt();
     hero.weapon(d, hand, ang); hero.arm(d, "near", hand);
   } else {
     hero.arm(d, "far", hand);
-    hero.legs(d, legTop); hero.torso(d); hero.shield?.(d); hero.head(d);
+    hero.legs(d, legTop); hero.torso(d); shieldAt(); hero.head(d);
     hero.weapon(d, hand, ang); hero.arm(d, "near", hand);
   }
   if (flash) c.tint(0xffffff, flash);
-  c.outline(OUTLINE);
-  hero.fx?.(d, hand, ang);
+  c.rim();
+  c.selout(OUTLINE);
+  if (p.attack < 0 || !p.move || p.move === "a1" || mv.kind === "double" || mv.kind === "charged") hero.fx?.(d, hand, ang);
+  if (p.attack >= 0) moveFx(d, hero, mv, hand, ang);
   if (withShadow) c.under((s) => s.ellipse(16 + d.lx, 29, 6, 1.5, 0x000000, 70));
   return c;
+}
+
+const rgbMix = (a: number, b: number, t: number) => {
+  const m = (s: number) => Math.round(((a >> s) & 255) + (((b >> s) & 255) - ((a >> s) & 255)) * t);
+  return (m(16) << 16) | (m(8) << 8) | m(0);
+};
+
+function arc(c: Canvas, cx: number, cy: number, r: number, a0: number, a1: number, col: number, alpha: number, width = 1) {
+  const n = Math.max(6, Math.abs(a1 - a0) / 5);
+  for (let i = 0; i <= n; i++) {
+    const a = rad(a0 + ((a1 - a0) * i) / n), fade = 0.35 + 0.65 * (i / n);
+    for (let w = 0; w < width; w++) c.px(cx + Math.cos(a) * (r - w), cy + Math.sin(a) * (r - w), col, alpha * fade * (w ? 0.6 : 1));
+  }
+}
+
+/** Effects shared by all combo moves: smears, speed lines, dust, magic circles. */
+function moveFx(d: D, hero: Hero, mv: Move, [hx, hy]: [number, number], a: number) {
+  const c = d.c, ph = d.p.attack, [fx, fy] = FACE[d.p.dir], col = mv.fx ?? 0xffffff;
+  const ux = Math.cos(rad(a)), uy = Math.sin(rad(a));
+  const prev = (i: number) => weaponAngle({ ...d.p, attack: i }, hero);
+  if ((mv.kind === "slash" || mv.kind === "bonk" || mv.kind === "slam") && ph === 1) {
+    // smear: a pale wedge from the wind-up angle to the swing angle, painted behind the body
+    const a0 = prev(0), a1 = a;
+    c.under((s) => { for (let r = 5; r <= 12; r++) arc(s, hx, hy, r, a0, a1, rgbMix(col, 0xbfd7ff, 0.3), r > 9 ? 120 : 60); });
+  }
+  if ((mv.kind === "slash" || mv.kind === "bonk") && ph === 2 && d.p.move !== "a1") arc(c, hx, hy, 12, prev(1), a + (a - prev(1)) * 0.3, col, 230, 2);
+  if (mv.kind === "thrust" && (ph === 1 || ph === 2)) {
+    const tipx = hx + ux * 12, tipy = hy + uy * 12, nx = -uy, ny = ux;
+    for (const o of [-3, 0, 3]) c.line(tipx - ux * (6 + Math.abs(o)) + nx * o, tipy - uy * (6 + Math.abs(o)) + ny * o, tipx - ux * (2 + Math.abs(o)) + nx * o, tipy - uy * (2 + Math.abs(o)) + ny * o, 0xffffff, ph === 2 ? 170 : 90);
+    if (ph === 2) { c.px(tipx + ux * 2, tipy + uy * 2, 0xffffff); c.px(tipx + ux * 2 + nx, tipy + uy * 2 + ny, 0xffffff, 150); c.px(tipx + ux * 2 - nx, tipy + uy * 2 - ny, 0xffffff, 150); }
+  }
+  if (mv.kind === "bash" && ph === 2) {
+    const bx = 16 + fx * 11 + d.ux, by = 20 + fy * 9 + d.uy;
+    for (const [sx, sy] of [[0, -3], [0, 3], [-3, 0], [3, 0], [-2, -2], [2, 2], [2, -2], [-2, 2]]) c.px(bx + sx, by + sy, 0xfff3b0, 230);
+    c.px(bx, by, 0xffffff);
+  }
+  if (mv.kind === "slam" && ph >= 2) {
+    const gx = Math.max(4, Math.min(27, hx + ux * 9)), gy = Math.min(29, Math.max(24, hy + uy * 9 + 3));
+    const r = ph === 2 ? 4 : 7, al = ph === 2 ? 220 : 120;
+    c.ellipse(gx, gy, r, r * 0.35, 0xd9c8a8, al * 0.35);
+    for (const s of [-1, 1]) { c.px(gx + s * r, gy, 0xe8dcc4, al); c.px(gx + s * (r - 1), gy - 1, 0xe8dcc4, al); c.px(gx + s * (r + 1), gy - 2 - (ph - 2), 0xbfb39a, al); }
+    if (ph === 2) { c.line(gx - 2, gy + 1, gx + 2, gy + 1, 0x3a2a1a, 200); c.px(gx - 3, gy, 0x3a2a1a, 200); c.px(gx + 3, gy + 2, 0x3a2a1a, 200); }
+  }
+  if (mv.kind === "cast") {
+    const al = [120, 200, 230, 110][ph];
+    c.under((s) => {
+      s.ellipse(16 + d.lx, 28, 11, 3.2, 0x9a6bff, al * 0.25);
+      for (let i = 0; i < 16; i++) { const t = rad(i * 22.5 + ph * 11); s.px(16 + d.lx + Math.cos(t) * 11, 28 + Math.sin(t) * 3.2, i % 4 ? 0x9a6bff : 0x5ee6ff, al); }
+    });
+    if (ph >= 1) for (let i = 0; i < 5; i++) c.px(8 + ((i * 7 + ph * 3) % 17) + d.lx, 26 - ((i * 5 + ph * 4) % 14), 0xc8fbff, 200);
+    if (ph === 2) { const ox = hx + ux * 16, oy = hy + uy * 16; c.ellipse(ox, oy, 4, 4, 0x9a6bff, 110); c.ellipse(ox, oy, 2, 2, 0xffffff, 230); for (const [sx, sy] of [[-6, 0], [6, 0], [0, -6], [-4, -4], [4, -4]]) c.px(ox + sx, oy + sy, 0xc8fbff); }
+  }
+  if (mv.kind === "double" && ph >= 2) {
+    const nx = -uy, ny = ux, k = ph === 2 ? 6 : 11;
+    for (const o of [3, -3]) { const sx = hx + nx * o, sy = hy + ny * o; c.line(sx + ux * k, sy + uy * k, sx + ux * (k + 6), sy + uy * (k + 6), 0xc9a26a); c.px(sx + ux * (k + 7), sy + uy * (k + 7), 0xffffff); }
+  }
+  if (mv.kind === "charged") {
+    if (ph <= 1) { const r = ph ? 3 : 2; c.ellipse(hx + ux * 9, hy + uy * 9, r, r, 0xffd166, 90 + ph * 60); c.px(hx + ux * 9, hy + uy * 9, 0xffffff); }
+    if (ph >= 2) {
+      const nx = -uy, ny = ux, k0 = ph === 2 ? 4 : 10, k1 = ph === 2 ? 22 : 26;
+      for (const o of [-1, 0, 1]) c.line(hx + ux * k0 + nx * o, hy + uy * k0 + ny * o, hx + ux * k1 + nx * o, hy + uy * k1 + ny * o, o ? 0xffd166 : 0xffffff, o ? 120 : 230);
+    }
+  }
+}
+
+function aura(c: Canvas, col: number, t: number, strong: boolean) {
+  c.under((s) => { s.ellipse(16, 18, 10, 12, col, strong ? 70 : 40); s.ellipse(16, 28, 10, 2.5, col, 90); });
+  for (let i = 0; i < 7; i++) {
+    const x = 6 + ((i * 5 + t * 3) % 21), y = 27 - ((i * 7 + t * 5) % 22);
+    c.px(x, y, rgbMix(col, 0xffffff, 0.5), 230); if (strong) c.px(x, y - 1, col, 150);
+  }
+}
+
+function ghostsBehind(dst: Canvas, src: Canvas, dx: number, dy: number, col: number) {
+  for (const [k, a] of [[2.4, 60], [1.3, 110]] as const) {
+    const g = new Canvas(FW, FH);
+    for (let y = 0; y < FH; y++) for (let x = 0; x < FW; x++) { const [pc, al] = src.get(x, y); if (al > 200) g.px(x, y, rgbMix(pc, col, 0.45), a); }
+    dst.under((s) => s.blit(g, Math.round(-dx * k), Math.round(-dy * k)));
+  }
 }
 
 function rotateLying(src: Canvas): Canvas {
@@ -408,8 +765,45 @@ export function animFrames(hero: Hero, anim: string, dir: Dir): Canvas[] {
   const B = (t: number) => base(dir, t);
   switch (anim) {
     case "idle": return [0, 0, 1, 1].map((bob, t) => renderFrame(hero, { ...B(t), bob }));
-    case "walk": return [1, 0, -1, 0].map((stride, t) => renderFrame(hero, { ...B(t), stride, bob: stride === 0 ? -1 : 0 }));
+    case "walk": return [1, 0.5, -0.5, -1, -0.5, 0.5].map((stride, t) => renderFrame(hero, { ...B(t), stride, bob: Math.abs(stride) === 1 ? 0 : -1 }));
     case "attack": return [0, 1, 2, 3].map((attack, t) => renderFrame(hero, { ...B(t), attack, bob: attack === 2 ? 1 : 0 }));
+    case "attack2": return [0, 1, 2, 3].map((attack, t) => renderFrame(hero, { ...B(t), attack, move: "a2", bob: attack === 2 ? 1 : 0 }));
+    case "attack3": {
+      if (hero.moves?.a3.kind === "spin") {
+        // spin on the spot: face each way in turn, ending where we started
+        const ring: (Dir | "left")[] = ["down", "left", "up", "right"];
+        const start = ring.indexOf(dir);
+        return [1, 2, 3, 0].map((k, i) => {
+          const fd = ring[(start + k) % 4], real: Dir = fd === "left" ? "right" : fd;
+          const f = renderFrame(hero, { ...B(i), dir: real, attack: Math.min(i + 1, 3), move: "a3", crouch: i === 3 ? 0 : 1 });
+          if (fd === "left") f.mirror();
+          if (i < 3) { arc(f, 16, 20, 13, i * 120 - 60, i * 120 + 100, 0xffffff, 200, 2); arc(f, 16, 20, 11, i * 120 - 20, i * 120 + 90, 0xbfd7ff, 120); }
+          return f;
+        });
+      }
+      return [0, 1, 2, 3].map((attack, t) => renderFrame(hero, { ...B(t), attack, move: "a3", bob: attack === 2 ? 1 : 0 }));
+    }
+    case "skill": {
+      const col = hero.aura ?? 0xffffff;
+      if (hero.name === "ninja") {
+        // shadow dash: lunge forward leaving afterimages
+        const [fx, fy] = FACE[dir];
+        const shift = (f: Canvas, k: number) => { const o = new Canvas(FW, FH); o.blit(f, fx * k, fy * k); return o; };
+        const f0 = renderFrame(hero, { ...B(0), attack: 0, move: "a2", crouch: 2 });
+        aura(f0, col, 0, false);
+        const f1 = shift(renderFrame(hero, { ...B(1), attack: 1, move: "a2" }, false), 3); ghostsBehind(f1, f1, fx * 3, fy * 3, col);
+        const f2 = shift(renderFrame(hero, { ...B(2), attack: 2 }, false), 4); ghostsBehind(f2, f2, fx * 3, fy * 3, col);
+        const f3 = shift(renderFrame(hero, { ...B(3), attack: 3 }), 2);
+        return [f0, f1, f2, f3];
+      }
+      return [0, 1, 2, 3].map((attack, t) => {
+        const f = renderFrame(hero, { ...B(t), attack, move: "a3", bob: attack === 2 ? 1 : 0, crouch: attack === 0 ? 1 : 0 });
+        aura(f, col, t, attack >= 1);
+        if (attack === 2) { arc(f, 16, 19, 14, 0, 359, rgbMix(col, 0xffffff, 0.4), 160); }
+        if (attack === 3) { arc(f, 16, 19, 15, 0, 359, col, 80); }
+        return f;
+      });
+    }
     case "hit": {
       const a = renderFrame(hero, { ...B(0), lean: 2, expr: "squint" }, true, 0.55);
       return [a, renderFrame(hero, { ...B(1), lean: 1, expr: "squint" })];

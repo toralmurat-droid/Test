@@ -63,6 +63,37 @@ export class Canvas {
       if (c !== undefined) this.px(x + (flip ? row.length - 1 - i : i), y + j, c);
     }));
   }
+  /** Coloured outline: each edge pixel takes a deep, cool shade of the part it wraps ("selout"). */
+  selout(base: number) {
+    const marks: [number, number, number][] = [];
+    for (let y = 0; y < this.h; y++) for (let x = 0; x < this.w; x++) {
+      if (this.alpha(x, y) > 0) continue;
+      let pick = -1;
+      for (const [dx, dy] of [[0, 1], [1, 0], [-1, 0], [0, -1]]) if (this.alpha(x + dx, y + dy) > 200) { pick = this.get(x + dx, y + dy)[0]; break; }
+      if (pick >= 0) marks.push([x, y, pick]);
+    }
+    for (const [x, y, col] of marks) {
+      const dk = shade(col, 0.32);
+      const mix = (a: number, b: number, t: number) => Math.round(a + (b - a) * t);
+      const r = mix((base >> 16) & 255, (dk >> 16) & 255, 0.55), g = mix((base >> 8) & 255, (dk >> 8) & 255, 0.55), b = mix(base & 255, dk & 255, 0.55);
+      this.px(x, y, (r << 16) | (g << 8) | b);
+    }
+  }
+  /** Light from the top-left: brighten opaque pixels whose left or top neighbour is empty. */
+  rim(f = 1.18) {
+    const marks: [number, number, number][] = [];
+    for (let y = 0; y < this.h; y++) for (let x = 0; x < this.w; x++) {
+      if (this.alpha(x, y) < 200) continue;
+      if (this.alpha(x - 1, y) === 0 || this.alpha(x, y - 1) === 0) marks.push([x, y, this.get(x, y)[0]]);
+    }
+    for (const [x, y, col] of marks) this.px(x, y, shade(col, f));
+  }
+  mirror() {
+    const o = new Canvas(this.w, this.h);
+    o.blit(this, 0, 0, (x, y) => [this.w - 1 - x, y]);
+    this.data = o.data;
+    return this;
+  }
   /** Dark outline around every opaque pixel (4-neighbour). */
   outline(c: number, x0 = 0, y0 = 0, w = this.w, h = this.h) {
     const marks: [number, number][] = [];
@@ -110,9 +141,24 @@ export class Canvas {
   }
 }
 
+/** Darken/lighten with hue shifting: shadows drift toward cool blue-violet, highlights toward warm yellow. */
 export function shade(c: number, f: number) {
-  const ch = (v: number) => Math.max(0, Math.min(255, Math.round(v * f)));
-  return (ch((c >> 16) & 255) << 16) | (ch((c >> 8) & 255) << 8) | ch(c & 255);
+  let r = ((c >> 16) & 255) / 255, g = ((c >> 8) & 255) / 255, b = (c & 255) / 255;
+  const mx = Math.max(r, g, b), mn = Math.min(r, g, b), dd = mx - mn;
+  let h = 0;
+  if (dd) h = mx === r ? ((g - b) / dd) % 6 : mx === g ? (b - r) / dd + 2 : (r - g) / dd + 4;
+  h *= 60; if (h < 0) h += 360;
+  let sat = mx ? dd / mx : 0, v = mx;
+  const toward = (target: number, amt: number) => { let diff = ((target - h + 540) % 360) - 180; h = (h + Math.sign(diff) * Math.min(Math.abs(diff), amt) + 360) % 360; };
+  if (sat > 0.08) {
+    if (f < 1) { toward(250, (1 - f) * 45); sat = Math.min(1, sat * (1 + (1 - f) * 0.35)); }
+    else if (f > 1) { toward(55, (f - 1) * 60); sat = sat * (1 - (f - 1) * 0.25); }
+  }
+  v = Math.min(1, v * f);
+  const C = v * sat, X = C * (1 - Math.abs(((h / 60) % 2) - 1)), m = v - C;
+  [r, g, b] = h < 60 ? [C, X, 0] : h < 120 ? [X, C, 0] : h < 180 ? [0, C, X] : h < 240 ? [0, X, C] : h < 300 ? [X, 0, C] : [C, 0, X];
+  const ch = (x: number) => Math.max(0, Math.min(255, Math.round((x + m) * 255)));
+  return (ch(r) << 16) | (ch(g) << 8) | ch(b);
 }
 
 const CRC = (() => {

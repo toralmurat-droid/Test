@@ -2,12 +2,13 @@ import Phaser from "phaser";
 
 /**
  * Generated pixel art (see tools/art, run `npm run art`).
- * Characters: 32x32 frames, animations `${char}_${anim}_${dir}`; dir is down | up | right (flipX for left).
+ * Characters: 32x32 frames (6 per row), animations `${char}_${anim}_${dir}`; dir is down | up | right (flipX for left).
  * Props/items: texture atlases "props" and "items" with frame names like "barrel", "potion_health".
  */
-export const CHARACTERS = ["ninja", "wizard", "knight"] as const;
+export const CHARACTERS = ["ninja", "wizard", "knight", "archer", "barbarian", "blacksmith", "merchant", "villager", "guard"] as const;
+export const NPC_NAMES = ["blacksmith", "merchant", "villager", "guard"] as const;
 export type CharacterName = (typeof CHARACTERS)[number];
-export const CHAR_ANIMS = ["idle", "walk", "attack", "hit", "ko"] as const;
+export const CHAR_ANIMS = ["idle", "walk", "attack", "attack2", "attack3", "hit", "ko", "skill"] as const;
 export const CHAR_ORIGIN = { x: 0.5, y: 29 / 32 }; // feet
 
 const BASE = "assets";
