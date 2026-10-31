@@ -2,7 +2,15 @@
  "characters": [
   "ninja",
   "wizard",
-  "knight"
+  "knight",
+  "archer",
+  "barbarian"
+ ],
+ "npcs": [
+  "blacksmith",
+  "merchant",
+  "villager",
+  "guard"
  ],
  "image": "{name}.png",
  "frameWidth": 32,

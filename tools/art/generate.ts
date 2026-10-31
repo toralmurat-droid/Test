@@ -1,5 +1,5 @@
 import { mkdirSync, writeFileSync } from "node:fs";
-import { ANIMS, COLS, DIRS, FH, FW, HEROES, buildSheet } from "./characters";
+import { ANIMS, COLS, DIRS, FH, FW, HEROES, NPCS, buildSheet } from "./characters";
 import { buildObjects } from "./objects";
 
 const OUT = "client/public/assets";
@@ -12,9 +12,10 @@ ANIMS.forEach((a, ai) => DIRS.forEach((dir, di) => {
   const row = ai * DIRS.length + di;
   animations[`${a.name}_${dir}`] = { frames: [...Array(a.frames).keys()].map((i) => row * COLS + i), fps: a.fps, loop: a.loop };
 }));
-for (const h of HEROES) buildSheet(h).save(`${OUT}/characters/${h.name}.png`);
+for (const h of [...HEROES, ...NPCS]) buildSheet(h).save(`${OUT}/characters/${h.name}.png`);
 writeFileSync(`${OUT}/characters/characters.json`, JSON.stringify({
   characters: HEROES.map((h) => h.name),
+  npcs: NPCS.map((h) => h.name),
   image: "{name}.png",
   frameWidth: FW, frameHeight: FH, columns: COLS,
   origin: { x: 0.5, y: 29 / FH },

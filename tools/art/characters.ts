@@ -339,7 +339,229 @@ function slash(d: D, [hx, hy]: [number, number], a: number, col: number, r: numb
   }
 }
 
-export const HEROES: Hero[] = [ninja, wizard, knight];
+// ---------- generic humans (archer, barbarian, NPCs) ----------
+interface HumanOpts {
+  name: string;
+  skin: number; hair: number; eye?: number;
+  hairStyle: "short" | "long" | "bald" | "ponytail";
+  beard?: number;                 // beard colour
+  hat?: { kind: "hood" | "horned" | "cap" | "helm" | "bandana" | "wide"; col: number; trim?: number };
+  shirt: number; pants: number; boots: number; belt?: number;
+  bareChest?: boolean;
+  apron?: number; vest?: number; tabard?: { col: number; emblem: number };
+  sleeve?: number;
+  weapon: "bow" | "axe" | "hammer" | "spear" | "dagger" | "none";
+  quiver?: boolean;
+  fxCol?: number;
+}
+
+function human(o: HumanOpts): Hero {
+  const eye = o.eye ?? 0x111111;
+  const sleeve = o.bareChest ? o.skin : o.sleeve ?? o.shirt;
+  const swing: Record<HumanOpts["weapon"], number[]> = {
+    bow: [0, 0, 0, 0], axe: [-140, -50, 30, 60], hammer: [-150, -70, 10, 40], spear: [-20, 0, 0, 0], dagger: [-90, -20, 30, 50], none: [-60, -10, 20, 30],
+  };
+  const idle: Record<HumanOpts["weapon"], Record<Dir, number>> = {
+    bow: { down: 180, up: 0, right: 0 }, axe: { down: 100, up: 110, right: 75 }, hammer: { down: 100, up: 110, right: 80 },
+    spear: { down: -95, up: -85, right: -80 }, dagger: { down: 110, up: 110, right: 100 }, none: { down: 90, up: 90, right: 90 },
+  };
+  const hat = o.hat;
+  const H: Hero = {
+    name: o.name,
+    swing: swing[o.weapon],
+    idleAngle: idle[o.weapon],
+    legs(d, top) { standardLegs(d, top, o.pants, o.boots); },
+    torso(d) {
+      const dir = d.p.dir;
+      const top = o.bareChest ? o.skin : o.shirt;
+      if (dir === "right") {
+        if (o.quiver) { d.U(9, 14, 3, 8, 0x8b5a2b); d.Ur(9, 12, 1, 2, 0xf3ead8); d.Ur(10, 12, 1, 2, 0xd62839); d.Ur(11, 13, 1, 1, 0xf3ead8); }
+        d.U(12, 16, 8, 8, top, true);
+        if (o.bareChest) { d.Ur(17, 18, 2, 1, shade(o.skin, 0.8)); d.Ur(12, 16, 8, 1, 0x7a5230); }
+        if (o.vest) d.Ur(12, 16, 4, 6, o.vest);
+        if (o.apron) d.Ur(16, 17, 4, 7, o.apron);
+        if (o.tabard) d.Ur(14, 17, 5, 7, o.tabard.col);
+        if (o.belt) d.Ur(12, 21, 8, 1, o.belt);
+      } else {
+        if (o.quiver && dir === "up") { d.U(17, 13, 3, 9, 0x8b5a2b); d.Ur(17, 12, 1, 1, 0xf3ead8); d.Ur(18, 11, 1, 2, 0xd62839); d.Ur(19, 12, 1, 1, 0xf3ead8); }
+        d.U(11, 16, 10, 8, top, true);
+        if (o.bareChest && dir === "down") { d.Ur(13, 18, 2, 1, shade(o.skin, 0.8)); d.Ur(17, 18, 2, 1, shade(o.skin, 0.8)); d.Ur(15, 20, 2, 1, shade(o.skin, 0.85)); }
+        if (o.bareChest) d.c.line(11 + d.ux, 16 + d.uy, 20 + d.ux, 22 + d.uy, 0x7a5230);
+        if (o.quiver && dir === "down") d.c.line(20 + d.ux, 16 + d.uy, 12 + d.ux, 21 + d.uy, 0x8b5a2b);
+        if (o.vest && dir === "down") { d.Ur(11, 16, 3, 7, o.vest); d.Ur(18, 16, 3, 7, o.vest); }
+        if (o.vest && dir === "up") d.Ur(11, 16, 10, 7, o.vest);
+        if (o.apron && dir === "down") { d.Ur(12, 17, 8, 7, o.apron); d.Ur(13, 16, 1, 1, o.apron); d.Ur(18, 16, 1, 1, o.apron); d.Ur(14, 19, 4, 2, shade(o.apron, 0.8)); }
+        if (o.apron && dir === "up") d.Ur(11, 20, 10, 1, o.apron);
+        if (o.tabard && dir === "down") { d.Ur(12, 17, 8, 7, o.tabard.col); d.Ur(15, 18, 2, 4, o.tabard.emblem); d.Ur(14, 19, 4, 1, o.tabard.emblem); }
+        if (o.tabard && dir === "up") d.Ur(12, 17, 8, 7, o.tabard.col);
+        if (o.belt) { d.Ur(11, 21, 10, 1, o.belt); if (dir === "down") d.Up(15, 21, 0xf2c14e); }
+      }
+    },
+    head(d) {
+      const dir = d.p.dir, hr = o.hair, sk = o.skin;
+      if (dir === "right") {
+        d.U(11, 5, 10, 11, sk, true);
+        if (o.hairStyle !== "bald") {
+          d.Ur(11, 5, 10, 3, hr); d.Ur(11, 8, 4, o.hairStyle === "long" ? 7 : 4, hr); d.Ur(15, 8, 1, 1, hr);
+          if (o.hairStyle === "ponytail") { d.Ur(9, 8, 2, 2, hr); d.Ur(8, 10, 2, 3, hr); d.Up(8, 13, hr); }
+          d.Up(12, 6, shade(hr, 1.25)); d.Up(14, 5, shade(hr, 1.25));
+        }
+        d.Ur(14, 10, 1, 2, shade(sk, 0.85)); // ear
+        eyes(d, [18], 10, eye); d.Up(21, 11, sk);
+        if (o.beard !== undefined) { d.Ur(15, 12, 6, 3, o.beard); d.Ur(16, 15, 4, 1, o.beard); }
+      } else if (dir === "down") {
+        d.U(10, 5, 12, 11, sk, true);
+        if (o.hairStyle !== "bald") {
+          d.Ur(10, 5, 12, 3, hr); d.Ur(10, 8, 1, o.hairStyle === "long" ? 7 : 3, hr); d.Ur(21, 8, 1, o.hairStyle === "long" ? 7 : 3, hr);
+          d.Ur(11, 8, 3, 1, hr); d.Up(18, 8, hr); d.Ur(12, 5, 3, 1, shade(hr, 1.25));
+        }
+        eyes(d, [13, 18], 10, eye);
+        d.Up(10, 11, shade(sk, 0.85)); d.Up(21, 11, shade(sk, 0.85));
+        if (o.beard !== undefined) { d.Ur(11, 12, 10, 3, o.beard); d.Ur(12, 15, 8, 1, o.beard); d.Ur(14, 13, 4, 1, shade(sk, 0.7)); }
+        else d.Ur(15, 13, 2, 1, shade(sk, 0.75));
+      } else {
+        d.U(10, 5, 12, 11, o.hairStyle === "bald" ? sk : hr, true);
+        if (o.hairStyle === "bald") d.Ur(10, 13, 12, 1, shade(sk, 0.85));
+        else if (o.hairStyle !== "long") d.Ur(11, 14, 10, 2, sk);
+        if (o.hairStyle === "ponytail") { d.Ur(15, 13, 2, 4, hr); }
+        if (o.hairStyle !== "bald") for (const x of [13, 16, 19]) d.Ur(x, 7, 1, 5, shade(hr, 0.82));
+      }
+      if (!hat) return;
+      const hc = hat.col, tr = hat.trim ?? shade(hc, 0.75);
+      if (hat.kind === "hood") {
+        if (dir === "right") { d.U(10, 4, 11, 5, hc, true); d.Ur(10, 9, 5, 7, hc); d.Ur(9, 9, 2, 6, hc); d.Ur(20, 6, 1, 3, tr); }
+        else if (dir === "down") { d.U(9, 4, 14, 4, hc, true); d.Ur(9, 8, 2, 8, hc); d.Ur(21, 8, 2, 8, hc); d.Ur(11, 8, 10, 1, tr); }
+        else { d.U(9, 4, 14, 12, hc, true); d.Ur(15, 6, 2, 9, tr); }
+      } else if (hat.kind === "horned") {
+        const horn = 0xefe3c8;
+        if (dir === "right") { d.U(11, 4, 10, 4, hc, true); d.Ur(11, 7, 10, 1, tr); for (const [x, y] of [[13, 3], [12, 2], [12, 1], [13, 0]]) d.Up(x, y, horn); }
+        else { d.U(10, 4, 12, 4, hc, true); d.Ur(10, 7, 12, 1, tr); if (dir === "down") d.Ur(15, 4, 2, 4, tr);
+          for (const [x, y] of [[9, 5], [8, 4], [7, 3], [7, 2], [8, 1], [22, 5], [23, 4], [24, 3], [24, 2], [23, 1]]) d.Up(x, y, horn); }
+      } else if (hat.kind === "cap") {
+        if (dir === "right") { d.U(11, 3, 9, 4, hc, true); d.Ur(19, 6, 4, 1, tr); if (hat.trim) d.Ur(11, 6, 8, 1, hat.trim); d.Up(13, 2, 0xd62839); d.Up(12, 1, 0xd62839); }
+        else { d.U(10, 3, 12, 4, hc, true); d.Ur(10, 6, 12, 1, tr); if (dir === "down") { d.Up(18, 2, 0xd62839); d.Up(19, 1, 0xd62839); } }
+      } else if (hat.kind === "helm") {
+        if (dir === "right") { d.U(11, 3, 10, 6, hc, true); d.Ur(11, 8, 10, 1, tr); d.Ur(19, 8, 1, 4, tr); }
+        else { d.U(10, 3, 12, 6, hc, true); d.Ur(10, 8, 12, 1, tr); if (dir === "down") d.Ur(15, 8, 2, 4, tr); }
+        d.Ur(15, 2, 2, 1, tr);
+      } else if (hat.kind === "bandana") {
+        if (dir === "right") { d.Ur(11, 5, 10, 3, hc); d.Ur(9, 7, 2, 2, hc); d.Up(8, 9, hc); }
+        else { d.Ur(10, 5, 12, 3, hc); d.Up(12, 6, tr); d.Up(17, 6, tr); if (dir === "up") { d.Ur(15, 8, 2, 3, hc); } }
+      } else if (hat.kind === "wide") {
+        if (dir === "right") { d.U(12, 2, 8, 4, hc, true); d.U(8, 5, 16, 2, hc); d.Ur(12, 4, 8, 1, tr); }
+        else { d.U(11, 1, 10, 5, hc, true); d.U(7, 5, 18, 2, hc); d.Ur(11, 4, 10, 1, tr); }
+      }
+    },
+    arm(d, which, [hx, hy]) {
+      const p = d.p;
+      if (p.dir === "right") {
+        if (which === "far") { d.c.box(17 + d.ux - (p.attack >= 0 ? 0 : Math.round(p.stride * 1.5)), 17 + d.uy, 2, 5, shade(sleeve, 0.75)); return; }
+        armTo(d, 15, 17, hx, hy, sleeve, o.skin);
+        return;
+      }
+      if (which === "far") {
+        const x = p.dir === "down" ? 21 : 9, sw = p.attack >= 0 ? 0 : (p.dir === "down" ? p.stride : -p.stride);
+        if (o.weapon === "bow" && p.attack >= 0) return; // both hands on the bow
+        d.c.box(x + d.ux, 17 + d.uy, 2, 5 + sw, sleeve); d.c.rect(x + d.ux, 22 + d.uy + sw, 2, 1, o.skin); return;
+      }
+      armTo(d, p.dir === "down" ? 9 : 21, 17, hx, hy, sleeve, o.skin);
+    },
+    weapon(d, [hx, hy], a) {
+      const ux = Math.cos(rad(a)), uy = Math.sin(rad(a)), nx = -uy, ny = ux;
+      const W = 0x8b5a2b, STEEL = 0xd5dce4;
+      switch (o.weapon) {
+        case "bow": {
+          const ph = d.p.attack, pull = ph === 0 ? 2 : ph === 1 ? 4 : 0;
+          const pts: [number, number][] = [];
+          for (let t = -7; t <= 7; t++) { const bend = 3 * (1 - (t / 7) ** 2); pts.push([hx + nx * t + ux * bend, hy + ny * t + uy * bend]); }
+          for (let i = 1; i < pts.length; i++) d.c.line(pts[i - 1][0], pts[i - 1][1], pts[i][0], pts[i][1], i === 1 || i === pts.length - 1 ? shade(W, 0.7) : W);
+          const sx = hx - ux * pull, sy = hy - uy * pull;
+          d.c.line(pts[0][0], pts[0][1], sx, sy, 0xf3ead8, 200); d.c.line(pts[pts.length - 1][0], pts[pts.length - 1][1], sx, sy, 0xf3ead8, 200);
+          if (ph === 0 || ph === 1) { d.c.line(sx, sy, sx + ux * 10, sy + uy * 10, 0xc9a26a); d.c.px(sx + ux * 11, sy + uy * 11, STEEL); d.c.px(sx, sy, 0xd62839); }
+          break;
+        }
+        case "axe": {
+          d.c.line(hx - ux * 2, hy - uy * 2, hx + ux * 10, hy + uy * 10, W);
+          const bx = hx + ux * 8, by = hy + uy * 8;
+          for (let t = 1; t <= 4; t++) d.c.line(bx + nx * t, by + ny * t, bx + nx * t + ux * (3 + (t > 2 ? 1 : 0)), by + ny * t + uy * (3 + (t > 2 ? 1 : 0)), t === 4 ? 0xf3f6f9 : STEEL);
+          d.c.line(bx - nx, by - ny, bx - nx + ux * 2, by - ny + uy * 2, shade(STEEL, 0.7));
+          break;
+        }
+        case "hammer": {
+          d.c.line(hx - ux * 2, hy - uy * 2, hx + ux * 8, hy + uy * 8, W);
+          const bx = hx + ux * 8, by = hy + uy * 8;
+          for (let t = -2; t <= 2; t++) d.c.line(bx + nx * t, by + ny * t, bx + nx * t + ux * 2, by + ny * t + uy * 2, t === -2 ? 0x8a939b : 0x5b6470);
+          break;
+        }
+        case "spear": {
+          d.c.line(hx - ux * 6, hy - uy * 6, hx + ux * 14, hy + uy * 14, W);
+          const tx = hx + ux * 14, ty = hy + uy * 14;
+          d.c.line(tx, ty, tx + ux * 4, ty + uy * 4, STEEL); d.c.px(tx + nx, ty + ny, STEEL); d.c.px(tx - nx, ty - ny, STEEL);
+          d.c.px(tx - ux, ty - uy, 0xd62839);
+          break;
+        }
+        case "dagger": {
+          d.c.line(hx - ux * 1, hy - uy * 1, hx, hy, 0x5a3a22);
+          d.c.line(hx + ux, hy + uy, hx + ux * 6, hy + uy * 6, STEEL);
+          break;
+        }
+        case "none": break;
+      }
+    },
+    fx(d, hand, a) {
+      const ph = d.p.attack;
+      if (o.weapon === "bow") {
+        if (ph === 2 || ph === 3) {
+          const ux = Math.cos(rad(a)), uy = Math.sin(rad(a)), [hx, hy] = hand, k = ph === 2 ? 8 : 13;
+          d.c.line(hx + ux * k, hy + uy * k, hx + ux * (k + 7), hy + uy * (k + 7), 0xc9a26a);
+          d.c.px(hx + ux * (k + 8), hy + uy * (k + 8), 0xffffff);
+          d.c.line(hx + ux * (k - 3), hy + uy * (k - 3), hx + ux * (k - 1), hy + uy * (k - 1), 0xffffff, 120);
+        }
+        return;
+      }
+      if (o.weapon === "spear" && ph === 2) {
+        const ux = Math.cos(rad(a)), uy = Math.sin(rad(a)), [hx, hy] = hand;
+        for (const k of [20, 22]) d.c.px(hx + ux * k, hy + uy * k, 0xffffff, 200);
+        return;
+      }
+      if (o.weapon !== "none" && ph === 2) slash(d, hand, a, o.fxCol ?? 0xffffff, o.weapon === "dagger" ? 9 : 12);
+    },
+  };
+  return H;
+}
+
+const archer = human({
+  name: "archer", skin: 0xf1c27d, hair: 0xc8792b, hairStyle: "ponytail",
+  hat: { kind: "hood", col: 0x3f7d3a, trim: 0x2c5a29 }, shirt: 0x5b9a45, sleeve: 0x4a7f38, pants: 0x6b4a2e, boots: 0x3d2a1a, belt: 0x5a3a22,
+  vest: 0x6e4526, weapon: "bow", quiver: true,
+});
+const barbarian = human({
+  name: "barbarian", skin: 0xe0a77a, hair: 0xd9792b, hairStyle: "long", beard: 0xd9792b,
+  hat: { kind: "horned", col: 0x8a939b, trim: 0x5b6470 }, shirt: 0, bareChest: true, pants: 0x7a5230, boots: 0x4a3020, belt: 0x3a2a1a,
+  weapon: "axe", fxCol: 0xffe0c0,
+});
+const blacksmith = human({
+  name: "blacksmith", skin: 0xd99a6c, hair: 0x2b2b2b, hairStyle: "bald", beard: 0x2b2b2b,
+  shirt: 0xb8a48a, pants: 0x4a4a52, boots: 0x2a2a2a, apron: 0x6e4526, weapon: "hammer", fxCol: 0xffb703,
+});
+const merchant = human({
+  name: "merchant", skin: 0xf1c8a0, hair: 0x6b4a2e, hairStyle: "short", beard: 0x6b4a2e,
+  hat: { kind: "wide", col: 0x7a2e5a, trim: 0xf2c14e }, shirt: 0xe9dcc2, vest: 0x9c2f5a, pants: 0x3d4a6b, boots: 0x3d2a1a, belt: 0xf2c14e,
+  weapon: "none",
+});
+const villager = human({
+  name: "villager", skin: 0xf1c27d, hair: 0x8b4a2b, hairStyle: "long",
+  hat: { kind: "bandana", col: 0xd9c08a, trim: 0xb89a5e }, shirt: 0x8fb3d9, pants: 0x6b5a45, boots: 0x4a3828, apron: 0xf3ead8,
+  weapon: "none",
+});
+const guard = human({
+  name: "guard", skin: 0xf1c27d, hair: 0x4e342e, hairStyle: "short",
+  hat: { kind: "helm", col: 0xa7b0ba, trim: 0x6f7883 }, shirt: 0x8a939b, pants: 0x4a3828, boots: 0x2e2a28, belt: 0x5a3a22,
+  tabard: { col: 0xb5262f, emblem: 0xf2c14e }, weapon: "spear",
+});
+
+export const HEROES: Hero[] = [ninja, wizard, knight, archer, barbarian];
+export const NPCS: Hero[] = [blacksmith, merchant, villager, guard];
 
 /** Render one frame into a fresh 32x32 canvas. */
 export function renderFrame(hero: Hero, p: Pose, withShadow = true, flash = 0): Canvas {
