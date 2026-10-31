@@ -171,6 +171,69 @@ const props: Obj[] = [
     c.box(4, 7, 24, 15, WOOD_L); c.rect(4, 7, 24, 1, WOOD_D);
     for (const [x, y, w, h] of [[6, 9, 7, 9], [15, 10, 6, 7], [22, 9, 5, 10]]) { c.box(x, y, w, h, CLOTH); c.px(x + w / 2, y, RED); for (let j = y + 2; j < y + h - 1; j += 2) c.rect(x + 1, j, w - 2, 1, 0xa89f8c); }
   }),
+  P("fountain", 32, 32, (c, f) => {
+    c.ellipse(16, 22, 14, 6, STONE); c.ellipse(16, 21, 12, 4.5, 0x2f80ed); c.ellipse(13, 20, 4, 1.2, 0x7fc1ff);
+    c.rect(2, 22, 28, 5, STONE); c.rect(2, 26, 28, 1, STONE_D); for (let x = 5; x < 30; x += 6) c.rect(x, 23, 1, 3, STONE_D);
+    c.box(14, 9, 4, 12, STONE); c.ellipse(16, 9, 5, 1.6, STONE); c.ellipse(16, 8.6, 3.5, 0.8, 0x2f80ed);
+    const w = f % 2;
+    c.px(16, 5 - w, 0xbfe3ff); c.px(16, 6, 0x7fc1ff); c.px(15, 4 + w, 0x7fc1ff, 200); c.px(17, 4 + w, 0x7fc1ff, 200);
+    c.line(11, 10 + w, 9, 17, 0x7fc1ff, 160); c.line(21, 10 + w, 23, 17, 0x7fc1ff, 160);
+    c.px(10 + w, 19, 0xffffff); c.px(22 - w, 19, 0xffffff);
+  }, { frames: 2, fps: 4 }),
+  P("weapon_rack", 32, 32, (c) => {
+    c.rect(4, 8, 2, 20, WOOD_D); c.rect(26, 8, 2, 20, WOOD_D); c.box(3, 10, 26, 2, WOOD); c.box(3, 24, 26, 2, WOOD);
+    c.line(9, 6, 9, 27, 0xd5dce4); c.rect(7, 22, 5, 1, GOLD); c.rect(9, 23, 1, 3, 0x6b4226);
+    c.line(16, 4, 16, 27, WOOD); c.line(16, 4, 16, 7, 0xd5dce4); c.px(15, 6, 0xd5dce4); c.px(17, 6, 0xd5dce4);
+    c.line(22, 8, 22, 27, WOOD); c.rect(19, 8, 3, 5, 0xd5dce4); c.rect(19, 12, 3, 1, 0x8a939b);
+  }),
+  P("archery_target", 32, 32, (c) => {
+    c.line(9, 28, 13, 12, WOOD_D); c.line(23, 28, 19, 12, WOOD_D);
+    c.ellipse(16, 14, 10, 10, 0xf3ead8); c.ellipse(16, 14, 8, 8, RED); c.ellipse(16, 14, 6, 6, 0xf3ead8); c.ellipse(16, 14, 4, 4, RED); c.ellipse(16, 14, 2, 2, GOLD);
+    c.line(19, 11, 25, 6, 0xc9a26a); c.px(25, 5, 0xf3ead8); c.px(26, 6, 0xf3ead8);
+  }),
+  P("scarecrow", 16, 32, (c) => {
+    c.box(7, 12, 2, 18, WOOD_D); c.box(1, 13, 14, 2, WOOD);
+    c.box(4, 13, 8, 9, 0x6b8f3a); c.rect(4, 16, 8, 1, 0x4f6b2a); c.rect(1, 13, 3, 3, 0x6b8f3a); c.rect(12, 13, 3, 3, 0x6b8f3a);
+    c.px(0, 15, 0xe2b84a); c.px(15, 15, 0xe2b84a); c.rect(5, 22, 6, 2, 0xe2b84a);
+    c.ellipse(8, 9, 3.5, 3.5, 0xd9c08a); c.px(7, 9, 0x2a1a0a); c.px(10, 9, 0x2a1a0a); c.rect(7, 11, 3, 1, 0x8b5a2b);
+    c.box(3, 4, 10, 2, 0x8b5a2b); c.box(5, 1, 6, 4, 0x8b5a2b);
+  }),
+  P("pumpkin", 16, 16, (c) => {
+    const O = 0xf08a24; c.ellipse(8, 10, 6, 4.5, O); c.rect(5, 6, 1, 8, shade(O, 0.8)); c.rect(10, 6, 1, 8, shade(O, 0.8)); c.ellipse(6, 9, 1, 2, shade(O, 1.2));
+    c.rect(7, 3, 2, 3, 0x4f7a2a); c.px(9, 4, GREEN);
+  }),
+  P("beehive", 16, 16, (c, f) => {
+    const Y = 0xe8b04a; c.box(6, 12, 4, 3, WOOD_D);
+    c.ellipse(8, 7, 5, 5, Y); for (const y of [4, 7, 10]) c.rect(3, y, 10, 1, shade(Y, 0.75)); c.rect(7, 9, 2, 2, 0x3a2412);
+    c.px(13 + (f % 2), 3, 0x1a1a1a); c.px(14 + (f % 2), 3, 0xffd34d); c.px(2 - (f % 2), 5, 0xffd34d);
+  }, { frames: 2, fps: 6 }),
+  P("gravestone", 16, 16, (c) => {
+    c.box(4, 4, 8, 11, STONE); c.ellipse(8, 4.5, 4, 2, STONE); c.rect(7, 6, 2, 5, STONE_D); c.rect(6, 7, 4, 1, STONE_D); c.rect(3, 14, 10, 1, GREEN_D);
+  }),
+  P("water_trough", 32, 16, (c) => {
+    c.box(3, 4, 26, 9, WOOD); c.rect(5, 5, 22, 3, 0x2f80ed); c.rect(6, 5, 6, 1, 0x7fc1ff); c.rect(4, 13, 2, 2, WOOD_D); c.rect(26, 13, 2, 2, WOOD_D);
+    c.rect(3, 10, 26, 1, WOOD_D);
+  }),
+  P("wheelbarrow", 32, 16, (c) => {
+    c.line(2, 6, 10, 8, WOOD_D); c.line(2, 7, 10, 9, WOOD_D);
+    c.box(9, 3, 16, 7, 0x8a939b); c.rect(10, 3, 14, 2, 0xe2b84a); c.rect(9, 9, 16, 1, 0x5b6470);
+    c.ellipse(25, 11, 3, 3, 0x5a3a22); c.ellipse(25, 11, 1, 1, IRON); c.rect(12, 10, 1, 5, WOOD_D);
+  }),
+  P("tavern_sign", 32, 32, (c) => {
+    c.box(4, 4, 2, 25, WOOD_D); c.box(4, 4, 22, 2, WOOD_D); c.line(12, 6, 12, 9, IRON); c.line(22, 6, 22, 9, IRON);
+    c.box(9, 9, 16, 11, WOOD_L, { top: true }); c.rect(9, 9, 16, 1, WOOD_D);
+    c.box(13, 11, 6, 7, GOLD); c.rect(13, 11, 6, 2, 0xffffff); c.rect(19, 13, 2, 3, GOLD); c.rect(14, 14, 1, 3, shade(GOLD, 0.8));
+  }),
+  P("tent", 32, 32, (c) => {
+    const T = 0xe0cfa8;
+    for (let y = 6; y < 28; y++) { const hw = Math.round((y - 6) * 0.62); c.rect(16 - hw, y, hw * 2 + 1, 1, T); c.px(16 + hw, y, shade(T, 0.75)); c.px(16 - hw, y, shade(T, 1.1)); }
+    for (let y = 14; y < 28; y++) { const hw = Math.round((y - 14) * 0.35); c.rect(16 - hw, y, hw * 2 + 1, 1, 0x3a2a1a); }
+    c.line(16, 2, 16, 6, WOOD_D); c.rect(17, 2, 4, 2, RED); c.rect(2, 27, 28, 1, shade(T, 0.7));
+  }),
+  P("flower_planter", 32, 16, (c) => {
+    c.box(2, 8, 28, 6, WOOD); c.rect(2, 8, 28, 1, WOOD_L);
+    for (let x = 4; x < 29; x += 3) { c.rect(x, 5, 1, 3, GREEN); const col = [0xff6b9d, 0xfff176, 0xffffff, 0xb08cff][(x / 3) % 4 | 0]; c.rect(x - 1, 3, 3, 2, col); c.px(x, 4, 0xffd34d); }
+  }),
 ];
 
 // ---------------- items (16x16 icons) ----------------
