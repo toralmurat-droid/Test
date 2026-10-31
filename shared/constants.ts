@@ -1,6 +1,6 @@
 export const TILE = 16;
-export const MAP_W = 64; // tiles
-export const MAP_H = 48; // tiles
+export const MAP_W = 96; // tiles
+export const MAP_H = 72; // tiles
 export const TICK_RATE = 20; // server updates per second
 export const PLAYER_SPEED = 90; // px per second (default; classes override, see classes.ts)
 export const PLAYER_RADIUS = 5; // collision half-size in px

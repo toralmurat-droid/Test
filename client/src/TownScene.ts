@@ -2,9 +2,10 @@ import Phaser from "phaser";
 import { Client, Room } from "colyseus.js";
 import { InputState, MAP_H, MAP_W, TILE } from "../../shared/constants";
 import { CLASSES, ClassKind, xpForLevel } from "../../shared/classes";
-import { isSafeZone, TOWN_MAP } from "../../shared/map";
+import { GROUND, OBJECTS, areaAt, isSafeZone } from "../../shared/map";
 import { moveStep } from "../../shared/movement";
 import { heroTexture, makeTileset, mobTexture } from "./textures";
+import { Minimap } from "./minimap";
 
 interface Entity {
   sprite: Phaser.GameObjects.Sprite;
@@ -27,6 +28,9 @@ export class TownScene extends Phaser.Scene {
   private input_: InputState = { up: false, down: false, left: false, right: false };
   private seq = 0;
   private chatEl = document.getElementById("chat") as HTMLInputElement;
+  private minimap?: Minimap;
+  private areaName = "";
+  private areaTimer?: number;
   private shots = new Map<string, { g: Phaser.GameObjects.Arc; tx: number; ty: number }>();
   private lastSpecial = -Infinity; // local clock (ms) of my last special, for the cooldown bar
 
@@ -36,9 +40,10 @@ export class TownScene extends Phaser.Scene {
 
   async create() {
     makeTileset(this);
-    const map = this.make.tilemap({ data: TOWN_MAP, tileWidth: TILE, tileHeight: TILE });
+    const map = this.make.tilemap({ tileWidth: TILE, tileHeight: TILE, width: MAP_W, height: MAP_H });
     const tiles = map.addTilesetImage("tiles", "tiles", TILE, TILE, 0, 0)!;
-    map.createLayer(0, tiles, 0, 0)!.setDepth(-1);
+    map.createBlankLayer("ground", tiles)!.putTilesAt(GROUND, 0, 0).setDepth(-2);
+    map.createBlankLayer("objects", tiles)!.putTilesAt(OBJECTS, 0, 0).setDepth(-1);
 
     const cam = this.cameras.main;
     cam.setBounds(0, 0, MAP_W * TILE, MAP_H * TILE);
@@ -67,6 +72,7 @@ export class TownScene extends Phaser.Scene {
     document.getElementById("join")!.hidden = true;
     (document.getElementById("join") as HTMLElement).style.display = "none";
     document.getElementById("hud")!.hidden = false;
+    this.minimap = new Minimap(document.getElementById("minimap") as HTMLCanvasElement);
 
     const players = (this.room.state as any).players;
     players.onAdd((p: any, id: string) => {
@@ -233,6 +239,18 @@ export class TownScene extends Phaser.Scene {
     this.time.delayedCall(4000, () => { if (e.bubble === b) { b.destroy(); e.bubble = undefined; } });
   }
 
+  /** Shows the area banner briefly whenever the player enters a new named area. */
+  private showArea(name: string) {
+    if (name === this.areaName) return;
+    this.areaName = name;
+    document.getElementById("location")!.textContent = name;
+    const el = document.getElementById("area")!;
+    el.textContent = name;
+    el.classList.add("show");
+    clearTimeout(this.areaTimer);
+    this.areaTimer = window.setTimeout(() => el.classList.remove("show"), 2500);
+  }
+
   update(_t: number, dtMs: number) {
     if (!this.room) return;
     const k = this.keys;
@@ -294,6 +312,10 @@ export class TownScene extends Phaser.Scene {
     }
 
     const meEnt = this.entities.get(this.me);
+    const others = [...this.entities].filter(([id, e]) => id !== this.me && !e.mob).map(([, e]) => e.sprite);
+    this.minimap?.draw(now, meEnt?.sprite, others);
+    if (meEnt) this.showArea(areaAt(meEnt.sprite.x, meEnt.sprite.y));
+
     const mine = meEnt?.state;
     if (mine) {
       const online = [...this.entities.values()].filter((x) => !x.mob).length;
