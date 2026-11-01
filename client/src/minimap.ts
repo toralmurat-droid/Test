@@ -93,8 +93,10 @@ export class Minimap {
       const s = localStorage.getItem(this.key);
       if (!s) return;
       const bin = atob(s);
-      if (bin.length !== this.seen.length) return;
-      for (let i = 0; i < bin.length; i++) this.seen[i] = bin.charCodeAt(i);
+      if (bin.length === this.seen.length) { for (let i = 0; i < bin.length; i++) this.seen[i] = bin.charCodeAt(i); return; }
+      if (bin.length === 160 * 120) { // saved before the map grew from 160x120: same coordinates, copy row by row
+        for (let y = 0; y < 120 && y < MAP_H; y++) for (let x = 0; x < 160 && x < MAP_W; x++) this.seen[y * MAP_W + x] = bin.charCodeAt(y * 160 + x);
+      }
     } catch { /* storage unavailable: start with nothing discovered */ }
   }
 

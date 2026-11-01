@@ -62,6 +62,12 @@ off to the Hunter's Camp, the Watchtower, the mill and Mirror Pond and the marsh
 - **Mirror Pond** and **Misty Marsh** (south-west, with a boardwalk), **Stonecrag Quarry** (south-east)
 - **Millbrook Mill** on **River Ashwell** (east), then **Whispering Woods** with trails, the **Old Ruins** and the
   **Old Watchtower**
+- The wider world, with tougher monsters: **Barrow Downs** (far south-west graveyard and mausoleum), **Sunken Lake**
+  (south, island shrine on a boardwalk), **Greywatch Keep** (ruined castle far east) and the **Thornwood** (dark pines,
+  north-east)
+
+Monster levels grow with distance from Oakvale (`zoneLevels` in `shared/spawns.ts`): level 1-3 next to the village,
+up to 10-12 at the far edges. Signposts at the gates and junctions have one board per road, naming where it leads.
 
 Each area in `AREAS` can list the monsters that belong there (`mobs`), and `randomPointInArea(name)` returns a free
 spot inside an area, for per-zone spawns.
