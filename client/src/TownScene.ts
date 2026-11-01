@@ -12,6 +12,7 @@ import {
 import { displayGrid } from "./tileset";
 import { heroTexture, itemTexture, makeTileset, MOB_LOOK, mobTexture } from "./textures";
 import { Minimap } from "./minimap";
+import { DayDial } from "./daydial";
 import { SignPanel } from "./signpanel";
 import { pixelText } from "./pixeltext";
 import { CHARACTERS, CHAR_ORIGIN, CharacterName, createArtAnims, playCharAnim, preloadArt } from "./artAssets";
@@ -65,6 +66,7 @@ export class TownScene extends Phaser.Scene {
   private seq = 0;
   private chatEl = document.getElementById("chat") as HTMLInputElement;
   private minimap?: Minimap;
+  private dial?: DayDial;
   private signPanel = new SignPanel();
   private ambient?: Ambient;
   private details?: Details;
@@ -171,6 +173,7 @@ export class TownScene extends Phaser.Scene {
     (document.getElementById("join") as HTMLElement).style.display = "none";
     document.getElementById("hud")!.hidden = false;
     this.minimap = new Minimap(document.getElementById("minimap") as HTMLCanvasElement, this.opts.name);
+    this.dial = new DayDial(document.getElementById("daydial") as HTMLCanvasElement);
 
     const players = (this.room.state as any).players;
     players.onAdd((p: any, id: string) => {
@@ -835,6 +838,7 @@ export class TownScene extends Phaser.Scene {
     const meEnt = this.entities.get(this.me);
     const others = [...this.entities].filter(([id, e]) => id !== this.me && !e.mob).map(([, e]) => e.sprite);
     this.minimap?.draw(now, meEnt?.sprite, others);
+    this.dial?.draw(now);
     if (meEnt) this.showArea(areaAt(meEnt.sprite.x, meEnt.sprite.y));
     this.signPanel.update(meEnt?.sprite);
 
