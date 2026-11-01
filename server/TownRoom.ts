@@ -15,10 +15,10 @@ import {
 import {
   ITEM_LIFETIME_MS, ItemKind, LOOT, MAX_POTIONS, PICKUP_RADIUS, POTION_COOLDOWN_MS, POTION_HEAL, PVP_GOLD_DROP,
 } from "../shared/items";
-import { areaAt, isSafeZone, isSolidAt, randomSpawn } from "../shared/map";
+import { isSafeZone, isSolidAt, randomSpawn } from "../shared/map";
 import { npcNear, TALK_RANGE } from "../shared/npcs";
 import { sellPrice, SHOPS } from "../shared/shops";
-import { isBlob, Q, QUEST } from "../shared/quests";
+import { inQuestZone, isBlob, Q, QUEST } from "../shared/quests";
 import { findHideSpot, HIDE, randomPointInZone, rollLevel, SPAWN_ZONES, zoneCap } from "../shared/spawns";
 import { moveStep } from "../shared/movement";
 import { SLOT_COUNT, SlotSkill, skillLearned } from "../shared/slots";
@@ -947,9 +947,9 @@ export class TownRoom extends Room<TownState> {
     }
   }
 
-  /** Investigation step: a blob seen in the woods. */
+  /** Investigation step: a blob seen in the quest zone. */
   private checkQuestSight(id: string, p: Player) {
-    if (!QUEST.woods.includes(areaAt(p.x, p.y))) return;
+    if (!inQuestZone(p.x, p.y)) return;
     const r2 = QUEST.sightRange * QUEST.sightRange;
     for (const m of this.state.mobs.values()) {
       if (m.dead || m.hidden || !isBlob(m.kind)) continue;

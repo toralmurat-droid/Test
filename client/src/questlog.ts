@@ -38,7 +38,8 @@ export class QuestLog {
       body = `<p class="ql-none">No quests yet. Look for a <b class="bang">!</b> over someone's head: Elder Rowan by the village bonfire needs help.</p>`;
     } else {
       const done = stage === Q.DONE;
-      const steps = QUEST_LOG.steps.map((st) => {
+      // Only steps already reached are shown; later ones stay hidden until the quest gets there
+      const steps = QUEST_LOG.steps.filter((st) => st.stage <= stage).map((st) => {
         const state = stage > st.stage ? "done" : stage === st.stage ? "now" : "todo";
         const icon = state === "done" ? "✓" : state === "now" ? "➜" : "○";
         const extra = st.stage === Q.HUNT && state !== "todo"
