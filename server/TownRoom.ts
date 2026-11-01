@@ -10,7 +10,8 @@ import {
 import {
   ITEM_LIFETIME_MS, ItemKind, LOOT, MAX_POTIONS, PICKUP_RADIUS, POTION_COOLDOWN_MS, POTION_HEAL, PVP_GOLD_DROP,
 } from "../shared/items";
-import { isSafeZone, isSolidAt, randomOutskirtsPoint, randomSpawn } from "../shared/map";
+import { isSafeZone, isSolidAt, randomSpawn } from "../shared/map";
+import { randomPointInZone, SPAWN_ZONES, zoneCap } from "../shared/spawns";
 import { moveStep } from "../shared/movement";
 
 export class Player extends Schema {
@@ -55,6 +56,7 @@ export class Mob extends Schema {
   @type("number") maxHp = 0;
   @type("boolean") dead = false;
 
+  zone = 0; // index into SPAWN_ZONES
   homeX = 0;
   homeY = 0;
   target = ""; // player session id being chased
@@ -87,11 +89,22 @@ export class Item extends Schema {
   expires = 0;
 }
 
+/** Live status of a monster spawn zone (see shared/spawns.ts). */
+export class Zone extends Schema {
+  @type("string") name = "";
+  @type("number") alive = 0;
+  @type("number") cap = 0;
+  @type("number") nextIn = 0; // seconds until the next monster respawns (0 = zone is full)
+
+  nextAt = 0; // server time of the next respawn, 0 when full
+}
+
 export class TownState extends Schema {
   @type({ map: Player }) players = new MapSchema<Player>();
   @type({ map: Mob }) mobs = new MapSchema<Mob>();
   @type({ map: Projectile }) projectiles = new MapSchema<Projectile>();
   @type({ map: Item }) items = new MapSchema<Item>();
+  @type({ map: Zone }) zones = new MapSchema<Zone>();
 }
 
 const COLORS = [0xe74c3c, 0x3498db, 0x2ecc71, 0xf1c40f, 0x9b59b6, 0xe67e22, 0x1abc9c, 0xecf0f1];
@@ -124,9 +137,16 @@ export class TownRoom extends Room<TownState> {
     this.setPatchRate(1000 / TICK_RATE);
     this.setSimulationInterval((dt) => this.update(dt), 1000 / TICK_RATE);
 
-    for (const kind of Object.keys(MOBS) as MobKind[]) {
-      for (let i = 0; i < MOBS[kind].count; i++) this.spawnMob(kind);
-    }
+    // Fill every spawn zone at start; after that each zone's timer brings monsters back one at a time
+    SPAWN_ZONES.forEach((z, zi) => {
+      const zone = new Zone();
+      zone.name = z.name; zone.cap = zoneCap(z);
+      this.state.zones.set(z.name, zone);
+      for (const [kind, n] of Object.entries(z.mobs) as [MobKind, number][]) {
+        for (let i = 0; i < n; i++) this.spawnMob(kind, zi);
+      }
+      zone.alive = zone.cap;
+    });
 
     this.onMessage("input", (client, msg: InputState & { seq: number }) => {
       const p = this.state.players.get(client.sessionId);
@@ -168,11 +188,12 @@ export class TownRoom extends Room<TownState> {
     this.state.players.delete(client.sessionId);
   }
 
-  private spawnMob(kind: MobKind, id = `m${++this.mobSeq}`) {
+  private spawnMob(kind: MobKind, zi: number, id = `m${++this.mobSeq}`) {
     const def = MOBS[kind];
-    const home = randomOutskirtsPoint();
+    const home = randomPointInZone(SPAWN_ZONES[zi]);
     const m = this.state.mobs.get(id) ?? new Mob();
     m.kind = kind;
+    m.zone = zi;
     m.x = m.homeX = home.x;
     m.y = m.homeY = home.y;
     m.hp = m.maxHp = def.maxHp;
@@ -202,7 +223,29 @@ export class TownRoom extends Room<TownState> {
     });
     this.state.items.forEach((it, id) => { if (now > it.expires) this.state.items.delete(id); });
     this.state.mobs.forEach((m, id) => this.updateMob(m, id, dt, now));
+    this.updateZones(now);
     this.state.projectiles.forEach((s, id) => this.updateProjectile(s, id, dt));
+  }
+
+  /** Per-zone respawn timers: while a zone is below its cap, revive one dead monster every respawnMs. */
+  private updateZones(now: number) {
+    SPAWN_ZONES.forEach((z, zi) => {
+      const zone = this.state.zones.get(z.name)!;
+      if (zone.alive >= zone.cap) { zone.nextAt = 0; if (zone.nextIn) zone.nextIn = 0; return; }
+      if (!zone.nextAt) zone.nextAt = now + z.respawnMs;
+      if (now >= zone.nextAt) {
+        let revived = false;
+        this.state.mobs.forEach((m, id) => {
+          if (revived || !m.dead || m.zone !== zi) return;
+          this.spawnMob(m.kind, zi, id);
+          revived = true;
+        });
+        if (revived) zone.alive++;
+        zone.nextAt = zone.alive < zone.cap ? now + z.respawnMs : 0;
+      }
+      const secs = zone.nextAt ? Math.ceil((zone.nextAt - now) / 1000) : 0;
+      if (zone.nextIn !== secs) zone.nextIn = secs;
+    });
   }
 
   private updateMob(m: Mob, id: string, dt: number, now: number) {
@@ -373,7 +416,8 @@ export class TownRoom extends Room<TownState> {
     m.dead = true;
     this.grantXp(attackerId, def.xp, m);
     this.dropLoot(m.kind, m.x, m.y);
-    this.clock.setTimeout(() => this.spawnMob(m.kind, targetId), def.respawnMs);
+    const zone = this.state.zones.get(SPAWN_ZONES[m.zone].name);
+    if (zone) zone.alive--;
   }
 
   private grantXp(id: string, amount: number, at: { x: number; y: number }) {
