@@ -19,7 +19,7 @@ To keep a local game on the latest merged version, run `npm run live` instead of
 fast-forwards when the branch has new commits (running `npm install` if dependencies changed) and restarts the game.
 It skips an update rather than overwrite local commits or edits.
 
-Controls: WASD/arrows to move, Space to attack, E or Shift for your class skill, Q to drink a potion, R for your ultimate (level 10), C for the hero menu, Enter to chat.
+Controls: WASD/arrows to move, Space to attack, E or Shift for your class skill, F to dodge roll, Q to drink a potion, R for your ultimate (level 10), C for the hero menu, Enter to chat.
 
 Gameplay:
 - **Classes** (`shared/classes.ts`):
@@ -30,6 +30,7 @@ Gameplay:
   - **Barbarian:** axe brawler. Skill *Rage*: +30% damage and +20% speed for 5s. Ultimate *Leap*.
 - **Combos:** each class has a 3-hit attack chain (press attack again within 0.7s). The 3rd hit is a finisher: Knight wide slam, Ninja lunge, Wizard big fireball, Archer power shot, Barbarian axe smash. Tuned in `combo` in `shared/classes.ts`.
 - **Attack variety:** normal hits pick 1 of 4 attack moves at random (never the same twice in a row).
+- **Dodge roll** (F): every hero rolls 48px in the move direction (or facing), untouchable for 0.3s, 1.5s cooldown. Tuned in `DODGE` in `shared/classes.ts`.
 - **Emotes:** type /wave /cheer /laugh /sit /sleep in chat. Heroes also fidget when standing still.
 - **Levels, stats and powers** (`shared/powers.ts`): XP raises your level (max 20). Each level auto-adds 5 points to **Stamina** (max HP), **Strength** (Knight/Ninja/Archer/Barbarian attack) and **Magic** (skills, cooldowns, Wizard fireballs), split by class. Powers unlock at levels 1, 3, 5, 8 and 10 (the level 10 one is an ultimate on **R**). Press **C** for the hero menu; it also pops up on level-up.
   - Knight: Shield, Iron Skin, Cleave, Second Wind, Earthquake (stun)

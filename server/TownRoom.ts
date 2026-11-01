@@ -5,7 +5,7 @@ import {
   RESPAWN_MS, SAFE_REGEN_PER_SEC, TICK_RATE,
 } from "../shared/constants";
 import {
-  ATTACK_VARIANTS, CLASSES, ClassKind, COMBO_WINDOW_MS, EMOTES, DASH_INVULN_MS, GUARD_REDUCTION, isClassKind, levelFromXp, PVP_KILL_XP,
+  ATTACK_VARIANTS, CLASSES, ClassKind, COMBO_WINDOW_MS, DODGE, EMOTES, DASH_INVULN_MS, GUARD_REDUCTION, isClassKind, levelFromXp, PVP_KILL_XP,
 } from "../shared/classes";
 import {
   attackMult, cooldownMult, CRIT, FROST, hasPower, heroSpeed, IGNITE, IRONSKIN_REDUCTION, magicMult, maxHpFromStats,
@@ -47,6 +47,7 @@ export class Player extends Schema {
   @type("boolean") stunned = false;
   @type("boolean") slowed = false;
   @type("boolean") raging = false; // barbarian Rage active
+  @type("boolean") rolling = false; // dodge roll in progress
   // Equipment (shared/gear.ts): equipped item ids ("" = empty) and the unequipped items carried
   @type("string") weapon = "";
   @type("string") armour = "";
@@ -59,6 +60,9 @@ export class Player extends Schema {
   lastSpecial = -Infinity;
   guardUntil = 0;
   invulnUntil = 0;
+  rollUntil = 0;
+  rollInput: InputState = { up: false, down: false, left: false, right: false };
+  lastDodge = -Infinity;
   lastHurt = 0;
   lastPotion = 0;
   attackReadyAt = 0;
@@ -196,6 +200,7 @@ export class TownRoom extends Room<TownState> {
     this.onMessage("special", (client) => this.playerSpecial(client.sessionId));
     this.onMessage("ult", (client) => this.playerUlt(client.sessionId));
     this.onMessage("potion", (client) => this.drinkPotion(client.sessionId));
+    this.onMessage("dodge", (client) => this.dodge(client.sessionId));
     this.onMessage("equip", (client, i: number) => this.equip(client.sessionId, i));
     this.onMessage("unequip", (client, slot: GearSlot) => this.unequip(client.sessionId, slot));
     this.onMessage("dropgear", (client, i: number) => this.dropGear(client.sessionId, i));
@@ -254,11 +259,14 @@ export class TownRoom extends Room<TownState> {
       p.slowed = now < p.slowUntil;
       p.raging = now < p.rageUntil;
       if (p.dead) { p.moving = false; return; }
+      p.rolling = now < p.rollUntil;
       const r = p.stunned
         ? { x: p.x, y: p.y, moving: false }
+        : p.rolling
+        ? moveStep(p.x, p.y, p.rollInput, dt, DODGE.distance / (DODGE.durationMs / 1000))
         : moveStep(p.x, p.y, p.input, dt, heroSpeed(p.cls, p.level, p.slowed, p.raging) * gearSpeedMult(this.equipped(p)));
       p.x = r.x; p.y = r.y; p.moving = r.moving;
-      p.dir = dirFromInput(p.input, p.dir);
+      if (!p.rolling) p.dir = dirFromInput(p.input, p.dir);
       if (r.moving) p.emote = "";
       p.guarding = now < p.guardUntil;
       // Out-of-combat regeneration, faster in the safe plaza
@@ -428,6 +436,23 @@ export class TownRoom extends Room<TownState> {
     const heal = Math.round(p.maxHp * POTION_HEAL);
     p.hp = Math.min(p.maxHp, p.hp + heal);
     this.broadcast("heal", { id, amount: heal });
+  }
+
+  // ---- Dodge roll ---------------------------------------------------------
+
+  private dodge(id: string) {
+    const p = this.state.players.get(id);
+    const now = Date.now();
+    if (!p || p.dead || p.stunned || now - p.lastDodge < DODGE.cooldownMs) return;
+    const i = p.input;
+    const moving = i.up !== i.down || i.left !== i.right;
+    p.rollInput = moving ? { ...i } : pushInput(DIR_OFFSET[p.dir]);
+    p.lastDodge = now;
+    p.rollUntil = now + DODGE.durationMs;
+    p.rolling = true;
+    p.invulnUntil = Math.max(p.invulnUntil, now + DODGE.invulnMs);
+    p.emote = "";
+    this.broadcast("dodge", { id, dir: p.dir });
   }
 
   // ---- Equipment ----------------------------------------------------------
