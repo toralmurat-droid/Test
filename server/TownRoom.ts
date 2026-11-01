@@ -18,6 +18,7 @@ import {
 import { isSafeZone, isSolidAt, randomSpawn } from "../shared/map";
 import { randomPointInZone, rollLevel, SPAWN_ZONES, zoneCap } from "../shared/spawns";
 import { moveStep } from "../shared/movement";
+import { heroPoise, MOB_COMBAT, POISE, poiseLevelMult, poiseSpeed, RAGE_ATTACK_SPEED } from "../shared/combat";
 import { canLearn, talentMult, talentBonus, talentReduce, TREES } from "../shared/talents";
 import {
   BAG_SIZE, Equipped, GEAR, GEAR_SLOTS, GearSlot, gearBlock, gearName, gearReachMult, gearSpeedMult, gearStats, isGearId, rollGear,
@@ -58,6 +59,7 @@ export class Player extends Schema {
   @type("boolean") slowed = false;
   @type("boolean") raging = false; // barbarian Rage active
   @type("boolean") rolling = false; // dodge roll in progress
+  @type("boolean") broken = false; // poise broken: dizzy, can't attack (shared/combat.ts)
   @type("number") energy = 100; // Stamina / Magic (ENERGY in shared/classes.ts)
   // Equipment (shared/gear.ts): equipped item ids ("" = empty) and the unequipped items carried
   @type("string") weapon = "";
@@ -73,6 +75,11 @@ export class Player extends Schema {
   input: InputState = { up: false, down: false, left: false, right: false };
   lastAttack = 0;
   lastSpecial = -Infinity;
+  // Hidden initiative / poise (shared/combat.ts)
+  poiseLost = 0;
+  lastPoiseHit = 0;
+  brokenUntil = 0;
+  steadyUntil = 0;
   guardUntil = 0;
   invulnUntil = 0;
   rollUntil = 0;
@@ -102,9 +109,16 @@ export class Mob extends Schema {
   @type("boolean") dead = false;
   @type("boolean") stunned = false;
   @type("boolean") slowed = false;
+  @type("boolean") broken = false; // poise broken: dizzy, runs away (shared/combat.ts)
+  @type("boolean") winding = false; // winding up an attack (telegraph)
 
   stunUntil = 0;
   slowUntil = 0;
+  poiseLost = 0;
+  lastPoiseHit = 0;
+  brokenUntil = 0;
+  steadyUntil = 0;
+  windUntil = 0;
   zone = 0; // index into SPAWN_ZONES (-1 for bloblings, which belong to their mother, not a zone)
   mother = ""; // bloblings: id of the Mother Blob that budded them
   nextBrood = 0; // Mother Blob: when she next tries to bud a blobling
@@ -167,7 +181,7 @@ export class TownState extends Schema {
 }
 
 /** Extra effects of a hit. */
-interface HitOpts { kb?: number; stunMs?: number; slowMs?: number; crit?: boolean; skill?: boolean }
+interface HitOpts { atkLevel?: number; kb?: number; stunMs?: number; slowMs?: number; crit?: boolean; skill?: boolean }
 
 const COLORS = [0xe74c3c, 0x3498db, 0x2ecc71, 0xf1c40f, 0x9b59b6, 0xe67e22, 0x1abc9c, 0xecf0f1];
 const STILL: InputState = { up: false, down: false, left: false, right: false };
@@ -188,6 +202,35 @@ function aimOf(p: Player): [number, number] {
   if (a) { p.ax = a[0]; p.ay = a[1]; }
   return [p.ax, p.ay];
 }
+
+type Poised = { poiseLost: number; lastPoiseHit: number; brokenUntil: number; steadyUntil: number; broken: boolean; dead: boolean };
+
+const mobPoiseMax = (m: Mob) => MOB_COMBAT[m.kind].poise * mobScale(m.level, "hp");
+const heroPoiseMax = (p: Player) => heroPoise(p.cls, p.level);
+
+/** Recover poise over time; end the broken state (poise refills and the target is steady for a moment). */
+function tickPoise(t: Poised, max: number, dt: number, now: number) {
+  if (t.dead) { t.poiseLost = 0; t.broken = false; t.brokenUntil = 0; return; }
+  if (t.broken) {
+    if (now < t.brokenUntil) return;
+    t.broken = false; t.poiseLost = 0; t.steadyUntil = now + POISE.steadyMs;
+    return;
+  }
+  if (t.poiseLost > 0 && now - t.lastPoiseHit >= POISE.regenDelayMs) t.poiseLost = Math.max(0, t.poiseLost - max * POISE.regenPerSec * dt);
+}
+
+/** Attack speed multiplier from current poise. */
+/** Drain poise; returns true when this hit breaks the target. Steady or already broken targets ignore it. */
+function drainPoise(t: Poised, max: number, amount: number, now: number, brokenMs: number): boolean {
+  if (amount <= 0 || t.broken || now < t.steadyUntil) return false;
+  t.poiseLost += amount;
+  t.lastPoiseHit = now;
+  if (t.poiseLost < max) return false;
+  t.poiseLost = max; t.broken = true; t.brokenUntil = now + brokenMs;
+  return true;
+}
+
+const poiseFrac = (t: Poised, max: number) => (t.broken ? 0 : Math.max(0, 1 - t.poiseLost / max));
 
 function dirFromInput(i: InputState, fallback: Dir): Dir {
   if (i.left) return "left";
@@ -327,6 +370,7 @@ export class TownRoom extends Room<TownState> {
       p.stunned = now < p.stunUntil;
       p.slowed = now < p.slowUntil;
       p.raging = now < p.rageUntil;
+      tickPoise(p, heroPoiseMax(p), dt, now);
       if (p.dead) { p.moving = false; p.energy = ENERGY.max; return; }
       if (p.energy < ENERGY.max) p.energy = Math.min(ENERGY.max, p.energy + ENERGY.regenPerSec * dt);
       p.rolling = now < p.rollUntil;
@@ -379,9 +423,11 @@ export class TownRoom extends Room<TownState> {
   }
 
   private updateMob(m: Mob, id: string, dt: number, now: number) {
-    if (m.dead) { m.moving = false; return; }
+    tickPoise(m, mobPoiseMax(m), dt, now);
+    if (m.dead) { m.moving = false; m.winding = false; m.windUntil = 0; return; }
     const def = MOBS[m.kind];
     m.stunned = now < m.stunUntil;
+    if (m.stunned || m.broken) { m.winding = false; m.windUntil = 0; }
     m.slowed = now < m.slowUntil;
     if (m.stunned) { m.moving = false; return; }
     if (m.kind === "motherblob" && now >= m.nextBrood) this.brood(m, id, now);
@@ -402,15 +448,25 @@ export class TownRoom extends Room<TownState> {
     }
 
     let input: InputState;
-    if (t) {
+    if (t && m.broken) {
+      // Broken: dizzy, can't fight back, tries to get away from the attacker
+      input = toward(m.x, m.y, m.x * 2 - t.x, m.y * 2 - t.y);
+    } else if (t) {
       const dist = Math.hypot(t.x - m.x, t.y - m.y);
-      if (dist <= MOB_ATTACK_RANGE) {
+      if (dist <= MOB_ATTACK_RANGE || m.windUntil) {
         input = STILL;
         m.dir = Math.abs(t.x - m.x) > Math.abs(t.y - m.y) ? (t.x > m.x ? "right" : "left") : (t.y > m.y ? "down" : "up");
-        if (now - m.lastAttack >= def.attackCooldownMs) {
-          m.lastAttack = now;
-          this.broadcast("swing", { id });
-          this.damagePlayer(m.target, Math.round(def.damage * mobScale(m.level, "damage")), def.name, DIR_OFFSET[m.dir]);
+        if (m.windUntil) {
+          // Wind-up done: the blow lands if the target is still close
+          if (now >= m.windUntil) {
+            m.windUntil = 0; m.winding = false; m.lastAttack = now;
+            if (dist <= MOB_ATTACK_RANGE + 6) {
+              this.broadcast("swing", { id });
+              this.damagePlayer(m.target, Math.round(def.damage * mobScale(m.level, "damage")), def.name, DIR_OFFSET[m.dir], 1, { atkLevel: m.level });
+            }
+          }
+        } else if (now - m.lastAttack >= def.attackCooldownMs / poiseSpeed(poiseFrac(m, mobPoiseMax(m)))) {
+          m.windUntil = now + MOB_COMBAT[m.kind].windupMs; m.winding = true; // telegraph, a hit interrupts it
         }
       } else {
         input = toward(m.x, m.y, t.x, t.y);
@@ -427,7 +483,7 @@ export class TownRoom extends Room<TownState> {
       input = m.wander;
     }
 
-    const speed = (t ? def.speed : def.speed * 0.5) * (m.slowed ? SLOW_MOB : 1);
+    const speed = (t ? def.speed * (m.broken ? POISE.fleeSpeed : 1) : def.speed * 0.5) * (m.slowed ? SLOW_MOB : 1);
     const r = moveStep(m.x, m.y, input, dt, speed);
     if (!isSafeZone(r.x, r.y)) { m.x = r.x; m.y = r.y; }
     m.moving = r.moving;
@@ -655,7 +711,7 @@ export class TownRoom extends Room<TownState> {
     const tp = this.state.players.get(targetId);
     if (tp) {
       const hpBefore = tp.hp;
-      const killed = this.damagePlayer(targetId, dmg, name, push, kb, opts);
+      const killed = this.damagePlayer(targetId, dmg, name, push, kb, { ...opts, atkLevel: a?.level });
       this.bloodthirst(a, attackerId, hpBefore - tp.hp);
       if (killed && a) {
         const victim = this.state.players.get(targetId)!;
@@ -673,6 +729,15 @@ export class TownRoom extends Room<TownState> {
     m.hp = Math.max(0, m.hp - dmg);
     m.target = attackerId; // fight back
     const now = Date.now();
+    // Initiative: drain poise; a solid hit interrupts the wind-up and delays the next attack
+    const pmax = mobPoiseMax(m);
+    // Higher-level monsters are harder to make dizzy
+    const pdmg = dmg * (opts.skill ? POISE.skillMult : 1) * poiseLevelMult(a?.level ?? 1, m.level);
+    if (drainPoise(m, pmax, pdmg, now, POISE.mobBrokenMs)) this.broadcast("broken", { id: targetId, ms: POISE.mobBrokenMs });
+    if (pdmg >= pmax * 0.15) {
+      m.windUntil = 0; m.winding = false;
+      m.lastAttack = Math.max(m.lastAttack, now - def.attackCooldownMs + POISE.mobFlinchMs);
+    }
     if (opts.stunMs) m.stunUntil = Math.max(m.stunUntil, now + opts.stunMs);
     if (opts.slowMs) m.slowUntil = Math.max(m.slowUntil, now + opts.slowMs);
     const k = moveStep(m.x, m.y, pushInput(push), 0.1 * kb);
@@ -739,6 +804,12 @@ export class TownRoom extends Room<TownState> {
     if (opts.slowMs && !unstoppable) t.slowUntil = Math.max(t.slowUntil, now + opts.slowMs);
     t.hp = Math.max(0, t.hp - dmg);
     t.lastHurt = now;
+    // Initiative: drain poise (shield blocks most of it, Unstoppable ignores it) and flinch
+    if (!unstoppable) {
+      const pdmg = dmg * (opts.skill ? POISE.skillMult : 1) * (guarded ? POISE.guardMult : 1) * poiseLevelMult(opts.atkLevel ?? t.level, t.level);
+      if (drainPoise(t, heroPoiseMax(t), pdmg, now, POISE.heroBrokenMs)) this.broadcast("broken", { id: tid, ms: POISE.heroBrokenMs });
+      if (!guarded) t.attackReadyAt = Math.max(t.attackReadyAt, now + POISE.heroFlinchMs);
+    }
     t.emote = "";
     if (!guarded && !unstoppable) {
       const kb = moveStep(t.x, t.y, pushInput(push), 0.12 * kbMul);
@@ -768,7 +839,7 @@ export class TownRoom extends Room<TownState> {
   private playerAttack(id: string) {
     const a = this.state.players.get(id);
     const now = Date.now();
-    if (!a || a.dead || a.stunned) return;
+    if (!a || a.dead || a.stunned || a.broken) return;
     const def = CLASSES[a.cls];
     if (now < a.attackReadyAt) return;
     // Chain into the next combo hit if pressed soon enough after the last one, else restart
@@ -776,7 +847,9 @@ export class TownRoom extends Room<TownState> {
     const hit = def.combo[step];
     a.combo = step;
     a.lastAttack = now;
-    a.attackReadyAt = now + (hit.cooldownMs ?? def.attackCooldownMs);
+    // Attack speed: slower when your poise is low, faster while raging
+    const atkSpeed = poiseSpeed(poiseFrac(a, heroPoiseMax(a))) * (now < a.rageUntil ? RAGE_ATTACK_SPEED : 1);
+    a.attackReadyAt = now + (hit.cooldownMs ?? def.attackCooldownMs) / atkSpeed;
     const off = aimOf(a);
     let dmg = Math.round(def.damage * attackMult(a.cls, this.stats(a)) * hit.damage);
     const critChance = (hasPower(a.cls, a.talents, "crit") ? CRIT.chance : 0) + talentBonus(a.cls, a.talents, "crit") / 100;
@@ -861,7 +934,7 @@ export class TownRoom extends Room<TownState> {
   private playerSpecial(id: string) {
     const a = this.state.players.get(id);
     const now = Date.now();
-    if (!a || a.dead || a.stunned) return;
+    if (!a || a.dead || a.stunned || a.broken) return;
     const sp = CLASSES[a.cls].special;
     if (!hasSpecial(a.cls, a.talents)) return; // learned in the skill tree
     if (now - a.lastSpecial < sp.cooldownMs * cooldownMult(a.cls, this.stats(a), a.talents) * talentReduce(a.cls, a.talents, "cdr")) return;
@@ -925,7 +998,7 @@ export class TownRoom extends Room<TownState> {
   private playerUlt(id: string) {
     const a = this.state.players.get(id);
     const now = Date.now();
-    if (!a || a.dead || a.stunned || !hasUlt(a.cls, a.talents)) return;
+    if (!a || a.dead || a.stunned || a.broken || !hasUlt(a.cls, a.talents)) return;
     const u = ULTS[a.cls];
     if (now - a.lastUlt < u.cooldownMs * cooldownMult(a.cls, this.stats(a), a.talents) * talentReduce(a.cls, a.talents, "cdr")) return;
     if (a.energy < ENERGY.cost.ult) return;

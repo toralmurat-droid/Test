@@ -21,21 +21,37 @@ export function rollLevel(z: SpawnZone): number {
 }
 
 /** Monsters per area. Rects come from the map's AREAS (shared/map.ts), so zones follow the map layout. */
-const ZONE_MOBS: { name: string; mobs: Partial<Record<MobKind, number>>; levels: [number, number]; respawnMs: number }[] = [
-  // Levels grow with distance from Oakvale
-  { name: "North Meadow", mobs: { slime: 11, motherblob: 1 }, levels: [1, 3], respawnMs: 6000 },
-  { name: "Goldenreach Farms", mobs: { slime: 12, motherblob: 1 }, levels: [2, 4], respawnMs: 6000 },
-  { name: "Mirror Pond", mobs: { slime: 8, motherblob: 1 }, levels: [5, 7], respawnMs: 7000 },
-  { name: "Misty Marsh", mobs: { slime: 10, motherblob: 2 }, levels: [3, 5], respawnMs: 6000 },
-  { name: "Stonecrag Quarry", mobs: { slime: 3, skeleton: 5 }, levels: [4, 6], respawnMs: 10000 },
-  { name: "Old Ruins", mobs: { skeleton: 7 }, levels: [8, 10], respawnMs: 12000 },
-  { name: "Old Watchtower", mobs: { skeleton: 5 }, levels: [10, 12], respawnMs: 12000 },
-  { name: "Whispering Woods", mobs: { slime: 9, skeleton: 6, motherblob: 1 }, levels: [6, 8], respawnMs: 8000 }, // broad area last: zone lookups take the first match
+const ZONE_MOBS: { name: string; mobs: Partial<Record<MobKind, number>>; respawnMs: number }[] = [
+  // Levels come from the distance to Oakvale (see zoneLevels)
+  { name: "North Meadow", mobs: { slime: 11, motherblob: 1 }, respawnMs: 6000 },
+  { name: "Goldenreach Farms", mobs: { slime: 12, motherblob: 1 }, respawnMs: 6000 },
+  { name: "Mirror Pond", mobs: { slime: 8, motherblob: 1 }, respawnMs: 7000 },
+  { name: "Misty Marsh", mobs: { slime: 10, motherblob: 2 }, respawnMs: 6000 },
+  { name: "Stonecrag Quarry", mobs: { slime: 3, skeleton: 5 }, respawnMs: 10000 },
+  { name: "Old Ruins", mobs: { skeleton: 7 }, respawnMs: 12000 },
+  { name: "Old Watchtower", mobs: { skeleton: 5 }, respawnMs: 12000 },
+  // The wider world: further from Oakvale, tougher monsters
+  { name: "Sunken Lake", mobs: { slime: 10, motherblob: 2 }, respawnMs: 8000 },
+  { name: "Barrow Downs", mobs: { skeleton: 9 }, respawnMs: 10000 },
+  { name: "Thornwood", mobs: { slime: 6, skeleton: 6, motherblob: 1 }, respawnMs: 9000 },
+  { name: "Greywatch Keep", mobs: { skeleton: 10 }, respawnMs: 11000 },
+  { name: "Whispering Woods", mobs: { slime: 9, skeleton: 6, motherblob: 1 }, respawnMs: 8000 }, // broad area last: zone lookups take the first match
 ];
+
+/**
+ * Monster levels grow with distance from the village centre: zones next to Oakvale are level 1-3,
+ * and every 8 tiles further out adds a level (each zone spans 3 levels).
+ */
+export function zoneLevels(a: { x: number; y: number; w: number; h: number }): [number, number] {
+  const cx = (VILLAGE.x0 + VILLAGE.x1) / 2, cy = (VILLAGE.y0 + VILLAGE.y1) / 2;
+  const d = Math.hypot(a.x + a.w / 2 - cx, a.y + a.h / 2 - cy);
+  const lo = 1 + Math.floor(Math.max(0, d - 40) / 8);
+  return [lo, lo + 2];
+}
 
 export const SPAWN_ZONES: SpawnZone[] = ZONE_MOBS.flatMap((z) => {
   const a = AREAS.find((area) => area.name === z.name);
-  return a ? [{ ...z, x: a.x, y: a.y, w: a.w, h: a.h }] : [];
+  return a ? [{ ...z, levels: zoneLevels(a), x: a.x, y: a.y, w: a.w, h: a.h }] : [];
 });
 
 export function zoneCap(z: SpawnZone): number {

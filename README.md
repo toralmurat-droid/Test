@@ -32,6 +32,7 @@ Gameplay:
 - **Attack variety:** normal hits pick 1 of 4 attack moves at random (never the same twice in a row).
 - **Dodge roll** (F): every hero rolls 48px in the move direction (or facing), untouchable for 0.3s, 1.5s cooldown. Tuned in `DODGE` in `shared/classes.ts`.
 - **8-way aim**: attacks, arrows, fireballs, dashes and ultimates go in the last direction you moved, diagonals included (`Player.ax/ay`, `Projectile.vx/vy`).
+- **Initiative & attack speed** (`shared/combat.ts`): every hero and monster has a hidden poise bar. Hits drain it, less against higher-level opponents (-15% per level above you, min 20%) and more against lower ones (+10% per level, max +50%), and make the target flinch (a monster's wind-up telegraph, a red flash, is interrupted; heroes' next attack is delayed slightly). Below half poise you attack slower; at 0 you are dizzy (stars): no attacks or skills for 1.2s (monsters 1.8s, and they run away). Then poise refills and you are steady for 1.5s. Shield blocks most poise damage; Unstoppable ignores it. Rage gives +15% attack speed. Hero panel shows attack speed and initiative.
 - **Emotes:** type /wave /cheer /laugh /sit /sleep in chat. Heroes also fidget when standing still.
 - **Levels, stats and powers** (`shared/powers.ts`): XP raises your level (max 20). You assign stat points yourself in the hero panel (**C**, click +): 1 point per level and 3 at levels 3, 5, 8 and 10 (27 by level 20). **Stamina** = max HP (+12) and HP regen, **Strength** = attack for Knight/Ninja/Archer/Barbarian (+7%) and +4 HP, **Magic** = skills (+7%), cooldowns (-2%, max -30%) and Wizard fireballs. Every level also adds 5 max HP. Reset is free out of combat. Class skills are learned in the skill tree (see below). Press **C** for the hero panel (characteristics only). On level-up a small notice appears; press C (or click it) to see the new stats.
 - **Skills** (`shared/talents.ts` + `shared/powers.ts`, press **T**): heroes start with only a basic attack. Every level after 1 gives 1 skill point. One tree per hero holds both the class skills (key **1** skill at level 1, passives at 3/5/8, the key **2** ultimate at level 10) and 3 branches of passive bonuses (e.g. Knight: Blade, Bulwark, Command; 3 ranks each). Rows unlock at levels 1, 3, 5, 8 and 10 and a node needs the one below it: the tree grows up from the hero (trunk at the bottom, ultimate at the top), with branch lines that light up as you learn skills. Effects: damage, skill damage, crit, lifesteal, max HP, armour, speed, cooldowns, regen. Reset is free out of combat. The Hero, Skills and Bag buttons (bottom right) open the menus at any time; Esc closes them.
@@ -61,6 +62,12 @@ off to the Hunter's Camp, the Watchtower, the mill and Mirror Pond and the marsh
 - **Mirror Pond** and **Misty Marsh** (south-west, with a boardwalk), **Stonecrag Quarry** (south-east)
 - **Millbrook Mill** on **River Ashwell** (east), then **Whispering Woods** with trails, the **Old Ruins** and the
   **Old Watchtower**
+- The wider world, with tougher monsters: **Barrow Downs** (far south-west graveyard and mausoleum), **Sunken Lake**
+  (south, island shrine on a boardwalk), **Greywatch Keep** (ruined castle far east) and the **Thornwood** (dark pines,
+  north-east)
+
+Monster levels grow with distance from Oakvale (`zoneLevels` in `shared/spawns.ts`): level 1-3 next to the village,
+up to 10-12 at the far edges. Signposts at the gates and junctions have one board per road, naming where it leads.
 
 Each area in `AREAS` can list the monsters that belong there (`mobs`), and `randomPointInArea(name)` returns a free
 spot inside an area, for per-zone spawns.
