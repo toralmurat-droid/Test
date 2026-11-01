@@ -19,8 +19,10 @@ export const T = {
   CAMPFIRE: 34, RUIN: 35, SIGN: 36, STUMP: 37, FENCE_V: 38,
   // ruins of the old village
   FLOOR: 39, RUBBLE: 40, BEAM: 41, FLAGS: 42, BONFIRE: 43,
+  // a wooden signpost with arrow boards (readable: see SIGNPOSTS)
+  SIGNPOST: 44,
 } as const;
-export const TILE_COUNT = 44;
+export const TILE_COUNT = 45;
 export const EMPTY = -1;
 
 /** A named region. `mobs` hints which monsters belong there (empty or missing = none, e.g. inside the village). */
@@ -273,7 +275,6 @@ function buildWorld() {
   setO(90, 62, T.HAY);
 
   // Signposts outside the village
-  setO(RX - 2, V.y0 - 5, T.SIGN); setO(V.x0 - 5, RY - 2, T.SIGN); setO(V.x1 + 5, RY - 2, T.SIGN); setO(RX - 2, V.y1 + 5, T.SIGN);
 
   // ---------- 7. Goldenreach Farms (west): barn, two fenced fields with openings on every side ----------
   const barn = building(14, 38, 9, 6, T.ROOF_RED, T.WALL_TIMBER, T.WINDOW_TIMBER);
@@ -326,6 +327,35 @@ function buildWorld() {
   });
   for (const [x, y] of [[96, 104], [97, 104], [104, 100], [108, 108]]) setO(x, y, T.RUIN);
   setO(100, 99, T.CRATE); setO(101, 99, T.CRATE); setO(100, 100, T.BARREL);
+
+  // ---------- 12b. Signposts at the gates and road junctions (directions are worked out in SIGNPOSTS) ----------
+  const posts: { x: number; y: number; to: string[] }[] = [];
+  /** Puts a signpost on the nearest free tile beside (not on) a road, within 3 tiles of (x, y). */
+  const signpost = (x: number, y: number, to: string[]) => {
+    let best: [number, number] | null = null, bd = 1e9;
+    for (let j = -3; j <= 3; j++) for (let i = -3; i <= 3; i++) {
+      const tx = x + i, ty = y + j;
+      if (!inMap(tx, ty) || roads.has(ty * MAP_W + tx) || ground[ty][tx] === T.WATER || ground[ty][tx] === T.BRIDGE) continue;
+      const o = objects[ty][tx];
+      if (o !== EMPTY && !NATURE.has(o)) continue;
+      if (![[1, 0], [-1, 0], [0, 1], [0, -1]].some(([a, b]) => roads.has((ty + b) * MAP_W + tx + a))) continue;
+      const d = i * i + j * j;
+      if (d < bd) { bd = d; best = [tx, ty]; }
+    }
+    if (!best) return;
+    setO(best[0], best[1], T.SIGNPOST);
+    posts.push({ x: best[0], y: best[1], to });
+  };
+  signpost(RX - 2, V.y0 - 4, ["North Meadow", "Hunter's Camp", "Old Watchtower", "Oakvale"]);          // north gate
+  signpost(RX - 2, V.y1 + 4, ["Stonecrag Quarry", "Oakvale"]);                                       // south gate
+  signpost(V.x0 - 4, RY - 1, ["Goldenreach Farms", "Mirror Pond", "Misty Marsh", "Oakvale"]);         // west gate
+  signpost(V.x1 + 4, RY - 1, ["Millbrook Mill", "Old Ruins", "Oakvale"]);                            // east gate
+  signpost(84, 26, ["Hunter's Camp", "Old Watchtower", "North Meadow", "Oakvale"]);                 // north fork
+  signpost(24, 58, ["Goldenreach Farms", "Oakvale"]);                                               // farm yard
+  signpost(36, 78, ["Mirror Pond", "Misty Marsh", "Oakvale"]);                                      // pond path
+  signpost(ruins.x - 10, 58, ["Old Ruins", "Old Watchtower", "Stonecrag Quarry", "Oakvale"]);       // before the ruins
+  signpost(94, 94, ["Stonecrag Quarry", "Old Ruins", "Oakvale"]);                                   // quarry
+  signpost(rc(60) - 9, 59, ["Old Ruins", "Millbrook Mill", "Oakvale"]);                              // west end of the bridge
 
   // ---------- 13. Keep every road clear, with a 1-tile verge ----------
   for (const k of roads) {
@@ -400,13 +430,32 @@ function buildWorld() {
     { name: "River Ashwell", x: riverCenter(60) - 6, y: 0, w: 12, h: MAP_H },
     { name: "Whispering Woods", x: woodsX - 2, y: 0, w: MAP_W - woodsX + 2, h: MAP_H, mobs: ["slime", "skeleton"] },
   ];
-  return { ground, objects, areas };
+  return { ground, objects, areas, posts };
 }
 
 export const WORLD = buildWorld();
 export const GROUND = WORLD.ground;
 export const OBJECTS = WORLD.objects;
 export const AREAS = WORLD.areas;
+
+/** A readable signpost: arrows from the post towards each named place. */
+export interface Signpost { x: number; y: number; dirs: { name: string; arrow: string }[] }
+const ARROWS = ["→", "↘", "↓", "↙", "←", "↖", "↑", "↗"]; // by compass octant, starting east, clockwise (y points down)
+export const SIGNPOSTS: Signpost[] = WORLD.posts.map((p) => ({
+  x: p.x, y: p.y,
+  dirs: p.to.flatMap((name) => {
+    const a = AREAS.find((r) => r.name === name);
+    if (!a) return [];
+    const oct = Math.round(Math.atan2(a.y + a.h / 2 - (p.y + 0.5), a.x + a.w / 2 - (p.x + 0.5)) / (Math.PI / 4));
+    return [{ name, arrow: ARROWS[(oct + 8) % 8] }];
+  }),
+}));
+
+/** The signpost within reach of a player at pixel (px, py), if any. */
+export function signpostNear(px: number, py: number, reach = 1.6): Signpost | undefined {
+  const tx = px / TILE, ty = py / TILE;
+  return SIGNPOSTS.find((s) => Math.hypot(s.x + 0.5 - tx, s.y + 0.5 - ty) <= reach);
+}
 
 export function isSolidTile(tx: number, ty: number): boolean {
   if (tx < 0 || ty < 0 || tx >= MAP_W || ty >= MAP_H) return true;
