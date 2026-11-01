@@ -33,8 +33,14 @@ infoEl.textContent = CLASSES[cls].blurb;
 const nameEl = document.getElementById("name") as HTMLInputElement;
 try { nameEl.value = localStorage.getItem("name") ?? ""; } catch { /* ignore */ }
 
+const pwEl = document.getElementById("password") as HTMLInputElement;
+
 function start() {
   const name = nameEl.value.trim();
+  const password = pwEl.value;
+  const status = document.getElementById("status")!;
+  if (name.length < 3) { status.textContent = "Pick a name (3 to 16 letters)."; return; }
+  if (password.length < 4) { status.textContent = "Pick a password (at least 4 characters)."; pwEl.focus(); return; }
   try { localStorage.setItem("name", name); localStorage.setItem("cls", cls); } catch { /* ignore */ }
   document.getElementById("play")!.setAttribute("disabled", "");
   document.getElementById("status")!.textContent = "Connecting…";
@@ -45,10 +51,11 @@ function start() {
     pixelArt: true,
     backgroundColor: "#1b1b24",
     scale: { mode: Phaser.Scale.RESIZE, width: window.innerWidth, height: window.innerHeight },
-    scene: [new TownScene({ name, color, cls })],
+    scene: [new TownScene({ name, password, color, cls })],
   });
 }
 
 document.getElementById("play")!.onclick = start;
-nameEl.onkeydown = (e) => { if (e.key === "Enter") start(); };
-nameEl.focus();
+nameEl.onkeydown = (e) => { if (e.key === "Enter") pwEl.focus(); };
+pwEl.onkeydown = (e) => { if (e.key === "Enter") start(); };
+(nameEl.value ? pwEl : nameEl).focus();

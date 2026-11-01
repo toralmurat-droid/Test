@@ -101,7 +101,7 @@ export class TownScene extends Phaser.Scene {
   private hotbarHtml = "";
   private iso?: IsoView;
 
-  constructor(private opts: { name: string; color: number; cls: ClassKind }) {
+  constructor(private opts: { name: string; password: string; color: number; cls: ClassKind }) {
     super("town");
   }
 
@@ -199,8 +199,9 @@ export class TownScene extends Phaser.Scene {
     const url = import.meta.env.DEV ? `${proto}://${location.hostname}:2567` : `${proto}://${location.host}`;
     try {
       this.room = await new Client(url).joinOrCreate("town", this.opts);
-    } catch (e) {
-      document.getElementById("status")!.textContent = "Could not connect to server.";
+    } catch (e: any) {
+      const msg = typeof e?.message === "string" && e.message && !/websocket|connect/i.test(e.message) ? e.message : "Could not connect to server.";
+      document.getElementById("status")!.textContent = msg;
       document.getElementById("play")!.removeAttribute("disabled");
       this.game.destroy(true);
       return;

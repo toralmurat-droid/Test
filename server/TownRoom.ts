@@ -22,6 +22,7 @@ import { sellPrice, SHOPS } from "../shared/shops";
 import { inZone, npcPresent, QUESTS, questStep, stepGoal, USE_RANGE } from "../shared/quests";
 import { findHideSpot, HIDE, noMobsAt, randomPointInZone, rollLevel, SPAWN_ZONES, zoneCap } from "../shared/spawns";
 import { moveStep } from "../shared/movement";
+import { flush, HeroSave, loadHero, login, saveHero } from "./accounts";
 import { SLOT_COUNT, SlotSkill, skillLearned } from "../shared/slots";
 import { heroPoise, MOB_COMBAT, POISE, poiseLevelMult, poiseSpeed, RAGE_ATTACK_SPEED } from "../shared/combat";
 import { canLearn, COMBO_NODE, talentMult, talentBonus, talentReduce, TREES } from "../shared/talents";
@@ -290,6 +291,8 @@ export class TownRoom extends Room<TownState> {
     this.setState(new TownState());
     this.setPatchRate(1000 / TICK_RATE);
     this.setSimulationInterval((dt) => this.update(dt), 1000 / TICK_RATE);
+    // Autosave everyone every 30 s, so a crash loses at most that much
+    this.clock.setInterval(() => this.state.players.forEach((p) => saveHero(p.name, p.cls, this.snapshot(p))), 30_000);
 
     // Fill every spawn zone at start; after that each zone's timer brings monsters back one at a time
     SPAWN_ZONES.forEach((z, zi) => {
@@ -356,13 +359,18 @@ export class TownRoom extends Room<TownState> {
   /** Remembers a hashed network address per player, so one person can't suggest or vote twice with alt heroes. */
   private addrs = new Map<string, string | undefined>();
 
-  onAuth(client: Client, _options: unknown, request?: IncomingMessage) {
+  /** Name + password check (server/accounts.ts); a new name creates the account. Also notes the network address for ideas. */
+  onAuth(client: Client, options: { name?: string; password?: string }, request?: IncomingMessage) {
+    const name = login(options?.name, options?.password);
+    let online = false;
+    this.state.players.forEach((o) => { if (o.name.toLowerCase() === name.toLowerCase()) online = true; });
+    if (online) throw new Error("This hero is already playing");
     const fwd = process.env.TRUST_PROXY ? String(request?.headers["x-forwarded-for"] ?? "").split(",")[0].trim() : "";
     const ip = fwd || request?.socket?.remoteAddress || "";
     // Local addresses are skipped so several tabs on one computer can still test ideas and votes
     const local = !ip || ip === "::1" || ip.startsWith("127.") || ip.startsWith("::ffff:127.");
     this.addrs.set(client.sessionId, local ? undefined : hashAddr(ip));
-    return true;
+    return { name };
   }
 
   private asker(client: Client): Asker | undefined {
@@ -413,11 +421,13 @@ export class TownRoom extends Room<TownState> {
     if (winners.length || expired.length) this.ideasChanged();
   }
 
-  onJoin(client: Client, options: { name?: string; color?: number; cls?: string }) {
+  onJoin(client: Client, options: { name?: string; color?: number; cls?: string }, auth?: { name: string }) {
     const p = new Player();
-    p.name = String(options?.name ?? "").slice(0, 16).trim() || `Hero${Math.floor(Math.random() * 1000)}`;
+    p.name = auth?.name ?? `Hero${Math.floor(Math.random() * 1000)}`;
     p.color = typeof options?.color === "number" ? options.color : COLORS[Math.floor(Math.random() * COLORS.length)];
     p.cls = isClassKind(options?.cls) ? options.cls : "knight";
+    const save = loadHero(p.name, p.cls);
+    if (save) this.restore(p, save);
     this.applyStats(p);
     p.hp = p.maxHp;
     const s = randomSpawn();
@@ -428,8 +438,44 @@ export class TownRoom extends Room<TownState> {
   }
 
   onLeave(client: Client) {
+    const p = this.state.players.get(client.sessionId);
+    if (p) saveHero(p.name, p.cls, this.snapshot(p));
     this.state.players.delete(client.sessionId);
     this.addrs.delete(client.sessionId);
+  }
+
+  onDispose() {
+    this.state.players.forEach((p) => saveHero(p.name, p.cls, this.snapshot(p)));
+    flush();
+  }
+
+  // ---- Saves (server/accounts.ts) -------------------------------------------
+
+  private snapshot(p: Player): HeroSave {
+    const talents: Record<string, number> = {};
+    p.talents.forEach((v, k) => { talents[k] = v; });
+    return {
+      color: p.color, xp: p.xp, level: p.level, kills: p.kills, gold: p.gold, potions: p.potions,
+      ptSta: p.ptSta, ptStr: p.ptStr, ptMag: p.ptMag,
+      weapon: p.weapon, armour: p.armour, shoes: p.shoes, hat: p.hat, shield: p.shield, ranged: p.ranged,
+      bag: p.bag.toArray(), talents, slots: p.slots.toArray(),
+      questId: p.questId, questStage: p.questStage, questCount: p.questCount,
+    };
+  }
+
+  private restore(p: Player, s: HeroSave) {
+    const num = (v: unknown, d = 0) => (typeof v === "number" && Number.isFinite(v) ? v : d);
+    const gear = (v: unknown) => (typeof v === "string" && isGearId(v) ? v : "");
+    p.color = num(s.color, p.color);
+    p.xp = num(s.xp); p.level = Math.max(1, num(s.level, 1)); p.kills = num(s.kills);
+    p.gold = num(s.gold); p.potions = Math.min(MAX_POTIONS, num(s.potions));
+    p.ptSta = num(s.ptSta); p.ptStr = num(s.ptStr); p.ptMag = num(s.ptMag);
+    p.weapon = gear(s.weapon); p.armour = gear(s.armour); p.shoes = gear(s.shoes);
+    p.hat = gear(s.hat); p.shield = gear(s.shield); p.ranged = gear(s.ranged);
+    if (Array.isArray(s.bag)) setBag(p, s.bag.map(gear).filter(Boolean).slice(0, BAG_SIZE));
+    for (const [k, v] of Object.entries(s.talents ?? {})) if (typeof v === "number") p.talents.set(k, v);
+    if (Array.isArray(s.slots)) s.slots.slice(0, SLOT_COUNT).forEach((v, i) => { p.slots[i] = typeof v === "string" ? v : ""; });
+    p.questId = Math.min(QUESTS.length, num(s.questId)); p.questStage = num(s.questStage); p.questCount = num(s.questCount);
   }
 
   private spawnMob(kind: MobKind, zi: number, id = `m${++this.mobSeq}`) {
