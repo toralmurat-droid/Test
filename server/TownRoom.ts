@@ -1,3 +1,4 @@
+import type { IncomingMessage } from "node:http";
 import { Client, Room } from "colyseus";
 import { ArraySchema, MapSchema, Schema, type } from "@colyseus/schema";
 import {
@@ -27,6 +28,8 @@ import { canLearn, COMBO_NODE, talentMult, talentBonus, talentReduce, TREES } fr
 import {
   BAG_SIZE, Equipped, GEAR, GEAR_SLOTS, GearSlot, gearBlock, gearName, gearReachMult, gearSpeedMult, gearStats, isGearId, potionChance, rollGear,
 } from "../shared/gear";
+import { Asker, boardFor, submit, tick as ideaTick, vote as ideaVote } from "../shared/ideas";
+import { hashAddr, ideaLog, saveIdeas } from "./ideaStore";
 
 export class Player extends Schema {
   @type("string") name = "";
@@ -321,9 +324,19 @@ export class TownRoom extends Room<TownState> {
     this.onMessage("buy", (client, msg: { i: number }) => this.shopBuy(client, msg?.i));
     this.onMessage("sell", (client, msg: { i: number }) => this.shopSell(client, msg?.i));
 
+    // Player ideas: suggest (once a day), vote, and every hour the best idea wins (shared/ideas.ts)
+    this.onMessage("idea", (client, text: string) => this.submitIdea(client, text));
+    this.onMessage("ideavote", (client, msg: { id: number; v: number }) => this.voteIdea(client, Number(msg?.id), Number(msg?.v)));
+    this.onMessage("ideas", (client) => this.sendBoard(client));
+    this.clock.setInterval(() => this.ideaRound(), 5000);
+
     this.onMessage("chat", (client, text: string) => {
       const p = this.state.players.get(client.sessionId);
       if (!p || typeof text !== "string") return;
+      const idea = text.trim().match(/^\/idea\s+([\s\S]+)$/i);
+      if (idea) return this.submitIdea(client, idea[1]);
+      const v = text.trim().match(/^\/(up|down|unvote)\s+#?(\d+)$/i);
+      if (v) return this.voteIdea(client, Number(v[2]), v[1].toLowerCase() === "up" ? 1 : v[1].toLowerCase() === "down" ? -1 : 0);
       const clean = text.slice(0, 120).trim();
       const cmd = clean.toLowerCase().replace(/^\//, "");
       if (clean.startsWith("/") && (EMOTES as readonly string[]).includes(cmd)) {
@@ -332,6 +345,66 @@ export class TownRoom extends Room<TownState> {
       }
       if (clean) this.broadcast("chat", { id: client.sessionId, name: p.name, text: clean });
     });
+  }
+
+  /** Remembers a hashed network address per player, so one person can't suggest or vote twice with alt heroes. */
+  private addrs = new Map<string, string | undefined>();
+
+  onAuth(client: Client, _options: unknown, request?: IncomingMessage) {
+    const fwd = process.env.TRUST_PROXY ? String(request?.headers["x-forwarded-for"] ?? "").split(",")[0].trim() : "";
+    const ip = fwd || request?.socket?.remoteAddress || "";
+    // Local addresses are skipped so several tabs on one computer can still test ideas and votes
+    const local = !ip || ip === "::1" || ip.startsWith("127.") || ip.startsWith("::ffff:127.");
+    this.addrs.set(client.sessionId, local ? undefined : hashAddr(ip));
+    return true;
+  }
+
+  private asker(client: Client): Asker | undefined {
+    const p = this.state.players.get(client.sessionId);
+    // IDEAS_ANY_LEVEL=1 lets fresh heroes suggest ideas (handy for local testing)
+    return p && { name: p.name, level: process.env.IDEAS_ANY_LEVEL ? 99 : p.level, addr: this.addrs.get(client.sessionId) };
+  }
+
+  private ideaNote(client: Client, text: string, ok = false) { client.send("ideanote", { text, ok }); }
+
+  private sendBoard(client: Client) {
+    const a = this.asker(client);
+    if (a) client.send("ideas", boardFor(ideaLog, a, Date.now()));
+  }
+
+  private ideasChanged() {
+    saveIdeas();
+    for (const c of this.clients) this.sendBoard(c);
+  }
+
+  private submitIdea(client: Client, text: unknown) {
+    const a = this.asker(client);
+    if (!a) return;
+    const r = submit(ideaLog, a, text, Date.now());
+    if (!r.ok) return this.ideaNote(client, r.error);
+    const i = r.idea!;
+    console.log(`Idea #${i.id} by ${i.author}: ${i.text}`);
+    this.ideaNote(client, `Idea #${i.id} received! Players can vote on it now.`, true);
+    this.broadcast("chat", { id: "", name: "Ideas", text: `${i.author} suggested idea #${i.id}: "${i.text.slice(0, 80)}" (/up ${i.id} or /down ${i.id})` });
+    this.ideasChanged();
+  }
+
+  private voteIdea(client: Client, id: number, v: number) {
+    const a = this.asker(client);
+    if (!a || !Number.isInteger(id)) return;
+    const r = ideaVote(ideaLog, a, id, v, Date.now());
+    if (!r.ok) return this.ideaNote(client, r.error);
+    if (r.idea!.status === "votedDown") this.broadcast("chat", { id: "", name: "Ideas", text: `Idea #${id} was voted down.` });
+    this.ideasChanged();
+  }
+
+  private ideaRound() {
+    const { winners, expired } = ideaTick(ideaLog, Date.now());
+    for (const w of winners) {
+      console.log(`Idea #${w.id} won this hour's vote: ${w.text}`);
+      this.broadcast("ideawin", { id: w.id, text: w.text, author: w.author });
+    }
+    if (winners.length || expired.length) this.ideasChanged();
   }
 
   onJoin(client: Client, options: { name?: string; color?: number; cls?: string }) {
@@ -344,11 +417,13 @@ export class TownRoom extends Room<TownState> {
     const s = randomSpawn();
     p.x = s.x; p.y = s.y;
     this.state.players.set(client.sessionId, p);
+    this.sendBoard(client); // the Ideas board is ready as soon as it is opened
     console.log(`${p.name} the ${CLASSES[p.cls].name} joined (${this.clients.length} online)`);
   }
 
   onLeave(client: Client) {
     this.state.players.delete(client.sessionId);
+    this.addrs.delete(client.sessionId);
   }
 
   private spawnMob(kind: MobKind, zi: number, id = `m${++this.mobSeq}`) {
