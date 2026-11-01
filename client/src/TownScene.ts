@@ -738,7 +738,9 @@ export class TownScene extends Phaser.Scene {
       e.gear?.sync(e.sprite, p);
 
       const x = Math.round(e.sprite.x), y = Math.round(e.sprite.y);
-      e.label?.setPosition(x, y - e.top - (p.hat ? 4 : 2)).setDepth(e.sprite.y + 1);
+      // Monsters: HP bar over the head, level tag just above it
+      const mobBarY = y - e.top - 4;
+      e.label?.setPosition(x, e.mob ? mobBarY - 1 : y - e.top - (p.hat ? 4 : 2)).setDepth(e.sprite.y + 1);
       if (e.mob && e.label) {
         // Level tag coloured by how tough it is for me: grey easy, white even, orange tougher, red dangerous
         const diff = (p.level ?? 1) - ((this.room.state as any).players?.get(this.me)?.level ?? 1);
@@ -757,10 +759,13 @@ export class TownScene extends Phaser.Scene {
           e.shield.clear().lineStyle(1, 0x9ad1ff, 0.9).strokeCircle(x, y - e.top / 2, e.top / 2 + 3).setDepth(e.sprite.y + 2);
         } else if (e.shield) { e.shield.destroy(); e.shield = undefined; }
       }
-      if (!p.dead && p.hp < maxHp) {
-        const bw = (e.mob && MOB_LOOK[p.kind]?.bar) || 14;
-        e.bar.fillStyle(0x000000).fillRect(x - bw / 2, y + 3, bw, 2);
-        e.bar.fillStyle(e.mob ? 0xf4a261 : 0xe63946).fillRect(x - bw / 2, y + 3, bw * (p.hp / maxHp), 2);
+      if (e.mob && !p.dead) {
+        const bw = MOB_LOOK[p.kind]?.bar || 14;
+        e.bar.fillStyle(0x000000).fillRect(x - bw / 2, mobBarY, bw, 2);
+        e.bar.fillStyle(0xf4a261).fillRect(x - bw / 2, mobBarY, bw * (p.hp / maxHp), 2);
+      } else if (!e.mob && !p.dead && p.hp < maxHp) {
+        e.bar.fillStyle(0x000000).fillRect(x - 7, y + 3, 14, 2);
+        e.bar.fillStyle(0xe63946).fillRect(x - 7, y + 3, 14 * (p.hp / maxHp), 2);
       }
     }
 
