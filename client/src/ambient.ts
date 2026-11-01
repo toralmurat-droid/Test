@@ -354,14 +354,14 @@ export class Ambient {
       if (OBJECTS[y][x] !== T.BONFIRE || OBJECTS[y - 1]?.[x] === T.BONFIRE || OBJECTS[y][x - 1] === T.BONFIRE) continue;
       this.bonfireTexture();
       const cx = (x + 1) * TILE, cy = (y + 1) * TILE + 6 * K;
-      this.scene.add.sprite(cx, cy, "bonfire", 0).setOrigin(0.5, 46 / 56).setDepth(cy).play("bonfire_burn");
-      const glow = this.scene.add.image(cx, cy - 10 * K, "glow").setTint(0xffa040).setScale(14 * K).setAlpha(0.3).setBlendMode(Phaser.BlendModes.ADD).setDepth(-0.8);
-      this.scene.tweens.add({ targets: glow, alpha: 0.45, scale: 15 * K, duration: 220, yoyo: true, repeat: -1, ease: "Sine.easeInOut", repeatDelay: 40 });
-      this.scene.add.particles(cx, cy - 20 * K, "spark", {
+      this.scene.add.sprite(cx, cy - 4 * K, "bonfire", 0).setOrigin(0.5, 46 / 56).setScale(0.68).setDepth(cy).play("bonfire_burn"); // in scale with the heroes
+      const glow = this.scene.add.image(cx, cy - 10 * K, "glow").setTint(0xffa040).setScale(10 * K).setAlpha(0.3).setBlendMode(Phaser.BlendModes.ADD).setDepth(-0.8);
+      this.scene.tweens.add({ targets: glow, alpha: 0.45, scale: 11 * K, duration: 220, yoyo: true, repeat: -1, ease: "Sine.easeInOut", repeatDelay: 40 });
+      this.scene.add.particles(cx, cy - 14 * K, "spark", {
         lifespan: { min: 700, max: 1600 }, speedY: { min: -45 * K, max: -18 * K }, speedX: { min: -14 * K, max: 14 * K },
         scale: { start: 2, end: 0.4 }, alpha: { start: 1, end: 0 }, frequency: 60, blendMode: "ADD",
       }).setDepth(25000);
-      this.smoke(cx, cy - 34 * K, 1.4);
+      this.smoke(cx, cy - 24 * K, 1.1);
     }
   }
 

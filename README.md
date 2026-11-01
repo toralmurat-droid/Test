@@ -52,7 +52,7 @@ The starting region is a 224×168-tile medieval map with 32px tiles drawn at the
 and every client build the same world. It has a ground layer and an object layer (objects and water are solid, except
 bushes, which you can walk through).
 
-It is laid out like a starting village: four narrow roads leave Oakvale, one to each nearby place (the farms to the
+It is laid out like a starting village: four narrow (1-tile) roads leave Oakvale, one to each nearby place (the farms to the
 west, the Old Ruins over the bridge to the east, the North Meadow, and Stonecrag Quarry to the south). Footpaths branch
 off to the Hunter's Camp, the Watchtower, the mill and Mirror Pond and the marsh. Generation also guarantees that every walkable tile can be reached.
 `npx tsx tools/map-metrics.ts` prints walkability, reachability and detour numbers.

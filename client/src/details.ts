@@ -379,7 +379,7 @@ export class Details {
       let byRoad = false; // only posts beside a cobbled road get a banner, not every breach in the old wall
       for (let d = -3; d <= 3; d++) if ((gateH ? GROUND[ty][tx + d] : GROUND[ty + d]?.[tx]) === T.COBBLE) byRoad = true;
       if (!byRoad) continue;
-      const b = scene.add.sprite((tx + 0.5) * TILE, ty * TILE + 2 * K, "banner").setOrigin(0.5, 0).setDepth(-0.9);
+      const b = scene.add.sprite((tx + 0.5) * TILE, ty * TILE + 5 * K, "banner").setOrigin(0.5, 0).setDepth(-0.9);
       b.play({ key: flap, startFrame: (tx + ty) % 3 });
       this.addLight((tx + 0.5) * TILE, ty * TILE + 8 * K, 0xffa040, 3, 0.6);
     }
