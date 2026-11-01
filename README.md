@@ -92,6 +92,10 @@ lanterns and the campfire at night. Add `?time=day|dusk|night` to the URL to for
 **Map viewer:** with `npm run dev` running, open http://localhost:5173/map.html to see the whole map with area,
 collision and grid overlays (no server needed). Edit `shared/map.ts` and it hot-reloads.
 
+## Accounts and saves
+
+Players log in with a name and password. A new name creates the account. Each account keeps one saved hero per class (level, XP, stat points, skill tree, hotbar, gear, bag, gold, potions, quest). Saves are written by the server to `data/saves.json` (change with `SAVE_FILE=...`) on leave, every 30 seconds, and on shutdown. Passwords are stored hashed (scrypt). Back up that file to keep player progress; it is not in git.
+
 ## Production
 
 ```bash
