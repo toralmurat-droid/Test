@@ -412,7 +412,12 @@ export class TownScene extends Phaser.Scene {
     const bar = this.add.graphics();
     const gear = hero ? new GearLayer(this, hero) : undefined;
     this.entities.set(id, { sprite, label, bar, tx: p.x, ty: p.y, state: p, mob, hero, gear, top: hero ? HERO_TOP : 14 });
-    if (id === this.me) this.cameras.main.startFollow(sprite, true, 0.15, 0.15);
+    if (id === this.me) {
+      // ?look=tx,ty (map viewing aid, like ?time=): park the camera on a tile instead of following the hero
+      const look = new URLSearchParams(location.search).get("look")?.split(",").map(Number);
+      const target = look?.length === 2 && look.every(Number.isFinite) ? this.add.zone((look[0] + 0.5) * TILE, (look[1] + 0.5) * TILE, 1, 1) : sprite;
+      this.cameras.main.startFollow(target, true, 0.15, 0.15);
+    }
   }
 
   private removeEntity(id: string) {

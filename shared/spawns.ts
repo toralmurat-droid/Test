@@ -23,19 +23,20 @@ export function rollLevel(z: SpawnZone): number {
 /** Monsters per area. Rects come from the map's AREAS (shared/map.ts), so zones follow the map layout. */
 const ZONE_MOBS: { name: string; mobs: Partial<Record<MobKind, number>>; respawnMs: number }[] = [
   // Levels come from the distance to Oakvale (see zoneLevels)
+  // Blobs live in the green and wet places (meadows, fields, ponds, forests), skeletons where the dead lie (graveyards, ruins)
   { name: "North Meadow", mobs: { slime: 11, motherblob: 1 }, respawnMs: 6000 },
   { name: "Goldenreach Farms", mobs: { slime: 12, motherblob: 1 }, respawnMs: 6000 },
   { name: "Mirror Pond", mobs: { slime: 8, motherblob: 1 }, respawnMs: 7000 },
   { name: "Misty Marsh", mobs: { slime: 10, motherblob: 2 }, respawnMs: 6000 },
-  { name: "Stonecrag Quarry", mobs: { slime: 3, skeleton: 5 }, respawnMs: 10000 },
-  { name: "Old Ruins", mobs: { skeleton: 7 }, respawnMs: 12000 },
-  { name: "Old Watchtower", mobs: { skeleton: 5 }, respawnMs: 12000 },
+  { name: "Stonecrag Quarry", mobs: { skeleton: 7 }, respawnMs: 10000 },
+  { name: "Old Ruins", mobs: { skeleton: 8 }, respawnMs: 11000 },
+  { name: "Old Watchtower", mobs: { skeleton: 6 }, respawnMs: 11000 },
   // The wider world: further from Oakvale, tougher monsters
   { name: "Sunken Lake", mobs: { slime: 10, motherblob: 2 }, respawnMs: 8000 },
-  { name: "Barrow Downs", mobs: { skeleton: 9 }, respawnMs: 10000 },
-  { name: "Thornwood", mobs: { slime: 6, skeleton: 6, motherblob: 1 }, respawnMs: 9000 },
+  { name: "Barrow Downs", mobs: { skeleton: 12 }, respawnMs: 9000 },
+  { name: "Thornwood", mobs: { slime: 12, motherblob: 2 }, respawnMs: 8000 },
   { name: "Greywatch Keep", mobs: { skeleton: 10 }, respawnMs: 11000 },
-  { name: "Whispering Woods", mobs: { slime: 9, skeleton: 6, motherblob: 1 }, respawnMs: 8000 }, // broad area last: zone lookups take the first match
+  { name: "Whispering Woods", mobs: { slime: 14, motherblob: 2 }, respawnMs: 7000 }, // broad area last: zone lookups take the first match
 ];
 
 /**

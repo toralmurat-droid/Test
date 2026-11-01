@@ -433,6 +433,22 @@ function buildWorld() {
   signpost(202, 42, ["Greywatch Keep", "Thornwood"]);
   signpost(rc(144) + 9, 142, ["Sunken Lake", "Old Ruins", "Stonecrag Quarry"]);                   // south bridge                                               // keep postern path
 
+  // ---------- 12c. Small graveyards where skeletons live (they rise from, and hide in, the graves) ----------
+  const graveyard = (cx: number, cy: number, r: number, seed: number) => each(cx - r, cy - r, 2 * r + 1, 2 * r + 1, (i, j) => {
+    if ((i - cx) % 2 !== 0 || (j - cy) % 2 !== 0) return; // neat rows, room to walk between them
+    if (objects[j][i] !== EMPTY || ground[j][i] === T.WATER || ground[j][i] === T.DIRT || ground[j][i] === T.COBBLE) return;
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if (roads.has((j + dy) * MAP_W + i + dx)) return;
+    if (hash(i, j, seed) < 0.85) setO(i, j, T.GRAVE);
+  });
+  graveyard(ruins.x + 10, ruins.y + 1, 2, 171);
+  graveyard(ruins.x - 9, ruins.y + 0, 2, 172);
+  graveyard(tower.x + 8, tower.y, 3, 173);
+  graveyard(tower.x - 8, tower.y - 1, 3, 174);
+  graveyard(quarry.x + 6, quarry.y + 16, 4, 175);
+  graveyard(quarry.x + 20, quarry.y + 5, 3, 176);
+  graveyard(keep.x - 3, keep.y + keep.h + 2, 3, 177);
+  graveyard(keep.x + keep.w + 2, keep.y - 2, 3, 178);
+
   // ---------- 13. Keep every road clear, with a 1-tile verge ----------
   for (const k of roads) {
     const x = k % MAP_W, y = (k / MAP_W) | 0;
@@ -506,9 +522,9 @@ function buildWorld() {
     { name: "Barrow Downs", ...barrow, mobs: ["skeleton"] },
     { name: "Sunken Lake", x: lake.x - lake.rx - 6, y: lake.y - lake.ry - 6, w: lake.rx * 2 + 12, h: lake.ry * 2 + 12, mobs: ["slime"] },
     { name: "Greywatch Keep", x: keep.x - 6, y: keep.y - 6, w: keep.w + 12, h: keep.h + 12, mobs: ["skeleton"] },
-    { name: "Thornwood", ...thorn, mobs: ["slime", "skeleton"] },
+    { name: "Thornwood", ...thorn, mobs: ["slime"] },
     { name: "River Ashwell", x: riverCenter(60) - 6, y: 0, w: 12, h: MAP_H },
-    { name: "Whispering Woods", x: woodsX - 2, y: 0, w: MAP_W - woodsX + 2, h: MAP_H, mobs: ["slime", "skeleton"] },
+    { name: "Whispering Woods", x: woodsX - 2, y: 0, w: MAP_W - woodsX + 2, h: MAP_H, mobs: ["slime"] },
   ];
   return { ground, objects, areas, posts, roads };
 }
