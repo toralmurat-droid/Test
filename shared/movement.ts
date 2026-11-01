@@ -1,5 +1,9 @@
 import { InputState, PLAYER_RADIUS, PLAYER_SPEED } from "./constants";
-import { isSolidAt } from "./map";
+import { isSolidAt as mapSolidAt } from "./map";
+import { isDecorSolidAt } from "./npcs";
+
+/** Map tiles plus the props around the village traders (shared/npcs.ts). */
+const isSolidAt = (x: number, y: number) => mapSolidAt(x, y) || isDecorSolidAt(x, y);
 
 function blocked(x: number, y: number): boolean {
   const r = PLAYER_RADIUS;

@@ -17,9 +17,37 @@ export const NPCS: Npc[] = [
   // Elder Rowan tends the bonfire in the middle of the market square
   { id: "druid", name: "Elder Rowan", title: "Druid", sprite: "druid", x: (ROADS.RX + 3) * TILE, y: (ROADS.RY + 1.7) * TILE, dir: "left" },
   // Traders around the market square
-  { id: "weaponsmith", name: "Brann", title: "Weapons merchant", sprite: "blacksmith", x: (ROADS.RX - 3) * TILE, y: (ROADS.RY - 1.5) * TILE, dir: "down", shop: "weaponsmith" },
-  { id: "witch", name: "Old Morwen", title: "Potion witch", sprite: "witch", x: (ROADS.RX - 3) * TILE, y: (ROADS.RY + 4) * TILE, dir: "right", shop: "witch" },
+  { id: "weaponsmith", name: "Brann", title: "Weapons merchant", sprite: "blacksmith", x: 71.6 * TILE, y: 57.5 * TILE, dir: "right", shop: "weaponsmith" },
+  { id: "witch", name: "Old Morwen", title: "Potion witch", sprite: "witch", x: 71.95 * TILE, y: 63.95 * TILE, dir: "right", shop: "witch" },
 ];
+
+/**
+ * Props around the traders (props atlas, bottom-centre pivot), in tiles. `solid` = blocking rect in tiles
+ * (x, y, w, h), used by shared/movement.ts so players walk around the hut and the forge.
+ */
+export interface NpcDecor { prop: string; x: number; y: number; scale: number; animated?: boolean; solid?: [number, number, number, number]; flip?: boolean }
+export const NPC_DECOR: NpcDecor[] = [
+  // Old Morwen's crooked hut, cauldron, candles and herbs
+  { prop: "witch_hut", x: 71, y: 63.1, scale: 0.65, animated: true, solid: [70.1, 62.35, 1.8, 0.75] },
+  { prop: "cauldron", x: 72.8, y: 64.05, scale: 0.55, animated: true, solid: [72.55, 63.8, 0.5, 0.25] },
+  { prop: "candles", x: 70.05, y: 63.45, scale: 0.5, animated: true },
+  { prop: "toadstools", x: 73.4, y: 63.3, scale: 0.5 },
+  { prop: "herb_rack", x: 72.9, y: 62.55, scale: 0.5 },
+  // Brann's smithy: forge with bellows, anvil, weapon rack
+  { prop: "forge", x: 70.4, y: 56.85, scale: 0.6, animated: true, solid: [69.85, 56.2, 1.1, 0.65] },
+  { prop: "anvil", x: 72.25, y: 57.65, scale: 0.5, solid: [72.05, 57.45, 0.4, 0.2] },
+  { prop: "weapon_rack", x: 73.3, y: 56.6, scale: 0.55, solid: [72.8, 56.3, 1.0, 0.3] },
+];
+
+/** True if (px, py) is inside one of the NPC props that block movement. */
+export function isDecorSolidAt(px: number, py: number): boolean {
+  const tx = px / TILE, ty = py / TILE;
+  for (const d of NPC_DECOR) {
+    const r = d.solid;
+    if (r && tx >= r[0] && ty >= r[1] && tx < r[0] + r[2] && ty < r[1] + r[3]) return true;
+  }
+  return false;
+}
 
 /** How close (px) a player must stand to talk to an NPC. */
 export const TALK_RANGE = 1.1 * TILE;

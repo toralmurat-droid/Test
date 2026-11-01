@@ -1176,10 +1176,322 @@
     "y": 1
    }
   },
-  "flower_planter": {
+  "witch_hut_0": {
    "frame": {
     "x": 195,
     "y": 260,
+    "w": 96,
+    "h": 96
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "pivot": {
+    "x": 0.5,
+    "y": 1
+   }
+  },
+  "witch_hut_1": {
+   "frame": {
+    "x": 292,
+    "y": 260,
+    "w": 96,
+    "h": 96
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "pivot": {
+    "x": 0.5,
+    "y": 1
+   }
+  },
+  "witch_hut_2": {
+   "frame": {
+    "x": 389,
+    "y": 260,
+    "w": 96,
+    "h": 96
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "pivot": {
+    "x": 0.5,
+    "y": 1
+   }
+  },
+  "witch_hut_3": {
+   "frame": {
+    "x": 0,
+    "y": 357,
+    "w": 96,
+    "h": 96
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 96,
+    "h": 96
+   },
+   "sourceSize": {
+    "w": 96,
+    "h": 96
+   },
+   "pivot": {
+    "x": 0.5,
+    "y": 1
+   }
+  },
+  "forge_0": {
+   "frame": {
+    "x": 97,
+    "y": 357,
+    "w": 64,
+    "h": 64
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 64,
+    "h": 64
+   },
+   "sourceSize": {
+    "w": 64,
+    "h": 64
+   },
+   "pivot": {
+    "x": 0.5,
+    "y": 1
+   }
+  },
+  "forge_1": {
+   "frame": {
+    "x": 162,
+    "y": 357,
+    "w": 64,
+    "h": 64
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 64,
+    "h": 64
+   },
+   "sourceSize": {
+    "w": 64,
+    "h": 64
+   },
+   "pivot": {
+    "x": 0.5,
+    "y": 1
+   }
+  },
+  "forge_2": {
+   "frame": {
+    "x": 227,
+    "y": 357,
+    "w": 64,
+    "h": 64
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 64,
+    "h": 64
+   },
+   "sourceSize": {
+    "w": 64,
+    "h": 64
+   },
+   "pivot": {
+    "x": 0.5,
+    "y": 1
+   }
+  },
+  "forge_3": {
+   "frame": {
+    "x": 292,
+    "y": 357,
+    "w": 64,
+    "h": 64
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 64,
+    "h": 64
+   },
+   "sourceSize": {
+    "w": 64,
+    "h": 64
+   },
+   "pivot": {
+    "x": 0.5,
+    "y": 1
+   }
+  },
+  "candles_0": {
+   "frame": {
+    "x": 357,
+    "y": 357,
+    "w": 32,
+    "h": 32
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 32,
+    "h": 32
+   },
+   "sourceSize": {
+    "w": 32,
+    "h": 32
+   },
+   "pivot": {
+    "x": 0.5,
+    "y": 1
+   }
+  },
+  "candles_1": {
+   "frame": {
+    "x": 390,
+    "y": 357,
+    "w": 32,
+    "h": 32
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 32,
+    "h": 32
+   },
+   "sourceSize": {
+    "w": 32,
+    "h": 32
+   },
+   "pivot": {
+    "x": 0.5,
+    "y": 1
+   }
+  },
+  "candles_2": {
+   "frame": {
+    "x": 423,
+    "y": 357,
+    "w": 32,
+    "h": 32
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 32,
+    "h": 32
+   },
+   "sourceSize": {
+    "w": 32,
+    "h": 32
+   },
+   "pivot": {
+    "x": 0.5,
+    "y": 1
+   }
+  },
+  "toadstools": {
+   "frame": {
+    "x": 456,
+    "y": 357,
+    "w": 32,
+    "h": 32
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 32,
+    "h": 32
+   },
+   "sourceSize": {
+    "w": 32,
+    "h": 32
+   },
+   "pivot": {
+    "x": 0.5,
+    "y": 1
+   }
+  },
+  "herb_rack": {
+   "frame": {
+    "x": 0,
+    "y": 454,
+    "w": 64,
+    "h": 32
+   },
+   "rotated": false,
+   "trimmed": false,
+   "spriteSourceSize": {
+    "x": 0,
+    "y": 0,
+    "w": 64,
+    "h": 32
+   },
+   "sourceSize": {
+    "w": 64,
+    "h": 32
+   },
+   "pivot": {
+    "x": 0.5,
+    "y": 1
+   }
+  },
+  "flower_planter": {
+   "frame": {
+    "x": 65,
+    "y": 454,
     "w": 64,
     "h": 32
    },
@@ -1205,7 +1517,7 @@
   "image": "props.png",
   "size": {
    "w": 512,
-   "h": 324
+   "h": 486
   },
   "scale": "1",
   "app": "tools/art/generate.ts"
@@ -1267,6 +1579,35 @@
    "frames": [
     "beehive_0",
     "beehive_1"
+   ],
+   "fps": 6,
+   "loop": true
+  },
+  "witch_hut": {
+   "frames": [
+    "witch_hut_0",
+    "witch_hut_1",
+    "witch_hut_2",
+    "witch_hut_3"
+   ],
+   "fps": 3,
+   "loop": true
+  },
+  "forge": {
+   "frames": [
+    "forge_0",
+    "forge_1",
+    "forge_2",
+    "forge_3"
+   ],
+   "fps": 8,
+   "loop": true
+  },
+  "candles": {
+   "frames": [
+    "candles_0",
+    "candles_1",
+    "candles_2"
    ],
    "fps": 6,
    "loop": true

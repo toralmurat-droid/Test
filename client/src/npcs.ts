@@ -1,6 +1,6 @@
 import "./npcs.css";
 import Phaser from "phaser";
-import { NPCS, Npc, npcNear, TALK_RANGE } from "../../shared/npcs";
+import { NPCS, NPC_DECOR, Npc, npcNear, TALK_RANGE } from "../../shared/npcs";
 import { druidDialog, Q, QUEST, QUEST_ZONE, questObjective, questTarget } from "../../shared/quests";
 import { TILE } from "../../shared/constants";
 import type { MapMarker } from "./minimap";
@@ -56,6 +56,52 @@ export class NpcLayer {
       }).setOrigin(0.5, 1).setScale(0.25).setResolution(2).setDepth(n.y + 1);
       scene.tweens.add({ targets: mark, y: n.y - 27, duration: 600, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
       this.sprites.set(n.id, { sprite, label, mark });
+    }
+    this.addSurroundings(scene);
+  }
+
+  /** Hut, cauldron, forge… around the traders, plus Brann hammering at his anvil and the witch's bubbling brew. */
+  private addSurroundings(scene: Phaser.Scene) {
+    for (const d of NPC_DECOR) {
+      const x = d.x * TILE, y = d.y * TILE;
+      const img = scene.add.sprite(x, y, "props", d.animated ? `${d.prop}_0` : d.prop).setOrigin(0.5, 1).setScale(d.scale).setDepth(y).setFlipX(!!d.flip);
+      if (d.animated && scene.anims.exists(`props_${d.prop}`)) img.play(`props_${d.prop}`);
+    }
+    const brann = NPCS.find((n) => n.id === "weaponsmith"), anvil = NPC_DECOR.find((d) => d.prop === "anvil");
+    const smith = brann && this.sprites.get(brann.id)?.sprite;
+    if (brann && anvil && smith) {
+      const ax = anvil.x * TILE, ay = anvil.y * TILE - 7;
+      // A slower take on his attack swing, so the hammer blow reads clearly
+      const dir = brann.dir === "left" ? "right" : brann.dir;
+      const key = `${brann.sprite}_hammer_${dir}`;
+      const swing = scene.cache.json.get("characters_meta")?.animations?.[`attack_${dir}`];
+      if (swing && !scene.anims.exists(key)) {
+        scene.anims.create({ key, frames: scene.anims.generateFrameNumbers(brann.sprite, { frames: swing.frames }), frameRate: 7, repeat: 0 });
+      }
+      const strike = () => {
+        if (this.talking === brann || !scene.anims.exists(key)) return; // stops to serve customers
+        smith.setFlipX(brann.dir === "left");
+        smith.play(key);
+        smith.once("animationcomplete", () => playCharAnim(smith, brann.sprite as CharacterName, "idle", brann.dir));
+        scene.time.delayedCall(400, () => this.sparks(ax, ay)); // hammer hits the anvil on the 3rd frame
+      };
+      scene.time.addEvent({ delay: 1600, loop: true, callback: strike });
+    }
+    const pot = NPC_DECOR.find((d) => d.prop === "cauldron");
+    if (pot) {
+      const px = pot.x * TILE, py = pot.y * TILE - 12;
+      scene.time.addEvent({ delay: 450, loop: true, callback: () => {
+        const b = scene.add.circle(px + (Math.random() - 0.5) * 7, py, 1 + Math.random(), 0x9be564, 0.85).setDepth(py + 40);
+        scene.tweens.add({ targets: b, y: py - 14 - Math.random() * 10, alpha: 0, scale: 1.6, duration: 1100, onComplete: () => b.destroy() });
+      } });
+    }
+  }
+
+  private sparks(x: number, y: number) {
+    for (let i = 0; i < 6; i++) {
+      const a = -Math.PI / 2 + (Math.random() - 0.5) * 2.2, d = 8 + Math.random() * 10;
+      const sp = this.scene.add.rectangle(x, y, 1.5, 1.5, Math.random() < 0.5 ? 0xffd166 : 0xff8c42).setDepth(y + 60);
+      this.scene.tweens.add({ targets: sp, x: x + Math.cos(a) * d, y: y + Math.sin(a) * d + 6, alpha: 0, duration: 350 + Math.random() * 200, onComplete: () => sp.destroy() });
     }
   }
 
