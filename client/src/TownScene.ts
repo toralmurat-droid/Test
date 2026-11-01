@@ -1,6 +1,6 @@
 import Phaser from "phaser";
 import { Client, Room } from "colyseus.js";
-import { InputState, MAP_H, MAP_W, TILE } from "../../shared/constants";
+import { InputState, MAP_H, MAP_W, regenFromStamina, TILE } from "../../shared/constants";
 import { CLASSES, ClassKind, DODGE, ENERGY, energyName, xpForLevel } from "../../shared/classes";
 import { GROUND, areaAt, isSafeZone } from "../../shared/map";
 import { moveStep } from "../../shared/movement";
@@ -442,7 +442,7 @@ export class TownScene extends Phaser.Scene {
       : levelUp;
     document.getElementById("herotitle")!.textContent = `${mine.name} · Lv ${lvl} ${CLASSES[cls].name}`;
     const notes: Record<StatKind, string> = {
-      sta: `${mine.maxHp} max HP`,
+      sta: `${mine.maxHp} max HP, regen ${regenFromStamina(st.sta)[1].toFixed(1)} HP/s`,
       str: STATS[cls].attackStat === "str" ? `attack ×${attackMult(cls, st).toFixed(2)}, +${HP_PER_STR} HP each` : `+${HP_PER_STR} HP per point`,
       mag: `${STATS[cls].attackStat === "mag" ? `attack ×${attackMult(cls, st).toFixed(2)}, ` : ""}skills ×${magicMult(cls, st).toFixed(2)}, ` +
         `cooldowns −${Math.round((1 - cooldownMult(cls, st, mine.talents)) * 100)}%`,
@@ -460,6 +460,7 @@ export class TownScene extends Phaser.Scene {
     const rows: [string, string][] = [
       ["Level", lvl >= 20 ? "20 (max)" : `${lvl} · XP ${mine.xp - cur}/${next - cur}`],
       ["Health", `${Math.ceil(mine.hp)} / ${mine.maxHp}`],
+      ["HP regen", `${regenFromStamina(st.sta)[1].toFixed(1)}/s resting · ${regenFromStamina(st.sta)[0].toFixed(1)}/s in a fight`],
       ["Attack", `${dmg} damage${def.projectile ? " (ranged)" : ""}`],
       ["Move speed", `${speed}`],
       ["Kills · Gold", `${mine.kills} · ${mine.gold}`],
