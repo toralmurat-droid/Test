@@ -6,7 +6,7 @@ import { GROUND, areaAt, isSafeZone } from "../../shared/map";
 import { moveStep } from "../../shared/movement";
 import { SPAWN_ZONES } from "../../shared/spawns";
 import {
-  attackMult, cooldownMult, heroSpeed, magicMult, POWERS, STAT_NAMES, StatKind, statsFor, ULT_LEVEL, ULTS,
+  attackMult, cooldownMult, heroSpeed, STATS, magicMult, POWERS, STAT_NAMES, StatKind, statsFor, ULT_LEVEL, ULTS,
 } from "../../shared/powers";
 import { heroTexture, itemTexture, makeTileset, mobTexture } from "./textures";
 import { Minimap } from "./minimap";
@@ -50,7 +50,7 @@ export class TownScene extends Phaser.Scene {
   private details?: Details;
   private areaName = "";
   private areaTimer?: number;
-  private shots = new Map<string, { g: Phaser.GameObjects.Arc; tx: number; ty: number }>();
+  private shots = new Map<string, { g: Phaser.GameObjects.Shape; tx: number; ty: number }>();
   private items = new Map<string, Phaser.GameObjects.Image>();
   private lastSpecial = -Infinity; // local clock (ms) of my last special, for the cooldown bar
   private lastUlt = -Infinity;
@@ -139,7 +139,12 @@ export class TownScene extends Phaser.Scene {
 
     const shots = (this.room.state as any).projectiles;
     shots.onAdd((s: any, id: string) => {
-      const g = this.add.circle(s.x, s.y, 2.5 * (s.size || 1), 0xff9f1c).setStrokeStyle(1, 0xffe066).setDepth(9000);
+      const size = s.size || 1;
+      const g: Phaser.GameObjects.Shape = s.kind === "arrow"
+        // Arrow: thin shaft along the flight direction
+        ? this.add.rectangle(s.x, s.y, 9 * size, 1.5 * size, 0xe8d8b0).setStrokeStyle(0.5, 0x5d4037)
+            .setAngle(s.dir === "up" || s.dir === "down" ? 90 : 0).setDepth(9000)
+        : this.add.circle(s.x, s.y, 2.5 * size, 0xff9f1c).setStrokeStyle(1, 0xffe066).setDepth(9000);
       const shot = { g, tx: s.x, ty: s.y };
       this.shots.set(id, shot);
       s.onChange(() => { shot.tx = s.x; shot.ty = s.y; });
@@ -176,7 +181,8 @@ export class TownScene extends Phaser.Scene {
 
     this.room.onMessage("swing", ({ id, step, variant }) => this.showSwing(id, step ?? 0, variant ?? 0));
     this.room.onMessage("special", (msg) => this.showSpecial(msg));
-    this.room.onMessage("boom", ({ x, y, r }) => this.burst(x, y, r ? r / 1.8 : 6, 0xff9f1c, r ? 300 : 200));
+    this.room.onMessage("boom", ({ x, y, r, kind }) =>
+      kind === "arrow" ? this.burst(x, y, 3, 0xd7ccc8, 150) : this.burst(x, y, r ? r / 1.8 : 6, 0xff9f1c, r ? 300 : 200));
     this.room.onMessage("ult", (msg) => this.showUlt(msg));
     this.room.onMessage("zonecleared", ({ zone, by, name, respawnSec }) => {
       if (by === this.me) this.showCleared(zone, respawnSec);
@@ -326,8 +332,8 @@ export class TownScene extends Phaser.Scene {
     document.getElementById("herotitle")!.textContent = `${mine.name} · Lv ${lvl} ${CLASSES[cls].name}`;
     const notes: Record<StatKind, string> = {
       sta: `${mine.maxHp} max HP`,
-      str: cls === "wizard" ? "+2 HP per point" : `attack ×${attackMult(cls, st).toFixed(2)}`,
-      mag: `${cls === "wizard" ? `fireball ×${attackMult(cls, st).toFixed(2)}, ` : ""}skills ×${magicMult(cls, st).toFixed(2)}, ` +
+      str: STATS[cls].attackStat === "str" ? `attack ×${attackMult(cls, st).toFixed(2)}, +2 HP each` : "+2 HP per point",
+      mag: `${STATS[cls].attackStat === "mag" ? `attack ×${attackMult(cls, st).toFixed(2)}, ` : ""}skills ×${magicMult(cls, st).toFixed(2)}, ` +
         `cooldowns −${Math.round((1 - cooldownMult(cls, st, lvl)) * 100)}%`,
     };
     document.getElementById("herostats")!.innerHTML = (["sta", "str", "mag"] as StatKind[]).map((k) => {
@@ -363,6 +369,31 @@ export class TownScene extends Phaser.Scene {
           this.tweens.add({ targets: g, angle: 180, alpha: 0, duration: 200, onComplete: () => g.destroy() });
         });
       }
+    } else if (msg.kind === "arrowrain") {
+      const warn = this.add.circle(msg.x, msg.y, msg.r, 0xd7ccc8, 0.12).setStrokeStyle(1, 0xbcaaa4).setDepth(9000);
+      const hits = msg.hits ?? 4, delay = msg.delay ?? 400;
+      for (let i = 0; i < hits; i++) {
+        this.time.delayedCall(delay + i * 250, () => {
+          // A handful of falling arrow streaks per wave
+          for (let k = 0; k < 6; k++) {
+            const a = Math.random() * Math.PI * 2, d = Math.random() * msg.r;
+            const ax = msg.x + Math.cos(a) * d, ay = msg.y + Math.sin(a) * d;
+            const streak = this.add.rectangle(ax, ay - 14, 1, 7, 0xe8d8b0).setDepth(10000);
+            this.tweens.add({ targets: streak, y: ay, alpha: 0, duration: 160, onComplete: () => streak.destroy() });
+          }
+          if (i === hits - 1) warn.destroy();
+        });
+      }
+    } else if (msg.kind === "leap") {
+      const m = msg as any;
+      if (e) { e.sprite.setPosition(m.x, m.y); e.tx = m.x; e.ty = m.y; }
+      for (let i = 0; i < 4; i++) {
+        const t = i / 4;
+        const ghost = this.add.circle(m.fromX + (m.x - m.fromX) * t, m.fromY - 10 - Math.sin(t * Math.PI) * 10 + (m.y - m.fromY) * t, 4, 0xffffff, 0.35).setDepth(9000);
+        this.tweens.add({ targets: ghost, alpha: 0, duration: 250 + i * 40, onComplete: () => ghost.destroy() });
+      }
+      this.burst(m.x, m.y, msg.r / 1.6, 0xa1887f, 350);
+      this.cameras.main.shake(180, 0.006);
     } else if (msg.kind === "meteor") {
       // Warning circle, then the impact
       const warn = this.add.circle(msg.x, msg.y, msg.r, 0xff3d00, 0.15).setStrokeStyle(1, 0xff6d00).setDepth(9000);
@@ -390,6 +421,9 @@ export class TownScene extends Phaser.Scene {
         this.tweens.add({ targets: ghost, alpha: 0, duration: 250 + i * 40, onComplete: () => ghost.destroy() });
       }
       if (e) { e.sprite.setPosition(msg.x!, msg.y!); e.tx = msg.x!; e.ty = msg.y!; }
+    } else if (msg.kind === "rage" && e) {
+      this.burst(e.sprite.x, e.sprite.y - 6, 9, 0xe63946, 300);
+      if (msg.id === this.me) this.cameras.main.shake(120, 0.004);
     } else if (msg.kind === "guard" && e) {
       this.burst(e.sprite.x, e.sprite.y - 6, 8, 0x9ad1ff, 250);
     }
@@ -465,7 +499,7 @@ export class TownScene extends Phaser.Scene {
       const p = e.state;
       if (id === this.me && !p.dead && !p.stunned) {
         // Client-side prediction with the same movement code the server runs
-        const r = moveStep(e.sprite.x, e.sprite.y, this.input_, dtMs / 1000, heroSpeed(p.cls as ClassKind, p.level, p.slowed) * gearSpeedMult(p));
+        const r = moveStep(e.sprite.x, e.sprite.y, this.input_, dtMs / 1000, heroSpeed(p.cls as ClassKind, p.level, p.slowed, p.raging) * gearSpeedMult(p));
         e.sprite.setPosition(r.x, r.y);
         if (!r.moving) {
           // Ease toward authoritative position while idle
@@ -506,9 +540,10 @@ export class TownScene extends Phaser.Scene {
         else e.sprite.setAlpha(p.dead ? 0.35 : 1).setAngle(p.dead ? 90 : 0);
       }
       e.sprite.setDepth(e.sprite.y);
-      // Status effects: blue for slowed, yellow flicker for stunned
-      if (!p.dead && (p.stunned || p.slowed)) {
-        e.sprite.setTint(p.stunned ? (Math.floor(now / 120) % 2 ? 0xfff176 : 0xffffff) : 0x90caf9);
+      // Status effects: yellow flicker for stunned, blue for slowed, red pulse for raging
+      if (!p.dead && (p.stunned || p.slowed || p.raging)) {
+        e.sprite.setTint(p.stunned ? (Math.floor(now / 120) % 2 ? 0xfff176 : 0xffffff)
+          : p.slowed ? 0x90caf9 : (Math.floor(now / 200) % 2 ? 0xff8a80 : 0xffcdd2));
         e.statusTint = true;
       } else if (e.statusTint) { e.sprite.clearTint(); e.statusTint = false; }
       e.gear?.sync(e.sprite, p);

@@ -9,8 +9,8 @@ html, body { margin: 0; height: 100%; background: #1b1b24; color: #eee; font: 14
 #colors { display: flex; gap: 6px; justify-content: center; margin: 12px 0; flex-wrap: wrap; }
 #colors button { width: 28px; height: 28px; border: 3px solid transparent; cursor: pointer; }
 #colors button.sel { border-color: #fff; }
-#classes { display: flex; gap: 6px; margin: 12px 0 4px; }
-#classes button { flex: 1; padding: 8px 4px; font: inherit; background: #15151f; color: #eee; border: 2px solid #555a7a; cursor: pointer; }
+#classes { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0 4px; }
+#classes button { flex: 1 1 28%; padding: 8px 4px; font: inherit; background: #15151f; color: #eee; border: 2px solid #555a7a; cursor: pointer; }
 #classes button.sel { border-color: #ffd166; color: #ffd166; }
 #classinfo { min-height: 2.8em; margin: 4px 0; }
 #ult { position: absolute; top: 76px; left: 12px; width: 200px; height: 14px; background: #222; border: 2px solid #000; }

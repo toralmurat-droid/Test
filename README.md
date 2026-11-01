@@ -26,10 +26,12 @@ Gameplay:
   - **Knight:** most HP, slow, strong sword. Skill *Shield*: blocks 70% damage and knockback for 2s.
   - **Ninja:** fast, low HP, rapid strikes. Skill *Dash*: blink forward, untouchable for a moment.
   - **Wizard:** ranged fireballs. Skill *Nova*: blast everything around you.
-- **Combos:** each class has a 3-hit attack chain (press attack again within 0.7s). The 3rd hit is a finisher: Knight wide slam, Ninja lunge, Wizard big fireball. Tuned in `combo` in `shared/classes.ts`.
+  - **Archer:** long-range arrows. Skill *Volley*: 3 arrows side by side. Ultimate *Arrow Rain*.
+  - **Barbarian:** axe brawler. Skill *Rage*: +30% damage and +20% speed for 5s. Ultimate *Leap*.
+- **Combos:** each class has a 3-hit attack chain (press attack again within 0.7s). The 3rd hit is a finisher: Knight wide slam, Ninja lunge, Wizard big fireball, Archer power shot, Barbarian axe smash. Tuned in `combo` in `shared/classes.ts`.
 - **Attack variety:** normal hits pick 1 of 4 attack moves at random (never the same twice in a row).
 - **Emotes:** type /wave /cheer /laugh /sit /sleep in chat. Heroes also fidget when standing still.
-- **Levels, stats and powers** (`shared/powers.ts`): XP raises your level (max 20). Each level auto-adds 5 points to **Stamina** (max HP), **Strength** (Knight/Ninja attack) and **Magic** (skills, cooldowns, Wizard fireballs), split by class. Powers unlock at levels 1, 3, 5, 8 and 10 (the level 10 one is an ultimate on **R**). Press **C** for the hero menu; it also pops up on level-up.
+- **Levels, stats and powers** (`shared/powers.ts`): XP raises your level (max 20). Each level auto-adds 5 points to **Stamina** (max HP), **Strength** (Knight/Ninja/Archer/Barbarian attack) and **Magic** (skills, cooldowns, Wizard fireballs), split by class. Powers unlock at levels 1, 3, 5, 8 and 10 (the level 10 one is an ultimate on **R**). Press **C** for the hero menu; it also pops up on level-up.
   - Knight: Shield, Iron Skin, Cleave, Second Wind, Earthquake (stun)
   - Ninja: Dash, Swift Feet, Critical Strike, Shadow Strike, Blade Storm
   - Wizard: Nova, Mana Flow, Ignite, Frost Nova (slow), Meteor

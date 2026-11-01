@@ -10,6 +10,7 @@ import {
 import {
   attackMult, cooldownMult, CRIT, FROST, hasPower, heroSpeed, IGNITE, IRONSKIN_REDUCTION, magicMult, maxHpFromStats,
   SECOND_WIND, SHADOW_STRIKE_DAMAGE, SLOW_MOB, statsFor, ULT_LEVEL, ULTS,
+  BLOODTHIRST, EAGLE_EYE_RANGE, GROUND_SLAM_STUN_MS, PIERCE_EXTRA, PINNING, RAGE,
 } from "../shared/powers";
 import {
   ITEM_LIFETIME_MS, ItemKind, LOOT, MAX_POTIONS, PICKUP_RADIUS, POTION_COOLDOWN_MS, POTION_HEAL, PVP_GOLD_DROP,
@@ -45,6 +46,7 @@ export class Player extends Schema {
   @type("number") mag = 0;
   @type("boolean") stunned = false;
   @type("boolean") slowed = false;
+  @type("boolean") raging = false; // barbarian Rage active
   // Equipment (shared/gear.ts): equipped item ids ("" = empty) and the unequipped items carried
   @type("string") weapon = "";
   @type("string") armour = "";
@@ -65,6 +67,7 @@ export class Player extends Schema {
   slowUntil = 0;
   lastUlt = -Infinity;
   secondWindAt = 0; // earliest time Second Wind can trigger again
+  rageUntil = 0;
 }
 
 export class Mob extends Schema {
@@ -96,9 +99,13 @@ export class Projectile extends Schema {
   @type("string") dir: Dir = "down";
   @type("string") owner = "";
   @type("number") size = 1; // visual scale (combo finisher fireballs are bigger)
+  @type("string") kind = "fireball"; // "fireball" | "arrow" (client picks the visual)
 
   knockback = 1;
   ignite = false; // wizard Ignite power: splash on impact
+  pierce = 0; // archer: extra targets the arrow can pass through
+  slowMs = 0; // archer Pinning Shot
+  hitIds = new Set<string>();
   traveled = 0;
   speed = 0;
   range = 0;
@@ -245,10 +252,11 @@ export class TownRoom extends Room<TownState> {
     this.state.players.forEach((p, pid) => {
       p.stunned = now < p.stunUntil;
       p.slowed = now < p.slowUntil;
+      p.raging = now < p.rageUntil;
       if (p.dead) { p.moving = false; return; }
       const r = p.stunned
         ? { x: p.x, y: p.y, moving: false }
-        : moveStep(p.x, p.y, p.input, dt, heroSpeed(p.cls, p.level, p.slowed) * gearSpeedMult(this.equipped(p)));
+        : moveStep(p.x, p.y, p.input, dt, heroSpeed(p.cls, p.level, p.slowed, p.raging) * gearSpeedMult(this.equipped(p)));
       p.x = r.x; p.y = r.y; p.moving = r.moving;
       p.dir = dirFromInput(p.input, p.dir);
       if (r.moving) p.emote = "";
@@ -352,16 +360,18 @@ export class TownRoom extends Room<TownState> {
       s.y += (oy * total) / steps;
       s.traveled += total / steps;
       if (isSolidAt(s.x, s.y) || s.traveled >= s.range) return this.explode(s, id);
-      const hit = this.firstTargetAt(s.x, s.y, s.radius + HIT_RADIUS, s.owner);
+      const hit = this.firstTargetAt(s.x, s.y, s.radius + HIT_RADIUS, s.owner, s.hitIds);
       if (hit) {
-        this.hitTarget(s.owner, hit, s.damage, DIR_OFFSET[s.dir], { kb: s.knockback });
+        this.hitTarget(s.owner, hit, s.damage, DIR_OFFSET[s.dir], { kb: s.knockback, slowMs: s.slowMs || undefined });
+        // Piercing arrows keep flying through a few targets
+        if (s.pierce > 0) { s.pierce--; s.hitIds.add(hit); continue; }
         return this.explode(s, id, hit);
       }
     }
   }
 
   private explode(s: Projectile, id: string, directHit = "") {
-    this.broadcast("boom", { x: s.x, y: s.y, r: s.ignite ? IGNITE.radius : 0 });
+    this.broadcast("boom", { x: s.x, y: s.y, r: s.ignite ? IGNITE.radius : 0, kind: s.kind });
     if (s.ignite) {
       const splash = Math.max(1, Math.round(s.damage * IGNITE.splash));
       for (const tid of this.targetsAround(s.x, s.y, IGNITE.radius, s.owner)) {
@@ -471,10 +481,11 @@ export class TownRoom extends Room<TownState> {
     return out;
   }
 
-  private firstTargetAt(x: number, y: number, r: number, exclude: string): string | undefined {
+  private firstTargetAt(x: number, y: number, r: number, exclude: string, skip?: Set<string>): string | undefined {
     // Skip players who cannot be hurt right now (safe zone, dash) so shots pass through them
     const now = Date.now();
     return this.targetsAround(x, y, r, exclude).find((id) => {
+      if (skip?.has(id)) return false;
       const p = this.state.players.get(id);
       return !p || (!isSafeZone(p.x, p.y) && now >= p.invulnUntil);
     });
@@ -487,13 +498,24 @@ export class TownRoom extends Room<TownState> {
     return Math.abs(dx) > Math.abs(dy) ? [Math.sign(dx), 0] : [0, Math.sign(dy) || 1];
   }
 
+  /** Barbarian Bloodthirst: heal a share of the damage dealt. */
+  private bloodthirst(a: Player | undefined, id: string, dealt: number) {
+    if (!a || a.dead || dealt <= 0 || !hasPower(a.cls, a.level, "bloodthirst")) return;
+    const heal = dealt * BLOODTHIRST;
+    a.hp = Math.min(a.maxHp, a.hp + heal);
+  }
+
   /** A player (`attackerId`) hits a player or mob. */
   private hitTarget(attackerId: string, targetId: string, dmg: number, push: [number, number], opts: HitOpts = {}) {
     const a = this.state.players.get(attackerId);
     const name = a?.name ?? "???";
     const kb = opts.kb ?? 1;
-    if (this.state.players.has(targetId)) {
-      if (this.damagePlayer(targetId, dmg, name, push, kb, opts) && a) {
+    const tp = this.state.players.get(targetId);
+    if (tp) {
+      const hpBefore = tp.hp;
+      const killed = this.damagePlayer(targetId, dmg, name, push, kb, opts);
+      this.bloodthirst(a, attackerId, hpBefore - tp.hp);
+      if (killed && a) {
         const victim = this.state.players.get(targetId)!;
         a.kills++;
         this.grantXp(attackerId, PVP_KILL_XP, victim);
@@ -505,6 +527,7 @@ export class TownRoom extends Room<TownState> {
     const m = this.state.mobs.get(targetId);
     if (!m || m.dead) return;
     const def = MOBS[m.kind];
+    this.bloodthirst(a, attackerId, Math.min(dmg, m.hp));
     m.hp = Math.max(0, m.hp - dmg);
     m.target = attackerId; // fight back
     const now = Date.now();
@@ -564,12 +587,14 @@ export class TownRoom extends Room<TownState> {
     const guarded = now < t.guardUntil;
     if (guarded) dmg = Math.max(1, Math.round(dmg * (1 - GUARD_REDUCTION)));
     if (hasPower(t.cls, t.level, "ironskin")) dmg = Math.max(1, Math.round(dmg * (1 - IRONSKIN_REDUCTION)));
-    if (opts.stunMs && !guarded) t.stunUntil = Math.max(t.stunUntil, now + opts.stunMs);
-    if (opts.slowMs) t.slowUntil = Math.max(t.slowUntil, now + opts.slowMs);
+    // Barbarian Unstoppable: while raging, ignore stun, slow and knockback
+    const unstoppable = now < t.rageUntil && hasPower(t.cls, t.level, "unstoppable");
+    if (opts.stunMs && !guarded && !unstoppable) t.stunUntil = Math.max(t.stunUntil, now + opts.stunMs);
+    if (opts.slowMs && !unstoppable) t.slowUntil = Math.max(t.slowUntil, now + opts.slowMs);
     t.hp = Math.max(0, t.hp - dmg);
     t.lastHurt = now;
     t.emote = "";
-    if (!guarded) {
+    if (!guarded && !unstoppable) {
       const kb = moveStep(t.x, t.y, pushInput(push), 0.12 * kbMul);
       t.x = kb.x; t.y = kb.y;
     }
@@ -610,6 +635,7 @@ export class TownRoom extends Room<TownState> {
     let dmg = Math.round(def.damage * attackMult(a.cls, this.stats(a)) * hit.damage);
     const crit = hasPower(a.cls, a.level, "crit") && Math.random() < CRIT.chance;
     if (crit) dmg = Math.round(dmg * CRIT.mult);
+    if (now < a.rageUntil) dmg = Math.round(dmg * RAGE.damage);
     a.emote = "";
     let variant = 0;
     if (step < 2) {
@@ -632,25 +658,37 @@ export class TownRoom extends Room<TownState> {
     }
 
     if (def.projectile) {
-      const scale = hit.shotScale ?? 1;
-      const s = new Projectile();
-      s.x = a.x + off[0] * 6; s.y = a.y - 4 + off[1] * 6;
-      s.dir = a.dir; s.owner = id; s.size = scale;
-      s.speed = def.projectile.speed; s.range = def.projectile.range; s.radius = def.projectile.radius * scale;
-      s.damage = dmg; s.knockback = hit.knockback;
-      s.ignite = hasPower(a.cls, a.level, "ignite");
-      this.state.projectiles.set(`s${++this.shotSeq}`, s);
+      this.shoot(a, id, dmg, hit.knockback, hit.shotScale ?? 1);
       return;
     }
 
     const reach = hit.range ?? def.attackRange;
+    // Barbarian Ground Slam: the finisher stuns
+    const slam = step === 2 && hasPower(a.cls, a.level, "groundslam") ? GROUND_SLAM_STUN_MS : undefined;
     // Knight Cleave: the finisher hits all around instead of only in front
     if (step === 2 && hasPower(a.cls, a.level, "cleave")) {
       for (const tid of this.targetsAround(a.x, a.y, reach, id)) this.hitTarget(id, tid, dmg, this.pushFrom(a.x, a.y, tid), { kb: hit.knockback, crit });
       return;
     }
     const hx = a.x + off[0] * 12, hy = a.y + off[1] * 12;
-    for (const tid of this.targetsAround(hx, hy, reach, id)) this.hitTarget(id, tid, dmg, off, { kb: hit.knockback, crit });
+    for (const tid of this.targetsAround(hx, hy, reach, id)) this.hitTarget(id, tid, dmg, off, { kb: hit.knockback, crit, stunMs: slam });
+  }
+
+  /** Fire one projectile from `a` (fireball or arrow), offset sideways by `lane` px. */
+  private shoot(a: Player, id: string, dmg: number, knockback: number, scale: number, lane = 0) {
+    const def = CLASSES[a.cls].projectile!;
+    const off = DIR_OFFSET[a.dir];
+    const s = new Projectile();
+    // Lanes are perpendicular to the facing direction (for Volley)
+    s.x = a.x + off[0] * 6 + off[1] * lane; s.y = a.y - 4 + off[1] * 6 + off[0] * lane;
+    s.dir = a.dir; s.owner = id; s.size = scale; s.kind = def.kind;
+    s.speed = def.speed; s.radius = def.radius * scale;
+    s.range = def.range * (hasPower(a.cls, a.level, "eagleeye") ? EAGLE_EYE_RANGE : 1);
+    s.damage = dmg; s.knockback = knockback;
+    s.ignite = hasPower(a.cls, a.level, "ignite");
+    s.pierce = hasPower(a.cls, a.level, "pierce") ? PIERCE_EXTRA : 0;
+    s.slowMs = hasPower(a.cls, a.level, "pinning") ? PINNING.durationMs : 0;
+    this.state.projectiles.set(`s${++this.shotSeq}`, s);
   }
 
   private playerSpecial(id: string) {
@@ -688,6 +726,18 @@ export class TownRoom extends Room<TownState> {
         this.broadcast("special", { id, kind: sp.kind, fromX, fromY, x: a.x, y: a.y });
         break;
       }
+      case "volley": {
+        const dmg = Math.round(CLASSES[a.cls].damage * attackMult(a.cls, this.stats(a)));
+        const n = sp.arrows ?? 3;
+        for (let i = 0; i < n; i++) this.shoot(a, id, dmg, 0.8, 1, (i - (n - 1) / 2) * 8);
+        this.broadcast("special", { id, kind: sp.kind });
+        break;
+      }
+      case "rage":
+        a.rageUntil = now + (sp.durationMs ?? 5000);
+        a.raging = true;
+        this.broadcast("special", { id, kind: sp.kind });
+        break;
       case "nova": {
         const r = sp.radius ?? 38;
         const dmg = Math.round((sp.damage ?? 30) * magicMult(a.cls, this.stats(a)));
@@ -722,11 +772,30 @@ export class TownRoom extends Room<TownState> {
       for (let i = 0; i < (u.hits ?? 3); i++) {
         this.clock.setTimeout(() => { if (!a.dead) blast(a.x, a.y, { kb: 0.4 }); }, i * 200);
       }
-    } else {
+    } else if (a.cls === "wizard") {
       const off = DIR_OFFSET[a.dir];
       const x = a.x + off[0] * (u.ahead ?? 56), y = a.y + off[1] * (u.ahead ?? 56);
       this.broadcast("ult", { id, kind: "meteor", x, y, r: u.radius, delay: u.delayMs });
       this.clock.setTimeout(() => blast(x, y, { kb: 2 }), u.delayMs ?? 600);
+    } else if (a.cls === "archer") {
+      const off = DIR_OFFSET[a.dir];
+      const x = a.x + off[0] * (u.ahead ?? 72), y = a.y + off[1] * (u.ahead ?? 72);
+      this.broadcast("ult", { id, kind: "arrowrain", x, y, r: u.radius, delay: u.delayMs, hits: u.hits });
+      for (let i = 0; i < (u.hits ?? 4); i++) {
+        this.clock.setTimeout(() => blast(x, y, { kb: 0.3, slowMs: hasPower(a.cls, a.level, "pinning") ? PINNING.durationMs : undefined }), (u.delayMs ?? 400) + i * 250);
+      }
+    } else {
+      // Barbarian Leap: jump forward (walls stop it), briefly untouchable, crash down on landing
+      const fromX = a.x, fromY = a.y;
+      const step = pushInput(DIR_OFFSET[a.dir]);
+      for (let moved = 0; moved < (u.ahead ?? 64); moved += 4) {
+        const r = moveStep(a.x, a.y, step, 1, 4);
+        if (r.x === a.x && r.y === a.y) break;
+        a.x = r.x; a.y = r.y;
+      }
+      a.invulnUntil = now + 300;
+      this.broadcast("ult", { id, kind: "leap", fromX, fromY, x: a.x, y: a.y, r: u.radius });
+      blast(a.x, a.y, { kb: 2 });
     }
   }
 }
