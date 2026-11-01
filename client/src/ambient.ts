@@ -272,7 +272,7 @@ export class Ambient {
     const spots: [number, number][] = [];
     for (let y = 0; y < MAP_H; y++) for (let x = 0; x < MAP_W; x++) if (GROUND[y][x] === T.FLOWERS && OBJECTS[y][x] === EMPTY) spots.push([x, y]);
     const cols = [0xffffff, 0xfff176, 0xffb3d9, 0x9ad1ff, 0xffa64d];
-    for (let i = 0; i < Math.min(26, spots.length); i++) {
+    for (let i = 0; i < Math.min(60, spots.length); i++) {
       const [x, y] = spots[Math.floor(r() * spots.length)];
       const s = this.scene.add.sprite((x + 0.5) * TILE, (y + 0.5) * TILE, "butterfly", 0).setTint(cols[i % cols.length]).setDepth(21000);
       this.butterflies.push({ s, ax: s.x, ay: s.y, ph: r() * 100, sp: 0.6 + r() * 0.6, r: 10 + r() * 18 });
@@ -283,7 +283,7 @@ export class Ambient {
     const woods = AREAS.find((a) => a.name === "Whispering Woods");
     if (!woods) return;
     const r = rng(5);
-    for (let i = 0; i < 40; i++) {
+    for (let i = 0; i < 80; i++) {
       const x = (woods.x + r() * woods.w) * TILE, y = (woods.y + r() * woods.h) * TILE;
       const s = this.scene.add.sprite(x, y, "glow").setBlendMode(Phaser.BlendModes.ADD).setDepth(21000).setScale(0.7);
       this.fireflies.push({ s, ax: x, ay: y, ph: r() * 100, sp: 0.3 + r() * 0.4, r: 8 + r() * 14 });
@@ -292,7 +292,7 @@ export class Ambient {
 
   private buildClouds() {
     const r = rng(3);
-    for (let i = 0; i < 7; i++) {
+    for (let i = 0; i < 16; i++) {
       const c = this.scene.add.image(r() * MAP_W * TILE, r() * MAP_H * TILE, "cloud")
         .setScale(2.5 + r() * 2).setAlpha(0.1).setDepth(24000);
       c.setData("v", 0.6 + r() * 0.8);
@@ -365,7 +365,9 @@ export class Ambient {
     if (this.swayTimer > 110) {
       this.swayTimer = 0;
       for (const s of this.trees) {
-        if (s.x < cam.x - 24 || s.x > cam.right + 24 || s.y < cam.y || s.y > cam.bottom + 40) continue;
+        const on = !(s.x < cam.x - 24 || s.x > cam.right + 24 || s.y < cam.y || s.y > cam.bottom + 40);
+        if (s.visible !== on) s.setVisible(on); // off-screen trees are skipped entirely by the renderer
+        if (!on) continue;
         const gust = Math.sin(s.x * 0.018 + s.y * 0.006 - t * 1.3) + 0.35 * Math.sin(t * 0.7 + s.getData("ph") * 10);
         s.setFrame(gust > 0.75 ? 1 : 0);
       }

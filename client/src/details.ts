@@ -1,6 +1,6 @@
 import Phaser from "phaser";
 import { MAP_H, MAP_W, TILE } from "../../shared/constants";
-import { EMPTY, GROUND, OBJECTS, T } from "../../shared/map";
+import { AREAS, EMPTY, GROUND, OBJECTS, T, VILLAGE } from "../../shared/map";
 
 /**
  * Fine detail for Oakvale, all cosmetic and client-side:
@@ -23,6 +23,11 @@ function hash(x: number, y: number, s: number) {
   h = Math.imul(h ^ (h >>> 13), 1274126177);
   return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
 }
+
+const inArea = (name: string, tx: number, ty: number) => {
+  const a = AREAS.find((z) => z.name === name);
+  return !!a && tx >= a.x && ty >= a.y && tx < a.x + a.w && ty < a.y + a.h;
+};
 
 export interface Box { x0: number; y0: number; x1: number; y1: number; roof: number }
 
@@ -129,7 +134,7 @@ export class Details {
   private night!: Phaser.GameObjects.Rectangle;
   private dusk!: Phaser.GameObjects.Rectangle;
   private lights: { img: Phaser.GameObjects.Image; base: number; flicker: number }[] = [];
-  private windows!: Phaser.GameObjects.RenderTexture;
+  private windows!: Phaser.GameObjects.Graphics;
   private ducks: Duck[] = [];
   private pond: [number, number][] = [];
   private fireflies?: (dark: number) => void;
@@ -228,7 +233,7 @@ export class Details {
       for (let ty = 0; ty < MAP_H; ty++) for (let tx = 0; tx < MAP_W; tx++) {
         const t = GROUND[ty][tx], X = tx * TILE, Y = ty * TILE;
         if (t === T.WATER) {
-          const pond = tx < 30 && ty > 50;
+          const pond = inArea("Mirror Pond", tx, ty);
           if (pond) this.pond.push([tx, ty]);
           if (pond && hash(tx, ty, 60) < 0.3) { // lily pad, sometimes with a flower
             const cx = X + 3 + Math.floor(hash(tx, ty, 61) * 9), cy = Y + 3 + Math.floor(hash(tx, ty, 62) * 9);
@@ -255,7 +260,8 @@ export class Details {
   }
 
   private roofShading() {
-    bake(this.scene, -0.95, (g) => {
+    const g = this.scene.add.graphics().setDepth(-0.95); // few shapes: a plain Graphics is cheaper than a full-map texture
+    {
       for (const b of roofGroups()) {
         const X0 = b.x0 * TILE, X1 = (b.x1 + 1) * TILE, Y0 = b.y0 * TILE, Y1 = (b.y1 + 1) * TILE, w = X1 - X0, h = Y1 - Y0;
         const ridge = Y0 + Math.max(4, Math.round(h * 0.38));
@@ -274,7 +280,7 @@ export class Details {
         for (let x = b.x0; x <= b.x1; x++) if (WALLS.has(obj(x, b.y1 + 1))) wallBelow = true;
         if (wallBelow) g.fillStyle(0x000000, 0.28).fillRect(X0, Y1, w, 3);
       }
-    });
+    }
   }
 
   private addLight(x: number, y: number, color: number, scale: number, base: number, flicker = 0.08) {
@@ -297,9 +303,10 @@ export class Details {
     if (!scene.anims.exists(flap)) scene.anims.create({ key: flap, frames: scene.anims.generateFrameNumbers("banner", { frames: [0, 1, 2, 1] }), frameRate: 4, repeat: -1 });
     for (let ty = 0; ty < MAP_H; ty++) for (let tx = 0; tx < MAP_W; tx++) {
       if (OBJECTS[ty][tx] !== T.PALISADE) continue;
-      const gateH = (obj(tx + 1, ty) === EMPTY && obj(tx + 3, ty) === T.PALISADE && GROUND[ty][tx + 1] === T.COBBLE) ||
-                    (obj(tx - 1, ty) === EMPTY && obj(tx - 3, ty) === T.PALISADE && GROUND[ty][tx - 1] === T.COBBLE);
-      const gateV = (obj(tx, ty + 1) === EMPTY && GROUND[ty + 1]?.[tx] === T.COBBLE) || (obj(tx, ty - 1) === EMPTY && GROUND[ty - 1]?.[tx] === T.COBBLE);
+      // gate posts: the last palisade post before an opening in the wall
+      const onTopBottom = ty === VILLAGE.y0 || ty === VILLAGE.y1, onSide = tx === VILLAGE.x0 || tx === VILLAGE.x1;
+      const gateH = onTopBottom && (obj(tx + 1, ty) === EMPTY || obj(tx - 1, ty) === EMPTY);
+      const gateV = onSide && !onTopBottom && (obj(tx, ty + 1) === EMPTY || obj(tx, ty - 1) === EMPTY);
       if (!gateH && !gateV) continue;
       const b = scene.add.sprite((tx + 0.5) * TILE, ty * TILE + 2, "banner").setOrigin(0.5, 0).setDepth(-0.9);
       b.play({ key: flap, startFrame: (tx + ty) % 3 });
@@ -321,13 +328,12 @@ export class Details {
     this.night = this.scene.add.rectangle(0, 0, W, H, 0x2a3870).setOrigin(0, 0).setDepth(27000).setBlendMode(Phaser.BlendModes.MULTIPLY).setAlpha(0);
     this.dusk = this.scene.add.rectangle(0, 0, W, H, 0xff8a3a).setOrigin(0, 0).setDepth(27001).setAlpha(0);
     // Lit windows: warm panes baked once, faded in at night
-    this.windows = bake(this.scene, 27200, (g) => {
-      for (let ty = 0; ty < MAP_H; ty++) for (let tx = 0; tx < MAP_W; tx++) {
-        const t = OBJECTS[ty][tx];
-        if (t === T.WINDOW_TIMBER) g.fillStyle(0xffd27a, 1).fillRect(tx * TILE + 5, ty * TILE + 5, 6, 6);
-        if (t === T.WINDOW_STONE) g.fillStyle(0xffe0a0, 1).fillRect(tx * TILE + 6, ty * TILE + 4, 4, 9);
-      }
-    }).setAlpha(0);
+    this.windows = this.scene.add.graphics().setDepth(27200).setAlpha(0);
+    for (let ty = 0; ty < MAP_H; ty++) for (let tx = 0; tx < MAP_W; tx++) {
+      const t = OBJECTS[ty][tx];
+      if (t === T.WINDOW_TIMBER) this.windows.fillStyle(0xffd27a, 1).fillRect(tx * TILE + 5, ty * TILE + 5, 6, 6);
+      if (t === T.WINDOW_STONE) this.windows.fillStyle(0xffe0a0, 1).fillRect(tx * TILE + 6, ty * TILE + 4, 4, 9);
+    }
     for (let ty = 0; ty < MAP_H; ty++) for (let tx = 0; tx < MAP_W; tx++) {
       const t = OBJECTS[ty][tx];
       if (t === T.WINDOW_TIMBER || t === T.WINDOW_STONE) this.addLight((tx + 0.5) * TILE, (ty + 0.6) * TILE, 0xffc070, 1.4, 0.45, 0.03);

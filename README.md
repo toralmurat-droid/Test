@@ -34,15 +34,24 @@ Gameplay:
 
 ## The world: Oakvale
 
-The starting region is a 96×72-tile (16px) medieval map, generated deterministically in `shared/map.ts` so the server
-and every client build the same world. It has a ground layer and an object layer (everything on the object layer
-and water are solid).
+The starting region is a 160×120-tile (16px) medieval map, generated deterministically in `shared/map.ts` so the server
+and every client build the same world. It has a ground layer and an object layer (objects and water are solid, except
+bushes, which you can walk through).
 
-- **Oakvale** — palisade-walled village: market square with well and stalls, Chapel of the Dawn and graveyard,
-  The Rusty Tankard tavern, blacksmith, cottages, vegetable garden
-- **Goldenreach Farms** (west) — barn, fenced wheat field, hay bales
-- **Mirror Pond** (south-west), **North Meadow**, **Millbrook Mill** on **River Ashwell** (east, bridged by the King's Road)
-- **Whispering Woods** (far east) with the **Old Ruins** clearing — room for the first mobs
+It is laid out for easy travel: 3-tile-wide King's Road (west–east) and North Road (north–south) cross at the market
+square, trails link every region, the palisade has 4 wide main gates and 4 side gates, the river has 3 bridges and a
+ford, and every road keeps a clear verge. Generation also guarantees that every walkable tile can be reached.
+`npx tsx tools/map-metrics.ts` prints walkability, reachability and detour numbers.
+
+- **Oakvale** (centre) — palisade-walled village: Market Square (safe zone) with well and stalls, Chapel of the Dawn and
+  graveyard, The Rusty Tankard tavern, the Smithy, cottages, vegetable garden
+- **Goldenreach Farms** (west), **Hunter's Camp** (north-west woods), **North Meadow** (north)
+- **Mirror Pond** and **Misty Marsh** (south-west, with a boardwalk), **Stonecrag Quarry** (south-east)
+- **Millbrook Mill** on **River Ashwell** (east), then **Whispering Woods** with trails, the **Old Ruins** and the
+  **Old Watchtower**
+
+Each area in `AREAS` can list the monsters that belong there (`mobs`), and `randomPointInArea(name)` returns a free
+spot inside an area, for per-zone spawns.
 
 In game, a minimap sits top-right and a banner shows the area name as you walk between regions.
 
