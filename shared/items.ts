@@ -24,4 +24,6 @@ export const LOOT: Record<MobKind, LootDef> = {
   warriorblob: { gold: [4, 10], potionChance: 0.25 },
   healerblob: { gold: [3, 8], potionChance: 0.4 },
   bandit: { gold: [8, 20], potionChance: 0.3 },
+  skeletonmage: { gold: [6, 14], potionChance: 0.35 },
+  necromancer: { gold: [40, 80], potionChance: 1 },
 };

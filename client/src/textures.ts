@@ -38,6 +38,32 @@ function shade(c: number, f: number) {
 // Bandit: persona frames with a hood and a red bandana over the mouth
 const BANDIT_FRAMES = FRAMES.map((f) => f.map((row, y) => (y === 4 ? row.replace(/K/g, "M") : row)));
 
+/**
+ * Skeleton casters (14x20): a hooded skull on the persona frames, a long robe instead of legs and a staff with a glowing orb.
+ * C hood, K bone, E glowing eyes, R robe, T trim, D feet, W staff, O orb, N horns (necromancer).
+ */
+export const CASTER_W = 14, CASTER_H = 20;
+const MAGE_HAT = ["......C.......", "......CC......", ".....CCCC.....", "....CCCCCC...."];
+const NECRO_HAT = ["..N........N..", "..NN......NN..", "...NNCCCCNN...", "....CCCCCC...."];
+function casterFrames(hat: string[]): string[][] {
+  const robeFront = ["..RRRRRRRR..", "..RRRRRRRR..", ".RRRRRRRRRR.", ".RTTTTTTTTR."];
+  const robeSide = ["...RRRRRR...", "...RRRRRR...", "..RRRRRRRR..", "..RTTTTTTR.."];
+  return FRAMES.map((f, i) => {
+    const side = i >= 4, step = i % 2 === 1;
+    const head = f.slice(0, 6).map((r) => r.replace(/H/g, "C"));
+    const body = f.slice(6, 11).map((r) => r.replace(/S/g, "R").replace(/B/g, "T"));
+    const feet = side ? (step ? "..DD....DD.." : "...DD..DD...") : (step ? "...DD..DD..." : "..DD....DD..");
+    const rows = [...head, ...body, ...(side ? robeSide : robeFront), feet].map((r) => "." + r + ".");
+    // Staff in the free hand: orb on top, shaft down to the ground
+    const sx = side ? 11 : 12;
+    const out = [...hat, ...rows].map((r) => [...r]);
+    for (let y = 5; y < CASTER_H; y++) out[y][sx] = y < 7 ? "O" : "W";
+    out[4][sx] = "o";
+    return out.map((r) => r.join(""));
+  });
+}
+const MAGE_FRAMES = casterFrames(MAGE_HAT), NECRO_FRAMES = casterFrames(NECRO_HAT);
+
 /** Builds (once per color) a 6-frame persona sprite sheet tinted by shirt color. */
 export function personaTexture(scene: Phaser.Scene, color: number): string {
   return drawSheet(scene, `persona_${color}`, FRAMES, {
@@ -217,7 +243,9 @@ const MOTHER3_A = motherFrame(3, false), MOTHER3_B = motherFrame(3, true);
 const BLOBLING_A = blobFrame(BLOBLING_W, BLOBLING_H, 6, false, false), BLOBLING_B = blobFrame(BLOBLING_W, BLOBLING_H, 6, true, false);
 
 /** Per-kind size info for the scene: head height (labels/bubbles) and HP bar width. */
-export const MOB_LOOK: Record<string, { top: number; bar: number; oy: number }> = {
+export const MOB_LOOK: Record<string, { top: number; bar: number; oy: number; scale?: number }> = {
+  skeletonmage: { top: 19, bar: 12, oy: 0.975 },
+  necromancer: { top: 32, bar: 24, oy: 0.975, scale: 1.6 }, // elite: drawn big
   motherblob: { top: 20, bar: 22, oy: 0.92 },
   blobling: { top: 8, bar: 8, oy: 0.9 },
   shooterblob: { top: 15, bar: 12, oy: 0.92 },
@@ -276,6 +304,16 @@ export function mobTexture(scene: Phaser.Scene, kind: string, level = 1): string
     return drawSheet(scene, "mob_slime", [SLIME_A, SLIME_B, SLIME_A, SLIME_B, SLIME_A, SLIME_B], {
       G: 0x7bd36b, L: 0xc8f5b8, E: 0x14301a, D: 0x3f8a3a,
     });
+  }
+  if (kind === "skeletonmage") {
+    return drawSheet(scene, "mob_skeletonmage", MAGE_FRAMES, {
+      C: 0x2c3a9a, K: 0xe8e6d6, E: 0x7fe7ff, R: 0x3b4cc0, T: 0xffd54f, D: 0x9a988a, W: 0x6d4c33, O: 0x7fe7ff, o: 0xe0fbff,
+    }, CASTER_W, CASTER_H);
+  }
+  if (kind === "necromancer") {
+    return drawSheet(scene, "mob_necromancer", NECRO_FRAMES, {
+      C: 0x1b1024, K: 0xd8d2bf, E: 0x7dff6a, R: 0x2a1838, T: 0x8e1b2e, D: 0x9a988a, W: 0x3a3340, O: 0x7dff6a, o: 0xe6ffd9, N: 0xd8d2bf,
+    }, CASTER_W, CASTER_H);
   }
   return drawSheet(scene, "mob_skeleton", FRAMES, {
     H: 0xe8e6d6, K: 0xe8e6d6, E: 0x111111, S: 0x4a4a52, B: 0x2a2a2a, P: 0xd2d0c0, D: 0x9a988a,
