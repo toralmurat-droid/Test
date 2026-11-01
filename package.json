@@ -7,7 +7,8 @@
     "dev:server": "tsx watch server/index.ts",
     "dev:client": "vite",
     "build": "tsc --noEmit && vite build",
-    "start": "NODE_ENV=production tsx server/index.ts"
+    "start": "NODE_ENV=production tsx server/index.ts",
+    "art": "tsx tools/art/generate.ts"
   },
   "dependencies": {
     "@colyseus/schema": "2.0.37",

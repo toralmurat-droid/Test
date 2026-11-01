@@ -10,5 +10,5 @@
     "useDefineForClassFields": false,
     "types": ["node", "vite/client"]
   },
-  "include": ["client/src", "server", "shared"]
+  "include": ["client/src", "server", "shared", "tools"]
 }
