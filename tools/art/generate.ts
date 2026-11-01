@@ -12,6 +12,9 @@ ANIMS.forEach((a, ai) => DIRS.forEach((dir, di) => {
   const row = ai * DIRS.length + di;
   animations[`${a.name}_${dir}`] = { frames: [...Array(a.frames).keys()].map((i) => row * COLS + i), fps: a.fps, loop: a.loop };
 }));
+// Normal-attack variants for the game (server sends variant 0-3); attack3 stays the combo finisher.
+const SWINGS = ["attack", "attack2", "attack4", "attack5"];
+SWINGS.forEach((src, i) => DIRS.forEach((dir) => { animations[`swing${i + 1}_${dir}`] = animations[`${src}_${dir}`]; }));
 for (const h of [...HEROES, ...NPCS]) buildSheet(h).save(`${OUT}/characters/${h.name}.png`);
 writeFileSync(`${OUT}/characters/characters.json`, JSON.stringify({
   characters: HEROES.map((h) => h.name),
