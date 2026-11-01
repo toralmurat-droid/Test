@@ -13,6 +13,7 @@ import { displayGrid } from "./tileset";
 import { heroTexture, itemTexture, makeTileset, MOB_LOOK, mobTexture } from "./textures";
 import { Minimap } from "./minimap";
 import { SignPanel } from "./signpanel";
+import { pixelText } from "./pixeltext";
 import { CHARACTERS, CHAR_ORIGIN, CharacterName, createArtAnims, playCharAnim, preloadArt } from "./artAssets";
 import { Ambient } from "./ambient";
 import { Details } from "./details";
@@ -698,7 +699,8 @@ export class TownScene extends Phaser.Scene {
     document.getElementById("location")!.textContent = name;
     const el = document.getElementById("area")!;
     const z = SPAWN_ZONES.find((sz) => sz.name === name);
-    el.textContent = z ? `${name} · Lv ${z.levels[0]}-${z.levels[1]}` : name;
+    el.replaceChildren(pixelText(name));
+    if (z) el.appendChild(pixelText(`Lv ${z.levels[0]}-${z.levels[1]}`, "#f4a261", 9, 2));
     el.classList.add("show");
     clearTimeout(this.areaTimer);
     this.areaTimer = window.setTimeout(() => el.classList.remove("show"), 2500);
