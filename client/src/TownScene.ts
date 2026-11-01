@@ -23,6 +23,7 @@ import { TalentMenu } from "./talents";
 interface Entity {
   sprite: Phaser.GameObjects.Sprite;
   label?: Phaser.GameObjects.Text;
+  lvlColor?: string; // monsters: current colour of the "Lv N" label
   mob: boolean;
   hero?: CharacterName; // set when drawn with the animated 32x32 sheets
   top: number; // px from the feet to the top of the head, for the name label and chat bubble
@@ -197,7 +198,7 @@ export class TownScene extends Phaser.Scene {
       const g: Phaser.GameObjects.Shape = s.kind === "arrow"
         // Arrow: thin shaft along the flight direction
         ? this.add.rectangle(s.x, s.y, 9 * size, 1.5 * size, 0xe8d8b0).setStrokeStyle(0.5, 0x5d4037)
-            .setAngle(s.dir === "up" || s.dir === "down" ? 90 : 0).setDepth(9000)
+            .setAngle(Math.atan2(s.vy ?? 0, s.vx ?? 1) * 180 / Math.PI).setDepth(9000)
         : this.add.circle(s.x, s.y, 2.5 * size, 0xff9f1c).setStrokeStyle(1, 0xffe066).setDepth(9000);
       const shot = { g, tx: s.x, ty: s.y };
       this.shots.set(id, shot);
@@ -238,7 +239,7 @@ export class TownScene extends Phaser.Scene {
       const e = this.entities.get(id);
       if (e) this.tweens.add({ targets: e.sprite, scaleX: 1.15, scaleY: 0.85, duration: 120, yoyo: true, repeat: 1 });
     });
-    this.room.onMessage("swing", ({ id, step, variant }) => this.showSwing(id, step ?? 0, variant ?? 0));
+    this.room.onMessage("swing", ({ id, step, variant, ax, ay }) => this.showSwing(id, step ?? 0, variant ?? 0, ax, ay));
     this.room.onMessage("special", (msg) => this.showSpecial(msg));
     this.room.onMessage("boom", ({ x, y, r, kind }) =>
       kind === "arrow" ? this.burst(x, y, 3, 0xd7ccc8, 150) : this.burst(x, y, r ? r / 1.8 : 6, 0xff9f1c, r ? 300 : 200));
@@ -336,7 +337,10 @@ export class TownScene extends Phaser.Scene {
   private addEntity(id: string, p: any, mob = false) {
     if (mob) {
       const sprite = this.add.sprite(p.x, p.y, mobTexture(this, p.kind), 0).setOrigin(0.5, MOB_LOOK[p.kind]?.oy ?? 0.85);
-      this.entities.set(id, { sprite, bar: this.add.graphics(), tx: p.x, ty: p.y, state: p, mob, top: MOB_LOOK[p.kind]?.top ?? 14 });
+      const label = this.add.text(p.x, p.y, `Lv${p.level ?? 1}`, {
+        fontFamily: "monospace", fontSize: "14px", color: "#ffffff", stroke: "#000", strokeThickness: 3,
+      }).setOrigin(0.5, 1).setScale(0.25).setResolution(2);
+      this.entities.set(id, { sprite, label, bar: this.add.graphics(), tx: p.x, ty: p.y, state: p, mob, top: MOB_LOOK[p.kind]?.top ?? 14 });
       return;
     }
     // Classes with a generated sheet use it; anything else falls back to the procedural persona
@@ -369,17 +373,19 @@ export class TownScene extends Phaser.Scene {
     return variant % 2 ? "attack2" : "attack";
   }
 
-  private showSwing(id: string, step: number, variant: number) {
+  private showSwing(id: string, step: number, variant: number, ax?: number, ay?: number) {
     const e = this.entities.get(id);
     if (!e) return;
     const dir = e.state.dir as string;
     if (e.hero) playCharAnim(e.sprite, e.hero, this.attackAnim(e.hero, step, variant), dir as any);
-    const off = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] }[dir] ?? [0, 1];
+    // Aim can be diagonal (the server sends it); mobs and old messages fall back to the facing direction
+    const off = typeof ax === "number" && typeof ay === "number" ? [ax, ay]
+      : { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] }[dir] ?? [0, 1];
     const cls = e.mob ? undefined : CLASSES[e.state.cls as ClassKind];
     const hit = cls?.combo[step];
     // Mirror our own lunge locally so client prediction doesn't fight the server
     if (id === this.me && hit?.lunge) {
-      const push = { up: off[1] < 0, down: off[1] > 0, left: off[0] < 0, right: off[0] > 0 };
+      const push = { up: off[1] < -0.1, down: off[1] > 0.1, left: off[0] < -0.1, right: off[0] > 0.1 };
       for (let moved = 0; moved < hit.lunge; moved += 2) {
         const r = moveStep(e.sprite.x, e.sprite.y, push, 1, 2);
         if (r.x === e.sprite.x && r.y === e.sprite.y) break;
@@ -656,7 +662,8 @@ export class TownScene extends Phaser.Scene {
     this.areaName = name;
     document.getElementById("location")!.textContent = name;
     const el = document.getElementById("area")!;
-    el.textContent = name;
+    const z = SPAWN_ZONES.find((sz) => sz.name === name);
+    el.textContent = z ? `${name} · Lv ${z.levels[0]}-${z.levels[1]}` : name;
     el.classList.add("show");
     clearTimeout(this.areaTimer);
     this.areaTimer = window.setTimeout(() => el.classList.remove("show"), 2500);
@@ -733,7 +740,18 @@ export class TownScene extends Phaser.Scene {
       e.gear?.sync(e.sprite, p);
 
       const x = Math.round(e.sprite.x), y = Math.round(e.sprite.y);
-      e.label?.setPosition(x, y - e.top - (p.hat ? 4 : 2)).setDepth(e.sprite.y + 1);
+      // Monsters: HP bar over the head, level tag just above it
+      const mobBarY = y - e.top - 4;
+      e.label?.setPosition(x, e.mob ? mobBarY - 1 : y - e.top - (p.hat ? 4 : 2)).setDepth(e.sprite.y + 1);
+      if (e.mob && e.label) {
+        // Level tag coloured by how tough it is for me: grey easy, white even, orange tougher, red dangerous
+        const diff = (p.level ?? 1) - ((this.room.state as any).players?.get(this.me)?.level ?? 1);
+        const col = diff >= 3 ? "#ff5252" : diff >= 1 ? "#ffb74d" : diff >= -2 ? "#ffffff" : "#9e9e9e";
+        const txt = `Lv${p.level ?? 1}`;
+        if (e.label.text !== txt) e.label.setText(txt);
+        if (e.lvlColor !== col) { e.label.setColor(col); e.lvlColor = col; }
+        e.label.setVisible(!p.dead);
+      }
       e.bubble?.setPosition(x, y - e.top - 7);
       e.bar.clear().setDepth(e.sprite.y + 1);
       const maxHp = p.maxHp;
@@ -743,10 +761,13 @@ export class TownScene extends Phaser.Scene {
           e.shield.clear().lineStyle(1, 0x9ad1ff, 0.9).strokeCircle(x, y - e.top / 2, e.top / 2 + 3).setDepth(e.sprite.y + 2);
         } else if (e.shield) { e.shield.destroy(); e.shield = undefined; }
       }
-      if (!p.dead && p.hp < maxHp) {
-        const bw = (e.mob && MOB_LOOK[p.kind]?.bar) || 14;
-        e.bar.fillStyle(0x000000).fillRect(x - bw / 2, y + 3, bw, 2);
-        e.bar.fillStyle(e.mob ? 0xf4a261 : 0xe63946).fillRect(x - bw / 2, y + 3, bw * (p.hp / maxHp), 2);
+      if (e.mob && !p.dead) {
+        const bw = MOB_LOOK[p.kind]?.bar || 14;
+        e.bar.fillStyle(0x000000).fillRect(x - bw / 2, mobBarY, bw, 2);
+        e.bar.fillStyle(0xf4a261).fillRect(x - bw / 2, mobBarY, bw * (p.hp / maxHp), 2);
+      } else if (!e.mob && !p.dead && p.hp < maxHp) {
+        e.bar.fillStyle(0x000000).fillRect(x - 7, y + 3, 14, 2);
+        e.bar.fillStyle(0xe63946).fillRect(x - 7, y + 3, 14 * (p.hp / maxHp), 2);
       }
     }
 
@@ -789,7 +810,7 @@ export class TownScene extends Phaser.Scene {
       const zdef = SPAWN_ZONES.find((z) => tx >= z.x && ty >= z.y && tx < z.x + z.w && ty < z.y + z.h);
       const zone = zdef && (this.room.state as any).zones?.get(zdef.name);
       document.getElementById("zone")!.textContent = zone
-        ? `⚔ ${zone.name}: ${zone.alive}/${zone.cap} monsters`
+        ? `⚔ ${zone.name} (Lv ${zdef!.levels[0]}-${zdef!.levels[1]}): ${zone.alive}/${zone.cap} monsters`
         : "";
       const cls = mine.cls as ClassKind;
       const cdm = cooldownMult(cls, { sta: mine.sta, str: mine.str, mag: mine.mag }, mine.talents) * talentReduce(cls, mine.talents, "cdr");

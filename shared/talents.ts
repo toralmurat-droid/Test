@@ -73,7 +73,7 @@ export function talentPoints(level: number): number { return Math.max(0, level -
 /**
  * Each hero's tree is a 3-column grid with rows at levels 1, 3, 5, 8 and 10. The class skills (shared/powers.ts,
  * 1 rank) and the passive skills (3 ranks) are both nodes. A node needs its row's level
- * and at least 1 rank in the node above it in the same column. Every node rank costs 1 skill point.
+ * and at least 1 rank in the node before it (drawn below it) in the same column. Every node rank costs 1 skill point.
  *   column 0: branch 0 skill 1 · class skill Lv3 · branch 0 skill 2 · class skill Lv8 · branch 0 skill 3
  *   column 1: class skill Lv1 · branch 1 skill 1 · branch 1 skill 2 · branch 1 skill 3 · ultimate Lv10
  *   column 2: branch 2 skill 1 · branch 2 skill 2 · class skill Lv5 · branch 2 skill 3 · (empty)
