@@ -105,7 +105,9 @@ export class TownScene extends Phaser.Scene {
     // Always reachable with the mouse too (even while typing in chat)
     const bagBtn = document.getElementById("bagbtn")!;
     bagBtn.addEventListener("mousedown", (ev) => ev.preventDefault());
-    bagBtn.addEventListener("click", toggleGear);
+    bagBtn.tabIndex = -1;
+    bagBtn.addEventListener("click", (ev) => { if (ev.detail === 0) return; bagBtn.blur(); toggleGear(); });
+    this.guardHudButtons();
     window.addEventListener("keydown", (ev) => { if (ev.key === "Escape" && this.gearMenu?.open) this.gearMenu.close(); });
     this.talentMenu = new TalentMenu((type, msg) => this.room?.send(type, msg));
     this.input.keyboard!.on("keydown-T", () => { if (!this.chatting()) this.talentMenu?.toggle(this.entities.get(this.me)?.state); });
@@ -234,6 +236,32 @@ export class TownScene extends Phaser.Scene {
     this.room.onMessage("xp", ({ amount, x, y }) => this.floatText(x, y - 10, `+${amount} XP`, "#ffd166"));
     this.room.onMessage("chat", ({ id, name, text }) => this.chatMessage(id, name, text));
     this.room.onLeave(() => this.feed("Disconnected from server"));
+  }
+
+  /**
+   * Game keys must never "press" an on-screen button. Some browsers keep focus on a clicked button, and then
+   * Space (attack) or Enter would click it again, e.g. opening the bag. Keyboard clicks on HUD buttons are dropped.
+   */
+  private guardHudButtons() {
+    const hud = document.getElementById("hud")!;
+    const focusedButton = () => {
+      const a = document.activeElement as HTMLElement | null;
+      return a && a !== this.chatEl && hud.contains(a) && (a.tagName === "BUTTON" || a.getAttribute("role") === "button") ? a : null;
+    };
+    for (const type of ["keydown", "keyup"] as const) {
+      window.addEventListener(type, (ev) => {
+        if (ev.key !== " " && ev.key !== "Enter") return;
+        const b = focusedButton();
+        if (!b) return;
+        if (ev.key === " ") ev.preventDefault(); // the game still sees the key; only the button click is cancelled
+        b.blur();
+      }, true);
+    }
+    // Clicks made with the keyboard have detail 0; real mouse/touch clicks have detail >= 1
+    hud.addEventListener("click", (ev) => {
+      const t = (ev.target as HTMLElement).closest("button");
+      if (t && ev.detail === 0) { ev.preventDefault(); ev.stopImmediatePropagation(); }
+    }, true);
   }
 
   private chatting() { return document.activeElement === this.chatEl; }
