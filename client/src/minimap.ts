@@ -2,8 +2,8 @@ import { MAP_H, MAP_W, TILE } from "../../shared/constants";
 import { AREAS, EMPTY, GROUND, OBJECTS } from "../../shared/map";
 import { createTilesetCanvas, tileColors } from "./tileset";
 
-const VIEW_W = 48, VIEW_H = 36; // tiles shown around the player on the minimap
-const PX = 4; // minimap canvas pixels per tile (48x36 tiles -> 192x144)
+const VIEW_W = 64, VIEW_H = 48; // tiles shown around the player on the minimap
+const PX = 3; // minimap canvas pixels per tile (64x48 tiles -> 192x144)
 const BIG = 5; // world map canvas pixels per tile
 const REVEAL = 9; // tiles around the player that become discovered
 const FADE = 3; // soft edge of the discovered area, in tiles
@@ -59,6 +59,20 @@ export class Minimap {
     this.overlay.addEventListener("click", () => this.toggle(false));
     el.addEventListener("click", () => this.toggle(true));
     el.title = "Open map (M)";
+    // Small globe button on the minimap's corner. Mouse/touch only: it never takes keyboard focus,
+    // so Space/Enter (attack, chat) can't press it.
+    const btn = document.createElement("button");
+    btn.id = "worldbtn";
+    btn.title = "World map (M)";
+    btn.tabIndex = -1;
+    btn.innerHTML = `<svg viewBox="0 0 12 12" width="20" height="20" shape-rendering="crispEdges" aria-hidden="true">
+      <rect x="3" y="0" width="6" height="12" fill="#3a78b8"/><rect x="0" y="3" width="12" height="6" fill="#3a78b8"/><rect x="1" y="1" width="10" height="10" fill="#3a78b8"/>
+      <rect x="2" y="2" width="3" height="2" fill="#5aa845"/><rect x="3" y="4" width="2" height="3" fill="#5aa845"/><rect x="7" y="3" width="3" height="2" fill="#5aa845"/>
+      <rect x="6" y="5" width="3" height="3" fill="#5aa845"/><rect x="7" y="8" width="2" height="2" fill="#5aa845"/><rect x="2" y="8" width="2" height="1" fill="#5aa845"/>
+      <rect x="3" y="1" width="2" height="1" fill="#9fd0ff"/><rect x="1" y="3" width="1" height="2" fill="#9fd0ff"/></svg>`;
+    btn.addEventListener("mousedown", (ev) => ev.preventDefault());
+    btn.addEventListener("click", (ev) => { if (ev.detail === 0) return; btn.blur(); this.toggle(true); });
+    el.parentElement?.appendChild(btn);
     window.addEventListener("keydown", (ev) => {
       const typing = document.activeElement instanceof HTMLInputElement || document.activeElement instanceof HTMLTextAreaElement;
       if (typing) return;
@@ -138,7 +152,7 @@ export class Minimap {
     };
     const known = (p: P) => this.seen[Math.floor(p.y / TILE) * MAP_W + Math.floor(p.x / TILE)] > 128;
     for (const o of others) if (known(o)) dot(c, o, PX, sx, sy, "#fff", 2);
-    if (me) { dot(c, me, PX, sx, sy, "#000", 4); dot(c, me, PX, sx, sy, "#ffd166", 3); }
+    if (me) { dot(c, me, PX, sx, sy, "#000", 3); dot(c, me, PX, sx, sy, "#ffd166", 2); }
 
     // World map (only while open)
     if (!this.isOpen) return;
