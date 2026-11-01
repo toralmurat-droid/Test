@@ -1,6 +1,7 @@
 import { MAP_H, MAP_W, TILE } from "../../shared/constants";
 import { AREAS, EMPTY, GROUND, OBJECTS } from "../../shared/map";
 import { createTilesetCanvas, tileColors } from "./tileset";
+import { ISO } from "./isoflag";
 
 const VIEW_W = 56, VIEW_H = 56; // tiles shown around the player on the (round) minimap
 const PX = 3; // minimap canvas pixels per tile (56x56 tiles -> 168x168)
@@ -24,6 +25,7 @@ export class Minimap {
   private fogCtx: CanvasRenderingContext2D;
   private seen = new Uint8Array(MAP_W * MAP_H); // 0 = unknown .. 255 = discovered
   private ctx: CanvasRenderingContext2D;
+  private flat?: HTMLCanvasElement; // iso view: unrotated minimap
   private last = 0;
   private lastSave = 0;
   private dirty = false;
@@ -144,7 +146,9 @@ export class Minimap {
     if (this.dirty && now - this.lastSave > 3000) { this.save(); this.dirty = false; this.lastSave = now; }
 
     // Minimap: the player's surroundings
-    const c = this.ctx;
+    // Iso view: drawn north-up off screen, then turned 45 degrees so "up" matches up on the screen
+    if (ISO && !this.flat) { this.flat = document.createElement("canvas"); this.flat.width = this.el.width; this.flat.height = this.el.height; }
+    const c = ISO ? this.flat!.getContext("2d")! : this.ctx;
     c.imageSmoothingEnabled = false;
     const cx = me ? me.x / TILE : MAP_W / 2, cy = me ? me.y / TILE : MAP_H / 2;
     // the player always sits in the middle of the round minimap; beyond the map edge is fog
@@ -161,6 +165,12 @@ export class Minimap {
     for (const o of others) if (known(o)) dot(c, o, PX, sx, sy, "#fff", 2);
     this.drawMarkers(c, PX, sx, sy, true);
     if (me) { dot(c, me, PX, sx, sy, "#000", 3); dot(c, me, PX, sx, sy, "#ffd166", 2); }
+    if (ISO) {
+      const o = this.ctx, w = this.el.width, h = this.el.height;
+      o.fillStyle = FOG; o.fillRect(0, 0, w, h);
+      o.save(); o.translate(w / 2, h / 2); o.rotate(Math.PI / 4); o.translate(-w / 2, -h / 2);
+      o.imageSmoothingEnabled = false; o.drawImage(this.flat!, 0, 0); o.restore();
+    }
 
     // World map (only while open)
     if (!this.isOpen) return;
@@ -223,8 +233,11 @@ export class Minimap {
       if (m.glyph) {
         const size = mini ? (m.track ? 14 : 11) : (m.track ? 18 : 14);
         g.font = `bold ${size}px monospace`; g.textAlign = "center"; g.textBaseline = "middle";
-        g.lineWidth = 3; g.strokeStyle = "#000"; g.strokeText(m.glyph, x, y);
-        g.fillStyle = m.color; g.fillText(m.glyph, x, y);
+        g.save(); g.translate(x, y);
+        if (mini && ISO) g.rotate(-Math.PI / 4); // stays upright once the iso minimap is turned
+        g.lineWidth = 3; g.strokeStyle = "#000"; g.strokeText(m.glyph, 0, 0);
+        g.fillStyle = m.color; g.fillText(m.glyph, 0, 0);
+        g.restore();
       }
       if (!mini && m.label && (m.track || m.r)) {
         g.font = "bold 11px monospace"; g.textAlign = "center"; g.textBaseline = "alphabetic";
