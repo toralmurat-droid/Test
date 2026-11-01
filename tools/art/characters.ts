@@ -14,11 +14,17 @@ export interface Pose {
   crouch: number;     // KO kneel
   attack: number;     // -1 none, 0 windup, 1 swing, 2 impact, 3 recover
   move?: MoveId;      // which attack in the combo (default a1)
-  expr: "n" | "squint" | "x";
+  expr: "n" | "squint" | "x" | "blink" | "happy";
+  headDx?: number;               // head turn / look around
+  hand?: [number, number];       // override weapon-hand position
+  wAng?: number;                 // override weapon angle (absolute)
+  farHand?: [number, number];    // free hand goes here (wave, cheer, scratch)
+  noWeapon?: boolean;
+  run?: boolean;
 }
 
 export const ANIMS: { name: string; frames: number; fps: number; loop: boolean }[] = [
-  { name: "idle", frames: 4, fps: 4, loop: true },
+  { name: "idle", frames: 6, fps: 5, loop: true },
   { name: "walk", frames: 6, fps: 11, loop: true },
   { name: "attack", frames: 4, fps: 14, loop: false },
   { name: "attack2", frames: 4, fps: 14, loop: false },
@@ -26,6 +32,15 @@ export const ANIMS: { name: string; frames: number; fps: number; loop: boolean }
   { name: "hit", frames: 2, fps: 10, loop: false },
   { name: "ko", frames: 4, fps: 6, loop: false },
   { name: "skill", frames: 4, fps: 10, loop: false },
+  // flavour animations (no gameplay effect)
+  { name: "idle2", frames: 6, fps: 4, loop: false },  // look around
+  { name: "idle3", frames: 6, fps: 9, loop: false },  // weapon flourish / fidget
+  { name: "run", frames: 6, fps: 14, loop: true },
+  { name: "wave", frames: 4, fps: 6, loop: true },
+  { name: "cheer", frames: 4, fps: 8, loop: true },
+  { name: "laugh", frames: 4, fps: 8, loop: true },
+  { name: "sit", frames: 4, fps: 3, loop: true },
+  { name: "sleep", frames: 4, fps: 2, loop: true },
 ];
 
 interface D {
@@ -59,6 +74,8 @@ interface Hero {
   kind1?: MoveKind;
   moves?: { a2: Move; a3: Move };
   aura?: number;   // skill glow colour
+  cols: { sleeve: number; hand: number };
+  weaponKind: string;
   idleAngle: Record<Dir, number>;
 }
 
@@ -68,7 +85,12 @@ function eyes(d: D, xs: number[], y: number, col: number) {
     if (d.p.expr === "x") {
       for (const [a, b] of [[-1, -1], [1, -1], [0, 0], [-1, 1], [1, 1]]) d.Up(x + a, y + b, col);
     } else if (d.p.expr === "squint") {
+      const s = x === xs[0] ? 1 : -1; // > <
+      d.Up(x - s, y - 1, col); d.Up(x, y, col); d.Up(x - s, y + 1, col);
+    } else if (d.p.expr === "happy") {
       d.Up(x - 1, y + 1, col); d.Up(x, y, col); d.Up(x + 1, y + 1, col);
+    } else if (d.p.expr === "blink") {
+      d.Up(x, y + 1, col);
     } else {
       d.Up(x, y, col); d.Up(x, y + 1, col);
     }
@@ -78,14 +100,14 @@ function eyes(d: D, xs: number[], y: number, col: number) {
 function standardLegs(d: D, legTop: number, pants: number, boots: number) {
   const { p } = d, s = p.stride, h = 28 - legTop;
   if (p.dir === "right") {
-    const back = -Math.round(s * 2), front = Math.round(s * 2);
+    const k = p.run ? 3 : 2, back = -Math.round(s * k), front = Math.round(s * k);
     for (const [off, f] of [[back, 0.8], [front, 1]] as const) {
       const x = 14 + off + d.lx;
       d.c.box(x, legTop, 3, h, shade(pants, f));
       d.c.box(x, 27, 4, 2, shade(boots, f));
     }
   } else {
-    const lift = (i: number) => (s === 0 ? 0 : (i === 0) === s > 0 ? 1 : 0);
+    const lift = (i: number) => (s === 0 ? 0 : (i === 0) === s > 0 ? (p.run && Math.abs(s) >= 1 ? 2 : 1) : 0);
     [12, 17].forEach((x, i) => {
       const up = lift(i);
       d.c.box(x + d.lx, legTop, 3, h - up, pants);
@@ -95,6 +117,7 @@ function standardLegs(d: D, legTop: number, pants: number, boots: number) {
 }
 
 function handPos(p: Pose, hero: Hero): [number, number] {
+  if (p.hand) return [p.hand[0], p.hand[1] + p.bob + p.crouch];
   const [fx, fy] = FACE[p.dir];
   const base: Record<Dir, [number, number]> = { down: [hero.name === "wizard" ? 9 : 10, 22], up: [21, 22], right: [16, 22] };
   let [x, y] = base[p.dir];
@@ -117,6 +140,7 @@ function moveOf(hero: Hero, p: Pose): Move {
 }
 
 function weaponAngle(p: Pose, hero: Hero) {
+  if (p.wAng !== undefined) return p.wAng;
   if (p.attack < 0) return hero.idleAngle[p.dir];
   const mv = moveOf(hero, p);
   let a = mv.swing[p.attack];
@@ -131,7 +155,7 @@ const ninja: Hero = {
   name: "ninja",
   swing: [-130, -40, 35, 60],
   idleAngle: { down: 115, up: 120, right: 110 },
-  aura: 0x9fb6ff,
+  aura: 0x9fb6ff, cols: { sleeve: NJ.suit, hand: NJ.wrap }, weaponKind: "katana",
   moves: {
     a2: { swing: [0, 0, 0, 0], reach: [-3, 5, 7, 3], lift: [1, 0, 0, 0], kind: "thrust" },
     a3: { swing: [-20, -20, -20, -20], reach: [2, 3, 3, 2], lift: [2, 2, 2, 2], kind: "spin" },
@@ -193,7 +217,7 @@ const knight: Hero = {
   name: "knight",
   swing: [-120, -30, 40, 70],
   idleAngle: { down: 100, up: 110, right: 70 },
-  aura: 0xffd166,
+  aura: 0xffd166, cols: { sleeve: KN.steel, hand: KN.dark }, weaponKind: "sword",
   moves: {
     a2: { swing: [110, 40, -35, -60], reach: [0, 3, 4, 2], lift: [0, 1, 0, 0], kind: "slash", fx: 0xfff6c8 },
     a3: { swing: [140, 140, 140, 140], reach: [-1, 1, 1, 0], lift: [0, 0, 0, 0], kind: "bash" },
@@ -270,7 +294,7 @@ const wizard: Hero = {
   swing: [-110, -55, -25, -15],
   idleAngle: { down: -97, up: -83, right: -78 },
   kind1: "shot",
-  aura: 0x5ee6ff,
+  aura: 0x5ee6ff, cols: { sleeve: WZ.robe, hand: WZ.skin }, weaponKind: "staff",
   moves: {
     a2: { swing: [-150, -70, 20, 45], reach: [0, 3, 4, 2], lift: [5, 2, 0, 0], kind: "bonk", fx: 0xc8fbff },
     a3: { swing: [-90, -90, -90, -90], abs: true, reach: [0, 0, 0, 0], lift: [3, 6, 6, 3], kind: "cast" },
@@ -415,7 +439,7 @@ function human(o: HumanOpts): Hero {
     swing: swing[o.weapon],
     kind1: o.weapon === "bow" ? "shot" : o.weapon === "spear" ? "thrust" : "slash",
     moves: moves[o.weapon],
-    aura: o.aura,
+    aura: o.aura, cols: { sleeve, hand: o.skin }, weaponKind: o.weapon,
     idleAngle: idle[o.weapon],
     legs(d, top) { standardLegs(d, top, o.pants, o.boots); },
     torso(d) {
@@ -613,7 +637,6 @@ export const NPCS: Hero[] = [blacksmith, merchant, villager, guard];
 /** Render one frame into a fresh 32x32 canvas. */
 export function renderFrame(hero: Hero, p: Pose, withShadow = true, flash = 0): Canvas {
   const c = new Canvas(FW, FH);
-  const [fx] = FACE[p.dir];
   const lean = p.dir === "right" ? -p.lean : 0; // knock back opposite facing
   const ly = p.dir === "down" ? -Math.min(p.lean, 1) : p.dir === "up" ? Math.min(p.lean, 1) : 0;
   const d: D = {
@@ -622,7 +645,7 @@ export function renderFrame(hero: Hero, p: Pose, withShadow = true, flash = 0): 
     Ur: (x, y, w, h, col) => c.rect(x + d.ux, y + d.uy, w, h, col),
     Up: (x, y, col) => c.px(x + d.ux, y + d.uy, col),
   };
-  void fx;
+  if (p.run) { if (p.dir === "right") d.ux += 1; }
   const hp = handPos({ ...p, lean: 0 }, hero);
   const hand: [number, number] = [hp[0] + d.ux, hp[1] + ly];
   const ang = weaponAngle(p, hero);
@@ -634,22 +657,30 @@ export function renderFrame(hero: Hero, p: Pose, withShadow = true, flash = 0): 
     const [sx, sy] = [FACE[p.dir][0] * push, FACE[p.dir][1] * push];
     d.ux += sx; d.uy += sy; hero.shield(d); d.ux -= sx; d.uy -= sy;
   };
+  const head = () => { const hd = p.headDx ?? 0; d.ux += hd; hero.head(d); d.ux -= hd; };
+  const farArm = () => {
+    if (!p.farHand) { hero.arm(d, "far", hand); shieldAt(); return; }
+    const sh: Record<Dir, [number, number]> = { down: [21, 17], up: [9, 17], right: [17, 17] };
+    armTo(d, sh[p.dir][0], sh[p.dir][1], p.farHand[0] + d.ux, p.farHand[1] + d.uy, hero.cols.sleeve, hero.cols.hand);
+  };
+  const weapon = () => { if (!p.noWeapon) hero.weapon(d, hand, ang); };
   const weaponBehind = p.dir === "up" ? p.attack < 1 || p.attack === 3 : hero.name === "wizard" && p.dir === "right" && p.attack < 0 ? false : false;
 
   if (p.dir === "up") {
-    if (weaponBehind) hero.weapon(d, hand, ang);
+    if (weaponBehind) weapon();
     hero.legs(d, legTop); hero.torso(d);
-    hero.arm(d, "far", hand); shieldAt(); hero.arm(d, "near", hand);
-    hero.head(d);
-    if (!weaponBehind) hero.weapon(d, hand, ang);
+    farArm(); hero.arm(d, "near", hand);
+    head();
+    if (!weaponBehind) weapon();
   } else if (p.dir === "down") {
-    hero.legs(d, legTop); hero.torso(d); hero.head(d);
-    hero.arm(d, "far", hand); shieldAt();
-    hero.weapon(d, hand, ang); hero.arm(d, "near", hand);
+    hero.legs(d, legTop); hero.torso(d); head();
+    farArm();
+    weapon(); hero.arm(d, "near", hand);
   } else {
-    hero.arm(d, "far", hand);
-    hero.legs(d, legTop); hero.torso(d); shieldAt(); hero.head(d);
-    hero.weapon(d, hand, ang); hero.arm(d, "near", hand);
+    if (!p.farHand) hero.arm(d, "far", hand);
+    hero.legs(d, legTop); hero.torso(d); if (!p.farHand) shieldAt(); head();
+    if (p.farHand) farArm();
+    weapon(); hero.arm(d, "near", hand);
   }
   if (flash) c.tint(0xffffff, flash);
   c.rim();
@@ -739,6 +770,19 @@ function ghostsBehind(dst: Canvas, src: Canvas, dx: number, dy: number, col: num
   }
 }
 
+/** Lift a shadowless frame off the ground by j px, keeping (and shrinking) the ground shadow. */
+function jumped(f: Canvas, j: number): Canvas {
+  const o = new Canvas(FW, FH);
+  o.ellipse(16, 29, 6 - Math.min(j, 3), 1.5, 0x000000, 70 - j * 10);
+  o.blit(f, 0, -j);
+  return o;
+}
+
+function zLetter(c: Canvas, x: number, y: number, n: number) {
+  const col = 0xe8f0ff;
+  for (let i = 0; i < n; i++) { c.px(x + i, y, col); c.px(x + i, y + n - 1, col); c.px(x + n - 1 - i, y + i, col); }
+}
+
 function rotateLying(src: Canvas): Canvas {
   // rotate 90° clockwise so the head ends up on the right, then sit it on the ground line
   const r = new Canvas(FW, FH);
@@ -764,7 +808,59 @@ const base = (dir: Dir, t: number): Pose => ({ dir, t, bob: 0, stride: 0, lean: 
 export function animFrames(hero: Hero, anim: string, dir: Dir): Canvas[] {
   const B = (t: number) => base(dir, t);
   switch (anim) {
-    case "idle": return [0, 0, 1, 1].map((bob, t) => renderFrame(hero, { ...B(t), bob }));
+    case "idle": return [0, 0, 0, 1, 1, 1].map((bob, t) => renderFrame(hero, { ...B(t), bob, expr: t === 5 ? "blink" : "n" }));
+    case "idle2": {
+      const look = dir === "right" ? [0, -1, -1, -1, 0, 0] : [0, -1, -1, 1, 1, 0];
+      return look.map((headDx, t) => renderFrame(hero, { ...B(t), headDx, bob: t === 5 ? 1 : 0, expr: t === 2 ? "blink" : "n" }));
+    }
+    case "idle3": {
+      const chest: Record<Dir, [number, number]> = { down: [12, 19], up: [20, 19], right: [17, 19] };
+      const wk = hero.weaponKind;
+      if (wk === "bow") return [0, 15, 25, 15, -10, 0].map((w, t) => renderFrame(hero, { ...B(t), wAng: hero.idleAngle[dir] + w, expr: t === 3 ? "happy" : "n", bob: t === 2 ? 1 : 0 }));
+      if (wk === "none") {
+        const head: Record<Dir, [number, number]> = { down: [22, 9], up: [9, 9], right: [17, 7] };
+        return [0, 1, 0, 1, 0, 1].map((k, t) => renderFrame(hero, { ...B(t), farHand: [head[dir][0] - k, head[dir][1] + k], expr: t >= 4 ? "happy" : "blink" }));
+      }
+      return [0, 1, 2, 3, 4, 5].map((i) => {
+        const f = renderFrame(hero, { ...B(i), hand: chest[dir], wAng: -90 + i * 72 + (i === 5 ? -72 * 5 + hero.idleAngle[dir] + 90 : 0), expr: i === 5 ? "happy" : "n" });
+        if (i > 0 && i < 5) arc(f, chest[dir][0], chest[dir][1], wk === "staff" || wk === "spear" ? 15 : 11, -90 + (i - 1) * 72, -90 + i * 72, 0xffffff, 110);
+        return f;
+      });
+    }
+    case "run": {
+      return [1, 0.5, -0.5, -1, -0.5, 0.5].map((stride, t) => {
+        const contact = Math.abs(stride) === 1;
+        const f = jumped(renderFrame(hero, { ...B(t), stride, run: true, bob: contact ? 1 : 0 }, false), contact ? 0 : 1);
+        if (contact) { const [fx] = FACE[dir]; const bx = dir === "right" ? 12 : t === 0 ? 11 : 20; for (const [x, y] of [[0, 0], [-1, -1], [-2, 0], [1, -1]]) f.px(bx + x - fx, 28 + y, 0xd9cdb4, 170); }
+        return f;
+      });
+    }
+    case "wave": {
+      const wv: Record<Dir, [number, number]> = { down: [24, 9], up: [7, 9], right: [21, 9] };
+      return [0, 1, 0, 1].map((k, t) => renderFrame(hero, { ...B(t), farHand: [wv[dir][0] + (dir === "up" ? k : -k) * 2, wv[dir][1] - k], expr: "happy" }));
+    }
+    case "cheer": {
+      const nearUp: Record<Dir, [number, number]> = { down: [8, 9], up: [24, 9], right: [19, 8] };
+      const farUp: Record<Dir, [number, number]> = { down: [24, 9], up: [7, 9], right: [15, 8] };
+      return [0, 3, 2, 0].map((j, t) => jumped(renderFrame(hero, { ...B(t), hand: [nearUp[dir][0], nearUp[dir][1] + (j ? 0 : 2)], wAng: -95, farHand: [farUp[dir][0], farUp[dir][1] + (j ? 0 : 2)], expr: "happy", crouch: j ? 0 : 1 }, false), j));
+    }
+    case "laugh": {
+      const belly: Record<Dir, [number, number]> = { down: [19, 21], up: [12, 21], right: [18, 21] };
+      return [0, 1, 0, 1].map((bob, t) => {
+        const f = renderFrame(hero, { ...B(t), bob, expr: "happy", farHand: belly[dir], headDx: t === 2 && dir !== "right" ? 1 : 0 });
+        if (dir !== "up") for (const [x, y] of t % 2 ? [[24, 6], [25, 5], [7, 7]] : [[25, 7], [26, 6], [6, 6]]) f.px(x, y, 0xffffff, 220);
+        return f;
+      });
+    }
+    case "sit": return [0, 0, 1, 1].map((bob, t) => renderFrame(hero, { ...B(t), crouch: 4, bob, expr: t === 3 ? "blink" : "n" }));
+    case "sleep": {
+      return [0, 1, 2, 3].map((t) => {
+        const f = rotateLying(renderFrame(hero, { ...B(t), expr: "blink" }, false));
+        const zs = [[0, 0], [3, -4], [6, -8]];
+        zs.forEach(([x, y], i) => { if (i <= t % 3 + (t === 3 ? 0 : 0)) zLetter(f, 21 + x, 13 + y - (t % 2), i === 2 ? 4 : 3); });
+        return f;
+      });
+    }
     case "walk": return [1, 0.5, -0.5, -1, -0.5, 0.5].map((stride, t) => renderFrame(hero, { ...B(t), stride, bob: Math.abs(stride) === 1 ? 0 : -1 }));
     case "attack": return [0, 1, 2, 3].map((attack, t) => renderFrame(hero, { ...B(t), attack, bob: attack === 2 ? 1 : 0 }));
     case "attack2": return [0, 1, 2, 3].map((attack, t) => renderFrame(hero, { ...B(t), attack, move: "a2", bob: attack === 2 ? 1 : 0 }));

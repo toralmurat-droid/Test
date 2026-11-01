@@ -8,7 +8,9 @@ import Phaser from "phaser";
 export const CHARACTERS = ["ninja", "wizard", "knight", "archer", "barbarian", "blacksmith", "merchant", "villager", "guard"] as const;
 export const NPC_NAMES = ["blacksmith", "merchant", "villager", "guard"] as const;
 export type CharacterName = (typeof CHARACTERS)[number];
-export const CHAR_ANIMS = ["idle", "walk", "attack", "attack2", "attack3", "hit", "ko", "skill"] as const;
+export const CHAR_ANIMS = ["idle", "walk", "attack", "attack2", "attack3", "hit", "ko", "skill", "idle2", "idle3", "run", "wave", "cheer", "laugh", "sit", "sleep"] as const;
+/** Cosmetic animations: play idle2/idle3 now and then while standing still, run when moving fast, emotes from chat (e.g. /wave). */
+export const FLAVOUR_ANIMS = ["idle2", "idle3", "run", "wave", "cheer", "laugh", "sit", "sleep"] as const;
 export const CHAR_ORIGIN = { x: 0.5, y: 29 / 32 }; // feet
 
 const BASE = "assets";
