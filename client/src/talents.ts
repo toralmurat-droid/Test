@@ -1,8 +1,10 @@
 import { ClassKind, CLASSES } from "../../shared/classes";
-import { POWERS } from "../../shared/powers";
-import { branchPoints, canLearn, canLearnPower, EFFECT_TEXT, POWER_KEY, powersLearned, MAX_RANK, rank, spentPoints, talentPoints, TIER_POINTS, TREES } from "../../shared/talents";
+import { EFFECT_TEXT, lockReason, nodeRank, spentPoints, talentPoints, TREE_LEVELS, treeNodes, TREES } from "../../shared/talents";
 
-/** Skill tree screen (T): 3 branches per hero, click a skill to spend a point. */
+/**
+ * Skill tree screen (T): one tree with the class skills (keys 1 and 2, plus passives like Iron Skin) and the
+ * passive skill branches. Rows are levels 1/3/5/8/10; a node needs the one above it. Click a node to spend a point.
+ */
 export class TalentMenu {
   private el = document.getElementById("tree")!;
   private sig = "";
@@ -10,9 +12,11 @@ export class TalentMenu {
   constructor(private send: (type: string, msg?: unknown) => void) {
     this.el.addEventListener("click", (ev) => {
       const t = (ev.target as HTMLElement).closest("[data-talent]") as HTMLElement | null;
-      if (t && !t.classList.contains("locked")) this.send("learn", t.dataset.talent);
+      if (t && t.classList.contains("can")) this.send("learn", t.dataset.talent);
       if ((ev.target as HTMLElement).id === "treereset") this.send("respec");
     });
+    // Buttons never keep keyboard focus, so Space in a fight can't click a node by accident
+    this.el.addEventListener("mousedown", (ev) => { if ((ev.target as HTMLElement).closest("button")) ev.preventDefault(); });
   }
 
   get open() { return !this.el.hidden; }
@@ -23,38 +27,32 @@ export class TalentMenu {
     if (!this.open || !state) return;
     const ranks = state.talents;
     const cls = state.cls as ClassKind;
-    const sig = [cls, state.level, powersLearned(ranks), ...TREES[cls].flatMap((b) => b.talents.map((t) => rank(ranks, t.id)))].join("|");
+    const nodes = treeNodes(cls);
+    const sig = [cls, state.level, ...nodes.map((n) => nodeRank(cls, ranks, n.id))].join("|");
     if (sig === this.sig) return;
     this.sig = sig;
     const free = talentPoints(state.level) - spentPoints(cls, ranks);
-    document.getElementById("treetitle")!.textContent = `${CLASSES[cls].name} skill tree`;
+    document.getElementById("treetitle")!.textContent = `${CLASSES[cls].name} skills`;
     document.getElementById("treepoints")!.innerHTML = free > 0
       ? `<b class="free">${free} skill point${free > 1 ? "s" : ""} to spend</b>`
-      : state.level < 2 ? "Reach level 2 to earn your first skill point." : "No points left. You get 1 point per level.";
-    // Powers path: level 1 power is free, the next ones open at levels 3/5/8/10 and cost 1 point each, in order
-    const learned = powersLearned(ranks);
-    document.getElementById("treepowers")!.innerHTML = POWERS[cls].map((pw, i) => {
-      const has = i <= learned;
-      const can = i === learned + 1 && canLearnPower(cls, state.level, ranks);
-      const st = has ? "max" : can ? "can" : "locked";
-      const tag = has ? "✔ Learned" : can ? "Click to learn (1 point)" : state.level < pw.level ? `🔒 Level ${pw.level}` : "🔒 Learn the previous power first";
-      const key = pw.key ? ` [${pw.key}]` : "";
-      return `<button class="talent power ${st}" ${can ? `data-talent="${POWER_KEY}"` : ""} style="--c:#ffd166">` +
-        `<b>${pw.name}${key}</b><span class="rank">Lv ${pw.level}</span><span class="fx">${pw.desc}</span><span class="req">${tag}</span></button>`;
-    }).join('<div class="plink"></div>');
-    document.getElementById("treebranches")!.innerHTML = TREES[cls].map((b) => {
-      const spent = branchPoints(b, ranks);
-      const nodes = b.talents.map((t, i) => {
-        const r = rank(ranks, t.id);
-        const learnable = canLearn(cls, state.level, ranks, t.id);
-        const tierLocked = spent < TIER_POINTS[i];
-        const cls_ = r >= MAX_RANK ? "max" : learnable ? "can" : tierLocked ? "locked" : r > 0 ? "has" : "off";
-        const now = r > 0 ? EFFECT_TEXT[t.effect](+(t.perRank * r).toFixed(1)) : EFFECT_TEXT[t.effect](t.perRank) + " per rank";
-        const lock = tierLocked ? `<span class="req">🔒 ${TIER_POINTS[i]} points in ${b.name}</span>` : "";
-        return `<button class="talent ${cls_}" data-talent="${t.id}" style="--c:${b.color}">` +
-          `<b>${t.name}</b><span class="rank">${r}/${MAX_RANK}</span><span class="fx">${now}</span>${lock}</button>`;
-      }).join('<div class="link"></div>');
-      return `<div class="branch"><h3 style="color:${b.color}">${b.name} <small>${spent}</small></h3>${nodes}</div>`;
-    }).join("");
+      : state.level < 2 ? "You start with a basic attack only. Reach level 2 for your first skill point." : "No points left. You get 1 point per level.";
+    const heads = TREES[cls].map((b) => `<div class="thead" style="color:${b.color}">${b.name}</div>`).join("");
+    let cells = `<div></div>${heads}`;
+    TREE_LEVELS.forEach((lvl, row) => {
+      cells += `<div class="tlvl">Lv ${lvl}</div>`;
+      for (let col = 0; col < 3; col++) {
+        const n = nodes.find((x) => x.row === row && x.col === col);
+        if (!n) { cells += "<div></div>"; continue; }
+        const r = nodeRank(cls, ranks, n.id);
+        const why = lockReason(cls, state.level, ranks, n.id);
+        const st = why === "max" ? "max" : why === "" ? "can" : why === "points" ? (r > 0 ? "has" : "off") : "locked";
+        const fx = n.talent ? (r > 0 ? EFFECT_TEXT[n.talent.effect](+(n.talent.perRank * r).toFixed(1)) : EFFECT_TEXT[n.talent.effect](n.talent.perRank) + " per rank") : n.desc;
+        const req = why === "level" ? `🔒 Level ${n.level}` : why === "above" ? "🔒 Learn the skill above first" : "";
+        const key = n.key ? ` <kbd>${n.key}</kbd>` : "";
+        cells += `<button class="talent ${n.kind} ${st}" data-talent="${n.id}" style="--c:${n.kind === "power" ? "#ffd166" : n.color}">` +
+          `<b>${n.name}${key}</b><span class="rank">${r}/${n.max}</span><span class="fx">${fx}</span>${req ? `<span class="req">${req}</span>` : ""}</button>`;
+      }
+    });
+    document.getElementById("treebranches")!.innerHTML = cells;
   }
 }

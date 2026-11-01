@@ -9,7 +9,7 @@ import {
 } from "../shared/classes";
 import {
   attackMult, cooldownMult, CRIT, FROST, hasPower, heroSpeed, IGNITE, IRONSKIN_REDUCTION, magicMult, maxHpFromStats,
-  POWERS, SECOND_WIND, SHADOW_STRIKE_DAMAGE, SLOW_MOB, statsFor, ULT_LEVEL, ULTS,
+  POWERS, SECOND_WIND, SHADOW_STRIKE_DAMAGE, SLOW_MOB, statsFor, ULTS, hasSpecial, hasUlt, powerNodeId,
   BLOODTHIRST, EAGLE_EYE_RANGE, GROUND_SLAM_STUN_MS, PIERCE_EXTRA, PINNING, RAGE,
 } from "../shared/powers";
 import {
@@ -18,7 +18,7 @@ import {
 import { isSafeZone, isSolidAt, randomSpawn } from "../shared/map";
 import { randomPointInZone, SPAWN_ZONES, zoneCap } from "../shared/spawns";
 import { moveStep } from "../shared/movement";
-import { canLearn, powerLevel, POWER_KEY, talentMult, talentBonus, talentReduce, TREES } from "../shared/talents";
+import { canLearn, talentMult, talentBonus, talentReduce, TREES } from "../shared/talents";
 import { BAG_SIZE, Equipped, GEAR, GEAR_SLOTS, GearSlot, gearName, gearSpeedMult, gearStats, isGearId, rollGear } from "../shared/gear";
 
 export class Player extends Schema {
@@ -58,7 +58,6 @@ export class Player extends Schema {
   @type(["string"]) bag = new ArraySchema<string>();
   // Skill tree (shared/talents.ts): ranks per talent id
   @type({ map: "number" }) talents = new MapSchema<number>();
-  @type("number") powerLevel = 1; // level of the highest power learned in the skill tree (1, 3, 5, 8, 10)
 
   input: InputState = { up: false, down: false, left: false, right: false };
   lastAttack = 0;
@@ -300,7 +299,7 @@ export class TownRoom extends Room<TownState> {
         ? { x: p.x, y: p.y, moving: false }
         : p.rolling
         ? moveStep(p.x, p.y, p.rollInput, dt, DODGE.distance / (DODGE.durationMs / 1000))
-        : moveStep(p.x, p.y, p.input, dt, heroSpeed(p.cls, p.powerLevel, p.slowed, p.raging) * gearSpeedMult(this.equipped(p)) * talentMult(p.cls, p.talents, "speed"));
+        : moveStep(p.x, p.y, p.input, dt, heroSpeed(p.cls, p.talents, p.slowed, p.raging) * gearSpeedMult(this.equipped(p)) * talentMult(p.cls, p.talents, "speed"));
       p.x = r.x; p.y = r.y; p.moving = r.moving;
       if (!p.rolling) p.dir = dirFromInput(p.input, p.dir);
       if (r.moving) p.emote = "";
@@ -504,8 +503,8 @@ export class TownRoom extends Room<TownState> {
     const p = this.state.players.get(id);
     if (!p || typeof tid !== "string" || !canLearn(p.cls, p.level, p.talents, tid)) return;
     p.talents.set(tid, (p.talents.get(tid) ?? 0) + 1);
-    p.powerLevel = powerLevel(p.talents);
-    if (tid === POWER_KEY) this.broadcast("power", { id, name: POWERS[p.cls].find((x) => x.level === p.powerLevel)?.name ?? "" });
+    const pw = POWERS[p.cls].find((x) => powerNodeId(x.id) === tid);
+    if (pw) this.broadcast("power", { id, name: pw.name });
     this.applyStats(p);
   }
 
@@ -514,7 +513,6 @@ export class TownRoom extends Room<TownState> {
     const p = this.state.players.get(id);
     if (!p || p.dead || Date.now() - p.lastHurt < 5000) return;
     p.talents.clear();
-    p.powerLevel = 1;
     this.applyStats(p);
   }
 
@@ -589,7 +587,7 @@ export class TownRoom extends Room<TownState> {
   /** Barbarian Bloodthirst: heal a share of the damage dealt. */
   private bloodthirst(a: Player | undefined, id: string, dealt: number) {
     if (!a || a.dead || dealt <= 0) return;
-    const share = (hasPower(a.cls, a.powerLevel, "bloodthirst") ? BLOODTHIRST : 0) + talentBonus(a.cls, a.talents, "lifesteal") / 100;
+    const share = (hasPower(a.cls, a.talents, "bloodthirst") ? BLOODTHIRST : 0) + talentBonus(a.cls, a.talents, "lifesteal") / 100;
     if (share <= 0) return;
     const heal = dealt * share;
     a.hp = Math.min(a.maxHp, a.hp + heal);
@@ -678,10 +676,10 @@ export class TownRoom extends Room<TownState> {
     if (!t || t.dead || isSafeZone(t.x, t.y) || now < t.invulnUntil) return false;
     const guarded = now < t.guardUntil;
     if (guarded) dmg = Math.max(1, Math.round(dmg * (1 - GUARD_REDUCTION)));
-    if (hasPower(t.cls, t.powerLevel, "ironskin")) dmg = Math.max(1, Math.round(dmg * (1 - IRONSKIN_REDUCTION)));
+    if (hasPower(t.cls, t.talents, "ironskin")) dmg = Math.max(1, Math.round(dmg * (1 - IRONSKIN_REDUCTION)));
     dmg = Math.max(1, Math.round(dmg * talentReduce(t.cls, t.talents, "armor")));
     // Barbarian Unstoppable: while raging, ignore stun, slow and knockback
-    const unstoppable = now < t.rageUntil && hasPower(t.cls, t.powerLevel, "unstoppable");
+    const unstoppable = now < t.rageUntil && hasPower(t.cls, t.talents, "unstoppable");
     if (opts.stunMs && !guarded && !unstoppable) t.stunUntil = Math.max(t.stunUntil, now + opts.stunMs);
     if (opts.slowMs && !unstoppable) t.slowUntil = Math.max(t.slowUntil, now + opts.slowMs);
     t.hp = Math.max(0, t.hp - dmg);
@@ -693,7 +691,7 @@ export class TownRoom extends Room<TownState> {
     }
     this.broadcast("hit", { id: tid, dmg, blocked: guarded, crit: !!opts.crit });
     // Knight Second Wind: an emergency heal when HP drops low
-    if (t.hp > 0 && t.hp < t.maxHp * SECOND_WIND.threshold && hasPower(t.cls, t.powerLevel, "secondwind") && now >= t.secondWindAt) {
+    if (t.hp > 0 && t.hp < t.maxHp * SECOND_WIND.threshold && hasPower(t.cls, t.talents, "secondwind") && now >= t.secondWindAt) {
       t.secondWindAt = now + SECOND_WIND.cooldownMs;
       const heal = Math.round(t.maxHp * SECOND_WIND.heal);
       t.hp = Math.min(t.maxHp, t.hp + heal);
@@ -726,7 +724,7 @@ export class TownRoom extends Room<TownState> {
     a.attackReadyAt = now + (hit.cooldownMs ?? def.attackCooldownMs);
     const off = DIR_OFFSET[a.dir];
     let dmg = Math.round(def.damage * attackMult(a.cls, this.stats(a)) * hit.damage);
-    const critChance = (hasPower(a.cls, a.powerLevel, "crit") ? CRIT.chance : 0) + talentBonus(a.cls, a.talents, "crit") / 100;
+    const critChance = (hasPower(a.cls, a.talents, "crit") ? CRIT.chance : 0) + talentBonus(a.cls, a.talents, "crit") / 100;
     const crit = Math.random() < critChance;
     if (crit) dmg = Math.round(dmg * CRIT.mult);
     if (now < a.rageUntil) dmg = Math.round(dmg * RAGE.damage);
@@ -758,9 +756,9 @@ export class TownRoom extends Room<TownState> {
 
     const reach = hit.range ?? def.attackRange;
     // Barbarian Ground Slam: the finisher stuns
-    const slam = step === 2 && hasPower(a.cls, a.powerLevel, "groundslam") ? GROUND_SLAM_STUN_MS : undefined;
+    const slam = step === 2 && hasPower(a.cls, a.talents, "groundslam") ? GROUND_SLAM_STUN_MS : undefined;
     // Knight Cleave: the finisher hits all around instead of only in front
-    if (step === 2 && hasPower(a.cls, a.powerLevel, "cleave")) {
+    if (step === 2 && hasPower(a.cls, a.talents, "cleave")) {
       for (const tid of this.targetsAround(a.x, a.y, reach, id)) this.hitTarget(id, tid, dmg, this.pushFrom(a.x, a.y, tid), { kb: hit.knockback, crit });
       return;
     }
@@ -777,11 +775,11 @@ export class TownRoom extends Room<TownState> {
     s.x = a.x + off[0] * 6 + off[1] * lane; s.y = a.y - 4 + off[1] * 6 + off[0] * lane;
     s.dir = a.dir; s.owner = id; s.size = scale; s.kind = def.kind;
     s.speed = def.speed; s.radius = def.radius * scale;
-    s.range = def.range * (hasPower(a.cls, a.powerLevel, "eagleeye") ? EAGLE_EYE_RANGE : 1);
+    s.range = def.range * (hasPower(a.cls, a.talents, "eagleeye") ? EAGLE_EYE_RANGE : 1);
     s.damage = dmg; s.knockback = knockback;
-    s.ignite = hasPower(a.cls, a.powerLevel, "ignite");
-    s.pierce = hasPower(a.cls, a.powerLevel, "pierce") ? PIERCE_EXTRA : 0;
-    s.slowMs = hasPower(a.cls, a.powerLevel, "pinning") ? PINNING.durationMs : 0;
+    s.ignite = hasPower(a.cls, a.talents, "ignite");
+    s.pierce = hasPower(a.cls, a.talents, "pierce") ? PIERCE_EXTRA : 0;
+    s.slowMs = hasPower(a.cls, a.talents, "pinning") ? PINNING.durationMs : 0;
     this.state.projectiles.set(`s${++this.shotSeq}`, s);
   }
 
@@ -790,7 +788,8 @@ export class TownRoom extends Room<TownState> {
     const now = Date.now();
     if (!a || a.dead || a.stunned) return;
     const sp = CLASSES[a.cls].special;
-    if (now - a.lastSpecial < sp.cooldownMs * cooldownMult(a.cls, this.stats(a), a.powerLevel) * talentReduce(a.cls, a.talents, "cdr")) return;
+    if (!hasSpecial(a.cls, a.talents)) return; // learned in the skill tree
+    if (now - a.lastSpecial < sp.cooldownMs * cooldownMult(a.cls, this.stats(a), a.talents) * talentReduce(a.cls, a.talents, "cdr")) return;
     if (a.energy < ENERGY.cost.special) return;
     a.energy -= ENERGY.cost.special;
     a.lastSpecial = now;
@@ -806,7 +805,7 @@ export class TownRoom extends Room<TownState> {
         const fromX = a.x, fromY = a.y;
         const dist = sp.distance ?? 56;
         const step = pushInput(DIR_OFFSET[a.dir]);
-        const shadow = hasPower(a.cls, a.powerLevel, "shadowstrike");
+        const shadow = hasPower(a.cls, a.talents, "shadowstrike");
         const cut = new Set<string>();
         // Move in 4px steps so walls stop the dash instead of being skipped
         for (let moved = 0; moved < dist; moved += 4) {
@@ -837,7 +836,7 @@ export class TownRoom extends Room<TownState> {
       case "nova": {
         const r = sp.radius ?? 38;
         const dmg = Math.round((sp.damage ?? 30) * magicMult(a.cls, this.stats(a)));
-        const frost = hasPower(a.cls, a.powerLevel, "frost");
+        const frost = hasPower(a.cls, a.talents, "frost");
         this.broadcast("special", { id, kind: sp.kind, x: a.x, y: a.y, r, frost });
         for (const tid of this.targetsAround(a.x, a.y, r, id)) {
           this.hitTarget(id, tid, dmg, this.pushFrom(a.x, a.y, tid), frost ? { slowMs: FROST.durationMs, skill: true } : { skill: true });
@@ -851,9 +850,9 @@ export class TownRoom extends Room<TownState> {
   private playerUlt(id: string) {
     const a = this.state.players.get(id);
     const now = Date.now();
-    if (!a || a.dead || a.stunned || a.powerLevel < ULT_LEVEL) return;
+    if (!a || a.dead || a.stunned || !hasUlt(a.cls, a.talents)) return;
     const u = ULTS[a.cls];
-    if (now - a.lastUlt < u.cooldownMs * cooldownMult(a.cls, this.stats(a), a.powerLevel) * talentReduce(a.cls, a.talents, "cdr")) return;
+    if (now - a.lastUlt < u.cooldownMs * cooldownMult(a.cls, this.stats(a), a.talents) * talentReduce(a.cls, a.talents, "cdr")) return;
     if (a.energy < ENERGY.cost.ult) return;
     a.energy -= ENERGY.cost.ult;
     a.lastUlt = now;
@@ -880,7 +879,7 @@ export class TownRoom extends Room<TownState> {
       const x = a.x + off[0] * (u.ahead ?? 72), y = a.y + off[1] * (u.ahead ?? 72);
       this.broadcast("ult", { id, kind: "arrowrain", x, y, r: u.radius, delay: u.delayMs, hits: u.hits });
       for (let i = 0; i < (u.hits ?? 4); i++) {
-        this.clock.setTimeout(() => blast(x, y, { kb: 0.3, slowMs: hasPower(a.cls, a.powerLevel, "pinning") ? PINNING.durationMs : undefined }), (u.delayMs ?? 400) + i * 250);
+        this.clock.setTimeout(() => blast(x, y, { kb: 0.3, slowMs: hasPower(a.cls, a.talents, "pinning") ? PINNING.durationMs : undefined }), (u.delayMs ?? 400) + i * 250);
       }
     } else {
       // Barbarian Leap: jump forward (walls stop it), briefly untouchable, crash down on landing
