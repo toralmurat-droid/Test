@@ -522,6 +522,7 @@ export class TownScene extends Phaser.Scene {
       const online = [...this.entities.values()].filter((x) => !x.mob).length;
       const safe = isSafeZone(meEnt.sprite.x, meEnt.sprite.y) ? "🛡 Safe zone · " : "";
       (document.getElementById("hpfill") as HTMLElement).style.width = `${(mine.hp / mine.maxHp) * 100}%`;
+      document.getElementById("hptext")!.textContent = `HP ${Math.ceil(mine.hp)} / ${Math.round(mine.maxHp)}`;
       const next = xpForLevel(mine.level + 1), cur = xpForLevel(mine.level);
       document.getElementById("stats")!.textContent =
         `${mine.dead ? "Respawning… " : safe}Lv ${mine.level} ${CLASSES[mine.cls as ClassKind].name} · ` +

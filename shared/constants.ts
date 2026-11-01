@@ -5,8 +5,11 @@ export const TICK_RATE = 20; // server updates per second
 export const PLAYER_SPEED = 90; // px per second (default; classes override, see classes.ts)
 export const PLAYER_RADIUS = 5; // collision half-size in px
 export const RESPAWN_MS = 2500;
-export const REGEN_DELAY_MS = 5000; // no damage taken for this long -> regenerate
-export const REGEN_PER_SEC = 0.03; // fraction of max HP per second
+// HP regeneration: every hero always regenerates a little, ramping up smoothly once out of combat.
+export const COMBAT_REGEN_PER_SEC = 0.008; // fraction of max HP per second while fighting
+export const REGEN_DELAY_MS = 3000; // no damage taken for this long -> out-of-combat regen starts ramping
+export const REGEN_RAMP_MS = 3000; // ramp from combat rate to full rate over this time
+export const REGEN_PER_SEC = 0.04; // fraction of max HP per second out of combat
 export const SAFE_REGEN_PER_SEC = 0.12; // faster regen on the plaza
 export const HIT_RADIUS = 6; // body radius used for projectile / melee hit tests
 

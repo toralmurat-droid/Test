@@ -1,7 +1,7 @@
 import { Client, Room } from "colyseus";
 import { MapSchema, Schema, type } from "@colyseus/schema";
 import {
-  Dir, HIT_RADIUS, InputState, MOB_ATTACK_RANGE, MOBS, MobKind, REGEN_DELAY_MS, REGEN_PER_SEC,
+  Dir, HIT_RADIUS, InputState, MOB_ATTACK_RANGE, MOBS, MobKind, REGEN_DELAY_MS, REGEN_PER_SEC, REGEN_RAMP_MS, COMBAT_REGEN_PER_SEC,
   RESPAWN_MS, SAFE_REGEN_PER_SEC, TICK_RATE,
 } from "../shared/constants";
 import {
@@ -242,9 +242,11 @@ export class TownRoom extends Room<TownState> {
       p.dir = dirFromInput(p.input, p.dir);
       if (r.moving) p.emote = "";
       p.guarding = now < p.guardUntil;
-      // Out-of-combat regeneration, faster in the safe plaza
-      if (p.hp < p.maxHp && now - p.lastHurt > REGEN_DELAY_MS) {
-        const rate = isSafeZone(p.x, p.y) ? SAFE_REGEN_PER_SEC : REGEN_PER_SEC;
+      // Regeneration: always a trickle, ramping up smoothly out of combat, fastest in the safe plaza
+      if (!p.dead && p.hp > 0 && p.hp < p.maxHp) {
+        const ramp = Math.min(1, Math.max(0, (now - p.lastHurt - REGEN_DELAY_MS) / REGEN_RAMP_MS));
+        const full = isSafeZone(p.x, p.y) ? SAFE_REGEN_PER_SEC : REGEN_PER_SEC;
+        const rate = COMBAT_REGEN_PER_SEC + (full - COMBAT_REGEN_PER_SEC) * ramp;
         p.hp = Math.min(p.maxHp, p.hp + p.maxHp * rate * dt);
       }
       this.pickUp(p, pid);
