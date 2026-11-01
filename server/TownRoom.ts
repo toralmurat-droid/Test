@@ -18,6 +18,7 @@ import {
 import { isSafeZone, isSolidAt, randomSpawn } from "../shared/map";
 import { randomPointInZone, SPAWN_ZONES, zoneCap } from "../shared/spawns";
 import { moveStep } from "../shared/movement";
+import { canLearn, talentMult, talentBonus, talentReduce, TREES } from "../shared/talents";
 import { BAG_SIZE, Equipped, GEAR, GEAR_SLOTS, GearSlot, gearName, gearSpeedMult, gearStats, isGearId, rollGear } from "../shared/gear";
 
 export class Player extends Schema {
@@ -53,6 +54,8 @@ export class Player extends Schema {
   @type("string") shoes = "";
   @type("string") hat = "";
   @type(["string"]) bag = new ArraySchema<string>();
+  // Skill tree (shared/talents.ts): ranks per talent id
+  @type({ map: "number" }) talents = new MapSchema<number>();
 
   input: InputState = { up: false, down: false, left: false, right: false };
   lastAttack = 0;
@@ -142,7 +145,7 @@ export class TownState extends Schema {
 }
 
 /** Extra effects of a hit. */
-interface HitOpts { kb?: number; stunMs?: number; slowMs?: number; crit?: boolean }
+interface HitOpts { kb?: number; stunMs?: number; slowMs?: number; crit?: boolean; skill?: boolean }
 
 const COLORS = [0xe74c3c, 0x3498db, 0x2ecc71, 0xf1c40f, 0x9b59b6, 0xe67e22, 0x1abc9c, 0xecf0f1];
 const STILL: InputState = { up: false, down: false, left: false, right: false };
@@ -199,6 +202,8 @@ export class TownRoom extends Room<TownState> {
     this.onMessage("equip", (client, i: number) => this.equip(client.sessionId, i));
     this.onMessage("unequip", (client, slot: GearSlot) => this.unequip(client.sessionId, slot));
     this.onMessage("dropgear", (client, i: number) => this.dropGear(client.sessionId, i));
+    this.onMessage("learn", (client, tid: string) => this.learnTalent(client.sessionId, tid));
+    this.onMessage("respec", (client) => this.respec(client.sessionId));
 
     this.onMessage("chat", (client, text: string) => {
       const p = this.state.players.get(client.sessionId);
@@ -256,7 +261,7 @@ export class TownRoom extends Room<TownState> {
       if (p.dead) { p.moving = false; return; }
       const r = p.stunned
         ? { x: p.x, y: p.y, moving: false }
-        : moveStep(p.x, p.y, p.input, dt, heroSpeed(p.cls, p.level, p.slowed, p.raging) * gearSpeedMult(this.equipped(p)));
+        : moveStep(p.x, p.y, p.input, dt, heroSpeed(p.cls, p.level, p.slowed, p.raging) * gearSpeedMult(this.equipped(p)) * talentMult(p.cls, p.talents, "speed"));
       p.x = r.x; p.y = r.y; p.moving = r.moving;
       p.dir = dirFromInput(p.input, p.dir);
       if (r.moving) p.emote = "";
@@ -266,6 +271,9 @@ export class TownRoom extends Room<TownState> {
         const rate = isSafeZone(p.x, p.y) ? SAFE_REGEN_PER_SEC : REGEN_PER_SEC;
         p.hp = Math.min(p.maxHp, p.hp + p.maxHp * rate * dt);
       }
+      // Skill tree regen works all the time, even in combat
+      const treeRegen = talentBonus(p.cls, p.talents, "regen");
+      if (treeRegen > 0 && !p.dead && p.hp > 0 && p.hp < p.maxHp) p.hp = Math.min(p.maxHp, p.hp + p.maxHp * treeRegen / 100 * dt);
       this.pickUp(p, pid);
     });
     this.state.items.forEach((it, id) => { if (now > it.expires) this.state.items.delete(id); });
@@ -430,6 +438,23 @@ export class TownRoom extends Room<TownState> {
     this.broadcast("heal", { id, amount: heal });
   }
 
+  // ---- Skill tree ---------------------------------------------------------
+
+  private learnTalent(id: string, tid: string) {
+    const p = this.state.players.get(id);
+    if (!p || typeof tid !== "string" || !canLearn(p.cls, p.level, p.talents, tid)) return;
+    p.talents.set(tid, (p.talents.get(tid) ?? 0) + 1);
+    this.applyStats(p);
+  }
+
+  /** Free reset of all skill points, only out of combat. */
+  private respec(id: string) {
+    const p = this.state.players.get(id);
+    if (!p || p.dead || Date.now() - p.lastHurt < 5000) return;
+    p.talents.clear();
+    this.applyStats(p);
+  }
+
   // ---- Equipment ----------------------------------------------------------
 
   private equipped(p: Player): Equipped {
@@ -500,14 +525,17 @@ export class TownRoom extends Room<TownState> {
 
   /** Barbarian Bloodthirst: heal a share of the damage dealt. */
   private bloodthirst(a: Player | undefined, id: string, dealt: number) {
-    if (!a || a.dead || dealt <= 0 || !hasPower(a.cls, a.level, "bloodthirst")) return;
-    const heal = dealt * BLOODTHIRST;
+    if (!a || a.dead || dealt <= 0) return;
+    const share = (hasPower(a.cls, a.level, "bloodthirst") ? BLOODTHIRST : 0) + talentBonus(a.cls, a.talents, "lifesteal") / 100;
+    if (share <= 0) return;
+    const heal = dealt * share;
     a.hp = Math.min(a.maxHp, a.hp + heal);
   }
 
   /** A player (`attackerId`) hits a player or mob. */
   private hitTarget(attackerId: string, targetId: string, dmg: number, push: [number, number], opts: HitOpts = {}) {
     const a = this.state.players.get(attackerId);
+    if (a) dmg = Math.round(dmg * talentMult(a.cls, a.talents, "dmg") * (opts.skill ? talentMult(a.cls, a.talents, "skill") : 1));
     const name = a?.name ?? "???";
     const kb = opts.kb ?? 1;
     const tp = this.state.players.get(targetId);
@@ -572,7 +600,7 @@ export class TownRoom extends Room<TownState> {
     const g = gearStats(p.cls, this.equipped(p));
     st.sta += g.sta; st.str += g.str; st.mag += g.mag;
     p.sta = st.sta; p.str = st.str; p.mag = st.mag;
-    const newMax = maxHpFromStats(p.cls, st);
+    const newMax = Math.round(maxHpFromStats(p.cls, st) * talentMult(p.cls, p.talents, "hp"));
     p.hp = Math.min(newMax, p.hp + Math.max(0, newMax - p.maxHp));
     p.maxHp = newMax;
   }
@@ -587,6 +615,7 @@ export class TownRoom extends Room<TownState> {
     const guarded = now < t.guardUntil;
     if (guarded) dmg = Math.max(1, Math.round(dmg * (1 - GUARD_REDUCTION)));
     if (hasPower(t.cls, t.level, "ironskin")) dmg = Math.max(1, Math.round(dmg * (1 - IRONSKIN_REDUCTION)));
+    dmg = Math.max(1, Math.round(dmg * talentReduce(t.cls, t.talents, "armor")));
     // Barbarian Unstoppable: while raging, ignore stun, slow and knockback
     const unstoppable = now < t.rageUntil && hasPower(t.cls, t.level, "unstoppable");
     if (opts.stunMs && !guarded && !unstoppable) t.stunUntil = Math.max(t.stunUntil, now + opts.stunMs);
@@ -633,7 +662,8 @@ export class TownRoom extends Room<TownState> {
     a.attackReadyAt = now + (hit.cooldownMs ?? def.attackCooldownMs);
     const off = DIR_OFFSET[a.dir];
     let dmg = Math.round(def.damage * attackMult(a.cls, this.stats(a)) * hit.damage);
-    const crit = hasPower(a.cls, a.level, "crit") && Math.random() < CRIT.chance;
+    const critChance = (hasPower(a.cls, a.level, "crit") ? CRIT.chance : 0) + talentBonus(a.cls, a.talents, "crit") / 100;
+    const crit = Math.random() < critChance;
     if (crit) dmg = Math.round(dmg * CRIT.mult);
     if (now < a.rageUntil) dmg = Math.round(dmg * RAGE.damage);
     a.emote = "";
@@ -696,7 +726,7 @@ export class TownRoom extends Room<TownState> {
     const now = Date.now();
     if (!a || a.dead || a.stunned) return;
     const sp = CLASSES[a.cls].special;
-    if (now - a.lastSpecial < sp.cooldownMs * cooldownMult(a.cls, this.stats(a), a.level)) return;
+    if (now - a.lastSpecial < sp.cooldownMs * cooldownMult(a.cls, this.stats(a), a.level) * talentReduce(a.cls, a.talents, "cdr")) return;
     a.lastSpecial = now;
     a.emote = "";
 
@@ -721,7 +751,7 @@ export class TownRoom extends Room<TownState> {
         }
         // Ninja Shadow Strike: cut every enemy passed through
         const sdmg = Math.round(CLASSES[a.cls].damage * attackMult(a.cls, this.stats(a)) * SHADOW_STRIKE_DAMAGE);
-        for (const tid of cut) this.hitTarget(id, tid, sdmg, DIR_OFFSET[a.dir], { kb: 0.5 });
+        for (const tid of cut) this.hitTarget(id, tid, sdmg, DIR_OFFSET[a.dir], { kb: 0.5, skill: true });
         a.invulnUntil = now + DASH_INVULN_MS;
         this.broadcast("special", { id, kind: sp.kind, fromX, fromY, x: a.x, y: a.y });
         break;
@@ -744,7 +774,7 @@ export class TownRoom extends Room<TownState> {
         const frost = hasPower(a.cls, a.level, "frost");
         this.broadcast("special", { id, kind: sp.kind, x: a.x, y: a.y, r, frost });
         for (const tid of this.targetsAround(a.x, a.y, r, id)) {
-          this.hitTarget(id, tid, dmg, this.pushFrom(a.x, a.y, tid), frost ? { slowMs: FROST.durationMs } : {});
+          this.hitTarget(id, tid, dmg, this.pushFrom(a.x, a.y, tid), frost ? { slowMs: FROST.durationMs, skill: true } : { skill: true });
         }
         break;
       }
@@ -757,12 +787,12 @@ export class TownRoom extends Room<TownState> {
     const now = Date.now();
     if (!a || a.dead || a.stunned || a.level < ULT_LEVEL) return;
     const u = ULTS[a.cls];
-    if (now - a.lastUlt < u.cooldownMs * cooldownMult(a.cls, this.stats(a), a.level)) return;
+    if (now - a.lastUlt < u.cooldownMs * cooldownMult(a.cls, this.stats(a), a.level) * talentReduce(a.cls, a.talents, "cdr")) return;
     a.lastUlt = now;
     a.emote = "";
     const dmg = Math.round(u.damage * magicMult(a.cls, this.stats(a)));
     const blast = (x: number, y: number, opts: HitOpts = {}) => {
-      for (const tid of this.targetsAround(x, y, u.radius, id)) this.hitTarget(id, tid, dmg, this.pushFrom(x, y, tid), opts);
+      for (const tid of this.targetsAround(x, y, u.radius, id)) this.hitTarget(id, tid, dmg, this.pushFrom(x, y, tid), { ...opts, skill: true });
     };
     if (a.cls === "knight") {
       this.broadcast("ult", { id, kind: "earthquake", x: a.x, y: a.y, r: u.radius });
