@@ -18,7 +18,7 @@ import {
 import { isSafeZone, isSolidAt, randomSpawn } from "../shared/map";
 import { randomPointInZone, rollLevel, SPAWN_ZONES, zoneCap } from "../shared/spawns";
 import { moveStep } from "../shared/movement";
-import { heroPoise, MOB_COMBAT, POISE, poiseSpeed, RAGE_ATTACK_SPEED } from "../shared/combat";
+import { heroPoise, MOB_COMBAT, POISE, poiseLevelMult, poiseSpeed, RAGE_ATTACK_SPEED } from "../shared/combat";
 import { canLearn, talentMult, talentBonus, talentReduce, TREES } from "../shared/talents";
 import { BAG_SIZE, Equipped, GEAR, GEAR_SLOTS, GearSlot, gearName, gearSpeedMult, gearStats, isGearId, rollGear } from "../shared/gear";
 
@@ -176,7 +176,7 @@ export class TownState extends Schema {
 }
 
 /** Extra effects of a hit. */
-interface HitOpts { kb?: number; stunMs?: number; slowMs?: number; crit?: boolean; skill?: boolean }
+interface HitOpts { atkLevel?: number; kb?: number; stunMs?: number; slowMs?: number; crit?: boolean; skill?: boolean }
 
 const COLORS = [0xe74c3c, 0x3498db, 0x2ecc71, 0xf1c40f, 0x9b59b6, 0xe67e22, 0x1abc9c, 0xecf0f1];
 const STILL: InputState = { up: false, down: false, left: false, right: false };
@@ -456,7 +456,7 @@ export class TownRoom extends Room<TownState> {
             m.windUntil = 0; m.winding = false; m.lastAttack = now;
             if (dist <= MOB_ATTACK_RANGE + 6) {
               this.broadcast("swing", { id });
-              this.damagePlayer(m.target, Math.round(def.damage * mobScale(m.level, "damage")), def.name, DIR_OFFSET[m.dir]);
+              this.damagePlayer(m.target, Math.round(def.damage * mobScale(m.level, "damage")), def.name, DIR_OFFSET[m.dir], 1, { atkLevel: m.level });
             }
           }
         } else if (now - m.lastAttack >= def.attackCooldownMs / poiseSpeed(poiseFrac(m, mobPoiseMax(m)))) {
@@ -705,7 +705,7 @@ export class TownRoom extends Room<TownState> {
     const tp = this.state.players.get(targetId);
     if (tp) {
       const hpBefore = tp.hp;
-      const killed = this.damagePlayer(targetId, dmg, name, push, kb, opts);
+      const killed = this.damagePlayer(targetId, dmg, name, push, kb, { ...opts, atkLevel: a?.level });
       this.bloodthirst(a, attackerId, hpBefore - tp.hp);
       if (killed && a) {
         const victim = this.state.players.get(targetId)!;
@@ -725,7 +725,8 @@ export class TownRoom extends Room<TownState> {
     const now = Date.now();
     // Initiative: drain poise; a solid hit interrupts the wind-up and delays the next attack
     const pmax = mobPoiseMax(m);
-    const pdmg = dmg * (opts.skill ? POISE.skillMult : 1);
+    // Higher-level monsters are harder to make dizzy
+    const pdmg = dmg * (opts.skill ? POISE.skillMult : 1) * poiseLevelMult(a?.level ?? 1, m.level);
     if (drainPoise(m, pmax, pdmg, now, POISE.mobBrokenMs)) this.broadcast("broken", { id: targetId, ms: POISE.mobBrokenMs });
     if (pdmg >= pmax * 0.15) {
       m.windUntil = 0; m.winding = false;
@@ -797,7 +798,7 @@ export class TownRoom extends Room<TownState> {
     t.lastHurt = now;
     // Initiative: drain poise (shield blocks most of it, Unstoppable ignores it) and flinch
     if (!unstoppable) {
-      const pdmg = dmg * (opts.skill ? POISE.skillMult : 1) * (guarded ? POISE.guardMult : 1);
+      const pdmg = dmg * (opts.skill ? POISE.skillMult : 1) * (guarded ? POISE.guardMult : 1) * poiseLevelMult(opts.atkLevel ?? t.level, t.level);
       if (drainPoise(t, heroPoiseMax(t), pdmg, now, POISE.heroBrokenMs)) this.broadcast("broken", { id: tid, ms: POISE.heroBrokenMs });
       if (!guarded) t.attackReadyAt = Math.max(t.attackReadyAt, now + POISE.heroFlinchMs);
     }
