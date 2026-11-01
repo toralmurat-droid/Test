@@ -54,8 +54,8 @@ west, the Old Ruins over the bridge to the east, the North Meadow, and Stonecrag
 off to the Hunter's Camp, the Watchtower, the mill and Mirror Pond and the marsh. Generation also guarantees that every walkable tile can be reached.
 `npx tsx tools/map-metrics.ts` prints walkability, reachability and detour numbers.
 
-- **Oakvale** (centre) — a small ruined village: Market Square (safe zone) with well, campfire and a stall, and four
-  roofless ruins you can walk inside (Chapel of the Dawn with graveyard, The Rusty Tankard, the Smithy, a cottage)
+- **Oakvale** (centre) — a small stockade with outward-facing pikes, a great bonfire in the middle of Market Square
+  (safe zone), and four small walk-in ruins in its corners (Chapel of the Dawn, The Rusty Tankard, the Smithy, a cottage)
 - **Goldenreach Farms** (west), **Hunter's Camp** (north-west woods), **North Meadow** (north)
 - **Mirror Pond** and **Misty Marsh** (south-west, with a boardwalk), **Stonecrag Quarry** (south-east)
 - **Millbrook Mill** on **River Ashwell** (east), then **Whispering Woods** with trails, the **Old Ruins** and the

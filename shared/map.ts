@@ -18,9 +18,9 @@ export const T = {
   STALL_RED: 26, STALL_BLUE: 27, BARREL: 28, CRATE: 29, ANVIL: 30, GRAVE: 31, HAY: 32, WHEEL: 33,
   CAMPFIRE: 34, RUIN: 35, SIGN: 36, STUMP: 37, FENCE_V: 38,
   // ruins of the old village
-  FLOOR: 39, RUBBLE: 40, BEAM: 41, FLAGS: 42,
+  FLOOR: 39, RUBBLE: 40, BEAM: 41, FLAGS: 42, BONFIRE: 43,
 } as const;
-export const TILE_COUNT = 43;
+export const TILE_COUNT = 44;
 export const EMPTY = -1;
 
 /** A named region. `mobs` hints which monsters belong there (empty or missing = none, e.g. inside the village). */
@@ -45,7 +45,7 @@ function noise(x: number, y: number, scale: number, seed: number) {
 // ---------- layout (tile coords) ----------
 
 /** Oakvale's palisade bounds (tiles, inclusive). */
-export const VILLAGE = { x0: 64, y0: 46, x1: 96, y1: 74 };
+export const VILLAGE = { x0: 68, y0: 50, x1: 92, y1: 70 };
 /** The two main roads (3 tiles wide): King's Road runs west↔east on rows RY..RY+2, North Road north↔south on columns RX..RX+2. */
 export const ROADS = { RX: 79, RY: 59 };
 /** Cobbled square in the middle of the ruined village. It is the safe zone. */
@@ -212,8 +212,8 @@ function buildWorld() {
   curve([[RX + 1, V.y1 + 4], [86, 82], [90, 90], [96, 96]], 2);
   curve([[96, 96], [106, 94], [rc(96) - 6, 97], [rc(96) + 6, 97], [128, 90], [136, 74], [ruins.x, ruins.y + 6]], 1); // Quarry bridge → ruins
   // Footpaths: the mill, Mirror Pond and on to the Misty Marsh
-  curve([[V.x1 - 1, 52], [101, 47], [mill.x + 3, mill.y + 8], [mill.x + 3, mill.y + 6]], 1);             // Mill path
-  curve([[V.x0 - 1, 67], [56, 72], [44, 72], [36, 78], [33, 86], [42, 96], [marsh.x + 2, 101]], 1);     // Pond & Marsh path
+  curve([[V.x1 + 3, RY], [101, 52], [mill.x + 3, mill.y + 8], [mill.x + 3, mill.y + 6]], 1);             // Mill path
+  curve([[V.x0 - 3, RY + 2], [60, 68], [56, 72], [44, 72], [36, 78], [33, 86], [42, 96], [marsh.x + 2, 101]], 1);     // Pond & Marsh path
 
   // ---------- 6. Oakvale: a small ruined village ----------
   // Cobbled streets meet on the square; the rest of the village is grass, dirt and rubble
@@ -224,52 +224,53 @@ function buildWorld() {
   road(SQ.x, SQ.y, SQ.w, SQ.h, T.COBBLE);
   // Rounded corners on the square: grass creeps back in
   for (const [cx, cy] of [[SQ.x, SQ.y], [SQ.x + SQ.w - 1, SQ.y], [SQ.x, SQ.y + SQ.h - 1], [SQ.x + SQ.w - 1, SQ.y + SQ.h - 1]]) setG(cx, cy, T.GRASS);
-  // Old palisade: rotted, with breaches everywhere, and wide open where roads pass
-  const nearRoad = (x: number, y: number) => { for (let j = -2; j <= 2; j++) for (let i = -2; i <= 2; i++) if (roads.has((y + j) * MAP_W + x + i)) return true; return false; };
-  const post = (x: number, y: number) => { if (!nearRoad(x, y) && noise(x, y, 4, 82) > 0.38) setO(x, y, T.PALISADE); };
+  // A small stockade of sharpened stakes around the village, open only where the roads pass
+  const nearRoad = (x: number, y: number) => { for (let j = -1; j <= 1; j++) for (let i = -1; i <= 1; i++) if (roads.has((y + j) * MAP_W + x + i)) return true; return false; };
+  const post = (x: number, y: number) => { if (!nearRoad(x, y)) setO(x, y, T.PALISADE); };
   for (let x = V.x0; x <= V.x1; x++) { post(x, V.y0); post(x, V.y1); }
   for (let y = V.y0 + 1; y < V.y1; y++) { post(V.x0, y); post(V.x1, y); }
 
   /**
-   * A roofless ruined building: flagstone or plank floor, broken walls with a doorway and breaches,
-   * rubble and debris. Players can walk in and around.
+   * A small roofless ruin: flagstone or plank floor, broken walls with a doorway (on the side facing the
+   * square) and breaches, a little rubble. Players can walk in and around.
    */
-  const ruinBuilding = (x: number, y: number, w: number, h: number, stone: boolean, seed: number) => {
+  const ruinBuilding = (x: number, y: number, w: number, h: number, stone: boolean, doorTop: boolean, seed: number) => {
     rectG(x, y, w, h, stone ? T.FLAGS : T.FLOOR);
     const wall = stone ? T.RUIN : T.BEAM;
-    const door = x + Math.floor(w / 2);
+    const door = x + Math.floor(w / 2), doorRow = doorTop ? y : y + h - 1;
     for (let i = x; i < x + w; i++) for (let j = y; j < y + h; j++) {
       const edge = i === x || j === y || i === x + w - 1 || j === y + h - 1;
       if (!edge) { if (hash(i, j, seed) < 0.12) setG(i, j, T.RUBBLE); continue; }
       const corner = (i === x || i === x + w - 1) && (j === y || j === y + h - 1);
-      const doorway = j === y + h - 1 && Math.abs(i - door) <= 1;
-      if (doorway) { setG(i, j, T.RUBBLE); continue; }
-      if (corner || noise(i, j, 2.5, seed + 1) > 0.36) setO(i, j, wall); // breaches come in runs, walls in long stretches
+      if (j === doorRow && i === door) { setG(i, j, T.RUBBLE); continue; }
+      if (corner || noise(i, j, 2.5, seed + 1) > 0.3) setO(i, j, wall); // breaches come in runs, walls in long stretches
       else setG(i, j, T.RUBBLE); // a hole in the wall
     }
-    // rubble spilling outside
-    for (let k = 0; k < 4; k++) setG(x - 1 + Math.floor(hash(seed, k, 3) * (w + 2)), y + h + Math.floor(hash(seed, k, 4) * 2), T.RUBBLE);
+    // a little rubble spilling out of the doorway
+    for (let k = 0; k < 2; k++) setG(door - 1 + Math.floor(hash(seed, k, 3) * 3), doorTop ? y - 1 : y + h, T.RUBBLE);
   };
 
-  ruinBuilding(84, 48, 9, 6, true, 101);   // Chapel of the Dawn
-  setO(88, 50, T.GRAVE); // the old altar stone
-  for (const [gx, gy] of [[94, 49], [95, 51], [94, 53]]) setO(gx, gy, T.GRAVE);
-  ruinBuilding(68, 48, 7, 6, true, 102);   // the Smithy
-  setO(71, 50, T.ANVIL);
-  ruinBuilding(85, 67, 9, 6, false, 103);    // The Rusty Tankard
-  setO(87, 69, T.BARREL); setO(91, 68, T.CRATE);
-  ruinBuilding(67, 66, 6, 6, false, 104); // a cottage
+  // Four small ruins in the corners of the stockade, doorways facing the square
+  ruinBuilding(87, 51, 5, 4, true, false, 101);  // Chapel of the Dawn
+  setO(89, 52, T.GRAVE); // the old altar stone
+  for (const [gx, gy] of [[95, 51], [96, 53], [95, 55]]) setO(gx, gy, T.GRAVE); // graveyard just outside
+  ruinBuilding(69, 51, 5, 4, true, false, 102);  // the Smithy
+  setO(71, 52, T.ANVIL);
+  ruinBuilding(87, 66, 5, 4, false, true, 103);  // The Rusty Tankard
+  setO(88, 68, T.BARREL); setO(90, 68, T.CRATE);
+  ruinBuilding(69, 66, 5, 4, false, true, 104);  // a cottage
 
-  // The square: the well, a survivors' campfire and a lone stall
-  setO(77, 57, T.WELL);
-  setO(83, 63, T.CAMPFIRE);
+  // The square: a large bonfire in the middle on a ring of hearth stones, the well, a lone stall
+  rectO(RX, RY, 2, 2, T.BONFIRE);
+  setO(75, 58, T.WELL);
   setO(SQ.x + SQ.w - 3, SQ.y + 1, T.STALL_RED); setO(SQ.x + SQ.w - 2, SQ.y + 1, T.STALL_RED);
   setO(SQ.x + 1, SQ.y + SQ.h - 2, T.CRATE); setO(SQ.x + 2, SQ.y + SQ.h - 2, T.BARREL);
   setO(RX - 2, SQ.y + 1, T.SIGN); // notice board
+  for (const [x, y] of [[RX - 3, RY + 3], [RX + 4, RY - 2]]) setO(x, y, T.STUMP); // seats by the fire
 
-  // Nature creeping back: a few trees, stumps and hay inside the old walls
-  for (const [x, y] of [[67, 57], [93, 57], [72, 72], [91, 49]]) setO(x, y, T.TREE);
-  setO(70, 63, T.STUMP); setO(92, 64, T.HAY);
+  // Nature creeping back: a few trees and hay around the stockade
+  for (const [x, y] of [[66, 56], [94, 62], [72, 73], [86, 47]]) setO(x, y, T.TREE);
+  setO(90, 62, T.HAY);
 
   // Signposts outside the village
   setO(RX - 2, V.y0 - 5, T.SIGN); setO(V.x0 - 5, RY - 2, T.SIGN); setO(V.x1 + 5, RY - 2, T.SIGN); setO(RX - 2, V.y1 + 5, T.SIGN);
@@ -383,9 +384,9 @@ function buildWorld() {
 
   const areas: Area[] = [
     { name: "Market Square", ...SQ },
-    { name: "Chapel of the Dawn", x: 83, y: 47, w: 14, h: 9 },
-    { name: "The Rusty Tankard", x: 84, y: 66, w: 11, h: 8 },
-    { name: "The Smithy", x: 67, y: 47, w: 9, h: 8 },
+    { name: "Chapel of the Dawn", x: 86, y: 50, w: 12, h: 7 },
+    { name: "The Rusty Tankard", x: 86, y: 65, w: 7, h: 6 },
+    { name: "The Smithy", x: 68, y: 50, w: 7, h: 6 },
     { name: "Oakvale", x: V.x0, y: V.y0, w: V.x1 - V.x0 + 1, h: V.y1 - V.y0 + 1 },
     { name: "Millbrook Mill", x: mx - 3, y: 36, w: 13, h: 14 },
     { name: "Old Ruins", x: ruins.x - 9, y: ruins.y - 8, w: 19, h: 17, mobs: ["skeleton"] },
