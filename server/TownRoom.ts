@@ -10,7 +10,7 @@ import {
 import {
   attackMult, cooldownMult, CRIT, FROST, hasPower, heroSpeed, IGNITE, IRONSKIN_REDUCTION, magicMult, maxHpFromStats,
   POWERS, SECOND_WIND, SHADOW_STRIKE_DAMAGE, SLOW_MOB, statsFor, statPoints, ULTS, hasSpecial, hasUlt, powerNodeId,
-  BLOODTHIRST, EAGLE_EYE_RANGE, GROUND_SLAM_STUN_MS, PIERCE_EXTRA, PINNING, RAGE,
+  BLOODTHIRST, EAGLE_EYE_RANGE, VOLLEY_DAMAGE, GROUND_SLAM_STUN_MS, PIERCE_EXTRA, PINNING, RAGE,
 } from "../shared/powers";
 import {
   ITEM_LIFETIME_MS, ItemKind, LOOT, MAX_POTIONS, PICKUP_RADIUS, POTION_COOLDOWN_MS, POTION_HEAL, PVP_GOLD_DROP,
@@ -1171,7 +1171,7 @@ export class TownRoom extends Room<TownState> {
         break;
       }
       case "volley": {
-        const dmg = Math.round(CLASSES[a.cls].damage * attackMult(a.cls, this.stats(a)));
+        const dmg = Math.round(CLASSES[a.cls].damage * attackMult(a.cls, this.stats(a)) * VOLLEY_DAMAGE);
         const n = sp.arrows ?? 3;
         for (let i = 0; i < n; i++) this.shoot(a, id, dmg, 0.8, 1, (i - (n - 1) / 2) * 8);
         this.broadcast("special", { id, kind: sp.kind });

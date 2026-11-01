@@ -7,7 +7,7 @@ import { CLASSES, ClassKind } from "./classes";
  * (27 points by level 20). Each class starts from its own base stats:
  *   Stamina  -> max HP (+12 per point) and HP regen (shared/constants.ts)
  *   Strength -> attack damage for Knight/Ninja/Archer/Barbarian (+7% per point), +4 max HP per point
- *   Magic    -> skill damage (+7% per point), skill cooldowns (-2% per point, max -30%), Wizard fireballs
+ *   Magic    -> skill damage (+7% per point), skill cooldowns (-2% per point, max -30%), Wizard fireballs and +4 max HP per point
  * Every level also adds HP_PER_LEVEL max HP, so levels matter whatever the build.
  */
 export type StatKind = "sta" | "str" | "mag";
@@ -49,7 +49,9 @@ export function statsFor(cls: ClassKind, assigned: Stats = { sta: 0, str: 0, mag
 
 export function maxHpFromStats(cls: ClassKind, s: Stats, level = 1): number {
   const b = STATS[cls].base;
-  return CLASSES[cls].maxHp + (level - 1) * HP_PER_LEVEL + (s.sta - b.sta) * HP_PER_STA + (s.str - b.str) * HP_PER_STR;
+  // Strength gives HP; a Magic-based hero (Wizard) gets the same from Magic so it isn't squishier for using its attack stat
+  const magHp = STATS[cls].attackStat === "mag" ? (s.mag - b.mag) * HP_PER_STR : 0;
+  return CLASSES[cls].maxHp + (level - 1) * HP_PER_LEVEL + (s.sta - b.sta) * HP_PER_STA + (s.str - b.str) * HP_PER_STR + magHp;
 }
 
 /** Multiplier for the primary attack, from the class's attack stat. */
@@ -84,11 +86,11 @@ export interface PowerDef { id: PowerId; level: number; name: string; desc: stri
 
 export const POWERS: Record<ClassKind, PowerDef[]> = {
   knight: [
-    { id: "guard", level: 1, name: "Shield", key: "1", desc: "Block 70% damage and all knockback for 2s." },
+    { id: "guard", level: 1, name: "Shield", key: "1", desc: "Block 55% damage and all knockback for 2s." },
     { id: "ironskin", level: 3, name: "Iron Skin", desc: "Passive: take 10% less damage." },
     { id: "cleave", level: 5, name: "Cleave", desc: "Combo finisher hits every enemy around you." },
     { id: "secondwind", level: 8, name: "Second Wind", desc: "Passive: below 25% HP, heal 30% (once per 60s)." },
-    { id: "earthquake", level: 10, name: "Earthquake", key: "2", desc: "Slam the ground: damage and stun everything nearby for 1.5s." },
+    { id: "earthquake", level: 10, name: "Earthquake", key: "2", desc: "Slam the ground: damage and stun everything nearby for 1s." },
   ],
   ninja: [
     { id: "dash", level: 1, name: "Dash", key: "1", desc: "Blink forward, untouchable for a moment." },
@@ -106,14 +108,14 @@ export const POWERS: Record<ClassKind, PowerDef[]> = {
   ],
   archer: [
     { id: "volley", level: 1, name: "Volley", key: "1", desc: "Fire 3 arrows side by side." },
-    { id: "eagleeye", level: 3, name: "Eagle Eye", desc: "Passive: arrows fly 30% farther." },
+    { id: "eagleeye", level: 3, name: "Eagle Eye", desc: "Passive: arrows fly 15% farther." },
     { id: "pierce", level: 5, name: "Piercing Arrows", desc: "Arrows pass through up to 2 extra enemies." },
     { id: "pinning", level: 8, name: "Pinning Shot", desc: "Arrows slow enemies for 1.5s." },
     { id: "arrowrain", level: 10, name: "Arrow Rain", key: "2", desc: "Rain arrows on an area ahead: 4 waves of damage." },
   ],
   barbarian: [
-    { id: "rage", level: 1, name: "Rage", key: "1", desc: "For 5s: +30% damage and +20% speed." },
-    { id: "bloodthirst", level: 3, name: "Bloodthirst", desc: "Passive: heal 15% of the damage you deal." },
+    { id: "rage", level: 1, name: "Rage", key: "1", desc: "For 4s: +20% damage and +20% speed." },
+    { id: "bloodthirst", level: 3, name: "Bloodthirst", desc: "Passive: heal 10% of the damage you deal." },
     { id: "groundslam", level: 5, name: "Ground Slam", desc: "Combo finisher stuns enemies for 0.6s." },
     { id: "unstoppable", level: 8, name: "Unstoppable", desc: "While raging: immune to stun, slow and knockback." },
     { id: "leap", level: 10, name: "Leap", key: "2", desc: "Leap forward and crash down, hurting everything where you land." },
@@ -149,20 +151,21 @@ export const SHADOW_STRIKE_DAMAGE = 0.8; // x primary damage
 export const IGNITE = { radius: 22, splash: 0.5 };
 export const FROST = { slow: 0.5, durationMs: 2000 };
 export const SLOW_MOB = 0.5;
-export const EAGLE_EYE_RANGE = 1.3;
+export const EAGLE_EYE_RANGE = 1.15;
+export const VOLLEY_DAMAGE = 0.6; // x class damage per Volley arrow (all 3 can hit one target)
 export const PIERCE_EXTRA = 2;
 export const PINNING = { durationMs: 1500 };
-export const RAGE = { damage: 1.3, speed: 1.2 };
-export const BLOODTHIRST = 0.15;
+export const RAGE = { damage: 1.2, speed: 1.2 };
+export const BLOODTHIRST = 0.1;
 export const GROUND_SLAM_STUN_MS = 600;
 
 export interface UltDef { name: string; cooldownMs: number; damage: number; radius: number; stunMs?: number; hits?: number; delayMs?: number; ahead?: number }
 export const ULTS: Record<ClassKind, UltDef> = {
-  knight: { name: "Earthquake", cooldownMs: 18000, damage: 35, radius: 50, stunMs: 1500 },
+  knight: { name: "Earthquake", cooldownMs: 18000, damage: 30, radius: 50, stunMs: 1000 },
   ninja: { name: "Blade Storm", cooldownMs: 14000, damage: 16, radius: 36, hits: 3 },
-  wizard: { name: "Meteor", cooldownMs: 16000, damage: 60, radius: 46, delayMs: 600, ahead: 56 },
+  wizard: { name: "Meteor", cooldownMs: 16000, damage: 70, radius: 50, delayMs: 450, ahead: 56 },
   archer: { name: "Arrow Rain", cooldownMs: 15000, damage: 16, radius: 44, hits: 4, delayMs: 400, ahead: 72 },
-  barbarian: { name: "Leap", cooldownMs: 14000, damage: 45, radius: 40, ahead: 64 },
+  barbarian: { name: "Leap", cooldownMs: 16000, damage: 38, radius: 40, ahead: 64 },
 };
 export const ULT_LEVEL = 10;
 

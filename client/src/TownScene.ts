@@ -516,7 +516,7 @@ export class TownScene extends Phaser.Scene {
     const notes: Record<StatKind, string> = {
       sta: `${mine.maxHp} max HP, regen ${regenFromStamina(st.sta)[1].toFixed(1)} HP/s`,
       str: STATS[cls].attackStat === "str" ? `attack ×${attackMult(cls, st).toFixed(2)}, +${HP_PER_STR} HP each` : `+${HP_PER_STR} HP per point`,
-      mag: `${STATS[cls].attackStat === "mag" ? `attack ×${attackMult(cls, st).toFixed(2)}, ` : ""}skills ×${magicMult(cls, st).toFixed(2)}, ` +
+      mag: `${STATS[cls].attackStat === "mag" ? `attack ×${attackMult(cls, st).toFixed(2)}, +${HP_PER_STR} HP each, ` : ""}skills ×${magicMult(cls, st).toFixed(2)}, ` +
         `cooldowns −${Math.round((1 - cooldownMult(cls, st, mine.talents)) * 100)}%`,
     };
     const pts: Record<StatKind, number> = { sta: mine.ptSta, str: mine.ptStr, mag: mine.ptMag };
