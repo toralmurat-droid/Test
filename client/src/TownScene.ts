@@ -529,6 +529,14 @@ export class TownScene extends Phaser.Scene {
     el.hidden = false;
   }
 
+  /** Bar label: name and current value right of centre, "/" exactly in the middle, max on the left of the right half,
+   * so the HP and Stamina numbers line up with each other. */
+  private barText(id: string, label: string, cur: number, max: number) {
+    const html = `<span class="l">${label} <b>${cur}</b></span><span class="sep">/</span><span class="r">${max}</span>`;
+    const el = document.getElementById(id)!;
+    if (el.innerHTML !== html) el.innerHTML = html;
+  }
+
   /** Skill slot bar (keys 1..0): drop a skill from the tree (or another slot) on a slot; right-click clears it. */
   private setupHotbar() {
     const bar = document.getElementById("hotbar")!;
@@ -925,7 +933,7 @@ export class TownScene extends Phaser.Scene {
       const online = [...this.entities.values()].filter((x) => !x.mob).length;
       const safe = isSafeZone(meEnt.sprite.x, meEnt.sprite.y) ? "🛡 Safe zone · " : "";
       (document.getElementById("hpfill") as HTMLElement).style.width = `${(mine.hp / mine.maxHp) * 100}%`;
-      document.getElementById("hptext")!.textContent = `HP ${Math.ceil(mine.hp)} / ${Math.round(mine.maxHp)}`;
+      this.barText("hptext", "HP", Math.ceil(mine.hp), Math.round(mine.maxHp));
       const next = xpForLevel(mine.level + 1), cur = xpForLevel(mine.level);
       const cls0 = mine.cls as ClassKind;
       document.getElementById("stats")!.textContent =
@@ -956,7 +964,7 @@ export class TownScene extends Phaser.Scene {
       const fill = document.getElementById("skillfill") as HTMLElement;
       fill.style.width = `${(mine.energy / ENERGY.max) * 100}%`;
       fill.classList.toggle("magic", cls === "wizard");
-      document.getElementById("skilltext")!.textContent = `${energyName(cls)} ${Math.floor(mine.energy)} / ${ENERGY.max}`;
+      this.barText("skilltext", energyName(cls), Math.floor(mine.energy), ENERGY.max);
       this.renderActions(mine, cls, cdm, now);
     }
   }

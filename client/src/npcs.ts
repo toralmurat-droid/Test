@@ -1,3 +1,4 @@
+import "./npcs.css";
 import Phaser from "phaser";
 import { NPCS, Npc, npcNear, TALK_RANGE } from "../../shared/npcs";
 import { druidDialog, Q, QUEST, questObjective } from "../../shared/quests";
