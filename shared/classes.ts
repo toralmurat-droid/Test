@@ -49,17 +49,17 @@ export interface ClassDef {
 
 export const CLASSES: Record<ClassKind, ClassDef> = {
   knight: {
-    name: "Knight", maxHp: 140, speed: 78, damage: 24, attackCooldownMs: 550, attackRange: 22,
+    name: "Knight", maxHp: 130, speed: 78, damage: 22, attackCooldownMs: 550, attackRange: 22,
     special: { kind: "guard", name: "Shield", cooldownMs: 6000, durationMs: 2000 },
     combo: [
       { damage: 1, knockback: 1 },
       { damage: 1.1, knockback: 1 },
       { damage: 1.6, knockback: 2.5, range: 30, cooldownMs: 800 }, // wide overhead slam
     ],
-    blurb: "Tanky sword. Shield blocks 70% damage and knockback.",
+    blurb: "Tanky sword. Shield blocks 55% damage and knockback.",
   },
   ninja: {
-    name: "Ninja", maxHp: 85, speed: 112, damage: 12, attackCooldownMs: 260, attackRange: 18,
+    name: "Ninja", maxHp: 90, speed: 112, damage: 16, attackCooldownMs: 260, attackRange: 18,
     special: { kind: "dash", name: "Dash", cooldownMs: 2500, distance: 56 },
     combo: [
       { damage: 1, knockback: 0.5 },
@@ -69,8 +69,8 @@ export const CLASSES: Record<ClassKind, ClassDef> = {
     blurb: "Fast, rapid strikes. Dash through enemies, briefly untouchable.",
   },
   wizard: {
-    name: "Wizard", maxHp: 95, speed: 86, damage: 22, attackCooldownMs: 550, attackRange: 0,
-    projectile: { speed: 210, range: 150, radius: 7, kind: "fireball" },
+    name: "Wizard", maxHp: 100, speed: 86, damage: 23, attackCooldownMs: 550, attackRange: 0,
+    projectile: { speed: 250, range: 185, radius: 7, kind: "fireball" },
     special: { kind: "nova", name: "Nova", cooldownMs: 7000, damage: 30, radius: 38 },
     combo: [
       { damage: 1, knockback: 1 },
@@ -81,7 +81,7 @@ export const CLASSES: Record<ClassKind, ClassDef> = {
   },
   archer: {
     name: "Archer", maxHp: 85, speed: 96, damage: 15, attackCooldownMs: 450, attackRange: 0,
-    projectile: { speed: 300, range: 190, radius: 4, kind: "arrow" },
+    projectile: { speed: 300, range: 175, radius: 4, kind: "arrow" },
     special: { kind: "volley", name: "Volley", cooldownMs: 6000, arrows: 3 },
     combo: [
       { damage: 1, knockback: 0.6 },
@@ -91,14 +91,14 @@ export const CLASSES: Record<ClassKind, ClassDef> = {
     blurb: "Long-range arrows. Volley fires 3 arrows side by side.",
   },
   barbarian: {
-    name: "Barbarian", maxHp: 110, speed: 90, damage: 20, attackCooldownMs: 480, attackRange: 20,
-    special: { kind: "rage", name: "Rage", cooldownMs: 12000, durationMs: 5000 },
+    name: "Barbarian", maxHp: 120, speed: 90, damage: 20, attackCooldownMs: 480, attackRange: 20,
+    special: { kind: "rage", name: "Rage", cooldownMs: 12000, durationMs: 4000 },
     combo: [
       { damage: 1, knockback: 1.2 },
       { damage: 1.1, knockback: 1.2 },
       { damage: 1.7, knockback: 2.2, range: 26, lunge: 10, cooldownMs: 750 }, // axe smash
     ],
-    blurb: "Axe brawler. Rage: hit harder and move faster for 5s.",
+    blurb: "Axe brawler. Rage: hit harder and move faster for 4s.",
   },
 };
 
@@ -112,7 +112,7 @@ export const ATTACK_VARIANTS = 4;
 export const EMOTES = ["wave", "cheer", "laugh", "sit", "sleep"] as const;
 export type Emote = (typeof EMOTES)[number];
 
-export const GUARD_REDUCTION = 0.7; // knight shield blocks this fraction of damage
+export const GUARD_REDUCTION = 0.55; // knight shield blocks this fraction of damage
 export const DASH_INVULN_MS = 250; // ninja is untouchable right after a dash
 
 /**

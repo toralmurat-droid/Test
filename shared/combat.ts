@@ -28,9 +28,9 @@ export const POISE = {
   fleeSpeed: 0.9, // broken monsters run away at this fraction of their speed
 } as const;
 
-/** Base poise per hero (+5% per level above 1). Heavy fighters hold their ground longer. */
-export const HERO_POISE: Record<ClassKind, number> = { knight: 90, barbarian: 80, archer: 50, ninja: 50, wizard: 45 };
-export const heroPoise = (cls: ClassKind, level: number) => Math.round(HERO_POISE[cls] * (1 + 0.05 * (Math.max(1, level) - 1)));
+/** Base poise per hero (+12% per level above 1, so it keeps up with damage growth). Heavy fighters hold their ground longer. */
+export const HERO_POISE: Record<ClassKind, number> = { knight: 90, barbarian: 80, archer: 55, ninja: 70, wizard: 55 };
+export const heroPoise = (cls: ClassKind, level: number) => Math.round(HERO_POISE[cls] * (1 + 0.12 * (Math.max(1, level) - 1)));
 
 /** Monster poise (scaled like HP by level) and attack wind-up. */
 export const MOB_COMBAT: Record<MobKind, { poise: number; windupMs: number }> = {
