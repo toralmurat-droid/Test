@@ -1,13 +1,13 @@
 import Phaser from "phaser";
 import { TILE } from "../../shared/constants";
 import { TILE_COUNT } from "../../shared/map";
-import { drawTileset } from "./tileset";
+import { ROWS, drawTileset } from "./tileset";
 
 const hex = (c: number) => "#" + c.toString(16).padStart(6, "0");
 
 /** Registers the procedural tileset (see tileset.ts) as a Phaser texture. */
 export function makeTileset(scene: Phaser.Scene) {
-  const tex = scene.textures.createCanvas("tiles", TILE * TILE_COUNT, TILE)!;
+  const tex = scene.textures.createCanvas("tiles", TILE * TILE_COUNT, TILE * ROWS)!;
   drawTileset(tex.getContext());
   tex.refresh();
 }
