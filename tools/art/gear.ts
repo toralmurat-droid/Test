@@ -1,6 +1,6 @@
 import { mkdirSync, writeFileSync } from "node:fs";
-import { Canvas, shade } from "./canvas";
-import { buildSheet, GearCtx, GearPart, HEROES, Pose, setGearHook } from "./characters";
+import { Canvas, HiCanvas, shade } from "./canvas";
+import { buildSheet, GearCtx, GearPart, HEROES, K, Pose, setGearHook } from "./characters";
 import { GEAR, GEAR_IDS, GearDef } from "../../shared/gear";
 
 /**
@@ -31,7 +31,7 @@ function recolour(main: Canvas, pts: [number, number, number][], col: number, pa
   const mean = pts.reduce((s, [, , c]) => s + lum(c), 0) / pts.length;
   for (const [x, y, c] of pts) {
     const f = Math.max(0.55, Math.min(1.35, 1 + (lum(c) - mean) * 1.6)) * (pattern?.(x, y) ?? 1);
-    main.px(x, y, shade(col, f));
+    main.pxN(x, y, shade(col, f));
   }
 }
 
@@ -63,9 +63,9 @@ function weapon(item: GearDef, main: Canvas, mask: Canvas, pts: [number, number,
       const [c, a] = shifted.get(x, y);
       if (a < 200) continue;
       const t = (x - hx) * ux + (y - hy) * uy;
-      if (t < len - k - 1) continue;
+      if (t < len - k * K - 1) continue;
       if (main.alpha(x, y) && !mask.alpha(x, y)) continue; // never paint over the body
-      main.px(x, y, c); mask.px(x, y, c);
+      main.pxN(x, y, c); mask.pxN(x, y, c);
       pts.push([x, y, c]);
     }
   }
@@ -74,45 +74,45 @@ function weapon(item: GearDef, main: Canvas, mask: Canvas, pts: [number, number,
   // Soft glow around the whole weapon, only on empty pixels
   for (let y = 0; y < mask.h; y++) for (let x = 0; x < mask.w; x++) {
     if (mask.alpha(x, y) || main.alpha(x, y)) continue;
-    if ([[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => mask.alpha(x + dx, y + dy) > 200)) main.px(x, y, item.accent, 110);
+    if ([[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => mask.alpha(x + dx, y + dy) > 200)) main.pxN(x, y, item.accent, 110);
   }
 }
 
 function armour(item: GearDef, main: Canvas, pts: [number, number, number][]) {
   const set = new Set(pts.map(([x, y]) => `${x},${y}`));
   const has = (x: number, y: number) => set.has(`${x},${y}`);
-  recolour(main, pts, item.color, item.style === "mail" ? (x, y) => ((x + y) % 2 ? 0.86 : 1.06) : undefined);
+  recolour(main, pts, item.color, item.style === "mail" ? (x, y) => ((Math.floor(x / K) + Math.floor(y / K)) % 2 ? 0.86 : 1.06) : undefined);
   if (item.style === "trim") {
     // Gold edges and a centre stripe
     const xs = pts.map(([x]) => x), mid = Math.round((Math.min(...xs) + Math.max(...xs)) / 2);
     for (const [x, y] of pts) {
       const edge = !has(x - 1, y) || !has(x + 1, y) || !has(x, y - 1);
-      if (edge || x === mid) main.px(x, y, shade(item.accent, edge ? 1 : 0.9));
+      if (edge || Math.abs(x - mid) < K / 2 + 0.01 || x === mid) main.pxN(x, y, shade(item.accent, edge ? 1 : 0.9));
     }
   } else if (item.style === "plain") {
     // Leather: a darker belt line along the bottom row and stitch dots
     const maxY = Math.max(...pts.map(([, y]) => y));
-    for (const [x, y] of pts) if (y === maxY - 1) main.px(x, y, shade(item.color, 0.6));
-    for (const [x, y] of pts) if (y === maxY - 4 && x % 2 === 0) main.px(x, y, item.accent);
+    for (const [x, y] of pts) if (y >= maxY - K && y < maxY) main.pxN(x, y, shade(item.color, 0.6));
+    for (const [x, y] of pts) if (y === maxY - 4 * K && Math.floor(x / K) % 2 === 0) main.pxN(x, y, item.accent);
   }
 }
 
 function shoes(item: GearDef, main: Canvas, pts: [number, number, number][], p: Pose) {
   // Per column, the bottom rows of the leg are the boot
-  const rows = item.tier === 1 ? 3 : 4;
+  const rows = (item.tier === 1 ? 3 : 4) * K;
   const bottom = new Map<number, number>();
   for (const [x, y] of pts) bottom.set(x, Math.max(bottom.get(x) ?? -1, y));
   const boot = pts.filter(([x, y]) => y > bottom.get(x)! - rows);
   recolour(main, boot, item.color);
   // Cuff in the accent colour
-  for (const [x, y] of boot) if (y === bottom.get(x)! - rows + 1) main.px(x, y, item.accent);
+  for (const [x, y] of boot) if (y < bottom.get(x)! - rows + 1 + K) main.pxN(x, y, item.accent);
   if (item.style === "wings") {
     const xs = [...bottom.keys()].sort((a, b) => a - b);
     if (!xs.length) return;
     const cuff = (x: number) => bottom.get(x)! - rows + 1;
     const wing = (x: number, dx: number) => {
       const y = cuff(x);
-      for (const [wx, wy] of [[dx, 0], [dx, -1], [2 * dx, -1], [2 * dx, -2]]) if (!main.alpha(x + wx, y + wy)) main.px(x + wx, y + wy, 0xffffff);
+      for (const [wx, wy] of [[dx, 0], [dx, -1], [2 * dx, -1], [2 * dx, -2]]) if (!main.alpha(x + wx, y + wy)) main.pxN(x + wx, y + wy, 0xffffff);
     };
     if (p.dir === "right") wing(xs[0], -1);
     else { wing(xs[0], -1); wing(xs[xs.length - 1], 1); }
@@ -124,34 +124,34 @@ function hat(item: GearDef, main: Canvas, mask: Canvas, pts: [number, number, nu
   const y0 = Math.min(...ys), y1 = Math.max(...ys), h = y1 - y0 + 1;
   // Row extents of the whole head (mask), so brims/crowns sit on the real silhouette
   const span = (y: number) => {
-    let a = 99, b = -1;
+    let a = 999, b = -1;
     for (let x = 0; x < mask.w; x++) if (mask.alpha(x, y) > 200) { a = Math.min(a, x); b = Math.max(b, x); }
     return [a, b] as const;
   };
   if (item.style === "crown") {
     // First row where the head is wide enough to wear a crown (wizard hats are pointy)
     let y = y0;
-    while (y < y1 && span(y)[1] - span(y)[0] < 6) y++;
+    while (y < y1 && span(y)[1] - span(y)[0] < 6 * K) y++;
     const [a, b] = span(y);
-    for (let x = a; x <= b; x++) { main.px(x, y, shade(item.color, 1.15)); main.px(x, y + 1, shade(item.color, 0.8)); }
+    for (let x = a; x <= b; x++) for (let j = 0; j < 2 * K; j++) main.pxN(x, y + j, shade(item.color, j < K ? 1.15 : 0.8));
     const mid = Math.round((a + b) / 2);
-    for (const [x, t] of [[a, 1], [mid, 2], [b, 1]] as const) for (let k = 1; k <= t; k++) main.px(x, y - k, shade(item.color, k === t ? 1.25 : 1));
-    main.px(mid, y + 1, item.accent);
+    for (const [x, t] of [[a, 1], [mid, 2], [b, 1]] as const) for (let k = 1; k <= t * K; k++) for (let i = 0; i < K; i++) main.pxN(x + (x === b ? -i : i) - (x === mid ? K >> 1 : 0), y - k, shade(item.color, k > (t - 1) * K ? 1.25 : 1));
+    for (let i = 0; i < K; i++) for (let j = 0; j < K; j++) main.pxN(mid - (K >> 1) + i, y + K + j, item.accent);
     return;
   }
-  const rows = Math.max(3, Math.round(h * (item.style === "helm" ? 0.5 : 0.35)));
+  const rows = Math.max(3 * K, Math.round(h * (item.style === "helm" ? 0.5 : 0.35)));
   recolour(main, pts.filter(([, y]) => y < y0 + rows), item.color);
   // Brim one pixel wider than the head
   const by = y0 + rows - 1, [a, b] = span(by);
-  for (let x = a - 1; x <= b + 1; x++) main.px(x, by, shade(item.color, 0.7));
+  for (let x = a - K; x <= b + K; x++) for (let j = 0; j < K; j++) main.pxN(x, by - j, shade(item.color, 0.7));
   if (item.style === "helm") {
     // Ridge on top
     const [ta, tb] = span(y0), mid = Math.round((ta + tb) / 2);
-    main.px(mid, y0 - 1, item.accent); main.px(mid, y0, shade(item.color, 1.3));
+    for (let i = 0; i < K; i++) { for (let j = 1; j <= K; j++) main.pxN(mid + i, y0 - j, item.accent); main.pxN(mid + i, y0, shade(item.color, 1.3)); }
   } else {
     // Feather sticking up from one side
-    const [ta] = span(y0 + 1);
-    for (const [dx, dy] of [[0, -1], [-1, -2], [-1, -3], [-2, -4]]) main.px(ta + dx, y0 + 1 + dy, item.accent);
+    const [ta] = span(y0 + K);
+    for (const [dx, dy] of [[0, -1], [-1, -2], [-1, -3], [-2, -4]]) for (let i = 0; i < K; i++) for (let j = 0; j < K; j++) if (i + j < K + 1) main.pxN(ta + dx * K + i, y0 + K + dy * K + j, item.accent);
   }
 }
 
@@ -161,7 +161,7 @@ function shield(item: GearDef, main: Canvas, mask: Canvas, p: Pose, g: GearCtx) 
     const pts = visible(main, mask);
     const set = new Set(pts.map(([x, y]) => `${x},${y}`));
     recolour(main, pts, item.color);
-    for (const [x, y] of pts) if (!set.has(`${x - 1},${y}`) || !set.has(`${x + 1},${y}`) || !set.has(`${x},${y - 1}`)) main.px(x, y, item.accent);
+    for (const [x, y] of pts) if (!set.has(`${x - 1},${y}`) || !set.has(`${x + 1},${y}`) || !set.has(`${x},${y - 1}`)) main.pxN(x, y, item.accent);
     return;
   }
   const c = shade(item.color, 1), dk = shade(item.color, 0.72), rim = item.accent;
@@ -283,7 +283,7 @@ const ICONS: Record<string, string[]> = {
 };
 
 function icon(item: GearDef): Canvas {
-  const c = new Canvas(16, 16);
+  const c = new HiCanvas(16, 16, K);
   const rows = item.slot === "hat" ? ICONS[item.style === "crown" ? "crown" : item.style === "helm" ? "helm" : "hat"]
     : item.slot === "shield" ? ICONS[item.style]
     : item.slot === "ranged" ? ICONS[item.style]
@@ -302,13 +302,14 @@ function icon(item: GearDef): Canvas {
 export function buildGear(out: string) {
   mkdirSync(out, { recursive: true });
   const frames: Record<string, { frame: { x: number; y: number; w: number; h: number } }> = {};
-  const atlas = new Canvas(16 * GEAR_IDS.length, 16);
+  const S = 16 * K;
+  const atlas = new Canvas(S * GEAR_IDS.length, S);
   GEAR_IDS.forEach((id, i) => {
-    atlas.blit(icon(GEAR[id]), i * 16, 0);
-    frames[id] = { frame: { x: i * 16, y: 0, w: 16, h: 16 } };
+    atlas.blit(icon(GEAR[id]), i * S, 0);
+    frames[id] = { frame: { x: i * S, y: 0, w: S, h: S } };
   });
   atlas.save(`${out}/icons.png`);
-  writeFileSync(`${out}/icons.json`, JSON.stringify({ frames, meta: { image: "icons.png", size: { w: atlas.w, h: 16 }, scale: 1 } }, null, 1));
+  writeFileSync(`${out}/icons.json`, JSON.stringify({ frames, meta: { image: "icons.png", size: { w: atlas.w, h: S }, scale: 1 } }, null, 1));
 
   for (const hero of HEROES) {
     setGearHook(null);

@@ -2,7 +2,7 @@ import Phaser from "phaser";
 
 /**
  * Generated pixel art (see tools/art, run `npm run art`).
- * Characters: 32x32 frames (6 per row), animations `${char}_${anim}_${dir}`; dir is down | up | right (flipX for left).
+ * Characters: 32x32 design frames rendered at CHAR_FRAME px (6 per row), animations `${char}_${anim}_${dir}`; dir is down | up | right (flipX for left).
  * Props/items: texture atlases "props" and "items" with frame names like "barrel", "potion_health".
  */
 export const CHARACTERS = ["ninja", "wizard", "knight", "archer", "barbarian", "blacksmith", "merchant", "villager", "guard"] as const;
@@ -13,12 +13,16 @@ export const CHAR_ANIMS = ["idle", "walk", "attack", "attack2", "attack3", "atta
 export const FLAVOUR_ANIMS = ["idle2", "idle3", "run", "wave", "cheer", "laugh", "sit", "sleep"] as const;
 /** Alternative takes on the basic movements: per-hero gait, roll, jump, guard, heavy hit, forward fall. */
 export const ALT_MOVE_ANIMS = ["walk2", "dodge", "jump", "block", "hit2", "ko2"] as const;
+/** Generated art is drawn ART_K times finer than its 32px design grid (tools/art K); scale sprites by 1/ART_K. */
+export const ART_K = 2;
+/** Size of one character frame in the PNG sheets. */
+export const CHAR_FRAME = 32 * ART_K;
 export const CHAR_ORIGIN = { x: 0.5, y: 29 / 32 }; // feet
 
 const BASE = "assets";
 
 export function preloadArt(scene: Phaser.Scene) {
-  for (const c of CHARACTERS) scene.load.spritesheet(c, `${BASE}/characters/${c}.png`, { frameWidth: 32, frameHeight: 32 });
+  for (const c of CHARACTERS) scene.load.spritesheet(c, `${BASE}/characters/${c}.png`, { frameWidth: CHAR_FRAME, frameHeight: CHAR_FRAME });
   scene.load.json("characters_meta", `${BASE}/characters/characters.json`);
   scene.load.atlas("props", `${BASE}/objects/props.png`, `${BASE}/objects/props.json`);
   scene.load.atlas("items", `${BASE}/objects/items.png`, `${BASE}/objects/items.json`);
