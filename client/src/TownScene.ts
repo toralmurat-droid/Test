@@ -3,6 +3,7 @@ import { Client, Room } from "colyseus.js";
 import { InputState, MAP_H, MAP_W, regenFromStamina, TILE } from "../../shared/constants";
 import { CLASSES, ClassKind, DODGE, ENERGY, energyName, xpForLevel } from "../../shared/classes";
 import { GROUND, areaAt, isSafeZone } from "../../shared/map";
+import { heroPoise, RAGE_ATTACK_SPEED } from "../../shared/combat";
 import { moveStep } from "../../shared/movement";
 import { SPAWN_ZONES } from "../../shared/spawns";
 import {
@@ -278,6 +279,12 @@ export class TownScene extends Phaser.Scene {
       if (e.hero && !e.state.dead) playCharAnim(e.sprite, e.hero, "hit", e.state.dir);
       if (id === this.me) this.cameras.main.shake(100, 0.004);
     });
+    // Initiative broken (shared/combat.ts): the target is dizzy and can't attack for a moment
+    this.room.onMessage("broken", ({ id }) => {
+      const e = this.entities.get(id);
+      if (!e) return;
+      this.floatText(e.sprite.x, e.sprite.y - 22, id === this.me ? "Dizzy!" : "Broken!", "#ffd166");
+    });
     this.room.onMessage("kill", ({ killer, victim }) => this.feed(`${killer} ⚔ ${victim}`));
     this.room.onMessage("xp", ({ amount, x, y }) => this.floatText(x, y - 10, `+${amount} XP`, "#ffd166"));
     this.room.onMessage("chat", ({ id, name, text }) => this.chatMessage(id, name, text));
@@ -470,6 +477,8 @@ export class TownScene extends Phaser.Scene {
       ["Health", `${Math.ceil(mine.hp)} / ${mine.maxHp}`],
       ["HP regen", `${regenFromStamina(st.sta)[1].toFixed(1)}/s resting · ${regenFromStamina(st.sta)[0].toFixed(1)}/s in a fight`],
       ["Attack", `${dmg} damage${def.projectile ? " (ranged)" : ""}`],
+      ["Attack speed", `${(1000 / def.attackCooldownMs * (mine.raging ? RAGE_ATTACK_SPEED : 1)).toFixed(1)} hits/s`],
+      ["Initiative", `${heroPoise(cls, lvl)} · dizzy at 0`],
       ["Move speed", `${speed}`],
       ["Kills · Gold", `${mine.kills} · ${mine.gold}`],
     ];
@@ -731,9 +740,10 @@ export class TownScene extends Phaser.Scene {
         else e.sprite.setAlpha(p.dead ? 0.35 : 1).setAngle(p.dead ? 90 : 0);
       }
       e.sprite.setDepth(e.sprite.y);
-      // Status effects: yellow flicker for stunned, blue for slowed, red pulse for raging
-      if (!p.dead && (p.stunned || p.slowed || p.raging)) {
+      // Status effects: yellow flicker for stunned, red flash for a monster winding up, blue for slowed, red pulse for raging
+      if (!p.dead && (p.stunned || p.winding || p.slowed || p.raging)) {
         e.sprite.setTint(p.stunned ? (Math.floor(now / 120) % 2 ? 0xfff176 : 0xffffff)
+          : p.winding ? (Math.floor(now / 70) % 2 ? 0xff6b6b : 0xffffff)
           : p.slowed ? 0x90caf9 : (Math.floor(now / 200) % 2 ? 0xff8a80 : 0xffcdd2));
         e.statusTint = true;
       } else if (e.statusTint) { e.sprite.clearTint(); e.statusTint = false; }
@@ -760,6 +770,14 @@ export class TownScene extends Phaser.Scene {
           e.shield ??= this.add.graphics();
           e.shield.clear().lineStyle(1, 0x9ad1ff, 0.9).strokeCircle(x, y - e.top / 2, e.top / 2 + 3).setDepth(e.sprite.y + 2);
         } else if (e.shield) { e.shield.destroy(); e.shield = undefined; }
+      }
+      if (p.broken && !p.dead) {
+        // Dizzy: three little stars circling over the head
+        const sy = y - e.top - (e.mob ? 8 : 4);
+        for (let i = 0; i < 3; i++) {
+          const a = now / 180 + (i * Math.PI * 2) / 3;
+          e.bar.fillStyle(0xffd166).fillRect(x + Math.cos(a) * 6 - 1, sy + Math.sin(a) * 2 - 1, 2, 2);
+        }
       }
       if (e.mob && !p.dead) {
         const bw = MOB_LOOK[p.kind]?.bar || 14;
