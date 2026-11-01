@@ -1,14 +1,14 @@
 import "./npcs.css";
 import Phaser from "phaser";
 import { NPCS, Npc, npcNear, TALK_RANGE } from "../../shared/npcs";
-import { druidDialog, Q, QUEST, questObjective, questTarget } from "../../shared/quests";
+import { druidDialog, Q, QUEST, QUEST_ZONE, questObjective, questTarget } from "../../shared/quests";
 import { TILE } from "../../shared/constants";
 import type { MapMarker } from "./minimap";
 import { QuestLog } from "./questlog";
 import { SHOPS, sellPrice } from "../../shared/shops";
 import { GEAR, gearName, itemText, TIER_NAMES } from "../../shared/gear";
 import { MAX_POTIONS } from "../../shared/items";
-import { CHAR_ORIGIN, CharacterName, playCharAnim } from "./artAssets";
+import { ART_K, CHAR_ORIGIN, CharacterName, playCharAnim } from "./artAssets";
 import { iconCanvas, TIER_COLORS } from "./gear";
 import { itemTexture } from "./textures";
 
@@ -45,7 +45,7 @@ export class NpcLayer {
     this.prompt.onclick = () => this.near && this.open(this.near);
     this.tracker.onclick = () => this.log.toggle(true);
     for (const n of NPCS) {
-      const sprite = scene.add.sprite(n.x, n.y, n.sprite, 0).setOrigin(CHAR_ORIGIN.x, CHAR_ORIGIN.y).setScale(0.75).setDepth(n.y);
+      const sprite = scene.add.sprite(n.x, n.y, n.sprite, 0).setOrigin(CHAR_ORIGIN.x, CHAR_ORIGIN.y).setScale(0.75 / ART_K).setDepth(n.y);
       playCharAnim(sprite, n.sprite as CharacterName, "idle", n.dir);
       sprite.setInteractive({ useHandCursor: true }).on("pointerdown", () => { if (this.near === n) this.open(n); });
       const label = scene.add.text(n.x, n.y - 21, n.name, {
@@ -76,7 +76,7 @@ export class NpcLayer {
   onQuest(stage: number) {
     const msg: Record<number, [string, string]> = {
       [Q.INVESTIGATE]: ["New quest", QUEST.title],
-      [Q.REPORT]: ["Blobs in the woods!", "Go back and tell Elder Rowan"],
+      [Q.REPORT]: [`Blobs in the ${QUEST_ZONE.name}!`, "Go back and tell Elder Rowan"],
       [Q.HUNT]: ["Quest updated", `Kill ${QUEST.killGoal} blobs`],
       [Q.RETURN]: [`${QUEST.killGoal} blobs slain!`, "Return to Elder Rowan"],
       [Q.DONE]: ["Quest complete", QUEST.title],
