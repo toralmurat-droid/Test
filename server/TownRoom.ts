@@ -5,7 +5,7 @@ import {
   RESPAWN_MS, SAFE_REGEN_PER_SEC, TICK_RATE,
 } from "../shared/constants";
 import {
-  CLASSES, ClassKind, COMBO_WINDOW_MS, damageFor, DASH_INVULN_MS, GUARD_REDUCTION, isClassKind, levelFromXp, maxHpFor, PVP_KILL_XP,
+  ATTACK_VARIANTS, CLASSES, ClassKind, COMBO_WINDOW_MS, EMOTES, damageFor, DASH_INVULN_MS, GUARD_REDUCTION, isClassKind, levelFromXp, maxHpFor, PVP_KILL_XP,
 } from "../shared/classes";
 import {
   ITEM_LIFETIME_MS, ItemKind, LOOT, MAX_POTIONS, PICKUP_RADIUS, POTION_COOLDOWN_MS, POTION_HEAL, PVP_GOLD_DROP,
@@ -28,6 +28,7 @@ export class Player extends Schema {
   @type("number") kills = 0;
   @type("number") xp = 0;
   @type("number") level = 1;
+  @type("string") emote = ""; // current emote animation ("" = none)
   @type("number") combo = 0; // which hit of the 3-hit combo was thrown last (0..2)
   @type("number") gold = 0;
   @type("number") potions = 0;
@@ -40,7 +41,8 @@ export class Player extends Schema {
   invulnUntil = 0;
   lastHurt = 0;
   lastPotion = 0;
-  attackReadyAt = 0; // when the next attack input is accepted
+  attackReadyAt = 0;
+  lastVariant = -1; // when the next attack input is accepted
 }
 
 export class Mob extends Schema {
@@ -141,6 +143,11 @@ export class TownRoom extends Room<TownState> {
       const p = this.state.players.get(client.sessionId);
       if (!p || typeof text !== "string") return;
       const clean = text.slice(0, 120).trim();
+      const cmd = clean.toLowerCase().replace(/^\//, "");
+      if (clean.startsWith("/") && (EMOTES as readonly string[]).includes(cmd)) {
+        if (!p.dead) p.emote = cmd;
+        return;
+      }
       if (clean) this.broadcast("chat", { id: client.sessionId, name: p.name, text: clean });
     });
   }
@@ -184,6 +191,7 @@ export class TownRoom extends Room<TownState> {
       const r = moveStep(p.x, p.y, p.input, dt, CLASSES[p.cls].speed);
       p.x = r.x; p.y = r.y; p.moving = r.moving;
       p.dir = dirFromInput(p.input, p.dir);
+      if (r.moving) p.emote = "";
       p.guarding = now < p.guardUntil;
       // Out-of-combat regeneration, faster in the safe plaza
       if (p.hp < p.maxHp && now - p.lastHurt > REGEN_DELAY_MS) {
@@ -393,6 +401,7 @@ export class TownRoom extends Room<TownState> {
     if (guarded) dmg = Math.max(1, Math.round(dmg * (1 - GUARD_REDUCTION)));
     t.hp = Math.max(0, t.hp - dmg);
     t.lastHurt = now;
+    t.emote = "";
     if (!guarded) {
       const kb = moveStep(t.x, t.y, pushInput(push), 0.12 * kbMul);
       t.x = kb.x; t.y = kb.y;
@@ -424,7 +433,18 @@ export class TownRoom extends Room<TownState> {
     a.attackReadyAt = now + (hit.cooldownMs ?? def.attackCooldownMs);
     const off = DIR_OFFSET[a.dir];
     const dmg = Math.round(damageFor(def.damage, a.level) * hit.damage);
-    this.broadcast("swing", { id, step });
+    a.emote = "";
+    let variant = 0;
+    if (step < 2) {
+      // Pick a different move than last time so normal attacks look varied
+      if (a.lastVariant < 0) variant = Math.floor(Math.random() * ATTACK_VARIANTS);
+      else {
+        variant = Math.floor(Math.random() * (ATTACK_VARIANTS - 1));
+        if (variant >= a.lastVariant) variant++;
+      }
+      a.lastVariant = variant;
+    }
+    this.broadcast("swing", { id, step, variant });
 
     if (hit.lunge) {
       for (let moved = 0; moved < hit.lunge; moved += 2) {
@@ -457,6 +477,7 @@ export class TownRoom extends Room<TownState> {
     const sp = CLASSES[a.cls].special;
     if (now - a.lastSpecial < sp.cooldownMs) return;
     a.lastSpecial = now;
+    a.emote = "";
 
     switch (sp.kind) {
       case "guard":

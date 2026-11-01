@@ -19,6 +19,8 @@ interface Entity {
   shield?: Phaser.GameObjects.Graphics;
   tx: number; ty: number; // server target position
   state: any;
+  idleSince?: number; // local time the hero stopped moving, for idle fidgets
+  nextFidget?: number;
 }
 
 const FRAME_BASE: Record<string, number> = { down: 0, up: 2, right: 4, left: 4 };
@@ -135,7 +137,7 @@ export class TownScene extends Phaser.Scene {
       if (e) this.floatText(e.sprite.x, e.sprite.y - 14, `+${amount}`, "#7cfc00");
     });
 
-    this.room.onMessage("swing", ({ id, step }) => this.showSwing(id, step ?? 0));
+    this.room.onMessage("swing", ({ id, step, variant }) => this.showSwing(id, step ?? 0, variant ?? 0));
     this.room.onMessage("special", (msg) => this.showSpecial(msg));
     this.room.onMessage("boom", ({ x, y }) => this.burst(x, y, 6, 0xff9f1c, 200));
     this.room.onMessage("levelup", ({ id, level }) => {
@@ -209,11 +211,19 @@ export class TownScene extends Phaser.Scene {
     this.entities.delete(id);
   }
 
-  private showSwing(id: string, step: number) {
+  /** Animation for an attack: finisher = attack3, normal hits = swing1..4 (falls back to attack/attack2). */
+  private attackAnim(hero: CharacterName, step: number, variant: number): string {
+    if (step === 2) return "attack3";
+    const swing = `swing${variant + 1}`;
+    if (this.anims.exists(`${hero}_${swing}_down`)) return swing;
+    return variant % 2 ? "attack2" : "attack";
+  }
+
+  private showSwing(id: string, step: number, variant: number) {
     const e = this.entities.get(id);
     if (!e) return;
     const dir = e.state.dir as string;
-    if (e.hero) playCharAnim(e.sprite, e.hero, ["attack", "attack2", "attack3"][step] ?? "attack", dir as any);
+    if (e.hero) playCharAnim(e.sprite, e.hero, this.attackAnim(e.hero, step, variant), dir as any);
     const off = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] }[dir] ?? [0, 1];
     const cls = e.mob ? undefined : CLASSES[e.state.cls as ClassKind];
     const hit = cls?.combo[step];
@@ -336,11 +346,21 @@ export class TownScene extends Phaser.Scene {
       if (e.hero) {
         // Let one-shot attack/hit/skill animations finish before going back to walk/idle
         const key = e.sprite.anims.currentAnim?.key ?? "";
-        const oneShot = e.sprite.anims.isPlaying && /_(attack\d?|hit|skill)_/.test(key);
+        const oneShot = e.sprite.anims.isPlaying && /_(attack\d?|swing\d|hit|skill|idle[23])_/.test(key);
+        if (moving || p.dead) e.idleSince = undefined;
+        else e.idleSince ??= now;
         if (p.dead) {
           if (!key.includes("_ko_")) playCharAnim(e.sprite, e.hero, "ko", p.dir);
         } else if (!oneShot) {
-          playCharAnim(e.sprite, e.hero, moving ? "walk" : "idle", p.dir);
+          if (!moving && p.emote && this.anims.exists(`${e.hero}_${p.emote}_down`)) {
+            playCharAnim(e.sprite, e.hero, p.emote, p.dir);
+          } else if (!moving && e.idleSince !== undefined && now - e.idleSince > 4000 && now > (e.nextFidget ?? 0)) {
+            // Standing still for a while: an occasional fidget (look around / weapon flourish)
+            e.nextFidget = now + 3000 + Math.random() * 4000;
+            playCharAnim(e.sprite, e.hero, Math.random() < 0.5 ? "idle2" : "idle3", p.dir);
+          } else {
+            playCharAnim(e.sprite, e.hero, moving ? "walk" : "idle", p.dir);
+          }
         }
         e.sprite.setAlpha(p.dead ? 0.6 : 1);
       } else {
