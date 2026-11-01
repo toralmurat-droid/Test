@@ -1,7 +1,7 @@
 import Phaser from "phaser";
 import { Client, Room } from "colyseus.js";
 import { InputState, MAP_H, MAP_W, TILE } from "../../shared/constants";
-import { CLASSES, ClassKind, xpForLevel } from "../../shared/classes";
+import { CLASSES, ClassKind, DODGE, xpForLevel } from "../../shared/classes";
 import { GROUND, areaAt, isSafeZone } from "../../shared/map";
 import { moveStep } from "../../shared/movement";
 import { SPAWN_ZONES } from "../../shared/spawns";
@@ -56,6 +56,7 @@ export class TownScene extends Phaser.Scene {
   private shots = new Map<string, { g: Phaser.GameObjects.Shape; tx: number; ty: number }>();
   private items = new Map<string, Phaser.GameObjects.Image>();
   private lastSpecial = -Infinity; // local clock (ms) of my last special, for the cooldown bar
+  private lastDodge = -Infinity; // local clock (ms) of my last dodge roll
   private lastUlt = -Infinity;
   private heroTimer?: number;
   private clearedTimer?: number;
@@ -88,13 +89,14 @@ export class TownScene extends Phaser.Scene {
     cam.roundPixels = true;
 
     // Keys without capture so typing in chat still works
-    this.keys = this.input.keyboard!.addKeys("W,A,S,D,UP,DOWN,LEFT,RIGHT,SPACE,E,SHIFT,Q,R,C,G,T", false) as any;
+    this.keys = this.input.keyboard!.addKeys("W,A,S,D,UP,DOWN,LEFT,RIGHT,SPACE,E,SHIFT,Q,R,C,G,T,F", false) as any;
     this.input.keyboard!.on("keydown-SPACE", () => { if (!this.chatting()) this.room?.send("attack"); });
     const special = () => { if (!this.chatting()) this.room?.send("special"); };
     this.input.keyboard!.on("keydown-E", special);
     this.input.keyboard!.on("keydown-SHIFT", special);
     this.input.keyboard!.on("keydown-Q", () => { if (!this.chatting()) this.room?.send("potion"); });
     this.input.keyboard!.on("keydown-R", () => { if (!this.chatting()) this.room?.send("ult"); });
+    this.input.keyboard!.on("keydown-F", () => { if (!this.chatting()) this.room?.send("dodge"); });
     this.input.keyboard!.on("keydown-C", () => { if (!this.chatting()) this.toggleHeroMenu(); });
     this.gearMenu = new GearMenu(this, (type, msg) => this.room?.send(type, msg));
     const toggleGear = () => this.gearMenu?.toggle(this.entities.get(this.me)?.state);
@@ -196,6 +198,7 @@ export class TownScene extends Phaser.Scene {
     this.room.onMessage("boom", ({ x, y, r, kind }) =>
       kind === "arrow" ? this.burst(x, y, 3, 0xd7ccc8, 150) : this.burst(x, y, r ? r / 1.8 : 6, 0xff9f1c, r ? 300 : 200));
     this.room.onMessage("ult", (msg) => this.showUlt(msg));
+    this.room.onMessage("dodge", (msg) => this.showDodge(msg));
     this.room.onMessage("zonecleared", ({ zone, by, name, respawnSec }) => {
       if (by === this.me) this.showCleared(zone, respawnSec);
       this.feed(`${name} cleared ${zone}!`);
@@ -363,6 +366,23 @@ export class TownScene extends Phaser.Scene {
     if (from !== undefined) this.heroTimer = window.setTimeout(() => { el.hidden = true; }, 7000);
   }
 
+  private showDodge(msg: { id: string; dir: string }) {
+    const e = this.entities.get(msg.id);
+    if (!e) return;
+    if (msg.id === this.me) this.lastDodge = this.time.now;
+    if (e.hero) playCharAnim(e.sprite, e.hero, "dodge", msg.dir as any);
+    // A couple of fading after-images and a dust puff
+    for (let i = 1; i <= 3; i++) {
+      this.time.delayedCall(i * 60, () => {
+        const g = this.add.sprite(e.sprite.x, e.sprite.y, e.sprite.texture.key, e.sprite.frame.name)
+          .setOrigin(e.sprite.originX, e.sprite.originY).setFlipX(e.sprite.flipX).setScale(e.sprite.scaleX, e.sprite.scaleY)
+          .setAlpha(0.35).setTint(0xbde0fe).setDepth(e.sprite.depth - 0.1);
+        this.tweens.add({ targets: g, alpha: 0, duration: 220, onComplete: () => g.destroy() });
+      });
+    }
+    this.burst(e.sprite.x, e.sprite.y + 4, 5, 0xd7ccc8, 250);
+  }
+
   private showUlt(msg: { id: string; kind: string; x: number; y: number; r: number; delay?: number; hits?: number }) {
     const e = this.entities.get(msg.id);
     if (msg.id === this.me) this.lastUlt = this.time.now;
@@ -509,7 +529,7 @@ export class TownScene extends Phaser.Scene {
     const now = this.time.now;
     for (const [id, e] of this.entities) {
       const p = e.state;
-      if (id === this.me && !p.dead && !p.stunned) {
+      if (id === this.me && !p.dead && !p.stunned && !p.rolling) {
         // Client-side prediction with the same movement code the server runs
         const r = moveStep(e.sprite.x, e.sprite.y, this.input_, dtMs / 1000, heroSpeed(p.cls as ClassKind, p.level, p.slowed, p.raging) * gearSpeedMult(p) * talentMult(p.cls as ClassKind, p.talents, "speed"));
         e.sprite.setPosition(r.x, r.y);
@@ -519,15 +539,16 @@ export class TownScene extends Phaser.Scene {
           e.sprite.y += (e.ty - e.sprite.y) * 0.2;
         }
       } else {
-        e.sprite.x += (e.tx - e.sprite.x) * 0.25;
-        e.sprite.y += (e.ty - e.sprite.y) * 0.25;
+        const ease = p.rolling ? 0.5 : 0.25; // rolls are fast: follow the server closely
+        e.sprite.x += (e.tx - e.sprite.x) * ease;
+        e.sprite.y += (e.ty - e.sprite.y) * ease;
       }
 
       const moving = id === this.me ? (this.input_.up || this.input_.down || this.input_.left || this.input_.right) : p.moving;
       if (e.hero) {
         // Let one-shot attack/hit/skill animations finish before going back to walk/idle
         const key = e.sprite.anims.currentAnim?.key ?? "";
-        const oneShot = e.sprite.anims.isPlaying && /_(attack\d?|swing\d|hit|skill|idle[23])_/.test(key);
+        const oneShot = e.sprite.anims.isPlaying && /_(attack\d?|swing\d|hit|skill|idle[23]|dodge)_/.test(key);
         if (moving || p.dead) e.idleSince = undefined;
         else e.idleSince ??= now;
         if (p.dead) {
@@ -613,7 +634,9 @@ export class TownScene extends Phaser.Scene {
       const spCd = sp.cooldownMs * cdm;
       const left = Math.max(0, spCd - (now - this.lastSpecial));
       (document.getElementById("skillfill") as HTMLElement).style.width = `${(1 - left / spCd) * 100}%`;
-      document.getElementById("skilltext")!.textContent = left > 0 ? `${sp.name} ${(left / 1000).toFixed(1)}s` : `${sp.name} ready [E]`;
+      const roll = Math.max(0, DODGE.cooldownMs - (now - this.lastDodge));
+      document.getElementById("skilltext")!.textContent = (left > 0 ? `${sp.name} ${(left / 1000).toFixed(1)}s` : `${sp.name} ready [E]`) +
+        (roll > 0 ? ` · Roll ${(roll / 1000).toFixed(1)}s` : " · Roll [F]");
       const ultEl = document.getElementById("ult")!;
       ultEl.hidden = mine.level < ULT_LEVEL;
       if (!ultEl.hidden) {
