@@ -1,4 +1,5 @@
 import { ISO } from "./isoflag";
+import { isoAnchor } from "./iso";
 import Phaser from "phaser";
 import { ART_K as K, MAP_H, MAP_W, TILE } from "../../shared/constants";
 import { AREAS, EMPTY, GROUND, OBJECTS, T, VILLAGE } from "../../shared/map";
@@ -455,6 +456,13 @@ export class Details {
       if (OBJECTS[ty][tx] !== T.DOOR) continue;
       const side = WALLS.has(obj(tx + 1, ty)) && obj(tx + 1, ty) !== T.DOOR ? 1 : -1;
       const x = tx * TILE + (side > 0 ? 17 : -1) * K, y = ty * TILE + 3 * K;
+      if (ISO) {
+        // iso: hangs on the front wall of the house, about head height
+        const foot = { x, y: (ty + 1) * TILE };
+        isoAnchor(scene.add.image(x, foot.y - 30, "lantern").setOrigin(0.5, 0).setDepth(foot.y + 1), foot);
+        this.addLight(x, foot.y, 0xffb347, 2.2, 0.75);
+        continue;
+      }
       scene.add.image(x, y, "lantern").setOrigin(0.5, 0).setDepth(-0.9);
       this.addLight(x, y + 5 * K, 0xffb347, 2.2, 0.75);
     }
@@ -471,6 +479,17 @@ export class Details {
       let byRoad = false; // only posts beside a cobbled road get a banner, not every breach in the old wall
       for (let d = -3; d <= 3; d++) if ((gateH ? GROUND[ty][tx + d] : GROUND[ty + d]?.[tx]) === T.COBBLE) byRoad = true;
       if (!byRoad) continue;
+      if (ISO) {
+        // iso: a flag on its own pole standing on the gate post's tile
+        const foot = { x: (tx + 0.5) * TILE, y: (ty + 0.5) * TILE };
+        isoAnchor(scene.add.rectangle(foot.x, foot.y, 3, 66, 0x5a3a1e).setOrigin(0.5, 1).setStrokeStyle(0.5, 0x2e1d0e).setDepth(foot.y + 0.5), foot);
+        isoAnchor(scene.add.circle(foot.x, foot.y - 67, 2, 0xc8a050).setDepth(foot.y + 0.6), foot);
+        const fb = scene.add.sprite(foot.x, foot.y - 62, "banner").setOrigin(0.5, 0).setDepth(foot.y + 1);
+        isoAnchor(fb, foot);
+        fb.play({ key: flap, startFrame: (tx + ty) % 3 });
+        this.addLight(foot.x, foot.y, 0xffa040, 3, 0.6);
+        continue;
+      }
       const b = scene.add.sprite((tx + 0.5) * TILE, ty * TILE + 5 * K, "banner").setOrigin(0.5, 0).setDepth(-0.9);
       b.play({ key: flap, startFrame: (tx + ty) % 3 });
       this.addLight((tx + 0.5) * TILE, ty * TILE + 8 * K, 0xffa040, 3, 0.6);

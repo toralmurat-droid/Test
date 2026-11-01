@@ -241,14 +241,21 @@ function house(scene: Phaser.Scene, x0: number, y0: number, x1: number, yb: numb
   }
   tex.refresh();
 
-  // Slices a few pixels wide, each sorted by the point of the front wall under it, so heroes in front or
-  // behind any part of the house are drawn in the right order.
-  const b: Building = { X0, Y0, X1, Y1, strips: [], left, right, top: topY, bottom, faded: false };
+  sliced(scene, key, X0, Y0, X1, Y1, left, topY, cw, ch, true);
+}
+
+/**
+ * Shows a canvas covering a footprint as slices a few pixels wide, each sorted by the point of the front edge
+ * under it, so heroes in front of or behind any part are drawn in the right order. `fade`: see-through when
+ * the hero walks behind it.
+ */
+function sliced(scene: Phaser.Scene, key: string, X0: number, Y0: number, X1: number, Y1: number,
+  left: number, topY: number, cw: number, ch: number, fade: boolean) {
+  const b: Building = { X0, Y0, X1, Y1, strips: [], left, right: left + cw, top: topY, bottom: topY + ch, faded: false };
   const SW = 8;
   const front = P(X1, Y1).x; // screen x of the front corner
   for (let x = 0; x < cw; x += SW) {
     const sx = left + x + SW / 2;
-    // world point on the front wall foot under this slice
     let wx: number, wy: number;
     if (sx <= front) { wy = Y1; wx = Math.min(X1, Math.max(X0, sx + Y1)); } else { wx = X1; wy = Math.min(Y1, Math.max(Y0, X1 - sx)); }
     const s = P(wx, wy);
@@ -256,5 +263,189 @@ function house(scene: Phaser.Scene, x0: number, y0: number, x1: number, yb: numb
     img.setCrop(x, 0, Math.min(SW, cw - x), ch);
     b.strips.push(img);
   }
-  BUILDINGS.push(b);
+  if (fade) BUILDINGS.push(b);
+}
+
+// ---------- market stalls ----------
+
+const STALLS = new Set<number>([T.STALL_RED, T.STALL_BLUE]);
+
+/** Market stalls: each run of stall tiles becomes one wooden stall with a striped awning. Returns the tiles used. */
+export function buildStalls(scene: Phaser.Scene): Set<number> {
+  const used = new Set<number>();
+  const H = OBJECTS.length, W = OBJECTS[0].length;
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const t = OBJECTS[y][x];
+    if (!STALLS.has(t) || used.has(y * W + x)) continue;
+    let x1 = x, y1 = y;
+    while (OBJECTS[y][x1 + 1] === t) x1++;
+    while (OBJECTS[y1 + 1]?.[x] === t && x1 === x) y1++;
+    for (let j = y; j <= y1; j++) for (let i = x; i <= x1; i++) used.add(j * W + i);
+    stall(scene, x, y, x1, y1, t === T.STALL_RED ? 0xc0392b : 0x2e6fb0);
+  }
+  return used;
+}
+
+function stall(scene: Phaser.Scene, x0: number, y0: number, x1: number, y1: number, color: number) {
+  // footprint inside the tiles, a little inset
+  const X0 = x0 * TILE + 3, Y0 = y0 * TILE + 6, X1 = (x1 + 1) * TILE - 3, Y1 = (y1 + 1) * TILE - 4;
+  const COUNTER = 13, POST = 36, FRONT_EAVE = 27, OV = 7;
+  const left = P(X0 - OV, Y1 + OV).x - 3, right = P(X1 + OV, Y0 - OV).x + 3;
+  const topY = P(X0, Y0, POST + 6).y - 4, bottom = P(X1 + 4, Y1 + OV).y + 4;
+  const cw = Math.ceil(right - left), ch = Math.ceil(bottom - topY);
+  const key = `stall_${x0}_${y0}`;
+  const tex = scene.textures.createCanvas(key, cw, ch)!;
+  const ctx = tex.getContext();
+  ctx.imageSmoothingEnabled = false;
+  const S = (x: number, y: number, z = 0): Pt => { const p = P(x, y, z); return { x: p.x - left, y: p.y - topY }; };
+  const poly = (pts: Pt[], fill: string, stroke?: string) => {
+    ctx.beginPath(); pts.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y))); ctx.closePath();
+    ctx.fillStyle = fill; ctx.fill(); if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = 1; ctx.stroke(); }
+  };
+  const hex = (c: number, k = 1) => {
+    const r = Math.min(255, ((c >> 16) & 255) * k) | 0, g = Math.min(255, ((c >> 8) & 255) * k) | 0, b = Math.min(255, (c & 255) * k) | 0;
+    return `rgb(${r},${g},${b})`;
+  };
+  const post = (x: number, y: number, h: number) => {
+    const a = S(x, y, h), b = S(x, y, 0);
+    ctx.fillStyle = "#5a3a1e"; ctx.fillRect(Math.round(a.x) - 1, Math.round(a.y), 3, Math.round(b.y - a.y));
+    ctx.fillStyle = "#7d5733"; ctx.fillRect(Math.round(a.x) - 1, Math.round(a.y), 1, Math.round(b.y - a.y));
+  };
+  // ground shadow
+  poly([S(X0, Y1), S(X1, Y1), S(X1 + 8, Y1 + 6), S(X1 + 8, Y0 + 6), S(X1, Y0)], "rgba(0,0,0,0.18)");
+  // back posts (taller: the awning slopes down to the front)
+  post(X0, Y0, POST); post(X1, Y0, POST);
+  // counter: a wooden box with planks
+  const plank = (pts: Pt[], base: string, k: number) => { poly(pts, base); ctx.save(); ctx.clip(); ctx.restore(); void k; };
+  plank([S(X0, Y0, COUNTER), S(X1, Y0, COUNTER), S(X1, Y1, COUNTER), S(X0, Y1, COUNTER)], "#a0744a", 0);
+  plank([S(X0, Y1, COUNTER), S(X1, Y1, COUNTER), S(X1, Y1, 0), S(X0, Y1, 0)], "#7d5733", 0);
+  plank([S(X1, Y0, COUNTER), S(X1, Y1, COUNTER), S(X1, Y1, 0), S(X1, Y0, 0)], "#5e4026", 0);
+  for (let z = 3; z < COUNTER; z += 4) { // plank seams
+    const a = S(X0, Y1, z), b = S(X1, Y1, z), c = S(X1, Y0, z);
+    ctx.strokeStyle = "rgba(40,26,14,0.55)"; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.lineTo(c.x, c.y); ctx.stroke();
+  }
+  // a cloth hanging over the front of the counter in the stall colour
+  poly([S(X0 + 2, Y1, COUNTER), S(X1 - 2, Y1, COUNTER), S(X1 - 2, Y1, COUNTER - 6), S(X0 + 2, Y1, COUNTER - 6)], hex(color, 0.85));
+  line(ctx, S(X0, Y1, COUNTER), S(X1, Y1, COUNTER), "#c89a68");
+  line(ctx, S(X1, Y1, COUNTER), S(X1, Y0, COUNTER), "#c89a68");
+  // goods on the counter: crates of produce, jars, bread
+  const goods = ["#e74c3c", "#f1c40f", "#27ae60", "#e67e22", "#8e44ad", "#d35400", "#ecf0f1"];
+  let gi = Math.floor(hash(x0, y0, 5) * goods.length);
+  for (let gx = X0 + 4; gx < X1 - 6; gx += 9) {
+    const gy = (Y0 + Y1) / 2 - 2;
+    // little crate
+    poly([S(gx, gy, COUNTER + 4), S(gx + 7, gy, COUNTER + 4), S(gx + 7, gy + 6, COUNTER + 4), S(gx, gy + 6, COUNTER + 4)], "#8a6239");
+    poly([S(gx, gy + 6, COUNTER + 4), S(gx + 7, gy + 6, COUNTER + 4), S(gx + 7, gy + 6, COUNTER), S(gx, gy + 6, COUNTER)], "#6b4a2d");
+    // heap of produce
+    const col = goods[gi++ % goods.length];
+    for (let k = 0; k < 4; k++) {
+      const p = S(gx + 1.5 + (k % 2) * 3.5, gy + 1 + Math.floor(k / 2) * 2.5, COUNTER + 5 + (k === 3 ? 1 : 0));
+      ctx.fillStyle = col; ctx.fillRect(Math.round(p.x) - 1, Math.round(p.y) - 1, 3, 2);
+      ctx.fillStyle = "rgba(255,255,255,0.45)"; ctx.fillRect(Math.round(p.x) - 1, Math.round(p.y) - 1, 1, 1);
+    }
+  }
+  // front posts
+  post(X0, Y1, FRONT_EAVE); post(X1, Y1, FRONT_EAVE);
+  // striped awning: sloped canvas from the back (high) to the front (low), stripes running front to back
+  const n = Math.max(4, Math.round((X1 - X0 + 2 * OV) / 6));
+  for (let i = 0; i < n; i++) {
+    const ax = X0 - OV + ((X1 - X0 + 2 * OV) * i) / n, bx = X0 - OV + ((X1 - X0 + 2 * OV) * (i + 1)) / n;
+    poly([S(ax, Y0 - 2, POST), S(bx, Y0 - 2, POST), S(bx, Y1 + OV, FRONT_EAVE), S(ax, Y1 + OV, FRONT_EAVE)], i % 2 ? "#f4efe6" : hex(color));
+  }
+  // scalloped valance along the front edge
+  for (let i = 0; i < n; i++) {
+    const ax = X0 - OV + ((X1 - X0 + 2 * OV) * i) / n, bx = X0 - OV + ((X1 - X0 + 2 * OV) * (i + 1)) / n;
+    const a = S(ax, Y1 + OV, FRONT_EAVE), b = S(bx, Y1 + OV, FRONT_EAVE), m = S((ax + bx) / 2, Y1 + OV, FRONT_EAVE - 4);
+    ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.quadraticCurveTo(m.x, m.y + 2, b.x, b.y); ctx.closePath();
+    ctx.fillStyle = i % 2 ? "#ddd6c9" : hex(color, 0.8); ctx.fill();
+  }
+  // the awning's side edge (east) shows its thickness, plus a shade line
+  poly([S(X1 + OV, Y0 - 2, POST), S(X1 + OV, Y1 + OV, FRONT_EAVE), S(X1 + OV, Y1 + OV, FRONT_EAVE - 2), S(X1 + OV, Y0 - 2, POST - 2)], hex(color, 0.55));
+  line(ctx, S(X0 - OV, Y1 + OV, FRONT_EAVE), S(X1 + OV, Y1 + OV, FRONT_EAVE), "rgba(60,20,20,0.5)");
+  tex.refresh();
+  sliced(scene, key, X0, Y0, X1, Y1, left, topY, cw, ch, false);
+}
+
+// ---------- ruined walls (thin, broken, with rubble) ----------
+
+/**
+ * One tile of a ruined wall: a wall about a third of a tile thick running from the tile centre towards each
+ * connected neighbour (mask bits N=1 E=2 S=4 W=8), its top broken into uneven steps, stone or charred timber,
+ * with fallen stones / splinters at its foot. Returns the texture key and the canvas height above the tile centre.
+ */
+export function ruinWallTexture(scene: Phaser.Scene, stone: boolean, mask: number, tx: number, ty: number) {
+  const variant = Math.floor(hash(tx, ty, 77) * 6);
+  const key = `rw_${stone ? "s" : "w"}_${mask}_${variant}`;
+  const MAXH = stone ? 30 : 36, PAD = 8;
+  const W = 64, H = 32 + MAXH + PAD;
+  if (scene.textures.exists(key)) return { key, up: MAXH + PAD + 16 };
+  const tex = scene.textures.createCanvas(key, W, H)!;
+  const ctx = tex.getContext();
+  ctx.imageSmoothingEnabled = false;
+  // local world coords (0..32 on the tile) to canvas
+  const S = (x: number, y: number, z: number): Pt => ({ x: x - y + 32, y: (x + y) / 2 - z + MAXH + PAD });
+  const face = stone ? stoneFace() : woodFace(), cap = stone ? stoneCap() : woodCap();
+  const r = (k: number) => hash(variant * 31 + k, mask, stone ? 5 : 9);
+
+  /** A box from (x0,y0) to (x1,y1), h high: top, south-west and south-east faces. */
+  const box = (x0: number, y0: number, x1: number, y1: number, h: number, shadeK = 1) => {
+    if (h <= 0) return;
+    const top = [S(x0, y0, h), S(x1, y0, h), S(x1, y1, h), S(x0, y1, h)];
+    const sw = [S(x0, y1, h), S(x1, y1, h), S(x1, y1, 0), S(x0, y1, 0)];
+    const se = [S(x1, y0, h), S(x1, y1, h), S(x1, y1, 0), S(x1, y0, 0)];
+    // faces textured in world px (so bricks keep their size), offset by position for variety
+    texPoly(ctx, sw, face, 0, 0, S(x0, y1, h), { x: 1, y: 0.5 }, { x: 0, y: 1 }, Math.ceil((x1 - x0) / TILE) + 1, Math.ceil(h / TILE) + 1, 0.12 * shadeK);
+    texPoly(ctx, se, face, 0, 0, S(x1, y0, h), { x: -1, y: 0.5 }, { x: 0, y: 1 }, Math.ceil((y1 - y0) / TILE) + 1, Math.ceil(h / TILE) + 1, 0.36 * shadeK);
+    texPoly(ctx, top, cap, 0, 0, S(x0, y0, h), { x: 1, y: 0.5 }, { x: -1, y: 0.5 }, 2, 2, 0);
+    line(ctx, S(x0, y1, h), S(x1, y1, h), "rgba(255,250,235,0.18)");
+  };
+
+  const T2 = stone ? 5 : 3; // half thickness
+  const c = 16;
+  type Seg = { x0: number; y0: number; x1: number; y1: number; h: number };
+  const segs: Seg[] = [];
+  // broken height profile: a few steps along each arm, lower towards the ends of a break
+  const height = (k: number) => {
+    const base = stone ? 14 : 18;
+    const v = base + r(k) * (MAXH - base);
+    return Math.round(v / 3) * 3;
+  };
+  const STEP = stone ? 6 : 4;
+  const arms: [number, number, number][] = [[1, 0, -1], [8, -1, 0], [2, 1, 0], [4, 0, 1]];
+  let k = 0;
+  for (const [bit, dx, dy] of arms) {
+    if (!(mask & bit)) continue;
+    for (let d = T2; d < 16; d += STEP) {
+      const d1 = Math.min(16, d + STEP);
+      let h = height(k++);
+      if (!stone && (k % 3)) h = Math.round(h * 0.45); // timber: posts stand tall, the planks between are burnt low
+      const a = dx !== 0
+        ? { x0: dx > 0 ? c + d : c - d1, x1: dx > 0 ? c + d1 : c - d, y0: c - T2, y1: c + T2 }
+        : { y0: dy > 0 ? c + d : c - d1, y1: dy > 0 ? c + d1 : c - d, x0: c - T2, x1: c + T2 };
+      segs.push({ ...a, h });
+    }
+  }
+  segs.push({ x0: c - T2, y0: c - T2, x1: c + T2, y1: c + T2, h: mask ? height(99) : Math.round(height(99) * 0.7) });
+  // rubble: fallen stones / splinters beside the wall
+  const rubble: Seg[] = [];
+  const n = 3 + Math.floor(r(50) * 4);
+  for (let i = 0; i < n; i++) {
+    const px0 = 3 + r(60 + i) * 24, py0 = 3 + r(70 + i) * 24;
+    if (Math.abs(px0 - c) < T2 + 2 && Math.abs(py0 - c) < T2 + 2) continue;
+    const s = stone ? 2 + Math.floor(r(80 + i) * 3) : 1 + Math.floor(r(80 + i) * 2);
+    rubble.push({ x0: px0, y0: py0, x1: px0 + (stone ? s : 6), y1: py0 + s, h: stone ? 1 + Math.floor(r(90 + i) * 3) : 1 });
+  }
+  // soft shadow at the wall foot
+  ctx.fillStyle = "rgba(0,0,0,0.16)";
+  for (const s of segs) {
+    const p = [S(s.x0, s.y1, 0), S(s.x1 + 3, s.y1 + 3, 0), S(s.x1 + 3, s.y0 + 3, 0), S(s.x1, s.y0, 0)];
+    ctx.beginPath(); p.forEach((q, i) => (i ? ctx.lineTo(q.x, q.y) : ctx.moveTo(q.x, q.y))); ctx.closePath(); ctx.fill();
+  }
+  // back to front
+  const all = [...segs.map((s) => ({ s, k: 1 })), ...rubble.map((s) => ({ s, k: 0.8 }))];
+  all.sort((a, b) => (a.s.x0 + a.s.y0) - (b.s.x0 + b.s.y0));
+  for (const { s, k: shadeK } of all) box(s.x0, s.y0, s.x1, s.y1, s.h, shadeK);
+  tex.refresh();
+  return { key, up: MAXH + PAD + 16 };
 }
