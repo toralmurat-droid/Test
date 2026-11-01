@@ -189,127 +189,121 @@
    "fps": 12,
    "loop": false
   },
-  "hit_down": {
+  "attack4_down": {
    "frames": [
     90,
-    91
+    91,
+    92,
+    93
+   ],
+   "fps": 14,
+   "loop": false
+  },
+  "attack4_up": {
+   "frames": [
+    96,
+    97,
+    98,
+    99
+   ],
+   "fps": 14,
+   "loop": false
+  },
+  "attack4_right": {
+   "frames": [
+    102,
+    103,
+    104,
+    105
+   ],
+   "fps": 14,
+   "loop": false
+  },
+  "hit_down": {
+   "frames": [
+    108,
+    109
    ],
    "fps": 10,
    "loop": false
   },
   "hit_up": {
    "frames": [
-    96,
-    97
+    114,
+    115
    ],
    "fps": 10,
    "loop": false
   },
   "hit_right": {
    "frames": [
-    102,
-    103
+    120,
+    121
    ],
    "fps": 10,
    "loop": false
   },
   "ko_down": {
    "frames": [
-    108,
-    109,
-    110,
-    111
+    126,
+    127,
+    128,
+    129
    ],
    "fps": 6,
    "loop": false
   },
   "ko_up": {
    "frames": [
-    114,
-    115,
-    116,
-    117
+    132,
+    133,
+    134,
+    135
    ],
    "fps": 6,
    "loop": false
   },
   "ko_right": {
    "frames": [
-    120,
-    121,
-    122,
-    123
+    138,
+    139,
+    140,
+    141
    ],
    "fps": 6,
    "loop": false
   },
   "skill_down": {
    "frames": [
-    126,
-    127,
-    128,
-    129
+    144,
+    145,
+    146,
+    147
    ],
    "fps": 10,
    "loop": false
   },
   "skill_up": {
    "frames": [
-    132,
-    133,
-    134,
-    135
+    150,
+    151,
+    152,
+    153
    ],
    "fps": 10,
    "loop": false
   },
   "skill_right": {
    "frames": [
-    138,
-    139,
-    140,
-    141
+    156,
+    157,
+    158,
+    159
    ],
    "fps": 10,
    "loop": false
   },
   "idle2_down": {
-   "frames": [
-    144,
-    145,
-    146,
-    147,
-    148,
-    149
-   ],
-   "fps": 4,
-   "loop": false
-  },
-  "idle2_up": {
-   "frames": [
-    150,
-    151,
-    152,
-    153,
-    154,
-    155
-   ],
-   "fps": 4,
-   "loop": false
-  },
-  "idle2_right": {
-   "frames": [
-    156,
-    157,
-    158,
-    159,
-    160,
-    161
-   ],
-   "fps": 4,
-   "loop": false
-  },
-  "idle3_down": {
    "frames": [
     162,
     163,
@@ -318,10 +312,10 @@
     166,
     167
    ],
-   "fps": 9,
+   "fps": 4,
    "loop": false
   },
-  "idle3_up": {
+  "idle2_up": {
    "frames": [
     168,
     169,
@@ -330,10 +324,10 @@
     172,
     173
    ],
-   "fps": 9,
+   "fps": 4,
    "loop": false
   },
-  "idle3_right": {
+  "idle2_right": {
    "frames": [
     174,
     175,
@@ -342,10 +336,10 @@
     178,
     179
    ],
-   "fps": 9,
+   "fps": 4,
    "loop": false
   },
-  "run_down": {
+  "idle3_down": {
    "frames": [
     180,
     181,
@@ -354,10 +348,10 @@
     184,
     185
    ],
-   "fps": 14,
-   "loop": true
+   "fps": 9,
+   "loop": false
   },
-  "run_up": {
+  "idle3_up": {
    "frames": [
     186,
     187,
@@ -366,10 +360,10 @@
     190,
     191
    ],
-   "fps": 14,
-   "loop": true
+   "fps": 9,
+   "loop": false
   },
-  "run_right": {
+  "idle3_right": {
    "frames": [
     192,
     193,
@@ -378,70 +372,76 @@
     196,
     197
    ],
-   "fps": 14,
-   "loop": true
+   "fps": 9,
+   "loop": false
   },
-  "wave_down": {
+  "run_down": {
    "frames": [
     198,
     199,
     200,
-    201
+    201,
+    202,
+    203
    ],
-   "fps": 6,
+   "fps": 14,
    "loop": true
   },
-  "wave_up": {
+  "run_up": {
    "frames": [
     204,
     205,
     206,
-    207
+    207,
+    208,
+    209
    ],
-   "fps": 6,
+   "fps": 14,
    "loop": true
   },
-  "wave_right": {
+  "run_right": {
    "frames": [
     210,
     211,
     212,
-    213
+    213,
+    214,
+    215
    ],
-   "fps": 6,
+   "fps": 14,
    "loop": true
   },
-  "cheer_down": {
+  "wave_down": {
    "frames": [
     216,
     217,
     218,
     219
    ],
-   "fps": 8,
+   "fps": 6,
    "loop": true
   },
-  "cheer_up": {
+  "wave_up": {
    "frames": [
     222,
     223,
     224,
     225
    ],
-   "fps": 8,
+   "fps": 6,
    "loop": true
   },
-  "cheer_right": {
+  "wave_right": {
    "frames": [
     228,
     229,
     230,
     231
    ],
-   "fps": 8,
+   "fps": 6,
    "loop": true
   },
-  "laugh_down": {
+  "cheer_down": {
    "frames": [
     234,
     235,
@@ -451,7 +451,7 @@
    "fps": 8,
    "loop": true
   },
-  "laugh_up": {
+  "cheer_up": {
    "frames": [
     240,
     241,
@@ -461,7 +461,7 @@
    "fps": 8,
    "loop": true
   },
-  "laugh_right": {
+  "cheer_right": {
    "frames": [
     246,
     247,
@@ -471,62 +471,92 @@
    "fps": 8,
    "loop": true
   },
-  "sit_down": {
+  "laugh_down": {
    "frames": [
     252,
     253,
     254,
     255
    ],
-   "fps": 3,
+   "fps": 8,
    "loop": true
   },
-  "sit_up": {
+  "laugh_up": {
    "frames": [
     258,
     259,
     260,
     261
    ],
-   "fps": 3,
+   "fps": 8,
    "loop": true
   },
-  "sit_right": {
+  "laugh_right": {
    "frames": [
     264,
     265,
     266,
     267
    ],
-   "fps": 3,
+   "fps": 8,
    "loop": true
   },
-  "sleep_down": {
+  "sit_down": {
    "frames": [
     270,
     271,
     272,
     273
    ],
-   "fps": 2,
+   "fps": 3,
    "loop": true
   },
-  "sleep_up": {
+  "sit_up": {
    "frames": [
     276,
     277,
     278,
     279
    ],
-   "fps": 2,
+   "fps": 3,
    "loop": true
   },
-  "sleep_right": {
+  "sit_right": {
    "frames": [
     282,
     283,
     284,
     285
+   ],
+   "fps": 3,
+   "loop": true
+  },
+  "sleep_down": {
+   "frames": [
+    288,
+    289,
+    290,
+    291
+   ],
+   "fps": 2,
+   "loop": true
+  },
+  "sleep_up": {
+   "frames": [
+    294,
+    295,
+    296,
+    297
+   ],
+   "fps": 2,
+   "loop": true
+  },
+  "sleep_right": {
+   "frames": [
+    300,
+    301,
+    302,
+    303
    ],
    "fps": 2,
    "loop": true

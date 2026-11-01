@@ -29,6 +29,7 @@ export const ANIMS: { name: string; frames: number; fps: number; loop: boolean }
   { name: "attack", frames: 4, fps: 14, loop: false },
   { name: "attack2", frames: 4, fps: 14, loop: false },
   { name: "attack3", frames: 4, fps: 12, loop: false },
+  { name: "attack4", frames: 4, fps: 14, loop: false },
   { name: "hit", frames: 2, fps: 10, loop: false },
   { name: "ko", frames: 4, fps: 6, loop: false },
   { name: "skill", frames: 4, fps: 10, loop: false },
@@ -57,7 +58,7 @@ const FACE: Record<Dir, [number, number]> = { down: [0, 1], up: [0, -1], right: 
 const FACE_ANGLE: Record<Dir, number> = { down: 90, up: -90, right: 0 };
 const rad = (d: number) => (d * Math.PI) / 180;
 
-export type MoveId = "a1" | "a2" | "a3";
+export type MoveId = "a1" | "a2" | "a3" | "a4";
 type MoveKind = "slash" | "thrust" | "spin" | "bash" | "slam" | "cast" | "double" | "charged" | "bonk" | "shot";
 interface Move { swing: number[]; reach?: number[]; lift?: number[]; abs?: boolean; kind: MoveKind; fx?: number }
 interface Hero {
@@ -72,7 +73,7 @@ interface Hero {
   fx?(d: D, hand: [number, number], angle: number): void;
   swing: number[]; // weapon angles relative to facing for attack phases 0..3
   kind1?: MoveKind;
-  moves?: { a2: Move; a3: Move };
+  moves?: { a2: Move; a3: Move; a4: Move };
   aura?: number;   // skill glow colour
   cols: { sleeve: number; hand: number };
   weaponKind: string;
@@ -159,6 +160,7 @@ const ninja: Hero = {
   moves: {
     a2: { swing: [0, 0, 0, 0], reach: [-3, 5, 7, 3], lift: [1, 0, 0, 0], kind: "thrust" },
     a3: { swing: [-20, -20, -20, -20], reach: [2, 3, 3, 2], lift: [2, 2, 2, 2], kind: "spin" },
+    a4: { swing: [80, 40, -45, -75], reach: [-1, 2, 4, 2], lift: [-2, 0, 3, 3], kind: "slash" },
   },
   legs(d, top) { standardLegs(d, top, NJ.suit, NJ.boot); if (d.p.dir !== "right") { d.c.rect(12 + d.lx, 25, 3, 1, NJ.wrap); d.c.rect(17 + d.lx, 25, 3, 1, NJ.wrap); } },
   torso(d) {
@@ -221,6 +223,7 @@ const knight: Hero = {
   moves: {
     a2: { swing: [110, 40, -35, -60], reach: [0, 3, 4, 2], lift: [0, 1, 0, 0], kind: "slash", fx: 0xfff6c8 },
     a3: { swing: [140, 140, 140, 140], reach: [-1, 1, 1, 0], lift: [0, 0, 0, 0], kind: "bash" },
+    a4: { swing: [-175, -100, 10, 25], reach: [-1, 1, 4, 3], lift: [8, 7, 0, 0], kind: "slash", fx: 0xfff6c8 },
   },
   legs(d, top) { standardLegs(d, top, KN.mail, KN.boot); if (d.p.dir !== "right") { d.c.rect(12 + d.lx, top, 3, 1, KN.steel); d.c.rect(17 + d.lx, top, 3, 1, KN.steel); } },
   torso(d) {
@@ -298,6 +301,7 @@ const wizard: Hero = {
   moves: {
     a2: { swing: [-150, -70, 20, 45], reach: [0, 3, 4, 2], lift: [5, 2, 0, 0], kind: "bonk", fx: 0xc8fbff },
     a3: { swing: [-90, -90, -90, -90], abs: true, reach: [0, 0, 0, 0], lift: [3, 6, 6, 3], kind: "cast" },
+    a4: { swing: [-35, -28, -22, -25], reach: [-6, -2, 0, -2], lift: [2, 1, 1, 0], kind: "thrust", fx: 0xc8fbff },
   },
   legs(d, top) {
     // robe skirt covers legs; feet peek out
@@ -426,13 +430,13 @@ function human(o: HumanOpts): Hero {
   };
   const hat = o.hat;
   const backhand = (sw: number[]): Move => ({ swing: [-sw[0] * 0.8, -sw[1], -sw[2], -sw[3]], kind: "slash", fx: o.fxCol });
-  const moves: Record<HumanOpts["weapon"], { a2: Move; a3: Move }> = {
-    bow: { a2: { swing: [0, 0, 0, 0], reach: [0, 1, 1, 0], lift: [1, 1, 1, 1], kind: "double" }, a3: { swing: [0, 0, 0, 0], reach: [-2, -3, 1, 0], lift: [1, 1, 0, 0], kind: "charged" } },
-    axe: { a2: backhand(swing.axe), a3: { swing: [-160, -95, 30, 40], reach: [-1, 0, 4, 3], lift: [7, 8, -1, -1], kind: "slam" } },
-    hammer: { a2: backhand(swing.hammer), a3: { swing: [-160, -95, 30, 40], reach: [-1, 0, 4, 3], lift: [7, 8, -1, -1], kind: "slam" } },
-    spear: { a2: { swing: [-70, -30, 35, 55], kind: "slash" }, a3: { swing: [0, 0, 0, 0], reach: [-4, 4, 7, 2], lift: [0, 0, 0, 0], kind: "thrust" } },
-    dagger: { a2: { swing: [0, 0, 0, 0], reach: [-3, 4, 6, 2], lift: [1, 0, 0, 0], kind: "thrust" }, a3: backhand(swing.dagger) },
-    none: { a2: { swing: [0, 0, 0, 0], reach: [-2, 4, 5, 2], lift: [1, 0, 0, 0], kind: "thrust" }, a3: { swing: [0, 0, 0, 0], reach: [-1, 3, 5, 1], lift: [0, 0, 0, 0], kind: "bash" } },
+  const moves: Record<HumanOpts["weapon"], { a2: Move; a3: Move; a4: Move }> = {
+    bow: { a2: { swing: [0, 0, 0, 0], reach: [0, 1, 1, 0], lift: [1, 1, 1, 1], kind: "double" }, a3: { swing: [0, 0, 0, 0], reach: [-2, -3, 1, 0], lift: [1, 1, 0, 0], kind: "charged" }, a4: { swing: [-25, -25, -20, -20], reach: [-1, 0, 0, 0], lift: [2, 2, 2, 2], kind: "shot" } },
+    axe: { a2: backhand(swing.axe), a3: { swing: [-160, -95, 30, 40], reach: [-1, 0, 4, 3], lift: [7, 8, -1, -1], kind: "slam" }, a4: { swing: [80, 40, -45, -75], reach: [-1, 2, 4, 2], lift: [-2, 0, 3, 3], kind: "slash", fx: o.fxCol } },
+    hammer: { a2: backhand(swing.hammer), a3: { swing: [-160, -95, 30, 40], reach: [-1, 0, 4, 3], lift: [7, 8, -1, -1], kind: "slam" }, a4: { swing: [80, 40, -45, -75], reach: [-1, 2, 4, 2], lift: [-2, 0, 3, 3], kind: "slash", fx: o.fxCol } },
+    spear: { a2: { swing: [-70, -30, 35, 55], kind: "slash" }, a3: { swing: [0, 0, 0, 0], reach: [-4, 4, 7, 2], lift: [0, 0, 0, 0], kind: "thrust" }, a4: { swing: [-175, -100, 10, 25], reach: [-1, 1, 4, 3], lift: [8, 7, 0, 0], kind: "slash" } },
+    dagger: { a2: { swing: [0, 0, 0, 0], reach: [-3, 4, 6, 2], lift: [1, 0, 0, 0], kind: "thrust" }, a3: backhand(swing.dagger), a4: { swing: [80, 40, -45, -75], reach: [-1, 2, 4, 2], lift: [-2, 0, 3, 3], kind: "slash" } },
+    none: { a2: { swing: [0, 0, 0, 0], reach: [-2, 4, 5, 2], lift: [1, 0, 0, 0], kind: "thrust" }, a3: { swing: [0, 0, 0, 0], reach: [-1, 3, 5, 1], lift: [0, 0, 0, 0], kind: "bash" }, a4: { swing: [0, 0, 0, 0], reach: [0, 2, 4, 1], lift: [-1, 2, 4, 1], kind: "thrust" } },
   };
   const H: Hero = {
     name: o.name,
@@ -685,7 +689,7 @@ export function renderFrame(hero: Hero, p: Pose, withShadow = true, flash = 0): 
   if (flash) c.tint(0xffffff, flash);
   c.rim();
   c.selout(OUTLINE);
-  if (p.attack < 0 || !p.move || p.move === "a1" || mv.kind === "double" || mv.kind === "charged") hero.fx?.(d, hand, ang);
+  if (p.attack < 0 || !p.move || p.move === "a1" || mv.kind === "double" || mv.kind === "charged" || mv.kind === "shot") hero.fx?.(d, hand, ang);
   if (p.attack >= 0) moveFx(d, hero, mv, hand, ang);
   if (withShadow) c.under((s) => s.ellipse(16 + d.lx, 29, 6, 1.5, 0x000000, 70));
   return c;
@@ -864,6 +868,7 @@ export function animFrames(hero: Hero, anim: string, dir: Dir): Canvas[] {
     case "walk": return [1, 0.5, -0.5, -1, -0.5, 0.5].map((stride, t) => renderFrame(hero, { ...B(t), stride, bob: Math.abs(stride) === 1 ? 0 : -1 }));
     case "attack": return [0, 1, 2, 3].map((attack, t) => renderFrame(hero, { ...B(t), attack, bob: attack === 2 ? 1 : 0 }));
     case "attack2": return [0, 1, 2, 3].map((attack, t) => renderFrame(hero, { ...B(t), attack, move: "a2", bob: attack === 2 ? 1 : 0 }));
+    case "attack4": return [0, 1, 2, 3].map((attack, t) => renderFrame(hero, { ...B(t), attack, move: "a4", bob: attack === 2 ? 1 : 0 }));
     case "attack3": {
       if (hero.moves?.a3.kind === "spin") {
         // spin on the spot: face each way in turn, ending where we started
