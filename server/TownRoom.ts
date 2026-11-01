@@ -9,7 +9,7 @@ import {
 } from "../shared/classes";
 import {
   attackMult, cooldownMult, CRIT, FROST, hasPower, heroSpeed, IGNITE, IRONSKIN_REDUCTION, magicMult, maxHpFromStats,
-  POWERS, SECOND_WIND, SHADOW_STRIKE_DAMAGE, SLOW_MOB, statsFor, ULTS, hasSpecial, hasUlt, powerNodeId,
+  POWERS, SECOND_WIND, SHADOW_STRIKE_DAMAGE, SLOW_MOB, statsFor, statPoints, ULTS, hasSpecial, hasUlt, powerNodeId,
   BLOODTHIRST, EAGLE_EYE_RANGE, GROUND_SLAM_STUN_MS, PIERCE_EXTRA, PINNING, RAGE,
 } from "../shared/powers";
 import {
@@ -45,6 +45,10 @@ export class Player extends Schema {
   @type("number") sta = 0;
   @type("number") str = 0;
   @type("number") mag = 0;
+  // Stat points the player assigned in the hero panel (shared/powers.ts statPoints)
+  @type("number") ptSta = 0;
+  @type("number") ptStr = 0;
+  @type("number") ptMag = 0;
   @type("boolean") stunned = false;
   @type("boolean") slowed = false;
   @type("boolean") raging = false; // barbarian Rage active
@@ -212,6 +216,8 @@ export class TownRoom extends Room<TownState> {
     this.onMessage("dropgear", (client, i: number) => this.dropGear(client.sessionId, i));
     this.onMessage("learn", (client, tid: string) => this.learnTalent(client.sessionId, tid));
     this.onMessage("respec", (client) => this.respec(client.sessionId));
+    this.onMessage("stat", (client, k: string) => this.assignStat(client.sessionId, k));
+    this.onMessage("resetstats", (client) => this.resetStats(client.sessionId));
 
     this.onMessage("chat", (client, text: string) => {
       const p = this.state.players.get(client.sessionId);
@@ -497,6 +503,24 @@ export class TownRoom extends Room<TownState> {
     this.broadcast("dodge", { id, dir: p.dir });
   }
 
+  // ---- Stat points (hero panel) -------------------------------------------
+
+  private assignStat(id: string, k: string) {
+    const p = this.state.players.get(id);
+    if (!p || (k !== "sta" && k !== "str" && k !== "mag")) return;
+    if (p.ptSta + p.ptStr + p.ptMag >= statPoints(p.level)) return;
+    if (k === "sta") p.ptSta++; else if (k === "str") p.ptStr++; else p.ptMag++;
+    this.applyStats(p);
+  }
+
+  /** Free reset of stat points, only out of combat. */
+  private resetStats(id: string) {
+    const p = this.state.players.get(id);
+    if (!p || p.dead || Date.now() - p.lastHurt < 5000) return;
+    p.ptSta = p.ptStr = p.ptMag = 0;
+    this.applyStats(p);
+  }
+
   // ---- Skill tree ---------------------------------------------------------
 
   private learnTalent(id: string, tid: string) {
@@ -650,7 +674,7 @@ export class TownRoom extends Room<TownState> {
     if (lvl > p.level) {
       const from = p.level;
       p.level = lvl;
-      this.applyStats(p); // stat points are allocated automatically by class
+      this.applyStats(p); // new stat points are assigned by the player in the hero panel
       if (!p.dead) p.hp = p.maxHp; // full heal on level up
       this.broadcast("levelup", { id, level: lvl, from });
     }
@@ -658,11 +682,11 @@ export class TownRoom extends Room<TownState> {
 
   /** Recompute stats and max HP from class + level + equipped gear. */
   private applyStats(p: Player) {
-    const st = statsFor(p.cls, p.level);
+    const st = statsFor(p.cls, { sta: p.ptSta, str: p.ptStr, mag: p.ptMag });
     const g = gearStats(p.cls, this.equipped(p));
     st.sta += g.sta; st.str += g.str; st.mag += g.mag;
     p.sta = st.sta; p.str = st.str; p.mag = st.mag;
-    const newMax = Math.round(maxHpFromStats(p.cls, st) * talentMult(p.cls, p.talents, "hp"));
+    const newMax = Math.round(maxHpFromStats(p.cls, st, p.level) * talentMult(p.cls, p.talents, "hp"));
     p.hp = Math.min(newMax, p.hp + Math.max(0, newMax - p.maxHp));
     p.maxHp = newMax;
   }

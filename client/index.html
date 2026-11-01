@@ -36,6 +36,7 @@
       <div id="herobanner"></div>
       <h2 id="herotitle"></h2>
       <div id="herostats"></div>
+      <p class="help">1 stat point per level, 3 at levels 3, 5, 8 and 10. <button id="statreset">Reset points</button> free, out of combat</p>
       <h3>Character</h3>
       <div id="herochar"></div>
       <p class="help">Skills are in the skill tree: press T.</p>
@@ -60,7 +61,7 @@
       <p class="help">Click an item to wear it · click a worn item to take it off · right-click to drop · G or Esc to close</p>
     </div>
     <div id="menubtns">
-      <button id="herobtn" title="Hero: stats and powers (C)">🛡 Hero <small>[C]</small></button>
+      <button id="herobtn" title="Hero: stats and powers (C)">🛡 Hero <small>[C]</small><span id="herobadge" class="badge" hidden></span></button>
       <button id="treebtn" title="Skill tree (T)">⭐ Skills <small>[T]</small><span id="treebadge" hidden></span></button>
       <button id="bagbtn" title="Equipment (G)">🎒 Bag <small>[G]</small></button>
     </div>

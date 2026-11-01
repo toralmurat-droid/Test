@@ -6,7 +6,7 @@ import { GROUND, areaAt, isSafeZone } from "../../shared/map";
 import { moveStep } from "../../shared/movement";
 import { SPAWN_ZONES } from "../../shared/spawns";
 import {
-  attackMult, cooldownMult, heroSpeed, STATS, magicMult, POWERS, STAT_NAMES, StatKind, statsFor, ULTS, hasSpecial, hasUlt, ultPower,
+  attackMult, cooldownMult, heroSpeed, STATS, magicMult, POWERS, STAT_NAMES, StatKind, statPoints, HP_PER_STR, ULTS, hasSpecial, hasUlt, ultPower,
 } from "../../shared/powers";
 import { displayGrid } from "./tileset";
 import { heroTexture, itemTexture, makeTileset, MOB_LOOK, mobTexture } from "./textures";
@@ -71,6 +71,8 @@ export class TownScene extends Phaser.Scene {
   private lastDodge = -Infinity;
   private actionsHtml = ""; // local clock (ms) of my last dodge roll
   private lastUlt = -Infinity;
+  private heroFrom?: number;
+  private heroSig = "";
   private levelFrom?: number; // level before the level-ups the player hasn't looked at yet
   private clearedTimer?: number;
   private gearMenu?: GearMenu;
@@ -118,6 +120,15 @@ export class TownScene extends Phaser.Scene {
     this.input.keyboard!.on("keydown-C", () => { if (!this.chatting()) this.toggleHeroMenu(); });
     this.input.keyboard!.on("keydown-ESC", () => this.closeMenus());
     document.getElementById("lvlnote")!.onclick = () => this.toggleHeroMenu();
+    // Hero panel: assign stat points / reset them (buttons never keep focus, so Space can't click them)
+    const heroEl = document.getElementById("hero")!;
+    heroEl.addEventListener("mousedown", (ev) => { if ((ev.target as HTMLElement).closest("button")) ev.preventDefault(); });
+    heroEl.addEventListener("click", (ev) => {
+      if (ev.detail === 0) return;
+      const b = (ev.target as HTMLElement).closest("button");
+      if (b?.dataset.stat) this.room?.send("stat", b.dataset.stat);
+      else if (b?.id === "statreset") this.room?.send("resetstats");
+    });
     this.gearMenu = new GearMenu(this, (type, msg) => this.room?.send(type, msg));
     const toggleGear = () => this.gearMenu?.toggle(this.entities.get(this.me)?.state);
     this.input.keyboard!.on("keydown-G", () => { if (!this.chatting()) toggleGear(); });
@@ -250,7 +261,7 @@ export class TownScene extends Phaser.Scene {
         // Don't pop the menu up mid-fight: show a small notice, the player opens it with C
         this.levelFrom = Math.min(this.levelFrom ?? Infinity, from ?? level - 1);
         const note = document.getElementById("lvlnote")!;
-        note.textContent = `⬆ Level ${level}! Press C to see your new stats`;
+        note.textContent = `⬆ Level ${level}! Press C to assign your stat points`;
         note.hidden = false;
       }
     });
@@ -416,22 +427,31 @@ export class TownScene extends Phaser.Scene {
   private showHeroMenu(from?: number) {
     const mine = this.entities.get(this.me)?.state;
     if (!mine) return;
+    this.heroFrom = from;
     const cls = mine.cls as ClassKind, lvl = mine.level as number;
     const st = { sta: mine.sta, str: mine.str, mag: mine.mag }; // includes gear bonuses
-    const base = statsFor(cls, lvl);
-    const prev = from !== undefined ? statsFor(cls, from) : undefined;
+    const free = statPoints(lvl) - (mine.ptSta + mine.ptStr + mine.ptMag);
+    // Rebuild only when something shown changed (called every frame while open)
+    const sig = [lvl, mine.xp, Math.ceil(mine.hp), mine.maxHp, st.sta, st.str, st.mag, free, mine.kills, mine.gold, from].join("|");
     const el = document.getElementById("hero")!;
-    document.getElementById("herobanner")!.textContent = from !== undefined ? `⬆ Level ${lvl}! Stat points were added automatically.` : "";
+    if (!el.hidden && sig === this.heroSig) return;
+    this.heroSig = sig;
+    const levelUp = from !== undefined ? `⬆ Level ${lvl}! ` : "";
+    document.getElementById("herobanner")!.textContent = free > 0
+      ? `${levelUp}${free} stat point${free > 1 ? "s" : ""} to assign: click + below.`
+      : levelUp;
     document.getElementById("herotitle")!.textContent = `${mine.name} · Lv ${lvl} ${CLASSES[cls].name}`;
     const notes: Record<StatKind, string> = {
       sta: `${mine.maxHp} max HP`,
-      str: STATS[cls].attackStat === "str" ? `attack ×${attackMult(cls, st).toFixed(2)}, +2 HP each` : "+2 HP per point",
+      str: STATS[cls].attackStat === "str" ? `attack ×${attackMult(cls, st).toFixed(2)}, +${HP_PER_STR} HP each` : `+${HP_PER_STR} HP per point`,
       mag: `${STATS[cls].attackStat === "mag" ? `attack ×${attackMult(cls, st).toFixed(2)}, ` : ""}skills ×${magicMult(cls, st).toFixed(2)}, ` +
         `cooldowns −${Math.round((1 - cooldownMult(cls, st, mine.talents)) * 100)}%`,
     };
+    const pts: Record<StatKind, number> = { sta: mine.ptSta, str: mine.ptStr, mag: mine.ptMag };
     document.getElementById("herostats")!.innerHTML = (["sta", "str", "mag"] as StatKind[]).map((k) => {
-      const gain = prev ? base[k] - prev[k] : 0;
-      return `<span>${STAT_NAMES[k]}</span><b>${st[k]}${gain ? ` <span class="gain">+${gain}</span>` : ""}</b><span class="note">${notes[k]}</span>`;
+      const plus = free > 0 ? `<button class="statplus" data-stat="${k}" title="Add a point to ${STAT_NAMES[k]}">+</button>` : "<span></span>";
+      const mine_ = pts[k] ? ` <span class="gain">(+${pts[k]})</span>` : "";
+      return `${plus}<span>${STAT_NAMES[k]}</span><b>${st[k]}${mine_}</b><span class="note">${notes[k]}</span>`;
     }).join("");
     const def = CLASSES[cls];
     const next = xpForLevel(lvl + 1), cur = xpForLevel(lvl);
@@ -741,6 +761,7 @@ export class TownScene extends Phaser.Scene {
     if (mine) {
       this.gearMenu?.refresh(mine);
       this.talentMenu?.refresh(mine);
+      if (!document.getElementById("hero")!.hidden) this.showHeroMenu(this.heroFrom);
       const online = [...this.entities.values()].filter((x) => !x.mob).length;
       const safe = isSafeZone(meEnt.sprite.x, meEnt.sprite.y) ? "🛡 Safe zone · " : "";
       (document.getElementById("hpfill") as HTMLElement).style.width = `${(mine.hp / mine.maxHp) * 100}%`;
@@ -755,6 +776,10 @@ export class TownScene extends Phaser.Scene {
       const badge = document.getElementById("treebadge")!;
       badge.hidden = freePts <= 0;
       badge.textContent = String(freePts);
+      const freeStats = statPoints(mine.level) - (mine.ptSta + mine.ptStr + mine.ptMag);
+      const hb = document.getElementById("herobadge")!;
+      hb.hidden = freeStats <= 0;
+      hb.textContent = String(freeStats);
       // Monster zone status: how many are alive
       const tx = meEnt.sprite.x / TILE, ty = meEnt.sprite.y / TILE;
       const zdef = SPAWN_ZONES.find((z) => tx >= z.x && ty >= z.y && tx < z.x + z.w && ty < z.y + z.h);
