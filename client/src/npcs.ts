@@ -2,10 +2,16 @@ import "./npcs.css";
 import Phaser from "phaser";
 import { NPCS, Npc, npcNear, TALK_RANGE } from "../../shared/npcs";
 import { druidDialog, Q, QUEST, questObjective } from "../../shared/quests";
+import { SHOPS, sellPrice } from "../../shared/shops";
+import { GEAR, gearName, itemText, TIER_NAMES } from "../../shared/gear";
+import { MAX_POTIONS } from "../../shared/items";
 import { CHAR_ORIGIN, CharacterName, playCharAnim } from "./artAssets";
+import { iconCanvas, TIER_COLORS } from "./gear";
+import { itemTexture } from "./textures";
 
 type Me = { x: number; y: number } | undefined;
-type QuestState = { questStage: number; questCount: number } | undefined;
+/** The local player's synced state (only the fields NPCs care about). */
+type QuestState = { questStage: number; questCount: number; gold?: number; potions?: number; cls?: string; bag?: Iterable<string> } | undefined;
 
 /**
  * Village NPCs (shared/npcs.ts): sprites by the bonfire, "!"/"?" quest markers, an "E Talk" prompt when close,
@@ -20,7 +26,8 @@ export class NpcLayer {
   private near?: Npc;
   private talking?: Npc;
   private trackerHtml = "";
-  private stage = -1;
+  private stage: unknown = -1;
+  private shopMsg = "";
 
   constructor(private scene: Phaser.Scene, private send: (type: string, msg?: unknown) => void) {
     const hud = document.getElementById("hud")!;
@@ -35,7 +42,7 @@ export class NpcLayer {
       playCharAnim(sprite, n.sprite as CharacterName, "idle", n.dir);
       sprite.setInteractive({ useHandCursor: true }).on("pointerdown", () => { if (this.near === n) this.open(n); });
       const label = scene.add.text(n.x, n.y - 21, n.name, {
-        fontFamily: "monospace", fontSize: "16px", color: "#b9f27c", stroke: "#000", strokeThickness: 3,
+        fontFamily: "monospace", fontSize: "16px", color: n.shop ? "#ffd166" : "#b9f27c", stroke: "#000", strokeThickness: 3,
       }).setOrigin(0.5, 1).setScale(0.25).setResolution(2).setDepth(n.y + 1);
       const mark = scene.add.text(n.x, n.y - 25, "", {
         fontFamily: "monospace", fontSize: "40px", fontStyle: "bold", color: "#ffd166", stroke: "#000", strokeThickness: 6,
@@ -76,21 +83,84 @@ export class NpcLayer {
     }
   }
 
+  /** Server answer to a buy / sell. */
+  onShop(msg: { ok: boolean; text: string }) {
+    this.shopMsg = `<span class="${msg.ok ? "ok" : "no"}">${msg.text}</span>`;
+    this.stage = -1;
+  }
+
   private open(n: Npc) {
     this.talking = n;
+    this.shopMsg = "";
     this.stage = -1; // force a redraw
     this.dialog.classList.add("open");
   }
 
+  private head(n: Npc) {
+    return `<div class="nd-head"><span class="nd-name">${n.name}</span><span class="nd-title">${n.title}</span></div>`;
+  }
+
+  /** Shop page: stock to buy, and (for traders who buy) the player's matching bag items to sell. */
+  private renderShop(n: Npc, q: QuestState) {
+    const shop = SHOPS[n.shop!];
+    const gold = q?.gold ?? 0, potions = q?.potions ?? 0, cls = q?.cls;
+    const bag = [...(q?.bag ?? [])];
+    const key = JSON.stringify([n.id, gold, potions, bag, this.shopMsg]);
+    if (key === this.stage) return;
+    this.stage = key;
+    const row = (icon: string, name: string, color: string, desc: string, btn: string, cls2: string, i: number, off: boolean) =>
+      `<div class="sh-row"><span class="sh-icon" data-icon="${icon}"></span><span class="sh-info"><b style="color:${color}">${name}</b><small>${desc}</small></span>` +
+      `<button class="${cls2}" data-i="${i}"${off ? " disabled" : ""}>${btn}</button></div>`;
+    const buy = shop.stock.map((e, i) => {
+      if (e.item === "potion") {
+        const qty = e.qty ?? 1;
+        return row("potion", qty > 1 ? `${qty} Healing Potions` : "Healing Potion", "#ff8a8a", `You carry ${potions}/${MAX_POTIONS} · drink with Q`,
+          `${e.price} 🪙`, "sh-buy", i, gold < e.price || potions + qty > MAX_POTIONS);
+      }
+      const d = GEAR[e.item];
+      return row(e.item, gearName(e.item, cls), TIER_COLORS[d.tier], `${TIER_NAMES[d.tier]} · ${itemText(e.item)}`, `${e.price} 🪙`, "sh-buy", i, gold < e.price);
+    }).join("");
+    const sellable = shop.buys ? bag.map((id, i) => [id, i] as const).filter(([id]) => GEAR[id] && shop.buys!.includes(GEAR[id].slot)) : [];
+    const sell = shop.buys
+      ? `<h4>Sell from your bag</h4>` + (sellable.length
+        ? sellable.map(([id, i]) => row(id, gearName(id, cls), TIER_COLORS[GEAR[id].tier], `${TIER_NAMES[GEAR[id].tier]} · ${itemText(id)}`, `Sell ${sellPrice(id)} 🪙`, "sh-sell", i, false)).join("")
+        : `<p class="sh-empty">No weapons in your bag. Unequip one in the Bag (G) to sell it.</p>`)
+      : "";
+    this.dialog.innerHTML = this.head(n) + `<p>${shop.greeting}</p>` +
+      `<div class="sh-gold">Your gold: <b>${gold} 🪙</b> ${this.shopMsg}</div>` +
+      `<h4>For sale</h4><div class="sh-list">${buy}</div>${sell}` +
+      `<div class="nd-btns"><button class="nd-bye">Goodbye <kbd>E</kbd></button></div>`;
+    this.dialog.classList.add("shop");
+    for (const el of this.dialog.querySelectorAll<HTMLElement>(".sh-icon")) {
+      const id = el.dataset.icon!;
+      el.appendChild(id === "potion" ? this.potionIcon() : iconCanvas(this.scene, id, 32));
+    }
+    for (const b of this.dialog.querySelectorAll<HTMLButtonElement>(".sh-buy, .sh-sell")) {
+      b.onclick = () => { this.send(b.classList.contains("sh-buy") ? "buy" : "sell", { i: Number(b.dataset.i) }); b.disabled = true; };
+    }
+    this.dialog.querySelector<HTMLButtonElement>(".nd-bye")!.onclick = () => this.close();
+  }
+
+  private potionIcon(): HTMLCanvasElement {
+    const c = document.createElement("canvas");
+    c.width = c.height = 32;
+    const ctx = c.getContext("2d")!;
+    ctx.imageSmoothingEnabled = false;
+    const src = this.scene.textures.get(itemTexture(this.scene, "potion")).getSourceImage() as CanvasImageSource;
+    ctx.drawImage(src, 0, 0, 8, 8, 0, 0, 32, 32);
+    return c;
+  }
+
   private renderDialog(q: QuestState) {
     const n = this.talking!;
+    if (n.shop) return this.renderShop(n, q);
+    this.dialog.classList.remove("shop");
     const stage = q?.questStage ?? 0, count = q?.questCount ?? 0;
     const key = stage * 1000 + count;
     if (key === this.stage) return;
     this.stage = key;
     const page = druidDialog(stage, count);
-    this.dialog.innerHTML =
-      `<div class="nd-head"><span class="nd-name">${n.name}</span><span class="nd-title">${n.title}</span></div>` +
+    this.dialog.innerHTML = this.head(n) +
       page.text.map((t) => `<p>${t}</p>`).join("") +
       `<div class="nd-btns">${page.accept ? `<button class="nd-accept">${page.accept}</button>` : ""}<button class="nd-bye">${page.bye} <kbd>E</kbd></button></div>`;
     const acc = this.dialog.querySelector<HTMLButtonElement>(".nd-accept");
@@ -102,7 +172,7 @@ export class NpcLayer {
     this.near = me ? npcNear(me.x, me.y) : undefined;
     if (this.talking && (!me || npcNear(me.x, me.y, TALK_RANGE * 1.6) !== this.talking)) this.close(); // walked away
     this.prompt.classList.toggle("open", !!this.near && !this.talking);
-    if (this.near && !this.talking) this.prompt.innerHTML = `<kbd>E</kbd> Talk to ${this.near.name}`;
+    if (this.near && !this.talking) this.prompt.innerHTML = `<kbd>E</kbd> ${this.near.shop ? "Trade with" : "Talk to"} ${this.near.name}`;
     if (this.talking) this.renderDialog(q);
 
     const stage = q?.questStage ?? 0, count = q?.questCount ?? 0;

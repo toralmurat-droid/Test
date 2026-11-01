@@ -9,11 +9,16 @@ export interface Npc {
   sprite: string; // character sheet in client/public/assets/characters
   x: number; y: number;
   dir: "down" | "up" | "left" | "right";
+  /** Shop id in shared/shops.ts, if this NPC trades */
+  shop?: string;
 }
 
 export const NPCS: Npc[] = [
   // Elder Rowan tends the bonfire in the middle of the market square
   { id: "druid", name: "Elder Rowan", title: "Druid", sprite: "druid", x: (ROADS.RX + 3) * TILE, y: (ROADS.RY + 1.7) * TILE, dir: "left" },
+  // Traders around the market square
+  { id: "weaponsmith", name: "Brann", title: "Weapons merchant", sprite: "blacksmith", x: (ROADS.RX - 3) * TILE, y: (ROADS.RY - 1.5) * TILE, dir: "down", shop: "weaponsmith" },
+  { id: "witch", name: "Old Morwen", title: "Potion witch", sprite: "witch", x: (ROADS.RX - 3) * TILE, y: (ROADS.RY + 4) * TILE, dir: "right", shop: "witch" },
 ];
 
 /** How close (px) a player must stand to talk to an NPC. */
