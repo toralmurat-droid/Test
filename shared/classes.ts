@@ -115,6 +115,9 @@ export type Emote = (typeof EMOTES)[number];
 export const GUARD_REDUCTION = 0.7; // knight shield blocks this fraction of damage
 export const DASH_INVULN_MS = 250; // ninja is untouchable right after a dash
 
+/** Dodge roll (F) for every hero: a quick roll in the move direction (or facing), untouchable while rolling. */
+export const DODGE = { distance: 48, durationMs: 250, invulnMs: 300, cooldownMs: 1500 };
+
 // ---- Levels -------------------------------------------------------------
 export const MAX_LEVEL = 20;
 export const PVP_KILL_XP = 20;

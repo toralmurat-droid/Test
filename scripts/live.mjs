@@ -35,11 +35,13 @@ function startDev() {
   dev = spawn("npm", ["run", "dev"], { cwd: ROOT, stdio: "inherit", detached: true });
 }
 function stopDev() {
+  // Capture this process: by the time the fallback fires, `dev` already points at the restarted one
+  const child = dev;
   return new Promise((resolve) => {
-    if (!dev || dev.exitCode !== null) return resolve();
-    dev.once("exit", () => resolve());
-    try { process.kill(-dev.pid, "SIGTERM"); } catch { resolve(); }
-    setTimeout(() => { try { process.kill(-dev.pid, "SIGKILL"); } catch {} }, 5000);
+    if (!child || child.exitCode !== null) return resolve();
+    const force = setTimeout(() => { try { process.kill(-child.pid, "SIGKILL"); } catch {} }, 5000);
+    child.once("exit", () => { clearTimeout(force); resolve(); });
+    try { process.kill(-child.pid, "SIGTERM"); } catch { clearTimeout(force); resolve(); }
   });
 }
 
