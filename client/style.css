@@ -3,15 +3,23 @@ html, body { margin: 0; height: 100%; background: #1b1b24; color: #eee; font: 14
 #game { position: fixed; inset: 0; }
 #game canvas { image-rendering: pixelated; }
 #join { position: fixed; inset: 0; display: grid; place-items: center; background: rgba(10,10,20,.75); z-index: 10; padding: 16px; }
-.panel { background: #2a2a3a; border: 3px solid #555a7a; padding: 24px; width: min(360px, 100%); text-align: center; }
+.panel { background: #2a2a3a; border: 3px solid #555a7a; padding: 24px; width: min(560px, 100%); max-height: 100%; overflow-y: auto; text-align: center; }
 .panel h1 { margin: 0 0 16px; font-size: 22px; color: #ffd166; }
 .panel input { width: 100%; padding: 8px; font: inherit; background: #15151f; color: #eee; border: 2px solid #555a7a; }
 #colors { display: flex; gap: 6px; justify-content: center; margin: 12px 0; flex-wrap: wrap; }
 #colors button { width: 28px; height: 28px; border: 3px solid transparent; cursor: pointer; }
 #colors button.sel { border-color: #fff; }
-#classes { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0 4px; }
-#classes button { flex: 1 1 28%; padding: 8px 4px; font: inherit; background: #15151f; color: #eee; border: 2px solid #555a7a; cursor: pointer; }
-#classes button.sel { border-color: #ffd166; color: #ffd166; }
+/* Hero picker: equal cards, each with the hero animated on a patch of grass */
+#classes { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; margin: 14px 0 4px; }
+@media (max-width: 480px) { #classes { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.herocard { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 6px 4px 8px; font: inherit; background: #15151f; color: #eee; border: 2px solid #555a7a; cursor: pointer; min-width: 0; }
+.herocard canvas { width: 100%; aspect-ratio: 1; max-width: 96px; image-rendering: pixelated; background: radial-gradient(ellipse at 50% 88%, #4f8a41 0 30%, #3f6f34 31% 60%, #2b4d25 100%); border: 1px solid #000; }
+.herocard .hcname { font-weight: bold; margin-top: 4px; }
+.herocard .hcskill { font-size: 11px; color: #9aa0b8; }
+.herocard:hover { border-color: #8a90b8; }
+.herocard.sel { border-color: #ffd166; box-shadow: 0 0 0 1px #ffd166 inset; }
+.herocard.sel .hcname { color: #ffd166; }
+.herocard:focus-visible { outline: 2px solid #ffd166; outline-offset: 2px; }
 #classinfo { min-height: 2.8em; margin: 4px 0; }
 #ult { position: absolute; top: 76px; left: 12px; width: 200px; height: 14px; background: #222; border: 2px solid #000; }
 #ultfill { position: absolute; inset: 0 auto 0 0; width: 100%; background: #f77f00; }
