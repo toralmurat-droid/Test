@@ -1,5 +1,5 @@
 import { Client, Room } from "colyseus";
-import { MapSchema, Schema, type } from "@colyseus/schema";
+import { ArraySchema, MapSchema, Schema, type } from "@colyseus/schema";
 import {
   Dir, HIT_RADIUS, InputState, MOB_ATTACK_RANGE, MOBS, MobKind, REGEN_DELAY_MS, REGEN_PER_SEC,
   RESPAWN_MS, SAFE_REGEN_PER_SEC, TICK_RATE,
@@ -17,6 +17,7 @@ import {
 import { isSafeZone, isSolidAt, randomSpawn } from "../shared/map";
 import { randomPointInZone, SPAWN_ZONES, zoneCap } from "../shared/spawns";
 import { moveStep } from "../shared/movement";
+import { BAG_SIZE, Equipped, GEAR, GEAR_SLOTS, GearSlot, gearName, gearSpeedMult, gearStats, isGearId, rollGear } from "../shared/gear";
 
 export class Player extends Schema {
   @type("string") name = "";
@@ -44,6 +45,12 @@ export class Player extends Schema {
   @type("number") mag = 0;
   @type("boolean") stunned = false;
   @type("boolean") slowed = false;
+  // Equipment (shared/gear.ts): equipped item ids ("" = empty) and the unequipped items carried
+  @type("string") weapon = "";
+  @type("string") armour = "";
+  @type("string") shoes = "";
+  @type("string") hat = "";
+  @type(["string"]) bag = new ArraySchema<string>();
 
   input: InputState = { up: false, down: false, left: false, right: false };
   lastAttack = 0;
@@ -104,6 +111,7 @@ export class Item extends Schema {
   @type("number") x = 0;
   @type("number") y = 0;
   @type("number") amount = 1;
+  @type("string") gear = ""; // kind "gear": the item id
 
   expires = 0;
 }
@@ -181,6 +189,9 @@ export class TownRoom extends Room<TownState> {
     this.onMessage("special", (client) => this.playerSpecial(client.sessionId));
     this.onMessage("ult", (client) => this.playerUlt(client.sessionId));
     this.onMessage("potion", (client) => this.drinkPotion(client.sessionId));
+    this.onMessage("equip", (client, i: number) => this.equip(client.sessionId, i));
+    this.onMessage("unequip", (client, slot: GearSlot) => this.unequip(client.sessionId, slot));
+    this.onMessage("dropgear", (client, i: number) => this.dropGear(client.sessionId, i));
 
     this.onMessage("chat", (client, text: string) => {
       const p = this.state.players.get(client.sessionId);
@@ -237,7 +248,7 @@ export class TownRoom extends Room<TownState> {
       if (p.dead) { p.moving = false; return; }
       const r = p.stunned
         ? { x: p.x, y: p.y, moving: false }
-        : moveStep(p.x, p.y, p.input, dt, heroSpeed(p.cls, p.level, p.slowed));
+        : moveStep(p.x, p.y, p.input, dt, heroSpeed(p.cls, p.level, p.slowed) * gearSpeedMult(this.equipped(p)));
       p.x = r.x; p.y = r.y; p.moving = r.moving;
       p.dir = dirFromInput(p.input, p.dir);
       if (r.moving) p.emote = "";
@@ -362,9 +373,9 @@ export class TownRoom extends Room<TownState> {
 
   // ---- Loot -------------------------------------------------------------
 
-  private dropItem(kind: ItemKind, x: number, y: number, amount: number) {
+  private dropItem(kind: ItemKind, x: number, y: number, amount: number, gear = "") {
     const it = new Item();
-    it.kind = kind; it.amount = amount;
+    it.kind = kind; it.amount = amount; it.gear = gear;
     // Scatter a little so several drops don't stack exactly
     it.x = x + (Math.random() - 0.5) * 10;
     it.y = y + (Math.random() - 0.5) * 10;
@@ -377,6 +388,8 @@ export class TownRoom extends Room<TownState> {
     const gold = def.gold[0] + Math.floor(Math.random() * (def.gold[1] - def.gold[0] + 1));
     if (gold > 0) this.dropItem("gold", x, y, gold);
     if (Math.random() < def.potionChance) this.dropItem("potion", x, y, 1);
+    const gear = rollGear(kind);
+    if (gear) this.dropItem("gear", x, y, 1, gear);
   }
 
   private pickUp(p: Player, pid: string) {
@@ -385,11 +398,14 @@ export class TownRoom extends Room<TownState> {
       if (it.kind === "potion") {
         if (p.potions >= MAX_POTIONS) return; // full: leave it on the ground
         p.potions += it.amount;
+      } else if (it.kind === "gear") {
+        if (p.bag.length >= BAG_SIZE || !isGearId(it.gear)) return; // bag full: leave it
+        p.bag.push(it.gear);
       } else {
         p.gold += it.amount;
       }
       this.state.items.delete(id);
-      this.clients.find((c) => c.sessionId === pid)?.send("pickup", { kind: it.kind, amount: it.amount, x: it.x, y: it.y });
+      this.clients.find((c) => c.sessionId === pid)?.send("pickup", { kind: it.kind, amount: it.amount, x: it.x, y: it.y, gear: it.gear, name: it.gear ? gearName(it.gear, p.cls) : "" });
     });
   }
 
@@ -402,6 +418,43 @@ export class TownRoom extends Room<TownState> {
     const heal = Math.round(p.maxHp * POTION_HEAL);
     p.hp = Math.min(p.maxHp, p.hp + heal);
     this.broadcast("heal", { id, amount: heal });
+  }
+
+  // ---- Equipment ----------------------------------------------------------
+
+  private equipped(p: Player): Equipped {
+    return { weapon: p.weapon, armour: p.armour, shoes: p.shoes, hat: p.hat };
+  }
+
+  /** Wear the bag item at index `i`; whatever was in that slot goes back to the bag. */
+  private equip(id: string, i: number) {
+    const p = this.state.players.get(id);
+    if (!p || typeof i !== "number" || i < 0 || i >= p.bag.length) return;
+    const gid = p.bag.at(i), def = gid ? GEAR[gid] : undefined;
+    if (!gid || !def) return;
+    const slot: GearSlot = def.slot;
+    const old = p[slot];
+    if (old) p.bag.setAt(i, old); else p.bag.splice(i, 1);
+    p[slot] = gid;
+    this.applyStats(p);
+  }
+
+  private unequip(id: string, slot: GearSlot) {
+    const p = this.state.players.get(id);
+    if (!p || !GEAR_SLOTS.includes(slot) || !p[slot] || p.bag.length >= BAG_SIZE) return;
+    p.bag.push(p[slot]);
+    p[slot] = "";
+    this.applyStats(p);
+  }
+
+  /** Throw a bag item on the ground (anyone can pick it up). */
+  private dropGear(id: string, i: number) {
+    const p = this.state.players.get(id);
+    if (!p || p.dead || typeof i !== "number" || i < 0 || i >= p.bag.length) return;
+    const [gid] = p.bag.splice(i, 1);
+    // Drop it out of pickup range so it isn't grabbed straight back
+    const off = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] }[p.dir];
+    this.dropItem("gear", p.x + off[0] * (PICKUP_RADIUS + 10), p.y + off[1] * (PICKUP_RADIUS + 10), 1, gid);
   }
 
   // ---- Combat -------------------------------------------------------------
@@ -490,9 +543,11 @@ export class TownRoom extends Room<TownState> {
     }
   }
 
-  /** Recompute stats and max HP from class + level. */
+  /** Recompute stats and max HP from class + level + equipped gear. */
   private applyStats(p: Player) {
     const st = statsFor(p.cls, p.level);
+    const g = gearStats(p.cls, this.equipped(p));
+    st.sta += g.sta; st.str += g.str; st.mag += g.mag;
     p.sta = st.sta; p.str = st.str; p.mag = st.mag;
     const newMax = maxHpFromStats(p.cls, st);
     p.hp = Math.min(newMax, p.hp + Math.max(0, newMax - p.maxHp));

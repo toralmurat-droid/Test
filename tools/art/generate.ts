@@ -1,6 +1,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { ANIMS, COLS, DIRS, FH, FW, HEROES, NPCS, buildSheet } from "./characters";
 import { buildObjects } from "./objects";
+import { buildGear } from "./gear";
 
 const OUT = "client/public/assets";
 mkdirSync(`${OUT}/characters`, { recursive: true });
@@ -28,4 +29,6 @@ writeFileSync(`${OUT}/characters/characters.json`, JSON.stringify({
 
 // ---- objects ----
 buildObjects(OUT + "/objects");
+// ---- gear overlays (must run after the plain sheets; see gear.ts) ----
+buildGear(OUT + "/gear");
 console.log("art generated in", OUT);
