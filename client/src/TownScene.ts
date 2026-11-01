@@ -97,7 +97,13 @@ export class TownScene extends Phaser.Scene {
     this.input.keyboard!.on("keydown-R", () => { if (!this.chatting()) this.room?.send("ult"); });
     this.input.keyboard!.on("keydown-C", () => { if (!this.chatting()) this.toggleHeroMenu(); });
     this.gearMenu = new GearMenu(this, (type, msg) => this.room?.send(type, msg));
-    this.input.keyboard!.on("keydown-G", () => { if (!this.chatting()) this.gearMenu?.toggle(this.entities.get(this.me)?.state); });
+    const toggleGear = () => this.gearMenu?.toggle(this.entities.get(this.me)?.state);
+    this.input.keyboard!.on("keydown-G", () => { if (!this.chatting()) toggleGear(); });
+    // Always reachable with the mouse too (even while typing in chat)
+    const bagBtn = document.getElementById("bagbtn")!;
+    bagBtn.addEventListener("mousedown", (ev) => ev.preventDefault());
+    bagBtn.addEventListener("click", toggleGear);
+    window.addEventListener("keydown", (ev) => { if (ev.key === "Escape" && this.gearMenu?.open) this.gearMenu.close(); });
     this.talentMenu = new TalentMenu((type, msg) => this.room?.send(type, msg));
     this.input.keyboard!.on("keydown-T", () => { if (!this.chatting()) this.talentMenu?.toggle(this.entities.get(this.me)?.state); });
     this.setupChat();
