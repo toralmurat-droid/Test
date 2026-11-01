@@ -8,6 +8,7 @@ import { SPAWN_ZONES } from "../../shared/spawns";
 import {
   attackMult, cooldownMult, heroSpeed, STATS, magicMult, POWERS, STAT_NAMES, StatKind, statsFor, ULT_LEVEL, ULTS,
 } from "../../shared/powers";
+import { displayGrid } from "./tileset";
 import { heroTexture, itemTexture, makeTileset, mobTexture } from "./textures";
 import { Minimap } from "./minimap";
 import { CHARACTERS, CHAR_ORIGIN, CharacterName, createArtAnims, playCharAnim, preloadArt } from "./artAssets";
@@ -15,6 +16,8 @@ import { Ambient } from "./ambient";
 import { Details } from "./details";
 import { GearLayer, GearMenu, preloadGear, TIER_COLORS } from "./gear";
 import { GEAR, gearSpeedMult } from "../../shared/gear";
+import { talentMult, talentPoints, spentPoints, talentReduce } from "../../shared/talents";
+import { TalentMenu } from "./talents";
 
 interface Entity {
   sprite: Phaser.GameObjects.Sprite;
@@ -58,6 +61,7 @@ export class TownScene extends Phaser.Scene {
   private heroTimer?: number;
   private clearedTimer?: number;
   private gearMenu?: GearMenu;
+  private talentMenu?: TalentMenu;
 
   constructor(private opts: { name: string; color: number; cls: ClassKind }) {
     super("town");
@@ -73,8 +77,8 @@ export class TownScene extends Phaser.Scene {
     createArtAnims(this);
     const map = this.make.tilemap({ tileWidth: TILE, tileHeight: TILE, width: MAP_W, height: MAP_H });
     const tiles = map.addTilesetImage("tiles", "tiles", TILE, TILE, 0, 0)!;
-    map.createBlankLayer("ground", tiles)!.putTilesAt(GROUND, 0, 0).setDepth(-2);
-    map.createBlankLayer("objects", tiles)!.putTilesAt(Ambient.objectLayerData(), 0, 0).setDepth(-1);
+    map.createBlankLayer("ground", tiles)!.putTilesAt(displayGrid(GROUND), 0, 0).setDepth(-2);
+    map.createBlankLayer("objects", tiles)!.putTilesAt(displayGrid(Ambient.objectLayerData()), 0, 0).setDepth(-1);
     this.ambient = new Ambient(this); // trees, shadows, smoke, wildlife… (cosmetic only)
     this.details = new Details(this); // roof shading, ground detail, ducks, lanterns, day/night
     this.details.onDarkness((d) => this.ambient?.setDarkness(d));
@@ -85,7 +89,7 @@ export class TownScene extends Phaser.Scene {
     cam.roundPixels = true;
 
     // Keys without capture so typing in chat still works
-    this.keys = this.input.keyboard!.addKeys("W,A,S,D,UP,DOWN,LEFT,RIGHT,SPACE,E,SHIFT,Q,R,C,G,F", false) as any;
+    this.keys = this.input.keyboard!.addKeys("W,A,S,D,UP,DOWN,LEFT,RIGHT,SPACE,E,SHIFT,Q,R,C,G,T,F", false) as any;
     this.input.keyboard!.on("keydown-SPACE", () => { if (!this.chatting()) this.room?.send("attack"); });
     const special = () => { if (!this.chatting()) this.room?.send("special"); };
     this.input.keyboard!.on("keydown-E", special);
@@ -95,7 +99,15 @@ export class TownScene extends Phaser.Scene {
     this.input.keyboard!.on("keydown-F", () => { if (!this.chatting()) this.room?.send("dodge"); });
     this.input.keyboard!.on("keydown-C", () => { if (!this.chatting()) this.toggleHeroMenu(); });
     this.gearMenu = new GearMenu(this, (type, msg) => this.room?.send(type, msg));
-    this.input.keyboard!.on("keydown-G", () => { if (!this.chatting()) this.gearMenu?.toggle(this.entities.get(this.me)?.state); });
+    const toggleGear = () => this.gearMenu?.toggle(this.entities.get(this.me)?.state);
+    this.input.keyboard!.on("keydown-G", () => { if (!this.chatting()) toggleGear(); });
+    // Always reachable with the mouse too (even while typing in chat)
+    const bagBtn = document.getElementById("bagbtn")!;
+    bagBtn.addEventListener("mousedown", (ev) => ev.preventDefault());
+    bagBtn.addEventListener("click", toggleGear);
+    window.addEventListener("keydown", (ev) => { if (ev.key === "Escape" && this.gearMenu?.open) this.gearMenu.close(); });
+    this.talentMenu = new TalentMenu((type, msg) => this.room?.send(type, msg));
+    this.input.keyboard!.on("keydown-T", () => { if (!this.chatting()) this.talentMenu?.toggle(this.entities.get(this.me)?.state); });
     this.setupChat();
 
     const proto = location.protocol === "https:" ? "wss" : "ws";
@@ -519,7 +531,7 @@ export class TownScene extends Phaser.Scene {
       const p = e.state;
       if (id === this.me && !p.dead && !p.stunned && !p.rolling) {
         // Client-side prediction with the same movement code the server runs
-        const r = moveStep(e.sprite.x, e.sprite.y, this.input_, dtMs / 1000, heroSpeed(p.cls as ClassKind, p.level, p.slowed, p.raging) * gearSpeedMult(p));
+        const r = moveStep(e.sprite.x, e.sprite.y, this.input_, dtMs / 1000, heroSpeed(p.cls as ClassKind, p.level, p.slowed, p.raging) * gearSpeedMult(p) * talentMult(p.cls as ClassKind, p.talents, "speed"));
         e.sprite.setPosition(r.x, r.y);
         if (!r.moving) {
           // Ease toward authoritative position while idle
@@ -599,13 +611,16 @@ export class TownScene extends Phaser.Scene {
     const mine = meEnt?.state;
     if (mine) {
       this.gearMenu?.refresh(mine);
+      this.talentMenu?.refresh(mine);
       const online = [...this.entities.values()].filter((x) => !x.mob).length;
       const safe = isSafeZone(meEnt.sprite.x, meEnt.sprite.y) ? "🛡 Safe zone · " : "";
       (document.getElementById("hpfill") as HTMLElement).style.width = `${(mine.hp / mine.maxHp) * 100}%`;
       const next = xpForLevel(mine.level + 1), cur = xpForLevel(mine.level);
+      const cls0 = mine.cls as ClassKind;
       document.getElementById("stats")!.textContent =
         `${mine.dead ? "Respawning… " : safe}Lv ${mine.level} ${CLASSES[mine.cls as ClassKind].name} · ` +
-        `XP ${mine.xp - cur}/${next - cur} · Gold ${mine.gold} · Potions ${mine.potions} · Kills ${mine.kills} · Online ${online}`;
+        `XP ${mine.xp - cur}/${next - cur} · Gold ${mine.gold} · Potions ${mine.potions} · Kills ${mine.kills} · Online ${online}` +
+        (talentPoints(mine.level) > spentPoints(cls0, mine.talents) ? ` · ⭐ ${talentPoints(mine.level) - spentPoints(cls0, mine.talents)} skill point(s): press T` : "");
       // Monster zone status: how many are alive and when the next one respawns
       const tx = meEnt.sprite.x / TILE, ty = meEnt.sprite.y / TILE;
       const zdef = SPAWN_ZONES.find((z) => tx >= z.x && ty >= z.y && tx < z.x + z.w && ty < z.y + z.h);
@@ -614,7 +629,7 @@ export class TownScene extends Phaser.Scene {
         ? `⚔ ${zone.name}: ${zone.alive}/${zone.cap} monsters${zone.nextIn ? ` · next in ${zone.nextIn}s` : ""}`
         : "";
       const cls = mine.cls as ClassKind;
-      const cdm = cooldownMult(cls, { sta: mine.sta, str: mine.str, mag: mine.mag }, mine.level);
+      const cdm = cooldownMult(cls, { sta: mine.sta, str: mine.str, mag: mine.mag }, mine.level) * talentReduce(cls, mine.talents, "cdr");
       const sp = CLASSES[cls].special;
       const spCd = sp.cooldownMs * cdm;
       const left = Math.max(0, spCd - (now - this.lastSpecial));

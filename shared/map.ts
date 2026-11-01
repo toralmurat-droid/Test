@@ -18,9 +18,9 @@ export const T = {
   STALL_RED: 26, STALL_BLUE: 27, BARREL: 28, CRATE: 29, ANVIL: 30, GRAVE: 31, HAY: 32, WHEEL: 33,
   CAMPFIRE: 34, RUIN: 35, SIGN: 36, STUMP: 37, FENCE_V: 38,
   // ruins of the old village
-  FLOOR: 39, RUBBLE: 40, BEAM: 41,
+  FLOOR: 39, RUBBLE: 40, BEAM: 41, FLAGS: 42,
 } as const;
-export const TILE_COUNT = 42;
+export const TILE_COUNT = 43;
 export const EMPTY = -1;
 
 /** A named region. `mobs` hints which monsters belong there (empty or missing = none, e.g. inside the village). */
@@ -240,41 +240,39 @@ function buildWorld() {
   for (const [cx, cy] of [[SQ.x, SQ.y], [SQ.x + SQ.w - 1, SQ.y], [SQ.x, SQ.y + SQ.h - 1], [SQ.x + SQ.w - 1, SQ.y + SQ.h - 1]]) setG(cx, cy, T.GRASS);
   // Old palisade: rotted, with breaches everywhere, and wide open where roads pass
   const nearRoad = (x: number, y: number) => { for (let j = -2; j <= 2; j++) for (let i = -2; i <= 2; i++) if (roads.has((y + j) * MAP_W + x + i)) return true; return false; };
-  const post = (x: number, y: number) => { if (!nearRoad(x, y) && hash(x, y, 81) > 0.3 && noise(x, y, 3, 82) > 0.3) setO(x, y, T.PALISADE); };
+  const post = (x: number, y: number) => { if (!nearRoad(x, y) && noise(x, y, 4, 82) > 0.38) setO(x, y, T.PALISADE); };
   for (let x = V.x0; x <= V.x1; x++) { post(x, V.y0); post(x, V.y1); }
   for (let y = V.y0 + 1; y < V.y1; y++) { post(V.x0, y); post(V.x1, y); }
 
   /**
-   * A ruined building: floor inside, broken walls with a doorway and holes, a corner of collapsed roof,
+   * A roofless ruined building: flagstone or plank floor, broken walls with a doorway and breaches,
    * rubble and debris. Players can walk in and around.
    */
-  const ruinBuilding = (x: number, y: number, w: number, h: number, stone: boolean, roof: number, seed: number) => {
-    rectG(x, y, w, h, stone ? T.COBBLE : T.FLOOR);
+  const ruinBuilding = (x: number, y: number, w: number, h: number, stone: boolean, seed: number) => {
+    rectG(x, y, w, h, stone ? T.FLAGS : T.FLOOR);
     const wall = stone ? T.RUIN : T.BEAM;
     const door = x + Math.floor(w / 2);
     for (let i = x; i < x + w; i++) for (let j = y; j < y + h; j++) {
       const edge = i === x || j === y || i === x + w - 1 || j === y + h - 1;
-      if (!edge) { if (hash(i, j, seed) < 0.22) setG(i, j, T.RUBBLE); continue; }
+      if (!edge) { if (hash(i, j, seed) < 0.12) setG(i, j, T.RUBBLE); continue; }
       const corner = (i === x || i === x + w - 1) && (j === y || j === y + h - 1);
       const doorway = j === y + h - 1 && Math.abs(i - door) <= 1;
       if (doorway) { setG(i, j, T.RUBBLE); continue; }
-      if (corner || hash(i, j, seed + 1) > 0.42) setO(i, j, wall);
+      if (corner || noise(i, j, 2.5, seed + 1) > 0.36) setO(i, j, wall); // breaches come in runs, walls in long stretches
       else setG(i, j, T.RUBBLE); // a hole in the wall
     }
-    // the back corner where a bit of roof still stands
-    rectO(x, y, 2, 2, roof);
     // rubble spilling outside
-    for (let k = 0; k < 6; k++) setG(x - 1 + Math.floor(hash(seed, k, 3) * (w + 2)), y + h + Math.floor(hash(seed, k, 4) * 2), T.RUBBLE);
+    for (let k = 0; k < 4; k++) setG(x - 1 + Math.floor(hash(seed, k, 3) * (w + 2)), y + h + Math.floor(hash(seed, k, 4) * 2), T.RUBBLE);
   };
 
-  ruinBuilding(84, 48, 9, 6, true, T.ROOF_SLATE, 101);   // Chapel of the Dawn
+  ruinBuilding(84, 48, 9, 6, true, 101);   // Chapel of the Dawn
   setO(88, 50, T.GRAVE); // the old altar stone
   for (const [gx, gy] of [[94, 49], [95, 51], [94, 53]]) setO(gx, gy, T.GRAVE);
-  ruinBuilding(68, 48, 7, 6, true, T.ROOF_SLATE, 102);   // the Smithy
+  ruinBuilding(68, 48, 7, 6, true, 102);   // the Smithy
   setO(71, 50, T.ANVIL);
-  ruinBuilding(85, 67, 9, 6, false, T.ROOF_RED, 103);    // The Rusty Tankard
+  ruinBuilding(85, 67, 9, 6, false, 103);    // The Rusty Tankard
   setO(87, 69, T.BARREL); setO(91, 68, T.CRATE);
-  ruinBuilding(67, 66, 6, 6, false, T.ROOF_THATCH, 104); // a cottage
+  ruinBuilding(67, 66, 6, 6, false, 104); // a cottage
 
   // The square: the well, a survivors' campfire and a lone stall
   setO(77, 57, T.WELL);

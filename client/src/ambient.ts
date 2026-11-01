@@ -13,7 +13,7 @@ import { ANIMATED_TILES, drawTileFrame } from "./tileset";
 
 const WIND_X = 6; // px/s drift for smoke and clouds
 const SOLID_BUILDING = new Set<number>([
-  T.ROOF_THATCH, T.ROOF_RED, T.ROOF_SLATE, T.WALL_TIMBER, T.WALL_STONE, T.WINDOW_TIMBER, T.WINDOW_STONE, T.DOOR, T.PALISADE, T.RUIN,
+  T.ROOF_THATCH, T.ROOF_RED, T.ROOF_SLATE, T.WALL_TIMBER, T.WALL_STONE, T.WINDOW_TIMBER, T.WINDOW_STONE, T.DOOR,
 ]);
 const ROOFS = new Set<number>([T.ROOF_THATCH, T.ROOF_RED, T.ROOF_SLATE]);
 const TREES = new Set<number>([T.TREE, T.PINE, T.BUSH]);

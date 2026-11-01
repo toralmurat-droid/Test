@@ -17,7 +17,7 @@
       <p id="classinfo" class="help"></p>
       <div id="colors"></div>
       <button id="play">Play</button>
-      <p class="help">Move: WASD / Arrows &nbsp;·&nbsp; Attack: Space &nbsp;·&nbsp; Skill: E / Shift &nbsp;·&nbsp; Ultimate (Lv 10): R &nbsp;·&nbsp; Dodge roll: F &nbsp;·&nbsp; Hero menu: C &nbsp;·&nbsp; Gear: G &nbsp;·&nbsp; Potion: Q &nbsp;·&nbsp; Chat: Enter<br>Emotes: /wave /cheer /laugh /sit /sleep</p>
+      <p class="help">Move: WASD / Arrows &nbsp;·&nbsp; Attack: Space &nbsp;·&nbsp; Skill: E / Shift &nbsp;·&nbsp; Ultimate (Lv 10): R &nbsp;·&nbsp; Dodge roll: F &nbsp;·&nbsp; Hero menu: C &nbsp;·&nbsp; Skill tree: T &nbsp;·&nbsp; Gear: G &nbsp;·&nbsp; Potion: Q &nbsp;·&nbsp; Chat: Enter<br>Emotes: /wave /cheer /laugh /sit /sleep</p>
       <p id="status"></p>
     </div>
   </div>
@@ -39,6 +39,12 @@
       <ul id="heropowers"></ul>
       <p class="help">C to close</p>
     </div>
+    <div id="tree" hidden>
+      <h2 id="treetitle"></h2>
+      <p id="treepoints"></p>
+      <div id="treebranches"></div>
+      <p class="help"><button id="treereset">Reset points</button> free, out of combat · T to close</p>
+    </div>
     <div id="gear" hidden>
       <h2>Equipment</h2>
       <div id="geartop">
@@ -49,8 +55,9 @@
       <h3 id="gearbagtitle">Bag</h3>
       <div id="gearbag"></div>
       <p id="gearempty" class="help">No gear yet. Monsters sometimes drop weapons, armour, shoes and hats: walk over them to pick them up.</p>
-      <p class="help">Click an item to wear it · click a worn item to take it off · right-click to drop · G to close</p>
+      <p class="help">Click an item to wear it · click a worn item to take it off · right-click to drop · G or Esc to close</p>
     </div>
+    <button id="bagbtn" title="Equipment (G)">🎒 Bag <small>[G]</small></button>
     <div id="feed"></div>
     <div id="chatlog"></div>
     <input id="chat" maxlength="120" placeholder="Press Enter to chat" autocomplete="off" />
