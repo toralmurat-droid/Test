@@ -231,6 +231,75 @@ const props: Obj[] = [
     for (let y = 14; y < 28; y++) { const hw = Math.round((y - 14) * 0.35); c.rect(16 - hw, y, hw * 2 + 1, 1, 0x3a2a1a); }
     c.line(16, 2, 16, 6, WOOD_D); c.rect(17, 2, 4, 2, RED); c.rect(2, 27, 28, 1, shade(T, 0.7));
   }),
+  // ---- NPC surroundings: the witch's hut and Brann's smithy ----
+  P("witch_hut", 48, 48, (c, f) => {
+    const W = 0x5a4632, WD = 0x3d2f22, TH = 0x4a3b5c, THL = 0x6b5a80, TD = 0x2e2440;
+    // crooked plank walls
+    c.box(9, 24, 30, 21, W);
+    for (let x = 12; x < 38; x += 4) c.rect(x, 25, 1, 19, WD);
+    c.rect(9, 24, 30, 1, WD); c.rect(9, 43, 30, 1, WD);
+    // steep thatch roof with a bent tip
+    for (let y = 6; y < 27; y++) {
+      const hw = Math.round(3 + (y - 6) * 0.95), cx = 24 - Math.round((26 - y) * 0.12);
+      c.rect(cx - hw, y, hw * 2 + 1, 1, y % 3 === 0 ? TD : TH);
+      c.px(cx - hw, y, THL); c.px(cx + hw, y, TD);
+    }
+    c.rect(20, 3, 4, 3, TH); c.rect(17, 1, 4, 2, TH); c.rect(15, 0, 2, 2, THL);
+    c.rect(4, 26, 40, 1, TD);
+    // hanging herb bundles under the eaves
+    for (const [x, col] of [[12, 0x6fae4a], [16, 0xa86fd0], [33, 0x8fbf5a], [37, 0xd9a441]] as [number, number][]) {
+      c.rect(x, 27, 1, 2, 0x8b6b4a); c.rect(x - 1, 29, 3, 3, col); c.px(x, 32, shade(col, 0.7));
+    }
+    // purple arched door
+    c.box(20, 31, 9, 13, 0x5b2a7a); c.rect(21, 30, 7, 1, 0x5b2a7a); c.rect(22, 29, 5, 1, 0x5b2a7a);
+    c.rect(24, 31, 1, 13, 0x3e1c55); c.px(27, 37, GOLD);
+    // round window with a flickering green glow
+    const glow = [0x9be564, 0xb8f07a, 0x86d65a, 0xa8ea6c][f];
+    c.ellipse(34, 33, 3.2, 3.2, WD); c.ellipse(34, 33, 2.2, 2.2, glow); c.rect(34, 31, 1, 5, WD); c.rect(32, 33, 5, 1, WD);
+    // skull over the door
+    c.ellipse(24.5, 26.5, 2, 1.6, CLOTH); c.px(24, 26, 0x1a1420); c.px(25, 26, 0x1a1420);
+    // wisp of green smoke from the tip
+    c.px(14 - (f % 2), 0, 0x9be564, 160);
+  }, { frames: 4, fps: 3 }),
+  P("forge", 32, 32, (c, f) => {
+    // chimney
+    c.box(7, 0, 9, 12, STONE_D); for (let y = 2; y < 12; y += 3) c.rect(8, y, 7, 1, shade(STONE_D, 0.8));
+    // stone furnace
+    c.box(2, 11, 22, 19, STONE, { top: true });
+    for (let y = 14; y < 29; y += 4) for (let x = 3 + ((y / 4) % 2) * 3; x < 23; x += 6) c.rect(x, y, 1, 3, STONE_D);
+    // fire mouth: coals and flickering flames
+    c.box(7, 17, 12, 9, 0x2a1a14); c.rect(8, 16, 10, 1, 0x2a1a14);
+    const s = [0, 1, 0, -1][f];
+    c.rect(8, 23, 10, 2, 0xc2410c); for (const x of [9, 12, 15]) c.px(x + (f % 2), 23, 0xffc93c);
+    c.ellipse(13 + s, 21, 3.5, 2.5, 0xff6b1a); c.ellipse(12 - s, 21, 2, 1.6, 0xffc93c); c.px(13, 18 + (f % 2), 0xff6b1a); c.px(11 + s, 19, 0xfff3b0);
+    // warm glow on the stone around the mouth
+    c.rect(6, 26, 14, 1, 0xff8c42, 120);
+    // bellows on the side
+    c.box(24, 21, 7, 6, 0x7a4a2a); c.rect(24, 23, 7, 1, 0x5a3420); c.line(24, 24, 20, 24, WOOD_D); c.rect(29, 18, 1, 3, WOOD_D);
+    // tongs and hammer leaning on it
+    c.line(1, 29, 3, 18, IRON); c.line(2, 29, 4, 18, shade(IRON, 0.8));
+  }, { frames: 4, fps: 8 }),
+  P("candles", 16, 16, (c, f) => {
+    for (const [x, h] of [[4, 7], [8, 10], [12, 5]] as [number, number][]) {
+      c.box(x - 1, 15 - h, 3, h, 0xe9e2cf); c.px(x - 1, 15 - h + 1, 0xd8cfb5);
+      const fl = (f + x) % 3;
+      c.px(x, 13 - h, 0xffc93c); c.px(x, 12 - h - (fl === 0 ? 1 : 0), 0xff6b1a); c.px(x, 14 - h, 0x3a2a1a);
+    }
+    c.rect(2, 15, 12, 1, 0x8b6b4a);
+  }, { frames: 3, fps: 6 }),
+  P("toadstools", 16, 16, (c) => {
+    for (const [x, y, r] of [[4, 12, 3], [10, 13, 2.5], [12, 9, 2]] as [number, number, number][]) {
+      c.rect(x, y, 1, 3, CLOTH); c.ellipse(x + 0.5, y, r, r * 0.6, 0x8e44ad); c.px(x - 1, y - 1, CLOTH); c.px(x + 1, y, CLOTH);
+    }
+    c.rect(2, 15, 12, 1, GREEN_D);
+  }),
+  P("herb_rack", 32, 16, (c) => {
+    c.rect(3, 2, 1, 13, WOOD_D); c.rect(28, 2, 1, 13, WOOD_D); c.box(2, 2, 28, 2, WOOD);
+    for (let x = 6; x < 27; x += 4) {
+      const col = [0x6fae4a, 0xa86fd0, 0xd9a441, 0x8fbf5a, 0xc0504d, 0x6fae4a][((x - 6) / 4) | 0];
+      c.rect(x, 4, 1, 2, 0x8b6b4a); c.rect(x - 1, 6, 3, 5, col); c.px(x, 11, shade(col, 0.7));
+    }
+  }),
   P("flower_planter", 32, 16, (c) => {
     c.box(2, 8, 28, 6, WOOD); c.rect(2, 8, 28, 1, WOOD_L);
     for (let x = 4; x < 29; x += 3) { c.rect(x, 5, 1, 3, GREEN); const col = [0xff6b9d, 0xfff176, 0xffffff, 0xb08cff][(x / 3) % 4 | 0]; c.rect(x - 1, 3, 3, 2, col); c.px(x, 4, 0xffd34d); }
