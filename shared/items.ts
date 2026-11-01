@@ -1,7 +1,7 @@
 import type { MobKind } from "./constants";
 
 /** Items lying on the ground. Art convention: client draws them by `Item.kind`. */
-export type ItemKind = "gold" | "potion" | "gear"; // "gear": Item.gear holds the id (shared/gear.ts)
+export type ItemKind = "gold" | "potion" | "gear" | "quest"; // "gear": Item.gear holds the id (shared/gear.ts); "quest": quest item id (shared/quests.ts)
 
 export const PICKUP_RADIUS = 10; // px
 export const ITEM_LIFETIME_MS = 30000; // ground items vanish after this
