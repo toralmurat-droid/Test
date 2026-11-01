@@ -1,5 +1,6 @@
 import { ClassKind, CLASSES } from "../../shared/classes";
-import { branchPoints, canLearn, EFFECT_TEXT, MAX_RANK, rank, spentPoints, talentPoints, TIER_POINTS, TREES } from "../../shared/talents";
+import { POWERS } from "../../shared/powers";
+import { branchPoints, canLearn, canLearnPower, EFFECT_TEXT, POWER_KEY, powersLearned, MAX_RANK, rank, spentPoints, talentPoints, TIER_POINTS, TREES } from "../../shared/talents";
 
 /** Skill tree screen (T): 3 branches per hero, click a skill to spend a point. */
 export class TalentMenu {
@@ -22,7 +23,7 @@ export class TalentMenu {
     if (!this.open || !state) return;
     const ranks = state.talents;
     const cls = state.cls as ClassKind;
-    const sig = [cls, state.level, ...TREES[cls].flatMap((b) => b.talents.map((t) => rank(ranks, t.id)))].join("|");
+    const sig = [cls, state.level, powersLearned(ranks), ...TREES[cls].flatMap((b) => b.talents.map((t) => rank(ranks, t.id)))].join("|");
     if (sig === this.sig) return;
     this.sig = sig;
     const free = talentPoints(state.level) - spentPoints(cls, ranks);
@@ -30,6 +31,17 @@ export class TalentMenu {
     document.getElementById("treepoints")!.innerHTML = free > 0
       ? `<b class="free">${free} skill point${free > 1 ? "s" : ""} to spend</b>`
       : state.level < 2 ? "Reach level 2 to earn your first skill point." : "No points left. You get 1 point per level.";
+    // Powers path: level 1 power is free, the next ones open at levels 3/5/8/10 and cost 1 point each, in order
+    const learned = powersLearned(ranks);
+    document.getElementById("treepowers")!.innerHTML = POWERS[cls].map((pw, i) => {
+      const has = i <= learned;
+      const can = i === learned + 1 && canLearnPower(cls, state.level, ranks);
+      const st = has ? "max" : can ? "can" : "locked";
+      const tag = has ? "✔ Learned" : can ? "Click to learn (1 point)" : state.level < pw.level ? `🔒 Level ${pw.level}` : "🔒 Learn the previous power first";
+      const key = pw.key ? ` [${pw.key}]` : "";
+      return `<button class="talent power ${st}" ${can ? `data-talent="${POWER_KEY}"` : ""} style="--c:#ffd166">` +
+        `<b>${pw.name}${key}</b><span class="rank">Lv ${pw.level}</span><span class="fx">${pw.desc}</span><span class="req">${tag}</span></button>`;
+    }).join('<div class="plink"></div>');
     document.getElementById("treebranches")!.innerHTML = TREES[cls].map((b) => {
       const spent = branchPoints(b, ranks);
       const nodes = b.talents.map((t, i) => {
