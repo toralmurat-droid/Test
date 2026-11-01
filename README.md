@@ -41,13 +41,13 @@ The starting region is a 160×120-tile (16px) medieval map, generated determinis
 and every client build the same world. It has a ground layer and an object layer (objects and water are solid, except
 bushes, which you can walk through).
 
-It is laid out for easy travel: 3-tile-wide King's Road (west–east) and North Road (north–south) cross at the market
-square, trails link every region, the palisade has 4 wide main gates and 4 side gates, the river has 3 bridges and a
-ford, and every road keeps a clear verge. Generation also guarantees that every walkable tile can be reached.
+It is laid out for easy travel: the 3-tile-wide King's Road (west–east) and North Road (north–south) wind across the
+map and meet at the market square, curving trails link every region, the rotted palisade is full of breaches, the river
+has 3 bridges and a ford, and every road keeps a clear verge. Generation also guarantees that every walkable tile can be reached.
 `npx tsx tools/map-metrics.ts` prints walkability, reachability and detour numbers.
 
-- **Oakvale** (centre) — palisade-walled village: Market Square (safe zone) with well and stalls, Chapel of the Dawn and
-  graveyard, The Rusty Tankard tavern, the Smithy, cottages, vegetable garden
+- **Oakvale** (centre) — a small ruined village: Market Square (safe zone) with well, campfire and a stall, and four
+  roofless ruins you can walk inside (Chapel of the Dawn with graveyard, The Rusty Tankard, the Smithy, a cottage)
 - **Goldenreach Farms** (west), **Hunter's Camp** (north-west woods), **North Meadow** (north)
 - **Mirror Pond** and **Misty Marsh** (south-west, with a boardwalk), **Stonecrag Quarry** (south-east)
 - **Millbrook Mill** on **River Ashwell** (east), then **Whispering Woods** with trails, the **Old Ruins** and the
