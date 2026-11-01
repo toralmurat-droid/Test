@@ -47,7 +47,7 @@ Gameplay:
 
 ## The world: Oakvale
 
-The starting region is a 160×120-tile (16px) medieval map, generated deterministically in `shared/map.ts` so the server
+The starting region is a 224×168-tile medieval map with 32px tiles drawn at the same pixel size as the heroes, generated deterministically in `shared/map.ts` so the server
 and every client build the same world. It has a ground layer and an object layer (objects and water are solid, except
 bushes, which you can walk through).
 
@@ -78,6 +78,10 @@ The world is alive (`client/src/ambient.ts`, cosmetic only): trees and bushes ar
 wind and hide you when you walk behind them; water ripples and has shoreline foam, the mill wheel turns, grass and
 flowers sway, chimneys and the campfire smoke, buildings cast shadows, and butterflies, birds, fireflies, jumping fish
 and cloud shadows drift around.
+
+Tile art (`client/src/tileset.ts`) is procedural: shapes are laid out on a 16-unit design grid and painted at full
+32px resolution (smooth curves, fine grass, cobbles, sand and water). Static ground detail is baked in chunks around
+the camera, so the larger map costs little video memory.
 
 Detail layer (`client/src/details.ts`): shaded roofs with ridges and eaves, pebbles, tufts, mushrooms and fallen
 leaves, grass spilling over road edges, rounded shorelines with reeds and lily pads, ducks on Mirror Pond, door

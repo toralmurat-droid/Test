@@ -1,8 +1,8 @@
-import { TILE } from "../../shared/constants";
+import { ART_K, TILE } from "../../shared/constants";
 import { SIGNPOSTS, T, TILE_COUNT, VILLAGE } from "../../shared/map";
 
 /**
- * Procedural 16×16 pixel-art tileset (no image assets needed yet).
+ * Procedural 32×32 pixel-art tileset (no image assets needed yet).
  * Pure canvas so both the game (Phaser) and the map viewer can use it.
  * Tile index order matches `T` in shared/map.ts.
  */
@@ -10,37 +10,85 @@ type Color = number | string;
 const css = (c: Color) => (typeof c === "number" ? "#" + c.toString(16).padStart(6, "0") : c);
 const SHADOW = "rgba(0,0,0,0.25)";
 
-class Painter {
+/**
+ * Paints one tile. Shapes are described on a 16-unit design grid and drawn at full resolution:
+ * `rect` and `px` cover K×K screen pixels per unit, while `disc`, `each` and `speckle` work per
+ * screen pixel, so curves, shading and texture get the finer 32px detail. `fpx` paints a single
+ * screen pixel (0..TILE-1) for hand-placed fine detail.
+ */
+export class Painter {
   private s: number;
   constructor(private ctx: CanvasRenderingContext2D, private ox: number, seed: number, private oy = 0) { this.s = seed * 7919 + 13; }
   r() { this.s = (this.s * 9301 + 49297) % 233280; return this.s / 233280; }
   ri(n: number) { return Math.floor(this.r() * n); }
   rect(x: number, y: number, w: number, h: number, c: Color) {
     this.ctx.fillStyle = css(c);
-    this.ctx.fillRect(this.ox + x, this.oy + y, w, h);
+    const x0 = Math.round(x * K), y0 = Math.round(y * K);
+    this.ctx.fillRect(this.ox + x0, this.oy + y0, Math.round((x + w) * K) - x0, Math.round((y + h) * K) - y0);
   }
   px(x: number, y: number, c: Color) { this.rect(x, y, 1, 1, c); }
-  fill(c: Color) { this.rect(0, 0, TILE, TILE, c); }
-  speckle(c: Color, n: number, x0 = 0, y0 = 0, w = TILE, h = TILE) {
-    for (let k = 0; k < n; k++) this.px(x0 + this.ri(w), y0 + this.ri(h), c);
+  /** One screen pixel, in screen pixels (0..TILE-1). */
+  fpx(x: number, y: number, c: Color) {
+    if (x < 0 || y < 0 || x >= TILE || y >= TILE) return;
+    this.ctx.fillStyle = css(c);
+    this.ctx.fillRect(this.ox + x, this.oy + y, 1, 1);
   }
-  /** Pixel ellipse. */
+  /** A run of screen pixels. */
+  frect(x: number, y: number, w: number, h: number, c: Color) {
+    this.ctx.fillStyle = css(c);
+    this.ctx.fillRect(this.ox + x, this.oy + y, w, h);
+  }
+  fill(c: Color) { this.rect(0, 0, 16, 16, c); }
+  /** Fine single-pixel grain over a design-unit rectangle (n is in design-pixel terms: ~2.5x as many fine dots). */
+  speckle(c: Color, n: number, x0 = 0, y0 = 0, w = 16, h = 16) {
+    const m = Math.round(n * K * 1.25);
+    for (let k = 0; k < m; k++) this.fpx(Math.floor((x0 + this.r() * w) * K), Math.floor((y0 + this.r() * h) * K), c);
+  }
+  /** Pixel ellipse (design units), rasterised at full resolution. */
   disc(cx: number, cy: number, rx: number, ry: number, c: Color) {
     for (let y = 0; y < TILE; y++) for (let x = 0; x < TILE; x++) {
-      const dx = (x + 0.5 - cx) / rx, dy = (y + 0.5 - cy) / ry;
-      if (dx * dx + dy * dy <= 1) this.px(x, y, c);
+      const dx = ((x + 0.5) / K - cx) / rx, dy = ((y + 0.5) / K - cy) / ry;
+      if (dx * dx + dy * dy <= 1) this.fpx(x, y, c);
     }
   }
-  /** Per-pixel painter: return a color or undefined to skip. */
+  /** Per-pixel painter at full resolution. `x`, `y` are design units, so `x + 0.5` is the pixel centre. */
   each(f: (x: number, y: number) => Color | undefined) {
-    for (let y = 0; y < TILE; y++) for (let x = 0; x < TILE; x++) { const c = f(x, y); if (c !== undefined) this.px(x, y, c); }
+    for (let y = 0; y < TILE; y++) for (let x = 0; x < TILE; x++) {
+      const c = f((x + 0.5) / K - 0.5, (y + 0.5) / K - 0.5);
+      if (c !== undefined) this.fpx(x, y, c);
+    }
   }
 }
+const K = ART_K;
 
 // ---------- ground ----------
-const grass = (p: Painter, base = 0x5a9a3c, dark = 0x4a8532, light = 0x6fb04a) => {
-  p.fill(base); p.speckle(dark, 22); p.speckle(light, 12);
-  for (let k = 0; k < 4; k++) { const x = p.ri(16), y = p.ri(15); p.px(x, y, 0x7cc455); p.px(x, y + 1, dark); }
+const SZ = TILE; // screen pixels per tile side
+/** Grass at full resolution: soft mottling, fine grain and short blades with lit tips. */
+const grass = (p: Painter, base = 0x5a9a3c, dark = 0x4a8532, light = 0x6fb04a, tip = 0x7cc455) => {
+  p.fill(base);
+  for (let k = 0; k < 5; k++) { // mottled patches: dithered so tiles blend into each other
+    const cx = p.ri(SZ), cy = p.ri(SZ), r = 3 + p.ri(4), c = k % 2 ? dark : light;
+    for (let y = -r; y <= r; y++) for (let x = -r; x <= r; x++)
+      if (x * x + y * y <= r * r && ((x + y) & 1) === 0 && p.r() < 0.8) p.fpx((cx + x + SZ) % SZ, (cy + y + SZ) % SZ, c);
+  }
+  for (let k = 0; k < 70; k++) p.fpx(p.ri(SZ), p.ri(SZ), dark);
+  for (let k = 0; k < 30; k++) p.fpx(p.ri(SZ), p.ri(SZ), light);
+  for (let k = 0; k < 16; k++) { // blades: dark stem, lighter tip
+    const x = p.ri(SZ), y = 3 + p.ri(SZ - 3), h = 2 + p.ri(3), lean = p.r() < 0.3 ? (p.r() < 0.5 ? -1 : 1) : 0;
+    for (let i = 0; i < h; i++) p.fpx(x + (i === h - 1 ? lean : 0), y - i, i === h - 1 ? tip : i === 0 ? dark : light);
+  }
+};
+/** Packed earth: fine grain, a few pebbles with lit tops, faint ruts. */
+const dirt = (p: Painter) => {
+  p.fill(0xa7814f);
+  for (let k = 0; k < 90; k++) p.fpx(p.ri(SZ), p.ri(SZ), 0x957244);
+  for (let k = 0; k < 40; k++) p.fpx(p.ri(SZ), p.ri(SZ), 0xbd9763);
+  for (let k = 0; k < 25; k++) p.fpx(p.ri(SZ), p.ri(SZ), 0x8a6a3e);
+  for (let k = 0; k < 3; k++) {
+    const x = 2 + p.ri(SZ - 5), y = 2 + p.ri(SZ - 5);
+    p.frect(x, y + 2, 3, 1, 0x7a5e38); p.frect(x, y, 3, 2, 0x8a7a64); p.fpx(x, y, 0xb0a08a); p.fpx(x + 1, y, 0xa09078);
+  }
+  if (p.r() < 0.5) { const y = 4 + p.ri(SZ - 8); for (let x = p.ri(6); x < SZ - p.ri(6); x++) if (p.r() < 0.7) p.fpx(x, y + (x % 7 === 0 ? 1 : 0), 0x926e40); }
 };
 const bricks = (p: Painter, base: number, line: number, hi: number, rowH = 4, joint = 8) => {
   p.fill(base);
@@ -260,7 +308,7 @@ const LIGHT_GRASS = [0x5a9a3c, 0x4a8532, 0x6fb04a, 0x5a9a3c];
 const DRAW: Record<number, (p: Painter, f: number, v: number) => void> = {
   [T.GRASS]: (p) => grass(p),
   [T.GRASS_DARK]: (p, _f, m) => {
-    grass(p, 0x4f8c36, 0x427a2c, 0x5f9f42);
+    grass(p, 0x4f8c36, 0x427a2c, 0x5f9f42, 0x6aa84a);
     // soft dithered edge towards lighter grass (m has a bit set for each side that is light grass)
     if (!m) return;
     p.each((x, y) => {
@@ -272,55 +320,76 @@ const DRAW: Record<number, (p: Painter, f: number, v: number) => void> = {
   },
   [T.TALL_GRASS]: (p, f) => {
     grass(p);
-    // tufts of three blades; tips lean with the wind on alternate frames
+    // tufts of tall blades; tips lean with the wind
     const lean = WIND[f % WIND.length];
-    for (let k = 0; k < 5; k++) {
-      const x = 2 + p.ri(12), y = 4 + p.ri(10), h = 3 + p.ri(2);
-      p.rect(x - 1, y, 3, 1, 0x3f7a2a);
-      p.rect(x, y - h + 1, 1, h - 1, 0x4a8a30); p.px(x + lean, y - h, 0x7cc455);
-      p.rect(x - 1, y - h + 2, 1, h - 2, 0x5a9a3c); p.px(x - 2 + (k % 2 ? lean : 0), y - h + 1, 0x6fb04a);
-      p.rect(x + 1, y - h + 3, 1, h - 3, 0x5a9a3c); p.px(x + 2 + (k % 2 ? 0 : lean), y - h + 2, 0x8fd468);
+    for (let k = 0; k < 6; k++) {
+      const x = 4 + p.ri(SZ - 8), y = 9 + p.ri(SZ - 10), n = 3 + p.ri(3);
+      p.frect(x - 2, y + 1, n + 3, 1, 0x3f7a2a);
+      for (let b = 0; b < n; b++) {
+        const bx = x + b - 1, h = 6 + p.ri(4) - Math.abs(b - (n >> 1)), side = b < n / 2 ? -1 : 1;
+        for (let i = 0; i < h; i++) {
+          const top = i >= h - 3, dx = top ? (b % 2 ? lean : side * (i === h - 1 ? 1 : 0)) : 0;
+          p.fpx(bx + dx, y - i, i === h - 1 ? 0x8fd468 : i < 2 ? 0x3f7a2a : b % 2 ? 0x5a9a3c : 0x4a8a30);
+        }
+      }
     }
   },
   [T.FLOWERS]: (p, f) => {
     grass(p);
-    const cols = [0xf06292, 0xfff176, 0xffffff, 0xba68c8, 0x64b5f6];
+    const cols = [[0xf06292, 0xc2185b], [0xfff176, 0xd8b02a], [0xffffff, 0xc8d0e0], [0xba68c8, 0x7b3f9a], [0x64b5f6, 0x2e7ac0]];
     const lean = WIND[f % WIND.length];
-    for (let k = 0; k < 5; k++) {
-      const x0 = 2 + p.ri(12), y = 2 + p.ri(12), c = cols[k];
-      p.px(x0, y + 2, 0x3f7a2a);
+    for (let k = 0; k < 6; k++) {
+      const x0 = 3 + p.ri(SZ - 6), y = 4 + p.ri(SZ - 10), [c, sh] = cols[k % 5];
       const x = x0 + (k % 2 ? lean : 0);
-      p.px(x - 1, y, c); p.px(x + 1, y, c); p.px(x, y - 1, c); p.px(x, y + 1, c); p.px(x, y, 0xffd54f);
+      for (let i = 2; i < 6; i++) p.fpx(x0 + (i < 3 ? x - x0 : 0), y + i, i > 4 ? 0x3f7a2a : 0x4a8a30); p.fpx(x0 + 1, y + 4, 0x5aa845); p.fpx(x0 + 2, y + 3, 0x5aa845);
+      // a 4×4 bloom: petals around a yellow heart, shaded underneath
+      ([".cc.", "cyyc", "cyys", ".ss."] as const).forEach((row, j) => [...row].forEach((ch, i) => {
+        if (ch !== ".") p.fpx(x - 1 + i, y - 2 + j, ch === "c" ? c : ch === "s" ? sh : j === 1 && i === 1 ? 0xfff3a0 : 0xffc83a);
+      }));
     }
   },
-  [T.DIRT]: (p) => { p.fill(0xa7814f); p.speckle(0x8f6c3f, 30); p.speckle(0xbd9763, 14); p.speckle(0x7a7a72, 3); },
+  [T.DIRT]: (p) => dirt(p),
   [T.COBBLE]: (p) => {
-    p.fill(0x77726a);
-    const stones = [0x9c978a, 0xa29d90, 0x968f83, 0x908b7f];
-    for (let y = 0; y < 16; y += 4) {
-      let x = -p.ri(3);
-      while (x < 16) {
-        const w = 3 + p.ri(3), x0 = Math.max(x, 0), x1 = Math.min(x + w - 1, 16);
-        if (x1 > x0) {
-          p.rect(x0, y, x1 - x0, 3, stones[p.ri(4)]);
-          p.rect(x0, y, x1 - x0, 1, 0xaba699); p.rect(x0, y + 2, x1 - x0, 1, 0x8a8579);
-          if (x >= 0) p.px(x0, y + 2, 0x77726a);
+    const mortar = 0x6a655d;
+    p.fill(mortar);
+    const stones = [0x9c978a, 0xa29d90, 0x968f83, 0x908b7f, 0x8f8a80];
+    for (let y = 0; y < SZ; y += 8) {
+      let x = -p.ri(6);
+      while (x < SZ) {
+        const w = 6 + p.ri(5), h = 6 + (p.r() < 0.3 ? 1 : 0), col = stones[p.ri(5)];
+        for (let j = 0; j < h; j++) for (let i = 0; i < w - 1; i++) {
+          const cx = x + i, cy = y + j;
+          if (cx < 0 || cx >= SZ) continue;
+          const corner = (i === 0 || i === w - 2) && (j === 0 || j === h - 1);
+          if (corner) continue;
+          p.fpx(cx, cy, j === 0 || (i === 0 && j < h - 1) ? 0xb3ada0 : j === h - 1 || i === w - 2 ? 0x7f7a6f : col);
         }
+        for (let n = 0; n < 2; n++) p.fpx(x + 1 + p.ri(Math.max(1, w - 3)), y + 1 + p.ri(h - 2), 0x88837a);
         x += w;
       }
     }
-    p.speckle(0x5f8f3f, 2);
+    for (let k = 0; k < 4; k++) { const x = p.ri(SZ); p.fpx(x, 7 + 8 * p.ri(4), 0x5f8f3f); } // moss in the joints
   },
-  [T.SAND]: (p) => { p.fill(0xd9c38a); p.speckle(0xc4ad74, 22); p.speckle(0xe8d6a3, 12); },
+  [T.SAND]: (p) => {
+    p.fill(0xd9c38a);
+    for (let k = 0; k < 80; k++) p.fpx(p.ri(SZ), p.ri(SZ), 0xc4ad74);
+    for (let k = 0; k < 45; k++) p.fpx(p.ri(SZ), p.ri(SZ), 0xe8d6a3);
+    for (let k = 0; k < 3; k++) { const x = 3 + p.ri(SZ - 6), y = 3 + p.ri(SZ - 6); p.fpx(x, y, 0xb59c66); p.fpx(x + 1, y, 0xf5ead0); } // tiny shells and grit
+    if (p.r() < 0.4) { const x = 4 + p.ri(SZ - 10), y = 4 + p.ri(SZ - 8); for (let i = 0; i < 5; i++) p.fpx(x + i, y + (i % 2), 0xc9b27c); } // wind ripple
+  },
   [T.WATER]: (p, f) => {
-    p.fill(0x3a78b8); p.speckle(0x2f68a3, 20);
+    p.fill(0x3a78b8);
+    for (let k = 0; k < 70; k++) p.fpx(p.ri(SZ), p.ri(SZ), 0x3370ae);
+    for (let k = 0; k < 40; k++) p.fpx(p.ri(SZ), p.ri(SZ), 0x2f68a3);
     // ripples drift slowly and twinkle
-    for (let k = 0; k < 5; k++) {
-      const x = p.ri(12), y = (p.ri(16) + (f >> 1)) % 16, on = (k + f) % 4;
+    for (let k = 0; k < 7; k++) {
+      const x = p.ri(SZ - 8), y = (p.ri(SZ) + (f >> 1)) % SZ, on = (k + f) % 4, len = 3 + p.ri(4);
       if (on === 0) continue;
-      p.rect(x, y, on === 2 ? 3 : 2, 1, 0x6ea6dc); p.px(x + (on === 2 ? 3 : 2), y, 0x4f8dc8);
+      const l = on === 2 ? len + 1 : len;
+      p.frect(x, y, l, 1, 0x5b95cf); p.frect(x + 1, y, Math.max(1, l - 2), 1, 0x7ab0e2);
+      p.fpx(x + 1, y + 1, 0x2f68a3); p.fpx(x + l - 2, y + 1, 0x2f68a3);
     }
-    if (f % 6 === k6(p)) p.px(p.ri(14) + 1, p.ri(14) + 1, 0xd8ecff);
+    if (f % 6 === k6(p)) { const x = 2 + p.ri(SZ - 4), y = 2 + p.ri(SZ - 4); p.fpx(x, y, 0xd8ecff); p.fpx(x + 1, y, 0xa8d0f4); p.fpx(x - 1, y, 0xa8d0f4); }
   },
   [T.BRIDGE]: (p) => {
     p.fill(0x8b5a2b); p.speckle(0xa06a35, 18); p.speckle(0x7a4e24, 10);
@@ -345,7 +414,7 @@ const DRAW: Record<number, (p: Painter, f: number, v: number) => void> = {
   [T.RUBBLE]: (p, _f, v) => { // debris over the floor it lies on: 0 flagstones, 1 planks, 2 grass, 3 dirt
     const base = v >> 2;
     if (base === 0) flags(p); else if (base === 1) planks(p); else if (base === 2) grass(p);
-    else { p.fill(0xa7814f); p.speckle(0x8f6c3f, 30); p.speckle(0xbd9763, 14); }
+    else dirt(p);
     debris(p, base === 2 ? 3 : base === 1 ? 2 : 3);
   },
 
@@ -486,7 +555,7 @@ const DRAW: Record<number, (p: Painter, f: number, v: number) => void> = {
   [T.CAMPFIRE]: (p, f) => {
     p.each((x, y) => {
       const d = Math.hypot(x + 0.5 - 8, y + 0.5 - 10);
-      return d > 4.5 && d < 6.2 && (x + y) % 3 ? 0x7a7a7a : undefined;
+      return d > 4.5 && d < 6.2 && (Math.floor(x * K) + Math.floor(y * K)) % 5 ? 0x7a7a7a : undefined;
     });
     p.rect(4, 10, 8, 2, 0x6b4426); p.rect(5, 11, 6, 2, 0x4e301a);
     const fl = [[0, 1, 0], [1, 0, 1], [0, 2, 1], [1, 1, 0]][f % 4];
