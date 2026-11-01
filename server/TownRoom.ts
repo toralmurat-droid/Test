@@ -1,7 +1,7 @@
 import { Client, Room } from "colyseus";
 import { ArraySchema, MapSchema, Schema, type } from "@colyseus/schema";
 import {
-  BROOD, Dir, HIT_RADIUS, InputState, MOB_ATTACK_RANGE, MOBS, MobKind, REGEN_DELAY_MS, REGEN_RAMP_MS, regenFromStamina, SAFE_REGEN_MULT,
+  BROOD, Dir, HIT_RADIUS, mobScale, InputState, MOB_ATTACK_RANGE, MOBS, MobKind, REGEN_DELAY_MS, REGEN_RAMP_MS, regenFromStamina, SAFE_REGEN_MULT,
   RESPAWN_MS, TICK_RATE,
 } from "../shared/constants";
 import {
@@ -16,7 +16,7 @@ import {
   ITEM_LIFETIME_MS, ItemKind, LOOT, MAX_POTIONS, PICKUP_RADIUS, POTION_COOLDOWN_MS, POTION_HEAL, PVP_GOLD_DROP,
 } from "../shared/items";
 import { isSafeZone, isSolidAt, randomSpawn } from "../shared/map";
-import { randomPointInZone, SPAWN_ZONES, zoneCap } from "../shared/spawns";
+import { randomPointInZone, rollLevel, SPAWN_ZONES, zoneCap } from "../shared/spawns";
 import { moveStep } from "../shared/movement";
 import { canLearn, talentMult, talentBonus, talentReduce, TREES } from "../shared/talents";
 import { BAG_SIZE, Equipped, GEAR, GEAR_SLOTS, GearSlot, gearName, gearSpeedMult, gearStats, isGearId, rollGear } from "../shared/gear";
@@ -84,6 +84,7 @@ export class Player extends Schema {
 
 export class Mob extends Schema {
   @type("string") kind: MobKind = "slime";
+  @type("number") level = 1;
   @type("number") x = 0;
   @type("number") y = 0;
   @type("string") dir: Dir = "down";
@@ -257,7 +258,8 @@ export class TownRoom extends Room<TownState> {
     m.zone = zi;
     m.x = m.homeX = home.x;
     m.y = m.homeY = home.y;
-    m.hp = m.maxHp = def.maxHp;
+    m.level = rollLevel(SPAWN_ZONES[zi]);
+    m.hp = m.maxHp = Math.round(def.maxHp * mobScale(m.level, "hp"));
     m.dead = false;
     m.target = "";
     if (kind === "motherblob") m.nextBrood = Date.now() + BROOD.minMs + Math.random() * (BROOD.maxMs - BROOD.minMs);
@@ -281,7 +283,8 @@ export class TownRoom extends Room<TownState> {
       const c = new Mob();
       c.kind = "blobling"; c.zone = -1; c.mother = motherId;
       c.x = c.homeX = x; c.y = c.homeY = y;
-      c.hp = c.maxHp = MOBS.blobling.maxHp;
+      c.level = mother.level;
+      c.hp = c.maxHp = Math.round(MOBS.blobling.maxHp * mobScale(c.level, "hp"));
       c.target = mother.target; // join the fight if mum is busy
       this.state.mobs.set(`b${++this.mobSeq}`, c);
       this.broadcast("brood", { id: motherId });
@@ -381,7 +384,7 @@ export class TownRoom extends Room<TownState> {
         if (now - m.lastAttack >= def.attackCooldownMs) {
           m.lastAttack = now;
           this.broadcast("swing", { id });
-          this.damagePlayer(m.target, def.damage, def.name, DIR_OFFSET[m.dir]);
+          this.damagePlayer(m.target, Math.round(def.damage * mobScale(m.level, "damage")), def.name, DIR_OFFSET[m.dir]);
         }
       } else {
         input = toward(m.x, m.y, t.x, t.y);
@@ -448,9 +451,9 @@ export class TownRoom extends Room<TownState> {
     this.state.items.set(`i${++this.itemSeq}`, it);
   }
 
-  private dropLoot(kind: MobKind, x: number, y: number) {
+  private dropLoot(kind: MobKind, x: number, y: number, goldMult = 1) {
     const def = LOOT[kind];
-    const gold = def.gold[0] + Math.floor(Math.random() * (def.gold[1] - def.gold[0] + 1));
+    const gold = Math.round((def.gold[0] + Math.floor(Math.random() * (def.gold[1] - def.gold[0] + 1))) * goldMult);
     if (gold > 0) this.dropItem("gold", x, y, gold);
     if (Math.random() < def.potionChance) this.dropItem("potion", x, y, 1);
     const gear = rollGear(kind);
@@ -651,8 +654,8 @@ export class TownRoom extends Room<TownState> {
     this.broadcast("hit", { id: targetId, dmg, crit: !!opts.crit });
     if (m.hp > 0) return;
     m.dead = true;
-    this.grantXp(attackerId, def.xp, m);
-    this.dropLoot(m.kind, m.x, m.y);
+    this.grantXp(attackerId, Math.round(def.xp * mobScale(m.level, "xp")), m);
+    this.dropLoot(m.kind, m.x, m.y, mobScale(m.level, "gold"));
     if (m.zone < 0) { this.clock.setTimeout(() => this.state.mobs.delete(targetId), 500); return; } // bloblings don't respawn
     const zone = this.state.zones.get(SPAWN_ZONES[m.zone].name);
     if (zone) {
