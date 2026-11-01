@@ -1,6 +1,6 @@
 import { dayPhase, dayTime } from "./details";
 
-const N = 72; // canvas pixels across (shown at 3x, like the minimap)
+const N = 78; // canvas pixels across (shown at 3x, like the minimap); 3px margin so sun/moon never clip
 const C = N / 2, R_IN = 29.5, R_OUT = 35.5, R_ICON = 32.5;
 const SUNRISE = 0.95, SUNSET = 0.685; // middle of dawn and dusk in the day cycle
 
@@ -45,13 +45,6 @@ export class DayDial {
       else col = r < R_IN + 2 ? earthHi : earth;
       d[o] = col[0]; d[o + 1] = col[1]; d[o + 2] = col[2]; d[o + 3] = 255;
     }
-    // stars twinkle in the night sky
-    if (dark > 0.3) for (let k = 0; k < 14; k++) {
-      const a = Math.PI * (0.06 + 0.88 * ((k * 0.618) % 1)), rr = R_IN + 2 + ((k * 7) % 4);
-      const x = Math.round(C + Math.cos(a) * rr - 0.5), y = Math.round(C - Math.sin(a) * rr - 0.5), o = (y * N + x) * 4;
-      const on = (k + Math.floor(nowMs / 700)) % 5 !== 0;
-      if (on) { d[o] = 255; d[o + 1] = 250; d[o + 2] = 210; d[o + 3] = Math.round(255 * Math.min(1, dark)); }
-    }
     g.putImageData(img, 0, 0);
     const a = DayDial.sunAngle(t);
     this.sun(C + Math.cos(a) * R_ICON, C - Math.sin(a) * R_ICON);
@@ -71,14 +64,22 @@ export class DayDial {
     }
   }
 
+  /** Pixel-art crescent (~11px): bright outer limb fading towards the terminator, two craters, crisp dark outline. */
   private moon(cx: number, cy: number) {
     const x0 = Math.round(cx), y0 = Math.round(cy);
-    for (let y = -3; y <= 3; y++) for (let x = -3; x <= 3; x++) {
-      const r = Math.hypot(x, y), bite = Math.hypot(x - 1.6, y - 1);
-      if (r > 3.2) continue;
-      if (r > 2.5) { this.dot(x0 + x - 0.5, y0 + y - 0.5, "#2a3050"); continue; }
-      if (bite < 2) continue; // crescent
-      this.dot(x0 + x - 0.5, y0 + y - 0.5, x + y < -1 ? "#ffffff" : "#d8deef");
+    const BX = 2.4, BY = -1.4, BR = 3.9; // the shadow disc that bites the full moon into a crescent
+    const lit = (x: number, y: number) => Math.hypot(x, y) <= 4.6 && Math.hypot(x - BX, y - BY) > BR;
+    const craters = new Set(["-3,1", "-1,3", "-2,-1"]);
+    for (let y = -6; y <= 6; y++) for (let x = -6; x <= 6; x++) {
+      const px = x0 + x - 0.5, py = y0 + y - 0.5;
+      if (lit(x, y)) {
+        const depth = Math.hypot(x - BX, y - BY) - BR; // 0 at the terminator, grows towards the outer limb
+        let c = depth > 2.6 ? "#fffef2" : depth > 1.5 ? "#f1ecc8" : depth > 0.7 ? "#d9d2a6" : "#b3ab84";
+        if (craters.has(`${x},${y}`)) c = depth > 1.5 ? "#cfc79c" : "#a59e78";
+        this.dot(px, py, c);
+      } else if (lit(x + 1, y) || lit(x - 1, y) || lit(x, y + 1) || lit(x, y - 1)) {
+        this.dot(px, py, "#141830");
+      }
     }
   }
 }

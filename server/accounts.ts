@@ -13,7 +13,7 @@ export interface HeroSave {
   bag: string[];
   talents: Record<string, number>;
   slots: string[];
-  questStage: number; questCount: number;
+  questId?: number; questStage: number; questCount: number;
 }
 
 interface Account {

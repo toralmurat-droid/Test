@@ -33,6 +33,7 @@ Gameplay:
 - **Dodge roll** (F): every hero rolls 48px in the move direction (or facing), untouchable for 0.3s, 1.5s cooldown. Tuned in `DODGE` in `shared/classes.ts`.
 - **8-way aim**: attacks, arrows, fireballs, dashes and ultimates go in the last direction you moved, diagonals included (`Player.ax/ay`, `Projectile.vx/vy`).
 - **Initiative & attack speed** (`shared/combat.ts`): every hero and monster has a hidden poise bar. Hits drain it, less against higher-level opponents (-15% per level above you, min 20%) and more against lower ones (+10% per level, max +50%), and make the target flinch (a monster's wind-up telegraph, a red flash, is interrupted; heroes' next attack is delayed slightly). Below half poise you attack slower; at 0 you are dizzy (stars): no attacks or skills for 1.2s (monsters 1.8s, and they run away). Then poise refills and you are steady for 1.5s. Shield blocks most poise damage; Unstoppable ignores it. Rage gives +15% attack speed. Hero panel shows attack speed and initiative.
+- **Player ideas** (`shared/ideas.ts`, press **I** or the 💡 Ideas button): players at level 3+ suggest one improvement a day (max 280 characters, 10 ideas a day for the whole game). Everyone votes with ▲/▼ (or `/up 12`, `/down 12` in chat; `/idea text` suggests from chat). Every hour, on the hour, the open idea with the best score wins if it has at least 5 voters and +3. Ideas at -5 are removed and ideas expire after 24h. The log is saved in `data/ideas.json` (or `IDEAS_FILE`) and readable at `/ideas.json`. Winners are built by hand for now. `IDEAS_ANY_LEVEL=1` lets fresh heroes suggest (for local testing). Rules are checked by `npx tsx tools/ideas-check.ts`.
 - **Emotes:** type /wave /cheer /laugh /sit /sleep in chat. Heroes also fidget when standing still.
 - **Levels, stats and powers** (`shared/powers.ts`): XP raises your level (max 20). You assign stat points yourself in the hero panel (**C**, click +): 1 point per level and 3 at levels 3, 5, 8 and 10 (27 by level 20). **Stamina** = max HP (+12) and HP regen, **Strength** = attack for Knight/Ninja/Archer/Barbarian (+7%) and +4 HP, **Magic** = skills (+7%), cooldowns (-2%, max -30%) and Wizard fireballs. Every level also adds 5 max HP. Reset is free out of combat. Class skills are learned in the skill tree (see below). Press **C** for the hero panel (characteristics only). On level-up a small notice appears; press C (or click it) to see the new stats.
 - **Skills** (`shared/talents.ts` + `shared/powers.ts`, press **T**): heroes start with only a basic attack. Every level after 1 gives 1 skill point. One tree per hero holds the class skills (an active skill at level 1, passives at 3/5/8, the active ultimate at level 10), the **3-Hit Combo** skill and 3 branches of passive bonuses (e.g. Knight: Blade, Bulwark, Command; 3 ranks each). Rows unlock at levels 1, 3, 5, 8 and 10 and a node needs the one below it: the tree grows up from the hero (trunk at the bottom, ultimate at the top), with branch lines that light up as you learn skills. Effects: damage, skill damage, crit, lifesteal, max HP, armour, speed, cooldowns, regen. Reset is free out of combat (it also empties the skill slots).
@@ -48,7 +49,7 @@ Gameplay:
 
 ## The world: Oakvale
 
-The starting region is a 224×168-tile medieval map with 32px tiles drawn at the same pixel size as the heroes, generated deterministically in `shared/map.ts` so the server
+The starting region is a 288×216-tile medieval map with 32px tiles drawn at the same pixel size as the heroes, generated deterministically in `shared/map.ts` so the server
 and every client build the same world. It has a ground layer and an object layer (objects and water are solid, except
 bushes, which you can walk through).
 
@@ -66,6 +67,8 @@ off to the Hunter's Camp, the Watchtower, the mill and Mirror Pond and the marsh
 - The wider world, with tougher monsters: **Barrow Downs** (far south-west graveyard and mausoleum), **Sunken Lake**
   (south, island shrine on a boardwalk), **Greywatch Keep** (ruined castle far east) and the **Thornwood** (dark pines,
   north-east)
+- Further out: **Redfang Hollow** (bandit camp behind a crude stockade, deep in the eastern woods), **Saltmere** (small
+  fishing village with two piers on the southern sea) and the **Saltwind Coast** (beaches along the Saltwind Sea)
 
 Monster levels grow with distance from Oakvale (`zoneLevels` in `shared/spawns.ts`): level 1-3 next to the village,
 up to 10-12 at the far edges. Signposts at the gates and junctions have one board per road, naming where it leads.
@@ -88,6 +91,10 @@ Detail layer (`client/src/details.ts`): shaded roofs with ridges and eaves, pebb
 leaves, grass spilling over road edges, rounded shorelines with reeds and lily pads, ducks on Mirror Pond, door
 lanterns and gate banners. A 30-minute day/night cycle (shared by all players via the clock) lights up windows,
 lanterns and the campfire at night. Add `?time=day|dusk|night` to the URL to force a time of day.
+
+**Isometric view:** the game is drawn in isometric by default. Add `?iso=0` to the URL for the old top-down view
+(`?iso=1` goes back; the choice is remembered). Only the drawing changes: the server, the map data and the movement rules stay top-down, see
+`client/src/iso.ts`. W/up moves up the screen.
 
 **Map viewer:** with `npm run dev` running, open http://localhost:5173/map.html to see the whole map with area,
 collision and grid overlays (no server needed). Edit `shared/map.ts` and it hot-reloads.

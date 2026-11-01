@@ -35,6 +35,9 @@ function shade(c: number, f: number) {
   return (r << 16) | (g << 8) | b;
 }
 
+// Bandit: persona frames with a hood and a red bandana over the mouth
+const BANDIT_FRAMES = FRAMES.map((f) => f.map((row, y) => (y === 4 ? row.replace(/K/g, "M") : row)));
+
 /** Builds (once per color) a 6-frame persona sprite sheet tinted by shirt color. */
 export function personaTexture(scene: Phaser.Scene, color: number): string {
   return drawSheet(scene, `persona_${color}`, FRAMES, {
@@ -61,6 +64,13 @@ const ITEM_ART: Record<string, { rows: string[]; pal: Record<string, number> }> 
     pal: { C: 0xffc93c, c: 0xd99a1e, r: 0xfff3b0 } },
   potion: { rows: ["...WW...", "...GG...", "..GRRG..", ".GRrRRG.", ".GRRRRG.", ".GRRRRG.", "..GGGG..", "........"],
     pal: { W: 0x8d6e63, G: 0xcfe8ff, R: 0xe63946, r: 0xffb3b3 } },
+  // Quest drops (shared/quests.ts QUEST_ITEMS)
+  q_jelly: { rows: ["........", "...GG...", "..GLGG..", ".GLGGGG.", ".GGGGGD.", "GGGGGGDD", ".GGDDDD.", "........"],
+    pal: { G: 0x7bd36b, L: 0xd6ffcc, D: 0x3f9a3a } },
+  q_core: { rows: ["...KK...", "..KSSK..", ".KSLSSK.", "KSLSSRSK", "KSSSRRSK", ".KSRRSK.", "..KSSK..", "...KK..."],
+    pal: { K: 0x1a1420, S: 0x8a94a3, L: 0xd8e0ea, R: 0xd62839 } },
+  q_rot: { rows: ["........", "....G...", "...GP...", "..PPPP..", ".PPLPPP.", ".PPPPPD.", "..PPDD..", "...DD..."],
+    pal: { G: 0x6fbf3a, P: 0x4a2f6b, L: 0x8e6bbf, D: 0x2a1a3d } },
 };
 
 /** Ground item texture by `Item.kind` (single frame). */
@@ -88,7 +98,7 @@ const SLIME_B = [..."............|............|............|............|.......
  * Round blob frame (w x h px): a dome with a highlight, two eyes and a dark rim at the base.
  * `squish` flattens/widens it for the bounce frame; `buds` adds little bloblings growing inside (Mother Blob).
  */
-function blobFrame(w: number, h: number, bodyH: number, squish: boolean, buds: boolean): string[] {
+function blobFrame(w: number, h: number, bodyH: number, squish: boolean, buds: boolean, tiara = buds): string[] {
   const rows: string[][] = Array.from({ length: h }, () => Array(w).fill("."));
   const bh = squish ? Math.round(bodyH * 0.86) : bodyH;
   const rx = (squish ? w / 2 : w / 2 - 1) - 0.01, ry = bh - 0.5;
@@ -125,7 +135,7 @@ function blobFrame(w: number, h: number, bodyH: number, squish: boolean, buds: b
     if (rows[y][x] !== "G") continue;
     if (!isBody(x - 1, y) || !isBody(x + 1, y) || !isBody(x, y - 1)) rows[y][x] = "O";
   }
-  if (buds) {
+  if (tiara) {
     // little gold tiara: she's the mother
     const tx = Math.round(cx), ty = top;
     for (const [ox, oy, c] of [[-3, 0, "Y"], [-2, 0, "Y"], [-1, 0, "Y"], [0, 0, "Y"], [1, 0, "Y"], [2, 0, "Y"], [-3, -1, "Y"], [0, -1, "R"], [2, -1, "Y"], [0, -2, "Y"]] as [number, number, string][]) {
@@ -135,22 +145,127 @@ function blobFrame(w: number, h: number, bodyH: number, squish: boolean, buds: b
   return rows.map((r) => r.join(""));
 }
 
+/** A plain blob with something extra drawn on top: a spout (shooter), a helmet (warrior) or a halo and cross (healer). */
+function blobVariant(w: number, h: number, bodyH: number, squish: boolean, kind: "shooter" | "warrior" | "healer"): string[] {
+  const rows = blobFrame(w, h, bodyH, squish, false).map((r) => [...r]);
+  const top = rows.findIndex((r) => r.some((c) => c !== "."));
+  const base = h - 2, cx = Math.floor((w - 1) / 2);
+  const body = (x: number, y: number) => rows[y]?.[x] !== undefined && rows[y][x] !== ".";
+  const set = (x: number, y: number, c: string) => { if (rows[y]?.[x] !== undefined) rows[y][x] = c; };
+  if (kind === "shooter") {
+    // stubby spout on the head, with a dark mouth
+    for (let y = top - 3; y < top + 1; y++) { set(cx, y, "N"); set(cx + 1, y, "N"); }
+    set(cx - 1, top - 3, "N"); set(cx + 2, top - 3, "N"); set(cx, top - 3, "n"); set(cx + 1, top - 3, "n");
+  } else if (kind === "warrior") {
+    // steel helmet over the top of the dome, with a red crest and angry brows
+    for (let y = top; y < top + 3; y++) for (let x = 0; x < w; x++) if (body(x, y)) set(x, y, y === top + 2 ? "h" : "H");
+    for (const x of [cx - 1, cx, cx + 1, cx + 2]) set(x, top - 1, "R");
+    set(cx, top - 2, "R"); set(cx + 1, top - 2, "R");
+    const ey = rows.findIndex((r) => r.includes("E"));
+    if (ey > 0) rows[ey].forEach((c, x) => { if (c === "E") set(x + (x < cx ? -1 : 1), ey - 1, "E"); });
+  } else {
+    // golden halo floating above, green cross on the belly
+    for (let x = cx - 2; x <= cx + 3; x++) set(x, top - 3, "Y");
+    set(cx - 3, top - 2, "Y"); set(cx + 4, top - 2, "Y");
+    const by = base - 2;
+    for (const [ox, oy] of [[0, -1], [1, -1], [-1, 0], [0, 0], [1, 0], [2, 0], [0, 1], [1, 1]]) if (body(cx + ox, by + oy)) set(cx + ox, by + oy, "X");
+  }
+  return rows.map((r) => r.join(""));
+}
+const VAR_W = 14, VAR_H = 17;
+const SHOOTER_A = blobVariant(VAR_W, VAR_H, 10, false, "shooter"), SHOOTER_B = blobVariant(VAR_W, VAR_H, 10, true, "shooter");
+const WARRIOR_A = blobVariant(16, 18, 12, false, "warrior"), WARRIOR_B = blobVariant(16, 18, 12, true, "warrior");
+const HEALER_A = blobVariant(VAR_W, VAR_H, 10, false, "healer"), HEALER_B = blobVariant(VAR_W, VAR_H, 10, true, "healer");
+
 const MOTHER_W = 24, MOTHER_H = 22, BLOBLING_W = 8, BLOBLING_H = 9;
 const MOTHER_A = blobFrame(MOTHER_W, MOTHER_H, 17, false, true), MOTHER_B = blobFrame(MOTHER_W, MOTHER_H, 17, true, true);
+
+/**
+ * Mother Blob by tier (shared MOTHER.tier): 2 = Lv 5+, iron crown and a leather belt with a gold buckle;
+ * 3 = Lv 10+, big jewelled crown, riveted steel plate round her middle and spikes on her back.
+ */
+function motherFrame(tier: 2 | 3, squish: boolean): string[] {
+  const rows = blobFrame(MOTHER_W, MOTHER_H, 17, squish, true, false).map((r) => [...r]);
+  const top = rows.findIndex((r) => r.some((c) => c !== "."));
+  const base = MOTHER_H - 2, cx = Math.floor((MOTHER_W - 1) / 2);
+  const body = (x: number, y: number) => rows[y]?.[x] !== undefined && rows[y][x] !== ".";
+  const set = (x: number, y: number, c: string) => { if (rows[y]?.[x] !== undefined) rows[y][x] = c; };
+  if (tier === 2) {
+    // iron crown: a band with three points
+    for (let x = cx - 3; x <= cx + 4; x++) { set(x, top, "I"); set(x, top - 1, "I"); }
+    for (const x of [cx - 3, cx + 0.5, cx + 4]) set(Math.round(x), top - 2, "I");
+    set(cx, top - 1, "i"); set(cx + 1, top - 1, "i");
+    // leather belt with a buckle
+    const by = base - 6;
+    for (let x = 0; x < MOTHER_W; x++) if (body(x, by)) { set(x, by, "T"); if (body(x, by + 1)) set(x, by + 1, "T"); }
+    for (const [ox, oy] of [[0, 0], [1, 0], [0, 1], [1, 1]]) set(cx + ox, by + oy, "Y");
+  } else {
+    // big gold crown with red jewels
+    for (let x = cx - 5; x <= cx + 6; x++) { set(x, top, "Y"); set(x, top - 1, "Y"); }
+    for (const x of [cx - 5, cx - 2, cx + 1, cx + 3, cx + 6]) { set(x, top - 2, "Y"); set(x, top - 3, "Y"); }
+    for (const x of [cx - 3, cx + 1, cx + 5]) set(x, top - 1, "R");
+    // steel plate round her middle, with rivets
+    for (let y = base - 7; y <= base - 4; y++) for (let x = 0; x < MOTHER_W; x++) if (body(x, y)) set(x, y, y === base - 7 ? "s" : "S");
+    for (let x = 2; x < MOTHER_W - 2; x += 3) if (body(x, base - 5)) set(x, base - 5, "r");
+    // spikes along her back
+    for (const dx of [-8, -6, 7, 9]) { const x = cx + dx; const y = rows.findIndex((r) => r[x] !== "."); if (y > 0) { set(x, y - 1, "S"); set(x, y - 2, "s"); } }
+  }
+  return rows.map((r) => r.join(""));
+}
+const MOTHER2_A = motherFrame(2, false), MOTHER2_B = motherFrame(2, true);
+const MOTHER3_A = motherFrame(3, false), MOTHER3_B = motherFrame(3, true);
 const BLOBLING_A = blobFrame(BLOBLING_W, BLOBLING_H, 6, false, false), BLOBLING_B = blobFrame(BLOBLING_W, BLOBLING_H, 6, true, false);
 
 /** Per-kind size info for the scene: head height (labels/bubbles) and HP bar width. */
 export const MOB_LOOK: Record<string, { top: number; bar: number; oy: number }> = {
   motherblob: { top: 20, bar: 22, oy: 0.92 },
   blobling: { top: 8, bar: 8, oy: 0.9 },
+  shooterblob: { top: 15, bar: 12, oy: 0.92 },
+  warriorblob: { top: 16, bar: 14, oy: 0.92 },
+  healerblob: { top: 15, bar: 12, oy: 0.92 },
 };
 
 /** Monster sprite sheets, same 6-frame layout as personas. */
-export function mobTexture(scene: Phaser.Scene, kind: string): string {
+export function mobTexture(scene: Phaser.Scene, kind: string, level = 1): string {
+  const mtier = level >= 10 ? 3 : level >= 5 ? 2 : 1; // MOTHER.tier
+  if (kind === "motherblob" && mtier === 2) {
+    return drawSheet(scene, "mob_motherblob2", [MOTHER2_A, MOTHER2_B, MOTHER2_A, MOTHER2_B, MOTHER2_A, MOTHER2_B], {
+      G: 0x2f8f9e, L: 0xb0eef5, E: 0x0b2a30, W: 0xffffff, D: 0x1c5560, O: 0x123f47, B: 0x8fe0c8, b: 0xdcfff4,
+      I: 0x8a9099, i: 0xc9ced6, Y: 0xffc93c, T: 0x6d4c33,
+    }, MOTHER_W, MOTHER_H);
+  }
+  if (kind === "motherblob" && mtier === 3) {
+    return drawSheet(scene, "mob_motherblob3", [MOTHER3_A, MOTHER3_B, MOTHER3_A, MOTHER3_B, MOTHER3_A, MOTHER3_B], {
+      G: 0x5a3f9e, L: 0xd3c2ff, E: 0x140a2a, W: 0xffffff, D: 0x35246b, O: 0x22164a, B: 0xb79cff, b: 0xf0e8ff,
+      Y: 0xffc93c, R: 0xe63946, S: 0x9aa3ad, s: 0xd6dce3, r: 0x4a4f57,
+    }, MOTHER_W, MOTHER_H);
+  }
   if (kind === "motherblob") {
     return drawSheet(scene, "mob_motherblob", [MOTHER_A, MOTHER_B, MOTHER_A, MOTHER_B, MOTHER_A, MOTHER_B], {
       G: 0x3f9e8c, L: 0xb8f2e0, E: 0x10302a, W: 0xffffff, D: 0x1f5c50, O: 0x1a4a40, B: 0x9be58a, b: 0xe2ffd6, Y: 0xffc93c, R: 0xe63946,
     }, MOTHER_W, MOTHER_H);
+  }
+  const sheet = (key: string, a: string[], b: string[], pal: Record<string, number>, w: number, h: number) =>
+    drawSheet(scene, key, [a, b, a, b, a, b], pal, w, h);
+  if (kind === "shooterblob") {
+    return sheet("mob_shooterblob", SHOOTER_A, SHOOTER_B, {
+      G: 0x9b6bd6, L: 0xe2ccff, E: 0x1e0f33, D: 0x5d3a8f, O: 0x3f2466, N: 0x4a4458, n: 0x1b1824,
+    }, VAR_W, VAR_H);
+  }
+  if (kind === "warriorblob") {
+    return sheet("mob_warriorblob", WARRIOR_A, WARRIOR_B, {
+      G: 0xd9573b, L: 0xffb59e, E: 0x2a0d06, D: 0x8f2f1c, O: 0x5c1d10, H: 0xaeb6c2, h: 0x6b7480, R: 0xe63946,
+    }, 16, 18);
+  }
+  if (kind === "healerblob") {
+    return sheet("mob_healerblob", HEALER_A, HEALER_B, {
+      G: 0xf5d0e6, L: 0xffffff, E: 0x3a1a2e, D: 0xc48aaa, O: 0x8a5577, Y: 0xffd54f, X: 0x43c463,
+    }, VAR_W, VAR_H);
+  }
+  if (kind === "bandit") {
+    return drawSheet(scene, "mob_bandit", BANDIT_FRAMES, {
+      H: 0x3b2f2a, K: 0xd9a77a, E: 0x1a1a1a, M: 0xb3261e, S: 0x6d4c33, B: 0x2b1d14, P: 0x3a3a3a, D: 0x1a1a1a,
+    });
   }
   if (kind === "blobling") {
     return drawSheet(scene, "mob_blobling", [BLOBLING_A, BLOBLING_B, BLOBLING_A, BLOBLING_B, BLOBLING_A, BLOBLING_B], {

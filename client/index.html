@@ -19,7 +19,7 @@
       <p id="classinfo" class="help"></p>
       <div id="colors"></div>
       <button id="play">Play</button>
-      <p class="help">Move: WASD / Arrows &nbsp;·&nbsp; Attack: Space &nbsp;·&nbsp; Skills: 1 to 0 (learn them with T, then drag them to a slot) &nbsp;·&nbsp; Dodge roll: Shift / F &nbsp;·&nbsp; Hero menu: C &nbsp;·&nbsp; Skill tree: T &nbsp;·&nbsp; Gear: G &nbsp;·&nbsp; Ranged gear: R &nbsp;·&nbsp; Map: M &nbsp;·&nbsp; Potion: Q &nbsp;·&nbsp; Talk to NPCs: E &nbsp;·&nbsp; Quest log: J &nbsp;·&nbsp; Chat: Enter<br>Emotes: /wave /cheer /laugh /sit /sleep</p>
+      <p class="help">Move: WASD / Arrows &nbsp;·&nbsp; Attack: Space &nbsp;·&nbsp; Skills: 1 to 0 (learn them with T, then drag them to a slot) &nbsp;·&nbsp; Dodge roll: Shift / F &nbsp;·&nbsp; Hero menu: C &nbsp;·&nbsp; Skill tree: T &nbsp;·&nbsp; Gear: G &nbsp;·&nbsp; Ranged gear: R &nbsp;·&nbsp; Map: M &nbsp;·&nbsp; Potion: Q &nbsp;·&nbsp; Talk to NPCs: E &nbsp;·&nbsp; Quest log: J &nbsp;·&nbsp; Ideas board: I &nbsp;·&nbsp; Chat: Enter<br>Emotes: /wave /cheer /laugh /sit /sleep</p>
       <p id="status"></p>
     </div>
   </div>
@@ -67,10 +67,11 @@
       <button id="herobtn" title="Hero: stats and powers (C)">🛡 Hero <small>[C]</small><span id="herobadge" class="badge" hidden></span></button>
       <button id="treebtn" title="Skill tree (T)">⭐ Skills <small>[T]</small><span id="treebadge" hidden></span></button>
       <button id="bagbtn" title="Equipment (G)">🎒 Bag <small>[G]</small></button>
+      <button id="ideabtn" title="Ideas board: suggest and vote (I)">💡 Ideas <small>[I]</small></button>
     </div>
     <div id="feed"></div>
     <div id="chatlog"></div>
-    <input id="chat" maxlength="120" placeholder="Press Enter to chat" autocomplete="off" />
+    <input id="chat" maxlength="300" placeholder="Press Enter to chat" autocomplete="off" />
   </div>
 
   <script type="module" src="/src/main.ts"></script>

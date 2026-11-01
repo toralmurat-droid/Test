@@ -19,6 +19,8 @@ export const NPCS: Npc[] = [
   // Traders around the market square
   { id: "weaponsmith", name: "Brann", title: "Weapons merchant", sprite: "blacksmith", x: 71.6 * TILE, y: 57.5 * TILE, dir: "right", shop: "weaponsmith" },
   { id: "witch", name: "Old Morwen", title: "Potion witch", sprite: "witch", x: 71.95 * TILE, y: 63.95 * TILE, dir: "right", shop: "witch" },
+  // Tobin the fisherman: only home once you free him from the blob cocoon at Sunken Lake (shared/quests.ts npcPresent)
+  { id: "fisher", name: "Tobin", title: "Fisherman", sprite: "villager", x: 85.5 * TILE, y: 61.4 * TILE, dir: "left" },
 ];
 
 /**
@@ -56,10 +58,11 @@ export function npcById(id: string): Npc | undefined {
   return NPCS.find((n) => n.id === id);
 }
 
-/** Nearest NPC within talking range, if any. */
-export function npcNear(x: number, y: number, range = TALK_RANGE): Npc | undefined {
+/** Nearest NPC within talking range, if any (`present` hides NPCs that are not there for this player). */
+export function npcNear(x: number, y: number, range = TALK_RANGE, present: (n: Npc) => boolean = () => true): Npc | undefined {
   let best: Npc | undefined, bd = range;
   for (const n of NPCS) {
+    if (!present(n)) continue;
     const d = Math.hypot(n.x - x, n.y - y);
     if (d <= bd) { best = n; bd = d; }
   }

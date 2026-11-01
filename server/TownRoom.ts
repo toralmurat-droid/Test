@@ -1,8 +1,9 @@
+import type { IncomingMessage } from "node:http";
 import { Client, Room } from "colyseus";
 import { ArraySchema, MapSchema, Schema, type } from "@colyseus/schema";
 import {
-  BROOD, Dir, HIT_RADIUS, mobScale, InputState, MOB_ATTACK_RANGE, MOBS, MobKind, REGEN_DELAY_MS, REGEN_RAMP_MS, regenFromStamina, SAFE_REGEN_MULT,
-  RESPAWN_MS, TICK_RATE,
+  BLOB_AI, BROOD, Dir, MOTHER, HIT_RADIUS, mobScale, InputState, MOB_ATTACK_RANGE, MOBS, MobKind, REGEN_DELAY_MS, REGEN_RAMP_MS, regenFromStamina, SAFE_REGEN_MULT,
+  RESPAWN_MS, TICK_RATE, TILE,
 } from "../shared/constants";
 import {
   ATTACK_VARIANTS, CLASSES, ClassKind, COMBO_WINDOW_MS, DODGE, EMOTES, ENERGY, DASH_INVULN_MS, GUARD_REDUCTION, isClassKind, levelFromXp, PVP_KILL_XP,
@@ -16,10 +17,10 @@ import {
   ITEM_LIFETIME_MS, ItemKind, LOOT, MAX_POTIONS, PICKUP_RADIUS, POTION_COOLDOWN_MS, POTION_HEAL, PVP_GOLD_DROP,
 } from "../shared/items";
 import { isSafeZone, isSolidAt, randomSpawn } from "../shared/map";
-import { npcNear, TALK_RANGE } from "../shared/npcs";
+import { npcById, npcNear, TALK_RANGE } from "../shared/npcs";
 import { sellPrice, SHOPS } from "../shared/shops";
-import { inQuestZone, isBlob, Q, QUEST } from "../shared/quests";
-import { findHideSpot, HIDE, randomPointInZone, rollLevel, SPAWN_ZONES, zoneCap } from "../shared/spawns";
+import { inZone, npcPresent, QUESTS, questStep, stepGoal, USE_RANGE } from "../shared/quests";
+import { findHideSpot, HIDE, noMobsAt, randomPointInZone, rollLevel, SPAWN_ZONES, zoneCap } from "../shared/spawns";
 import { moveStep } from "../shared/movement";
 import { flush, HeroSave, loadHero, login, saveHero } from "./accounts";
 import { SLOT_COUNT, SlotSkill, skillLearned } from "../shared/slots";
@@ -28,6 +29,8 @@ import { canLearn, COMBO_NODE, talentMult, talentBonus, talentReduce, TREES } fr
 import {
   BAG_SIZE, Equipped, GEAR, GEAR_SLOTS, GearSlot, gearBlock, gearName, gearReachMult, gearSpeedMult, gearStats, isGearId, potionChance, rollGear,
 } from "../shared/gear";
+import { Asker, boardFor, submit, tick as ideaTick, vote as ideaVote } from "../shared/ideas";
+import { hashAddr, ideaLog, saveIdeas } from "./ideaStore";
 
 export class Player extends Schema {
   @type("string") name = "";
@@ -76,7 +79,8 @@ export class Player extends Schema {
   @type(["string"]) bag = new ArraySchema<string>();
   // Skill tree (shared/talents.ts): ranks per talent id
   @type({ map: "number" }) talents = new MapSchema<number>();
-  // First quest (shared/quests.ts): step and blob kills
+  // Blob quest chain (shared/quests.ts): quest index, step (0 = not accepted) and progress on the step
+  @type("number") questId = 0;
   @type("number") questStage = 0;
   @type("number") questCount = 0;
   // Skill slots on keys 1..0 (shared/slots.ts): "special" | "ult" | "" (empty). Empty until the player assigns them.
@@ -117,6 +121,9 @@ export class Mob extends Schema {
   seekUntil = 0; // give up reaching the spot after this
   hideUntil = 0; // leaves the spot on its own after this
   fleeing = false; // dizzy and running for cover
+  chargeUntil = 0; nextCharge = 0; // warrior blob lunge
+  nextHeal = 0; // healer blob
+  specialKind = ""; specialAt = 0; nextBounce = 0; nextSlam = 0; // mother blob special moves
   @type("number") x = 0;
   @type("number") y = 0;
   @type("string") dir: Dir = "down";
@@ -174,7 +181,8 @@ export class Item extends Schema {
   @type("number") x = 0;
   @type("number") y = 0;
   @type("number") amount = 1;
-  @type("string") gear = ""; // kind "gear": the item id
+  @type("string") gear = ""; // kind "gear": the item id; kind "quest": the quest item id (shared/quests.ts QUEST_ITEMS)
+  @type("string") owner = ""; // kind "quest": only this player sees and picks it up
 
   expires = 0;
 }
@@ -321,12 +329,23 @@ export class TownRoom extends Room<TownState> {
     this.onMessage("resetstats", (client) => this.resetStats(client.sessionId));
 
     this.onMessage("quest", (client) => this.advanceQuest(client.sessionId));
+    this.onMessage("use", (client, msg: { id: string }) => this.useQuestObject(client.sessionId, msg?.id));
     this.onMessage("buy", (client, msg: { i: number }) => this.shopBuy(client, msg?.i));
     this.onMessage("sell", (client, msg: { i: number }) => this.shopSell(client, msg?.i));
+
+    // Player ideas: suggest (once a day), vote, and every hour the best idea wins (shared/ideas.ts)
+    this.onMessage("idea", (client, text: string) => this.submitIdea(client, text));
+    this.onMessage("ideavote", (client, msg: { id: number; v: number }) => this.voteIdea(client, Number(msg?.id), Number(msg?.v)));
+    this.onMessage("ideas", (client) => this.sendBoard(client));
+    this.clock.setInterval(() => this.ideaRound(), 5000);
 
     this.onMessage("chat", (client, text: string) => {
       const p = this.state.players.get(client.sessionId);
       if (!p || typeof text !== "string") return;
+      const idea = text.trim().match(/^\/idea\s+([\s\S]+)$/i);
+      if (idea) return this.submitIdea(client, idea[1]);
+      const v = text.trim().match(/^\/(up|down|unvote)\s+#?(\d+)$/i);
+      if (v) return this.voteIdea(client, Number(v[2]), v[1].toLowerCase() === "up" ? 1 : v[1].toLowerCase() === "down" ? -1 : 0);
       const clean = text.slice(0, 120).trim();
       const cmd = clean.toLowerCase().replace(/^\//, "");
       if (clean.startsWith("/") && (EMOTES as readonly string[]).includes(cmd)) {
@@ -337,13 +356,69 @@ export class TownRoom extends Room<TownState> {
     });
   }
 
-  /** Name + password check (server/accounts.ts). A new name creates the account. */
-  onAuth(_client: Client, options: { name?: string; password?: string }) {
+  /** Remembers a hashed network address per player, so one person can't suggest or vote twice with alt heroes. */
+  private addrs = new Map<string, string | undefined>();
+
+  /** Name + password check (server/accounts.ts); a new name creates the account. Also notes the network address for ideas. */
+  onAuth(client: Client, options: { name?: string; password?: string }, request?: IncomingMessage) {
     const name = login(options?.name, options?.password);
     let online = false;
     this.state.players.forEach((o) => { if (o.name.toLowerCase() === name.toLowerCase()) online = true; });
     if (online) throw new Error("This hero is already playing");
+    const fwd = process.env.TRUST_PROXY ? String(request?.headers["x-forwarded-for"] ?? "").split(",")[0].trim() : "";
+    const ip = fwd || request?.socket?.remoteAddress || "";
+    // Local addresses are skipped so several tabs on one computer can still test ideas and votes
+    const local = !ip || ip === "::1" || ip.startsWith("127.") || ip.startsWith("::ffff:127.");
+    this.addrs.set(client.sessionId, local ? undefined : hashAddr(ip));
     return { name };
+  }
+
+  private asker(client: Client): Asker | undefined {
+    const p = this.state.players.get(client.sessionId);
+    // IDEAS_ANY_LEVEL=1 lets fresh heroes suggest ideas (handy for local testing)
+    return p && { name: p.name, level: process.env.IDEAS_ANY_LEVEL ? 99 : p.level, addr: this.addrs.get(client.sessionId) };
+  }
+
+  private ideaNote(client: Client, text: string, ok = false) { client.send("ideanote", { text, ok }); }
+
+  private sendBoard(client: Client) {
+    const a = this.asker(client);
+    if (a) client.send("ideas", boardFor(ideaLog, a, Date.now()));
+  }
+
+  private ideasChanged() {
+    saveIdeas();
+    for (const c of this.clients) this.sendBoard(c);
+  }
+
+  private submitIdea(client: Client, text: unknown) {
+    const a = this.asker(client);
+    if (!a) return;
+    const r = submit(ideaLog, a, text, Date.now());
+    if (!r.ok) return this.ideaNote(client, r.error);
+    const i = r.idea!;
+    console.log(`Idea #${i.id} by ${i.author}: ${i.text}`);
+    this.ideaNote(client, `Idea #${i.id} received! Players can vote on it now.`, true);
+    this.broadcast("chat", { id: "", name: "Ideas", text: `${i.author} suggested idea #${i.id}: "${i.text.slice(0, 80)}" (/up ${i.id} or /down ${i.id})` });
+    this.ideasChanged();
+  }
+
+  private voteIdea(client: Client, id: number, v: number) {
+    const a = this.asker(client);
+    if (!a || !Number.isInteger(id)) return;
+    const r = ideaVote(ideaLog, a, id, v, Date.now());
+    if (!r.ok) return this.ideaNote(client, r.error);
+    if (r.idea!.status === "votedDown") this.broadcast("chat", { id: "", name: "Ideas", text: `Idea #${id} was voted down.` });
+    this.ideasChanged();
+  }
+
+  private ideaRound() {
+    const { winners, expired } = ideaTick(ideaLog, Date.now());
+    for (const w of winners) {
+      console.log(`Idea #${w.id} won this hour's vote: ${w.text}`);
+      this.broadcast("ideawin", { id: w.id, text: w.text, author: w.author });
+    }
+    if (winners.length || expired.length) this.ideasChanged();
   }
 
   onJoin(client: Client, options: { name?: string; color?: number; cls?: string }, auth?: { name: string }) {
@@ -358,6 +433,7 @@ export class TownRoom extends Room<TownState> {
     const s = randomSpawn();
     p.x = s.x; p.y = s.y;
     this.state.players.set(client.sessionId, p);
+    this.sendBoard(client); // the Ideas board is ready as soon as it is opened
     console.log(`${p.name} the ${CLASSES[p.cls].name} joined (${this.clients.length} online)`);
   }
 
@@ -365,6 +441,7 @@ export class TownRoom extends Room<TownState> {
     const p = this.state.players.get(client.sessionId);
     if (p) saveHero(p.name, p.cls, this.snapshot(p));
     this.state.players.delete(client.sessionId);
+    this.addrs.delete(client.sessionId);
   }
 
   onDispose() {
@@ -382,7 +459,7 @@ export class TownRoom extends Room<TownState> {
       ptSta: p.ptSta, ptStr: p.ptStr, ptMag: p.ptMag,
       weapon: p.weapon, armour: p.armour, shoes: p.shoes, hat: p.hat, shield: p.shield, ranged: p.ranged,
       bag: p.bag.toArray(), talents, slots: p.slots.toArray(),
-      questStage: p.questStage, questCount: p.questCount,
+      questId: p.questId, questStage: p.questStage, questCount: p.questCount,
     };
   }
 
@@ -398,7 +475,7 @@ export class TownRoom extends Room<TownState> {
     if (Array.isArray(s.bag)) setBag(p, s.bag.map(gear).filter(Boolean).slice(0, BAG_SIZE));
     for (const [k, v] of Object.entries(s.talents ?? {})) if (typeof v === "number") p.talents.set(k, v);
     if (Array.isArray(s.slots)) s.slots.slice(0, SLOT_COUNT).forEach((v, i) => { p.slots[i] = typeof v === "string" ? v : ""; });
-    p.questStage = num(s.questStage); p.questCount = num(s.questCount);
+    p.questId = Math.min(QUESTS.length, num(s.questId)); p.questStage = num(s.questStage); p.questCount = num(s.questCount);
   }
 
   private spawnMob(kind: MobKind, zi: number, id = `m${++this.mobSeq}`) {
@@ -414,8 +491,38 @@ export class TownRoom extends Room<TownState> {
     m.dead = false;
     m.target = "";
     m.hidden = false; m.spot = ""; m.fleeing = false;
+    m.specialKind = ""; m.specialAt = 0; m.nextBounce = 0; m.nextSlam = 0;
     if (kind === "motherblob") m.nextBrood = Date.now() + BROOD.minMs + Math.random() * (BROOD.maxMs - BROOD.minMs);
     if (!this.state.mobs.has(id)) this.state.mobs.set(id, m);
+  }
+
+  // ---- Special blobs --------------------------------------------------------
+
+  /** Shooter blob spits a slime ball at (tx,ty). It only hurts players. */
+  private blobShot(m: Mob, id: string, tx: number, ty: number) {
+    const s = new Projectile();
+    const dx = tx - m.x, dy = ty - m.y, d = Math.hypot(dx, dy) || 1;
+    s.x = m.x; s.y = m.y - 4; s.vx = dx / d; s.vy = dy / d;
+    s.owner = id; s.kind = "slimeball";
+    s.speed = BLOB_AI.shooter.shotSpeed; s.range = BLOB_AI.shooter.range * 1.4; s.radius = BLOB_AI.shooter.shotRadius;
+    s.damage = Math.round(MOBS[m.kind].damage * mobScale(m.level, "damage"));
+    this.state.projectiles.set(`s${++this.shotSeq}`, s);
+    this.broadcast("swing", { id });
+  }
+
+  /** Healer blob mends the most hurt blob (itself included) within range. */
+  private blobHeal(m: Mob, id: string, now: number) {
+    m.nextHeal = now + BLOB_AI.healer.everyMs;
+    let best: Mob | undefined, bestId = "", worst = 0.999;
+    this.state.mobs.forEach((o, oid) => {
+      if (o.dead || o.hidden || o.kind === "skeleton" || Math.hypot(o.x - m.x, o.y - m.y) > BLOB_AI.healer.range) return;
+      const f = o.hp / o.maxHp;
+      if (f < worst) { worst = f; best = o; bestId = oid; }
+    });
+    if (!best) return;
+    const amount = Math.max(1, Math.round(best.maxHp * BLOB_AI.healer.frac));
+    best.hp = Math.min(best.maxHp, best.hp + amount);
+    this.broadcast("blobheal", { from: id, to: bestId, amount });
   }
 
   // ---- Hiding in graves / trees ---------------------------------------------
@@ -471,8 +578,13 @@ export class TownRoom extends Room<TownState> {
       if (c.mother === motherId) mine++;
     });
     if (mine >= BROOD.perMother || total >= BROOD.worldCap) return;
+    if (this.budBlobling(mother, motherId)) this.broadcast("brood", { id: motherId });
+  }
+
+  /** Put one blobling next to its mother (false if there was no free spot). */
+  private budBlobling(mother: Mob, motherId: string, spread = 6): boolean {
     for (let i = 0; i < 8; i++) {
-      const a = Math.random() * Math.PI * 2, r = 8 + Math.random() * 6;
+      const a = Math.random() * Math.PI * 2, r = 8 + Math.random() * spread;
       const x = mother.x + Math.cos(a) * r, y = mother.y + Math.sin(a) * r;
       if (isSolidAt(x, y) || isSafeZone(x, y)) continue;
       const c = new Mob();
@@ -482,9 +594,48 @@ export class TownRoom extends Room<TownState> {
       c.hp = c.maxHp = Math.round(MOBS.blobling.maxHp * mobScale(c.level, "hp"));
       c.target = mother.target; // join the fight if mum is busy
       this.state.mobs.set(`b${++this.mobSeq}`, c);
-      this.broadcast("brood", { id: motherId });
-      return;
+      return true;
     }
+    return false;
+  }
+
+  /**
+   * Mother Blob special moves. Returns true while she is busy with one (she stands still).
+   * A move is telegraphed (wind-up + "mbwind" so the client can warn), then lands as a shockwave.
+   */
+  private motherSpecial(m: Mob, id: string, dist: number, now: number): boolean {
+    if (m.specialAt) {
+      if (now < m.specialAt) return true;
+      const move = m.specialKind === "slam" ? MOTHER.slam : MOTHER.bounce;
+      m.specialAt = 0; m.winding = false; m.lastAttack = now;
+      const dmg = Math.round(MOBS.motherblob.damage * mobScale(m.level, "damage") * move.dmgMult);
+      this.state.players.forEach((p, pid) => {
+        if (p.dead) return;
+        const dx = p.x - m.x, dy = p.y - m.y, d = Math.hypot(dx, dy);
+        if (d > move.radius) return;
+        const push: [number, number] = d > 0.1 ? [dx / d, dy / d] : [0, 1];
+        this.damagePlayer(pid, dmg, m.specialKind === "slam" ? "Mother Blob's Ground Slam" : "Mother Blob's Belly Bounce", push, move.knockback, { atkLevel: m.level });
+      });
+      if (m.specialKind === "slam") {
+        // the slam shakes loose a swarm of bloblings (world cap still applies)
+        let total = 0;
+        this.state.mobs.forEach((c) => { if (c.kind === "blobling" && !c.dead) total++; });
+        for (let i = 0; i < MOTHER.slam.swarm && total < BROOD.worldCap; i++) if (this.budBlobling(m, id, 18)) total++;
+      }
+      this.broadcast("mbhit", { id, kind: m.specialKind, x: m.x, y: m.y, r: move.radius });
+      m.specialKind = "";
+      return true;
+    }
+    if (m.broken || m.windUntil) return false;
+    if (m.level >= MOTHER.slam.level && now >= m.nextSlam && dist <= MOTHER.slam.range) {
+      m.specialKind = "slam"; m.specialAt = now + MOTHER.slam.windupMs; m.nextSlam = now + MOTHER.slam.cooldownMs;
+      m.nextBounce = Math.max(m.nextBounce, now + 2000);
+    } else if (m.level >= MOTHER.bounce.level && now >= m.nextBounce && dist <= MOTHER.bounce.range) {
+      m.specialKind = "bounce"; m.specialAt = now + MOTHER.bounce.windupMs; m.nextBounce = now + MOTHER.bounce.cooldownMs;
+    } else return false;
+    m.winding = true;
+    this.broadcast("mbwind", { id, kind: m.specialKind, ms: m.specialKind === "slam" ? MOTHER.slam.windupMs : MOTHER.bounce.windupMs });
+    return true;
   }
 
   // ---- Tick ---------------------------------------------------------------
@@ -498,7 +649,7 @@ export class TownRoom extends Room<TownState> {
       p.raging = now < p.rageUntil;
       tickPoise(p, heroPoiseMax(p), dt, now);
       if (p.dead) { p.moving = false; p.energy = ENERGY.max; return; }
-      if (p.questStage === Q.INVESTIGATE) this.checkQuestSight(pid, p);
+      this.checkQuestPlace(pid, p);
       if (p.energy < ENERGY.max) p.energy = Math.min(ENERGY.max, p.energy + ENERGY.regenPerSec * dt);
       p.rolling = now < p.rollUntil;
       const r = p.stunned
@@ -584,18 +735,46 @@ export class TownRoom extends Room<TownState> {
       if (Math.hypot(m.outX - m.x, m.outY - m.y) < 5) return this.hide(m, id, now);
       const go = toward(m.x, m.y, m.outX, m.outY);
       const r = moveStep(m.x, m.y, go, dt, def.speed * (m.fleeing ? POISE.fleeSpeed : 0.6) * (m.slowed ? SLOW_MOB : 1));
-      if (!isSafeZone(r.x, r.y)) { m.x = r.x; m.y = r.y; }
+      if (!isSafeZone(r.x, r.y) && !noMobsAt(r.x, r.y)) { m.x = r.x; m.y = r.y; }
       m.moving = r.moving;
       m.dir = dirFromInput(go, m.dir);
       return;
     }
 
+    if (m.kind === "healerblob" && now >= m.nextHeal) this.blobHeal(m, id, now);
+
     let input: InputState;
+    const ranged = m.kind === "shooterblob" || m.kind === "healerblob";
     if (t && m.broken) {
       // Broken: dizzy, can't fight back, tries to get away from the attacker
       input = toward(m.x, m.y, m.x * 2 - t.x, m.y * 2 - t.y);
+    } else if (t && ranged) {
+      // Shooter / healer blobs hang back: step away when crowded, close in when too far
+      const dist = Math.hypot(t.x - m.x, t.y - m.y);
+      const keep = m.kind === "shooterblob" ? BLOB_AI.shooter.keepAway : BLOB_AI.healer.keepAway;
+      const far = m.kind === "shooterblob" ? BLOB_AI.shooter.range * 0.85 : BLOB_AI.healer.range;
+      input = dist < keep ? toward(m.x, m.y, m.x * 2 - t.x, m.y * 2 - t.y) : dist > far ? toward(m.x, m.y, t.x, t.y) : STILL;
+      if (m.kind === "shooterblob") {
+        if (m.windUntil) {
+          input = STILL;
+          if (now >= m.windUntil) {
+            m.windUntil = 0; m.winding = false; m.lastAttack = now;
+            if (dist <= BLOB_AI.shooter.range * 1.2) this.blobShot(m, id, t.x, t.y);
+          }
+        } else if (dist <= BLOB_AI.shooter.range && now - m.lastAttack >= def.attackCooldownMs / poiseSpeed(poiseFrac(m, mobPoiseMax(m)))) {
+          m.windUntil = now + MOB_COMBAT[m.kind].windupMs; m.winding = true;
+        }
+      }
+      if (input === STILL) m.dir = Math.abs(t.x - m.x) > Math.abs(t.y - m.y) ? (t.x > m.x ? "right" : "left") : (t.y > m.y ? "down" : "up");
+    } else if (t && m.kind === "motherblob" && this.motherSpecial(m, id, Math.hypot(t.x - m.x, t.y - m.y), now)) {
+      input = STILL;
     } else if (t) {
       const dist = Math.hypot(t.x - m.x, t.y - m.y);
+      // Warrior blob: lunge at a target a few steps away
+      if (m.kind === "warriorblob" && !m.windUntil && now >= m.nextCharge && dist >= BLOB_AI.warrior.chargeMin && dist <= BLOB_AI.warrior.chargeMax) {
+        m.chargeUntil = now + BLOB_AI.warrior.chargeMs; m.nextCharge = now + BLOB_AI.warrior.cooldownMs;
+        this.broadcast("blobcharge", { id });
+      }
       if (dist <= MOB_ATTACK_RANGE || m.windUntil) {
         input = STILL;
         m.dir = Math.abs(t.x - m.x) > Math.abs(t.y - m.y) ? (t.x > m.x ? "right" : "left") : (t.y > m.y ? "down" : "up");
@@ -627,9 +806,10 @@ export class TownRoom extends Room<TownState> {
       input = m.wander;
     }
 
-    const speed = (t ? def.speed * (m.broken ? POISE.fleeSpeed : 1) : def.speed * 0.5) * (m.slowed ? SLOW_MOB : 1);
+    const charge = now < m.chargeUntil ? BLOB_AI.warrior.chargeMult : 1;
+    const speed = (t ? def.speed * (m.broken ? POISE.fleeSpeed : 1) * charge : def.speed * 0.5) * (m.slowed ? SLOW_MOB : 1);
     const r = moveStep(m.x, m.y, input, dt, speed);
-    if (!isSafeZone(r.x, r.y)) { m.x = r.x; m.y = r.y; }
+    if (!isSafeZone(r.x, r.y) && !noMobsAt(r.x, r.y)) { m.x = r.x; m.y = r.y; }
     m.moving = r.moving;
     m.dir = dirFromInput(input, m.dir);
   }
@@ -644,6 +824,14 @@ export class TownRoom extends Room<TownState> {
       s.y += (oy * total) / steps;
       s.traveled += total / steps;
       if (isSolidAt(s.x, s.y) || s.traveled >= s.range) return this.explode(s, id);
+      const shooter = this.state.mobs.get(s.owner);
+      if (shooter) {
+        // A monster's shot only hits players
+        let pid = "";
+        this.state.players.forEach((p, k) => { if (!pid && !p.dead && Math.hypot(p.x - s.x, p.y - s.y) <= s.radius + HIT_RADIUS) pid = k; });
+        if (pid && this.damagePlayer(pid, s.damage, MOBS[shooter.kind].name, [s.vx, s.vy], 0.5, { atkLevel: shooter.level })) return this.explode(s, id, pid);
+        continue;
+      }
       const hit = this.firstTargetAt(s.x, s.y, s.radius + HIT_RADIUS, s.owner, s.hitIds);
       if (hit) {
         this.hitTarget(s.owner, hit, s.damage, [s.vx, s.vy], { kb: s.knockback, slowMs: s.slowMs || undefined });
@@ -667,9 +855,9 @@ export class TownRoom extends Room<TownState> {
 
   // ---- Loot -------------------------------------------------------------
 
-  private dropItem(kind: ItemKind, x: number, y: number, amount: number, gear = "") {
+  private dropItem(kind: ItemKind, x: number, y: number, amount: number, gear = "", owner = "") {
     const it = new Item();
-    it.kind = kind; it.amount = amount; it.gear = gear;
+    it.kind = kind; it.amount = amount; it.gear = gear; it.owner = owner;
     // Scatter a little so several drops don't stack exactly
     it.x = x + (Math.random() - 0.5) * 10;
     it.y = y + (Math.random() - 0.5) * 10;
@@ -690,6 +878,15 @@ export class TownRoom extends Room<TownState> {
   private pickUp(p: Player, pid: string) {
     this.state.items.forEach((it, id) => {
       if (Math.hypot(it.x - p.x, it.y - p.y) > PICKUP_RADIUS) return;
+      if (it.kind === "quest") {
+        if (it.owner !== pid) return; // someone else's quest drop
+        const s = questStep(p);
+        this.state.items.delete(id);
+        if (s?.type !== "collect" || s.item !== it.gear) return; // left over from an earlier step
+        this.clients.find((c) => c.sessionId === pid)?.send("pickup", { kind: it.kind, amount: 1, x: it.x, y: it.y, gear: it.gear, name: "" });
+        this.questProgress(pid, p, p.questCount + 1);
+        return;
+      }
       if (it.kind === "potion") {
         if (p.potions >= MAX_POTIONS) return; // full: leave it on the ground
         p.potions += it.amount;
@@ -911,14 +1108,11 @@ export class TownRoom extends Room<TownState> {
     if (opts.stunMs) m.stunUntil = Math.max(m.stunUntil, now + opts.stunMs);
     if (opts.slowMs) m.slowUntil = Math.max(m.slowUntil, now + opts.slowMs);
     const k = moveStep(m.x, m.y, pushInput(push), 0.1 * kb);
-    if (!isSafeZone(k.x, k.y)) { m.x = k.x; m.y = k.y; }
+    if (!isSafeZone(k.x, k.y) && !noMobsAt(k.x, k.y)) { m.x = k.x; m.y = k.y; }
     this.broadcast("hit", { id: targetId, dmg, crit: !!opts.crit });
     if (m.hp > 0) return;
     m.dead = true;
-    if (a && a.questStage === Q.HUNT && isBlob(m.kind)) {
-      a.questCount++;
-      if (a.questCount >= QUEST.killGoal) this.setQuest(attackerId, a, Q.RETURN);
-    }
+    if (a) this.questKill(attackerId, a, m);
     m.hidden = false; m.spot = ""; m.fleeing = false;
     this.grantXp(attackerId, Math.round(def.xp * mobScale(m.level, "xp")), m);
     this.dropLoot(m.kind, m.x, m.y, mobScale(m.level, "gold"), m.level);
@@ -977,35 +1171,87 @@ export class TownRoom extends Room<TownState> {
   }
 
   // ---- Quest -------------------------------------------------------------
+  // The blob quest chain (shared/quests.ts). The server owns progress; the client gets "quest" {qid, stage, done?}.
 
-  private setQuest(id: string, p: Player, stage: number) {
-    p.questStage = stage;
-    this.clients.find((c) => c.sessionId === id)?.send("quest", { stage });
+  private sendQuest(id: string, p: Player, done = false) {
+    this.clients.find((c) => c.sessionId === id)?.send("quest", { qid: p.questId, stage: p.questStage, done });
   }
 
-  /** Accept / hand in at the druid. Only works standing next to him. */
+  /** Move to the next step (or claim the reward and move on to the next quest). */
+  private nextStep(id: string, p: Player) {
+    const d = QUESTS[p.questId];
+    if (!d) return;
+    p.questCount = 0;
+    if (p.questStage < d.steps.length) { p.questStage++; this.sendQuest(id, p); return; }
+    p.gold += d.reward.gold;
+    p.potions = Math.min(MAX_POTIONS, p.potions + d.reward.potions);
+    p.questId++;
+    p.questStage = 0;
+    this.sendQuest(id, p, true);
+    this.grantXp(id, d.reward.xp, p);
+  }
+
+  /** Progress on a kill / collect / use step; finishes the step at its goal. */
+  private questProgress(id: string, p: Player, count: number) {
+    const s = questStep(p);
+    if (!s) return;
+    p.questCount = count;
+    const n = s.type === "use" ? (count === (1 << s.objects!.length) - 1 ? stepGoal(s) : 0) : count;
+    if (n >= stepGoal(s)) this.nextStep(id, p);
+  }
+
+  private nearNpc(p: Player, npc: string): boolean {
+    const n = npcById(npc);
+    return !!n && npcPresent(npc, p) && Math.hypot(n.x - p.x, n.y - p.y) <= TALK_RANGE * 1.5;
+  }
+
+  /** Accept a quest at its giver, or finish a "talk" step next to that NPC. */
   private advanceQuest(id: string) {
     const p = this.state.players.get(id);
-    if (!p || p.dead || npcNear(p.x, p.y, TALK_RANGE * 1.5)?.id !== QUEST.giver) return;
-    if (p.questStage === Q.NONE) this.setQuest(id, p, Q.INVESTIGATE);
-    else if (p.questStage === Q.REPORT) { p.questCount = 0; this.setQuest(id, p, Q.HUNT); }
-    else if (p.questStage === Q.RETURN) {
-      p.gold += QUEST.reward.gold;
-      p.potions = Math.min(MAX_POTIONS, p.potions + QUEST.reward.potions);
-      this.setQuest(id, p, Q.DONE);
-      this.grantXp(id, QUEST.reward.xp, p);
+    const d = p && QUESTS[p.questId];
+    if (!p || !d || p.dead) return;
+    if (p.questStage === 0) {
+      if (p.level >= d.minLevel && this.nearNpc(p, d.giver)) this.nextStep(id, p);
+      return;
+    }
+    const s = questStep(p);
+    if (s?.type === "talk" && this.nearNpc(p, s.npc!)) this.nextStep(id, p);
+  }
+
+  /** E on a quest object (lantern, shrine, cocoon, Brood Heart). */
+  private useQuestObject(id: string, oid: string) {
+    const p = this.state.players.get(id);
+    const s = p && questStep(p);
+    if (!p || p.dead || s?.type !== "use") return;
+    const i = s.objects!.findIndex((o) => o.id === oid);
+    const o = s.objects![i];
+    if (!o || p.questCount & (1 << i) || Math.hypot(o.x - p.x, o.y - p.y) > USE_RANGE * 1.5) return;
+    this.clients.find((c) => c.sessionId === id)?.send("questuse", { id: o.id });
+    this.questProgress(id, p, p.questCount | (1 << i));
+  }
+
+  /** "see" a blob in a zone, or "reach" a spot. */
+  private checkQuestPlace(id: string, p: Player) {
+    const s = questStep(p);
+    if (s?.type === "reach") {
+      if (Math.hypot(s.at!.x - p.x, s.at!.y - p.y) <= s.at!.r) this.nextStep(id, p);
+      return;
+    }
+    if (s?.type !== "see" || !inZone(s.zone!, p.x, p.y)) return;
+    const r2 = (9 * TILE) ** 2;
+    for (const m of this.state.mobs.values()) {
+      if (m.dead || m.hidden || !s.kinds!.includes(m.kind)) continue;
+      const dx = m.x - p.x, dy = m.y - p.y;
+      if (dx * dx + dy * dy <= r2) { this.nextStep(id, p); return; }
     }
   }
 
-  /** Investigation step: a blob seen in the quest zone. */
-  private checkQuestSight(id: string, p: Player) {
-    if (!inQuestZone(p.x, p.y)) return;
-    const r2 = QUEST.sightRange * QUEST.sightRange;
-    for (const m of this.state.mobs.values()) {
-      if (m.dead || m.hidden || !isBlob(m.kind)) continue;
-      const dx = m.x - p.x, dy = m.y - p.y;
-      if (dx * dx + dy * dy <= r2) { this.setQuest(id, p, Q.REPORT); return; }
-    }
+  /** A monster died to this player: count it, or maybe drop a quest item only they can see. */
+  private questKill(id: string, p: Player, m: Mob) {
+    const s = questStep(p);
+    if (!s || !s.kinds?.includes(m.kind) || (s.zone && !inZone(s.zone, m.x, m.y))) return;
+    if (s.type === "kill") this.questProgress(id, p, p.questCount + 1);
+    else if (s.type === "collect" && Math.random() < (s.chance?.[m.kind] ?? 0)) this.dropItem("quest", m.x, m.y, 1, s.item!, id);
   }
 
   private grantXp(id: string, amount: number, at: { x: number; y: number }) {

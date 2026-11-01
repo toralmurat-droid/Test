@@ -1,8 +1,8 @@
 export const TILE = 32; // px per tile (same pixel size as the 32px heroes)
 /** Tile art was first designed on a 16-unit grid: K = fine pixels per design unit. */
 export const ART_K = TILE / 16;
-export const MAP_W = 224; // tiles
-export const MAP_H = 168; // tiles
+export const MAP_W = 288; // tiles
+export const MAP_H = 216; // tiles
 export const TICK_RATE = 20; // server updates per second
 export const PLAYER_SPEED = 90; // px per second (default; classes override, see classes.ts)
 export const PLAYER_RADIUS = 5; // collision half-size in px
@@ -28,7 +28,7 @@ export interface InputState {
   right: boolean;
 }
 
-export type MobKind = "slime" | "skeleton" | "motherblob" | "blobling";
+export type MobKind = "slime" | "skeleton" | "motherblob" | "blobling" | "shooterblob" | "warriorblob" | "healerblob" | "bandit";
 
 export interface MobDef {
   name: string;
@@ -48,10 +48,34 @@ export const MOBS: Record<MobKind, MobDef> = {
   motherblob: { name: "Mother Blob", maxHp: 200, speed: 28, damage: 12, attackCooldownMs: 1300, aggroRange: 70, leash: 120, xp: 60 },
   // Tiny, quick, fragile children of a Mother Blob; they never respawn on their own
   blobling: { name: "Blobling", maxHp: 14, speed: 58, damage: 4, attackCooldownMs: 800, aggroRange: 90, leash: 160, xp: 3 },
+  // Higher-level blob zones: a ranged spitter, a helmeted brawler and a healer that keeps the others alive (see BLOB_AI)
+  shooterblob: { name: "Shooter Blob", maxHp: 50, speed: 40, damage: 10, attackCooldownMs: 1800, aggroRange: 130, leash: 180, xp: 18 },
+  warriorblob: { name: "Warrior Blob", maxHp: 110, speed: 52, damage: 16, attackCooldownMs: 1100, aggroRange: 100, leash: 170, xp: 26 },
+  healerblob: { name: "Healer Blob", maxHp: 60, speed: 42, damage: 5, attackCooldownMs: 1200, aggroRange: 110, leash: 160, xp: 22 },
+  // Outlaws of Redfang Hollow: quick, hit hard, hood and red bandana
+  bandit: { name: "Bandit", maxHp: 95, speed: 64, damage: 15, attackCooldownMs: 950, aggroRange: 120, leash: 200, xp: 30 },
+};
+
+/** Special blob behaviour. Distances in px. */
+export const BLOB_AI = {
+  shooter: { range: 110, keepAway: 55, shotSpeed: 150, shotRadius: 3 }, // spits slime balls from a distance
+  warrior: { chargeMin: 26, chargeMax: 72, chargeMs: 320, chargeMult: 3, cooldownMs: 4000 }, // lunges at you
+  healer: { range: 70, everyMs: 3000, frac: 0.15, keepAway: 50 }, // heals the most hurt blob nearby, stays back
+};
+
+/**
+ * Mother Blob grows with her level: a new look per tier (more armour the higher she is) and special moves.
+ * Lv 5+: Belly Bounce, a short-range shockwave that knocks players back.
+ * Lv 10+: Ground Slam, a big hit around her that also calls a swarm of bloblings.
+ */
+export const MOTHER = {
+  tier: (level: number) => (level >= 10 ? 3 : level >= 5 ? 2 : 1),
+  bounce: { level: 5, range: 34, radius: 42, windupMs: 600, cooldownMs: 7000, dmgMult: 0.8, knockback: 3 },
+  slam: { level: 10, range: 70, radius: 66, windupMs: 900, cooldownMs: 15000, dmgMult: 1.8, knockback: 2, swarm: 5 },
 };
 
 /** Mother Blob brood: every few seconds (random) she may bud a blobling, up to `perMother` alive at once. */
-export const BROOD = { minMs: 5000, maxMs: 12000, perMother: 4, worldCap: 40 };
+export const BROOD = { minMs: 5000, maxMs: 12000, perMother: 4, worldCap: 60 };
 /** How a monster's level scales its base stats (level 1 = the MOBS numbers). */
 export const MOB_LEVEL = { hp: 0.3, damage: 0.12, xp: 0.25, gold: 0.2 }; // +x per level above 1
 export function mobScale(level: number, stat: keyof typeof MOB_LEVEL): number {

@@ -4,7 +4,10 @@ import "./npcs.css";
 import { pixelText } from "./pixeltext";
 import Phaser from "phaser";
 import { NPCS, NPC_DECOR, Npc, npcNear, TALK_RANGE } from "../../shared/npcs";
-import { druidDialog, Q, QUEST, QUEST_ZONE, questObjective, questTarget } from "../../shared/quests";
+import {
+  npcPresent, npcQuestMark, QUESTS, questDialog, questObjective, questStep, QuestState as QState, questTargets, stepGoal, stepProgress,
+} from "../../shared/quests";
+import { QuestObjects } from "./questObjects";
 import { TILE } from "../../shared/constants";
 import type { MapMarker } from "./minimap";
 import { QuestLog } from "./questlog";
@@ -17,7 +20,7 @@ import { itemTexture } from "./textures";
 
 type Me = { x: number; y: number } | undefined;
 /** The local player's synced state (only the fields NPCs care about). */
-type QuestState = { questStage: number; questCount: number; gold?: number; potions?: number; cls?: string; bag?: Iterable<string> } | undefined;
+type QuestState = (QState & { gold?: number; potions?: number; cls?: string; bag?: Iterable<string> }) | undefined;
 
 /**
  * Village NPCs (shared/npcs.ts): sprites by the bonfire, "!"/"?" quest markers, an "E Talk" prompt when close,
@@ -31,6 +34,11 @@ export class NpcLayer {
   private toast = document.createElement("div");
   private near?: Npc;
   private talking?: Npc;
+  /** Trader page instead of the quest talk (traders who also give quests get a "Trade" button) */
+  private trading = false;
+  private q: QuestState;
+  readonly objects: QuestObjects;
+  private nearObj?: ReturnType<QuestObjects["near"]>;
   private trackerHtml = "";
   private stage: unknown = -1;
   private shopMsg = "";
@@ -45,7 +53,7 @@ export class NpcLayer {
     this.tracker.id = "questtracker";
     this.toast.id = "questtoast";
     hud.append(this.prompt, this.dialog, this.tracker, this.toast);
-    this.prompt.onclick = () => this.near && this.open(this.near);
+    this.prompt.onclick = () => this.interact();
     this.tracker.onclick = () => this.log.toggle(true);
     for (const n of NPCS) {
       const sprite = scene.add.sprite(n.x, n.y, n.sprite, 0).setOrigin(CHAR_ORIGIN.x, CHAR_ORIGIN.y).setScale(0.75 / ART_K).setDepth(n.y);
@@ -61,6 +69,7 @@ export class NpcLayer {
       this.sprites.set(n.id, { sprite, label, mark });
     }
     this.addSurroundings(scene);
+    this.objects = new QuestObjects(scene);
   }
 
   /** Hut, cauldron, forge… around the traders, plus Brann hammering at his anvil and the witch's bubbling brew. */
@@ -110,9 +119,10 @@ export class NpcLayer {
 
   get isOpen() { return !!this.talking; }
 
-  /** E key: talk to the NPC you stand next to (or close the dialog). */
+  /** E key: use the quest object you stand next to, talk to the NPC next to you, or close the dialog. */
   interact() {
     if (this.talking) this.close();
+    else if (this.nearObj) this.send("use", { id: this.nearObj.id });
     else if (this.near) this.open(this.near);
   }
 
@@ -121,16 +131,12 @@ export class NpcLayer {
     this.dialog.classList.remove("open");
   }
 
-  /** Server says the quest moved on: banner + refresh the open dialog. */
-  onQuest(stage: number) {
-    const msg: Record<number, [string, string]> = {
-      [Q.INVESTIGATE]: ["New quest", QUEST.title],
-      [Q.REPORT]: [`Blobs in the ${QUEST_ZONE.name}!`, "Go back and tell Elder Rowan"],
-      [Q.HUNT]: ["Quest updated", `Kill ${QUEST.killGoal} blobs`],
-      [Q.RETURN]: [`${QUEST.killGoal} blobs slain!`, "Return to Elder Rowan"],
-      [Q.DONE]: ["Quest complete", QUEST.title],
-    };
-    const m = msg[stage];
+  /** Server says the quest moved on: banner in the pixel font. */
+  onQuest(msg: { qid: number; stage: number; done?: boolean }) {
+    let m: [string, string] | undefined;
+    if (msg.done) m = ["Quest complete", QUESTS[msg.qid - 1]?.title ?? ""];
+    else m = QUESTS[msg.qid]?.steps[msg.stage - 1]?.banner;
+    if (m && m[0] === "New quest") m = ["New quest", QUESTS[msg.qid].title];
     this.tracker.classList.remove("flash"); void this.tracker.offsetWidth; this.tracker.classList.add("flash");
     if (m) {
       // Same pixel lettering as the zone banners
@@ -149,6 +155,7 @@ export class NpcLayer {
 
   private open(n: Npc) {
     this.talking = n;
+    this.trading = !questDialog(n.id, this.q);
     this.shopMsg = "";
     this.stage = -1; // force a redraw
     this.dialog.classList.add("open");
@@ -163,7 +170,7 @@ export class NpcLayer {
     const shop = SHOPS[n.shop!];
     const gold = q?.gold ?? 0, potions = q?.potions ?? 0, cls = q?.cls;
     const bag = [...(q?.bag ?? [])];
-    const key = JSON.stringify([n.id, gold, potions, bag, this.shopMsg]);
+    const key = JSON.stringify([n.id, gold, potions, bag, this.shopMsg, q?.questId, q?.questStage]);
     if (key === this.stage) return;
     this.stage = key;
     const row = (icon: string, name: string, color: string, desc: string, btn: string, cls2: string, i: number, off: boolean) =>
@@ -184,11 +191,14 @@ export class NpcLayer {
         ? sellable.map(([id, i]) => row(id, gearName(id, cls), TIER_COLORS[GEAR[id].tier], `${TIER_NAMES[GEAR[id].tier]} · ${itemText(id)}`, `Sell ${sellPrice(id)} 🪙`, "sh-sell", i, false)).join("")
         : `<p class="sh-empty">No weapons in your bag. Unequip one in the Bag (G) to sell it.</p>`)
       : "";
+    const quest = questDialog(n.id, q);
     this.dialog.innerHTML = this.head(n) + `<p>${shop.greeting}</p>` +
       `<div class="sh-gold">Your gold: <b>${gold} 🪙</b> ${this.shopMsg}</div>` +
       `<h4>For sale</h4><div class="sh-list">${buy}</div>${sell}` +
-      `<div class="nd-btns"><button class="nd-bye">Goodbye <kbd>E</kbd></button></div>`;
+      `<div class="nd-btns">${quest ? `<button class="nd-talk">Talk</button>` : ""}<button class="nd-bye">Goodbye <kbd>E</kbd></button></div>`;
     this.dialog.classList.add("shop");
+    const talk = this.dialog.querySelector<HTMLButtonElement>(".nd-talk");
+    if (talk) talk.onclick = () => { this.trading = false; this.stage = -1; };
     for (const el of this.dialog.querySelectorAll<HTMLElement>(".sh-icon")) {
       const id = el.dataset.icon!;
       el.appendChild(id === "potion" ? this.potionIcon() : iconCanvas(this.scene, id, 32));
@@ -211,53 +221,74 @@ export class NpcLayer {
 
   private renderDialog(q: QuestState) {
     const n = this.talking!;
-    if (n.shop) return this.renderShop(n, q);
+    const page = questDialog(n.id, q);
+    if (n.shop && (this.trading || !page)) return this.renderShop(n, q);
     this.dialog.classList.remove("shop");
-    const stage = q?.questStage ?? 0, count = q?.questCount ?? 0;
-    const key = stage * 1000 + count;
+    const key = JSON.stringify([n.id, q?.questId, q?.questStage, q?.questCount, q?.level]);
     if (key === this.stage) return;
     this.stage = key;
-    const page = druidDialog(stage, count);
+    const p = page ?? { text: ["Good day to you."], bye: "Farewell" };
     this.dialog.innerHTML = this.head(n) +
-      page.text.map((t) => `<p>${t}</p>`).join("") +
-      `<div class="nd-btns">${page.accept ? `<button class="nd-accept">${page.accept}</button>` : ""}<button class="nd-bye">${page.bye} <kbd>E</kbd></button></div>`;
+      p.text.map((t) => `<p>${t}</p>`).join("") +
+      `<div class="nd-btns">${p.accept ? `<button class="nd-accept">${p.accept}</button>` : ""}` +
+      `${n.shop ? `<button class="nd-trade">Trade</button>` : ""}<button class="nd-bye">${p.bye} <kbd>E</kbd></button></div>`;
     const acc = this.dialog.querySelector<HTMLButtonElement>(".nd-accept");
     if (acc) acc.onclick = () => { this.send("quest"); acc.disabled = true; };
+    const trade = this.dialog.querySelector<HTMLButtonElement>(".nd-trade");
+    if (trade) trade.onclick = () => { this.trading = true; this.stage = -1; };
     this.dialog.querySelector<HTMLButtonElement>(".nd-bye")!.onclick = () => this.close();
   }
 
   update(me: Me, q: QuestState) {
-    this.near = me ? npcNear(me.x, me.y) : undefined;
-    if (this.talking && (!me || npcNear(me.x, me.y, TALK_RANGE * 1.6) !== this.talking)) this.close(); // walked away
-    this.prompt.classList.toggle("open", !!this.near && !this.talking);
-    if (this.near && !this.talking) this.prompt.innerHTML = `<kbd>E</kbd> ${this.near.shop ? "Trade with" : "Talk to"} ${this.near.name}`;
+    this.q = q;
+    const present = (n: Npc) => npcPresent(n.id, q);
+    this.objects.update(q);
+    this.nearObj = this.talking ? undefined : this.objects.near(me, q);
+    this.near = me ? npcNear(me.x, me.y, TALK_RANGE, present) : undefined;
+    if (this.talking && (!me || npcNear(me.x, me.y, TALK_RANGE * 1.6, present) !== this.talking)) this.close(); // walked away
+    const showPrompt = (!!this.near || !!this.nearObj) && !this.talking;
+    this.prompt.classList.toggle("open", showPrompt);
+    if (showPrompt) {
+      this.prompt.innerHTML = this.nearObj
+        ? `<kbd>E</kbd> ${this.nearObj.verb}: ${this.nearObj.name}`
+        : `<kbd>E</kbd> ${this.near!.shop ? "Trade with" : "Talk to"} ${this.near!.name}`;
+    }
     if (this.talking) this.renderDialog(q);
 
-    const stage = q?.questStage ?? 0, count = q?.questCount ?? 0;
-    const druid = this.sprites.get(QUEST.giver);
-    if (druid) {
-      // "!" = quest to pick up, "?" = come back to me
-      const mark = stage === Q.NONE ? "!" : stage === Q.REPORT || stage === Q.RETURN ? "?" : "";
-      if (druid.mark.text !== mark) druid.mark.setText(mark);
+    // "!" = quest to pick up, "?" = come and talk to me
+    for (const n of NPCS) {
+      const s = this.sprites.get(n.id);
+      if (!s) continue;
+      const here = present(n);
+      s.sprite.setVisible(here); s.label.setVisible(here); s.mark.setVisible(here);
+      const mark = here ? npcQuestMark(n.id, q) : "";
+      if (s.mark.text !== mark) s.mark.setText(mark);
     }
-    // Map markers: "!" / "?" on the quest giver, coins on traders, and the current quest target
-    const target = this.log.tracked ? questTarget(stage) : undefined;
-    this.markers = NPCS.map((n): MapMarker => {
-      if (n.id === QUEST.giver) {
-        const g = druid?.mark.text ?? "";
-        return { x: n.x, y: n.y, glyph: g || "•", color: g ? "#ffd166" : "#b9f27c", label: n.name, track: !!g && (stage === Q.NONE || target?.kind === "npc") };
-      }
-      return { x: n.x, y: n.y, glyph: "$", color: "#f2c14e", label: n.title };
+    // Map markers: "!" / "?" on NPCs, coins on traders, and the current quest targets
+    const def = q ? QUESTS[q.questId] : QUESTS[0];
+    const targets = this.log.tracked ? questTargets(q) : [];
+    this.markers = NPCS.filter(present).map((n): MapMarker => {
+      const g = npcQuestMark(n.id, q);
+      if (g) return { x: n.x, y: n.y, glyph: g, color: "#ffd166", label: n.name, track: this.log.tracked };
+      if (n.shop) return { x: n.x, y: n.y, glyph: "$", color: "#f2c14e", label: n.title };
+      return { x: n.x, y: n.y, glyph: "•", color: "#b9f27c", label: n.name };
     });
-    if (target?.kind === "area") this.markers.push({ x: target.x, y: target.y, r: target.r, glyph: "", color: "#ffd166", label: target.label, track: true });
+    for (const t of targets) {
+      if (t.kind === "area") this.markers.push({ x: t.x, y: t.y, r: t.r, glyph: "", color: "#ffd166", label: t.label, track: true });
+      else if (t.kind === "object") this.markers.push({ x: t.x, y: t.y, glyph: "◆", color: "#7ff3ff", label: t.label, track: true });
+    }
     this.log.render(q);
 
     // On-screen tracker: quest, current objective, progress bar and where to go
-    const obj = questObjective(stage, count);
+    const step = questStep(q);
+    const obj = questObjective(q);
     let html = "";
-    if (obj && this.log.tracked) {
-      const bar = stage === Q.HUNT ? `<div class="qt-bar"><div style="width:${Math.min(1, count / QUEST.killGoal) * 100}%"></div></div>` : "";
+    if (def && step && obj && this.log.tracked) {
+      const goal = stepGoal(step), n = stepProgress(step, q!.questCount);
+      const bar = goal > 1 ? `<div class="qt-bar"><div style="width:${(n / goal) * 100}%"></div></div>` : "";
       let dir = "";
+      // Point at the nearest target
+      const target = me && targets.length ? targets.reduce((a, b) => (Math.hypot(a.x - me.x, a.y - me.y) <= Math.hypot(b.x - me.x, b.y - me.y) ? a : b)) : undefined;
       if (target && me) {
         const dx = target.x - me.x, dy = target.y - me.y, d = Math.hypot(dx, dy) - (target.r ?? 0);
         if (d > TILE * 2) {
@@ -267,7 +298,11 @@ export class NpcLayer {
           dir = `<div class="qt-dir">${arrows[k]} ${Math.round(d / TILE)} tiles ${names[k]}</div>`;
         } else if (target.kind === "area") dir = `<div class="qt-dir">You are here</div>`;
       }
-      html = `<div class="qt-title">${QUEST.title}</div><div class="qt-obj">${stage === Q.REPORT || stage === Q.RETURN ? "➜ " : "• "}${obj}</div>${bar}${dir}<div class="qt-hint">J: quest log</div>`;
+      html = `<div class="qt-title">${def.title}</div><div class="qt-obj">${step.type === "talk" ? "➜ " : "• "}${obj}</div>${bar}${dir}<div class="qt-hint">J: quest log</div>`;
+    } else if (def && q && q.questStage === 0 && this.log.tracked && (q.level ?? 1) >= def.minLevel && q.questId > 0) {
+      // Between quests: point to whoever has the next one
+      const giver = NPCS.find((n) => n.id === def.giver);
+      html = `<div class="qt-title">New quest available</div><div class="qt-obj">➜ Talk to ${giver?.name ?? ""} <b class="bang">!</b></div><div class="qt-hint">J: quest log</div>`;
     }
     if (html !== this.trackerHtml) {
       this.trackerHtml = html;
