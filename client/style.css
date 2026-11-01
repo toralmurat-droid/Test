@@ -110,3 +110,10 @@ html, body { margin: 0; height: 100%; background: #1b1b24; color: #eee; font: 14
   background: rgba(30,30,46,.9); border: 2px solid #555a7a; padding: 6px 10px; cursor: pointer; }
 #bagbtn:hover { border-color: #ffd166; }
 #bagbtn small { color: #aaa; font-weight: normal; }
+
+/* Level-up notice: the hero menu no longer pops up, the player opens it (C or click) */
+#lvlnote { position: absolute; bottom: 64px; left: 50%; transform: translateX(-50%); pointer-events: auto; cursor: pointer;
+  font: inherit; font-size: 14px; font-weight: bold; color: #7cfc00; background: rgba(30,30,46,.9); border: 2px solid #7cfc00;
+  padding: 6px 12px; white-space: nowrap; max-width: calc(100% - 32px); overflow: hidden; text-overflow: ellipsis;
+  animation: lvlnote-pulse 1.2s ease-in-out infinite; z-index: 6; }
+@keyframes lvlnote-pulse { 50% { box-shadow: 0 0 10px #7cfc00; } }

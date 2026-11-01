@@ -57,7 +57,7 @@ export class TownScene extends Phaser.Scene {
   private items = new Map<string, Phaser.GameObjects.Image>();
   private lastSpecial = -Infinity; // local clock (ms) of my last special, for the cooldown bar
   private lastUlt = -Infinity;
-  private heroTimer?: number;
+  private levelFrom?: number; // level before the level-ups the player hasn't looked at yet
   private clearedTimer?: number;
   private gearMenu?: GearMenu;
   private talentMenu?: TalentMenu;
@@ -96,6 +96,7 @@ export class TownScene extends Phaser.Scene {
     this.input.keyboard!.on("keydown-Q", () => { if (!this.chatting()) this.room?.send("potion"); });
     this.input.keyboard!.on("keydown-R", () => { if (!this.chatting()) this.room?.send("ult"); });
     this.input.keyboard!.on("keydown-C", () => { if (!this.chatting()) this.toggleHeroMenu(); });
+    document.getElementById("lvlnote")!.onclick = () => this.toggleHeroMenu();
     this.gearMenu = new GearMenu(this, (type, msg) => this.room?.send(type, msg));
     const toggleGear = () => this.gearMenu?.toggle(this.entities.get(this.me)?.state);
     this.input.keyboard!.on("keydown-G", () => { if (!this.chatting()) toggleGear(); });
@@ -209,7 +210,11 @@ export class TownScene extends Phaser.Scene {
       if (e) this.floatText(e.sprite.x, e.sprite.y - 20, `LEVEL ${level}!`, "#7cfc00");
       if (id === this.me) {
         this.feed(`You reached level ${level}`);
-        this.showHeroMenu(from ?? level - 1);
+        // Don't pop the menu up mid-fight: show a small notice, the player opens it with C
+        this.levelFrom = Math.min(this.levelFrom ?? Infinity, from ?? level - 1);
+        const note = document.getElementById("lvlnote")!;
+        note.textContent = `⬆ Level ${level}! Press C to see your new stats`;
+        note.hidden = false;
       }
     });
     this.room.onMessage("hit", ({ id, dmg, blocked, crit }) => {
@@ -328,10 +333,12 @@ export class TownScene extends Phaser.Scene {
 
   private toggleHeroMenu() {
     const el = document.getElementById("hero")!;
-    if (el.hidden) this.showHeroMenu(); else el.hidden = true;
+    if (el.hidden) this.showHeroMenu(this.levelFrom); else el.hidden = true;
+    this.levelFrom = undefined;
+    document.getElementById("lvlnote")!.hidden = true;
   }
 
-  /** Opens the hero menu. After a level-up (`from` = previous level) it highlights the gains and auto-closes. */
+  /** Opens the hero menu. After level-ups (`from` = level before them) it highlights the gains. */
   private showHeroMenu(from?: number) {
     const mine = this.entities.get(this.me)?.state;
     if (!mine) return;
@@ -340,7 +347,7 @@ export class TownScene extends Phaser.Scene {
     const base = statsFor(cls, lvl);
     const prev = from !== undefined ? statsFor(cls, from) : undefined;
     const el = document.getElementById("hero")!;
-    document.getElementById("herobanner")!.textContent = from !== undefined ? `⬆ Level ${lvl}! Points added automatically.` : "";
+    document.getElementById("herobanner")!.textContent = from !== undefined ? `⬆ Level ${lvl}! Stat points were added automatically.` : "";
     document.getElementById("herotitle")!.textContent = `${mine.name} · Lv ${lvl} ${CLASSES[cls].name}`;
     const notes: Record<StatKind, string> = {
       sta: `${mine.maxHp} max HP`,
@@ -359,8 +366,6 @@ export class TownScene extends Phaser.Scene {
       return `<li class="${state}"><b>${pw.name}${key}</b> · ${tag}<br>${pw.desc}</li>`;
     }).join("");
     el.hidden = false;
-    clearTimeout(this.heroTimer);
-    if (from !== undefined) this.heroTimer = window.setTimeout(() => { el.hidden = true; }, 7000);
   }
 
   private showUlt(msg: { id: string; kind: string; x: number; y: number; r: number; delay?: number; hits?: number }) {
