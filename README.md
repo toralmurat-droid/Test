@@ -44,6 +44,16 @@ and water are solid).
 
 In game, a minimap sits top-right and a banner shows the area name as you walk between regions.
 
+The world is alive (`client/src/ambient.ts`, cosmetic only): trees and bushes are tall sprites that sway in a travelling
+wind and hide you when you walk behind them; water ripples and has shoreline foam, the mill wheel turns, grass and
+flowers sway, chimneys and the campfire smoke, buildings cast shadows, and butterflies, birds, fireflies, jumping fish
+and cloud shadows drift around.
+
+Detail layer (`client/src/details.ts`): shaded roofs with ridges and eaves, pebbles, tufts, mushrooms and fallen
+leaves, grass spilling over road edges, rounded shorelines with reeds and lily pads, ducks on Mirror Pond, door
+lanterns and gate banners. An 8-minute day/night cycle (shared by all players via the clock) lights up windows,
+lanterns and the campfire at night. Add `?time=day|dusk|night` to the URL to force a time of day.
+
 **Map viewer:** with `npm run dev` running, open http://localhost:5173/map.html to see the whole map with area,
 collision and grid overlays (no server needed). Edit `shared/map.ts` and it hot-reloads.
 
