@@ -474,6 +474,7 @@ export class TownScene extends Phaser.Scene {
       const label = this.add.text(p.x, p.y, `Lv${p.level ?? 1}`, {
         fontFamily: "monospace", fontSize: "14px", color: "#ffffff", stroke: "#000", strokeThickness: 3,
       }).setOrigin(0.5, 1).setScale(0.25).setResolution(2);
+      isoAnchor(label, sprite);
       this.entities.set(id, { sprite, label, bar: isoAnchor(this.add.graphics(), sprite) as Phaser.GameObjects.Graphics, tx: p.x, ty: p.y, state: p, mob, top: MOB_LOOK[p.kind]?.top ?? 14 });
       return;
     }
@@ -486,6 +487,7 @@ export class TownScene extends Phaser.Scene {
       fontFamily: "monospace", fontSize: "16px", color: id === this.me ? "#ffd166" : "#ffffff",
       stroke: "#000", strokeThickness: 3,
     }).setOrigin(0.5, 1).setScale(0.25).setResolution(2);
+    isoAnchor(label, sprite);
     const bar = isoAnchor(this.add.graphics(), sprite) as Phaser.GameObjects.Graphics;
     const gear = hero ? new GearLayer(this, hero) : undefined;
     this.entities.set(id, { sprite, label, bar, tx: p.x, ty: p.y, state: p, mob, hero, gear, top: hero ? HERO_TOP : 14 });
@@ -842,6 +844,7 @@ export class TownScene extends Phaser.Scene {
       fontFamily: "monospace", fontSize: "16px", color: "#000", backgroundColor: "#ffffffdd",
       padding: { x: 4, y: 2 }, wordWrap: { width: 400 },
     }).setOrigin(0.5, 1).setScale(0.25).setResolution(2).setDepth(20000);
+    isoAnchor(e.bubble, e.sprite);
     const b = e.bubble;
     this.time.delayedCall(4000, () => { if (e.bubble === b) { b.destroy(); e.bubble = undefined; } });
   }
