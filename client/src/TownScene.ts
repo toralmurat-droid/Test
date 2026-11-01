@@ -73,6 +73,7 @@ export class TownScene extends Phaser.Scene {
   private items = new Map<string, Phaser.GameObjects.Image>();
   private lastSpecial = -Infinity; // local clock (ms) of my last special, for the cooldown bar
   private lastDodge = -Infinity;
+  private lastRanged = -Infinity;
   private actionsHtml = ""; // local clock (ms) of my last dodge roll
   private lastUlt = -Infinity;
   private heroFrom?: number;
@@ -108,7 +109,7 @@ export class TownScene extends Phaser.Scene {
     cam.roundPixels = true;
 
     // Keys without capture so typing in chat still works
-    this.keys = this.input.keyboard!.addKeys("W,A,S,D,UP,DOWN,LEFT,RIGHT,SPACE,SHIFT,Q,C,G,T,F,ONE,TWO,NUMPAD_ONE,NUMPAD_TWO", false) as any;
+    this.keys = this.input.keyboard!.addKeys("W,A,S,D,UP,DOWN,LEFT,RIGHT,SPACE,SHIFT,Q,C,G,T,F,R,ONE,TWO,NUMPAD_ONE,NUMPAD_TWO", false) as any;
     this.input.keyboard!.on("keydown-SPACE", () => { if (!this.chatting()) this.room?.send("attack"); });
     // Skills learned in the tree go on the number keys (top row or numpad): 1 = class skill, 2 = ultimate
     const special = () => { if (!this.chatting()) this.room?.send("special"); };
@@ -118,6 +119,8 @@ export class TownScene extends Phaser.Scene {
     this.input.keyboard!.on("keydown-TWO", ult);
     this.input.keyboard!.on("keydown-NUMPAD_TWO", ult);
     this.input.keyboard!.on("keydown-Q", () => { if (!this.chatting()) this.room?.send("potion"); });
+    // Secondary ranged weapon from the equipment screen (sling, knives, crossbow)
+    this.input.keyboard!.on("keydown-R", () => { if (!this.chatting()) this.room?.send("ranged"); });
     const dodge = () => { if (!this.chatting()) this.room?.send("dodge"); };
     this.input.keyboard!.on("keydown-SHIFT", dodge);
     this.input.keyboard!.on("keydown-F", dodge);
@@ -196,7 +199,14 @@ export class TownScene extends Phaser.Scene {
     const shots = (this.room.state as any).projectiles;
     shots.onAdd((s: any, id: string) => {
       const size = s.size || 1;
-      const g: Phaser.GameObjects.Shape = s.kind === "arrow"
+      const g: Phaser.GameObjects.Shape = s.kind === "stone"
+        // Sling stone (equipment)
+        ? this.add.circle(s.x, s.y, 1.5, 0x9e9e9e).setStrokeStyle(0.5, 0x424242).setDepth(9000)
+        : s.kind === "knife" || s.kind === "bolt"
+        // Thrown knife / crossbow bolt (equipment)
+        ? this.add.rectangle(s.x, s.y, s.kind === "bolt" ? 8 : 5, s.kind === "bolt" ? 1.5 : 2, s.kind === "bolt" ? 0x8d6e63 : 0xe0e6ee)
+            .setStrokeStyle(0.5, 0x37474f).setAngle(Math.atan2(s.vy ?? 0, s.vx ?? 1) * 180 / Math.PI).setDepth(9000)
+        : s.kind === "arrow"
         // Arrow: thin shaft along the flight direction
         ? this.add.rectangle(s.x, s.y, 9 * size, 1.5 * size, 0xe8d8b0).setStrokeStyle(0.5, 0x5d4037)
             .setAngle(Math.atan2(s.vy ?? 0, s.vx ?? 1) * 180 / Math.PI).setDepth(9000)
@@ -243,9 +253,14 @@ export class TownScene extends Phaser.Scene {
     this.room.onMessage("swing", ({ id, step, variant, ax, ay }) => this.showSwing(id, step ?? 0, variant ?? 0, ax, ay));
     this.room.onMessage("special", (msg) => this.showSpecial(msg));
     this.room.onMessage("boom", ({ x, y, r, kind }) =>
-      kind === "arrow" ? this.burst(x, y, 3, 0xd7ccc8, 150) : this.burst(x, y, r ? r / 1.8 : 6, 0xff9f1c, r ? 300 : 200));
+      kind === "arrow" || kind === "stone" || kind === "knife" || kind === "bolt" ? this.burst(x, y, 3, 0xd7ccc8, 150) : this.burst(x, y, r ? r / 1.8 : 6, 0xff9f1c, r ? 300 : 200));
     this.room.onMessage("ult", (msg) => this.showUlt(msg));
     this.room.onMessage("dodge", (msg) => this.showDodge(msg));
+    this.room.onMessage("rangedshot", ({ id }) => {
+      const e = this.entities.get(id);
+      if (id === this.me) this.lastRanged = this.time.now;
+      if (e?.hero && !e.state.dead) playCharAnim(e.sprite, e.hero, "attack", e.state.dir);
+    });
     this.room.onMessage("zonecleared", ({ zone, by, name }) => {
       if (by === this.me) this.showCleared(zone);
       this.feed(`${name} cleared ${zone}!`);
@@ -503,6 +518,8 @@ export class TownScene extends Phaser.Scene {
       row("2", u.name, u.cooldownMs * cdm, this.lastUlt, "", hasUlt(cls, mine.talents) ? "" : `🔒 Lv ${ultPower(cls).level}`, ENERGY.cost.ult),
       row("Shift", "Dodge roll", DODGE.cooldownMs, this.lastDodge, "", "", ENERGY.cost.dodge),
       row("Q", "Potion", 0, 0, `×${mine.potions}`, mine.potions > 0 ? "" : "×0"),
+      // Secondary ranged weapon from the equipment screen, only when one is worn
+      ...(mine.ranged && GEAR[mine.ranged]?.shot ? [row("R", GEAR[mine.ranged].name, GEAR[mine.ranged].shot!.cooldownMs, this.lastRanged)] : []),
     ].join("");
     const el = document.getElementById("actions")!;
     if (this.actionsHtml !== html) { el.innerHTML = html; this.actionsHtml = html; }

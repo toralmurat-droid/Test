@@ -658,9 +658,11 @@ const guard = human({
 export const HEROES: Hero[] = [ninja, wizard, knight, archer, barbarian];
 export const NPCS: Hero[] = [blacksmith, merchant, villager, guard];
 
-export type GearPart = "legs" | "torso" | "head" | "weapon";
+export type GearPart = "legs" | "torso" | "head" | "weapon" | "shield";
+/** Extra pose info for the gear generator: body offset, weapon hand/angle, and a way to redraw the weapon elsewhere. */
+export interface GearCtx { ux: number; uy: number; hand: [number, number]; ang: number; hasShield: boolean; redraw: (dx: number, dy: number) => Canvas }
 /** Set by tools/art/gear.ts while it renders gear overlays: recolours `main` where the part (`mask`) is visible. */
-export let gearHook: ((part: GearPart, main: Canvas, mask: Canvas, p: Pose, hero: string) => void) | null = null;
+export let gearHook: ((part: GearPart, main: Canvas, mask: Canvas, p: Pose, hero: string, g: GearCtx) => void) | null = null;
 export function setGearHook(fn: typeof gearHook) { gearHook = fn; }
 
 /** Render one frame into a fresh 32x32 canvas. */
@@ -680,19 +682,24 @@ export function renderFrame(hero: Hero, p: Pose, withShadow = true, flash = 0): 
   const ang = weaponAngle(p, hero);
   const legTop = 24 + p.crouch;
   const mv = moveOf(hero, p);
-  const shieldAt = () => {
-    if (!hero.shield) return;
+  const shieldAt = () => part("shield", () => {
+    if (!hero.shield) return; // heroes without one still go through `part`, so gear can add a shield
     const push = mv.kind === "bash" && p.attack >= 0 ? (p.dir === "right" ? [-1, 2, 2, 1] : [-1, 3, 4, 2])[p.attack] : 0;
     const [sx, sy] = [FACE[p.dir][0] * push, FACE[p.dir][1] * push];
     d.ux += sx; d.uy += sy; hero.shield(d); d.ux -= sx; d.uy -= sy;
-  };
+  });
   // Each body part goes through `part` so the gear generator (tools/art/gear.ts) can recolour it
   const part = (slot: GearPart, fn: () => void) => {
     fn();
     if (!gearHook) return;
     const main = d.c, mask = new Canvas(FW, FH);
     d.c = mask; fn(); d.c = main;
-    gearHook(slot, main, mask, p, hero.name);
+    const redraw = (dx: number, dy: number) => {
+      const m = new Canvas(FW, FH), keep = d.c;
+      d.c = m; hero.weapon(d, [hand[0] + dx, hand[1] + dy], ang); d.c = keep;
+      return m;
+    };
+    gearHook(slot, main, mask, p, hero.name, { ux: d.ux, uy: d.uy, hand, ang, hasShield: !!hero.shield, redraw });
   };
   const head = () => part("head", () => { const hd = p.headDx ?? 0; d.ux += hd; hero.head(d); d.ux -= hd; });
   const legs = () => part("legs", () => hero.legs(d, legTop));

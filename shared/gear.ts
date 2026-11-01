@@ -2,13 +2,15 @@ import type { MobKind } from "./constants";
 import { STATS, Stats } from "./powers";
 
 /**
- * Equipment: four slots, each item adds stats and is drawn on the hero.
+ * Equipment: six slots, each item adds stats and is drawn on the hero.
  * Art convention: overlay sheets `assets/gear/{hero}_{id}.png` (same frame layout as the hero sheet, see tools/art/gear.ts),
- * icons in the `gear_icons` atlas with frame name = id. Player fields weapon/armour/shoes/hat hold the equipped id ("" = none).
+ * icons in the `gear_icons` atlas with frame name = id. Player fields weapon/ranged/shield/armour/hat/shoes hold the equipped id ("" = none).
  */
-export type GearSlot = "weapon" | "armour" | "shoes" | "hat";
-export const GEAR_SLOTS: GearSlot[] = ["weapon", "armour", "shoes", "hat"];
-export const SLOT_NAMES: Record<GearSlot, string> = { weapon: "Weapon", armour: "Armour", shoes: "Shoes", hat: "Hat" };
+export type GearSlot = "weapon" | "ranged" | "shield" | "armour" | "hat" | "shoes";
+export const GEAR_SLOTS: GearSlot[] = ["weapon", "ranged", "shield", "armour", "hat", "shoes"];
+export const SLOT_NAMES: Record<GearSlot, string> = { weapon: "Weapon", ranged: "Ranged", shield: "Shield", armour: "Armour", hat: "Hat", shoes: "Shoes" };
+/** Key that fires the equipped ranged (secondary) weapon. */
+export const RANGED_KEY = "R";
 
 export interface GearBonus {
   atk?: number; // added to the hero's attack stat (Strength or Magic, by class)
@@ -16,7 +18,12 @@ export interface GearBonus {
   str?: number;
   mag?: number;
   speed?: number; // fraction, 0.1 = +10% move speed
+  reach?: number; // fraction, 0.4 = melee reach and projectile range +40%
+  block?: number; // fraction of incoming damage the shield stops
 }
+
+/** Secondary ranged weapon: fired with RANGED_KEY, independent of the class attack. */
+export interface ShotDef { damage: number; range: number; speed: number; cooldownMs: number; kind: "stone" | "knife" | "bolt" }
 
 export interface GearDef {
   id: string;
@@ -27,6 +34,7 @@ export interface GearDef {
   color: number; // main colour on the hero
   accent: number; // trim / glow
   style: string; // drawing style for the art generator
+  shot?: ShotDef; // ranged slot only
 }
 
 const G = (d: GearDef) => d;
@@ -34,6 +42,19 @@ export const GEAR: Record<string, GearDef> = Object.fromEntries([
   G({ id: "w_bronze", slot: "weapon", tier: 1, name: "Bronze", bonus: { atk: 2 }, color: 0xcd7f32, accent: 0xffd08a, style: "plain" }),
   G({ id: "w_frost", slot: "weapon", tier: 2, name: "Frost", bonus: { atk: 4, mag: 1 }, color: 0x7fd8ff, accent: 0xe8fbff, style: "plain" }),
   G({ id: "w_dragon", slot: "weapon", tier: 3, name: "Dragonfire", bonus: { atk: 7, str: 1 }, color: 0xff5a1f, accent: 0xffc247, style: "glow" }),
+  // Long weapons: more reach (bigger melee arc, longer shots) for a bit less attack
+  G({ id: "w_ash", slot: "weapon", tier: 1, name: "Ashwood Long", bonus: { atk: 1, reach: 0.25 }, color: 0xa87444, accent: 0xe0b98a, style: "long" }),
+  G({ id: "w_long", slot: "weapon", tier: 2, name: "Longreach", bonus: { atk: 3, reach: 0.4 }, color: 0xc8d6e0, accent: 0x4cc9f0, style: "long" }),
+  G({ id: "w_sky", slot: "weapon", tier: 3, name: "Skyreach", bonus: { atk: 5, reach: 0.6 }, color: 0xffd166, accent: 0xfff3b0, style: "longglow" }),
+  G({ id: "sh_wood", slot: "shield", tier: 1, name: "Wooden Shield", bonus: { sta: 1, block: 0.05 }, color: 0x9a6634, accent: 0x6f7883, style: "round" }),
+  G({ id: "sh_iron", slot: "shield", tier: 2, name: "Iron Shield", bonus: { sta: 2, block: 0.1 }, color: 0xa3acb6, accent: 0x5a626c, style: "kite" }),
+  G({ id: "sh_dragon", slot: "shield", tier: 3, name: "Dragon Shield", bonus: { sta: 4, block: 0.15 }, color: 0xb3262e, accent: 0xf2c14e, style: "kite" }),
+  G({ id: "r_sling", slot: "ranged", tier: 1, name: "Sling", bonus: {}, color: 0x8a5a32, accent: 0xc89b6a, style: "sling",
+    shot: { damage: 10, range: 120, speed: 200, cooldownMs: 1100, kind: "stone" } }),
+  G({ id: "r_knives", slot: "ranged", tier: 2, name: "Throwing Knives", bonus: { str: 1 }, color: 0xc9cdd6, accent: 0x6b4226, style: "knives",
+    shot: { damage: 16, range: 140, speed: 240, cooldownMs: 850, kind: "knife" } }),
+  G({ id: "r_crossbow", slot: "ranged", tier: 3, name: "Crossbow", bonus: { str: 1, sta: 1 }, color: 0x6b4423, accent: 0xb0bec5, style: "crossbow",
+    shot: { damage: 28, range: 190, speed: 280, cooldownMs: 1400, kind: "bolt" } }),
   G({ id: "a_leather", slot: "armour", tier: 1, name: "Leather Vest", bonus: { sta: 2 }, color: 0x8a5a32, accent: 0xc89b6a, style: "plain" }),
   G({ id: "a_chain", slot: "armour", tier: 2, name: "Chainmail", bonus: { sta: 4, str: 1 }, color: 0xa7b6c8, accent: 0x5c6878, style: "mail" }),
   G({ id: "a_royal", slot: "armour", tier: 3, name: "Royal Plate", bonus: { sta: 7, str: 1, mag: 1 }, color: 0xb3262e, accent: 0xf2c14e, style: "trim" }),
@@ -86,6 +107,16 @@ export function gearStats(cls: string, eq: Equipped): Stats {
   return out;
 }
 
+/** Melee reach / projectile range multiplier from long weapons. */
+export function gearReachMult(eq: Equipped): number {
+  return 1 + ((eq.weapon ? GEAR[eq.weapon]?.bonus.reach : 0) ?? 0);
+}
+
+/** Fraction of damage the equipped shield blocks. */
+export function gearBlock(eq: Equipped): number {
+  return (eq.shield ? GEAR[eq.shield]?.bonus.block : 0) ?? 0;
+}
+
 /** Move speed multiplier from shoes (and anything else with `speed`). */
 export function gearSpeedMult(eq: Equipped): number {
   let m = 1;
@@ -110,5 +141,15 @@ export function bonusText(b: GearBonus): string {
   if (b.str) parts.push(`+${b.str} Strength`);
   if (b.mag) parts.push(`+${b.mag} Magic`);
   if (b.speed) parts.push(`+${Math.round(b.speed * 100)}% speed`);
+  if (b.reach) parts.push(`+${Math.round(b.reach * 100)}% reach`);
+  if (b.block) parts.push(`blocks ${Math.round(b.block * 100)}% damage`);
   return parts.join(", ");
+}
+
+/** Full description of an item: bonuses, plus damage/range for ranged weapons. */
+export function itemText(id: string): string {
+  const d = GEAR[id];
+  if (!d) return "";
+  const shot = d.shot ? `${d.shot.damage} dmg, range ${d.shot.range}, every ${(d.shot.cooldownMs / 1000).toFixed(1)}s [${RANGED_KEY}]` : "";
+  return [shot, bonusText(d.bonus)].filter(Boolean).join(", ");
 }

@@ -1,5 +1,5 @@
 import Phaser from "phaser";
-import { bonusText, GEAR, GEAR_IDS, GEAR_SLOTS, gearName, gearStats, gearSpeedMult, GearSlot, BAG_SIZE, SLOT_NAMES, TIER_NAMES } from "../../shared/gear";
+import { GEAR, itemText, GEAR_IDS, GEAR_SLOTS, gearName, gearStats, gearSpeedMult, GearSlot, BAG_SIZE, SLOT_NAMES, TIER_NAMES } from "../../shared/gear";
 import { STAT_NAMES, StatKind } from "../../shared/powers";
 
 /**
@@ -19,8 +19,8 @@ export function preloadGear(scene: Phaser.Scene) {
 
 export const gearKey = (hero: string, id: string) => `gear_${hero}_${id}`;
 
-/** Drawn order on top of the hero: shoes, armour, hat, weapon. */
-const LAYER_ORDER: GearSlot[] = ["shoes", "armour", "hat", "weapon"];
+/** Drawn order on top of the hero (each overlay already has the right pixels hidden behind the body). */
+const LAYER_ORDER: GearSlot[] = ["ranged", "shoes", "armour", "hat", "shield", "weapon"];
 
 /** Overlay sprites for one hero. Call sync() every frame after the hero sprite is updated. */
 export class GearLayer {
@@ -118,7 +118,7 @@ export class GearMenu {
       row.appendChild(icon);
       const txt = document.createElement("span");
       txt.innerHTML = id
-        ? `<b style="color:${TIER_COLORS[GEAR[id].tier]}">${gearName(id, cls)}</b><br><small>${bonusText(GEAR[id].bonus)}</small>`
+        ? `<b style="color:${TIER_COLORS[GEAR[id].tier]}">${gearName(id, cls)}</b><br><small>${itemText(id)}</small>`
         : `<b>${SLOT_NAMES[slot]}</b><br><small>empty</small>`;
       row.appendChild(txt);
       if (id) { row.title = "Click to take off"; row.onclick = () => this.send("unequip", slot); }
@@ -145,7 +145,7 @@ export class GearMenu {
         const d = GEAR[id];
         cell.appendChild(iconCanvas(this.scene, id));
         cell.style.borderColor = TIER_COLORS[d.tier];
-        cell.title = `${gearName(id, cls)} (${TIER_NAMES[d.tier]} ${SLOT_NAMES[d.slot]})\n${bonusText(d.bonus)}\nClick: equip · Right-click: drop`;
+        cell.title = `${gearName(id, cls)} (${TIER_NAMES[d.tier]} ${SLOT_NAMES[d.slot]})\n${itemText(id)}\nClick: equip · Right-click: drop`;
         cell.onclick = () => this.send("equip", i);
         cell.oncontextmenu = (ev) => { ev.preventDefault(); this.send("dropgear", i); };
       } else cell.disabled = true;
