@@ -2,7 +2,7 @@ import type { IncomingMessage } from "node:http";
 import { Client, Room } from "colyseus";
 import { ArraySchema, MapSchema, Schema, type } from "@colyseus/schema";
 import {
-  BLOB_AI, BROOD, Dir, HIT_RADIUS, mobScale, InputState, MOB_ATTACK_RANGE, MOBS, MobKind, REGEN_DELAY_MS, REGEN_RAMP_MS, regenFromStamina, SAFE_REGEN_MULT,
+  BLOB_AI, BROOD, Dir, MOTHER, HIT_RADIUS, mobScale, InputState, MOB_ATTACK_RANGE, MOBS, MobKind, REGEN_DELAY_MS, REGEN_RAMP_MS, regenFromStamina, SAFE_REGEN_MULT,
   RESPAWN_MS, TICK_RATE,
 } from "../shared/constants";
 import {
@@ -121,6 +121,7 @@ export class Mob extends Schema {
   fleeing = false; // dizzy and running for cover
   chargeUntil = 0; nextCharge = 0; // warrior blob lunge
   nextHeal = 0; // healer blob
+  specialKind = ""; specialAt = 0; nextBounce = 0; nextSlam = 0; // mother blob special moves
   @type("number") x = 0;
   @type("number") y = 0;
   @type("string") dir: Dir = "down";
@@ -441,6 +442,7 @@ export class TownRoom extends Room<TownState> {
     m.dead = false;
     m.target = "";
     m.hidden = false; m.spot = ""; m.fleeing = false;
+    m.specialKind = ""; m.specialAt = 0; m.nextBounce = 0; m.nextSlam = 0;
     if (kind === "motherblob") m.nextBrood = Date.now() + BROOD.minMs + Math.random() * (BROOD.maxMs - BROOD.minMs);
     if (!this.state.mobs.has(id)) this.state.mobs.set(id, m);
   }
@@ -527,8 +529,13 @@ export class TownRoom extends Room<TownState> {
       if (c.mother === motherId) mine++;
     });
     if (mine >= BROOD.perMother || total >= BROOD.worldCap) return;
+    if (this.budBlobling(mother, motherId)) this.broadcast("brood", { id: motherId });
+  }
+
+  /** Put one blobling next to its mother (false if there was no free spot). */
+  private budBlobling(mother: Mob, motherId: string, spread = 6): boolean {
     for (let i = 0; i < 8; i++) {
-      const a = Math.random() * Math.PI * 2, r = 8 + Math.random() * 6;
+      const a = Math.random() * Math.PI * 2, r = 8 + Math.random() * spread;
       const x = mother.x + Math.cos(a) * r, y = mother.y + Math.sin(a) * r;
       if (isSolidAt(x, y) || isSafeZone(x, y)) continue;
       const c = new Mob();
@@ -538,9 +545,48 @@ export class TownRoom extends Room<TownState> {
       c.hp = c.maxHp = Math.round(MOBS.blobling.maxHp * mobScale(c.level, "hp"));
       c.target = mother.target; // join the fight if mum is busy
       this.state.mobs.set(`b${++this.mobSeq}`, c);
-      this.broadcast("brood", { id: motherId });
-      return;
+      return true;
     }
+    return false;
+  }
+
+  /**
+   * Mother Blob special moves. Returns true while she is busy with one (she stands still).
+   * A move is telegraphed (wind-up + "mbwind" so the client can warn), then lands as a shockwave.
+   */
+  private motherSpecial(m: Mob, id: string, dist: number, now: number): boolean {
+    if (m.specialAt) {
+      if (now < m.specialAt) return true;
+      const move = m.specialKind === "slam" ? MOTHER.slam : MOTHER.bounce;
+      m.specialAt = 0; m.winding = false; m.lastAttack = now;
+      const dmg = Math.round(MOBS.motherblob.damage * mobScale(m.level, "damage") * move.dmgMult);
+      this.state.players.forEach((p, pid) => {
+        if (p.dead) return;
+        const dx = p.x - m.x, dy = p.y - m.y, d = Math.hypot(dx, dy);
+        if (d > move.radius) return;
+        const push: [number, number] = d > 0.1 ? [dx / d, dy / d] : [0, 1];
+        this.damagePlayer(pid, dmg, m.specialKind === "slam" ? "Mother Blob's Ground Slam" : "Mother Blob's Belly Bounce", push, move.knockback, { atkLevel: m.level });
+      });
+      if (m.specialKind === "slam") {
+        // the slam shakes loose a swarm of bloblings (world cap still applies)
+        let total = 0;
+        this.state.mobs.forEach((c) => { if (c.kind === "blobling" && !c.dead) total++; });
+        for (let i = 0; i < MOTHER.slam.swarm && total < BROOD.worldCap; i++) if (this.budBlobling(m, id, 18)) total++;
+      }
+      this.broadcast("mbhit", { id, kind: m.specialKind, x: m.x, y: m.y, r: move.radius });
+      m.specialKind = "";
+      return true;
+    }
+    if (m.broken || m.windUntil) return false;
+    if (m.level >= MOTHER.slam.level && now >= m.nextSlam && dist <= MOTHER.slam.range) {
+      m.specialKind = "slam"; m.specialAt = now + MOTHER.slam.windupMs; m.nextSlam = now + MOTHER.slam.cooldownMs;
+      m.nextBounce = Math.max(m.nextBounce, now + 2000);
+    } else if (m.level >= MOTHER.bounce.level && now >= m.nextBounce && dist <= MOTHER.bounce.range) {
+      m.specialKind = "bounce"; m.specialAt = now + MOTHER.bounce.windupMs; m.nextBounce = now + MOTHER.bounce.cooldownMs;
+    } else return false;
+    m.winding = true;
+    this.broadcast("mbwind", { id, kind: m.specialKind, ms: m.specialKind === "slam" ? MOTHER.slam.windupMs : MOTHER.bounce.windupMs });
+    return true;
   }
 
   // ---- Tick ---------------------------------------------------------------
@@ -671,6 +717,8 @@ export class TownRoom extends Room<TownState> {
         }
       }
       if (input === STILL) m.dir = Math.abs(t.x - m.x) > Math.abs(t.y - m.y) ? (t.x > m.x ? "right" : "left") : (t.y > m.y ? "down" : "up");
+    } else if (t && m.kind === "motherblob" && this.motherSpecial(m, id, Math.hypot(t.x - m.x, t.y - m.y), now)) {
+      input = STILL;
     } else if (t) {
       const dist = Math.hypot(t.x - m.x, t.y - m.y);
       // Warrior blob: lunge at a target a few steps away

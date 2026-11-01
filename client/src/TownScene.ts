@@ -226,6 +226,8 @@ export class TownScene extends Phaser.Scene {
         const e = this.entities.get(id);
         if (!e) return;
         e.tx = m.x; e.ty = m.y;
+        // A respawned Mother Blob can come back at another level, with another look
+        if (m.kind === "motherblob") { const key = mobTexture(this, m.kind, m.level); if (e.sprite.texture.key !== key) e.sprite.setTexture(key, 0); }
         if (Math.hypot(e.sprite.x - m.x, e.sprite.y - m.y) > 48) e.sprite.setPosition(m.x, m.y);
       });
     });
@@ -294,6 +296,20 @@ export class TownScene extends Phaser.Scene {
         this.tweens.add({ targets: beam, alpha: 0, duration: 450, onComplete: () => beam.destroy() });
       }
       this.floatText(b.sprite.x, b.sprite.y - b.top - 6, `+${amount}`, "#7cfc00", PIXEL_FONT);
+    });
+    // Mother Blob special: she swells up (wind-up), then a shockwave ring; the slam also shakes the screen
+    this.room.onMessage("mbwind", ({ id, kind, ms }) => {
+      const e = this.entities.get(id);
+      if (!e) return;
+      this.tweens.add({ targets: e.sprite, scaleX: kind === "slam" ? 1.3 : 1.15, scaleY: kind === "slam" ? 1.3 : 0.85, duration: ms, yoyo: false,
+        onComplete: () => e.sprite.setScale(1) });
+      this.floatText(e.sprite.x, e.sprite.y - e.top - 6, kind === "slam" ? "GROUND SLAM!" : "BOUNCE!", kind === "slam" ? "#ff5252" : "#ffb74d", PIXEL_FONT);
+    });
+    this.room.onMessage("mbhit", ({ kind, x, y, r }) => {
+      const ring = this.add.circle(x, y, 4).setStrokeStyle(kind === "slam" ? 3 : 2, kind === "slam" ? 0xff5252 : 0xffb74d, 0.9).setDepth(20000);
+      this.tweens.add({ targets: ring, radius: r, alpha: 0, duration: kind === "slam" ? 420 : 300, onComplete: () => ring.destroy() });
+      const me = this.entities.get(this.me);
+      if (me && Math.hypot(me.sprite.x - x, me.sprite.y - y) < r * 2.5) this.cameras.main.shake(kind === "slam" ? 260 : 120, kind === "slam" ? 0.008 : 0.004);
     });
     // Warrior blob lunges: quick stretch
     this.room.onMessage("blobcharge", ({ id }) => {
@@ -433,7 +449,7 @@ export class TownScene extends Phaser.Scene {
 
   private addEntity(id: string, p: any, mob = false) {
     if (mob) {
-      const sprite = this.add.sprite(p.x, p.y, mobTexture(this, p.kind), 0).setOrigin(0.5, MOB_LOOK[p.kind]?.oy ?? 0.85);
+      const sprite = this.add.sprite(p.x, p.y, mobTexture(this, p.kind, p.level), 0).setOrigin(0.5, MOB_LOOK[p.kind]?.oy ?? 0.85);
       const label = this.add.text(p.x, p.y, `Lv${p.level ?? 1}`, {
         fontFamily: "monospace", fontSize: "14px", color: "#ffffff", stroke: "#000", strokeThickness: 3,
       }).setOrigin(0.5, 1).setScale(0.25).setResolution(2);
