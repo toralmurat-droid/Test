@@ -28,6 +28,9 @@ export class Player extends Schema {
   @type("number") x = 0;
   @type("number") y = 0;
   @type("string") dir: Dir = "down";
+  // Aim: unit vector of the last movement direction, diagonals included (attacks and shots go this way)
+  @type("number") ax = 0;
+  @type("number") ay = 1;
   @type("boolean") moving = false;
   @type("number") hp = 100;
   @type("number") maxHp = 100;
@@ -111,6 +114,8 @@ export class Projectile extends Schema {
   @type("number") x = 0;
   @type("number") y = 0;
   @type("string") dir: Dir = "down";
+  @type("number") vx = 0; // flight direction (unit vector, may be diagonal)
+  @type("number") vy = 1;
   @type("string") owner = "";
   @type("number") size = 1; // visual scale (combo finisher fireballs are bigger)
   @type("string") kind = "fireball"; // "fireball" | "arrow" (client picks the visual)
@@ -162,6 +167,21 @@ const COLORS = [0xe74c3c, 0x3498db, 0x2ecc71, 0xf1c40f, 0x9b59b6, 0xe67e22, 0x1a
 const STILL: InputState = { up: false, down: false, left: false, right: false };
 const DIR_OFFSET: Record<Dir, [number, number]> = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] };
 const pushInput = (o: [number, number]): InputState => ({ up: o[1] < 0, down: o[1] > 0, left: o[0] < 0, right: o[0] > 0 });
+
+/** Unit vector of the keys held (diagonals included), or null when not moving. */
+function aimFromInput(i: InputState): [number, number] | null {
+  const x = (i.right ? 1 : 0) - (i.left ? 1 : 0), y = (i.down ? 1 : 0) - (i.up ? 1 : 0);
+  if (!x && !y) return null;
+  const l = Math.hypot(x, y);
+  return [x / l, y / l];
+}
+
+/** Where a hero attacks: the keys held right now, else the last direction they moved. */
+function aimOf(p: Player): [number, number] {
+  const a = !p.rolling && aimFromInput(p.input);
+  if (a) { p.ax = a[0]; p.ay = a[1]; }
+  return [p.ax, p.ay];
+}
 
 function dirFromInput(i: InputState, fallback: Dir): Dir {
   if (i.left) return "left";
@@ -307,7 +327,7 @@ export class TownRoom extends Room<TownState> {
         ? moveStep(p.x, p.y, p.rollInput, dt, DODGE.distance / (DODGE.durationMs / 1000))
         : moveStep(p.x, p.y, p.input, dt, heroSpeed(p.cls, p.talents, p.slowed, p.raging) * gearSpeedMult(this.equipped(p)) * talentMult(p.cls, p.talents, "speed"));
       p.x = r.x; p.y = r.y; p.moving = r.moving;
-      if (!p.rolling) p.dir = dirFromInput(p.input, p.dir);
+      if (!p.rolling) { p.dir = dirFromInput(p.input, p.dir); aimOf(p); }
       if (r.moving) p.emote = "";
       p.guarding = now < p.guardUntil;
       // Regeneration from Stamina: always a trickle, ramping up smoothly out of combat, fastest in the safe plaza
@@ -406,7 +426,7 @@ export class TownRoom extends Room<TownState> {
   }
 
   private updateProjectile(s: Projectile, id: string, dt: number) {
-    const [ox, oy] = DIR_OFFSET[s.dir];
+    const ox = s.vx, oy = s.vy;
     // Sub-step so fast shots never skip over a target or a thin wall
     const total = s.speed * dt;
     const steps = Math.max(1, Math.ceil(total / 4));
@@ -417,7 +437,7 @@ export class TownRoom extends Room<TownState> {
       if (isSolidAt(s.x, s.y) || s.traveled >= s.range) return this.explode(s, id);
       const hit = this.firstTargetAt(s.x, s.y, s.radius + HIT_RADIUS, s.owner, s.hitIds);
       if (hit) {
-        this.hitTarget(s.owner, hit, s.damage, DIR_OFFSET[s.dir], { kb: s.knockback, slowMs: s.slowMs || undefined });
+        this.hitTarget(s.owner, hit, s.damage, [s.vx, s.vy], { kb: s.knockback, slowMs: s.slowMs || undefined });
         // Piercing arrows keep flying through a few targets
         if (s.pierce > 0) { s.pierce--; s.hitIds.add(hit); continue; }
         return this.explode(s, id, hit);
@@ -494,7 +514,7 @@ export class TownRoom extends Room<TownState> {
     p.energy -= ENERGY.cost.dodge;
     const i = p.input;
     const moving = i.up !== i.down || i.left !== i.right;
-    p.rollInput = moving ? { ...i } : pushInput(DIR_OFFSET[p.dir]);
+    p.rollInput = moving ? { ...i } : pushInput(aimOf(p));
     p.lastDodge = now;
     p.rollUntil = now + DODGE.durationMs;
     p.rolling = true;
@@ -746,7 +766,7 @@ export class TownRoom extends Room<TownState> {
     a.combo = step;
     a.lastAttack = now;
     a.attackReadyAt = now + (hit.cooldownMs ?? def.attackCooldownMs);
-    const off = DIR_OFFSET[a.dir];
+    const off = aimOf(a);
     let dmg = Math.round(def.damage * attackMult(a.cls, this.stats(a)) * hit.damage);
     const critChance = (hasPower(a.cls, a.talents, "crit") ? CRIT.chance : 0) + talentBonus(a.cls, a.talents, "crit") / 100;
     const crit = Math.random() < critChance;
@@ -763,7 +783,7 @@ export class TownRoom extends Room<TownState> {
       }
       a.lastVariant = variant;
     }
-    this.broadcast("swing", { id, step, variant });
+    this.broadcast("swing", { id, step, variant, ax: off[0], ay: off[1] });
 
     if (hit.lunge) {
       for (let moved = 0; moved < hit.lunge; moved += 2) {
@@ -793,11 +813,11 @@ export class TownRoom extends Room<TownState> {
   /** Fire one projectile from `a` (fireball or arrow), offset sideways by `lane` px. */
   private shoot(a: Player, id: string, dmg: number, knockback: number, scale: number, lane = 0) {
     const def = CLASSES[a.cls].projectile!;
-    const off = DIR_OFFSET[a.dir];
+    const off = aimOf(a);
     const s = new Projectile();
-    // Lanes are perpendicular to the facing direction (for Volley)
-    s.x = a.x + off[0] * 6 + off[1] * lane; s.y = a.y - 4 + off[1] * 6 + off[0] * lane;
-    s.dir = a.dir; s.owner = id; s.size = scale; s.kind = def.kind;
+    // Lanes are perpendicular to the aim (for Volley)
+    s.x = a.x + off[0] * 6 - off[1] * lane; s.y = a.y - 4 + off[1] * 6 + off[0] * lane;
+    s.dir = a.dir; s.vx = off[0]; s.vy = off[1]; s.owner = id; s.size = scale; s.kind = def.kind;
     s.speed = def.speed; s.radius = def.radius * scale;
     s.range = def.range * (hasPower(a.cls, a.talents, "eagleeye") ? EAGLE_EYE_RANGE : 1);
     s.damage = dmg; s.knockback = knockback;
@@ -828,7 +848,7 @@ export class TownRoom extends Room<TownState> {
       case "dash": {
         const fromX = a.x, fromY = a.y;
         const dist = sp.distance ?? 56;
-        const step = pushInput(DIR_OFFSET[a.dir]);
+        const step = pushInput(aimOf(a));
         const shadow = hasPower(a.cls, a.talents, "shadowstrike");
         const cut = new Set<string>();
         // Move in 4px steps so walls stop the dash instead of being skipped
@@ -840,7 +860,7 @@ export class TownRoom extends Room<TownState> {
         }
         // Ninja Shadow Strike: cut every enemy passed through
         const sdmg = Math.round(CLASSES[a.cls].damage * attackMult(a.cls, this.stats(a)) * SHADOW_STRIKE_DAMAGE);
-        for (const tid of cut) this.hitTarget(id, tid, sdmg, DIR_OFFSET[a.dir], { kb: 0.5, skill: true });
+        for (const tid of cut) this.hitTarget(id, tid, sdmg, aimOf(a), { kb: 0.5, skill: true });
         a.invulnUntil = now + DASH_INVULN_MS;
         this.broadcast("special", { id, kind: sp.kind, fromX, fromY, x: a.x, y: a.y });
         break;
@@ -894,12 +914,12 @@ export class TownRoom extends Room<TownState> {
         this.clock.setTimeout(() => { if (!a.dead) blast(a.x, a.y, { kb: 0.4 }); }, i * 200);
       }
     } else if (a.cls === "wizard") {
-      const off = DIR_OFFSET[a.dir];
+      const off = aimOf(a);
       const x = a.x + off[0] * (u.ahead ?? 56), y = a.y + off[1] * (u.ahead ?? 56);
       this.broadcast("ult", { id, kind: "meteor", x, y, r: u.radius, delay: u.delayMs });
       this.clock.setTimeout(() => blast(x, y, { kb: 2 }), u.delayMs ?? 600);
     } else if (a.cls === "archer") {
-      const off = DIR_OFFSET[a.dir];
+      const off = aimOf(a);
       const x = a.x + off[0] * (u.ahead ?? 72), y = a.y + off[1] * (u.ahead ?? 72);
       this.broadcast("ult", { id, kind: "arrowrain", x, y, r: u.radius, delay: u.delayMs, hits: u.hits });
       for (let i = 0; i < (u.hits ?? 4); i++) {
@@ -908,7 +928,7 @@ export class TownRoom extends Room<TownState> {
     } else {
       // Barbarian Leap: jump forward (walls stop it), briefly untouchable, crash down on landing
       const fromX = a.x, fromY = a.y;
-      const step = pushInput(DIR_OFFSET[a.dir]);
+      const step = pushInput(aimOf(a));
       for (let moved = 0; moved < (u.ahead ?? 64); moved += 4) {
         const r = moveStep(a.x, a.y, step, 1, 4);
         if (r.x === a.x && r.y === a.y) break;

@@ -195,7 +195,7 @@ export class TownScene extends Phaser.Scene {
       const g: Phaser.GameObjects.Shape = s.kind === "arrow"
         // Arrow: thin shaft along the flight direction
         ? this.add.rectangle(s.x, s.y, 9 * size, 1.5 * size, 0xe8d8b0).setStrokeStyle(0.5, 0x5d4037)
-            .setAngle(s.dir === "up" || s.dir === "down" ? 90 : 0).setDepth(9000)
+            .setAngle(Math.atan2(s.vy ?? 0, s.vx ?? 1) * 180 / Math.PI).setDepth(9000)
         : this.add.circle(s.x, s.y, 2.5 * size, 0xff9f1c).setStrokeStyle(1, 0xffe066).setDepth(9000);
       const shot = { g, tx: s.x, ty: s.y };
       this.shots.set(id, shot);
@@ -236,7 +236,7 @@ export class TownScene extends Phaser.Scene {
       const e = this.entities.get(id);
       if (e) this.tweens.add({ targets: e.sprite, scaleX: 1.15, scaleY: 0.85, duration: 120, yoyo: true, repeat: 1 });
     });
-    this.room.onMessage("swing", ({ id, step, variant }) => this.showSwing(id, step ?? 0, variant ?? 0));
+    this.room.onMessage("swing", ({ id, step, variant, ax, ay }) => this.showSwing(id, step ?? 0, variant ?? 0, ax, ay));
     this.room.onMessage("special", (msg) => this.showSpecial(msg));
     this.room.onMessage("boom", ({ x, y, r, kind }) =>
       kind === "arrow" ? this.burst(x, y, 3, 0xd7ccc8, 150) : this.burst(x, y, r ? r / 1.8 : 6, 0xff9f1c, r ? 300 : 200));
@@ -367,17 +367,19 @@ export class TownScene extends Phaser.Scene {
     return variant % 2 ? "attack2" : "attack";
   }
 
-  private showSwing(id: string, step: number, variant: number) {
+  private showSwing(id: string, step: number, variant: number, ax?: number, ay?: number) {
     const e = this.entities.get(id);
     if (!e) return;
     const dir = e.state.dir as string;
     if (e.hero) playCharAnim(e.sprite, e.hero, this.attackAnim(e.hero, step, variant), dir as any);
-    const off = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] }[dir] ?? [0, 1];
+    // Aim can be diagonal (the server sends it); mobs and old messages fall back to the facing direction
+    const off = typeof ax === "number" && typeof ay === "number" ? [ax, ay]
+      : { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] }[dir] ?? [0, 1];
     const cls = e.mob ? undefined : CLASSES[e.state.cls as ClassKind];
     const hit = cls?.combo[step];
     // Mirror our own lunge locally so client prediction doesn't fight the server
     if (id === this.me && hit?.lunge) {
-      const push = { up: off[1] < 0, down: off[1] > 0, left: off[0] < 0, right: off[0] > 0 };
+      const push = { up: off[1] < -0.1, down: off[1] > 0.1, left: off[0] < -0.1, right: off[0] > 0.1 };
       for (let moved = 0; moved < hit.lunge; moved += 2) {
         const r = moveStep(e.sprite.x, e.sprite.y, push, 1, 2);
         if (r.x === e.sprite.x && r.y === e.sprite.y) break;
