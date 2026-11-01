@@ -16,7 +16,7 @@ import {
   ITEM_LIFETIME_MS, ItemKind, LOOT, MAX_POTIONS, PICKUP_RADIUS, POTION_COOLDOWN_MS, POTION_HEAL, PVP_GOLD_DROP,
 } from "../shared/items";
 import { isSafeZone, isSolidAt, randomSpawn } from "../shared/map";
-import { randomPointInZone, rollLevel, SPAWN_ZONES, zoneCap } from "../shared/spawns";
+import { findHideSpot, HIDE, randomPointInZone, rollLevel, SPAWN_ZONES, zoneCap } from "../shared/spawns";
 import { moveStep } from "../shared/movement";
 import { heroPoise, MOB_COMBAT, POISE, poiseLevelMult, poiseSpeed, RAGE_ATTACK_SPEED } from "../shared/combat";
 import { canLearn, talentMult, talentBonus, talentReduce, TREES } from "../shared/talents";
@@ -100,6 +100,13 @@ export class Player extends Schema {
 export class Mob extends Schema {
   @type("string") kind: MobKind = "slime";
   @type("number") level = 1;
+  @type("boolean") hidden = false; // tucked into a grave/tree: untouchable, only its eyes show
+
+  spot = ""; // hiding spot (tile "x,y") it is heading to or sitting in
+  spotX = 0; spotY = 0; outX = 0; outY = 0; // spot centre, and the walkable tile it steps in/out from
+  seekUntil = 0; // give up reaching the spot after this
+  hideUntil = 0; // leaves the spot on its own after this
+  fleeing = false; // dizzy and running for cover
   @type("number") x = 0;
   @type("number") y = 0;
   @type("string") dir: Dir = "down";
@@ -341,8 +348,52 @@ export class TownRoom extends Room<TownState> {
     m.hp = m.maxHp = Math.round(def.maxHp * mobScale(m.level, "hp"));
     m.dead = false;
     m.target = "";
+    m.hidden = false; m.spot = ""; m.fleeing = false;
     if (kind === "motherblob") m.nextBrood = Date.now() + BROOD.minMs + Math.random() * (BROOD.maxMs - BROOD.minMs);
     if (!this.state.mobs.has(id)) this.state.mobs.set(id, m);
+  }
+
+  // ---- Hiding in graves / trees ---------------------------------------------
+
+  /** Pick the nearest free hiding spot and start walking to it. */
+  private claimSpot(m: Mob, x: number, y: number, radius: number, now: number, fleeing: boolean) {
+    const taken = new Set<string>();
+    this.state.mobs.forEach((o) => { if (o !== m && o.spot && !o.dead) taken.add(o.spot); });
+    const s = findHideSpot(m.kind, x, y, radius, taken);
+    if (!s) return;
+    m.spot = s.key; m.spotX = s.x; m.spotY = s.y; m.outX = s.outX; m.outY = s.outY;
+    m.seekUntil = now + HIDE.seekMs; m.fleeing = fleeing;
+  }
+
+  private hide(m: Mob, id: string, now: number) {
+    m.hidden = true; m.fleeing = false; m.target = ""; m.moving = false;
+    m.winding = false; m.windUntil = 0;
+    m.x = m.spotX; m.y = m.spotY;
+    m.hideUntil = now + HIDE.minMs + Math.random() * (HIDE.maxMs - HIDE.minMs);
+    this.broadcast("hide", { id });
+  }
+
+  /** Hidden: heal a little, wait for a victim to walk by, or leave after a while. */
+  private updateHidden(m: Mob, id: string, dt: number, now: number) {
+    m.moving = false;
+    if (m.hp < m.maxHp) m.hp = Math.min(m.maxHp, m.hp + m.maxHp * HIDE.regenPerSec * dt);
+    let victim = "", best = HIDE.ambushRange;
+    this.state.players.forEach((p, pid) => {
+      if (p.dead || isSafeZone(p.x, p.y)) return;
+      const d = Math.hypot(p.x - m.x, p.y - m.y);
+      if (d < best) { best = d; victim = pid; }
+    });
+    if (m.broken) return;
+    if (victim) this.popOut(m, id, victim);
+    else if (now > m.hideUntil) this.popOut(m, id, "");
+  }
+
+  private popOut(m: Mob, id: string, victim: string) {
+    m.hidden = false; m.spot = "";
+    m.x = m.outX; m.y = m.outY;
+    m.target = victim;
+    m.lastAttack = 0; // strike right away
+    if (victim) this.broadcast("ambush", { id, x: m.x, y: m.y, victim });
   }
 
   /** A Mother Blob buds a blobling next to her, unless she already has a full brood (or the world is full of them). */
@@ -441,6 +492,7 @@ export class TownRoom extends Room<TownState> {
     m.slowed = now < m.slowUntil;
     if (m.stunned) { m.moving = false; return; }
     if (m.kind === "motherblob" && now >= m.nextBrood) this.brood(m, id, now);
+    if (m.hidden) return this.updateHidden(m, id, dt, now);
 
     // Drop target if it died, left, went into the safe zone, or pulled us too far from home
     let t = m.target ? this.state.players.get(m.target) : undefined;
@@ -455,6 +507,21 @@ export class TownRoom extends Room<TownState> {
         const d = Math.hypot(p.x - m.x, p.y - m.y);
         if (d < best && Math.hypot(p.x - m.homeX, p.y - m.homeY) < def.leash) { best = d; m.target = pid; t = p; }
       });
+    }
+
+    // Dizzy: run for the nearest grave/tree if there is one
+    if (t && m.broken && !m.spot && HIDE.spots[m.kind]) this.claimSpot(m, m.x, m.y, HIDE.fleeRadius, now, true);
+    // Heading for a hiding spot (a calm monster forgets it as soon as it has someone to fight)
+    if (m.spot && !m.fleeing && t) m.spot = "";
+    if (m.spot && now > m.seekUntil) { m.spot = ""; m.fleeing = false; }
+    if (m.spot) {
+      if (Math.hypot(m.outX - m.x, m.outY - m.y) < 5) return this.hide(m, id, now);
+      const go = toward(m.x, m.y, m.outX, m.outY);
+      const r = moveStep(m.x, m.y, go, dt, def.speed * (m.fleeing ? POISE.fleeSpeed : 0.6) * (m.slowed ? SLOW_MOB : 1));
+      if (!isSafeZone(r.x, r.y)) { m.x = r.x; m.y = r.y; }
+      m.moving = r.moving;
+      m.dir = dirFromInput(go, m.dir);
+      return;
     }
 
     let input: InputState;
@@ -489,6 +556,7 @@ export class TownRoom extends Room<TownState> {
         const dx = Math.floor(Math.random() * 3) - 1, dy = Math.floor(Math.random() * 3) - 1;
         m.wander = Math.random() < 0.4 ? STILL : { right: dx > 0, left: dx < 0, down: dy > 0, up: dy < 0 };
         m.nextWander = now + 800 + Math.random() * 2000;
+        if (HIDE.spots[m.kind] && Math.random() < HIDE.idleChance) this.claimSpot(m, m.homeX, m.homeY, HIDE.idleRadius, now, false);
       }
       input = m.wander;
     }
@@ -686,7 +754,7 @@ export class TownRoom extends Room<TownState> {
       if (tid !== exclude && !t.dead && Math.hypot(t.x - x, t.y - y) <= r) out.push(tid);
     });
     this.state.mobs.forEach((m, mid) => {
-      if (!m.dead && Math.hypot(m.x - x, m.y - y) <= r) out.push(mid);
+      if (!m.dead && !m.hidden && Math.hypot(m.x - x, m.y - y) <= r) out.push(mid);
     });
     return out;
   }
@@ -760,6 +828,7 @@ export class TownRoom extends Room<TownState> {
     this.broadcast("hit", { id: targetId, dmg, crit: !!opts.crit });
     if (m.hp > 0) return;
     m.dead = true;
+    m.hidden = false; m.spot = ""; m.fleeing = false;
     this.grantXp(attackerId, Math.round(def.xp * mobScale(m.level, "xp")), m);
     this.dropLoot(m.kind, m.x, m.y, mobScale(m.level, "gold"), m.level);
     if (m.zone < 0) { this.clock.setTimeout(() => this.state.mobs.delete(targetId), 500); return; } // bloblings don't respawn

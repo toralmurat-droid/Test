@@ -246,6 +246,15 @@ export class TownScene extends Phaser.Scene {
     });
 
     // A Mother Blob budding a blobling: quick wobble
+    // A hidden monster jumps out of its grave / tree
+    this.room.onMessage("ambush", ({ id, x, y, victim }) => {
+      const e = this.entities.get(id);
+      if (!e) return;
+      e.sprite.setPosition(x, y); e.tx = x; e.ty = y;
+      this.floatText(x, y - e.top - 4, "!", "#ff5252");
+      this.tweens.add({ targets: e.sprite, scaleX: { from: 0.4, to: 1 }, scaleY: { from: 1.6, to: 1 }, duration: 220, ease: "Back.Out" });
+      if (victim === this.me) this.cameras.main.shake(80, 0.002);
+    });
     this.room.onMessage("brood", ({ id }) => {
       const e = this.entities.get(id);
       if (e) this.tweens.add({ targets: e.sprite, scaleX: 1.15, scaleY: 0.85, duration: 120, yoyo: true, repeat: 1 });
@@ -753,7 +762,7 @@ export class TownScene extends Phaser.Scene {
         const step = moving ? Math.floor(now / 150) % 2 : 0;
         e.sprite.setFrame(FRAME_BASE[p.dir] + step);
         e.sprite.setFlipX(p.dir === "left");
-        if (e.mob) e.sprite.setVisible(!p.dead);
+        if (e.mob) e.sprite.setVisible(!p.dead && !p.hidden);
         else e.sprite.setAlpha(p.dead ? 0.35 : 1).setAngle(p.dead ? 90 : 0);
       }
       e.sprite.setDepth(e.sprite.y);
@@ -777,7 +786,7 @@ export class TownScene extends Phaser.Scene {
         const txt = `Lv${p.level ?? 1}`;
         if (e.label.text !== txt) e.label.setText(txt);
         if (e.lvlColor !== col) { e.label.setColor(col); e.lvlColor = col; }
-        e.label.setVisible(!p.dead);
+        e.label.setVisible(!p.dead && !p.hidden);
       }
       e.bubble?.setPosition(x, y - e.top - 7);
       e.bar.clear().setDepth(e.sprite.y + 1);
@@ -796,7 +805,17 @@ export class TownScene extends Phaser.Scene {
           e.bar.fillStyle(0xffd166).fillRect(x + Math.cos(a) * 6 - 1, sy + Math.sin(a) * 2 - 1, 2, 2);
         }
       }
-      if (e.mob && !p.dead) {
+      if (e.mob && !p.dead && p.hidden) {
+        // Hiding in a grave or tree: only a pair of eyes peeks out (and blinks now and then)
+        e.bar.setDepth(20000);
+        const blink = (now + x * 53 + y * 31) % 3200 < 160;
+        if (!blink) {
+          const col = p.kind === "skeleton" ? 0xff5252 : 0xfff176;
+          const ey = y - (p.kind === "skeleton" ? 2 : 5);
+          e.bar.fillStyle(0x000000, 0.6).fillRect(x - 3, ey - 1, 7, 3);
+          e.bar.fillStyle(col).fillRect(x - 2, ey, 1, 1).fillRect(x + 2, ey, 1, 1);
+        }
+      } else if (e.mob && !p.dead) {
         const bw = MOB_LOOK[p.kind]?.bar || 14;
         e.bar.fillStyle(0x000000).fillRect(x - bw / 2, mobBarY, bw, 2);
         e.bar.fillStyle(0xf4a261).fillRect(x - bw / 2, mobBarY, bw * (p.hp / maxHp), 2);
