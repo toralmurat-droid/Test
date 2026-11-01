@@ -73,7 +73,7 @@ html, body { margin: 0; height: 100%; background: #1b1b24; color: #eee; font: 14
 #hpfill { height: 100%; width: 100%; background: #e63946; transition: width .25s linear; }
 #hptext { position: absolute; inset: 0; display: grid; grid-template-columns: 1fr 14px 1fr; align-items: center; font-size: 12px; font-weight: bold; line-height: 1; font-variant-numeric: tabular-nums; color: #fff; text-shadow: 1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000; }
 #stats { position: absolute; top: 34px; left: 12px; text-shadow: 1px 1px #000; }
-#feed { position: absolute; top: 290px; right: 12px; text-align: right; text-shadow: 1px 1px #000; }
+#feed { position: absolute; top: 350px; right: 12px; text-align: right; text-shadow: 1px 1px #000; }
 #chatlog { position: absolute; bottom: 44px; left: 12px; width: min(400px, calc(100% - 24px)); text-shadow: 1px 1px #000; }
 #chat { position: absolute; bottom: 12px; left: 12px; width: min(400px, calc(100% - 24px)); padding: 6px; font: inherit;
   background: rgba(0,0,0,.5); color: #fff; border: 1px solid #555; pointer-events: auto; }
