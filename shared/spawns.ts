@@ -1,5 +1,5 @@
 import { MobKind, TILE } from "./constants";
-import { AREAS, isSafeZone, isSolidAt, VILLAGE } from "./map";
+import { AREAS, isSafeZone, isSolidAt, OBJECTS, T, VILLAGE } from "./map";
 
 /**
  * Monster spawn zones. Each zone keeps up to `mobs[kind]` monsters alive. Every `respawnMs` its timer fires
@@ -70,4 +70,44 @@ export function randomPointInZone(z: SpawnZone): { x: number; y: number } {
     if (!isSolidAt(x - 6, y - 6) && !isSolidAt(x + 6, y + 6) && !isSolidAt(x - 6, y + 6) && !isSolidAt(x + 6, y - 6)) return { x, y };
   }
   return { x: (z.x + z.w / 2) * TILE, y: (z.y + z.h / 2) * TILE };
+}
+
+/**
+ * Hiding: skeletons slip into graves, slimes and bloblings into trees. A hidden monster can't be hit or seen
+ * (only its eyes peek out) and jumps out when a player walks close. Dizzy (broken) monsters run for cover too.
+ */
+export const HIDE = {
+  spots: { skeleton: [T.GRAVE], slime: [T.TREE, T.PINE], blobling: [T.TREE, T.PINE] } as Partial<Record<MobKind, number[]>>,
+  idleChance: 0.06, // per wander decision, chance an idle monster goes to hide
+  idleRadius: 7, // tiles from home to look for a spot
+  fleeRadius: 6, // tiles from the monster when it's dizzy
+  ambushRange: 40, // px: a player this close makes a hidden monster jump out
+  minMs: 10000, maxMs: 25000, // how long it stays hidden if nobody comes by
+  regenPerSec: 0.04, // fraction of max HP healed per second while hidden
+  seekMs: 7000, // give up walking to a spot after this long
+};
+
+export interface HideSpot { key: string; x: number; y: number; outX: number; outY: number }
+
+/** Nearest free hiding spot for `kind` within `radius` tiles of (px,py), with a walkable tile next to it to step in from. */
+export function findHideSpot(kind: MobKind, px: number, py: number, radius: number, taken: Set<string>): HideSpot | undefined {
+  const ids = HIDE.spots[kind];
+  if (!ids) return undefined;
+  const cx = Math.floor(px / TILE), cy = Math.floor(py / TILE);
+  let best: HideSpot | undefined, bestD = Infinity;
+  for (let ty = cy - radius; ty <= cy + radius; ty++) {
+    for (let tx = cx - radius; tx <= cx + radius; tx++) {
+      const o = OBJECTS[ty]?.[tx];
+      if (o === undefined || !ids.includes(o) || taken.has(`${tx},${ty}`)) continue;
+      const x = (tx + 0.5) * TILE, y = (ty + 0.5) * TILE;
+      if (isSafeZone(x, y)) continue;
+      for (const [dx, dy] of [[0, 1], [0, -1], [1, 0], [-1, 0]]) {
+        const ox = x + dx * TILE, oy = y + dy * TILE;
+        if (isSafeZone(ox, oy) || isSolidAt(ox - 5, oy - 5) || isSolidAt(ox + 5, oy + 5) || isSolidAt(ox - 5, oy + 5) || isSolidAt(ox + 5, oy - 5)) continue;
+        const d = Math.hypot(ox - px, oy - py);
+        if (d < bestD) { bestD = d; best = { key: `${tx},${ty}`, x, y, outX: ox, outY: oy }; }
+      }
+    }
+  }
+  return best;
 }
