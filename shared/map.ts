@@ -17,8 +17,10 @@ export const T = {
   ROOF_SLATE: 19, WALL_TIMBER: 20, WALL_STONE: 21, WINDOW_TIMBER: 22, WINDOW_STONE: 23, DOOR: 24, WELL: 25,
   STALL_RED: 26, STALL_BLUE: 27, BARREL: 28, CRATE: 29, ANVIL: 30, GRAVE: 31, HAY: 32, WHEEL: 33,
   CAMPFIRE: 34, RUIN: 35, SIGN: 36, STUMP: 37, FENCE_V: 38,
+  // ruins of the old village
+  FLOOR: 39, RUBBLE: 40, BEAM: 41,
 } as const;
-export const TILE_COUNT = 39;
+export const TILE_COUNT = 42;
 export const EMPTY = -1;
 
 /** A named region. `mobs` hints which monsters belong there (empty or missing = none, e.g. inside the village). */
@@ -43,11 +45,11 @@ function noise(x: number, y: number, scale: number, seed: number) {
 // ---------- layout (tile coords) ----------
 
 /** Oakvale's palisade bounds (tiles, inclusive). */
-export const VILLAGE = { x0: 54, y0: 38, x1: 106, y1: 82 };
+export const VILLAGE = { x0: 64, y0: 46, x1: 96, y1: 74 };
 /** The two main roads (3 tiles wide): King's Road runs west↔east on rows RY..RY+2, North Road north↔south on columns RX..RX+2. */
 export const ROADS = { RX: 79, RY: 59 };
-/** Cobbled market square in the middle of the village. It is the safe zone. */
-export const SAFE_ZONE = { x: 70, y: 52, w: 21, h: 17 };
+/** Cobbled square in the middle of the ruined village. It is the safe zone. */
+export const SAFE_ZONE = { x: 74, y: 55, w: 13, h: 11 };
 
 /** Column of the river's center for a given row (River Ashwell, east of the village). */
 export const riverCenter = (y: number) => Math.round(118 + 3 * Math.sin(y / 11) + 1.5 * Math.sin(y / 5));
@@ -118,7 +120,7 @@ function buildWorld() {
     building(x, y, w, h, roof, T.WALL_TIMBER, T.WINDOW_TIMBER);
   /** Path from a door straight down to the next road. */
   const doorPath = (d: { x: number; y: number }, t: number = T.DIRT) => {
-    for (let y = d.y + 1; y < MAP_H && !roads.has(y * MAP_W + d.x) && y < d.y + 12; y++) road(d.x, y, 1, 1, t);
+    for (let y = d.y + 1; y < MAP_H && !roads.has(y * MAP_W + d.x) && y < d.y + 24; y++) road(d.x, y, 1, 1, t);
   };
   /** Winding 2-wide trail (in the woods): follows a sine around a base line. */
   const trailH = (x0: number, x1: number, y0: number, amp: number, period: number, t: number = T.DIRT) => {
@@ -126,6 +128,22 @@ function buildWorld() {
   };
   const trailV = (y0: number, y1: number, x0: number, amp: number, period: number, t: number = T.DIRT) => {
     for (let y = y0; y <= y1; y++) road(x0 + Math.round(amp * Math.sin(y / period)), y, 2, 1, t);
+  };
+
+  /** Winding road through waypoints (Catmull-Rom spline), `w` tiles wide; bridges itself over water. */
+  const curve = (pts: [number, number][], w: number, t: number = T.DIRT) => {
+    const P = [pts[0], ...pts, pts[pts.length - 1]];
+    for (let i = 1; i < P.length - 2; i++) {
+      const [p0, p1, p2, p3] = [P[i - 1], P[i], P[i + 1], P[i + 2]];
+      const len = Math.hypot(p2[0] - p1[0], p2[1] - p1[1]);
+      for (let k = 0; k <= len * 4; k++) {
+        const u = k / Math.max(1, len * 4), u2 = u * u, u3 = u2 * u;
+        const c = (a: number, b: number, c: number, d: number) => 0.5 * (2 * b + (-a + c) * u + (2 * a - 5 * b + 4 * c - d) * u2 + (-a + 3 * b - 3 * c + d) * u3);
+        const x = c(p0[0], p1[0], p2[0], p3[0]), y = c(p0[1], p1[1], p2[1], p3[1]);
+        const r = w / 2;
+        each(Math.round(x - r), Math.round(y - r), w, w, (i2, j2) => road(i2, j2, 1, 1, t));
+      }
+    }
   };
 
   const V = VILLAGE, { RX, RY } = ROADS, SQ = SAFE_ZONE;
@@ -184,93 +202,93 @@ function buildWorld() {
   const mx = riverCenter(44) - 9; // the mill sits on the west bank
   clearO(mx - 3, 36, 13, 14);
 
-  // ---------- 5. Roads ----------
-  road(0, RY, MAP_W, 3);                   // King's Road, west ↔ east (bridged over the river)
-  road(RX, 0, 3, MAP_H);                   // North Road, north ↔ south
-  road(16, 20, RX - 16, 2);                // Hunter's Trail: North Road → Hunter's Camp
-  road(RX + 3, 20, tower.x - RX - 3, 2);   // Watchtower Trail (bridged)
-  road(34, RY + 3, 2, 26);                 // Pond Path: King's Road → Mirror Pond
-  road(36, 71, V.x0 - 36 + 4, 2);          // West lane: Pond Path → village side gate
-  road(65, 21, 2, V.y0 - 21 + 4);          // North lane: Hunter's Trail → village side gate
-  road(V.x1 - 3, 47, mx - V.x1 + 3, 2);    // Mill lane: village side gate → Millbrook Mill
-  road(95, V.y1 - 3, 2, 96 - V.y1 + 3);    // Quarry lane: village side gate → Quarry Road
-  road(RX + 3, 96, 140 - RX - 3, 2);       // Quarry Road (bridged) → east woods
-  road(marsh.x + 2, 102, RX - marsh.x - 2, 2); // Marsh road (boardwalk over the pools)
-  // A shallow ford crosses the river south of the bridge
-  for (let y = 79; y < 82; y++) { const cx = riverCenter(y); each(cx - 2, y, 4, 1, (x) => setG(x, y, T.SAND)); }
-  road(V.x1 - 3, 80, riverCenter(80) - V.x1 + 1, 1, T.DIRT);
-  road(riverCenter(80) + 3, 80, 12, 1, T.DIRT);
+  // ---------- 5. Roads: gently winding, wide, and crossing the river square-on ----------
+  const rc = riverCenter;
+  const mill = { x: mx, y: 41 };
+  // King's Road, west ↔ east (bridged over the river, through the Old Ruins)
+  curve([[-2, 63], [14, 58], [30, 64], [46, 58], [V.x0 - 4, RY + 1]], 3);
+  curve([[V.x1 + 4, RY + 1], [104, 63], [rc(60) - 7, 61], [rc(60) + 7, 61], [128, 57], [ruins.x, ruins.y], [150, 63], [MAP_W + 2, 58]], 3);
+  // North Road, north ↔ south
+  curve([[80, -2], [76, 10], [84, 22], [78, 34], [RX + 1, V.y0 - 4]], 3);
+  curve([[RX + 1, V.y1 + 4], [86, 84], [82, 96], [75, 108], [81, MAP_H + 2]], 3);
+  curve([[16, 21], [camp.x, camp.y + 1], [42, 16], [60, 24], [70, 18], [80, 22]], 2);                  // Hunter's Trail
+  curve([[84, 22], [98, 15], [rc(18) - 6, 18], [rc(18) + 6, 18], [130, 25], [tower.x, tower.y + 4]], 2); // Watchtower Trail
+  curve([[30, 61], [36, 70], [31, 80], [33, 86]], 2);                                                   // Pond Path
+  curve([[V.x0 - 1, 67], [56, 72], [44, 70], [34, 75]], 2);                                             // West lane
+  curve([[68, V.y0 + 1], [66, 38], [61, 30], [60, 24]], 2);                                             // North lane
+  curve([[V.x1 - 1, 52], [101, 47], [mill.x + 3, mill.y + 8], [mill.x + 3, mill.y + 6]], 2);            // Mill lane
+  curve([[92, V.y1 - 1], [96, 82], [92, 90], [96, 97]], 2);                                             // Quarry lane
+  curve([[84, 96], [96, 97], [106, 94], [rc(96) - 6, 97], [rc(96) + 6, 97], [128, 100], [140, 95], [146, 96]], 2); // Quarry Road
+  curve([[78, 103], [66, 106], [56, 100], [46, 104], [marsh.x + 2, 101]], 2);                           // Marsh boardwalk
+  // A shallow ford crosses the river between the bridges
+  for (let y = 79; y < 82; y++) { const cx = rc(y); each(cx - 2, y, 4, 1, (x) => setG(x, y, T.SAND)); }
+  curve([[95, 84], [104, 80], [rc(80) - 3, 80]], 2);
+  curve([[rc(80) + 3, 80], [130, 78], [138, 84]], 2);
   // Woodland trails east of the river
   trailH(woodsX - 2, MAP_W - 1, 34, 3, 7);
   trailH(woodsX - 2, MAP_W - 1, 84, 3, 8);
   trailV(4, MAP_H - 4, 146, 3, 6);
 
-  // ---------- 6. Oakvale village (palisade with 4 main gates and 4 side gates) ----------
-  for (let x = V.x0; x <= V.x1; x++) for (const y of [V.y0, V.y1]) setO(x, y, T.PALISADE);
-  for (let y = V.y0; y <= V.y1; y++) for (const x of [V.x0, V.x1]) setO(x, y, T.PALISADE);
-  // inner ring lane just inside the palisade
-  road(V.x0 + 3, V.y0 + 3, V.x1 - V.x0 - 5, 2);
-  road(V.x0 + 3, V.y1 - 4, V.x1 - V.x0 - 5, 2);
-  road(V.x0 + 3, V.y0 + 3, 2, V.y1 - V.y0 - 5);
-  road(V.x1 - 4, V.y0 + 3, 2, V.y1 - V.y0 - 5);
-  // gates: wide openings where roads cross the palisade
-  const gateH = (x: number, w: number) => { for (const y of [V.y0, V.y1]) each(x, y, w, 1, (i, j) => setO(i, j, EMPTY)); };
-  const gateV = (y: number, h: number) => { for (const x of [V.x0, V.x1]) each(x, y, 1, h, (i, j) => setO(i, j, EMPTY)); };
-  gateH(RX - 2, 7); gateV(RY - 2, 7);       // main gates
-  each(64, V.y0, 4, 1, (x, y) => setO(x, y, EMPTY));      // north side gate
-  each(94, V.y1, 4, 1, (x, y) => setO(x, y, EMPTY));      // south side gate
-  each(V.x0, 70, 1, 4, (x, y) => setO(x, y, EMPTY));      // west side gate
-  each(V.x1, 46, 1, 4, (x, y) => setO(x, y, EMPTY));      // east side gate
-  each(V.x1, 79, 1, 3, (x, y) => setO(x, y, EMPTY));      // ford gate
-  road(V.x0 - 3, RY, 7, 3, T.COBBLE); road(V.x1 - 3, RY, 7, 3, T.COBBLE);
-  road(RX, V.y0 - 3, 3, 7, T.COBBLE); road(RX, V.y1 - 3, 3, 7, T.COBBLE);
-  // main streets and market square are cobbled
-  road(V.x0, RY, V.x1 - V.x0 + 1, 3, T.COBBLE);
-  road(RX, V.y0, 3, V.y1 - V.y0 + 1, T.COBBLE);
+  // ---------- 6. Oakvale: a small ruined village ----------
+  // Cobbled streets meet on the square; the rest of the village is grass, dirt and rubble
+  curve([[V.x0 - 4, RY + 1], [70, RY + 2], [SQ.x, RY + 1]], 3, T.COBBLE);
+  curve([[SQ.x + SQ.w - 1, RY + 1], [91, RY], [V.x1 + 4, RY + 1]], 3, T.COBBLE);
+  curve([[RX + 1, V.y0 - 4], [RX, 51], [RX + 1, SQ.y]], 3, T.COBBLE);
+  curve([[RX + 1, SQ.y + SQ.h - 1], [RX + 2, 70], [RX + 1, V.y1 + 4]], 3, T.COBBLE);
   road(SQ.x, SQ.y, SQ.w, SQ.h, T.COBBLE);
+  // Rounded corners on the square: grass creeps back in
+  for (const [cx, cy] of [[SQ.x, SQ.y], [SQ.x + SQ.w - 1, SQ.y], [SQ.x, SQ.y + SQ.h - 1], [SQ.x + SQ.w - 1, SQ.y + SQ.h - 1]]) setG(cx, cy, T.GRASS);
+  // Old palisade: rotted, with breaches everywhere, and wide open where roads pass
+  const nearRoad = (x: number, y: number) => { for (let j = -2; j <= 2; j++) for (let i = -2; i <= 2; i++) if (roads.has((y + j) * MAP_W + x + i)) return true; return false; };
+  const post = (x: number, y: number) => { if (!nearRoad(x, y) && hash(x, y, 81) > 0.3 && noise(x, y, 3, 82) > 0.3) setO(x, y, T.PALISADE); };
+  for (let x = V.x0; x <= V.x1; x++) { post(x, V.y0); post(x, V.y1); }
+  for (let y = V.y0 + 1; y < V.y1; y++) { post(V.x0, y); post(V.x1, y); }
 
-  // Market square: well, stalls and a few barrels, all on the edges so the middle stays open
-  setO(75, 55, T.WELL);
-  setO(72, 66, T.STALL_RED); setO(73, 66, T.STALL_RED);
-  setO(87, 66, T.STALL_BLUE); setO(88, 66, T.STALL_BLUE);
-  setO(87, 54, T.STALL_RED); setO(88, 54, T.STALL_RED);
-  setO(71, 53, T.BARREL); setO(89, 67, T.BARREL); setO(89, 53, T.CRATE); setO(71, 67, T.CRATE);
-  setO(77, 53, T.SIGN); // notice board
+  /**
+   * A ruined building: floor inside, broken walls with a doorway and holes, a corner of collapsed roof,
+   * rubble and debris. Players can walk in and around.
+   */
+  const ruinBuilding = (x: number, y: number, w: number, h: number, stone: boolean, roof: number, seed: number) => {
+    rectG(x, y, w, h, stone ? T.COBBLE : T.FLOOR);
+    const wall = stone ? T.RUIN : T.BEAM;
+    const door = x + Math.floor(w / 2);
+    for (let i = x; i < x + w; i++) for (let j = y; j < y + h; j++) {
+      const edge = i === x || j === y || i === x + w - 1 || j === y + h - 1;
+      if (!edge) { if (hash(i, j, seed) < 0.22) setG(i, j, T.RUBBLE); continue; }
+      const corner = (i === x || i === x + w - 1) && (j === y || j === y + h - 1);
+      const doorway = j === y + h - 1 && Math.abs(i - door) <= 1;
+      if (doorway) { setG(i, j, T.RUBBLE); continue; }
+      if (corner || hash(i, j, seed + 1) > 0.42) setO(i, j, wall);
+      else setG(i, j, T.RUBBLE); // a hole in the wall
+    }
+    // the back corner where a bit of roof still stands
+    rectO(x, y, 2, 2, roof);
+    // rubble spilling outside
+    for (let k = 0; k < 6; k++) setG(x - 1 + Math.floor(hash(seed, k, 3) * (w + 2)), y + h + Math.floor(hash(seed, k, 4) * 2), T.RUBBLE);
+  };
 
-  // North-west quarter: two cottages and the smithy
-  doorPath(house(60, 44, 6, 6));
-  doorPath(house(68, 44, 6, 6, T.ROOF_RED));
-  const smithy = building(60, 51, 7, 6, T.ROOF_SLATE, T.WALL_STONE, T.WINDOW_STONE);
-  doorPath(smithy);
-  setO(67, 56, T.ANVIL); setO(67, 52, T.BARREL); setO(68, 52, T.CRATE);
+  ruinBuilding(84, 48, 9, 6, true, T.ROOF_SLATE, 101);   // Chapel of the Dawn
+  setO(88, 50, T.GRAVE); // the old altar stone
+  for (const [gx, gy] of [[94, 49], [95, 51], [94, 53]]) setO(gx, gy, T.GRAVE);
+  ruinBuilding(68, 48, 7, 6, true, T.ROOF_SLATE, 102);   // the Smithy
+  setO(71, 50, T.ANVIL);
+  ruinBuilding(85, 67, 9, 6, false, T.ROOF_RED, 103);    // The Rusty Tankard
+  setO(87, 69, T.BARREL); setO(91, 68, T.CRATE);
+  ruinBuilding(67, 66, 6, 6, false, T.ROOF_THATCH, 104); // a cottage
 
-  // North-east quarter: Chapel of the Dawn and its graveyard, a cottage
-  const chapel = building(84, 43, 9, 9, T.ROOF_SLATE, T.WALL_STONE, T.WINDOW_STONE, true);
-  doorPath(chapel, T.COBBLE);
-  rectG(95, 44, 6, 8, T.GRASS_DARK);
-  fenceBox(94, 43, 8, 10, [[97, 52], [98, 52]]);
-  for (const [gx, gy] of [[96, 45], [99, 45], [96, 48], [99, 48]]) setO(gx, gy, T.GRAVE);
-  doorPath(house(93, 54, 6, 5, T.ROOF_RED));
+  // The square: the well, a survivors' campfire and a lone stall
+  setO(77, 57, T.WELL);
+  setO(83, 63, T.CAMPFIRE);
+  setO(SQ.x + SQ.w - 3, SQ.y + 1, T.STALL_RED); setO(SQ.x + SQ.w - 2, SQ.y + 1, T.STALL_RED);
+  setO(SQ.x + 1, SQ.y + SQ.h - 2, T.CRATE); setO(SQ.x + 2, SQ.y + SQ.h - 2, T.BARREL);
+  setO(RX - 2, SQ.y + 1, T.SIGN); // notice board
 
-  // South-west quarter: cottages and a vegetable garden
-  doorPath(house(60, 64, 6, 6));
-  doorPath(house(68, 70, 6, 6, T.ROOF_RED));
-  rectG(61, 72, 5, 3, T.CROPS);
-  fenceBox(60, 71, 7, 5, [[63, 71], [63, 75]]);
+  // Nature creeping back: a few trees, stumps and hay inside the old walls
+  for (const [x, y] of [[67, 57], [93, 57], [72, 72], [91, 49]]) setO(x, y, T.TREE);
+  setO(70, 63, T.STUMP); setO(92, 64, T.HAY);
 
-  // South-east quarter: The Rusty Tankard tavern and two houses
-  const tavern = building(92, 63, 9, 7, T.ROOF_RED, T.WALL_TIMBER, T.WINDOW_TIMBER, true);
-  doorPath(tavern);
-  setO(91, 67, T.BARREL); setO(91, 68, T.BARREL);
-  doorPath(house(84, 70, 6, 6));
-  doorPath(house(92, 72, 5, 5, T.ROOF_RED));
-
-  // A few shade trees and hay bales, kept away from paths
-  for (const [x, y] of [[58, 48], [58, 66], [102, 60], [77, 47], [83, 74]]) setO(x, y, T.TREE);
-  setO(103, 76, T.HAY); setO(57, 76, T.HAY);
-
-  // Signposts outside the main gates
-  setO(RX - 2, V.y0 - 4, T.SIGN); setO(V.x0 - 4, RY - 2, T.SIGN); setO(V.x1 + 4, RY - 2, T.SIGN); setO(RX - 2, V.y1 + 4, T.SIGN);
+  // Signposts outside the village
+  setO(RX - 2, V.y0 - 5, T.SIGN); setO(V.x0 - 5, RY - 2, T.SIGN); setO(V.x1 + 5, RY - 2, T.SIGN); setO(RX - 2, V.y1 + 5, T.SIGN);
 
   // ---------- 7. Goldenreach Farms (west): barn, two fenced fields with openings on every side ----------
   const barn = building(14, 38, 9, 6, T.ROOF_RED, T.WALL_TIMBER, T.WINDOW_TIMBER);
@@ -283,9 +301,9 @@ function buildWorld() {
   fenceBox(12, 65, 16, 11, sideGaps(12, 65, 16, 11));
 
   // ---------- 8. Millbrook watermill ----------
-  const mill = building(mx, 41, 6, 6, T.ROOF_THATCH, T.WALL_TIMBER, T.WINDOW_TIMBER);
+  const millDoor = building(mill.x, mill.y, 6, 6, T.ROOF_THATCH, T.WALL_TIMBER, T.WINDOW_TIMBER);
   setO(riverCenter(44) - 2, 44, T.WHEEL);
-  doorPath(mill);
+  doorPath(millDoor);
   setO(mx - 1, 45, T.CRATE); setO(mx - 1, 46, T.BARREL);
 
   // ---------- 9. North Meadow: flowers and a few boulders ----------
@@ -381,9 +399,9 @@ function buildWorld() {
 
   const areas: Area[] = [
     { name: "Market Square", ...SQ },
-    { name: "Chapel of the Dawn", x: 83, y: 42, w: 20, h: 11 },
-    { name: "The Rusty Tankard", x: 90, y: 62, w: 12, h: 9 },
-    { name: "The Smithy", x: 59, y: 50, w: 10, h: 8 },
+    { name: "Chapel of the Dawn", x: 83, y: 47, w: 14, h: 9 },
+    { name: "The Rusty Tankard", x: 84, y: 66, w: 11, h: 8 },
+    { name: "The Smithy", x: 67, y: 47, w: 9, h: 8 },
     { name: "Oakvale", x: V.x0, y: V.y0, w: V.x1 - V.x0 + 1, h: V.y1 - V.y0 + 1 },
     { name: "Millbrook Mill", x: mx - 3, y: 36, w: 13, h: 14 },
     { name: "Old Ruins", x: ruins.x - 9, y: ruins.y - 8, w: 19, h: 17, mobs: ["skeleton"] },
