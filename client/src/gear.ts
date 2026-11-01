@@ -76,10 +76,18 @@ export class GearMenu {
   private el = document.getElementById("gear")!;
   private sig = "";
 
-  constructor(private scene: Phaser.Scene, private send: (type: string, msg: unknown) => void) {}
+  constructor(private scene: Phaser.Scene, private send: (type: string, msg: unknown) => void) {
+    // Buttons never keep keyboard focus, so Space/Enter in a fight can't click a bag item by accident
+    this.el.addEventListener("mousedown", (ev) => { if ((ev.target as HTMLElement).closest("button")) ev.preventDefault(); });
+  }
 
   get open() { return !this.el.hidden; }
-  toggle(state: any) { if (this.open) this.el.hidden = true; else { this.el.hidden = false; this.sig = ""; this.refresh(state); } }
+  /** Opens on top of any other menu; works in combat, while dead and while chatting (via the Bag button). */
+  toggle(state: any) {
+    if (this.open) { this.close(); return; }
+    for (const id of ["hero", "tree"]) { const other = document.getElementById(id); if (other) other.hidden = true; }
+    this.el.hidden = false; this.sig = ""; this.refresh(state);
+  }
   close() { this.el.hidden = true; }
 
   /** Rebuild only when something gear-related changed. */

@@ -485,7 +485,7 @@ export class TownRoom extends Room<TownState> {
   /** Throw a bag item on the ground (anyone can pick it up). */
   private dropGear(id: string, i: number) {
     const p = this.state.players.get(id);
-    if (!p || p.dead || typeof i !== "number" || i < 0 || i >= p.bag.length) return;
+    if (!p || typeof i !== "number" || i < 0 || i >= p.bag.length) return;
     const [gid] = p.bag.splice(i, 1);
     // Drop it out of pickup range so it isn't grabbed straight back
     const off = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] }[p.dir];
