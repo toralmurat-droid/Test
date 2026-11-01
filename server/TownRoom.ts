@@ -20,7 +20,7 @@ import { isSafeZone, isSolidAt, randomSpawn } from "../shared/map";
 import { npcNear, TALK_RANGE } from "../shared/npcs";
 import { sellPrice, SHOPS } from "../shared/shops";
 import { inQuestZone, isBlob, Q, QUEST } from "../shared/quests";
-import { findHideSpot, HIDE, randomPointInZone, rollLevel, SPAWN_ZONES, zoneCap } from "../shared/spawns";
+import { findHideSpot, HIDE, noMobsAt, randomPointInZone, rollLevel, SPAWN_ZONES, zoneCap } from "../shared/spawns";
 import { moveStep } from "../shared/movement";
 import { SLOT_COUNT, SlotSkill, skillLearned } from "../shared/slots";
 import { heroPoise, MOB_COMBAT, POISE, poiseLevelMult, poiseSpeed, RAGE_ATTACK_SPEED } from "../shared/combat";
@@ -640,7 +640,7 @@ export class TownRoom extends Room<TownState> {
       if (Math.hypot(m.outX - m.x, m.outY - m.y) < 5) return this.hide(m, id, now);
       const go = toward(m.x, m.y, m.outX, m.outY);
       const r = moveStep(m.x, m.y, go, dt, def.speed * (m.fleeing ? POISE.fleeSpeed : 0.6) * (m.slowed ? SLOW_MOB : 1));
-      if (!isSafeZone(r.x, r.y)) { m.x = r.x; m.y = r.y; }
+      if (!isSafeZone(r.x, r.y) && !noMobsAt(r.x, r.y)) { m.x = r.x; m.y = r.y; }
       m.moving = r.moving;
       m.dir = dirFromInput(go, m.dir);
       return;
@@ -712,7 +712,7 @@ export class TownRoom extends Room<TownState> {
     const charge = now < m.chargeUntil ? BLOB_AI.warrior.chargeMult : 1;
     const speed = (t ? def.speed * (m.broken ? POISE.fleeSpeed : 1) * charge : def.speed * 0.5) * (m.slowed ? SLOW_MOB : 1);
     const r = moveStep(m.x, m.y, input, dt, speed);
-    if (!isSafeZone(r.x, r.y)) { m.x = r.x; m.y = r.y; }
+    if (!isSafeZone(r.x, r.y) && !noMobsAt(r.x, r.y)) { m.x = r.x; m.y = r.y; }
     m.moving = r.moving;
     m.dir = dirFromInput(input, m.dir);
   }
@@ -1002,7 +1002,7 @@ export class TownRoom extends Room<TownState> {
     if (opts.stunMs) m.stunUntil = Math.max(m.stunUntil, now + opts.stunMs);
     if (opts.slowMs) m.slowUntil = Math.max(m.slowUntil, now + opts.slowMs);
     const k = moveStep(m.x, m.y, pushInput(push), 0.1 * kb);
-    if (!isSafeZone(k.x, k.y)) { m.x = k.x; m.y = k.y; }
+    if (!isSafeZone(k.x, k.y) && !noMobsAt(k.x, k.y)) { m.x = k.x; m.y = k.y; }
     this.broadcast("hit", { id: targetId, dmg, crit: !!opts.crit });
     if (m.hp > 0) return;
     m.dead = true;

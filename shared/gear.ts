@@ -79,6 +79,7 @@ export const GEAR_DROP: Record<MobKind, { chance: number; tiers: [number, number
   shooterblob: { chance: 0.08, tiers: [0.75, 0.22, 0.03] },
   warriorblob: { chance: 0.12, tiers: [0.6, 0.32, 0.08] },
   healerblob: { chance: 0.1, tiers: [0.7, 0.25, 0.05] },
+  bandit: { chance: 0.18, tiers: [0.45, 0.4, 0.15] },
 };
 
 export function isGearId(v: unknown): v is string {
