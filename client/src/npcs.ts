@@ -1,4 +1,7 @@
+import "@fontsource/pixelify-sans/400.css";
+import "@fontsource/pixelify-sans/700.css";
 import "./npcs.css";
+import { pixelText } from "./pixeltext";
 import Phaser from "phaser";
 import { NPCS, NPC_DECOR, Npc, npcNear, TALK_RANGE } from "../../shared/npcs";
 import { druidDialog, Q, QUEST, QUEST_ZONE, questObjective, questTarget } from "../../shared/quests";
@@ -130,7 +133,8 @@ export class NpcLayer {
     const m = msg[stage];
     this.tracker.classList.remove("flash"); void this.tracker.offsetWidth; this.tracker.classList.add("flash");
     if (m) {
-      this.toast.innerHTML = `<div class="big">${m[0]}</div><div class="small">${m[1]}</div>`;
+      // Same pixel lettering as the zone banners
+      this.toast.replaceChildren(pixelText(m[0], "#b9f27c", 13, 3), pixelText(m[1], "#ffffff", 11, 2));
       this.toast.classList.remove("show"); void this.toast.offsetWidth; this.toast.classList.add("show");
       clearTimeout((this.toast as any)._t);
       (this.toast as any)._t = setTimeout(() => this.toast.classList.remove("show"), 3500);
