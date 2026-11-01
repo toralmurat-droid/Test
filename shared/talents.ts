@@ -1,9 +1,13 @@
 import { ClassKind } from "./classes";
+import { POWER_LEVELS } from "./powers";
 
 /**
  * Skill tree (press T). Every level after 1 gives 1 skill point. Each hero has 3 branches of 3 skills;
  * each skill has up to 3 ranks. A branch's 2nd skill needs 2 points spent in that branch, the 3rd needs 4.
  * 19 points (level 20) can't fill all 27 ranks, so players choose a build. Respec is free (out of combat).
+ *
+ * Powers path: the class powers (shared/powers.ts) sit at the top of the tree. The level 1 power is free; the next ones
+ * become available at levels 3, 5, 8 and 10 and are learned in order for 1 skill point each (key POWER_KEY = how many).
  *
  * Effects are generic so the server applies them in one place each:
  *   dmg       all damage dealt +x%          skill   skill + ultimate damage +x%
@@ -69,8 +73,19 @@ const rankOf = (r: Ranks, id: string): number =>
 
 export function talentPoints(level: number): number { return Math.max(0, level - 1); }
 
+export const POWER_KEY = "_powers";
+/** How many powers past the level 1 one have been learned (0..4). */
+export const powersLearned = (r: Ranks) => rankOf(r, POWER_KEY);
+/** Level of the highest learned power (1, 3, 5, 8 or 10): pass this as `level` to hasPower(). */
+export const powerLevel = (r: Ranks) => POWER_LEVELS[Math.min(powersLearned(r), POWER_LEVELS.length - 1)];
+/** Can the next power be learned? (right level reached + a free point) */
+export function canLearnPower(cls: ClassKind, level: number, r: Ranks): boolean {
+  const n = powersLearned(r);
+  return n < POWER_LEVELS.length - 1 && level >= POWER_LEVELS[n + 1] && spentPoints(cls, r) < talentPoints(level);
+}
+
 export function spentPoints(cls: ClassKind, r: Ranks): number {
-  return TREES[cls].reduce((sum, b) => sum + branchPoints(b, r), 0);
+  return TREES[cls].reduce((sum, b) => sum + branchPoints(b, r), 0) + powersLearned(r);
 }
 
 export function branchPoints(b: BranchDef, r: Ranks): number {
@@ -81,6 +96,7 @@ export function rank(r: Ranks, id: string): number { return rankOf(r, id); }
 
 /** Can one more rank be put in talent `id`? */
 export function canLearn(cls: ClassKind, level: number, r: Ranks, id: string): boolean {
+  if (id === POWER_KEY) return canLearnPower(cls, level, r);
   if (spentPoints(cls, r) >= talentPoints(level)) return false;
   for (const b of TREES[cls]) {
     const i = b.talents.findIndex((x) => x.id === id);

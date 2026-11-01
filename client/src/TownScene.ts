@@ -416,18 +416,24 @@ export class TownScene extends Phaser.Scene {
       sta: `${mine.maxHp} max HP`,
       str: STATS[cls].attackStat === "str" ? `attack ×${attackMult(cls, st).toFixed(2)}, +2 HP each` : "+2 HP per point",
       mag: `${STATS[cls].attackStat === "mag" ? `attack ×${attackMult(cls, st).toFixed(2)}, ` : ""}skills ×${magicMult(cls, st).toFixed(2)}, ` +
-        `cooldowns −${Math.round((1 - cooldownMult(cls, st, lvl)) * 100)}%`,
+        `cooldowns −${Math.round((1 - cooldownMult(cls, st, mine.powerLevel)) * 100)}%`,
     };
     document.getElementById("herostats")!.innerHTML = (["sta", "str", "mag"] as StatKind[]).map((k) => {
       const gain = prev ? base[k] - prev[k] : 0;
       return `<span>${STAT_NAMES[k]}</span><b>${st[k]}${gain ? ` <span class="gain">+${gain}</span>` : ""}</b><span class="note">${notes[k]}</span>`;
     }).join("");
-    document.getElementById("heropowers")!.innerHTML = POWERS[cls].map((pw) => {
-      const state = lvl < pw.level ? "locked" : from !== undefined && pw.level > from ? "new" : "";
-      const tag = state === "locked" ? `🔒 Lv ${pw.level}` : state === "new" ? "NEW!" : `Lv ${pw.level}`;
-      const key = pw.key ? ` [${pw.key}]` : "";
-      return `<li class="${state}"><b>${pw.name}${key}</b> · ${tag}<br>${pw.desc}</li>`;
-    }).join("");
+    const def = CLASSES[cls];
+    const next = xpForLevel(lvl + 1), cur = xpForLevel(lvl);
+    const dmg = Math.round(def.damage * attackMult(cls, st) * talentMult(cls, mine.talents, "dmg"));
+    const speed = Math.round(heroSpeed(cls, mine.powerLevel, false) * gearSpeedMult(mine) * talentMult(cls, mine.talents, "speed"));
+    const rows: [string, string][] = [
+      ["Level", lvl >= 20 ? "20 (max)" : `${lvl} · XP ${mine.xp - cur}/${next - cur}`],
+      ["Health", `${Math.ceil(mine.hp)} / ${mine.maxHp}`],
+      ["Attack", `${dmg} damage${def.projectile ? " (ranged)" : ""}`],
+      ["Move speed", `${speed}`],
+      ["Kills · Gold", `${mine.kills} · ${mine.gold}`],
+    ];
+    document.getElementById("herochar")!.innerHTML = rows.map(([k, v]) => `<span>${k}</span><b>${v}</b>`).join("");
     el.hidden = false;
   }
 
@@ -618,7 +624,7 @@ export class TownScene extends Phaser.Scene {
       const p = e.state;
       if (id === this.me && !p.dead && !p.stunned && !p.rolling) {
         // Client-side prediction with the same movement code the server runs
-        const r = moveStep(e.sprite.x, e.sprite.y, this.input_, dtMs / 1000, heroSpeed(p.cls as ClassKind, p.level, p.slowed, p.raging) * gearSpeedMult(p) * talentMult(p.cls as ClassKind, p.talents, "speed"));
+        const r = moveStep(e.sprite.x, e.sprite.y, this.input_, dtMs / 1000, heroSpeed(p.cls as ClassKind, p.powerLevel, p.slowed, p.raging) * gearSpeedMult(p) * talentMult(p.cls as ClassKind, p.talents, "speed"));
         e.sprite.setPosition(r.x, r.y);
         if (!r.moving) {
           // Ease toward authoritative position while idle
@@ -721,7 +727,7 @@ export class TownScene extends Phaser.Scene {
         ? `⚔ ${zone.name}: ${zone.alive}/${zone.cap} monsters${zone.nextIn ? ` · next in ${zone.nextIn}s` : ""}`
         : "";
       const cls = mine.cls as ClassKind;
-      const cdm = cooldownMult(cls, { sta: mine.sta, str: mine.str, mag: mine.mag }, mine.level) * talentReduce(cls, mine.talents, "cdr");
+      const cdm = cooldownMult(cls, { sta: mine.sta, str: mine.str, mag: mine.mag }, mine.powerLevel) * talentReduce(cls, mine.talents, "cdr");
       const sp = CLASSES[cls].special;
       const spCd = sp.cooldownMs * cdm;
       const left = Math.max(0, spCd - (now - this.lastSpecial));
@@ -730,7 +736,7 @@ export class TownScene extends Phaser.Scene {
       document.getElementById("skilltext")!.textContent = (left > 0 ? `${sp.name} ${(left / 1000).toFixed(1)}s` : `${sp.name} ready [E]`) +
         (roll > 0 ? ` · Roll ${(roll / 1000).toFixed(1)}s` : " · Roll [F]");
       const ultEl = document.getElementById("ult")!;
-      ultEl.hidden = mine.level < ULT_LEVEL;
+      ultEl.hidden = mine.powerLevel < ULT_LEVEL;
       if (!ultEl.hidden) {
         const u = ULTS[cls], uCd = u.cooldownMs * cdm;
         const uLeft = Math.max(0, uCd - (now - this.lastUlt));
