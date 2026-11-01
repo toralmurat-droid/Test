@@ -17,6 +17,7 @@ import { MAX_POTIONS } from "../../shared/items";
 import { ART_K, CHAR_ORIGIN, CharacterName, playCharAnim } from "./artAssets";
 import { iconCanvas, TIER_COLORS } from "./gear";
 import { itemTexture } from "./textures";
+import { isoAnchor } from "./iso";
 
 type Me = { x: number; y: number } | undefined;
 /** The local player's synced state (only the fields NPCs care about). */
@@ -66,6 +67,8 @@ export class NpcLayer {
         fontFamily: "monospace", fontSize: "40px", fontStyle: "bold", color: "#ffd166", stroke: "#000", strokeThickness: 6,
       }).setOrigin(0.5, 1).setScale(0.25).setResolution(2).setDepth(n.y + 1);
       scene.tweens.add({ targets: mark, y: n.y - 27, duration: 600, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
+      // iso view: name and quest mark stand straight above the NPC, not at a world point north of it
+      isoAnchor(label, sprite); isoAnchor(mark, sprite);
       this.sprites.set(n.id, { sprite, label, mark });
     }
     this.addSurroundings(scene);

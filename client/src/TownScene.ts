@@ -468,6 +468,8 @@ export class TownScene extends Phaser.Scene {
     const t = this.add.text(x, y, text, {
       fontFamily: font, fontSize: "16px", color, stroke: "#000", strokeThickness: 3,
     }).setOrigin(0.5, 1).setScale(0.25).setResolution(2).setDepth(30000);
+    // iso view: callers lift the text above a hero's feet; rise straight up from there on screen
+    isoAnchor(t, { x, y: y + 14 });
     this.tweens.add({ targets: t, y: y - 10, alpha: 0, duration: 800, onComplete: () => t.destroy() });
   }
 

@@ -2,7 +2,7 @@ import Phaser from "phaser";
 import { MAP_H, MAP_W, TILE } from "../../shared/constants";
 import { T, TILE_COUNT } from "../../shared/map";
 import { ROWS, ANIMATED_TILES } from "./tileset";
-import { BUILDINGS, buildHouses, stoneCap, stoneFace, woodCap, woodFace } from "./isobuild";
+import { BUILDINGS, buildHouses, buildStalls, ruinWallTexture } from "./isobuild";
 
 /**
  * Isometric view (phase 1). The game world (server, collisions, movement, every x/y in the client) stays the
@@ -377,6 +377,7 @@ function stakesTexture(scene: Phaser.Scene, fence: boolean, mask: number, broken
 export function isoStanding(scene: Phaser.Scene, objects: number[][]): number[][] {
   const out = objects.map((r) => r.slice());
   const houses = buildHouses(scene);
+  for (const k of buildStalls(scene)) houses.add(k);
   const src = (scene.textures.get("tiles") as Phaser.Textures.CanvasTexture).getSourceImage() as HTMLCanvasElement;
   const tileSrc = (i: number): Src => ({ img: src, sx: (i % TILE_COUNT) * TILE, sy: Math.floor(i / TILE_COUNT) * TILE });
   const at = (x: number, y: number) => (x < 0 || y < 0 || x >= MAP_W || y >= MAP_H ? -1 : objects[y][x]);
@@ -397,11 +398,14 @@ export function isoStanding(scene: Phaser.Scene, objects: number[][]): number[][
     } else if (h !== undefined) {
       let key: string;
       if (t === T.RUIN || t === T.BEAM) {
-        // Broken walls: stone or charred timber, uneven heights
-        const stone = t === T.RUIN;
-        h = h! + Math.round((hashXY(tx, ty) - 0.5) * (stone ? 10 : 8));
-        const face = stone ? stoneFace() : woodFace(), cap = stone ? stoneCap() : woodCap();
-        key = blockTexture(scene, `blk_${stone ? "ruin" : "beam"}_${h}`, { img: cap, sx: 0, sy: 0 }, { img: face, sx: 0, sy: 0 }, h);
+        // Broken walls: thin stone or charred timber walls along the wall line, with rubble
+        const same = (x: number, y: number) => id(at(x, y)) === t;
+        const mask = (same(tx, ty - 1) ? 1 : 0) | (same(tx + 1, ty) ? 2 : 0) | (same(tx, ty + 1) ? 4 : 0) | (same(tx - 1, ty) ? 8 : 0);
+        const w = ruinWallTexture(scene, t === T.RUIN, mask, tx, ty);
+        const img = scene.add.image(cx, cy, w.key);
+        img.setOrigin(0.5, w.up / img.height).setDepth(cy);
+        out[ty][tx] = -1;
+        continue;
       } else {
         // Other blocks (stalls, stray roof/wall tiles): their own art on top and sides
         key = blockTexture(scene, `blk_${index}_${h}`, tileSrc(index), tileSrc(index), h!);
