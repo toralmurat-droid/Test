@@ -1,7 +1,7 @@
 import { MAP_H, MAP_W, PLAYER_RADIUS, TILE, type MobKind } from "./constants";
 
 /**
- * Oakvale and its surroundings — the starting region (224×168 tiles).
+ * Oakvale and its surroundings — the starting region (288×216 tiles).
  *
  * The world is two tile layers that share one tileset:
  *  - ground:  always filled (grass, roads, water…)
@@ -398,6 +398,59 @@ function buildWorld() {
   curve([[tower.x + 4, tower.y], [160, 18], [176, 24], [glade.x - 5, glade.y]], 1);                   // Thornwood trail
   curve([[glade.x + 5, glade.y], [204, 30], [200, 40], [keep.x + keep.w - 1, keep.y + 8]], 1);       // down to the keep's postern
 
+  // ---------- 12a2. The coast and the far east ----------
+  // The Saltwind Sea along the south edge: a wavy coastline with a sandy beach; River Ashwell flows into it
+  const coastY = (x: number) => Math.round(196 + 3 * Math.sin(x / 11) + 2 * Math.sin(x / 5.3) + noise(x, 0, 6, 181) * 3);
+  for (let x = 0; x < MAP_W; x++) {
+    const cy = coastY(x);
+    for (let y = cy - 4; y < MAP_H; y++) {
+      if (!inMap(x, y)) continue;
+      setO(x, y, EMPTY);
+      if (y >= cy) setG(x, y, T.WATER);
+      else if (y >= cy - 2 || hash(x, y, 182) < 0.5) setG(x, y, T.SAND);
+    }
+    for (let y = cy - 8; y < cy - 4; y++) if (inMap(x, y) && (objects[y][x] === T.TREE || objects[y][x] === T.PINE) && hash(x, y, 183) < 0.7) setO(x, y, hash(x, y, 184) < 0.3 ? T.BUSH : EMPTY); // thin the trees near the beach
+  }
+
+  // Saltmere: a small fishing village on the beach east of the river mouth, with two piers
+  const salt = { x: 126, y: 176, w: 34, h: 22 };
+  clearO(salt.x - 2, salt.y - 2, salt.w + 4, salt.h + 4);
+  each(salt.x, salt.y, salt.w, coastY(salt.x + 17) - salt.y - 3, (x, y) => { if (isGrass(ground[y][x]) && hash(x, y, 185) < 0.3) setG(x, y, T.GRASS); });
+  const saltHouses: { x: number; y: number }[] = [];
+  for (const [hx, hy, roof] of [[128, 178, T.ROOF_SLATE], [135, 177, T.ROOF_THATCH], [143, 178, T.ROOF_SLATE], [150, 177, T.ROOF_THATCH]] as const)
+    saltHouses.push(house(hx, hy, 5, 4, roof));
+  const lane = 186; // the lane along the beach
+  curve([[salt.x - 1, lane], [salt.x + 12, lane + 1], [salt.x + 24, lane], [salt.x + salt.w, lane + 1]], 1);
+  for (const d of saltHouses) doorPath(d);
+  for (const px of [134, 147]) { // piers out over the water
+    const cy = coastY(px);
+    road(px, lane + 1, 1, cy - lane + 5);
+    road(px - 1, cy + 4, 3, 1);
+    setO(px + 1, cy - 1, T.BARREL); setO(px - 1, cy - 2, T.CRATE);
+  }
+  for (const [fx, fy] of [[140, 189], [141, 189], [153, 189], [154, 189]]) setO(fx, fy, T.FENCE); // drying racks for the nets
+  setO(138, 183, T.WELL); setO(129, 189, T.CAMPFIRE); setO(131, 183, T.BARREL); setO(132, 183, T.CRATE); setO(157, 183, T.HAY);
+
+  // Redfang Hollow: a bandit settlement in a clearing deep in the eastern woods, behind a crude fence
+  const band = { x: 240, y: 102, w: 24, h: 18 };
+  disk(band.x + band.w / 2, band.y + band.h / 2, band.w / 2 + 5, band.h / 2 + 5, (x, y, d) => {
+    setO(x, y, d > 0.85 && hash(x, y, 186) < 0.3 ? T.STUMP : EMPTY);
+    if (isGrass(ground[y][x])) setG(x, y, noise(x, y, 4, 187) > 0.45 ? T.DIRT : T.GRASS_DARK);
+  });
+  fenceBox(band.x, band.y, band.w, band.h, [...sideGaps(band.x, band.y, band.w, band.h, 2)]);
+  const bandHuts = [house(band.x + 2, band.y + 2, 4, 4, T.ROOF_THATCH), house(band.x + 9, band.y + 2, 5, 4, T.ROOF_RED), house(band.x + 17, band.y + 2, 4, 4, T.ROOF_THATCH)];
+  rectG(band.x + 1, band.y + 7, band.w - 2, 1, T.DIRT);
+  for (const d of bandHuts) setG(d.x, d.y + 1, T.DIRT);
+  setO(band.x + 12, band.y + 11, T.CAMPFIRE);
+  setO(band.x + 3, band.y + 13, T.STALL_RED); setO(band.x + 4, band.y + 13, T.STALL_RED); // the loot pile
+  for (const [ox, oy, t] of [[band.x + 7, band.y + 14, T.CRATE], [band.x + 8, band.y + 14, T.CRATE], [band.x + 7, band.y + 15, T.BARREL],
+    [band.x + 18, band.y + 13, T.HAY], [band.x + 20, band.y + 15, T.BARREL], [band.x + 16, band.y + 15, T.STUMP], [band.x + 14, band.y + 9, T.STUMP], [band.x + 10, band.y + 9, T.STUMP]] as const) setO(ox, oy, t);
+
+  // Roads to the new places
+  curve([[lake.x + 3, lake.y + lake.ry + 3], [104, 166], [110, 174], [rc(179) - 6, 179], [rc(179) + 6, 179], [salt.x - 1, lane]], 1); // Coast Road (lake → Saltmere)
+  curve([[keep.x + keep.w + 1, keep.y + 8], [216, 68], [228, 84], [band.x + band.w / 2, band.y - 2]], 1);                            // Bandit Trail (keep → Redfang)
+  curve([[band.x + band.w / 2, band.y + band.h + 1], [244, 140], [222, 162], [194, 176], [170, 184], [salt.x + salt.w, lane + 1]], 1); // Smugglers' Path (Redfang → Saltmere)
+
   // ---------- 12b. Signposts at the gates and road junctions (directions are worked out in SIGNPOSTS) ----------
   const posts: { x: number; y: number; to: string[] }[] = [];
   /** Puts a signpost on the nearest free tile beside (not on) a road, within 3 tiles of (x, y). */
@@ -431,7 +484,10 @@ function buildWorld() {
   signpost(156, 61, ["Greywatch Keep", "Old Ruins", "Oakvale"]);                                    // keep road
   signpost(tower.x + 12, 20, ["Thornwood", "Old Watchtower", "Oakvale"]);                            // into the Thornwood
   signpost(202, 42, ["Greywatch Keep", "Thornwood"]);
-  signpost(rc(144) + 9, 142, ["Sunken Lake", "Old Ruins", "Stonecrag Quarry"]);                   // south bridge                                               // keep postern path
+  signpost(rc(144) + 9, 142, ["Sunken Lake", "Old Ruins", "Stonecrag Quarry"]);
+  signpost(salt.x - 2, lane - 1, ["Saltmere", "Sunken Lake"]);                                       // Saltmere's west end
+  signpost(band.x + band.w / 2 + 2, band.y - 8, ["Redfang Hollow", "Greywatch Keep"]);               // bandit trail
+  signpost(salt.x + salt.w + 1, lane - 1, ["Saltmere", "Redfang Hollow"]);                         // Saltmere's east end                   // south bridge                                               // keep postern path
 
   // ---------- 12c. Small graveyards where skeletons live (they rise from, and hide in, the graves) ----------
   const graveyard = (cx: number, cy: number, r: number, seed: number) => each(cx - r, cy - r, 2 * r + 1, 2 * r + 1, (i, j) => {
@@ -523,8 +579,11 @@ function buildWorld() {
     { name: "Sunken Lake", x: lake.x - lake.rx - 6, y: lake.y - lake.ry - 6, w: lake.rx * 2 + 12, h: lake.ry * 2 + 12, mobs: ["slime"] },
     { name: "Greywatch Keep", x: keep.x - 6, y: keep.y - 6, w: keep.w + 12, h: keep.h + 12, mobs: ["skeleton"] },
     { name: "Thornwood", ...thorn, mobs: ["slime"] },
+    { name: "Saltmere", ...salt },
+    { name: "Redfang Hollow", x: band.x - 4, y: band.y - 4, w: band.w + 8, h: band.h + 8, mobs: ["skeleton"] },
+    { name: "Saltwind Coast", x: 0, y: 184, w: MAP_W, h: MAP_H - 184, mobs: ["slime"] },
     { name: "River Ashwell", x: riverCenter(60) - 6, y: 0, w: 12, h: MAP_H },
-    { name: "Whispering Woods", x: woodsX - 2, y: 0, w: MAP_W - woodsX + 2, h: MAP_H, mobs: ["slime"] },
+    { name: "Whispering Woods", x: woodsX - 2, y: 0, w: MAP_W - woodsX + 2, h: 184, mobs: ["slime"] },
   ];
   return { ground, objects, areas, posts, roads };
 }
