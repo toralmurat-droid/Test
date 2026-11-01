@@ -58,7 +58,11 @@
       <p id="gearempty" class="help">No gear yet. Monsters sometimes drop weapons, armour, shoes and hats: walk over them to pick them up.</p>
       <p class="help">Click an item to wear it · click a worn item to take it off · right-click to drop · G or Esc to close</p>
     </div>
-    <button id="bagbtn" title="Equipment (G)">🎒 Bag <small>[G]</small></button>
+    <div id="menubtns">
+      <button id="herobtn" title="Hero: stats and powers (C)">🛡 Hero <small>[C]</small></button>
+      <button id="treebtn" title="Skill tree (T)">⭐ Skills <small>[T]</small><span id="treebadge" hidden></span></button>
+      <button id="bagbtn" title="Equipment (G)">🎒 Bag <small>[G]</small></button>
+    </div>
     <div id="feed"></div>
     <div id="chatlog"></div>
     <input id="chat" maxlength="120" placeholder="Press Enter to chat" autocomplete="off" />
