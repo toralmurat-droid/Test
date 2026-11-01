@@ -253,70 +253,112 @@ const beamWall = (p: Painter, m: number) => {
  * v = neighbour mask (bits 0-3) | 16 if the outside is to the south | 32 if the outside is to the east.
  */
 const palisade = (p: Painter, v: number) => {
-  // Drawn per screen pixel: a low wall of slim sharpened logs (about 2/3 of a hero's height) bound with rope,
-  // with thin pikes jutting outward at uneven angles.
-  const m = v & 15, outS = !!(v & 16), outE = !!(v & 32);
+  // A clean wooden stockade, drawn per pixel. Horizontal runs: a row of 6px logs with sharpened tops, one cross-rail
+  // and a soft shadow. Vertical runs: a strip of logs seen from above whose sharpened ends point outward. Ends of a
+  // run (beside gates) get a sturdy gate post; corners get a thicker corner post. v = mask | 16 out-south | 32 out-east.
+  const m = v & 15, outE = !!(v & 32), outS = !!(v & 16), dmg = !!(v & 64);
   const horiz = !!(m & (E | W)) || !(m & (N | S)), vert = !!(m & (N | S));
-  const T_ = SZ, cx = outE ? 8 : 16; // x of the 8px log column in vertical runs (room for pikes outside)
-  const shade = (c: number, k: number) => { const r = (c >> 16) & 255, g = (c >> 8) & 255, b = c & 255; const f = (x: number) => Math.max(0, Math.min(255, Math.round(x * k))); return (f(r) << 16) | (f(g) << 8) | f(b); };
-  /** One upright log, 4px wide, with a whittled point. */
-  const log = (x: number, top: number, bot: number) => {
-    const base = [0x7a5230, 0x84593a, 0x704a2a][p.ri(3)];
-    for (let y = top + 2; y < bot; y++) {
-      p.fpx(x, y, shade(base, 1.3)); p.fpx(x + 1, y, base); p.fpx(x + 2, y, base); p.fpx(x + 3, y, shade(base, 0.62));
-    }
-    for (let k = 0; k < 2; k++) p.fpx(x + 1 + p.ri(2), top + 4 + p.ri(Math.max(1, bot - top - 6)), shade(base, 0.8)); // knots
-    p.frect(x, top + 1, 4, 1, shade(base, 1.25)); p.fpx(x + 3, top + 1, shade(base, 0.8));
-    p.fpx(x + 1, top, 0xd8b88a); p.fpx(x + 2, top, 0xc09a6a); // cut point
-    p.fpx(x, bot - 1, 0x3e2814); p.fpx(x + 1, bot - 1, 0x4e331c); p.fpx(x + 2, bot - 1, 0x4e331c); p.fpx(x + 3, bot - 1, 0x2e1e10);
+  const CX = 12; // left edge of the 8px vertical strip
+  const OUT = 0x2a1a0c, HI = 0xb07a48, BASE = 0x8a5a32, SH = 0x6e4626, SH2 = 0x5a381c, TIP = 0xe0c08e, TIP2 = 0xc49a64;
+  const n = (k: number) => ((k * 2654435761) >>> 0) % 3; // stable per-log variation
+
+  /** One upright log (6px wide) from `top` (tip) down to `bot`. */
+  const log = (x: number, top: number, bot: number, k: number) => {
+    const cols = [OUT, HI, BASE, BASE, SH, SH2];
+    for (let y = top + 3; y < bot; y++) cols.forEach((c, i) => p.fpx(x + i, y, c));
+    // sharpened point
+    p.fpx(x + 2, top, TIP); p.fpx(x + 3, top, TIP2);
+    p.fpx(x + 1, top + 1, TIP); p.fpx(x + 2, top + 1, TIP); p.fpx(x + 3, top + 1, TIP2); p.fpx(x + 4, top + 1, SH);
+    p.fpx(x, top + 2, OUT); p.fpx(x + 1, top + 2, HI); p.fpx(x + 2, top + 2, TIP2); p.fpx(x + 3, top + 2, BASE); p.fpx(x + 4, top + 2, SH); p.fpx(x + 5, top + 2, SH2);
+    p.fpx(x + 1, top, OUT); p.fpx(x + 4, top, OUT); p.fpx(x, top + 1, OUT); p.fpx(x + 5, top + 1, OUT);
+    // bark grain and a knot
+    for (let y = top + 5 + n(k); y < bot - 2; y += 5) p.fpx(x + 2 + (y & 1), y, SH);
+    if (n(k + 7) === 0) { p.fpx(x + 3, top + 9, SH2); p.fpx(x + 2, top + 9, SH); }
   };
-  /** A slim sharpened pike from (x, y) along angle a, 2px thick with a pale tip. */
-  const pike = (x: number, y: number, a: number, len: number) => {
-    const dx = Math.cos(a), dy = Math.sin(a), steep = Math.abs(dy) > Math.abs(dx);
-    for (let t = 0; t <= len; t++) {
-      const px = Math.round(x + dx * t), py = Math.round(y + dy * t);
-      if (t >= len - 2) { p.fpx(px, py, t === len ? 0xf2e8cc : 0xd8c49a); continue; }
-      p.fpx(px, py, 0x9a6a3c);
-      p.fpx(px + (steep ? 1 : 0), py + (steep ? 0 : 1), 0x5e3b1f);
+  /** A log snapped off at `top`: jagged splinters, a pale broken core, a charred edge. */
+  const brokenLog = (x: number, top: number, bot: number, k: number) => {
+    const cols = [OUT, HI, BASE, BASE, SH, SH2], jag = [1, 0, 2, 0, 1, 2];
+    for (let i = 0; i < 6; i++) {
+      const y0 = top + jag[(i + k) % 6];
+      for (let y = y0 + 2; y < bot; y++) p.fpx(x + i, y, cols[i]);
+      p.fpx(x + i, y0, i === 0 || i === 5 ? OUT : 0xd8b88a); // pale splintered wood
+      p.fpx(x + i, y0 + 1, i === 0 || i === 5 ? OUT : i < 3 ? 0xb08a5a : 0x3a2414); // charred on one side
     }
+    p.fpx(x + 2, top + 6, SH); p.fpx(x + 3, top + 10, SH);
   };
-  const jitter = () => (p.r() - 0.5) * 0.9; // up to about ±25°
-  const rope = (x0: number, x1: number, y: number) => { p.frect(x0, y, x1 - x0, 1, 0x3a2614); for (let x = x0 + (y % 2); x < x1; x += 2) p.fpx(x, y - 1, 0x8a6a40); };
+  /** A gate or corner post: wider, taller, with an iron band and a cap. */
+  const post = (x: number, w: number, top: number, bot: number) => {
+    for (let y = top + 2; y < bot; y++) for (let i = 0; i < w; i++) p.fpx(x + i, y, i === 0 || i === w - 1 ? OUT : i === 1 ? HI : i >= w - 3 ? SH : BASE);
+    for (let i = 1; i < w - 1; i++) { p.fpx(x + i, top, i === 1 ? OUT : TIP2); p.fpx(x + i, top + 1, i < 3 ? TIP : i >= w - 3 ? SH : TIP2); }
+    p.fpx(x, top + 1, OUT); p.fpx(x + w - 1, top + 1, OUT);
+    for (const y of [top + 6, bot - 6]) { for (let i = 0; i < w; i++) p.fpx(x + i, y, 0x3a3a40); for (let i = 1; i < w - 1; i++) p.fpx(x + i, y - 1, 0x6a6a72); p.fpx(x + 2, y, 0x9a9aa2); }
+    p.frect(x, bot, w, 2, "rgba(0,0,0,0.25)");
+  };
 
   if (horiz) {
-    const x0 = m & W ? 0 : vert ? cx : 2, x1 = m & E ? T_ : vert ? cx + 8 : T_ - 2;
-    const top = () => 13 + p.ri(3), bot = 30;
-    if (!outS) { // outside is north: pikes rise from behind the wall
-      for (let x = x0 + 1 + p.ri(3); x < x1 - 2; x += 6 + p.ri(3)) pike(x, 17, -Math.PI / 2 + jitter(), 13 + p.ri(4));
-      p.frect(x0, 30, x1 - x0, 2, "rgba(0,0,0,0.22)");
-      for (let x = x0; x + 3 < x1 + 1; x += 4) log(x, top(), bot);
-      rope(x0, x1, 18); rope(x0, x1, 25);
-    } else { // outside is south: pikes jut out in front of the wall
-      p.frect(x0, 29, x1 - x0, 2, "rgba(0,0,0,0.22)");
-      for (let x = x0; x + 3 < x1 + 1; x += 4) log(x, 9 + p.ri(3), 26);
-      rope(x0, x1, 14); rope(x0, x1, 21);
-      for (let x = x0 + 2 + p.ri(3); x < x1 - 2; x += 6 + p.ri(3)) {
-        const a = Math.PI / 2 + jitter();
-        p.fpx(Math.round(x + Math.cos(a) * 6) + 2, 31, "rgba(0,0,0,0.25)");
-        pike(x, 22, a, 7 + p.ri(3));
-      }
+    const left = m & W ? 0 : vert ? CX : 4, right = m & E ? SZ : vert ? CX + 8 : SZ - 4;
+    p.frect(left, 29, right - left, 1, "rgba(0,0,0,0.35)");
+    p.frect(left, 30, right - left, 2, "rgba(0,0,0,0.18)");
+    // damaged stretches: one log gone (fallen in front of the gap), others snapped off at uneven heights
+    const logs: number[] = [];
+    for (let x = left - (left % 6); x < right; x += 6) if (x + 6 > left && x < right) logs.push(x);
+    const gone = dmg && !vert && logs.length > 2 ? logs[1 + p.ri(logs.length - 2)] : -1;
+    for (const x of logs) {
+      const k = Math.floor(x / 6) + (outS ? 11 : 0);
+      if (x === gone) continue;
+      const top = 5 + n(k) + (k % 2);
+      if (dmg && p.r() < 0.5) brokenLog(x, 12 + p.ri(9), 29, k);
+      else log(x, top, 29, k);
     }
+    // cross-rail with a peg on every log (broken where a log is missing)
+    const rail = (a: number, b: number) => { p.frect(a, 17, b - a, 1, 0x9a6a3a); p.frect(a, 18, b - a, 2, SH2); p.frect(a, 20, b - a, 1, OUT); };
+    if (gone < 0) rail(left, right);
+    else {
+      rail(left, gone + 1); rail(gone + 6, right);
+      p.fpx(gone + 1, 21, SH2); p.fpx(gone + 1, 22, SH2); p.fpx(gone + 5, 16, 0x9a6a3a); // splintered ends
+      // the fallen log, lying across the foot of the gap
+      for (let i = -2; i < 9; i++) { p.fpx(gone + i, 26, OUT); p.fpx(gone + i, 27, HI); p.fpx(gone + i, 28, BASE); p.fpx(gone + i, 29, SH2); }
+      p.fpx(gone - 3, 27, OUT); p.fpx(gone - 3, 28, OUT); p.fpx(gone + 9, 27, TIP); p.fpx(gone + 9, 28, TIP2); p.fpx(gone + 10, 28, TIP);
+    }
+    for (const x of logs) if (x !== gone && x + 3 >= left) p.fpx(x + 3, 18, 0xc8a070);
+    if (!(m & W) && !vert) post(left - 2, 8, 2, 30); // gate post at the open end
+    if (!(m & E) && !vert) post(right - 6, 8, 2, 30);
   }
   if (vert) {
-    const y0 = m & N ? 0 : horiz ? (outS ? 9 : 13) : 4, y1 = m & S ? T_ : horiz ? 28 : 28;
-    p.frect(cx + 8, y0 + 2, 2, y1 - y0, "rgba(0,0,0,0.22)");
-    for (let i = 0; i < 2; i++) { // two logs side by side, seen from above at an angle
-      const x = cx + i * 4, base = i ? 0x704a2a : 0x7a5230;
-      for (let y = y0; y < y1; y++) { p.fpx(x, y, shade(base, 1.3)); p.fpx(x + 1, y, base); p.fpx(x + 2, y, base); p.fpx(x + 3, y, shade(base, 0.62)); }
-      for (let y = y0 + 3 + p.ri(4); y < y1 - 1; y += 5 + p.ri(4)) p.fpx(x + 1 + p.ri(2), y, shade(base, 0.8));
-      if (!(m & N)) { p.fpx(x + 1, y0, 0xd8b88a); p.fpx(x + 2, y0, 0xc09a6a); }
+    const y0 = m & N ? 0 : horiz ? 14 : 6, y1 = m & S ? SZ : horiz ? 30 : 28;
+    p.frect(CX + 8, y0 + 2, 2, y1 - y0, "rgba(0,0,0,0.2)");
+    // logs lying across the strip, seen from above; their sharpened ends poke outward
+    const segs: number[] = [];
+    for (let y = y0 - (y0 % 6); y < y1; y += 6) segs.push(y);
+    const lost = dmg && !horiz && segs.length > 3 ? segs[1 + p.ri(segs.length - 2)] : -1;
+    if (lost >= 0) { // a missing log: splintered stumps either side, and the log fallen beside the wall
+      p.frect(CX + 1, lost, 6, 1, 0xd8b88a); p.frect(CX + 1, lost + 5, 6, 1, 0xb08a5a);
+      const fx = outE ? CX - 6 : CX + 11;
+      for (let j = -1; j < 8; j++) { p.fpx(fx, lost + j, OUT); p.fpx(fx + 1, lost + j, HI); p.fpx(fx + 2, lost + j, BASE); p.fpx(fx + 3, lost + j, SH2); }
+      p.fpx(fx + 1, lost + 8, TIP); p.fpx(fx + 2, lost + 8, TIP2); p.fpx(fx + 1, lost + 9, TIP);
     }
-    for (let y = y0 + 5; y < y1 - 1; y += 9) { p.frect(cx, y, 8, 1, 0x3a2614); p.fpx(cx + 2, y - 1, 0x8a6a40); p.fpx(cx + 6, y - 1, 0x8a6a40); }
-    for (let y = y0 + 3 + p.ri(3); y < y1 - 2; y += 6 + p.ri(3)) {
-      if (outE) pike(cx + 8, y, jitter() * 0.8, 8 + p.ri(4));
-      else pike(cx - 1, y, Math.PI + jitter() * 0.8, 8 + p.ri(4));
+    for (const y of segs) {
+      const k = Math.floor(y / 6) + (outE ? 5 : 0);
+      if (y === lost) continue;
+      for (let j = 0; j < 6; j++) {
+        const yy = y + j;
+        if (yy < y0 || yy >= y1) continue;
+        const c = j === 0 ? OUT : j === 1 ? HI : j >= 4 ? SH : BASE;
+        for (let i = 0; i < 8; i++) p.fpx(CX + i, yy, i === 0 || i === 7 ? OUT : c);
+      }
+      if (y + 3 < y0 || y + 3 >= y1) continue;
+      const len = 3 + n(k); // the pointed end jutting out, alternating lengths
+      for (let t = 1; t <= len; t++) {
+        const x = outE ? CX + 7 + t : CX - t, h = t === len ? 1 : 2;
+        const yy = y + 2 + (t === len ? 1 : 0);
+        p.fpx(x, yy, t >= len - 1 ? TIP : HI);
+        if (h > 1) p.fpx(x, yy + 1, t >= len - 1 ? TIP2 : SH);
+      }
     }
+    if (!(m & N) && !horiz) post(CX - 1, 10, y0 - 4, y0 + 12); // gate post at the open end
+    if (!(m & S) && !horiz) post(CX - 1, 10, y1 - 22, y1);
   }
+  if (horiz && vert) post(CX - 1, 10, 0, 30); // corner post
 };
 
 const LIGHT_GRASS = [0x5a9a3c, 0x4a8532, 0x6fb04a, 0x5a9a3c];
@@ -616,7 +658,7 @@ const DRAW: Record<number, (p: Painter, f: number, v: number) => void> = {
  *  - the floor under rubble (rows 0-15 = base * 4 + variant).
  * A tilemap index is `row * TILE_COUNT + id`.
  */
-export const ROWS = 64;
+export const ROWS = 128;
 const VARIED = new Set<number>([T.GRASS, T.TALL_GRASS, T.FLOWERS, T.DIRT, T.COBBLE, T.SAND, T.WATER, T.FLOOR, T.FLAGS, T.FIELD, T.BRIDGE]);
 const CONNECTED = new Set<number>([T.RUIN, T.BEAM, T.PALISADE]);
 const LIGHT = new Set<number>([T.GRASS, T.TALL_GRASS, T.FLOWERS]);
@@ -640,11 +682,12 @@ const paint = (ctx: CanvasRenderingContext2D, id: number, row: number, f: number
 export function drawTileset(ctx: CanvasRenderingContext2D) {
   ctx.clearRect(0, 0, TILE * TILE_COUNT, TILE * ROWS);
   for (let i = 0; i < TILE_COUNT; i++) {
-    const rows = VARIED.has(i) ? 4 : i === T.PALISADE || i === T.SIGNPOST ? 64 : CONNECTED.has(i) || i === T.GRASS_DARK || i === T.RUBBLE ? 16 : 1;
+    const rows = VARIED.has(i) ? 4 : i === T.PALISADE ? 128 : i === T.SIGNPOST ? 64 : CONNECTED.has(i) || i === T.GRASS_DARK || i === T.RUBBLE ? 16 : 1;
     for (let r = 0; r < rows; r++) paint(ctx, i, r, 0);
   }
 }
 
+const dhash = (x: number, y: number) => { let h = Math.imul(x, 2246822519) ^ Math.imul(y, 3266489917); h = Math.imul(h ^ (h >>> 15), 668265263); return ((h ^ (h >>> 13)) >>> 0) / 4294967296; };
 const vhash = (x: number, y: number) => { let h = Math.imul(x, 73856093) ^ Math.imul(y, 19349663); h = Math.imul(h ^ (h >>> 13), 1274126177); return (h >>> 0) % 4; };
 
 /** Tileset row to use for tile `id` at (x, y) of `grid`. */
@@ -659,7 +702,8 @@ export function tileRow(grid: number[][], x: number, y: number): number {
     return (n - 1) * 16 + sp.dirs.slice(0, 4).reduce((m, d, i) => m | (Math.cos(d.angle) < 0 ? 1 << i : 0), 0);
   }
   if (id === T.PALISADE) // which way is outside: away from the village centre
-    return mask((t) => t === id) | (y > (VILLAGE.y0 + VILLAGE.y1) / 2 ? 16 : 0) | (x > (VILLAGE.x0 + VILLAGE.x1) / 2 ? 32 : 0);
+    return mask((t) => t === id) | (y > (VILLAGE.y0 + VILLAGE.y1) / 2 ? 16 : 0) | (x > (VILLAGE.x0 + VILLAGE.x1) / 2 ? 32 : 0)
+      | (dhash(x, y) < 0.45 ? 64 : 0); // weathered and broken in places
   if (CONNECTED.has(id)) return mask((t) => t === id);
   if (id === T.GRASS_DARK) return mask((t) => LIGHT.has(t));
   if (id === T.RUBBLE) {

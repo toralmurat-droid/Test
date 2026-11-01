@@ -37,6 +37,9 @@ const ZONE_MOBS: { name: string; mobs: Partial<Record<MobKind, number>>; respawn
   { name: "Barrow Downs", mobs: { skeleton: 18 }, respawnMs: 6750 },
   { name: "Thornwood", mobs: { slime: 8, shooterblob: 6, warriorblob: 6, healerblob: 4, motherblob: 2 }, respawnMs: 6000 },
   { name: "Greywatch Keep", mobs: { skeleton: 15 }, respawnMs: 8250 },
+  // The coast and the far east (Saltmere itself stays monster-free, see NO_MOB_AREAS)
+  { name: "Redfang Hollow", mobs: { bandit: 14 }, respawnMs: 6000 },
+  { name: "Saltwind Coast", mobs: { slime: 14, shooterblob: 5, warriorblob: 5, healerblob: 4, motherblob: 2 }, respawnMs: 4500 },
   { name: "Whispering Woods", mobs: { slime: 10, shooterblob: 4, warriorblob: 4, healerblob: 3, motherblob: 2 }, respawnMs: 5250 }, // broad area last: zone lookups take the first match
 ];
 
@@ -60,6 +63,15 @@ export function zoneCap(z: SpawnZone): number {
   return Object.values(z.mobs).reduce((a, b) => a + (b ?? 0), 0);
 }
 
+/** Peaceful places inside monster zones (with a margin in tiles): nothing spawns or walks in there. */
+export const NO_MOB_AREAS = ["Saltmere"];
+const NO_MOB_RECTS = NO_MOB_AREAS.flatMap((n) => AREAS.filter((a) => a.name === n)).map((a) => ({ x0: a.x - 2, y0: a.y - 2, x1: a.x + a.w + 2, y1: a.y + a.h + 2 }));
+/** True where monsters may not go (pixel coords). */
+export function noMobsAt(px: number, py: number): boolean {
+  const tx = px / TILE, ty = py / TILE;
+  return NO_MOB_RECTS.some((r) => tx >= r.x0 && tx < r.x1 && ty >= r.y0 && ty < r.y1);
+}
+
 /** Random walkable point inside a zone (never in the village or the safe zone). */
 export function randomPointInZone(z: SpawnZone): { x: number; y: number } {
   const v = VILLAGE;
@@ -68,7 +80,7 @@ export function randomPointInZone(z: SpawnZone): { x: number; y: number } {
     const ty = z.y + Math.floor(Math.random() * z.h);
     if (tx >= v.x0 - 2 && tx <= v.x1 + 2 && ty >= v.y0 - 2 && ty <= v.y1 + 2) continue;
     const x = (tx + 0.5) * TILE, y = (ty + 0.5) * TILE;
-    if (isSafeZone(x, y)) continue;
+    if (isSafeZone(x, y) || noMobsAt(x, y)) continue;
     if (!isSolidAt(x - 6, y - 6) && !isSolidAt(x + 6, y + 6) && !isSolidAt(x - 6, y + 6) && !isSolidAt(x + 6, y - 6)) return { x, y };
   }
   return { x: (z.x + z.w / 2) * TILE, y: (z.y + z.h / 2) * TILE };

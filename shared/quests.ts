@@ -6,7 +6,7 @@ import { npcById } from "./npcs";
 /**
  * The blob quest chain. Quests are done one after the other, each in a blob zone a little further from
  * Oakvale and a little tougher (North Meadow → Goldenreach Farms → Misty Marsh → Mirror Pond → Sunken Lake →
- * Whispering Woods → Thornwood).
+ * Thornwood → deep in the Whispering Woods).
  *
  * Progress lives on the server: Player.questId = index in QUESTS, Player.questStage = 0 before the quest is
  * accepted, then 1..steps.length for the step being worked on (stage s = steps[s - 1]); Player.questCount =
@@ -156,11 +156,11 @@ export const LANTERNS: QuestObject[] = [
 ];
 export const COCOON = obj("cocoon", "cocoon", "Blob cocoon", "Free Tobin", "Sunken Lake", 0.3, 0.35);
 export const SHRINES: QuestObject[] = [
-  obj("shrine1", "shrine", "Rotting shrine", "Cleanse", "Whispering Woods", 0.2, 0.62),
-  obj("shrine2", "shrine", "Rotting shrine", "Cleanse", "Whispering Woods", 0.42, 0.78),
-  obj("shrine3", "shrine", "Rotting shrine", "Cleanse", "Whispering Woods", 0.3, 0.45),
+  obj("shrine1", "shrine", "Rotting shrine", "Cleanse", "Thornwood", 0.2, 0.3),
+  obj("shrine2", "shrine", "Rotting shrine", "Cleanse", "Thornwood", 0.5, 0.75),
+  obj("shrine3", "shrine", "Rotting shrine", "Cleanse", "Thornwood", 0.8, 0.35),
 ];
-export const BROOD_HEART = obj("heart", "heart", "Brood Heart", "Burn", "Thornwood", 0.55, 0.5);
+export const BROOD_HEART = obj("heart", "heart", "Brood Heart", "Burn", "Whispering Woods", 0.6, 0.62);
 
 const back = (npc: string, name: string, where: string, say: string[], accept: string, nag?: string): QuestStep =>
   ({ type: "talk", npc, text: `Return to ${name}`, banner: ["Quest updated", `Return to ${name}`], say, accept, obj: `Return to ${name} (${where})`, nag });
@@ -273,38 +273,38 @@ export const QUESTS: QuestDef[] = [
     after: "Tobin is home, thanks to you. But the blobs are coming from somewhere deep in the woods. Talk to me when you are ready.",
   },
   {
-    id: "woods", title: "The Rotting Shrines", giver: "druid", zone: Z.woods.name, minLevel: 7,
-    description: `The old forest shrines of ${Z.woods.name} are rotting under blob slime, and the forest spirits have gone quiet. Elder Rowan asked you to cleanse them and bring back the rot seeds the healer blobs carry.`,
+    id: "woods", title: "The Rotting Shrines", giver: "druid", zone: Z.thorn.name, minLevel: 10,
+    description: `The old forest shrines of ${Z.thorn.name} are rotting under blob slime, and the forest spirits have gone quiet. Elder Rowan asked you to cleanse them and bring back the rot seeds the healer blobs carry.`,
     offer: [
       "Tobin told me something. The cocoon was full of tiny black seeds.",
-      `The old shrines of ${Z.woods.name} are rotting, and the forest spirits have gone quiet. The rot and the blobs are one and the same.`,
+      `The old shrines of ${Z.thorn.name} are rotting, and the forest spirits have gone quiet. The rot and the blobs are one and the same.`,
       "Cleanse the three shrines, and bring me 4 rot seeds from the healer blobs so I can study them.",
     ],
     acceptText: "I'll cleanse them",
     steps: [
-      { type: "use", zone: Z.woods.name, objects: SHRINES, text: "Cleanse the 3 rotting shrines", banner: ["New quest", "The Rotting Shrines"],
+      { type: "use", zone: Z.thorn.name, objects: SHRINES, text: "Cleanse the 3 rotting shrines", banner: ["New quest", "The Rotting Shrines"],
         obj: "Shrines cleansed: {n} / {goal}", nag: "{n} of {goal} shrines are clean. Press E at each one." },
-      { type: "collect", zone: Z.woods.name, kinds: ["healerblob"], item: "rot", goal: 4, chance: { healerblob: 0.7 },
+      { type: "collect", zone: Z.thorn.name, kinds: ["healerblob"], item: "rot", goal: 4, chance: { healerblob: 0.7 },
         text: "Collect 4 Rot Seeds from healer blobs", banner: ["The shrines are clean!", "Collect 4 Rot Seeds"], obj: "Rot Seeds: {n} / {goal}",
         nag: "{n} of {goal} seeds. The healers hide behind the others, go for them first." },
-      back("druid", "Elder Rowan", "village bonfire", ["These seeds... they all point the same way. Thornwood.", "There is a heart in there, a brood heart, feeding every blob in the land. Rest, and take this."], "Claim reward"),
+      back("druid", "Elder Rowan", "village bonfire", ["These seeds... they all point the same way. Deep into the Whispering Woods.", "There is a heart in there, a brood heart, feeding every blob in the land. Rest, and take this."], "Claim reward"),
     ],
     reward: { xp: 900, gold: 260, potions: 3 },
-    after: "The heart of the brood beats in Thornwood. Come to me when you are strong enough to face it.",
+    after: "The heart of the brood beats deep in the Whispering Woods. Come to me when you are strong enough to face it.",
   },
   {
-    id: "thorn", title: "Heart of the Brood", giver: "druid", zone: Z.thorn.name, minLevel: 10,
-    description: `Every blob in the land comes from the Brood Heart deep in ${Z.thorn.name}. Two Mother Blobs guard it. Elder Rowan asked you to end it.`,
+    id: "thorn", title: "Heart of the Brood", giver: "druid", zone: Z.woods.name, minLevel: 12,
+    description: `Every blob in the land comes from the Brood Heart deep in ${Z.woods.name}. Two Mother Blobs guard it. Elder Rowan asked you to end it.`,
     offer: [
-      `It is time. The Brood Heart beats deep in ${Z.thorn.name}, ${zdir(Z.thorn)} of here.`,
+      `It is time. The Brood Heart beats deep in ${Z.woods.name}, ${zdir(Z.woods)} of here.`,
       "Two Mother Blobs guard it. Slay them, then burn the heart with this torch of oak fire.",
       "This is the hardest thing I have ever asked of anyone. Will you go?",
     ],
     acceptText: "I will end it",
     steps: [
-      { type: "kill", zone: Z.thorn.name, kinds: ["motherblob"], goal: 2, text: `Slay 2 Mother Blobs in ${Z.thorn.name}`, banner: ["New quest", "Heart of the Brood"],
+      { type: "kill", zone: Z.woods.name, kinds: ["motherblob"], goal: 2, text: `Slay 2 Mother Blobs in ${Z.woods.name}`, banner: ["New quest", "Heart of the Brood"],
         obj: "Mother Blobs slain: {n} / {goal}", nag: "{n} of {goal} Mother Blobs. Take potions, and do not fight them both at once." },
-      { type: "use", zone: Z.thorn.name, objects: [BROOD_HEART], text: "Burn the Brood Heart", banner: ["The guardians have fallen!", "Burn the Brood Heart"],
+      { type: "use", zone: Z.woods.name, objects: [BROOD_HEART], text: "Burn the Brood Heart", banner: ["The guardians have fallen!", "Burn the Brood Heart"],
         obj: "Burn the Brood Heart", nag: "The heart is unguarded. Burn it!" },
       back("druid", "Elder Rowan", "village bonfire", ["I felt it, all the way here. The whole forest sighed.", "There will always be blobs, friend. But never like this again. Oakvale owes you everything."], "Claim reward"),
     ],

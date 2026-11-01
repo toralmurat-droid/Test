@@ -49,7 +49,7 @@ Gameplay:
 
 ## The world: Oakvale
 
-The starting region is a 224×168-tile medieval map with 32px tiles drawn at the same pixel size as the heroes, generated deterministically in `shared/map.ts` so the server
+The starting region is a 288×216-tile medieval map with 32px tiles drawn at the same pixel size as the heroes, generated deterministically in `shared/map.ts` so the server
 and every client build the same world. It has a ground layer and an object layer (objects and water are solid, except
 bushes, which you can walk through).
 
@@ -67,6 +67,8 @@ off to the Hunter's Camp, the Watchtower, the mill and Mirror Pond and the marsh
 - The wider world, with tougher monsters: **Barrow Downs** (far south-west graveyard and mausoleum), **Sunken Lake**
   (south, island shrine on a boardwalk), **Greywatch Keep** (ruined castle far east) and the **Thornwood** (dark pines,
   north-east)
+- Further out: **Redfang Hollow** (bandit camp behind a crude stockade, deep in the eastern woods), **Saltmere** (small
+  fishing village with two piers on the southern sea) and the **Saltwind Coast** (beaches along the Saltwind Sea)
 
 Monster levels grow with distance from Oakvale (`zoneLevels` in `shared/spawns.ts`): level 1-3 next to the village,
 up to 10-12 at the far edges. Signposts at the gates and junctions have one board per road, naming where it leads.
@@ -89,6 +91,10 @@ Detail layer (`client/src/details.ts`): shaded roofs with ridges and eaves, pebb
 leaves, grass spilling over road edges, rounded shorelines with reeds and lily pads, ducks on Mirror Pond, door
 lanterns and gate banners. A 30-minute day/night cycle (shared by all players via the clock) lights up windows,
 lanterns and the campfire at night. Add `?time=day|dusk|night` to the URL to force a time of day.
+
+**Isometric view (in progress):** add `?iso=1` to the URL to play in the isometric view (`?iso=0` goes back; the
+choice is remembered). Only the drawing changes: the server, the map data and the movement rules stay top-down, see
+`client/src/iso.ts`. W/up moves up the screen.
 
 **Map viewer:** with `npm run dev` running, open http://localhost:5173/map.html to see the whole map with area,
 collision and grid overlays (no server needed). Edit `shared/map.ts` and it hot-reloads.
