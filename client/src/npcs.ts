@@ -1,7 +1,10 @@
 import "./npcs.css";
 import Phaser from "phaser";
 import { NPCS, Npc, npcNear, TALK_RANGE } from "../../shared/npcs";
-import { druidDialog, Q, QUEST, questObjective } from "../../shared/quests";
+import { druidDialog, Q, QUEST, questObjective, questTarget } from "../../shared/quests";
+import { TILE } from "../../shared/constants";
+import type { MapMarker } from "./minimap";
+import { QuestLog } from "./questlog";
 import { SHOPS, sellPrice } from "../../shared/shops";
 import { GEAR, gearName, itemText, TIER_NAMES } from "../../shared/gear";
 import { MAX_POTIONS } from "../../shared/items";
@@ -28,6 +31,9 @@ export class NpcLayer {
   private trackerHtml = "";
   private stage: unknown = -1;
   private shopMsg = "";
+  readonly log = new QuestLog();
+  /** Quest giver / trader / quest area markers for the minimap and world map. */
+  markers: MapMarker[] = [];
 
   constructor(private scene: Phaser.Scene, private send: (type: string, msg?: unknown) => void) {
     const hud = document.getElementById("hud")!;
@@ -37,6 +43,7 @@ export class NpcLayer {
     this.toast.id = "questtoast";
     hud.append(this.prompt, this.dialog, this.tracker, this.toast);
     this.prompt.onclick = () => this.near && this.open(this.near);
+    this.tracker.onclick = () => this.log.toggle(true);
     for (const n of NPCS) {
       const sprite = scene.add.sprite(n.x, n.y, n.sprite, 0).setOrigin(CHAR_ORIGIN.x, CHAR_ORIGIN.y).setScale(0.75).setDepth(n.y);
       playCharAnim(sprite, n.sprite as CharacterName, "idle", n.dir);
@@ -75,6 +82,7 @@ export class NpcLayer {
       [Q.DONE]: ["Quest complete", QUEST.title],
     };
     const m = msg[stage];
+    this.tracker.classList.remove("flash"); void this.tracker.offsetWidth; this.tracker.classList.add("flash");
     if (m) {
       this.toast.innerHTML = `<div class="big">${m[0]}</div><div class="small">${m[1]}</div>`;
       this.toast.classList.remove("show"); void this.toast.offsetWidth; this.toast.classList.add("show");
@@ -182,8 +190,35 @@ export class NpcLayer {
       const mark = stage === Q.NONE ? "!" : stage === Q.REPORT || stage === Q.RETURN ? "?" : "";
       if (druid.mark.text !== mark) druid.mark.setText(mark);
     }
+    // Map markers: "!" / "?" on the quest giver, coins on traders, and the current quest target
+    const target = this.log.tracked ? questTarget(stage) : undefined;
+    this.markers = NPCS.map((n): MapMarker => {
+      if (n.id === QUEST.giver) {
+        const g = druid?.mark.text ?? "";
+        return { x: n.x, y: n.y, glyph: g || "•", color: g ? "#ffd166" : "#b9f27c", label: n.name, track: !!g && (stage === Q.NONE || target?.kind === "npc") };
+      }
+      return { x: n.x, y: n.y, glyph: "$", color: "#f2c14e", label: n.title };
+    });
+    if (target?.kind === "area") this.markers.push({ x: target.x, y: target.y, r: target.r, glyph: "", color: "#ffd166", label: target.label, track: true });
+    this.log.render(q);
+
+    // On-screen tracker: quest, current objective, progress bar and where to go
     const obj = questObjective(stage, count);
-    const html = obj ? `<div class="qt-title">${QUEST.title}</div><div class="qt-obj">${stage === Q.REPORT || stage === Q.RETURN ? "➜ " : "• "}${obj}</div>` : "";
+    let html = "";
+    if (obj && this.log.tracked) {
+      const bar = stage === Q.HUNT ? `<div class="qt-bar"><div style="width:${Math.min(1, count / QUEST.killGoal) * 100}%"></div></div>` : "";
+      let dir = "";
+      if (target && me) {
+        const dx = target.x - me.x, dy = target.y - me.y, d = Math.hypot(dx, dy) - (target.r ?? 0);
+        if (d > TILE * 2) {
+          const arrows = ["→", "↘", "↓", "↙", "←", "↖", "↑", "↗"];
+          const names = ["east", "south-east", "south", "south-west", "west", "north-west", "north", "north-east"];
+          const k = (Math.round(Math.atan2(dy, dx) / (Math.PI / 4)) + 8) % 8;
+          dir = `<div class="qt-dir">${arrows[k]} ${Math.round(d / TILE)} tiles ${names[k]}</div>`;
+        } else if (target.kind === "area") dir = `<div class="qt-dir">You are here</div>`;
+      }
+      html = `<div class="qt-title">${QUEST.title}</div><div class="qt-obj">${stage === Q.REPORT || stage === Q.RETURN ? "➜ " : "• "}${obj}</div>${bar}${dir}<div class="qt-hint">J: quest log</div>`;
+    }
     if (html !== this.trackerHtml) {
       this.trackerHtml = html;
       this.tracker.innerHTML = html;

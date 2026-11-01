@@ -117,7 +117,7 @@ export class TownScene extends Phaser.Scene {
     cam.roundPixels = true;
 
     // Keys without capture so typing in chat still works
-    this.keys = this.input.keyboard!.addKeys("W,A,S,D,UP,DOWN,LEFT,RIGHT,SPACE,SHIFT,Q,C,G,T,F,R,E", false) as any;
+    this.keys = this.input.keyboard!.addKeys("W,A,S,D,UP,DOWN,LEFT,RIGHT,SPACE,SHIFT,Q,C,G,T,F,R,E,J", false) as any;
     this.input.keyboard!.on("keydown-SPACE", () => { if (!this.chatting()) this.room?.send("attack"); });
     // Skill slots 1..0 (top row or numpad). With the skill tree open and the mouse over a learned skill,
     // the number key puts that skill in the slot instead of using it.
@@ -142,6 +142,12 @@ export class TownScene extends Phaser.Scene {
     this.input.keyboard!.on("keydown-C", () => { if (!this.chatting()) this.toggleHeroMenu(); });
     this.input.keyboard!.on("keydown-ESC", () => this.closeMenus());
     this.input.keyboard!.on("keydown-E", () => { if (!this.chatting()) this.npcs?.interact(); });
+    this.input.keyboard!.on("keydown-J", () => {
+      if (this.chatting() || !this.npcs) return;
+      const open = this.npcs.log.open;
+      this.closeMenus();
+      this.npcs.log.toggle(!open);
+    });
     document.getElementById("lvlnote")!.onclick = () => this.toggleHeroMenu();
     // Hero panel: assign stat points / reset them (buttons never keep focus, so Space can't click them)
     const heroEl = document.getElementById("hero")!;
@@ -480,6 +486,7 @@ export class TownScene extends Phaser.Scene {
   private closeMenus() {
     for (const id of ["hero", "tree"]) document.getElementById(id)!.hidden = true;
     this.npcs?.close();
+    this.npcs?.log.toggle(false);
     this.gearMenu?.close();
   }
 
@@ -926,6 +933,7 @@ export class TownScene extends Phaser.Scene {
     if (meEnt) this.showArea(areaAt(meEnt.sprite.x, meEnt.sprite.y));
     this.signPanel.update(meEnt?.sprite);
     this.npcs?.update(meEnt && !meEnt.state.dead ? meEnt.sprite : undefined, meEnt?.state);
+    if (this.minimap && this.npcs) this.minimap.markers = this.npcs.markers;
 
     const mine = meEnt?.state;
     if (mine) {

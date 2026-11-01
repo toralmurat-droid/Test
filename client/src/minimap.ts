@@ -10,6 +10,8 @@ const FADE = 3; // soft edge of the discovered area, in tiles
 const FOG = "#15151d";
 
 type P = { x: number; y: number };
+/** Something to point at on the maps: a quest giver ("!" / "?"), a trader, or a quest area (circle). */
+export interface MapMarker { x: number; y: number; glyph: string; color: string; r?: number; label?: string; track?: boolean }
 
 /**
  * Minimap with fog of war: only places the player has been near are shown, and the minimap only
@@ -28,6 +30,8 @@ export class Minimap {
   private overlay: HTMLDivElement;
   private big: HTMLCanvasElement;
   private key: string;
+  /** Quest and NPC markers, set by the NPC layer every frame. */
+  markers: MapMarker[] = [];
 
   constructor(private el: HTMLCanvasElement, name = "") {
     el.width = VIEW_W * PX;
@@ -154,6 +158,7 @@ export class Minimap {
     };
     const known = (p: P) => this.seen[Math.floor(p.y / TILE) * MAP_W + Math.floor(p.x / TILE)] > 128;
     for (const o of others) if (known(o)) dot(c, o, PX, sx, sy, "#fff", 2);
+    this.drawMarkers(c, PX, sx, sy, true);
     if (me) { dot(c, me, PX, sx, sy, "#000", 3); dot(c, me, PX, sx, sy, "#ffd166", 2); }
 
     // World map (only while open)
@@ -180,6 +185,51 @@ export class Minimap {
       g.fillStyle = "#ffe8a3"; g.fillText(a.name, ax * BIG, ay * BIG);
     }
     for (const o of others) if (known(o)) dot(g, o, BIG, 0, 0, "#fff", 3);
+    this.drawMarkers(g, BIG, 0, 0, false);
     if (me) { dot(g, me, BIG, 0, 0, "#000", 6); dot(g, me, BIG, 0, 0, "#ffd166", 4); }
+  }
+
+  /**
+   * Markers: dashed circle for quest areas, glyph for NPCs. On the round minimap a tracked target that is out of
+   * view becomes an arrow on the rim pointing towards it.
+   */
+  private drawMarkers(g: CanvasRenderingContext2D, s: number, ox: number, oy: number, mini: boolean) {
+    const W = g.canvas.width, H = g.canvas.height, cx = W / 2, cy = H / 2, rim = W / 2 - 9;
+    const t = performance.now() / 1000;
+    for (const m of this.markers) {
+      let x = (m.x / TILE - ox) * s, y = (m.y / TILE - oy) * s;
+      const off = mini && Math.hypot(x - cx, y - cy) > rim;
+      if (off && !m.track) continue;
+      if (m.r && !off) {
+        // Quest area: pulsing dashed circle
+        g.save();
+        g.strokeStyle = m.color; g.lineWidth = mini ? 1.5 : 2.5; g.setLineDash([4, 3]); g.lineDashOffset = -t * 6;
+        g.globalAlpha = 0.75 + Math.sin(t * 3) * 0.25;
+        g.beginPath(); g.arc(x, y, (m.r / TILE) * s, 0, Math.PI * 2); g.stroke();
+        g.fillStyle = m.color; g.globalAlpha = 0.12; g.fill();
+        g.restore();
+      }
+      if (off) {
+        // Arrow on the rim of the minimap
+        const a = Math.atan2(y - cy, x - cx);
+        x = cx + Math.cos(a) * rim; y = cy + Math.sin(a) * rim;
+        g.save(); g.translate(x, y); g.rotate(a);
+        g.fillStyle = "#000"; g.beginPath(); g.moveTo(8, 0); g.lineTo(-5, -6); g.lineTo(-5, 6); g.closePath(); g.fill();
+        g.fillStyle = m.color; g.beginPath(); g.moveTo(6, 0); g.lineTo(-4, -4); g.lineTo(-4, 4); g.closePath(); g.fill();
+        g.restore();
+        continue;
+      }
+      if (m.glyph) {
+        const size = mini ? (m.track ? 14 : 11) : (m.track ? 18 : 14);
+        g.font = `bold ${size}px monospace`; g.textAlign = "center"; g.textBaseline = "middle";
+        g.lineWidth = 3; g.strokeStyle = "#000"; g.strokeText(m.glyph, x, y);
+        g.fillStyle = m.color; g.fillText(m.glyph, x, y);
+      }
+      if (!mini && m.label && (m.track || m.r)) {
+        g.font = "bold 11px monospace"; g.textAlign = "center"; g.textBaseline = "alphabetic";
+        g.fillStyle = "#000"; g.fillText(m.label, x + 1, y + (m.r ? 4 : 18) + 1);
+        g.fillStyle = m.color; g.fillText(m.label, x, y + (m.r ? 4 : 18));
+      }
+    }
   }
 }
