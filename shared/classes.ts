@@ -2,10 +2,10 @@
  * Hero classes. All gameplay numbers live here so the server and client agree.
  * Art convention: the client picks a sprite by `Player.cls` ("knight" | "ninja" | "wizard").
  */
-export type ClassKind = "knight" | "ninja" | "wizard";
-export const CLASS_KINDS: ClassKind[] = ["knight", "ninja", "wizard"];
+export type ClassKind = "knight" | "ninja" | "wizard" | "archer" | "barbarian";
+export const CLASS_KINDS: ClassKind[] = ["knight", "ninja", "wizard", "archer", "barbarian"];
 
-export type SpecialKind = "guard" | "dash" | "nova";
+export type SpecialKind = "guard" | "dash" | "nova" | "volley" | "rage";
 
 /**
  * One hit of the 3-hit attack combo. Pressing attack again within COMBO_WINDOW_MS after the previous hit's
@@ -32,12 +32,13 @@ export interface ClassDef {
   /** Melee: hit everything within `attackRange` of a point 12px in front. */
   attackRange: number;
   /** Ranged: primary attack fires a projectile instead of a melee swing. */
-  projectile?: { speed: number; range: number; radius: number };
+  projectile?: { speed: number; range: number; radius: number; kind: "fireball" | "arrow" };
   special: {
     kind: SpecialKind;
     name: string;
     cooldownMs: number;
-    durationMs?: number; // guard
+    durationMs?: number; // guard, rage
+    arrows?: number; // volley
     distance?: number; // dash, px
     damage?: number; // nova
     radius?: number; // nova, px
@@ -69,7 +70,7 @@ export const CLASSES: Record<ClassKind, ClassDef> = {
   },
   wizard: {
     name: "Wizard", maxHp: 95, speed: 86, damage: 22, attackCooldownMs: 550, attackRange: 0,
-    projectile: { speed: 210, range: 150, radius: 7 },
+    projectile: { speed: 210, range: 150, radius: 7, kind: "fireball" },
     special: { kind: "nova", name: "Nova", cooldownMs: 7000, damage: 30, radius: 38 },
     combo: [
       { damage: 1, knockback: 1 },
@@ -77,6 +78,27 @@ export const CLASSES: Record<ClassKind, ClassDef> = {
       { damage: 1.7, knockback: 2, shotScale: 1.6, cooldownMs: 900 }, // big fireball
     ],
     blurb: "Ranged fireballs. Nova blasts everything around you.",
+  },
+  archer: {
+    name: "Archer", maxHp: 85, speed: 96, damage: 15, attackCooldownMs: 450, attackRange: 0,
+    projectile: { speed: 300, range: 190, radius: 4, kind: "arrow" },
+    special: { kind: "volley", name: "Volley", cooldownMs: 6000, arrows: 3 },
+    combo: [
+      { damage: 1, knockback: 0.6 },
+      { damage: 1, knockback: 0.6 },
+      { damage: 1.8, knockback: 1.6, shotScale: 1.3, cooldownMs: 700 }, // power shot
+    ],
+    blurb: "Long-range arrows. Volley fires 3 arrows side by side.",
+  },
+  barbarian: {
+    name: "Barbarian", maxHp: 110, speed: 90, damage: 20, attackCooldownMs: 480, attackRange: 20,
+    special: { kind: "rage", name: "Rage", cooldownMs: 12000, durationMs: 5000 },
+    combo: [
+      { damage: 1, knockback: 1.2 },
+      { damage: 1.1, knockback: 1.2 },
+      { damage: 1.7, knockback: 2.2, range: 26, lunge: 10, cooldownMs: 750 }, // axe smash
+    ],
+    blurb: "Axe brawler. Rage: hit harder and move faster for 5s.",
   },
 };
 
