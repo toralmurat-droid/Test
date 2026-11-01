@@ -30,6 +30,7 @@ export const ANIMS: { name: string; frames: number; fps: number; loop: boolean }
   { name: "attack2", frames: 4, fps: 14, loop: false },
   { name: "attack3", frames: 4, fps: 12, loop: false },
   { name: "attack4", frames: 4, fps: 14, loop: false },
+  { name: "attack5", frames: 4, fps: 14, loop: false },
   { name: "hit", frames: 2, fps: 10, loop: false },
   { name: "ko", frames: 4, fps: 6, loop: false },
   { name: "skill", frames: 4, fps: 10, loop: false },
@@ -58,7 +59,7 @@ const FACE: Record<Dir, [number, number]> = { down: [0, 1], up: [0, -1], right: 
 const FACE_ANGLE: Record<Dir, number> = { down: 90, up: -90, right: 0 };
 const rad = (d: number) => (d * Math.PI) / 180;
 
-export type MoveId = "a1" | "a2" | "a3" | "a4";
+export type MoveId = "a1" | "a2" | "a3" | "a4" | "a5";
 type MoveKind = "slash" | "thrust" | "spin" | "bash" | "slam" | "cast" | "double" | "charged" | "bonk" | "shot";
 interface Move { swing: number[]; reach?: number[]; lift?: number[]; abs?: boolean; kind: MoveKind; fx?: number }
 interface Hero {
@@ -137,6 +138,10 @@ function handPos(p: Pose, hero: Hero): [number, number] {
 
 function moveOf(hero: Hero, p: Pose): Move {
   if (!p.move || p.move === "a1" || !hero.moves) return { swing: hero.swing, kind: hero.kind1 ?? "slash" };
+  // a5: a lower, flatter take on the basic attack (4th normal-attack variant)
+  if (p.move === "a5") return hero.kind1 === "shot"
+    ? { swing: hero.swing.map((v) => v - 15), reach: [0, 0, -1, -2], lift: [3, 2, 1, 1], kind: "shot" }
+    : { swing: [-70, -20, 40, 20], reach: [2, 5, 6, 3], lift: [2, 1, 0, 0], kind: hero.kind1 ?? "slash" };
   return hero.moves[p.move];
 }
 
@@ -689,7 +694,7 @@ export function renderFrame(hero: Hero, p: Pose, withShadow = true, flash = 0): 
   if (flash) c.tint(0xffffff, flash);
   c.rim();
   c.selout(OUTLINE);
-  if (p.attack < 0 || !p.move || p.move === "a1" || mv.kind === "double" || mv.kind === "charged" || mv.kind === "shot") hero.fx?.(d, hand, ang);
+  if (p.attack < 0 || !p.move || p.move === "a1" || mv.kind === "double" || mv.kind === "charged" || mv.kind === "shot" || p.move === "a5") hero.fx?.(d, hand, ang);
   if (p.attack >= 0) moveFx(d, hero, mv, hand, ang);
   if (withShadow) c.under((s) => s.ellipse(16 + d.lx, 29, 6, 1.5, 0x000000, 70));
   return c;
@@ -868,6 +873,7 @@ export function animFrames(hero: Hero, anim: string, dir: Dir): Canvas[] {
     case "walk": return [1, 0.5, -0.5, -1, -0.5, 0.5].map((stride, t) => renderFrame(hero, { ...B(t), stride, bob: Math.abs(stride) === 1 ? 0 : -1 }));
     case "attack": return [0, 1, 2, 3].map((attack, t) => renderFrame(hero, { ...B(t), attack, bob: attack === 2 ? 1 : 0 }));
     case "attack2": return [0, 1, 2, 3].map((attack, t) => renderFrame(hero, { ...B(t), attack, move: "a2", bob: attack === 2 ? 1 : 0 }));
+    case "attack5": return [0, 1, 2, 3].map((attack, t) => renderFrame(hero, { ...B(t), attack, move: "a5", bob: attack === 2 ? 1 : 0, lean: dir === "right" ? -[0, 1, 2, 1][attack] : 0 }));
     case "attack4": return [0, 1, 2, 3].map((attack, t) => renderFrame(hero, { ...B(t), attack, move: "a4", bob: attack === 2 ? 1 : 0 }));
     case "attack3": {
       if (hero.moves?.a3.kind === "spin") {

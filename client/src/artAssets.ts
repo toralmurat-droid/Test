@@ -8,7 +8,7 @@ import Phaser from "phaser";
 export const CHARACTERS = ["ninja", "wizard", "knight", "archer", "barbarian", "blacksmith", "merchant", "villager", "guard"] as const;
 export const NPC_NAMES = ["blacksmith", "merchant", "villager", "guard"] as const;
 export type CharacterName = (typeof CHARACTERS)[number];
-export const CHAR_ANIMS = ["idle", "walk", "attack", "attack2", "attack3", "attack4", "hit", "ko", "skill", "idle2", "idle3", "run", "wave", "cheer", "laugh", "sit", "sleep"] as const;
+export const CHAR_ANIMS = ["idle", "walk", "attack", "attack2", "attack3", "attack4", "attack5", "hit", "ko", "skill", "idle2", "idle3", "run", "wave", "cheer", "laugh", "sit", "sleep"] as const;
 /** Cosmetic animations: play idle2/idle3 now and then while standing still, run when moving fast, emotes from chat (e.g. /wave). */
 export const FLAVOUR_ANIMS = ["idle2", "idle3", "run", "wave", "cheer", "laugh", "sit", "sleep"] as const;
 export const CHAR_ORIGIN = { x: 0.5, y: 29 / 32 }; // feet
@@ -57,9 +57,5 @@ export function playCharAnim(sprite: Phaser.GameObjects.Sprite, char: CharacterN
   sprite.play(`${char}_${anim}_${d}`, true);
 }
 
-/** The four normal-attack variants. Pick one per Space press so attacks don't look repetitive. */
-export const ATTACK_VARIANTS = ["attack", "attack2", "attack3", "attack4"] as const;
-export function nextAttackAnim(prev?: string): (typeof ATTACK_VARIANTS)[number] {
-  const options = ATTACK_VARIANTS.filter((a) => a !== prev);
-  return options[Math.floor(Math.random() * options.length)];
-}
+/** The four normal-attack variants (aliases in characters.json). attack3 stays the combo finisher. */
+export const SWING_ANIMS = ["swing1", "swing2", "swing3", "swing4"] as const;
