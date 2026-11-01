@@ -24,6 +24,7 @@ import { GEAR, gearSpeedMult } from "../../shared/gear";
 import { COMBO_NODE, talentMult, talentPoints, spentPoints, talentReduce } from "../../shared/talents";
 import { activeSkills, SLOT_COUNT, SLOT_KEYS, skillLearned } from "../../shared/slots";
 import { TalentMenu } from "./talents";
+import { IdeaBoard } from "./ideas";
 
 interface Entity {
   sprite: Phaser.GameObjects.Sprite;
@@ -69,6 +70,7 @@ export class TownScene extends Phaser.Scene {
   private seq = 0;
   private npcs?: NpcLayer;
   private chatEl = document.getElementById("chat") as HTMLInputElement;
+  private ideaBoard?: IdeaBoard;
   private minimap?: Minimap;
   private dial?: DayDial;
   private signPanel = new SignPanel();
@@ -175,6 +177,10 @@ export class TownScene extends Phaser.Scene {
     window.addEventListener("keydown", (ev) => { if (ev.key === "Escape") this.closeMenus(); });
     this.talentMenu = new TalentMenu((type, msg) => this.room?.send(type, msg));
     this.input.keyboard!.on("keydown-T", () => { if (!this.chatting()) this.toggleTree(); });
+    this.ideaBoard = new IdeaBoard((type, msg) => this.room?.send(type, msg));
+    const toggleIdeas = () => { if (!this.ideaBoard!.open) this.closeMenus(); this.ideaBoard!.toggle(); };
+    this.input.keyboard!.on("keydown-I", () => { if (!this.chatting()) toggleIdeas(); });
+    menuButton("ideabtn", toggleIdeas);
     this.setupChat();
 
     const proto = location.protocol === "https:" ? "wss" : "ws";
@@ -338,6 +344,15 @@ export class TownScene extends Phaser.Scene {
     this.room.onMessage("kill", ({ killer, victim }) => this.feed(`${killer} ⚔ ${victim}`));
     this.room.onMessage("xp", ({ amount, x, y }) => this.floatText(x, y - 10, `+${amount} XP`, "#ffd166"));
     this.room.onMessage("chat", ({ id, name, text }) => this.chatMessage(id, name, text));
+    this.room.onMessage("ideas", (view) => this.ideaBoard?.update(view));
+    this.room.onMessage("ideanote", ({ text, ok }) => {
+      this.ideaBoard?.note(text, ok);
+      if (!this.ideaBoard?.open) this.feed(text);
+    });
+    this.room.onMessage("ideawin", ({ id, text, author }) => {
+      this.feed(`💡 Idea #${id} by ${author} won this hour's vote!`);
+      this.chatMessage("", "Ideas", `Idea #${id} "${text.slice(0, 80)}" won this hour's vote! It goes to the builders.`);
+    });
     this.room.onLeave(() => this.feed("Disconnected from server"));
   }
 
@@ -367,14 +382,17 @@ export class TownScene extends Phaser.Scene {
     }, true);
   }
 
-  private chatting() { return document.activeElement === this.chatEl; }
+  /** True while typing (chat box or the idea box): game keys are off. */
+  private chatting() { return document.activeElement === this.chatEl || !!this.ideaBoard?.typing(); }
 
   private setupChat() {
     window.addEventListener("keydown", (ev) => {
       if (ev.key !== "Enter") return;
-      if (this.chatting()) {
+      if (this.ideaBoard?.typing()) return; // the idea box handles its own Enter
+      if (document.activeElement === this.chatEl) {
         const t = this.chatEl.value.trim();
-        if (t) this.room?.send("chat", t);
+        if (/^\/ideas?$/i.test(t)) { this.closeMenus(); this.ideaBoard?.show(); }
+        else if (t) this.room?.send("chat", t);
         this.chatEl.value = "";
         this.chatEl.blur();
       } else if (this.room) {
@@ -493,6 +511,7 @@ export class TownScene extends Phaser.Scene {
     this.npcs?.close();
     this.npcs?.log.toggle(false);
     this.gearMenu?.close();
+    this.ideaBoard?.close();
   }
 
   /** Opens the hero menu. After level-ups (`from` = level before them) it highlights the gains. */
