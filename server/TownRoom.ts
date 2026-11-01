@@ -17,6 +17,7 @@ import {
 } from "../shared/items";
 import { areaAt, isSafeZone, isSolidAt, randomSpawn } from "../shared/map";
 import { npcNear, TALK_RANGE } from "../shared/npcs";
+import { sellPrice, SHOPS } from "../shared/shops";
 import { isBlob, Q, QUEST } from "../shared/quests";
 import { findHideSpot, HIDE, randomPointInZone, rollLevel, SPAWN_ZONES, zoneCap } from "../shared/spawns";
 import { moveStep } from "../shared/movement";
@@ -317,6 +318,8 @@ export class TownRoom extends Room<TownState> {
     this.onMessage("resetstats", (client) => this.resetStats(client.sessionId));
 
     this.onMessage("quest", (client) => this.advanceQuest(client.sessionId));
+    this.onMessage("buy", (client, msg: { i: number }) => this.shopBuy(client, msg?.i));
+    this.onMessage("sell", (client, msg: { i: number }) => this.shopSell(client, msg?.i));
 
     this.onMessage("chat", (client, text: string) => {
       const p = this.state.players.get(client.sessionId);
@@ -879,6 +882,48 @@ export class TownRoom extends Room<TownState> {
         this.broadcast("zonecleared", { zone: z.name, by: attackerId, name: a?.name ?? "", respawnSec: Math.round(z.respawnMs / 1000) });
       }
     }
+  }
+
+  // ---- Shops (shared/shops.ts) ----------------------------------------------
+
+  /** The shop of the trader the player stands next to. */
+  private shopNear(p: Player) {
+    const n = npcNear(p.x, p.y, TALK_RANGE * 1.5);
+    return n?.shop ? SHOPS[n.shop] : undefined;
+  }
+
+  private shopBuy(client: Client, i: unknown) {
+    const p = this.state.players.get(client.sessionId);
+    const shop = p && !p.dead ? this.shopNear(p) : undefined;
+    const e = shop && typeof i === "number" ? shop.stock[i] : undefined;
+    if (!p || !e) return;
+    const no = (text: string) => client.send("shop", { ok: false, text });
+    if (p.gold < e.price) return no("Not enough gold");
+    if (e.item === "potion") {
+      const qty = e.qty ?? 1;
+      if (p.potions + qty > MAX_POTIONS) return no(`You can carry ${MAX_POTIONS} potions at most`);
+      p.potions += qty;
+    } else {
+      if (!GEAR[e.item]) return;
+      if (p.bag.length >= BAG_SIZE) return no("Your bag is full");
+      setBag(p, [...bagItems(p), e.item]);
+    }
+    p.gold -= e.price;
+    client.send("shop", { ok: true, text: `-${e.price} gold` });
+  }
+
+  private shopSell(client: Client, i: unknown) {
+    const p = this.state.players.get(client.sessionId);
+    const shop = p && !p.dead ? this.shopNear(p) : undefined;
+    if (!p || !shop?.buys || typeof i !== "number" || i < 0 || i >= p.bag.length) return;
+    const gid = p.bag.at(i), def = gid ? GEAR[gid] : undefined;
+    if (!gid || !def || !shop.buys.includes(def.slot)) return;
+    const items = [...bagItems(p)];
+    items.splice(i, 1);
+    setBag(p, items);
+    const price = sellPrice(gid);
+    p.gold += price;
+    client.send("shop", { ok: true, text: `+${price} gold` });
   }
 
   // ---- Quest -------------------------------------------------------------

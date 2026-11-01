@@ -11,7 +11,8 @@
   "merchant",
   "villager",
   "guard",
-  "druid"
+  "druid",
+  "witch"
  ],
  "image": "{name}.png",
  "frameWidth": 32,

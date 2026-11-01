@@ -62,7 +62,7 @@ function drawFrame(scene: Phaser.Scene, ctx: CanvasRenderingContext2D, key: stri
   ctx.drawImage(f.source.image as CanvasImageSource, f.cutX, f.cutY, f.cutWidth, f.cutHeight, dx, dy, f.cutWidth * scale, f.cutHeight * scale);
 }
 
-function iconCanvas(scene: Phaser.Scene, id: string, size = 32): HTMLCanvasElement {
+export function iconCanvas(scene: Phaser.Scene, id: string, size = 32): HTMLCanvasElement {
   const c = document.createElement("canvas");
   c.width = c.height = size;
   const ctx = c.getContext("2d")!;

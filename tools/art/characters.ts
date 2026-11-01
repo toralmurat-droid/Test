@@ -426,7 +426,7 @@ interface HumanOpts {
   skin: number; hair: number; eye?: number;
   hairStyle: "short" | "long" | "bald" | "ponytail";
   beard?: number;                 // beard colour
-  hat?: { kind: "hood" | "horned" | "cap" | "helm" | "bandana" | "wide"; col: number; trim?: number };
+  hat?: { kind: "hood" | "horned" | "cap" | "helm" | "bandana" | "wide" | "witch"; col: number; trim?: number };
   shirt: number; pants: number; boots: number; belt?: number;
   bareChest?: boolean;
   apron?: number; vest?: number; tabard?: { col: number; emblem: number };
@@ -546,6 +546,15 @@ function human(o: HumanOpts): Hero {
       } else if (hat.kind === "wide") {
         if (dir === "right") { d.U(12, 2, 8, 4, hc, true); d.U(8, 5, 16, 2, hc); d.Ur(12, 4, 8, 1, tr); }
         else { d.U(11, 1, 10, 5, hc, true); d.U(7, 5, 18, 2, hc); d.Ur(11, 4, 10, 1, tr); }
+      } else if (hat.kind === "witch") {
+        // Tall pointed hat with the tip bent over, wide brim and a coloured band
+        if (dir === "right") {
+          d.U(8, 6, 16, 2, hc, true); d.U(12, 3, 9, 3, hc, true); d.Ur(13, 1, 6, 2, hc); d.Ur(11, 0, 4, 1, hc); d.Up(10, 1, hc);
+          d.Ur(12, 5, 9, 1, tr);
+        } else {
+          d.U(6, 6, 20, 2, hc, true); d.U(11, 3, 10, 3, hc, true); d.Ur(12, 1, 8, 2, hc); d.Ur(15, 0, 5, 1, hc); d.Up(20, 1, hc); d.Up(21, 2, hc);
+          d.Ur(11, 5, 10, 1, tr); if (dir === "down") d.Up(15, 5, 0xf2c14e);
+        }
       }
     },
     arm(d, which, [hx, hy]) {
@@ -608,8 +617,9 @@ function human(o: HumanOpts): Hero {
           d.c.px(hx + ux * 3 + nx, hy + uy * 3 + ny, shade(G, 0.7));
           const tx = hx + ux * 11, ty = hy + uy * 11;
           d.c.px(tx + nx, ty + ny, G); d.c.px(tx + ux + nx * 2, ty + uy + ny * 2, G); d.c.px(tx + ux * 2 + nx, ty + uy * 2 + ny, G);
-          d.c.px(tx + ux, ty + uy, 0x9be564); d.c.px(tx + ux * 2, ty + uy * 2, 0xd8ffb0);
-          d.c.px(tx - nx, ty - ny, 0x5b9a45);
+          const gem = o.fxCol ?? 0x9be564;
+          d.c.px(tx + ux, ty + uy, gem); d.c.px(tx + ux * 2, ty + uy * 2, shade(gem, 1.35));
+          d.c.px(tx - nx, ty - ny, shade(gem, 0.7));
           break;
         }
         case "none": break;
@@ -674,7 +684,13 @@ const druid = human({
   pants: 0x46602c, boots: 0x4a3420, belt: 0xb08a4a, weapon: "staff", fxCol: 0x9be564, aura: 0x9be564, gait: "stroll",
 });
 
-export const NPCS: Hero[] = [blacksmith, merchant, villager, guard, druid];
+const witch = human({
+  name: "witch", skin: 0xcfe0b0, hair: 0x2a1f3d, hairStyle: "long", eye: 0x6a1b9a,
+  hat: { kind: "witch", col: 0x2e2340, trim: 0x8e44ad }, shirt: 0x4a2f6b, sleeve: 0x3a2556, apron: 0x2e2340,
+  pants: 0x3a2556, boots: 0x221a2e, belt: 0x8e44ad, weapon: "staff", fxCol: 0xc77dff, aura: 0xc77dff, gait: "stroll",
+});
+
+export const NPCS: Hero[] = [blacksmith, merchant, villager, guard, druid, witch];
 
 export type GearPart = "legs" | "torso" | "head" | "weapon" | "shield";
 /** Extra pose info for the gear generator: body offset, weapon hand/angle, and a way to redraw the weapon elsewhere. */

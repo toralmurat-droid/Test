@@ -187,6 +187,7 @@ export class TownScene extends Phaser.Scene {
     this.minimap = new Minimap(document.getElementById("minimap") as HTMLCanvasElement, this.opts.name);
     this.npcs = new NpcLayer(this, (type, msg) => this.room.send(type, msg));
     this.room.onMessage("quest", ({ stage }) => this.npcs?.onQuest(stage));
+    this.room.onMessage("shop", (msg) => this.npcs?.onShop(msg));
     this.dial = new DayDial(document.getElementById("daydial") as HTMLCanvasElement);
 
     const players = (this.room.state as any).players;
