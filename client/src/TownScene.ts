@@ -52,6 +52,7 @@ export class TownScene extends Phaser.Scene {
   private lastSpecial = -Infinity; // local clock (ms) of my last special, for the cooldown bar
   private lastUlt = -Infinity;
   private heroTimer?: number;
+  private clearedTimer?: number;
 
   constructor(private opts: { name: string; color: number; cls: ClassKind }) {
     super("town");
@@ -157,6 +158,10 @@ export class TownScene extends Phaser.Scene {
     this.room.onMessage("special", (msg) => this.showSpecial(msg));
     this.room.onMessage("boom", ({ x, y, r }) => this.burst(x, y, r ? r / 1.8 : 6, 0xff9f1c, r ? 300 : 200));
     this.room.onMessage("ult", (msg) => this.showUlt(msg));
+    this.room.onMessage("zonecleared", ({ zone, by, name, respawnSec }) => {
+      if (by === this.me) this.showCleared(zone, respawnSec);
+      this.feed(`${name} cleared ${zone}!`);
+    });
     this.room.onMessage("power", ({ id, name }) => {
       const e = this.entities.get(id);
       if (e) this.floatText(e.sprite.x, e.sprite.y - 24, name, "#7cfc00");
@@ -394,6 +399,19 @@ export class TownScene extends Phaser.Scene {
   }
 
   /** Shows the area banner briefly whenever the player enters a new named area. */
+  /** Big on-screen "zone cleared" banner for the player who killed the zone's last monster. */
+  private showCleared(zone: string, respawnSec: number) {
+    const el = document.getElementById("cleared")!;
+    el.querySelector(".big")!.textContent = `${zone} cleared!`;
+    el.querySelector(".small")!.textContent = `Monsters return one by one every ${respawnSec}s`;
+    el.classList.remove("show");
+    void (el as HTMLElement).offsetWidth; // restart the pop animation
+    el.classList.add("show");
+    this.cameras.main.flash(250, 124, 252, 0);
+    clearTimeout(this.clearedTimer);
+    this.clearedTimer = window.setTimeout(() => el.classList.remove("show"), 3500);
+  }
+
   private showArea(name: string) {
     if (name === this.areaName) return;
     this.areaName = name;
