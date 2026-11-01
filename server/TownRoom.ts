@@ -232,6 +232,16 @@ function drainPoise(t: Poised, max: number, amount: number, now: number, brokenM
 
 const poiseFrac = (t: Poised, max: number) => (t.broken ? 0 : Math.max(0, 1 - t.poiseLost / max));
 
+/**
+ * Replace the whole bag instead of editing it in place: several in-place edits of an ArraySchema in one patch
+ * (e.g. a double-click sending two swaps) desync the client copy and showed the same item in several cells.
+ */
+const bagItems = (p: Player): string[] => p.bag.toArray().filter((g): g is string => !!g);
+
+function setBag(p: Player, items: string[]) {
+  p.bag = new ArraySchema<string>(...items);
+}
+
 function dirFromInput(i: InputState, fallback: Dir): Dir {
   if (i.left) return "left";
   if (i.right) return "right";
@@ -551,7 +561,7 @@ export class TownRoom extends Room<TownState> {
         p.potions += it.amount;
       } else if (it.kind === "gear") {
         if (p.bag.length >= BAG_SIZE || !isGearId(it.gear)) return; // bag full: leave it
-        p.bag.push(it.gear);
+        setBag(p, [...bagItems(p), it.gear]);
       } else {
         p.gold += it.amount;
       }
@@ -640,7 +650,9 @@ export class TownRoom extends Room<TownState> {
     if (!gid || !def) return;
     const slot: GearSlot = def.slot;
     const old = p[slot];
-    if (old) p.bag.setAt(i, old); else p.bag.splice(i, 1);
+    const items = [...bagItems(p)];
+    if (old) items[i] = old; else items.splice(i, 1);
+    setBag(p, items);
     p[slot] = gid;
     this.applyStats(p);
   }
@@ -648,7 +660,7 @@ export class TownRoom extends Room<TownState> {
   private unequip(id: string, slot: GearSlot) {
     const p = this.state.players.get(id);
     if (!p || !GEAR_SLOTS.includes(slot) || !p[slot] || p.bag.length >= BAG_SIZE) return;
-    p.bag.push(p[slot]);
+    setBag(p, [...bagItems(p), p[slot]]);
     p[slot] = "";
     this.applyStats(p);
   }
@@ -657,7 +669,9 @@ export class TownRoom extends Room<TownState> {
   private dropGear(id: string, i: number) {
     const p = this.state.players.get(id);
     if (!p || typeof i !== "number" || i < 0 || i >= p.bag.length) return;
-    const [gid] = p.bag.splice(i, 1);
+    const items = [...bagItems(p)];
+    const [gid] = items.splice(i, 1);
+    setBag(p, items);
     // Drop it out of pickup range so it isn't grabbed straight back
     const off = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] }[p.dir];
     this.dropItem("gear", p.x + off[0] * (PICKUP_RADIUS + 10), p.y + off[1] * (PICKUP_RADIUS + 10), 1, gid);
