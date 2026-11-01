@@ -72,22 +72,31 @@ const stall = (p: Painter, c: number) => {
   p.rect(12, 9, 2, 1, 0x6fbf55); p.px(12, 8, 0x4f9a3a);
 };
 
-const DRAW: Record<number, (p: Painter) => void> = {
+/** Wind pattern for swaying grass and flowers (pixel offset per frame). */
+const WIND = [0, 0, 1, 1, 1, 0, 0, 0, -1, 0];
+const k6 = (p: Painter) => p.ri(6);
+
+const DRAW: Record<number, (p: Painter, f: number) => void> = {
   [T.GRASS]: (p) => grass(p),
   [T.GRASS_DARK]: (p) => grass(p, 0x4f8c36, 0x427a2c, 0x5f9f42),
-  [T.TALL_GRASS]: (p) => {
+  [T.TALL_GRASS]: (p, f) => {
     grass(p);
+    // blades lean with the wind: the tip moves one pixel on alternate frames
+    const lean = WIND[f % WIND.length];
     for (let k = 0; k < 14; k++) {
       const x = p.ri(16), y = 2 + p.ri(10), h = 2 + p.ri(4);
-      p.rect(x, y, 1, h, k % 2 ? 0x3f7a2a : 0x7cc455);
-      p.px(x, y, 0x8fd468);
+      p.rect(x, y + 1, 1, h - 1, k % 2 ? 0x3f7a2a : 0x7cc455);
+      p.px(Math.min(15, Math.max(0, x + (k % 3 ? lean : 0))), y, 0x8fd468);
     }
   },
-  [T.FLOWERS]: (p) => {
+  [T.FLOWERS]: (p, f) => {
     grass(p);
     const cols = [0xf06292, 0xfff176, 0xffffff, 0xba68c8, 0x64b5f6];
+    const lean = WIND[f % WIND.length];
     for (let k = 0; k < 5; k++) {
-      const x = 2 + p.ri(12), y = 2 + p.ri(12), c = cols[k];
+      const x0 = 2 + p.ri(12), y = 2 + p.ri(12), c = cols[k];
+      p.px(x0, y + 2, 0x3f7a2a);
+      const x = x0 + (k % 2 ? lean : 0);
       p.px(x - 1, y, c); p.px(x + 1, y, c); p.px(x, y - 1, c); p.px(x, y + 1, c); p.px(x, y, 0xffd54f);
     }
   },
@@ -102,9 +111,15 @@ const DRAW: Record<number, (p: Painter) => void> = {
     }
   },
   [T.SAND]: (p) => { p.fill(0xd9c38a); p.speckle(0xc4ad74, 22); p.speckle(0xe8d6a3, 12); },
-  [T.WATER]: (p) => {
+  [T.WATER]: (p, f) => {
     p.fill(0x3a78b8); p.speckle(0x2f68a3, 20);
-    for (let k = 0; k < 4; k++) { const x = p.ri(12), y = p.ri(15); p.rect(x, y, 3, 1, 0x6ea6dc); p.px(x + 3, y, 0x4f8dc8); }
+    // ripples drift slowly and twinkle
+    for (let k = 0; k < 5; k++) {
+      const x = p.ri(12), y = (p.ri(16) + (f >> 1)) % 16, on = (k + f) % 4;
+      if (on === 0) continue;
+      p.rect(x, y, on === 2 ? 3 : 2, 1, 0x6ea6dc); p.px(x + (on === 2 ? 3 : 2), y, 0x4f8dc8);
+    }
+    if (f % 6 === k6(p)) p.px(p.ri(14) + 1, p.ri(14) + 1, 0xd8ecff);
   },
   [T.BRIDGE]: (p) => {
     p.fill(0x8b5a2b); p.speckle(0xa06a35, 18); p.speckle(0x7a4e24, 10);
@@ -253,20 +268,28 @@ const DRAW: Record<number, (p: Painter) => void> = {
     p.rect(1, 9, 14, 1, 0xb8962e); p.rect(1, 12, 14, 1, 0xb8962e);
     p.rect(4, 5, 1, 10, 0x8b5e34); p.rect(11, 5, 1, 10, 0x8b5e34);
   },
-  [T.WHEEL]: (p) => p.each((x, y) => {
-    const dx = x + 0.5 - 8, dy = y + 0.5 - 8, d = Math.hypot(dx, dy);
-    if (d < 1.6) return 0x3a3a3a;
-    if (d > 5.6 && d < 7.6) return (Math.round(Math.atan2(dy, dx) / (Math.PI / 6)) % 2) ? 0x6b4426 : 0x8b5e34;
-    if (d < 6 && (Math.abs(dx) < 0.8 || Math.abs(dy) < 0.8 || Math.abs(dx - dy) < 0.9 || Math.abs(dx + dy) < 0.9)) return 0x8b5e34;
-    return undefined;
-  }),
-  [T.CAMPFIRE]: (p) => {
+  [T.WHEEL]: (p, f) => {
+    const rot = (f % 12) * (Math.PI / 24); // spokes repeat every 45°, so 12 frames make a full loop
+    p.each((x, y) => {
+      const dx = x + 0.5 - 8, dy = y + 0.5 - 8, d = Math.hypot(dx, dy), a = Math.atan2(dy, dx) - rot;
+      if (d < 1.6) return 0x3a3a3a;
+      if (d > 5.6 && d < 7.6) return (Math.round(a / (Math.PI / 6)) & 1) ? 0x6b4426 : 0x8b5e34;
+      const m = ((a % (Math.PI / 4)) + Math.PI / 4) % (Math.PI / 4); // angle to nearest spoke
+      if (d < 6 && (m < 0.18 * (6 / Math.max(d, 1)) || Math.PI / 4 - m < 0.18 * (6 / Math.max(d, 1)))) return 0x8b5e34;
+      if (d >= 7.6 && d < 8.2 && (Math.round(a / (Math.PI / 6)) & 1)) return 0x9fd0ff; // water dripping off paddles
+      return undefined;
+    });
+  },
+  [T.CAMPFIRE]: (p, f) => {
     p.each((x, y) => {
       const d = Math.hypot(x + 0.5 - 8, y + 0.5 - 10);
       return d > 4.5 && d < 6.2 && (x + y) % 3 ? 0x7a7a7a : undefined;
     });
     p.rect(4, 10, 8, 2, 0x6b4426); p.rect(5, 11, 6, 2, 0x4e301a);
-    p.rect(6, 6, 4, 5, 0xff8c1a); p.rect(7, 4, 2, 3, 0xffb23a); p.rect(7, 7, 2, 3, 0xffe066); p.px(8, 3, 0xffb23a);
+    const fl = [[0, 1, 0], [1, 0, 1], [0, 2, 1], [1, 1, 0]][f % 4];
+    p.rect(6, 6 + fl[0], 4, 5 - fl[0], 0xff8c1a); p.rect(7 - fl[2], 4 - fl[1] + 1, 2, 3, 0xffb23a);
+    p.rect(7, 7, 2, 3, 0xffe066); p.px(8 + fl[2], 3 - fl[1] + 1, 0xffb23a);
+    if (fl[1] === 2) p.px(7, 1, 0xffe066);
   },
   [T.RUIN]: (p) => {
     p.rect(1, 6, 14, 9, 0x8a857a); p.rect(1, 4, 5, 2, 0x8a857a); p.rect(9, 2, 4, 4, 0x8a857a);
@@ -293,7 +316,16 @@ const DRAW: Record<number, (p: Painter) => void> = {
 /** Paints every tile into a single row on the given context (TILE_COUNT × TILE wide). */
 export function drawTileset(ctx: CanvasRenderingContext2D) {
   ctx.clearRect(0, 0, TILE * TILE_COUNT, TILE);
-  for (let i = 0; i < TILE_COUNT; i++) DRAW[i]?.(new Painter(ctx, i * TILE, i + 1));
+  for (let i = 0; i < TILE_COUNT; i++) DRAW[i]?.(new Painter(ctx, i * TILE, i + 1), 0);
+}
+
+/** Tiles that change over time (see `drawTileFrame`). */
+export const ANIMATED_TILES: number[] = [T.WATER, T.WHEEL, T.CAMPFIRE, T.TALL_GRASS, T.FLOWERS];
+
+/** Repaints one tile of the tileset for animation frame `f` (same seed, so only the moving parts change). */
+export function drawTileFrame(ctx: CanvasRenderingContext2D, id: number, f: number) {
+  ctx.clearRect(id * TILE, 0, TILE, TILE);
+  DRAW[id]?.(new Painter(ctx, id * TILE, id + 1), f);
 }
 
 export function createTilesetCanvas(): HTMLCanvasElement {

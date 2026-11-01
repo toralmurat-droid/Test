@@ -2,11 +2,13 @@ import Phaser from "phaser";
 import { Client, Room } from "colyseus.js";
 import { InputState, MAP_H, MAP_W, TILE } from "../../shared/constants";
 import { CLASSES, ClassKind, xpForLevel } from "../../shared/classes";
-import { GROUND, OBJECTS, areaAt, isSafeZone } from "../../shared/map";
+import { GROUND, areaAt, isSafeZone } from "../../shared/map";
 import { moveStep } from "../../shared/movement";
 import { heroTexture, itemTexture, makeTileset, mobTexture } from "./textures";
 import { Minimap } from "./minimap";
 import { CHARACTERS, CHAR_ORIGIN, CharacterName, createArtAnims, playCharAnim, preloadArt } from "./artAssets";
+import { Ambient } from "./ambient";
+import { Details } from "./details";
 
 interface Entity {
   sprite: Phaser.GameObjects.Sprite;
@@ -36,6 +38,8 @@ export class TownScene extends Phaser.Scene {
   private seq = 0;
   private chatEl = document.getElementById("chat") as HTMLInputElement;
   private minimap?: Minimap;
+  private ambient?: Ambient;
+  private details?: Details;
   private areaName = "";
   private areaTimer?: number;
   private shots = new Map<string, { g: Phaser.GameObjects.Arc; tx: number; ty: number }>();
@@ -56,7 +60,10 @@ export class TownScene extends Phaser.Scene {
     const map = this.make.tilemap({ tileWidth: TILE, tileHeight: TILE, width: MAP_W, height: MAP_H });
     const tiles = map.addTilesetImage("tiles", "tiles", TILE, TILE, 0, 0)!;
     map.createBlankLayer("ground", tiles)!.putTilesAt(GROUND, 0, 0).setDepth(-2);
-    map.createBlankLayer("objects", tiles)!.putTilesAt(OBJECTS, 0, 0).setDepth(-1);
+    map.createBlankLayer("objects", tiles)!.putTilesAt(Ambient.objectLayerData(), 0, 0).setDepth(-1);
+    this.ambient = new Ambient(this); // trees, shadows, smoke, wildlife… (cosmetic only)
+    this.details = new Details(this); // roof shading, ground detail, ducks, lanterns, day/night
+    this.details.onDarkness((d) => this.ambient?.setDarkness(d));
 
     const cam = this.cameras.main;
     cam.setBounds(0, 0, MAP_W * TILE, MAP_H * TILE);
@@ -313,6 +320,8 @@ export class TownScene extends Phaser.Scene {
   }
 
   update(_t: number, dtMs: number) {
+    this.ambient?.update(this.time.now, dtMs);
+    this.details?.update(this.time.now, dtMs);
     if (!this.room) return;
     const k = this.keys;
     const typing = this.chatting();
