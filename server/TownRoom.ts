@@ -917,7 +917,7 @@ export class TownRoom extends Room<TownState> {
     const a = this.state.players.get(id);
     const now = Date.now();
     const shot = a?.ranged ? GEAR[a.ranged]?.shot : undefined;
-    if (!a || !shot || a.dead || a.stunned || a.rolling || now - a.lastRanged < shot.cooldownMs) return;
+    if (!a || !shot || a.dead || a.stunned || a.broken || a.rolling || now - a.lastRanged < shot.cooldownMs) return;
     a.lastRanged = now;
     a.emote = "";
     const off = aimOf(a);
