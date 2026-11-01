@@ -1,0 +1,59 @@
+# Automatically merges pull requests opened by Claude threads.
+# Only PRs from claude/* branches in THIS repo (never forks) into the
+# default branch are merged. Drafts are skipped. If the PR has conflicts
+# or a check fails, nothing is merged; it retries on the next push.
+name: Auto-merge Claude PRs
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, ready_for_review]
+    branches: [claude/relaxed-wozniak-cjs85z]
+
+permissions:
+  contents: write
+  pull-requests: write
+  checks: read
+
+concurrency:
+  group: auto-merge-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  merge:
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      startsWith(github.event.pull_request.head.ref, 'claude/') &&
+      github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wait for other checks to pass
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          for i in $(seq 1 60); do
+            runs=$(gh api "repos/$GITHUB_REPOSITORY/commits/$SHA/check-runs" --paginate \
+              --jq '.check_runs[] | select(.name != "merge") | "\(.status) \(.conclusion)"')
+            if echo "$runs" | grep -Eq ' (failure|cancelled|timed_out|action_required)$'; then
+              echo "A check failed; not merging."; exit 1
+            fi
+            if ! echo "$runs" | grep -Eq '^(queued|in_progress|waiting|pending|requested)'; then
+              echo "All other checks done."; exit 0
+            fi
+            sleep 20
+          done
+          echo "Timed out waiting for checks."; exit 1
+
+      - name: Merge the PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR: ${{ github.event.pull_request.number }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          for i in 1 2 3 4 5 6; do
+            if gh pr merge "$PR" --repo "$GITHUB_REPOSITORY" --merge --match-head-commit "$SHA"; then
+              echo "Merged."; exit 0
+            fi
+            sleep 10
+          done
+          echo "Could not merge (conflicts?). Will retry on the next push."; exit 1

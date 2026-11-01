@@ -1,0 +1,24 @@
+{
+ "heroes": [
+  "ninja",
+  "wizard",
+  "knight",
+  "archer",
+  "barbarian"
+ ],
+ "items": [
+  "w_bronze",
+  "w_frost",
+  "w_dragon",
+  "a_leather",
+  "a_chain",
+  "a_royal",
+  "s_leather",
+  "s_swift",
+  "s_winged",
+  "h_cap",
+  "h_helm",
+  "h_crown"
+ ],
+ "image": "{hero}_{item}.png"
+}

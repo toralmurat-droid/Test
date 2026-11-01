@@ -15,6 +15,10 @@ npm run dev
 
 Open http://localhost:5173 in two browser tabs to see the multiplayer. The game server runs on port 2567.
 
+To keep a local game on the latest merged version, run `npm run live` instead of `npm run dev`: it checks GitHub every minute,
+fast-forwards when the branch has new commits (running `npm install` if dependencies changed) and restarts the game.
+It skips an update rather than overwrite local commits or edits.
+
 Controls: WASD/arrows to move, Space to attack, E or Shift for your class skill, Q to drink a potion, R for your ultimate (level 10), C for the hero menu, Enter to chat.
 
 Gameplay:
