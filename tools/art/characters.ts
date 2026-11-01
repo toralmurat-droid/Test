@@ -1,8 +1,15 @@
-import { Canvas, shade } from "./canvas";
+import { Canvas, HiCanvas, shade } from "./canvas";
 
 export type Dir = "down" | "up" | "right";
 export const DIRS: Dir[] = ["down", "up", "right"];
-export const FW = 32, FH = 32, COLS = 6;
+/** Logical frame size (all drawing code works on this 32x32 grid). */
+export const LW = 32, LH = 32, COLS = 6;
+/** Fine pixels per logical pixel: frames are rendered at K x the logical size. */
+export const K = 2;
+/** Output frame size in pixels. */
+export const FW = LW * K, FH = LH * K;
+/** A fresh frame canvas: logical 32x32 drawing, rendered K times finer. */
+export const mk = () => new HiCanvas(LW, LH, K);
 const OUTLINE = 0x1a1420;
 
 export interface Pose {
@@ -665,9 +672,9 @@ export interface GearCtx { ux: number; uy: number; hand: [number, number]; ang: 
 export let gearHook: ((part: GearPart, main: Canvas, mask: Canvas, p: Pose, hero: string, g: GearCtx) => void) | null = null;
 export function setGearHook(fn: typeof gearHook) { gearHook = fn; }
 
-/** Render one frame into a fresh 32x32 canvas. */
-let canvasFactory = () => new Canvas(FW, FH);
-/** Swap the canvas renderFrame draws into (used to try higher-resolution rendering). */
+/** Render one frame into a fresh frame canvas. */
+let canvasFactory: () => Canvas = mk;
+/** Swap the canvas renderFrame draws into. */
 export function setCanvasFactory(f: () => Canvas) { canvasFactory = f; }
 
 export function renderFrame(hero: Hero, p: Pose, withShadow = true, flash = 0): Canvas {
@@ -696,10 +703,10 @@ export function renderFrame(hero: Hero, p: Pose, withShadow = true, flash = 0): 
   const part = (slot: GearPart, fn: () => void) => {
     fn();
     if (!gearHook) return;
-    const main = d.c, mask = new Canvas(FW, FH);
+    const main = d.c, mask = mk();
     d.c = mask; fn(); d.c = main;
     const redraw = (dx: number, dy: number) => {
-      const m = new Canvas(FW, FH), keep = d.c;
+      const m = mk(), keep = d.c;
       d.c = m; hero.weapon(d, [hand[0] + dx, hand[1] + dy], ang); d.c = keep;
       return m;
     };
@@ -732,6 +739,7 @@ export function renderFrame(hero: Hero, p: Pose, withShadow = true, flash = 0): 
     if (p.farHand) farArm();
     weapon(); hero.arm(d, "near", hand);
   }
+  if (c instanceof HiCanvas) c.smooth();
   if (flash) c.tint(0xffffff, flash);
   c.rim();
   c.selout(OUTLINE);
@@ -747,10 +755,10 @@ const rgbMix = (a: number, b: number, t: number) => {
 };
 
 function arc(c: Canvas, cx: number, cy: number, r: number, a0: number, a1: number, col: number, alpha: number, width = 1) {
-  const n = Math.max(6, Math.abs(a1 - a0) / 5);
+  const n = Math.max(6, Math.abs(a1 - a0) / 5) * c.k;
   for (let i = 0; i <= n; i++) {
     const a = rad(a0 + ((a1 - a0) * i) / n), fade = 0.35 + 0.65 * (i / n);
-    for (let w = 0; w < width; w++) c.px(cx + Math.cos(a) * (r - w), cy + Math.sin(a) * (r - w), col, alpha * fade * (w ? 0.6 : 1));
+    for (let w = 0; w < width * c.k; w++) { const rr = r - w / c.k; c.dot(cx + Math.cos(a) * rr, cy + Math.sin(a) * rr, col, alpha * fade * (w >= c.k ? 0.6 : 1)); }
   }
 }
 
@@ -814,15 +822,15 @@ function aura(c: Canvas, col: number, t: number, strong: boolean) {
 
 function ghostsBehind(dst: Canvas, src: Canvas, dx: number, dy: number, col: number) {
   for (const [k, a] of [[2.4, 60], [1.3, 110]] as const) {
-    const g = new Canvas(FW, FH);
-    for (let y = 0; y < FH; y++) for (let x = 0; x < FW; x++) { const [pc, al] = src.get(x, y); if (al > 200) g.px(x, y, rgbMix(pc, col, 0.45), a); }
+    const g = mk();
+    for (let y = 0; y < g.h; y++) for (let x = 0; x < g.w; x++) { const [pc, al] = src.get(x, y); if (al > 200) g.pxN(x, y, rgbMix(pc, col, 0.45), a); }
     dst.under((s) => s.blit(g, Math.round(-dx * k), Math.round(-dy * k)));
   }
 }
 
 /** Lift a shadowless frame off the ground by j px, keeping (and shrinking) the ground shadow. */
 function jumped(f: Canvas, j: number): Canvas {
-  const o = new Canvas(FW, FH);
+  const o = mk();
   o.ellipse(16, 29, 6 - Math.min(j, 3), 1.5, 0x000000, 70 - j * 10);
   o.blit(f, 0, -j);
   return o;
@@ -835,25 +843,26 @@ function zLetter(c: Canvas, x: number, y: number, n: number) {
 
 /** Rotate a frame by k quarter-turns clockwise about its centre (for rolls). */
 function rot90(src: Canvas, k: number, cy = 20): Canvas {
-  const o = new Canvas(FW, FH);
+  const o = mk();
   k = ((k % 4) + 4) % 4;
+  const cxN = 16 * K + (K - 1) / 2, cyN = cy * K + (K - 1) / 2;
   o.blit(src, 0, 0, (x, y) => {
-    const dx = x - 16, dy = y - cy;
+    const dx = x - cxN, dy = y - cyN;
     const [rx, ry] = k === 1 ? [-dy, dx] : k === 2 ? [-dx, -dy] : k === 3 ? [dy, -dx] : [dx, dy];
-    return [16 + rx, cy + ry];
+    return [cxN + rx, cyN + ry];
   });
   return o;
 }
 
 /** Face-down fall: rotate counter-clockwise so the head ends up on the left. */
 function fallForward(src: Canvas): Canvas {
-  const r = new Canvas(FW, FH);
+  const r = mk();
   r.blit(src, 0, 0, (x, y) => [y, FW - 1 - x]);
   let maxY = 0, minX = FW, maxX = 0;
   for (let y = 0; y < FH; y++) for (let x = 0; x < FW; x++) if (r.alpha(x, y)) { maxY = Math.max(maxY, y); minX = Math.min(minX, x); maxX = Math.max(maxX, x); }
-  const out = new Canvas(FW, FH);
+  const out = mk();
   out.ellipse(16, 29, 11, 1.5, 0x000000, 70);
-  out.blit(r, Math.round((FW - 1 - maxX - minX) / 2), 30 - maxY);
+  out.blit(r, Math.round((FW - 1 - maxX - minX) / 2) / K, (30 * K + K - 1 - maxY) / K);
   return out;
 }
 
@@ -863,13 +872,13 @@ function dust(c: Canvas, x: number, y: number, size: number, alpha = 170) {
 
 function rotateLying(src: Canvas): Canvas {
   // rotate 90° clockwise so the head ends up on the right, then sit it on the ground line
-  const r = new Canvas(FW, FH);
+  const r = mk();
   r.blit(src, 0, 0, (x, y) => [FW - 1 - y, x]);
   let maxY = 0, minX = FW, maxX = 0;
   for (let y = 0; y < FH; y++) for (let x = 0; x < FW; x++) if (r.alpha(x, y)) { maxY = Math.max(maxY, y); minX = Math.min(minX, x); maxX = Math.max(maxX, x); }
-  const out = new Canvas(FW, FH);
+  const out = mk();
   out.ellipse(16, 29, 11, 1.5, 0x000000, 70);
-  out.blit(r, Math.round((FW - 1 - maxX - minX) / 2), 30 - maxY);
+  out.blit(r, Math.round((FW - 1 - maxX - minX) / 2) / K, (30 * K + K - 1 - maxY) / K);
   return out;
 }
 
@@ -968,7 +977,7 @@ export function animFrames(hero: Hero, anim: string, dir: Dir): Canvas[] {
     case "dodge": {
       const [fx, fy] = FACE[dir];
       const crouchF = renderFrame(hero, { ...B(0), crouch: 3, noWeapon: false }, false);
-      const spin = (k: number, sh: number) => { const o = new Canvas(FW, FH); o.ellipse(16, 29, 5, 1.2, 0, 50); o.blit(rot90(crouchF, dir === "right" ? k : dir === "down" ? k : -k), Math.round(fx * sh), Math.round(fy * sh * 0.5)); return o; };
+      const spin = (k: number, sh: number) => { const o = mk(); o.ellipse(16, 29, 5, 1.2, 0, 50); o.blit(rot90(crouchF, dir === "right" ? k : dir === "down" ? k : -k), Math.round(fx * sh), Math.round(fy * sh * 0.5)); return o; };
       const f0 = renderFrame(hero, { ...B(0), crouch: 3 });
       const f1 = spin(1, 1), f2 = spin(2, 2), f3 = spin(3, 2);
       dust(f2, 16 - fx * 8, 29, 2); dust(f3, 16 - fx * 9, 29, 1, 120);
@@ -1038,7 +1047,7 @@ export function animFrames(hero: Hero, anim: string, dir: Dir): Canvas[] {
       if (hero.name === "ninja") {
         // shadow dash: lunge forward leaving afterimages
         const [fx, fy] = FACE[dir];
-        const shift = (f: Canvas, k: number) => { const o = new Canvas(FW, FH); o.blit(f, fx * k, fy * k); return o; };
+        const shift = (f: Canvas, k: number) => { const o = mk(); o.blit(f, fx * k, fy * k); return o; };
         const f0 = renderFrame(hero, { ...B(0), attack: 0, move: "a2", crouch: 2 });
         aura(f0, col, 0, false);
         const f1 = shift(renderFrame(hero, { ...B(1), attack: 1, move: "a2" }, false), 3); ghostsBehind(f1, f1, fx * 3, fy * 3, col);
