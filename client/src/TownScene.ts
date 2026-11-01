@@ -743,12 +743,12 @@ export class TownScene extends Phaser.Scene {
       const badge = document.getElementById("treebadge")!;
       badge.hidden = freePts <= 0;
       badge.textContent = String(freePts);
-      // Monster zone status: how many are alive and when the next one respawns
+      // Monster zone status: how many are alive
       const tx = meEnt.sprite.x / TILE, ty = meEnt.sprite.y / TILE;
       const zdef = SPAWN_ZONES.find((z) => tx >= z.x && ty >= z.y && tx < z.x + z.w && ty < z.y + z.h);
       const zone = zdef && (this.room.state as any).zones?.get(zdef.name);
       document.getElementById("zone")!.textContent = zone
-        ? `⚔ ${zone.name}: ${zone.alive}/${zone.cap} monsters${zone.nextIn ? ` · next in ${zone.nextIn}s` : ""}`
+        ? `⚔ ${zone.name}: ${zone.alive}/${zone.cap} monsters`
         : "";
       const cls = mine.cls as ClassKind;
       const cdm = cooldownMult(cls, { sta: mine.sta, str: mine.str, mag: mine.mag }, mine.powerLevel) * talentReduce(cls, mine.talents, "cdr");
