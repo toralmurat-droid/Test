@@ -103,15 +103,24 @@ html, body { margin: 0; height: 100%; background: #1b1b24; color: #eee; font: 14
 @media (max-width: 600px) { #mapbox { transform: scale(.6); transform-origin: top right; } #feed { top: 120px; } #area { font-size: 20px; } }
 
 /* Skill tree (T) */
-#tree { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(560px, calc(100% - 32px));
+#tree { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(600px, calc(100% - 32px));
   max-height: calc(100% - 32px); overflow: auto; background: rgba(30,30,46,.96); border: 3px solid #555a7a; padding: 14px 16px;
   pointer-events: auto; z-index: 7; }
 #tree h2 { margin: 0 0 4px; font-size: 18px; color: #ffd166; }
 #treepoints { margin: 0 0 10px; font-size: 13px; color: #aaa; }
 #treepoints .free { color: #7cfc00; }
-#treebranches { display: grid; grid-template-columns: 34px repeat(3, 1fr); gap: 6px; align-items: stretch; }
-#treebranches .thead { text-align: center; font-weight: bold; font-size: 13px; }
-#treebranches .tlvl { align-self: center; font-size: 11px; color: #aaa; }
+#treebranches { display: grid; grid-template-columns: 34px repeat(3, 1fr); column-gap: 18px; row-gap: 22px; align-items: stretch; position: relative; }
+#treebranches > :not(svg) { position: relative; z-index: 1; }
+#treebranches .treelinks { position: absolute; left: 0; top: 0; pointer-events: none; z-index: 0; }
+#treebranches .tlvl { align-self: center; font-size: 11px; color: #666; }
+#treebranches .tlvl.on { color: #ffd166; }
+#treebranches .troot { justify-self: center; font-weight: bold; font-size: 12px; padding: 2px 10px; border: 2px solid currentColor;
+  border-radius: 10px; background: #15151f; }
+#treebranches .trunk { grid-column: 2 / 5; justify-self: center; margin-top: -4px; padding: 5px 18px; font-weight: bold; font-size: 13px;
+  color: #1e1e2e; background: #a68a64; border: 2px solid #6b5537; border-radius: 6px 6px 14px 14px; }
+.talent .pips { position: absolute; top: 7px; right: 8px; display: flex; gap: 3px; }
+.talent .pips i { width: 7px; height: 7px; border-radius: 50%; border: 1px solid #666; }
+.talent .pips i.on { background: var(--c); border-color: var(--c); }
 .talent kbd { font: inherit; font-size: 10px; color: #000; background: #ffd166; padding: 0 3px; }
 .talent.power { background: #1f1a10; }
 .branch { flex: 1 1 150px; display: flex; flex-direction: column; align-items: stretch; }
@@ -119,7 +128,8 @@ html, body { margin: 0; height: 100%; background: #1b1b24; color: #eee; font: 14
 .branch h3 small { color: #aaa; font-weight: normal; }
 .branch .link { width: 2px; height: 10px; background: #555a7a; margin: 0 auto; }
 .talent { display: flex; flex-direction: column; gap: 2px; text-align: left; font: inherit; font-size: 12px; padding: 6px 8px;
-  background: #15151f; color: #eee; border: 2px solid #555a7a; cursor: pointer; position: relative; }
+  background: #15151f; color: #eee; border: 2px solid #555a7a; border-radius: 10px; cursor: pointer; position: relative; }
+.talent.power { border-radius: 4px; }
 .talent .rank { position: absolute; top: 6px; right: 8px; color: #aaa; }
 .talent .fx { color: #ccc; font-size: 11px; }
 .talent .req { color: #888; font-size: 11px; }
