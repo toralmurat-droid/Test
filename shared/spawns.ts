@@ -1,5 +1,5 @@
 import { MobKind, TILE } from "./constants";
-import { isSafeZone, isSolidAt, VILLAGE } from "./map";
+import { AREAS, isSafeZone, isSolidAt, VILLAGE } from "./map";
 
 /**
  * Monster spawn zones. Each zone keeps up to `mobs[kind]` monsters alive. Every `respawnMs` its timer fires
@@ -13,14 +13,22 @@ export interface SpawnZone {
   respawnMs: number;
 }
 
-export const SPAWN_ZONES: SpawnZone[] = [
-  { name: "North Meadow", x: 24, y: 1, w: 42, h: 11, mobs: { slime: 5 }, respawnMs: 10000 },
-  { name: "Goldenreach Farms", x: 3, y: 26, w: 18, h: 28, mobs: { slime: 4 }, respawnMs: 12000 },
-  { name: "Mirror Pond", x: 3, y: 56, w: 16, h: 12, mobs: { slime: 3 }, respawnMs: 12000 },
-  { name: "Southern Fields", x: 22, y: 59, w: 44, h: 11, mobs: { slime: 3, skeleton: 1 }, respawnMs: 14000 },
-  { name: "Whispering Woods", x: 80, y: 1, w: 15, h: 26, mobs: { slime: 2, skeleton: 3 }, respawnMs: 15000 },
-  { name: "Old Ruins", x: 81, y: 29, w: 14, h: 14, mobs: { skeleton: 4 }, respawnMs: 20000 },
+/** Monsters per area. Rects come from the map's AREAS (shared/map.ts), so zones follow the map layout. */
+const ZONE_MOBS: { name: string; mobs: Partial<Record<MobKind, number>>; respawnMs: number }[] = [
+  { name: "North Meadow", mobs: { slime: 5 }, respawnMs: 10000 },
+  { name: "Goldenreach Farms", mobs: { slime: 4 }, respawnMs: 12000 },
+  { name: "Mirror Pond", mobs: { slime: 3 }, respawnMs: 12000 },
+  { name: "Misty Marsh", mobs: { slime: 4 }, respawnMs: 12000 },
+  { name: "Stonecrag Quarry", mobs: { slime: 1, skeleton: 3 }, respawnMs: 16000 },
+  { name: "Old Ruins", mobs: { skeleton: 4 }, respawnMs: 20000 },
+  { name: "Old Watchtower", mobs: { skeleton: 3 }, respawnMs: 20000 },
+  { name: "Whispering Woods", mobs: { slime: 3, skeleton: 3 }, respawnMs: 15000 }, // broad area last: zone lookups take the first match
 ];
+
+export const SPAWN_ZONES: SpawnZone[] = ZONE_MOBS.flatMap((z) => {
+  const a = AREAS.find((area) => area.name === z.name);
+  return a ? [{ ...z, x: a.x, y: a.y, w: a.w, h: a.h }] : [];
+});
 
 export function zoneCap(z: SpawnZone): number {
   return Object.values(z.mobs).reduce((a, b) => a + (b ?? 0), 0);
