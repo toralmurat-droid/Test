@@ -702,8 +702,8 @@ export class TownScene extends Phaser.Scene {
     document.getElementById("location")!.textContent = name;
     const el = document.getElementById("area")!;
     const z = SPAWN_ZONES.find((sz) => sz.name === name);
-    el.replaceChildren(pixelText(name));
-    if (z) el.appendChild(pixelText(`Lv ${z.levels[0]}-${z.levels[1]}`, "#f4a261", 9, 2));
+    el.replaceChildren(pixelText(name, "#fff0b8", 13, 3));
+    if (z) el.appendChild(pixelText(`Lv ${z.levels[0]}-${z.levels[1]}`, "#ffb070", 11, 2));
     el.classList.add("show");
     clearTimeout(this.areaTimer);
     this.areaTimer = window.setTimeout(() => el.classList.remove("show"), 2500);

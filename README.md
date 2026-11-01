@@ -72,7 +72,7 @@ up to 10-12 at the far edges. Signposts at the gates and junctions have one boar
 Each area in `AREAS` can list the monsters that belong there (`mobs`), and `randomPointInArea(name)` returns a free
 spot inside an area, for per-zone spawns.
 
-In game, a minimap sits top-right and a banner shows the area name as you walk between regions.
+In game, a round minimap sits top-right inside a day/night dial (the sun and moon turn around it with the 30-minute day), and a bold pixel-font banner shows the area name as you walk between regions.
 
 The world is alive (`client/src/ambient.ts`, cosmetic only): trees and bushes are tall sprites that sway in a travelling
 wind and hide you when you walk behind them; water ripples and has shoreline foam, the mill wheel turns, grass and
