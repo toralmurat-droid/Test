@@ -48,7 +48,7 @@ function noise(x: number, y: number, scale: number, seed: number) {
 
 /** Oakvale's palisade bounds (tiles, inclusive). */
 export const VILLAGE = { x0: 68, y0: 50, x1: 92, y1: 70 };
-/** The two main roads (3 tiles wide): King's Road runs west↔east on rows RY..RY+2, North Road north↔south on columns RX..RX+2. */
+/** Where the two main roads cross the village: King's Road runs west↔east near row RY+1, North Road north↔south near column RX+1. */
 export const ROADS = { RX: 79, RY: 59 };
 /** Cobbled square in the middle of the ruined village. It is the safe zone. */
 export const SAFE_ZONE = { x: 74, y: 55, w: 13, h: 11 };
@@ -128,6 +128,7 @@ function buildWorld() {
   /** Winding road through waypoints (Catmull-Rom spline), `w` tiles wide; bridges itself over water. */
   const curve = (pts: [number, number][], w: number, t: number = T.DIRT) => {
     const P = [pts[0], ...pts, pts[pts.length - 1]];
+    let last: [number, number] | undefined;
     for (let i = 1; i < P.length - 2; i++) {
       const [p0, p1, p2, p3] = [P[i - 1], P[i], P[i + 1], P[i + 2]];
       const len = Math.hypot(p2[0] - p1[0], p2[1] - p1[1]);
@@ -135,8 +136,11 @@ function buildWorld() {
         const u = k / Math.max(1, len * 4), u2 = u * u, u3 = u2 * u;
         const c = (a: number, b: number, c: number, d: number) => 0.5 * (2 * b + (-a + c) * u + (2 * a - 5 * b + 4 * c - d) * u2 + (-a + 3 * b - 3 * c + d) * u3);
         const x = c(p0[0], p1[0], p2[0], p3[0]), y = c(p0[1], p1[1], p2[1], p3[1]);
-        const r = w / 2;
-        each(Math.round(x - r), Math.round(y - r), w, w, (i2, j2) => road(i2, j2, 1, 1, t));
+        const r = w / 2, cx = Math.round(x - r), cy = Math.round(y - r);
+        // keep 1-wide paths 4-connected: a diagonal step gets a corner tile, so there is always a walkable way along
+        if (w === 1 && last && last[0] !== cx && last[1] !== cy) road(cx, last[1], 1, 1, t);
+        last = [cx, cy];
+        each(cx, cy, w, w, (i2, j2) => road(i2, j2, 1, 1, t));
       }
     }
   };
@@ -198,20 +202,20 @@ function buildWorld() {
   clearO(mx - 3, 36, 13, 14);
 
   // ---------- 5. Roads: few and narrow, each one leading from the village to a place ----------
-  // Four 2-wide roads leave the village gates; 1-wide footpaths branch off to the smaller sights.
+  // Four narrow roads leave the village gates; footpaths branch off to the smaller sights.
   const rc = riverCenter;
   const mill = { x: mx, y: 41 };
   // West Road → Goldenreach Farms (ends at the barn yard)
-  curve([[V.x0 - 4, RY + 1], [52, 58], [40, 62], [28, 57], [18, 56]], 2);
+  curve([[V.x0 - 4, RY + 1], [52, 58], [40, 62], [28, 57], [18, 56]], 1);
   // East Road → over the bridge → the Old Ruins in the woods
-  curve([[V.x1 + 4, RY + 1], [104, 63], [rc(60) - 7, 61], [rc(60) + 7, 61], [128, 57], [ruins.x, ruins.y]], 2);
+  curve([[V.x1 + 4, RY + 1], [104, 63], [rc(60) - 7, 61], [rc(60) + 7, 61], [128, 57], [ruins.x, ruins.y]], 1);
   // North Road → North Meadow, where it splits for the Hunter's Camp and the Watchtower
-  curve([[RX + 1, V.y0 - 4], [78, 34], [84, 24]], 2);
+  curve([[RX + 1, V.y0 - 4], [78, 34], [84, 24]], 1);
   curve([[84, 24], [70, 18], [60, 24], [42, 16], [camp.x, camp.y + 1]], 1);                            // Hunter's Trail
   curve([[84, 24], [98, 15], [rc(18) - 6, 18], [rc(18) + 6, 18], [130, 25], [tower.x, tower.y + 4]], 1); // Watchtower Trail
   curve([[tower.x, tower.y + 4], [146, 36], [142, 48], [ruins.x, ruins.y - 6]], 1);                      // woodland path, watchtower ↔ ruins
   // South Road → Stonecrag Quarry
-  curve([[RX + 1, V.y1 + 4], [86, 82], [90, 90], [96, 96]], 2);
+  curve([[RX + 1, V.y1 + 4], [86, 82], [90, 90], [96, 96]], 1);
   curve([[96, 96], [106, 94], [rc(96) - 6, 97], [rc(96) + 6, 97], [128, 90], [136, 74], [ruins.x, ruins.y + 6]], 1); // Quarry bridge → ruins
   // Footpaths: the mill, Mirror Pond and on to the Misty Marsh
   curve([[V.x1 + 3, RY], [101, 52], [mill.x + 3, mill.y + 8], [mill.x + 3, mill.y + 6]], 1);             // Mill path
@@ -219,10 +223,10 @@ function buildWorld() {
 
   // ---------- 6. Oakvale: a small ruined village ----------
   // Cobbled streets meet on the square; the rest of the village is grass, dirt and rubble
-  curve([[V.x0 - 4, RY + 1], [70, RY + 2], [SQ.x, RY + 1]], 2, T.COBBLE);
-  curve([[SQ.x + SQ.w - 1, RY + 1], [91, RY], [V.x1 + 4, RY + 1]], 2, T.COBBLE);
-  curve([[RX + 1, V.y0 - 4], [RX, 51], [RX + 1, SQ.y]], 2, T.COBBLE);
-  curve([[RX + 1, SQ.y + SQ.h - 1], [RX + 2, 70], [RX + 1, V.y1 + 4]], 2, T.COBBLE);
+  curve([[V.x0 - 4, RY + 1], [70, RY + 2], [SQ.x, RY + 1]], 1, T.COBBLE);
+  curve([[SQ.x + SQ.w - 1, RY + 1], [91, RY], [V.x1 + 4, RY + 1]], 1, T.COBBLE);
+  curve([[RX + 1, V.y0 - 4], [RX, 51], [RX + 1, SQ.y]], 1, T.COBBLE);
+  curve([[RX + 1, SQ.y + SQ.h - 1], [RX + 2, 70], [RX + 1, V.y1 + 4]], 1, T.COBBLE);
   road(SQ.x, SQ.y, SQ.w, SQ.h, T.COBBLE);
   // Rounded corners on the square: grass creeps back in
   for (const [cx, cy] of [[SQ.x, SQ.y], [SQ.x + SQ.w - 1, SQ.y], [SQ.x, SQ.y + SQ.h - 1], [SQ.x + SQ.w - 1, SQ.y + SQ.h - 1]]) setG(cx, cy, T.GRASS);
@@ -385,11 +389,11 @@ function buildWorld() {
   setO(glade.x, glade.y, T.CAMPFIRE); setO(glade.x - 2, glade.y + 1, T.STUMP); setO(glade.x + 2, glade.y + 1, T.STUMP);
 
   // Roads into the wider world
-  curve([[96, 100], [99, 112], [97, 124], [lake.x - 6, lake.y - lake.ry - 4]], 2);                  // Lake Road (from the quarry)
+  curve([[96, 100], [99, 112], [97, 124], [lake.x - 6, lake.y - lake.ry - 4]], 1);                  // Lake Road (from the quarry)
   curve([[lake.x - 6, lake.y - lake.ry - 4], [lake.x - 1, lake.y - lake.ry - 2], [lake.x, lake.y - 1]], 1); // boardwalk to the island
-  curve([[marsh.x + 2, 101], [32, 112], [38, 124], [mau.x + 4, mau.y + mau.h + 2]], 2);             // Barrow Road (from the marsh)
+  curve([[marsh.x + 2, 101], [32, 112], [38, 124], [mau.x + 4, mau.y + mau.h + 2]], 1);             // Barrow Road (from the marsh)
   curve([[mau.x + 4, mau.y + mau.h + 2], [60, 152], [74, 148], [lake.x - lake.rx - 4, lake.y]], 1); // Downs path, barrows ↔ lake
-  curve([[ruins.x + 6, ruins.y], [156, 62], [168, 58], [keep.x - 6, keep.y + 8], [keep.x + 2, keep.y + 8]], 2); // Keep Road (past the Old Ruins)
+  curve([[ruins.x + 6, ruins.y], [156, 62], [168, 58], [keep.x - 6, keep.y + 8], [keep.x + 2, keep.y + 8]], 1); // Keep Road (past the Old Ruins)
   curve([[lake.x + lake.rx + 4, lake.y - 2], [rc(144) - 6, 144], [rc(144) + 6, 144], [134, 132], [140, 112], [136, 92]], 1); // south bridge → woods path
   curve([[tower.x + 4, tower.y], [160, 18], [176, 24], [glade.x - 5, glade.y]], 1);                   // Thornwood trail
   curve([[glade.x + 5, glade.y], [204, 30], [200, 40], [keep.x + keep.w - 1, keep.y + 8]], 1);       // down to the keep's postern

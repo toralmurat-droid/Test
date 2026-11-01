@@ -18,18 +18,19 @@ const SHADOW = "rgba(0,0,0,0.25)";
  */
 export class Painter {
   private s: number;
-  constructor(private ctx: CanvasRenderingContext2D, private ox: number, seed: number, private oy = 0) { this.s = seed * 7919 + 13; }
+  /** `k`: screen pixels per design unit (smaller props use k < 2 and an offset inside the tile). */
+  constructor(private ctx: CanvasRenderingContext2D, private ox: number, seed: number, private oy = 0, private k = K, private lx = 0, private ly = 0) { this.s = seed * 7919 + 13; }
   r() { this.s = (this.s * 9301 + 49297) % 233280; return this.s / 233280; }
   ri(n: number) { return Math.floor(this.r() * n); }
   rect(x: number, y: number, w: number, h: number, c: Color) {
     this.ctx.fillStyle = css(c);
-    const x0 = Math.round(x * K), y0 = Math.round(y * K);
-    this.ctx.fillRect(this.ox + x0, this.oy + y0, Math.round((x + w) * K) - x0, Math.round((y + h) * K) - y0);
+    const k = this.k, x0 = Math.round(x * k), y0 = Math.round(y * k);
+    this.ctx.fillRect(this.ox + x0, this.oy + y0, Math.round((x + w) * k) - x0, Math.round((y + h) * k) - y0);
   }
   px(x: number, y: number, c: Color) { this.rect(x, y, 1, 1, c); }
   /** One screen pixel, in screen pixels (0..TILE-1). */
   fpx(x: number, y: number, c: Color) {
-    if (x < 0 || y < 0 || x >= TILE || y >= TILE) return;
+    if (x + this.lx < 0 || y + this.ly < 0 || x + this.lx >= TILE || y + this.ly >= TILE) return;
     this.ctx.fillStyle = css(c);
     this.ctx.fillRect(this.ox + x, this.oy + y, 1, 1);
   }
@@ -41,20 +42,20 @@ export class Painter {
   fill(c: Color) { this.rect(0, 0, 16, 16, c); }
   /** Fine single-pixel grain over a design-unit rectangle (n is in design-pixel terms: ~2.5x as many fine dots). */
   speckle(c: Color, n: number, x0 = 0, y0 = 0, w = 16, h = 16) {
-    const m = Math.round(n * K * 1.25);
-    for (let k = 0; k < m; k++) this.fpx(Math.floor((x0 + this.r() * w) * K), Math.floor((y0 + this.r() * h) * K), c);
+    const m = Math.round(n * this.k * 1.25);
+    for (let k = 0; k < m; k++) this.fpx(Math.floor((x0 + this.r() * w) * this.k), Math.floor((y0 + this.r() * h) * this.k), c);
   }
   /** Pixel ellipse (design units), rasterised at full resolution. */
   disc(cx: number, cy: number, rx: number, ry: number, c: Color) {
     for (let y = 0; y < TILE; y++) for (let x = 0; x < TILE; x++) {
-      const dx = ((x + 0.5) / K - cx) / rx, dy = ((y + 0.5) / K - cy) / ry;
+      const dx = ((x + 0.5) / this.k - cx) / rx, dy = ((y + 0.5) / this.k - cy) / ry;
       if (dx * dx + dy * dy <= 1) this.fpx(x, y, c);
     }
   }
   /** Per-pixel painter at full resolution. `x`, `y` are design units, so `x + 0.5` is the pixel centre. */
   each(f: (x: number, y: number) => Color | undefined) {
     for (let y = 0; y < TILE; y++) for (let x = 0; x < TILE; x++) {
-      const c = f((x + 0.5) / K - 0.5, (y + 0.5) / K - 0.5);
+      const c = f((x + 0.5) / this.k - 0.5, (y + 0.5) / this.k - 0.5);
       if (c !== undefined) this.fpx(x, y, c);
     }
   }
@@ -252,53 +253,68 @@ const beamWall = (p: Painter, m: number) => {
  * v = neighbour mask (bits 0-3) | 16 if the outside is to the south | 32 if the outside is to the east.
  */
 const palisade = (p: Painter, v: number) => {
+  // Drawn per screen pixel: a low wall of slim sharpened logs (about 2/3 of a hero's height) bound with rope,
+  // with thin pikes jutting outward at uneven angles.
   const m = v & 15, outS = !!(v & 16), outE = !!(v & 32);
   const horiz = !!(m & (E | W)) || !(m & (N | S)), vert = !!(m & (N | S));
-  const stake = (x: number, top: number, bot: number) => {
-    p.rect(x, top + 1, 3, bot - top - 1, 0x7a5230);
-    p.rect(x, top + 1, 1, bot - top - 1, 0x9a6a40); p.rect(x + 2, top + 1, 1, bot - top - 1, 0x4e331c);
-    p.px(x + 1, top, 0xb08a5a);
-    p.rect(x, bot - 1, 3, 1, 0x3e2814);
+  const T_ = SZ, cx = outE ? 8 : 16; // x of the 8px log column in vertical runs (room for pikes outside)
+  const shade = (c: number, k: number) => { const r = (c >> 16) & 255, g = (c >> 8) & 255, b = c & 255; const f = (x: number) => Math.max(0, Math.min(255, Math.round(x * k))); return (f(r) << 16) | (f(g) << 8) | f(b); };
+  /** One upright log, 4px wide, with a whittled point. */
+  const log = (x: number, top: number, bot: number) => {
+    const base = [0x7a5230, 0x84593a, 0x704a2a][p.ri(3)];
+    for (let y = top + 2; y < bot; y++) {
+      p.fpx(x, y, shade(base, 1.3)); p.fpx(x + 1, y, base); p.fpx(x + 2, y, base); p.fpx(x + 3, y, shade(base, 0.62));
+    }
+    for (let k = 0; k < 2; k++) p.fpx(x + 1 + p.ri(2), top + 4 + p.ri(Math.max(1, bot - top - 6)), shade(base, 0.8)); // knots
+    p.frect(x, top + 1, 4, 1, shade(base, 1.25)); p.fpx(x + 3, top + 1, shade(base, 0.8));
+    p.fpx(x + 1, top, 0xd8b88a); p.fpx(x + 2, top, 0xc09a6a); // cut point
+    p.fpx(x, bot - 1, 0x3e2814); p.fpx(x + 1, bot - 1, 0x4e331c); p.fpx(x + 2, bot - 1, 0x4e331c); p.fpx(x + 3, bot - 1, 0x2e1e10);
   };
-  /** A sharpened pike from (x, y) along angle `a` (radians), pale whittled tip. */
+  /** A slim sharpened pike from (x, y) along angle a, 2px thick with a pale tip. */
   const pike = (x: number, y: number, a: number, len: number) => {
     const dx = Math.cos(a), dy = Math.sin(a), steep = Math.abs(dy) > Math.abs(dx);
     for (let t = 0; t <= len; t++) {
       const px = Math.round(x + dx * t), py = Math.round(y + dy * t);
-      if (px < 0 || px > 15 || py < 0 || py > 15) break;
-      if (t >= len - 1) { p.px(px, py, 0xe6d8b4); continue; }
-      p.px(px, py, t % 3 === 1 ? 0x5e3b1f : 0x8a5c34);
-      p.px(px + (steep ? 1 : 0), py + (steep ? 0 : 1), 0x4a2f18);
+      if (t >= len - 2) { p.fpx(px, py, t === len ? 0xf2e8cc : 0xd8c49a); continue; }
+      p.fpx(px, py, 0x9a6a3c);
+      p.fpx(px + (steep ? 1 : 0), py + (steep ? 0 : 1), 0x5e3b1f);
     }
   };
-  const jitter = () => (p.r() - 0.5) * 1.1; // up to ~±30°
-  const cx = outE ? 4 : 9; // x of the stake column in vertical runs (pikes need room on the outside)
+  const jitter = () => (p.r() - 0.5) * 0.9; // up to about ±25°
+  const rope = (x0: number, x1: number, y: number) => { p.frect(x0, y, x1 - x0, 1, 0x3a2614); for (let x = x0 + (y % 2); x < x1; x += 2) p.fpx(x, y - 1, 0x8a6a40); };
 
   if (horiz) {
-    const x0 = m & W ? 0 : vert ? cx : 1, x1 = m & E ? 16 : vert ? cx + 6 : 15;
-    if (!outS) { // outside is north: pikes rise behind the wall
-      for (let x = x0 + 1 + p.ri(2); x < x1 - 1; x += 4 + p.ri(2)) pike(x, 11, -Math.PI / 2 + jitter(), 11 + p.ri(2));
-      p.rect(x0, 15, x1 - x0, 1, "rgba(0,0,0,0.25)");
-      for (let x = x0; x + 2 < x1; x += 3) stake(x, 5 + p.ri(2), 15);
-      p.rect(x0, 8, x1 - x0, 1, 0x4e331c); p.rect(x0, 12, x1 - x0, 1, 0x5e3b1f);
+    const x0 = m & W ? 0 : vert ? cx : 2, x1 = m & E ? T_ : vert ? cx + 8 : T_ - 2;
+    const top = () => 13 + p.ri(3), bot = 30;
+    if (!outS) { // outside is north: pikes rise from behind the wall
+      for (let x = x0 + 1 + p.ri(3); x < x1 - 2; x += 6 + p.ri(3)) pike(x, 17, -Math.PI / 2 + jitter(), 13 + p.ri(4));
+      p.frect(x0, 30, x1 - x0, 2, "rgba(0,0,0,0.22)");
+      for (let x = x0; x + 3 < x1 + 1; x += 4) log(x, top(), bot);
+      rope(x0, x1, 18); rope(x0, x1, 25);
     } else { // outside is south: pikes jut out in front of the wall
-      for (let x = x0; x + 2 < x1; x += 3) stake(x, p.ri(2), 12);
-      p.rect(x0, 4, x1 - x0, 1, 0x4e331c); p.rect(x0, 8, x1 - x0, 1, 0x5e3b1f);
-      for (let x = x0 + 1 + p.ri(2); x < x1 - 1; x += 4 + p.ri(2)) {
-        const a = Math.PI / 2 + jitter(), len = 6 + p.ri(2);
-        p.px(Math.round(x + Math.cos(a) * len) + 1, 15, "rgba(0,0,0,0.25)");
-        pike(x, 10, a, len);
+      p.frect(x0, 29, x1 - x0, 2, "rgba(0,0,0,0.22)");
+      for (let x = x0; x + 3 < x1 + 1; x += 4) log(x, 9 + p.ri(3), 26);
+      rope(x0, x1, 14); rope(x0, x1, 21);
+      for (let x = x0 + 2 + p.ri(3); x < x1 - 2; x += 6 + p.ri(3)) {
+        const a = Math.PI / 2 + jitter();
+        p.fpx(Math.round(x + Math.cos(a) * 6) + 2, 31, "rgba(0,0,0,0.25)");
+        pike(x, 22, a, 7 + p.ri(3));
       }
     }
   }
   if (vert) {
-    const y0 = m & N ? 0 : horiz ? (outS ? 2 : 6) : 1, y1 = m & S ? 16 : horiz ? 13 : 15;
-    p.rect(cx + 6, y0 + 1, 1, y1 - y0, "rgba(0,0,0,0.22)");
-    stake(cx, y0, y1); stake(cx + 3, Math.min(y1 - 2, y0 + 1 + p.ri(2)), y1);
-    for (let y = y0 + 2; y < y1; y += 5) p.rect(cx, y, 6, 1, 0x4e331c);
-    for (let y = y0 + 2 + p.ri(2); y < y1 - 1; y += 4 + p.ri(2)) {
-      if (outE) pike(cx + 5, y, jitter() * 0.8, 8 + p.ri(3));
-      else pike(cx, y, Math.PI + jitter() * 0.8, 8 + p.ri(3));
+    const y0 = m & N ? 0 : horiz ? (outS ? 9 : 13) : 4, y1 = m & S ? T_ : horiz ? 28 : 28;
+    p.frect(cx + 8, y0 + 2, 2, y1 - y0, "rgba(0,0,0,0.22)");
+    for (let i = 0; i < 2; i++) { // two logs side by side, seen from above at an angle
+      const x = cx + i * 4, base = i ? 0x704a2a : 0x7a5230;
+      for (let y = y0; y < y1; y++) { p.fpx(x, y, shade(base, 1.3)); p.fpx(x + 1, y, base); p.fpx(x + 2, y, base); p.fpx(x + 3, y, shade(base, 0.62)); }
+      for (let y = y0 + 3 + p.ri(4); y < y1 - 1; y += 5 + p.ri(4)) p.fpx(x + 1 + p.ri(2), y, shade(base, 0.8));
+      if (!(m & N)) { p.fpx(x + 1, y0, 0xd8b88a); p.fpx(x + 2, y0, 0xc09a6a); }
+    }
+    for (let y = y0 + 5; y < y1 - 1; y += 9) { p.frect(cx, y, 8, 1, 0x3a2614); p.fpx(cx + 2, y - 1, 0x8a6a40); p.fpx(cx + 6, y - 1, 0x8a6a40); }
+    for (let y = y0 + 3 + p.ri(3); y < y1 - 2; y += 6 + p.ri(3)) {
+      if (outE) pike(cx + 8, y, jitter() * 0.8, 8 + p.ri(4));
+      else pike(cx - 1, y, Math.PI + jitter() * 0.8, 8 + p.ri(4));
     }
   }
 };
@@ -605,8 +621,20 @@ const VARIED = new Set<number>([T.GRASS, T.TALL_GRASS, T.FLOWERS, T.DIRT, T.COBB
 const CONNECTED = new Set<number>([T.RUIN, T.BEAM, T.PALISADE]);
 const LIGHT = new Set<number>([T.GRASS, T.TALL_GRASS, T.FLOWERS]);
 
-const paint = (ctx: CanvasRenderingContext2D, id: number, row: number, f: number) =>
-  DRAW[id]?.(new Painter(ctx, id * TILE, id + 1 + row * 131, row * TILE), f, row);
+/**
+ * Small props are painted smaller than their tile so they stay in scale with the heroes (24px tall):
+ * screen pixels per design unit, bottom-centred in the tile.
+ */
+const PROP_K: Partial<Record<number, number>> = {
+  [T.GRAVE]: 1.3, [T.BARREL]: 1.45, [T.CRATE]: 1.4, [T.ANVIL]: 1.4, [T.STUMP]: 1.6, [T.HAY]: 1.7, [T.ROCK]: 1.7, [T.SIGN]: 1.6, [T.WELL]: 1.8,
+};
+const paint = (ctx: CanvasRenderingContext2D, id: number, row: number, f: number) => {
+  const k = PROP_K[id] ?? K, lx = Math.round((TILE - 16 * k) / 2), ly = TILE - Math.round(16 * k);
+  ctx.save();
+  ctx.beginPath(); ctx.rect(id * TILE, row * TILE, TILE, TILE); ctx.clip(); // never bleed into the next tile
+  DRAW[id]?.(new Painter(ctx, id * TILE + lx, id + 1 + row * 131, row * TILE + ly, k, lx, ly), f, row);
+  ctx.restore();
+};
 
 /** Paints every tile and variant onto the given context (TILE_COUNT × ROWS tiles). */
 export function drawTileset(ctx: CanvasRenderingContext2D) {
