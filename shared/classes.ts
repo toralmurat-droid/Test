@@ -115,6 +115,13 @@ export type Emote = (typeof EMOTES)[number];
 export const GUARD_REDUCTION = 0.7; // knight shield blocks this fraction of damage
 export const DASH_INVULN_MS = 250; // ninja is untouchable right after a dash
 
+/**
+ * Stamina (Magic for the Wizard): every hero has 100 points that refill over time. Skills, the ultimate and the
+ * dodge roll spend it; basic attacks are free. Shown as the blue bar under the HP bar.
+ */
+export const ENERGY = { max: 100, regenPerSec: 14, cost: { special: 30, ult: 50, dodge: 20 } };
+export const energyName = (cls: string) => (cls === "wizard" ? "Magic" : "Stamina");
+
 /** Dodge roll (F) for every hero: a quick roll in the move direction (or facing), untouchable while rolling. */
 export const DODGE = { distance: 48, durationMs: 250, invulnMs: 300, cooldownMs: 1500 };
 

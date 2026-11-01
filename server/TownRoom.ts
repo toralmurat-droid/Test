@@ -5,7 +5,7 @@ import {
   RESPAWN_MS, SAFE_REGEN_PER_SEC, TICK_RATE,
 } from "../shared/constants";
 import {
-  ATTACK_VARIANTS, CLASSES, ClassKind, COMBO_WINDOW_MS, DODGE, EMOTES, DASH_INVULN_MS, GUARD_REDUCTION, isClassKind, levelFromXp, PVP_KILL_XP,
+  ATTACK_VARIANTS, CLASSES, ClassKind, COMBO_WINDOW_MS, DODGE, EMOTES, ENERGY, DASH_INVULN_MS, GUARD_REDUCTION, isClassKind, levelFromXp, PVP_KILL_XP,
 } from "../shared/classes";
 import {
   attackMult, cooldownMult, CRIT, FROST, hasPower, heroSpeed, IGNITE, IRONSKIN_REDUCTION, magicMult, maxHpFromStats,
@@ -49,6 +49,7 @@ export class Player extends Schema {
   @type("boolean") slowed = false;
   @type("boolean") raging = false; // barbarian Rage active
   @type("boolean") rolling = false; // dodge roll in progress
+  @type("number") energy = 100; // Stamina / Magic (ENERGY in shared/classes.ts)
   // Equipment (shared/gear.ts): equipped item ids ("" = empty) and the unequipped items carried
   @type("string") weapon = "";
   @type("string") armour = "";
@@ -264,7 +265,8 @@ export class TownRoom extends Room<TownState> {
       p.stunned = now < p.stunUntil;
       p.slowed = now < p.slowUntil;
       p.raging = now < p.rageUntil;
-      if (p.dead) { p.moving = false; return; }
+      if (p.dead) { p.moving = false; p.energy = ENERGY.max; return; }
+      if (p.energy < ENERGY.max) p.energy = Math.min(ENERGY.max, p.energy + ENERGY.regenPerSec * dt);
       p.rolling = now < p.rollUntil;
       const r = p.stunned
         ? { x: p.x, y: p.y, moving: false }
@@ -454,7 +456,8 @@ export class TownRoom extends Room<TownState> {
   private dodge(id: string) {
     const p = this.state.players.get(id);
     const now = Date.now();
-    if (!p || p.dead || p.stunned || now - p.lastDodge < DODGE.cooldownMs) return;
+    if (!p || p.dead || p.stunned || now - p.lastDodge < DODGE.cooldownMs || p.energy < ENERGY.cost.dodge) return;
+    p.energy -= ENERGY.cost.dodge;
     const i = p.input;
     const moving = i.up !== i.down || i.left !== i.right;
     p.rollInput = moving ? { ...i } : pushInput(DIR_OFFSET[p.dir]);
@@ -758,6 +761,8 @@ export class TownRoom extends Room<TownState> {
     if (!a || a.dead || a.stunned) return;
     const sp = CLASSES[a.cls].special;
     if (now - a.lastSpecial < sp.cooldownMs * cooldownMult(a.cls, this.stats(a), a.powerLevel) * talentReduce(a.cls, a.talents, "cdr")) return;
+    if (a.energy < ENERGY.cost.special) return;
+    a.energy -= ENERGY.cost.special;
     a.lastSpecial = now;
     a.emote = "";
 
@@ -819,6 +824,8 @@ export class TownRoom extends Room<TownState> {
     if (!a || a.dead || a.stunned || a.powerLevel < ULT_LEVEL) return;
     const u = ULTS[a.cls];
     if (now - a.lastUlt < u.cooldownMs * cooldownMult(a.cls, this.stats(a), a.powerLevel) * talentReduce(a.cls, a.talents, "cdr")) return;
+    if (a.energy < ENERGY.cost.ult) return;
+    a.energy -= ENERGY.cost.ult;
     a.lastUlt = now;
     a.emote = "";
     const dmg = Math.round(u.damage * magicMult(a.cls, this.stats(a)));

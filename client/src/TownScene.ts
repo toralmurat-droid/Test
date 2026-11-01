@@ -1,7 +1,7 @@
 import Phaser from "phaser";
 import { Client, Room } from "colyseus.js";
 import { InputState, MAP_H, MAP_W, TILE } from "../../shared/constants";
-import { CLASSES, ClassKind, DODGE, xpForLevel } from "../../shared/classes";
+import { CLASSES, ClassKind, DODGE, ENERGY, energyName, xpForLevel } from "../../shared/classes";
 import { GROUND, areaAt, isSafeZone } from "../../shared/map";
 import { moveStep } from "../../shared/movement";
 import { SPAWN_ZONES } from "../../shared/spawns";
@@ -441,18 +441,19 @@ export class TownScene extends Phaser.Scene {
   /** HUD list of every action with its key and cooldown, under the skill bar. */
   private renderActions(mine: any, cls: ClassKind, cdm: number, now: number) {
     const sp = CLASSES[cls].special, u = ULTS[cls];
-    const row = (key: string, name: string, cdMs: number, last: number, extra = "", locked = "") => {
+    const row = (key: string, name: string, cdMs: number, last: number, extra = "", locked = "", cost = 0) => {
       const left = cdMs > 0 ? Math.max(0, cdMs - (now - last)) : 0;
-      const state = locked ? "locked" : left > 0 ? "wait" : "";
-      const status = locked || (left > 0 ? `${(left / 1000).toFixed(1)}s` : extra || "ready");
+      const short = cost > mine.energy;
+      const state = locked ? "locked" : left > 0 || short ? "wait" : "";
+      const status = locked || (left > 0 ? `${(left / 1000).toFixed(1)}s` : short ? `needs ${cost}` : extra || "ready");
       const fill = left > 0 ? `<div class="cd" style="width:${(1 - left / cdMs) * 100}%"></div>` : "";
       return `<li class="${state}${key === "R" ? " ult" : ""}">${fill}<kbd>${key}</kbd><span class="n">${name}</span><span class="s">${status}</span></li>`;
     };
     const html = [
       row("Space", CLASSES[cls].projectile ? "Shoot" : "Attack", 0, 0, "3-hit combo"),
-      row("E", sp.name, sp.cooldownMs * cdm, this.lastSpecial),
-      row("R", u.name, u.cooldownMs * cdm, this.lastUlt, "", mine.powerLevel < ULT_LEVEL ? `🔒 Lv ${ULT_LEVEL}` : ""),
-      row("F", "Dodge roll", DODGE.cooldownMs, this.lastDodge),
+      row("E", sp.name, sp.cooldownMs * cdm, this.lastSpecial, "", "", ENERGY.cost.special),
+      row("R", u.name, u.cooldownMs * cdm, this.lastUlt, "", mine.powerLevel < ULT_LEVEL ? `🔒 Lv ${ULT_LEVEL}` : "", ENERGY.cost.ult),
+      row("F", "Dodge roll", DODGE.cooldownMs, this.lastDodge, "", "", ENERGY.cost.dodge),
       row("Q", "Potion", 0, 0, `×${mine.potions}`, mine.potions > 0 ? "" : "×0"),
     ].join("");
     const el = document.getElementById("actions")!;
@@ -755,8 +756,11 @@ export class TownScene extends Phaser.Scene {
       const sp = CLASSES[cls].special;
       const spCd = sp.cooldownMs * cdm;
       const left = Math.max(0, spCd - (now - this.lastSpecial));
-      (document.getElementById("skillfill") as HTMLElement).style.width = `${(1 - left / spCd) * 100}%`;
-      document.getElementById("skilltext")!.textContent = left > 0 ? `${sp.name} ${(left / 1000).toFixed(1)}s` : `${sp.name} ready [E]`;
+      // Blue bar = Stamina (Magic for the Wizard), spent by skills, the ultimate and the dodge roll
+      const fill = document.getElementById("skillfill") as HTMLElement;
+      fill.style.width = `${(mine.energy / ENERGY.max) * 100}%`;
+      fill.classList.toggle("magic", cls === "wizard");
+      document.getElementById("skilltext")!.textContent = `${energyName(cls)} ${Math.floor(mine.energy)} / ${ENERGY.max}`;
       this.renderActions(mine, cls, cdm, now);
     }
   }
