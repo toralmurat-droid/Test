@@ -38,7 +38,7 @@ Gameplay:
   - Ninja: Dash, Swift Feet, Critical Strike, Shadow Strike, Blade Storm
   - Wizard: Nova, Mana Flow, Ignite, Frost Nova (slow), Meteor
 - **Loot** (`shared/items.ts`): monsters drop gold and health potions; walk over them to pick up. Potions (max 5) heal 40% HP. Killed by a player? You drop half your gold.
-- **Regen:** every hero always regenerates a little HP, even in a fight. After 3s without damage it ramps up smoothly to full speed (much faster on the Market Square). The HP bar shows current / max HP.
+- **Regen:** HP regen comes from your **Stamina** stat: 0.1 HP/s per point in a fight, ramping up to 0.5 HP/s per point after 3s without damage, 3x on the Market Square (Knight Lv1: 1 → 5 HP/s). Gear and levels that add Stamina speed it up; the hero panel (C) shows your rate. The HP bar shows current / max HP.
 - **PvP:** players can fight each other anywhere except the cobbled **Market Square**, which is a safe zone.
 - **Monsters:** slimes and skeletons roam the outskirts outside the palisade. They chase nearby players, fight back when hit, and give XP when killed. They live in spawn zones (North Meadow, Goldenreach Farms, Mirror Pond, Southern Fields, Whispering Woods, Old Ruins), each with its own monster mix and cap. While a zone is below its cap, its timer brings back one monster every 10-20s. The HUD shows how many monsters are alive in the zone. Killing a zone's last monster shows a big "<zone> cleared!" banner to that player and a line in everyone's feed. They can't enter the square and give up the chase if pulled too far from home.
 - Monster stats live in `shared/constants.ts` (`MOBS`); zones and timers in `shared/spawns.ts` (`SPAWN_ZONES`).

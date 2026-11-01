@@ -1,8 +1,8 @@
 import { Client, Room } from "colyseus";
 import { ArraySchema, MapSchema, Schema, type } from "@colyseus/schema";
 import {
-  Dir, HIT_RADIUS, InputState, MOB_ATTACK_RANGE, MOBS, MobKind, REGEN_DELAY_MS, REGEN_PER_SEC, REGEN_RAMP_MS, COMBAT_REGEN_PER_SEC,
-  RESPAWN_MS, SAFE_REGEN_PER_SEC, TICK_RATE,
+  Dir, HIT_RADIUS, InputState, MOB_ATTACK_RANGE, MOBS, MobKind, REGEN_DELAY_MS, REGEN_RAMP_MS, regenFromStamina, SAFE_REGEN_MULT,
+  RESPAWN_MS, TICK_RATE,
 } from "../shared/constants";
 import {
   ATTACK_VARIANTS, CLASSES, ClassKind, COMBO_WINDOW_MS, DODGE, EMOTES, DASH_INVULN_MS, GUARD_REDUCTION, isClassKind, levelFromXp, PVP_KILL_XP,
@@ -275,12 +275,12 @@ export class TownRoom extends Room<TownState> {
       if (!p.rolling) p.dir = dirFromInput(p.input, p.dir);
       if (r.moving) p.emote = "";
       p.guarding = now < p.guardUntil;
-      // Regeneration: always a trickle, ramping up smoothly out of combat, fastest in the safe plaza
+      // Regeneration from Stamina: always a trickle, ramping up smoothly out of combat, fastest in the safe plaza
       if (!p.dead && p.hp > 0 && p.hp < p.maxHp) {
         const ramp = Math.min(1, Math.max(0, (now - p.lastHurt - REGEN_DELAY_MS) / REGEN_RAMP_MS));
-        const full = isSafeZone(p.x, p.y) ? SAFE_REGEN_PER_SEC : REGEN_PER_SEC;
-        const rate = COMBAT_REGEN_PER_SEC + (full - COMBAT_REGEN_PER_SEC) * ramp;
-        p.hp = Math.min(p.maxHp, p.hp + p.maxHp * rate * dt);
+        const [fight, rest] = regenFromStamina(p.sta);
+        const full = rest * (isSafeZone(p.x, p.y) ? SAFE_REGEN_MULT : 1);
+        p.hp = Math.min(p.maxHp, p.hp + (fight + (full - fight) * ramp) * dt);
       }
       // Skill tree regen works all the time, even in combat
       const treeRegen = talentBonus(p.cls, p.talents, "regen");
