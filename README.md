@@ -15,7 +15,7 @@ npm run dev
 
 Open http://localhost:5173 in two browser tabs to see the multiplayer. The game server runs on port 2567.
 
-Controls: WASD/arrows to move, Space to attack, E or Shift for your class skill, Q to drink a potion, Enter to chat.
+Controls: WASD/arrows to move, Space to attack, E or Shift for your class skill, Q to drink a potion, R for your ultimate (level 10), C for the hero menu, Enter to chat.
 
 Gameplay:
 - **Classes** (`shared/classes.ts`):
@@ -25,7 +25,10 @@ Gameplay:
 - **Combos:** each class has a 3-hit attack chain (press attack again within 0.7s). The 3rd hit is a finisher: Knight wide slam, Ninja lunge, Wizard big fireball. Tuned in `combo` in `shared/classes.ts`.
 - **Attack variety:** normal hits pick 1 of 4 attack moves at random (never the same twice in a row).
 - **Emotes:** type /wave /cheer /laugh /sit /sleep in chat. Heroes also fidget when standing still.
-- **Levels:** XP from monsters and PvP kills. Each level adds HP and damage and fully heals you.
+- **Levels, stats and powers** (`shared/powers.ts`): XP raises your level (max 20). Each level auto-adds 5 points to **Stamina** (max HP), **Strength** (Knight/Ninja attack) and **Magic** (skills, cooldowns, Wizard fireballs), split by class. Powers unlock at levels 1, 3, 5, 8 and 10 (the level 10 one is an ultimate on **R**). Press **C** for the hero menu; it also pops up on level-up.
+  - Knight: Shield, Iron Skin, Cleave, Second Wind, Earthquake (stun)
+  - Ninja: Dash, Swift Feet, Critical Strike, Shadow Strike, Blade Storm
+  - Wizard: Nova, Mana Flow, Ignite, Frost Nova (slow), Meteor
 - **Loot** (`shared/items.ts`): monsters drop gold and health potions; walk over them to pick up. Potions (max 5) heal 40% HP. Killed by a player? You drop half your gold.
 - **Regen:** HP regenerates after 5s without taking damage, much faster on the Market Square.
 - **PvP:** players can fight each other anywhere except the cobbled **Market Square**, which is a safe zone.

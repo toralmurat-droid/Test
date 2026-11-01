@@ -5,8 +5,12 @@ import {
   RESPAWN_MS, SAFE_REGEN_PER_SEC, TICK_RATE,
 } from "../shared/constants";
 import {
-  ATTACK_VARIANTS, CLASSES, ClassKind, COMBO_WINDOW_MS, EMOTES, damageFor, DASH_INVULN_MS, GUARD_REDUCTION, isClassKind, levelFromXp, maxHpFor, PVP_KILL_XP,
+  ATTACK_VARIANTS, CLASSES, ClassKind, COMBO_WINDOW_MS, EMOTES, DASH_INVULN_MS, GUARD_REDUCTION, isClassKind, levelFromXp, PVP_KILL_XP,
 } from "../shared/classes";
+import {
+  attackMult, cooldownMult, CRIT, FROST, hasPower, heroSpeed, IGNITE, IRONSKIN_REDUCTION, magicMult, maxHpFromStats,
+  SECOND_WIND, SHADOW_STRIKE_DAMAGE, SLOW_MOB, statsFor, ULT_LEVEL, ULTS,
+} from "../shared/powers";
 import {
   ITEM_LIFETIME_MS, ItemKind, LOOT, MAX_POTIONS, PICKUP_RADIUS, POTION_COOLDOWN_MS, POTION_HEAL, PVP_GOLD_DROP,
 } from "../shared/items";
@@ -34,6 +38,12 @@ export class Player extends Schema {
   @type("number") gold = 0;
   @type("number") potions = 0;
   @type("number") seq = 0; // last processed input sequence (for client reconciliation)
+  // Stats, auto-allocated on level up (see shared/powers.ts)
+  @type("number") sta = 0;
+  @type("number") str = 0;
+  @type("number") mag = 0;
+  @type("boolean") stunned = false;
+  @type("boolean") slowed = false;
 
   input: InputState = { up: false, down: false, left: false, right: false };
   lastAttack = 0;
@@ -43,7 +53,11 @@ export class Player extends Schema {
   lastHurt = 0;
   lastPotion = 0;
   attackReadyAt = 0;
-  lastVariant = -1; // when the next attack input is accepted
+  lastVariant = -1;
+  stunUntil = 0;
+  slowUntil = 0;
+  lastUlt = -Infinity;
+  secondWindAt = 0; // earliest time Second Wind can trigger again
 }
 
 export class Mob extends Schema {
@@ -55,7 +69,11 @@ export class Mob extends Schema {
   @type("number") hp = 0;
   @type("number") maxHp = 0;
   @type("boolean") dead = false;
+  @type("boolean") stunned = false;
+  @type("boolean") slowed = false;
 
+  stunUntil = 0;
+  slowUntil = 0;
   zone = 0; // index into SPAWN_ZONES
   homeX = 0;
   homeY = 0;
@@ -73,6 +91,7 @@ export class Projectile extends Schema {
   @type("number") size = 1; // visual scale (combo finisher fireballs are bigger)
 
   knockback = 1;
+  ignite = false; // wizard Ignite power: splash on impact
   traveled = 0;
   speed = 0;
   range = 0;
@@ -106,6 +125,9 @@ export class TownState extends Schema {
   @type({ map: Item }) items = new MapSchema<Item>();
   @type({ map: Zone }) zones = new MapSchema<Zone>();
 }
+
+/** Extra effects of a hit. */
+interface HitOpts { kb?: number; stunMs?: number; slowMs?: number; crit?: boolean }
 
 const COLORS = [0xe74c3c, 0x3498db, 0x2ecc71, 0xf1c40f, 0x9b59b6, 0xe67e22, 0x1abc9c, 0xecf0f1];
 const STILL: InputState = { up: false, down: false, left: false, right: false };
@@ -157,6 +179,7 @@ export class TownRoom extends Room<TownState> {
 
     this.onMessage("attack", (client) => this.playerAttack(client.sessionId));
     this.onMessage("special", (client) => this.playerSpecial(client.sessionId));
+    this.onMessage("ult", (client) => this.playerUlt(client.sessionId));
     this.onMessage("potion", (client) => this.drinkPotion(client.sessionId));
 
     this.onMessage("chat", (client, text: string) => {
@@ -177,7 +200,8 @@ export class TownRoom extends Room<TownState> {
     p.name = String(options?.name ?? "").slice(0, 16).trim() || `Hero${Math.floor(Math.random() * 1000)}`;
     p.color = typeof options?.color === "number" ? options.color : COLORS[Math.floor(Math.random() * COLORS.length)];
     p.cls = isClassKind(options?.cls) ? options.cls : "knight";
-    p.hp = p.maxHp = maxHpFor(p.cls, 1);
+    this.applyStats(p);
+    p.hp = p.maxHp;
     const s = randomSpawn();
     p.x = s.x; p.y = s.y;
     this.state.players.set(client.sessionId, p);
@@ -208,8 +232,12 @@ export class TownRoom extends Room<TownState> {
     const dt = dtMs / 1000;
     const now = Date.now();
     this.state.players.forEach((p, pid) => {
+      p.stunned = now < p.stunUntil;
+      p.slowed = now < p.slowUntil;
       if (p.dead) { p.moving = false; return; }
-      const r = moveStep(p.x, p.y, p.input, dt, CLASSES[p.cls].speed);
+      const r = p.stunned
+        ? { x: p.x, y: p.y, moving: false }
+        : moveStep(p.x, p.y, p.input, dt, heroSpeed(p.cls, p.level, p.slowed));
       p.x = r.x; p.y = r.y; p.moving = r.moving;
       p.dir = dirFromInput(p.input, p.dir);
       if (r.moving) p.emote = "";
@@ -251,6 +279,9 @@ export class TownRoom extends Room<TownState> {
   private updateMob(m: Mob, id: string, dt: number, now: number) {
     if (m.dead) { m.moving = false; return; }
     const def = MOBS[m.kind];
+    m.stunned = now < m.stunUntil;
+    m.slowed = now < m.slowUntil;
+    if (m.stunned) { m.moving = false; return; }
 
     // Drop target if it died, left, went into the safe zone, or pulled us too far from home
     let t = m.target ? this.state.players.get(m.target) : undefined;
@@ -293,7 +324,7 @@ export class TownRoom extends Room<TownState> {
       input = m.wander;
     }
 
-    const speed = t ? def.speed : def.speed * 0.5;
+    const speed = (t ? def.speed : def.speed * 0.5) * (m.slowed ? SLOW_MOB : 1);
     const r = moveStep(m.x, m.y, input, dt, speed);
     if (!isSafeZone(r.x, r.y)) { m.x = r.x; m.y = r.y; }
     m.moving = r.moving;
@@ -312,14 +343,20 @@ export class TownRoom extends Room<TownState> {
       if (isSolidAt(s.x, s.y) || s.traveled >= s.range) return this.explode(s, id);
       const hit = this.firstTargetAt(s.x, s.y, s.radius + HIT_RADIUS, s.owner);
       if (hit) {
-        this.hitTarget(s.owner, hit, s.damage, DIR_OFFSET[s.dir], s.knockback);
-        return this.explode(s, id);
+        this.hitTarget(s.owner, hit, s.damage, DIR_OFFSET[s.dir], { kb: s.knockback });
+        return this.explode(s, id, hit);
       }
     }
   }
 
-  private explode(s: Projectile, id: string) {
-    this.broadcast("boom", { x: s.x, y: s.y });
+  private explode(s: Projectile, id: string, directHit = "") {
+    this.broadcast("boom", { x: s.x, y: s.y, r: s.ignite ? IGNITE.radius : 0 });
+    if (s.ignite) {
+      const splash = Math.max(1, Math.round(s.damage * IGNITE.splash));
+      for (const tid of this.targetsAround(s.x, s.y, IGNITE.radius, s.owner)) {
+        if (tid !== directHit) this.hitTarget(s.owner, tid, splash, this.pushFrom(s.x, s.y, tid));
+      }
+    }
     this.state.projectiles.delete(id);
   }
 
@@ -390,12 +427,20 @@ export class TownRoom extends Room<TownState> {
     });
   }
 
+  /** Direction to push `targetId` away from (x,y). */
+  private pushFrom(x: number, y: number, targetId: string): [number, number] {
+    const t = this.state.players.get(targetId) ?? this.state.mobs.get(targetId)!;
+    const dx = t.x - x, dy = t.y - y;
+    return Math.abs(dx) > Math.abs(dy) ? [Math.sign(dx), 0] : [0, Math.sign(dy) || 1];
+  }
+
   /** A player (`attackerId`) hits a player or mob. */
-  private hitTarget(attackerId: string, targetId: string, dmg: number, push: [number, number], kb = 1) {
+  private hitTarget(attackerId: string, targetId: string, dmg: number, push: [number, number], opts: HitOpts = {}) {
     const a = this.state.players.get(attackerId);
     const name = a?.name ?? "???";
+    const kb = opts.kb ?? 1;
     if (this.state.players.has(targetId)) {
-      if (this.damagePlayer(targetId, dmg, name, push, kb) && a) {
+      if (this.damagePlayer(targetId, dmg, name, push, kb, opts) && a) {
         const victim = this.state.players.get(targetId)!;
         a.kills++;
         this.grantXp(attackerId, PVP_KILL_XP, victim);
@@ -409,9 +454,12 @@ export class TownRoom extends Room<TownState> {
     const def = MOBS[m.kind];
     m.hp = Math.max(0, m.hp - dmg);
     m.target = attackerId; // fight back
+    const now = Date.now();
+    if (opts.stunMs) m.stunUntil = Math.max(m.stunUntil, now + opts.stunMs);
+    if (opts.slowMs) m.slowUntil = Math.max(m.slowUntil, now + opts.slowMs);
     const k = moveStep(m.x, m.y, pushInput(push), 0.1 * kb);
     if (!isSafeZone(k.x, k.y)) { m.x = k.x; m.y = k.y; }
-    this.broadcast("hit", { id: targetId, dmg });
+    this.broadcast("hit", { id: targetId, dmg, crit: !!opts.crit });
     if (m.hp > 0) return;
     m.dead = true;
     this.grantXp(attackerId, def.xp, m);
@@ -427,22 +475,35 @@ export class TownRoom extends Room<TownState> {
     this.clients.find((c) => c.sessionId === id)?.send("xp", { amount, x: at.x, y: at.y });
     const lvl = levelFromXp(p.xp);
     if (lvl > p.level) {
+      const from = p.level;
       p.level = lvl;
-      const newMax = maxHpFor(p.cls, lvl);
-      p.hp += newMax - p.maxHp;
-      p.maxHp = newMax;
+      this.applyStats(p); // stat points are allocated automatically by class
       if (!p.dead) p.hp = p.maxHp; // full heal on level up
-      this.broadcast("levelup", { id, level: lvl });
+      this.broadcast("levelup", { id, level: lvl, from });
     }
   }
 
+  /** Recompute stats and max HP from class + level. */
+  private applyStats(p: Player) {
+    const st = statsFor(p.cls, p.level);
+    p.sta = st.sta; p.str = st.str; p.mag = st.mag;
+    const newMax = maxHpFromStats(p.cls, st);
+    p.hp = Math.min(newMax, p.hp + Math.max(0, newMax - p.maxHp));
+    p.maxHp = newMax;
+  }
+
+  private stats(p: Player) { return { sta: p.sta, str: p.str, mag: p.mag }; }
+
   /** Applies damage to a player. Returns true if it killed them. */
-  private damagePlayer(tid: string, dmg: number, byName: string, push: [number, number], kbMul = 1): boolean {
+  private damagePlayer(tid: string, dmg: number, byName: string, push: [number, number], kbMul = 1, opts: HitOpts = {}): boolean {
     const t = this.state.players.get(tid);
     const now = Date.now();
     if (!t || t.dead || isSafeZone(t.x, t.y) || now < t.invulnUntil) return false;
     const guarded = now < t.guardUntil;
     if (guarded) dmg = Math.max(1, Math.round(dmg * (1 - GUARD_REDUCTION)));
+    if (hasPower(t.cls, t.level, "ironskin")) dmg = Math.max(1, Math.round(dmg * (1 - IRONSKIN_REDUCTION)));
+    if (opts.stunMs && !guarded) t.stunUntil = Math.max(t.stunUntil, now + opts.stunMs);
+    if (opts.slowMs) t.slowUntil = Math.max(t.slowUntil, now + opts.slowMs);
     t.hp = Math.max(0, t.hp - dmg);
     t.lastHurt = now;
     t.emote = "";
@@ -450,7 +511,15 @@ export class TownRoom extends Room<TownState> {
       const kb = moveStep(t.x, t.y, pushInput(push), 0.12 * kbMul);
       t.x = kb.x; t.y = kb.y;
     }
-    this.broadcast("hit", { id: tid, dmg, blocked: guarded });
+    this.broadcast("hit", { id: tid, dmg, blocked: guarded, crit: !!opts.crit });
+    // Knight Second Wind: an emergency heal when HP drops low
+    if (t.hp > 0 && t.hp < t.maxHp * SECOND_WIND.threshold && hasPower(t.cls, t.level, "secondwind") && now >= t.secondWindAt) {
+      t.secondWindAt = now + SECOND_WIND.cooldownMs;
+      const heal = Math.round(t.maxHp * SECOND_WIND.heal);
+      t.hp = Math.min(t.maxHp, t.hp + heal);
+      this.broadcast("heal", { id: tid, amount: heal });
+      this.broadcast("power", { id: tid, name: "Second Wind" });
+    }
     if (t.hp > 0) return false;
     t.dead = true;
     t.guardUntil = 0; t.guarding = false;
@@ -466,7 +535,7 @@ export class TownRoom extends Room<TownState> {
   private playerAttack(id: string) {
     const a = this.state.players.get(id);
     const now = Date.now();
-    if (!a || a.dead) return;
+    if (!a || a.dead || a.stunned) return;
     const def = CLASSES[a.cls];
     if (now < a.attackReadyAt) return;
     // Chain into the next combo hit if pressed soon enough after the last one, else restart
@@ -476,7 +545,9 @@ export class TownRoom extends Room<TownState> {
     a.lastAttack = now;
     a.attackReadyAt = now + (hit.cooldownMs ?? def.attackCooldownMs);
     const off = DIR_OFFSET[a.dir];
-    const dmg = Math.round(damageFor(def.damage, a.level) * hit.damage);
+    let dmg = Math.round(def.damage * attackMult(a.cls, this.stats(a)) * hit.damage);
+    const crit = hasPower(a.cls, a.level, "crit") && Math.random() < CRIT.chance;
+    if (crit) dmg = Math.round(dmg * CRIT.mult);
     a.emote = "";
     let variant = 0;
     if (step < 2) {
@@ -505,21 +576,27 @@ export class TownRoom extends Room<TownState> {
       s.dir = a.dir; s.owner = id; s.size = scale;
       s.speed = def.projectile.speed; s.range = def.projectile.range; s.radius = def.projectile.radius * scale;
       s.damage = dmg; s.knockback = hit.knockback;
+      s.ignite = hasPower(a.cls, a.level, "ignite");
       this.state.projectiles.set(`s${++this.shotSeq}`, s);
       return;
     }
 
     const reach = hit.range ?? def.attackRange;
+    // Knight Cleave: the finisher hits all around instead of only in front
+    if (step === 2 && hasPower(a.cls, a.level, "cleave")) {
+      for (const tid of this.targetsAround(a.x, a.y, reach, id)) this.hitTarget(id, tid, dmg, this.pushFrom(a.x, a.y, tid), { kb: hit.knockback, crit });
+      return;
+    }
     const hx = a.x + off[0] * 12, hy = a.y + off[1] * 12;
-    for (const tid of this.targetsAround(hx, hy, reach, id)) this.hitTarget(id, tid, dmg, off, hit.knockback);
+    for (const tid of this.targetsAround(hx, hy, reach, id)) this.hitTarget(id, tid, dmg, off, { kb: hit.knockback, crit });
   }
 
   private playerSpecial(id: string) {
     const a = this.state.players.get(id);
     const now = Date.now();
-    if (!a || a.dead) return;
+    if (!a || a.dead || a.stunned) return;
     const sp = CLASSES[a.cls].special;
-    if (now - a.lastSpecial < sp.cooldownMs) return;
+    if (now - a.lastSpecial < sp.cooldownMs * cooldownMult(a.cls, this.stats(a), a.level)) return;
     a.lastSpecial = now;
     a.emote = "";
 
@@ -533,28 +610,61 @@ export class TownRoom extends Room<TownState> {
         const fromX = a.x, fromY = a.y;
         const dist = sp.distance ?? 56;
         const step = pushInput(DIR_OFFSET[a.dir]);
+        const shadow = hasPower(a.cls, a.level, "shadowstrike");
+        const cut = new Set<string>();
         // Move in 4px steps so walls stop the dash instead of being skipped
         for (let moved = 0; moved < dist; moved += 4) {
           const r = moveStep(a.x, a.y, step, 1, 4);
           if (r.x === a.x && r.y === a.y) break;
           a.x = r.x; a.y = r.y;
+          if (shadow) for (const tid of this.targetsAround(a.x, a.y, 12, id)) cut.add(tid);
         }
+        // Ninja Shadow Strike: cut every enemy passed through
+        const sdmg = Math.round(CLASSES[a.cls].damage * attackMult(a.cls, this.stats(a)) * SHADOW_STRIKE_DAMAGE);
+        for (const tid of cut) this.hitTarget(id, tid, sdmg, DIR_OFFSET[a.dir], { kb: 0.5 });
         a.invulnUntil = now + DASH_INVULN_MS;
         this.broadcast("special", { id, kind: sp.kind, fromX, fromY, x: a.x, y: a.y });
         break;
       }
       case "nova": {
         const r = sp.radius ?? 38;
-        const dmg = damageFor(sp.damage ?? 30, a.level);
-        this.broadcast("special", { id, kind: sp.kind, x: a.x, y: a.y, r });
+        const dmg = Math.round((sp.damage ?? 30) * magicMult(a.cls, this.stats(a)));
+        const frost = hasPower(a.cls, a.level, "frost");
+        this.broadcast("special", { id, kind: sp.kind, x: a.x, y: a.y, r, frost });
         for (const tid of this.targetsAround(a.x, a.y, r, id)) {
-          const t = this.state.players.get(tid) ?? this.state.mobs.get(tid)!;
-          const dx = t.x - a.x, dy = t.y - a.y;
-          const push: [number, number] = Math.abs(dx) > Math.abs(dy) ? [Math.sign(dx), 0] : [0, Math.sign(dy) || 1];
-          this.hitTarget(id, tid, dmg, push);
+          this.hitTarget(id, tid, dmg, this.pushFrom(a.x, a.y, tid), frost ? { slowMs: FROST.durationMs } : {});
         }
         break;
       }
+    }
+  }
+
+  /** Level 10 ultimate on R. */
+  private playerUlt(id: string) {
+    const a = this.state.players.get(id);
+    const now = Date.now();
+    if (!a || a.dead || a.stunned || a.level < ULT_LEVEL) return;
+    const u = ULTS[a.cls];
+    if (now - a.lastUlt < u.cooldownMs * cooldownMult(a.cls, this.stats(a), a.level)) return;
+    a.lastUlt = now;
+    a.emote = "";
+    const dmg = Math.round(u.damage * magicMult(a.cls, this.stats(a)));
+    const blast = (x: number, y: number, opts: HitOpts = {}) => {
+      for (const tid of this.targetsAround(x, y, u.radius, id)) this.hitTarget(id, tid, dmg, this.pushFrom(x, y, tid), opts);
+    };
+    if (a.cls === "knight") {
+      this.broadcast("ult", { id, kind: "earthquake", x: a.x, y: a.y, r: u.radius });
+      blast(a.x, a.y, { stunMs: u.stunMs, kb: 0.5 });
+    } else if (a.cls === "ninja") {
+      this.broadcast("ult", { id, kind: "bladestorm", x: a.x, y: a.y, r: u.radius, hits: u.hits });
+      for (let i = 0; i < (u.hits ?? 3); i++) {
+        this.clock.setTimeout(() => { if (!a.dead) blast(a.x, a.y, { kb: 0.4 }); }, i * 200);
+      }
+    } else {
+      const off = DIR_OFFSET[a.dir];
+      const x = a.x + off[0] * (u.ahead ?? 56), y = a.y + off[1] * (u.ahead ?? 56);
+      this.broadcast("ult", { id, kind: "meteor", x, y, r: u.radius, delay: u.delayMs });
+      this.clock.setTimeout(() => blast(x, y, { kb: 2 }), u.delayMs ?? 600);
     }
   }
 }

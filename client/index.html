@@ -17,7 +17,7 @@
       <p id="classinfo" class="help"></p>
       <div id="colors"></div>
       <button id="play">Play</button>
-      <p class="help">Move: WASD / Arrows &nbsp;·&nbsp; Attack: Space &nbsp;·&nbsp; Skill: E / Shift &nbsp;·&nbsp; Potion: Q &nbsp;·&nbsp; Chat: Enter<br>Emotes: /wave /cheer /laugh /sit /sleep</p>
+      <p class="help">Move: WASD / Arrows &nbsp;·&nbsp; Attack: Space &nbsp;·&nbsp; Skill: E / Shift &nbsp;·&nbsp; Ultimate (Lv 10): R &nbsp;·&nbsp; Hero menu: C &nbsp;·&nbsp; Potion: Q &nbsp;·&nbsp; Chat: Enter<br>Emotes: /wave /cheer /laugh /sit /sleep</p>
       <p id="status"></p>
     </div>
   </div>
@@ -28,7 +28,16 @@
     <div id="mapbox"><canvas id="minimap"></canvas><div id="location"></div></div>
     <div id="area"></div>
     <div id="skill"><div id="skillfill"></div><span id="skilltext"></span></div>
+    <div id="ult" hidden><div id="ultfill"></div><span id="ulttext"></span></div>
     <div id="zone"></div>
+    <div id="hero" hidden>
+      <div id="herobanner"></div>
+      <h2 id="herotitle"></h2>
+      <div id="herostats"></div>
+      <h3>Powers</h3>
+      <ul id="heropowers"></ul>
+      <p class="help">C to close</p>
+    </div>
     <div id="feed"></div>
     <div id="chatlog"></div>
     <input id="chat" maxlength="120" placeholder="Press Enter to chat" autocomplete="off" />

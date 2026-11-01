@@ -58,7 +58,7 @@ export const CLASSES: Record<ClassKind, ClassDef> = {
     blurb: "Tanky sword. Shield blocks 70% damage and knockback.",
   },
   ninja: {
-    name: "Ninja", maxHp: 85, speed: 112, damage: 14, attackCooldownMs: 260, attackRange: 18,
+    name: "Ninja", maxHp: 85, speed: 112, damage: 12, attackCooldownMs: 260, attackRange: 18,
     special: { kind: "dash", name: "Dash", cooldownMs: 2500, distance: 56 },
     combo: [
       { damage: 1, knockback: 0.5 },
@@ -68,7 +68,7 @@ export const CLASSES: Record<ClassKind, ClassDef> = {
     blurb: "Fast, rapid strikes. Dash through enemies, briefly untouchable.",
   },
   wizard: {
-    name: "Wizard", maxHp: 95, speed: 86, damage: 18, attackCooldownMs: 600, attackRange: 0,
+    name: "Wizard", maxHp: 95, speed: 86, damage: 22, attackCooldownMs: 550, attackRange: 0,
     projectile: { speed: 210, range: 150, radius: 7 },
     special: { kind: "nova", name: "Nova", cooldownMs: 7000, damage: 30, radius: 38 },
     combo: [
@@ -108,13 +108,7 @@ export function levelFromXp(xp: number): number {
   return l;
 }
 
-/** Each level adds 8% max HP and 6% damage. */
-export function maxHpFor(cls: ClassKind, level: number): number {
-  return Math.round(CLASSES[cls].maxHp * (1 + 0.08 * (level - 1)));
-}
-export function damageFor(base: number, level: number): number {
-  return Math.round(base * (1 + 0.06 * (level - 1)));
-}
+/** Level-up stats and powers live in shared/powers.ts. */
 
 export function isClassKind(v: unknown): v is ClassKind {
   return typeof v === "string" && (CLASS_KINDS as string[]).includes(v);
