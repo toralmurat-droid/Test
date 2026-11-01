@@ -5,6 +5,9 @@ import { CLASSES, ClassKind, xpForLevel } from "../../shared/classes";
 import { GROUND, areaAt, isSafeZone } from "../../shared/map";
 import { moveStep } from "../../shared/movement";
 import { SPAWN_ZONES } from "../../shared/spawns";
+import {
+  attackMult, cooldownMult, heroSpeed, magicMult, POWERS, STAT_NAMES, StatKind, statsFor, ULT_LEVEL, ULTS,
+} from "../../shared/powers";
 import { heroTexture, itemTexture, makeTileset, mobTexture } from "./textures";
 import { Minimap } from "./minimap";
 import { CHARACTERS, CHAR_ORIGIN, CharacterName, createArtAnims, playCharAnim, preloadArt } from "./artAssets";
@@ -22,6 +25,7 @@ interface Entity {
   shield?: Phaser.GameObjects.Graphics;
   tx: number; ty: number; // server target position
   state: any;
+  statusTint?: boolean;
   idleSince?: number; // local time the hero stopped moving, for idle fidgets
   nextFidget?: number;
 }
@@ -46,6 +50,8 @@ export class TownScene extends Phaser.Scene {
   private shots = new Map<string, { g: Phaser.GameObjects.Arc; tx: number; ty: number }>();
   private items = new Map<string, Phaser.GameObjects.Image>();
   private lastSpecial = -Infinity; // local clock (ms) of my last special, for the cooldown bar
+  private lastUlt = -Infinity;
+  private heroTimer?: number;
 
   constructor(private opts: { name: string; color: number; cls: ClassKind }) {
     super("town");
@@ -72,12 +78,14 @@ export class TownScene extends Phaser.Scene {
     cam.roundPixels = true;
 
     // Keys without capture so typing in chat still works
-    this.keys = this.input.keyboard!.addKeys("W,A,S,D,UP,DOWN,LEFT,RIGHT,SPACE,E,SHIFT,Q", false) as any;
+    this.keys = this.input.keyboard!.addKeys("W,A,S,D,UP,DOWN,LEFT,RIGHT,SPACE,E,SHIFT,Q,R,C", false) as any;
     this.input.keyboard!.on("keydown-SPACE", () => { if (!this.chatting()) this.room?.send("attack"); });
     const special = () => { if (!this.chatting()) this.room?.send("special"); };
     this.input.keyboard!.on("keydown-E", special);
     this.input.keyboard!.on("keydown-SHIFT", special);
     this.input.keyboard!.on("keydown-Q", () => { if (!this.chatting()) this.room?.send("potion"); });
+    this.input.keyboard!.on("keydown-R", () => { if (!this.chatting()) this.room?.send("ult"); });
+    this.input.keyboard!.on("keydown-C", () => { if (!this.chatting()) this.toggleHeroMenu(); });
     this.setupChat();
 
     const proto = location.protocol === "https:" ? "wss" : "ws";
@@ -147,16 +155,25 @@ export class TownScene extends Phaser.Scene {
 
     this.room.onMessage("swing", ({ id, step, variant }) => this.showSwing(id, step ?? 0, variant ?? 0));
     this.room.onMessage("special", (msg) => this.showSpecial(msg));
-    this.room.onMessage("boom", ({ x, y }) => this.burst(x, y, 6, 0xff9f1c, 200));
-    this.room.onMessage("levelup", ({ id, level }) => {
+    this.room.onMessage("boom", ({ x, y, r }) => this.burst(x, y, r ? r / 1.8 : 6, 0xff9f1c, r ? 300 : 200));
+    this.room.onMessage("ult", (msg) => this.showUlt(msg));
+    this.room.onMessage("power", ({ id, name }) => {
+      const e = this.entities.get(id);
+      if (e) this.floatText(e.sprite.x, e.sprite.y - 24, name, "#7cfc00");
+    });
+    this.room.onMessage("levelup", ({ id, level, from }) => {
       const e = this.entities.get(id);
       if (e) this.floatText(e.sprite.x, e.sprite.y - 20, `LEVEL ${level}!`, "#7cfc00");
-      if (id === this.me) this.feed(`You reached level ${level}`);
+      if (id === this.me) {
+        this.feed(`You reached level ${level}`);
+        this.showHeroMenu(from ?? level - 1);
+      }
     });
-    this.room.onMessage("hit", ({ id, dmg, blocked }) => {
+    this.room.onMessage("hit", ({ id, dmg, blocked, crit }) => {
       const e = this.entities.get(id);
       if (!e) return;
-      this.floatText(e.sprite.x, e.sprite.y - 14, `-${dmg}`, blocked ? "#9ad1ff" : id === this.me ? "#ff5d5d" : "#ffffff");
+      this.floatText(e.sprite.x, e.sprite.y - 14, crit ? `CRIT -${dmg}` : `-${dmg}`,
+        blocked ? "#9ad1ff" : crit ? "#ffd60a" : id === this.me ? "#ff5d5d" : "#ffffff");
       e.sprite.setTintFill(0xffffff);
       this.time.delayedCall(80, () => e.sprite.clearTint());
       if (e.hero && !e.state.dead) playCharAnim(e.sprite, e.hero, "hit", e.state.dir);
@@ -263,12 +280,80 @@ export class TownScene extends Phaser.Scene {
     this.tweens.add({ targets: g, scale: 1.8, alpha: 0, duration: ms, onComplete: () => g.destroy() });
   }
 
-  private showSpecial(msg: { id: string; kind: string; x?: number; y?: number; fromX?: number; fromY?: number; r?: number }) {
+  // ---- Hero menu (stats + powers) -----------------------------------------
+
+  private toggleHeroMenu() {
+    const el = document.getElementById("hero")!;
+    if (el.hidden) this.showHeroMenu(); else el.hidden = true;
+  }
+
+  /** Opens the hero menu. After a level-up (`from` = previous level) it highlights the gains and auto-closes. */
+  private showHeroMenu(from?: number) {
+    const mine = this.entities.get(this.me)?.state;
+    if (!mine) return;
+    const cls = mine.cls as ClassKind, lvl = mine.level as number;
+    const st = statsFor(cls, lvl);
+    const prev = from !== undefined ? statsFor(cls, from) : undefined;
+    const el = document.getElementById("hero")!;
+    document.getElementById("herobanner")!.textContent = from !== undefined ? `⬆ Level ${lvl}! Points added automatically.` : "";
+    document.getElementById("herotitle")!.textContent = `${mine.name} · Lv ${lvl} ${CLASSES[cls].name}`;
+    const notes: Record<StatKind, string> = {
+      sta: `${mine.maxHp} max HP`,
+      str: cls === "wizard" ? "+2 HP per point" : `attack ×${attackMult(cls, st).toFixed(2)}`,
+      mag: `${cls === "wizard" ? `fireball ×${attackMult(cls, st).toFixed(2)}, ` : ""}skills ×${magicMult(cls, st).toFixed(2)}, ` +
+        `cooldowns −${Math.round((1 - cooldownMult(cls, st, lvl)) * 100)}%`,
+    };
+    document.getElementById("herostats")!.innerHTML = (["sta", "str", "mag"] as StatKind[]).map((k) => {
+      const gain = prev ? st[k] - prev[k] : 0;
+      return `<span>${STAT_NAMES[k]}</span><b>${st[k]}${gain ? ` <span class="gain">+${gain}</span>` : ""}</b><span class="note">${notes[k]}</span>`;
+    }).join("");
+    document.getElementById("heropowers")!.innerHTML = POWERS[cls].map((pw) => {
+      const state = lvl < pw.level ? "locked" : from !== undefined && pw.level > from ? "new" : "";
+      const tag = state === "locked" ? `🔒 Lv ${pw.level}` : state === "new" ? "NEW!" : `Lv ${pw.level}`;
+      const key = pw.key ? ` [${pw.key}]` : "";
+      return `<li class="${state}"><b>${pw.name}${key}</b> · ${tag}<br>${pw.desc}</li>`;
+    }).join("");
+    el.hidden = false;
+    clearTimeout(this.heroTimer);
+    if (from !== undefined) this.heroTimer = window.setTimeout(() => { el.hidden = true; }, 7000);
+  }
+
+  private showUlt(msg: { id: string; kind: string; x: number; y: number; r: number; delay?: number; hits?: number }) {
+    const e = this.entities.get(msg.id);
+    if (msg.id === this.me) this.lastUlt = this.time.now;
+    if (e?.hero) playCharAnim(e.sprite, e.hero, "skill", e.state.dir);
+    if (msg.kind === "earthquake") {
+      const g = this.add.circle(msg.x, msg.y, msg.r, 0x8d6e63, 0.35).setStrokeStyle(3, 0xd7ccc8).setDepth(10000).setScale(0.2);
+      this.tweens.add({ targets: g, scale: 1, alpha: 0, duration: 450, onComplete: () => g.destroy() });
+      this.cameras.main.shake(250, 0.008);
+    } else if (msg.kind === "bladestorm") {
+      for (let i = 0; i < (msg.hits ?? 3); i++) {
+        this.time.delayedCall(i * 200, () => {
+          const x = e?.sprite.x ?? msg.x, y = (e?.sprite.y ?? msg.y) - 5;
+          const g = this.add.graphics({ x, y }).setDepth(10000);
+          g.lineStyle(2, 0xe0e0ff, 1);
+          for (let k = 0; k < 3; k++) { const a = k * 2.09 + i; g.beginPath(); g.arc(0, 0, msg.r * 0.7, a, a + 1.2); g.strokePath(); }
+          this.tweens.add({ targets: g, angle: 180, alpha: 0, duration: 200, onComplete: () => g.destroy() });
+        });
+      }
+    } else if (msg.kind === "meteor") {
+      // Warning circle, then the impact
+      const warn = this.add.circle(msg.x, msg.y, msg.r, 0xff3d00, 0.15).setStrokeStyle(1, 0xff6d00).setDepth(9000);
+      this.time.delayedCall(msg.delay ?? 600, () => {
+        warn.destroy();
+        this.burst(msg.x, msg.y, msg.r / 1.5, 0xff6d00, 450);
+        this.cameras.main.shake(200, 0.006);
+      });
+    }
+  }
+
+  private showSpecial(msg: { id: string; kind: string; x?: number; y?: number; fromX?: number; fromY?: number; r?: number; frost?: boolean }) {
     const e = this.entities.get(msg.id);
     if (msg.id === this.me) this.lastSpecial = this.time.now;
     if (e?.hero) playCharAnim(e.sprite, e.hero, "skill", e.state.dir);
     if (msg.kind === "nova") {
-      const g = this.add.circle(msg.x!, msg.y! - 4, msg.r!, 0x9b5de5, 0.25).setStrokeStyle(2, 0xc77dff).setDepth(10000).setScale(0.2);
+      const [fill, line] = msg.frost ? [0x4cc9f0, 0xa2e8ff] : [0x9b5de5, 0xc77dff];
+      const g = this.add.circle(msg.x!, msg.y! - 4, msg.r!, fill, 0.25).setStrokeStyle(2, line).setDepth(10000).setScale(0.2);
       this.tweens.add({ targets: g, scale: 1, alpha: 0, duration: 350, onComplete: () => g.destroy() });
     } else if (msg.kind === "dash") {
       // Afterimages along the dash path
@@ -338,9 +423,9 @@ export class TownScene extends Phaser.Scene {
     const now = this.time.now;
     for (const [id, e] of this.entities) {
       const p = e.state;
-      if (id === this.me && !p.dead) {
+      if (id === this.me && !p.dead && !p.stunned) {
         // Client-side prediction with the same movement code the server runs
-        const r = moveStep(e.sprite.x, e.sprite.y, this.input_, dtMs / 1000, CLASSES[p.cls as ClassKind].speed);
+        const r = moveStep(e.sprite.x, e.sprite.y, this.input_, dtMs / 1000, heroSpeed(p.cls as ClassKind, p.level, p.slowed));
         e.sprite.setPosition(r.x, r.y);
         if (!r.moving) {
           // Ease toward authoritative position while idle
@@ -381,6 +466,11 @@ export class TownScene extends Phaser.Scene {
         else e.sprite.setAlpha(p.dead ? 0.35 : 1).setAngle(p.dead ? 90 : 0);
       }
       e.sprite.setDepth(e.sprite.y);
+      // Status effects: blue for slowed, yellow flicker for stunned
+      if (!p.dead && (p.stunned || p.slowed)) {
+        e.sprite.setTint(p.stunned ? (Math.floor(now / 120) % 2 ? 0xfff176 : 0xffffff) : 0x90caf9);
+        e.statusTint = true;
+      } else if (e.statusTint) { e.sprite.clearTint(); e.statusTint = false; }
 
       const x = Math.round(e.sprite.x), y = Math.round(e.sprite.y);
       e.label?.setPosition(x, y - e.top - 2).setDepth(e.sprite.y + 1);
@@ -417,7 +507,7 @@ export class TownScene extends Phaser.Scene {
       const next = xpForLevel(mine.level + 1), cur = xpForLevel(mine.level);
       document.getElementById("stats")!.textContent =
         `${mine.dead ? "Respawning… " : safe}Lv ${mine.level} ${CLASSES[mine.cls as ClassKind].name} · ` +
-        `XP ${mine.xp - cur}/${next - cur} · Gold: ${mine.gold} · Potions [Q]: ${mine.potions} · Kills: ${mine.kills} · Online: ${online}`;
+        `XP ${mine.xp - cur}/${next - cur} · Gold ${mine.gold} · Potions ${mine.potions} · Kills ${mine.kills} · Online ${online}`;
       // Monster zone status: how many are alive and when the next one respawns
       const tx = meEnt.sprite.x / TILE, ty = meEnt.sprite.y / TILE;
       const zdef = SPAWN_ZONES.find((z) => tx >= z.x && ty >= z.y && tx < z.x + z.w && ty < z.y + z.h);
@@ -425,10 +515,21 @@ export class TownScene extends Phaser.Scene {
       document.getElementById("zone")!.textContent = zone
         ? `⚔ ${zone.name}: ${zone.alive}/${zone.cap} monsters${zone.nextIn ? ` · next in ${zone.nextIn}s` : ""}`
         : "";
-      const sp = CLASSES[mine.cls as ClassKind].special;
-      const left = Math.max(0, sp.cooldownMs - (now - this.lastSpecial));
-      (document.getElementById("skillfill") as HTMLElement).style.width = `${(1 - left / sp.cooldownMs) * 100}%`;
+      const cls = mine.cls as ClassKind;
+      const cdm = cooldownMult(cls, { sta: mine.sta, str: mine.str, mag: mine.mag }, mine.level);
+      const sp = CLASSES[cls].special;
+      const spCd = sp.cooldownMs * cdm;
+      const left = Math.max(0, spCd - (now - this.lastSpecial));
+      (document.getElementById("skillfill") as HTMLElement).style.width = `${(1 - left / spCd) * 100}%`;
       document.getElementById("skilltext")!.textContent = left > 0 ? `${sp.name} ${(left / 1000).toFixed(1)}s` : `${sp.name} ready [E]`;
+      const ultEl = document.getElementById("ult")!;
+      ultEl.hidden = mine.level < ULT_LEVEL;
+      if (!ultEl.hidden) {
+        const u = ULTS[cls], uCd = u.cooldownMs * cdm;
+        const uLeft = Math.max(0, uCd - (now - this.lastUlt));
+        (document.getElementById("ultfill") as HTMLElement).style.width = `${(1 - uLeft / uCd) * 100}%`;
+        document.getElementById("ulttext")!.textContent = uLeft > 0 ? `${u.name} ${(uLeft / 1000).toFixed(1)}s` : `${u.name} ready [R]`;
+      }
     }
   }
 }
