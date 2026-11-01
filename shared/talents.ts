@@ -1,13 +1,10 @@
 import { ClassKind } from "./classes";
-import { POWER_LEVELS } from "./powers";
+import { POWER_LEVELS, POWERS, powerNodeId } from "./powers";
 
 /**
- * Skill tree (press T). Every level after 1 gives 1 skill point. Each hero has 3 branches of 3 skills;
- * each skill has up to 3 ranks. A branch's 2nd skill needs 2 points spent in that branch, the 3rd needs 4.
- * 19 points (level 20) can't fill all 27 ranks, so players choose a build. Respec is free (out of combat).
- *
- * Powers path: the class powers (shared/powers.ts) sit at the top of the tree. The level 1 power is free; the next ones
- * become available at levels 3, 5, 8 and 10 and are learned in order for 1 skill point each (key POWER_KEY = how many).
+ * Skill tree (press T). Every level after 1 gives 1 skill point. One tree holds the class skills (E, R and the
+ * other shared/powers.ts skills) and 3 branches of passive skills (3 ranks each); see treeNodes() for the layout.
+ * Heroes start with only a basic attack. 19 points (level 20) can't fill all 32 ranks, so players choose a build. Respec is free (out of combat).
  *
  * Effects are generic so the server applies them in one place each:
  *   dmg       all damage dealt +x%          skill   skill + ultimate damage +x%
@@ -22,7 +19,6 @@ export interface TalentDef { id: string; name: string; effect: TalentEffect; per
 export interface BranchDef { name: string; color: string; talents: [TalentDef, TalentDef, TalentDef] }
 
 export const MAX_RANK = 3;
-export const TIER_POINTS = [0, 2, 4]; // points needed in the branch to unlock skill 1, 2, 3
 
 const t = (id: string, name: string, effect: TalentEffect, perRank: number): TalentDef => ({ id, name, effect, perRank });
 
@@ -73,19 +69,43 @@ const rankOf = (r: Ranks, id: string): number =>
 
 export function talentPoints(level: number): number { return Math.max(0, level - 1); }
 
-export const POWER_KEY = "_powers";
-/** How many powers past the level 1 one have been learned (0..4). */
-export const powersLearned = (r: Ranks) => rankOf(r, POWER_KEY);
-/** Level of the highest learned power (1, 3, 5, 8 or 10): pass this as `level` to hasPower(). */
-export const powerLevel = (r: Ranks) => POWER_LEVELS[Math.min(powersLearned(r), POWER_LEVELS.length - 1)];
-/** Can the next power be learned? (right level reached + a free point) */
-export function canLearnPower(cls: ClassKind, level: number, r: Ranks): boolean {
-  const n = powersLearned(r);
-  return n < POWER_LEVELS.length - 1 && level >= POWER_LEVELS[n + 1] && spentPoints(cls, r) < talentPoints(level);
+// ---- One tree: class skills and passive skills together ---------------------------------------------
+/**
+ * Each hero's tree is a 3-column grid with rows at levels 1, 3, 5, 8 and 10. The class skills (shared/powers.ts,
+ * 1 rank) and the passive skills (3 ranks) are both nodes. A node needs its row's level
+ * and at least 1 rank in the node above it in the same column. Every node rank costs 1 skill point.
+ *   column 0: branch 0 skill 1 · class skill Lv3 · branch 0 skill 2 · class skill Lv8 · branch 0 skill 3
+ *   column 1: class skill Lv1 · branch 1 skill 1 · branch 1 skill 2 · branch 1 skill 3 · ultimate Lv10
+ *   column 2: branch 2 skill 1 · branch 2 skill 2 · class skill Lv5 · branch 2 skill 3 · (empty)
+ */
+export const TREE_LEVELS = POWER_LEVELS;
+
+export interface TreeNode {
+  id: string; name: string; desc: string; level: number; col: number; row: number; max: number;
+  kind: "power" | "passive"; key?: "1" | "2"; color: string; talent?: TalentDef;
 }
 
+export function treeNodes(cls: ClassKind): TreeNode[] {
+  const b = TREES[cls], pw = POWERS[cls];
+  const passive = (bi: number, ti: number, col: number, row: number): TreeNode => {
+    const t = b[bi].talents[ti];
+    return { id: t.id, name: t.name, desc: "", level: TREE_LEVELS[row], col, row, max: MAX_RANK, kind: "passive", color: b[bi].color, talent: t };
+  };
+  const power = (pi: number, col: number, row: number): TreeNode => {
+    const p = pw[pi];
+    return { id: powerNodeId(p.id), name: p.name, desc: p.desc, level: p.level, col, row, max: 1, kind: "power", key: p.key, color: "#ffd166" };
+  };
+  return [
+    passive(0, 0, 0, 0), power(1, 0, 1), passive(0, 1, 0, 2), power(3, 0, 3), passive(0, 2, 0, 4),
+    power(0, 1, 0), passive(1, 0, 1, 1), passive(1, 1, 1, 2), passive(1, 2, 1, 3), power(4, 1, 4),
+    passive(2, 0, 2, 0), passive(2, 1, 2, 1), power(2, 2, 2), passive(2, 2, 2, 3),
+  ];
+}
+
+export const nodeRank = (_cls: ClassKind, r: Ranks, id: string): number => rankOf(r, id);
+
 export function spentPoints(cls: ClassKind, r: Ranks): number {
-  return TREES[cls].reduce((sum, b) => sum + branchPoints(b, r), 0) + powersLearned(r);
+  return treeNodes(cls).reduce((s, n) => s + rankOf(r, n.id), 0);
 }
 
 export function branchPoints(b: BranchDef, r: Ranks): number {
@@ -94,17 +114,20 @@ export function branchPoints(b: BranchDef, r: Ranks): number {
 
 export function rank(r: Ranks, id: string): number { return rankOf(r, id); }
 
-/** Can one more rank be put in talent `id`? */
-export function canLearn(cls: ClassKind, level: number, r: Ranks, id: string): boolean {
-  if (id === POWER_KEY) return canLearnPower(cls, level, r);
-  if (spentPoints(cls, r) >= talentPoints(level)) return false;
-  for (const b of TREES[cls]) {
-    const i = b.talents.findIndex((x) => x.id === id);
-    if (i < 0) continue;
-    return rankOf(r, id) < MAX_RANK && branchPoints(b, r) >= TIER_POINTS[i];
-  }
-  return false;
+export type LockReason = "" | "max" | "level" | "above" | "points";
+/** Why node `id` can't take one more rank right now ("" = it can). */
+export function lockReason(cls: ClassKind, level: number, r: Ranks, id: string): LockReason {
+  const nodes = treeNodes(cls);
+  const n = nodes.find((x) => x.id === id);
+  if (!n || nodeRank(cls, r, id) >= n.max) return "max";
+  if (level < n.level) return "level";
+  const above = nodes.find((x) => x.col === n.col && x.row === n.row - 1);
+  if (above && nodeRank(cls, r, above.id) < 1) return "above";
+  if (spentPoints(cls, r) >= talentPoints(level)) return "points";
+  return "";
 }
+
+export const canLearn = (cls: ClassKind, level: number, r: Ranks, id: string) => lockReason(cls, level, r, id) === "";
 
 /** Total bonus for an effect, in percent (e.g. 12 = +12%). */
 export function talentBonus(cls: ClassKind, r: Ranks, effect: TalentEffect): number {
