@@ -19,7 +19,7 @@ To keep a local game on the latest merged version, run `npm run live` instead of
 fast-forwards when the branch has new commits (running `npm install` if dependencies changed) and restarts the game.
 It skips an update rather than overwrite local commits or edits.
 
-Controls: WASD/arrows to move, Space to attack, E or Shift for your class skill, F to dodge roll, Q to drink a potion, R for your ultimate (level 10), C for the hero menu, T for the skill tree, Enter to chat.
+Controls: WASD/arrows to move, Space to attack, E or Shift for your class skill, F to dodge roll, Q to drink a potion, R for your ultimate (level 10), C for the hero menu, T for the skill tree, Enter to chat. The action list under the skill bar shows every action with its key and cooldown.
 
 Gameplay:
 - **Classes** (`shared/classes.ts`):
