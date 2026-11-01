@@ -6,6 +6,7 @@ import { GROUND, areaAt, isSafeZone } from "../../shared/map";
 import { moveStep } from "../../shared/movement";
 import { heroTexture, itemTexture, makeTileset, mobTexture } from "./textures";
 import { Minimap } from "./minimap";
+import { CHARACTERS, CHAR_ORIGIN, CharacterName, createArtAnims, playCharAnim, preloadArt } from "./artAssets";
 import { Ambient } from "./ambient";
 import { Details } from "./details";
 
@@ -13,14 +14,20 @@ interface Entity {
   sprite: Phaser.GameObjects.Sprite;
   label?: Phaser.GameObjects.Text;
   mob: boolean;
+  hero?: CharacterName; // set when drawn with the animated 32x32 sheets
+  top: number; // px from the feet to the top of the head, for the name label and chat bubble
   bar: Phaser.GameObjects.Graphics;
   bubble?: Phaser.GameObjects.Text;
   shield?: Phaser.GameObjects.Graphics;
   tx: number; ty: number; // server target position
   state: any;
+  idleSince?: number; // local time the hero stopped moving, for idle fidgets
+  nextFidget?: number;
 }
 
 const FRAME_BASE: Record<string, number> = { down: 0, up: 2, right: 4, left: 4 };
+const HERO_SCALE = 0.75;
+const HERO_TOP = 24 * HERO_SCALE; // drawn hero height above the feet in the 32x32 frames
 
 export class TownScene extends Phaser.Scene {
   private room!: Room;
@@ -43,8 +50,13 @@ export class TownScene extends Phaser.Scene {
     super("town");
   }
 
+  preload() {
+    preloadArt(this);
+  }
+
   async create() {
     makeTileset(this);
+    createArtAnims(this);
     const map = this.make.tilemap({ tileWidth: TILE, tileHeight: TILE, width: MAP_W, height: MAP_H });
     const tiles = map.addTilesetImage("tiles", "tiles", TILE, TILE, 0, 0)!;
     map.createBlankLayer("ground", tiles)!.putTilesAt(GROUND, 0, 0).setDepth(-2);
@@ -132,7 +144,7 @@ export class TownScene extends Phaser.Scene {
       if (e) this.floatText(e.sprite.x, e.sprite.y - 14, `+${amount}`, "#7cfc00");
     });
 
-    this.room.onMessage("swing", ({ id, step }) => this.showSwing(id, step ?? 0));
+    this.room.onMessage("swing", ({ id, step, variant }) => this.showSwing(id, step ?? 0, variant ?? 0));
     this.room.onMessage("special", (msg) => this.showSpecial(msg));
     this.room.onMessage("boom", ({ x, y }) => this.burst(x, y, 6, 0xff9f1c, 200));
     this.room.onMessage("levelup", ({ id, level }) => {
@@ -146,6 +158,7 @@ export class TownScene extends Phaser.Scene {
       this.floatText(e.sprite.x, e.sprite.y - 14, `-${dmg}`, blocked ? "#9ad1ff" : id === this.me ? "#ff5d5d" : "#ffffff");
       e.sprite.setTintFill(0xffffff);
       this.time.delayedCall(80, () => e.sprite.clearTint());
+      if (e.hero && !e.state.dead) playCharAnim(e.sprite, e.hero, "hit", e.state.dir);
       if (id === this.me) this.cameras.main.shake(100, 0.004);
     });
     this.room.onMessage("kill", ({ killer, victim }) => this.feed(`${killer} ⚔ ${victim}`));
@@ -179,18 +192,22 @@ export class TownScene extends Phaser.Scene {
   }
 
   private addEntity(id: string, p: any, mob = false) {
-    const tex = mob ? mobTexture(this, p.kind) : heroTexture(this, p.cls, p.color);
-    const sprite = this.add.sprite(p.x, p.y, tex, 0).setOrigin(0.5, 0.85);
     if (mob) {
-      this.entities.set(id, { sprite, bar: this.add.graphics(), tx: p.x, ty: p.y, state: p, mob });
+      const sprite = this.add.sprite(p.x, p.y, mobTexture(this, p.kind), 0).setOrigin(0.5, 0.85);
+      this.entities.set(id, { sprite, bar: this.add.graphics(), tx: p.x, ty: p.y, state: p, mob, top: 14 });
       return;
     }
+    // Classes with a generated sheet use it; anything else falls back to the procedural persona
+    const hero = (CHARACTERS as readonly string[]).includes(p.cls) ? (p.cls as CharacterName) : undefined;
+    const sprite = hero
+      ? this.add.sprite(p.x, p.y, hero, 0).setOrigin(CHAR_ORIGIN.x, CHAR_ORIGIN.y).setScale(HERO_SCALE)
+      : this.add.sprite(p.x, p.y, heroTexture(this, p.cls, p.color), 0).setOrigin(0.5, 0.85);
     const label = this.add.text(p.x, p.y, p.name, {
       fontFamily: "monospace", fontSize: "16px", color: id === this.me ? "#ffd166" : "#ffffff",
       stroke: "#000", strokeThickness: 3,
     }).setOrigin(0.5, 1).setScale(0.25).setResolution(2);
     const bar = this.add.graphics();
-    this.entities.set(id, { sprite, label, bar, tx: p.x, ty: p.y, state: p, mob });
+    this.entities.set(id, { sprite, label, bar, tx: p.x, ty: p.y, state: p, mob, hero, top: hero ? HERO_TOP : 14 });
     if (id === this.me) this.cameras.main.startFollow(sprite, true, 0.15, 0.15);
   }
 
@@ -201,10 +218,19 @@ export class TownScene extends Phaser.Scene {
     this.entities.delete(id);
   }
 
-  private showSwing(id: string, step: number) {
+  /** Animation for an attack: finisher = attack3, normal hits = swing1..4 (falls back to attack/attack2). */
+  private attackAnim(hero: CharacterName, step: number, variant: number): string {
+    if (step === 2) return "attack3";
+    const swing = `swing${variant + 1}`;
+    if (this.anims.exists(`${hero}_${swing}_down`)) return swing;
+    return variant % 2 ? "attack2" : "attack";
+  }
+
+  private showSwing(id: string, step: number, variant: number) {
     const e = this.entities.get(id);
     if (!e) return;
     const dir = e.state.dir as string;
+    if (e.hero) playCharAnim(e.sprite, e.hero, this.attackAnim(e.hero, step, variant), dir as any);
     const off = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] }[dir] ?? [0, 1];
     const cls = e.mob ? undefined : CLASSES[e.state.cls as ClassKind];
     const hit = cls?.combo[step];
@@ -239,6 +265,7 @@ export class TownScene extends Phaser.Scene {
   private showSpecial(msg: { id: string; kind: string; x?: number; y?: number; fromX?: number; fromY?: number; r?: number }) {
     const e = this.entities.get(msg.id);
     if (msg.id === this.me) this.lastSpecial = this.time.now;
+    if (e?.hero) playCharAnim(e.sprite, e.hero, "skill", e.state.dir);
     if (msg.kind === "nova") {
       const g = this.add.circle(msg.x!, msg.y! - 4, msg.r!, 0x9b5de5, 0.25).setStrokeStyle(2, 0xc77dff).setDepth(10000).setScale(0.2);
       this.tweens.add({ targets: g, scale: 1, alpha: 0, duration: 350, onComplete: () => g.destroy() });
@@ -325,22 +352,44 @@ export class TownScene extends Phaser.Scene {
       }
 
       const moving = id === this.me ? (this.input_.up || this.input_.down || this.input_.left || this.input_.right) : p.moving;
-      const step = moving ? Math.floor(now / 150) % 2 : 0;
-      e.sprite.setFrame(FRAME_BASE[p.dir] + step);
-      e.sprite.setFlipX(p.dir === "left");
-      if (e.mob) e.sprite.setVisible(!p.dead);
-      else e.sprite.setAlpha(p.dead ? 0.35 : 1).setAngle(p.dead ? 90 : 0);
+      if (e.hero) {
+        // Let one-shot attack/hit/skill animations finish before going back to walk/idle
+        const key = e.sprite.anims.currentAnim?.key ?? "";
+        const oneShot = e.sprite.anims.isPlaying && /_(attack\d?|swing\d|hit|skill|idle[23])_/.test(key);
+        if (moving || p.dead) e.idleSince = undefined;
+        else e.idleSince ??= now;
+        if (p.dead) {
+          if (!key.includes("_ko_")) playCharAnim(e.sprite, e.hero, "ko", p.dir);
+        } else if (!oneShot) {
+          if (!moving && p.emote && this.anims.exists(`${e.hero}_${p.emote}_down`)) {
+            playCharAnim(e.sprite, e.hero, p.emote, p.dir);
+          } else if (!moving && e.idleSince !== undefined && now - e.idleSince > 4000 && now > (e.nextFidget ?? 0)) {
+            // Standing still for a while: an occasional fidget (look around / weapon flourish)
+            e.nextFidget = now + 3000 + Math.random() * 4000;
+            playCharAnim(e.sprite, e.hero, Math.random() < 0.5 ? "idle2" : "idle3", p.dir);
+          } else {
+            playCharAnim(e.sprite, e.hero, moving ? "walk" : "idle", p.dir);
+          }
+        }
+        e.sprite.setAlpha(p.dead ? 0.6 : 1);
+      } else {
+        const step = moving ? Math.floor(now / 150) % 2 : 0;
+        e.sprite.setFrame(FRAME_BASE[p.dir] + step);
+        e.sprite.setFlipX(p.dir === "left");
+        if (e.mob) e.sprite.setVisible(!p.dead);
+        else e.sprite.setAlpha(p.dead ? 0.35 : 1).setAngle(p.dead ? 90 : 0);
+      }
       e.sprite.setDepth(e.sprite.y);
 
       const x = Math.round(e.sprite.x), y = Math.round(e.sprite.y);
-      e.label?.setPosition(x, y - 16).setDepth(e.sprite.y + 1);
-      e.bubble?.setPosition(x, y - 21);
+      e.label?.setPosition(x, y - e.top - 2).setDepth(e.sprite.y + 1);
+      e.bubble?.setPosition(x, y - e.top - 7);
       e.bar.clear().setDepth(e.sprite.y + 1);
       const maxHp = p.maxHp;
       if (!e.mob) {
         if (p.guarding && !p.dead) {
           e.shield ??= this.add.graphics();
-          e.shield.clear().lineStyle(1, 0x9ad1ff, 0.9).strokeCircle(x, y - 6, 9).setDepth(e.sprite.y + 2);
+          e.shield.clear().lineStyle(1, 0x9ad1ff, 0.9).strokeCircle(x, y - e.top / 2, e.top / 2 + 3).setDepth(e.sprite.y + 2);
         } else if (e.shield) { e.shield.destroy(); e.shield = undefined; }
       }
       if (!p.dead && p.hp < maxHp) {

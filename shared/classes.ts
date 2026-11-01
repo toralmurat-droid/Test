@@ -80,6 +80,16 @@ export const CLASSES: Record<ClassKind, ClassDef> = {
   },
 };
 
+/**
+ * Normal (non-finisher) attacks pick one of ATTACK_VARIANTS moves at random, never the same twice in a row.
+ * Art convention: animations swing1..swing4; the "swing" message carries `variant` (0-based).
+ */
+export const ATTACK_VARIANTS = 4;
+
+/** Chat commands like "/wave". Art convention: animation names match. Moving or fighting cancels them. */
+export const EMOTES = ["wave", "cheer", "laugh", "sit", "sleep"] as const;
+export type Emote = (typeof EMOTES)[number];
+
 export const GUARD_REDUCTION = 0.7; // knight shield blocks this fraction of damage
 export const DASH_INVULN_MS = 250; // ninja is untouchable right after a dash
 
