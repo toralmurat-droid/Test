@@ -98,19 +98,25 @@ export class TownScene extends Phaser.Scene {
     this.input.keyboard!.on("keydown-R", () => { if (!this.chatting()) this.room?.send("ult"); });
     this.input.keyboard!.on("keydown-F", () => { if (!this.chatting()) this.room?.send("dodge"); });
     this.input.keyboard!.on("keydown-C", () => { if (!this.chatting()) this.toggleHeroMenu(); });
+    this.input.keyboard!.on("keydown-ESC", () => this.closeMenus());
     document.getElementById("lvlnote")!.onclick = () => this.toggleHeroMenu();
     this.gearMenu = new GearMenu(this, (type, msg) => this.room?.send(type, msg));
     const toggleGear = () => this.gearMenu?.toggle(this.entities.get(this.me)?.state);
     this.input.keyboard!.on("keydown-G", () => { if (!this.chatting()) toggleGear(); });
-    // Always reachable with the mouse too (even while typing in chat)
-    const bagBtn = document.getElementById("bagbtn")!;
-    bagBtn.addEventListener("mousedown", (ev) => ev.preventDefault());
-    bagBtn.tabIndex = -1;
-    bagBtn.addEventListener("click", (ev) => { if (ev.detail === 0) return; bagBtn.blur(); toggleGear(); });
+    // Always reachable with the mouse too (even while typing in chat, in combat or while dead)
+    const menuButton = (id: string, onClick: () => void) => {
+      const b = document.getElementById(id)!;
+      b.addEventListener("mousedown", (ev) => ev.preventDefault()); // never take focus (Space/Enter must not click it)
+      b.tabIndex = -1;
+      b.addEventListener("click", (ev) => { if (ev.detail === 0) return; b.blur(); onClick(); });
+    };
+    menuButton("bagbtn", toggleGear);
+    menuButton("herobtn", () => this.toggleHeroMenu());
+    menuButton("treebtn", () => this.toggleTree());
     this.guardHudButtons();
-    window.addEventListener("keydown", (ev) => { if (ev.key === "Escape" && this.gearMenu?.open) this.gearMenu.close(); });
+    window.addEventListener("keydown", (ev) => { if (ev.key === "Escape") this.closeMenus(); });
     this.talentMenu = new TalentMenu((type, msg) => this.room?.send(type, msg));
-    this.input.keyboard!.on("keydown-T", () => { if (!this.chatting()) this.talentMenu?.toggle(this.entities.get(this.me)?.state); });
+    this.input.keyboard!.on("keydown-T", () => { if (!this.chatting()) this.toggleTree(); });
     this.setupChat();
 
     const proto = location.protocol === "https:" ? "wss" : "ws";
@@ -364,9 +370,20 @@ export class TownScene extends Phaser.Scene {
 
   private toggleHeroMenu() {
     const el = document.getElementById("hero")!;
-    if (el.hidden) this.showHeroMenu(this.levelFrom); else el.hidden = true;
+    if (el.hidden) { this.closeMenus(); this.showHeroMenu(this.levelFrom); } else el.hidden = true;
     this.levelFrom = undefined;
     document.getElementById("lvlnote")!.hidden = true;
+  }
+
+  /** Skill tree on top of everything else (only one menu open at a time). */
+  private toggleTree() {
+    if (!this.talentMenu?.open) this.closeMenus();
+    this.talentMenu?.toggle(this.entities.get(this.me)?.state);
+  }
+
+  private closeMenus() {
+    for (const id of ["hero", "tree"]) document.getElementById(id)!.hidden = true;
+    this.gearMenu?.close();
   }
 
   /** Opens the hero menu. After level-ups (`from` = level before them) it highlights the gains. */
@@ -655,6 +672,10 @@ export class TownScene extends Phaser.Scene {
         `${mine.dead ? "Respawning… " : safe}Lv ${mine.level} ${CLASSES[mine.cls as ClassKind].name} · ` +
         `XP ${mine.xp - cur}/${next - cur} · Gold ${mine.gold} · Potions ${mine.potions} · Kills ${mine.kills} · Online ${online}` +
         (talentPoints(mine.level) > spentPoints(cls0, mine.talents) ? ` · ⭐ ${talentPoints(mine.level) - spentPoints(cls0, mine.talents)} skill point(s): press T` : "");
+      const freePts = talentPoints(mine.level) - spentPoints(cls0, mine.talents);
+      const badge = document.getElementById("treebadge")!;
+      badge.hidden = freePts <= 0;
+      badge.textContent = String(freePts);
       // Monster zone status: how many are alive and when the next one respawns
       const tx = meEnt.sprite.x / TILE, ty = meEnt.sprite.y / TILE;
       const zdef = SPAWN_ZONES.find((z) => tx >= z.x && ty >= z.y && tx < z.x + z.w && ty < z.y + z.h);
