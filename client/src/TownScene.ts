@@ -4,6 +4,7 @@ import { InputState, MAP_H, MAP_W, TILE } from "../../shared/constants";
 import { CLASSES, ClassKind, xpForLevel } from "../../shared/classes";
 import { GROUND, areaAt, isSafeZone } from "../../shared/map";
 import { moveStep } from "../../shared/movement";
+import { SPAWN_ZONES } from "../../shared/spawns";
 import { heroTexture, itemTexture, makeTileset, mobTexture } from "./textures";
 import { Minimap } from "./minimap";
 import { CHARACTERS, CHAR_ORIGIN, CharacterName, createArtAnims, playCharAnim, preloadArt } from "./artAssets";
@@ -417,6 +418,13 @@ export class TownScene extends Phaser.Scene {
       document.getElementById("stats")!.textContent =
         `${mine.dead ? "Respawning… " : safe}Lv ${mine.level} ${CLASSES[mine.cls as ClassKind].name} · ` +
         `XP ${mine.xp - cur}/${next - cur} · Gold: ${mine.gold} · Potions [Q]: ${mine.potions} · Kills: ${mine.kills} · Online: ${online}`;
+      // Monster zone status: how many are alive and when the next one respawns
+      const tx = meEnt.sprite.x / TILE, ty = meEnt.sprite.y / TILE;
+      const zdef = SPAWN_ZONES.find((z) => tx >= z.x && ty >= z.y && tx < z.x + z.w && ty < z.y + z.h);
+      const zone = zdef && (this.room.state as any).zones?.get(zdef.name);
+      document.getElementById("zone")!.textContent = zone
+        ? `⚔ ${zone.name}: ${zone.alive}/${zone.cap} monsters${zone.nextIn ? ` · next in ${zone.nextIn}s` : ""}`
+        : "";
       const sp = CLASSES[mine.cls as ClassKind].special;
       const left = Math.max(0, sp.cooldownMs - (now - this.lastSpecial));
       (document.getElementById("skillfill") as HTMLElement).style.width = `${(1 - left / sp.cooldownMs) * 100}%`;
