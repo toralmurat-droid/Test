@@ -437,7 +437,14 @@ function buildWorld() {
     setO(x, y, d > 0.85 && hash(x, y, 186) < 0.3 ? T.STUMP : EMPTY);
     if (isGrass(ground[y][x])) setG(x, y, noise(x, y, 4, 187) > 0.45 ? T.DIRT : T.GRASS_DARK);
   });
-  fenceBox(band.x, band.y, band.w, band.h, [...sideGaps(band.x, band.y, band.w, band.h, 2)]);
+  { // a crude stockade of sharpened stakes, with gates on each side and a few stakes missing
+    const gaps = sideGaps(band.x, band.y, band.w, band.h, 2), gap = (i: number, j: number) => gaps.some(([gx, gy]) => gx === i && gy === j);
+    each(band.x, band.y, band.w, band.h, (i, j) => {
+      const edge = i === band.x || j === band.y || i === band.x + band.w - 1 || j === band.y + band.h - 1;
+      const corner = (i === band.x || i === band.x + band.w - 1) && (j === band.y || j === band.y + band.h - 1);
+      if (edge && !gap(i, j) && (corner || hash(i, j, 77) > 0.08)) setO(i, j, T.PALISADE);
+    });
+  }
   const bandHuts = [house(band.x + 2, band.y + 2, 4, 4, T.ROOF_THATCH), house(band.x + 9, band.y + 2, 5, 4, T.ROOF_RED), house(band.x + 17, band.y + 2, 4, 4, T.ROOF_THATCH)];
   rectG(band.x + 1, band.y + 7, band.w - 2, 1, T.DIRT);
   for (const d of bandHuts) setG(d.x, d.y + 1, T.DIRT);
@@ -486,8 +493,8 @@ function buildWorld() {
   signpost(202, 42, ["Greywatch Keep", "Thornwood"]);
   signpost(rc(144) + 9, 142, ["Sunken Lake", "Old Ruins", "Stonecrag Quarry"]);
   signpost(salt.x - 2, lane - 1, ["Saltmere", "Sunken Lake"]);                                       // Saltmere's west end
-  signpost(band.x + band.w / 2 + 2, band.y - 8, ["Redfang Hollow", "Greywatch Keep"]);               // bandit trail
-  signpost(salt.x + salt.w + 1, lane - 1, ["Saltmere", "Redfang Hollow"]);                         // Saltmere's east end                   // south bridge                                               // keep postern path
+  signpost(band.x + 7, band.y - 6, ["Redfang Hollow", "Greywatch Keep"]);               // bandit trail
+  signpost(salt.x + salt.w + 1, lane - 1, ["Saltmere", "Redfang Hollow"]);                         // Saltmere's east end
 
   // ---------- 12c. Small graveyards where skeletons live (they rise from, and hide in, the graves) ----------
   const graveyard = (cx: number, cy: number, r: number, seed: number) => each(cx - r, cy - r, 2 * r + 1, 2 * r + 1, (i, j) => {
