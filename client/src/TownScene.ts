@@ -40,6 +40,18 @@ const FRAME_BASE: Record<string, number> = { down: 0, up: 2, right: 4, left: 4 }
 const HERO_SCALE = 0.75;
 const HERO_TOP = 24 * HERO_SCALE; // drawn hero height above the feet in the 32x32 frames
 
+/** Random line under the "zone cleared" banner. */
+const CONGRATS = [
+  "Well fought, hero!",
+  "The land is safe, for now.",
+  "Victory is yours!",
+  "Nothing left standing. Impressive!",
+  "The villagers will sing of this.",
+  "Great job, champion!",
+  "Not a single monster left!",
+  "You make it look easy.",
+];
+
 export class TownScene extends Phaser.Scene {
   private room!: Room;
   private me = "";
@@ -202,8 +214,8 @@ export class TownScene extends Phaser.Scene {
       kind === "arrow" ? this.burst(x, y, 3, 0xd7ccc8, 150) : this.burst(x, y, r ? r / 1.8 : 6, 0xff9f1c, r ? 300 : 200));
     this.room.onMessage("ult", (msg) => this.showUlt(msg));
     this.room.onMessage("dodge", (msg) => this.showDodge(msg));
-    this.room.onMessage("zonecleared", ({ zone, by, name, respawnSec }) => {
-      if (by === this.me) this.showCleared(zone, respawnSec);
+    this.room.onMessage("zonecleared", ({ zone, by, name }) => {
+      if (by === this.me) this.showCleared(zone);
       this.feed(`${name} cleared ${zone}!`);
     });
     this.room.onMessage("power", ({ id, name }) => {
@@ -212,7 +224,10 @@ export class TownScene extends Phaser.Scene {
     });
     this.room.onMessage("levelup", ({ id, level, from }) => {
       const e = this.entities.get(id);
-      if (e) this.floatText(e.sprite.x, e.sprite.y - 20, `LEVEL ${level}!`, "#7cfc00");
+      if (e) {
+        this.floatText(e.sprite.x, e.sprite.y - 20, `LEVEL ${level}!`, "#7cfc00");
+        this.levelBurst(e.sprite, id === this.me);
+      }
       if (id === this.me) {
         this.feed(`You reached level ${level}`);
         // Don't pop the menu up mid-fight: show a small notice, the player opens it with C
@@ -520,11 +535,33 @@ export class TownScene extends Phaser.Scene {
   }
 
   /** Shows the area banner briefly whenever the player enters a new named area. */
+  /** Level-up: the hero radiates a short burst of gold light (everyone nearby sees it); your own also shakes the screen. */
+  private levelBurst(sprite: Phaser.GameObjects.Sprite, mine: boolean) {
+    const x = sprite.x, y = sprite.y - 6, depth = sprite.depth + 1;
+    // Soft glow that swells and fades
+    const glow = this.add.circle(x, y, 14, 0xffd166, 0.55).setDepth(depth).setBlendMode(Phaser.BlendModes.ADD);
+    this.tweens.add({ targets: glow, scale: 3.2, alpha: 0, duration: 650, ease: "Cubic.easeOut", onComplete: () => glow.destroy() });
+    // Expanding golden ring
+    const ring = this.add.circle(x, y, 10).setStrokeStyle(2, 0xffe08a, 1).setDepth(depth);
+    this.tweens.add({ targets: ring, scale: 4, alpha: 0, duration: 550, ease: "Quad.easeOut", onComplete: () => ring.destroy() });
+    // Rays shooting outwards
+    for (let i = 0; i < 12; i++) {
+      const a = (i / 12) * Math.PI * 2;
+      const ray = this.add.rectangle(x + Math.cos(a) * 8, y + Math.sin(a) * 8, 6, 1.5, 0xffd166, 1)
+        .setRotation(a).setDepth(depth).setBlendMode(Phaser.BlendModes.ADD);
+      this.tweens.add({ targets: ray, x: x + Math.cos(a) * 34, y: y + Math.sin(a) * 34, scaleX: 2, alpha: 0, duration: 500, ease: "Quad.easeOut", onComplete: () => ray.destroy() });
+    }
+    // The hero flashes gold for a moment
+    sprite.setTintFill(0xffd166);
+    this.time.delayedCall(120, () => sprite.clearTint());
+    if (mine) this.cameras.main.shake(260, 0.006);
+  }
+
   /** Big on-screen "zone cleared" banner for the player who killed the zone's last monster. */
-  private showCleared(zone: string, respawnSec: number) {
+  private showCleared(zone: string) {
     const el = document.getElementById("cleared")!;
     el.querySelector(".big")!.textContent = `${zone} cleared!`;
-    el.querySelector(".small")!.textContent = `Monsters return one by one every ${respawnSec}s`;
+    el.querySelector(".small")!.textContent = CONGRATS[Math.floor(Math.random() * CONGRATS.length)];
     el.classList.remove("show");
     void (el as HTMLElement).offsetWidth; // restart the pop animation
     el.classList.add("show");
