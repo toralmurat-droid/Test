@@ -163,6 +163,7 @@ export class Ambient {
     this.buildTrees();
     this.buildChimneys();
     this.buildCampfires();
+    this.buildBonfires();
     this.buildButterflies();
     this.buildFireflies();
     this.buildClouds();
@@ -264,6 +265,74 @@ export class Ambient {
         scale: { start: 1, end: 0.3 }, alpha: { start: 1, end: 0 }, frequency: 140, blendMode: "ADD",
       }).setDepth(25000);
       this.smoke(cx, cy - 6, 0.7);
+    }
+  }
+
+  /** Paints the bonfire spritesheet: a ring of stones, crossed logs and a tall flickering fire (6 frames of 48x56). */
+  private bonfireTexture() {
+    const FW = 48, FH = 56, N = 6;
+    if (this.scene.textures.exists("bonfire")) return;
+    const tex = this.scene.textures.createCanvas("bonfire", FW * N, FH)!;
+    const g = tex.getContext();
+    const px = (x: number, y: number, c: string) => { g.fillStyle = c; g.fillRect(x, y, 1, 1); };
+    for (let f = 0; f < N; f++) {
+      const ox = f * FW, cx = ox + 24, by = 46;
+      // shadow and ring of stones
+      g.fillStyle = "rgba(0,0,0,0.3)"; g.beginPath(); g.ellipse(cx, by + 2, 21, 8, 0, 0, Math.PI * 2); g.fill();
+      g.fillStyle = "#2b2420"; g.beginPath(); g.ellipse(cx, by, 15, 6, 0, 0, Math.PI * 2); g.fill();
+      for (let k = 0; k < 14; k++) {
+        const a = (k / 14) * Math.PI * 2, sx = Math.round(cx + Math.cos(a) * 17 - 2), sy = Math.round(by + Math.sin(a) * 7 - 2);
+        g.fillStyle = "#5c5850"; g.fillRect(sx, sy + 1, 5, 3);
+        g.fillStyle = k % 3 ? "#8f897c" : "#a39d90"; g.fillRect(sx, sy, 5, 3);
+        g.fillStyle = "#c0baad"; g.fillRect(sx + 1, sy, 2, 1);
+      }
+      // crossed logs and embers
+      for (const [x0, y0, x1, y1] of [[cx - 12, by + 3, cx + 10, by - 4], [cx - 10, by - 4, cx + 12, by + 3], [cx - 3, by + 4, cx + 2, by - 6]]) {
+        const n = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0));
+        for (let t = 0; t <= n; t++) {
+          const x = Math.round(x0 + ((x1 - x0) * t) / n), y = Math.round(y0 + ((y1 - y0) * t) / n);
+          px(x, y, "#6b4426"); px(x, y + 1, "#6b4426"); px(x, y + 2, "#3e2814");
+          if ((t + f) % 5 === 0) px(x, y, "#ff7a1a");
+        }
+      }
+      for (let k = 0; k < 10; k++) px(cx - 9 + ((k * 7 + f * 3) % 19), by - 1 + ((k * 5) % 4), k % 2 ? "#ffb33a" : "#ff6a1a");
+      // flames: three layered tongues that sway and stretch frame to frame
+      const layer = (w: number, h: number, col: string, phase: number) => {
+        g.fillStyle = col;
+        for (let y = 0; y < h; y++) {
+          const t = y / h, sway = Math.sin(f * 1.05 + phase + t * 3) * 3 * t;
+          const half = w * Math.sqrt(1 - t) * (0.85 + 0.15 * Math.sin(f * 2.1 + y * 0.7 + phase));
+          if (half < 0.5) continue;
+          g.fillRect(Math.round(cx + sway - half), by - 3 - y, Math.max(1, Math.round(half * 2)), 1);
+        }
+        // detached licks of flame
+        const ly = by - 3 - h - 2 - ((f * 3 + phase * 5) % 6);
+        g.fillRect(Math.round(cx + Math.sin(f + phase) * 4), Math.round(ly), 2, 2);
+      };
+      layer(11, 30 + (f % 3) * 2, "#e8501a", 0);
+      layer(8, 24 + ((f + 1) % 3) * 2, "#ff9a2a", 1.3);
+      layer(5, 16 + ((f + 2) % 3), "#ffd65a", 2.1);
+      layer(2, 8, "#fff6c0", 2.8);
+      tex.add(f, 0, ox, 0, FW, FH);
+    }
+    tex.refresh();
+    this.scene.anims.create({ key: "bonfire_burn", frames: this.scene.anims.generateFrameNumbers("bonfire", { start: 0, end: N - 1 }), frameRate: 9, repeat: -1 });
+  }
+
+  /** The great bonfire in the square: a 2x2 BONFIRE block gets one big animated fire, glow, sparks and smoke. */
+  private buildBonfires() {
+    for (let y = 0; y < MAP_H; y++) for (let x = 0; x < MAP_W; x++) {
+      if (OBJECTS[y][x] !== T.BONFIRE || OBJECTS[y - 1]?.[x] === T.BONFIRE || OBJECTS[y][x - 1] === T.BONFIRE) continue;
+      this.bonfireTexture();
+      const cx = (x + 1) * TILE, cy = (y + 1) * TILE + 6;
+      this.scene.add.sprite(cx, cy, "bonfire", 0).setOrigin(0.5, 46 / 56).setDepth(cy).play("bonfire_burn");
+      const glow = this.scene.add.image(cx, cy - 10, "glow").setTint(0xffa040).setScale(14).setAlpha(0.3).setBlendMode(Phaser.BlendModes.ADD).setDepth(-0.8);
+      this.scene.tweens.add({ targets: glow, alpha: 0.45, scale: 15, duration: 220, yoyo: true, repeat: -1, ease: "Sine.easeInOut", repeatDelay: 40 });
+      this.scene.add.particles(cx, cy - 20, "spark", {
+        lifespan: { min: 700, max: 1600 }, speedY: { min: -45, max: -18 }, speedX: { min: -14, max: 14 },
+        scale: { start: 1.3, end: 0.3 }, alpha: { start: 1, end: 0 }, frequency: 60, blendMode: "ADD",
+      }).setDepth(25000);
+      this.smoke(cx, cy - 34, 1.4);
     }
   }
 

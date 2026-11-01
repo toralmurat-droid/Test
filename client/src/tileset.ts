@@ -1,5 +1,5 @@
 import { TILE } from "../../shared/constants";
-import { T, TILE_COUNT } from "../../shared/map";
+import { T, TILE_COUNT, VILLAGE } from "../../shared/map";
 
 /**
  * Procedural 16×16 pixel-art tileset (no image assets needed yet).
@@ -199,25 +199,59 @@ const beamWall = (p: Painter, m: number) => {
   p.speckle(0x5a9a3c, 3, 0, 12, 16, 4);
 };
 
-/** Pointed log stakes; vertical runs are drawn as a single file of stakes seen side-on. */
-const palisade = (p: Painter, m: number) => {
-  const stake = (x: number, top: number, bot: number, lean = 0) => {
-    p.rect(x + lean, top + 1, 3, bot - top - 1, 0x7a5230);
-    p.rect(x + lean, top + 1, 1, bot - top - 1, 0x9a6a40); p.rect(x + 2 + lean, top + 1, 1, bot - top - 1, 0x4e331c);
-    p.px(x + 1 + lean, top, 0x9a6a40);
-    p.rect(x + lean, bot - 1, 3, 1, 0x3e2814);
+/**
+ * Stockade of log stakes with sharpened pikes jutting outward at uneven angles.
+ * v = neighbour mask (bits 0-3) | 16 if the outside is to the south | 32 if the outside is to the east.
+ */
+const palisade = (p: Painter, v: number) => {
+  const m = v & 15, outS = !!(v & 16), outE = !!(v & 32);
+  const horiz = !!(m & (E | W)) || !(m & (N | S)), vert = !!(m & (N | S));
+  const stake = (x: number, top: number, bot: number) => {
+    p.rect(x, top + 1, 3, bot - top - 1, 0x7a5230);
+    p.rect(x, top + 1, 1, bot - top - 1, 0x9a6a40); p.rect(x + 2, top + 1, 1, bot - top - 1, 0x4e331c);
+    p.px(x + 1, top, 0xb08a5a);
+    p.rect(x, bot - 1, 3, 1, 0x3e2814);
   };
-  if (m & (E | W) || !(m & (N | S))) {
-    const x0 = m & W ? 0 : 1, x1 = m & E ? 16 : 13;
-    p.rect(x0, 14, x1 - x0, 2, "rgba(0,0,0,0.22)");
-    for (let x = x0; x + 2 < x1 + 1; x += 4) stake(x, 1 + p.ri(3) + (!(m & E) && x > 8 ? 3 : 0) + (!(m & W) && x < 4 ? 3 : 0), 15);
-    p.rect(x0, 9, x1 - x0, 1, 0x4e331c); p.rect(x0, 5, x1 - x0, 1, 0x5e3b1f);
+  /** A sharpened pike from (x, y) along angle `a` (radians), pale whittled tip. */
+  const pike = (x: number, y: number, a: number, len: number) => {
+    const dx = Math.cos(a), dy = Math.sin(a), steep = Math.abs(dy) > Math.abs(dx);
+    for (let t = 0; t <= len; t++) {
+      const px = Math.round(x + dx * t), py = Math.round(y + dy * t);
+      if (px < 0 || px > 15 || py < 0 || py > 15) break;
+      if (t >= len - 1) { p.px(px, py, 0xe6d8b4); continue; }
+      p.px(px, py, t % 3 === 1 ? 0x5e3b1f : 0x8a5c34);
+      p.px(px + (steep ? 1 : 0), py + (steep ? 0 : 1), 0x4a2f18);
+    }
+  };
+  const jitter = () => (p.r() - 0.5) * 1.1; // up to ~±30°
+  const cx = outE ? 4 : 9; // x of the stake column in vertical runs (pikes need room on the outside)
+
+  if (horiz) {
+    const x0 = m & W ? 0 : vert ? cx : 1, x1 = m & E ? 16 : vert ? cx + 6 : 15;
+    if (!outS) { // outside is north: pikes rise behind the wall
+      for (let x = x0 + 1 + p.ri(2); x < x1 - 1; x += 4 + p.ri(2)) pike(x, 11, -Math.PI / 2 + jitter(), 11 + p.ri(2));
+      p.rect(x0, 15, x1 - x0, 1, "rgba(0,0,0,0.25)");
+      for (let x = x0; x + 2 < x1; x += 3) stake(x, 5 + p.ri(2), 15);
+      p.rect(x0, 8, x1 - x0, 1, 0x4e331c); p.rect(x0, 12, x1 - x0, 1, 0x5e3b1f);
+    } else { // outside is south: pikes jut out in front of the wall
+      for (let x = x0; x + 2 < x1; x += 3) stake(x, p.ri(2), 12);
+      p.rect(x0, 4, x1 - x0, 1, 0x4e331c); p.rect(x0, 8, x1 - x0, 1, 0x5e3b1f);
+      for (let x = x0 + 1 + p.ri(2); x < x1 - 1; x += 4 + p.ri(2)) {
+        const a = Math.PI / 2 + jitter(), len = 6 + p.ri(2);
+        p.px(Math.round(x + Math.cos(a) * len) + 1, 15, "rgba(0,0,0,0.25)");
+        pike(x, 10, a, len);
+      }
+    }
   }
-  if (m & (N | S)) {
-    const y0 = m & N ? -2 : 1;
-    p.rect(11, 2, 2, 14, "rgba(0,0,0,0.2)");
-    stake(5, Math.max(0, y0), 9); stake(8, Math.max(0, y0) + 2, 11); stake(5, 6, 16); stake(8, 9, 16);
-    p.rect(5, 5, 6, 1, 0x4e331c); p.rect(5, 13, 6, 1, 0x4e331c);
+  if (vert) {
+    const y0 = m & N ? 0 : horiz ? (outS ? 2 : 6) : 1, y1 = m & S ? 16 : horiz ? 13 : 15;
+    p.rect(cx + 6, y0 + 1, 1, y1 - y0, "rgba(0,0,0,0.22)");
+    stake(cx, y0, y1); stake(cx + 3, Math.min(y1 - 2, y0 + 1 + p.ri(2)), y1);
+    for (let y = y0 + 2; y < y1; y += 5) p.rect(cx, y, 6, 1, 0x4e331c);
+    for (let y = y0 + 2 + p.ri(2); y < y1 - 1; y += 4 + p.ri(2)) {
+      if (outE) pike(cx + 5, y, jitter() * 0.8, 8 + p.ri(3));
+      else pike(cx, y, Math.PI + jitter() * 0.8, 8 + p.ri(3));
+    }
   }
 };
 
@@ -461,6 +495,7 @@ const DRAW: Record<number, (p: Painter, f: number, v: number) => void> = {
     if (fl[1] === 2) p.px(7, 1, 0xffe066);
   },
   [T.RUIN]: (p, _f, m) => ruinWall(p, m),
+  [T.BONFIRE]: (p) => { p.speckle(0x3a332c, 14); p.speckle(0xc0502a, 3); }, // ash; the fire itself is a sprite (ambient.ts)
   [T.SIGN]: (p) => {
     p.disc(8, 15, 4, 1, SHADOW);
     p.rect(7, 8, 2, 7, 0x6b4426);
@@ -482,7 +517,7 @@ const DRAW: Record<number, (p: Painter, f: number, v: number) => void> = {
  *  - the floor under rubble (rows 0-15 = base * 4 + variant).
  * A tilemap index is `row * TILE_COUNT + id`.
  */
-export const ROWS = 16;
+export const ROWS = 64;
 const VARIED = new Set<number>([T.GRASS, T.TALL_GRASS, T.FLOWERS, T.DIRT, T.COBBLE, T.SAND, T.WATER, T.FLOOR, T.FLAGS, T.FIELD, T.BRIDGE]);
 const CONNECTED = new Set<number>([T.RUIN, T.BEAM, T.PALISADE]);
 const LIGHT = new Set<number>([T.GRASS, T.TALL_GRASS, T.FLOWERS]);
@@ -494,7 +529,7 @@ const paint = (ctx: CanvasRenderingContext2D, id: number, row: number, f: number
 export function drawTileset(ctx: CanvasRenderingContext2D) {
   ctx.clearRect(0, 0, TILE * TILE_COUNT, TILE * ROWS);
   for (let i = 0; i < TILE_COUNT; i++) {
-    const rows = VARIED.has(i) ? 4 : CONNECTED.has(i) || i === T.GRASS_DARK || i === T.RUBBLE ? ROWS : 1;
+    const rows = VARIED.has(i) ? 4 : i === T.PALISADE ? 64 : CONNECTED.has(i) || i === T.GRASS_DARK || i === T.RUBBLE ? 16 : 1;
     for (let r = 0; r < rows; r++) paint(ctx, i, r, 0);
   }
 }
@@ -506,6 +541,8 @@ export function tileRow(grid: number[][], x: number, y: number): number {
   const id = grid[y][x];
   const at = (i: number, j: number) => grid[j]?.[i] ?? id;
   const mask = (ok: (t: number) => boolean) => (ok(at(x, y - 1)) ? 1 : 0) | (ok(at(x + 1, y)) ? 2 : 0) | (ok(at(x, y + 1)) ? 4 : 0) | (ok(at(x - 1, y)) ? 8 : 0);
+  if (id === T.PALISADE) // which way is outside: away from the village centre
+    return mask((t) => t === id) | (y > (VILLAGE.y0 + VILLAGE.y1) / 2 ? 16 : 0) | (x > (VILLAGE.x0 + VILLAGE.x1) / 2 ? 32 : 0);
   if (CONNECTED.has(id)) return mask((t) => t === id);
   if (id === T.GRASS_DARK) return mask((t) => LIGHT.has(t));
   if (id === T.RUBBLE) {

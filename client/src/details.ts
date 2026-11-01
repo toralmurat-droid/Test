@@ -341,6 +341,7 @@ export class Details {
       const t = OBJECTS[ty][tx];
       if (t === T.WINDOW_TIMBER || t === T.WINDOW_STONE) this.addLight((tx + 0.5) * TILE, (ty + 0.6) * TILE, 0xffc070, 1.4, 0.45, 0.03);
       if (t === T.CAMPFIRE) this.addLight((tx + 0.5) * TILE, (ty + 0.6) * TILE, 0xff9030, 5, 0.9, 0.15);
+      if (t === T.BONFIRE && OBJECTS[ty - 1]?.[tx] !== T.BONFIRE && OBJECTS[ty][tx - 1] !== T.BONFIRE) this.addLight((tx + 1) * TILE, (ty + 0.8) * TILE, 0xff9030, 12, 1, 0.2);
     }
   }
 
