@@ -49,9 +49,9 @@ The starting region is a 160×120-tile (16px) medieval map, generated determinis
 and every client build the same world. It has a ground layer and an object layer (objects and water are solid, except
 bushes, which you can walk through).
 
-It is laid out for easy travel: the 3-tile-wide King's Road (west–east) and North Road (north–south) wind across the
-map and meet at the market square, curving trails link every region, the rotted palisade is full of breaches, the river
-has 3 bridges and a ford, and every road keeps a clear verge. Generation also guarantees that every walkable tile can be reached.
+It is laid out like a starting village: four narrow roads leave Oakvale, one to each nearby place (the farms to the
+west, the Old Ruins over the bridge to the east, the North Meadow, and Stonecrag Quarry to the south). Footpaths branch
+off to the Hunter's Camp, the Watchtower, the mill and Mirror Pond and the marsh. Generation also guarantees that every walkable tile can be reached.
 `npx tsx tools/map-metrics.ts` prints walkability, reachability and detour numbers.
 
 - **Oakvale** (centre) — a small ruined village: Market Square (safe zone) with well, campfire and a stall, and four
@@ -73,7 +73,7 @@ and cloud shadows drift around.
 
 Detail layer (`client/src/details.ts`): shaded roofs with ridges and eaves, pebbles, tufts, mushrooms and fallen
 leaves, grass spilling over road edges, rounded shorelines with reeds and lily pads, ducks on Mirror Pond, door
-lanterns and gate banners. An 8-minute day/night cycle (shared by all players via the clock) lights up windows,
+lanterns and gate banners. A 30-minute day/night cycle (shared by all players via the clock) lights up windows,
 lanterns and the campfire at night. Add `?time=day|dusk|night` to the URL to force a time of day.
 
 **Map viewer:** with `npm run dev` running, open http://localhost:5173/map.html to see the whole map with area,

@@ -119,12 +119,12 @@ function dayPhase(nowMs: number): { dark: number; warm: number } {
   if (forced === "night") return { dark: 1, warm: 0 };
   if (forced === "dusk") return { dark: 0.45, warm: 1 };
   if (forced === "day") return { dark: 0, warm: 0 };
-  const CYCLE = 8 * 60 * 1000; // 8-minute day
+  const CYCLE = 30 * 60 * 1000; // 30-minute day: about 19 min daylight, 2 min dusk, 6 min night, 3 min dawn
   const t = (nowMs % CYCLE) / CYCLE;
-  // 0-.55 day, .55-.65 dusk, .65-.9 night, .9-1 dawn
+  // 0-.65 day, .65-.72 dusk, .72-.9 night, .9-1 dawn
   const ramp = (a: number, b: number) => Math.min(1, Math.max(0, (t - a) / (b - a)));
-  const dark = t < 0.55 ? 0 : t < 0.65 ? ramp(0.55, 0.65) : t < 0.9 ? 1 : 1 - ramp(0.9, 1);
-  const warm = t > 0.5 && t < 0.7 ? Math.sin(((t - 0.5) / 0.2) * Math.PI) : t > 0.88 ? Math.sin(((t - 0.88) / 0.12) * Math.PI) * 0.6 : 0;
+  const dark = t < 0.65 ? 0 : t < 0.72 ? ramp(0.65, 0.72) : t < 0.9 ? 1 : 1 - ramp(0.9, 1);
+  const warm = t > 0.61 && t < 0.76 ? Math.sin(((t - 0.61) / 0.15) * Math.PI) : t > 0.88 ? Math.sin(((t - 0.88) / 0.12) * Math.PI) * 0.6 : 0;
   return { dark, warm };
 }
 
