@@ -213,7 +213,7 @@ export class TownScene extends Phaser.Scene {
     const e = this.entities.get(id);
     if (!e) return;
     const dir = e.state.dir as string;
-    if (e.hero) playCharAnim(e.sprite, e.hero, "attack", dir as any);
+    if (e.hero) playCharAnim(e.sprite, e.hero, ["attack", "attack2", "attack3"][step] ?? "attack", dir as any);
     const off = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] }[dir] ?? [0, 1];
     const cls = e.mob ? undefined : CLASSES[e.state.cls as ClassKind];
     const hit = cls?.combo[step];
@@ -336,7 +336,7 @@ export class TownScene extends Phaser.Scene {
       if (e.hero) {
         // Let one-shot attack/hit/skill animations finish before going back to walk/idle
         const key = e.sprite.anims.currentAnim?.key ?? "";
-        const oneShot = e.sprite.anims.isPlaying && /_(attack|hit|skill)_/.test(key);
+        const oneShot = e.sprite.anims.isPlaying && /_(attack\d?|hit|skill)_/.test(key);
         if (p.dead) {
           if (!key.includes("_ko_")) playCharAnim(e.sprite, e.hero, "ko", p.dir);
         } else if (!oneShot) {
