@@ -14,6 +14,7 @@ import { heroTexture, itemTexture, makeTileset, MOB_LOOK, mobTexture } from "./t
 import { Minimap } from "./minimap";
 import { DayDial } from "./daydial";
 import { SignPanel } from "./signpanel";
+import { NpcLayer } from "./npcs";
 import { pixelText } from "./pixeltext";
 import { ART_K, CHARACTERS, CHAR_ORIGIN, CharacterName, createArtAnims, playCharAnim, preloadArt } from "./artAssets";
 import { Ambient } from "./ambient";
@@ -66,6 +67,7 @@ export class TownScene extends Phaser.Scene {
   private keys!: Record<string, Phaser.Input.Keyboard.Key>;
   private input_: InputState = { up: false, down: false, left: false, right: false };
   private seq = 0;
+  private npcs?: NpcLayer;
   private chatEl = document.getElementById("chat") as HTMLInputElement;
   private minimap?: Minimap;
   private dial?: DayDial;
@@ -115,7 +117,7 @@ export class TownScene extends Phaser.Scene {
     cam.roundPixels = true;
 
     // Keys without capture so typing in chat still works
-    this.keys = this.input.keyboard!.addKeys("W,A,S,D,UP,DOWN,LEFT,RIGHT,SPACE,SHIFT,Q,C,G,T,F,R", false) as any;
+    this.keys = this.input.keyboard!.addKeys("W,A,S,D,UP,DOWN,LEFT,RIGHT,SPACE,SHIFT,Q,C,G,T,F,R,E", false) as any;
     this.input.keyboard!.on("keydown-SPACE", () => { if (!this.chatting()) this.room?.send("attack"); });
     // Skill slots 1..0 (top row or numpad). With the skill tree open and the mouse over a learned skill,
     // the number key puts that skill in the slot instead of using it.
@@ -139,6 +141,7 @@ export class TownScene extends Phaser.Scene {
     this.input.keyboard!.on("keydown-F", dodge);
     this.input.keyboard!.on("keydown-C", () => { if (!this.chatting()) this.toggleHeroMenu(); });
     this.input.keyboard!.on("keydown-ESC", () => this.closeMenus());
+    this.input.keyboard!.on("keydown-E", () => { if (!this.chatting()) this.npcs?.interact(); });
     document.getElementById("lvlnote")!.onclick = () => this.toggleHeroMenu();
     // Hero panel: assign stat points / reset them (buttons never keep focus, so Space can't click them)
     const heroEl = document.getElementById("hero")!;
@@ -183,6 +186,8 @@ export class TownScene extends Phaser.Scene {
     (document.getElementById("join") as HTMLElement).style.display = "none";
     document.getElementById("hud")!.hidden = false;
     this.minimap = new Minimap(document.getElementById("minimap") as HTMLCanvasElement, this.opts.name);
+    this.npcs = new NpcLayer(this, (type, msg) => this.room.send(type, msg));
+    this.room.onMessage("quest", ({ stage }) => this.npcs?.onQuest(stage));
     this.dial = new DayDial(document.getElementById("daydial") as HTMLCanvasElement);
 
     const players = (this.room.state as any).players;
@@ -473,6 +478,7 @@ export class TownScene extends Phaser.Scene {
 
   private closeMenus() {
     for (const id of ["hero", "tree"]) document.getElementById(id)!.hidden = true;
+    this.npcs?.close();
     this.gearMenu?.close();
   }
 
@@ -918,6 +924,7 @@ export class TownScene extends Phaser.Scene {
     this.dial?.draw(now);
     if (meEnt) this.showArea(areaAt(meEnt.sprite.x, meEnt.sprite.y));
     this.signPanel.update(meEnt?.sprite);
+    this.npcs?.update(meEnt && !meEnt.state.dead ? meEnt.sprite : undefined, meEnt?.state);
 
     const mine = meEnt?.state;
     if (mine) {

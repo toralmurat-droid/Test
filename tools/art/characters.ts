@@ -438,7 +438,7 @@ interface HumanOpts {
   bareChest?: boolean;
   apron?: number; vest?: number; tabard?: { col: number; emblem: number };
   sleeve?: number;
-  weapon: "bow" | "axe" | "hammer" | "spear" | "dagger" | "none";
+  weapon: "bow" | "axe" | "hammer" | "spear" | "dagger" | "staff" | "none";
   quiver?: boolean;
   fxCol?: number;
   aura?: number;
@@ -449,11 +449,11 @@ function human(o: HumanOpts): Hero {
   const eye = o.eye ?? 0x111111;
   const sleeve = o.bareChest ? o.skin : o.sleeve ?? o.shirt;
   const swing: Record<HumanOpts["weapon"], number[]> = {
-    bow: [0, 0, 0, 0], axe: [-140, -50, 30, 60], hammer: [-150, -70, 10, 40], spear: [-20, 0, 0, 0], dagger: [-90, -20, 30, 50], none: [-60, -10, 20, 30],
+    bow: [0, 0, 0, 0], axe: [-140, -50, 30, 60], hammer: [-150, -70, 10, 40], spear: [-20, 0, 0, 0], dagger: [-90, -20, 30, 50], staff: [-120, -60, 10, 40], none: [-60, -10, 20, 30],
   };
   const idle: Record<HumanOpts["weapon"], Record<Dir, number>> = {
     bow: { down: 180, up: 0, right: 0 }, axe: { down: 100, up: 110, right: 75 }, hammer: { down: 100, up: 110, right: 80 },
-    spear: { down: -95, up: -85, right: -80 }, dagger: { down: 110, up: 110, right: 100 }, none: { down: 90, up: 90, right: 90 },
+    spear: { down: -95, up: -85, right: -80 }, dagger: { down: 110, up: 110, right: 100 }, staff: { down: -95, up: -85, right: -85 }, none: { down: 90, up: 90, right: 90 },
   };
   const hat = o.hat;
   const backhand = (sw: number[]): Move => ({ swing: [-sw[0] * 0.8, -sw[1], -sw[2], -sw[3]], kind: "slash", fx: o.fxCol });
@@ -463,6 +463,7 @@ function human(o: HumanOpts): Hero {
     hammer: { a2: backhand(swing.hammer), a3: { swing: [-160, -95, 30, 40], reach: [-1, 0, 4, 3], lift: [7, 8, -1, -1], kind: "slam" }, a4: { swing: [80, 40, -45, -75], reach: [-1, 2, 4, 2], lift: [-2, 0, 3, 3], kind: "slash", fx: o.fxCol } },
     spear: { a2: { swing: [-70, -30, 35, 55], kind: "slash" }, a3: { swing: [0, 0, 0, 0], reach: [-4, 4, 7, 2], lift: [0, 0, 0, 0], kind: "thrust" }, a4: { swing: [-175, -100, 10, 25], reach: [-1, 1, 4, 3], lift: [8, 7, 0, 0], kind: "slash" } },
     dagger: { a2: { swing: [0, 0, 0, 0], reach: [-3, 4, 6, 2], lift: [1, 0, 0, 0], kind: "thrust" }, a3: backhand(swing.dagger), a4: { swing: [80, 40, -45, -75], reach: [-1, 2, 4, 2], lift: [-2, 0, 3, 3], kind: "slash" } },
+    staff: { a2: backhand(swing.staff), a3: { swing: [-160, -95, 30, 40], reach: [-1, 0, 4, 3], lift: [7, 8, -1, -1], kind: "slam" }, a4: { swing: [0, 0, 0, 0], reach: [-3, 3, 5, 1], lift: [0, 0, 0, 0], kind: "thrust" } },
     none: { a2: { swing: [0, 0, 0, 0], reach: [-2, 4, 5, 2], lift: [1, 0, 0, 0], kind: "thrust" }, a3: { swing: [0, 0, 0, 0], reach: [-1, 3, 5, 1], lift: [0, 0, 0, 0], kind: "bash" }, a4: { swing: [0, 0, 0, 0], reach: [0, 2, 4, 1], lift: [-1, 2, 4, 1], kind: "thrust" } },
   };
   const H: Hero = {
@@ -607,6 +608,17 @@ function human(o: HumanOpts): Hero {
           d.c.line(hx + ux, hy + uy, hx + ux * 6, hy + uy * 6, STEEL);
           break;
         }
+        case "staff": {
+          // Gnarled oak staff with a glowing leaf-green stone in its crook
+          const G = 0x6e4526;
+          d.c.line(hx - ux * 7, hy - uy * 7, hx + ux * 11, hy + uy * 11, G);
+          d.c.px(hx + ux * 3 + nx, hy + uy * 3 + ny, shade(G, 0.7));
+          const tx = hx + ux * 11, ty = hy + uy * 11;
+          d.c.px(tx + nx, ty + ny, G); d.c.px(tx + ux + nx * 2, ty + uy + ny * 2, G); d.c.px(tx + ux * 2 + nx, ty + uy * 2 + ny, G);
+          d.c.px(tx + ux, ty + uy, 0x9be564); d.c.px(tx + ux * 2, ty + uy * 2, 0xd8ffb0);
+          d.c.px(tx - nx, ty - ny, 0x5b9a45);
+          break;
+        }
         case "none": break;
       }
     },
@@ -663,7 +675,13 @@ const guard = human({
 });
 
 export const HEROES: Hero[] = [ninja, wizard, knight, archer, barbarian];
-export const NPCS: Hero[] = [blacksmith, merchant, villager, guard];
+const druid = human({
+  name: "druid", skin: 0xe8b68c, hair: 0xe9e4d8, hairStyle: "long", beard: 0xf3efe6,
+  hat: { kind: "hood", col: 0x4f6b32, trim: 0x8a6a3a }, shirt: 0x5f7f3a, sleeve: 0x4f6b32, vest: 0x7a5a32,
+  pants: 0x46602c, boots: 0x4a3420, belt: 0xb08a4a, weapon: "staff", fxCol: 0x9be564, aura: 0x9be564, gait: "stroll",
+});
+
+export const NPCS: Hero[] = [blacksmith, merchant, villager, guard, druid];
 
 export type GearPart = "legs" | "torso" | "head" | "weapon" | "shield";
 /** Extra pose info for the gear generator: body offset, weapon hand/angle, and a way to redraw the weapon elsewhere. */

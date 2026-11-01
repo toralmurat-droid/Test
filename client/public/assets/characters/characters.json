@@ -10,7 +10,8 @@
   "blacksmith",
   "merchant",
   "villager",
-  "guard"
+  "guard",
+  "druid"
  ],
  "image": "{name}.png",
  "frameWidth": 64,

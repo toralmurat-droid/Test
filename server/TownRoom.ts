@@ -15,7 +15,9 @@ import {
 import {
   ITEM_LIFETIME_MS, ItemKind, LOOT, MAX_POTIONS, PICKUP_RADIUS, POTION_COOLDOWN_MS, POTION_HEAL, PVP_GOLD_DROP,
 } from "../shared/items";
-import { isSafeZone, isSolidAt, randomSpawn } from "../shared/map";
+import { areaAt, isSafeZone, isSolidAt, randomSpawn } from "../shared/map";
+import { npcNear, TALK_RANGE } from "../shared/npcs";
+import { isBlob, Q, QUEST } from "../shared/quests";
 import { findHideSpot, HIDE, randomPointInZone, rollLevel, SPAWN_ZONES, zoneCap } from "../shared/spawns";
 import { moveStep } from "../shared/movement";
 import { SLOT_COUNT, SlotSkill, skillLearned } from "../shared/slots";
@@ -72,6 +74,9 @@ export class Player extends Schema {
   @type(["string"]) bag = new ArraySchema<string>();
   // Skill tree (shared/talents.ts): ranks per talent id
   @type({ map: "number" }) talents = new MapSchema<number>();
+  // First quest (shared/quests.ts): step and blob kills
+  @type("number") questStage = 0;
+  @type("number") questCount = 0;
   // Skill slots on keys 1..0 (shared/slots.ts): "special" | "ult" | "" (empty). Empty until the player assigns them.
   @type(["string"]) slots = new ArraySchema<string>(...Array(SLOT_COUNT).fill(""));
 
@@ -311,6 +316,8 @@ export class TownRoom extends Room<TownState> {
     this.onMessage("stat", (client, k: string) => this.assignStat(client.sessionId, k));
     this.onMessage("resetstats", (client) => this.resetStats(client.sessionId));
 
+    this.onMessage("quest", (client) => this.advanceQuest(client.sessionId));
+
     this.onMessage("chat", (client, text: string) => {
       const p = this.state.players.get(client.sessionId);
       if (!p || typeof text !== "string") return;
@@ -438,6 +445,7 @@ export class TownRoom extends Room<TownState> {
       p.raging = now < p.rageUntil;
       tickPoise(p, heroPoiseMax(p), dt, now);
       if (p.dead) { p.moving = false; p.energy = ENERGY.max; return; }
+      if (p.questStage === Q.INVESTIGATE) this.checkQuestSight(pid, p);
       if (p.energy < ENERGY.max) p.energy = Math.min(ENERGY.max, p.energy + ENERGY.regenPerSec * dt);
       p.rolling = now < p.rollUntil;
       const r = p.stunned
@@ -854,6 +862,10 @@ export class TownRoom extends Room<TownState> {
     this.broadcast("hit", { id: targetId, dmg, crit: !!opts.crit });
     if (m.hp > 0) return;
     m.dead = true;
+    if (a && a.questStage === Q.HUNT && isBlob(m.kind)) {
+      a.questCount++;
+      if (a.questCount >= QUEST.killGoal) this.setQuest(attackerId, a, Q.RETURN);
+    }
     m.hidden = false; m.spot = ""; m.fleeing = false;
     this.grantXp(attackerId, Math.round(def.xp * mobScale(m.level, "xp")), m);
     this.dropLoot(m.kind, m.x, m.y, mobScale(m.level, "gold"), m.level);
@@ -866,6 +878,38 @@ export class TownRoom extends Room<TownState> {
         const z = SPAWN_ZONES[m.zone];
         this.broadcast("zonecleared", { zone: z.name, by: attackerId, name: a?.name ?? "", respawnSec: Math.round(z.respawnMs / 1000) });
       }
+    }
+  }
+
+  // ---- Quest -------------------------------------------------------------
+
+  private setQuest(id: string, p: Player, stage: number) {
+    p.questStage = stage;
+    this.clients.find((c) => c.sessionId === id)?.send("quest", { stage });
+  }
+
+  /** Accept / hand in at the druid. Only works standing next to him. */
+  private advanceQuest(id: string) {
+    const p = this.state.players.get(id);
+    if (!p || p.dead || npcNear(p.x, p.y, TALK_RANGE * 1.5)?.id !== QUEST.giver) return;
+    if (p.questStage === Q.NONE) this.setQuest(id, p, Q.INVESTIGATE);
+    else if (p.questStage === Q.REPORT) { p.questCount = 0; this.setQuest(id, p, Q.HUNT); }
+    else if (p.questStage === Q.RETURN) {
+      p.gold += QUEST.reward.gold;
+      p.potions = Math.min(MAX_POTIONS, p.potions + QUEST.reward.potions);
+      this.setQuest(id, p, Q.DONE);
+      this.grantXp(id, QUEST.reward.xp, p);
+    }
+  }
+
+  /** Investigation step: a blob seen in the woods. */
+  private checkQuestSight(id: string, p: Player) {
+    if (!QUEST.woods.includes(areaAt(p.x, p.y))) return;
+    const r2 = QUEST.sightRange * QUEST.sightRange;
+    for (const m of this.state.mobs.values()) {
+      if (m.dead || m.hidden || !isBlob(m.kind)) continue;
+      const dx = m.x - p.x, dy = m.y - p.y;
+      if (dx * dx + dy * dy <= r2) { this.setQuest(id, p, Q.REPORT); return; }
     }
   }
 

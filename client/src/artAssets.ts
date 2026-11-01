@@ -5,8 +5,8 @@ import Phaser from "phaser";
  * Characters: 32x32 design frames rendered at CHAR_FRAME px (6 per row), animations `${char}_${anim}_${dir}`; dir is down | up | right (flipX for left).
  * Props/items: texture atlases "props" and "items" with frame names like "barrel", "potion_health".
  */
-export const CHARACTERS = ["ninja", "wizard", "knight", "archer", "barbarian", "blacksmith", "merchant", "villager", "guard"] as const;
-export const NPC_NAMES = ["blacksmith", "merchant", "villager", "guard"] as const;
+export const CHARACTERS = ["ninja", "wizard", "knight", "archer", "barbarian", "blacksmith", "merchant", "villager", "guard", "druid"] as const;
+export const NPC_NAMES = ["blacksmith", "merchant", "villager", "guard", "druid"] as const;
 export type CharacterName = (typeof CHARACTERS)[number];
 export const CHAR_ANIMS = ["idle", "walk", "attack", "attack2", "attack3", "attack4", "attack5", "hit", "ko", "skill", "idle2", "idle3", "run", "wave", "cheer", "laugh", "sit", "sleep", "walk2", "dodge", "jump", "block", "hit2", "ko2"] as const;
 /** Cosmetic animations: play idle2/idle3 now and then while standing still, run when moving fast, emotes from chat (e.g. /wave). */
