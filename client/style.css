@@ -9,13 +9,34 @@ html, body { margin: 0; height: 100%; background: #1b1b24; color: #eee; font: 14
 #colors { display: flex; gap: 6px; justify-content: center; margin: 12px 0; flex-wrap: wrap; }
 #colors button { width: 28px; height: 28px; border: 3px solid transparent; cursor: pointer; }
 #colors button.sel { border-color: #fff; }
-#classes { display: flex; gap: 6px; margin: 12px 0 4px; }
-#classes button { flex: 1; padding: 8px 4px; font: inherit; background: #15151f; color: #eee; border: 2px solid #555a7a; cursor: pointer; }
+#classes { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0 4px; }
+#classes button { flex: 1 1 28%; padding: 8px 4px; font: inherit; background: #15151f; color: #eee; border: 2px solid #555a7a; cursor: pointer; }
 #classes button.sel { border-color: #ffd166; color: #ffd166; }
 #classinfo { min-height: 2.8em; margin: 4px 0; }
 #ult { position: absolute; top: 76px; left: 12px; width: 200px; height: 14px; background: #222; border: 2px solid #000; }
 #ultfill { position: absolute; inset: 0 auto 0 0; width: 100%; background: #f77f00; }
 #ulttext { position: relative; font-size: 11px; padding-left: 4px; line-height: 10px; text-shadow: 1px 1px #000; }
+#gear { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(420px, calc(100% - 32px));
+  max-height: calc(100% - 32px); overflow: auto; background: rgba(30,30,46,.96); border: 3px solid #555a7a; padding: 14px 16px;
+  pointer-events: auto; z-index: 7; }
+#gear h2 { margin: 0 0 8px; font-size: 18px; color: #ffd166; }
+#gear h3 { margin: 10px 0 6px; font-size: 14px; color: #ccc; }
+#geartop { display: flex; gap: 12px; align-items: center; }
+#gearpreview { width: 128px; height: 128px; flex: none; image-rendering: pixelated; background: radial-gradient(#3d5a3a, #22301f); border: 2px solid #555a7a; }
+#gearslots { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 0; }
+.gslot { display: flex; gap: 8px; align-items: center; text-align: left; font: inherit; font-size: 12px; color: #eee; background: #15151f;
+  border: 2px solid #3a3a52; padding: 2px 6px 2px 2px; cursor: pointer; }
+.gslot.empty { color: #777; cursor: default; }
+.gslot:not(.empty):hover { border-color: #ef476f; }
+.gslot small { color: #aaa; }
+.gslot canvas, .gicon { width: 32px; height: 32px; flex: none; image-rendering: pixelated; }
+.gicon { display: inline-block; border: 1px dashed #444; }
+#geartotal { font-size: 12px; color: #ccc; margin: 8px 0 0; }
+#gearbag { display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; }
+.gcell { aspect-ratio: 1; padding: 2px; background: #15151f; border: 2px solid #3a3a52; cursor: pointer; display: grid; place-items: center; }
+.gcell:disabled { cursor: default; opacity: .5; }
+.gcell:not(:disabled):hover { background: #2f2f48; }
+.gcell canvas { width: 100%; height: 100%; max-width: 40px; image-rendering: pixelated; }
 #ult:not([hidden]) ~ #zone { top: 96px; }
 #hero { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(380px, calc(100% - 32px));
   max-height: calc(100% - 32px); overflow: auto; background: rgba(30,30,46,.95); border: 3px solid #555a7a; padding: 14px 16px;
@@ -62,3 +83,31 @@ html, body { margin: 0; height: 100%; background: #1b1b24; color: #eee; font: 14
 @keyframes cleared-pop { from { transform: scale(1.6); } to { transform: scale(1); } }
 @media (max-width: 600px) { #cleared .big { font-size: 24px; } }
 @media (max-width: 600px) { #mapbox { transform: scale(.6); transform-origin: top right; } #feed { top: 120px; } #area { font-size: 20px; } }
+
+/* Skill tree (T) */
+#tree { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(560px, calc(100% - 32px));
+  max-height: calc(100% - 32px); overflow: auto; background: rgba(30,30,46,.96); border: 3px solid #555a7a; padding: 14px 16px;
+  pointer-events: auto; z-index: 7; }
+#tree h2 { margin: 0 0 4px; font-size: 18px; color: #ffd166; }
+#treepoints { margin: 0 0 10px; font-size: 13px; color: #aaa; }
+#treepoints .free { color: #7cfc00; }
+#treebranches { display: flex; gap: 10px; flex-wrap: wrap; }
+.branch { flex: 1 1 150px; display: flex; flex-direction: column; align-items: stretch; }
+.branch h3 { margin: 0 0 6px; font-size: 14px; text-align: center; }
+.branch h3 small { color: #aaa; font-weight: normal; }
+.branch .link { width: 2px; height: 10px; background: #555a7a; margin: 0 auto; }
+.talent { display: flex; flex-direction: column; gap: 2px; text-align: left; font: inherit; font-size: 12px; padding: 6px 8px;
+  background: #15151f; color: #eee; border: 2px solid #555a7a; cursor: pointer; position: relative; }
+.talent .rank { position: absolute; top: 6px; right: 8px; color: #aaa; }
+.talent .fx { color: #ccc; font-size: 11px; }
+.talent .req { color: #888; font-size: 11px; }
+.talent.can { border-color: var(--c); box-shadow: 0 0 6px var(--c); }
+.talent.has, .talent.max { border-color: var(--c); }
+.talent.max .rank { color: var(--c); }
+.talent.locked { opacity: .45; cursor: default; }
+.talent.off { cursor: default; }
+#treereset { font: inherit; font-size: 11px; background: #15151f; color: #eee; border: 1px solid #555a7a; cursor: pointer; padding: 2px 6px; }
+#bagbtn { position: absolute; right: 12px; bottom: 12px; pointer-events: auto; z-index: 8; font: inherit; font-weight: bold; color: #ffd166;
+  background: rgba(30,30,46,.9); border: 2px solid #555a7a; padding: 6px 10px; cursor: pointer; }
+#bagbtn:hover { border-color: #ffd166; }
+#bagbtn small { color: #aaa; font-weight: normal; }

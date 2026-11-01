@@ -20,6 +20,8 @@ export const STATS: Record<ClassKind, StatDef> = {
   knight: { base: { sta: 10, str: 8, mag: 2 }, perLevel: { sta: 2, str: 3, mag: 0 }, attackStat: "str" },
   ninja: { base: { sta: 6, str: 10, mag: 4 }, perLevel: { sta: 1, str: 3, mag: 1 }, attackStat: "str" },
   wizard: { base: { sta: 7, str: 2, mag: 11 }, perLevel: { sta: 1, str: 1, mag: 3 }, attackStat: "mag" },
+  archer: { base: { sta: 7, str: 9, mag: 4 }, perLevel: { sta: 1, str: 3, mag: 1 }, attackStat: "str" },
+  barbarian: { base: { sta: 9, str: 10, mag: 1 }, perLevel: { sta: 1, str: 3, mag: 1 }, attackStat: "str" },
 };
 
 export const HP_PER_STA = 6;
@@ -63,7 +65,9 @@ export const POWER_LEVELS = [1, 3, 5, 8, 10] as const;
 export type PowerId =
   | "guard" | "ironskin" | "cleave" | "secondwind" | "earthquake"
   | "dash" | "swift" | "crit" | "shadowstrike" | "bladestorm"
-  | "nova" | "manaflow" | "ignite" | "frost" | "meteor";
+  | "nova" | "manaflow" | "ignite" | "frost" | "meteor"
+  | "volley" | "eagleeye" | "pierce" | "pinning" | "arrowrain"
+  | "rage" | "bloodthirst" | "groundslam" | "unstoppable" | "leap";
 
 export interface PowerDef { id: PowerId; level: number; name: string; desc: string; key?: "E" | "R" }
 
@@ -89,6 +93,20 @@ export const POWERS: Record<ClassKind, PowerDef[]> = {
     { id: "frost", level: 8, name: "Frost Nova", desc: "Nova also slows enemies by 50% for 2s." },
     { id: "meteor", level: 10, name: "Meteor", key: "R", desc: "Call a meteor ahead of you: huge area damage." },
   ],
+  archer: [
+    { id: "volley", level: 1, name: "Volley", key: "E", desc: "Fire 3 arrows side by side." },
+    { id: "eagleeye", level: 3, name: "Eagle Eye", desc: "Passive: arrows fly 30% farther." },
+    { id: "pierce", level: 5, name: "Piercing Arrows", desc: "Arrows pass through up to 2 extra enemies." },
+    { id: "pinning", level: 8, name: "Pinning Shot", desc: "Arrows slow enemies for 1.5s." },
+    { id: "arrowrain", level: 10, name: "Arrow Rain", key: "R", desc: "Rain arrows on an area ahead: 4 waves of damage." },
+  ],
+  barbarian: [
+    { id: "rage", level: 1, name: "Rage", key: "E", desc: "For 5s: +30% damage and +20% speed." },
+    { id: "bloodthirst", level: 3, name: "Bloodthirst", desc: "Passive: heal 15% of the damage you deal." },
+    { id: "groundslam", level: 5, name: "Ground Slam", desc: "Combo finisher stuns enemies for 0.6s." },
+    { id: "unstoppable", level: 8, name: "Unstoppable", desc: "While raging: immune to stun, slow and knockback." },
+    { id: "leap", level: 10, name: "Leap", key: "R", desc: "Leap forward and crash down, hurting everything where you land." },
+  ],
 };
 
 export function hasPower(cls: ClassKind, level: number, id: PowerId): boolean {
@@ -108,19 +126,28 @@ export const SHADOW_STRIKE_DAMAGE = 0.8; // x primary damage
 export const IGNITE = { radius: 22, splash: 0.5 };
 export const FROST = { slow: 0.5, durationMs: 2000 };
 export const SLOW_MOB = 0.5;
+export const EAGLE_EYE_RANGE = 1.3;
+export const PIERCE_EXTRA = 2;
+export const PINNING = { durationMs: 1500 };
+export const RAGE = { damage: 1.3, speed: 1.2 };
+export const BLOODTHIRST = 0.15;
+export const GROUND_SLAM_STUN_MS = 600;
 
 export interface UltDef { name: string; cooldownMs: number; damage: number; radius: number; stunMs?: number; hits?: number; delayMs?: number; ahead?: number }
 export const ULTS: Record<ClassKind, UltDef> = {
   knight: { name: "Earthquake", cooldownMs: 18000, damage: 35, radius: 50, stunMs: 1500 },
   ninja: { name: "Blade Storm", cooldownMs: 14000, damage: 16, radius: 36, hits: 3 },
   wizard: { name: "Meteor", cooldownMs: 16000, damage: 60, radius: 46, delayMs: 600, ahead: 56 },
+  archer: { name: "Arrow Rain", cooldownMs: 15000, damage: 16, radius: 44, hits: 4, delayMs: 400, ahead: 72 },
+  barbarian: { name: "Leap", cooldownMs: 14000, damage: 45, radius: 40, ahead: 64 },
 };
 export const ULT_LEVEL = 10;
 
 /** Movement speed after passives and slows (used by server and client prediction). */
-export function heroSpeed(cls: ClassKind, level: number, slowed: boolean): number {
+export function heroSpeed(cls: ClassKind, level: number, slowed: boolean, raging = false): number {
   let s = CLASSES[cls].speed;
   if (hasPower(cls, level, "swift")) s *= 1 + SWIFT_BONUS;
+  if (raging) s *= RAGE.speed;
   if (slowed) s *= 1 - FROST.slow;
   return s;
 }

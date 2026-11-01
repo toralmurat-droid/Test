@@ -12,12 +12,12 @@ const SHADOW = "rgba(0,0,0,0.25)";
 
 class Painter {
   private s: number;
-  constructor(private ctx: CanvasRenderingContext2D, private ox: number, seed: number) { this.s = seed * 7919 + 13; }
+  constructor(private ctx: CanvasRenderingContext2D, private ox: number, seed: number, private oy = 0) { this.s = seed * 7919 + 13; }
   r() { this.s = (this.s * 9301 + 49297) % 233280; return this.s / 233280; }
   ri(n: number) { return Math.floor(this.r() * n); }
   rect(x: number, y: number, w: number, h: number, c: Color) {
     this.ctx.fillStyle = css(c);
-    this.ctx.fillRect(this.ox + x, y, w, h);
+    this.ctx.fillRect(this.ox + x, this.oy + y, w, h);
   }
   px(x: number, y: number, c: Color) { this.rect(x, y, 1, 1, c); }
   fill(c: Color) { this.rect(0, 0, TILE, TILE, c); }
@@ -76,17 +76,176 @@ const stall = (p: Painter, c: number) => {
 const WIND = [0, 0, 1, 1, 1, 0, 0, 0, -1, 0];
 const k6 = (p: Painter) => p.ri(6);
 
-const DRAW: Record<number, (p: Painter, f: number) => void> = {
+// ---------- ruins ----------
+// Neighbour masks for connected tiles (walls, palisade): which sides continue into a tile of the same kind.
+const N = 1, E = 2, S = 4, W = 8;
+
+/** Worn flagstones: a few large slabs with dark joints, chipped edges and moss. */
+const flags = (p: Painter) => {
+  p.fill(0x6e6a61);
+  const xs = [0, 5 + p.ri(4), 16], cols = [0x8f897c, 0x9a9488, 0x878175, 0xa29c8f];
+  for (let r = 0; r < 2; r++) {
+    const y0 = r * 8, y1 = y0 + 8, off = r ? p.ri(5) - 2 : 0;
+    for (let c = 0; c < 2; c++) {
+      const x0 = Math.max(0, xs[c] + (c ? off : 0)), x1 = Math.min(16, xs[c + 1] + (c ? 0 : off));
+      const col = cols[p.ri(4)];
+      p.rect(x0, y0, x1 - x0 - 1, 7, col);
+      p.rect(x0, y0, x1 - x0 - 1, 1, 0xa39d90);
+      p.rect(x0, y0 + 6, x1 - x0 - 1, 1, 0x7f7a6f);
+      p.speckle(0x807a6e, 4, x0, y0 + 1, Math.max(1, x1 - x0 - 1), 5);
+    }
+  }
+  if (p.r() < 0.6) { const x = 2 + p.ri(11), y = 1 + p.ri(13); p.px(x, y, 0x5f5b53); p.px(x + 1, y + 1, 0x5f5b53); p.px(x + 1, y + 2, 0x5f5b53); }
+  p.speckle(0x5f8f3f, 5); p.speckle(0x4a7a32, 3);
+};
+/** Plank floor: boards of varying tone, staggered joints, the odd missing board. */
+const planks = (p: Painter) => {
+  p.fill(0x5e4630);
+  const tones = [0x8a6a44, 0x84653f, 0x8f6f49, 0x806240];
+  for (let y = 0; y < 16; y += 4) {
+    const j = 3 + p.ri(10), c = tones[p.ri(4)];
+    p.rect(0, y, 16, 3, c); p.rect(0, y, 16, 1, 0x967550);
+    p.rect(j, y, 1, 3, 0x5e4630);
+    p.px(p.ri(16), y + 1 + p.ri(2), 0x76593a); p.px(p.ri(16), y + 1, 0x76593a);
+  }
+  if (p.r() < 0.12) { const x = p.ri(10), y = 4 * p.ri(4); p.rect(x, y, 5, 3, 0x4a3828); p.px(x + 1, y + 1, 0x4f6e33); }
+  p.speckle(0x5a8a3a, 2);
+};
+/** Scattered broken stones and splinters on top of whatever is underneath. */
+const debris = (p: Painter, n: number) => {
+  for (let k = 0; k < n; k++) {
+    const x = 1 + p.ri(12), y = 2 + p.ri(11), w = 2 + p.ri(2), c = [0x9a948a, 0x8a847a, 0xa8a296][p.ri(3)];
+    p.rect(x, y + 2, w, 1, "rgba(0,0,0,0.28)");
+    p.rect(x, y, w, 2, c); p.rect(x, y, w - 1, 1, 0xc0baad);
+  }
+  if (p.r() < 0.6) { const x = p.ri(10), y = 3 + p.ri(11); p.rect(x, y, 5, 1, 0x4e331c); p.px(x + 4, y, 0x2a1d14); }
+};
+
+/** Stone wall seen from above at a slight angle: a light top course and a darker brick face, broken and mossy. */
+const ruinWall = (p: Painter, m: number) => {
+  const horiz = !!(m & (E | W)) || !(m & (N | S));
+  const top = 0xb2ab9c, topJ = 0x8a8477, face = 0x8a8478, mortar = 0x625e56;
+  // jagged broken top: higher towards connected sides, crumbling at free ends
+  const jag: number[] = [];
+  for (let x = 0, h = p.ri(2); x < 16; x++) {
+    if (p.r() < 0.3) h = Math.max(0, Math.min(2, h + (p.r() < 0.5 ? -1 : 1)));
+    let hh = h;
+    if (!(m & W) && x < 4) hh += 4 - x;
+    if (!(m & E) && x > 11) hh += x - 11;
+    jag.push(hh);
+  }
+  if (horiz) {
+    const x0 = m & W ? 0 : 1, x1 = m & E ? 16 : 15;
+    p.rect(x0, 15, x1 - x0, 1, "rgba(0,0,0,0.25)");
+    for (let x = x0; x < x1; x++) {
+      const t = 1 + jag[x];
+      if (t > 12) continue;
+      p.rect(x, t, 1, Math.max(0, 7 - t), top);
+      p.px(x, t, 0xc8c1b1);
+      p.rect(x, Math.max(t, 7), 1, 15 - Math.max(t, 7), face);
+    }
+    for (const y of [10, 13]) for (let x = x0; x < x1; x++) if (1 + jag[x] < y) p.px(x, y, mortar);
+    for (let x = x0 + 2; x < x1; x += 4) if (1 + jag[x] < 8) { p.px(x, 8, mortar); p.px(x, 9, mortar); }
+    for (let x = x0; x < x1; x += 4) if (1 + jag[x] < 11) { p.px(x + 1, 11, mortar); p.px(x + 1, 12, mortar); }
+    for (let x = x0 + 3; x < x1; x += 5) if (1 + jag[x] < 4) p.px(x, 4, topJ);
+    p.rect(x0, 7, x1 - x0, 1, 0x9d968a);
+    p.rect(x0, 14, x1 - x0, 1, 0x57534c);
+  }
+  if (m & (N | S)) {
+    const y0 = m & N ? 0 : 1, y1 = m & S ? 16 : 8;
+    p.rect(12, y0 + 1, 2, y1 - y0, "rgba(0,0,0,0.2)");
+    p.rect(4, y0, 8, y1 - y0, top);
+    p.rect(4, y0, 1, y1 - y0, 0xc8c1b1); p.rect(11, y0, 1, y1 - y0, topJ);
+    for (let y = y0 + 3; y < y1; y += 4) p.rect(5, y, 6, 1, topJ);
+    for (let y = y0 + 1; y < y1; y += 4) p.px(8, y, topJ);
+    if (!(m & N)) { p.px(4, y0, 0x8a8477); p.px(10, y0, 0x8a8477); p.rect(5, y0, 3, 1, 0xc8c1b1); }
+    if (!(m & S) && !horiz) {
+      p.rect(4, 8, 8, 7, face); p.rect(4, 11, 8, 1, mortar); p.px(7, 8, mortar); p.px(7, 9, mortar); p.px(9, 12, mortar); p.px(9, 13, mortar);
+      p.rect(4, 14, 8, 1, 0x57534c); p.rect(4, 15, 9, 1, "rgba(0,0,0,0.25)");
+    }
+  }
+  // moss and ivy in the cracks
+  for (let k = 0; k < 5; k++) { const x = 3 + p.ri(10), y = 4 + p.ri(9); p.px(x, y, k % 2 ? 0x5f8f3f : 0x4a7a32); }
+  // fallen stones at broken ends
+  if (horiz && !(m & E)) { p.rect(13, 13, 2, 2, 0x9a948a); p.px(13, 13, 0xc0baad); }
+  if (horiz && !(m & W)) { p.rect(1, 13, 2, 2, 0x8a847a); p.px(1, 13, 0xc0baad); }
+};
+
+/** Charred timber frame: a sill beam with burnt uprights of uneven height. */
+const beamWall = (p: Painter, m: number) => {
+  const horiz = !!(m & (E | W)) || !(m & (N | S));
+  const post = (x: number, top: number, bot: number) => {
+    p.rect(x, top, 4, bot - top, 0x4a3524);
+    p.rect(x, top, 1, bot - top, 0x6b4a30); p.rect(x + 3, top, 1, bot - top, 0x2a1d14);
+    p.rect(x, top, 4, 1, 0x1a1210); p.px(x + (p.ri(2) ? 0 : 3), top + 1, 0x1a1210); p.px(x + 1, top + 3 + p.ri(3), 0x2a1d14);
+  };
+  if (horiz) {
+    const x0 = m & W ? 0 : 2, x1 = m & E ? 16 : 14;
+    p.rect(x0, 14, x1 - x0, 2, "rgba(0,0,0,0.25)");
+    post(x0 === 0 ? 1 : 2, 1 + p.ri(4), 14);
+    if (p.r() < 0.55) post(8 + p.ri(3), 3 + p.ri(5), 14);
+    p.rect(x0, 10, x1 - x0, 5, 0x5a3e28); p.rect(x0, 10, x1 - x0, 1, 0x7a5636); p.rect(x0, 14, x1 - x0, 1, 0x3a2818);
+    for (let x = x0 + 2; x < x1 - 1; x += 5) p.px(x, 12, 0x3a2818);
+    p.px(x0 + 3 + p.ri(8), 12, 0x1a1210); p.px(x0 + 2 + p.ri(8), 13, 0x2a1d14);
+  }
+  if (m & (N | S)) {
+    const y0 = m & N ? 0 : 3, y1 = m & S ? 16 : 13;
+    p.rect(11, y0 + 1, 2, y1 - y0, "rgba(0,0,0,0.25)");
+    p.rect(4, y0, 7, y1 - y0, 0x5a3e28); p.rect(4, y0, 1, y1 - y0, 0x7a5636); p.rect(10, y0, 1, y1 - y0, 0x3a2818);
+    for (let y = y0 + 2; y < y1; y += 5) p.rect(6, y, 3, 1, 0x3a2818);
+    if (!horiz && !(m & S)) post(6, 3 + p.ri(4), 14);
+    else if (!horiz && p.r() < 0.5) post(6, 1 + p.ri(4), 8 + p.ri(4));
+  }
+  p.speckle(0x5a9a3c, 3, 0, 12, 16, 4);
+};
+
+/** Pointed log stakes; vertical runs are drawn as a single file of stakes seen side-on. */
+const palisade = (p: Painter, m: number) => {
+  const stake = (x: number, top: number, bot: number, lean = 0) => {
+    p.rect(x + lean, top + 1, 3, bot - top - 1, 0x7a5230);
+    p.rect(x + lean, top + 1, 1, bot - top - 1, 0x9a6a40); p.rect(x + 2 + lean, top + 1, 1, bot - top - 1, 0x4e331c);
+    p.px(x + 1 + lean, top, 0x9a6a40);
+    p.rect(x + lean, bot - 1, 3, 1, 0x3e2814);
+  };
+  if (m & (E | W) || !(m & (N | S))) {
+    const x0 = m & W ? 0 : 1, x1 = m & E ? 16 : 13;
+    p.rect(x0, 14, x1 - x0, 2, "rgba(0,0,0,0.22)");
+    for (let x = x0; x + 2 < x1 + 1; x += 4) stake(x, 1 + p.ri(3) + (!(m & E) && x > 8 ? 3 : 0) + (!(m & W) && x < 4 ? 3 : 0), 15);
+    p.rect(x0, 9, x1 - x0, 1, 0x4e331c); p.rect(x0, 5, x1 - x0, 1, 0x5e3b1f);
+  }
+  if (m & (N | S)) {
+    const y0 = m & N ? -2 : 1;
+    p.rect(11, 2, 2, 14, "rgba(0,0,0,0.2)");
+    stake(5, Math.max(0, y0), 9); stake(8, Math.max(0, y0) + 2, 11); stake(5, 6, 16); stake(8, 9, 16);
+    p.rect(5, 5, 6, 1, 0x4e331c); p.rect(5, 13, 6, 1, 0x4e331c);
+  }
+};
+
+const LIGHT_GRASS = [0x5a9a3c, 0x4a8532, 0x6fb04a, 0x5a9a3c];
+
+const DRAW: Record<number, (p: Painter, f: number, v: number) => void> = {
   [T.GRASS]: (p) => grass(p),
-  [T.GRASS_DARK]: (p) => grass(p, 0x4f8c36, 0x427a2c, 0x5f9f42),
+  [T.GRASS_DARK]: (p, _f, m) => {
+    grass(p, 0x4f8c36, 0x427a2c, 0x5f9f42);
+    // soft dithered edge towards lighter grass (m has a bit set for each side that is light grass)
+    if (!m) return;
+    p.each((x, y) => {
+      let d = 9;
+      if (m & N) d = Math.min(d, y); if (m & S) d = Math.min(d, 15 - y);
+      if (m & W) d = Math.min(d, x); if (m & E) d = Math.min(d, 15 - x);
+      return d < 4 && p.r() < (4 - d) / 4.5 ? LIGHT_GRASS[p.ri(4)] : undefined;
+    });
+  },
   [T.TALL_GRASS]: (p, f) => {
     grass(p);
-    // blades lean with the wind: the tip moves one pixel on alternate frames
+    // tufts of three blades; tips lean with the wind on alternate frames
     const lean = WIND[f % WIND.length];
-    for (let k = 0; k < 14; k++) {
-      const x = p.ri(16), y = 2 + p.ri(10), h = 2 + p.ri(4);
-      p.rect(x, y + 1, 1, h - 1, k % 2 ? 0x3f7a2a : 0x7cc455);
-      p.px(Math.min(15, Math.max(0, x + (k % 3 ? lean : 0))), y, 0x8fd468);
+    for (let k = 0; k < 5; k++) {
+      const x = 2 + p.ri(12), y = 4 + p.ri(10), h = 3 + p.ri(2);
+      p.rect(x - 1, y, 3, 1, 0x3f7a2a);
+      p.rect(x, y - h + 1, 1, h - 1, 0x4a8a30); p.px(x + lean, y - h, 0x7cc455);
+      p.rect(x - 1, y - h + 2, 1, h - 2, 0x5a9a3c); p.px(x - 2 + (k % 2 ? lean : 0), y - h + 1, 0x6fb04a);
+      p.rect(x + 1, y - h + 3, 1, h - 3, 0x5a9a3c); p.px(x + 2 + (k % 2 ? 0 : lean), y - h + 2, 0x8fd468);
     }
   },
   [T.FLOWERS]: (p, f) => {
@@ -102,13 +261,21 @@ const DRAW: Record<number, (p: Painter, f: number) => void> = {
   },
   [T.DIRT]: (p) => { p.fill(0xa7814f); p.speckle(0x8f6c3f, 30); p.speckle(0xbd9763, 14); p.speckle(0x7a7a72, 3); },
   [T.COBBLE]: (p) => {
-    p.fill(0x6f6a60);
-    const stones = [0x9e998c, 0xa8a396, 0x938e81];
-    for (let y = 0, i = 0; y < 16; y += 4, i++) for (let x = (i % 2) ? -3 : 0; x < 16; x += 5) {
-      const x0 = Math.max(x, 0), x1 = Math.min(x + 4, 16);
-      p.rect(x0, y, x1 - x0, 3, stones[p.ri(3)]);
-      if (x >= 0) p.px(x, y, 0xbab5a8);
+    p.fill(0x77726a);
+    const stones = [0x9c978a, 0xa29d90, 0x968f83, 0x908b7f];
+    for (let y = 0; y < 16; y += 4) {
+      let x = -p.ri(3);
+      while (x < 16) {
+        const w = 3 + p.ri(3), x0 = Math.max(x, 0), x1 = Math.min(x + w - 1, 16);
+        if (x1 > x0) {
+          p.rect(x0, y, x1 - x0, 3, stones[p.ri(4)]);
+          p.rect(x0, y, x1 - x0, 1, 0xaba699); p.rect(x0, y + 2, x1 - x0, 1, 0x8a8579);
+          if (x >= 0) p.px(x0, y + 2, 0x77726a);
+        }
+        x += w;
+      }
     }
+    p.speckle(0x5f8f3f, 2);
   },
   [T.SAND]: (p) => { p.fill(0xd9c38a); p.speckle(0xc4ad74, 22); p.speckle(0xe8d6a3, 12); },
   [T.WATER]: (p, f) => {
@@ -139,20 +306,13 @@ const DRAW: Record<number, (p: Painter, f: number) => void> = {
     }
   },
 
-  [T.FLOOR]: (p) => { // weathered wooden floorboards of a ruined house
-    p.fill(0x8a6a44);
-    for (const y of [0, 4, 8, 12]) { p.rect(0, y + 3, 16, 1, 0x5e4528); p.rect(0, y, 16, 1, 0x9c7a50); }
-    for (let k = 0; k < 4; k++) p.px(p.ri(16), k * 4 + 1 + p.ri(2), 0x4a3520); // nail heads and knots
-    p.speckle(0x7a5c3a, 14); p.speckle(0x5a9a3c, 5); // moss in the cracks
-    p.rect(p.ri(10), 4 * p.ri(4) + 1, 5, 2, 0x3a2a1a); // a missing plank
-  },
-  [T.RUBBLE]: (p) => { // dirt strewn with broken stones and bits of timber
-    p.fill(0x9a7d55); p.speckle(0x846a46, 24); p.speckle(0x5a9a3c, 6);
-    for (let k = 0; k < 6; k++) {
-      const x = p.ri(13), y = p.ri(13), c = k % 3 ? 0x9a948a : 0x7a7268;
-      p.rect(x, y, 2 + p.ri(2), 2, c); p.px(x, y, 0xbab4a8); p.px(x + 1, y + 2, 0x55504a);
-    }
-    p.rect(p.ri(10), p.ri(14), 5, 1, 0x4e331c);
+  [T.FLOOR]: (p) => planks(p),
+  [T.FLAGS]: (p) => flags(p),
+  [T.RUBBLE]: (p, _f, v) => { // debris over the floor it lies on: 0 flagstones, 1 planks, 2 grass, 3 dirt
+    const base = v >> 2;
+    if (base === 0) flags(p); else if (base === 1) planks(p); else if (base === 2) grass(p);
+    else { p.fill(0xa7814f); p.speckle(0x8f6c3f, 30); p.speckle(0xbd9763, 14); }
+    debris(p, base === 2 ? 3 : base === 1 ? 2 : 3);
   },
 
   // ---------- objects (transparent background) ----------
@@ -190,26 +350,8 @@ const DRAW: Record<number, (p: Painter, f: number) => void> = {
     p.disc(6, 8.2, 2.2, 1.2, 0xb0b0b0);
     p.px(10, 11, 0x5a5a5a); p.px(11, 12, 0x5a5a5a);
   },
-  [T.BEAM]: (p) => { // charred timber wall: broken posts and a fallen beam
-    p.disc(8, 14.5, 7, 1.6, SHADOW);
-    for (const [x, top] of [[1, 2], [7, 6], [12, 3]] as const) {
-      p.rect(x, top, 3, 15 - top, 0x4a3524);
-      p.rect(x, top, 1, 15 - top, 0x6b4a30); p.rect(x + 2, top, 1, 15 - top, 0x2a1d14);
-      p.px(x + 1, top, 0x1a1210); p.px(x, top + 1, 0x1a1210); // charred tips
-    }
-    p.rect(0, 9, 16, 2, 0x5a3e28); p.rect(0, 9, 16, 1, 0x7a5636); p.px(6, 10, 0x1a1210); p.px(11, 9, 0x1a1210);
-    p.rect(3, 12, 4, 2, 0xd8c8a8); p.px(4, 12, 0xeee0c4); // a scrap of plaster
-    p.speckle(0x5a9a3c, 4, 0, 13, 16, 3);
-  },
-  [T.PALISADE]: (p) => {
-    for (const x of [0, 4, 8, 12]) {
-      p.rect(x, 2, 4, 14, 0x7a5230);
-      p.rect(x, 2, 1, 14, 0x5e3b1f); p.rect(x + 3, 2, 1, 14, 0x4e331c);
-      p.rect(x + 1, 3, 1, 12, 0x9a6a40);
-      p.rect(x + 1, 1, 2, 1, 0x7a5230); p.px(x + 1, 0, 0x9a6a40);
-    }
-    p.rect(0, 9, 16, 1, 0x4e331c);
-  },
+  [T.BEAM]: (p, _f, m) => beamWall(p, m),
+  [T.PALISADE]: (p, _f, m) => palisade(p, m),
   [T.FENCE]: (p) => {
     p.rect(0, 8, 16, 2, 0x8b5e34); p.rect(0, 12, 16, 2, 0x8b5e34); p.rect(0, 8, 16, 1, 0xa8774a);
     p.rect(1, 5, 2, 11, 0x6b4426); p.rect(13, 5, 2, 11, 0x6b4426); p.px(1, 5, 0x8b5e34); p.px(13, 5, 0x8b5e34);
@@ -318,14 +460,7 @@ const DRAW: Record<number, (p: Painter, f: number) => void> = {
     p.rect(7, 7, 2, 3, 0xffe066); p.px(8 + fl[2], 3 - fl[1] + 1, 0xffb23a);
     if (fl[1] === 2) p.px(7, 1, 0xffe066);
   },
-  [T.RUIN]: (p) => {
-    p.rect(1, 6, 14, 9, 0x8a857a); p.rect(1, 4, 5, 2, 0x8a857a); p.rect(9, 2, 4, 4, 0x8a857a);
-    for (const y of [8, 11]) p.rect(1, y, 14, 1, 0x6a665e);
-    for (const [x, y] of [[5, 6], [10, 9], [4, 12], [12, 12], [11, 3]]) p.rect(x, y, 1, 2, 0x6a665e);
-    p.rect(1, 6, 14, 1, 0xa39e92); p.rect(9, 2, 4, 1, 0xa39e92);
-    p.speckle(0x5f8f3f, 10, 1, 4, 14, 11);
-    p.rect(1, 15, 14, 1, 0x5a564f);
-  },
+  [T.RUIN]: (p, _f, m) => ruinWall(p, m),
   [T.SIGN]: (p) => {
     p.disc(8, 15, 4, 1, SHADOW);
     p.rect(7, 8, 2, 7, 0x6b4426);
@@ -340,24 +475,65 @@ const DRAW: Record<number, (p: Painter, f: number) => void> = {
   },
 };
 
-/** Paints every tile into a single row on the given context (TILE_COUNT × TILE wide). */
+/**
+ * The tileset has ROWS rows. Row 0 is the plain tile; other rows hold variants:
+ *  - random look-alikes for ground tiles (rows 0-3), so large areas don't repeat,
+ *  - neighbour masks for connected tiles (walls, palisade, dark-grass edges),
+ *  - the floor under rubble (rows 0-15 = base * 4 + variant).
+ * A tilemap index is `row * TILE_COUNT + id`.
+ */
+export const ROWS = 16;
+const VARIED = new Set<number>([T.GRASS, T.TALL_GRASS, T.FLOWERS, T.DIRT, T.COBBLE, T.SAND, T.WATER, T.FLOOR, T.FLAGS, T.FIELD, T.BRIDGE]);
+const CONNECTED = new Set<number>([T.RUIN, T.BEAM, T.PALISADE]);
+const LIGHT = new Set<number>([T.GRASS, T.TALL_GRASS, T.FLOWERS]);
+
+const paint = (ctx: CanvasRenderingContext2D, id: number, row: number, f: number) =>
+  DRAW[id]?.(new Painter(ctx, id * TILE, id + 1 + row * 131, row * TILE), f, row);
+
+/** Paints every tile and variant onto the given context (TILE_COUNT × ROWS tiles). */
 export function drawTileset(ctx: CanvasRenderingContext2D) {
-  ctx.clearRect(0, 0, TILE * TILE_COUNT, TILE);
-  for (let i = 0; i < TILE_COUNT; i++) DRAW[i]?.(new Painter(ctx, i * TILE, i + 1), 0);
+  ctx.clearRect(0, 0, TILE * TILE_COUNT, TILE * ROWS);
+  for (let i = 0; i < TILE_COUNT; i++) {
+    const rows = VARIED.has(i) ? 4 : CONNECTED.has(i) || i === T.GRASS_DARK || i === T.RUBBLE ? ROWS : 1;
+    for (let r = 0; r < rows; r++) paint(ctx, i, r, 0);
+  }
+}
+
+const vhash = (x: number, y: number) => { let h = Math.imul(x, 73856093) ^ Math.imul(y, 19349663); h = Math.imul(h ^ (h >>> 13), 1274126177); return (h >>> 0) % 4; };
+
+/** Tileset row to use for tile `id` at (x, y) of `grid`. */
+export function tileRow(grid: number[][], x: number, y: number): number {
+  const id = grid[y][x];
+  const at = (i: number, j: number) => grid[j]?.[i] ?? id;
+  const mask = (ok: (t: number) => boolean) => (ok(at(x, y - 1)) ? 1 : 0) | (ok(at(x + 1, y)) ? 2 : 0) | (ok(at(x, y + 1)) ? 4 : 0) | (ok(at(x - 1, y)) ? 8 : 0);
+  if (CONNECTED.has(id)) return mask((t) => t === id);
+  if (id === T.GRASS_DARK) return mask((t) => LIGHT.has(t));
+  if (id === T.RUBBLE) {
+    let fl = 0, pl = 0, gr = 0;
+    for (const [i, j] of [[x, y - 1], [x + 1, y], [x, y + 1], [x - 1, y]]) { const t = at(i, j); if (t === T.FLAGS || t === T.COBBLE) fl++; else if (t === T.FLOOR) pl++; else if (LIGHT.has(t) || t === T.GRASS_DARK) gr++; }
+    const base = fl >= pl && fl >= gr && fl > 0 ? 0 : pl >= gr && pl > 0 ? 1 : gr > 0 ? 2 : 3;
+    return base * 4 + vhash(x, y);
+  }
+  return VARIED.has(id) ? vhash(x, y) : 0;
+}
+
+/** Converts a grid of tile ids to tilemap indices (variants and connections resolved). */
+export function displayGrid(grid: number[][]): number[][] {
+  return grid.map((row, y) => row.map((id, x) => (id < 0 ? id : tileRow(grid, x, y) * TILE_COUNT + id)));
 }
 
 /** Tiles that change over time (see `drawTileFrame`). */
 export const ANIMATED_TILES: number[] = [T.WATER, T.WHEEL, T.CAMPFIRE, T.TALL_GRASS, T.FLOWERS];
 
-/** Repaints one tile of the tileset for animation frame `f` (same seed, so only the moving parts change). */
+/** Repaints one tile (all its variant rows) for animation frame `f` (same seeds, so only the moving parts change). */
 export function drawTileFrame(ctx: CanvasRenderingContext2D, id: number, f: number) {
-  ctx.clearRect(id * TILE, 0, TILE, TILE);
-  DRAW[id]?.(new Painter(ctx, id * TILE, id + 1), f);
+  const rows = VARIED.has(id) ? 4 : 1;
+  for (let r = 0; r < rows; r++) { ctx.clearRect(id * TILE, r * TILE, TILE, TILE); paint(ctx, id, r, f); }
 }
 
 export function createTilesetCanvas(): HTMLCanvasElement {
   const c = document.createElement("canvas");
-  c.width = TILE * TILE_COUNT; c.height = TILE;
+  c.width = TILE * TILE_COUNT; c.height = TILE * ROWS;
   drawTileset(c.getContext("2d")!);
   return c;
 }

@@ -1,18 +1,23 @@
 import Phaser from "phaser";
 import { Client, Room } from "colyseus.js";
 import { InputState, MAP_H, MAP_W, TILE } from "../../shared/constants";
-import { CLASSES, ClassKind, xpForLevel } from "../../shared/classes";
+import { CLASSES, ClassKind, DODGE, xpForLevel } from "../../shared/classes";
 import { GROUND, areaAt, isSafeZone } from "../../shared/map";
 import { moveStep } from "../../shared/movement";
 import { SPAWN_ZONES } from "../../shared/spawns";
 import {
-  attackMult, cooldownMult, heroSpeed, magicMult, POWERS, STAT_NAMES, StatKind, statsFor, ULT_LEVEL, ULTS,
+  attackMult, cooldownMult, heroSpeed, STATS, magicMult, POWERS, STAT_NAMES, StatKind, statsFor, ULT_LEVEL, ULTS,
 } from "../../shared/powers";
+import { displayGrid } from "./tileset";
 import { heroTexture, itemTexture, makeTileset, mobTexture } from "./textures";
 import { Minimap } from "./minimap";
 import { CHARACTERS, CHAR_ORIGIN, CharacterName, createArtAnims, playCharAnim, preloadArt } from "./artAssets";
 import { Ambient } from "./ambient";
 import { Details } from "./details";
+import { GearLayer, GearMenu, preloadGear, TIER_COLORS } from "./gear";
+import { GEAR, gearSpeedMult } from "../../shared/gear";
+import { talentMult, talentPoints, spentPoints, talentReduce } from "../../shared/talents";
+import { TalentMenu } from "./talents";
 
 interface Entity {
   sprite: Phaser.GameObjects.Sprite;
@@ -26,6 +31,7 @@ interface Entity {
   tx: number; ty: number; // server target position
   state: any;
   statusTint?: boolean;
+  gear?: GearLayer; // equipment overlays (heroes only)
   idleSince?: number; // local time the hero stopped moving, for idle fidgets
   nextFidget?: number;
 }
@@ -47,12 +53,15 @@ export class TownScene extends Phaser.Scene {
   private details?: Details;
   private areaName = "";
   private areaTimer?: number;
-  private shots = new Map<string, { g: Phaser.GameObjects.Arc; tx: number; ty: number }>();
+  private shots = new Map<string, { g: Phaser.GameObjects.Shape; tx: number; ty: number }>();
   private items = new Map<string, Phaser.GameObjects.Image>();
   private lastSpecial = -Infinity; // local clock (ms) of my last special, for the cooldown bar
+  private lastDodge = -Infinity; // local clock (ms) of my last dodge roll
   private lastUlt = -Infinity;
   private heroTimer?: number;
   private clearedTimer?: number;
+  private gearMenu?: GearMenu;
+  private talentMenu?: TalentMenu;
 
   constructor(private opts: { name: string; color: number; cls: ClassKind }) {
     super("town");
@@ -60,6 +69,7 @@ export class TownScene extends Phaser.Scene {
 
   preload() {
     preloadArt(this);
+    preloadGear(this);
   }
 
   async create() {
@@ -67,8 +77,8 @@ export class TownScene extends Phaser.Scene {
     createArtAnims(this);
     const map = this.make.tilemap({ tileWidth: TILE, tileHeight: TILE, width: MAP_W, height: MAP_H });
     const tiles = map.addTilesetImage("tiles", "tiles", TILE, TILE, 0, 0)!;
-    map.createBlankLayer("ground", tiles)!.putTilesAt(GROUND, 0, 0).setDepth(-2);
-    map.createBlankLayer("objects", tiles)!.putTilesAt(Ambient.objectLayerData(), 0, 0).setDepth(-1);
+    map.createBlankLayer("ground", tiles)!.putTilesAt(displayGrid(GROUND), 0, 0).setDepth(-2);
+    map.createBlankLayer("objects", tiles)!.putTilesAt(displayGrid(Ambient.objectLayerData()), 0, 0).setDepth(-1);
     this.ambient = new Ambient(this); // trees, shadows, smoke, wildlife… (cosmetic only)
     this.details = new Details(this); // roof shading, ground detail, ducks, lanterns, day/night
     this.details.onDarkness((d) => this.ambient?.setDarkness(d));
@@ -79,14 +89,25 @@ export class TownScene extends Phaser.Scene {
     cam.roundPixels = true;
 
     // Keys without capture so typing in chat still works
-    this.keys = this.input.keyboard!.addKeys("W,A,S,D,UP,DOWN,LEFT,RIGHT,SPACE,E,SHIFT,Q,R,C", false) as any;
+    this.keys = this.input.keyboard!.addKeys("W,A,S,D,UP,DOWN,LEFT,RIGHT,SPACE,E,SHIFT,Q,R,C,G,T,F", false) as any;
     this.input.keyboard!.on("keydown-SPACE", () => { if (!this.chatting()) this.room?.send("attack"); });
     const special = () => { if (!this.chatting()) this.room?.send("special"); };
     this.input.keyboard!.on("keydown-E", special);
     this.input.keyboard!.on("keydown-SHIFT", special);
     this.input.keyboard!.on("keydown-Q", () => { if (!this.chatting()) this.room?.send("potion"); });
     this.input.keyboard!.on("keydown-R", () => { if (!this.chatting()) this.room?.send("ult"); });
+    this.input.keyboard!.on("keydown-F", () => { if (!this.chatting()) this.room?.send("dodge"); });
     this.input.keyboard!.on("keydown-C", () => { if (!this.chatting()) this.toggleHeroMenu(); });
+    this.gearMenu = new GearMenu(this, (type, msg) => this.room?.send(type, msg));
+    const toggleGear = () => this.gearMenu?.toggle(this.entities.get(this.me)?.state);
+    this.input.keyboard!.on("keydown-G", () => { if (!this.chatting()) toggleGear(); });
+    // Always reachable with the mouse too (even while typing in chat)
+    const bagBtn = document.getElementById("bagbtn")!;
+    bagBtn.addEventListener("mousedown", (ev) => ev.preventDefault());
+    bagBtn.addEventListener("click", toggleGear);
+    window.addEventListener("keydown", (ev) => { if (ev.key === "Escape" && this.gearMenu?.open) this.gearMenu.close(); });
+    this.talentMenu = new TalentMenu((type, msg) => this.room?.send(type, msg));
+    this.input.keyboard!.on("keydown-T", () => { if (!this.chatting()) this.talentMenu?.toggle(this.entities.get(this.me)?.state); });
     this.setupChat();
 
     const proto = location.protocol === "https:" ? "wss" : "ws";
@@ -132,7 +153,12 @@ export class TownScene extends Phaser.Scene {
 
     const shots = (this.room.state as any).projectiles;
     shots.onAdd((s: any, id: string) => {
-      const g = this.add.circle(s.x, s.y, 2.5 * (s.size || 1), 0xff9f1c).setStrokeStyle(1, 0xffe066).setDepth(9000);
+      const size = s.size || 1;
+      const g: Phaser.GameObjects.Shape = s.kind === "arrow"
+        // Arrow: thin shaft along the flight direction
+        ? this.add.rectangle(s.x, s.y, 9 * size, 1.5 * size, 0xe8d8b0).setStrokeStyle(0.5, 0x5d4037)
+            .setAngle(s.dir === "up" || s.dir === "down" ? 90 : 0).setDepth(9000)
+        : this.add.circle(s.x, s.y, 2.5 * size, 0xff9f1c).setStrokeStyle(1, 0xffe066).setDepth(9000);
       const shot = { g, tx: s.x, ty: s.y };
       this.shots.set(id, shot);
       s.onChange(() => { shot.tx = s.x; shot.ty = s.y; });
@@ -141,14 +167,27 @@ export class TownScene extends Phaser.Scene {
 
     const items = (this.room.state as any).items;
     items.onAdd((it: any, id: string) => {
-      const img = this.add.image(it.x, it.y, itemTexture(this, it.kind)).setDepth(it.y - 8);
+      const gear = it.kind === "gear" && GEAR[it.gear];
+      const img = gear
+        ? this.add.image(it.x, it.y, "gear_icons", it.gear).setScale(0.6).setDepth(it.y - 8)
+        : this.add.image(it.x, it.y, itemTexture(this, it.kind)).setDepth(it.y - 8);
+      if (gear && gear.tier > 1) {
+        // Rare / epic drops sparkle
+        this.tweens.add({ targets: img, alpha: 0.65, duration: 400, yoyo: true, repeat: -1 });
+      }
       // Gentle bob so loot catches the eye
       this.tweens.add({ targets: img, y: it.y - 2, duration: 500, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
       this.items.set(id, img);
     });
     items.onRemove((_it: any, id: string) => { this.items.get(id)?.destroy(); this.items.delete(id); });
-    this.room.onMessage("pickup", ({ kind, amount, x, y }) =>
-      this.floatText(x, y - 6, kind === "gold" ? `+${amount} gold` : "+1 potion", kind === "gold" ? "#ffc93c" : "#ff8fa3"));
+    this.room.onMessage("pickup", ({ kind, amount, x, y, gear, name }) => {
+      if (kind === "gear") {
+        this.floatText(x, y - 6, `+${name}`, TIER_COLORS[GEAR[gear]?.tier ?? 1]);
+        this.feed(`Found ${name}! Press G to equip`);
+        return;
+      }
+      this.floatText(x, y - 6, kind === "gold" ? `+${amount} gold` : "+1 potion", kind === "gold" ? "#ffc93c" : "#ff8fa3");
+    });
     this.room.onMessage("heal", ({ id, amount }) => {
       const e = this.entities.get(id);
       if (e) this.floatText(e.sprite.x, e.sprite.y - 14, `+${amount}`, "#7cfc00");
@@ -156,8 +195,10 @@ export class TownScene extends Phaser.Scene {
 
     this.room.onMessage("swing", ({ id, step, variant }) => this.showSwing(id, step ?? 0, variant ?? 0));
     this.room.onMessage("special", (msg) => this.showSpecial(msg));
-    this.room.onMessage("boom", ({ x, y, r }) => this.burst(x, y, r ? r / 1.8 : 6, 0xff9f1c, r ? 300 : 200));
+    this.room.onMessage("boom", ({ x, y, r, kind }) =>
+      kind === "arrow" ? this.burst(x, y, 3, 0xd7ccc8, 150) : this.burst(x, y, r ? r / 1.8 : 6, 0xff9f1c, r ? 300 : 200));
     this.room.onMessage("ult", (msg) => this.showUlt(msg));
+    this.room.onMessage("dodge", (msg) => this.showDodge(msg));
     this.room.onMessage("zonecleared", ({ zone, by, name, respawnSec }) => {
       if (by === this.me) this.showCleared(zone, respawnSec);
       this.feed(`${name} cleared ${zone}!`);
@@ -230,14 +271,15 @@ export class TownScene extends Phaser.Scene {
       stroke: "#000", strokeThickness: 3,
     }).setOrigin(0.5, 1).setScale(0.25).setResolution(2);
     const bar = this.add.graphics();
-    this.entities.set(id, { sprite, label, bar, tx: p.x, ty: p.y, state: p, mob, hero, top: hero ? HERO_TOP : 14 });
+    const gear = hero ? new GearLayer(this, hero) : undefined;
+    this.entities.set(id, { sprite, label, bar, tx: p.x, ty: p.y, state: p, mob, hero, gear, top: hero ? HERO_TOP : 14 });
     if (id === this.me) this.cameras.main.startFollow(sprite, true, 0.15, 0.15);
   }
 
   private removeEntity(id: string) {
     const e = this.entities.get(id);
     if (!e) return;
-    e.sprite.destroy(); e.label?.destroy(); e.bar.destroy(); e.bubble?.destroy(); e.shield?.destroy();
+    e.sprite.destroy(); e.label?.destroy(); e.bar.destroy(); e.bubble?.destroy(); e.shield?.destroy(); e.gear?.destroy();
     this.entities.delete(id);
   }
 
@@ -297,19 +339,20 @@ export class TownScene extends Phaser.Scene {
     const mine = this.entities.get(this.me)?.state;
     if (!mine) return;
     const cls = mine.cls as ClassKind, lvl = mine.level as number;
-    const st = statsFor(cls, lvl);
+    const st = { sta: mine.sta, str: mine.str, mag: mine.mag }; // includes gear bonuses
+    const base = statsFor(cls, lvl);
     const prev = from !== undefined ? statsFor(cls, from) : undefined;
     const el = document.getElementById("hero")!;
     document.getElementById("herobanner")!.textContent = from !== undefined ? `⬆ Level ${lvl}! Points added automatically.` : "";
     document.getElementById("herotitle")!.textContent = `${mine.name} · Lv ${lvl} ${CLASSES[cls].name}`;
     const notes: Record<StatKind, string> = {
       sta: `${mine.maxHp} max HP`,
-      str: cls === "wizard" ? "+2 HP per point" : `attack ×${attackMult(cls, st).toFixed(2)}`,
-      mag: `${cls === "wizard" ? `fireball ×${attackMult(cls, st).toFixed(2)}, ` : ""}skills ×${magicMult(cls, st).toFixed(2)}, ` +
+      str: STATS[cls].attackStat === "str" ? `attack ×${attackMult(cls, st).toFixed(2)}, +2 HP each` : "+2 HP per point",
+      mag: `${STATS[cls].attackStat === "mag" ? `attack ×${attackMult(cls, st).toFixed(2)}, ` : ""}skills ×${magicMult(cls, st).toFixed(2)}, ` +
         `cooldowns −${Math.round((1 - cooldownMult(cls, st, lvl)) * 100)}%`,
     };
     document.getElementById("herostats")!.innerHTML = (["sta", "str", "mag"] as StatKind[]).map((k) => {
-      const gain = prev ? st[k] - prev[k] : 0;
+      const gain = prev ? base[k] - prev[k] : 0;
       return `<span>${STAT_NAMES[k]}</span><b>${st[k]}${gain ? ` <span class="gain">+${gain}</span>` : ""}</b><span class="note">${notes[k]}</span>`;
     }).join("");
     document.getElementById("heropowers")!.innerHTML = POWERS[cls].map((pw) => {
@@ -321,6 +364,23 @@ export class TownScene extends Phaser.Scene {
     el.hidden = false;
     clearTimeout(this.heroTimer);
     if (from !== undefined) this.heroTimer = window.setTimeout(() => { el.hidden = true; }, 7000);
+  }
+
+  private showDodge(msg: { id: string; dir: string }) {
+    const e = this.entities.get(msg.id);
+    if (!e) return;
+    if (msg.id === this.me) this.lastDodge = this.time.now;
+    if (e.hero) playCharAnim(e.sprite, e.hero, "dodge", msg.dir as any);
+    // A couple of fading after-images and a dust puff
+    for (let i = 1; i <= 3; i++) {
+      this.time.delayedCall(i * 60, () => {
+        const g = this.add.sprite(e.sprite.x, e.sprite.y, e.sprite.texture.key, e.sprite.frame.name)
+          .setOrigin(e.sprite.originX, e.sprite.originY).setFlipX(e.sprite.flipX).setScale(e.sprite.scaleX, e.sprite.scaleY)
+          .setAlpha(0.35).setTint(0xbde0fe).setDepth(e.sprite.depth - 0.1);
+        this.tweens.add({ targets: g, alpha: 0, duration: 220, onComplete: () => g.destroy() });
+      });
+    }
+    this.burst(e.sprite.x, e.sprite.y + 4, 5, 0xd7ccc8, 250);
   }
 
   private showUlt(msg: { id: string; kind: string; x: number; y: number; r: number; delay?: number; hits?: number }) {
@@ -341,6 +401,31 @@ export class TownScene extends Phaser.Scene {
           this.tweens.add({ targets: g, angle: 180, alpha: 0, duration: 200, onComplete: () => g.destroy() });
         });
       }
+    } else if (msg.kind === "arrowrain") {
+      const warn = this.add.circle(msg.x, msg.y, msg.r, 0xd7ccc8, 0.12).setStrokeStyle(1, 0xbcaaa4).setDepth(9000);
+      const hits = msg.hits ?? 4, delay = msg.delay ?? 400;
+      for (let i = 0; i < hits; i++) {
+        this.time.delayedCall(delay + i * 250, () => {
+          // A handful of falling arrow streaks per wave
+          for (let k = 0; k < 6; k++) {
+            const a = Math.random() * Math.PI * 2, d = Math.random() * msg.r;
+            const ax = msg.x + Math.cos(a) * d, ay = msg.y + Math.sin(a) * d;
+            const streak = this.add.rectangle(ax, ay - 14, 1, 7, 0xe8d8b0).setDepth(10000);
+            this.tweens.add({ targets: streak, y: ay, alpha: 0, duration: 160, onComplete: () => streak.destroy() });
+          }
+          if (i === hits - 1) warn.destroy();
+        });
+      }
+    } else if (msg.kind === "leap") {
+      const m = msg as any;
+      if (e) { e.sprite.setPosition(m.x, m.y); e.tx = m.x; e.ty = m.y; }
+      for (let i = 0; i < 4; i++) {
+        const t = i / 4;
+        const ghost = this.add.circle(m.fromX + (m.x - m.fromX) * t, m.fromY - 10 - Math.sin(t * Math.PI) * 10 + (m.y - m.fromY) * t, 4, 0xffffff, 0.35).setDepth(9000);
+        this.tweens.add({ targets: ghost, alpha: 0, duration: 250 + i * 40, onComplete: () => ghost.destroy() });
+      }
+      this.burst(m.x, m.y, msg.r / 1.6, 0xa1887f, 350);
+      this.cameras.main.shake(180, 0.006);
     } else if (msg.kind === "meteor") {
       // Warning circle, then the impact
       const warn = this.add.circle(msg.x, msg.y, msg.r, 0xff3d00, 0.15).setStrokeStyle(1, 0xff6d00).setDepth(9000);
@@ -368,6 +453,9 @@ export class TownScene extends Phaser.Scene {
         this.tweens.add({ targets: ghost, alpha: 0, duration: 250 + i * 40, onComplete: () => ghost.destroy() });
       }
       if (e) { e.sprite.setPosition(msg.x!, msg.y!); e.tx = msg.x!; e.ty = msg.y!; }
+    } else if (msg.kind === "rage" && e) {
+      this.burst(e.sprite.x, e.sprite.y - 6, 9, 0xe63946, 300);
+      if (msg.id === this.me) this.cameras.main.shake(120, 0.004);
     } else if (msg.kind === "guard" && e) {
       this.burst(e.sprite.x, e.sprite.y - 6, 8, 0x9ad1ff, 250);
     }
@@ -441,9 +529,9 @@ export class TownScene extends Phaser.Scene {
     const now = this.time.now;
     for (const [id, e] of this.entities) {
       const p = e.state;
-      if (id === this.me && !p.dead && !p.stunned) {
+      if (id === this.me && !p.dead && !p.stunned && !p.rolling) {
         // Client-side prediction with the same movement code the server runs
-        const r = moveStep(e.sprite.x, e.sprite.y, this.input_, dtMs / 1000, heroSpeed(p.cls as ClassKind, p.level, p.slowed));
+        const r = moveStep(e.sprite.x, e.sprite.y, this.input_, dtMs / 1000, heroSpeed(p.cls as ClassKind, p.level, p.slowed, p.raging) * gearSpeedMult(p) * talentMult(p.cls as ClassKind, p.talents, "speed"));
         e.sprite.setPosition(r.x, r.y);
         if (!r.moving) {
           // Ease toward authoritative position while idle
@@ -451,15 +539,16 @@ export class TownScene extends Phaser.Scene {
           e.sprite.y += (e.ty - e.sprite.y) * 0.2;
         }
       } else {
-        e.sprite.x += (e.tx - e.sprite.x) * 0.25;
-        e.sprite.y += (e.ty - e.sprite.y) * 0.25;
+        const ease = p.rolling ? 0.5 : 0.25; // rolls are fast: follow the server closely
+        e.sprite.x += (e.tx - e.sprite.x) * ease;
+        e.sprite.y += (e.ty - e.sprite.y) * ease;
       }
 
       const moving = id === this.me ? (this.input_.up || this.input_.down || this.input_.left || this.input_.right) : p.moving;
       if (e.hero) {
         // Let one-shot attack/hit/skill animations finish before going back to walk/idle
         const key = e.sprite.anims.currentAnim?.key ?? "";
-        const oneShot = e.sprite.anims.isPlaying && /_(attack\d?|swing\d|hit|skill|idle[23])_/.test(key);
+        const oneShot = e.sprite.anims.isPlaying && /_(attack\d?|swing\d|hit|skill|idle[23]|dodge)_/.test(key);
         if (moving || p.dead) e.idleSince = undefined;
         else e.idleSince ??= now;
         if (p.dead) {
@@ -484,14 +573,16 @@ export class TownScene extends Phaser.Scene {
         else e.sprite.setAlpha(p.dead ? 0.35 : 1).setAngle(p.dead ? 90 : 0);
       }
       e.sprite.setDepth(e.sprite.y);
-      // Status effects: blue for slowed, yellow flicker for stunned
-      if (!p.dead && (p.stunned || p.slowed)) {
-        e.sprite.setTint(p.stunned ? (Math.floor(now / 120) % 2 ? 0xfff176 : 0xffffff) : 0x90caf9);
+      // Status effects: yellow flicker for stunned, blue for slowed, red pulse for raging
+      if (!p.dead && (p.stunned || p.slowed || p.raging)) {
+        e.sprite.setTint(p.stunned ? (Math.floor(now / 120) % 2 ? 0xfff176 : 0xffffff)
+          : p.slowed ? 0x90caf9 : (Math.floor(now / 200) % 2 ? 0xff8a80 : 0xffcdd2));
         e.statusTint = true;
       } else if (e.statusTint) { e.sprite.clearTint(); e.statusTint = false; }
+      e.gear?.sync(e.sprite, p);
 
       const x = Math.round(e.sprite.x), y = Math.round(e.sprite.y);
-      e.label?.setPosition(x, y - e.top - 2).setDepth(e.sprite.y + 1);
+      e.label?.setPosition(x, y - e.top - (p.hat ? 4 : 2)).setDepth(e.sprite.y + 1);
       e.bubble?.setPosition(x, y - e.top - 7);
       e.bar.clear().setDepth(e.sprite.y + 1);
       const maxHp = p.maxHp;
@@ -519,14 +610,18 @@ export class TownScene extends Phaser.Scene {
 
     const mine = meEnt?.state;
     if (mine) {
+      this.gearMenu?.refresh(mine);
+      this.talentMenu?.refresh(mine);
       const online = [...this.entities.values()].filter((x) => !x.mob).length;
       const safe = isSafeZone(meEnt.sprite.x, meEnt.sprite.y) ? "🛡 Safe zone · " : "";
       (document.getElementById("hpfill") as HTMLElement).style.width = `${(mine.hp / mine.maxHp) * 100}%`;
       document.getElementById("hptext")!.textContent = `HP ${Math.ceil(mine.hp)} / ${Math.round(mine.maxHp)}`;
       const next = xpForLevel(mine.level + 1), cur = xpForLevel(mine.level);
+      const cls0 = mine.cls as ClassKind;
       document.getElementById("stats")!.textContent =
         `${mine.dead ? "Respawning… " : safe}Lv ${mine.level} ${CLASSES[mine.cls as ClassKind].name} · ` +
-        `XP ${mine.xp - cur}/${next - cur} · Gold ${mine.gold} · Potions ${mine.potions} · Kills ${mine.kills} · Online ${online}`;
+        `XP ${mine.xp - cur}/${next - cur} · Gold ${mine.gold} · Potions ${mine.potions} · Kills ${mine.kills} · Online ${online}` +
+        (talentPoints(mine.level) > spentPoints(cls0, mine.talents) ? ` · ⭐ ${talentPoints(mine.level) - spentPoints(cls0, mine.talents)} skill point(s): press T` : "");
       // Monster zone status: how many are alive and when the next one respawns
       const tx = meEnt.sprite.x / TILE, ty = meEnt.sprite.y / TILE;
       const zdef = SPAWN_ZONES.find((z) => tx >= z.x && ty >= z.y && tx < z.x + z.w && ty < z.y + z.h);
@@ -535,12 +630,14 @@ export class TownScene extends Phaser.Scene {
         ? `⚔ ${zone.name}: ${zone.alive}/${zone.cap} monsters${zone.nextIn ? ` · next in ${zone.nextIn}s` : ""}`
         : "";
       const cls = mine.cls as ClassKind;
-      const cdm = cooldownMult(cls, { sta: mine.sta, str: mine.str, mag: mine.mag }, mine.level);
+      const cdm = cooldownMult(cls, { sta: mine.sta, str: mine.str, mag: mine.mag }, mine.level) * talentReduce(cls, mine.talents, "cdr");
       const sp = CLASSES[cls].special;
       const spCd = sp.cooldownMs * cdm;
       const left = Math.max(0, spCd - (now - this.lastSpecial));
       (document.getElementById("skillfill") as HTMLElement).style.width = `${(1 - left / spCd) * 100}%`;
-      document.getElementById("skilltext")!.textContent = left > 0 ? `${sp.name} ${(left / 1000).toFixed(1)}s` : `${sp.name} ready [E]`;
+      const roll = Math.max(0, DODGE.cooldownMs - (now - this.lastDodge));
+      document.getElementById("skilltext")!.textContent = (left > 0 ? `${sp.name} ${(left / 1000).toFixed(1)}s` : `${sp.name} ready [E]`) +
+        (roll > 0 ? ` · Roll ${(roll / 1000).toFixed(1)}s` : " · Roll [F]");
       const ultEl = document.getElementById("ult")!;
       ultEl.hidden = mine.level < ULT_LEVEL;
       if (!ultEl.hidden) {
