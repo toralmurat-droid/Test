@@ -68,7 +68,8 @@ export class TownScene extends Phaser.Scene {
   private shots = new Map<string, { g: Phaser.GameObjects.Shape; tx: number; ty: number }>();
   private items = new Map<string, Phaser.GameObjects.Image>();
   private lastSpecial = -Infinity; // local clock (ms) of my last special, for the cooldown bar
-  private lastDodge = -Infinity; // local clock (ms) of my last dodge roll
+  private lastDodge = -Infinity;
+  private actionsHtml = ""; // local clock (ms) of my last dodge roll
   private lastUlt = -Infinity;
   private levelFrom?: number; // level before the level-ups the player hasn't looked at yet
   private clearedTimer?: number;
@@ -437,6 +438,29 @@ export class TownScene extends Phaser.Scene {
     el.hidden = false;
   }
 
+  /** HUD list of every action with its key and cooldown, under the skill bar. */
+  private renderActions(mine: any, cls: ClassKind, cdm: number, now: number) {
+    const sp = CLASSES[cls].special, u = ULTS[cls];
+    const row = (key: string, name: string, cdMs: number, last: number, extra = "", locked = "") => {
+      const left = cdMs > 0 ? Math.max(0, cdMs - (now - last)) : 0;
+      const state = locked ? "locked" : left > 0 ? "wait" : "";
+      const status = locked || (left > 0 ? `${(left / 1000).toFixed(1)}s` : extra || "ready");
+      const fill = left > 0 ? `<div class="cd" style="width:${(1 - left / cdMs) * 100}%"></div>` : "";
+      return `<li class="${state}${key === "R" ? " ult" : ""}">${fill}<kbd>${key}</kbd><span class="n">${name}</span><span class="s">${status}</span></li>`;
+    };
+    const html = [
+      row("Space", CLASSES[cls].projectile ? "Shoot" : "Attack", 0, 0, "3-hit combo"),
+      row("E", sp.name, sp.cooldownMs * cdm, this.lastSpecial),
+      row("R", u.name, u.cooldownMs * cdm, this.lastUlt, "", mine.powerLevel < ULT_LEVEL ? `🔒 Lv ${ULT_LEVEL}` : ""),
+      row("F", "Dodge roll", DODGE.cooldownMs, this.lastDodge),
+      row("Q", "Potion", 0, 0, `×${mine.potions}`, mine.potions > 0 ? "" : "×0"),
+    ].join("");
+    const el = document.getElementById("actions")!;
+    if (this.actionsHtml !== html) { el.innerHTML = html; this.actionsHtml = html; }
+    const zone = document.getElementById("zone")!;
+    zone.style.top = `${el.offsetTop + el.offsetHeight + 4}px`;
+  }
+
   private showDodge(msg: { id: string; dir: string }) {
     const e = this.entities.get(msg.id);
     if (!e) return;
@@ -732,17 +756,8 @@ export class TownScene extends Phaser.Scene {
       const spCd = sp.cooldownMs * cdm;
       const left = Math.max(0, spCd - (now - this.lastSpecial));
       (document.getElementById("skillfill") as HTMLElement).style.width = `${(1 - left / spCd) * 100}%`;
-      const roll = Math.max(0, DODGE.cooldownMs - (now - this.lastDodge));
-      document.getElementById("skilltext")!.textContent = (left > 0 ? `${sp.name} ${(left / 1000).toFixed(1)}s` : `${sp.name} ready [E]`) +
-        (roll > 0 ? ` · Roll ${(roll / 1000).toFixed(1)}s` : " · Roll [F]");
-      const ultEl = document.getElementById("ult")!;
-      ultEl.hidden = mine.powerLevel < ULT_LEVEL;
-      if (!ultEl.hidden) {
-        const u = ULTS[cls], uCd = u.cooldownMs * cdm;
-        const uLeft = Math.max(0, uCd - (now - this.lastUlt));
-        (document.getElementById("ultfill") as HTMLElement).style.width = `${(1 - uLeft / uCd) * 100}%`;
-        document.getElementById("ulttext")!.textContent = uLeft > 0 ? `${u.name} ${(uLeft / 1000).toFixed(1)}s` : `${u.name} ready [R]`;
-      }
+      document.getElementById("skilltext")!.textContent = left > 0 ? `${sp.name} ${(left / 1000).toFixed(1)}s` : `${sp.name} ready [E]`;
+      this.renderActions(mine, cls, cdm, now);
     }
   }
 }

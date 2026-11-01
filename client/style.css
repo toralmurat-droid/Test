@@ -37,7 +37,6 @@ html, body { margin: 0; height: 100%; background: #1b1b24; color: #eee; font: 14
 .gcell:disabled { cursor: default; opacity: .5; }
 .gcell:not(:disabled):hover { background: #2f2f48; }
 .gcell canvas { width: 100%; height: 100%; max-width: 40px; image-rendering: pixelated; }
-#ult:not([hidden]) ~ #zone { top: 96px; }
 #hero { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(380px, calc(100% - 32px));
   max-height: calc(100% - 32px); overflow: auto; background: rgba(30,30,46,.95); border: 3px solid #555a7a; padding: 14px 16px;
   pointer-events: auto; z-index: 6; }
@@ -141,3 +140,16 @@ html, body { margin: 0; height: 100%; background: #1b1b24; color: #eee; font: 14
 #treepowers .power .rank { position: static; color: #ffd166; font-size: 11px; }
 #treepowers .plink { width: 8px; flex: none; align-self: center; height: 2px; background: #555a7a; }
 @media (max-width: 600px) { #treepowers { flex-direction: column; } #treepowers .plink { width: 2px; height: 8px; } }
+/* Action list under the skill bar: every action with its key and cooldown */
+#actions { position: absolute; top: 76px; left: 12px; width: 200px; margin: 0; padding: 0; list-style: none; font-size: 11px; }
+#actions li { position: relative; display: flex; align-items: center; gap: 6px; height: 16px; margin-bottom: 2px; padding-right: 4px;
+  background: rgba(20,20,32,.75); border: 1px solid #000; overflow: hidden; text-shadow: 1px 1px #000; }
+#actions li .cd { position: absolute; inset: 0 auto 0 0; background: rgba(76,201,240,.35); }
+#actions li.ult .cd { background: rgba(247,127,0,.45); }
+#actions li kbd { position: relative; min-width: 34px; text-align: center; font: inherit; font-weight: bold; color: #ffd166;
+  background: #15151f; border-right: 1px solid #000; line-height: 16px; }
+#actions li .n { position: relative; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#actions li .s { position: relative; color: #7cfc00; }
+#actions li.wait .s { color: #ffd166; }
+#actions li.locked { opacity: .5; }
+#actions li.locked .s { color: #aaa; }
