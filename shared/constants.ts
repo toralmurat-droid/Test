@@ -28,7 +28,7 @@ export interface InputState {
   right: boolean;
 }
 
-export type MobKind = "slime" | "skeleton" | "motherblob" | "blobling" | "shooterblob" | "warriorblob" | "healerblob" | "bandit";
+export type MobKind = "slime" | "skeleton" | "motherblob" | "blobling" | "shooterblob" | "warriorblob" | "healerblob" | "bandit" | "skeletonmage" | "necromancer";
 
 export interface MobDef {
   name: string;
@@ -54,6 +54,26 @@ export const MOBS: Record<MobKind, MobDef> = {
   healerblob: { name: "Healer Blob", maxHp: 60, speed: 42, damage: 5, attackCooldownMs: 1200, aggroRange: 110, leash: 160, xp: 22 },
   // Outlaws of Redfang Hollow: quick, hit hard, hood and red bandana
   bandit: { name: "Bandit", maxHp: 95, speed: 64, damage: 15, attackCooldownMs: 950, aggroRange: 120, leash: 200, xp: 30 },
+  // Higher skeleton zones: a robed caster that throws magic bolts from range, and the elite Necromancer (see SKELETON_AI)
+  skeletonmage: { name: "Skeleton Mage", maxHp: 60, speed: 50, damage: 13, attackCooldownMs: 1900, aggroRange: 140, leash: 200, xp: 32 },
+  necromancer: { name: "Necromancer", maxHp: 520, speed: 38, damage: 18, attackCooldownMs: 1700, aggroRange: 150, leash: 230, xp: 240 },
+};
+
+/** Elite monsters: much tougher than the rest of their zone, with a bigger look and an "Elite" tag. */
+export const ELITE: Partial<Record<MobKind, true>> = { necromancer: true };
+
+/**
+ * Skeleton casters. Distances in px.
+ * Mage: keeps its distance and throws magic bolts.
+ * Necromancer: shadow bolts, raises skeletons around it, and Death Circle: a big telegraphed blast on the ground where you stand.
+ */
+export const SKELETON_AI = {
+  mage: { range: 120, keepAway: 60, shotSpeed: 140, shotRadius: 3 },
+  necro: {
+    range: 140, keepAway: 70, shotSpeed: 165, shotRadius: 4, boltMult: 1.3,
+    raise: { everyMs: 10000, count: 2, max: 5, spread: 22, castMs: 800 },
+    circle: { range: 150, radius: 38, windupMs: 1300, cooldownMs: 7500, dmgMult: 2 },
+  },
 };
 
 /** Special blob behaviour. Distances in px. */

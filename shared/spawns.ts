@@ -24,6 +24,7 @@ export function rollLevel(z: SpawnZone): number {
 const ZONE_MOBS: { name: string; mobs: Partial<Record<MobKind, number>>; respawnMs: number }[] = [
   // Levels come from the distance to Oakvale (see zoneLevels)
   // Blob zones above Lv 3 add shooter + warrior blobs, above Lv 5 healer blobs too.
+  // Skeleton zones from Lv 5 add skeleton mages; the deepest ones (Barrow Downs, the Keep) an elite Necromancer too.
   // Blobs live in the green and wet places (meadows, fields, ponds, forests), skeletons where the dead lie (graveyards, ruins)
   { name: "North Meadow", mobs: { slime: 16, motherblob: 2 }, respawnMs: 4500 },
   { name: "Goldenreach Farms", mobs: { slime: 18, motherblob: 2 }, respawnMs: 4500 },
@@ -31,12 +32,12 @@ const ZONE_MOBS: { name: string; mobs: Partial<Record<MobKind, number>>; respawn
   { name: "Misty Marsh", mobs: { slime: 15, motherblob: 2 }, respawnMs: 4500 },
   { name: "Stonecrag Quarry", mobs: { skeleton: 10 }, respawnMs: 7500 },
   { name: "Old Ruins", mobs: { skeleton: 12 }, respawnMs: 8250 },
-  { name: "Old Watchtower", mobs: { skeleton: 9 }, respawnMs: 8250 },
+  { name: "Old Watchtower", mobs: { skeleton: 7, skeletonmage: 3 }, respawnMs: 8250 },
   // The wider world: further from Oakvale, tougher monsters
   { name: "Sunken Lake", mobs: { slime: 8, shooterblob: 4, warriorblob: 4, healerblob: 3, motherblob: 2 }, respawnMs: 6000 },
-  { name: "Barrow Downs", mobs: { skeleton: 18 }, respawnMs: 6750 },
+  { name: "Barrow Downs", mobs: { skeleton: 14, skeletonmage: 5, necromancer: 1 }, respawnMs: 6750 },
   { name: "Thornwood", mobs: { slime: 8, shooterblob: 6, warriorblob: 6, healerblob: 4, motherblob: 2 }, respawnMs: 6000 },
-  { name: "Greywatch Keep", mobs: { skeleton: 15 }, respawnMs: 8250 },
+  { name: "Greywatch Keep", mobs: { skeleton: 11, skeletonmage: 5, necromancer: 2 }, respawnMs: 8250 },
   // The coast and the far east (Saltmere itself stays monster-free, see NO_MOB_AREAS)
   { name: "Redfang Hollow", mobs: { bandit: 14 }, respawnMs: 6000 },
   { name: "Saltwind Coast", mobs: { slime: 14, shooterblob: 5, warriorblob: 5, healerblob: 4, motherblob: 2 }, respawnMs: 4500 },
@@ -91,7 +92,7 @@ export function randomPointInZone(z: SpawnZone): { x: number; y: number } {
  * (only its eyes peek out) and jumps out when a player walks close. Dizzy (broken) monsters run for cover too.
  */
 export const HIDE = {
-  spots: { skeleton: [T.GRAVE], slime: [T.TREE, T.PINE], blobling: [T.TREE, T.PINE], shooterblob: [T.TREE, T.PINE], healerblob: [T.TREE, T.PINE] } as Partial<Record<MobKind, number[]>>,
+  spots: { skeleton: [T.GRAVE], skeletonmage: [T.GRAVE], slime: [T.TREE, T.PINE], blobling: [T.TREE, T.PINE], shooterblob: [T.TREE, T.PINE], healerblob: [T.TREE, T.PINE] } as Partial<Record<MobKind, number[]>>,
   idleChance: 0.06, // per wander decision, chance an idle monster goes to hide
   idleRadius: 7, // tiles from home to look for a spot
   fleeRadius: 6, // tiles from the monster when it's dizzy

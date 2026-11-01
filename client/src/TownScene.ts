@@ -1,6 +1,6 @@
 import Phaser from "phaser";
 import { Client, Room } from "colyseus.js";
-import { InputState, MAP_H, MAP_W, regenFromStamina, TILE } from "../../shared/constants";
+import { ELITE, InputState, MAP_H, MAP_W, regenFromStamina, TILE } from "../../shared/constants";
 import { CLASSES, ClassKind, DODGE, ENERGY, energyName, xpForLevel } from "../../shared/classes";
 import { GROUND, areaAt, isSafeZone } from "../../shared/map";
 import { heroPoise, RAGE_ATTACK_SPEED } from "../../shared/combat";
@@ -249,7 +249,11 @@ export class TownScene extends Phaser.Scene {
     const shots = (this.room.state as any).projectiles;
     shots.onAdd((s: any, id: string) => {
       const size = s.size || 1;
-      const g: Phaser.GameObjects.Shape = s.kind === "slimeball"
+      const g: Phaser.GameObjects.Shape = s.kind === "magicbolt" || s.kind === "shadowbolt"
+        // Skeleton mage bolt (ice blue) / Necromancer shadow bolt (sickly green, bigger)
+        ? this.add.circle(s.x, s.y, s.kind === "shadowbolt" ? 3.5 : 2.5, s.kind === "shadowbolt" ? 0x7dff6a : 0x7fe7ff)
+            .setStrokeStyle(1, s.kind === "shadowbolt" ? 0x1b5e20 : 0x1a4a8a).setDepth(9000)
+        : s.kind === "slimeball"
         // Shooter blob spit: purple goo ball
         ? this.add.circle(s.x, s.y, 2.5, 0xb57cff).setStrokeStyle(1, 0x4a2a7a).setDepth(9000)
         : s.kind === "stone"
@@ -335,6 +339,43 @@ export class TownScene extends Phaser.Scene {
       const me = this.entities.get(this.me);
       if (me && Math.hypot(me.sprite.x - x, me.sprite.y - y) < r * 2.5) this.cameras.main.shake(kind === "slam" ? 260 : 120, kind === "slam" ? 0.008 : 0.004);
     });
+    // Necromancer: arms up while casting. Death Circle marks the ground first (a flat painting, so it lies on the iso ground too)
+    this.room.onMessage("necrowind", ({ id, kind, ms, x, y, r }) => {
+      const e = this.entities.get(id);
+      if (e) {
+        this.tweens.add({ targets: e.sprite, scaleY: e.sprite.scaleY * 1.12, duration: ms / 2, yoyo: true });
+        this.floatText(e.sprite.x, e.sprite.y - e.top - 6, kind === "circle" ? "DEATH CIRCLE!" : "RISE!", kind === "circle" ? "#b388ff" : "#7dff6a", PIXEL_FONT);
+      }
+      if (kind !== "circle") return;
+      const g = this.add.graphics().setDepth(2);
+      const t0 = this.time.now;
+      const draw = () => {
+        const f = Math.min(1, (this.time.now - t0) / ms);
+        g.clear().fillStyle(0x4a148c, 0.25).fillCircle(x, y, r).lineStyle(1.5, 0xb388ff, 0.9).strokeCircle(x, y, r);
+        g.fillStyle(0x7c4dff, 0.35).fillCircle(x, y, r * f); // fills up until it goes off
+      };
+      draw();
+      const ev = this.time.addEvent({ delay: 30, loop: true, callback: draw });
+      this.time.delayedCall(ms, () => { ev.remove(); g.destroy(); });
+    });
+    this.room.onMessage("necrohit", ({ x, y, r }) => {
+      const g = this.add.graphics().setDepth(2);
+      g.fillStyle(0xb388ff, 0.7).fillCircle(x, y, r);
+      this.tweens.add({ targets: g, alpha: 0, duration: 450, onComplete: () => g.destroy() });
+      for (let i = 0; i < 10; i++) {
+        const a = (i / 10) * Math.PI * 2, d = Math.random() * r;
+        this.burst(x + Math.cos(a) * d, y + Math.sin(a) * d * 0.9, 3, 0x7c4dff, 380);
+      }
+      const me = this.entities.get(this.me);
+      if (me && Math.hypot(me.sprite.x - x, me.sprite.y - y) < r * 2.5) this.cameras.main.shake(220, 0.007);
+    });
+    // Skeletons climb out of the ground: green flash and dust where each one appears
+    this.room.onMessage("necroraise", ({ pts }) => {
+      for (const [x, y] of pts as [number, number][]) {
+        this.burst(x, y, 4, 0x7dff6a, 420);
+        this.burst(x, y + 1, 3, 0x8d6e63, 300);
+      }
+    });
     // Warrior blob lunges: quick stretch
     this.room.onMessage("blobcharge", ({ id }) => {
       const e = this.entities.get(id);
@@ -356,7 +397,9 @@ export class TownScene extends Phaser.Scene {
     this.room.onMessage("swing", ({ id, step, variant, ax, ay }) => this.showSwing(id, step ?? 0, variant ?? 0, ax, ay));
     this.room.onMessage("special", (msg) => this.showSpecial(msg));
     this.room.onMessage("boom", ({ x, y, r, kind }) =>
-      kind === "arrow" || kind === "stone" || kind === "knife" || kind === "bolt" ? this.burst(x, y, 3, 0xd7ccc8, 150) : this.burst(x, y, r ? r / 1.8 : 6, 0xff9f1c, r ? 300 : 200));
+      kind === "arrow" || kind === "stone" || kind === "knife" || kind === "bolt" ? this.burst(x, y, 3, 0xd7ccc8, 150)
+      : kind === "magicbolt" || kind === "shadowbolt" ? this.burst(x, y, kind === "shadowbolt" ? 5 : 3, kind === "shadowbolt" ? 0x7dff6a : 0x7fe7ff, 220)
+      : this.burst(x, y, r ? r / 1.8 : 6, 0xff9f1c, r ? 300 : 200));
     this.room.onMessage("ult", (msg) => this.showUlt(msg));
     this.room.onMessage("dodge", (msg) => this.showDodge(msg));
     this.room.onMessage("rangedshot", ({ id }) => {
@@ -475,7 +518,8 @@ export class TownScene extends Phaser.Scene {
 
   private addEntity(id: string, p: any, mob = false) {
     if (mob) {
-      const sprite = this.add.sprite(p.x, p.y, mobTexture(this, p.kind, p.level), 0).setOrigin(0.5, MOB_LOOK[p.kind]?.oy ?? 0.85);
+      const sprite = this.add.sprite(p.x, p.y, mobTexture(this, p.kind, p.level), 0).setOrigin(0.5, MOB_LOOK[p.kind]?.oy ?? 0.85)
+        .setScale(MOB_LOOK[p.kind]?.scale ?? 1);
       const label = this.add.text(p.x, p.y, `Lv${p.level ?? 1}`, {
         fontFamily: "monospace", fontSize: "14px", color: "#ffffff", stroke: "#000", strokeThickness: 3,
       }).setOrigin(0.5, 1).setScale(0.25).setResolution(2);
@@ -990,7 +1034,7 @@ export class TownScene extends Phaser.Scene {
         // Level tag coloured by how tough it is for me: grey easy, white even, orange tougher, red dangerous
         const diff = (p.level ?? 1) - ((this.room.state as any).players?.get(this.me)?.level ?? 1);
         const col = diff >= 3 ? "#ff5252" : diff >= 1 ? "#ffb74d" : diff >= -2 ? "#ffffff" : "#9e9e9e";
-        const txt = `Lv${p.level ?? 1}`;
+        const txt = ELITE[p.kind as keyof typeof ELITE] ? `Elite Lv${p.level ?? 1}` : `Lv${p.level ?? 1}`;
         if (e.label.text !== txt) e.label.setText(txt);
         if (e.lvlColor !== col) { e.label.setColor(col); e.lvlColor = col; }
         e.label.setVisible(!p.dead && !p.hidden);
@@ -1017,13 +1061,14 @@ export class TownScene extends Phaser.Scene {
         e.bar.setDepth(20000);
         const blink = (now + x * 53 + y * 31) % 3200 < 160;
         if (!blink) {
-          const col = p.kind === "skeleton" ? 0xff5252 : 0xfff176;
-          const ey = y - (p.kind === "skeleton" ? 2 : 5);
+          const col = p.kind === "skeleton" ? 0xff5252 : p.kind === "skeletonmage" ? 0x7fe7ff : 0xfff176;
+          const ey = y - (p.kind === "skeleton" || p.kind === "skeletonmage" ? 2 : 5);
           e.bar.fillStyle(0x000000, 0.6).fillRect(x - 3, ey - 1, 7, 3);
           e.bar.fillStyle(col).fillRect(x - 2, ey, 1, 1).fillRect(x + 2, ey, 1, 1);
         }
       } else if (e.mob && !p.dead) {
         const bw = MOB_LOOK[p.kind]?.bar || 14;
+        if (ELITE[p.kind as keyof typeof ELITE]) e.bar.fillStyle(0xffc93c).fillRect(x - bw / 2 - 1, mobBarY - 1, bw + 2, 4); // elite: gold frame
         e.bar.fillStyle(0x000000).fillRect(x - bw / 2, mobBarY, bw, 2);
         e.bar.fillStyle(0xf4a261).fillRect(x - bw / 2, mobBarY, bw * (p.hp / maxHp), 2);
       } else if (!e.mob && !p.dead && p.hp < maxHp) {

@@ -2,7 +2,7 @@ import type { IncomingMessage } from "node:http";
 import { Client, Room } from "colyseus";
 import { ArraySchema, MapSchema, Schema, type } from "@colyseus/schema";
 import {
-  BLOB_AI, BROOD, Dir, MOTHER, HIT_RADIUS, mobScale, InputState, MOB_ATTACK_RANGE, MOBS, MobKind, REGEN_DELAY_MS, REGEN_RAMP_MS, regenFromStamina, SAFE_REGEN_MULT,
+  BLOB_AI, BROOD, Dir, MOTHER, SKELETON_AI, HIT_RADIUS, mobScale, InputState, MOB_ATTACK_RANGE, MOBS, MobKind, REGEN_DELAY_MS, REGEN_RAMP_MS, regenFromStamina, SAFE_REGEN_MULT,
   RESPAWN_MS, TICK_RATE, TILE,
 } from "../shared/constants";
 import {
@@ -19,7 +19,7 @@ import {
 import { isSafeZone, isSolidAt, randomSpawn } from "../shared/map";
 import { npcById, npcNear, TALK_RANGE } from "../shared/npcs";
 import { sellPrice, SHOPS } from "../shared/shops";
-import { inZone, npcPresent, QUESTS, questStep, stepGoal, USE_RANGE } from "../shared/quests";
+import { BLOB_KINDS, inZone, npcPresent, QUESTS, questStep, stepGoal, USE_RANGE } from "../shared/quests";
 import { findHideSpot, HIDE, noMobsAt, randomPointInZone, rollLevel, SPAWN_ZONES, zoneCap } from "../shared/spawns";
 import { moveStep } from "../shared/movement";
 import { flush, HeroSave, loadHero, login, saveHero } from "./accounts";
@@ -123,7 +123,8 @@ export class Mob extends Schema {
   fleeing = false; // dizzy and running for cover
   chargeUntil = 0; nextCharge = 0; // warrior blob lunge
   nextHeal = 0; // healer blob
-  specialKind = ""; specialAt = 0; nextBounce = 0; nextSlam = 0; // mother blob special moves
+  specialKind = ""; specialAt = 0; nextBounce = 0; nextSlam = 0; // mother blob special moves (necromancer casts too)
+  nextRaise = 0; nextCircle = 0; castX = 0; castY = 0; // necromancer: raise dead, Death Circle aim
   @type("number") x = 0;
   @type("number") y = 0;
   @type("string") dir: Dir = "down";
@@ -280,6 +281,14 @@ function toward(x: number, y: number, tx: number, ty: number): InputState {
   const dx = tx - x, dy = ty - y;
   return { right: dx > 2, left: dx < -2, down: dy > 2, up: dy < -2 };
 }
+
+/** Monsters that fight from range: how close they let you come, how far they chase, and their shot (none for healers). */
+const RANGED: Partial<Record<MobKind, { keepAway: number; far: number; range: number; shot: string; shotSpeed: number; shotRadius: number; mult?: number }>> = {
+  shooterblob: { ...BLOB_AI.shooter, far: BLOB_AI.shooter.range * 0.85, shot: "slimeball" },
+  healerblob: { keepAway: BLOB_AI.healer.keepAway, far: BLOB_AI.healer.range, range: BLOB_AI.healer.range, shot: "", shotSpeed: 0, shotRadius: 0 },
+  skeletonmage: { ...SKELETON_AI.mage, far: SKELETON_AI.mage.range * 0.85, shot: "magicbolt" },
+  necromancer: { ...SKELETON_AI.necro, far: SKELETON_AI.necro.range * 0.8, shot: "shadowbolt", mult: SKELETON_AI.necro.boltMult },
+};
 
 export class TownRoom extends Room<TownState> {
   maxClients = 50;
@@ -491,21 +500,22 @@ export class TownRoom extends Room<TownState> {
     m.dead = false;
     m.target = "";
     m.hidden = false; m.spot = ""; m.fleeing = false;
-    m.specialKind = ""; m.specialAt = 0; m.nextBounce = 0; m.nextSlam = 0;
+    m.specialKind = ""; m.specialAt = 0; m.nextBounce = 0; m.nextSlam = 0; m.nextRaise = 0; m.nextCircle = 0;
     if (kind === "motherblob") m.nextBrood = Date.now() + BROOD.minMs + Math.random() * (BROOD.maxMs - BROOD.minMs);
     if (!this.state.mobs.has(id)) this.state.mobs.set(id, m);
   }
 
   // ---- Special blobs --------------------------------------------------------
 
-  /** Shooter blob spits a slime ball at (tx,ty). It only hurts players. */
-  private blobShot(m: Mob, id: string, tx: number, ty: number) {
+  /** Ranged monsters' shot at (tx,ty): shooter blob slime ball, skeleton mage magic bolt, necromancer shadow bolt. Only hurts players. */
+  private mobShot(m: Mob, id: string, tx: number, ty: number) {
     const s = new Projectile();
     const dx = tx - m.x, dy = ty - m.y, d = Math.hypot(dx, dy) || 1;
+    const cfg = RANGED[m.kind]!;
     s.x = m.x; s.y = m.y - 4; s.vx = dx / d; s.vy = dy / d;
-    s.owner = id; s.kind = "slimeball";
-    s.speed = BLOB_AI.shooter.shotSpeed; s.range = BLOB_AI.shooter.range * 1.4; s.radius = BLOB_AI.shooter.shotRadius;
-    s.damage = Math.round(MOBS[m.kind].damage * mobScale(m.level, "damage"));
+    s.owner = id; s.kind = cfg.shot;
+    s.speed = cfg.shotSpeed; s.range = cfg.range * 1.4; s.radius = cfg.shotRadius;
+    s.damage = Math.round(MOBS[m.kind].damage * mobScale(m.level, "damage") * (cfg.mult ?? 1));
     this.state.projectiles.set(`s${++this.shotSeq}`, s);
     this.broadcast("swing", { id });
   }
@@ -515,7 +525,7 @@ export class TownRoom extends Room<TownState> {
     m.nextHeal = now + BLOB_AI.healer.everyMs;
     let best: Mob | undefined, bestId = "", worst = 0.999;
     this.state.mobs.forEach((o, oid) => {
-      if (o.dead || o.hidden || o.kind === "skeleton" || Math.hypot(o.x - m.x, o.y - m.y) > BLOB_AI.healer.range) return;
+      if (o.dead || o.hidden || !BLOB_KINDS.includes(o.kind as MobKind) || Math.hypot(o.x - m.x, o.y - m.y) > BLOB_AI.healer.range) return;
       const f = o.hp / o.maxHp;
       if (f < worst) { worst = f; best = o; bestId = oid; }
     });
@@ -638,6 +648,76 @@ export class TownRoom extends Room<TownState> {
     return true;
   }
 
+  // ---- Necromancer ----------------------------------------------------------
+
+  /**
+   * Necromancer spells. Returns true while casting (it stands still).
+   * Raise Dead: skeletons climb out of the ground around it (they belong to it and crumble when it dies).
+   * Death Circle: marks the ground under the target, then blasts everyone still inside.
+   */
+  private necroSpell(m: Mob, id: string, t: Player, dist: number, now: number): boolean {
+    const N = SKELETON_AI.necro;
+    if (m.specialAt) {
+      if (now < m.specialAt) return true;
+      m.specialAt = 0; m.winding = false; m.lastAttack = now;
+      if (m.specialKind === "circle") {
+        const dmg = Math.round(MOBS.necromancer.damage * mobScale(m.level, "damage") * N.circle.dmgMult);
+        this.state.players.forEach((p, pid) => {
+          if (p.dead) return;
+          const dx = p.x - m.castX, dy = p.y - m.castY, d = Math.hypot(dx, dy);
+          if (d > N.circle.radius) return;
+          this.damagePlayer(pid, dmg, "Necromancer's Death Circle", d > 0.1 ? [dx / d, dy / d] : [0, 1], 1.5, { atkLevel: m.level });
+        });
+        this.broadcast("necrohit", { id, x: m.castX, y: m.castY, r: N.circle.radius });
+      } else {
+        const pts: [number, number][] = [];
+        let mine = 0;
+        this.state.mobs.forEach((c) => { if (c.mother === id && !c.dead) mine++; });
+        for (let i = 0; i < N.raise.count && mine < N.raise.max; i++) {
+          const c = this.raiseSkeleton(m, id);
+          if (c) { pts.push([Math.round(c.x), Math.round(c.y)]); mine++; }
+        }
+        this.broadcast("necroraise", { id, pts });
+      }
+      m.specialKind = "";
+      return true;
+    }
+    if (m.broken) return false;
+    let mine = 0;
+    this.state.mobs.forEach((c) => { if (c.mother === id && !c.dead) mine++; });
+    if (now >= m.nextRaise && mine < N.raise.max) {
+      m.specialKind = "raise"; m.specialAt = now + N.raise.castMs; m.nextRaise = now + N.raise.everyMs;
+      this.broadcast("necrowind", { id, kind: "raise", ms: N.raise.castMs });
+    } else if (now >= m.nextCircle && dist <= N.circle.range) {
+      m.specialKind = "circle"; m.specialAt = now + N.circle.windupMs; m.nextCircle = now + N.circle.cooldownMs;
+      m.castX = t.x; m.castY = t.y;
+      m.lastAttack = Math.max(m.lastAttack, now); // no bolt on top of the circle
+      this.broadcast("necrowind", { id, kind: "circle", ms: N.circle.windupMs, x: Math.round(t.x), y: Math.round(t.y), r: N.circle.radius });
+    } else return false;
+    m.winding = true; m.windUntil = 0;
+    return true;
+  }
+
+  /** One skeleton climbs out of the ground next to the necromancer (same level, belongs to it, never respawns). */
+  private raiseSkeleton(n: Mob, necroId: string): Mob | undefined {
+    const spread = SKELETON_AI.necro.raise.spread;
+    for (let i = 0; i < 10; i++) {
+      const a = Math.random() * Math.PI * 2, r = 10 + Math.random() * spread;
+      const x = n.x + Math.cos(a) * r, y = n.y + Math.sin(a) * r;
+      if (isSolidAt(x, y) || isSafeZone(x, y) || noMobsAt(x, y)) continue;
+      const c = new Mob();
+      c.kind = "skeleton"; c.zone = -1; c.mother = necroId;
+      c.x = c.homeX = x; c.y = c.homeY = y;
+      c.level = n.level;
+      c.hp = c.maxHp = Math.round(MOBS.skeleton.maxHp * mobScale(c.level, "hp"));
+      c.target = n.target;
+      c.stunUntil = Date.now() + 500; // climbing out
+      this.state.mobs.set(`r${++this.mobSeq}`, c);
+      return c;
+    }
+    return undefined;
+  }
+
   // ---- Tick ---------------------------------------------------------------
 
   private update(dtMs: number) {
@@ -744,24 +824,24 @@ export class TownRoom extends Room<TownState> {
     if (m.kind === "healerblob" && now >= m.nextHeal) this.blobHeal(m, id, now);
 
     let input: InputState;
-    const ranged = m.kind === "shooterblob" || m.kind === "healerblob";
+    const ranged = !!RANGED[m.kind];
     if (t && m.broken) {
       // Broken: dizzy, can't fight back, tries to get away from the attacker
       input = toward(m.x, m.y, m.x * 2 - t.x, m.y * 2 - t.y);
     } else if (t && ranged) {
-      // Shooter / healer blobs hang back: step away when crowded, close in when too far
+      // Shooters, healers and casters hang back: step away when crowded, close in when too far
       const dist = Math.hypot(t.x - m.x, t.y - m.y);
-      const keep = m.kind === "shooterblob" ? BLOB_AI.shooter.keepAway : BLOB_AI.healer.keepAway;
-      const far = m.kind === "shooterblob" ? BLOB_AI.shooter.range * 0.85 : BLOB_AI.healer.range;
-      input = dist < keep ? toward(m.x, m.y, m.x * 2 - t.x, m.y * 2 - t.y) : dist > far ? toward(m.x, m.y, t.x, t.y) : STILL;
-      if (m.kind === "shooterblob") {
+      const cfg = RANGED[m.kind]!;
+      input = dist < cfg.keepAway ? toward(m.x, m.y, m.x * 2 - t.x, m.y * 2 - t.y) : dist > cfg.far ? toward(m.x, m.y, t.x, t.y) : STILL;
+      if (m.kind === "necromancer" && this.necroSpell(m, id, t, dist, now)) input = STILL;
+      else if (cfg.shot) {
         if (m.windUntil) {
           input = STILL;
           if (now >= m.windUntil) {
             m.windUntil = 0; m.winding = false; m.lastAttack = now;
-            if (dist <= BLOB_AI.shooter.range * 1.2) this.blobShot(m, id, t.x, t.y);
+            if (dist <= cfg.range * 1.2) this.mobShot(m, id, t.x, t.y);
           }
-        } else if (dist <= BLOB_AI.shooter.range && now - m.lastAttack >= def.attackCooldownMs / poiseSpeed(poiseFrac(m, mobPoiseMax(m)))) {
+        } else if (dist <= cfg.range && now - m.lastAttack >= def.attackCooldownMs / poiseSpeed(poiseFrac(m, mobPoiseMax(m)))) {
           m.windUntil = now + MOB_COMBAT[m.kind].windupMs; m.winding = true;
         }
       }
@@ -1116,7 +1196,15 @@ export class TownRoom extends Room<TownState> {
     m.hidden = false; m.spot = ""; m.fleeing = false;
     this.grantXp(attackerId, Math.round(def.xp * mobScale(m.level, "xp")), m);
     this.dropLoot(m.kind, m.x, m.y, mobScale(m.level, "gold"), m.level);
-    if (m.zone < 0) { this.clock.setTimeout(() => this.state.mobs.delete(targetId), 500); return; } // bloblings don't respawn
+    if (m.kind === "necromancer") {
+      // Its raised skeletons fall apart with it
+      this.state.mobs.forEach((c, cid) => {
+        if (c.mother !== targetId || c.dead) return;
+        c.dead = true; c.hp = 0;
+        this.clock.setTimeout(() => this.state.mobs.delete(cid), 500);
+      });
+    }
+    if (m.zone < 0) { this.clock.setTimeout(() => this.state.mobs.delete(targetId), 500); return; } // bloblings, raised skeletons don't respawn
     const zone = this.state.zones.get(SPAWN_ZONES[m.zone].name);
     if (zone) {
       zone.alive--;
