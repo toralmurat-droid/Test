@@ -1,15 +1,15 @@
 import Phaser from "phaser";
 import { Client, Room } from "colyseus.js";
 import { InputState, MAP_H, MAP_W, regenFromStamina, TILE } from "../../shared/constants";
-import { CLASSES, ClassKind, DODGE, xpForLevel } from "../../shared/classes";
+import { CLASSES, ClassKind, DODGE, ENERGY, energyName, xpForLevel } from "../../shared/classes";
 import { GROUND, areaAt, isSafeZone } from "../../shared/map";
 import { moveStep } from "../../shared/movement";
 import { SPAWN_ZONES } from "../../shared/spawns";
 import {
-  attackMult, cooldownMult, heroSpeed, STATS, magicMult, POWERS, STAT_NAMES, StatKind, statsFor, ULT_LEVEL, ULTS,
+  attackMult, cooldownMult, heroSpeed, STATS, magicMult, POWERS, STAT_NAMES, StatKind, statsFor, ULTS, hasSpecial, hasUlt, ultPower,
 } from "../../shared/powers";
 import { displayGrid } from "./tileset";
-import { heroTexture, itemTexture, makeTileset, mobTexture } from "./textures";
+import { heroTexture, itemTexture, makeTileset, MOB_LOOK, mobTexture } from "./textures";
 import { Minimap } from "./minimap";
 import { CHARACTERS, CHAR_ORIGIN, CharacterName, createArtAnims, playCharAnim, preloadArt } from "./artAssets";
 import { Ambient } from "./ambient";
@@ -102,14 +102,19 @@ export class TownScene extends Phaser.Scene {
     cam.roundPixels = true;
 
     // Keys without capture so typing in chat still works
-    this.keys = this.input.keyboard!.addKeys("W,A,S,D,UP,DOWN,LEFT,RIGHT,SPACE,E,SHIFT,Q,R,C,G,T,F", false) as any;
+    this.keys = this.input.keyboard!.addKeys("W,A,S,D,UP,DOWN,LEFT,RIGHT,SPACE,SHIFT,Q,C,G,T,F,ONE,TWO,NUMPAD_ONE,NUMPAD_TWO", false) as any;
     this.input.keyboard!.on("keydown-SPACE", () => { if (!this.chatting()) this.room?.send("attack"); });
+    // Skills learned in the tree go on the number keys (top row or numpad): 1 = class skill, 2 = ultimate
     const special = () => { if (!this.chatting()) this.room?.send("special"); };
-    this.input.keyboard!.on("keydown-E", special);
-    this.input.keyboard!.on("keydown-SHIFT", special);
+    const ult = () => { if (!this.chatting()) this.room?.send("ult"); };
+    this.input.keyboard!.on("keydown-ONE", special);
+    this.input.keyboard!.on("keydown-NUMPAD_ONE", special);
+    this.input.keyboard!.on("keydown-TWO", ult);
+    this.input.keyboard!.on("keydown-NUMPAD_TWO", ult);
     this.input.keyboard!.on("keydown-Q", () => { if (!this.chatting()) this.room?.send("potion"); });
-    this.input.keyboard!.on("keydown-R", () => { if (!this.chatting()) this.room?.send("ult"); });
-    this.input.keyboard!.on("keydown-F", () => { if (!this.chatting()) this.room?.send("dodge"); });
+    const dodge = () => { if (!this.chatting()) this.room?.send("dodge"); };
+    this.input.keyboard!.on("keydown-SHIFT", dodge);
+    this.input.keyboard!.on("keydown-F", dodge);
     this.input.keyboard!.on("keydown-C", () => { if (!this.chatting()) this.toggleHeroMenu(); });
     this.input.keyboard!.on("keydown-ESC", () => this.closeMenus());
     document.getElementById("lvlnote")!.onclick = () => this.toggleHeroMenu();
@@ -215,6 +220,11 @@ export class TownScene extends Phaser.Scene {
       if (e) this.floatText(e.sprite.x, e.sprite.y - 14, `+${amount}`, "#7cfc00");
     });
 
+    // A Mother Blob budding a blobling: quick wobble
+    this.room.onMessage("brood", ({ id }) => {
+      const e = this.entities.get(id);
+      if (e) this.tweens.add({ targets: e.sprite, scaleX: 1.15, scaleY: 0.85, duration: 120, yoyo: true, repeat: 1 });
+    });
     this.room.onMessage("swing", ({ id, step, variant }) => this.showSwing(id, step ?? 0, variant ?? 0));
     this.room.onMessage("special", (msg) => this.showSpecial(msg));
     this.room.onMessage("boom", ({ x, y, r, kind }) =>
@@ -312,8 +322,8 @@ export class TownScene extends Phaser.Scene {
 
   private addEntity(id: string, p: any, mob = false) {
     if (mob) {
-      const sprite = this.add.sprite(p.x, p.y, mobTexture(this, p.kind), 0).setOrigin(0.5, 0.85);
-      this.entities.set(id, { sprite, bar: this.add.graphics(), tx: p.x, ty: p.y, state: p, mob, top: 14 });
+      const sprite = this.add.sprite(p.x, p.y, mobTexture(this, p.kind), 0).setOrigin(0.5, MOB_LOOK[p.kind]?.oy ?? 0.85);
+      this.entities.set(id, { sprite, bar: this.add.graphics(), tx: p.x, ty: p.y, state: p, mob, top: MOB_LOOK[p.kind]?.top ?? 14 });
       return;
     }
     // Classes with a generated sheet use it; anything else falls back to the procedural persona
@@ -417,7 +427,7 @@ export class TownScene extends Phaser.Scene {
       sta: `${mine.maxHp} max HP, regen ${regenFromStamina(st.sta)[1].toFixed(1)} HP/s`,
       str: STATS[cls].attackStat === "str" ? `attack ×${attackMult(cls, st).toFixed(2)}, +2 HP each` : "+2 HP per point",
       mag: `${STATS[cls].attackStat === "mag" ? `attack ×${attackMult(cls, st).toFixed(2)}, ` : ""}skills ×${magicMult(cls, st).toFixed(2)}, ` +
-        `cooldowns −${Math.round((1 - cooldownMult(cls, st, mine.powerLevel)) * 100)}%`,
+        `cooldowns −${Math.round((1 - cooldownMult(cls, st, mine.talents)) * 100)}%`,
     };
     document.getElementById("herostats")!.innerHTML = (["sta", "str", "mag"] as StatKind[]).map((k) => {
       const gain = prev ? base[k] - prev[k] : 0;
@@ -426,7 +436,7 @@ export class TownScene extends Phaser.Scene {
     const def = CLASSES[cls];
     const next = xpForLevel(lvl + 1), cur = xpForLevel(lvl);
     const dmg = Math.round(def.damage * attackMult(cls, st) * talentMult(cls, mine.talents, "dmg"));
-    const speed = Math.round(heroSpeed(cls, mine.powerLevel, false) * gearSpeedMult(mine) * talentMult(cls, mine.talents, "speed"));
+    const speed = Math.round(heroSpeed(cls, mine.talents, false) * gearSpeedMult(mine) * talentMult(cls, mine.talents, "speed"));
     const rows: [string, string][] = [
       ["Level", lvl >= 20 ? "20 (max)" : `${lvl} · XP ${mine.xp - cur}/${next - cur}`],
       ["Health", `${Math.ceil(mine.hp)} / ${mine.maxHp}`],
@@ -442,18 +452,19 @@ export class TownScene extends Phaser.Scene {
   /** HUD list of every action with its key and cooldown, under the skill bar. */
   private renderActions(mine: any, cls: ClassKind, cdm: number, now: number) {
     const sp = CLASSES[cls].special, u = ULTS[cls];
-    const row = (key: string, name: string, cdMs: number, last: number, extra = "", locked = "") => {
+    const row = (key: string, name: string, cdMs: number, last: number, extra = "", locked = "", cost = 0) => {
       const left = cdMs > 0 ? Math.max(0, cdMs - (now - last)) : 0;
-      const state = locked ? "locked" : left > 0 ? "wait" : "";
-      const status = locked || (left > 0 ? `${(left / 1000).toFixed(1)}s` : extra || "ready");
+      const short = cost > mine.energy;
+      const state = locked ? "locked" : left > 0 || short ? "wait" : "";
+      const status = locked || (left > 0 ? `${(left / 1000).toFixed(1)}s` : short ? `needs ${cost}` : extra || "ready");
       const fill = left > 0 ? `<div class="cd" style="width:${(1 - left / cdMs) * 100}%"></div>` : "";
-      return `<li class="${state}${key === "R" ? " ult" : ""}">${fill}<kbd>${key}</kbd><span class="n">${name}</span><span class="s">${status}</span></li>`;
+      return `<li class="${state}${key === "2" ? " ult" : ""}">${fill}<kbd>${key}</kbd><span class="n">${name}</span><span class="s">${status}</span></li>`;
     };
     const html = [
       row("Space", CLASSES[cls].projectile ? "Shoot" : "Attack", 0, 0, "3-hit combo"),
-      row("E", sp.name, sp.cooldownMs * cdm, this.lastSpecial),
-      row("R", u.name, u.cooldownMs * cdm, this.lastUlt, "", mine.powerLevel < ULT_LEVEL ? `🔒 Lv ${ULT_LEVEL}` : ""),
-      row("F", "Dodge roll", DODGE.cooldownMs, this.lastDodge),
+      row("1", sp.name, sp.cooldownMs * cdm, this.lastSpecial, "", hasSpecial(cls, mine.talents) ? "" : "🔒 learn (T)", ENERGY.cost.special),
+      row("2", u.name, u.cooldownMs * cdm, this.lastUlt, "", hasUlt(cls, mine.talents) ? "" : `🔒 Lv ${ultPower(cls).level}`, ENERGY.cost.ult),
+      row("Shift", "Dodge roll", DODGE.cooldownMs, this.lastDodge, "", "", ENERGY.cost.dodge),
       row("Q", "Potion", 0, 0, `×${mine.potions}`, mine.potions > 0 ? "" : "×0"),
     ].join("");
     const el = document.getElementById("actions")!;
@@ -649,7 +660,7 @@ export class TownScene extends Phaser.Scene {
       const p = e.state;
       if (id === this.me && !p.dead && !p.stunned && !p.rolling) {
         // Client-side prediction with the same movement code the server runs
-        const r = moveStep(e.sprite.x, e.sprite.y, this.input_, dtMs / 1000, heroSpeed(p.cls as ClassKind, p.powerLevel, p.slowed, p.raging) * gearSpeedMult(p) * talentMult(p.cls as ClassKind, p.talents, "speed"));
+        const r = moveStep(e.sprite.x, e.sprite.y, this.input_, dtMs / 1000, heroSpeed(p.cls as ClassKind, p.talents, p.slowed, p.raging) * gearSpeedMult(p) * talentMult(p.cls as ClassKind, p.talents, "speed"));
         e.sprite.setPosition(r.x, r.y);
         if (!r.moving) {
           // Ease toward authoritative position while idle
@@ -711,8 +722,9 @@ export class TownScene extends Phaser.Scene {
         } else if (e.shield) { e.shield.destroy(); e.shield = undefined; }
       }
       if (!p.dead && p.hp < maxHp) {
-        e.bar.fillStyle(0x000000).fillRect(x - 7, y + 3, 14, 2);
-        e.bar.fillStyle(e.mob ? 0xf4a261 : 0xe63946).fillRect(x - 7, y + 3, 14 * (p.hp / maxHp), 2);
+        const bw = (e.mob && MOB_LOOK[p.kind]?.bar) || 14;
+        e.bar.fillStyle(0x000000).fillRect(x - bw / 2, y + 3, bw, 2);
+        e.bar.fillStyle(e.mob ? 0xf4a261 : 0xe63946).fillRect(x - bw / 2, y + 3, bw * (p.hp / maxHp), 2);
       }
     }
 
@@ -752,12 +764,15 @@ export class TownScene extends Phaser.Scene {
         ? `⚔ ${zone.name}: ${zone.alive}/${zone.cap} monsters`
         : "";
       const cls = mine.cls as ClassKind;
-      const cdm = cooldownMult(cls, { sta: mine.sta, str: mine.str, mag: mine.mag }, mine.powerLevel) * talentReduce(cls, mine.talents, "cdr");
+      const cdm = cooldownMult(cls, { sta: mine.sta, str: mine.str, mag: mine.mag }, mine.talents) * talentReduce(cls, mine.talents, "cdr");
       const sp = CLASSES[cls].special;
       const spCd = sp.cooldownMs * cdm;
       const left = Math.max(0, spCd - (now - this.lastSpecial));
-      (document.getElementById("skillfill") as HTMLElement).style.width = `${(1 - left / spCd) * 100}%`;
-      document.getElementById("skilltext")!.textContent = left > 0 ? `${sp.name} ${(left / 1000).toFixed(1)}s` : `${sp.name} ready [E]`;
+      // Blue bar = Stamina (Magic for the Wizard), spent by skills, the ultimate and the dodge roll
+      const fill = document.getElementById("skillfill") as HTMLElement;
+      fill.style.width = `${(mine.energy / ENERGY.max) * 100}%`;
+      fill.classList.toggle("magic", cls === "wizard");
+      document.getElementById("skilltext")!.textContent = `${energyName(cls)} ${Math.floor(mine.energy)} / ${ENERGY.max}`;
       this.renderActions(mine, cls, cdm, now);
     }
   }

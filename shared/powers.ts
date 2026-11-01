@@ -52,9 +52,9 @@ export function magicMult(cls: ClassKind, s: Stats): number {
   return 1 + (s.mag - STATS[cls].base.mag) * DMG_PER_POINT + (cls === "wizard" ? 0 : 0.02 * (s.str - STATS[cls].base.str));
 }
 
-export function cooldownMult(cls: ClassKind, s: Stats, level: number): number {
+export function cooldownMult(cls: ClassKind, s: Stats, learned: Learned): number {
   let m = 1 - Math.min(MAX_CDR, (s.mag - STATS[cls].base.mag) * CDR_PER_MAG);
-  if (hasPower(cls, level, "manaflow")) m *= 0.8;
+  if (hasPower(cls, learned, "manaflow")) m *= 0.8;
   return m;
 }
 
@@ -69,53 +69,65 @@ export type PowerId =
   | "volley" | "eagleeye" | "pierce" | "pinning" | "arrowrain"
   | "rage" | "bloodthirst" | "groundslam" | "unstoppable" | "leap";
 
-export interface PowerDef { id: PowerId; level: number; name: string; desc: string; key?: "E" | "R" }
+export interface PowerDef { id: PowerId; level: number; name: string; desc: string; key?: "1" | "2" }
 
 export const POWERS: Record<ClassKind, PowerDef[]> = {
   knight: [
-    { id: "guard", level: 1, name: "Shield", key: "E", desc: "Block 70% damage and all knockback for 2s." },
+    { id: "guard", level: 1, name: "Shield", key: "1", desc: "Block 70% damage and all knockback for 2s." },
     { id: "ironskin", level: 3, name: "Iron Skin", desc: "Passive: take 10% less damage." },
     { id: "cleave", level: 5, name: "Cleave", desc: "Combo finisher hits every enemy around you." },
     { id: "secondwind", level: 8, name: "Second Wind", desc: "Passive: below 25% HP, heal 30% (once per 60s)." },
-    { id: "earthquake", level: 10, name: "Earthquake", key: "R", desc: "Slam the ground: damage and stun everything nearby for 1.5s." },
+    { id: "earthquake", level: 10, name: "Earthquake", key: "2", desc: "Slam the ground: damage and stun everything nearby for 1.5s." },
   ],
   ninja: [
-    { id: "dash", level: 1, name: "Dash", key: "E", desc: "Blink forward, untouchable for a moment." },
+    { id: "dash", level: 1, name: "Dash", key: "1", desc: "Blink forward, untouchable for a moment." },
     { id: "swift", level: 3, name: "Swift Feet", desc: "Passive: move 12% faster." },
     { id: "crit", level: 5, name: "Critical Strike", desc: "Passive: 20% chance to deal double damage." },
     { id: "shadowstrike", level: 8, name: "Shadow Strike", desc: "Dash cuts every enemy you pass through." },
-    { id: "bladestorm", level: 10, name: "Blade Storm", key: "R", desc: "Spin: 3 quick hits on everything around you." },
+    { id: "bladestorm", level: 10, name: "Blade Storm", key: "2", desc: "Spin: 3 quick hits on everything around you." },
   ],
   wizard: [
-    { id: "nova", level: 1, name: "Nova", key: "E", desc: "Blast everything around you." },
+    { id: "nova", level: 1, name: "Nova", key: "1", desc: "Blast everything around you." },
     { id: "manaflow", level: 3, name: "Mana Flow", desc: "Passive: skills recharge 20% faster." },
     { id: "ignite", level: 5, name: "Ignite", desc: "Fireballs explode, splashing 50% damage nearby." },
     { id: "frost", level: 8, name: "Frost Nova", desc: "Nova also slows enemies by 50% for 2s." },
-    { id: "meteor", level: 10, name: "Meteor", key: "R", desc: "Call a meteor ahead of you: huge area damage." },
+    { id: "meteor", level: 10, name: "Meteor", key: "2", desc: "Call a meteor ahead of you: huge area damage." },
   ],
   archer: [
-    { id: "volley", level: 1, name: "Volley", key: "E", desc: "Fire 3 arrows side by side." },
+    { id: "volley", level: 1, name: "Volley", key: "1", desc: "Fire 3 arrows side by side." },
     { id: "eagleeye", level: 3, name: "Eagle Eye", desc: "Passive: arrows fly 30% farther." },
     { id: "pierce", level: 5, name: "Piercing Arrows", desc: "Arrows pass through up to 2 extra enemies." },
     { id: "pinning", level: 8, name: "Pinning Shot", desc: "Arrows slow enemies for 1.5s." },
-    { id: "arrowrain", level: 10, name: "Arrow Rain", key: "R", desc: "Rain arrows on an area ahead: 4 waves of damage." },
+    { id: "arrowrain", level: 10, name: "Arrow Rain", key: "2", desc: "Rain arrows on an area ahead: 4 waves of damage." },
   ],
   barbarian: [
-    { id: "rage", level: 1, name: "Rage", key: "E", desc: "For 5s: +30% damage and +20% speed." },
+    { id: "rage", level: 1, name: "Rage", key: "1", desc: "For 5s: +30% damage and +20% speed." },
     { id: "bloodthirst", level: 3, name: "Bloodthirst", desc: "Passive: heal 15% of the damage you deal." },
     { id: "groundslam", level: 5, name: "Ground Slam", desc: "Combo finisher stuns enemies for 0.6s." },
     { id: "unstoppable", level: 8, name: "Unstoppable", desc: "While raging: immune to stun, slow and knockback." },
-    { id: "leap", level: 10, name: "Leap", key: "R", desc: "Leap forward and crash down, hurting everything where you land." },
+    { id: "leap", level: 10, name: "Leap", key: "2", desc: "Leap forward and crash down, hurting everything where you land." },
   ],
 };
 
-export function hasPower(cls: ClassKind, level: number, id: PowerId): boolean {
-  return POWERS[cls].some((p) => p.id === id && level >= p.level);
+/**
+ * Skills learned in the skill tree (Player.talents): rank per node id. Class skills ("powers") are nodes "pw_<id>".
+ * Heroes start with only a basic attack; every class skill must be learned with a skill point. See shared/talents.ts for the tree layout.
+ */
+export type Learned = { get(id: string): number | undefined } | Record<string, number>;
+export const powerNodeId = (id: PowerId) => `pw_${id}`;
+const learnedRank = (r: Learned, id: string): number =>
+  (typeof (r as any).get === "function" ? (r as any).get(id) : (r as Record<string, number>)[id]) ?? 0;
+
+export function hasPower(cls: ClassKind, learned: Learned, id: PowerId): boolean {
+  const p = POWERS[cls].find((x) => x.id === id);
+  return !!p && learnedRank(learned, powerNodeId(id)) > 0;
 }
 
-export function powersUnlockedAt(cls: ClassKind, level: number): PowerDef[] {
-  return POWERS[cls].filter((p) => p.level === level);
-}
+/** The class skill on key 1 (level 1) and the ultimate on key 2 (level 10). */
+export const specialPower = (cls: ClassKind) => POWERS[cls].find((p) => p.key === "1")!;
+export const ultPower = (cls: ClassKind) => POWERS[cls].find((p) => p.key === "2")!;
+export const hasSpecial = (cls: ClassKind, learned: Learned) => hasPower(cls, learned, specialPower(cls).id);
+export const hasUlt = (cls: ClassKind, learned: Learned) => hasPower(cls, learned, ultPower(cls).id);
 
 // ---- Tuning for the new powers -------------------------------------------
 export const IRONSKIN_REDUCTION = 0.1;
@@ -144,9 +156,9 @@ export const ULTS: Record<ClassKind, UltDef> = {
 export const ULT_LEVEL = 10;
 
 /** Movement speed after passives and slows (used by server and client prediction). */
-export function heroSpeed(cls: ClassKind, level: number, slowed: boolean, raging = false): number {
+export function heroSpeed(cls: ClassKind, learned: Learned, slowed: boolean, raging = false): number {
   let s = CLASSES[cls].speed;
-  if (hasPower(cls, level, "swift")) s *= 1 + SWIFT_BONUS;
+  if (hasPower(cls, learned, "swift")) s *= 1 + SWIFT_BONUS;
   if (raging) s *= RAGE.speed;
   if (slowed) s *= 1 - FROST.slow;
   return s;

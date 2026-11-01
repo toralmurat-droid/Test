@@ -84,8 +84,79 @@ export function itemTexture(scene: Phaser.Scene, kind: string): string {
 const SLIME_A = [..."............|............|............|............|............|............|.....GG.....|...GGGGGG...|..GLLGGGGG..|.GLLGGGGGGG.|.GGGEGGEGGG.|.GGGGGGGGGG.|GGGGGGGGGGGG|GGGGGGGGGGGG|.DDDDDDDDDD.|............".split("|")];
 const SLIME_B = [..."............|............|............|............|............|............|............|....GGGG....|..GGGGGGGG..|.GLLGGGGGGG.|GLLGEGGEGGGG|GGGGGGGGGGGG|GGGGGGGGGGGG|GGGGGGGGGGGG|DDDDDDDDDDDD|............".split("|")];
 
+/**
+ * Round blob frame (w x h px): a dome with a highlight, two eyes and a dark rim at the base.
+ * `squish` flattens/widens it for the bounce frame; `buds` adds little bloblings growing inside (Mother Blob).
+ */
+function blobFrame(w: number, h: number, bodyH: number, squish: boolean, buds: boolean): string[] {
+  const rows: string[][] = Array.from({ length: h }, () => Array(w).fill("."));
+  const bh = squish ? Math.round(bodyH * 0.86) : bodyH;
+  const rx = (squish ? w / 2 : w / 2 - 1) - 0.01, ry = bh - 0.5;
+  const cx = (w - 1) / 2, base = h - 2; // bottom row of the body
+  for (let y = base - bh + 1; y <= base; y++) {
+    for (let x = 0; x < w; x++) {
+      const dx = (x - cx) / rx, dy = (y - base) / ry; // dome: half ellipse sitting on the base row
+      if (dx * dx + dy * dy <= 1 && y >= 0) rows[y][x] = "G";
+    }
+  }
+  for (let x = 0; x < w; x++) if (rows[base][x] === "G") rows[base + 1][x] = "D";
+  const top = base - bh + 1;
+  const put = (x: number, y: number, c: string) => { if (rows[y]?.[x] === "G") rows[y][x] = c; };
+  // highlight on the upper left
+  const hl = Math.max(1, Math.round(w / 8));
+  for (let i = 0; i < hl; i++) for (let j = 0; j < hl + 1; j++) put(Math.round(cx - rx * 0.5) + j - i, top + 2 + i, "L");
+  // eyes
+  const ey = top + Math.round(bh * 0.45), gap = Math.max(1, Math.round(w / 6));
+  const eh = w >= 20 ? 2 : 1;
+  for (let k = 0; k < eh; k++) { put(Math.floor(cx) - gap, ey + k, "E"); put(Math.ceil(cx) + gap, ey + k, "E"); }
+  if (w >= 20) { put(Math.floor(cx) - gap, ey, "W"); put(Math.ceil(cx) + gap, ey, "W"); }
+  if (buds) {
+    // three babies floating inside her belly
+    for (const [bx, by] of [[cx - rx * 0.55, base - 2], [cx + rx * 0.5, base - 3], [cx + 0.5, base - 1]]) {
+      const x0 = Math.round(bx), y0 = Math.round(by);
+      for (const [ox, oy] of [[0, 0], [1, 0], [0, -1], [1, -1], [-1, 0], [2, 0]]) put(x0 + ox, y0 + oy, "B");
+      put(x0, y0 - 1, "b");
+    }
+  }
+  // dark outline so blobs read against the grass
+  const filled = rows.map((r) => r.map((c) => c !== "."));
+  const isBody = (x: number, y: number) => !!filled[y]?.[x];
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    if (rows[y][x] !== "G") continue;
+    if (!isBody(x - 1, y) || !isBody(x + 1, y) || !isBody(x, y - 1)) rows[y][x] = "O";
+  }
+  if (buds) {
+    // little gold tiara: she's the mother
+    const tx = Math.round(cx), ty = top;
+    for (const [ox, oy, c] of [[-3, 0, "Y"], [-2, 0, "Y"], [-1, 0, "Y"], [0, 0, "Y"], [1, 0, "Y"], [2, 0, "Y"], [-3, -1, "Y"], [0, -1, "R"], [2, -1, "Y"], [0, -2, "Y"]] as [number, number, string][]) {
+      if (rows[ty + oy]) rows[ty + oy][tx + ox] = c;
+    }
+  }
+  return rows.map((r) => r.join(""));
+}
+
+const MOTHER_W = 24, MOTHER_H = 22, BLOBLING_W = 8, BLOBLING_H = 9;
+const MOTHER_A = blobFrame(MOTHER_W, MOTHER_H, 17, false, true), MOTHER_B = blobFrame(MOTHER_W, MOTHER_H, 17, true, true);
+const BLOBLING_A = blobFrame(BLOBLING_W, BLOBLING_H, 6, false, false), BLOBLING_B = blobFrame(BLOBLING_W, BLOBLING_H, 6, true, false);
+
+/** Per-kind size info for the scene: head height (labels/bubbles) and HP bar width. */
+export const MOB_LOOK: Record<string, { top: number; bar: number; oy: number }> = {
+  motherblob: { top: 20, bar: 22, oy: 0.92 },
+  blobling: { top: 8, bar: 8, oy: 0.9 },
+};
+
 /** Monster sprite sheets, same 6-frame layout as personas. */
 export function mobTexture(scene: Phaser.Scene, kind: string): string {
+  if (kind === "motherblob") {
+    return drawSheet(scene, "mob_motherblob", [MOTHER_A, MOTHER_B, MOTHER_A, MOTHER_B, MOTHER_A, MOTHER_B], {
+      G: 0x3f9e8c, L: 0xb8f2e0, E: 0x10302a, W: 0xffffff, D: 0x1f5c50, O: 0x1a4a40, B: 0x9be58a, b: 0xe2ffd6, Y: 0xffc93c, R: 0xe63946,
+    }, MOTHER_W, MOTHER_H);
+  }
+  if (kind === "blobling") {
+    return drawSheet(scene, "mob_blobling", [BLOBLING_A, BLOBLING_B, BLOBLING_A, BLOBLING_B, BLOBLING_A, BLOBLING_B], {
+      G: 0xa6e86b, L: 0xf0ffd8, E: 0x14301a, D: 0x5f9e3a, O: 0x3f7a2a,
+    }, BLOBLING_W, BLOBLING_H);
+  }
   if (kind === "slime") {
     return drawSheet(scene, "mob_slime", [SLIME_A, SLIME_B, SLIME_A, SLIME_B, SLIME_A, SLIME_B], {
       G: 0x7bd36b, L: 0xc8f5b8, E: 0x14301a, D: 0x3f8a3a,
@@ -96,8 +167,9 @@ export function mobTexture(scene: Phaser.Scene, kind: string): string {
   });
 }
 
-function drawSheet(scene: Phaser.Scene, key: string, frames: string[][], pal: Record<string, number>): string {
+function drawSheet(scene: Phaser.Scene, key: string, frames: string[][], pal: Record<string, number>, PW_ = PW, PH_ = PH): string {
   if (scene.textures.exists(key)) return key;
+  const PW = PW_, PH = PH_;
   const tex = scene.textures.createCanvas(key, PW * frames.length, PH)!;
   const ctx = tex.getContext();
   frames.forEach((rows, f) => {

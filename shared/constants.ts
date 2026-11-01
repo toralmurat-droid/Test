@@ -26,7 +26,7 @@ export interface InputState {
   right: boolean;
 }
 
-export type MobKind = "slime" | "skeleton";
+export type MobKind = "slime" | "skeleton" | "motherblob" | "blobling";
 
 export interface MobDef {
   name: string;
@@ -42,5 +42,12 @@ export interface MobDef {
 export const MOBS: Record<MobKind, MobDef> = {
   slime: { name: "Slime", maxHp: 40, speed: 45, damage: 8, attackCooldownMs: 1000, aggroRange: 80, leash: 140, xp: 10 },
   skeleton: { name: "Skeleton", maxHp: 80, speed: 62, damage: 14, attackCooldownMs: 900, aggroRange: 110, leash: 200, xp: 25 },
+  // Big, slow slime that buds off bloblings now and then (see BROOD)
+  motherblob: { name: "Mother Blob", maxHp: 200, speed: 28, damage: 12, attackCooldownMs: 1300, aggroRange: 70, leash: 120, xp: 60 },
+  // Tiny, quick, fragile children of a Mother Blob; they never respawn on their own
+  blobling: { name: "Blobling", maxHp: 14, speed: 58, damage: 4, attackCooldownMs: 800, aggroRange: 90, leash: 160, xp: 3 },
 };
+
+/** Mother Blob brood: every few seconds (random) she may bud a blobling, up to `perMother` alive at once. */
+export const BROOD = { minMs: 5000, maxMs: 12000, perMother: 4, worldCap: 40 };
 export const MOB_ATTACK_RANGE = 14; // px
