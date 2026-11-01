@@ -2,8 +2,8 @@ import { MAP_H, MAP_W, TILE } from "../../shared/constants";
 import { AREAS, EMPTY, GROUND, OBJECTS } from "../../shared/map";
 import { createTilesetCanvas, tileColors } from "./tileset";
 
-const VIEW_W = 64, VIEW_H = 48; // tiles shown around the player on the minimap
-const PX = 3; // minimap canvas pixels per tile (64x48 tiles -> 192x144)
+const VIEW_W = 56, VIEW_H = 56; // tiles shown around the player on the (round) minimap
+const PX = 3; // minimap canvas pixels per tile (56x56 tiles -> 168x168)
 const BIG = 5; // world map canvas pixels per tile
 const REVEAL = 9; // tiles around the player that become discovered
 const FADE = 3; // soft edge of the discovered area, in tiles
@@ -140,12 +140,12 @@ export class Minimap {
     const c = this.ctx;
     c.imageSmoothingEnabled = false;
     const cx = me ? me.x / TILE : MAP_W / 2, cy = me ? me.y / TILE : MAP_H / 2;
-    const sx = Math.max(0, Math.min(MAP_W - VIEW_W, Math.round(cx - VIEW_W / 2)));
-    const sy = Math.max(0, Math.min(MAP_H - VIEW_H, Math.round(cy - VIEW_H / 2)));
+    // the player always sits in the middle of the round minimap; beyond the map edge is fog
+    const sx = Math.round(cx - VIEW_W / 2), sy = Math.round(cy - VIEW_H / 2);
     c.fillStyle = FOG;
     c.fillRect(0, 0, this.el.width, this.el.height);
-    c.drawImage(this.colors, sx, sy, VIEW_W, VIEW_H, 0, 0, VIEW_W * PX, VIEW_H * PX);
-    c.drawImage(this.fog, sx, sy, VIEW_W, VIEW_H, 0, 0, VIEW_W * PX, VIEW_H * PX);
+    c.drawImage(this.colors, -sx * PX, -sy * PX, MAP_W * PX, MAP_H * PX);
+    c.drawImage(this.fog, -sx * PX, -sy * PX, MAP_W * PX, MAP_H * PX);
     const dot = (g: CanvasRenderingContext2D, p: P, s: number, ox: number, oy: number, color: string, r: number) => {
       g.fillStyle = color;
       g.fillRect(Math.round((p.x / TILE - ox) * s) - r, Math.round((p.y / TILE - oy) * s) - r, r * 2, r * 2);
