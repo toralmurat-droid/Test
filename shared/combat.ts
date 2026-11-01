@@ -48,3 +48,14 @@ export function poiseSpeed(frac: number): number {
 
 /** Attack speed bonus while raging (Barbarian). */
 export const RAGE_ATTACK_SPEED = 1.15;
+
+/**
+ * Level difference: hitting a higher-level opponent drains less poise (-15% per level above you, down to 20%),
+ * a lower-level one drains more (+10% per level below, up to +50%). Works the same for monsters hitting heroes.
+ */
+export const POISE_LEVEL = { perLevelAbove: 0.15, perLevelBelow: 0.1, min: 0.2, max: 1.5 } as const;
+export function poiseLevelMult(attackerLevel: number, targetLevel: number): number {
+  const d = (targetLevel || 1) - (attackerLevel || 1);
+  const m = d > 0 ? 1 - POISE_LEVEL.perLevelAbove * d : 1 - POISE_LEVEL.perLevelBelow * d;
+  return Math.min(POISE_LEVEL.max, Math.max(POISE_LEVEL.min, m));
+}
