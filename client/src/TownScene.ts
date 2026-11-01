@@ -126,7 +126,9 @@ export class TownScene extends Phaser.Scene {
 
     const cam = this.cameras.main;
     cam.setBounds(0, 0, MAP_W * TILE, MAP_H * TILE);
-    cam.setZoom(3);
+    // ?zoom=N (viewing aid, like ?look): another camera zoom
+    const zq = Number(new URLSearchParams(location.search).get("zoom"));
+    cam.setZoom(zq > 0 && zq <= 6 ? zq : 3);
     cam.roundPixels = true;
     if (ISO) this.iso = new IsoView(this);
 

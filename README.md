@@ -94,7 +94,9 @@ lanterns and the campfire at night. Add `?time=day|dusk|night` to the URL to for
 
 **Isometric view:** the game is drawn in isometric by default. Add `?iso=0` to the URL for the old top-down view
 (`?iso=1` goes back; the choice is remembered). Only the drawing changes: the server, the map data and the movement rules stay top-down, see
-`client/src/iso.ts`. W/up moves up the screen.
+`client/src/iso.ts`. W/up moves up the screen. Houses (walls, pitched roof, chimney) and ruin walls are built in
+`client/src/isobuild.ts`; a house turns see-through when your hero walks behind it. `?zoom=1.5` zooms the camera out
+(viewing aid, like `?look=tx,ty`).
 
 **Map viewer:** with `npm run dev` running, open http://localhost:5173/map.html to see the whole map with area,
 collision and grid overlays (no server needed). Edit `shared/map.ts` and it hot-reloads.

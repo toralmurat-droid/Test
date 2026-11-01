@@ -1,3 +1,4 @@
+import { ISO } from "./isoflag";
 import Phaser from "phaser";
 import { ART_K as K, MAP_H, MAP_W, TILE } from "../../shared/constants";
 import { AREAS, EMPTY, GROUND, OBJECTS, T, VILLAGE } from "../../shared/map";
@@ -491,7 +492,8 @@ export class Details {
     this.dusk = this.scene.add.rectangle(0, 0, W, H, 0xff8a3a).setOrigin(0, 0).setDepth(27001).setAlpha(0);
     // Lit windows: warm panes baked once, faded in at night
     this.windows = this.scene.add.graphics().setDepth(27200).setAlpha(0);
-    for (let ty = 0; ty < MAP_H; ty++) for (let tx = 0; tx < MAP_W; tx++) {
+    // (iso view: windows are on upright walls, the flat panes would land on the ground)
+    if (!ISO) for (let ty = 0; ty < MAP_H; ty++) for (let tx = 0; tx < MAP_W; tx++) {
       const t = OBJECTS[ty][tx];
       if (t === T.WINDOW_TIMBER) this.windows.fillStyle(0xffd27a, 1).fillRect(tx * TILE + 5 * K, ty * TILE + 5 * K, 6 * K, 6 * K);
       if (t === T.WINDOW_STONE) this.windows.fillStyle(0xffe0a0, 1).fillRect(tx * TILE + 6 * K, ty * TILE + 4 * K, 4 * K, 9 * K);
