@@ -19,6 +19,7 @@
     "tsx": "4.19.2"
   },
   "devDependencies": {
+    "@fontsource/pixelify-sans": "^5.3.0",
     "@types/express": "4.17.21",
     "@types/node": "22.10.2",
     "colyseus.js": "0.15.28",
