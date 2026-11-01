@@ -1,7 +1,7 @@
 import { Client, Room } from "colyseus";
 import { ArraySchema, MapSchema, Schema, type } from "@colyseus/schema";
 import {
-  Dir, HIT_RADIUS, InputState, MOB_ATTACK_RANGE, MOBS, MobKind, REGEN_DELAY_MS, REGEN_PER_SEC, REGEN_RAMP_MS, COMBAT_REGEN_PER_SEC,
+  BROOD, Dir, HIT_RADIUS, InputState, MOB_ATTACK_RANGE, MOBS, MobKind, REGEN_DELAY_MS, REGEN_PER_SEC, REGEN_RAMP_MS, COMBAT_REGEN_PER_SEC,
   RESPAWN_MS, SAFE_REGEN_PER_SEC, TICK_RATE,
 } from "../shared/constants";
 import {
@@ -93,7 +93,9 @@ export class Mob extends Schema {
 
   stunUntil = 0;
   slowUntil = 0;
-  zone = 0; // index into SPAWN_ZONES
+  zone = 0; // index into SPAWN_ZONES (-1 for bloblings, which belong to their mother, not a zone)
+  mother = ""; // bloblings: id of the Mother Blob that budded them
+  nextBrood = 0; // Mother Blob: when she next tries to bud a blobling
   homeX = 0;
   homeY = 0;
   target = ""; // player session id being chased
@@ -253,7 +255,33 @@ export class TownRoom extends Room<TownState> {
     m.hp = m.maxHp = def.maxHp;
     m.dead = false;
     m.target = "";
+    if (kind === "motherblob") m.nextBrood = Date.now() + BROOD.minMs + Math.random() * (BROOD.maxMs - BROOD.minMs);
     if (!this.state.mobs.has(id)) this.state.mobs.set(id, m);
+  }
+
+  /** A Mother Blob buds a blobling next to her, unless she already has a full brood (or the world is full of them). */
+  private brood(mother: Mob, motherId: string, now: number) {
+    mother.nextBrood = now + BROOD.minMs + Math.random() * (BROOD.maxMs - BROOD.minMs);
+    let mine = 0, total = 0;
+    this.state.mobs.forEach((c) => {
+      if (c.kind !== "blobling" || c.dead) return;
+      total++;
+      if (c.mother === motherId) mine++;
+    });
+    if (mine >= BROOD.perMother || total >= BROOD.worldCap) return;
+    for (let i = 0; i < 8; i++) {
+      const a = Math.random() * Math.PI * 2, r = 8 + Math.random() * 6;
+      const x = mother.x + Math.cos(a) * r, y = mother.y + Math.sin(a) * r;
+      if (isSolidAt(x, y) || isSafeZone(x, y)) continue;
+      const c = new Mob();
+      c.kind = "blobling"; c.zone = -1; c.mother = motherId;
+      c.x = c.homeX = x; c.y = c.homeY = y;
+      c.hp = c.maxHp = MOBS.blobling.maxHp;
+      c.target = mother.target; // join the fight if mum is busy
+      this.state.mobs.set(`b${++this.mobSeq}`, c);
+      this.broadcast("brood", { id: motherId });
+      return;
+    }
   }
 
   // ---- Tick ---------------------------------------------------------------
@@ -322,6 +350,7 @@ export class TownRoom extends Room<TownState> {
     m.stunned = now < m.stunUntil;
     m.slowed = now < m.slowUntil;
     if (m.stunned) { m.moving = false; return; }
+    if (m.kind === "motherblob" && now >= m.nextBrood) this.brood(m, id, now);
 
     // Drop target if it died, left, went into the safe zone, or pulled us too far from home
     let t = m.target ? this.state.players.get(m.target) : undefined;
@@ -602,6 +631,7 @@ export class TownRoom extends Room<TownState> {
     m.dead = true;
     this.grantXp(attackerId, def.xp, m);
     this.dropLoot(m.kind, m.x, m.y);
+    if (m.zone < 0) { this.clock.setTimeout(() => this.state.mobs.delete(targetId), 500); return; } // bloblings don't respawn
     const zone = this.state.zones.get(SPAWN_ZONES[m.zone].name);
     if (zone) {
       zone.alive--;
