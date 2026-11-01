@@ -76,6 +76,9 @@ export const GEAR_DROP: Record<MobKind, { chance: number; tiers: [number, number
   skeleton: { chance: 0.15, tiers: [0.5, 0.38, 0.12] },
   motherblob: { chance: 0.25, tiers: [0.45, 0.4, 0.15] },
   blobling: { chance: 0.01, tiers: [1, 0, 0] },
+  shooterblob: { chance: 0.08, tiers: [0.75, 0.22, 0.03] },
+  warriorblob: { chance: 0.12, tiers: [0.6, 0.32, 0.08] },
+  healerblob: { chance: 0.1, tiers: [0.7, 0.25, 0.05] },
 };
 
 export function isGearId(v: unknown): v is string {

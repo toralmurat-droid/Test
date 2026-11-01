@@ -135,6 +135,38 @@ function blobFrame(w: number, h: number, bodyH: number, squish: boolean, buds: b
   return rows.map((r) => r.join(""));
 }
 
+/** A plain blob with something extra drawn on top: a spout (shooter), a helmet (warrior) or a halo and cross (healer). */
+function blobVariant(w: number, h: number, bodyH: number, squish: boolean, kind: "shooter" | "warrior" | "healer"): string[] {
+  const rows = blobFrame(w, h, bodyH, squish, false).map((r) => [...r]);
+  const top = rows.findIndex((r) => r.some((c) => c !== "."));
+  const base = h - 2, cx = Math.floor((w - 1) / 2);
+  const body = (x: number, y: number) => rows[y]?.[x] !== undefined && rows[y][x] !== ".";
+  const set = (x: number, y: number, c: string) => { if (rows[y]?.[x] !== undefined) rows[y][x] = c; };
+  if (kind === "shooter") {
+    // stubby spout on the head, with a dark mouth
+    for (let y = top - 3; y < top + 1; y++) { set(cx, y, "N"); set(cx + 1, y, "N"); }
+    set(cx - 1, top - 3, "N"); set(cx + 2, top - 3, "N"); set(cx, top - 3, "n"); set(cx + 1, top - 3, "n");
+  } else if (kind === "warrior") {
+    // steel helmet over the top of the dome, with a red crest and angry brows
+    for (let y = top; y < top + 3; y++) for (let x = 0; x < w; x++) if (body(x, y)) set(x, y, y === top + 2 ? "h" : "H");
+    for (const x of [cx - 1, cx, cx + 1, cx + 2]) set(x, top - 1, "R");
+    set(cx, top - 2, "R"); set(cx + 1, top - 2, "R");
+    const ey = rows.findIndex((r) => r.includes("E"));
+    if (ey > 0) rows[ey].forEach((c, x) => { if (c === "E") set(x + (x < cx ? -1 : 1), ey - 1, "E"); });
+  } else {
+    // golden halo floating above, green cross on the belly
+    for (let x = cx - 2; x <= cx + 3; x++) set(x, top - 3, "Y");
+    set(cx - 3, top - 2, "Y"); set(cx + 4, top - 2, "Y");
+    const by = base - 2;
+    for (const [ox, oy] of [[0, -1], [1, -1], [-1, 0], [0, 0], [1, 0], [2, 0], [0, 1], [1, 1]]) if (body(cx + ox, by + oy)) set(cx + ox, by + oy, "X");
+  }
+  return rows.map((r) => r.join(""));
+}
+const VAR_W = 14, VAR_H = 17;
+const SHOOTER_A = blobVariant(VAR_W, VAR_H, 10, false, "shooter"), SHOOTER_B = blobVariant(VAR_W, VAR_H, 10, true, "shooter");
+const WARRIOR_A = blobVariant(16, 18, 12, false, "warrior"), WARRIOR_B = blobVariant(16, 18, 12, true, "warrior");
+const HEALER_A = blobVariant(VAR_W, VAR_H, 10, false, "healer"), HEALER_B = blobVariant(VAR_W, VAR_H, 10, true, "healer");
+
 const MOTHER_W = 24, MOTHER_H = 22, BLOBLING_W = 8, BLOBLING_H = 9;
 const MOTHER_A = blobFrame(MOTHER_W, MOTHER_H, 17, false, true), MOTHER_B = blobFrame(MOTHER_W, MOTHER_H, 17, true, true);
 const BLOBLING_A = blobFrame(BLOBLING_W, BLOBLING_H, 6, false, false), BLOBLING_B = blobFrame(BLOBLING_W, BLOBLING_H, 6, true, false);
@@ -143,6 +175,9 @@ const BLOBLING_A = blobFrame(BLOBLING_W, BLOBLING_H, 6, false, false), BLOBLING_
 export const MOB_LOOK: Record<string, { top: number; bar: number; oy: number }> = {
   motherblob: { top: 20, bar: 22, oy: 0.92 },
   blobling: { top: 8, bar: 8, oy: 0.9 },
+  shooterblob: { top: 15, bar: 12, oy: 0.92 },
+  warriorblob: { top: 16, bar: 14, oy: 0.92 },
+  healerblob: { top: 15, bar: 12, oy: 0.92 },
 };
 
 /** Monster sprite sheets, same 6-frame layout as personas. */
@@ -151,6 +186,23 @@ export function mobTexture(scene: Phaser.Scene, kind: string): string {
     return drawSheet(scene, "mob_motherblob", [MOTHER_A, MOTHER_B, MOTHER_A, MOTHER_B, MOTHER_A, MOTHER_B], {
       G: 0x3f9e8c, L: 0xb8f2e0, E: 0x10302a, W: 0xffffff, D: 0x1f5c50, O: 0x1a4a40, B: 0x9be58a, b: 0xe2ffd6, Y: 0xffc93c, R: 0xe63946,
     }, MOTHER_W, MOTHER_H);
+  }
+  const sheet = (key: string, a: string[], b: string[], pal: Record<string, number>, w: number, h: number) =>
+    drawSheet(scene, key, [a, b, a, b, a, b], pal, w, h);
+  if (kind === "shooterblob") {
+    return sheet("mob_shooterblob", SHOOTER_A, SHOOTER_B, {
+      G: 0x9b6bd6, L: 0xe2ccff, E: 0x1e0f33, D: 0x5d3a8f, O: 0x3f2466, N: 0x4a4458, n: 0x1b1824,
+    }, VAR_W, VAR_H);
+  }
+  if (kind === "warriorblob") {
+    return sheet("mob_warriorblob", WARRIOR_A, WARRIOR_B, {
+      G: 0xd9573b, L: 0xffb59e, E: 0x2a0d06, D: 0x8f2f1c, O: 0x5c1d10, H: 0xaeb6c2, h: 0x6b7480, R: 0xe63946,
+    }, 16, 18);
+  }
+  if (kind === "healerblob") {
+    return sheet("mob_healerblob", HEALER_A, HEALER_B, {
+      G: 0xf5d0e6, L: 0xffffff, E: 0x3a1a2e, D: 0xc48aaa, O: 0x8a5577, Y: 0xffd54f, X: 0x43c463,
+    }, VAR_W, VAR_H);
   }
   if (kind === "blobling") {
     return drawSheet(scene, "mob_blobling", [BLOBLING_A, BLOBLING_B, BLOBLING_A, BLOBLING_B, BLOBLING_A, BLOBLING_B], {

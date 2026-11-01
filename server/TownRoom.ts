@@ -2,7 +2,7 @@ import type { IncomingMessage } from "node:http";
 import { Client, Room } from "colyseus";
 import { ArraySchema, MapSchema, Schema, type } from "@colyseus/schema";
 import {
-  BROOD, Dir, HIT_RADIUS, mobScale, InputState, MOB_ATTACK_RANGE, MOBS, MobKind, REGEN_DELAY_MS, REGEN_RAMP_MS, regenFromStamina, SAFE_REGEN_MULT,
+  BLOB_AI, BROOD, Dir, HIT_RADIUS, mobScale, InputState, MOB_ATTACK_RANGE, MOBS, MobKind, REGEN_DELAY_MS, REGEN_RAMP_MS, regenFromStamina, SAFE_REGEN_MULT,
   RESPAWN_MS, TICK_RATE,
 } from "../shared/constants";
 import {
@@ -119,6 +119,8 @@ export class Mob extends Schema {
   seekUntil = 0; // give up reaching the spot after this
   hideUntil = 0; // leaves the spot on its own after this
   fleeing = false; // dizzy and running for cover
+  chargeUntil = 0; nextCharge = 0; // warrior blob lunge
+  nextHeal = 0; // healer blob
   @type("number") x = 0;
   @type("number") y = 0;
   @type("string") dir: Dir = "down";
@@ -443,6 +445,35 @@ export class TownRoom extends Room<TownState> {
     if (!this.state.mobs.has(id)) this.state.mobs.set(id, m);
   }
 
+  // ---- Special blobs --------------------------------------------------------
+
+  /** Shooter blob spits a slime ball at (tx,ty). It only hurts players. */
+  private blobShot(m: Mob, id: string, tx: number, ty: number) {
+    const s = new Projectile();
+    const dx = tx - m.x, dy = ty - m.y, d = Math.hypot(dx, dy) || 1;
+    s.x = m.x; s.y = m.y - 4; s.vx = dx / d; s.vy = dy / d;
+    s.owner = id; s.kind = "slimeball";
+    s.speed = BLOB_AI.shooter.shotSpeed; s.range = BLOB_AI.shooter.range * 1.4; s.radius = BLOB_AI.shooter.shotRadius;
+    s.damage = Math.round(MOBS[m.kind].damage * mobScale(m.level, "damage"));
+    this.state.projectiles.set(`s${++this.shotSeq}`, s);
+    this.broadcast("swing", { id });
+  }
+
+  /** Healer blob mends the most hurt blob (itself included) within range. */
+  private blobHeal(m: Mob, id: string, now: number) {
+    m.nextHeal = now + BLOB_AI.healer.everyMs;
+    let best: Mob | undefined, bestId = "", worst = 0.999;
+    this.state.mobs.forEach((o, oid) => {
+      if (o.dead || o.hidden || o.kind === "skeleton" || Math.hypot(o.x - m.x, o.y - m.y) > BLOB_AI.healer.range) return;
+      const f = o.hp / o.maxHp;
+      if (f < worst) { worst = f; best = o; bestId = oid; }
+    });
+    if (!best) return;
+    const amount = Math.max(1, Math.round(best.maxHp * BLOB_AI.healer.frac));
+    best.hp = Math.min(best.maxHp, best.hp + amount);
+    this.broadcast("blobheal", { from: id, to: bestId, amount });
+  }
+
   // ---- Hiding in graves / trees ---------------------------------------------
 
   /** Pick the nearest free hiding spot and start walking to it. */
@@ -615,12 +646,38 @@ export class TownRoom extends Room<TownState> {
       return;
     }
 
+    if (m.kind === "healerblob" && now >= m.nextHeal) this.blobHeal(m, id, now);
+
     let input: InputState;
+    const ranged = m.kind === "shooterblob" || m.kind === "healerblob";
     if (t && m.broken) {
       // Broken: dizzy, can't fight back, tries to get away from the attacker
       input = toward(m.x, m.y, m.x * 2 - t.x, m.y * 2 - t.y);
+    } else if (t && ranged) {
+      // Shooter / healer blobs hang back: step away when crowded, close in when too far
+      const dist = Math.hypot(t.x - m.x, t.y - m.y);
+      const keep = m.kind === "shooterblob" ? BLOB_AI.shooter.keepAway : BLOB_AI.healer.keepAway;
+      const far = m.kind === "shooterblob" ? BLOB_AI.shooter.range * 0.85 : BLOB_AI.healer.range;
+      input = dist < keep ? toward(m.x, m.y, m.x * 2 - t.x, m.y * 2 - t.y) : dist > far ? toward(m.x, m.y, t.x, t.y) : STILL;
+      if (m.kind === "shooterblob") {
+        if (m.windUntil) {
+          input = STILL;
+          if (now >= m.windUntil) {
+            m.windUntil = 0; m.winding = false; m.lastAttack = now;
+            if (dist <= BLOB_AI.shooter.range * 1.2) this.blobShot(m, id, t.x, t.y);
+          }
+        } else if (dist <= BLOB_AI.shooter.range && now - m.lastAttack >= def.attackCooldownMs / poiseSpeed(poiseFrac(m, mobPoiseMax(m)))) {
+          m.windUntil = now + MOB_COMBAT[m.kind].windupMs; m.winding = true;
+        }
+      }
+      if (input === STILL) m.dir = Math.abs(t.x - m.x) > Math.abs(t.y - m.y) ? (t.x > m.x ? "right" : "left") : (t.y > m.y ? "down" : "up");
     } else if (t) {
       const dist = Math.hypot(t.x - m.x, t.y - m.y);
+      // Warrior blob: lunge at a target a few steps away
+      if (m.kind === "warriorblob" && !m.windUntil && now >= m.nextCharge && dist >= BLOB_AI.warrior.chargeMin && dist <= BLOB_AI.warrior.chargeMax) {
+        m.chargeUntil = now + BLOB_AI.warrior.chargeMs; m.nextCharge = now + BLOB_AI.warrior.cooldownMs;
+        this.broadcast("blobcharge", { id });
+      }
       if (dist <= MOB_ATTACK_RANGE || m.windUntil) {
         input = STILL;
         m.dir = Math.abs(t.x - m.x) > Math.abs(t.y - m.y) ? (t.x > m.x ? "right" : "left") : (t.y > m.y ? "down" : "up");
@@ -652,7 +709,8 @@ export class TownRoom extends Room<TownState> {
       input = m.wander;
     }
 
-    const speed = (t ? def.speed * (m.broken ? POISE.fleeSpeed : 1) : def.speed * 0.5) * (m.slowed ? SLOW_MOB : 1);
+    const charge = now < m.chargeUntil ? BLOB_AI.warrior.chargeMult : 1;
+    const speed = (t ? def.speed * (m.broken ? POISE.fleeSpeed : 1) * charge : def.speed * 0.5) * (m.slowed ? SLOW_MOB : 1);
     const r = moveStep(m.x, m.y, input, dt, speed);
     if (!isSafeZone(r.x, r.y)) { m.x = r.x; m.y = r.y; }
     m.moving = r.moving;
@@ -669,6 +727,14 @@ export class TownRoom extends Room<TownState> {
       s.y += (oy * total) / steps;
       s.traveled += total / steps;
       if (isSolidAt(s.x, s.y) || s.traveled >= s.range) return this.explode(s, id);
+      const shooter = this.state.mobs.get(s.owner);
+      if (shooter) {
+        // A monster's shot only hits players
+        let pid = "";
+        this.state.players.forEach((p, k) => { if (!pid && !p.dead && Math.hypot(p.x - s.x, p.y - s.y) <= s.radius + HIT_RADIUS) pid = k; });
+        if (pid && this.damagePlayer(pid, s.damage, MOBS[shooter.kind].name, [s.vx, s.vy], 0.5, { atkLevel: shooter.level })) return this.explode(s, id, pid);
+        continue;
+      }
       const hit = this.firstTargetAt(s.x, s.y, s.radius + HIT_RADIUS, s.owner, s.hitIds);
       if (hit) {
         this.hitTarget(s.owner, hit, s.damage, [s.vx, s.vy], { kb: s.knockback, slowMs: s.slowMs || undefined });

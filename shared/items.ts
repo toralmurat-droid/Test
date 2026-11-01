@@ -20,4 +20,7 @@ export const LOOT: Record<MobKind, LootDef> = {
   skeleton: { gold: [5, 12], potionChance: 0.3 },
   motherblob: { gold: [8, 18], potionChance: 0.5 },
   blobling: { gold: [0, 1], potionChance: 0.03 },
+  shooterblob: { gold: [2, 6], potionChance: 0.15 },
+  warriorblob: { gold: [4, 10], potionChance: 0.25 },
+  healerblob: { gold: [3, 8], potionChance: 0.4 },
 };

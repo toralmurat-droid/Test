@@ -38,6 +38,9 @@ export const MOB_COMBAT: Record<MobKind, { poise: number; windupMs: number }> = 
   skeleton: { poise: 55, windupMs: 300 },
   motherblob: { poise: 110, windupMs: 500 },
   blobling: { poise: 8, windupMs: 220 },
+  shooterblob: { poise: 25, windupMs: 450 },
+  warriorblob: { poise: 75, windupMs: 380 },
+  healerblob: { poise: 25, windupMs: 300 },
 };
 
 /** Attack speed multiplier from the poise fraction (1 above half, down to minSpeed at 0). */

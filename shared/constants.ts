@@ -28,7 +28,7 @@ export interface InputState {
   right: boolean;
 }
 
-export type MobKind = "slime" | "skeleton" | "motherblob" | "blobling";
+export type MobKind = "slime" | "skeleton" | "motherblob" | "blobling" | "shooterblob" | "warriorblob" | "healerblob";
 
 export interface MobDef {
   name: string;
@@ -48,6 +48,17 @@ export const MOBS: Record<MobKind, MobDef> = {
   motherblob: { name: "Mother Blob", maxHp: 200, speed: 28, damage: 12, attackCooldownMs: 1300, aggroRange: 70, leash: 120, xp: 60 },
   // Tiny, quick, fragile children of a Mother Blob; they never respawn on their own
   blobling: { name: "Blobling", maxHp: 14, speed: 58, damage: 4, attackCooldownMs: 800, aggroRange: 90, leash: 160, xp: 3 },
+  // Higher-level blob zones: a ranged spitter, a helmeted brawler and a healer that keeps the others alive (see BLOB_AI)
+  shooterblob: { name: "Shooter Blob", maxHp: 50, speed: 40, damage: 10, attackCooldownMs: 1800, aggroRange: 130, leash: 180, xp: 18 },
+  warriorblob: { name: "Warrior Blob", maxHp: 110, speed: 52, damage: 16, attackCooldownMs: 1100, aggroRange: 100, leash: 170, xp: 26 },
+  healerblob: { name: "Healer Blob", maxHp: 60, speed: 42, damage: 5, attackCooldownMs: 1200, aggroRange: 110, leash: 160, xp: 22 },
+};
+
+/** Special blob behaviour. Distances in px. */
+export const BLOB_AI = {
+  shooter: { range: 110, keepAway: 55, shotSpeed: 150, shotRadius: 3 }, // spits slime balls from a distance
+  warrior: { chargeMin: 26, chargeMax: 72, chargeMs: 320, chargeMult: 3, cooldownMs: 4000 }, // lunges at you
+  healer: { range: 70, everyMs: 3000, frac: 0.15, keepAway: 50 }, // heals the most hurt blob nearby, stays back
 };
 
 /** Mother Blob brood: every few seconds (random) she may bud a blobling, up to `perMother` alive at once. */

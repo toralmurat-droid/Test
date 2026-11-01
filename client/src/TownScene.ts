@@ -61,6 +61,9 @@ const CONGRATS = [
   "You make it look easy.",
 ];
 
+/** Pixel font (loaded with the NPC styles) for new in-world text. */
+const PIXEL_FONT = "'Pixelify Sans', monospace";
+
 export class TownScene extends Phaser.Scene {
   private room!: Room;
   private me = "";
@@ -231,7 +234,10 @@ export class TownScene extends Phaser.Scene {
     const shots = (this.room.state as any).projectiles;
     shots.onAdd((s: any, id: string) => {
       const size = s.size || 1;
-      const g: Phaser.GameObjects.Shape = s.kind === "stone"
+      const g: Phaser.GameObjects.Shape = s.kind === "slimeball"
+        // Shooter blob spit: purple goo ball
+        ? this.add.circle(s.x, s.y, 2.5, 0xb57cff).setStrokeStyle(1, 0x4a2a7a).setDepth(9000)
+        : s.kind === "stone"
         // Sling stone (equipment)
         ? this.add.circle(s.x, s.y, 1.5, 0x9e9e9e).setStrokeStyle(0.5, 0x424242).setDepth(9000)
         : s.kind === "knife" || s.kind === "bolt"
@@ -278,6 +284,22 @@ export class TownScene extends Phaser.Scene {
     });
 
     // A Mother Blob budding a blobling: quick wobble
+    // Healer blob mends another blob: green beam and a "+N" in the pixel font
+    this.room.onMessage("blobheal", ({ from, to, amount }) => {
+      const a = this.entities.get(from), b = this.entities.get(to);
+      if (!b) return;
+      if (a && a !== b) {
+        const beam = this.add.graphics().setDepth(20000);
+        beam.lineStyle(1, 0x7cfc00, 0.9).lineBetween(a.sprite.x, a.sprite.y - 6, b.sprite.x, b.sprite.y - 6);
+        this.tweens.add({ targets: beam, alpha: 0, duration: 450, onComplete: () => beam.destroy() });
+      }
+      this.floatText(b.sprite.x, b.sprite.y - b.top - 6, `+${amount}`, "#7cfc00", PIXEL_FONT);
+    });
+    // Warrior blob lunges: quick stretch
+    this.room.onMessage("blobcharge", ({ id }) => {
+      const e = this.entities.get(id);
+      if (e) this.tweens.add({ targets: e.sprite, scaleX: 1.25, scaleY: 0.8, duration: 140, yoyo: true });
+    });
     // A hidden monster jumps out of its grave / tree
     this.room.onMessage("ambush", ({ id, x, y, victim }) => {
       const e = this.entities.get(id);
@@ -402,9 +424,9 @@ export class TownScene extends Phaser.Scene {
     });
   }
 
-  private floatText(x: number, y: number, text: string, color: string) {
+  private floatText(x: number, y: number, text: string, color: string, font = "monospace") {
     const t = this.add.text(x, y, text, {
-      fontFamily: "monospace", fontSize: "16px", color, stroke: "#000", strokeThickness: 3,
+      fontFamily: font, fontSize: "16px", color, stroke: "#000", strokeThickness: 3,
     }).setOrigin(0.5, 1).setScale(0.25).setResolution(2).setDepth(30000);
     this.tweens.add({ targets: t, y: y - 10, alpha: 0, duration: 800, onComplete: () => t.destroy() });
   }
