@@ -5,8 +5,11 @@ import {
   RESPAWN_MS, SAFE_REGEN_PER_SEC, TICK_RATE,
 } from "../shared/constants";
 import {
-  CLASSES, ClassKind, damageFor, DASH_INVULN_MS, GUARD_REDUCTION, isClassKind, levelFromXp, maxHpFor, PVP_KILL_XP,
+  CLASSES, ClassKind, COMBO_WINDOW_MS, damageFor, DASH_INVULN_MS, GUARD_REDUCTION, isClassKind, levelFromXp, maxHpFor, PVP_KILL_XP,
 } from "../shared/classes";
+import {
+  ITEM_LIFETIME_MS, ItemKind, LOOT, MAX_POTIONS, PICKUP_RADIUS, POTION_COOLDOWN_MS, POTION_HEAL, PVP_GOLD_DROP,
+} from "../shared/items";
 import { isSafeZone, isSolidAt, randomOutskirtsPoint, randomSpawn } from "../shared/map";
 import { moveStep } from "../shared/movement";
 
@@ -25,6 +28,9 @@ export class Player extends Schema {
   @type("number") kills = 0;
   @type("number") xp = 0;
   @type("number") level = 1;
+  @type("number") combo = 0; // which hit of the 3-hit combo was thrown last (0..2)
+  @type("number") gold = 0;
+  @type("number") potions = 0;
   @type("number") seq = 0; // last processed input sequence (for client reconciliation)
 
   input: InputState = { up: false, down: false, left: false, right: false };
@@ -33,6 +39,8 @@ export class Player extends Schema {
   guardUntil = 0;
   invulnUntil = 0;
   lastHurt = 0;
+  lastPotion = 0;
+  attackReadyAt = 0; // when the next attack input is accepted
 }
 
 export class Mob extends Schema {
@@ -58,7 +66,9 @@ export class Projectile extends Schema {
   @type("number") y = 0;
   @type("string") dir: Dir = "down";
   @type("string") owner = "";
+  @type("number") size = 1; // visual scale (combo finisher fireballs are bigger)
 
+  knockback = 1;
   traveled = 0;
   speed = 0;
   range = 0;
@@ -66,10 +76,20 @@ export class Projectile extends Schema {
   damage = 0;
 }
 
+export class Item extends Schema {
+  @type("string") kind: ItemKind = "gold";
+  @type("number") x = 0;
+  @type("number") y = 0;
+  @type("number") amount = 1;
+
+  expires = 0;
+}
+
 export class TownState extends Schema {
   @type({ map: Player }) players = new MapSchema<Player>();
   @type({ map: Mob }) mobs = new MapSchema<Mob>();
   @type({ map: Projectile }) projectiles = new MapSchema<Projectile>();
+  @type({ map: Item }) items = new MapSchema<Item>();
 }
 
 const COLORS = [0xe74c3c, 0x3498db, 0x2ecc71, 0xf1c40f, 0x9b59b6, 0xe67e22, 0x1abc9c, 0xecf0f1];
@@ -95,6 +115,7 @@ export class TownRoom extends Room<TownState> {
   maxClients = 50;
   private mobSeq = 0;
   private shotSeq = 0;
+  private itemSeq = 0;
 
   onCreate() {
     this.setState(new TownState());
@@ -114,6 +135,7 @@ export class TownRoom extends Room<TownState> {
 
     this.onMessage("attack", (client) => this.playerAttack(client.sessionId));
     this.onMessage("special", (client) => this.playerSpecial(client.sessionId));
+    this.onMessage("potion", (client) => this.drinkPotion(client.sessionId));
 
     this.onMessage("chat", (client, text: string) => {
       const p = this.state.players.get(client.sessionId);
@@ -157,7 +179,7 @@ export class TownRoom extends Room<TownState> {
   private update(dtMs: number) {
     const dt = dtMs / 1000;
     const now = Date.now();
-    this.state.players.forEach((p) => {
+    this.state.players.forEach((p, pid) => {
       if (p.dead) { p.moving = false; return; }
       const r = moveStep(p.x, p.y, p.input, dt, CLASSES[p.cls].speed);
       p.x = r.x; p.y = r.y; p.moving = r.moving;
@@ -168,7 +190,9 @@ export class TownRoom extends Room<TownState> {
         const rate = isSafeZone(p.x, p.y) ? SAFE_REGEN_PER_SEC : REGEN_PER_SEC;
         p.hp = Math.min(p.maxHp, p.hp + p.maxHp * rate * dt);
       }
+      this.pickUp(p, pid);
     });
+    this.state.items.forEach((it, id) => { if (now > it.expires) this.state.items.delete(id); });
     this.state.mobs.forEach((m, id) => this.updateMob(m, id, dt, now));
     this.state.projectiles.forEach((s, id) => this.updateProjectile(s, id, dt));
   }
@@ -237,7 +261,7 @@ export class TownRoom extends Room<TownState> {
       if (isSolidAt(s.x, s.y) || s.traveled >= s.range) return this.explode(s, id);
       const hit = this.firstTargetAt(s.x, s.y, s.radius + HIT_RADIUS, s.owner);
       if (hit) {
-        this.hitTarget(s.owner, hit, s.damage, DIR_OFFSET[s.dir]);
+        this.hitTarget(s.owner, hit, s.damage, DIR_OFFSET[s.dir], s.knockback);
         return this.explode(s, id);
       }
     }
@@ -246,6 +270,50 @@ export class TownRoom extends Room<TownState> {
   private explode(s: Projectile, id: string) {
     this.broadcast("boom", { x: s.x, y: s.y });
     this.state.projectiles.delete(id);
+  }
+
+  // ---- Loot -------------------------------------------------------------
+
+  private dropItem(kind: ItemKind, x: number, y: number, amount: number) {
+    const it = new Item();
+    it.kind = kind; it.amount = amount;
+    // Scatter a little so several drops don't stack exactly
+    it.x = x + (Math.random() - 0.5) * 10;
+    it.y = y + (Math.random() - 0.5) * 10;
+    it.expires = Date.now() + ITEM_LIFETIME_MS;
+    this.state.items.set(`i${++this.itemSeq}`, it);
+  }
+
+  private dropLoot(kind: MobKind, x: number, y: number) {
+    const def = LOOT[kind];
+    const gold = def.gold[0] + Math.floor(Math.random() * (def.gold[1] - def.gold[0] + 1));
+    if (gold > 0) this.dropItem("gold", x, y, gold);
+    if (Math.random() < def.potionChance) this.dropItem("potion", x, y, 1);
+  }
+
+  private pickUp(p: Player, pid: string) {
+    this.state.items.forEach((it, id) => {
+      if (Math.hypot(it.x - p.x, it.y - p.y) > PICKUP_RADIUS) return;
+      if (it.kind === "potion") {
+        if (p.potions >= MAX_POTIONS) return; // full: leave it on the ground
+        p.potions += it.amount;
+      } else {
+        p.gold += it.amount;
+      }
+      this.state.items.delete(id);
+      this.clients.find((c) => c.sessionId === pid)?.send("pickup", { kind: it.kind, amount: it.amount, x: it.x, y: it.y });
+    });
+  }
+
+  private drinkPotion(id: string) {
+    const p = this.state.players.get(id);
+    const now = Date.now();
+    if (!p || p.dead || p.potions <= 0 || p.hp >= p.maxHp || now - p.lastPotion < POTION_COOLDOWN_MS) return;
+    p.lastPotion = now;
+    p.potions--;
+    const heal = Math.round(p.maxHp * POTION_HEAL);
+    p.hp = Math.min(p.maxHp, p.hp + heal);
+    this.broadcast("heal", { id, amount: heal });
   }
 
   // ---- Combat -------------------------------------------------------------
@@ -272,13 +340,16 @@ export class TownRoom extends Room<TownState> {
   }
 
   /** A player (`attackerId`) hits a player or mob. */
-  private hitTarget(attackerId: string, targetId: string, dmg: number, push: [number, number]) {
+  private hitTarget(attackerId: string, targetId: string, dmg: number, push: [number, number], kb = 1) {
     const a = this.state.players.get(attackerId);
     const name = a?.name ?? "???";
     if (this.state.players.has(targetId)) {
-      if (this.damagePlayer(targetId, dmg, name, push) && a) {
+      if (this.damagePlayer(targetId, dmg, name, push, kb) && a) {
+        const victim = this.state.players.get(targetId)!;
         a.kills++;
-        this.grantXp(attackerId, PVP_KILL_XP, this.state.players.get(targetId)!);
+        this.grantXp(attackerId, PVP_KILL_XP, victim);
+        const lost = Math.floor(victim.gold * PVP_GOLD_DROP);
+        if (lost > 0) { victim.gold -= lost; this.dropItem("gold", victim.x, victim.y, lost); }
       }
       return;
     }
@@ -287,12 +358,13 @@ export class TownRoom extends Room<TownState> {
     const def = MOBS[m.kind];
     m.hp = Math.max(0, m.hp - dmg);
     m.target = attackerId; // fight back
-    const kb = moveStep(m.x, m.y, pushInput(push), 0.1);
-    if (!isSafeZone(kb.x, kb.y)) { m.x = kb.x; m.y = kb.y; }
+    const k = moveStep(m.x, m.y, pushInput(push), 0.1 * kb);
+    if (!isSafeZone(k.x, k.y)) { m.x = k.x; m.y = k.y; }
     this.broadcast("hit", { id: targetId, dmg });
     if (m.hp > 0) return;
     m.dead = true;
     this.grantXp(attackerId, def.xp, m);
+    this.dropLoot(m.kind, m.x, m.y);
     this.clock.setTimeout(() => this.spawnMob(m.kind, targetId), def.respawnMs);
   }
 
@@ -313,7 +385,7 @@ export class TownRoom extends Room<TownState> {
   }
 
   /** Applies damage to a player. Returns true if it killed them. */
-  private damagePlayer(tid: string, dmg: number, byName: string, push: [number, number]): boolean {
+  private damagePlayer(tid: string, dmg: number, byName: string, push: [number, number], kbMul = 1): boolean {
     const t = this.state.players.get(tid);
     const now = Date.now();
     if (!t || t.dead || isSafeZone(t.x, t.y) || now < t.invulnUntil) return false;
@@ -322,7 +394,7 @@ export class TownRoom extends Room<TownState> {
     t.hp = Math.max(0, t.hp - dmg);
     t.lastHurt = now;
     if (!guarded) {
-      const kb = moveStep(t.x, t.y, pushInput(push), 0.12);
+      const kb = moveStep(t.x, t.y, pushInput(push), 0.12 * kbMul);
       t.x = kb.x; t.y = kb.y;
     }
     this.broadcast("hit", { id: tid, dmg, blocked: guarded });
@@ -343,24 +415,39 @@ export class TownRoom extends Room<TownState> {
     const now = Date.now();
     if (!a || a.dead) return;
     const def = CLASSES[a.cls];
-    if (now - a.lastAttack < def.attackCooldownMs) return;
+    if (now < a.attackReadyAt) return;
+    // Chain into the next combo hit if pressed soon enough after the last one, else restart
+    const step = a.lastAttack > 0 && now - a.attackReadyAt <= COMBO_WINDOW_MS && a.combo < 2 ? a.combo + 1 : 0;
+    const hit = def.combo[step];
+    a.combo = step;
     a.lastAttack = now;
+    a.attackReadyAt = now + (hit.cooldownMs ?? def.attackCooldownMs);
     const off = DIR_OFFSET[a.dir];
-    const dmg = damageFor(def.damage, a.level);
-    this.broadcast("swing", { id });
+    const dmg = Math.round(damageFor(def.damage, a.level) * hit.damage);
+    this.broadcast("swing", { id, step });
+
+    if (hit.lunge) {
+      for (let moved = 0; moved < hit.lunge; moved += 2) {
+        const r = moveStep(a.x, a.y, pushInput(off), 1, 2);
+        if (r.x === a.x && r.y === a.y) break;
+        a.x = r.x; a.y = r.y;
+      }
+    }
 
     if (def.projectile) {
+      const scale = hit.shotScale ?? 1;
       const s = new Projectile();
       s.x = a.x + off[0] * 6; s.y = a.y - 4 + off[1] * 6;
-      s.dir = a.dir; s.owner = id;
-      s.speed = def.projectile.speed; s.range = def.projectile.range; s.radius = def.projectile.radius;
-      s.damage = dmg;
+      s.dir = a.dir; s.owner = id; s.size = scale;
+      s.speed = def.projectile.speed; s.range = def.projectile.range; s.radius = def.projectile.radius * scale;
+      s.damage = dmg; s.knockback = hit.knockback;
       this.state.projectiles.set(`s${++this.shotSeq}`, s);
       return;
     }
 
+    const reach = hit.range ?? def.attackRange;
     const hx = a.x + off[0] * 12, hy = a.y + off[1] * 12;
-    for (const tid of this.targetsAround(hx, hy, def.attackRange, id)) this.hitTarget(id, tid, dmg, off);
+    for (const tid of this.targetsAround(hx, hy, reach, id)) this.hitTarget(id, tid, dmg, off, hit.knockback);
   }
 
   private playerSpecial(id: string) {

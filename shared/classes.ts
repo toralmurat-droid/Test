@@ -7,6 +7,22 @@ export const CLASS_KINDS: ClassKind[] = ["knight", "ninja", "wizard"];
 
 export type SpecialKind = "guard" | "dash" | "nova";
 
+/**
+ * One hit of the 3-hit attack combo. Pressing attack again within COMBO_WINDOW_MS after the previous hit's
+ * cooldown chains to the next hit; otherwise the combo restarts at hit 1. Art convention: the client plays
+ * the attack animation for `Player.combo` (0, 1, 2) and the "swing" message carries `step`.
+ */
+export interface ComboHit {
+  damage: number; // multiplier on the class damage
+  range?: number; // melee reach override, px
+  knockback: number; // multiplier on normal knockback
+  lunge?: number; // px the hero steps forward with the hit
+  shotScale?: number; // wizard: projectile size multiplier
+  cooldownMs?: number; // override of attackCooldownMs before the next input counts
+}
+
+export const COMBO_WINDOW_MS = 700;
+
 export interface ClassDef {
   name: string;
   maxHp: number;
@@ -26,6 +42,7 @@ export interface ClassDef {
     damage?: number; // nova
     radius?: number; // nova, px
   };
+  combo: [ComboHit, ComboHit, ComboHit];
   blurb: string;
 }
 
@@ -33,17 +50,32 @@ export const CLASSES: Record<ClassKind, ClassDef> = {
   knight: {
     name: "Knight", maxHp: 140, speed: 78, damage: 24, attackCooldownMs: 550, attackRange: 22,
     special: { kind: "guard", name: "Shield", cooldownMs: 6000, durationMs: 2000 },
+    combo: [
+      { damage: 1, knockback: 1 },
+      { damage: 1.1, knockback: 1 },
+      { damage: 1.6, knockback: 2.5, range: 30, cooldownMs: 800 }, // wide overhead slam
+    ],
     blurb: "Tanky sword. Shield blocks 70% damage and knockback.",
   },
   ninja: {
     name: "Ninja", maxHp: 85, speed: 112, damage: 14, attackCooldownMs: 260, attackRange: 18,
     special: { kind: "dash", name: "Dash", cooldownMs: 2500, distance: 56 },
+    combo: [
+      { damage: 1, knockback: 0.5 },
+      { damage: 1, knockback: 0.5 },
+      { damage: 1.8, knockback: 1.5, lunge: 14, cooldownMs: 450 }, // lunging finisher
+    ],
     blurb: "Fast, rapid strikes. Dash through enemies, briefly untouchable.",
   },
   wizard: {
     name: "Wizard", maxHp: 95, speed: 86, damage: 18, attackCooldownMs: 600, attackRange: 0,
     projectile: { speed: 210, range: 150, radius: 7 },
     special: { kind: "nova", name: "Nova", cooldownMs: 7000, damage: 30, radius: 38 },
+    combo: [
+      { damage: 1, knockback: 1 },
+      { damage: 1, knockback: 1 },
+      { damage: 1.7, knockback: 2, shotScale: 1.6, cooldownMs: 900 }, // big fireball
+    ],
     blurb: "Ranged fireballs. Nova blasts everything around you.",
   },
 };
