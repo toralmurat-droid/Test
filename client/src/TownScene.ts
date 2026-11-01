@@ -25,6 +25,7 @@ import { COMBO_NODE, talentMult, talentPoints, spentPoints, talentReduce } from 
 import { activeSkills, SLOT_COUNT, SLOT_KEYS, skillLearned } from "../../shared/slots";
 import { TalentMenu } from "./talents";
 import { IdeaBoard } from "./ideas";
+import { ISO, IsoView, isoAnchor, isoInput, screenDir } from "./iso";
 
 interface Entity {
   sprite: Phaser.GameObjects.Sprite;
@@ -40,6 +41,8 @@ interface Entity {
   state: any;
   statusTint?: boolean;
   gear?: GearLayer; // equipment overlays (heroes only)
+  vdir?: string; // iso view: facing on screen, from the last movement or attack
+  lastX?: number; lastY?: number;
   idleSince?: number; // local time the hero stopped moving, for idle fidgets
   nextFidget?: number;
 }
@@ -95,6 +98,7 @@ export class TownScene extends Phaser.Scene {
   private gearMenu?: GearMenu;
   private talentMenu?: TalentMenu;
   private hotbarHtml = "";
+  private iso?: IsoView;
 
   constructor(private opts: { name: string; color: number; cls: ClassKind }) {
     super("town");
@@ -108,10 +112,13 @@ export class TownScene extends Phaser.Scene {
   async create() {
     makeTileset(this);
     createArtAnims(this);
-    const map = this.make.tilemap({ tileWidth: TILE, tileHeight: TILE, width: MAP_W, height: MAP_H });
-    const tiles = map.addTilesetImage("tiles", "tiles", TILE, TILE, 0, 0)!;
-    map.createBlankLayer("ground", tiles)!.putTilesAt(displayGrid(GROUND), 0, 0).setDepth(-2);
-    map.createBlankLayer("objects", tiles)!.putTilesAt(displayGrid(Ambient.objectLayerData()), 0, 0).setDepth(-1);
+    if (ISO) IsoView.tilemap(this, displayGrid(GROUND), displayGrid(Ambient.objectLayerData()));
+    else {
+      const map = this.make.tilemap({ tileWidth: TILE, tileHeight: TILE, width: MAP_W, height: MAP_H });
+      const tiles = map.addTilesetImage("tiles", "tiles", TILE, TILE, 0, 0)!;
+      map.createBlankLayer("ground", tiles)!.putTilesAt(displayGrid(GROUND), 0, 0).setDepth(-2);
+      map.createBlankLayer("objects", tiles)!.putTilesAt(displayGrid(Ambient.objectLayerData()), 0, 0).setDepth(-1);
+    }
     this.ambient = new Ambient(this); // trees, shadows, smoke, wildlife… (cosmetic only)
     this.details = new Details(this); // roof shading, ground detail, ducks, lanterns, day/night
     this.details.onDarkness((d) => this.ambient?.setDarkness(d));
@@ -120,6 +127,7 @@ export class TownScene extends Phaser.Scene {
     cam.setBounds(0, 0, MAP_W * TILE, MAP_H * TILE);
     cam.setZoom(3);
     cam.roundPixels = true;
+    if (ISO) this.iso = new IsoView(this);
 
     // Keys without capture so typing in chat still works
     this.keys = this.input.keyboard!.addKeys("W,A,S,D,UP,DOWN,LEFT,RIGHT,SPACE,SHIFT,Q,C,G,T,F,R,E,J", false) as any;
@@ -338,7 +346,7 @@ export class TownScene extends Phaser.Scene {
     this.room.onMessage("rangedshot", ({ id }) => {
       const e = this.entities.get(id);
       if (id === this.me) this.lastRanged = this.time.now;
-      if (e?.hero && !e.state.dead) playCharAnim(e.sprite, e.hero, "attack", e.state.dir);
+      if (e?.hero && !e.state.dead) playCharAnim(e.sprite, e.hero, "attack", this.dirOf(e));
     });
     this.room.onMessage("zonecleared", ({ zone, by, name }) => {
       if (by === this.me) this.showCleared(zone);
@@ -370,7 +378,7 @@ export class TownScene extends Phaser.Scene {
         blocked ? "#9ad1ff" : crit ? "#ffd60a" : id === this.me ? "#ff5d5d" : "#ffffff");
       e.sprite.setTintFill(0xffffff);
       this.time.delayedCall(80, () => e.sprite.clearTint());
-      if (e.hero && !e.state.dead) playCharAnim(e.sprite, e.hero, "hit", e.state.dir);
+      if (e.hero && !e.state.dead) playCharAnim(e.sprite, e.hero, "hit", this.dirOf(e));
       if (id === this.me) this.cameras.main.shake(100, 0.004);
     });
     // Initiative broken (shared/combat.ts): the target is dizzy and can't attack for a moment
@@ -453,7 +461,7 @@ export class TownScene extends Phaser.Scene {
       const label = this.add.text(p.x, p.y, `Lv${p.level ?? 1}`, {
         fontFamily: "monospace", fontSize: "14px", color: "#ffffff", stroke: "#000", strokeThickness: 3,
       }).setOrigin(0.5, 1).setScale(0.25).setResolution(2);
-      this.entities.set(id, { sprite, label, bar: this.add.graphics(), tx: p.x, ty: p.y, state: p, mob, top: MOB_LOOK[p.kind]?.top ?? 14 });
+      this.entities.set(id, { sprite, label, bar: isoAnchor(this.add.graphics(), sprite) as Phaser.GameObjects.Graphics, tx: p.x, ty: p.y, state: p, mob, top: MOB_LOOK[p.kind]?.top ?? 14 });
       return;
     }
     // Classes with a generated sheet use it; anything else falls back to the procedural persona
@@ -465,7 +473,7 @@ export class TownScene extends Phaser.Scene {
       fontFamily: "monospace", fontSize: "16px", color: id === this.me ? "#ffd166" : "#ffffff",
       stroke: "#000", strokeThickness: 3,
     }).setOrigin(0.5, 1).setScale(0.25).setResolution(2);
-    const bar = this.add.graphics();
+    const bar = isoAnchor(this.add.graphics(), sprite) as Phaser.GameObjects.Graphics;
     const gear = hero ? new GearLayer(this, hero) : undefined;
     this.entities.set(id, { sprite, label, bar, tx: p.x, ty: p.y, state: p, mob, hero, gear, top: hero ? HERO_TOP : 14 });
     if (id === this.me) {
@@ -483,6 +491,17 @@ export class TownScene extends Phaser.Scene {
     this.entities.delete(id);
   }
 
+  /** Facing to draw: the server's direction, or in the iso view the direction on screen. */
+  private dirOf(e: Entity): any {
+    if (!ISO) return e.state.dir;
+    return e.vdir ?? this.worldToScreenDir(e.state.dir);
+  }
+
+  private worldToScreenDir(dir: string): string {
+    const v = ({ up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] } as Record<string, number[]>)[dir] ?? [0, 1];
+    return screenDir(v[0], v[1], dir);
+  }
+
   /** Animation for an attack: finisher = attack3, normal hits = swing1..4 (falls back to attack/attack2). */
   private attackAnim(hero: CharacterName, step: number, variant: number): string {
     if (step === 2) return "attack3";
@@ -495,7 +514,8 @@ export class TownScene extends Phaser.Scene {
     const e = this.entities.get(id);
     if (!e) return;
     const dir = e.state.dir as string;
-    if (e.hero) playCharAnim(e.sprite, e.hero, this.attackAnim(e.hero, step, variant), dir as any);
+    if (typeof ax === "number" && typeof ay === "number") e.vdir = screenDir(ax, ay, e.vdir ?? dir);
+    if (e.hero) playCharAnim(e.sprite, e.hero, this.attackAnim(e.hero, step, variant), this.dirOf(e));
     // Aim can be diagonal (the server sends it); mobs and old messages fall back to the facing direction
     const off = typeof ax === "number" && typeof ay === "number" ? [ax, ay]
       : { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] }[dir] ?? [0, 1];
@@ -697,7 +717,7 @@ export class TownScene extends Phaser.Scene {
     const e = this.entities.get(msg.id);
     if (!e) return;
     if (msg.id === this.me) this.lastDodge = this.time.now;
-    if (e.hero) playCharAnim(e.sprite, e.hero, "dodge", msg.dir as any);
+    if (e.hero) playCharAnim(e.sprite, e.hero, "dodge", (ISO ? this.worldToScreenDir(msg.dir) : msg.dir) as any);
     // A couple of fading after-images and a dust puff
     for (let i = 1; i <= 3; i++) {
       this.time.delayedCall(i * 60, () => {
@@ -713,7 +733,7 @@ export class TownScene extends Phaser.Scene {
   private showUlt(msg: { id: string; kind: string; x: number; y: number; r: number; delay?: number; hits?: number }) {
     const e = this.entities.get(msg.id);
     if (msg.id === this.me) this.lastUlt = this.time.now;
-    if (e?.hero) playCharAnim(e.sprite, e.hero, "skill", e.state.dir);
+    if (e?.hero) playCharAnim(e.sprite, e.hero, "skill", this.dirOf(e));
     if (msg.kind === "earthquake") {
       const g = this.add.circle(msg.x, msg.y, msg.r, 0x8d6e63, 0.35).setStrokeStyle(3, 0xd7ccc8).setDepth(10000).setScale(0.2);
       this.tweens.add({ targets: g, scale: 1, alpha: 0, duration: 450, onComplete: () => g.destroy() });
@@ -767,7 +787,7 @@ export class TownScene extends Phaser.Scene {
   private showSpecial(msg: { id: string; kind: string; x?: number; y?: number; fromX?: number; fromY?: number; r?: number; frost?: boolean }) {
     const e = this.entities.get(msg.id);
     if (msg.id === this.me) this.lastSpecial = this.time.now;
-    if (e?.hero) playCharAnim(e.sprite, e.hero, "skill", e.state.dir);
+    if (e?.hero) playCharAnim(e.sprite, e.hero, "skill", this.dirOf(e));
     if (msg.kind === "nova") {
       const [fill, line] = msg.frost ? [0x4cc9f0, 0xa2e8ff] : [0x9b5de5, 0xc77dff];
       const g = this.add.circle(msg.x!, msg.y! - 4, msg.r!, fill, 0.25).setStrokeStyle(2, line).setDepth(10000).setScale(0.2);
@@ -863,6 +883,7 @@ export class TownScene extends Phaser.Scene {
   }
 
   update(_t: number, dtMs: number) {
+    this.iso?.update(dtMs);
     this.ambient?.update(this.time.now, dtMs);
     this.details?.update(this.time.now, dtMs);
     if (!this.room) return;
@@ -870,7 +891,7 @@ export class TownScene extends Phaser.Scene {
     const typing = this.chatting();
     const next: InputState = typing
       ? { up: false, down: false, left: false, right: false }
-      : { up: k.W.isDown || k.UP.isDown, down: k.S.isDown || k.DOWN.isDown, left: k.A.isDown || k.LEFT.isDown, right: k.D.isDown || k.RIGHT.isDown };
+      : isoInput(k.W.isDown || k.UP.isDown, k.S.isDown || k.DOWN.isDown, k.A.isDown || k.LEFT.isDown, k.D.isDown || k.RIGHT.isDown);
     const i = this.input_;
     if (next.up !== i.up || next.down !== i.down || next.left !== i.left || next.right !== i.right) {
       this.input_ = next;
@@ -896,6 +917,13 @@ export class TownScene extends Phaser.Scene {
       }
 
       const moving = id === this.me ? (this.input_.up || this.input_.down || this.input_.left || this.input_.right) : p.moving;
+      if (ISO) {
+        // Face where the hero goes on screen (the server's 4 directions are world directions)
+        const dx = e.sprite.x - (e.lastX ?? e.sprite.x), dy = e.sprite.y - (e.lastY ?? e.sprite.y);
+        if (moving && Math.hypot(dx, dy) > 0.05) e.vdir = screenDir(dx, dy, e.vdir ?? p.dir);
+        e.lastX = e.sprite.x; e.lastY = e.sprite.y;
+      }
+      const dir = this.dirOf(e) as any;
       if (e.hero) {
         // Let one-shot attack/hit/skill animations finish before going back to walk/idle
         const key = e.sprite.anims.currentAnim?.key ?? "";
@@ -903,23 +931,23 @@ export class TownScene extends Phaser.Scene {
         if (moving || p.dead) e.idleSince = undefined;
         else e.idleSince ??= now;
         if (p.dead) {
-          if (!key.includes("_ko_")) playCharAnim(e.sprite, e.hero, "ko", p.dir);
+          if (!key.includes("_ko_")) playCharAnim(e.sprite, e.hero, "ko", dir);
         } else if (!oneShot) {
           if (!moving && p.emote && this.anims.exists(`${e.hero}_${p.emote}_down`)) {
-            playCharAnim(e.sprite, e.hero, p.emote, p.dir);
+            playCharAnim(e.sprite, e.hero, p.emote, dir);
           } else if (!moving && e.idleSince !== undefined && now - e.idleSince > 4000 && now > (e.nextFidget ?? 0)) {
             // Standing still for a while: an occasional fidget (look around / weapon flourish)
             e.nextFidget = now + 3000 + Math.random() * 4000;
-            playCharAnim(e.sprite, e.hero, Math.random() < 0.5 ? "idle2" : "idle3", p.dir);
+            playCharAnim(e.sprite, e.hero, Math.random() < 0.5 ? "idle2" : "idle3", dir);
           } else {
-            playCharAnim(e.sprite, e.hero, moving ? "walk" : "idle", p.dir);
+            playCharAnim(e.sprite, e.hero, moving ? "walk" : "idle", dir);
           }
         }
         e.sprite.setAlpha(p.dead ? 0.6 : 1);
       } else {
         const step = moving ? Math.floor(now / 150) % 2 : 0;
-        e.sprite.setFrame(FRAME_BASE[p.dir] + step);
-        e.sprite.setFlipX(p.dir === "left");
+        e.sprite.setFrame(FRAME_BASE[dir] + step);
+        e.sprite.setFlipX(dir === "left");
         if (e.mob) e.sprite.setVisible(!p.dead && !p.hidden);
         else e.sprite.setAlpha(p.dead ? 0.35 : 1).setAngle(p.dead ? 90 : 0);
       }
@@ -951,7 +979,7 @@ export class TownScene extends Phaser.Scene {
       const maxHp = p.maxHp;
       if (!e.mob) {
         if (p.guarding && !p.dead) {
-          e.shield ??= this.add.graphics();
+          e.shield ??= isoAnchor(this.add.graphics(), e.sprite) as Phaser.GameObjects.Graphics;
           e.shield.clear().lineStyle(1, 0x9ad1ff, 0.9).strokeCircle(x, y - e.top / 2, e.top / 2 + 3).setDepth(e.sprite.y + 2);
         } else if (e.shield) { e.shield.destroy(); e.shield = undefined; }
       }
