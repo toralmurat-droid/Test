@@ -1,5 +1,5 @@
 import Phaser from "phaser";
-import { NPCS, Npc, npcNear } from "../../shared/npcs";
+import { NPCS, Npc, npcNear, TALK_RANGE } from "../../shared/npcs";
 import { druidDialog, Q, QUEST, questObjective } from "../../shared/quests";
 import { CHAR_ORIGIN, CharacterName, playCharAnim } from "./artAssets";
 
@@ -99,7 +99,7 @@ export class NpcLayer {
 
   update(me: Me, q: QuestState) {
     this.near = me ? npcNear(me.x, me.y) : undefined;
-    if (this.talking && (!me || npcNear(me.x, me.y, 48) !== this.talking)) this.close(); // walked away
+    if (this.talking && (!me || npcNear(me.x, me.y, TALK_RANGE * 1.6) !== this.talking)) this.close(); // walked away
     this.prompt.classList.toggle("open", !!this.near && !this.talking);
     if (this.near && !this.talking) this.prompt.innerHTML = `<kbd>E</kbd> Talk to ${this.near.name}`;
     if (this.talking) this.renderDialog(q);

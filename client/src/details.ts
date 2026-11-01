@@ -1,5 +1,5 @@
 import Phaser from "phaser";
-import { MAP_H, MAP_W, TILE } from "../../shared/constants";
+import { ART_K as K, MAP_H, MAP_W, TILE } from "../../shared/constants";
 import { AREAS, EMPTY, GROUND, OBJECTS, T, VILLAGE } from "../../shared/map";
 
 /**
@@ -53,22 +53,44 @@ export function roofGroups(): Box[] {
   return out;
 }
 
-/** Bakes a Graphics drawing into a static image at the given depth. */
-function bake(scene: Phaser.Scene, depth: number, draw: (g: Phaser.GameObjects.Graphics) => void) {
-  const g = scene.make.graphics({}, false);
-  draw(g);
-  const rt = scene.add.renderTexture(0, 0, W, H).setOrigin(0, 0).setDepth(depth);
-  rt.draw(g);
-  g.destroy();
-  return rt;
+const CHUNK = 16; // tiles per side of a baked chunk
+
+/**
+ * A static detail layer baked into render textures, chunk by chunk, only around the camera:
+ * a full-map texture at 32px tiles would take hundreds of MB of video memory.
+ */
+class ChunkLayer {
+  private live = new Map<number, Phaser.GameObjects.RenderTexture>();
+  constructor(private scene: Phaser.Scene, private depth: number, private draw: (g: Phaser.GameObjects.Graphics, tx0: number, ty0: number, tx1: number, ty1: number) => void) {}
+  update(view: Phaser.Geom.Rectangle) {
+    const S = CHUNK * TILE, m = TILE * 4;
+    const cx0 = Math.max(0, Math.floor((view.x - m) / S)), cy0 = Math.max(0, Math.floor((view.y - m) / S));
+    const cx1 = Math.min(Math.ceil(MAP_W / CHUNK) - 1, Math.floor((view.right + m) / S)), cy1 = Math.min(Math.ceil(MAP_H / CHUNK) - 1, Math.floor((view.bottom + m) / S));
+    const want = new Set<number>();
+    for (let cy = cy0; cy <= cy1; cy++) for (let cx = cx0; cx <= cx1; cx++) {
+      const k = cy * 1000 + cx;
+      want.add(k);
+      if (this.live.has(k)) continue;
+      const g = this.scene.make.graphics({}, false);
+      const tx0 = cx * CHUNK, ty0 = cy * CHUNK;
+      g.setPosition(-tx0 * TILE, -ty0 * TILE);
+      this.draw(g, tx0, ty0, Math.min(MAP_W, tx0 + CHUNK), Math.min(MAP_H, ty0 + CHUNK));
+      const rt = this.scene.add.renderTexture(tx0 * TILE, ty0 * TILE, S, S).setOrigin(0, 0).setDepth(this.depth);
+      rt.draw(g);
+      g.destroy();
+      this.live.set(k, rt);
+    }
+    for (const [k, rt] of this.live) if (!want.has(k)) { rt.destroy(); this.live.delete(k); }
+  }
 }
 
+/** A small generated texture. `px` paints in screen pixels: draw at `k` = 1 for full detail, or pass k to scale a design. */
 function texture(scene: Phaser.Scene, key: string, w: number, h: number, frames: number, draw: (px: (x: number, y: number, c: number, a?: number) => void, f: number) => void) {
   if (scene.textures.exists(key)) return;
   const tex = scene.textures.createCanvas(key, w * frames, h)!;
   const ctx = tex.getContext();
   for (let f = 0; f < frames; f++) {
-    draw((x, y, c, a = 1) => { ctx.globalAlpha = a; ctx.fillStyle = "#" + c.toString(16).padStart(6, "0"); ctx.fillRect(f * w + x, y, 1, 1); }, f);
+    draw((x, y, c, a = 1) => { if (x < 0 || y < 0 || x >= w || y >= h) return; ctx.globalAlpha = a; ctx.fillStyle = "#" + c.toString(16).padStart(6, "0"); ctx.fillRect(f * w + x, y, 1, 1); }, f);
     tex.add(f, 0, f * w, 0, w, h);
   }
   ctx.globalAlpha = 1;
@@ -76,52 +98,71 @@ function texture(scene: Phaser.Scene, key: string, w: number, h: number, frames:
 }
 
 function makeTextures(scene: Phaser.Scene) {
-  texture(scene, "lantern", 5, 9, 1, (px) => {
-    for (let x = 0; x < 5; x++) px(x, 0, 0x2a2a2a);
-    px(2, 1, 0x2a2a2a);
-    for (let y = 2; y < 8; y++) { px(0, y, 0x2a2a2a); px(4, y, 0x2a2a2a); }
-    for (let y = 2; y < 8; y++) for (let x = 1; x < 4; x++) px(x, y, y < 4 ? 0xfff2b0 : 0xffc65a);
-    for (let x = 0; x < 5; x++) px(x, 8, 0x2a2a2a);
-    px(2, 5, 0xffffff);
+  texture(scene, "lantern", 10, 18, 1, (px) => {
+    const iron = 0x2a2a2a, rim = 0x4a4a4a;
+    px(4, 0, iron); px(5, 0, iron); px(3, 1, iron); px(6, 1, iron); // hanging ring
+    for (let x = 2; x < 8; x++) px(x, 2, iron);
+    for (let x = 1; x < 9; x++) px(x, 3, x === 1 ? iron : rim);
+    for (let y = 4; y < 15; y++) { px(0, y, iron); px(9, y, iron); px(1, y, rim); px(8, y, 0x1a1a1a); }
+    for (let y = 4; y < 15; y++) for (let x = 2; x < 8; x++) px(x, y, y < 7 ? 0xfff6c8 : y < 11 ? 0xffd77a : 0xffb347);
+    for (let x = 2; x < 8; x++) px(x, 9, iron); // cross bar
+    px(3, 5, 0xffffff); px(3, 6, 0xffffff); px(4, 11, 0xfff2b0); // glints and flame
+    for (let x = 0; x < 10; x++) px(x, 15, iron);
+    for (let x = 2; x < 8; x++) px(x, 16, rim);
+    px(4, 17, iron); px(5, 17, iron);
   });
-  texture(scene, "banner", 8, 14, 3, (px, f) => {
-    for (let x = 0; x < 8; x++) px(x, 0, 0x5a3a1e);
+  texture(scene, "banner", 16, 28, 3, (px, f) => {
+    for (let x = 0; x < 16; x++) { px(x, 0, 0x7a5230); px(x, 1, 0x5a3a1e); }
+    px(0, 0, 0xc8a050); px(15, 0, 0xc8a050);
     const sway = [0, 1, 0][f];
-    for (let y = 1; y < 13; y++) {
-      const o = y > 6 ? sway * ((y - 6) / 6) : 0;
-      for (let x = 1; x < 7; x++) px(Math.round(x + o), y, x < 2 ? 0x7a1c1c : 0xa82a2a);
-    }
+    const off = (y: number) => Math.round(y > 12 ? sway * 2 * ((y - 12) / 13) : 0);
+    for (let y = 2; y < 26; y++) for (let x = 2; x < 14; x++)
+      px(x + off(y), y, x < 4 ? 0x7a1c1c : x > 11 ? 0x8f2222 : (x + y) % 9 === 0 ? 0x9c2626 : 0xa82a2a);
+    for (let y = 2; y < 26; y++) { px(2 + off(y), y, 0xc8a050); px(13 + off(y), y, 0xb08840); } // gold trim
     // golden oak leaf emblem
-    for (const [x, y] of [[3, 4], [4, 4], [3, 5], [4, 5], [2, 5], [5, 5], [3, 6], [4, 6], [3, 7]]) px(x + (y > 6 ? sway : 0), y, 0xe8c060);
+    const leaf = ["..##..", ".####.", "######", ".####.", "######", ".####.", "..##..", "..#...", "..#..."];
+    leaf.forEach((row, j) => [...row].forEach((ch, i) => { if (ch === "#") px(5 + i + off(7 + j), 7 + j, j < 3 ? 0xf2d27a : 0xe8c060); }));
+    for (let j = 1; j < 7; j++) px(7 + off(7 + j), 7 + j, 0xb8902e); // leaf vein
     // swallowtail end
-    px(Math.round(1 + sway), 13, 0xa82a2a); px(Math.round(6 + sway), 13, 0xa82a2a);
+    for (let i = 0; i < 4; i++) { px(3 + i + off(26), 26, 0xa82a2a); px(9 + i + off(26), 26, 0xa82a2a); }
+    for (let i = 0; i < 2; i++) { px(3 + i + off(27), 27, 0x8f2222); px(11 + i + off(27), 27, 0x8f2222); }
   });
-  texture(scene, "duck", 7, 6, 2, (px, f) => {
-    const body = 0xf2f2ea, head = 0x2f7a4a;
-    for (let x = 0; x < 6; x++) px(x, 3, body);
-    for (let x = 1; x < 5; x++) px(x, 2, body);
-    px(0, 2, 0xd8d8cc); px(5, 2, head); px(5, 1, head); px(6, 1 + f * 0, 0xf0a020); px(5, 0, head);
-    px(5, 1, f ? 0x1a1a1a : head);
-    for (let x = 0; x < 6; x++) px(x, 4, 0x9fc8ec, 0.7);
-    px(f ? 0 : 6, 5, 0xd8ecff, 0.8);
+  texture(scene, "duck", 14, 12, 2, (px, f) => {
+    const body = 0xf2f2ea, shade = 0xd8d8cc, head = 0x2f7a4a;
+    for (let y = 4; y < 9; y++) for (let x = 0; x < 11; x++) {
+      const dx = (x - 5) / 5.5, dy = (y - 7) / 2.6;
+      if (dx * dx + dy * dy <= 1) px(x, y, y > 7 ? shade : x < 3 && y < 6 ? 0xffffff : body);
+    }
+    px(0, 5, shade); px(0, 4, shade); // tail
+    for (let x = 3; x < 8; x++) px(x, 6, 0xc8c8bc); // folded wing
+    for (let y = 0; y < 5; y++) for (let x = 8; x < 12; x++) if ((x - 9.8) ** 2 + (y - 2.2) ** 2 <= 4.2) px(x, y, head);
+    px(9, 4, 0xffffff); px(10, 4, 0xffffff); // neck ring
+    px(12, 2, 0xf0a020); px(13, 2, 0xf0a020); px(12, 3, 0xd08010);
+    px(10, 1, f ? 0x1a1a1a : head);
+    for (let x = 0; x < 12; x++) px(x, 9, 0x9fc8ec, 0.7);
+    for (let x = 1; x < 10; x += 3) px(x + f, 10, 0xd8ecff, 0.6);
+    px(f ? 0 : 12, 10, 0xd8ecff, 0.8); px(f ? 13 : 1, 11, 0xd8ecff, 0.5);
   });
-  texture(scene, "light", 32, 32, 1, (px) => {
-    for (let y = 0; y < 32; y++) for (let x = 0; x < 32; x++) {
-      const d = Math.hypot(x - 15.5, y - 15.5) / 16;
+  texture(scene, "light", 64, 64, 1, (px) => {
+    for (let y = 0; y < 64; y++) for (let x = 0; x < 64; x++) {
+      const d = Math.hypot(x - 31.5, y - 31.5) / 32;
       if (d < 1) px(x, y, 0xffffff, (1 - d) ** 2);
     }
   });
 }
 
-/** Phase of the day: 0..1 darkness and a dusk warmth, shared by every client via the wall clock. */
-function dayPhase(nowMs: number): { dark: number; warm: number } {
+/** Time of day as 0..1 of the 30-minute cycle, shared by every client via the wall clock (?time=day|dusk|night forces it). */
+export function dayTime(nowMs: number): number {
   const forced = new URLSearchParams(location.search).get("time");
-  if (forced === "night") return { dark: 1, warm: 0 };
-  if (forced === "dusk") return { dark: 0.45, warm: 1 };
-  if (forced === "day") return { dark: 0, warm: 0 };
+  if (forced === "night") return 0.81;
+  if (forced === "dusk") return 0.685;
+  if (forced === "day") return 0.3;
   const CYCLE = 30 * 60 * 1000; // 30-minute day: about 19 min daylight, 2 min dusk, 6 min night, 3 min dawn
-  const t = (nowMs % CYCLE) / CYCLE;
-  // 0-.65 day, .65-.72 dusk, .72-.9 night, .9-1 dawn
+  return (nowMs % CYCLE) / CYCLE;
+}
+
+/** Phase of the day: 0..1 darkness and a dusk warmth. t: 0-.65 day, .65-.72 dusk, .72-.9 night, .9-1 dawn. */
+export function dayPhase(t: number): { dark: number; warm: number } {
   const ramp = (a: number, b: number) => Math.min(1, Math.max(0, (t - a) / (b - a)));
   const dark = t < 0.65 ? 0 : t < 0.72 ? ramp(0.65, 0.72) : t < 0.9 ? 1 : 1 - ramp(0.9, 1);
   const warm = t > 0.61 && t < 0.76 ? Math.sin(((t - 0.61) / 0.15) * Math.PI) : t > 0.88 ? Math.sin(((t - 0.88) / 0.12) * Math.PI) * 0.6 : 0;
@@ -139,11 +180,14 @@ export class Details {
   private pond: [number, number][] = [];
   private fireflies?: (dark: number) => void;
 
+  private layers: ChunkLayer[] = [];
+
   constructor(private scene: Phaser.Scene) {
     makeTextures(scene);
-    this.groundDecals();
-    this.roundCorners();
-    this.waterDecor();
+    for (let ty = 0; ty < MAP_H; ty++) for (let tx = 0; tx < MAP_W; tx++) if (GROUND[ty][tx] === T.WATER && inArea("Mirror Pond", tx, ty)) this.pond.push([tx, ty]);
+    this.layers.push(new ChunkLayer(scene, -1.7, (g, x0, y0, x1, y1) => this.groundDecals(g, x0, y0, x1, y1)));
+    this.layers.push(new ChunkLayer(scene, -1.59, (g, x0, y0, x1, y1) => this.roundCorners(g, x0, y0, x1, y1)));
+    this.layers.push(new ChunkLayer(scene, -1.58, (g, x0, y0, x1, y1) => this.waterDecor(g, x0, y0, x1, y1)));
     this.roofShading();
     this.lanternsAndBanners();
     this.ducksOnPond();
@@ -153,133 +197,157 @@ export class Details {
   /** Lets the ambient layer brighten fireflies at night. */
   onDarkness(f: (dark: number) => void) { this.fireflies = f; }
 
-  private groundDecals() {
-    bake(this.scene, -1.7, (g) => {
-      const px = (x: number, y: number, c: number, a = 1) => g.fillStyle(c, a).fillRect(x, y, 1, 1);
-      for (let ty = 0; ty < MAP_H; ty++) for (let tx = 0; tx < MAP_W; tx++) {
-        const t = GROUND[ty][tx], X = tx * TILE, Y = ty * TILE;
-        const free = OBJECTS[ty][tx] === EMPTY;
-        if (GRASSY.has(t) && free) {
-          const h = hash(tx, ty, 1), ox = Math.floor(hash(tx, ty, 2) * 12) + 2, oy = Math.floor(hash(tx, ty, 3) * 12) + 2;
-          if (h < 0.08) { px(X + ox, Y + oy, 0x8d8d84); px(X + ox + 1, Y + oy, 0xb0b0a6); px(X + ox + 1, Y + oy + 1, 0x6e6e66); } // pebbles
-          else if (h < 0.2) { px(X + ox, Y + oy, 0x2f6b24); px(X + ox + 2, Y + oy, 0x2f6b24); px(X + ox + 1, Y + oy + 1, 0x2f6b24); px(X + ox + 1, Y + oy - 1, 0x86c95a); } // tuft
-          else if (h < 0.26) { for (const [dx, dy] of [[0, 0], [1, 0], [0, 1], [1, 1], [2, 1]]) px(X + ox + dx, Y + oy + dy, 0x4f9a3a); px(X + ox, Y + oy, 0x6fbf55); } // clover
-          else if (h < 0.275) { px(X + ox, Y + oy + 1, 0xece0c8); px(X + ox - 1, Y + oy, 0xc0392b); px(X + ox, Y + oy, 0xd84343); px(X + ox + 1, Y + oy, 0xc0392b); px(X + ox, Y + oy - 1, 0xffffff); } // mushroom
-          // fallen leaves under nearby oaks
-          let oak = false;
-          for (const [dx, dy] of [[0, -1], [1, 0], [-1, 0], [0, 1]]) if (obj(tx + dx, ty + dy) === T.TREE) oak = true;
-          if (oak) for (let k = 0; k < 4; k++) {
-            const lx = Math.floor(hash(tx, ty, 10 + k) * 15), ly = Math.floor(hash(tx, ty, 20 + k) * 15);
-            px(X + lx, Y + ly, [0xd98a2b, 0xc8a13a, 0xb5562a, 0x8fae3a][k]);
+  /** Pebbles, tufts, clover, mushrooms, fallen leaves, grass spilling over road edges, ruts and moss. Screen-pixel detail. */
+  private groundDecals(g: Phaser.GameObjects.Graphics, x0: number, y0: number, x1: number, y1: number) {
+    const px = (x: number, y: number, c: number, a = 1) => g.fillStyle(c, a).fillRect(x, y, 1, 1);
+    const R = TILE - 8; // keep decals off the tile edge
+    for (let ty = y0; ty < y1; ty++) for (let tx = x0; tx < x1; tx++) {
+      const t = GROUND[ty][tx], X = tx * TILE, Y = ty * TILE;
+      const free = OBJECTS[ty][tx] === EMPTY;
+      if (GRASSY.has(t) && free) {
+        const h = hash(tx, ty, 1), x = X + 4 + Math.floor(hash(tx, ty, 2) * R), y = Y + 5 + Math.floor(hash(tx, ty, 3) * R);
+        if (h < 0.08) { // pebbles
+          for (const [dx, dy, w] of [[0, 0, 3], [4, 1, 2], [2, 3, 2]]) {
+            g.fillStyle(0x3f6e2a, 0.6).fillRect(x + dx, y + dy + 2, w, 1);
+            g.fillStyle(0x8d8d84, 1).fillRect(x + dx, y + dy, w, 2);
+            px(x + dx, y + dy, 0xb8b8ae); px(x + dx + w - 1, y + dy + 1, 0x6e6e66);
           }
+        } else if (h < 0.2) { // tuft
+          for (let b = 0; b < 5; b++) {
+            const hh = 3 + ((b * 7 + tx) % 3) - Math.abs(b - 2);
+            for (let i = 0; i < hh + 2; i++) px(x + b + (i > hh && b !== 2 ? Math.sign(b - 2) : 0), y - i, i === hh + 1 ? 0x86c95a : i < 2 ? 0x2f6b24 : 0x3f7a2a);
+          }
+        } else if (h < 0.26) { // clover
+          for (const [dx, dy] of [[0, 0], [3, 0], [1.5, -2]]) {
+            g.fillStyle(0x4f9a3a, 1).fillRect(x + Math.round(dx), y + Math.round(dy), 2, 2);
+            px(x + Math.round(dx), y + Math.round(dy), 0x6fbf55);
+          }
+          px(x + 2, y + 2, 0x3f7a2a); px(x + 2, y + 3, 0x3f7a2a);
+        } else if (h < 0.275) { // mushroom
+          g.fillStyle(0xece0c8, 1).fillRect(x + 1, y + 1, 2, 3); px(x + 2, y + 3, 0xc8b89a);
+          g.fillStyle(0xc0392b, 1).fillRect(x - 1, y - 1, 6, 2); g.fillStyle(0xd84343, 1).fillRect(x, y - 2, 4, 1);
+          px(x, y - 1, 0xffffff); px(x + 3, y - 2, 0xffffff); px(x + 4, y, 0x8f2a20);
+          g.fillStyle(0x000000, 0.25).fillRect(x, y + 4, 4, 1);
         }
-        // Grass spilling over the edge of roads and the square: breaks up the tile grid
-        if (t === T.DIRT || t === T.COBBLE || t === T.SAND) {
-          for (const [dx, dy] of [[0, -1], [0, 1], [-1, 0], [1, 0]]) {
-            if (!GRASSY.has(gnd(tx + dx, ty + dy))) continue;
-            for (let i = 0; i < 16; i++) {
-              const depth = Math.floor(hash(tx * 16 + i, ty, 40 + dx * 3 + dy) * 3.2);
-              for (let d = 0; d < depth; d++) {
-                const x = dx === 0 ? X + i : dx < 0 ? X + d : X + 15 - d;
-                const y = dy === 0 ? Y + i : dy < 0 ? Y + d : Y + 15 - d;
-                px(x, y, d === depth - 1 ? 0x3f7a2a : 0x5a9a3c);
-              }
-            }
-          }
-          if (t === T.DIRT && hash(tx, ty, 50) < 0.35) { // small stones and ruts on roads
-            const ox = Math.floor(hash(tx, ty, 51) * 13) + 1, oy = Math.floor(hash(tx, ty, 52) * 13) + 1;
-            px(X + ox, Y + oy, 0x8a7a64); px(X + ox + 1, Y + oy, 0x6e604c);
-          }
-          if (t === T.COBBLE && hash(tx, ty, 53) < 0.2) { // moss between the cobbles
-            const ox = Math.floor(hash(tx, ty, 54) * 14), oy = Math.floor(hash(tx, ty, 55) * 4) * 4 + 3;
-            px(X + ox, Y + oy, 0x5f8f3f); px(X + ox + 1, Y + oy, 0x4a7a32);
-          }
+        // fallen leaves under nearby oaks
+        let oak = false;
+        for (const [dx, dy] of [[0, -1], [1, 0], [-1, 0], [0, 1]]) if (obj(tx + dx, ty + dy) === T.TREE) oak = true;
+        if (oak) for (let k = 0; k < 6; k++) {
+          const lx = X + Math.floor(hash(tx, ty, 10 + k) * (TILE - 2)), ly = Y + Math.floor(hash(tx, ty, 20 + k) * (TILE - 1));
+          const c = [0xd98a2b, 0xc8a13a, 0xb5562a, 0x8fae3a, 0xd98a2b, 0xa8682a][k];
+          px(lx, ly, c); px(lx + 1, ly, c); if (k % 2) px(lx + 1, ly + 1, 0x7a4a1e);
         }
       }
-    });
+      // Grass spilling over the edge of roads and the square: breaks up the tile grid
+      if (t === T.DIRT || t === T.COBBLE || t === T.SAND) {
+        for (const [dx, dy] of [[0, -1], [0, 1], [-1, 0], [1, 0]]) {
+          if (!GRASSY.has(gnd(tx + dx, ty + dy))) continue;
+          for (let i = 0; i < TILE; i++) {
+            const n = hash(tx * TILE + i, ty, 40 + dx * 3 + dy), depth = Math.floor((0.6 + 0.4 * Math.sin((i + tx * 5) / 3)) * n * 6.5);
+            for (let d = 0; d < depth; d++) {
+              const x = dx === 0 ? X + i : dx < 0 ? X + d : X + TILE - 1 - d;
+              const y = dy === 0 ? Y + i : dy < 0 ? Y + d : Y + TILE - 1 - d;
+              px(x, y, d === depth - 1 ? 0x3f7a2a : d === depth - 2 && n > 0.7 ? 0x6fb04a : 0x5a9a3c);
+            }
+          }
+        }
+        if (t === T.DIRT && hash(tx, ty, 50) < 0.35) { // small stones on roads
+          const ox = X + 2 + Math.floor(hash(tx, ty, 51) * (TILE - 6)), oy = Y + 2 + Math.floor(hash(tx, ty, 52) * (TILE - 6));
+          g.fillStyle(0x7a6448, 1).fillRect(ox, oy + 1, 3, 1); g.fillStyle(0x9a8a72, 1).fillRect(ox, oy, 3, 1); px(ox, oy, 0xb8a88e);
+          px(ox + 5, oy + 2, 0x8a7a64); px(ox + 6, oy + 2, 0x6e604c);
+        }
+        if (t === T.COBBLE && hash(tx, ty, 53) < 0.2) { // moss between the cobbles
+          const ox = X + Math.floor(hash(tx, ty, 54) * (TILE - 4)), oy = Y + Math.floor(hash(tx, ty, 55) * 4) * 8 + 7;
+          px(ox, oy, 0x5f8f3f); px(ox + 1, oy, 0x4a7a32); px(ox + 2, oy, 0x5f8f3f); px(ox + 1, oy - 1, 0x6fa04a);
+        }
+      }
+    }
   }
 
   /** Rounds the blocky corners of ponds, rivers and sandy banks so shorelines look natural. */
-  private roundCorners() {
+  private roundCorners(g: Phaser.GameObjects.Graphics, x0: number, y0: number, x1: number, y1: number) {
     const BASE: Record<number, number> = { [T.SAND]: 0xd9c38a, [T.GRASS]: 0x5a9a3c, [T.GRASS_DARK]: 0x4f8c36, [T.TALL_GRASS]: 0x5a9a3c, [T.FLOWERS]: 0x5a9a3c, [T.DIRT]: 0xa7814f };
     const wet = (t: number) => t === T.WATER || t === T.BRIDGE || t === -1;
-    bake(this.scene, -1.59, (g) => {
-      const R = 7;
-      for (let ty = 0; ty < MAP_H; ty++) for (let tx = 0; tx < MAP_W; tx++) {
-        const t = GROUND[ty][tx], X = tx * TILE, Y = ty * TILE;
-        for (const [sx, sy] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
-          const a = gnd(tx + sx, ty), b = gnd(tx, ty + sy), d = gnd(tx + sx, ty + sy);
-          let fill: number | undefined, foam = false;
-          if (t === T.WATER && !wet(a) && !wet(b) && a === b && BASE[a] !== undefined) { fill = BASE[a]; foam = true; } // land pokes into water
-          else if (t === T.SAND && GRASSY.has(a) && a === b && GRASSY.has(d)) fill = BASE[a]; // grass rounds off sandy banks
-          else if (!wet(t) && BASE[t] !== undefined && wet(a) && wet(b) && wet(d) && a !== -1) fill = 0x3a78b8; // water bites into land
-          if (fill === undefined) continue;
-          // corner square of R×R pixels: paint everything outside the quarter circle
-          const cx = sx < 0 ? X + R : X + TILE - R, cy = sy < 0 ? Y + R : Y + TILE - R;
-          for (let j = 0; j < R; j++) for (let i = 0; i < R; i++) {
-            const x = sx < 0 ? X + i : X + TILE - 1 - i, y = sy < 0 ? Y + j : Y + TILE - 1 - j;
-            const dist = Math.hypot(x + 0.5 - cx, y + 0.5 - cy);
-            if (dist > R) g.fillStyle(fill, 1).fillRect(x, y, 1, 1);
-            else if (foam && dist > R - 1) g.fillStyle(0xd8ecff, 0.7).fillRect(x, y, 1, 1);
-          }
+    const R = 7 * K;
+    for (let ty = y0; ty < y1; ty++) for (let tx = x0; tx < x1; tx++) {
+      const t = GROUND[ty][tx], X = tx * TILE, Y = ty * TILE;
+      for (const [sx, sy] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+        const a = gnd(tx + sx, ty), b = gnd(tx, ty + sy), d = gnd(tx + sx, ty + sy);
+        let fill: number | undefined, foam = false;
+        if (t === T.WATER && !wet(a) && !wet(b) && a === b && BASE[a] !== undefined) { fill = BASE[a]; foam = true; } // land pokes into water
+        else if (t === T.SAND && GRASSY.has(a) && a === b && GRASSY.has(d)) fill = BASE[a]; // grass rounds off sandy banks
+        else if (!wet(t) && BASE[t] !== undefined && wet(a) && wet(b) && wet(d) && a !== -1) fill = 0x3a78b8; // water bites into land
+        if (fill === undefined) continue;
+        // corner square of R×R pixels: paint everything outside the quarter circle
+        const cx = sx < 0 ? X + R : X + TILE - R, cy = sy < 0 ? Y + R : Y + TILE - R;
+        for (let j = 0; j < R; j++) for (let i = 0; i < R; i++) {
+          const x = sx < 0 ? X + i : X + TILE - 1 - i, y = sy < 0 ? Y + j : Y + TILE - 1 - j;
+          const dist = Math.hypot(x + 0.5 - cx, y + 0.5 - cy);
+          if (dist > R) g.fillStyle(fill, 1).fillRect(x, y, 1, 1);
+          else if (foam && dist > R - 1.5) g.fillStyle(0xd8ecff, 0.7).fillRect(x, y, 1, 1);
+          else if (foam && dist > R - 3) g.fillStyle(0xd8ecff, 0.25).fillRect(x, y, 1, 1);
         }
       }
-    });
+    }
   }
 
-  private waterDecor() {
-    bake(this.scene, -1.58, (g) => {
-      const px = (x: number, y: number, c: number, a = 1) => g.fillStyle(c, a).fillRect(x, y, 1, 1);
-      for (let ty = 0; ty < MAP_H; ty++) for (let tx = 0; tx < MAP_W; tx++) {
-        const t = GROUND[ty][tx], X = tx * TILE, Y = ty * TILE;
-        if (t === T.WATER) {
-          const pond = inArea("Mirror Pond", tx, ty);
-          if (pond) this.pond.push([tx, ty]);
-          if (pond && hash(tx, ty, 60) < 0.3) { // lily pad, sometimes with a flower
-            const cx = X + 3 + Math.floor(hash(tx, ty, 61) * 9), cy = Y + 3 + Math.floor(hash(tx, ty, 62) * 9);
-            for (let dy = -2; dy <= 2; dy++) for (let dx = -3; dx <= 3; dx++) {
-              if ((dx * dx) / 9 + (dy * dy) / 4 > 1 || (dx === 1 && dy <= 0 && dy > -2)) continue;
-              px(cx + dx, cy + dy, dy > 0 ? 0x2f7a3a : 0x4f9a4a);
-            }
-            if (hash(tx, ty, 63) < 0.4) { px(cx - 1, cy - 1, 0xffd6e8); px(cx, cy - 2, 0xffffff); px(cx, cy - 1, 0xffd54f); }
-          }
+  /** Lily pads on Mirror Pond, reeds and cattails along the water. */
+  private waterDecor(g: Phaser.GameObjects.Graphics, x0: number, y0: number, x1: number, y1: number) {
+    const px = (x: number, y: number, c: number, a = 1) => g.fillStyle(c, a).fillRect(x, y, 1, 1);
+    for (let ty = y0; ty < y1; ty++) for (let tx = x0; tx < x1; tx++) {
+      const t = GROUND[ty][tx], X = tx * TILE, Y = ty * TILE;
+      if (t === T.WATER && inArea("Mirror Pond", tx, ty) && hash(tx, ty, 60) < 0.3) { // lily pad, sometimes with a flower
+        const cx = X + 7 + Math.floor(hash(tx, ty, 61) * 18), cy = Y + 7 + Math.floor(hash(tx, ty, 62) * 18);
+        for (let dy = -4; dy <= 4; dy++) for (let dx = -6; dx <= 6; dx++) {
+          const e = (dx * dx) / 36 + (dy * dy) / 16;
+          if (e > 1 || (dx >= 0 && dx <= 1 + (dy + 4) / 3 && dy <= 0 && dy > -5 && dx < 4)) continue; // notch
+          px(cx + dx, cy + dy, e > 0.7 ? 0x2f7a3a : dy > 1 ? 0x3f8a40 : 0x4f9a4a);
         }
-        // Reeds and cattails on land right next to water
-        if ((t === T.SAND || GRASSY.has(t)) && OBJECTS[ty][tx] === EMPTY) {
-          let wet = false;
-          for (const [dx, dy] of [[0, -1], [0, 1], [-1, 0], [1, 0]]) if (gnd(tx + dx, ty + dy) === T.WATER) wet = true;
-          if (!wet || hash(tx, ty, 70) > 0.45) continue;
-          for (let k = 0; k < 4; k++) {
-            const x = X + 2 + Math.floor(hash(tx, ty, 71 + k) * 12), y = Y + 6 + Math.floor(hash(tx, ty, 75 + k) * 8), h = 4 + Math.floor(hash(tx, ty, 79 + k) * 4);
-            for (let i = 0; i < h; i++) px(x + (i > h - 2 && k % 2 ? 1 : 0), y - i, i < 2 ? 0x3f6a2a : 0x6a9a3a);
-            if (k % 2 === 0) { px(x, y - h, 0x6a4020); px(x, y - h + 1, 0x7a4a24); }
-          }
+        px(cx - 3, cy - 1, 0x6fbf60); px(cx - 2, cy - 2, 0x6fbf60);
+        g.fillStyle(0x1d4a7a, 0.4).fillRect(cx - 5, cy + 5, 11, 1);
+        if (hash(tx, ty, 63) < 0.4) {
+          for (const [dx, dy] of [[-2, -1], [2, -1], [0, -3], [-1, -2], [1, -2]]) px(cx + dx, cy + dy, 0xffd6e8);
+          px(cx, cy - 4, 0xffffff); px(cx - 1, cy - 1, 0xf0a0c0); px(cx + 1, cy - 1, 0xf0a0c0); px(cx, cy - 1, 0xffd54f); px(cx, cy - 2, 0xffd54f);
         }
       }
-    });
+      // Reeds and cattails on land right next to water
+      if ((t === T.SAND || GRASSY.has(t)) && OBJECTS[ty][tx] === EMPTY) {
+        let wetSide = false;
+        for (const [dx, dy] of [[0, -1], [0, 1], [-1, 0], [1, 0]]) if (gnd(tx + dx, ty + dy) === T.WATER) wetSide = true;
+        if (!wetSide || hash(tx, ty, 70) > 0.45) continue;
+        for (let k = 0; k < 6; k++) {
+          const x = X + 3 + Math.floor(hash(tx, ty, 71 + k) * 26), y = Y + 12 + Math.floor(hash(tx, ty, 75 + k) * 18), h = 8 + Math.floor(hash(tx, ty, 79 + k) * 8);
+          for (let i = 0; i < h; i++) px(x + (i > h - 3 && k % 2 ? 1 : 0), y - i, i < 3 ? 0x3f6a2a : i % 4 === 0 ? 0x5a8a32 : 0x6a9a3a);
+          if (k % 3 === 0) { // cattail head
+            g.fillStyle(0x6a4020, 1).fillRect(x - 1, y - h - 1, 2, 4); px(x - 1, y - h - 1, 0x8a5a30); px(x, y - h - 2, 0x6a9a3a);
+          } else if (k % 3 === 1) px(x - 1, y - Math.floor(h / 2), 0x7aaa48); // a leaf
+        }
+      }
+    }
   }
 
   private roofShading() {
     const g = this.scene.add.graphics().setDepth(-0.95); // few shapes: a plain Graphics is cheaper than a full-map texture
-    {
-      for (const b of roofGroups()) {
-        const X0 = b.x0 * TILE, X1 = (b.x1 + 1) * TILE, Y0 = b.y0 * TILE, Y1 = (b.y1 + 1) * TILE, w = X1 - X0, h = Y1 - Y0;
-        const ridge = Y0 + Math.max(4, Math.round(h * 0.38));
-        g.fillStyle(0x000000, 0.14).fillRect(X0, Y0, w, ridge - Y0); // far slope in shade
-        g.fillStyle(0xffffff, 0.08).fillRect(X0, ridge, w, Y1 - ridge); // near slope catches the light
-        g.fillStyle(0x000000, 0.35).fillRect(X0, ridge - 1, w, 1); // ridge cap
-        g.fillStyle(0xffffff, 0.25).fillRect(X0, ridge, w, 1);
-        for (let x = X0 + 2; x < X1 - 1; x += 4) g.fillStyle(0x000000, 0.25).fillRect(x, ridge - 2, 2, 1);
-        g.fillStyle(0xffffff, 0.18).fillRect(X0, Y0, 1, h); // lit west edge
-        g.fillStyle(0x000000, 0.22).fillRect(X1 - 2, Y0, 2, h); // shaded east edge
-        g.fillStyle(0x000000, 0.25).fillRect(X0, Y0, w, 1);
-        // eaves: a dark overhang line and its shadow falling on the wall below
-        g.fillStyle(0x000000, 0.45).fillRect(X0 - 1, Y1 - 1, w + 2, 1);
-        if (b.roof === T.ROOF_THATCH) for (let x = X0; x < X1; x += 2) g.fillStyle(0xd8b456, 1).fillRect(x, Y1, 1, 1 + ((x >> 1) % 2));
-        let wallBelow = false;
-        for (let x = b.x0; x <= b.x1; x++) if (WALLS.has(obj(x, b.y1 + 1))) wallBelow = true;
-        if (wallBelow) g.fillStyle(0x000000, 0.28).fillRect(X0, Y1, w, 3);
-      }
+    for (const b of roofGroups()) {
+      const X0 = b.x0 * TILE, X1 = (b.x1 + 1) * TILE, Y0 = b.y0 * TILE, Y1 = (b.y1 + 1) * TILE, w = X1 - X0, h = Y1 - Y0;
+      const ridge = Y0 + Math.max(4 * K, Math.round(h * 0.38));
+      // the slopes darken gradually away from the light
+      for (let y = Y0; y < ridge; y += 2) g.fillStyle(0x000000, 0.08 + 0.1 * ((y - Y0) / (ridge - Y0))).fillRect(X0, y, w, 2); // far slope in shade
+      for (let y = ridge; y < Y1; y += 2) g.fillStyle(0xffffff, 0.11 - 0.07 * ((y - ridge) / (Y1 - ridge))).fillRect(X0, y, w, 2); // near slope catches the light
+      g.fillStyle(0x000000, 0.35).fillRect(X0, ridge - 2, w, 2); // ridge cap
+      g.fillStyle(0xffffff, 0.3).fillRect(X0, ridge, w, 1);
+      g.fillStyle(0xffffff, 0.15).fillRect(X0, ridge + 1, w, 1);
+      for (let x = X0 + 3; x < X1 - 2; x += 6) { g.fillStyle(0x000000, 0.25).fillRect(x, ridge - 4, 3, 2); g.fillStyle(0xffffff, 0.15).fillRect(x, ridge - 4, 3, 1); }
+      g.fillStyle(0xffffff, 0.18).fillRect(X0, Y0, 2, h); // lit west edge
+      g.fillStyle(0x000000, 0.22).fillRect(X1 - 4, Y0, 4, h); // shaded east edge
+      g.fillStyle(0x000000, 0.12).fillRect(X1 - 6, Y0, 2, h);
+      g.fillStyle(0x000000, 0.25).fillRect(X0, Y0, w, 2);
+      // eaves: a dark overhang line and its shadow falling on the wall below
+      g.fillStyle(0x000000, 0.45).fillRect(X0 - 2, Y1 - 2, w + 4, 2);
+      if (b.roof === T.ROOF_THATCH) for (let x = X0; x < X1; x += 2) g.fillStyle(x % 4 ? 0xd8b456 : 0xc49a40, 1).fillRect(x, Y1, 2, 1 + ((x * 7) >> 2) % 4);
+      let wallBelow = false;
+      for (let x = b.x0; x <= b.x1; x++) if (WALLS.has(obj(x, b.y1 + 1))) wallBelow = true;
+      if (wallBelow) { g.fillStyle(0x000000, 0.28).fillRect(X0, Y1, w, 4); g.fillStyle(0x000000, 0.14).fillRect(X0, Y1 + 4, w, 3); }
     }
   }
 
@@ -294,9 +362,9 @@ export class Details {
     for (let ty = 0; ty < MAP_H; ty++) for (let tx = 0; tx < MAP_W; tx++) {
       if (OBJECTS[ty][tx] !== T.DOOR) continue;
       const side = WALLS.has(obj(tx + 1, ty)) && obj(tx + 1, ty) !== T.DOOR ? 1 : -1;
-      const x = tx * TILE + (side > 0 ? 17 : -1), y = ty * TILE + 3;
+      const x = tx * TILE + (side > 0 ? 17 : -1) * K, y = ty * TILE + 3 * K;
       scene.add.image(x, y, "lantern").setOrigin(0.5, 0).setDepth(-0.9);
-      this.addLight(x, y + 5, 0xffb347, 2.2, 0.75);
+      this.addLight(x, y + 5 * K, 0xffb347, 2.2, 0.75);
     }
     // Banners hang on the palisade either side of each gate, lanterns light the way in
     const flap = "banner_flap";
@@ -311,9 +379,9 @@ export class Details {
       let byRoad = false; // only posts beside a cobbled road get a banner, not every breach in the old wall
       for (let d = -3; d <= 3; d++) if ((gateH ? GROUND[ty][tx + d] : GROUND[ty + d]?.[tx]) === T.COBBLE) byRoad = true;
       if (!byRoad) continue;
-      const b = scene.add.sprite((tx + 0.5) * TILE, ty * TILE + 2, "banner").setOrigin(0.5, 0).setDepth(-0.9);
+      const b = scene.add.sprite((tx + 0.5) * TILE, ty * TILE + 2 * K, "banner").setOrigin(0.5, 0).setDepth(-0.9);
       b.play({ key: flap, startFrame: (tx + ty) % 3 });
-      this.addLight((tx + 0.5) * TILE, ty * TILE + 8, 0xffa040, 3, 0.6);
+      this.addLight((tx + 0.5) * TILE, ty * TILE + 8 * K, 0xffa040, 3, 0.6);
     }
   }
 
@@ -334,8 +402,8 @@ export class Details {
     this.windows = this.scene.add.graphics().setDepth(27200).setAlpha(0);
     for (let ty = 0; ty < MAP_H; ty++) for (let tx = 0; tx < MAP_W; tx++) {
       const t = OBJECTS[ty][tx];
-      if (t === T.WINDOW_TIMBER) this.windows.fillStyle(0xffd27a, 1).fillRect(tx * TILE + 5, ty * TILE + 5, 6, 6);
-      if (t === T.WINDOW_STONE) this.windows.fillStyle(0xffe0a0, 1).fillRect(tx * TILE + 6, ty * TILE + 4, 4, 9);
+      if (t === T.WINDOW_TIMBER) this.windows.fillStyle(0xffd27a, 1).fillRect(tx * TILE + 5 * K, ty * TILE + 5 * K, 6 * K, 6 * K);
+      if (t === T.WINDOW_STONE) this.windows.fillStyle(0xffe0a0, 1).fillRect(tx * TILE + 6 * K, ty * TILE + 4 * K, 4 * K, 9 * K);
     }
     for (let ty = 0; ty < MAP_H; ty++) for (let tx = 0; tx < MAP_W; tx++) {
       const t = OBJECTS[ty][tx];
@@ -346,14 +414,15 @@ export class Details {
   }
 
   update(now: number, dtMs: number) {
-    const { dark, warm } = dayPhase(Date.now());
+    const { dark, warm } = dayPhase(dayTime(Date.now()));
     this.night.setAlpha(dark * 0.85);
     this.dusk.setAlpha(warm * 0.12);
     this.windows.setAlpha(Math.min(1, dark * 1.2) * 0.9);
     const cam = this.scene.cameras.main.worldView;
+    for (const l of this.layers) l.update(cam);
     for (const l of this.lights) {
       if (!dark) { if (l.img.alpha) l.img.setAlpha(0); continue; }
-      if (!cam.contains(l.img.x, l.img.y) && !cam.contains(l.img.x + 30, l.img.y + 30) && !cam.contains(l.img.x - 30, l.img.y - 30)) continue;
+      if (!cam.contains(l.img.x, l.img.y) && !cam.contains(l.img.x + 60, l.img.y + 60) && !cam.contains(l.img.x - 60, l.img.y - 60)) continue;
       const f = Math.sin(now / 90 + l.img.x) * 0.5 + Math.sin(now / 37 + l.img.y) * 0.5;
       l.img.setAlpha(dark * (l.base + f * l.flicker));
     }
@@ -361,7 +430,7 @@ export class Details {
 
     // Ducks paddle to a random spot on the pond, rest, then paddle on
     for (const d of this.ducks) {
-      if (d.wait > 0) { d.wait -= dtMs; d.s.y = d.ty + Math.sin(now / 400 + d.tx) * 0.4; continue; }
+      if (d.wait > 0) { d.wait -= dtMs; d.s.y = d.ty + Math.sin(now / 400 + d.tx) * 0.8; continue; }
       const dx = d.tx - d.s.x, dy = d.ty - d.s.y, dist = Math.hypot(dx, dy);
       if (dist < 1) {
         const [tx, ty] = this.pond[Math.floor(Math.random() * this.pond.length)];
@@ -369,7 +438,7 @@ export class Details {
         d.wait = 1500 + Math.random() * 4000;
         continue;
       }
-      const sp = 7 * (dtMs / 1000);
+      const sp = 7 * K * (dtMs / 1000);
       d.s.x += (dx / dist) * Math.min(sp, dist); d.s.y += (dy / dist) * Math.min(sp, dist);
       d.s.setFlipX(dx < 0).setFrame(Math.floor(now / 300) % 2);
     }

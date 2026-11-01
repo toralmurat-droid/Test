@@ -13,11 +13,11 @@ export interface Npc {
 
 export const NPCS: Npc[] = [
   // Elder Rowan tends the bonfire in the middle of the market square
-  { id: "druid", name: "Elder Rowan", title: "Druid", sprite: "druid", x: (ROADS.RX + 4.5) * TILE, y: (ROADS.RY + 1.8) * TILE, dir: "left" },
+  { id: "druid", name: "Elder Rowan", title: "Druid", sprite: "druid", x: (ROADS.RX + 3) * TILE, y: (ROADS.RY + 1.7) * TILE, dir: "left" },
 ];
 
 /** How close (px) a player must stand to talk to an NPC. */
-export const TALK_RANGE = 32;
+export const TALK_RANGE = 1.1 * TILE;
 
 export function npcById(id: string): Npc | undefined {
   return NPCS.find((n) => n.id === id);

@@ -28,14 +28,15 @@ Gameplay:
   - **Wizard:** ranged fireballs. Skill *Nova*: blast everything around you.
   - **Archer:** long-range arrows. Skill *Volley*: 3 arrows side by side. Ultimate *Arrow Rain*.
   - **Barbarian:** axe brawler. Skill *Rage*: +30% damage and +20% speed for 5s. Ultimate *Leap*.
-- **Combos:** each class has a 3-hit attack chain (press attack again within 0.7s). The 3rd hit is a finisher: Knight wide slam, Ninja lunge, Wizard big fireball, Archer power shot, Barbarian axe smash. Tuned in `combo` in `shared/classes.ts`.
+- **Combos:** the basic attack alternates two hits. With the **3-Hit Combo** skill (skill tree, Lv 1) a 3rd hit in a row (press attack again within 0.7s) is a finisher: Knight wide slam, Ninja lunge, Wizard big fireball, Archer power shot, Barbarian axe smash. Tuned in `combo` in `shared/classes.ts`.
 - **Attack variety:** normal hits pick 1 of 4 attack moves at random (never the same twice in a row).
 - **Dodge roll** (F): every hero rolls 48px in the move direction (or facing), untouchable for 0.3s, 1.5s cooldown. Tuned in `DODGE` in `shared/classes.ts`.
 - **8-way aim**: attacks, arrows, fireballs, dashes and ultimates go in the last direction you moved, diagonals included (`Player.ax/ay`, `Projectile.vx/vy`).
 - **Initiative & attack speed** (`shared/combat.ts`): every hero and monster has a hidden poise bar. Hits drain it, less against higher-level opponents (-15% per level above you, min 20%) and more against lower ones (+10% per level, max +50%), and make the target flinch (a monster's wind-up telegraph, a red flash, is interrupted; heroes' next attack is delayed slightly). Below half poise you attack slower; at 0 you are dizzy (stars): no attacks or skills for 1.2s (monsters 1.8s, and they run away). Then poise refills and you are steady for 1.5s. Shield blocks most poise damage; Unstoppable ignores it. Rage gives +15% attack speed. Hero panel shows attack speed and initiative.
 - **Emotes:** type /wave /cheer /laugh /sit /sleep in chat. Heroes also fidget when standing still.
 - **Levels, stats and powers** (`shared/powers.ts`): XP raises your level (max 20). You assign stat points yourself in the hero panel (**C**, click +): 1 point per level and 3 at levels 3, 5, 8 and 10 (27 by level 20). **Stamina** = max HP (+12) and HP regen, **Strength** = attack for Knight/Ninja/Archer/Barbarian (+7%) and +4 HP, **Magic** = skills (+7%), cooldowns (-2%, max -30%) and Wizard fireballs. Every level also adds 5 max HP. Reset is free out of combat. Class skills are learned in the skill tree (see below). Press **C** for the hero panel (characteristics only). On level-up a small notice appears; press C (or click it) to see the new stats.
-- **Skills** (`shared/talents.ts` + `shared/powers.ts`, press **T**): heroes start with only a basic attack. Every level after 1 gives 1 skill point. One tree per hero holds both the class skills (key **1** skill at level 1, passives at 3/5/8, the key **2** ultimate at level 10) and 3 branches of passive bonuses (e.g. Knight: Blade, Bulwark, Command; 3 ranks each). Rows unlock at levels 1, 3, 5, 8 and 10 and a node needs the one below it: the tree grows up from the hero (trunk at the bottom, ultimate at the top), with branch lines that light up as you learn skills. Effects: damage, skill damage, crit, lifesteal, max HP, armour, speed, cooldowns, regen. Reset is free out of combat. The Hero, Skills and Bag buttons (bottom right) open the menus at any time; Esc closes them.
+- **Skills** (`shared/talents.ts` + `shared/powers.ts`, press **T**): heroes start with only a basic attack. Every level after 1 gives 1 skill point. One tree per hero holds the class skills (an active skill at level 1, passives at 3/5/8, the active ultimate at level 10), the **3-Hit Combo** skill and 3 branches of passive bonuses (e.g. Knight: Blade, Bulwark, Command; 3 ranks each). Rows unlock at levels 1, 3, 5, 8 and 10 and a node needs the one below it: the tree grows up from the hero (trunk at the bottom, ultimate at the top), with branch lines that light up as you learn skills. Effects: damage, skill damage, crit, lifesteal, max HP, armour, speed, cooldowns, regen. Reset is free out of combat (it also empties the skill slots).
+- **Skill slots** (`shared/slots.ts`): keys **1** to **0** (bar at the bottom). They start empty: drag a learned active skill from the tree onto a slot, or hover it in the tree and press a number key. Right-click a slot to clear it; drag between slots to move. The Hero, Skills and Bag buttons (bottom right) open the menus at any time; Esc closes them.
   - Knight: Shield, Iron Skin, Cleave, Second Wind, Earthquake (stun)
   - Ninja: Dash, Swift Feet, Critical Strike, Shadow Strike, Blade Storm
   - Wizard: Nova, Mana Flow, Ignite, Frost Nova (slow), Meteor
@@ -47,7 +48,7 @@ Gameplay:
 
 ## The world: Oakvale
 
-The starting region is a 160×120-tile (16px) medieval map, generated deterministically in `shared/map.ts` so the server
+The starting region is a 224×168-tile medieval map with 32px tiles drawn at the same pixel size as the heroes, generated deterministically in `shared/map.ts` so the server
 and every client build the same world. It has a ground layer and an object layer (objects and water are solid, except
 bushes, which you can walk through).
 
@@ -72,12 +73,16 @@ up to 10-12 at the far edges. Signposts at the gates and junctions have one boar
 Each area in `AREAS` can list the monsters that belong there (`mobs`), and `randomPointInArea(name)` returns a free
 spot inside an area, for per-zone spawns.
 
-In game, a minimap sits top-right and a banner shows the area name as you walk between regions.
+In game, a round minimap sits top-right inside a day/night dial (the sun and moon turn around it with the 30-minute day), and a bold pixel-font banner shows the area name as you walk between regions.
 
 The world is alive (`client/src/ambient.ts`, cosmetic only): trees and bushes are tall sprites that sway in a travelling
 wind and hide you when you walk behind them; water ripples and has shoreline foam, the mill wheel turns, grass and
 flowers sway, chimneys and the campfire smoke, buildings cast shadows, and butterflies, birds, fireflies, jumping fish
 and cloud shadows drift around.
+
+Tile art (`client/src/tileset.ts`) is procedural: shapes are laid out on a 16-unit design grid and painted at full
+32px resolution (smooth curves, fine grass, cobbles, sand and water). Static ground detail is baked in chunks around
+the camera, so the larger map costs little video memory.
 
 Detail layer (`client/src/details.ts`): shaded roofs with ridges and eaves, pebbles, tufts, mushrooms and fallen
 leaves, grass spilling over road edges, rounded shorelines with reeds and lily pads, ducks on Mirror Pond, door

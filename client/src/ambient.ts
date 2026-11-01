@@ -1,5 +1,5 @@
 import Phaser from "phaser";
-import { MAP_H, MAP_W, TILE } from "../../shared/constants";
+import { ART_K as K, MAP_H, MAP_W, TILE } from "../../shared/constants";
 import { AREAS, EMPTY, GROUND, OBJECTS, T } from "../../shared/map";
 import { ANIMATED_TILES, drawTileFrame } from "./tileset";
 
@@ -29,28 +29,42 @@ function rng(seed: number) {
 
 // ---------- generated textures ----------
 
-type Px = (x: number, y: number, c: number, a?: number) => void;
-function canvasTex(scene: Phaser.Scene, key: string, w: number, h: number, frames: number, draw: (px: Px, f: number, ox: number) => void) {
+/** Paints one design pixel (k×k screen pixels); `fine` paints single screen pixels for full-resolution detail. */
+type Px = ((x: number, y: number, c: number, a?: number) => void) & { k: number; fine: (x: number, y: number, c: number, a?: number) => void };
+/** A generated spritesheet of `frames` frames, each w×h design pixels drawn k screen pixels wide. */
+function canvasTex(scene: Phaser.Scene, key: string, w: number, h: number, frames: number, draw: (px: Px, f: number, ox: number) => void, k = 1) {
   if (scene.textures.exists(key)) return;
-  const tex = scene.textures.createCanvas(key, w * frames, h)!;
+  const W = w * k, H = h * k;
+  const tex = scene.textures.createCanvas(key, W * frames, H)!;
   const ctx = tex.getContext();
   for (let f = 0; f < frames; f++) {
-    const ox = f * w;
-    draw((x, y, c, a = 1) => {
+    const ox = f * W;
+    const fine = (x: number, y: number, c: number, a = 1) => {
+      x = Math.round(x); y = Math.round(y);
+      if (x < 0 || y < 0 || x >= W || y >= H) return;
+      ctx.globalAlpha = a; ctx.fillStyle = hex(c); ctx.fillRect(ox + x, y, 1, 1);
+    };
+    const px = ((x: number, y: number, c: number, a = 1) => {
+      x = Math.round(x); y = Math.round(y);
       if (x < 0 || y < 0 || x >= w || y >= h) return;
-      ctx.globalAlpha = a; ctx.fillStyle = hex(c); ctx.fillRect(ox + Math.round(x), Math.round(y), 1, 1);
-    }, f, ox);
-    tex.add(f, 0, ox, 0, w, h);
+      ctx.globalAlpha = a; ctx.fillStyle = hex(c); ctx.fillRect(ox + x * k, y * k, k, k);
+    }) as Px;
+    px.k = k; px.fine = fine;
+    draw(px, f, ox);
+    tex.add(f, 0, ox, 0, W, H);
   }
   ctx.globalAlpha = 1;
   tex.refresh();
 }
+/** Filled ellipse in design pixels, rasterised per screen pixel (smooth edges at k > 1). */
 function disc(px: Px, cx: number, cy: number, rx: number, ry: number, c: number | ((x: number, y: number) => number | undefined), a = 1) {
-  for (let y = Math.floor(cy - ry); y <= cy + ry; y++) for (let x = Math.floor(cx - rx); x <= cx + rx; x++) {
-    const dx = (x + 0.5 - cx) / rx, dy = (y + 0.5 - cy) / ry;
+  const k = px.k;
+  for (let y = Math.floor((cy - ry) * k); y <= (cy + ry) * k; y++) for (let x = Math.floor((cx - rx) * k); x <= (cx + rx) * k; x++) {
+    const X = (x + 0.5) / k, Y = (y + 0.5) / k;
+    const dx = (X - cx) / rx, dy = (Y - cy) / ry;
     if (dx * dx + dy * dy > 1) continue;
-    const col = typeof c === "number" ? c : c(x, y);
-    if (col !== undefined) px(x, y, col, a);
+    const col = typeof c === "number" ? c : c(X - 0.5, Y - 0.5);
+    if (col !== undefined) px.fine(x, y, col, a);
   }
 }
 
@@ -71,28 +85,37 @@ function makeTextures(scene: Phaser.Scene) {
       for (const [cx, cy, rx, ry] of lobes) disc(px, cx + s, cy, rx, ry, (x, y) => (y - cy > ry * 0.25 || x - cx > rx * 0.45 ? dark : mid));
       disc(px, 10 + s, 7.5, 6, 4.5, mid);
       disc(px, 9 + s, 6, 4, 2.8, light);
-      for (let k = 0; k < 26; k++) {
-        const x = 4 + Math.floor(r() * 16), y = 2 + Math.floor(r() * 16);
+      // leaf clusters: small two-tone clumps at full resolution
+      for (let k = 0; k < 70; k++) {
+        const x = 4 + r() * 16, y = 2 + r() * 16;
         const dx = (x - 12) / 10, dy = (y - 10) / 8.5;
-        if (dx * dx + dy * dy < 0.85) px(x + s, y, k % 3 ? dark : light);
+        if (dx * dx + dy * dy >= 0.85) continue;
+        const fx = Math.floor((x + s) * K), fy = Math.floor(y * K), c = k % 3 ? dark : light;
+        px.fine(fx, fy, c); px.fine(fx + 1, fy, c); px.fine(fx, fy + 1, k % 3 ? 0x1f4a1d : mid);
       }
-      px(7 + s, 4, hi); px(8 + s, 4, hi); px(6 + s, 5, hi); px(11 + s, 3, hi);
-    });
+      for (const [x, y] of [[7, 4], [8, 4], [6, 5], [11, 3], [9, 3.5], [5, 6.5]]) { px.fine((x + s) * K, y * K, hi); px.fine((x + s) * K + 1, y * K, hi); px.fine((x + s) * K, y * K + 1, light); }
+      // bark texture
+      for (let y = 15; y < 26; y += 2) px.fine(11 * K + 1 + ((y * 3) % 3), y * K, 0x3e2614);
+    }, K);
   }
-  // Pine: 20x30, 2 sway frames (top sways more than the bottom).
+  // Pine: 20x30 design pixels, 2 sway frames (top sways more than the bottom). Drawn per screen pixel.
   canvasTex(scene, "pine", 20, 30, 2, (px, f) => {
     disc(px, 10, 27.5, 6.5, 2, 0x000000, 0.22);
-    for (let y = 22; y < 28; y++) { px(9, y, 0x5a3a1e); px(10, y, 0x4a2f18); }
+    for (let y = 22 * K; y < 28 * K; y++) for (let x = 9 * K; x < 11 * K; x++) px.fine(x, y, x < 10 * K ? 0x5a3a1e : 0x4a2f18);
     const tiers: [number, number, number][] = [[0, 9, 1], [6, 16, 2.5], [12, 24, 4]];
-    for (const [y0, y1, w0] of tiers) for (let y = y0; y < y1; y++) {
-      const half = w0 + (y - y0) * 0.75, sway = f && y < 14 ? 1 : 0;
-      const x0 = Math.round(10 - half) + sway, x1 = Math.round(10 + half) + sway;
-      for (let x = x0; x < x1; x++) px(x, y, x < (x0 + x1) / 2 ? 0x2b7148 : 0x1f5a3a);
-      px(x0 - 1, y, 0x174530); px(x1, y, 0x174530); px(x0, y, 0x3d8a5a);
-      if (y === y1 - 1) for (let x = x0; x < x1; x += 2) px(x, y, 0x174530);
+    for (const [y0, y1, w0] of tiers) for (let fy = y0 * K; fy < y1 * K; fy++) {
+      const y = fy / K, half = w0 + (y - y0) * 0.75, sway = f && y < 14 ? K * (1 - y / 14) * 1.5 : 0;
+      const x0 = Math.round((10 - half) * K + sway), x1 = Math.round((10 + half) * K + sway);
+      const edge = fy >= y1 * K - 2; // the needle fringe at the bottom of each tier
+      for (let x = x0; x < x1; x++) {
+        if (edge && (x + fy) % 3 === 0) continue;
+        px.fine(x, fy, x < (x0 + x1) / 2 - 1 ? ((x + fy * 2) % 7 === 0 ? 0x3d8a5a : 0x2b7148) : (x + fy) % 6 === 0 ? 0x174530 : 0x1f5a3a);
+      }
+      px.fine(x0 - 1, fy, 0x174530); px.fine(x1, fy, 0x174530); px.fine(x0, fy, 0x3d8a5a);
+      if (edge) for (let x = x0; x < x1; x += 3) px.fine(x, fy + 1, 0x174530);
     }
-    px(10 + f, 0, 0x4e9a6a);
-  });
+    px.fine(10 * K + f, 0, 0x4e9a6a); px.fine(10 * K + f - 1, 1, 0x4e9a6a);
+  }, K);
   // Bush: 16x16, 2 frames.
   canvasTex(scene, "bush", 16, 16, 2, (px, f) => {
     disc(px, 8, 14.5, 6.5, 1.6, 0x000000, 0.22);
@@ -100,14 +123,15 @@ function makeTextures(scene: Phaser.Scene) {
     disc(px, 8 + f * 0.5, 10.5, 6.2, 4.5, 0x2f6b2a);
     disc(px, 7.5 + f, 10, 5, 3.6, 0x3f8a35);
     disc(px, 6 + f, 8.5, 2, 1.4, 0x5aa845);
-    px(10 + f, 10, 0xd84343); px(5, 12, 0xd84343); px(11, 12, 0xd84343);
-  });
+    for (const [x, y] of [[10 + f, 10], [5, 12], [11, 12], [8, 13]]) { px(x, y, 0xd84343); px.fine(x * K, y * K, 0xff8a80); }
+    for (let k = 0; k < 24; k++) { const a = k * 2.4, d = (k % 5) / 5; px.fine((8 + f * 0.5 + Math.cos(a) * 5.5 * d) * K, (10.5 + Math.sin(a) * 4 * d) * K, k % 2 ? 0x2f6b2a : 0x4f9a3a); }
+  }, K);
   canvasTex(scene, "chimney", 5, 8, 1, (px) => {
     for (let y = 1; y < 8; y++) for (let x = 0; x < 5; x++) px(x, y, (y + (x >> 1)) % 3 ? 0x8a4a3a : 0x6a362a);
     for (let x = 0; x < 5; x++) px(x, 0, 0x4a4a4a);
     for (let y = 1; y < 8; y++) px(4, y, 0x5a2e22);
-  });
-  canvasTex(scene, "puff", 8, 8, 1, (px) => disc(px, 4, 4, 3.6, 3.6, (x, y) => (x + y < 7 ? 0xf2f2f2 : 0xc8c8c8)));
+  }, K);
+  canvasTex(scene, "puff", 8, 8, 1, (px) => disc(px, 4, 4, 3.6, 3.6, (x, y) => (x + y < 7 ? 0xf2f2f2 : 0xc8c8c8)), K);
   canvasTex(scene, "spark", 2, 2, 1, (px) => { px(0, 0, 0xffe066); px(1, 0, 0xffb23a); px(0, 1, 0xffb23a); px(1, 1, 0xff8c1a); });
   canvasTex(scene, "glow", 9, 9, 1, (px) => {
     for (let y = 0; y < 9; y++) for (let x = 0; x < 9; x++) {
@@ -119,12 +143,12 @@ function makeTextures(scene: Phaser.Scene) {
     px(2, 1, 0x3a2a1a); px(2, 2, 0x3a2a1a);
     if (f === 0) { px(0, 0, 0xffffff); px(1, 0, 0xffffff); px(1, 1, 0xffffff); px(3, 0, 0xffffff); px(4, 0, 0xffffff); px(3, 1, 0xffffff); px(0, 2, 0xffffff); px(4, 2, 0xffffff); }
     else { px(1, 1, 0xffffff); px(1, 2, 0xffffff); px(3, 1, 0xffffff); px(3, 2, 0xffffff); }
-  });
+  }, K);
   canvasTex(scene, "bird", 7, 4, 2, (px, f) => {
     px(3, 2, 0x2a2a30); px(3, 1, 0x2a2a30);
     if (f === 0) { px(0, 0, 0x2a2a30); px(1, 1, 0x2a2a30); px(2, 1, 0x2a2a30); px(4, 1, 0x2a2a30); px(5, 1, 0x2a2a30); px(6, 0, 0x2a2a30); }
     else { px(1, 2, 0x2a2a30); px(2, 2, 0x2a2a30); px(4, 2, 0x2a2a30); px(5, 2, 0x2a2a30); px(0, 3, 0x2a2a30); px(6, 3, 0x2a2a30); }
-  });
+  }, K);
   canvasTex(scene, "cloud", 96, 56, 1, (px) => {
     const r = rng(11);
     const blobs = Array.from({ length: 7 }, () => [16 + r() * 64, 18 + r() * 20, 14 + r() * 14, 10 + r() * 8]);
@@ -182,8 +206,8 @@ export class Ambient {
     for (let y = 0; y < MAP_H; y++) for (let x = 0; x < MAP_W; x++) {
       if (!isB(x, y)) continue;
       const tall = obj(x, y) !== T.PALISADE;
-      if (!isB(x + 1, y)) g.fillRect((x + 1) * TILE, y * TILE + (isB(x + 1, y - 1) || !isB(x, y - 1) ? 4 : 0), tall ? 4 : 2, TILE);
-      if (!isB(x, y + 1)) g.fillRect(x * TILE + (isB(x - 1, y + 1) || !isB(x - 1, y) ? 3 : 0), (y + 1) * TILE, TILE + (isB(x + 1, y) ? 0 : tall ? 4 : 2), tall ? 3 : 2);
+      if (!isB(x + 1, y)) g.fillRect((x + 1) * TILE, y * TILE + (isB(x + 1, y - 1) || !isB(x, y - 1) ? 4 * K : 0), (tall ? 4 : 2) * K, TILE);
+      if (!isB(x, y + 1)) g.fillRect(x * TILE + (isB(x - 1, y + 1) || !isB(x - 1, y) ? 3 * K : 0), (y + 1) * TILE, TILE + (isB(x + 1, y) ? 0 : (tall ? 4 : 2) * K), (tall ? 3 : 2) * K);
     }
   }
 
@@ -196,10 +220,13 @@ export class Ambient {
       if (GROUND[y][x] !== T.WATER) continue;
       this.waterTiles.push([x, y]);
       const X = x * TILE, Y = y * TILE;
-      if (!water(x, y - 1)) { bank.fillStyle(0x1d4a7a, 0.55).fillRect(X, Y, TILE, 3); foam.fillStyle(0xd8ecff, 0.8).fillRect(X, Y + 3, TILE, 1); }
-      if (!water(x, y + 1)) foam.fillStyle(0xd8ecff, 0.8).fillRect(X, Y + TILE - 1, TILE, 1);
-      if (!water(x - 1, y)) { bank.fillStyle(0x1d4a7a, 0.35).fillRect(X, Y, 1, TILE); foam.fillStyle(0xd8ecff, 0.7).fillRect(X + 1, Y, 1, TILE); }
-      if (!water(x + 1, y)) foam.fillStyle(0xd8ecff, 0.7).fillRect(X + TILE - 1, Y, 1, TILE);
+      if (!water(x, y - 1)) {
+        bank.fillStyle(0x1d4a7a, 0.55).fillRect(X, Y, TILE, 5); bank.fillStyle(0x1d4a7a, 0.25).fillRect(X, Y + 5, TILE, 2);
+        foam.fillStyle(0xd8ecff, 0.85).fillRect(X, Y + 6, TILE, 1); foam.fillStyle(0xd8ecff, 0.35).fillRect(X, Y + 7, TILE, 1);
+      }
+      if (!water(x, y + 1)) { foam.fillStyle(0xd8ecff, 0.85).fillRect(X, Y + TILE - 1, TILE, 1); foam.fillStyle(0xd8ecff, 0.35).fillRect(X, Y + TILE - 2, TILE, 1); }
+      if (!water(x - 1, y)) { bank.fillStyle(0x1d4a7a, 0.35).fillRect(X, Y, 2, TILE); foam.fillStyle(0xd8ecff, 0.75).fillRect(X + 2, Y, 1, TILE); foam.fillStyle(0xd8ecff, 0.3).fillRect(X + 3, Y, 1, TILE); }
+      if (!water(x + 1, y)) { foam.fillStyle(0xd8ecff, 0.75).fillRect(X + TILE - 1, Y, 1, TILE); foam.fillStyle(0xd8ecff, 0.3).fillRect(X + TILE - 2, Y, 1, TILE); }
     }
     this.scene.tweens.add({ targets: foam, alpha: 0.35, duration: 1400, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
   }
@@ -211,7 +238,7 @@ export class Ambient {
       const t = OBJECTS[y][x];
       if (!TREES.has(t)) continue;
       const key = t === T.PINE ? "pine" : t === T.BUSH ? "bush" : r() < 0.5 ? "oak_a" : "oak_b";
-      const s = this.scene.add.sprite((x + 0.5) * TILE + (t === T.BUSH ? 0 : Math.round(r() * 2 - 1)), (y + 1) * TILE, key, 0)
+      const s = this.scene.add.sprite((x + 0.5) * TILE + (t === T.BUSH ? 0 : Math.round((r() * 2 - 1) * K)), (y + 1) * TILE, key, 0)
         .setOrigin(0.5, 1).setDepth((y + 1) * TILE - 2).setTint(tints[Math.floor(r() * tints.length)]);
       if (t !== T.BUSH && r() < 0.25) s.setFlipX(true);
       s.setData("ph", r() * 0.6);
@@ -236,17 +263,17 @@ export class Ambient {
         }
       }
       if (maxX - minX < 2) continue;
-      const cx = (r() < 0.5 ? maxX - 1 : minX + 1) * TILE + 6, cy = minY * TILE + 9;
+      const cx = (r() < 0.5 ? maxX - 1 : minX + 1) * TILE + 6 * K, cy = minY * TILE + 9 * K;
       this.scene.add.image(cx, cy, "chimney").setOrigin(0.5, 1).setDepth(-0.9);
-      if (r() < 0.8) this.smoke(cx, cy - 8, 0.9);
+      if (r() < 0.8) this.smoke(cx, cy - 8 * K, 0.9);
     }
   }
 
   private smoke(x: number, y: number, scale: number) {
     this.scene.add.particles(x, y, "puff", {
       lifespan: { min: 2600, max: 3600 },
-      speedY: { min: -12, max: -7 },
-      speedX: { min: WIND_X - 2, max: WIND_X + 3 },
+      speedY: { min: -12 * K, max: -7 * K },
+      speedX: { min: (WIND_X - 2) * K, max: (WIND_X + 3) * K },
       scale: { start: 0.5 * scale, end: 1.6 * scale },
       alpha: { start: 0.75, end: 0 },
       frequency: 320,
@@ -257,14 +284,14 @@ export class Ambient {
   private buildCampfires() {
     for (let y = 0; y < MAP_H; y++) for (let x = 0; x < MAP_W; x++) {
       if (OBJECTS[y][x] !== T.CAMPFIRE) continue;
-      const cx = (x + 0.5) * TILE, cy = y * TILE + 9;
-      const glow = this.scene.add.image(cx, cy, "glow").setTint(0xffa040).setScale(6).setAlpha(0.25).setBlendMode(Phaser.BlendModes.ADD).setDepth(-0.8);
-      this.scene.tweens.add({ targets: glow, alpha: 0.4, scale: 6.6, duration: 180, yoyo: true, repeat: -1, ease: "Sine.easeInOut", repeatDelay: 60 });
-      this.scene.add.particles(cx, cy - 2, "spark", {
-        lifespan: { min: 500, max: 1100 }, speedY: { min: -30, max: -14 }, speedX: { min: -8, max: 10 },
-        scale: { start: 1, end: 0.3 }, alpha: { start: 1, end: 0 }, frequency: 140, blendMode: "ADD",
+      const cx = (x + 0.5) * TILE, cy = y * TILE + 9 * K;
+      const glow = this.scene.add.image(cx, cy, "glow").setTint(0xffa040).setScale(6 * K).setAlpha(0.25).setBlendMode(Phaser.BlendModes.ADD).setDepth(-0.8);
+      this.scene.tweens.add({ targets: glow, alpha: 0.4, scale: 6.6 * K, duration: 180, yoyo: true, repeat: -1, ease: "Sine.easeInOut", repeatDelay: 60 });
+      this.scene.add.particles(cx, cy - 2 * K, "spark", {
+        lifespan: { min: 500, max: 1100 }, speedY: { min: -30 * K, max: -14 * K }, speedX: { min: -8 * K, max: 10 * K },
+        scale: { start: 1.5, end: 0.4 }, alpha: { start: 1, end: 0 }, frequency: 140, blendMode: "ADD",
       }).setDepth(25000);
-      this.smoke(cx, cy - 6, 0.7);
+      this.smoke(cx, cy - 6 * K, 0.7);
     }
   }
 
@@ -272,8 +299,9 @@ export class Ambient {
   private bonfireTexture() {
     const FW = 48, FH = 56, N = 6;
     if (this.scene.textures.exists("bonfire")) return;
-    const tex = this.scene.textures.createCanvas("bonfire", FW * N, FH)!;
+    const tex = this.scene.textures.createCanvas("bonfire", FW * N * K, FH * K)!;
     const g = tex.getContext();
+    g.save(); g.scale(K, K); // drawn on the design grid, scaled up (ellipses and flames stay smooth)
     const px = (x: number, y: number, c: string) => { g.fillStyle = c; g.fillRect(x, y, 1, 1); };
     for (let f = 0; f < N; f++) {
       const ox = f * FW, cx = ox + 24, by = 46;
@@ -313,8 +341,9 @@ export class Ambient {
       layer(8, 24 + ((f + 1) % 3) * 2, "#ff9a2a", 1.3);
       layer(5, 16 + ((f + 2) % 3), "#ffd65a", 2.1);
       layer(2, 8, "#fff6c0", 2.8);
-      tex.add(f, 0, ox, 0, FW, FH);
     }
+    g.restore();
+    for (let f = 0; f < N; f++) tex.add(f, 0, f * FW * K, 0, FW * K, FH * K);
     tex.refresh();
     this.scene.anims.create({ key: "bonfire_burn", frames: this.scene.anims.generateFrameNumbers("bonfire", { start: 0, end: N - 1 }), frameRate: 9, repeat: -1 });
   }
@@ -324,15 +353,15 @@ export class Ambient {
     for (let y = 0; y < MAP_H; y++) for (let x = 0; x < MAP_W; x++) {
       if (OBJECTS[y][x] !== T.BONFIRE || OBJECTS[y - 1]?.[x] === T.BONFIRE || OBJECTS[y][x - 1] === T.BONFIRE) continue;
       this.bonfireTexture();
-      const cx = (x + 1) * TILE, cy = (y + 1) * TILE + 6;
+      const cx = (x + 1) * TILE, cy = (y + 1) * TILE + 6 * K;
       this.scene.add.sprite(cx, cy, "bonfire", 0).setOrigin(0.5, 46 / 56).setDepth(cy).play("bonfire_burn");
-      const glow = this.scene.add.image(cx, cy - 10, "glow").setTint(0xffa040).setScale(14).setAlpha(0.3).setBlendMode(Phaser.BlendModes.ADD).setDepth(-0.8);
-      this.scene.tweens.add({ targets: glow, alpha: 0.45, scale: 15, duration: 220, yoyo: true, repeat: -1, ease: "Sine.easeInOut", repeatDelay: 40 });
-      this.scene.add.particles(cx, cy - 20, "spark", {
-        lifespan: { min: 700, max: 1600 }, speedY: { min: -45, max: -18 }, speedX: { min: -14, max: 14 },
-        scale: { start: 1.3, end: 0.3 }, alpha: { start: 1, end: 0 }, frequency: 60, blendMode: "ADD",
+      const glow = this.scene.add.image(cx, cy - 10 * K, "glow").setTint(0xffa040).setScale(14 * K).setAlpha(0.3).setBlendMode(Phaser.BlendModes.ADD).setDepth(-0.8);
+      this.scene.tweens.add({ targets: glow, alpha: 0.45, scale: 15 * K, duration: 220, yoyo: true, repeat: -1, ease: "Sine.easeInOut", repeatDelay: 40 });
+      this.scene.add.particles(cx, cy - 20 * K, "spark", {
+        lifespan: { min: 700, max: 1600 }, speedY: { min: -45 * K, max: -18 * K }, speedX: { min: -14 * K, max: 14 * K },
+        scale: { start: 2, end: 0.4 }, alpha: { start: 1, end: 0 }, frequency: 60, blendMode: "ADD",
       }).setDepth(25000);
-      this.smoke(cx, cy - 34, 1.4);
+      this.smoke(cx, cy - 34 * K, 1.4);
     }
   }
 
@@ -363,7 +392,7 @@ export class Ambient {
     const r = rng(3);
     for (let i = 0; i < 16; i++) {
       const c = this.scene.add.image(r() * MAP_W * TILE, r() * MAP_H * TILE, "cloud")
-        .setScale(2.5 + r() * 2).setAlpha(0.1).setDepth(24000);
+        .setScale((2.5 + r() * 2) * K).setAlpha(0.1).setDepth(24000);
       c.setData("v", 0.6 + r() * 0.8);
       this.clouds.push(c);
     }
@@ -377,13 +406,13 @@ export class Ambient {
     const x0 = fromLeft ? cam.x - 30 : cam.right + 30, x1 = fromLeft ? cam.right + 60 : cam.x - 60;
     const dur = 7000 + Math.random() * 3000, rise = (Math.random() - 0.5) * cam.height * 0.6;
     for (let i = 0; i < n; i++) {
-      const ox = (i % 2 ? -1 : 1) * Math.ceil(i / 2) * 7, oy = Math.ceil(i / 2) * 6 * (fromLeft ? 1 : -1) * (i % 2 ? 1 : -1) * 0.5 + Math.abs(ox) * 0.6;
+      const ox = (i % 2 ? -1 : 1) * Math.ceil(i / 2) * 7 * K, oy = Math.ceil(i / 2) * 6 * K * (fromLeft ? 1 : -1) * (i % 2 ? 1 : -1) * 0.5 + Math.abs(ox) * 0.6;
       const bird = this.scene.add.sprite(x0 - (fromLeft ? Math.abs(ox) : -Math.abs(ox)), y0 + oy, "bird", 0).setDepth(26000).setFlipX(!fromLeft);
-      const shadow = this.scene.add.ellipse(bird.x + 18, bird.y + 46, 6, 2, 0x000000, 0.18).setDepth(-1.4);
+      const shadow = this.scene.add.ellipse(bird.x + 18 * K, bird.y + 46 * K, 6 * K, 2 * K, 0x000000, 0.18).setDepth(-1.4);
       bird.play({ key: "bird_flap", frameRate: 6 + Math.random() * 3, startFrame: i % 2 });
       this.scene.tweens.add({
         targets: bird, x: x1 - (fromLeft ? Math.abs(ox) : -Math.abs(ox)), y: bird.y + rise, duration: dur,
-        onUpdate: () => shadow.setPosition(bird.x + 18, bird.y + 46),
+        onUpdate: () => shadow.setPosition(bird.x + 18 * K, bird.y + 46 * K),
         onComplete: () => { bird.destroy(); shadow.destroy(); },
       });
     }
@@ -397,12 +426,12 @@ export class Ambient {
       const [tx, ty] = this.waterTiles[Math.floor(Math.random() * this.waterTiles.length)];
       const x = (tx + Math.random()) * TILE, y = (ty + Math.random()) * TILE;
       if (!cam.contains(x, y)) continue;
-      const ring = this.scene.add.ellipse(x, y, 2, 1).setStrokeStyle(1, 0xd8ecff, 0.8).setDepth(-1.55);
+      const ring = this.scene.add.ellipse(x, y, 4, 2).setStrokeStyle(1, 0xd8ecff, 0.8).setDepth(-1.55);
       ring.isFilled = false;
       this.scene.tweens.add({ targets: ring, scaleX: 5, scaleY: 5, alpha: 0, duration: 1300, ease: "Quad.easeOut", onComplete: () => ring.destroy() });
       if (Math.random() < 0.15) { // a fish jumps
-        const fish = this.scene.add.rectangle(x, y, 3, 1, 0xc0d8e8).setDepth(-1.5);
-        this.scene.tweens.add({ targets: fish, y: y - 6, duration: 220, yoyo: true, onComplete: () => fish.destroy() });
+        const fish = this.scene.add.rectangle(x, y, 3 * K, K, 0xc0d8e8).setDepth(-1.5);
+        this.scene.tweens.add({ targets: fish, y: y - 6 * K, duration: 220, yoyo: true, onComplete: () => fish.destroy() });
       }
       return;
     }
@@ -434,17 +463,17 @@ export class Ambient {
     if (this.swayTimer > 110) {
       this.swayTimer = 0;
       for (const s of this.trees) {
-        const on = !(s.x < cam.x - 24 || s.x > cam.right + 24 || s.y < cam.y || s.y > cam.bottom + 40);
+        const on = !(s.x < cam.x - 24 * K || s.x > cam.right + 24 * K || s.y < cam.y || s.y > cam.bottom + 40 * K);
         if (s.visible !== on) s.setVisible(on); // off-screen trees are skipped entirely by the renderer
         if (!on) continue;
-        const gust = Math.sin(s.x * 0.018 + s.y * 0.006 - t * 1.3) + 0.35 * Math.sin(t * 0.7 + s.getData("ph") * 10);
+        const gust = Math.sin((s.x * 0.018 + s.y * 0.006) / K - t * 1.3) + 0.35 * Math.sin(t * 0.7 + s.getData("ph") * 10);
         s.setFrame(gust > 0.75 ? 1 : 0);
       }
     }
 
     for (const b of this.butterflies) {
       const k = t * b.sp + b.ph;
-      b.s.setPosition(b.ax + Math.sin(k) * b.r + Math.sin(k * 2.3) * 4, b.ay + Math.sin(k * 1.7) * b.r * 0.5 - 6 + Math.sin(k * 6) * 1.5);
+      b.s.setPosition(b.ax + Math.sin(k) * b.r + Math.sin(k * 2.3) * 4, b.ay + Math.sin(k * 1.7) * b.r * 0.5 - 6 * K + Math.sin(k * 6) * 1.5);
       b.s.setFrame(Math.floor(now / 90 + b.ph * 7) % 2);
     }
     for (const f of this.fireflies) {
@@ -453,8 +482,8 @@ export class Ambient {
       f.s.setAlpha(Math.max(0, Math.sin(k * 3.1)) * (0.25 + this.dark * 0.75)).setDepth(this.dark > 0.3 ? 27600 : 21000);
     }
     for (const c of this.clouds) {
-      c.x += WIND_X * c.getData("v") * (dtMs / 1000);
-      c.y += 1.2 * c.getData("v") * (dtMs / 1000);
+      c.x += WIND_X * K * c.getData("v") * (dtMs / 1000);
+      c.y += 1.2 * K * c.getData("v") * (dtMs / 1000);
       if (c.x - c.displayWidth / 2 > MAP_W * TILE) c.x = -c.displayWidth / 2;
       if (c.y - c.displayHeight / 2 > MAP_H * TILE) c.y = -c.displayHeight / 2;
     }
