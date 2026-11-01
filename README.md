@@ -92,8 +92,8 @@ leaves, grass spilling over road edges, rounded shorelines with reeds and lily p
 lanterns and gate banners. A 30-minute day/night cycle (shared by all players via the clock) lights up windows,
 lanterns and the campfire at night. Add `?time=day|dusk|night` to the URL to force a time of day.
 
-**Isometric view (in progress):** add `?iso=1` to the URL to play in the isometric view (`?iso=0` goes back; the
-choice is remembered). Only the drawing changes: the server, the map data and the movement rules stay top-down, see
+**Isometric view:** the game is drawn in isometric by default. Add `?iso=0` to the URL for the old top-down view
+(`?iso=1` goes back; the choice is remembered). Only the drawing changes: the server, the map data and the movement rules stay top-down, see
 `client/src/iso.ts`. W/up moves up the screen.
 
 **Map viewer:** with `npm run dev` running, open http://localhost:5173/map.html to see the whole map with area,
