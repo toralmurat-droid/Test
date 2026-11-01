@@ -372,8 +372,8 @@ class Duel {
         if (!t.dead && !s.miss && Math.abs(t.x - s.x) <= s.radius + HIT_RADIUS && now >= t.invulnUntil) {
           s.hit = true;
           this.hit(s.owner, t, s.dmg, s.dir, { kb: s.kb, slowMs: s.slowMs || undefined });
-          // Ignite splash skips the direct target, so it never adds damage in a 1v1
-          void IGNITE;
+          // Ignite: the explosion also burns the target that was hit
+          if (s.ignite && !t.dead) this.hit(s.owner, t, Math.max(1, Math.round(s.dmg * IGNITE.splash)), s.dir, { kb: 0 });
         }
       }
     }

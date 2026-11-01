@@ -102,7 +102,7 @@ export const POWERS: Record<ClassKind, PowerDef[]> = {
   wizard: [
     { id: "nova", level: 1, name: "Nova", key: "1", desc: "Blast everything around you." },
     { id: "manaflow", level: 3, name: "Mana Flow", desc: "Passive: skills recharge 20% faster." },
-    { id: "ignite", level: 5, name: "Ignite", desc: "Fireballs explode, splashing 50% damage nearby." },
+    { id: "ignite", level: 5, name: "Ignite", desc: "Fireballs explode: 30% extra damage to the target and everyone nearby." },
     { id: "frost", level: 8, name: "Frost Nova", desc: "Nova also slows enemies by 50% for 2s." },
     { id: "meteor", level: 10, name: "Meteor", key: "2", desc: "Call a meteor ahead of you: huge area damage." },
   ],
@@ -148,8 +148,8 @@ export const SECOND_WIND = { threshold: 0.25, heal: 0.3, cooldownMs: 60000 };
 export const SWIFT_BONUS = 0.12;
 export const CRIT = { chance: 0.2, mult: 2 };
 export const SHADOW_STRIKE_DAMAGE = 0.8; // x primary damage
-export const IGNITE = { radius: 22, splash: 0.5 };
-export const FROST = { slow: 0.5, durationMs: 2000 };
+export const IGNITE = { radius: 22, splash: 0.3 };
+export const FROST = { slow: 0.5, durationMs: 2500 };
 export const SLOW_MOB = 0.5;
 export const EAGLE_EYE_RANGE = 1.15;
 export const VOLLEY_DAMAGE = 0.6; // x class damage per Volley arrow (all 3 can hit one target)
@@ -163,7 +163,7 @@ export interface UltDef { name: string; cooldownMs: number; damage: number; radi
 export const ULTS: Record<ClassKind, UltDef> = {
   knight: { name: "Earthquake", cooldownMs: 18000, damage: 30, radius: 50, stunMs: 1000 },
   ninja: { name: "Blade Storm", cooldownMs: 14000, damage: 16, radius: 36, hits: 3 },
-  wizard: { name: "Meteor", cooldownMs: 16000, damage: 70, radius: 50, delayMs: 450, ahead: 56 },
+  wizard: { name: "Meteor", cooldownMs: 16000, damage: 85, radius: 50, delayMs: 450, ahead: 56 },
   archer: { name: "Arrow Rain", cooldownMs: 15000, damage: 16, radius: 44, hits: 4, delayMs: 400, ahead: 72 },
   barbarian: { name: "Leap", cooldownMs: 16000, damage: 38, radius: 40, ahead: 64 },
 };
