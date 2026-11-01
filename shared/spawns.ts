@@ -15,14 +15,14 @@ export interface SpawnZone {
 
 /** Monsters per area. Rects come from the map's AREAS (shared/map.ts), so zones follow the map layout. */
 const ZONE_MOBS: { name: string; mobs: Partial<Record<MobKind, number>>; respawnMs: number }[] = [
-  { name: "North Meadow", mobs: { slime: 5 }, respawnMs: 10000 },
-  { name: "Goldenreach Farms", mobs: { slime: 4 }, respawnMs: 12000 },
-  { name: "Mirror Pond", mobs: { slime: 3 }, respawnMs: 12000 },
-  { name: "Misty Marsh", mobs: { slime: 4 }, respawnMs: 12000 },
-  { name: "Stonecrag Quarry", mobs: { slime: 1, skeleton: 3 }, respawnMs: 16000 },
-  { name: "Old Ruins", mobs: { skeleton: 4 }, respawnMs: 20000 },
-  { name: "Old Watchtower", mobs: { skeleton: 3 }, respawnMs: 20000 },
-  { name: "Whispering Woods", mobs: { slime: 3, skeleton: 3 }, respawnMs: 15000 }, // broad area last: zone lookups take the first match
+  { name: "North Meadow", mobs: { slime: 11, motherblob: 1 }, respawnMs: 6000 },
+  { name: "Goldenreach Farms", mobs: { slime: 12, motherblob: 1 }, respawnMs: 6000 },
+  { name: "Mirror Pond", mobs: { slime: 8, motherblob: 1 }, respawnMs: 7000 },
+  { name: "Misty Marsh", mobs: { slime: 10, motherblob: 2 }, respawnMs: 6000 },
+  { name: "Stonecrag Quarry", mobs: { slime: 3, skeleton: 5 }, respawnMs: 10000 },
+  { name: "Old Ruins", mobs: { skeleton: 7 }, respawnMs: 12000 },
+  { name: "Old Watchtower", mobs: { skeleton: 5 }, respawnMs: 12000 },
+  { name: "Whispering Woods", mobs: { slime: 9, skeleton: 6, motherblob: 1 }, respawnMs: 8000 }, // broad area last: zone lookups take the first match
 ];
 
 export const SPAWN_ZONES: SpawnZone[] = ZONE_MOBS.flatMap((z) => {

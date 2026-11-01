@@ -9,7 +9,7 @@ import {
   attackMult, cooldownMult, heroSpeed, STATS, magicMult, POWERS, STAT_NAMES, StatKind, statsFor, ULT_LEVEL, ULTS,
 } from "../../shared/powers";
 import { displayGrid } from "./tileset";
-import { heroTexture, itemTexture, makeTileset, mobTexture } from "./textures";
+import { heroTexture, itemTexture, makeTileset, MOB_LOOK, mobTexture } from "./textures";
 import { Minimap } from "./minimap";
 import { CHARACTERS, CHAR_ORIGIN, CharacterName, createArtAnims, playCharAnim, preloadArt } from "./artAssets";
 import { Ambient } from "./ambient";
@@ -215,6 +215,11 @@ export class TownScene extends Phaser.Scene {
       if (e) this.floatText(e.sprite.x, e.sprite.y - 14, `+${amount}`, "#7cfc00");
     });
 
+    // A Mother Blob budding a blobling: quick wobble
+    this.room.onMessage("brood", ({ id }) => {
+      const e = this.entities.get(id);
+      if (e) this.tweens.add({ targets: e.sprite, scaleX: 1.15, scaleY: 0.85, duration: 120, yoyo: true, repeat: 1 });
+    });
     this.room.onMessage("swing", ({ id, step, variant }) => this.showSwing(id, step ?? 0, variant ?? 0));
     this.room.onMessage("special", (msg) => this.showSpecial(msg));
     this.room.onMessage("boom", ({ x, y, r, kind }) =>
@@ -312,8 +317,8 @@ export class TownScene extends Phaser.Scene {
 
   private addEntity(id: string, p: any, mob = false) {
     if (mob) {
-      const sprite = this.add.sprite(p.x, p.y, mobTexture(this, p.kind), 0).setOrigin(0.5, 0.85);
-      this.entities.set(id, { sprite, bar: this.add.graphics(), tx: p.x, ty: p.y, state: p, mob, top: 14 });
+      const sprite = this.add.sprite(p.x, p.y, mobTexture(this, p.kind), 0).setOrigin(0.5, MOB_LOOK[p.kind]?.oy ?? 0.85);
+      this.entities.set(id, { sprite, bar: this.add.graphics(), tx: p.x, ty: p.y, state: p, mob, top: MOB_LOOK[p.kind]?.top ?? 14 });
       return;
     }
     // Classes with a generated sheet use it; anything else falls back to the procedural persona
@@ -711,8 +716,9 @@ export class TownScene extends Phaser.Scene {
         } else if (e.shield) { e.shield.destroy(); e.shield = undefined; }
       }
       if (!p.dead && p.hp < maxHp) {
-        e.bar.fillStyle(0x000000).fillRect(x - 7, y + 3, 14, 2);
-        e.bar.fillStyle(e.mob ? 0xf4a261 : 0xe63946).fillRect(x - 7, y + 3, 14 * (p.hp / maxHp), 2);
+        const bw = (e.mob && MOB_LOOK[p.kind]?.bar) || 14;
+        e.bar.fillStyle(0x000000).fillRect(x - bw / 2, y + 3, bw, 2);
+        e.bar.fillStyle(e.mob ? 0xf4a261 : 0xe63946).fillRect(x - bw / 2, y + 3, bw * (p.hp / maxHp), 2);
       }
     }
 
