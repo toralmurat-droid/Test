@@ -139,6 +139,22 @@ const DRAW: Record<number, (p: Painter, f: number) => void> = {
     }
   },
 
+  [T.FLOOR]: (p) => { // weathered wooden floorboards of a ruined house
+    p.fill(0x8a6a44);
+    for (const y of [0, 4, 8, 12]) { p.rect(0, y + 3, 16, 1, 0x5e4528); p.rect(0, y, 16, 1, 0x9c7a50); }
+    for (let k = 0; k < 4; k++) p.px(p.ri(16), k * 4 + 1 + p.ri(2), 0x4a3520); // nail heads and knots
+    p.speckle(0x7a5c3a, 14); p.speckle(0x5a9a3c, 5); // moss in the cracks
+    p.rect(p.ri(10), 4 * p.ri(4) + 1, 5, 2, 0x3a2a1a); // a missing plank
+  },
+  [T.RUBBLE]: (p) => { // dirt strewn with broken stones and bits of timber
+    p.fill(0x9a7d55); p.speckle(0x846a46, 24); p.speckle(0x5a9a3c, 6);
+    for (let k = 0; k < 6; k++) {
+      const x = p.ri(13), y = p.ri(13), c = k % 3 ? 0x9a948a : 0x7a7268;
+      p.rect(x, y, 2 + p.ri(2), 2, c); p.px(x, y, 0xbab4a8); p.px(x + 1, y + 2, 0x55504a);
+    }
+    p.rect(p.ri(10), p.ri(14), 5, 1, 0x4e331c);
+  },
+
   // ---------- objects (transparent background) ----------
   [T.TREE]: (p) => {
     p.disc(8, 14.5, 6, 1.8, SHADOW);
@@ -173,6 +189,17 @@ const DRAW: Record<number, (p: Painter, f: number) => void> = {
     p.disc(7.5, 9.8, 5.4, 3.8, 0x8d8d8d);
     p.disc(6, 8.2, 2.2, 1.2, 0xb0b0b0);
     p.px(10, 11, 0x5a5a5a); p.px(11, 12, 0x5a5a5a);
+  },
+  [T.BEAM]: (p) => { // charred timber wall: broken posts and a fallen beam
+    p.disc(8, 14.5, 7, 1.6, SHADOW);
+    for (const [x, top] of [[1, 2], [7, 6], [12, 3]] as const) {
+      p.rect(x, top, 3, 15 - top, 0x4a3524);
+      p.rect(x, top, 1, 15 - top, 0x6b4a30); p.rect(x + 2, top, 1, 15 - top, 0x2a1d14);
+      p.px(x + 1, top, 0x1a1210); p.px(x, top + 1, 0x1a1210); // charred tips
+    }
+    p.rect(0, 9, 16, 2, 0x5a3e28); p.rect(0, 9, 16, 1, 0x7a5636); p.px(6, 10, 0x1a1210); p.px(11, 9, 0x1a1210);
+    p.rect(3, 12, 4, 2, 0xd8c8a8); p.px(4, 12, 0xeee0c4); // a scrap of plaster
+    p.speckle(0x5a9a3c, 4, 0, 13, 16, 3);
   },
   [T.PALISADE]: (p) => {
     for (const x of [0, 4, 8, 12]) {
