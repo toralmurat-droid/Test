@@ -1,6 +1,7 @@
 import Phaser from "phaser";
 import { GEAR, itemText, GEAR_IDS, GEAR_SLOTS, gearName, gearStats, gearSpeedMult, GearSlot, BAG_SIZE, SLOT_NAMES, TIER_NAMES } from "../../shared/gear";
 import { STAT_NAMES, StatKind } from "../../shared/powers";
+import { ART_K, CHAR_FRAME } from "./artAssets";
 
 /**
  * Equipment on the client: overlay sprites that follow each hero frame for frame, and the equipment screen (G).
@@ -13,7 +14,7 @@ export const TIER_COLORS = ["", "#e0e0e0", "#4cc9f0", "#c77dff"];
 export function preloadGear(scene: Phaser.Scene) {
   scene.load.atlas("gear_icons", `${BASE}/icons.png`, `${BASE}/icons.json`);
   for (const h of GEAR_HEROES) for (const id of GEAR_IDS) {
-    scene.load.spritesheet(gearKey(h, id), `${BASE}/${h}_${id}.png`, { frameWidth: 32, frameHeight: 32 });
+    scene.load.spritesheet(gearKey(h, id), `${BASE}/${h}_${id}.png`, { frameWidth: CHAR_FRAME, frameHeight: CHAR_FRAME });
   }
 }
 
@@ -67,7 +68,7 @@ export function iconCanvas(scene: Phaser.Scene, id: string, size = 32): HTMLCanv
   c.width = c.height = size;
   const ctx = c.getContext("2d")!;
   ctx.imageSmoothingEnabled = false;
-  drawFrame(scene, ctx, "gear_icons", id, 0, 0, size / 16);
+  drawFrame(scene, ctx, "gear_icons", id, 0, 0, size / (16 * ART_K));
   return c;
 }
 
@@ -113,8 +114,8 @@ export class GearMenu {
     const ctx = pv.getContext("2d")!;
     ctx.imageSmoothingEnabled = false;
     ctx.clearRect(0, 0, pv.width, pv.height);
-    drawFrame(this.scene, ctx, cls, 0, 0, 0, pv.width / 32);
-    for (const slot of LAYER_ORDER) if (state[slot]) drawFrame(this.scene, ctx, gearKey(cls, state[slot]), 0, 0, 0, pv.width / 32);
+    drawFrame(this.scene, ctx, cls, 0, 0, 0, pv.width / CHAR_FRAME);
+    for (const slot of LAYER_ORDER) if (state[slot]) drawFrame(this.scene, ctx, gearKey(cls, state[slot]), 0, 0, 0, pv.width / CHAR_FRAME);
 
     // Slots
     const slots = document.getElementById("gearslots")!;

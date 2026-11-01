@@ -1,5 +1,6 @@
 import { mkdirSync, writeFileSync } from "node:fs";
-import { Canvas, shade } from "./canvas";
+import { Canvas, HiCanvas, shade } from "./canvas";
+import { K } from "./characters";
 
 const OUT_C = 0x1a1420;
 const WOOD = 0x9c6b3e, WOOD_D = 0x6e4526, WOOD_L = 0xc28a54, IRON = 0x6b7280, STONE = 0x9aa1a8, STONE_D = 0x6b7178;
@@ -261,19 +262,20 @@ const items: Obj[] = [
 ];
 
 function render(o: Obj, f: number) {
-  const c = new Canvas(o.w, o.h);
+  const c = new HiCanvas(o.w, o.h, K);
   o.draw(c, f);
   c.outline(OUT_C);
   if (o.shadow !== false && o.kind === "prop") {
-    let maxY = 0, minX = o.w, maxX = 0;
-    for (let y = 0; y < o.h; y++) for (let x = 0; x < o.w; x++) if (c.alpha(x, y)) { maxY = y; minX = Math.min(minX, x); maxX = Math.max(maxX, x); }
+    let maxY = 0, minX = c.w, maxX = 0;
+    for (let y = 0; y < c.h; y++) for (let x = 0; x < c.w; x++) if (c.alpha(x, y)) { maxY = y; minX = Math.min(minX, x); maxX = Math.max(maxX, x); }
+    maxY = Math.floor(maxY / K); minX = Math.floor(minX / K); maxX = Math.floor(maxX / K);
     c.under((s) => s.ellipse((minX + maxX) / 2, Math.min(o.h - 1.5, maxY), (maxX - minX) / 2, 1.3, 0, 60));
   }
   return c;
 }
 
 /** Shelf-pack frames into one atlas image + Phaser JSON-hash. */
-function pack(list: Obj[], file: string, dir: string, width = 256) {
+function pack(list: Obj[], file: string, dir: string, width = 256 * K) {
   const frames: { key: string; img: Canvas; pivotY: number }[] = [];
   const anims: Record<string, { frames: string[]; fps: number; loop: boolean }> = {};
   for (const o of list) {
@@ -307,5 +309,5 @@ function pack(list: Obj[], file: string, dir: string, width = 256) {
 export function buildObjects(dir: string) {
   mkdirSync(dir, { recursive: true });
   pack(props, "props", dir);
-  pack(items, "items", dir, 128);
+  pack(items, "items", dir, 128 * K);
 }

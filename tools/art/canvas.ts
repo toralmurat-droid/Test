@@ -26,6 +26,10 @@ export class Canvas {
     d[i + 2] = d[i + 2] * (1 - t) + (c & 255) * t;
     d[i + 3] = Math.max(d[i + 3], a);
   }
+  /** Native-resolution pixel (same as px on a plain canvas; one fine pixel on a HiCanvas). */
+  pxN(x: number, y: number, c: number, a = 255) { Canvas.prototype.px.call(this, x, y, c, a); }
+  /** Logical scale: drawing coordinates are multiplied by k (1 on a plain canvas). */
+  get k() { return 1; }
   clear(x: number, y: number) { if (this.inside(x, y)) this.data.fill(0, (y * this.w + x) * 4, (y * this.w + x) * 4 + 4); }
   rect(x: number, y: number, w: number, h: number, c: number, a = 255) {
     for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) this.px(x + i, y + j, c, a);
@@ -88,6 +92,7 @@ export class Canvas {
     }
     for (const [x, y, col] of marks) this.px(x, y, shade(col, f));
   }
+  dot(x: number, y: number, c: number, a = 255) { this.px(x, y, c, a); }
   mirror() {
     const o = new Canvas(this.w, this.h);
     o.blit(this, 0, 0, (x, y) => [this.w - 1 - x, y]);
@@ -138,6 +143,104 @@ export class Canvas {
       o.data.set(this.data.subarray(si, si + 4), (y * o.w + x) * 4);
     }
     return o;
+  }
+}
+
+/** Same logical 32px drawing API, rendered k times finer: thin outlines, finer bevels, smoother curves. */
+export class HiCanvas extends Canvas {
+  nat = false;
+  private _k: number;
+  constructor(public lw: number, public lh: number, k: number) { super(lw * k, lh * k); this._k = k; }
+  get k() { return this._k; }
+  private n(f: () => void) { const o = this.nat; this.nat = true; f(); this.nat = o; }
+  px(x: number, y: number, c: number, a = 255) {
+    if (this.nat) return super.px(x, y, c, a);
+    x = Math.round(x); y = Math.round(y);
+    this.n(() => { for (let j = 0; j < this.k; j++) for (let i = 0; i < this.k; i++) super.px(x * this.k + i, y * this.k + j, c, a); });
+  }
+  clear(x: number, y: number) { for (let j = 0; j < this.k; j++) for (let i = 0; i < this.k; i++) super.clear(x * this.k + i, y * this.k + j); }
+  private nrect(x: number, y: number, w: number, h: number, c: number, a = 255) { this.n(() => { for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) super.px(x + i, y + j, c, a); }); }
+  box(x: number, y: number, w: number, h: number, c: number, opts: { top?: boolean } = {}) {
+    const k = this.k, X = Math.round(x) * k, Y = Math.round(y) * k, W = w * k, H = h * k;
+    this.nrect(X, Y, W, H, c);
+    // soft two-step shading: 1 native px edge plus a faint inner band
+    if (h > 1) { this.nrect(X, Y + H - 1, W, 1, shade(c, 0.7)); this.nrect(X, Y + H - 2, W, 1, shade(c, 0.86)); }
+    if (w > 2) {
+      this.nrect(X + W - 1, Y, 1, H, shade(c, 0.7)); this.nrect(X + W - 2, Y, 1, H - 1, shade(c, 0.86));
+      this.nrect(X, Y, 1, H - 1, shade(c, 1.22)); this.nrect(X + 1, Y + 1, 1, H - 3, shade(c, 1.08));
+    }
+    if (opts.top && w > 2) this.nrect(X + 1, Y, W - 2, 1, shade(c, 1.22));
+  }
+  line(x0: number, y0: number, x1: number, y1: number, c: number, a = 255) {
+    const k = this.k, o = (k - 1) / 2;
+    let X0 = Math.round(x0 * k + o), Y0 = Math.round(y0 * k + o);
+    const X1 = Math.round(x1 * k + o), Y1 = Math.round(y1 * k + o);
+    const dx = Math.abs(X1 - X0), dy = -Math.abs(Y1 - Y0), sx = X0 < X1 ? 1 : -1, sy = Y0 < Y1 ? 1 : -1;
+    let err = dx + dy;
+    this.n(() => {
+      for (;;) {
+        for (let j = 0; j < k; j++) for (let i = 0; i < k; i++) if (i + j < k + (k > 2 ? 1 : 0)) super.px(X0 + i - (k >> 1) + 1, Y0 + j - (k >> 1) + 1, c, a);
+        if (X0 === X1 && Y0 === Y1) break;
+        const e2 = 2 * err;
+        if (e2 >= dy) { err += dy; X0 += sx; }
+        if (e2 <= dx) { err += dx; Y0 += sy; }
+      }
+    });
+  }
+  ellipse(cx: number, cy: number, rx: number, ry: number, c: number, a = 255) {
+    const k = this.k, CX = cx * k + (k - 1) / 2, CY = cy * k + (k - 1) / 2, RX = (rx + 0.5) * k - 0.5, RY = (ry + 0.5) * k - 0.5;
+    this.n(() => {
+      for (let y = Math.floor(CY - RY); y <= Math.ceil(CY + RY); y++)
+        for (let x = Math.floor(CX - RX); x <= Math.ceil(CX + RX); x++) {
+          const nx = (x - CX) / (RX + 0.5), ny = (y - CY) / (RY + 0.5);
+          if (nx * nx + ny * ny <= 1) super.px(x, y, c, a);
+        }
+    });
+  }
+  /** Offsets are logical (scaled by k); a transform works on native pixel coordinates. */
+  blit(src: Canvas, dx: number, dy: number, transform?: (x: number, y: number) => [number, number]) {
+    if (this.nat) return super.blit(src, dx, dy, transform);
+    this.n(() => super.blit(src, Math.round(dx * this.k), Math.round(dy * this.k), transform));
+  }
+  /** A single fine pixel at a logical (fractional) position: thin effects such as arcs and sparks. */
+  dot(x: number, y: number, c: number, a = 255) { this.pxN(Math.floor(x * this.k + 0.5 * (this.k - 1) + 0.5), Math.floor(y * this.k + 0.5 * (this.k - 1) + 0.5), c, a); }
+  /**
+   * Scale2x-style rounding for k=2: every logical cell still drawn as a flat 2x2 block gets its
+   * staircase corners filled from matching neighbours, so blocky diagonals and silhouettes become smooth.
+   */
+  smooth() {
+    if (this.k !== 2) return;
+    const W = this.lw, H = this.lh, src = this.data.slice();
+    const key = (x: number, y: number) => {
+      if (x < 0 || y < 0 || x >= W || y >= H) return 0;
+      const i = (y * 2 * this.w + x * 2) * 4, j = i + 4, r = i + this.w * 4, q = r + 4;
+      for (let o = 0; o < 4; o++) if (src[i + o] !== src[j + o] || src[i + o] !== src[r + o] || src[i + o] !== src[q + o]) return -1;
+      return src[i + 3] === 0 ? 0 : ((src[i] << 16) | (src[i + 1] << 8) | src[i + 2]) * 256 + src[i + 3];
+    };
+    const put = (x: number, y: number, kk: number, ox: number, oy: number) => {
+      const i = ((y * 2 + oy) * this.w + x * 2 + ox) * 4;
+      if (kk === 0) { this.data.fill(0, i, i + 4); return; }
+      const c = Math.floor(kk / 256);
+      this.data[i] = (c >> 16) & 255; this.data[i + 1] = (c >> 8) & 255; this.data[i + 2] = c & 255; this.data[i + 3] = kk % 256;
+    };
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const E = key(x, y);
+      if (E < 0) continue;
+      const A = key(x, y - 1), B = key(x + 1, y), C = key(x - 1, y), D = key(x, y + 1);
+      if (A < 0 || B < 0 || C < 0 || D < 0 || A === D || B === C) continue;
+      if (C === A && C !== E) put(x, y, A, 0, 0);
+      if (A === B && A !== E) put(x, y, B, 1, 0);
+      if (C === D && C !== E) put(x, y, C, 0, 1);
+      if (D === B && D !== E) put(x, y, B, 1, 1);
+    }
+  }
+  selout(b: number) { this.n(() => super.selout(b)); }
+  rim(f?: number) { this.n(() => super.rim(f)); }
+  outline(c: number) { this.n(() => super.outline(c)); }
+  under(fn: (c: Canvas) => void) {
+    const tmp = new HiCanvas(this.lw, this.lh, this.k);
+    fn(tmp);
+    for (let i = 0; i < this.data.length; i += 4) if (this.data[i + 3] === 0 && tmp.data[i + 3] > 0) this.data.set(tmp.data.subarray(i, i + 4), i);
   }
 }
 

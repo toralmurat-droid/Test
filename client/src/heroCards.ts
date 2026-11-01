@@ -8,7 +8,7 @@ interface AnimDef { frames: number[]; fps: number; loop: boolean }
 interface Meta { columns: number; frameWidth: number; animations: Record<string, AnimDef> }
 
 const BASE = "assets/characters";
-const SCALE = 2;
+const SCALE = 2; // card size in 32px design units; the frame is meta.frameWidth px
 const SHOWCASE = ["idle3", "swing1", "swing2", "attack3", "skill", "cheer"];
 
 export function mountHeroCards(host: HTMLElement, kinds: ClassKind[], selected: ClassKind, onPick: (k: ClassKind) => void) {
@@ -84,7 +84,7 @@ export function mountHeroCards(host: HTMLElement, kinds: ClassKind[], selected: 
       const f = a.frames[i], fw = meta.frameWidth, cols = meta.columns;
       c.ctx.imageSmoothingEnabled = false;
       c.ctx.clearRect(0, 0, c.cv.width, c.cv.height);
-      c.ctx.drawImage(c.img, (f % cols) * fw, Math.floor(f / cols) * fw, fw, fw, 0, 0, fw * SCALE, fw * SCALE);
+      c.ctx.drawImage(c.img, (f % cols) * fw, Math.floor(f / cols) * fw, fw, fw, 0, 0, 32 * SCALE, 32 * SCALE);
     }
   }
   raf = requestAnimationFrame(tick);

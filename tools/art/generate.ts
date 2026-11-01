@@ -1,5 +1,5 @@
 import { mkdirSync, writeFileSync } from "node:fs";
-import { ANIMS, COLS, DIRS, FH, FW, HEROES, NPCS, buildSheet } from "./characters";
+import { ANIMS, COLS, DIRS, FH, FW, HEROES, K, LH, NPCS, buildSheet } from "./characters";
 import { buildObjects } from "./objects";
 import { buildGear } from "./gear";
 
@@ -22,7 +22,9 @@ writeFileSync(`${OUT}/characters/characters.json`, JSON.stringify({
   npcs: NPCS.map((h) => h.name),
   image: "{name}.png",
   frameWidth: FW, frameHeight: FH, columns: COLS,
-  origin: { x: 0.5, y: 29 / FH },
+  origin: { x: 0.5, y: 29 / LH },
+  /** Fine pixels per logical pixel: display frames at 1/artScale of their size to keep the old world size. */
+  artScale: K,
   directions: DIRS, flipXForLeft: "right",
   animations,
 }, null, 1));

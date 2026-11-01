@@ -15,13 +15,14 @@
   "witch"
  ],
  "image": "{name}.png",
- "frameWidth": 32,
- "frameHeight": 32,
+ "frameWidth": 64,
+ "frameHeight": 64,
  "columns": 6,
  "origin": {
   "x": 0.5,
   "y": 0.90625
  },
+ "artScale": 2,
  "directions": [
   "down",
   "up",

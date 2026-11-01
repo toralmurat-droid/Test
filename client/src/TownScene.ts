@@ -16,7 +16,7 @@ import { DayDial } from "./daydial";
 import { SignPanel } from "./signpanel";
 import { NpcLayer } from "./npcs";
 import { pixelText } from "./pixeltext";
-import { CHARACTERS, CHAR_ORIGIN, CharacterName, createArtAnims, playCharAnim, preloadArt } from "./artAssets";
+import { ART_K, CHARACTERS, CHAR_ORIGIN, CharacterName, createArtAnims, playCharAnim, preloadArt } from "./artAssets";
 import { Ambient } from "./ambient";
 import { Details } from "./details";
 import { GearLayer, GearMenu, preloadGear, TIER_COLORS } from "./gear";
@@ -44,8 +44,9 @@ interface Entity {
 }
 
 const FRAME_BASE: Record<string, number> = { down: 0, up: 2, right: 4, left: 4 };
-const HERO_SCALE = 0.75;
-const HERO_TOP = 24 * HERO_SCALE; // drawn hero height above the feet in the 32x32 frames
+/** On-screen hero size: 0.75 of a 32px design frame (frames are ART_K times finer). */
+const HERO_SCALE = 0.75 / ART_K;
+const HERO_TOP = 24 * 0.75; // drawn hero height above the feet (24 of the 32 design px)
 
 /** Random line under the "zone cleared" banner. */
 const CONGRATS = [
@@ -240,7 +241,7 @@ export class TownScene extends Phaser.Scene {
     items.onAdd((it: any, id: string) => {
       const gear = it.kind === "gear" && GEAR[it.gear];
       const img = gear
-        ? this.add.image(it.x, it.y, "gear_icons", it.gear).setScale(0.6).setDepth(it.y - 8)
+        ? this.add.image(it.x, it.y, "gear_icons", it.gear).setScale(0.6 / ART_K).setDepth(it.y - 8)
         : this.add.image(it.x, it.y, itemTexture(this, it.kind)).setDepth(it.y - 8);
       if (gear && gear.tier > 1) {
         // Rare / epic drops sparkle
