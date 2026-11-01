@@ -21,7 +21,7 @@ import { moveStep } from "../shared/movement";
 import { heroPoise, MOB_COMBAT, POISE, poiseLevelMult, poiseSpeed, RAGE_ATTACK_SPEED } from "../shared/combat";
 import { canLearn, talentMult, talentBonus, talentReduce, TREES } from "../shared/talents";
 import {
-  BAG_SIZE, Equipped, GEAR, GEAR_SLOTS, GearSlot, gearBlock, gearName, gearReachMult, gearSpeedMult, gearStats, isGearId, rollGear,
+  BAG_SIZE, Equipped, GEAR, GEAR_SLOTS, GearSlot, gearBlock, gearName, gearReachMult, gearSpeedMult, gearStats, isGearId, potionChance, rollGear,
 } from "../shared/gear";
 
 export class Player extends Schema {
@@ -533,12 +533,13 @@ export class TownRoom extends Room<TownState> {
     this.state.items.set(`i${++this.itemSeq}`, it);
   }
 
-  private dropLoot(kind: MobKind, x: number, y: number, goldMult = 1) {
+  /** Loot scales with the monster's level: more gold, more potions, more and better gear (shared/gear.ts LOOT_LEVEL). */
+  private dropLoot(kind: MobKind, x: number, y: number, goldMult = 1, level = 1) {
     const def = LOOT[kind];
     const gold = Math.round((def.gold[0] + Math.floor(Math.random() * (def.gold[1] - def.gold[0] + 1))) * goldMult);
     if (gold > 0) this.dropItem("gold", x, y, gold);
-    if (Math.random() < def.potionChance) this.dropItem("potion", x, y, 1);
-    const gear = rollGear(kind);
+    if (Math.random() < potionChance(def.potionChance, level)) this.dropItem("potion", x, y, 1);
+    const gear = rollGear(kind, level);
     if (gear) this.dropItem("gear", x, y, 1, gear);
   }
 
@@ -746,7 +747,7 @@ export class TownRoom extends Room<TownState> {
     if (m.hp > 0) return;
     m.dead = true;
     this.grantXp(attackerId, Math.round(def.xp * mobScale(m.level, "xp")), m);
-    this.dropLoot(m.kind, m.x, m.y, mobScale(m.level, "gold"));
+    this.dropLoot(m.kind, m.x, m.y, mobScale(m.level, "gold"), m.level);
     if (m.zone < 0) { this.clock.setTimeout(() => this.state.mobs.delete(targetId), 500); return; } // bloblings don't respawn
     const zone = this.state.zones.get(SPAWN_ZONES[m.zone].name);
     if (zone) {
