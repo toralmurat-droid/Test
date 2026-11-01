@@ -658,6 +658,11 @@ const guard = human({
 export const HEROES: Hero[] = [ninja, wizard, knight, archer, barbarian];
 export const NPCS: Hero[] = [blacksmith, merchant, villager, guard];
 
+export type GearPart = "legs" | "torso" | "head" | "weapon";
+/** Set by tools/art/gear.ts while it renders gear overlays: recolours `main` where the part (`mask`) is visible. */
+export let gearHook: ((part: GearPart, main: Canvas, mask: Canvas, p: Pose, hero: string) => void) | null = null;
+export function setGearHook(fn: typeof gearHook) { gearHook = fn; }
+
 /** Render one frame into a fresh 32x32 canvas. */
 export function renderFrame(hero: Hero, p: Pose, withShadow = true, flash = 0): Canvas {
   const c = new Canvas(FW, FH);
@@ -665,9 +670,9 @@ export function renderFrame(hero: Hero, p: Pose, withShadow = true, flash = 0): 
   const ly = p.dir === "down" ? -Math.min(p.lean, 1) : p.dir === "up" ? Math.min(p.lean, 1) : 0;
   const d: D = {
     c, p, ux: lean, uy: p.bob + p.crouch + ly, lx: lean,
-    U: (x, y, w, h, col, top) => c.box(x + d.ux, y + d.uy, w, h, col, { top }),
-    Ur: (x, y, w, h, col) => c.rect(x + d.ux, y + d.uy, w, h, col),
-    Up: (x, y, col) => c.px(x + d.ux, y + d.uy, col),
+    U: (x, y, w, h, col, top) => d.c.box(x + d.ux, y + d.uy, w, h, col, { top }),
+    Ur: (x, y, w, h, col) => d.c.rect(x + d.ux, y + d.uy, w, h, col),
+    Up: (x, y, col) => d.c.px(x + d.ux, y + d.uy, col),
   };
   if (p.run) { if (p.dir === "right") d.ux += 1; }
   const hp = handPos({ ...p, lean: 0 }, hero);
@@ -681,28 +686,38 @@ export function renderFrame(hero: Hero, p: Pose, withShadow = true, flash = 0): 
     const [sx, sy] = [FACE[p.dir][0] * push, FACE[p.dir][1] * push];
     d.ux += sx; d.uy += sy; hero.shield(d); d.ux -= sx; d.uy -= sy;
   };
-  const head = () => { const hd = p.headDx ?? 0; d.ux += hd; hero.head(d); d.ux -= hd; };
+  // Each body part goes through `part` so the gear generator (tools/art/gear.ts) can recolour it
+  const part = (slot: GearPart, fn: () => void) => {
+    fn();
+    if (!gearHook) return;
+    const main = d.c, mask = new Canvas(FW, FH);
+    d.c = mask; fn(); d.c = main;
+    gearHook(slot, main, mask, p, hero.name);
+  };
+  const head = () => part("head", () => { const hd = p.headDx ?? 0; d.ux += hd; hero.head(d); d.ux -= hd; });
+  const legs = () => part("legs", () => hero.legs(d, legTop));
+  const torso = () => part("torso", () => hero.torso(d));
   const farArm = () => {
     if (!p.farHand) { hero.arm(d, "far", hand); shieldAt(); return; }
     const sh: Record<Dir, [number, number]> = { down: [21, 17], up: [9, 17], right: [17, 17] };
     armTo(d, sh[p.dir][0], sh[p.dir][1], p.farHand[0] + d.ux, p.farHand[1] + d.uy, hero.cols.sleeve, hero.cols.hand);
   };
-  const weapon = () => { if (!p.noWeapon) hero.weapon(d, hand, ang); };
+  const weapon = () => { if (!p.noWeapon) part("weapon", () => hero.weapon(d, hand, ang)); };
   const weaponBehind = p.dir === "up" ? p.attack < 1 || p.attack === 3 : hero.name === "wizard" && p.dir === "right" && p.attack < 0 ? false : false;
 
   if (p.dir === "up") {
     if (weaponBehind) weapon();
-    hero.legs(d, legTop); hero.torso(d);
+    legs(); torso();
     farArm(); hero.arm(d, "near", hand);
     head();
     if (!weaponBehind) weapon();
   } else if (p.dir === "down") {
-    hero.legs(d, legTop); hero.torso(d); head();
+    legs(); torso(); head();
     farArm();
     weapon(); hero.arm(d, "near", hand);
   } else {
     if (!p.farHand) hero.arm(d, "far", hand);
-    hero.legs(d, legTop); hero.torso(d); if (!p.farHand) shieldAt(); head();
+    legs(); torso(); if (!p.farHand) shieldAt(); head();
     if (p.farHand) farArm();
     weapon(); hero.arm(d, "near", hand);
   }
