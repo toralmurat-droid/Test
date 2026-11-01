@@ -666,8 +666,12 @@ export let gearHook: ((part: GearPart, main: Canvas, mask: Canvas, p: Pose, hero
 export function setGearHook(fn: typeof gearHook) { gearHook = fn; }
 
 /** Render one frame into a fresh 32x32 canvas. */
+let canvasFactory = () => new Canvas(FW, FH);
+/** Swap the canvas renderFrame draws into (used to try higher-resolution rendering). */
+export function setCanvasFactory(f: () => Canvas) { canvasFactory = f; }
+
 export function renderFrame(hero: Hero, p: Pose, withShadow = true, flash = 0): Canvas {
-  const c = new Canvas(FW, FH);
+  const c = canvasFactory();
   const lean = p.dir === "right" ? -p.lean : 0; // knock back opposite facing
   const ly = p.dir === "down" ? -Math.min(p.lean, 1) : p.dir === "up" ? Math.min(p.lean, 1) : 0;
   const d: D = {
