@@ -22,6 +22,7 @@ import { TalentMenu } from "./talents";
 interface Entity {
   sprite: Phaser.GameObjects.Sprite;
   label?: Phaser.GameObjects.Text;
+  lvlColor?: string; // monsters: current colour of the "Lv N" label
   mob: boolean;
   hero?: CharacterName; // set when drawn with the animated 32x32 sheets
   top: number; // px from the feet to the top of the head, for the name label and chat bubble
@@ -334,7 +335,10 @@ export class TownScene extends Phaser.Scene {
   private addEntity(id: string, p: any, mob = false) {
     if (mob) {
       const sprite = this.add.sprite(p.x, p.y, mobTexture(this, p.kind), 0).setOrigin(0.5, MOB_LOOK[p.kind]?.oy ?? 0.85);
-      this.entities.set(id, { sprite, bar: this.add.graphics(), tx: p.x, ty: p.y, state: p, mob, top: MOB_LOOK[p.kind]?.top ?? 14 });
+      const label = this.add.text(p.x, p.y, `Lv${p.level ?? 1}`, {
+        fontFamily: "monospace", fontSize: "14px", color: "#ffffff", stroke: "#000", strokeThickness: 3,
+      }).setOrigin(0.5, 1).setScale(0.25).setResolution(2);
+      this.entities.set(id, { sprite, label, bar: this.add.graphics(), tx: p.x, ty: p.y, state: p, mob, top: MOB_LOOK[p.kind]?.top ?? 14 });
       return;
     }
     // Classes with a generated sheet use it; anything else falls back to the procedural persona
@@ -654,7 +658,8 @@ export class TownScene extends Phaser.Scene {
     this.areaName = name;
     document.getElementById("location")!.textContent = name;
     const el = document.getElementById("area")!;
-    el.textContent = name;
+    const z = SPAWN_ZONES.find((sz) => sz.name === name);
+    el.textContent = z ? `${name} · Lv ${z.levels[0]}-${z.levels[1]}` : name;
     el.classList.add("show");
     clearTimeout(this.areaTimer);
     this.areaTimer = window.setTimeout(() => el.classList.remove("show"), 2500);
@@ -732,6 +737,15 @@ export class TownScene extends Phaser.Scene {
 
       const x = Math.round(e.sprite.x), y = Math.round(e.sprite.y);
       e.label?.setPosition(x, y - e.top - (p.hat ? 4 : 2)).setDepth(e.sprite.y + 1);
+      if (e.mob && e.label) {
+        // Level tag coloured by how tough it is for me: grey easy, white even, orange tougher, red dangerous
+        const diff = (p.level ?? 1) - ((this.room.state as any).players?.get(this.me)?.level ?? 1);
+        const col = diff >= 3 ? "#ff5252" : diff >= 1 ? "#ffb74d" : diff >= -2 ? "#ffffff" : "#9e9e9e";
+        const txt = `Lv${p.level ?? 1}`;
+        if (e.label.text !== txt) e.label.setText(txt);
+        if (e.lvlColor !== col) { e.label.setColor(col); e.lvlColor = col; }
+        e.label.setVisible(!p.dead);
+      }
       e.bubble?.setPosition(x, y - e.top - 7);
       e.bar.clear().setDepth(e.sprite.y + 1);
       const maxHp = p.maxHp;
@@ -786,7 +800,7 @@ export class TownScene extends Phaser.Scene {
       const zdef = SPAWN_ZONES.find((z) => tx >= z.x && ty >= z.y && tx < z.x + z.w && ty < z.y + z.h);
       const zone = zdef && (this.room.state as any).zones?.get(zdef.name);
       document.getElementById("zone")!.textContent = zone
-        ? `⚔ ${zone.name}: ${zone.alive}/${zone.cap} monsters`
+        ? `⚔ ${zone.name} (Lv ${zdef!.levels[0]}-${zdef!.levels[1]}): ${zone.alive}/${zone.cap} monsters`
         : "";
       const cls = mine.cls as ClassKind;
       const cdm = cooldownMult(cls, { sta: mine.sta, str: mine.str, mag: mine.mag }, mine.talents) * talentReduce(cls, mine.talents, "cdr");
