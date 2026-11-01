@@ -11,6 +11,7 @@ import {
 import { displayGrid } from "./tileset";
 import { heroTexture, itemTexture, makeTileset, MOB_LOOK, mobTexture } from "./textures";
 import { Minimap } from "./minimap";
+import { SignPanel } from "./signpanel";
 import { CHARACTERS, CHAR_ORIGIN, CharacterName, createArtAnims, playCharAnim, preloadArt } from "./artAssets";
 import { Ambient } from "./ambient";
 import { Details } from "./details";
@@ -62,6 +63,7 @@ export class TownScene extends Phaser.Scene {
   private seq = 0;
   private chatEl = document.getElementById("chat") as HTMLInputElement;
   private minimap?: Minimap;
+  private signPanel = new SignPanel();
   private ambient?: Ambient;
   private details?: Details;
   private areaName = "";
@@ -778,6 +780,7 @@ export class TownScene extends Phaser.Scene {
     const others = [...this.entities].filter(([id, e]) => id !== this.me && !e.mob).map(([, e]) => e.sprite);
     this.minimap?.draw(now, meEnt?.sprite, others);
     if (meEnt) this.showArea(areaAt(meEnt.sprite.x, meEnt.sprite.y));
+    this.signPanel.update(meEnt?.sprite);
 
     const mine = meEnt?.state;
     if (mine) {

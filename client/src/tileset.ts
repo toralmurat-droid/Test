@@ -496,6 +496,19 @@ const DRAW: Record<number, (p: Painter, f: number, v: number) => void> = {
   },
   [T.RUIN]: (p, _f, m) => ruinWall(p, m),
   [T.BONFIRE]: (p) => { p.speckle(0x3a332c, 14); p.speckle(0xc0502a, 3); }, // ash; the fire itself is a sprite (ambient.ts)
+  [T.SIGNPOST]: (p) => { // a tall post with three arrow boards pointing different ways
+    p.disc(8, 15, 4.5, 1.1, SHADOW);
+    p.rect(7, 1, 2, 14, 0x6b4426); p.rect(7, 1, 1, 14, 0x8b5e34); p.px(7, 0, 0x8b5e34); p.px(8, 0, 0x6b4426);
+    const board = (y: number, x0: number, x1: number, right: boolean) => {
+      p.rect(x0, y, x1 - x0, 3, 0xb07a44); p.rect(x0, y, x1 - x0, 1, 0xd09a5c); p.rect(x0, y + 2, x1 - x0, 1, 0x7a522a);
+      if (right) { p.px(x1, y + 1, 0xb07a44); p.px(x1, y, 0x7a522a); p.px(x1, y + 2, 0x7a522a); }
+      else { p.px(x0 - 1, y + 1, 0xb07a44); p.px(x0 - 1, y, 0x7a522a); p.px(x0 - 1, y + 2, 0x7a522a); }
+      for (let x = x0 + 1; x < x1 - 1; x += 2) p.px(x, y + 1, 0x5a3a1e); // carved letters
+    };
+    board(2, 6, 14, true);
+    board(6, 2, 10, false);
+    board(10, 7, 13, true);
+  },
   [T.SIGN]: (p) => {
     p.disc(8, 15, 4, 1, SHADOW);
     p.rect(7, 8, 2, 7, 0x6b4426);
