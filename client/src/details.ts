@@ -84,6 +84,108 @@ class ChunkLayer {
   }
 }
 
+/** Like ChunkLayer, but painted pixel by pixel into a canvas texture (fast for dense, full-tile detail). */
+class PixelChunkLayer {
+  private live = new Map<number, { img: Phaser.GameObjects.Image; key: string }>();
+  constructor(private scene: Phaser.Scene, private depth: number, private paint: (d: Uint8ClampedArray, S: number, tx0: number, ty0: number, tx1: number, ty1: number) => void) {}
+  update(view: Phaser.Geom.Rectangle) {
+    const S = CHUNK * TILE, m = TILE * 4;
+    const cx0 = Math.max(0, Math.floor((view.x - m) / S)), cy0 = Math.max(0, Math.floor((view.y - m) / S));
+    const cx1 = Math.min(Math.ceil(MAP_W / CHUNK) - 1, Math.floor((view.right + m) / S)), cy1 = Math.min(Math.ceil(MAP_H / CHUNK) - 1, Math.floor((view.bottom + m) / S));
+    const want = new Set<number>();
+    for (let cy = cy0; cy <= cy1; cy++) for (let cx = cx0; cx <= cx1; cx++) {
+      const k = cy * 1000 + cx;
+      want.add(k);
+      if (this.live.has(k)) continue;
+      const key = `blend_${this.depth}_${k}`;
+      if (this.scene.textures.exists(key)) this.scene.textures.remove(key);
+      const tex = this.scene.textures.createCanvas(key, S, S)!;
+      const ctx = tex.getContext(), img = ctx.createImageData(S, S);
+      const tx0 = cx * CHUNK, ty0 = cy * CHUNK;
+      this.paint(img.data, S, tx0, ty0, Math.min(MAP_W, tx0 + CHUNK), Math.min(MAP_H, ty0 + CHUNK));
+      ctx.putImageData(img, 0, 0);
+      tex.refresh();
+      this.live.set(k, { img: this.scene.add.image(tx0 * TILE, ty0 * TILE, key).setOrigin(0, 0).setDepth(this.depth), key });
+    }
+    for (const [k, l] of this.live) if (!want.has(k)) { l.img.destroy(); this.scene.textures.remove(l.key); this.live.delete(k); }
+  }
+}
+
+const ROADY = new Set<number>([T.DIRT, T.COBBLE]);
+const GRASS_PAL = [0x5a9a3c, 0x5a9a3c, 0x5a9a3c, 0x4a8532, 0x6fb04a], DARK_PAL = [0x4f8c36, 0x4f8c36, 0x427a2c, 0x5f9f42];
+const DIRT_PAL = [0xa7814f, 0xa7814f, 0xa7814f, 0x957244, 0xbd9763, 0x8a6a3e];
+const smoothstep = (t: number) => t * t * (3 - 2 * t);
+
+/**
+ * Smooth transitions between ground types, painted per pixel over the tilemap:
+ *  - roads and the cobbled square get organic, rounded edges into the grass (diagonal roads become smooth bands),
+ *    with a darker rut on dirt and kerb stones on cobbles,
+ *  - cobbled streets break up into dirt roads: stones thin out and scatter as loose cobbles.
+ * Each pixel samples a field interpolated between tile centres (1 = road, 0 = grass), plus a little noise.
+ */
+function paintTransitions(d: Uint8ClampedArray, S: number, tx0: number, ty0: number, tx1: number, ty1: number) {
+  const set = (lx: number, ly: number, c: number) => { const o = (ly * S + lx) * 4; d[o] = c >> 16; d[o + 1] = (c >> 8) & 255; d[o + 2] = c & 255; d[o + 3] = 255; };
+  const pick = (pal: number[], wx: number, wy: number) => pal[Math.floor(hash(wx, wy, 7) * pal.length)];
+  const wobble = (wx: number, wy: number) => 0.09 * Math.sin(wx * 0.29 + wy * 0.13) + 0.06 * Math.sin(wy * 0.41 - wx * 0.17 + 1.3) + (hash(wx >> 1, wy >> 1, 9) - 0.5) * 0.08;
+  for (let ty = ty0; ty < ty1; ty++) for (let tx = tx0; tx < tx1; tx++) {
+    const t = gnd(tx, ty), road = ROADY.has(t), grassy = GRASSY.has(t);
+    if (!road && !grassy) continue;
+    let nRoad = false, nGrass = false, nDirt = false, nCobble = false;
+    for (let j = -1; j <= 1; j++) for (let i = -1; i <= 1; i++) {
+      const n = gnd(tx + i, ty + j);
+      if (ROADY.has(n)) nRoad = true; if (GRASSY.has(n)) nGrass = true; if (n === T.DIRT) nDirt = true; if (n === T.COBBLE) nCobble = true;
+    }
+    if (grassy && !nDirt) continue; // grass is only painted over by dirt
+    if (road && !nGrass && !(t === T.COBBLE && nDirt) && !(t === T.DIRT && nCobble)) continue;
+    const own = road ? 1 : 0;
+    // field values at the 4x4 surrounding tile centres (neutral tiles take this tile's value)
+    const R = (i: number, j: number) => { const n = gnd(i, j); return ROADY.has(n) ? 1 : GRASSY.has(n) ? 0 : own; };
+    const ownD = t === T.DIRT ? 1 : t === T.COBBLE ? 0 : 0.5;
+    const D = (i: number, j: number) => { const n = gnd(i, j); return n === T.DIRT ? 1 : n === T.COBBLE ? 0 : ownD; };
+    const dark = t === T.GRASS_DARK;
+    const field = (F: (i: number, j: number) => number, wx: number, wy: number) => {
+      const fx = (wx + 0.5) / TILE - 0.5, fy = (wy + 0.5) / TILE - 0.5, i0 = Math.floor(fx), j0 = Math.floor(fy);
+      const u = smoothstep(fx - i0), v = smoothstep(fy - j0);
+      const a = F(i0, j0), b = F(i0 + 1, j0), c = F(i0, j0 + 1), e = F(i0 + 1, j0 + 1);
+      return (a * (1 - u) + b * u) * (1 - v) + (c * (1 - u) + e * u) * v;
+    };
+    for (let py = 0; py < TILE; py++) for (let px = 0; px < TILE; px++) {
+      const wx = tx * TILE + px, wy = ty * TILE + py, lx = wx - tx0 * TILE, ly = wy - ty0 * TILE;
+      const f = field(R, wx, wy) + wobble(wx, wy);
+      if (grassy) {
+        if (f > 0.5) { // the dirt road spills smoothly into this grass tile
+          if (field(D, wx, wy) < 0.5) continue; // cobbles keep their own edge
+          set(lx, ly, f < 0.55 ? 0x8f6c3f : pick(DIRT_PAL, wx, wy));
+        } else if (f > 0.46 && hash(wx, wy, 11) < 0.6) set(lx, ly, dark ? 0x3a6e26 : 0x3f7a2a); // grass lip along the road
+        continue;
+      }
+      // road tile
+      if (f < 0.5) { // grass reclaims the edge and rounds the corners
+        set(lx, ly, f > 0.46 && hash(wx, wy, 11) < 0.6 ? 0x3f7a2a : f > 0.43 && hash(wx, wy, 12) < 0.25 ? 0x6fb04a : pick(dark ? DARK_PAL : GRASS_PAL, wx, wy));
+        continue;
+      }
+      if (f < 0.56) { // worn rut on dirt, kerb stones on cobbles
+        if (t === T.DIRT) { if (hash(wx, wy, 13) < 0.7) set(lx, ly, 0x8f6c3f); }
+        else set(lx, ly, ((wx + wy) >> 2) % 3 === 0 ? 0x5e5a52 : f < 0.53 ? 0x8a857a : 0xa9a497);
+        continue;
+      }
+      if (t === T.COBBLE && nDirt) { // cobbles thin out towards a dirt road
+        const dv = field(D, wx, wy) + wobble(wx + 50, wy + 30);
+        if (dv > 0.22) {
+          const keep = hash(Math.floor(wx / 6), Math.floor(wy / 8), 15) < (0.72 - dv) * 1.9; // whole stones survive here and there
+          if (!keep) set(lx, ly, pick(DIRT_PAL, wx, wy));
+        }
+      } else if (t === T.DIRT && nCobble) { // loose cobbles scattered on the dirt near the paving
+        const dv = field(D, wx, wy) + wobble(wx + 50, wy + 30);
+        const cx = Math.floor(wx / 6), cy = Math.floor(wy / 5), sx = wx - cx * 6, sy = wy - cy * 5;
+        if (dv < 0.88 && hash(cx, cy, 16) < (0.88 - dv) * 1.3 && sx >= 1 && sx <= 4 && sy >= 1 && sy <= 3 && !((sx === 1 || sx === 4) && (sy === 1 || sy === 3)))
+          set(lx, ly, sy === 1 ? 0xb3ada0 : sy === 3 ? 0x7f7a6f : sx === 4 ? 0x88837a : 0x9c978a);
+        else if (dv < 0.88 && hash(cx, cy, 16) < (0.88 - dv) * 1.3 && sy === 4 && sx >= 1 && sx <= 4) set(lx, ly, 0x7a5e38); // stone's shadow
+      }
+    }
+  }
+}
+
 /** A small generated texture. `px` paints in screen pixels: draw at `k` = 1 for full detail, or pass k to scale a design. */
 function texture(scene: Phaser.Scene, key: string, w: number, h: number, frames: number, draw: (px: (x: number, y: number, c: number, a?: number) => void, f: number) => void) {
   if (scene.textures.exists(key)) return;
@@ -180,11 +282,12 @@ export class Details {
   private pond: [number, number][] = [];
   private fireflies?: (dark: number) => void;
 
-  private layers: ChunkLayer[] = [];
+  private layers: { update(view: Phaser.Geom.Rectangle): void }[] = [];
 
   constructor(private scene: Phaser.Scene) {
     makeTextures(scene);
     for (let ty = 0; ty < MAP_H; ty++) for (let tx = 0; tx < MAP_W; tx++) if (GROUND[ty][tx] === T.WATER && inArea("Mirror Pond", tx, ty)) this.pond.push([tx, ty]);
+    this.layers.push(new PixelChunkLayer(scene, -1.75, paintTransitions));
     this.layers.push(new ChunkLayer(scene, -1.7, (g, x0, y0, x1, y1) => this.groundDecals(g, x0, y0, x1, y1)));
     this.layers.push(new ChunkLayer(scene, -1.59, (g, x0, y0, x1, y1) => this.roundCorners(g, x0, y0, x1, y1)));
     this.layers.push(new ChunkLayer(scene, -1.58, (g, x0, y0, x1, y1) => this.waterDecor(g, x0, y0, x1, y1)));
@@ -238,19 +341,7 @@ export class Details {
           px(lx, ly, c); px(lx + 1, ly, c); if (k % 2) px(lx + 1, ly + 1, 0x7a4a1e);
         }
       }
-      // Grass spilling over the edge of roads and the square: breaks up the tile grid
       if (t === T.DIRT || t === T.COBBLE || t === T.SAND) {
-        for (const [dx, dy] of [[0, -1], [0, 1], [-1, 0], [1, 0]]) {
-          if (!GRASSY.has(gnd(tx + dx, ty + dy))) continue;
-          for (let i = 0; i < TILE; i++) {
-            const n = hash(tx * TILE + i, ty, 40 + dx * 3 + dy), depth = Math.floor((0.6 + 0.4 * Math.sin((i + tx * 5) / 3)) * n * 6.5);
-            for (let d = 0; d < depth; d++) {
-              const x = dx === 0 ? X + i : dx < 0 ? X + d : X + TILE - 1 - d;
-              const y = dy === 0 ? Y + i : dy < 0 ? Y + d : Y + TILE - 1 - d;
-              px(x, y, d === depth - 1 ? 0x3f7a2a : d === depth - 2 && n > 0.7 ? 0x6fb04a : 0x5a9a3c);
-            }
-          }
-        }
         if (t === T.DIRT && hash(tx, ty, 50) < 0.35) { // small stones on roads
           const ox = X + 2 + Math.floor(hash(tx, ty, 51) * (TILE - 6)), oy = Y + 2 + Math.floor(hash(tx, ty, 52) * (TILE - 6));
           g.fillStyle(0x7a6448, 1).fillRect(ox, oy + 1, 3, 1); g.fillStyle(0x9a8a72, 1).fillRect(ox, oy, 3, 1); px(ox, oy, 0xb8a88e);
