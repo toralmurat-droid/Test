@@ -151,6 +151,10 @@ export class Ambient {
   private waterTiles: [number, number][] = [];
   private nextRipple = 0;
   private nextFlock = 4000;
+  private dark = 0;
+
+  /** 0 by day, 1 at night (fireflies glow brighter in the dark). */
+  setDarkness(d: number) { this.dark = d; }
 
   constructor(private scene: Phaser.Scene) {
     makeTextures(scene);
@@ -375,7 +379,7 @@ export class Ambient {
     for (const f of this.fireflies) {
       const k = t * f.sp + f.ph;
       f.s.setPosition(f.ax + Math.sin(k) * f.r, f.ay + Math.cos(k * 1.3) * f.r * 0.7);
-      f.s.setAlpha(Math.max(0, Math.sin(k * 3.1)) * 0.9);
+      f.s.setAlpha(Math.max(0, Math.sin(k * 3.1)) * (0.25 + this.dark * 0.75)).setDepth(this.dark > 0.3 ? 27600 : 21000);
     }
     for (const c of this.clouds) {
       c.x += WIND_X * c.getData("v") * (dtMs / 1000);

@@ -7,6 +7,7 @@ import { moveStep } from "../../shared/movement";
 import { heroTexture, makeTileset, mobTexture } from "./textures";
 import { Minimap } from "./minimap";
 import { Ambient } from "./ambient";
+import { Details } from "./details";
 
 interface Entity {
   sprite: Phaser.GameObjects.Sprite;
@@ -31,6 +32,7 @@ export class TownScene extends Phaser.Scene {
   private chatEl = document.getElementById("chat") as HTMLInputElement;
   private minimap?: Minimap;
   private ambient?: Ambient;
+  private details?: Details;
   private areaName = "";
   private areaTimer?: number;
   private shots = new Map<string, { g: Phaser.GameObjects.Arc; tx: number; ty: number }>();
@@ -47,6 +49,8 @@ export class TownScene extends Phaser.Scene {
     map.createBlankLayer("ground", tiles)!.putTilesAt(GROUND, 0, 0).setDepth(-2);
     map.createBlankLayer("objects", tiles)!.putTilesAt(Ambient.objectLayerData(), 0, 0).setDepth(-1);
     this.ambient = new Ambient(this); // trees, shadows, smoke, wildlife… (cosmetic only)
+    this.details = new Details(this); // roof shading, ground detail, ducks, lanterns, day/night
+    this.details.onDarkness((d) => this.ambient?.setDarkness(d));
 
     const cam = this.cameras.main;
     cam.setBounds(0, 0, MAP_W * TILE, MAP_H * TILE);
@@ -256,6 +260,7 @@ export class TownScene extends Phaser.Scene {
 
   update(_t: number, dtMs: number) {
     this.ambient?.update(this.time.now, dtMs);
+    this.details?.update(this.time.now, dtMs);
     if (!this.room) return;
     const k = this.keys;
     const typing = this.chatting();

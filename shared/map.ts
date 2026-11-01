@@ -105,7 +105,7 @@ function buildWorld() {
     if (ground[y][cx + 2] !== T.WATER) setG(cx + 2, y, T.SAND);
   }
   for (let y = 0; y < MAP_H; y++) for (let x = 0; x < MAP_W; x++) {
-    const dx = (x - 11) / 5, dy = (y - 61) / 3.2, d = dx * dx + dy * dy;
+    const dx = (x - 11) / 6.5, dy = (y - 61) / 4.3, d = dx * dx + dy * dy;
     if (d < 1) setG(x, y, T.WATER);
     else if (d < 1.6) setG(x, y, T.SAND);
   }
