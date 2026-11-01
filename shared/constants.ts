@@ -1,4 +1,6 @@
-export const TILE = 16;
+export const TILE = 32; // px per tile (same pixel size as the 32px heroes)
+/** Tile art was first designed on a 16-unit grid: K = fine pixels per design unit. */
+export const ART_K = TILE / 16;
 export const MAP_W = 224; // tiles
 export const MAP_H = 168; // tiles
 export const TICK_RATE = 20; // server updates per second
