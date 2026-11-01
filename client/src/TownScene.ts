@@ -4,7 +4,7 @@ import { InputState, MAP_H, MAP_W, TILE } from "../../shared/constants";
 import { CLASSES, ClassKind, xpForLevel } from "../../shared/classes";
 import { GROUND, OBJECTS, areaAt, isSafeZone } from "../../shared/map";
 import { moveStep } from "../../shared/movement";
-import { heroTexture, makeTileset, mobTexture } from "./textures";
+import { heroTexture, itemTexture, makeTileset, mobTexture } from "./textures";
 import { Minimap } from "./minimap";
 
 interface Entity {
@@ -32,6 +32,7 @@ export class TownScene extends Phaser.Scene {
   private areaName = "";
   private areaTimer?: number;
   private shots = new Map<string, { g: Phaser.GameObjects.Arc; tx: number; ty: number }>();
+  private items = new Map<string, Phaser.GameObjects.Image>();
   private lastSpecial = -Infinity; // local clock (ms) of my last special, for the cooldown bar
 
   constructor(private opts: { name: string; color: number; cls: ClassKind }) {
@@ -51,11 +52,12 @@ export class TownScene extends Phaser.Scene {
     cam.roundPixels = true;
 
     // Keys without capture so typing in chat still works
-    this.keys = this.input.keyboard!.addKeys("W,A,S,D,UP,DOWN,LEFT,RIGHT,SPACE,E,SHIFT", false) as any;
+    this.keys = this.input.keyboard!.addKeys("W,A,S,D,UP,DOWN,LEFT,RIGHT,SPACE,E,SHIFT,Q", false) as any;
     this.input.keyboard!.on("keydown-SPACE", () => { if (!this.chatting()) this.room?.send("attack"); });
     const special = () => { if (!this.chatting()) this.room?.send("special"); };
     this.input.keyboard!.on("keydown-E", special);
     this.input.keyboard!.on("keydown-SHIFT", special);
+    this.input.keyboard!.on("keydown-Q", () => { if (!this.chatting()) this.room?.send("potion"); });
     this.setupChat();
 
     const proto = location.protocol === "https:" ? "wss" : "ws";
@@ -107,6 +109,21 @@ export class TownScene extends Phaser.Scene {
       s.onChange(() => { shot.tx = s.x; shot.ty = s.y; });
     });
     shots.onRemove((_s: any, id: string) => { this.shots.get(id)?.g.destroy(); this.shots.delete(id); });
+
+    const items = (this.room.state as any).items;
+    items.onAdd((it: any, id: string) => {
+      const img = this.add.image(it.x, it.y, itemTexture(this, it.kind)).setDepth(it.y - 8);
+      // Gentle bob so loot catches the eye
+      this.tweens.add({ targets: img, y: it.y - 2, duration: 500, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
+      this.items.set(id, img);
+    });
+    items.onRemove((_it: any, id: string) => { this.items.get(id)?.destroy(); this.items.delete(id); });
+    this.room.onMessage("pickup", ({ kind, amount, x, y }) =>
+      this.floatText(x, y - 6, kind === "gold" ? `+${amount} gold` : "+1 potion", kind === "gold" ? "#ffc93c" : "#ff8fa3"));
+    this.room.onMessage("heal", ({ id, amount }) => {
+      const e = this.entities.get(id);
+      if (e) this.floatText(e.sprite.x, e.sprite.y - 14, `+${amount}`, "#7cfc00");
+    });
 
     this.room.onMessage("swing", ({ id }) => this.showSwing(id));
     this.room.onMessage("special", (msg) => this.showSpecial(msg));
@@ -324,7 +341,7 @@ export class TownScene extends Phaser.Scene {
       const next = xpForLevel(mine.level + 1), cur = xpForLevel(mine.level);
       document.getElementById("stats")!.textContent =
         `${mine.dead ? "Respawning… " : safe}Lv ${mine.level} ${CLASSES[mine.cls as ClassKind].name} · ` +
-        `XP ${mine.xp - cur}/${next - cur} · Kills: ${mine.kills} · Online: ${online}`;
+        `XP ${mine.xp - cur}/${next - cur} · Gold: ${mine.gold} · Potions [Q]: ${mine.potions} · Kills: ${mine.kills} · Online: ${online}`;
       const sp = CLASSES[mine.cls as ClassKind].special;
       const left = Math.max(0, sp.cooldownMs - (now - this.lastSpecial));
       (document.getElementById("skillfill") as HTMLElement).style.width = `${(1 - left / sp.cooldownMs) * 100}%`;

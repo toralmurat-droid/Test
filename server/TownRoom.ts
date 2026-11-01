@@ -7,6 +7,9 @@ import {
 import {
   CLASSES, ClassKind, damageFor, DASH_INVULN_MS, GUARD_REDUCTION, isClassKind, levelFromXp, maxHpFor, PVP_KILL_XP,
 } from "../shared/classes";
+import {
+  ITEM_LIFETIME_MS, ItemKind, LOOT, MAX_POTIONS, PICKUP_RADIUS, POTION_COOLDOWN_MS, POTION_HEAL, PVP_GOLD_DROP,
+} from "../shared/items";
 import { isSafeZone, isSolidAt, randomOutskirtsPoint, randomSpawn } from "../shared/map";
 import { moveStep } from "../shared/movement";
 
@@ -25,6 +28,8 @@ export class Player extends Schema {
   @type("number") kills = 0;
   @type("number") xp = 0;
   @type("number") level = 1;
+  @type("number") gold = 0;
+  @type("number") potions = 0;
   @type("number") seq = 0; // last processed input sequence (for client reconciliation)
 
   input: InputState = { up: false, down: false, left: false, right: false };
@@ -33,6 +38,7 @@ export class Player extends Schema {
   guardUntil = 0;
   invulnUntil = 0;
   lastHurt = 0;
+  lastPotion = 0;
 }
 
 export class Mob extends Schema {
@@ -66,10 +72,20 @@ export class Projectile extends Schema {
   damage = 0;
 }
 
+export class Item extends Schema {
+  @type("string") kind: ItemKind = "gold";
+  @type("number") x = 0;
+  @type("number") y = 0;
+  @type("number") amount = 1;
+
+  expires = 0;
+}
+
 export class TownState extends Schema {
   @type({ map: Player }) players = new MapSchema<Player>();
   @type({ map: Mob }) mobs = new MapSchema<Mob>();
   @type({ map: Projectile }) projectiles = new MapSchema<Projectile>();
+  @type({ map: Item }) items = new MapSchema<Item>();
 }
 
 const COLORS = [0xe74c3c, 0x3498db, 0x2ecc71, 0xf1c40f, 0x9b59b6, 0xe67e22, 0x1abc9c, 0xecf0f1];
@@ -95,6 +111,7 @@ export class TownRoom extends Room<TownState> {
   maxClients = 50;
   private mobSeq = 0;
   private shotSeq = 0;
+  private itemSeq = 0;
 
   onCreate() {
     this.setState(new TownState());
@@ -114,6 +131,7 @@ export class TownRoom extends Room<TownState> {
 
     this.onMessage("attack", (client) => this.playerAttack(client.sessionId));
     this.onMessage("special", (client) => this.playerSpecial(client.sessionId));
+    this.onMessage("potion", (client) => this.drinkPotion(client.sessionId));
 
     this.onMessage("chat", (client, text: string) => {
       const p = this.state.players.get(client.sessionId);
@@ -157,7 +175,7 @@ export class TownRoom extends Room<TownState> {
   private update(dtMs: number) {
     const dt = dtMs / 1000;
     const now = Date.now();
-    this.state.players.forEach((p) => {
+    this.state.players.forEach((p, pid) => {
       if (p.dead) { p.moving = false; return; }
       const r = moveStep(p.x, p.y, p.input, dt, CLASSES[p.cls].speed);
       p.x = r.x; p.y = r.y; p.moving = r.moving;
@@ -168,7 +186,9 @@ export class TownRoom extends Room<TownState> {
         const rate = isSafeZone(p.x, p.y) ? SAFE_REGEN_PER_SEC : REGEN_PER_SEC;
         p.hp = Math.min(p.maxHp, p.hp + p.maxHp * rate * dt);
       }
+      this.pickUp(p, pid);
     });
+    this.state.items.forEach((it, id) => { if (now > it.expires) this.state.items.delete(id); });
     this.state.mobs.forEach((m, id) => this.updateMob(m, id, dt, now));
     this.state.projectiles.forEach((s, id) => this.updateProjectile(s, id, dt));
   }
@@ -248,6 +268,50 @@ export class TownRoom extends Room<TownState> {
     this.state.projectiles.delete(id);
   }
 
+  // ---- Loot -------------------------------------------------------------
+
+  private dropItem(kind: ItemKind, x: number, y: number, amount: number) {
+    const it = new Item();
+    it.kind = kind; it.amount = amount;
+    // Scatter a little so several drops don't stack exactly
+    it.x = x + (Math.random() - 0.5) * 10;
+    it.y = y + (Math.random() - 0.5) * 10;
+    it.expires = Date.now() + ITEM_LIFETIME_MS;
+    this.state.items.set(`i${++this.itemSeq}`, it);
+  }
+
+  private dropLoot(kind: MobKind, x: number, y: number) {
+    const def = LOOT[kind];
+    const gold = def.gold[0] + Math.floor(Math.random() * (def.gold[1] - def.gold[0] + 1));
+    if (gold > 0) this.dropItem("gold", x, y, gold);
+    if (Math.random() < def.potionChance) this.dropItem("potion", x, y, 1);
+  }
+
+  private pickUp(p: Player, pid: string) {
+    this.state.items.forEach((it, id) => {
+      if (Math.hypot(it.x - p.x, it.y - p.y) > PICKUP_RADIUS) return;
+      if (it.kind === "potion") {
+        if (p.potions >= MAX_POTIONS) return; // full: leave it on the ground
+        p.potions += it.amount;
+      } else {
+        p.gold += it.amount;
+      }
+      this.state.items.delete(id);
+      this.clients.find((c) => c.sessionId === pid)?.send("pickup", { kind: it.kind, amount: it.amount, x: it.x, y: it.y });
+    });
+  }
+
+  private drinkPotion(id: string) {
+    const p = this.state.players.get(id);
+    const now = Date.now();
+    if (!p || p.dead || p.potions <= 0 || p.hp >= p.maxHp || now - p.lastPotion < POTION_COOLDOWN_MS) return;
+    p.lastPotion = now;
+    p.potions--;
+    const heal = Math.round(p.maxHp * POTION_HEAL);
+    p.hp = Math.min(p.maxHp, p.hp + heal);
+    this.broadcast("heal", { id, amount: heal });
+  }
+
   // ---- Combat -------------------------------------------------------------
 
   /** All live, hittable targets (players and mobs) within `r` of (x,y), except `exclude`. */
@@ -277,8 +341,11 @@ export class TownRoom extends Room<TownState> {
     const name = a?.name ?? "???";
     if (this.state.players.has(targetId)) {
       if (this.damagePlayer(targetId, dmg, name, push) && a) {
+        const victim = this.state.players.get(targetId)!;
         a.kills++;
-        this.grantXp(attackerId, PVP_KILL_XP, this.state.players.get(targetId)!);
+        this.grantXp(attackerId, PVP_KILL_XP, victim);
+        const lost = Math.floor(victim.gold * PVP_GOLD_DROP);
+        if (lost > 0) { victim.gold -= lost; this.dropItem("gold", victim.x, victim.y, lost); }
       }
       return;
     }
@@ -293,6 +360,7 @@ export class TownRoom extends Room<TownState> {
     if (m.hp > 0) return;
     m.dead = true;
     this.grantXp(attackerId, def.xp, m);
+    this.dropLoot(m.kind, m.x, m.y);
     this.clock.setTimeout(() => this.spawnMob(m.kind, targetId), def.respawnMs);
   }
 
