@@ -82,10 +82,34 @@ export function isGearId(v: unknown): v is string {
   return typeof v === "string" && v in GEAR;
 }
 
-/** Random drop for a monster kind, or undefined. */
-export function rollGear(kind: MobKind, rnd = Math.random): string | undefined {
+/**
+ * Higher-level monsters drop better loot. Per level above 1: gear chance +8% (relative, max 60%),
+ * Rare odds +3 points (max 55%), Epic odds +2 points (max 45%), Common takes what is left (min 5%).
+ */
+export const LOOT_LEVEL = { chance: 0.08, maxChance: 0.6, rare: 0.03, maxRare: 0.55, epic: 0.02, maxEpic: 0.45, potion: 0.05, maxPotion: 0.6 };
+
+/** Gear drop chance and tier odds (Common, Rare, Epic) for a monster of this kind and level. */
+export function gearDropOdds(kind: MobKind, level = 1): { chance: number; tiers: [number, number, number] } {
   const d = GEAR_DROP[kind];
-  if (!d || rnd() >= d.chance) return undefined;
+  if (!d) return { chance: 0, tiers: [1, 0, 0] };
+  const n = Math.max(0, level - 1), L = LOOT_LEVEL;
+  const chance = Math.min(Math.max(d.chance, L.maxChance), d.chance * (1 + L.chance * n));
+  const epic = Math.min(Math.max(d.tiers[2], L.maxEpic), d.tiers[2] + L.epic * n);
+  const rare = Math.min(Math.max(d.tiers[1], L.maxRare), d.tiers[1] + L.rare * n);
+  const common = Math.max(0.05, 1 - rare - epic);
+  const sum = common + rare + epic;
+  return { chance, tiers: [common / sum, rare / sum, epic / sum] };
+}
+
+/** Potion drop chance scaled by monster level. */
+export function potionChance(base: number, level = 1): number {
+  return Math.min(Math.max(base, LOOT_LEVEL.maxPotion), base * (1 + LOOT_LEVEL.potion * Math.max(0, level - 1)));
+}
+
+/** Random drop for a monster kind and level, or undefined. */
+export function rollGear(kind: MobKind, level = 1, rnd = Math.random): string | undefined {
+  const d = gearDropOdds(kind, level);
+  if (rnd() >= d.chance) return undefined;
   let r = rnd(), tier = 1;
   for (let i = 0; i < 3; i++) { if (r < d.tiers[i]) { tier = i + 1; break; } r -= d.tiers[i]; }
   const pool = GEAR_IDS.filter((id) => GEAR[id].tier === tier);
