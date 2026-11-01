@@ -18,7 +18,8 @@ import { Ambient } from "./ambient";
 import { Details } from "./details";
 import { GearLayer, GearMenu, preloadGear, TIER_COLORS } from "./gear";
 import { GEAR, gearSpeedMult } from "../../shared/gear";
-import { talentMult, talentPoints, spentPoints, talentReduce } from "../../shared/talents";
+import { COMBO_NODE, talentMult, talentPoints, spentPoints, talentReduce } from "../../shared/talents";
+import { activeSkills, SLOT_COUNT, SLOT_KEYS, skillLearned } from "../../shared/slots";
 import { TalentMenu } from "./talents";
 
 interface Entity {
@@ -82,6 +83,7 @@ export class TownScene extends Phaser.Scene {
   private clearedTimer?: number;
   private gearMenu?: GearMenu;
   private talentMenu?: TalentMenu;
+  private hotbarHtml = "";
 
   constructor(private opts: { name: string; color: number; cls: ClassKind }) {
     super("town");
@@ -109,15 +111,22 @@ export class TownScene extends Phaser.Scene {
     cam.roundPixels = true;
 
     // Keys without capture so typing in chat still works
-    this.keys = this.input.keyboard!.addKeys("W,A,S,D,UP,DOWN,LEFT,RIGHT,SPACE,SHIFT,Q,C,G,T,F,R,ONE,TWO,NUMPAD_ONE,NUMPAD_TWO", false) as any;
+    this.keys = this.input.keyboard!.addKeys("W,A,S,D,UP,DOWN,LEFT,RIGHT,SPACE,SHIFT,Q,C,G,T,F,R", false) as any;
     this.input.keyboard!.on("keydown-SPACE", () => { if (!this.chatting()) this.room?.send("attack"); });
-    // Skills learned in the tree go on the number keys (top row or numpad): 1 = class skill, 2 = ultimate
-    const special = () => { if (!this.chatting()) this.room?.send("special"); };
-    const ult = () => { if (!this.chatting()) this.room?.send("ult"); };
-    this.input.keyboard!.on("keydown-ONE", special);
-    this.input.keyboard!.on("keydown-NUMPAD_ONE", special);
-    this.input.keyboard!.on("keydown-TWO", ult);
-    this.input.keyboard!.on("keydown-NUMPAD_TWO", ult);
+    // Skill slots 1..0 (top row or numpad). With the skill tree open and the mouse over a learned skill,
+    // the number key puts that skill in the slot instead of using it.
+    const names = ["ONE", "TWO", "THREE", "FOUR", "FIVE", "SIX", "SEVEN", "EIGHT", "NINE", "ZERO"];
+    names.forEach((k, n) => {
+      const press = () => {
+        if (this.chatting()) return;
+        const hover = this.talentMenu?.open ? this.talentMenu.hoveredActive() : undefined;
+        if (hover) this.room?.send("assign", { slot: n, skill: hover });
+        else this.room?.send("useslot", n);
+      };
+      this.input.keyboard!.on(`keydown-${k}`, press);
+      this.input.keyboard!.on(`keydown-NUMPAD_${k}`, press);
+    });
+    this.setupHotbar();
     this.input.keyboard!.on("keydown-Q", () => { if (!this.chatting()) this.room?.send("potion"); });
     // Secondary ranged weapon from the equipment screen (sling, knives, crossbow)
     this.input.keyboard!.on("keydown-R", () => { if (!this.chatting()) this.room?.send("ranged"); });
@@ -501,21 +510,67 @@ export class TownScene extends Phaser.Scene {
     el.hidden = false;
   }
 
+  /** Skill slot bar (keys 1..0): drop a skill from the tree (or another slot) on a slot; right-click clears it. */
+  private setupHotbar() {
+    const bar = document.getElementById("hotbar")!;
+    bar.addEventListener("dragover", (ev) => { if ((ev.target as HTMLElement).closest("[data-slot]")) ev.preventDefault(); });
+    bar.addEventListener("drop", (ev) => {
+      const cell = (ev.target as HTMLElement).closest("[data-slot]") as HTMLElement | null;
+      const skill = ev.dataTransfer?.getData("text/skill");
+      if (!cell || !skill) return;
+      ev.preventDefault();
+      this.room?.send("assign", { slot: Number(cell.dataset.slot), skill });
+    });
+    bar.addEventListener("dragstart", (ev) => {
+      const cell = (ev.target as HTMLElement).closest("[data-slot]") as HTMLElement | null;
+      if (cell?.dataset.skill) ev.dataTransfer?.setData("text/skill", cell.dataset.skill);
+    });
+    bar.addEventListener("contextmenu", (ev) => {
+      const cell = (ev.target as HTMLElement).closest("[data-slot]") as HTMLElement | null;
+      if (!cell) return;
+      ev.preventDefault();
+      if (cell.dataset.skill) this.room?.send("assign", { slot: Number(cell.dataset.slot), skill: "" });
+    });
+    bar.addEventListener("click", (ev) => {
+      const cell = (ev.target as HTMLElement).closest("[data-slot]") as HTMLElement | null;
+      if (cell?.dataset.skill) this.room?.send("useslot", Number(cell.dataset.slot));
+    });
+  }
+
+  /** Name, cooldown and cost of an active skill for the HUD. */
+  private skillHud(cls: ClassKind, skill: string, cdm: number) {
+    const sp = CLASSES[cls].special, u = ULTS[cls];
+    return skill === "ult"
+      ? { name: u.name, cdMs: u.cooldownMs * cdm, last: this.lastUlt, cost: ENERGY.cost.ult, ult: true }
+      : { name: sp.name, cdMs: sp.cooldownMs * cdm, last: this.lastSpecial, cost: ENERGY.cost.special, ult: false };
+  }
+
   /** HUD list of every action with its key and cooldown, under the skill bar. */
   private renderActions(mine: any, cls: ClassKind, cdm: number, now: number) {
-    const sp = CLASSES[cls].special, u = ULTS[cls];
     const row = (key: string, name: string, cdMs: number, last: number, extra = "", locked = "", cost = 0) => {
       const left = cdMs > 0 ? Math.max(0, cdMs - (now - last)) : 0;
       const short = cost > mine.energy;
       const state = locked ? "locked" : left > 0 || short ? "wait" : "";
       const status = locked || (left > 0 ? `${(left / 1000).toFixed(1)}s` : short ? `needs ${cost}` : extra || "ready");
       const fill = left > 0 ? `<div class="cd" style="width:${(1 - left / cdMs) * 100}%"></div>` : "";
-      return `<li class="${state}${key === "2" ? " ult" : ""}">${fill}<kbd>${key}</kbd><span class="n">${name}</span><span class="s">${status}</span></li>`;
+      return `<li class="${state}${ult ? " ult" : ""}">${fill}<kbd>${key}</kbd><span class="n">${name}</span><span class="s">${status}</span></li>`;
     };
+    let ult = false;
+    const slots: string[] = [...(mine.slots ?? [])];
+    // Assigned slots first, then learned skills still waiting for a slot
+    const slotRows = slots.map((skill, i) => {
+      if (!skill) return "";
+      const h = this.skillHud(cls, skill, cdm);
+      ult = h.ult;
+      const r = row(SLOT_KEYS[i], h.name, h.cdMs, h.last, "", skillLearned(cls, mine.talents, skill as any) ? "" : "🔒", h.cost);
+      ult = false;
+      return r;
+    });
+    const unslotted = activeSkills(cls).filter((a) => skillLearned(cls, mine.talents, a.id) && !slots.includes(a.id))
+      .map((a) => row("–", a.name, 0, 0, "", "no slot: drag it from T"));
     const html = [
-      row("Space", CLASSES[cls].projectile ? "Shoot" : "Attack", 0, 0, "3-hit combo"),
-      row("1", sp.name, sp.cooldownMs * cdm, this.lastSpecial, "", hasSpecial(cls, mine.talents) ? "" : "🔒 learn (T)", ENERGY.cost.special),
-      row("2", u.name, u.cooldownMs * cdm, this.lastUlt, "", hasUlt(cls, mine.talents) ? "" : `🔒 Lv ${ultPower(cls).level}`, ENERGY.cost.ult),
+      row("Space", CLASSES[cls].projectile ? "Shoot" : "Attack", 0, 0, (mine.talents?.get(COMBO_NODE) ?? 0) > 0 ? "3-hit combo" : "ready"),
+      ...slotRows, ...unslotted,
       row("Shift", "Dodge roll", DODGE.cooldownMs, this.lastDodge, "", "", ENERGY.cost.dodge),
       row("Q", "Potion", 0, 0, `×${mine.potions}`, mine.potions > 0 ? "" : "×0"),
       // Secondary ranged weapon from the equipment screen, only when one is worn
@@ -523,6 +578,19 @@ export class TownScene extends Phaser.Scene {
     ].join("");
     const el = document.getElementById("actions")!;
     if (this.actionsHtml !== html) { el.innerHTML = html; this.actionsHtml = html; }
+    // Slot bar at the bottom: 10 cells, cooldown shading, drag targets
+    const cells = Array.from({ length: SLOT_COUNT }, (_, i) => {
+      const skill = slots[i] ?? "";
+      if (!skill) return `<div class="slot empty" data-slot="${i}"><kbd>${SLOT_KEYS[i]}</kbd></div>`;
+      const h = this.skillHud(cls, skill, cdm);
+      const left = Math.max(0, h.cdMs - (now - h.last));
+      const shade = left > 0 ? `<div class="cd" style="height:${(left / h.cdMs) * 100}%"></div>` : "";
+      const wait = left > 0 || h.cost > mine.energy ? " wait" : "";
+      return `<div class="slot${h.ult ? " ult" : ""}${wait}" data-slot="${i}" data-skill="${skill}" draggable="true" title="${h.name}: click or press ${SLOT_KEYS[i]} · right-click to clear">` +
+        `${shade}<kbd>${SLOT_KEYS[i]}</kbd><span>${h.name}</span>${left > 0 ? `<b>${Math.ceil(left / 1000)}</b>` : ""}</div>`;
+    }).join("");
+    const bar = document.getElementById("hotbar")!;
+    if (this.hotbarHtml !== cells) { bar.innerHTML = cells; this.hotbarHtml = cells; }
     const zone = document.getElementById("zone")!;
     zone.style.top = `${el.offsetTop + el.offsetHeight + 4}px`;
   }

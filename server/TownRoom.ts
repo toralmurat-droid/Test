@@ -18,8 +18,9 @@ import {
 import { isSafeZone, isSolidAt, randomSpawn } from "../shared/map";
 import { randomPointInZone, rollLevel, SPAWN_ZONES, zoneCap } from "../shared/spawns";
 import { moveStep } from "../shared/movement";
+import { SLOT_COUNT, SlotSkill, skillLearned } from "../shared/slots";
 import { heroPoise, MOB_COMBAT, POISE, poiseLevelMult, poiseSpeed, RAGE_ATTACK_SPEED } from "../shared/combat";
-import { canLearn, talentMult, talentBonus, talentReduce, TREES } from "../shared/talents";
+import { canLearn, COMBO_NODE, talentMult, talentBonus, talentReduce, TREES } from "../shared/talents";
 import {
   BAG_SIZE, Equipped, GEAR, GEAR_SLOTS, GearSlot, gearBlock, gearName, gearReachMult, gearSpeedMult, gearStats, isGearId, potionChance, rollGear,
 } from "../shared/gear";
@@ -71,6 +72,8 @@ export class Player extends Schema {
   @type(["string"]) bag = new ArraySchema<string>();
   // Skill tree (shared/talents.ts): ranks per talent id
   @type({ map: "number" }) talents = new MapSchema<number>();
+  // Skill slots on keys 1..0 (shared/slots.ts): "special" | "ult" | "" (empty). Empty until the player assigns them.
+  @type(["string"]) slots = new ArraySchema<string>(...Array(SLOT_COUNT).fill(""));
 
   input: InputState = { up: false, down: false, left: false, right: false };
   lastAttack = 0;
@@ -284,6 +287,8 @@ export class TownRoom extends Room<TownState> {
     this.onMessage("unequip", (client, slot: GearSlot) => this.unequip(client.sessionId, slot));
     this.onMessage("dropgear", (client, i: number) => this.dropGear(client.sessionId, i));
     this.onMessage("ranged", (client) => this.fireRanged(client.sessionId));
+    this.onMessage("useslot", (client, n: number) => this.useSlot(client.sessionId, n));
+    this.onMessage("assign", (client, msg: { slot: number; skill: string }) => this.assignSlot(client.sessionId, msg));
     this.onMessage("learn", (client, tid: string) => this.learnTalent(client.sessionId, tid));
     this.onMessage("respec", (client) => this.respec(client.sessionId));
     this.onMessage("stat", (client, k: string) => this.assignStat(client.sessionId, k));
@@ -618,11 +623,32 @@ export class TownRoom extends Room<TownState> {
     this.applyStats(p);
   }
 
+  /** Press a slot key: use whatever skill is in that slot. */
+  private useSlot(id: string, n: number) {
+    const p = this.state.players.get(id);
+    if (!p || typeof n !== "number" || n < 0 || n >= SLOT_COUNT) return;
+    const s = p.slots.at(n);
+    if (s === "special") this.playerSpecial(id);
+    else if (s === "ult") this.playerUlt(id);
+  }
+
+  /** Put a learned active skill in a slot (moving it out of any other slot), or clear the slot with skill "". */
+  private assignSlot(id: string, msg: { slot: number; skill: string }) {
+    const p = this.state.players.get(id);
+    if (!p || !msg || typeof msg.slot !== "number" || msg.slot < 0 || msg.slot >= SLOT_COUNT) return;
+    const skill = msg.skill;
+    if (skill !== "" && skill !== "special" && skill !== "ult") return;
+    if (skill && !skillLearned(p.cls, p.talents, skill as SlotSkill)) return;
+    if (skill) for (let i = 0; i < SLOT_COUNT; i++) if (p.slots.at(i) === skill) p.slots.setAt(i, "");
+    p.slots.setAt(msg.slot, skill);
+  }
+
   /** Free reset of all skill points, only out of combat. */
   private respec(id: string) {
     const p = this.state.players.get(id);
     if (!p || p.dead || Date.now() - p.lastHurt < 5000) return;
     p.talents.clear();
+    for (let i = 0; i < SLOT_COUNT; i++) p.slots.setAt(i, "");
     this.applyStats(p);
   }
 
@@ -844,7 +870,9 @@ export class TownRoom extends Room<TownState> {
     const def = CLASSES[a.cls];
     if (now < a.attackReadyAt) return;
     // Chain into the next combo hit if pressed soon enough after the last one, else restart
-    const step = a.lastAttack > 0 && now - a.attackReadyAt <= COMBO_WINDOW_MS && a.combo < 2 ? a.combo + 1 : 0;
+    // Without the 3-Hit Combo skill (skill tree) the attack alternates hits 1 and 2; the finisher needs the skill
+    const lastStep = (a.talents.get(COMBO_NODE) ?? 0) > 0 ? 2 : 1;
+    const step = a.lastAttack > 0 && now - a.attackReadyAt <= COMBO_WINDOW_MS && a.combo < lastStep ? a.combo + 1 : 0;
     const hit = def.combo[step];
     a.combo = step;
     a.lastAttack = now;

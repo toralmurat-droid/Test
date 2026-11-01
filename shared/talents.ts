@@ -1,4 +1,5 @@
 import { ClassKind } from "./classes";
+import { CLASSES } from "./classes";
 import { POWER_LEVELS, POWERS, powerNodeId } from "./powers";
 
 /**
@@ -76,13 +77,14 @@ export function talentPoints(level: number): number { return Math.max(0, level -
  * and at least 1 rank in the node before it (drawn below it) in the same column. Every node rank costs 1 skill point.
  *   column 0: branch 0 skill 1 · class skill Lv3 · branch 0 skill 2 · class skill Lv8 · branch 0 skill 3
  *   column 1: class skill Lv1 · branch 1 skill 1 · branch 1 skill 2 · branch 1 skill 3 · ultimate Lv10
- *   column 2: branch 2 skill 1 · branch 2 skill 2 · class skill Lv5 · branch 2 skill 3 · (empty)
+ *   column 2: 3-hit combo Lv1 · branch 2 skill 1 · class skill Lv5 · branch 2 skill 2 · branch 2 skill 3
+ * Without the combo skill the basic attack alternates hits 1 and 2; with it, the 3rd hit in a row is the finisher.
  */
 export const TREE_LEVELS = POWER_LEVELS;
 
 export interface TreeNode {
   id: string; name: string; desc: string; level: number; col: number; row: number; max: number;
-  kind: "power" | "passive"; key?: "1" | "2"; color: string; talent?: TalentDef;
+  kind: "power" | "passive" | "combo"; key?: "1" | "2"; color: string; talent?: TalentDef;
 }
 
 export function treeNodes(cls: ClassKind): TreeNode[] {
@@ -98,8 +100,22 @@ export function treeNodes(cls: ClassKind): TreeNode[] {
   return [
     passive(0, 0, 0, 0), power(1, 0, 1), passive(0, 1, 0, 2), power(3, 0, 3), passive(0, 2, 0, 4),
     power(0, 1, 0), passive(1, 0, 1, 1), passive(1, 1, 1, 2), passive(1, 2, 1, 3), power(4, 1, 4),
-    passive(2, 0, 2, 0), passive(2, 1, 2, 1), power(2, 2, 2), passive(2, 2, 2, 3),
+    comboNode(cls), passive(2, 0, 2, 1), power(2, 2, 2), passive(2, 1, 2, 3), passive(2, 2, 2, 4),
   ];
+}
+
+/** The 3-hit combo skill: unlocks the class's finisher (shared/classes.ts combo[2]). */
+export const COMBO_NODE = "combo";
+export const COMBO_FINISHER: Record<ClassKind, string> = {
+  knight: "a wide overhead slam", ninja: "a lunging strike", wizard: "a big fireball",
+  archer: "a power shot", barbarian: "an axe smash",
+};
+function comboNode(cls: ClassKind): TreeNode {
+  const f = CLASSES[cls].combo[2];
+  return {
+    id: COMBO_NODE, name: "3-Hit Combo", level: TREE_LEVELS[0], col: 2, row: 0, max: 1, kind: "combo", color: "#ffd166",
+    desc: `Attack 3 times in a row: the 3rd hit is ${COMBO_FINISHER[cls]} (×${f.damage} damage).`,
+  };
 }
 
 export const nodeRank = (_cls: ClassKind, r: Ranks, id: string): number => rankOf(r, id);
