@@ -63,6 +63,17 @@ export const BLOB_AI = {
   healer: { range: 70, everyMs: 3000, frac: 0.15, keepAway: 50 }, // heals the most hurt blob nearby, stays back
 };
 
+/**
+ * Mother Blob grows with her level: a new look per tier (more armour the higher she is) and special moves.
+ * Lv 5+: Belly Bounce, a short-range shockwave that knocks players back.
+ * Lv 10+: Ground Slam, a big hit around her that also calls a swarm of bloblings.
+ */
+export const MOTHER = {
+  tier: (level: number) => (level >= 10 ? 3 : level >= 5 ? 2 : 1),
+  bounce: { level: 5, range: 34, radius: 42, windupMs: 600, cooldownMs: 7000, dmgMult: 0.8, knockback: 3 },
+  slam: { level: 10, range: 70, radius: 66, windupMs: 900, cooldownMs: 15000, dmgMult: 1.8, knockback: 2, swarm: 5 },
+};
+
 /** Mother Blob brood: every few seconds (random) she may bud a blobling, up to `perMother` alive at once. */
 export const BROOD = { minMs: 5000, maxMs: 12000, perMother: 4, worldCap: 60 };
 /** How a monster's level scales its base stats (level 1 = the MOBS numbers). */

@@ -91,7 +91,7 @@ const SLIME_B = [..."............|............|............|............|.......
  * Round blob frame (w x h px): a dome with a highlight, two eyes and a dark rim at the base.
  * `squish` flattens/widens it for the bounce frame; `buds` adds little bloblings growing inside (Mother Blob).
  */
-function blobFrame(w: number, h: number, bodyH: number, squish: boolean, buds: boolean): string[] {
+function blobFrame(w: number, h: number, bodyH: number, squish: boolean, buds: boolean, tiara = buds): string[] {
   const rows: string[][] = Array.from({ length: h }, () => Array(w).fill("."));
   const bh = squish ? Math.round(bodyH * 0.86) : bodyH;
   const rx = (squish ? w / 2 : w / 2 - 1) - 0.01, ry = bh - 0.5;
@@ -128,7 +128,7 @@ function blobFrame(w: number, h: number, bodyH: number, squish: boolean, buds: b
     if (rows[y][x] !== "G") continue;
     if (!isBody(x - 1, y) || !isBody(x + 1, y) || !isBody(x, y - 1)) rows[y][x] = "O";
   }
-  if (buds) {
+  if (tiara) {
     // little gold tiara: she's the mother
     const tx = Math.round(cx), ty = top;
     for (const [ox, oy, c] of [[-3, 0, "Y"], [-2, 0, "Y"], [-1, 0, "Y"], [0, 0, "Y"], [1, 0, "Y"], [2, 0, "Y"], [-3, -1, "Y"], [0, -1, "R"], [2, -1, "Y"], [0, -2, "Y"]] as [number, number, string][]) {
@@ -172,6 +172,41 @@ const HEALER_A = blobVariant(VAR_W, VAR_H, 10, false, "healer"), HEALER_B = blob
 
 const MOTHER_W = 24, MOTHER_H = 22, BLOBLING_W = 8, BLOBLING_H = 9;
 const MOTHER_A = blobFrame(MOTHER_W, MOTHER_H, 17, false, true), MOTHER_B = blobFrame(MOTHER_W, MOTHER_H, 17, true, true);
+
+/**
+ * Mother Blob by tier (shared MOTHER.tier): 2 = Lv 5+, iron crown and a leather belt with a gold buckle;
+ * 3 = Lv 10+, big jewelled crown, riveted steel plate round her middle and spikes on her back.
+ */
+function motherFrame(tier: 2 | 3, squish: boolean): string[] {
+  const rows = blobFrame(MOTHER_W, MOTHER_H, 17, squish, true, false).map((r) => [...r]);
+  const top = rows.findIndex((r) => r.some((c) => c !== "."));
+  const base = MOTHER_H - 2, cx = Math.floor((MOTHER_W - 1) / 2);
+  const body = (x: number, y: number) => rows[y]?.[x] !== undefined && rows[y][x] !== ".";
+  const set = (x: number, y: number, c: string) => { if (rows[y]?.[x] !== undefined) rows[y][x] = c; };
+  if (tier === 2) {
+    // iron crown: a band with three points
+    for (let x = cx - 3; x <= cx + 4; x++) { set(x, top, "I"); set(x, top - 1, "I"); }
+    for (const x of [cx - 3, cx + 0.5, cx + 4]) set(Math.round(x), top - 2, "I");
+    set(cx, top - 1, "i"); set(cx + 1, top - 1, "i");
+    // leather belt with a buckle
+    const by = base - 6;
+    for (let x = 0; x < MOTHER_W; x++) if (body(x, by)) { set(x, by, "T"); if (body(x, by + 1)) set(x, by + 1, "T"); }
+    for (const [ox, oy] of [[0, 0], [1, 0], [0, 1], [1, 1]]) set(cx + ox, by + oy, "Y");
+  } else {
+    // big gold crown with red jewels
+    for (let x = cx - 5; x <= cx + 6; x++) { set(x, top, "Y"); set(x, top - 1, "Y"); }
+    for (const x of [cx - 5, cx - 2, cx + 1, cx + 3, cx + 6]) { set(x, top - 2, "Y"); set(x, top - 3, "Y"); }
+    for (const x of [cx - 3, cx + 1, cx + 5]) set(x, top - 1, "R");
+    // steel plate round her middle, with rivets
+    for (let y = base - 7; y <= base - 4; y++) for (let x = 0; x < MOTHER_W; x++) if (body(x, y)) set(x, y, y === base - 7 ? "s" : "S");
+    for (let x = 2; x < MOTHER_W - 2; x += 3) if (body(x, base - 5)) set(x, base - 5, "r");
+    // spikes along her back
+    for (const dx of [-8, -6, 7, 9]) { const x = cx + dx; const y = rows.findIndex((r) => r[x] !== "."); if (y > 0) { set(x, y - 1, "S"); set(x, y - 2, "s"); } }
+  }
+  return rows.map((r) => r.join(""));
+}
+const MOTHER2_A = motherFrame(2, false), MOTHER2_B = motherFrame(2, true);
+const MOTHER3_A = motherFrame(3, false), MOTHER3_B = motherFrame(3, true);
 const BLOBLING_A = blobFrame(BLOBLING_W, BLOBLING_H, 6, false, false), BLOBLING_B = blobFrame(BLOBLING_W, BLOBLING_H, 6, true, false);
 
 /** Per-kind size info for the scene: head height (labels/bubbles) and HP bar width. */
@@ -184,7 +219,20 @@ export const MOB_LOOK: Record<string, { top: number; bar: number; oy: number }> 
 };
 
 /** Monster sprite sheets, same 6-frame layout as personas. */
-export function mobTexture(scene: Phaser.Scene, kind: string): string {
+export function mobTexture(scene: Phaser.Scene, kind: string, level = 1): string {
+  const mtier = level >= 10 ? 3 : level >= 5 ? 2 : 1; // MOTHER.tier
+  if (kind === "motherblob" && mtier === 2) {
+    return drawSheet(scene, "mob_motherblob2", [MOTHER2_A, MOTHER2_B, MOTHER2_A, MOTHER2_B, MOTHER2_A, MOTHER2_B], {
+      G: 0x2f8f9e, L: 0xb0eef5, E: 0x0b2a30, W: 0xffffff, D: 0x1c5560, O: 0x123f47, B: 0x8fe0c8, b: 0xdcfff4,
+      I: 0x8a9099, i: 0xc9ced6, Y: 0xffc93c, T: 0x6d4c33,
+    }, MOTHER_W, MOTHER_H);
+  }
+  if (kind === "motherblob" && mtier === 3) {
+    return drawSheet(scene, "mob_motherblob3", [MOTHER3_A, MOTHER3_B, MOTHER3_A, MOTHER3_B, MOTHER3_A, MOTHER3_B], {
+      G: 0x5a3f9e, L: 0xd3c2ff, E: 0x140a2a, W: 0xffffff, D: 0x35246b, O: 0x22164a, B: 0xb79cff, b: 0xf0e8ff,
+      Y: 0xffc93c, R: 0xe63946, S: 0x9aa3ad, s: 0xd6dce3, r: 0x4a4f57,
+    }, MOTHER_W, MOTHER_H);
+  }
   if (kind === "motherblob") {
     return drawSheet(scene, "mob_motherblob", [MOTHER_A, MOTHER_B, MOTHER_A, MOTHER_B, MOTHER_A, MOTHER_B], {
       G: 0x3f9e8c, L: 0xb8f2e0, E: 0x10302a, W: 0xffffff, D: 0x1f5c50, O: 0x1a4a40, B: 0x9be58a, b: 0xe2ffd6, Y: 0xffc93c, R: 0xe63946,
