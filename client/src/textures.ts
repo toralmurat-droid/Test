@@ -35,6 +35,9 @@ function shade(c: number, f: number) {
   return (r << 16) | (g << 8) | b;
 }
 
+// Bandit: persona frames with a hood and a red bandana over the mouth
+const BANDIT_FRAMES = FRAMES.map((f) => f.map((row, y) => (y === 4 ? row.replace(/K/g, "M") : row)));
+
 /** Builds (once per color) a 6-frame persona sprite sheet tinted by shirt color. */
 export function personaTexture(scene: Phaser.Scene, color: number): string {
   return drawSheet(scene, `persona_${color}`, FRAMES, {
@@ -203,6 +206,11 @@ export function mobTexture(scene: Phaser.Scene, kind: string): string {
     return sheet("mob_healerblob", HEALER_A, HEALER_B, {
       G: 0xf5d0e6, L: 0xffffff, E: 0x3a1a2e, D: 0xc48aaa, O: 0x8a5577, Y: 0xffd54f, X: 0x43c463,
     }, VAR_W, VAR_H);
+  }
+  if (kind === "bandit") {
+    return drawSheet(scene, "mob_bandit", BANDIT_FRAMES, {
+      H: 0x3b2f2a, K: 0xd9a77a, E: 0x1a1a1a, M: 0xb3261e, S: 0x6d4c33, B: 0x2b1d14, P: 0x3a3a3a, D: 0x1a1a1a,
+    });
   }
   if (kind === "blobling") {
     return drawSheet(scene, "mob_blobling", [BLOBLING_A, BLOBLING_B, BLOBLING_A, BLOBLING_B, BLOBLING_A, BLOBLING_B], {

@@ -587,7 +587,7 @@ function buildWorld() {
     { name: "Greywatch Keep", x: keep.x - 6, y: keep.y - 6, w: keep.w + 12, h: keep.h + 12, mobs: ["skeleton"] },
     { name: "Thornwood", ...thorn, mobs: ["slime"] },
     { name: "Saltmere", ...salt },
-    { name: "Redfang Hollow", x: band.x - 4, y: band.y - 4, w: band.w + 8, h: band.h + 8, mobs: ["skeleton"] },
+    { name: "Redfang Hollow", x: band.x - 4, y: band.y - 4, w: band.w + 8, h: band.h + 8, mobs: ["bandit"] },
     { name: "Saltwind Coast", x: 0, y: 184, w: MAP_W, h: MAP_H - 184, mobs: ["slime"] },
     { name: "River Ashwell", x: riverCenter(60) - 6, y: 0, w: 12, h: MAP_H },
     { name: "Whispering Woods", x: woodsX - 2, y: 0, w: MAP_W - woodsX + 2, h: 184, mobs: ["slime"] },

@@ -28,7 +28,7 @@ export interface InputState {
   right: boolean;
 }
 
-export type MobKind = "slime" | "skeleton" | "motherblob" | "blobling" | "shooterblob" | "warriorblob" | "healerblob";
+export type MobKind = "slime" | "skeleton" | "motherblob" | "blobling" | "shooterblob" | "warriorblob" | "healerblob" | "bandit";
 
 export interface MobDef {
   name: string;
@@ -52,6 +52,8 @@ export const MOBS: Record<MobKind, MobDef> = {
   shooterblob: { name: "Shooter Blob", maxHp: 50, speed: 40, damage: 10, attackCooldownMs: 1800, aggroRange: 130, leash: 180, xp: 18 },
   warriorblob: { name: "Warrior Blob", maxHp: 110, speed: 52, damage: 16, attackCooldownMs: 1100, aggroRange: 100, leash: 170, xp: 26 },
   healerblob: { name: "Healer Blob", maxHp: 60, speed: 42, damage: 5, attackCooldownMs: 1200, aggroRange: 110, leash: 160, xp: 22 },
+  // Outlaws of Redfang Hollow: quick, hit hard, hood and red bandana
+  bandit: { name: "Bandit", maxHp: 95, speed: 64, damage: 15, attackCooldownMs: 950, aggroRange: 120, leash: 200, xp: 30 },
 };
 
 /** Special blob behaviour. Distances in px. */
