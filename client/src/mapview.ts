@@ -1,6 +1,6 @@
 import { MAP_H, MAP_W, TILE } from "../../shared/constants";
 import { AREAS, EMPTY, GROUND, OBJECTS, areaAt, isSolidTile } from "../../shared/map";
-import { createTilesetCanvas } from "./tileset";
+import { createTilesetCanvas, tileRow } from "./tileset";
 
 // Standalone viewer for the world map: no server needed. Open /map.html.
 const tileset = createTilesetCanvas();
@@ -13,8 +13,9 @@ const $ = (id: string) => document.getElementById(id) as HTMLInputElement;
 function render() {
   ctx.imageSmoothingEnabled = false;
   for (let y = 0; y < MAP_H; y++) for (let x = 0; x < MAP_W; x++) {
-    for (const t of [GROUND[y][x], OBJECTS[y][x]]) {
-      if (t !== EMPTY) ctx.drawImage(tileset, t * TILE, 0, TILE, TILE, x * TILE, y * TILE, TILE, TILE);
+    for (const grid of [GROUND, OBJECTS]) {
+      const t = grid[y][x];
+      if (t !== EMPTY) ctx.drawImage(tileset, t * TILE, tileRow(grid, x, y) * TILE, TILE, TILE, x * TILE, y * TILE, TILE, TILE);
     }
   }
   if ($("solid").checked) {

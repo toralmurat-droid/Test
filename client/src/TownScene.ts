@@ -8,6 +8,7 @@ import { SPAWN_ZONES } from "../../shared/spawns";
 import {
   attackMult, cooldownMult, heroSpeed, STATS, magicMult, POWERS, STAT_NAMES, StatKind, statsFor, ULT_LEVEL, ULTS,
 } from "../../shared/powers";
+import { displayGrid } from "./tileset";
 import { heroTexture, itemTexture, makeTileset, mobTexture } from "./textures";
 import { Minimap } from "./minimap";
 import { CHARACTERS, CHAR_ORIGIN, CharacterName, createArtAnims, playCharAnim, preloadArt } from "./artAssets";
@@ -72,8 +73,8 @@ export class TownScene extends Phaser.Scene {
     createArtAnims(this);
     const map = this.make.tilemap({ tileWidth: TILE, tileHeight: TILE, width: MAP_W, height: MAP_H });
     const tiles = map.addTilesetImage("tiles", "tiles", TILE, TILE, 0, 0)!;
-    map.createBlankLayer("ground", tiles)!.putTilesAt(GROUND, 0, 0).setDepth(-2);
-    map.createBlankLayer("objects", tiles)!.putTilesAt(Ambient.objectLayerData(), 0, 0).setDepth(-1);
+    map.createBlankLayer("ground", tiles)!.putTilesAt(displayGrid(GROUND), 0, 0).setDepth(-2);
+    map.createBlankLayer("objects", tiles)!.putTilesAt(displayGrid(Ambient.objectLayerData()), 0, 0).setDepth(-1);
     this.ambient = new Ambient(this); // trees, shadows, smoke, wildlife… (cosmetic only)
     this.details = new Details(this); // roof shading, ground detail, ducks, lanterns, day/night
     this.details.onDarkness((d) => this.ambient?.setDarkness(d));
