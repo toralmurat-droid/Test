@@ -465,7 +465,14 @@ export class TownRoom extends Room<TownState> {
     this.grantXp(attackerId, def.xp, m);
     this.dropLoot(m.kind, m.x, m.y);
     const zone = this.state.zones.get(SPAWN_ZONES[m.zone].name);
-    if (zone) zone.alive--;
+    if (zone) {
+      zone.alive--;
+      // Last monster of the zone down: tell everyone (the killer gets a big banner)
+      if (zone.alive <= 0) {
+        const z = SPAWN_ZONES[m.zone];
+        this.broadcast("zonecleared", { zone: z.name, by: attackerId, name: a?.name ?? "", respawnSec: Math.round(z.respawnMs / 1000) });
+      }
+    }
   }
 
   private grantXp(id: string, amount: number, at: { x: number; y: number }) {
