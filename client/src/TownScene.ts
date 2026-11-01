@@ -127,7 +127,7 @@ export class TownScene extends Phaser.Scene {
     document.getElementById("join")!.hidden = true;
     (document.getElementById("join") as HTMLElement).style.display = "none";
     document.getElementById("hud")!.hidden = false;
-    this.minimap = new Minimap(document.getElementById("minimap") as HTMLCanvasElement);
+    this.minimap = new Minimap(document.getElementById("minimap") as HTMLCanvasElement, this.opts.name);
 
     const players = (this.room.state as any).players;
     players.onAdd((p: any, id: string) => {
