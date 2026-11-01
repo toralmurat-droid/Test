@@ -1,6 +1,6 @@
 import Phaser from "phaser";
 import { MAP_H, MAP_W, TILE } from "../../shared/constants";
-import { TILE_COUNT } from "../../shared/map";
+import { T, TILE_COUNT } from "../../shared/map";
 import { ROWS, ANIMATED_TILES } from "./tileset";
 
 /**
@@ -18,14 +18,8 @@ import { ROWS, ANIMATED_TILES } from "./tileset";
  *   screen height, so front/back order is right.
  * Turned on with ?iso=1 in the address (or localStorage "iso" = "1").
  */
-export const ISO = (() => {
-  const q = new URLSearchParams(location.search).get("iso");
-  if (q !== null) {
-    try { localStorage.setItem("iso", q === "0" ? "0" : "1"); } catch { /* private mode */ }
-    return q !== "0";
-  }
-  try { return localStorage.getItem("iso") === "1"; } catch { return false; }
-})();
+export { ISO } from "./isoflag";
+import { ISO } from "./isoflag";
 
 export const isoX = (x: number, y: number) => x - y;
 export const isoY = (x: number, y: number) => (x + y) / 2;
@@ -125,7 +119,8 @@ export class IsoView {
     } as any);
     const map = new Phaser.Tilemaps.Tilemap(scene, data);
     const tiles = map.addTilesetImage("tiles_iso", "tiles_iso", IW + BLEED * 2, IH + BLEED * 2, 0, 0, 0, { x: BLEED, y: BLEED })!;
-    for (const [name, grid, depth] of [["ground", ground, -2], ["objects", objects, -1]] as const) {
+    const flatObjects = isoStanding(scene, objects);
+    for (const [name, grid, depth] of [["ground", ground, -2], ["objects", flatObjects, -1]] as const) {
       const layer = map.createBlankLayer(name, tiles, -IW / 2, 0)!;
       layer.putTilesAt(grid as number[][], 0, 0).setDepth(depth);
       (layer as any).cullCallback = isoCull;
@@ -141,6 +136,18 @@ export class IsoView {
     scene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => { ev.off(Phaser.Core.Events.PRE_RENDER, pre); ev.off(Phaser.Core.Events.POST_RENDER, post); });
     const cam = scene.cameras.main;
     cam.removeBounds();
+    // Clicks (e.g. on NPCs) are tested between frames, when objects are back at world x/y: project them for the test
+    const mgr = scene.input.manager as any, hit = mgr.hitTest;
+    if (!mgr.__iso) {
+      mgr.__iso = true;
+      mgr.hitTest = function (pointer: any, objects: any[], camera: any, output?: any) {
+        const back: [any, number, number][] = [];
+        for (const o of objects) if (o.scrollFactorX !== 0 && o.x !== undefined && o.parentContainer == null) {
+          back.push([o, o.x, o.y]); const x = o.x, y = o.y; o.x = isoX(x, y); o.y = isoY(x, y);
+        }
+        try { return hit.call(this, pointer, objects, camera, output); } finally { for (const [o, x, y] of back) { o.x = x; o.y = y; } }
+      };
+    }
   }
 
   /** Keep animated tiles (water, grass, wheel, fire) moving in the diamond tileset too. */
@@ -229,4 +236,152 @@ export class IsoView {
     const x0 = Math.min(...xs), y0 = Math.min(...ys);
     v.setTo(x0, y0, Math.max(...xs) - x0, Math.max(...ys) - y0);
   }
+}
+
+// ---------- phase 2: standing objects ----------
+
+const id = (index: number) => (index < 0 ? -1 : index % TILE_COUNT);
+const ROOF_IDS = new Set<number>([T.ROOF_THATCH, T.ROOF_RED, T.ROOF_SLATE]);
+const FACADE = new Set<number>([T.WALL_TIMBER, T.WALL_STONE, T.WINDOW_TIMBER, T.WINDOW_STONE, T.DOOR]);
+/** Block height (screen px) of each wall-like object; their tile art goes on the top and both visible sides. */
+const BLOCK_H: Partial<Record<number, number>> = {
+  [T.ROOF_THATCH]: 44, [T.ROOF_RED]: 44, [T.ROOF_SLATE]: 44,
+  [T.WALL_TIMBER]: 44, [T.WALL_STONE]: 44, [T.WINDOW_TIMBER]: 44, [T.WINDOW_STONE]: 44, [T.DOOR]: 44,
+  [T.RUIN]: 22, [T.BEAM]: 18, [T.STALL_RED]: 14, [T.STALL_BLUE]: 14,
+};
+/** Small things drawn upright from their (3/4 view) tile art, standing on the tile. */
+const UPRIGHT = new Set<number>([
+  T.ROCK, T.WELL, T.BARREL, T.CRATE, T.ANVIL, T.GRAVE, T.HAY, T.WHEEL, T.SIGN, T.STUMP, T.SIGNPOST,
+]);
+
+/** Tile image (square, from "tiles") as a frame name, added on first use. */
+function tileFrame(scene: Phaser.Scene, index: number) {
+  const tex = scene.textures.get("tiles"), name = `t${index}`;
+  if (!tex.has(name)) tex.add(name, 0, (index % TILE_COUNT) * TILE, Math.floor(index / TILE_COUNT) * TILE, TILE, TILE);
+  return name;
+}
+
+/**
+ * A wall-like tile as an iso block: `top` tile art on the top diamond, `side` tile art on the two faces we see
+ * (south-west and south-east), the faces shaded.
+ */
+function blockTexture(scene: Phaser.Scene, top: number, side: number, h: number) {
+  const key = `blk_${top}_${side}_${h}`;
+  if (scene.textures.exists(key)) return key;
+  const src = (scene.textures.get("tiles") as Phaser.Textures.CanvasTexture).getSourceImage() as HTMLCanvasElement;
+  const tex = scene.textures.createCanvas(key, IW, IH + h)!;
+  const ctx = tex.getContext();
+  ctx.imageSmoothingEnabled = false;
+  const sx = (i: number) => (i % TILE_COUNT) * TILE, sy = (i: number) => Math.floor(i / TILE_COUNT) * TILE;
+  const face = (a: number, b: number, e: number, f: number, shade: number) => {
+    ctx.save();
+    ctx.beginPath();
+    if (b > 0) { ctx.moveTo(0, IH / 2); ctx.lineTo(IW / 2, IH); ctx.lineTo(IW / 2, IH + h); ctx.lineTo(0, IH / 2 + h); }
+    else { ctx.moveTo(IW / 2, IH); ctx.lineTo(IW, IH / 2); ctx.lineTo(IW, IH / 2 + h); ctx.lineTo(IW / 2, IH + h); }
+    ctx.closePath(); ctx.clip();
+    ctx.setTransform(a, b, 0, (h + 1) / TILE, e, f);
+    ctx.drawImage(src, sx(side), sy(side), TILE, TILE, 0, 0, TILE + 1, TILE);
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.fillStyle = `rgba(20,16,40,${shade})`;
+    ctx.fillRect(0, 0, IW, IH + h);
+    ctx.restore();
+  };
+  // the faces hang under the top diamond's lower edges
+  face(1, 0.5, 0, IH / 2, 0.22);
+  face(1, -0.5, IW / 2, IH, 0.4);
+  ctx.setTransform(1, 0.5, -1, 0.5, IW / 2, 0);
+  ctx.drawImage(src, sx(top), sy(top), TILE, TILE, 0, 0, TILE + 0.5, TILE + 0.5);
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  // a thin dark rim where the top meets the faces
+  ctx.strokeStyle = "rgba(20,16,40,0.35)";
+  ctx.beginPath(); ctx.moveTo(0, IH / 2); ctx.lineTo(IW / 2, IH); ctx.lineTo(IW, IH / 2); ctx.stroke();
+  tex.refresh();
+  return key;
+}
+
+const FENCES = new Set<number>([T.FENCE, T.FENCE_V]);
+
+/**
+ * Palisade and fences: wooden posts along the line to each connected neighbour (mask bits N=1 E=2 S=4 W=8).
+ * Palisade posts are tall pointed stakes, fences low posts with two rails. `broken` knocks some stakes down.
+ */
+function stakesTexture(scene: Phaser.Scene, fence: boolean, mask: number, broken: boolean) {
+  const key = `stk_${fence ? "f" : "p"}_${mask}_${broken ? 1 : 0}`;
+  if (scene.textures.exists(key)) return key;
+  const H = fence ? 12 : 30, W = IW, HT = IH + H;
+  const tex = scene.textures.createCanvas(key, W, HT)!;
+  const ctx = tex.getContext();
+  // footprint centre of the tile in this canvas, and the screen step of one world px along x / y
+  const c = { x: IW / 2, y: H + IH / 2 };
+  const along = (wx: number, wy: number) => ({ x: c.x + (wx - wy), y: c.y + (wx + wy) / 2 });
+  const dirs: [number, number, number][] = [[1, 0, -1], [2, 1, 0], [4, 0, 1], [8, -1, 0]];
+  const pts: { x: number; y: number; k: number }[] = [];
+  let k = 0;
+  const step = fence ? 8 : 4;
+  for (const [bit, dx, dy] of dirs) if (mask & bit) for (let d = 0; d <= TILE / 2; d += step) pts.push({ ...along(dx * d, dy * d), k: k++ });
+  if (!mask || !pts.length) pts.push({ ...along(0, 0), k: 0 });
+  const seen = new Set<string>();
+  const posts = pts.filter((p) => { const s = `${Math.round(p.x)},${Math.round(p.y)}`; if (seen.has(s)) return false; seen.add(s); return true; })
+    .sort((a, b) => a.y - b.y);
+  const wood = ["#6b4a2b", "#7d5733", "#5e4026"], dark = "#3b2817", light = "#a07448";
+  if (fence) {
+    // two rails between the posts
+    for (const [bit, dx, dy] of dirs) if (mask & bit) {
+      const a = along(0, 0), b = along(dx * TILE / 2, dy * TILE / 2);
+      for (const hh of [4, 9]) { ctx.strokeStyle = "#7d5733"; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(a.x, a.y - hh); ctx.lineTo(b.x, b.y - hh); ctx.stroke(); }
+    }
+  }
+  posts.forEach((p, i) => {
+    let h = fence ? H : H - ((i * 7 + mask) % 3) * 2;
+    if (broken && (i * 13 + mask * 5) % 4 === 0) h = Math.round(h * 0.35);
+    const x = Math.round(p.x) - 1, y = Math.round(p.y);
+    ctx.fillStyle = wood[i % 3]; ctx.fillRect(x - 1, y - h, 3, h);
+    ctx.fillStyle = light; ctx.fillRect(x - 1, y - h, 1, h);
+    ctx.fillStyle = dark; ctx.fillRect(x + 1, y - h, 1, h);
+    if (!fence && h > 10) { ctx.fillStyle = wood[i % 3]; ctx.fillRect(x, y - h - 2, 1, 2); } // pointed tip
+    ctx.fillStyle = "rgba(0,0,0,0.25)"; ctx.fillRect(x - 1, y, 4, 1); // contact shadow
+  });
+  tex.refresh();
+  return key;
+}
+
+/**
+ * Object tiles that stand up: walls, houses, ruins and the palisade become blocks, small props stand upright.
+ * Returns the object grid with those removed (what is left is drawn flat by the tilemap).
+ */
+export function isoStanding(scene: Phaser.Scene, objects: number[][]): number[][] {
+  const out = objects.map((r) => r.slice());
+  const at = (x: number, y: number) => (x < 0 || y < 0 || x >= MAP_W || y >= MAP_H ? -1 : objects[y][x]);
+  for (let ty = 0; ty < MAP_H; ty++) for (let tx = 0; tx < MAP_W; tx++) {
+    const index = objects[ty][tx], t = id(index);
+    if (t < 0) continue;
+    const cx = (tx + 0.5) * TILE, cy = (ty + 0.5) * TILE;
+    const h = BLOCK_H[t];
+    if (t === T.PALISADE || FENCES.has(t)) {
+      const same = (x: number, y: number) => { const n = id(at(x, y)); return t === T.PALISADE ? n === T.PALISADE : FENCES.has(n); };
+      const mask = (same(tx, ty - 1) ? 1 : 0) | (same(tx + 1, ty) ? 2 : 0) | (same(tx, ty + 1) ? 4 : 0) | (same(tx - 1, ty) ? 8 : 0);
+      const broken = t === T.PALISADE && (Math.floor(index / TILE_COUNT) & 64) !== 0;
+      const key = stakesTexture(scene, t !== T.PALISADE, mask, broken);
+      const H = t === T.PALISADE ? 30 : 12;
+      scene.add.image(cx, cy, key).setOrigin(0.5, (H + IH / 2) / (IH + H)).setDepth(cy);
+      out[ty][tx] = -1;
+    } else if (h !== undefined) {
+      // A house facade shows the roof above it on top; its own art (windows, door) goes on the sides.
+      let top = index, side = index;
+      if (FACADE.has(t)) {
+        for (let k = 1; k < 8; k++) { const up = at(tx, ty - k); if (ROOF_IDS.has(id(up))) { top = up; break; } if (!FACADE.has(id(up))) break; }
+      } else if (ROOF_IDS.has(t)) {
+        for (let k = 1; k < 16; k++) { const dn = at(tx, ty + k); if (FACADE.has(id(dn))) { side = dn; break; } if (!ROOF_IDS.has(id(dn))) break; }
+      }
+      const key = blockTexture(scene, top, side, h);
+      // origin = the centre of the footprint diamond, so the block stands on its tile
+      scene.add.image(cx, cy, key).setOrigin(0.5, (IH / 2 + h) / (IH + h)).setDepth(cy);
+      out[ty][tx] = -1;
+    } else if (UPRIGHT.has(t)) {
+      // 3/4 view art: its bottom edge stands on the tile's centre, a little forward
+      scene.add.image(cx, cy, "tiles", tileFrame(scene, index)).setOrigin(0.5, 0.85).setDepth(cy);
+      out[ty][tx] = -1;
+    }
+  }
+  return out;
 }
