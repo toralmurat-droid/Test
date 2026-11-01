@@ -62,7 +62,8 @@ html, body { margin: 0; height: 100%; background: #1b1b24; color: #eee; font: 14
 #heropowers b { color: inherit; }
 #zone { position: absolute; top: 76px; left: 12px; font-size: 12px; color: #f4a261; text-shadow: 1px 1px #000; }
 #skill { position: absolute; top: 56px; left: 12px; width: 200px; height: 14px; background: #222; border: 2px solid #000; }
-#skillfill { position: absolute; inset: 0 auto 0 0; width: 100%; background: #4cc9f0; }
+#skillfill { position: absolute; inset: 0 auto 0 0; width: 100%; background: #e9c46a; transition: width .15s linear; }
+#skillfill.magic { background: #4cc9f0; }
 #skilltext { position: relative; font-size: 11px; padding-left: 4px; line-height: 10px; text-shadow: 1px 1px #000; }
 #play { width: 100%; padding: 10px; font: inherit; font-weight: bold; background: #06d6a0; border: 0; cursor: pointer; }
 .help { color: #aaa; font-size: 12px; }
