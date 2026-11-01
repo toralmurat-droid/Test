@@ -591,6 +591,201 @@
    "fps": 2,
    "loop": true
   },
+  "walk2_down": {
+   "frames": [
+    324,
+    325,
+    326,
+    327,
+    328,
+    329
+   ],
+   "fps": 9,
+   "loop": true
+  },
+  "walk2_up": {
+   "frames": [
+    330,
+    331,
+    332,
+    333,
+    334,
+    335
+   ],
+   "fps": 9,
+   "loop": true
+  },
+  "walk2_right": {
+   "frames": [
+    336,
+    337,
+    338,
+    339,
+    340,
+    341
+   ],
+   "fps": 9,
+   "loop": true
+  },
+  "dodge_down": {
+   "frames": [
+    342,
+    343,
+    344,
+    345,
+    346,
+    347
+   ],
+   "fps": 16,
+   "loop": false
+  },
+  "dodge_up": {
+   "frames": [
+    348,
+    349,
+    350,
+    351,
+    352,
+    353
+   ],
+   "fps": 16,
+   "loop": false
+  },
+  "dodge_right": {
+   "frames": [
+    354,
+    355,
+    356,
+    357,
+    358,
+    359
+   ],
+   "fps": 16,
+   "loop": false
+  },
+  "jump_down": {
+   "frames": [
+    360,
+    361,
+    362,
+    363,
+    364,
+    365
+   ],
+   "fps": 12,
+   "loop": false
+  },
+  "jump_up": {
+   "frames": [
+    366,
+    367,
+    368,
+    369,
+    370,
+    371
+   ],
+   "fps": 12,
+   "loop": false
+  },
+  "jump_right": {
+   "frames": [
+    372,
+    373,
+    374,
+    375,
+    376,
+    377
+   ],
+   "fps": 12,
+   "loop": false
+  },
+  "block_down": {
+   "frames": [
+    378,
+    379,
+    380,
+    381
+   ],
+   "fps": 10,
+   "loop": false
+  },
+  "block_up": {
+   "frames": [
+    384,
+    385,
+    386,
+    387
+   ],
+   "fps": 10,
+   "loop": false
+  },
+  "block_right": {
+   "frames": [
+    390,
+    391,
+    392,
+    393
+   ],
+   "fps": 10,
+   "loop": false
+  },
+  "hit2_down": {
+   "frames": [
+    396,
+    397,
+    398
+   ],
+   "fps": 10,
+   "loop": false
+  },
+  "hit2_up": {
+   "frames": [
+    402,
+    403,
+    404
+   ],
+   "fps": 10,
+   "loop": false
+  },
+  "hit2_right": {
+   "frames": [
+    408,
+    409,
+    410
+   ],
+   "fps": 10,
+   "loop": false
+  },
+  "ko2_down": {
+   "frames": [
+    414,
+    415,
+    416,
+    417
+   ],
+   "fps": 6,
+   "loop": false
+  },
+  "ko2_up": {
+   "frames": [
+    420,
+    421,
+    422,
+    423
+   ],
+   "fps": 6,
+   "loop": false
+  },
+  "ko2_right": {
+   "frames": [
+    426,
+    427,
+    428,
+    429
+   ],
+   "fps": 6,
+   "loop": false
+  },
   "swing1_down": {
    "frames": [
     36,

@@ -1,0 +1,170 @@
+<title>Pixel Town Brawl Sprites</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@500;700&family=Work+Sans:wght@400;600&display=swap">
+<style>
+/* Layout: a playable test field up top, then an animation board for the chosen hero, then props and items */
+:root{--bg:#eef1e6;--panel:#f9faf5;--ink:#1f2419;--muted:#5d6655;--grass:#5d9b4d;--accent:#b2452f;--line:#d5dbc8;--key:#e4e9d8;
+--display:"Pixelify Sans",ui-monospace,monospace;--body:"Work Sans",system-ui,sans-serif}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#171a14;--panel:#20251c;--ink:#e7ecdf;--muted:#9aa58f;--grass:#3f6f34;--accent:#e07a5f;--line:#323a2b;--key:#2b3226;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#171a14;--panel:#20251c;--ink:#e7ecdf;--muted:#9aa58f;--grass:#3f6f34;--accent:#e07a5f;--line:#323a2b;--key:#2b3226;color-scheme:dark}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:28px 48px}
+main{max-width:1000px;margin:0 auto;display:flex;flex-direction:column;gap:40px}
+section{display:flex;flex-direction:column;gap:12px}
+h1,h2,h3{font-family:var(--display);margin:0;text-wrap:balance}h1{font-size:2.2rem}h2{font-size:1.45rem}h3{font-size:1.05rem}
+p{margin:0;color:var(--muted);max-width:68ch;line-height:1.5}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.seg{display:flex;flex-wrap:wrap;border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.seg button{font:600 13px var(--body);background:var(--panel);color:var(--ink);border:0;padding:7px 12px;cursor:pointer;border-right:1px solid var(--line);text-transform:capitalize}
+.seg button:last-child{border-right:0}.seg button[aria-pressed="true"]{background:var(--accent);color:#fff}
+button:focus-visible,canvas:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.play{display:grid;grid-template-columns:minmax(0,1fr) 240px;gap:16px;align-items:start}
+@media (max-width:760px){.play{grid-template-columns:minmax(0,1fr)}}
+#field{width:100%;aspect-ratio:16/9;image-rendering:pixelated;border-radius:6px;display:block;background:var(--grass);cursor:pointer;touch-action:none}
+.keys{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px;display:grid;grid-template-columns:auto 1fr;gap:6px 10px;font-size:13px;align-items:center}
+kbd{justify-self:start;font:600 12px ui-monospace,monospace;background:var(--key);border:1px solid var(--line);border-bottom-width:2px;border-radius:4px;padding:1px 6px;white-space:nowrap}
+.now{font:600 13px ui-monospace,monospace;color:var(--muted)}
+.pad{display:flex;flex-wrap:wrap;gap:6px}
+.pad button{font:600 13px var(--body);background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:8px 10px;cursor:pointer;touch-action:none;min-width:44px}
+.pad button:active{background:var(--key)}
+.board{display:grid;grid-template-columns:repeat(auto-fill,minmax(112px,1fr));gap:10px}
+.cell{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:8px;display:flex;flex-direction:column;gap:6px;align-items:center}
+.cell canvas{width:96px;height:96px;image-rendering:pixelated;background:var(--grass);border-radius:4px}
+.cell code{font-size:11px;color:var(--muted);text-align:center}
+.cell.new{border-color:var(--accent)}
+.group{display:flex;flex-direction:column;gap:8px}
+.group h3 small{font:400 12px var(--body);color:var(--muted);margin-left:6px}
+</style>
+<main>
+<header style="display:flex;flex-direction:column;gap:8px">
+<h1>Pixel Town Brawl sprites</h1>
+<p>Five heroes and four villagers at 32×32, all drawn by <code>tools/art</code>. Take any of them for a walk on the test field, then check every animation on the board below.</p>
+</header>
+
+<section>
+<h2>Test field</h2>
+<div class="row"><div class="seg" id="heroPick"></div></div>
+<div class="play">
+  <div style="display:flex;flex-direction:column;gap:8px;min-width:0">
+    <canvas id="field" width="320" height="180" tabindex="0" aria-label="Test field. Click, then use the keyboard to move and attack."></canvas>
+    <div class="row" style="justify-content:space-between"><span class="now" id="now">idle</span><span class="now" id="hint">Click the field to take control</span></div>
+    <div class="pad" id="pad"></div>
+  </div>
+  <div class="keys" id="keys"></div>
+</div>
+</section>
+
+<section>
+<h2 id="boardTitle">Animation board</h2>
+<div class="row"><div class="seg" id="dirPick"></div><span class="now">Outlined cells are the new alternative moves</span></div>
+<div id="board" style="display:flex;flex-direction:column;gap:18px"></div>
+</section>
+
+<section><h2>Village props</h2><p>Shown at 2× so sizes compare. Bottom-centre pivot with a soft shadow baked in.</p><div class="board" id="props"></div></section>
+<section><h2>Items</h2><p>16×16 icons for loot, shop and inventory.</p><div class="board" id="items"></div></section>
+</main>
+<script>
+const D=__DATA__;
+const load=s=>new Promise(r=>{const i=new Image();i.onload=()=>r(i);i.src=s});
+const FW=32,COLS=D.meta.columns,A=D.meta.animations;
+const GROUPS=[
+ ["Moving",["idle","idle2","idle3","walk","walk2","run"]],
+ ["Fighting",["swing1","swing2","swing3","swing4","attack3","skill"]],
+ ["Defending",["block","dodge","jump","hit","hit2"]],
+ ["Down",["ko","ko2"]],
+ ["Emotes",["wave","cheer","laugh","sit","sleep"]],
+];
+const NEW=new Set(["walk2","dodge","jump","block","hit2","ko2"]);
+const LABEL={idle2:"look around",idle3:"flourish",walk2:"gait",swing1:"swing 1",swing2:"swing 2",swing3:"swing 3",swing4:"swing 4",attack3:"finisher",hit2:"heavy hit",ko2:"fall forward"};
+const GAIT={ninja:"sneak",knight:"march",wizard:"float",barbarian:"swagger",archer:"light step"};
+let hero="ninja",bdir="down";
+const imgs={};
+function anim(name,dir){const d=dir==="left"?"right":dir;return A[name+"_"+d]}
+function drawFrame(ctx,img,f,x,y,s,flip){const sx=(f%COLS)*FW,sy=Math.floor(f/COLS)*FW;ctx.save();if(flip){ctx.translate(x+FW*s,y);ctx.scale(-1,1);x=0;y=0}ctx.drawImage(img,sx,sy,FW,FW,x,y,FW*s,FW*s);ctx.restore()}
+function frameAt(a,ms){const per=1000/a.fps;let i=Math.floor(ms/per);if(a.loop)return a.frames[i%a.frames.length];const total=a.frames.length+Math.round(a.fps*0.8);return a.frames[Math.min(i%total,a.frames.length-1)]}
+function seg(id,list,get,set,label){const el=document.getElementById(id);el.innerHTML="";list.forEach(v=>{const b=document.createElement("button");b.textContent=label?label(v):v;b.setAttribute("aria-pressed",v===get());b.onclick=()=>{set(v);seg(id,list,get,set,label)};el.appendChild(b)})}
+
+// ---------- test field ----------
+const field=document.getElementById("field"),fx=field.getContext("2d");fx.imageSmoothingEnabled=false;
+const W=320,H=180;
+const P={x:160,y:110,dir:"down",anim:"idle",t0:0,shot:null,lastAct:0,walkStyle:"walk",keys:new Set()};
+const KEYS=[["WASD / arrows","move"],["Shift","run"],["G","switch walk / gait"],["Space","attack (random swing 1–4)"],["F","combo finisher"],["E","skill"],["Q","dodge roll"],["C","jump"],["B","block"],["H / Shift+H","hit / heavy hit"],["K / Shift+K","knock out / fall forward"],["1–5","wave, cheer, laugh, sit, sleep"]];
+document.getElementById("keys").innerHTML=KEYS.map(([k,v])=>`<kbd>${k}</kbd><span>${v}</span>`).join("");
+let lastSwing="";
+function play(name){P.shot=name;P.t0=performance.now();P.lastAct=P.t0}
+function swing(){const o=["swing1","swing2","swing3","swing4"].filter(s=>s!==lastSwing);lastSwing=o[Math.floor(Math.random()*o.length)];play(lastSwing)}
+const ACT={" ":swing,f:()=>play("attack3"),e:()=>play("skill"),q:()=>play("dodge"),c:()=>play("jump"),b:()=>play("block"),h:()=>play("hit"),H:()=>play("hit2"),k:()=>play("ko"),K:()=>play("ko2"),1:()=>play("wave"),2:()=>play("cheer"),3:()=>play("laugh"),4:()=>play("sit"),5:()=>play("sleep"),g:()=>{P.walkStyle=P.walkStyle==="walk"?"walk2":"walk"},G:()=>{P.walkStyle=P.walkStyle==="walk"?"walk2":"walk"}};
+const MOVE={w:"up",arrowup:"up",s:"down",arrowdown:"down",a:"left",arrowleft:"left",d:"right",arrowright:"right"};
+field.addEventListener("focus",()=>document.getElementById("hint").textContent="Keyboard on: try Space, E, Q, 1–5");
+field.addEventListener("blur",()=>{document.getElementById("hint").textContent="Click the field to take control";P.keys.clear()});
+field.addEventListener("pointerdown",()=>field.focus());
+field.addEventListener("keydown",e=>{const k=e.key.length===1?e.key:e.key.toLowerCase();const m=MOVE[k.toLowerCase()];if(m){P.keys.add(m);e.preventDefault();return}if(e.key==="Shift"){P.run=true;return}const fn=ACT[k]??ACT[k.toLowerCase()];if(fn&&!e.repeat){fn();e.preventDefault()}});
+field.addEventListener("keyup",e=>{const m=MOVE[e.key.toLowerCase()];if(m)P.keys.delete(m);if(e.key==="Shift")P.run=false});
+// touch pad
+const pad=document.getElementById("pad");
+[["◀","left"],["▲","up"],["▼","down"],["▶","right"]].forEach(([t,d])=>{const b=document.createElement("button");b.textContent=t;b.setAttribute("aria-label","move "+d);b.onpointerdown=e=>{e.preventDefault();P.keys.add(d)};const up=()=>P.keys.delete(d);b.onpointerup=up;b.onpointerleave=up;b.onpointercancel=up;pad.appendChild(b)});
+[["Attack"," "],["Finisher","f"],["Skill","e"],["Dodge","q"],["Jump","c"],["Block","b"],["Gait","g"],["Wave","1"],["Cheer","2"]].forEach(([t,k])=>{const b=document.createElement("button");b.textContent=t;b.onclick=()=>ACT[k]();pad.appendChild(b)});
+
+// scenery: grass texture + a few props
+const grass=document.createElement("canvas");grass.width=W;grass.height=H;
+(()=>{const g=grass.getContext("2d");g.fillStyle="#5d9b4d";g.fillRect(0,0,W,H);let s=11;const r=()=>(s=(s*9301+49297)%233280)/233280;for(let i=0;i<900;i++){g.fillStyle=r()<.5?"#4f8a41":"#6fae5c";g.fillRect(r()*W|0,r()*H|0,1,1)}
+ g.fillStyle="#c8a165";for(let y=128;y<146;y++){g.fillRect(0,y,W,1)}for(let i=0;i<160;i++){g.fillStyle=r()<.5?"#b08850":"#d9b77e";g.fillRect(r()*W|0,128+(r()*18|0),1,1)}})();
+const SCENERY=[["well",56,96],["market_stall",250,92],["barrel",226,96],["crate",212,98],["lamppost",120,124],["training_dummy",200,170],["bush",30,170],["fountain",288,176],["campfire",80,172],["flower_planter",150,60],["haystack",28,60]];
+
+function step(now,dt){
+ const mv={x:0,y:0};for(const k of P.keys){if(k==="left")mv.x--;if(k==="right")mv.x++;if(k==="up")mv.y--;if(k==="down")mv.y++}
+ const moving=!!(mv.x||mv.y);
+ if(P.shot){const a=anim(P.shot,P.dir);const done=(now-P.t0)>=a.frames.length*1000/a.fps+(P.shot==="ko"||P.shot==="ko2"||P.shot==="sleep"||P.shot==="sit"?900:60);
+   if(P.shot==="dodge"){const v={left:[-1,0],right:[1,0],up:[0,-1],down:[0,1]}[P.dir];P.x+=v[0]*110*dt;P.y+=v[1]*110*dt}
+   if(done||(moving&&!["ko","ko2","dodge","skill","attack3"].includes(P.shot)&&(now-P.t0)>150))P.shot=null}
+ if(!P.shot){
+   if(moving){P.dir=mv.x<0?"left":mv.x>0?"right":mv.y<0?"up":"down";const sp=P.run?100:(P.walkStyle==="walk2"&&hero==="ninja"?38:55);const n=Math.hypot(mv.x,mv.y);P.x+=mv.x/n*sp*dt;P.y+=mv.y/n*sp*dt;P.anim=P.run?"run":P.walkStyle;P.lastAct=now}
+   else{if(P.anim!=="idle"&&P.anim!=="idle2"&&P.anim!=="idle3"){P.anim="idle";P.t0=now}
+     if(P.anim==="idle"&&now-P.lastAct>3500){P.anim=Math.random()<.5?"idle2":"idle3";P.t0=now;P.lastAct=now}
+     if(P.anim!=="idle"){const a=anim(P.anim,P.dir);if(now-P.t0>a.frames.length*1000/a.fps){P.anim="idle";P.t0=now}}}
+ }
+ P.x=Math.max(14,Math.min(W-14,P.x));P.y=Math.max(30,Math.min(H-4,P.y));
+}
+function drawField(now){
+ fx.drawImage(grass,0,0);
+ const items=SCENERY.map(([n,x,y])=>({y,draw:()=>{const fr=PJ.frames[PJ.animations[n]?PJ.animations[n].frames[Math.floor(now/(1000/PJ.animations[n].fps))%PJ.animations[n].frames.length]:n].frame;fx.drawImage(propsImg,fr.x,fr.y,fr.w,fr.h,Math.round(x-fr.w/2),Math.round(y-fr.h),fr.w,fr.h)}}));
+ const cur=P.shot??P.anim,a=anim(cur,P.dir),f=frameAt({...a,loop:P.shot?false:a.loop},now-(P.shot?P.t0:(cur==="idle"||cur.startsWith("walk")||cur==="run"?0:P.t0)));
+ items.push({y:P.y,draw:()=>drawFrame(fx,imgs[hero],f,Math.round(P.x-16),Math.round(P.y-29),1,P.dir==="left")});
+ items.sort((p,q)=>p.y-q.y).forEach(i=>i.draw());
+ document.getElementById("now").textContent=`${hero} · ${LABEL[cur]??cur}${cur==="walk2"&&GAIT[hero]?" ("+GAIT[hero]+")":""} · ${P.dir}`;
+}
+
+// ---------- board ----------
+let cells=[];
+function buildBoard(){
+ const host=document.getElementById("board");host.innerHTML="";cells=[];
+ document.getElementById("boardTitle").textContent=`Animation board: ${hero}`;
+ for(const [title,list] of GROUPS){
+   const g=document.createElement("div");g.className="group";g.innerHTML=`<h3>${title}</h3>`;
+   const b=document.createElement("div");b.className="board";
+   for(const n of list){if(!anim(n,"down"))continue;const c=document.createElement("div");c.className="cell"+(NEW.has(n)?" new":"");const cv=document.createElement("canvas");cv.width=96;cv.height=96;c.appendChild(cv);const l=document.createElement("code");l.textContent=(LABEL[n]??n)+(n==="walk2"&&GAIT[hero]?` · ${GAIT[hero]}`:"");c.appendChild(l);b.appendChild(c);cells.push({cv,n})}
+   g.appendChild(b);host.appendChild(g);
+ }
+}
+function drawBoard(now){for(const {cv,n} of cells){const x=cv.getContext("2d");x.imageSmoothingEnabled=false;x.clearRect(0,0,96,96);const a=anim(n,bdir);drawFrame(x,imgs[hero],frameAt(a,now),0,0,3,bdir==="left")}}
+
+// ---------- props / items ----------
+let propsImg,itemsImg;const PJ=D.propsJson,IJ=D.itemsJson;const gcells=[];
+function gallery(){const seen=new Set();
+ for(const k of Object.keys(PJ.frames)){const base=k.replace(/_\d+$/,"");const an=PJ.animations[base];if(an){if(seen.has(base))continue;seen.add(base)}gcells.push(mk("props",propsImg,PJ,an?base:k,an?an.frames:[k],an?an.fps:1,2))}
+ for(const k of Object.keys(IJ.frames))gcells.push(mk("items",itemsImg,IJ,k,[k],1,5))}
+function mk(host,img,json,name,frames,fps,s){const d=document.createElement("div");d.className="cell";const cv=document.createElement("canvas");cv.width=96;cv.height=96;d.appendChild(cv);const l=document.createElement("code");l.textContent=name;d.appendChild(l);document.getElementById(host).appendChild(d);return{cv,img,json,frames,fps,s}}
+function drawGallery(now){for(const c of gcells){const k=c.frames[Math.floor(now/(1000/c.fps))%c.frames.length],fr=c.json.frames[k].frame,x=c.cv.getContext("2d");x.imageSmoothingEnabled=false;x.clearRect(0,0,96,96);x.drawImage(c.img,fr.x,fr.y,fr.w,fr.h,(96-fr.w*c.s)/2,(96-fr.h*c.s)/2,fr.w*c.s,fr.h*c.s)}}
+
+(async()=>{
+ for(const[k,v]of Object.entries(D.chars))imgs[k]=await load(v);
+ propsImg=await load(D.props);itemsImg=await load(D.items);
+ const names=[...D.meta.characters,...D.meta.npcs];
+ seg("heroPick",names,()=>hero,v=>{hero=v;buildBoard()});
+ seg("dirPick",["down","left","up","right"],()=>bdir,v=>bdir=v);
+ buildBoard();gallery();
+ const reduce=matchMedia("(prefers-reduced-motion: reduce)").matches;
+ let last=performance.now();
+ function loop(now){const dt=Math.min(.05,(now-last)/1000);last=now;step(now,dt);drawField(now);drawBoard(reduce?0:now);drawGallery(reduce?0:now);requestAnimationFrame(loop)}
+ requestAnimationFrame(loop);
+})();
+</script>
