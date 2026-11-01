@@ -1,5 +1,5 @@
 import { TILE } from "../../shared/constants";
-import { T, TILE_COUNT, VILLAGE } from "../../shared/map";
+import { SIGNPOSTS, T, TILE_COUNT, VILLAGE } from "../../shared/map";
 
 /**
  * Procedural 16×16 pixel-art tileset (no image assets needed yet).
@@ -496,18 +496,19 @@ const DRAW: Record<number, (p: Painter, f: number, v: number) => void> = {
   },
   [T.RUIN]: (p, _f, m) => ruinWall(p, m),
   [T.BONFIRE]: (p) => { p.speckle(0x3a332c, 14); p.speckle(0xc0502a, 3); }, // ash; the fire itself is a sprite (ambient.ts)
-  [T.SIGNPOST]: (p) => { // a tall post with three arrow boards pointing different ways
+  [T.SIGNPOST]: (p, _f, v) => { // a post with one arrow board per road leaving the spot (v: (boards-1)*16 + left-pointing bits)
+    const n = (v >> 4) + 1;
     p.disc(8, 15, 4.5, 1.1, SHADOW);
     p.rect(7, 1, 2, 14, 0x6b4426); p.rect(7, 1, 1, 14, 0x8b5e34); p.px(7, 0, 0x8b5e34); p.px(8, 0, 0x6b4426);
-    const board = (y: number, x0: number, x1: number, right: boolean) => {
+    const board = (y: number, left: boolean, len: number) => {
+      const x0 = left ? 8 - len : 8, x1 = left ? 8 : 8 + len;
       p.rect(x0, y, x1 - x0, 3, 0xb07a44); p.rect(x0, y, x1 - x0, 1, 0xd09a5c); p.rect(x0, y + 2, x1 - x0, 1, 0x7a522a);
-      if (right) { p.px(x1, y + 1, 0xb07a44); p.px(x1, y, 0x7a522a); p.px(x1, y + 2, 0x7a522a); }
-      else { p.px(x0 - 1, y + 1, 0xb07a44); p.px(x0 - 1, y, 0x7a522a); p.px(x0 - 1, y + 2, 0x7a522a); }
+      const tip = left ? x0 - 1 : x1;
+      p.px(tip, y + 1, 0xb07a44); p.px(tip, y, 0x7a522a); p.px(tip, y + 2, 0x7a522a);
       for (let x = x0 + 1; x < x1 - 1; x += 2) p.px(x, y + 1, 0x5a3a1e); // carved letters
     };
-    board(2, 6, 14, true);
-    board(6, 2, 10, false);
-    board(10, 7, 13, true);
+    const gap = n >= 4 ? 3 : 4;
+    for (let i = 0; i < n; i++) board(1 + i * gap, !!(v & (1 << i)), 6 - (i % 2));
   },
   [T.SIGN]: (p) => {
     p.disc(8, 15, 4, 1, SHADOW);
@@ -542,7 +543,7 @@ const paint = (ctx: CanvasRenderingContext2D, id: number, row: number, f: number
 export function drawTileset(ctx: CanvasRenderingContext2D) {
   ctx.clearRect(0, 0, TILE * TILE_COUNT, TILE * ROWS);
   for (let i = 0; i < TILE_COUNT; i++) {
-    const rows = VARIED.has(i) ? 4 : i === T.PALISADE ? 64 : CONNECTED.has(i) || i === T.GRASS_DARK || i === T.RUBBLE ? 16 : 1;
+    const rows = VARIED.has(i) ? 4 : i === T.PALISADE || i === T.SIGNPOST ? 64 : CONNECTED.has(i) || i === T.GRASS_DARK || i === T.RUBBLE ? 16 : 1;
     for (let r = 0; r < rows; r++) paint(ctx, i, r, 0);
   }
 }
@@ -554,6 +555,12 @@ export function tileRow(grid: number[][], x: number, y: number): number {
   const id = grid[y][x];
   const at = (i: number, j: number) => grid[j]?.[i] ?? id;
   const mask = (ok: (t: number) => boolean) => (ok(at(x, y - 1)) ? 1 : 0) | (ok(at(x + 1, y)) ? 2 : 0) | (ok(at(x, y + 1)) ? 4 : 0) | (ok(at(x - 1, y)) ? 8 : 0);
+  if (id === T.SIGNPOST) {
+    const sp = SIGNPOSTS.find((s) => s.x === x && s.y === y);
+    if (!sp) return 16; // two boards
+    const n = Math.max(1, Math.min(4, sp.dirs.length));
+    return (n - 1) * 16 + sp.dirs.slice(0, 4).reduce((m, d, i) => m | (Math.cos(d.angle) < 0 ? 1 << i : 0), 0);
+  }
   if (id === T.PALISADE) // which way is outside: away from the village centre
     return mask((t) => t === id) | (y > (VILLAGE.y0 + VILLAGE.y1) / 2 ? 16 : 0) | (x > (VILLAGE.x0 + VILLAGE.x1) / 2 ? 32 : 0);
   if (CONNECTED.has(id)) return mask((t) => t === id);

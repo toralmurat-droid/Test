@@ -32,7 +32,7 @@ for (let i = 0; i < N; i++) if (fromSpawn[i] >= 0) reach++;
 const reachable: number[] = [];
 for (let i = 0; i < N; i++) if (fromSpawn[i] >= 0) reachable.push(i);
 let seed = 7; const rnd = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296);
-let ratio = 0, worst = 0, samples = 0;
+let ratio = 0, worst = 0, samples = 0, worstAt = '';
 for (let k = 0; k < 40; k++) {
   const a = reachable[Math.floor(rnd() * reachable.length)];
   const d = bfs(a % MAP_W, (a / MAP_W) | 0);
@@ -40,7 +40,7 @@ for (let k = 0; k < 40; k++) {
     const b = reachable[Math.floor(rnd() * reachable.length)];
     const m = Math.abs((a % MAP_W) - (b % MAP_W)) + Math.abs(((a / MAP_W) | 0) - ((b / MAP_W) | 0));
     if (m < 10) continue;
-    const r = d[b] / m; ratio += r; worst = Math.max(worst, r); samples++;
+    const r = d[b] / m; ratio += r; samples++; if (r > worst) { worst = r; worstAt = `(${a % MAP_W},${(a / MAP_W) | 0}) -> (${b % MAP_W},${(b / MAP_W) | 0})`; }
   }
 }
 // Narrow spots: walkable tiles squeezed between solids on both sides (1-tile corridors)
@@ -51,5 +51,5 @@ for (let y = 0; y < MAP_H; y++) for (let x = 0; x < MAP_W; x++) {
 }
 console.log(`map ${MAP_W}x${MAP_H} (${N} tiles)`);
 console.log(`walkable ${(100 * walkable / N).toFixed(1)}%  reachable from spawn ${(100 * reach / walkable).toFixed(1)}% of walkable`);
-console.log(`detour factor avg ${(ratio / samples).toFixed(2)}  worst ${worst.toFixed(2)}  (1.00 = straight line)`);
+console.log(`detour factor avg ${(ratio / samples).toFixed(2)}  worst ${worst.toFixed(2)} ${worstAt}  (1.00 = straight line)`);
 console.log(`1-tile squeeze spots: ${narrow}`);

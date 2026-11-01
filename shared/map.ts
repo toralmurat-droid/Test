@@ -1,7 +1,7 @@
 import { MAP_H, MAP_W, PLAYER_RADIUS, TILE, type MobKind } from "./constants";
 
 /**
- * Oakvale and its surroundings — the starting region (160×120 tiles).
+ * Oakvale and its surroundings — the starting region (224×168 tiles).
  *
  * The world is two tile layers that share one tileset:
  *  - ground:  always filled (grass, roads, water…)
@@ -177,7 +177,7 @@ function buildWorld() {
     const edge = d < 3 + noise(x, y, 6, 11) * 5;
     const woods = x >= woodsX + Math.round(noise(x, y, 5, 23) * 3) && noise(x, y, 6, 71) > 0.42;
     const grove = noise(x, y, 9, 17) > 0.72;
-    if ((edge && h < 0.85) || (woods && h < 0.62) || (grove && h < 0.5) || h < 0.004) setO(x, y, pine ? T.PINE : T.TREE);
+    if ((edge && h < 0.85) || (woods && h < (x < 160 ? 0.62 : 0.42)) || (grove && h < 0.5) || h < 0.004) setO(x, y, pine ? T.PINE : T.TREE);
     else if ((edge || woods || grove) && h < 0.75) setO(x, y, T.BUSH);
     else if (h > 0.985) setO(x, y, T.BUSH); // bushes are walk-through decoration
   }
@@ -328,6 +328,72 @@ function buildWorld() {
   for (const [x, y] of [[96, 104], [97, 104], [104, 100], [108, 108]]) setO(x, y, T.RUIN);
   setO(100, 99, T.CRATE); setO(101, 99, T.CRATE); setO(100, 100, T.BARREL);
 
+  // ---------- 12a. The wider world (tougher areas further from Oakvale) ----------
+  // Barrow Downs (south-west): an old burial ground on dark grass, rows of graves and a ruined mausoleum
+  const barrow = { x: 22, y: 126, w: 46, h: 30 };
+  each(barrow.x, barrow.y, barrow.w, barrow.h, (x, y) => {
+    if (objects[y][x] === T.TREE || objects[y][x] === T.PINE) setO(x, y, hash(x, y, 141) < 0.12 ? T.STUMP : EMPTY);
+    if (isGrass(ground[y][x])) setG(x, y, noise(x, y, 5, 142) > 0.62 ? T.DIRT : hash(x, y, 143) < 0.7 ? T.GRASS_DARK : T.TALL_GRASS);
+  });
+  for (let gy = barrow.y + 4; gy < barrow.y + barrow.h - 3; gy += 3) for (let gx = barrow.x + 4; gx < barrow.x + barrow.w - 4; gx += 3) {
+    if (hash(gx, gy, 144) < 0.55 && !(gx > 38 && gx < 52 && gy > 134 && gy < 146)) setO(gx, gy, T.GRAVE);
+  }
+  const mau = { x: 40, y: 136, w: 9, h: 7 }; // the mausoleum, doorway to the south
+  rectG(mau.x, mau.y, mau.w, mau.h, T.FLAGS);
+  for (let i = mau.x; i < mau.x + mau.w; i++) for (let j = mau.y; j < mau.y + mau.h; j++) {
+    const edge = i === mau.x || j === mau.y || i === mau.x + mau.w - 1 || j === mau.y + mau.h - 1;
+    if (!edge) { if (hash(i, j, 145) < 0.15) setG(i, j, T.RUBBLE); continue; }
+    if (j === mau.y + mau.h - 1 && Math.abs(i - (mau.x + 4)) <= 1) { setG(i, j, T.RUBBLE); continue; }
+    if (noise(i, j, 3, 146) > 0.28) setO(i, j, T.RUIN); else setG(i, j, T.RUBBLE);
+  }
+  setO(mau.x + 4, mau.y + 2, T.GRAVE); // the old king's tomb
+
+  // Sunken Lake (south, west of the river): a wide lake with a ruined shrine on an island, reached by a boardwalk
+  const lake = { x: 96, y: 146, rx: 13, ry: 8 };
+  disk(lake.x, lake.y, lake.rx + 7, lake.ry + 6, (x, y) => setO(x, y, EMPTY));
+  disk(lake.x, lake.y, lake.rx * 1.25, lake.ry * 1.3, (x, y) => setG(x, y, T.SAND));
+  disk(lake.x, lake.y, lake.rx, lake.ry, (x, y) => setG(x, y, T.WATER));
+  disk(lake.x, lake.y + 1, 3.5, 2.5, (x, y) => setG(x, y, T.GRASS));
+  for (const [dx, dy] of [[-2, 0], [2, 0], [-2, 2], [2, 2]]) setO(lake.x + dx, lake.y + dy, T.RUIN);
+  setO(lake.x, lake.y + 1, T.CAMPFIRE);
+
+  // Greywatch Keep (far east, beyond the Old Ruins): a ruined castle with corner towers and a west gate
+  const keep = { x: 182, y: 50, w: 22, h: 16 };
+  clearO(keep.x - 6, keep.y - 6, keep.w + 12, keep.h + 12);
+  rectG(keep.x, keep.y, keep.w, keep.h, T.FLAGS);
+  each(keep.x - 5, keep.y - 5, keep.w + 10, keep.h + 10, (x, y) => { if (ground[y][x] !== T.FLAGS && noise(x, y, 4, 151) > 0.5) setG(x, y, T.DIRT); });
+  for (let i = keep.x; i < keep.x + keep.w; i++) for (let j = keep.y; j < keep.y + keep.h; j++) {
+    const edge = i === keep.x || j === keep.y || i === keep.x + keep.w - 1 || j === keep.y + keep.h - 1;
+    if (!edge) { if (hash(i, j, 152) < 0.08) setG(i, j, T.RUBBLE); continue; }
+    if (i === keep.x && Math.abs(j - (keep.y + 8)) <= 1) continue; // west gate
+    if (i === keep.x + keep.w - 1 && Math.abs(j - (keep.y + 8)) <= 0) continue; // postern
+    if (noise(i, j, 3, 153) > 0.22) setO(i, j, T.RUIN); else setG(i, j, T.RUBBLE);
+  }
+  for (const [tx, ty] of [[keep.x - 1, keep.y - 1], [keep.x + keep.w - 2, keep.y - 1], [keep.x - 1, keep.y + keep.h - 2], [keep.x + keep.w - 2, keep.y + keep.h - 2]]) rectO(tx, ty, 3, 3, T.RUIN);
+  rectO(keep.x + 8, keep.y + 3, 6, 4, T.RUIN); clearO(keep.x + 10, keep.y + 6, 2, 1); // the broken great hall
+  setO(keep.x + 11, keep.y + 5, T.GRAVE);
+  setO(keep.x + 5, keep.y + 11, T.CAMPFIRE); setO(keep.x + 16, keep.y + 11, T.CRATE); setO(keep.x + 17, keep.y + 11, T.BARREL);
+
+  // Thornwood (north-east, past the Watchtower): a dark pine forest with one trail through it
+  const thorn = { x: 162, y: 2, w: 60, h: 38 };
+  each(thorn.x, thorn.y, thorn.w, thorn.h, (x, y) => {
+    if (isGrass(ground[y][x])) setG(x, y, T.GRASS_DARK);
+    if (objects[y][x] === T.TREE || (objects[y][x] === EMPTY && hash(x, y, 161) < 0.08)) setO(x, y, T.PINE);
+  });
+  const glade = { x: 196, y: 20 };
+  disk(glade.x, glade.y, 7, 5, (x, y) => { setO(x, y, EMPTY); setG(x, y, hash(x, y, 162) < 0.2 ? T.FLOWERS : T.GRASS_DARK); });
+  setO(glade.x, glade.y, T.CAMPFIRE); setO(glade.x - 2, glade.y + 1, T.STUMP); setO(glade.x + 2, glade.y + 1, T.STUMP);
+
+  // Roads into the wider world
+  curve([[96, 100], [99, 112], [97, 124], [lake.x - 6, lake.y - lake.ry - 4]], 2);                  // Lake Road (from the quarry)
+  curve([[lake.x - 6, lake.y - lake.ry - 4], [lake.x - 1, lake.y - lake.ry - 2], [lake.x, lake.y - 1]], 1); // boardwalk to the island
+  curve([[marsh.x + 2, 101], [32, 112], [38, 124], [mau.x + 4, mau.y + mau.h + 2]], 2);             // Barrow Road (from the marsh)
+  curve([[mau.x + 4, mau.y + mau.h + 2], [60, 152], [74, 148], [lake.x - lake.rx - 4, lake.y]], 1); // Downs path, barrows ↔ lake
+  curve([[ruins.x + 6, ruins.y], [156, 62], [168, 58], [keep.x - 6, keep.y + 8], [keep.x + 2, keep.y + 8]], 2); // Keep Road (past the Old Ruins)
+  curve([[lake.x + lake.rx + 4, lake.y - 2], [rc(144) - 6, 144], [rc(144) + 6, 144], [134, 132], [140, 112], [136, 92]], 1); // south bridge → woods path
+  curve([[tower.x + 4, tower.y], [160, 18], [176, 24], [glade.x - 5, glade.y]], 1);                   // Thornwood trail
+  curve([[glade.x + 5, glade.y], [204, 30], [200, 40], [keep.x + keep.w - 1, keep.y + 8]], 1);       // down to the keep's postern
+
   // ---------- 12b. Signposts at the gates and road junctions (directions are worked out in SIGNPOSTS) ----------
   const posts: { x: number; y: number; to: string[] }[] = [];
   /** Puts a signpost on the nearest free tile beside (not on) a road, within 3 tiles of (x, y). */
@@ -349,13 +415,19 @@ function buildWorld() {
   signpost(RX - 2, V.y0 - 4, ["North Meadow", "Hunter's Camp", "Old Watchtower", "Oakvale"]);          // north gate
   signpost(RX - 2, V.y1 + 4, ["Stonecrag Quarry", "Oakvale"]);                                       // south gate
   signpost(V.x0 - 4, RY - 1, ["Goldenreach Farms", "Mirror Pond", "Misty Marsh", "Oakvale"]);         // west gate
-  signpost(V.x1 + 4, RY - 1, ["Millbrook Mill", "Old Ruins", "Oakvale"]);                            // east gate
+  signpost(V.x1 + 5, RY + 3, ["Millbrook Mill", "Old Ruins", "Oakvale"]);                            // east gate
   signpost(84, 26, ["Hunter's Camp", "Old Watchtower", "North Meadow", "Oakvale"]);                 // north fork
-  signpost(24, 58, ["Goldenreach Farms", "Oakvale"]);                                               // farm yard
   signpost(36, 78, ["Mirror Pond", "Misty Marsh", "Oakvale"]);                                      // pond path
   signpost(ruins.x - 10, 58, ["Old Ruins", "Old Watchtower", "Stonecrag Quarry", "Oakvale"]);       // before the ruins
   signpost(94, 94, ["Stonecrag Quarry", "Old Ruins", "Oakvale"]);                                   // quarry
   signpost(rc(60) - 9, 59, ["Old Ruins", "Millbrook Mill", "Oakvale"]);                              // west end of the bridge
+  signpost(98, 116, ["Sunken Lake", "Stonecrag Quarry", "Oakvale"]);                                // lake road
+  signpost(33, 112, ["Barrow Downs", "Misty Marsh", "Oakvale"]);                                    // barrow road
+  signpost(62, 151, ["Barrow Downs", "Sunken Lake"]);                                               // downs path
+  signpost(156, 61, ["Greywatch Keep", "Old Ruins", "Oakvale"]);                                    // keep road
+  signpost(tower.x + 12, 20, ["Thornwood", "Old Watchtower", "Oakvale"]);                            // into the Thornwood
+  signpost(202, 42, ["Greywatch Keep", "Thornwood"]);
+  signpost(rc(144) + 9, 142, ["Sunken Lake", "Old Ruins", "Stonecrag Quarry"]);                   // south bridge                                               // keep postern path
 
   // ---------- 13. Keep every road clear, with a 1-tile verge ----------
   for (const k of roads) {
@@ -427,10 +499,14 @@ function buildWorld() {
     { name: "Mirror Pond", x: pond.x - 13, y: pond.y - 9, w: 26, h: 18, mobs: ["slime"] },
     { name: "Goldenreach Farms", x: 10, y: 34, w: 40, h: 46, mobs: ["slime"] },
     { name: "North Meadow", x: 86, y: 4, w: 30, h: 30, mobs: ["slime"] },
+    { name: "Barrow Downs", ...barrow, mobs: ["skeleton"] },
+    { name: "Sunken Lake", x: lake.x - lake.rx - 6, y: lake.y - lake.ry - 6, w: lake.rx * 2 + 12, h: lake.ry * 2 + 12, mobs: ["slime"] },
+    { name: "Greywatch Keep", x: keep.x - 6, y: keep.y - 6, w: keep.w + 12, h: keep.h + 12, mobs: ["skeleton"] },
+    { name: "Thornwood", ...thorn, mobs: ["slime", "skeleton"] },
     { name: "River Ashwell", x: riverCenter(60) - 6, y: 0, w: 12, h: MAP_H },
     { name: "Whispering Woods", x: woodsX - 2, y: 0, w: MAP_W - woodsX + 2, h: MAP_H, mobs: ["slime", "skeleton"] },
   ];
-  return { ground, objects, areas, posts };
+  return { ground, objects, areas, posts, roads };
 }
 
 export const WORLD = buildWorld();
@@ -439,17 +515,76 @@ export const OBJECTS = WORLD.objects;
 export const AREAS = WORLD.areas;
 
 /** A readable signpost: arrows from the post towards each named place. */
-export interface Signpost { x: number; y: number; dirs: { name: string; arrow: string }[] }
+/**
+ * A readable signpost: one board per road leaving the spot, each with an arrow along that road and the
+ * place(s) the road leads to. A post beside a plain road has two boards; a crossroads has four.
+ */
+export interface Signpost { x: number; y: number; dirs: { name: string; arrow: string; angle: number }[] }
 const ARROWS = ["→", "↘", "↓", "↙", "←", "↖", "↑", "↗"]; // by compass octant, starting east, clockwise (y points down)
-export const SIGNPOSTS: Signpost[] = WORLD.posts.map((p) => ({
-  x: p.x, y: p.y,
-  dirs: p.to.flatMap((name) => {
-    const a = AREAS.find((r) => r.name === name);
-    if (!a) return [];
-    const oct = Math.round(Math.atan2(a.y + a.h / 2 - (p.y + 0.5), a.x + a.w / 2 - (p.x + 0.5)) / (Math.PI / 4));
-    return [{ name, arrow: ARROWS[(oct + 8) % 8] }];
-  }),
-}));
+
+function buildSignpost(p: { x: number; y: number; to: string[] }): Signpost {
+  const roads = WORLD.roads;
+  // Centre on the nearest road tile: that's the spot the boards describe
+  let cx = p.x + 0.5, cy = p.y + 0.5, cd = Infinity;
+  for (let j = -3; j <= 3; j++) for (let i = -3; i <= 3; i++) {
+    const x = p.x + i, y = p.y + j;
+    if (roads.has(y * MAP_W + x) && Math.hypot(i, j) < cd) { cd = Math.hypot(i, j); cx = x + 0.5; cy = y + 0.5; }
+  }
+  const dist = (k: number) => Math.hypot((k % MAP_W) + 0.5 - cx, ((k / MAP_W) | 0) + 0.5 - cy);
+  // Road tiles on a ring around the post, grouped into arcs: each arc is one road leaving the spot
+  const ring: { k: number; a: number }[] = [];
+  for (let j = -5; j <= 5; j++) for (let i = -5; i <= 5; i++) {
+    const x = Math.floor(cx) + i, y = Math.floor(cy) + j, k = y * MAP_W + x;
+    if (x < 0 || y < 0 || x >= MAP_W || y >= MAP_H || !roads.has(k)) continue;
+    const d = dist(k);
+    if (d >= 2.5 && d <= 4) ring.push({ k, a: Math.atan2((y + 0.5) - cy, (x + 0.5) - cx) });
+  }
+  ring.sort((u, v) => u.a - v.a);
+  const arcs: { k: number; a: number }[][] = [];
+  for (const r of ring) {
+    const last = arcs[arcs.length - 1];
+    if (last && r.a - last[last.length - 1].a < 0.6) last.push(r); else arcs.push([r]);
+  }
+  if (arcs.length > 1 && ring[0].a + Math.PI * 2 - ring[ring.length - 1].a < 0.6) arcs[0].push(...arcs.pop()!); // wrap around
+  // Walk each road outwards to see which places it reaches first
+  const named = AREAS.filter((a) => !(p.x >= a.x && p.x < a.x + a.w && p.y >= a.y && p.y < a.y + a.h));
+  const broad = (name: string) => (AREAS.find((a) => a.name === name)!.w * AREAS.find((a) => a.name === name)!.h) >= 2500;
+  const inArea = (k: number, a: Area) => { const x = k % MAP_W, y = (k / MAP_W) | 0; return x >= a.x && x < a.x + a.w && y >= a.y && y < a.y + a.h; };
+  const branches = arcs.map((arc) => {
+    const reach = new Map<string, number>();
+    const seen = new Set<number>(arc.map((r) => r.k));
+    let frontier = arc.map((r) => r.k);
+    for (let step = 0; frontier.length && step < 400; step++) {
+      for (const k of frontier) for (const a of named) if (!reach.has(a.name) && inArea(k, a)) reach.set(a.name, step);
+      const next: number[] = [];
+      for (const k of frontier) for (const n of [k + 1, k - 1, k + MAP_W, k - MAP_W, k + MAP_W + 1, k + MAP_W - 1, k - MAP_W + 1, k - MAP_W - 1]) {
+        if (seen.has(n) || !roads.has(n) || dist(n) < 2.5) continue;
+        seen.add(n); next.push(n);
+      }
+      frontier = next;
+    }
+    const sx = arc.reduce((t, r) => t + Math.cos(r.a), 0), sy = arc.reduce((t, r) => t + Math.sin(r.a), 0);
+    return { angle: Math.atan2(sy, sx), reach };
+  });
+  // Each wanted place goes on the road that reaches it soonest; a road with none of them names the first place it reaches
+  const labels = branches.map(() => [] as { name: string; d: number }[]);
+  for (const name of p.to) {
+    let best = -1, bd = Infinity;
+    branches.forEach((b, i) => { const d = b.reach.get(name); if (d !== undefined && d < bd) { bd = d; best = i; } });
+    if (best >= 0) labels[best].push({ name, d: bd });
+  }
+  const dirs = branches.map((b, i) => {
+    let names = labels[i].sort((u, v) => u.d - v.d).slice(0, 2).map((l) => l.name);
+    if (!names.length) {
+      const first = [...b.reach].sort((u, v) => Number(broad(u[0])) - Number(broad(v[0])) || u[1] - v[1])[0];
+      names = [first ? first[0] : "The wilds"];
+    }
+    const oct = Math.round(b.angle / (Math.PI / 4));
+    return { name: names.join(" · "), arrow: ARROWS[(oct + 8) % 8], angle: b.angle };
+  });
+  return { x: p.x, y: p.y, dirs };
+}
+export const SIGNPOSTS: Signpost[] = WORLD.posts.map(buildSignpost);
 
 /** The signpost within reach of a player at pixel (px, py), if any. */
 export function signpostNear(px: number, py: number, reach = 1.6): Signpost | undefined {
