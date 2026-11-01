@@ -4,11 +4,11 @@
  * then shown scaled up with nearest-neighbour pixels.
  */
 export function pixelText(text: string, color = "#ffe8a3", size = 11, scale = 3): HTMLCanvasElement {
-  const pad = 3;
+  const pad = 4;
   const m = document.createElement("canvas").getContext("2d")!;
   const font = `bold ${size}px monospace`;
   m.font = font;
-  const w = Math.ceil(m.measureText(text).width) + pad * 2, h = size + pad * 2 + 2;
+  const w = Math.ceil(m.measureText(text).width) + pad * 2, h = size + pad * 2 + 3;
   const c = document.createElement("canvas");
   c.width = w; c.height = h;
   const g = c.getContext("2d")!;
@@ -25,10 +25,10 @@ export function pixelText(text: string, color = "#ffe8a3", size = 11, scale = 3)
   for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
     const i = y * w + x;
     if (on[i]) { const shade = !lit(x, y + 1) || y > pad + size * 0.6; set(i, shade ? dr : r, shade ? dg : gg, shade ? db : b); continue; }
-    // 1px black outline all round, plus a drop shadow below-right
+    // thick black outline all round (2px, rounded), plus a drop shadow below-right
     let edge = false;
-    for (let dy = -1; dy <= 1 && !edge; dy++) for (let dx = -1; dx <= 1; dx++) if (lit(x + dx, y + dy)) { edge = true; break; }
-    if (edge || lit(x - 1, y - 2) || lit(x - 2, y - 2)) set(i, 0, 0, 0);
+    for (let dy = -2; dy <= 2 && !edge; dy++) for (let dx = -2; dx <= 2; dx++) if (Math.abs(dx) + Math.abs(dy) <= 3 && lit(x + dx, y + dy)) { edge = true; break; }
+    if (edge || lit(x - 2, y - 3) || lit(x - 3, y - 3)) set(i, 0, 0, 0);
   }
   g.putImageData(out, 0, 0);
   c.style.width = `${w * scale}px`; c.style.height = `${h * scale}px`;

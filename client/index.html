@@ -17,7 +17,7 @@
       <p id="classinfo" class="help"></p>
       <div id="colors"></div>
       <button id="play">Play</button>
-      <p class="help">Move: WASD / Arrows &nbsp;·&nbsp; Attack: Space &nbsp;·&nbsp; Skills: 1, 2 (learn them with T) &nbsp;·&nbsp; Dodge roll: Shift / F &nbsp;·&nbsp; Hero menu: C &nbsp;·&nbsp; Skill tree: T &nbsp;·&nbsp; Gear: G &nbsp;·&nbsp; Ranged gear: R &nbsp;·&nbsp; Map: M &nbsp;·&nbsp; Potion: Q &nbsp;·&nbsp; Chat: Enter<br>Emotes: /wave /cheer /laugh /sit /sleep</p>
+      <p class="help">Move: WASD / Arrows &nbsp;·&nbsp; Attack: Space &nbsp;·&nbsp; Skills: 1 to 0 (learn them with T, then drag them to a slot) &nbsp;·&nbsp; Dodge roll: Shift / F &nbsp;·&nbsp; Hero menu: C &nbsp;·&nbsp; Skill tree: T &nbsp;·&nbsp; Gear: G &nbsp;·&nbsp; Ranged gear: R &nbsp;·&nbsp; Map: M &nbsp;·&nbsp; Potion: Q &nbsp;·&nbsp; Chat: Enter<br>Emotes: /wave /cheer /laugh /sit /sleep</p>
       <p id="status"></p>
     </div>
   </div>
@@ -25,11 +25,12 @@
   <div id="hud" hidden>
     <div id="hpbar"><div id="hpfill"></div><div id="hptext"></div></div>
     <div id="stats"></div>
-    <div id="mapbox"><canvas id="minimap"></canvas><div id="location"></div></div>
+    <div id="mapbox"><canvas id="daydial"></canvas><canvas id="minimap"></canvas><div id="location"></div></div>
     <div id="area"></div>
     <div id="cleared"><div class="big"></div><div class="small"></div></div>
     <div id="skill"><div id="skillfill"></div><span id="skilltext"></span></div>
     <ul id="actions"></ul>
+    <div id="hotbar"></div>
     <div id="zone"></div>
     <button id="lvlnote" hidden></button>
     <div id="hero" hidden>

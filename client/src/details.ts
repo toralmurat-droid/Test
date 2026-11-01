@@ -151,15 +151,18 @@ function makeTextures(scene: Phaser.Scene) {
   });
 }
 
-/** Phase of the day: 0..1 darkness and a dusk warmth, shared by every client via the wall clock. */
-function dayPhase(nowMs: number): { dark: number; warm: number } {
+/** Time of day as 0..1 of the 30-minute cycle, shared by every client via the wall clock (?time=day|dusk|night forces it). */
+export function dayTime(nowMs: number): number {
   const forced = new URLSearchParams(location.search).get("time");
-  if (forced === "night") return { dark: 1, warm: 0 };
-  if (forced === "dusk") return { dark: 0.45, warm: 1 };
-  if (forced === "day") return { dark: 0, warm: 0 };
+  if (forced === "night") return 0.81;
+  if (forced === "dusk") return 0.685;
+  if (forced === "day") return 0.3;
   const CYCLE = 30 * 60 * 1000; // 30-minute day: about 19 min daylight, 2 min dusk, 6 min night, 3 min dawn
-  const t = (nowMs % CYCLE) / CYCLE;
-  // 0-.65 day, .65-.72 dusk, .72-.9 night, .9-1 dawn
+  return (nowMs % CYCLE) / CYCLE;
+}
+
+/** Phase of the day: 0..1 darkness and a dusk warmth. t: 0-.65 day, .65-.72 dusk, .72-.9 night, .9-1 dawn. */
+export function dayPhase(t: number): { dark: number; warm: number } {
   const ramp = (a: number, b: number) => Math.min(1, Math.max(0, (t - a) / (b - a)));
   const dark = t < 0.65 ? 0 : t < 0.72 ? ramp(0.65, 0.72) : t < 0.9 ? 1 : 1 - ramp(0.9, 1);
   const warm = t > 0.61 && t < 0.76 ? Math.sin(((t - 0.61) / 0.15) * Math.PI) : t > 0.88 ? Math.sin(((t - 0.88) / 0.12) * Math.PI) * 0.6 : 0;
@@ -376,7 +379,7 @@ export class Details {
       let byRoad = false; // only posts beside a cobbled road get a banner, not every breach in the old wall
       for (let d = -3; d <= 3; d++) if ((gateH ? GROUND[ty][tx + d] : GROUND[ty + d]?.[tx]) === T.COBBLE) byRoad = true;
       if (!byRoad) continue;
-      const b = scene.add.sprite((tx + 0.5) * TILE, ty * TILE + 2 * K, "banner").setOrigin(0.5, 0).setDepth(-0.9);
+      const b = scene.add.sprite((tx + 0.5) * TILE, ty * TILE + 5 * K, "banner").setOrigin(0.5, 0).setDepth(-0.9);
       b.play({ key: flap, startFrame: (tx + ty) % 3 });
       this.addLight((tx + 0.5) * TILE, ty * TILE + 8 * K, 0xffa040, 3, 0.6);
     }
@@ -411,7 +414,7 @@ export class Details {
   }
 
   update(now: number, dtMs: number) {
-    const { dark, warm } = dayPhase(Date.now());
+    const { dark, warm } = dayPhase(dayTime(Date.now()));
     this.night.setAlpha(dark * 0.85);
     this.dusk.setAlpha(warm * 0.12);
     this.windows.setAlpha(Math.min(1, dark * 1.2) * 0.9);
