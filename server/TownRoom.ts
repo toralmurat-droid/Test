@@ -19,7 +19,9 @@ import { isSafeZone, isSolidAt, randomSpawn } from "../shared/map";
 import { randomPointInZone, rollLevel, SPAWN_ZONES, zoneCap } from "../shared/spawns";
 import { moveStep } from "../shared/movement";
 import { canLearn, talentMult, talentBonus, talentReduce, TREES } from "../shared/talents";
-import { BAG_SIZE, Equipped, GEAR, GEAR_SLOTS, GearSlot, gearName, gearSpeedMult, gearStats, isGearId, rollGear } from "../shared/gear";
+import {
+  BAG_SIZE, Equipped, GEAR, GEAR_SLOTS, GearSlot, gearBlock, gearName, gearReachMult, gearSpeedMult, gearStats, isGearId, rollGear,
+} from "../shared/gear";
 
 export class Player extends Schema {
   @type("string") name = "";
@@ -62,6 +64,8 @@ export class Player extends Schema {
   @type("string") armour = "";
   @type("string") shoes = "";
   @type("string") hat = "";
+  @type("string") shield = "";
+  @type("string") ranged = ""; // secondary ranged weapon, fired with R
   @type(["string"]) bag = new ArraySchema<string>();
   // Skill tree (shared/talents.ts): ranks per talent id
   @type({ map: "number" }) talents = new MapSchema<number>();
@@ -74,6 +78,7 @@ export class Player extends Schema {
   rollUntil = 0;
   rollInput: InputState = { up: false, down: false, left: false, right: false };
   lastDodge = -Infinity;
+  lastRanged = -Infinity;
   lastHurt = 0;
   lastPotion = 0;
   attackReadyAt = 0;
@@ -235,6 +240,7 @@ export class TownRoom extends Room<TownState> {
     this.onMessage("equip", (client, i: number) => this.equip(client.sessionId, i));
     this.onMessage("unequip", (client, slot: GearSlot) => this.unequip(client.sessionId, slot));
     this.onMessage("dropgear", (client, i: number) => this.dropGear(client.sessionId, i));
+    this.onMessage("ranged", (client) => this.fireRanged(client.sessionId));
     this.onMessage("learn", (client, tid: string) => this.learnTalent(client.sessionId, tid));
     this.onMessage("respec", (client) => this.respec(client.sessionId));
     this.onMessage("stat", (client, k: string) => this.assignStat(client.sessionId, k));
@@ -566,7 +572,7 @@ export class TownRoom extends Room<TownState> {
   // ---- Equipment ----------------------------------------------------------
 
   private equipped(p: Player): Equipped {
-    return { weapon: p.weapon, armour: p.armour, shoes: p.shoes, hat: p.hat };
+    return Object.fromEntries(GEAR_SLOTS.map((s) => [s, p[s]]));
   }
 
   /** Wear the bag item at index `i`; whatever was in that slot goes back to the bag. */
@@ -725,6 +731,8 @@ export class TownRoom extends Room<TownState> {
     if (guarded) dmg = Math.max(1, Math.round(dmg * (1 - GUARD_REDUCTION)));
     if (hasPower(t.cls, t.talents, "ironskin")) dmg = Math.max(1, Math.round(dmg * (1 - IRONSKIN_REDUCTION)));
     dmg = Math.max(1, Math.round(dmg * talentReduce(t.cls, t.talents, "armor")));
+    const block = gearBlock(this.equipped(t)); // equipped shield
+    if (block) dmg = Math.max(1, Math.round(dmg * (1 - block)));
     // Barbarian Unstoppable: while raging, ignore stun, slow and knockback
     const unstoppable = now < t.rageUntil && hasPower(t.cls, t.talents, "unstoppable");
     if (opts.stunMs && !guarded && !unstoppable) t.stunUntil = Math.max(t.stunUntil, now + opts.stunMs);
@@ -801,7 +809,8 @@ export class TownRoom extends Room<TownState> {
       return;
     }
 
-    const reach = hit.range ?? def.attackRange;
+    const reachMult = gearReachMult(this.equipped(a)); // long weapons
+    const reach = (hit.range ?? def.attackRange) * reachMult;
     // Barbarian Ground Slam: the finisher stuns
     const slam = step === 2 && hasPower(a.cls, a.talents, "groundslam") ? GROUND_SLAM_STUN_MS : undefined;
     // Knight Cleave: the finisher hits all around instead of only in front
@@ -809,7 +818,7 @@ export class TownRoom extends Room<TownState> {
       for (const tid of this.targetsAround(a.x, a.y, reach, id)) this.hitTarget(id, tid, dmg, this.pushFrom(a.x, a.y, tid), { kb: hit.knockback, crit });
       return;
     }
-    const hx = a.x + off[0] * 12, hy = a.y + off[1] * 12;
+    const hx = a.x + off[0] * 12 * reachMult, hy = a.y + off[1] * 12 * reachMult;
     for (const tid of this.targetsAround(hx, hy, reach, id)) this.hitTarget(id, tid, dmg, off, { kb: hit.knockback, crit, stunMs: slam });
   }
 
@@ -822,12 +831,31 @@ export class TownRoom extends Room<TownState> {
     s.x = a.x + off[0] * 6 - off[1] * lane; s.y = a.y - 4 + off[1] * 6 + off[0] * lane;
     s.dir = a.dir; s.vx = off[0]; s.vy = off[1]; s.owner = id; s.size = scale; s.kind = def.kind;
     s.speed = def.speed; s.radius = def.radius * scale;
-    s.range = def.range * (hasPower(a.cls, a.talents, "eagleeye") ? EAGLE_EYE_RANGE : 1);
+    s.range = def.range * (hasPower(a.cls, a.talents, "eagleeye") ? EAGLE_EYE_RANGE : 1) * gearReachMult(this.equipped(a));
     s.damage = dmg; s.knockback = knockback;
     s.ignite = hasPower(a.cls, a.talents, "ignite");
     s.pierce = hasPower(a.cls, a.talents, "pierce") ? PIERCE_EXTRA : 0;
     s.slowMs = hasPower(a.cls, a.talents, "pinning") ? PINNING.durationMs : 0;
     this.state.projectiles.set(`s${++this.shotSeq}`, s);
+  }
+
+  /** Secondary ranged weapon (sling, knives, crossbow) on R: its own cooldown, scales with the attack stat. */
+  private fireRanged(id: string) {
+    const a = this.state.players.get(id);
+    const now = Date.now();
+    const shot = a?.ranged ? GEAR[a.ranged]?.shot : undefined;
+    if (!a || !shot || a.dead || a.stunned || a.rolling || now - a.lastRanged < shot.cooldownMs) return;
+    a.lastRanged = now;
+    a.emote = "";
+    const off = aimOf(a);
+    const s = new Projectile();
+    s.x = a.x + off[0] * 6; s.y = a.y - 4 + off[1] * 6;
+    s.dir = a.dir; s.vx = off[0]; s.vy = off[1]; s.owner = id; s.kind = shot.kind;
+    s.speed = shot.speed; s.radius = 3; s.range = shot.range;
+    s.damage = Math.round(shot.damage * attackMult(a.cls, this.stats(a)));
+    s.knockback = 0.6;
+    this.state.projectiles.set(`s${++this.shotSeq}`, s);
+    this.broadcast("rangedshot", { id, kind: shot.kind });
   }
 
   private playerSpecial(id: string) {

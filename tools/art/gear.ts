@@ -1,6 +1,6 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { Canvas, shade } from "./canvas";
-import { buildSheet, GearPart, HEROES, Pose, setGearHook } from "./characters";
+import { buildSheet, GearCtx, GearPart, HEROES, Pose, setGearHook } from "./characters";
 import { GEAR, GEAR_IDS, GearDef } from "../../shared/gear";
 
 /**
@@ -9,7 +9,7 @@ import { GEAR, GEAR_IDS, GearDef } from "../../shared/gear";
  * from the plain sheet. The game draws that overlay on top of the hero, frame for frame.
  */
 
-const PART_OF: Record<GearDef["slot"], GearPart> = { weapon: "weapon", armour: "torso", shoes: "legs", hat: "head" };
+const PART_OF: Record<GearDef["slot"], GearPart> = { weapon: "weapon", ranged: "torso", shield: "shield", armour: "torso", shoes: "legs", hat: "head" };
 
 const lum = (c: number) => (((c >> 16) & 255) * 0.3 + ((c >> 8) & 255) * 0.59 + (c & 255) * 0.11) / 255;
 
@@ -36,20 +36,41 @@ function recolour(main: Canvas, pts: [number, number, number][], col: number, pa
 }
 
 function hook(item: GearDef) {
-  return (part: GearPart, main: Canvas, mask: Canvas, p: Pose) => {
+  return (part: GearPart, main: Canvas, mask: Canvas, p: Pose, _hero: string, g: GearCtx) => {
     if (PART_OF[item.slot] !== part) return;
+    // These draw new shapes, so they run even when the part itself drew nothing
+    if (item.slot === "shield") return shield(item, main, mask, p, g);
+    if (item.slot === "ranged") return ranged(item, main, p, g);
     const pts = visible(main, mask);
     if (!pts.length) return;
-    if (item.slot === "weapon") weapon(item, main, mask, pts);
+    if (item.slot === "weapon") weapon(item, main, mask, pts, g);
     else if (item.slot === "armour") armour(item, main, pts);
     else if (item.slot === "shoes") shoes(item, main, pts, p);
     else hat(item, main, mask, pts);
   };
 }
 
-function weapon(item: GearDef, main: Canvas, mask: Canvas, pts: [number, number, number][]) {
+function weapon(item: GearDef, main: Canvas, mask: Canvas, pts: [number, number, number][], g: GearCtx) {
+  if (item.style.startsWith("long")) {
+    // Long weapon: redraw the weapon further along its own direction and keep the part past the old tip
+    const [hx, hy] = g.hand;
+    let tip = pts[0], best = -1;
+    for (const q of pts) { const dd = (q[0] - hx) ** 2 + (q[1] - hy) ** 2; if (dd > best) { best = dd; tip = q; } }
+    const len = Math.sqrt(best) || 1, ux = (tip[0] - hx) / len, uy = (tip[1] - hy) / len;
+    const k = Math.round((item.bonus.reach ?? 0) * 8) + 1;
+    const shifted = g.redraw(Math.round(ux * k), Math.round(uy * k));
+    for (let y = 0; y < shifted.h; y++) for (let x = 0; x < shifted.w; x++) {
+      const [c, a] = shifted.get(x, y);
+      if (a < 200) continue;
+      const t = (x - hx) * ux + (y - hy) * uy;
+      if (t < len - k - 1) continue;
+      if (main.alpha(x, y) && !mask.alpha(x, y)) continue; // never paint over the body
+      main.px(x, y, c); mask.px(x, y, c);
+      pts.push([x, y, c]);
+    }
+  }
   recolour(main, pts, item.color);
-  if (item.style !== "glow") return;
+  if (item.style !== "glow" && item.style !== "longglow") return;
   // Soft glow around the whole weapon, only on empty pixels
   for (let y = 0; y < mask.h; y++) for (let x = 0; x < mask.w; x++) {
     if (mask.alpha(x, y) || main.alpha(x, y)) continue;
@@ -134,6 +155,58 @@ function hat(item: GearDef, main: Canvas, mask: Canvas, pts: [number, number, nu
   }
 }
 
+/** Shield: recolour the knight's own shield, or strap a new one to everybody else's far arm. */
+function shield(item: GearDef, main: Canvas, mask: Canvas, p: Pose, g: GearCtx) {
+  if (g.hasShield) {
+    const pts = visible(main, mask);
+    const set = new Set(pts.map(([x, y]) => `${x},${y}`));
+    recolour(main, pts, item.color);
+    for (const [x, y] of pts) if (!set.has(`${x - 1},${y}`) || !set.has(`${x + 1},${y}`) || !set.has(`${x},${y - 1}`)) main.px(x, y, item.accent);
+    return;
+  }
+  const c = shade(item.color, 1), dk = shade(item.color, 0.72), rim = item.accent;
+  if (p.dir === "right") {
+    // Edge-on, held in front
+    const x = 19 + g.ux + (p.attack === 0 ? 1 : 0), y = 16 + g.uy;
+    main.rect(x, y, 3, 9, c); main.rect(x + 2, y, 1, 9, dk);
+    main.rect(x, y, 3, 1, rim); main.rect(x, y + 8, 3, 1, rim);
+    return;
+  }
+  // Facing: on the far arm (right of the body facing down, left facing up = on the back)
+  const x = (p.dir === "down" ? 19 : 7) + g.ux, y = 17 + g.uy;
+  if (item.style === "round") {
+    main.ellipse(x + 3, y + 3.5, 3, 3.5, c);
+    for (let a = 0; a < 360; a += 12) main.px(x + 3 + Math.cos(a * Math.PI / 180) * 3.2, y + 3.5 + Math.sin(a * Math.PI / 180) * 3.7, rim);
+    main.rect(x + 2, y + 3, 2, 2, shade(rim, 1.2));
+  } else {
+    main.box(x, y, 6, 7, c);
+    main.rect(x + 1, y + 7, 4, 1, c); main.rect(x + 2, y + 8, 2, 1, c);
+    main.rect(x, y, 6, 1, rim); main.rect(x, y, 1, 7, rim); main.rect(x + 5, y, 1, 7, rim);
+    main.px(x + 1, y + 7, rim); main.px(x + 4, y + 7, rim); main.px(x + 2, y + 8, rim); main.px(x + 3, y + 8, rim);
+    if (p.dir === "down") { main.rect(x + 2, y + 2, 2, 3, rim); main.rect(x + 1, y + 3, 4, 1, rim); }
+  }
+}
+
+/** Secondary ranged weapon worn on the body: a strap across the torso and the item at the hip / on the back. */
+function ranged(item: GearDef, main: Canvas, p: Pose, g: GearCtx) {
+  const X = (x: number) => x + g.ux, Y = (y: number) => y + g.uy;
+  const strap = shade(item.accent, 0.75);
+  if (p.dir === "down") main.line(X(11), Y(16), X(19), Y(22), strap);
+  else if (p.dir === "up") main.line(X(20), Y(16), X(12), Y(22), strap);
+  const glyph = (x: number, y: number) => {
+    if (item.style === "sling") {
+      main.rect(x, y, 2, 2, item.color); main.px(x, y + 2, shade(item.color, 0.7)); main.px(x + 1, y - 1, item.accent);
+    } else if (item.style === "knives") {
+      for (const dx of [0, 2]) { main.rect(x + dx, y, 1, 2, item.color); main.px(x + dx, y + 2, item.accent); }
+    } else {
+      main.rect(x - 2, y, 6, 1, item.accent); main.rect(x, y - 1, 2, 4, item.color); main.px(x - 2, y + 1, item.accent); main.px(x + 3, y + 1, item.accent);
+    }
+  };
+  if (p.dir === "down") glyph(X(item.style === "crossbow" ? 10 : 19), Y(item.style === "crossbow" ? 14 : 21));
+  else if (p.dir === "up") glyph(X(item.style === "crossbow" ? 15 : 12), Y(item.style === "crossbow" ? 18 : 21));
+  else glyph(X(item.style === "crossbow" ? 11 : 12), Y(item.style === "crossbow" ? 17 : 20));
+}
+
 /** Plain-minus-geared difference: only the changed pixels. */
 function diff(plain: Canvas, geared: Canvas): Canvas {
   const out = new Canvas(plain.w, plain.h);
@@ -146,7 +219,37 @@ function diff(plain: Canvas, geared: Canvas): Canvas {
 }
 
 // ---- 16x16 icons (menu + ground drops) -------------------------------------
-const ICONS: Record<GearDef["slot"] | "crown" | "helm", string[]> = {
+const ICONS: Record<string, string[]> = {
+  long: [
+    "...............L", "..............LM", ".............LMD", "............LMD.", "...........LMD..", "..........LMD...",
+    ".........LMD....", "........HHD.....", ".......HH.......", "......HH........", ".....HH.........", "....HH..........",
+    "...HH...........", "..HH............", ".PP.............", "PP..............",
+  ],
+  round: [
+    "................", ".....AAAAAA.....", "....ALLLLLLA....", "...ALLLLLLLLA...", "..ALLLLLLLLLLA..", "..ALLLLMMLLLLA..",
+    "..ALLLMAAMLLLA..", "..ALLLMAAMLLLA..", "..ALLLLMMLLLLA..", "..ALLLLLLLLLMA..", "...ALLLLLLLMA...", "....ADMMMMDA....",
+    ".....AAAAAA.....", "................", "................", "................",
+  ],
+  kite: [
+    "................", "..AAAAAAAAAAAA..", "..ALLLLAALLLLA..", "..ALLLLAALLLLA..", "..ALLLLAALLLLA..", "..AAAAAAAAAAAA..",
+    "..ALLLLAALLLMA..", "..ALLLLAALLLMA..", "...ALLLAALLMA...", "...ALLLAALLMA...", "....ALLAALMA....", ".....ALAAMA.....",
+    "......AAAA......", ".......AA.......", "................", "................",
+  ],
+  sling: [
+    "................", "................", "..A.........A...", "...A.......A....", "....A.....A.....", ".....A...A......",
+    "......LLLL......", ".....LMMMML.....", ".....LMDDML.....", "......LLLL......", "................", "..........MMM...",
+    ".........MDDDM..", ".........MDDDM..", "..........MMM...", "................",
+  ],
+  knives: [
+    "................", "...L....L....L..", "...L....L....L..", "..LM...LM...LM..", "..LM...LM...LM..", "..LM...LM...LM..",
+    "..LM...LM...LM..", "..LM...LM...LM..", ".AAAA.AAAA.AAAA.", "..HH...HH...HH..", "..HH...HH...HH..", "..HH...HH...HH..",
+    "..DD...DD...DD..", "................", "................", "................",
+  ],
+  crossbow: [
+    "................", "...AAAA..AAAA...", "..A....LL....A..", ".A.....LL.....A.", "A......LL......A", ".......LL.......",
+    "......PLLP......", ".......LL.......", ".......LL.......", ".......MM.......", "......MMMM......", "......MDDM......",
+    "......MDDM......", ".......MM.......", "................", "................",
+  ],
   weapon: [
     "..............LL", ".............LML", "............LMD.", "...........LMD..", "..........LMD...", ".........LMD....",
     "........LMD.....", "...A...LMD......", "...AA.LMD.......", "....AAMD........", ".....AA.........", "....HHAA........",
@@ -181,7 +284,11 @@ const ICONS: Record<GearDef["slot"] | "crown" | "helm", string[]> = {
 
 function icon(item: GearDef): Canvas {
   const c = new Canvas(16, 16);
-  const rows = item.slot === "hat" ? ICONS[item.style === "crown" ? "crown" : item.style === "helm" ? "helm" : "hat"] : ICONS[item.slot];
+  const rows = item.slot === "hat" ? ICONS[item.style === "crown" ? "crown" : item.style === "helm" ? "helm" : "hat"]
+    : item.slot === "shield" ? ICONS[item.style]
+    : item.slot === "ranged" ? ICONS[item.style]
+    : item.slot === "weapon" && item.style.startsWith("long") ? ICONS.long
+    : ICONS[item.slot];
   c.sprite(0, 0, rows, {
     L: shade(item.color, 1.1), M: shade(item.color, 0.8), D: shade(item.color, 0.55), A: item.accent,
     H: 0x6b4226, P: shade(item.accent, 0.8),
