@@ -847,7 +847,7 @@ export class TownRoom extends Room<TownState> {
     if (s.ignite) {
       const splash = Math.max(1, Math.round(s.damage * IGNITE.splash));
       for (const tid of this.targetsAround(s.x, s.y, IGNITE.radius, s.owner)) {
-        if (tid !== directHit) this.hitTarget(s.owner, tid, splash, this.pushFrom(s.x, s.y, tid));
+        this.hitTarget(s.owner, tid, splash, this.pushFrom(s.x, s.y, tid)); // the direct target burns too
       }
     }
     this.state.projectiles.delete(id);

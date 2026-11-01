@@ -71,7 +71,7 @@ export const CLASSES: Record<ClassKind, ClassDef> = {
   wizard: {
     name: "Wizard", maxHp: 100, speed: 86, damage: 23, attackCooldownMs: 550, attackRange: 0,
     projectile: { speed: 250, range: 185, radius: 7, kind: "fireball" },
-    special: { kind: "nova", name: "Nova", cooldownMs: 7000, damage: 30, radius: 38 },
+    special: { kind: "nova", name: "Nova", cooldownMs: 7000, damage: 40, radius: 46 },
     combo: [
       { damage: 1, knockback: 1 },
       { damage: 1, knockback: 1 },
