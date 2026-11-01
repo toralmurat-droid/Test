@@ -75,10 +75,18 @@ function iconCanvas(scene: Phaser.Scene, id: string, size = 32): HTMLCanvasEleme
 export class GearMenu {
   private el = document.getElementById("gear")!;
   private sig = "";
+  private busyUntil = 0; // one action at a time: a double-click must not swap an item in and straight back out
 
   constructor(private scene: Phaser.Scene, private send: (type: string, msg: unknown) => void) {
     // Buttons never keep keyboard focus, so Space/Enter in a fight can't click a bag item by accident
     this.el.addEventListener("mousedown", (ev) => { if ((ev.target as HTMLElement).closest("button")) ev.preventDefault(); });
+  }
+
+  /** Sends a bag action unless the previous one is still waiting for the server's update (max 800 ms). */
+  private act(type: string, msg: unknown) {
+    if (performance.now() < this.busyUntil) return;
+    this.busyUntil = performance.now() + 800;
+    this.send(type, msg);
   }
 
   get open() { return !this.el.hidden; }
@@ -97,6 +105,7 @@ export class GearMenu {
     const sig = [state.cls, ...GEAR_SLOTS.map((s) => state[s]), ...bagItems, state.sta, state.str, state.mag, state.maxHp].join("|");
     if (sig === this.sig) return;
     this.sig = sig;
+    this.busyUntil = 0; // the server answered, accept clicks again
     const cls = state.cls as string;
 
     // Hero preview with everything worn
@@ -121,7 +130,7 @@ export class GearMenu {
         ? `<b style="color:${TIER_COLORS[GEAR[id].tier]}">${gearName(id, cls)}</b><br><small>${itemText(id)}</small>`
         : `<b>${SLOT_NAMES[slot]}</b><br><small>empty</small>`;
       row.appendChild(txt);
-      if (id) { row.title = "Click to take off"; row.onclick = () => this.send("unequip", slot); }
+      if (id) { row.title = "Click to take off"; row.onclick = () => this.act("unequip", slot); }
       slots.appendChild(row);
     }
 
@@ -146,8 +155,8 @@ export class GearMenu {
         cell.appendChild(iconCanvas(this.scene, id));
         cell.style.borderColor = TIER_COLORS[d.tier];
         cell.title = `${gearName(id, cls)} (${TIER_NAMES[d.tier]} ${SLOT_NAMES[d.slot]})\n${itemText(id)}\nClick: equip · Right-click: drop`;
-        cell.onclick = () => this.send("equip", i);
-        cell.oncontextmenu = (ev) => { ev.preventDefault(); this.send("dropgear", i); };
+        cell.onclick = () => this.act("equip", i);
+        cell.oncontextmenu = (ev) => { ev.preventDefault(); this.act("dropgear", i); };
       } else cell.disabled = true;
       bag.appendChild(cell);
     }
