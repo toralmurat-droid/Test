@@ -61,6 +61,13 @@ const ITEM_ART: Record<string, { rows: string[]; pal: Record<string, number> }> 
     pal: { C: 0xffc93c, c: 0xd99a1e, r: 0xfff3b0 } },
   potion: { rows: ["...WW...", "...GG...", "..GRRG..", ".GRrRRG.", ".GRRRRG.", ".GRRRRG.", "..GGGG..", "........"],
     pal: { W: 0x8d6e63, G: 0xcfe8ff, R: 0xe63946, r: 0xffb3b3 } },
+  // Quest drops (shared/quests.ts QUEST_ITEMS)
+  q_jelly: { rows: ["........", "...GG...", "..GLGG..", ".GLGGGG.", ".GGGGGD.", "GGGGGGDD", ".GGDDDD.", "........"],
+    pal: { G: 0x7bd36b, L: 0xd6ffcc, D: 0x3f9a3a } },
+  q_core: { rows: ["...KK...", "..KSSK..", ".KSLSSK.", "KSLSSRSK", "KSSSRRSK", ".KSRRSK.", "..KSSK..", "...KK..."],
+    pal: { K: 0x1a1420, S: 0x8a94a3, L: 0xd8e0ea, R: 0xd62839 } },
+  q_rot: { rows: ["........", "....G...", "...GP...", "..PPPP..", ".PPLPPP.", ".PPPPPD.", "..PPDD..", "...DD..."],
+    pal: { G: 0x6fbf3a, P: 0x4a2f6b, L: 0x8e6bbf, D: 0x2a1a3d } },
 };
 
 /** Ground item texture by `Item.kind` (single frame). */

@@ -3,7 +3,7 @@ import { Client, Room } from "colyseus";
 import { ArraySchema, MapSchema, Schema, type } from "@colyseus/schema";
 import {
   BLOB_AI, BROOD, Dir, HIT_RADIUS, mobScale, InputState, MOB_ATTACK_RANGE, MOBS, MobKind, REGEN_DELAY_MS, REGEN_RAMP_MS, regenFromStamina, SAFE_REGEN_MULT,
-  RESPAWN_MS, TICK_RATE,
+  RESPAWN_MS, TICK_RATE, TILE,
 } from "../shared/constants";
 import {
   ATTACK_VARIANTS, CLASSES, ClassKind, COMBO_WINDOW_MS, DODGE, EMOTES, ENERGY, DASH_INVULN_MS, GUARD_REDUCTION, isClassKind, levelFromXp, PVP_KILL_XP,
@@ -17,9 +17,9 @@ import {
   ITEM_LIFETIME_MS, ItemKind, LOOT, MAX_POTIONS, PICKUP_RADIUS, POTION_COOLDOWN_MS, POTION_HEAL, PVP_GOLD_DROP,
 } from "../shared/items";
 import { isSafeZone, isSolidAt, randomSpawn } from "../shared/map";
-import { npcNear, TALK_RANGE } from "../shared/npcs";
+import { npcById, npcNear, TALK_RANGE } from "../shared/npcs";
 import { sellPrice, SHOPS } from "../shared/shops";
-import { inQuestZone, isBlob, Q, QUEST } from "../shared/quests";
+import { inZone, npcPresent, QUESTS, questStep, stepGoal, USE_RANGE } from "../shared/quests";
 import { findHideSpot, HIDE, randomPointInZone, rollLevel, SPAWN_ZONES, zoneCap } from "../shared/spawns";
 import { moveStep } from "../shared/movement";
 import { SLOT_COUNT, SlotSkill, skillLearned } from "../shared/slots";
@@ -78,7 +78,8 @@ export class Player extends Schema {
   @type(["string"]) bag = new ArraySchema<string>();
   // Skill tree (shared/talents.ts): ranks per talent id
   @type({ map: "number" }) talents = new MapSchema<number>();
-  // First quest (shared/quests.ts): step and blob kills
+  // Blob quest chain (shared/quests.ts): quest index, step (0 = not accepted) and progress on the step
+  @type("number") questId = 0;
   @type("number") questStage = 0;
   @type("number") questCount = 0;
   // Skill slots on keys 1..0 (shared/slots.ts): "special" | "ult" | "" (empty). Empty until the player assigns them.
@@ -178,7 +179,8 @@ export class Item extends Schema {
   @type("number") x = 0;
   @type("number") y = 0;
   @type("number") amount = 1;
-  @type("string") gear = ""; // kind "gear": the item id
+  @type("string") gear = ""; // kind "gear": the item id; kind "quest": the quest item id (shared/quests.ts QUEST_ITEMS)
+  @type("string") owner = ""; // kind "quest": only this player sees and picks it up
 
   expires = 0;
 }
@@ -323,6 +325,7 @@ export class TownRoom extends Room<TownState> {
     this.onMessage("resetstats", (client) => this.resetStats(client.sessionId));
 
     this.onMessage("quest", (client) => this.advanceQuest(client.sessionId));
+    this.onMessage("use", (client, msg: { id: string }) => this.useQuestObject(client.sessionId, msg?.id));
     this.onMessage("buy", (client, msg: { i: number }) => this.shopBuy(client, msg?.i));
     this.onMessage("sell", (client, msg: { i: number }) => this.shopSell(client, msg?.i));
 
@@ -554,7 +557,7 @@ export class TownRoom extends Room<TownState> {
       p.raging = now < p.rageUntil;
       tickPoise(p, heroPoiseMax(p), dt, now);
       if (p.dead) { p.moving = false; p.energy = ENERGY.max; return; }
-      if (p.questStage === Q.INVESTIGATE) this.checkQuestSight(pid, p);
+      this.checkQuestPlace(pid, p);
       if (p.energy < ENERGY.max) p.energy = Math.min(ENERGY.max, p.energy + ENERGY.regenPerSec * dt);
       p.rolling = now < p.rollUntil;
       const r = p.stunned
@@ -758,9 +761,9 @@ export class TownRoom extends Room<TownState> {
 
   // ---- Loot -------------------------------------------------------------
 
-  private dropItem(kind: ItemKind, x: number, y: number, amount: number, gear = "") {
+  private dropItem(kind: ItemKind, x: number, y: number, amount: number, gear = "", owner = "") {
     const it = new Item();
-    it.kind = kind; it.amount = amount; it.gear = gear;
+    it.kind = kind; it.amount = amount; it.gear = gear; it.owner = owner;
     // Scatter a little so several drops don't stack exactly
     it.x = x + (Math.random() - 0.5) * 10;
     it.y = y + (Math.random() - 0.5) * 10;
@@ -781,6 +784,15 @@ export class TownRoom extends Room<TownState> {
   private pickUp(p: Player, pid: string) {
     this.state.items.forEach((it, id) => {
       if (Math.hypot(it.x - p.x, it.y - p.y) > PICKUP_RADIUS) return;
+      if (it.kind === "quest") {
+        if (it.owner !== pid) return; // someone else's quest drop
+        const s = questStep(p);
+        this.state.items.delete(id);
+        if (s?.type !== "collect" || s.item !== it.gear) return; // left over from an earlier step
+        this.clients.find((c) => c.sessionId === pid)?.send("pickup", { kind: it.kind, amount: 1, x: it.x, y: it.y, gear: it.gear, name: "" });
+        this.questProgress(pid, p, p.questCount + 1);
+        return;
+      }
       if (it.kind === "potion") {
         if (p.potions >= MAX_POTIONS) return; // full: leave it on the ground
         p.potions += it.amount;
@@ -1006,10 +1018,7 @@ export class TownRoom extends Room<TownState> {
     this.broadcast("hit", { id: targetId, dmg, crit: !!opts.crit });
     if (m.hp > 0) return;
     m.dead = true;
-    if (a && a.questStage === Q.HUNT && isBlob(m.kind)) {
-      a.questCount++;
-      if (a.questCount >= QUEST.killGoal) this.setQuest(attackerId, a, Q.RETURN);
-    }
+    if (a) this.questKill(attackerId, a, m);
     m.hidden = false; m.spot = ""; m.fleeing = false;
     this.grantXp(attackerId, Math.round(def.xp * mobScale(m.level, "xp")), m);
     this.dropLoot(m.kind, m.x, m.y, mobScale(m.level, "gold"), m.level);
@@ -1068,35 +1077,87 @@ export class TownRoom extends Room<TownState> {
   }
 
   // ---- Quest -------------------------------------------------------------
+  // The blob quest chain (shared/quests.ts). The server owns progress; the client gets "quest" {qid, stage, done?}.
 
-  private setQuest(id: string, p: Player, stage: number) {
-    p.questStage = stage;
-    this.clients.find((c) => c.sessionId === id)?.send("quest", { stage });
+  private sendQuest(id: string, p: Player, done = false) {
+    this.clients.find((c) => c.sessionId === id)?.send("quest", { qid: p.questId, stage: p.questStage, done });
   }
 
-  /** Accept / hand in at the druid. Only works standing next to him. */
+  /** Move to the next step (or claim the reward and move on to the next quest). */
+  private nextStep(id: string, p: Player) {
+    const d = QUESTS[p.questId];
+    if (!d) return;
+    p.questCount = 0;
+    if (p.questStage < d.steps.length) { p.questStage++; this.sendQuest(id, p); return; }
+    p.gold += d.reward.gold;
+    p.potions = Math.min(MAX_POTIONS, p.potions + d.reward.potions);
+    p.questId++;
+    p.questStage = 0;
+    this.sendQuest(id, p, true);
+    this.grantXp(id, d.reward.xp, p);
+  }
+
+  /** Progress on a kill / collect / use step; finishes the step at its goal. */
+  private questProgress(id: string, p: Player, count: number) {
+    const s = questStep(p);
+    if (!s) return;
+    p.questCount = count;
+    const n = s.type === "use" ? (count === (1 << s.objects!.length) - 1 ? stepGoal(s) : 0) : count;
+    if (n >= stepGoal(s)) this.nextStep(id, p);
+  }
+
+  private nearNpc(p: Player, npc: string): boolean {
+    const n = npcById(npc);
+    return !!n && npcPresent(npc, p) && Math.hypot(n.x - p.x, n.y - p.y) <= TALK_RANGE * 1.5;
+  }
+
+  /** Accept a quest at its giver, or finish a "talk" step next to that NPC. */
   private advanceQuest(id: string) {
     const p = this.state.players.get(id);
-    if (!p || p.dead || npcNear(p.x, p.y, TALK_RANGE * 1.5)?.id !== QUEST.giver) return;
-    if (p.questStage === Q.NONE) this.setQuest(id, p, Q.INVESTIGATE);
-    else if (p.questStage === Q.REPORT) { p.questCount = 0; this.setQuest(id, p, Q.HUNT); }
-    else if (p.questStage === Q.RETURN) {
-      p.gold += QUEST.reward.gold;
-      p.potions = Math.min(MAX_POTIONS, p.potions + QUEST.reward.potions);
-      this.setQuest(id, p, Q.DONE);
-      this.grantXp(id, QUEST.reward.xp, p);
+    const d = p && QUESTS[p.questId];
+    if (!p || !d || p.dead) return;
+    if (p.questStage === 0) {
+      if (p.level >= d.minLevel && this.nearNpc(p, d.giver)) this.nextStep(id, p);
+      return;
+    }
+    const s = questStep(p);
+    if (s?.type === "talk" && this.nearNpc(p, s.npc!)) this.nextStep(id, p);
+  }
+
+  /** E on a quest object (lantern, shrine, cocoon, Brood Heart). */
+  private useQuestObject(id: string, oid: string) {
+    const p = this.state.players.get(id);
+    const s = p && questStep(p);
+    if (!p || p.dead || s?.type !== "use") return;
+    const i = s.objects!.findIndex((o) => o.id === oid);
+    const o = s.objects![i];
+    if (!o || p.questCount & (1 << i) || Math.hypot(o.x - p.x, o.y - p.y) > USE_RANGE * 1.5) return;
+    this.clients.find((c) => c.sessionId === id)?.send("questuse", { id: o.id });
+    this.questProgress(id, p, p.questCount | (1 << i));
+  }
+
+  /** "see" a blob in a zone, or "reach" a spot. */
+  private checkQuestPlace(id: string, p: Player) {
+    const s = questStep(p);
+    if (s?.type === "reach") {
+      if (Math.hypot(s.at!.x - p.x, s.at!.y - p.y) <= s.at!.r) this.nextStep(id, p);
+      return;
+    }
+    if (s?.type !== "see" || !inZone(s.zone!, p.x, p.y)) return;
+    const r2 = (9 * TILE) ** 2;
+    for (const m of this.state.mobs.values()) {
+      if (m.dead || m.hidden || !s.kinds!.includes(m.kind)) continue;
+      const dx = m.x - p.x, dy = m.y - p.y;
+      if (dx * dx + dy * dy <= r2) { this.nextStep(id, p); return; }
     }
   }
 
-  /** Investigation step: a blob seen in the quest zone. */
-  private checkQuestSight(id: string, p: Player) {
-    if (!inQuestZone(p.x, p.y)) return;
-    const r2 = QUEST.sightRange * QUEST.sightRange;
-    for (const m of this.state.mobs.values()) {
-      if (m.dead || m.hidden || !isBlob(m.kind)) continue;
-      const dx = m.x - p.x, dy = m.y - p.y;
-      if (dx * dx + dy * dy <= r2) { this.setQuest(id, p, Q.REPORT); return; }
-    }
+  /** A monster died to this player: count it, or maybe drop a quest item only they can see. */
+  private questKill(id: string, p: Player, m: Mob) {
+    const s = questStep(p);
+    if (!s || !s.kinds?.includes(m.kind) || (s.zone && !inZone(s.zone, m.x, m.y))) return;
+    if (s.type === "kill") this.questProgress(id, p, p.questCount + 1);
+    else if (s.type === "collect" && Math.random() < (s.chance?.[m.kind] ?? 0)) this.dropItem("quest", m.x, m.y, 1, s.item!, id);
   }
 
   private grantXp(id: string, amount: number, at: { x: number; y: number }) {

@@ -15,6 +15,7 @@ import { Minimap } from "./minimap";
 import { DayDial } from "./daydial";
 import { SignPanel } from "./signpanel";
 import { NpcLayer } from "./npcs";
+import { QUEST_ITEMS } from "../../shared/quests";
 import { pixelText } from "./pixeltext";
 import { ART_K, CHARACTERS, CHAR_ORIGIN, CharacterName, createArtAnims, playCharAnim, preloadArt } from "./artAssets";
 import { Ambient } from "./ambient";
@@ -202,7 +203,8 @@ export class TownScene extends Phaser.Scene {
     document.getElementById("hud")!.hidden = false;
     this.minimap = new Minimap(document.getElementById("minimap") as HTMLCanvasElement, this.opts.name);
     this.npcs = new NpcLayer(this, (type, msg) => this.room.send(type, msg));
-    this.room.onMessage("quest", ({ stage }) => this.npcs?.onQuest(stage));
+    this.room.onMessage("quest", (msg) => this.npcs?.onQuest(msg));
+    this.room.onMessage("questuse", ({ id }) => this.npcs?.objects.burst(id));
     this.room.onMessage("shop", (msg) => this.npcs?.onShop(msg));
     this.dial = new DayDial(document.getElementById("daydial") as HTMLCanvasElement);
 
@@ -257,10 +259,17 @@ export class TownScene extends Phaser.Scene {
 
     const items = (this.room.state as any).items;
     items.onAdd((it: any, id: string) => {
+      if (it.kind === "quest" && it.owner !== this.room.sessionId) return; // someone else's quest drop
       const gear = it.kind === "gear" && GEAR[it.gear];
       const img = gear
         ? this.add.image(it.x, it.y, "gear_icons", it.gear).setScale(0.6 / ART_K).setDepth(it.y - 8)
-        : this.add.image(it.x, it.y, itemTexture(this, it.kind)).setDepth(it.y - 8);
+        : this.add.image(it.x, it.y, itemTexture(this, it.kind === "quest" ? `q_${it.gear}` : it.kind)).setDepth(it.y - 8);
+      if (it.kind === "quest") {
+        // Quest drops glow so they stand out from the gold
+        const glow = this.add.circle(it.x, it.y, 6, 0xffd166, 0.3).setDepth(it.y - 9).setBlendMode(Phaser.BlendModes.ADD);
+        this.tweens.add({ targets: glow, scale: 1.4, alpha: 0.1, duration: 600, yoyo: true, repeat: -1 });
+        img.once("destroy", () => glow.destroy());
+      }
       if (gear && gear.tier > 1) {
         // Rare / epic drops sparkle
         this.tweens.add({ targets: img, alpha: 0.65, duration: 400, yoyo: true, repeat: -1 });
@@ -271,6 +280,10 @@ export class TownScene extends Phaser.Scene {
     });
     items.onRemove((_it: any, id: string) => { this.items.get(id)?.destroy(); this.items.delete(id); });
     this.room.onMessage("pickup", ({ kind, amount, x, y, gear, name }) => {
+      if (kind === "quest") {
+        this.floatText(x, y - 6, `+1 ${QUEST_ITEMS[gear]?.name ?? ""}`, "#ffd166", PIXEL_FONT);
+        return;
+      }
       if (kind === "gear") {
         this.floatText(x, y - 6, `+${name}`, TIER_COLORS[GEAR[gear]?.tier ?? 1]);
         this.feed(`Found ${name}! Press G to equip`);

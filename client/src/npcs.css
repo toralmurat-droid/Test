@@ -62,7 +62,9 @@
 #questlog .ql-body { display: flex; gap: 14px; }
 #questlog .ql-list { flex: 0 0 150px; font: 13px var(--pixel-font); }
 #questlog .ql-cat { color: #7a6a44; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px; }
-#questlog .ql-item { padding: 4px 6px; border-radius: 3px; background: rgba(139,94,52,.18); border-left: 3px solid #ffb703; font-weight: bold; }
+#questlog .ql-item { padding: 4px 6px; border-radius: 3px; border-left: 3px solid transparent; cursor: pointer; margin-bottom: 2px; opacity: .8; }
+#questlog .ql-item.sel { background: rgba(139,94,52,.18); border-left-color: #ffb703; font-weight: bold; opacity: 1; }
+#questlog .ql-next { font-size: 13px; margin-top: 8px; }
 #questlog .ql-detail { flex: 1; min-width: 0; }
 #questlog h3 { margin: 0; font: bold 16px var(--pixel-font); color: #3d5a1e; }
 #questlog h4 { margin: 10px 0 4px; font: bold 13px var(--pixel-font); color: #6b4a22; text-transform: uppercase; letter-spacing: 1px; }
