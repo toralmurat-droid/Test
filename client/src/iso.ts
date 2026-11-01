@@ -2,6 +2,7 @@ import Phaser from "phaser";
 import { MAP_H, MAP_W, TILE } from "../../shared/constants";
 import { T, TILE_COUNT } from "../../shared/map";
 import { ROWS, ANIMATED_TILES } from "./tileset";
+import { BUILDINGS, buildHouses, stoneCap, stoneFace, woodCap, woodFace } from "./isobuild";
 
 /**
  * Isometric view (phase 1). The game world (server, collisions, movement, every x/y in the client) stays the
@@ -136,6 +137,8 @@ export class IsoView {
     scene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => { ev.off(Phaser.Core.Events.PRE_RENDER, pre); ev.off(Phaser.Core.Events.POST_RENDER, post); });
     const cam = scene.cameras.main;
     cam.removeBounds();
+    // Big soft glows (fires, lamps) are tiny textures scaled up: smooth them instead of showing blocky squares
+    for (const k of ["glow", "light"]) if (scene.textures.exists(k)) scene.textures.get(k).setFilter(Phaser.Textures.FilterMode.LINEAR);
     // Clicks (e.g. on NPCs) are tested between frames, when objects are back at world x/y: project them for the test
     const mgr = scene.input.manager as any, hit = mgr.hitTest;
     if (!mgr.__iso) {
@@ -194,6 +197,8 @@ export class IsoView {
       if (!this.seen.has(o)) {
         this.seen.add(o);
         if (this.isFlat(o)) { (moved ??= []).push(o); continue; }
+        // Ambient chimneys sat on flat roofs; iso houses draw their own
+        if (o.texture?.key === "chimney") o.visible = false;
       }
       if (!o.visible) continue;
       if (o.depth < OVERLAY_DEPTH && (o.x < vx0 || o.x > vx1 || o.y < vy0 || o.y > vy1) && o !== follow && !anchors.has(o)) {
@@ -222,6 +227,23 @@ export class IsoView {
       if (o.depth !== mine) o.setDepth(mine);
       o.__isoD = mine; o.__isoO = orig;
     }
+    this.fadeBuildings(follow);
+  }
+
+  /** A house in front of the hero (camera target) turns see-through so the hero stays visible. */
+  private fadeBuildings(follow: any) {
+    if (!follow || follow.__isoF !== this.frame) return;
+    const fx = follow.x, fy = follow.y, fd = follow.depth;
+    for (const b of BUILDINGS) {
+      let behind = false;
+      if (fx > b.left && fx < b.right && fy > b.top && fy - 24 < b.bottom) {
+        // depth of the house slice under the hero's x
+        let best: any;
+        for (const st of b.strips) if (!best || Math.abs((st as any).x - fx) < Math.abs(best.x - fx)) best = st;
+        behind = !!best && fd < best.depth;
+      }
+      if (behind !== b.faded) { b.faded = behind; for (const st of b.strips) st.setAlpha(behind ? 0.45 : 1); }
+    }
   }
 
   private post() {
@@ -240,6 +262,11 @@ export class IsoView {
 
 // ---------- phase 2: standing objects ----------
 
+const hashXY = (x: number, y: number) => {
+  let h = (Math.imul(x, 374761393) + Math.imul(y, 668265263)) | 0;
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+};
 const id = (index: number) => (index < 0 ? -1 : index % TILE_COUNT);
 const ROOF_IDS = new Set<number>([T.ROOF_THATCH, T.ROOF_RED, T.ROOF_SLATE]);
 const FACADE = new Set<number>([T.WALL_TIMBER, T.WALL_STONE, T.WINDOW_TIMBER, T.WINDOW_STONE, T.DOOR]);
@@ -265,14 +292,12 @@ function tileFrame(scene: Phaser.Scene, index: number) {
  * A wall-like tile as an iso block: `top` tile art on the top diamond, `side` tile art on the two faces we see
  * (south-west and south-east), the faces shaded.
  */
-function blockTexture(scene: Phaser.Scene, top: number, side: number, h: number) {
-  const key = `blk_${top}_${side}_${h}`;
+type Src = { img: CanvasImageSource; sx: number; sy: number };
+function blockTexture(scene: Phaser.Scene, key: string, topSrc: Src, sideSrc: Src, h: number) {
   if (scene.textures.exists(key)) return key;
-  const src = (scene.textures.get("tiles") as Phaser.Textures.CanvasTexture).getSourceImage() as HTMLCanvasElement;
   const tex = scene.textures.createCanvas(key, IW, IH + h)!;
   const ctx = tex.getContext();
   ctx.imageSmoothingEnabled = false;
-  const sx = (i: number) => (i % TILE_COUNT) * TILE, sy = (i: number) => Math.floor(i / TILE_COUNT) * TILE;
   const face = (a: number, b: number, e: number, f: number, shade: number) => {
     ctx.save();
     ctx.beginPath();
@@ -280,7 +305,7 @@ function blockTexture(scene: Phaser.Scene, top: number, side: number, h: number)
     else { ctx.moveTo(IW / 2, IH); ctx.lineTo(IW, IH / 2); ctx.lineTo(IW, IH / 2 + h); ctx.lineTo(IW / 2, IH + h); }
     ctx.closePath(); ctx.clip();
     ctx.setTransform(a, b, 0, (h + 1) / TILE, e, f);
-    ctx.drawImage(src, sx(side), sy(side), TILE, TILE, 0, 0, TILE + 1, TILE);
+    ctx.drawImage(sideSrc.img, sideSrc.sx, sideSrc.sy, TILE, TILE, 0, 0, TILE + 1, TILE);
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.fillStyle = `rgba(20,16,40,${shade})`;
     ctx.fillRect(0, 0, IW, IH + h);
@@ -290,7 +315,7 @@ function blockTexture(scene: Phaser.Scene, top: number, side: number, h: number)
   face(1, 0.5, 0, IH / 2, 0.22);
   face(1, -0.5, IW / 2, IH, 0.4);
   ctx.setTransform(1, 0.5, -1, 0.5, IW / 2, 0);
-  ctx.drawImage(src, sx(top), sy(top), TILE, TILE, 0, 0, TILE + 0.5, TILE + 0.5);
+  ctx.drawImage(topSrc.img, topSrc.sx, topSrc.sy, TILE, TILE, 0, 0, TILE + 0.5, TILE + 0.5);
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   // a thin dark rim where the top meets the faces
   ctx.strokeStyle = "rgba(20,16,40,0.35)";
@@ -351,12 +376,16 @@ function stakesTexture(scene: Phaser.Scene, fence: boolean, mask: number, broken
  */
 export function isoStanding(scene: Phaser.Scene, objects: number[][]): number[][] {
   const out = objects.map((r) => r.slice());
+  const houses = buildHouses(scene);
+  const src = (scene.textures.get("tiles") as Phaser.Textures.CanvasTexture).getSourceImage() as HTMLCanvasElement;
+  const tileSrc = (i: number): Src => ({ img: src, sx: (i % TILE_COUNT) * TILE, sy: Math.floor(i / TILE_COUNT) * TILE });
   const at = (x: number, y: number) => (x < 0 || y < 0 || x >= MAP_W || y >= MAP_H ? -1 : objects[y][x]);
   for (let ty = 0; ty < MAP_H; ty++) for (let tx = 0; tx < MAP_W; tx++) {
     const index = objects[ty][tx], t = id(index);
     if (t < 0) continue;
     const cx = (tx + 0.5) * TILE, cy = (ty + 0.5) * TILE;
-    const h = BLOCK_H[t];
+    if (houses.has(ty * MAP_W + tx)) { out[ty][tx] = -1; continue; }
+    let h = BLOCK_H[t];
     if (t === T.PALISADE || FENCES.has(t)) {
       const same = (x: number, y: number) => { const n = id(at(x, y)); return t === T.PALISADE ? n === T.PALISADE : FENCES.has(n); };
       const mask = (same(tx, ty - 1) ? 1 : 0) | (same(tx + 1, ty) ? 2 : 0) | (same(tx, ty + 1) ? 4 : 0) | (same(tx - 1, ty) ? 8 : 0);
@@ -366,14 +395,17 @@ export function isoStanding(scene: Phaser.Scene, objects: number[][]): number[][
       scene.add.image(cx, cy, key).setOrigin(0.5, (H + IH / 2) / (IH + H)).setDepth(cy);
       out[ty][tx] = -1;
     } else if (h !== undefined) {
-      // A house facade shows the roof above it on top; its own art (windows, door) goes on the sides.
-      let top = index, side = index;
-      if (FACADE.has(t)) {
-        for (let k = 1; k < 8; k++) { const up = at(tx, ty - k); if (ROOF_IDS.has(id(up))) { top = up; break; } if (!FACADE.has(id(up))) break; }
-      } else if (ROOF_IDS.has(t)) {
-        for (let k = 1; k < 16; k++) { const dn = at(tx, ty + k); if (FACADE.has(id(dn))) { side = dn; break; } if (!ROOF_IDS.has(id(dn))) break; }
+      let key: string;
+      if (t === T.RUIN || t === T.BEAM) {
+        // Broken walls: stone or charred timber, uneven heights
+        const stone = t === T.RUIN;
+        h = h! + Math.round((hashXY(tx, ty) - 0.5) * (stone ? 10 : 8));
+        const face = stone ? stoneFace() : woodFace(), cap = stone ? stoneCap() : woodCap();
+        key = blockTexture(scene, `blk_${stone ? "ruin" : "beam"}_${h}`, { img: cap, sx: 0, sy: 0 }, { img: face, sx: 0, sy: 0 }, h);
+      } else {
+        // Other blocks (stalls, stray roof/wall tiles): their own art on top and sides
+        key = blockTexture(scene, `blk_${index}_${h}`, tileSrc(index), tileSrc(index), h!);
       }
-      const key = blockTexture(scene, top, side, h);
       // origin = the centre of the footprint diamond, so the block stands on its tile
       scene.add.image(cx, cy, key).setOrigin(0.5, (IH / 2 + h) / (IH + h)).setDepth(cy);
       out[ty][tx] = -1;
