@@ -63,7 +63,7 @@ const CHUNK = 16; // tiles per side of a baked chunk
  */
 class ChunkLayer {
   private live = new Map<number, Phaser.GameObjects.RenderTexture>();
-  constructor(private scene: Phaser.Scene, private depth: number, private draw: (g: Phaser.GameObjects.Graphics, tx0: number, ty0: number, tx1: number, ty1: number) => void, private tint?: number) {}
+  constructor(private scene: Phaser.Scene, private depth: number, private draw: (g: Phaser.GameObjects.Graphics, tx0: number, ty0: number, tx1: number, ty1: number) => void, private tint?: number, private res = 1) {}
   update(view: Phaser.Geom.Rectangle) {
     const S = CHUNK * TILE, m = TILE * 4;
     const cx0 = Math.max(0, Math.floor((view.x - m) / S)), cy0 = Math.max(0, Math.floor((view.y - m) / S));
@@ -74,10 +74,10 @@ class ChunkLayer {
       want.add(k);
       if (this.live.has(k)) continue;
       const g = this.scene.make.graphics({}, false);
-      const tx0 = cx * CHUNK, ty0 = cy * CHUNK;
-      g.setPosition(-tx0 * TILE, -ty0 * TILE);
+      const tx0 = cx * CHUNK, ty0 = cy * CHUNK, R = this.res;
+      g.setPosition(-tx0 * TILE * R, -ty0 * TILE * R).setScale(R);
       this.draw(g, tx0, ty0, Math.min(MAP_W, tx0 + CHUNK), Math.min(MAP_H, ty0 + CHUNK));
-      const rt = this.scene.add.renderTexture(tx0 * TILE, ty0 * TILE, S, S).setOrigin(0, 0).setDepth(this.depth);
+      const rt = this.scene.add.renderTexture(tx0 * TILE, ty0 * TILE, S * R, S * R).setOrigin(0, 0).setDepth(this.depth).setScale(1 / R);
       rt.draw(g);
       if (this.tint !== undefined) rt.setTint(this.tint);
       g.destroy();
@@ -190,6 +190,29 @@ function drawUpright(g: Phaser.GameObjects.Graphics, x0: number, y0: number, x1:
   for (const [, f] of items) f();
 }
 
+/** Smooth mode: lily pads lying on Mirror Pond (flat, world coordinates), some flowering, with soft shadows. */
+function lilyPadsSmooth(g: Phaser.GameObjects.Graphics, x0: number, y0: number, x1: number, y1: number) {
+  for (let ty = y0; ty < y1; ty++) for (let tx = x0; tx < x1; tx++) {
+    if (GROUND[ty][tx] !== T.WATER || !inArea("Mirror Pond", tx, ty)) continue;
+    for (let k = 0; k < 2; k++) {
+      if (hash(tx, ty, 60 + k * 5) > (k ? 0.18 : 0.38)) continue;
+      const cx = tx * TILE + 6 + hash(tx, ty, 61 + k * 5) * 20, cy = ty * TILE + 6 + hash(tx, ty, 62 + k * 5) * 20;
+      const r = 4.5 + hash(tx, ty, 64 + k * 5) * 3.5, a = hash(tx, ty, 63 + k * 5) * Math.PI * 2;
+      g.fillStyle(0x0a1810, 0.45).slice(cx + 1.2, cy + 1.2, r, a + 0.35, a + Math.PI * 2 - 0.35, false).fillPath();
+      g.fillStyle(0x24401e, 1).slice(cx, cy, r, a + 0.35, a + Math.PI * 2 - 0.35, false).fillPath();
+      g.fillStyle(0x3a5a2a, 1).slice(cx - 0.3, cy - 0.3, r * 0.86, a + 0.4, a + Math.PI * 2 - 0.4, false).fillPath();
+      g.fillStyle(0x5a7a3a, 0.8).slice(cx - 0.9, cy - 0.9, r * 0.45, a + 0.6, a + Math.PI * 1.4, false).fillPath();
+      g.lineStyle(0.25, 0x1e3418, 0.8);
+      for (let v = 1; v < 6; v++) { const b = a + 0.35 + v * ((Math.PI * 2 - 0.7) / 6); g.lineBetween(cx, cy, cx + Math.cos(b) * r * 0.85, cy + Math.sin(b) * r * 0.85); }
+      if (hash(tx, ty, 66 + k) < 0.35) { // water lily flower
+        const fx = cx + Math.cos(a + Math.PI) * r * 0.2, fy = cy + Math.sin(a + Math.PI) * r * 0.2;
+        for (let p = 0; p < 8; p++) { const b = (p / 8) * Math.PI * 2; g.fillStyle(p % 2 ? 0xc89aa8 : 0xe8c8d0, 1).fillEllipse(fx + Math.cos(b) * 1.5, fy + Math.sin(b) * 1.5, 2.2, 2.2); }
+        g.fillStyle(0xf0d8a0, 1).fillCircle(fx, fy, 0.9);
+      }
+    }
+  }
+}
+
 /** Smooth-mode upright detail: curved grass blades, round mushrooms and flowers (same placement as drawUpright). */
 function drawUprightSmooth(g: Phaser.GameObjects.Graphics, x0: number, y0: number, x1: number, y1: number) {
   const R = TILE - 8;
@@ -203,6 +226,23 @@ function drawUprightSmooth(g: Phaser.GameObjects.Graphics, x0: number, y0: numbe
   };
   for (let ty = y0; ty < y1; ty++) for (let tx = x0; tx < x1; tx++) {
     const t = GROUND[ty][tx], X = tx * TILE, Y = ty * TILE;
+    // reeds and cattails on the bank right next to water
+    if ((t === T.SAND || GRASSY.has(t)) && OBJECTS[ty][tx] === EMPTY && hash(tx, ty, 70) < 0.45
+      && [[0, -1], [0, 1], [-1, 0], [1, 0]].some(([dx, dy]) => gnd(tx + dx, ty + dy) === T.WATER)) {
+      for (let k = 0; k < 7; k++) {
+        const rx = X + 3 + hash(tx, ty, 71 + k) * 26, ry = Y + 6 + hash(tx, ty, 75 + k) * 22, rh = 10 + hash(tx, ty, 79 + k) * 9;
+        const [x, y] = at(rx, ry), lean = (hash(tx, ty, 90 + k) - 0.5) * 3;
+        items.push([rx + ry, () => {
+          g.fillStyle(0x0c1a0c, 0.25).fillEllipse(x + 1, y + 0.3, 4, 1.2);
+          blade(x, y, rh, lean, k % 2 ? 0x3e5226 : 0x55602e, 0.55);
+          blade(x + 0.6, y, rh * 0.7, lean + 1.6, 0x2e4020, 0.45);
+          if (k % 3 === 0) { // cattail head
+            g.fillStyle(0x3a2414, 1).fillRoundedRect(x + lean * 0.95 - 0.8, y - rh * 0.92 - 1.2, 1.6, 3.8, 0.8);
+            g.fillStyle(0x6a4a2a, 0.8).fillRect(x + lean * 0.95 - 0.6, y - rh * 0.92 - 0.8, 0.5, 2.6);
+          }
+        }]);
+      }
+    }
     if (!GRASSY.has(t) || OBJECTS[ty][tx] !== EMPTY) continue;
     const h = hash(tx, ty, 1), wx = X + 4 + hash(tx, ty, 2) * R, wy = Y + 5 + hash(tx, ty, 3) * R;
     const [x, y] = at(wx, wy);
@@ -506,7 +546,9 @@ export class Details {
       this.layers.push(new ChunkLayer(scene, -1.7, (g, x0, y0, x1, y1) => this.groundDecals(g, x0, y0, x1, y1)));
       this.layers.push(new PixelChunkLayer(scene, -1.74, paintShore));
     }
-    this.layers.push(new ChunkLayer(scene, -1.58, (g, x0, y0, x1, y1) => this.waterDecor(g, x0, y0, x1, y1), SMOOTH ? 0x8a9478 : undefined)); // muted lily pads and reeds in the smooth look
+    this.layers.push(SMOOTH
+      ? new ChunkLayer(scene, -1.58, (g, x0, y0, x1, y1) => lilyPadsSmooth(g, x0, y0, x1, y1), undefined, 2) // reeds stand up in IsoUprightLayer
+      : new ChunkLayer(scene, -1.58, (g, x0, y0, x1, y1) => this.waterDecor(g, x0, y0, x1, y1)));
     if (ISO) this.layers.push(new IsoUprightLayer(scene, -1.5));
     this.roofShading();
     this.lanternsAndBanners();
