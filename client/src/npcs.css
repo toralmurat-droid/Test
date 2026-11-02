@@ -1,7 +1,7 @@
 /* All NPC, shop and quest text uses the bundled pixel font (@fontsource/pixelify-sans) with crisp edges.
    New on-screen text should use var(--pixel-font) too. */
 :root { --pixel-font: "Pixelify Sans", monospace; }
-#npcprompt, #npcdialog, #questtracker, #questtoast, #questlog { font-family: var(--pixel-font); -webkit-font-smoothing: none; -moz-osx-font-smoothing: grayscale; font-smooth: never; }
+#npcprompt, #chestprompt, #npcdialog, #questtracker, #questtoast, #questlog { font-family: var(--pixel-font); -webkit-font-smoothing: none; -moz-osx-font-smoothing: grayscale; font-smooth: never; }
 #npcdialog button, #questlog button, #questlog input { font-family: var(--pixel-font); }
 #questtoast canvas { display: block; margin: 0 auto; max-width: calc(100vw - 32px); }
 
@@ -96,3 +96,10 @@
 #questtracker .qt-hint { color: #8a8a8a; font-size: 12px; margin-top: 2px; }
 #questtracker.flash { animation: qt-flash .8s ease-out; }
 @keyframes qt-flash { 0% { background: rgba(255,209,102,.6); } 100% { background: rgba(0,0,0,.55); } }
+
+/* Loot chests (client/src/chests.ts): same look as the talk prompt, gold border */
+#chestprompt { display: none; position: absolute; left: 50%; bottom: 120px; transform: translateX(-50%); padding: 6px 12px; pointer-events: auto; cursor: pointer;
+  background: rgba(32,22,8,.88); border: 2px solid #c9962b; border-radius: 4px; color: #fff3cf; font: bold 13px var(--pixel-font); white-space: nowrap; }
+#chestprompt.open { display: block; }
+#chestprompt kbd { display: inline-block; padding: 0 5px; margin-right: 4px; border: 1px solid #e9c35a; border-radius: 3px; background: #4a3410; color: #fff; font: bold 13px var(--pixel-font); }
+#chestprompt .lv { color: #e9c35a; margin-left: 4px; }

@@ -121,6 +121,8 @@ export class NpcLayer {
   }
 
   get isOpen() { return !!this.talking; }
+  /** Another prompt (a loot chest) has the spot this frame. */
+  hidePrompt = false;
 
   /** E key: use the quest object you stand next to, talk to the NPC next to you, or close the dialog. */
   interact() {
@@ -249,7 +251,7 @@ export class NpcLayer {
     this.nearObj = this.talking ? undefined : this.objects.near(me, q);
     this.near = me ? npcNear(me.x, me.y, TALK_RANGE, present) : undefined;
     if (this.talking && (!me || npcNear(me.x, me.y, TALK_RANGE * 1.6, present) !== this.talking)) this.close(); // walked away
-    const showPrompt = (!!this.near || !!this.nearObj) && !this.talking;
+    const showPrompt = (!!this.near || !!this.nearObj) && !this.talking && !this.hidePrompt;
     this.prompt.classList.toggle("open", showPrompt);
     if (showPrompt) {
       this.prompt.innerHTML = this.nearObj

@@ -28,6 +28,7 @@ import { iconImg } from "./skillIcons";
 import { TalentMenu } from "./talents";
 import { IdeaBoard } from "./ideas";
 import { ISO, IsoView, isoAnchor, isoInput, screenDir } from "./iso";
+import { ChestLayer } from "./chests";
 
 interface Entity {
   sprite: Phaser.GameObjects.Sprite;
@@ -77,6 +78,7 @@ export class TownScene extends Phaser.Scene {
   private input_: InputState = { up: false, down: false, left: false, right: false };
   private seq = 0;
   private npcs?: NpcLayer;
+  private chests?: ChestLayer;
   private chatEl = document.getElementById("chat") as HTMLInputElement;
   private ideaBoard?: IdeaBoard;
   private minimap?: Minimap;
@@ -158,7 +160,11 @@ export class TownScene extends Phaser.Scene {
     this.input.keyboard!.on("keydown-F", dodge);
     this.input.keyboard!.on("keydown-C", () => { if (!this.chatting()) this.toggleHeroMenu(); });
     this.input.keyboard!.on("keydown-ESC", () => this.closeMenus());
-    this.input.keyboard!.on("keydown-E", () => { if (!this.chatting()) this.npcs?.interact(); });
+    this.input.keyboard!.on("keydown-E", () => {
+      if (this.chatting()) return;
+      if (!this.npcs?.isOpen && this.chests?.interact()) return; // a loot chest right here comes first
+      this.npcs?.interact();
+    });
     this.input.keyboard!.on("keydown-J", () => {
       if (this.chatting() || !this.npcs) return;
       const open = this.npcs.log.open;
@@ -218,6 +224,10 @@ export class TownScene extends Phaser.Scene {
     this.room.onMessage("quest", (msg) => this.npcs?.onQuest(msg));
     this.room.onMessage("questuse", ({ id }) => this.npcs?.objects.burst(id));
     this.room.onMessage("shop", (msg) => this.npcs?.onShop(msg));
+    this.chests = new ChestLayer(this, (type, msg) => this.room.send(type, msg));
+    this.room.onMessage("chests", (left) => this.chests?.setOpened(left));
+    this.room.onMessage("chestopen", ({ id, refill }) => this.chests?.opened(id, refill));
+    this.room.send("chests"); // which chests this account already emptied
     this.dial = new DayDial(document.getElementById("daydial") as HTMLCanvasElement);
 
     const players = (this.room.state as any).players;
@@ -303,11 +313,11 @@ export class TownScene extends Phaser.Scene {
         return;
       }
       if (kind === "gear") {
-        this.floatText(x, y - 6, `+${name}`, TIER_COLORS[GEAR[gear]?.tier ?? 1]);
+        this.floatText(x, y - 6, `+${name}`, TIER_COLORS[GEAR[gear]?.tier ?? 1], PIXEL_FONT);
         this.feed(`Found ${name}! Press G to equip`);
         return;
       }
-      this.floatText(x, y - 6, kind === "gold" ? `+${amount} gold` : "+1 potion", kind === "gold" ? "#ffc93c" : "#ff8fa3");
+      this.floatText(x, y - 6, kind === "gold" ? `+${amount} gold` : "+1 potion", kind === "gold" ? "#ffc93c" : "#ff8fa3", PIXEL_FONT);
     });
     this.room.onMessage("heal", ({ id, amount }) => {
       const e = this.entities.get(id);
@@ -1149,6 +1159,8 @@ export class TownScene extends Phaser.Scene {
     this.dial?.draw(now);
     if (meEnt) this.showArea(areaAt(meEnt.sprite.x, meEnt.sprite.y));
     this.signPanel.update(meEnt?.sprite);
+    this.chests?.update(meEnt && !meEnt.state.dead ? meEnt.sprite : undefined, !!this.npcs?.isOpen);
+    if (this.npcs) this.npcs.hidePrompt = !!this.chests?.near;
     this.npcs?.update(meEnt && !meEnt.state.dead ? meEnt.sprite : undefined, meEnt?.state);
     if (this.minimap && this.npcs) this.minimap.markers = this.npcs.markers;
 
