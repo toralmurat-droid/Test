@@ -528,6 +528,13 @@ function buildWorld() {
     each(x - 1, y - 1, 3, 3, (i, j) => { if (NATURE.has(objects[j][i])) setO(i, j, EMPTY); });
   }
 
+  // A road clipping the corner of a stream leaves a lone bridge tile: make it a dirt ford instead
+  for (let y = 0; y < MAP_H; y++) for (let x = 0; x < MAP_W; x++) {
+    if (ground[y][x] !== T.BRIDGE) continue;
+    const b = (i: number, j: number) => inMap(i, j) && ground[j][i] === T.BRIDGE;
+    if (!b(x - 1, y) && !b(x + 1, y) && !b(x, y - 1) && !b(x, y + 1)) setG(x, y, T.DIRT);
+  }
+
   // ---------- 14. Reachability: carve through nature to any pocket the player can't reach ----------
   const solid = (x: number, y: number) => !inMap(x, y) || (objects[y][x] !== EMPTY && !WALKABLE_OBJECTS.has(objects[y][x])) || ground[y][x] === T.WATER;
   const flood = (sx: number, sy: number) => {

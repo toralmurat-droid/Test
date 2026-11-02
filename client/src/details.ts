@@ -263,6 +263,91 @@ function paintTransitions(d: Uint8ClampedArray, S: number, tx0: number, ty0: num
   }
 }
 
+const SAND_PAL = [0xd9c38a, 0xd9c38a, 0xd9c38a, 0xc4ad74, 0xe8d6a3];
+const WATER_PAL = [0x3a78b8, 0x3a78b8, 0x3a78b8, 0x3370ae, 0x2f68a3];
+/** Shore class of a ground tile: 0 water, 1 sand, 2 land; undefined = neutral (bridges, map edge). */
+const level = (t: number): number | undefined => (t === T.WATER ? 0 : t === T.SAND ? 1 : t === T.BRIDGE || t === -1 ? undefined : 2);
+/** Roads keep their own edges (see paintTransitions): they count as land for the waterline only. */
+const SHORE_PAINTED = new Set<number>([T.WATER, T.SAND, ...GRASSY]);
+
+/**
+ * Smooth shorelines: grass, sand and water meet along soft, wavy curves instead of tile steps.
+ * Two fields are blurred over neighbouring tiles and interpolated between tile centres: "water" and "land".
+ * Each pixel is water where the water field is over half, else land where the land field is, else sand.
+ * The water field is blurred less, so the waterline stays close to the tiles you cannot walk on.
+ * Wet sand and foam line the water, which is a little darker under the bank behind it.
+ */
+function paintShore(d: Uint8ClampedArray, S: number, tx0: number, ty0: number, tx1: number, ty1: number) {
+  const set = (lx: number, ly: number, c: number, a = 255) => {
+    const o = (ly * S + lx) * 4;
+    if (a < 255 && d[o + 3]) { const k = a / 255; d[o] = d[o] * (1 - k) + (c >> 16) * k; d[o + 1] = d[o + 1] * (1 - k) + ((c >> 8) & 255) * k; d[o + 2] = d[o + 2] * (1 - k) + (c & 255) * k; return; }
+    d[o] = c >> 16; d[o + 1] = (c >> 8) & 255; d[o + 2] = c & 255; d[o + 3] = a;
+  };
+  const pick = (pal: number[], wx: number, wy: number) => pal[Math.floor(hash(wx, wy, 7) * pal.length)];
+  const wobble = (wx: number, wy: number, s: number) => 0.11 * Math.sin(wx * 0.21 + wy * 0.09 + s) + 0.07 * Math.sin(wy * 0.33 - wx * 0.14 + 1.7 + s) + (hash(wx >> 1, wy >> 1, 31 + s) - 0.5) * 0.06;
+  // blurred fields at tile centres (cached for this chunk)
+  const cache = new Map<number, number>();
+  const blur = (i: number, j: number, land: boolean) => {
+    const key = ((j + 2) * (MAP_W + 4) + i + 2) * 2 + +land;
+    let v = cache.get(key);
+    if (v !== undefined) return v;
+    let sum = 0, ws = 0;
+    for (let b = -1; b <= 1; b++) for (let a = -1; a <= 1; a++) {
+      const n = gnd(i + a, j + b), l = level(n);
+      if (l === undefined || (land && ROADY.has(n))) continue;
+      const w = a === 0 && b === 0 ? (land ? 4 : 8) : a === 0 || b === 0 ? 2 : 1;
+      sum += w * (land ? +(l === 2) : +(l === 0)); ws += w;
+    }
+    v = ws ? sum / ws : 0;
+    cache.set(key, v);
+    return v;
+  };
+  const field = (wx: number, wy: number, land: boolean) => {
+    const fx = (wx + 0.5) / TILE - 0.5, fy = (wy + 0.5) / TILE - 0.5, i0 = Math.floor(fx), j0 = Math.floor(fy);
+    const u = smoothstep(fx - i0), v = smoothstep(fy - j0);
+    return (blur(i0, j0, land) * (1 - u) + blur(i0 + 1, j0, land) * u) * (1 - v) + (blur(i0, j0 + 1, land) * (1 - u) + blur(i0 + 1, j0 + 1, land) * u) * v;
+  };
+  // land colour: the nearest land tile around
+  const landAt = (wx: number, wy: number) => {
+    const i = Math.floor(wx / TILE), j = Math.floor(wy / TILE);
+    let best: number = T.GRASS, bd = 1e9;
+    for (let b = j - 1; b <= j + 1; b++) for (let a = i - 1; a <= i + 1; a++) {
+      const n = gnd(a, b); if (!GRASSY.has(n)) continue;
+      const dd = (wx - (a + 0.5) * TILE) ** 2 + (wy - (b + 0.5) * TILE) ** 2; if (dd < bd) { bd = dd; best = n; }
+    }
+    return best;
+  };
+  for (let ty = ty0; ty < ty1; ty++) for (let tx = tx0; tx < tx1; tx++) {
+    const t = gnd(tx, ty), own = level(t);
+    if (own === undefined || !SHORE_PAINTED.has(t)) continue;
+    let mixed = false;
+    for (let j = -2; j <= 2 && !mixed; j++) for (let i = -2; i <= 2; i++) { const l = level(gnd(tx + i, ty + j)); if (l !== undefined && l !== own) { mixed = true; break; } }
+    if (!mixed) continue;
+    for (let py = 0; py < TILE; py++) for (let px = 0; px < TILE; px++) {
+      const wx = tx * TILE + px, wy = ty * TILE + py, lx = wx - tx0 * TILE, ly = wy - ty0 * TILE;
+      const fw = field(wx, wy, false) + wobble(wx, wy, 0), fg = field(wx, wy, true) + wobble(wx, wy, 3);
+      if (fw > 0.5) {
+        if (own !== 0) set(lx, ly, pick(WATER_PAL, wx, wy));
+        if (fw < 0.55) set(lx, ly, 0xd8ecff, 210); // foam on the waterline
+        else if (fw < 0.62 && hash(wx, wy, 33) < 0.45) set(lx, ly, 0xa8d0f4, 150);
+        // the bank behind (north-west, further up the screen) shades the water
+        const back = field(wx - 6, wy - 6, false) + wobble(wx - 6, wy - 6, 0);
+        if (back < 0.5) set(lx, ly, 0x1d4a7a, Math.min(130, (0.5 - back) * 520));
+      } else if (fg > 0.5) {
+        const lt = own === 2 ? t : landAt(wx, wy);
+        if (own !== 2) set(lx, ly, pick(lt === T.GRASS_DARK ? DARK_PAL : GRASS_PAL, wx, wy));
+        if (GRASSY.has(lt) && fg < 0.53 && hash(wx, wy, 11) < 0.6) set(lx, ly, lt === T.GRASS_DARK ? 0x3a6e26 : 0x3f7a2a); // grass lip
+        else if (GRASSY.has(lt) && fg < 0.57 && hash(wx, wy, 12) < 0.2) set(lx, ly, 0x6fb04a);
+      } else {
+        if (own !== 1) set(lx, ly, pick(SAND_PAL, wx, wy));
+        if (fw > 0.42) set(lx, ly, hash(wx, wy, 34) < 0.7 ? 0xb8a26a : 0xc4ad74); // wet sand
+        else if (fw > 0.36 && hash(wx, wy, 36) < 0.35) set(lx, ly, 0xc4ad74);
+        else if (fg > 0.46 && hash(wx, wy, 35) < 0.4) set(lx, ly, 0xb59c66); // grass roots in the sand
+      }
+    }
+  }
+}
+
 /** A small generated texture. `px` paints in screen pixels: draw at `k` = 1 for full detail, or pass k to scale a design. */
 function texture(scene: Phaser.Scene, key: string, w: number, h: number, frames: number, draw: (px: (x: number, y: number, c: number, a?: number) => void, f: number) => void) {
   if (scene.textures.exists(key)) return;
@@ -366,7 +451,7 @@ export class Details {
     for (let ty = 0; ty < MAP_H; ty++) for (let tx = 0; tx < MAP_W; tx++) if (GROUND[ty][tx] === T.WATER && inArea("Mirror Pond", tx, ty)) this.pond.push([tx, ty]);
     this.layers.push(new PixelChunkLayer(scene, -1.75, paintTransitions));
     this.layers.push(new ChunkLayer(scene, -1.7, (g, x0, y0, x1, y1) => this.groundDecals(g, x0, y0, x1, y1)));
-    this.layers.push(new ChunkLayer(scene, -1.59, (g, x0, y0, x1, y1) => this.roundCorners(g, x0, y0, x1, y1)));
+    this.layers.push(new PixelChunkLayer(scene, -1.74, paintShore));
     this.layers.push(new ChunkLayer(scene, -1.58, (g, x0, y0, x1, y1) => this.waterDecor(g, x0, y0, x1, y1)));
     if (ISO) this.layers.push(new IsoUprightLayer(scene, -1.5));
     this.roofShading();
@@ -429,33 +514,6 @@ export class Details {
         if (t === T.COBBLE && hash(tx, ty, 53) < 0.2) { // moss between the cobbles
           const ox = X + Math.floor(hash(tx, ty, 54) * (TILE - 4)), oy = Y + Math.floor(hash(tx, ty, 55) * 4) * 8 + 7;
           px(ox, oy, 0x5f8f3f); px(ox + 1, oy, 0x4a7a32); px(ox + 2, oy, 0x5f8f3f); px(ox + 1, oy - 1, 0x6fa04a);
-        }
-      }
-    }
-  }
-
-  /** Rounds the blocky corners of ponds, rivers and sandy banks so shorelines look natural. */
-  private roundCorners(g: Phaser.GameObjects.Graphics, x0: number, y0: number, x1: number, y1: number) {
-    const BASE: Record<number, number> = { [T.SAND]: 0xd9c38a, [T.GRASS]: 0x5a9a3c, [T.GRASS_DARK]: 0x4f8c36, [T.TALL_GRASS]: 0x5a9a3c, [T.FLOWERS]: 0x5a9a3c, [T.DIRT]: 0xa7814f };
-    const wet = (t: number) => t === T.WATER || t === T.BRIDGE || t === -1;
-    const R = 7 * K;
-    for (let ty = y0; ty < y1; ty++) for (let tx = x0; tx < x1; tx++) {
-      const t = GROUND[ty][tx], X = tx * TILE, Y = ty * TILE;
-      for (const [sx, sy] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
-        const a = gnd(tx + sx, ty), b = gnd(tx, ty + sy), d = gnd(tx + sx, ty + sy);
-        let fill: number | undefined, foam = false;
-        if (t === T.WATER && !wet(a) && !wet(b) && a === b && BASE[a] !== undefined) { fill = BASE[a]; foam = true; } // land pokes into water
-        else if (t === T.SAND && GRASSY.has(a) && a === b && GRASSY.has(d)) fill = BASE[a]; // grass rounds off sandy banks
-        else if (!wet(t) && BASE[t] !== undefined && wet(a) && wet(b) && wet(d) && a !== -1) fill = 0x3a78b8; // water bites into land
-        if (fill === undefined) continue;
-        // corner square of R×R pixels: paint everything outside the quarter circle
-        const cx = sx < 0 ? X + R : X + TILE - R, cy = sy < 0 ? Y + R : Y + TILE - R;
-        for (let j = 0; j < R; j++) for (let i = 0; i < R; i++) {
-          const x = sx < 0 ? X + i : X + TILE - 1 - i, y = sy < 0 ? Y + j : Y + TILE - 1 - j;
-          const dist = Math.hypot(x + 0.5 - cx, y + 0.5 - cy);
-          if (dist > R) g.fillStyle(fill, 1).fillRect(x, y, 1, 1);
-          else if (foam && dist > R - 1.5) g.fillStyle(0xd8ecff, 0.7).fillRect(x, y, 1, 1);
-          else if (foam && dist > R - 3) g.fillStyle(0xd8ecff, 0.25).fillRect(x, y, 1, 1);
         }
       }
     }

@@ -22,7 +22,8 @@ import { sellPrice, SHOPS } from "../shared/shops";
 import { BLOB_KINDS, inZone, npcPresent, QUESTS, questStep, stepGoal, USE_RANGE } from "../shared/quests";
 import { findHideSpot, HIDE, noMobsAt, randomPointInZone, rollLevel, SPAWN_ZONES, zoneCap } from "../shared/spawns";
 import { moveStep } from "../shared/movement";
-import { flush, HeroSave, loadHero, login, saveHero } from "./accounts";
+import { flush, HeroSave, loadHero, login, markChest, openedChests, saveHero } from "./accounts";
+import { chestById, CHEST_RANGE, CHEST_RESPAWN_MS, rollChest } from "../shared/chests";
 import { SLOT_COUNT, SlotSkill, skillLearned } from "../shared/slots";
 import { heroPoise, MOB_COMBAT, POISE, poiseLevelMult, poiseSpeed, RAGE_ATTACK_SPEED } from "../shared/combat";
 import { canLearn, COMBO_NODE, talentMult, talentBonus, talentReduce, TREES } from "../shared/talents";
@@ -339,6 +340,8 @@ export class TownRoom extends Room<TownState> {
 
     this.onMessage("quest", (client) => this.advanceQuest(client.sessionId));
     this.onMessage("use", (client, msg: { id: string }) => this.useQuestObject(client.sessionId, msg?.id));
+    this.onMessage("chest", (client, msg: { id: string }) => this.openChest(client, msg?.id));
+    this.onMessage("chests", (client) => this.sendChests(client));
     this.onMessage("buy", (client, msg: { i: number }) => this.shopBuy(client, msg?.i));
     this.onMessage("sell", (client, msg: { i: number }) => this.shopSell(client, msg?.i));
 
@@ -1316,6 +1319,41 @@ export class TownRoom extends Room<TownState> {
     if (!o || p.questCount & (1 << i) || Math.hypot(o.x - p.x, o.y - p.y) > USE_RANGE * 1.5) return;
     this.clients.find((c) => c.sessionId === id)?.send("questuse", { id: o.id });
     this.questProgress(id, p, p.questCount | (1 << i));
+  }
+
+  /**
+   * Loot chest (shared/chests.ts): once per account until it refills. Loot goes straight to the hero
+   * (gold, potions up to the cap, gear into the bag); what doesn't fit is dropped at the chest.
+   */
+  /** Loot chests this account already emptied, with the ms left until each refills (asked by the client once it listens). */
+  private sendChests(client: Client) {
+    const p = this.state.players.get(client.sessionId);
+    if (!p) return;
+    const now = Date.now();
+    client.send("chests", Object.fromEntries(Object.entries(openedChests(p.name, now)).map(([id, t]) => [id, t - now])));
+  }
+
+  private openChest(client: Client, cid: unknown) {
+    const p = this.state.players.get(client.sessionId);
+    const c = chestById(cid);
+    if (!p || p.dead || !c || Math.hypot(c.x - p.x, c.y - p.y) > CHEST_RANGE * 1.5) return;
+    const now = Date.now();
+    if (openedChests(p.name, now)[c.id]) return;
+    const refill = now + CHEST_RESPAWN_MS;
+    markChest(p.name, c.id, refill);
+    client.send("chestopen", { id: c.id, refill: CHEST_RESPAWN_MS });
+    const loot = rollChest(c.level, c.tier);
+    let row = 0; // stack the "+loot" texts so they don't overlap
+    const got = (kind: ItemKind, amount: number, gear = "") =>
+      client.send("pickup", { kind, amount, x: c.x, y: c.y - 8 - 9 * row++, gear, name: gear ? gearName(gear, p.cls) : "" });
+    p.gold += loot.gold;
+    got("gold", loot.gold);
+    for (let i = 0; i < loot.potions; i++) {
+      if (p.potions < MAX_POTIONS) { p.potions++; got("potion", 1); } else this.dropItem("potion", c.x, c.y + 10, 1);
+    }
+    for (const g of loot.gear) {
+      if (p.bag.length < BAG_SIZE) { setBag(p, [...bagItems(p), g]); got("gear", 1, g); } else this.dropItem("gear", c.x, c.y + 10, 1, g);
+    }
   }
 
   /** "see" a blob in a zone, or "reach" a spot. */

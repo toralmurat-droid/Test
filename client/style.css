@@ -199,8 +199,7 @@ html, body { margin: 0; height: 100%; background: #1b1b24; color: #eee; font: 14
 #hotbar .slot span { position: relative; padding: 0 2px 3px; text-align: center; line-height: 1.05; white-space: nowrap; overflow: hidden; max-width: 100%; text-overflow: ellipsis; }
 #hotbar .slot b { position: absolute; top: 8px; font-size: 13px; color: #fff; text-shadow: 0 0 2px #000; }
 #hotbar .slot .cd { position: absolute; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,.55); }
-#hotbar .slot.dragover, #hotbar .slot.empty:hover { border-color: #7cfc00; opacity: 1; }
-.talent[draggable="true"] { cursor: grab; }
+#hotbar .slot:hover, #hotbar .slot.picking { border-color: #7cfc00; opacity: 1; }
 /* HP / Stamina numbers: "/" sits at the exact centre of both bars, so the two lines up */
 #hptext .l, #skilltext .l { text-align: right; white-space: nowrap; }
 #hptext .l b, #skilltext .l b { font-weight: bold; }
@@ -245,3 +244,22 @@ html, body { margin: 0; height: 100%; background: #1b1b24; color: #eee; font: 14
 .ideacard .score { font-weight: bold; font-variant-numeric: tabular-nums; }
 .ideacard .score.pos { color: #7cfc00; }
 .ideacard .score.neg { color: #ef476f; }
+#hotbar .slot.empty { cursor: pointer; }
+#hotbar .slot i { font-style: normal; font-size: 16px; color: #777; margin-bottom: 8px; }
+#hotbar .slot .sicon { position: absolute; left: 50%; top: 50%; width: 24px; height: 24px; transform: translate(-50%, -40%); image-rendering: pixelated; }
+#hotbar .slot.wait .sicon { filter: grayscale(.6) brightness(.8); }
+#hotbar .slot b { z-index: 1; }
+/* Slot picker: opens above the clicked slot, scrolls when the list is long */
+#slotpick { position: absolute; z-index: 10; width: 230px; background: rgba(30,30,46,.97); border: 2px solid #7cfc00; padding: 6px; pointer-events: auto; }
+#slotpick .ph { font-size: 12px; font-weight: bold; color: #ffd166; margin: 0 2px 5px; }
+#slotpick .plist { max-height: 190px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; }
+#slotpick .opt { display: flex; align-items: center; gap: 8px; text-align: left; font: inherit; font-size: 12px; color: #eee; background: #15151f;
+  border: 2px solid #555a7a; padding: 4px 6px; cursor: pointer; }
+#slotpick .opt:hover { border-color: #7cfc00; }
+#slotpick .opt.cur { border-color: #ffd166; }
+#slotpick .opt.locked { opacity: .45; cursor: default; }
+#slotpick .opt span { display: flex; flex-direction: column; }
+#slotpick .opt small { color: #aaa; font-size: 10px; }
+#slotpick .picon { width: 24px; height: 24px; flex: none; image-rendering: pixelated; }
+#slotpick .picon.none { display: flex; align-items: center; justify-content: center; color: #e63946; font-size: 16px; }
+.talent .ticon { width: 14px; height: 14px; vertical-align: -2px; margin-right: 3px; image-rendering: pixelated; }

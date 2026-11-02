@@ -3,6 +3,7 @@ import { MAP_H, MAP_W, TILE } from "../../shared/constants";
 import { T, TILE_COUNT } from "../../shared/map";
 import { ROWS, ANIMATED_TILES } from "./tileset";
 import { BUILDINGS, buildBarns, buildHouses, buildStalls, ruinWallTexture } from "./isobuild";
+import { buildBridges } from "./isobridge";
 
 /**
  * Isometric view (phase 1). The game world (server, collisions, movement, every x/y in the client) stays the
@@ -129,7 +130,8 @@ export class IsoView {
     const tiles = map.addTilesetImage("tiles_iso", "tiles_iso", IW + BLEED * 2, IH + BLEED * 2, 0, 0, 0, { x: BLEED, y: BLEED })!;
     const flatObjects = isoStanding(scene, objects);
     isoCrops(scene, ground, objects);
-    for (const [name, grid, depth] of [["ground", ground, -2], ["objects", flatObjects, -1]] as const) {
+    const water = buildBridges(scene, ground); // bridges stand over the water
+    for (const [name, grid, depth] of [["ground", water, -2], ["objects", flatObjects, -1]] as const) {
       const layer = map.createBlankLayer(name, tiles, -IW / 2, 0)!;
       layer.putTilesAt(grid as number[][], 0, 0).setDepth(depth);
       (layer as any).cullCallback = isoCull;
