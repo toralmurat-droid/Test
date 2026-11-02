@@ -631,7 +631,7 @@ function tuft(c: CanvasRenderingContext2D, x: number, y: number, R: () => number
 export function ruinWallTexture(scene: Phaser.Scene, stone: boolean, mask: number, tx: number, ty: number) {
   const variant = Math.floor(hash(tx, ty, 77) * 6);
   const key = `rw_${stone ? "s" : "w"}_${mask}_${variant}`;
-  const MAXH = stone ? 30 : 36, PAD = 8;
+  const MAXH = stone ? 30 : 36, PAD = stone ? 18 : 8;
   const W = 64, H = 32 + MAXH + PAD;
   if (scene.textures.exists(key)) return { key, up: MAXH + PAD + 16 };
   // local world coords (0..32 on the tile) to canvas
@@ -699,6 +699,22 @@ export function ruinWallTexture(scene: Phaser.Scene, stone: boolean, mask: numbe
         const base = stone ? (rub ? 0x6a655c : 0x7a7468) : (rub ? 0x3a2a1c : 0x4a3424);
         const seed = Math.round(sg.x0 * 7 + sg.y0 * 13 + variant);
         I.box(sg.x0, sg.x1, sg.y0, sg.y1, 0, sg.h, base, stone ? stones(c, seed, base, 1) : planks(c, seed, base));
+        if (!rub && stone) {
+          // broken top: a few loose blocks left on the wall, set back and askew, so the top line is jagged
+          const Rt = rng(seed * 7 + 11);
+          const lone = !mask; // a lone pillar: a stepped, crumbling stack
+          const n = lone ? 1 + Math.floor(Rt() * 2) : 1 + Math.floor(Rt() * 2.5);
+          let z = sg.h;
+          let u0 = sg.x0, u1 = sg.x1, v0 = sg.y0, v1 = sg.y1;
+          for (let k = 0; k < n; k++) {
+            if (!lone && Rt() < 0.35) continue;
+            const w = (u1 - u0), d = (v1 - v0);
+            const sh = (Rt() - 0.5) * w * 0.3, nu0 = u0 + Rt() * w * 0.4 + sh, nu1 = u1 - Rt() * w * 0.3 + sh, nv0 = v0 + Rt() * d * 0.4, nv1 = v1 - Rt() * d * 0.2;
+            const hh = 2 + Rt() * (lone ? 5 : 3.5);
+            I.box(nu0, nu1, nv0, nv1, z, z + hh, base, stones(c, seed + k + 1, base, 1));
+            if (lone) { z += hh; u0 = nu0; u1 = nu1; v0 = nv0; v1 = nv1; }
+          }
+        }
         if (!rub) { // jagged broken top with moss / char
           const [tx0, ty0] = I.p((sg.x0 + sg.x1) / 2, (sg.y0 + sg.y1) / 2, sg.h);
           c.fillStyle = stone ? "rgba(74,96,44,0.55)" : "rgba(20,14,10,0.7)";
