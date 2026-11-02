@@ -24,6 +24,7 @@ export { ISO } from "./isoflag";
 import { ISO, SMOOTH } from "./isoflag";
 import { SmoothGround } from "./smoothground";
 import { hiResTexture } from "./smooth";
+import { uprightTexture } from "./smoothProps";
 
 export const isoX = (x: number, y: number) => x - y;
 export const isoY = (x: number, y: number) => (x + y) / 2;
@@ -482,7 +483,9 @@ export function isoStanding(scene: Phaser.Scene, objects: number[][]): number[][
       out[ty][tx] = -1;
     } else if (UPRIGHT.has(t)) {
       // 3/4 view art: its bottom edge stands on the tile's centre, a little forward
-      scene.add.image(cx, cy, "tiles", tileFrame(scene, index)).setOrigin(0.5, 0.85).setDepth(cy);
+      const painted = SMOOTH ? uprightTexture(scene, t) : undefined; // detailed iso art in place of the 3/4 tile
+      if (painted) scene.add.image(cx, cy, painted).setOrigin(0.5, 0.85).setDepth(cy);
+      else scene.add.image(cx, cy, "tiles", tileFrame(scene, index)).setOrigin(0.5, 0.85).setDepth(cy);
       out[ty][tx] = -1;
     }
   }
