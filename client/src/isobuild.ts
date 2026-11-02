@@ -1,4 +1,4 @@
-import { Iso, planks, stones } from "./smoothProps";
+import { col, Iso, planks, rng, stones, type Pt as IPt } from "./smoothProps";
 import { hiResTexture } from "./smooth";
 import { SMOOTH } from "./isoflag";
 import Phaser from "phaser";
@@ -379,6 +379,46 @@ function stall(scene: Phaser.Scene, x0: number, y0: number, x1: number, y1: numb
  * connected neighbour (mask bits N=1 E=2 S=4 W=8), its top broken into uneven steps, stone or charred timber,
  * with fallen stones / splinters at its foot. Returns the texture key and the canvas height above the tile centre.
  */
+/** One ivy leaf: a small dark-green blob lit on its top-left. */
+function leaf(c: CanvasRenderingContext2D, x: number, y: number, R: () => number, k: number) {
+  const g = [0x2c4a22, 0x3a5a28, 0x4a6a30, 0x5e7a38][Math.floor(R() * 4)];
+  const s = 0.55 + R() * 0.55;
+  c.fillStyle = col(g, 0.55 * k); c.beginPath(); c.ellipse(x + 0.25, y + 0.3, s, s * 0.75, 0, 0, Math.PI * 2); c.fill();
+  c.fillStyle = col(g, k); c.beginPath(); c.ellipse(x, y, s, s * 0.75, R() * 3, 0, Math.PI * 2); c.fill();
+  c.fillStyle = col(g, 1.35 * k, 0.7); c.beginPath(); c.ellipse(x - s * 0.3, y - s * 0.3, s * 0.4, s * 0.3, 0, 0, Math.PI * 2); c.fill();
+}
+/** A rough fallen stone: an irregular lit top over a darker side, with a shadow. */
+function chunk(c: CanvasRenderingContext2D, I: Iso, u: number, v: number, r0: number, R: () => number, base: number) {
+  const n = 6, top: IPt[] = [], foot: IPt[] = [];
+  const h = r0 * (0.6 + R() * 0.5);
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * Math.PI * 2, rr = r0 * (0.7 + R() * 0.5);
+    top.push(I.p(u + Math.cos(a) * rr * 0.8, v + Math.sin(a) * rr * 0.8, h));
+    foot.push(I.p(u + Math.cos(a) * rr, v + Math.sin(a) * rr, 0));
+  }
+  const [sx, sy] = I.p(u + 0.8, v + 0.8, 0);
+  c.fillStyle = "rgba(0,0,0,0.3)"; c.beginPath(); c.ellipse(sx, sy, r0 * 1.5, r0 * 0.7, 0, 0, Math.PI * 2); c.fill();
+  const tone = 0.8 + R() * 0.35;
+  I.poly(foot, col(base, 0.6 * tone));
+  for (let i = 0; i < n; i++) { // side facets between the top and foot rings
+    const j = (i + 1) % n, lit = Math.cos((i / n) * Math.PI * 2 + 0.8);
+    I.poly([top[i], top[j], foot[j], foot[i]], col(base, (0.62 + 0.18 * lit) * tone));
+  }
+  I.poly(top, col(base, 1.08 * tone), "rgba(20,16,12,0.5)", 0.25);
+  if (R() < 0.5) { const [mx, my] = I.p(u - 0.2, v - 0.2, h); c.fillStyle = "rgba(78,102,46,0.75)"; c.beginPath(); c.ellipse(mx, my, r0 * 0.6, r0 * 0.3, 0, 0, Math.PI * 2); c.fill(); }
+}
+/** A weed tuft (k > 2: a small fern / sapling). */
+function tuft(c: CanvasRenderingContext2D, x: number, y: number, R: () => number, k: number) {
+  const n = k > 2 ? 9 : 4 + Math.floor(R() * 4);
+  c.lineCap = "round";
+  for (let i = 0; i < n; i++) {
+    const a = -Math.PI / 2 + (R() - 0.5) * 2.0, L = (1.8 + R() * 2.4) * k;
+    const g = [0x3c5a26, 0x4e6c2e, 0x62783a, 0x7a7a40][Math.floor(R() * 4)];
+    c.strokeStyle = col(g, 0.9 + R() * 0.3); c.lineWidth = k > 2 ? 0.6 : 0.4;
+    c.beginPath(); c.moveTo(x, y); c.quadraticCurveTo(x + Math.cos(a) * L * 0.4, y + Math.sin(a) * L * 0.6, x + Math.cos(a) * L, y + Math.sin(a) * L * 0.7); c.stroke();
+  }
+}
+
 export function ruinWallTexture(scene: Phaser.Scene, stone: boolean, mask: number, tx: number, ty: number) {
   const variant = Math.floor(hash(tx, ty, 77) * 6);
   const key = `rw_${stone ? "s" : "w"}_${mask}_${variant}`;
@@ -454,7 +494,47 @@ export function ruinWallTexture(scene: Phaser.Scene, stone: boolean, mask: numbe
           const [tx0, ty0] = I.p((sg.x0 + sg.x1) / 2, (sg.y0 + sg.y1) / 2, sg.h);
           c.fillStyle = stone ? "rgba(74,96,44,0.55)" : "rgba(20,14,10,0.7)";
           c.beginPath(); c.ellipse(tx0, ty0, 3 + (seed % 3), 1.4, 0, 0, Math.PI * 2); c.fill();
+          // nature taking over: ivy climbing the two visible faces, thicker low down
+          const ivy = r(200 + seed % 17);
+          if (ivy < (stone ? 0.7 : 0.45)) {
+            const reach = sg.h * (0.35 + r(210 + seed % 13) * 0.65);
+            const R = rng(seed * 3 + 1);
+            const nLeaf = Math.round((sg.x1 - sg.x0 + sg.y1 - sg.y0) * reach * 0.12);
+            for (let i = 0; i < nLeaf; i++) {
+              const z = reach * Math.pow(R(), 1.6);
+              const onL = R() < 0.55;
+              const [lx, ly] = onL ? I.p(sg.x0 + R() * (sg.x1 - sg.x0), sg.y1, z) : I.p(sg.x1, sg.y0 + R() * (sg.y1 - sg.y0), z);
+              leaf(c, lx, ly, R, onL ? 1 : 0.72);
+            }
+          }
         }
+      }
+      // fallen pieces scattered on the ground: rough stones or charred beams, some half sunk in grass
+      const R = rng(variant * 101 + mask * 7 + (stone ? 1 : 2));
+      const nDebris = 4 + Math.floor(R() * 6);
+      for (let i = 0; i < nDebris; i++) {
+        const u = 1 + R() * 30, v = 1 + R() * 30;
+        if (segs.some((sg) => u > sg.x0 - 1 && u < sg.x1 + 1 && v > sg.y0 - 1 && v < sg.y1 + 1)) continue;
+        if (stone || R() < 0.4) chunk(c, I, u, v, 0.8 + R() * 1.8, R, stone ? 0x77716a : 0x6a6258);
+        else { // a fallen charred beam lying at an angle
+          const L = 6 + R() * 8, an = R() * Math.PI;
+          const du = Math.cos(an) * L / 2, dv = Math.sin(an) * L / 2;
+          const a = I.p(u - du, v - dv, 0.9), b = I.p(u + du, v + dv, 0.9);
+          c.lineCap = "butt";
+          c.strokeStyle = "rgba(0,0,0,0.35)"; c.lineWidth = 2.4; c.beginPath(); c.moveTo(a[0] + 0.6, a[1] + 1.2); c.lineTo(b[0] + 0.6, b[1] + 1.2); c.stroke();
+          c.strokeStyle = "#2a1d14"; c.lineWidth = 1.9; c.beginPath(); c.moveTo(a[0], a[1]); c.lineTo(b[0], b[1]); c.stroke();
+          c.strokeStyle = "rgba(120,90,60,0.6)"; c.lineWidth = 0.5; c.beginPath(); c.moveTo(a[0], a[1] - 0.6); c.lineTo(b[0], b[1] - 0.6); c.stroke();
+          c.fillStyle = "rgba(10,8,6,0.8)"; c.fillRect(b[0] - 0.6, b[1] - 0.9, 1.2, 1.2); // burnt end
+        }
+      }
+      // weeds, ferns and the odd sapling at the wall foot and among the debris
+      const nWeed = 6 + Math.floor(R() * 8);
+      for (let i = 0; i < nWeed; i++) {
+        let u = 1 + R() * 30, v = 1 + R() * 30;
+        const sg = segs[Math.floor(R() * segs.length)];
+        if (R() < 0.6 && sg) { u = sg.x0 + R() * (sg.x1 - sg.x0); v = sg.y1 + 0.6 + R() * 1.5; }
+        const [wx0, wy0] = I.p(u, v, 0);
+        tuft(c, wx0, wy0, R, R() < 0.12 ? 2.6 : 1);
       }
     });
     return { key, up: MAXH + PAD + 16 };

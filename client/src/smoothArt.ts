@@ -82,6 +82,15 @@ function canopy(ctx: CanvasRenderingContext2D, seed: number, cx: number, cy: num
   ctx.restore();
 }
 
+/** A bare branch from (x0,y0) to (x1,y1), tapering. */
+function limb(ctx: CanvasRenderingContext2D, x0: number, y0: number, x1: number, y1: number, w: number) {
+  ctx.strokeStyle = "#2e241c"; ctx.lineCap = "round";
+  const mx = (x0 + x1) / 2 + (y1 - y0) * 0.15, my = (y0 + y1) / 2 - Math.abs(x1 - x0) * 0.12;
+  ctx.lineWidth = w; ctx.beginPath(); ctx.moveTo(x0, y0); ctx.quadraticCurveTo(mx, my, x1, y1); ctx.stroke();
+  ctx.strokeStyle = "rgba(96,84,70,0.55)"; ctx.lineWidth = w * 0.3;
+  ctx.beginPath(); ctx.moveTo(x0 - w * 0.2, y0 - w * 0.2); ctx.quadraticCurveTo(mx - w * 0.2, my - w * 0.2, x1, y1); ctx.stroke();
+}
+
 export function smoothTrees(scene: Phaser.Scene, K: number) {
   // Oaks: 24x28 design units (x K texture px), trunk base bottom centre, 2 sway frames
   for (const [key, seed, pal] of [
@@ -95,6 +104,31 @@ export function smoothTrees(scene: Phaser.Scene, K: number) {
       canopy(ctx, seed, 12, 10.5, 10.6, 8.8, pal as unknown as number[], f * 0.45);
     });
   }
+  // More oaks, so a wood is not one tree repeated: a broad old one with a split crown, a sickly one with dead
+  // branches through a thin canopy, a young narrow one; then a second, taller pine
+  hiResTexture(scene, "oak_c", 24 * K, 28 * K, 2, S, (ctx, f) => {
+    ctx.scale(K, K);
+    shadow(ctx, 12, 25.6, 10, 2.6);
+    trunk(ctx, 12, 12, 26, 2);
+    limb(ctx, 12, 15, 6.5, 9, 0.7); limb(ctx, 12, 14, 17.5, 8.5, 0.7);
+    canopy(ctx, 31, 7.4, 9.6, 6.4, 6, [0x1e2c16, 0x34421f, 0x4c5629, 0x6c6c36], f * 0.4);
+    canopy(ctx, 37, 16.4, 9, 6.6, 6.4, [0x1e2c16, 0x34421f, 0x4c5629, 0x6c6c36], f * 0.5);
+    canopy(ctx, 41, 12, 5.6, 5.4, 4.4, [0x22301a, 0x3c4a24, 0x56602c, 0x7a7642], f * 0.45);
+  });
+  hiResTexture(scene, "oak_d", 24 * K, 28 * K, 2, S, (ctx, f) => {
+    ctx.scale(K, K);
+    shadow(ctx, 12, 25.6, 8, 2.2);
+    trunk(ctx, 12, 9, 26, 1.5);
+    canopy(ctx, 53, 12.5, 11.5, 8.4, 6.8, [0x26301a, 0x40462a, 0x5c5a32, 0x7c7040], f * 0.4);
+    // dead limbs poking out of the thin crown
+    limb(ctx, 11, 11, 3.5, 4.5, 0.75); limb(ctx, 13, 10, 19, 3, 0.65);
+  });
+  hiResTexture(scene, "oak_e", 24 * K, 28 * K, 2, S, (ctx, f) => {
+    ctx.scale(K, K);
+    shadow(ctx, 12, 25.6, 6.5, 2);
+    trunk(ctx, 12, 14, 26, 1.1);
+    canopy(ctx, 67, 12, 11.5, 6.6, 9.4, [0x182a16, 0x2a4422, 0x40582c, 0x5e7036], f * 0.55);
+  });
   // Pine: 20x30, layered tiers
   hiResTexture(scene, "pine", 20 * K, 30 * K, 2, S, (ctx, f) => {
     ctx.scale(K, K);
