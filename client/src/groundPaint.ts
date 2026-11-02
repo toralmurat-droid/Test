@@ -150,30 +150,48 @@ function material(t: number, wx: number, wy: number, sx: number, sy: number, dep
       break;
     }
     case COBBLE: {
-      // worn, irregular Voronoi setts with packed earth in the joints
-      const C = 5.8, ux = wx + (vn(wx / 9, wy / 9, 27) - 0.5) * 3, uy = wy + (vn(wx / 9, wy / 9, 28) - 0.5) * 3;
+      // worn, irregular hand-laid setts: uneven sizes, sunken and tilted stones, chips, cracks, earth in the joints
+      const w1 = 3, w2 = 0.8;
+      const ux = wx + (vn(wx / 9, wy / 9, 27) - 0.5) * w1 * 2 + (vn(wx / 2.6, wy / 2.6, 37) - 0.5) * w2;
+      const uy = wy + (vn(wx / 9, wy / 9, 28) - 0.5) * w1 * 2 + (vn(wx / 2.6, wy / 2.6, 38) - 0.5) * w2;
+      const C = 5.8;
       const gx = Math.floor(ux / C), gy = Math.floor(uy / C);
       let d1 = 1e9, d2 = 1e9, best = 0, bx = 0, by = 0, cid = 0;
       for (let j = -1; j <= 1; j++) for (let i = -1; i <= 1; i++) {
         const cx = gx + i, cy = gy + j;
-        const px = (cx + 0.15 + hash2(cx, cy, 21) * 0.7) * C, py = (cy + 0.15 + hash2(cx, cy, 22) * 0.7) * C;
+        const px = (cx + 0.1 + hash2(cx, cy, 21) * 0.8) * C, py = (cy + 0.1 + hash2(cx, cy, 22) * 0.8) * C;
         const dx = ux - px, dy = uy - py, d = Math.sqrt(dx * dx + dy * dy);
         if (d < d1) { d2 = d1; d1 = d; best = hash2(cx, cy, 23); bx = dx; by = dy; cid = cx * 7919 + cy; } else if (d < d2) d2 = d;
       }
       const edge = d2 - d1;
-      const missing = hash2(cid, 3, 29) < 0.05;
-      const tone = 0.78 + best * 0.32, warm = hash2(cid, 1, 24);
-      r = (104 + 16 * warm) * tone; g = (100 + 8 * warm) * tone; b = (92 - 2 * warm) * tone;
-      const n = d1 / (C * 0.62), lit = -(bx + by) / (C * 0.6);
-      const k = 1 - 0.34 * n * n + 0.2 * lit * n;
+      // patches where the setts are gone: packed earth and gravel show through
+      const hole = sstep(0.72, 0.8, vn(wx / 30, wy / 30, 39) * 0.75 + hash2(cid, 5, 40) * 0.25);
+      const missing = hash2(cid, 3, 29) < 0.04 || hole > 0.5;
+      const tone = 0.7 + best * 0.42, warm = hash2(cid, 1, 24);
+      r = (104 + 18 * warm) * tone; g = (100 + 9 * warm) * tone; b = (92 - 3 * warm) * tone;
+      // each stone sits at its own height and tilt: sunken ones dark, proud ones catch the light
+      const tilt = (hash2(cid, 6, 41) - 0.5) * 0.9, sink = hash2(cid, 7, 42);
+      const n = d1 / (C * 0.6), lit = -(bx * (1 + tilt) + by * (1 - tilt)) / (C * 0.6);
+      const k = (1 - 0.38 * n * n + 0.3 * lit * n) * (sink < 0.12 ? 0.84 : sink > 0.9 ? 1.08 : 1);
       r *= k; g *= k; b *= k;
       const st = vn(wx * 0.8, wy * 0.8, 25) * 0.6 + vn(wx * 2.2, wy * 2.2, 26) * 0.4; // stone grain and chips
-      r *= 0.88 + st * 0.2; g *= 0.88 + st * 0.2; b *= 0.88 + st * 0.2;
-      const mortar = missing ? 0 : sstep(0.35, 1.5, edge);
-      const mr = 58 + grain * 10, mg = 47 + grain * 8, mb = 36;
+      r *= 0.84 + st * 0.26; g *= 0.84 + st * 0.26; b *= 0.84 + st * 0.26;
+      // hairline cracks across some stones, chipped corners
+      if (hash2(cid, 8, 43) < 0.1) {
+        const an = hash2(cid, 9, 44) * Math.PI, cr = Math.abs(bx * Math.sin(an) - by * Math.cos(an) + (vn(wx * 1.3, wy * 1.3, 45) - 0.5) * 0.9);
+        if (cr < 0.16) { r *= 0.72; g *= 0.72; b *= 0.72; }
+      }
+      // joints vary: tight in places, wide and earthy in others
+      const jw = 0.35 + 0.5 * vn(wx / 14, wy / 14, 46);
+      const mortar = missing ? 0 : sstep(jw, jw + 1.1, edge);
+      const mr = 56 + grain * 12, mg = 45 + grain * 9, mb = 34;
       r = mr + (r - mr) * mortar; g = mg + (g - mg) * mortar; b = mb + (b - mb) * mortar;
-      if (mortar < 0.6 && vn(wx / 24, wy / 24, 26) > 0.72) { r = 58; g = 72; b = 38; } // moss in the joints
-      ht = 0.55 + 0.4 * mortar;
+      if (missing) { // loose gravel in the gaps
+        const gc = hash2(Math.floor(wx * 1.1), Math.floor(wy * 1.1), 47);
+        if (gc < 0.3) { const t2 = 70 + gc * 160; r = t2; g = t2 * 0.94; b = t2 * 0.84; }
+      }
+      if (mortar < 0.6 && vn(wx / 24, wy / 24, 26) > 0.68) { r = 54 + grain * 10; g = 70 + grain * 10; b = 36; } // moss and weeds in the joints
+      ht = (missing ? 0.3 : 0.55 + 0.4 * mortar) + (sink - 0.5) * 0.2;
       break;
     }
     case SAND: {
@@ -272,7 +290,8 @@ export function paintChunk(g: GroundData, f: Fields, sx0: number, sy0: number, c
       const sx = sx0 + (i + 0.5) / res;
       const wx = sy + sx / 2, wy = sy - sx / 2;
       // wavy borders: warp the lookup point
-      const u = wx + (vn(wx / 15, wy / 15, 1) - 0.5) * 16, v = wy + (vn(wx / 15, wy / 15, 2) - 0.5) * 16;
+      const u = wx + (vn(wx / 45, wy / 45, 3) - 0.5) * 22 + (vn(wx / 15, wy / 15, 1) - 0.5) * 14 + (vn(wx / 4, wy / 4, 4) - 0.5) * 5;
+      const v = wy + (vn(wx / 45, wy / 45, 5) - 0.5) * 22 + (vn(wx / 15, wy / 15, 2) - 0.5) * 14 + (vn(wx / 4, wy / 4, 6) - 0.5) * 5;
       const fx = u / tile - 0.5, fy = v / tile - 0.5;
       const x0 = Math.floor(fx), y0 = Math.floor(fy);
       let tx = fx - x0, ty = fy - y0;
@@ -284,14 +303,24 @@ export function paintChunk(g: GroundData, f: Fields, sx0: number, sy0: number, c
       let s1 = -9, s2 = -9, t1 = types[0], t2 = -1;
       for (const t of types) {
         const ht = material(t, wx, wy, sx, sy, depth, 0);
-        const s = wt[t] + 0.45 * (ht - 0.5);
+        const s = wt[t] + 0.7 * (ht - 0.5) + 0.14 * (hash2(Math.floor(wx / 1.5), Math.floor(wy / 1.5), 60 + t) - 0.5);
         if (s > s1) { s2 = s1; t2 = t1; s1 = s; t1 = t; c2.set(c1); c1.set(out3); }
         else if (s > s2) { s2 = s; t2 = t; c2.set(out3); }
       }
       let r = c1[0], gg = c1[1], b = c1[2];
       if (t2 >= 0 && t2 !== t1) {
-        const a = clamp01(0.5 + (s1 - s2) / 0.09);
+        const soft = t1 <= FLOWERS && t2 <= FLOWERS; // grass into grass: a wide, soft blend, no earth band
+        const a = clamp01(0.5 + (s1 - s2) / (soft ? 0.5 : 0.09));
         r = c1[0] * a + c2[0] * (1 - a); gg = c1[1] * a + c2[1] * (1 - a); b = c1[2] * a + c2[2] * (1 - a);
+        // worn earth and scattered gravel along borders between land materials
+        if (!soft && t1 !== WATER && t2 !== WATER && t1 !== DIRT) {
+          const band = clamp01(1 - (s1 - s2) / 0.32) * (0.55 + 0.45 * vn(wx / 6, wy / 6, 64));
+          if (band > 0.15) {
+            material(DIRT, wx, wy, sx, sy, 0, 0);
+            const e = band * 0.75;
+            r += (out3[0] * 0.92 - r) * e; gg += (out3[1] * 0.92 - gg) * e; b += (out3[2] * 0.92 - b) * e;
+          }
+        }
         // foam where water meets land, wet darker ground just above it
         if ((t1 === WATER) !== (t2 === WATER)) {
           const foam = 1 - Math.abs(a - 0.5) * 2;
