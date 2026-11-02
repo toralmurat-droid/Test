@@ -1,5 +1,5 @@
 import { CLASSES, ClassKind } from "../../shared/classes";
-import { CHAR_BASE, CHAR_EXT, HD_CHARS } from "./artAssets";
+import { CHAR_BASE, CHAR_EXT } from "./artAssets";
 
 /**
  * Hero picker for the start menu: one equal-size card per class with the hero's sprite animated
@@ -83,7 +83,7 @@ export function mountHeroCards(host: HTMLElement, kinds: ClassKind[], selected: 
       let i = Math.floor(t / (1000 / a.fps));
       i = a.loop ? i % a.frames.length : Math.min(i, a.frames.length - 1);
       const f = a.frames[i], fw = meta.frameWidth, cols = meta.columns;
-      c.ctx.imageSmoothingEnabled = HD_CHARS;
+      c.ctx.imageSmoothingEnabled = false;
       c.ctx.clearRect(0, 0, c.cv.width, c.cv.height);
       c.ctx.drawImage(c.img, (f % cols) * fw, Math.floor(f / cols) * fw, fw, fw, 0, 0, 32 * SCALE, 32 * SCALE);
     }

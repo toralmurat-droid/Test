@@ -1,10 +1,20 @@
 import { Canvas, HiCanvas, shade } from "./canvas";
-import { hasLook, paintFrame } from "./paint/body";
+import { DiagAlt, FrameInfo, hasLook, paintFrame, setPaintPixel } from "./paint/body";
 
 export type Dir = "down" | "up" | "right";
 export const DIRS: Dir[] = ["down", "up", "right"];
 /** Logical frame size (all drawing code works on this 32x32 grid). */
 export const LW = 32, LH = 32, COLS = 6;
+/**
+ * Painted sheets: two extra 3/4 facings (downright, upright; flipX gives downleft, upleft) and 8-frame
+ * walk/run cycles, so rows are anim x 5 dirs and 8 columns.
+ */
+export type SheetDir = Dir | "downright" | "upright";
+export const PAINT_DIRS: SheetDir[] = ["down", "up", "right", "downright", "upright"];
+export const PAINT_COLS = 8;
+const FLUID = new Set(["walk", "run", "walk2"]);
+/** Animation list for a sheet: painted sheets get 8-frame (smoother) walk and run cycles. */
+export function animsOf(painted: boolean) { return ANIMS.map((a) => painted && FLUID.has(a.name) ? { ...a, frames: PAINT_COLS, fps: Math.round(a.fps * 8 / 6) } : a); }
 /** Fine pixels per logical pixel: frames are rendered at K x the logical size. */
 export let K = 2;
 /** Output frame size in pixels. */
@@ -14,7 +24,9 @@ export let FW = LW * K, FH = LH * K;
  * the pixel code, at k fine pixels per logical pixel. Small effects (sparks, stars, dust) become soft dots.
  */
 export let PAINTED = false;
-export function setPainted(on: boolean, k: number) { PAINTED = on; K = k; FW = LW * K; FH = LH * K; }
+/** Painted, then turned into crisp pixel art (hard edges, posterized colours, 1px outline) at k texels per unit. */
+export let PIXEL = false;
+export function setPainted(on: boolean, k: number, pixel = false) { PAINTED = on; PIXEL = on && pixel; K = k; FW = Math.round(LW * K); FH = Math.round(LH * K); setPaintPixel(PIXEL); }
 
 /** HiCanvas whose logical "pixels" are soft round dots (for effects painted onto smooth frames). */
 class SoftCanvas extends HiCanvas {
@@ -28,7 +40,7 @@ class SoftCanvas extends HiCanvas {
   }
 }
 /** A fresh frame canvas: logical 32x32 drawing, rendered K times finer. */
-export const mk = (): HiCanvas => PAINTED ? new SoftCanvas(LW, LH, K) : new HiCanvas(LW, LH, K);
+export const mk = (): HiCanvas => PAINTED && !PIXEL ? new SoftCanvas(LW, LH, K) : new HiCanvas(LW, LH, K);
 const OUTLINE = 0x1a1420;
 
 export interface Pose {
@@ -47,6 +59,7 @@ export interface Pose {
   farHand?: [number, number];    // free hand goes here (wave, cheer, scratch)
   noWeapon?: boolean;
   run?: boolean;
+  phase?: number;     // painted walk cycles: continuous step phase (radians), drives smooth leg lift
 }
 
 export const ANIMS: { name: string; frames: number; fps: number; loop: boolean }[] = [
@@ -723,7 +736,7 @@ export const MOB_POSES: Record<string, Hero> = {
   skeleton: mobPose("skeleton", "axe"), bandit: mobPose("bandit", "dagger"),
   skeletonmage: mobPose("skeletonmage", "staff"), necromancer: mobPose("necromancer", "staff"),
 };
-export const posed = (hero: Hero, p: Partial<Pose> & { dir: Dir }) => renderFrame(hero, { t: 0, bob: 0, stride: 0, lean: 0, crouch: 0, attack: -1, expr: "n", ...p });
+export const posed = (hero: Hero, p: Partial<Pose> & { dir: Dir }, shadow = true) => renderFrame(hero, { t: 0, bob: 0, stride: 0, lean: 0, crouch: 0, attack: -1, expr: "n", ...p }, shadow);
 
 export type GearPart = "legs" | "torso" | "head" | "weapon" | "shield";
 /** Extra pose info for the gear generator: body offset, weapon hand/angle, and a way to redraw the weapon elsewhere. */
@@ -739,14 +752,23 @@ export function setCanvasFactory(f: () => Canvas) { canvasFactory = f; }
 
 export function renderFrame(hero: Hero, p: Pose, withShadow = true, flash = 0): Canvas {
   if (PAINTED && hasLook(hero.name)) {
-    const hp = handPos({ ...p, lean: 0 }, hero);
-    const lean = p.dir === "right" ? -p.lean : 0, ly = p.dir === "down" ? -Math.min(p.lean, 1) : p.dir === "up" ? Math.min(p.lean, 1) : 0;
-    const ux = lean + (p.run && p.dir === "right" ? 1 : 0);
-    const f = paintFrame(hero.name, p, {
-      hand: [hp[0] + ux, hp[1] + ly], ang: weaponAngle(p, hero), mv: moveOf(hero, p),
-      prevAng: (i) => weaponAngle({ ...p, attack: i }, hero), hasShieldMove: !!hero.shield,
-    }, withShadow, flash, K);
-    const soft = new SoftCanvas(LW, LH, K);
+    const infoOf = (p: Pose): FrameInfo => {
+      const hp = handPos({ ...p, lean: 0 }, hero);
+      const lean = p.dir === "right" ? -p.lean : 0, ly = p.dir === "down" ? -Math.min(p.lean, 1) : p.dir === "up" ? Math.min(p.lean, 1) : 0;
+      const ux = lean + (p.run && p.dir === "right" ? 1 : 0);
+      return {
+        hand: [hp[0] + ux, hp[1] + ly], ang: weaponAngle(p, hero), mv: moveOf(hero, p),
+        prevAng: (i) => weaponAngle({ ...p, attack: i }, hero), hasShieldMove: !!hero.shield,
+      };
+    };
+    if (diagRec) { diagRec.push({ p, info: infoOf(p) }); return mk(); }
+    let alt: DiagAlt | undefined;
+    if (diagUse) {
+      const rec = diagUse.poses[diagUse.i++];
+      if (rec && rec.p.dir === "right" && p.dir === diagUse.base) alt = { p: rec.p, info: rec.info, diag: diagUse.dir };
+    }
+    const f = paintFrame(hero.name, p, infoOf(p), withShadow, flash, K, alt);
+    const soft = mk();
     soft.data = f.data;
     return soft;
   }
@@ -903,7 +925,7 @@ function ghostsBehind(dst: Canvas, src: Canvas, dx: number, dy: number, col: num
 /** Lift a shadowless frame off the ground by j px, keeping (and shrinking) the ground shadow. */
 /** Ground shadow: a hard pixel ellipse, or a soft one on painted frames. */
 function groundShadow(o: Canvas, cx: number, cy: number, rx: number, ry: number, a: number) {
-  if (!PAINTED) { o.ellipse(cx, cy, rx, ry, 0x000000, a); return; }
+  if (!PAINTED || PIXEL) { o.ellipse(cx, cy, rx, ry, 0x000000, a); return; }
   const k = K, CX = cx * k + k / 2, CY = cy * k + k / 2, RX = (rx + 1) * k, RY = (ry + 0.6) * k;
   for (let y = Math.floor(CY - RY); y <= Math.ceil(CY + RY); y++) for (let x = Math.floor(CX - RX); x <= Math.ceil(CX + RX); x++) {
     const d = Math.hypot((x + 0.5 - CX) / RX, (y + 0.5 - CY) / RY);
@@ -973,8 +995,39 @@ function stars(c: Canvas, t: number) {
 }
 
 const base = (dir: Dir, t: number): Pose => ({ dir, t, bob: 0, stride: 0, lean: 0, crouch: 0, attack: -1, expr: "n" });
+/** Painted sheets use 8-frame movement cycles. */
+let fluidHero = false;
+const fluid = () => fluidHero;
+const cycle = () => [...Array(PAINT_COLS).keys()].map((t) => (t * 2 * Math.PI) / PAINT_COLS);
+
+/** Per-hero gait (walk2) on the smooth 8-frame cycle. */
+function walk2Fluid(hero: Hero, dir: Dir, B: (t: number) => Pose): Canvas[] {
+  const g = hero.gait ?? "stroll";
+  return cycle().map((ph, t) => {
+    const c = Math.cos(ph), s = Math.abs(Math.sin(ph));
+    switch (g) {
+      case "sneak":
+        return renderFrame(hero, { ...B(t), stride: c * 0.6, phase: ph, crouch: 2, lean: dir === "right" ? -1 : 0, bob: -0.7 * s, headDx: dir === "right" ? 1 : 0 });
+      case "march":
+        return renderFrame(hero, { ...B(t), stride: c, phase: ph, bob: Math.abs(c) * 1.1 - s * 0.9 });
+      case "float": {
+        const h = Math.round(3 + Math.sin(ph));
+        const f = jumped(renderFrame(hero, { ...B(t), stride: 0, bob: 0.5 + 0.5 * Math.cos(ph * 2) }, false), h);
+        if (t % 2 === 0) f.px(12 + t, 29, 0xc8fbff, 160);
+        return f;
+      }
+      case "swagger":
+        return renderFrame(hero, { ...B(t), stride: c, phase: ph, bob: Math.abs(c) - s, headDx: dir === "right" ? 0 : Math.sin(ph) * 0.9 });
+      case "light":
+        return jumped(renderFrame(hero, { ...B(t), stride: c, phase: ph, bob: Math.abs(c) }, false), Math.round(2 * s));
+      default:
+        return renderFrame(hero, { ...B(t), stride: c * 0.8, phase: ph, bob: -0.8 * s, expr: t === 5 ? "blink" : "n" });
+    }
+  });
+}
 
 export function animFrames(hero: Hero, anim: string, dir: Dir): Canvas[] {
+  fluidHero = PAINTED && hasLook(hero.name);
   const B = (t: number) => base(dir, t);
   switch (anim) {
     case "idle": return [0, 0, 0, 1, 1, 1].map((bob, t) => renderFrame(hero, { ...B(t), bob, expr: t === 5 ? "blink" : "n" }));
@@ -997,6 +1050,13 @@ export function animFrames(hero: Hero, anim: string, dir: Dir): Canvas[] {
       });
     }
     case "run": {
+      if (fluid()) return cycle().map((ph, t) => {
+        // 8-frame run: legs on a continuous phase, body dips at each footfall and floats between
+        const c = Math.cos(ph), air = Math.abs(Math.sin(ph));
+        const f = renderFrame(hero, { ...B(t), stride: c, phase: ph, run: true, bob: 0.9 * Math.abs(c) - 1.4 * air }, true);
+        if (Math.abs(c) > 0.99) { const [fx] = FACE[dir]; const bx = dir === "right" ? 12 : c > 0 ? 11 : 20; for (const [x, y] of [[0, 0], [-1, -1], [-2, 0], [1, -1]]) f.px(bx + x - fx, 28 + y, 0xd9cdb4, 170); }
+        return f;
+      });
       return [1, 0.5, -0.5, -1, -0.5, 0.5].map((stride, t) => {
         const contact = Math.abs(stride) === 1;
         const f = jumped(renderFrame(hero, { ...B(t), stride, run: true, bob: contact ? 1 : 0 }, false), contact ? 0 : 1);
@@ -1030,8 +1090,11 @@ export function animFrames(hero: Hero, anim: string, dir: Dir): Canvas[] {
         return f;
       });
     }
-    case "walk": return [1, 0.5, -0.5, -1, -0.5, 0.5].map((stride, t) => renderFrame(hero, { ...B(t), stride, bob: Math.abs(stride) === 1 ? 0 : -1 }));
+    case "walk":
+      if (fluid()) return cycle().map((ph, t) => renderFrame(hero, { ...B(t), stride: Math.cos(ph), phase: ph, bob: -0.9 * Math.abs(Math.sin(ph)), expr: t === 6 ? "blink" : "n" }));
+      return [1, 0.5, -0.5, -1, -0.5, 0.5].map((stride, t) => renderFrame(hero, { ...B(t), stride, bob: Math.abs(stride) === 1 ? 0 : -1 }));
     case "walk2": {
+      if (fluid()) return walk2Fluid(hero, dir, B);
       const strides = [1, 0.5, -0.5, -1, -0.5, 0.5];
       const g = hero.gait ?? "stroll";
       return strides.map((stride, t) => {
@@ -1163,10 +1226,28 @@ export function animFrames(hero: Hero, anim: string, dir: Dir): Canvas[] {
   throw new Error(anim);
 }
 
+// 3/4 facings: the same animation is first "rendered" facing right only to record its poses, then rendered facing
+// down (or up) with each frame blended with the matching right-facing pose (see paint/body.ts blendRig).
+let diagRec: { p: Pose; info: FrameInfo }[] | null = null;
+let diagUse: { dir: "downright" | "upright"; base: Dir; poses: { p: Pose; info: FrameInfo }[]; i: number } | null = null;
+
+/** Frames of one animation for any sheet direction (diagonals only for painted characters). */
+export function sheetFrames(hero: Hero, anim: string, dir: SheetDir): Canvas[] {
+  if (dir !== "downright" && dir !== "upright") return animFrames(hero, anim, dir);
+  const base: Dir = dir === "downright" ? "down" : "up";
+  diagRec = [];
+  try { animFrames(hero, anim, "right"); } finally { /* keep what was recorded */ }
+  const poses = diagRec; diagRec = null;
+  diagUse = { dir, base, poses, i: 0 };
+  try { return animFrames(hero, anim, base); } finally { diagUse = null; }
+}
+
 export function buildSheet(hero: Hero) {
-  const sheet = new Canvas(FW * COLS, FH * ANIMS.length * DIRS.length);
-  ANIMS.forEach((a, ai) => DIRS.forEach((dir, di) => {
-    animFrames(hero, a.name, dir).forEach((f, fi) => sheet.blit(f, fi * FW, (ai * DIRS.length + di) * FH));
+  const painted = PAINTED && hasLook(hero.name);
+  const dirs: SheetDir[] = painted ? PAINT_DIRS : DIRS, cols = painted ? PAINT_COLS : COLS, anims = animsOf(painted);
+  const sheet = new Canvas(FW * cols, FH * anims.length * dirs.length);
+  anims.forEach((a, ai) => dirs.forEach((dir, di) => {
+    sheetFrames(hero, a.name, dir).forEach((f, fi) => sheet.blit(f, fi * FW, (ai * dirs.length + di) * FH));
   }));
   return sheet;
 }

@@ -260,6 +260,8 @@ const PAINTED_MOBS = ["slime", "blobling", "shooterblob", "warriorblob", "healer
 const PAINTED_LOOK: Record<string, { top: number; bar: number; oy: number; scale?: number }> = {
   skeleton: { top: 17, bar: 12, oy: 20 / 22 }, bandit: { top: 17, bar: 12, oy: 20 / 22 },
   skeletonmage: { top: 21, bar: 12, oy: 0.975 }, necromancer: { top: 34, bar: 24, oy: 0.975, scale: 1.6 },
+  // pixel sheets use even frame heights (whole texels at 1.5 per px)
+  blobling: { top: 9, bar: 8, oy: 0.91 }, shooterblob: { top: 16, bar: 12, oy: 0.93 }, healerblob: { top: 16, bar: 12, oy: 0.93 },
 };
 /** Painted monster sheets (tools/art/paint/mobs.ts), loaded by preloadPaintedMobs for the smooth look. */
 export function preloadPaintedMobs(scene: Phaser.Scene) {

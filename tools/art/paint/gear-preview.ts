@@ -4,8 +4,8 @@ import { animFrames, HEROES, setPainted } from "../characters";
 import { GEAR, GEAR_IDS } from "../../../shared/gear";
 import { setPaintGear } from "./body";
 /** Preview: every hero (rows) wearing each item (columns), facing down. `npx tsx tools/art/paint/gear-preview.ts` */
-setPainted(true, 3);
-const F = 96, ids = [null, ...GEAR_IDS];
+setPainted(true, Number(process.env.K ?? 1.125), process.env.SMOOTH !== "1");
+const F = Math.round(32 * Number(process.env.K ?? 1.125)), ids = [null, ...GEAR_IDS];
 const out = createCanvas(F * ids.length, F * HEROES.length), o = out.getContext("2d");
 o.fillStyle = "#4a5236"; o.fillRect(0, 0, out.width, out.height);
 HEROES.forEach((h, hi) => ids.forEach((id, i) => {

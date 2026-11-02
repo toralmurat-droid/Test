@@ -2,13 +2,17 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { createCanvas } from "@napi-rs/canvas";
 import { MOB_POSES, posed, setPainted, type Dir } from "../characters";
 import { C2, P, css, ellipseP, fillShape, glow, limb, line, metal, mix, rng, sh, vol } from "./brush";
+import { pixelAlpha, pixelize, shrink } from "./body";
 
 /**
- * Painted monster sheets for the smooth look. Same textures as client/src/textures.ts mobTexture (6 frames:
- * 0-1 down, 2-3 up, 4-5 right, the second of each pair is the step / squish), painted HI times bigger.
- * The client uploads them through hiResTexture, so frame sizes and pivots stay exactly as before.
+ * Monster sheets for the iso look. Same textures as client/src/textures.ts mobTexture (6 frames:
+ * 0-1 down, 2-3 up, 4-5 right, the second of each pair is the step / squish): painted HI times bigger, then turned
+ * into pixel art at TX texels per world px (the shared pixel grid, like the heroes). The client uploads them
+ * through hiResTexture, so frame sizes and pivots stay the same. Frame sizes are even so TX x size is whole.
  */
-const HI = 8;
+const HI = 8, TX = 1.5;
+/** Ground shadows go on their own layer so pixelize does not cut them away. */
+let SH: C2 | null = null;
 const DIRS: Dir[] = ["down", "down", "up", "up", "right", "right"];
 
 interface Sheet { key: string; w: number; h: number; draw: (c: C2, f: number) => void }
@@ -16,12 +20,13 @@ interface Sheet { key: string; w: number; h: number; draw: (c: C2, f: number) =>
 // ---------------------------------------------------------------- humanoid monsters (character painter)
 const PK = 5; // painter resolution for these
 function humanoid(key: string, kind: string, w: number, h: number, oy: number, scale: number): Sheet {
-  const frames = DIRS.map((dir, f) => posed(MOB_POSES[kind], { dir, t: f, stride: f % 2 ? (dir === "right" ? -1 : 1) : 0, bob: f % 2 ? -1 : 0 }));
+  const frames = DIRS.map((dir, f) => posed(MOB_POSES[kind], { dir, t: f, stride: f % 2 ? (dir === "right" ? -1 : 1) : 0, bob: f % 2 ? -1 : 0 }, false));
   return {
     key, w, h,
     draw: (c, f) => {
       const fr = frames[f], n = createCanvas(fr.w, fr.h), x = n.getContext("2d"), img = x.createImageData(fr.w, fr.h);
       img.data.set(fr.data); x.putImageData(img, 0, 0);
+      if (SH) { SH.save(); SH.translate(w / 2, oy * h); SH.scale(1, 0.3); SH.fillStyle = "rgba(0,0,0,0.42)"; SH.beginPath(); SH.arc(0, 0, 4.2 * scale / 0.64, 0, Math.PI * 2); SH.fill(); SH.restore(); }
       // logical unit (16, 29) = the feet -> (w/2, oy*h) in world px
       c.save(); c.translate(w / 2, oy * h); c.scale(scale, scale); c.translate(-16, -29);
       c.imageSmoothingEnabled = true; (c as any).imageSmoothingQuality = "high";
@@ -41,10 +46,11 @@ function blobFrame(c: C2, w: number, h: number, pal: BlobPal, o: BlobOpts, f: nu
   const rx = (squish ? w / 2 - 0.35 : w / 2 - 1.0), ry = o.bodyH * (squish ? 0.84 : 1) * 0.97;
   const top = base - ry;
   // ground shadow
-  c.save(); c.translate(cx, base + 0.3); c.scale(1, 0.32);
-  const sg = c.createRadialGradient(0, 0, 0, 0, 0, rx + 1);
-  sg.addColorStop(0, "rgba(0,0,0,0.45)"); sg.addColorStop(1, "rgba(0,0,0,0)");
-  c.fillStyle = sg; c.beginPath(); c.arc(0, 0, rx + 1, 0, Math.PI * 2); c.fill(); c.restore();
+  const sc = SH ?? c;
+  sc.save(); sc.translate(cx, base + 0.3); sc.scale(1, 0.32);
+  const sg = sc.createRadialGradient(0, 0, 0, 0, 0, rx + 1);
+  sg.addColorStop(0, "rgba(0,0,0,0.45)"); sg.addColorStop(0.7, "rgba(0,0,0,0.35)"); sg.addColorStop(1, "rgba(0,0,0,0)");
+  sc.fillStyle = sg; sc.beginPath(); sc.arc(0, 0, rx + 1, 0, Math.PI * 2); sc.fill(); sc.restore();
   const dome = (cc: C2) => {
     cc.moveTo(cx - rx, base - 0.3);
     cc.bezierCurveTo(cx - rx - 0.2, top + ry * 0.05, cx - rx * 0.45, top - ry * 0.02, cx, top);
@@ -124,10 +130,10 @@ export function buildMobs(out: string) {
   setPainted(true, PK);
   const sheets: Sheet[] = [
     blobSheet("mob_slime", 12, 16, { G: 0x6cc35c, L: 0xc8f5b8, D: 0x2f7a32, E: 0x14301a }, { bodyH: 9 }),
-    blobSheet("mob_blobling", 8, 9, { G: 0x9ade63, L: 0xf0ffd8, D: 0x4f8e30, E: 0x14301a }, { bodyH: 6, seed: 5 }),
-    blobSheet("mob_shooterblob", 14, 17, { G: 0x9068cc, L: 0xe2ccff, D: 0x4e2f80, E: 0x1e0f33 }, { bodyH: 10, extra: "shooter" }),
+    blobSheet("mob_blobling", 8, 10, { G: 0x9ade63, L: 0xf0ffd8, D: 0x4f8e30, E: 0x14301a }, { bodyH: 6, seed: 5 }),
+    blobSheet("mob_shooterblob", 14, 18, { G: 0x9068cc, L: 0xe2ccff, D: 0x4e2f80, E: 0x1e0f33 }, { bodyH: 10, extra: "shooter" }),
     blobSheet("mob_warriorblob", 16, 18, { G: 0xd0543a, L: 0xffb59e, D: 0x7f2a19, E: 0x2a0d06 }, { bodyH: 10, extra: "warrior" }),
-    blobSheet("mob_healerblob", 14, 17, { G: 0xf0c6de, L: 0xffffff, D: 0xb57a9b, E: 0x3a1a2e }, { bodyH: 10, extra: "healer" }),
+    blobSheet("mob_healerblob", 14, 18, { G: 0xf0c6de, L: 0xffffff, D: 0xb57a9b, E: 0x3a1a2e }, { bodyH: 10, extra: "healer" }),
     blobSheet("mob_motherblob", 24, 22, { G: 0x3a9684, L: 0xb8f2e0, D: 0x1c5448, E: 0x10302a }, { bodyH: 17, extra: "mother1", seed: 9 }),
     blobSheet("mob_motherblob2", 24, 22, { G: 0x2c8796, L: 0xb0eef5, D: 0x184c56, E: 0x0b2a30 }, { bodyH: 17, extra: "mother2", seed: 10 }),
     blobSheet("mob_motherblob3", 24, 22, { G: 0x553b96, L: 0xd3c2ff, D: 0x2f205f, E: 0x140a2a }, { bodyH: 17, extra: "mother3", seed: 11 }),
@@ -139,15 +145,24 @@ export function buildMobs(out: string) {
   ];
   const meta: Record<string, { w: number; h: number; scale: number }> = {};
   for (const s of sheets) {
-    const cv = createCanvas(s.w * HI * 6, s.h * HI), c = cv.getContext("2d");
+    const tw = s.w * TX, th = s.h * TX;
+    const cv = createCanvas(tw * 6, th), oc = cv.getContext("2d");
+    const sheet = oc.createImageData(tw * 6, th);
     for (let f = 0; f < 6; f++) {
-      c.save(); c.translate(f * s.w * HI, 0); c.scale(HI, HI);
-      c.beginPath(); c.rect(0, 0, s.w, s.h); c.clip();
-      s.draw(c, f);
-      c.restore();
+      const body = createCanvas(s.w * HI, s.h * HI), shadow = createCanvas(s.w * HI, s.h * HI);
+      const c = body.getContext("2d"), sc = shadow.getContext("2d");
+      c.scale(HI, HI); sc.scale(HI, HI);
+      SH = sc; s.draw(c, f); SH = null;
+      const b = shrink(body, "mb", tw, th); pixelize(b, tw, th);
+      const u = shrink(shadow, "ms", tw, th); pixelAlpha(u);
+      for (let y = 0; y < th; y++) for (let x = 0; x < tw; x++) {
+        const i = (y * tw + x) * 4, o = (y * tw * 6 + f * tw + x) * 4, src = b[i + 3] ? b : u;
+        for (let k = 0; k < 4; k++) sheet.data[o + k] = src[i + k];
+      }
     }
-    writeFileSync(`${out}/${s.key}.webp`, cv.encodeSync("webp", 90));
-    meta[s.key] = { w: s.w, h: s.h, scale: HI };
+    oc.putImageData(sheet, 0, 0);
+    writeFileSync(`${out}/${s.key}.webp`, cv.encodeSync("webp", 100));
+    meta[s.key] = { w: s.w, h: s.h, scale: TX };
   }
   writeFileSync(`${out}/mobs.json`, JSON.stringify(meta, null, 1));
   setPainted(false, 2);

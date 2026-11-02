@@ -128,7 +128,7 @@ export class GearMenu {
     // Hero preview with everything worn
     const pv = document.getElementById("gearpreview") as HTMLCanvasElement;
     const ctx = pv.getContext("2d")!;
-    ctx.imageSmoothingEnabled = HD_CHARS;
+    ctx.imageSmoothingEnabled = false;
     ctx.clearRect(0, 0, pv.width, pv.height);
     drawFrame(this.scene, ctx, cls, 0, 0, 0, pv.width / CHAR_FRAME);
     for (const slot of LAYER_ORDER) if (state[slot] && ensureGear(this.scene, cls, state[slot], () => { this.sig = ""; this.refresh(state); })) drawFrame(this.scene, ctx, gearKey(cls, state[slot]), 0, 0, 0, pv.width / CHAR_FRAME);
