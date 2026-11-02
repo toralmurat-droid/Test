@@ -28,7 +28,11 @@ function ensureGear(scene: Phaser.Scene, hero: string, id: string, done?: () => 
   if (!HD_CHARS || pending.has(key) || !GEAR_HEROES.includes(hero)) return false;
   pending.add(key);
   scene.load.spritesheet(key, `assets/hd/gear/${hero}_${id}.webp`, { frameWidth: CHAR_FRAME, frameHeight: CHAR_FRAME });
-  scene.load.once(`filecomplete-spritesheet-${key}`, () => { pending.delete(key); done?.(); });
+  scene.load.once(`filecomplete-spritesheet-${key}`, () => {
+    pending.delete(key);
+    scene.textures.get(key).setFilter(Phaser.Textures.FilterMode.NEAREST); // pixel art: keep texels crisp
+    done?.();
+  });
   scene.load.once("loaderror", () => pending.delete(key));
   if (!scene.load.isLoading()) scene.load.start();
   return false;
