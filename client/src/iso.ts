@@ -654,8 +654,9 @@ export function isoStanding(scene: Phaser.Scene, objects: number[][]): number[][
       out[ty][tx] = -1;
     } else if (UPRIGHT.has(t)) {
       // 3/4 view art: its bottom edge stands on the tile's centre, a little forward
-      const painted = SMOOTH ? uprightTexture(scene, t) : undefined; // detailed iso art in place of the 3/4 tile
-      if (painted) scene.add.image(cx, cy, painted).setOrigin(0.5, 0.85).setDepth(cy);
+      const v = (((tx * 2654435761) ^ (ty * 40503)) >>> 0) % 4;
+      const painted = SMOOTH ? uprightTexture(scene, t, v) : undefined; // detailed iso art in place of the 3/4 tile
+      if (painted) scene.add.image(cx, cy, painted).setOrigin(0.5, 0.85).setDepth(cy).setFlipX(t !== T.SIGN && t !== T.SIGNPOST && v >= 2);
       else scene.add.image(cx, cy, "tiles", tileFrame(scene, index)).setOrigin(0.5, 0.85).setDepth(cy);
       out[ty][tx] = -1;
     }

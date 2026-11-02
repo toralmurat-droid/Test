@@ -426,8 +426,13 @@ function barrel(c: Ctx, I: Iso) {
     c.strokeStyle = "#2a2826"; c.lineWidth = 1; c.beginPath(); c.ellipse(x, y - hy, w, w * 0.42, 0, 0, Math.PI); c.stroke();
     c.strokeStyle = "rgba(170,170,160,0.5)"; c.lineWidth = 0.3; c.beginPath(); c.ellipse(x, y - hy - 0.4, w, w * 0.42, 0, Math.PI * 0.55, Math.PI * 0.95); c.stroke();
   }
-  c.fillStyle = "#7a5a38"; c.beginPath(); c.ellipse(x, y - h, r * 0.9, r * 0.4, 0, 0, Math.PI * 2); c.fill();
+  c.fillStyle = V === 1 ? "#1e140c" : "#7a5a38"; c.beginPath(); c.ellipse(x, y - h, r * 0.9, r * 0.4, 0, 0, Math.PI * 2); c.fill();
   c.strokeStyle = "#2a2826"; c.lineWidth = 0.7; c.stroke();
+  if (V === 1) { // lid gone: dark inside, rain water glint
+    c.fillStyle = "rgba(90,110,110,0.45)"; c.beginPath(); c.ellipse(x - 1, y - h + 0.8, r * 0.5, r * 0.18, 0, 0, Math.PI * 2); c.fill();
+    return;
+  }
+  if (V === 2) { c.strokeStyle = "rgba(140,70,30,0.7)"; c.lineWidth = 0.7; c.beginPath(); c.ellipse(x, y - h / 2, r * 1.1, r * 0.46, 0, 0.2, Math.PI * 0.8); c.stroke(); }
   c.strokeStyle = "rgba(40,26,12,0.5)"; c.lineWidth = 0.2; for (let k = -1; k <= 1; k++) { c.beginPath(); c.moveTo(x - r * 0.8, y - h + k * 1.1); c.lineTo(x + r * 0.8, y - h + k * 1.1); c.stroke(); }
 }
 
@@ -445,6 +450,11 @@ function crate(c: Ctx, I: Iso) {
   }
   const top: Pt[] = [I.p(-s, -s, h), I.p(s, -s, h), I.p(s, s, h), I.p(-s, s, h)];
   I.poly(top, "#8a6a42", "#4a3218", 0.6);
+  if (V === 1 || V === 3) { // a split plank: dark gap with splinters
+    const a = I.p(-s + 2, s, h * 0.55), b = I.p(-s + 7, s, h * 0.62);
+    c.strokeStyle = "#140c06"; c.lineWidth = 1.2; c.beginPath(); c.moveTo(...a); c.lineTo(b[0], b[1] + 0.6); c.lineTo(...b); c.stroke();
+    c.strokeStyle = "#b08a5a"; c.lineWidth = 0.3; c.beginPath(); c.moveTo(b[0], b[1] - 0.7); c.lineTo(b[0] + 1.2, b[1] - 1.4); c.stroke();
+  }
   c.strokeStyle = "rgba(40,26,12,0.6)"; c.lineWidth = 0.25;
   for (let k = 1; k < 4; k++) { c.beginPath(); c.moveTo(...I.p(-s + k * 2.75, -s, h)); c.lineTo(...I.p(-s + k * 2.75, s, h)); c.stroke(); }
 }
@@ -572,14 +582,78 @@ function anvilTile(c: Ctx, I: Iso) { c.save(); c.translate(0, 6); anvil(c); c.re
 
 const UPRIGHT_ART: Partial<Record<number, (c: Ctx, I: Iso) => void>> = {
   [T.BARREL]: barrel, [T.CRATE]: crate, [T.WELL]: well, [T.SIGN]: (c, I) => signpost(c, I, 1), [T.SIGNPOST]: (c, I) => signpost(c, I, 2),
-  [T.HAY]: hay, [T.ROCK]: (c, I) => rock(c, I, 7), [T.STUMP]: stump, [T.GRAVE]: grave, [T.WHEEL]: wheel, [T.ANVIL]: anvilTile,
+  [T.HAY]: hay, [T.ROCK]: (c, I) => rock(c, I, 7 + V * 13), [T.STUMP]: stump, [T.GRAVE]: grave, [T.WHEEL]: wheel, [T.ANVIL]: anvilTile,
 };
 
 /** Painted iso texture for an upright prop tile id, or undefined to keep the tile art. */
-export function uprightTexture(scene: Phaser.Scene, id: number): string | undefined {
+/** Which variant is being painted (0..VARIANTS-1): art functions read it so no two props look stamped out. */
+let V = 0;
+export const UPRIGHT_VARIANTS = 4;
+
+export function uprightTexture(scene: Phaser.Scene, id: number, variant = 0): string | undefined {
   const art = UPRIGHT_ART[id];
   if (!art) return;
-  const key = `up_${id}`;
-  hiResTexture(scene, key, UW, UH, 1, 6, (c) => art(c, new Iso(c, UO[0], UO[1])));
+  const key = `up_${id}_${variant}`;
+  hiResTexture(scene, key, UW, UH, 1, 6, (c) => {
+    V = variant;
+    const I = new Iso(c, UO[0], UO[1]);
+    const R = rng(id * 131 + variant * 977 + 3);
+    // signs, graves and stumps sit a little crooked; others keep their footing
+    const lean = id === T.SIGN || id === T.SIGNPOST || id === T.GRAVE ? (R() - 0.5) * 0.22 : 0;
+    if (lean) { c.save(); c.translate(UO[0], UO[1]); c.rotate(lean); c.translate(-UO[0], -UO[1]); }
+    art(c, I);
+    if (lean) c.restore();
+    agePass(c, I, R, id);
+  });
   return key;
+}
+
+/**
+ * Time on a prop: lichen and moss on the upper, damp-catching surfaces, grime at the foot, chips and cracks,
+ * and a ring of weeds, pebbles and leaves where it meets the ground. Differs per variant.
+ */
+function agePass(c: Ctx, I: Iso, R: () => number, id: number) {
+  const [x, y] = I.p(0, 0, 0);
+  // moss and lichen specks, only where there is already paint (source-atop)
+  c.save(); c.globalCompositeOperation = "source-atop";
+  const mossy = id === T.ROCK || id === T.GRAVE || id === T.STUMP || id === T.WELL ? 1 : 0.45;
+  const nm = Math.round((20 + R() * 50) * mossy);
+  const mx = x + (R() - 0.5) * 6, my = y - 4 - R() * 8;
+  for (let k = 0; k < nm; k++) {
+    const px = mx + (R() - 0.5) * 12, py = my + (R() - 0.5) * 8;
+    c.fillStyle = R() < 0.8 ? ["rgba(70,92,40,0.75)", "rgba(92,110,50,0.7)", "rgba(56,74,34,0.8)"][Math.floor(R() * 3)] : "rgba(170,160,110,0.55)";
+    c.beginPath(); c.ellipse(px, py, 0.4 + R() * 0.7, 0.3 + R() * 0.4, 0, 0, Math.PI * 2); c.fill();
+  }
+  // grime rising from the ground
+  const g = c.createLinearGradient(0, y + 2, 0, y - 6);
+  g.addColorStop(0, "rgba(28,22,14,0.45)"); g.addColorStop(1, "rgba(28,22,14,0)");
+  c.fillStyle = g; c.fillRect(x - 16, y - 6, 32, 9);
+  // chips and hairline cracks
+  for (let k = 0; k < 2 + Math.floor(R() * 3); k++) {
+    const px = x + (R() - 0.5) * 10, py = y - 2 - R() * 12;
+    c.strokeStyle = "rgba(16,12,8,0.55)"; c.lineWidth = 0.25;
+    c.beginPath(); c.moveTo(px, py); c.lineTo(px + (R() - 0.5) * 2, py + 1 + R() * 2); c.lineTo(px + (R() - 0.5) * 3, py + 2 + R() * 2.5); c.stroke();
+  }
+  c.restore();
+  // weeds, pebbles and fallen leaves around the foot
+  const ring = 6 + R() * 5;
+  for (let k = 0; k < 4 + Math.floor(R() * 6); k++) {
+    const a = R() * Math.PI * 2, d = ring * (0.75 + R() * 0.45);
+    const px = x + Math.cos(a) * d, py = y + Math.sin(a) * d * 0.5;
+    if (Math.sin(a) < -0.2 && R() < 0.7) continue; // mostly in front and at the sides
+    const kind = R();
+    if (kind < 0.6) { // tuft
+      c.lineCap = "round";
+      for (let i = 0; i < 3 + Math.floor(R() * 4); i++) {
+        const an = -Math.PI / 2 + (R() - 0.5) * 1.8, L = 1.5 + R() * 2.6;
+        c.strokeStyle = ["#3c5a26", "#4e6c2e", "#62783a", "#7a7a40"][Math.floor(R() * 4)]; c.lineWidth = 0.4;
+        c.beginPath(); c.moveTo(px, py); c.quadraticCurveTo(px + Math.cos(an) * L * 0.4, py + Math.sin(an) * L * 0.6, px + Math.cos(an) * L, py + Math.sin(an) * L * 0.7); c.stroke();
+      }
+    } else if (kind < 0.85) { // pebble
+      c.fillStyle = "rgba(0,0,0,0.3)"; c.beginPath(); c.ellipse(px + 0.4, py + 0.3, 1, 0.5, 0, 0, Math.PI * 2); c.fill();
+      c.fillStyle = col(0x7a746a, 0.8 + R() * 0.4); c.beginPath(); c.ellipse(px, py, 0.9, 0.55, 0, 0, Math.PI * 2); c.fill();
+    } else { // leaf
+      c.fillStyle = R() < 0.5 ? "#7a5a2a" : "#6a3a20"; c.beginPath(); c.ellipse(px, py, 0.9, 0.45, R() * 3, 0, Math.PI * 2); c.fill();
+    }
+  }
 }
