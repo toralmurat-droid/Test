@@ -220,30 +220,23 @@ function paintDeck(b: Buf, t: Tile, landEnd: boolean) {
     // ragged plank ends on the open sides; under them the stringer beam shows
     const cut = (edgeA && c < p.endA) || (edgeB && c > TILE - p.endB);
     const stringer = c < 4.5 || c > TILE - 4.5 || Math.abs(c - TILE / 2) < 1.6;
-    let hole = p.missing && !landEnd;
+    // the deck is always whole where people walk: damage shows as split, sunk or patched planks, never as holes
+    if (cut) { b.set(X, Y, pick(WOOD[2], 1.2 + dith(X, Y) + (stringer ? 0.4 : 0))); continue; } // ragged plank ends over the beam
     if (p.split && !landEnd) {
       const jag = (vn(cw * 0.9, p.pi, 5) - 0.5) * 3.5;
-      if (Math.abs(c - TILE * p.breakAt + jag) < 1.4 + vn(cw * 0.5, p.pi, 6) * 1.6) hole = true;
-    }
-    if (cut || hole) {
-      if (cut && !hole) { if (!stringer) continue; }
-      if (stringer && !cut) { const l = 1.4 + dith(X, Y) * 1.2 + (c < 4.5 ? 0.6 : 0); b.set(X, Y, pick(WOOD[2], l)); continue; }
-      if (stringer && cut) { b.set(X, Y, pick(WOOD[2], 1.5 + dith(X, Y))); continue; }
-      const glint = vn(wx * 0.6, wy * 1.4, 9) > 0.78 ? 3 : 0;
-      b.set(X, Y, glint ? WATERD[3] : pick(WATERD, 0.6 + dith(X, Y) + (vn(wx * 0.4, wy * 0.4, 8) - 0.5)), 1);
-      continue;
+      if (Math.abs(c - TILE * p.breakAt + jag) < 0.5) { b.set(X, Y, pick(WOOD[0], 0.3 + dith(X, Y) * 0.6)); continue; }
     }
     // the plank: shading across it (rounded worn top), grain along it, knots, cracks, wet sides, moss in the seams
     const seam = p.ta < 0.13 || p.ta > 0.96;
     if (seam) { b.set(X, Y, pick(WOOD[0], 0.4 + dith(X, Y) * 0.8 + (p.sunk ? -0.5 : 0))); if (vn(wx * 0.7, wy * 0.7, 11) > 0.7) b.set(X, Y, pick(MOSS, 1 + dith(X, Y) * 2)); continue; }
     const grain = vn(c * 0.35 + p.pi * 7, p.ta * 3, 12), knot = vn(c * 0.8, a * 0.8, 13) > 0.86;
     let l = 3 + p.tone + (p.ta < 0.3 ? 0.55 : p.ta > 0.8 ? -0.6 : 0) + (grain - 0.5) * 1.6 + dith(X, Y) * 0.9 - wet * 1.2;
-    if (p.sunk) l -= 0.9;
+    if (p.sunk) l -= 0.45;
     if (knot) l -= 1.6;
     if (vn(c * 0.25, p.pi * 3.1, 14) > 0.8 && Math.abs(p.ta - 0.55) < 0.06) l = 0.6; // a crack along the grain
     // nails over the stringers
     if (Math.abs(p.ta - 0.55) < 0.08 && (Math.abs(c - 3) < 0.45 || Math.abs(c - TILE + 3) < 0.45)) { b.set(X, Y, rgb(hash(p.pi, 7, 2) < 0.5 ? "#2a2522" : "#6a3a1e")); continue; }
-    let col = pick(p.wood, l);
+    let col = pick(p.missing ? WOOD[0] : p.wood, p.missing ? l + 0.8 : l); // a newer patch board where one rotted away
     const mz = vn(wx * 0.18, wy * 0.18, 15) * 0.8 + vn(wx * 0.6, wy * 0.6, 16) * 0.2 + wet * 0.3 + (p.ta < 0.22 || p.ta > 0.88 ? 0.1 : 0);
     if (mz > 0.8) col = pick(MOSS, 0.8 + (mz - 0.8) * 8 + dith(X, Y));
     b.set(X, Y, col);
