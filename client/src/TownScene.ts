@@ -424,7 +424,7 @@ export class TownScene extends Phaser.Scene {
     this.room.onMessage("boom", ({ x, y, r, kind }) =>
       kind === "arrow" || kind === "stone" || kind === "knife" || kind === "bolt" ? this.burst(x, y, 3, 0xd7ccc8, 150)
       : kind === "magicbolt" || kind === "shadowbolt" ? this.burst(x, y, kind === "shadowbolt" ? 5 : 3, kind === "shadowbolt" ? 0x7dff6a : 0x7fe7ff, 220)
-      : this.burst(x, y, r ? r / 1.8 : 6, 0xff9f1c, r ? 300 : 200));
+      : this.burst(x, y, 5, 0xff9f1c, 220)); // small impact puff only, never the splash area
     this.room.onMessage("ult", (msg) => this.showUlt(msg));
     this.room.onMessage("dodge", (msg) => this.showDodge(msg));
     this.room.onMessage("rangedshot", ({ id }) => {
@@ -621,17 +621,8 @@ export class TownScene extends Phaser.Scene {
       }
     }
     if (cls?.projectile) return; // the fireball itself is the visual
-    const finisher = step === 2;
-    const radius = finisher ? 12 : 8;
-    const g = this.add.graphics({ x: e.sprite.x + off[0] * 10, y: e.sprite.y - 5 + off[1] * 10 });
-    g.lineStyle(finisher ? 3 : 2, finisher ? 0xffd166 : 0xffffff, 1);
-    const a = Math.atan2(off[1], off[0]);
-    // Hit 1 sweeps one way, hit 2 the other, the finisher is a wide arc
-    const [from, to] = step === 1 ? [a + 1, a - 1] : finisher ? [a - 1.6, a + 1.6] : [a - 1, a + 1];
-    g.beginPath(); g.arc(0, 0, radius, Math.min(from, to), Math.max(from, to)); g.strokePath();
-    g.setDepth(10000);
-    this.tweens.add({ targets: g, alpha: 0, scale: finisher ? 1.7 : 1.4, duration: finisher ? 260 : 180, onComplete: () => g.destroy() });
-    if (finisher && id === this.me) this.cameras.main.shake(80, 0.003);
+    // No hit-area shapes (Murat): the attack animation is the visual; the finisher still shakes the camera
+    if (step === 2 && id === this.me) this.cameras.main.shake(80, 0.003);
   }
 
   private burst(x: number, y: number, r: number, color: number, ms: number) {
@@ -885,21 +876,11 @@ export class TownScene extends Phaser.Scene {
     if (msg.id === this.me) this.lastUlt = this.time.now;
     if (e?.hero) playCharAnim(e.sprite, e.hero, "skill", this.dirOf(e));
     if (msg.kind === "earthquake") {
-      const g = this.add.circle(msg.x, msg.y, msg.r, 0x8d6e63, 0.35).setStrokeStyle(3, 0xd7ccc8).setDepth(10000).setScale(0.2);
-      this.tweens.add({ targets: g, scale: 1, alpha: 0, duration: 450, onComplete: () => g.destroy() });
       this.cameras.main.shake(250, 0.008);
     } else if (msg.kind === "bladestorm") {
-      for (let i = 0; i < (msg.hits ?? 3); i++) {
-        this.time.delayedCall(i * 200, () => {
-          const x = e?.sprite.x ?? msg.x, y = (e?.sprite.y ?? msg.y) - 5;
-          const g = this.add.graphics({ x, y }).setDepth(10000);
-          g.lineStyle(2, 0xe0e0ff, 1);
-          for (let k = 0; k < 3; k++) { const a = k * 2.09 + i; g.beginPath(); g.arc(0, 0, msg.r * 0.7, a, a + 1.2); g.strokePath(); }
-          this.tweens.add({ targets: g, angle: 180, alpha: 0, duration: 200, onComplete: () => g.destroy() });
-        });
-      }
+      // The hero spins (no hit-area shapes)
+      if (e) this.tweens.add({ targets: e.sprite, angle: 360, duration: (msg.hits ?? 3) * 200, onComplete: () => e.sprite.setAngle(0) });
     } else if (msg.kind === "arrowrain") {
-      const warn = this.add.circle(msg.x, msg.y, msg.r, 0xd7ccc8, 0.12).setStrokeStyle(1, 0xbcaaa4).setDepth(9000);
       const hits = msg.hits ?? 4, delay = msg.delay ?? 400;
       for (let i = 0; i < hits; i++) {
         this.time.delayedCall(delay + i * 250, () => {
@@ -910,7 +891,6 @@ export class TownScene extends Phaser.Scene {
             const streak = this.add.rectangle(ax, ay - 14, 1, 7, 0xe8d8b0).setDepth(10000);
             this.tweens.add({ targets: streak, y: ay, alpha: 0, duration: 160, onComplete: () => streak.destroy() });
           }
-          if (i === hits - 1) warn.destroy();
         });
       }
     } else if (msg.kind === "leap") {
@@ -921,16 +901,14 @@ export class TownScene extends Phaser.Scene {
         const ghost = this.add.circle(m.fromX + (m.x - m.fromX) * t, m.fromY - 10 - Math.sin(t * Math.PI) * 10 + (m.y - m.fromY) * t, 4, 0xffffff, 0.35).setDepth(9000);
         this.tweens.add({ targets: ghost, alpha: 0, duration: 250 + i * 40, onComplete: () => ghost.destroy() });
       }
-      this.burst(m.x, m.y, msg.r / 1.6, 0xa1887f, 350);
       this.cameras.main.shake(180, 0.006);
     } else if (msg.kind === "meteor") {
-      // Warning circle, then the impact
-      const warn = this.add.circle(msg.x, msg.y, msg.r, 0xff3d00, 0.15).setStrokeStyle(1, 0xff6d00).setDepth(9000);
-      this.time.delayedCall(msg.delay ?? 600, () => {
-        warn.destroy();
-        this.burst(msg.x, msg.y, msg.r / 1.5, 0xff6d00, 450);
+      // A falling meteor, then the impact (no area circle)
+      const rock = this.add.circle(msg.x - 30, msg.y - 60, 4, 0xff6d00).setStrokeStyle(1, 0xffd166).setDepth(20000);
+      this.tweens.add({ targets: rock, x: msg.x, y: msg.y, duration: msg.delay ?? 600, ease: "Quad.easeIn", onComplete: () => {
+        rock.destroy();
         this.cameras.main.shake(200, 0.006);
-      });
+      } });
     }
   }
 
@@ -939,9 +917,8 @@ export class TownScene extends Phaser.Scene {
     if (msg.id === this.me) this.lastSpecial = this.time.now;
     if (e?.hero) playCharAnim(e.sprite, e.hero, "skill", this.dirOf(e));
     if (msg.kind === "nova") {
-      const [fill, line] = msg.frost ? [0x4cc9f0, 0xa2e8ff] : [0x9b5de5, 0xc77dff];
-      const g = this.add.circle(msg.x!, msg.y! - 4, msg.r!, fill, 0.25).setStrokeStyle(2, line).setDepth(10000).setScale(0.2);
-      this.tweens.add({ targets: g, scale: 1, alpha: 0, duration: 350, onComplete: () => g.destroy() });
+      // No area circle: the caster flashes instead
+      if (e) { e.sprite.setTintFill(msg.frost ? 0xa2e8ff : 0xc77dff); this.time.delayedCall(120, () => e.sprite.clearTint()); }
     } else if (msg.kind === "dash") {
       // Afterimages along the dash path
       for (let i = 0; i < 4; i++) {
