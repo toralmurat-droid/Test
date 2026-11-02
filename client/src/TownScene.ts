@@ -24,6 +24,7 @@ import { GearLayer, GearMenu, preloadGear, TIER_COLORS } from "./gear";
 import { GEAR, gearSpeedMult } from "../../shared/gear";
 import { COMBO_NODE, talentMult, talentPoints, spentPoints, talentReduce } from "../../shared/talents";
 import { activeSkills, SLOT_COUNT, SLOT_KEYS, skillLearned } from "../../shared/slots";
+import { iconImg } from "./skillIcons";
 import { TalentMenu } from "./talents";
 import { IdeaBoard } from "./ideas";
 import { ISO, IsoView, isoAnchor, isoInput, screenDir } from "./iso";
@@ -630,6 +631,7 @@ export class TownScene extends Phaser.Scene {
 
   private closeMenus() {
     for (const id of ["hero", "tree"]) document.getElementById(id)!.hidden = true;
+    this.closeSlotPicker();
     this.npcs?.close();
     this.npcs?.log.toggle(false);
     this.gearMenu?.close();
@@ -692,31 +694,88 @@ export class TownScene extends Phaser.Scene {
     if (el.innerHTML !== html) el.innerHTML = html;
   }
 
-  /** Skill slot bar (keys 1..0): drop a skill from the tree (or another slot) on a slot; right-click clears it. */
+  /**
+   * Skill slot bar (keys 1..0). Click a slot to open a list of your skills (icon, name, where it is now) and pick
+   * one; the mouse wheel over a slot scrolls through the choices directly; right-click empties it. Keys use the slot.
+   */
   private setupHotbar() {
     const bar = document.getElementById("hotbar")!;
-    bar.addEventListener("dragover", (ev) => { if ((ev.target as HTMLElement).closest("[data-slot]")) ev.preventDefault(); });
-    bar.addEventListener("drop", (ev) => {
-      const cell = (ev.target as HTMLElement).closest("[data-slot]") as HTMLElement | null;
-      const skill = ev.dataTransfer?.getData("text/skill");
-      if (!cell || !skill) return;
-      ev.preventDefault();
-      this.room?.send("assign", { slot: Number(cell.dataset.slot), skill });
-    });
-    bar.addEventListener("dragstart", (ev) => {
-      const cell = (ev.target as HTMLElement).closest("[data-slot]") as HTMLElement | null;
-      if (cell?.dataset.skill) ev.dataTransfer?.setData("text/skill", cell.dataset.skill);
+    const pick = document.getElementById("slotpick")!;
+    const cellOf = (ev: Event) => (ev.target as HTMLElement).closest("[data-slot]") as HTMLElement | null;
+    bar.addEventListener("click", (ev) => {
+      const cell = cellOf(ev);
+      if (!cell) return;
+      const n = Number(cell.dataset.slot);
+      if (!pick.hidden && this.pickSlot === n) this.closeSlotPicker(); else this.openSlotPicker(n);
     });
     bar.addEventListener("contextmenu", (ev) => {
-      const cell = (ev.target as HTMLElement).closest("[data-slot]") as HTMLElement | null;
+      const cell = cellOf(ev);
       if (!cell) return;
       ev.preventDefault();
       if (cell.dataset.skill) this.room?.send("assign", { slot: Number(cell.dataset.slot), skill: "" });
     });
-    bar.addEventListener("click", (ev) => {
-      const cell = (ev.target as HTMLElement).closest("[data-slot]") as HTMLElement | null;
-      if (cell?.dataset.skill) this.room?.send("useslot", Number(cell.dataset.slot));
+    // Wheel over a slot: cycle (empty) -> skill A -> skill B -> ... (learned skills only)
+    bar.addEventListener("wheel", (ev) => {
+      const cell = cellOf(ev);
+      const mine = this.entities.get(this.me)?.state;
+      if (!cell || !mine) return;
+      ev.preventDefault();
+      const cls = mine.cls as ClassKind;
+      const choices = ["", ...activeSkills(cls).filter((a) => skillLearned(cls, mine.talents, a.id)).map((a) => a.id)];
+      if (choices.length < 2) return;
+      const n = Number(cell.dataset.slot);
+      const cur = Math.max(0, choices.indexOf(mine.slots?.at(n) ?? ""));
+      const next = choices[(cur + (ev.deltaY > 0 ? 1 : -1) + choices.length) % choices.length];
+      this.room?.send("assign", { slot: n, skill: next });
+    }, { passive: false });
+    pick.addEventListener("click", (ev) => {
+      const opt = (ev.target as HTMLElement).closest("[data-pick]") as HTMLElement | null;
+      if (!opt || opt.classList.contains("locked")) return;
+      this.room?.send("assign", { slot: this.pickSlot, skill: opt.dataset.pick });
+      this.closeSlotPicker();
     });
+    // Clicking anywhere else closes the list
+    document.addEventListener("mousedown", (ev) => {
+      if (pick.hidden) return;
+      const t = ev.target as HTMLElement;
+      if (!t.closest("#slotpick") && !t.closest("#hotbar")) this.closeSlotPicker();
+    });
+  }
+
+  private pickSlot = -1;
+
+  /** The skill list for slot `n`: every active skill of the class, learned ones clickable, plus "Empty". */
+  private openSlotPicker(n: number) {
+    const mine = this.entities.get(this.me)?.state;
+    if (!mine) return;
+    const cls = mine.cls as ClassKind;
+    const slots: string[] = [...(mine.slots ?? [])];
+    const opts = activeSkills(cls).map((a) => {
+      const learned = skillLearned(cls, mine.talents, a.id);
+      const at = slots.indexOf(a.id);
+      const where = !learned ? `🔒 learn it in the tree (T), Lv ${a.level}` : at === n ? "in this slot" : at >= 0 ? `now on key ${SLOT_KEYS[at]}` : "not on a key yet";
+      return `<button class="opt${learned ? "" : " locked"}${at === n ? " cur" : ""}" data-pick="${a.id}" title="${a.desc}">` +
+        `${iconImg(a.power, "picon")}<span><b>${a.name}</b><small>${where}</small></span></button>`;
+    }).join("");
+    const empty = `<button class="opt clear" data-pick=""><span class="picon none">✕</span><span><b>Empty</b><small>clear key ${SLOT_KEYS[n]}</small></span></button>`;
+    const pick = document.getElementById("slotpick")!;
+    pick.innerHTML = `<div class="ph">Key ${SLOT_KEYS[n]}: choose a skill</div><div class="plist">${opts}${slots[n] ? empty : ""}</div>`;
+    this.pickSlot = n;
+    pick.hidden = false;
+    // Sit just above the clicked slot
+    const cell = document.querySelector(`#hotbar [data-slot="${n}"]`) as HTMLElement | null;
+    const hud = document.getElementById("hud")!.getBoundingClientRect();
+    if (cell) {
+      const r = cell.getBoundingClientRect();
+      const w = pick.offsetWidth;
+      pick.style.left = `${Math.max(8, Math.min(hud.width - w - 8, r.left - hud.left + r.width / 2 - w / 2))}px`;
+      pick.style.bottom = `${hud.bottom - r.top + 6}px`;
+    }
+  }
+
+  private closeSlotPicker() {
+    document.getElementById("slotpick")!.hidden = true;
+    this.pickSlot = -1;
   }
 
   /** Name, cooldown and cost of an active skill for the HUD. */
@@ -749,7 +808,7 @@ export class TownScene extends Phaser.Scene {
       return r;
     });
     const unslotted = activeSkills(cls).filter((a) => skillLearned(cls, mine.talents, a.id) && !slots.includes(a.id))
-      .map((a) => row("–", a.name, 0, 0, "", "no slot: drag it from T"));
+      .map((a) => row("–", a.name, 0, 0, "", "no key: click a slot below"));
     const html = [
       row("Space", CLASSES[cls].projectile ? "Shoot" : "Attack", 0, 0, (mine.talents?.get(COMBO_NODE) ?? 0) > 0 ? "3-hit combo" : "ready"),
       ...slotRows, ...unslotted,
@@ -760,16 +819,18 @@ export class TownScene extends Phaser.Scene {
     ].join("");
     const el = document.getElementById("actions")!;
     if (this.actionsHtml !== html) { el.innerHTML = html; this.actionsHtml = html; }
-    // Slot bar at the bottom: 10 cells, cooldown shading, drag targets
+    // Slot bar at the bottom: 10 cells, cooldown shading, click to choose a skill
     const cells = Array.from({ length: SLOT_COUNT }, (_, i) => {
       const skill = slots[i] ?? "";
-      if (!skill) return `<div class="slot empty" data-slot="${i}"><kbd>${SLOT_KEYS[i]}</kbd></div>`;
+      const picking = this.pickSlot === i ? " picking" : "";
+      if (!skill) return `<div class="slot empty${picking}" data-slot="${i}" title="Click to put a skill on key ${SLOT_KEYS[i]}"><kbd>${SLOT_KEYS[i]}</kbd><i>+</i></div>`;
       const h = this.skillHud(cls, skill, cdm);
       const left = Math.max(0, h.cdMs - (now - h.last));
       const shade = left > 0 ? `<div class="cd" style="height:${(left / h.cdMs) * 100}%"></div>` : "";
       const wait = left > 0 || h.cost > mine.energy ? " wait" : "";
-      return `<div class="slot${h.ult ? " ult" : ""}${wait}" data-slot="${i}" data-skill="${skill}" draggable="true" title="${h.name}: click or press ${SLOT_KEYS[i]} · right-click to clear">` +
-        `${shade}<kbd>${SLOT_KEYS[i]}</kbd><span>${h.name}</span>${left > 0 ? `<b>${Math.ceil(left / 1000)}</b>` : ""}</div>`;
+      const power = activeSkills(cls).find((a) => a.id === skill)?.power ?? "";
+      return `<div class="slot${h.ult ? " ult" : ""}${wait}${picking}" data-slot="${i}" data-skill="${skill}" title="${h.name} (key ${SLOT_KEYS[i]}) · click to change · wheel to scroll · right-click to clear">` +
+        `${iconImg(power)}${shade}<kbd>${SLOT_KEYS[i]}</kbd>${left > 0 ? `<b>${Math.ceil(left / 1000)}</b>` : ""}</div>`;
     }).join("");
     const bar = document.getElementById("hotbar")!;
     if (this.hotbarHtml !== cells) { bar.innerHTML = cells; this.hotbarHtml = cells; }
