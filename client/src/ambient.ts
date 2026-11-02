@@ -6,6 +6,7 @@ import { ISO, isoAnchor } from "./iso";
 import { SMOOTH } from "./isoflag";
 import { smoothTrees } from "./smoothArt";
 import { hiResTexture } from "./smooth";
+import { paintBonfire } from "./bonfireArt";
 
 /**
  * Living-world layer for Oakvale. Purely cosmetic and client-side (collision still comes from shared/map.ts):
@@ -183,7 +184,16 @@ export class Ambient {
   private dark = 0;
 
   /** 0 by day, 1 at night (fireflies glow brighter in the dark). */
-  setDarkness(d: number) { this.dark = d; }
+  setDarkness(d: number) { this.dark = d; for (const o of this.fireLit) o.setAlpha(d * 0.6); }
+  /** Additive copies of the fires above the night tint, so flames keep their colour in the dark. */
+  private fireLit: Phaser.GameObjects.Sprite[] = [];
+  private litCopy(s: Phaser.GameObjects.Sprite) {
+    if (!SMOOTH) return s;
+    const o = this.scene.add.sprite(s.x, s.y, "bonfire_lit", 0).setOrigin(s.originX, s.originY).setScale(s.scaleX).setBlendMode(Phaser.BlendModes.ADD).setDepth(27600).setAlpha(this.dark * 0.6);
+    s.on(Phaser.Animations.Events.ANIMATION_UPDATE, () => o.setFrame(s.frame.name));
+    this.fireLit.push(o);
+    return s;
+  }
 
   constructor(private scene: Phaser.Scene) {
     makeTextures(scene);
@@ -282,7 +292,7 @@ export class Ambient {
         // Iso: a small upright fire (stone ring, crossed logs, flames) instead of the flat tile; sparks and smoke rise from its flames
         const fy = (y + 0.5) * TILE;
         this.bonfireTexture();
-        this.scene.add.sprite(cx, fy, "bonfire", 0).setOrigin(0.5, 46 / 56).setScale(0.42).setDepth(fy).play({ key: "bonfire_burn", startFrame: (x + y) % 6 });
+        this.litCopy(this.scene.add.sprite(cx, fy, "bonfire", 0).setOrigin(0.5, 46 / 56).setScale(0.42).setDepth(fy)).play({ key: "bonfire_burn", startFrame: (x + y) % 6 });
         const glow = this.scene.add.image(cx, fy, "glow").setTint(0xffa040).setScale(6 * K).setAlpha(0.25).setBlendMode(Phaser.BlendModes.ADD).setDepth(-0.8);
         this.scene.tweens.add({ targets: glow, alpha: 0.4, scale: 6.6 * K, duration: 180, yoyo: true, repeat: -1, ease: "Sine.easeInOut", repeatDelay: 60 });
         const sparks = this.scene.add.particles(cx, fy - 9 * K, "spark", {
@@ -308,64 +318,11 @@ export class Ambient {
     const FW = 48, FH = 56, N = 6;
     if (this.scene.textures.exists("bonfire")) return;
     if (SMOOTH) {
-      // finer art for the shared pixel grid: stacked stones with shading, charred logs, layered soft flames
-      hiResTexture(this.scene, "bonfire", FW * K, FH * K, N, 4, (g, f) => {
-        g.scale(K, K);
-        const cx = 24, by = 46;
-        const SR = (k: number, s2: number) => { let h = Math.imul(k * 73 + 11, 374761393) ^ Math.imul(s2 + 5, 668265263); h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; };
-        const sh = g.createRadialGradient(cx, by + 2, 0, cx, by + 2, 22);
-        sh.addColorStop(0, "rgba(8,6,4,0.55)"); sh.addColorStop(1, "rgba(8,6,4,0)");
-        g.fillStyle = sh; g.beginPath(); g.ellipse(cx, by + 2, 22, 9, 0, 0, Math.PI * 2); g.fill();
-        g.fillStyle = "#1e1814"; g.beginPath(); g.ellipse(cx, by, 15, 6, 0, 0, Math.PI * 2); g.fill();
-        // ash and soot spilled past the ring, charred bits in the dirt
-        for (let k = 0; k < 40; k++) {
-          const a = SR(k, 1) * Math.PI * 2, d = 14 + SR(k, 2) * 9;
-          g.fillStyle = SR(k, 3) < 0.6 ? "rgba(40,36,32,0.55)" : "rgba(150,144,134,0.4)";
-          g.beginPath(); g.ellipse(cx + Math.cos(a) * d, by + Math.sin(a) * d * 0.42, 0.6 + SR(k, 4) * 1.4, 0.4 + SR(k, 5) * 0.6, 0, 0, Math.PI * 2); g.fill();
-        }
-        const stone = (a: number, front: boolean, k = 0) => {
-          // uneven field stones: each its own size, set in or out of line, some sunk, some cracked by the heat
-          const r0 = 16.5 + (SR(k, 6) - 0.5) * 2.2, w = 2.4 + SR(k, 7) * 2.4, h = 1.6 + SR(k, 8) * 1.6, tone = 0.75 + SR(k, 9) * 0.4;
-          const x = cx + Math.cos(a) * r0, y = by + Math.sin(a) * r0 * 0.41;
-          const gr = g.createRadialGradient(x - 1, y - 1.2, 0, x, y, w);
-          gr.addColorStop(0, `rgb(${184 * tone | 0},${178 * tone | 0},${166 * tone | 0})`); gr.addColorStop(0.6, `rgb(${119 * tone | 0},${114 * tone | 0},${106 * tone | 0})`); gr.addColorStop(1, "#3a3632");
-          g.fillStyle = gr; g.beginPath(); g.ellipse(x, y - h * 0.4, w, h, (SR(k, 10) - 0.5) * 0.6, 0, Math.PI * 2); g.fill();
-          g.fillStyle = "rgba(20,16,12,0.5)"; g.beginPath(); g.ellipse(x, y - h * 0.1, w * 0.9, h * 0.4, 0, 0, Math.PI); g.fill(); // soot on the inner side
-          if (SR(k, 11) < 0.3) { g.strokeStyle = "rgba(14,10,8,0.7)"; g.lineWidth = 0.3; g.beginPath(); g.moveTo(x - w * 0.3, y - h); g.lineTo(x + w * 0.1, y - h * 0.2); g.stroke(); }
-          if (SR(k, 12) < 0.25) { g.fillStyle = "rgba(78,98,46,0.7)"; g.beginPath(); g.ellipse(x - w * 0.3, y - h * 0.9, w * 0.4, h * 0.3, 0, 0, Math.PI * 2); g.fill(); }
-          if (front) { g.fillStyle = "rgba(255,140,50,0.18)"; g.beginPath(); g.ellipse(x, y - h, w * 0.7, h * 0.5, 0, 0, Math.PI * 2); g.fill(); }
-        };
-        for (let k = 0; k < 16; k++) { const a = (k / 16) * Math.PI * 2; if (Math.sin(a) < 0 && SR(k, 13) > 0.08) stone(a + (SR(k, 14) - 0.5) * 0.25, false, k); }
-        // logs
-        for (const [x0, y0, x1, y1] of [[cx - 12, by + 2, cx + 10, by - 4], [cx - 10, by - 4, cx + 12, by + 2], [cx - 3, by + 4, cx + 2, by - 6]]) {
-          g.lineCap = "round";
-          g.strokeStyle = "#2a1a0e"; g.lineWidth = 3.2; g.beginPath(); g.moveTo(x0, y0); g.lineTo(x1, y1); g.stroke();
-          g.strokeStyle = "#5a3a20"; g.lineWidth = 2.2; g.beginPath(); g.moveTo(x0, y0 - 0.4); g.lineTo(x1, y1 - 0.4); g.stroke();
-          g.strokeStyle = "rgba(255,110,30,0.8)"; g.lineWidth = 0.6; g.setLineDash([1.2, 2.2]); g.lineDashOffset = f;
-          g.beginPath(); g.moveTo(x0, y0 + 0.6); g.lineTo(x1, y1 + 0.6); g.stroke(); g.setLineDash([]);
-        }
-        const glow = g.createRadialGradient(cx, by - 4, 0, cx, by - 4, 14);
-        glow.addColorStop(0, "rgba(255,170,60,0.55)"); glow.addColorStop(1, "rgba(255,120,30,0)");
-        g.fillStyle = glow; g.beginPath(); g.arc(cx, by - 4, 14, 0, Math.PI * 2); g.fill();
-        // flames: soft tongues swaying frame to frame
-        const tongue = (w: number, h: number, c0: string, c1: string, phase: number, dx: number) => {
-          const sway = Math.sin(f * 1.05 + phase) * 3, x = cx + dx, y = by - 2;
-          const gr = g.createLinearGradient(x, y, x, y - h);
-          gr.addColorStop(0, c0); gr.addColorStop(1, c1);
-          g.fillStyle = gr; g.beginPath(); g.moveTo(x - w, y);
-          g.bezierCurveTo(x - w * 1.05, y - h * 0.45, x + sway * 0.5 - w * 0.3, y - h * 0.75, x + sway, y - h);
-          g.bezierCurveTo(x + sway * 0.4 + w * 0.35, y - h * 0.7, x + w * 1.05, y - h * 0.4, x + w, y);
-          g.closePath(); g.fill();
-        };
-        tongue(11, 30 + (f % 3) * 2, "rgba(200,50,15,0.95)", "rgba(240,90,20,0.3)", 0, 0);
-        tongue(5, 20 + ((f + 2) % 3) * 2, "rgba(230,80,20,0.9)", "rgba(255,140,40,0.2)", 2.2, -6);
-        tongue(5, 18 + ((f + 1) % 3) * 2, "rgba(230,80,20,0.9)", "rgba(255,140,40,0.2)", 4.1, 6);
-        tongue(8, 24 + ((f + 1) % 3) * 2, "rgba(255,150,40,0.95)", "rgba(255,190,70,0.3)", 1.3, 0);
-        tongue(5, 16 + ((f + 2) % 3), "rgba(255,220,100,0.95)", "rgba(255,240,170,0.4)", 2.1, 0);
-        tongue(2.4, 8, "rgba(255,250,220,1)", "rgba(255,250,220,0.5)", 2.8, 0);
-        for (let k = 0; k < 16; k++) { const a = (k / 16) * Math.PI * 2; if (Math.sin(a) >= 0 && SR(k, 13) > 0.08) stone(a + (SR(k, 14) - 0.5) * 0.25, true, k); }
-      });
-      this.scene.anims.create({ key: "bonfire_burn", frames: this.scene.anims.generateFrameNumbers("bonfire", { start: 0, end: N - 1 }), frameRate: 9, repeat: -1 });
+      // hand-built pixel fire with depth: pit, stone ring, leaning pyre and a dithered fire field (bonfireArt.ts)
+      const M = 8;
+      hiResTexture(this.scene, "bonfire", FW * K, FH * K, M, 4, (g, f) => { g.scale(K, K); paintBonfire(g, f, M); });
+      hiResTexture(this.scene, "bonfire_lit", FW * K, FH * K, M, 4, (g, f) => { g.scale(K, K); paintBonfire(g, f, M, true); });
+      this.scene.anims.create({ key: "bonfire_burn", frames: this.scene.anims.generateFrameNumbers("bonfire", { start: 0, end: M - 1 }), frameRate: 10, repeat: -1 });
       return;
     }
     const tex = this.scene.textures.createCanvas("bonfire", FW * N * K, FH * K)!;
@@ -423,12 +380,12 @@ export class Ambient {
       if (OBJECTS[y][x] !== T.BONFIRE || OBJECTS[y - 1]?.[x] === T.BONFIRE || OBJECTS[y][x - 1] === T.BONFIRE) continue;
       this.bonfireTexture();
       const cx = (x + 1) * TILE, cy = (y + 1) * TILE + 6 * K;
-      this.scene.add.sprite(cx, cy - 4 * K, "bonfire", 0).setOrigin(0.5, 46 / 56).setScale(0.68).setDepth(cy).play("bonfire_burn"); // in scale with the heroes
+      this.litCopy(this.scene.add.sprite(cx, cy - 4 * K, "bonfire", 0).setOrigin(0.5, 46 / 56).setScale(0.68).setDepth(cy)).play("bonfire_burn"); // in scale with the heroes
       const glow = this.scene.add.image(cx, cy - 10 * K, "glow").setTint(0xffa040).setScale(10 * K).setAlpha(0.3).setBlendMode(Phaser.BlendModes.ADD).setDepth(-0.8);
       this.scene.tweens.add({ targets: glow, alpha: 0.45, scale: 11 * K, duration: 220, yoyo: true, repeat: -1, ease: "Sine.easeInOut", repeatDelay: 40 });
       this.scene.add.particles(cx, cy - 14 * K, "spark", {
         lifespan: { min: 700, max: 1600 }, speedY: { min: -45 * K, max: -18 * K }, speedX: { min: -14 * K, max: 14 * K },
-        scale: { start: 2, end: 0.4 }, alpha: { start: 1, end: 0 }, frequency: 60, blendMode: "ADD",
+        scale: { start: SMOOTH ? 1 : 2, end: 0.3 }, alpha: { start: 1, end: 0 }, frequency: SMOOTH ? 90 : 60, blendMode: "ADD",
       }).setDepth(25000);
       this.smoke(cx, cy - 24 * K, 1.1);
     }
