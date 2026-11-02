@@ -48,12 +48,15 @@ interface Entity {
   statusTint?: boolean;
   gear?: GearLayer; // equipment overlays (heroes only)
   vdir?: string; // iso view: facing on screen, from the last movement or attack
+  strikeUntil?: number; // monster: show its strike frame until then (after a "swing")
   lastX?: number; lastY?: number;
   idleSince?: number; // local time the hero stopped moving, for idle fidgets
   nextFidget?: number;
 }
 
 const FRAME_BASE: Record<string, number> = { down: 0, up: 2, right: 4, left: 4 };
+/** Iso monster sheets have attack frames after the walk ones: wind-up, then strike, per facing. */
+const ATTACK_BASE: Record<string, number> = { down: 6, up: 8, right: 10, left: 10 };
 /** On-screen hero size: 0.75 of a 32px design frame (frames are ART_K times finer). */
 const HERO_SCALE = CHAR_SCALE;
 const HERO_TOP = 24 * 0.75 * CHAR_GROW; // drawn hero height above the feet (24 of the 32 design px)
@@ -606,6 +609,7 @@ export class TownScene extends Phaser.Scene {
     const dir = e.state.dir as string;
     if (typeof ax === "number" && typeof ay === "number") e.vdir = (e.hero ? screenDir8 : screenDir)(ax, ay, e.vdir ?? dir);
     if (e.hero) playCharAnim(e.sprite, e.hero, this.attackAnim(e.hero, step, variant), this.dirOf(e));
+    if (e.mob) e.strikeUntil = this.time.now + 240;
     // Aim can be diagonal (the server sends it); mobs and old messages fall back to the facing direction
     const off = typeof ax === "number" && typeof ay === "number" ? [ax, ay]
       : { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] }[dir] ?? [0, 1];
@@ -1074,16 +1078,22 @@ export class TownScene extends Phaser.Scene {
         e.sprite.setAlpha(p.dead ? 0.6 : 1);
       } else {
         const step = moving ? Math.floor(now / 150) % 2 : 0;
-        e.sprite.setFrame(FRAME_BASE[dir] + step);
+        // Monsters gather themselves before a blow (wind-up frame) and lunge when it lands (strike frame)
+        const attackFrames = e.mob && e.sprite.texture.frameTotal > 12;
+        if (attackFrames && !p.dead && p.winding) e.sprite.setFrame(ATTACK_BASE[dir]);
+        else if (attackFrames && !p.dead && now < (e.strikeUntil ?? 0)) e.sprite.setFrame(ATTACK_BASE[dir] + 1);
+        else e.sprite.setFrame(FRAME_BASE[dir] + step);
         e.sprite.setFlipX(dir === "left");
         if (e.mob) e.sprite.setVisible(!p.dead && !p.hidden);
         else e.sprite.setAlpha(p.dead ? 0.35 : 1).setAngle(p.dead ? 90 : 0);
       }
       e.sprite.setDepth(e.sprite.y);
-      // Status effects: yellow flicker for stunned, red flash for a monster winding up, blue for slowed, red pulse for raging
-      if (!p.dead && (p.stunned || p.winding || p.slowed || p.raging)) {
+      // Status effects: yellow flicker for stunned, blue for slowed, red pulse for raging. A monster winding up shows
+      // it in its pose; only sheets without attack frames (?pixel=1) still flash red.
+      const windFlash = p.winding && e.sprite.texture.frameTotal <= 12;
+      if (!p.dead && (p.stunned || windFlash || p.slowed || p.raging)) {
         e.sprite.setTint(p.stunned ? (Math.floor(now / 120) % 2 ? 0xfff176 : 0xffffff)
-          : p.winding ? (Math.floor(now / 70) % 2 ? 0xff6b6b : 0xffffff)
+          : windFlash ? (Math.floor(now / 70) % 2 ? 0xff6b6b : 0xffffff)
           : p.slowed ? 0x90caf9 : (Math.floor(now / 200) % 2 ? 0xff8a80 : 0xffcdd2));
         e.statusTint = true;
       } else if (e.statusTint) { e.sprite.clearTint(); e.statusTint = false; }

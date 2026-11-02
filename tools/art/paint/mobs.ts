@@ -6,7 +6,8 @@ import { pixelAlpha, pixelize, shrink } from "./body";
 
 /**
  * Monster sheets for the iso look. Same textures as client/src/textures.ts mobTexture (6 frames:
- * 0-1 down, 2-3 up, 4-5 right, the second of each pair is the step / squish): painted HI times bigger, then turned
+ * 0-1 down, 2-3 up, 4-5 right, the second of each pair is the step / squish), plus 6 attack frames (6-7 down,
+ * 8-9 up, 10-11 right: wind-up, then the strike) so monsters visibly gather and lunge: painted HI times bigger, then turned
  * into pixel art at TX texels per world px (the shared pixel grid, like the heroes). The client uploads them
  * through hiResTexture, so frame sizes and pivots stay the same. Frame sizes are even so TX x size is whole.
  */
@@ -14,13 +15,25 @@ const HI = 8, TX = 1.5;
 /** Ground shadows go on their own layer so pixelize does not cut them away. */
 let SH: C2 | null = null;
 const DIRS: Dir[] = ["down", "down", "up", "up", "right", "right"];
+const FRAMES = 12;
+/** Facing and pose of sheet frame f. */
+function frameOf(f: number): { dir: Dir; pose: "stand" | "step" | "wind" | "strike" } {
+  if (f < 6) return { dir: DIRS[f], pose: f % 2 ? "step" : "stand" };
+  const k = f - 6;
+  return { dir: (["down", "up", "right"] as Dir[])[k >> 1], pose: k % 2 ? "strike" : "wind" };
+}
 
 interface Sheet { key: string; w: number; h: number; draw: (c: C2, f: number) => void }
 
 // ---------------------------------------------------------------- humanoid monsters (character painter)
 const PK = 5; // painter resolution for these
 function humanoid(key: string, kind: string, w: number, h: number, oy: number, scale: number): Sheet {
-  const frames = DIRS.map((dir, f) => posed(MOB_POSES[kind], { dir, t: f, stride: f % 2 ? (dir === "right" ? -1 : 1) : 0, bob: f % 2 ? -1 : 0 }, false));
+  const frames = [...Array(FRAMES).keys()].map((f) => {
+    const { dir, pose } = frameOf(f);
+    if (pose === "wind") return posed(MOB_POSES[kind], { dir, t: f, attack: 0, crouch: 1, lean: 1, expr: "squint" }, false);
+    if (pose === "strike") return posed(MOB_POSES[kind], { dir, t: f, attack: 2, bob: 1 }, false);
+    return posed(MOB_POSES[kind], { dir, t: f, stride: pose === "step" ? (dir === "right" ? -1 : 1) : 0, bob: pose === "step" ? -1 : 0 }, false);
+  });
   return {
     key, w, h,
     draw: (c, f) => {
@@ -41,9 +54,13 @@ interface BlobPal { G: number; L: number; D: number; E: number }
 interface BlobOpts { bodyH: number; extra?: "shooter" | "warrior" | "healer" | "mother1" | "mother2" | "mother3"; seed?: number }
 
 function blobFrame(c: C2, w: number, h: number, pal: BlobPal, o: BlobOpts, f: number) {
-  const dir = DIRS[f], squish = f % 2 === 1;
-  const cx = w / 2, base = h - 1.3;
-  const rx = (squish ? w / 2 - 0.35 : w / 2 - 1.0), ry = o.bodyH * (squish ? 0.84 : 1) * 0.97;
+  const { dir, pose } = frameOf(f), squish = pose === "step";
+  const wind = pose === "wind", strike = pose === "strike";
+  // wind-up: sink low and wide, leaning away from the target; strike: spring up tall and narrow toward it
+  const lean = dir === "right" ? (wind ? -0.9 : strike ? 1.1 : 0) : 0;
+  const cx = w / 2 + lean, base = h - 1.3 + (dir === "down" && strike ? 0.4 : 0);
+  const rx = wind ? w / 2 - 0.25 : strike ? w / 2 - 1.7 : (squish ? w / 2 - 0.35 : w / 2 - 1.0);
+  const ry = o.bodyH * (wind ? 0.74 : strike ? 1.08 : squish ? 0.84 : 1) * 0.97;
   const top = base - ry;
   // ground shadow
   const sc = SH ?? c;
@@ -96,6 +113,12 @@ function blobFrame(c: C2, w: number, h: number, pal: BlobPal, o: BlobOpts, f: nu
   };
   if (dir === "down") { eye(cx - gap, ey); eye(cx + gap, ey); line(c, [[cx - es, ey + es * 2], [cx, ey + es * 2.5], [cx + es, ey + es * 2]], sh(pal.D, 0.4), 0.22, 0.8); }
   else if (dir === "right") { eye(cx + rx * 0.5, ey); eye(cx + rx * 0.05, ey - 0.1); }
+  if ((wind || strike) && dir !== "up") {
+    // angry brows slanting in toward the nose
+    const bw = Math.max(0.35, es * 0.55), bc = sh(pal.D, 0.35);
+    const xs = dir === "down" ? [cx - gap, cx + gap] : [cx + rx * 0.05, cx + rx * 0.5];
+    for (const x of xs) { const s = dir === "down" ? (x < cx ? 1 : -1) : 1; line(c, [[x - es * 1.1 * s, ey - es * 1.7], [x + es * 0.8 * s, ey - es * 1.05]], bc, bw, 0.95); }
+  }
   // extras
   const x = o.extra;
   if (x === "shooter") {
@@ -143,12 +166,12 @@ export function buildMobs(out: string) {
     humanoid("mob_skeletonmage", "skeletonmage", 24, 32, 31.2 / 32, 0.93),
     humanoid("mob_necromancer", "necromancer", 24, 32, 31.2 / 32, 0.93),
   ];
-  const meta: Record<string, { w: number; h: number; scale: number }> = {};
+  const meta: Record<string, { w: number; h: number; scale: number; frames: number }> = {};
   for (const s of sheets) {
     const tw = s.w * TX, th = s.h * TX;
-    const cv = createCanvas(tw * 6, th), oc = cv.getContext("2d");
-    const sheet = oc.createImageData(tw * 6, th);
-    for (let f = 0; f < 6; f++) {
+    const cv = createCanvas(tw * FRAMES, th), oc = cv.getContext("2d");
+    const sheet = oc.createImageData(tw * FRAMES, th);
+    for (let f = 0; f < FRAMES; f++) {
       const body = createCanvas(s.w * HI, s.h * HI), shadow = createCanvas(s.w * HI, s.h * HI);
       const c = body.getContext("2d"), sc = shadow.getContext("2d");
       c.scale(HI, HI); sc.scale(HI, HI);
@@ -158,13 +181,13 @@ export function buildMobs(out: string) {
       pixelize(b, tw, th, true, blob ? { y0: Math.round(th * 0.7), y1: th, mud: 0.14, sat: 0.9 } : { y0: Math.round(th * 0.72), y1: th, mud: s.key.includes("bandit") ? 0.38 : 0.2 });
       const u = shrink(shadow, "ms", tw, th); pixelAlpha(u);
       for (let y = 0; y < th; y++) for (let x = 0; x < tw; x++) {
-        const i = (y * tw + x) * 4, o = (y * tw * 6 + f * tw + x) * 4, src = b[i + 3] ? b : u;
+        const i = (y * tw + x) * 4, o = (y * tw * FRAMES + f * tw + x) * 4, src = b[i + 3] ? b : u;
         for (let k = 0; k < 4; k++) sheet.data[o + k] = src[i + k];
       }
     }
     oc.putImageData(sheet, 0, 0);
     writeFileSync(`${out}/${s.key}.webp`, cv.encodeSync("webp", 100));
-    meta[s.key] = { w: s.w, h: s.h, scale: TX };
+    meta[s.key] = { w: s.w, h: s.h, scale: TX, frames: FRAMES };
   }
   writeFileSync(`${out}/mobs.json`, JSON.stringify(meta, null, 1));
   setPainted(false, 2);
