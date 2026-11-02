@@ -151,7 +151,7 @@ function material(t: number, wx: number, wy: number, sx: number, sy: number, dep
     }
     case COBBLE: {
       // worn, irregular Voronoi setts with packed earth in the joints
-      const C = 7.5, ux = wx + (vn(wx / 9, wy / 9, 27) - 0.5) * 3, uy = wy + (vn(wx / 9, wy / 9, 28) - 0.5) * 3;
+      const C = 5.8, ux = wx + (vn(wx / 9, wy / 9, 27) - 0.5) * 3, uy = wy + (vn(wx / 9, wy / 9, 28) - 0.5) * 3;
       const gx = Math.floor(ux / C), gy = Math.floor(uy / C);
       let d1 = 1e9, d2 = 1e9, best = 0, bx = 0, by = 0, cid = 0;
       for (let j = -1; j <= 1; j++) for (let i = -1; i <= 1; i++) {

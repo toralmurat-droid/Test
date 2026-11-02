@@ -5,6 +5,7 @@ import { ANIMATED_TILES, drawTileFrame } from "./tileset";
 import { ISO, isoAnchor } from "./iso";
 import { SMOOTH } from "./isoflag";
 import { smoothTrees } from "./smoothArt";
+import { hiResTexture } from "./smooth";
 
 /**
  * Living-world layer for Oakvale. Purely cosmetic and client-side (collision still comes from shared/map.ts):
@@ -304,6 +305,55 @@ export class Ambient {
   private bonfireTexture() {
     const FW = 48, FH = 56, N = 6;
     if (this.scene.textures.exists("bonfire")) return;
+    if (SMOOTH) {
+      // finer art for the shared pixel grid: stacked stones with shading, charred logs, layered soft flames
+      hiResTexture(this.scene, "bonfire", FW * K, FH * K, N, 4, (g, f) => {
+        g.scale(K, K);
+        const cx = 24, by = 46;
+        const sh = g.createRadialGradient(cx, by + 2, 0, cx, by + 2, 22);
+        sh.addColorStop(0, "rgba(8,6,4,0.55)"); sh.addColorStop(1, "rgba(8,6,4,0)");
+        g.fillStyle = sh; g.beginPath(); g.ellipse(cx, by + 2, 22, 9, 0, 0, Math.PI * 2); g.fill();
+        g.fillStyle = "#1e1814"; g.beginPath(); g.ellipse(cx, by, 15, 6, 0, 0, Math.PI * 2); g.fill();
+        const stone = (a: number, front: boolean) => {
+          const x = cx + Math.cos(a) * 16.5, y = by + Math.sin(a) * 6.8, w = 3.2 + ((a * 7) % 1.2), h = 2.4;
+          const gr = g.createRadialGradient(x - 1, y - 1.2, 0, x, y, w);
+          gr.addColorStop(0, "#b8b2a6"); gr.addColorStop(0.6, "#77726a"); gr.addColorStop(1, "#3a3632");
+          g.fillStyle = gr; g.beginPath(); g.ellipse(x, y - h * 0.4, w, h, 0, 0, Math.PI * 2); g.fill();
+          if (front) { g.fillStyle = "rgba(255,140,50,0.18)"; g.beginPath(); g.ellipse(x, y - h, w * 0.7, h * 0.5, 0, 0, Math.PI * 2); g.fill(); }
+        };
+        for (let k = 0; k < 16; k++) { const a = (k / 16) * Math.PI * 2; if (Math.sin(a) < 0) stone(a, false); }
+        // logs
+        for (const [x0, y0, x1, y1] of [[cx - 12, by + 2, cx + 10, by - 4], [cx - 10, by - 4, cx + 12, by + 2], [cx - 3, by + 4, cx + 2, by - 6]]) {
+          g.lineCap = "round";
+          g.strokeStyle = "#2a1a0e"; g.lineWidth = 3.2; g.beginPath(); g.moveTo(x0, y0); g.lineTo(x1, y1); g.stroke();
+          g.strokeStyle = "#5a3a20"; g.lineWidth = 2.2; g.beginPath(); g.moveTo(x0, y0 - 0.4); g.lineTo(x1, y1 - 0.4); g.stroke();
+          g.strokeStyle = "rgba(255,110,30,0.8)"; g.lineWidth = 0.6; g.setLineDash([1.2, 2.2]); g.lineDashOffset = f;
+          g.beginPath(); g.moveTo(x0, y0 + 0.6); g.lineTo(x1, y1 + 0.6); g.stroke(); g.setLineDash([]);
+        }
+        const glow = g.createRadialGradient(cx, by - 4, 0, cx, by - 4, 14);
+        glow.addColorStop(0, "rgba(255,170,60,0.55)"); glow.addColorStop(1, "rgba(255,120,30,0)");
+        g.fillStyle = glow; g.beginPath(); g.arc(cx, by - 4, 14, 0, Math.PI * 2); g.fill();
+        // flames: soft tongues swaying frame to frame
+        const tongue = (w: number, h: number, c0: string, c1: string, phase: number, dx: number) => {
+          const sway = Math.sin(f * 1.05 + phase) * 3, x = cx + dx, y = by - 2;
+          const gr = g.createLinearGradient(x, y, x, y - h);
+          gr.addColorStop(0, c0); gr.addColorStop(1, c1);
+          g.fillStyle = gr; g.beginPath(); g.moveTo(x - w, y);
+          g.bezierCurveTo(x - w * 1.05, y - h * 0.45, x + sway * 0.5 - w * 0.3, y - h * 0.75, x + sway, y - h);
+          g.bezierCurveTo(x + sway * 0.4 + w * 0.35, y - h * 0.7, x + w * 1.05, y - h * 0.4, x + w, y);
+          g.closePath(); g.fill();
+        };
+        tongue(11, 30 + (f % 3) * 2, "rgba(200,50,15,0.95)", "rgba(240,90,20,0.3)", 0, 0);
+        tongue(5, 20 + ((f + 2) % 3) * 2, "rgba(230,80,20,0.9)", "rgba(255,140,40,0.2)", 2.2, -6);
+        tongue(5, 18 + ((f + 1) % 3) * 2, "rgba(230,80,20,0.9)", "rgba(255,140,40,0.2)", 4.1, 6);
+        tongue(8, 24 + ((f + 1) % 3) * 2, "rgba(255,150,40,0.95)", "rgba(255,190,70,0.3)", 1.3, 0);
+        tongue(5, 16 + ((f + 2) % 3), "rgba(255,220,100,0.95)", "rgba(255,240,170,0.4)", 2.1, 0);
+        tongue(2.4, 8, "rgba(255,250,220,1)", "rgba(255,250,220,0.5)", 2.8, 0);
+        for (let k = 0; k < 16; k++) { const a = (k / 16) * Math.PI * 2; if (Math.sin(a) >= 0) stone(a, true); }
+      });
+      this.scene.anims.create({ key: "bonfire_burn", frames: this.scene.anims.generateFrameNumbers("bonfire", { start: 0, end: N - 1 }), frameRate: 9, repeat: -1 });
+      return;
+    }
     const tex = this.scene.textures.createCanvas("bonfire", FW * N * K, FH * K)!;
     const g = tex.getContext();
     g.save(); g.scale(K, K); // drawn on the design grid, scaled up (ellipses and flames stay smooth)
