@@ -312,18 +312,30 @@ export class Ambient {
       hiResTexture(this.scene, "bonfire", FW * K, FH * K, N, 4, (g, f) => {
         g.scale(K, K);
         const cx = 24, by = 46;
+        const SR = (k: number, s2: number) => { let h = Math.imul(k * 73 + 11, 374761393) ^ Math.imul(s2 + 5, 668265263); h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; };
         const sh = g.createRadialGradient(cx, by + 2, 0, cx, by + 2, 22);
         sh.addColorStop(0, "rgba(8,6,4,0.55)"); sh.addColorStop(1, "rgba(8,6,4,0)");
         g.fillStyle = sh; g.beginPath(); g.ellipse(cx, by + 2, 22, 9, 0, 0, Math.PI * 2); g.fill();
         g.fillStyle = "#1e1814"; g.beginPath(); g.ellipse(cx, by, 15, 6, 0, 0, Math.PI * 2); g.fill();
-        const stone = (a: number, front: boolean) => {
-          const x = cx + Math.cos(a) * 16.5, y = by + Math.sin(a) * 6.8, w = 3.2 + ((a * 7) % 1.2), h = 2.4;
+        // ash and soot spilled past the ring, charred bits in the dirt
+        for (let k = 0; k < 40; k++) {
+          const a = SR(k, 1) * Math.PI * 2, d = 14 + SR(k, 2) * 9;
+          g.fillStyle = SR(k, 3) < 0.6 ? "rgba(40,36,32,0.55)" : "rgba(150,144,134,0.4)";
+          g.beginPath(); g.ellipse(cx + Math.cos(a) * d, by + Math.sin(a) * d * 0.42, 0.6 + SR(k, 4) * 1.4, 0.4 + SR(k, 5) * 0.6, 0, 0, Math.PI * 2); g.fill();
+        }
+        const stone = (a: number, front: boolean, k = 0) => {
+          // uneven field stones: each its own size, set in or out of line, some sunk, some cracked by the heat
+          const r0 = 16.5 + (SR(k, 6) - 0.5) * 2.2, w = 2.4 + SR(k, 7) * 2.4, h = 1.6 + SR(k, 8) * 1.6, tone = 0.75 + SR(k, 9) * 0.4;
+          const x = cx + Math.cos(a) * r0, y = by + Math.sin(a) * r0 * 0.41;
           const gr = g.createRadialGradient(x - 1, y - 1.2, 0, x, y, w);
-          gr.addColorStop(0, "#b8b2a6"); gr.addColorStop(0.6, "#77726a"); gr.addColorStop(1, "#3a3632");
-          g.fillStyle = gr; g.beginPath(); g.ellipse(x, y - h * 0.4, w, h, 0, 0, Math.PI * 2); g.fill();
+          gr.addColorStop(0, `rgb(${184 * tone | 0},${178 * tone | 0},${166 * tone | 0})`); gr.addColorStop(0.6, `rgb(${119 * tone | 0},${114 * tone | 0},${106 * tone | 0})`); gr.addColorStop(1, "#3a3632");
+          g.fillStyle = gr; g.beginPath(); g.ellipse(x, y - h * 0.4, w, h, (SR(k, 10) - 0.5) * 0.6, 0, Math.PI * 2); g.fill();
+          g.fillStyle = "rgba(20,16,12,0.5)"; g.beginPath(); g.ellipse(x, y - h * 0.1, w * 0.9, h * 0.4, 0, 0, Math.PI); g.fill(); // soot on the inner side
+          if (SR(k, 11) < 0.3) { g.strokeStyle = "rgba(14,10,8,0.7)"; g.lineWidth = 0.3; g.beginPath(); g.moveTo(x - w * 0.3, y - h); g.lineTo(x + w * 0.1, y - h * 0.2); g.stroke(); }
+          if (SR(k, 12) < 0.25) { g.fillStyle = "rgba(78,98,46,0.7)"; g.beginPath(); g.ellipse(x - w * 0.3, y - h * 0.9, w * 0.4, h * 0.3, 0, 0, Math.PI * 2); g.fill(); }
           if (front) { g.fillStyle = "rgba(255,140,50,0.18)"; g.beginPath(); g.ellipse(x, y - h, w * 0.7, h * 0.5, 0, 0, Math.PI * 2); g.fill(); }
         };
-        for (let k = 0; k < 16; k++) { const a = (k / 16) * Math.PI * 2; if (Math.sin(a) < 0) stone(a, false); }
+        for (let k = 0; k < 16; k++) { const a = (k / 16) * Math.PI * 2; if (Math.sin(a) < 0 && SR(k, 13) > 0.08) stone(a + (SR(k, 14) - 0.5) * 0.25, false, k); }
         // logs
         for (const [x0, y0, x1, y1] of [[cx - 12, by + 2, cx + 10, by - 4], [cx - 10, by - 4, cx + 12, by + 2], [cx - 3, by + 4, cx + 2, by - 6]]) {
           g.lineCap = "round";
@@ -351,7 +363,7 @@ export class Ambient {
         tongue(8, 24 + ((f + 1) % 3) * 2, "rgba(255,150,40,0.95)", "rgba(255,190,70,0.3)", 1.3, 0);
         tongue(5, 16 + ((f + 2) % 3), "rgba(255,220,100,0.95)", "rgba(255,240,170,0.4)", 2.1, 0);
         tongue(2.4, 8, "rgba(255,250,220,1)", "rgba(255,250,220,0.5)", 2.8, 0);
-        for (let k = 0; k < 16; k++) { const a = (k / 16) * Math.PI * 2; if (Math.sin(a) >= 0) stone(a, true); }
+        for (let k = 0; k < 16; k++) { const a = (k / 16) * Math.PI * 2; if (Math.sin(a) >= 0 && SR(k, 13) > 0.08) stone(a + (SR(k, 14) - 0.5) * 0.25, true, k); }
       });
       this.scene.anims.create({ key: "bonfire_burn", frames: this.scene.anims.generateFrameNumbers("bonfire", { start: 0, end: N - 1 }), frameRate: 9, repeat: -1 });
       return;

@@ -509,6 +509,24 @@ function signpost(c: Ctx, I: Iso, boards: number) {
 }
 
 function hay(c: Ctx, I: Iso) {
+  const lr = rng(40 + V);
+  // loose straw blown around the bale
+  for (let k = 0; k < 40; k++) {
+    const a = lr() * Math.PI * 2, d = 7 + lr() * 6, [px, py] = I.p(Math.cos(a) * d, Math.sin(a) * d, 0);
+    c.strokeStyle = col(lr() < 0.5 ? 0xc8a848 : 0x8a6a2a, 0.9); c.lineWidth = 0.25;
+    c.beginPath(); c.moveTo(px, py); c.lineTo(px + (lr() - 0.5) * 3, py + (lr() - 0.5) * 1); c.stroke();
+  }
+  if (V >= 2) { // a round bale lying on its side, a little slumped
+    I.shadow(-8, -7, 8, 7, 2);
+    const [x, y] = I.p(0, 0, 0), r = 7, L = 6;
+    const g = c.createLinearGradient(x - 9, 0, x + 9, 0); g.addColorStop(0, "#d8b850"); g.addColorStop(0.5, "#a88a34"); g.addColorStop(1, "#5a4618");
+    c.fillStyle = g; c.beginPath(); c.ellipse(x + L * 0.5, y - r + L * 0.25, r * 0.8, r, 0, -Math.PI / 2, Math.PI / 2); c.lineTo(x - L * 0.5, y + L * -0.25 + 0); c.ellipse(x - L * 0.5, y - r - L * 0.25, r * 0.8, r, 0, Math.PI / 2, Math.PI * 1.5); c.closePath(); c.fill();
+    c.fillStyle = "#c8a440"; c.beginPath(); c.ellipse(x - L * 0.5, y - r - L * 0.25, r * 0.8, r * 0.98, 0, 0, Math.PI * 2); c.fill();
+    c.strokeStyle = "rgba(110,84,30,0.8)"; c.lineWidth = 0.3;
+    for (const rr of [1.5, 3, 4.5, 6]) { c.beginPath(); c.ellipse(x - L * 0.5, y - r - L * 0.25, rr * 0.8, rr, 0, 0, Math.PI * 2); c.stroke(); }
+    c.fillStyle = "rgba(70,60,30,0.35)"; c.beginPath(); c.ellipse(x - L * 0.5 + 1, y - r - L * 0.25 + 2, r * 0.5, r * 0.5, 0, 0, Math.PI * 2); c.fill(); // weathered grey core
+    return;
+  }
   I.shadow(-8, -6, 8, 6, 2);
   const s = 7, d = 5, h = 9;
   I.box(-s, s, -d, d, 0, h, 0xb8963c);
@@ -567,15 +585,39 @@ function grave(c: Ctx, I: Iso) {
 }
 
 function wheel(c: Ctx, I: Iso) {
-  I.shadow(-6, -3, 6, 3, 2);
-  const [x, y] = I.p(0, 0, 9);
-  c.save(); c.translate(x, y); c.transform(1, 0.5, 0, 1, 0, 0);
-  c.strokeStyle = "#4a3218"; c.lineWidth = 1.6; c.beginPath(); c.arc(0, 0, 8, 0, Math.PI * 2); c.stroke();
-  c.strokeStyle = "#8a6a42"; c.lineWidth = 0.4; c.beginPath(); c.arc(0, 0, 8.4, Math.PI * 1.1, Math.PI * 1.6); c.stroke();
-  c.strokeStyle = "#5a3e22"; c.lineWidth = 0.8;
-  for (let k = 0; k < 8; k++) { const a = k * Math.PI / 4; c.beginPath(); c.moveTo(0, 0); c.lineTo(Math.cos(a) * 7.5, Math.sin(a) * 7.5); c.stroke(); }
-  c.fillStyle = "#3a2814"; c.beginPath(); c.arc(0, 0, 1.8, 0, Math.PI * 2); c.fill();
-  c.restore();
+  // the mill's paddle wheel: two rims tied by paddles, turning in the stream, on a timber frame with an axle
+  const [x, y] = I.p(0, 0, 12);
+  const R0 = 12.5;
+  // frame posts and the axle beam into the mill
+  I.box(-1, 1, -7, -5.5, -3, 15, 0x4a3420);
+  I.box(-1, 1, 5.5, 7, -3, 15, 0x3e2c1a);
+  const draw = (off: number, front: boolean) => {
+    c.save(); c.translate(x + off, y + off * 0.5); c.transform(1, 0.5, 0, 1, 0, 0);
+    c.strokeStyle = front ? "#4a3218" : "#2e1e10"; c.lineWidth = 1.6; c.beginPath(); c.arc(0, 0, R0, 0, Math.PI * 2); c.stroke();
+    c.strokeStyle = front ? "#5a3e22" : "#3a2814"; c.lineWidth = 0.9;
+    for (let k = 0; k < 8; k++) { const a = k * Math.PI / 4 + 0.2; c.beginPath(); c.moveTo(0, 0); c.lineTo(Math.cos(a) * R0, Math.sin(a) * R0); c.stroke(); }
+    if (front) {
+      c.strokeStyle = "rgba(150,120,80,0.6)"; c.lineWidth = 0.4; c.beginPath(); c.arc(0, 0, R0 + 0.4, Math.PI * 1.05, Math.PI * 1.6); c.stroke();
+      c.strokeStyle = "rgba(70,96,44,0.85)"; c.lineWidth = 1; c.beginPath(); c.arc(0, 0, R0, Math.PI * 0.15, Math.PI * 0.85); c.stroke(); // wet moss low on the rim
+      c.fillStyle = "#2a1c0e"; c.beginPath(); c.arc(0, 0, 2, 0, Math.PI * 2); c.fill();
+      c.fillStyle = "#6a6a66"; c.beginPath(); c.arc(-0.4, -0.4, 0.9, 0, Math.PI * 2); c.fill();
+    }
+    c.restore();
+  };
+  draw(-3, false);
+  // paddles between the rims
+  for (let k = 0; k < 12; k++) {
+    const a = k * Math.PI / 6;
+    const px = Math.cos(a) * R0, py = Math.sin(a) * R0;
+    const p0 = [x - 3 + px, y - 1.5 + py + px * 0.5], p1 = [x + 3 + px, y + 1.5 + py + px * 0.5];
+    c.strokeStyle = Math.sin(a) > 0.3 ? "#2a1c10" : "#6a4a2a"; c.lineWidth = 1.5; c.beginPath(); c.moveTo(p0[0], p0[1]); c.lineTo(p1[0], p1[1]); c.stroke();
+  }
+  draw(3, true);
+  // churned water and spray at the foot
+  const [wx, wy] = I.p(0, 0, 0);
+  c.fillStyle = "rgba(200,214,206,0.55)"; c.beginPath(); c.ellipse(wx + 1, wy + 1, 11, 3, 0, 0, Math.PI * 2); c.fill();
+  c.fillStyle = "rgba(240,248,244,0.7)";
+  for (let k = 0; k < 10; k++) { const a = k / 10 * Math.PI * 2; c.beginPath(); c.arc(wx + Math.cos(a) * (6 + (k % 3) * 2), wy + Math.sin(a) * 2 - (k % 2) * 1.5, 0.6 + (k % 3) * 0.3, 0, Math.PI * 2); c.fill(); }
 }
 
 function anvilTile(c: Ctx, I: Iso) { c.save(); c.translate(0, 6); anvil(c); c.restore(); void I; }
