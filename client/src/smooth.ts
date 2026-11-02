@@ -88,13 +88,12 @@ export function smoothCopy(img: HTMLCanvasElement | HTMLImageElement, key = ""):
   const cx = c.getContext("2d", { willReadFrequently: true })!;
   cx.drawImage(img, 0, 0);
   let px = new Uint32Array(cx.getImageData(0, 0, w, h).data.buffer);
-  px = scale2x(px, w, h);
-  px = scale2x(px, w * 2, h * 2);
+  px = scale2x(px, w, h); // 2x: about the shared pixel grid's density (pixelgrid.ts), without rounding edges away
   const out = document.createElement("canvas");
-  out.width = w * 4; out.height = h * 4;
+  out.width = w * 2; out.height = h * 2;
   const data = new Uint8ClampedArray(px.buffer);
-  if (WEATHER.test(key)) weather(data, w * 4, h * 4, 8);
-  out.getContext("2d")!.putImageData(new ImageData(data, w * 4, h * 4), 0, 0);
+  if (WEATHER.test(key)) weather(data, w * 2, h * 2, 4);
+  out.getContext("2d")!.putImageData(new ImageData(data, w * 2, h * 2), 0, 0);
   return out;
 }
 

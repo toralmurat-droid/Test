@@ -29,6 +29,7 @@ import { TalentMenu } from "./talents";
 import { IdeaBoard } from "./ideas";
 import { ISO, IsoView, isoAnchor, isoInput, screenDir } from "./iso";
 import { SMOOTH } from "./isoflag";
+import { addPixelGrid } from "./pixelgrid";
 import { paintSmoothProps } from "./smoothProps";
 import { ChestLayer } from "./chests";
 
@@ -144,6 +145,7 @@ export class TownScene extends Phaser.Scene {
       cm.saturate(-0.22);
       cm.contrast(0.12, true);
       cam.postFX.addVignette(0.5, 0.5, 0.92, 0.42);
+      addPixelGrid(cam); // one pixel density for everything in the world
     }
     if (ISO) this.iso = new IsoView(this);
 
