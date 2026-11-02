@@ -2,6 +2,7 @@ import Phaser from "phaser";
 import { ART_K as K, MAP_H, MAP_W, TILE } from "../../shared/constants";
 import { AREAS, EMPTY, GROUND, OBJECTS, T } from "../../shared/map";
 import { ANIMATED_TILES, drawTileFrame } from "./tileset";
+import { ISO, isoAnchor } from "./iso";
 
 /**
  * Living-world layer for Oakvale. Purely cosmetic and client-side (collision still comes from shared/map.ts):
@@ -270,7 +271,7 @@ export class Ambient {
   }
 
   private smoke(x: number, y: number, scale: number) {
-    this.scene.add.particles(x, y, "puff", {
+    return this.scene.add.particles(x, y, "puff", {
       lifespan: { min: 2600, max: 3600 },
       speedY: { min: -12 * K, max: -7 * K },
       speedX: { min: (WIND_X - 2) * K, max: (WIND_X + 3) * K },
@@ -285,6 +286,21 @@ export class Ambient {
     for (let y = 0; y < MAP_H; y++) for (let x = 0; x < MAP_W; x++) {
       if (OBJECTS[y][x] !== T.CAMPFIRE) continue;
       const cx = (x + 0.5) * TILE, cy = y * TILE + 9 * K;
+      if (ISO) {
+        // Iso: a small upright fire (stone ring, crossed logs, flames) instead of the flat tile; sparks and smoke rise from its flames
+        const fy = (y + 0.5) * TILE;
+        this.bonfireTexture();
+        this.scene.add.sprite(cx, fy, "bonfire", 0).setOrigin(0.5, 46 / 56).setScale(0.42).setDepth(fy).play({ key: "bonfire_burn", startFrame: (x + y) % 6 });
+        const glow = this.scene.add.image(cx, fy, "glow").setTint(0xffa040).setScale(6 * K).setAlpha(0.25).setBlendMode(Phaser.BlendModes.ADD).setDepth(-0.8);
+        this.scene.tweens.add({ targets: glow, alpha: 0.4, scale: 6.6 * K, duration: 180, yoyo: true, repeat: -1, ease: "Sine.easeInOut", repeatDelay: 60 });
+        const sparks = this.scene.add.particles(cx, fy - 9 * K, "spark", {
+          lifespan: { min: 500, max: 1100 }, speedY: { min: -30 * K, max: -14 * K }, speedX: { min: -8 * K, max: 10 * K },
+          scale: { start: 1.5, end: 0.4 }, alpha: { start: 1, end: 0 }, frequency: 140, blendMode: "ADD",
+        }).setDepth(25000);
+        isoAnchor(sparks, { x: cx, y: fy });
+        isoAnchor(this.smoke(cx, fy - 14 * K, 0.7), { x: cx, y: fy });
+        continue;
+      }
       const glow = this.scene.add.image(cx, cy, "glow").setTint(0xffa040).setScale(6 * K).setAlpha(0.25).setBlendMode(Phaser.BlendModes.ADD).setDepth(-0.8);
       this.scene.tweens.add({ targets: glow, alpha: 0.4, scale: 6.6 * K, duration: 180, yoyo: true, repeat: -1, ease: "Sine.easeInOut", repeatDelay: 60 });
       this.scene.add.particles(cx, cy - 2 * K, "spark", {

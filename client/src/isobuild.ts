@@ -1,6 +1,6 @@
 import Phaser from "phaser";
 import { TILE } from "../../shared/constants";
-import { OBJECTS, T, TILE_COUNT } from "../../shared/map";
+import { BARNS, OBJECTS, T, TILE_COUNT } from "../../shared/map";
 
 /**
  * Iso buildings (phase 4 polish): whole houses with walls and a pitched roof, and the materials used for
@@ -105,6 +105,8 @@ export interface Building {
   /** Screen box (projected coordinates). */
   left: number; right: number; top: number; bottom: number;
   faded: boolean;
+  /** Alpha when see-through (default 0.45). */
+  fadeTo?: number;
 }
 export const BUILDINGS: Building[] = [];
 
@@ -250,8 +252,8 @@ function house(scene: Phaser.Scene, x0: number, y0: number, x1: number, yb: numb
  * the hero walks behind it.
  */
 function sliced(scene: Phaser.Scene, key: string, X0: number, Y0: number, X1: number, Y1: number,
-  left: number, topY: number, cw: number, ch: number, fade: boolean) {
-  const b: Building = { X0, Y0, X1, Y1, strips: [], left, right: left + cw, top: topY, bottom: topY + ch, faded: false };
+  left: number, topY: number, cw: number, ch: number, fade: boolean, fadeTo?: number) {
+  const b: Building = { X0, Y0, X1, Y1, strips: [], left, right: left + cw, top: topY, bottom: topY + ch, faded: false, fadeTo };
   const SW = 8;
   const front = P(X1, Y1).x; // screen x of the front corner
   for (let x = 0; x < cw; x += SW) {
@@ -448,4 +450,184 @@ export function ruinWallTexture(scene: Phaser.Scene, stone: boolean, mask: numbe
   for (const { s, k: shadeK } of all) box(s.x0, s.y0, s.x1, s.y1, s.h, shadeK);
   tex.refresh();
   return { key, up: MAXH + PAD + 16 };
+}
+
+// ---------- walk-in barns ----------
+
+/** Red barn boards, upright, with dark seams and weathering. */
+const barnFace = () => mat("barnFace", (c) => {
+  const tones = ["#a23324", "#9a2e20", "#ad3a2a", "#932b1e"];
+  for (let i = 0; i < 8; i++) {
+    px(c, i * 4, 0, 4, 32, tones[Math.floor(hash(i, 2, 31) * tones.length)]);
+    px(c, i * 4, 0, 1, 32, "#6e1d14");
+    px(c, i * 4 + 1, 0, 1, 32, "rgba(255,190,160,0.12)");
+    for (let k = 0; k < 3; k++) if (hash(i, k, 32) < 0.5) px(c, i * 4 + 2, Math.floor(hash(i, k, 33) * 30), 1, 2, "#7f2418");
+  }
+});
+/** Weathered grey-brown wooden shingles. */
+const barnRoof = () => mat("barnRoof", (c) => {
+  const tones = ["#5d5048", "#544840", "#665850", "#4d423b", "#6c5e54"];
+  for (let r = 0; r < 8; r++) for (let b = -1; b < 6; b++) {
+    const x = b * 6 + (r % 2 ? 3 : 0), y = r * 4;
+    px(c, x, y, 6, 4, tones[Math.floor(hash(b + 7, r, 41) * tones.length)]);
+    px(c, x, y + 3, 6, 1, "#3a302a");
+    px(c, x + 5, y, 1, 4, "#41372f");
+    px(c, x, y, 5, 1, "rgba(255,240,220,0.10)");
+  }
+});
+const barnCap = () => mat("barnCap", (c) => {
+  px(c, 0, 0, 32, 32, "#e8e0d0");
+  for (let i = 0; i < 8; i++) px(c, 0, i * 4 + 3, 32, 1, "#c9bfae");
+});
+
+const BARN_H = 40, BARN_T = 9; // wall height and plank wall thickness (world px)
+
+/** The barns of BARNS: plank walls you can walk between, open doors, a gambrel roof that fades when you go in. */
+export function buildBarns(scene: Phaser.Scene): Set<number> {
+  const used = new Set<number>();
+  const W = OBJECTS[0].length;
+  for (const b of BARNS) {
+    for (let ty = b.y; ty < b.y + b.h; ty++) for (let tx = b.x; tx < b.x + b.w; tx++) {
+      const edge = tx === b.x || tx === b.x + b.w - 1 || ty === b.y || ty === b.y + b.h - 1;
+      if (!edge) continue;
+      const door = ty === b.y + b.h - 1 && tx >= b.door0 && tx <= b.door1;
+      if (!door) barnWall(scene, b, tx, ty);
+      used.add(ty * W + tx);
+    }
+    barnRoofImage(scene, b);
+  }
+  return used;
+}
+
+type Box = { x0: number; y0: number; x1: number; y1: number; z0?: number; h: number; door?: boolean };
+
+function barnWall(scene: Phaser.Scene, b: typeof BARNS[number], tx: number, ty: number) {
+  const boxes: Box[] = [], T2 = BARN_T;
+  const back = ty === b.y, front = ty === b.y + b.h - 1, west = tx === b.x, east = tx === b.x + b.w - 1;
+  if (back) boxes.push({ x0: 0, y0: 0, x1: 32, y1: T2, h: BARN_H });
+  if (west) boxes.push({ x0: 0, y0: 0, x1: T2, y1: 32, h: BARN_H });
+  if (east) boxes.push({ x0: 32 - T2, y0: 0, x1: 32, y1: 32, h: BARN_H });
+  if (front) boxes.push({ x0: 0, y0: 32 - T2, x1: 32, y1: 32, h: BARN_H });
+  // big doors swung open flat against the front wall
+  if (front && tx === b.door0 - 1) boxes.push({ x0: -16, y0: 32, x1: 32, y1: 35, h: BARN_H - 6, door: true });
+  if (front && tx === b.door1 + 1) boxes.push({ x0: 0, y0: 32, x1: 48, y1: 35, h: BARN_H - 6, door: true });
+  const key = `barnwall_${tx}_${ty}`;
+  const CW = 128, PAD = BARN_H + 12, CH = 32 + 32 + PAD;
+  const tex = scene.textures.createCanvas(key, CW, CH)!;
+  const ctx = tex.getContext();
+  ctx.imageSmoothingEnabled = false;
+  const S = (x: number, y: number, z: number): Pt => ({ x: x - y + CW / 2, y: (x + y) / 2 - z + PAD });
+  const face = barnFace(), cap = barnCap();
+  boxes.sort((a, c) => (a.x0 + a.y0) - (c.x0 + c.y0));
+  // contact shadow
+  ctx.fillStyle = "rgba(0,0,0,0.16)";
+  for (const q of boxes) {
+    const p = [S(q.x0, q.y1, 0), S(q.x1 + 4, q.y1 + 4, 0), S(q.x1 + 4, q.y0 + 4, 0), S(q.x1, q.y0, 0)];
+    ctx.beginPath(); p.forEach((r, i) => (i ? ctx.lineTo(r.x, r.y) : ctx.moveTo(r.x, r.y))); ctx.closePath(); ctx.fill();
+  }
+  for (const q of boxes) {
+    const { x0, y0, x1, y1, h } = q;
+    const top = [S(x0, y0, h), S(x1, y0, h), S(x1, y1, h), S(x0, y1, h)];
+    const sw = [S(x0, y1, h), S(x1, y1, h), S(x1, y1, 0), S(x0, y1, 0)];
+    const se = [S(x1, y0, h), S(x1, y1, h), S(x1, y1, 0), S(x1, y0, 0)];
+    texPoly(ctx, sw, face, 0, 0, S(x0, y1, h), { x: 1, y: 0.5 }, { x: 0, y: 1 }, Math.ceil((x1 - x0) / TILE) + 1, 2, 0.1);
+    texPoly(ctx, se, face, 0, 0, S(x1, y0, h), { x: -1, y: 0.5 }, { x: 0, y: 1 }, Math.ceil((y1 - y0) / TILE) + 1, 2, 0.34);
+    texPoly(ctx, top, cap, 0, 0, S(x0, y0, h), { x: 1, y: 0.5 }, { x: -1, y: 0.5 }, 2, 2, 0);
+    // white trim: top rail and foot board
+    line(ctx, S(x0, y1, h - 1), S(x1, y1, h - 1), "#eee6d6", 2);
+    line(ctx, S(x1, y1, h - 1), S(x1, y0, h - 1), "#c9bfae", 2);
+    line(ctx, S(x0, y1, 1), S(x1, y1, 1), "rgba(60,20,10,0.6)", 2);
+    if (q.door) {
+      // white frame and cross brace on the door leaf
+      const a = S(x0 + 2, y1, h - 2), bb = S(x1 - 2, y1, h - 2), c = S(x1 - 2, y1, 2), d = S(x0 + 2, y1, 2);
+      ctx.strokeStyle = "#f0e8d8"; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(bb.x, bb.y); ctx.lineTo(c.x, c.y); ctx.lineTo(d.x, d.y); ctx.closePath();
+      ctx.moveTo(a.x, a.y); ctx.lineTo(c.x, c.y); ctx.moveTo(bb.x, bb.y); ctx.lineTo(d.x, d.y); ctx.stroke();
+      const m = S((x0 + x1) / 2, y1, h / 2);
+      ctx.fillStyle = "#3a2a1e"; ctx.fillRect(Math.round(m.x) - 1, Math.round(m.y) - 1, 2, 2);
+    }
+  }
+  // white corner boards on the outside corners
+  const corner = (x: number, y: number) => line(ctx, S(x, y, BARN_H), S(x, y, 0), "#e8e0d0", 3);
+  if (front && east) corner(32, 32);
+  if (front && west) corner(0, 32);
+  if (back && east) corner(32, 0);
+  tex.refresh();
+  const cx = (tx + 0.5) * TILE, cy = (ty + 0.5) * TILE;
+  scene.add.image(cx, cy, key).setOrigin(0.5, (16 + PAD) / CH).setDepth(cy);
+}
+
+function barnRoofImage(scene: Phaser.Scene, b: typeof BARNS[number]) {
+  const X0 = b.x * TILE, X1 = (b.x + b.w) * TILE, Y0 = b.y * TILE, Y1 = (b.y + b.h) * TILE;
+  const E = BARN_H, D = Y1 - Y0, KI = Math.round(D * 0.22), KZ = 36, RZ = KZ + 20, o = 7;
+  const ym = (Y0 + Y1) / 2, eaveZ = E - Math.round((o * KZ) / KI);
+  const left = P(X0 - o, Y1 + o).x - 4, right = P(X1 + o, Y0 - o).x + 4;
+  const topY = P(X0 - o, Y0 - o, E + RZ + 24).y - 6, bottom = P(X1 + o, Y1 + o, eaveZ).y + 6;
+  const cw = Math.ceil(right - left), ch = Math.ceil(bottom - topY);
+  const key = `barnroof_${b.x}_${b.y}`;
+  const tex = scene.textures.createCanvas(key, cw, ch)!;
+  const ctx = tex.getContext();
+  ctx.imageSmoothingEnabled = false;
+  const S = (x: number, y: number, z = 0): Pt => { const p = P(x, y, z); return { x: p.x - left, y: p.y - topY }; };
+  const sub = (a: Pt, c: Pt): Pt => ({ x: a.x - c.x, y: a.y - c.y });
+  const poly = (pts: Pt[], fill: string) => {
+    ctx.beginPath(); pts.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y))); ctx.closePath(); ctx.fillStyle = fill; ctx.fill();
+  };
+  const roof = barnRoof(), face = barnFace();
+  // a roof plane from an eave line (ya, za) up to (yb, zb), along the whole length: shingles in world px
+  const plane = (ya: number, za: number, yb: number, zb: number, shade: number) => {
+    const A = S(X0 - o, ya, za), B = S(X1 + o, ya, za), C = S(X1 + o, yb, zb), Dd = S(X0 - o, yb, zb);
+    const len = Math.hypot(yb - ya, zb - za);
+    const v = { x: (Dd.x - A.x) / len, y: (Dd.y - A.y) / len };
+    texPoly(ctx, [A, B, C, Dd], roof, 0, 0, A, { x: 1, y: 0.5 }, v, Math.ceil((X1 - X0 + 2 * o) / TILE) + 1, Math.ceil(len / TILE) + 1, shade);
+  };
+  // back slopes (only their top shows)
+  plane(Y0 - o, eaveZ, Y0 + KI, E + KZ, 0.5);
+  plane(Y0 + KI, E + KZ, ym, E + RZ, 0.4);
+  // east gable: the wall goes on up under the roof, with a hayloft door
+  const g = [S(X1, Y0, E), S(X1, Y0 + KI, E + KZ), S(X1, ym, E + RZ), S(X1, Y1 - KI, E + KZ), S(X1, Y1, E)];
+  texPoly(ctx, g, face, 0, 0, S(X1, Y0, E + RZ), { x: -1, y: 0.5 }, { x: 0, y: 1 }, Math.ceil(D / TILE) + 1, Math.ceil(RZ / TILE) + 1, 0.34);
+  line(ctx, S(X1, Y0, E), S(X1, Y1, E), "#e8e0d0", 2);
+  const hw = 14, hz0 = E + 6, hz1 = E + 34;
+  const hd = [S(X1, ym - hw, hz1), S(X1, ym + hw, hz1), S(X1, ym + hw, hz0), S(X1, ym - hw, hz0)];
+  poly(hd, "#7a2318");
+  ctx.strokeStyle = "#f0e8d8"; ctx.lineWidth = 2;
+  ctx.beginPath(); hd.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y))); ctx.closePath();
+  ctx.moveTo(hd[0].x, hd[0].y); ctx.lineTo(hd[2].x, hd[2].y); ctx.moveTo(hd[1].x, hd[1].y); ctx.lineTo(hd[3].x, hd[3].y); ctx.stroke();
+  // hay beam sticking out above the loft door, with a pulley
+  const bm0 = S(X1, ym, E + RZ - 8), bm1 = S(X1 + 14, ym, E + RZ - 8);
+  line(ctx, bm0, bm1, "#4a3020", 3);
+  line(ctx, S(X1 + 12, ym, E + RZ - 9), S(X1 + 12, ym, E + RZ - 20), "#2a1e14", 1);
+  // lintel over the open doorway
+  const dx0 = b.door0 * TILE, dx1 = (b.door1 + 1) * TILE, LZ = E - 9;
+  poly([S(dx0, Y1, E), S(dx1, Y1, E), S(dx1, Y1, LZ), S(dx0, Y1, LZ)], "#8a281c");
+  poly([S(dx0, Y1, LZ), S(dx1, Y1, LZ), S(dx1, Y1 - BARN_T, LZ), S(dx0, Y1 - BARN_T, LZ)], "#4a1a12");
+  line(ctx, S(dx0, Y1, LZ), S(dx1, Y1, LZ), "#eee6d6", 2);
+  line(ctx, S(dx0, Y1, E - 1), S(dx1, Y1, E - 1), "#eee6d6", 2);
+  // front slopes: steep lower, shallow upper
+  plane(Y1 + o, eaveZ, Y1 - KI, E + KZ, 0.04);
+  plane(Y1 - KI, E + KZ, ym, E + RZ, 0);
+  // edges: eave boards, the knee, the gable rake and the ridge
+  line(ctx, S(X0 - o, Y1 + o, eaveZ), S(X1 + o, Y1 + o, eaveZ), "#e8e0d0", 2);
+  line(ctx, S(X0 - o, Y1 - KI, E + KZ), S(X1 + o, Y1 - KI, E + KZ), "rgba(30,22,16,0.55)", 1);
+  ctx.strokeStyle = "#e8e0d0"; ctx.lineWidth = 2; ctx.beginPath();
+  for (const [i, p] of [S(X1 + o, Y1 + o, eaveZ), S(X1 + o, Y1 - KI, E + KZ), S(X1 + o, ym, E + RZ), S(X1 + o, Y0 + KI, E + KZ), S(X1 + o, Y0 - o, eaveZ)].entries()) i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y);
+  ctx.stroke();
+  line(ctx, S(X0 - o, ym, E + RZ + 1), S(X1 + o, ym, E + RZ + 1), "#3a302a", 2);
+  // a little louvred cupola on the ridge with a weather vane
+  const cx = (X0 + X1) / 2, cs = 9, cz0 = E + RZ - 4, cz1 = E + RZ + 12;
+  const cube = (z0: number, z1: number, col1: string, col2: string, s2 = cs) => {
+    poly([S(cx - s2, ym + s2, z1), S(cx + s2, ym + s2, z1), S(cx + s2, ym + s2, z0), S(cx - s2, ym + s2, z0)], col1);
+    poly([S(cx + s2, ym - s2, z1), S(cx + s2, ym + s2, z1), S(cx + s2, ym + s2, z0), S(cx + s2, ym - s2, z0)], col2);
+  };
+  cube(cz0, cz1, "#b03a2a", "#8a281c");
+  for (let k = 0; k < 3; k++) line(ctx, S(cx - cs + 2, ym + cs, cz0 + 5 + k * 3), S(cx + cs - 2, ym + cs, cz0 + 5 + k * 3), "#3a1a12");
+  const apex = S(cx, ym, cz1 + 10);
+  poly([S(cx - cs - 2, ym + cs + 2, cz1), S(cx + cs + 2, ym + cs + 2, cz1), apex], "#5d5048");
+  poly([S(cx + cs + 2, ym - cs - 2, cz1), S(cx + cs + 2, ym + cs + 2, cz1), apex], "#4a3f38");
+  line(ctx, apex, S(cx, ym, cz1 + 20), "#2a2a2a", 1);
+  line(ctx, S(cx - 5, ym, cz1 + 17), S(cx + 5, ym, cz1 + 17), "#2a2a2a", 1);
+  void sub;
+  tex.refresh();
+  sliced(scene, key, X0, Y0, X1, Y1, left, topY, cw, ch, true, 0.22);
 }
