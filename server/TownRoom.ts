@@ -169,6 +169,8 @@ export class Projectile extends Schema {
   knockback = 1;
   ignite = false; // wizard Ignite power: splash on impact
   pierce = 0; // archer: extra targets the arrow can pass through
+  mobLevel = 0; // > 0: a monster's shot (only hurts players); its level, kept even if the shooter dies mid-flight
+  mobName = "";
   slowMs = 0; // archer Pinning Shot
   hitIds = new Set<string>();
   traveled = 0;
@@ -519,7 +521,7 @@ export class TownRoom extends Room<TownState> {
     const dx = tx - m.x, dy = ty - m.y, d = Math.hypot(dx, dy) || 1;
     const cfg = RANGED[m.kind]!;
     s.x = m.x; s.y = m.y - 4; s.vx = dx / d; s.vy = dy / d;
-    s.owner = id; s.kind = cfg.shot;
+    s.owner = id; s.kind = cfg.shot; s.mobLevel = m.level || 1; s.mobName = MOBS[m.kind].name;
     s.speed = cfg.shotSpeed; s.range = cfg.range * 1.4; s.radius = cfg.shotRadius;
     s.damage = Math.round(MOBS[m.kind].damage * mobScale(m.level, "damage") * (cfg.mult ?? 1));
     this.state.projectiles.set(`s${++this.shotSeq}`, s);
@@ -917,12 +919,18 @@ export class TownRoom extends Room<TownState> {
       s.y += (oy * total) / steps;
       s.traveled += total / steps;
       if (isSolidAt(s.x, s.y) || s.traveled >= s.range) return this.explode(s, id);
-      const shooter = this.state.mobs.get(s.owner);
-      if (shooter) {
-        // A monster's shot only hits players
+      if (s.mobLevel > 0) {
+        // A monster's shot only hits players, once: it is used up on the first player it can hurt.
+        // (It used to stay alive unless the hit was a kill, so it pushed and hurt the player every tick.)
+        const now = Date.now();
         let pid = "";
-        this.state.players.forEach((p, k) => { if (!pid && !p.dead && Math.hypot(p.x - s.x, p.y - s.y) <= s.radius + HIT_RADIUS) pid = k; });
-        if (pid && this.damagePlayer(pid, s.damage, MOBS[shooter.kind].name, [s.vx, s.vy], 0.5, { atkLevel: shooter.level })) return this.explode(s, id, pid);
+        this.state.players.forEach((p, k) => {
+          if (!pid && !p.dead && !isSafeZone(p.x, p.y) && now >= p.invulnUntil && Math.hypot(p.x - s.x, p.y - s.y) <= s.radius + HIT_RADIUS) pid = k;
+        });
+        if (pid) {
+          this.damagePlayer(pid, s.damage, s.mobName, [s.vx, s.vy], 0.5, { atkLevel: s.mobLevel });
+          return this.explode(s, id, pid);
+        }
         continue;
       }
       const hit = this.firstTargetAt(s.x, s.y, s.radius + HIT_RADIUS, s.owner, s.hitIds);
