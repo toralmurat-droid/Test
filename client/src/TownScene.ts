@@ -77,6 +77,9 @@ const CONGRATS = [
 /** Pixel font (loaded with the NPC styles) for new in-world text. */
 const PIXEL_FONT = "'Pixelify Sans', monospace";
 
+/** Goo colours of the blobs (match their painted sheets), for the splash when one is struck. */
+const GOO: Record<string, number> = { slime: 0x5fae4c, blobling: 0x8cc955, shooterblob: 0x7f5cb8, warriorblob: 0xb94a32, healerblob: 0xd9aec6 };
+
 export class TownScene extends Phaser.Scene {
   private room!: Room;
   private me = "";
@@ -269,8 +272,8 @@ export class TownScene extends Phaser.Scene {
         const e = this.entities.get(id);
         if (!e) return;
         e.tx = m.x; e.ty = m.y;
-        // A respawned Mother Blob can come back at another level, with another look
-        if (m.kind === "motherblob") { const key = mobTexture(this, m.kind, m.level); if (e.sprite.texture.key !== key) e.sprite.setTexture(key, 0); }
+        // A respawned Mother Blob can come back at another level, a skeleton with another weapon
+        if (m.kind === "motherblob" || m.kind === "skeleton") { const key = mobTexture(this, m.kind, m.level, m.weapon); if (e.sprite.texture.key !== key) e.sprite.setTexture(key, 0); }
         if (Math.hypot(e.sprite.x - m.x, e.sprite.y - m.y) > 48) e.sprite.setPosition(m.x, m.y);
       });
     });
@@ -468,6 +471,7 @@ export class TownScene extends Phaser.Scene {
       e.sprite.setTintFill(0xffffff);
       this.time.delayedCall(80, () => e.sprite.clearTint());
       if (e.hero && !e.state.dead) playCharAnim(e.sprite, e.hero, "hit", this.dirOf(e));
+      if (e.mob) this.gooSplat(e, dmg);
       if (id === this.me) this.cameras.main.shake(100, 0.004);
     });
     // Initiative broken (shared/combat.ts): the target is dizzy and can't attack for a moment
@@ -566,7 +570,7 @@ export class TownScene extends Phaser.Scene {
 
   private addEntity(id: string, p: any, mob = false) {
     if (mob) {
-      const sprite = this.add.sprite(p.x, p.y, mobTexture(this, p.kind, p.level), 0).setOrigin(0.5, MOB_LOOK[p.kind]?.oy ?? 0.85)
+      const sprite = this.add.sprite(p.x, p.y, mobTexture(this, p.kind, p.level, p.weapon), 0).setOrigin(0.5, MOB_LOOK[p.kind]?.oy ?? 0.85)
         .setScale(MOB_LOOK[p.kind]?.scale ?? 1);
       // The level tag is made when the monster comes on screen (see update): thousands of text canvases would cost a lot
       this.entities.set(id, { sprite, bar: isoAnchor(this.add.graphics(), sprite) as Phaser.GameObjects.Graphics, tx: p.x, ty: p.y, state: p, mob, top: MOB_LOOK[p.kind]?.top ?? 14 });
@@ -644,6 +648,36 @@ export class TownScene extends Phaser.Scene {
     if (cls?.projectile) return; // the fireball itself is the visual
     // No hit-area shapes (Murat): the attack animation is the visual; the finisher still shakes the camera
     if (step === 2 && id === this.me) this.cameras.main.shake(80, 0.003);
+  }
+
+  /** A struck blob loses some goo: blobs of slime fly off in little arcs and splat on the ground, then soak away. */
+  private gooSplat(e: { sprite: Phaser.GameObjects.Sprite; state: any; top: number }, dmg: number) {
+    const k = e.state.kind as string, lvl = e.state.level ?? 1;
+    const col = k === "motherblob" ? (lvl >= 10 ? 0x553b96 : lvl >= 5 ? 0x2c8796 : 0x3a9684) : GOO[k];
+    if (col === undefined) return;
+    const dark = Phaser.Display.Color.ValueToColor(col).darken(25).color;
+    const big = k === "motherblob" ? 1.6 : k === "blobling" ? 0.6 : 1;
+    const bx = e.sprite.x, by = e.sprite.y, n = Math.min(12, Math.round((4 + dmg / 6) * big));
+    for (let i = 0; i < n; i++) {
+      const sz = Math.random() < 0.3 ? 2 : 1.5, c = Math.random() < 0.35 ? dark : col;
+      const x0 = bx + (Math.random() - 0.5) * 6 * big, y0 = by - e.top * (0.35 + Math.random() * 0.3);
+      const dx = (Math.random() - 0.5) * 44 * big, land = by + (Math.random() - 0.3) * 5 * big, peak = 5 + Math.random() * 10 * big;
+      const d = this.add.rectangle(x0, y0, sz, sz, c).setDepth(by + 1); // world depth: iso view re-sorts it by the blob's feet
+      isoAnchor(d, { x: bx, y: by });
+      const ms = 260 + Math.random() * 200;
+      this.tweens.addCounter({
+        from: 0, to: 1, duration: ms,
+        onUpdate: (tw) => { const t = tw.getValue() ?? 0; d.setPosition(x0 + dx * t, y0 + (land - y0) * t - peak * 4 * t * (1 - t)); },
+        onComplete: () => {
+          // splat: a flat little puddle that stays a moment
+          d.setSize(sz + 1 + Math.random() * 2, 1).setDepth(by - 0.5).setAlpha(0.85);
+          this.tweens.add({ targets: d, alpha: 0, delay: 500 + Math.random() * 700, duration: 700, onComplete: () => d.destroy() });
+        },
+      });
+    }
+    // a wobble of the body as the goo tears off
+    const sx = e.sprite.scaleX, sy = e.sprite.scaleY;
+    if (!this.tweens.isTweening(e.sprite)) this.tweens.add({ targets: e.sprite, scaleX: sx * 1.12, scaleY: sy * 0.86, duration: 70, yoyo: true, ease: "Quad.easeOut", onComplete: () => e.sprite.setScale(sx, sy) });
   }
 
   private burst(x: number, y: number, r: number, color: number, ms: number) {

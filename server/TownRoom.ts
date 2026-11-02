@@ -2,7 +2,7 @@ import type { IncomingMessage } from "node:http";
 import { Client, Room } from "colyseus";
 import { ArraySchema, MapSchema, Schema, type } from "@colyseus/schema";
 import {
-  BLOB_AI, BROOD, Dir, MOTHER, SKELETON_AI, HIT_RADIUS, mobScale, InputState, MOB_ATTACK_RANGE, MOBS, MobKind, REGEN_DELAY_MS, REGEN_RAMP_MS, regenFromStamina, SAFE_REGEN_MULT,
+  BLOB_AI, BROOD, Dir, MOTHER, SKELETON_AI, HIT_RADIUS, mobScale, InputState, MOB_ATTACK_RANGE, MOBS, MobKind, rollSkeletonWeapon, SKELETON_BOW, SKELETON_WEAPONS, SkeletonWeapon, REGEN_DELAY_MS, REGEN_RAMP_MS, regenFromStamina, SAFE_REGEN_MULT,
   RESPAWN_MS, TICK_RATE, TILE,
 } from "../shared/constants";
 import {
@@ -71,7 +71,7 @@ export class Player extends Schema {
   @type("boolean") broken = false; // poise broken: dizzy, can't attack (shared/combat.ts)
   @type("number") energy = 100; // Stamina / Magic (ENERGY in shared/classes.ts)
   // Equipment (shared/gear.ts): equipped item ids ("" = empty) and the unequipped items carried
-  @type("string") weapon = "";
+  weapon = "";
   @type("string") armour = "";
   @type("string") shoes = "";
   @type("string") hat = "";
@@ -115,6 +115,7 @@ export class Player extends Schema {
 export class Mob extends Schema {
   @type("string") kind: MobKind = "slime";
   @type("number") level = 1;
+  @type("string") weapon = ""; // skeletons: sword, axe, spear or bow (SKELETON_WEAPONS)
   @type("boolean") hidden = false; // tucked into a grave/tree: untouchable, only its eyes show
 
   spot = ""; // hiding spot (tile "x,y") it is heading to or sitting in
@@ -289,11 +290,20 @@ function toward(x: number, y: number, tx: number, ty: number): InputState {
 const SLEEP_RANGE = 40 * TILE;
 
 /** Monsters that fight from range: how close they let you come, how far they chase, and their shot (none for healers). */
-const RANGED: Partial<Record<MobKind, { keepAway: number; far: number; range: number; shot: string; shotSpeed: number; shotRadius: number; mult?: number }>> = {
+type RangedCfg = { keepAway: number; far: number; range: number; shot: string; shotSpeed: number; shotRadius: number; mult?: number };
+const RANGED: Partial<Record<MobKind, RangedCfg>> = {
   shooterblob: { ...BLOB_AI.shooter, far: BLOB_AI.shooter.range * 0.85, shot: "slimeball" },
   healerblob: { keepAway: BLOB_AI.healer.keepAway, far: BLOB_AI.healer.range, range: BLOB_AI.healer.range, shot: "", shotSpeed: 0, shotRadius: 0 },
   skeletonmage: { ...SKELETON_AI.mage, far: SKELETON_AI.mage.range * 0.85, shot: "magicbolt" },
   necromancer: { ...SKELETON_AI.necro, far: SKELETON_AI.necro.range * 0.8, shot: "shadowbolt", mult: SKELETON_AI.necro.boltMult },
+};
+
+const BOW_SKELETON: RangedCfg = { ...SKELETON_BOW, range: SKELETON_WEAPONS.bow.range, far: SKELETON_WEAPONS.bow.range * 0.85, shot: "arrow", mult: SKELETON_WEAPONS.bow.dmg };
+const rangedOf = (m: Mob): RangedCfg | undefined => m.kind === "skeleton" && m.weapon === "bow" ? BOW_SKELETON : RANGED[m.kind];
+/** Melee reach, damage, cooldown and wind-up of a monster (skeletons depend on their weapon). */
+const meleeOf = (m: Mob) => {
+  const w = m.kind === "skeleton" ? SKELETON_WEAPONS[(m.weapon || "sword") as SkeletonWeapon] : undefined;
+  return { range: w?.range ?? MOB_ATTACK_RANGE, dmg: w?.dmg ?? 1, cooldown: w?.cooldown ?? 1, windupMs: w?.windupMs ?? MOB_COMBAT[m.kind].windupMs };
 };
 
 export class TownRoom extends Room<TownState> {
@@ -500,6 +510,7 @@ export class TownRoom extends Room<TownState> {
     const home = spawnPoint(SPAWN_ZONES[zi], kind);
     const m = this.state.mobs.get(id) ?? new Mob();
     m.kind = kind;
+    m.weapon = kind === "skeleton" ? rollSkeletonWeapon() : "";
     m.zone = zi;
     m.x = m.homeX = home.x;
     m.y = m.homeY = home.y;
@@ -519,7 +530,7 @@ export class TownRoom extends Room<TownState> {
   private mobShot(m: Mob, id: string, tx: number, ty: number) {
     const s = new Projectile();
     const dx = tx - m.x, dy = ty - m.y, d = Math.hypot(dx, dy) || 1;
-    const cfg = RANGED[m.kind]!;
+    const cfg = rangedOf(m)!;
     s.x = m.x; s.y = m.y - 4; s.vx = dx / d; s.vy = dy / d;
     s.owner = id; s.kind = cfg.shot; s.mobLevel = m.level || 1; s.mobName = MOBS[m.kind].name;
     s.speed = cfg.shotSpeed; s.range = cfg.range * 1.4; s.radius = cfg.shotRadius;
@@ -714,7 +725,7 @@ export class TownRoom extends Room<TownState> {
       const x = n.x + Math.cos(a) * r, y = n.y + Math.sin(a) * r;
       if (isSolidAt(x, y) || isSafeZone(x, y) || noMobsAt(x, y)) continue;
       const c = new Mob();
-      c.kind = "skeleton"; c.zone = -1; c.mother = necroId;
+      c.kind = "skeleton"; c.weapon = rollSkeletonWeapon(); c.zone = -1; c.mother = necroId;
       c.x = c.homeX = x; c.y = c.homeY = y;
       c.level = n.level;
       c.hp = c.maxHp = Math.round(MOBS.skeleton.maxHp * mobScale(c.level, "hp"));
@@ -839,14 +850,15 @@ export class TownRoom extends Room<TownState> {
     if (m.kind === "healerblob" && now >= m.nextHeal) this.blobHeal(m, id, now);
 
     let input: InputState;
-    const ranged = !!RANGED[m.kind];
+    const ranged = !!rangedOf(m);
     if (t && m.broken) {
       // Broken: dizzy, can't fight back, tries to get away from the attacker
       input = toward(m.x, m.y, m.x * 2 - t.x, m.y * 2 - t.y);
     } else if (t && ranged) {
       // Shooters, healers and casters hang back: step away when crowded, close in when too far
       const dist = Math.hypot(t.x - m.x, t.y - m.y);
-      const cfg = RANGED[m.kind]!;
+      const cfg = rangedOf(m)!;
+      const melee = meleeOf(m);
       input = dist < cfg.keepAway ? toward(m.x, m.y, m.x * 2 - t.x, m.y * 2 - t.y) : dist > cfg.far ? toward(m.x, m.y, t.x, t.y) : STILL;
       if (m.kind === "necromancer" && this.necroSpell(m, id, t, dist, now)) input = STILL;
       else if (cfg.shot) {
@@ -856,8 +868,8 @@ export class TownRoom extends Room<TownState> {
             m.windUntil = 0; m.winding = false; m.lastAttack = now;
             if (dist <= cfg.range * 1.2) this.mobShot(m, id, t.x, t.y);
           }
-        } else if (dist <= cfg.range && now - m.lastAttack >= def.attackCooldownMs / poiseSpeed(poiseFrac(m, mobPoiseMax(m)))) {
-          m.windUntil = now + MOB_COMBAT[m.kind].windupMs; m.winding = true;
+        } else if (dist <= cfg.range && now - m.lastAttack >= def.attackCooldownMs * melee.cooldown / poiseSpeed(poiseFrac(m, mobPoiseMax(m)))) {
+          m.windUntil = now + melee.windupMs; m.winding = true;
         }
       }
       if (input === STILL) m.dir = Math.abs(t.x - m.x) > Math.abs(t.y - m.y) ? (t.x > m.x ? "right" : "left") : (t.y > m.y ? "down" : "up");
@@ -870,20 +882,21 @@ export class TownRoom extends Room<TownState> {
         m.chargeUntil = now + BLOB_AI.warrior.chargeMs; m.nextCharge = now + BLOB_AI.warrior.cooldownMs;
         this.broadcast("blobcharge", { id });
       }
-      if (dist <= MOB_ATTACK_RANGE || m.windUntil) {
+      const melee = meleeOf(m);
+      if (dist <= melee.range || m.windUntil) {
         input = STILL;
         m.dir = Math.abs(t.x - m.x) > Math.abs(t.y - m.y) ? (t.x > m.x ? "right" : "left") : (t.y > m.y ? "down" : "up");
         if (m.windUntil) {
           // Wind-up done: the blow lands if the target is still close
           if (now >= m.windUntil) {
             m.windUntil = 0; m.winding = false; m.lastAttack = now;
-            if (dist <= MOB_ATTACK_RANGE + 6) {
+            if (dist <= melee.range + 6) {
               this.broadcast("swing", { id });
-              this.damagePlayer(m.target, Math.round(def.damage * mobScale(m.level, "damage")), def.name, DIR_OFFSET[m.dir], 1, { atkLevel: m.level });
+              this.damagePlayer(m.target, Math.round(def.damage * melee.dmg * mobScale(m.level, "damage")), def.name, DIR_OFFSET[m.dir], 1, { atkLevel: m.level });
             }
           }
-        } else if (now - m.lastAttack >= def.attackCooldownMs / poiseSpeed(poiseFrac(m, mobPoiseMax(m)))) {
-          m.windUntil = now + MOB_COMBAT[m.kind].windupMs; m.winding = true; // telegraph, a hit interrupts it
+        } else if (now - m.lastAttack >= def.attackCooldownMs * melee.cooldown / poiseSpeed(poiseFrac(m, mobPoiseMax(m)))) {
+          m.windUntil = now + melee.windupMs; m.winding = true; // telegraph, a hit interrupts it
         }
       } else {
         input = toward(m.x, m.y, t.x, t.y);

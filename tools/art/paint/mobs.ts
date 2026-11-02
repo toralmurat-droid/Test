@@ -1,7 +1,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { createCanvas } from "@napi-rs/canvas";
 import { MOB_POSES, posed, setPainted, type Dir } from "../characters";
-import { C2, P, css, ellipseP, fillShape, glow, limb, line, metal, mix, rng, sh, vol } from "./brush";
+import { C2, P, blobPath, css, ellipseP, poly, fillShape, glow, limb, line, metal, mix, rng, sh, vol } from "./brush";
 import { pixelAlpha, pixelize, shrink } from "./body";
 
 /**
@@ -68,51 +68,101 @@ function blobFrame(c: C2, w: number, h: number, pal: BlobPal, o: BlobOpts, f: nu
   const sg = sc.createRadialGradient(0, 0, 0, 0, 0, rx + 1);
   sg.addColorStop(0, "rgba(0,0,0,0.45)"); sg.addColorStop(0.7, "rgba(0,0,0,0.35)"); sg.addColorStop(1, "rgba(0,0,0,0)");
   sc.fillStyle = sg; sc.beginPath(); sc.arc(0, 0, rx + 1, 0, Math.PI * 2); sc.fill(); sc.restore();
-  const dome = (cc: C2) => {
-    cc.moveTo(cx - rx, base - 0.3);
-    cc.bezierCurveTo(cx - rx - 0.2, top + ry * 0.05, cx - rx * 0.45, top - ry * 0.02, cx, top);
-    cc.bezierCurveTo(cx + rx * 0.45, top - ry * 0.02, cx + rx + 0.2, top + ry * 0.05, cx + rx, base - 0.3);
-    cc.quadraticCurveTo(cx, base + 0.9, cx - rx, base - 0.3);
-    cc.closePath();
-  };
-  // dark rim first (outline), then the jelly
-  c.save(); c.beginPath(); dome(c); c.strokeStyle = css(sh(pal.D, 0.45), 0.9); c.lineWidth = 0.7; c.stroke(); c.restore();
+  // ---- body: a lumpy, sagging sack of slime (same lumps every frame, a little wobble per frame)
+  const seed = o.seed ?? 3, sr = rng(seed * 977 + 13), ph = [sr() * 6.3, sr() * 6.3, sr() * 6.3], wob = f * 0.7;
+  const lump = (a: number) => 0.06 * Math.sin(a * 3 + ph[0]) + 0.04 * Math.sin(a * 5 + ph[1]) + 0.018 * Math.sin(a * 8 + ph[2] + wob);
+  const pts: P[] = [];
+  const N = 30;
+  for (let k = 0; k <= N; k++) {
+    const a = Math.PI + (k / N) * Math.PI, sag = 1 + 0.16 * Math.pow(1 - Math.abs(Math.sin(a)), 1.6); // bulges low on the sides
+    pts.push([cx + Math.cos(a) * rx * sag * (1 + lump(a)), base - 0.2 + Math.sin(a) * ry * (1 + lump(a) * 0.8)]);
+  }
+  // sloppy underside spreading onto the ground
+  for (let k = 1; k < 8; k++) { const t = k / 8; pts.push([cx + rx * 1.12 - t * rx * 2.24, base + 0.35 + Math.sin(t * 9 + ph[1]) * 0.25]); }
+  const dome = blobPath(pts);
+  const bile = mix(pal.G, 0x8c8a3c, 0.3), gunk = mix(pal.D, 0x2b2a12, 0.35);
+  // puddle of ooze it leaves under itself
+  fillShape(c, ellipseP(cx + 0.2, base + 0.45, rx * 1.2, Math.max(0.7, rx * 0.22)), css(sh(pal.D, 0.75), 0.85));
+  fillShape(c, ellipseP(cx - rx * 0.4, base + 0.3, rx * 0.35, 0.3), css(mix(pal.L, bile, 0.5), 0.6));
+  // dark rim (outline), then the jelly
+  c.save(); c.beginPath(); dome(c); c.strokeStyle = css(sh(gunk, 0.45), 0.9); c.lineWidth = 0.7; c.stroke(); c.restore();
   const g = c.createRadialGradient(cx - rx * 0.35, top + ry * 0.3, 0.2, cx, base - ry * 0.35, Math.max(rx, ry) * 1.25);
-  g.addColorStop(0, css(mix(pal.L, pal.G, 0.35), 0.97)); g.addColorStop(0.45, css(pal.G, 0.94)); g.addColorStop(0.85, css(pal.D, 0.95)); g.addColorStop(1, css(sh(pal.D, 0.6), 0.97));
+  g.addColorStop(0, css(mix(pal.L, bile, 0.5), 0.97)); g.addColorStop(0.4, css(bile, 0.95)); g.addColorStop(0.8, css(pal.D, 0.96)); g.addColorStop(1, css(sh(gunk, 0.6), 0.98));
   c.beginPath(); dome(c); c.fillStyle = g; c.fill();
   c.save(); c.beginPath(); dome(c); c.clip();
-  // subsurface glow near the ground, darker core, floating bubbles
-  const sub = c.createLinearGradient(0, base - ry * 0.4, 0, base + 0.5);
-  sub.addColorStop(0, css(pal.L, 0)); sub.addColorStop(1, css(pal.L, 0.35));
-  c.fillStyle = sub; c.fillRect(cx - rx - 1, base - ry, rx * 2 + 2, ry + 2);
-  const r = rng((o.seed ?? 3) + (squish ? 1 : 0));
-  for (let k = 0; k < Math.max(3, w / 3); k++) {
-    const bx = cx + (r() - 0.5) * rx * 1.4, by = base - 0.8 - r() * ry * 0.75, br = 0.2 + r() * 0.45;
-    c.beginPath(); c.arc(bx, by, br, 0, Math.PI * 2); c.strokeStyle = css(pal.L, 0.45); c.lineWidth = 0.12; c.stroke();
-    fillShape(c, ellipseP(bx - br * 0.35, by - br * 0.35, br * 0.3, br * 0.3), "rgba(255,255,255,0.5)");
+  const r = rng(seed + (squish ? 1 : 0));
+  const rs = rng(seed * 31 + 7); // stable across frames (blotches, debris, pustules)
+  // mottled, unhealthy skin: bilious and bruised blotches
+  for (let k = 0; k < Math.max(5, w / 2); k++) {
+    const bx = cx + (rs() - 0.5) * rx * 1.9, by = base - rs() * ry * 1.05, br = 0.5 + rs() * Math.max(0.8, rx * 0.22);
+    fillShape(c, ellipseP(bx, by, br, br * (0.6 + rs() * 0.5), rs() * 3), css(rs() < 0.5 ? mix(bile, 0xb5b04a, 0.5) : sh(gunk, 0.9), 0.24));
+  }
+  // murky core with things floating in it (a bone, grit, a half-digested leaf)
+  fillShape(c, ellipseP(cx + rx * 0.1, base - ry * 0.32, rx * 0.5, ry * 0.3), css(sh(gunk, 0.8), 0.45));
+  if (w >= 10) {
+    const bx = cx - rx * 0.2 + rs() * rx * 0.3, by = base - ry * 0.3;
+    line(c, [[bx - 1.0, by + 0.3], [bx + 1.0, by - 0.4]], 0xd8d0b0, 0.35, 0.75);
+    for (const [ex, ey] of [[bx - 1.0, by + 0.3], [bx + 1.0, by - 0.4]]) fillShape(c, ellipseP(ex, ey, 0.32, 0.32), css(0xd8d0b0, 0.75));
+    fillShape(c, ellipseP(cx + rx * 0.45, base - ry * 0.22, 0.7, 0.4, 0.6), css(0x5a4a1c, 0.6));
+  }
+  for (let k = 0; k < Math.max(2, w / 5); k++) fillShape(c, ellipseP(cx + (rs() - 0.5) * rx * 1.2, base - 0.6 - rs() * ry * 0.5, 0.18, 0.18), css(0x2a2410, 0.7));
+  // a few greasy bubbles
+  for (let k = 0; k < Math.max(2, w / 5); k++) {
+    const bx = cx + (r() - 0.5) * rx * 1.4, by = base - 0.8 - r() * ry * 0.75, br = 0.2 + r() * 0.35;
+    c.beginPath(); c.arc(bx, by, br, 0, Math.PI * 2); c.strokeStyle = css(mix(pal.L, bile, 0.4), 0.5); c.lineWidth = 0.12; c.stroke();
   }
   if (o.extra?.startsWith("mother")) {
-    // babies curled up inside her
+    // babies curled up inside her, half dissolved
     for (const [bx, by, s] of [[cx - rx * 0.5, base - 2.2, 1.6], [cx + rx * 0.45, base - 3.0, 1.4], [cx + 0.4, base - 1.4, 1.2]]) {
-      fillShape(c, ellipseP(bx, by, s * 1.1, s * 0.8), css(sh(pal.L, 0.95), 0.55));
-      fillShape(c, ellipseP(bx - s * 0.3, by - s * 0.3, s * 0.3, s * 0.2), "rgba(255,255,255,0.5)");
+      fillShape(c, ellipseP(bx, by, s * 1.1, s * 0.8), css(mix(pal.L, bile, 0.5), 0.5));
+      fillShape(c, ellipseP(bx + s * 0.3, by, s * 0.25, s * 0.25), css(gunk, 0.7));
     }
   }
-  // rim lighting along the left edge
-  c.beginPath(); dome(c); c.strokeStyle = css(pal.L, 0.35); c.lineWidth = 0.5; c.translate(0.35, 0.35); c.stroke();
+  // dim rim light along the top-left edge
+  c.beginPath(); dome(c); c.strokeStyle = css(mix(pal.L, bile, 0.3), 0.3); c.lineWidth = 0.5; c.translate(0.35, 0.35); c.stroke();
   c.restore();
-  // glossy highlight
-  fillShape(c, ellipseP(cx - rx * 0.42, top + ry * 0.32, rx * 0.26, ry * 0.15, -0.5), "rgba(255,255,255,0.55)");
-  fillShape(c, ellipseP(cx - rx * 0.5, top + ry * 0.28, rx * 0.08, ry * 0.06), "rgba(255,255,255,0.95)");
-  // face
-  const ey = base - ry * 0.5, gap = Math.max(1, w / 6.5), es = Math.max(0.55, w / 18);
-  const eye = (x: number, y: number) => {
-    fillShape(c, ellipseP(x, y, es * 0.95, es * 1.15), css(0xf4f6ee));
-    fillShape(c, ellipseP(x + (dir === "right" ? es * 0.35 : 0), y + es * 0.15, es * 0.6, es * 0.75), css(pal.E));
-    fillShape(c, ellipseP(x - es * 0.2, y - es * 0.35, es * 0.22, es * 0.22), "rgba(255,255,255,0.95)");
+  // pustules and warts swelling out of the skin
+  const nP = Math.max(1, Math.round(w / 7));
+  for (let k = 0; k < nP; k++) {
+    const a = Math.PI * (1.15 + rs() * 0.7), d = 0.55 + rs() * 0.4;
+    const px = cx + Math.cos(a) * rx * d, py = base - 0.2 + Math.sin(a) * ry * d, pr = 0.45 + rs() * Math.max(0.35, w / 20);
+    fillShape(c, ellipseP(px, py, pr * 1.25, pr * 1.15), css(sh(bile, 0.7), 0.95));
+    fillShape(c, ellipseP(px, py - pr * 0.15, pr, pr * 0.9), css(mix(0xd8cf6a, pal.L, 0.25), 0.95));
+    fillShape(c, ellipseP(px - pr * 0.3, py - pr * 0.4, pr * 0.3, pr * 0.25), "rgba(255,255,230,0.85)");
+  }
+  // wet streaks instead of one clean shine
+  for (let k = 0; k < 3; k++) {
+    const hx = cx - rx * (0.55 - k * 0.22), hy = top + ry * (0.3 + k * 0.08);
+    line(c, [[hx - rx * 0.08, hy + 0.15], [hx + rx * 0.08, hy - 0.15]], 0xf8f8e0, 0.25, 0.7 - k * 0.15);
+  }
+  // drips sliding down and hanging off the edge
+  for (let k = 0; k < Math.max(2, Math.round(w / 6)); k++) {
+    const dx = cx + (rs() - 0.5) * rx * 1.7, len = 0.8 + rs() * 1.2 + (f % 3) * 0.25;
+    const dy = base - 0.3;
+    limb(c, [dx, dy - len * 0.6], [dx + 0.05, dy + len * 0.45], 0.55, 0.35, bile);
+    fillShape(c, ellipseP(dx + 0.05, dy + len * 0.5, 0.38, 0.45), css(mix(pal.L, bile, 0.3), 0.95));
+  }
+  // face: mismatched, bloodshot eyes and a drooling maw full of crooked teeth
+  const ey = base - ry * 0.52, gap = Math.max(1, w / 6.5), es = Math.max(0.55, w / 18);
+  const eye = (x: number, y: number, k: number, look: number) => {
+    const s = es * k;
+    fillShape(c, ellipseP(x, y, s * 1.05, s * 1.2), css(sh(gunk, 0.6)));
+    fillShape(c, ellipseP(x, y, s * 0.92, s * 1.05), css(0xe6dfa8));
+    if (s > 0.6) for (let v = 0; v < 3; v++) { const a = v * 2.1 + seed; line(c, [[x + Math.cos(a) * s * 0.9, y + Math.sin(a) * s], [x + Math.cos(a) * s * 0.35, y + Math.sin(a) * s * 0.4]], 0xc0392b, 0.1, 0.8); }
+    fillShape(c, ellipseP(x + look * s * 0.3, y + s * 0.2, s * 0.42, s * 0.5), css(pal.E));
+    fillShape(c, ellipseP(x + look * s * 0.3 - s * 0.15, y - s * 0.05, s * 0.13, s * 0.13), "rgba(255,255,240,0.9)");
+    line(c, [[x - s, y - s * 0.75], [x + s, y - s * 0.95]], sh(gunk, 0.5), Math.max(0.25, s * 0.35), 0.9); // heavy lid
   };
-  if (dir === "down") { eye(cx - gap, ey); eye(cx + gap, ey); line(c, [[cx - es, ey + es * 2], [cx, ey + es * 2.5], [cx + es, ey + es * 2]], sh(pal.D, 0.4), 0.22, 0.8); }
-  else if (dir === "right") { eye(cx + rx * 0.5, ey); eye(cx + rx * 0.05, ey - 0.1); }
+  const maw = (mx: number, my: number, mw: number) => {
+    const open = (wind ? 0.9 : strike ? 1.5 : 0.6) * es;
+    const m = blobPath([[mx - mw, my], [mx - mw * 0.4, my - open * 0.3], [mx + mw * 0.5, my - open * 0.2], [mx + mw, my + open * 0.1], [mx + mw * 0.3, my + open], [mx - mw * 0.5, my + open * 0.8]]);
+    fillShape(c, m, css(0x1e0a10));
+    fillShape(c, ellipseP(mx, my + open * 0.7, mw * 0.45, open * 0.3), css(0x7a2633, 0.9)); // tongue
+    for (let k = 0; k < 4; k++) { const tx = mx - mw * 0.7 + k * mw * 0.45; fillShape(c, poly([[tx - 0.22, my - open * 0.15], [tx + 0.22, my - open * 0.15], [tx + (k % 2 ? 0.1 : -0.05), my + open * (0.35 + (k % 3) * 0.12)]]), css(0xe8e0bc)); }
+    limb(c, [mx + mw * 0.35, my + open * 0.8], [mx + mw * 0.4, my + open * 0.8 + 1.0 + (f % 2) * 0.4], 0.32, 0.18, mix(pal.L, 0xffffff, 0.3)); // drool
+  };
+  if (dir === "down") { eye(cx - gap, ey, 1.15, 0.6); eye(cx + gap * 1.05, ey + 0.25, 0.8, -0.4); maw(cx + 0.2, ey + es * 2.0, Math.max(0.9, gap * 0.85)); }
+  else if (dir === "right") { eye(cx + rx * 0.52, ey, 1.05, 0.8); eye(cx + rx * 0.08, ey - 0.15, 0.75, 0.8); maw(cx + rx * 0.62, ey + es * 2.0, Math.max(0.7, gap * 0.6)); }
   if ((wind || strike) && dir !== "up") {
     // angry brows slanting in toward the nose
     const bw = Math.max(0.35, es * 0.55), bc = sh(pal.D, 0.35);
@@ -162,6 +212,9 @@ export function buildMobs(out: string) {
     blobSheet("mob_motherblob3", 24, 22, { G: 0x553b96, L: 0xd3c2ff, D: 0x2f205f, E: 0x140a2a }, { bodyH: 17, extra: "mother3", seed: 11 }),
     // humanoids get taller frames than the pixel ones, about hero height (client: PAINTED_LOOK in textures.ts)
     humanoid("mob_skeleton", "skeleton", 20, 30, 27.5 / 30, 0.85),
+    humanoid("mob_skeleton_axe", "skeleton_axe", 20, 30, 27.5 / 30, 0.85),
+    humanoid("mob_skeleton_spear", "skeleton_spear", 32, 30, 27.5 / 30, 0.85),
+    humanoid("mob_skeleton_bow", "skeleton_bow", 20, 30, 27.5 / 30, 0.85),
     humanoid("mob_bandit", "bandit", 20, 30, 27.5 / 30, 0.85),
     humanoid("mob_skeletonmage", "skeletonmage", 24, 32, 31.2 / 32, 0.93),
     humanoid("mob_necromancer", "necromancer", 24, 32, 31.2 / 32, 0.93),

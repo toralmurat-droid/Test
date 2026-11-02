@@ -53,6 +53,24 @@
   "scale": 1.5,
   "frames": 12
  },
+ "mob_skeleton_axe": {
+  "w": 20,
+  "h": 30,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_skeleton_spear": {
+  "w": 32,
+  "h": 30,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_skeleton_bow": {
+  "w": 20,
+  "h": 30,
+  "scale": 1.5,
+  "frames": 12
+ },
  "mob_bandit": {
   "w": 20,
   "h": 30,
