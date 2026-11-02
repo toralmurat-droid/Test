@@ -104,6 +104,21 @@ export const BLOB_AI = {
 };
 
 /**
+ * Blob merging (Murat): a blob in danger (hurt, or facing several heroes) calls the blobs around it, and they
+ * melt into one big blob. Levels, HP and abilities (shoot, charge, heal) add up. At most 5 blobs merge into a
+ * blob below Lv 10, up to 10 into a higher one. Mother Blobs don't merge (bloblings do).
+ */
+export const MERGE = {
+  hpFrac: 0.5, // "in danger" below this fraction of HP...
+  crowd: 2, crowdRange: 80, // ...or with this many heroes this close
+  callRange: 130, callEveryMs: 5000, // px around it that hear the call, and how often it may call
+  speedMult: 1.5, touch: 10, // callers rush in and fuse on contact (px)
+  capLow: 5, capHigh: 10, highLevel: 10,
+  shotEveryMs: 2200, // a merged blob that can shoot spits between blows
+  growPerBlob: 0.22, // client: sprite scale +22% per blob inside
+};
+
+/**
  * Mother Blob grows with her level: a new look per tier (more armour the higher she is) and special moves.
  * Lv 5+: Belly Bounce, a short-range shockwave that knocks players back.
  * Lv 10+: Ground Slam, a big hit around her that also calls a swarm of bloblings.

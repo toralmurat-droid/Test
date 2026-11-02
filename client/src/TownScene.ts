@@ -1,6 +1,6 @@
 import Phaser from "phaser";
 import { Client, Room } from "colyseus.js";
-import { ELITE, InputState, MAP_H, MAP_W, regenFromStamina, TILE } from "../../shared/constants";
+import { ELITE, InputState, MERGE, MAP_H, MAP_W, regenFromStamina, TILE } from "../../shared/constants";
 import { CLASSES, ClassKind, DODGE, ENERGY, energyName, xpForLevel } from "../../shared/classes";
 import { GROUND, areaAt, isSafeZone } from "../../shared/map";
 import { heroPoise, RAGE_ATTACK_SPEED } from "../../shared/combat";
@@ -34,6 +34,7 @@ import { paintSmoothProps } from "./smoothProps";
 import { ChestLayer } from "./chests";
 
 interface Entity {
+  merged?: number; // blobs fused into this monster (MERGE)
   sprite: Phaser.GameObjects.Sprite;
   label?: Phaser.GameObjects.Text;
   lvlColor?: string; // monsters: current colour of the "Lv N" label
@@ -275,6 +276,7 @@ export class TownScene extends Phaser.Scene {
         // A respawned Mother Blob can come back at another level, a skeleton with another weapon
         if (m.kind === "motherblob" || m.kind === "skeleton") { const key = mobTexture(this, m.kind, m.level, m.weapon); if (e.sprite.texture.key !== key) e.sprite.setTexture(key, 0); }
         if (Math.hypot(e.sprite.x - m.x, e.sprite.y - m.y) > 48) e.sprite.setPosition(m.x, m.y);
+        if ((m.merged || 1) !== (e.merged ?? 1)) this.growMob(e, m);
       });
     });
     mobs.onRemove((_m: any, id: string) => this.removeEntity(id));
@@ -412,7 +414,7 @@ export class TownScene extends Phaser.Scene {
     // Warrior blob lunges: quick stretch
     this.room.onMessage("blobcharge", ({ id }) => {
       const e = this.entities.get(id);
-      if (e) this.tweens.add({ targets: e.sprite, scaleX: 1.25, scaleY: 0.8, duration: 140, yoyo: true });
+      if (e) this.tweens.add({ targets: e.sprite, scaleX: e.sprite.scaleX * 1.25, scaleY: e.sprite.scaleY * 0.8, duration: 140, yoyo: true });
     });
     // A hidden monster jumps out of its grave / tree
     this.room.onMessage("ambush", ({ id, x, y, victim }) => {
@@ -423,9 +425,23 @@ export class TownScene extends Phaser.Scene {
       this.tweens.add({ targets: e.sprite, scaleX: { from: 0.4, to: 1 }, scaleY: { from: 1.6, to: 1 }, duration: 220, ease: "Back.Out" });
       if (victim === this.me) this.cameras.main.shake(80, 0.002);
     });
+    // Blob merging: the one in danger calls ("MERGE!"), the others rush in and melt into it
+    this.room.onMessage("blobcall", ({ id }) => {
+      const e = this.entities.get(id);
+      if (!e) return;
+      this.floatText(e.sprite.x, e.sprite.y - e.top - 6, "MERGE!", "#a5ff6b", PIXEL_FONT);
+      this.tweens.add({ targets: e.sprite, scaleY: e.sprite.scaleY * 1.12, duration: 160, yoyo: true, repeat: 1 });
+    });
+    this.room.onMessage("blobmerge", ({ into, x, y, level }) => {
+      const h = this.entities.get(into);
+      this.burst(x, y, 4, 0x8bd450, 260);
+      if (!h) return;
+      this.burst(h.sprite.x, h.sprite.y - 4, 7, 0x8bd450, 360);
+      this.floatText(h.sprite.x, h.sprite.y - h.top - 8, `Lv${level}`, "#a5ff6b", PIXEL_FONT);
+    });
     this.room.onMessage("brood", ({ id }) => {
       const e = this.entities.get(id);
-      if (e) this.tweens.add({ targets: e.sprite, scaleX: 1.15, scaleY: 0.85, duration: 120, yoyo: true, repeat: 1 });
+      if (e) this.tweens.add({ targets: e.sprite, scaleX: e.sprite.scaleX * 1.15, scaleY: e.sprite.scaleY * 0.85, duration: 120, yoyo: true, repeat: 1 });
     });
     this.room.onMessage("swing", ({ id, step, variant, ax, ay }) => this.showSwing(id, step ?? 0, variant ?? 0, ax, ay));
     this.room.onMessage("special", (msg) => this.showSpecial(msg));
@@ -568,12 +584,24 @@ export class TownScene extends Phaser.Scene {
     this.tweens.add({ targets: t, y: y - 10, alpha: 0, duration: 800, onComplete: () => t.destroy() });
   }
 
+  /** Merged blobs (MERGE): bigger sprite, label and HP bar for every blob inside. */
+  private growMob(e: Entity, p: any) {
+    const n = p.merged || 1, prev = e.merged ?? 1;
+    e.merged = n;
+    const grow = 1 + MERGE.growPerBlob * (n - 1), base = MOB_LOOK[p.kind]?.scale ?? 1;
+    e.top = (MOB_LOOK[p.kind]?.top ?? 14) * grow;
+    this.tweens.killTweensOf(e.sprite);
+    if (n > prev) this.tweens.add({ targets: e.sprite, scaleX: base * grow, scaleY: base * grow, duration: 260, ease: "Back.Out" });
+    else e.sprite.setScale(base * grow);
+  }
+
   private addEntity(id: string, p: any, mob = false) {
     if (mob) {
       const sprite = this.add.sprite(p.x, p.y, mobTexture(this, p.kind, p.level, p.weapon), 0).setOrigin(0.5, MOB_LOOK[p.kind]?.oy ?? 0.85)
         .setScale(MOB_LOOK[p.kind]?.scale ?? 1);
       // The level tag is made when the monster comes on screen (see update): thousands of text canvases would cost a lot
       this.entities.set(id, { sprite, bar: isoAnchor(this.add.graphics(), sprite) as Phaser.GameObjects.Graphics, tx: p.x, ty: p.y, state: p, mob, top: MOB_LOOK[p.kind]?.top ?? 14 });
+      if ((p.merged || 1) > 1) this.growMob(this.entities.get(id)!, p);
       return;
     }
     // Classes with a generated sheet use it; anything else falls back to the procedural persona
@@ -1210,7 +1238,7 @@ export class TownScene extends Phaser.Scene {
           e.bar.fillStyle(col).fillRect(x - 2, ey, 1, 1).fillRect(x + 2, ey, 1, 1);
         }
       } else if (e.mob && !p.dead) {
-        const bw = MOB_LOOK[p.kind]?.bar || 14;
+        const bw = Math.min(40, (MOB_LOOK[p.kind]?.bar || 14) * (1 + MERGE.growPerBlob * ((p.merged || 1) - 1)));
         if (ELITE[p.kind as keyof typeof ELITE]) e.bar.fillStyle(0xffc93c).fillRect(x - bw / 2 - 1, mobBarY - 1, bw + 2, 4); // elite: gold frame
         e.bar.fillStyle(0x000000).fillRect(x - bw / 2, mobBarY, bw, 2);
         e.bar.fillStyle(0xf4a261).fillRect(x - bw / 2, mobBarY, bw * (p.hp / maxHp), 2);
