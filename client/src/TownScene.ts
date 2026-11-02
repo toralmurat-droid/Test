@@ -10,14 +10,14 @@ import {
   attackMult, cooldownMult, heroSpeed, STATS, magicMult, POWERS, STAT_NAMES, StatKind, statPoints, HP_PER_STR, ULTS, hasSpecial, hasUlt, ultPower,
 } from "../../shared/powers";
 import { displayGrid } from "./tileset";
-import { heroTexture, itemTexture, makeTileset, MOB_LOOK, mobTexture } from "./textures";
+import { heroTexture, itemTexture, makeTileset, MOB_LOOK, mobTexture, preloadPaintedMobs } from "./textures";
 import { Minimap } from "./minimap";
 import { DayDial } from "./daydial";
 import { SignPanel } from "./signpanel";
 import { NpcLayer } from "./npcs";
 import { QUEST_ITEMS } from "../../shared/quests";
 import { pixelText } from "./pixeltext";
-import { ART_K, CHARACTERS, CHAR_ORIGIN, CharacterName, createArtAnims, playCharAnim, preloadArt } from "./artAssets";
+import { ART_K, CHAR_K, CHARACTERS, CHAR_ORIGIN, CharacterName, createArtAnims, playCharAnim, preloadArt } from "./artAssets";
 import { Ambient } from "./ambient";
 import { Details } from "./details";
 import { GearLayer, GearMenu, preloadGear, TIER_COLORS } from "./gear";
@@ -54,7 +54,7 @@ interface Entity {
 
 const FRAME_BASE: Record<string, number> = { down: 0, up: 2, right: 4, left: 4 };
 /** On-screen hero size: 0.75 of a 32px design frame (frames are ART_K times finer). */
-const HERO_SCALE = 0.75 / ART_K;
+const HERO_SCALE = 0.75 / CHAR_K;
 const HERO_TOP = 24 * 0.75; // drawn hero height above the feet (24 of the 32 design px)
 
 /** Random line under the "zone cleared" banner. */
@@ -113,6 +113,7 @@ export class TownScene extends Phaser.Scene {
   preload() {
     preloadArt(this);
     preloadGear(this);
+    preloadPaintedMobs(this);
   }
 
   async create() {

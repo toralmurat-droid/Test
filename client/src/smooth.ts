@@ -6,7 +6,7 @@ import Phaser from "phaser";
  * diagonals and curves, and then drawn with linear filtering. Frame coordinates stay the same, so nothing else changes.
  */
 const MAX_AREA = 512 * 512; // bigger canvases (tilesets, baked chunks) are only filtered, not enlarged
-const SKIP = /^(sg_|tiles_iso|__)/;
+const SKIP = /^(sg_|tiles_iso|__|hd_)/;
 
 function scale2x(src: Uint32Array, w: number, h: number): Uint32Array {
   const out = new Uint32Array(w * h * 4), W = w * 2;

@@ -1,4 +1,5 @@
 import { CLASSES, ClassKind } from "../../shared/classes";
+import { CHAR_BASE, CHAR_EXT, HD_CHARS } from "./artAssets";
 
 /**
  * Hero picker for the start menu: one equal-size card per class with the hero's sprite animated
@@ -7,7 +8,7 @@ import { CLASSES, ClassKind } from "../../shared/classes";
 interface AnimDef { frames: number[]; fps: number; loop: boolean }
 interface Meta { columns: number; frameWidth: number; animations: Record<string, AnimDef> }
 
-const BASE = "assets/characters";
+const BASE = CHAR_BASE;
 const SCALE = 2; // card size in 32px design units; the frame is meta.frameWidth px
 const SHOWCASE = ["idle3", "swing1", "swing2", "attack3", "skill", "cheer"];
 
@@ -52,7 +53,7 @@ export function mountHeroCards(host: HTMLElement, kinds: ClassKind[], selected: 
 
   let meta: Meta | null = null;
   fetch(`${BASE}/characters.json`).then((r) => r.json()).then((m) => { meta = m; }).catch(() => { /* cards still show names */ });
-  for (const c of cards) { const i = new Image(); i.onload = () => { c.img = i; }; i.src = `${BASE}/${c.k}.png`; }
+  for (const c of cards) { const i = new Image(); i.onload = () => { c.img = i; }; i.src = `${BASE}/${c.k}.${CHAR_EXT}`; }
 
   const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
   let raf = 0;
@@ -82,7 +83,7 @@ export function mountHeroCards(host: HTMLElement, kinds: ClassKind[], selected: 
       let i = Math.floor(t / (1000 / a.fps));
       i = a.loop ? i % a.frames.length : Math.min(i, a.frames.length - 1);
       const f = a.frames[i], fw = meta.frameWidth, cols = meta.columns;
-      c.ctx.imageSmoothingEnabled = false;
+      c.ctx.imageSmoothingEnabled = HD_CHARS;
       c.ctx.clearRect(0, 0, c.cv.width, c.cv.height);
       c.ctx.drawImage(c.img, (f % cols) * fw, Math.floor(f / cols) * fw, fw, fw, 0, 0, 32 * SCALE, 32 * SCALE);
     }

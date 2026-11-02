@@ -1,4 +1,5 @@
 import Phaser from "phaser";
+import { SMOOTH } from "./isoflag";
 
 /**
  * Generated pixel art (see tools/art, run `npm run art`).
@@ -15,15 +16,23 @@ export const FLAVOUR_ANIMS = ["idle2", "idle3", "run", "wave", "cheer", "laugh",
 export const ALT_MOVE_ANIMS = ["walk2", "dodge", "jump", "block", "hit2", "ko2"] as const;
 /** Generated art is drawn ART_K times finer than its 32px design grid (tools/art K); scale sprites by 1/ART_K. */
 export const ART_K = 2;
-/** Size of one character frame in the PNG sheets. */
-export const CHAR_FRAME = 32 * ART_K;
+/**
+ * Painted characters (smooth look, assets/hd, tools/art/paint) unless `?pixel=1`: 96px frames, WebP.
+ * Character sprites are scaled by 1/CHAR_K so they keep the same size on screen either way.
+ */
+export const HD_CHARS = SMOOTH;
+export const CHAR_K = HD_CHARS ? 3 : ART_K;
+/** Size of one character frame in the sheets. */
+export const CHAR_FRAME = 32 * CHAR_K;
+export const CHAR_BASE = HD_CHARS ? "assets/hd/characters" : "assets/characters";
+export const CHAR_EXT = HD_CHARS ? "webp" : "png";
 export const CHAR_ORIGIN = { x: 0.5, y: 29 / 32 }; // feet
 
 const BASE = "assets";
 
 export function preloadArt(scene: Phaser.Scene) {
-  for (const c of CHARACTERS) scene.load.spritesheet(c, `${BASE}/characters/${c}.png`, { frameWidth: CHAR_FRAME, frameHeight: CHAR_FRAME });
-  scene.load.json("characters_meta", `${BASE}/characters/characters.json`);
+  for (const c of CHARACTERS) scene.load.spritesheet(c, `${CHAR_BASE}/${c}.${CHAR_EXT}`, { frameWidth: CHAR_FRAME, frameHeight: CHAR_FRAME });
+  scene.load.json("characters_meta", `${CHAR_BASE}/characters.json`);
   scene.load.atlas("props", `${BASE}/objects/props.png`, `${BASE}/objects/props.json`);
   scene.load.atlas("items", `${BASE}/objects/items.png`, `${BASE}/objects/items.json`);
   scene.load.json("props_meta", `${BASE}/objects/props.json`);
