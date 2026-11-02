@@ -70,8 +70,9 @@ export class Player extends Schema {
   @type("boolean") rolling = false; // dodge roll in progress
   @type("boolean") broken = false; // poise broken: dizzy, can't attack (shared/combat.ts)
   @type("number") energy = 100; // Stamina / Magic (ENERGY in shared/classes.ts)
-  // Equipment (shared/gear.ts): equipped item ids ("" = empty) and the unequipped items carried
-  weapon = "";
+  // Equipment (shared/gear.ts): equipped item ids ("" = empty) and the unequipped items carried.
+  // Each slot must stay a synced @type field, or the client never sees it (the sword vanished from the menu).
+  @type("string") weapon = "";
   @type("string") armour = "";
   @type("string") shoes = "";
   @type("string") hat = "";
