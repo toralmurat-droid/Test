@@ -269,14 +269,15 @@ export function preloadPaintedMobs(scene: Phaser.Scene) {
   if (!SMOOTH) return;
   Object.assign(MOB_LOOK, PAINTED_LOOK);
   scene.load.json("hd_mobs", "assets/hd/mobs/mobs.json");
-  for (const k of [...PAINTED_MOBS.map((m) => `mob_${m}`), "mob_motherblob2", "mob_motherblob3"]) scene.load.image(`hd_${k}`, `assets/hd/mobs/${k}.webp`);
+  for (const k of [...PAINTED_MOBS.map((m) => `mob_${m}`), "mob_motherblob2", "mob_motherblob3", "mob_skeleton_axe", "mob_skeleton_spear", "mob_skeleton_bow"]) scene.load.image(`hd_${k}`, `assets/hd/mobs/${k}.webp`);
 }
 
 /** Monster sprite sheets, same 6-frame layout as personas (painted when the smooth look is on). */
-export function mobTexture(scene: Phaser.Scene, kind: string, level = 1): string {
+export function mobTexture(scene: Phaser.Scene, kind: string, level = 1, weapon = ""): string {
   if (SMOOTH && PAINTED_MOBS.includes(kind)) {
     const tier = level >= 10 ? 3 : level >= 5 ? 2 : 1;
-    const key = kind === "motherblob" && tier > 1 ? `mob_motherblob${tier}` : `mob_${kind}`;
+    // skeletons carry a sword (base sheet), an axe, a spear or a bow
+    const key = kind === "motherblob" && tier > 1 ? `mob_motherblob${tier}` : kind === "skeleton" && weapon && weapon !== "sword" ? `mob_skeleton_${weapon}` : `mob_${kind}`;
     if (scene.textures.exists(key)) return key;
     const meta = scene.cache.json.get("hd_mobs")?.[key];
     const src = scene.textures.exists(`hd_${key}`) ? scene.textures.get(`hd_${key}`).getSourceImage() as HTMLImageElement : null;

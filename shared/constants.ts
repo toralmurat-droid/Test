@@ -76,6 +76,26 @@ export const SKELETON_AI = {
   },
 };
 
+/**
+ * Skeleton weapons (random per skeleton, shown in its hands): reach in px, damage and cooldown multipliers, wind-up.
+ * Sword is the all-rounder, the axe hits hard but slowly, the spear reaches twice as far, the bow shoots arrows from afar.
+ */
+export type SkeletonWeapon = "sword" | "axe" | "spear" | "bow";
+export const SKELETON_WEAPONS: Record<SkeletonWeapon, { range: number; dmg: number; cooldown: number; windupMs: number; weight: number }> = {
+  sword: { range: 14, dmg: 1, cooldown: 1, windupMs: 300, weight: 3 },
+  axe: { range: 13, dmg: 1.45, cooldown: 1.4, windupMs: 480, weight: 2 },
+  spear: { range: 28, dmg: 0.9, cooldown: 1.15, windupMs: 380, weight: 2 },
+  bow: { range: 115, dmg: 0.7, cooldown: 1.6, windupMs: 550, weight: 2 },
+};
+/** Bow skeletons keep this far from you; arrows fly at this speed. */
+export const SKELETON_BOW = { keepAway: 50, shotSpeed: 170, shotRadius: 3 };
+export function rollSkeletonWeapon(): SkeletonWeapon {
+  const all = Object.entries(SKELETON_WEAPONS) as [SkeletonWeapon, { weight: number }][];
+  let r = Math.random() * all.reduce((a, [, w]) => a + w.weight, 0);
+  for (const [k, w] of all) if ((r -= w.weight) < 0) return k;
+  return "sword";
+}
+
 /** Special blob behaviour. Distances in px. */
 export const BLOB_AI = {
   shooter: { range: 110, keepAway: 55, shotSpeed: 150, shotRadius: 3 }, // spits slime balls from a distance

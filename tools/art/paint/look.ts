@@ -35,6 +35,10 @@ export const MOB_LOOKS: Record<string, Look> = {
     torso: "bare", torsoCol: 0xd8d2bc, legs: "trousers", legCol: 0xd8d2bc, boots: 0x3a3238, bootStyle: "shoe",
     sleeve: 0xd8d2bc, arms: "bare", weapon: "sword", fx: 0xffffff, belt: 0x3a2a1e,
   },
+  // the same skeleton with its other weapons (server: SKELETON_WEAPONS), rags dyed a little differently so they read apart
+  get skeleton_axe(): Look { return { ...MOB_LOOKS.skeleton, weapon: "axe", rags: 0x4a2f2a }; },
+  get skeleton_spear(): Look { return { ...MOB_LOOKS.skeleton, weapon: "spear", rags: 0x2f3a36 }; },
+  get skeleton_bow(): Look { return { ...MOB_LOOKS.skeleton, weapon: "bow", rags: 0x3a3a2a }; },
   bandit: {
     skin: 0xd9a77a, hair: 0x3b2f2a, hairStyle: "short", mask: 0xa3231b,
     head: "hood", headCol: 0x40342c, headTrim: 0x2a221c,

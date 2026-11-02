@@ -747,7 +747,8 @@ export const NPCS: Hero[] = [blacksmith, merchant, villager, guard, druid, witch
 /** Pose data for monsters painted with the character painter (paint/mobs.ts); never drawn as pixel art. */
 const mobPose = (name: string, weapon: HumanOpts["weapon"]) => human({ name, skin: 0, hair: 0, hairStyle: "bald", shirt: 0, pants: 0, boots: 0, weapon });
 export const MOB_POSES: Record<string, Hero> = {
-  skeleton: mobPose("skeleton", "axe"), bandit: mobPose("bandit", "dagger"),
+  skeleton: mobPose("skeleton", "axe"), skeleton_axe: mobPose("skeleton_axe", "axe"),
+  skeleton_spear: mobPose("skeleton_spear", "spear"), skeleton_bow: mobPose("skeleton_bow", "bow"), bandit: mobPose("bandit", "dagger"),
   skeletonmage: mobPose("skeletonmage", "staff"), necromancer: mobPose("necromancer", "staff"),
 };
 export const posed = (hero: Hero, p: Partial<Pose> & { dir: Dir }, shadow = true) => renderFrame(hero, { t: 0, bob: 0, stride: 0, lean: 0, crouch: 0, attack: -1, expr: "n", ...p }, shadow);
