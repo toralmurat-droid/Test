@@ -59,6 +59,15 @@ export function screenDir(dx: number, dy: number, fallback: string): "up" | "dow
   return sy > 0 ? "down" : "up";
 }
 
+const DIR8 = ["right", "downright", "down", "downleft", "left", "upleft", "up", "upright"] as const;
+/** Like screenDir but with the four diagonals too (heroes have 3/4 facings in the iso sheets). */
+export function screenDir8(dx: number, dy: number, fallback: string): string {
+  if (!ISO) return fallback;
+  const sx = dx - dy, sy = dx + dy; // screen vector with the diamond's 2:1 squash undone
+  if (Math.abs(sx) < 1e-6 && Math.abs(sy) < 1e-6) return fallback;
+  return DIR8[((Math.round(Math.atan2(sy, sx) / (Math.PI / 4)) % 8) + 8) % 8];
+}
+
 /** Keyboard on screen axes (W = up the screen) turned into world input. */
 export function isoInput(up: boolean, down: boolean, left: boolean, right: boolean) {
   if (!ISO) return { up, down, left, right };

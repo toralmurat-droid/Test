@@ -27,7 +27,7 @@ import { activeSkills, SLOT_COUNT, SLOT_KEYS, skillLearned } from "../../shared/
 import { iconImg } from "./skillIcons";
 import { TalentMenu } from "./talents";
 import { IdeaBoard } from "./ideas";
-import { ISO, IsoView, isoAnchor, isoInput, screenDir } from "./iso";
+import { ISO, IsoView, isoAnchor, isoInput, screenDir, screenDir8 } from "./iso";
 import { SMOOTH } from "./isoflag";
 import { addPixelGrid } from "./pixelgrid";
 import { paintSmoothProps } from "./smoothProps";
@@ -583,12 +583,13 @@ export class TownScene extends Phaser.Scene {
   /** Facing to draw: the server's direction, or in the iso view the direction on screen. */
   private dirOf(e: Entity): any {
     if (!ISO) return e.state.dir;
-    return e.vdir ?? this.worldToScreenDir(e.state.dir);
+    return e.vdir ?? this.worldToScreenDir(e.state.dir, !!e.hero);
   }
 
-  private worldToScreenDir(dir: string): string {
+  /** Heroes face 8 ways on screen (3/4 sheets), monsters 4. */
+  private worldToScreenDir(dir: string, eight = false): string {
     const v = ({ up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] } as Record<string, number[]>)[dir] ?? [0, 1];
-    return screenDir(v[0], v[1], dir);
+    return (eight ? screenDir8 : screenDir)(v[0], v[1], dir);
   }
 
   /** Animation for an attack: finisher = attack3, normal hits = swing1..4 (falls back to attack/attack2). */
@@ -603,7 +604,7 @@ export class TownScene extends Phaser.Scene {
     const e = this.entities.get(id);
     if (!e) return;
     const dir = e.state.dir as string;
-    if (typeof ax === "number" && typeof ay === "number") e.vdir = screenDir(ax, ay, e.vdir ?? dir);
+    if (typeof ax === "number" && typeof ay === "number") e.vdir = (e.hero ? screenDir8 : screenDir)(ax, ay, e.vdir ?? dir);
     if (e.hero) playCharAnim(e.sprite, e.hero, this.attackAnim(e.hero, step, variant), this.dirOf(e));
     // Aim can be diagonal (the server sends it); mobs and old messages fall back to the facing direction
     const off = typeof ax === "number" && typeof ay === "number" ? [ax, ay]
@@ -866,7 +867,7 @@ export class TownScene extends Phaser.Scene {
     const e = this.entities.get(msg.id);
     if (!e) return;
     if (msg.id === this.me) this.lastDodge = this.time.now;
-    if (e.hero) playCharAnim(e.sprite, e.hero, "dodge", (ISO ? this.worldToScreenDir(msg.dir) : msg.dir) as any);
+    if (e.hero) playCharAnim(e.sprite, e.hero, "dodge", (ISO ? this.worldToScreenDir(msg.dir, true) : msg.dir) as any);
     // A couple of fading after-images and a dust puff
     for (let i = 1; i <= 3; i++) {
       this.time.delayedCall(i * 60, () => {
@@ -1070,7 +1071,7 @@ export class TownScene extends Phaser.Scene {
       if (ISO) {
         // Face where the hero goes on screen (the server's 4 directions are world directions)
         const dx = e.sprite.x - (e.lastX ?? e.sprite.x), dy = e.sprite.y - (e.lastY ?? e.sprite.y);
-        if (moving && Math.hypot(dx, dy) > 0.05) e.vdir = screenDir(dx, dy, e.vdir ?? p.dir);
+        if (moving && Math.hypot(dx, dy) > 0.05) e.vdir = (e.hero ? screenDir8 : screenDir)(dx, dy, e.vdir ?? p.dir);
         e.lastX = e.sprite.x; e.lastY = e.sprite.y;
       }
       const dir = this.dirOf(e) as any;

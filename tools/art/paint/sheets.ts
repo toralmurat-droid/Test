@@ -6,8 +6,8 @@ import { diff } from "../gear";
 import { GEAR, GEAR_IDS } from "../../../shared/gear";
 import { setPaintGear } from "./body";
 
-/** Painted (smooth) character sheets: same layout and animations as the pixel ones, 96px frames, WebP. */
-export const PAINT_K = 3;
+/** Painted-then-pixelated character sheets: same layout and animations as the old ones, 36px frames (1.5 texels per world px), PNG-quality WebP. */
+export const PAINT_K = 1.125; // 36px frames: 1.5 texels per world px (a hero frame is 24 world px)
 
 function saveWebp(c: Canvas, path: string, q = 90) {
   const n = createCanvas(c.w, c.h), x = n.getContext("2d");
@@ -18,7 +18,7 @@ function saveWebp(c: Canvas, path: string, q = 90) {
 }
 
 export function buildPainted(out: string, opts: { gear?: boolean; only?: string[] } = {}) {
-  setPainted(true, PAINT_K);
+  setPainted(true, PAINT_K, true);
   mkdirSync(`${out}/characters`, { recursive: true });
   mkdirSync(`${out}/gear`, { recursive: true });
   const want = (n: string) => !opts.only?.length || opts.only.includes(n);

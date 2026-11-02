@@ -2,61 +2,61 @@
  "mob_slime": {
   "w": 12,
   "h": 16,
-  "scale": 8
+  "scale": 1.5
  },
  "mob_blobling": {
   "w": 8,
-  "h": 9,
-  "scale": 8
+  "h": 10,
+  "scale": 1.5
  },
  "mob_shooterblob": {
   "w": 14,
-  "h": 17,
-  "scale": 8
+  "h": 18,
+  "scale": 1.5
  },
  "mob_warriorblob": {
   "w": 16,
   "h": 18,
-  "scale": 8
+  "scale": 1.5
  },
  "mob_healerblob": {
   "w": 14,
-  "h": 17,
-  "scale": 8
+  "h": 18,
+  "scale": 1.5
  },
  "mob_motherblob": {
   "w": 24,
   "h": 22,
-  "scale": 8
+  "scale": 1.5
  },
  "mob_motherblob2": {
   "w": 24,
   "h": 22,
-  "scale": 8
+  "scale": 1.5
  },
  "mob_motherblob3": {
   "w": 24,
   "h": 22,
-  "scale": 8
+  "scale": 1.5
  },
  "mob_skeleton": {
   "w": 16,
   "h": 22,
-  "scale": 8
+  "scale": 1.5
  },
  "mob_bandit": {
   "w": 16,
   "h": 22,
-  "scale": 8
+  "scale": 1.5
  },
  "mob_skeletonmage": {
   "w": 18,
   "h": 24,
-  "scale": 8
+  "scale": 1.5
  },
  "mob_necromancer": {
   "w": 18,
   "h": 24,
-  "scale": 8
+  "scale": 1.5
  }
 }

@@ -13,13 +13,19 @@ type Dir = "down" | "up" | "right";
 interface PoseLike {
   dir: Dir; t: number; bob: number; stride: number; lean: number; crouch: number; attack: number; move?: string;
   expr: string; headDx?: number; hand?: [number, number]; farHand?: [number, number]; noWeapon?: boolean; run?: boolean; wAng?: number;
+  phase?: number;
 }
+/** A 3/4 (diagonal) frame: the same pose facing right, blended with the down/up one. */
+export interface DiagAlt { p: PoseLike; info: FrameInfo; diag: "downright" | "upright" }
 export interface MoveLike { kind: string; fx?: number }
 export interface FrameInfo { hand: P; ang: number; mv: MoveLike; prevAng: (phase: number) => number; hasShieldMove: boolean }
 
 /** Supersampling: frames are painted SS times bigger, then scaled down. */
 const SS = 2;
 let gear: GearDef | null = null;
+let PIX = false;
+/** Pixel-art output: hard edges, posterized colours, rim and 1px coloured outline (see pixelize). */
+export function setPaintPixel(on: boolean) { PIX = on; }
 /** The item being "worn" while the gear generator renders overlay sheets (null = plain hero). */
 export function setPaintGear(g: GearDef | null) { gear = g; }
 export const hasLook = (name: string) => !!(LOOKS[name] ?? MOB_LOOKS[name]);
@@ -31,6 +37,10 @@ interface Rig {
   head: P; nearS: P; farS: P; nearH: P; farH: P; nearE: P; farE: P;
   hips: [P, P]; knees: [P, P]; feet: [P, P];
   ang: number; u: P; n: P; seed: number; info: FrameInfo;
+  /** facing on screen (unit-ish) */
+  face: P;
+  /** 3/4 view: +1 down-right, -1 up-right, 0 straight. Front details are shifted by fo, the torso narrowed. */
+  diag: number; fo: number; narrow: number; sil: number;
 }
 
 const OLD_NEAR: Record<Dir, P> = { down: [9.5, 17.5], up: [21.5, 17.5], right: [15.5, 17.5] };
@@ -68,7 +78,21 @@ function rig(name: string, p: PoseLike, info: FrameInfo): Rig {
   // legs
   const s = p.stride;
   let hips: [P, P], feet: [P, P];
-  if (R) {
+  if (p.phase !== undefined) {
+    // smooth cycle: the foot swinging forward lifts on an arc, the planted one slides back
+    const ph = p.phase, sn = Math.sin(ph);
+    const lift = p.run ? 2.1 : 1.3;
+    const l0 = Math.max(0, sn) * lift, l1 = Math.max(0, -sn) * lift;
+    if (R) {
+      const k = p.run ? 4.3 : 3.5; // s is cos(ph) scaled by the gait
+      hips = [[16 + lx - 0.2, hipY], [16 + lx + 0.5, hipY]];
+      feet = [[16 + lx - s * k, 29 - l0], [16 + lx + s * k, 29 - l1]];
+    } else {
+      const dep = (dir === "down" ? 0.7 : -0.5) * s;
+      hips = [[16 + lx - 1.5 * b, hipY], [16 + lx + 1.5 * b, hipY]];
+      feet = [[16 + lx - 1.8 * b, 29 - l0 + dep], [16 + lx + 1.8 * b, 29 - l1 - dep]];
+    }
+  } else if (R) {
     const k = p.run ? 4.3 : 3.5, lift = p.run ? 1.7 : 1.1;
     const half = Math.abs(s) === 0.5;
     const backSw = half && (p.t === 1 || p.t === 2), frontSw = half && (p.t === 4 || p.t === 5);
@@ -87,7 +111,45 @@ function rig(name: string, p: PoseLike, info: FrameInfo): Rig {
     nearS, farS, nearH: nH, farH: fH, nearE, farE, hips, knees: [knee(0), knee(1)], feet,
     ang, u: [Math.cos(rad(ang)), Math.sin(rad(ang))], n: [-Math.sin(rad(ang)), Math.cos(rad(ang))],
     seed: hashStr(name) ^ (p.t * 7919), info,
+    face: dir === "down" ? [0, 1] : dir === "up" ? [0, -1] : [1, 0], diag: 0, fo: 0, narrow: 1, sil: 0,
   };
+}
+
+const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+const lerpP = (a: P, b: P, t: number): P => [lerp(a[0], b[0], t), lerp(a[1], b[1], t)];
+function lerpAng(a: number, b: number, t: number) { let d = ((b - a) % 360 + 540) % 360 - 180; return a + d * t; }
+
+/**
+ * 3/4 view: the down (or up) rig and the right-facing rig of the same pose, half way between. Parts are still
+ * drawn with the down/up painters, with the torso narrowed and front details shifted toward the facing side.
+ */
+function blendRig(a: Rig, b: Rig, diag: "downright" | "upright"): Rig {
+  const t = 0.5, dn = diag === "downright";
+  const r: Rig = { ...a };
+  r.cx = lerp(a.cx, b.cx, t); r.sy = lerp(a.sy, b.sy, t); r.hipY = lerp(a.hipY, b.hipY, t); r.uy = lerp(a.uy, b.uy, t);
+  r.head = lerpP(a.head, b.head, t);
+  r.nearS = lerpP(a.nearS, b.nearS, t); r.farS = lerpP(a.farS, b.farS, t);
+  r.nearH = lerpP(a.nearH, b.nearH, t); r.farH = lerpP(a.farH, b.farH, t);
+  r.hips = [lerpP(a.hips[0], b.hips[0], t), lerpP(a.hips[1], b.hips[1], t)];
+  // feet: the step also goes into the screen (diagonal travel), the back foot further away
+  const fx = (i: number) => b.feet[i][0] - (16 + b.lx);
+  r.feet = [0, 1].map((i) => {
+    const f = lerpP(a.feet[i], b.feet[i], t);
+    return [f[0] + fx(i) * 0.25, f[1] + fx(i) * (dn ? 0.42 : -0.42)] as P;
+  }) as [P, P];
+  const bend = (s: P) => (e: P) => (e[0] - r.cx) * Math.sign(s[0] - r.cx || 1) + e[1] * 0.35;
+  const [nearE, nH] = ik(r.nearS, r.nearH, 4.1, 4.1, bend(r.nearS));
+  const [farE, fH] = ik(r.farS, r.farH, 4.1, 4.1, bend(r.farS));
+  r.nearE = nearE; r.nearH = nH; r.farE = farE; r.farH = fH;
+  const knee = (i: number) => ik(r.hips[i], r.feet[i], 4.95, 4.95, (e) => e[0] * 0.6 + (e[0] - 16) * (i ? 1 : -1) * 0.2)[0];
+  r.knees = [knee(0), knee(1)];
+  r.ang = lerpAng(a.ang, b.ang, t);
+  r.u = [Math.cos(rad(r.ang)), Math.sin(rad(r.ang))]; r.n = [-Math.sin(rad(r.ang)), Math.cos(rad(r.ang))];
+  r.face = dn ? [0.8, 0.6] : [0.8, -0.6];
+  r.diag = dn ? 1 : -1; r.fo = dn ? 0.85 : 0; r.narrow = 0.84;
+  // front centre line moves toward the facing side (down-right) or away from it (the back, up-right)
+  r.sil = dn ? 0.55 : -0.45; r.cx += r.sil;
+  return r;
 }
 
 // ---------------------------------------------------------------- colour dimming for far-side parts
@@ -202,13 +264,15 @@ function furKilt(c: C2, r: Rig) {
 
 // ---------------------------------------------------------------- torso
 function torsoShape(r: Rig, widen = 0): { s: Shape; box: [number, number, number, number] } {
-  const { cx, sy, hipY, b } = r, belly = r.L.belly ? 0.9 : 0;
+  const { sy, hipY, b } = r, belly = r.L.belly ? 0.9 : 0;
   if (r.R) {
+    const cx = r.cx;
     const pts: P[] = [[cx - 1.3, sy - 1.1], [cx + 1.1, sy - 1.1], [cx + 2.0 * b + widen, sy + 0.9], [cx + 2.3 * b + widen + belly * 0.4, sy + 3.0], [cx + 1.7 + belly + widen, hipY - 1.7],
       [cx + 1.9 + widen, hipY + 0.9], [cx - 1.9 - widen, hipY + 0.9], [cx - 1.7 - widen, hipY - 2.0], [cx - 2.2 * b - widen, sy + 2.3], [cx - 1.9 * b - widen, sy - 0.2]];
     return { s: blobPath(pts), box: [cx - 2.4 * b, sy - 1.2, 4.8 * b + 0.6, hipY - sy + 2.2] };
   }
-  const w = 3.65 * b + widen, ww = 2.55 * b + widen + belly, hw = 2.85 * b + widen;
+  const k = r.narrow, cx = r.cx - r.sil;
+  const w = (3.65 * b + widen) * k, ww = (2.55 * b + widen + belly) * k, hw = (2.85 * b + widen) * k;
   const pts: P[] = [[cx - w * 0.5, sy - 1.25], [cx - w, sy - 0.55], [cx - w * 1.02, sy + 1.7], [cx - ww, hipY - 2.1], [cx - hw, hipY + 0.9],
     [cx + hw, hipY + 0.9], [cx + ww, hipY - 2.1], [cx + w * 1.02, sy + 1.7], [cx + w, sy - 0.55], [cx + w * 0.5, sy - 1.25]];
   return { s: blobPath(pts), box: [cx - w, sy - 1.3, 2 * w, hipY - sy + 2.3] };
@@ -526,16 +590,17 @@ function skull(c: C2, r: Rig) {
   const cran = ellipseP(fx, hy - 0.4, 2.3, 2.25);
   vol(c, cran, bone, [fx - 2.3, hy - 2.7, 4.6, 4.5], { ao: 0.35, spec: 0.25 });
   if (dir === "up") { line(c, [[hx, hy - 2.6], [hx, hy + 1]], sh(bone, 0.6), 0.15, 0.6); return; }
-  const sockets: P[] = r.R ? [[hx + 1.1, hy - 0.1]] : [[hx - 0.9, hy - 0.1], [hx + 0.9, hy - 0.1]];
+  const qx = hx + r.fo;
+  const sockets: P[] = r.R ? [[hx + 1.1, hy - 0.1]] : [[qx - 0.85, hy - 0.1], [qx + 0.85, hy - 0.1]];
   for (const [x, y] of sockets) {
     fillShape(c, ellipseP(x, y, 0.7, 0.65), css(dk));
     glow(c, x, y, 1.1, glowC, 0.75);
     fillShape(c, ellipseP(x, y, 0.22, 0.22), css(mix(glowC, 0xffffff, 0.6)));
   }
-  const nx = r.R ? hx + 1.9 : hx;
+  const nx = r.R ? hx + 1.9 : qx;
   fillShape(c, poly([[nx - 0.3, hy + 1.0], [nx, hy + 0.4], [nx + 0.3, hy + 1.0]]), css(dk));
   // teeth
-  const t0 = r.R ? hx + 0.4 : hx - 1.1, t1 = r.R ? hx + 1.9 : hx + 1.1;
+  const t0 = r.R ? hx + 0.4 : qx - 1.1, t1 = r.R ? hx + 1.9 : qx + 1.1;
   line(c, [[t0, hy + 1.75], [t1, hy + 1.75]], dk, 0.18, 0.9);
   for (let x = t0 + 0.35; x < t1; x += 0.45) line(c, [[x, hy + 1.35], [x, hy + 2.15]], dk, 0.1, 0.8);
 }
@@ -572,12 +637,18 @@ function head(c: C2, r: Rig) {
     fillShape(c, ellipseP(hx + 1.2, hy + 2.0, 1.0, 0.6), css(sh(skin, 0.9)));
     vol(c, ellipseP(hx - 0.6, hy + 0.4, 0.55, 0.75), sh(skin, 0.85), [hx - 1.2, hy - 0.4, 1.2, 1.6], { ao: 0.3 });
   }
+  const fo = r.fo, qx = hx + fo; // 3/4 view: features slide toward the facing side
+  if (r.diag && !covered) {
+    // ear on the side we now see (left for down-right, right for the back view)
+    const ex = r.diag > 0 ? hx - 2.05 : hx + 2.05;
+    vol(c, ellipseP(ex, hy + 0.4, 0.5, 0.75), sh(skin, 0.85), [ex - 0.6, hy - 0.4, 1.2, 1.6], { ao: 0.3 });
+  }
   if (dir === "down" && !covered) {
-    eyesFront(c, r, hx, hy, [hx - 0.95, hx + 0.95]);
-    line(c, [[hx + 0.12, hy + 0.5], [hx + 0.28, hy + 1.25], [hx - 0.05, hy + 1.35]], sh(skin, 0.6), 0.18, 0.7);
+    eyesFront(c, r, qx, hy, fo ? [qx - 0.8, qx + 0.85] : [hx - 0.95, hx + 0.95]);
+    line(c, [[qx + 0.12 + fo * 0.4, hy + 0.5], [qx + 0.28 + fo * 0.5, hy + 1.25], [qx - 0.05, hy + 1.35]], sh(skin, 0.6), 0.18, 0.7);
     if (!L.beard || L.beardStyle === "stubble") {
-      if (r.p.expr === "happy") curve(c, [hx - 0.6, hy + 1.75], [hx, hy + 2.25], [hx + 0.6, hy + 1.75], sh(skin, 0.4), 0.2);
-      else line(c, [[hx - 0.45, hy + 1.85], [hx + 0.45, hy + 1.85]], sh(skin, 0.5), 0.2, 0.8);
+      if (r.p.expr === "happy") curve(c, [qx - 0.6, hy + 1.75], [qx, hy + 2.25], [qx + 0.6, hy + 1.75], sh(skin, 0.4), 0.2);
+      else line(c, [[qx - 0.45, hy + 1.85], [qx + 0.45, hy + 1.85]], sh(skin, 0.5), 0.2, 0.8);
     }
   } else if (r.R && !covered) {
     const ey = hy + 0.25, ex = hx + 1.25, col = L.eye ?? 0x1a1010;
@@ -590,7 +661,7 @@ function head(c: C2, r: Rig) {
   if (L.mask !== undefined && dir !== "up") {
     const mc = C(L.mask);
     const m = r.R ? blobPath([[hx - 0.4, hy + 0.7], [hx + 2.8, hy + 0.6], [hx + 2.2, hy + 2.6], [hx + 0.2, hy + 2.9]])
-      : blobPath([[hx - 2.4, hy + 0.6], [hx + 2.4, hy + 0.6], [hx + 2.0, hy + 2.4], [hx, hy + 3.1], [hx - 2.0, hy + 2.4]]);
+      : blobPath([[qx - 2.4 + fo * 0.5, hy + 0.6], [qx + 2.4 - fo, hy + 0.6], [qx + 2.0 - fo, hy + 2.4], [qx, hy + 3.1], [qx - 2.0 + fo * 0.5, hy + 2.4]]);
     vol(c, m, mc, [hx - 2.4, hy + 0.5, 4.8, 2.7], { ao: 0.3 });
     curve(c, [hx - 1.4, hy + 1.6], [hx, hy + 2.2], [hx + 1.4, hy + 1.6], sh(mc, 0.6), 0.18, 0.7);
   }
@@ -620,17 +691,17 @@ function head(c: C2, r: Rig) {
       const long = L.beardStyle === "long";
       const bottom = long ? r.sy + 3.6 : hy + 3.4;
       const s = r.R ? blobPath([[hx - 0.6, hy + 0.3], [hx + 2.0, hy + 0.9], [hx + 1.9, hy + 2.2], [hx + 0.9 + (long ? 0.5 : 0), bottom], [hx - 0.3, hy + 2.6]])
-        : blobPath([[hx - 2.25, hy + 0.7], [hx - 1.0, hy + 1.7], [hx + 1.0, hy + 1.7], [hx + 2.25, hy + 0.7], [hx + 1.9, hy + 2.6], [hx + (long ? 0.3 : 0.9), bottom], [hx - (long ? 0.3 : 0.9), bottom], [hx - 1.9, hy + 2.6]]);
+        : blobPath([[qx - 2.25 + fo * 0.4, hy + 0.7], [qx - 1.0, hy + 1.7], [qx + 1.0, hy + 1.7], [qx + 2.25 - fo, hy + 0.7], [qx + 1.9 - fo, hy + 2.6], [qx + (long ? 0.3 : 0.9), bottom], [qx - (long ? 0.3 : 0.9), bottom], [qx - 1.9 + fo * 0.4, hy + 2.6]]);
       vol(c, s, bc, [hx - 2.3, hy, 4.6, bottom - hy], { ao: 0.25 });
       grain(c, s, [hx - 2.3, hy, 4.6, bottom - hy], bc, r.seed + 35, 45, 0.45, 0.9, 1.5);
-      if (dir === "down") { line(c, [[hx - 0.7, hy + 1.45], [hx + 0.7, hy + 1.45]], sh(bc, 0.4), 0.3, 0.9); curve(c, [hx - 1.4, hy + 1.2], [hx, hy + 0.85], [hx + 1.4, hy + 1.2], sh(bc, 0.85), 0.45); }
+      if (dir === "down") { line(c, [[qx - 0.7, hy + 1.45], [qx + 0.7, hy + 1.45]], sh(bc, 0.4), 0.3, 0.9); curve(c, [qx - 1.4, hy + 1.2], [qx, hy + 0.85], [qx + 1.4, hy + 1.2], sh(bc, 0.85), 0.45); }
     }
   }
   if (worn !== "none") hat(c, r, worn);
 }
 
 function hat(c: C2, r: Rig, hg: HeadGear | "crown") {
-  const L = r.L, [hx, hy] = r.head, dir = r.dir;
+  const L = r.L, [hx, hy] = r.head, dir = r.dir, fo = r.fo, qx = hx + fo;
   const g = gear?.slot === "hat" ? gear : null;
   const col = C(g ? g.color : L.headCol ?? 0x888888), trim = C(g ? g.accent : L.headTrim ?? 0xd9a93a);
   const t = r.p.t;
@@ -639,9 +710,9 @@ function hat(c: C2, r: Rig, hg: HeadGear | "crown") {
       const s = blobPath([[hx - 2.75, hy + 2.9], [hx - 2.85, hy - 1.2], [hx - 2.3, hy - 3.0], [hx, hy - 3.45], [hx + 2.3, hy - 3.0], [hx + 2.85, hy - 1.2], [hx + 2.75, hy + 2.9], [hx, hy + 3.3]]);
       metal(c, s, col, [hx - 2.8, hy - 2], [hx + 2.8, hy + 1.5], 0.8);
       if (dir === "down") {
-        fillShape(c, (cc) => cc.rect(hx - 2.2, hy - 0.05, 4.4, 0.5), css(0x0c0a10));
-        line(c, [[hx, hy - 3.3], [hx, hy + 3.1]], sh(col, 1.45), 0.35, 0.7);
-        for (let k = 0; k < 3; k++) fillShape(c, ellipseP(hx + 0.9, hy + 1.3 + k * 0.5, 0.12, 0.12), css(0x0c0a10));
+        fillShape(c, (cc) => cc.rect(hx - 2.2 + fo * 1.2, hy - 0.05, 4.4 - fo * 0.9, 0.5), css(0x0c0a10));
+        line(c, [[qx, hy - 3.3], [qx, hy + 3.1]], sh(col, 1.45), 0.35, 0.7);
+        for (let k = 0; k < 3; k++) fillShape(c, ellipseP(qx + 0.9, hy + 1.3 + k * 0.5, 0.12, 0.12), css(0x0c0a10));
         line(c, [[hx - 2.7, hy - 1.3], [hx + 2.7, hy - 1.3]], trim, 0.38, 0.9);
       } else if (r.R) {
         fillShape(c, (cc) => cc.rect(hx + 0.4, hy - 0.05, 2.5, 0.5), css(0x0c0a10));
@@ -661,8 +732,8 @@ function hat(c: C2, r: Rig, hg: HeadGear | "crown") {
       vol(c, s, col, [hx - 2.6, hy - 3, 5.2, 5.8], { ao: 0.35 });
       grain(c, s, [hx - 2.6, hy - 3, 5.2, 5.8], col, r.seed + 51, 25, 0.2, 0.8, 1);
       if (dir === "down") {
-        clipTo(c, s, () => vol(c, (cc) => cc.rect(hx - 1.9, hy - 0.45, 3.8, 1.45), C(L.skin), [hx - 2, hy - 0.5, 4, 1.5], { ao: 0.2 }));
-        eyesFront(c, r, hx, hy - 0.05, [hx - 0.9, hx + 0.9]);
+        clipTo(c, s, () => vol(c, (cc) => cc.rect(hx - 1.9 + fo * 1.2, hy - 0.45, 3.8 - fo * 0.4, 1.45), C(L.skin), [hx - 2, hy - 0.5, 4, 1.5], { ao: 0.2 }));
+        eyesFront(c, r, qx, hy - 0.05, fo ? [qx - 0.8, qx + 0.85] : [hx - 0.9, hx + 0.9]);
       } else if (r.R) {
         clipTo(c, s, () => vol(c, (cc) => cc.rect(hx + 0.5, hy - 0.45, 2.3, 1.45), C(L.skin), [hx + 0.5, hy - 0.5, 2.3, 1.5], { ao: 0.2 }));
         fillShape(c, ellipseP(hx + 1.35, hy + 0.2, 0.28, 0.3), css(L.eye ?? 0x111111));
@@ -711,6 +782,7 @@ function hat(c: C2, r: Rig, hg: HeadGear | "crown") {
         : dir === "up" ? blobPath([[hx - 3.2, hy + 3.6], [hx - 3.0, hy - 1.4], [hx - 1.4, hy - 3.2], [hx, hy - 3.6], [hx + 1.4, hy - 3.2], [hx + 3.0, hy - 1.4], [hx + 3.2, hy + 3.6], [hx, hy + 4.4]])
         : blobPath([[hx - 3.2, hy + 3.6], [hx - 3.0, hy - 1.4], [hx - 1.4, hy - 3.25], [hx, hy - 3.5], [hx + 1.4, hy - 3.25], [hx + 3.0, hy - 1.4], [hx + 3.2, hy + 3.6], [hx + 1.9, hy + 2.6], [hx + 2.2, hy - 0.4], [hx, hy - 2.1], [hx - 2.2, hy - 0.4], [hx - 1.9, hy + 2.6]]);
       if (dir === "down") clipTo(c, ellipseP(hx, hy, 2.3, 2.62), () => fillShape(c, (cc) => cc.rect(hx - 3, hy - 3, 6, 2.6), css(0x0c140a, 0.5)));
+      void qx;
       vol(c, s, col, [hx - 3.4, hy - 3.6, 6.8, 7.5], { ao: 0.4 });
       grain(c, s, [hx - 3.4, hy - 3.6, 6.8, 7.5], col, r.seed + 71, 40, 0.22, 1, 1.2);
       if (dir === "down") curve(c, [hx - 2.1, hy + 2.6], [hx - 2.3, hy - 1.9], [hx, hy - 2.2], sh(col, 1.35), 0.25, 0.6);
@@ -729,14 +801,14 @@ function hat(c: C2, r: Rig, hg: HeadGear | "crown") {
       metal(c, dome, col, [hx - 2.5, hy - 3], [hx + 2.5, hy], 0.7);
       line(c, [[hx - 2.6, hy - 0.55], [hx + 2.6, hy - 0.55]], sh(col, 0.6), 0.55, 0.9);
       for (let k = -2; k <= 2; k++) fillShape(c, ellipseP(hx + k * 1.0, hy - 0.55, 0.16, 0.16), css(sh(col, 1.5)));
-      if (dir === "down") metal(c, (cc) => cc.rect(hx - 0.3, hy - 0.6, 0.6, 2.0), col, [hx - 0.3, hy], [hx + 0.3, hy + 1]);
+      if (dir === "down") metal(c, (cc) => cc.rect(qx - 0.3, hy - 0.6, 0.6, 2.0), col, [qx - 0.3, hy], [qx + 0.3, hy + 1]);
       break;
     }
     case "helm": {
       const dome = blobPath([[hx - 2.75, hy - 0.1], [hx - 2.5, hy - 2.5], [hx, hy - 3.5], [hx + 2.5, hy - 2.5], [hx + 2.75, hy - 0.1]]);
       metal(c, dome, col, [hx - 2.6, hy - 3], [hx + 2.6, hy], 0.8);
       line(c, [[hx - 2.9, hy - 0.25], [hx + 2.9, hy - 0.25]], sh(col, 0.55), 0.55, 0.95);
-      if (dir === "down") metal(c, (cc) => cc.rect(hx - 0.32, hy - 0.4, 0.64, 2.1), col, [hx - 0.3, hy], [hx + 0.3, hy + 1]);
+      if (dir === "down") metal(c, (cc) => cc.rect(qx - 0.32, hy - 0.4, 0.64, 2.1), col, [qx - 0.3, hy], [qx + 0.3, hy + 1]);
       if (dir !== "up") line(c, [[hx - 0.2, hy - 3.4], [hx + (r.R ? 1.2 : 0), hy - 0.8]], sh(col, 1.45), 0.25, 0.6);
       if (g) glow(c, hx, hy - 3.5, 0.8, trim, 0.6);
       break;
@@ -910,7 +982,7 @@ function shield(c: C2, r: Rig) {
   const style = g ? (g.style === "round" ? "round" : "kite") : L.shield!.style;
   const col = C(g ? g.color : L.shield!.col), trim = C(g ? g.accent : L.shield!.trim), emb = C(g ? g.accent : L.shield!.emblem);
   const push = r.info.mv.kind === "bash" && r.p.attack >= 0 ? (r.R ? [-1, 2, 2, 1] : [-1, 3, 4, 2])[r.p.attack] : 0;
-  const face: P = r.dir === "down" ? [0, 1] : r.dir === "up" ? [0, -1] : [1, 0];
+  const face = r.face;
   const fh = r.farH;
   if (r.R) {
     const x = r.cx + 2.6 + face[0] * push * 1.2 + (r.p.attack === 0 ? 0.5 : 0), y = r.sy + 1.4;
@@ -982,7 +1054,7 @@ function swoosh(c: C2, cx: number, cy: number, r0: number, a0: number, a1: numbe
 
 function moveFx(c: C2, r: Rig, under: C2) {
   const p = r.p, ph = p.attack, mv = r.info.mv, col = mv.fx ?? 0xffffff, [hx, hy] = r.nearH, a = r.ang, u = r.u, n = r.n;
-  const face: P = r.dir === "down" ? [0, 1] : r.dir === "up" ? [0, -1] : [1, 0];
+  const face = r.face;
   const L = 1.45;
   if (ph < 0) return;
   if ((mv.kind === "slash" || mv.kind === "bonk" || mv.kind === "slam") && ph === 1) {
@@ -1123,11 +1195,11 @@ function post(src: ReturnType<typeof canvas>, S: number) {
 }
 
 /** Paint one frame of a character. Returns a HiCanvas (32x32 logical, K fine pixels each) like renderFrame. */
-export function paintFrame(name: string, p: PoseLike, info: FrameInfo, withShadow: boolean, flash: number, K: number): HiCanvas {
-  const S = K * SS, N = 32 * S;
+export function paintFrame(name: string, p: PoseLike, info: FrameInfo, withShadow: boolean, flash: number, K: number, alt?: DiagAlt): HiCanvas {
+  const S = PIX ? 8 : K * SS, N = Math.round(32 * S);
   const body = scratch("body", N, N), c = body.getContext("2d");
   c.scale(S, S);
-  const r = rig(name, p, info), L = r.L, dir = r.dir;
+  const r = alt ? blendRig(rig(name, p, info), rig(name, alt.p, alt.info), alt.diag) : rig(name, p, info), L = r.L, dir = r.dir;
   const under = scratch("under", N, N), uc = under.getContext("2d"); uc.scale(S, S);
 
   const legs = () => {
@@ -1141,7 +1213,25 @@ export function paintFrame(name: string, p: PoseLike, info: FrameInfo, withShado
   const weaponNow = () => { if (!p.noWeapon) weapon(c, r); };
   const bowHidesFar = L.weapon === "bow" && p.attack >= 0 && !p.farHand;
 
-  if (dir === "up") {
+  if (dir === "up" && r.diag) {
+    // seen from behind, turned right: the far (left) arm tucks behind the body
+    const behind = p.attack < 1 || p.attack === 3;
+    if (behind) weaponNow();
+    if (!bowHidesFar && !p.farHand) farArm();
+    legs(); torso(c, r); rangedGear(c, r);
+    backItem(c, r, true);
+    if (p.farHand) farArm(); shieldNow();
+    arm(c, r, "near");
+    head(c, r);
+    if (!behind) weaponNow();
+  } else if (dir === "down" && r.diag) {
+    // facing down-right: the far (left) arm goes behind the torso, the shield stays in front
+    backItem(c, r, false);
+    if (!bowHidesFar && !p.farHand) farArm();
+    legs(); torso(c, r); backItem(c, r, true); rangedGear(c, r); head(c, r);
+    if (p.farHand) farArm(); shieldNow();
+    weaponNow(); arm(c, r, "near");
+  } else if (dir === "up") {
     const behind = p.attack < 1 || p.attack === 3;
     if (behind) weaponNow();
     legs(); torso(c, r); rangedGear(c, r);
@@ -1165,6 +1255,7 @@ export function paintFrame(name: string, p: PoseLike, info: FrameInfo, withShado
     weaponNow(); arm(c, r, "near");
   }
 
+  if (PIX) return pixelFrame(body, under, r, K, S, flash, withShadow);
   const out = post(body, S), oc = out.getContext("2d");
   oc.save(); oc.scale(S, S);
   heroFx(oc, r);
@@ -1187,5 +1278,66 @@ export function paintFrame(name: string, p: PoseLike, info: FrameInfo, withShado
   const img = fc.getImageData(0, 0, 32 * K, 32 * K);
   const hc = new HiCanvas(32, 32, K);
   hc.data.set(img.data);
+  return hc;
+}
+
+// ---------------------------------------------------------------- pixel-art output
+const OUTLINE = 0x1a1420;
+/**
+ * Turns a painted RGBA image (already scaled to the target size) into pixel art in place: alpha becomes 0 or 255,
+ * colours are posterized, the top-left edge gets a lighter rim and the silhouette a 1px outline in a deep shade
+ * of the colour it wraps.
+ */
+export function pixelize(d: Uint8ClampedArray | Uint8Array, w: number, h: number, outline = true) {
+  const STEP = 12;
+  for (let i = 0; i < d.length; i += 4) {
+    if (d[i + 3] < 120) { d[i] = d[i + 1] = d[i + 2] = d[i + 3] = 0; continue; }
+    d[i + 3] = 255;
+    for (let k = 0; k < 3; k++) d[i + k] = Math.min(255, Math.round(d[i + k] / STEP) * STEP);
+  }
+  const hc = new HiCanvas(w, h, 1);
+  hc.data.set(d);
+  hc.rim(1.16);
+  if (outline) hc.selout(OUTLINE);
+  d.set(hc.data);
+}
+
+/** Effects / shadows layer: keep soft colour but snap alpha to a few steps so it reads as pixels. */
+export function pixelAlpha(d: Uint8ClampedArray) {
+  for (let i = 3; i < d.length; i += 4) { const a = d[i]; d[i] = a < 40 ? 0 : a < 110 ? 85 : a < 190 ? 160 : 255; }
+}
+
+export function shrink(src: ReturnType<typeof canvas>, id: string, w: number, h: number) {
+  const fin = scratch(id, w, h), fc = fin.getContext("2d");
+  fc.imageSmoothingEnabled = true; (fc as any).imageSmoothingQuality = "high";
+  fc.drawImage(src, 0, 0, w, h);
+  return fc.getImageData(0, 0, w, h).data;
+}
+
+function pixelFrame(body: ReturnType<typeof canvas>, under: ReturnType<typeof canvas>, r: Rig, K: number, S: number, flash: number, withShadow: boolean): HiCanvas {
+  const W = Math.round(32 * K), N = body.width;
+  const b = shrink(body, "pxb", W, W);
+  pixelize(b, W, W);
+  if (flash) for (let i = 0; i < b.length; i += 4) if (b[i + 3]) for (let k = 0; k < 3; k++) b[i + k] += (255 - b[i + k]) * flash;
+  // effects in front
+  const fx = scratch("fx", N, N), fc = fx.getContext("2d");
+  fc.scale(S, S); heroFx(fc, r); moveFx(fc, r, under.getContext("2d"));
+  const f = shrink(fx, "pxf", W, W); pixelAlpha(f);
+  // behind: smears, circles and the ground shadow
+  if (withShadow) {
+    const uc = under.getContext("2d");
+    uc.save(); uc.setTransform(S, 0, 0, S, 0, 0); uc.translate(16 + r.lx, 29); uc.scale(1, 0.28);
+    uc.fillStyle = "rgba(0,0,0,0.38)"; uc.beginPath(); uc.arc(0, 0, 6.2, 0, Math.PI * 2); uc.fill(); uc.restore();
+  }
+  const u = shrink(under, "pxu", W, W); pixelAlpha(u);
+  const hc = new HiCanvas(32, 32, K);
+  const o = hc.data;
+  const over = (src: Uint8ClampedArray, i: number) => {
+    const a = src[i + 3] / 255; if (!a) return;
+    const oa = o[i + 3] / 255, na = a + oa * (1 - a);
+    for (let k = 0; k < 3; k++) o[i + k] = Math.round((src[i + k] * a + o[i + k] * oa * (1 - a)) / na);
+    o[i + 3] = Math.round(na * 255);
+  };
+  for (let i = 0; i < o.length; i += 4) { over(u, i); over(b, i); over(f, i); }
   return hc;
 }
