@@ -143,6 +143,72 @@ export function buildHouses(scene: Phaser.Scene): Set<number> {
   return covered;
 }
 
+/**
+ * Time on a lived-in house: moss and lichen patches and slipped shingles on the front roof slope, damp and grime
+ * rising at the wall foot, ivy on some walls, weeds and a few dropped things around the base. Pixel-sized marks,
+ * painted on the house canvas (before it is enlarged), so it keeps the shared pixel density.
+ */
+function weatherHouse(ctx: CanvasRenderingContext2D, S: (x: number, y: number, z?: number) => Pt,
+  b: { X0: number; X1: number; Y0: number; Y1: number; o: number; top: number; eave: number; facadeH: number; alongX: boolean }, seed: number) {
+  const R = rng(seed);
+  const { X0, X1, Y0, Y1, o, top, eave, facadeH, alongX } = b;
+  const dot = (p: Pt, w: number, h: number, c: string) => { ctx.fillStyle = c; ctx.fillRect(Math.round(p.x), Math.round(p.y), w, h); };
+  // a point on the front slope: s along the ridge (0..1), t from ridge (0) to eave (1)
+  const slope = (s0: number, t0: number): Pt => alongX
+    ? S(X0 - o + s0 * (X1 - X0 + 2 * o), (Y0 + Y1) / 2 + t0 * ((Y1 - Y0) / 2 + o), top + t0 * (eave - top))
+    : S((X0 + X1) / 2 + t0 * ((X1 - X0) / 2 + o), Y0 - o + s0 * (Y1 - Y0 + 2 * o), top + t0 * (eave - top));
+  // moss and lichen: clumps of a few pixels, gathered in two or three patches, more towards the eaves
+  const patches = 2 + Math.floor(R() * 3);
+  for (let k = 0; k < patches; k++) {
+    const ps = R(), pt = 0.35 + R() * 0.6, n = 40 + Math.floor(R() * 60);
+    for (let i = 0; i < n; i++) {
+      const p = slope(Math.min(1, Math.max(0, ps + (R() - 0.5) * 0.22)), Math.min(0.98, Math.max(0.05, pt + (R() - 0.5) * 0.3 * R())));
+      const c = R() < 0.75 ? ["rgba(78,98,46,0.75)", "rgba(96,112,52,0.7)", "rgba(60,78,38,0.8)"][Math.floor(R() * 3)] : "rgba(160,150,96,0.6)";
+      dot(p, 1 + Math.floor(R() * 2), 1 + Math.floor(R() * 1.6), c);
+    }
+  }
+  // slipped or missing shingles: dark gaps with a light lower lip
+  const gaps = 1 + Math.floor(R() * 4);
+  for (let k = 0; k < gaps; k++) {
+    const p = slope(0.08 + R() * 0.84, 0.2 + R() * 0.7);
+    dot(p, 3, 2, "rgba(20,14,10,0.75)"); dot({ x: p.x, y: p.y + 2 }, 3, 1, "rgba(200,180,150,0.25)");
+  }
+  // damp and grime rising from the wall foot (front and side faces): a soft band with a ragged top
+  const foot = (a0: Pt, a1: Pt, ph: number) => {
+    const n = Math.ceil(Math.abs(a1.x - a0.x));
+    for (let i = 0; i <= n; i++) {
+      const f = i / Math.max(1, n), x = a0.x + (a1.x - a0.x) * f, y = a0.y + (a1.y - a0.y) * f;
+      const h = 4 + 3 * Math.sin(f * 9 + ph) + 2 * Math.sin(f * 23 + ph * 2) + R() * 1.5;
+      ctx.fillStyle = "rgba(34,30,20,0.16)"; ctx.fillRect(Math.round(x), Math.round(y - h), 1, Math.round(h));
+      ctx.fillStyle = "rgba(34,30,20,0.18)"; ctx.fillRect(Math.round(x), Math.round(y - 2), 1, 2);
+    }
+  };
+  foot(S(X0, Y1, 0), S(X1, Y1, 0), R() * 6); foot(S(X1, Y1, 0), S(X1, Y0, 0), R() * 6);
+  // streaks running down from the eaves
+  for (let i = 0; i < 6; i++) {
+    const f = R(), a = S(X0 + f * (X1 - X0), Y1, facadeH - 2);
+    ctx.fillStyle = "rgba(24,20,14,0.18)"; ctx.fillRect(Math.round(a.x), Math.round(a.y), 1, 6 + Math.floor(R() * 12));
+  }
+  // ivy climbing one corner of some houses
+  if (R() < 0.5) {
+    const onFront = R() < 0.5, f0 = R() < 0.5 ? 0.02 : 0.8, reach = facadeH * (0.4 + R() * 0.6);
+    for (let i = 0; i < 70; i++) {
+      const z = reach * Math.pow(R(), 1.5), f = f0 + R() * 0.18 * (1 - z / reach + 0.3);
+      const p = onFront ? S(X0 + f * (X1 - X0), Y1, z) : S(X1, Y0 + f * (Y1 - Y0), z);
+      dot(p, 1 + Math.floor(R() * 2), 1, ["#2c4a22", "#3a5a28", "#4e6c30", "#1e3418"][Math.floor(R() * 4)]);
+    }
+  }
+  // weeds along the base
+  for (let i = 0; i < 18; i++) {
+    const f = R(), front = R() < 0.6;
+    const p = front ? S(X0 + f * (X1 - X0), Y1 + 1 + R() * 3, 0) : S(X1 + 1 + R() * 3, Y0 + f * (Y1 - Y0), 0);
+    const h = 2 + Math.floor(R() * 4), c = ["#3c5a26", "#4e6c2e", "#62783a"][Math.floor(R() * 3)];
+    dot({ x: p.x, y: p.y - h }, 1, h, c);
+    if (R() < 0.6) dot({ x: p.x + 1, y: p.y - h + 1 }, 1, h - 1, c);
+    if (R() < 0.5) dot({ x: p.x - 1, y: p.y - h + 2 }, 1, Math.max(1, h - 2), c);
+  }
+}
+
 function house(scene: Phaser.Scene, x0: number, y0: number, x1: number, yb: number, roof: number) {
   const src = (scene.textures.get("tiles") as Phaser.Textures.CanvasTexture).getSourceImage() as HTMLCanvasElement;
   const tsx = (id: number) => (id % TILE_COUNT) * TILE, tsy = (id: number) => Math.floor(id / TILE_COUNT) * TILE;
@@ -244,6 +310,7 @@ function house(scene: Phaser.Scene, x0: number, y0: number, x1: number, yb: numb
     line(ctx, S(xm, Y0 - o, top + 1), S(xm, Y1 + o, top + 1), "rgba(40,28,20,0.85)", 2);
     line(ctx, S(X1 + o, Y0 - o, eave), S(X1 + o, Y1 + o, eave), "rgba(30,20,12,0.6)", 1);
   }
+  if (SMOOTH) weatherHouse(ctx, S, { X0, X1, Y0, Y1, o, top, eave, facadeH, alongX }, x0 * 131 + y0 * 17);
   tex.refresh();
 
   sliced(scene, key, X0, Y0, X1, Y1, left, topY, cw, ch, true);
