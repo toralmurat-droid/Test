@@ -1,9 +1,10 @@
 import { ClassKind, CLASSES } from "../../shared/classes";
 import { activeByNode, SLOT_KEYS } from "../../shared/slots";
+import { iconImg } from "./skillIcons";
 import { EFFECT_TEXT, lockReason, nodeRank, spentPoints, talentPoints, TREE_LEVELS, treeNodes, TREES } from "../../shared/talents";
 
 /**
- * Skill tree screen (T): one tree with the class skills (actives go on slots 1-0 by drag or hover + number key, plus passives like Iron Skin), the 3-hit combo and the
+ * Skill tree screen (T): one tree with the class skills (actives go on slots 1-0: click a slot, or hover here + number key, plus passives like Iron Skin), the 3-hit combo and the
  * passive skill branches, drawn as a tree growing up from the hero: Lv 1 at the bottom, ultimate at the top; a node needs the one below it. Click a node to spend a point.
  */
 export class TalentMenu {
@@ -13,27 +14,20 @@ export class TalentMenu {
   private cls?: ClassKind;
 
   constructor(private send: (type: string, msg?: unknown) => void) {
-    // Learned active skills can be dragged onto the slot bar, or hovered while pressing a number key
+    // Learned active skills: hover one and press a number key to put it on that key
     this.el.addEventListener("mouseover", (ev) => {
       const t = (ev.target as HTMLElement).closest("[data-talent]") as HTMLElement | null;
       this.hover = t?.dataset.talent ?? "";
     });
     this.el.addEventListener("mouseleave", () => { this.hover = ""; });
-    this.el.addEventListener("dragstart", (ev) => {
-      const t = (ev.target as HTMLElement).closest("[data-active]") as HTMLElement | null;
-      if (t) ev.dataTransfer?.setData("text/skill", t.dataset.active!);
-    });
+
     this.el.addEventListener("click", (ev) => {
       const t = (ev.target as HTMLElement).closest("[data-talent]") as HTMLElement | null;
       if (t && t.classList.contains("can")) this.send("learn", t.dataset.talent);
       if ((ev.target as HTMLElement).id === "treereset") this.send("respec");
     });
     // Buttons never keep keyboard focus, so Space in a fight can't click a node by accident
-    // (draggable skills keep the default or the drag never starts; they are already learned, so a stray Space click does nothing)
-    this.el.addEventListener("mousedown", (ev) => {
-      const b = (ev.target as HTMLElement).closest("button");
-      if (b && !b.draggable) ev.preventDefault();
-    });
+    this.el.addEventListener("mousedown", (ev) => { if ((ev.target as HTMLElement).closest("button")) ev.preventDefault(); });
   }
 
   get open() { return !this.el.hidden; }
@@ -77,16 +71,17 @@ export class TalentMenu {
         const st = why === "max" ? "max" : why === "" ? "can" : why === "points" ? (r > 0 ? "has" : "off") : "locked";
         const fx = n.talent ? (r > 0 ? EFFECT_TEXT[n.talent.effect](+(n.talent.perRank * r).toFixed(1)) : EFFECT_TEXT[n.talent.effect](n.talent.perRank) + " per rank") : n.desc;
         const req = why === "level" ? `🔒 Level ${n.level}` : why === "above" ? "🔒 Learn the skill below first" : "";
-        // Active skills: show the slot key once placed; learned ones can be dragged to the slot bar
+        // Active skills: show the slot key once placed
         const act = n.kind === "power" ? activeByNode(cls, n.id) : undefined;
         const slot = act ? slots.indexOf(act.id) : -1;
         const key = slot >= 0 ? ` <kbd>${SLOT_KEYS[slot]}</kbd>` : "";
-        const drag = act && r > 0 ? ` draggable="true" data-active="${act.id}"` : "";
-        const hint = act && r > 0 && slot < 0 ? `<span class="req">⇩ Drag to a slot (or hover + press 1-0)</span>` : "";
+        const actAttr = act && r > 0 ? ` data-active="${act.id}"` : "";
+        const hint = act && r > 0 && slot < 0 ? `<span class="req">⇩ Click a key slot at the bottom to use it (or hover here + press 1-0)</span>` : "";
+        const icon = n.kind === "combo" ? iconImg("combo", "ticon") : act ? iconImg(act.power, "ticon") : "";
         const pips = Array.from({ length: n.max }, (_, i) => `<i class="${i < r ? "on" : ""}"></i>`).join("");
         const gold = n.kind !== "passive";
-        cells += `<button class="talent ${gold ? "power" : "passive"} ${st}" data-talent="${n.id}" data-col="${col}" data-row="${row}" data-rank="${r}"${drag} style="--c:${gold ? "#ffd166" : n.color}">` +
-          `<b>${gold ? "★ " : ""}${n.name}${key}</b><span class="pips">${pips}</span><span class="fx">${fx}</span>${req ? `<span class="req">${req}</span>` : hint}</button>`;
+        cells += `<button class="talent ${gold ? "power" : "passive"} ${st}" data-talent="${n.id}" data-col="${col}" data-row="${row}" data-rank="${r}"${actAttr} style="--c:${gold ? "#ffd166" : n.color}">` +
+          `<b>${icon || (gold ? "★ " : "")}${n.name}${key}</b><span class="pips">${pips}</span><span class="fx">${fx}</span>${req ? `<span class="req">${req}</span>` : hint}</button>`;
       }
     });
     const roots = b.map((x, i) => `<div class="troot" data-col="${i}" style="color:${x.color}">${x.name}</div>`).join("");
