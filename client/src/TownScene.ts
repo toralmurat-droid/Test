@@ -5,7 +5,7 @@ import { CLASSES, ClassKind, DODGE, ENERGY, energyName, xpForLevel } from "../..
 import { GROUND, areaAt, isSafeZone } from "../../shared/map";
 import { heroPoise, RAGE_ATTACK_SPEED } from "../../shared/combat";
 import { moveStep } from "../../shared/movement";
-import { SPAWN_ZONES } from "../../shared/spawns";
+import { levelsAt, SPAWN_ZONES, zoneAt } from "../../shared/spawns";
 import {
   attackMult, cooldownMult, heroSpeed, STATS, magicMult, POWERS, STAT_NAMES, StatKind, statPoints, HP_PER_STR, ULTS, hasSpecial, hasUlt, ultPower,
 } from "../../shared/powers";
@@ -39,6 +39,7 @@ interface Entity {
   lvlColor?: string; // monsters: current colour of the "Lv N" label
   mob: boolean;
   hero?: CharacterName; // set when drawn with the animated 32x32 sheets
+  culled?: boolean; // monster off screen: not drawn this frame
   top: number; // px from the feet to the top of the head, for the name label and chat bubble
   bar: Phaser.GameObjects.Graphics;
   bubble?: Phaser.GameObjects.Text;
@@ -545,11 +546,8 @@ export class TownScene extends Phaser.Scene {
     if (mob) {
       const sprite = this.add.sprite(p.x, p.y, mobTexture(this, p.kind, p.level), 0).setOrigin(0.5, MOB_LOOK[p.kind]?.oy ?? 0.85)
         .setScale(MOB_LOOK[p.kind]?.scale ?? 1);
-      const label = this.add.text(p.x, p.y, `Lv${p.level ?? 1}`, {
-        fontFamily: "monospace", fontSize: "14px", color: "#ffffff", stroke: "#000", strokeThickness: 3,
-      }).setOrigin(0.5, 1).setScale(0.25).setResolution(2);
-      isoAnchor(label, sprite);
-      this.entities.set(id, { sprite, label, bar: isoAnchor(this.add.graphics(), sprite) as Phaser.GameObjects.Graphics, tx: p.x, ty: p.y, state: p, mob, top: MOB_LOOK[p.kind]?.top ?? 14 });
+      // The level tag is made when the monster comes on screen (see update): thousands of text canvases would cost a lot
+      this.entities.set(id, { sprite, bar: isoAnchor(this.add.graphics(), sprite) as Phaser.GameObjects.Graphics, tx: p.x, ty: p.y, state: p, mob, top: MOB_LOOK[p.kind]?.top ?? 14 });
       return;
     }
     // Classes with a generated sheet use it; anything else falls back to the procedural persona
@@ -1066,6 +1064,25 @@ export class TownScene extends Phaser.Scene {
         e.sprite.x += (e.tx - e.sprite.x) * ease;
         e.sprite.y += (e.ty - e.sprite.y) * ease;
       }
+      // Monsters off screen: hide them and skip the per-frame drawing (there are a lot of them)
+      if (e.mob) {
+        const v = this.cameras.main.worldView, M = 48;
+        const off = e.sprite.x < v.x - M || e.sprite.x > v.right + M || e.sprite.y < v.y - M || e.sprite.y > v.bottom + M;
+        if (off) {
+          if (!e.culled) {
+            e.culled = true; e.sprite.setVisible(false); e.bar.clear(); e.bubble?.setVisible(false);
+            e.label?.destroy(); e.label = undefined; e.lvlColor = undefined;
+          }
+          continue;
+        }
+        if (e.culled) { e.culled = false; e.bubble?.setVisible(true); }
+        if (!e.label) {
+          e.label = this.add.text(e.sprite.x, e.sprite.y, "", {
+            fontFamily: "monospace", fontSize: "14px", color: "#ffffff", stroke: "#000", strokeThickness: 3,
+          }).setOrigin(0.5, 1).setScale(0.25).setResolution(2);
+          isoAnchor(e.label, e.sprite);
+        }
+      }
 
       const moving = id === this.me ? (this.input_.up || this.input_.down || this.input_.left || this.input_.right) : p.moving;
       if (ISO) {
@@ -1204,10 +1221,10 @@ export class TownScene extends Phaser.Scene {
       hb.textContent = String(freeStats);
       // Monster zone status: how many are alive
       const tx = meEnt.sprite.x / TILE, ty = meEnt.sprite.y / TILE;
-      const zdef = SPAWN_ZONES.find((z) => tx >= z.x && ty >= z.y && tx < z.x + z.w && ty < z.y + z.h);
+      const zdef = zoneAt(Math.floor(tx), Math.floor(ty));
       const zone = zdef && (this.room.state as any).zones?.get(zdef.name);
       document.getElementById("zone")!.textContent = zone
-        ? `⚔ ${zone.name} (Lv ${zdef!.levels[0]}-${zdef!.levels[1]}): ${zone.alive}/${zone.cap} monsters`
+        ? `⚔ ${zone.name} (Lv ${levelsAt(zdef!, tx, ty).join("-")}): ${zone.alive}/${zone.cap} monsters`
         : "";
       const cls = mine.cls as ClassKind;
       const cdm = cooldownMult(cls, { sta: mine.sta, str: mine.str, mag: mine.mag }, mine.talents) * talentReduce(cls, mine.talents, "cdr");

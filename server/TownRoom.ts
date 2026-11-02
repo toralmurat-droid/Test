@@ -20,7 +20,7 @@ import { isSafeZone, isSolidAt, randomSpawn } from "../shared/map";
 import { npcById, npcNear, TALK_RANGE } from "../shared/npcs";
 import { sellPrice, SHOPS } from "../shared/shops";
 import { BLOB_KINDS, inZone, npcPresent, QUESTS, questStep, stepGoal, USE_RANGE } from "../shared/quests";
-import { findHideSpot, HIDE, noMobsAt, randomPointInZone, rollLevel, SPAWN_ZONES, zoneCap } from "../shared/spawns";
+import { findHideSpot, HIDE, noMobsAt, spawnPoint, SPAWN_ZONES, zoneCap } from "../shared/spawns";
 import { moveStep } from "../shared/movement";
 import { flush, HeroSave, loadHero, login, markChest, openedChests, saveHero } from "./accounts";
 import { chestById, CHEST_RANGE, CHEST_RESPAWN_MS, rollChest } from "../shared/chests";
@@ -283,6 +283,9 @@ function toward(x: number, y: number, tx: number, ty: number): InputState {
   return { right: dx > 2, left: dx < -2, down: dy > 2, up: dy < -2 };
 }
 
+/** Monsters with no player within this many px (square) doze until someone comes by. */
+const SLEEP_RANGE = 40 * TILE;
+
 /** Monsters that fight from range: how close they let you come, how far they chase, and their shot (none for healers). */
 const RANGED: Partial<Record<MobKind, { keepAway: number; far: number; range: number; shot: string; shotSpeed: number; shotRadius: number; mult?: number }>> = {
   shooterblob: { ...BLOB_AI.shooter, far: BLOB_AI.shooter.range * 0.85, shot: "slimeball" },
@@ -492,13 +495,13 @@ export class TownRoom extends Room<TownState> {
 
   private spawnMob(kind: MobKind, zi: number, id = `m${++this.mobSeq}`) {
     const def = MOBS[kind];
-    const home = randomPointInZone(SPAWN_ZONES[zi]);
+    const home = spawnPoint(SPAWN_ZONES[zi], kind);
     const m = this.state.mobs.get(id) ?? new Mob();
     m.kind = kind;
     m.zone = zi;
     m.x = m.homeX = home.x;
     m.y = m.homeY = home.y;
-    m.level = rollLevel(SPAWN_ZONES[zi]);
+    m.level = home.level;
     m.hp = m.maxHp = Math.round(def.maxHp * mobScale(m.level, "hp"));
     m.dead = false;
     m.target = "";
@@ -783,6 +786,11 @@ export class TownRoom extends Room<TownState> {
     });
   }
 
+  private playerNear(x: number, y: number, r: number): boolean {
+    for (const p of this.state.players.values()) if (!p.dead && Math.abs(p.x - x) < r && Math.abs(p.y - y) < r) return true;
+    return false;
+  }
+
   private updateMob(m: Mob, id: string, dt: number, now: number) {
     tickPoise(m, mobPoiseMax(m), dt, now);
     if (m.dead) { m.moving = false; m.winding = false; m.windUntil = 0; return; }
@@ -791,6 +799,8 @@ export class TownRoom extends Room<TownState> {
     if (m.stunned || m.broken) { m.winding = false; m.windUntil = 0; }
     m.slowed = now < m.slowUntil;
     if (m.stunned) { m.moving = false; return; }
+    // Nobody around: the monster dozes (no wandering, no budding), which keeps big monster counts cheap
+    if (!m.target && !this.playerNear(m.x, m.y, SLEEP_RANGE)) { if (m.moving) m.moving = false; return; }
     if (m.kind === "motherblob" && now >= m.nextBrood) this.brood(m, id, now);
     if (m.hidden) return this.updateHidden(m, id, dt, now);
 
