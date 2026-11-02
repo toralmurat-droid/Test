@@ -13,8 +13,20 @@ export type SheetDir = Dir | "downright" | "upright";
 export const PAINT_DIRS: SheetDir[] = ["down", "up", "right", "downright", "upright"];
 export const PAINT_COLS = 8;
 const FLUID = new Set(["walk", "run", "walk2"]);
-/** Animation list for a sheet: painted sheets get 8-frame (smoother) walk and run cycles. */
-export function animsOf(painted: boolean) { return ANIMS.map((a) => painted && FLUID.has(a.name) ? { ...a, frames: PAINT_COLS, fps: Math.round(a.fps * 8 / 6) } : a); }
+/** Attacks drawn as 8 in-between frames in painted sheets (same duration as the 4-frame ones). */
+const SWING8 = new Set(["attack", "attack2", "attack3", "attack4", "attack5"]);
+/** Animation list for a sheet: painted sheets get 8-frame (smoother) walk/run cycles and attack swings. */
+export function animsOf(painted: boolean) {
+  return ANIMS.map((a) => !painted ? a
+    : FLUID.has(a.name) ? { ...a, frames: PAINT_COLS, fps: Math.round(a.fps * 8 / 6) }
+    : SWING8.has(a.name) ? { ...a, frames: PAINT_COLS, fps: a.fps * 2 } : a);
+}
+/** Value of a 4-key attack table at a fractional phase (extrapolates a little before 0 for anticipation). */
+const keyAt = (arr: number[], t: number) => {
+  if (t <= 0) return arr[0] + (arr[0] - arr[1]) * -t;
+  const i = Math.min(2, Math.floor(t)), f = Math.min(1, t - i);
+  return arr[i] + (arr[i + 1] - arr[i]) * f;
+};
 /** Fine pixels per logical pixel: frames are rendered at K x the logical size. */
 export let K = 2;
 /** Output frame size in pixels. */
@@ -60,6 +72,7 @@ export interface Pose {
   noWeapon?: boolean;
   run?: boolean;
   phase?: number;     // painted walk cycles: continuous step phase (radians), drives smooth leg lift
+  attackT?: number;   // painted swings: continuous attack phase (-0.5..3) between the 4 key poses; attack = rounded
 }
 
 export const ANIMS: { name: string; frames: number; fps: number; loop: boolean }[] = [
@@ -172,9 +185,10 @@ function handPos(p: Pose, hero: Hero): [number, number] {
   let [x, y] = base[p.dir];
   if (p.attack >= 0) {
     const mv = moveOf(hero, p);
-    const reach = (mv.reach ?? [0, 3, 4, 2])[p.attack], lift = (mv.lift ?? [5, 2, 0, 0])[p.attack];
+    const at = p.attackT ?? p.attack;
+    const reach = keyAt(mv.reach ?? [0, 3, 4, 2], at), lift = keyAt(mv.lift ?? [5, 2, 0, 0], at);
     x += fx * reach; y += fy * reach - lift;
-    if (p.dir === "down") x += [1, 2, 3, 2][p.attack];
+    if (p.dir === "down") x += keyAt([1, 2, 3, 2], at);
   } else if (p.dir === "right") {
     x += Math.round(-p.stride * 1.5);
   } else {
@@ -196,7 +210,7 @@ function weaponAngle(p: Pose, hero: Hero) {
   if (p.wAng !== undefined) return p.wAng;
   if (p.attack < 0) return hero.idleAngle[p.dir];
   const mv = moveOf(hero, p);
-  let a = mv.swing[p.attack];
+  let a = p.attackT !== undefined ? keyAt(mv.swing, p.attackT) : mv.swing[p.attack];
   if (mv.abs) return a;
   if (p.dir === "up") a = -a; // sweep the other way so it reads the same
   a += FACE_ANGLE[p.dir];
@@ -758,7 +772,7 @@ export function renderFrame(hero: Hero, p: Pose, withShadow = true, flash = 0): 
       const ux = lean + (p.run && p.dir === "right" ? 1 : 0);
       return {
         hand: [hp[0] + ux, hp[1] + ly], ang: weaponAngle(p, hero), mv: moveOf(hero, p),
-        prevAng: (i) => weaponAngle({ ...p, attack: i }, hero), hasShieldMove: !!hero.shield,
+        prevAng: (i) => weaponAngle({ ...p, attack: i, attackT: undefined }, hero), hasShieldMove: !!hero.shield,
       };
     };
     if (diagRec) { diagRec.push({ p, info: infoOf(p) }); return mk(); }
@@ -1000,6 +1014,24 @@ let fluidHero = false;
 const fluid = () => fluidHero;
 const cycle = () => [...Array(PAINT_COLS).keys()].map((t) => (t * 2 * Math.PI) / PAINT_COLS);
 
+/**
+ * An attack as 8 frames between its 4 key poses: a pull-back past the wind-up (anticipation), a fast arc,
+ * the impact held for two frames and an easing follow-through back toward guard.
+ */
+const SWING_T = [-0.2, -0.45, 0.35, 1.0, 1.7, 2.0, 2.5, 3.0];
+function swing8(hero: Hero, B: (t: number) => Pose, move?: MoveId, leanIn = false): Canvas[] {
+  return SWING_T.map((at, t) => {
+    const attack = Math.max(0, Math.min(3, Math.round(at)));
+    const dip = Math.max(0, 1 - Math.abs(at - 2) * 1.4); // body drops into the blow
+    return renderFrame(hero, {
+      ...B(t), attack, attackT: at, move,
+      bob: at < 0 ? -0.5 * -at / 0.45 : dip, crouch: dip * 0.6,
+      lean: leanIn ? -keyAt([0, 1, 2, 1], Math.max(0, at)) : at < 0 ? 0.6 * -at / 0.45 : 0,
+      expr: at > 1.5 && at < 2.6 ? "squint" : "n",
+    });
+  });
+}
+
 /** Per-hero gait (walk2) on the smooth 8-frame cycle. */
 function walk2Fluid(hero: Hero, dir: Dir, B: (t: number) => Pose): Canvas[] {
   const g = hero.gait ?? "stroll";
@@ -1168,23 +1200,25 @@ export function animFrames(hero: Hero, anim: string, dir: Dir): Canvas[] {
         lying, last,
       ];
     }
-    case "attack": return [0, 1, 2, 3].map((attack, t) => renderFrame(hero, { ...B(t), attack, bob: attack === 2 ? 1 : 0 }));
-    case "attack2": return [0, 1, 2, 3].map((attack, t) => renderFrame(hero, { ...B(t), attack, move: "a2", bob: attack === 2 ? 1 : 0 }));
-    case "attack5": return [0, 1, 2, 3].map((attack, t) => renderFrame(hero, { ...B(t), attack, move: "a5", bob: attack === 2 ? 1 : 0, lean: dir === "right" ? -[0, 1, 2, 1][attack] : 0 }));
-    case "attack4": return [0, 1, 2, 3].map((attack, t) => renderFrame(hero, { ...B(t), attack, move: "a4", bob: attack === 2 ? 1 : 0 }));
+    case "attack": if (fluid()) return swing8(hero, B); return [0, 1, 2, 3].map((attack, t) => renderFrame(hero, { ...B(t), attack, bob: attack === 2 ? 1 : 0 }));
+    case "attack2": if (fluid()) return swing8(hero, B, "a2"); return [0, 1, 2, 3].map((attack, t) => renderFrame(hero, { ...B(t), attack, move: "a2", bob: attack === 2 ? 1 : 0 }));
+    case "attack5": if (fluid()) return swing8(hero, B, "a5", dir === "right"); return [0, 1, 2, 3].map((attack, t) => renderFrame(hero, { ...B(t), attack, move: "a5", bob: attack === 2 ? 1 : 0, lean: dir === "right" ? -[0, 1, 2, 1][attack] : 0 }));
+    case "attack4": if (fluid()) return swing8(hero, B, "a4"); return [0, 1, 2, 3].map((attack, t) => renderFrame(hero, { ...B(t), attack, move: "a4", bob: attack === 2 ? 1 : 0 }));
     case "attack3": {
       if (hero.moves?.a3.kind === "spin") {
         // spin on the spot: face each way in turn, ending where we started
         const ring: (Dir | "left")[] = ["down", "left", "up", "right"];
         const start = ring.indexOf(dir);
-        return [1, 2, 3, 0].map((k, i) => {
+        const spin = [1, 2, 3, 0].map((k, i) => {
           const fd = ring[(start + k) % 4], real: Dir = fd === "left" ? "right" : fd;
           const f = renderFrame(hero, { ...B(i), dir: real, attack: Math.min(i + 1, 3), move: "a3", crouch: i === 3 ? 0 : 1 });
           if (fd === "left") f.mirror();
           if (i < 3) { arc(f, 16, 20, 13, i * 120 - 60, i * 120 + 100, 0xffffff, 200, 2); arc(f, 16, 20, 11, i * 120 - 20, i * 120 + 90, 0xbfd7ff, 120); }
           return f;
         });
+        return fluid() ? spin.flatMap((f) => [f, f]) : spin; // 8 columns in painted sheets
       }
+      if (fluid()) return swing8(hero, B, "a3");
       return [0, 1, 2, 3].map((attack, t) => renderFrame(hero, { ...B(t), attack, move: "a3", bob: attack === 2 ? 1 : 0 }));
     }
     case "skill": {

@@ -281,7 +281,7 @@ export function mobTexture(scene: Phaser.Scene, kind: string, level = 1): string
     const meta = scene.cache.json.get("hd_mobs")?.[key];
     const src = scene.textures.exists(`hd_${key}`) ? scene.textures.get(`hd_${key}`).getSourceImage() as HTMLImageElement : null;
     if (meta && src) {
-      hiResTexture(scene, key, meta.w, meta.h, 6, meta.scale, (ctx, f) => ctx.drawImage(src, f * meta.w * meta.scale, 0, meta.w * meta.scale, meta.h * meta.scale, 0, 0, meta.w, meta.h));
+      hiResTexture(scene, key, meta.w, meta.h, meta.frames ?? 6, meta.scale, (ctx, f) => ctx.drawImage(src, f * meta.w * meta.scale, 0, meta.w * meta.scale, meta.h * meta.scale, 0, 0, meta.w, meta.h));
       scene.textures.get(key).setFilter(Phaser.Textures.FilterMode.NEAREST); // pixel art sheet
       return key;
     }
