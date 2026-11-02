@@ -212,23 +212,9 @@ export class Ambient {
   }
 
   private buildShore() {
-    // Dark bank under land on the north edge, pale foam where water meets land; the foam gently pulses.
-    const bank = this.scene.add.graphics().setDepth(-1.6);
-    const foam = this.scene.add.graphics().setDepth(-1.6);
-    const water = (x: number, y: number) => { const g = ground(x, y); return g === T.WATER || g === -1; };
-    for (let y = 0; y < MAP_H; y++) for (let x = 0; x < MAP_W; x++) {
-      if (GROUND[y][x] !== T.WATER) continue;
-      this.waterTiles.push([x, y]);
-      const X = x * TILE, Y = y * TILE;
-      if (!water(x, y - 1)) {
-        bank.fillStyle(0x1d4a7a, 0.55).fillRect(X, Y, TILE, 5); bank.fillStyle(0x1d4a7a, 0.25).fillRect(X, Y + 5, TILE, 2);
-        foam.fillStyle(0xd8ecff, 0.85).fillRect(X, Y + 6, TILE, 1); foam.fillStyle(0xd8ecff, 0.35).fillRect(X, Y + 7, TILE, 1);
-      }
-      if (!water(x, y + 1)) { foam.fillStyle(0xd8ecff, 0.85).fillRect(X, Y + TILE - 1, TILE, 1); foam.fillStyle(0xd8ecff, 0.35).fillRect(X, Y + TILE - 2, TILE, 1); }
-      if (!water(x - 1, y)) { bank.fillStyle(0x1d4a7a, 0.35).fillRect(X, Y, 2, TILE); foam.fillStyle(0xd8ecff, 0.75).fillRect(X + 2, Y, 1, TILE); foam.fillStyle(0xd8ecff, 0.3).fillRect(X + 3, Y, 1, TILE); }
-      if (!water(x + 1, y)) { foam.fillStyle(0xd8ecff, 0.75).fillRect(X + TILE - 1, Y, 1, TILE); foam.fillStyle(0xd8ecff, 0.3).fillRect(X + TILE - 2, Y, 1, TILE); }
-    }
-    this.scene.tweens.add({ targets: foam, alpha: 0.35, duration: 1400, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
+    // The shoreline itself (curved banks, wet sand, foam) is painted by details.ts; here only the water tiles are
+    // listed for the sparkles.
+    for (let y = 0; y < MAP_H; y++) for (let x = 0; x < MAP_W; x++) if (GROUND[y][x] === T.WATER) this.waterTiles.push([x, y]);
   }
 
   private buildTrees() {
