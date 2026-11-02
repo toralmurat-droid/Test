@@ -1,4 +1,4 @@
-import { ISO } from "./isoflag";
+import { ISO, SMOOTH } from "./isoflag";
 import { isoAnchor, isoScreen } from "./iso";
 import Phaser from "phaser";
 import { ART_K as K, MAP_H, MAP_W, TILE } from "../../shared/constants";
@@ -134,9 +134,10 @@ class IsoUprightLayer {
       const left = (tx0 - ty1) * TILE, top = ((tx0 + ty0) * TILE) / 2 - UP;
       const w = (tx1 - tx0 + ty1 - ty0) * TILE, h = ((tx1 - tx0 + ty1 - ty0) * TILE) / 2 + UP;
       const g = this.scene.make.graphics({}, false);
-      g.setPosition(-left, -top);
-      drawUpright(g, tx0, ty0, tx1, ty1);
-      const rt = this.scene.add.renderTexture(left, top, w, h).setOrigin(0, 0).setDepth(this.depth);
+      const R = SMOOTH ? 3 : 1; // smooth mode: painted at 3x so thin blades and round caps stay crisp at camera zoom
+      g.setPosition(-left * R, -top * R).setScale(R);
+      (SMOOTH ? drawUprightSmooth : drawUpright)(g, tx0, ty0, tx1, ty1);
+      const rt = this.scene.add.renderTexture(left, top, w * R, h * R).setOrigin(0, 0).setDepth(this.depth).setScale(1 / R);
       rt.draw(g);
       g.destroy();
       isoScreen(rt);
@@ -181,6 +182,56 @@ function drawUpright(g: Phaser.GameObjects.Graphics, x0: number, y0: number, x1:
         const by = sy - st - 3;
         g.fillStyle(c, 1).fillRect(sx - 1, by, 3, 3); px(sx, by - 1, c); px(sx - 2, by + 1, c); px(sx + 2, by + 1, sh); px(sx, by + 3, sh);
         px(sx, by + 1, 0xffd23a);
+      }]);
+    }
+  }
+  items.sort((a, b) => a[0] - b[0]);
+  for (const [, f] of items) f();
+}
+
+/** Smooth-mode upright detail: curved grass blades, round mushrooms and flowers (same placement as drawUpright). */
+function drawUprightSmooth(g: Phaser.GameObjects.Graphics, x0: number, y0: number, x1: number, y1: number) {
+  const R = TILE - 8;
+  const at = (wx: number, wy: number) => [wx - wy, (wx + wy) / 2];
+  const items: [number, () => void][] = [];
+  const FLOWER_COLS = [[0xf06292, 0xc2185b], [0xfff176, 0xd8b02a], [0xffffff, 0xc8d0e0], [0xba68c8, 0x7b3f9a], [0x64b5f6, 0x2e7ac0]];
+  const blade = (x: number, y: number, h: number, lean: number, c: number, w = 0.7) => {
+    g.fillStyle(c, 1).beginPath();
+    g.moveTo(x - w, y); g.lineTo(x + lean * 0.5, y - h * 0.6); g.lineTo(x + lean, y - h); g.lineTo(x + lean * 0.5 + 0.25, y - h * 0.6); g.lineTo(x + w, y);
+    g.closePath().fillPath();
+  };
+  for (let ty = y0; ty < y1; ty++) for (let tx = x0; tx < x1; tx++) {
+    const t = GROUND[ty][tx], X = tx * TILE, Y = ty * TILE;
+    if (!GRASSY.has(t) || OBJECTS[ty][tx] !== EMPTY) continue;
+    const h = hash(tx, ty, 1), wx = X + 4 + hash(tx, ty, 2) * R, wy = Y + 5 + hash(tx, ty, 3) * R;
+    const [x, y] = at(wx, wy);
+    if (h >= 0.08 && h < 0.2) items.push([wx + wy, () => { // tuft
+      g.fillStyle(0x10300c, 0.22).fillEllipse(x, y + 0.5, 9, 2.4);
+      for (let b = 0; b < 9; b++) {
+        const k = hash(tx * 9 + b, ty, 5), lean = (b - 4) * 0.9 + (k - 0.5) * 1.5, hh = 5 + k * 4 - Math.abs(b - 4) * 0.5;
+        blade(x + (b - 4) * 0.7, y, hh, lean, b % 3 === 0 ? 0x2f6b24 : b % 3 === 1 ? 0x4a8a30 : 0x6aaa44);
+      }
+    }]);
+    else if (h >= 0.26 && h < 0.275) items.push([wx + wy, () => { // mushrooms
+      g.fillStyle(0x000000, 0.22).fillEllipse(x + 1, y + 0.5, 9, 2.4);
+      g.fillStyle(0xe8dcc4, 1).fillRoundedRect(x - 1.2, y - 5, 2.4, 5.4, 1);
+      g.fillStyle(0x9a2a20, 1).fillEllipse(x, y - 5.2, 8.6, 4.4);
+      g.fillStyle(0xd23f34, 1).fillEllipse(x - 0.3, y - 5.9, 7.6, 3.6);
+      g.fillStyle(0xf06a5c, 1).fillEllipse(x - 1.4, y - 6.6, 3.2, 1.4);
+      g.fillStyle(0xffffff, 0.95).fillCircle(x - 2, y - 6, 0.6).fillCircle(x + 1, y - 6.8, 0.5).fillCircle(x + 2.5, y - 5.4, 0.45);
+      g.fillStyle(0xe8dcc4, 1).fillRoundedRect(x + 4.6, y - 2.4, 1.6, 2.8, 0.6);
+      g.fillStyle(0xc0392b, 1).fillEllipse(x + 5.4, y - 2.6, 4, 2);
+    }]);
+    if (t === T.FLOWERS) for (let k = 0; k < 6; k++) {
+      const fx = X + 3 + hash(tx, ty, 30 + k) * (TILE - 6), fy = Y + 3 + hash(tx, ty, 40 + k) * (TILE - 6);
+      const [sx, sy] = at(fx, fy), [c, sh] = FLOWER_COLS[(k + tx + ty) % 5], st = 4 + hash(tx, ty, 50 + k) * 4;
+      items.push([fx + fy, () => {
+        g.fillStyle(0x1e4a14, 0.25).fillEllipse(sx, sy + 0.3, 3.6, 1.2);
+        g.lineStyle(0.5, 0x3f7a2a, 1).lineBetween(sx, sy, sx + 0.3, sy - st);
+        blade(sx + 0.4, sy, 2.6, 1.4, 0x5aa845, 0.5);
+        const by = sy - st - 1;
+        for (let p = 0; p < 5; p++) { const a = (p / 5) * Math.PI * 2; g.fillStyle(p % 2 ? sh : c, 1).fillCircle(sx + 0.3 + Math.cos(a) * 1.1, by + Math.sin(a) * 0.8, 0.95); }
+        g.fillStyle(0xffd23a, 1).fillCircle(sx + 0.3, by, 0.6);
       }]);
     }
   }
@@ -449,9 +500,11 @@ export class Details {
   constructor(private scene: Phaser.Scene) {
     makeTextures(scene);
     for (let ty = 0; ty < MAP_H; ty++) for (let tx = 0; tx < MAP_W; tx++) if (GROUND[ty][tx] === T.WATER && inArea("Mirror Pond", tx, ty)) this.pond.push([tx, ty]);
-    this.layers.push(new PixelChunkLayer(scene, -1.75, paintTransitions));
-    this.layers.push(new ChunkLayer(scene, -1.7, (g, x0, y0, x1, y1) => this.groundDecals(g, x0, y0, x1, y1)));
-    this.layers.push(new PixelChunkLayer(scene, -1.74, paintShore));
+    if (!SMOOTH) { // the smooth painted ground (smoothground.ts) has its own borders, shores and detail
+      this.layers.push(new PixelChunkLayer(scene, -1.75, paintTransitions));
+      this.layers.push(new ChunkLayer(scene, -1.7, (g, x0, y0, x1, y1) => this.groundDecals(g, x0, y0, x1, y1)));
+      this.layers.push(new PixelChunkLayer(scene, -1.74, paintShore));
+    }
     this.layers.push(new ChunkLayer(scene, -1.58, (g, x0, y0, x1, y1) => this.waterDecor(g, x0, y0, x1, y1)));
     if (ISO) this.layers.push(new IsoUprightLayer(scene, -1.5));
     this.roofShading();

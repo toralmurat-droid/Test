@@ -1,0 +1,137 @@
+import Phaser from "phaser";
+import { hiResTexture } from "./smooth";
+
+/**
+ * Smooth, painted versions of the world's trees and bushes (no pixel art): soft gradients, layered leaf clusters,
+ * rim light from the top-left. Same texture keys, sizes, frames and pivots as the pixel ones in ambient.ts.
+ */
+const S = 6; // painted at 6x the texture size
+
+function rng(seed: number) {
+  return () => ((seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0) / 4294967296);
+}
+const rgb = (c: number, k = 1, a = 1) => `rgba(${Math.min(255, ((c >> 16) & 255) * k) | 0},${Math.min(255, ((c >> 8) & 255) * k) | 0},${Math.min(255, (c & 255) * k) | 0},${a})`;
+
+function shadow(ctx: CanvasRenderingContext2D, x: number, y: number, rx: number, ry: number, a = 0.3) {
+  const g = ctx.createRadialGradient(x, y, 0, x, y, rx);
+  g.addColorStop(0, `rgba(10,20,10,${a})`); g.addColorStop(0.7, `rgba(10,20,10,${a * 0.6})`); g.addColorStop(1, "rgba(10,20,10,0)");
+  ctx.save(); ctx.translate(x, y); ctx.scale(1, ry / rx); ctx.translate(-x, -y);
+  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, rx, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+}
+
+/** A soft round blob lit from the top-left. */
+function blob(ctx: CanvasRenderingContext2D, x: number, y: number, rx: number, ry: number, c: number, light = 1.35, dark = 0.55) {
+  const g = ctx.createRadialGradient(x - rx * 0.35, y - ry * 0.4, 0, x, y, Math.max(rx, ry) * 1.1);
+  g.addColorStop(0, rgb(c, light)); g.addColorStop(0.55, rgb(c)); g.addColorStop(1, rgb(c, dark));
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2); ctx.fill();
+}
+
+function trunk(ctx: CanvasRenderingContext2D, cx: number, top: number, base: number, w: number) {
+  const g = ctx.createLinearGradient(cx - w, 0, cx + w, 0);
+  g.addColorStop(0, "#8a5d36"); g.addColorStop(0.45, "#6b4426"); g.addColorStop(1, "#3c2412");
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.moveTo(cx - w * 0.55, top);
+  ctx.quadraticCurveTo(cx - w * 0.6, base - 3, cx - w * 1.5, base);
+  ctx.quadraticCurveTo(cx, base - 0.8, cx + w * 1.5, base);
+  ctx.quadraticCurveTo(cx + w * 0.6, base - 3, cx + w * 0.55, top);
+  ctx.closePath(); ctx.fill();
+  // bark lines
+  ctx.strokeStyle = "rgba(40,22,10,0.45)"; ctx.lineWidth = 0.18;
+  for (let i = 0; i < 4; i++) {
+    const x = cx - w * 0.35 + i * w * 0.25;
+    ctx.beginPath(); ctx.moveTo(x, top + 1 + i * 0.7); ctx.quadraticCurveTo(x + 0.2, (top + base) / 2, x - 0.1 + (i % 2) * 0.3, base - 0.8); ctx.stroke();
+  }
+}
+
+/** Leafy canopy: shaded lobes, then hundreds of small leaf clusters, darker low and right, sunlit high and left. */
+function canopy(ctx: CanvasRenderingContext2D, seed: number, cx: number, cy: number, rx: number, ry: number, pal: number[], sway: number) {
+  const [dark, mid, light, hi] = pal;
+  const r = rng(seed);
+  cx += sway;
+  // dark underside mass
+  blob(ctx, cx, cy + ry * 0.15, rx * 1.02, ry * 0.95, dark, 1.0, 0.7);
+  const lobes: [number, number, number, number][] = [
+    [cx, cy, rx * 0.85, ry * 0.85], [cx - rx * 0.5, cy + ry * 0.2, rx * 0.5, ry * 0.5], [cx + rx * 0.5, cy + ry * 0.25, rx * 0.5, ry * 0.5],
+    [cx - rx * 0.1, cy - ry * 0.45, rx * 0.65, ry * 0.55], [cx + rx * 0.35, cy - ry * 0.25, rx * 0.45, ry * 0.45],
+  ];
+  for (const [x, y, a, b] of lobes) blob(ctx, x, y, a, b, mid, 1.25, 0.62);
+  // leaf clusters
+  for (let k = 0; k < 420; k++) {
+    const ang = r() * Math.PI * 2, d = Math.sqrt(r()) * 0.98;
+    const x = cx + Math.cos(ang) * rx * d, y = cy + Math.sin(ang) * ry * d;
+    const lit = (-(x - cx) / rx - (y - cy) / ry) * 0.5 + 0.5 + (r() - 0.5) * 0.35; // 0 = shade, 1 = sun
+    const c = lit > 0.78 ? hi : lit > 0.52 ? light : lit > 0.3 ? mid : dark;
+    const s = 0.45 + r() * 0.55;
+    ctx.fillStyle = rgb(c, 0.9 + r() * 0.2, 0.9);
+    ctx.beginPath(); ctx.ellipse(x, y, s, s * 0.7, r() * Math.PI, 0, Math.PI * 2); ctx.fill();
+  }
+  // soft rim light on the top-left edge
+  ctx.save();
+  ctx.globalCompositeOperation = "source-atop";
+  const g = ctx.createLinearGradient(cx - rx, cy - ry, cx + rx * 0.3, cy + ry * 0.3);
+  g.addColorStop(0, "rgba(255,250,200,0.22)"); g.addColorStop(0.5, "rgba(255,250,200,0)"); g.addColorStop(1, "rgba(0,20,30,0.22)");
+  ctx.fillStyle = g; ctx.fillRect(cx - rx * 1.2, cy - ry * 1.2, rx * 2.4, ry * 2.4);
+  ctx.restore();
+}
+
+export function smoothTrees(scene: Phaser.Scene, K: number) {
+  // Oaks: 24x28 design units (x K texture px), trunk base bottom centre, 2 sway frames
+  for (const [key, seed, pal] of [
+    ["oak_a", 3, [0x24521f, 0x3a7a2e, 0x5a9c3c, 0x9fd06a]],
+    ["oak_b", 7, [0x2a5a22, 0x41862f, 0x66aa40, 0xb0d870]],
+  ] as const) {
+    hiResTexture(scene, key, 24 * K, 28 * K, 2, S, (ctx, f) => {
+      ctx.scale(K, K);
+      shadow(ctx, 12, 25.6, 9, 2.4);
+      trunk(ctx, 12, 13, 26, 1.6);
+      canopy(ctx, seed, 12, 10.5, 10.6, 8.8, pal as unknown as number[], f * 0.45);
+    });
+  }
+  // Pine: 20x30, layered tiers
+  hiResTexture(scene, "pine", 20 * K, 30 * K, 2, S, (ctx, f) => {
+    ctx.scale(K, K);
+    shadow(ctx, 10, 27.6, 6.8, 2);
+    trunk(ctx, 10, 21, 28, 1.1);
+    const r = rng(17);
+    const tiers: [number, number, number][] = [[14, 25, 8.4], [8, 19, 6.4], [3, 13.5, 4.4], [0, 7.5, 2.4]];
+    for (const [i, [y0, y1, half]] of tiers.entries()) {
+      const sway = f ? (0.25 + i * 0.25) : 0;
+      const cx = 10 + sway;
+      // tier body: a drooping cone with a jagged needle hem
+      const g = ctx.createLinearGradient(cx - half, y0, cx + half, y1);
+      g.addColorStop(0, "#4f9a68"); g.addColorStop(0.45, "#2b6e47"); g.addColorStop(1, "#143d28");
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.moveTo(cx, y0);
+      ctx.quadraticCurveTo(cx - half * 0.45, y0 + (y1 - y0) * 0.55, cx - half, y1);
+      const teeth = 7;
+      for (let t = 0; t < teeth; t++) {
+        const xa = cx - half + ((t + 0.5) / teeth) * half * 2, xb = cx - half + ((t + 1) / teeth) * half * 2;
+        ctx.quadraticCurveTo(xa, y1 - 1.3 - r() * 0.5, xb, y1 + (t % 2 ? 0.3 : -0.1));
+      }
+      ctx.quadraticCurveTo(cx + half * 0.45, y0 + (y1 - y0) * 0.55, cx, y0);
+      ctx.fill();
+      // needle strokes
+      ctx.lineWidth = 0.22;
+      for (let k = 0; k < 40; k++) {
+        const t = r(), y = y0 + 1 + t * (y1 - y0 - 1.5), w = half * (y - y0) / (y1 - y0) * 0.95;
+        const x = cx + (r() * 2 - 1) * w;
+        ctx.strokeStyle = x < cx ? "rgba(140,210,150,0.45)" : "rgba(10,40,25,0.4)";
+        ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + (x < cx ? -0.6 : 0.6), y + 0.9); ctx.stroke();
+      }
+    }
+  });
+  // Bush: 16x16, round, with berries
+  hiResTexture(scene, "bush", 16 * K, 16 * K, 2, S, (ctx, f) => {
+    ctx.scale(K, K);
+    shadow(ctx, 8, 14.6, 7, 1.8);
+    canopy(ctx, 23, 8, 10.2, 6.6, 4.6, [0x24521f, 0x3a7a2e, 0x5a9c3c, 0x8fc860], f * 0.4);
+    for (const [x, y] of [[10.5, 10], [5, 12], [11, 12.2], [8, 13], [6.5, 9]]) {
+      const g = ctx.createRadialGradient(x - 0.25, y - 0.25, 0, x, y, 0.75);
+      g.addColorStop(0, "#ffb0a8"); g.addColorStop(0.4, "#e0473f"); g.addColorStop(1, "#8a1d18");
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x + f * 0.4, y, 0.7, 0, Math.PI * 2); ctx.fill();
+    }
+  });
+}
