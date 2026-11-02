@@ -356,8 +356,98 @@ const FENCES = new Set<number>([T.FENCE, T.FENCE_V]);
  * Palisade and fences: wooden posts along the line to each connected neighbour (mask bits N=1 E=2 S=4 W=8).
  * Palisade posts are tall pointed stakes, fences low posts with two rails. `broken` knocks some stakes down.
  */
-function stakesTexture(scene: Phaser.Scene, fence: boolean, mask: number, broken: boolean) {
-  const key = `stk_${fence ? "f" : "p"}_${mask}_${broken ? 1 : 0}`;
+/**
+ * A rough-built palisade: uneven logs leaning a little this way and that, a few missing or snapped, and on the
+ * outside a ragged row of sharpened stakes driven into the dirt at an angle, pointing out. Weeds, ivy and
+ * moss creep over it. `out`: 1 = outside to the south, 2 = to the east (else north / west).
+ */
+function wildPalisade(c: CanvasRenderingContext2D, posts: { x: number; y: number; k: number }[],
+  along: (wx: number, wy: number) => { x: number; y: number }, mask: number, broken: boolean, out: number, variant: number, H: number) {
+  let seed = (mask * 977 + variant * 7919 + out * 131 + (broken ? 5 : 0)) | 1;
+  const R = () => ((seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0) / 4294967296);
+  const horiz = !!(mask & 10) && !(mask & 5), vert = !!(mask & 5) && !(mask & 10);
+  let ox = horiz ? 0 : out & 2 ? 1 : -1, oy = vert ? 0 : out & 1 ? 1 : -1;
+  const n = Math.hypot(ox, oy) || 1; ox /= n; oy /= n;
+  const log = (x0: number, y0: number, x1: number, y1: number, w: number, tone: number, tip: boolean) => {
+    // a tapered round log from (x0,y0) foot to (x1,y1) top, lit from the left
+    const dx = x1 - x0, dy = y1 - y0, L = Math.hypot(dx, dy) || 1, nx = -dy / L, ny = dx / L;
+    const tw = tip ? 0.15 : w * 0.85;
+    const g = c.createLinearGradient(x0 - nx * w, y0 - ny * w, x0 + nx * w, y0 + ny * w);
+    g.addColorStop(0, `rgb(${34 * tone},${24 * tone},${15 * tone})`); g.addColorStop(0.6, `rgb(${92 * tone},${66 * tone},${42 * tone})`); g.addColorStop(1, `rgb(${126 * tone},${96 * tone},${64 * tone})`);
+    c.fillStyle = g;
+    c.beginPath(); c.moveTo(x0 + nx * w, y0 + ny * w); c.lineTo(x1 + nx * tw, y1 + ny * tw); c.lineTo(x1 - nx * tw, y1 - ny * tw); c.lineTo(x0 - nx * w, y0 - ny * w); c.closePath(); c.fill();
+    if (tip) { // pale cut face near the point
+      c.fillStyle = `rgba(${196 * tone},${162 * tone},${116 * tone},0.85)`;
+      c.beginPath(); c.moveTo(x1, y1); c.lineTo(x1 - dx / L * 3 + nx * w * 0.8, y1 - dy / L * 3 + ny * w * 0.8); c.lineTo(x1 - dx / L * 2.6, y1 - dy / L * 2.6); c.closePath(); c.fill();
+    }
+    c.strokeStyle = "rgba(20,12,6,0.5)"; c.lineWidth = 0.18; // bark cracks
+    for (let k = 0; k < 2; k++) { const f = 0.3 + k * 0.35; c.beginPath(); c.moveTo(x0 + nx * w * (f - 0.5), y0 + ny * w * (f - 0.5)); c.lineTo(x0 + dx * 0.7 + nx * w * (f - 0.6), y0 + dy * 0.7 + ny * w * (f - 0.6)); c.stroke(); }
+  };
+  const foot = (x: number, y: number, r: number, a = 0.5) => {
+    const sh = c.createRadialGradient(x + 1, y, 0, x + 1, y, r);
+    sh.addColorStop(0, `rgba(8,6,4,${a})`); sh.addColorStop(1, "rgba(8,6,4,0)");
+    c.fillStyle = sh; c.beginPath(); c.ellipse(x + 1, y, r, r / 2, 0, 0, Math.PI * 2); c.fill();
+  };
+  const weed = (x: number, y: number, big = 1) => {
+    c.lineCap = "round";
+    const m = 3 + Math.floor(R() * 4);
+    for (let i = 0; i < m; i++) {
+      const a = -Math.PI / 2 + (R() - 0.5) * 1.9, L = (1.4 + R() * 2.4) * big;
+      c.strokeStyle = ["#3c5a26", "#4e6c2e", "#62783a", "#7a7a40"][Math.floor(R() * 4)]; c.lineWidth = 0.4;
+      c.beginPath(); c.moveTo(x, y); c.quadraticCurveTo(x + Math.cos(a) * L * 0.4, y + Math.sin(a) * L * 0.6, x + Math.cos(a) * L, y + Math.sin(a) * L * 0.7); c.stroke();
+    }
+  };
+  const leaf = (x: number, y: number) => {
+    const g = ["#2c4a22", "#3a5a28", "#4e6c30", "#1e3418"][Math.floor(R() * 4)], s0 = 0.45 + R() * 0.45;
+    c.fillStyle = g; c.beginPath(); c.ellipse(x, y, s0, s0 * 0.7, R() * 3, 0, Math.PI * 2); c.fill();
+  };
+  // the outside spike row: sharpened stakes driven in at an angle, pointing out, some fallen or missing
+  const spikes: (() => void)[] = [];
+  const along2 = posts.length > 1 ? posts : [posts[0]];
+  for (let i = 0; i < along2.length; i += 1) {
+    if (R() < 0.3) continue;
+    const p = along2[i];
+    const off = 3 + R() * 4, lean = 0.85 + R() * 0.4; // distance out from the wall, angle up from the ground (rad)
+    const L = 10 + R() * 5, side = (R() - 0.5) * 0.9;
+    const bx = p.x + (ox - oy) * off + (R() - 0.5) * 2, by = p.y + (ox + oy) / 2 * off;
+    const fallen = R() < 0.08, pair = !fallen && R() < 0.45;
+    for (const sd of pair ? [side + 0.45, side - 0.45] : [side]) {
+    const hx = ox + (-oy) * sd, hy = oy + ox * sd; // horizontal pointing direction (world)
+    const up = fallen ? 0.6 : L * Math.sin(lean), fw = L * Math.cos(fallen ? 0.05 : lean);
+    const tx = bx + (hx - hy) * fw, ty = by + (hx + hy) / 2 * fw - up;
+    spikes.push(() => {
+      foot(bx, by, 2.2, 0.4);
+      log(bx, by, tx, ty, 1.5 + R() * 0.4, 0.95 + R() * 0.3, true);
+      if (R() < 0.35) for (let k = 0; k < 6; k++) { const f = R() * 0.6; leaf(bx + (tx - bx) * f + (R() - 0.5), by + (ty - by) * f + (R() - 0.5)); }
+      if (R() < 0.6) weed(bx + (R() - 0.5) * 2, by + 0.4, 0.9);
+    });
+    }
+  }
+  const behind = ox + oy < 0; // pointing up-screen: drawn before the wall
+  if (behind) spikes.forEach((f) => f());
+  // the wall: uneven logs, leaning, a few snapped short or missing
+  posts.forEach((p, i) => {
+    if (R() < 0.06) return; // a gap
+    let h = H - R() * 7;
+    if (broken && R() < 0.35) h = H * (0.25 + R() * 0.25);
+    else if (R() < 0.07) h *= 0.55;
+    const x = p.x + (R() - 0.5) * 0.6, y = p.y + (R() - 0.5) * 0.4, w = 1.55 + R() * 0.45, tone = 0.75 + R() * 0.35;
+    const lx = (R() - 0.5) * 3.2; // lean
+    foot(x, y, 4);
+    const sharp = h > H * 0.6;
+    log(x, y, x + lx, y - h, w, tone, sharp);
+    if (!sharp) { c.fillStyle = `rgba(${150 * tone},${120 * tone},${84 * tone},1)`; c.beginPath(); c.ellipse(x + lx, y - h, w * 0.85, w * 0.4, 0, 0, Math.PI * 2); c.fill(); }
+    if (R() < 0.4) { const ry = y - 4 - R() * 4; c.strokeStyle = "rgba(150,124,80,0.9)"; c.lineWidth = 0.5; c.beginPath(); c.ellipse(x + lx * (y - ry) / h, ry, w, w * 0.4, 0, 0, Math.PI); c.stroke(); }
+    // moss at the foot, ivy climbing some logs
+    c.fillStyle = "rgba(60,80,34,0.65)"; c.beginPath(); c.ellipse(x - w * 0.3, y - 0.7, w * 0.9, 0.7, 0, 0, Math.PI * 2); c.fill();
+    if (R() < 0.3) { const reach = h * (0.3 + R() * 0.6); for (let k = 0; k < 14; k++) { const z = reach * Math.pow(R(), 1.4); leaf(x + lx * z / h + (R() - 0.5) * w * 1.6, y - z); } }
+    if (R() < 0.7) weed(x + (R() - 0.5) * 3, y + 0.8, R() < 0.15 ? 1.8 : 1);
+  });
+  if (!behind) spikes.forEach((f) => f());
+}
+
+function stakesTexture(scene: Phaser.Scene, fence: boolean, mask: number, broken: boolean, out = 0, variant = 0) {
+  const key = `stk_${fence ? "f" : "p"}_${mask}_${broken ? 1 : 0}${SMOOTH ? `_${out}_${variant}` : ""}`;
   if (scene.textures.exists(key)) return key;
   const H = fence ? 12 : 30, W = IW, HT = IH + H;
   // footprint centre of the tile in this canvas, and the screen step of one world px along x / y
@@ -372,6 +462,11 @@ function stakesTexture(scene: Phaser.Scene, fence: boolean, mask: number, broken
   const seen = new Set<string>();
   const posts = pts.filter((p) => { const s = `${Math.round(p.x)},${Math.round(p.y)}`; if (seen.has(s)) return false; seen.add(s); return true; })
     .sort((a, b) => a.y - b.y);
+  if (SMOOTH && !fence) {
+    if (scene.textures.exists(key)) scene.textures.remove(key);
+    hiResTexture(scene, key, W, HT, 1, 6, (c) => wildPalisade(c, posts, along, mask, broken, out, variant, H));
+    return key;
+  }
   if (SMOOTH) {
     // painted at 6x: round logs with bark, sharpened tips, rope lashings and soft shadows
     if (scene.textures.exists(key)) scene.textures.remove(key);
@@ -468,7 +563,10 @@ export function isoStanding(scene: Phaser.Scene, objects: number[][]): number[][
       const same = (x: number, y: number) => { const n = id(at(x, y)); return t === T.PALISADE ? n === T.PALISADE : FENCES.has(n); };
       const mask = (same(tx, ty - 1) ? 1 : 0) | (same(tx + 1, ty) ? 2 : 0) | (same(tx, ty + 1) ? 4 : 0) | (same(tx - 1, ty) ? 8 : 0);
       const broken = t === T.PALISADE && (Math.floor(index / TILE_COUNT) & 64) !== 0;
-      const key = stakesTexture(scene, t !== T.PALISADE, mask, broken);
+      const row = Math.floor(index / TILE_COUNT);
+      const outDir = t === T.PALISADE ? (row & 16 ? 1 : 0) | (row & 32 ? 2 : 0) : 0;
+      const variant = t === T.PALISADE ? ((tx * 73856093) ^ (ty * 19349663)) >>> 0 : 0;
+      const key = stakesTexture(scene, t !== T.PALISADE, mask, broken, outDir, variant % 6);
       const H = t === T.PALISADE ? 30 : 12;
       scene.add.image(cx, cy, key).setOrigin(0.5, (H + IH / 2) / (IH + H)).setDepth(cy);
       out[ty][tx] = -1;
