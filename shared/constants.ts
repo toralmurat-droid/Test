@@ -95,7 +95,7 @@ export const MOTHER = {
 };
 
 /** Mother Blob brood: every few seconds (random) she may bud a blobling, up to `perMother` alive at once. */
-export const BROOD = { minMs: 5000, maxMs: 12000, perMother: 4, worldCap: 60 };
+export const BROOD = { minMs: 5000, maxMs: 12000, perMother: 4, worldCap: 160 };
 /** How a monster's level scales its base stats (level 1 = the MOBS numbers). */
 export const MOB_LEVEL = { hp: 0.3, damage: 0.12, xp: 0.25, gold: 0.2 }; // +x per level above 1
 export function mobScale(level: number, stat: keyof typeof MOB_LEVEL): number {

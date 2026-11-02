@@ -12,6 +12,8 @@ export interface SpawnZone {
   mobs: Partial<Record<MobKind, number>>;
   levels: [number, number]; // min, max monster level in this zone
   respawnMs: number;
+  /** Broad wild zone: spawns skip the named areas inside it, and levels follow the distance of each spawn point. */
+  wild?: boolean;
 }
 
 /** Random level within the zone's range. */
@@ -20,8 +22,17 @@ export function rollLevel(z: SpawnZone): number {
   return lo + Math.floor(Math.random() * (hi - lo + 1));
 }
 
+/** Peaceful places inside monster zones (with a margin in tiles): nothing spawns or walks in there. */
+export const NO_MOB_AREAS = ["Saltmere"];
+const NO_MOB_RECTS = NO_MOB_AREAS.flatMap((n) => AREAS.filter((a) => a.name === n)).map((a) => ({ x0: a.x - 2, y0: a.y - 2, x1: a.x + a.w + 2, y1: a.y + a.h + 2 }));
+/** True where monsters may not go (pixel coords). */
+export function noMobsAt(px: number, py: number): boolean {
+  const tx = px / TILE, ty = py / TILE;
+  return NO_MOB_RECTS.some((r) => tx >= r.x0 && tx < r.x1 && ty >= r.y0 && ty < r.y1);
+}
+
 /** Monsters per area. Rects come from the map's AREAS (shared/map.ts), so zones follow the map layout. */
-const ZONE_MOBS: { name: string; mobs: Partial<Record<MobKind, number>>; respawnMs: number }[] = [
+const ZONE_MOBS: { name: string; mobs: Partial<Record<MobKind, number>>; respawnMs: number; wild?: boolean }[] = [
   // Levels come from the distance to Oakvale (see zoneLevels)
   // Blob zones above Lv 3 add shooter + warrior blobs, above Lv 5 healer blobs too.
   // Skeleton zones from Lv 5 add skeleton mages; the deepest ones (Barrow Downs, the Keep) an elite Necromancer too.
@@ -41,50 +52,110 @@ const ZONE_MOBS: { name: string; mobs: Partial<Record<MobKind, number>>; respawn
   // The coast and the far east (Saltmere itself stays monster-free, see NO_MOB_AREAS)
   { name: "Redfang Hollow", mobs: { bandit: 14 }, respawnMs: 6000 },
   { name: "Saltwind Coast", mobs: { slime: 14, shooterblob: 5, warriorblob: 5, healerblob: 4, motherblob: 2 }, respawnMs: 4500 },
-  { name: "Whispering Woods", mobs: { slime: 10, shooterblob: 4, warriorblob: 4, healerblob: 3, motherblob: 2 }, respawnMs: 5250 }, // broad area last: zone lookups take the first match
+  { name: "Whispering Woods", mobs: { slime: 10, shooterblob: 4, warriorblob: 4, healerblob: 3, motherblob: 2 }, respawnMs: 5250, wild: true }, // broad areas last: zone lookups take the first match
+  // Everything west of the river that no named area covers: fields, roads and woods around Oakvale
+  { name: "Oakvale Countryside", mobs: { slime: 10, shooterblob: 3, warriorblob: 3, healerblob: 2, motherblob: 2 }, respawnMs: 5250, wild: true },
 ];
+/** Wild zones that are not map areas (no banner, no map label): their rect in tiles. */
+const WILD_RECTS: Record<string, { x: number; y: number; w: number; h: number }> = {
+  "Oakvale Countryside": { x: 0, y: 0, w: 109, h: 184 },
+};
+
+/**
+ * Density (Murat wants monsters everywhere): every zone keeps at least one monster per this many walkable tiles.
+ * Wild zones are a bit thinner than the named hunting grounds. Elites (necromancers) keep their hand-set count.
+ */
+export const DENSITY = { tilesPerMob: 9, wildTilesPerMob: 12 };
+/** Blob variants only appear from these levels (Murat: shooter + warrior above Lv 3, healer above Lv 5). */
+export const KIND_MIN_LEVEL: Partial<Record<MobKind, number>> = { shooterblob: 4, warriorblob: 4, healerblob: 6 };
 
 /**
  * Monster levels grow with distance from the village centre: zones next to Oakvale are level 1-3,
  * and every 8 tiles further out adds a level (each zone spans 3 levels).
  */
 export function zoneLevels(a: { x: number; y: number; w: number; h: number }): [number, number] {
-  const cx = (VILLAGE.x0 + VILLAGE.x1) / 2, cy = (VILLAGE.y0 + VILLAGE.y1) / 2;
-  const d = Math.hypot(a.x + a.w / 2 - cx, a.y + a.h / 2 - cy);
-  const lo = 1 + Math.floor(Math.max(0, d - 40) / 8);
+  const lo = baseLevelAt(a.x + a.w / 2, a.y + a.h / 2);
   return [lo, lo + 2];
+}
+/** Lowest monster level at a tile, from its distance to the village centre (a spot spans this level to +2). */
+export function baseLevelAt(tx: number, ty: number): number {
+  const cx = (VILLAGE.x0 + VILLAGE.x1) / 2, cy = (VILLAGE.y0 + VILLAGE.y1) / 2;
+  return 1 + Math.floor(Math.max(0, Math.hypot(tx - cx, ty - cy) - 40) / 8);
+}
+
+const inRect = (r: { x: number; y: number; w: number; h: number }, tx: number, ty: number) => tx >= r.x && tx < r.x + r.w && ty >= r.y && ty < r.y + r.h;
+/** Named areas (and Oakvale's surroundings) a wild zone leaves alone: its monsters stay in their own biome. */
+function claimedByArea(name: string, tx: number, ty: number): boolean {
+  return AREAS.some((a) => a.name !== name && a.name !== "Whispering Woods" && a.name !== "River Ashwell" && inRect(a, tx, ty));
+}
+/** Tiles where this zone may spawn a monster. */
+function spawnable(z: { name: string; wild?: boolean }, tx: number, ty: number): boolean {
+  const v = VILLAGE;
+  if (tx >= v.x0 - 2 && tx <= v.x1 + 2 && ty >= v.y0 - 2 && ty <= v.y1 + 2) return false;
+  if (z.wild && claimedByArea(z.name, tx, ty)) return false;
+  const x = (tx + 0.5) * TILE, y = (ty + 0.5) * TILE;
+  if (isSafeZone(x, y) || noMobsAt(x, y)) return false;
+  return !isSolidAt(x - 6, y - 6) && !isSolidAt(x + 6, y + 6) && !isSolidAt(x - 6, y + 6) && !isSolidAt(x + 6, y - 6);
 }
 
 export const SPAWN_ZONES: SpawnZone[] = ZONE_MOBS.flatMap((z) => {
-  const a = AREAS.find((area) => area.name === z.name);
-  return a ? [{ ...z, levels: zoneLevels(a), x: a.x, y: a.y, w: a.w, h: a.h }] : [];
+  const a = AREAS.find((area) => area.name === z.name) ?? WILD_RECTS[z.name];
+  if (!a) return [];
+  const r = { x: a.x, y: a.y, w: a.w, h: a.h };
+  // Walkable tiles -> how many monsters (kinds keep their mix, elites stay as set)
+  let tiles = 0, lo = 99, hi = 0;
+  for (let ty = r.y; ty < r.y + r.h; ty++) for (let tx = r.x; tx < r.x + r.w; tx++) {
+    if (!spawnable(z, tx, ty)) continue;
+    tiles++;
+    if (z.wild) { const l = baseLevelAt(tx, ty); lo = Math.min(lo, l); hi = Math.max(hi, l + 2); }
+  }
+  const base = Object.values(z.mobs).reduce((n, c) => n + (c ?? 0), 0);
+  const want = Math.round(tiles / (z.wild ? DENSITY.wildTilesPerMob : DENSITY.tilesPerMob));
+  const f = Math.max(1, want / base);
+  const mobs: Partial<Record<MobKind, number>> = {};
+  for (const [k, n] of Object.entries(z.mobs) as [MobKind, number][]) mobs[k] = k === "necromancer" ? n : k === "motherblob" ? Math.max(n, Math.round(n * f / 4)) : Math.round(n * f); // big ones grow slower
+  const levels: [number, number] = z.wild && hi > 0 ? [lo, hi] : zoneLevels(r);
+  return [{ ...z, ...r, mobs, levels, respawnMs: Math.max(800, Math.round(z.respawnMs / f)) }];
 });
 
 export function zoneCap(z: SpawnZone): number {
   return Object.values(z.mobs).reduce((a, b) => a + (b ?? 0), 0);
 }
 
-/** Peaceful places inside monster zones (with a margin in tiles): nothing spawns or walks in there. */
-export const NO_MOB_AREAS = ["Saltmere"];
-const NO_MOB_RECTS = NO_MOB_AREAS.flatMap((n) => AREAS.filter((a) => a.name === n)).map((a) => ({ x0: a.x - 2, y0: a.y - 2, x1: a.x + a.w + 2, y1: a.y + a.h + 2 }));
-/** True where monsters may not go (pixel coords). */
-export function noMobsAt(px: number, py: number): boolean {
-  const tx = px / TILE, ty = py / TILE;
-  return NO_MOB_RECTS.some((r) => tx >= r.x0 && tx < r.x1 && ty >= r.y0 && ty < r.y1);
-}
-
-/** Random walkable point inside a zone (never in the village or the safe zone). */
+/** Random walkable point inside a zone (never in the village or the safe zone; wild zones skip named areas). */
 export function randomPointInZone(z: SpawnZone): { x: number; y: number } {
-  const v = VILLAGE;
-  for (let i = 0; i < 200; i++) {
+  for (let i = 0; i < 300; i++) {
     const tx = z.x + Math.floor(Math.random() * z.w);
     const ty = z.y + Math.floor(Math.random() * z.h);
-    if (tx >= v.x0 - 2 && tx <= v.x1 + 2 && ty >= v.y0 - 2 && ty <= v.y1 + 2) continue;
-    const x = (tx + 0.5) * TILE, y = (ty + 0.5) * TILE;
-    if (isSafeZone(x, y) || noMobsAt(x, y)) continue;
-    if (!isSolidAt(x - 6, y - 6) && !isSolidAt(x + 6, y + 6) && !isSolidAt(x - 6, y + 6) && !isSolidAt(x + 6, y - 6)) return { x, y };
+    if (spawnable(z, tx, ty)) return { x: (tx + 0.5) * TILE, y: (ty + 0.5) * TILE };
   }
   return { x: (z.x + z.w / 2) * TILE, y: (z.y + z.h / 2) * TILE };
+}
+
+/** Where and at what level a monster of this kind appears. In wild zones the level follows the spot. */
+export function spawnPoint(z: SpawnZone, kind: MobKind): { x: number; y: number; level: number } {
+  const min = KIND_MIN_LEVEL[kind] ?? 1;
+  if (!z.wild) return { ...randomPointInZone(z), level: Math.max(min, rollLevel(z)) };
+  let best = randomPointInZone(z), lvl = 0;
+  for (let i = 0; i < 25; i++) {
+    const p = i ? randomPointInZone(z) : best;
+    const l = baseLevelAt(p.x / TILE, p.y / TILE) + Math.floor(Math.random() * 3);
+    if (l > lvl) { best = p; lvl = l; }
+    if (l >= min) break; // variants only out where the levels are high enough
+  }
+  return { ...best, level: Math.max(min, lvl) };
+}
+
+/** The monster zone a tile belongs to (wild zones leave out the named areas inside them). */
+export function zoneAt(tx: number, ty: number): SpawnZone | undefined {
+  return SPAWN_ZONES.find((z) => inRect(z, tx, ty) && !(z.wild && claimedByArea(z.name, tx, ty)));
+}
+
+/** Level range shown for a zone at a tile: wild zones show the local range. */
+export function levelsAt(z: SpawnZone, tx: number, ty: number): [number, number] {
+  if (!z.wild) return z.levels;
+  const l = baseLevelAt(tx, ty);
+  return [l, l + 2];
 }
 
 /**
