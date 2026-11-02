@@ -3,12 +3,12 @@ import { Client, Room } from "colyseus.js";
 import { ELITE, InputState, MERGE, MAP_H, MAP_W, regenFromStamina, TILE } from "../../shared/constants";
 import { CLASSES, ClassKind, DODGE, ENERGY, energyName, xpForLevel } from "../../shared/classes";
 import { GROUND, areaAt, isSafeZone } from "../../shared/map";
-import { heroPoise, RAGE_ATTACK_SPEED } from "../../shared/combat";
+import { heroPoise } from "../../shared/combat";
 import { moveStep } from "../../shared/movement";
 import { levelsAt, SPAWN_ZONES, zoneAt } from "../../shared/spawns";
-import {
-  attackMult, cooldownMult, heroSpeed, STATS, magicMult, POWERS, STAT_NAMES, StatKind, statPoints, HP_PER_STR, ULTS, hasSpecial, hasUlt, ultPower,
-} from "../../shared/powers";
+import { attackMult, cooldownMult, heroSpeed, STATS, magicMult, STAT_NAMES, StatKind, statPoints, HP_PER_STR } from "../../shared/powers";
+import { skillOf, STACK_NAME, MAX_STACKS, TREE_LEVELS } from "../../shared/skills";
+import { SkillFx } from "./skillfx";
 import { displayGrid } from "./tileset";
 import { heroTexture, itemTexture, makeTileset, MOB_LOOK, mobTexture, preloadPaintedMobs } from "./textures";
 import { Minimap } from "./minimap";
@@ -22,7 +22,7 @@ import { Ambient } from "./ambient";
 import { Details } from "./details";
 import { GearLayer, GearMenu, preloadGear, TIER_COLORS } from "./gear";
 import { GEAR, gearSpeedMult } from "../../shared/gear";
-import { COMBO_NODE, talentMult, talentPoints, spentPoints, talentReduce } from "../../shared/talents";
+import { talentMult, talentPoints, spentPoints } from "../../shared/talents";
 import { activeSkills, SLOT_COUNT, SLOT_KEYS, skillLearned } from "../../shared/slots";
 import { iconImg } from "./skillIcons";
 import { TalentMenu } from "./talents";
@@ -99,13 +99,13 @@ export class TownScene extends Phaser.Scene {
   private details?: Details;
   private areaName = "";
   private areaTimer?: number;
-  private shots = new Map<string, { g: Phaser.GameObjects.Shape; tx: number; ty: number }>();
+  private shots = new Map<string, { g: Phaser.GameObjects.GameObject & { x: number; y: number }; tx: number; ty: number }>();
+  private fx!: SkillFx;
+  private lastCast: Record<string, number> = {}; // local clock (ms) of my last cast of each skill, for cooldowns
   private items = new Map<string, Phaser.GameObjects.Image>();
-  private lastSpecial = -Infinity; // local clock (ms) of my last special, for the cooldown bar
   private lastDodge = -Infinity;
   private lastRanged = -Infinity;
   private actionsHtml = ""; // local clock (ms) of my last dodge roll
-  private lastUlt = -Infinity;
   private heroFrom?: number;
   private heroSig = "";
   private levelFrom?: number; // level before the level-ups the player hasn't looked at yet
@@ -127,6 +127,7 @@ export class TownScene extends Phaser.Scene {
   }
 
   async create() {
+    this.fx = new SkillFx(this, (id) => this.entities.get(id), () => this.me);
     makeTileset(this);
     createArtAnims(this);
     if (SMOOTH) paintSmoothProps(this); // painted iso forge, anvil, witch hut… in place of the front-view pixel props
@@ -284,7 +285,7 @@ export class TownScene extends Phaser.Scene {
     const shots = (this.room.state as any).projectiles;
     shots.onAdd((s: any, id: string) => {
       const size = s.size || 1;
-      const g: Phaser.GameObjects.Shape = s.kind === "magicbolt" || s.kind === "shadowbolt"
+      const g = this.fx.addShot(id, s) ?? (s.kind === "magicbolt" || s.kind === "shadowbolt"
         // Skeleton mage bolt (ice blue) / Necromancer shadow bolt (sickly green, bigger)
         ? this.add.circle(s.x, s.y, s.kind === "shadowbolt" ? 3.5 : 2.5, s.kind === "shadowbolt" ? 0x7dff6a : 0x7fe7ff)
             .setStrokeStyle(1, s.kind === "shadowbolt" ? 0x1b5e20 : 0x1a4a8a).setDepth(9000)
@@ -302,12 +303,16 @@ export class TownScene extends Phaser.Scene {
         // Arrow: thin shaft along the flight direction
         ? this.add.rectangle(s.x, s.y, 9 * size, 1.5 * size, 0xe8d8b0).setStrokeStyle(0.5, 0x5d4037)
             .setAngle(Math.atan2(s.vy ?? 0, s.vx ?? 1) * 180 / Math.PI).setDepth(9000)
-        : this.add.circle(s.x, s.y, 2.5 * size, 0xff9f1c).setStrokeStyle(1, 0xffe066).setDepth(9000);
+        : this.add.circle(s.x, s.y, 2.5 * size, 0xff9f1c).setStrokeStyle(1, 0xffe066).setDepth(9000));
       const shot = { g, tx: s.x, ty: s.y };
       this.shots.set(id, shot);
       s.onChange(() => { shot.tx = s.x; shot.ty = s.y; });
     });
-    shots.onRemove((_s: any, id: string) => { this.shots.get(id)?.g.destroy(); this.shots.delete(id); });
+    shots.onRemove((_s: any, id: string) => { this.shots.get(id)?.g.destroy(); this.shots.delete(id); this.fx.removeShot(id); });
+    // Skill ground effects (shared/skills.ts fields)
+    const fields = (this.room.state as any).fields;
+    fields?.onAdd((f: any, id: string) => this.fx.addField(id, f));
+    fields?.onRemove((_f: any, id: string) => this.fx.removeField(id));
 
     const items = (this.room.state as any).items;
     items.onAdd((it: any, id: string) => {
@@ -444,12 +449,11 @@ export class TownScene extends Phaser.Scene {
       if (e) this.tweens.add({ targets: e.sprite, scaleX: e.sprite.scaleX * 1.15, scaleY: e.sprite.scaleY * 0.85, duration: 120, yoyo: true, repeat: 1 });
     });
     this.room.onMessage("swing", ({ id, step, variant, ax, ay }) => this.showSwing(id, step ?? 0, variant ?? 0, ax, ay));
-    this.room.onMessage("special", (msg) => this.showSpecial(msg));
-    this.room.onMessage("boom", ({ x, y, r, kind }) =>
-      kind === "arrow" || kind === "stone" || kind === "knife" || kind === "bolt" ? this.burst(x, y, 3, 0xd7ccc8, 150)
+    this.room.onMessage("sfx", (ev) => this.onSkillFx(ev));
+    this.room.onMessage("boom", ({ x, y, r, kind }) => this.fx.impact(x, y, kind, r) ||
+      (kind === "arrow" || kind === "stone" || kind === "knife" || kind === "bolt" ? this.burst(x, y, 3, 0xd7ccc8, 150)
       : kind === "magicbolt" || kind === "shadowbolt" ? this.burst(x, y, kind === "shadowbolt" ? 5 : 3, kind === "shadowbolt" ? 0x7dff6a : 0x7fe7ff, 220)
-      : this.burst(x, y, 5, 0xff9f1c, 220)); // small impact puff only, never the splash area
-    this.room.onMessage("ult", (msg) => this.showUlt(msg));
+      : this.burst(x, y, 5, 0xff9f1c, 220))); // small impact puff only, never the splash area
     this.room.onMessage("dodge", (msg) => this.showDodge(msg));
     this.room.onMessage("rangedshot", ({ id }) => {
       const e = this.entities.get(id);
@@ -770,13 +774,13 @@ export class TownScene extends Phaser.Scene {
     const def = CLASSES[cls];
     const next = xpForLevel(lvl + 1), cur = xpForLevel(lvl);
     const dmg = Math.round(def.damage * attackMult(cls, st) * talentMult(cls, mine.talents, "dmg"));
-    const speed = Math.round(heroSpeed(cls, mine.talents, false) * gearSpeedMult(mine) * talentMult(cls, mine.talents, "speed"));
+    const speed = Math.round(heroSpeed(cls, false, mine.spd ?? 1) * gearSpeedMult(mine));
     const rows: [string, string][] = [
       ["Level", lvl >= 20 ? "20 (max)" : `${lvl} · XP ${mine.xp - cur}/${next - cur}`],
       ["Health", `${Math.ceil(mine.hp)} / ${mine.maxHp}`],
       ["HP regen", `${regenFromStamina(st.sta)[1].toFixed(1)}/s resting · ${regenFromStamina(st.sta)[0].toFixed(1)}/s in a fight`],
       ["Attack", `${dmg} damage${def.projectile ? " (ranged)" : ""}`],
-      ["Attack speed", `${(1000 / def.attackCooldownMs * (mine.raging ? RAGE_ATTACK_SPEED : 1)).toFixed(1)} hits/s`],
+      ["Attack speed", `${(1000 / def.attackCooldownMs).toFixed(1)} hits/s`],
       ["Initiative", `${heroPoise(cls, lvl)} · dizzy at 0`],
       ["Move speed", `${speed}`],
       ["Kills · Gold", `${mine.kills} · ${mine.gold}`],
@@ -852,9 +856,9 @@ export class TownScene extends Phaser.Scene {
     const opts = activeSkills(cls).map((a) => {
       const learned = skillLearned(cls, mine.talents, a.id);
       const at = slots.indexOf(a.id);
-      const where = !learned ? `🔒 learn it in the tree (T), Lv ${a.level}` : at === n ? "in this slot" : at >= 0 ? `now on key ${SLOT_KEYS[at]}` : "not on a key yet";
+      const where = !learned ? `🔒 learn it in the tree (T), Lv ${TREE_LEVELS[a.row]}` : at === n ? "in this slot" : at >= 0 ? `now on key ${SLOT_KEYS[at]}` : "not on a key yet";
       return `<button class="opt${learned ? "" : " locked"}${at === n ? " cur" : ""}" data-pick="${a.id}" title="${a.desc}">` +
-        `${iconImg(a.power, "picon")}<span><b>${a.name}</b><small>${where}</small></span></button>`;
+        `${iconImg(a.id, "picon")}<span><b>${a.name}</b><small>${where}</small></span></button>`;
     }).join("");
     const empty = `<button class="opt clear" data-pick=""><span class="picon none">✕</span><span><b>Empty</b><small>clear key ${SLOT_KEYS[n]}</small></span></button>`;
     const pick = document.getElementById("slotpick")!;
@@ -879,10 +883,8 @@ export class TownScene extends Phaser.Scene {
 
   /** Name, cooldown and cost of an active skill for the HUD. */
   private skillHud(cls: ClassKind, skill: string, cdm: number) {
-    const sp = CLASSES[cls].special, u = ULTS[cls];
-    return skill === "ult"
-      ? { name: u.name, cdMs: u.cooldownMs * cdm, last: this.lastUlt, cost: ENERGY.cost.ult, ult: true }
-      : { name: sp.name, cdMs: sp.cooldownMs * cdm, last: this.lastSpecial, cost: ENERGY.cost.special, ult: false };
+    const s = skillOf(cls, skill);
+    return { name: s?.name ?? "?", cdMs: (s?.cd ?? 0) * cdm, last: this.lastCast[skill] ?? -Infinity, cost: s?.cost ?? 0, ult: s?.row === 4 };
   }
 
   /** HUD list of every action with its key and cooldown, under the skill bar. */
@@ -909,7 +911,7 @@ export class TownScene extends Phaser.Scene {
     const unslotted = activeSkills(cls).filter((a) => skillLearned(cls, mine.talents, a.id) && !slots.includes(a.id))
       .map((a) => row("–", a.name, 0, 0, "", "no key: click a slot below"));
     const html = [
-      row("Space", CLASSES[cls].projectile ? "Shoot" : "Attack", 0, 0, (mine.talents?.get(COMBO_NODE) ?? 0) > 0 ? "3-hit combo" : "ready"),
+      row("Space", CLASSES[cls].projectile ? "Shoot" : "Attack", 0, 0, mine.stacks > 0 ? `${STACK_NAME[cls]} ${mine.stacks}/${MAX_STACKS}` : "3-hit combo"),
       ...slotRows, ...unslotted,
       row("Shift", "Dodge roll", DODGE.cooldownMs, this.lastDodge, "", "", ENERGY.cost.dodge),
       row("Q", "Potion", 0, 0, `×${mine.potions}`, mine.potions > 0 ? "" : "×0"),
@@ -927,7 +929,7 @@ export class TownScene extends Phaser.Scene {
       const left = Math.max(0, h.cdMs - (now - h.last));
       const shade = left > 0 ? `<div class="cd" style="height:${(left / h.cdMs) * 100}%"></div>` : "";
       const wait = left > 0 || h.cost > mine.energy ? " wait" : "";
-      const power = activeSkills(cls).find((a) => a.id === skill)?.power ?? "";
+      const power = skill;
       return `<div class="slot${h.ult ? " ult" : ""}${wait}${picking}" data-slot="${i}" data-skill="${skill}" title="${h.name} (key ${SLOT_KEYS[i]}) · click to change · wheel to scroll · right-click to clear">` +
         `${iconImg(power)}${shade}<kbd>${SLOT_KEYS[i]}</kbd>${left > 0 ? `<b>${Math.ceil(left / 1000)}</b>` : ""}</div>`;
     }).join("");
@@ -954,68 +956,18 @@ export class TownScene extends Phaser.Scene {
     this.burst(e.sprite.x, e.sprite.y + 4, 5, 0xd7ccc8, 250);
   }
 
-  private showUlt(msg: { id: string; kind: string; x: number; y: number; r: number; delay?: number; hits?: number }) {
-    const e = this.entities.get(msg.id);
-    if (msg.id === this.me) this.lastUlt = this.time.now;
-    if (e?.hero) playCharAnim(e.sprite, e.hero, "skill", this.dirOf(e));
-    if (msg.kind === "earthquake") {
-      this.cameras.main.shake(250, 0.008);
-    } else if (msg.kind === "bladestorm") {
-      // The hero spins (no hit-area shapes)
-      if (e) this.tweens.add({ targets: e.sprite, angle: 360, duration: (msg.hits ?? 3) * 200, onComplete: () => e.sprite.setAngle(0) });
-    } else if (msg.kind === "arrowrain") {
-      const hits = msg.hits ?? 4, delay = msg.delay ?? 400;
-      for (let i = 0; i < hits; i++) {
-        this.time.delayedCall(delay + i * 250, () => {
-          // A handful of falling arrow streaks per wave
-          for (let k = 0; k < 6; k++) {
-            const a = Math.random() * Math.PI * 2, d = Math.random() * msg.r;
-            const ax = msg.x + Math.cos(a) * d, ay = msg.y + Math.sin(a) * d;
-            const streak = this.add.rectangle(ax, ay - 14, 1, 7, 0xe8d8b0).setDepth(10000);
-            this.tweens.add({ targets: streak, y: ay, alpha: 0, duration: 160, onComplete: () => streak.destroy() });
-          }
-        });
-      }
-    } else if (msg.kind === "leap") {
-      const m = msg as any;
-      if (e) { e.sprite.setPosition(m.x, m.y); e.tx = m.x; e.ty = m.y; }
-      for (let i = 0; i < 4; i++) {
-        const t = i / 4;
-        const ghost = this.add.circle(m.fromX + (m.x - m.fromX) * t, m.fromY - 10 - Math.sin(t * Math.PI) * 10 + (m.y - m.fromY) * t, 4, 0xffffff, 0.35).setDepth(9000);
-        this.tweens.add({ targets: ghost, alpha: 0, duration: 250 + i * 40, onComplete: () => ghost.destroy() });
-      }
-      this.cameras.main.shake(180, 0.006);
-    } else if (msg.kind === "meteor") {
-      // A falling meteor, then the impact (no area circle)
-      const rock = this.add.circle(msg.x - 30, msg.y - 60, 4, 0xff6d00).setStrokeStyle(1, 0xffd166).setDepth(20000);
-      this.tweens.add({ targets: rock, x: msg.x, y: msg.y, duration: msg.delay ?? 600, ease: "Quad.easeIn", onComplete: () => {
-        rock.destroy();
-        this.cameras.main.shake(200, 0.006);
-      } });
+  /** Skill visual event from the server (shared/skillEngine.ts): drawn by SkillFx, plus the hero's cast animation. */
+  private onSkillFx(ev: any) {
+    if (ev.ev === "cast") {
+      const e = this.entities.get(ev.id);
+      if (ev.id === this.me) this.lastCast[ev.s] = this.time.now;
+      if (e?.hero) playCharAnim(e.sprite, e.hero, "skill", this.dirOf(e));
     }
-  }
-
-  private showSpecial(msg: { id: string; kind: string; x?: number; y?: number; fromX?: number; fromY?: number; r?: number; frost?: boolean }) {
-    const e = this.entities.get(msg.id);
-    if (msg.id === this.me) this.lastSpecial = this.time.now;
-    if (e?.hero) playCharAnim(e.sprite, e.hero, "skill", this.dirOf(e));
-    if (msg.kind === "nova") {
-      // No area circle: the caster flashes instead
-      if (e) { e.sprite.setTintFill(msg.frost ? 0xa2e8ff : 0xc77dff); this.time.delayedCall(120, () => e.sprite.clearTint()); }
-    } else if (msg.kind === "dash") {
-      // Afterimages along the dash path
-      for (let i = 0; i < 4; i++) {
-        const t = i / 4;
-        const ghost = this.add.circle(msg.fromX! + (msg.x! - msg.fromX!) * t, msg.fromY! - 6 + (msg.y! - msg.fromY!) * t, 4, 0xffffff, 0.4).setDepth(9000);
-        this.tweens.add({ targets: ghost, alpha: 0, duration: 250 + i * 40, onComplete: () => ghost.destroy() });
-      }
-      if (e) { e.sprite.setPosition(msg.x!, msg.y!); e.tx = msg.x!; e.ty = msg.y!; }
-    } else if (msg.kind === "rage" && e) {
-      this.burst(e.sprite.x, e.sprite.y - 6, 9, 0xe63946, 300);
-      if (msg.id === this.me) this.cameras.main.shake(120, 0.004);
-    } else if (msg.kind === "guard" && e) {
-      this.burst(e.sprite.x, e.sprite.y - 6, 8, 0x9ad1ff, 250);
+    if (ev.ev === "move" || ev.ev === "countered") {
+      const e = this.entities.get(ev.id);
+      if (e) { e.tx = ev.x; e.ty = ev.y; }
     }
+    this.fx.onEvent(ev);
   }
 
   private feed(text: string) {
@@ -1098,6 +1050,7 @@ export class TownScene extends Phaser.Scene {
     this.ambient?.update(this.time.now, dtMs);
     this.details?.update(this.time.now, dtMs);
     if (!this.room) return;
+    this.fx.update(dtMs);
     const k = this.keys;
     const typing = this.chatting();
     const next: InputState = typing
@@ -1112,9 +1065,10 @@ export class TownScene extends Phaser.Scene {
     const now = this.time.now;
     for (const [id, e] of this.entities) {
       const p = e.state;
-      if (id === this.me && !p.dead && !p.stunned && !p.rolling) {
+      const rooted = typeof p.fx === "string" && p.fx.includes("charge"); // a buildup roots the hero
+      if (id === this.me && !p.dead && !p.stunned && !p.rolling && !rooted) {
         // Client-side prediction with the same movement code the server runs
-        const r = moveStep(e.sprite.x, e.sprite.y, this.input_, dtMs / 1000, heroSpeed(p.cls as ClassKind, p.talents, p.slowed, p.raging) * gearSpeedMult(p) * talentMult(p.cls as ClassKind, p.talents, "speed"));
+        const r = moveStep(e.sprite.x, e.sprite.y, this.input_, dtMs / 1000, heroSpeed(p.cls as ClassKind, p.slowed, p.spd ?? 1) * gearSpeedMult(p));
         e.sprite.setPosition(r.x, r.y);
         if (!r.moving) {
           // Ease toward authoritative position while idle
@@ -1212,6 +1166,11 @@ export class TownScene extends Phaser.Scene {
       }
       e.bubble?.setPosition(x, y - e.top - 7);
       e.bar.clear().setDepth(e.sprite.y + 1);
+      this.fx.status(e, e.bar, dtMs / 1000);
+      // Stacks built by basic hits (Valor, Ki, Fury...): small pips under the hero
+      if (!e.mob && !p.dead && p.stacks > 0) {
+        for (let i = 0; i < MAX_STACKS; i++) e.bar.fillStyle(i < p.stacks ? 0xffd166 : 0x000000, i < p.stacks ? 1 : 0.5).fillRect(x - 7 + i * 3, y + 6, 2, 2);
+      }
       const maxHp = p.maxHp;
       if (!e.mob) {
         if (p.guarding && !p.dead) {
@@ -1295,10 +1254,7 @@ export class TownScene extends Phaser.Scene {
         ? `⚔ ${zone.name} (Lv ${levelsAt(zdef!, tx, ty).join("-")}): ${zone.alive}/${zone.cap} monsters`
         : "";
       const cls = mine.cls as ClassKind;
-      const cdm = cooldownMult(cls, { sta: mine.sta, str: mine.str, mag: mine.mag }, mine.talents) * talentReduce(cls, mine.talents, "cdr");
-      const sp = CLASSES[cls].special;
-      const spCd = sp.cooldownMs * cdm;
-      const left = Math.max(0, spCd - (now - this.lastSpecial));
+      const cdm = cooldownMult(cls, { sta: mine.sta, str: mine.str, mag: mine.mag }, mine.talents);
       // Blue bar = Stamina (Magic for the Wizard), spent by skills, the ultimate and the dodge roll
       const fill = document.getElementById("skillfill") as HTMLElement;
       fill.style.width = `${(mine.energy / ENERGY.max) * 100}%`;

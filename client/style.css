@@ -109,7 +109,7 @@ html, body { margin: 0; height: 100%; background: #1b1b24; color: #eee; font: 14
 @media (max-width: 600px) { #mapbox { transform: scale(.6); transform-origin: top right; } #feed { top: 200px; } #area { font-size: 20px; } }
 
 /* Skill tree (T) */
-#tree { position: absolute; left: 50%; top: calc(50% - 46px); transform: translate(-50%, -50%); width: min(600px, calc(100% - 32px));
+#tree { position: absolute; left: 50%; top: calc(50% - 46px); transform: translate(-50%, -50%); width: min(760px, calc(100% - 32px));
   max-height: calc(100% - 124px); overflow: auto; background: rgba(30,30,46,.96); border: 3px solid #555a7a; padding: 14px 16px;
   pointer-events: auto; z-index: 7; }
 #tree h2 { margin: 0 0 4px; font-size: 18px; color: #ffd166; }
@@ -144,6 +144,13 @@ html, body { margin: 0; height: 100%; background: #1b1b24; color: #eee; font: 14
 .talent.max .rank { color: var(--c); }
 .talent.locked { opacity: .45; cursor: default; }
 .talent.off { cursor: default; }
+.talent .ttype { font-size: 10px; color: var(--c); text-transform: uppercase; letter-spacing: .5px; }
+.talent .ttype.pas { color: #aaa; }
+.talent .cost { color: #8fa3c8; font-size: 10px; }
+.talent .rk { color: #9ad1ff; font-size: 10px; }
+.talent.ult { background: #261a10; border-width: 3px; }
+.talent.ult.has, .talent.ult.max { box-shadow: 0 0 10px var(--c); }
+#treepoints .treehint { display: block; color: #8fa3c8; font-size: 12px; margin-top: 2px; }
 #treereset { font: inherit; font-size: 11px; background: #15151f; color: #eee; border: 1px solid #555a7a; cursor: pointer; padding: 2px 6px; }
 /* Menu buttons (bottom right): always clickable, in combat, while dead or while typing in chat */
 #menubtns { position: absolute; right: 12px; bottom: 12px; display: flex; gap: 6px; pointer-events: none; z-index: 8; }
@@ -274,3 +281,5 @@ html, body { margin: 0; height: 100%; background: #1b1b24; color: #eee; font: 14
 #death .back { font-size: 14px; color: #bbb; min-height: 18px; }
 @keyframes death-in { from { opacity: 0; transform: scale(1.3); } to { opacity: 1; transform: scale(1); } }
 @media (max-width: 600px) { #death .big { font-size: 32px; } #death .by { font-size: 16px; } }
+/* Skill tree, slot picker and action list use the game's pixel font */
+#tree, #tree button, #slotpick, #slotpick button, #actions, #hotbar { font-family: 'Pixelify Sans', monospace; }

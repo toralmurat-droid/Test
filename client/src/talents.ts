@@ -1,11 +1,14 @@
 import { ClassKind, CLASSES } from "../../shared/classes";
-import { activeByNode, SLOT_KEYS } from "../../shared/slots";
+import { SLOT_KEYS } from "../../shared/slots";
 import { iconImg } from "./skillIcons";
-import { EFFECT_TEXT, lockReason, nodeRank, spentPoints, talentPoints, TREE_LEVELS, treeNodes, TREES } from "../../shared/talents";
+import {
+  BRANCHES, EFFECT_TEXT, lockReason, MAX_RANK, RANK_POWER, rankOf, SKILLS, spentPoints, STACK_NAME, talentPoints, TREE_LEVELS,
+} from "../../shared/skills";
 
 /**
- * Skill tree screen (T): one tree with the class skills (actives go on slots 1-0: click a slot, or hover here + number key, plus passives like Iron Skin), the 3-hit combo and the
- * passive skill branches, drawn as a tree growing up from the hero: Lv 1 at the bottom, ultimate at the top; a node needs the one below it. Click a node to spend a point.
+ * Skill tree screen (T): 3 branches of 5 skills (shared/skills.ts), drawn as a tree growing up from the hero:
+ * Lv 1 at the bottom, the Lv 10 ultimates at the top; a skill needs the one below it. Click a skill to spend a point
+ * (3 ranks each). Learned actives go on keys 1-0: click a slot at the bottom, or hover the skill here and press a number key.
  */
 export class TalentMenu {
   private el = document.getElementById("tree")!;
@@ -32,7 +35,7 @@ export class TalentMenu {
 
   get open() { return !this.el.hidden; }
 
-  /** Active skill ("special" | "ult") under the mouse, if it is learned, so a number key can slot it. */
+  /** Learned active skill under the mouse, so a number key can slot it. */
   hoveredActive(): string | undefined {
     if (!this.open || !this.cls || !this.hover) return undefined;
     const btn = this.el.querySelector(`[data-talent="${this.hover}"][data-active]`) as HTMLElement | null;
@@ -46,42 +49,46 @@ export class TalentMenu {
     const ranks = state.talents;
     const cls = state.cls as ClassKind;
     this.cls = cls;
-    const nodes = treeNodes(cls);
+    const nodes = SKILLS[cls];
     const slots: string[] = [...(state.slots ?? [])];
-    const sig = [cls, state.level, slots.join(","), ...nodes.map((n) => nodeRank(cls, ranks, n.id))].join("|");
+    const sig = [cls, state.level, slots.join(","), ...nodes.map((n) => rankOf(ranks, n.id))].join("|");
     if (sig === this.sig) return;
     this.sig = sig;
     const free = talentPoints(state.level) - spentPoints(cls, ranks);
     document.getElementById("treetitle")!.textContent = `${CLASSES[cls].name} skills`;
-    document.getElementById("treepoints")!.innerHTML = free > 0
+    document.getElementById("treepoints")!.innerHTML = (free > 0
       ? `<b class="free">${free} skill point${free > 1 ? "s" : ""} to spend</b>`
-      : state.level < 2 ? "You start with a basic attack only. Reach level 2 for your first skill point." : "No points left. You get 1 point per level.";
-    // A real tree: root (the hero) at the bottom, level 1 just above it, the ultimate at the top.
+      : state.level < 2 ? "You start with a basic attack only. Reach level 2 for your first skill point." : "No points left. You get 1 point per level.") +
+      `<span class="treehint">Basic hits build ${STACK_NAME[cls]} (up to 5): some skills spend it for more power.</span>`;
+    // A real tree: root (the hero) at the bottom, level 1 just above it, the ultimates at the top.
     // Rows are drawn top-down from Lv 10 to Lv 1; branch lines are an SVG layer drawn after layout (drawLinks).
-    const b = TREES[cls];
+    const b = BRANCHES[cls];
     let cells = "";
     [...TREE_LEVELS].map((lvl, row) => ({ lvl, row })).reverse().forEach(({ lvl, row }) => {
       const reached = state.level >= lvl;
       cells += `<div class="tlvl${reached ? " on" : ""}">Lv ${lvl}</div>`;
       for (let col = 0; col < 3; col++) {
-        const n = nodes.find((x) => x.row === row && x.col === col);
+        const n = nodes.find((x) => x.row === row && x.branch === col);
         if (!n) { cells += "<div></div>"; continue; }
-        const r = nodeRank(cls, ranks, n.id);
+        const r = rankOf(ranks, n.id);
         const why = lockReason(cls, state.level, ranks, n.id);
         const st = why === "max" ? "max" : why === "" ? "can" : why === "points" ? (r > 0 ? "has" : "off") : "locked";
-        const fx = n.talent ? (r > 0 ? EFFECT_TEXT[n.talent.effect](+(n.talent.perRank * r).toFixed(1)) : EFFECT_TEXT[n.talent.effect](n.talent.perRank) + " per rank") : n.desc;
-        const req = why === "level" ? `🔒 Level ${n.level}` : why === "above" ? "🔒 Learn the skill below first" : "";
-        // Active skills: show the slot key once placed
-        const act = n.kind === "power" ? activeByNode(cls, n.id) : undefined;
-        const slot = act ? slots.indexOf(act.id) : -1;
+        const pas = n.passive;
+        const fx = pas
+          ? (r > 0 ? EFFECT_TEXT[pas.effect](+(pas.perRank * r).toFixed(1)) : EFFECT_TEXT[pas.effect](pas.perRank) + " per rank")
+          : n.desc;
+        const rankNote = !pas && r > 0 && r < MAX_RANK ? `<span class="rk">Next rank: +${Math.round(RANK_POWER * 100)}% power, longer effects</span>` : "";
+        const cost = !pas ? `<span class="cost">${(n.cd ?? 0) / 1000}s · ${n.cost ?? 0} ${cls === "wizard" ? "magic" : "stamina"}${n.chargeMs ? ` · charge ${n.chargeMs / 1000}s` : ""}</span>` : "";
+        const req = why === "level" ? `🔒 Level ${TREE_LEVELS[n.row]}` : why === "above" ? "🔒 Learn the skill below first" : "";
+        const slot = !pas ? slots.indexOf(n.id) : -1;
         const key = slot >= 0 ? ` <kbd>${SLOT_KEYS[slot]}</kbd>` : "";
-        const actAttr = act && r > 0 ? ` data-active="${act.id}"` : "";
-        const hint = act && r > 0 && slot < 0 ? `<span class="req">⇩ Click a key slot at the bottom to use it (or hover here + press 1-0)</span>` : "";
-        const icon = n.kind === "combo" ? iconImg("combo", "ticon") : act ? iconImg(act.power, "ticon") : "";
-        const pips = Array.from({ length: n.max }, (_, i) => `<i class="${i < r ? "on" : ""}"></i>`).join("");
-        const gold = n.kind !== "passive";
-        cells += `<button class="talent ${gold ? "power" : "passive"} ${st}" data-talent="${n.id}" data-col="${col}" data-row="${row}" data-rank="${r}"${actAttr} style="--c:${gold ? "#ffd166" : n.color}">` +
-          `<b>${icon || (gold ? "★ " : "")}${n.name}${key}</b><span class="pips">${pips}</span><span class="fx">${fx}</span>${req ? `<span class="req">${req}</span>` : hint}</button>`;
+        const actAttr = !pas && r > 0 ? ` data-active="${n.id}"` : "";
+        const hint = !pas && r > 0 && slot < 0 ? `<span class="req">⇩ Click a key slot at the bottom to use it (or hover here + press 1-0)</span>` : "";
+        const pips = Array.from({ length: MAX_RANK }, (_, i) => `<i class="${i < r ? "on" : ""}"></i>`).join("");
+        const ult = n.row === 4;
+        const tag = `<span class="ttype${pas ? " pas" : ""}">${n.type}</span>`;
+        cells += `<button class="talent ${pas ? "passive" : "power"}${ult ? " ult" : ""} ${st}" data-talent="${n.id}" data-col="${col}" data-row="${row}" data-rank="${r}"${actAttr} style="--c:${b[col].color}">` +
+          `<b>${iconImg(n.id, "ticon")}${n.name}${key}</b>${tag}<span class="pips">${pips}</span><span class="fx">${fx}</span>${cost}${rankNote}${req ? `<span class="req">${req}</span>` : hint}</button>`;
       }
     });
     const roots = b.map((x, i) => `<div class="troot" data-col="${i}" style="color:${x.color}">${x.name}</div>`).join("");
