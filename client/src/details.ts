@@ -63,7 +63,7 @@ const CHUNK = 16; // tiles per side of a baked chunk
  */
 class ChunkLayer {
   private live = new Map<number, Phaser.GameObjects.RenderTexture>();
-  constructor(private scene: Phaser.Scene, private depth: number, private draw: (g: Phaser.GameObjects.Graphics, tx0: number, ty0: number, tx1: number, ty1: number) => void) {}
+  constructor(private scene: Phaser.Scene, private depth: number, private draw: (g: Phaser.GameObjects.Graphics, tx0: number, ty0: number, tx1: number, ty1: number) => void, private tint?: number) {}
   update(view: Phaser.Geom.Rectangle) {
     const S = CHUNK * TILE, m = TILE * 4;
     const cx0 = Math.max(0, Math.floor((view.x - m) / S)), cy0 = Math.max(0, Math.floor((view.y - m) / S));
@@ -79,6 +79,7 @@ class ChunkLayer {
       this.draw(g, tx0, ty0, Math.min(MAP_W, tx0 + CHUNK), Math.min(MAP_H, ty0 + CHUNK));
       const rt = this.scene.add.renderTexture(tx0 * TILE, ty0 * TILE, S, S).setOrigin(0, 0).setDepth(this.depth);
       rt.draw(g);
+      if (this.tint !== undefined) rt.setTint(this.tint);
       g.destroy();
       this.live.set(k, rt);
     }
@@ -194,7 +195,7 @@ function drawUprightSmooth(g: Phaser.GameObjects.Graphics, x0: number, y0: numbe
   const R = TILE - 8;
   const at = (wx: number, wy: number) => [wx - wy, (wx + wy) / 2];
   const items: [number, () => void][] = [];
-  const FLOWER_COLS = [[0xf06292, 0xc2185b], [0xfff176, 0xd8b02a], [0xffffff, 0xc8d0e0], [0xba68c8, 0x7b3f9a], [0x64b5f6, 0x2e7ac0]];
+  const FLOWER_COLS = [[0xb0546a, 0x7a2a40], [0xd0b860, 0x9a7e30], [0xd8d4c8, 0x9a9890], [0x8a6a9a, 0x5a3a6a], [0x6a88a8, 0x3a5470]];
   const blade = (x: number, y: number, h: number, lean: number, c: number, w = 0.7) => {
     g.fillStyle(c, 1).beginPath();
     g.moveTo(x - w, y); g.lineTo(x + lean * 0.5, y - h * 0.6); g.lineTo(x + lean, y - h); g.lineTo(x + lean * 0.5 + 0.25, y - h * 0.6); g.lineTo(x + w, y);
@@ -209,7 +210,7 @@ function drawUprightSmooth(g: Phaser.GameObjects.Graphics, x0: number, y0: numbe
       g.fillStyle(0x10300c, 0.22).fillEllipse(x, y + 0.5, 9, 2.4);
       for (let b = 0; b < 9; b++) {
         const k = hash(tx * 9 + b, ty, 5), lean = (b - 4) * 0.9 + (k - 0.5) * 1.5, hh = 5 + k * 4 - Math.abs(b - 4) * 0.5;
-        blade(x + (b - 4) * 0.7, y, hh, lean, b % 3 === 0 ? 0x2f6b24 : b % 3 === 1 ? 0x4a8a30 : 0x6aaa44);
+        blade(x + (b - 4) * 0.7, y, hh, lean, b % 3 === 0 ? 0x26361a : b % 3 === 1 ? 0x3e5226 : 0x5e6c34);
       }
     }]);
     else if (h >= 0.26 && h < 0.275) items.push([wx + wy, () => { // mushrooms
@@ -505,7 +506,7 @@ export class Details {
       this.layers.push(new ChunkLayer(scene, -1.7, (g, x0, y0, x1, y1) => this.groundDecals(g, x0, y0, x1, y1)));
       this.layers.push(new PixelChunkLayer(scene, -1.74, paintShore));
     }
-    this.layers.push(new ChunkLayer(scene, -1.58, (g, x0, y0, x1, y1) => this.waterDecor(g, x0, y0, x1, y1)));
+    this.layers.push(new ChunkLayer(scene, -1.58, (g, x0, y0, x1, y1) => this.waterDecor(g, x0, y0, x1, y1), SMOOTH ? 0x8a9478 : undefined)); // muted lily pads and reeds in the smooth look
     if (ISO) this.layers.push(new IsoUprightLayer(scene, -1.5));
     this.roofShading();
     this.lanternsAndBanners();

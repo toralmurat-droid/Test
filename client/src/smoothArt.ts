@@ -12,7 +12,7 @@ function rng(seed: number) {
 }
 const rgb = (c: number, k = 1, a = 1) => `rgba(${Math.min(255, ((c >> 16) & 255) * k) | 0},${Math.min(255, ((c >> 8) & 255) * k) | 0},${Math.min(255, (c & 255) * k) | 0},${a})`;
 
-function shadow(ctx: CanvasRenderingContext2D, x: number, y: number, rx: number, ry: number, a = 0.3) {
+function shadow(ctx: CanvasRenderingContext2D, x: number, y: number, rx: number, ry: number, a = 0.5) {
   const g = ctx.createRadialGradient(x, y, 0, x, y, rx);
   g.addColorStop(0, `rgba(10,20,10,${a})`); g.addColorStop(0.7, `rgba(10,20,10,${a * 0.6})`); g.addColorStop(1, "rgba(10,20,10,0)");
   ctx.save(); ctx.translate(x, y); ctx.scale(1, ry / rx); ctx.translate(-x, -y);
@@ -29,7 +29,7 @@ function blob(ctx: CanvasRenderingContext2D, x: number, y: number, rx: number, r
 
 function trunk(ctx: CanvasRenderingContext2D, cx: number, top: number, base: number, w: number) {
   const g = ctx.createLinearGradient(cx - w, 0, cx + w, 0);
-  g.addColorStop(0, "#8a5d36"); g.addColorStop(0.45, "#6b4426"); g.addColorStop(1, "#3c2412");
+  g.addColorStop(0, "#6e5440"); g.addColorStop(0.45, "#4a3424"); g.addColorStop(1, "#22160e");
   ctx.fillStyle = g;
   ctx.beginPath();
   ctx.moveTo(cx - w * 0.55, top);
@@ -57,9 +57,15 @@ function canopy(ctx: CanvasRenderingContext2D, seed: number, cx: number, cy: num
     [cx - rx * 0.1, cy - ry * 0.45, rx * 0.65, ry * 0.55], [cx + rx * 0.35, cy - ry * 0.25, rx * 0.45, ry * 0.45],
   ];
   for (const [x, y, a, b] of lobes) blob(ctx, x, y, a, b, mid, 1.25, 0.62);
-  // leaf clusters
-  for (let k = 0; k < 420; k++) {
-    const ang = r() * Math.PI * 2, d = Math.sqrt(r()) * 0.98;
+  // dark hollows between the leaf masses
+  for (let k = 0; k < 26; k++) {
+    const ang = r() * Math.PI * 2, d = Math.sqrt(r()) * 0.8;
+    ctx.fillStyle = rgb(dark, 0.6, 0.55);
+    ctx.beginPath(); ctx.ellipse(cx + Math.cos(ang) * rx * d, cy + Math.sin(ang) * ry * d + ry * 0.1, 0.9 + r() * 1.2, 0.6 + r() * 0.8, r() * 3, 0, Math.PI * 2); ctx.fill();
+  }
+  // leaf clusters (some past the edge, so the silhouette is ragged)
+  for (let k = 0; k < 480; k++) {
+    const ang = r() * Math.PI * 2, d = Math.sqrt(r()) * 1.06;
     const x = cx + Math.cos(ang) * rx * d, y = cy + Math.sin(ang) * ry * d;
     const lit = (-(x - cx) / rx - (y - cy) / ry) * 0.5 + 0.5 + (r() - 0.5) * 0.35; // 0 = shade, 1 = sun
     const c = lit > 0.78 ? hi : lit > 0.52 ? light : lit > 0.3 ? mid : dark;
@@ -71,7 +77,7 @@ function canopy(ctx: CanvasRenderingContext2D, seed: number, cx: number, cy: num
   ctx.save();
   ctx.globalCompositeOperation = "source-atop";
   const g = ctx.createLinearGradient(cx - rx, cy - ry, cx + rx * 0.3, cy + ry * 0.3);
-  g.addColorStop(0, "rgba(255,250,200,0.22)"); g.addColorStop(0.5, "rgba(255,250,200,0)"); g.addColorStop(1, "rgba(0,20,30,0.22)");
+  g.addColorStop(0, "rgba(255,230,170,0.12)"); g.addColorStop(0.5, "rgba(255,230,170,0)"); g.addColorStop(1, "rgba(5,10,15,0.4)");
   ctx.fillStyle = g; ctx.fillRect(cx - rx * 1.2, cy - ry * 1.2, rx * 2.4, ry * 2.4);
   ctx.restore();
 }
@@ -79,8 +85,8 @@ function canopy(ctx: CanvasRenderingContext2D, seed: number, cx: number, cy: num
 export function smoothTrees(scene: Phaser.Scene, K: number) {
   // Oaks: 24x28 design units (x K texture px), trunk base bottom centre, 2 sway frames
   for (const [key, seed, pal] of [
-    ["oak_a", 3, [0x24521f, 0x3a7a2e, 0x5a9c3c, 0x9fd06a]],
-    ["oak_b", 7, [0x2a5a22, 0x41862f, 0x66aa40, 0xb0d870]],
+    ["oak_a", 3, [0x1a2e16, 0x2c4620, 0x44592a, 0x66743a]],
+    ["oak_b", 7, [0x22301a, 0x3a4a24, 0x52602c, 0x747840]],
   ] as const) {
     hiResTexture(scene, key, 24 * K, 28 * K, 2, S, (ctx, f) => {
       ctx.scale(K, K);
@@ -101,7 +107,7 @@ export function smoothTrees(scene: Phaser.Scene, K: number) {
       const cx = 10 + sway;
       // tier body: a drooping cone with a jagged needle hem
       const g = ctx.createLinearGradient(cx - half, y0, cx + half, y1);
-      g.addColorStop(0, "#4f9a68"); g.addColorStop(0.45, "#2b6e47"); g.addColorStop(1, "#143d28");
+      g.addColorStop(0, "#4a6e4c"); g.addColorStop(0.45, "#25452f"); g.addColorStop(1, "#0f2218");
       ctx.fillStyle = g;
       ctx.beginPath();
       ctx.moveTo(cx, y0);
@@ -118,7 +124,7 @@ export function smoothTrees(scene: Phaser.Scene, K: number) {
       for (let k = 0; k < 40; k++) {
         const t = r(), y = y0 + 1 + t * (y1 - y0 - 1.5), w = half * (y - y0) / (y1 - y0) * 0.95;
         const x = cx + (r() * 2 - 1) * w;
-        ctx.strokeStyle = x < cx ? "rgba(140,210,150,0.45)" : "rgba(10,40,25,0.4)";
+        ctx.strokeStyle = x < cx ? "rgba(130,160,120,0.4)" : "rgba(10,40,25,0.4)";
         ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + (x < cx ? -0.6 : 0.6), y + 0.9); ctx.stroke();
       }
     }
@@ -127,10 +133,10 @@ export function smoothTrees(scene: Phaser.Scene, K: number) {
   hiResTexture(scene, "bush", 16 * K, 16 * K, 2, S, (ctx, f) => {
     ctx.scale(K, K);
     shadow(ctx, 8, 14.6, 7, 1.8);
-    canopy(ctx, 23, 8, 10.2, 6.6, 4.6, [0x24521f, 0x3a7a2e, 0x5a9c3c, 0x8fc860], f * 0.4);
+    canopy(ctx, 23, 8, 10.2, 6.6, 4.6, [0x1a2e16, 0x2c4620, 0x48612e, 0x748a44], f * 0.4);
     for (const [x, y] of [[10.5, 10], [5, 12], [11, 12.2], [8, 13], [6.5, 9]]) {
       const g = ctx.createRadialGradient(x - 0.25, y - 0.25, 0, x, y, 0.75);
-      g.addColorStop(0, "#ffb0a8"); g.addColorStop(0.4, "#e0473f"); g.addColorStop(1, "#8a1d18");
+      g.addColorStop(0, "#e09080"); g.addColorStop(0.4, "#a8302a"); g.addColorStop(1, "#5a1210");
       ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x + f * 0.4, y, 0.7, 0, Math.PI * 2); ctx.fill();
     }
   });

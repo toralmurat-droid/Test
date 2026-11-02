@@ -134,6 +134,14 @@ export class TownScene extends Phaser.Scene {
     const zq = Number(new URLSearchParams(location.search).get("zoom"));
     cam.setZoom(zq > 0 && zq <= 6 ? zq : 3);
     cam.roundPixels = !SMOOTH;
+    if (SMOOTH && cam.postFX) {
+      // Moody grade for the painted world (the HUD is HTML, so it is not affected): muted colours, deeper contrast,
+      // a dark vignette around the edges
+      const cm = cam.postFX.addColorMatrix();
+      cm.saturate(-0.22);
+      cm.contrast(0.12, true);
+      cam.postFX.addVignette(0.5, 0.5, 0.92, 0.42);
+    }
     if (ISO) this.iso = new IsoView(this);
 
     // Keys without capture so typing in chat still works

@@ -29,10 +29,60 @@ function scale2x(src: Uint32Array, w: number, h: number): Uint32Array {
   return out;
 }
 
-/** A 4x smoothed copy of a canvas or image. */
-export function smoothCopy(img: HTMLCanvasElement | HTMLImageElement): HTMLCanvasElement | undefined {
+/** World structures that get weathered (grime, streaks, muted colours) on top of the smoothing. */
+const WEATHER = /^(house_|stall_|rw_|barn|stk_|bridge_|props$|bonfire|crop_)/;
+const MAX_WEATHER_AREA = 2048 * 2048;
+
+function hash2(x: number, y: number, s: number) {
+  let h = (Math.imul(x, 374761393) + Math.imul(y, 668265263) + Math.imul(s, 982451653)) | 0;
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+}
+function vn(x: number, y: number, s: number) {
+  const x0 = Math.floor(x), y0 = Math.floor(y);
+  let tx = x - x0, ty = y - y0;
+  tx = tx * tx * (3 - 2 * tx); ty = ty * ty * (3 - 2 * ty);
+  const a = hash2(x0, y0, s), b = hash2(x0 + 1, y0, s), c = hash2(x0, y0 + 1, s), d = hash2(x0 + 1, y0 + 1, s);
+  return a + (b - a) * tx + (c - a) * ty + (a - b - c + d) * tx * ty;
+}
+
+/**
+ * Weathering for buildings and props, in place on RGBA pixels of a w x h image whose design pixel is `u` px:
+ * soft grime blotches, vertical rain streaks, fine grain, and colours pulled toward a muted, earthy tone.
+ */
+function weather(d: Uint8ClampedArray, w: number, h: number, u: number) {
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const o = (y * w + x) * 4;
+    if (!d[o + 3]) continue;
+    const X = x / u, Y = y / u;
+    const blot = vn(X / 9, Y / 9, 1) * 0.6 + vn(X / 3, Y / 3, 2) * 0.4;
+    const streak = vn(X / 1.6, Y / 14, 3);
+    const grain = hash2(x, y, 4);
+    const k = 0.74 + 0.22 * blot - (streak > 0.68 ? (streak - 0.68) * 0.6 : 0) + (grain - 0.5) * 0.06;
+    let r = d[o], g = d[o + 1], b = d[o + 2];
+    const l = r * 0.3 + g * 0.55 + b * 0.15;
+    // desaturate 30% and tint toward warm umber
+    r = (r * 0.7 + l * 0.3) * 0.98 + 4; g = (g * 0.7 + l * 0.3) * 0.95 + 2; b = (b * 0.7 + l * 0.3) * 0.86;
+    d[o] = r * k; d[o + 1] = g * k; d[o + 2] = b * k;
+  }
+}
+
+/** A 4x smoothed (and, for structures, weathered) copy of a canvas or image. */
+export function smoothCopy(img: HTMLCanvasElement | HTMLImageElement, key = ""): HTMLCanvasElement | undefined {
   const w = img.width, h = img.height;
-  if (!w || !h || w * h > MAX_AREA) return;
+  if (!w || !h) return;
+  if (w * h > MAX_AREA) {
+    // too big to enlarge: weather it at its own size
+    if (!WEATHER.test(key) || w * h > MAX_WEATHER_AREA) return;
+    const c = document.createElement("canvas");
+    c.width = w; c.height = h;
+    const cx = c.getContext("2d", { willReadFrequently: true })!;
+    cx.drawImage(img, 0, 0);
+    const id = cx.getImageData(0, 0, w, h);
+    weather(id.data, w, h, 2);
+    cx.putImageData(id, 0, 0);
+    return c;
+  }
   const c = document.createElement("canvas");
   c.width = w; c.height = h;
   const cx = c.getContext("2d", { willReadFrequently: true })!;
@@ -42,7 +92,9 @@ export function smoothCopy(img: HTMLCanvasElement | HTMLImageElement): HTMLCanva
   px = scale2x(px, w * 2, h * 2);
   const out = document.createElement("canvas");
   out.width = w * 4; out.height = h * 4;
-  out.getContext("2d")!.putImageData(new ImageData(new Uint8ClampedArray(px.buffer), w * 4, h * 4), 0, 0);
+  const data = new Uint8ClampedArray(px.buffer);
+  if (WEATHER.test(key)) weather(data, w * 4, h * 4, 8);
+  out.getContext("2d")!.putImageData(new ImageData(data, w * 4, h * 4), 0, 0);
   return out;
 }
 
@@ -91,7 +143,7 @@ export function installSmoothTextures() {
   const init = TS.init;
   TS.init = function (game: Phaser.Game) {
     if (!eligible(this)) return init.call(this, game);
-    const real = this.image, hi = HI.get(this.texture?.key) ?? smoothCopy(real);
+    const real = this.image, hi = HI.get(this.texture?.key) ?? smoothCopy(real, this.texture?.key);
     if (!hi) return init.call(this, game);
     // Upload the big copy: UVs are fractions of the (unchanged) logical width/height, so frames still line up
     const wasCanvas = this.isCanvas;
@@ -102,7 +154,7 @@ export function installSmoothTextures() {
   const update = TS.update;
   TS.update = function () {
     if (!this.__smooth || !this.renderer?.gl) return update.call(this);
-    const hi = HI.get(this.texture?.key) ?? smoothCopy(this.image);
+    const hi = HI.get(this.texture?.key) ?? smoothCopy(this.image, this.texture?.key);
     if (hi) this.renderer.updateCanvasTexture(hi, this.glTexture, this.flipY);
   };
 }
