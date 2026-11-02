@@ -40,23 +40,23 @@
   "scale": 1.5
  },
  "mob_skeleton": {
-  "w": 16,
-  "h": 22,
+  "w": 20,
+  "h": 30,
   "scale": 1.5
  },
  "mob_bandit": {
-  "w": 16,
-  "h": 22,
+  "w": 20,
+  "h": 30,
   "scale": 1.5
  },
  "mob_skeletonmage": {
-  "w": 18,
-  "h": 24,
+  "w": 24,
+  "h": 32,
   "scale": 1.5
  },
  "mob_necromancer": {
-  "w": 18,
-  "h": 24,
+  "w": 24,
+  "h": 32,
   "scale": 1.5
  }
 }
