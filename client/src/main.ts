@@ -2,6 +2,8 @@ import Phaser from "phaser";
 import { TownScene } from "./TownScene";
 import { CLASSES, CLASS_KINDS, ClassKind, isClassKind } from "../../shared/classes";
 import { mountHeroCards } from "./heroCards";
+import { SMOOTH } from "./isoflag";
+import { installSmoothTextures } from "./smooth";
 
 const COLORS = [0xe74c3c, 0x3498db, 0x2ecc71, 0xf1c40f, 0x9b59b6, 0xe67e22, 0x1abc9c, 0xecf0f1];
 let color = COLORS[Math.floor(Math.random() * COLORS.length)];
@@ -45,10 +47,12 @@ function start() {
   document.getElementById("play")!.setAttribute("disabled", "");
   document.getElementById("status")!.textContent = "Connecting…";
   heroCards.stop();
+  if (SMOOTH) installSmoothTextures();
   new Phaser.Game({
     type: Phaser.AUTO,
     parent: "game",
-    pixelArt: true,
+    pixelArt: !SMOOTH,
+    antialias: SMOOTH,
     backgroundColor: "#1b1b24",
     scale: { mode: Phaser.Scale.RESIZE, width: window.innerWidth, height: window.innerHeight },
     scene: [new TownScene({ name, password, color, cls })],

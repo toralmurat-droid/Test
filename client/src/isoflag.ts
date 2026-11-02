@@ -7,3 +7,16 @@ export const ISO = (() => {
   }
   try { return localStorage.getItem("iso") !== "0"; } catch { return true; }
 })();
+
+/**
+ * Smooth (non-pixel) graphics, on by default with the iso view: painted ground, filtered textures.
+ * `?pixel=1` brings back the pixel-art look, `?pixel=0` the smooth one; remembered in localStorage.
+ */
+export const SMOOTH = ISO && (() => {
+  const q = new URLSearchParams(location.search).get("pixel");
+  if (q !== null) {
+    try { localStorage.setItem("pixel", q === "1" ? "1" : "0"); } catch { /* private mode */ }
+    return q !== "1";
+  }
+  try { return localStorage.getItem("pixel") !== "1"; } catch { return true; }
+})();

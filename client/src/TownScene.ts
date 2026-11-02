@@ -28,6 +28,7 @@ import { iconImg } from "./skillIcons";
 import { TalentMenu } from "./talents";
 import { IdeaBoard } from "./ideas";
 import { ISO, IsoView, isoAnchor, isoInput, screenDir } from "./iso";
+import { SMOOTH } from "./isoflag";
 import { ChestLayer } from "./chests";
 
 interface Entity {
@@ -132,7 +133,7 @@ export class TownScene extends Phaser.Scene {
     // ?zoom=N (viewing aid, like ?look): another camera zoom
     const zq = Number(new URLSearchParams(location.search).get("zoom"));
     cam.setZoom(zq > 0 && zq <= 6 ? zq : 3);
-    cam.roundPixels = true;
+    cam.roundPixels = !SMOOTH;
     if (ISO) this.iso = new IsoView(this);
 
     // Keys without capture so typing in chat still works

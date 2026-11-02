@@ -21,7 +21,8 @@ import { buildBridges } from "./isobridge";
  * Turned on with ?iso=1 in the address (or localStorage "iso" = "1").
  */
 export { ISO } from "./isoflag";
-import { ISO } from "./isoflag";
+import { ISO, SMOOTH } from "./isoflag";
+import { SmoothGround } from "./smoothground";
 
 export const isoX = (x: number, y: number) => x - y;
 export const isoY = (x: number, y: number) => (x + y) / 2;
@@ -110,6 +111,7 @@ function isoCull(layer: Phaser.Tilemaps.LayerData, camera: Phaser.Cameras.Scene2
 }
 
 export class IsoView {
+  static ground?: SmoothGround;
   private flat = new Map<number, Phaser.GameObjects.Container>();
   private flatSet = new Set<Phaser.GameObjects.Container>();
   /** Objects projected this frame (their world x/y are kept on them as __isoX/__isoY and put back after drawing). */
@@ -131,6 +133,7 @@ export class IsoView {
     const flatObjects = isoStanding(scene, objects);
     isoCrops(scene, ground, objects);
     const water = buildBridges(scene, ground); // bridges stand over the water
+    if (SMOOTH) IsoView.ground = new SmoothGround(scene, water, (img) => isoScreen(img));
     for (const [name, grid, depth] of [["ground", water, -2], ["objects", flatObjects, -1]] as const) {
       const layer = map.createBlankLayer(name, tiles, -IW / 2, 0)!;
       layer.putTilesAt(grid as number[][], 0, 0).setDepth(depth);
@@ -165,6 +168,8 @@ export class IsoView {
 
   /** Keep animated tiles (water, grass, wheel, fire) moving in the diamond tileset too. */
   update(dtMs: number) {
+    const cam = this.scene.cameras.main;
+    IsoView.ground?.update(cam.midPoint.x, cam.midPoint.y, cam.width / cam.zoom, cam.height / cam.zoom);
     this.tileTimer += dtMs;
     if (this.tileTimer > 160) { this.tileTimer = 0; bakeIsoTiles(this.scene, ANIMATED_TILES); }
   }

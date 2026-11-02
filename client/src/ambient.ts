@@ -3,6 +3,8 @@ import { ART_K as K, MAP_H, MAP_W, TILE } from "../../shared/constants";
 import { AREAS, EMPTY, GROUND, OBJECTS, T } from "../../shared/map";
 import { ANIMATED_TILES, drawTileFrame } from "./tileset";
 import { ISO, isoAnchor } from "./iso";
+import { SMOOTH } from "./isoflag";
+import { smoothTrees } from "./smoothArt";
 
 /**
  * Living-world layer for Oakvale. Purely cosmetic and client-side (collision still comes from shared/map.ts):
@@ -70,6 +72,7 @@ function disc(px: Px, cx: number, cy: number, rx: number, ry: number, c: number 
 }
 
 function makeTextures(scene: Phaser.Scene) {
+  if (SMOOTH) smoothTrees(scene, K); // painted trees and bushes (same keys: the pixel ones below are then skipped)
   // Oak: 24x28, 2 sway frames. Trunk base sits at the bottom centre (the collision tile).
   for (const [key, seed, dark, mid, light, hi] of [
     ["oak_a", 3, 0x2a5f26, 0x3a8031, 0x4f9c3e, 0x74bf55],
