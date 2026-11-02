@@ -2,7 +2,7 @@ import type { IncomingMessage } from "node:http";
 import { Client, Room } from "colyseus";
 import { ArraySchema, MapSchema, Schema, type } from "@colyseus/schema";
 import {
-  BLOB_AI, BROOD, Dir, MOTHER, SKELETON_AI, HIT_RADIUS, mobScale, InputState, MOB_ATTACK_RANGE, MOBS, MobKind, rollSkeletonWeapon, SKELETON_BOW, SKELETON_WEAPONS, SkeletonWeapon, REGEN_DELAY_MS, REGEN_RAMP_MS, regenFromStamina, SAFE_REGEN_MULT,
+  BLOB_AI, BROOD, Dir, MERGE, MOTHER, SKELETON_AI, HIT_RADIUS, mobScale, InputState, MOB_ATTACK_RANGE, MOBS, MobKind, rollSkeletonWeapon, SKELETON_BOW, SKELETON_WEAPONS, SkeletonWeapon, REGEN_DELAY_MS, REGEN_RAMP_MS, regenFromStamina, SAFE_REGEN_MULT,
   RESPAWN_MS, TICK_RATE, TILE,
 } from "../shared/constants";
 import {
@@ -117,6 +117,11 @@ export class Mob extends Schema {
   @type("number") level = 1;
   @type("string") weapon = ""; // skeletons: sword, axe, spear or bow (SKELETON_WEAPONS)
   @type("boolean") hidden = false; // tucked into a grave/tree: untouchable, only its eyes show
+  @type("number") merged = 1; // blobs inside this one (MERGE): the client draws it bigger
+  mergeInto = ""; // answering a call: id of the blob it is rushing to fuse with
+  mergeCap = 0; // most blobs this one may hold (set at its first call)
+  canShoot = false; canCharge = false; canHeal = false; // abilities picked up by merging
+  nextCall = 0; nextShot = 0;
 
   spot = ""; // hiding spot (tile "x,y") it is heading to or sitting in
   spotX = 0; spotY = 0; outX = 0; outY = 0; // spot centre, and the walkable tile it steps in/out from
@@ -520,6 +525,8 @@ export class TownRoom extends Room<TownState> {
     m.target = "";
     m.hidden = false; m.spot = ""; m.fleeing = false;
     m.specialKind = ""; m.specialAt = 0; m.nextBounce = 0; m.nextSlam = 0; m.nextRaise = 0; m.nextCircle = 0;
+    m.merged = 1; m.mergeInto = ""; m.mergeCap = 0; m.nextCall = 0; m.nextShot = 0;
+    m.canShoot = kind === "shooterblob"; m.canCharge = kind === "warriorblob"; m.canHeal = kind === "healerblob";
     if (kind === "motherblob") m.nextBrood = Date.now() + BROOD.minMs + Math.random() * (BROOD.maxMs - BROOD.minMs);
     if (!this.state.mobs.has(id)) this.state.mobs.set(id, m);
   }
@@ -527,10 +534,9 @@ export class TownRoom extends Room<TownState> {
   // ---- Special blobs --------------------------------------------------------
 
   /** Ranged monsters' shot at (tx,ty): shooter blob slime ball, skeleton mage magic bolt, necromancer shadow bolt. Only hurts players. */
-  private mobShot(m: Mob, id: string, tx: number, ty: number) {
+  private mobShot(m: Mob, id: string, tx: number, ty: number, cfg: RangedCfg = rangedOf(m)!) {
     const s = new Projectile();
     const dx = tx - m.x, dy = ty - m.y, d = Math.hypot(dx, dy) || 1;
-    const cfg = rangedOf(m)!;
     s.x = m.x; s.y = m.y - 4; s.vx = dx / d; s.vy = dy / d;
     s.owner = id; s.kind = cfg.shot; s.mobLevel = m.level || 1; s.mobName = MOBS[m.kind].name;
     s.speed = cfg.shotSpeed; s.range = cfg.range * 1.4; s.radius = cfg.shotRadius;
@@ -558,6 +564,7 @@ export class TownRoom extends Room<TownState> {
 
   /** Pick the nearest free hiding spot and start walking to it. */
   private claimSpot(m: Mob, x: number, y: number, radius: number, now: number, fleeing: boolean) {
+    if (m.merged > 1 || m.mergeInto) return; // a big merged blob doesn't fit in a tree
     const taken = new Set<string>();
     this.state.mobs.forEach((o) => { if (o !== m && o.spot && !o.dead) taken.add(o.spot); });
     const s = findHideSpot(m.kind, x, y, radius, taken);
@@ -665,6 +672,47 @@ export class TownRoom extends Room<TownState> {
     m.winding = true;
     this.broadcast("mbwind", { id, kind: m.specialKind, ms: m.specialKind === "slam" ? MOTHER.slam.windupMs : MOTHER.bounce.windupMs });
     return true;
+  }
+
+  // ---- Blob merging -----------------------------------------------------------
+
+  /** Blobs that can call for help and fuse (not Mother Blobs). */
+  private static canMerge(m: Mob) { return m.kind !== "motherblob" && BLOB_KINDS.includes(m.kind); }
+
+  /** In danger: call the blobs around to fuse into this one, up to its cap. */
+  private blobCall(m: Mob, id: string, now: number) {
+    m.nextCall = now + MERGE.callEveryMs;
+    m.mergeCap ||= m.level < MERGE.highLevel ? MERGE.capLow : MERGE.capHigh;
+    let room = m.mergeCap - m.merged;
+    this.state.mobs.forEach((o) => { if (o.mergeInto === id && !o.dead) room -= o.merged; });
+    if (room <= 0) return;
+    const near: [number, string, Mob][] = [];
+    this.state.mobs.forEach((o, oid) => {
+      if (o === m || o.dead || o.hidden || o.mergeInto || !TownRoom.canMerge(o)) return;
+      const d = Math.hypot(o.x - m.x, o.y - m.y);
+      if (d <= MERGE.callRange) near.push([d, oid, o]);
+    });
+    near.sort((a, b) => a[0] - b[0]);
+    let called = 0;
+    for (const [, , o] of near) {
+      if (o.merged > room) continue;
+      o.mergeInto = id; o.spot = ""; o.windUntil = 0; o.winding = false;
+      room -= o.merged; called++;
+      if (room <= 0) break;
+    }
+    if (called) this.broadcast("blobcall", { id });
+  }
+
+  /** o melts into h: levels, HP and abilities add up; o is gone (its zone brings a fresh one back later). */
+  private absorb(h: Mob, hid: string, o: Mob, oid: string) {
+    h.merged += o.merged; h.level += o.level;
+    h.maxHp += o.maxHp; h.hp = Math.min(h.maxHp, h.hp + o.hp);
+    h.canShoot ||= o.canShoot; h.canCharge ||= o.canCharge; h.canHeal ||= o.canHeal;
+    o.dead = true; o.hp = 0; o.mergeInto = ""; o.moving = false;
+    this.state.mobs.forEach((c) => { if (c.mergeInto === oid) c.mergeInto = ""; });
+    if (o.zone < 0) this.clock.setTimeout(() => this.state.mobs.delete(oid), 500);
+    else { const zone = this.state.zones.get(SPAWN_ZONES[o.zone].name); if (zone) zone.alive--; }
+    this.broadcast("blobmerge", { into: hid, from: oid, x: Math.round(o.x), y: Math.round(o.y), level: h.level, merged: h.merged });
   }
 
   // ---- Necromancer ----------------------------------------------------------
@@ -816,6 +864,20 @@ export class TownRoom extends Room<TownState> {
     if (!m.target && !this.playerNear(m.x, m.y, SLEEP_RANGE)) { if (m.moving) m.moving = false; return; }
     if (m.kind === "motherblob" && now >= m.nextBrood) this.brood(m, id, now);
     if (m.hidden) return this.updateHidden(m, id, dt, now);
+    // Answering a merge call: rush to the caller and fuse on contact
+    if (m.mergeInto) {
+      const h = this.state.mobs.get(m.mergeInto);
+      if (!h || h.dead || h.hidden) m.mergeInto = "";
+      else {
+        if (Math.hypot(h.x - m.x, h.y - m.y) <= MERGE.touch) return this.absorb(h, m.mergeInto, m, id);
+        const go = toward(m.x, m.y, h.x, h.y);
+        const r = moveStep(m.x, m.y, go, dt, def.speed * MERGE.speedMult * (m.slowed ? SLOW_MOB : 1));
+        if (!isSafeZone(r.x, r.y) && !noMobsAt(r.x, r.y)) { m.x = r.x; m.y = r.y; }
+        else m.mergeInto = "";
+        m.moving = r.moving; m.dir = dirFromInput(go, m.dir);
+        return;
+      }
+    }
 
     // Drop target if it died, left, went into the safe zone, or pulled us too far from home
     let t = m.target ? this.state.players.get(m.target) : undefined;
@@ -847,10 +909,16 @@ export class TownRoom extends Room<TownState> {
       return;
     }
 
-    if (m.kind === "healerblob" && now >= m.nextHeal) this.blobHeal(m, id, now);
+    if (m.canHeal && now >= m.nextHeal) this.blobHeal(m, id, now);
+    // A blob in danger calls for help
+    if (t && TownRoom.canMerge(m) && now >= m.nextCall && !m.broken) {
+      let crowd = 0;
+      this.state.players.forEach((p) => { if (!p.dead && Math.hypot(p.x - m.x, p.y - m.y) <= MERGE.crowdRange) crowd++; });
+      if (m.hp < m.maxHp * MERGE.hpFrac || crowd >= MERGE.crowd) this.blobCall(m, id, now);
+    }
 
     let input: InputState;
-    const ranged = !!rangedOf(m);
+    const ranged = !!rangedOf(m) && m.merged <= 1; // a merged blob is a brawler that also spits if it can
     if (t && m.broken) {
       // Broken: dizzy, can't fight back, tries to get away from the attacker
       input = toward(m.x, m.y, m.x * 2 - t.x, m.y * 2 - t.y);
@@ -878,11 +946,16 @@ export class TownRoom extends Room<TownState> {
     } else if (t) {
       const dist = Math.hypot(t.x - m.x, t.y - m.y);
       // Warrior blob: lunge at a target a few steps away
-      if (m.kind === "warriorblob" && !m.windUntil && now >= m.nextCharge && dist >= BLOB_AI.warrior.chargeMin && dist <= BLOB_AI.warrior.chargeMax) {
+      if (m.canCharge && !m.windUntil && now >= m.nextCharge && dist >= BLOB_AI.warrior.chargeMin && dist <= BLOB_AI.warrior.chargeMax) {
         m.chargeUntil = now + BLOB_AI.warrior.chargeMs; m.nextCharge = now + BLOB_AI.warrior.cooldownMs;
         this.broadcast("blobcharge", { id });
       }
       const melee = meleeOf(m);
+      // Merged blob that swallowed a shooter: spits slime balls while closing in
+      if (m.merged > 1 && m.canShoot && !m.windUntil && now >= m.nextShot && dist > melee.range * 2 && dist <= BLOB_AI.shooter.range) {
+        m.nextShot = now + MERGE.shotEveryMs;
+        this.mobShot(m, id, t.x, t.y, RANGED.shooterblob!);
+      }
       if (dist <= melee.range || m.windUntil) {
         input = STILL;
         m.dir = Math.abs(t.x - m.x) > Math.abs(t.y - m.y) ? (t.x > m.x ? "right" : "left") : (t.y > m.y ? "down" : "up");
