@@ -253,15 +253,30 @@ function drawUprightSmooth(g: Phaser.GameObjects.Graphics, x0: number, y0: numbe
         blade(x + (b - 4) * 0.7, y, hh, lean, b % 3 === 0 ? 0x26361a : b % 3 === 1 ? 0x3e5226 : 0x5e6c34);
       }
     }]);
-    else if (h >= 0.26 && h < 0.275) items.push([wx + wy, () => { // mushrooms
-      g.fillStyle(0x000000, 0.22).fillEllipse(x + 1, y + 0.5, 9, 2.4);
-      g.fillStyle(0xe8dcc4, 1).fillRoundedRect(x - 1.2, y - 5, 2.4, 5.4, 1);
-      g.fillStyle(0x9a2a20, 1).fillEllipse(x, y - 5.2, 8.6, 4.4);
-      g.fillStyle(0xd23f34, 1).fillEllipse(x - 0.3, y - 5.9, 7.6, 3.6);
-      g.fillStyle(0xf06a5c, 1).fillEllipse(x - 1.4, y - 6.6, 3.2, 1.4);
-      g.fillStyle(0xffffff, 0.95).fillCircle(x - 2, y - 6, 0.6).fillCircle(x + 1, y - 6.8, 0.5).fillCircle(x + 2.5, y - 5.4, 0.45);
-      g.fillStyle(0xe8dcc4, 1).fillRoundedRect(x + 4.6, y - 2.4, 1.6, 2.8, 0.6);
-      g.fillStyle(0xc0392b, 1).fillEllipse(x + 5.4, y - 2.6, 4, 2);
+    else if (h >= 0.26 && h < 0.275) items.push([wx + wy, () => { // mushrooms: fly agaric, brown boletes or pale clusters, all sizes
+      const kind = hash(tx, ty, 77), n = 1 + Math.floor(hash(tx, ty, 78) * 4);
+      g.fillStyle(0x000000, 0.22).fillEllipse(x + 1, y + 0.5, 6 + n * 2.5, 2.4);
+      for (let m = 0; m < n; m++) {
+        const s = (m === 0 ? 1 : 0.45 + hash(tx * 3 + m, ty, 79) * 0.5) * (0.7 + hash(tx, ty, 80) * 0.5);
+        const mx = x + (m === 0 ? 0 : (hash(tx + m, ty, 81) - 0.5) * 10), my = y + (m === 0 ? 0 : (hash(tx, ty + m, 82) - 0.3) * 3);
+        const lean = (hash(tx + m, ty + m, 83) - 0.5) * 1.6 * s;
+        if (kind < 0.4) { // red cap with white spots
+          g.fillStyle(0xe8dcc4, 1).fillRoundedRect(mx - 1.2 * s, my - 5 * s, 2.4 * s, 5.4 * s, 1);
+          g.fillStyle(0x9a2a20, 1).fillEllipse(mx + lean, my - 5.2 * s, 8.6 * s, 4.4 * s);
+          g.fillStyle(0xd23f34, 1).fillEllipse(mx + lean - 0.3, my - 5.9 * s, 7.6 * s, 3.6 * s);
+          g.fillStyle(0xf06a5c, 1).fillEllipse(mx + lean - 1.4 * s, my - 6.6 * s, 3.2 * s, 1.4 * s);
+          if (s > 0.6) g.fillStyle(0xffffff, 0.95).fillCircle(mx + lean - 2 * s, my - 6 * s, 0.6).fillCircle(mx + lean + 1 * s, my - 6.8 * s, 0.5);
+        } else if (kind < 0.75) { // brown bolete: fat pale stem, chestnut cap
+          g.fillStyle(0xcfc0a0, 1).fillRoundedRect(mx - 1.6 * s, my - 4.4 * s, 3.2 * s, 4.8 * s, 1.2);
+          g.fillStyle(0x4a2c18, 1).fillEllipse(mx + lean, my - 4.8 * s, 8 * s, 4.6 * s);
+          g.fillStyle(0x7a4a26, 1).fillEllipse(mx + lean - 0.3, my - 5.4 * s, 7 * s, 3.6 * s);
+          g.fillStyle(0xa0703e, 1).fillEllipse(mx + lean - 1.2 * s, my - 6 * s, 3 * s, 1.2 * s);
+        } else { // pale clustered caps on thin stems
+          g.lineStyle(0.6, 0xd8d0bc, 1).lineBetween(mx, my, mx + lean, my - 5 * s);
+          g.fillStyle(0x8a8270, 1).fillEllipse(mx + lean, my - 5 * s, 4.4 * s, 2 * s);
+          g.fillStyle(0xd8d0bc, 1).fillEllipse(mx + lean - 0.3, my - 5.4 * s, 3.8 * s, 1.6 * s);
+        }
+      }
     }]);
     if (t === T.FLOWERS) for (let k = 0; k < 6; k++) {
       const fx = X + 3 + hash(tx, ty, 30 + k) * (TILE - 6), fy = Y + 3 + hash(tx, ty, 40 + k) * (TILE - 6);
