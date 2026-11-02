@@ -148,6 +148,142 @@ export function buildHouses(scene: Phaser.Scene): Set<number> {
  * rising at the wall foot, ivy on some walls, weeds and a few dropped things around the base. Pixel-sized marks,
  * painted on the house canvas (before it is enlarged), so it keeps the shared pixel density.
  */
+/** Fills a screen quad. */
+function quad(ctx: CanvasRenderingContext2D, pts: Pt[], fill: string | CanvasGradient) {
+  ctx.fillStyle = fill; ctx.beginPath(); pts.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y))); ctx.closePath(); ctx.fill();
+}
+
+/**
+ * Makes the walls read as built, not as a box: a rough fieldstone footing, heavy corner posts, the shadow the
+ * eaves throw on the wall, patches where the plaster fell off, a door step and a log pile against the side.
+ */
+function houseWalls(ctx: CanvasRenderingContext2D, S: (x: number, y: number, z?: number) => Pt,
+  b: { X0: number; X1: number; Y0: number; Y1: number; facadeH: number; stone: boolean }, seed: number) {
+  const R = rng(seed);
+  const { X0, X1, Y0, Y1, facadeH, stone } = b;
+  // shadow under the eaves (the roof drawn later covers its top)
+  for (let k = 0; k < 12; k++) {
+    const z1 = facadeH - k, z0 = z1 - 1, a = 0.5 * (1 - k / 12);
+    quad(ctx, [S(X0, Y1, z1), S(X1, Y1, z1), S(X1, Y1, z0), S(X0, Y1, z0)], `rgba(14,10,8,${a})`);
+    quad(ctx, [S(X1, Y1, z1), S(X1, Y0, z1), S(X1, Y0, z0), S(X1, Y1, z0)], `rgba(14,10,8,${a * 0.8})`);
+  }
+  // plaster fallen off in patches: wattle and stone show through
+  if (!stone) for (let k = 0; k < 2 + Math.floor(R() * 3); k++) {
+    const front = R() < 0.6, f = 0.08 + R() * 0.84, z = 7 + R() * (facadeH - 18), w = 3 + R() * 5, h = 2 + R() * 4;
+    const at = (df: number, dz: number) => front ? S(X0 + f * (X1 - X0) + df, Y1, z + dz) : S(X1, Y0 + f * (Y1 - Y0) + df, z + dz);
+    const pts = [at(0, 0), at(w * 0.5, h * 0.4 + R()), at(w, 0.5), at(w * 0.8, -h * 0.5), at(w * 0.2, -h * 0.6)];
+    quad(ctx, pts, "#8a7258");
+    for (let i = 0; i < 6; i++) { const q = at(R() * w, (R() - 0.5) * h); ctx.fillStyle = R() < 0.5 ? "#6a5440" : "#9c8468"; ctx.fillRect(Math.round(q.x), Math.round(q.y), 2, 1); }
+    ctx.strokeStyle = "rgba(40,28,18,0.6)"; ctx.lineWidth = 0.6; ctx.beginPath(); pts.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y))); ctx.closePath(); ctx.stroke();
+  }
+  // fieldstone footing, a little proud of the wall
+  const FH = 6, P2 = 1.5;
+  quad(ctx, [S(X0 - P2, Y1 + P2, FH), S(X1 + P2, Y1 + P2, FH), S(X1 + P2, Y1 + P2, 0), S(X0 - P2, Y1 + P2, 0)], "#4e4840");
+  quad(ctx, [S(X1 + P2, Y1 + P2, FH), S(X1 + P2, Y0, FH), S(X1 + P2, Y0, 0), S(X1 + P2, Y1 + P2, 0)], "#3a3530");
+  quad(ctx, [S(X0 - P2, Y1 + P2, FH), S(X1 + P2, Y1 + P2, FH), S(X1, Y1, FH), S(X0, Y1, FH)], "#8a8274"); // top ledge
+  quad(ctx, [S(X1 + P2, Y1 + P2, FH), S(X1 + P2, Y0, FH), S(X1, Y0, FH), S(X1, Y1, FH)], "#7a7266");
+  const stonesOn = (front: boolean) => {
+    const len = front ? X1 - X0 : Y1 - Y0;
+    for (let row = 0; row < 2; row++) {
+      let d = -P2 + (row ? R() * 3 : 0);
+      while (d < len + P2) {
+        const w = 3 + R() * 4, z0 = row * 3 + 0.4, z1 = z0 + 2.4;
+        const q = (dd: number, z: number) => front ? S(X0 + dd, Y1 + P2, z) : S(X1 + P2, Y0 + dd, z);
+        const tone = (front ? 0.95 : 0.72) * (0.75 + R() * 0.45);
+        quad(ctx, [q(d + 0.3, z1), q(d + w - 0.3, z1), q(d + w - 0.3, z0), q(d + 0.3, z0)], `rgb(${116 * tone | 0},${108 * tone | 0},${96 * tone | 0})`);
+        const hi = q(d + 0.5, z1);
+        ctx.fillStyle = "rgba(220,210,190,0.25)"; ctx.fillRect(Math.round(hi.x), Math.round(hi.y), Math.max(1, Math.round(w * (front ? 1 : 0.5)) - 1), 1);
+        d += w;
+      }
+    }
+  };
+  stonesOn(true); stonesOn(false);
+  // heavy corner post
+  const cp = (x: number, y: number, k: number) => {
+    const a = S(x, y, facadeH), c0 = S(x, y, FH);
+    ctx.fillStyle = `rgba(${52 * k | 0},${36 * k | 0},${22 * k | 0},1)`; ctx.fillRect(Math.round(a.x) - 2, Math.round(a.y), 4, Math.round(c0.y - a.y));
+    ctx.fillStyle = "rgba(160,120,80,0.35)"; ctx.fillRect(Math.round(a.x) - 2, Math.round(a.y), 1, Math.round(c0.y - a.y));
+  };
+  cp(X1, Y1, 1); cp(X0, Y1, 0.9);
+  // log pile against the side wall on some houses
+  if (R() < 0.55) {
+    const f0 = 0.15 + R() * 0.45, len = 10 + R() * 8;
+    for (let row = 0; row < 3; row++) for (let i = 0; i < 6 - row; i++) {
+      const d = f0 * (Y1 - Y0) + i * (len / 6) + row * len / 12, z = 2 + row * 2.6;
+      const p = S(X1 + 4, Y0 + d, z);
+      ctx.fillStyle = "#3a2818"; ctx.beginPath(); ctx.ellipse(p.x, p.y, 1.6, 1.4, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = R() < 0.5 ? "#b08a5c" : "#9c7a50"; ctx.beginPath(); ctx.ellipse(p.x - 0.3, p.y - 0.2, 1.1, 1, 0, 0, Math.PI * 2); ctx.fill();
+    }
+  }
+}
+
+/** The roof as a built thing: a thick eave board with a lit edge, a sagging ridge cap, a stone chimney top. */
+/** A small plank porch roof on two posts over the door, with a worn step stone. */
+function porch(ctx: CanvasRenderingContext2D, S: (x: number, y: number, z?: number) => Pt, xa: number, xb: number, y: number, seed: number) {
+  const R = rng(seed);
+  const a = xa + 2, b = xb - 2, d = 9, zw = 25, zp = 19;
+  quad(ctx, [S(a, y, 0), S(b, y, 0), S(b, y + d + 2, 0), S(a, y + d + 2, 0)], "rgba(10,8,6,0.22)"); // shade on the ground
+  const st = [S(a + 5, y, 1.5), S(b - 5, y, 1.5), S(b - 5, y + 4, 1.5), S(a + 5, y + 4, 1.5)];
+  quad(ctx, [S(a + 5, y + 4, 1.5), S(b - 5, y + 4, 1.5), S(b - 5, y + 4, 0), S(a + 5, y + 4, 0)], "#5a544a");
+  quad(ctx, st, "#8c8476");
+  for (const x of [a + 1, b - 1]) { // posts
+    const t = S(x, y + d, zp), f = S(x, y + d, 0);
+    ctx.fillStyle = "#3a2818"; ctx.fillRect(Math.round(t.x) - 1, Math.round(t.y), 3, Math.round(f.y - t.y));
+    ctx.fillStyle = "rgba(180,140,96,0.45)"; ctx.fillRect(Math.round(t.x) - 1, Math.round(t.y), 1, Math.round(f.y - t.y));
+  }
+  // shed roof: planks from the wall down to the posts
+  const r = [S(a - 2, y, zw), S(b + 2, y, zw), S(b + 2, y + d + 2, zp - 1), S(a - 2, y + d + 2, zp - 1)];
+  quad(ctx, r, "#5e4630");
+  const n = 7;
+  for (let i = 0; i <= n; i++) {
+    const f = i / n, x = a - 2 + f * (b - a + 4);
+    const p0 = S(x, y, zw), p1 = S(x, y + d + 2, zp - 1);
+    ctx.strokeStyle = "rgba(24,16,10,0.7)"; ctx.lineWidth = 0.7; ctx.beginPath(); ctx.moveTo(p0.x, p0.y); ctx.lineTo(p1.x, p1.y); ctx.stroke();
+    if (R() < 0.3) { ctx.fillStyle = "rgba(78,98,46,0.6)"; ctx.fillRect(Math.round((p0.x + p1.x) / 2), Math.round((p0.y + p1.y) / 2), 2, 1); }
+  }
+  quad(ctx, [r[3], r[2], { x: r[2].x, y: r[2].y + 2 }, { x: r[3].x, y: r[3].y + 2 }], "#2a1e14"); // front edge
+  quad(ctx, [r[3], r[2], { x: r[2].x, y: r[2].y + 0.8 }, { x: r[3].x, y: r[3].y + 0.8 }], "rgba(200,170,120,0.4)");
+}
+
+function houseRoof(ctx: CanvasRenderingContext2D, S: (x: number, y: number, z?: number) => Pt,
+  b: { X0: number; X1: number; Y0: number; Y1: number; o: number; top: number; eave: number; alongX: boolean }, seed: number) {
+  const R = rng(seed);
+  const { X0, X1, Y0, Y1, o, top, eave, alongX } = b;
+  // front slope corners and a point on it: s along the ridge, t from ridge (0) to eave (1)
+  const sp = (s0: number, t0: number): Pt => alongX
+    ? S(X0 - o + s0 * (X1 - X0 + 2 * o), (Y0 + Y1) / 2 + t0 * ((Y1 - Y0) / 2 + o), top + t0 * (eave - top))
+    : S((X0 + X1) / 2 + t0 * ((X1 - X0) / 2 + o), Y0 - o + s0 * (Y1 - Y0 + 2 * o), top + t0 * (eave - top));
+  // light falls off down the slope; the slope is not a flat plane but sags between the rafters
+  const ridgeA = sp(0, 0), eaveA = sp(0, 1);
+  const g = ctx.createLinearGradient(ridgeA.x, ridgeA.y, eaveA.x, eaveA.y);
+  g.addColorStop(0, "rgba(255,240,210,0.10)"); g.addColorStop(0.5, "rgba(0,0,0,0)"); g.addColorStop(1, "rgba(10,8,6,0.32)");
+  quad(ctx, [sp(0, 0), sp(1, 0), sp(1, 1), sp(0, 1)], g);
+  const rafters = 3 + Math.floor(R() * 3);
+  for (let i = 0; i < rafters; i++) { // soft dips between rafters
+    const s0 = (i + 0.5) / rafters, w = 0.5 / rafters;
+    quad(ctx, [sp(s0 - w * 0.6, 0.05), sp(s0 + w * 0.6, 0.05), sp(s0 + w * 0.8, 0.95), sp(s0 - w * 0.8, 0.95)], "rgba(10,8,6,0.08)");
+  }
+  // patched repairs: a few shingles of another tone
+  for (let k = 0; k < 2 + Math.floor(R() * 3); k++) {
+    const s0 = 0.05 + R() * 0.8, t0 = 0.15 + R() * 0.6, ws = 0.04 + R() * 0.08, wt = 0.08 + R() * 0.12;
+    quad(ctx, [sp(s0, t0), sp(s0 + ws, t0), sp(s0 + ws, t0 + wt), sp(s0, t0 + wt)], R() < 0.5 ? "rgba(255,230,190,0.12)" : "rgba(10,8,6,0.18)");
+  }
+  // eave board: 3 px thick under the front eave line
+  const e0 = alongX ? S(X0 - o, Y1 + o, eave) : S(X1 + o, Y0 - o, eave), e1 = S(X1 + o, Y1 + o, eave);
+  quad(ctx, [e0, e1, { x: e1.x, y: e1.y + 3 }, { x: e0.x, y: e0.y + 3 }], "#2a1e14");
+  quad(ctx, [e0, e1, { x: e1.x, y: e1.y + 1 }, { x: e0.x, y: e0.y + 1 }], "rgba(190,160,120,0.45)");
+  // ridge cap: rounded tiles along the ridge, sagging a little in the middle
+  const r0 = alongX ? S(X0 - o, (Y0 + Y1) / 2, top) : S((X0 + X1) / 2, Y0 - o, top);
+  const r1 = alongX ? S(X1 + o, (Y0 + Y1) / 2, top) : S((X0 + X1) / 2, Y1 + o, top);
+  const n = Math.ceil(Math.hypot(r1.x - r0.x, r1.y - r0.y) / 4);
+  const sag = 1 + R() * 1.5;
+  for (let i = 0; i <= n; i++) {
+    const f = i / n, x = r0.x + (r1.x - r0.x) * f, y = r0.y + (r1.y - r0.y) * f + Math.sin(f * Math.PI) * sag;
+    ctx.fillStyle = "#2a2420"; ctx.beginPath(); ctx.ellipse(x, y + 0.5, 2.6, 1.8, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = i % 3 === 0 ? "#6a5e54" : "#5a5048"; ctx.beginPath(); ctx.ellipse(x - 0.3, y - 0.2, 2.1, 1.3, 0, 0, Math.PI * 2); ctx.fill();
+  }
+}
+
 function weatherHouse(ctx: CanvasRenderingContext2D, S: (x: number, y: number, z?: number) => Pt,
   b: { X0: number; X1: number; Y0: number; Y1: number; o: number; top: number; eave: number; facadeH: number; alongX: boolean }, seed: number) {
   const R = rng(seed);
@@ -287,6 +423,7 @@ function house(scene: Phaser.Scene, x0: number, y0: number, x1: number, yb: numb
   line(ctx, S(X1, Y1, facadeH), S(X1, Y1, 0), "rgba(40,26,16,0.8)", 2);
   line(ctx, S(X0, Y1, 0), S(X1, Y1, 0), "rgba(30,20,12,0.5)");
   line(ctx, S(X1, Y1, 0), S(X1, Y0, 0), "rgba(30,20,12,0.5)");
+  if (SMOOTH) houseWalls(ctx, S, { X0, X1, Y0, Y1, facadeH, stone: wallId === T.WALL_STONE }, x0 * 31 + y0 * 7);
 
   // 5. gable end (triangle of wall under the roof) and the front slope
   const gableArt = { id: wallId };
@@ -309,6 +446,11 @@ function house(scene: Phaser.Scene, x0: number, y0: number, x1: number, yb: numb
     line(ctx, S(xm, Y1 + o, top), S(X1 + o, Y1 + o, eave), "rgba(30,20,12,0.55)", 2);
     line(ctx, S(xm, Y0 - o, top + 1), S(xm, Y1 + o, top + 1), "rgba(40,28,20,0.85)", 2);
     line(ctx, S(X1 + o, Y0 - o, eave), S(X1 + o, Y1 + o, eave), "rgba(30,20,12,0.6)", 1);
+  }
+  if (SMOOTH) houseRoof(ctx, S, { X0, X1, Y0, Y1, o, top, eave, alongX }, x0 * 53 + y0 * 11);
+  if (SMOOTH) {
+    const di = [...Array(wTiles).keys()].find((i) => facadeRow(i) === T.DOOR);
+    if (di !== undefined) porch(ctx, S, X0 + di * TILE, X0 + (di + 1) * TILE, Y1, x0 * 7 + y0);
   }
   if (SMOOTH) weatherHouse(ctx, S, { X0, X1, Y0, Y1, o, top, eave, facadeH, alongX }, x0 * 131 + y0 * 17);
   tex.refresh();
