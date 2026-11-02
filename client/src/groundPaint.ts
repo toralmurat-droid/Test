@@ -20,6 +20,8 @@ export interface GroundData {
 const GRASS = 0, GRASS_DARK = 1, TALL = 2, FLOWERS = 3, DIRT = 4, COBBLE = 5, SAND = 6, WATER = 7, BRIDGE = 8, FIELD = 9, CROPS = 10;
 const FLOOR = 39, RUBBLE = 40;
 const NT = 64;
+/** Kernel radius in tiles: how far grounds reach into each other. */
+const KR = 1.8;
 
 function hash2(x: number, y: number, s: number) {
   let h = (Math.imul(x, 374761393) + Math.imul(y, 668265263) + Math.imul(s, 982451653)) | 0;
@@ -71,6 +73,8 @@ export function makeFields(g: GroundData): Fields {
 }
 
 const out3 = new Float32Array(3);
+/** How much of the material owns this spot (1 deep inside, ~0.3 at a border): old roads crumble near their edges. */
+let OWN = 1;
 
 /**
  * Colour + "height" of one material at a world point. The height lets materials poke into each other at
@@ -165,8 +169,9 @@ function material(t: number, wx: number, wy: number, sx: number, sy: number, dep
       }
       const edge = d2 - d1;
       // patches where the setts are gone: packed earth and gravel show through
-      const hole = sstep(0.72, 0.8, vn(wx / 30, wy / 30, 39) * 0.75 + hash2(cid, 5, 40) * 0.25);
-      const missing = hash2(cid, 3, 29) < 0.04 || hole > 0.5;
+      const decay = clamp01((0.85 - OWN) * 1.6);
+      const hole = sstep(0.72, 0.8, vn(wx / 30, wy / 30, 39) * 0.75 + hash2(cid, 5, 40) * 0.25 + decay * 0.35);
+      const missing = hash2(cid, 3, 29) < 0.04 + decay * 0.45 || hole > 0.5;
       const tone = 0.7 + best * 0.42, warm = hash2(cid, 1, 24);
       r = (104 + 18 * warm) * tone; g = (100 + 9 * warm) * tone; b = (92 - 3 * warm) * tone;
       // each stone sits at its own height and tilt: sunken ones dark, proud ones catch the light
@@ -290,31 +295,50 @@ export function paintChunk(g: GroundData, f: Fields, sx0: number, sy0: number, c
       const sx = sx0 + (i + 0.5) / res;
       const wx = sy + sx / 2, wy = sy - sx / 2;
       // wavy borders: warp the lookup point
-      const u = wx + (vn(wx / 45, wy / 45, 3) - 0.5) * 22 + (vn(wx / 15, wy / 15, 1) - 0.5) * 14 + (vn(wx / 4, wy / 4, 4) - 0.5) * 5;
-      const v = wy + (vn(wx / 45, wy / 45, 5) - 0.5) * 22 + (vn(wx / 15, wy / 15, 2) - 0.5) * 14 + (vn(wx / 4, wy / 4, 6) - 0.5) * 5;
+      const u = wx + (vn(wx / 45, wy / 45, 3) - 0.5) * 18 + (vn(wx / 15, wy / 15, 1) - 0.5) * 10 + (vn(wx / 4, wy / 4, 4) - 0.5) * 4;
+      const v = wy + (vn(wx / 45, wy / 45, 5) - 0.5) * 18 + (vn(wx / 15, wy / 15, 2) - 0.5) * 10 + (vn(wx / 4, wy / 4, 6) - 0.5) * 4;
+      // wide tent kernel over the tiles around: a broad zone where neighbouring grounds mix
       const fx = u / tile - 0.5, fy = v / tile - 0.5;
       const x0 = Math.floor(fx), y0 = Math.floor(fy);
-      let tx = fx - x0, ty = fy - y0;
-      tx = tx * tx * (3 - 2 * tx); ty = ty * ty * (3 - 2 * ty);
       types.length = 0;
-      add(at(x0, y0), (1 - tx) * (1 - ty)); add(at(x0 + 1, y0), tx * (1 - ty));
-      add(at(x0, y0 + 1), (1 - tx) * ty); add(at(x0 + 1, y0 + 1), tx * ty);
+      let tot = 0;
+      for (let b2 = -1; b2 <= 2; b2++) {
+        const ky = 1 - Math.abs(fy - (y0 + b2)) / KR;
+        if (ky <= 0) continue;
+        for (let a2 = -1; a2 <= 2; a2++) {
+          const kx = 1 - Math.abs(fx - (x0 + a2)) / KR;
+          if (kx <= 0) continue;
+          add(at(x0 + a2, y0 + b2), kx * ky); tot += kx * ky;
+        }
+      }
+      for (const t of types) wt[t] /= tot;
       const depth = field(f.depth, wx / tile - 0.5, wy / tile - 0.5);
       let s1 = -9, s2 = -9, t1 = types[0], t2 = -1;
+      let ar = 0, ag = 0, ab = 0, al = 0; // weighted mean colour of the land grounds here (dust, sand and earth carry over)
       for (const t of types) {
+        OWN = wt[t];
         const ht = material(t, wx, wy, sx, sy, depth, 0);
-        const s = wt[t] + 0.7 * (ht - 0.5) + 0.14 * (hash2(Math.floor(wx / 1.5), Math.floor(wy / 1.5), 60 + t) - 0.5);
+        // patches: each ground spills into its neighbour as islands and specks, bigger blobs then fine scatter
+        const wet = t === WATER;
+        const patch = vn(wx / 16, wy / 16, 70 + t) * 0.55 + vn(wx / 5, wy / 5, 80 + t) * 0.3 + hash2(Math.floor(wx / 1.5), Math.floor(wy / 1.5), 60 + t) * 0.15;
+        const s = wt[t] + (wet ? 0.3 : 1.15) * (patch - 0.5) + (wet ? 0.2 : 0.4) * (ht - 0.5);
         if (s > s1) { s2 = s1; t2 = t1; s1 = s; t1 = t; c2.set(c1); c1.set(out3); }
         else if (s > s2) { s2 = s; t2 = t; c2.set(out3); }
+        if (!wet) { ar += out3[0] * wt[t]; ag += out3[1] * wt[t]; ab += out3[2] * wt[t]; al += wt[t]; }
       }
       let r = c1[0], gg = c1[1], b = c1[2];
+      if (t1 !== WATER && al > 0 && wt[t1] < 0.98) {
+        const k = 0.45 * (1 - wt[t1]);
+        c1[0] += (ar / al - c1[0]) * k; c1[1] += (ag / al - c1[1]) * k; c1[2] += (ab / al - c1[2]) * k;
+        r = c1[0]; gg = c1[1]; b = c1[2];
+      }
       if (t2 >= 0 && t2 !== t1) {
         const soft = t1 <= FLOWERS && t2 <= FLOWERS; // grass into grass: a wide, soft blend, no earth band
         const a = clamp01(0.5 + (s1 - s2) / (soft ? 0.5 : 0.09));
         r = c1[0] * a + c2[0] * (1 - a); gg = c1[1] * a + c2[1] * (1 - a); b = c1[2] * a + c2[2] * (1 - a);
         // worn earth and scattered gravel along borders between land materials
         if (!soft && t1 !== WATER && t2 !== WATER && t1 !== DIRT) {
-          const band = clamp01(1 - (s1 - s2) / 0.32) * (0.55 + 0.45 * vn(wx / 6, wy / 6, 64));
+          const band = clamp01(1 - (s1 - s2) / 0.18) * (0.55 + 0.45 * vn(wx / 6, wy / 6, 64));
           if (band > 0.15) {
             material(DIRT, wx, wy, sx, sy, 0, 0);
             const e = band * 0.75;
