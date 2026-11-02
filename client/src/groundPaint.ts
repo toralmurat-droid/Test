@@ -78,96 +78,136 @@ const out3 = new Float32Array(3);
  */
 function material(t: number, wx: number, wy: number, sx: number, sy: number, depth: number, now: number): number {
   let r = 0, g = 0, b = 0, ht = 0.5;
+  // big, slow grime and damp patches shared by every land material (muted, weathered look)
+  const grime = fbm(wx / 110, wy / 110, 91);
+  const grain = hash2(Math.floor(sx * 2), Math.floor(sy * 2), 92) - 0.5;
   switch (t) {
     case GRASS: case GRASS_DARK: case TALL: case FLOWERS: {
-      const m = fbm(wx / 170, wy / 170, 3);
-      const p = vn(wx / 26, wy / 26, 5);
-      const blade = vn(sx / 1.3, sy / 4.2, 7) * 0.6 + vn(sx / 0.8, sy / 2.6, 8) * 0.4;
+      const m = fbm(wx / 150, wy / 150, 3);
+      const p = vn(wx / 22, wy / 22, 5);
+      const blade = vn(sx / 1.1, sy / 4.6, 7) * 0.55 + vn(sx / 0.7, sy / 2.8, 8) * 0.45;
       const dark = t === GRASS_DARK, tall = t === TALL;
-      // warm, sunny green to cooler green
-      r = dark ? 50 + 22 * m : 72 + 40 * m;
-      g = dark ? 96 + 22 * m : 124 + 26 * m;
-      b = dark ? 50 + 10 * m : 54 + 8 * m;
-      if (tall) { r += 14; g += 6; }
-      const k = (0.84 + 0.3 * p) * ((tall ? 0.8 : 0.88) + (tall ? 0.38 : 0.24) * blade);
+      // dark olive to dusty green; dry straw patches
+      r = dark ? 46 + 16 * m : 66 + 22 * m;
+      g = dark ? 64 + 14 * m : 84 + 18 * m;
+      b = dark ? 38 + 6 * m : 42 + 6 * m;
+      const dry = sstep(0.55, 0.78, fbm(wx / 70, wy / 70, 4)) * (dark ? 0.4 : 0.8);
+      r += (112 - r) * dry * 0.6; g += (100 - g) * dry * 0.5; b += (58 - b) * dry * 0.4;
+      if (tall) { r += 10; g += 6; }
+      const k = (0.8 + 0.34 * p) * ((tall ? 0.7 : 0.76) + (tall ? 0.55 : 0.44) * blade);
       r *= k; g *= k; b *= k;
-      // tiny flecks of light blades
+      // bare earth showing through worn spots
+      const bare = sstep(0.72, 0.86, vn(wx / 38, wy / 38, 6) * 0.7 + p * 0.3 + (0.5 - blade) * 0.25) * (dark ? 0.4 : 0.9);
+      if (bare > 0) {
+        const e = 0.7 + 0.35 * vn(wx / 5, wy / 5, 12) + 0.25 * vn(wx / 1.6, wy / 1.6, 11);
+        r += (84 * e - r) * bare; g += (66 * e - g) * bare; b += (46 * e - b) * bare;
+      }
+      // fallen leaves, twigs and small stones
+      const cx = Math.floor(wx / 4), cy = Math.floor(wy / 4), hc = hash2(cx, cy, 13);
+      if (hc < 0.07) {
+        const px = (cx + 0.5) * 4 + (hash2(cx, cy, 14) - 0.5) * 2.4, py = (cy + 0.5) * 4 + (hash2(cx, cy, 15) - 0.5) * 2.4;
+        const dx = wx - px, dy = wy - py;
+        if (hc < 0.035) { // leaf: a small rotated ellipse in ochre / rust
+          const an = hash2(cx, cy, 16) * 3.14, ca = Math.cos(an), sa = Math.sin(an);
+          const u = (dx * ca + dy * sa) / 1.1, v = (-dx * sa + dy * ca) / 0.55;
+          if (u * u + v * v < 1) { const c = hash2(cx, cy, 17); r = c < 0.5 ? 128 : 104; g = c < 0.5 ? 86 : 60; b = c < 0.5 ? 36 : 32; r *= 0.85 + 0.3 * (1 - u * u); g *= 0.85 + 0.3 * (1 - u * u); }
+        } else { // pebble with a shadow
+          const rr = 0.5 + hash2(cx, cy, 18) * 0.6, d2 = dx * dx + dy * dy;
+          if (d2 < rr * rr) { const lit = clamp01(0.55 - (dx + dy) / (rr * 2)); r = 72 + 40 * lit; g = 70 + 36 * lit; b = 62 + 30 * lit; }
+          else if (d2 < (rr + 0.5) * (rr + 0.5) && dx + dy > 0) { r *= 0.7; g *= 0.7; b *= 0.7; }
+        }
+      }
       const f = hash2(Math.floor(sx * 1.5), Math.floor(sy * 1.5), 9);
-      if (f > 0.985) { r += 30; g += 34; b += 10; }
-      if (t === FLOWERS && f < 0.02) { const c = hash2(Math.floor(sx * 1.5), Math.floor(sy * 1.5), 10); r = c < 0.33 ? 240 : c < 0.66 ? 250 : 200; g = c < 0.33 ? 110 : c < 0.66 ? 230 : 140; b = c < 0.33 ? 150 : c < 0.66 ? 120 : 230; }
-      ht = 0.35 + 0.35 * p + 0.25 * blade;
+      if (f > 0.99) { r += 26; g += 26; b += 8; }
+      if (t === FLOWERS && f < 0.015) { const c = hash2(Math.floor(sx * 1.5), Math.floor(sy * 1.5), 10); r = c < 0.33 ? 170 : c < 0.66 ? 196 : 150; g = c < 0.33 ? 70 : c < 0.66 ? 170 : 110; b = c < 0.33 ? 90 : c < 0.66 ? 80 : 170; }
+      ht = 0.35 + 0.35 * p + 0.25 * blade - bare * 0.2;
       break;
     }
     case DIRT: {
-      const m = fbm(wx / 60, wy / 60, 13), p = vn(wx / 9, wy / 9, 14);
-      r = 142 + 30 * m; g = 108 + 24 * m; b = 70 + 16 * m;
-      const k = 0.86 + 0.22 * p + (hash2(Math.floor(sx * 2), Math.floor(sy * 2), 15) - 0.5) * 0.06;
+      const m = fbm(wx / 50, wy / 50, 13), p = vn(wx / 8, wy / 8, 14);
+      r = 98 + 22 * m; g = 76 + 16 * m; b = 54 + 10 * m;
+      const damp = sstep(0.6, 0.8, fbm(wx / 40, wy / 40, 19));
+      const k = (0.84 + 0.26 * p + grain * 0.08) * (1 - damp * 0.25);
       r *= k; g *= k; b *= k;
-      // pebbles
-      const cx = Math.floor(wx / 5), cy = Math.floor(wy / 5);
-      if (hash2(cx, cy, 16) < 0.16) {
-        const px = (cx + 0.2 + hash2(cx, cy, 17) * 0.6) * 5, py = (cy + 0.2 + hash2(cx, cy, 18) * 0.6) * 5;
-        const dx = wx - px, dy = wy - py, d2 = dx * dx + dy * dy, rr = 0.8 + hash2(cx, cy, 19) * 0.9;
-        if (d2 < rr * rr) { const lit = clamp01(0.6 - (dx + dy) / (rr * 2)); r = 150 + 50 * lit; g = 136 + 46 * lit; b = 116 + 40 * lit; ht = 0.9; }
-        else if (d2 < (rr + 0.6) * (rr + 0.6) && dx + dy > 0) { r *= 0.8; g *= 0.8; b *= 0.8; }
+      // dried cracks: thin dark lines along big Voronoi edges
+      const C = 22, gx = Math.floor(wx / C), gy = Math.floor(wy / C);
+      let d1 = 1e9, d2 = 1e9;
+      for (let j = -1; j <= 1; j++) for (let i = -1; i <= 1; i++) {
+        const qx = (gx + i + hash2(gx + i, gy + j, 101)) * C, qy = (gy + j + hash2(gx + i, gy + j, 102)) * C;
+        const d = Math.hypot(wx - qx, wy - qy);
+        if (d < d1) { d2 = d1; d1 = d; } else if (d < d2) d2 = d;
+      }
+      if (d2 - d1 < 0.6 && vn(wx / 12, wy / 12, 103) > 0.62) { r *= 0.8; g *= 0.8; b *= 0.8; }
+      // gravel and stones
+      const cx = Math.floor(wx / 3.5), cy = Math.floor(wy / 3.5);
+      if (hash2(cx, cy, 16) < 0.22) {
+        const px = (cx + 0.2 + hash2(cx, cy, 17) * 0.6) * 3.5, py = (cy + 0.2 + hash2(cx, cy, 18) * 0.6) * 3.5;
+        const dx = wx - px, dy = wy - py, d2s = dx * dx + dy * dy, rr = 0.45 + hash2(cx, cy, 19) * 0.9;
+        if (d2s < rr * rr) { const lit = clamp01(0.55 - (dx + dy) / (rr * 2)); const tone = 0.8 + hash2(cx, cy, 20) * 0.4; r = (96 + 54 * lit) * tone; g = (90 + 48 * lit) * tone; b = (80 + 42 * lit) * tone; ht = 0.9; }
+        else if (d2s < (rr + 0.5) * (rr + 0.5) && dx + dy > 0) { r *= 0.68; g *= 0.68; b *= 0.68; }
       }
       ht = Math.max(ht, 0.25 + 0.4 * p);
       break;
     }
     case COBBLE: {
-      // Voronoi stones
-      const C = 7, gx = Math.floor(wx / C), gy = Math.floor(wy / C);
-      let d1 = 1e9, d2 = 1e9, best = 0, bx = 0, by = 0;
+      // worn, irregular Voronoi setts with packed earth in the joints
+      const C = 7.5, ux = wx + (vn(wx / 9, wy / 9, 27) - 0.5) * 3, uy = wy + (vn(wx / 9, wy / 9, 28) - 0.5) * 3;
+      const gx = Math.floor(ux / C), gy = Math.floor(uy / C);
+      let d1 = 1e9, d2 = 1e9, best = 0, bx = 0, by = 0, cid = 0;
       for (let j = -1; j <= 1; j++) for (let i = -1; i <= 1; i++) {
         const cx = gx + i, cy = gy + j;
         const px = (cx + 0.15 + hash2(cx, cy, 21) * 0.7) * C, py = (cy + 0.15 + hash2(cx, cy, 22) * 0.7) * C;
-        const dx = wx - px, dy = wy - py, d = Math.sqrt(dx * dx + dy * dy);
-        if (d < d1) { d2 = d1; d1 = d; best = hash2(cx, cy, 23); bx = dx; by = dy; } else if (d < d2) d2 = d;
+        const dx = ux - px, dy = uy - py, d = Math.sqrt(dx * dx + dy * dy);
+        if (d < d1) { d2 = d1; d1 = d; best = hash2(cx, cy, 23); bx = dx; by = dy; cid = cx * 7919 + cy; } else if (d < d2) d2 = d;
       }
       const edge = d2 - d1;
-      const tone = 0.88 + best * 0.2, warm = hash2(Math.floor(best * 1000), 1, 24);
-      r = (138 + 22 * warm) * tone; g = (128 + 12 * warm) * tone; b = (114 - 4 * warm) * tone;
-      // dome shading, light from the top-left of the screen (world -x-y is screen up)
-      const n = d1 / (C * 0.62);
-      const lit = -(bx + by) / (C * 0.6);
-      const k = 1 - 0.28 * n * n + 0.16 * lit * n;
+      const missing = hash2(cid, 3, 29) < 0.05;
+      const tone = 0.78 + best * 0.32, warm = hash2(cid, 1, 24);
+      r = (104 + 16 * warm) * tone; g = (100 + 8 * warm) * tone; b = (92 - 2 * warm) * tone;
+      const n = d1 / (C * 0.62), lit = -(bx + by) / (C * 0.6);
+      const k = 1 - 0.34 * n * n + 0.2 * lit * n;
       r *= k; g *= k; b *= k;
-      const grain = vn(wx * 0.9, wy * 0.9, 25);
-      r *= 0.93 + grain * 0.12; g *= 0.93 + grain * 0.12; b *= 0.93 + grain * 0.12;
-      const mortar = sstep(0.4, 1.6, edge);
-      const mr = 74, mg = 68, mb = 56;
+      const st = vn(wx * 0.8, wy * 0.8, 25) * 0.6 + vn(wx * 2.2, wy * 2.2, 26) * 0.4; // stone grain and chips
+      r *= 0.88 + st * 0.2; g *= 0.88 + st * 0.2; b *= 0.88 + st * 0.2;
+      const mortar = missing ? 0 : sstep(0.35, 1.5, edge);
+      const mr = 58 + grain * 10, mg = 47 + grain * 8, mb = 36;
       r = mr + (r - mr) * mortar; g = mg + (g - mg) * mortar; b = mb + (b - mb) * mortar;
-      // a bit of moss in the joints
-      if (mortar < 0.5 && vn(wx / 30, wy / 30, 26) > 0.8) { r = 82; g = 108; b = 54; }
+      if (mortar < 0.6 && vn(wx / 24, wy / 24, 26) > 0.72) { r = 58; g = 72; b = 38; } // moss in the joints
       ht = 0.55 + 0.4 * mortar;
       break;
     }
     case SAND: {
-      const m = fbm(wx / 70, wy / 70, 31);
-      const rip = Math.sin((wx * 0.55 + wy * 0.25) / 2.2 + vn(wx / 20, wy / 20, 32) * 6) * 0.035;
-      r = 214 + 18 * m; g = 190 + 16 * m; b = 136 + 12 * m;
-      const k = 0.94 + rip + (hash2(Math.floor(sx * 2), Math.floor(sy * 2), 33) - 0.5) * 0.05;
+      const m = fbm(wx / 60, wy / 60, 31);
+      const rip = Math.sin((wx * 0.55 + wy * 0.25) / 2.2 + vn(wx / 20, wy / 20, 32) * 6) * 0.04;
+      r = 158 + 18 * m; g = 140 + 14 * m; b = 104 + 10 * m;
+      const k = 0.92 + rip + grain * 0.07;
       r *= k; g *= k; b *= k;
+      const cx = Math.floor(wx / 5), cy = Math.floor(wy / 5);
+      if (hash2(cx, cy, 34) < 0.08) { // shell bits and pebbles
+        const dx = wx - (cx + 0.5) * 5, dy = wy - (cy + 0.5) * 5;
+        if (dx * dx + dy * dy < 0.5) { r = 196; g = 186; b = 166; }
+      }
       ht = 0.3 + 0.2 * m;
       break;
     }
     case WATER: case BRIDGE: {
       const dd = sstep(0.2, 3.2, depth);
-      r = 70 + (24 - 70) * dd; g = 168 + (84 - 168) * dd; b = 172 + (140 - 172) * dd;
+      r = 58 + (16 - 58) * dd; g = 86 + (38 - 86) * dd; b = 72 + (48 - 72) * dd;
       const w1 = vn(sx / 14 + now * 0.3, sy / 3.2, 41), w2 = vn(sx / 7, sy / 1.8 - now * 0.2, 42);
       const wave = w1 * 0.6 + w2 * 0.4;
-      const k = 0.92 + wave * 0.14;
+      const k = 0.9 + wave * 0.16;
       r *= k; g *= k; b *= k;
-      if (wave > 0.72) { const s = (wave - 0.72) * 3; r += 90 * s; g += 90 * s; b += 80 * s; }
+      if (wave > 0.74) { const s = (wave - 0.74) * 2.4; r += 70 * s; g += 76 * s; b += 70 * s; }
       ht = 0.5;
       break;
     }
     case FIELD: case CROPS: {
       const m = fbm(wx / 80, wy / 80, 51);
       const fur = Math.sin(wy * (Math.PI * 2 / 8) + vn(wx / 30, wy / 30, 52) * 1.5);
-      r = 122 + 20 * m; g = 88 + 14 * m; b = 58 + 8 * m;
-      const k = 0.9 + fur * 0.12 + (hash2(Math.floor(sx * 2), Math.floor(sy * 2), 53) - 0.5) * 0.05;
+      r = 84 + 16 * m; g = 62 + 12 * m; b = 42 + 6 * m;
+      const k = 0.86 + fur * 0.16 + grain * 0.08;
       r *= k; g *= k; b *= k;
+      if (fur > 0.7 && hash2(Math.floor(wx * 1.5), Math.floor(wy * 1.5), 54) < 0.12) { r = 112; g = 104; b = 58; } // straw
       ht = 0.4 + 0.15 * fur;
       break;
     }
@@ -175,26 +215,30 @@ function material(t: number, wx: number, wy: number, sx: number, sy: number, dep
       const C = 15, gx = Math.floor(wx / C + (Math.floor(wy / C) % 2) * 0.5), gy = Math.floor(wy / C);
       const lx = wx / C + (Math.floor(wy / C) % 2) * 0.5 - gx, ly = wy / C - gy;
       const e = Math.min(lx, 1 - lx, ly, 1 - ly) * C;
-      const tone = 0.82 + hash2(gx, gy, 71) * 0.26, m = fbm(wx / 12, wy / 12, 72);
-      r = 150 * tone * (0.9 + 0.2 * m); g = 140 * tone * (0.9 + 0.2 * m); b = 122 * tone * (0.9 + 0.2 * m);
-      if (hash2(gx, gy, 73) < 0.3 && vn(wx / 3, wy / 3, 74) > 0.75) { r *= 0.7; g *= 0.7; b *= 0.7; } // cracks
+      const tone = 0.78 + hash2(gx, gy, 71) * 0.28, m = fbm(wx / 12, wy / 12, 72);
+      r = 108 * tone * (0.88 + 0.24 * m); g = 102 * tone * (0.88 + 0.24 * m); b = 90 * tone * (0.88 + 0.24 * m);
+      if (hash2(gx, gy, 73) < 0.35 && vn(wx / 3, wy / 3, 74) > 0.74) { r *= 0.62; g *= 0.62; b *= 0.62; } // cracks
       const j = sstep(0.3, 1.4, e);
-      r = 70 + (r - 70) * j; g = 66 + (g - 66) * j; b = 54 + (b - 54) * j;
-      if (j < 0.6 && vn(wx / 20, wy / 20, 75) > 0.55) { r = 76; g = 112; b = 50; } // grass in the joints
+      r = 48 + (r - 48) * j; g = 44 + (g - 44) * j; b = 36 + (b - 36) * j;
+      if (j < 0.6 && vn(wx / 20, wy / 20, 75) > 0.5) { r = 58; g = 74; b = 38; } // grass in the joints
       ht = 0.5 + 0.3 * j;
       break;
     }
     case RUBBLE: {
       const m = fbm(wx / 30, wy / 30, 81);
-      r = 120 + 20 * m; g = 104 + 18 * m; b = 80 + 12 * m;
+      r = 82 + 16 * m; g = 70 + 14 * m; b = 54 + 10 * m;
       const cx = Math.floor(wx / 6), cy = Math.floor(wy / 6);
       const px = (cx + 0.5) * 6 + (hash2(cx, cy, 82) - 0.5) * 3, py = (cy + 0.5) * 6 + (hash2(cx, cy, 83) - 0.5) * 3;
       const dx = wx - px, dy = wy - py, rr = 1.2 + hash2(cx, cy, 84) * 1.6;
-      if (hash2(cx, cy, 85) < 0.55 && dx * dx + dy * dy < rr * rr) { const lit = clamp01(0.6 - (dx + dy) / (rr * 2)); const t2 = 120 + 70 * lit; r = t2; g = t2 * 0.95; b = t2 * 0.86; }
+      if (hash2(cx, cy, 85) < 0.55 && dx * dx + dy * dy < rr * rr) { const lit = clamp01(0.6 - (dx + dy) / (rr * 2)); const t2 = 84 + 66 * lit; r = t2; g = t2 * 0.95; b = t2 * 0.86; }
       ht = 0.6;
       break;
     }
-    default: r = 90; g = 130; b = 60;
+    default: r = 70; g = 84; b = 44;
+  }
+  if (t !== WATER && t !== BRIDGE) {
+    const k = 0.78 + 0.3 * grime; // weathering: darker, damp patches
+    r *= k; g *= k; b *= k;
   }
   out3[0] = r; out3[1] = g; out3[2] = b;
   return ht;
@@ -252,7 +296,7 @@ export function paintChunk(g: GroundData, f: Fields, sx0: number, sy0: number, c
         if ((t1 === WATER) !== (t2 === WATER)) {
           const foam = 1 - Math.abs(a - 0.5) * 2;
           const fo = foam * foam * (0.55 + 0.45 * vn(sx / 3, sy / 1.5, 61));
-          r += (235 - r) * fo; gg += (245 - gg) * fo; b += (240 - b) * fo;
+          r += (190 - r) * fo * 0.7; gg += (196 - gg) * fo * 0.7; b += (184 - b) * fo * 0.7;
         }
       }
       if (t1 !== WATER) {
@@ -260,7 +304,7 @@ export function paintChunk(g: GroundData, f: Fields, sx0: number, sy0: number, c
         if (wet > 0) { const k = 1 - 0.3 * Math.min(1, wet * 2); r *= k; gg *= k; b *= k * 1.02; }
         // contact shadow around walls, rocks and posts
         const ao = field(f.ao, wx / tile - 0.5, wy / tile - 0.5);
-        if (ao > 0) { const k = 1 - 0.32 * ao; r *= k; gg *= k; b *= k; }
+        if (ao > 0) { const k = 1 - 0.45 * ao; r *= k; gg *= k; b *= k; }
       }
       for (const t of types) wt[t] = 0;
       const o = (j * W + i) * 4;
