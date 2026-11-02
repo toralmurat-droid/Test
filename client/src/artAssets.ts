@@ -43,6 +43,8 @@ export function preloadArt(scene: Phaser.Scene) {
 /** Call once in create(), after preloadArt has finished. */
 export function createArtAnims(scene: Phaser.Scene) {
   const meta = scene.cache.json.get("characters_meta");
+  // The iso sheets are pixel art on the world's texel grid: sample them NEAREST (the game is antialiased otherwise)
+  if (HD_CHARS) for (const c of CHARACTERS) scene.textures.get(c).setFilter(Phaser.Textures.FilterMode.NEAREST);
   for (const c of CHARACTERS) {
     for (const [name, a] of Object.entries<any>(meta.animations)) {
       const key = `${c}_${name}`;
