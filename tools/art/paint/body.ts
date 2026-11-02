@@ -1288,11 +1288,12 @@ const OUTLINE = 0x1a1420;
  * colours are posterized, the top-left edge gets a lighter rim and the silhouette a 1px outline in a deep shade
  * of the colour it wraps.
  */
-export function pixelize(d: Uint8ClampedArray | Uint8Array, w: number, h: number, outline = true) {
+export function pixelize(d: Uint8ClampedArray | Uint8Array, w: number, h: number, outline = true, wear?: Wear) {
   const STEP = 12;
   for (let i = 0; i < d.length; i += 4) {
     if (d[i + 3] < 120) { d[i] = d[i + 1] = d[i + 2] = d[i + 3] = 0; continue; }
     d[i + 3] = 255;
+    if (wear) weather(d, i, Math.floor(i / 4 / w), (i / 4) % w, wear);
     for (let k = 0; k < 3; k++) d[i + k] = Math.min(255, Math.round(d[i + k] / STEP) * STEP);
   }
   const hc = new HiCanvas(w, h, 1);
@@ -1300,6 +1301,33 @@ export function pixelize(d: Uint8ClampedArray | Uint8Array, w: number, h: number
   hc.rim(1.16);
   if (outline) hc.selout(OUTLINE);
   d.set(hc.data);
+}
+
+/**
+ * Weathering so characters sit in the aged decor: colours pulled toward the world's earthy palette, warm-brown
+ * shadows, and road dust / mud creeping up from the feet (rows y0..y1, strongest at the ground), in a fixed
+ * ordered-dither pattern so it reads as pixel texture rather than a smooth gradient.
+ */
+export interface Wear { y0: number; y1: number; sat?: number; mud?: number }
+const BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
+function weather(d: Uint8ClampedArray | Uint8Array, i: number, y: number, x: number, o: Wear) {
+  let r = d[i], g = d[i + 1], b = d[i + 2];
+  const l = r * 0.3 + g * 0.59 + b * 0.11;
+  if (r + g + b > 700) return; // keep sparks, glints and glowing eyes bright
+  const sat = o.sat ?? 0.8;
+  r = l + (r - l) * sat; g = l + (g - l) * sat; b = l + (b - l) * sat;
+  // shadows lean warm brown (like the decor's), lights stay
+  const sh = Math.max(0, 1 - l / 110);
+  r += 6 * sh; g += 2 * sh; b -= 5 * sh;
+  // dust and mud up the legs, dithered
+  if (y > o.y0) {
+    const t = Math.min(1, (y - o.y0) / Math.max(1, o.y1 - o.y0)) * (o.mud ?? 0.38);
+    const th = (BAYER[(y & 3) * 4 + (x & 3)] + 0.5) / 16;
+    const k = t * (th < t * 1.6 ? 1 : 0.35);
+    const mr = 0x5a, mg = 0x48, mb = 0x34;
+    r += (mr - r) * k; g += (mg - g) * k; b += (mb - b) * k;
+  }
+  d[i] = Math.max(0, Math.min(255, r)); d[i + 1] = Math.max(0, Math.min(255, g)); d[i + 2] = Math.max(0, Math.min(255, b));
 }
 
 /** Effects / shadows layer: keep soft colour but snap alpha to a few steps so it reads as pixels. */
@@ -1317,7 +1345,8 @@ export function shrink(src: ReturnType<typeof canvas>, id: string, w: number, h:
 function pixelFrame(body: ReturnType<typeof canvas>, under: ReturnType<typeof canvas>, r: Rig, K: number, S: number, flash: number, withShadow: boolean): HiCanvas {
   const W = Math.round(32 * K), N = body.width;
   const b = shrink(body, "pxb", W, W);
-  pixelize(b, W, W);
+  // dust from the knees down (frame rows: knees ~ 23/32, ground 29/32), shifted with crouch/jumps via the hip line
+  pixelize(b, W, W, true, { y0: Math.round((r.hipY + 3) / 32 * W), y1: Math.round(29.5 / 32 * W), mud: r.L.skull ? 0.25 : 0.5 });
   if (flash) for (let i = 0; i < b.length; i += 4) if (b[i + 3]) for (let k = 0; k < 3; k++) b[i + k] += (255 - b[i + k]) * flash;
   // effects in front
   const fx = scratch("fx", N, N), fc = fx.getContext("2d");

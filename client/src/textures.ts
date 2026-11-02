@@ -258,8 +258,9 @@ export const MOB_LOOK: Record<string, { top: number; bar: number; oy: number; sc
 const PAINTED_MOBS = ["slime", "blobling", "shooterblob", "warriorblob", "healerblob", "motherblob", "skeleton", "bandit", "skeletonmage", "necromancer"];
 /** Painted humanoid monsters have taller frames (feet lower in the frame, label higher). */
 const PAINTED_LOOK: Record<string, { top: number; bar: number; oy: number; scale?: number }> = {
-  skeleton: { top: 17, bar: 12, oy: 20 / 22 }, bandit: { top: 17, bar: 12, oy: 20 / 22 },
-  skeletonmage: { top: 21, bar: 12, oy: 0.975 }, necromancer: { top: 34, bar: 24, oy: 0.975, scale: 1.6 },
+  // about hero height (heroes are 32 world px since the 48px sheets)
+  skeleton: { top: 23, bar: 14, oy: 27.5 / 30 }, bandit: { top: 23, bar: 14, oy: 27.5 / 30 },
+  skeletonmage: { top: 25, bar: 14, oy: 0.975 }, necromancer: { top: 40, bar: 26, oy: 0.975, scale: 1.45 },
   // pixel sheets use even frame heights (whole texels at 1.5 per px)
   blobling: { top: 9, bar: 8, oy: 0.91 }, shooterblob: { top: 16, bar: 12, oy: 0.93 }, healerblob: { top: 16, bar: 12, oy: 0.93 },
 };

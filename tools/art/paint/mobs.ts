@@ -26,7 +26,7 @@ function humanoid(key: string, kind: string, w: number, h: number, oy: number, s
     draw: (c, f) => {
       const fr = frames[f], n = createCanvas(fr.w, fr.h), x = n.getContext("2d"), img = x.createImageData(fr.w, fr.h);
       img.data.set(fr.data); x.putImageData(img, 0, 0);
-      if (SH) { SH.save(); SH.translate(w / 2, oy * h); SH.scale(1, 0.3); SH.fillStyle = "rgba(0,0,0,0.42)"; SH.beginPath(); SH.arc(0, 0, 4.2 * scale / 0.64, 0, Math.PI * 2); SH.fill(); SH.restore(); }
+      if (SH) { SH.save(); SH.translate(w / 2, oy * h); SH.scale(1, 0.3); SH.fillStyle = "rgba(0,0,0,0.42)"; SH.beginPath(); SH.arc(0, 0, 6.5 * scale, 0, Math.PI * 2); SH.fill(); SH.restore(); }
       // logical unit (16, 29) = the feet -> (w/2, oy*h) in world px
       c.save(); c.translate(w / 2, oy * h); c.scale(scale, scale); c.translate(-16, -29);
       c.imageSmoothingEnabled = true; (c as any).imageSmoothingQuality = "high";
@@ -137,11 +137,11 @@ export function buildMobs(out: string) {
     blobSheet("mob_motherblob", 24, 22, { G: 0x3a9684, L: 0xb8f2e0, D: 0x1c5448, E: 0x10302a }, { bodyH: 17, extra: "mother1", seed: 9 }),
     blobSheet("mob_motherblob2", 24, 22, { G: 0x2c8796, L: 0xb0eef5, D: 0x184c56, E: 0x0b2a30 }, { bodyH: 17, extra: "mother2", seed: 10 }),
     blobSheet("mob_motherblob3", 24, 22, { G: 0x553b96, L: 0xd3c2ff, D: 0x2f205f, E: 0x140a2a }, { bodyH: 17, extra: "mother3", seed: 11 }),
-    // humanoids get taller frames than the pixel ones (client: MOB_LOOK overrides in textures.ts)
-    humanoid("mob_skeleton", "skeleton", 16, 22, 20 / 22, 0.64),
-    humanoid("mob_bandit", "bandit", 16, 22, 20 / 22, 0.64),
-    humanoid("mob_skeletonmage", "skeletonmage", 18, 24, 23.4 / 24, 0.7),
-    humanoid("mob_necromancer", "necromancer", 18, 24, 23.4 / 24, 0.7),
+    // humanoids get taller frames than the pixel ones, about hero height (client: PAINTED_LOOK in textures.ts)
+    humanoid("mob_skeleton", "skeleton", 20, 30, 27.5 / 30, 0.85),
+    humanoid("mob_bandit", "bandit", 20, 30, 27.5 / 30, 0.85),
+    humanoid("mob_skeletonmage", "skeletonmage", 24, 32, 31.2 / 32, 0.93),
+    humanoid("mob_necromancer", "necromancer", 24, 32, 31.2 / 32, 0.93),
   ];
   const meta: Record<string, { w: number; h: number; scale: number }> = {};
   for (const s of sheets) {
@@ -153,7 +153,9 @@ export function buildMobs(out: string) {
       const c = body.getContext("2d"), sc = shadow.getContext("2d");
       c.scale(HI, HI); sc.scale(HI, HI);
       SH = sc; s.draw(c, f); SH = null;
-      const b = shrink(body, "mb", tw, th); pixelize(b, tw, th);
+      const blob = !/skeleton|bandit|necromancer/.test(s.key);
+      const b = shrink(body, "mb", tw, th);
+      pixelize(b, tw, th, true, blob ? { y0: Math.round(th * 0.7), y1: th, mud: 0.14, sat: 0.9 } : { y0: Math.round(th * 0.72), y1: th, mud: s.key.includes("bandit") ? 0.38 : 0.2 });
       const u = shrink(shadow, "ms", tw, th); pixelAlpha(u);
       for (let y = 0; y < th; y++) for (let x = 0; x < tw; x++) {
         const i = (y * tw + x) * 4, o = (y * tw * 6 + f * tw + x) * 4, src = b[i + 3] ? b : u;
