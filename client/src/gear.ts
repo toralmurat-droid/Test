@@ -1,7 +1,7 @@
 import Phaser from "phaser";
 import { GEAR, itemText, GEAR_IDS, GEAR_SLOTS, gearName, gearStats, gearSpeedMult, GearSlot, BAG_SIZE, SLOT_NAMES, TIER_NAMES } from "../../shared/gear";
 import { STAT_NAMES, StatKind } from "../../shared/powers";
-import { ART_K, CHAR_FRAME } from "./artAssets";
+import { ART_K, CHAR_FRAME, HD_CHARS } from "./artAssets";
 
 /**
  * Equipment on the client: overlay sprites that follow each hero frame for frame, and the equipment screen (G).
@@ -13,9 +13,25 @@ export const TIER_COLORS = ["", "#e0e0e0", "#4cc9f0", "#c77dff"];
 
 export function preloadGear(scene: Phaser.Scene) {
   scene.load.atlas("gear_icons", `${BASE}/icons.png`, `${BASE}/icons.json`);
+  // Painted overlay sheets are big (96px frames), so they load the first time someone wears the item
+  if (HD_CHARS) return;
   for (const h of GEAR_HEROES) for (const id of GEAR_IDS) {
     scene.load.spritesheet(gearKey(h, id), `${BASE}/${h}_${id}.png`, { frameWidth: CHAR_FRAME, frameHeight: CHAR_FRAME });
   }
+}
+
+const pending = new Set<string>();
+/** Starts loading a painted overlay sheet if it is not there yet; returns true when it can be used. */
+function ensureGear(scene: Phaser.Scene, hero: string, id: string, done?: () => void) {
+  const key = gearKey(hero, id);
+  if (scene.textures.exists(key)) return true;
+  if (!HD_CHARS || pending.has(key) || !GEAR_HEROES.includes(hero)) return false;
+  pending.add(key);
+  scene.load.spritesheet(key, `assets/hd/gear/${hero}_${id}.webp`, { frameWidth: CHAR_FRAME, frameHeight: CHAR_FRAME });
+  scene.load.once(`filecomplete-spritesheet-${key}`, () => { pending.delete(key); done?.(); });
+  scene.load.once("loaderror", () => pending.delete(key));
+  if (!scene.load.isLoading()) scene.load.start();
+  return false;
 }
 
 export const gearKey = (hero: string, id: string) => `gear_${hero}_${id}`;
@@ -35,7 +51,7 @@ export class GearLayer {
       const id: string = state[slot] ?? "";
       const key = id ? gearKey(this.hero, id) : "";
       let s = this.sprites[slot];
-      if (!key || !this.scene.textures.exists(key)) {
+      if (!key || !ensureGear(this.scene, this.hero, id)) {
         if (s) { s.destroy(); delete this.sprites[slot]; delete this.ids[slot]; }
         return;
       }
@@ -112,10 +128,10 @@ export class GearMenu {
     // Hero preview with everything worn
     const pv = document.getElementById("gearpreview") as HTMLCanvasElement;
     const ctx = pv.getContext("2d")!;
-    ctx.imageSmoothingEnabled = false;
+    ctx.imageSmoothingEnabled = HD_CHARS;
     ctx.clearRect(0, 0, pv.width, pv.height);
     drawFrame(this.scene, ctx, cls, 0, 0, 0, pv.width / CHAR_FRAME);
-    for (const slot of LAYER_ORDER) if (state[slot]) drawFrame(this.scene, ctx, gearKey(cls, state[slot]), 0, 0, 0, pv.width / CHAR_FRAME);
+    for (const slot of LAYER_ORDER) if (state[slot] && ensureGear(this.scene, cls, state[slot], () => { this.sig = ""; this.refresh(state); })) drawFrame(this.scene, ctx, gearKey(cls, state[slot]), 0, 0, 0, pv.width / CHAR_FRAME);
 
     // Slots
     const slots = document.getElementById("gearslots")!;

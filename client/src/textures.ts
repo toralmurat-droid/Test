@@ -2,6 +2,8 @@ import Phaser from "phaser";
 import { TILE } from "../../shared/constants";
 import { TILE_COUNT } from "../../shared/map";
 import { ROWS, drawTileset } from "./tileset";
+import { SMOOTH } from "./isoflag";
+import { hiResTexture } from "./smooth";
 
 const hex = (c: number) => "#" + c.toString(16).padStart(6, "0");
 
@@ -253,8 +255,37 @@ export const MOB_LOOK: Record<string, { top: number; bar: number; oy: number; sc
   healerblob: { top: 15, bar: 12, oy: 0.92 },
 };
 
-/** Monster sprite sheets, same 6-frame layout as personas. */
+const PAINTED_MOBS = ["slime", "blobling", "shooterblob", "warriorblob", "healerblob", "motherblob", "skeleton", "bandit", "skeletonmage", "necromancer"];
+/** Painted humanoid monsters have taller frames (feet lower in the frame, label higher). */
+const PAINTED_LOOK: Record<string, { top: number; bar: number; oy: number; scale?: number }> = {
+  skeleton: { top: 17, bar: 12, oy: 20 / 22 }, bandit: { top: 17, bar: 12, oy: 20 / 22 },
+  skeletonmage: { top: 21, bar: 12, oy: 0.975 }, necromancer: { top: 34, bar: 24, oy: 0.975, scale: 1.6 },
+};
+/** Painted monster sheets (tools/art/paint/mobs.ts), loaded by preloadPaintedMobs for the smooth look. */
+export function preloadPaintedMobs(scene: Phaser.Scene) {
+  if (!SMOOTH) return;
+  Object.assign(MOB_LOOK, PAINTED_LOOK);
+  scene.load.json("hd_mobs", "assets/hd/mobs/mobs.json");
+  for (const k of [...PAINTED_MOBS.map((m) => `mob_${m}`), "mob_motherblob2", "mob_motherblob3"]) scene.load.image(`hd_${k}`, `assets/hd/mobs/${k}.webp`);
+}
+
+/** Monster sprite sheets, same 6-frame layout as personas (painted when the smooth look is on). */
 export function mobTexture(scene: Phaser.Scene, kind: string, level = 1): string {
+  if (SMOOTH && PAINTED_MOBS.includes(kind)) {
+    const tier = level >= 10 ? 3 : level >= 5 ? 2 : 1;
+    const key = kind === "motherblob" && tier > 1 ? `mob_motherblob${tier}` : `mob_${kind}`;
+    if (scene.textures.exists(key)) return key;
+    const meta = scene.cache.json.get("hd_mobs")?.[key];
+    const src = scene.textures.exists(`hd_${key}`) ? scene.textures.get(`hd_${key}`).getSourceImage() as HTMLImageElement : null;
+    if (meta && src) {
+      hiResTexture(scene, key, meta.w, meta.h, 6, meta.scale, (ctx, f) => ctx.drawImage(src, f * meta.w * meta.scale, 0, meta.w * meta.scale, meta.h * meta.scale, 0, 0, meta.w, meta.h));
+      return key;
+    }
+  }
+  return pixelMobTexture(scene, kind, level);
+}
+
+function pixelMobTexture(scene: Phaser.Scene, kind: string, level = 1): string {
   const mtier = level >= 10 ? 3 : level >= 5 ? 2 : 1; // MOTHER.tier
   if (kind === "motherblob" && mtier === 2) {
     return drawSheet(scene, "mob_motherblob2", [MOTHER2_A, MOTHER2_B, MOTHER2_A, MOTHER2_B, MOTHER2_A, MOTHER2_B], {

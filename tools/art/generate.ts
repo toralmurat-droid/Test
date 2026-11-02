@@ -1,7 +1,9 @@
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { ANIMS, COLS, DIRS, FH, FW, HEROES, K, LH, NPCS, buildSheet } from "./characters";
 import { buildObjects } from "./objects";
 import { buildGear } from "./gear";
+import { buildPainted, PAINT_K } from "./paint/sheets";
+import { buildMobs } from "./paint/mobs";
 
 const OUT = "client/public/assets";
 mkdirSync(`${OUT}/characters`, { recursive: true });
@@ -33,4 +35,12 @@ writeFileSync(`${OUT}/characters/characters.json`, JSON.stringify({
 buildObjects(OUT + "/objects");
 // ---- gear overlays (must run after the plain sheets; see gear.ts) ----
 buildGear(OUT + "/gear");
+// ---- painted (smooth) characters + gear: assets/hd, used unless ?pixel=1 (`npm run art -- --hd-only knight` = just those) ----
+const args = process.argv.slice(2), hdOnly = args[0] === "--hd-only";
+buildPainted(OUT + "/hd", { only: hdOnly ? args.slice(1) : [] });
+buildMobs(OUT + "/hd/mobs");
+writeFileSync(`${OUT}/hd/characters/characters.json`, JSON.stringify({
+  ...JSON.parse(readFileSync(`${OUT}/characters/characters.json`, "utf8")),
+  image: "{name}.webp", frameWidth: FW / K * PAINT_K, frameHeight: FH / K * PAINT_K, artScale: PAINT_K,
+}, null, 1));
 console.log("art generated in", OUT);

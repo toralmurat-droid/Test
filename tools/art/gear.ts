@@ -208,7 +208,7 @@ function ranged(item: GearDef, main: Canvas, p: Pose, g: GearCtx) {
 }
 
 /** Plain-minus-geared difference: only the changed pixels. */
-function diff(plain: Canvas, geared: Canvas): Canvas {
+export function diff(plain: Canvas, geared: Canvas): Canvas {
   const out = new Canvas(plain.w, plain.h);
   for (let i = 0; i < plain.data.length; i += 4) {
     const same = plain.data[i] === geared.data[i] && plain.data[i + 1] === geared.data[i + 1] &&

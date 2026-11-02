@@ -14,7 +14,7 @@ import { QuestLog } from "./questlog";
 import { SHOPS, sellPrice } from "../../shared/shops";
 import { GEAR, gearName, itemText, TIER_NAMES } from "../../shared/gear";
 import { MAX_POTIONS } from "../../shared/items";
-import { ART_K, CHAR_ORIGIN, CharacterName, playCharAnim } from "./artAssets";
+import { CHAR_K, CHAR_ORIGIN, CharacterName, playCharAnim } from "./artAssets";
 import { iconCanvas, TIER_COLORS } from "./gear";
 import { itemTexture } from "./textures";
 import { isoAnchor } from "./iso";
@@ -57,7 +57,7 @@ export class NpcLayer {
     this.prompt.onclick = () => this.interact();
     this.tracker.onclick = () => this.log.toggle(true);
     for (const n of NPCS) {
-      const sprite = scene.add.sprite(n.x, n.y, n.sprite, 0).setOrigin(CHAR_ORIGIN.x, CHAR_ORIGIN.y).setScale(0.75 / ART_K).setDepth(n.y);
+      const sprite = scene.add.sprite(n.x, n.y, n.sprite, 0).setOrigin(CHAR_ORIGIN.x, CHAR_ORIGIN.y).setScale(0.75 / CHAR_K).setDepth(n.y);
       playCharAnim(sprite, n.sprite as CharacterName, "idle", n.dir);
       sprite.setInteractive({ useHandCursor: true }).on("pointerdown", () => { if (this.near === n) this.open(n); });
       const label = scene.add.text(n.x, n.y - 21, n.name, {

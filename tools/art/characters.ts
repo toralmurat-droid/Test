@@ -1,15 +1,34 @@
 import { Canvas, HiCanvas, shade } from "./canvas";
+import { hasLook, paintFrame } from "./paint/body";
 
 export type Dir = "down" | "up" | "right";
 export const DIRS: Dir[] = ["down", "up", "right"];
 /** Logical frame size (all drawing code works on this 32x32 grid). */
 export const LW = 32, LH = 32, COLS = 6;
 /** Fine pixels per logical pixel: frames are rendered at K x the logical size. */
-export const K = 2;
+export let K = 2;
 /** Output frame size in pixels. */
-export const FW = LW * K, FH = LH * K;
+export let FW = LW * K, FH = LH * K;
+/**
+ * Painted mode: characters with a look in paint/look.ts are drawn by the smooth painter (paint/body.ts) instead of
+ * the pixel code, at k fine pixels per logical pixel. Small effects (sparks, stars, dust) become soft dots.
+ */
+export let PAINTED = false;
+export function setPainted(on: boolean, k: number) { PAINTED = on; K = k; FW = LW * K; FH = LH * K; }
+
+/** HiCanvas whose logical "pixels" are soft round dots (for effects painted onto smooth frames). */
+class SoftCanvas extends HiCanvas {
+  px(x: number, y: number, c: number, a = 255) {
+    if (this.nat) return Canvas.prototype.px.call(this, x, y, c, a);
+    const k = this.k, cx = (x + 0.5) * k, cy = (y + 0.5) * k, r = k * 0.75;
+    for (let j = Math.floor(cy - r); j <= Math.ceil(cy + r); j++) for (let i = Math.floor(cx - r); i <= Math.ceil(cx + r); i++) {
+      const d = Math.hypot(i + 0.5 - cx, j + 0.5 - cy) / r;
+      if (d < 1) Canvas.prototype.px.call(this, i, j, c, Math.round(a * Math.min(1, (1 - d) * 1.8)));
+    }
+  }
+}
 /** A fresh frame canvas: logical 32x32 drawing, rendered K times finer. */
-export const mk = () => new HiCanvas(LW, LH, K);
+export const mk = (): HiCanvas => PAINTED ? new SoftCanvas(LW, LH, K) : new HiCanvas(LW, LH, K);
 const OUTLINE = 0x1a1420;
 
 export interface Pose {
@@ -698,6 +717,13 @@ const witch = human({
 });
 
 export const NPCS: Hero[] = [blacksmith, merchant, villager, guard, druid, witch];
+/** Pose data for monsters painted with the character painter (paint/mobs.ts); never drawn as pixel art. */
+const mobPose = (name: string, weapon: HumanOpts["weapon"]) => human({ name, skin: 0, hair: 0, hairStyle: "bald", shirt: 0, pants: 0, boots: 0, weapon });
+export const MOB_POSES: Record<string, Hero> = {
+  skeleton: mobPose("skeleton", "axe"), bandit: mobPose("bandit", "dagger"),
+  skeletonmage: mobPose("skeletonmage", "staff"), necromancer: mobPose("necromancer", "staff"),
+};
+export const posed = (hero: Hero, p: Partial<Pose> & { dir: Dir }) => renderFrame(hero, { t: 0, bob: 0, stride: 0, lean: 0, crouch: 0, attack: -1, expr: "n", ...p });
 
 export type GearPart = "legs" | "torso" | "head" | "weapon" | "shield";
 /** Extra pose info for the gear generator: body offset, weapon hand/angle, and a way to redraw the weapon elsewhere. */
@@ -712,6 +738,18 @@ let canvasFactory: () => Canvas = mk;
 export function setCanvasFactory(f: () => Canvas) { canvasFactory = f; }
 
 export function renderFrame(hero: Hero, p: Pose, withShadow = true, flash = 0): Canvas {
+  if (PAINTED && hasLook(hero.name)) {
+    const hp = handPos({ ...p, lean: 0 }, hero);
+    const lean = p.dir === "right" ? -p.lean : 0, ly = p.dir === "down" ? -Math.min(p.lean, 1) : p.dir === "up" ? Math.min(p.lean, 1) : 0;
+    const ux = lean + (p.run && p.dir === "right" ? 1 : 0);
+    const f = paintFrame(hero.name, p, {
+      hand: [hp[0] + ux, hp[1] + ly], ang: weaponAngle(p, hero), mv: moveOf(hero, p),
+      prevAng: (i) => weaponAngle({ ...p, attack: i }, hero), hasShieldMove: !!hero.shield,
+    }, withShadow, flash, K);
+    const soft = new SoftCanvas(LW, LH, K);
+    soft.data = f.data;
+    return soft;
+  }
   const c = canvasFactory();
   const lean = p.dir === "right" ? -p.lean : 0; // knock back opposite facing
   const ly = p.dir === "down" ? -Math.min(p.lean, 1) : p.dir === "up" ? Math.min(p.lean, 1) : 0;
@@ -863,9 +901,19 @@ function ghostsBehind(dst: Canvas, src: Canvas, dx: number, dy: number, col: num
 }
 
 /** Lift a shadowless frame off the ground by j px, keeping (and shrinking) the ground shadow. */
+/** Ground shadow: a hard pixel ellipse, or a soft one on painted frames. */
+function groundShadow(o: Canvas, cx: number, cy: number, rx: number, ry: number, a: number) {
+  if (!PAINTED) { o.ellipse(cx, cy, rx, ry, 0x000000, a); return; }
+  const k = K, CX = cx * k + k / 2, CY = cy * k + k / 2, RX = (rx + 1) * k, RY = (ry + 0.6) * k;
+  for (let y = Math.floor(CY - RY); y <= Math.ceil(CY + RY); y++) for (let x = Math.floor(CX - RX); x <= Math.ceil(CX + RX); x++) {
+    const d = Math.hypot((x + 0.5 - CX) / RX, (y + 0.5 - CY) / RY);
+    if (d < 1) o.pxN(x, y, 0x000000, Math.round(a * 1.5 * Math.min(1, (1 - d) * 1.6)));
+  }
+}
+
 function jumped(f: Canvas, j: number): Canvas {
   const o = mk();
-  o.ellipse(16, 29, 6 - Math.min(j, 3), 1.5, 0x000000, 70 - j * 10);
+  groundShadow(o, 16, 29, 6 - Math.min(j, 3), 1.5, 70 - j * 10);
   o.blit(f, 0, -j);
   return o;
 }
@@ -895,7 +943,7 @@ function fallForward(src: Canvas): Canvas {
   let maxY = 0, minX = FW, maxX = 0;
   for (let y = 0; y < FH; y++) for (let x = 0; x < FW; x++) if (r.alpha(x, y)) { maxY = Math.max(maxY, y); minX = Math.min(minX, x); maxX = Math.max(maxX, x); }
   const out = mk();
-  out.ellipse(16, 29, 11, 1.5, 0x000000, 70);
+  groundShadow(out, 16, 29, 11, 1.5, 70);
   out.blit(r, Math.round((FW - 1 - maxX - minX) / 2) / K, (30 * K + K - 1 - maxY) / K);
   return out;
 }
@@ -911,7 +959,7 @@ function rotateLying(src: Canvas): Canvas {
   let maxY = 0, minX = FW, maxX = 0;
   for (let y = 0; y < FH; y++) for (let x = 0; x < FW; x++) if (r.alpha(x, y)) { maxY = Math.max(maxY, y); minX = Math.min(minX, x); maxX = Math.max(maxX, x); }
   const out = mk();
-  out.ellipse(16, 29, 11, 1.5, 0x000000, 70);
+  groundShadow(out, 16, 29, 11, 1.5, 70);
   out.blit(r, Math.round((FW - 1 - maxX - minX) / 2) / K, (30 * K + K - 1 - maxY) / K);
   return out;
 }
@@ -1011,7 +1059,7 @@ export function animFrames(hero: Hero, anim: string, dir: Dir): Canvas[] {
     case "dodge": {
       const [fx, fy] = FACE[dir];
       const crouchF = renderFrame(hero, { ...B(0), crouch: 3, noWeapon: false }, false);
-      const spin = (k: number, sh: number) => { const o = mk(); o.ellipse(16, 29, 5, 1.2, 0, 50); o.blit(rot90(crouchF, dir === "right" ? k : dir === "down" ? k : -k), Math.round(fx * sh), Math.round(fy * sh * 0.5)); return o; };
+      const spin = (k: number, sh: number) => { const o = mk(); groundShadow(o, 16, 29, 5, 1.2, 50); o.blit(rot90(crouchF, dir === "right" ? k : dir === "down" ? k : -k), Math.round(fx * sh), Math.round(fy * sh * 0.5)); return o; };
       const f0 = renderFrame(hero, { ...B(0), crouch: 3 });
       const f1 = spin(1, 1), f2 = spin(2, 2), f3 = spin(3, 2);
       dust(f2, 16 - fx * 8, 29, 2); dust(f3, 16 - fx * 9, 29, 1, 120);
