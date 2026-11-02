@@ -2,7 +2,7 @@ import Phaser from "phaser";
 import { MAP_H, MAP_W, TILE } from "../../shared/constants";
 import { T, TILE_COUNT } from "../../shared/map";
 import { ROWS, ANIMATED_TILES } from "./tileset";
-import { BUILDINGS, buildHouses, buildStalls, ruinWallTexture } from "./isobuild";
+import { BUILDINGS, buildBarns, buildHouses, buildStalls, ruinWallTexture } from "./isobuild";
 import { buildBridges } from "./isobridge";
 
 /**
@@ -42,6 +42,10 @@ export function isoAnchor(g: Phaser.GameObjects.GameObject, to: { x: number; y: 
   return g;
 }
 
+// Things already drawn in screen (iso) coordinates, e.g. chunks of upright grass and flowers: left as they are.
+const screenSpace = new WeakSet<Phaser.GameObjects.GameObject>();
+export function isoScreen<O extends Phaser.GameObjects.GameObject>(o: O) { screenSpace.add(o); return o; }
+
 /** Screen direction (anim facing) of a world-space movement or aim vector. */
 export function screenDir(dx: number, dy: number, fallback: string): "up" | "down" | "left" | "right" {
   if (!ISO) return fallback as any;
@@ -61,6 +65,8 @@ export function isoInput(up: boolean, down: boolean, left: boolean, right: boole
   return { up: wy < 0, down: wy > 0, left: wx < 0, right: wx > 0 };
 }
 
+const BAKE_FROM: Partial<Record<number, number>> = { [T.FLOWERS]: T.GRASS, [T.FIELD]: T.DIRT, [T.CROPS]: T.DIRT };
+
 /** Builds the diamond tileset texture "tiles_iso" from the square "tiles" canvas. */
 function bakeIsoTiles(scene: Phaser.Scene, ids?: number[]) {
   const src = (scene.textures.get("tiles") as Phaser.Textures.CanvasTexture).getSourceImage() as HTMLCanvasElement;
@@ -77,7 +83,8 @@ function bakeIsoTiles(scene: Phaser.Scene, ids?: number[]) {
     // (0,0)->(top vertex) (T,0)->(right) (0,T)->(left) (T,T)->(bottom); slightly enlarged into the bleed
     const k = 1 + (BLEED * 2) / IH;
     ctx.setTransform(k, k / 2, -k, k / 2, ox + CW / 2, oy);
-    ctx.drawImage(src, id * TILE, row * TILE, TILE, TILE, 0, 0, TILE, TILE);
+    const from = BAKE_FROM[id] ?? id; // flowers stand up as their own sprites (details.ts): plain grass under them
+    ctx.drawImage(src, from * TILE, row * TILE, TILE, TILE, 0, 0, TILE, TILE);
   }
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   tex.refresh();
@@ -122,6 +129,7 @@ export class IsoView {
     const map = new Phaser.Tilemaps.Tilemap(scene, data);
     const tiles = map.addTilesetImage("tiles_iso", "tiles_iso", IW + BLEED * 2, IH + BLEED * 2, 0, 0, 0, { x: BLEED, y: BLEED })!;
     const flatObjects = isoStanding(scene, objects);
+    isoCrops(scene, ground, objects);
     const water = buildBridges(scene, ground); // bridges stand over the water
     for (const [name, grid, depth] of [["ground", water, -2], ["objects", flatObjects, -1]] as const) {
       const layer = map.createBlankLayer(name, tiles, -IW / 2, 0)!;
@@ -195,7 +203,7 @@ export class IsoView {
     // Pass 1: remember world positions; new flat paintings move into the ground plane
     for (let i = 0; i < list.length; i++) {
       const o = list[i];
-      if (o.scrollFactorX === 0 || o.type === "TilemapLayer" || o.x === undefined || flatContainers.has(o)) continue;
+      if (o.scrollFactorX === 0 || o.type === "TilemapLayer" || o.x === undefined || flatContainers.has(o) || screenSpace.has(o)) continue;
       if (!this.seen.has(o)) {
         this.seen.add(o);
         if (this.isFlat(o)) { (moved ??= []).push(o); continue; }
@@ -244,7 +252,7 @@ export class IsoView {
         for (const st of b.strips) if (!best || Math.abs((st as any).x - fx) < Math.abs(best.x - fx)) best = st;
         behind = !!best && fd < best.depth;
       }
-      if (behind !== b.faded) { b.faded = behind; for (const st of b.strips) st.setAlpha(behind ? 0.45 : 1); }
+      if (behind !== b.faded) { b.faded = behind; for (const st of b.strips) st.setAlpha(behind ? b.fadeTo ?? 0.45 : 1); }
     }
   }
 
@@ -380,6 +388,7 @@ export function isoStanding(scene: Phaser.Scene, objects: number[][]): number[][
   const out = objects.map((r) => r.slice());
   const houses = buildHouses(scene);
   for (const k of buildStalls(scene)) houses.add(k);
+  for (const k of buildBarns(scene)) houses.add(k);
   const src = (scene.textures.get("tiles") as Phaser.Textures.CanvasTexture).getSourceImage() as HTMLCanvasElement;
   const tileSrc = (i: number): Src => ({ img: src, sx: (i % TILE_COUNT) * TILE, sy: Math.floor(i / TILE_COUNT) * TILE });
   const at = (x: number, y: number) => (x < 0 || y < 0 || x >= MAP_W || y >= MAP_H ? -1 : objects[y][x]);
@@ -388,6 +397,7 @@ export function isoStanding(scene: Phaser.Scene, objects: number[][]): number[][
     if (t < 0) continue;
     const cx = (tx + 0.5) * TILE, cy = (ty + 0.5) * TILE;
     if (houses.has(ty * MAP_W + tx)) { out[ty][tx] = -1; continue; }
+    if (t === T.CAMPFIRE) { out[ty][tx] = -1; continue; } // an upright fire sprite (ambient.ts)
     let h = BLOCK_H[t];
     if (t === T.PALISADE || FENCES.has(t)) {
       const same = (x: number, y: number) => { const n = id(at(x, y)); return t === T.PALISADE ? n === T.PALISADE : FENCES.has(n); };
@@ -422,4 +432,68 @@ export function isoStanding(scene: Phaser.Scene, objects: number[][]): number[][
     }
   }
   return out;
+}
+
+// ---------- crops ----------
+
+/**
+ * Crop fields stand up: every FIELD tile gets a patch of wheat stalks, every CROPS tile rows of leafy vegetables,
+ * sorted with the heroes like any prop (a hero walking through the wheat is hidden to the knees).
+ */
+function isoCrops(scene: Phaser.Scene, ground: number[][], objects: number[][]) {
+  const UP = 22, W = IW, H = IH + UP;
+  const hsh = (x: number, y: number, s: number) => {
+    let h = (Math.imul(x, 374761393) + Math.imul(y, 668265263) + Math.imul(s, 982451653)) | 0;
+    h = Math.imul(h ^ (h >>> 13), 1274126177);
+    return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+  };
+  const make = (kind: "wheat" | "veg", v: number) => {
+    const key = `crop_${kind}_${v}`;
+    if (scene.textures.exists(key)) return key;
+    const tex = scene.textures.createCanvas(key, W, H)!;
+    const c = tex.getContext();
+    const S = (x: number, y: number) => ({ x: Math.round(x - y + W / 2), y: Math.round((x + y) / 2 + UP) });
+    const px = (x: number, y: number, col: string, w = 1, h = 1) => { c.fillStyle = col; c.fillRect(x, y, w, h); };
+    const pts: [number, number][] = [];
+    if (kind === "wheat") {
+      for (let y = 2; y < TILE; y += 4) for (let x = 1 + (y % 8 ? 2 : 0); x < TILE; x += 4) pts.push([x, y]);
+    } else {
+      for (const y of [4, 12, 20, 28]) for (const x of [4, 12, 20, 28]) pts.push([x, y]);
+    }
+    pts.sort((a, b) => a[0] + a[1] - b[0] - b[1]); // back to front
+    pts.forEach(([x, y], i) => {
+      const r = (k: number) => hsh(x + v * 37, y, k);
+      const p = S(x, y);
+      if (kind === "wheat") {
+        const h = 11 + Math.floor(r(1) * 6), lean = r(2) < 0.3 ? -1 : r(2) > 0.7 ? 1 : 0;
+        px(p.x, p.y - 1, "rgba(60,40,10,0.35)", 2, 1);
+        for (let k = 0; k < h; k++) px(p.x + (k > h * 0.6 ? lean : 0), p.y - k, k < 3 ? "#9a7a26" : "#c7a43c");
+        const hx = p.x + lean, hy = p.y - h;
+        px(hx - 1, hy - 4, "#e8cc66", 2, 4); px(hx, hy - 5, "#f4dc84"); px(hx + 1, hy - 3, "#c9a640", 1, 3);
+        if (i % 3 === 0) px(hx + 1, hy - 6, "#d8b84a");
+      } else {
+        // a soil ridge and a leafy plant: cabbages and lettuces
+        px(p.x - 4, p.y, "#5a3d22", 9, 1);
+        const big = r(3) < 0.5, w = big ? 11 : 8, h = big ? 8 : 7;
+        const dark = big ? "#3f7f2e" : "#4f9a3a", mid = big ? "#5aa845" : "#6fbf55", lite = big ? "#8fd36a" : "#a6e07c";
+        px(p.x - (w >> 1), p.y - 2, "rgba(0,0,0,0.25)", w, 2);
+        for (let k = 0; k < h; k++) { const ww = Math.max(1, Math.round(w * Math.sin(((k + 0.5) / h) * Math.PI))); px(p.x - (ww >> 1), p.y - 1 - k, k < 2 ? dark : mid, ww, 1); }
+        if (big) { // cabbage: pale heart, curled outer leaves
+          px(p.x - 2, p.y - h + 1, lite, 4, 2); px(p.x - 1, p.y - h, lite, 2, 1); px(p.x - 3, p.y - 3, "#2f6b24", 1, 2); px(p.x + 3, p.y - 4, "#2f6b24", 1, 2);
+          px(p.x - (w >> 1), p.y - 3, dark, 2, 1); px(p.x + (w >> 1) - 1, p.y - 3, dark, 2, 1);
+        } else { // leafy greens: a few leaves standing up
+          for (const [dx, hh] of [[-3, 3], [-1, 5], [1, 4], [3, 2]]) { px(p.x + dx, p.y - h - hh + 2, mid, 1, hh); px(p.x + dx, p.y - h - hh + 1, lite); }
+        }
+      }
+    });
+    tex.refresh();
+    return key;
+  };
+  for (let ty = 0; ty < MAP_H; ty++) for (let tx = 0; tx < MAP_W; tx++) {
+    const g = ground[ty][tx] % TILE_COUNT;
+    if ((g !== T.FIELD && g !== T.CROPS) || objects[ty][tx] >= 0) continue;
+    const key = make(g === T.FIELD ? "wheat" : "veg", (tx * 7 + ty * 3) % 4);
+    const cx = (tx + 0.5) * TILE, cy = (ty + 0.5) * TILE;
+    scene.add.image(cx, cy, key).setOrigin(0.5, (UP + IH / 2) / H).setDepth(cy);
+  }
 }

@@ -1,5 +1,5 @@
 import { ISO } from "./isoflag";
-import { isoAnchor } from "./iso";
+import { isoAnchor, isoScreen } from "./iso";
 import Phaser from "phaser";
 import { ART_K as K, MAP_H, MAP_W, TILE } from "../../shared/constants";
 import { AREAS, EMPTY, GROUND, OBJECTS, T, VILLAGE } from "../../shared/map";
@@ -111,6 +111,81 @@ class PixelChunkLayer {
     }
     for (const [k, l] of this.live) if (!want.has(k)) { l.img.destroy(); this.scene.textures.remove(l.key); this.live.delete(k); }
   }
+}
+
+/**
+ * Iso only: small upright things (grass tufts, mushrooms, flowers) painted straight in screen space, chunk by chunk,
+ * so they stand up instead of lying skewed on the ground. Drawn just above the ground, under everything else.
+ */
+class IsoUprightLayer {
+  private live = new Map<number, Phaser.GameObjects.RenderTexture>();
+  constructor(private scene: Phaser.Scene, private depth: number) {}
+  update(view: Phaser.Geom.Rectangle) {
+    const S = CHUNK * TILE, m = TILE * 4, UP = 24;
+    const cx0 = Math.max(0, Math.floor((view.x - m) / S)), cy0 = Math.max(0, Math.floor((view.y - m) / S));
+    const cx1 = Math.min(Math.ceil(MAP_W / CHUNK) - 1, Math.floor((view.right + m) / S)), cy1 = Math.min(Math.ceil(MAP_H / CHUNK) - 1, Math.floor((view.bottom + m) / S));
+    const want = new Set<number>();
+    for (let cy = cy0; cy <= cy1; cy++) for (let cx = cx0; cx <= cx1; cx++) {
+      const k = cy * 1000 + cx;
+      want.add(k);
+      if (this.live.has(k)) continue;
+      const tx0 = cx * CHUNK, ty0 = cy * CHUNK, tx1 = Math.min(MAP_W, tx0 + CHUNK), ty1 = Math.min(MAP_H, ty0 + CHUNK);
+      // screen box of the chunk's diamond, plus room above for things standing up
+      const left = (tx0 - ty1) * TILE, top = ((tx0 + ty0) * TILE) / 2 - UP;
+      const w = (tx1 - tx0 + ty1 - ty0) * TILE, h = ((tx1 - tx0 + ty1 - ty0) * TILE) / 2 + UP;
+      const g = this.scene.make.graphics({}, false);
+      g.setPosition(-left, -top);
+      drawUpright(g, tx0, ty0, tx1, ty1);
+      const rt = this.scene.add.renderTexture(left, top, w, h).setOrigin(0, 0).setDepth(this.depth);
+      rt.draw(g);
+      g.destroy();
+      isoScreen(rt);
+      this.live.set(k, rt);
+    }
+    for (const [k, rt] of this.live) if (!want.has(k)) { rt.destroy(); this.live.delete(k); }
+  }
+}
+
+/** Upright tufts, mushrooms and flowers of tiles [x0,x1)×[y0,y1), at their iso screen points. */
+function drawUpright(g: Phaser.GameObjects.Graphics, x0: number, y0: number, x1: number, y1: number) {
+  const px = (x: number, y: number, c: number, a = 1) => g.fillStyle(c, a).fillRect(x, y, 1, 1);
+  const R = TILE - 8;
+  const at = (wx: number, wy: number) => [Math.round(wx - wy), Math.round((wx + wy) / 2)];
+  const items: [number, () => void][] = []; // drawn back to front
+  const FLOWER_COLS = [[0xf06292, 0xc2185b], [0xfff176, 0xd8b02a], [0xffffff, 0xc8d0e0], [0xba68c8, 0x7b3f9a], [0x64b5f6, 0x2e7ac0]];
+  for (let ty = y0; ty < y1; ty++) for (let tx = x0; tx < x1; tx++) {
+    const t = GROUND[ty][tx], X = tx * TILE, Y = ty * TILE;
+    if (!GRASSY.has(t) || OBJECTS[ty][tx] !== EMPTY) continue;
+    const h = hash(tx, ty, 1), wx = X + 4 + Math.floor(hash(tx, ty, 2) * R), wy = Y + 5 + Math.floor(hash(tx, ty, 3) * R);
+    const [x, y] = at(wx, wy);
+    if (h >= 0.08 && h < 0.2) items.push([wx + wy, () => { // tuft of grass blades
+      for (let b = 0; b < 5; b++) {
+        const hh = 4 + ((b * 7 + tx) % 3) - Math.abs(b - 2);
+        for (let i = 0; i < hh + 2; i++) px(x + b - 2 + (i > hh && b !== 2 ? Math.sign(b - 2) : 0), y - i, i === hh + 1 ? 0x86c95a : i < 2 ? 0x2f6b24 : 0x3f7a2a);
+      }
+    }]);
+    else if (h >= 0.26 && h < 0.275) items.push([wx + wy, () => { // red cap mushroom on a pale stem, and a small one beside it
+      g.fillStyle(0x000000, 0.25).fillRect(x - 3, y, 7, 2);
+      g.fillStyle(0xece0c8, 1).fillRect(x - 1, y - 4, 3, 5); px(x + 1, y - 1, 0xc8b89a); px(x + 1, y - 2, 0xc8b89a);
+      g.fillStyle(0x8f2a20, 1).fillRect(x - 4, y - 5, 9, 1);
+      g.fillStyle(0xc0392b, 1).fillRect(x - 4, y - 7, 9, 2); g.fillStyle(0xd84343, 1).fillRect(x - 3, y - 8, 7, 1); g.fillStyle(0xd84343, 1).fillRect(x - 2, y - 9, 5, 1);
+      px(x - 2, y - 7, 0xffffff); px(x + 1, y - 8, 0xffffff); px(x + 3, y - 6, 0xffffff);
+      g.fillStyle(0xece0c8, 1).fillRect(x + 5, y - 2, 2, 3); g.fillStyle(0xc0392b, 1).fillRect(x + 4, y - 4, 4, 2); px(x + 5, y - 4, 0xffffff);
+    }]);
+    if (t === T.FLOWERS) for (let k = 0; k < 6; k++) { // upright flowers on stems
+      const fx = X + 3 + Math.floor(hash(tx, ty, 30 + k) * (TILE - 6)), fy = Y + 3 + Math.floor(hash(tx, ty, 40 + k) * (TILE - 6));
+      const [sx, sy] = at(fx, fy), [c, sh] = FLOWER_COLS[(k + tx + ty) % 5], st = 4 + Math.floor(hash(tx, ty, 50 + k) * 4);
+      items.push([fx + fy, () => {
+        g.fillStyle(0x1e4a14, 0.3).fillRect(sx - 1, sy, 3, 1);
+        g.fillStyle(0x3f7a2a, 1).fillRect(sx, sy - st, 1, st); px(sx + 1, sy - 2, 0x5aa845); px(sx - 1, sy - 3, 0x5aa845);
+        const by = sy - st - 3;
+        g.fillStyle(c, 1).fillRect(sx - 1, by, 3, 3); px(sx, by - 1, c); px(sx - 2, by + 1, c); px(sx + 2, by + 1, sh); px(sx, by + 3, sh);
+        px(sx, by + 1, 0xffd23a);
+      }]);
+    }
+  }
+  items.sort((a, b) => a[0] - b[0]);
+  for (const [, f] of items) f();
 }
 
 const ROADY = new Set<number>([T.DIRT, T.COBBLE]);
@@ -378,6 +453,7 @@ export class Details {
     this.layers.push(new ChunkLayer(scene, -1.7, (g, x0, y0, x1, y1) => this.groundDecals(g, x0, y0, x1, y1)));
     this.layers.push(new PixelChunkLayer(scene, -1.74, paintShore));
     this.layers.push(new ChunkLayer(scene, -1.58, (g, x0, y0, x1, y1) => this.waterDecor(g, x0, y0, x1, y1)));
+    if (ISO) this.layers.push(new IsoUprightLayer(scene, -1.5));
     this.roofShading();
     this.lanternsAndBanners();
     this.ducksOnPond();
@@ -402,6 +478,7 @@ export class Details {
             g.fillStyle(0x8d8d84, 1).fillRect(x + dx, y + dy, w, 2);
             px(x + dx, y + dy, 0xb8b8ae); px(x + dx + w - 1, y + dy + 1, 0x6e6e66);
           }
+        } else if (ISO && h >= 0.08 && h < 0.275 && !(h >= 0.2 && h < 0.26)) { // tufts and mushrooms stand up (IsoUprightLayer)
         } else if (h < 0.2) { // tuft
           for (let b = 0; b < 5; b++) {
             const hh = 3 + ((b * 7 + tx) % 3) - Math.abs(b - 2);

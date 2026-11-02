@@ -51,6 +51,9 @@ export const VILLAGE = { x0: 68, y0: 50, x1: 92, y1: 70 };
 /** Where the two main roads cross the village: King's Road runs west↔east near row RY+1, North Road north↔south near column RX+1. */
 export const ROADS = { RX: 79, RY: 59 };
 /** Cobbled square in the middle of the ruined village. It is the safe zone. */
+/** Walk-in barns (Goldenreach Farms): footprint in tiles and the open doorway columns in the front wall. */
+export const BARNS = [{ x: 14, y: 38, w: 9, h: 6, door0: 17, door1: 19 }];
+
 export const SAFE_ZONE = { x: 74, y: 55, w: 13, h: 11 };
 
 /** Column of the river's center for a given row (River Ashwell, east of the village). */
@@ -281,8 +284,15 @@ function buildWorld() {
   // Signposts outside the village
 
   // ---------- 7. Goldenreach Farms (west): barn, two fenced fields with openings on every side ----------
-  const barn = building(14, 38, 9, 6, T.ROOF_RED, T.WALL_TIMBER, T.WINDOW_TIMBER);
-  doorPath(barn);
+  // The barn is open: plank walls round a straw floor, a wide doorway in front, hay and tools inside
+  for (const b of BARNS) {
+    rectG(b.x, b.y, b.w, b.h, T.FLOOR);
+    for (let x = b.x; x < b.x + b.w; x++) { setO(x, b.y, T.WALL_TIMBER); if (x < b.door0 || x > b.door1) setO(x, b.y + b.h - 1, T.WALL_TIMBER); }
+    for (let y = b.y; y < b.y + b.h; y++) { setO(b.x, y, T.WALL_TIMBER); setO(b.x + b.w - 1, y, T.WALL_TIMBER); }
+    setO(b.x + 1, b.y + 1, T.HAY); setO(b.x + 2, b.y + 1, T.HAY); setO(b.x + 1, b.y + 2, T.HAY);
+    setO(b.x + b.w - 2, b.y + 1, T.CRATE); setO(b.x + b.w - 2, b.y + b.h - 2, T.BARREL); setO(b.x + b.w - 3, b.y + 1, T.HAY);
+    doorPath({ x: Math.floor((b.door0 + b.door1) / 2), y: b.y + b.h - 1 });
+  }
   for (const [x, y] of [[24, 40], [24, 41], [12, 42], [24, 43]]) setO(x, y, T.HAY);
   rectG(29, 39, 16, 15, T.FIELD);
   fenceBox(28, 38, 18, 17, sideGaps(28, 38, 18, 17));
