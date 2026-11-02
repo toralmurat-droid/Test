@@ -22,6 +22,8 @@ interface Account {
   hash: string;
   created: number;
   heroes: Partial<Record<string, HeroSave>>;
+  /** Loot chests this account opened: chest id -> time it refills (ms). Shared by all heroes of the account. */
+  chests?: Record<string, number>;
 }
 
 const FILE = path.resolve(process.env.SAVE_FILE ?? path.join(__dirname, "../data/saves.json"));
@@ -64,6 +66,22 @@ export function saveHero(name: string, cls: string, hero: HeroSave) {
   const acc = accounts[key(name)];
   if (!acc) return;
   acc.heroes[cls] = hero;
+  dirty = true;
+}
+
+/** Chests this account has opened that have not refilled yet (id -> refill time, ms). Drops expired entries. */
+export function openedChests(name: string, now = Date.now()): Record<string, number> {
+  const acc = accounts[key(name)];
+  if (!acc?.chests) return {};
+  for (const [id, t] of Object.entries(acc.chests)) if (!(t > now)) delete acc.chests[id];
+  return { ...acc.chests };
+}
+
+/** Remember that this account emptied a chest until `refillAt`. */
+export function markChest(name: string, id: string, refillAt: number) {
+  const acc = accounts[key(name)];
+  if (!acc) return;
+  (acc.chests ??= {})[id] = refillAt;
   dirty = true;
 }
 
