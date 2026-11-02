@@ -48,7 +48,22 @@ export function addPixelGrid(cam: Phaser.Cameras.Scene2D.Camera) {
   if (!r.pipelines.postPipelineClasses.has("PixelGridFX")) r.pipelines.addPostPipeline("PixelGridFX", PixelGridFX);
   cam.setPostPipeline("PixelGridFX");
   const fx = cam.getPostPipeline("PixelGridFX") as PixelGridFX;
-  const sync = () => { fx.size = Math.max(1, Math.round(cam.zoom * ART_PX)); };
+  // Text in the world (names, damage numbers, quest marks) is drawn by a second camera without the grid, so it stays
+  // readable; that camera follows the main one exactly.
+  const scene = cam.scene, ui = scene.cameras.add(0, 0, cam.width, cam.height).setName("worldText");
+  ui.transparent = true;
+  const mainBit = cam.id, uiBit = ui.id;
+  const copy = () => { ui.setZoom(cam.zoom); ui.setScroll(cam.scrollX, cam.scrollY); ui.setRoundPixels(cam.roundPixels); };
+  cam.on(Phaser.Cameras.Scene2D.Events.FOLLOW_UPDATE, copy);
+  scene.scale.on(Phaser.Scale.Events.RESIZE, (s: Phaser.Structs.Size) => ui.setSize(s.width, s.height));
+  const sync = () => {
+    fx.size = Math.max(1, Math.round(cam.zoom * ART_PX));
+    copy();
+    for (const o of scene.children.list as any[]) {
+      const text = o.type === "Text" && o.scrollFactorX !== 0;
+      o.cameraFilter = text ? mainBit : uiBit; // bits set = cameras that skip the object
+    }
+  };
   sync();
-  cam.scene.events.on(Phaser.Scenes.Events.PRE_RENDER, sync);
+  scene.events.on(Phaser.Scenes.Events.PRE_RENDER, sync);
 }

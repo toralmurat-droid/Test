@@ -1,5 +1,6 @@
 import Phaser from "phaser";
-import { overrideTexture, smoothCopy } from "./smooth";
+import { hiResTexture, overrideTexture, smoothCopy } from "./smooth";
+import { T } from "../../shared/map";
 
 /**
  * Painted isometric versions of the front-view props around the witch and the blacksmith (forge, anvil, weapon
@@ -403,4 +404,182 @@ export function paintSmoothProps(scene: Phaser.Scene) {
   paint("herb_rack", herbRack);
   for (let f = 0; f < 4; f++) paint(`witch_hut_${f}`, witchHut, f);
   overrideTexture(scene, "props", hi);
+}
+
+// ---------- upright map props (barrels, crates, well, signs, hay…), one tile each ----------
+
+
+const UW = 32, UH = 40, UO: Pt = [16, 34]; // texture size; footprint centre (shown at origin 0.5, 0.85)
+
+function barrel(c: Ctx, I: Iso) {
+  I.shadow(-6, -6, 6, 6, 2);
+  const [x, y] = I.p(0, 0, 0), r = 6.5, h = 13;
+  const g = c.createLinearGradient(x - r, 0, x + r, 0);
+  g.addColorStop(0, "#8a6038"); g.addColorStop(0.35, "#6a4628"); g.addColorStop(1, "#2a1a0c");
+  c.fillStyle = g;
+  c.beginPath(); c.moveTo(x - r * 0.9, y); c.quadraticCurveTo(x - r * 1.12, y - h / 2, x - r * 0.9, y - h);
+  c.lineTo(x + r * 0.9, y - h); c.quadraticCurveTo(x + r * 1.12, y - h / 2, x + r * 0.9, y); c.ellipse(x, y, r * 0.9, r * 0.42, 0, 0, Math.PI); c.fill();
+  c.strokeStyle = "rgba(20,12,6,0.6)"; c.lineWidth = 0.25;
+  for (let k = -2; k <= 2; k++) { c.beginPath(); c.moveTo(x + k * 2.4, y + 1.5 - Math.abs(k) * 0.4); c.quadraticCurveTo(x + k * 2.9, y - h / 2, x + k * 2.4, y - h + 0.3); c.stroke(); }
+  for (const hy of [2.2, h / 2, h - 2.2]) { // iron hoops
+    const w = r * (hy === h / 2 ? 1.1 : 0.98);
+    c.strokeStyle = "#2a2826"; c.lineWidth = 1; c.beginPath(); c.ellipse(x, y - hy, w, w * 0.42, 0, 0, Math.PI); c.stroke();
+    c.strokeStyle = "rgba(170,170,160,0.5)"; c.lineWidth = 0.3; c.beginPath(); c.ellipse(x, y - hy - 0.4, w, w * 0.42, 0, Math.PI * 0.55, Math.PI * 0.95); c.stroke();
+  }
+  c.fillStyle = "#7a5a38"; c.beginPath(); c.ellipse(x, y - h, r * 0.9, r * 0.4, 0, 0, Math.PI * 2); c.fill();
+  c.strokeStyle = "#2a2826"; c.lineWidth = 0.7; c.stroke();
+  c.strokeStyle = "rgba(40,26,12,0.5)"; c.lineWidth = 0.2; for (let k = -1; k <= 1; k++) { c.beginPath(); c.moveTo(x - r * 0.8, y - h + k * 1.1); c.lineTo(x + r * 0.8, y - h + k * 1.1); c.stroke(); }
+}
+
+function crate(c: Ctx, I: Iso) {
+  I.shadow(-6, -6, 6, 6, 2);
+  const s = 5.5, h = 11;
+  I.box(-s, s, -s, s, 0, h, 0x7a5a36, planks(c, 7, 0x7a5a36));
+  // cross braces and frame on both sides
+  for (const side of ["L", "R"] as const) {
+    const P = (a: number, z: number) => side === "L" ? I.p(-s + a * 2 * s, s, z) : I.p(s, s - a * 2 * s, z);
+    c.strokeStyle = side === "L" ? "#4a3218" : "#33220f"; c.lineWidth = 1.1;
+    c.beginPath(); c.moveTo(...P(0.05, 0.6)); c.lineTo(...P(0.95, h - 0.6)); c.stroke();
+    c.lineWidth = 0.9;
+    c.beginPath(); c.moveTo(...P(0, 0.4)); c.lineTo(...P(1, 0.4)); c.moveTo(...P(0, h - 0.4)); c.lineTo(...P(1, h - 0.4)); c.stroke();
+  }
+  const top: Pt[] = [I.p(-s, -s, h), I.p(s, -s, h), I.p(s, s, h), I.p(-s, s, h)];
+  I.poly(top, "#8a6a42", "#4a3218", 0.6);
+  c.strokeStyle = "rgba(40,26,12,0.6)"; c.lineWidth = 0.25;
+  for (let k = 1; k < 4; k++) { c.beginPath(); c.moveTo(...I.p(-s + k * 2.75, -s, h)); c.lineTo(...I.p(-s + k * 2.75, s, h)); c.stroke(); }
+}
+
+function well(c: Ctx, I: Iso) {
+  I.shadow(-11, -11, 11, 11, 3);
+  // round stone wall
+  const [x, y] = I.p(0, 0, 0), rx = 11, ry = 5.5, h = 8;
+  const r = rng(5);
+  for (let row = 0; row < 3; row++) for (let k = 0; k < 14; k++) {
+    const a0 = (k + (row % 2) * 0.5) / 14 * Math.PI, a1 = a0 + Math.PI / 14;
+    const yy = y - row * (h / 3);
+    const t = 0.7 + r() * 0.35, lit = 0.65 + 0.45 * Math.cos(a0 + 0.3);
+    c.fillStyle = col(0x8a8478, t * lit);
+    c.beginPath(); c.ellipse(x, yy, rx, ry, 0, a0, a1); c.lineTo(x + Math.cos(a1) * rx, yy - h / 3 + Math.sin(a1) * ry); c.ellipse(x, yy - h / 3, rx, ry, 0, a1, a0, true); c.closePath(); c.fill();
+    c.strokeStyle = "rgba(30,26,22,0.6)"; c.lineWidth = 0.25; c.stroke();
+  }
+  c.fillStyle = "#9a948a"; c.beginPath(); c.ellipse(x, y - h, rx, ry, 0, 0, Math.PI * 2); c.fill();
+  const wg = c.createRadialGradient(x, y - h, 0, x, y - h, rx * 0.8);
+  wg.addColorStop(0, "#0a1418"); wg.addColorStop(0.7, "#1a2a2e"); wg.addColorStop(1, "#2a2a26");
+  c.fillStyle = wg; c.beginPath(); c.ellipse(x, y - h, rx * 0.78, ry * 0.72, 0, 0, Math.PI * 2); c.fill();
+  c.fillStyle = "rgba(120,150,150,0.35)"; c.beginPath(); c.ellipse(x - 2, y - h + 0.6, 2.5, 0.8, 0, 0, Math.PI * 2); c.fill();
+  // posts, roof and windlass
+  for (const u of [-9, 9]) I.box(u - 0.9, u + 0.9, -0.9, 0.9, h - 1, 27, 0x5a3e22);
+  const [ax, ay] = I.p(-9, 0, 20), [bx, by] = I.p(9, 0, 20);
+  c.strokeStyle = "#4a3218"; c.lineWidth = 1.4; c.beginPath(); c.moveTo(ax, ay); c.lineTo(bx, by); c.stroke();
+  c.strokeStyle = "#8a7a5a"; c.lineWidth = 0.35; c.beginPath(); c.moveTo((ax + bx) / 2, (ay + by) / 2); c.lineTo((ax + bx) / 2, (ay + by) / 2 + 9); c.stroke();
+  c.fillStyle = "#4a3824"; c.fillRect((ax + bx) / 2 - 1.3, (ay + by) / 2 + 8, 2.6, 2.6);
+  const ridge = 33, e = 25;
+  const roof: Pt[] = [I.p(-12, 0, ridge), I.p(12, 0, ridge), I.p(12, 7, e), I.p(-12, 7, e)];
+  const rg = c.createLinearGradient(...roof[0], ...roof[3]); rg.addColorStop(0, "#7a4a2e"); rg.addColorStop(1, "#4a2a18");
+  I.poly(roof, rg, "#2a160a", 0.5);
+  c.strokeStyle = "rgba(30,14,6,0.6)"; c.lineWidth = 0.3;
+  for (let k = 1; k < 4; k++) { const a = I.p(-12, k * 1.75, ridge - k * 2), b = I.p(12, k * 1.75, ridge - k * 2); c.beginPath(); c.moveTo(...a); c.lineTo(...b); c.stroke(); }
+  I.poly([I.p(12, 7, e), I.p(12, -7, e), I.p(12, 0, ridge)], "#3a2414");
+}
+
+function signpost(c: Ctx, I: Iso, boards: number) {
+  I.shadow(-3, -3, 3, 3, 2);
+  I.box(-0.9, 0.9, -0.9, 0.9, 0, 24, 0x5a3e22);
+  const board = (z: number, dir: 1 | -1, len: number) => {
+    const a = I.p(0, 1, z), b = I.p(dir * len, 1, z + dir * 0.5);
+    const g = c.createLinearGradient(a[0], a[1] - 3, a[0], a[1] + 3); g.addColorStop(0, "#9a7448"); g.addColorStop(1, "#5a3e22");
+    c.fillStyle = g;
+    c.beginPath(); c.moveTo(a[0], a[1] - 2.6); c.lineTo(b[0], b[1] - 2.6); c.lineTo(b[0] + dir * 2, b[1]); c.lineTo(b[0], b[1] + 2.6); c.lineTo(a[0], a[1] + 2.6); c.closePath(); c.fill();
+    c.strokeStyle = "#2a1a0c"; c.lineWidth = 0.4; c.stroke();
+    c.strokeStyle = "rgba(30,18,8,0.7)"; c.lineWidth = 0.35; // carved letters
+    for (let k = 0; k < 3; k++) { const t = 0.2 + k * 0.22; c.beginPath(); c.moveTo(a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t); c.lineTo(a[0] + (b[0] - a[0]) * (t + 0.14), a[1] + (b[1] - a[1]) * (t + 0.14)); c.stroke(); }
+  };
+  board(21, 1, 10);
+  if (boards > 1) board(16, -1, 9);
+}
+
+function hay(c: Ctx, I: Iso) {
+  I.shadow(-8, -6, 8, 6, 2);
+  const s = 7, d = 5, h = 9;
+  I.box(-s, s, -d, d, 0, h, 0xb8963c);
+  const r = rng(9);
+  // straw strands over the sides and top
+  for (let k = 0; k < 160; k++) {
+    const side = k % 3, u = r(), z = r();
+    let a: Pt;
+    if (side === 0) a = I.p(-s + u * 2 * s, d, z * h); else if (side === 1) a = I.p(s, d - u * 2 * d, z * h); else a = I.p(-s + u * 2 * s, -d + z * 2 * d, h);
+    const t = side === 0 ? 0.85 : side === 1 ? 0.62 : 1.05;
+    c.strokeStyle = col(r() < 0.5 ? 0xd8b850 : 0x9a7a2a, t); c.lineWidth = 0.22;
+    c.beginPath(); c.moveTo(...a); c.lineTo(a[0] + (r() - 0.5) * 3, a[1] + (r() - 0.5) * 1.2); c.stroke();
+  }
+  for (const k of [-3.5, 3.5]) { // twine
+    c.strokeStyle = "#5a3a1a"; c.lineWidth = 0.5;
+    c.beginPath(); c.moveTo(...I.p(k, d, 0)); c.lineTo(...I.p(k, d, h)); c.lineTo(...I.p(k, -d, h)); c.stroke();
+  }
+}
+
+function rock(c: Ctx, I: Iso, seed: number) {
+  I.shadow(-7, -6, 7, 6, 2);
+  const [x, y] = I.p(0, 0, 0), r = rng(seed);
+  const pts: Pt[] = [];
+  for (let k = 0; k < 9; k++) { const a = Math.PI + (k / 8) * Math.PI, rr = 7 + r() * 2.5; pts.push([x + Math.cos(a) * rr * 1.1, y + Math.sin(a) * rr * 1.1 - 1]); }
+  pts.push([x + 7, y + 1.5], [x - 7, y + 1.5]);
+  const g = c.createLinearGradient(x - 6, y - 10, x + 5, y);
+  g.addColorStop(0, "#a8a296"); g.addColorStop(0.5, "#6e6a62"); g.addColorStop(1, "#33302c");
+  I.poly(pts, g);
+  c.strokeStyle = "rgba(20,18,16,0.6)"; c.lineWidth = 0.3;
+  c.beginPath(); c.moveTo(x - 1, y - 9); c.lineTo(x + 1, y - 4); c.lineTo(x + 4, y - 2); c.stroke();
+  c.fillStyle = "rgba(80,104,44,0.6)"; c.beginPath(); c.ellipse(x - 3, y - 7.5, 3, 1.2, -0.3, 0, Math.PI * 2); c.fill();
+}
+
+function stump(c: Ctx, I: Iso) {
+  I.shadow(-6, -6, 6, 6, 2);
+  const [x, y] = I.p(0, 0, 0), r = 5.5, h = 5;
+  const g = c.createLinearGradient(x - r, 0, x + r, 0); g.addColorStop(0, "#7a5a3a"); g.addColorStop(0.5, "#4e3624"); g.addColorStop(1, "#22160c");
+  c.fillStyle = g;
+  c.beginPath(); c.moveTo(x - r - 1.5, y + 0.5); c.lineTo(x - r, y - h); c.lineTo(x + r, y - h); c.lineTo(x + r + 1.5, y + 0.5); c.ellipse(x, y + 0.5, r + 1.5, (r + 1.5) * 0.4, 0, 0, Math.PI); c.fill();
+  c.fillStyle = "#a08058"; c.beginPath(); c.ellipse(x, y - h, r, r * 0.45, 0, 0, Math.PI * 2); c.fill();
+  c.strokeStyle = "rgba(90,60,30,0.7)"; c.lineWidth = 0.22;
+  for (const rr of [1.4, 2.8, 4.2]) { c.beginPath(); c.ellipse(x, y - h, rr, rr * 0.45, 0, 0, Math.PI * 2); c.stroke(); }
+  c.strokeStyle = "rgba(20,12,6,0.5)"; c.beginPath(); c.moveTo(x, y - h); c.lineTo(x + 3, y - h + 1); c.stroke();
+}
+
+function grave(c: Ctx, I: Iso) {
+  I.shadow(-5, -3, 5, 3, 2);
+  const h = 13;
+  I.box(-4.5, 4.5, -1.2, 1.2, 0, h - 3, 0x77736a, stones(c, 3, 0x77736a, 1));
+  const [a, b] = [I.p(-4.5, 1.2, h - 3), I.p(4.5, 1.2, h - 3)];
+  c.fillStyle = "#6a665e"; c.beginPath(); c.moveTo(...a); c.quadraticCurveTo((a[0] + b[0]) / 2, (a[1] + b[1]) / 2 - 7, ...b); c.closePath(); c.fill();
+  c.strokeStyle = "rgba(20,18,16,0.7)"; c.lineWidth = 0.5;
+  const m = I.p(0, 1.2, h - 4);
+  c.beginPath(); c.moveTo(m[0], m[1] - 3); c.lineTo(m[0], m[1] + 4); c.moveTo(m[0] - 2, m[1] - 0.5); c.lineTo(m[0] + 2, m[1] + 0.5); c.stroke();
+  c.fillStyle = "rgba(70,92,40,0.6)"; c.beginPath(); c.ellipse(...I.p(-3, 1.2, 1), 2.5, 1, 0, 0, Math.PI * 2); c.fill();
+}
+
+function wheel(c: Ctx, I: Iso) {
+  I.shadow(-6, -3, 6, 3, 2);
+  const [x, y] = I.p(0, 0, 9);
+  c.save(); c.translate(x, y); c.transform(1, 0.5, 0, 1, 0, 0);
+  c.strokeStyle = "#4a3218"; c.lineWidth = 1.6; c.beginPath(); c.arc(0, 0, 8, 0, Math.PI * 2); c.stroke();
+  c.strokeStyle = "#8a6a42"; c.lineWidth = 0.4; c.beginPath(); c.arc(0, 0, 8.4, Math.PI * 1.1, Math.PI * 1.6); c.stroke();
+  c.strokeStyle = "#5a3e22"; c.lineWidth = 0.8;
+  for (let k = 0; k < 8; k++) { const a = k * Math.PI / 4; c.beginPath(); c.moveTo(0, 0); c.lineTo(Math.cos(a) * 7.5, Math.sin(a) * 7.5); c.stroke(); }
+  c.fillStyle = "#3a2814"; c.beginPath(); c.arc(0, 0, 1.8, 0, Math.PI * 2); c.fill();
+  c.restore();
+}
+
+function anvilTile(c: Ctx, I: Iso) { c.save(); c.translate(0, 6); anvil(c); c.restore(); void I; }
+
+const UPRIGHT_ART: Partial<Record<number, (c: Ctx, I: Iso) => void>> = {
+  [T.BARREL]: barrel, [T.CRATE]: crate, [T.WELL]: well, [T.SIGN]: (c, I) => signpost(c, I, 1), [T.SIGNPOST]: (c, I) => signpost(c, I, 2),
+  [T.HAY]: hay, [T.ROCK]: (c, I) => rock(c, I, 7), [T.STUMP]: stump, [T.GRAVE]: grave, [T.WHEEL]: wheel, [T.ANVIL]: anvilTile,
+};
+
+/** Painted iso texture for an upright prop tile id, or undefined to keep the tile art. */
+export function uprightTexture(scene: Phaser.Scene, id: number): string | undefined {
+  const art = UPRIGHT_ART[id];
+  if (!art) return;
+  const key = `up_${id}`;
+  hiResTexture(scene, key, UW, UH, 1, 6, (c) => art(c, new Iso(c, UO[0], UO[1])));
+  return key;
 }
