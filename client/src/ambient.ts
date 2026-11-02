@@ -228,10 +228,12 @@ export class Ambient {
     for (let y = 0; y < MAP_H; y++) for (let x = 0; x < MAP_W; x++) {
       const t = OBJECTS[y][x];
       if (!TREES.has(t)) continue;
-      const key = t === T.PINE ? "pine" : t === T.BUSH ? "bush" : r() < 0.5 ? "oak_a" : "oak_b";
+      const oaks = SMOOTH ? ["oak_a", "oak_b", "oak_c", "oak_d", "oak_e", "oak_a", "oak_b"] : ["oak_a", "oak_b"];
+      const key = t === T.PINE ? "pine" : t === T.BUSH ? "bush" : oaks[Math.floor(r() * oaks.length)];
       const s = this.scene.add.sprite((x + 0.5) * TILE + (t === T.BUSH ? 0 : Math.round((r() * 2 - 1) * K)), (y + 1) * TILE, key, 0)
         .setOrigin(0.5, 1).setDepth((y + 1) * TILE - 2).setTint(tints[Math.floor(r() * tints.length)]);
-      if (t !== T.BUSH && r() < 0.25) s.setFlipX(true);
+      if (r() < (SMOOTH ? 0.5 : t === T.BUSH ? 0 : 0.25)) s.setFlipX(true);
+      if (SMOOTH) s.setScale(t === T.BUSH ? 0.85 + r() * 0.3 : 0.82 + r() * 0.36); // no two trees the same size
       s.setData("ph", r() * 0.6);
       this.trees.push(s);
     }

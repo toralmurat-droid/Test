@@ -234,16 +234,36 @@ function material(t: number, wx: number, wy: number, sx: number, sy: number, dep
       ht = 0.4 + 0.15 * fur;
       break;
     }
-    case FLOOR: { // worn flagstones of the old village
-      const C = 15, gx = Math.floor(wx / C + (Math.floor(wy / C) % 2) * 0.5), gy = Math.floor(wy / C);
-      const lx = wx / C + (Math.floor(wy / C) % 2) * 0.5 - gx, ly = wy / C - gy;
+    case FLOOR: { // worn flagstones of the old village: cracked, sunk, some lifted out with grass and earth below
+      const C = 15, ox = (vn(wx / 20, wy / 20, 76) - 0.5) * 2.5, oy = (vn(wx / 20, wy / 20, 77) - 0.5) * 2.5;
+      const qx = wx + ox, qy = wy + oy;
+      const row = Math.floor(qy / C), shift = (row % 2) * 0.5 + hash2(row, 0, 78) * 0.3;
+      const gx = Math.floor(qx / C + shift), gy = row;
+      const lx = qx / C + shift - gx, ly = qy / C - gy;
       const e = Math.min(lx, 1 - lx, ly, 1 - ly) * C;
-      const tone = 0.78 + hash2(gx, gy, 71) * 0.28, m = fbm(wx / 12, wy / 12, 72);
-      r = 108 * tone * (0.88 + 0.24 * m); g = 102 * tone * (0.88 + 0.24 * m); b = 90 * tone * (0.88 + 0.24 * m);
-      if (hash2(gx, gy, 73) < 0.35 && vn(wx / 3, wy / 3, 74) > 0.74) { r *= 0.62; g *= 0.62; b *= 0.62; } // cracks
-      const j = sstep(0.3, 1.4, e);
+      const gone = hash2(gx, gy, 79) < 0.14 || vn(wx / 40, wy / 40, 80) > 0.7;
+      if (gone) { // the slab is missing: earth, weeds and stone bits
+        const m = vn(wx / 4, wy / 4, 81), gr = vn(wx / 9, wy / 9, 82);
+        r = 70 + 18 * m; g = 60 + 14 * m; b = 44 + 8 * m;
+        if (gr > 0.45) { const k = 0.8 + 0.4 * vn(sx / 1.1, sy / 3.2, 83); r = 62 * k; g = 80 * k; b = 40 * k; }
+        if (hash2(Math.floor(wx), Math.floor(wy), 84) < 0.08) { r = 112; g = 106; b = 94; }
+        ht = 0.35;
+        break;
+      }
+      const tone = 0.74 + hash2(gx, gy, 71) * 0.34, m = fbm(wx / 12, wy / 12, 72);
+      // each slab sits a little tilted: light falls off across it
+      const tilt = (hash2(gx, gy, 85) - 0.5) * 0.3, sl = 1 + tilt * ((lx - 0.5) + (ly - 0.5));
+      const kk = tone * (0.86 + 0.26 * m) * sl;
+      r = 108 * kk; g = 102 * kk; b = 90 * kk;
+      if (hash2(gx, gy, 73) < 0.45) { // cracks running across the slab
+        const an = hash2(gx, gy, 86) * Math.PI, d = Math.abs((lx - 0.5) * Math.sin(an) - (ly - 0.5) * Math.cos(an) + (vn(wx / 2, wy / 2, 87) - 0.5) * 0.12);
+        if (d < 0.025) { r *= 0.58; g *= 0.58; b *= 0.58; }
+      }
+      if (hash2(gx, gy, 88) < 0.3 && lx + ly < 0.45) { r *= 0.7; g *= 0.68; b *= 0.66; } // chipped corner
+      const j = sstep(0.3, 1.6, e);
       r = 48 + (r - 48) * j; g = 44 + (g - 44) * j; b = 36 + (b - 36) * j;
-      if (j < 0.6 && vn(wx / 20, wy / 20, 75) > 0.5) { r = 58; g = 74; b = 38; } // grass in the joints
+      if (j < 0.75 && vn(wx / 14, wy / 14, 75) > 0.42) { r = 56 + grain * 14; g = 74 + grain * 14; b = 36; } // grass in the joints
+      if (vn(wx / 10, wy / 10, 89) > 0.7) { r = r * 0.6 + 50 * 0.4; g = g * 0.6 + 70 * 0.4; b = b * 0.6 + 34 * 0.4; } // moss creeping over
       ht = 0.5 + 0.3 * j;
       break;
     }
