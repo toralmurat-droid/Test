@@ -1,3 +1,6 @@
+import { Iso, planks, stones } from "./smoothProps";
+import { hiResTexture } from "./smooth";
+import { SMOOTH } from "./isoflag";
 import Phaser from "phaser";
 import { TILE } from "../../shared/constants";
 import { BARNS, OBJECTS, T, TILE_COUNT } from "../../shared/map";
@@ -382,15 +385,12 @@ export function ruinWallTexture(scene: Phaser.Scene, stone: boolean, mask: numbe
   const MAXH = stone ? 30 : 36, PAD = 8;
   const W = 64, H = 32 + MAXH + PAD;
   if (scene.textures.exists(key)) return { key, up: MAXH + PAD + 16 };
-  const tex = scene.textures.createCanvas(key, W, H)!;
-  const ctx = tex.getContext();
-  ctx.imageSmoothingEnabled = false;
   // local world coords (0..32 on the tile) to canvas
   const S = (x: number, y: number, z: number): Pt => ({ x: x - y + 32, y: (x + y) / 2 - z + MAXH + PAD });
-  const face = stone ? stoneFace() : woodFace(), cap = stone ? stoneCap() : woodCap();
   const r = (k: number) => hash(variant * 31 + k, mask, stone ? 5 : 9);
 
   /** A box from (x0,y0) to (x1,y1), h high: top, south-west and south-east faces. */
+  let ctx!: CanvasRenderingContext2D, face: any, cap: any;
   const box = (x0: number, y0: number, x1: number, y1: number, h: number, shadeK = 1) => {
     if (h <= 0) return;
     const top = [S(x0, y0, h), S(x1, y0, h), S(x1, y1, h), S(x0, y1, h)];
@@ -438,6 +438,31 @@ export function ruinWallTexture(scene: Phaser.Scene, stone: boolean, mask: numbe
     const s = stone ? 2 + Math.floor(r(80 + i) * 3) : 1 + Math.floor(r(80 + i) * 2);
     rubble.push({ x0: px0, y0: py0, x1: px0 + (stone ? s : 6), y1: py0 + s, h: stone ? 1 + Math.floor(r(90 + i) * 3) : 1 });
   }
+  if (SMOOTH) {
+    // painted at 6x: stone courses or charred planks with real shading, moss and a broken top
+    hiResTexture(scene, key, W, H, 1, 6, (c) => {
+      const I = new Iso(c, 32, MAXH + PAD);
+      for (const sg of segs) I.shadow(sg.x0, sg.y0, sg.x1, sg.y1, 2, 0.35);
+      const all = [...segs.map((sg) => ({ sg, rub: false })), ...rubble.map((sg) => ({ sg, rub: true }))];
+      all.sort((a, b) => (a.sg.x0 + a.sg.y0) - (b.sg.x0 + b.sg.y0));
+      for (const { sg, rub } of all) {
+        if (sg.h <= 0) continue;
+        const base = stone ? (rub ? 0x6a655c : 0x7a7468) : (rub ? 0x3a2a1c : 0x4a3424);
+        const seed = Math.round(sg.x0 * 7 + sg.y0 * 13 + variant);
+        I.box(sg.x0, sg.x1, sg.y0, sg.y1, 0, sg.h, base, stone ? stones(c, seed, base, 1) : planks(c, seed, base));
+        if (!rub) { // jagged broken top with moss / char
+          const [tx0, ty0] = I.p((sg.x0 + sg.x1) / 2, (sg.y0 + sg.y1) / 2, sg.h);
+          c.fillStyle = stone ? "rgba(74,96,44,0.55)" : "rgba(20,14,10,0.7)";
+          c.beginPath(); c.ellipse(tx0, ty0, 3 + (seed % 3), 1.4, 0, 0, Math.PI * 2); c.fill();
+        }
+      }
+    });
+    return { key, up: MAXH + PAD + 16 };
+  }
+  const tex = scene.textures.createCanvas(key, W, H)!;
+  ctx = tex.getContext();
+  ctx.imageSmoothingEnabled = false;
+  face = stone ? stoneFace() : woodFace(); cap = stone ? stoneCap() : woodCap();
   // soft shadow at the wall foot
   ctx.fillStyle = "rgba(0,0,0,0.16)";
   for (const s of segs) {

@@ -29,6 +29,7 @@ import { TalentMenu } from "./talents";
 import { IdeaBoard } from "./ideas";
 import { ISO, IsoView, isoAnchor, isoInput, screenDir } from "./iso";
 import { SMOOTH } from "./isoflag";
+import { paintSmoothProps } from "./smoothProps";
 import { ChestLayer } from "./chests";
 
 interface Entity {
@@ -117,6 +118,7 @@ export class TownScene extends Phaser.Scene {
   async create() {
     makeTileset(this);
     createArtAnims(this);
+    if (SMOOTH) paintSmoothProps(this); // painted iso forge, anvil, witch hut… in place of the front-view pixel props
     if (ISO) IsoView.tilemap(this, displayGrid(GROUND), displayGrid(Ambient.objectLayerData()));
     else {
       const map = this.make.tilemap({ tileWidth: TILE, tileHeight: TILE, width: MAP_W, height: MAP_H });

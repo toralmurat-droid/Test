@@ -23,6 +23,7 @@ import { buildBridges } from "./isobridge";
 export { ISO } from "./isoflag";
 import { ISO, SMOOTH } from "./isoflag";
 import { SmoothGround } from "./smoothground";
+import { hiResTexture } from "./smooth";
 
 export const isoX = (x: number, y: number) => x - y;
 export const isoY = (x: number, y: number) => (x + y) / 2;
@@ -349,8 +350,6 @@ function stakesTexture(scene: Phaser.Scene, fence: boolean, mask: number, broken
   const key = `stk_${fence ? "f" : "p"}_${mask}_${broken ? 1 : 0}`;
   if (scene.textures.exists(key)) return key;
   const H = fence ? 12 : 30, W = IW, HT = IH + H;
-  const tex = scene.textures.createCanvas(key, W, HT)!;
-  const ctx = tex.getContext();
   // footprint centre of the tile in this canvas, and the screen step of one world px along x / y
   const c = { x: IW / 2, y: H + IH / 2 };
   const along = (wx: number, wy: number) => ({ x: c.x + (wx - wy), y: c.y + (wx + wy) / 2 });
@@ -363,6 +362,57 @@ function stakesTexture(scene: Phaser.Scene, fence: boolean, mask: number, broken
   const seen = new Set<string>();
   const posts = pts.filter((p) => { const s = `${Math.round(p.x)},${Math.round(p.y)}`; if (seen.has(s)) return false; seen.add(s); return true; })
     .sort((a, b) => a.y - b.y);
+  if (SMOOTH) {
+    // painted at 6x: round logs with bark, sharpened tips, rope lashings and soft shadows
+    if (scene.textures.exists(key)) scene.textures.remove(key);
+    hiResTexture(scene, key, W, HT, 1, 6, (c) => {
+      const logGrad = (x: number, w: number, tone: number) => {
+        const g = c.createLinearGradient(x - w, 0, x + w, 0);
+        g.addColorStop(0, `rgb(${120 * tone},${92 * tone},${62 * tone})`); g.addColorStop(0.35, `rgb(${92 * tone},${66 * tone},${42 * tone})`);
+        g.addColorStop(1, `rgb(${34 * tone},${24 * tone},${15 * tone})`);
+        return g;
+      };
+      if (fence) for (const [bit, dx, dy] of dirs) if (mask & bit) {
+        const a = along(0, 0), b = along(dx * TILE / 2, dy * TILE / 2);
+        for (const hh of [4, 9]) {
+          c.strokeStyle = "#2a1c10"; c.lineWidth = 1.9; c.beginPath(); c.moveTo(a.x, a.y - hh + 0.4); c.lineTo(b.x, b.y - hh + 0.4); c.stroke();
+          c.strokeStyle = "#6e5236"; c.lineWidth = 1.3; c.beginPath(); c.moveTo(a.x, a.y - hh); c.lineTo(b.x, b.y - hh); c.stroke();
+          c.strokeStyle = "rgba(200,170,120,0.35)"; c.lineWidth = 0.3; c.beginPath(); c.moveTo(a.x, a.y - hh - 0.5); c.lineTo(b.x, b.y - hh - 0.5); c.stroke();
+        }
+      }
+      posts.forEach((p, i) => {
+        let h = fence ? H : H - ((i * 7 + mask) % 3) * 2;
+        if (broken && (i * 13 + mask * 5) % 4 === 0) h = Math.round(h * 0.35);
+        const x = p.x + (((i * 5 + mask) % 3) - 1) * 0.3, y = p.y, w = fence ? 1.3 : 1.75, tone = 0.85 + ((i * 7 + mask * 3) % 5) * 0.06;
+        const sh = c.createRadialGradient(x + 1, y, 0, x + 1, y, 4);
+        sh.addColorStop(0, "rgba(8,6,4,0.55)"); sh.addColorStop(1, "rgba(8,6,4,0)");
+        c.fillStyle = sh; c.beginPath(); c.ellipse(x + 1, y, 4, 2, 0, 0, Math.PI * 2); c.fill();
+        const top = y - h, tip = !fence && h > 10;
+        c.fillStyle = logGrad(x, w, tone);
+        c.beginPath(); c.moveTo(x - w, y); c.lineTo(x - w, top + (tip ? 0 : 0.5)); c.lineTo(x + w, top + (tip ? 0 : 0.5)); c.lineTo(x + w, y);
+        c.ellipse(x, y, w, w * 0.45, 0, 0, Math.PI); c.closePath(); c.fill();
+        // bark: a few dark vertical cracks
+        c.strokeStyle = "rgba(20,12,6,0.55)"; c.lineWidth = 0.18;
+        for (let k = 0; k < 3; k++) { const bx = x - w * 0.5 + k * w * 0.5; c.beginPath(); c.moveTo(bx, y - 1); c.quadraticCurveTo(bx + 0.2, (y + top) / 2, bx - 0.1, top + 2); c.stroke(); }
+        if (tip) { // sharpened point: cone with a pale cut face on the lit side
+          c.fillStyle = logGrad(x, w, tone * 0.95);
+          c.beginPath(); c.moveTo(x - w, top); c.lineTo(x + 0.2, top - 3.6); c.lineTo(x + w, top); c.closePath(); c.fill();
+          c.fillStyle = `rgba(${200 * tone},${168 * tone},${120 * tone},0.9)`;
+          c.beginPath(); c.moveTo(x - w, top); c.lineTo(x + 0.2, top - 3.6); c.lineTo(x - 0.1, top + 0.3); c.closePath(); c.fill();
+          // rope lashing
+          for (const ry of [top + 4, y - 6]) { c.strokeStyle = "rgba(150,124,80,0.95)"; c.lineWidth = 0.55; c.beginPath(); c.ellipse(x, ry, w, w * 0.4, 0, 0, Math.PI); c.stroke(); }
+        } else {
+          c.fillStyle = `rgba(${150 * tone},${120 * tone},${84 * tone},1)`; c.beginPath(); c.ellipse(x, top + 0.5, w, w * 0.45, 0, 0, Math.PI * 2); c.fill();
+          c.strokeStyle = "rgba(60,40,20,0.6)"; c.lineWidth = 0.15; c.beginPath(); c.ellipse(x, top + 0.5, w * 0.5, w * 0.22, 0, 0, Math.PI * 2); c.stroke();
+        }
+        // a little moss at the foot
+        c.fillStyle = "rgba(60,80,34,0.6)"; c.beginPath(); c.ellipse(x - w * 0.3, y - 0.6, w * 0.8, 0.6, 0, 0, Math.PI * 2); c.fill();
+      });
+    });
+    return key;
+  }
+  const tex = scene.textures.createCanvas(key, W, HT)!;
+  const ctx = tex.getContext();
   const wood = ["#6b4a2b", "#7d5733", "#5e4026"], dark = "#3b2817", light = "#a07448";
   if (fence) {
     // two rails between the posts

@@ -125,6 +125,13 @@ export function hiResTexture(scene: Phaser.Scene, key: string, w: number, h: num
   tex.refresh();
 }
 
+/** Replaces what the GPU shows for an already loaded texture with a hand-painted high-res canvas (same layout). */
+export function overrideTexture(scene: Phaser.Scene, key: string, hi: HTMLCanvasElement) {
+  HI.set(key, hi);
+  const src = scene.textures.get(key).source[0] as any;
+  if (src?.renderer?.gl && src.glTexture) src.renderer.updateCanvasTexture(hi, src.glTexture, src.flipY);
+}
+
 let installed = false;
 /** Patches Phaser's texture upload so every eligible texture goes up smoothed. Call before the game starts. */
 export function installSmoothTextures() {
