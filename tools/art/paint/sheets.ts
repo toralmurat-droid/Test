@@ -7,7 +7,7 @@ import { GEAR, GEAR_IDS } from "../../../shared/gear";
 import { setPaintGear } from "./body";
 
 /** Painted-then-pixelated character sheets: same layout and animations as the old ones, 36px frames (1.5 texels per world px), PNG-quality WebP. */
-export const PAINT_K = 1.125; // 36px frames: 1.5 texels per world px (a hero frame is 24 world px)
+export const PAINT_K = 1.5; // 48px frames: 1.5 texels per world px (a hero frame is 32 world px, a third taller than the old heroes)
 
 function saveWebp(c: Canvas, path: string, q = 90) {
   const n = createCanvas(c.w, c.h), x = n.getContext("2d");

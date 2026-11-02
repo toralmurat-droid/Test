@@ -17,7 +17,7 @@ import { SignPanel } from "./signpanel";
 import { NpcLayer } from "./npcs";
 import { QUEST_ITEMS } from "../../shared/quests";
 import { pixelText } from "./pixeltext";
-import { ART_K, CHAR_K, CHARACTERS, CHAR_ORIGIN, CharacterName, createArtAnims, playCharAnim, preloadArt } from "./artAssets";
+import { ART_K, CHAR_GROW, CHAR_SCALE, CHARACTERS, CHAR_ORIGIN, CharacterName, createArtAnims, playCharAnim, preloadArt } from "./artAssets";
 import { Ambient } from "./ambient";
 import { Details } from "./details";
 import { GearLayer, GearMenu, preloadGear, TIER_COLORS } from "./gear";
@@ -55,8 +55,8 @@ interface Entity {
 
 const FRAME_BASE: Record<string, number> = { down: 0, up: 2, right: 4, left: 4 };
 /** On-screen hero size: 0.75 of a 32px design frame (frames are ART_K times finer). */
-const HERO_SCALE = 0.75 / CHAR_K;
-const HERO_TOP = 24 * 0.75; // drawn hero height above the feet (24 of the 32 design px)
+const HERO_SCALE = CHAR_SCALE;
+const HERO_TOP = 24 * 0.75 * CHAR_GROW; // drawn hero height above the feet (24 of the 32 design px)
 
 /** Random line under the "zone cleared" banner. */
 const CONGRATS = [

@@ -14,7 +14,7 @@ import { QuestLog } from "./questlog";
 import { SHOPS, sellPrice } from "../../shared/shops";
 import { GEAR, gearName, itemText, TIER_NAMES } from "../../shared/gear";
 import { MAX_POTIONS } from "../../shared/items";
-import { CHAR_K, CHAR_ORIGIN, CharacterName, playCharAnim } from "./artAssets";
+import { CHAR_GROW, CHAR_SCALE, CHAR_ORIGIN, CharacterName, playCharAnim } from "./artAssets";
 import { iconCanvas, TIER_COLORS } from "./gear";
 import { itemTexture } from "./textures";
 import { isoAnchor } from "./iso";
@@ -57,16 +57,16 @@ export class NpcLayer {
     this.prompt.onclick = () => this.interact();
     this.tracker.onclick = () => this.log.toggle(true);
     for (const n of NPCS) {
-      const sprite = scene.add.sprite(n.x, n.y, n.sprite, 0).setOrigin(CHAR_ORIGIN.x, CHAR_ORIGIN.y).setScale(0.75 / CHAR_K).setDepth(n.y);
+      const sprite = scene.add.sprite(n.x, n.y, n.sprite, 0).setOrigin(CHAR_ORIGIN.x, CHAR_ORIGIN.y).setScale(CHAR_SCALE).setDepth(n.y);
       playCharAnim(sprite, n.sprite as CharacterName, "idle", n.dir);
       sprite.setInteractive({ useHandCursor: true }).on("pointerdown", () => { if (this.near === n) this.open(n); });
-      const label = scene.add.text(n.x, n.y - 21, n.name, {
+      const label = scene.add.text(n.x, n.y - Math.round(21 * CHAR_GROW), n.name, {
         fontFamily: "monospace", fontSize: "16px", color: n.shop ? "#ffd166" : "#b9f27c", stroke: "#000", strokeThickness: 3,
       }).setOrigin(0.5, 1).setScale(0.25).setResolution(2).setDepth(n.y + 1);
-      const mark = scene.add.text(n.x, n.y - 25, "", {
+      const mark = scene.add.text(n.x, n.y - Math.round(25 * CHAR_GROW), "", {
         fontFamily: "monospace", fontSize: "40px", fontStyle: "bold", color: "#ffd166", stroke: "#000", strokeThickness: 6,
       }).setOrigin(0.5, 1).setScale(0.25).setResolution(2).setDepth(n.y + 1);
-      scene.tweens.add({ targets: mark, y: n.y - 27, duration: 600, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
+      scene.tweens.add({ targets: mark, y: n.y - Math.round(27 * CHAR_GROW), duration: 600, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
       // iso view: name and quest mark stand straight above the NPC, not at a world point north of it
       isoAnchor(label, sprite); isoAnchor(mark, sprite);
       this.sprites.set(n.id, { sprite, label, mark });

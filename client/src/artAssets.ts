@@ -19,11 +19,15 @@ export const ALT_MOVE_ANIMS = ["walk2", "dodge", "jump", "block", "hit2", "ko2"]
 export const ART_K = 2;
 /**
  * Iso characters (assets/hd, tools/art/paint: painted, then pixelated onto the shared 1.5 texels per world px grid)
- * unless `?pixel=1`: 36px frames, WebP, 8 facings and 8-frame walk cycles.
+ * unless `?pixel=1`: 48px frames, WebP, 8 facings and 8-frame walk cycles.
  * Character sprites are scaled by 1/CHAR_K so they keep the same size on screen either way.
  */
 export const HD_CHARS = SMOOTH;
-export const CHAR_K = HD_CHARS ? 1.125 : ART_K;
+export const CHAR_K = HD_CHARS ? 1.5 : ART_K;
+/** Iso characters stand a third taller (about one tile) than the old 24px heroes, for more detail. */
+export const CHAR_GROW = HD_CHARS ? 4 / 3 : 1;
+/** Sprite scale for characters: 48px iso frames show at 32 world px (1.5 texels per world px). */
+export const CHAR_SCALE = (0.75 * CHAR_GROW) / CHAR_K;
 /** Size of one character frame in the sheets. */
 export const CHAR_FRAME = 32 * CHAR_K;
 export const CHAR_BASE = HD_CHARS ? "assets/hd/characters" : "assets/characters";

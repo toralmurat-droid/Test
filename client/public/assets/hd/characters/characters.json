@@ -15,14 +15,14 @@
   "witch"
  ],
  "image": "{name}.webp",
- "frameWidth": 36,
- "frameHeight": 36,
+ "frameWidth": 48,
+ "frameHeight": 48,
  "columns": 8,
  "origin": {
   "x": 0.5,
   "y": 0.90625
  },
- "artScale": 1.125,
+ "artScale": 1.5,
  "directions": [
   "down",
   "up",
