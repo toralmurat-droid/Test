@@ -263,3 +263,14 @@ html, body { margin: 0; height: 100%; background: #1b1b24; color: #eee; font: 14
 #slotpick .picon { width: 24px; height: 24px; flex: none; image-rendering: pixelated; }
 #slotpick .picon.none { display: flex; align-items: center; justify-content: center; color: #e63946; font-size: 16px; }
 .talent .ticon { width: 14px; height: 14px; vertical-align: -2px; margin-right: 3px; image-rendering: pixelated; }
+/* Death screen: "You died - killed by ..." in the pixel font, until respawn */
+#death { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+  background: radial-gradient(ellipse at center, rgba(60,0,0,.55), rgba(0,0,0,.25) 70%); pointer-events: none; z-index: 5;
+  font-family: 'Pixelify Sans', monospace; text-shadow: 2px 2px #000, -1px -1px #000; }
+#death[hidden] { display: none; }
+#death.show { animation: death-in .5s ease-out; }
+#death .big { font-size: 46px; font-weight: bold; color: #e63946; letter-spacing: 2px; }
+#death .by { font-size: 20px; color: #fff; }
+#death .back { font-size: 14px; color: #bbb; min-height: 18px; }
+@keyframes death-in { from { opacity: 0; transform: scale(1.3); } to { opacity: 1; transform: scale(1); } }
+@media (max-width: 600px) { #death .big { font-size: 32px; } #death .by { font-size: 16px; } }

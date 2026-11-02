@@ -1467,6 +1467,8 @@ export class TownRoom extends Room<TownState> {
     t.dead = true;
     t.guardUntil = 0; t.guarding = false;
     this.broadcast("kill", { killer: byName, victim: t.name });
+    // The victim gets a "You died - killed by ..." screen until they respawn
+    this.clients.find((c) => c.sessionId === tid)?.send("died", { by: byName, ms: RESPAWN_MS });
     this.clock.setTimeout(() => {
       if (!this.state.players.has(tid)) return;
       const s = randomSpawn();

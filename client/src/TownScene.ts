@@ -109,6 +109,7 @@ export class TownScene extends Phaser.Scene {
   private gearMenu?: GearMenu;
   private talentMenu?: TalentMenu;
   private hotbarHtml = "";
+  private deathTimer?: number;
   private iso?: IsoView;
 
   constructor(private opts: { name: string; password: string; color: number; cls: ClassKind }) {
@@ -476,6 +477,24 @@ export class TownScene extends Phaser.Scene {
       this.floatText(e.sprite.x, e.sprite.y - 22, id === this.me ? "Dizzy!" : "Broken!", "#ffd166");
     });
     this.room.onMessage("kill", ({ killer, victim }) => this.feed(`${killer} ⚔ ${victim}`));
+    // Our hero died: "You died - killed by <monster or player>" with a respawn countdown
+    this.room.onMessage("died", ({ by, ms }) => {
+      const el = document.getElementById("death")!;
+      el.querySelector(".by")!.textContent = `Killed by ${by}`;
+      const back = el.querySelector(".back")!;
+      // Wall clock (not the scene clock, which can jump when the tab was in the background)
+      const until = Date.now() + (ms ?? 2500);
+      el.hidden = false;
+      el.classList.remove("show"); void el.offsetWidth; el.classList.add("show");
+      clearInterval(this.deathTimer);
+      const tick = () => {
+        const left = Math.max(0, until - Date.now());
+        back.textContent = left > 0 ? `Back in ${Math.ceil(left / 1000)}s` : "";
+        if (left <= 0) { el.hidden = true; clearInterval(this.deathTimer); }
+      };
+      tick();
+      this.deathTimer = window.setInterval(tick, 100);
+    });
     this.room.onMessage("xp", ({ amount, x, y }) => this.floatText(x, y - 10, `+${amount} XP`, "#ffd166"));
     this.room.onMessage("chat", ({ id, name, text }) => this.chatMessage(id, name, text));
     this.room.onMessage("ideas", (view) => this.ideaBoard?.update(view));
