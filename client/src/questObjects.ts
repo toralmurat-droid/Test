@@ -1,5 +1,5 @@
 import Phaser from "phaser";
-import { CHAR_K, CHAR_ORIGIN, playCharAnim } from "./artAssets";
+import { CHAR_SCALE, CHAR_ORIGIN, playCharAnim } from "./artAssets";
 import { allObjects, cocoonPresent, objectDone, QuestObject, QuestState, usableObjects, USE_RANGE } from "../../shared/quests";
 
 /**
@@ -108,7 +108,7 @@ export class QuestObjects {
     for (const o of allObjects()) {
       if (o.kind === "cocoon") {
         // Tobin, stuck in a wobbling bubble of green goo
-        this.tobin = scene.add.sprite(o.x, o.y, "villager", 0).setOrigin(CHAR_ORIGIN.x, CHAR_ORIGIN.y).setScale(0.75 / CHAR_K).setDepth(o.y);
+        this.tobin = scene.add.sprite(o.x, o.y, "villager", 0).setOrigin(CHAR_ORIGIN.x, CHAR_ORIGIN.y).setScale(CHAR_SCALE).setDepth(o.y);
         playCharAnim(this.tobin, "villager", "idle", "down");
         this.goo = scene.add.ellipse(o.x, o.y - 10, 22, 26, 0x6fd36b, 0.55).setStrokeStyle(1, 0x2f8f2a, 0.9).setDepth(o.y + 1);
         scene.tweens.add({ targets: this.goo, scaleX: 1.08, scaleY: 0.94, duration: 700, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
