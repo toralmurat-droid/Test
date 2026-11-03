@@ -1,4 +1,5 @@
 import Phaser from "phaser";
+import { takeRejoin } from "./reconnect";
 import { TownScene } from "./TownScene";
 import { CLASSES, CLASS_KINDS, ClassKind, isClassKind } from "../../shared/classes";
 import { mountHeroCards } from "./heroCards";
@@ -136,3 +137,11 @@ document.getElementById("play")!.onclick = start;
 nameEl.onkeydown = (e) => { if (e.key === "Enter") pwEl.focus(); };
 pwEl.onkeydown = (e) => { if (e.key === "Enter") start(); };
 (nameEl.value ? pwEl : nameEl).focus();
+
+// Back from a server restart: log straight back in with the same hero
+const rejoin = takeRejoin();
+if (rejoin) {
+  if (isClassKind(rejoin.cls)) cls = rejoin.cls;
+  color = rejoin.color;
+  launch(rejoin.name, rejoin.password, false);
+}
