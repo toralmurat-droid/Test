@@ -22,4 +22,5 @@ RUN mkdir -p /app/data
 
 # The host sets PORT; 2567 is the fallback
 EXPOSE 2567
-CMD ["npx", "tsx", "server/index.ts"]
+# Run node directly (not through npx) so Railway's stop signal reaches the game: it then saves everyone before exiting
+CMD ["node", "--import", "tsx", "server/index.ts"]

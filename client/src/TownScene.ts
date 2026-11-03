@@ -1,4 +1,5 @@
 import Phaser from "phaser";
+import { reconnectSoon } from "./reconnect";
 import { Client, Room } from "colyseus.js";
 import { BOSS, ELITE, InputState, MERGE, MAP_H, MAP_W, regenFromStamina, TILE } from "../../shared/constants";
 import { CLASSES, ClassKind, DODGE, ENERGY, energyName, MAX_LEVEL, xpForLevel } from "../../shared/classes";
@@ -728,7 +729,13 @@ export class TownScene extends Phaser.Scene {
       this.feed(`💡 Idea #${id} by ${author} won this hour's vote!`);
       this.chatMessage("", "Ideas", `Idea #${id} "${text.slice(0, 80)}" won this hour's vote! It goes to the builders.`);
     });
-    this.room.onLeave(() => this.feed("Disconnected from server"));
+    // Server restart (every deploy): show a notice and log back in by itself
+    const login = { name: this.opts.name, password: this.opts.password, cls: this.opts.cls, color: this.opts.color };
+    this.room.onLeave(() => { this.feed("Disconnected from server"); reconnectSoon(login); });
+    // A connection that silently died (no updates for 15s) is treated the same way
+    let lastPatch = Date.now();
+    this.room.onStateChange(() => { lastPatch = Date.now(); });
+    window.setInterval(() => { if (Date.now() - lastPatch > 15_000) reconnectSoon(login); }, 3000);
   }
 
   /**
