@@ -22,6 +22,8 @@ export interface HeroSave {
   kit?: number;
   /** 0 until the hero closed the first-login intro (missing on older saves = already seen). */
   intro?: number;
+  /** Portal stones this hero has woken (shared/portals.ts ids). */
+  portals?: string[];
 }
 
 interface Account {
