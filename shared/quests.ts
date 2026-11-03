@@ -93,19 +93,29 @@ export const USE_RANGE = 1.3 * TILE;
 
 // ---- Quest definitions ----
 
-export type StepType = "see" | "reach" | "talk" | "kill" | "collect" | "use";
+export type StepType = "see" | "reach" | "talk" | "kill" | "collect" | "use" | "merge";
+
+/** Bump when steps change: saves from an older version restart their current quest at the offer. */
+export const QUEST_VERSION = 2;
+
+/** A fused blob the server puts in the world for a player on this step (one at a time, back if lost). */
+export interface Summon { parts: MobKind[]; level: number; x: number; y: number }
 export interface QuestStep {
   type: StepType;
   /** Quest log line */
   text: string;
   /** Banner when the step starts: [title, line] */
   banner: [string, string];
-  /** Where to go (spawn zone name) for see / kill / collect / use; kills and drops only count inside it */
+  /** Where to go (spawn zone name) for see / use / merge; for kill / collect it is only where to find them */
   zone?: string;
   /** talk: who to talk to */
   npc?: string;
-  /** see / kill / collect: which monsters */
+  /** see / kill / collect / merge: which monsters (kills and drops count anywhere on the map, Murat's rule) */
   kinds?: MobKind[];
+  /** kill: only blobs with at least this many fused inside count */
+  fused?: number;
+  /** kill: a fused blob spawned for the player in the zone */
+  summon?: Summon;
   /** kill / collect: how many */
   goal?: number;
   /** collect: item id in QUEST_ITEMS, and drop chance per kind */
@@ -165,6 +175,16 @@ export const BROOD_HEART = obj("heart", "heart", "Brood Heart", "Burn", "Whisper
 const back = (npc: string, name: string, where: string, say: string[], accept: string, nag?: string): QuestStep =>
   ({ type: "talk", npc, text: `Return to ${name}`, banner: ["Quest updated", `Return to ${name}`], say, accept, obj: `Return to ${name} (${where})`, nag });
 
+/**
+ * The story: long ago one vast ooze, the Gloam, swallowed half the valley. The first druids could not kill
+ * it, so they broke it into a thousand pieces and bound them with spirit lanterns and forest shrines, so
+ * the pieces would forget one another. Those pieces are the blobs. Now the bindings are failing and the
+ * blobs remember: a hurt blob calls the others and they fuse (MERGE in constants), and every fusion brings
+ * the Gloam closer to whole. Mother Blobs are pieces that remember enough to bud new ones, and the Brood
+ * Heart in the Whispering Woods is the Gloam's own heart, pulling every piece home.
+ * The chain follows that discovery: first you see blobs fuse, then fused blobs grow armed and bigger,
+ * until the Gloam itself rises when you burn its heart.
+ */
 export const QUESTS: QuestDef[] = [
   {
     id: "meadow", title: "Trouble Near Oakvale", giver: "druid", zone: FZ, minLevel: 1,
@@ -180,105 +200,120 @@ export const QUESTS: QuestDef[] = [
         obj: `Investigate ${FZN}, ${FZD} of the village`, nag: `${FZ} lies ${FZD} of the village. Look carefully, and come back when you have seen it.` },
       { type: "talk", npc: "druid", text: "Tell Elder Rowan what you saw", banner: [`Blobs in ${FZN}!`, "Go back and tell Elder Rowan"],
         obj: "Tell Elder Rowan what you saw (village bonfire)",
-        say: [`Blobs? In ${FZN}? So that is what the trees are afraid of.`, "They spread fast, and the Mother Blobs keep budding new ones. If we wait, they will be at our gates.", "Thin their numbers. Slay 10 of them and come back to me."],
+        say: [`Blobs? In ${FZN}? So that is what the trees are afraid of.`, "Blobs are simple things. They wander, they wobble, they keep to themselves. Or they used to.", "Slay 10 of them. And watch them closely while you fight. Tell me what they do when they are hurt."],
         accept: "I'll kill 10 blobs" },
       { type: "kill", kinds: BLOB_KINDS, goal: 10, text: "Kill 10 blobs", banner: ["Quest updated", "Kill 10 blobs"], obj: "Kill blobs: {n} / {goal}",
-        nag: "You have slain {n} of {goal}. Keep going, Oakvale is counting on you." },
-      back("druid", "Elder Rowan", "village bonfire", ["I felt the land breathe easier. You have done well, friend.", "Take this, with the thanks of Oakvale."], "Claim reward"),
+        nag: "You have slain {n} of {goal}. And watch what the wounded ones do." },
+      { type: "merge", kinds: BLOB_KINDS, zone: FZ, text: "Watch a wounded blob call for help", banner: ["Something is strange...", "Wound a blob and watch it"],
+        obj: "Wound a blob and watch what it does", nag: "Hurt one, but do not finish it. See what it does." },
+      back("druid", "Elder Rowan", "village bonfire", ["They called to each other... and melted into one? You are certain?", "Blobs have not done that since the old tale of the Gloam. I hoped it was only a tale.", "Take this, with the thanks of Oakvale. I must think."], "Claim reward"),
     ],
     reward: { xp: 120, gold: 40, potions: 2 },
-    after: "Old Morwen, our potion witch, has been asking about you. Her hut is on the west side of the square.",
+    after: "Old Morwen knows blob jelly better than anyone. Her hut is on the west side of the square. Ask her what makes them stick together.",
   },
   {
-    id: "jelly", title: "Jelly for the Cauldron", giver: "witch", zone: Z.farms.name, minLevel: 2,
-    description: `Old Morwen wants fresh blob jelly for her brews. The blobs have spread into ${Z.farms.name}, ${zdir(Z.farms)} of Oakvale, and the farmers want them gone too.`,
+    id: "jelly", title: "Jelly That Crawls", giver: "witch", zone: Z.farms.name, minLevel: 2,
+    description: `Old Morwen wants blob jelly to find out why the blobs have started to fuse. ${Z.farms.name}, ${zdir(Z.farms)} of Oakvale, is crawling with them.`,
     offer: [
-      "Rowan's little helper! Yes, yes, I heard. Blobs, blobs everywhere.",
-      `Do you know what blob jelly does to a healing brew? Wonders, dearie. And ${Z.farms.name} is crawling with blobs now.`,
-      "Bring me 6 lumps of fresh jelly. Squash them and pick up what they leave behind.",
+      "Rowan's little helper! Yes, yes, I heard. Blobs that melt into each other. Nasty.",
+      "Jelly is jelly, dearie. It should not want anything. Bring me some and we shall see what it wants.",
+      `Six lumps of blob jelly, then. ${Z.farms.name} is full of them. Squash them and pick up what they leave behind.`,
     ],
     acceptText: "I'll fetch the jelly",
     steps: [
       { type: "collect", zone: Z.farms.name, kinds: ["slime", "motherblob", "blobling"], item: "jelly", goal: 6, chance: { slime: 0.5, motherblob: 1, blobling: 0.25 },
-        text: `Collect 6 Blob Jelly in ${Z.farms.name}`, banner: ["New quest", "Jelly for the Cauldron"], obj: `Blob Jelly from ${Z.farms.name}: {n} / {goal}`,
-        nag: `{n} of {goal}. Only fresh jelly from ${Z.farms.name}, mind, the meadow ones taste of grass.` },
-      back("witch", "Old Morwen", "her hut", ["Oh, look at it wobble! Perfect.", "Here, potions from the last batch, and some coin. Mind the green one."], "Claim reward"),
+        text: "Collect 6 Blob Jelly", banner: ["New quest", "Jelly That Crawls"], obj: "Blob Jelly: {n} / {goal}",
+        nag: `{n} of {goal}. Any blob will do, but ${Z.farms.name} has plenty.` },
+      { type: "talk", npc: "witch", text: "Bring the jelly to Old Morwen", banner: ["The jelly is moving!", "Bring it to Old Morwen"],
+        obj: "Bring the jelly to Old Morwen (her hut)",
+        say: ["Into the jar with it... oh. Oh my. Look, dearie. The lumps are crawling toward each other.", "They want to be one thing. Not two blobs, not six. One.", `I need jelly from a blob that has already fused. Find a big one in ${Z.farms.name} and squash it.`],
+        accept: "I'll find a fused blob" },
+      { type: "kill", zone: Z.farms.name, kinds: BLOB_KINDS, fused: 2, goal: 1,
+        summon: { parts: ["slime", "slime"], level: 4, ...spotIn(Z.farms.name, 0.55, 0.5) },
+        text: "Squash a fused blob", banner: ["Quest updated", "Squash a fused blob"], obj: "Fused blob squashed: {n} / {goal}",
+        nag: `A big one, two blobs or more in one skin. There is one lurking in ${Z.farms.name}.` },
+      back("witch", "Old Morwen", "her hut", ["This jelly hums, dearie. Hums! Like it remembers a song.", "Here, potions from the last batch, and some coin. Then go and tell Rowan it hums. He will know what that means."], "Claim reward"),
     ],
     reward: { xp: 220, gold: 60, potions: 3 },
-    after: "Rowan was looking grim this morning. Go and see him, dearie. And come back for potions!",
+    after: "Rowan has gone pale as milk since you told him. Go and see him, dearie. And come back for potions!",
   },
   {
     id: "marsh", title: "Lights in the Mist", giver: "druid", zone: Z.marsh.name, minLevel: 3,
-    description: `Old spirit lanterns once kept ${Z.marsh.name} safe. They have gone dark, and the blobs grow bolder in the fog. Elder Rowan asked you to light them again and deal with the Mother Blob that brings the mist.`,
+    description: `Elder Rowan told you the tale of the Gloam, the ooze the first druids broke into pieces. The spirit lanterns of ${Z.marsh.name} kept the pieces apart. They have gone dark.`,
     offer: [
-      `Morwen's brews will help, but the blobs keep coming. They come from ${Z.marsh.name}, ${zdir(Z.marsh)} of here.`,
-      "Long ago we hung spirit lanterns in the marsh. Their light keeps such things away. They have all gone dark.",
-      "Light the four lanterns, and slay the Mother Blob that thrives in the dark.",
+      "Jelly that hums. Then it is true. Listen, friend, and I will tell you the tale of the Gloam.",
+      "Long ago one great ooze swallowed half this valley. The first druids could not kill it, so they broke it into a thousand pieces. Those pieces are the blobs.",
+      `They hung spirit lanterns in ${Z.marsh.name}, ${zdir(Z.marsh)} of here. Their light makes the pieces forget one another. Now the lanterns are dark, and the pieces remember.`,
+      "Light the four lanterns. And slay a Mother Blob: a piece that remembers enough to bud new pieces.",
     ],
     acceptText: "I'll light them",
     steps: [
       { type: "use", zone: Z.marsh.name, objects: LANTERNS, text: `Light the 4 spirit lanterns in ${Z.marsh.name}`, banner: ["New quest", "Lights in the Mist"],
         obj: "Spirit lanterns lit: {n} / {goal}", nag: "{n} of {goal} lanterns burn. Walk up to one and press E." },
-      { type: "kill", zone: Z.marsh.name, kinds: ["motherblob"], goal: 1, text: `Slay a Mother Blob in ${Z.marsh.name}`, banner: ["The lanterns burn!", "Now slay a Mother Blob"],
-        obj: `Mother Blob slain in ${Z.marsh.name}: {n} / {goal}`, nag: "Now the Mother Blob. She is big, and her little ones will swarm you. Strike her first." },
-      back("druid", "Elder Rowan", "village bonfire", ["I can see the glow from here. The marsh can breathe again.", "You are becoming quite the blob hunter. Take this."], "Claim reward"),
+      { type: "kill", zone: Z.marsh.name, kinds: ["motherblob"], goal: 1, text: "Slay a Mother Blob", banner: ["The lanterns burn!", "Now slay a Mother Blob"],
+        obj: "Mother Blob slain: {n} / {goal}", nag: "Now a Mother Blob. She is big, and her little ones will swarm you. Strike her first." },
+      back("druid", "Elder Rowan", "village bonfire", ["I can see the glow from here. In the light, the marsh blobs scatter and forget.", "But lanterns only slow it. Something is calling the pieces home. Take this, you have earned it."], "Claim reward"),
     ],
     reward: { xp: 320, gold: 80, potions: 2 },
-    after: "Brann the smith wants a word with you. Something about blobs with swords, if you can believe it.",
+    after: "Brann the smith wants a word with you. Blobs with blades, he says. I fear the fused ones are learning.",
   },
   {
     id: "pond", title: "Armed and Oozing", giver: "weaponsmith", zone: Z.pond.name, minLevel: 4,
-    description: `Blobs at ${Z.pond.name} have started to spit stones and swing blades. Brann wants them thinned, and wants their hard cores to see what makes them so tough.`,
+    description: `At ${Z.pond.name} blobs that swallow shooters and warriors keep all their tricks. Brann wants them thinned, their cores studied, and the big fused one up there gone.`,
     offer: [
       "You're the one Rowan keeps bragging about? Good. I have a job that needs a sharp blade.",
-      `Up at ${Z.pond.name}, ${zdir(Z.pond)} of here, blobs are shooting stones and swinging blades. Blobs! With blades!`,
-      "Kill 4 of the shooters. Then bring me 3 cores from the warrior blobs. I want to know what they're made of.",
+      `Up at ${Z.pond.name}, ${zdir(Z.pond)} of here, blobs are shooting stones and swinging blades. And when one swallows another, it keeps the trick. A blob that spits AND swings!`,
+      "Kill 4 shooters. Bring me 3 cores from the warrior blobs. Then kill that big fused brute that's been seen at the water.",
     ],
     acceptText: "Leave it to me",
     steps: [
-      { type: "kill", zone: Z.pond.name, kinds: ["shooterblob"], goal: 4, text: `Kill 4 shooter blobs at ${Z.pond.name}`, banner: ["New quest", "Armed and Oozing"],
+      { type: "kill", zone: Z.pond.name, kinds: ["shooterblob"], goal: 4, text: "Kill 4 shooter blobs", banner: ["New quest", "Armed and Oozing"],
         obj: "Shooter blobs: {n} / {goal}", nag: "{n} of {goal} shooters. Close in fast, they're weak up close." },
       { type: "collect", zone: Z.pond.name, kinds: ["warriorblob"], item: "core", goal: 3, chance: { warriorblob: 0.6 },
         text: "Collect 3 Blob Cores from warrior blobs", banner: ["Shooters down!", "Collect 3 Blob Cores"], obj: "Blob Cores: {n} / {goal}",
         nag: "{n} of {goal} cores. Watch out for the lunge, step aside when they crouch." },
-      back("weaponsmith", "Brann", "his forge", ["Hard as river stone. No wonder they hit like hammers.", "Here, you've earned this. And the forge is always open to you."], "Claim reward"),
+      { type: "kill", zone: Z.pond.name, kinds: BLOB_KINDS, fused: 3, goal: 1,
+        summon: { parts: ["warriorblob", "shooterblob", "slime"], level: 7, ...spotIn(Z.pond.name, 0.5, 0.45) },
+        text: "Slay a blob of 3 or more fused together", banner: ["Cores collected!", "Slay the fused brute"], obj: "Fused brute slain: {n} / {goal}",
+        nag: `Three blobs in one, spitting and swinging. It lurks at ${Z.pond.name}. Don't let it call more.` },
+      back("weaponsmith", "Brann", "his forge", ["Look at these cores. Three of them, welded into one like hot iron.", "It's building itself a body, piece by piece. Here, you've earned this. The forge is always open to you."], "Claim reward"),
     ],
     reward: { xp: 450, gold: 150, potions: 2 },
     after: "Rowan's got bad news, I hear. Tobin the fisherman never came home.",
   },
   {
     id: "lake", title: "Lost at the Lake", giver: "druid", zone: Z.lake.name, minLevel: 6,
-    description: `Tobin the fisherman went to ${Z.lake.name} three days ago and never came back. Elder Rowan fears the blobs took him.`,
+    description: `Tobin the fisherman went to ${Z.lake.name} three days ago and never came back. Elder Rowan fears the blobs have wrapped him in a fused cocoon.`,
     offer: [
       `Tobin the fisherman went to ${Z.lake.name} three days ago. He never came back.`,
-      "The blobs there are different. Some of them heal the others. I fear they have taken him somewhere.",
-      "Please, find him. Bring him home.",
+      "Hunters saw blobs there fusing around something on the shore, layer over layer, and healer blobs feeding it.",
+      "If the Gloam is learning, it may want to learn what we are. Please, find him. Bring him home.",
     ],
     acceptText: "I'll find Tobin",
     steps: [
       { type: "reach", at: { x: COCOON.x, y: COCOON.y, r: 5 * TILE, label: "Tobin's last camp" }, zone: Z.lake.name,
         text: `Search ${Z.lake.name} for Tobin`, banner: ["New quest", "Lost at the Lake"], obj: `Search ${Z.lake.name} for Tobin`,
         nag: "His camp was on the north shore of the lake. Start there." },
-      { type: "kill", zone: Z.lake.name, kinds: ["healerblob"], goal: 3, text: "Kill 3 healer blobs keeping the cocoon alive",
-        banner: ["Tobin is trapped in a blob cocoon!", "Kill the healer blobs that feed it"], obj: "Healer blobs: {n} / {goal}",
-        nag: "Healer blobs feed the cocoon. Kill them, then cut him free." },
+      { type: "kill", zone: Z.lake.name, kinds: ["healerblob"], goal: 3, text: "Kill 3 healer blobs feeding the cocoon",
+        banner: ["Tobin is inside a fused cocoon!", "Kill the healer blobs that feed it"], obj: "Healer blobs: {n} / {goal}",
+        nag: "Healer blobs keep the cocoon alive. Kill them, then cut him free." },
       { type: "use", zone: Z.lake.name, objects: [COCOON], text: "Free Tobin from the cocoon", banner: ["The cocoon weakens!", "Free Tobin"],
         obj: "Free Tobin from the cocoon", nag: "Hurry, cut him free!" },
       { type: "talk", npc: "fisher", text: "Check on Tobin back in Oakvale", banner: ["Tobin is free!", "He ran home to Oakvale"],
         obj: "Check on Tobin in Oakvale (east of the bonfire)",
-        say: ["You came for me! I thought I'd be blob food for sure.", "I ran all the way home. Here, it's not much, but it's all my savings. Thank you, friend."],
+        say: ["You came for me! They kept melting into each other around me, bigger and bigger.", "And they hummed. One word, over and over. Gloam. Gloam. Gloam.", "Here, it's all my savings. Thank you, friend. I am never fishing there again."],
         accept: "Claim reward", nag: "" },
     ],
     reward: { xp: 650, gold: 200, potions: 3 },
-    after: "Tobin is home, thanks to you. But the blobs are coming from somewhere deep in the woods. Talk to me when you are ready.",
+    after: "Tobin heard them say its name. The Gloam is waking. Its pieces come from somewhere deep in the woods. Talk to me when you are ready.",
   },
   {
     id: "woods", title: "The Rotting Shrines", giver: "druid", zone: Z.thorn.name, minLevel: 10,
-    description: `The old forest shrines of ${Z.thorn.name} are rotting under blob slime, and the forest spirits have gone quiet. Elder Rowan asked you to cleanse them and bring back the rot seeds the healer blobs carry.`,
+    description: `The shrines of ${Z.thorn.name} are the last binding stones of the Gloam, and they are rotting under blob slime. Elder Rowan asked you to cleanse them, gather the rot seeds, and destroy the great fused blob that guards them.`,
     offer: [
-      "Tobin told me something. The cocoon was full of tiny black seeds.",
-      `The old shrines of ${Z.thorn.name} are rotting, and the forest spirits have gone quiet. The rot and the blobs are one and the same.`,
-      "Cleanse the three shrines, and bring me 4 rot seeds from the healer blobs so I can study them.",
+      "Tobin's cocoon was full of tiny black seeds. Rot seeds. Bits of the Gloam's memory, carried by the healers.",
+      `The old shrines of ${Z.thorn.name} were the druids' last binding stones. The rot eats them, and with every shrine that falls the blobs fuse bigger.`,
+      "Cleanse the three shrines and bring me 4 rot seeds. Something huge has fused there to guard them. Bring it down.",
     ],
     acceptText: "I'll cleanse them",
     steps: [
@@ -287,29 +322,37 @@ export const QUESTS: QuestDef[] = [
       { type: "collect", zone: Z.thorn.name, kinds: ["healerblob"], item: "rot", goal: 4, chance: { healerblob: 0.7 },
         text: "Collect 4 Rot Seeds from healer blobs", banner: ["The shrines are clean!", "Collect 4 Rot Seeds"], obj: "Rot Seeds: {n} / {goal}",
         nag: "{n} of {goal} seeds. The healers hide behind the others, go for them first." },
-      back("druid", "Elder Rowan", "village bonfire", ["These seeds... they all point the same way. Deep into the Whispering Woods.", "There is a heart in there, a brood heart, feeding every blob in the land. Rest, and take this."], "Claim reward"),
+      { type: "kill", zone: Z.thorn.name, kinds: BLOB_KINDS, fused: 4, goal: 1,
+        summon: { parts: ["warriorblob", "healerblob", "shooterblob", "slime"], level: 14, ...spotIn(Z.thorn.name, 0.5, 0.5) },
+        text: "Slay a blob of 4 or more fused together", banner: ["The seeds stir...", "Slay the Thornwood Amalgam"], obj: "Thornwood Amalgam slain: {n} / {goal}",
+        nag: `Four blobs in one skin, and it heals itself. It guards the heart of ${Z.thorn.name}.` },
+      back("druid", "Elder Rowan", "village bonfire", ["These seeds all point the same way. Deep into the Whispering Woods.", "There beats the Brood Heart. It is the Gloam's own heart, pulling every piece back home. Rest, and take this."], "Claim reward"),
     ],
     reward: { xp: 900, gold: 260, potions: 3 },
-    after: "The heart of the brood beats deep in the Whispering Woods. Come to me when you are strong enough to face it.",
+    after: "The Gloam's heart beats deep in the Whispering Woods. Come to me when you are strong enough to face it.",
   },
   {
-    id: "thorn", title: "Heart of the Brood", giver: "druid", zone: Z.woods.name, minLevel: 12,
-    description: `Every blob in the land comes from the Brood Heart deep in ${Z.woods.name}. Two Mother Blobs guard it. Elder Rowan asked you to end it.`,
+    id: "thorn", title: "The Gloam Awakens", giver: "druid", zone: Z.woods.name, minLevel: 12,
+    description: `The Brood Heart deep in ${Z.woods.name} is the Gloam's heart. Two Mother Blobs guard it. Burn it, and every piece near it will fuse into the Gloam itself.`,
     offer: [
       `It is time. The Brood Heart beats deep in ${Z.woods.name}, ${zdir(Z.woods)} of here.`,
       "Two Mother Blobs guard it. Slay them, then burn the heart with this torch of oak fire.",
-      "This is the hardest thing I have ever asked of anyone. Will you go?",
+      "When the heart burns, the Gloam will try to become whole one last time. Every blob near it will fuse into one. You must destroy what rises.",
     ],
     acceptText: "I will end it",
     steps: [
-      { type: "kill", zone: Z.woods.name, kinds: ["motherblob"], goal: 2, text: `Slay 2 Mother Blobs in ${Z.woods.name}`, banner: ["New quest", "Heart of the Brood"],
+      { type: "kill", zone: Z.woods.name, kinds: ["motherblob"], goal: 2, text: "Slay 2 Mother Blobs", banner: ["New quest", "The Gloam Awakens"],
         obj: "Mother Blobs slain: {n} / {goal}", nag: "{n} of {goal} Mother Blobs. Take potions, and do not fight them both at once." },
       { type: "use", zone: Z.woods.name, objects: [BROOD_HEART], text: "Burn the Brood Heart", banner: ["The guardians have fallen!", "Burn the Brood Heart"],
         obj: "Burn the Brood Heart", nag: "The heart is unguarded. Burn it!" },
-      back("druid", "Elder Rowan", "village bonfire", ["I felt it, all the way here. The whole forest sighed.", "There will always be blobs, friend. But never like this again. Oakvale owes you everything."], "Claim reward"),
+      { type: "kill", zone: Z.woods.name, kinds: BLOB_KINDS, fused: 6, goal: 1,
+        summon: { parts: ["warriorblob", "shooterblob", "healerblob", "warriorblob", "slime", "shooterblob"], level: 16, x: BROOD_HEART.x, y: BROOD_HEART.y + TILE },
+        text: "Destroy the Gloam", banner: ["THE GLOAM RISES", "Destroy it before it grows"], obj: "The Gloam destroyed: {n} / {goal}",
+        nag: "It rose by the burning heart. Six pieces in one. Destroy it!" },
+      back("druid", "Elder Rowan", "village bonfire", ["I felt it, all the way here. The whole forest sighed.", "There will always be blobs, friend, but with no heart to call them, they will never find each other again. Oakvale owes you everything."], "Claim reward"),
     ],
     reward: { xp: 1600, gold: 500, potions: 5 },
-    after: "The land is quieter thanks to you. May the old oaks shelter you, friend.",
+    after: "The land is quieter thanks to you. The pieces wander alone again. May the old oaks shelter you, friend.",
   },
 ];
 

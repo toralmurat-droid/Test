@@ -20,7 +20,7 @@ import {
 import { isSafeZone, isSolidAt, randomSpawn } from "../shared/map";
 import { npcById, npcNear, TALK_RANGE } from "../shared/npcs";
 import { sellPrice, SHOPS } from "../shared/shops";
-import { BLOB_KINDS, inZone, npcPresent, QUESTS, questStep, stepGoal, USE_RANGE } from "../shared/quests";
+import { BLOB_KINDS, inZone, npcPresent, QUEST_VERSION, QUESTS, questStep, stepGoal, Summon, USE_RANGE } from "../shared/quests";
 import { findHideSpot, HIDE, noMobsAt, spawnPoint, SPAWN_ZONES, zoneCap } from "../shared/spawns";
 import { moveStep } from "../shared/movement";
 import { flush, HeroSave, loadHero, login, markChest, openedChests, saveHero } from "./accounts";
@@ -90,6 +90,7 @@ export class Player extends Schema {
   @type("number") questId = 0;
   @type("number") questStage = 0;
   @type("number") questCount = 0;
+  nextSummon = 0; // when the server may bring back this player's quest fused blob (QuestStep.summon)
   // Skill slots on keys 1..0 (shared/slots.ts): a skill id or "" (empty). Empty until the player assigns them.
   @type(["string"]) slots = new ArraySchema<string>(...Array(SLOT_COUNT).fill(""));
 
@@ -124,6 +125,7 @@ export class Mob extends Schema {
   @type("boolean") hidden = false; // tucked into a grave/tree: untouchable, only its eyes show
   @type("number") merged = 1; // blobs inside this one (MERGE): the client draws it bigger
   @type("string") parts = ""; // kinds of the blobs swallowed, comma-separated: the client paints their colours, eyes and mouths on it
+  summonFor = ""; // quest fused blob (QuestStep.summon): session id of the player it was spawned for
   mergeInto = ""; // answering a call: id of the blob it is rushing to fuse with
   mergeCap = 0; // most blobs this one may hold (set at its first call)
   canShoot = false; canCharge = false; canHeal = false; // abilities picked up by merging
@@ -500,6 +502,7 @@ export class TownRoom extends Room<TownState> {
     const p = this.state.players.get(client.sessionId);
     if (p) saveHero(p.name, p.cls, this.snapshot(p));
     this.state.players.delete(client.sessionId);
+    this.unsummon(client.sessionId);
     this.addrs.delete(client.sessionId);
   }
 
@@ -518,7 +521,7 @@ export class TownRoom extends Room<TownState> {
       ptSta: p.ptSta, ptStr: p.ptStr, ptMag: p.ptMag,
       weapon: p.weapon, armour: p.armour, shoes: p.shoes, hat: p.hat, shield: p.shield, ranged: p.ranged,
       bag: p.bag.toArray(), talents, slots: p.slots.toArray(),
-      questId: p.questId, questStage: p.questStage, questCount: p.questCount,
+      questId: p.questId, questStage: p.questStage, questCount: p.questCount, questVer: QUEST_VERSION,
     };
   }
 
@@ -538,6 +541,8 @@ export class TownRoom extends Room<TownState> {
       p.slots[i] = typeof v === "string" && skillLearned(p.cls, p.talents, v) && skillOf(p.cls, v)?.passive === undefined ? v : "";
     });
     p.questId = Math.min(QUESTS.length, num(s.questId)); p.questStage = num(s.questStage); p.questCount = num(s.questCount);
+    // The steps of a quest changed since this save: start the current quest again from its offer
+    if (num(s.questVer, 1) !== QUEST_VERSION && p.questStage > 0) { p.questStage = 0; p.questCount = 0; }
   }
 
   private spawnMob(kind: MobKind, zi: number, id = `m${++this.mobSeq}`) {
@@ -556,7 +561,7 @@ export class TownRoom extends Room<TownState> {
     m.hidden = false; m.spot = ""; m.fleeing = false;
     m.specialKind = ""; m.specialAt = 0; m.nextBounce = 0; m.nextSlam = 0; m.nextRaise = 0; m.nextCircle = 0;
     m.foe = ""; m.nextFoeScan = 0;
-    m.merged = 1; m.parts = ""; m.mergeInto = ""; m.mergeCap = 0; m.nextCall = 0; m.nextShot = 0;
+    m.merged = 1; m.parts = ""; m.summonFor = ""; m.mergeInto = ""; m.mergeCap = 0; m.nextCall = 0; m.nextShot = 0;
     m.canShoot = kind === "shooterblob"; m.canCharge = kind === "warriorblob"; m.canHeal = kind === "healerblob";
     if (kind === "motherblob") m.nextBrood = Date.now() + BROOD.minMs + Math.random() * (BROOD.maxMs - BROOD.minMs);
     if (!this.state.mobs.has(id)) this.state.mobs.set(id, m);
@@ -719,7 +724,7 @@ export class TownRoom extends Room<TownState> {
   private findFoe(m: Mob, now: number) {
     m.nextFoeScan = now + FEUD.scanMs * (0.7 + Math.random() * 0.6);
     const side = FACTION[m.kind];
-    if (!side || m.mergeInto) return;
+    if (!side || m.mergeInto || m.summonFor) return;
     let best = FEUD.range;
     const cx = Math.floor(m.x / FEUD_CELL), cy = Math.floor(m.y / FEUD_CELL);
     for (let gy = cy - 1; gy <= cy + 1; gy++) for (let gx = cx - 1; gx <= cx + 1; gx++) {
@@ -736,7 +741,7 @@ export class TownRoom extends Room<TownState> {
   private buildFeudGrid() {
     this.feudGrid.clear();
     this.state.mobs.forEach((o, oid) => {
-      if (o.dead || !FACTION[o.kind]) return;
+      if (o.dead || o.summonFor || !FACTION[o.kind]) return;
       const k = Math.floor(o.x / FEUD_CELL) * 4096 + Math.floor(o.y / FEUD_CELL);
       const cell = this.feudGrid.get(k);
       if (cell) cell.push([oid, o]); else this.feudGrid.set(k, [[oid, o]]);
@@ -780,7 +785,7 @@ export class TownRoom extends Room<TownState> {
       room -= o.merged; called++;
       if (room <= 0) break;
     }
-    if (called) this.broadcast("blobcall", { id });
+    if (called) { this.broadcast("blobcall", { id }); this.questSawMerge(m.x, m.y); }
   }
 
   /** o melts into h: levels, HP and abilities add up; o is gone (its zone brings a fresh one back later). */
@@ -794,6 +799,7 @@ export class TownRoom extends Room<TownState> {
     if (o.zone < 0) this.clock.setTimeout(() => this.state.mobs.delete(oid), 500);
     else { const zone = this.state.zones.get(SPAWN_ZONES[o.zone].name); if (zone) zone.alive--; }
     this.broadcast("blobmerge", { into: hid, from: oid, x: Math.round(o.x), y: Math.round(o.y), level: h.level, merged: h.merged });
+    this.questSawMerge(h.x, h.y);
   }
 
   // ---- Necromancer ----------------------------------------------------------
@@ -1522,6 +1528,7 @@ export class TownRoom extends Room<TownState> {
     const d = QUESTS[p.questId];
     if (!d) return;
     p.questCount = 0;
+    this.unsummon(id);
     if (p.questStage < d.steps.length) { p.questStage++; this.sendQuest(id, p); return; }
     p.gold += d.reward.gold;
     p.potions = Math.min(MAX_POTIONS, p.potions + d.reward.potions);
@@ -1605,9 +1612,54 @@ export class TownRoom extends Room<TownState> {
     }
   }
 
-  /** "see" a blob in a zone, or "reach" a spot. */
+  /** A blob called for help or fused near (x, y): players on a "merge" step close by have seen it. */
+  private questSawMerge(x: number, y: number) {
+    const r2 = (10 * TILE) ** 2;
+    this.state.players.forEach((p, pid) => {
+      if (p.dead || questStep(p)?.type !== "merge") return;
+      const dx = x - p.x, dy = y - p.y;
+      if (dx * dx + dy * dy <= r2) this.nextStep(pid, p);
+    });
+  }
+
+  /** Put a quest fused blob in the world for this player: several blobs already melted into one (like absorb()). */
+  private summonFused(pid: string, sm: Summon) {
+    const [host, ...rest] = sm.parts;
+    const m = new Mob();
+    m.kind = host; m.zone = -1; m.summonFor = pid;
+    m.x = m.homeX = sm.x; m.y = m.homeY = sm.y;
+    m.level = sm.level;
+    m.merged = sm.parts.length; m.parts = rest.join(","); m.mergeCap = m.merged;
+    // HP of all the parts together, a little under the sum so the fight stays fair at the quest's level
+    m.hp = m.maxHp = Math.round(sm.parts.reduce((t, k) => t + MOBS[k].maxHp, 0) * mobScale(sm.level, "hp") * 0.7);
+    m.canShoot = sm.parts.includes("shooterblob"); m.canCharge = sm.parts.includes("warriorblob"); m.canHeal = sm.parts.includes("healerblob");
+    const id = `q${++this.mobSeq}`;
+    this.state.mobs.set(id, m);
+    this.broadcast("blobmerge", { into: id, from: "", x: Math.round(m.x), y: Math.round(m.y), level: m.level, merged: m.merged });
+  }
+
+  /** Remove the quest fused blob spawned for this player (step done, or they left). */
+  private unsummon(pid: string) {
+    this.state.mobs.forEach((m, mid) => {
+      if (m.summonFor !== pid || m.dead) return;
+      m.dead = true; m.hp = 0;
+      this.clock.setTimeout(() => this.state.mobs.delete(mid), 500);
+    });
+  }
+
+  /** "see" a blob in a zone, or "reach" a spot; keeps a quest fused blob around while the player is near its zone. */
   private checkQuestPlace(id: string, p: Player) {
     const s = questStep(p);
+    if (s?.summon && s.zone && inZone(s.zone, p.x, p.y)) {
+      const now = Date.now();
+      if (now >= p.nextSummon) {
+        p.nextSummon = now + 15000;
+        let mine = false;
+        this.state.mobs.forEach((m) => { if (m.summonFor === id && !m.dead) mine = true; });
+        if (!mine) this.summonFused(id, s.summon);
+      }
+      return;
+    }
     if (s?.type === "reach") {
       if (Math.hypot(s.at!.x - p.x, s.at!.y - p.y) <= s.at!.r) this.nextStep(id, p);
       return;
@@ -1624,7 +1676,9 @@ export class TownRoom extends Room<TownState> {
   /** A monster died to this player: count it, or maybe drop a quest item only they can see. */
   private questKill(id: string, p: Player, m: Mob) {
     const s = questStep(p);
-    if (!s || !s.kinds?.includes(m.kind) || (s.zone && !inZone(s.zone, m.x, m.y))) return;
+    // Kills and drops count anywhere on the map: only the monster's type matters (Murat's rule)
+    if (!s || !s.kinds?.includes(m.kind)) return;
+    if (s.type === "kill" && (m.merged ?? 1) < (s.fused ?? 1)) return;
     if (s.type === "kill") this.questProgress(id, p, p.questCount + 1);
     else if (s.type === "collect" && Math.random() < (s.chance?.[m.kind] ?? 0)) this.dropItem("quest", m.x, m.y, 1, s.item!, id);
   }
