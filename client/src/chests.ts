@@ -1,5 +1,6 @@
 import Phaser from "phaser";
-import { Chest, CHESTS, CHEST_NAMES, CHEST_RANGE, ChestTier } from "../../shared/chests";
+import { Chest, chestLock, CHESTS, CHEST_NAMES, CHEST_RANGE, ChestTier } from "../../shared/chests";
+import type { QuestState } from "../../shared/quests";
 import { isoAnchor } from "./iso";
 
 /**
@@ -7,7 +8,29 @@ import { isoAnchor } from "./iso";
  * in the isometric view direction, so the chest sits in the iso world like the buildings do: plank body, rounded
  * lid, metal bands, lock plate; the open version shows the lid swung back and a heap of coins.
  * Each player sees their own chests: emptied ones stay open until they refill.
+ * Lair chests are locked while their guardians live, story chests until the quest step is done: a padlock floats over them.
  */
+
+const PADLOCK = [
+  "..KKKK..",
+  ".KSKKSK.",
+  ".KS..SK.",
+  ".KS..SK.",
+  "KKKKKKKK",
+  "KGGGGGGK",
+  "KGGKKGGK",
+  "KGGKKGGK",
+  "KDGGGGDK",
+  "KKKKKKKK",
+];
+function padlockTexture(scene: Phaser.Scene) {
+  if (scene.textures.exists("chest_padlock")) return;
+  const pal: Record<string, string> = { K: "#1a1018", S: "#b4b9c6", G: "#e9c35a", D: "#9c6f1c" };
+  const tex = scene.textures.createCanvas("chest_padlock", 8, PADLOCK.length)!;
+  const ctx = tex.getContext();
+  PADLOCK.forEach((row, y) => [...row].forEach((ch, x) => { if (pal[ch]) { ctx.fillStyle = pal[ch]; ctx.fillRect(x, y, 1, 1); } }));
+  tex.refresh();
+}
 
 // Model size in units (1 unit = S texture px). x = long side, y = depth, z = up.
 const W = 10.5, D = 7, H = 5.4, R = D / 2, S = 2;
@@ -169,7 +192,7 @@ function paint(scene: Phaser.Scene, key: string, tier: ChestTier, open: boolean)
 
 const keyFor = (tier: ChestTier, open: boolean) => `chest_${tier}_${open ? "open" : "shut"}`;
 
-interface Drawn { c: Chest; img: Phaser.GameObjects.Image; open: boolean }
+interface Drawn { c: Chest; img: Phaser.GameObjects.Image; open: boolean; lock: Phaser.GameObjects.Image; locked?: string }
 
 export class ChestLayer {
   private drawn: Drawn[] = [];
@@ -177,13 +200,19 @@ export class ChestLayer {
   private refill = new Map<string, number>();
   private prompt = document.createElement("div");
   near?: Chest;
+  /** Why the chest next to you can't be opened yet (shown instead of "E Open"). */
+  private nearLock?: string;
 
   constructor(private scene: Phaser.Scene, private send: (type: string, msg?: unknown) => void) {
+    padlockTexture(scene);
     for (const t of [1, 2, 3] as ChestTier[]) { paint(scene, keyFor(t, false), t, false); paint(scene, keyFor(t, true), t, true); }
     for (const c of CHESTS) {
       const img = scene.add.image(c.x, c.y, keyFor(c.tier, false))
         .setOrigin((OX + BASE.sx) / TEX, (OY + BASE.sy) / TEX).setScale(1 / S).setDepth(c.y);
-      this.drawn.push({ c, img, open: false });
+      const lock = scene.add.image(c.x, c.y - 17, "chest_padlock").setOrigin(0.5, 1).setDepth(6000).setVisible(false);
+      isoAnchor(lock, c);
+      scene.tweens.add({ targets: lock, y: c.y - 19, duration: 700, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
+      this.drawn.push({ c, img, open: false, lock });
     }
     this.prompt.id = "chestprompt";
     this.prompt.onclick = () => this.interact();
@@ -231,28 +260,35 @@ export class ChestLayer {
 
   /** E key: open the chest you stand next to. Returns true if it did something. */
   interact(): boolean {
-    if (!this.near) return false;
+    if (!this.near || this.nearLock) return false;
     this.send("chest", { id: this.near.id });
     return true;
   }
 
   private me?: { x: number; y: number };
 
-  update(me: { x: number; y: number } | undefined, blocked: boolean) {
+  /** `guards(id)` = living guardians of a lair chest (from the synced monsters). */
+  update(me: { x: number; y: number } | undefined, blocked: boolean, q: QuestState | undefined, guards: (id: string) => number) {
     this.me = me;
     const now = Date.now();
-    let best: Chest | undefined, bd = CHEST_RANGE;
+    let best: Drawn | undefined, bd = CHEST_RANGE;
     for (const d of this.drawn) {
       const open = this.isOpen(d.c.id, now);
       this.setOpen(d, open);
+      d.locked = open ? undefined : chestLock(d.c, q, d.c.guards ? guards(d.c.id) : 0);
+      if (d.lock.visible !== !!d.locked) d.lock.setVisible(!!d.locked);
       if (!me || open) continue;
       const dist = Math.hypot(d.c.x - me.x, d.c.y - me.y);
-      if (dist <= bd) { bd = dist; best = d.c; }
+      if (dist <= bd) { bd = dist; best = d; }
     }
-    this.near = blocked ? undefined : best;
+    this.near = blocked ? undefined : best?.c;
+    this.nearLock = blocked ? undefined : best?.locked;
     this.prompt.classList.toggle("open", !!this.near);
+    this.prompt.classList.toggle("locked", !!this.nearLock);
     if (this.near) {
-      const html = `<kbd>E</kbd> Open ${CHEST_NAMES[this.near.tier]} <span class="lv">Lv ${this.near.level}</span>`;
+      const html = this.nearLock
+        ? `${CHEST_NAMES[this.near.tier]} <span class="lv">Lv ${this.near.level}</span> <span class="why">${this.nearLock}</span>`
+        : `<kbd>E</kbd> Open ${CHEST_NAMES[this.near.tier]} <span class="lv">Lv ${this.near.level}</span>`;
       if (this.prompt.innerHTML !== html) this.prompt.innerHTML = html;
     }
   }
@@ -260,7 +296,7 @@ export class ChestLayer {
   private glint() {
     const me = this.me;
     if (!me) return;
-    const close = this.drawn.filter((d) => !d.open && Math.hypot(d.c.x - me.x, d.c.y - me.y) < 14 * 32);
+    const close = this.drawn.filter((d) => !d.open && !d.locked && Math.hypot(d.c.x - me.x, d.c.y - me.y) < 14 * 32);
     const d = close[Math.floor(Math.random() * close.length)];
     if (!d) return;
     const x = d.c.x + (Math.random() - 0.5) * 12, y = d.c.y - 6 - Math.random() * 8;

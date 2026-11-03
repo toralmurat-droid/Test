@@ -24,7 +24,7 @@ import { BLOB_KINDS, inZone, npcPresent, QUEST_VERSION, QUESTS, questStep, stepG
 import { findHideSpot, HIDE, noMobsAt, spawnPoint, SPAWN_ZONES, zoneCap } from "../shared/spawns";
 import { moveStep } from "../shared/movement";
 import { flush, HeroSave, loadHero, login, markChest, openedChests, saveHero } from "./accounts";
-import { chestById, CHEST_RANGE, CHEST_RESPAWN_MS, rollChest } from "../shared/chests";
+import { chestById, chestLock, CHEST_RANGE, CHEST_RESPAWN_MS, CHESTS, GUARD_RESPAWN_MS, rollChest } from "../shared/chests";
 import { SLOT_COUNT } from "../shared/slots";
 import { heroPoise, MOB_COMBAT, POISE, poiseLevelMult, poiseSpeed } from "../shared/combat";
 import {
@@ -124,6 +124,7 @@ export class Mob extends Schema {
   @type("string") weapon = ""; // skeletons: sword, axe, spear or bow (SKELETON_WEAPONS)
   @type("boolean") hidden = false; // tucked into a grave/tree: untouchable, only its eyes show
   @type("number") merged = 1; // blobs inside this one (MERGE): the client draws it bigger
+  @type("string") guard = ""; // id of the loot chest it guards (shared/chests.ts): the chest stays locked while it lives
   @type("string") parts = ""; // kinds of the blobs swallowed, comma-separated: the client paints their colours, eyes and mouths on it
   summonFor = ""; // quest fused blob (QuestStep.summon): session id of the player it was spawned for
   mergeInto = ""; // answering a call: id of the blob it is rushing to fuse with
@@ -922,6 +923,7 @@ export class TownRoom extends Room<TownState> {
       this.updateMob(m, id, dt, now);
     });
     this.updateZones(now);
+    this.updateGuards(now);
     this.state.projectiles.forEach((s, id) => this.updateProjectile(s, id, dt));
     this.state.fields.forEach((f, id) => {
       if (!tickField(this.host, f.inst)) { this.state.fields.delete(id); return; }
@@ -932,6 +934,52 @@ export class TownRoom extends Room<TownState> {
       const due = this.pending.filter((x) => x.at <= now);
       if (due.length) { this.pending = this.pending.filter((x) => x.at > now); for (const x of due) x.fn(); }
     }
+  }
+
+  /** When each lair chest's missing guardians come back (chest id -> server time). */
+  private guardBack = new Map<string, number>();
+
+  /** Lair chests (shared/chests.ts) keep their guardians: a missing one returns GUARD_RESPAWN_MS after it fell. */
+  private updateGuards(now: number) {
+    const alive = new Map<string, number>(); // "chestId|kind" -> living guardians
+    this.state.mobs.forEach((m) => { if (m.guard && !m.dead) alive.set(`${m.guard}|${m.kind}`, (alive.get(`${m.guard}|${m.kind}`) ?? 0) + 1); });
+    for (const c of CHESTS) {
+      if (!c.guards) continue;
+      const missing = (Object.entries(c.guards) as [MobKind, number][]).flatMap(([k, n]) => Array(Math.max(0, n - (alive.get(`${c.id}|${k}`) ?? 0))).fill(k) as MobKind[]);
+      if (!missing.length) { this.guardBack.delete(c.id); continue; }
+      const at = this.guardBack.get(c.id);
+      if (at === undefined) { this.guardBack.set(c.id, this.guardsSpawned ? now + GUARD_RESPAWN_MS : now); continue; }
+      if (now < at) continue;
+      for (const k of missing) this.spawnGuard(k, c);
+      this.guardBack.delete(c.id);
+    }
+    this.guardsSpawned = true;
+  }
+  private guardsSpawned = false;
+
+  private spawnGuard(kind: MobKind, c: (typeof CHESTS)[number]) {
+    const id = `g${++this.mobSeq}`;
+    this.spawnMob(kind, 0, id);
+    const m = this.state.mobs.get(id)!;
+    m.zone = -1; // not part of a zone count; deleted when it dies, updateGuards brings a new one
+    m.guard = c.id;
+    // stands around the chest, on free ground
+    let x = c.x, y = c.y + TILE;
+    for (let i = 0; i < 20; i++) {
+      const a = Math.random() * Math.PI * 2, r = TILE * (0.9 + Math.random() * 0.9);
+      const tx = c.x + Math.cos(a) * r, ty = c.y + Math.sin(a) * r;
+      if (!isSolidAt(tx, ty)) { x = tx; y = ty; break; }
+    }
+    m.x = m.homeX = x; m.y = m.homeY = y;
+    m.level = Math.max(1, c.level - 1);
+    m.hp = m.maxHp = Math.round(MOBS[kind].maxHp * mobScale(m.level, "hp"));
+  }
+
+  /** Living guardians of a chest (near it: one lured far away still counts until it dies). */
+  private guardsAlive(cid: string): number {
+    let n = 0;
+    this.state.mobs.forEach((m) => { if (m.guard === cid && !m.dead) n++; });
+    return n;
   }
 
   /** Per-zone respawn timers: while a zone is below its cap, revive one dead monster every respawnMs. */
@@ -1595,6 +1643,8 @@ export class TownRoom extends Room<TownState> {
     if (!p || p.dead || !c || Math.hypot(c.x - p.x, c.y - p.y) > CHEST_RANGE * 1.5) return;
     const now = Date.now();
     if (openedChests(p.name, now)[c.id]) return;
+    const lock = chestLock(c, p, this.guardsAlive(c.id));
+    if (lock) { client.send("chestlocked", { id: c.id, text: lock }); return; }
     const refill = now + CHEST_RESPAWN_MS;
     markChest(p.name, c.id, refill);
     client.send("chestopen", { id: c.id, refill: CHEST_RESPAWN_MS });

@@ -284,6 +284,7 @@ export class TownScene extends Phaser.Scene {
     this.chests = new ChestLayer(this, (type, msg) => this.room.send(type, msg));
     this.room.onMessage("chests", (left) => this.chests?.setOpened(left));
     this.room.onMessage("chestopen", ({ id, refill }) => this.chests?.opened(id, refill));
+    this.room.onMessage("chestlocked", () => {}); // the prompt already says why
     this.room.send("chests"); // which chests this account already emptied
     this.dial = new DayDial(document.getElementById("daydial") as HTMLCanvasElement);
 
@@ -1274,7 +1275,11 @@ export class TownScene extends Phaser.Scene {
     this.dial?.draw(now);
     if (meEnt) this.showArea(areaAt(meEnt.sprite.x, meEnt.sprite.y));
     this.signPanel.update(meEnt?.sprite);
-    this.chests?.update(meEnt && !meEnt.state.dead ? meEnt.sprite : undefined, !!this.npcs?.isOpen);
+    if (this.chests) {
+      const guards = new Map<string, number>(); // lair chest id -> living guardians
+      (this.room.state as any).mobs.forEach((m: any) => { if (m.guard && !m.dead) guards.set(m.guard, (guards.get(m.guard) ?? 0) + 1); });
+      this.chests.update(meEnt && !meEnt.state.dead ? meEnt.sprite : undefined, !!this.npcs?.isOpen, meEnt?.state, (cid) => guards.get(cid) ?? 0);
+    }
     if (this.npcs) this.npcs.hidePrompt = !!this.chests?.near;
     this.npcs?.update(meEnt && !meEnt.state.dead ? meEnt.sprite : undefined, meEnt?.state);
     if (this.minimap && this.npcs) this.minimap.markers = this.npcs.markers;
