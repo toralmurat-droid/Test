@@ -9,7 +9,7 @@ import {
   ATTACK_VARIANTS, CLASSES, ClassKind, COMBO_WINDOW_MS, DODGE, EMOTES, ENERGY, DASH_INVULN_MS, GUARD_REDUCTION, isClassKind, levelFromXp, MAX_XP, capLevel, PVP_KILL_XP,
 } from "../shared/classes";
 import { attackMult, cooldownMult, critChance, heroSpeed, magicMult, maxHpFromStats, SLOW_MOB, statsFor, statPoints } from "../shared/powers";
-import { activeSkills, canLearn, cleanRanks, skillLearned, skillOf, talentBonus, talentMult, talentReduce } from "../shared/skills";
+import { activeSkills, canLearn, classSkills, cleanRanks, MAX_RANK, skillLearned, skillOf, talentBonus, talentMult, talentReduce } from "../shared/skills";
 import {
   afterHit, atkSpeedMult, blocking, buffLifesteal, buffRegen, castSkill, ccImmune, charging, counterHit, dealtMult, FieldInst, newRuntime,
   shotEnd, shotHit, ShotSpec, SkillHost, speedMult, statusOf, takenMult, tickField, tickUnit, Unit,
@@ -502,6 +502,7 @@ export class TownRoom extends Room<TownState> {
       if (idea) return this.submitIdea(client, idea[1]);
       const v = text.trim().match(/^\/(up|down|unvote)\s+#?(\d+)$/i);
       if (v) return this.voteIdea(client, Number(v[2]), v[1].toLowerCase() === "up" ? 1 : v[1].toLowerCase() === "down" ? -1 : 0);
+      if (/^\/max$/i.test(text.trim())) return this.maxHero(client);
       const clean = text.slice(0, 120).trim();
       const cmd = clean.toLowerCase().replace(/^\//, "");
       if (clean.startsWith("/") && (EMOTES as readonly string[]).includes(cmd)) {
@@ -2120,6 +2121,32 @@ export class TownRoom extends Room<TownState> {
   }
 
   // ---- Skill tree ---------------------------------------------------------
+
+  /**
+   * Test command "/max": the hero jumps to the max level, learns every skill at max rank (actives go on free keys),
+   * spreads all stat points over the 4 stats, and gets full potions and gold. Only for account names listed in the TESTERS environment variable
+   * (comma separated, e.g. TESTERS=Clement,Murat). Off when TESTERS is not set. Saved like normal progress.
+   */
+  private maxHero(client: Client) {
+    const p = this.state.players.get(client.sessionId);
+    if (!p) return;
+    const testers = String(process.env.TESTERS ?? "").split(",").map((n) => n.trim().toLowerCase()).filter(Boolean);
+    if (!testers.includes(p.name.toLowerCase())) return;
+    const from = p.level;
+    p.xp = MAX_XP;
+    p.level = levelFromXp(MAX_XP);
+    // Skills are in tree order (parents first), so one pass per rank learns them all
+    for (let pass = 0; pass < MAX_RANK; pass++) for (const sk of classSkills(p.cls)) this.learnTalent(client.sessionId, sk.id);
+    // Every stat point the level gives, spread evenly over the 4 stats (points already placed are reset first)
+    const pts = statPoints(p.level), each = Math.floor(pts / 4), left = pts % 4;
+    p.ptSta = each + (left > 0 ? 1 : 0); p.ptStr = each + (left > 1 ? 1 : 0); p.ptMag = each + (left > 2 ? 1 : 0); p.ptDex = each;
+    p.potions = MAX_POTIONS;
+    p.gold = Math.max(p.gold, 100000);
+    this.applyStats(p);
+    if (!p.dead) p.hp = p.maxHp;
+    if (p.level > from) this.broadcast("levelup", { id: client.sessionId, level: p.level, from });
+    client.send("chat", { id: "", name: "Test", text: `Level ${p.level}, every skill at max rank, ${pts} stat points spread over all stats.` });
+  }
 
   private learnTalent(id: string, tid: string) {
     const p = this.state.players.get(id);
