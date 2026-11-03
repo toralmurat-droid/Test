@@ -39,6 +39,7 @@ import { addPixelGrid } from "./pixelgrid";
 import { paintSmoothProps } from "./smoothProps";
 import { ChestLayer } from "./chests";
 import { ShrineLayer } from "./shrine";
+import { PortalLayer } from "./portal";
 import { BOON_NAMES, WIND_BLESSING } from "../../shared/shrine";
 import { addWorldProps } from "./worldProps";
 import { addSiegeWorks } from "./siegeArt";
@@ -191,6 +192,7 @@ export class TownScene extends Phaser.Scene {
   private torches?: GateTorches;
   private chests?: ChestLayer;
   private shrine?: ShrineLayer;
+  private portals?: PortalLayer;
   private chatEl = document.getElementById("chat") as HTMLInputElement;
   private ideaBoard?: IdeaBoard;
   private intro?: IntroPanel;
@@ -295,6 +297,7 @@ export class TownScene extends Phaser.Scene {
       if (this.chatting()) return;
       if (!this.npcs?.isOpen && this.chests?.interact()) return; // a loot chest right here comes first
       if (!this.npcs?.isOpen && this.shrine?.interact()) return; // then the forest shrine
+      if (!this.npcs?.isOpen && this.portals?.interact()) return; // then a portal stone's travel list
       this.npcs?.interact();
     });
     this.input.keyboard!.on("keydown-J", () => {
@@ -379,6 +382,21 @@ export class TownScene extends Phaser.Scene {
       this.floatText(e.sprite.x, e.sprite.y - 22, text, "#9cf3dc", PIXEL_FONT);
     });
     this.room.send("shrine"); // is the shrine spent right now?
+    // Portal stones: woken one by one on foot, then fast travel between the woken ones
+    this.portals = new PortalLayer(this, (type, msg) => this.room.send(type, msg));
+    this.room.onMessage("portals", ({ found, woke }) => this.portals?.setFound(found ?? [], woke));
+    this.room.onMessage("travel", ({ id, from, to, x, y }) => {
+      this.portals?.travelled(from, to);
+      const e = this.entities.get(id);
+      if (!e) return;
+      e.sprite.setPosition(x, y); e.tx = x; e.ty = y; e.lastX = x; e.lastY = y; // a jump, not a walk
+      if (id === this.me) { this.portals?.close(); this.cameras.main.fadeIn(900, 40, 14, 4); } // a warm flash while the new place is drawn
+    });
+    this.room.onMessage("travelno", () => {
+      const e = this.entities.get(this.me);
+      if (e) this.floatText(e.sprite.x, e.sprite.y - 22, "Not while fighting", "#ffa22e", PIXEL_FONT);
+    });
+    this.room.send("portals"); // which stones this hero has woken
     // First login of this hero: a short how-to-play panel, never shown again once closed
     this.intro = new IntroPanel(() => this.room?.send("introseen"));
     this.room.onMessage("intro", () => afterLoading(() => { this.closeMenus(); this.intro?.show(); }));
@@ -780,6 +798,7 @@ export class TownScene extends Phaser.Scene {
     this.room.onMessage("hit", ({ id, dmg, blocked, crit }) => {
       const e = this.entities.get(id);
       if (!e) return;
+      if (id === this.me) this.portals?.hurt();
       this.floatText(e.sprite.x, e.sprite.y - 14, crit ? `CRIT -${dmg}` : `-${dmg}`,
         blocked ? "#9ad1ff" : crit ? "#ffd60a" : id === this.me ? "#ff5d5d" : "#ffffff");
       e.sprite.setTintFill(0xffffff);
@@ -1353,6 +1372,7 @@ export class TownScene extends Phaser.Scene {
     this.npcs?.log.toggle(false);
     this.gearMenu?.close();
     this.ideaBoard?.close();
+    this.portals?.close();
   }
 
   /** Opens the hero menu. After level-ups (`from` = level before them) it highlights the gains. */
@@ -1890,9 +1910,10 @@ export class TownScene extends Phaser.Scene {
       this.chests.update(meEnt && !meEnt.state.dead ? meEnt.sprite : undefined, !!this.npcs?.isOpen, meEnt?.state, (cid) => guards.get(cid) ?? 0);
     }
     this.shrine?.update(meEnt && !meEnt.state.dead && !this.chests?.near ? meEnt.sprite : undefined, !!this.npcs?.isOpen);
-    if (this.npcs) this.npcs.hidePrompt = !!this.chests?.near || !!this.shrine?.near;
+    if (this.npcs) this.npcs.hidePrompt = !!this.chests?.near || !!this.shrine?.near || !!this.portals?.near;
     this.npcs?.update(meEnt && !meEnt.state.dead ? meEnt.sprite : undefined, meEnt?.state);
-    if (this.minimap && this.npcs) this.minimap.markers = this.npcs.markers;
+    this.portals?.update(meEnt && !meEnt.state.dead ? meEnt.sprite : undefined, !!this.npcs?.isOpen || !!this.chests?.near || !!this.shrine?.near);
+    if (this.minimap && this.npcs) this.minimap.markers = this.portals ? [...this.npcs.markers, ...this.portals.markers()] : this.npcs.markers;
 
     const mine = meEnt?.state;
     if (mine) {

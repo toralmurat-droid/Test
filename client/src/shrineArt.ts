@@ -15,28 +15,28 @@ import { hiResTexture } from "./smooth";
 const W = 96, H = 128, CX = 48, BY = 106; // cells; BY = the dais centre (the sprite's feet)
 export const SHRINE_FW = W / 2, SHRINE_FH = H / 2, SHRINE_FOOT = BY / H;
 
-const hash = (a: number, b: number, s = 0) => {
+export const hash = (a: number, b: number, s = 0) => {
   let h = Math.imul(a * 73 + 11 + s * 977, 374761393) ^ Math.imul(b + 5 + s * 131, 668265263);
   h = Math.imul(h ^ (h >>> 13), 1274126177);
   return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
 };
 const smooth = (t: number) => t * t * (3 - 2 * t);
-const vnoise = (x: number, y: number, py: number, s: number) => {
+export const vnoise = (x: number, y: number, py: number, s: number) => {
   const ix = Math.floor(x), iy = Math.floor(y), fx = smooth(x - ix), fy = smooth(y - iy);
   const m = (v: number) => ((v % py) + py) % py;
   const a = hash(ix, m(iy), s), b = hash(ix + 1, m(iy), s), c = hash(ix, m(iy + 1), s), d = hash(ix + 1, m(iy + 1), s);
   return a + (b - a) * fx + (c - a) * fy + (a - b - c + d) * fx * fy;
 };
 const BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5].map((v) => (v + 0.5) / 16);
-const dith = (x: number, y: number) => BAYER[(y & 3) * 4 + (x & 3)];
+export const dith = (x: number, y: number) => BAYER[(y & 3) * 4 + (x & 3)];
 
 /** Wisp fire, dark to bright (the bonfire's ramp, turned to a cold green-blue). */
 const WISP = ["#06302e", "#0b4a48", "#0f6b66", "#16928a", "#25b8a6", "#52dcc2", "#9cf3dc", "#e2fff4"];
 const WISP_T = [0.2, 0.3, 0.4, 0.5, 0.6, 0.72, 0.84, 0.95];
-const OUT = "#15110e";
+export const OUT = "#15110e";
 
-type Px = (x: number, y: number, c: string) => void;
-const stoneCol = (lit: number, tone: number) => {
+export type Px = (x: number, y: number, c: string) => void;
+export const stoneCol = (lit: number, tone: number) => {
   const c = (r: number, g: number, b: number) => `rgb(${(r * tone) | 0},${(g * tone) | 0},${(b * tone) | 0})`;
   return lit > 0.5 ? c(170, 168, 156) : lit > 0.05 ? c(122, 120, 110) : lit > -0.45 ? c(84, 83, 77) : c(54, 53, 50);
 };

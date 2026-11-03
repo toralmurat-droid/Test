@@ -57,6 +57,19 @@ export const BARNS = [{ x: 14, y: 38, w: 9, h: 6, door0: 17, door1: 19 }];
 /** Redfang Hollow, the bandit camp: the stockade (tiles) and its three watchtowers by the gates (see shared/bandits.ts). */
 /** The Whispering Woods shrine (tile), beside the Bandit Trail: the map keeps a clearing around it (shared/shrine.ts). */
 export const SHRINE_SPOT = { x: 226, y: 73 };
+/**
+ * Carved stone waystones for fast travel (shared/portals.ts), tile of each stone's foot. The map keeps a small
+ * clearing around each one. Order = the order of the travel list.
+ */
+export const PORTAL_SPOTS = [
+  { id: "oakvale", name: "Oakvale North Gate", x: 84, y: 46 },
+  { id: "farms", name: "Goldenreach Farms", x: 30, y: 63 },
+  { id: "barrow", name: "Barrow Downs", x: 50, y: 145 },
+  { id: "saltmere", name: "Saltmere", x: 147, y: 175 },
+  { id: "ruins", name: "Old Ruins", x: 150, y: 59 },
+  { id: "keep", name: "Greywatch Keep", x: 196, y: 69 },
+  { id: "gravemoor", name: "Gravemoor Cemetery", x: 210, y: 120 },
+] as const;
 export const REDFANG = { x: 240, y: 102, w: 24, h: 18 };
 export const REDFANG_TOWERS: [number, number][] = [[254, 103], [249, 118], [241, 108]];
 
@@ -679,6 +692,8 @@ function buildWorld() {
 
   // ---------- 13a. The forest shrine (shared/shrine.ts): a small clearing beside the Bandit Trail, deep in the Whispering Woods ----------
   disk(SHRINE_SPOT.x + 0.5, SHRINE_SPOT.y + 0.5, 3.2, 2.8, (x, y) => { if (NATURE.has(objects[y][x])) setO(x, y, EMPTY); });
+  // ---------- 13c. The portal stones (shared/portals.ts): a little clearing round each ----------
+  for (const p of PORTAL_SPOTS) disk(p.x + 0.5, p.y + 0.5, 2.6, 2.2, (x, y) => { if (NATURE.has(objects[y][x])) setO(x, y, EMPTY); });
 
   // ---------- 14. Reachability: carve through nature to any pocket the player can't reach ----------
   const solid = (x: number, y: number) => !inMap(x, y) || (objects[y][x] !== EMPTY && !WALKABLE_OBJECTS.has(objects[y][x])) || ground[y][x] === T.WATER;

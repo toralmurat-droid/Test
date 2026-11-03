@@ -27,6 +27,7 @@ import { moveStep } from "../shared/movement";
 import { SLOTS_BY_ZONE, WORK_SLOTS } from "../shared/siege";
 import { BANDIT_AI, BANDIT_ROLES, CAMP_POSTS, CHIEF, clearWalk, findPath, postPos, roleOf } from "../shared/bandits";
 import { flush, HeroSave, loadHero, login, markChest, openedChests, resetChests, saveHero } from "./accounts";
+import { arrivalOf, cleanPortals, PORTAL_COMBAT_MS, PORTAL_RANGE, PORTAL_WAKE_RANGE, portalById, PORTALS } from "../shared/portals";
 import { rollBoon, shrineXp, SHRINE, SHRINE_COOLDOWN_MS, SHRINE_RANGE, WIND_BLESSING, WIND_BLESSING_ID } from "../shared/shrine";
 import { chestById, chestLock, CHEST_RANGE, CHEST_RESPAWN_MS, CHESTS, GUARD_RESPAWN_MS, rollChest } from "../shared/chests";
 import { SLOT_COUNT } from "../shared/slots";
@@ -111,6 +112,7 @@ export class Player extends Schema {
   input: InputState = { up: false, down: false, left: false, right: false };
   lastAttack = 0;
   introSeen = false; // closed the first-login game intro (saved, never synced)
+  portals = new Set<string>(); // portal stones this hero has woken (shared/portals.ts; saved, never synced)
   lastSpecial = -Infinity;
   // Hidden initiative / poise (shared/combat.ts)
   poiseLost = 0;
@@ -475,6 +477,8 @@ export class TownRoom extends Room<TownState> {
     this.onMessage("chest", (client, msg: { id: string }) => this.openChest(client, msg?.id));
     this.onMessage("chests", (client) => this.sendChests(client));
     this.onMessage("pray", (client) => this.pray(client));
+    this.onMessage("portals", (client) => this.sendPortals(client));
+    this.onMessage("travel", (client, msg: { to?: string }) => this.travel(client, msg?.to));
     this.onMessage("shrine", (client) => client.send("shrine", { left: Math.max(0, this.shrineReadyAt - Date.now()) }));
     // First-login game intro: shown once per hero, until it is closed
     this.onMessage("intro", (client) => { if (this.state.players.get(client.sessionId)?.introSeen === false) client.send("intro"); });
@@ -622,6 +626,7 @@ export class TownRoom extends Room<TownState> {
       boneId: p.boneId, boneStage: p.boneStage, boneCount: p.boneCount, boneVer: CHAINS[1].version,
       redId: p.redId, redStage: p.redStage, redCount: p.redCount, redVer: CHAINS[2].version, kit: 1,
       intro: p.introSeen ? 1 : 0,
+      portals: [...p.portals],
     };
   }
 
@@ -640,6 +645,7 @@ export class TownRoom extends Room<TownState> {
     if (Array.isArray(s.slots)) s.slots.slice(0, SLOT_COUNT).forEach((v, i) => {
       p.slots[i] = typeof v === "string" && skillLearned(p.cls, p.talents, v) && skillOf(p.cls, v)?.passive === undefined ? v : "";
     });
+    for (const id of cleanPortals(s.portals)) p.portals.add(id);
     const sv = s as unknown as Record<string, unknown>;
     CHAINS.forEach((ch, c) => {
       const [a, b, n] = ch.keys;
@@ -1363,6 +1369,7 @@ export class TownRoom extends Room<TownState> {
       tickPoise(p, heroPoiseMax(p), dt, now);
       if (p.dead) { p.moving = false; p.energy = ENERGY.max; return; }
       for (let c = 0; c < CHAINS.length; c++) this.checkQuestPlace(pid, p, c);
+      this.wakePortals(pid, p);
       if (p.energy < ENERGY.max) p.energy = Math.min(ENERGY.max, p.energy + ENERGY.regenPerSec * dt);
       p.rolling = now < p.rollUntil;
       const r = p.stunned || charging(p, now) // a buildup roots the hero
@@ -2516,6 +2523,41 @@ export class TownRoom extends Room<TownState> {
       amount = WIND_BLESSING.ms;
     }
     this.broadcast("shrine", { left: SHRINE_COOLDOWN_MS, by: id, boon, amount });
+  }
+
+  // ---- Portal stones (shared/portals.ts) -----------------------------------------
+
+  private sendPortals(client: Client, woke?: string) {
+    const p = this.state.players.get(client.sessionId);
+    if (p) client.send("portals", { found: [...p.portals], woke });
+  }
+
+  /** Walking up to a sleeping portal stone wakes it for this hero (saved right away). */
+  private wakePortals(pid: string, p: Player) {
+    if (p.portals.size >= PORTALS.length) return;
+    for (const o of PORTALS) {
+      if (p.portals.has(o.id) || Math.hypot(o.x - p.x, o.y - p.y) > PORTAL_WAKE_RANGE) continue;
+      p.portals.add(o.id);
+      saveHero(p.name, p.cls, this.snapshot(p));
+      const c = this.clients.find((cl) => cl.sessionId === pid);
+      if (c) this.sendPortals(c, o.id);
+    }
+  }
+
+  /** Step through a woken portal to another one this hero has woken. */
+  private travel(client: Client, to: unknown) {
+    const id = client.sessionId, p = this.state.players.get(id);
+    const now = Date.now();
+    const dest = portalById(to);
+    if (!p || p.dead || !dest || !p.portals.has(dest.id)) return;
+    const from = PORTALS.find((o) => p.portals.has(o.id) && Math.hypot(o.x - p.x, o.y - p.y) <= PORTAL_RANGE * 1.5);
+    if (!from || from.id === dest.id) return;
+    if (now - p.lastHurt < PORTAL_COMBAT_MS) { client.send("travelno", { why: "fight" }); return; }
+    const at = arrivalOf(dest);
+    p.x = at.x; p.y = at.y; p.moving = false;
+    p.rollUntil = 0; p.rolling = false;
+    p.emote = "";
+    this.broadcast("travel", { id, from: from.id, to: dest.id, x: at.x, y: at.y });
   }
 
   /** A blob called for help / fused ("merge"), or skeletons began a bone ritual ("ritual"), near (x, y): players on that step close by have seen it. */
