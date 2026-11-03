@@ -125,3 +125,8 @@ export function flush() {
   }
 }
 setInterval(() => { if (dirty) flush(); }, 5000).unref();
+
+/** All accounts as stored on disk (password hashes, never passwords), for the admin backup download. */
+export function allAccounts() {
+  return accounts;
+}

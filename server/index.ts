@@ -1,11 +1,12 @@
 import http from "node:http";
 import path from "node:path";
+import crypto from "node:crypto";
 import express from "express";
 import { Server } from "colyseus";
 import { WebSocketTransport } from "@colyseus/ws-transport";
 import { TownRoom } from "./TownRoom";
-import { publicLog } from "./ideaStore";
-import { peek } from "./accounts";
+import { ideaLog, publicLog } from "./ideaStore";
+import { allAccounts, peek } from "./accounts";
 
 const PORT = Number(process.env.PORT ?? 2567);
 const app = express();
@@ -18,6 +19,19 @@ if (process.env.NODE_ENV === "production") {
 app.get("/health", (_req, res) => { res.send("ok"); });
 // The player idea log (read-only), newest first
 app.get("/ideas.json", (_req, res) => { res.json(publicLog()); });
+
+// Backup download of every account and the idea log: /admin/backup?key=ADMIN_KEY
+// Off unless the ADMIN_KEY environment variable is set (Railway: service -> Variables).
+app.get("/admin/backup", (req, res) => {
+  const want = Buffer.from(process.env.ADMIN_KEY ?? "");
+  const got = Buffer.from(String(req.query.key ?? ""));
+  const ok = want.length >= 12 && got.length === want.length && crypto.timingSafeEqual(got, want);
+  if (!ok) { res.sendStatus(404); return; }
+  const day = new Date().toISOString().slice(0, 10);
+  res.setHeader("Content-Disposition", `attachment; filename="game-backup-${day}.json"`);
+  res.setHeader("Cache-Control", "no-store");
+  res.json({ at: new Date().toISOString(), saves: allAccounts(), ideas: ideaLog });
+});
 
 // Login screen: which saved heroes does this account have? (lets the player pick Continue or New game)
 app.use("/account", (req, res, next) => {
