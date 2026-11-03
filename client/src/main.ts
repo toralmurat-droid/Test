@@ -87,7 +87,7 @@ function choose(name: string, password: string, level: number) {
   };
   const confirm = () => {
     title.textContent = "Start over?";
-    text.textContent = `Your level ${level} ${hero} will be erased: level, gear, gold, skills and quests. This cannot be undone.`;
+    text.textContent = `Your level ${level} ${hero} will be erased: level, gear, gold, skills and quests, and all chests fill up again. This cannot be undone.`;
     btns.replaceChildren();
     button("danger", "Yes, start a new game", `Erase the level ${level} ${hero}`, () => launch(name, password, true));
     button("plain", "No, go back", "Keep my hero", menu);
