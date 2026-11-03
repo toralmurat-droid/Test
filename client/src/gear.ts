@@ -1,5 +1,5 @@
 import Phaser from "phaser";
-import { GEAR, itemText, GEAR_IDS, GEAR_SLOTS, gearName, gearStats, gearSpeedMult, GearSlot, BAG_SIZE, SLOT_NAMES, TIER_NAMES } from "../../shared/gear";
+import { GEAR, itemText, LOOT_IDS, canWear, GEAR_SLOTS, gearName, gearStats, gearSpeedMult, GearSlot, BAG_SIZE, SLOT_NAMES, TIER_NAMES } from "../../shared/gear";
 import { STAT_NAMES, StatKind } from "../../shared/powers";
 import { ART_K, CHAR_FRAME, HD_CHARS } from "./artAssets";
 
@@ -15,7 +15,7 @@ export function preloadGear(scene: Phaser.Scene) {
   scene.load.atlas("gear_icons", `${BASE}/icons.png`, `${BASE}/icons.json`);
   // Painted overlay sheets are big (96px frames), so they load the first time someone wears the item
   if (HD_CHARS) return;
-  for (const h of GEAR_HEROES) for (const id of GEAR_IDS) {
+  for (const h of GEAR_HEROES) for (const id of LOOT_IDS) { // the old pixel sheets already show the class kit
     scene.load.spritesheet(gearKey(h, id), `${BASE}/${h}_${id}.png`, { frameWidth: CHAR_FRAME, frameHeight: CHAR_FRAME });
   }
 }
@@ -40,8 +40,11 @@ function ensureGear(scene: Phaser.Scene, hero: string, id: string, done?: () => 
 
 export const gearKey = (hero: string, id: string) => `gear_${hero}_${id}`;
 
-/** Drawn order on top of the hero (each overlay already has the right pixels hidden behind the body). */
-const LAYER_ORDER: GearSlot[] = ["ranged", "shoes", "armour", "hat", "shield", "weapon"];
+/**
+ * Drawn order on top of the hero (each overlay already has the right pixels hidden behind the body).
+ * The base sheet is the bare hero in underwear: armour first (clothes), then boots over the trouser legs, then the rest.
+ */
+export const LAYER_ORDER: GearSlot[] = ["armour", "shoes", "ranged", "hat", "shield", "weapon"];
 
 /** Overlay sprites for one hero. Call sync() every frame after the hero sprite is updated. */
 export class GearLayer {
@@ -175,7 +178,10 @@ export class GearMenu {
         const d = GEAR[id];
         cell.appendChild(iconCanvas(this.scene, id));
         cell.style.borderColor = TIER_COLORS[d.tier];
-        cell.title = `${gearName(id, cls)} (${TIER_NAMES[d.tier]} ${SLOT_NAMES[d.slot]})\n${itemText(id)}\nClick: equip · Right-click: drop`;
+        const fits = canWear(cls, id);
+        cell.title = `${gearName(id, cls)} (${TIER_NAMES[d.tier]} ${SLOT_NAMES[d.slot]})\n${itemText(id)}\n` +
+          (fits ? "Click: equip · Right-click: drop" : `Only a ${d.cls} can wear this · Right-click: drop`);
+        if (!fits) cell.style.opacity = "0.5";
         cell.onclick = () => this.act("equip", i);
         cell.oncontextmenu = (ev) => { ev.preventDefault(); this.act("dropgear", i); };
       } else cell.disabled = true;

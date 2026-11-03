@@ -690,7 +690,8 @@ export class Details {
     }
   }
 
-  private addLight(x: number, y: number, color: number, scale: number, base: number, flicker = 0.08) {
+  /** A warm light that fades in at dusk (used for lanterns, also by worldProps.ts). */
+  addLight(x: number, y: number, color: number, scale: number, base: number, flicker = 0.08) {
     const img = this.scene.add.image(x, y, "light").setTint(color).setScale(scale).setBlendMode(Phaser.BlendModes.ADD).setDepth(27500).setAlpha(0);
     this.lights.push({ img, base, flicker });
   }

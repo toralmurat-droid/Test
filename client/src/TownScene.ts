@@ -32,6 +32,7 @@ import { SMOOTH } from "./isoflag";
 import { addPixelGrid } from "./pixelgrid";
 import { paintSmoothProps } from "./smoothProps";
 import { ChestLayer } from "./chests";
+import { addWorldProps } from "./worldProps";
 
 /** One painted bit on a merged blob, in body-relative units (-1..1 across the body). */
 interface BlobPart { kind: "patch" | "eye" | "mouth"; u: number; v: number; r: number; col: number }
@@ -174,6 +175,7 @@ export class TownScene extends Phaser.Scene {
     this.ambient = new Ambient(this); // trees, shadows, smoke, wildlife… (cosmetic only)
     this.details = new Details(this); // roof shading, ground detail, ducks, lanterns, day/night
     this.details.onDarkness((d) => this.ambient?.setDarkness(d));
+    addWorldProps(this, (x, y) => this.details?.addLight(x, y, 0xffb347, 2.2, 0.75)); // spear racks, pennants, dummies, lantern poles...
 
     const cam = this.cameras.main;
     cam.setBounds(0, 0, MAP_W * TILE, MAP_H * TILE);

@@ -167,12 +167,180 @@
     "w": 32,
     "h": 32
    }
+  },
+  "knight_weapon": {
+   "frame": {
+    "x": 672,
+    "y": 0,
+    "w": 32,
+    "h": 32
+   }
+  },
+  "knight_shield": {
+   "frame": {
+    "x": 704,
+    "y": 0,
+    "w": 32,
+    "h": 32
+   }
+  },
+  "knight_armour": {
+   "frame": {
+    "x": 736,
+    "y": 0,
+    "w": 32,
+    "h": 32
+   }
+  },
+  "knight_hat": {
+   "frame": {
+    "x": 768,
+    "y": 0,
+    "w": 32,
+    "h": 32
+   }
+  },
+  "knight_shoes": {
+   "frame": {
+    "x": 800,
+    "y": 0,
+    "w": 32,
+    "h": 32
+   }
+  },
+  "ninja_weapon": {
+   "frame": {
+    "x": 832,
+    "y": 0,
+    "w": 32,
+    "h": 32
+   }
+  },
+  "ninja_armour": {
+   "frame": {
+    "x": 864,
+    "y": 0,
+    "w": 32,
+    "h": 32
+   }
+  },
+  "ninja_hat": {
+   "frame": {
+    "x": 896,
+    "y": 0,
+    "w": 32,
+    "h": 32
+   }
+  },
+  "ninja_shoes": {
+   "frame": {
+    "x": 928,
+    "y": 0,
+    "w": 32,
+    "h": 32
+   }
+  },
+  "wizard_weapon": {
+   "frame": {
+    "x": 960,
+    "y": 0,
+    "w": 32,
+    "h": 32
+   }
+  },
+  "wizard_armour": {
+   "frame": {
+    "x": 992,
+    "y": 0,
+    "w": 32,
+    "h": 32
+   }
+  },
+  "wizard_hat": {
+   "frame": {
+    "x": 1024,
+    "y": 0,
+    "w": 32,
+    "h": 32
+   }
+  },
+  "wizard_shoes": {
+   "frame": {
+    "x": 1056,
+    "y": 0,
+    "w": 32,
+    "h": 32
+   }
+  },
+  "archer_weapon": {
+   "frame": {
+    "x": 1088,
+    "y": 0,
+    "w": 32,
+    "h": 32
+   }
+  },
+  "archer_armour": {
+   "frame": {
+    "x": 1120,
+    "y": 0,
+    "w": 32,
+    "h": 32
+   }
+  },
+  "archer_hat": {
+   "frame": {
+    "x": 1152,
+    "y": 0,
+    "w": 32,
+    "h": 32
+   }
+  },
+  "archer_shoes": {
+   "frame": {
+    "x": 1184,
+    "y": 0,
+    "w": 32,
+    "h": 32
+   }
+  },
+  "barbarian_weapon": {
+   "frame": {
+    "x": 1216,
+    "y": 0,
+    "w": 32,
+    "h": 32
+   }
+  },
+  "barbarian_armour": {
+   "frame": {
+    "x": 1248,
+    "y": 0,
+    "w": 32,
+    "h": 32
+   }
+  },
+  "barbarian_hat": {
+   "frame": {
+    "x": 1280,
+    "y": 0,
+    "w": 32,
+    "h": 32
+   }
+  },
+  "barbarian_shoes": {
+   "frame": {
+    "x": 1312,
+    "y": 0,
+    "w": 32,
+    "h": 32
+   }
   }
  },
  "meta": {
   "image": "icons.png",
   "size": {
-   "w": 672,
+   "w": 1344,
    "h": 32
   },
   "scale": 1

@@ -14,6 +14,8 @@ export interface HeroSave {
   talents: Record<string, number>;
   slots: string[];
   questId?: number; questStage: number; questCount: number; questVer?: number;
+  /** 1 once the hero has been given its class starting kit (older saves get it on their next login). */
+  kit?: number;
 }
 
 interface Account {
