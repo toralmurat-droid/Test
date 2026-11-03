@@ -652,8 +652,10 @@ export const WORLD_PROP_SPOTS = spots();
 /** Paints the prop textures if needed (npcs.ts uses wp_weapon_rack for Brann's smithy). */
 export function worldPropTextures(scene: Phaser.Scene) { makeTextures(scene); }
 
+const LANTERN_LIFT = 71 / TX, LANTERN_DX = 6 / TX;
+
 /** Adds the props to the scene. `light` gets called for every lantern (the day/night layer lights it after dusk). */
-export function addWorldProps(scene: Phaser.Scene, light?: (x: number, y: number) => void) {
+export function addWorldProps(scene: Phaser.Scene, light?: (x: number, y: number, lift: number, dx: number) => void) {
   makeTextures(scene);
   watchtower(scene);
   sheet(scene, "wp_shipwreck", WRECK_W, WRECK_H, N, shipwreck, 0);
@@ -665,6 +667,7 @@ export function addWorldProps(scene: Phaser.Scene, light?: (x: number, y: number
     const spr = scene.add.sprite(s.x, s.y, s.kind, 0).setOrigin(0.5, 1).setScale(1 / TX).setDepth(s.y).setFlipX(!!s.flip);
     // out of step with each other, so a row of them doesn't move as one
     spr.play({ key: `${s.kind}_idle`, startFrame: Math.floor(hash(Math.round(s.x), Math.round(s.y), 9) * N) });
-    if (s.kind === "wp_lantern_pole") light?.(s.x, s.y);
+    // the glow sits in the lantern: it hangs at texel x 22 of 32 (6 right of the sprite's centre), its middle ~71 texels above the foot
+    if (s.kind === "wp_lantern_pole") light?.(s.x, s.y, LANTERN_LIFT, LANTERN_DX);
   }
 }

@@ -205,7 +205,7 @@ export class GateTorches {
       flame.play({ key: "torch_flame_burn", startFrame: start });
       flameLit.play({ key: "torch_flame_lit_burn", startFrame: start });
       isoAnchor(flame, foot); isoAnchor(flameLit, foot);
-      const light = scene.add.image(t.x, t.y - 6, "light").setTint(0xffa040).setScale(2.6).setBlendMode(Phaser.BlendModes.ADD).setDepth(27500).setAlpha(0);
+      const light = scene.add.image(t.x, t.y - HEAD - 8, "light").setTint(0xffa040).setScale(2.6).setBlendMode(Phaser.BlendModes.ADD).setDepth(27500).setAlpha(0);
       isoAnchor(light, foot);
       // sparks rise slowly from the flame (like the bonfire's); a few flint sparks fly while he strikes
       const sparks = scene.add.particles(t.x, t.y - HEAD - 8, "spark", {

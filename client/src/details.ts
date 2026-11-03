@@ -695,9 +695,13 @@ export class Details {
     }
   }
 
-  /** A warm light that fades in at dusk (used for lanterns, also by worldProps.ts). */
-  addLight(x: number, y: number, color: number, scale: number, base: number, flicker = 0.08) {
-    const img = this.scene.add.image(x, y, "light").setTint(color).setScale(scale).setBlendMode(Phaser.BlendModes.ADD).setDepth(27500).setAlpha(0);
+  /**
+   * A warm light that fades in at dusk (used for lanterns, also by worldProps.ts). (x, y) is the foot of whatever holds
+   * the light; `lift` raises the glow to the flame itself (world px above the foot), `dx` shifts it sideways.
+   */
+  addLight(x: number, y: number, color: number, scale: number, base: number, flicker = 0.08, lift = 0, dx = 0) {
+    const img = this.scene.add.image(x + dx, y - lift, "light").setTint(color).setScale(scale).setBlendMode(Phaser.BlendModes.ADD).setDepth(27500).setAlpha(0);
+    if (lift || dx) isoAnchor(img, { x, y }); // iso: keep it up at the lamp, not skewed onto the ground
     this.lights.push({ img, base, flicker });
   }
 
@@ -712,7 +716,7 @@ export class Details {
         // iso: hangs on the front wall of the house, about head height
         const foot = { x, y: (ty + 1) * TILE };
         isoAnchor(scene.add.image(x, foot.y - 30, "lantern").setOrigin(0.5, 0).setDepth(foot.y + 1), foot);
-        this.addLight(x, foot.y, 0xffb347, 2.2, 0.75);
+        this.addLight(x, foot.y, 0xffb347, 2.2, 0.75, 0.08, 21); // in the lantern (its middle is 21 px up the wall)
         continue;
       }
       scene.add.image(x, y, "lantern").setOrigin(0.5, 0).setDepth(-0.9);
