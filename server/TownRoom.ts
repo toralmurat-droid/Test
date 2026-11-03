@@ -27,6 +27,7 @@ import { moveStep } from "../shared/movement";
 import { SLOTS_BY_ZONE, WORK_SLOTS } from "../shared/siege";
 import { BANDIT_AI, BANDIT_ROLES, CAMP_POSTS, CHIEF, clearWalk, findPath, postPos, roleOf } from "../shared/bandits";
 import { flush, HeroSave, loadHero, login, markChest, openedChests, resetChests, saveHero } from "./accounts";
+import { rollBoon, shrineXp, SHRINE, SHRINE_COOLDOWN_MS, SHRINE_RANGE, WIND_BLESSING, WIND_BLESSING_ID } from "../shared/shrine";
 import { chestById, chestLock, CHEST_RANGE, CHEST_RESPAWN_MS, CHESTS, GUARD_RESPAWN_MS, rollChest } from "../shared/chests";
 import { SLOT_COUNT } from "../shared/slots";
 import { heroPoise, MOB_COMBAT, POISE, poiseLevelMult, poiseSpeed } from "../shared/combat";
@@ -472,6 +473,8 @@ export class TownRoom extends Room<TownState> {
     this.onMessage("use", (client, msg: { id: string }) => this.useQuestObject(client.sessionId, msg?.id));
     this.onMessage("chest", (client, msg: { id: string }) => this.openChest(client, msg?.id));
     this.onMessage("chests", (client) => this.sendChests(client));
+    this.onMessage("pray", (client) => this.pray(client));
+    this.onMessage("shrine", (client) => client.send("shrine", { left: Math.max(0, this.shrineReadyAt - Date.now()) }));
     // First-login game intro: shown once per hero, until it is closed
     this.onMessage("intro", (client) => { if (this.state.players.get(client.sessionId)?.introSeen === false) client.send("intro"); });
     this.onMessage("introseen", (client) => {
@@ -2426,6 +2429,34 @@ export class TownRoom extends Room<TownState> {
     for (const g of loot.gear) {
       if (p.bag.length < BAG_SIZE) { setBag(p, [...bagItems(p), g]); got("gear", 1, g); } else this.dropItem("gear", c.x, c.y + 10, 1, g);
     }
+  }
+
+  /** The Whispering Woods shrine (shared/shrine.ts): ready again at this server time. One shrine for everyone. */
+  private shrineReadyAt = 0;
+
+  /** Pray at the shrine: a random boon for this hero, then it is spent for everyone until it recharges. */
+  private pray(client: Client) {
+    const id = client.sessionId, p = this.state.players.get(id);
+    const now = Date.now();
+    if (!p || p.dead || Math.hypot(SHRINE.x - p.x, SHRINE.y - p.y) > SHRINE_RANGE * 1.5) return;
+    if (now < this.shrineReadyAt) { client.send("shrine", { left: this.shrineReadyAt - now }); return; }
+    this.shrineReadyAt = now + SHRINE_COOLDOWN_MS;
+    const boon = rollBoon(p.hp < p.maxHp || p.energy < ENERGY.max);
+    let amount = 0;
+    if (boon === "heal") {
+      amount = Math.round(p.maxHp - p.hp);
+      p.hp = p.maxHp;
+      p.energy = ENERGY.max;
+      if (amount > 0) this.broadcast("heal", { id, amount });
+    } else if (boon === "xp") {
+      amount = shrineXp(p.level);
+      this.grantXp(id, amount, { x: p.x, y: p.y });
+    } else {
+      p.sk.buffs = p.sk.buffs.filter((b) => b.id !== WIND_BLESSING_ID);
+      p.sk.buffs.push({ id: WIND_BLESSING_ID, until: now + WIND_BLESSING.ms, b: WIND_BLESSING, rank: 1, stacks: 0 });
+      amount = WIND_BLESSING.ms;
+    }
+    this.broadcast("shrine", { left: SHRINE_COOLDOWN_MS, by: id, boon, amount });
   }
 
   /** A blob called for help / fused ("merge"), or skeletons began a bone ritual ("ritual"), near (x, y): players on that step close by have seen it. */

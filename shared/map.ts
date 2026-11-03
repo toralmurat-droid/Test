@@ -55,6 +55,8 @@ export const ROADS = { RX: 79, RY: 59 };
 export const BARNS = [{ x: 14, y: 38, w: 9, h: 6, door0: 17, door1: 19 }];
 
 /** Redfang Hollow, the bandit camp: the stockade (tiles) and its three watchtowers by the gates (see shared/bandits.ts). */
+/** The Whispering Woods shrine (tile), beside the Bandit Trail: the map keeps a clearing around it (shared/shrine.ts). */
+export const SHRINE_SPOT = { x: 226, y: 73 };
 export const REDFANG = { x: 240, y: 102, w: 24, h: 18 };
 export const REDFANG_TOWERS: [number, number][] = [[254, 103], [249, 118], [241, 108]];
 
@@ -588,6 +590,9 @@ function buildWorld() {
     const b = (i: number, j: number) => inMap(i, j) && ground[j][i] === T.BRIDGE;
     if (!b(x - 1, y) && !b(x + 1, y) && !b(x, y - 1) && !b(x, y + 1)) setG(x, y, T.DIRT);
   }
+
+  // ---------- 13a. The forest shrine (shared/shrine.ts): a small clearing beside the Bandit Trail, deep in the Whispering Woods ----------
+  disk(SHRINE_SPOT.x + 0.5, SHRINE_SPOT.y + 0.5, 3.2, 2.8, (x, y) => { if (NATURE.has(objects[y][x])) setO(x, y, EMPTY); });
 
   // ---------- 14. Reachability: carve through nature to any pocket the player can't reach ----------
   const solid = (x: number, y: number) => !inMap(x, y) || (objects[y][x] !== EMPTY && !WALKABLE_OBJECTS.has(objects[y][x])) || ground[y][x] === T.WATER;

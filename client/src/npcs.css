@@ -120,3 +120,12 @@
 #intro button { display: block; margin: 12px auto 0; padding: 6px 16px; font: bold 14px var(--pixel-font); background: #6b5a3a;
   color: #fff4d6; border: 2px solid #ffd166; cursor: pointer; }
 #intro button:hover { background: #806b44; }
+
+/* Whispering Woods shrine (client/src/shrine.ts) */
+#shrineprompt { display: none; position: absolute; left: 50%; bottom: 120px; transform: translateX(-50%); padding: 6px 12px; pointer-events: auto; cursor: pointer;
+  background: rgba(8,26,24,.88); border: 2px solid #25b8a6; border-radius: 4px; color: #e2fff4; font: bold 13px var(--pixel-font); white-space: nowrap;
+  -webkit-font-smoothing: none; -moz-osx-font-smoothing: grayscale; }
+#shrineprompt.open { display: block; }
+#shrineprompt kbd { display: inline-block; padding: 0 5px; margin-right: 4px; border: 1px solid #52dcc2; border-radius: 3px; background: #0b4a48; color: #fff; font: bold 13px var(--pixel-font); }
+#shrineprompt.spent { cursor: default; border-color: #3f6e66; color: #b8d8d0; }
+#shrineprompt .why { display: block; margin-top: 2px; color: #9cf3dc; font-weight: normal; }
