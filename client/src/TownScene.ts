@@ -21,13 +21,19 @@ import { WatchLayer } from "./watch";
 import { WrathBanner } from "./wrath";
 import { inVillage } from "../../shared/wrath";
 import { GateTorches } from "./gateTorches";
-import { QUEST_ITEMS } from "../../shared/quests";
+import { npcPresent, QUEST_ITEMS, usableObjects, USE_RANGE } from "../../shared/quests";
+import { NPCS, TALK_RANGE } from "../../shared/npcs";
+import { CHESTS, CHEST_RANGE } from "../../shared/chests";
+import { SHRINE, SHRINE_RANGE } from "../../shared/shrine";
+import { PORTALS, PORTAL_RANGE } from "../../shared/portals";
+import { PointerControls, type ClickEnemy, type ClickSpot } from "./pointer";
+import { warmPaths } from "./pathfind";
 import { pixelText } from "./pixeltext";
 import { ART_K, CHAR_GROW, CHAR_SCALE, CHARACTERS, CHAR_ORIGIN, CharacterName, createArtAnims, playCharAnim, preloadArt } from "./artAssets";
 import { Ambient } from "./ambient";
 import { Details } from "./details";
 import { GearLayer, GearMenu, preloadGear, TIER_COLORS } from "./gear";
-import { GEAR, gearSpeedMult } from "../../shared/gear";
+import { GEAR, gearReachMult, gearSpeedMult } from "../../shared/gear";
 import { talentMult, talentPoints, spentPoints } from "../../shared/talents";
 import { activeSkills, SLOT_COUNT, SLOT_KEYS, skillLearned } from "../../shared/slots";
 import { iconImg } from "./skillIcons";
@@ -189,6 +195,7 @@ export class TownScene extends Phaser.Scene {
   private keys!: Record<string, Phaser.Input.Keyboard.Key>;
   private input_: InputState = { up: false, down: false, left: false, right: false };
   private seq = 0;
+  private pointer?: PointerControls;
   private npcs?: NpcLayer;
   private villagers?: Villagers;
   private watch?: WatchLayer;
@@ -348,6 +355,7 @@ export class TownScene extends Phaser.Scene {
     this.input.keyboard!.on("keydown-P", () => { if (!this.chatting()) toggleParty(); });
     menuButton("partybtn", toggleParty);
     this.setupChat();
+    this.setupPointer();
 
     setLoading("Joining Oakvale", 0.5);
     const proto = location.protocol === "https:" ? "wss" : "ws";
@@ -898,6 +906,90 @@ export class TownScene extends Phaser.Scene {
       const t = (ev.target as HTMLElement).closest("button");
       if (t && ev.detail === 0) { ev.preventDefault(); ev.stopImmediatePropagation(); }
     }, true);
+  }
+
+  /** Send the held movement directions to the server when they change. */
+  private sendInput(next: InputState) {
+    const i = this.input_;
+    if (next.up === i.up && next.down === i.down && next.left === i.left && next.right === i.right) return;
+    this.input_ = { ...next };
+    this.room?.send("input", { ...next, seq: ++this.seq });
+  }
+
+  /** Mouse controls (client/src/pointer.ts): click to walk, talk, open, attack; right click for the slot 1 skill. */
+  private setupPointer() {
+    warmPaths(); // the walk grid, while the loading screen is still up
+    if (import.meta.env.DEV) (window as any).__town = this; // for local test scripts
+    const meEnt = () => {
+      const e = this.entities.get(this.me);
+      return e && !e.state.dead ? e : undefined;
+    };
+    const attackable = (id: string, e: Entity) => {
+      if (e.state.dead || id === this.me) return false;
+      if (e.mob) return true;
+      const m = meEnt(); // other heroes only where fighting is allowed
+      return !!m && !isSafeZone(e.sprite.x, e.sprite.y) && !isSafeZone(m.sprite.x, m.sprite.y);
+    };
+    const asEnemy = (id: string, e: Entity): ClickEnemy => ({ id, x: e.sprite.x, y: e.sprite.y, h: e.top || 20, dead: !!e.state.dead });
+    const secondarySkill = () => {
+      const p = meEnt()?.state;
+      const id = p?.slots?.at?.(0) ?? p?.slots?.[0];
+      return p && id && skillLearned(p.cls, p.talents, id) ? skillOf(p.cls, id) : undefined;
+    };
+    const basicReach = (p: any) => {
+      const def = CLASSES[p.cls as ClassKind];
+      const k = gearReachMult(p);
+      return def.projectile ? def.projectile.range * k * 0.8 : 12 * k + def.attackRange * k * 0.9 + 4;
+    };
+    this.pointer = new PointerControls(this, {
+      me: () => { const e = meEnt(); return e ? { x: e.sprite.x, y: e.sprite.y, state: e.state } : undefined; },
+      enemies: () => {
+        const out: ClickEnemy[] = [];
+        for (const [id, e] of this.entities) if (!e.culled && attackable(id, e)) out.push(asEnemy(id, e));
+        return out;
+      },
+      enemy: (id) => { const e = this.entities.get(id); return e && attackable(id, e) ? asEnemy(id, e) : undefined; },
+      spots: () => {
+        const p = meEnt()?.state;
+        const out: ClickSpot[] = [];
+        for (const n of NPCS) if (npcPresent(n.id, p)) out.push({ x: n.x, y: n.y, w: 18, h: 30, range: TALK_RANGE, act: () => { if (!this.npcs?.isOpen) this.npcs?.interact(); } });
+        for (const c of CHESTS) out.push({ x: c.x, y: c.y, w: 22, h: 18, range: CHEST_RANGE, act: () => this.chests?.interact() });
+        out.push({ x: SHRINE.x, y: SHRINE.y, w: 26, h: 36, range: SHRINE_RANGE, act: () => this.shrine?.interact() });
+        for (const o of PORTALS) out.push({ x: o.x, y: o.y, w: 26, h: 40, range: PORTAL_RANGE, act: () => this.portals?.interact() });
+        for (const { o } of usableObjects(p)) out.push({ x: o.x, y: o.y, w: 22, h: 22, range: USE_RANGE, act: () => this.room?.send("use", { id: o.id }) });
+        return out;
+      },
+      speed: () => {
+        const p = meEnt()?.state;
+        return p ? heroSpeed(p.cls as ClassKind, p.slowed, p.spd ?? 1) * gearSpeedMult(p) : 80;
+      },
+      reach: (secondary) => {
+        const p = meEnt()?.state;
+        if (!p) return 0;
+        if (!secondary) return basicReach(p);
+        const s = secondarySkill();
+        if (s) {
+          if (s.shots) return s.shots.range * 0.8;
+          if (s.move) return Math.max(basicReach(p), s.move.dist * 0.8);
+          if (s.areas?.length) return Math.max(...s.areas.map((a) => (a.ahead ?? 0) + a.r * 0.7));
+          if (s.cry) return s.cry.r * 0.8;
+          if (s.field && !s.field.follow) return (s.field.ahead ?? 0) + s.field.r * 0.7;
+          return basicReach(p);
+        }
+        const shot = p.ranged ? GEAR[p.ranged]?.shot : undefined;
+        return shot ? shot.range * 0.8 : basicReach(p);
+      },
+      fire: (secondary) => {
+        if (!secondary) { this.room?.send("attack"); return; }
+        const p = meEnt()?.state;
+        if (secondarySkill()) this.room?.send("useslot", 0);
+        else if (p?.ranged && GEAR[p.ranged]?.shot) this.room?.send("ranged");
+        else this.room?.send("attack");
+      },
+      send: (type, msg) => this.room?.send(type, msg),
+      stop: () => this.sendInput({ up: false, down: false, left: false, right: false }),
+      blocked: () => !this.room || loadingActive() || !!this.intro?.open,
+    });
   }
 
   /** True while typing (chat box or the idea box): game keys are off. */
@@ -1563,14 +1655,14 @@ export class TownScene extends Phaser.Scene {
       if (!skill) return "";
       const h = this.skillHud(cls, skill, cdm);
       ult = h.ult;
-      const r = row(SLOT_KEYS[i], h.name, h.cdMs, h.last, "", skillLearned(cls, mine.talents, skill as any) ? "" : "🔒", h.cost);
+      const r = row(i === 0 ? `${SLOT_KEYS[i]} · R-click` : SLOT_KEYS[i], h.name, h.cdMs, h.last, "", skillLearned(cls, mine.talents, skill as any) ? "" : "🔒", h.cost);
       ult = false;
       return r;
     });
     const unslotted = activeSkills(cls).filter((a) => skillLearned(cls, mine.talents, a.id) && !slots.includes(a.id))
       .map((a) => row("–", a.name, 0, 0, "", "no key: click a slot below"));
     const html = [
-      row("Space", CLASSES[cls].projectile ? "Shoot" : "Attack", 0, 0, mine.stacks > 0 ? `${STACK_NAME[cls]} ${mine.stacks}/${MAX_STACKS}` : "3-hit combo"),
+      row("L-click", CLASSES[cls].projectile ? "Shoot" : "Attack", 0, 0, mine.stacks > 0 ? `${STACK_NAME[cls]} ${mine.stacks}/${MAX_STACKS}` : "3-hit combo"),
       ...slotRows, ...unslotted,
       row("Shift", "Dodge roll", DODGE.cooldownMs, this.lastDodge, "", "", ENERGY.cost.dodge),
       row("Q", "Potion", 0, 0, `×${mine.potions}`, mine.potions > 0 ? "" : "×0"),
@@ -1752,11 +1844,11 @@ export class TownScene extends Phaser.Scene {
     const next: InputState = typing
       ? { up: false, down: false, left: false, right: false }
       : isoInput(k.W.isDown || k.UP.isDown, k.S.isDown || k.DOWN.isDown, k.A.isDown || k.LEFT.isDown, k.D.isDown || k.RIGHT.isDown);
-    const i = this.input_;
-    if (next.up !== i.up || next.down !== i.down || next.left !== i.left || next.right !== i.right) {
-      this.input_ = next;
-      this.room.send("input", { ...next, seq: ++this.seq });
-    }
+    // Point-and-click: the mouse steers until a movement key is pressed
+    let want = next;
+    if (next.up || next.down || next.left || next.right) this.pointer?.cancel();
+    else want = this.pointer?.update(Math.min(dtMs, 100)) ?? next;
+    this.sendInput(want);
 
     const now = this.time.now, wall = performance.now();
     // Long frames (a hiccup, a hidden tab) are capped so prediction never leaps through a wall

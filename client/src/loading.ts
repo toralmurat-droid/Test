@@ -16,8 +16,11 @@ let waiting: (() => void)[] = [];
 
 const TIPS = [
   "Watch the wind-up of big enemies and roll away (Shift or F).",
-  "Chain your attacks with Space for a 3-hit combo.",
-  "Loot chests fill up again after a while. Press E to open them.",
+  "Left-click the ground to walk there. Hold the button to keep walking.",
+  "Left-click a monster to attack it. Hold the button to keep hitting for a 3-hit combo.",
+  "Right-click uses the skill in hotbar slot 1, on the monster you click.",
+  "Click villagers, chests, shrines and portal stones to use them.",
+  "Loot chests fill up again after a while. Click one to open it.",
   "The forest shrine grants a random boon to whoever prays first.",
   "Quest givers have a mark over their heads. Press J for your quest log.",
   "Zones get harder the further you go from Oakvale.",

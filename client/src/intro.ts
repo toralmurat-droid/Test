@@ -1,9 +1,9 @@
 // One-time game intro: shown on a hero's first login, never again once closed (the server saves that).
 const SECTIONS: [string, string][] = [
-  ["Move & fight", "WASD or arrows to walk. Space attacks (chain hits for a combo). Shift or F dodge-rolls. Q drinks a potion. Watch the wind-up of big enemies and roll away."],
-  ["Grow your hero", "Monsters give XP and gold. Each level gives stat points (C) and skill points (T). Learn skills in the tree, then put them on the hotbar and use them with keys 1 to 0."],
-  ["Gear & loot", "Walk over drops to pick them up. G opens your equipment: click to wear. Open loot chests with E, and buy or sell at the village shops."],
-  ["Quests", "Talk to villagers with E. Quest givers send you out into the wilds; J opens your quest log. Zones get harder the further you go from Oakvale."],
+  ["Move & fight", "Left-click the ground to walk there; hold the button to keep walking. Left-click a monster to walk up and attack it (hold to keep hitting, chain hits for a combo). Right-click uses the skill in hotbar slot 1. Shift or F dodge-rolls, Q drinks a potion. Keys still work too: WASD to walk, Space to attack."],
+  ["Grow your hero", "Monsters give XP and gold. Each level gives stat points (C) and skill points (T). Learn skills in the tree, then put them on the hotbar and use them with keys 1 to 0. Slot 1 is also your right-click skill."],
+  ["Gear & loot", "Click a drop or walk over it to pick it up. G opens your equipment: click to wear. Click a loot chest to open it, and buy or sell at the village shops."],
+  ["Quests", "Click villagers to talk to them (or press E next to them). Quest givers send you out into the wilds; J opens your quest log. Zones get harder the further you go from Oakvale."],
   ["Saving", "Your hero is saved on the server automatically. Log in with the same name and password on any device to carry on."],
 ];
 

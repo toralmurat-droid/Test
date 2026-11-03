@@ -466,6 +466,13 @@ export class TownRoom extends Room<TownState> {
     });
 
     this.onMessage("attack", (client) => this.playerAttack(client.sessionId));
+    // Point-and-click: turn toward a world point (the clicked enemy or spot) before an attack or skill
+    this.onMessage("face", (client, msg: { x: number; y: number }) => {
+      const p = this.state.players.get(client.sessionId);
+      const x = Number(msg?.x), y = Number(msg?.y);
+      if (!p || p.dead || p.rolling || !Number.isFinite(x) || !Number.isFinite(y)) return;
+      this.host.face(client.sessionId, x - p.x, y - p.y);
+    });
     this.onMessage("cast", (client, skill: string) => this.cast(client.sessionId, skill));
     this.onMessage("potion", (client) => this.drinkPotion(client.sessionId));
     this.onMessage("dodge", (client) => this.dodge(client.sessionId));
