@@ -505,6 +505,8 @@ export const rankTime = (rank: number) => 1 + RANK_TIME * Math.max(0, rank - 1);
 
 /** The active skills a class can put on a key, in tree order. */
 export const activeSkills = (cls: ClassKind) => S[cls].filter(isActive);
+/** Every skill of a class (actives and passives), in tree order. */
+export const classSkills = (cls: ClassKind) => S[cls].slice();
 export const skillLearned = (cls: ClassKind, r: Ranks, id: string) => !!skillOf(cls, id) && rankOf(r, id) > 0;
 
 
