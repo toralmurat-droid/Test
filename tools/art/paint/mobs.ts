@@ -296,11 +296,14 @@ export function buildMobs(out: string, ONLY?: string[]) {
     humanoid("mob_skeleton_spear", "skeleton_spear", 32, 30, 27.5 / 30, 0.85),
     humanoid("mob_skeleton_bow", "skeleton_bow", 20, 30, 27.5 / 30, 0.85),
     humanoid("mob_bandit", "bandit", 20, 30, 27.5 / 30, 0.85),
+    humanoid("mob_bandit_brute", "bandit_brute", 24, 30, 27.5 / 30, 0.9),
+    humanoid("mob_bandit_archer", "bandit_archer", 20, 30, 27.5 / 30, 0.85),
+    humanoid("mob_banditchief", "banditchief", 28, 34, 32 / 34, 0.95),
     humanoid("mob_skeletonmage", "skeletonmage", 24, 32, 31.2 / 32, 0.93),
     humanoid("mob_necromancer", "necromancer", 24, 32, 31.2 / 32, 0.93),
     humanoid("mob_demon", "demon", 28, 34, 33 / 34, 1.0),
     // drawn on a 24x16 layout, 1.35x up into a 32x22 frame (about as long as a skeleton is tall)
-    { key: "mob_crawler", w: 32, h: 22, draw: (c, f) => {
+    { key: "mob_crawler", w: 32, h: 22, draw: (c: C2, f: number) => {
       for (const k of SH ? [c, SH] : [c]) { k.save(); k.translate(16, 20); k.scale(1.35, 1.35); k.translate(-12, -14); }
       crawlerFrame(c, 24, 16, f);
       c.restore(); SH?.restore();

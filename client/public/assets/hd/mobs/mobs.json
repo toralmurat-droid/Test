@@ -77,6 +77,24 @@
   "scale": 1.5,
   "frames": 12
  },
+ "mob_bandit_brute": {
+  "w": 24,
+  "h": 30,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_bandit_archer": {
+  "w": 20,
+  "h": 30,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_banditchief": {
+  "w": 28,
+  "h": 34,
+  "scale": 1.5,
+  "frames": 12
+ },
  "mob_skeletonmage": {
   "w": 24,
   "h": 32,

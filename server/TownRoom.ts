@@ -25,6 +25,7 @@ import { BLOB_KINDS, inZone, npcPresent, QUEST_VERSION, QUESTS, questStep, stepG
 import { findHideSpot, HIDE, noMobsAt, spawnPoint, SPAWN_ZONES, zoneCap } from "../shared/spawns";
 import { moveStep } from "../shared/movement";
 import { SLOTS_BY_ZONE, WORK_SLOTS } from "../shared/siege";
+import { BANDIT_AI, BANDIT_ROLES, CAMP_POSTS, CHIEF, clearWalk, findPath, postPos, roleOf } from "../shared/bandits";
 import { flush, HeroSave, loadHero, login, markChest, openedChests, resetChests, saveHero } from "./accounts";
 import { chestById, chestLock, CHEST_RANGE, CHEST_RESPAWN_MS, CHESTS, GUARD_RESPAWN_MS, rollChest } from "../shared/chests";
 import { SLOT_COUNT } from "../shared/slots";
@@ -153,6 +154,11 @@ export class Mob extends Schema {
   nextHeal = 0; // healer blob
   specialKind = ""; specialAt = 0; nextBounce = 0; nextSlam = 0; // mother blob special moves (necromancer casts too)
   nextRaise = 0; nextCircle = 0; castX = 0; castY = 0; // necromancer: raise dead, Death Circle aim
+  // Redfang Hollow bandits (shared/bandits.ts): camp member, its post (CAMP_POSTS index), patrol progress, horn alert
+  camp = false; post = -1; perch = false; pLeg = 0; pDir = 1; stuckSince = 0; detourUntil = 0;
+  alertUntil = 0; alertHero = ""; nextHorn = 0; nextVolley = 0; rallyUntil = 0; chargeMult = 1; dashHit = false; reinforced = false;
+  nextSweep = 0; nextLeap = 0; nextCry = 0;
+  path: [number, number][] = []; pathAt = 0; pathTX = 0; pathTY = 0; // the way round walls (gates), see seek
   @type("number") x = 0;
   @type("number") y = 0;
   @type("string") dir: Dir = "down";
@@ -299,7 +305,7 @@ function aimOf(p: Player): [number, number] {
 
 type Poised = { poiseLost: number; lastPoiseHit: number; brokenUntil: number; steadyUntil: number; broken: boolean; dead: boolean };
 
-const mobPoiseMax = (m: Mob) => MOB_COMBAT[m.kind].poise * mobScale(m.level, "hp");
+const mobPoiseMax = (m: Mob) => MOB_COMBAT[m.kind].poise * mobScale(m.level, "hp") * (m.kind === "bandit" ? BANDIT_ROLES[roleOf(m.weapon)].poise : 1);
 const heroPoiseMax = (p: Player) => heroPoise(p.cls, p.level);
 
 /** Recover poise over time; end the broken state (poise refills and the target is steady for a moment). */
@@ -366,7 +372,32 @@ const RANGED: Partial<Record<MobKind, RangedCfg>> = {
 };
 
 const BOW_SKELETON: RangedCfg = { ...SKELETON_BOW, range: SKELETON_WEAPONS.bow.range, far: SKELETON_WEAPONS.bow.range * 0.85, shot: "arrow", mult: SKELETON_WEAPONS.bow.dmg };
-const rangedOf = (m: Mob): RangedCfg | undefined => m.kind === "skeleton" && m.weapon === "bow" ? BOW_SKELETON : RANGED[m.kind];
+const BANDIT_BOW: RangedCfg = { ...BANDIT_AI.bow, far: BANDIT_AI.bow.range * 0.85, shot: "arrow" };
+const LOOKOUT_BOW: RangedCfg = { ...BANDIT_AI.lookoutBow, keepAway: 0, far: 1e9, shot: "arrow" }; // never leaves its tower
+const rangedOf = (m: Mob): RangedCfg | undefined =>
+  m.kind === "skeleton" && m.weapon === "bow" ? BOW_SKELETON
+  : m.kind === "bandit" ? (m.weapon === "archer" ? BANDIT_BOW : m.weapon === "lookout" ? LOOKOUT_BOW : undefined)
+  : RANGED[m.kind];
+/** A monster's stats: its kind's numbers, a bandit's role on top, and the camp's horn alert (they come from far). */
+function mobDef(m: Mob, now = Date.now()): MobDef {
+  const base = MOBS[m.kind];
+  if (m.kind !== "bandit" && m.kind !== "banditchief") return base;
+  const r = m.kind === "bandit" ? BANDIT_ROLES[roleOf(m.weapon)] : undefined;
+  const rally = now < m.rallyUntil;
+  const alert = now < m.alertUntil;
+  const H = BANDIT_AI.horn;
+  return {
+    ...base,
+    name: r?.name ?? base.name,
+    maxHp: base.maxHp * (r?.hp ?? 1),
+    damage: base.damage * (r?.dmg ?? 1) * (rally ? CHIEF.warCry.dmg : 1),
+    speed: base.speed * (r?.speed ?? 1) * (rally ? CHIEF.warCry.speed : 1),
+    attackCooldownMs: base.attackCooldownMs * (r?.cooldown ?? 1),
+    xp: base.xp * (r?.xp ?? 1),
+    aggroRange: m.weapon === "lookout" ? H.sight : alert ? Math.max(base.aggroRange, H.alertAggro) : base.aggroRange,
+    leash: m.weapon === "lookout" ? 1e9 : alert ? Math.max(base.leash, H.alertLeash) : base.leash,
+  };
+}
 /** Melee reach, damage, cooldown and wind-up of a monster (skeletons depend on their weapon). */
 const meleeOf = (m: Mob) => {
   const w = m.kind === "skeleton" ? SKELETON_WEAPONS[(m.weapon || "sword") as SkeletonWeapon] : undefined;
@@ -591,6 +622,12 @@ export class TownRoom extends Room<TownState> {
 
   /** A spawn spot in the zone away from every hero, or null if none turned up (the hero stands in a small zone). */
   private freeSpawnPoint(zi: number, kind: MobKind) {
+    if (kind === "bandit" && SPAWN_ZONES[zi].name === "Redfang Hollow") {
+      const post = this.freePost("");
+      if (post < 0) return null;
+      const at = postPos(CAMP_POSTS[post]);
+      return this.playerNear(at.x, at.y, NO_SPAWN_RANGE) ? null : { ...at, level: spawnPoint(SPAWN_ZONES[zi], kind).level };
+    }
     for (let i = 0; i < 12; i++) {
       const pt = spawnPoint(SPAWN_ZONES[zi], kind);
       if (!this.playerNear(pt.x, pt.y, NO_SPAWN_RANGE)) return pt;
@@ -599,11 +636,23 @@ export class TownRoom extends Room<TownState> {
   }
 
   private spawnMob(kind: MobKind, zi: number, id = `m${++this.mobSeq}`, at?: ReturnType<typeof spawnPoint>) {
-    const def = MOBS[kind];
-    const home = at ?? spawnPoint(SPAWN_ZONES[zi], kind);
     const m = this.state.mobs.get(id) ?? new Mob();
+    let home = at ?? spawnPoint(SPAWN_ZONES[zi], kind);
     m.kind = kind;
     m.weapon = kind === "skeleton" ? rollSkeletonWeapon() : "";
+    m.camp = false; m.post = -1; m.perch = false; m.pLeg = 0; m.pDir = 1; m.stuckSince = 0; m.detourUntil = 0;
+    m.alertUntil = 0; m.alertHero = ""; m.nextHorn = 0; m.nextVolley = 0; m.rallyUntil = 0; m.chargeMult = 1; m.dashHit = false; m.reinforced = false;
+    m.nextSweep = 0; m.nextLeap = 0; m.nextCry = 0;
+    if (kind === "bandit" && SPAWN_ZONES[zi]?.name === "Redfang Hollow") {
+      // The camp: every bandit takes the first free post (its role, spot and patrol route)
+      const post = this.freePost(id);
+      if (post >= 0) {
+        const P = CAMP_POSTS[post];
+        m.camp = true; m.post = post; m.weapon = P.role; m.perch = P.role === "lookout";
+        home = { ...postPos(P), level: home.level };
+      }
+    }
+    const def = mobDef(m);
     m.zone = zi;
     m.x = m.homeX = home.x;
     m.y = m.homeY = home.y;
@@ -678,6 +727,13 @@ export class TownRoom extends Room<TownState> {
     }
   }
 
+  /** First camp post nobody alive holds (-1 if all are taken). */
+  private freePost(self: string): number {
+    const held = new Set<number>();
+    this.state.mobs.forEach((o, oid) => { if (oid !== self && o.camp && !o.dead && o.post >= 0) held.add(o.post); });
+    return CAMP_POSTS.findIndex((_, i) => !held.has(i));
+  }
+
   // ---- Special blobs --------------------------------------------------------
 
   /** Ranged monsters' shot at (tx,ty): shooter blob slime ball, skeleton mage magic bolt, necromancer shadow bolt. Only hurts players. */
@@ -685,9 +741,10 @@ export class TownRoom extends Room<TownState> {
     const s = new Projectile();
     const dx = tx - m.x, dy = ty - m.y, d = Math.hypot(dx, dy) || 1;
     s.x = m.x; s.y = m.y - 4; s.vx = dx / d; s.vy = dy / d;
-    s.owner = id; s.kind = cfg.shot; s.mobLevel = m.level || 1; s.mobName = MOBS[m.kind].name;
+    const def = mobDef(m);
+    s.owner = id; s.kind = cfg.shot; s.mobLevel = m.level || 1; s.mobName = def.name;
     s.speed = cfg.shotSpeed; s.range = cfg.range * 1.4; s.radius = cfg.shotRadius;
-    s.damage = Math.round(MOBS[m.kind].damage * mobScale(m.level, "damage") * (cfg.mult ?? 1));
+    s.damage = Math.round(def.damage * mobScale(m.level, "damage") * (cfg.mult ?? 1));
     this.state.projectiles.set(`s${++this.shotSeq}`, s);
     this.broadcast("swing", { id });
   }
@@ -852,10 +909,12 @@ export class TownRoom extends Room<TownState> {
   private pickTarget(m: Mob, def: MobDef) {
     let best = 0, target = "", foe = "";
     m.threat = 0;
+    const alerted = Date.now() < m.alertUntil;
     this.state.players.forEach((p, pid) => {
       if (p.dead || isSafeZone(p.x, p.y) || Math.hypot(p.x - m.homeX, p.y - m.homeY) >= def.leash) return;
       const d = Math.hypot(p.x - m.x, p.y - m.y);
-      const hated = pid === m.hateId ? m.hate : 0;
+      // a hero the horn (or a shout) called the camp against counts as hated
+      const hated = (pid === m.hateId ? m.hate : 0) + (alerted && pid === m.alertHero ? 0.5 : 0);
       const range = hated > 0 ? def.aggroRange * 2 : def.aggroRange;
       if (d >= range) return;
       if (d < def.aggroRange) m.threat = Math.max(m.threat, p.level - m.level);
@@ -863,7 +922,8 @@ export class TownRoom extends Room<TownState> {
       const score = Math.max(0, 1 - d / def.aggroRange) * lf + hated + (pid === m.target ? AGGRO.stick : 0);
       if (score > best) { best = score; target = pid; }
     });
-    const side = FACTION[m.kind];
+    const side = m.perch ? undefined : FACTION[m.kind]; // lookouts stay up on their tower
+    const fr = m.camp && CAMP_POSTS[m.post]?.route ? BANDIT_AI.patrolFeud : FEUD.range; // patrols go looking for trouble
     if (side && !m.mergeInto && !m.summonFor && Math.hypot(m.x - m.homeX, m.y - m.homeY) <= def.leash) {
       const cx = Math.floor(m.x / FEUD_CELL), cy = Math.floor(m.y / FEUD_CELL);
       for (let gy = cy - 1; gy <= cy + 1; gy++) for (let gx = cx - 1; gx <= cx + 1; gx++) {
@@ -871,8 +931,8 @@ export class TownRoom extends Room<TownState> {
           if (FACTION[o.kind] === side || o.dead || o.hidden || o.mergeInto) continue;
           const d = Math.hypot(o.x - m.x, o.y - m.y);
           const hated = oid === m.hateId ? m.hate : 0;
-          if (d >= (hated > 0 || oid === m.foe ? FEUD.range * 2 : FEUD.range)) continue;
-          const score = AGGRO.rival * Math.max(0.05, 1 - d / FEUD.range) * aggroLevelFactor(m.level, o.level) + hated + (oid === m.foe ? AGGRO.stick : 0);
+          if (d >= (hated > 0 || oid === m.foe ? fr * 2 : fr)) continue;
+          const score = AGGRO.rival * Math.max(0.05, 1 - d / fr) * aggroLevelFactor(m.level, o.level) + hated + (oid === m.foe ? AGGRO.stick : 0);
           if (score > best) { best = score; target = ""; foe = oid; }
         }
       }
@@ -894,6 +954,9 @@ export class TownRoom extends Room<TownState> {
 
   /** A monster's blow on another monster: no loot and no XP when it dies; the victim fights back. */
   private mobHitsMob(m: Mob, id: string, o: Mob, oid: string, dmg: number) {
+    // Redfang bandits are seasoned fighters: they cut through the beasts of the woods and shrug off their blows
+    if (FACTION[m.kind] === "outlaw") dmg = Math.round(dmg * BANDIT_AI.feud.dealt);
+    if (FACTION[o.kind] === "outlaw") dmg = Math.max(1, Math.round(dmg * BANDIT_AI.feud.taken));
     o.hp -= dmg;
     this.addHate(o, id, dmg);
     if (!o.target && !o.foe) o.foe = id;
@@ -1243,6 +1306,7 @@ export class TownRoom extends Room<TownState> {
       const fx = statusOf(m, now);
       if (m.fx !== fx) m.fx = fx;
       this.updateMob(m, id, dt, now);
+      if (m.perch) { m.x = m.homeX; m.y = m.homeY; m.moving = false; } // lookouts never leave their tower
     });
     this.updateZones(now);
     this.updateGuards(now);
@@ -1386,6 +1450,7 @@ export class TownRoom extends Room<TownState> {
     m.x = m.homeX = x; m.y = m.homeY = y;
     m.level = Math.max(1, c.level - 1);
     m.hp = m.maxHp = Math.round(MOBS[kind].maxHp * mobScale(m.level, "hp"));
+    if (kind === "banditchief") { m.camp = true; m.post = -1; } // leads the camp: hears the horn, rallies his men
   }
 
   /** Living guardians of a chest (near it: one lured far away still counts until it dies). */
@@ -1434,7 +1499,7 @@ export class TownRoom extends Room<TownState> {
       this.clock.setTimeout(() => this.state.mobs.delete(id), 500);
       return;
     }
-    const def = MOBS[m.kind];
+    const def = mobDef(m, now);
     m.stunned = now < m.stunUntil;
     if (m.stunned || m.broken) { m.winding = false; m.windUntil = 0; }
     m.slowed = now < m.slowUntil;
@@ -1475,6 +1540,9 @@ export class TownRoom extends Room<TownState> {
 
     // A worker drops its tools the moment it has someone to fight (and its gang looks up too)
     if (m.work && (t || foe || m.spot)) this.dropWork(m, id, now);
+    // Redfang Hollow: lookouts blow the horn, the chief rallies his camp and calls for more men
+    if (t && m.perch && now >= m.nextHorn) this.blowHorn(m, id, now);
+    if (t && m.kind === "banditchief") this.chiefOrders(m, id, now);
 
     // Dizzy: run for the nearest grave/tree if there is one
     if (t && m.broken && !m.spot && HIDE.spots[m.kind]) this.claimSpot(m, m.x, m.y, HIDE.fleeRadius, now, true);
@@ -1511,14 +1579,17 @@ export class TownRoom extends Room<TownState> {
       const dist = Math.hypot(t.x - m.x, t.y - m.y);
       const cfg = rangedOf(m)!;
       const melee = meleeOf(m);
-      input = dist < cfg.keepAway ? toward(m.x, m.y, m.x * 2 - t.x, m.y * 2 - t.y) : dist > cfg.far ? toward(m.x, m.y, t.x, t.y) : STILL;
+      input = dist < cfg.keepAway ? toward(m.x, m.y, m.x * 2 - t.x, m.y * 2 - t.y) : dist > cfg.far ? this.go(m, t.x, t.y, now) : STILL;
       if (m.kind === "necromancer" && this.necroSpell(m, id, t, dist, now)) input = STILL;
       else if (cfg.shot) {
         if (m.windUntil) {
           input = STILL;
           if (now >= m.windUntil) {
             m.windUntil = 0; m.winding = false; m.lastAttack = now;
-            if (dist <= cfg.range * 1.2) this.mobShot(m, id, t.x, t.y);
+            if (dist <= cfg.range * 1.2) {
+              this.mobShot(m, id, t.x, t.y);
+              if (m.kind === "bandit" && now >= m.nextVolley) this.volley(m, id, t, now);
+            }
           }
         } else if (dist <= cfg.range && now - m.lastAttack >= def.attackCooldownMs * melee.cooldown / poiseSpeed(poiseFrac(m, mobPoiseMax(m)))) {
           m.windUntil = now + melee.windupMs; m.winding = true;
@@ -1529,18 +1600,33 @@ export class TownRoom extends Room<TownState> {
       input = STILL;
     } else if (t && m.kind === "motherblob" && this.motherSpecial(m, id, Math.hypot(t.x - m.x, t.y - m.y), now)) {
       input = STILL;
+    } else if ((t || m.specialAt) && (m.kind === "banditchief" || m.weapon === "brute") && this.banditSpecial(m, id, t, t ? Math.hypot(t.x - m.x, t.y - m.y) : 0, now)) {
+      input = STILL;
     } else if (t) {
       const dist = Math.hypot(t.x - m.x, t.y - m.y);
       // Warrior blob: lunge at a target a few steps away
       if (m.canCharge && !m.windUntil && now >= m.nextCharge && dist >= BLOB_AI.warrior.chargeMin && dist <= BLOB_AI.warrior.chargeMax) {
-        m.chargeUntil = now + BLOB_AI.warrior.chargeMs; m.nextCharge = now + BLOB_AI.warrior.cooldownMs;
+        m.chargeUntil = now + BLOB_AI.warrior.chargeMs; m.nextCharge = now + BLOB_AI.warrior.cooldownMs; m.chargeMult = BLOB_AI.warrior.chargeMult;
         this.broadcast("blobcharge", { id });
       }
+      // Cutthroat: darts in and stabs on arrival
+      const D = BANDIT_AI.dash;
+      if (m.kind === "bandit" && m.weapon === "cutthroat" && !m.broken && !m.windUntil && now >= m.nextCharge && dist >= D.min && dist <= D.max) {
+        m.chargeUntil = now + D.ms; m.nextCharge = now + D.cooldownMs; m.chargeMult = D.mult; m.dashHit = true;
+        this.broadcast("bdash", { id });
+      }
+      if (m.dashHit && now > m.chargeUntil + 250) m.dashHit = false; // missed
       const melee = meleeOf(m);
       // Merged blob that swallowed a shooter: spits slime balls while closing in
       if (m.merged > 1 && m.canShoot && !m.windUntil && now >= m.nextShot && dist > melee.range * 2 && dist <= BLOB_AI.shooter.range) {
         m.nextShot = now + MERGE.shotEveryMs;
         this.mobShot(m, id, t.x, t.y, RANGED.shooterblob!);
+      }
+      if (m.dashHit && dist <= melee.range + 4) {
+        // the dash lands: a stab right away, no wind-up
+        m.dashHit = false; m.chargeUntil = 0; m.lastAttack = now;
+        this.broadcast("swing", { id });
+        this.damagePlayer(m.target, Math.round(def.damage * D.dmgMult * mobScale(m.level, "damage")), def.name, DIR_OFFSET[m.dir], 1.5, { atkLevel: m.level, from: id });
       }
       if (dist <= melee.range || m.windUntil) {
         input = STILL;
@@ -1568,7 +1654,7 @@ export class TownRoom extends Room<TownState> {
         const r = Math.abs(diff) > 0.35 ? Math.max(melee.range + 12, dist * 0.9) : Math.max(melee.range * BONES.flankRadius, dist * 0.75);
         input = toward(m.x, m.y, t.x + Math.cos(a) * r, t.y + Math.sin(a) * r);
       } else {
-        input = toward(m.x, m.y, t.x, t.y);
+        input = this.go(m, t.x, t.y, now);
       }
     } else if (foe && !m.broken) {
       // Fighting a monster of the other side: walk up and hit it (everyone brawls here, no special moves)
@@ -1588,11 +1674,13 @@ export class TownRoom extends Room<TownState> {
         } else if (now - m.lastAttack >= def.attackCooldownMs * melee.cooldown) {
           m.windUntil = now + melee.windupMs; m.winding = true;
         }
-      } else input = toward(m.x, m.y, foe.x, foe.y);
+      } else input = this.go(m, foe.x, foe.y, now);
     } else if (m.job >= 0 && !m.guard) {
       input = this.work(m, now); // back to the siege works
+    } else if (m.camp && CAMP_POSTS[m.post]?.route) {
+      input = this.patrolStep(m, now); // walk the trail, back and forth
     } else if (Math.hypot(m.x - m.homeX, m.y - m.homeY) > 40) {
-      input = toward(m.x, m.y, m.homeX, m.homeY); // walk back home
+      input = this.go(m, m.homeX, m.homeY, now); // walk back home
     } else {
       if (now > m.nextWander) {
         // Idle or stroll in a random 8-way direction
@@ -1604,12 +1692,183 @@ export class TownRoom extends Room<TownState> {
       input = m.wander;
     }
 
-    const charge = now < m.chargeUntil ? BLOB_AI.warrior.chargeMult : 1;
+    const charge = now < m.chargeUntil ? m.chargeMult : 1;
     const speed = (t || foe ? def.speed * (m.broken ? POISE.fleeSpeed : 1) * charge : def.speed * 0.5) * (m.slowed ? SLOW_MOB : 1);
     const r = moveStep(m.x, m.y, input, dt, speed);
+    if (m.camp && r.moving && !t && !foe) {
+      // a patrol stuck on a tree steps aside for a moment
+      if (Math.hypot(r.x - m.x, r.y - m.y) < speed * dt * 0.25) { m.stuckSince ||= now; } else m.stuckSince = 0;
+      if (m.stuckSince && now - m.stuckSince > 900) {
+        m.stuckSince = 0; m.detourUntil = now + 700 + Math.random() * 500;
+        const a = Math.floor(Math.random() * 8) * Math.PI / 4;
+        m.wander = { right: Math.cos(a) > 0.3, left: Math.cos(a) < -0.3, down: Math.sin(a) > 0.3, up: Math.sin(a) < -0.3 };
+      }
+    }
     if (!isSafeZone(r.x, r.y) && !noMobsAt(r.x, r.y)) { m.x = r.x; m.y = r.y; }
     m.moving = r.moving;
     m.dir = dirFromInput(input, m.dir);
+  }
+
+  // ---- Redfang Hollow bandits (shared/bandits.ts) -----------------------------
+
+  /** Patrol: walk to the next point of the route; at the end turn round. Home follows, so after a fight it carries on. */
+  private patrolStep(m: Mob, now: number): InputState {
+    if (now < m.detourUntil) return m.wander;
+    const route = CAMP_POSTS[m.post].route!;
+    m.pLeg = Math.max(0, Math.min(route.length - 1, m.pLeg));
+    const [tx, ty] = route[m.pLeg], x = (tx + 0.5) * TILE, y = (ty + 0.5) * TILE;
+    m.homeX = x; m.homeY = y;
+    if (Math.hypot(x - m.x, y - m.y) < 10) {
+      if (m.pLeg + m.pDir < 0 || m.pLeg + m.pDir >= route.length) m.pDir = -m.pDir;
+      m.pLeg += m.pDir;
+      if (Math.random() < 0.3) m.detourUntil = now + 1200; // a short halt to look around
+      m.wander = STILL;
+      return STILL;
+    }
+    return this.go(m, x, y, now);
+  }
+
+  /** Walk toward (x,y): camp bandits find their way round walls through the gates, others go straight. */
+  private go(m: Mob, x: number, y: number, now: number): InputState {
+    if (!m.camp || clearWalk(m.x, m.y, x, y)) { m.path = []; return toward(m.x, m.y, x, y); }
+    const moved = Math.hypot(x - m.pathTX, y - m.pathTY) > TILE;
+    if (!m.path.length || moved || now > m.pathAt + 1500) {
+      m.path = findPath(m.x, m.y, x, y); m.pathAt = now; m.pathTX = x; m.pathTY = y;
+    }
+    // skip the points already reached, and any we can see past
+    while (m.path.length > 1 && (Math.hypot(m.path[0][0] - m.x, m.path[0][1] - m.y) < 8 || clearWalk(m.x, m.y, m.path[1][0], m.path[1][1]))) m.path.shift();
+    const p = m.path[0];
+    return p ? toward(m.x, m.y, p[0], p[1]) : toward(m.x, m.y, x, y);
+  }
+
+  private lastHorn = 0;
+  /** A lookout spots a hero: the horn sounds and the whole camp (and the patrols nearby) comes for him. */
+  private blowHorn(m: Mob, id: string, now: number) {
+    const H = BANDIT_AI.horn;
+    m.nextHorn = now + H.cooldownMs;
+    if (now - this.lastHorn > 6000) { this.lastHorn = now; this.broadcast("horn", { id, x: Math.round(m.x), y: Math.round(m.y) }); }
+    this.alertCamp(m.x, m.y, H.range, m.target, now);
+  }
+
+  /** Every camp bandit (and the chief) within r px drops what it was doing and goes for the hero. */
+  private alertCamp(x: number, y: number, r: number, heroId: string, now: number) {
+    if (!this.state.players.has(heroId)) return;
+    const ids: string[] = [];
+    this.state.mobs.forEach((o, oid) => {
+      if (o.dead || !(o.camp || o.kind === "banditchief") || Math.hypot(o.x - x, o.y - y) > r) return;
+      o.alertUntil = now + BANDIT_AI.horn.alertMs; o.alertHero = heroId;
+      if (o.perch) return; // lookouts keep shooting from their towers
+      if (!o.target) { o.target = heroId; o.foe = ""; o.nextAggro = now + AGGRO.everyMs; ids.push(oid); }
+      if (o.hateId !== heroId || o.hate < AGGRO.hitBase) this.addHate(o, heroId, 0);
+    });
+    if (ids.length) this.broadcast("alert", { ids });
+  }
+
+  /** Bandit hit by a hero: shouts for the others close by. */
+  private banditShout(m: Mob, id: string, heroId: string, now: number) {
+    if (now < m.nextCall) return;
+    m.nextCall = now + BANDIT_AI.shout.cooldownMs;
+    this.broadcast("bshout", { id });
+    this.alertCamp(m.x, m.y, BANDIT_AI.shout.range, heroId, now);
+  }
+
+  /** Archers now and then loose two more arrows beside the aimed one. */
+  private volley(m: Mob, id: string, t: Player, now: number) {
+    const V = BANDIT_AI.volley;
+    m.nextVolley = now + V.everyMs * (0.8 + Math.random() * 0.4);
+    const a0 = Math.atan2(t.y - m.y, t.x - m.x), d = Math.hypot(t.x - m.x, t.y - m.y);
+    for (let k = 1; k < V.arrows; k++) {
+      const a = a0 + (k % 2 ? 1 : -1) * V.spread * Math.ceil(k / 2);
+      this.mobShot(m, id, m.x + Math.cos(a) * d, m.y + Math.sin(a) * d);
+    }
+    this.broadcast("volley", { id });
+  }
+
+  /** The chief: War Cry (rallies everyone around him) and, once badly hurt, two more cutthroats out of the huts. */
+  private chiefOrders(m: Mob, id: string, now: number) {
+    const W = CHIEF.warCry;
+    if (now >= m.nextCry && !m.broken) {
+      m.nextCry = now + W.cooldownMs;
+      const ids: string[] = [id];
+      m.rallyUntil = now + W.buffMs;
+      this.state.mobs.forEach((o, oid) => {
+        if (oid === id || o.dead || !o.camp || Math.hypot(o.x - m.x, o.y - m.y) > W.range) return;
+        o.rallyUntil = now + W.buffMs; ids.push(oid);
+      });
+      this.broadcast("warcry", { id, ids, ms: W.buffMs });
+      this.alertCamp(m.x, m.y, W.range, m.target, now);
+    }
+    if (!m.reinforced && m.hp < m.maxHp * CHIEF.reinforce.hpFrac) {
+      m.reinforced = true;
+      const pts: [number, number][] = [];
+      let extra = 0; // his men still alive from an earlier fight count too
+      this.state.mobs.forEach((o) => { if (!o.dead && o.kind === "bandit" && o.camp && o.post < 0) extra++; });
+      for (let i = extra; i < CHIEF.reinforce.count; i++) {
+        const c = this.callReinforcement(m, id);
+        if (c) pts.push([Math.round(c.x), Math.round(c.y)]);
+      }
+      this.broadcast("reinforce", { id, pts });
+    }
+  }
+
+  /** One extra cutthroat runs out next to the chief (his own man: no post, never respawns). */
+  private callReinforcement(chief: Mob, chiefId: string): Mob | undefined {
+    for (let i = 0; i < 12; i++) {
+      const a = Math.random() * Math.PI * 2, r = 30 + Math.random() * 30;
+      const x = chief.x + Math.cos(a) * r, y = chief.y + Math.sin(a) * r;
+      if (isSolidAt(x, y) || isSafeZone(x, y) || noMobsAt(x, y)) continue;
+      const c = new Mob();
+      c.kind = "bandit"; c.weapon = "cutthroat"; c.zone = -1; c.mother = chiefId; c.camp = true; c.post = -1;
+      c.x = c.homeX = x; c.y = c.homeY = y; c.level = chief.level;
+      c.hp = c.maxHp = Math.round(mobDef(c).maxHp * mobScale(c.level, "hp"));
+      c.target = chief.target; c.alertUntil = Date.now() + BANDIT_AI.horn.alertMs; c.rallyUntil = chief.rallyUntil;
+      c.stunUntil = Date.now() + 350;
+      this.state.mobs.set(`k${++this.mobSeq}`, c);
+      return c;
+    }
+    return undefined;
+  }
+
+  /**
+   * Telegraphed moves (true while busy, it stands still). Brute: Cleave. Chief: Sweep, and Leap: marks the
+   * ground under the hero, jumps, and lands there hitting everyone around (stuns).
+   */
+  private banditSpecial(m: Mob, id: string, t: Player | undefined, dist: number, now: number): boolean {
+    const chief = m.kind === "banditchief", S = chief ? CHIEF.sweep : BANDIT_AI.cleave, L = CHIEF.leap;
+    if (m.specialAt) {
+      if (now < m.specialAt) return true;
+      const kind = m.specialKind;
+      m.specialAt = 0; m.winding = false; m.lastAttack = now; m.specialKind = "";
+      if (kind === "leap") {
+        // take off toward the mark; lands after the flight
+        m.specialKind = "land"; m.specialAt = now + L.flightMs;
+        this.broadcast("chiefleap", { id, x: Math.round(m.castX), y: Math.round(m.castY), ms: L.flightMs });
+        return true;
+      }
+      if (kind === "land" && !isSolidAt(m.castX, m.castY) && !isSafeZone(m.castX, m.castY) && !noMobsAt(m.castX, m.castY)) { m.x = m.castX; m.y = m.castY; }
+      const radius = kind === "land" ? L.radius : S.radius;
+      const dmg = Math.round(mobDef(m, now).damage * mobScale(m.level, "damage") * (kind === "land" ? L.dmgMult : S.dmgMult));
+      const name = chief ? (kind === "land" ? "Redfang Chief's Leap" : "Redfang Chief's Sweep") : "Brute's Cleave";
+      this.state.players.forEach((p, pid) => {
+        if (p.dead) return;
+        const dx = p.x - m.x, dy = p.y - m.y, d = Math.hypot(dx, dy);
+        if (d > radius) return;
+        this.damagePlayer(pid, dmg, name, d > 0.1 ? [dx / d, dy / d] : [0, 1], kind === "land" ? 1.5 : S.knockback, { atkLevel: m.level, from: id, stunMs: kind === "land" ? L.stunMs : undefined });
+      });
+      this.broadcast("bhit", { id, kind: kind === "land" ? "leap" : chief ? "sweep" : "cleave", x: Math.round(m.x), y: Math.round(m.y), r: radius });
+      return true;
+    }
+    if (!t || m.broken || m.windUntil || m.stunned) return false;
+    if (chief && now >= m.nextLeap && dist >= L.min && dist <= L.max) {
+      m.specialKind = "leap"; m.specialAt = now + L.windupMs; m.nextLeap = now + L.cooldownMs;
+      m.castX = t.x; m.castY = t.y;
+      this.broadcast("bwind", { id, kind: "leap", ms: L.windupMs + L.flightMs, x: Math.round(t.x), y: Math.round(t.y), r: L.radius });
+    } else if (now >= m.nextSweep && dist <= S.range) {
+      m.specialKind = "sweep"; m.specialAt = now + S.windupMs; m.nextSweep = now + S.cooldownMs;
+      this.broadcast("bwind", { id, kind: chief ? "sweep" : "cleave", ms: S.windupMs, x: Math.round(m.x), y: Math.round(m.y), r: S.radius });
+    } else return false;
+    m.winding = true;
+    return true;
   }
 
   private updateProjectile(s: Projectile, id: string, dt: number) {
@@ -1910,7 +2169,8 @@ export class TownRoom extends Room<TownState> {
     }
     const m = this.state.mobs.get(targetId);
     if (!m || m.dead) return;
-    const def = MOBS[m.kind];
+    const def = mobDef(m);
+    if (a && (m.camp || m.kind === "banditchief")) this.banditShout(m, targetId, attackerId, Date.now());
     dmg = Math.max(1, Math.round(dmg * takenMult(m, Date.now())));
     if (m.bones) dmg = Math.max(1, Math.round(dmg * (1 - DEMON.harvest.armorPer * m.bones))); // Bone Demon's bone armour
     this.bloodthirst(a, attackerId, Math.min(dmg, m.hp));
@@ -1937,7 +2197,7 @@ export class TownRoom extends Room<TownState> {
     if (m.hp > 0) { afterHit(this.host, attackerId, targetId, opts); return; }
     if (a) this.questKill(attackerId, a, m);
     this.grantXp(attackerId, Math.round(def.xp * mobScale(m.level, "xp")), m);
-    this.dropLoot(m.kind, m.x, m.y, mobScale(m.level, "gold"), m.level);
+    this.dropLoot(m.kind, m.x, m.y, mobScale(m.level, "gold") * (m.kind === "bandit" ? BANDIT_ROLES[roleOf(m.weapon)].loot : 1), m.level);
     this.mobDied(m, targetId, attackerId, a?.name ?? "");
   }
 

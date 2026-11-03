@@ -1,6 +1,6 @@
 import Phaser from "phaser";
 import { TILE } from "../../shared/constants";
-import { AREAS, EMPTY, GROUND, OBJECTS, SIGNPOSTS, T, VILLAGE } from "../../shared/map";
+import { AREAS, EMPTY, GROUND, OBJECTS, REDFANG_TOWERS, SIGNPOSTS, T, VILLAGE } from "../../shared/map";
 import { NPCS, NPC_DECOR } from "../../shared/npcs";
 import { CHESTS } from "../../shared/chests";
 import { SIEGE_SITES } from "../../shared/siege";
@@ -374,8 +374,52 @@ function makeTextures(scene: Phaser.Scene) {
   }, 0.5);
 }
 
+/** Redfang watchtower (shared/bandits.ts): four leaning legs, braces, a ladder, a railed platform under a thatch roof, a red rag. */
+function watchtower(scene: Phaser.Scene) {
+  sheet(scene, "wp_watchtower", 60, 126, N, (p, f) => {
+    const t = (f / N) * Math.PI * 2;
+    const deck = 126 - 57; // platform top: PERCH_LIFT (38 world px) above the foot
+    // back legs (darker), then the front ones leaning in
+    p.shaft(18, 118, 20, deck - 2, 2, OLDWOOD); p.shaft(40, 118, 38, deck - 2, 2, OLDWOOD);
+    p.shaft(7, 125, 13, deck, 3); p.shaft(50, 125, 44, deck, 3);
+    // cross braces and lashings
+    p.line(10, 120, 45, deck + 12, WOOD[2]); p.line(10, 119, 45, deck + 11, WOOD[1]);
+    p.line(48, 120, 13, deck + 12, WOOD[2]); p.line(48, 119, 13, deck + 11, WOOD[1]);
+    p.shaft(9, 100, 48, 100, 2); p.line(9, 101, 48, 101, WOOD[2]);
+    for (const [x, y] of [[9, 100], [47, 100], [12, deck + 4], [45, deck + 4]]) { p.px(x, y + 1, ROPE); p.px(x + 1, y + 2, ROPE); }
+    // ladder up the front
+    p.shaft(24, 125, 25, deck, 1); p.shaft(33, 125, 32, deck, 1);
+    for (let y = deck + 5; y < 124; y += 6) { p.line(25, y, 32, y, WOOD[0]); p.line(25, y + 1, 32, y + 1, WOOD[2]); }
+    // platform deck
+    p.rect(4, deck - 5, 52, 6, WOOD[1]);
+    for (let x = 4; x < 56; x += 5) p.line(x, deck - 5, x, deck, WOOD[2]);
+    p.line(4, deck - 5, 55, deck - 5, WOOD[0]); p.line(4, deck + 1, 55, deck + 1, 0x2a1d13);
+    // railing
+    for (const x of [5, 29, 53]) p.shaft(x, deck - 5, x, deck - 20, 2);
+    p.shaft(5, deck - 20, 54, deck - 20, 2); p.line(6, deck - 13, 53, deck - 13, WOOD[1]);
+    // roof posts and a ragged thatch roof
+    p.shaft(6, deck - 20, 8, 24, 2, OLDWOOD); p.shaft(52, deck - 20, 50, 24, 2, OLDWOOD);
+    for (let y = 4; y < 25; y++) {
+      const half = 6 + (y - 4) * 1.25;
+      for (let x = Math.round(30 - half); x <= Math.round(30 + half); x++) {
+        const edge = y > 21 && (x * 7 + y) % 3 === 0; // frayed eave
+        if (edge) continue;
+        const k = (x - (30 - half)) / (half * 2);
+        p.px(x, y, (x + y * 3) % 7 === 0 ? STRAW[2] : k < 0.35 ? STRAW[0] : k > 0.75 ? STRAW[2] : STRAW[1]);
+      }
+    }
+    p.line(24, 3, 36, 3, STRAW[2]); p.px(30, 2, OLDWOOD[1]); p.px(30, 1, OLDWOOD[1]);
+    // the alarm horn hanging from a post
+    p.line(50, deck - 22, 51, deck - 18, ROPE);
+    for (let i = 0; i < 7; i++) p.px(51 + i * 0.6, deck - 17 + i * 0.4, i < 2 ? BONE.lo : i < 5 ? BONE.mid : BONE.hi);
+    p.px(55, deck - 15, 0x2a1d13);
+    // red rag flying from the roof
+    pennant(p, 4, 20, 12, 5, t, RAG);
+  }, 0.55);
+}
+
 // ---- placement -------------------------------------------------------------------------------------------
-type Kind = "wp_spear_rack" | "wp_pennant_red" | "wp_pennant_black" | "wp_dummy" | "wp_lantern_pole" | "wp_skull_pike" | "wp_net_rack" | "wp_spears_ground";
+type Kind = "wp_spear_rack" | "wp_pennant_red" | "wp_pennant_black" | "wp_dummy" | "wp_lantern_pole" | "wp_skull_pike" | "wp_net_rack" | "wp_spears_ground" | "wp_watchtower";
 interface Spot { kind: Kind; x: number; y: number; flip?: boolean }
 
 const hash = (x: number, y: number, s: number) => { let h = (x * 374761393 + y * 668265263 + s * 2147483647) | 0; h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; };
@@ -432,6 +476,8 @@ function spots(): Spot[] {
   scatter(out, "Barrow Downs", "wp_spears_ground", 4, 6);
   scatter(out, "Old Ruins", "wp_spears_ground", 2, 5);
   // Redfang Hollow: skull pikes and the bandits' spear rack
+  // the watchtowers first (fixed spots by the gates, manned by lookouts), so nothing else is put under them
+  for (const [tx, ty] of REDFANG_TOWERS) out.push({ kind: "wp_watchtower", x: (tx + 0.5) * TILE, y: (ty + 0.5) * TILE });
   scatter(out, "Redfang Hollow", "wp_skull_pike", 6, 3);
   scatter(out, "Redfang Hollow", "wp_spear_rack", 1, 4);
   // Saltmere: nets drying by the beach, lantern poles on the lane
@@ -443,9 +489,11 @@ function spots(): Spot[] {
 /** World-space height (px) of each prop: textures are 1.5 texels per world px. */
 const SIZE: Record<Kind, number> = {
   wp_spear_rack: 80, wp_pennant_red: 100, wp_pennant_black: 100, wp_dummy: 58, wp_lantern_pole: 90, wp_skull_pike: 72, wp_net_rack: 50, wp_spears_ground: 54,
+  wp_watchtower: 84,
 };
 const FPS: Record<Kind, number> = {
   wp_spear_rack: 6, wp_pennant_red: 7, wp_pennant_black: 6, wp_dummy: 3, wp_lantern_pole: 3, wp_skull_pike: 6, wp_net_rack: 3, wp_spears_ground: 5,
+  wp_watchtower: 6,
 };
 
 export const WORLD_PROP_SPOTS = spots();
@@ -456,6 +504,7 @@ export function worldPropTextures(scene: Phaser.Scene) { makeTextures(scene); }
 /** Adds the props to the scene. `light` gets called for every lantern (the day/night layer lights it after dusk). */
 export function addWorldProps(scene: Phaser.Scene, light?: (x: number, y: number) => void) {
   makeTextures(scene);
+  watchtower(scene);
   for (const kind of Object.keys(SIZE) as Kind[]) {
     const key = `${kind}_idle`;
     if (!scene.anims.exists(key)) scene.anims.create({ key, frames: scene.anims.generateFrameNumbers(kind, { start: 0, end: N - 1 }), frameRate: FPS[kind], repeat: -1 });

@@ -760,6 +760,7 @@ const mobPose = (name: string, weapon: HumanOpts["weapon"]) => human({ name, ski
 export const MOB_POSES: Record<string, Hero> = {
   skeleton: mobPose("skeleton", "axe"), skeleton_axe: mobPose("skeleton_axe", "axe"),
   skeleton_spear: mobPose("skeleton_spear", "spear"), skeleton_bow: mobPose("skeleton_bow", "bow"), bandit: mobPose("bandit", "dagger"),
+  bandit_brute: mobPose("bandit_brute", "axe"), bandit_archer: mobPose("bandit_archer", "bow"), banditchief: mobPose("banditchief", "axe"),
   skeletonmage: mobPose("skeletonmage", "staff"), necromancer: mobPose("necromancer", "staff"),
   demon: mobPose("demon", "axe"),
 };
