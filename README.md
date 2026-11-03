@@ -107,7 +107,7 @@ collision and grid overlays (no server needed). Edit `shared/map.ts` and it hot-
 
 ## Accounts and saves
 
-Players log in with a name and password. A new name creates the account. Each account keeps one saved hero per class (level, XP, stat points, skill tree, hotbar, gear, bag, gold, potions, quest). Saves are written by the server to `data/saves.json` (change with `SAVE_FILE=...`) on leave, every 30 seconds, and on shutdown. Passwords are stored hashed (scrypt). Back up that file to keep player progress; it is not in git. Testing: names listed in `TESTERS=Name1,Name2` can type `/max` in chat to jump to level 99 with every skill at max rank and all stat points placed.
+Players log in with a name and password. A new name creates the account. Each account keeps one saved hero per class (level, XP, stat points, skill tree, hotbar, gear, bag, gold, potions, quest). Saves are written by the server to `data/saves.json` (change with `SAVE_FILE=...`) on leave, every 30 seconds, and on shutdown. Passwords are stored hashed (scrypt). Back up that file to keep player progress; it is not in git. Testing: any player can type `/max` in chat to jump to level 99 with every skill at max rank and all stat points placed.
 
 ## Production
 
