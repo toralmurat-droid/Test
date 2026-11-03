@@ -324,9 +324,11 @@ function herbRack(ctx: Ctx) {
  * under a heavy, sagging thatch gone green with moss. A patched door, a shuttered window with a faint sickly glow,
  * herbs and bones hanging from the eave, a leaning stone chimney. Pixelized with the other props.
  */
+const HUT_PIVOT = 85 / 96; // pivot row of the 96 px tall witch_hut frames
 function witchHut(ctx: Ctx, f: number) {
-  const I = new Iso(ctx, 50, 88), r = rng(61);
-  I.shadow(-19, -15, 19, 15, 1, 0.55); // kept inside the frame
+  // footprint centre 8 px above the pivot row (HUT_PIVOT), with room below for the front corner of the footing
+  const I = new Iso(ctx, 50, 77), r = rng(61);
+  I.shadow(-19, -15, 19, 15, 0, 0.55); // kept inside the frame
   // a footing of rough field stones, half sunk in the earth, with weeds
   I.box(-19, 19, -15, 15, 0, 4, 0x4e4a42, stones(ctx, 3, 0x4e4a42, 0.85));
   // walls: weathered grey-brown planks, darker and mossy toward the ground
@@ -417,11 +419,11 @@ function witchHut(ctx: Ctx, f: number) {
     else { ctx.fillStyle = kind ? "#6a5a3a" : "#4e6030"; ctx.beginPath(); ctx.moveTo(x - 1.4, y + 2.5); ctx.lineTo(x + 1.4, y + 2.5); ctx.lineTo(x + 0.3, y + 7); ctx.lineTo(x - 0.4, y + 7); ctx.closePath(); ctx.fill(); }
   }
   // a leaning chimney of rough stones, with thin grey pixel smoke
-  I.box(-11, -6, 2, 7, 44, 64, 0x4e4a42, stones(ctx, 31, 0x4e4a42, 0.85));
-  const [cx, cy] = I.p(-8.5, 4.5, 64);
-  for (let k = 0; k < 4; k++) {
-    const t = (k + f * 0.25) % 4, px = cx + t * 2.2, py = cy - 3 - t * 5, rad = 1.6 + t * 0.8;
-    ctx.fillStyle = `rgba(${120 - t * 8},${124 - t * 8},${110 - t * 8},${0.55 - t * 0.12})`;
+  I.box(-11, -6, 2, 7, 44, 61, 0x4e4a42, stones(ctx, 31, 0x4e4a42, 0.85));
+  const [cx, cy] = I.p(-8.5, 4.5, 61);
+  for (let k = 0; k < 3; k++) { // short drift so the puffs stay inside the frame
+    const t = (k + f * 0.75) % 3, px = cx + t * 2, py = cy - 2 - t * 2.6, rad = 1.4 + t * 0.6;
+    ctx.fillStyle = `rgba(${120 - t * 8},${124 - t * 8},${110 - t * 8},${0.5 * (1 - t / 3)})`;
     ctx.beginPath(); ctx.ellipse(px, py, rad, rad * 0.75, 0, 0, Math.PI * 2); ctx.fill();
   }
   // weeds along the footing
@@ -462,7 +464,11 @@ export function paintSmoothProps(scene: Phaser.Scene) {
   for (let f = 0; f < 3; f++) paint(`candles_${f}`, candles, f);
   paint("toadstools", toadstools);
   paint("herb_rack", herbRack);
-  for (let f = 0; f < 4; f++) paint(`witch_hut_${f}`, witchHut, f);
+  for (let f = 0; f < 4; f++) {
+    paint(`witch_hut_${f}`, witchHut, f);
+    // the painted hut stands higher in its frame (see witchHut): move the pivot up with it so it stays on its spot
+    if (tex.has(`witch_hut_${f}`)) { const fr = tex.get(`witch_hut_${f}`) as any; fr.customPivot = true; fr.pivotX = 0.5; fr.pivotY = HUT_PIVOT; }
+  }
   overrideTexture(scene, "props", hi);
 }
 
