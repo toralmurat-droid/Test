@@ -46,6 +46,7 @@ export const MOB_COMBAT: Record<MobKind, { poise: number; windupMs: number }> = 
   bandit: { poise: 60, windupMs: 300 },
   skeletonmage: { poise: 30, windupMs: 450 },
   necromancer: { poise: 220, windupMs: 500 },
+  banditchief: { poise: 260, windupMs: 420 },
 };
 
 /** Attack speed multiplier from the poise fraction (1 above half, down to minSpeed at 0). */

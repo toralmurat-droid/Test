@@ -1,6 +1,6 @@
 import Phaser from "phaser";
 import { Client, Room } from "colyseus.js";
-import { ELITE, InputState, MERGE, MAP_H, MAP_W, regenFromStamina, TILE } from "../../shared/constants";
+import { BOSS, ELITE, InputState, MERGE, MAP_H, MAP_W, regenFromStamina, TILE } from "../../shared/constants";
 import { CLASSES, ClassKind, DODGE, ENERGY, energyName, MAX_LEVEL, xpForLevel } from "../../shared/classes";
 import { GROUND, areaAt, isSafeZone } from "../../shared/map";
 import { heroPoise } from "../../shared/combat";
@@ -37,6 +37,7 @@ import { ChestLayer } from "./chests";
 import { addWorldProps } from "./worldProps";
 import { addSiegeWorks } from "./siegeArt";
 import { SiegeWork } from "./siegeWork";
+import { PERCH_LIFT } from "../../shared/bandits";
 
 /** One painted bit on a merged blob, in body-relative units (-1..1 across the body). */
 interface BlobPart { kind: "patch" | "eye" | "mouth"; u: number; v: number; r: number; col: number }
@@ -90,6 +91,8 @@ interface Entity {
   gear?: GearLayer; // equipment overlays (heroes only)
   vdir?: string; // iso view: facing on screen, from the last movement or attack
   strikeUntil?: number; // monster: show its strike frame until then (after a "swing")
+  leapUntil?: number;
+  rallyUntil?: number; // bandit under the chief's War Cry (local time) // Redfang Chief in the air: glide to the landing spot instead of snapping there
   lastX?: number; lastY?: number;
   idleSince?: number; // local time the hero stopped moving, for idle fidgets
   nextFidget?: number;
@@ -323,8 +326,11 @@ export class TownScene extends Phaser.Scene {
         if (!e) return;
         e.tx = m.x; e.ty = m.y;
         // A respawned Mother Blob can come back at another level, a skeleton with another weapon
-        if (m.kind === "motherblob" || m.kind === "skeleton") { const key = mobTexture(this, m.kind, m.level, m.weapon); if (e.sprite.texture.key !== key) e.sprite.setTexture(key, 0); }
-        if (Math.hypot(e.sprite.x - m.x, e.sprite.y - m.y) > 48) e.sprite.setPosition(m.x, m.y);
+        if (m.kind === "motherblob" || m.kind === "skeleton" || m.kind === "bandit") {
+          const key = mobTexture(this, m.kind, m.level, m.weapon);
+          if (e.sprite.texture.key !== key) { e.sprite.setTexture(key, 0); this.perch(e, m); }
+        }
+        if (Math.hypot(e.sprite.x - m.x, e.sprite.y - m.y) > 48 && !(this.time.now < (e.leapUntil ?? 0))) e.sprite.setPosition(m.x, m.y);
         if ((m.merged || 1) !== (e.merged ?? 1)) this.growMob(e, m);
       });
     });
@@ -506,6 +512,97 @@ export class TownScene extends Phaser.Scene {
     this.room.onMessage("blobcharge", ({ id }) => {
       const e = this.entities.get(id);
       if (e) this.squash(e, 1.25, 0.8, 140);
+    });
+    // ---- Redfang Hollow (shared/bandits.ts) ----
+    // A lookout blows the horn: sound rings spread from the tower, the camp is warned
+    this.room.onMessage("horn", ({ id, x, y }) => {
+      const e = this.entities.get(id);
+      const hx = e?.sprite.x ?? x, hy = e?.sprite.y ?? y;
+      this.floatText(hx, hy - (e?.top ?? 40) - 6, "HORN!", "#ffb74d", PIXEL_FONT);
+      for (let i = 0; i < 3; i++) this.time.delayedCall(i * 260, () => {
+        const ring = isoAnchor(this.add.circle(hx, hy, 6).setStrokeStyle(2, 0xffcc80, 0.85).setDepth(20000), { x: hx, y: hy });
+        this.tweens.add({ targets: ring, radius: 150, alpha: 0, duration: 1100, onComplete: () => ring.destroy() });
+      });
+      const me = this.entities.get(this.me);
+      if (me && Math.hypot(me.sprite.x - hx, me.sprite.y - hy) < 26 * TILE) this.feed("A horn sounds from Redfang Hollow: the bandits are coming!");
+    });
+    // Bandits answering the horn or a shout: a red "!" over each
+    this.room.onMessage("alert", ({ ids }) => {
+      for (const id of ids as string[]) {
+        const e = this.entities.get(id);
+        if (e && !e.culled) this.floatText(e.sprite.x, e.sprite.y - e.top - 4, "!", "#ff5252", PIXEL_FONT);
+      }
+    });
+    this.room.onMessage("bshout", ({ id }) => {
+      const e = this.entities.get(id);
+      if (e && !e.culled) this.floatText(e.sprite.x, e.sprite.y - e.top - 6, Phaser.Utils.Array.GetRandom(["TO ME!", "HERE!", "ALARM!"]), "#ffcc80", PIXEL_FONT);
+    });
+    // Cutthroat dash: a quick lean and a dust puff
+    this.room.onMessage("bdash", ({ id }) => {
+      const e = this.entities.get(id);
+      if (!e) return;
+      this.burst(e.sprite.x, e.sprite.y, 3, 0x8d6e63, 260);
+      this.tweens.add({ targets: e.sprite, scaleX: e.sprite.scaleX * 1.15, scaleY: e.sprite.scaleY * 0.9, duration: 120, yoyo: true });
+    });
+    this.room.onMessage("volley", ({ id }) => {
+      const e = this.entities.get(id);
+      if (e && !e.culled) this.floatText(e.sprite.x, e.sprite.y - e.top - 6, "VOLLEY!", "#e0c080", PIXEL_FONT);
+    });
+    // Brute Cleave / Chief Sweep / Chief Leap: the ground is marked red until the blow lands
+    this.room.onMessage("bwind", ({ id, kind, ms, x, y, r }) => {
+      const e = this.entities.get(id);
+      if (e) {
+        const name = kind === "leap" ? "LEAP!" : kind === "sweep" ? "SWEEP!" : "CLEAVE!";
+        this.floatText(e.sprite.x, e.sprite.y - e.top - 6, name, "#ff5252", PIXEL_FONT);
+        if (kind !== "leap") this.tweens.add({ targets: e.sprite, scaleY: e.sprite.scaleY * 1.08, duration: ms * 0.8, yoyo: true });
+      }
+      const g = this.add.graphics().setDepth(2);
+      const t0 = this.time.now;
+      const draw = () => {
+        const f = Math.min(1, (this.time.now - t0) / ms);
+        const cx = kind === "leap" ? x : e?.sprite.x ?? x, cy = kind === "leap" ? y : e?.sprite.y ?? y;
+        g.clear().fillStyle(0x8b0000, 0.22).fillCircle(cx, cy, r).lineStyle(1.5, 0xff5252, 0.9).strokeCircle(cx, cy, r);
+        g.fillStyle(0xff3d2e, 0.3).fillCircle(cx, cy, r * f);
+      };
+      draw();
+      const ev = this.time.addEvent({ delay: 30, loop: true, callback: draw });
+      this.time.delayedCall(ms, () => { ev.remove(); g.destroy(); });
+    });
+    this.room.onMessage("bhit", ({ kind, x, y, r }) => {
+      const ring = this.add.circle(x, y, 4).setStrokeStyle(3, kind === "cleave" ? 0xffb74d : 0xff5252, 0.9).setDepth(20000);
+      isoAnchor(ring, { x, y });
+      this.tweens.add({ targets: ring, radius: r, alpha: 0, duration: 320, onComplete: () => ring.destroy() });
+      for (let i = 0; i < 8; i++) {
+        const a = (i / 8) * Math.PI * 2;
+        this.burst(x + Math.cos(a) * r * 0.7, y + Math.sin(a) * r * 0.7, 2.5, 0x8d6e63, 340);
+      }
+      const me = this.entities.get(this.me);
+      if (me && Math.hypot(me.sprite.x - x, me.sprite.y - y) < r * 2.5) this.cameras.main.shake(kind === "leap" ? 260 : 140, kind === "leap" ? 0.009 : 0.005);
+    });
+    // The chief jumps: he glides to the mark while rising and falling
+    this.room.onMessage("chiefleap", ({ id, x, y, ms }) => {
+      const e = this.entities.get(id);
+      if (!e) return;
+      e.leapUntil = this.time.now + ms + 300;
+      e.tx = x; e.ty = y;
+      const sx = e.sprite.scaleX, sy = e.sprite.scaleY;
+      this.tweens.add({ targets: e.sprite, scaleX: sx * 1.3, scaleY: sy * 1.3, duration: ms / 2, yoyo: true, ease: "Sine.easeOut", onComplete: () => e.sprite.setScale(sx, sy) });
+    });
+    // War Cry: the chief roars, his men glow red while it lasts
+    this.room.onMessage("warcry", ({ id, ids, ms }) => {
+      const e = this.entities.get(id);
+      if (e) {
+        this.floatText(e.sprite.x, e.sprite.y - e.top - 6, "WAR CRY!", "#ff5252", PIXEL_FONT);
+        const ring = isoAnchor(this.add.circle(e.sprite.x, e.sprite.y, 8).setStrokeStyle(3, 0xff3d2e, 0.8).setDepth(20000), { x: e.sprite.x, y: e.sprite.y });
+        this.tweens.add({ targets: ring, radius: 110, alpha: 0, duration: 700, onComplete: () => ring.destroy() });
+      }
+      for (const oid of ids as string[]) { const o = this.entities.get(oid); if (o) o.rallyUntil = this.time.now + ms; }
+    });
+    // The chief calls his men: two cutthroats burst out
+    this.room.onMessage("reinforce", ({ id, pts }) => {
+      const e = this.entities.get(id);
+      if (e) this.floatText(e.sprite.x, e.sprite.y - e.top - 6, "TO ARMS!", "#ffb74d", PIXEL_FONT);
+      for (const [x, y] of pts as [number, number][]) this.burst(x, y, 4, 0x8d6e63, 380);
     });
     // A hidden monster jumps out of its grave / tree
     // A skeleton at the siege works spots a hero: tools down, "!"
@@ -722,6 +819,14 @@ export class TownScene extends Phaser.Scene {
     else e.sprite.setScale(base * grow);
   }
 
+  /** Redfang lookouts stand up on their watchtower's platform: drawn lifted, label and HP bar above them. */
+  private perch(e: Entity, p: any) {
+    const base = MOB_LOOK[p.kind]?.oy ?? 0.85, top = MOB_LOOK[p.kind]?.top ?? 14;
+    const up = p.kind === "bandit" && p.weapon === "lookout";
+    e.sprite.setOrigin(0.5, base + (up ? PERCH_LIFT / e.sprite.frame.height : 0));
+    e.top = top + (up ? PERCH_LIFT : 0);
+  }
+
   private addEntity(id: string, p: any, mob = false) {
     if (mob) {
       const sprite = this.add.sprite(p.x, p.y, mobTexture(this, p.kind, p.level, p.weapon), 0).setOrigin(0.5, MOB_LOOK[p.kind]?.oy ?? 0.85)
@@ -730,6 +835,7 @@ export class TownScene extends Phaser.Scene {
       // The level tag is made when the monster comes on screen (see update): thousands of text canvases would cost a lot
       this.entities.set(id, { sprite, bar: isoAnchor(this.add.graphics(), sprite) as Phaser.GameObjects.Graphics, tx: p.x, ty: p.y, state: p, mob, top: MOB_LOOK[p.kind]?.top ?? 14 });
       if ((p.merged || 1) > 1) this.growMob(this.entities.get(id)!, p);
+      this.perch(this.entities.get(id)!, p);
       return;
     }
     // Classes with a generated sheet use it; anything else falls back to the procedural persona
@@ -1444,7 +1550,7 @@ export class TownScene extends Phaser.Scene {
         // Level tag coloured by how tough it is for me: grey easy, white even, orange tougher, red dangerous
         const diff = (p.level ?? 1) - ((this.room.state as any).players?.get(this.me)?.level ?? 1);
         const col = diff >= 3 ? "#ff5252" : diff >= 1 ? "#ffb74d" : diff >= -2 ? "#ffffff" : "#9e9e9e";
-        const txt = ELITE[p.kind as keyof typeof ELITE] ? `Elite Lv${p.level ?? 1}` : `Lv${p.level ?? 1}`;
+        const txt = BOSS[p.kind as keyof typeof BOSS] ? `Boss Lv${p.level ?? 1}` : ELITE[p.kind as keyof typeof ELITE] ? `Elite Lv${p.level ?? 1}` : `Lv${p.level ?? 1}`;
         if (e.label.text !== txt) e.label.setText(txt);
         if (e.lvlColor !== col) { e.label.setColor(col); e.lvlColor = col; }
         e.label.setVisible(!p.dead && !p.hidden);
@@ -1486,7 +1592,11 @@ export class TownScene extends Phaser.Scene {
         if (p.parts) this.drawBlobParts(e, id, p, x, y);
         else if (p.kind === "demon" && p.bones) this.drawDemonBones(e, p, x, y);
         const bw = Math.min(40, (MOB_LOOK[p.kind]?.bar || 14) * (1 + MERGE.growPerBlob * ((p.merged || 1) - 1)));
-        if (ELITE[p.kind as keyof typeof ELITE]) e.bar.fillStyle(0xffc93c).fillRect(x - bw / 2 - 1, mobBarY - 1, bw + 2, 4); // elite: gold frame
+        if (ELITE[p.kind as keyof typeof ELITE]) e.bar.fillStyle(BOSS[p.kind as keyof typeof BOSS] ? 0xc62828 : 0xffc93c).fillRect(x - bw / 2 - 1, mobBarY - 1, bw + 2, 4); // elite: gold frame, boss: red
+        if (e.rallyUntil && now < e.rallyUntil) {
+          // rallied by the chief's War Cry: a red glow under the feet
+          e.bar.fillStyle(0xff3d2e, 0.18 + 0.1 * Math.sin(now / 120)).fillEllipse(x, y, 22, 9);
+        }
         e.bar.fillStyle(0x000000).fillRect(x - bw / 2, mobBarY, bw, 2);
         e.bar.fillStyle(0xf4a261).fillRect(x - bw / 2, mobBarY, bw * (p.hp / maxHp), 2);
       } else if (!e.mob && !p.dead && p.hp < maxHp) {

@@ -251,6 +251,7 @@ export const MOB_LOOK: Record<string, { top: number; bar: number; oy: number; sc
   skeletonmage: { top: 19, bar: 12, oy: 0.975 },
   necromancer: { top: 32, bar: 24, oy: 0.975, scale: 1.6 }, // elite: drawn big
   demon: { top: 32, bar: 26, oy: 0.975, scale: 1.7 },
+  banditchief: { top: 34, bar: 28, oy: 0.85, scale: 1.6 }, // boss of Redfang Hollow
   motherblob: { top: 20, bar: 22, oy: 0.92 },
   blobling: { top: 8, bar: 8, oy: 0.9 },
   shooterblob: { top: 15, bar: 12, oy: 0.92 },
@@ -259,7 +260,7 @@ export const MOB_LOOK: Record<string, { top: number; bar: number; oy: number; sc
   crawler: { top: 10, bar: 10, oy: CRAWL_CROP },
 };
 
-const PAINTED_MOBS = ["slime", "blobling", "shooterblob", "warriorblob", "healerblob", "motherblob", "skeleton", "bandit", "skeletonmage", "necromancer", "demon", "crawler"];
+const PAINTED_MOBS = ["slime", "blobling", "shooterblob", "warriorblob", "healerblob", "motherblob", "skeleton", "bandit", "skeletonmage", "necromancer", "demon", "crawler", "banditchief"];
 /** Painted humanoid monsters have taller frames (feet lower in the frame, label higher). */
 const PAINTED_LOOK: Record<string, { top: number; bar: number; oy: number; scale?: number }> = {
   // about hero height (heroes are 32 world px since the 48px sheets)
@@ -267,6 +268,7 @@ const PAINTED_LOOK: Record<string, { top: number; bar: number; oy: number; scale
   skeleton: { top: 23, bar: 14, oy: 27.5 / 30 }, bandit: { top: 23, bar: 14, oy: 27.5 / 30 },
   skeletonmage: { top: 25, bar: 14, oy: 0.975 }, necromancer: { top: 40, bar: 26, oy: 0.975, scale: 1.45 },
   demon: { top: 50, bar: 28, oy: 33 / 34, scale: 1.45 },
+  banditchief: { top: 46, bar: 30, oy: 32 / 34, scale: 1.5 },
   // pixel sheets use even frame heights (whole texels at 1.5 per px)
   blobling: { top: 9, bar: 8, oy: 0.91 }, shooterblob: { top: 16, bar: 12, oy: 0.93 }, healerblob: { top: 16, bar: 12, oy: 0.93 },
 };
@@ -275,7 +277,7 @@ export function preloadPaintedMobs(scene: Phaser.Scene) {
   if (!SMOOTH) return;
   Object.assign(MOB_LOOK, PAINTED_LOOK);
   scene.load.json("hd_mobs", "assets/hd/mobs/mobs.json");
-  for (const k of [...PAINTED_MOBS.map((m) => `mob_${m}`), "mob_motherblob2", "mob_motherblob3", "mob_skeleton_axe", "mob_skeleton_spear", "mob_skeleton_bow"]) scene.load.image(`hd_${k}`, `assets/hd/mobs/${k}.webp`);
+  for (const k of [...PAINTED_MOBS.map((m) => `mob_${m}`), "mob_motherblob2", "mob_motherblob3", "mob_skeleton_axe", "mob_skeleton_spear", "mob_skeleton_bow", "mob_bandit_brute", "mob_bandit_archer"]) scene.load.image(`hd_${k}`, `assets/hd/mobs/${k}.webp`);
 }
 
 /** Monster sprite sheets, same 6-frame layout as personas (painted when the smooth look is on). */
@@ -284,7 +286,9 @@ export function mobTexture(scene: Phaser.Scene, kind: string, level = 1, weapon 
   if (SMOOTH && PAINTED_MOBS.includes(kind)) {
     const tier = level >= 10 ? 3 : level >= 5 ? 2 : 1;
     // skeletons carry a sword (base sheet), an axe, a spear or a bow
-    const key = kind === "motherblob" && tier > 1 ? `mob_motherblob${tier}` : kind === "skeleton" && weapon && weapon !== "sword" ? `mob_skeleton_${weapon}` : `mob_${kind}`;
+    // bandits by role (shared/bandits.ts): cutthroats use the base sheet, lookouts are archers up on a tower
+    const key = kind === "motherblob" && tier > 1 ? `mob_motherblob${tier}` : kind === "skeleton" && weapon && weapon !== "sword" ? `mob_skeleton_${weapon}`
+      : kind === "bandit" && (weapon === "brute" || weapon === "archer" || weapon === "lookout") ? `mob_bandit_${weapon === "lookout" ? "archer" : weapon}` : `mob_${kind}`;
     if (scene.textures.exists(key)) return key;
     const meta = scene.cache.json.get("hd_mobs")?.[key];
     const src = scene.textures.exists(`hd_${key}`) ? scene.textures.get(`hd_${key}`).getSourceImage() as HTMLImageElement : null;
@@ -333,7 +337,7 @@ function pixelMobTexture(scene: Phaser.Scene, kind: string, level = 1): string {
       G: 0xf5d0e6, L: 0xffffff, E: 0x3a1a2e, D: 0xc48aaa, O: 0x8a5577, Y: 0xffd54f, X: 0x43c463,
     }, VAR_W, VAR_H);
   }
-  if (kind === "bandit") {
+  if (kind === "bandit" || kind === "banditchief") {
     return drawSheet(scene, "mob_bandit", BANDIT_FRAMES, {
       H: 0x3b2f2a, K: 0xd9a77a, E: 0x1a1a1a, M: 0xb3261e, S: 0x6d4c33, B: 0x2b1d14, P: 0x3a3a3a, D: 0x1a1a1a,
     });

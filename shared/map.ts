@@ -54,6 +54,10 @@ export const ROADS = { RX: 79, RY: 59 };
 /** Walk-in barns (Goldenreach Farms): footprint in tiles and the open doorway columns in the front wall. */
 export const BARNS = [{ x: 14, y: 38, w: 9, h: 6, door0: 17, door1: 19 }];
 
+/** Redfang Hollow, the bandit camp: the stockade (tiles) and its three watchtowers by the gates (see shared/bandits.ts). */
+export const REDFANG = { x: 240, y: 102, w: 24, h: 18 };
+export const REDFANG_TOWERS: [number, number][] = [[254, 103], [249, 118], [241, 108]];
+
 export const SAFE_ZONE = { x: 74, y: 55, w: 13, h: 11 };
 
 /** Column of the river's center for a given row (River Ashwell, east of the village). */
@@ -442,7 +446,7 @@ function buildWorld() {
   setO(138, 183, T.WELL); setO(129, 189, T.CAMPFIRE); setO(131, 183, T.BARREL); setO(132, 183, T.CRATE); setO(157, 183, T.HAY);
 
   // Redfang Hollow: a bandit settlement in a clearing deep in the eastern woods, behind a crude fence
-  const band = { x: 240, y: 102, w: 24, h: 18 };
+  const band = REDFANG;
   disk(band.x + band.w / 2, band.y + band.h / 2, band.w / 2 + 5, band.h / 2 + 5, (x, y, d) => {
     setO(x, y, d > 0.85 && hash(x, y, 186) < 0.3 ? T.STUMP : EMPTY);
     if (isGrass(ground[y][x])) setG(x, y, noise(x, y, 4, 187) > 0.45 ? T.DIRT : T.GRASS_DARK);
@@ -460,6 +464,8 @@ function buildWorld() {
   for (const d of bandHuts) setG(d.x, d.y + 1, T.DIRT);
   setO(band.x + 12, band.y + 11, T.CAMPFIRE);
   setO(band.x + 3, band.y + 13, T.STALL_RED); setO(band.x + 4, band.y + 13, T.STALL_RED); // the loot pile
+  // the lookouts' watchtowers stand on a stack of crates (drawn by client/src/worldProps.ts, manned per shared/bandits.ts)
+  for (const [tx, ty] of REDFANG_TOWERS) setO(tx, ty, T.CRATE);
   for (const [ox, oy, t] of [[band.x + 7, band.y + 14, T.CRATE], [band.x + 8, band.y + 14, T.CRATE], [band.x + 7, band.y + 15, T.BARREL],
     [band.x + 18, band.y + 13, T.HAY], [band.x + 20, band.y + 15, T.BARREL], [band.x + 16, band.y + 15, T.STUMP], [band.x + 14, band.y + 9, T.STUMP], [band.x + 10, band.y + 9, T.STUMP]] as const) setO(ox, oy, t);
 
