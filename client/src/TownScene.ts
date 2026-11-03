@@ -1,7 +1,7 @@
 import Phaser from "phaser";
 import { Client, Room } from "colyseus.js";
 import { ELITE, InputState, MERGE, MAP_H, MAP_W, regenFromStamina, TILE } from "../../shared/constants";
-import { CLASSES, ClassKind, DODGE, ENERGY, energyName, xpForLevel } from "../../shared/classes";
+import { CLASSES, ClassKind, DODGE, ENERGY, energyName, MAX_LEVEL, xpForLevel } from "../../shared/classes";
 import { GROUND, areaAt, isSafeZone } from "../../shared/map";
 import { heroPoise } from "../../shared/combat";
 import { moveStep } from "../../shared/movement";
@@ -836,7 +836,7 @@ export class TownScene extends Phaser.Scene {
     const dmg = Math.round(def.damage * attackMult(cls, st) * talentMult(cls, mine.talents, "dmg"));
     const speed = Math.round(heroSpeed(cls, false, mine.spd ?? 1) * gearSpeedMult(mine));
     const rows: [string, string][] = [
-      ["Level", lvl >= 20 ? "20 (max)" : `${lvl} · XP ${mine.xp - cur}/${next - cur}`],
+      ["Level", lvl >= MAX_LEVEL ? `${MAX_LEVEL} (max)` : `${lvl} · XP ${mine.xp - cur}/${next - cur}`],
       ["Health", `${Math.ceil(mine.hp)} / ${mine.maxHp}`],
       ["HP regen", `${regenFromStamina(st.sta)[1].toFixed(1)}/s resting · ${regenFromStamina(st.sta)[0].toFixed(1)}/s in a fight`],
       ["Attack", `${dmg} damage${def.projectile ? " (ranged)" : ""}`],
@@ -1306,7 +1306,7 @@ export class TownScene extends Phaser.Scene {
       const cls0 = mine.cls as ClassKind;
       document.getElementById("stats")!.textContent =
         `${mine.dead ? "Respawning… " : safe}Lv ${mine.level} ${CLASSES[mine.cls as ClassKind].name} · ` +
-        `XP ${mine.xp - cur}/${next - cur} · Gold ${mine.gold} · Potions ${mine.potions} · Kills ${mine.kills} · Online ${online}` +
+        `${mine.level >= MAX_LEVEL ? "XP MAX" : `XP ${mine.xp - cur}/${next - cur}`} · Gold ${mine.gold} · Potions ${mine.potions} · Kills ${mine.kills} · Online ${online}` +
         (talentPoints(mine.level) > spentPoints(cls0, mine.talents) ? ` · ⭐ ${talentPoints(mine.level) - spentPoints(cls0, mine.talents)} skill point(s): press T` : "");
       const freePts = talentPoints(mine.level) - spentPoints(cls0, mine.talents);
       const badge = document.getElementById("treebadge")!;

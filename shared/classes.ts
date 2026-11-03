@@ -126,13 +126,18 @@ export const energyName = (cls: string) => (cls === "wizard" ? "Magic" : "Stamin
 export const DODGE = { distance: 48, durationMs: 250, invulnMs: 300, cooldownMs: 1500 };
 
 // ---- Levels -------------------------------------------------------------
-export const MAX_LEVEL = 20;
+/** Heroes and monsters both stop at Lv 99 (Murat). */
+export const MAX_LEVEL = 99;
 export const PVP_KILL_XP = 20;
 
 /** Total XP needed to reach `level` (level 1 = 0 XP). */
 export function xpForLevel(level: number): number {
   return 40 * (level - 1) * level;
 }
+
+/** XP stops growing at max level. */
+export const MAX_XP = xpForLevel(MAX_LEVEL);
+export const capLevel = (l: number) => Math.min(MAX_LEVEL, Math.max(1, l));
 
 export function levelFromXp(xp: number): number {
   let l = 1;
