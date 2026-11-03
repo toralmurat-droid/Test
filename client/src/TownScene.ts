@@ -1,7 +1,7 @@
 import Phaser from "phaser";
 import { reconnectSoon } from "./reconnect";
 import { Client, Room } from "colyseus.js";
-import { BOSS, ELITE, InputState, MERGE, MAP_H, MAP_W, regenFromStamina, TILE } from "../../shared/constants";
+import { BOSS, ELITE, InputState, MERGE, MAP_H, MAP_W, regenFromStamina, TICK_RATE, TILE } from "../../shared/constants";
 import { CLASSES, ClassKind, DODGE, ENERGY, energyName, MAX_LEVEL, xpForLevel } from "../../shared/classes";
 import { GROUND, areaAt, isSafeZone } from "../../shared/map";
 import { heroPoise } from "../../shared/combat";
@@ -92,6 +92,8 @@ interface Entity {
   bubble?: Phaser.GameObjects.Text;
   shield?: Phaser.GameObjects.Graphics;
   tx: number; ty: number; // server target position
+  snaps?: Snap[]; // recent server positions with local arrival time, played back a little late (see interpolate)
+  chaseUntil?: number; // a dash/blink/knockback event: ease to tx/ty instead of playing back the snapshots
   state: any;
   statusTint?: boolean;
   gear?: GearLayer; // equipment overlays (heroes only)
@@ -103,6 +105,52 @@ interface Entity {
   lastX?: number; lastY?: number;
   idleSince?: number; // local time the hero stopped moving, for idle fidgets
   nextFidget?: number;
+}
+
+/** A server position and the local time it arrived. */
+interface Snap { t: number; x: number; y: number }
+/**
+ * Other heroes and monsters are drawn this far in the past, so there is always a newer server position to glide
+ * towards. The server sends 20 updates a second (one per 50 ms) and some arrive late; 2 updates of slack hides that.
+ */
+const INTERP_DELAY = 2.2 * (1000 / TICK_RATE);
+/**
+ * Server update clock. Updates leave the server every 50 ms but reach us unevenly (network, a busy server, a second
+ * player's traffic), so each one is stamped with a smoothed time: the last stamp + 50 ms, nudged slowly towards
+ * when it really arrived. `patchSeq` counts updates (bumped after each one), so all changes of one update share a stamp.
+ */
+let patchSeq = 0, stampSeq = -1, stamp = 0;
+function patchTime(): number {
+  if (stampSeq === patchSeq) return stamp;
+  stampSeq = patchSeq;
+  const now = performance.now(), guess = stamp + 1000 / TICK_RATE;
+  stamp = Math.abs(now - guess) > 250 ? now : Math.min(now, guess + (now - guess) * 0.1);
+  return stamp;
+}
+/** Record a server position for an entity (several field changes of one update count once). */
+function pushSnap(e: { snaps?: Snap[] }, x: number, y: number) {
+  const s = (e.snaps ??= []), t = patchTime();
+  const last = s[s.length - 1];
+  if (last && t - last.t < 1) { last.x = x; last.y = y; return; }
+  s.push({ t, x, y });
+  if (s.length > 12) s.splice(0, s.length - 12);
+}
+/** Where the entity was at local time t, from its snapshots: blended between the two around t, or carried a little past the last. */
+function interpolate(s: Snap[], t: number): { x: number; y: number } | undefined {
+  if (!s.length) return undefined;
+  if (t <= s[0].t) return s[0];
+  for (let i = s.length - 1; i > 0; i--) {
+    const a = s[i - 1], b = s[i];
+    if (t >= a.t && t <= b.t) {
+      const k = (t - a.t) / Math.max(1, b.t - a.t);
+      return { x: a.x + (b.x - a.x) * k, y: a.y + (b.y - a.y) * k };
+    }
+  }
+  // Past the newest update (a late one): keep the last speed a moment so the entity doesn't stop and jump
+  const b = s[s.length - 1], a = s[s.length - 2];
+  if (!a || b.t - a.t < 1) return b;
+  const over = Math.min(t - b.t, 1000 / TICK_RATE * 1.5), k = over / Math.max(1, b.t - a.t);
+  return { x: b.x + (b.x - a.x) * k, y: b.y + (b.y - a.y) * k };
 }
 
 const FRAME_BASE: Record<string, number> = { down: 0, up: 2, right: 4, left: 4 };
@@ -337,6 +385,7 @@ export class TownScene extends Phaser.Scene {
     this.room.send("intro");
     this.dial = new DayDial(document.getElementById("daydial") as HTMLCanvasElement);
 
+    this.room.onStateChange(() => { patchSeq++; });
     const players = (this.room.state as any).players;
     players.onAdd((p: any, id: string) => {
       this.addEntity(id, p);
@@ -344,8 +393,9 @@ export class TownScene extends Phaser.Scene {
         const e = this.entities.get(id);
         if (!e) return;
         e.tx = p.x; e.ty = p.y;
+        pushSnap(e, p.x, p.y);
         // Snap on respawn / large correction
-        if (Math.hypot(e.sprite.x - p.x, e.sprite.y - p.y) > 48) e.sprite.setPosition(p.x, p.y);
+        if (Math.hypot(e.sprite.x - p.x, e.sprite.y - p.y) > 48) { e.sprite.setPosition(p.x, p.y); e.snaps = [{ t: patchTime(), x: p.x, y: p.y }]; }
       });
     });
     players.onRemove((_p: any, id: string) => this.removeEntity(id));
@@ -357,12 +407,13 @@ export class TownScene extends Phaser.Scene {
         const e = this.entities.get(id);
         if (!e) return;
         e.tx = m.x; e.ty = m.y;
+        pushSnap(e, m.x, m.y);
         // A respawned Mother Blob can come back at another level, a skeleton with another weapon
         if (m.kind === "motherblob" || m.kind === "skeleton" || m.kind === "bandit" || m.kind === "demon") {
           const key = mobTexture(this, m.kind, m.level, m.weapon, m.bones);
           if (e.sprite.texture.key !== key) { e.sprite.setTexture(key, 0); this.perch(e, m); }
         }
-        if (Math.hypot(e.sprite.x - m.x, e.sprite.y - m.y) > 48 && !(this.time.now < (e.leapUntil ?? 0))) e.sprite.setPosition(m.x, m.y);
+        if (Math.hypot(e.sprite.x - m.x, e.sprite.y - m.y) > 48 && !(this.time.now < (e.leapUntil ?? 0))) { e.sprite.setPosition(m.x, m.y); e.snaps = [{ t: patchTime(), x: m.x, y: m.y }]; }
         if ((m.merged || 1) !== (e.merged ?? 1)) this.growMob(e, m);
       });
     });
@@ -661,12 +712,13 @@ export class TownScene extends Phaser.Scene {
       if (!e || e.culled) return;
       this.siege.drop(id, work, e.sprite.x, e.sprite.y);
       this.floatText(e.sprite.x, e.sprite.y - e.top - 4, "!", "#ff5252", PIXEL_FONT);
+      e.chaseUntil = this.time.now + 200; // let the little hop play instead of the snapshot playback
       this.tweens.add({ targets: e.sprite, y: { from: e.sprite.y - 3, to: e.sprite.y }, duration: 180, ease: "Quad.easeIn" });
     });
     this.room.onMessage("ambush", ({ id, x, y, victim }) => {
       const e = this.entities.get(id);
       if (!e) return;
-      e.sprite.setPosition(x, y); e.tx = x; e.ty = y;
+      e.sprite.setPosition(x, y); e.tx = x; e.ty = y; e.snaps = [{ t: patchTime(), x, y }];
       this.floatText(x, y - e.top - 4, "!", "#ff5252");
       const b = this.bodyScale(e);
       this.tweens.add({ targets: e.sprite, scaleX: { from: b * 0.4, to: b }, scaleY: { from: b * 1.6, to: b }, duration: 220, ease: "Back.Out" });
@@ -889,7 +941,7 @@ export class TownScene extends Phaser.Scene {
         .setScale(MOB_LOOK[p.kind]?.scale ?? 1);
       if (p.kind === "crawler" && sprite.texture.key.startsWith("mob_skeleton")) sprite.setCrop(0, 0, sprite.frame.width, sprite.frame.height * CRAWL_CROP); // legs gone
       // The level tag is made when the monster comes on screen (see update): thousands of text canvases would cost a lot
-      this.entities.set(id, { sprite, bar: isoAnchor(this.add.graphics(), sprite) as Phaser.GameObjects.Graphics, tx: p.x, ty: p.y, state: p, mob, top: MOB_LOOK[p.kind]?.top ?? 14 });
+      this.entities.set(id, { sprite, bar: isoAnchor(this.add.graphics(), sprite) as Phaser.GameObjects.Graphics, tx: p.x, ty: p.y, snaps: [{ t: patchTime(), x: p.x, y: p.y }], state: p, mob, top: MOB_LOOK[p.kind]?.top ?? 14 });
       if ((p.merged || 1) > 1) this.growMob(this.entities.get(id)!, p);
       this.perch(this.entities.get(id)!, p);
       return;
@@ -906,7 +958,7 @@ export class TownScene extends Phaser.Scene {
     isoAnchor(label, sprite);
     const bar = isoAnchor(this.add.graphics(), sprite) as Phaser.GameObjects.Graphics;
     const gear = hero ? new GearLayer(this, hero) : undefined;
-    this.entities.set(id, { sprite, label, bar, tx: p.x, ty: p.y, state: p, mob, hero, gear, top: hero ? HERO_TOP : 14 });
+    this.entities.set(id, { sprite, label, bar, tx: p.x, ty: p.y, snaps: [{ t: patchTime(), x: p.x, y: p.y }], state: p, mob, hero, gear, top: hero ? HERO_TOP : 14 });
     if (id === this.me) {
       // ?look=tx,ty (map viewing aid, like ?time=): park the camera on a tile instead of following the hero
       const look = new URLSearchParams(location.search).get("look")?.split(",").map(Number);
@@ -1529,7 +1581,7 @@ export class TownScene extends Phaser.Scene {
     }
     if (ev.ev === "move" || ev.ev === "countered") {
       const e = this.entities.get(ev.id);
-      if (e) { e.tx = ev.x; e.ty = ev.y; }
+      if (e) { e.tx = ev.x; e.ty = ev.y; e.chaseUntil = this.time.now + 250; }
     }
     this.fx.onEvent(ev);
   }
@@ -1650,23 +1702,34 @@ export class TownScene extends Phaser.Scene {
       this.room.send("input", { ...next, seq: ++this.seq });
     }
 
-    const now = this.time.now;
+    const now = this.time.now, wall = performance.now();
+    // Long frames (a hiccup, a hidden tab) are capped so prediction never leaps through a wall
+    const step = Math.min(dtMs, 100);
+    // An easing written for 60 fps (k per frame), adjusted so it pulls just as hard at 30, 120 or 144 fps
+    const ease = (k: number) => 1 - Math.pow(1 - k, step / (1000 / 60));
     for (const [id, e] of this.entities) {
       const p = e.state;
       const rooted = typeof p.fx === "string" && p.fx.includes("charge"); // a buildup roots the hero
       if (id === this.me && !p.dead && !p.stunned && !p.rolling && !rooted) {
         // Client-side prediction with the same movement code the server runs
-        const r = moveStep(e.sprite.x, e.sprite.y, this.input_, dtMs / 1000, heroSpeed(p.cls as ClassKind, p.slowed, p.spd ?? 1) * gearSpeedMult(p));
+        const r = moveStep(e.sprite.x, e.sprite.y, this.input_, step / 1000, heroSpeed(p.cls as ClassKind, p.slowed, p.spd ?? 1) * gearSpeedMult(p));
         e.sprite.setPosition(r.x, r.y);
         if (!r.moving) {
-          // Ease toward authoritative position while idle
-          e.sprite.x += (e.tx - e.sprite.x) * 0.2;
-          e.sprite.y += (e.ty - e.sprite.y) * 0.2;
+          // Ease toward authoritative position while idle (same pull at any frame rate)
+          const k = ease(0.2);
+          e.sprite.x += (e.tx - e.sprite.x) * k;
+          e.sprite.y += (e.ty - e.sprite.y) * k;
         }
+      } else if (id === this.me || now < (e.leapUntil ?? 0) || now < (e.chaseUntil ?? 0)) {
+        // Our own hero while rolling/stunned, a leap or a dash: follow the server closely
+        const k = ease(id === this.me || p.rolling ? 0.5 : 0.25);
+        e.sprite.x += (e.tx - e.sprite.x) * k;
+        e.sprite.y += (e.ty - e.sprite.y) * k;
       } else {
-        const ease = p.rolling ? 0.5 : 0.25; // rolls are fast: follow the server closely
-        e.sprite.x += (e.tx - e.sprite.x) * ease;
-        e.sprite.y += (e.ty - e.sprite.y) * ease;
+        // Everyone else: play back their server positions a little late, so they glide at an even speed
+        // instead of lurching once per server update (and stopping when one comes in late)
+        const at = interpolate(e.snaps ?? [], wall - INTERP_DELAY);
+        if (at) e.sprite.setPosition(at.x, at.y);
       }
       // Monsters off screen: hide them and skip the per-frame drawing (there are a lot of them)
       if (e.mob) {
