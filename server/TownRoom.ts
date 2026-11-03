@@ -32,6 +32,7 @@ import { arrivalOf, cleanPortals, PORTAL_COMBAT_MS, PORTAL_RANGE, PORTAL_WAKE_RA
 import { rollBoon, shrineXp, SHRINE, SHRINE_COOLDOWN_MS, SHRINE_RANGE, WIND_BLESSING, WIND_BLESSING_ID } from "../shared/shrine";
 import { chestById, chestLock, CHEST_RANGE, CHEST_RESPAWN_MS, CHESTS, GUARD_RESPAWN_MS, rollChest } from "../shared/chests";
 import { SLOT_COUNT } from "../shared/slots";
+import { groupDmgMult, groupHpMult, PARTY, together } from "../shared/party";
 import { heroPoise, MOB_COMBAT, POISE, poiseLevelMult, poiseSpeed } from "../shared/combat";
 import {
   BAG_SIZE, Equipped, GEAR, GEAR_SLOTS, GearSlot, gearBlock, gearName, gearReachMult, gearSpeedMult, gearStats, isGearId, potionChance, rollGear, canWear, starterKit,
@@ -84,6 +85,7 @@ export class Player extends Schema {
   @type("number") stacks = 0;
   @type("number") spd = 1;
   @type("string") fx = "";
+  @type("string") party = ""; // player group id ("" = solo); shared/party.ts
   // Equipment (shared/gear.ts): equipped item ids ("" = empty) and the unequipped items carried.
   // Each slot must stay a synced @type field, or the client never sees it (the sword vanished from the menu).
   @type("string") weapon = "";
@@ -500,6 +502,11 @@ export class TownRoom extends Room<TownState> {
     this.onMessage("ideas", (client) => this.sendBoard(client));
     this.clock.setInterval(() => this.ideaRound(), 5000);
 
+    this.onMessage("pinvite", (client, msg: { id?: string; name?: string }) => this.partyInvite(client.sessionId, msg));
+    this.onMessage("paccept", (client, msg: { from?: string }) => this.partyAnswer(client.sessionId, msg?.from, true));
+    this.onMessage("pdecline", (client, msg: { from?: string }) => this.partyAnswer(client.sessionId, msg?.from, false));
+    this.onMessage("pleave", (client) => this.partyLeave(client.sessionId));
+
     this.onMessage("chat", (client, text: string) => {
       const p = this.state.players.get(client.sessionId);
       if (!p || typeof text !== "string") return;
@@ -508,6 +515,9 @@ export class TownRoom extends Room<TownState> {
       const v = text.trim().match(/^\/(up|down|unvote)\s+#?(\d+)$/i);
       if (v) return this.voteIdea(client, Number(v[2]), v[1].toLowerCase() === "up" ? 1 : v[1].toLowerCase() === "down" ? -1 : 0);
       if (/^\/max$/i.test(text.trim())) return this.maxHero(client);
+      const inv = text.trim().match(/^\/(?:invite|inv|group)\s+(.+)$/i);
+      if (inv) return this.partyInvite(client.sessionId, { name: inv[1] });
+      if (/^\/(leave|ungroup)$/i.test(text.trim())) return this.partyLeave(client.sessionId);
       const clean = text.slice(0, 120).trim();
       const cmd = clean.toLowerCase().replace(/^\//, "");
       if (clean.startsWith("/") && (EMOTES as readonly string[]).includes(cmd)) {
@@ -608,6 +618,8 @@ export class TownRoom extends Room<TownState> {
   onLeave(client: Client) {
     const p = this.state.players.get(client.sessionId);
     if (p) saveHero(p.name, p.cls, this.snapshot(p));
+    this.partyLeave(client.sessionId);
+    this.invites.delete(client.sessionId);
     this.state.players.delete(client.sessionId);
     this.unsummon(client.sessionId);
     this.addrs.delete(client.sessionId);
@@ -2286,12 +2298,86 @@ export class TownRoom extends Room<TownState> {
     this.dropItem("gear", p.x + off[0] * (PICKUP_RADIUS + 10), p.y + off[1] * (PICKUP_RADIUS + 10), 1, gid);
   }
 
+  // ---- Player groups (shared/party.ts) --------------------------------------
+
+  /** Pending invites: invited player -> who asked, and until when. */
+  private invites = new Map<string, { from: string; until: number }>();
+  private partySeq = 0;
+
+  private members(party: string): string[] {
+    const out: string[] = [];
+    if (party) this.state.players.forEach((p, id) => { if (p.party === party) out.push(id); });
+    return out;
+  }
+
+  /** `id`'s live group members (with `id` itself) fighting together around (x, y). */
+  private groupNear(id: string, x: number, y: number): string[] {
+    const me = this.state.players.get(id);
+    if (!me?.party) return [id];
+    return this.members(me.party).filter((pid) => {
+      const p = this.state.players.get(pid)!;
+      return pid === id || (!p.dead && together(p.x, p.y, x, y));
+    });
+  }
+
+  private tell(id: string, text: string) {
+    this.clients.find((c) => c.sessionId === id)?.send("party", { text });
+  }
+
+  private partyInvite(id: string, msg: { id?: string; name?: string }) {
+    const me = this.state.players.get(id);
+    if (!me) return;
+    let tid = typeof msg?.id === "string" ? msg.id : "";
+    if (!tid && typeof msg?.name === "string") {
+      const want = msg.name.trim().toLowerCase();
+      this.state.players.forEach((p, pid) => { if (!tid && pid !== id && p.name.toLowerCase() === want) tid = pid; });
+    }
+    const t = this.state.players.get(tid);
+    if (!t || tid === id) return this.tell(id, "No such player here.");
+    if (me.party && t.party === me.party) return this.tell(id, `${t.name} is already in your group.`);
+    if (t.party) return this.tell(id, `${t.name} is already in another group.`);
+    if (me.party && this.members(me.party).length >= PARTY.maxSize) return this.tell(id, `Your group is full (${PARTY.maxSize}).`);
+    const prev = this.invites.get(tid);
+    if (prev && prev.from === id && prev.until > Date.now()) return this.tell(id, `You already invited ${t.name}.`);
+    this.invites.set(tid, { from: id, until: Date.now() + PARTY.inviteMs });
+    this.clients.find((c) => c.sessionId === tid)?.send("pinvite", { from: id, name: me.name, ms: PARTY.inviteMs });
+    this.tell(id, `Invited ${t.name} to your group.`);
+  }
+
+  private partyAnswer(id: string, from: unknown, yes: boolean) {
+    const inv = this.invites.get(id);
+    const me = this.state.players.get(id);
+    if (!me || !inv || inv.from !== from) return;
+    this.invites.delete(id);
+    const host = this.state.players.get(inv.from);
+    if (!host || inv.until < Date.now()) return this.tell(id, "That invite has run out.");
+    if (!yes) return this.tell(inv.from, `${me.name} declined your invite.`);
+    if (me.party) this.partyLeave(id);
+    if (host.party && this.members(host.party).length >= PARTY.maxSize) return this.tell(id, `${host.name}'s group is full.`);
+    if (!host.party) host.party = `g${++this.partySeq}`;
+    me.party = host.party;
+    for (const pid of this.members(host.party)) this.tell(pid, pid === id ? `You joined ${host.name}'s group.` : `${me.name} joined the group.`);
+  }
+
+  private partyLeave(id: string) {
+    const me = this.state.players.get(id);
+    if (!me?.party) return;
+    const party = me.party;
+    me.party = "";
+    this.tell(id, "You left the group.");
+    const rest = this.members(party);
+    if (rest.length === 1) { this.state.players.get(rest[0])!.party = ""; this.tell(rest[0], `${me.name} left: the group is disbanded.`); }
+    else for (const pid of rest) this.tell(pid, `${me.name} left the group.`);
+  }
+
   // ---- Combat -------------------------------------------------------------
 
   /** All live, hittable targets (players and mobs) within `r` of (x,y), except `exclude`. */
   private targetsAround(x: number, y: number, r: number, exclude: string): string[] {
     const out: string[] = [];
+    const me = this.state.players.get(exclude);
     this.state.players.forEach((t, tid) => {
+      if (me?.party && t.party === me.party) return; // no friendly fire inside a group
       if (tid !== exclude && !t.dead && Math.hypot(t.x - x, t.y - y) <= r) out.push(tid);
     });
     this.state.mobs.forEach((m, mid) => {
@@ -2329,6 +2415,7 @@ export class TownRoom extends Room<TownState> {
   /** A player (`attackerId`) hits a player or mob. */
   private hitTarget(attackerId: string, targetId: string, dmg: number, push: [number, number], opts: HitOpts = {}) {
     const a = this.state.players.get(attackerId);
+    if (a?.party && this.state.players.get(targetId)?.party === a.party) return; // group mates can't hurt each other
     if (a) dmg = dmg * talentMult(a.cls, a.talents, "dmg") * (opts.skill && !opts.dot ? talentMult(a.cls, a.talents, "skill") : 1) * dealtMult(a, Date.now());
     dmg = Math.max(1, Math.round(dmg));
     opts = { ...opts, from: attackerId };
@@ -2353,6 +2440,8 @@ export class TownRoom extends Room<TownState> {
     const def = mobDef(m);
     if (a && (m.camp || m.kind === "banditchief")) this.banditShout(m, targetId, attackerId, Date.now());
     dmg = Math.max(1, Math.round(dmg * takenMult(m, Date.now())));
+    // A group fighting together faces a tougher monster (shared/party.ts): it soaks more per hit
+    if (a?.party) dmg = Math.max(1, Math.round(dmg / groupHpMult(this.groupNear(attackerId, m.x, m.y).length)));
     if (m.bones) dmg = Math.max(1, Math.round(dmg * (1 - DEMON.harvest.armorPer * m.bones))); // Bone Demon's bone armour
     this.bloodthirst(a, attackerId, Math.min(dmg, m.hp));
     m.hp = Math.max(0, m.hp - dmg);
@@ -2377,7 +2466,9 @@ export class TownRoom extends Room<TownState> {
     this.broadcast("hit", { id: targetId, dmg, crit: !!opts.crit, dot: !!opts.dot });
     if (m.hp > 0) { afterHit(this.host, attackerId, targetId, opts); return; }
     if (a) for (let c = 0; c < CHAINS.length; c++) this.questKill(attackerId, a, m, c);
-    this.grantXp(attackerId, Math.round(def.xp * mobScale(m.level, "xp")), m);
+    // Kill XP: every group member in the same zone gets it (the killer alone when solo)
+    const xp = Math.round(def.xp * mobScale(m.level, "xp"));
+    for (const pid of a?.party ? this.groupNear(attackerId, m.x, m.y) : [attackerId]) this.grantXp(pid, xp, m);
     this.dropLoot(m.kind, m.x, m.y, mobScale(m.level, "gold") * (m.kind === "bandit" ? BANDIT_ROLES[roleOf(m.weapon)].loot : 1), m.level);
     this.mobDied(m, targetId, attackerId, a?.name ?? "");
   }
@@ -2753,6 +2844,8 @@ export class TownRoom extends Room<TownState> {
     // Weakened monsters hit softer
     const fromMob = opts.from ? this.state.mobs.get(opts.from) : undefined;
     if (fromMob) dmg *= dealtMult(fromMob, now);
+    // ...and hit a group harder
+    if (fromMob && t.party) dmg *= groupDmgMult(this.groupNear(tid, fromMob.x, fromMob.y).length);
     const guarded = blocking(t, now);
     if (guarded) dmg = Math.max(1, Math.round(dmg * (1 - GUARD_REDUCTION)));
     dmg = Math.max(1, Math.round(dmg * talentReduce(t.cls, t.talents, "armor") * takenMult(t, now)));

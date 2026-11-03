@@ -33,6 +33,7 @@ import { activeSkills, SLOT_COUNT, SLOT_KEYS, skillLearned } from "../../shared/
 import { iconImg } from "./skillIcons";
 import { TalentMenu } from "./talents";
 import { IdeaBoard } from "./ideas";
+import { PartyUI } from "./party";
 import { IntroPanel } from "./intro";
 import { afterLoading, hideLoading, loadingActive, loadingFor, setLoading } from "./loading";
 import { ISO, IsoView, isoAnchor, isoInput, screenDir, screenDir8 } from "./iso";
@@ -198,6 +199,7 @@ export class TownScene extends Phaser.Scene {
   private portals?: PortalLayer;
   private chatEl = document.getElementById("chat") as HTMLInputElement;
   private ideaBoard?: IdeaBoard;
+  private party?: PartyUI;
   private intro?: IntroPanel;
   private minimap?: Minimap;
   private dial?: DayDial;
@@ -340,6 +342,11 @@ export class TownScene extends Phaser.Scene {
     const toggleIdeas = () => { if (!this.ideaBoard!.open) this.closeMenus(); this.ideaBoard!.toggle(); };
     this.input.keyboard!.on("keydown-I", () => { if (!this.chatting()) toggleIdeas(); });
     menuButton("ideabtn", toggleIdeas);
+    // Player groups: invite nearby heroes / leave (P or the Group button)
+    this.party = new PartyUI((type, msg) => this.room?.send(type, msg), () => (this.room?.state as any)?.players, () => this.me);
+    const toggleParty = () => { if (!this.party!.open) this.closeMenus(); this.party!.toggle(); };
+    this.input.keyboard!.on("keydown-P", () => { if (!this.chatting()) toggleParty(); });
+    menuButton("partybtn", toggleParty);
     this.setupChat();
 
     setLoading("Joining Oakvale", 0.5);
@@ -847,6 +854,8 @@ export class TownScene extends Phaser.Scene {
     });
     this.room.onMessage("xp", ({ amount, x, y }) => this.floatText(x, y - 10, `+${amount} XP`, "#ffd166"));
     this.room.onMessage("chat", ({ id, name, text }) => this.chatMessage(id, name, text));
+    this.room.onMessage("pinvite", ({ from, name, ms }) => this.party?.invited(from, name, ms));
+    this.room.onMessage("party", ({ text }) => this.party?.notice(text));
     this.room.onMessage("ideas", (view) => this.ideaBoard?.update(view));
     this.room.onMessage("ideanote", ({ text, ok }) => {
       this.ideaBoard?.note(text, ok);
@@ -1385,6 +1394,7 @@ export class TownScene extends Phaser.Scene {
     this.npcs?.log.toggle(false);
     this.gearMenu?.close();
     this.ideaBoard?.close();
+    this.party?.close();
     this.portals?.close();
   }
 
@@ -1733,6 +1743,7 @@ export class TownScene extends Phaser.Scene {
     this.details?.update(this.time.now, dtMs);
     if (!this.room) return;
     this.villagers?.update(dtMs, this.outlawSpots());
+    this.party?.update();
     this.watch?.update(dtMs);
     this.torches?.update(this.time.now, (id) => !!this.watch?.striking(id));
     this.fx.update(dtMs);
@@ -1863,6 +1874,11 @@ export class TownScene extends Phaser.Scene {
         if (e.label.text !== txt) e.label.setText(txt);
         if (e.lvlColor !== col) { e.label.setColor(col); e.lvlColor = col; }
         e.label.setVisible(!p.dead && !p.hidden);
+      } else if (e.label && id !== this.me) {
+        // Group members: green name
+        const myParty = (this.room.state as any).players?.get(this.me)?.party;
+        const col = myParty && p.party === myParty ? "#7cfc00" : "#ffffff";
+        if (e.lvlColor !== col) { e.label.setColor(col); e.lvlColor = col; }
       }
       e.bubble?.setPosition(x, y - e.top - 7);
       e.bar.clear().setDepth(e.sprite.y + 1);

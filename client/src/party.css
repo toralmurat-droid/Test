@@ -1,0 +1,29 @@
+/* Player groups (client/src/party.ts). Pixel font like all on-screen text. */
+#partypanel, #partyframe, #partyask, #partytoast, #partypanel button, #partyask button {
+  font-family: var(--pixel-font); -webkit-font-smoothing: none; -moz-osx-font-smoothing: grayscale; }
+#partypanel { position: absolute; left: 50%; top: calc(50% - 30px); transform: translate(-50%, -50%); width: min(360px, calc(100% - 32px));
+  max-height: calc(100% - 110px); overflow: auto; background: rgba(30,30,46,.96); border: 3px solid #555a7a; padding: 12px 14px;
+  pointer-events: auto; z-index: 9; font-size: 13px; }
+#partypanel h2 { margin: 0 0 6px; font-size: 18px; color: #ffd166; }
+#partypanel h3 { margin: 10px 0 4px; font-size: 14px; color: #ffd166; }
+#partypanel ul { list-style: none; margin: 0 0 6px; padding: 0; }
+#partypanel li { display: flex; align-items: center; gap: 6px; padding: 2px 0; }
+#partypanel li small, #partyframe small { color: #aaa; }
+#partypanel li button { margin-left: auto; }
+#partypanel .help { color: #aaa; font-size: 13px; margin: 4px 0; }
+#partypanel button, #partyask button { font-size: 13px; background: #15151f; color: #eee; border: 1px solid #555a7a; cursor: pointer; padding: 2px 8px; }
+#partypanel button:hover, #partyask button:hover { border-color: #ffd166; }
+#partyframe { position: absolute; left: 12px; top: 42%; width: 150px; pointer-events: none; text-shadow: 1px 1px #000; }
+#partyframe .pt { font-size: 13px; color: #7cfc00; margin-bottom: 2px; }
+#partyframe .pm { margin-bottom: 5px; }
+#partyframe .pn { display: block; font-size: 13px; color: #b9ff8a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#partyframe .pb { display: block; height: 6px; background: #400; border: 1px solid #000; }
+#partyframe .pb i { display: block; height: 100%; background: #e63946; }
+#partyframe .dead .pn { color: #888; }
+#partyask { position: absolute; left: 50%; top: 22%; transform: translateX(-50%); background: rgba(30,30,46,.96); border: 3px solid #7cfc00;
+  padding: 8px 14px 10px; pointer-events: auto; z-index: 11; text-align: center; font-size: 13px; }
+#partyask p { margin: 0 0 8px; }
+#partyask small { color: #aaa; }
+#partytoast { position: absolute; left: 50%; top: 15%; transform: translateX(-50%); color: #b9ff8a; font-size: 14px; text-shadow: 1px 1px #000;
+  opacity: 0; transition: opacity .3s; pointer-events: none; z-index: 11; white-space: nowrap; }
+#partytoast.show { opacity: 1; }

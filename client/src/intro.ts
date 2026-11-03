@@ -15,7 +15,7 @@ export class IntroPanel {
     this.el.innerHTML =
       `<h2>Welcome to Oakvale</h2>` +
       SECTIONS.map(([h, t]) => `<h3>${h}</h3><p>${t}</p>`).join("") +
-      `<p class="introhint">M map · I ideas board · Enter chat</p><button id="introok">Got it, let's go!</button>`;
+      `<p class="introhint">M map · I ideas board · P group · Enter chat</p><button id="introok">Got it, let's go!</button>`;
     this.el.hidden = true;
     document.getElementById("hud")!.appendChild(this.el);
     const ok = this.el.querySelector("button")!;
