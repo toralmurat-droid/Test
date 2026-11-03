@@ -169,6 +169,51 @@ export const LOOKS: Record<string, Look> = {
     sleeve: 0x8a939e, arms: "cloth", glove: 0x5a3a22,
     weapon: "spear", fx: 0xffffff,
   },
+  // The gate watch: a dented kettle helm, rusted mail over a padded coat, a faded oxblood tabard, spear and battered round shield
+  watchman: {
+    skin: 0xd9a47c, hair: 0x3a2a20, hairStyle: "short", beard: 0x3a2a20, beardStyle: "stubble",
+    head: "helm", headCol: 0x7a7f84, headTrim: 0x4f5357,
+    torso: "mail", torsoCol: 0x6c7176, tabard: { col: 0x5a1c1c, trim: 0x8a6a34, emblem: 0xa88a48 }, belt: 0x3a2618, buckle: 0x8a7a5a,
+    legs: "trousers", legCol: 0x4a3a2a, boots: 0x2a2420, bootStyle: "leather",
+    sleeve: 0x6a5a44, arms: "cloth", glove: 0x3e2a1a, bracer: 0x4a3424,
+    weapon: "spear", fx: 0xffffff, back: "cape", capeCol: 0x3a3028, build: 1.05,
+    shield: { col: 0x5a4028, trim: 0x6a6e72, emblem: 0x5a1c1c, style: "round" },
+  },
+  // Townsfolk of the ruined village: worn, muddy, earthy cloth
+  peasant: {
+    skin: 0xd8a27a, hair: 0x6a4a2a, hairStyle: "short", beard: 0x6a4a2a, beardStyle: "full",
+    head: "cap", headCol: 0x5a4a34, headTrim: 0x3e3224,
+    torso: "jerkin", torsoCol: 0x6a5a3e, trim: 0x4a3e2a, belt: 0x3a2818, buckle: 0x7a6a4a,
+    legs: "trousers", legCol: 0x4e4436, boots: 0x3a2a1e, bootStyle: "leather",
+    sleeve: 0x7a6a50, arms: "cloth", weapon: "none", fx: 0xffffff,
+  },
+  farmwife: {
+    skin: 0xe6b48c, hair: 0xa8642e, hairStyle: "long",
+    head: "bandana", headCol: 0x8a7a5c, headTrim: 0x6a5a40,
+    torso: "shirt", torsoCol: 0x7a5a48, apron: 0xb8aa8a, belt: 0x4a3420,
+    legs: "dress", legCol: 0x5a4a3a, boots: 0x3a2a1e, bootStyle: "shoe",
+    sleeve: 0x8a6a52, arms: "cloth", weapon: "none", fx: 0xffffff,
+  },
+  labourer: {
+    skin: 0xc8906a, hairStyle: "bald", hair: 0x3a2a1e, beard: 0x3a2a1e, beardStyle: "stubble",
+    head: "none", torso: "shirt", torsoCol: 0x9a8a6a, vest: 0x4a3a2a, belt: 0x2e2014, buckle: 0x6a5a40,
+    legs: "trousers", legCol: 0x3e3a34, boots: 0x2a2018, bootStyle: "leather",
+    sleeve: 0xc8906a, arms: "bare", bracer: 0x4a3424, weapon: "none", fx: 0xffffff, build: 1.1,
+  },
+  elder: {
+    skin: 0xd8a888, hair: 0xb8b2a4, hairStyle: "short", beard: 0xc8c2b4, beardStyle: "long",
+    head: "hood", headCol: 0x4a4038, headTrim: 0x342c26,
+    torso: "robe", torsoCol: 0x5a4e40, trim: 0x3e342a, sash: 0x6a4a2a,
+    legs: "robe", legCol: 0x4e4438, boots: 0x3a2a1e, bootStyle: "shoe",
+    sleeve: 0x4e4438, arms: "cloth", weapon: "none", fx: 0xffffff, back: "cape", capeCol: 0x3a322a,
+  },
+  goodwife: {
+    skin: 0xe8b890, hair: 0x4a3020, hairStyle: "long",
+    head: "hood", headCol: 0x5a3a3a, headTrim: 0x402828,
+    torso: "shirt", torsoCol: 0x6a4a4a, apron: 0x9a8e74, belt: 0x3a2818,
+    legs: "dress", legCol: 0x4a3434, boots: 0x2e2218, bootStyle: "shoe",
+    sleeve: 0x5a3e3e, arms: "cloth", weapon: "none", fx: 0xffffff, back: "cape", capeCol: 0x3e2c2c,
+  },
   druid: {
     skin: 0xe2ad84, hair: 0xe6e1d4, hairStyle: "long", beard: 0xf0ece2, beardStyle: "long",
     head: "hood", headCol: 0x4a6430, headTrim: 0x7d6036,

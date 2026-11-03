@@ -234,8 +234,8 @@ function buildWorld() {
   // Rounded corners on the square: grass creeps back in
   for (const [cx, cy] of [[SQ.x, SQ.y], [SQ.x + SQ.w - 1, SQ.y], [SQ.x, SQ.y + SQ.h - 1], [SQ.x + SQ.w - 1, SQ.y + SQ.h - 1]]) setG(cx, cy, T.GRASS);
   // A small stockade of sharpened stakes around the village, open only where the roads pass
-  const nearRoad = (x: number, y: number) => { for (let j = -1; j <= 1; j++) for (let i = -1; i <= 1; i++) if (roads.has((y + j) * MAP_W + x + i)) return true; return false; };
-  const post = (x: number, y: number) => { if (!nearRoad(x, y)) setO(x, y, T.PALISADE); };
+  // Tight gates (Murat 2026-11-03): the wall stops only on the road tile itself, so each gate is a one-tile gap the watchmen can hold
+  const post = (x: number, y: number) => { if (!roads.has(y * MAP_W + x)) setO(x, y, T.PALISADE); };
   for (let x = V.x0; x <= V.x1; x++) { post(x, V.y0); post(x, V.y1); }
   for (let y = V.y0 + 1; y < V.y1; y++) { post(V.x0, y); post(V.x1, y); }
 

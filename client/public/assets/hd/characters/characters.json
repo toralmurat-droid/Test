@@ -12,7 +12,13 @@
   "villager",
   "guard",
   "druid",
-  "witch"
+  "witch",
+  "watchman",
+  "peasant",
+  "farmwife",
+  "labourer",
+  "elder",
+  "goodwife"
  ],
  "image": "{name}.webp",
  "frameWidth": 48,

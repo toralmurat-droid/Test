@@ -15,6 +15,8 @@ import { Minimap } from "./minimap";
 import { DayDial } from "./daydial";
 import { SignPanel } from "./signpanel";
 import { NpcLayer } from "./npcs";
+import { Villagers } from "./villagers";
+import { WatchLayer } from "./watch";
 import { QUEST_ITEMS } from "../../shared/quests";
 import { pixelText } from "./pixeltext";
 import { ART_K, CHAR_GROW, CHAR_SCALE, CHARACTERS, CHAR_ORIGIN, CharacterName, createArtAnims, playCharAnim, preloadArt } from "./artAssets";
@@ -124,6 +126,8 @@ export class TownScene extends Phaser.Scene {
   private input_: InputState = { up: false, down: false, left: false, right: false };
   private seq = 0;
   private npcs?: NpcLayer;
+  private villagers?: Villagers;
+  private watch?: WatchLayer;
   private chests?: ChestLayer;
   private chatEl = document.getElementById("chat") as HTMLInputElement;
   private ideaBoard?: IdeaBoard;
@@ -281,6 +285,8 @@ export class TownScene extends Phaser.Scene {
     document.getElementById("hud")!.hidden = false;
     this.minimap = new Minimap(document.getElementById("minimap") as HTMLCanvasElement, this.opts.name);
     this.npcs = new NpcLayer(this, (type, msg) => this.room.send(type, msg));
+    this.villagers = new Villagers(this); // townsfolk idling on the square
+    this.watch = new WatchLayer(this, (this.room.state as any).watch); // watchmen at the gates
     this.room.onMessage("quest", (msg) => this.npcs?.onQuest(msg));
     this.room.onMessage("questuse", ({ id }) => this.npcs?.objects.burst(id));
     this.room.onMessage("shop", (msg) => this.npcs?.onShop(msg));
@@ -1232,6 +1238,8 @@ export class TownScene extends Phaser.Scene {
     this.ambient?.update(this.time.now, dtMs);
     this.details?.update(this.time.now, dtMs);
     if (!this.room) return;
+    this.villagers?.update(dtMs);
+    this.watch?.update(dtMs);
     this.fx.update(dtMs);
     const k = this.keys;
     const typing = this.chatting();
