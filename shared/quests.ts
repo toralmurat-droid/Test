@@ -1,5 +1,5 @@
 import { MobKind, TILE } from "./constants";
-import { AREAS, isSafeZone, isSolidAt, VILLAGE } from "./map";
+import { AREAS, isSafeZone, isSolidAt, REDFANG, VILLAGE } from "./map";
 import { SPAWN_ZONES, SpawnZone } from "./spawns";
 import { npcById } from "./npcs";
 
@@ -83,6 +83,7 @@ export const QUEST_ITEMS: Record<string, QuestItemDef> = {
   rot: { name: "Rot Seed", plural: "Rot Seeds" },
   shot: { name: "Sigil Stone", plural: "Sigil Stones" },
   dust: { name: "Grave Dust", plural: "Grave Dust" },
+  cod: { name: "Salted Cod", plural: "Salted Cod" },
 };
 
 // ---- Map objects you use with E ----
@@ -563,6 +564,104 @@ export const BONE_QUESTS: QuestDef[] = [
   },
 ];
 
+// ---- The Redfang chain: Old Garrick of Saltmere ----
+
+const SALT = AREAS.find((a) => a.name === "Saltmere")!;
+const RED_AREA = "Redfang Hollow";
+
+/**
+ * The story: the Redfang bandits come down the Smugglers' Path from their hollow in the eastern woods and bleed
+ * Saltmere dry: the winter stores of salted cod, the boats, and now young Pell, Old Garrick's grandson, who went
+ * up the path to get his boat back and never came down. Captain Hale hears of it from a gull-runner and sends the
+ * hero to Saltmere (a town, no monsters); Old Garrick, the eldest fisherman, sends them on to Redfang Hollow.
+ * Starts at level 16 (beside the end of the Pale Marshal story): Hale → Saltmere → Redfang Hollow (Lv 18-20)
+ * → the Redfang Chief.
+ */
+export const RED_QUESTS: QuestDef[] = [
+  {
+    id: "saltmere", title: "Word from Saltmere", giver: "captain", zone: SALT.name, minLevel: 16,
+    description: `A gull-runner came up the Coast Road: the fisherfolk of ${SALT.name}, ${dirFromVillage(SALT.x + SALT.w / 2, SALT.y + SALT.h / 2)} of Oakvale by the sea, are being robbed blind. Captain Hale asked you to go and hear Old Garrick out.`,
+    offer: [
+      "A gull-runner came up the Coast Road this morning, half dead on his feet. From Saltmere.",
+      `Saltmere is a fishing town down by the sea, ${dirFromVillage(SALT.x + SALT.w / 2, SALT.y + SALT.h / 2)} of here. Honest folk. No soldiers, no walls. Someone has been bleeding them dry.`,
+      "Their eldest, Old Garrick, begs for help. I can't spare the watch, not with the dead on the roads. Will you go and hear him out?",
+    ],
+    acceptText: "I'll go to Saltmere",
+    steps: [
+      { type: "reach", at: { x: (SALT.x + SALT.w / 2) * TILE, y: (SALT.y + 10) * TILE, r: 8 * TILE, label: SALT.name }, zone: SALT.name,
+        text: `Travel to ${SALT.name}`, banner: ["New quest", "Word from Saltmere"], obj: `Travel to ${SALT.name}, down the Coast Road by the sea`,
+        nag: "Follow the Coast Road past Sunken Lake, down to the sea. You can't miss the smell of fish." },
+      { type: "talk", npc: "oldfisher", text: "Find Old Garrick", banner: [`You reached ${SALT.name}`, "Find Old Garrick by the beach fire"],
+        obj: "Find Old Garrick (by the fire on the beach)",
+        say: [
+          "Hale sent you? Then the watch hasn't forgotten us. Sit, sit. The fire's warm, even if the news isn't.",
+          "Eighty winters I've fished this coast. Storms, sea-wolves, a whale that ate my best net. Never anything like the Redfang.",
+          "Here, a little for your trouble on the road. Now listen, and I'll tell you what they've done.",
+        ],
+        accept: "Claim reward", nag: "" },
+    ],
+    reward: { xp: 900, gold: 120, potions: 2 },
+    after: "Old Garrick will be by the fire on the beach. Saltmere has nobody else to ask.",
+  },
+  {
+    id: "cod", title: "Salt and Steel", giver: "oldfisher", zone: RED_AREA, minLevel: 17,
+    description: `The Redfang bandits come down the Smugglers' Path and carry off Saltmere's winter stores. Old Garrick asked you to teach them a lesson at ${RED_AREA} and bring back the salted cod they stole.`,
+    offer: [
+      "Every new moon they come down the Smugglers' Path, from the Redfang Hollow up in the eastern woods. Red rags on their arms, axes on their backs.",
+      "They took the winter stores. Every barrel of salted cod we put by. Without it, half this town won't see spring.",
+      `Go up the path to ${RED_AREA}. Show those Redfang dogs that Saltmere has teeth too, and bring back what you can of our cod.`,
+      "Mind the towers by their gates. The lookouts carry horns, and the whole camp comes running when they blow.",
+    ],
+    acceptText: "I'll bring back your cod",
+    steps: [
+      { type: "kill", zone: RED_AREA, kinds: ["bandit"], goal: 8, text: "Slay 8 Redfang bandits", banner: ["New quest", "Salt and Steel"],
+        obj: "Redfang bandits slain: {n} / {goal}", nag: "{n} of {goal}. Pick them off one at a time, before the horns call the rest." },
+      { type: "collect", zone: RED_AREA, kinds: ["bandit", "banditchief"], item: "cod", goal: 5, chance: { bandit: 0.45, banditchief: 1 },
+        text: "Take back 5 Salted Cod from the bandits", banner: ["The Redfang bleed!", "Take back the stolen cod"], obj: "Salted Cod: {n} / {goal}",
+        nag: "{n} of {goal}. They carry it in their packs, the thieving gulls." },
+      { type: "talk", npc: "oldfisher", text: "Bring the cod to Old Garrick", banner: ["You have the cod", "Bring it to Old Garrick"],
+        obj: "Bring the cod to Old Garrick (Saltmere beach)",
+        say: [
+          "Our cod! That's Saltmere salt on it, I'd know it anywhere. Bless you.",
+          "There's something else, and I've not had the heart to say it. My grandson Pell went up that path to take his boat back. Alone. Three weeks ago.",
+          "He never came down. Here, take this. And when you're ready, come back to me. Please.",
+        ],
+        accept: "Claim reward" },
+    ],
+    reward: { xp: 1500, gold: 300, potions: 3 },
+    after: "Pell... come back to me when you're ready. I can't ask anyone else.",
+  },
+  {
+    id: "chief", title: "The Redfang Chief", giver: "oldfisher", zone: RED_AREA, minLevel: 19,
+    description: `Old Garrick's grandson Pell went up to ${RED_AREA} to take back his boat and never came down. Find him, and put an end to the Redfang Chief who holds the camp together.`,
+    offer: [
+      "A smuggler passed through last night. He says the Redfang keep a boy chained by their chief's tent. A boy with a fisherman's hands.",
+      "It's Pell. It has to be.",
+      "The chief is a brute of a man, they say, with an axe as long as an oar. While he lives, the camp holds together. Kill him, and the rest will scatter like gulls.",
+      "Bring my boy home.",
+    ],
+    acceptText: "I'll bring Pell home",
+    steps: [
+      { type: "reach", at: { x: (REDFANG.x + REDFANG.w / 2) * TILE, y: (REDFANG.y + REDFANG.h / 2) * TILE, r: 7 * TILE, label: "Redfang camp" }, zone: RED_AREA,
+        text: `Find Pell inside ${RED_AREA}`, banner: ["New quest", "The Redfang Chief"], obj: `Find Pell inside the camp at ${RED_AREA}`,
+        nag: "They keep him in the middle of the camp, by the chief's tent. Get inside the fence." },
+      { type: "kill", zone: RED_AREA, kinds: ["banditchief"], goal: 1, text: "Defeat the Redfang Chief",
+        banner: ["Pell is chained by the chief's tent!", "Defeat the Redfang Chief"], obj: "Redfang Chief defeated: {n} / {goal}",
+        nag: "The chief guards his tent. Watch for his leap, and don't let his war cry rally the camp around you." },
+      { type: "talk", npc: "oldfisher", text: "Bring the news to Old Garrick", banner: ["The Redfang Chief has fallen!", "Pell is free. Go back to Saltmere"],
+        obj: "Go back to Old Garrick (Saltmere beach)",
+        say: [
+          "Pell! He came running down the path at dawn, thin as a rake and grinning like a fool. He's home. He's home.",
+          "And no red rags on the Smugglers' Path since. They say the Redfang are fighting each other over what the chief left behind.",
+          "I've nothing worth what you've done. Take what Saltmere has, and know there's always a warm fire for you on this beach.",
+        ],
+        accept: "Claim reward" },
+    ],
+    reward: { xp: 2400, gold: 600, potions: 5 },
+    after: "Pell's mending his boat again. Saltmere sleeps easy now. Sit by the fire whenever you pass, friend.",
+  },
+];
+
 // ---- Chains: the blob story and the skeleton story run side by side, each with its own progress ----
 
 export interface QuestChain {
@@ -577,12 +676,13 @@ export interface QuestChain {
 export const CHAINS: QuestChain[] = [
   { id: "gloam", name: "The Gloam", quests: QUESTS, keys: ["questId", "questStage", "questCount"], version: QUEST_VERSION, verKey: "questVer" },
   { id: "bones", name: "The Pale Marshal", quests: BONE_QUESTS, keys: ["boneId", "boneStage", "boneCount"], version: 1, verKey: "boneVer" },
+  { id: "redfang", name: "The Redfang Debt", quests: RED_QUESTS, keys: ["redId", "redStage", "redCount"], version: 1, verKey: "redVer" },
 ];
 
 /** Progress on one chain (chain undefined = the blob chain, so a Player passed as is reads as chain 0). */
 export interface QuestState { questId: number; questStage: number; questCount: number; level?: number; chain?: number }
 /** A player's progress on every chain: the Player schema fields (CHAINS[].keys). */
-export type Quester = { level?: number; questId?: number; questStage?: number; questCount?: number; boneId?: number; boneStage?: number; boneCount?: number };
+export type Quester = { level?: number; questId?: number; questStage?: number; questCount?: number; boneId?: number; boneStage?: number; boneCount?: number; redId?: number; redStage?: number; redCount?: number };
 
 /** One chain's progress, read from the player's fields. */
 export function chainState(p: Quester | undefined, c: number): QuestState | undefined {
@@ -661,6 +761,7 @@ export const rewardText = (r: Reward) => `${r.xp} XP, ${r.gold} gold, ${r.potion
 const IDLE: Record<string, string> = {
   druid: "The old oaks are restless. Keep your blade sharp, friend.",
   captain: "Quiet on the walls today. I don't trust quiet.",
+  oldfisher: "Tide's turning. Mind the wet sand, it'll have your boots off.",
 };
 
 /** What an NPC says about one chain, or undefined if nothing. */

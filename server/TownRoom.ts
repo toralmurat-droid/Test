@@ -99,6 +99,10 @@ export class Player extends Schema {
   @type("number") boneId = 0;
   @type("number") boneStage = 0;
   @type("number") boneCount = 0;
+  // Redfang chain (Old Garrick of Saltmere), CHAINS[2]
+  @type("number") redId = 0;
+  @type("number") redStage = 0;
+  @type("number") redCount = 0;
   nextSummon = 0; // when the server may bring back this player's quest fused blob (QuestStep.summon)
   // Skill slots on keys 1..0 (shared/slots.ts): a skill id or "" (empty). Empty until the player assigns them.
   @type(["string"]) slots = new ArraySchema<string>(...Array(SLOT_COUNT).fill(""));
@@ -611,7 +615,8 @@ export class TownRoom extends Room<TownState> {
       weapon: p.weapon, armour: p.armour, shoes: p.shoes, hat: p.hat, shield: p.shield, ranged: p.ranged,
       bag: p.bag.toArray(), talents, slots: p.slots.toArray(),
       questId: p.questId, questStage: p.questStage, questCount: p.questCount, questVer: CHAINS[0].version,
-      boneId: p.boneId, boneStage: p.boneStage, boneCount: p.boneCount, boneVer: CHAINS[1].version, kit: 1,
+      boneId: p.boneId, boneStage: p.boneStage, boneCount: p.boneCount, boneVer: CHAINS[1].version,
+      redId: p.redId, redStage: p.redStage, redCount: p.redCount, redVer: CHAINS[2].version, kit: 1,
       intro: p.introSeen ? 1 : 0,
     };
   }

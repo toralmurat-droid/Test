@@ -99,6 +99,8 @@ const ITEM_ART: Record<string, { rows: string[]; pal: Record<string, number> }> 
     pal: { K: 0x1a1420, S: 0x8a94a3, L: 0xd8e0ea, R: 0xd62839 } },
   q_rot: { rows: ["........", "....G...", "...GP...", "..PPPP..", ".PPLPPP.", ".PPPPPD.", "..PPDD..", "...DD..."],
     pal: { G: 0x6fbf3a, P: 0x4a2f6b, L: 0x8e6bbf, D: 0x2a1a3d } },
+  q_cod: { rows: ["........", "........", ".T..SSS.", "TTSSLSSE", ".TSSSSSS", "TTSDDDS.", ".T......", "........"],
+    pal: { T: 0x8a6a3a, S: 0xc9b48a, L: 0xf2ead2, D: 0x8f7a52, E: 0x2a2018 } },
 };
 
 /** Ground item texture by `Item.kind` (single frame). */
