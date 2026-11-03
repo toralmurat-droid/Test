@@ -1,6 +1,6 @@
 import Phaser from "phaser";
 import { MAP_H, MAP_W, TILE } from "../../shared/constants";
-import { GROUND, T } from "../../shared/map";
+import { BROKEN_BRIDGES, GROUND, MAKESHIFT_BRIDGES, T } from "../../shared/map";
 import { SMOOTH } from "./isoflag";
 import { hiResTexture } from "./smooth";
 
@@ -20,6 +20,9 @@ const HT = UP + IH + DOWN;
 const gnd = (x: number, y: number) => (x < 0 || y < 0 || x >= MAP_W || y >= MAP_H ? -1 : GROUND[y][x]);
 const isWater = (x: number, y: number) => { const g = gnd(x, y); return g === T.WATER || g === -1; };
 const isBridge = (x: number, y: number) => gnd(x, y) === T.BRIDGE;
+const BROKEN = new Set(BROKEN_BRIDGES.map((b) => b.y * MAP_W + b.x));
+const MAKESHIFT = new Set(MAKESHIFT_BRIDGES.map((b) => b.y * MAP_W + b.x));
+const isGap = (x: number, y: number) => x >= 0 && y >= 0 && x < MAP_W && y < MAP_H && BROKEN.has(y * MAP_W + x);
 const hash = (x: number, y: number, s: number) => {
   let h = (Math.imul(x, 374761393) + Math.imul(y, 668265263) + Math.imul(s, 982451653)) | 0;
   h = Math.imul(h ^ (h >>> 13), 1274126177);
@@ -198,7 +201,28 @@ class Buf {
 /** Texel of a deck-local point (0..TILE) lifted by `up` world px. */
 const TX = (x: number, y: number, up = 0) => ({ X: (IW / 2 + x - y) * S, Y: (UP + (x + y) / 2 - up) * S });
 
-interface Tile { tx: number; ty: number; alongX: boolean; w: Sides; br: Sides /* neighbour is bridge */ }
+interface Tile { tx: number; ty: number; alongX: boolean; w: Sides; br: Sides /* neighbour is bridge */; gap: Sides /* the span fell in there */; makeshift: boolean /* narrow, no railings */ }
+
+/**
+ * How far (world px) the broken end of a deck has crumbled back from the edge towards a fallen span, at lane
+ * position `c` (0..TILE across the way). Plank by plank it varies; the stringer beams under the sides hold out longest.
+ */
+function ragAt(t: Tile, c: number) {
+  const lane = t.alongX ? t.ty : t.tx;
+  const stringer = c < 4.5 || c > TILE - 4.5;
+  if (stringer) return 0.5 + vn(c * 0.9, lane, 61) * 2.5;
+  return 3 + vn(c * 0.45, lane, 62) * 7 + (vn(c * 2.2, lane, 63) - 0.5) * 3;
+}
+/** Distance (world px) from a deck-local point to the edge of each fallen span next to this tile; Infinity if none. */
+function gapDist(t: Tile, x: number, y: number) {
+  let d = Infinity;
+  if (t.gap.e) d = Math.min(d, TILE - x);
+  if (t.gap.w) d = Math.min(d, x);
+  if (t.gap.s) d = Math.min(d, TILE - y);
+  if (t.gap.n) d = Math.min(d, y);
+  return d;
+}
+const SPLINTER = ramp("#4a3a28", "#7d6748", "#a88d66", "#c9b088");
 
 /** Plank state at world position `a` along the way (one plank ≈ 5 px), seeded by the bridge row/column. */
 function plank(a: number, lane: number) {
@@ -216,6 +240,18 @@ function paintDeck(b: Buf, t: Tile, landEnd: boolean) {
     if (x < 0 || y < 0 || x >= TILE || y >= TILE) continue;
     const wx = tx * TILE + x, wy = ty * TILE + y, a = alongX ? wx : wy, c = alongX ? y : x, cw = alongX ? wy : wx;
     const p = plank(a, lane);
+    if (t.makeshift) { // a narrow walk of uneven planks laid over two logs
+      const half = 8.5 + p.endA * 1.6 + (hash(p.pi, lane, 9) - 0.5) * 2.5;
+      if (Math.abs(c - TILE / 2) > half) continue;
+      if (Math.abs(c - TILE / 2) > half - 0.8) { b.set(X, Y, pick(WOOD[0], 0.7 + dith(X, Y))); continue; }
+    }
+    const gd = gapDist(t, x, y);
+    if (gd < Infinity) { // the broken end over the fallen span: torn planks, fresh pale splinters, dark wet wood
+      const rag = ragAt(t, c);
+      if (gd < rag) continue;
+      if (gd < rag + 1.2) { b.set(X, Y, pick(SPLINTER, 1.6 + dith(X, Y) * 1.6 + (vn(c * 3, gd, 64) - 0.5) * 1.5)); continue; }
+      if (gd < rag + 4 && vn(c * 1.3, gd * 1.3, 65) > 0.55) { b.set(X, Y, pick(WOOD[0], 1 + dith(X, Y))); continue; }
+    }
     const wet = (edgeA && c < 3 ? 1 - c / 3 : 0) + (edgeB && c > TILE - 3 ? 1 - (TILE - c) / 3 : 0);
     // ragged plank ends on the open sides; under them the stringer beam shows
     const cut = (edgeA && c < p.endA) || (edgeB && c > TILE - p.endB);
@@ -249,6 +285,9 @@ function paintFace(b: Buf, t: Tile, side: "s" | "e") {
   for (let q = 0; q <= TILE; q += 0.25) for (let d = 0; d <= BEAM; d += 0.25) {
     const o = side === "s" ? TX(q, TILE) : TX(TILE, q), X = o.X, Y = o.Y + d * S;
     const wq = (side === "s" ? t.tx : t.ty) * TILE + q;
+    const gd = side === "s" ? gapDist(t, q, TILE) : gapDist(t, TILE, q);
+    if (gd < ragAt(t, TILE - 1) + 0.6 * d) continue; // the beam is snapped off at the break
+    if (gd < ragAt(t, TILE - 1) + 0.6 * d + 1) { b.set(X, Y, pick(SPLINTER, 2 + dith(Math.round(X), Math.round(Y)))); continue; }
     let l = 2.4 + shade + (d < 0.6 ? 1 : 0) + (vn(wq * 0.25, d * 2, 21) - 0.5) * 1.4 + dith(Math.round(X), Math.round(Y)) * 0.8;
     if (!along && ((wq / 5.2) % 1) < 0.14) l -= 1.4; // plank ends seen from the side
     if (along && Math.abs(d - BEAM * 0.5) < 0.3 && (wq % 9) < 0.5) { b.set(X, Y, rgb("#211915")); continue; } // bolts on the stringer
@@ -295,13 +334,14 @@ function abutment(b: Buf, t: Tile, side: "n" | "e" | "s" | "w") {
 }
 
 /** Posts and two rails from local a to b. Crooked posts, sagging rails, now and then a snapped rail hanging down. */
-function rail(b: Buf, ax: number, ay: number, bx: number, by: number, endA: boolean, endB: boolean, seed: number) {
-  const brk = hash(seed, 3, 51) < 0.16, brkAt = 0.35 + hash(seed, 4, 51) * 0.3;
+function rail(b: Buf, ax: number, ay: number, bx: number, by: number, endA: boolean, endB: boolean, seed: number, snapB = false) {
+  const brk = snapB || hash(seed, 3, 51) < 0.16, brkAt = snapB ? 0.55 : 0.35 + hash(seed, 4, 51) * 0.3;
   const sag = 0.6 + hash(seed, 5, 51) * 0.8;
   const rails = [RAIL - 1, RAIL * 0.5];
   rails.forEach((h, ri) => {
-    const snapped = brk && ri === 0;
+    const snapped = brk && (ri === 0 || snapB);
     for (let t = 0; t <= 1; t += 0.01) {
+      if (snapB && ri === 1 && t > 0.35 + hash(seed, 7, 51) * 0.15) break; // the lower rail is torn away too
       let x = ax + (bx - ax) * t, y = ay + (by - ay) * t, up = h - Math.sin(t * Math.PI) * sag;
       if (snapped && t > brkAt) {
         if (t > brkAt + 0.28) break; // the loose end hangs down from the break
@@ -326,7 +366,14 @@ function rail(b: Buf, ax: number, ay: number, bx: number, by: number, endA: bool
   };
   post(ax, ay, endA, seed * 3 + 1);
   if (hash(seed, 6, 51) > 0.12) post((ax + bx) / 2, (ay + by) / 2, false, seed * 3 + 2); // a middle post fell out here and there
-  if (endB) post(bx, by, true, seed * 3 + 3);
+  if (endB && !snapB) post(bx, by, true, seed * 3 + 3);
+}
+
+/** A railing along a long side; at a fallen span it is snapped, its loose end hanging towards the water. */
+function longRail(b: Buf, t: Tile, ax: number, ay: number, bx: number, by: number, endA: boolean, endB: boolean, seed: number, sa: keyof Sides, sb: keyof Sides) {
+  if (t.gap[sb]) rail(b, ax, ay, bx, by, endA, false, seed, true);
+  else if (t.gap[sa]) rail(b, bx, by, ax, ay, endB, false, seed, true);
+  else rail(b, ax, ay, bx, by, endA, endB, seed);
 }
 
 function hiCanvas(scene: Phaser.Scene, key: string, draw: (b: Buf) => void) {
@@ -340,7 +387,7 @@ function hiCanvas(scene: Phaser.Scene, key: string, draw: (b: Buf) => void) {
 /** Long sides get railings whatever is under them; a dead end in the water gets one too; land ends stay open. */
 function railSides(t: Tile) {
   const long = t.alongX ? { n: true, s: true, e: false, w: false } : { n: false, s: false, e: true, w: true };
-  const on = (k: keyof Sides) => !t.br[k] && (long[k] || t.w[k]);
+  const on = (k: keyof Sides) => !t.br[k] && !t.gap[k] && (long[k] || t.w[k]);
   return { n: on("n"), e: on("e"), s: on("s"), w: on("w") };
 }
 
@@ -363,27 +410,103 @@ function deckTex(scene: Phaser.Scene, t: Tile) {
     if (w.s) sh([L, B, off(B), off(L)]);
     if (w.e) sh([B, R, off(R), off(B)]);
     const k = t.tx * 31 + t.ty * 17;
-    if (w.s && !br.s) { pile(b, TILE * 0.5, TILE, k); if (w.e || !br.e) pile(b, TILE - 1, TILE, k + 1); }
-    if (w.e && !br.e) { pile(b, TILE, TILE * 0.5, k + 2); }
+    if (t.makeshift) { // two log piles under the middle, a lashed log on each side of the walk, no railings
+      if (w.s || w.n) { pile(b, t.alongX ? TILE * 0.5 : TILE * 0.5 - 7, t.alongX ? TILE * 0.5 + 7 : TILE * 0.5, k); }
+      for (const off of [-8, 8]) for (let q = 0; q <= TILE; q += 0.25) for (let r = -1.3; r <= 1.3; r += 0.25) {
+        const lx = t.alongX ? q : TILE / 2 + off + r, ly = t.alongX ? TILE / 2 + off + r : q, o = TX(lx, ly, -1.5);
+        b.set(o.X, o.Y, pick(WOOD[2], 2.4 - r * 0.9 + (vn(q * 0.3, off, 81) - 0.5) * 1.2 + dith(Math.round(o.X), Math.round(o.Y)) * 0.8));
+      }
+      for (const s of ["n", "w"] as const) if (!br[s] && !w[s]) abutment(b, t, s);
+      paintDeck(b, t, true);
+      return;
+    }
+    if (w.s && !br.s) { pile(b, TILE * 0.5, TILE, k); if ((w.e || !br.e) && !t.gap.e) pile(b, TILE - 1, TILE, k + 1); }
+    if (w.e && !br.e && !t.gap.e) { pile(b, TILE, TILE * 0.5, k + 2); }
     // far-side footings go under the deck
     for (const s of ["n", "w"] as const) if (!br[s] && !w[s]) abutment(b, t, s);
     paintDeck(b, t, !w.n && !br.n || !w.s && !br.s || !w.e && !br.e || !w.w && !br.w);
-    if (!br.s && (w.s || !t.alongX)) paintFace(b, t, "s");
-    if (!br.e && (w.e || t.alongX)) paintFace(b, t, "e");
+    if (!br.s && !t.gap.s && (w.s || !t.alongX)) paintFace(b, t, "s");
+    if (!br.e && !t.gap.e && (w.e || t.alongX)) paintFace(b, t, "e");
     const rs = railSides(t), T0 = { x: 0, y: 0 };
-    if (rs.n) rail(b, T0.x, T0.y, TILE, 0, !br.w, !br.e && !rs.e, t.tx * 7 + t.ty * 3);
-    if (rs.w) rail(b, 0, 0, 0, TILE, !br.n && !rs.n, !br.s, t.tx * 5 + t.ty * 11);
+    if (rs.n) longRail(b, t, T0.x, T0.y, TILE, 0, !br.w, !br.e && !rs.e, t.tx * 7 + t.ty * 3, "w", "e");
+    if (rs.w) longRail(b, t, 0, 0, 0, TILE, !br.n && !rs.n, !br.s, t.tx * 5 + t.ty * 11, "n", "s");
   });
 }
 
 function frontTex(scene: Phaser.Scene, t: Tile) {
+  if (t.makeshift) {
+    const land = { s: !t.w.s && !t.br.s, e: !t.w.e && !t.br.e };
+    if (!land.s && !land.e) return null;
+    return hiCanvas(scene, `bridge_front_${t.tx}_${t.ty}`, (b) => { if (land.s) abutment(b, t, "s"); if (land.e) abutment(b, t, "e"); });
+  }
   const rs = railSides(t), land = { s: !t.w.s && !t.br.s, e: !t.w.e && !t.br.e };
   if (!rs.s && !rs.e && !land.s && !land.e) return null;
   return hiCanvas(scene, `bridge_front_${t.tx}_${t.ty}`, (b) => {
     if (land.s) abutment(b, t, "s");
     if (land.e) abutment(b, t, "e");
-    if (rs.e) rail(b, TILE, 0, TILE, TILE, !t.br.n && !rs.n, !t.br.s, t.tx * 13 + t.ty * 5);
-    if (rs.s) rail(b, 0, TILE, TILE, TILE, !t.br.w, !t.br.e, t.tx * 3 + t.ty * 19);
+    if (rs.e) longRail(b, t, TILE, 0, TILE, TILE, !t.br.n && !rs.n, !t.br.s, t.tx * 13 + t.ty * 5, "n", "s");
+    if (rs.s) longRail(b, t, 0, TILE, TILE, TILE, !t.br.w, !t.br.e, t.tx * 3 + t.ty * 19, "w", "e");
+  });
+}
+
+/**
+ * The fallen span: the stumps of its piles sticking out of the river with fresh splintered tops, the torn deck
+ * boards hanging from both broken ends down into the water, and a few loose planks drifting in between.
+ */
+function gapTex(scene: Phaser.Scene, gx: number, gy: number) {
+  const alongX = isBridge(gx - 1, gy) || isBridge(gx + 1, gy);
+  return hiCanvas(scene, `bridge_gap_${gx}_${gy}`, (b) => {
+    // local point from "along the way" a (0..TILE) and "across" c (0..TILE)
+    const at = (a: number, c: number, up = 0) => (alongX ? TX(a, c, up) : TX(c, a, up));
+    const k0 = gx * 31 + gy * 17, WL = -(BEAM + 9); // the water surface, below the deck
+    // ripples on the water first
+    const ripple = (a: number, c: number, r: number, k: number) => {
+      for (let i = -r; i <= r; i += 0.5) if (hash(k, Math.round(i * 2), 71) < 0.7) { const o = at(a + i, c - i * 0.2, WL); b.set(o.X, o.Y, rgb("#bcd6d2"), 0.45 - Math.abs(i / r) * 0.3); }
+    };
+    // pile stumps: thick, leaning, with a jagged pale top
+    const stump = (a: number, c: number, h: number, k: number) => {
+      const o = at(a, c, WL), lean = (hash(k, 1, 72) - 0.5) * 1.4;
+      for (let d = 0; d <= h + 1.5; d += 0.25) for (let wv = -1.7; wv <= 1.7; wv += 0.25) {
+        const top = h + Math.sin(wv * 3.1 + k) * 0.9 + (hash(k, Math.round(wv * 4), 73) - 0.5) * 1.2;
+        if (d > top) continue;
+        const X = o.X + (wv + lean * (d / h)) * S, Y = o.Y - d * S, edge = Math.abs(wv) > 1.35;
+        const l = 2.6 - wv * 0.8 + (vn(d * 2, wv * 2 + k, 74) - 0.5) + dith(Math.round(X), Math.round(Y)) * 0.8;
+        let col = edge ? pick(WOOD[0], 0.4) : pick(WOOD[2], l);
+        if (d > top - 0.8 && !edge) col = pick(SPLINTER, 1.5 + l * 0.5);
+        else if (d < 2.5 && !edge) col = pick(MOSS, 0.6 + l * 0.4);
+        b.set(X, Y, col);
+      }
+      ripple(a, c, 3, k);
+    };
+    // a board: from (a0,c0,up0) to (a1,c1,up1), `wd` wide across
+    const board = (a0: number, c0: number, u0: number, a1: number, c1: number, u1: number, wd: number, k: number, ends: boolean) => {
+      const len = Math.hypot(a1 - a0, c1 - c0, u1 - u0);
+      const na = -(c1 - c0) / Math.hypot(a1 - a0, c1 - c0 || 1e-6), nc = (a1 - a0) / Math.hypot(a1 - a0, c1 - c0 || 1e-6);
+      for (let s = 0; s <= 1; s += 0.25 / len) for (let q = -wd / 2; q <= wd / 2; q += 0.25) {
+        const tip = ends && s > 0.92 && hash(k, Math.round(q * 4), 75) < (s - 0.92) * 14;
+        if (tip) continue;
+        const o = at(a0 + (a1 - a0) * s + na * q, c0 + (c1 - c0) * s + nc * q, u0 + (u1 - u0) * s);
+        const edge = Math.abs(q) > wd / 2 - 0.4, under = u0 + (u1 - u0) * s < WL + 1.5;
+        let l = 2.8 - q * 0.25 + (vn(s * len * 0.4, q + k, 76) - 0.5) * 1.6 + dith(Math.round(o.X), Math.round(o.Y)) * 0.9 - s * 0.8;
+        let col = edge ? pick(WOOD[0], 0.7) : pick(WOOD[hash(k, 2, 77) < 0.5 ? 1 : 2], l);
+        if (ends && s > 0.86 && !edge) col = pick(SPLINTER, 1.4 + l * 0.4);
+        if (under) col = pick(WATERD, 1.6 + l * 0.3); // under the surface it fades into the river
+        b.set(o.X, o.Y, col);
+      }
+    };
+    stump(TILE * 0.42, 2.5, 5, k0 + 1);
+    stump(TILE * 0.58, TILE - 2.5, 7, k0 + 2);
+    stump(TILE * 0.5, TILE * 0.5, 2.5, k0 + 3);
+    // boards torn from both ends, hanging into the water
+    board(-1, 8, 0, 8, 9.5, WL + 0.5, 4.6, k0 + 4, true);
+    board(-1, TILE - 4, -0.5, 6, TILE - 3, WL + 1, 3.6, k0 + 5, true);
+    board(TILE + 1, 13, 0, TILE - 9, 15, WL + 0.5, 4.6, k0 + 6, true);
+    // the snapped stringer beam sagging from the near end
+    board(-1, 2, -1, 11, 3.5, WL, 2.4, k0 + 7, true);
+    // loose planks drifting
+    board(10, 17, WL + 0.4, 20, 21, WL + 0.4, 4, k0 + 8, false);
+    ripple(15, 19, 6, k0 + 9);
+    board(17, 5, WL + 0.3, 23, 9, WL + 0.3, 3.4, k0 + 10, false);
   });
 }
 
@@ -405,7 +528,8 @@ export function buildBridges(scene: Phaser.Scene, ground: number[][]): number[][
     const openX = !w.e || !w.w, openY = !w.n || !w.s;
     const alongX = openX && !openY ? true : openY && !openX ? false
       : br.w || br.e ? !(br.n || br.s) || openX : false;
-    const t: Tile = { tx, ty, alongX, w, br };
+    const gap: Sides = { n: isGap(tx, ty - 1), e: isGap(tx + 1, ty), s: isGap(tx, ty + 1), w: isGap(tx - 1, ty) };
+    const t: Tile = { tx, ty, alongX, w, br, gap, makeshift: MAKESHIFT.has(ty * MAP_W + tx) };
     const cx = (tx + 0.5) * TILE, cy = (ty + 0.5) * TILE, oy = (UP + IH / 2) / HT;
     if (!SMOOTH) {
       scene.add.image(cx, cy, deckTexture(scene, alongX, w, Math.floor(hash(tx, ty, 1) * 4))).setOrigin(0.5, oy).setDepth(-0.9);
@@ -416,5 +540,6 @@ export function buildBridges(scene: Phaser.Scene, ground: number[][]): number[][
     const f = frontTex(scene, t);
     if (f) scene.add.image(cx, cy, f).setOrigin(0.5, oy).setDepth(cy + 16);
   }
+  if (SMOOTH) for (const g of BROKEN_BRIDGES) scene.add.image((g.x + 0.5) * TILE, (g.y + 0.5) * TILE, gapTex(scene, g.x, g.y)).setOrigin(0.5, (UP + IH / 2) / HT).setDepth(-0.9);
   return out;
 }
