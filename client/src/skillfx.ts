@@ -45,6 +45,11 @@ export interface FxEntity { sprite: Phaser.GameObjects.Sprite; top: number; stat
 const pick = <T>(a: T[]) => a[Math.floor(Math.random() * a.length)];
 const rnd = (a: number, b: number) => a + Math.random() * (b - a);
 
+/** Goo of the shooter blob's spit (not a skill style). */
+const GOO = [0xf3e5ff, 0xd1a6ff, 0xb57cff, 0x8e4fd6, 0x5b2c91];
+/** Basic and monster projectiles drawn here too (not only skill shots): their trails and impacts. */
+const BASIC_SHOTS = new Set(["fireball", "arrow", "bolt", "knife", "stone", "slimeball", "magicbolt", "shadowbolt"]);
+
 /** World offset that shows as `h` px straight up on screen. */
 const lift = (h: number): [number, number] => (ISO ? [-h, -h] : [0, -h]);
 /** Screen-space vector between two world points (for drawing lightning and blades in a block). */
@@ -762,10 +767,66 @@ export class SkillFx {
         break;
       }
       case "arcane": g = glow(0xc77dff, 0.3); break;
-      default: return undefined;
+      default:
+        if (!BASIC_SHOTS.has(look)) return undefined;
+        g = this.basicShot(look, s, size);
     }
     this.shots.set(id, { s, g, look, born: this.t });
     return g;
+  }
+
+  /** Screen angle (degrees) of a world direction: in the iso view a world heading turns on screen. */
+  private screenDeg(vx: number, vy: number) {
+    const [dx, dy] = screenDelta(vx, vy);
+    return Math.atan2(dy, dx) * 180 / Math.PI;
+  }
+
+  /** Look of basic and monster projectiles: a small drawn object, mostly with a soft light around it. */
+  private basicShot(look: string, s: any, size: number) {
+    const sc = this.scene, deg = this.screenDeg(s.vx ?? 1, s.vy ?? 0);
+    const light = (tint: number, k: number, a = 0.8) => sc.add.image(0, 0, "fx_glow").setTint(tint).setBlendMode(Phaser.BlendModes.ADD).setScale(k).setAlpha(a);
+    const box = (...objs: Phaser.GameObjects.GameObject[]) => sc.add.container(s.x, s.y, objs).setDepth(DEPTH);
+    const d = sc.add.graphics();
+    switch (look) {
+      case "fireball": {
+        // Hot white core inside orange flame, flickering (see tickShots)
+        d.fillStyle(0xff9f1c).fillCircle(0, 0, 2.6 * size).fillStyle(0xfff176).fillCircle(0, 0, 1.7 * size).fillStyle(0xffffff).fillCircle(-0.4, -0.4, 0.9 * size);
+        return box(light(0xff7b00, 0.42 * size), d);
+      }
+      case "arrow": case "bolt": {
+        // Wooden shaft, steel head, feathers (bolts: shorter, thicker, dark wood)
+        const bolt = look === "bolt", L = (bolt ? 7 : 9) * size, w = bolt ? 1.4 : 0.9;
+        d.fillStyle(bolt ? 0x6d4c33 : 0xd8b98a).fillRect(-L / 2, -w / 2, L, w);
+        d.fillStyle(0xdfe6f0).fillTriangle(L / 2 - 0.5, -1.6, L / 2 - 0.5, 1.6, L / 2 + 2.6, 0);
+        d.fillStyle(0x6d7d99).fillTriangle(L / 2 - 0.5, 0, L / 2 - 0.5, 1.6, L / 2 + 2.6, 0);
+        d.fillStyle(bolt ? 0x37474f : 0xe63946).fillTriangle(-L / 2, -w / 2, -L / 2 + 2.5, -w / 2, -L / 2 - 0.5, -2.2).fillTriangle(-L / 2, w / 2, -L / 2 + 2.5, w / 2, -L / 2 - 0.5, 2.2);
+        return box(d).setAngle(deg);
+      }
+      case "knife": {
+        d.fillStyle(0xdfe6f0).fillTriangle(-0.5, -1.2, -0.5, 1.2, 4.5, 0);
+        d.fillStyle(0xffffff).fillTriangle(-0.5, -1.2, -0.5, 0, 4.5, 0);
+        d.fillStyle(0x5d4037).fillRect(-3.5, -0.8, 3, 1.6).fillStyle(0xffd166).fillRect(-0.9, -1.6, 0.8, 3.2);
+        return box(light(0xffffff, 0.12, 0.5), d).setAngle(deg);
+      }
+      case "stone": {
+        d.fillStyle(0x6d6d6d).fillPoints([{ x: -2, y: -1 }, { x: -0.5, y: -2.2 }, { x: 1.8, y: -1.5 }, { x: 2.3, y: 0.8 }, { x: 0.6, y: 2 }, { x: -1.8, y: 1.6 }], true);
+        d.fillStyle(0xa9a9a9).fillCircle(-0.4, -0.7, 0.9);
+        return box(d);
+      }
+      case "slimeball": {
+        // A wobbling glob of purple goo with a wet shine
+        d.fillStyle(0x5b2c91).fillCircle(0, 0.4, 2.9).fillStyle(0xb57cff).fillCircle(0, 0, 2.6).fillStyle(0xd1a6ff).fillCircle(-0.8, -0.9, 1).fillStyle(0xffffff).fillRect(-1.2, -1.4, 0.8, 0.8);
+        return box(light(0x9d4edd, 0.26, 0.6), d);
+      }
+      case "magicbolt": {
+        d.fillStyle(0x4cc9f0).fillCircle(0, 0, 2.4).fillStyle(0xd6f6ff).fillCircle(0, 0, 1.5).fillStyle(0xffffff).fillCircle(0, 0, 0.8);
+        return box(light(0x4cc9f0, 0.4), d);
+      }
+      default: { // shadowbolt: dark heart in a sickly green glow
+        d.fillStyle(0x43a047).fillCircle(0, 0, 3.3).fillStyle(0x1a1033).fillCircle(0, 0, 2.2).fillStyle(0x7dff6a).fillCircle(0.6, -0.6, 0.8);
+        return box(light(0x7cfc00, 0.55, 0.7), d);
+      }
+    }
   }
 
   removeShot(id: string) { this.shots.delete(id); }
@@ -826,12 +887,58 @@ export class SkillFx {
         }
         case "powerarrow": for (let i = 0; i < n(60); i++) this.p(x - ax * 5, y - ay * 5, 0, pick(PALETTE.wind), { life: 250, size: 1, size1: 0 }); break;
         case "frostarrow": for (let i = 0; i < n(50); i++) this.p(x - ax * 5, y - ay * 5, 0, pick(PALETTE.frost), { life: 300, size: 1, size1: 0 }); break;
+        // ---- basic and monster shots
+        case "fireball": {
+          const sz = s.size || 1;
+          (g as any).setScale(1 + 0.12 * Math.sin(age / 35));
+          for (let i = 0; i < n(120 * sz); i++) this.p(x - ax * rnd(1, 5), y - ay * rnd(1, 5), rnd(-1.5, 1.5), pick(PALETTE.fire), { vx: -ax * 30 + rnd(-8, 8), vy: -ay * 30 + rnd(-8, 8), vz: rnd(4, 14), life: rnd(250, 480), size: pick([1, 2, 2]), size1: 0 });
+          if (Math.random() < 6 * dt) this.p(x - ax * 5, y - ay * 5, 2, pick([0x4a4a4a, 0x6d6d6d]), { vz: 12, life: 500, size: 2, size1: 3, alpha: 0.35, add: false, depth: DEPTH - 1 });
+          break;
+        }
+        case "arrow": case "bolt":
+          // Faint air streak behind the feathers
+          for (let i = 0; i < n(45); i++) this.p(x - ax * 6, y - ay * 6, 0, 0xffffff, { vx: -ax * 10, vy: -ay * 10, life: 160, size: 1, size1: 0, alpha: 0.45 });
+          break;
+        case "knife":
+          (g as any).angle += 1100 * dt;
+          if (Math.random() < 0.35) this.p(x, y, 0, pick(PALETTE.steel), { life: 140, size: 1 });
+          break;
+        case "stone":
+          (g as any).angle += 500 * dt;
+          if (Math.random() < 12 * dt) this.p(x, y, 0, pick(PALETTE.earth), { vz: -5, g: 60, life: 300, size: 1, add: false });
+          break;
+        case "slimeball": {
+          const wob = 1 + 0.14 * Math.sin(age / 45);
+          (g as any).setScale(wob, 2 - wob);
+          // Drips that fall to the ground and a goo trail
+          if (Math.random() < 14 * dt) this.p(x + rnd(-1, 1), y, 0, pick(GOO), { vz: -10, g: 120, life: 450, size: pick([1, 2]), add: false });
+          for (let i = 0; i < n(30); i++) this.p(x - ax * 3, y - ay * 3, 0, pick(GOO), { life: 220, size: 1, size1: 0 });
+          break;
+        }
+        case "magicbolt": {
+          // Two frost sparks spiral around the bolt, a glittering tail
+          const a = age / 35;
+          for (const k of [1, -1]) this.p(x - ay * Math.cos(a) * 3 * k, y + ax * Math.cos(a) * 3 * k, Math.sin(a) * 3 * k, pick(PALETTE.frost), { life: 240, size: 1, size1: 0 });
+          for (let i = 0; i < n(40); i++) this.p(x - ax * 3, y - ay * 3, rnd(-1, 1), pick(PALETTE.frost), { vx: -ax * 15, vy: -ay * 15, life: 300, size: 1, size1: 0 });
+          break;
+        }
+        case "shadowbolt": {
+          (g as any).setScale(1 + 0.1 * Math.sin(age / 60));
+          const a = age / 50;
+          for (let k = 0; k < 3; k++) {
+            const b = a + k * 2.1;
+            this.p(x + Math.cos(b) * 4.5, y + Math.sin(b) * 4.5, rnd(-1, 1), pick(PALETTE.shadow), { life: 200, size: pick([1, 2]), size1: 0, add: false });
+          }
+          for (let i = 0; i < n(60); i++) this.p(x - ax * 4, y - ay * 4, rnd(-2, 2), pick(PALETTE.poison), { vx: -ax * 20 + rnd(-6, 6), vy: -ay * 20 + rnd(-6, 6), vz: rnd(0, 8), life: rnd(250, 450), size: pick([1, 2]), size1: 0 });
+          break;
+        }
       }
     }
   }
 
   /** Impact of a skill projectile ("boom" message). */
   impact(x: number, y: number, kind: string, r: number) {
+    if (BASIC_SHOTS.has(kind)) { this.basicImpact(x, y, kind, r); return true; }
     const style: FxStyle | undefined = ({ shuriken: "steel", lightning: "lightning", dragon: "fire", phoenix: "fire", inferno: "fire", flamewave: "fire",
       iceshard: "frost", arcane: "arcane", powerarrow: "wind", frostarrow: "frost", net: "nature" } as Record<string, FxStyle>)[kind];
     if (!style) return false;
@@ -845,6 +952,34 @@ export class SkillFx {
       if (big && this.nearMe(x, y)) this.scene.cameras.main.shake(220, 0.008);
     } else this.burst(x, y, 4, style, 8, 60, 300);
     return true;
+  }
+
+  /** Impacts of basic and monster shots: sparks, splinters, goo and light; the fireball's splash puffs up bigger. */
+  private basicImpact(x: number, y: number, kind: string, r: number) {
+    switch (kind) {
+      case "fireball": {
+        const k = r > 0 ? Math.min(2.2, 1 + r / 30) : 1;
+        this.burst(x, y, 3, "fire", Math.round(14 * k), 70 * k, 420);
+        this.glow(x, y, 3, 14 * k, 0xff9f1c, 300);
+        this.smoke(x, y, 4 * k, Math.round(2 * k));
+        break;
+      }
+      case "arrow": case "bolt": this.burst(x, y, 2, "earth", 6, 45, 300); this.burst(x, y, 2, "steel", 3, 35, 180); break;
+      case "knife": this.burst(x, y, 3, "steel", 8, 60, 240); this.glow(x, y, 3, 6, 0xffffff, 150); break;
+      case "stone": this.burst(x, y, 1, "earth", 9, 50, 380, 1); break;
+      case "slimeball":
+        for (let i = 0; i < 12; i++) {
+          const a = Math.random() * Math.PI * 2, sp = rnd(20, 55);
+          this.p(x, y, 3, pick(GOO), { vx: Math.cos(a) * sp, vy: Math.sin(a) * sp * 0.6, vz: rnd(15, 45), g: 160, drag: 1.5, life: rnd(350, 600), size: pick([1, 2, 2]), add: false });
+        }
+        this.glow(x, y, 0, 9, 0x9d4edd, 260, 0.6, true);
+        break;
+      case "magicbolt": this.burst(x, y, 3, "frost", 12, 60, 380); this.glow(x, y, 3, 12, 0x4cc9f0, 260); break;
+      default: // shadowbolt
+        this.ring(x, y, 14, "shadow", 14, { life: 380, up: 10, add: false });
+        this.burst(x, y, 3, "poison", 12, 55, 420);
+        this.glow(x, y, 3, 16, 0x7cfc00, 320);
+    }
   }
 
   // ---- statuses on heroes and monsters -------------------------------------------------------------------
