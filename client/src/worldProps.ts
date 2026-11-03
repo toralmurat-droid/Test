@@ -3,6 +3,7 @@ import { TILE } from "../../shared/constants";
 import { AREAS, EMPTY, GROUND, OBJECTS, SIGNPOSTS, T, VILLAGE } from "../../shared/map";
 import { NPCS, NPC_DECOR } from "../../shared/npcs";
 import { CHESTS } from "../../shared/chests";
+import { SIEGE_SITES } from "../../shared/siege";
 
 /**
  * Standing world props with idle animations: spear racks with fluttering pennants, war pennants on tall poles,
@@ -13,11 +14,11 @@ import { CHESTS } from "../../shared/chests";
  * top left, weathered dark palette, 1px dark outline. Purely cosmetic: walk-through, client only.
  */
 const TX = 1.5; // texels per world px
-const OUTLINE = 0x15100d;
+export const OUTLINE = 0x15100d;
 
 // ---- painter -------------------------------------------------------------------------------------------
-type Px = (x: number, y: number, c: number, a?: number) => void;
-interface Pen {
+export type Px = (x: number, y: number, c: number, a?: number) => void;
+export interface Pen {
   px: Px;
   line(x0: number, y0: number, x1: number, y1: number, c: number): void;
   rect(x: number, y: number, w: number, h: number, c: number): void;
@@ -25,7 +26,7 @@ interface Pen {
   shaft(x0: number, y0: number, x1: number, y1: number, w?: number, cols?: [number, number, number]): void;
 }
 
-function pen(buf: Uint32Array, W: number, H: number): Pen {
+export function pen(buf: Uint32Array, W: number, H: number): Pen {
   const px: Px = (x, y, c, a = 1) => {
     x = Math.round(x); y = Math.round(y);
     if (x < 0 || y < 0 || x >= W || y >= H) return;
@@ -53,7 +54,7 @@ function pen(buf: Uint32Array, W: number, H: number): Pen {
 }
 
 /** Paints `frames` frames side by side, outlines each silhouette, and registers the spritesheet texture. */
-function sheet(scene: Phaser.Scene, key: string, w: number, h: number, frames: number, draw: (p: Pen, f: number) => void, shadow = 0.5) {
+export function sheet(scene: Phaser.Scene, key: string, w: number, h: number, frames: number, draw: (p: Pen, f: number) => void, shadow = 0.5) {
   if (scene.textures.exists(key)) return;
   const tex = scene.textures.createCanvas(key, w * frames, h)!;
   const ctx = tex.getContext();
@@ -87,16 +88,16 @@ function sheet(scene: Phaser.Scene, key: string, w: number, h: number, frames: n
 }
 
 // ---- palette (dark, weathered) -------------------------------------------------------------------------
-const WOOD: [number, number, number] = [0x7d5c3c, 0x5a3f28, 0x3a281a];
-const OLDWOOD: [number, number, number] = [0x6e665a, 0x504a40, 0x34302a];
-const IRON = { hi: 0xb4b8bc, mid: 0x7a7f86, lo: 0x43474d };
-const ROPE = 0x9a8458;
-const BONE = { hi: 0xe2dac4, mid: 0xb8ae94, lo: 0x7a705c };
+export const WOOD: [number, number, number] = [0x7d5c3c, 0x5a3f28, 0x3a281a];
+export const OLDWOOD: [number, number, number] = [0x6e665a, 0x504a40, 0x34302a];
+export const IRON = { hi: 0xb4b8bc, mid: 0x7a7f86, lo: 0x43474d };
+export const ROPE = 0x9a8458;
+export const BONE = { hi: 0xe2dac4, mid: 0xb8ae94, lo: 0x7a705c };
 const STRAW = [0xd2b46a, 0xb0924e, 0x86703a];
 const sway = (f: number, n: number) => Math.sin((f / n) * Math.PI * 2);
 
 /** Spear head pointing up with its tip at (x, y). */
-function spearHead(p: Pen, x: number, y: number) {
+export function spearHead(p: Pen, x: number, y: number) {
   for (let j = 0; j < 7; j++) {
     const half = j < 3 ? j * 0.5 : (6 - j) * 0.45 + 0.4;
     for (let i = -Math.round(half); i <= Math.round(half); i++) p.px(x + i, y + j, i < 0 ? IRON.hi : i > 0 ? IRON.lo : IRON.mid);
@@ -260,16 +261,14 @@ function makeTextures(scene: Phaser.Scene) {
     }
   }, 0.4);
 
-  // Broken spears stuck in the ground, a torn cloth on one, a shield half buried
+  // Broken spears stuck in the ground, a rope end on one, a shield half buried
   sheet(scene, "wp_spears_ground", 40, 54, N, (p, f) => {
     const t = (f / N) * Math.PI * 2;
     p.shaft(9, 52, 15, 12, 2, OLDWOOD); spearHead(p, 16, 5);
     p.shaft(22, 52, 18, 26, 2, OLDWOOD); p.px(17, 25, OLDWOOD[0]); p.px(19, 24, OLDWOOD[2]); // snapped
     p.shaft(30, 52, 34, 18, 2, OLDWOOD); spearHead(p, 35, 11);
-    for (let i = 0; i < 11; i++) {
-      const dy = Math.round(Math.sin(t + i * 0.6) * (0.3 + i * 0.15)), h = Math.max(2, 6 - Math.floor(i / 2.4));
-      for (let j = 0; j < h; j++) if (!(i > 6 && (i * 3 + j) % 5 === 0)) p.px(16 + i, 20 + j + dy, j === 0 ? BLACK[0] : j === h - 1 ? BLACK[2] : BLACK[1]);
-    }
+    // a frayed rope binding swinging from the snapped shaft (no cloth: no flags where the dead march)
+    for (let i = 0; i < 6; i++) p.px(19 + Math.round(Math.sin(t) * i * 0.25), 27 + i, i % 2 ? ROPE : 0x6a5a3a);
     // round shield leaning at the foot
     for (let y = 40; y < 53; y++) for (let x = 17; x < 31; x++) {
       const dx = (x - 24) / 7, dy = (y - 47) / 6.2;
@@ -300,6 +299,7 @@ function free(tx: number, ty: number, taken: Spot[], gap: number): boolean {
   if (NPC_DECOR.some((d) => Math.hypot(d.x * TILE - cx, d.y * TILE - cy) < 2 * TILE)) return false;
   if (CHESTS.some((c) => Math.hypot(c.x - cx, c.y - cy) < 2 * TILE)) return false;
   if (SIGNPOSTS.some((s) => Math.hypot((s.x + 0.5) * TILE - cx, (s.y + 0.5) * TILE - cy) < 2 * TILE)) return false;
+  if (SIEGE_SITES.some((s) => Math.abs(s.tx - tx) <= 9 && Math.abs(s.ty - ty) <= 4)) return false; // siege works
   return true;
 }
 
@@ -329,13 +329,12 @@ function spots(): Spot[] {
   scatter(out, "Oakvale", "wp_dummy", 2, 5, (tx, ty) => tx < VILLAGE.x0 + 9);
   scatter(out, "Oakvale", "wp_pennant_red", 2, 8);
   scatter(out, "Oakvale", "wp_lantern_pole", 6, 4, byRoad(1));
-  // Hunter's Camp and the Old Watchtower: spears and pennants
+  // Hunter's Camp: a spear rack and a dummy
   scatter(out, "Hunter's Camp", "wp_spear_rack", 1, 3);
   scatter(out, "Hunter's Camp", "wp_dummy", 1, 3);
-  scatter(out, "Old Watchtower", "wp_pennant_black", 2, 5);
+  // Skeleton lands (Watchtower, Keep, Barrows, Ruins): no flags or pennants, the dead don't camp. Their siege
+  // works are in siegeArt.ts; only old broken spears lie around.
   scatter(out, "Old Watchtower", "wp_spears_ground", 2, 4);
-  // Old battlefields: the keep and the barrows
-  scatter(out, "Greywatch Keep", "wp_pennant_black", 3, 6);
   scatter(out, "Greywatch Keep", "wp_spears_ground", 4, 4);
   scatter(out, "Barrow Downs", "wp_spears_ground", 4, 6);
   scatter(out, "Old Ruins", "wp_spears_ground", 2, 5);

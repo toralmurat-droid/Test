@@ -323,7 +323,7 @@ function buildWorld() {
 
   // ---------- 11. Old Ruins (on the King's Road, deep in the woods) and the Old Watchtower ----------
   for (const [dx, dy] of [[-6, -5], [-5, -5], [-4, -5], [-6, -4], [-6, -3], [4, -5], [5, -5], [5, -4], [4, 4], [5, 3], [-6, 3], [-5, 4]]) setO(ruins.x + dx, ruins.y + dy, T.RUIN);
-  setO(ruins.x + 1, ruins.y + 5, T.CAMPFIRE); setO(ruins.x - 1, ruins.y + 6, T.STUMP); setO(ruins.x + 3, ruins.y + 6, T.STUMP);
+  // no campfire: the dead don't camp, they build (siege works, shared/siege.ts)
   for (let a = 0; a < 16; a++) { // broken ring of the watchtower, with wide gaps
     if (a % 4 === 0 || a % 4 === 1) continue;
     const ang = (a / 16) * Math.PI * 2;
@@ -386,7 +386,7 @@ function buildWorld() {
   for (const [tx, ty] of [[keep.x - 1, keep.y - 1], [keep.x + keep.w - 2, keep.y - 1], [keep.x - 1, keep.y + keep.h - 2], [keep.x + keep.w - 2, keep.y + keep.h - 2]]) rectO(tx, ty, 3, 3, T.RUIN);
   rectO(keep.x + 8, keep.y + 3, 6, 4, T.RUIN); clearO(keep.x + 10, keep.y + 6, 2, 1); // the broken great hall
   setO(keep.x + 11, keep.y + 5, T.GRAVE);
-  setO(keep.x + 5, keep.y + 11, T.CAMPFIRE); setO(keep.x + 16, keep.y + 11, T.CRATE); setO(keep.x + 17, keep.y + 11, T.BARREL);
+  setO(keep.x + 16, keep.y + 11, T.CRATE); setO(keep.x + 17, keep.y + 11, T.BARREL);
 
   // Thornwood (north-east, past the Watchtower): a dark pine forest with one trail through it
   const thorn = { x: 162, y: 2, w: 60, h: 38 };
