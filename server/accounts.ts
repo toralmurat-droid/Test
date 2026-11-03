@@ -18,6 +18,8 @@ export interface HeroSave {
   boneId?: number; boneStage?: number; boneCount?: number; boneVer?: number;
   /** 1 once the hero has been given its class starting kit (older saves get it on their next login). */
   kit?: number;
+  /** 0 until the hero closed the first-login intro (missing on older saves = already seen). */
+  intro?: number;
 }
 
 interface Account {
