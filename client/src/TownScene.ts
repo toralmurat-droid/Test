@@ -97,6 +97,7 @@ interface Entity {
   gear?: GearLayer; // equipment overlays (heroes only)
   vdir?: string; // iso view: facing on screen, from the last movement or attack
   strikeUntil?: number; // monster: show its strike frame until then (after a "swing")
+  rip?: { start: number; end: number }; // Bone Demon tearing a skeleton apart: its harvest frames (demonRip)
   leapUntil?: number;
   rallyUntil?: number; // bandit under the chief's War Cry (local time) // Redfang Chief in the air: glide to the landing spot instead of snapping there
   lastX?: number; lastY?: number;
@@ -357,8 +358,8 @@ export class TownScene extends Phaser.Scene {
         if (!e) return;
         e.tx = m.x; e.ty = m.y;
         // A respawned Mother Blob can come back at another level, a skeleton with another weapon
-        if (m.kind === "motherblob" || m.kind === "skeleton" || m.kind === "bandit") {
-          const key = mobTexture(this, m.kind, m.level, m.weapon);
+        if (m.kind === "motherblob" || m.kind === "skeleton" || m.kind === "bandit" || m.kind === "demon") {
+          const key = mobTexture(this, m.kind, m.level, m.weapon, m.bones);
           if (e.sprite.texture.key !== key) { e.sprite.setTexture(key, 0); this.perch(e, m); }
         }
         if (Math.hypot(e.sprite.x - m.x, e.sprite.y - m.y) > 48 && !(this.time.now < (e.leapUntil ?? 0))) e.sprite.setPosition(m.x, m.y);
@@ -489,6 +490,19 @@ export class TownScene extends Phaser.Scene {
     // Skeletons climb out of the ground: green flash and dust where each one appears
     // Bone ritual: the skeletons fly apart, their bones arc through the air, land and slide into a pentagram that glows
     this.room.onMessage("ritual", (msg) => this.boneRitual(msg));
+    // the skeletons give up the fight and walk to the points of a star: a faint circle draws itself on the ground
+    this.room.onMessage("ritualcall", ({ x, y, r, ms }) => {
+      this.floatText(x, y - 30, "BONE RITUAL!", "#ff5233", PIXEL_FONT);
+      const g = this.add.graphics().setDepth(2), clock = { t: 0 };
+      this.tweens.add({
+        targets: clock, t: 1, duration: ms + 300, onComplete: () => g.destroy(),
+        onUpdate: () => {
+          const k = Math.min(1, clock.t * 1.15);
+          g.clear().lineStyle(1, 0xff5252, 0.25 + 0.2 * Math.sin(clock.t * 40));
+          g.beginPath(); g.arc(x, y, r * 1.15, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * k); g.strokePath();
+        },
+      });
+    });
     this.room.onMessage("demonrise", ({ id, x, y }) => {
       this.burst(x, y, 10, 0xff3d00, 520); this.burst(x, y - 10, 6, 0x2a0a0a, 640);
       const e = this.entities.get(id);
@@ -515,12 +529,17 @@ export class TownScene extends Phaser.Scene {
       const me = this.entities.get(this.me);
       if (me && Math.hypot(me.sprite.x - x, me.sprite.y - y) < r * 3) this.cameras.main.shake(260, 0.009);
     });
-    // Bone Demon rips a skeleton apart: its bones fly onto the demon (armour, then a blade)
-    this.room.onMessage("demonharvest", ({ id, from: [fx, fy], bones }) => {
+    // Bone Demon grabs a skeleton, lifts it, snaps it in two between its fists and straps the piece on
+    this.room.onMessage("demonrip", (msg) => this.demonRip(msg));
+    this.room.onMessage("demonharvest", ({ id, bones }) => {
       const e = this.entities.get(id);
       if (!e) return;
-      this.boneStream(fx, fy, e, 8);
-      this.time.delayedCall(520, () => { this.squash(e, 1.12, 0.9, 120); this.floatText(e.sprite.x, e.sprite.y - e.top - 6, bones >= 3 ? "BONE BLADE!" : "BONE ARMOUR!", "#e8e2d0", PIXEL_FONT); });
+      const key = mobTexture(this, "demon", e.state.level, "", bones);
+      if (e.sprite.texture.key !== key) e.sprite.setTexture(key, e.sprite.frame.name as any);
+      e.sprite.setTint(0xfff4dc); this.time.delayedCall(60, () => e.sprite.clearTint());
+      this.burst(e.sprite.x, e.sprite.y - e.top * 0.5, 6, 0xe8e2d0, 260);
+      this.squash(e, 1.1, 0.92, 120);
+      this.floatText(e.sprite.x, e.sprite.y - e.top - 6, ["", "BONE PAULDRONS!", "RIB CUIRASS!", "BONE BLADE!", "SKULL CROWN!"][Math.min(4, bones)], "#e8e2d0", PIXEL_FONT);
     });
     this.room.onMessage("demongrab", ({ id, from: [fx, fy] }) => {
       this.burst(fx, fy - 8, 6, 0xe8e2d0, 260);
@@ -866,7 +885,7 @@ export class TownScene extends Phaser.Scene {
 
   private addEntity(id: string, p: any, mob = false) {
     if (mob) {
-      const sprite = this.add.sprite(p.x, p.y, mobTexture(this, p.kind, p.level, p.weapon), 0).setOrigin(0.5, MOB_LOOK[p.kind]?.oy ?? 0.85)
+      const sprite = this.add.sprite(p.x, p.y, mobTexture(this, p.kind, p.level, p.weapon, p.bones), 0).setOrigin(0.5, MOB_LOOK[p.kind]?.oy ?? 0.85)
         .setScale(MOB_LOOK[p.kind]?.scale ?? 1);
       if (p.kind === "crawler" && sprite.texture.key.startsWith("mob_skeleton")) sprite.setCrop(0, 0, sprite.frame.width, sprite.frame.height * CRAWL_CROP); // legs gone
       // The level tag is made when the monster comes on screen (see update): thousands of text canvases would cost a lot
@@ -993,9 +1012,16 @@ export class TownScene extends Phaser.Scene {
    * short, bounce and slide on into place along the lines of a pentagram, skulls on its points; then the star glows
    * until the demon climbs out. Drawn on one flat ground painting, heights lifted straight up the screen.
    */
-  private boneRitual({ x, y, r, bones: from, ms }: { x: number; y: number; r: number; bones: [number, number][]; ms: number }) {
+  private boneRitual({ x, y, r, bones: who, ms }: { x: number; y: number; r: number; bones: [number, number, string?, string?, number?, string?][]; ms: number }) {
     const g = this.add.graphics().setDepth(2);
     const V = [0, 1, 2, 3, 4].map((k) => { const a = -Math.PI / 2 + (k * Math.PI * 2) / 5; return [x + Math.cos(a) * r, y + Math.sin(a) * r * 0.9] as [number, number]; });
+    // Murat 2026-11-03: each skeleton leaps from its place at the star into the point in front of it and shatters there
+    const LEAP = 420, STAGGER = 160;
+    const from: [number, number][] = who.map(([fx, fy], si) => {
+      const [vx, vy] = V[si % 5], land: [number, number] = [fx + (vx - fx) * 0.85, fy + (vy - fy) * 0.85];
+      this.skeletonLeap(fx, fy, land, who[si], si * STAGGER, LEAP);
+      return land;
+    });
     const PER = 7; // bones per skeleton: a skull and six long bones
     const long = from.length * (PER - 1), perSeg = Math.ceil(long / 5);
     type Bone = { sx: number; sy: number; lx: number; ly: number; tx: number; ty: number; a0: number; a1: number; spin: number; len: number; skull: boolean; delay: number; fly: number; h: number };
@@ -1013,13 +1039,12 @@ export class TownScene extends Phaser.Scene {
         const sx = fx + (Math.random() - 0.5) * 8, sy = fy - 8 + (Math.random() - 0.5) * 8, d = Math.hypot(tx - sx, ty - sy) || 1;
         const slide = 4 + Math.random() * 7; // lands short of its spot and skids on
         list.push({ sx, sy, tx, ty, lx: tx - ((tx - sx) / d) * slide, ly: ty - ((ty - sy) / d) * slide, a0: Math.random() * Math.PI, a1, spin: (Math.random() < 0.5 ? -1 : 1) * (4 + Math.random() * 6),
-          len: b === 0 ? 0 : 4 + Math.random() * 3, skull: b === 0, delay: si * 140 + Math.random() * 120, fly: 420 + d * 2.2, h: 14 + d * 0.25 });
+          len: b === 0 ? 0 : 4 + Math.random() * 3, skull: b === 0, delay: si * STAGGER + LEAP + Math.random() * 60, fly: 260 + d * 2.2, h: 8 + d * 0.25 });
       }
-      this.burst(fx, fy - 8, 7, 0xe8e2d0, 320);
+      this.time.delayedCall(si * STAGGER + LEAP, () => this.burst(fx, fy - 8, 7, 0xe8e2d0, 320));
     });
     const SLIDE = 380, settle = Math.max(...list.map((b) => b.delay + b.fly + SLIDE)), glowAt = settle + 100, end = ms + 1600;
     const lift = (px: number, py: number, z: number): [number, number] => (ISO ? [px - z, py - z] : [px, py - z]);
-    this.floatText(x, y - 30, "BONE RITUAL!", "#ff5233", PIXEL_FONT);
     const clock = { t: 0 };
     this.tweens.add({
       targets: clock, t: end, duration: end, onComplete: () => g.destroy(),
@@ -1067,34 +1092,148 @@ export class TownScene extends Phaser.Scene {
     });
   }
 
-  /** A handful of bones arcing from a point onto a sprite (the Bone Demon taking a skeleton's bones). */
-  private boneStream(fx: number, fy: number, e: Entity, n: number) {
-    const g = this.add.graphics().setDepth(e.sprite.depth + 1);
+  /** A skeleton (a copy of its sprite; the real one is gone) jumps in an arc, arms flung up, and lands at `to`. */
+  private skeletonLeap(fx: number, fy: number, to: [number, number], [, , kind, weapon, level, sid]: [number, number, string?, string?, number?, string?], delay: number, ms: number) {
+    const victim = sid ? this.entities.get(sid)?.sprite : undefined;
+    const k = kind ?? "skeleton", tex = victim?.texture.key ?? mobTexture(this, k === "crawler" ? "skeleton" : k, level ?? 1, weapon ?? "");
+    const sp = this.add.sprite(fx, fy, tex, victim ? victim.frame.name : 0).setOrigin(0.5, victim?.originY ?? MOB_LOOK[k]?.oy ?? 0.85)
+      .setScale(Math.abs(victim?.scaleX ?? 1)).setFlipX(to[0] < fx);
+    if (victim?.isCropped) sp.setCrop(0, 0, sp.frame.width, sp.frame.height * CRAWL_CROP);
     const lift = (px: number, py: number, z: number): [number, number] => (ISO ? [px - z, py - z] : [px, py - z]);
-    const bones = [...Array(n)].map((_, i) => ({ delay: i * 35, spin: (Math.random() - 0.5) * 14, a0: Math.random() * 3, len: 3 + Math.random() * 3, ox: (Math.random() - 0.5) * 8, oy: (Math.random() - 0.5) * 8 }));
-    const clock = { t: 0 }, FLY = 420;
+    const strike = sp.texture.frameTotal > 12, side = Math.abs(to[0] - fx) > Math.abs(to[1] - fy);
+    const dirK = side ? "right" : to[1] > fy ? "down" : "up";
+    const clock = { t: 0 };
     this.tweens.add({
-      targets: clock, t: FLY + n * 35, duration: FLY + n * 35, onComplete: () => g.destroy(),
+      targets: clock, t: 1, delay, duration: ms, ease: "Linear",
+      onStart: () => { if (strike) sp.setFrame(ATTACK_BASE[dirK]); }, // crouch to spring
       onUpdate: () => {
-        g.clear();
-        for (const b of bones) {
-          const u = Math.min(1, Math.max(0, (clock.t - b.delay) / FLY));
-          if (u <= 0 || u >= 1) continue;
-          // target: the demon's body (its world position; the sprite stands on it)
-          const tx = e.state.x ?? fx, ty = e.state.y ?? fy;
-          const px = fx + b.ox + (tx - fx - b.ox) * u, py = fy + b.oy + (ty - fy - b.oy) * u;
-          const [qx, qy] = lift(px, py, 10 + 22 * u * (1 - u) * 4 * 0.5 + 14 * u);
-          const ang = b.a0 + b.spin * u, dx = Math.cos(ang) * b.len / 2, dy = Math.sin(ang) * b.len / 2;
-          g.lineStyle(1.3, 0xd8d0b8).lineBetween(qx - dx, qy - dy, qx + dx, qy + dy);
-          g.fillStyle(0xf0ead8).fillCircle(qx - dx, qy - dy, 0.9).fillCircle(qx + dx, qy + dy, 0.9);
-        }
+        const u = clock.t, h = 22 * 4 * u * (1 - u);
+        const [qx, qy] = lift(fx + (to[0] - fx) * u, fy + (to[1] - fy) * u, h);
+        sp.setPosition(qx, qy).setDepth(qy + 20).setAngle((to[0] < fx ? -1 : 1) * 200 * u * u);
+        if (strike && u > 0.15) sp.setFrame(ATTACK_BASE[dirK] + 1); // flung out
       },
+      onComplete: () => sp.destroy(),
+    });
+  }
+
+  /** Bone Harvest timeline (ms, server DEMON.harvest.ripMs/equipMs): reach, lift overhead, snap, press the piece on. */
+  private static RIP = { grab: 450, snap: 1150, don: 1600, equip: 1950 };
+
+  /** The demon's sheet frame during its harvest (painted sheets carry 9 harvest frames after the 12). */
+  private ripFrame(e: Entity, now: number, dir: string): number {
+    if (e.sprite.texture.frameTotal <= 21) return -1;
+    const t = now - e.rip!.start, R = TownScene.RIP, di = dir === "down" ? 0 : dir === "up" ? 1 : 2;
+    if (t < R.grab) return ATTACK_BASE[dir] + (t < R.grab * 0.45 ? 0 : 1);
+    if (t < R.snap) return 12 + di * 3;
+    if (t < R.don) return 12 + di * 3 + 1;
+    if (t < R.equip + 250) return 12 + di * 3 + 2;
+    return -1;
+  }
+
+  /** Where the demon's two fists are in this sheet frame, as offsets from its sprite position (screen px). */
+  private ripHands(e: Entity, frame: number): [[number, number], [number, number]] | null {
+    const meta = this.cache.json.get("hd_mobs")?.[e.sprite.texture.key], hd = meta?.hands?.[frame];
+    if (!hd) return null;
+    const s = e.sprite, flip = s.flipX ? -1 : 1, ox = meta.w * s.originX, oy = meta.h * s.originY;
+    const at = (x: number, y: number): [number, number] => [(x - ox) * flip * Math.abs(s.scaleX), (y - oy) * Math.abs(s.scaleY)];
+    return [at(hd[0], hd[1]), at(hd[2], hd[3])];
+  }
+
+  /**
+   * Bone Harvest (Murat 2026-11-03): the demon reaches for the skeleton and drags it up, holds it overhead while it
+   * kicks, snaps it in two between its fists (bone chips, a crack), then presses the pieces onto its body; the worn
+   * piece appears on its sheet when the server's "demonharvest" comes (equip).
+   */
+  private demonRip({ id, sid, from: [fx, fy], kind, weapon, level, piece, ms }: { id: string; sid: string; from: [number, number]; kind: string; weapon: string; level: number; piece: number; ms: number }) {
+    const e = this.entities.get(id);
+    if (!e) return;
+    const R = TownScene.RIP, start = this.time.now;
+    e.rip = { start, end: start + ms };
+    // face the skeleton (iso: on screen)
+    const wx = fx - e.sprite.x, wy = fy - e.sprite.y;
+    if (ISO) e.vdir = screenDir(wx, wy, e.vdir ?? e.state.dir);
+    const scr = (x: number, y: number): [number, number] => (ISO ? [x - y, (x + y) / 2] : [x, y]);
+    const s0 = scr(wx, wy);
+    // a copy of the skeleton's own sprite (the real one is gone): whole, then its two halves
+    const victim = this.entities.get(sid)?.sprite;
+    const tex = victim?.texture.key ?? mobTexture(this, kind === "crawler" ? "skeleton" : kind, level, weapon);
+    const sc = victim ? Math.abs(victim.scaleX) : (MOB_LOOK[kind]?.scale ?? 1);
+    const make = () => isoAnchor(this.add.sprite(e.sprite.x, e.sprite.y, tex, FRAME_BASE.right).setScale(sc), e.sprite) as Phaser.GameObjects.Sprite;
+    const whole = make().setOrigin(0.5, 0.5);
+    const fh = whole.frame.height, fw = whole.frame.width;
+    const top = make().setOrigin(0.5, 0.27).setCrop(0, 0, fw, fh * 0.5).setVisible(false);
+    const low = make().setOrigin(0.5, 0.75).setCrop(0, fh * 0.5, fw, fh * 0.5).setVisible(false);
+    if (kind === "crawler") whole.setCrop(0, 0, fw, fh * CRAWL_CROP);
+    const chips = this.add.graphics();
+    isoAnchor(chips, e.sprite);
+    const debris: { x: number; y: number; vx: number; vy: number; h: number; vh: number; a: number; va: number; len: number }[] = [];
+    let snapped = false;
+    const H = e.sprite.displayHeight * e.sprite.originY;
+    const clock = { t: 0 };
+    this.tweens.add({
+      targets: clock, t: ms, duration: ms,
+      onUpdate: () => {
+        const t = clock.t, ex = e.sprite.x, ey = e.sprite.y;
+        const dir = this.dirOf(e), behind = dir === "up";
+        const frame = Number(e.sprite.frame.name);
+        const hands = this.ripHands(e, frame) ?? [[-6, -H * 0.8], [6, -H * 0.8]];
+        const mid: [number, number] = [(hands[0][0] + hands[1][0]) / 2, (hands[0][1] + hands[1][1]) / 2];
+        const d = e.sprite.depth + (behind ? -0.6 : 0.6);
+        for (const o of [whole, top, low, chips]) o.setDepth(d);
+        if (t < R.snap) {
+          // dragged in and lifted: from where it stood to between the fists, turning to lie across them
+          const u = Math.min(1, t / R.grab), ease = 1 - (1 - u) * (1 - u);
+          const kick = t > R.grab ? Math.sin(t / 45) * 9 * (1 - (t - R.grab) / (R.snap - R.grab) * 0.4) : 0;
+          const lift = 8 * Math.sin(u * Math.PI);
+          whole.setPosition(ex + s0[0] + (mid[0] - s0[0]) * ease, ey + s0[1] - (fh * sc * 0.5) * (1 - ease) + (mid[1] - s0[1]) * ease - lift)
+            .setAngle(90 * ease * (e.sprite.flipX ? -1 : 1) + kick).setFlipX(e.sprite.flipX);
+          // a tremble just before it gives
+          if (t > R.snap - 220) whole.x += Math.sin(t / 12) * 0.8;
+          return;
+        }
+        if (!snapped) {
+          snapped = true; whole.setVisible(false); top.setVisible(true); low.setVisible(true);
+          const [cx, cy] = [ex + mid[0], ey + mid[1]];
+          this.burst(cx, cy, 5, 0xe8e2d0, 300);
+          this.floatText(cx, cy - 10, "CRACK!", "#e8e2d0", PIXEL_FONT);
+          // chips fly from the break (height above its feet) and fall around it
+          for (let i = 0; i < 9; i++) debris.push({ x: mid[0], y: (Math.random() - 0.5) * 4, vx: (Math.random() - 0.5) * 70, vy: (Math.random() - 0.5) * 24, h: -mid[1], vh: 20 + Math.random() * 45, a: Math.random() * 3, va: (Math.random() - 0.5) * 18, len: 2 + Math.random() * 2.5 });
+          const me = this.entities.get(this.me);
+          if (me && Math.hypot(me.sprite.x - ex, me.sprite.y - ey) < 260) this.cameras.main.shake(160, 0.006);
+        }
+        // the halves in each fist, torn outward; then pressed onto the body until they are worn
+        const fl = e.sprite.flipX ? -1 : 1;
+        const pull = Math.min(1, (t - R.snap) / 160);
+        const into = t > R.don ? Math.min(1, (t - R.don) / (R.equip - R.don)) : 0;
+        // where this piece goes on: 1 the shoulders, 2 the chest, 3 the weapon hand, 4 the head
+        const W = e.sprite.displayWidth * 0.2;
+        const goal = (half: 0 | 1): [number, number] => piece === 1 ? [(half ? 1 : -1) * W, -H * 0.5] : piece === 2 ? [0, -H * 0.4]
+          : piece === 3 ? hands[0] : [0, -H * 0.78];
+        const place = (o: Phaser.GameObjects.Sprite, h: [number, number], ang: number) => {
+          const body = goal(o === top ? 0 : 1);
+          const x = h[0] + (body[0] - h[0]) * into, y = h[1] + (body[1] - h[1]) * into;
+          o.setPosition(ex + x, ey + y).setAngle(ang * (1 - into * 0.6)).setScale(sc * (1 - into * 0.65)).setAlpha(1 - Math.max(0, into - 0.7) / 0.3).setFlipX(e.sprite.flipX);
+        };
+        place(top, hands[0], fl * (90 + 45 * pull));
+        place(low, hands[1], fl * (90 - 45 * pull));
+        // splinters and bone chips falling to the ground
+        chips.clear();
+        const dt = this.game.loop.delta / 1000;
+        for (const b of debris) {
+          if (b.h > 0 || b.vh > 0) { b.vh -= 280 * dt; b.h = Math.max(0, b.h + b.vh * dt); b.x += b.vx * dt; b.y += b.vy * dt; b.a += b.va * dt; }
+          if (b.h <= 0) b.vh = 0; // landed
+          const qx = ex + b.x, qy = ey + b.y - b.h, dx = Math.cos(b.a) * b.len / 2, dy = Math.sin(b.a) * b.len / 2;
+          chips.lineStyle(1.2, 0xd8d0b8).lineBetween(qx - dx, qy - dy, qx + dx, qy + dy);
+        }
+        chips.setAlpha(t > ms - 400 ? (ms - t) / 400 : 1);
+      },
+      onComplete: () => { whole.destroy(); top.destroy(); low.destroy(); chips.destroy(); },
     });
   }
 
   /**
-   * Bone Demon's harvested bones (p.bones, server DEMON.harvest): 1 shoulder plates, 2 a rib cuirass,
-   * 3 a bone blade in its hand, 4 a spiked bone crown. Drawn over the sprite like a merged blob's patches.
+   * Bone Demon's harvested bones (p.bones, server DEMON.harvest) for the ?pixel=1 look, which has no demon sheets:
+   * 1 shoulder plates, 2 a rib cuirass, 3 a bone blade in its hand, 4 a spiked bone crown. (Painted sheets wear them.)
    */
   private drawDemonBones(e: Entity, p: any, x: number, y: number) {
     const g = (e.parts ??= isoAnchor(this.add.graphics(), e.sprite) as Phaser.GameObjects.Graphics);
@@ -1581,7 +1720,9 @@ export class TownScene extends Phaser.Scene {
         const step = moving ? Math.floor(now / 150) % 2 : 0;
         // Monsters gather themselves before a blow (wind-up frame) and lunge when it lands (strike frame)
         const attackFrames = e.mob && e.sprite.texture.frameTotal > 12;
-        if (attackFrames && !p.dead && p.winding) e.sprite.setFrame(ATTACK_BASE[dir]);
+        const rip = e.rip && !p.dead && now < e.rip.end ? this.ripFrame(e, now, dir) : -1;
+        if (rip >= 0) e.sprite.setFrame(rip);
+        else if (attackFrames && !p.dead && p.winding) e.sprite.setFrame(ATTACK_BASE[dir]);
         else if (attackFrames && !p.dead && now < (e.strikeUntil ?? 0)) e.sprite.setFrame(ATTACK_BASE[dir] + 1);
         else e.sprite.setFrame(FRAME_BASE[dir] + step);
         if (e.mob && p.job >= 0) { const wf = this.siege.update(id, e, p, now, moving); if (wf !== undefined) e.sprite.setFrame(wf); } // siege works
@@ -1650,7 +1791,8 @@ export class TownScene extends Phaser.Scene {
         }
       } else if (e.mob && !p.dead) {
         if (p.parts) this.drawBlobParts(e, id, p, x, y);
-        else if (p.kind === "demon" && p.bones) this.drawDemonBones(e, p, x, y);
+        else if (p.kind === "demon" && p.bones && !e.sprite.texture.key.startsWith("mob_demon")) this.drawDemonBones(e, p, x, y); // painted sheets wear them
+
         const bw = Math.min(40, (MOB_LOOK[p.kind]?.bar || 14) * (1 + MERGE.growPerBlob * ((p.merged || 1) - 1)));
         if (ELITE[p.kind as keyof typeof ELITE]) e.bar.fillStyle(BOSS[p.kind as keyof typeof BOSS] ? 0xc62828 : 0xffc93c).fillRect(x - bw / 2 - 1, mobBarY - 1, bw + 2, 4); // elite: gold frame, boss: red
         if (e.rallyUntil && now < e.rallyUntil) {

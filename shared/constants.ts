@@ -124,9 +124,10 @@ export const BONES = {
    * Overpowered (Murat 2026-11-03): when 3+ skeletons fighting one hero are outmatched (the hero is `gap`+ levels
    * above them on average, or they are down below `hpFrac` of their health together), up to 5 of them throw
    * themselves apart. They also do it, fight or not, when a hero `passGap`+ levels above them comes within `near` px: their bones fly and slide into a pentagram of radius `radius` and after `castMs` a Bone Demon
-   * climbs out (Lv = their best + `levelUp`, at least the hero's level - `belowHero`). It is banished again after `lifeMs`. One ritual per hero per `cooldownMs`.
+   * climbs out (Lv = their best + `levelUp`, at least the hero's level - `belowHero`). First they walk to the points of
+   * the star (`rim` x radius out) and, once there or after `gatherMs`, throw themselves in and burst into its bones. It is banished again after `lifeMs`. One ritual per hero per `cooldownMs`.
    */
-  ritual: { minPack: 3, maxPack: 5, near: 170, gap: 3, hpFrac: 0.45, passGap: 6, belowHero: 2, checkMs: 1000, castMs: 3200, radius: 34, levelUp: 3, lifeMs: 90000, cooldownMs: 45000, maxDemons: 6 },
+  ritual: { gatherMs: 3500, rim: 1.6, minPack: 3, maxPack: 5, near: 170, gap: 3, hpFrac: 0.45, passGap: 6, belowHero: 2, checkMs: 1000, castMs: 3200, radius: 34, levelUp: 3, lifeMs: 90000, cooldownMs: 45000, maxDemons: 6 },
 };
 /** Bone Demon's Hellfire Stomp: a telegraphed blast of fire around it. */
 export const DEMON = {
@@ -134,9 +135,10 @@ export const DEMON = {
   /**
    * Bone Harvest (Murat): it rips apart a skeleton within `range` px and wears its bones, up to `max` pieces
    * (1-2 armour: shoulder plates and a rib cuirass, 3-4 a bone blade and a spiked crown). Each piece cuts the
-   * damage it takes by `armorPer` and adds `dmgPer` to its blows.
+   * damage it takes by `armorPer` and adds `dmgPer` to its blows. Tearing one apart takes `ripMs` (it stands still:
+   * grab, lift, snap it in two, strap the piece on); the piece is worn at `equipMs`.
    */
-  harvest: { everyMs: 5000, range: 90, max: 4, armorPer: 0.1, dmgPer: 0.12 },
+  harvest: { everyMs: 5000, range: 90, max: 4, armorPer: 0.1, dmgPer: 0.12, ripMs: 2500, equipMs: 1950 },
   /** Skeleton Toss: a hero keeping `min`-`max` px away gets a skeleton (grabbed within `grab` px) thrown at him. */
   toss: { everyMs: 4000, grab: 70, min: 55, max: 180, speed: 170, radius: 7, dmgMult: 1.6 },
 };

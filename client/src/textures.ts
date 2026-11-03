@@ -279,18 +279,19 @@ export function preloadPaintedMobs(scene: Phaser.Scene) {
   if (!SMOOTH) return;
   Object.assign(MOB_LOOK, PAINTED_LOOK);
   scene.load.json("hd_mobs", "assets/hd/mobs/mobs.json");
-  for (const k of [...PAINTED_MOBS.map((m) => `mob_${m}`), "mob_motherblob2", "mob_motherblob3", "mob_skeleton_axe", "mob_skeleton_spear", "mob_skeleton_bow", "mob_bandit_brute", "mob_bandit_archer"]) scene.load.image(`hd_${k}`, `assets/hd/mobs/${k}.webp`);
+  for (const k of [...PAINTED_MOBS.map((m) => `mob_${m}`), "mob_motherblob2", "mob_motherblob3", "mob_skeleton_axe", "mob_skeleton_spear", "mob_skeleton_bow", "mob_bandit_brute", "mob_bandit_archer", "mob_demon1", "mob_demon2", "mob_demon3", "mob_demon4"]) scene.load.image(`hd_${k}`, `assets/hd/mobs/${k}.webp`);
 }
 
 /** Monster sprite sheets, same 6-frame layout as personas (painted when the smooth look is on). */
-export function mobTexture(scene: Phaser.Scene, kind: string, level = 1, weapon = ""): string {
+export function mobTexture(scene: Phaser.Scene, kind: string, level = 1, weapon = "", bones = 0): string {
   if (kind === "crawler" && !(SMOOTH && scene.textures.exists("hd_mob_crawler"))) return mobTexture(scene, "skeleton", level, weapon); // pixel look: a skeleton's upper half (cropped in TownScene)
   if (SMOOTH && PAINTED_MOBS.includes(kind)) {
     const tier = level >= 10 ? 3 : level >= 5 ? 2 : 1;
     // skeletons carry a sword (base sheet), an axe, a spear or a bow
     // bandits by role (shared/bandits.ts): cutthroats use the base sheet, lookouts are archers up on a tower
     const key = kind === "motherblob" && tier > 1 ? `mob_motherblob${tier}` : kind === "skeleton" && weapon && weapon !== "sword" ? `mob_skeleton_${weapon}`
-      : kind === "bandit" && (weapon === "brute" || weapon === "archer" || weapon === "lookout") ? `mob_bandit_${weapon === "lookout" ? "archer" : weapon}` : `mob_${kind}`;
+      : kind === "bandit" && (weapon === "brute" || weapon === "archer" || weapon === "lookout") ? `mob_bandit_${weapon === "lookout" ? "archer" : weapon}`
+      : kind === "demon" && bones > 0 ? `mob_demon${Math.min(4, bones)}` : `mob_${kind}`; // the demon wearing its harvested bones
     if (scene.textures.exists(key)) return key;
     const meta = scene.cache.json.get("hd_mobs")?.[key];
     const src = scene.textures.exists(`hd_${key}`) ? scene.textures.get(`hd_${key}`).getSourceImage() as HTMLImageElement : null;

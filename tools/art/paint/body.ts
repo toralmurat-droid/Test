@@ -411,6 +411,7 @@ function torso(c: C2, r: Rig) {
       for (let k = -1; k <= 1; k += 2) curve(c, [cx + k * 1.5, sy + 1], [cx + k * 2.2, sy + 3.5], [cx + k * 1.4, hipY - 0.5], fold, 0.2, 0.45);
     }
   }
+  if ((L.boneArmour ?? 0) >= 2) boneCuirass(c, r, s);
   if (!gear || gear.slot !== "armour") {
     if (L.vest) vest(c, r, s);
     if (L.apron) apron(c, r);
@@ -602,6 +603,7 @@ function arm(c: C2, r: Rig, which: "near" | "far") {
     metal(c, ps, pc, [s[0] - 1.6, s[1] - 1.4], [s[0] + 1.6, s[1] + 1.2], 0.7);
     if (armoured || L.trim) clipTo(c, ps, () => { c.beginPath(); ps(c); c.strokeStyle = css(C(armoured ? gear!.accent : L.trim!), 0.9); c.lineWidth = 0.4; c.stroke(); });
   }
+  if ((L.boneArmour ?? 0) >= 1) bonePauldron(c, r, s, isNear);
 }
 
 // ---------------------------------------------------------------- head
@@ -656,7 +658,7 @@ function head(c: C2, r: Rig) {
   const L = r.L, [hx, hy] = r.head, dir = r.dir, skin = C(L.skin);
   const hg = r.L.head, worn = headGear(r);
   const covered = hg === "greathelm" || hg === "ninjahood";
-  if (L.skull) { skull(c, r); if (worn !== "none") hat(c, r, worn); return; }
+  if (L.skull) { skull(c, r); if (worn !== "none") hat(c, r, worn); if ((L.boneArmour ?? 0) >= 4) boneCrown(c, r); return; }
   // neck
   if (!covered) limb(c, [r.cx + (r.R ? 0.2 : 0), r.sy - 0.9], [hx, hy + 1.6], 1.6, 1.5, sh(skin, 0.75));
   // long hair behind the head
@@ -1008,6 +1010,23 @@ function weapon(c: C2, r: Rig) {
       if (W.glowing) glowAlong(len, len + 4, W.accent);
       break;
     }
+    case "boneblade": {
+      // Bone Demon's harvest: a femur hilt, a jawbone guard and a jagged blade of fused ribs
+      const bone = C(BONE), len = 11.5;
+      limb(c, at(-2.4), at(1.0), 0.8, 0.7, sh(bone, 0.82));
+      const kn = at(-2.6);
+      vol(c, ellipseP(kn[0], kn[1], 0.95, 0.85), bone, [kn[0] - 1, kn[1] - 1, 2, 2], { ao: 0.3 });
+      const pts: P[] = [at(1.1, -0.75)];
+      for (let t = 1.1; t < len - 1; t += 1.35) pts.push(at(t + 0.55, 1.75), at(t + 1.35, 1.0)); // serrated edge
+      pts.push(at(len + 1.5, 0.1), at(len - 0.4, -0.85));
+      const xs = pts.map((q) => q[0]), ys = pts.map((q) => q[1]);
+      vol(c, poly(pts), bone, [Math.min(...xs), Math.min(...ys), Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys)], { ao: 0.4, spec: 0.25 });
+      line(c, [at(1.6, 0.2), at(len - 0.5, 0.2)], sh(bone, 0.55), 0.16, 0.85); // marrow groove
+      for (const t of [3.2, 6.1, 8.7]) line(c, [at(t, -0.6), at(t + 0.4, 0.5)], sh(bone, 0.5), 0.12, 0.8); // where the ribs are fused
+      limb(c, at(1.0, -2.0), at(1.0, 2.0), 0.65, 0.55, sh(bone, 0.92)); // jawbone guard
+      for (const k of [-1.4, -0.5, 0.4, 1.3]) fillShape(c, ellipseP(at(1.35, k)[0], at(1.35, k)[1], 0.16, 0.16), css(sh(bone, 1.3))); // its teeth
+      break;
+    }
     case "dagger": {
       blade(c, h, u, n, 0.8, 5 * W.long, 0.8, W.blade);
       limb(c, at(-1), at(0.6), 0.55, 0.55, C(0x5a3a22));
@@ -1237,11 +1256,86 @@ function post(src: ReturnType<typeof canvas>, S: number) {
 }
 
 /** Paint one frame of a character. Returns a HiCanvas (32x32 logical, K fine pixels each) like renderFrame. */
+/** Body points of the last painted frame, in the 32-unit painter space (paint/mobs.ts exports the demon's hands). */
+export let lastRig: Record<"nearH" | "farH" | "nearS" | "farS" | "head" | "chest", P> | null = null;
+
+// ---------------------------------------------------------------- Bone Demon's harvested bone armour (Look.boneArmour)
+const BONE = 0xe2dbc6;
+
+/** 1: a cracked skull strapped on each shoulder, two rib spikes sweeping out of it. */
+function bonePauldron(c: C2, r: Rig, s: P, isNear: boolean) {
+  const out = r.R ? (isNear ? -0.35 : 0.7) : Math.sign(s[0] - r.cx) || 1, bone = C(BONE), b = r.b;
+  const cx = s[0] + (r.R ? 0.15 : out * 0.4), cy = s[1] - 0.45, rx = (r.R ? 1.7 : 1.9) * b, ry = 1.35 * b;
+  for (const [k, len] of [[-0.7, 2.4], [0.45, 3.2]]) {
+    const ax = cx + out * rx * 0.35 + k * 0.9 * (r.R ? 1 : out), ay = cy - ry * 0.45, tip: P = [ax + out * len * 0.7, ay - len];
+    fillShape(c, poly([[ax - 0.55, ay + 0.3], [ax + 0.55, ay + 0.3], tip]), css(sh(bone, 0.86)));
+    line(c, [[ax - 0.15, ay], tip], sh(bone, 1.25), 0.16, 0.8);
+  }
+  const cap = ellipseP(cx, cy, rx, ry, r.R ? 0 : out * 0.22);
+  vol(c, cap, bone, [cx - rx, cy - ry, 2 * rx, 2 * ry], { ao: 0.4, spec: 0.3 });
+  if (r.dir !== "up") {
+    // the skull's empty eye and a crack across the cap
+    fillShape(c, ellipseP(cx + out * rx * 0.38, cy + ry * 0.12, 0.5, 0.42), css(sh(bone, 0.28)));
+    fillShape(c, ellipseP(cx + out * rx * 0.05, cy + ry * 0.2, 0.32, 0.3), css(sh(bone, 0.35)));
+  }
+  line(c, [[cx - rx * 0.55, cy - ry * 0.25], [cx - rx * 0.1, cy + ry * 0.05], [cx + rx * 0.15, cy - ry * 0.4]], sh(bone, 0.48), 0.13, 0.85);
+  line(c, [[cx - rx * 0.85, cy + ry * 0.75], [cx + rx * 0.85, cy + ry * 0.85]], C(0x3a2014), 0.42, 0.95); // strap
+}
+
+/** 2: a cuirass of ribs and a sternum lashed over the chest (the spine and shoulder blades seen from behind). */
+function boneCuirass(c: C2, r: Rig, s: Shape) {
+  const { cx, sy, hipY } = r, bone = C(BONE), dk = sh(bone, 0.42), b = r.b;
+  const rib = (a: P, ctl: P, e: P, w: number) => {
+    curve(c, a, ctl, e, dk, w + 0.35, 0.95); curve(c, a, ctl, e, bone, w, 1);
+    curve(c, [a[0], a[1] - 0.18], [ctl[0], ctl[1] - 0.2], [e[0], e[1] - 0.15], sh(bone, 1.3), 0.16, 0.75);
+  };
+  clipTo(c, s, () => {
+    if (r.dir === "up") {
+      for (const k of [-1, 1]) {
+        const sp = blobPath([[cx + k * 0.9, sy - 0.2], [cx + k * 3.2 * b, sy + 0.3], [cx + k * 2.5 * b, sy + 3.8], [cx + k * 1.0, sy + 2.8]]);
+        vol(c, sp, bone, [cx - 3.5 * b, sy - 0.3, 7 * b, 4.2], { ao: 0.4 });
+      }
+      for (let y = sy - 0.4; y < hipY - 1.6; y += 1.05) vol(c, ellipseP(cx, y, 0.8, 0.5), bone, [cx - 0.8, y - 0.5, 1.6, 1], { ao: 0.35 });
+      return;
+    }
+    if (r.R) {
+      for (let i = 0; i < 4; i++) { const y = sy + 1.0 + i * 1.4; rib([cx + 2.3 * b - i * 0.15, y], [cx + 0.2, y - 1.0], [cx - 2.0 * b, y + 0.6], 0.6 - i * 0.04); }
+      limb(c, [cx + 2.0 * b, sy - 0.1], [cx + 1.7 * b, sy + 6.0], 0.7, 0.55, bone);
+      return;
+    }
+    const mx = cx + r.fo * 0.6;
+    for (let i = 0; i < 4; i++) {
+      const y = sy + 1.0 + i * 1.45, w = 3.4 * b - i * 0.3;
+      for (const k of [-1, 1]) rib([mx + k * 0.3, y], [mx + k * w * 0.7, y - 1.1], [mx + k * w, y + 0.8], 0.62 - i * 0.05);
+    }
+    limb(c, [mx, sy - 0.3], [mx, sy + 6.4], 0.85, 0.6, bone); // sternum
+    vol(c, ellipseP(mx, sy - 0.1, 1.0, 0.7), bone, [mx - 1, sy - 0.8, 2, 1.4], { ao: 0.3 }); // collar knot
+  });
+}
+
+/** 4: a crown of finger bones round the horned helm, a little skull on its brow. */
+function boneCrown(c: C2, r: Rig) {
+  const [hx, hy] = r.head, bone = C(BONE), y = hy - 1.9, qx = hx + (r.R ? 0.6 : r.fo);
+  const xs = r.R ? [-1.7, -0.6, 0.5, 1.6] : [-2.3, -1.15, 0, 1.15, 2.3];
+  for (const dx of xs) {
+    const x = hx + dx + (r.R ? 0.4 : 0), hgt = 1.6 + (Math.abs(dx) < 0.6 ? 0.9 : 0) - Math.abs(dx) * 0.15;
+    const sp = poly([[x - 0.45, y + 0.2], [x - 0.2, y - hgt], [x + 0.1, y - hgt - 0.3], [x + 0.45, y + 0.2]]);
+    vol(c, sp, bone, [x - 0.5, y - hgt - 0.3, 1, hgt + 0.5], { ao: 0.3, spec: 0.3 });
+  }
+  line(c, [[hx - 2.7, y + 0.35], [hx + 2.7, y + 0.35]], sh(bone, 0.45), 0.95, 1);
+  line(c, [[hx - 2.6, y + 0.25], [hx + 2.6, y + 0.25]], bone, 0.55, 1);
+  if (r.dir !== "up") {
+    vol(c, ellipseP(qx, y + 0.2, 0.95, 0.85), bone, [qx - 1, y - 0.7, 2, 1.8], { ao: 0.3, spec: 0.3 });
+    for (const k of r.R ? [0.3] : [-0.35, 0.35]) fillShape(c, ellipseP(qx + k, y + 0.2, 0.22, 0.22), css(sh(bone, 0.25)));
+  }
+}
+
 export function paintFrame(name: string, p: PoseLike, info: FrameInfo, withShadow: boolean, flash: number, K: number, alt?: DiagAlt): HiCanvas {
   const S = PIX ? 8 : K * SS, N = Math.round(32 * S);
   const body = scratch("body", N, N), c = body.getContext("2d");
   c.scale(S, S);
   const r = alt ? blendRig(rig(name, p, info), rig(name, alt.p, alt.info), alt.diag) : rig(name, p, info), L = r.L, dir = r.dir;
+  lastRig = { nearH: r.nearH, farH: r.farH, nearS: r.nearS, farS: r.farS, head: r.head, chest: [r.cx, r.sy + 3] };
   const under = scratch("under", N, N), uc = under.getContext("2d"); uc.scale(S, S);
 
   const legs = () => {
