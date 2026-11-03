@@ -483,14 +483,16 @@ export class TownRoom extends Room<TownState> {
     if (winners.length || expired.length) this.ideasChanged();
   }
 
-  onJoin(client: Client, options: { name?: string; color?: number; cls?: string }, auth?: { name: string }) {
+  onJoin(client: Client, options: { name?: string; color?: number; cls?: string; newGame?: boolean }, auth?: { name: string }) {
     const p = new Player();
     p.name = auth?.name ?? `Hero${Math.floor(Math.random() * 1000)}`;
     p.color = typeof options?.color === "number" ? options.color : COLORS[Math.floor(Math.random() * COLORS.length)];
     p.cls = isClassKind(options?.cls) ? options.cls : "knight";
-    const save = loadHero(p.name, p.cls);
+    // "New game" on the login screen: start this class over (the old save is overwritten right away)
+    const save = options?.newGame ? undefined : loadHero(p.name, p.cls);
     if (save) this.restore(p, save);
     this.applyStats(p);
+    if (options?.newGame) saveHero(p.name, p.cls, this.snapshot(p));
     p.hp = p.maxHp;
     const s = randomSpawn();
     p.x = s.x; p.y = s.y;

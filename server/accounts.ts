@@ -58,6 +58,19 @@ export function login(nameIn: unknown, pwIn: unknown): string {
   return acc.name;
 }
 
+/** Check a name + password without creating anything. Lists the saved heroes (class -> level). */
+export function peek(nameIn: unknown, pwIn: unknown): { exists: boolean; heroes: Record<string, number> } {
+  const name = String(nameIn ?? "").trim();
+  const pw = String(pwIn ?? "");
+  const acc = accounts[key(name)];
+  if (!acc) return { exists: false, heroes: {} };
+  const ok = crypto.timingSafeEqual(Buffer.from(hashPw(pw.slice(0, 64), acc.salt), "hex"), Buffer.from(acc.hash, "hex"));
+  if (!ok) throw new Error("Wrong password for this name (or the name is taken)");
+  const heroes: Record<string, number> = {};
+  for (const [cls, h] of Object.entries(acc.heroes)) if (h) heroes[cls] = h.level || 1;
+  return { exists: true, heroes };
+}
+
 export function loadHero(name: string, cls: string): HeroSave | undefined {
   return accounts[key(name)]?.heroes[cls];
 }
