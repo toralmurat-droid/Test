@@ -105,6 +105,7 @@ export class Player extends Schema {
 
   input: InputState = { up: false, down: false, left: false, right: false };
   lastAttack = 0;
+  introSeen = false; // closed the first-login game intro (saved, never synced)
   lastSpecial = -Infinity;
   // Hidden initiative / poise (shared/combat.ts)
   poiseLost = 0;
@@ -467,6 +468,12 @@ export class TownRoom extends Room<TownState> {
     this.onMessage("use", (client, msg: { id: string }) => this.useQuestObject(client.sessionId, msg?.id));
     this.onMessage("chest", (client, msg: { id: string }) => this.openChest(client, msg?.id));
     this.onMessage("chests", (client) => this.sendChests(client));
+    // First-login game intro: shown once per hero, until it is closed
+    this.onMessage("intro", (client) => { if (this.state.players.get(client.sessionId)?.introSeen === false) client.send("intro"); });
+    this.onMessage("introseen", (client) => {
+      const p = this.state.players.get(client.sessionId);
+      if (p && !p.introSeen) { p.introSeen = true; saveHero(p.name, p.cls, this.snapshot(p)); }
+    });
     this.onMessage("buy", (client, msg: { i: number }) => this.shopBuy(client, msg?.i));
     this.onMessage("sell", (client, msg: { i: number }) => this.shopSell(client, msg?.i));
 
@@ -567,6 +574,7 @@ export class TownRoom extends Room<TownState> {
     if (options?.newGame) resetChests(p.name);
     const save = options?.newGame ? undefined : loadHero(p.name, p.cls);
     if (save) this.restore(p, save);
+    p.introSeen = !!save && save.intro !== 0; // heroes from before the intro existed skip it
     // New heroes (and saves from before class kits existed) put on the class's starting kit
     if (!save?.kit) this.wearKit(p);
     this.applyStats(p);
@@ -604,6 +612,7 @@ export class TownRoom extends Room<TownState> {
       bag: p.bag.toArray(), talents, slots: p.slots.toArray(),
       questId: p.questId, questStage: p.questStage, questCount: p.questCount, questVer: CHAINS[0].version,
       boneId: p.boneId, boneStage: p.boneStage, boneCount: p.boneCount, boneVer: CHAINS[1].version, kit: 1,
+      intro: p.introSeen ? 1 : 0,
     };
   }
 

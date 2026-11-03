@@ -29,6 +29,7 @@ import { activeSkills, SLOT_COUNT, SLOT_KEYS, skillLearned } from "../../shared/
 import { iconImg } from "./skillIcons";
 import { TalentMenu } from "./talents";
 import { IdeaBoard } from "./ideas";
+import { IntroPanel } from "./intro";
 import { ISO, IsoView, isoAnchor, isoInput, screenDir, screenDir8 } from "./iso";
 import { SMOOTH } from "./isoflag";
 import { addPixelGrid } from "./pixelgrid";
@@ -136,6 +137,7 @@ export class TownScene extends Phaser.Scene {
   private chests?: ChestLayer;
   private chatEl = document.getElementById("chat") as HTMLInputElement;
   private ideaBoard?: IdeaBoard;
+  private intro?: IntroPanel;
   private minimap?: Minimap;
   private dial?: DayDial;
   private signPanel = new SignPanel();
@@ -303,6 +305,10 @@ export class TownScene extends Phaser.Scene {
     this.room.onMessage("chestopen", ({ id, refill }) => this.chests?.opened(id, refill));
     this.room.onMessage("chestlocked", () => {}); // the prompt already says why
     this.room.send("chests"); // which chests this account already emptied
+    // First login of this hero: a short how-to-play panel, never shown again once closed
+    this.intro = new IntroPanel(() => this.room?.send("introseen"));
+    this.room.onMessage("intro", () => { this.closeMenus(); this.intro?.show(); });
+    this.room.send("intro");
     this.dial = new DayDial(document.getElementById("daydial") as HTMLCanvasElement);
 
     const players = (this.room.state as any).players;
@@ -1118,6 +1124,7 @@ export class TownScene extends Phaser.Scene {
   }
 
   private closeMenus() {
+    this.intro?.close();
     for (const id of ["hero", "tree"]) document.getElementById(id)!.hidden = true;
     this.closeSlotPicker();
     this.npcs?.close();
