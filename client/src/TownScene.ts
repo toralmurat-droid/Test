@@ -196,7 +196,7 @@ export class TownScene extends Phaser.Scene {
     this.ambient = new Ambient(this); // trees, shadows, smoke, wildlife… (cosmetic only)
     this.details = new Details(this); // roof shading, ground detail, ducks, lanterns, day/night
     this.details.onDarkness((d) => this.ambient?.setDarkness(d));
-    addWorldProps(this, (x, y) => this.details?.addLight(x, y, 0xffb347, 2.2, 0.75)); // spear racks, pennants, dummies, lantern poles...
+    addWorldProps(this, (x, y, lift, dx) => this.details?.addLight(x, y, 0xffb347, 2.2, 0.75, 0.08, lift, dx)); // spear racks, pennants, dummies, lantern poles...
     addSiegeWorks(this); // the necromancer's half-built siege engines in the skeleton lands
     this.siege = new SiegeWork(this);
 
