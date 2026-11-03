@@ -72,6 +72,8 @@ const ZONE_MOBS: { name: string; mobs: Partial<Record<MobKind, number>>; respawn
   // The west coast, where the Gloam's story ends (blob quests 6 and 7): set levels so the chain climbs evenly
   { name: "Brinewood", mobs: { slime: 8, shooterblob: 6, warriorblob: 6, healerblob: 5, motherblob: 2 }, respawnMs: 6000, levels: [10, 12] },
   { name: "Heronwreck Strand", mobs: { slime: 8, shooterblob: 5, warriorblob: 5, healerblob: 4, motherblob: 3 }, respawnMs: 6000, levels: [12, 14] },
+  // Redfang raiders pillaging the Saltmere fishers' smokehouse (Redfang quest chain), on the coast well away from their camp
+  { name: "Gullrock Cove", mobs: { bandit: 6 }, respawnMs: 12000, fixed: true, levels: [17, 19] },
   { name: "Saltwind Coast", mobs: { slime: 14, shooterblob: 5, warriorblob: 5, healerblob: 4, motherblob: 2 }, respawnMs: 4500 },
   { name: "Whispering Woods", mobs: { slime: 10, shooterblob: 4, warriorblob: 4, healerblob: 3, motherblob: 2 }, respawnMs: 5250, wild: true }, // broad areas last: zone lookups take the first match
   // Everything west of the river that no named area covers: fields, roads and woods around Oakvale
