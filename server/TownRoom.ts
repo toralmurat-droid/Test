@@ -138,7 +138,7 @@ export class Mob extends Schema {
   @type("number") level = 1;
   @type("string") weapon = ""; // skeletons: sword, axe, spear or bow (SKELETON_WEAPONS)
   @type("boolean") hidden = false; // tucked into a grave/tree: untouchable, only its eyes show
-  @type("number") bones = 0; // Bone Demon: skeleton pieces it wears (DEMON.harvest), the client draws them on it
+  @type("number") bones = 0; // Bone Demon: skeleton pieces it wears (DEMON.harvest), the client shows its sheet wearing them (mob_demon1..4)
   @type("number") merged = 1; // blobs inside this one (MERGE): the client draws it bigger
   @type("string") guard = ""; // id of the loot chest it guards (shared/chests.ts): the chest stays locked while it lives
   @type("string") work = ""; // skeleton at the siege works (shared/siege.ts): hammer, saw, haul, carry (with a plank), fetch (going for one)
@@ -152,6 +152,7 @@ export class Mob extends Schema {
   canShoot = false; canCharge = false; canHeal = false; // abilities picked up by merging
   nextCall = 0; nextShot = 0;
   foe = ""; // blob vs undead feud (FEUD): the monster it is fighting
+  riteX = NaN; riteY = 0; // BONES.ritual: the point of the star this skeleton walks to before it throws itself in
   ritual = false; banishAt = 0; nextStomp = 0; nextHarvest = 0; nextToss = 0; // BONES.ritual: given to a demon summoning; demon: when it goes back, next Hellfire Stomp
   leg = 0; restUntil = 0; // carriers: 0 = taking a plank to the engine, 1 = going back to the yard; pause at each end
   flankA = NaN; // BONES: side of the hero this skeleton closes in from (NaN = straight at him)
@@ -693,7 +694,7 @@ export class TownRoom extends Room<TownState> {
     m.target = "";
     m.hidden = false; m.spot = ""; m.fleeing = false;
     m.specialKind = ""; m.specialAt = 0; m.nextBounce = 0; m.nextSlam = 0; m.nextRaise = 0; m.nextCircle = 0;
-    m.ritual = false; m.banishAt = 0; m.nextStomp = 0; m.nextHarvest = 0; m.nextToss = 0; m.bones = 0;
+    m.ritual = false; m.riteX = NaN; m.banishAt = 0; m.nextStomp = 0; m.nextHarvest = 0; m.nextToss = 0; m.bones = 0;
     m.foe = ""; m.hateId = ""; m.hate = 0; m.nextAggro = 0; m.threat = 0;
     m.work = ""; m.job = -1; m.leg = 1; m.restUntil = 0;
     if (kind === "skeleton" && zi >= 0) this.takeJob(m, id, SPAWN_ZONES[zi].name);
@@ -1185,8 +1186,12 @@ export class TownRoom extends Room<TownState> {
   private ritualCd = new Map<string, number>(); // hero -> no new ritual against him before this time
   private static RITUAL_KINDS: MobKind[] = ["skeleton", "skeletonmage", "crawler"];
 
+  /** Rituals whose skeletons are still walking to the star (BONES.ritual.gatherMs). */
+  private rites: { x: number; y: number; level: number; pid: string; ids: string[]; until: number }[] = [];
+
   /** Skeletons that are losing badly to a hero give their bones to summon a demon. */
   private checkRituals(now: number) {
+    this.updateRites(now);
     if (now < this.nextRitualCheck) return;
     const R = BONES.ritual;
     this.nextRitualCheck = now + R.checkMs;
@@ -1220,13 +1225,34 @@ export class TownRoom extends Room<TownState> {
       this.ritualCd.set(pid, now + R.cooldownMs);
       // the demon answers the threat: never far below the hero it was called against
       const level = Math.max(Math.max(...chosen.map(([, m]) => m.level)) + R.levelUp, p.level - R.belowHero);
-      const bones = chosen.map(([, m]) => [Math.round(m.x), Math.round(m.y)]);
-      for (const [id, m] of chosen) { m.ritual = true; this.mobDied(m, id, "", ""); }
-      this.broadcast("ritual", { x: Math.round(cx), y: Math.round(cy), r: R.radius, bones, ms: R.castMs });
+      // Murat 2026-11-03: they first walk up to the points of the star, then throw themselves in (updateRites)
+      chosen.forEach(([, m], k) => {
+        const a = -Math.PI / 2 + (k * Math.PI * 2) / 5;
+        m.ritual = true; m.riteX = cx + Math.cos(a) * R.radius * R.rim; m.riteY = cy + Math.sin(a) * R.radius * R.rim;
+        m.target = ""; m.foe = ""; m.winding = false; m.windUntil = 0;
+      });
+      this.rites.push({ x: cx, y: cy, level, pid, ids: chosen.map(([id]) => id), until: now + R.gatherMs });
+      this.broadcast("ritualcall", { x: Math.round(cx), y: Math.round(cy), r: R.radius, ms: R.gatherMs });
       this.questWitness("ritual", cx, cy);
-      this.clock.setTimeout(() => this.summonDemon(cx, cy, level, pid), R.castMs);
       if (++demons >= R.maxDemons) return;
     }
+  }
+
+  /** Gathered (or out of time): the skeletons leap into the star and burst into its bones; the demon climbs out. */
+  private updateRites(now: number) {
+    if (!this.rites.length) return;
+    const R = BONES.ritual;
+    this.rites = this.rites.filter((rt) => {
+      const alive = rt.ids.map((id) => [id, this.state.mobs.get(id)] as const).filter(([, m]) => m && !m.dead && m.ritual) as [string, Mob][];
+      if (!alive.length) return false; // all cut down on the way: no demon
+      const ready = alive.every(([, m]) => Math.hypot(m.x - m.riteX, m.y - m.riteY) < 4);
+      if (!ready && now < rt.until) return true;
+      const bones = alive.map(([id, m]) => [Math.round(m.x), Math.round(m.y), m.kind, m.weapon, m.level, id]);
+      for (const [id, m] of alive) { m.riteX = NaN; this.mobDied(m, id, "", ""); }
+      this.broadcast("ritual", { x: Math.round(rt.x), y: Math.round(rt.y), r: R.radius, bones, ms: R.castMs });
+      this.clock.setTimeout(() => this.summonDemon(rt.x, rt.y, rt.level, rt.pid), R.castMs);
+      return false;
+    });
   }
 
   private summonDemon(x: number, y: number, level: number, pid: string) {
@@ -1274,17 +1300,31 @@ export class TownRoom extends Room<TownState> {
     if (m.bones < H.max && now >= m.nextHarvest) {
       const s = this.skeletonNear(m, H.range);
       if (!s) return;
-      m.nextHarvest = now + H.everyMs;
+      m.nextHarvest = now + H.everyMs + H.ripMs;
       const [sid, sk] = s;
+      // Bone Harvest takes a while (Murat 2026-11-03): it grabs the skeleton, lifts it, snaps it in two between its
+      // fists and straps the piece on; it stands still meanwhile (demonSpecial "rip") and only wears it at equipMs
+      const from = [Math.round(sk.x), Math.round(sk.y)], look = { kind: sk.kind, weapon: sk.weapon, level: sk.level };
       sk.ritual = true; this.mobDied(sk, sid, "", "");
-      m.bones++;
-      this.broadcast("demonharvest", { id, from: [Math.round(sk.x), Math.round(sk.y)], bones: m.bones });
+      m.dir = Math.abs(sk.x - m.x) > Math.abs(sk.y - m.y) ? (sk.x > m.x ? "right" : "left") : (sk.y > m.y ? "down" : "up");
+      m.specialKind = "rip"; m.specialAt = now + H.ripMs; m.moving = false; m.winding = false;
+      this.broadcast("demonrip", { id, sid, from, ...look, piece: m.bones + 1, ms: H.ripMs, equipMs: H.equipMs });
+      this.clock.setTimeout(() => {
+        if (m.dead || m.bones >= H.max) return;
+        m.bones++;
+        this.broadcast("demonharvest", { id, bones: m.bones });
+      }, H.equipMs);
     }
   }
 
   /** Bone Demon's Hellfire Stomp; true while it is busy with it (it stands still). */
   private demonSpecial(m: Mob, id: string, dist: number, now: number): boolean {
     const S = DEMON.stomp;
+    if (m.specialAt && m.specialKind === "rip") {
+      if (now < m.specialAt) return true; // busy tearing a skeleton apart
+      m.specialAt = 0; m.specialKind = ""; m.lastAttack = now;
+      return false;
+    }
     if (m.specialAt) {
       if (now < m.specialAt) return true;
       m.specialAt = 0; m.winding = false; m.lastAttack = now; m.specialKind = "";
@@ -1548,6 +1588,16 @@ export class TownRoom extends Room<TownState> {
       return;
     }
     const def = mobDef(m, now);
+    if (m.ritual && !Number.isNaN(m.riteX)) {
+      // walking to its place at the star (BONES.ritual), deaf to everything else
+      const d = Math.hypot(m.riteX - m.x, m.riteY - m.y);
+      m.winding = false;
+      if (d < 4) { m.moving = false; m.dir = m.riteY > m.y + 2 ? "down" : "up"; return; }
+      const go = toward(m.x, m.y, m.riteX, m.riteY), r = moveStep(m.x, m.y, go, dt, Math.min(def.speed * 1.15, d / dt));
+      if (this.canStep(m, r.x, r.y)) { m.x = r.x; m.y = r.y; }
+      m.moving = r.moving; m.dir = dirFromInput(go, m.dir);
+      return;
+    }
     m.stunned = now < m.stunUntil;
     if (m.stunned || m.broken) { m.winding = false; m.windUntil = 0; }
     m.slowed = now < m.slowUntil;

@@ -2,7 +2,7 @@
 export type HeadGear = "greathelm" | "ninjahood" | "wizardhat" | "hood" | "horned" | "cap" | "helm" | "bandana" | "wide" | "witch" | "none";
 export type TorsoKind = "plate" | "wrap" | "robe" | "jerkin" | "bare" | "shirt" | "mail" | "leather";
 export type LegKind = "trousers" | "mail" | "wrapped" | "robe" | "fur" | "dress" | "bare";
-export type WeaponKind = "katana" | "sword" | "staff" | "bow" | "axe" | "hammer" | "spear" | "dagger" | "druidstaff" | "witchstaff" | "none";
+export type WeaponKind = "katana" | "sword" | "staff" | "bow" | "axe" | "hammer" | "spear" | "dagger" | "druidstaff" | "witchstaff" | "boneblade" | "none";
 
 export interface Look {
   skin: number;
@@ -28,6 +28,8 @@ export interface Look {
   rags?: number;    // tattered cloth hanging off a skeleton
   harness?: boolean; // leather strap across a bare chest (barbarian kit)
   weaponKind?: WeaponKind; // what found weapons look like in this hero's hands (heroes start with weapon "none")
+  /** Bone Demon (DEMON.harvest): skeleton pieces it wears, painted onto the body: 1 pauldrons, 2 rib cuirass, 3 bone blade, 4 skull crown. */
+  boneArmour?: number;
 }
 
 /** Monsters painted with the same body code (sheets built by paint/mobs.ts). */
@@ -85,6 +87,11 @@ export const MOB_LOOKS: Record<string, Look> = {
     legs: "fur", legCol: 0x2e1a14, boots: 0x3a1410, bootStyle: "bare",
     sleeve: 0xa8241c, arms: "bare", bracer: 0x2a1410, weapon: "axe", fx: 0xff6a2a, build: 1.4, back: "pelt", capeCol: 0x1e0c0a,
   },
+  // the demon wearing 1-4 harvested skeletons (sheets mob_demon1..4): painted on its body so they move with it
+  get demon1(): Look { return { ...MOB_LOOKS.demon, boneArmour: 1 }; },
+  get demon2(): Look { return { ...MOB_LOOKS.demon, boneArmour: 2 }; },
+  get demon3(): Look { return { ...MOB_LOOKS.demon, boneArmour: 3, weapon: "boneblade" }; },
+  get demon4(): Look { return { ...MOB_LOOKS.demon, boneArmour: 4, weapon: "boneblade" }; },
   necromancer: {
     skin: 0xd2cbb4, skull: true, bones: true, eyeGlow: 0x7dff6a, head: "horned", headCol: 0x2a1838, headTrim: 0xd8d2bf,
     torso: "robe", torsoCol: 0x24152e, trim: 0x8e1b2e, sash: 0x8e1b2e,

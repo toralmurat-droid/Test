@@ -2,7 +2,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { createCanvas } from "@napi-rs/canvas";
 import { MOB_POSES, posed, setPainted, type Dir } from "../characters";
 import { C2, P, blobPath, css, ellipseP, poly, fillShape, glow, limb, line, metal, mix, rng, sh, vol } from "./brush";
-import { pixelAlpha, pixelize, shrink } from "./body";
+import { lastRig, pixelAlpha, pixelize, shrink } from "./body";
 
 /**
  * Monster sheets for the iso look. Same textures as client/src/textures.ts mobTexture (6 frames:
@@ -23,19 +23,33 @@ function frameOf(f: number): { dir: Dir; pose: "stand" | "step" | "wind" | "stri
   return { dir: (["down", "up", "right"] as Dir[])[k >> 1], pose: k % 2 ? "strike" : "wind" };
 }
 
-interface Sheet { key: string; w: number; h: number; draw: (c: C2, f: number) => void }
+interface Sheet { key: string; w: number; h: number; draw: (c: C2, f: number) => void; frames?: number; hands?: number[][] }
+
+/**
+ * Bone Demon's Bone Harvest (client TownScene demonRip): 9 more frames after the 12, 3 per facing (down, up, right):
+ * "hold" lifts a skeleton overhead in both fists, "snap" tears it apart at chest height, "don" presses a piece onto
+ * its body. Hands are in the old 32px rig's coordinates (posed() moves them onto the painted body).
+ */
+const RIP_FRAMES = 9;
+const RIP: Record<"down" | "up" | "right", { hold: [P, P]; snap: [P, P]; don: [P, P] }> = {
+  down: { hold: [[13, 9], [19, 9]], snap: [[6, 16], [26, 16]], don: [[12, 15], [20, 15]] },
+  up: { hold: [[19, 9], [13, 9]], snap: [[26, 16], [6, 16]], don: [[20, 15], [12, 15]] },
+  right: { hold: [[19, 8], [17, 8]], snap: [[23, 15], [12, 14]], don: [[17, 16], [16, 15]] },
+};
 
 // ---------------------------------------------------------------- humanoid monsters (character painter)
 const PK = 5; // painter resolution for these
-function humanoid(key: string, kind: string, w: number, h: number, oy: number, scale: number): Sheet {
-  const frames = [...Array(FRAMES).keys()].map((f) => {
-    const { dir, pose } = frameOf(f);
-    if (pose === "wind") return posed(MOB_POSES[kind], { dir, t: f, attack: 0, crouch: 1, lean: 1, expr: "squint" }, false);
-    if (pose === "strike") return posed(MOB_POSES[kind], { dir, t: f, attack: 2, bob: 1 }, false);
-    return posed(MOB_POSES[kind], { dir, t: f, stride: pose === "step" ? (dir === "right" ? -1 : 1) : 0, bob: pose === "step" ? -1 : 0 }, false);
+function humanoid(key: string, kind: string, w: number, h: number, oy: number, scale: number, rip = false): Sheet {
+  const hands: number[][] = [];
+  const frames = [...Array(FRAMES + (rip ? RIP_FRAMES : 0)).keys()].map((f) => {
+    const fr = humanoidFrame(kind, f);
+    // the hands in sheet px (world px from the frame's top-left): where the client puts the skeleton it holds
+    const toSheet = (q: P) => [+(w / 2 + (q[0] - 16) * scale).toFixed(2), +(oy * h + (q[1] - 29) * scale).toFixed(2)];
+    if (rip && lastRig) hands.push([...toSheet(lastRig.nearH), ...toSheet(lastRig.farH)]);
+    return fr;
   });
   return {
-    key, w, h,
+    key, w, h, frames: frames.length, hands: rip ? hands : undefined,
     draw: (c, f) => {
       const fr = frames[f], n = createCanvas(fr.w, fr.h), x = n.getContext("2d"), img = x.createImageData(fr.w, fr.h);
       img.data.set(fr.data); x.putImageData(img, 0, 0);
@@ -47,6 +61,20 @@ function humanoid(key: string, kind: string, w: number, h: number, oy: number, s
       c.restore();
     },
   };
+}
+
+function humanoidFrame(kind: string, f: number) {
+  if (f >= FRAMES) {
+    const k = f - FRAMES, dir = (["down", "up", "right"] as const)[Math.floor(k / 3)], step = (["hold", "snap", "don"] as const)[k % 3];
+    const [hand, farHand] = RIP[dir][step];
+    return posed(MOB_POSES[kind], { dir, t: f, hand, farHand, noWeapon: true, wAng: 90, crouch: step === "snap" ? 1 : 0, bob: step === "hold" ? -1 : 0, expr: step === "snap" ? "squint" : "n" }, false);
+  }
+  {
+    const { dir, pose } = frameOf(f);
+    if (pose === "wind") return posed(MOB_POSES[kind], { dir, t: f, attack: 0, crouch: 1, lean: 1, expr: "squint" }, false);
+    if (pose === "strike") return posed(MOB_POSES[kind], { dir, t: f, attack: 2, bob: 1 }, false);
+    return posed(MOB_POSES[kind], { dir, t: f, stride: pose === "step" ? (dir === "right" ? -1 : 1) : 0, bob: pose === "step" ? -1 : 0 }, false);
+  }
 }
 
 // ---------------------------------------------------------------- blobs
@@ -301,7 +329,9 @@ export function buildMobs(out: string, ONLY?: string[]) {
     humanoid("mob_banditchief", "banditchief", 28, 34, 32 / 34, 0.95),
     humanoid("mob_skeletonmage", "skeletonmage", 24, 32, 31.2 / 32, 0.93),
     humanoid("mob_necromancer", "necromancer", 24, 32, 31.2 / 32, 0.93),
-    humanoid("mob_demon", "demon", 28, 34, 33 / 34, 1.0),
+    humanoid("mob_demon", "demon", 28, 34, 33 / 34, 1.0, true),
+    // wearing 1-4 harvested skeletons (look.ts demon1..4)
+    ...[1, 2, 3, 4].map((n) => humanoid(`mob_demon${n}`, `demon${n}`, 28, 34, 33 / 34, 1.0, true)),
     // drawn on a 24x16 layout, 1.35x up into a 32x22 frame (about as long as a skeleton is tall)
     { key: "mob_crawler", w: 32, h: 22, draw: (c: C2, f: number) => {
       for (const k of SH ? [c, SH] : [c]) { k.save(); k.translate(16, 20); k.scale(1.35, 1.35); k.translate(-12, -14); }
@@ -309,12 +339,13 @@ export function buildMobs(out: string, ONLY?: string[]) {
       c.restore(); SH?.restore();
     } },
   ].filter((s) => !ONLY || ONLY.includes(s.key));
-  const meta: Record<string, { w: number; h: number; scale: number; frames: number }> = {};
+  const meta: Record<string, { w: number; h: number; scale: number; frames: number; hands?: number[][] }> = {};
   for (const s of sheets) {
     const tw = s.w * TX, th = s.h * TX;
-    const cv = createCanvas(tw * FRAMES, th), oc = cv.getContext("2d");
-    const sheet = oc.createImageData(tw * FRAMES, th);
-    for (let f = 0; f < FRAMES; f++) {
+    const NF = s.frames ?? FRAMES;
+    const cv = createCanvas(tw * NF, th), oc = cv.getContext("2d");
+    const sheet = oc.createImageData(tw * NF, th);
+    for (let f = 0; f < NF; f++) {
       const body = createCanvas(s.w * HI, s.h * HI), shadow = createCanvas(s.w * HI, s.h * HI);
       const c = body.getContext("2d"), sc = shadow.getContext("2d");
       c.scale(HI, HI); sc.scale(HI, HI);
@@ -324,13 +355,13 @@ export function buildMobs(out: string, ONLY?: string[]) {
       pixelize(b, tw, th, true, blob ? { y0: Math.round(th * 0.7), y1: th, mud: 0.14, sat: 0.9 } : { y0: Math.round(th * 0.72), y1: th, mud: s.key.includes("bandit") ? 0.38 : 0.2 });
       const u = shrink(shadow, "ms", tw, th); pixelAlpha(u);
       for (let y = 0; y < th; y++) for (let x = 0; x < tw; x++) {
-        const i = (y * tw + x) * 4, o = (y * tw * FRAMES + f * tw + x) * 4, src = b[i + 3] ? b : u;
+        const i = (y * tw + x) * 4, o = (y * tw * NF + f * tw + x) * 4, src = b[i + 3] ? b : u;
         for (let k = 0; k < 4; k++) sheet.data[o + k] = src[i + k];
       }
     }
     oc.putImageData(sheet, 0, 0);
     writeFileSync(`${out}/${s.key}.webp`, cv.encodeSync("webp", 100));
-    meta[s.key] = { w: s.w, h: s.h, scale: TX, frames: FRAMES };
+    meta[s.key] = { w: s.w, h: s.h, scale: TX, frames: NF, ...(s.hands ? { hands: s.hands } : {}) };
   }
   writeFileSync(`${out}/mobs.json`, JSON.stringify(meta, null, 1));
   setPainted(false, 2);
