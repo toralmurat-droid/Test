@@ -1,5 +1,6 @@
 import { MobKind, TILE } from "./constants";
 import { AREAS, isSafeZone, isSolidAt, OBJECTS, T, VILLAGE } from "./map";
+import { CAMP_POSTS } from "./bandits";
 
 /**
  * Monster spawn zones. Each zone keeps up to `mobs[kind]` monsters alive. Every `respawnMs` its timer fires
@@ -32,7 +33,7 @@ export function noMobsAt(px: number, py: number): boolean {
 }
 
 /** Monsters per area. Rects come from the map's AREAS (shared/map.ts), so zones follow the map layout. */
-const ZONE_MOBS: { name: string; mobs: Partial<Record<MobKind, number>>; respawnMs: number; wild?: boolean; levels?: [number, number] }[] = [
+const ZONE_MOBS: { name: string; mobs: Partial<Record<MobKind, number>>; respawnMs: number; wild?: boolean; fixed?: boolean; levels?: [number, number] }[] = [
   // Levels come from the distance to Oakvale (see zoneLevels)
   // Blob zones above Lv 3 add shooter + warrior blobs, above Lv 5 healer blobs too.
   // Skeleton zones from Lv 5 add skeleton mages; the deepest ones (Barrow Downs, the Keep) an elite Necromancer too.
@@ -53,7 +54,8 @@ const ZONE_MOBS: { name: string; mobs: Partial<Record<MobKind, number>>; respawn
   { name: "Thornwood", mobs: { slime: 8, shooterblob: 6, warriorblob: 6, healerblob: 4, motherblob: 2 }, respawnMs: 6000 },
   { name: "Greywatch Keep", mobs: { skeleton: 11, skeletonmage: 5, necromancer: 2 }, respawnMs: 8250, levels: [18, 20] },
   // The coast and the far east (Saltmere itself stays monster-free, see NO_MOB_AREAS)
-  { name: "Redfang Hollow", mobs: { bandit: 14 }, respawnMs: 6000 },
+  // Redfang Hollow is a small organised camp (shared/bandits.ts): one bandit per post, no density scaling
+  { name: "Redfang Hollow", mobs: { bandit: CAMP_POSTS.length }, respawnMs: 20000, fixed: true },
   { name: "Saltwind Coast", mobs: { slime: 14, shooterblob: 5, warriorblob: 5, healerblob: 4, motherblob: 2 }, respawnMs: 4500 },
   { name: "Whispering Woods", mobs: { slime: 10, shooterblob: 4, warriorblob: 4, healerblob: 3, motherblob: 2 }, respawnMs: 5250, wild: true }, // broad areas last: zone lookups take the first match
   // Everything west of the river that no named area covers: fields, roads and woods around Oakvale
@@ -114,7 +116,7 @@ export const SPAWN_ZONES: SpawnZone[] = ZONE_MOBS.flatMap((z) => {
   }
   const base = Object.values(z.mobs).reduce((n, c) => n + (c ?? 0), 0);
   const want = Math.round(tiles / (z.wild ? DENSITY.wildTilesPerMob : DENSITY.tilesPerMob));
-  const f = Math.max(1, want / base);
+  const f = z.fixed ? 1 : Math.max(1, want / base); // fixed: hand-set count
   const mobs: Partial<Record<MobKind, number>> = {};
   for (const [k, n] of Object.entries(z.mobs) as [MobKind, number][]) mobs[k] = k === "necromancer" ? n : k === "motherblob" ? Math.max(n, Math.round(n * f / 4)) : Math.round(n * f); // big ones grow slower
   const levels: [number, number] = z.levels ?? (z.wild && hi > 0 ? [lo, hi] : zoneLevels(r));

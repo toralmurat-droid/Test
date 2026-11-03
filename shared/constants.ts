@@ -28,7 +28,7 @@ export interface InputState {
   right: boolean;
 }
 
-export type MobKind = "slime" | "skeleton" | "motherblob" | "blobling" | "shooterblob" | "warriorblob" | "healerblob" | "bandit" | "skeletonmage" | "necromancer" | "crawler" | "demon";
+export type MobKind = "slime" | "skeleton" | "motherblob" | "blobling" | "shooterblob" | "warriorblob" | "healerblob" | "bandit" | "skeletonmage" | "necromancer" | "crawler" | "demon" | "banditchief";
 
 export interface MobDef {
   name: string;
@@ -58,11 +58,15 @@ export const MOBS: Record<MobKind, MobDef> = {
   skeletonmage: { name: "Skeleton Mage", maxHp: 60, speed: 50, damage: 17, attackCooldownMs: 1900, aggroRange: 140, leash: 200, xp: 32 },
   necromancer: { name: "Necromancer", maxHp: 520, speed: 38, damage: 22, attackCooldownMs: 1700, aggroRange: 150, leash: 230, xp: 240 },
   demon: { name: "Bone Demon", maxHp: 640, speed: 50, damage: 30, attackCooldownMs: 1300, aggroRange: 170, leash: 320, xp: 220 },
+  // Boss of Redfang Hollow (shared/bandits.ts CHIEF): a big axeman who leaps at you and rallies his camp
+  banditchief: { name: "Redfang Chief", maxHp: 760, speed: 58, damage: 26, attackCooldownMs: 1150, aggroRange: 150, leash: 330, xp: 420 },
   crawler: { name: "Crawling Skeleton", maxHp: 26, speed: 30, damage: 13, attackCooldownMs: 1000, aggroRange: 120, leash: 220, xp: 6 },
 };
 
 /** Elite monsters: much tougher than the rest of their zone, with a bigger look and an "Elite" tag. */
-export const ELITE: Partial<Record<MobKind, true>> = { necromancer: true, demon: true };
+export const ELITE: Partial<Record<MobKind, true>> = { necromancer: true, demon: true, banditchief: true };
+/** Bosses: elites that lead a whole camp (tagged "Boss" instead of "Elite"). */
+export const BOSS: Partial<Record<MobKind, true>> = { banditchief: true };
 
 /**
  * Skeleton casters. Distances in px.
@@ -159,9 +163,11 @@ export function aggroLevelFactor(lvl: number, targetLvl: number) {
   if (gap < 0) return 1 + Math.min(AGGRO.preyMax, -gap * AGGRO.preyPerLevel);
   return Math.max(0, 1 - Math.max(0, gap - AGGRO.freeGap) * AGGRO.perLevel);
 }
-export const FACTION: Partial<Record<MobKind, "blob" | "undead">> = {
+// Outlaws (Redfang Hollow) fight both: their patrols pick fights with whatever lives in the woods
+export const FACTION: Partial<Record<MobKind, "blob" | "undead" | "outlaw">> = {
   slime: "blob", blobling: "blob", motherblob: "blob", shooterblob: "blob", warriorblob: "blob", healerblob: "blob",
   skeleton: "undead", skeletonmage: "undead", necromancer: "undead", crawler: "undead", demon: "undead",
+  bandit: "outlaw", banditchief: "outlaw",
 };
 
 /**

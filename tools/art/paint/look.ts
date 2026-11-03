@@ -48,6 +48,30 @@ export const MOB_LOOKS: Record<string, Look> = {
     legs: "trousers", legCol: 0x3a3a3a, boots: 0x231a14, bootStyle: "leather",
     sleeve: 0x4a3a30, arms: "cloth", glove: 0x2b1d14, weapon: "dagger", fx: 0xffffff, back: "cape", capeCol: 0x3a2e28,
   },
+  // Redfang Hollow roles (shared/bandits.ts): a bare-armed axe brute, a hooded archer, and their chief
+  bandit_brute: {
+    skin: 0xc98f62, hair: 0x2a201a, hairStyle: "bald", beard: 0x2a201a, beardStyle: "full", mask: 0xa3231b,
+    head: "bandana", headCol: 0x8e1f1a, headTrim: 0x5a1410,
+    torso: "leather", torsoCol: 0x4a3426, trim: 0x2a1c14, belt: 0x2b1d14, buckle: 0x8a8a8a, harness: true,
+    legs: "fur", legCol: 0x5a4a3a, boots: 0x231a14, bootStyle: "wrap",
+    sleeve: 0xc98f62, arms: "bare", bracer: 0x3a2a1e, glove: 0x2b1d14, weapon: "axe", fx: 0xffd0c0, build: 1.22,
+  },
+  bandit_archer: {
+    skin: 0xd9a77a, hair: 0x5a3a22, hairStyle: "short", mask: 0xa3231b,
+    head: "hood", headCol: 0x3a3a2a, headTrim: 0x24241a,
+    torso: "jerkin", torsoCol: 0x4e4a34, trim: 0x2e2a1e, belt: 0x2b1d14, buckle: 0x9a8a6a,
+    legs: "trousers", legCol: 0x3a342c, boots: 0x231a14, bootStyle: "leather",
+    sleeve: 0x3e3a2c, arms: "cloth", bracer: 0x5a3a22, glove: 0x2b1d14, weapon: "bow", back: "quiver", capeCol: 0x3a2a1e, fx: 0xffffff,
+  },
+  banditchief: {
+    skin: 0xcf9a6e, hair: 0x1e1814, hairStyle: "long", beard: 0x1e1814, beardStyle: "full", eye: 0x111111,
+    head: "horned", headCol: 0x55504a, headTrim: 0xc9c0ae,
+    torso: "mail", torsoCol: 0x6b6a6a, trim: 0x3a2a20, tabard: { col: 0x7e1c18, trim: 0x2a1a14, emblem: 0x3a1210 },
+    belt: 0x2b1d14, buckle: 0xc9a050,
+    legs: "fur", legCol: 0x4a3a2c, boots: 0x231a14, bootStyle: "leather",
+    sleeve: 0x5a5856, arms: "plate", glove: 0x2b1d14, bracer: 0x3a2a1e, weapon: "axe", fx: 0xff8a70,
+    back: "pelt", capeCol: 0x5a4632, build: 1.25,
+  },
   skeletonmage: {
     skin: 0xe2ddca, skull: true, bones: true, eyeGlow: 0x7fe7ff, head: "hood", headCol: 0x26338a, headTrim: 0x1a2466,
     torso: "robe", torsoCol: 0x2f3fa6, trim: 0xe0b440, sash: 0x1a2466,

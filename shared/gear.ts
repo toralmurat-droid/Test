@@ -136,6 +136,7 @@ export const GEAR_DROP: Record<MobKind, { chance: number; tiers: [number, number
   bandit: { chance: 0.18, tiers: [0.45, 0.4, 0.15] },
   skeletonmage: { chance: 0.16, tiers: [0.5, 0.38, 0.12] },
   necromancer: { chance: 0.75, tiers: [0.1, 0.5, 0.4] },
+  banditchief: { chance: 1, tiers: [0, 0.45, 0.55] },
 };
 
 export function isGearId(v: unknown): v is string {

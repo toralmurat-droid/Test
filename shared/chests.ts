@@ -45,7 +45,7 @@ const LAIRS: { area: string; guards: Partial<Record<MobKind, number>>; at?: [num
   { area: "Barrow Downs", guards: { necromancer: 1 } },
   { area: "Greywatch Keep", guards: { necromancer: 1 } },
   { area: "Thornwood", guards: { motherblob: 1, warriorblob: 1 } },
-  { area: "Redfang Hollow", guards: { bandit: 3 }, at: [0.28, 0.5] }, // the yard between the bandit houses
+  { area: "Redfang Hollow", guards: { banditchief: 1 }, at: [0.28, 0.5] }, // the yard between the bandit houses: the chief keeps the loot
   { area: "Saltwind Coast", guards: { motherblob: 1, shooterblob: 1 }, at: [0.3, 0.5] },
   { area: "Saltwind Coast", guards: { motherblob: 1, warriorblob: 1 }, at: [0.75, 0.5] },
   { area: "Whispering Woods", guards: { motherblob: 1, healerblob: 1 }, at: [0.55, 0.45] },
