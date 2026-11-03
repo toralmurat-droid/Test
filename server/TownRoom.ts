@@ -12,7 +12,7 @@ import { attackMult, cooldownMult, critChance, heroSpeed, magicMult, maxHpFromSt
 import { activeSkills, canLearn, classSkills, cleanRanks, MAX_RANK, skillLearned, skillOf, talentBonus, talentMult, talentReduce } from "../shared/skills";
 import {
   afterHit, atkSpeedMult, blocking, buffLifesteal, buffRegen, castSkill, ccImmune, charging, counterHit, dealtMult, FieldInst, newRuntime,
-  shotEnd, shotHit, ShotSpec, SkillHost, speedMult, statusOf, takenMult, tickField, tickUnit, Unit,
+  shotEnd, shotHit, shotPulse, ShotSpec, SkillHost, speedMult, statusOf, takenMult, tickField, tickUnit, Unit,
 } from "../shared/skillEngine";
 import {
   ITEM_LIFETIME_MS, ItemKind, LOOT, MAX_POTIONS, PICKUP_RADIUS, POTION_COOLDOWN_MS, POTION_HEAL, PVP_GOLD_DROP,
@@ -227,6 +227,7 @@ export class Projectile extends Schema {
   mobName = "";
   hitIds = new Set<string>();
   traveled = 0;
+  pulsed = 0; // distance at the last pulse (ShotSpec.pulse)
   speed = 0;
   range = 0;
   radius = 0;
@@ -2016,6 +2017,8 @@ export class TownRoom extends Room<TownState> {
       s.y += (oy * total) / steps;
       s.traveled += total / steps;
       if (isSolidAt(s.x, s.y) || s.traveled >= s.range) return this.explode(s, id);
+      const pulse = s.spec?.pulse;
+      if (pulse && s.traveled - s.pulsed >= pulse.every) { s.pulsed = s.traveled; shotPulse(this.host, s.spec!, s.x, s.y); }
       if (s.mobLevel > 0) {
         // A monster's shot only hits players, once: it is used up on the first player it can hurt.
         // (It used to stay alive unless the hit was a kill, so it pushed and hurt the player every tick.)

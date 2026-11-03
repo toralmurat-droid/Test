@@ -44,6 +44,7 @@ export interface ShotSpec extends HitEffects {
   owner: string; skill: string; x: number; y: number; vx: number; vy: number;
   kind: string; speed: number; range: number; radius: number; size: number; dmg: number;
   pierce: number; explode: number; chain: number; field?: FieldDef; rank: number; power: number;
+  pulse?: ShotDef["pulse"];
 }
 
 export interface FieldInst {
@@ -272,7 +273,7 @@ function fire(h: SkillHost, id: string, skill: string, d: ShotDef, rank: number,
     h.shoot({
       owner: id, skill, x: x + vx * 6 - aim[1] * lane, y: y - 4 + vy * 6 + aim[0] * lane, vx, vy,
       kind: d.kind, speed: d.speed, range: d.range, radius: d.radius, size: d.size ?? 1, dmg,
-      pierce: d.pierce ?? 0, explode: d.explode ?? 0, chain: d.chain ?? 0, field: d.field, rank, power,
+      pierce: d.pierce ?? 0, explode: d.explode ?? 0, chain: d.chain ?? 0, field: d.field, rank, power, pulse: d.pulse,
       ...effects(d, t),
     });
   }
@@ -308,6 +309,11 @@ function chain(h: SkillHost, owner: string, from: string, hops: number, dmg: num
 }
 
 /** A skill projectile stops at (x, y): explosion and ground effect. */
+/** A pulsing projectile (ShotDef.pulse) flew `every` px further: it sets off its area where it is now. */
+export function shotPulse(h: SkillHost, s: ShotSpec, x: number, y: number) {
+  if (s.pulse) area(h, s.owner, { id: s.skill }, s.pulse.area, s.power, rankTime(s.rank), [x, y]);
+}
+
 export function shotEnd(h: SkillHost, s: ShotSpec, x: number, y: number) {
   if (s.explode > 0) {
     area(h, s.owner, { id: s.skill }, { r: s.explode, dmg: 0, slowMs: s.slowMs, burn: s.burn, kb: s.kb, look: "burst" }, 1, 1, [x, y]);

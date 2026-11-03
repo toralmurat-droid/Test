@@ -825,16 +825,16 @@ export class SkillFx {
         g.fillStyle(0xffffff).fillTriangle(-2, -0.5, -2, 0.5, 4, 0);
         break;
       }
-      case "spinshard": {
-        // A four-bladed star of ice in a cold glow; it spins in tickShots
+      case "frozenorb": {
+        // A ball of frozen magic: cold glow, pale shell, white heart, and a few ice spikes that turn (tickShots)
         const d = this.scene.add.graphics();
-        for (let k = 0; k < 4; k++) {
-          const a = k * Math.PI / 2, c = Math.cos(a), sn = Math.sin(a), L = 5 * size, w = 1.4 * size;
-          d.fillStyle(0x4cc9f0).fillTriangle(c * L, sn * L, -sn * w, c * w, sn * w * 0.3, -c * w * 0.3);
-          d.fillStyle(0xd6f6ff).fillTriangle(c * L, sn * L, -sn * w * 0.5, c * w * 0.5, 0, 0);
+        for (let k = 0; k < 6; k++) {
+          const a = k * Math.PI / 3, c = Math.cos(a), sn = Math.sin(a), L = 5.5 * size, w = 0.9 * size;
+          d.fillStyle(0x4cc9f0).fillTriangle(c * L, sn * L, -sn * w, c * w, sn * w, -c * w);
         }
-        d.fillStyle(0xffffff).fillCircle(0, 0, 0.9 * size);
-        g = this.scene.add.container(s.x, s.y, [glow(0x8be9ff, 0.32 * size).setPosition(0, 0), d]).setDepth(DEPTH);
+        d.fillStyle(0x2a6fdb).fillCircle(0, 0, 3.4 * size).fillStyle(0x8be9ff).fillCircle(0, 0, 2.7 * size)
+          .fillStyle(0xd6f6ff).fillCircle(-0.5 * size, -0.5 * size, 1.6 * size).fillStyle(0xffffff).fillCircle(-0.8 * size, -0.8 * size, 0.7 * size);
+        g = this.scene.add.container(s.x, s.y, [glow(0x8be9ff, 0.5 * size).setPosition(0, 0), d]).setDepth(DEPTH);
         break;
       }
       case "arcane": g = glow(0xc77dff, 0.3); break;
@@ -922,10 +922,16 @@ export class SkillFx {
       switch (look) {
         case "shuriken": (g as any).angle += 1400 * dt; if (Math.random() < 0.4) this.p(x, y, 0, 0xffffff, { life: 120, depth: DEPTH - 1 }); break;
         case "net": (g as any).angle += 400 * dt; break;
-        case "spinshard":
-          (g as any).angle += 1100 * dt;
-          for (let i = 0; i < n(70); i++) this.p(x + rnd(-3, 3), y + rnd(-3, 3), 0, pick(PALETTE.frost), { life: 260, size: pick([1, 1, 2]), size1: 0 });
+        case "frozenorb": {
+          (g as any).angle += 240 * dt;
+          // ice splinters spin off the orb in every direction, and a frosty mist trails behind it
+          for (let i = 0; i < n(90); i++) {
+            const a = Math.random() * Math.PI * 2, v = rnd(25, 55);
+            this.p(x + Math.cos(a) * 4, y + Math.sin(a) * 4, z + rnd(-2, 2), pick(PALETTE.frost), { vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: rnd(200, 380), size: pick([1, 1, 2]), size1: 0 });
+          }
+          for (let i = 0; i < n(40); i++) this.p(x - ax * 6 + rnd(-3, 3), y - ay * 6 + rnd(-3, 3), 0, 0xd6f6ff, { life: 420, size: 2, size1: 0 });
           break;
+        }
         case "lightning":
           for (let i = 0; i < n(80); i++) this.p(x + rnd(-3, 3), y + rnd(-3, 3), rnd(-2, 2), pick(PALETTE.lightning), { life: 120, size: 1 });
           if (Math.random() < 0.5) this.bolt(x - ax * 14, y - ay * 14, 0, x, y, 0, PALETTE.lightning, 1, 60);
@@ -1030,7 +1036,7 @@ export class SkillFx {
   impact(x: number, y: number, kind: string, r: number) {
     if (BASIC_SHOTS.has(kind)) { this.basicImpact(x, y, kind, r); return true; }
     const style: FxStyle | undefined = ({ shuriken: "steel", lightning: "lightning", dragon: "fire", phoenix: "fire", inferno: "fire", flamewave: "fire",
-      iceshard: "frost", spinshard: "frost", arcane: "arcane", powerarrow: "wind", frostarrow: "frost", net: "nature" } as Record<string, FxStyle>)[kind];
+      iceshard: "frost", frozenorb: "frost", arcane: "arcane", powerarrow: "wind", frostarrow: "frost", net: "nature" } as Record<string, FxStyle>)[kind];
     if (!style) return false;
     if (r > 0) {
       const big = r >= 44;
