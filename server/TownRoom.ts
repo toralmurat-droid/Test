@@ -20,6 +20,7 @@ import {
 import { isSafeZone, isSolidAt, randomSpawn, VILLAGE } from "../shared/map";
 import { isDecorSolidAt, npcById, npcNear, TALK_RANGE } from "../shared/npcs";
 import { beyondWall, WATCH, WATCH_POSTS, WatchPost } from "../shared/watch";
+import { inVillage, WRATH } from "../shared/wrath";
 import { sellPrice, SHOPS } from "../shared/shops";
 import { BLOB_KINDS, CHAINS, chainState, inZone, isBlob, npcPresent, QuestState, questStep, stepGoal, Summon, USE_RANGE } from "../shared/quests";
 import { findHideSpot, HIDE, MOTHER_KEEP_OUT, noMobsAt, spawnPoint, SPAWN_ZONES, villageDist, zoneCap } from "../shared/spawns";
@@ -57,6 +58,7 @@ export class Player extends Schema {
   @type("number") xp = 0;
   @type("number") level = 1;
   @type("string") emote = ""; // current emote animation ("" = none)
+  @type("boolean") outlaw = false; // cast a skill inside Oakvale: the village attacks until they leave (shared/wrath.ts)
   @type("number") combo = 0; // which hit of the 3-hit combo was thrown last (0..2)
   @type("number") gold = 0;
   @type("number") potions = 0;
@@ -126,6 +128,7 @@ export class Player extends Schema {
   lastDodge = -Infinity;
   lastRanged = -Infinity;
   lastHurt = 0;
+  wrathNext = 0; // next townsfolk blow on an outlaw
   lastPotion = 0;
   attackReadyAt = 0;
   lastVariant = -1;
@@ -275,6 +278,7 @@ export class Watchman extends Schema {
 
   post!: WatchPost;
   target = ""; // monster id he is fighting
+  foe = ""; // outlaw hero he is hunting (shared/wrath.ts), before any monster
   nextLook = 0; nextHit = 0; strikeAt = 0;
   crossing = false; // walking through the gate opening
   stuckSince = 0; // when he last stopped making progress
@@ -296,6 +300,7 @@ interface HitOpts {
   atkLevel?: number; kb?: number; stunMs?: number; slowMs?: number; crit?: boolean; skill?: boolean;
   basic?: boolean; dot?: boolean; thorn?: boolean; burn?: [number, number]; markMs?: number; weakMs?: number; fearMs?: number;
   from?: string; // attacker id (hero or monster), for counters and thorns
+  wrath?: boolean; // the village punishing an outlaw: lands even on the safe square
 }
 
 const COLORS = [0xe74c3c, 0x3498db, 0x2ecc71, 0xf1c40f, 0x9b59b6, 0xe67e22, 0x1abc9c, 0xecf0f1];
@@ -1392,6 +1397,7 @@ export class TownRoom extends Room<TownState> {
       const treeRegen = talentBonus(p.cls, p.talents, "regen") + buffRegen(p, now) * 100;
       if (treeRegen > 0 && !p.dead && p.hp > 0 && p.hp < p.maxHp) p.hp = Math.min(p.maxHp, p.hp + p.maxHp * treeRegen / 100 * dt);
       this.pickUp(p, pid);
+      this.updateWrath(pid, p, now);
     });
     this.state.items.forEach((it, id) => { if (now > it.expires) this.state.items.delete(id); });
     this.buildFeudGrid();
@@ -1432,13 +1438,26 @@ export class TownRoom extends Room<TownState> {
       this.watchSeen = [];
       this.state.mobs.forEach((o, oid) => { if (!o.dead && !o.hidden && o.x > x0 && o.x < x1 && o.y > y0 && o.y < y1) this.watchSeen.push([oid, o]); });
     }
+    this.outlaws = [];
+    this.state.players.forEach((p, pid) => { if (p.outlaw && !p.dead) this.outlaws.push([pid, p]); });
     this.state.watch.forEach((w) => this.updateWatchman(w, dt, now));
   }
 
+  /** Heroes the village is after right now (shared/wrath.ts). */
+  private outlaws: [string, Player][] = [];
+
   private updateWatchman(w: Watchman, dt: number, now: number) {
     const P = w.post, sight = WATCH.sightTiles * TILE, leash = WATCH.leashTiles * TILE;
-    let t = w.target ? this.state.mobs.get(w.target) : undefined;
-    if (t && (t.dead || t.hidden || Math.hypot(t.x - P.x, t.y - P.y) > leash)) { t = undefined; w.target = ""; }
+    // An outlaw in the village comes first: hunt them anywhere inside the stockade
+    let foe = w.foe ? this.state.players.get(w.foe) : undefined;
+    if (foe && (foe.dead || !foe.outlaw)) { foe = undefined; w.foe = ""; }
+    if (!foe && this.outlaws.length) {
+      let bd = Infinity;
+      for (const [pid, o] of this.outlaws) { const d = Math.hypot(o.x - w.x, o.y - w.y); if (d < bd) { bd = d; w.foe = pid; foe = o; } }
+    }
+    let t: Mob | Player | undefined = foe ?? (w.target ? this.state.mobs.get(w.target) : undefined);
+    if (foe) w.target = "";
+    if (!foe && t && ((t as Mob).dead || (t as Mob).hidden || Math.hypot(t.x - P.x, t.y - P.y) > leash)) { t = undefined; w.target = ""; }
     if (now >= w.nextLook && !t) {
       w.nextLook = now + 400;
       let bd = sight;
@@ -1451,7 +1470,10 @@ export class TownRoom extends Room<TownState> {
     // A thrust in progress lands, if the monster is still in reach
     if (w.strikeAt && now >= w.strikeAt) {
       w.strikeAt = 0;
-      if (t && Math.hypot(t.x - w.x, t.y - w.y) <= WATCH.reach * 1.4) this.watchHits(w, w.target, t, now);
+      if (foe && Math.hypot(foe.x - w.x, foe.y - w.y) <= WATCH.reach * 1.6) {
+        const d = Math.hypot(foe.x - w.x, foe.y - w.y) || 1;
+        this.damagePlayer(w.foe, WRATH.watchDamage(foe.maxHp), "The village watch", [(foe.x - w.x) / d, (foe.y - w.y) / d], 1.5, { wrath: true, stunMs: WRATH.stunMs });
+      } else if (!foe && t && Math.hypot(t.x - w.x, t.y - w.y) <= WATCH.reach * 1.4) this.watchHits(w, w.target, t as Mob, now);
     }
     if (w.strikeAt) { w.moving = false; return; } // planted for the thrust
     let gx: number, gy: number, stop: number;
@@ -1468,7 +1490,7 @@ export class TownRoom extends Room<TownState> {
     } else w.crossing = false;
     const dx = gx - w.x, dy = gy - w.y, d = Math.hypot(dx, dy);
     if (d > stop) {
-      const step = Math.min(d - stop, WATCH.speed * dt), ux = dx / d, uy = dy / d;
+      const step = Math.min(d - stop, WATCH.speed * (foe ? WRATH.watchSpeed : 1) * dt), ux = dx / d, uy = dy / d;
       const nx = w.x + ux * step, ny = w.y + uy * step;
       const free = (x: number, y: number) => { for (const [ox, oy] of [[-5, -5], [5, -5], [-5, 5], [5, 5]]) if (isSolidAt(x + ox, y + oy) || isDecorSolidAt(x + ox, y + oy)) return false; return true; };
       const ox = w.x, oy = w.y;
@@ -1482,7 +1504,7 @@ export class TownRoom extends Room<TownState> {
       else if (!w.stuckSince) w.stuckSince = now;
       else if (now - w.stuckSince > 1200) {
         // can't get there: give up on that monster (and ignore it a while), or stand where he is if it was his post
-        if (t) { w.ignore = w.target; w.ignoreUntil = now + 8000; w.target = ""; }
+        if (t && !foe) { w.ignore = w.target; w.ignoreUntil = now + 8000; w.target = ""; }
         w.stuckSince = 0;
       }
       return;
@@ -1492,7 +1514,7 @@ export class TownRoom extends Room<TownState> {
     if (t) {
       const td = Math.hypot(t.x - w.x, t.y - w.y) || 1;
       w.ax = (t.x - w.x) / td; w.ay = (t.y - w.y) / td;
-      if (now >= w.nextHit) { w.nextHit = now + WATCH.hitEveryMs; w.strikeAt = now + WATCH.windMs; w.swing++; }
+      if (now >= w.nextHit) { w.nextHit = now + (foe ? WRATH.watchHitEveryMs : WATCH.hitEveryMs); w.strikeAt = now + WATCH.windMs; w.swing++; }
     } else if (Math.hypot(w.x - P.x, w.y - P.y) <= 2) { w.ax = -P.nx; w.ay = -P.ny; } // back on post, eyes on the road
   }
 
@@ -2163,7 +2185,30 @@ export class TownRoom extends Room<TownState> {
   private cast(id: string, skill: string) {
     const p = this.state.players.get(id);
     if (!p || typeof skill !== "string" || p.rolling) return;
-    if (castSkill(this.host, id, skill)) p.emote = "";
+    if (castSkill(this.host, id, skill)) {
+      p.emote = "";
+      if (!p.outlaw && inVillage(p.x, p.y)) this.setOutlaw(id, p, true);
+    }
+  }
+
+  /** No magic in Oakvale (shared/wrath.ts): the caster becomes an outlaw until they leave the village or die. */
+  private setOutlaw(id: string, p: Player, on: boolean) {
+    if (p.outlaw === on) return;
+    p.outlaw = on;
+    if (on) p.wrathNext = Date.now() + 600;
+    // left = walked out of the village (false when the outlaw died: no "you left" banner over the death screen)
+    this.broadcast("wrath", { id, on, left: !on && !p.dead, shout: WRATH.shouts[Math.floor(Math.random() * WRATH.shouts.length)] });
+  }
+
+  /** The townsfolk mob an outlaw: a heavy blow every WRATH.mobEveryMs while they stay inside the stockade. */
+  private updateWrath(id: string, p: Player, now: number) {
+    if (!p.outlaw) return;
+    if (p.dead || !inVillage(p.x, p.y)) { this.setOutlaw(id, p, false); return; }
+    if (now < p.wrathNext) return;
+    p.wrathNext = now + WRATH.mobEveryMs;
+    const a = Math.random() * Math.PI * 2;
+    this.damagePlayer(id, WRATH.mobDamage(p.maxHp), "The angry villagers", [Math.cos(a), Math.sin(a)], 0.6, { wrath: true });
+    if (p.dead) this.setOutlaw(id, p, false);
   }
 
   /** Press a slot key: use whatever skill is in that slot. */
@@ -2702,7 +2747,7 @@ export class TownRoom extends Room<TownState> {
   private damagePlayer(tid: string, dmg: number, byName: string, push: [number, number], kbMul = 1, opts: HitOpts = {}): boolean {
     const t = this.state.players.get(tid);
     const now = Date.now();
-    if (!t || t.dead || isSafeZone(t.x, t.y) || now < t.invulnUntil) return false;
+    if (!t || t.dead || (isSafeZone(t.x, t.y) && !opts.wrath) || now < t.invulnUntil) return false;
     // A counter stance (Riposte, Mirror Ice...) eats the hit and strikes back
     if (counterHit(this.host, tid, opts.from, dmg, opts)) return false;
     // Weakened monsters hit softer

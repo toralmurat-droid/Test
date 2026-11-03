@@ -18,6 +18,8 @@ import { SignPanel } from "./signpanel";
 import { NpcLayer } from "./npcs";
 import { Villagers } from "./villagers";
 import { WatchLayer } from "./watch";
+import { WrathBanner } from "./wrath";
+import { inVillage } from "../../shared/wrath";
 import { GateTorches } from "./gateTorches";
 import { QUEST_ITEMS } from "../../shared/quests";
 import { pixelText } from "./pixeltext";
@@ -189,6 +191,7 @@ export class TownScene extends Phaser.Scene {
   private npcs?: NpcLayer;
   private villagers?: Villagers;
   private watch?: WatchLayer;
+  private wrathBanner?: WrathBanner;
   private torches?: GateTorches;
   private chests?: ChestLayer;
   private shrine?: ShrineLayer;
@@ -814,6 +817,16 @@ export class TownScene extends Phaser.Scene {
       this.floatText(e.sprite.x, e.sprite.y - 22, id === this.me ? "Dizzy!" : "Broken!", "#ffd166");
     });
     this.room.onMessage("kill", ({ killer, victim }) => this.feed(`${killer} ⚔ ${victim}`));
+    // No magic in Oakvale (shared/wrath.ts): a hero cast a skill inside the village, or got out again
+    this.room.onMessage("wrath", ({ id, on, left, shout }) => {
+      const e = this.entities.get(id);
+      if (!on && !left) return; // the outlaw died: the death screen says it all
+      if (on && e) this.villagers?.shoutNear(e.sprite.x, e.sprite.y, shout);
+      if (id === this.me) {
+        (this.wrathBanner ??= new WrathBanner()).show(on, shout);
+        if (on) this.cameras.main.shake(300, 0.008);
+      } else if (e) this.floatText(e.sprite.x, e.sprite.y - 22, on ? "Outlaw!" : "Pardoned", on ? "#ff5252" : "#d8f0c0", PIXEL_FONT);
+    });
     // Our hero died: "You died - killed by <monster or player>" with a respawn countdown
     this.room.onMessage("died", ({ by, ms }) => {
       const el = document.getElementById("death")!;
@@ -1632,6 +1645,18 @@ export class TownScene extends Phaser.Scene {
     this.time.delayedCall(4000, () => { if (e.bubble === b) { b.destroy(); e.bubble = undefined; } });
   }
 
+  /** Where the outlaw heroes are (shared/wrath.ts): the townsfolk run at them. */
+  private outlawSpots(): { x: number; y: number }[] {
+    const out: { x: number; y: number }[] = [];
+    (this.room.state as any).players?.forEach((p: any, id: string) => {
+      if (!p.outlaw || p.dead) return;
+      const e = this.entities.get(id);
+      const x = e?.sprite.x ?? p.x, y = e?.sprite.y ?? p.y;
+      if (inVillage(x, y)) out.push({ x, y });
+    });
+    return out;
+  }
+
   /** Shows the area banner briefly whenever the player enters a new named area. */
   /** Level-up: the hero radiates a short burst of gold light (everyone nearby sees it); your own also shakes the screen. */
   private levelBurst(sprite: Phaser.GameObjects.Sprite, mine: boolean) {
@@ -1707,7 +1732,7 @@ export class TownScene extends Phaser.Scene {
     this.ambient?.update(this.time.now, dtMs);
     this.details?.update(this.time.now, dtMs);
     if (!this.room) return;
-    this.villagers?.update(dtMs);
+    this.villagers?.update(dtMs, this.outlawSpots());
     this.watch?.update(dtMs);
     this.torches?.update(this.time.now, (id) => !!this.watch?.striking(id));
     this.fx.update(dtMs);
