@@ -144,18 +144,25 @@ html, body { margin: 0; height: 100%; background: #1b1b24; color: #eee; font: 14
 .tbough { position: absolute; transform: translateX(-50%); font-size: 12px; font-weight: bold; padding: 1px 8px; background: #15151f;
   border: 2px solid currentColor; border-radius: 8px; }
 .tnode { position: absolute; transform: translate(-50%, -50%); width: 54px; height: 54px; padding: 1px; background: #15151f;
-  border: 3px solid #3a3d55; border-radius: 6px; cursor: pointer; font: inherit; }
-.tnode .nicon { width: 48px; height: 48px; display: block; image-rendering: pixelated; }
+  border: 3px solid #3a3d55; border-radius: 2px; cursor: pointer; font: inherit; --k: #4a4e6a;
+  /* pixel frame: dark rim outside, dark inner line, hard drop shadow */
+  box-shadow: 0 0 0 2px #0b0b12, 4px 4px 0 2px rgba(0,0,0,.45), inset 0 0 0 2px #0b0b12; }
+/* corner studs */
+.tnode::before { content: ""; position: absolute; inset: -5px; pointer-events: none; z-index: 1;
+  background: linear-gradient(var(--k), var(--k)) 0 0 / 6px 6px no-repeat, linear-gradient(var(--k), var(--k)) 100% 0 / 6px 6px no-repeat,
+    linear-gradient(var(--k), var(--k)) 0 100% / 6px 6px no-repeat, linear-gradient(var(--k), var(--k)) 100% 100% / 6px 6px no-repeat; }
+.tnode .nicon { width: 48px; height: 48px; display: block; image-rendering: pixelated; box-shadow: inset 0 0 0 1px #000; }
 .tnode.locked .nicon, .tnode.off .nicon { filter: grayscale(.85) brightness(.55); }
-.tnode.has, .tnode.max { border-color: var(--c); }
-.tnode.can { border-color: var(--c); box-shadow: 0 0 8px var(--c); animation: tpulse 1.2s ease-in-out infinite; }
-@keyframes tpulse { 50% { box-shadow: 0 0 2px var(--c); } }
+.tnode.has, .tnode.max, .tnode.can { border-color: var(--c); --k: #f2d27a; }
+.tnode.can { animation: tpulse 1.2s steps(3) infinite; }
+@keyframes tpulse { 50% { box-shadow: 0 0 0 2px #0b0b12, 4px 4px 0 2px rgba(0,0,0,.45), inset 0 0 0 2px #0b0b12, 0 0 0 5px var(--c); } }
 .tnode.locked, .tnode.off { cursor: default; }
 .tnode.ult { width: 60px; height: 60px; border-width: 4px; }
 .tnode.ult .nicon { width: 48px; height: 48px; margin: 2px; }
 .tnode.passive { border-radius: 50%; }
+.tnode.passive::before { display: none; }
 .tnode.passive .nicon { border-radius: 50%; }
-.tnode:hover { outline: 2px solid #fff; z-index: 2; }
+.tnode:hover { outline: 2px solid #fff; outline-offset: 2px; z-index: 2; }
 .tnode .pips { position: absolute; left: 50%; bottom: -9px; transform: translateX(-50%); display: flex; gap: 2px; padding: 1px 2px; background: #15151f; border-radius: 4px; }
 .tnode .pips i { width: 6px; height: 6px; border-radius: 50%; border: 1px solid #666; }
 .tnode .pips i.on { background: var(--c); border-color: var(--c); }
