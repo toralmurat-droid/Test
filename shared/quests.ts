@@ -376,12 +376,13 @@ const BZ = {
   quarry: zoneByName("Stonecrag Quarry"), ruins: zoneByName("Old Ruins"), tower: zoneByName("Old Watchtower"),
   barrow: zoneByName("Barrow Downs"), grave: zoneByName("Gravemoor Cemetery"), keep: zoneByName("Greywatch Keep"),
 };
-/** Half-built catapults at the Old Ruins (the skeletons' siege work sites). */
-export const ENGINES: QuestObject[] = [
-  obj("engine1", "engine", "Half-built catapult", "Burn", "Old Ruins", 0.25, 0.3),
-  obj("engine2", "engine", "Half-built catapult", "Burn", "Old Ruins", 0.75, 0.35),
-  obj("engine3", "engine", "Half-built catapult", "Burn", "Old Ruins", 0.5, 0.8),
-];
+/**
+ * The half-built siege engines at Stonecrag Quarry. Their real spots are the skeletons' work sites, which
+ * shared/siege.ts works out (it needs the chests, which need these quests, so it moves these objects onto the
+ * sites itself when it loads); the spots here are only a fallback.
+ */
+export const ENGINES: QuestObject[] = [0, 1, 2, 3].map((i) =>
+  obj(`engine${i + 1}`, "engine", "Half-built siege engine", "Burn", "Stonecrag Quarry", 0.2 + 0.6 * (i % 2), 0.3 + 0.4 * Math.floor(i / 2)));
 export const BEACON = obj("beacon", "beacon", "Green signal fire", "Douse", "Old Watchtower", 0.5, 0.62);
 /** The four crypts of Gravemoor (see the cemetery in shared/map.ts): the seal stands in each doorway. */
 export const CRYPTS: QuestObject[] = ([[189, 133], [209, 133], [189, 148], [209, 148]] as const)
@@ -427,23 +428,23 @@ export const BONE_QUESTS: QuestDef[] = [
     after: "Show those stones to Brann at the forge. If anyone knows siege work, he does.",
   },
   {
-    id: "engines", title: "Engines of the Dead", giver: "weaponsmith", zone: BZ.ruins.name, minLevel: 8,
-    description: `The dead are building catapults at ${BZ.ruins.name}. Brann wants their bone-wrights, the skeleton mages, put down and the engines burned before they are finished.`,
+    id: "engines", title: "Engines of the Dead", giver: "weaponsmith", zone: BZ.quarry.name, minLevel: 8,
+    description: `The dead are building siege engines in ${BZ.quarry.name}, and their bone-wrights, the skeleton mages of ${BZ.ruins.name}, bind them with dark magic. Brann wants the engines burned and the bone-wrights put down.`,
     offer: [
       "Hale sent you? Let me see those stones. Hmph. Sigil shot. The old marshals of Greywatch used this mark.",
-      `My cousin hunts past ${BZ.ruins.name}. He says the dead are hauling timber there. That means catapults.`,
-      "Their mages bind the beams with bone-magic: bone-wrights, we called them. Kill four, then burn the engines before they are done.",
+      `Stone shot means catapults. And the dead aren't only cutting stone in ${BZ.quarry.name}, they're building the engines right there. I've seen the timber from the road.`,
+      `Burn every engine before it's finished. Then go to ${BZ.ruins.name}: the mages there bind the beams with bone-magic. Bone-wrights, we called them. Kill four.`,
     ],
     acceptText: "I'll burn them",
     steps: [
-      { type: "kill", zone: BZ.ruins.name, kinds: ["skeletonmage"], goal: 4, text: "Slay 4 skeleton mages (the bone-wrights)",
-        banner: ["New quest", "Engines of the Dead"], obj: "Skeleton mages: {n} / {goal}",
-        nag: "{n} of {goal} bone-wrights. They hide in the graves, so watch your step." },
-      { type: "use", zone: BZ.ruins.name, objects: ENGINES, chest: false, text: `Burn the 3 catapults at ${BZ.ruins.name}`,
-        banner: ["The bone-wrights are down!", "Burn the catapults"], obj: "Catapults burned: {n} / {goal}",
-        nag: "{n} of {goal} engines burn. Walk up to one and press E." },
+      { type: "use", zone: BZ.quarry.name, objects: ENGINES, chest: false, text: `Burn the siege engines in ${BZ.quarry.name}`,
+        banner: ["New quest", "Engines of the Dead"], obj: "Siege engines burned: {n} / {goal}",
+        nag: "{n} of {goal} engines burn. Walk up to one and press E. The workers will drop their tools and come for you." },
+      { type: "kill", zone: BZ.ruins.name, kinds: ["skeletonmage"], goal: 4, text: `Slay 4 skeleton mages, the bone-wrights of ${BZ.ruins.name}`,
+        banner: ["The engines burn!", "Now slay 4 bone-wrights"], obj: "Skeleton mages: {n} / {goal}",
+        nag: `{n} of {goal} bone-wrights. They hide in the graves around ${BZ.ruins.name}, so watch your step.` },
       back("weaponsmith", "Brann", "his forge", [
-        "I could see the smoke from the forge. Good work.",
+        "I could see the smoke from the forge. Good work. And no more bone-wrights to rebuild them.",
         "But listen: an engine needs a target, and an army needs a commander. Somebody gives these bones their orders.",
         "Hale says the Old Watchtower has been burning green at night. Go and see him. Here, for your trouble.",
       ], "Claim reward"),
@@ -548,7 +549,7 @@ export const BONE_QUESTS: QuestDef[] = [
       { type: "use", zone: BZ.keep.name, objects: [PHYLACTERY], text: "Shatter the Marshal's phylactery", banner: ["His guard has fallen!", "Shatter the phylactery"],
         obj: "Shatter the phylactery", nag: "It stands before the great hall. Break it!" },
       { type: "kill", zone: BZ.keep.name, kinds: ["necromancer"], goal: 1,
-        summon: { parts: ["necromancer"], level: 22, title: "Vaeloth, the Pale Marshal", hpMult: 4, ...spotIn(BZ.keep.name, 0.5, 0.65) },
+        summon: { parts: ["necromancer"], level: 22, title: "Vaeloth, the Pale Marshal", hpMult: 3, ...spotIn(BZ.keep.name, 0.5, 0.65) },
         text: "Defeat Vaeloth, the Pale Marshal", banner: ["THE PALE MARSHAL RISES", "Defeat Vaeloth"], obj: "The Pale Marshal defeated: {n} / {goal}",
         nag: "He's out of his hall and he's angry. Finish him!" },
       back("captain", "Captain Hale", "east gate", [

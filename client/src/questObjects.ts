@@ -2,7 +2,10 @@ import Phaser from "phaser";
 import { CHAR_SCALE, CHAR_ORIGIN, playCharAnim } from "./artAssets";
 import { allObjects, cocoonPresent, objectDone, QuestObject, Quester, usableObjects, USE_RANGE } from "../../shared/quests";
 
+import "../../shared/siege"; // puts the quest's siege engines (ENGINES) on the skeletons' work sites
+
 type QuestState = Quester;
+import { TILE as TILE_PX } from "../../shared/constants";
 
 /**
  * Quest objects in the world (shared/quests.ts): spirit lanterns in the marsh, rotting shrines in the woods,
@@ -86,29 +89,7 @@ const HEART = [
   ".OOOOOOOOOOOOOOOOOO.",
 ];
 
-// Skeleton chain objects: half-built catapult, green signal brazier, crypt seal, the Pale Marshal's phylactery
-const ENGINE = [
-  "..................KK..",
-  ".................KWWK.",
-  "................KWLK..",
-  "...............KWLK...",
-  "..............KWLK....",
-  ".............KWLK.....",
-  "............KWLK......",
-  "...........KWLK.......",
-  "..KK......KWLK....KK..",
-  "..KWK....KWLK....KWK..",
-  "..KWLK..KWLK....KLWK..",
-  "..KWWLKKWLKBBK.KLWWK..",
-  "..KWKWLWLK.KBBKLWKWK..",
-  "..KWK.KWK...KBLWK.WK..",
-  "KKKKKKKKKKKKKKKKKKKKKK",
-  "KWWWWLWWWWWLWWWWWLWWWK",
-  "KKKKKKKKKKKKKKKKKKKKKK",
-  ".KIK..............KIK.",
-  "KIIIK............KIIIK",
-  ".KIK..............KIK.",
-];
+// Skeleton chain objects: green signal brazier, crypt seal, the Pale Marshal's phylactery (+ flames on burned siege engines)
 const BEACON = [
   ".....F....F.....",
   "....FF...FWF....",
@@ -163,9 +144,8 @@ const PHYLAC = [
 ];
 
 function textures(scene: Phaser.Scene) {
-  const bone = { K, W: WOOD, L: WOOD_L, B: 0xd8cfb8, I: IRON };
-  rowsTexture(scene, "qobj_engine", ENGINE, bone);
-  rowsTexture(scene, "qobj_engine_burnt", ENGINE, { K, W: 0x2a2224, L: 0x4a3a34, B: 0x6b625a, I: 0x2f3338 });
+  // The siege engines themselves are the skeletons' work-site props (siegeArt.ts): a burned one just gets flames
+  rowsTexture(scene, "qobj_engine_fire", BEACON.slice(0, 7), { F: 0xb8461f, W: 0xff8c42, Y: 0xffe08a });
   const br = { K, I: IRON, L: IRON_L };
   rowsTexture(scene, "qobj_beacon", BEACON, { ...br, F: 0x2f8f3a, W: 0x7dff6a, Y: 0xe8ffd0 });
   rowsTexture(scene, "qobj_beacon_out", BEACON.map((r, i) => (i < 7 ? r.replace(/[FWY]/g, ".") : r)), br);
@@ -190,10 +170,10 @@ function textures(scene: Phaser.Scene) {
 /** First look and size of each kind, and its look once done. */
 const START: Record<string, string> = {
   lantern: "qobj_lantern_off", shrine: "qobj_shrine_rot", heart: "qobj_heart",
-  engine: "qobj_engine", beacon: "qobj_beacon", crypt: "qobj_crypt", phylactery: "qobj_phylactery",
+  engine: "qobj_engine_fire", beacon: "qobj_beacon", crypt: "qobj_crypt", phylactery: "qobj_phylactery",
 };
-const DONE: Record<string, string> = { engine: "qobj_engine_burnt", beacon: "qobj_beacon_out", crypt: "qobj_crypt_sealed", phylactery: "qobj_phylactery_broken" };
-const SCALE: Record<string, number> = { heart: 2, shrine: 1.5, engine: 1.6, beacon: 1.4, crypt: 1.5, phylactery: 1.3 };
+const DONE: Record<string, string> = { engine: "qobj_engine_fire", beacon: "qobj_beacon_out", crypt: "qobj_crypt_sealed", phylactery: "qobj_phylactery_broken" };
+const SCALE: Record<string, number> = { heart: 2, shrine: 1.5, engine: 2.4, beacon: 1.4, crypt: 1.5, phylactery: 1.3 };
 /** Coloured light some objects give off until done. */
 const GLOW: Record<string, number> = { beacon: 0x7dff6a, crypt: 0x5fe36a, phylactery: 0x7dff6a };
 
@@ -218,6 +198,7 @@ export class QuestObjects {
       const key = START[o.kind];
       const img = scene.add.image(o.x, o.y, key).setOrigin(0.5, 1).setScale(SCALE[o.kind] ?? 1.4).setDepth(o.y);
       const d: Drawn = { o, img };
+      if (o.kind === "engine") { img.setVisible(false).setPosition(o.x, o.y - TILE_PX * 0.6).setDepth(o.y + 40); }
       if (GLOW[o.kind]) {
         d.glow = scene.add.circle(o.x, o.y - img.displayHeight * 0.6, 14, GLOW[o.kind], 0.22).setDepth(o.y + 1).setBlendMode(Phaser.BlendModes.ADD);
         scene.tweens.add({ targets: d.glow, scale: 1.3, alpha: 0.1, duration: 700, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
@@ -264,6 +245,11 @@ export class QuestObjects {
         d.glow?.setVisible(done);
       } else if (d.o.kind === "shrine") {
         d.img.setTexture(done ? "qobj_shrine_clean" : "qobj_shrine_rot");
+      } else if (d.o.kind === "engine") {
+        // flames on the engine once this player burned it (the engine itself is a world prop)
+        d.img.setVisible(done);
+        if (done) this.scene.tweens.add({ targets: d.img, scaleY: 2.8, scaleX: 2.2, duration: 260, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
+        else this.scene.tweens.killTweensOf(d.img);
       } else if (DONE[d.o.kind]) {
         d.img.setTexture(done ? DONE[d.o.kind] : START[d.o.kind]);
         d.glow?.setVisible(!done);
