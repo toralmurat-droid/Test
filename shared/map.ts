@@ -140,7 +140,7 @@ function buildWorld() {
   };
 
   /** Winding road through waypoints (Catmull-Rom spline), `w` tiles wide; bridges itself over water. */
-  const curve = (pts: [number, number][], w: number, t: number = T.DIRT) => {
+  const curve = (pts: [number, number][], w: number, t: number = T.DIRT, put: (x: number, y: number, u: number) => void = (x, y) => road(x, y, 1, 1, t)) => {
     const P = [pts[0], ...pts, pts[pts.length - 1]];
     let last: [number, number] | undefined;
     for (let i = 1; i < P.length - 2; i++) {
@@ -152,9 +152,10 @@ function buildWorld() {
         const x = c(p0[0], p1[0], p2[0], p3[0]), y = c(p0[1], p1[1], p2[1], p3[1]);
         const r = w / 2, cx = Math.round(x - r), cy = Math.round(y - r);
         // keep 1-wide paths 4-connected: a diagonal step gets a corner tile, so there is always a walkable way along
-        if (w === 1 && last && last[0] !== cx && last[1] !== cy) road(cx, last[1], 1, 1, t);
+        const along = (i - 1 + u) / (P.length - 3); // 0..1 along the whole curve
+        if (w === 1 && last && last[0] !== cx && last[1] !== cy) put(cx, last[1], along);
         last = [cx, cy];
-        each(cx, cy, w, w, (i2, j2) => road(i2, j2, 1, 1, t));
+        each(cx, cy, w, w, (i2, j2) => put(i2, j2, along));
       }
     }
   };
@@ -415,7 +416,32 @@ function buildWorld() {
   curve([[marsh.x + 2, 101], [32, 112], [38, 124], [mau.x + 4, mau.y + mau.h + 2]], 1);             // Barrow Road (from the marsh)
   curve([[mau.x + 4, mau.y + mau.h + 2], [60, 152], [74, 148], [lake.x - lake.rx - 4, lake.y]], 1); // Downs path, barrows ↔ lake
   curve([[ruins.x + 6, ruins.y], [156, 62], [168, 58], [keep.x - 6, keep.y + 8], [keep.x + 2, keep.y + 8]], 1); // Keep Road (past the Old Ruins)
-  curve([[lake.x + lake.rx + 4, lake.y - 2], [rc(144) - 6, 144], [rc(144) + 6, 144], [134, 132], [140, 112], [136, 92]], 1); // south bridge → woods path
+  // East of the lake (Murat 2026-11-03): a small makeshift bridge over the river, then a thin dirt trail that fades out
+  // in the Whispering Woods. From there only deer trails wind on through the trees, to the Keep, Gravemoor, Redfang Hollow and Saltmere.
+  curve([[lake.x + lake.rx + 4, lake.y - 2], [rc(144) - 6, 144], [rc(144) + 6, 144]], 1); // the makeshift bridge
+  const makeshift: { x: number; y: number }[] = [];
+  for (let x = rc(144) - 6; x <= rc(144) + 6; x++) if (ground[144][x] === T.BRIDGE) makeshift.push({ x, y: 144 });
+  /** A thin dirt trail: worn bare at first, then only patches in the grass, then nothing. Kept clear of trees. */
+  const fading = (x: number, y: number, u: number) => {
+    if (!inMap(x, y) || ground[y][x] === T.WATER || ground[y][x] === T.BRIDGE) return;
+    if (NATURE.has(objects[y][x])) setO(x, y, EMPTY);
+    if (hash(x, y, 201) < 1.15 - u * 1.25 && isGrass(ground[y][x])) setG(x, y, T.DIRT);
+    if (u < 0.45) roads.add(y * MAP_W + x);
+  };
+  /** A deer trail through the woods: no dirt, just a winding way between the trunks (bushes stay, you walk through them). */
+  const deer = (x: number, y: number) => {
+    if (!inMap(x, y) || ground[y][x] === T.WATER) return;
+    if (objects[y][x] !== T.BUSH && NATURE.has(objects[y][x])) setO(x, y, EMPTY);
+    if (isGrass(ground[y][x]) && hash(x, y, 204) < 0.22) setG(x, y, T.DIRT); // a bare, trodden patch now and then
+    for (const [i, j] of [[x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]]) // room to pass: thin the trunks beside it
+      if (inMap(i, j) && (objects[j][i] === T.TREE || objects[j][i] === T.PINE) && hash(i, j, 202) < 0.4) setO(i, j, hash(i, j, 203) < 0.5 ? T.BUSH : EMPTY);
+  };
+  curve([[rc(144) + 6, 144], [129, 139], [133, 134], [136, 130]], 1, T.DIRT, fading);
+  const WOODS_END: [number, number] = [136, 130];
+  curve([WOODS_END, [148, 126], [162, 121], [176, 118], [190, 119], [199, 121], [199, 124]], 1, T.DIRT, deer); // → Gravemoor (north gate)
+  curve([[176, 118], [196, 112], [218, 110], [232, 111], [239, 111]], 1, T.DIRT, deer);                     // → Redfang Hollow (west gate)
+  curve([[148, 126], [153, 110], [160, 94], [165, 78], [168, 62], [168, 59]], 1, T.DIRT, deer);              // → the Keep Road
+  curve([[133, 134], [139, 148], [143, 162], [148, 172], [148, 176]], 1, T.DIRT, deer);                     // → Saltmere
   curve([[tower.x + 4, tower.y], [160, 18], [176, 24], [glade.x - 5, glade.y]], 1);                   // Thornwood trail
   curve([[glade.x + 5, glade.y], [204, 30], [200, 40], [keep.x + keep.w - 1, keep.y + 8]], 1);       // down to the keep's postern
 
@@ -579,7 +605,7 @@ function buildWorld() {
   signpost(156, 61, ["Greywatch Keep", "Old Ruins", "Oakvale"]);                                    // keep road
   signpost(tower.x + 12, 20, ["Thornwood", "Old Watchtower", "Oakvale"]);                            // into the Thornwood
   signpost(202, 42, ["Greywatch Keep", "Thornwood"]);
-  signpost(rc(144) + 9, 142, ["Sunken Lake", "Old Ruins", "Stonecrag Quarry"]);
+  signpost(rc(144) + 8, 142, ["Sunken Lake", "Stonecrag Quarry"]);
   signpost(salt.x - 2, lane - 1, ["Saltmere", "Sunken Lake"]);                                       // Saltmere's west end
   signpost(band.x + 7, band.y - 6, ["Redfang Hollow", "Greywatch Keep"]);               // bandit trail
   signpost(salt.x + salt.w + 1, lane - 1, ["Saltmere", "Redfang Hollow"]);                         // Saltmere's east end
@@ -612,6 +638,23 @@ function buildWorld() {
     if (ground[y][x] !== T.BRIDGE) continue;
     const b = (i: number, j: number) => inMap(i, j) && ground[j][i] === T.BRIDGE;
     if (!b(x - 1, y) && !b(x + 1, y) && !b(x, y - 1) && !b(x, y + 1)) setG(x, y, T.DIRT);
+  }
+
+  // ---------- 13b. Broken bridges (Murat 2026-11-03): the spans to the Old Ruins and the Old Watchtower have fallen in
+  // halfway across, so new heroes can't wander straight into the high-level zones. The quarry bridge further south
+  // still stands, so the ruins (and the woodland path on to the watchtower) can still be reached the long way round.
+  const broken: { x: number; y: number }[] = [];
+  for (const by of [17, 61]) {
+    const cx = rc(by);
+    let x0 = cx - 6;
+    while (x0 < cx + 6 && ground[by][x0] !== T.BRIDGE) x0++;
+    let x1 = x0;
+    while (ground[by][x1 + 1] === T.BRIDGE) x1++;
+    if (ground[by][x0] !== T.BRIDGE) continue;
+    const gx = x0 + Math.floor((x1 - x0 + 1) / 2); // walk at most half the span, then the planks are gone
+    setG(gx, by, T.WATER);
+    roads.delete(by * MAP_W + gx);
+    broken.push({ x: gx, y: by });
   }
 
   // ---------- 14. Reachability: carve through nature to any pocket the player can't reach ----------
@@ -691,13 +734,17 @@ function buildWorld() {
     { name: "River Ashwell", x: riverCenter(60) - 6, y: 0, w: 12, h: MAP_H },
     { name: "Whispering Woods", x: woodsX - 2, y: 0, w: MAP_W - woodsX + 2, h: 184, mobs: ["slime"] },
   ];
-  return { ground, objects, areas, posts, roads };
+  return { ground, objects, areas, posts, roads, broken, makeshift };
 }
 
 export const WORLD = buildWorld();
 export const GROUND = WORLD.ground;
 export const OBJECTS = WORLD.objects;
 export const AREAS = WORLD.areas;
+/** Water tiles where a bridge span has collapsed (the broken bridges to the Old Ruins and the Old Watchtower). */
+export const BROKEN_BRIDGES = WORLD.broken;
+/** Tiles of the small makeshift bridge east of the Sunken Lake (narrow, no railings). */
+export const MAKESHIFT_BRIDGES = WORLD.makeshift;
 
 /** A readable signpost: arrows from the post towards each named place. */
 /**
