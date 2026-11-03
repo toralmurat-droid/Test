@@ -1,5 +1,5 @@
 import { TILE } from "./constants";
-import { ROADS } from "./map";
+import { ROADS, WRECK } from "./map";
 
 /** Village NPCs: where they stand (feet, in pixels) and which sprite sheet they use. Server and client share this. */
 export interface Npc {
@@ -48,6 +48,8 @@ export const NPC_DECOR: NpcDecor[] = [
 /** True if (px, py) is inside one of the NPC props that block movement. */
 export function isDecorSolidAt(px: number, py: number): boolean {
   const tx = px / TILE, ty = py / TILE;
+  const w = WRECK.solid;
+  if (tx >= w[0] && ty >= w[1] && tx < w[0] + w[2] && ty < w[1] + w[3]) return true; // the Grey Heron's hull
   for (const d of NPC_DECOR) {
     const r = d.solid;
     if (r && tx >= r[0] && ty >= r[1] && tx < r[0] + r[2] && ty < r[1] + r[3]) return true;

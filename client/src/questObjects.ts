@@ -9,7 +9,7 @@ import { TILE as TILE_PX } from "../../shared/constants";
 
 /**
  * Quest objects in the world (shared/quests.ts): spirit lanterns in the marsh, rotting shrines in the woods,
- * Tobin's blob cocoon at the lake and the Brood Heart in Thornwood. Each is drawn per player: a lantern you
+ * Tobin's blob cocoon at the lake and the Brood Heart in the wreck on Heronwreck Strand. Each is drawn per player: a lantern you
  * lit stays lit for you, the cocoon is gone once you freed Tobin.
  */
 

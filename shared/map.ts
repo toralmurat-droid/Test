@@ -58,6 +58,13 @@ export const BARNS = [{ x: 14, y: 38, w: 9, h: 6, door0: 17, door1: 19 }];
 export const REDFANG = { x: 240, y: 102, w: 24, h: 18 };
 export const REDFANG_TOWERS: [number, number][] = [[254, 103], [249, 118], [241, 108]];
 
+/**
+ * The wreck of the Grey Heron on Heronwreck Strand (west coast): the ship that carried the Gloam and broke on the
+ * shore, letting it loose on the valley (blob quest chain, shared/quests.ts). `x, y` = the foot of the hull sprite
+ * (tile, drawn by client/src/worldProps.ts), `solid` = the hull's blocking rect in tiles (x, y, w, h).
+ */
+export const WRECK = { x: 27, y: 195, solid: [25, 194.3, 5.2, 1.1] as [number, number, number, number] };
+
 export const SAFE_ZONE = { x: 74, y: 55, w: 13, h: 11 };
 
 /** Column of the river's center for a given row (River Ashwell, east of the village). */
@@ -521,6 +528,23 @@ function buildWorld() {
   }
   curve([[gcx, grave.y + grave.h], [gcx + 2, grave.y + grave.h + 6], [204, 167], [208, 169]], 1);  // Gravemoor Lane (to the Smugglers' Path)
 
+  // ---------- 12a3. The west coast: Brinewood and Heronwreck Strand (the end of the Gloam's story) ----------
+  // Brinewood: a salt-stunted pine wood behind the dunes, where the druids raised their last binding shrines
+  const brine = { x: 4, y: 158, w: 50, h: 26 };
+  each(brine.x, brine.y, brine.w, brine.h, (x, y) => {
+    if (ground[y][x] === T.WATER || ground[y][x] === T.SAND) return;
+    if (isGrass(ground[y][x])) setG(x, y, noise(x, y, 6, 191) > 0.66 ? T.TALL_GRASS : T.GRASS_DARK);
+    if (objects[y][x] === T.TREE || (objects[y][x] === EMPTY && hash(x, y, 192) < 0.2 * (0.4 + noise(x, y, 7, 194)))) setO(x, y, T.PINE);
+  });
+  // Heronwreck Strand: the beach where the Grey Heron broke up. Driftwood and her spilled cargo lie along the sand.
+  const strand = { x: 0, y: 184, w: 66, h: MAP_H - 184 };
+  clearO(WRECK.x - 6, WRECK.y - 4, 13, 7);
+  each(WRECK.x - 7, WRECK.y - 5, 15, 7, (x, y) => { if (ground[y][x] !== T.WATER && hash(x, y, 193) < 0.75) setG(x, y, T.SAND); });
+  for (const [ox, oy, t] of [[WRECK.x - 5, WRECK.y - 3, T.BARREL], [WRECK.x - 4, WRECK.y - 3, T.CRATE], [WRECK.x + 5, WRECK.y - 3, T.BARREL],
+    [WRECK.x + 6, WRECK.y - 2, T.CRATE], [WRECK.x - 9, WRECK.y - 1, T.BARREL], [WRECK.x + 12, WRECK.y - 2, T.CRATE], [WRECK.x - 14, WRECK.y - 3, T.STUMP]] as const)
+    if (inMap(ox, oy) && ground[oy][ox] !== T.WATER) setO(ox, oy, t);
+  curve([[mau.x + 4, mau.y + mau.h + 2], [42, 160], [34, 170], [30, 180], [WRECK.x, WRECK.y - 4]], 1); // Wreck Trail (barrows → Brinewood → the strand)
+
   // ---------- 12b. Signposts at the gates and road junctions (directions are worked out in SIGNPOSTS) ----------
   const posts: { x: number; y: number; to: string[] }[] = [];
   /** Puts a signpost on the nearest free tile beside (not on) a road, within 3 tiles of (x, y). */
@@ -551,6 +575,7 @@ function buildWorld() {
   signpost(98, 116, ["Sunken Lake", "Stonecrag Quarry", "Oakvale"]);                                // lake road
   signpost(33, 112, ["Barrow Downs", "Misty Marsh", "Oakvale"]);                                    // barrow road
   signpost(62, 151, ["Barrow Downs", "Sunken Lake"]);                                               // downs path
+  signpost(44, 157, ["Brinewood", "Heronwreck Strand", "Barrow Downs"]);                            // wreck trail
   signpost(156, 61, ["Greywatch Keep", "Old Ruins", "Oakvale"]);                                    // keep road
   signpost(tower.x + 12, 20, ["Thornwood", "Old Watchtower", "Oakvale"]);                            // into the Thornwood
   signpost(202, 42, ["Greywatch Keep", "Thornwood"]);
@@ -660,7 +685,9 @@ function buildWorld() {
     { name: "Gravemoor Cemetery", x: grave.x - 3, y: grave.y - 3, w: grave.w + 6, h: grave.h + 6, mobs: ["skeleton", "skeletonmage", "necromancer"] },
     { name: "Saltmere", ...salt },
     { name: "Redfang Hollow", x: band.x - 4, y: band.y - 4, w: band.w + 8, h: band.h + 8, mobs: ["bandit"] },
-    { name: "Saltwind Coast", x: 0, y: 184, w: MAP_W, h: MAP_H - 184, mobs: ["slime"] },
+    { name: "Brinewood", ...brine, mobs: ["slime"] },
+    { name: "Heronwreck Strand", ...strand, mobs: ["slime"] },
+    { name: "Saltwind Coast", x: strand.x + strand.w, y: 184, w: MAP_W - strand.x - strand.w, h: MAP_H - 184, mobs: ["slime"] },
     { name: "River Ashwell", x: riverCenter(60) - 6, y: 0, w: 12, h: MAP_H },
     { name: "Whispering Woods", x: woodsX - 2, y: 0, w: MAP_W - woodsX + 2, h: 184, mobs: ["slime"] },
   ];
