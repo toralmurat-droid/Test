@@ -36,6 +36,8 @@ import { SMOOTH } from "./isoflag";
 import { addPixelGrid } from "./pixelgrid";
 import { paintSmoothProps } from "./smoothProps";
 import { ChestLayer } from "./chests";
+import { ShrineLayer } from "./shrine";
+import { BOON_NAMES, WIND_BLESSING } from "../../shared/shrine";
 import { addWorldProps } from "./worldProps";
 import { addSiegeWorks } from "./siegeArt";
 import { SiegeWork } from "./siegeWork";
@@ -136,6 +138,7 @@ export class TownScene extends Phaser.Scene {
   private villagers?: Villagers;
   private watch?: WatchLayer;
   private chests?: ChestLayer;
+  private shrine?: ShrineLayer;
   private chatEl = document.getElementById("chat") as HTMLInputElement;
   private ideaBoard?: IdeaBoard;
   private intro?: IntroPanel;
@@ -238,6 +241,7 @@ export class TownScene extends Phaser.Scene {
     this.input.keyboard!.on("keydown-E", () => {
       if (this.chatting()) return;
       if (!this.npcs?.isOpen && this.chests?.interact()) return; // a loot chest right here comes first
+      if (!this.npcs?.isOpen && this.shrine?.interact()) return; // then the forest shrine
       this.npcs?.interact();
     });
     this.input.keyboard!.on("keydown-J", () => {
@@ -306,6 +310,18 @@ export class TownScene extends Phaser.Scene {
     this.room.onMessage("chestopen", ({ id, refill }) => this.chests?.opened(id, refill));
     this.room.onMessage("chestlocked", () => {}); // the prompt already says why
     this.room.send("chests"); // which chests this account already emptied
+    // The Whispering Woods shrine: one for everyone, spent for a while after each prayer
+    this.shrine = new ShrineLayer(this, (type, msg) => this.room.send(type, msg), PIXEL_FONT);
+    this.room.onMessage("shrine", ({ left, by, boon }) => {
+      this.shrine?.setLeft(left);
+      if (!boon) return;
+      this.shrine?.used();
+      const e = this.entities.get(by);
+      if (!e) return;
+      const text = boon === "speed" ? `${BOON_NAMES.speed} (${Math.round(WIND_BLESSING.ms / 1000)}s)` : boon === "heal" ? `${BOON_NAMES.heal}!` : `${BOON_NAMES.xp}!`;
+      this.floatText(e.sprite.x, e.sprite.y - 22, text, "#9cf3dc", PIXEL_FONT);
+    });
+    this.room.send("shrine"); // is the shrine spent right now?
     // First login of this hero: a short how-to-play panel, never shown again once closed
     this.intro = new IntroPanel(() => this.room?.send("introseen"));
     this.room.onMessage("intro", () => { this.closeMenus(); this.intro?.show(); });
@@ -1638,7 +1654,8 @@ export class TownScene extends Phaser.Scene {
       (this.room.state as any).mobs.forEach((m: any) => { if (m.guard && !m.dead) guards.set(m.guard, (guards.get(m.guard) ?? 0) + 1); });
       this.chests.update(meEnt && !meEnt.state.dead ? meEnt.sprite : undefined, !!this.npcs?.isOpen, meEnt?.state, (cid) => guards.get(cid) ?? 0);
     }
-    if (this.npcs) this.npcs.hidePrompt = !!this.chests?.near;
+    this.shrine?.update(meEnt && !meEnt.state.dead && !this.chests?.near ? meEnt.sprite : undefined, !!this.npcs?.isOpen);
+    if (this.npcs) this.npcs.hidePrompt = !!this.chests?.near || !!this.shrine?.near;
     this.npcs?.update(meEnt && !meEnt.state.dead ? meEnt.sprite : undefined, meEnt?.state);
     if (this.minimap && this.npcs) this.minimap.markers = this.npcs.markers;
 

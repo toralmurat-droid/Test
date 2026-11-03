@@ -1085,6 +1085,12 @@ export class SkillFx {
         g.fillStyle(0xff8a80).fillRect(xs - 0.5, sy - 0.5, 1.5, 1.5);
       } else if (w === "weak") {
         if (chance(6)) this.p(x + rnd(-5, 5), y, top, pick(PALETTE.shadow), { vz: -12, life: 500, size: 1, add: false });
+      } else if (w === "shrine_wind") {
+        // Blessing of the Wind (forest shrine): pale green-blue gusts swirling round the feet and trailing behind
+        if (chance(20)) {
+          const a = this.t / 160 + Math.random() * 6;
+          this.p(x + Math.cos(a) * 7, y + Math.sin(a) * 3, rnd(0, 5), pick([0x9cf3dc, 0x52dcc2, 0xe2fff4]), { vz: rnd(4, 14), vx: -Math.sin(a) * 18, vy: Math.cos(a) * 8, life: rnd(300, 520), size: 1, size1: 0 });
+        }
       } else if (w === "charge") {
         // handled by the gather effect
       } else if (w.startsWith("counter:")) {
