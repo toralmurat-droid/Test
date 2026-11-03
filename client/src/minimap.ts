@@ -2,10 +2,14 @@ import { MAP_H, MAP_W, TILE } from "../../shared/constants";
 import { AREAS, EMPTY, GROUND, OBJECTS } from "../../shared/map";
 import { createTilesetCanvas, tileColors } from "./tileset";
 import { ISO } from "./isoflag";
+import { pixelText } from "./pixeltext";
+import { clasp, frameBorderImage, plaque, FRAME } from "./mapframe";
 
 const VIEW_W = 56, VIEW_H = 56; // tiles shown around the player on the (round) minimap
 const PX = 3; // minimap canvas pixels per tile (56x56 tiles -> 168x168)
-const BIG = 5; // world map canvas pixels per tile
+const MIN_VIEW = 24; // minimap zoom when almost nothing is explored (tiles across)
+const MAP_PAD = 6; // fog tiles kept around the explored area on the world map
+const PF = '"Pixelify Sans", monospace';
 const REVEAL = 9; // tiles around the player that become discovered
 const FADE = 3; // soft edge of the discovered area, in tiles
 const FOG = "#15151d";
@@ -32,6 +36,9 @@ export class Minimap {
   private overlay: HTMLDivElement;
   private big: HTMLCanvasElement;
   private key: string;
+  /** Bounding box of everything discovered so far (tiles, inclusive); the maps only frame this. */
+  private bx0 = MAP_W; private by0 = MAP_H; private bx1 = -1; private by1 = -1;
+  private view = MIN_VIEW; // tiles currently shown across the minimap (eases towards the explored size)
   /** Quest and NPC markers, set by the NPC layer every frame. */
   markers: MapMarker[] = [];
 
@@ -52,15 +59,26 @@ export class Minimap {
     }
     this.fogCtx = this.fog.getContext("2d")!;
     this.load();
+    for (let y = 0; y < MAP_H; y++) for (let x = 0; x < MAP_W; x++) if (this.seen[y * MAP_W + x]) this.grow(x, y);
+    this.view = this.targetView();
     this.paintFog(0, 0, MAP_W, MAP_H);
 
     // Big world map overlay
     this.overlay = document.createElement("div");
     this.overlay.id = "worldmap";
-    this.overlay.innerHTML = `<div class="wm-box"><div class="wm-title">Map of Oakvale</div><canvas></canvas><div class="wm-hint">Click or press M / Esc to close</div></div>`;
+    this.overlay.innerHTML = `<div class="wm-box"><div class="wm-title"></div><canvas class="wm-map"></canvas><div class="wm-hint">Click or press M / Esc to close</div></div>`;
     this.big = this.overlay.querySelector("canvas")!;
-    this.big.width = MAP_W * BIG;
-    this.big.height = MAP_H * BIG;
+    // Ornate frame: iron-bound oak with gem corners, a title plaque on top and clasps on the sides
+    const box = this.overlay.querySelector<HTMLDivElement>(".wm-box")!;
+    box.style.borderImage = frameBorderImage();
+    box.style.borderWidth = `${FRAME * 3}px`;
+    const title = pixelText("Map of Oakvale", "#e8c27a", 11, 2);
+    const plate = plaque(title.width * 2, title.height * 2);
+    const tbox = this.overlay.querySelector<HTMLDivElement>(".wm-title")!;
+    tbox.append(plate, title);
+    const l = clasp(true), r = clasp(true), bt = clasp(false);
+    l.classList.add("wm-l"); r.classList.add("wm-r"); bt.classList.add("wm-b");
+    box.append(l, r, bt);
     document.body.appendChild(this.overlay);
     this.overlay.addEventListener("click", () => this.toggle(false));
     el.addEventListener("click", () => this.toggle(true));
@@ -125,6 +143,27 @@ export class Minimap {
     this.fogCtx.putImageData(img, x0, y0);
   }
 
+  private grow(x: number, y: number) {
+    if (x < this.bx0) this.bx0 = x; if (x > this.bx1) this.bx1 = x;
+    if (y < this.by0) this.by0 = y; if (y > this.by1) this.by1 = y;
+  }
+
+  /** Minimap zoom: shows a little more than the explored area, up to VIEW_W tiles across. */
+  private targetView() {
+    const ext = Math.max(this.bx1 - this.bx0, this.by1 - this.by0) + 1;
+    return Math.max(MIN_VIEW, Math.min(VIEW_W, ext * 0.6 + 8));
+  }
+
+  /** Part of the world shown on the opened map: the explored area plus a fog margin. */
+  private region() {
+    if (this.bx1 < 0) return { x: 0, y: 0, w: MAP_W, h: MAP_H };
+    let w = Math.max(36, this.bx1 - this.bx0 + 1 + MAP_PAD * 2), hh = Math.max(28, this.by1 - this.by0 + 1 + MAP_PAD * 2);
+    w = Math.min(w, MAP_W); hh = Math.min(hh, MAP_H);
+    const cx = (this.bx0 + this.bx1 + 1) / 2, cy = (this.by0 + this.by1 + 1) / 2;
+    const x = Math.max(0, Math.min(MAP_W - w, Math.round(cx - w / 2))), y = Math.max(0, Math.min(MAP_H - hh, Math.round(cy - hh / 2)));
+    return { x, y, w, h: hh };
+  }
+
   /** Marks the tiles around the player as discovered. */
   private reveal(tx: number, ty: number) {
     const r = REVEAL + FADE;
@@ -134,7 +173,7 @@ export class Minimap {
       const d = Math.hypot(x - tx, y - ty);
       const v = d <= REVEAL ? 255 : d < r ? Math.round(255 * (1 - (d - REVEAL) / FADE)) : 0;
       const k = y * MAP_W + x;
-      if (v > this.seen[k]) { this.seen[k] = v; changed = true; }
+      if (v > this.seen[k]) { this.seen[k] = v; changed = true; this.grow(x, y); }
     }
     if (changed) { this.paintFog(x0, y0, x1 - x0 + 1, y1 - y0 + 1); this.dirty = true; }
   }
@@ -151,20 +190,25 @@ export class Minimap {
     const c = ISO ? this.flat!.getContext("2d")! : this.ctx;
     c.imageSmoothingEnabled = false;
     const cx = me ? me.x / TILE : MAP_W / 2, cy = me ? me.y / TILE : MAP_H / 2;
+    // The minimap zooms out as more of the world is discovered, so the world's size isn't given away at the start.
+    const tv = this.targetView();
+    this.view += (tv - this.view) * 0.08;
+    if (Math.abs(tv - this.view) < 0.05) this.view = tv;
+    const mpx = this.el.width / this.view; // canvas pixels per tile right now
     // the player always sits in the middle of the round minimap; beyond the map edge is fog
-    const sx = Math.round(cx - VIEW_W / 2), sy = Math.round(cy - VIEW_H / 2);
+    const sx = cx - this.view / 2, sy = cy - this.view / 2;
     c.fillStyle = FOG;
     c.fillRect(0, 0, this.el.width, this.el.height);
-    c.drawImage(this.colors, -sx * PX, -sy * PX, MAP_W * PX, MAP_H * PX);
-    c.drawImage(this.fog, -sx * PX, -sy * PX, MAP_W * PX, MAP_H * PX);
+    c.drawImage(this.colors, -sx * mpx, -sy * mpx, MAP_W * mpx, MAP_H * mpx);
+    c.drawImage(this.fog, -sx * mpx, -sy * mpx, MAP_W * mpx, MAP_H * mpx);
     const dot = (g: CanvasRenderingContext2D, p: P, s: number, ox: number, oy: number, color: string, r: number) => {
       g.fillStyle = color;
       g.fillRect(Math.round((p.x / TILE - ox) * s) - r, Math.round((p.y / TILE - oy) * s) - r, r * 2, r * 2);
     };
     const known = (p: P) => this.seen[Math.floor(p.y / TILE) * MAP_W + Math.floor(p.x / TILE)] > 128;
-    for (const o of others) if (known(o)) dot(c, o, PX, sx, sy, "#fff", 2);
-    this.drawMarkers(c, PX, sx, sy, true);
-    if (me) { dot(c, me, PX, sx, sy, "#000", 3); dot(c, me, PX, sx, sy, "#ffd166", 2); }
+    for (const o of others) if (known(o)) dot(c, o, mpx, sx, sy, "#fff", 2);
+    this.drawMarkers(c, mpx, sx, sy, true);
+    if (me) { dot(c, me, mpx, sx, sy, "#000", 3); dot(c, me, mpx, sx, sy, "#ffd166", 2); }
     if (ISO) {
       const o = this.ctx, w = this.el.width, h = this.el.height;
       o.fillStyle = FOG; o.fillRect(0, 0, w, h);
@@ -174,13 +218,21 @@ export class Minimap {
 
     // World map (only while open)
     if (!this.isOpen) return;
+    // Only the explored part (plus a fog margin) is framed, so the map grows as the world is discovered.
+    const R = this.region();
+    const maxW = Math.min(960, window.innerWidth - 32 - FRAME * 6 - 24), maxH = window.innerHeight - 32 - FRAME * 6 - 90;
+    const BIG = Math.max(2, Math.min(16, Math.floor(Math.min(maxW / R.w, maxH / R.h))));
+    if (this.big.width !== R.w * BIG || this.big.height !== R.h * BIG) {
+      this.big.width = R.w * BIG; this.big.height = R.h * BIG;
+      this.big.style.width = `${R.w * BIG}px`; this.big.style.height = `${R.h * BIG}px`;
+    }
     const g = this.big.getContext("2d")!;
     g.imageSmoothingEnabled = false;
     g.fillStyle = FOG;
     g.fillRect(0, 0, this.big.width, this.big.height);
-    g.drawImage(this.colors, 0, 0, MAP_W * BIG, MAP_H * BIG);
-    g.drawImage(this.fog, 0, 0, MAP_W * BIG, MAP_H * BIG);
-    g.font = "bold 13px monospace";
+    g.drawImage(this.colors, -R.x * BIG, -R.y * BIG, MAP_W * BIG, MAP_H * BIG);
+    g.drawImage(this.fog, -R.x * BIG, -R.y * BIG, MAP_W * BIG, MAP_H * BIG);
+    g.font = `13px ${PF}`;
     g.textAlign = "center";
     const named = new Set<string>();
     const boxes: [number, number, number][] = [];
@@ -188,16 +240,16 @@ export class Minimap {
       if (named.has(a.name) || a.w * a.h > 2500) continue; // skip the huge background regions
       const ax = Math.floor(a.x + a.w / 2), ay = Math.floor(a.y + a.h / 2);
       if (this.seen[ay * MAP_W + ax] < 200) continue;
-      const lx = ax * BIG, ly = ay * BIG, half = (a.name.length * 8) / 2 + 4;
+      const lx = (ax - R.x) * BIG, ly = (ay - R.y) * BIG, half = g.measureText(a.name).width / 2 + 4;
       if (boxes.some(([bx, by, bh]) => Math.abs(by - ly) < 16 && Math.abs(bx - lx) < bh + half)) continue; // don't overlap labels
       boxes.push([lx, ly, half]);
       named.add(a.name);
-      g.fillStyle = "#000"; g.fillText(a.name, ax * BIG + 1, ay * BIG + 1);
-      g.fillStyle = "#ffe8a3"; g.fillText(a.name, ax * BIG, ay * BIG);
+      g.fillStyle = "#000"; g.fillText(a.name, lx + 1, ly + 1);
+      g.fillStyle = "#ffe8a3"; g.fillText(a.name, lx, ly);
     }
-    for (const o of others) if (known(o)) dot(g, o, BIG, 0, 0, "#fff", 3);
-    this.drawMarkers(g, BIG, 0, 0, false);
-    if (me) { dot(g, me, BIG, 0, 0, "#000", 6); dot(g, me, BIG, 0, 0, "#ffd166", 4); }
+    for (const o of others) if (known(o)) dot(g, o, BIG, R.x, R.y, "#fff", 3);
+    this.drawMarkers(g, BIG, R.x, R.y, false);
+    if (me) { dot(g, me, BIG, R.x, R.y, "#000", 6); dot(g, me, BIG, R.x, R.y, "#ffd166", 4); }
   }
 
   /**
@@ -232,7 +284,7 @@ export class Minimap {
       }
       if (m.glyph) {
         const size = mini ? (m.track ? 14 : 11) : (m.track ? 18 : 14);
-        g.font = `bold ${size}px monospace`; g.textAlign = "center"; g.textBaseline = "middle";
+        g.font = `bold ${size}px ${PF}`; g.textAlign = "center"; g.textBaseline = "middle";
         g.save(); g.translate(x, y);
         if (mini && ISO) g.rotate(-Math.PI / 4); // stays upright once the iso minimap is turned
         g.lineWidth = 3; g.strokeStyle = "#000"; g.strokeText(m.glyph, 0, 0);
@@ -240,7 +292,7 @@ export class Minimap {
         g.restore();
       }
       if (!mini && m.label && (m.track || m.r)) {
-        g.font = "bold 11px monospace"; g.textAlign = "center"; g.textBaseline = "alphabetic";
+        g.font = `11px ${PF}`; g.textAlign = "center"; g.textBaseline = "alphabetic";
         g.fillStyle = "#000"; g.fillText(m.label, x + 1, y + (m.r ? 4 : 18) + 1);
         g.fillStyle = m.color; g.fillText(m.label, x, y + (m.r ? 4 : 18));
       }
