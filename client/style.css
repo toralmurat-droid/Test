@@ -68,6 +68,18 @@ html, body { margin: 0; height: 100%; background: #1b1b24; color: #eee; font: 14
 #play { width: 100%; padding: 10px; font: inherit; font-weight: bold; background: #06d6a0; border: 0; cursor: pointer; }
 .help { color: #aaa; font-size: 12px; }
 #status { color: #ef476f; min-height: 1em; }
+#savepick, #savepick button { font-family: 'Pixelify Sans', monospace; -webkit-font-smoothing: none; }
+#savepick { width: min(420px, 100%); }
+#savepick h2 { margin: 0 0 8px; font-size: 22px; color: #ffd166; text-shadow: 2px 2px #000; }
+#savepick .help { font-size: 14px; color: #c9b89a; }
+#savebtns { display: grid; gap: 10px; margin: 16px 0 8px; }
+#savebtns button { padding: 12px; font-size: 17px; border: 3px solid #000; cursor: pointer; color: #111; box-shadow: inset -3px -3px rgba(0,0,0,.25), inset 3px 3px rgba(255,255,255,.25); }
+#savebtns button small { display: block; font-size: 13px; opacity: .8; }
+#savebtns .cont { background: #06d6a0; }
+#savebtns .fresh { background: #e9c46a; }
+#savebtns .danger { background: #ef476f; color: #fff; }
+#savebtns .plain { background: #555a7a; color: #eee; }
+#savepick .savelink { background: none; border: 0; color: #aaa; font-size: 14px; cursor: pointer; text-decoration: underline; }
 #hud { position: fixed; inset: 0; pointer-events: none; z-index: 5; }
 #hpbar { position: absolute; top: 12px; left: 12px; width: 200px; height: 16px; background: #400; border: 2px solid #000; }
 #hpfill { height: 100%; width: 100%; background: #e63946; transition: width .25s linear; }

@@ -149,7 +149,7 @@ export class TownScene extends Phaser.Scene {
   private deathTimer?: number;
   private iso?: IsoView;
 
-  constructor(private opts: { name: string; password: string; color: number; cls: ClassKind }) {
+  constructor(private opts: { name: string; password: string; color: number; cls: ClassKind; newGame?: boolean }) {
     super("town");
   }
 
