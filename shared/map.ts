@@ -60,9 +60,19 @@ export const SHRINE_SPOT = { x: 226, y: 73 };
 export const REDFANG = { x: 240, y: 102, w: 24, h: 18 };
 export const REDFANG_TOWERS: [number, number][] = [[254, 103], [249, 118], [241, 108]];
 
+/**
+ * The wreck of the Grey Heron on Heronwreck Strand (west coast): the ship that carried the Gloam and broke on the
+ * shore, letting it loose on the valley (blob quest chain, shared/quests.ts). `x, y` = the foot of the hull sprite
+ * (tile, drawn by client/src/worldProps.ts), `solid` = the hull's blocking rect in tiles (x, y, w, h).
+ */
+export const WRECK = { x: 27, y: 195, solid: [25, 194.3, 5.2, 1.1] as [number, number, number, number] };
+
 export const SAFE_ZONE = { x: 74, y: 55, w: 13, h: 11 };
 
 /** Column of the river's center for a given row (River Ashwell, east of the village). */
+/** Gullrock Cove: a fishers' smokehouse on a little bay east of Saltmere, burned and pillaged by Redfang raiders (Redfang quest chain). */
+export const GULLROCK = { x: 178, y: 182, w: 28, h: 12 };
+
 export const riverCenter = (y: number) => Math.round(118 + 3 * Math.sin(y / 11) + 1.5 * Math.sin(y / 5));
 
 /** Objects you can walk through (purely decorative, drawn over the player when they stand behind them). */
@@ -135,7 +145,7 @@ function buildWorld() {
   };
 
   /** Winding road through waypoints (Catmull-Rom spline), `w` tiles wide; bridges itself over water. */
-  const curve = (pts: [number, number][], w: number, t: number = T.DIRT) => {
+  const curve = (pts: [number, number][], w: number, t: number = T.DIRT, put: (x: number, y: number, u: number) => void = (x, y) => road(x, y, 1, 1, t)) => {
     const P = [pts[0], ...pts, pts[pts.length - 1]];
     let last: [number, number] | undefined;
     for (let i = 1; i < P.length - 2; i++) {
@@ -147,9 +157,10 @@ function buildWorld() {
         const x = c(p0[0], p1[0], p2[0], p3[0]), y = c(p0[1], p1[1], p2[1], p3[1]);
         const r = w / 2, cx = Math.round(x - r), cy = Math.round(y - r);
         // keep 1-wide paths 4-connected: a diagonal step gets a corner tile, so there is always a walkable way along
-        if (w === 1 && last && last[0] !== cx && last[1] !== cy) road(cx, last[1], 1, 1, t);
+        const along = (i - 1 + u) / (P.length - 3); // 0..1 along the whole curve
+        if (w === 1 && last && last[0] !== cx && last[1] !== cy) put(cx, last[1], along);
         last = [cx, cy];
-        each(cx, cy, w, w, (i2, j2) => road(i2, j2, 1, 1, t));
+        each(cx, cy, w, w, (i2, j2) => put(i2, j2, along));
       }
     }
   };
@@ -410,7 +421,32 @@ function buildWorld() {
   curve([[marsh.x + 2, 101], [32, 112], [38, 124], [mau.x + 4, mau.y + mau.h + 2]], 1);             // Barrow Road (from the marsh)
   curve([[mau.x + 4, mau.y + mau.h + 2], [60, 152], [74, 148], [lake.x - lake.rx - 4, lake.y]], 1); // Downs path, barrows ↔ lake
   curve([[ruins.x + 6, ruins.y], [156, 62], [168, 58], [keep.x - 6, keep.y + 8], [keep.x + 2, keep.y + 8]], 1); // Keep Road (past the Old Ruins)
-  curve([[lake.x + lake.rx + 4, lake.y - 2], [rc(144) - 6, 144], [rc(144) + 6, 144], [134, 132], [140, 112], [136, 92]], 1); // south bridge → woods path
+  // East of the lake (Murat 2026-11-03): a small makeshift bridge over the river, then a thin dirt trail that fades out
+  // in the Whispering Woods. From there only deer trails wind on through the trees, to the Keep, Gravemoor, Redfang Hollow and Saltmere.
+  curve([[lake.x + lake.rx + 4, lake.y - 2], [rc(144) - 6, 144], [rc(144) + 6, 144]], 1); // the makeshift bridge
+  const makeshift: { x: number; y: number }[] = [];
+  for (let x = rc(144) - 6; x <= rc(144) + 6; x++) if (ground[144][x] === T.BRIDGE) makeshift.push({ x, y: 144 });
+  /** A thin dirt trail: worn bare at first, then only patches in the grass, then nothing. Kept clear of trees. */
+  const fading = (x: number, y: number, u: number) => {
+    if (!inMap(x, y) || ground[y][x] === T.WATER || ground[y][x] === T.BRIDGE) return;
+    if (NATURE.has(objects[y][x])) setO(x, y, EMPTY);
+    if (hash(x, y, 201) < 1.15 - u * 1.25 && isGrass(ground[y][x])) setG(x, y, T.DIRT);
+    if (u < 0.45) roads.add(y * MAP_W + x);
+  };
+  /** A deer trail through the woods: no dirt, just a winding way between the trunks (bushes stay, you walk through them). */
+  const deer = (x: number, y: number) => {
+    if (!inMap(x, y) || ground[y][x] === T.WATER) return;
+    if (objects[y][x] !== T.BUSH && NATURE.has(objects[y][x])) setO(x, y, EMPTY);
+    if (isGrass(ground[y][x]) && hash(x, y, 204) < 0.22) setG(x, y, T.DIRT); // a bare, trodden patch now and then
+    for (const [i, j] of [[x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]]) // room to pass: thin the trunks beside it
+      if (inMap(i, j) && (objects[j][i] === T.TREE || objects[j][i] === T.PINE) && hash(i, j, 202) < 0.4) setO(i, j, hash(i, j, 203) < 0.5 ? T.BUSH : EMPTY);
+  };
+  curve([[rc(144) + 6, 144], [129, 139], [133, 134], [136, 130]], 1, T.DIRT, fading);
+  const WOODS_END: [number, number] = [136, 130];
+  curve([WOODS_END, [148, 126], [162, 121], [176, 118], [190, 119], [199, 121], [199, 124]], 1, T.DIRT, deer); // → Gravemoor (north gate)
+  curve([[176, 118], [196, 112], [218, 110], [232, 111], [239, 111]], 1, T.DIRT, deer);                     // → Redfang Hollow (west gate)
+  curve([[148, 126], [153, 110], [160, 94], [165, 78], [168, 62], [168, 59]], 1, T.DIRT, deer);              // → the Keep Road
+  curve([[133, 134], [139, 148], [143, 162], [148, 172], [148, 176]], 1, T.DIRT, deer);                     // → Saltmere
   curve([[tower.x + 4, tower.y], [160, 18], [176, 24], [glade.x - 5, glade.y]], 1);                   // Thornwood trail
   curve([[glade.x + 5, glade.y], [204, 30], [200, 40], [keep.x + keep.w - 1, keep.y + 8]], 1);       // down to the keep's postern
 
@@ -471,6 +507,21 @@ function buildWorld() {
   for (const [ox, oy, t] of [[band.x + 7, band.y + 14, T.CRATE], [band.x + 8, band.y + 14, T.CRATE], [band.x + 7, band.y + 15, T.BARREL],
     [band.x + 18, band.y + 13, T.HAY], [band.x + 20, band.y + 15, T.BARREL], [band.x + 16, band.y + 15, T.STUMP], [band.x + 14, band.y + 9, T.STUMP], [band.x + 10, band.y + 9, T.STUMP]] as const) setO(ox, oy, t);
 
+  // Gullrock Cove: the Saltmere fishers' smokehouse on the little bay east of town, burned out by Redfang raiders who
+  // camp among the broken barrels of salted cod (Redfang quest chain, shared/quests.ts)
+  const cove = GULLROCK;
+  each(cove.x, cove.y, cove.w, cove.h, (x, y) => {
+    if (objects[y][x] === T.TREE || objects[y][x] === T.PINE || objects[y][x] === T.BUSH) if (hash(x, y, 196) < 0.85) setO(x, y, EMPTY);
+    if (isGrass(ground[y][x]) && noise(x, y, 3, 197) > 0.68) setG(x, y, T.DIRT);
+  });
+  ruinBuilding(cove.x + 8, cove.y + 2, 5, 4, false, false, 198); // the burned smokehouse
+  setO(cove.x + 10, cove.y + 3, T.BARREL);
+  setO(cove.x + 15, cove.y + 6, T.CAMPFIRE); // the raiders' fire
+  for (const [ox, oy, t] of [[cove.x + 14, cove.y + 3, T.BARREL], [cove.x + 17, cove.y + 4, T.BARREL], [cove.x + 18, cove.y + 4, T.CRATE], [cove.x + 6, cove.y + 7, T.CRATE],
+    [cove.x + 13, cove.y + 8, T.BARREL], [cove.x + 19, cove.y + 7, T.STUMP], [cove.x + 12, cove.y + 6, T.STUMP], [cove.x + 21, cove.y + 3, T.HAY]] as const) setO(ox, oy, t);
+  for (const fx of [cove.x + 4, cove.x + 5, cove.x + 22, cove.x + 23]) setO(fx, cove.y + 8, T.FENCE); // net racks, half pulled down
+  curve([[191, 177], [192, 181], [cove.x + 14, cove.y + 5]], 1); // the fishers' track down from the Smugglers' Path
+
   // Roads to the new places
   curve([[lake.x + 3, lake.y + lake.ry + 3], [104, 166], [110, 174], [rc(179) - 6, 179], [rc(179) + 6, 179], [salt.x - 1, lane]], 1); // Coast Road (lake → Saltmere)
   curve([[keep.x + keep.w + 1, keep.y + 8], [216, 68], [228, 84], [band.x + band.w / 2, band.y - 2]], 1);                            // Bandit Trail (keep → Redfang)
@@ -523,6 +574,23 @@ function buildWorld() {
   }
   curve([[gcx, grave.y + grave.h], [gcx + 2, grave.y + grave.h + 6], [204, 167], [208, 169]], 1);  // Gravemoor Lane (to the Smugglers' Path)
 
+  // ---------- 12a3. The west coast: Brinewood and Heronwreck Strand (the end of the Gloam's story) ----------
+  // Brinewood: a salt-stunted pine wood behind the dunes, where the druids raised their last binding shrines
+  const brine = { x: 4, y: 158, w: 50, h: 26 };
+  each(brine.x, brine.y, brine.w, brine.h, (x, y) => {
+    if (ground[y][x] === T.WATER || ground[y][x] === T.SAND) return;
+    if (isGrass(ground[y][x])) setG(x, y, noise(x, y, 6, 191) > 0.66 ? T.TALL_GRASS : T.GRASS_DARK);
+    if (objects[y][x] === T.TREE || (objects[y][x] === EMPTY && hash(x, y, 192) < 0.2 * (0.4 + noise(x, y, 7, 194)))) setO(x, y, T.PINE);
+  });
+  // Heronwreck Strand: the beach where the Grey Heron broke up. Driftwood and her spilled cargo lie along the sand.
+  const strand = { x: 0, y: 184, w: 66, h: MAP_H - 184 };
+  clearO(WRECK.x - 6, WRECK.y - 4, 13, 7);
+  each(WRECK.x - 7, WRECK.y - 5, 15, 7, (x, y) => { if (ground[y][x] !== T.WATER && hash(x, y, 193) < 0.75) setG(x, y, T.SAND); });
+  for (const [ox, oy, t] of [[WRECK.x - 5, WRECK.y - 3, T.BARREL], [WRECK.x - 4, WRECK.y - 3, T.CRATE], [WRECK.x + 5, WRECK.y - 3, T.BARREL],
+    [WRECK.x + 6, WRECK.y - 2, T.CRATE], [WRECK.x - 9, WRECK.y - 1, T.BARREL], [WRECK.x + 12, WRECK.y - 2, T.CRATE], [WRECK.x - 14, WRECK.y - 3, T.STUMP]] as const)
+    if (inMap(ox, oy) && ground[oy][ox] !== T.WATER) setO(ox, oy, t);
+  curve([[mau.x + 4, mau.y + mau.h + 2], [42, 160], [34, 170], [30, 180], [WRECK.x, WRECK.y - 4]], 1); // Wreck Trail (barrows → Brinewood → the strand)
+
   // ---------- 12b. Signposts at the gates and road junctions (directions are worked out in SIGNPOSTS) ----------
   const posts: { x: number; y: number; to: string[] }[] = [];
   /** Puts a signpost on the nearest free tile beside (not on) a road, within 3 tiles of (x, y). */
@@ -553,10 +621,11 @@ function buildWorld() {
   signpost(98, 116, ["Sunken Lake", "Stonecrag Quarry", "Oakvale"]);                                // lake road
   signpost(33, 112, ["Barrow Downs", "Misty Marsh", "Oakvale"]);                                    // barrow road
   signpost(62, 151, ["Barrow Downs", "Sunken Lake"]);                                               // downs path
+  signpost(44, 157, ["Brinewood", "Heronwreck Strand", "Barrow Downs"]);                            // wreck trail
   signpost(156, 61, ["Greywatch Keep", "Old Ruins", "Oakvale"]);                                    // keep road
   signpost(tower.x + 12, 20, ["Thornwood", "Old Watchtower", "Oakvale"]);                            // into the Thornwood
   signpost(202, 42, ["Greywatch Keep", "Thornwood"]);
-  signpost(rc(144) + 9, 142, ["Sunken Lake", "Old Ruins", "Stonecrag Quarry"]);
+  signpost(rc(144) + 8, 142, ["Sunken Lake", "Stonecrag Quarry"]);
   signpost(salt.x - 2, lane - 1, ["Saltmere", "Sunken Lake"]);                                       // Saltmere's west end
   signpost(band.x + 7, band.y - 6, ["Redfang Hollow", "Greywatch Keep"]);               // bandit trail
   signpost(salt.x + salt.w + 1, lane - 1, ["Saltmere", "Redfang Hollow"]);                         // Saltmere's east end
@@ -589,6 +658,23 @@ function buildWorld() {
     if (ground[y][x] !== T.BRIDGE) continue;
     const b = (i: number, j: number) => inMap(i, j) && ground[j][i] === T.BRIDGE;
     if (!b(x - 1, y) && !b(x + 1, y) && !b(x, y - 1) && !b(x, y + 1)) setG(x, y, T.DIRT);
+  }
+
+  // ---------- 13b. Broken bridges (Murat 2026-11-03): the spans to the Old Ruins and the Old Watchtower have fallen in
+  // halfway across, so new heroes can't wander straight into the high-level zones. The quarry bridge further south
+  // still stands, so the ruins (and the woodland path on to the watchtower) can still be reached the long way round.
+  const broken: { x: number; y: number }[] = [];
+  for (const by of [17, 61]) {
+    const cx = rc(by);
+    let x0 = cx - 6;
+    while (x0 < cx + 6 && ground[by][x0] !== T.BRIDGE) x0++;
+    let x1 = x0;
+    while (ground[by][x1 + 1] === T.BRIDGE) x1++;
+    if (ground[by][x0] !== T.BRIDGE) continue;
+    const gx = x0 + Math.floor((x1 - x0 + 1) / 2); // walk at most half the span, then the planks are gone
+    setG(gx, by, T.WATER);
+    roads.delete(by * MAP_W + gx);
+    broken.push({ x: gx, y: by });
   }
 
   // ---------- 13a. The forest shrine (shared/shrine.ts): a small clearing beside the Bandit Trail, deep in the Whispering Woods ----------
@@ -665,17 +751,24 @@ function buildWorld() {
     { name: "Gravemoor Cemetery", x: grave.x - 3, y: grave.y - 3, w: grave.w + 6, h: grave.h + 6, mobs: ["skeleton", "skeletonmage", "necromancer"] },
     { name: "Saltmere", ...salt },
     { name: "Redfang Hollow", x: band.x - 4, y: band.y - 4, w: band.w + 8, h: band.h + 8, mobs: ["bandit"] },
-    { name: "Saltwind Coast", x: 0, y: 184, w: MAP_W, h: MAP_H - 184, mobs: ["slime"] },
+    { name: "Brinewood", ...brine, mobs: ["slime"] },
+    { name: "Heronwreck Strand", ...strand, mobs: ["slime"] },
+    { name: "Gullrock Cove", ...GULLROCK, mobs: ["bandit"] },
+    { name: "Saltwind Coast", x: strand.x + strand.w, y: 184, w: MAP_W - strand.x - strand.w, h: MAP_H - 184, mobs: ["slime"] },
     { name: "River Ashwell", x: riverCenter(60) - 6, y: 0, w: 12, h: MAP_H },
     { name: "Whispering Woods", x: woodsX - 2, y: 0, w: MAP_W - woodsX + 2, h: 184, mobs: ["slime"] },
   ];
-  return { ground, objects, areas, posts, roads };
+  return { ground, objects, areas, posts, roads, broken, makeshift };
 }
 
 export const WORLD = buildWorld();
 export const GROUND = WORLD.ground;
 export const OBJECTS = WORLD.objects;
 export const AREAS = WORLD.areas;
+/** Water tiles where a bridge span has collapsed (the broken bridges to the Old Ruins and the Old Watchtower). */
+export const BROKEN_BRIDGES = WORLD.broken;
+/** Tiles of the small makeshift bridge east of the Sunken Lake (narrow, no railings). */
+export const MAKESHIFT_BRIDGES = WORLD.makeshift;
 
 /** A readable signpost: arrows from the post towards each named place. */
 /**

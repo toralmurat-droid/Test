@@ -22,7 +22,7 @@ import { isDecorSolidAt, npcById, npcNear, TALK_RANGE } from "../shared/npcs";
 import { beyondWall, WATCH, WATCH_POSTS, WatchPost } from "../shared/watch";
 import { sellPrice, SHOPS } from "../shared/shops";
 import { BLOB_KINDS, CHAINS, chainState, inZone, isBlob, npcPresent, QuestState, questStep, stepGoal, Summon, USE_RANGE } from "../shared/quests";
-import { findHideSpot, HIDE, noMobsAt, spawnPoint, SPAWN_ZONES, zoneCap } from "../shared/spawns";
+import { findHideSpot, HIDE, MOTHER_KEEP_OUT, noMobsAt, spawnPoint, SPAWN_ZONES, villageDist, zoneCap } from "../shared/spawns";
 import { moveStep } from "../shared/movement";
 import { SLOTS_BY_ZONE, WORK_SLOTS } from "../shared/siege";
 import { BANDIT_AI, BANDIT_ROLES, CAMP_POSTS, CHIEF, clearWalk, findPath, postPos, roleOf } from "../shared/bandits";
@@ -680,6 +680,8 @@ export class TownRoom extends Room<TownState> {
         m.camp = true; m.post = post; m.weapon = P.role; m.perch = P.role === "lookout";
         home = { ...postPos(P), level: home.level };
       }
+    } else if (kind === "bandit" && SPAWN_ZONES[zi]?.name === "Gullrock Cove") {
+      m.weapon = (["cutthroat", "brute", "archer", "cutthroat"] as const)[this.mobSeq % 4]; // the raiding party: a mix of roles
     }
     const def = mobDef(m);
     m.zone = zi;
@@ -1562,7 +1564,7 @@ export class TownRoom extends Room<TownState> {
         if (Math.hypot(h.x - m.x, h.y - m.y) <= MERGE.touch) return this.absorb(h, m.mergeInto, m, id);
         const go = toward(m.x, m.y, h.x, h.y);
         const r = moveStep(m.x, m.y, go, dt, def.speed * MERGE.speedMult * (m.slowed ? SLOW_MOB : 1));
-        if (!isSafeZone(r.x, r.y) && !noMobsAt(r.x, r.y)) { m.x = r.x; m.y = r.y; }
+        if (this.canStep(m, r.x, r.y)) { m.x = r.x; m.y = r.y; }
         else m.mergeInto = "";
         m.moving = r.moving; m.dir = dirFromInput(go, m.dir);
         return;
@@ -1599,7 +1601,7 @@ export class TownRoom extends Room<TownState> {
       if (Math.hypot(m.outX - m.x, m.outY - m.y) < 5) return this.hide(m, id, now);
       const go = toward(m.x, m.y, m.outX, m.outY);
       const r = moveStep(m.x, m.y, go, dt, def.speed * (m.fleeing ? POISE.fleeSpeed : 0.6) * (m.slowed ? SLOW_MOB : 1));
-      if (!isSafeZone(r.x, r.y) && !noMobsAt(r.x, r.y)) { m.x = r.x; m.y = r.y; }
+      if (this.canStep(m, r.x, r.y)) { m.x = r.x; m.y = r.y; }
       m.moving = r.moving;
       m.dir = dirFromInput(go, m.dir);
       return;
@@ -1750,9 +1752,16 @@ export class TownRoom extends Room<TownState> {
         m.wander = { right: Math.cos(a) > 0.3, left: Math.cos(a) < -0.3, down: Math.sin(a) > 0.3, up: Math.sin(a) < -0.3 };
       }
     }
-    if (!isSafeZone(r.x, r.y) && !noMobsAt(r.x, r.y)) { m.x = r.x; m.y = r.y; }
+    if (this.canStep(m, r.x, r.y)) { m.x = r.x; m.y = r.y; }
     m.moving = r.moving;
     m.dir = dirFromInput(input, m.dir);
+  }
+
+  /** May a walking monster step to (x,y)? Never into the safe zone or a peaceful place; a Mother Blob never closer to Oakvale than MOTHER_KEEP_OUT (she may still step back out). */
+  private canStep(m: Mob, x: number, y: number): boolean {
+    if (isSafeZone(x, y) || noMobsAt(x, y)) return false;
+    if (m.kind === "motherblob") { const d = villageDist(x, y); if (d < MOTHER_KEEP_OUT && d < villageDist(m.x, m.y)) return false; }
+    return true;
   }
 
   // ---- Redfang Hollow bandits (shared/bandits.ts) -----------------------------
@@ -2538,6 +2547,7 @@ export class TownRoom extends Room<TownState> {
     // Kills and drops count anywhere on the map: only the monster's type matters (Murat's rule)
     if (!s || !s.kinds?.includes(m.kind)) return;
     if (s.type === "kill" && (m.merged ?? 1) < (s.fused ?? 1)) return;
+    if (s.type === "kill" && s.own && m.summonFor !== id) return; // a named leader: only the one summoned for this player
     if (s.type === "kill") this.questProgress(id, p, c, q.questCount + 1);
     else if (s.type === "collect" && Math.random() < (s.chance?.[m.kind] ?? 0)) this.dropItem("quest", m.x, m.y, 1, s.item!, id);
   }
