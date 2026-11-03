@@ -126,6 +126,7 @@ export class Mob extends Schema {
   @type("number") level = 1;
   @type("string") weapon = ""; // skeletons: sword, axe, spear or bow (SKELETON_WEAPONS)
   @type("boolean") hidden = false; // tucked into a grave/tree: untouchable, only its eyes show
+  @type("number") bones = 0; // Bone Demon: skeleton pieces it wears (DEMON.harvest), the client draws them on it
   @type("number") merged = 1; // blobs inside this one (MERGE): the client draws it bigger
   @type("string") guard = ""; // id of the loot chest it guards (shared/chests.ts): the chest stays locked while it lives
   @type("string") parts = ""; // kinds of the blobs swallowed, comma-separated: the client paints their colours, eyes and mouths on it
@@ -135,7 +136,7 @@ export class Mob extends Schema {
   canShoot = false; canCharge = false; canHeal = false; // abilities picked up by merging
   nextCall = 0; nextShot = 0;
   foe = ""; // blob vs undead feud (FEUD): the monster it is fighting
-  ritual = false; banishAt = 0; nextStomp = 0; // BONES.ritual: given to a demon summoning; demon: when it goes back, next Hellfire Stomp
+  ritual = false; banishAt = 0; nextStomp = 0; nextHarvest = 0; nextToss = 0; // BONES.ritual: given to a demon summoning; demon: when it goes back, next Hellfire Stomp
   flankA = NaN; // BONES: side of the hero this skeleton closes in from (NaN = straight at him)
   hateId = ""; hate = 0; nextAggro = 0; threat = 0; // AGGRO: who hit it last and how much it hates them; level gap of the scariest hero near
 
@@ -365,7 +366,7 @@ const rangedOf = (m: Mob): RangedCfg | undefined => m.kind === "skeleton" && m.w
 /** Melee reach, damage, cooldown and wind-up of a monster (skeletons depend on their weapon). */
 const meleeOf = (m: Mob) => {
   const w = m.kind === "skeleton" ? SKELETON_WEAPONS[(m.weapon || "sword") as SkeletonWeapon] : undefined;
-  return { range: w?.range ?? MOB_ATTACK_RANGE, dmg: w?.dmg ?? 1, cooldown: w?.cooldown ?? 1, windupMs: w?.windupMs ?? MOB_COMBAT[m.kind].windupMs };
+  return { range: w?.range ?? MOB_ATTACK_RANGE, dmg: w?.dmg ?? (m.kind === "demon" ? 1 + DEMON.harvest.dmgPer * m.bones : 1), cooldown: w?.cooldown ?? 1, windupMs: w?.windupMs ?? MOB_COMBAT[m.kind].windupMs };
 };
 
 export class TownRoom extends Room<TownState> {
@@ -608,7 +609,7 @@ export class TownRoom extends Room<TownState> {
     m.target = "";
     m.hidden = false; m.spot = ""; m.fleeing = false;
     m.specialKind = ""; m.specialAt = 0; m.nextBounce = 0; m.nextSlam = 0; m.nextRaise = 0; m.nextCircle = 0;
-    m.ritual = false; m.banishAt = 0; m.nextStomp = 0;
+    m.ritual = false; m.banishAt = 0; m.nextStomp = 0; m.nextHarvest = 0; m.nextToss = 0; m.bones = 0;
     m.foe = ""; m.hateId = ""; m.hate = 0; m.nextAggro = 0; m.threat = 0;
     m.merged = 1; m.parts = ""; m.summonFor = ""; m.mergeInto = ""; m.mergeCap = 0; m.nextCall = 0; m.nextShot = 0;
     m.canShoot = kind === "shooterblob"; m.canCharge = kind === "warriorblob"; m.canHeal = kind === "healerblob";
@@ -797,7 +798,7 @@ export class TownRoom extends Room<TownState> {
       const range = hated > 0 ? def.aggroRange * 2 : def.aggroRange;
       if (d >= range) return;
       if (d < def.aggroRange) m.threat = Math.max(m.threat, p.level - m.level);
-      const lf = m.merged > 1 ? Math.max(1, aggroLevelFactor(m.level, p.level)) : aggroLevelFactor(m.level, p.level); // a merged blob regrouped to fight: no hero scares it
+      const lf = m.merged > 1 || m.kind === "demon" ? Math.max(1, aggroLevelFactor(m.level, p.level)) : aggroLevelFactor(m.level, p.level); // a merged blob regrouped to fight, a demon was called against him: no hero scares them
       const score = Math.max(0, 1 - d / def.aggroRange) * lf + hated + (pid === m.target ? AGGRO.stick : 0);
       if (score > best) { best = score; target = pid; }
     });
@@ -1019,33 +1020,40 @@ export class TownRoom extends Room<TownState> {
     const R = BONES.ritual;
     this.nextRitualCheck = now + R.checkMs;
     let demons = 0;
-    const packs = new Map<string, [string, Mob][]>();
-    this.state.mobs.forEach((m, id) => {
-      if (m.kind === "demon" && !m.dead) demons++;
-      if (m.dead || m.hidden || m.ritual || !m.target || !TownRoom.RITUAL_KINDS.includes(m.kind)) return;
-      const list = packs.get(m.target);
-      if (list) list.push([id, m]); else packs.set(m.target, [[id, m]]);
-    });
+    this.state.mobs.forEach((m) => { if (m.kind === "demon" && !m.dead) demons++; });
     if (demons >= R.maxDemons) return;
-    for (const [pid, list] of packs) {
-      const p = this.state.players.get(pid);
-      if (!p || p.dead || (this.ritualCd.get(pid) ?? 0) > now) continue;
-      const near = list.filter(([, m]) => Math.hypot(m.x - p.x, m.y - p.y) <= R.near);
+    const cells = Math.ceil(R.near / FEUD_CELL);
+    for (const [pid, p] of this.state.players) {
+      if (p.dead || isSafeZone(p.x, p.y) || (this.ritualCd.get(pid) ?? 0) > now) continue;
+      // skeletons around this hero (from the feud grid: blobs and undead by map cell)
+      const near: [string, Mob][] = [];
+      const gx0 = Math.floor(p.x / FEUD_CELL), gy0 = Math.floor(p.y / FEUD_CELL);
+      for (let gy = gy0 - cells; gy <= gy0 + cells; gy++) for (let gx = gx0 - cells; gx <= gx0 + cells; gx++) {
+        for (const [id, m] of this.feudGrid.get(gx * 4096 + gy) ?? []) {
+          if (m.dead || m.hidden || m.ritual || !TownRoom.RITUAL_KINDS.includes(m.kind) || Math.hypot(m.x - p.x, m.y - p.y) > R.near) continue;
+          near.push([id, m]);
+        }
+      }
       if (near.length < R.minPack) continue;
-      const lvl = near.reduce((s, [, m]) => s + m.level, 0) / near.length;
-      const hp = near.reduce((s, [, m]) => s + m.hp, 0) / near.reduce((s, [, m]) => s + m.maxHp, 0);
-      if (p.level - lvl < R.gap && hp > R.hpFrac) continue; // still holding their own
-      const cx = near.reduce((s, [, m]) => s + m.x, 0) / near.length, cy = near.reduce((s, [, m]) => s + m.y, 0) / near.length;
+      const avg = (l: [string, Mob][]) => l.reduce((s, [, m]) => s + m.level, 0) / l.length;
+      // losing a fight to him, or just seeing a hero far beyond them walk past (Murat 2026-11-03)
+      const fighting = near.filter(([, m]) => m.target === pid);
+      const hp = fighting.length ? fighting.reduce((s, [, m]) => s + m.hp, 0) / fighting.reduce((s, [, m]) => s + m.maxHp, 0) : 1;
+      const losing = fighting.length >= R.minPack && (p.level - avg(fighting) >= R.gap || hp <= R.hpFrac);
+      const outclassed = p.level - avg(near) >= R.passGap;
+      if (!losing && !outclassed) continue;
+      const pack = losing ? fighting : near;
+      const cx = pack.reduce((s, [, m]) => s + m.x, 0) / pack.length, cy = pack.reduce((s, [, m]) => s + m.y, 0) / pack.length;
       if (isSafeZone(cx, cy) || isSolidAt(cx, cy)) continue;
-      const chosen = near.sort((a, b) => Math.hypot(a[1].x - cx, a[1].y - cy) - Math.hypot(b[1].x - cx, b[1].y - cy)).slice(0, R.maxPack);
+      const chosen = pack.sort((a, b) => Math.hypot(a[1].x - cx, a[1].y - cy) - Math.hypot(b[1].x - cx, b[1].y - cy)).slice(0, R.maxPack);
       this.ritualCd.set(pid, now + R.cooldownMs);
-      const level = Math.max(...chosen.map(([, m]) => m.level)) + R.levelUp;
+      // the demon answers the threat: never far below the hero it was called against
+      const level = Math.max(Math.max(...chosen.map(([, m]) => m.level)) + R.levelUp, p.level - R.belowHero);
       const bones = chosen.map(([, m]) => [Math.round(m.x), Math.round(m.y)]);
       for (const [id, m] of chosen) { m.ritual = true; this.mobDied(m, id, "", ""); }
       this.broadcast("ritual", { x: Math.round(cx), y: Math.round(cy), r: R.radius, bones, ms: R.castMs });
       this.clock.setTimeout(() => this.summonDemon(cx, cy, level, pid), R.castMs);
-      demons++;
-      if (demons >= R.maxDemons) return;
+      if (++demons >= R.maxDemons) return;
     }
   }
 
@@ -1061,6 +1069,45 @@ export class TownRoom extends Room<TownState> {
     const id = `d${++this.mobSeq}`;
     this.state.mobs.set(id, d);
     this.broadcast("demonrise", { id, x: Math.round(x), y: Math.round(y) });
+  }
+
+  /** The nearest living skeleton within r px of the demon (to rip apart or to throw). */
+  private skeletonNear(m: Mob, r: number): [string, Mob] | undefined {
+    let best: [string, Mob] | undefined, bd = r;
+    const cells = Math.ceil(r / FEUD_CELL), gx0 = Math.floor(m.x / FEUD_CELL), gy0 = Math.floor(m.y / FEUD_CELL);
+    for (let gy = gy0 - cells; gy <= gy0 + cells; gy++) for (let gx = gx0 - cells; gx <= gx0 + cells; gx++) {
+      for (const [id, o] of this.feudGrid.get(gx * 4096 + gy) ?? []) {
+        if (o.dead || o.hidden || o.ritual || !TownRoom.RITUAL_KINDS.includes(o.kind)) continue;
+        const d = Math.hypot(o.x - m.x, o.y - m.y);
+        if (d < bd) { bd = d; best = [id, o]; }
+      }
+    }
+    return best;
+  }
+
+  /** Bone Demon uses the skeletons around it: throws one at a hero who keeps away, or wears one as armour. */
+  private demonBones(m: Mob, id: string, t: Player, dist: number, now: number) {
+    const H = DEMON.harvest, S = DEMON.toss;
+    if (dist >= S.min && dist <= S.max && now >= m.nextToss) {
+      const s = this.skeletonNear(m, S.grab);
+      if (s) {
+        m.nextToss = now + S.everyMs;
+        const [sid, sk] = s;
+        sk.ritual = true; this.mobDied(sk, sid, "", "");
+        this.broadcast("demongrab", { id, from: [Math.round(sk.x), Math.round(sk.y)] });
+        this.mobShot(m, id, t.x, t.y, { keepAway: 0, far: 0, range: S.max, shot: "skelthrow", shotSpeed: S.speed, shotRadius: S.radius, mult: S.dmgMult });
+        return;
+      }
+    }
+    if (m.bones < H.max && now >= m.nextHarvest) {
+      const s = this.skeletonNear(m, H.range);
+      if (!s) return;
+      m.nextHarvest = now + H.everyMs;
+      const [sid, sk] = s;
+      sk.ritual = true; this.mobDied(sk, sid, "", "");
+      m.bones++;
+      this.broadcast("demonharvest", { id, from: [Math.round(sk.x), Math.round(sk.y)], bones: m.bones });
+    }
   }
 
   /** Bone Demon's Hellfire Stomp; true while it is busy with it (it stands still). */
@@ -1389,6 +1436,7 @@ export class TownRoom extends Room<TownState> {
       if (m.hp < m.maxHp * MERGE.hpFrac || crowd >= MERGE.crowd || m.threat >= AGGRO.dangerGap) this.blobCall(m, id, now);
     }
 
+    if (t && m.kind === "demon" && !m.broken && !m.specialAt) this.demonBones(m, id, t, Math.hypot(t.x - m.x, t.y - m.y), now);
     let input: InputState;
     const ranged = !!rangedOf(m) && m.merged <= 1; // a merged blob is a brawler that also spits if it can
     if (t && m.broken) {
@@ -1798,6 +1846,7 @@ export class TownRoom extends Room<TownState> {
     if (!m || m.dead) return;
     const def = MOBS[m.kind];
     dmg = Math.max(1, Math.round(dmg * takenMult(m, Date.now())));
+    if (m.bones) dmg = Math.max(1, Math.round(dmg * (1 - DEMON.harvest.armorPer * m.bones))); // Bone Demon's bone armour
     this.bloodthirst(a, attackerId, Math.min(dmg, m.hp));
     m.hp = Math.max(0, m.hp - dmg);
     this.addHate(m, attackerId, dmg); // fight back (generated aggro)
