@@ -33,8 +33,41 @@ import { addPixelGrid } from "./pixelgrid";
 import { paintSmoothProps } from "./smoothProps";
 import { ChestLayer } from "./chests";
 
+/** One painted bit on a merged blob, in body-relative units (-1..1 across the body). */
+interface BlobPart { kind: "patch" | "eye" | "mouth"; u: number; v: number; r: number; col: number }
+/** Body colours of the blob kinds, for the patches and eye rims of merged blobs. */
+const BLOB_COLORS: Record<string, number> = { slime: 0x7bd36b, blobling: 0xa6e86b, shooterblob: 0x9b6bd6, warriorblob: 0xd9573b, healerblob: 0xf5d0e6 };
+
+/**
+ * Layout of a merged blob's extra features: a colour patch per swallowed blob, about two eyes and one mouth
+ * each, capped so a 10-blob monster stays readable. Seeded by the monster id so it doesn't jump around.
+ */
+function blobPartsLayout(id: string, parts: string[]): BlobPart[] {
+  let seed = 0;
+  for (const ch of id + parts.join()) seed = (seed * 31 + ch.charCodeAt(0)) | 0;
+  const rnd = () => { seed = (seed * 1103515245 + 12345) | 0; return ((seed >>> 8) & 0xffff) / 0x10000; };
+  const out: BlobPart[] = [];
+  const free = (u: number, v: number, r: number) => out.every((o) => o.kind === "patch" || Math.hypot(o.u - u, (o.v - v) * 1.4) > o.r + r + 0.06);
+  const place = (kind: BlobPart["kind"], r: number, col: number, vMin: number, vMax: number) => {
+    for (let i = 0; i < 30; i++) {
+      const u = (rnd() * 2 - 1) * 0.8, v = vMin + rnd() * (vMax - vMin);
+      if (u * u + v * v > 0.85 || (kind !== "patch" && !free(u, v, r))) continue;
+      out.push({ kind, u, v, r, col });
+      return;
+    }
+  };
+  const kinds = parts.slice(0, 6);
+  for (const k of kinds) place("patch", 0.32 + rnd() * 0.18, BLOB_COLORS[k] ?? 0x7bd36b, -0.7, 0.7);
+  const eyes = Math.min(2 * parts.length, 6), mouths = Math.min(parts.length, 3);
+  for (let i = 0; i < eyes; i++) place("eye", 0.11 + rnd() * 0.07, BLOB_COLORS[kinds[i % kinds.length]] ?? 0xffffff, -0.6, 0.3);
+  for (let i = 0; i < mouths; i++) place("mouth", 0.16 + rnd() * 0.08, 0, 0.25, 0.75);
+  return out;
+}
+
 interface Entity {
   merged?: number; // blobs fused into this monster (MERGE)
+  parts?: Phaser.GameObjects.Graphics; // merged blob: colour patches, extra eyes and mouths of the blobs inside
+  partsKey?: string; partsLayout?: BlobPart[];
   sprite: Phaser.GameObjects.Sprite;
   label?: Phaser.GameObjects.Text;
   lvlColor?: string; // monsters: current colour of the "Lv N" label
@@ -588,6 +621,33 @@ export class TownScene extends Phaser.Scene {
     this.tweens.add({ targets: t, y: y - 10, alpha: 0, duration: 800, onComplete: () => t.destroy() });
   }
 
+  /** Merged blob: paint the swallowed blobs' colours, eyes and mouths over its body (follows squash tweens). */
+  private drawBlobParts(e: Entity, id: string, p: any, x: number, y: number) {
+    if (e.partsKey !== p.parts) { e.partsKey = p.parts; e.partsLayout = blobPartsLayout(id, String(p.parts).split(",")); }
+    const g = (e.parts ??= isoAnchor(this.add.graphics(), e.sprite) as Phaser.GameObjects.Graphics);
+    g.clear().setVisible(true).setDepth(e.sprite.depth + 0.5);
+    const above = e.sprite.displayHeight * e.sprite.originY; // frame height above the feet
+    const hw = e.sprite.displayWidth * 0.38, hh = above * 0.26, cy = y - above * 0.3; // body ellipse
+    const flip = e.sprite.flipX ? -1 : 1, back = this.dirOf(e) === "up";
+    for (const b of e.partsLayout!) {
+      const px = x + b.u * hw * flip, py = cy + b.v * hh, r = b.r * hw;
+      if (b.kind === "patch") {
+        g.fillStyle(b.col, 0.6).fillEllipse(px, py, r * 2, r * 1.5);
+        g.fillStyle(0xffffff, 0.18).fillEllipse(px - r * 0.3, py - r * 0.3, r * 0.7, r * 0.45); // wet shine
+      } else if (back) continue;
+      else if (b.kind === "eye") {
+        const blink = (this.time.now + b.u * 9000 + b.v * 5000) % 4200 < 140;
+        g.fillStyle(b.col).fillCircle(px, py, r * 1.25);
+        if (blink) { g.fillStyle(0x1a1a1a).fillRect(px - r, py - 0.25, r * 2, 0.5); continue; }
+        g.fillStyle(0xffffff).fillCircle(px, py, r);
+        g.fillStyle(0x111111).fillCircle(px + r * 0.25 * flip, py + r * 0.15, r * 0.5);
+      } else {
+        g.fillStyle(0x2a0d12, 0.9).fillEllipse(px, py, r * 2, r * 0.9);
+        g.fillStyle(0xffffff).fillRect(px - r * 0.45, py - r * 0.45, r * 0.3, r * 0.35).fillRect(px + r * 0.2, py - r * 0.45, r * 0.3, r * 0.35); // teeth
+      }
+    }
+  }
+
   /** Merged blobs (MERGE): bigger sprite, label and HP bar for every blob inside. */
   private growMob(e: Entity, p: any) {
     const n = p.merged || 1, prev = e.merged ?? 1;
@@ -632,7 +692,7 @@ export class TownScene extends Phaser.Scene {
   private removeEntity(id: string) {
     const e = this.entities.get(id);
     if (!e) return;
-    e.sprite.destroy(); e.label?.destroy(); e.bar.destroy(); e.bubble?.destroy(); e.shield?.destroy(); e.gear?.destroy();
+    e.sprite.destroy(); e.label?.destroy(); e.bar.destroy(); e.parts?.destroy(); e.bubble?.destroy(); e.shield?.destroy(); e.gear?.destroy();
     this.entities.delete(id);
   }
 
@@ -1086,7 +1146,7 @@ export class TownScene extends Phaser.Scene {
         const off = e.sprite.x < v.x - M || e.sprite.x > v.right + M || e.sprite.y < v.y - M || e.sprite.y > v.bottom + M;
         if (off) {
           if (!e.culled) {
-            e.culled = true; e.sprite.setVisible(false); e.bar.clear(); e.bubble?.setVisible(false);
+            e.culled = true; e.sprite.setVisible(false); e.bar.clear(); e.parts?.clear(); e.bubble?.setVisible(false);
             e.label?.destroy(); e.label = undefined; e.lvlColor = undefined;
           }
           continue;
@@ -1186,6 +1246,7 @@ export class TownScene extends Phaser.Scene {
           e.bar.fillStyle(0xffd166).fillRect(x + Math.cos(a) * 6 - 1, sy + Math.sin(a) * 2 - 1, 2, 2);
         }
       }
+      e.parts?.clear();
       if (e.mob && !p.dead && p.hidden) {
         // Hiding in a grave or tree: only a pair of eyes peeks out (and blinks now and then)
         e.bar.setDepth(20000);
@@ -1197,6 +1258,7 @@ export class TownScene extends Phaser.Scene {
           e.bar.fillStyle(col).fillRect(x - 2, ey, 1, 1).fillRect(x + 2, ey, 1, 1);
         }
       } else if (e.mob && !p.dead) {
+        if (p.parts) this.drawBlobParts(e, id, p, x, y);
         const bw = Math.min(40, (MOB_LOOK[p.kind]?.bar || 14) * (1 + MERGE.growPerBlob * ((p.merged || 1) - 1)));
         if (ELITE[p.kind as keyof typeof ELITE]) e.bar.fillStyle(0xffc93c).fillRect(x - bw / 2 - 1, mobBarY - 1, bw + 2, 4); // elite: gold frame
         e.bar.fillStyle(0x000000).fillRect(x - bw / 2, mobBarY, bw, 2);
