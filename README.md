@@ -6,6 +6,10 @@ A browser-based online multiplayer pixel brawler set in a small town.
 - **Server:** Colyseus 0.15 (Node.js). The server is authoritative: it runs movement, combat and respawns.
 - **Shared:** map, movement and constants used by both sides (`shared/`)
 
+## Put it online
+
+See [DEPLOY.md](DEPLOY.md): Railway + the `Dockerfile`, with a volume at `/app/data` for player saves and auto-deploy on every merge.
+
 ## Run locally
 
 ```bash

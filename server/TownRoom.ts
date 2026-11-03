@@ -6,7 +6,7 @@ import {
   RESPAWN_MS, TICK_RATE, TILE,
 } from "../shared/constants";
 import {
-  ATTACK_VARIANTS, CLASSES, ClassKind, COMBO_WINDOW_MS, DODGE, EMOTES, ENERGY, DASH_INVULN_MS, GUARD_REDUCTION, isClassKind, levelFromXp, PVP_KILL_XP,
+  ATTACK_VARIANTS, CLASSES, ClassKind, COMBO_WINDOW_MS, DODGE, EMOTES, ENERGY, DASH_INVULN_MS, GUARD_REDUCTION, isClassKind, levelFromXp, MAX_XP, capLevel, PVP_KILL_XP,
 } from "../shared/classes";
 import { attackMult, cooldownMult, heroSpeed, magicMult, maxHpFromStats, SLOW_MOB, statsFor, statPoints } from "../shared/powers";
 import { activeSkills, canLearn, cleanRanks, skillLearned, skillOf, talentBonus, talentMult, talentReduce } from "../shared/skills";
@@ -28,7 +28,7 @@ import { chestById, chestLock, CHEST_RANGE, CHEST_RESPAWN_MS, CHESTS, GUARD_RESP
 import { SLOT_COUNT } from "../shared/slots";
 import { heroPoise, MOB_COMBAT, POISE, poiseLevelMult, poiseSpeed } from "../shared/combat";
 import {
-  BAG_SIZE, Equipped, GEAR, GEAR_SLOTS, GearSlot, gearBlock, gearName, gearReachMult, gearSpeedMult, gearStats, isGearId, potionChance, rollGear,
+  BAG_SIZE, Equipped, GEAR, GEAR_SLOTS, GearSlot, gearBlock, gearName, gearReachMult, gearSpeedMult, gearStats, isGearId, potionChance, rollGear, canWear, starterKit,
 } from "../shared/gear";
 import { Asker, boardFor, submit, tick as ideaTick, vote as ideaVote } from "../shared/ideas";
 import { hashAddr, ideaLog, saveIdeas } from "./ideaStore";
@@ -496,6 +496,8 @@ export class TownRoom extends Room<TownState> {
     if (options?.newGame) resetChests(p.name);
     const save = options?.newGame ? undefined : loadHero(p.name, p.cls);
     if (save) this.restore(p, save);
+    // New heroes (and saves from before class kits existed) put on the class's starting kit
+    if (!save?.kit) this.wearKit(p);
     this.applyStats(p);
     if (options?.newGame) saveHero(p.name, p.cls, this.snapshot(p));
     p.hp = p.maxHp;
@@ -529,15 +531,15 @@ export class TownRoom extends Room<TownState> {
       ptSta: p.ptSta, ptStr: p.ptStr, ptMag: p.ptMag,
       weapon: p.weapon, armour: p.armour, shoes: p.shoes, hat: p.hat, shield: p.shield, ranged: p.ranged,
       bag: p.bag.toArray(), talents, slots: p.slots.toArray(),
-      questId: p.questId, questStage: p.questStage, questCount: p.questCount, questVer: QUEST_VERSION,
+      questId: p.questId, questStage: p.questStage, questCount: p.questCount, questVer: QUEST_VERSION, kit: 1,
     };
   }
 
   private restore(p: Player, s: HeroSave) {
     const num = (v: unknown, d = 0) => (typeof v === "number" && Number.isFinite(v) ? v : d);
-    const gear = (v: unknown) => (typeof v === "string" && isGearId(v) ? v : "");
+    const gear = (v: unknown) => (typeof v === "string" && isGearId(v) && canWear(p.cls, v) ? v : "");
     p.color = num(s.color, p.color);
-    p.xp = num(s.xp); p.level = Math.max(1, num(s.level, 1)); p.kills = num(s.kills);
+    p.xp = Math.min(MAX_XP, num(s.xp)); p.level = capLevel(num(s.level, 1)); p.kills = num(s.kills);
     p.gold = num(s.gold); p.potions = Math.min(MAX_POTIONS, num(s.potions));
     p.ptSta = num(s.ptSta); p.ptStr = num(s.ptStr); p.ptMag = num(s.ptMag);
     p.weapon = gear(s.weapon); p.armour = gear(s.armour); p.shoes = gear(s.shoes);
@@ -846,7 +848,7 @@ export class TownRoom extends Room<TownState> {
       o.mergeCap = Math.max(o.mergeCap, h.mergeCap); o.target ||= h.target; o.foe ||= h.foe;
       [h, hid, o, oid] = [o, oid, h, hid];
     }
-    h.merged += o.merged; h.level += o.level;
+    h.merged += o.merged; h.level = capLevel(h.level + o.level);
     h.parts = [h.parts, o.kind, o.parts].filter(Boolean).join(",");
     h.maxHp += o.maxHp; h.hp = Math.min(h.maxHp, h.hp + o.hp);
     h.canShoot ||= o.canShoot; h.canCharge ||= o.canCharge; h.canHeal ||= o.canHeal;
@@ -1477,6 +1479,12 @@ export class TownRoom extends Room<TownState> {
 
   // ---- Equipment ----------------------------------------------------------
 
+  /** Fills the empty slots with the class's starting kit (shared/gear.ts starterKit); kit items already carried are not doubled. */
+  private wearKit(p: Player) {
+    const have = new Set([...GEAR_SLOTS.map((s) => p[s]), ...bagItems(p)]);
+    for (const [slot, id] of Object.entries(starterKit(p.cls)) as [GearSlot, string][]) if (!p[slot] && !have.has(id)) p[slot] = id;
+  }
+
   private equipped(p: Player): Equipped {
     return Object.fromEntries(GEAR_SLOTS.map((s) => [s, p[s]]));
   }
@@ -1486,7 +1494,7 @@ export class TownRoom extends Room<TownState> {
     const p = this.state.players.get(id);
     if (!p || typeof i !== "number" || i < 0 || i >= p.bag.length) return;
     const gid = p.bag.at(i), def = gid ? GEAR[gid] : undefined;
-    if (!gid || !def) return;
+    if (!gid || !def || !canWear(p.cls, gid)) return;
     const slot: GearSlot = def.slot;
     const old = p[slot];
     const items = [...bagItems(p)];
@@ -1795,7 +1803,7 @@ export class TownRoom extends Room<TownState> {
     const m = new Mob();
     m.kind = host; m.zone = -1; m.summonFor = pid;
     m.x = m.homeX = sm.x; m.y = m.homeY = sm.y;
-    m.level = sm.level;
+    m.level = capLevel(sm.level);
     m.merged = sm.parts.length; m.parts = rest.join(","); m.mergeCap = m.merged;
     // HP of all the parts together, a little under the sum so the fight stays fair at the quest's level
     m.hp = m.maxHp = Math.round(sm.parts.reduce((t, k) => t + MOBS[k].maxHp, 0) * mobScale(sm.level, "hp") * 0.7);
@@ -1853,6 +1861,8 @@ export class TownRoom extends Room<TownState> {
   private grantXp(id: string, amount: number, at: { x: number; y: number }) {
     const p = this.state.players.get(id);
     if (!p) return;
+    if (p.xp >= MAX_XP) return; // max level: XP stops
+    amount = Math.min(amount, MAX_XP - p.xp);
     p.xp += amount;
     this.clients.find((c) => c.sessionId === id)?.send("xp", { amount, x: at.x, y: at.y });
     const lvl = levelFromXp(p.xp);

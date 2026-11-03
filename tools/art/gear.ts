@@ -1,7 +1,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { Canvas, HiCanvas, shade } from "./canvas";
 import { buildSheet, GearCtx, GearPart, HEROES, K, Pose, setGearHook } from "./characters";
-import { GEAR, GEAR_IDS, GearDef } from "../../shared/gear";
+import { GEAR, GEAR_IDS, GearDef, LOOT_IDS } from "../../shared/gear";
 
 /**
  * Gear overlays. For every hero and item we render the full hero sheet again with that item "worn"
@@ -280,11 +280,38 @@ const ICONS: Record<string, string[]> = {
     "...LLLLLLLLL....", "...LLLLALLLL....", "...LLLLLLLLL....", "...DDDDDDDDD....", "................", "................",
     "................", "................", "................", "................",
   ],
+  hood: [
+    "................", "......MMMM......", ".....MLLLLM.....", "....MLLLLLLM....", "...MLLLLLLLLM...", "...MLLDDDDLLM...",
+    "..MLLD....DLLM..", "..MLLD....DLLM..", "..MLLD....DLLM..", "..MLLLD..DLLLM..", ".MLLLLLDDLLLLLM.", ".MLLLLLLLLLLLLM.",
+    "MLLLLLLAALLLLLLM", "MMMMMMMMMMMMMMMM", "................", "................",
+  ],
+  horned: [
+    "................", "A..............A", "AA............AA", ".AA..........AA.", "..AA..MMMM..AA..", "...AAMLLLLMAA...",
+    "....MLLLLLLM....", "...MLLLLLLLLM...", "...MLLLLLLLLM...", "...DDDDDDDDDD...", "...ML.DDDD.LM...", "...ML......LM...",
+    "....M......M....", "................", "................", "................",
+  ],
+  bow: [
+    ".....ALL........", ".....A.LM.......", ".....A..LM......", ".....A...LM.....", ".....A....LM....", ".....A....LM....",
+    ".....A.....HH...", ".....A.....HH...", ".....A.....HH...", ".....A....LM....", ".....A....LM....", ".....A...LM.....",
+    ".....A..LM......", ".....A.LM.......", ".....ALL........", "................",
+  ],
+  axe: [
+    "................", ".........MLL....", "........MLLLL...", ".......MLLLLLL..", "......DLLLLLLLL.", "......DLLHHLLLL.",
+    ".......DLHHLLLL.", "........HHDLLL..", ".......HH..DL...", "......HH........", ".....HH.........", "....HH..........",
+    "...HH...........", "..HH............", ".PP.............", "PP..............",
+  ],
+  robe: [
+    "................", "....MM....MM....", "...MLLMAAMLLM...", "..MLLLLAALLLLM..", ".MLLLLLAALLLLLM.", ".MLMLLLAALLLMLM.",
+    ".ML.MLLAALLM.LM.", "....MLLAALLM....", "....DDDDDDDD....", "...MLLLAALLLM...", "...MLLLAALLLM...", "..MLLLLAALLLLM..",
+    "..MLLLLAALLLLM..", ".MLLLLLAALLLLLM.", ".AAAAAAAAAAAAAA.", "................",
+  ],
 };
 
 function icon(item: GearDef): Canvas {
   const c = new HiCanvas(16, 16, K);
-  const rows = item.slot === "hat" ? ICONS[item.style === "crown" ? "crown" : item.style === "helm" ? "helm" : "hat"]
+  const rows = item.slot === "hat" ? ICONS[item.style === "crown" ? "crown" : item.style === "helm" ? "helm" : item.style === "hood" ? "hood" : item.style === "horned" ? "horned" : "hat"]
+    : item.slot === "weapon" && (item.style === "bow" || item.style === "axe") ? ICONS[item.style]
+    : item.slot === "armour" && item.style === "robe" ? ICONS.robe
     : item.slot === "shield" ? ICONS[item.style]
     : item.slot === "ranged" ? ICONS[item.style]
     : item.slot === "weapon" && item.style.startsWith("long") ? ICONS.long
@@ -299,7 +326,8 @@ function icon(item: GearDef): Canvas {
   return c;
 }
 
-export function buildGear(out: string) {
+/** The 16x16 item icons atlas (menu, bag, ground drops). */
+export function buildGearIcons(out: string) {
   mkdirSync(out, { recursive: true });
   const frames: Record<string, { frame: { x: number; y: number; w: number; h: number } }> = {};
   const S = 16 * K;
@@ -310,11 +338,16 @@ export function buildGear(out: string) {
   });
   atlas.save(`${out}/icons.png`);
   writeFileSync(`${out}/icons.json`, JSON.stringify({ frames, meta: { image: "icons.png", size: { w: atlas.w, h: S }, scale: 1 } }, null, 1));
+}
+
+export function buildGear(out: string) {
+  buildGearIcons(out);
 
   for (const hero of HEROES) {
     setGearHook(null);
     const plain = buildSheet(hero);
-    for (const id of GEAR_IDS) {
+    // old pixel sheets still show the full class look, so class kits get no overlay there
+    for (const id of LOOT_IDS) {
       setGearHook(hook(GEAR[id]));
       diff(plain, buildSheet(hero)).save(`${out}/${hero.name}_${id}.png`);
     }
