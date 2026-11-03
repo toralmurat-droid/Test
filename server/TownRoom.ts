@@ -993,6 +993,20 @@ export class TownRoom extends Room<TownState> {
   /** Blobs that can call for help and fuse (Mother Blobs too, Murat 2026-11-03). */
   private static canMerge(m: Mob) { return BLOB_KINDS.includes(m.kind); }
 
+  /** Blobs below MERGE.minLevel don't merge, unless a hero close by is on the "watch a blob call for help" quest step. */
+  private mergeLevelOk(m: Mob) {
+    if (m.level >= MERGE.minLevel) return true;
+    const r2 = (10 * TILE) ** 2;
+    let ok = false;
+    this.state.players.forEach((p) => {
+      if (ok || p.dead) return;
+      const dx = m.x - p.x, dy = m.y - p.y;
+      if (dx * dx + dy * dy > r2) return;
+      for (let c = 0; c < CHAINS.length; c++) if (questStep(this.qs(p, c))?.type === "merge") { ok = true; return; }
+    });
+    return ok;
+  }
+
   /** In danger: call the blobs around to fuse into this one, up to its cap. */
   private blobCall(m: Mob, id: string, now: number) {
     m.nextCall = now + MERGE.callEveryMs;
@@ -1001,8 +1015,10 @@ export class TownRoom extends Room<TownState> {
     this.state.mobs.forEach((o) => { if (o.mergeInto === id && !o.dead) room -= o.merged; });
     if (room <= 0) return;
     const near: [number, string, Mob][] = [];
+    const lowOk = m.level < MERGE.minLevel; // a quest-witness call: low blobs may answer it too
     this.state.mobs.forEach((o, oid) => {
       if (o === m || o.dead || o.hidden || o.mergeInto || !TownRoom.canMerge(o)) return;
+      if (o.level < MERGE.minLevel && !lowOk) return;
       const d = Math.hypot(o.x - m.x, o.y - m.y);
       if (d <= MERGE.callRange) near.push([d, oid, o]);
     });
@@ -1583,7 +1599,7 @@ export class TownRoom extends Room<TownState> {
 
     if (m.canHeal && now >= m.nextHeal) this.blobHeal(m, id, now);
     // A blob in danger calls for help
-    if ((t || m.threat >= AGGRO.dangerGap) && TownRoom.canMerge(m) && now >= m.nextCall && !m.broken) {
+    if ((t || m.threat >= AGGRO.dangerGap) && TownRoom.canMerge(m) && now >= m.nextCall && !m.broken && this.mergeLevelOk(m)) {
       let crowd = 0;
       this.state.players.forEach((p) => { if (!p.dead && Math.hypot(p.x - m.x, p.y - m.y) <= MERGE.crowdRange) crowd++; });
       // In danger: badly hurt, crowded, or facing a hero far above its level (merging adds up their levels)

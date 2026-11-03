@@ -173,7 +173,8 @@ export const FACTION: Partial<Record<MobKind, "blob" | "undead" | "outlaw">> = {
 /**
  * Blob merging (Murat): a blob in danger (hurt, or facing several heroes) calls the blobs around it, and they
  * melt into one big blob. Levels, HP and abilities (shoot, charge, heal) add up. At most 5 blobs merge into a
- * blob below Lv 10, up to 10 into a higher one. Mother Blobs don't merge (bloblings do).
+ * blob below Lv 10, up to 10 into a higher one. Only blobs of Lv 5+ merge (Murat 2026-11-03), except near a
+ * hero whose quest step is to watch a blob call for help (the first quest, in a Lv 1-3 zone).
  */
 export const MERGE = {
   hpFrac: 0.5, // "in danger" below this fraction of HP...
@@ -181,6 +182,7 @@ export const MERGE = {
   callRange: 130, callEveryMs: 5000, // px around it that hear the call, and how often it may call
   speedMult: 1.5, touch: 10, // callers rush in and fuse on contact (px)
   capLow: 5, capHigh: 10, highLevel: 10,
+  minLevel: 5, // blobs below this level neither call for help nor answer a call
   shotEveryMs: 2200, // a merged blob that can shoot spits between blows
   growPerBlob: 0.22, // client: sprite scale +22% per blob inside
 };
