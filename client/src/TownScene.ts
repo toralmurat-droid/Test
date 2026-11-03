@@ -35,6 +35,8 @@ import { addPixelGrid } from "./pixelgrid";
 import { paintSmoothProps } from "./smoothProps";
 import { ChestLayer } from "./chests";
 import { addWorldProps } from "./worldProps";
+import { addSiegeWorks } from "./siegeArt";
+import { SiegeWork } from "./siegeWork";
 
 /** One painted bit on a merged blob, in body-relative units (-1..1 across the body). */
 interface BlobPart { kind: "patch" | "eye" | "mouth"; u: number; v: number; r: number; col: number }
@@ -136,6 +138,7 @@ export class TownScene extends Phaser.Scene {
   private signPanel = new SignPanel();
   private ambient?: Ambient;
   private details?: Details;
+  private siege!: SiegeWork;
   private areaName = "";
   private areaTimer?: number;
   private shots = new Map<string, { g: Phaser.GameObjects.GameObject & { x: number; y: number }; tx: number; ty: number; at: number; dx: number; dy: number; spd: number }>();
@@ -181,6 +184,8 @@ export class TownScene extends Phaser.Scene {
     this.details = new Details(this); // roof shading, ground detail, ducks, lanterns, day/night
     this.details.onDarkness((d) => this.ambient?.setDarkness(d));
     addWorldProps(this, (x, y) => this.details?.addLight(x, y, 0xffb347, 2.2, 0.75)); // spear racks, pennants, dummies, lantern poles...
+    addSiegeWorks(this); // the necromancer's half-built siege engines in the skeleton lands
+    this.siege = new SiegeWork(this);
 
     const cam = this.cameras.main;
     cam.setBounds(0, 0, MAP_W * TILE, MAP_H * TILE);
@@ -503,6 +508,14 @@ export class TownScene extends Phaser.Scene {
       if (e) this.squash(e, 1.25, 0.8, 140);
     });
     // A hidden monster jumps out of its grave / tree
+    // A skeleton at the siege works spots a hero: tools down, "!"
+    this.room.onMessage("workdrop", ({ id, work, x, y }) => {
+      const e = this.entities.get(id);
+      if (!e || e.culled) return;
+      this.siege.drop(id, work, e.sprite.x, e.sprite.y);
+      this.floatText(e.sprite.x, e.sprite.y - e.top - 4, "!", "#ff5252", PIXEL_FONT);
+      this.tweens.add({ targets: e.sprite, y: { from: e.sprite.y - 3, to: e.sprite.y }, duration: 180, ease: "Quad.easeIn" });
+    });
     this.room.onMessage("ambush", ({ id, x, y, victim }) => {
       const e = this.entities.get(id);
       if (!e) return;
@@ -743,6 +756,7 @@ export class TownScene extends Phaser.Scene {
   private removeEntity(id: string) {
     const e = this.entities.get(id);
     if (!e) return;
+    this.siege?.clear(id);
     e.sprite.destroy(); e.label?.destroy(); e.bar.destroy(); e.parts?.destroy(); e.bubble?.destroy(); e.shield?.destroy(); e.gear?.destroy();
     this.entities.delete(id);
   }
@@ -1356,7 +1370,7 @@ export class TownScene extends Phaser.Scene {
         if (off) {
           if (!e.culled) {
             e.culled = true; e.sprite.setVisible(false); e.bar.clear(); e.parts?.clear(); e.bubble?.setVisible(false);
-            e.label?.destroy(); e.label = undefined; e.lvlColor = undefined;
+            e.label?.destroy(); e.label = undefined; e.lvlColor = undefined; this.siege.clear(id);
           }
           continue;
         }
@@ -1404,6 +1418,7 @@ export class TownScene extends Phaser.Scene {
         if (attackFrames && !p.dead && p.winding) e.sprite.setFrame(ATTACK_BASE[dir]);
         else if (attackFrames && !p.dead && now < (e.strikeUntil ?? 0)) e.sprite.setFrame(ATTACK_BASE[dir] + 1);
         else e.sprite.setFrame(FRAME_BASE[dir] + step);
+        if (e.mob && p.job >= 0) { const wf = this.siege.update(id, e, p, now, moving); if (wf !== undefined) e.sprite.setFrame(wf); } // siege works
         e.sprite.setFlipX(dir === "left");
         if (p.kind === "crawler" && e.sprite.isCropped) e.sprite.setAngle(dir === "left" ? -16 : dir === "right" ? 16 : 0); // leaning on its arms
         if (e.mob) e.sprite.setVisible(!p.dead && !p.hidden);

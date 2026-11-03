@@ -24,6 +24,7 @@ import { sellPrice, SHOPS } from "../shared/shops";
 import { BLOB_KINDS, inZone, npcPresent, QUEST_VERSION, QUESTS, questStep, stepGoal, Summon, USE_RANGE } from "../shared/quests";
 import { findHideSpot, HIDE, noMobsAt, spawnPoint, SPAWN_ZONES, zoneCap } from "../shared/spawns";
 import { moveStep } from "../shared/movement";
+import { SLOTS_BY_ZONE, WORK_SLOTS } from "../shared/siege";
 import { flush, HeroSave, loadHero, login, markChest, openedChests, resetChests, saveHero } from "./accounts";
 import { chestById, chestLock, CHEST_RANGE, CHEST_RESPAWN_MS, CHESTS, GUARD_RESPAWN_MS, rollChest } from "../shared/chests";
 import { SLOT_COUNT } from "../shared/slots";
@@ -129,6 +130,8 @@ export class Mob extends Schema {
   @type("number") bones = 0; // Bone Demon: skeleton pieces it wears (DEMON.harvest), the client draws them on it
   @type("number") merged = 1; // blobs inside this one (MERGE): the client draws it bigger
   @type("string") guard = ""; // id of the loot chest it guards (shared/chests.ts): the chest stays locked while it lives
+  @type("string") work = ""; // skeleton at the siege works (shared/siege.ts): hammer, saw, haul, carry (with a plank), fetch (going for one)
+  @type("number") job = -1; // its WORK_SLOTS index (-1: no job); the client reads it to know where it works
   @type("string") parts = ""; // kinds of the blobs swallowed, comma-separated: the client paints their colours, eyes and mouths on it
   summonFor = ""; // quest fused blob (QuestStep.summon): session id of the player it was spawned for
   mergeInto = ""; // answering a call: id of the blob it is rushing to fuse with
@@ -137,6 +140,7 @@ export class Mob extends Schema {
   nextCall = 0; nextShot = 0;
   foe = ""; // blob vs undead feud (FEUD): the monster it is fighting
   ritual = false; banishAt = 0; nextStomp = 0; nextHarvest = 0; nextToss = 0; // BONES.ritual: given to a demon summoning; demon: when it goes back, next Hellfire Stomp
+  leg = 0; restUntil = 0; // carriers: 0 = taking a plank to the engine, 1 = going back to the yard; pause at each end
   flankA = NaN; // BONES: side of the hero this skeleton closes in from (NaN = straight at him)
   hateId = ""; hate = 0; nextAggro = 0; threat = 0; // AGGRO: who hit it last and how much it hates them; level gap of the scariest hero near
 
@@ -611,10 +615,67 @@ export class TownRoom extends Room<TownState> {
     m.specialKind = ""; m.specialAt = 0; m.nextBounce = 0; m.nextSlam = 0; m.nextRaise = 0; m.nextCircle = 0;
     m.ritual = false; m.banishAt = 0; m.nextStomp = 0; m.nextHarvest = 0; m.nextToss = 0; m.bones = 0;
     m.foe = ""; m.hateId = ""; m.hate = 0; m.nextAggro = 0; m.threat = 0;
+    m.work = ""; m.job = -1; m.leg = 1; m.restUntil = 0;
+    if (kind === "skeleton" && zi >= 0) this.takeJob(m, id, SPAWN_ZONES[zi].name);
     m.merged = 1; m.parts = ""; m.summonFor = ""; m.mergeInto = ""; m.mergeCap = 0; m.nextCall = 0; m.nextShot = 0;
     m.canShoot = kind === "shooterblob"; m.canCharge = kind === "warriorblob"; m.canHeal = kind === "healerblob";
     if (kind === "motherblob") m.nextBrood = Date.now() + BROOD.minMs + Math.random() * (BROOD.maxMs - BROOD.minMs);
     if (!this.state.mobs.has(id)) this.state.mobs.set(id, m);
+  }
+
+  // ---- Siege works (shared/siege.ts) ------------------------------------------
+  // The necromancer's skeletons build siege engines. Each job slot holds one worker; a skeleton that spawns in a
+  // zone with sites takes a free one, works there while no hero is near, and drops it to fight.
+
+  private jobs = new Map<number, string>(); // WORK_SLOTS index -> mob id
+
+  private takeJob(m: Mob, id: string, zone: string) {
+    const slots = SLOTS_BY_ZONE.get(zone);
+    if (!slots) return;
+    const free = slots.filter((k) => { const o = this.state.mobs.get(this.jobs.get(k) ?? ""); return !o || o.dead || o.job !== k || this.jobs.get(k) === id; });
+    if (!free.length) return; // every job taken: this one patrols
+    const k = free[Math.floor(Math.random() * free.length)];
+    this.jobs.set(k, id);
+    m.job = k;
+    const w = WORK_SLOTS[k];
+    m.homeX = w.x; m.homeY = w.y; // its leash is the work site
+    // nobody watching: it is already at work (else it walks over from where it rose)
+    if (!this.playerNear(w.x, w.y, NO_SPAWN_RANGE)) { m.x = w.x; m.y = w.y; }
+  }
+
+  /** Walks to its post and works there (carriers go back and forth between the yard and the engine). */
+  private work(m: Mob, now: number): InputState {
+    const w = WORK_SLOTS[m.job];
+    const carrier = w.job === "carry";
+    const gx = carrier && m.leg === 1 ? w.fromX! : w.x, gy = carrier && m.leg === 1 ? w.fromY! : w.y;
+    const d = Math.hypot(gx - m.x, gy - m.y);
+    if (carrier) {
+      if (!m.work) m.work = m.leg === 0 ? "carry" : "fetch";
+      if (d > 4) { m.restUntil = 0; return toward(m.x, m.y, gx, gy); }
+      if (!m.restUntil) m.restUntil = now + 1000 + Math.random() * 1200; // put the plank down / pick one up
+      else if (now >= m.restUntil) { m.leg = 1 - m.leg; m.work = m.leg === 0 ? "carry" : "fetch"; m.restUntil = 0; }
+      const lx = m.leg === 1 ? 2 * gx - w.x : w.lookX, ly = m.leg === 1 ? gy : w.lookY; // the yard lies beyond its pick-up spot
+      m.dir = Math.abs(lx - m.x) > Math.abs(ly - m.y) ? (lx > m.x ? "right" : "left") : (ly > m.y ? "down" : "up");
+      return STILL;
+    }
+    if (d > (m.work ? 10 : 4)) { m.work = ""; return toward(m.x, m.y, gx, gy); }
+    m.work = w.job;
+    m.dir = Math.abs(w.lookX - m.x) > Math.abs(w.lookY - m.y) ? (w.lookX > m.x ? "right" : "left") : (w.lookY > m.y ? "down" : "up");
+    return STILL;
+  }
+
+  /** Interrupted: tools down (the client shows it), and the rest of the site's gang turns on the same enemy. */
+  private dropWork(m: Mob, id: string, now: number) {
+    this.broadcast("workdrop", { id, work: m.work, x: Math.round(m.x), y: Math.round(m.y) });
+    m.work = ""; m.leg = 1; m.restUntil = 0;
+    if (m.job < 0 || !m.target) return;
+    const site = WORK_SLOTS[m.job].site;
+    for (const [k, oid] of this.jobs) {
+      if (oid === id || WORK_SLOTS[k].site !== site) continue;
+      const o = this.state.mobs.get(oid);
+      if (!o || o.dead || o.job !== k || o.target) continue;
+      o.hateId = m.target; o.hate = Math.max(o.hate, 0.5); o.nextAggro = Math.min(o.nextAggro, now + 150 + Math.random() * 350);
+    }
   }
 
   // ---- Special blobs --------------------------------------------------------
@@ -1412,6 +1473,9 @@ export class TownRoom extends Room<TownState> {
       foe = m.foe ? this.state.mobs.get(m.foe) : undefined;
     }
 
+    // A worker drops its tools the moment it has someone to fight (and its gang looks up too)
+    if (m.work && (t || foe || m.spot)) this.dropWork(m, id, now);
+
     // Dizzy: run for the nearest grave/tree if there is one
     if (t && m.broken && !m.spot && HIDE.spots[m.kind]) this.claimSpot(m, m.x, m.y, HIDE.fleeRadius, now, true);
     // Heading for a hiding spot (a calm monster forgets it as soon as it has someone to fight)
@@ -1525,6 +1589,8 @@ export class TownRoom extends Room<TownState> {
           m.windUntil = now + melee.windupMs; m.winding = true;
         }
       } else input = toward(m.x, m.y, foe.x, foe.y);
+    } else if (m.job >= 0 && !m.guard) {
+      input = this.work(m, now); // back to the siege works
     } else if (Math.hypot(m.x - m.homeX, m.y - m.homeY) > 40) {
       input = toward(m.x, m.y, m.homeX, m.homeY); // walk back home
     } else {
