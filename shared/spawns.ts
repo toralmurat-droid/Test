@@ -32,6 +32,19 @@ export function noMobsAt(px: number, py: number): boolean {
   return NO_MOB_RECTS.some((r) => tx >= r.x0 && tx < r.x1 && ty >= r.y0 && ty < r.y1);
 }
 
+/** Mother Blobs keep this many tiles away from Oakvale's stockade (Murat 2026-11-03): no spawning, no wandering in. */
+export const MOTHER_KEEP_OUT = 16;
+/** Distance in tiles from a pixel point to the village stockade rect (0 inside). */
+export function villageDist(px: number, py: number): number {
+  const v = VILLAGE, tx = px / TILE, ty = py / TILE;
+  const dx = Math.max(v.x0 - tx, 0, tx - (v.x1 + 1)), dy = Math.max(v.y0 - ty, 0, ty - (v.y1 + 1));
+  return Math.hypot(dx, dy);
+}
+/** True where a monster of this kind may not stand because it is too close to the village. */
+export function tooNearVillage(kind: MobKind, px: number, py: number): boolean {
+  return kind === "motherblob" && villageDist(px, py) < MOTHER_KEEP_OUT;
+}
+
 /** Monsters per area. Rects come from the map's AREAS (shared/map.ts), so zones follow the map layout. */
 const ZONE_MOBS: { name: string; mobs: Partial<Record<MobKind, number>>; respawnMs: number; wild?: boolean; fixed?: boolean; levels?: [number, number] }[] = [
   // Levels come from the distance to Oakvale (see zoneLevels)
@@ -131,10 +144,11 @@ export function zoneCap(z: SpawnZone): number {
 }
 
 /** Random walkable point inside a zone (never in the village or the safe zone; wild zones skip named areas). */
-export function randomPointInZone(z: SpawnZone): { x: number; y: number } {
+export function randomPointInZone(z: SpawnZone, kind?: MobKind): { x: number; y: number } {
   for (let i = 0; i < 300; i++) {
     const tx = z.x + Math.floor(Math.random() * z.w);
     const ty = z.y + Math.floor(Math.random() * z.h);
+    if (kind && tooNearVillage(kind, (tx + 0.5) * TILE, (ty + 0.5) * TILE)) continue;
     if (spawnable(z, tx, ty)) return { x: (tx + 0.5) * TILE, y: (ty + 0.5) * TILE };
   }
   return { x: (z.x + z.w / 2) * TILE, y: (z.y + z.h / 2) * TILE };
@@ -143,10 +157,10 @@ export function randomPointInZone(z: SpawnZone): { x: number; y: number } {
 /** Where and at what level a monster of this kind appears. In wild zones the level follows the spot. */
 export function spawnPoint(z: SpawnZone, kind: MobKind): { x: number; y: number; level: number } {
   const min = KIND_MIN_LEVEL[kind] ?? 1;
-  if (!z.wild) return { ...randomPointInZone(z), level: Math.max(min, rollLevel(z)) };
-  let best = randomPointInZone(z), lvl = 0;
+  if (!z.wild) return { ...randomPointInZone(z, kind), level: Math.max(min, rollLevel(z)) };
+  let best = randomPointInZone(z, kind), lvl = 0;
   for (let i = 0; i < 25; i++) {
-    const p = i ? randomPointInZone(z) : best;
+    const p = i ? randomPointInZone(z, kind) : best;
     const l = baseLevelAt(p.x / TILE, p.y / TILE) + Math.floor(Math.random() * 3);
     if (l > lvl) { best = p; lvl = l; }
     if (l >= min) break; // variants only out where the levels are high enough
