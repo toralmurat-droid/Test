@@ -325,6 +325,8 @@ function toward(x: number, y: number, tx: number, ty: number): InputState {
 const FEUD_CELL = 128; // px, >= FEUD.range
 /** Monsters with no player within this many px (square) doze until someone comes by. */
 const SLEEP_RANGE = 40 * TILE;
+/** Monsters never (re)appear this close to a living hero (Murat): the zone tries another spot or waits. */
+const NO_SPAWN_RANGE = 10 * TILE;
 
 /** Monsters that fight from range: how close they let you come, how far they chase, and their shot (none for healers). */
 type RangedCfg = { keepAway: number; far: number; range: number; shot: string; shotSpeed: number; shotRadius: number; mult?: number };
@@ -550,9 +552,18 @@ export class TownRoom extends Room<TownState> {
     if (num(s.questVer, 1) !== QUEST_VERSION && p.questStage > 0) { p.questStage = 0; p.questCount = 0; }
   }
 
-  private spawnMob(kind: MobKind, zi: number, id = `m${++this.mobSeq}`) {
+  /** A spawn spot in the zone away from every hero, or null if none turned up (the hero stands in a small zone). */
+  private freeSpawnPoint(zi: number, kind: MobKind) {
+    for (let i = 0; i < 12; i++) {
+      const pt = spawnPoint(SPAWN_ZONES[zi], kind);
+      if (!this.playerNear(pt.x, pt.y, NO_SPAWN_RANGE)) return pt;
+    }
+    return null;
+  }
+
+  private spawnMob(kind: MobKind, zi: number, id = `m${++this.mobSeq}`, at?: ReturnType<typeof spawnPoint>) {
     const def = MOBS[kind];
-    const home = spawnPoint(SPAWN_ZONES[zi], kind);
+    const home = at ?? spawnPoint(SPAWN_ZONES[zi], kind);
     const m = this.state.mobs.get(id) ?? new Mob();
     m.kind = kind;
     m.weapon = kind === "skeleton" ? rollSkeletonWeapon() : "";
@@ -995,6 +1006,7 @@ export class TownRoom extends Room<TownState> {
       const at = this.guardBack.get(c.id);
       if (at === undefined) { this.guardBack.set(c.id, this.guardsSpawned ? now + GUARD_RESPAWN_MS : now); continue; }
       if (now < at) continue;
+      if (this.playerNear(c.x, c.y, NO_SPAWN_RANGE)) continue; // guardians return once nobody is around the chest
       for (const k of missing) this.spawnGuard(k, c);
       this.guardBack.delete(c.id);
     }
@@ -1034,14 +1046,17 @@ export class TownRoom extends Room<TownState> {
       if (zone.alive >= zone.cap) { zone.nextAt = 0; if (zone.nextIn) zone.nextIn = 0; return; }
       if (!zone.nextAt) zone.nextAt = now + z.respawnMs;
       if (now >= zone.nextAt) {
-        let revived = false;
+        let revived = false, blocked = false;
         this.state.mobs.forEach((m, id) => {
-          if (revived || !m.dead || m.zone !== zi) return;
-          this.spawnMob(m.kind, zi, id);
+          if (revived || blocked || !m.dead || m.zone !== zi) return;
+          const at = this.freeSpawnPoint(zi, m.kind);
+          if (!at) { blocked = true; return; }
+          this.spawnMob(m.kind, zi, id, at);
           revived = true;
         });
         if (revived) zone.alive++;
-        zone.nextAt = zone.alive < zone.cap ? now + z.respawnMs : 0;
+        // No free spot (a hero is standing all over a small zone): try again shortly
+        zone.nextAt = blocked ? now + 2000 : zone.alive < zone.cap ? now + z.respawnMs : 0;
       }
       const secs = zone.nextAt ? Math.ceil((zone.nextAt - now) / 1000) : 0;
       if (zone.nextIn !== secs) zone.nextIn = secs;
