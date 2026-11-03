@@ -132,7 +132,7 @@ export class TownScene extends Phaser.Scene {
   private details?: Details;
   private areaName = "";
   private areaTimer?: number;
-  private shots = new Map<string, { g: Phaser.GameObjects.GameObject & { x: number; y: number }; tx: number; ty: number }>();
+  private shots = new Map<string, { g: Phaser.GameObjects.GameObject & { x: number; y: number }; tx: number; ty: number; at: number; dx: number; dy: number; spd: number }>();
   private fx!: SkillFx;
   private lastCast: Record<string, number> = {}; // local clock (ms) of my last cast of each skill, for cooldowns
   private items = new Map<string, Phaser.GameObjects.Image>();
@@ -318,28 +318,19 @@ export class TownScene extends Phaser.Scene {
     const shots = (this.room.state as any).projectiles;
     shots.onAdd((s: any, id: string) => {
       const size = s.size || 1;
-      const g = this.fx.addShot(id, s) ?? (s.kind === "magicbolt" || s.kind === "shadowbolt"
-        // Skeleton mage bolt (ice blue) / Necromancer shadow bolt (sickly green, bigger)
-        ? this.add.circle(s.x, s.y, s.kind === "shadowbolt" ? 3.5 : 2.5, s.kind === "shadowbolt" ? 0x7dff6a : 0x7fe7ff)
-            .setStrokeStyle(1, s.kind === "shadowbolt" ? 0x1b5e20 : 0x1a4a8a).setDepth(9000)
-        : s.kind === "slimeball"
-        // Shooter blob spit: purple goo ball
-        ? this.add.circle(s.x, s.y, 2.5, 0xb57cff).setStrokeStyle(1, 0x4a2a7a).setDepth(9000)
-        : s.kind === "stone"
-        // Sling stone (equipment)
-        ? this.add.circle(s.x, s.y, 1.5, 0x9e9e9e).setStrokeStyle(0.5, 0x424242).setDepth(9000)
-        : s.kind === "knife" || s.kind === "bolt"
-        // Thrown knife / crossbow bolt (equipment)
-        ? this.add.rectangle(s.x, s.y, s.kind === "bolt" ? 8 : 5, s.kind === "bolt" ? 1.5 : 2, s.kind === "bolt" ? 0x8d6e63 : 0xe0e6ee)
-            .setStrokeStyle(0.5, 0x37474f).setAngle(Math.atan2(s.vy ?? 0, s.vx ?? 1) * 180 / Math.PI).setDepth(9000)
-        : s.kind === "arrow"
-        // Arrow: thin shaft along the flight direction
-        ? this.add.rectangle(s.x, s.y, 9 * size, 1.5 * size, 0xe8d8b0).setStrokeStyle(0.5, 0x5d4037)
-            .setAngle(Math.atan2(s.vy ?? 0, s.vx ?? 1) * 180 / Math.PI).setDepth(9000)
-        : this.add.circle(s.x, s.y, 2.5 * size, 0xff9f1c).setStrokeStyle(1, 0xffe066).setDepth(9000));
-      const shot = { g, tx: s.x, ty: s.y };
+      // Every kind has its own look, trail and impact in skillfx.ts; a plain fireball is the fallback
+      const g = this.fx.addShot(id, s) ?? this.add.circle(s.x, s.y, 2.5 * size, 0xff9f1c).setStrokeStyle(1, 0xffe066).setDepth(9000);
+      const shot = { g, tx: s.x, ty: s.y, at: this.time.now, dx: s.vx ?? 0, dy: s.vy ?? 0, spd: 0 };
       this.shots.set(id, shot);
-      s.onChange(() => { shot.tx = s.x; shot.ty = s.y; });
+      s.onChange(() => {
+        // Learn the flight speed from the server updates so the shot can glide between them (see update)
+        const now = this.time.now, gap = now - shot.at;
+        if (gap > 5) {
+          const v = Math.hypot(s.x - shot.tx, s.y - shot.ty) / (gap / 1000);
+          shot.spd = shot.spd ? shot.spd * 0.5 + v * 0.5 : v;
+        }
+        shot.tx = s.x; shot.ty = s.y; shot.at = now; shot.dx = s.vx ?? shot.dx; shot.dy = s.vy ?? shot.dy;
+      });
     });
     shots.onRemove((_s: any, id: string) => { this.shots.get(id)?.g.destroy(); this.shots.delete(id); this.fx.removeShot(id); });
     // Skill ground effects (shared/skills.ts fields)
@@ -1270,8 +1261,11 @@ export class TownScene extends Phaser.Scene {
     }
 
     for (const shot of this.shots.values()) {
-      shot.g.x += (shot.tx - shot.g.x) * 0.5;
-      shot.g.y += (shot.ty - shot.g.y) * 0.5;
+      // Glide along the flight line between server updates (no stutter at 20 updates a second)
+      const lead = Math.min(80, now - shot.at) / 1000;
+      const px = shot.tx + shot.dx * shot.spd * lead, py = shot.ty + shot.dy * shot.spd * lead;
+      shot.g.x += (px - shot.g.x) * 0.6;
+      shot.g.y += (py - shot.g.y) * 0.6;
     }
 
     const meEnt = this.entities.get(this.me);
