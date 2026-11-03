@@ -123,6 +123,7 @@ export class Mob extends Schema {
   @type("string") weapon = ""; // skeletons: sword, axe, spear or bow (SKELETON_WEAPONS)
   @type("boolean") hidden = false; // tucked into a grave/tree: untouchable, only its eyes show
   @type("number") merged = 1; // blobs inside this one (MERGE): the client draws it bigger
+  @type("string") parts = ""; // kinds of the blobs swallowed, comma-separated: the client paints their colours, eyes and mouths on it
   mergeInto = ""; // answering a call: id of the blob it is rushing to fuse with
   mergeCap = 0; // most blobs this one may hold (set at its first call)
   canShoot = false; canCharge = false; canHeal = false; // abilities picked up by merging
@@ -552,7 +553,7 @@ export class TownRoom extends Room<TownState> {
     m.target = "";
     m.hidden = false; m.spot = ""; m.fleeing = false;
     m.specialKind = ""; m.specialAt = 0; m.nextBounce = 0; m.nextSlam = 0; m.nextRaise = 0; m.nextCircle = 0;
-    m.merged = 1; m.mergeInto = ""; m.mergeCap = 0; m.nextCall = 0; m.nextShot = 0;
+    m.merged = 1; m.parts = ""; m.mergeInto = ""; m.mergeCap = 0; m.nextCall = 0; m.nextShot = 0;
     m.canShoot = kind === "shooterblob"; m.canCharge = kind === "warriorblob"; m.canHeal = kind === "healerblob";
     if (kind === "motherblob") m.nextBrood = Date.now() + BROOD.minMs + Math.random() * (BROOD.maxMs - BROOD.minMs);
     if (!this.state.mobs.has(id)) this.state.mobs.set(id, m);
@@ -733,6 +734,7 @@ export class TownRoom extends Room<TownState> {
   /** o melts into h: levels, HP and abilities add up; o is gone (its zone brings a fresh one back later). */
   private absorb(h: Mob, hid: string, o: Mob, oid: string) {
     h.merged += o.merged; h.level += o.level;
+    h.parts = [h.parts, o.kind, o.parts].filter(Boolean).join(",");
     h.maxHp += o.maxHp; h.hp = Math.min(h.maxHp, h.hp + o.hp);
     h.canShoot ||= o.canShoot; h.canCharge ||= o.canCharge; h.canHeal ||= o.canHeal;
     o.dead = true; o.hp = 0; o.mergeInto = ""; o.moving = false;
