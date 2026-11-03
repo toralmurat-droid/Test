@@ -18,6 +18,7 @@ import { SignPanel } from "./signpanel";
 import { NpcLayer } from "./npcs";
 import { Villagers } from "./villagers";
 import { WatchLayer } from "./watch";
+import { GateTorches } from "./gateTorches";
 import { QUEST_ITEMS } from "../../shared/quests";
 import { pixelText } from "./pixeltext";
 import { ART_K, CHAR_GROW, CHAR_SCALE, CHARACTERS, CHAR_ORIGIN, CharacterName, createArtAnims, playCharAnim, preloadArt } from "./artAssets";
@@ -137,6 +138,7 @@ export class TownScene extends Phaser.Scene {
   private npcs?: NpcLayer;
   private villagers?: Villagers;
   private watch?: WatchLayer;
+  private torches?: GateTorches;
   private chests?: ChestLayer;
   private shrine?: ShrineLayer;
   private chatEl = document.getElementById("chat") as HTMLInputElement;
@@ -302,6 +304,8 @@ export class TownScene extends Phaser.Scene {
     this.npcs = new NpcLayer(this, (type, msg) => this.room.send(type, msg));
     this.villagers = new Villagers(this); // townsfolk idling on the square
     this.watch = new WatchLayer(this, (this.room.state as any).watch); // watchmen at the gates
+    this.torches = new GateTorches(this); // torches at the gates, lit by the watch at dusk
+    this.watch.torches = this.torches;
     this.room.onMessage("quest", (msg) => this.npcs?.onQuest(msg));
     this.room.onMessage("questuse", ({ id }) => this.npcs?.objects.burst(id));
     this.room.onMessage("shop", (msg) => this.npcs?.onShop(msg));
@@ -1469,6 +1473,7 @@ export class TownScene extends Phaser.Scene {
     if (!this.room) return;
     this.villagers?.update(dtMs);
     this.watch?.update(dtMs);
+    this.torches?.update(this.time.now, (id) => !!this.watch?.striking(id));
     this.fx.update(dtMs);
     const k = this.keys;
     const typing = this.chatting();
