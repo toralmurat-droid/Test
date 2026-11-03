@@ -1,6 +1,6 @@
 import Phaser from "phaser";
 import { TILE } from "../../shared/constants";
-import { AREAS, EMPTY, GROUND, OBJECTS, REDFANG_TOWERS, SIGNPOSTS, T, VILLAGE } from "../../shared/map";
+import { AREAS, EMPTY, GROUND, OBJECTS, REDFANG_TOWERS, SIGNPOSTS, T, VILLAGE, WRECK } from "../../shared/map";
 import { NPCS, NPC_DECOR } from "../../shared/npcs";
 import { CHESTS } from "../../shared/chests";
 import { SIEGE_SITES } from "../../shared/siege";
@@ -418,8 +418,155 @@ function watchtower(scene: Phaser.Scene) {
   }, 0.55);
 }
 
+
+// ---- the wreck of the Grey Heron (Heronwreck Strand, blob quest chain) -------------------------------------
+const SAIL = [0x3a3226, 0x5e5240, 0x837458, 0xa8987a, 0xc8baa0];     // salt-stained canvas
+const HULL = [0x1a120c, 0x2e2016, 0x463222, 0x5e4630, 0x7a5e42, 0x96785a]; // sea-bleached planks
+const DECK = [0x2a1e14, 0x463424, 0x624a34, 0x7e6248];
+const WEED = [0x16200f, 0x223218, 0x34481f];
+const OOZE = [0x2a0e20, 0x5a1440, 0x9b2c6b, 0xe26fa8, 0xffc4e2];
+const GLOAM_GREEN = [0x1e3a18, 0x3a6a2a, 0x6aa848];
+const wHash = (x: number, y: number, s: number) => { let h = Math.imul(x * 73 + 11 + s * 977, 374761393) ^ Math.imul(y + 5 + s * 131, 668265263); h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; };
+const wNoise = (x: number, y: number, s: number) => {
+  const ix = Math.floor(x), iy = Math.floor(y), fx = x - ix, fy = y - iy, sx = fx * fx * (3 - 2 * fx), sy = fy * fy * (3 - 2 * fy);
+  const a = wHash(ix, iy, s), b = wHash(ix + 1, iy, s), c = wHash(ix, iy + 1, s), d = wHash(ix + 1, iy + 1, s);
+  return a + (b - a) * sx + (c - a) * sy + (a - b - c + d) * sx * sy;
+};
+export const WRECK_W = 300, WRECK_H = 200;
+
+/**
+ * A merchant cog lying on the sand, bow raised to the upper left, her stern smashed into the surf at the lower right.
+ * The hull runs along the world x axis, so in the iso view she lies along the shore. Planked side lit from the top
+ * left with sea-bleached strakes, weed and barnacles at the waterline, a sliver of broken deck, a breach in her side
+ * showing the ribs and the hold (where the Brood Heart glows), a snapped mast with a torn sail flapping on its yard.
+ */
+function shipwreck(p: Pen, f: number) {
+  const t = (f / N) * Math.PI * 2;
+  // the breach sits right above the sprite's foot (x 150, bottom), so the Brood Heart drawn there stands in it
+  const X0 = 14, X1 = 262;                  // bow tip .. smashed stern
+  const keel = (u: number) => 126 + u * 112 + Math.sin(u * Math.PI) * 4 - (u > 0.55 ? (u - 0.55) * 95 : 0)
+    - (u < 0.16 ? Math.pow((0.16 - u) / 0.16, 1.6) * 44 : 0); // keel line, bow up (curving up into the stem), stern down in the surf
+  const side = (u: number) => (u < 0.1 ? 0.35 + 6.5 * u : 1) * (50 + 34 * Math.pow(1 - u, 2)); // side height, the bow rises high
+  const gun = (u: number) => keel(u) - side(u) - (u < 0.12 ? (0.12 - u) * 90 : 0);  // gunwale with the bow's sheer
+  const deckW = (u: number) => Math.max(0, 26 * Math.pow(Math.sin(Math.min(1, u * 1.15) * Math.PI), 0.7) - 2); // she heels toward us: we see her deck
+  // breach in her side (the hold), with a ragged edge
+  const breach = (x: number, y: number, u: number) => {
+    const v = (y - gun(u)) / (keel(u) - gun(u));
+    const cu = (u - 0.55) / 0.12, cv = (v - 0.56) / 0.4;
+    return cu * cu + cv * cv < 0.75 + 0.5 * wNoise(x * 0.25, y * 0.25, 3);
+  };
+  // the stern is smashed: planks end raggedly
+  const smashed = (x: number, y: number, u: number) => u > 0.86 && (u - 0.86) * 9 > 0.25 + 0.75 * wNoise(x * 0.12, y * 0.6, 4) + ((y >> 2) % 2) * 0.12;
+
+  // --- her shadow on the sand ---
+  for (let x = X0 - 4; x <= X1 - 4; x++) {
+    const u = Math.min(1, Math.max(0, (x - X0) / (X1 - X0))), k = keel(u);
+    for (let j = -2; j < 9; j++) if (wHash(x, j, 24) < 0.92) p.px(x + 4, k + j, 0x0e0a08, j < 3 ? 0.42 : 0.42 - (j - 3) * 0.06);
+  }
+  // --- snapped mast behind the hull, a yard hanging askew with a torn sail ---
+  const mu = 0.34, mx = X0 + (X1 - X0) * mu, mBase = gun(mu) - deckW(mu) * 0.5;
+  const mTop = 18, lean = -10;
+  const mastX = (y: number) => mx + lean * (mBase - y) / (mBase - mTop);
+  for (let y = mTop; y < mBase; y++) for (let k = 0; k < 5; k++) p.px(mastX(y) - 2 + k, y, k === 0 ? HULL[5] : k < 2 ? HULL[4] : k < 4 ? HULL[3] : HULL[1]);
+  for (let k = 0; k < 6; k++) p.px(mastX(mTop) - 2 + k, mTop - 1 - (k % 3 === 1 ? 3 : k % 2), HULL[k < 3 ? 4 : 2]); // splintered top
+  for (const y of [40, 66, 92]) { p.line(mastX(y) - 3, y, mastX(y) + 3, y, ROPE); p.line(mastX(y) - 3, y + 1, mastX(y) + 3, y + 1, 0x6a5a3a); } // iron bands, rope lashings
+  // a gull keeps watch on the stump
+  { const gx = mastX(mTop) - 1, gy = mTop - 4, bob = f % 3 === 0 ? 0 : 0;
+    p.rect(gx - 3, gy - 3 + bob, 7, 3, 0xe8e4dc); p.rect(gx - 2, gy - 6 + bob, 3, 3, 0xf4f0ea); p.px(gx - 3, gy - 5 + bob, 0xe0a030);
+    p.px(gx - 1, gy - 5 + bob, 0x101010); p.rect(gx + 1, gy - 3 + bob, 4, 1, 0x7a7e86); p.px(gx + 4, gy - 2 + bob, 0x5a5e66); }
+  // yard: hangs from one rope, tilted, swinging a little
+  const sw = Math.sin(t) * 1.5;
+  const yA = { x: mastX(44) - 34, y: 36 + sw }, yB = { x: mastX(44) + 46, y: 58 - sw };
+  p.line(mastX(30), 30, yA.x + 8, yA.y, ROPE); p.line(mastX(38), 38, yB.x - 6, yB.y, ROPE);
+  // sail: hangs from the yard, torn, the loose end flapping
+  for (let i = 0; i <= 80; i++) {
+    const k = i / 80, tx = yA.x + (yB.x - yA.x) * k, ty = yA.y + (yB.y - yA.y) * k;
+    const len = 26 + 34 * Math.sin(k * Math.PI * 0.9) * (0.6 + 0.4 * wNoise(i * 0.3, 0, 7)) - (k > 0.7 ? (k - 0.7) * 60 : 0);
+    for (let j = 2; j < len; j++) {
+      const fl = Math.sin(t + k * 4 + j * 0.08) * (j / 60) * 4, x = tx + fl + j * 0.12, y = ty + j;
+      const hole = wNoise(x * 0.18, j * 0.18, 8) > 0.72 && j > 6;
+      if (hole) continue;
+      const fold = Math.sin(k * 22 + t * 0.5 + j * 0.02);
+      let lv = 2.6 + fold * 0.9 - j / len * 1.2 - k * 0.6;
+      if (j > len - 3) lv -= 1.2; // ragged dark hem
+      const c = step(SAIL, lv, Math.round(x), y);
+      p.px(x, y, wHash(Math.round(x), y, 9) < 0.04 ? 0x4a3e2c : c); // salt stains
+    }
+  }
+  for (let i = 0; i <= 80; i++) { const k = i / 80; p.px(yA.x + (yB.x - yA.x) * k, yA.y + (yB.y - yA.y) * k, HULL[4]); p.px(yA.x + (yB.x - yA.x) * k, yA.y + (yB.y - yA.y) * k + 1, HULL[2]); }
+  // rigging: slack stays to the bow and to the stern
+  const sag = (x0: number, y0: number, x1: number, y1: number, d: number) => { for (let i = 0; i <= 120; i++) { const k = i / 120; p.px(x0 + (x1 - x0) * k, y0 + (y1 - y0) * k + Math.sin(k * Math.PI) * d, 0x4a3e2c); } };
+  sag(mastX(24), 24, X0 + 6, gun(0.02) - 12, 10);
+  sag(mastX(50), 50, X0 + (X1 - X0) * 0.8, gun(0.8) - 4, 16 + Math.sin(t) * 2);
+
+  // --- deck (seen past the gunwale, tilted toward us) ---
+  for (let x = X0; x <= X1; x++) {
+    const u = (x - X0) / (X1 - X0), g = gun(u), dw = deckW(u);
+    for (let y = Math.round(g - dw); y < g; y++) {
+      if (u > 0.84 && wNoise(x * 0.2, y * 0.3, 11) > 0.45) continue; // stern deck is gone
+      if (u > 0.55 && u < 0.72 && y > g - dw * 0.7 && wNoise(x * 0.15, y * 0.3, 12) > 0.5) { p.px(x, y, HULL[0]); continue; } // stove-in deck
+      const seam = Math.round(y - (g - dw)) % 4 === 0, butt = (x + Math.floor((y - g) / 4) * 13) % 23 === 0;
+      p.px(x, y, seam || butt ? DECK[0] : step(DECK, 2.2 - (g - y) / Math.max(1, dw) * 0.8 + (wNoise(x * 0.3, y, 13) - 0.5), x, y));
+    }
+    // a cargo hatch, its cover gone: a dark square hole in the deck
+    if (u > 0.2 && u < 0.27 && dw > 8) for (let y = Math.round(g - dw * 0.75); y < g - dw * 0.25; y++) p.px(x, y, u < 0.205 || y < g - dw * 0.72 ? DECK[3] : HULL[0]);
+    // the far bulwark along the top of the deck, broken in places
+    if (dw > 2 && u < 0.84 && wNoise(x * 0.09, 0, 23) > 0.3) { const y = Math.round(g - dw); p.px(x, y - 2, HULL[4]); p.px(x, y - 1, HULL[3]); p.px(x, y, HULL[1]); if (x % 11 === 0) for (let k = 0; k < 4; k++) p.px(x, y - 2 - k, HULL[k < 2 ? 3 : 4]); }
+  }
+  // --- hull side ---
+  for (let x = X0; x <= X1; x++) {
+    const u = (x - X0) / (X1 - X0), g = gun(u), kl = keel(u);
+    for (let y = Math.round(g); y <= kl; y++) {
+      if (smashed(x, y, u)) continue;
+      const v = (y - g) / Math.max(1, kl - g);
+      if (breach(x, y, u)) {
+        // the hold: dark inside, ribs, and the Gloam's ooze glowing at the bottom
+        const ribs = (x + Math.round(v * 4)) % 9 < 3;
+        const glow = v > 0.55 ? (v - 0.55) * 2.2 * (0.75 + 0.25 * Math.sin(t + x * 0.05)) : 0;
+        if (ribs) p.px(x, y, (x + Math.round(v * 4)) % 9 === 0 ? HULL[3] : HULL[1]);
+        else if (glow > 0.25) p.px(x, y, step(OOZE, glow * 3.2 + wNoise(x * 0.2, y * 0.2 + t, 14) - 0.5, x, y));
+        else p.px(x, y, (x + y) % 7 === 0 ? HULL[1] : HULL[0]);
+        continue;
+      }
+      const strake = Math.floor(v * 9), sv = v * 9 - strake;
+      let lv = 4.6 - Math.pow(v, 0.8) * 3.4 + (v < 0.12 ? 0.3 : 0) - (u > 0.8 ? (u - 0.8) * 4 : 0) + (wNoise(x * 0.08, strake * 3, 15) - 0.5) * 0.9 - (u < 0.06 ? 0.6 : 0);
+      if (sv < 0.14) lv = 0.6;                                   // seam between strakes
+      else if (sv > 0.82) lv -= 0.7;                             // underside of each plank
+      if ((x + strake * 31) % 37 === 0) lv = 0.5;                 // butt joints
+      let c = step(HULL, lv, x, y);
+      if (v > 0.74 && wNoise(x * 0.15, y * 0.4, 16) > 0.5 - (v - 0.74) * 1.4) c = step(WEED, (wNoise(x * 0.3, y * 0.3, 17)) * 3, x, y); // weed at the waterline
+      if (v > 0.7 && wHash(x, y, 18) < 0.018) c = BONE.lo;      // barnacles
+      if (v > 0.8) c = step(HULL, Math.min(lv, 1.6) - (v - 0.8) * 3, x, y) === HULL[0] && wHash(x, y, 25) < 0.5 ? HULL[0] : c; // the bilge turns under, into shadow
+      if (wHash(x >> 1, y >> 2, 19) < 0.012) c = 0x6a3a22;      // rust weeping from the nails
+      p.px(x, y, c);
+    }
+    // gunwale rail
+    if (!smashed(x, Math.round(g), u) && !(u > 0.86 && wNoise(x * 0.2, 0, 20) > 0.5)) { p.px(x, g - 1, HULL[5]); p.px(x, g, HULL[4]); p.px(x, g + 1, HULL[2]); }
+  }
+  // breach edge: splintered plank ends around the hole
+  for (let x = X0; x <= X1; x++) {
+    const u = (x - X0) / (X1 - X0), g = gun(u), kl = keel(u);
+    for (let y = Math.round(g); y <= kl; y++) {
+      if (!breach(x, y, u) || breach(x, y - 1, u) && breach(x - 1, y, u) && breach(x + 1, y, u) && breach(x, y + 1, u)) continue;
+      p.px(x, y, HULL[5]);
+      if (wHash(x, y, 21) < 0.25) p.px(x + 1, y + (y > (g + kl) / 2 ? 2 : -2), HULL[4]);
+    }
+  }
+  // ooze spilling out of the breach onto the sand, a pink drip pulsing
+  for (let i = 0; i < 30; i++) {
+    const u = 0.5 + i * 0.0035, x = X0 + (X1 - X0) * u, y0 = keel(u) - 6;
+    const len = 4 + Math.round(6 * wHash(i, 0, 22) + (i % 5 === 2 ? 1 + Math.sin(t) * 2 : 0));
+    for (let j = 0; j < len; j++) p.px(x, y0 + j, j === len - 1 ? GLOAM_GREEN[0] : step(GLOAM_GREEN, 2.4 - j / len * 1.6, Math.round(x), y0 + j));
+  }
+  // bowsprit and figurehead stump
+  p.shaft(X0 + 2, gun(0.01) + 2, X0 - 10, gun(0) - 26, 3, OLDWOOD);
+  for (let y = 0; y < 8; y++) for (let x = 0; x < 6; x++) if ((x - 2.5) ** 2 / 9 + (y - 4) ** 2 / 16 < 1) p.px(X0 + 1 + x, gun(0.01) + 4 + y, x < 2 ? HULL[4] : HULL[2]); // the heron, worn to a lump
+  // broken stern timbers sticking up out of the surf
+  for (const [x, h] of [[240, 26], [250, 18], [259, 30]] as const) { const u = (x - X0) / (X1 - X0); p.shaft(x, keel(u), x + 3, keel(u) - h, 2, HULL.slice(2, 5) as [number, number, number]); }
+}
+
 // ---- placement -------------------------------------------------------------------------------------------
-type Kind = "wp_spear_rack" | "wp_pennant_red" | "wp_pennant_black" | "wp_dummy" | "wp_lantern_pole" | "wp_skull_pike" | "wp_net_rack" | "wp_spears_ground" | "wp_watchtower";
+type Kind = "wp_shipwreck" | "wp_spear_rack" | "wp_pennant_red" | "wp_pennant_black" | "wp_dummy" | "wp_lantern_pole" | "wp_skull_pike" | "wp_net_rack" | "wp_spears_ground" | "wp_watchtower";
 interface Spot { kind: Kind; x: number; y: number; flip?: boolean }
 
 const hash = (x: number, y: number, s: number) => { let h = (x * 374761393 + y * 668265263 + s * 2147483647) | 0; h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; };
@@ -480,6 +627,8 @@ function spots(): Spot[] {
   for (const [tx, ty] of REDFANG_TOWERS) out.push({ kind: "wp_watchtower", x: (tx + 0.5) * TILE, y: (ty + 0.5) * TILE });
   scatter(out, "Redfang Hollow", "wp_skull_pike", 6, 3);
   scatter(out, "Redfang Hollow", "wp_spear_rack", 1, 4);
+  // Heronwreck Strand: the Grey Heron (fixed spot, see WRECK in shared/map.ts)
+  out.push({ kind: "wp_shipwreck", x: (WRECK.x + 0.5) * TILE, y: (WRECK.y + 0.6) * TILE });
   // Saltmere: nets drying by the beach, lantern poles on the lane
   scatter(out, "Saltmere", "wp_net_rack", 3, 5);
   scatter(out, "Saltmere", "wp_lantern_pole", 3, 6);
@@ -488,10 +637,12 @@ function spots(): Spot[] {
 
 /** World-space height (px) of each prop: textures are 1.5 texels per world px. */
 const SIZE: Record<Kind, number> = {
+  wp_shipwreck: WRECK_H / TX,
   wp_spear_rack: 80, wp_pennant_red: 100, wp_pennant_black: 100, wp_dummy: 58, wp_lantern_pole: 90, wp_skull_pike: 72, wp_net_rack: 50, wp_spears_ground: 54,
   wp_watchtower: 84,
 };
 const FPS: Record<Kind, number> = {
+  wp_shipwreck: 4,
   wp_spear_rack: 6, wp_pennant_red: 7, wp_pennant_black: 6, wp_dummy: 3, wp_lantern_pole: 3, wp_skull_pike: 6, wp_net_rack: 3, wp_spears_ground: 5,
   wp_watchtower: 6,
 };
@@ -505,6 +656,7 @@ export function worldPropTextures(scene: Phaser.Scene) { makeTextures(scene); }
 export function addWorldProps(scene: Phaser.Scene, light?: (x: number, y: number) => void) {
   makeTextures(scene);
   watchtower(scene);
+  sheet(scene, "wp_shipwreck", WRECK_W, WRECK_H, N, shipwreck, 0);
   for (const kind of Object.keys(SIZE) as Kind[]) {
     const key = `${kind}_idle`;
     if (!scene.anims.exists(key)) scene.anims.create({ key, frames: scene.anims.generateFrameNumbers(kind, { start: 0, end: N - 1 }), frameRate: FPS[kind], repeat: -1 });

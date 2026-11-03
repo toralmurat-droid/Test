@@ -1,12 +1,13 @@
 import { MobKind, TILE } from "./constants";
-import { AREAS, isSafeZone, isSolidAt, REDFANG, VILLAGE } from "./map";
+import { AREAS, isSafeZone, isSolidAt, REDFANG, VILLAGE, WRECK } from "./map";
 import { SPAWN_ZONES, SpawnZone } from "./spawns";
 import { npcById } from "./npcs";
 
 /**
  * The blob quest chain. Quests are done one after the other, each in a blob zone a little further from
  * Oakvale and a little tougher (North Meadow → Goldenreach Farms → Misty Marsh → Mirror Pond → Sunken Lake →
- * Thornwood → deep in the Whispering Woods).
+ * Brinewood → the wreck of the Grey Heron on Heronwreck Strand). The whole chain stays west of River Ashwell
+ * and ends on the coast, where the Gloam first came ashore (Murat 2026-11-03).
  *
  * Progress lives on the server: Player.questId = index in QUESTS, Player.questStage = 0 before the quest is
  * accepted, then 1..steps.length for the step being worked on (stage s = steps[s - 1]); Player.questCount =
@@ -102,7 +103,7 @@ export const USE_RANGE = 1.3 * TILE;
 export type StepType = "see" | "reach" | "talk" | "kill" | "collect" | "use" | "merge" | "ritual";
 
 /** Bump when steps change: saves from an older version restart their current quest at the offer. */
-export const QUEST_VERSION = 2;
+export const QUEST_VERSION = 3;
 
 /**
  * A monster the server puts in the world for a player on this step (one at a time, back if lost): a fused blob
@@ -166,7 +167,7 @@ const FZ = QUEST_ZONE.name;
 const FZN = `the ${FZ}`, FZD = zdir(QUEST_ZONE);
 const Z = {
   farms: zoneByName("Goldenreach Farms"), marsh: zoneByName("Misty Marsh"), pond: zoneByName("Mirror Pond"),
-  lake: zoneByName("Sunken Lake"), woods: zoneByName("Whispering Woods"), thorn: zoneByName("Thornwood"),
+  lake: zoneByName("Sunken Lake"), brine: zoneByName("Brinewood"), strand: zoneByName("Heronwreck Strand"),
 };
 
 export const LANTERNS: QuestObject[] = [
@@ -177,22 +178,26 @@ export const LANTERNS: QuestObject[] = [
 ];
 export const COCOON = obj("cocoon", "cocoon", "Blob cocoon", "Free Tobin", "Sunken Lake", 0.3, 0.35);
 export const SHRINES: QuestObject[] = [
-  obj("shrine1", "shrine", "Rotting shrine", "Cleanse", "Thornwood", 0.2, 0.3),
-  obj("shrine2", "shrine", "Rotting shrine", "Cleanse", "Thornwood", 0.5, 0.75),
-  obj("shrine3", "shrine", "Rotting shrine", "Cleanse", "Thornwood", 0.8, 0.35),
+  obj("shrine1", "shrine", "Rotting shrine", "Cleanse", "Brinewood", 0.2, 0.3),
+  obj("shrine2", "shrine", "Rotting shrine", "Cleanse", "Brinewood", 0.5, 0.75),
+  obj("shrine3", "shrine", "Rotting shrine", "Cleanse", "Brinewood", 0.8, 0.35),
 ];
-export const BROOD_HEART = obj("heart", "heart", "Brood Heart", "Burn", "Whispering Woods", 0.6, 0.62);
+/** In the breach of the Grey Heron's hull, where it has lain since the wreck. */
+export const BROOD_HEART: QuestObject = { id: "heart", kind: "heart", name: "Brood Heart", verb: "Burn", x: (WRECK.x + 0.8) * TILE, y: (WRECK.y + 0.9) * TILE };
 
 const back = (npc: string, name: string, where: string, say: string[], accept: string, nag?: string): QuestStep =>
   ({ type: "talk", npc, text: `Return to ${name}`, banner: ["Quest updated", `Return to ${name}`], say, accept, obj: `Return to ${name} (${where})`, nag });
 
 /**
- * The story: long ago one vast ooze, the Gloam, swallowed half the valley. The first druids could not kill
- * it, so they broke it into a thousand pieces and bound them with spirit lanterns and forest shrines, so
- * the pieces would forget one another. Those pieces are the blobs. Now the bindings are failing and the
- * blobs remember: a hurt blob calls the others and they fuse (MERGE in constants), and every fusion brings
- * the Gloam closer to whole. Mother Blobs are pieces that remember enough to bud new ones, and the Brood
- * Heart in the Whispering Woods is the Gloam's own heart, pulling every piece home.
+ * The story: long ago a ship, the Grey Heron, ran onto the rocks of the west coast in a storm. In her hold was a
+ * sealed cask of something no one should have carried: the Gloam, one vast ooze. It crawled out of the wreck and
+ * swallowed half the valley. The first druids could not kill it, so they broke it into a thousand pieces and bound
+ * them with spirit lanterns and forest shrines, so the pieces would forget one another. Those pieces are the
+ * blobs. Its heart they could not break, so they left it in the wreck and ringed the strand with the Brinewood
+ * shrines. Now the bindings are failing and the blobs remember: a hurt blob calls the others and they fuse (MERGE
+ * in constants), and every fusion brings the Gloam closer to whole. Mother Blobs are pieces that remember enough
+ * to bud new ones, and the Brood Heart in the wreck on Heronwreck Strand is the Gloam's own heart, pulling every
+ * piece home.
  * The chain follows that discovery: first you see blobs fuse, then fused blobs grow armed and bigger,
  * until the Gloam itself rises when you burn its heart.
  */
@@ -253,7 +258,8 @@ export const QUESTS: QuestDef[] = [
     description: `Elder Rowan told you the tale of the Gloam, the ooze the first druids broke into pieces. The spirit lanterns of ${Z.marsh.name} kept the pieces apart. They have gone dark.`,
     offer: [
       "Jelly that hums. Then it is true. Listen, friend, and I will tell you the tale of the Gloam.",
-      "Long ago one great ooze swallowed half this valley. The first druids could not kill it, so they broke it into a thousand pieces. Those pieces are the blobs.",
+      "Long ago a ship, the Grey Heron, broke on the rocks of the west coast. In her hold was a sealed cask, and in the cask was the Gloam.",
+      "It crawled out of the wreck and swallowed half this valley. The first druids could not kill it, so they broke it into a thousand pieces. Those pieces are the blobs.",
       `They hung spirit lanterns in ${Z.marsh.name}, ${zdir(Z.marsh)} of here. Their light makes the pieces forget one another. Now the lanterns are dark, and the pieces remember.`,
       "Light the four lanterns. And slay a Mother Blob: a piece that remembers enough to bud new pieces.",
     ],
@@ -316,51 +322,53 @@ export const QUESTS: QuestDef[] = [
         accept: "Claim reward", nag: "" },
     ],
     reward: { xp: 650, gold: 200, potions: 3 },
-    after: "Tobin heard them say its name. The Gloam is waking. Its pieces come from somewhere deep in the woods. Talk to me when you are ready.",
+    after: "Tobin heard them say its name. The Gloam is waking. And the pieces drift west, toward the old wreck on the coast. Talk to me when you are ready.",
   },
   {
-    id: "woods", title: "The Rotting Shrines", giver: "druid", zone: Z.thorn.name, minLevel: 10,
-    description: `The shrines of ${Z.thorn.name} are the last binding stones of the Gloam, and they are rotting under blob slime. Elder Rowan asked you to cleanse them, gather the rot seeds, and destroy the great fused blob that guards them.`,
+    id: "woods", title: "The Rotting Shrines", giver: "druid", zone: Z.brine.name, minLevel: 10,
+    description: `The shrines of ${Z.brine.name}, behind the beach where the Grey Heron was wrecked, are the last binding stones of the Gloam, and they are rotting under blob slime. Elder Rowan asked you to cleanse them, gather the rot seeds, and destroy the great fused blob that guards them.`,
     offer: [
       "Tobin's cocoon was full of tiny black seeds. Rot seeds. Bits of the Gloam's memory, carried by the healers.",
-      `The old shrines of ${Z.thorn.name} were the druids' last binding stones. The rot eats them, and with every shrine that falls the blobs fuse bigger.`,
+      `The old shrines of ${Z.brine.name}, ${zdir(Z.brine)} of here by the sea, were the druids' last binding stones. They ring the strand where the Grey Heron broke up, to keep what is left in her hold from the valley.`,
+      "The rot eats them, and with every shrine that falls the blobs fuse bigger.",
       "Cleanse the three shrines and bring me 4 rot seeds. Something huge has fused there to guard them. Bring it down.",
     ],
     acceptText: "I'll cleanse them",
     steps: [
-      { type: "use", zone: Z.thorn.name, objects: SHRINES, text: "Cleanse the 3 rotting shrines", banner: ["New quest", "The Rotting Shrines"],
+      { type: "use", zone: Z.brine.name, objects: SHRINES, text: "Cleanse the 3 rotting shrines", banner: ["New quest", "The Rotting Shrines"],
         obj: "Shrines cleansed: {n} / {goal}", nag: "{n} of {goal} shrines are clean. Press E at each one." },
-      { type: "collect", zone: Z.thorn.name, kinds: ["healerblob"], item: "rot", goal: 4, chance: { healerblob: 0.7 },
+      { type: "collect", zone: Z.brine.name, kinds: ["healerblob"], item: "rot", goal: 4, chance: { healerblob: 0.7 },
         text: "Collect 4 Rot Seeds from healer blobs", banner: ["The shrines are clean!", "Collect 4 Rot Seeds"], obj: "Rot Seeds: {n} / {goal}",
         nag: "{n} of {goal} seeds. The healers hide behind the others, go for them first." },
-      { type: "kill", zone: Z.thorn.name, kinds: BLOB_KINDS, fused: 4, goal: 1,
-        summon: { parts: ["warriorblob", "healerblob", "shooterblob", "slime"], level: 14, ...spotIn(Z.thorn.name, 0.5, 0.5) },
-        text: "Slay a blob of 4 or more fused together", banner: ["The seeds stir...", "Slay the Thornwood Amalgam"], obj: "Thornwood Amalgam slain: {n} / {goal}",
-        nag: `Four blobs in one skin, and it heals itself. It guards the heart of ${Z.thorn.name}.` },
-      back("druid", "Elder Rowan", "village bonfire", ["These seeds all point the same way. Deep into the Whispering Woods.", "There beats the Brood Heart. It is the Gloam's own heart, pulling every piece back home. Rest, and take this."], "Claim reward"),
+      { type: "kill", zone: Z.brine.name, kinds: BLOB_KINDS, fused: 4, goal: 1,
+        summon: { parts: ["warriorblob", "healerblob", "shooterblob", "slime"], level: 14, ...spotIn(Z.brine.name, 0.5, 0.5) },
+        text: "Slay a blob of 4 or more fused together", banner: ["The seeds stir...", "Slay the Brinewood Amalgam"], obj: "Brinewood Amalgam slain: {n} / {goal}",
+        nag: `Four blobs in one skin, and it heals itself. It guards the heart of ${Z.brine.name}.` },
+      back("druid", "Elder Rowan", "village bonfire", ["These seeds all point the same way. Down to the strand, to the wreck of the Grey Heron.", "Her hold never let go of the Brood Heart. It is the Gloam's own heart, pulling every piece back home. Rest, and take this."], "Claim reward"),
     ],
     reward: { xp: 900, gold: 260, potions: 3 },
-    after: "The Gloam's heart beats deep in the Whispering Woods. Come to me when you are strong enough to face it.",
+    after: "The Gloam's heart still beats in the wreck of the Grey Heron. Come to me when you are strong enough to face it.",
   },
   {
-    id: "thorn", title: "The Gloam Awakens", giver: "druid", zone: Z.woods.name, minLevel: 12,
-    description: `The Brood Heart deep in ${Z.woods.name} is the Gloam's heart. Two Mother Blobs guard it. Burn it, and every piece near it will fuse into the Gloam itself.`,
+    id: "thorn", title: "The Gloam Awakens", giver: "druid", zone: Z.strand.name, minLevel: 12,
+    description: `The Brood Heart lies in the broken hold of the Grey Heron, wrecked on ${Z.strand.name}, where the Gloam first came ashore. Two Mother Blobs guard it. Burn it, and every piece near it will fuse into the Gloam itself.`,
     offer: [
-      `It is time. The Brood Heart beats deep in ${Z.woods.name}, ${zdir(Z.woods)} of here.`,
+      `It is time. The Brood Heart lies in the wreck of the Grey Heron on ${Z.strand.name}, ${zdir(Z.strand)} of here.`,
+      "That is where it all began. The Gloam crawled out of her hold, and its heart never left it. The sea has been rotting her timbers for a hundred years, and still it beats.",
       "Two Mother Blobs guard it. Slay them, then burn the heart with this torch of oak fire.",
       "When the heart burns, the Gloam will try to become whole one last time. Every blob near it will fuse into one. You must destroy what rises.",
     ],
     acceptText: "I will end it",
     steps: [
-      { type: "kill", zone: Z.woods.name, kinds: ["motherblob"], goal: 2, text: "Slay 2 Mother Blobs", banner: ["New quest", "The Gloam Awakens"],
+      { type: "kill", zone: Z.strand.name, kinds: ["motherblob"], goal: 2, text: "Slay 2 Mother Blobs", banner: ["New quest", "The Gloam Awakens"],
         obj: "Mother Blobs slain: {n} / {goal}", nag: "{n} of {goal} Mother Blobs. Take potions, and do not fight them both at once." },
-      { type: "use", zone: Z.woods.name, objects: [BROOD_HEART], text: "Burn the Brood Heart", banner: ["The guardians have fallen!", "Burn the Brood Heart"],
+      { type: "use", zone: Z.strand.name, objects: [BROOD_HEART], text: "Burn the Brood Heart", banner: ["The guardians have fallen!", "Burn the Brood Heart"],
         obj: "Burn the Brood Heart", nag: "The heart is unguarded. Burn it!" },
-      { type: "kill", zone: Z.woods.name, kinds: BLOB_KINDS, fused: 6, goal: 1,
-        summon: { parts: ["warriorblob", "shooterblob", "healerblob", "warriorblob", "slime", "shooterblob"], level: 16, x: BROOD_HEART.x, y: BROOD_HEART.y + TILE },
+      { type: "kill", zone: Z.strand.name, kinds: BLOB_KINDS, fused: 6, goal: 1,
+        summon: { parts: ["warriorblob", "shooterblob", "healerblob", "warriorblob", "slime", "shooterblob"], level: 16, x: BROOD_HEART.x + 3 * TILE, y: BROOD_HEART.y },
         text: "Destroy the Gloam", banner: ["THE GLOAM RISES", "Destroy it before it grows"], obj: "The Gloam destroyed: {n} / {goal}",
-        nag: "It rose by the burning heart. Six pieces in one. Destroy it!" },
-      back("druid", "Elder Rowan", "village bonfire", ["I felt it, all the way here. The whole forest sighed.", "There will always be blobs, friend, but with no heart to call them, they will never find each other again. Oakvale owes you everything."], "Claim reward"),
+        nag: "It rose from the wreck by the burning heart. Six pieces in one. Destroy it!" },
+      back("druid", "Elder Rowan", "village bonfire", ["I felt it, all the way here. The whole valley sighed, and the sea with it.", "There will always be blobs, friend, but with no heart to call them, they will never find each other again. Oakvale owes you everything."], "Claim reward"),
     ],
     reward: { xp: 1600, gold: 500, potions: 5 },
     after: "The land is quieter thanks to you. The pieces wander alone again. May the old oaks shelter you, friend.",
