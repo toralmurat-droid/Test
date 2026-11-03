@@ -15,6 +15,9 @@ const FADE = 3; // soft edge of the discovered area, in tiles
 const FOG = "#15151d";
 
 type P = { x: number; y: number };
+/** Another online hero: shown on both maps in its own colour, named on the world map. */
+export type OtherHero = P & { name?: string };
+const ALLY = "#5ec8ff"; // other players (own hero is gold)
 /** Something to point at on the maps: a quest giver ("!" / "?"), a trader, or a quest area (circle). */
 export interface MapMarker { x: number; y: number; glyph: string; color: string; r?: number; label?: string; track?: boolean }
 
@@ -180,7 +183,7 @@ export class Minimap {
     if (changed) { this.paintFog(x0, y0, x1 - x0 + 1, y1 - y0 + 1); this.dirty = true; }
   }
 
-  draw(now: number, me: P | undefined, others: P[]) {
+  draw(now: number, me: P | undefined, others: OtherHero[]) {
     if (now - this.last < 100) return;
     this.last = now;
     if (me) this.reveal(Math.floor(me.x / TILE), Math.floor(me.y / TILE));
@@ -207,8 +210,8 @@ export class Minimap {
       g.fillStyle = color;
       g.fillRect(Math.round((p.x / TILE - ox) * s) - r, Math.round((p.y / TILE - oy) * s) - r, r * 2, r * 2);
     };
-    const known = (p: P) => this.seen[Math.floor(p.y / TILE) * MAP_W + Math.floor(p.x / TILE)] > 128;
-    for (const o of others) if (known(o)) dot(c, o, mpx, sx, sy, "#fff", 2);
+    // Other online heroes: blue dots with a dark outline, shown even in unexplored parts
+    for (const o of others) { dot(c, o, mpx, sx, sy, "#000", 3); dot(c, o, mpx, sx, sy, ALLY, 2); }
     this.drawMarkers(c, mpx, sx, sy, true);
     if (me) { dot(c, me, mpx, sx, sy, "#000", 3); dot(c, me, mpx, sx, sy, "#ffd166", 2); }
     if (ISO) {
@@ -250,8 +253,16 @@ export class Minimap {
       g.fillStyle = "#000"; g.fillText(a.name, lx + 1, ly + 1);
       g.fillStyle = "#ffe8a3"; g.fillText(a.name, lx, ly);
     }
-    for (const o of others) if (known(o)) dot(g, o, BIG, R.x, R.y, "#fff", 3);
     this.drawMarkers(g, BIG, R.x, R.y, false);
+    // Other online heroes: blue dot + name above it
+    g.font = `11px ${PF}`; g.textAlign = "center"; g.textBaseline = "alphabetic";
+    for (const o of others) {
+      dot(g, o, BIG, R.x, R.y, "#000", 5); dot(g, o, BIG, R.x, R.y, ALLY, 3);
+      if (!o.name) continue;
+      const lx = Math.round((o.x / TILE - R.x) * BIG), ly = Math.round((o.y / TILE - R.y) * BIG) - 8;
+      g.fillStyle = "#000"; g.fillText(o.name, lx + 1, ly + 1);
+      g.fillStyle = ALLY; g.fillText(o.name, lx, ly);
+    }
     if (me) { dot(g, me, BIG, R.x, R.y, "#000", 6); dot(g, me, BIG, R.x, R.y, "#ffd166", 4); }
   }
 
