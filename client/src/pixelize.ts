@@ -5,9 +5,10 @@
  */
 const BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5].map((v) => (v + 0.5) / 16 - 0.5);
 
-export function pixelize(ctx: CanvasRenderingContext2D, w: number, h: number, cell: number, opts: { step?: number; outline?: number } = {}) {
-  const step = opts.step ?? 14, outline = opts.outline ?? 0.45;
-  const img = ctx.getImageData(0, 0, w, h), d = img.data;
+export function pixelize(ctx: CanvasRenderingContext2D, w: number, h: number, cell: number, opts: { step?: number; outline?: number; ox?: number; oy?: number } = {}) {
+  const step = opts.step ?? 14, outline = opts.outline ?? 0.45, ox = opts.ox ?? 0, oy = opts.oy ?? 0;
+  ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0);
+  const img = ctx.getImageData(ox, oy, w, h), d = img.data;
   const CW = Math.ceil(w / cell), CH = Math.ceil(h / cell);
   const cr = new Float32Array(CW * CH * 4);
   for (let cy = 0; cy < CH; cy++) for (let cx = 0; cx < CW; cx++) {
@@ -33,5 +34,6 @@ export function pixelize(ctx: CanvasRenderingContext2D, w: number, h: number, ce
       d[i] = r; d[i + 1] = g; d[i + 2] = b; d[i + 3] = a * 255;
     }
   }
-  ctx.putImageData(img, 0, 0);
+  ctx.putImageData(img, ox, oy);
+  ctx.restore();
 }
