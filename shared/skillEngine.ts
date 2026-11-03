@@ -44,7 +44,7 @@ export interface ShotSpec extends HitEffects {
   owner: string; skill: string; x: number; y: number; vx: number; vy: number;
   kind: string; speed: number; range: number; radius: number; size: number; dmg: number;
   pierce: number; explode: number; chain: number; field?: FieldDef; rank: number; power: number;
-  pulse?: ShotDef["pulse"];
+  pulse?: ShotDef["pulse"]; pulses?: number; // pulses so far (turns the shard ring)
 }
 
 export interface FieldInst {
@@ -309,9 +309,18 @@ function chain(h: SkillHost, owner: string, from: string, hops: number, dmg: num
 }
 
 /** A skill projectile stops at (x, y): explosion and ground effect. */
-/** A pulsing projectile (ShotDef.pulse) flew `every` px further: it sets off its area where it is now. */
+/** A pulsing projectile (ShotDef.pulse) flew `every` px further: it sets off its area and/or shoots its shard ring from where it is now. */
 export function shotPulse(h: SkillHost, s: ShotSpec, x: number, y: number) {
-  if (s.pulse) area(h, s.owner, { id: s.skill }, s.pulse.area, s.power, rankTime(s.rank), [x, y]);
+  const p = s.pulse;
+  if (!p) return;
+  const i = s.pulses = (s.pulses ?? 0) + 1;
+  if (p.area) area(h, s.owner, { id: s.skill }, p.area, s.power, rankTime(s.rank), [x, y]);
+  if (p.shards) {
+    const n = p.shards.n ?? 1;
+    const a = Math.atan2(s.vy, s.vx) + (i * (p.turn ?? 0)) * Math.PI / 180;
+    // n shots fanned over 360 * (n-1)/n degrees = evenly all around; fire() lifts shots 4 px, so start 4 px lower
+    fire(h, s.owner, s.skill, { ...p.shards, spread: 360 * (n - 1) / n }, s.rank, s.power, x, y + 4, [Math.cos(a), Math.sin(a)]);
+  }
 }
 
 export function shotEnd(h: SkillHost, s: ShotSpec, x: number, y: number) {

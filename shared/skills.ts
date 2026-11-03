@@ -58,7 +58,11 @@ export interface ShotDef extends HitEffects {
   explode?: number; // radius of the blast where it stops
   chain?: number; // jumps to this many more enemies nearby (lightning)
   field?: FieldDef; // leaves a ground effect where it stops
-  pulse?: { every: number; area: AreaDef }; // sets off `area` where it is, every `every` px it flies (Frozen Orb)
+  /**
+   * Every `every` px it flies: sets off `area` where it is, and/or shoots `shards` out of itself in a ring
+   * (`shards.n` evenly spaced around it, the ring turning by `turn` degrees each time: a spiral). Frozen Orb.
+   */
+  pulse?: { every: number; area?: AreaDef; shards?: ShotDef; turn?: number };
 }
 
 export interface MoveDef {
@@ -288,9 +292,9 @@ const S: Record<ClassKind, SkillDef[]> = <Record<ClassKind, SkillDef[]>><unknown
       desc: "Summon a blizzard ahead for 5s: ice rains down, hurting and slowing everyone inside.",
       field: { kind: "blizzard", r: 70, ahead: 56, ms: 5000, tickMs: 500, dmg: 11, slowMs: 900 } },
     { id: "w_frozenorb", name: "Frozen Orb", type: "Attack", branch: 1, row: 4, style: "frost", cd: 0, cost: 2,
-      desc: "Launch an orb of frozen magic that flies straight and very far through enemies. Every few steps it bursts with ice around it, and at the end it blows up in a big frost blast. No cooldown: cast it as fast as your magic lasts.",
+      desc: "Launch an orb of frozen magic that flies straight and very far through enemies. As it goes it keeps spitting ice shards all around it in a turning spiral, and at the end it blows up in a big frost blast. No cooldown: cast it as fast as your magic lasts.",
       shots: { kind: "frozenorb", speed: 200, range: 450, radius: 7, size: 1.6, dmg: 10, pierce: 99, slowMs: 1000, kb: 0.2, explode: 56,
-        pulse: { every: 50, area: { r: 30, dmg: 9, slowMs: 900, look: "nova" } } } },
+        pulse: { every: 40, turn: 25, shards: { kind: "iceshard", n: 4, speed: 230, range: 80, radius: 4, dmg: 6, slowMs: 700, kb: 0.2 } } } },
 
     // Storm / arcane
     { id: "w_missiles", name: "Arcane Missiles", type: "Attack", branch: 2, row: 0, style: "arcane", cd: 4000, cost: 20,
