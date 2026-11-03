@@ -244,6 +244,8 @@ const MOTHER2_A = motherFrame(2, false), MOTHER2_B = motherFrame(2, true);
 const MOTHER3_A = motherFrame(3, false), MOTHER3_B = motherFrame(3, true);
 const BLOBLING_A = blobFrame(BLOBLING_W, BLOBLING_H, 6, false, false), BLOBLING_B = blobFrame(BLOBLING_W, BLOBLING_H, 6, true, false);
 
+/** Crawling skeleton: only this top fraction of the skeleton frame is drawn, resting on the ground. */
+export const CRAWL_CROP = 0.6;
 /** Per-kind size info for the scene: head height (labels/bubbles) and HP bar width. */
 export const MOB_LOOK: Record<string, { top: number; bar: number; oy: number; scale?: number }> = {
   skeletonmage: { top: 19, bar: 12, oy: 0.975 },
@@ -253,12 +255,14 @@ export const MOB_LOOK: Record<string, { top: number; bar: number; oy: number; sc
   shooterblob: { top: 15, bar: 12, oy: 0.92 },
   warriorblob: { top: 16, bar: 14, oy: 0.92 },
   healerblob: { top: 15, bar: 12, oy: 0.92 },
+  crawler: { top: 10, bar: 10, oy: CRAWL_CROP },
 };
 
 const PAINTED_MOBS = ["slime", "blobling", "shooterblob", "warriorblob", "healerblob", "motherblob", "skeleton", "bandit", "skeletonmage", "necromancer"];
 /** Painted humanoid monsters have taller frames (feet lower in the frame, label higher). */
 const PAINTED_LOOK: Record<string, { top: number; bar: number; oy: number; scale?: number }> = {
   // about hero height (heroes are 32 world px since the 48px sheets)
+  crawler: { top: 11, bar: 10, oy: CRAWL_CROP },
   skeleton: { top: 23, bar: 14, oy: 27.5 / 30 }, bandit: { top: 23, bar: 14, oy: 27.5 / 30 },
   skeletonmage: { top: 25, bar: 14, oy: 0.975 }, necromancer: { top: 40, bar: 26, oy: 0.975, scale: 1.45 },
   // pixel sheets use even frame heights (whole texels at 1.5 per px)
@@ -274,6 +278,7 @@ export function preloadPaintedMobs(scene: Phaser.Scene) {
 
 /** Monster sprite sheets, same 6-frame layout as personas (painted when the smooth look is on). */
 export function mobTexture(scene: Phaser.Scene, kind: string, level = 1, weapon = ""): string {
+  if (kind === "crawler") return mobTexture(scene, "skeleton", level, weapon); // a skeleton's upper half (cropped in TownScene)
   if (SMOOTH && PAINTED_MOBS.includes(kind)) {
     const tier = level >= 10 ? 3 : level >= 5 ? 2 : 1;
     // skeletons carry a sword (base sheet), an axe, a spear or a bow

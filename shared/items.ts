@@ -18,6 +18,7 @@ export interface LootDef {
 export const LOOT: Record<MobKind, LootDef> = {
   slime: { gold: [1, 4], potionChance: 0.15 },
   skeleton: { gold: [5, 12], potionChance: 0.3 },
+  crawler: { gold: [0, 2], potionChance: 0.05 },
   motherblob: { gold: [8, 18], potionChance: 0.5 },
   blobling: { gold: [0, 1], potionChance: 0.03 },
   shooterblob: { gold: [2, 6], potionChance: 0.15 },

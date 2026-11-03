@@ -2,7 +2,7 @@ import type { IncomingMessage } from "node:http";
 import { Client, Room } from "colyseus";
 import { ArraySchema, MapSchema, Schema, type } from "@colyseus/schema";
 import {
-  AGGRO, aggroLevelFactor, BLOB_AI, BROOD, Dir, FACTION, FEUD, MERGE, MobDef, MOTHER, SKELETON_AI, HIT_RADIUS, mobScale, InputState, MOB_ATTACK_RANGE, MOBS, MobKind, rollSkeletonWeapon, SKELETON_BOW, SKELETON_WEAPONS, SkeletonWeapon, REGEN_DELAY_MS, REGEN_RAMP_MS, regenFromStamina, SAFE_REGEN_MULT,
+  AGGRO, aggroLevelFactor, BLOB_AI, BONES, BROOD, Dir, FACTION, FEUD, MERGE, MobDef, MOTHER, SKELETON_AI, HIT_RADIUS, mobScale, InputState, MOB_ATTACK_RANGE, MOBS, MobKind, rollSkeletonWeapon, SKELETON_BOW, SKELETON_WEAPONS, SkeletonWeapon, REGEN_DELAY_MS, REGEN_RAMP_MS, regenFromStamina, SAFE_REGEN_MULT,
   RESPAWN_MS, TICK_RATE, TILE,
 } from "../shared/constants";
 import {
@@ -132,6 +132,7 @@ export class Mob extends Schema {
   canShoot = false; canCharge = false; canHeal = false; // abilities picked up by merging
   nextCall = 0; nextShot = 0;
   foe = ""; // blob vs undead feud (FEUD): the monster it is fighting
+  flankA = NaN; // BONES: side of the hero this skeleton closes in from (NaN = straight at him)
   hateId = ""; hate = 0; nextAggro = 0; threat = 0; // AGGRO: who hit it last and how much it hates them; level gap of the scariest hero near
 
   spot = ""; // hiding spot (tile "x,y") it is heading to or sitting in
@@ -929,6 +930,51 @@ export class TownRoom extends Room<TownState> {
     return undefined;
   }
 
+  /** The upper half of a broken skeleton: slow, frail, still swinging (no zone, never respawns). */
+  private spawnCrawler(x: number, y: number, level: number, weapon: string, mother: string, killer: string) {
+    if (isSafeZone(x, y)) return;
+    const c = new Mob();
+    c.kind = "crawler"; c.weapon = weapon; c.zone = -1; c.mother = mother;
+    c.x = c.homeX = x; c.y = c.homeY = y;
+    c.level = level;
+    c.hp = c.maxHp = Math.round(MOBS.crawler.maxHp * mobScale(level, "hp"));
+    if (this.state.players.has(killer)) { c.target = killer; this.addHate(c, killer, 0); }
+    else if (this.state.mobs.get(killer)?.dead === false) c.foe = killer;
+    c.stunUntil = Date.now() + 300;
+    const id = `c${++this.mobSeq}`;
+    this.state.mobs.set(id, c);
+    this.broadcast("bonebreak", { id, x: Math.round(x), y: Math.round(y) });
+  }
+
+  /**
+   * Skeleton packs: when two or more skeletons go for the same hero, give each its own side of him,
+   * spread evenly around the circle starting from where the first one already is (BONES).
+   */
+  private flankKeys = new Map<string, string>(); // hero -> ids of the pack whose sides are handed out
+  private assignFlanks() {
+    const packs = new Map<string, [string, Mob][]>();
+    this.state.mobs.forEach((m, id) => {
+      if (m.dead || m.hidden || !m.target || (m.kind !== "skeleton" && m.kind !== "crawler") || m.weapon === "bow") { m.flankA = NaN; return; }
+      const list = packs.get(m.target);
+      if (list) list.push([id, m]); else packs.set(m.target, [[id, m]]);
+    });
+    for (const pid of this.flankKeys.keys()) if (!packs.has(pid)) this.flankKeys.delete(pid);
+    packs.forEach((list, pid) => {
+      const p = this.state.players.get(pid);
+      if (!p || list.length < 2) { for (const [, m] of list) m.flankA = NaN; this.flankKeys.delete(pid); return; }
+      const key = list.map(([id]) => id).sort().join();
+      if (this.flankKeys.get(pid) === key) return; // same pack: everyone keeps its side
+      this.flankKeys.set(pid, key);
+      // spread evenly round the hero, centred on where the pack comes from, keeping their left-to-right order
+      const ang = list.map(([, m]) => Math.atan2(m.y - p.y, m.x - p.x));
+      const mean = Math.atan2(ang.reduce((s, a) => s + Math.sin(a), 0), ang.reduce((s, a) => s + Math.cos(a), 0));
+      const rel = ang.map((a) => Math.atan2(Math.sin(a - mean), Math.cos(a - mean)));
+      const order = list.map((_, i) => i).sort((a, b) => rel[a] - rel[b]);
+      const step = (Math.PI * 2) / list.length;
+      order.forEach((i, k) => { list[i][1].flankA = mean + (k - (list.length - 1) / 2) * step; });
+    });
+  }
+
   // ---- Tick ---------------------------------------------------------------
 
   private update(dtMs: number) {
@@ -972,6 +1018,7 @@ export class TownRoom extends Room<TownState> {
     });
     this.state.items.forEach((it, id) => { if (now > it.expires) this.state.items.delete(id); });
     this.buildFeudGrid();
+    this.assignFlanks();
     this.state.mobs.forEach((m, id) => {
       tickUnit(this.host, id);
       const fx = statusOf(m, now);
@@ -1188,6 +1235,16 @@ export class TownRoom extends Room<TownState> {
         } else if (now - m.lastAttack >= def.attackCooldownMs * melee.cooldown / poiseSpeed(poiseFrac(m, mobPoiseMax(m)))) {
           m.windUntil = now + melee.windupMs; m.winding = true; // telegraph, a hit interrupts it
         }
+      } else if (!Number.isNaN(m.flankA)) {
+        // Pack attack: swing round to its own side of the hero while closing in
+        const cur = Math.atan2(m.y - t.y, m.x - t.x);
+        let diff = m.flankA - cur;
+        while (diff > Math.PI) diff -= Math.PI * 2;
+        while (diff < -Math.PI) diff += Math.PI * 2;
+        const a = cur + Math.max(-BONES.flankTurn, Math.min(BONES.flankTurn, diff));
+        // circle round outside its reach until on its side, then close in
+        const r = Math.abs(diff) > 0.35 ? Math.max(melee.range + 12, dist * 0.9) : Math.max(melee.range * BONES.flankRadius, dist * 0.75);
+        input = toward(m.x, m.y, t.x + Math.cos(a) * r, t.y + Math.sin(a) * r);
       } else {
         input = toward(m.x, m.y, t.x, t.y);
       }
@@ -1557,6 +1614,11 @@ export class TownRoom extends Room<TownState> {
   private mobDied(m: Mob, targetId: string, attackerId: string, killerName: string) {
     m.dead = true; m.hp = 0;
     m.hidden = false; m.spot = ""; m.fleeing = false; m.foe = "";
+    // A skeleton may break in two: its upper body drags itself on at whoever killed it
+    if (m.kind === "skeleton" && Math.random() < BONES.crawlChance) {
+      const x = m.x, y = m.y, level = m.level, weapon = m.weapon === "bow" ? "sword" : m.weapon, mother = m.mother;
+      this.clock.setTimeout(() => this.spawnCrawler(x, y, level, weapon, mother, attackerId), BONES.crawlDelayMs);
+    }
     if (m.kind === "necromancer") {
       // Its raised skeletons fall apart with it
       this.state.mobs.forEach((c, cid) => {

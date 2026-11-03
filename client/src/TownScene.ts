@@ -10,7 +10,7 @@ import { attackMult, cooldownMult, heroSpeed, STATS, magicMult, STAT_NAMES, Stat
 import { skillOf, STACK_NAME, MAX_STACKS, TREE_LEVELS } from "../../shared/skills";
 import { SkillFx } from "./skillfx";
 import { displayGrid } from "./tileset";
-import { heroTexture, itemTexture, makeTileset, MOB_LOOK, mobTexture, preloadPaintedMobs } from "./textures";
+import { CRAWL_CROP, heroTexture, itemTexture, makeTileset, MOB_LOOK, mobTexture, preloadPaintedMobs } from "./textures";
 import { Minimap } from "./minimap";
 import { DayDial } from "./daydial";
 import { SignPanel } from "./signpanel";
@@ -435,6 +435,11 @@ export class TownScene extends Phaser.Scene {
       if (me && Math.hypot(me.sprite.x - x, me.sprite.y - y) < r * 2.5) this.cameras.main.shake(220, 0.007);
     });
     // Skeletons climb out of the ground: green flash and dust where each one appears
+    // A skeleton broke in two: bone chips fly, its upper half drags on
+    this.room.onMessage("bonebreak", ({ x, y }) => {
+      this.burst(x, y - 6, 6, 0xe8e2d0, 380);
+      this.burst(x, y, 3, 0x8d8577, 260);
+    });
     this.room.onMessage("necroraise", ({ pts }) => {
       for (const [x, y] of pts as [number, number][]) {
         this.burst(x, y, 4, 0x7dff6a, 420);
@@ -655,6 +660,7 @@ export class TownScene extends Phaser.Scene {
     if (mob) {
       const sprite = this.add.sprite(p.x, p.y, mobTexture(this, p.kind, p.level, p.weapon), 0).setOrigin(0.5, MOB_LOOK[p.kind]?.oy ?? 0.85)
         .setScale(MOB_LOOK[p.kind]?.scale ?? 1);
+      if (p.kind === "crawler") sprite.setCrop(0, 0, sprite.frame.width, sprite.frame.height * CRAWL_CROP); // legs gone
       // The level tag is made when the monster comes on screen (see update): thousands of text canvases would cost a lot
       this.entities.set(id, { sprite, bar: isoAnchor(this.add.graphics(), sprite) as Phaser.GameObjects.Graphics, tx: p.x, ty: p.y, state: p, mob, top: MOB_LOOK[p.kind]?.top ?? 14 });
       if ((p.merged || 1) > 1) this.growMob(this.entities.get(id)!, p);
@@ -1188,6 +1194,7 @@ export class TownScene extends Phaser.Scene {
         else if (attackFrames && !p.dead && now < (e.strikeUntil ?? 0)) e.sprite.setFrame(ATTACK_BASE[dir] + 1);
         else e.sprite.setFrame(FRAME_BASE[dir] + step);
         e.sprite.setFlipX(dir === "left");
+        if (p.kind === "crawler") e.sprite.setAngle(dir === "left" ? -16 : dir === "right" ? 16 : 0); // leaning on its arms
         if (e.mob) e.sprite.setVisible(!p.dead && !p.hidden);
         else e.sprite.setAlpha(p.dead ? 0.35 : 1).setAngle(p.dead ? 90 : 0);
       }
