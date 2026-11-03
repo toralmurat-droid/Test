@@ -2,7 +2,7 @@ import { ClassKind } from "./classes";
 import type { StatKind } from "./powers";
 
 /**
- * Skill trees (press T). Every hero has 3 branches of 5 skills. Each branch is a small, uneven tree (TREE below):
+ * Skill trees (press T). Every hero has 3 branches of 5 skills (the wizard's Frost branch has 6). Each branch is a small, uneven tree (TREE below):
  * a skill needs its parent skill and a hero level; some strong skills are dead ends (leaves) that lead nowhere higher.
  * Skills that need a higher level hit harder (LEVEL_POWER), and some also scale with an attribute (SkillDef.scale).
  * `row` is the skill's tier (0-4): how big its effects look and how rich its icon frame is (4 = ultimate).
@@ -286,6 +286,9 @@ const S: Record<ClassKind, SkillDef[]> = <Record<ClassKind, SkillDef[]>><unknown
     { id: "w_blizzard", name: "Blizzard", type: "Ultimate", branch: 1, row: 4, style: "frost", cd: 20000, cost: 50, chargeMs: 300,
       desc: "Summon a blizzard ahead for 5s: ice rains down, hurting and slowing everyone inside.",
       field: { kind: "blizzard", r: 70, ahead: 56, ms: 5000, tickMs: 500, dmg: 11, slowMs: 900 } },
+    { id: "w_spinshard", name: "Spinning Ice Shard", type: "Attack", branch: 1, row: 4, style: "frost", cd: 0, cost: 10,
+      desc: "Hurl a whirling star of ice: it cuts through up to 3 enemies and slows them. No cooldown: cast it as fast as your magic lasts.",
+      shots: { kind: "spinshard", speed: 240, range: 190, radius: 6, size: 1.6, dmg: 20, pierce: 2, slowMs: 1000, kb: 0.4 } },
 
     // Storm / arcane
     { id: "w_missiles", name: "Arcane Missiles", type: "Attack", branch: 2, row: 0, style: "arcane", cd: 4000, cost: 20,
@@ -442,6 +445,8 @@ const TREE: Record<string, Shape> = {
   // Wizard · Frost
   w_nova: [1, undefined, ["mag", 3]], w_shards: [3, "w_nova", ["dex", 3]], w_armor: [7, "w_shards"], w_mirror: [10, "w_shards"],
   w_blizzard: [20, "w_mirror", ["mag", 4]],
+  // the highest skill of the wizard: forks off Mirror Ice next to the Blizzard
+  w_spinshard: [26, "w_mirror", ["mag", 3]],
   // Wizard · Storm: one long limb, Mana Flow off the root
   w_missiles: [2, undefined, ["dex", 3]], w_flow: [12, "w_missiles"], w_blink: [5, "w_missiles", ["mag", 3]],
   w_static: [9, "w_blink", ["mag", 3]], w_storm: [24, "w_static", ["mag", 4]],
