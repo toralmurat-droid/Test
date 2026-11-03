@@ -28,7 +28,7 @@ import { chestById, chestLock, CHEST_RANGE, CHEST_RESPAWN_MS, CHESTS, GUARD_RESP
 import { SLOT_COUNT } from "../shared/slots";
 import { heroPoise, MOB_COMBAT, POISE, poiseLevelMult, poiseSpeed } from "../shared/combat";
 import {
-  BAG_SIZE, Equipped, GEAR, GEAR_SLOTS, GearSlot, gearBlock, gearName, gearReachMult, gearSpeedMult, gearStats, isGearId, potionChance, rollGear,
+  BAG_SIZE, Equipped, GEAR, GEAR_SLOTS, GearSlot, gearBlock, gearName, gearReachMult, gearSpeedMult, gearStats, isGearId, potionChance, rollGear, canWear, starterKit,
 } from "../shared/gear";
 import { Asker, boardFor, submit, tick as ideaTick, vote as ideaVote } from "../shared/ideas";
 import { hashAddr, ideaLog, saveIdeas } from "./ideaStore";
@@ -496,6 +496,8 @@ export class TownRoom extends Room<TownState> {
     if (options?.newGame) resetChests(p.name);
     const save = options?.newGame ? undefined : loadHero(p.name, p.cls);
     if (save) this.restore(p, save);
+    // New heroes (and saves from before class kits existed) put on the class's starting kit
+    if (!save?.kit) this.wearKit(p);
     this.applyStats(p);
     if (options?.newGame) saveHero(p.name, p.cls, this.snapshot(p));
     p.hp = p.maxHp;
@@ -529,13 +531,13 @@ export class TownRoom extends Room<TownState> {
       ptSta: p.ptSta, ptStr: p.ptStr, ptMag: p.ptMag,
       weapon: p.weapon, armour: p.armour, shoes: p.shoes, hat: p.hat, shield: p.shield, ranged: p.ranged,
       bag: p.bag.toArray(), talents, slots: p.slots.toArray(),
-      questId: p.questId, questStage: p.questStage, questCount: p.questCount, questVer: QUEST_VERSION,
+      questId: p.questId, questStage: p.questStage, questCount: p.questCount, questVer: QUEST_VERSION, kit: 1,
     };
   }
 
   private restore(p: Player, s: HeroSave) {
     const num = (v: unknown, d = 0) => (typeof v === "number" && Number.isFinite(v) ? v : d);
-    const gear = (v: unknown) => (typeof v === "string" && isGearId(v) ? v : "");
+    const gear = (v: unknown) => (typeof v === "string" && isGearId(v) && canWear(p.cls, v) ? v : "");
     p.color = num(s.color, p.color);
     p.xp = num(s.xp); p.level = Math.max(1, num(s.level, 1)); p.kills = num(s.kills);
     p.gold = num(s.gold); p.potions = Math.min(MAX_POTIONS, num(s.potions));
@@ -1477,6 +1479,12 @@ export class TownRoom extends Room<TownState> {
 
   // ---- Equipment ----------------------------------------------------------
 
+  /** Fills the empty slots with the class's starting kit (shared/gear.ts starterKit); kit items already carried are not doubled. */
+  private wearKit(p: Player) {
+    const have = new Set([...GEAR_SLOTS.map((s) => p[s]), ...bagItems(p)]);
+    for (const [slot, id] of Object.entries(starterKit(p.cls)) as [GearSlot, string][]) if (!p[slot] && !have.has(id)) p[slot] = id;
+  }
+
   private equipped(p: Player): Equipped {
     return Object.fromEntries(GEAR_SLOTS.map((s) => [s, p[s]]));
   }
@@ -1486,7 +1494,7 @@ export class TownRoom extends Room<TownState> {
     const p = this.state.players.get(id);
     if (!p || typeof i !== "number" || i < 0 || i >= p.bag.length) return;
     const gid = p.bag.at(i), def = gid ? GEAR[gid] : undefined;
-    if (!gid || !def) return;
+    if (!gid || !def || !canWear(p.cls, gid)) return;
     const slot: GearSlot = def.slot;
     const old = p[slot];
     const items = [...bagItems(p)];

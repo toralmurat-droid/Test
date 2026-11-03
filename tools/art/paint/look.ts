@@ -1,7 +1,7 @@
 /** How each painted character looks: materials, colours and kit. Poses and animation timing come from characters.ts. */
 export type HeadGear = "greathelm" | "ninjahood" | "wizardhat" | "hood" | "horned" | "cap" | "helm" | "bandana" | "wide" | "witch" | "none";
 export type TorsoKind = "plate" | "wrap" | "robe" | "jerkin" | "bare" | "shirt" | "mail" | "leather";
-export type LegKind = "trousers" | "mail" | "wrapped" | "robe" | "fur" | "dress";
+export type LegKind = "trousers" | "mail" | "wrapped" | "robe" | "fur" | "dress" | "bare";
 export type WeaponKind = "katana" | "sword" | "staff" | "bow" | "axe" | "hammer" | "spear" | "dagger" | "druidstaff" | "witchstaff" | "none";
 
 export interface Look {
@@ -13,7 +13,7 @@ export interface Look {
   torso: TorsoKind; torsoCol: number; trim?: number;
   tabard?: { col: number; trim: number; emblem: number };
   apron?: number; vest?: number; sash?: number; belt?: number; buckle?: number; belly?: boolean;
-  legs: LegKind; legCol: number; boots: number; bootStyle?: "greave" | "leather" | "wrap" | "shoe";
+  legs: LegKind; legCol: number; boots: number; bootStyle?: "greave" | "leather" | "wrap" | "shoe" | "bare";
   sleeve: number; arms: "plate" | "cloth" | "bare" | "wrap"; glove?: number; bracer?: number;
   weapon: WeaponKind;
   shield?: { col: number; trim: number; emblem: number; style: "kite" | "round" };
@@ -26,6 +26,8 @@ export interface Look {
   eyeGlow?: number;
   mask?: number;    // cloth over the lower face
   rags?: number;    // tattered cloth hanging off a skeleton
+  harness?: boolean; // leather strap across a bare chest (barbarian kit)
+  weaponKind?: WeaponKind; // what found weapons look like in this hero's hands (heroes start with weapon "none")
 }
 
 /** Monsters painted with the same body code (sheets built by paint/mobs.ts). */
@@ -60,48 +62,77 @@ export const MOB_LOOKS: Record<string, Look> = {
   },
 };
 
-export const LOOKS: Record<string, Look> = {
+/** Undyed linen braies: what every hero wears under the class kit. */
+export const LINEN = 0xe2dccb;
+
+/** A hero's own body (skin, hair, build) in nothing but linen underwear; the class look comes from KITS. */
+function bare(b: Partial<Look> & { skin: number; weaponKind: WeaponKind; fx: number }): Look {
+  return {
+    head: "none", torso: "bare", torsoCol: b.skin, legs: "bare", legCol: LINEN, boots: b.skin, bootStyle: "bare",
+    sleeve: b.skin, arms: "bare", weapon: "none", ...b,
+  };
+}
+
+export const HERO_BODIES: Record<string, Look> = {
+  knight: bare({ skin: 0xe8b48a, hair: 0x6b4a2e, hairStyle: "short", beard: 0x6b4a2e, beardStyle: "stubble", build: 1.08, weaponKind: "sword", fx: 0xfff1c4 }),
+  ninja: bare({ skin: 0xe2ad7f, eye: 0x111111, hair: 0x1c1a22, hairStyle: "short", weaponKind: "katana", fx: 0xbfd7ff }),
+  wizard: bare({ skin: 0xecc39c, hair: 0xe9e7ef, hairStyle: "long", beard: 0xeeeef4, beardStyle: "long", weaponKind: "staff", orb: 0x5ee6ff, fx: 0xc8fbff }),
+  archer: bare({ skin: 0xe8b07e, hair: 0xb8662a, hairStyle: "ponytail", weaponKind: "bow", fx: 0xe8f7c8 }),
+  barbarian: bare({ skin: 0xd99a6a, hair: 0xc8631f, hairStyle: "long", beard: 0xc8631f, beardStyle: "full", build: 1.12, weaponKind: "axe", fx: 0xffe0c0 }),
+};
+
+/**
+ * Class starting kits (shared/gear.ts starterKit, item id `${hero}_${slot}`): the Look fields each item puts on the bare body.
+ * The gear generator renders every item alone on the bare body and keeps the changed pixels as an overlay sheet.
+ */
+export const KITS: Record<string, Partial<Record<"weapon" | "shield" | "armour" | "hat" | "shoes", Partial<Look>>>> = {
   knight: {
-    skin: 0xe8b48a, head: "greathelm", headCol: 0xb9c2cc, plume: 0xc0262f, headTrim: 0xd9a93a,
-    torso: "plate", torsoCol: 0xaeb8c4, trim: 0xd9a93a,
-    tabard: { col: 0x24468f, trim: 0xd9a93a, emblem: 0xf0c75a },
-    legs: "mail", legCol: 0x7d8792, boots: 0x9aa4ae, bootStyle: "greave",
-    sleeve: 0xaeb8c4, arms: "plate", glove: 0x6f7883, belt: 0x4a2f1c, buckle: 0xd9a93a,
-    weapon: "sword", shield: { col: 0x24468f, trim: 0xd9a93a, emblem: 0xf0c75a, style: "kite" },
-    back: "cape", capeCol: 0x8c1d24,
-    fx: 0xfff1c4, build: 1.08,
+    hat: { head: "greathelm", headCol: 0xb9c2cc, plume: 0xc0262f, headTrim: 0xd9a93a },
+    armour: {
+      torso: "plate", torsoCol: 0xaeb8c4, trim: 0xd9a93a, tabard: { col: 0x24468f, trim: 0xd9a93a, emblem: 0xf0c75a },
+      legs: "mail", legCol: 0x7d8792, sleeve: 0xaeb8c4, arms: "plate", glove: 0x6f7883, belt: 0x4a2f1c, buckle: 0xd9a93a,
+      back: "cape", capeCol: 0x8c1d24,
+    },
+    shoes: { boots: 0x9aa4ae, bootStyle: "greave" },
+    weapon: { weapon: "sword" },
+    shield: { shield: { col: 0x24468f, trim: 0xd9a93a, emblem: 0xf0c75a, style: "kite" } },
   },
   ninja: {
-    skin: 0xe2ad7f, eye: 0x111111, head: "ninjahood", headCol: 0x23253a, headTrim: 0xc21f32,
-    torso: "wrap", torsoCol: 0x2b2e48, sash: 0x8a2230,
-    legs: "wrapped", legCol: 0x2b2e48, boots: 0x16172a, bootStyle: "wrap",
-    sleeve: 0x2b2e48, arms: "wrap", glove: 0xbfc4cf,
-    weapon: "katana", fx: 0xbfd7ff, back: "cape", capeCol: 0x1b1c2e,
+    hat: { head: "ninjahood", headCol: 0x23253a, headTrim: 0xc21f32 },
+    armour: { torso: "wrap", torsoCol: 0x2b2e48, sash: 0x8a2230, legs: "wrapped", legCol: 0x2b2e48, sleeve: 0x2b2e48, arms: "wrap", glove: 0xbfc4cf, back: "cape", capeCol: 0x1b1c2e },
+    shoes: { boots: 0x16172a, bootStyle: "wrap" },
+    weapon: { weapon: "katana" },
   },
   wizard: {
-    skin: 0xecc39c, hair: 0xe9e7ef, hairStyle: "long", beard: 0xeeeef4, beardStyle: "long",
-    head: "wizardhat", headCol: 0x4b2a8c, headTrim: 0xe0b440,
-    torso: "robe", torsoCol: 0x5b33a3, trim: 0xe0b440, sash: 0x2e1d55,
-    legs: "robe", legCol: 0x5b33a3, boots: 0x4a2e1c, bootStyle: "shoe",
-    sleeve: 0x5b33a3, arms: "cloth",
-    weapon: "staff", orb: 0x5ee6ff, fx: 0xc8fbff,
+    hat: { head: "wizardhat", headCol: 0x4b2a8c, headTrim: 0xe0b440 },
+    armour: { torso: "robe", torsoCol: 0x5b33a3, trim: 0xe0b440, sash: 0x2e1d55, legs: "robe", legCol: 0x5b33a3, sleeve: 0x5b33a3, arms: "cloth" },
+    shoes: { boots: 0x4a2e1c, bootStyle: "shoe" },
+    weapon: { weapon: "staff" },
   },
   archer: {
-    skin: 0xe8b07e, hair: 0xb8662a, hairStyle: "ponytail",
-    head: "hood", headCol: 0x355f2e, headTrim: 0x24421f,
-    torso: "jerkin", torsoCol: 0x6e4526, trim: 0x4f7f3a, belt: 0x3e2715, buckle: 0xc9a050,
-    legs: "trousers", legCol: 0x5c4129, boots: 0x3a2717, bootStyle: "leather",
-    sleeve: 0x4a7a38, arms: "cloth", bracer: 0x6e4526, glove: 0x5a3a22,
-    weapon: "bow", back: "quiver", capeCol: 0x2f5a2a, fx: 0xe8f7c8,
+    hat: { head: "hood", headCol: 0x355f2e, headTrim: 0x24421f },
+    armour: {
+      torso: "jerkin", torsoCol: 0x6e4526, trim: 0x4f7f3a, belt: 0x3e2715, buckle: 0xc9a050,
+      legs: "trousers", legCol: 0x5c4129, sleeve: 0x4a7a38, arms: "cloth", bracer: 0x6e4526, glove: 0x5a3a22,
+    },
+    shoes: { boots: 0x3a2717, bootStyle: "leather" },
+    weapon: { weapon: "bow", back: "quiver", capeCol: 0x2f5a2a },
   },
   barbarian: {
-    skin: 0xd99a6a, hair: 0xc8631f, hairStyle: "long", beard: 0xc8631f, beardStyle: "full",
-    head: "horned", headCol: 0x7d8792, headTrim: 0xeadfc6,
-    torso: "bare", torsoCol: 0xd99a6a, belt: 0x3a2414, buckle: 0xb8b8b8,
-    legs: "fur", legCol: 0x6a4527, boots: 0x45301e, bootStyle: "leather",
-    sleeve: 0xd99a6a, arms: "bare", bracer: 0x4a3020,
-    weapon: "axe", back: "pelt", capeCol: 0x8a6a48, fx: 0xffe0c0, build: 1.12,
+    hat: { head: "horned", headCol: 0x7d8792, headTrim: 0xeadfc6 },
+    armour: { harness: true, belt: 0x3a2414, buckle: 0xb8b8b8, legs: "fur", legCol: 0x6a4527, bracer: 0x4a3020, back: "pelt", capeCol: 0x8a6a48 },
+    shoes: { boots: 0x45301e, bootStyle: "leather" },
+    weapon: { weapon: "axe" },
   },
+};
+
+/** A hero wearing its whole starting kit (the old all-in-one class look). */
+export function dressed(hero: string): Look {
+  return Object.assign({}, HERO_BODIES[hero], ...Object.values(KITS[hero] ?? {}));
+}
+
+export const LOOKS: Record<string, Look> = {
+  ...HERO_BODIES,
   blacksmith: {
     skin: 0xcf9066, hairStyle: "bald", hair: 0x2b2b2b, beard: 0x2b2b2b, beardStyle: "full",
     head: "none", torso: "shirt", torsoCol: 0xb2a088, apron: 0x5e3b20, belt: 0x2e1d10,

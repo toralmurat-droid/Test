@@ -1,5 +1,9 @@
 import { CLASSES, ClassKind } from "../../shared/classes";
-import { CHAR_BASE, CHAR_EXT } from "./artAssets";
+import { CHAR_BASE, CHAR_EXT, HD_CHARS } from "./artAssets";
+import { GEAR_SLOTS, starterKit } from "../../shared/gear";
+
+/** Same order as gear.ts LAYER_ORDER (not imported: that module pulls in Phaser). */
+const KIT_ORDER = ["armour", "shoes", "ranged", "hat", "shield", "weapon"] as const;
 
 /**
  * Hero picker for the start menu: one equal-size card per class with the hero's sprite animated
@@ -31,7 +35,7 @@ export function mountHeroCards(host: HTMLElement, kinds: ClassKind[], selected: 
     b.append(cv, name, skill);
     b.onclick = () => { select(k); onPick(k); };
     host.appendChild(b);
-    return { k, b, cv, ctx: cv.getContext("2d")!, img: null as HTMLImageElement | null, anim: "idle", t0: 0, hover: false, step: 0, nextFidget: 2500 + Math.random() * 4000 };
+    return { k, b, cv, ctx: cv.getContext("2d")!, img: null as HTMLImageElement | null, kit: [] as HTMLImageElement[], anim: "idle", t0: 0, hover: false, step: 0, nextFidget: 2500 + Math.random() * 4000 };
   });
   for (const c of cards) {
     c.b.onpointerenter = () => { c.hover = true; };
@@ -53,7 +57,19 @@ export function mountHeroCards(host: HTMLElement, kinds: ClassKind[], selected: 
 
   let meta: Meta | null = null;
   fetch(`${BASE}/characters.json`).then((r) => r.json()).then((m) => { meta = m; }).catch(() => { /* cards still show names */ });
-  for (const c of cards) { const i = new Image(); i.onload = () => { c.img = i; }; i.src = `${BASE}/${c.k}.${CHAR_EXT}`; }
+  for (const c of cards) {
+    const i = new Image(); i.onload = () => { c.img = i; }; i.src = `${BASE}/${c.k}.${CHAR_EXT}`;
+    // The painted sheet is the bare hero: put the starting kit on top, layer by layer
+    if (HD_CHARS) {
+      const kit = starterKit(c.k);
+      for (const slot of KIT_ORDER) {
+        const id = kit[slot];
+        if (!id || !GEAR_SLOTS.includes(slot)) continue;
+        const g = new Image(); g.src = `assets/hd/gear/${c.k}_${id}.webp`;
+        c.kit.push(g);
+      }
+    }
+  }
 
   const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
   let raf = 0;
@@ -85,7 +101,9 @@ export function mountHeroCards(host: HTMLElement, kinds: ClassKind[], selected: 
       const f = a.frames[i], fw = meta.frameWidth, cols = meta.columns;
       c.ctx.imageSmoothingEnabled = false;
       c.ctx.clearRect(0, 0, c.cv.width, c.cv.height);
-      c.ctx.drawImage(c.img, (f % cols) * fw, Math.floor(f / cols) * fw, fw, fw, 0, 0, 32 * SCALE, 32 * SCALE);
+      for (const img of [c.img, ...c.kit]) {
+        if (img.complete && img.naturalWidth) c.ctx.drawImage(img, (f % cols) * fw, Math.floor(f / cols) * fw, fw, fw, 0, 0, 32 * SCALE, 32 * SCALE);
+      }
     }
   }
   raf = requestAnimationFrame(tick);

@@ -3,7 +3,7 @@ import { HiCanvas } from "../canvas";
 import {
   C2, P, blobPath, canvas, clipTo, css, curve, ellipseP, fillShape, glow, grain, hashStr, ik, limb, line, metal, mix, poly, rad, rng, sh, Shape, vol,
 } from "./brush";
-import { HeadGear, Look, LOOKS, MOB_LOOKS, TorsoKind } from "./look";
+import { HeadGear, HERO_BODIES, LINEN, Look, LOOKS, MOB_LOOKS, TorsoKind } from "./look";
 
 /**
  * Painted characters: the same poses as the pixel heroes (characters.ts works out hand position, weapon angle and
@@ -28,8 +28,21 @@ let PIX = false;
 export function setPaintPixel(on: boolean) { PIX = on; }
 /** The item being "worn" while the gear generator renders overlay sheets (null = plain hero). */
 export function setPaintGear(g: GearDef | null) { gear = g; }
+let kit: Partial<Look> | null = null;
+/** A class-kit item being "worn" (look.ts KITS): its Look fields go on top of the bare hero body. */
+export function setPaintKit(k: Partial<Look> | null) { kit = k; }
 export const hasLook = (name: string) => !!(LOOKS[name] ?? MOB_LOOKS[name]);
-const lookOf = (name: string) => LOOKS[name] ?? MOB_LOOKS[name];
+function lookOf(name: string): Look {
+  const L = LOOKS[name] ?? MOB_LOOKS[name];
+  if (!HERO_BODIES[name]) return L;
+  if (kit) return { ...L, ...kit };
+  // found gear on a bare hero: weapons take the class's weapon shape, body armour comes with matching leg wear
+  if (gear?.slot === "weapon" && L.weapon === "none" && L.weaponKind) return { ...L, weapon: L.weaponKind };
+  if (gear?.slot === "armour" && L.legs === "bare") {
+    return gear.style === "plain" ? { ...L, legs: "trousers", legCol: sh(gear.color, 0.62) } : { ...L, legs: "mail", legCol: sh(gear.color, 0.78) };
+  }
+  return L;
+}
 
 interface Rig {
   name: string; L: Look; p: PoseLike; dir: Dir; R: boolean; b: number;
@@ -162,6 +175,13 @@ function boots(c: C2, r: Rig, i: number, ankle: P, foot: P) {
   const L = r.L, st = gear?.slot === "shoes" ? (gear.style === "plain" ? "leather" : "leather") : L.bootStyle ?? "leather";
   const col = C(gear?.slot === "shoes" ? gear.color : L.boots);
   const fw = r.R ? 1 : 0;
+  if (st === "bare") {
+    // bare foot: a skin-coloured foot with a darker toe line
+    const fx = foot[0] + fw * 0.6, fy = foot[1] - 0.4;
+    vol(c, ellipseP(fx, fy, r.R ? 1.3 : 0.85, 0.6), C(L.skin), [fx - 1.3, fy - 0.6, 2.6, 1.2], { ao: 0.25 });
+    line(c, [[fx - (r.R ? -0.6 : 0.5), fy + 0.25], [fx + (r.R ? 1.2 : 0.5), fy + 0.25]], sh(C(L.skin), 0.55), 0.18, 0.7);
+    return;
+  }
   if (st !== "shoe") {
     const top: P = [ankle[0], ankle[1] - (st === "greave" ? 3.2 : 2.1)];
     limb(c, top, ankle, 1.95, 1.85, col, { metal: st === "greave" });
@@ -197,6 +217,17 @@ function leg(c: C2, r: Rig, i: number) {
     return;
   }
   const col = C(L.legCol);
+  if (kind === "bare") {
+    // bare skin with linen braies down to mid-thigh
+    const skin = C(L.skin), mid: P = [hip[0] + (kn[0] - hip[0]) * 0.62, hip[1] + (kn[1] - hip[1]) * 0.62];
+    limb(c, hip, kn, 2.2, 1.75, skin);
+    limb(c, kn, ankle, 1.75, 1.3, skin);
+    line(c, [[kn[0] - 0.2, kn[1] - 0.3], [kn[0] + 0.3, kn[1] + 0.5]], sh(skin, 0.6), 0.16, 0.55);
+    limb(c, [hip[0], hip[1] - 0.6], mid, 2.75, 2.45, col);
+    line(c, [[mid[0] - 1.2, mid[1] + 0.1], [mid[0] + 1.2, mid[1] + 0.2]], sh(col, 0.55), 0.2, 0.7); // hem
+    boots(c, r, i, ankle, ft);
+    return;
+  }
   if (kind === "mail") {
     limb(c, hip, kn, 2.5, 2.0, col);
     limb(c, kn, ankle, 2.0, 1.6, col);
@@ -246,6 +277,17 @@ function skirt(c: C2, r: Rig) {
     line(c, [[r.cx - 6, hem - 0.25], [r.cx + 6, hem - 0.25]], C(L.trim!), 0.55, 0.9); c.restore();
   });
   if (L.legs === "dress") clipTo(c, s, () => { line(c, [[r.cx - 6, hem - 0.9], [r.cx + 6, hem - 0.9]], sh(col, 0.6), 0.25, 0.6); });
+}
+
+/** Linen underwear: the band over the hips joining the two legs (bare heroes). */
+function braies(c: C2, r: Rig) {
+  const col = C(r.L.legCol), y0 = r.hipY - 1.5, y1 = r.hipY + 1.3, hw = 2.75 * r.b * (r.R ? 0.8 : 1);
+  const x = r.cx - r.sil * 0.5 + (r.R ? -0.3 : 0);
+  const s = blobPath([[x - hw, y0], [x + hw, y0], [x + hw + 0.2, y1 - 0.4], [x + 0.6, y1 + 0.3], [x, y1 - 0.2], [x - 0.6, y1 + 0.3], [x - hw - 0.2, y1 - 0.4]]);
+  vol(c, s, col, [x - hw, y0, 2 * hw, y1 - y0 + 0.5], { ao: 0.3 });
+  grain(c, s, [x - hw, y0, 2 * hw, y1 - y0 + 0.5], col, r.seed + 9, 24, 0.22, 0.8, 1.3);
+  line(c, [[x - hw, y0 + 0.35], [x + hw, y0 + 0.35]], sh(col, 0.6), 0.25, 0.8); // drawstring fold
+  if (r.dir === "down") curve(c, [x - 0.3, y0 + 0.4], [x - 0.6, y0 + 1.2], [x - 0.2, y0 + 1.6], sh(col, 0.55), 0.15, 0.7);
 }
 
 /** Fur kilt over the barbarian's hips. */
@@ -332,7 +374,7 @@ function torso(c: C2, r: Rig) {
       line(c, [[cx + 1.2, sy + 4.8], [cx + 1.9, sy + 4.9]], m, 0.18, 0.45);
     }
     // leather harness strap across the chest
-    if (!gear || gear.slot !== "armour") clipTo(c, s, () => {
+    if (L.harness && (!gear || gear.slot !== "armour")) clipTo(c, s, () => {
       const a: P = r.R ? [cx - 1, sy - 1] : down ? [cx - 3.2, sy - 0.6] : [cx + 3.2, sy - 0.6];
       const bb: P = r.R ? [cx + 1.6, hipY - 1] : down ? [cx + 2.8, hipY - 1.2] : [cx - 2.8, hipY - 1.2];
       line(c, [a, bb], C(0x4a2e18), 0.95); line(c, [a, bb], C(0x7a5232), 0.3, 0.7);
@@ -1207,6 +1249,7 @@ export function paintFrame(name: string, p: PoseLike, info: FrameInfo, withShado
     else if (r.R) { far(() => leg(c, r, 0), 0.8); leg(c, r, 1); }
     else { leg(c, r, 0); leg(c, r, 1); }
     if (L.legs === "fur") furKilt(c, r);
+    if (L.legs === "bare") braies(c, r);
   };
   const farArm = () => { far(() => arm(c, r, "far")); };
   const shieldNow = () => { shield(c, r); };

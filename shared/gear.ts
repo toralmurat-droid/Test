@@ -35,6 +35,8 @@ export interface GearDef {
   accent: number; // trim / glow
   style: string; // drawing style for the art generator
   shot?: ShotDef; // ranged slot only
+  /** Starting kit: only this class can wear it, it never drops from monsters or chests, and it is what makes the hero look like its class. */
+  cls?: string;
 }
 
 const G = (d: GearDef) => d;
@@ -64,8 +66,57 @@ export const GEAR: Record<string, GearDef> = Object.fromEntries([
   G({ id: "h_cap", slot: "hat", tier: 1, name: "Feather Cap", bonus: { mag: 1, sta: 1 }, color: 0x3f7d3a, accent: 0xe63946, style: "cap" }),
   G({ id: "h_helm", slot: "hat", tier: 2, name: "Iron Helm", bonus: { sta: 3, str: 1 }, color: 0x9aa3ad, accent: 0x5a626c, style: "helm" }),
   G({ id: "h_crown", slot: "hat", tier: 3, name: "Golden Crown", bonus: { sta: 2, str: 2, mag: 3 }, color: 0xf2c14e, accent: 0xe63946, style: "crown" }),
+  ...starterKits(),
 ].map((d) => [d.id, d]));
 export const GEAR_IDS = Object.keys(GEAR);
+/** Items that can drop or be found (everything except the class starting kits). */
+export const LOOT_IDS = GEAR_IDS.filter((id) => !GEAR[id].cls);
+
+/**
+ * Starting kits. A hero with nothing equipped is a plain human in linen underwear; these items are the class look
+ * (the knight's plate and great helm, the wizard's robe and hat...). New heroes start wearing them. No stat bonus,
+ * so taking them off or replacing them only changes the look. Id = `${cls}_${slot}`.
+ */
+function starterKits(): GearDef[] {
+  const k = (cls: string, slot: GearSlot, name: string, color: number, accent: number, style: string): GearDef =>
+    ({ id: `${cls}_${slot}`, slot, tier: 1, name, bonus: {}, color, accent, style, cls });
+  return [
+    k("knight", "weapon", "Squire's", 0xc9d2dc, 0xd9a93a, "plain"),
+    k("knight", "shield", "Knight's Shield", 0x24468f, 0xd9a93a, "kite"),
+    k("knight", "armour", "Knight's Plate", 0xaeb8c4, 0xd9a93a, "trim"),
+    k("knight", "hat", "Great Helm", 0xb9c2cc, 0xc0262f, "helm"),
+    k("knight", "shoes", "Steel Greaves", 0x9aa4ae, 0x6f7883, "plain"),
+    k("ninja", "weapon", "Shadow", 0xbfc4cf, 0x2b2e48, "plain"),
+    k("ninja", "armour", "Shinobi Garb", 0x2b2e48, 0x8a2230, "plain"),
+    k("ninja", "hat", "Shinobi Hood", 0x23253a, 0xc21f32, "hood"),
+    k("ninja", "shoes", "Tabi Wraps", 0x16172a, 0xa9aec0, "plain"),
+    k("wizard", "weapon", "Apprentice", 0x7a4f2a, 0x5ee6ff, "long"),
+    k("wizard", "armour", "Arcane Robe", 0x5b33a3, 0xe0b440, "robe"),
+    k("wizard", "hat", "Pointed Hat", 0x4b2a8c, 0xe0b440, "hat"),
+    k("wizard", "shoes", "Soft Shoes", 0x4a2e1c, 0x6b4423, "plain"),
+    k("archer", "weapon", "Yew", 0x8a5a32, 0xe9e2d0, "bow"),
+    k("archer", "armour", "Ranger's Jerkin", 0x6e4526, 0x4f7f3a, "plain"),
+    k("archer", "hat", "Ranger's Hood", 0x355f2e, 0x24421f, "hood"),
+    k("archer", "shoes", "Ranger's Boots", 0x3a2717, 0x6e4526, "plain"),
+    k("barbarian", "weapon", "Iron", 0x9aa3ad, 0x6b4226, "axe"),
+    k("barbarian", "armour", "Fur Kilt", 0x6a4527, 0x8a6a48, "fur"),
+    k("barbarian", "hat", "Horned Helm", 0x7d8792, 0xeadfc6, "horned"),
+    k("barbarian", "shoes", "Fur-lined Boots", 0x45301e, 0x8a6a48, "plain"),
+  ];
+}
+
+/** The class's starting kit, slot -> item id. */
+export function starterKit(cls: string): Equipped {
+  const out: Equipped = {};
+  for (const id of GEAR_IDS) if (GEAR[id].cls === cls) out[GEAR[id].slot] = id;
+  return out;
+}
+
+/** Class kits only fit their own class; everything else fits anyone. */
+export function canWear(cls: string, id: string): boolean {
+  const d = GEAR[id];
+  return !!d && (!d.cls || d.cls === cls);
+}
 
 export const BAG_SIZE = 12;
 export const TIER_NAMES = ["", "Common", "Rare", "Epic"];
@@ -119,7 +170,7 @@ export function rollGear(kind: MobKind, level = 1, rnd = Math.random): string | 
   if (rnd() >= d.chance) return undefined;
   let r = rnd(), tier = 1;
   for (let i = 0; i < 3; i++) { if (r < d.tiers[i]) { tier = i + 1; break; } r -= d.tiers[i]; }
-  const pool = GEAR_IDS.filter((id) => GEAR[id].tier === tier);
+  const pool = LOOT_IDS.filter((id) => GEAR[id].tier === tier);
   return pool[Math.floor(rnd() * pool.length)];
 }
 
@@ -181,6 +232,7 @@ export function bonusText(b: GearBonus): string {
 export function itemText(id: string): string {
   const d = GEAR[id];
   if (!d) return "";
+  if (d.cls && !d.shot && !Object.keys(d.bonus).length) return "Starting gear";
   const shot = d.shot ? `${d.shot.damage} dmg, range ${d.shot.range}, every ${(d.shot.cooldownMs / 1000).toFixed(1)}s [${RANGED_KEY}]` : "";
   return [shot, bonusText(d.bonus)].filter(Boolean).join(", ");
 }
