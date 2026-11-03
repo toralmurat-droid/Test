@@ -16,6 +16,8 @@ export interface HeroSave {
   questId?: number; questStage: number; questCount: number; questVer?: number;
   /** Skeleton quest chain (shared/quests.ts CHAINS[1]) */
   boneId?: number; boneStage?: number; boneCount?: number; boneVer?: number;
+  /** Redfang quest chain (CHAINS[2]) */
+  redId?: number; redStage?: number; redCount?: number; redVer?: number;
   /** 1 once the hero has been given its class starting kit (older saves get it on their next login). */
   kit?: number;
   /** 0 until the hero closed the first-login intro (missing on older saves = already seen). */

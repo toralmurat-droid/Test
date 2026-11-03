@@ -182,7 +182,7 @@ export class NpcLayer {
     const shop = SHOPS[n.shop!];
     const gold = q?.gold ?? 0, potions = q?.potions ?? 0, cls = q?.cls;
     const bag = [...(q?.bag ?? [])];
-    const key = JSON.stringify([n.id, gold, potions, bag, this.shopMsg, q?.questId, q?.questStage, q?.boneId, q?.boneStage]);
+    const key = JSON.stringify([n.id, gold, potions, bag, this.shopMsg, q?.questId, q?.questStage, q?.boneId, q?.boneStage, q?.redId, q?.redStage]);
     if (key === this.stage) return;
     this.stage = key;
     const row = (icon: string, name: string, color: string, desc: string, btn: string, cls2: string, i: number, off: boolean) =>
@@ -236,7 +236,7 @@ export class NpcLayer {
     const page = questDialog(n.id, q);
     if (n.shop && (this.trading || !page)) return this.renderShop(n, q);
     this.dialog.classList.remove("shop");
-    const key = JSON.stringify([n.id, q?.questId, q?.questStage, q?.questCount, q?.boneId, q?.boneStage, q?.boneCount, q?.level]);
+    const key = JSON.stringify([n.id, q?.questId, q?.questStage, q?.questCount, q?.boneId, q?.boneStage, q?.boneCount, q?.redId, q?.redStage, q?.redCount, q?.level]);
     if (key === this.stage) return;
     this.stage = key;
     const p = page ?? { text: ["Good day to you."], bye: "Farewell", chain: 0 };
