@@ -1,7 +1,7 @@
 import { npcById } from "../../shared/npcs";
-import { QUESTS, questObjective, QuestState as QState, stepGoal, stepProgress } from "../../shared/quests";
+import { CHAINS, chainState, QuestDef, questObjective, Quester, QuestState as QState, stepGoal, stepProgress } from "../../shared/quests";
 
-type QuestState = QState | undefined;
+type QuestState = Quester | undefined;
 
 const TRACK_KEY = "quest:untracked";
 
@@ -9,8 +9,8 @@ const TRACK_KEY = "quest:untracked";
 export class QuestLog {
   private el = document.createElement("div");
   private html = "";
-  /** Quest shown on the right (index in QUESTS); -1 = the current one */
-  private sel = -1;
+  /** Quest shown on the right ("chain:index"); "" = the current one */
+  private sel = "";
   tracked = true;
 
   constructor() {
@@ -22,7 +22,7 @@ export class QuestLog {
       const t = ev.target as HTMLElement;
       if (t.closest(".ql-close")) this.toggle(false);
       const item = t.closest<HTMLElement>(".ql-item");
-      if (item) { this.sel = Number(item.dataset.q); this.html = ""; }
+      if (item) { this.sel = item.dataset.q ?? ""; this.html = ""; }
       if (t.closest(".ql-track")) {
         this.tracked = (t.closest(".ql-track") as HTMLInputElement).checked;
         try { localStorage.setItem(TRACK_KEY, this.tracked ? "0" : "1"); } catch { /* ignore */ }
@@ -33,23 +33,33 @@ export class QuestLog {
 
   get open() { return !this.el.hidden; }
 
-  toggle(open = !this.open) { this.el.hidden = !open; this.html = ""; if (open) this.sel = -1; }
+  toggle(open = !this.open) { this.el.hidden = !open; this.html = ""; if (open) this.sel = ""; }
 
-  render(q: QuestState) {
+  render(p: QuestState) {
     if (!this.open) return;
-    const qid = q?.questId ?? 0, stage = q?.questStage ?? 0, count = q?.questCount ?? 0;
-    const active = QUESTS[qid] && stage > 0 ? qid : -1;
-    const finished = QUESTS.slice(0, qid).map((_, i) => i).reverse();
+    // Every chain (the blob story, the skeleton story) has its own active quest and finished ones
+    type Entry = { key: string; d: QuestDef; q: QState; done: boolean };
+    const active: Entry[] = [], finished: Entry[] = [], hints: string[] = [];
+    CHAINS.forEach((ch, c) => {
+      const q = chainState(p, c) ?? { chain: c, questId: 0, questStage: 0, questCount: 0 };
+      const qid = q.questId;
+      if (ch.quests[qid] && q.questStage > 0) active.push({ key: `${c}:${qid}`, d: ch.quests[qid], q, done: false });
+      for (let i = qid - 1; i >= 0; i--) finished.push({ key: `${c}:${i}`, d: ch.quests[i], q, done: true });
+      const next = ch.quests[qid];
+      if (next && q.questStage === 0 && (qid > 0 || c > 0 || (q.level ?? 1) >= next.minLevel)) {
+        hints.push((q.level ?? 1) >= next.minLevel ? `<b class="bang">!</b> ${npcById(next.giver)?.name} has a new quest for you.` : `${ch.name}: next quest at level ${next.minLevel}.`);
+      }
+    });
     let body: string;
-    if (active < 0 && !finished.length) {
+    if (!active.length && !finished.length) {
       body = `<p class="ql-none">No quests yet. Look for a <b class="bang">!</b> over someone's head: Elder Rowan by the village bonfire needs help.</p>`;
     } else {
-      const sel = this.sel >= 0 && (this.sel === active || this.sel < qid) ? this.sel : active >= 0 ? active : finished[0];
-      const d = QUESTS[sel], done = sel < qid;
-      const item = (i: number) => `<div class="ql-item${i === sel ? " sel" : ""}" data-q="${i}">${QUESTS[i].title}</div>`;
-      const next = QUESTS[qid];
-      const hint = active < 0 && next
-        ? `<p class="ql-next">${(q?.level ?? 1) >= next.minLevel ? `<b class="bang">!</b> ${npcById(next.giver)?.name} has a new quest for you.` : `Next quest at level ${next.minLevel}.`}</p>` : "";
+      const all = [...active, ...finished];
+      const cur = all.find((e) => e.key === this.sel) ?? all[0];
+      const { d, q, done } = cur;
+      const stage = q.questStage, count = q.questCount;
+      const item = (e: Entry) => `<div class="ql-item${e === cur ? " sel" : ""}" data-q="${e.key}">${e.d.title}</div>`;
+      const hint = hints.map((h) => `<p class="ql-next">${h}</p>`).join("");
       // Only steps already reached are shown; later ones stay hidden until the quest gets there
       const reached = done ? d.steps.length : stage;
       const steps = d.steps.slice(0, reached).map((st, i) => {
@@ -63,12 +73,12 @@ export class QuestLog {
       const r = d.reward;
       body =
         `<div class="ql-list">` +
-        (active >= 0 ? `<div class="ql-cat">Active</div>${item(active)}` : "") +
+        (active.length ? `<div class="ql-cat">Active</div>${active.map(item).join("")}` : "") +
         (finished.length ? `<div class="ql-cat">Completed</div>${finished.map(item).join("")}` : "") +
         `${hint}</div>` +
         `<div class="ql-detail">` +
         `<h3>${d.title} ${done ? `<span class="ql-badge">Complete</span>` : ""}</h3>` +
-        `<div class="ql-meta">Given by ${npcById(d.giver)?.name} · ${d.zone} · Lv ${d.minLevel}+</div>` +
+        `<div class="ql-meta">${CHAINS[q.chain ?? 0].name} · Given by ${npcById(d.giver)?.name} · ${d.zone} · Lv ${d.minLevel}+</div>` +
         `<p>${d.description}</p>` +
         `<h4>Objectives</h4><ul class="ql-steps">${steps}</ul>` +
         (done ? "" : `<p class="ql-now">${questObjective(q)}</p>`) +

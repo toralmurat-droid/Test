@@ -5,7 +5,7 @@ import { pixelText } from "./pixeltext";
 import Phaser from "phaser";
 import { NPCS, NPC_DECOR, Npc, npcNear, TALK_RANGE } from "../../shared/npcs";
 import {
-  npcPresent, npcQuestMark, QUESTS, questDialog, questObjective, questStep, QuestState as QState, questTargets, stepGoal, stepProgress,
+  CHAINS, chainState, npcPresent, npcQuestMark, questDef, questDialog, questObjective, questStep, Quester, questTargets, stepGoal, stepProgress,
 } from "../../shared/quests";
 import { QuestObjects } from "./questObjects";
 import { TILE } from "../../shared/constants";
@@ -21,7 +21,7 @@ import { isoAnchor } from "./iso";
 
 type Me = { x: number; y: number } | undefined;
 /** The local player's synced state (only the fields NPCs care about). */
-type QuestState = (QState & { gold?: number; potions?: number; cls?: string; bag?: Iterable<string> }) | undefined;
+type QuestState = (Quester & { gold?: number; potions?: number; cls?: string; bag?: Iterable<string> }) | undefined;
 
 /**
  * Village NPCs (shared/npcs.ts): sprites by the bonfire, "!"/"?" quest markers, an "E Talk" prompt when close,
@@ -137,11 +137,12 @@ export class NpcLayer {
   }
 
   /** Server says the quest moved on: banner in the pixel font. */
-  onQuest(msg: { qid: number; stage: number; done?: boolean }) {
+  onQuest(msg: { qid: number; stage: number; done?: boolean; chain?: number }) {
+    const quests = CHAINS[msg.chain ?? 0]?.quests ?? CHAINS[0].quests;
     let m: [string, string] | undefined;
-    if (msg.done) m = ["Quest complete", QUESTS[msg.qid - 1]?.title ?? ""];
-    else m = QUESTS[msg.qid]?.steps[msg.stage - 1]?.banner;
-    if (m && m[0] === "New quest") m = ["New quest", QUESTS[msg.qid].title];
+    if (msg.done) m = ["Quest complete", quests[msg.qid - 1]?.title ?? ""];
+    else m = quests[msg.qid]?.steps[msg.stage - 1]?.banner;
+    if (m && m[0] === "New quest") m = ["New quest", quests[msg.qid].title];
     this.tracker.classList.remove("flash"); void this.tracker.offsetWidth; this.tracker.classList.add("flash");
     if (m) {
       // Same pixel lettering as the zone banners
@@ -175,7 +176,7 @@ export class NpcLayer {
     const shop = SHOPS[n.shop!];
     const gold = q?.gold ?? 0, potions = q?.potions ?? 0, cls = q?.cls;
     const bag = [...(q?.bag ?? [])];
-    const key = JSON.stringify([n.id, gold, potions, bag, this.shopMsg, q?.questId, q?.questStage]);
+    const key = JSON.stringify([n.id, gold, potions, bag, this.shopMsg, q?.questId, q?.questStage, q?.boneId, q?.boneStage]);
     if (key === this.stage) return;
     this.stage = key;
     const row = (icon: string, name: string, color: string, desc: string, btn: string, cls2: string, i: number, off: boolean) =>
@@ -229,16 +230,16 @@ export class NpcLayer {
     const page = questDialog(n.id, q);
     if (n.shop && (this.trading || !page)) return this.renderShop(n, q);
     this.dialog.classList.remove("shop");
-    const key = JSON.stringify([n.id, q?.questId, q?.questStage, q?.questCount, q?.level]);
+    const key = JSON.stringify([n.id, q?.questId, q?.questStage, q?.questCount, q?.boneId, q?.boneStage, q?.boneCount, q?.level]);
     if (key === this.stage) return;
     this.stage = key;
-    const p = page ?? { text: ["Good day to you."], bye: "Farewell" };
+    const p = page ?? { text: ["Good day to you."], bye: "Farewell", chain: 0 };
     this.dialog.innerHTML = this.head(n) +
       p.text.map((t) => `<p>${t}</p>`).join("") +
       `<div class="nd-btns">${p.accept ? `<button class="nd-accept">${p.accept}</button>` : ""}` +
       `${n.shop ? `<button class="nd-trade">Trade</button>` : ""}<button class="nd-bye">${p.bye} <kbd>E</kbd></button></div>`;
     const acc = this.dialog.querySelector<HTMLButtonElement>(".nd-accept");
-    if (acc) acc.onclick = () => { this.send("quest"); acc.disabled = true; };
+    if (acc) acc.onclick = () => { this.send("quest", { chain: p.chain }); acc.disabled = true; };
     const trade = this.dialog.querySelector<HTMLButtonElement>(".nd-trade");
     if (trade) trade.onclick = () => { this.trading = true; this.stage = -1; };
     this.dialog.querySelector<HTMLButtonElement>(".nd-bye")!.onclick = () => this.close();
@@ -269,9 +270,9 @@ export class NpcLayer {
       const mark = here ? npcQuestMark(n.id, q) : "";
       if (s.mark.text !== mark) s.mark.setText(mark);
     }
-    // Map markers: "!" / "?" on NPCs, coins on traders, and the current quest targets
-    const def = q ? QUESTS[q.questId] : QUESTS[0];
-    const targets = this.log.tracked ? questTargets(q) : [];
+    // Map markers: "!" / "?" on NPCs, coins on traders, and the current quest targets of every chain
+    const states = CHAINS.map((_, c) => chainState(q, c));
+    const targets = this.log.tracked ? states.flatMap((st) => questTargets(st)) : [];
     this.markers = NPCS.filter(present).map((n): MapMarker => {
       const g = npcQuestMark(n.id, q);
       if (g) return { x: n.x, y: n.y, glyph: g, color: "#ffd166", label: n.name, track: this.log.tracked };
@@ -284,12 +285,26 @@ export class NpcLayer {
     }
     this.log.render(q);
 
-    // On-screen tracker: quest, current objective, progress bar and where to go
-    const step = questStep(q);
-    const obj = questObjective(q);
+    // On-screen tracker: one block per chain with its quest, current objective, progress bar and where to go
     let html = "";
-    if (def && step && obj && this.log.tracked) {
-      const goal = stepGoal(step), n = stepProgress(step, q!.questCount);
+    if (this.log.tracked) {
+      const blocks = states.map((st) => this.trackBlock(me, st)).filter(Boolean);
+      if (blocks.length) html = blocks.join("") + `<div class="qt-hint">J: quest log</div>`;
+    }
+    if (html !== this.trackerHtml) {
+      this.trackerHtml = html;
+      this.tracker.innerHTML = html;
+      this.tracker.classList.toggle("open", !!html);
+    }
+  }
+
+  /** Tracker block for one chain ("" when it has nothing to show). */
+  private trackBlock(me: Me, q: ReturnType<typeof chainState>): string {
+    const def = questDef(q), step = questStep(q), obj = questObjective(q);
+    if (!def || !q) return "";
+    if (step && obj) {
+      const targets = questTargets(q);
+      const goal = stepGoal(step), n = stepProgress(step, q.questCount);
       const bar = goal > 1 ? `<div class="qt-bar"><div style="width:${(n / goal) * 100}%"></div></div>` : "";
       let dir = "";
       // Point at the nearest target
@@ -303,16 +318,13 @@ export class NpcLayer {
           dir = `<div class="qt-dir">${arrows[k]} ${Math.round(d / TILE)} tiles ${names[k]}</div>`;
         } else if (target.kind === "area") dir = `<div class="qt-dir">You are here</div>`;
       }
-      html = `<div class="qt-title">${def.title}</div><div class="qt-obj">${step.type === "talk" ? "➜ " : "• "}${obj}</div>${bar}${dir}<div class="qt-hint">J: quest log</div>`;
-    } else if (def && q && q.questStage === 0 && this.log.tracked && (q.level ?? 1) >= def.minLevel && q.questId > 0) {
-      // Between quests: point to whoever has the next one
+      return `<div class="qt-block"><div class="qt-title">${def.title}</div><div class="qt-obj">${step.type === "talk" ? "➜ " : "• "}${obj}</div>${bar}${dir}</div>`;
+    }
+    // Between quests: point to whoever has the next one (the blob chain's very first quest has its own "!" intro)
+    if (q.questStage === 0 && (q.level ?? 1) >= def.minLevel && (q.questId > 0 || (q.chain ?? 0) > 0)) {
       const giver = NPCS.find((n) => n.id === def.giver);
-      html = `<div class="qt-title">New quest available</div><div class="qt-obj">➜ Talk to ${giver?.name ?? ""} <b class="bang">!</b></div><div class="qt-hint">J: quest log</div>`;
+      return `<div class="qt-block"><div class="qt-title">New quest available</div><div class="qt-obj">➜ Talk to ${giver?.name ?? ""} <b class="bang">!</b></div></div>`;
     }
-    if (html !== this.trackerHtml) {
-      this.trackerHtml = html;
-      this.tracker.innerHTML = html;
-      this.tracker.classList.toggle("open", !!html);
-    }
+    return "";
   }
 }

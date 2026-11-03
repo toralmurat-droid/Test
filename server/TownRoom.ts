@@ -21,7 +21,7 @@ import { isSafeZone, isSolidAt, randomSpawn, VILLAGE } from "../shared/map";
 import { isDecorSolidAt, npcById, npcNear, TALK_RANGE } from "../shared/npcs";
 import { beyondWall, WATCH, WATCH_POSTS, WatchPost } from "../shared/watch";
 import { sellPrice, SHOPS } from "../shared/shops";
-import { BLOB_KINDS, inZone, npcPresent, QUEST_VERSION, QUESTS, questStep, stepGoal, Summon, USE_RANGE } from "../shared/quests";
+import { BLOB_KINDS, CHAINS, chainState, inZone, isBlob, npcPresent, QuestState, questStep, stepGoal, Summon, USE_RANGE } from "../shared/quests";
 import { findHideSpot, HIDE, noMobsAt, spawnPoint, SPAWN_ZONES, zoneCap } from "../shared/spawns";
 import { moveStep } from "../shared/movement";
 import { flush, HeroSave, loadHero, login, markChest, openedChests, resetChests, saveHero } from "./accounts";
@@ -93,6 +93,10 @@ export class Player extends Schema {
   @type("number") questId = 0;
   @type("number") questStage = 0;
   @type("number") questCount = 0;
+  // Skeleton quest chain (the Pale Marshal), run beside the blob chain: same meaning, CHAINS[1]
+  @type("number") boneId = 0;
+  @type("number") boneStage = 0;
+  @type("number") boneCount = 0;
   nextSummon = 0; // when the server may bring back this player's quest fused blob (QuestStep.summon)
   // Skill slots on keys 1..0 (shared/slots.ts): a skill id or "" (empty). Empty until the player assigns them.
   @type(["string"]) slots = new ArraySchema<string>(...Array(SLOT_COUNT).fill(""));
@@ -129,7 +133,9 @@ export class Mob extends Schema {
   @type("number") merged = 1; // blobs inside this one (MERGE): the client draws it bigger
   @type("string") guard = ""; // id of the loot chest it guards (shared/chests.ts): the chest stays locked while it lives
   @type("string") parts = ""; // kinds of the blobs swallowed, comma-separated: the client paints their colours, eyes and mouths on it
-  summonFor = ""; // quest fused blob (QuestStep.summon): session id of the player it was spawned for
+  summonFor = ""; // quest monster (QuestStep.summon): session id of the player it was spawned for
+  summonChain = 0; // ...and the quest chain of that step
+  @type("string") title = ""; // quest boss name shown over it instead of "Elite" (QuestStep.summon.title)
   mergeInto = ""; // answering a call: id of the blob it is rushing to fuse with
   mergeCap = 0; // most blobs this one may hold (set at its first call)
   canShoot = false; canCharge = false; canHeal = false; // abilities picked up by merging
@@ -419,7 +425,7 @@ export class TownRoom extends Room<TownState> {
     this.onMessage("stat", (client, k: string) => this.assignStat(client.sessionId, k));
     this.onMessage("resetstats", (client) => this.resetStats(client.sessionId));
 
-    this.onMessage("quest", (client) => this.advanceQuest(client.sessionId));
+    this.onMessage("quest", (client, msg: { chain?: number }) => this.advanceQuest(client.sessionId, CHAINS[Number(msg?.chain)] ? Number(msg.chain) : 0));
     this.onMessage("use", (client, msg: { id: string }) => this.useQuestObject(client.sessionId, msg?.id));
     this.onMessage("chest", (client, msg: { id: string }) => this.openChest(client, msg?.id));
     this.onMessage("chests", (client) => this.sendChests(client));
@@ -558,7 +564,8 @@ export class TownRoom extends Room<TownState> {
       ptSta: p.ptSta, ptStr: p.ptStr, ptMag: p.ptMag, ptDex: p.ptDex,
       weapon: p.weapon, armour: p.armour, shoes: p.shoes, hat: p.hat, shield: p.shield, ranged: p.ranged,
       bag: p.bag.toArray(), talents, slots: p.slots.toArray(),
-      questId: p.questId, questStage: p.questStage, questCount: p.questCount, questVer: QUEST_VERSION, kit: 1,
+      questId: p.questId, questStage: p.questStage, questCount: p.questCount, questVer: CHAINS[0].version,
+      boneId: p.boneId, boneStage: p.boneStage, boneCount: p.boneCount, boneVer: CHAINS[1].version, kit: 1,
     };
   }
 
@@ -577,9 +584,14 @@ export class TownRoom extends Room<TownState> {
     if (Array.isArray(s.slots)) s.slots.slice(0, SLOT_COUNT).forEach((v, i) => {
       p.slots[i] = typeof v === "string" && skillLearned(p.cls, p.talents, v) && skillOf(p.cls, v)?.passive === undefined ? v : "";
     });
-    p.questId = Math.min(QUESTS.length, num(s.questId)); p.questStage = num(s.questStage); p.questCount = num(s.questCount);
-    // The steps of a quest changed since this save: start the current quest again from its offer
-    if (num(s.questVer, 1) !== QUEST_VERSION && p.questStage > 0) { p.questStage = 0; p.questCount = 0; }
+    const sv = s as unknown as Record<string, unknown>;
+    CHAINS.forEach((ch, c) => {
+      const [a, b, n] = ch.keys;
+      const st = { questId: Math.min(ch.quests.length, num(sv[a])), questStage: num(sv[b]), questCount: num(sv[n]) };
+      // The steps of a quest changed since this save: start the current quest again from its offer
+      if (num(sv[ch.verKey], 1) !== ch.version && st.questStage > 0) { st.questStage = 0; st.questCount = 0; }
+      this.qset(p, c, st);
+    });
   }
 
   /** A spawn spot in the zone away from every hero, or null if none turned up (the hero stands in a small zone). */
@@ -866,7 +878,7 @@ export class TownRoom extends Room<TownState> {
       room -= o.merged; called++;
       if (room <= 0) break;
     }
-    if (called) { this.broadcast("blobcall", { id }); this.questSawMerge(m.x, m.y); }
+    if (called) { this.broadcast("blobcall", { id }); this.questWitness("merge", m.x, m.y); }
   }
 
   /** o melts into h: levels, HP and abilities add up; o is gone (its zone brings a fresh one back later). */
@@ -887,7 +899,7 @@ export class TownRoom extends Room<TownState> {
     else { const zone = this.state.zones.get(SPAWN_ZONES[o.zone].name); if (zone) zone.alive--; }
     h.nextAggro = 0; // done merging: pick a fight right away
     this.broadcast("blobmerge", { into: hid, from: oid, x: Math.round(o.x), y: Math.round(o.y), level: h.level, merged: h.merged });
-    this.questSawMerge(h.x, h.y);
+    this.questWitness("merge", h.x, h.y);
   }
 
   // ---- Necromancer ----------------------------------------------------------
@@ -1041,6 +1053,7 @@ export class TownRoom extends Room<TownState> {
       const bones = chosen.map(([, m]) => [Math.round(m.x), Math.round(m.y)]);
       for (const [id, m] of chosen) { m.ritual = true; this.mobDied(m, id, "", ""); }
       this.broadcast("ritual", { x: Math.round(cx), y: Math.round(cy), r: R.radius, bones, ms: R.castMs });
+      this.questWitness("ritual", cx, cy);
       this.clock.setTimeout(() => this.summonDemon(cx, cy, level, pid), R.castMs);
       demons++;
       if (demons >= R.maxDemons) return;
@@ -1101,7 +1114,7 @@ export class TownRoom extends Room<TownState> {
       if (p.spd !== spd) p.spd = spd;
       tickPoise(p, heroPoiseMax(p), dt, now);
       if (p.dead) { p.moving = false; p.energy = ENERGY.max; return; }
-      this.checkQuestPlace(pid, p);
+      for (let c = 0; c < CHAINS.length; c++) this.checkQuestPlace(pid, p, c);
       if (p.energy < ENERGY.max) p.energy = Math.min(ENERGY.max, p.energy + ENERGY.regenPerSec * dt);
       p.rolling = now < p.rollUntil;
       const r = p.stunned || charging(p, now) // a buildup roots the hero
@@ -1552,11 +1565,11 @@ export class TownRoom extends Room<TownState> {
       if (Math.hypot(it.x - p.x, it.y - p.y) > PICKUP_RADIUS) return;
       if (it.kind === "quest") {
         if (it.owner !== pid) return; // someone else's quest drop
-        const s = questStep(p);
         this.state.items.delete(id);
-        if (s?.type !== "collect" || s.item !== it.gear) return; // left over from an earlier step
-        this.clients.find((c) => c.sessionId === pid)?.send("pickup", { kind: it.kind, amount: 1, x: it.x, y: it.y, gear: it.gear, name: "" });
-        this.questProgress(pid, p, p.questCount + 1);
+        const c = CHAINS.findIndex((_, i) => { const s = questStep(chainState(p, i)); return s?.type === "collect" && s.item === it.gear; });
+        if (c < 0) return; // left over from an earlier step
+        this.clients.find((cl) => cl.sessionId === pid)?.send("pickup", { kind: it.kind, amount: 1, x: it.x, y: it.y, gear: it.gear, name: "" });
+        this.questProgress(pid, p, c, this.qs(p, c).questCount + 1);
         return;
       }
       if (it.kind === "potion") {
@@ -1806,7 +1819,7 @@ export class TownRoom extends Room<TownState> {
     }
     this.broadcast("hit", { id: targetId, dmg, crit: !!opts.crit, dot: !!opts.dot });
     if (m.hp > 0) { afterHit(this.host, attackerId, targetId, opts); return; }
-    if (a) this.questKill(attackerId, a, m);
+    if (a) for (let c = 0; c < CHAINS.length; c++) this.questKill(attackerId, a, m, c);
     this.grantXp(attackerId, Math.round(def.xp * mobScale(m.level, "xp")), m);
     this.dropLoot(m.kind, m.x, m.y, mobScale(m.level, "gold"), m.level);
     this.mobDied(m, targetId, attackerId, a?.name ?? "");
@@ -1884,34 +1897,44 @@ export class TownRoom extends Room<TownState> {
   }
 
   // ---- Quest -------------------------------------------------------------
-  // The blob quest chain (shared/quests.ts). The server owns progress; the client gets "quest" {qid, stage, done?}.
+  // Quest chains (shared/quests.ts CHAINS: the blob story, the skeleton story), each with its own progress on the
+  // player. The server owns progress; the client gets "quest" {chain, qid, stage, done?}.
 
-  private sendQuest(id: string, p: Player, done = false) {
-    this.clients.find((c) => c.sessionId === id)?.send("quest", { qid: p.questId, stage: p.questStage, done });
+  /** One chain's progress on this player. */
+  private qs(p: Player, c: number): QuestState { return chainState(p, c)!; }
+  private qset(p: Player, c: number, v: Partial<QuestState>) {
+    const [a, b, n] = CHAINS[c].keys, r = p as unknown as Record<string, number>;
+    if (v.questId !== undefined) r[a] = v.questId;
+    if (v.questStage !== undefined) r[b] = v.questStage;
+    if (v.questCount !== undefined) r[n] = v.questCount;
+  }
+
+  private sendQuest(id: string, p: Player, c: number, done = false) {
+    const q = this.qs(p, c);
+    this.clients.find((cl) => cl.sessionId === id)?.send("quest", { chain: c, qid: q.questId, stage: q.questStage, done });
   }
 
   /** Move to the next step (or claim the reward and move on to the next quest). */
-  private nextStep(id: string, p: Player) {
-    const d = QUESTS[p.questId];
+  private nextStep(id: string, p: Player, c: number) {
+    const q = this.qs(p, c), d = CHAINS[c].quests[q.questId];
     if (!d) return;
-    p.questCount = 0;
-    this.unsummon(id);
-    if (p.questStage < d.steps.length) { p.questStage++; this.sendQuest(id, p); return; }
+    this.qset(p, c, { questCount: 0 });
+    this.unsummon(id, c);
+    if (q.questStage < d.steps.length) { this.qset(p, c, { questStage: q.questStage + 1 }); this.sendQuest(id, p, c); return; }
     p.gold += d.reward.gold;
     p.potions = Math.min(MAX_POTIONS, p.potions + d.reward.potions);
-    p.questId++;
-    p.questStage = 0;
-    this.sendQuest(id, p, true);
+    this.qset(p, c, { questId: q.questId + 1, questStage: 0 });
+    this.sendQuest(id, p, c, true);
     this.grantXp(id, d.reward.xp, p);
   }
 
   /** Progress on a kill / collect / use step; finishes the step at its goal. */
-  private questProgress(id: string, p: Player, count: number) {
-    const s = questStep(p);
+  private questProgress(id: string, p: Player, c: number, count: number) {
+    const s = questStep(this.qs(p, c));
     if (!s) return;
-    p.questCount = count;
+    this.qset(p, c, { questCount: count });
     const n = s.type === "use" ? (count === (1 << s.objects!.length) - 1 ? stepGoal(s) : 0) : count;
-    if (n >= stepGoal(s)) this.nextStep(id, p);
+    if (n >= stepGoal(s)) this.nextStep(id, p, c);
   }
 
   private nearNpc(p: Player, npc: string): boolean {
@@ -1920,28 +1943,33 @@ export class TownRoom extends Room<TownState> {
   }
 
   /** Accept a quest at its giver, or finish a "talk" step next to that NPC. */
-  private advanceQuest(id: string) {
+  private advanceQuest(id: string, c: number) {
     const p = this.state.players.get(id);
-    const d = p && QUESTS[p.questId];
-    if (!p || !d || p.dead) return;
-    if (p.questStage === 0) {
-      if (p.level >= d.minLevel && this.nearNpc(p, d.giver)) this.nextStep(id, p);
+    if (!p || p.dead) return;
+    const q = this.qs(p, c), d = CHAINS[c].quests[q.questId];
+    if (!d) return;
+    if (q.questStage === 0) {
+      if (p.level >= d.minLevel && this.nearNpc(p, d.giver)) this.nextStep(id, p, c);
       return;
     }
-    const s = questStep(p);
-    if (s?.type === "talk" && this.nearNpc(p, s.npc!)) this.nextStep(id, p);
+    const s = questStep(q);
+    if (s?.type === "talk" && this.nearNpc(p, s.npc!)) this.nextStep(id, p, c);
   }
 
-  /** E on a quest object (lantern, shrine, cocoon, Brood Heart). */
+  /** E on a quest object (lantern, shrine, cocoon, Brood Heart, catapult, crypt...). */
   private useQuestObject(id: string, oid: string) {
     const p = this.state.players.get(id);
-    const s = p && questStep(p);
-    if (!p || p.dead || s?.type !== "use") return;
-    const i = s.objects!.findIndex((o) => o.id === oid);
-    const o = s.objects![i];
-    if (!o || p.questCount & (1 << i) || Math.hypot(o.x - p.x, o.y - p.y) > USE_RANGE * 1.5) return;
-    this.clients.find((c) => c.sessionId === id)?.send("questuse", { id: o.id });
-    this.questProgress(id, p, p.questCount | (1 << i));
+    if (!p || p.dead) return;
+    for (let c = 0; c < CHAINS.length; c++) {
+      const q = this.qs(p, c), s = questStep(q);
+      if (s?.type !== "use") continue;
+      const i = s.objects!.findIndex((o) => o.id === oid);
+      const o = s.objects![i];
+      if (!o || q.questCount & (1 << i) || Math.hypot(o.x - p.x, o.y - p.y) > USE_RANGE * 1.5) continue;
+      this.clients.find((cl) => cl.sessionId === id)?.send("questuse", { id: o.id });
+      this.questProgress(id, p, c, q.questCount | (1 << i));
+      return;
+    }
   }
 
   /**
@@ -1981,56 +2009,68 @@ export class TownRoom extends Room<TownState> {
     }
   }
 
-  /** A blob called for help or fused near (x, y): players on a "merge" step close by have seen it. */
-  private questSawMerge(x: number, y: number) {
+  /** A blob called for help / fused ("merge"), or skeletons began a bone ritual ("ritual"), near (x, y): players on that step close by have seen it. */
+  private questWitness(type: "merge" | "ritual", x: number, y: number) {
     const r2 = (10 * TILE) ** 2;
     this.state.players.forEach((p, pid) => {
-      if (p.dead || questStep(p)?.type !== "merge") return;
+      if (p.dead) return;
       const dx = x - p.x, dy = y - p.y;
-      if (dx * dx + dy * dy <= r2) this.nextStep(pid, p);
+      if (dx * dx + dy * dy > r2) return;
+      for (let c = 0; c < CHAINS.length; c++) if (questStep(this.qs(p, c))?.type === type) this.nextStep(pid, p, c);
     });
   }
 
-  /** Put a quest fused blob in the world for this player: several blobs already melted into one (like absorb()). */
-  private summonFused(pid: string, sm: Summon) {
+  /**
+   * Put a quest monster in the world for this player: several blobs already melted into one (like absorb()),
+   * or a single monster (a Bone Demon, a necromancer...) with a name tag and extra HP.
+   */
+  private summonFused(pid: string, sm: Summon, c: number) {
     const [host, ...rest] = sm.parts;
     const m = new Mob();
-    m.kind = host; m.zone = -1; m.summonFor = pid;
+    m.kind = host; m.zone = -1; m.summonFor = pid; m.summonChain = c;
     m.x = m.homeX = sm.x; m.y = m.homeY = sm.y;
     m.level = capLevel(sm.level);
+    m.title = sm.title ?? "";
+    const id = `q${++this.mobSeq}`;
+    if (!isBlob(host)) {
+      m.hp = m.maxHp = Math.round(MOBS[host].maxHp * mobScale(m.level, "hp") * (sm.hpMult ?? 1));
+      if (host === "demon") { m.nextStomp = Date.now() + 2500; m.stunUntil = Date.now() + 700; } // climbing out
+      this.state.mobs.set(id, m);
+      if (host === "demon") this.broadcast("demonrise", { id, x: Math.round(m.x), y: Math.round(m.y) });
+      return;
+    }
     m.merged = sm.parts.length; m.parts = rest.join(","); m.mergeCap = m.merged;
     // HP of all the parts together, a little under the sum so the fight stays fair at the quest's level
-    m.hp = m.maxHp = Math.round(sm.parts.reduce((t, k) => t + MOBS[k].maxHp, 0) * mobScale(sm.level, "hp") * 0.7);
+    m.hp = m.maxHp = Math.round(sm.parts.reduce((t, k) => t + MOBS[k].maxHp, 0) * mobScale(sm.level, "hp") * 0.7 * (sm.hpMult ?? 1));
     m.canShoot = sm.parts.includes("shooterblob"); m.canCharge = sm.parts.includes("warriorblob"); m.canHeal = sm.parts.includes("healerblob");
-    const id = `q${++this.mobSeq}`;
     this.state.mobs.set(id, m);
     this.broadcast("blobmerge", { into: id, from: "", x: Math.round(m.x), y: Math.round(m.y), level: m.level, merged: m.merged });
   }
 
-  /** Remove the quest fused blob spawned for this player (step done, or they left). */
-  private unsummon(pid: string) {
+  /** Remove the quest monster spawned for this player (step done on that chain, or they left: every chain). */
+  private unsummon(pid: string, c?: number) {
     this.state.mobs.forEach((m, mid) => {
-      if (m.summonFor !== pid || m.dead) return;
+      if (m.summonFor !== pid || m.dead || (c !== undefined && m.summonChain !== c)) return;
       m.dead = true; m.hp = 0;
       this.clock.setTimeout(() => this.state.mobs.delete(mid), 500);
     });
   }
 
-  /** "see" a blob in a zone, or "reach" a spot; keeps a quest fused blob around while the player is near its zone. */
-  private checkQuestPlace(id: string, p: Player) {
-    const s = questStep(p);
+  /** "see" a monster in a zone, or "reach" a spot; keeps a quest monster around while the player is near its zone. */
+  private checkQuestPlace(id: string, p: Player, c: number) {
+    const s = questStep(this.qs(p, c));
     if (s?.summon && s.zone && inZone(s.zone, p.x, p.y)) {
       const now = Date.now();
       if (now >= p.nextSummon) {
         p.nextSummon = now + 15000;
         let mine = false;
-        this.state.mobs.forEach((m) => { if (m.summonFor === id && !m.dead) mine = true; });
-        if (!mine) this.summonFused(id, s.summon);
+        this.state.mobs.forEach((m) => { if (m.summonFor === id && m.summonChain === c && !m.dead) mine = true; });
+        if (!mine) this.summonFused(id, s.summon, c);
       }
       return;
     }
     if (s?.type === "reach") {
-      if (Math.hypot(s.at!.x - p.x, s.at!.y - p.y) <= s.at!.r) this.nextStep(id, p);
+      if (Math.hypot(s.at!.x - p.x, s.at!.y - p.y) <= s.at!.r) this.nextStep(id, p, c);
       return;
     }
     if (s?.type !== "see" || !inZone(s.zone!, p.x, p.y)) return;
@@ -2038,17 +2078,17 @@ export class TownRoom extends Room<TownState> {
     for (const m of this.state.mobs.values()) {
       if (m.dead || m.hidden || !s.kinds!.includes(m.kind)) continue;
       const dx = m.x - p.x, dy = m.y - p.y;
-      if (dx * dx + dy * dy <= r2) { this.nextStep(id, p); return; }
+      if (dx * dx + dy * dy <= r2) { this.nextStep(id, p, c); return; }
     }
   }
 
   /** A monster died to this player: count it, or maybe drop a quest item only they can see. */
-  private questKill(id: string, p: Player, m: Mob) {
-    const s = questStep(p);
+  private questKill(id: string, p: Player, m: Mob, c: number) {
+    const q = this.qs(p, c), s = questStep(q);
     // Kills and drops count anywhere on the map: only the monster's type matters (Murat's rule)
     if (!s || !s.kinds?.includes(m.kind)) return;
     if (s.type === "kill" && (m.merged ?? 1) < (s.fused ?? 1)) return;
-    if (s.type === "kill") this.questProgress(id, p, p.questCount + 1);
+    if (s.type === "kill") this.questProgress(id, p, c, q.questCount + 1);
     else if (s.type === "collect" && Math.random() < (s.chance?.[m.kind] ?? 0)) this.dropItem("quest", m.x, m.y, 1, s.item!, id);
   }
 
