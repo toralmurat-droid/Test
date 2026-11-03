@@ -287,8 +287,8 @@ const S: Record<ClassKind, SkillDef[]> = <Record<ClassKind, SkillDef[]>><unknown
       desc: "Summon a blizzard ahead for 5s: ice rains down, hurting and slowing everyone inside.",
       field: { kind: "blizzard", r: 70, ahead: 56, ms: 5000, tickMs: 500, dmg: 11, slowMs: 900 } },
     { id: "w_spinshard", name: "Spinning Ice Shard", type: "Attack", branch: 1, row: 4, style: "frost", cd: 0, cost: 10,
-      desc: "Hurl a whirling star of ice: it cuts through up to 3 enemies and slows them. No cooldown: cast it as fast as your magic lasts.",
-      shots: { kind: "spinshard", speed: 240, range: 190, radius: 6, size: 1.6, dmg: 20, pierce: 2, slowMs: 1000, kb: 0.4 } },
+      desc: "Hurl a whirling star of ice that flies very far: it cuts through up to 3 enemies and slows them. No cooldown: cast it as fast as your magic lasts.",
+      shots: { kind: "spinshard", speed: 340, range: 450, radius: 6, size: 1.6, dmg: 20, pierce: 2, slowMs: 1000, kb: 0.4 } },
 
     // Storm / arcane
     { id: "w_missiles", name: "Arcane Missiles", type: "Attack", branch: 2, row: 0, style: "arcane", cd: 4000, cost: 20,
