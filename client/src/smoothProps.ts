@@ -475,7 +475,10 @@ export function paintSmoothProps(scene: Phaser.Scene) {
 // ---------- upright map props (barrels, crates, well, signs, hay…), one tile each ----------
 
 
-const UW = 32, UH = 40, UO: Pt = [16, 34]; // texture size; footprint centre (shown at origin 0.5, 0.85)
+// texture size and footprint centre: roomy enough that wide art (the well's roof, hay, wheels) and soft shadows
+// are never cut at the edge. iso.ts shows them at origin (0.5, UPRIGHT_OY), so the footprint stands on the tile.
+const UW = 52, UH = 58, UO: Pt = [26, 44];
+export const UPRIGHT_OY = UO[1] / UH;
 
 function barrel(c: Ctx, I: Iso) {
   I.shadow(-6, -6, 6, 6, 2);
