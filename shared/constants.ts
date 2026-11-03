@@ -107,7 +107,29 @@ export const BLOB_AI = {
  * Blobs and the undead hate each other (Murat): where they meet they fight. A monster with no hero to fight
  * picks the nearest enemy of the other side within `range` px, and kills between monsters drop no loot or XP.
  */
-export const FEUD = { range: 90, scanMs: 600, dmgMult: 1 };
+export const FEUD = { range: 90, dmgMult: 1 };
+
+/**
+ * Aggro (Murat): a monster fights whoever it hates most, hero or rival monster, re-picked every `everyMs`.
+ * Perceived aggro: closeness (1 at contact, 0 at its aggro range) times a level factor: a target more than
+ * `freeGap` levels above the monster is scary, -`perLevel` per extra level (a much stronger hero is left alone
+ * unless he attacks); a weaker one is a bit more tempting (+`preyPerLevel` per level, up to `preyMax`).
+ * Rival monsters count `rival` as much as a hero. Generated aggro: each blow adds `hitBase` + `dmgMult` x the
+ * fraction of HP it took (up to `max`), fading by `decayPerSec`. The current target gets `stick` so monsters
+ * don't flip-flop. A blob that sees a hero `dangerGap`+ levels above it feels in danger and calls its kin to merge.
+ */
+export const AGGRO = {
+  everyMs: 600, rival: 0.8, stick: 0.3,
+  freeGap: 2, perLevel: 0.2, preyPerLevel: 0.05, preyMax: 0.25,
+  hitBase: 0.6, dmgMult: 2, max: 3, decayPerSec: 0.15,
+  dangerGap: 4,
+};
+/** How much a monster of level `lvl` cares about a target of level `targetLvl` (0 = not at all). */
+export function aggroLevelFactor(lvl: number, targetLvl: number) {
+  const gap = targetLvl - lvl;
+  if (gap < 0) return 1 + Math.min(AGGRO.preyMax, -gap * AGGRO.preyPerLevel);
+  return Math.max(0, 1 - Math.max(0, gap - AGGRO.freeGap) * AGGRO.perLevel);
+}
 export const FACTION: Partial<Record<MobKind, "blob" | "undead">> = {
   slime: "blob", blobling: "blob", motherblob: "blob", shooterblob: "blob", warriorblob: "blob", healerblob: "blob",
   skeleton: "undead", skeletonmage: "undead", necromancer: "undead",
