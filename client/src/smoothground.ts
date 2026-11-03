@@ -41,6 +41,19 @@ export class SmoothGround {
     scene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.workers.forEach((w) => w.terminate()));
   }
 
+  /** Chunks still waiting to be painted or being painted (0 once everything around the camera is drawn). */
+  get pending() {
+    let n = this.queue.length;
+    for (const img of this.live.values()) if (img === null) n++;
+    return n;
+  }
+  /** Chunks on screen already painted. */
+  get painted() {
+    let n = 0;
+    for (const img of this.live.values()) if (img) n++;
+    return n;
+  }
+
   /** Call every frame with the camera's centre and size in iso screen px. */
   update(midX: number, midY: number, viewW: number, viewH: number) {
     const m = 160;

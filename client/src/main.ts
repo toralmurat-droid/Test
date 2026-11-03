@@ -1,5 +1,6 @@
 import Phaser from "phaser";
 import { takeRejoin } from "./reconnect";
+import { showLoading } from "./loading";
 import { TownScene } from "./TownScene";
 import { CLASSES, CLASS_KINDS, ClassKind, isClassKind } from "../../shared/classes";
 import { mountHeroCards } from "./heroCards";
@@ -121,6 +122,7 @@ function launch(name: string, password: string, newGame: boolean) {
   showPick(false);
   status.textContent = "Connecting…";
   heroCards.stop();
+  showLoading(); // covers everything until the world is fully drawn (TownScene hides it)
   if (SMOOTH) installSmoothTextures();
   new Phaser.Game({
     type: Phaser.AUTO,
