@@ -4,6 +4,10 @@ import { isSolidAt, SAFE_ZONE } from "../../shared/map";
 import { isDecorSolidAt, NPCS } from "../../shared/npcs";
 import { CHAR_ORIGIN, CHAR_SCALE, CharacterName, playCharAnim } from "./artAssets";
 import { faceOf } from "./watch";
+import { isoAnchor } from "./iso";
+import { WRATH } from "../../shared/wrath";
+
+const PIXEL_FONT = "'Pixelify Sans', monospace";
 
 /**
  * Townsfolk of Oakvale (Murat 2026-11-03): they idle, stroll about the market square and stop to chat with each other.
@@ -14,11 +18,12 @@ const FOLK: CharacterName[] = ["peasant", "farmwife", "labourer", "elder", "good
 const AREA = { x0: SAFE_ZONE.x - 1.5, y0: SAFE_ZONE.y - 1.5, x1: SAFE_ZONE.x + SAFE_ZONE.w + 1.5, y1: SAFE_ZONE.y + SAFE_ZONE.h + 1.5 };
 const KEEP_CLEAR = 0.9 * TILE; // stay off the traders' and the druid's spot
 
-type Mode = "idle" | "walk" | "chat" | "sit";
+type Mode = "idle" | "walk" | "chat" | "sit" | "mob" | "home";
 interface Folk {
   name: CharacterName; sprite: Phaser.GameObjects.Sprite;
   x: number; y: number; tx: number; ty: number; speed: number;
   mode: Mode; until: number; face: string; anim: string; nextFlavour: number; backAt: number;
+  nextBlow?: number; nextShout?: number; bubble?: Phaser.GameObjects.Text; stuck?: number;
 }
 
 const free = (x: number, y: number) => {
@@ -86,9 +91,83 @@ export class Villagers {
     f.mode = "idle"; f.until = now + rand(1500, 4000);
   }
 
-  update(dtMs: number) {
+  /** Step towards (tx, ty), sliding along walls. Returns false when nothing moved. */
+  private stepTo(f: Folk, tx: number, ty: number, speed: number, dt: number, stop: number): boolean {
+    const dx = tx - f.x, dy = ty - f.y, d = Math.hypot(dx, dy);
+    if (d <= stop) return false;
+    const s = Math.min(d - stop, speed * dt), nx = f.x + dx / d * s, ny = f.y + dy / d * s;
+    const ox = f.x, oy = f.y;
+    if (free(nx, f.y)) f.x = nx;
+    if (free(f.x, ny)) f.y = ny;
+    f.face = faceOf(dx, dy, f.face);
+    f.sprite.setPosition(f.x, f.y).setDepth(f.y);
+    return Math.hypot(f.x - ox, f.y - oy) > s * 0.2;
+  }
+
+  /** A shout over a villager's head (pixel font), gone after a couple of seconds. */
+  private shout(f: Folk, text: string) {
+    f.bubble?.destroy();
+    const b = this.scene.add.text(f.x, f.y - 30, text, {
+      fontFamily: PIXEL_FONT, fontSize: "16px", color: "#ffdddd", stroke: "#3a0000", strokeThickness: 4,
+    }).setOrigin(0.5, 1).setScale(0.25).setResolution(2).setDepth(20000);
+    isoAnchor(b, f);
+    f.bubble = b;
+    this.scene.time.delayedCall(2200, () => { if (f.bubble === b) { b.destroy(); f.bubble = undefined; } });
+  }
+
+  /** The villager closest to (x, y) shouts this (a hero just cast a spell in the village). */
+  shoutNear(x: number, y: number, text: string) {
+    let best: Folk | undefined, bd = Infinity;
+    for (const f of this.folk) { const d = Math.hypot(f.x - x, f.y - y); if (d < bd) { bd = d; best = f; } }
+    if (best) { this.shout(best, text); best.nextShout = this.scene.time.now + 2500; }
+  }
+
+  /**
+   * An outlaw hero is in the village (shared/wrath.ts): every villager runs at the nearest one and lays into them
+   * (the server deals the damage). With no outlaw left they walk back to the square.
+   */
+  private mob(f: Folk, foes: { x: number; y: number }[], now: number, dt: number) {
+    let foe = foes[0], bd = Infinity;
+    for (const o of foes) { const d = Math.hypot(o.x - f.x, o.y - f.y); if (d < bd) { bd = d; foe = o; } }
+    if (f.mode !== "mob") { f.mode = "mob"; f.nextBlow = now + rand(200, 900); f.nextShout = now + rand(0, 2500); f.backAt = 0; }
+    if (f.bubble) f.bubble.setPosition(f.x, f.y - 30);
+    if (now >= (f.nextShout ?? 0)) {
+      f.nextShout = now + rand(3500, 8000);
+      if (Math.random() < 0.55) this.shout(f, WRATH.shouts[Math.floor(Math.random() * WRATH.shouts.length)]);
+    }
+    if (this.stepTo(f, foe.x, foe.y, f.speed * 2.6, dt, 14)) { if (now >= (f.backAt ?? 0)) this.play(f, "run"); return; }
+    f.face = faceOf(foe.x - f.x, foe.y - f.y, f.face);
+    if (bd <= 22 && now >= (f.nextBlow ?? 0)) {
+      f.nextBlow = now + rand(700, 1200);
+      this.play(f, Math.random() < 0.5 ? "attack" : "attack2", true);
+      f.backAt = now + 450;
+    } else if (now >= (f.backAt ?? 0)) this.play(f, bd <= 22 ? "idle" : "cheer");
+  }
+
+  update(dtMs: number, foes: { x: number; y: number }[] = []) {
     const now = this.scene.time.now, dt = dtMs / 1000;
     for (const f of this.folk) {
+      if (foes.length) { this.mob(f, foes, now, dt); continue; }
+      if (f.bubble) f.bubble.setPosition(f.x, f.y - 30);
+      if (f.mode === "mob") {
+        // calm again: back to the square
+        const p = this.randomSpot() ?? { x: f.x, y: f.y };
+        f.mode = "home"; f.tx = p.x; f.ty = p.y; f.until = now + 15000; f.stuck = 0;
+      }
+      if (f.mode === "home") {
+        if (this.stepTo(f, f.tx, f.ty, f.speed * 1.3, dt, 2)) { f.stuck = 0; this.play(f, "walk"); continue; }
+        f.stuck = (f.stuck ?? 0) + dtMs;
+        const there = Math.hypot(f.tx - f.x, f.ty - f.y) <= 3;
+        if (there || f.stuck > 2500 || now > f.until) {
+          if (!there) { // wedged behind a house: pick another spot to head for
+            const p = this.randomSpot();
+            if (p && now <= f.until) { f.tx = p.x; f.ty = p.y; f.stuck = 0; continue; }
+            if (p) { f.x = p.x; f.y = p.y; f.sprite.setPosition(f.x, f.y).setDepth(f.y); }
+          }
+          f.mode = "idle"; f.until = now + rand(1000, 3000); this.play(f, "idle");
+        }
+        continue;
+      }
       if (f.mode === "walk") {
         const dx = f.tx - f.x, dy = f.ty - f.y, d = Math.hypot(dx, dy);
         if (d < 1.5 || now > f.until) { f.mode = "idle"; f.until = now + rand(2000, 6000); f.nextFlavour = now + rand(800, 3000); this.play(f, "idle"); }
