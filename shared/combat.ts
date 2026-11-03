@@ -37,6 +37,7 @@ export const MOB_COMBAT: Record<MobKind, { poise: number; windupMs: number }> = 
   slime: { poise: 30, windupMs: 350 },
   skeleton: { poise: 55, windupMs: 300 },
   crawler: { poise: 20, windupMs: 320 },
+  demon: { poise: 260, windupMs: 520 },
   motherblob: { poise: 110, windupMs: 500 },
   blobling: { poise: 8, windupMs: 220 },
   shooterblob: { poise: 25, windupMs: 450 },

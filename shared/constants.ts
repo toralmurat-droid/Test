@@ -28,7 +28,7 @@ export interface InputState {
   right: boolean;
 }
 
-export type MobKind = "slime" | "skeleton" | "motherblob" | "blobling" | "shooterblob" | "warriorblob" | "healerblob" | "bandit" | "skeletonmage" | "necromancer" | "crawler";
+export type MobKind = "slime" | "skeleton" | "motherblob" | "blobling" | "shooterblob" | "warriorblob" | "healerblob" | "bandit" | "skeletonmage" | "necromancer" | "crawler" | "demon";
 
 export interface MobDef {
   name: string;
@@ -57,11 +57,12 @@ export const MOBS: Record<MobKind, MobDef> = {
   // Higher skeleton zones: a robed caster that throws magic bolts from range, and the elite Necromancer (see SKELETON_AI)
   skeletonmage: { name: "Skeleton Mage", maxHp: 60, speed: 50, damage: 17, attackCooldownMs: 1900, aggroRange: 140, leash: 200, xp: 32 },
   necromancer: { name: "Necromancer", maxHp: 520, speed: 38, damage: 22, attackCooldownMs: 1700, aggroRange: 150, leash: 230, xp: 240 },
+  demon: { name: "Bone Demon", maxHp: 640, speed: 50, damage: 30, attackCooldownMs: 1300, aggroRange: 170, leash: 320, xp: 220 },
   crawler: { name: "Crawling Skeleton", maxHp: 26, speed: 30, damage: 13, attackCooldownMs: 1000, aggroRange: 120, leash: 220, xp: 6 },
 };
 
 /** Elite monsters: much tougher than the rest of their zone, with a bigger look and an "Elite" tag. */
-export const ELITE: Partial<Record<MobKind, true>> = { necromancer: true };
+export const ELITE: Partial<Record<MobKind, true>> = { necromancer: true, demon: true };
 
 /**
  * Skeleton casters. Distances in px.
@@ -113,7 +114,18 @@ export const BLOB_AI = {
  * (`crawlChance`, appears after `crawlDelayMs`). Two or more skeletons on one hero spread out around him
  * and close in from different sides (`flankTurn` = max radians they swing round per step of approach).
  */
-export const BONES = { crawlChance: 0.35, crawlDelayMs: 650, flankTurn: 0.9, flankRadius: 0.8 };
+export const BONES = {
+  crawlChance: 0.35, crawlDelayMs: 650, flankTurn: 0.9, flankRadius: 0.8,
+  /**
+   * Overpowered (Murat 2026-11-03): when 3+ skeletons fighting one hero are outmatched (the hero is `gap`+ levels
+   * above them on average, or they are down below `hpFrac` of their health together), up to 5 of them throw
+   * themselves apart: their bones fly and slide into a pentagram of radius `radius` and after `castMs` a Bone Demon
+   * climbs out (Lv = their best + `levelUp`). It is banished again after `lifeMs`. One ritual per hero per `cooldownMs`.
+   */
+  ritual: { minPack: 3, maxPack: 5, near: 170, gap: 3, hpFrac: 0.45, checkMs: 1000, castMs: 3200, radius: 34, levelUp: 3, lifeMs: 90000, cooldownMs: 45000, maxDemons: 6 },
+};
+/** Bone Demon's Hellfire Stomp: a telegraphed blast of fire around it. */
+export const DEMON = { stomp: { everyMs: 6500, windupMs: 800, range: 60, radius: 58, dmgMult: 1.3, knockback: 2.2 } };
 export const FEUD = { range: 90, dmgMult: 1 };
 
 /**
@@ -139,7 +151,7 @@ export function aggroLevelFactor(lvl: number, targetLvl: number) {
 }
 export const FACTION: Partial<Record<MobKind, "blob" | "undead">> = {
   slime: "blob", blobling: "blob", motherblob: "blob", shooterblob: "blob", warriorblob: "blob", healerblob: "blob",
-  skeleton: "undead", skeletonmage: "undead", necromancer: "undead", crawler: "undead",
+  skeleton: "undead", skeletonmage: "undead", necromancer: "undead", crawler: "undead", demon: "undead",
 };
 
 /**
