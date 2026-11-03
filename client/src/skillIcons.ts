@@ -5,6 +5,7 @@
  */
 import { skillById } from "../../shared/skills";
 import { PALETTE } from "./skillfx";
+import { paintSkill, ICON } from "./skillArt";
 
 type Icon = { pal: Record<string, string>; px: string[] };
 
@@ -278,8 +279,20 @@ const cache = new Map<string, string>();
 /** Data URL of the icon for a skill id (power id like "guard", or "combo"); "" if there is none. */
 export function skillIcon(id: string): string {
   if (cache.has(id)) return cache.get(id)!;
+  if (typeof document === "undefined") return "";
+  // Skill tree skills: the 24x24 painted icon (client/src/skillArt.ts)
+  const art = paintSkill(id);
+  if (art) {
+    const c = document.createElement("canvas");
+    c.width = ICON; c.height = ICON;
+    const g = c.getContext("2d")!;
+    art.forEach((col, i) => { if (col) { g.fillStyle = col; g.fillRect(i % ICON, Math.floor(i / ICON), 1, 1); } });
+    const url = c.toDataURL();
+    cache.set(id, url);
+    return url;
+  }
   const ic = ICONS[SAME_ICON[id] ?? id] ?? glyphIcon(id);
-  if (!ic || typeof document === "undefined") return "";
+  if (!ic) return "";
   const c = document.createElement("canvas");
   c.width = 12; c.height = 12;
   const g = c.getContext("2d")!;
