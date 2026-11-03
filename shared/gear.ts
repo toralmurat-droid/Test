@@ -17,6 +17,7 @@ export interface GearBonus {
   sta?: number;
   str?: number;
   mag?: number;
+  dex?: number; // Dexterity: critical hit chance
   speed?: number; // fraction, 0.1 = +10% move speed
   reach?: number; // fraction, 0.4 = melee reach and projectile range +40%
   block?: number; // fraction of incoming damage the shield stops
@@ -53,7 +54,7 @@ export const GEAR: Record<string, GearDef> = Object.fromEntries([
   G({ id: "sh_dragon", slot: "shield", tier: 3, name: "Dragon Shield", bonus: { sta: 4, block: 0.15 }, color: 0xb3262e, accent: 0xf2c14e, style: "kite" }),
   G({ id: "r_sling", slot: "ranged", tier: 1, name: "Sling", bonus: {}, color: 0x8a5a32, accent: 0xc89b6a, style: "sling",
     shot: { damage: 10, range: 120, speed: 200, cooldownMs: 1100, kind: "stone" } }),
-  G({ id: "r_knives", slot: "ranged", tier: 2, name: "Throwing Knives", bonus: { str: 1 }, color: 0xc9cdd6, accent: 0x6b4226, style: "knives",
+  G({ id: "r_knives", slot: "ranged", tier: 2, name: "Throwing Knives", bonus: { str: 1, dex: 1 }, color: 0xc9cdd6, accent: 0x6b4226, style: "knives",
     shot: { damage: 16, range: 140, speed: 240, cooldownMs: 850, kind: "knife" } }),
   G({ id: "r_crossbow", slot: "ranged", tier: 3, name: "Crossbow", bonus: { str: 1, sta: 1 }, color: 0x6b4423, accent: 0xb0bec5, style: "crossbow",
     shot: { damage: 28, range: 190, speed: 280, cooldownMs: 1400, kind: "bolt" } }),
@@ -61,9 +62,9 @@ export const GEAR: Record<string, GearDef> = Object.fromEntries([
   G({ id: "a_chain", slot: "armour", tier: 2, name: "Chainmail", bonus: { sta: 4, str: 1 }, color: 0xa7b6c8, accent: 0x5c6878, style: "mail" }),
   G({ id: "a_royal", slot: "armour", tier: 3, name: "Royal Plate", bonus: { sta: 7, str: 1, mag: 1 }, color: 0xb3262e, accent: 0xf2c14e, style: "trim" }),
   G({ id: "s_leather", slot: "shoes", tier: 1, name: "Leather Boots", bonus: { speed: 0.05 }, color: 0x6b4423, accent: 0xa0703f, style: "plain" }),
-  G({ id: "s_swift", slot: "shoes", tier: 2, name: "Swift Boots", bonus: { speed: 0.1, sta: 1 }, color: 0x2e9b5a, accent: 0xa8f0b0, style: "plain" }),
+  G({ id: "s_swift", slot: "shoes", tier: 2, name: "Swift Boots", bonus: { speed: 0.1, sta: 1, dex: 1 }, color: 0x2e9b5a, accent: 0xa8f0b0, style: "plain" }),
   G({ id: "s_winged", slot: "shoes", tier: 3, name: "Winged Boots", bonus: { speed: 0.15, sta: 2 }, color: 0xf0eee6, accent: 0xf2c14e, style: "wings" }),
-  G({ id: "h_cap", slot: "hat", tier: 1, name: "Feather Cap", bonus: { mag: 1, sta: 1 }, color: 0x3f7d3a, accent: 0xe63946, style: "cap" }),
+  G({ id: "h_cap", slot: "hat", tier: 1, name: "Feather Cap", bonus: { mag: 1, sta: 1, dex: 1 }, color: 0x3f7d3a, accent: 0xe63946, style: "cap" }),
   G({ id: "h_helm", slot: "hat", tier: 2, name: "Iron Helm", bonus: { sta: 3, str: 1 }, color: 0x9aa3ad, accent: 0x5a626c, style: "helm" }),
   G({ id: "h_crown", slot: "hat", tier: 3, name: "Golden Crown", bonus: { sta: 2, str: 2, mag: 3 }, color: 0xf2c14e, accent: 0xe63946, style: "crown" }),
   ...starterKits(),
@@ -178,12 +179,12 @@ export type Equipped = Partial<Record<GearSlot, string>>;
 
 /** Stat points added by the equipped items. Weapon `atk` goes to the class's attack stat. */
 export function gearStats(cls: string, eq: Equipped): Stats {
-  const out: Stats = { sta: 0, str: 0, mag: 0 };
+  const out: Stats = { sta: 0, str: 0, mag: 0, dex: 0 };
   const atkStat = (STATS as Record<string, { attackStat: keyof Stats }>)[cls]?.attackStat ?? "str";
   for (const s of GEAR_SLOTS) {
     const b = eq[s] ? GEAR[eq[s]!]?.bonus : undefined;
     if (!b) continue;
-    out.sta += b.sta ?? 0; out.str += b.str ?? 0; out.mag += b.mag ?? 0;
+    out.sta += b.sta ?? 0; out.str += b.str ?? 0; out.mag += b.mag ?? 0; out.dex += b.dex ?? 0;
     out[atkStat] += b.atk ?? 0;
   }
   return out;

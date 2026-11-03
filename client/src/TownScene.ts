@@ -6,8 +6,8 @@ import { GROUND, areaAt, isSafeZone } from "../../shared/map";
 import { heroPoise } from "../../shared/combat";
 import { moveStep } from "../../shared/movement";
 import { levelsAt, SPAWN_ZONES, zoneAt } from "../../shared/spawns";
-import { attackMult, cooldownMult, heroSpeed, STATS, magicMult, STAT_NAMES, StatKind, statPoints, HP_PER_STR } from "../../shared/powers";
-import { skillOf, STACK_NAME, MAX_STACKS, TREE_LEVELS } from "../../shared/skills";
+import { attackMult, cooldownMult, critChance, heroSpeed, STATS, magicMult, STAT_KINDS, STAT_NAMES, StatKind, statPoints, HP_PER_STR } from "../../shared/powers";
+import { skillOf, STACK_NAME, MAX_STACKS, talentBonus } from "../../shared/skills";
 import { SkillFx } from "./skillfx";
 import { displayGrid } from "./tileset";
 import { CRAWL_CROP, heroTexture, itemTexture, makeTileset, MOB_LOOK, mobTexture, preloadPaintedMobs } from "./textures";
@@ -807,10 +807,10 @@ export class TownScene extends Phaser.Scene {
     if (!mine) return;
     this.heroFrom = from;
     const cls = mine.cls as ClassKind, lvl = mine.level as number;
-    const st = { sta: mine.sta, str: mine.str, mag: mine.mag }; // includes gear bonuses
-    const free = statPoints(lvl) - (mine.ptSta + mine.ptStr + mine.ptMag);
+    const st = { sta: mine.sta, str: mine.str, mag: mine.mag, dex: mine.dex ?? 0 }; // includes gear bonuses
+    const free = statPoints(lvl) - (mine.ptSta + mine.ptStr + mine.ptMag + (mine.ptDex ?? 0));
     // Rebuild only when something shown changed (called every frame while open)
-    const sig = [lvl, mine.xp, Math.ceil(mine.hp), mine.maxHp, st.sta, st.str, st.mag, free, mine.kills, mine.gold, from].join("|");
+    const sig = [lvl, mine.xp, Math.ceil(mine.hp), mine.maxHp, st.sta, st.str, st.mag, st.dex, free, mine.kills, mine.gold, from].join("|");
     const el = document.getElementById("hero")!;
     if (!el.hidden && sig === this.heroSig) return;
     this.heroSig = sig;
@@ -824,9 +824,10 @@ export class TownScene extends Phaser.Scene {
       str: STATS[cls].attackStat === "str" ? `attack ×${attackMult(cls, st).toFixed(2)}, +${HP_PER_STR} HP each` : `+${HP_PER_STR} HP per point`,
       mag: `${STATS[cls].attackStat === "mag" ? `attack ×${attackMult(cls, st).toFixed(2)}, +${HP_PER_STR} HP each, ` : ""}skills ×${magicMult(cls, st).toFixed(2)}, ` +
         `cooldowns −${Math.round((1 - cooldownMult(cls, st, mine.talents)) * 100)}%`,
+      dex: `${Math.round(critChance(st, talentBonus(cls, mine.talents, "crit")) * 100)}% critical hits (double damage), skills too`,
     };
-    const pts: Record<StatKind, number> = { sta: mine.ptSta, str: mine.ptStr, mag: mine.ptMag };
-    document.getElementById("herostats")!.innerHTML = (["sta", "str", "mag"] as StatKind[]).map((k) => {
+    const pts: Record<StatKind, number> = { sta: mine.ptSta, str: mine.ptStr, mag: mine.ptMag, dex: mine.ptDex ?? 0 };
+    document.getElementById("herostats")!.innerHTML = STAT_KINDS.map((k) => {
       const plus = free > 0 ? `<button class="statplus" data-stat="${k}" title="Add a point to ${STAT_NAMES[k]}">+</button>` : "<span></span>";
       const mine_ = pts[k] ? ` <span class="gain">(+${pts[k]})</span>` : "";
       return `${plus}<span>${STAT_NAMES[k]}</span><b>${st[k]}${mine_}</b><span class="note">${notes[k]}</span>`;
@@ -841,6 +842,7 @@ export class TownScene extends Phaser.Scene {
       ["HP regen", `${regenFromStamina(st.sta)[1].toFixed(1)}/s resting · ${regenFromStamina(st.sta)[0].toFixed(1)}/s in a fight`],
       ["Attack", `${dmg} damage${def.projectile ? " (ranged)" : ""}`],
       ["Attack speed", `${(1000 / def.attackCooldownMs).toFixed(1)} hits/s`],
+      ["Critical hits", `${Math.round(critChance(st, talentBonus(cls, mine.talents, "crit")) * 100)}% chance, double damage`],
       ["Initiative", `${heroPoise(cls, lvl)} · dizzy at 0`],
       ["Move speed", `${speed}`],
       ["Kills · Gold", `${mine.kills} · ${mine.gold}`],
@@ -916,7 +918,7 @@ export class TownScene extends Phaser.Scene {
     const opts = activeSkills(cls).map((a) => {
       const learned = skillLearned(cls, mine.talents, a.id);
       const at = slots.indexOf(a.id);
-      const where = !learned ? `🔒 learn it in the tree (T), Lv ${TREE_LEVELS[a.row]}` : at === n ? "in this slot" : at >= 0 ? `now on key ${SLOT_KEYS[at]}` : "not on a key yet";
+      const where = !learned ? `🔒 learn it in the tree (T), Lv ${a.req}` : at === n ? "in this slot" : at >= 0 ? `now on key ${SLOT_KEYS[at]}` : "not on a key yet";
       return `<button class="opt${learned ? "" : " locked"}${at === n ? " cur" : ""}" data-pick="${a.id}" title="${a.desc}">` +
         `${iconImg(a.id, "picon")}<span><b>${a.name}</b><small>${where}</small></span></button>`;
     }).join("");
@@ -1312,7 +1314,7 @@ export class TownScene extends Phaser.Scene {
       const badge = document.getElementById("treebadge")!;
       badge.hidden = freePts <= 0;
       badge.textContent = String(freePts);
-      const freeStats = statPoints(mine.level) - (mine.ptSta + mine.ptStr + mine.ptMag);
+      const freeStats = statPoints(mine.level) - (mine.ptSta + mine.ptStr + mine.ptMag + (mine.ptDex ?? 0));
       const hb = document.getElementById("herobadge")!;
       hb.hidden = freeStats <= 0;
       hb.textContent = String(freeStats);
@@ -1324,7 +1326,7 @@ export class TownScene extends Phaser.Scene {
         ? `⚔ ${zone.name} (Lv ${levelsAt(zdef!, tx, ty).join("-")}): ${zone.alive}/${zone.cap} monsters`
         : "";
       const cls = mine.cls as ClassKind;
-      const cdm = cooldownMult(cls, { sta: mine.sta, str: mine.str, mag: mine.mag }, mine.talents);
+      const cdm = cooldownMult(cls, { sta: mine.sta, str: mine.str, mag: mine.mag, dex: mine.dex ?? 0 }, mine.talents);
       // Blue bar = Stamina (Magic for the Wizard), spent by skills, the ultimate and the dodge roll
       const fill = document.getElementById("skillfill") as HTMLElement;
       fill.style.width = `${(mine.energy / ENERGY.max) * 100}%`;

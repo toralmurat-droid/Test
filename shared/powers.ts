@@ -9,20 +9,22 @@ import { Ranks, talentReduce } from "./skills";
  *   Stamina  -> max HP (+12 per point) and HP regen (shared/constants.ts)
  *   Strength -> attack damage for Knight/Ninja/Archer/Barbarian (+7% per point), +4 max HP per point
  *   Magic    -> skill damage (+7% per point), skill cooldowns (-2% per point, max -30%), Wizard fireballs and +4 max HP per point
+ *   Dexterity -> critical hits: 1% chance per point (class base included), crits deal double damage; skills crit too
  * Every level also adds HP_PER_LEVEL max HP, so levels matter whatever the build.
  */
-export type StatKind = "sta" | "str" | "mag";
-export const STAT_NAMES: Record<StatKind, string> = { sta: "Stamina", str: "Strength", mag: "Magic" };
+export type StatKind = "sta" | "str" | "mag" | "dex";
+export const STAT_KINDS: StatKind[] = ["sta", "str", "mag", "dex"];
+export const STAT_NAMES: Record<StatKind, string> = { sta: "Stamina", str: "Strength", mag: "Magic", dex: "Dexterity" };
 export type Stats = Record<StatKind, number>;
 
 export interface StatDef { base: Stats; attackStat: StatKind }
 
 export const STATS: Record<ClassKind, StatDef> = {
-  knight: { base: { sta: 10, str: 8, mag: 2 }, attackStat: "str" },
-  ninja: { base: { sta: 6, str: 10, mag: 4 }, attackStat: "str" },
-  wizard: { base: { sta: 7, str: 2, mag: 11 }, attackStat: "mag" },
-  archer: { base: { sta: 7, str: 9, mag: 4 }, attackStat: "str" },
-  barbarian: { base: { sta: 9, str: 10, mag: 1 }, attackStat: "str" },
+  knight: { base: { sta: 10, str: 8, mag: 2, dex: 3 }, attackStat: "str" },
+  ninja: { base: { sta: 6, str: 10, mag: 4, dex: 9 }, attackStat: "str" },
+  wizard: { base: { sta: 7, str: 2, mag: 11, dex: 3 }, attackStat: "mag" },
+  archer: { base: { sta: 7, str: 9, mag: 4, dex: 8 }, attackStat: "str" },
+  barbarian: { base: { sta: 9, str: 10, mag: 1, dex: 4 }, attackStat: "str" },
 };
 
 export const HP_PER_STA = 12;
@@ -31,6 +33,8 @@ export const HP_PER_LEVEL = 5;
 export const DMG_PER_POINT = 0.07;
 export const CDR_PER_MAG = 0.02;
 export const MAX_CDR = 0.3;
+export const CRIT_PER_DEX = 0.01;
+export const MAX_CRIT = 0.6;
 
 /** Levels that give 3 stat points instead of 1. */
 export const MAJOR_LEVELS = [3, 5, 8, 10];
@@ -43,9 +47,14 @@ export function statPoints(level: number): number {
 }
 
 /** Class base stats plus the points the player assigned. */
-export function statsFor(cls: ClassKind, assigned: Stats = { sta: 0, str: 0, mag: 0 }): Stats {
+export function statsFor(cls: ClassKind, assigned: Partial<Stats> = {}): Stats {
   const b = STATS[cls].base;
-  return { sta: b.sta + assigned.sta, str: b.str + assigned.str, mag: b.mag + assigned.mag };
+  return { sta: b.sta + (assigned.sta ?? 0), str: b.str + (assigned.str ?? 0), mag: b.mag + (assigned.mag ?? 0), dex: b.dex + (assigned.dex ?? 0) };
+}
+
+/** Chance (0..MAX_CRIT) that a hit is critical (double damage), from Dexterity plus the skill tree's crit passives (%). */
+export function critChance(s: Stats, passivePct = 0): number {
+  return Math.min(MAX_CRIT, (s.dex ?? 0) * CRIT_PER_DEX + passivePct / 100);
 }
 
 export function maxHpFromStats(cls: ClassKind, s: Stats, level = 1): number {

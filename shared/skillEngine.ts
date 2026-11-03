@@ -1,8 +1,9 @@
 import { ClassKind } from "./classes";
 import {
-  AreaDef, BuffDef, FieldDef, HitEffects, MARK_TAKEN, MAX_STACKS, MoveDef, rankOf, rankPower, rankTime, Ranks, ShotDef, SkillDef, skillOf,
-  STACK_DECAY_MS, STACK_POWER, WEAK_DEALT,
+  AreaDef, BuffDef, FieldDef, HitEffects, levelPower, MARK_TAKEN, MAX_STACKS, MoveDef, rankOf, rankPower, rankTime, Ranks, scalePower,
+  ShotDef, SkillDef, skillOf, STACK_DECAY_MS, STACK_POWER, WEAK_DEALT,
 } from "./skills";
+import { Stats, STATS } from "./powers";
 
 /**
  * Runs the skills of shared/skills.ts. It knows nothing about the room: the server (server/TownRoom.ts) and the
@@ -73,6 +74,8 @@ export interface SkillHost {
   /** Weapon hit of the hero (class damage x attack stat), and the Magic multiplier for flat skill damage. */
   weaponHit(id: string): number;
   magic(id: string): number;
+  /** Hero attributes (with gear), for skills that scale with one. */
+  stats?(id: string): Stats | undefined;
   cooldownMult(id: string): number;
   fx(ev: Record<string, unknown>): void;
 }
@@ -113,7 +116,8 @@ export function castSkill(h: SkillHost, id: string, skillId: string): boolean {
   u.sk.last[s.id] = now;
   let stacks = 0;
   if (s.consume) { stacks = u.sk.stacks; u.sk.stacks = 0; }
-  const power = rankPower(rank) * (s.consume && !s.buff?.perStack ? 1 + STACK_POWER * stacks : 1);
+  const power = rankPower(rank) * levelPower(s) * scalePower(s, h.stats?.(id), STATS[u.cls].base) *
+    (s.consume && !s.buff?.perStack ? 1 + STACK_POWER * stacks : 1);
   h.fx({ ev: "cast", id, s: s.id, rank, stacks, charge: s.chargeMs ?? 0, x: u.x, y: u.y });
   if (s.chargeMs) {
     u.sk.chargeUntil = now + s.chargeMs;

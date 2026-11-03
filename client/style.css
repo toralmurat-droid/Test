@@ -129,21 +129,57 @@ html, body { margin: 0; height: 100%; background: #1b1b24; color: #eee; font: 14
 @media (max-width: 600px) { #mapbox { transform: scale(.6); transform-origin: top right; } #feed { top: 200px; } #area { font-size: 20px; } }
 
 /* Skill tree (T) */
-#tree { position: absolute; left: 50%; top: calc(50% - 46px); transform: translate(-50%, -50%); width: min(760px, calc(100% - 32px));
+#tree { position: absolute; left: 50%; top: calc(50% - 46px); transform: translate(-50%, -50%); width: min(910px, calc(100% - 32px));
   max-height: calc(100% - 124px); overflow: auto; background: rgba(30,30,46,.96); border: 3px solid #555a7a; padding: 14px 16px;
   pointer-events: auto; z-index: 7; }
 #tree h2 { margin: 0 0 4px; font-size: 18px; color: #ffd166; }
 #treepoints { margin: 0 0 10px; font-size: 13px; color: #aaa; }
 #treepoints .free { color: #7cfc00; }
-#treebranches { display: grid; grid-template-columns: 34px repeat(3, 1fr); column-gap: 18px; row-gap: 22px; align-items: stretch; position: relative; }
-#treebranches > :not(svg) { position: relative; z-index: 1; }
-#treebranches .treelinks { position: absolute; left: 0; top: 0; pointer-events: none; z-index: 0; }
-#treebranches .tlvl { align-self: center; font-size: 11px; color: #666; }
-#treebranches .tlvl.on { color: #ffd166; }
-#treebranches .troot { justify-self: center; font-weight: bold; font-size: 12px; padding: 2px 10px; border: 2px solid currentColor;
-  border-radius: 10px; background: #15151f; }
-#treebranches .trunk { grid-column: 2 / 5; justify-self: center; margin-top: -4px; padding: 5px 18px; font-weight: bold; font-size: 13px;
-  color: #1e1e2e; background: #a68a64; border: 2px solid #6b5537; border-radius: 6px 6px 14px 14px; }
+#treebranches { display: flex; gap: 14px; align-items: flex-start; flex-wrap: wrap; }
+.treewrap { position: relative; flex: none; border: 2px solid #3a3d55; }
+.treewrap .treeart { position: absolute; left: 0; top: 0; width: 100%; height: 100%; image-rendering: pixelated; }
+.treebox { position: absolute; inset: 0; }
+.tlv { position: absolute; left: 4px; transform: translateY(-50%); font-size: 10px; color: #555a7a; border-bottom: 1px dashed #2e3148; width: 34px; }
+.tlv.on { color: #ffd166; }
+.tbough { position: absolute; transform: translateX(-50%); font-size: 12px; font-weight: bold; padding: 1px 8px; background: #15151f;
+  border: 2px solid currentColor; border-radius: 8px; }
+.tnode { position: absolute; transform: translate(-50%, -50%); width: 54px; height: 54px; padding: 1px; background: #15151f;
+  border: 3px solid #3a3d55; border-radius: 6px; cursor: pointer; font: inherit; }
+.tnode .nicon { width: 48px; height: 48px; display: block; image-rendering: pixelated; }
+.tnode.locked .nicon, .tnode.off .nicon { filter: grayscale(.85) brightness(.55); }
+.tnode.has, .tnode.max { border-color: var(--c); }
+.tnode.can { border-color: var(--c); box-shadow: 0 0 8px var(--c); animation: tpulse 1.2s ease-in-out infinite; }
+@keyframes tpulse { 50% { box-shadow: 0 0 2px var(--c); } }
+.tnode.locked, .tnode.off { cursor: default; }
+.tnode.ult { width: 60px; height: 60px; border-width: 4px; }
+.tnode.ult .nicon { width: 48px; height: 48px; margin: 2px; }
+.tnode.passive { border-radius: 50%; }
+.tnode.passive .nicon { border-radius: 50%; }
+.tnode:hover { outline: 2px solid #fff; z-index: 2; }
+.tnode .pips { position: absolute; left: 50%; bottom: -9px; transform: translateX(-50%); display: flex; gap: 2px; padding: 1px 2px; background: #15151f; border-radius: 4px; }
+.tnode .pips i { width: 6px; height: 6px; border-radius: 50%; border: 1px solid #666; }
+.tnode .pips i.on { background: var(--c); border-color: var(--c); }
+.tnode kbd { position: absolute; top: -8px; right: -8px; font: inherit; font-size: 10px; color: #000; background: #ffd166; padding: 0 3px; }
+.tnode .nlv { position: absolute; top: -10px; left: 50%; transform: translateX(-50%); font-size: 10px; color: #ccc; background: #15151f; padding: 0 3px; white-space: nowrap; }
+#treeinfo { flex: 1; min-width: 220px; font-size: 12px; color: #ccc; background: #15151f; border: 2px solid #3a3d55; padding: 10px; }
+#treeinfo .ihead { display: flex; gap: 8px; align-items: center; border-bottom: 2px solid var(--c); padding-bottom: 6px; }
+#treeinfo .iicon { width: 48px; height: 48px; image-rendering: pixelated; flex: none; }
+#treeinfo .ihead b { display: block; font-size: 15px; color: #fff; }
+#treeinfo .ttype { display: block; font-size: 10px; color: var(--c); text-transform: uppercase; letter-spacing: .5px; }
+#treeinfo .ttype.pas { color: #aaa; }
+#treeinfo .pips { display: flex; gap: 3px; margin-top: 3px; }
+#treeinfo .pips i { width: 8px; height: 8px; border-radius: 50%; border: 1px solid #666; }
+#treeinfo .pips i.on { background: var(--c); border-color: var(--c); }
+#treeinfo p { margin: 6px 0 0; }
+#treeinfo .idmg { display: flex; justify-content: space-between; align-items: baseline; margin-top: 8px; color: #ffb4a8; }
+#treeinfo .idmg b { font-size: 22px; color: #ff6b5b; }
+#treeinfo .iparts { color: #e8b0a8; font-size: 11px; margin-top: 2px; }
+#treeinfo .inext { color: #9ad1ff; font-size: 11px; }
+#treeinfo .icost { color: #8fa3c8; font-size: 11px; }
+#treeinfo .iscale { color: #ffd166; font-size: 11px; }
+#treeinfo .ipath { color: #a68a64; font-size: 11px; }
+#treeinfo .istat { color: #888; margin-top: 10px; }
+#treeinfo .istat.can { color: #7cfc00; }
 .talent .pips { position: absolute; top: 7px; right: 8px; display: flex; gap: 3px; }
 .talent .pips i { width: 7px; height: 7px; border-radius: 50%; border: 1px solid #666; }
 .talent .pips i.on { background: var(--c); border-color: var(--c); }

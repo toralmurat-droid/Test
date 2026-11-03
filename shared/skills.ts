@@ -1,7 +1,11 @@
 import { ClassKind } from "./classes";
+import type { StatKind } from "./powers";
 
 /**
- * Skill trees (press T). Every hero has 3 branches of 5 skills, one per tree row (levels 1, 3, 5, 8, 10).
+ * Skill trees (press T). Every hero has 3 branches of 5 skills. Each branch is a small, uneven tree (TREE below):
+ * a skill needs its parent skill and a hero level; some strong skills are dead ends (leaves) that lead nowhere higher.
+ * Skills that need a higher level hit harder (LEVEL_POWER), and some also scale with an attribute (SkillDef.scale).
+ * `row` is the skill's tier (0-4): how big its effects look and how rich its icon frame is (4 = ultimate).
  * Most skills are actives (put them on keys 1-0): attacks, auras, war cries, enchantments, buildups (charge
  * up, or spend the Fury/Ki/... stacks your basic hits build), counters, traps and ground effects. A branch has at
  * most one passive. Higher rows are stronger and much flashier (client/src/skillfx.ts).
@@ -109,6 +113,9 @@ export type SkillType = "Attack" | "Aura" | "War cry" | "Enchant" | "Buildup" | 
 export interface SkillDef {
   id: string; name: string; type: SkillType; desc: string;
   branch: 0 | 1 | 2; row: 0 | 1 | 2 | 3 | 4;
+  req: number; // hero level needed (filled from TREE)
+  parent?: string; // skill that must be learned first (none = root of its branch)
+  scale?: { stat: StatKind; per: number }; // +per% skill power for every point of `stat` above the class's base
   style: FxStyle;
   passive?: { effect: TalentEffect; perRank: number };
   cd?: number; cost?: number; // ms, energy
@@ -138,7 +145,7 @@ export const BRANCHES: Record<ClassKind, [BranchDef, BranchDef, BranchDef]> = {
   barbarian: [{ name: "Fury", color: "#e63946" }, { name: "Warcry", color: "#ffd166" }, { name: "Earth", color: "#a68a64" }],
 };
 
-const S: Record<ClassKind, SkillDef[]> = {
+const S: Record<ClassKind, SkillDef[]> = <Record<ClassKind, SkillDef[]>><unknown>{
   // ---------------------------------------------------------------- KNIGHT
   knight: [
     // Valor: sword offense
@@ -155,7 +162,7 @@ const S: Record<ClassKind, SkillDef[]> = {
       move: { kind: "dash", dist: 72, path: 1.4, invulnMs: 300 }, areas: [{ r: 30, wpn: 0.8, kb: 1.5, look: "slash" }] },
     { id: "k_judgement", name: "Judgement Blade", type: "Ultimate", branch: 0, row: 4, style: "holy", cd: 20000, cost: 50, chargeMs: 600,
       desc: "Raise your sword to the sky. A giant blade of light falls ahead of you: huge damage, stuns.",
-      areas: [{ r: 48, ahead: 46, dmg: 85, stunMs: 1200, kb: 2, look: "sword" }] },
+      areas: [{ r: 48, ahead: 46, dmg: 100, stunMs: 1200, kb: 2, look: "sword" }] },
 
     // Bulwark: defence and counters
     { id: "k_shield", name: "Shield Wall", type: "Enchant", branch: 1, row: 0, style: "frost", cd: 6000, cost: 25,
@@ -204,10 +211,10 @@ const S: Record<ClassKind, SkillDef[]> = {
       desc: "Light as a cat: move faster." },
     { id: "n_assassinate", name: "Assassinate", type: "Buildup", branch: 0, row: 3, style: "shadow", cd: 10000, cost: 30, consume: true,
       desc: "Spend your Ki: vanish and strike the nearest enemy from behind. Each Ki stack adds 25%.",
-      move: { kind: "behind", dist: 110, invulnMs: 200 }, areas: [{ r: 20, wpn: 1.6, kb: 1, look: "slash" }] },
+      move: { kind: "behind", dist: 110, invulnMs: 200 }, areas: [{ r: 20, wpn: 2.4, kb: 1, look: "slash" }] },
     { id: "n_cuts", name: "Thousand Cuts", type: "Ultimate", branch: 0, row: 4, style: "shadow", cd: 18000, cost: 50,
       desc: "Become a shadow: blink from enemy to enemy six times, slashing each one. Untouchable meanwhile.",
-      move: { kind: "multi", dist: 96, hits: 6, everyMs: 150, wpn: 0.7, invulnMs: 1000 } },
+      move: { kind: "multi", dist: 96, hits: 6, everyMs: 150, wpn: 0.6, invulnMs: 450 } },
 
     // Steel: blades and parries
     { id: "n_shuriken", name: "Shuriken Fan", type: "Attack", branch: 1, row: 0, style: "steel", cd: 4000, cost: 20,
@@ -218,7 +225,7 @@ const S: Record<ClassKind, SkillDef[]> = {
       buff: { ms: 5000, atkspd: 40, onHit: { burn: [3, 2000] } } },
     { id: "n_parry", name: "Shadow Parry", type: "Counter", branch: 1, row: 2, style: "shadow", cd: 8000, cost: 20,
       desc: "Stand ready for 0.7s. When struck, you vanish, appear behind the attacker and cut them deep.",
-      counter: { ms: 700, blink: "behind", wpn: 2.4, effects: { kb: 1 } } },
+      counter: { ms: 700, blink: "behind", wpn: 3.4, effects: { kb: 1 } } },
     { id: "n_vital", name: "Vital Points", type: "Passive", branch: 1, row: 3, style: "blood", passive: { effect: "crit", perRank: 5 },
       desc: "You know where it hurts: more critical hits." },
     { id: "n_storm", name: "Blade Storm", type: "Ultimate", branch: 1, row: 4, style: "steel", cd: 15000, cost: 50,
@@ -237,10 +244,10 @@ const S: Record<ClassKind, SkillDef[]> = {
       field: { kind: "caltrops", r: 30, ahead: 36, ms: 6000, tickMs: 400, dmg: 5, slowMs: 600 } },
     { id: "n_lightning", name: "Lightning Jutsu", type: "Attack", branch: 2, row: 3, style: "lightning", cd: 9000, cost: 30,
       desc: "Hurl a lightning bolt that jumps to 3 more enemies, stunning each.",
-      shots: { kind: "lightning", speed: 420, range: 170, radius: 5, wpn: 2, stunMs: 350, chain: 3 } },
+      shots: { kind: "lightning", speed: 420, range: 170, radius: 5, wpn: 3.2, stunMs: 350, chain: 3 } },
     { id: "n_dragon", name: "Fire Dragon", type: "Ultimate", branch: 2, row: 4, style: "fire", cd: 18000, cost: 50, chargeMs: 450,
       desc: "Gather your chakra and release a fire dragon: it tears through everyone in its path and explodes.",
-      shots: { kind: "dragon", speed: 200, range: 190, radius: 10, size: 2, wpn: 3.2, burn: [6, 3000], pierce: 99, explode: 44 } },
+      shots: { kind: "dragon", speed: 200, range: 190, radius: 10, size: 2, wpn: 5, burn: [6, 3000], pierce: 99, explode: 44 } },
   ],
 
   // ---------------------------------------------------------------- WIZARD
@@ -256,7 +263,7 @@ const S: Record<ClassKind, SkillDef[]> = {
       field: { kind: "fire", r: 34, ahead: 44, ms: 4000, tickMs: 400, dmg: 10 } },
     { id: "w_orb", name: "Inferno Orb", type: "Buildup", branch: 0, row: 3, style: "fire", cd: 11000, cost: 35, chargeMs: 600, consume: true,
       desc: "Gather fire into a huge orb, then hurl it: it explodes in a big blast. Arcane stacks make it stronger.",
-      shots: { kind: "inferno", speed: 150, range: 160, radius: 9, size: 2.2, dmg: 40, explode: 50, burn: [5, 2000], kb: 2 } },
+      shots: { kind: "inferno", speed: 150, range: 160, radius: 9, size: 2.2, dmg: 100, explode: 50, burn: [5, 2000], kb: 2 } },
     { id: "w_meteor", name: "Meteor Shower", type: "Ultimate", branch: 0, row: 4, style: "fire", cd: 20000, cost: 50, chargeMs: 400,
       desc: "Pull meteors from the sky: one giant impact ahead, four smaller ones around it, and burning ground.",
       areas: [{ r: 50, ahead: 56, dmg: 80, kb: 2, delayMs: 450, look: "meteor" },
@@ -275,10 +282,10 @@ const S: Record<ClassKind, SkillDef[]> = {
       buff: { ms: 8000, armor: 25, thorns: { slowMs: 1200, dmg: 6 } } },
     { id: "w_mirror", name: "Mirror Ice", type: "Counter", branch: 1, row: 3, style: "frost", cd: 10000, cost: 25,
       desc: "Encase yourself in a mirror of ice for 0.9s: the next hit shatters it, freezing the attacker and reflecting the damage.",
-      counter: { ms: 900, reflect: 1, effects: { stunMs: 1000 }, area: { r: 34, dmg: 16, slowMs: 1500, look: "nova" } } },
+      counter: { ms: 900, reflect: 1, effects: { stunMs: 1000 }, area: { r: 34, dmg: 55, slowMs: 1500, look: "nova" } } },
     { id: "w_blizzard", name: "Blizzard", type: "Ultimate", branch: 1, row: 4, style: "frost", cd: 20000, cost: 50, chargeMs: 300,
       desc: "Summon a blizzard ahead for 5s: ice rains down, hurting and slowing everyone inside.",
-      field: { kind: "blizzard", r: 70, ahead: 56, ms: 5000, tickMs: 500, dmg: 7, slowMs: 900 } },
+      field: { kind: "blizzard", r: 70, ahead: 56, ms: 5000, tickMs: 500, dmg: 11, slowMs: 900 } },
 
     // Storm / arcane
     { id: "w_missiles", name: "Arcane Missiles", type: "Attack", branch: 2, row: 0, style: "arcane", cd: 4000, cost: 20,
@@ -286,7 +293,7 @@ const S: Record<ClassKind, SkillDef[]> = {
       shots: { kind: "arcane", n: 3, spread: 14, speed: 300, range: 170, radius: 4, dmg: 13, kb: 0.4 } },
     { id: "w_blink", name: "Blink", type: "Movement", branch: 2, row: 1, style: "arcane", cd: 6000, cost: 20,
       desc: "Teleport ahead. The rift you leave behind explodes.",
-      areas: [{ r: 30, dmg: 18, kb: 1, look: "burst", atStart: true }], move: { kind: "blink", dist: 72, invulnMs: 200 } },
+      areas: [{ r: 30, dmg: 40, kb: 1, look: "burst", atStart: true }], move: { kind: "blink", dist: 72, invulnMs: 200 } },
     { id: "w_static", name: "Static Field", type: "Aura", branch: 2, row: 2, style: "lightning", cd: 16000, cost: 30,
       desc: "Crackle with lightning for 8s: every 0.6s a bolt strikes an enemy near you.",
       field: { kind: "static", r: 62, ms: 8000, tickMs: 600, follow: true, zap: { n: 1, dmg: 9, stunMs: 150 } } },
@@ -327,7 +334,7 @@ const S: Record<ClassKind, SkillDef[]> = {
       field: { kind: "firetrap", r: 18, ahead: 20, ms: 20000, tickMs: 100, trap: true, burst: { r: 44, dmg: 44, kb: 2.5, burn: [4, 2000], look: "burst" } } },
     { id: "a_net", name: "Net Shot", type: "Attack", branch: 1, row: 3, style: "nature", cd: 10000, cost: 25,
       desc: "Shoot a weighted net: it tangles the first enemy (rooted 1.6s) and slows everyone near it.",
-      shots: { kind: "net", speed: 260, range: 160, radius: 6, size: 1.4, wpn: 0.6, stunMs: 1600, explode: 30, slowMs: 1500 } },
+      shots: { kind: "net", speed: 260, range: 160, radius: 6, size: 1.4, wpn: 3.3, stunMs: 1600, explode: 30, slowMs: 1500 } },
     { id: "a_sentry", name: "Hunter's Sentry", type: "Ultimate", branch: 1, row: 4, style: "nature", cd: 22000, cost: 50,
       desc: "Plant a carved sentry totem for 10s. Its glowing eye fires arrows at every enemy that comes near.",
       field: { kind: "sentry", r: 140, ms: 10000, tickMs: 450, turret: { kind: "arrow", speed: 320, range: 160, radius: 4, dmg: 13, kb: 0.4 } } },
@@ -388,7 +395,7 @@ const S: Record<ClassKind, SkillDef[]> = {
     // Earth
     { id: "b_slam", name: "Ground Slam", type: "Attack", branch: 2, row: 0, style: "earth", cd: 6000, cost: 20,
       desc: "Smash the ground: hurts and stuns everything around you.",
-      areas: [{ r: 38, dmg: 22, stunMs: 500, kb: 1, look: "slam" }] },
+      areas: [{ r: 38, dmg: 22, stunMs: 350, kb: 1, look: "slam" }] },
     { id: "b_leap", name: "Leap", type: "Movement", branch: 2, row: 1, style: "earth", cd: 9000, cost: 25,
       desc: "Leap forward and crash down, hurting everything where you land.",
       move: { kind: "leap", dist: 64, invulnMs: 300 }, areas: [{ r: 40, dmg: 26, kb: 2, look: "slam" }] },
@@ -396,13 +403,87 @@ const S: Record<ClassKind, SkillDef[]> = {
       desc: "Hide like a bear: more max HP." },
     { id: "b_seismic", name: "Seismic Wave", type: "Attack", branch: 2, row: 3, style: "earth", cd: 10000, cost: 30,
       desc: "Stomp and send a wave of stone spikes bursting out of the ground ahead.",
-      areas: [{ r: 22, ahead: 20, dmg: 22, kb: 1.5, slowMs: 600, waves: 5, everyMs: 90, line: 20, look: "spikes" }] },
+      areas: [{ r: 22, ahead: 20, dmg: 15, kb: 1.5, slowMs: 600, waves: 5, everyMs: 90, line: 20, look: "spikes" }] },
     { id: "b_avalanche", name: "Avalanche", type: "Ultimate", branch: 2, row: 4, style: "earth", cd: 22000, cost: 50,
       desc: "Leap high into the air and come down like a mountain: a huge stun blast, then boulders rain around you.",
-      move: { kind: "leap", dist: 90, invulnMs: 600 },
-      areas: [{ r: 62, dmg: 38, stunMs: 1000, kb: 2, delayMs: 350, look: "slam" }, { r: 22, dmg: 18, waves: 6, everyMs: 120, delayMs: 600, scatter: 72, look: "meteor" }] },
+      move: { kind: "leap", dist: 90, invulnMs: 300 },
+      areas: [{ r: 62, dmg: 28, stunMs: 700, kb: 2, delayMs: 350, look: "slam" }, { r: 22, dmg: 9, waves: 6, everyMs: 120, delayMs: 600, scatter: 72, look: "meteor" }] },
   ],
 };
+
+// ---- Tree shape -------------------------------------------------------------------------------------
+/**
+ * id: [level needed, parent skill, attribute scaling]. Uneven on purpose: some branches fork early, strong skills
+ * such as Valor Rush, Inferno Orb or Fan of Arrows are dead ends, and the ultimates crown the longest limbs.
+ */
+type Shape = [req: number, parent?: string, scale?: [StatKind, number]];
+const TREE: Record<string, Shape> = {
+  // Knight · Valor: lunge forks into a dead-end charge and the whirl, which grows on to the Judgement Blade
+  k_lunge: [1, undefined, ["str", 4]], k_rush: [9, "k_lunge", ["str", 4]], k_whirl: [4, "k_lunge", ["str", 4]],
+  k_mastery: [12, "k_whirl"], k_judgement: [22, "k_whirl", ["str", 5]],
+  // Knight · Bulwark: one long limb, Iron Skin hangs off the root
+  k_shield: [1], k_ironskin: [6, "k_shield"], k_riposte: [3, "k_shield", ["dex", 3]], k_taunt: [10, "k_riposte"],
+  k_quake: [20, "k_taunt", ["sta", 4]],
+  // Knight · Crusade
+  k_holyblade: [2], k_consecrate: [5, "k_holyblade", ["mag", 3]], k_aura: [13, "k_consecrate", ["mag", 3]],
+  k_rally: [8, "k_consecrate"], k_wrath: [24, "k_rally", ["mag", 4]],
+  // Ninja · Shadow: the smoke fork ends in Assassinate (dead end) or Thousand Cuts
+  n_step: [1], n_swift: [6, "n_step"], n_smoke: [4, "n_step"], n_assassinate: [11, "n_smoke", ["dex", 4]],
+  n_cuts: [22, "n_smoke", ["dex", 4]],
+  // Ninja · Steel
+  n_shuriken: [1, undefined, ["dex", 3]], n_flurry: [4, "n_shuriken"], n_vital: [12, "n_flurry"], n_parry: [8, "n_flurry", ["dex", 3]],
+  n_storm: [20, "n_parry", ["str", 3]],
+  // Ninja · Spirit: fire splits into poison craft (dead end) and lightning, which leads to the dragon
+  n_flame: [2, undefined, ["mag", 3]], n_poison: [5, "n_flame"], n_caltrops: [9, "n_poison", ["dex", 2]],
+  n_lightning: [12, "n_flame", ["mag", 3]], n_dragon: [24, "n_lightning", ["mag", 4]],
+  // Wizard · Fire: the wall forks into the Inferno Orb (dead end) and the Meteor Shower
+  w_wave: [1, undefined, ["mag", 3]], w_pyro: [8, "w_wave"], w_firewall: [5, "w_wave", ["mag", 3]],
+  w_orb: [11, "w_firewall", ["mag", 4]], w_meteor: [22, "w_firewall", ["mag", 4]],
+  // Wizard · Frost
+  w_nova: [1, undefined, ["mag", 3]], w_shards: [3, "w_nova", ["dex", 3]], w_armor: [7, "w_shards"], w_mirror: [10, "w_shards"],
+  w_blizzard: [20, "w_mirror", ["mag", 4]],
+  // Wizard · Storm: one long limb, Mana Flow off the root
+  w_missiles: [2, undefined, ["dex", 3]], w_flow: [12, "w_missiles"], w_blink: [5, "w_missiles", ["mag", 3]],
+  w_static: [9, "w_blink", ["mag", 3]], w_storm: [24, "w_static", ["mag", 4]],
+  // Archer · Marksman: Power Shot forks into the Fan (dead end) and Steady Aim on to the Arrow Rain
+  a_volley: [1, undefined, ["dex", 3]], a_power: [4, "a_volley", ["str", 3]], a_fan: [10, "a_power", ["dex", 3]],
+  a_aim: [7, "a_power"], a_rain: [20, "a_aim", ["dex", 3]],
+  // Archer · Trapper: the reflex is a dead end right off the root
+  a_beartrap: [1, undefined, ["str", 2]], a_reflex: [3, "a_beartrap", ["dex", 3]], a_explosive: [6, "a_beartrap", ["mag", 3]],
+  a_net: [10, "a_explosive"], a_sentry: [22, "a_net", ["dex", 3]],
+  // Archer · Nature
+  a_firearrows: [2], a_frostarrow: [5, "a_firearrows", ["mag", 2]], a_feast: [12, "a_frostarrow"], a_windwalk: [8, "a_frostarrow"],
+  a_phoenix: [24, "a_windwalk", ["mag", 4]],
+  // Barbarian · Fury
+  b_rage: [1], b_cleave: [3, "b_rage", ["str", 3]], b_bloodthirst: [8, "b_cleave"], b_berserk: [11, "b_cleave"],
+  b_whirlwind: [22, "b_berserk", ["str", 4]],
+  // Barbarian · Warcry: the battle cry forks into the howl (ending in Retaliate) and the drums (ending in the ancestors)
+  b_battlecry: [1], b_howl: [5, "b_battlecry"], b_retaliate: [9, "b_howl", ["sta", 3]], b_drums: [12, "b_battlecry", ["sta", 2]],
+  b_ancestors: [24, "b_drums", ["str", 3]],
+  // Barbarian · Earth: Leap forks into the Seismic Wave (dead end) and Thick Skin on to the Avalanche
+  b_slam: [1, undefined, ["sta", 2]], b_leap: [4, "b_slam", ["str", 3]], b_seismic: [10, "b_leap", ["str", 3]],
+  b_thick: [7, "b_leap"], b_avalanche: [20, "b_thick", ["sta", 3]],
+};
+for (const list of Object.values(S)) for (const sk of list) {
+  const t = TREE[sk.id];
+  if (!t) throw new Error(`skill ${sk.id} has no place in TREE`);
+  sk.req = t[0]; sk.parent = t[1];
+  if (t[2]) sk.scale = { stat: t[2][0], per: t[2][1] };
+}
+// Tree order: parents before children, lower levels first
+for (const list of Object.values(S)) list.sort((a, b) => a.branch - b.branch || depth(a, list) - depth(b, list) || a.req - b.req);
+function depth(s: SkillDef, list: SkillDef[]): number { let d = 0, p = s.parent; while (p) { d++; p = list.find((x) => x.id === p)?.parent; } return d; }
+
+/** Skills that need a higher level hit harder: +LEVEL_POWER skill power per level needed above 1. */
+export const LEVEL_POWER = 0.03;
+export const levelPower = (s: SkillDef) => 1 + LEVEL_POWER * Math.max(0, s.req - 1);
+/** Extra power from the skill's attribute: +per% for each point above the class's base (gear counts). */
+export function scalePower(s: SkillDef, stats?: Partial<Record<StatKind, number>>, base?: Partial<Record<StatKind, number>>): number {
+  if (!s.scale || !stats) return 1;
+  return 1 + s.scale.per / 100 * Math.max(0, (stats[s.scale.stat] ?? 0) - (base?.[s.scale.stat] ?? 0));
+}
+/** The skills that grow out of `id`. */
+export const childrenOf = (cls: ClassKind, id: string) => S[cls].filter((x) => x.parent === id);
 
 export const SKILLS = S;
 const BY_ID = new Map<string, SkillDef>();
@@ -426,8 +507,6 @@ export const rankTime = (rank: number) => 1 + RANK_TIME * Math.max(0, rank - 1);
 export const activeSkills = (cls: ClassKind) => S[cls].filter(isActive);
 export const skillLearned = (cls: ClassKind, r: Ranks, id: string) => !!skillOf(cls, id) && rankOf(r, id) > 0;
 
-/** Skill tree rows: the level each row needs. */
-export const TREE_LEVELS = [1, 3, 5, 8, 10] as const;
 
 export function talentPoints(level: number): number { return Math.max(0, level - 1); }
 
@@ -436,13 +515,12 @@ export function spentPoints(cls: ClassKind, r: Ranks): number {
 }
 
 export type LockReason = "" | "max" | "level" | "above" | "points";
-/** Why skill `id` can't take one more rank right now ("" = it can). A skill needs the one below it in its branch. */
+/** Why skill `id` can't take one more rank right now ("" = it can). A skill needs its parent skill learned. */
 export function lockReason(cls: ClassKind, level: number, r: Ranks, id: string): LockReason {
   const n = skillOf(cls, id);
   if (!n || rankOf(r, id) >= MAX_RANK) return "max";
-  if (level < TREE_LEVELS[n.row]) return "level";
-  const below = S[cls].find((x) => x.branch === n.branch && x.row === n.row - 1);
-  if (below && rankOf(r, below.id) < 1) return "above";
+  if (level < n.req) return "level";
+  if (n.parent && rankOf(r, n.parent) < 1) return "above";
   if (spentPoints(cls, r) >= talentPoints(level)) return "points";
   return "";
 }
@@ -476,10 +554,7 @@ export function cleanRanks(cls: ClassKind, level: number, saved: Record<string, 
     const v = saved[s.id];
     if (typeof v === "number" && v > 0) out[s.id] = Math.min(MAX_RANK, Math.floor(v));
   }
-  // Learn order must still be valid: drop skills whose lower skill is missing or too high for the level
-  for (const s of [...S[cls]].sort((a, b) => a.row - b.row)) {
-    const below = S[cls].find((x) => x.branch === s.branch && x.row === s.row - 1);
-    if (out[s.id] && (level < TREE_LEVELS[s.row] || (below && !out[below.id]))) delete out[s.id];
-  }
+  // Learn order must still be valid: drop skills whose parent is missing or that need a higher level (S is in tree order)
+  for (const s of S[cls]) if (out[s.id] && (level < s.req || (s.parent && !out[s.parent]))) delete out[s.id];
   return spentPoints(cls, out) <= talentPoints(level) ? out : {};
 }
