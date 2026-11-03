@@ -6,30 +6,83 @@ import { dith, hash, OUT, stoneCol, vnoise, type Px } from "./shrineArt";
 /**
  * Hand-built pixel art for the portal stones (shared/portals.ts), in the forest shrine's style (shrineArt.ts): one
  * colour per cell on a half design-unit grid, three-tone stone lit from the top left, ordered dithering, dark outlines.
- * A ring of carved voussoir stones with a keystone stands on a squat plinth over a worn flagstone dais. Each block of
- * the ring bears a carved rune.
+ * Built as real isometric solids (Murat 2026-11-03: the first, front-on ring looked flat): a two-tier flagstone
+ * platform and a carved plinth, each with a lit top, a mid-tone left face and a dark right face, carrying a thick ring
+ * of carved voussoirs set along the world x axis. The ring is drawn in depth slices, so its inner and outer rims
+ * show as side faces, and it faces the arrival side (world +y, screen down-left).
  *   "portal_lit": 8 animated frames: the runes burn orange and a slow fire-swirl fills the ring.
  *   "portal_cold": one frame: a dormant ring, runes dark, the opening empty (not found yet).
  */
 
-const W = 128, H = 160, CX = 64, BY = 140; // cells; BY = the dais centre (the sprite's feet)
+const W = 128, H = 184, CX = 64, BY = 140; // cells; BY = the platform's centre on the ground (the sprite's feet)
 export const PORTAL_FW = W / 2, PORTAL_FH = H / 2, PORTAL_FOOT = BY / H;
-const RC = BY - 62; // ring centre
-const RO = 46, RI = 29; // outer / inner radius of the ring
-const BLOCKS = 13; // voussoirs round the ring (the keystone is the top one)
+
+// Iso axes in cells: world x runs down-right, world y down-left, height straight up (2:1 like the map tiles)
+const UX = 1, UY = 0.5, NX = -1, NY = 0.5;
+const ZTOP1 = 6, ZTOP2 = 11; // platform tiers' tops
+const PL = { a: 23, b: 9, z: 16 }; // plinth half-extents and height, on top of the upper tier
+const ZP = ZTOP2 + PL.z; // plinth top
+const RO = 37, RI = 23, DEPTH = 6; // ring outer / inner radius, half thickness (world y)
+const ZC = ZP + RO - 6; // ring centre height: its foot sinks into the plinth
+const BLOCKS = 13;
 
 /** Portal fire, dark to bright (the village bonfire's ramp). */
 const FIRE = ["#3a0f08", "#6e1a0a", "#a82c0c", "#d84a12", "#f2761c", "#ffa22e", "#ffcf52", "#fff0a8"];
 const FIRE_T = [0.18, 0.28, 0.38, 0.48, 0.58, 0.69, 0.8, 0.92];
 const band = (v: number) => { let i = -1; for (let j = 0; j < FIRE.length; j++) if (v > FIRE_T[j]) i = j; return i; };
 
-/** Carved rune `k` in block-local coords (u along the ring, v across it, both about -1..1): true on its groove. */
+/** Screen cell of a world point (a along x, b along y, z up), relative to the feet. */
+const scr = (a: number, b: number, z: number) => ({ x: CX + a * UX + b * NX, y: BY + a * UY + b * NY - z });
+
+/** Carved rune `k` in block-local coords (u along the ring, v across it, about -1..1): true on its groove. */
 function rune(k: number, u: number, v: number): boolean {
   const kind = k % 4, a = Math.abs(u), b = Math.abs(v);
-  if (kind === 0) return (a < 0.13 && b < 0.62) || (Math.abs(u - v * 0.6) < 0.12 && v < 0 && v > -0.62); // a branch
-  if (kind === 1) return Math.abs(Math.hypot(u, v * 0.9) - 0.42) < 0.12 || (a < 0.12 && b < 0.12); // eye
-  if (kind === 2) return (a < 0.12 && b < 0.62) || (b < 0.12 && a < 0.42) || (Math.abs(v + 0.45) < 0.11 && a < 0.3); // cross with a foot
-  return Math.abs(Math.abs(u) - (0.55 - b * 0.5)) < 0.13 && b < 0.6; // chevron
+  if (kind === 0) return (a < 0.14 && b < 0.62) || (Math.abs(u - v * 0.6) < 0.13 && v < 0 && v > -0.62);
+  if (kind === 1) return Math.abs(Math.hypot(u, v * 0.9) - 0.42) < 0.13 || (a < 0.13 && b < 0.13);
+  if (kind === 2) return (a < 0.13 && b < 0.62) || (b < 0.13 && a < 0.42) || (Math.abs(v + 0.45) < 0.12 && a < 0.3);
+  return Math.abs(Math.abs(u) - (0.55 - b * 0.5)) < 0.14 && b < 0.6;
+}
+
+type Face = "top" | "left" | "right";
+/**
+ * An iso box standing on (0, 0, z0) in world coords, half-extents A (x) and B (y), height h. `col` colours a cell of a
+ * face from the face's own coords (s, t, each 0..1 across the face) and returns undefined to use the plain stone.
+ */
+function isoBox(px: Px, z0: number, A: number, B: number, h: number, tone: number, seed: number,
+  col?: (face: Face, s: number, t: number, x: number, y: number, lit: number) => string | undefined) {
+  const top = scr(0, 0, z0 + h);
+  const x0 = Math.floor(CX - A - B - 1), x1 = Math.ceil(CX + A + B + 1);
+  const y0 = Math.floor(top.y - (A + B) * 0.5 - 1), y1 = Math.ceil(scr(A, B, z0).y + 1);
+  for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
+    const qx = x + 0.5 - CX, qy = y + 0.5 - BY;
+    // top face: q = a*U + b*N - (z0+h)*Z
+    const ty = qy + z0 + h;
+    const a = (qx + 2 * ty) / 2, b = (2 * ty - qx) / 2; // inverse of x = a - b, y = (a + b) / 2
+    let face: Face | undefined, s = 0, t = 0, edge = false;
+    if (Math.abs(a) <= A && Math.abs(b) <= B) {
+      face = "top"; s = (a + A) / (2 * A); t = (b + B) / (2 * B);
+      edge = A - Math.abs(a) < 0.9 || B - Math.abs(b) < 0.9;
+    } else {
+      // left face (b = +B): x = a - B, y = (a + B)/2 - z
+      const al = qx + B, zl = (al + B) / 2 - qy;
+      if (Math.abs(al) <= A && zl >= z0 && zl <= z0 + h) {
+        face = "left"; s = (al + A) / (2 * A); t = (zl - z0) / h;
+        edge = A - Math.abs(al) < 0.8 || zl - z0 < 0.9 || z0 + h - zl < 0.6;
+      } else {
+        // right face (a = +A): x = A - b, y = (A + b)/2 - z
+        const br = A - qx, zr = (A + br) / 2 - qy;
+        if (Math.abs(br) <= B && zr >= z0 && zr <= z0 + h) {
+          face = "right"; s = (br + B) / (2 * B); t = (zr - z0) / h;
+          edge = B - Math.abs(br) < 0.8 || zr - z0 < 0.9 || z0 + h - zr < 0.6;
+        }
+      }
+    }
+    if (!face) continue;
+    if (edge) { px(x, y, OUT); continue; }
+    const n = (vnoise(x * 0.3, y * 0.3, 999, seed) - 0.5) * 0.5 + (dith(x, y) - 0.5) * 0.45;
+    const lit = (face === "top" ? 0.62 : face === "left" ? 0.05 : -0.55) + n;
+    px(x, y, col?.(face, s, t, x, y, lit) ?? stoneCol(lit, tone));
+  }
 }
 
 function paintPortal(g: CanvasRenderingContext2D, f: number, N: number, lit: boolean) {
@@ -37,111 +90,128 @@ function paintPortal(g: CanvasRenderingContext2D, f: number, N: number, lit: boo
   g.scale(0.5, 0.5);
   const px: Px = (x, y, c) => { g.fillStyle = c; g.fillRect(x, y, 1, 1); };
   const ph = (f / N) * Math.PI * 2, pulse = 0.5 + 0.5 * Math.sin(ph);
+  /** Portal light falling on a top face: strongest in front of the ring. */
+  const glowAt = (x: number, y: number) => {
+    if (!lit) return 0;
+    const c = scr(0, 4, ZP);
+    return Math.max(0, 1 - Math.hypot((x - c.x) / 40, (y - c.y) / 22));
+  };
 
-  // soft shadow, then the dais: worn flagstones with moss in the joints, grass creeping over the rim
-  for (let y = BY - 24; y <= BY + 20; y++) for (let x = 0; x < W; x++) {
-    const ex = (x - CX) / 60, ey = (y - BY - 2) / 18, d = ex * ex + ey * ey;
-    if (d < 1 && dith(x, y) < (1 - d) * 0.7) px(x, y, "rgba(10,8,6,0.45)");
+  // soft shadow on the grass
+  for (let y = BY - 30; y <= BY + 40; y++) for (let x = 0; x < W; x++) {
+    const ex = (x - CX - 4) / 62, ey = (y - BY - 6) / 32, d = ex * ex + ey * ey;
+    if (d < 1 && dith(x, y) < (1 - d) * 0.6) px(x, y, "rgba(10,8,6,0.45)");
   }
-  for (let y = BY - 18; y <= BY + 16; y++) for (let x = CX - 56; x <= CX + 56; x++) {
-    const ex = (x - CX) / 54, ey = (y - BY) / 15.5, d = ex * ex + ey * ey;
-    const rim = 1 + (vnoise(x * 0.3, y * 0.5, 999, 161) - 0.5) * 0.22;
-    if (d > rim) continue;
-    const u = (x - CX) / 10 + vnoise(x * 0.2, y * 0.3, 999, 162) * 0.6, v = (y - BY) / 4.5 + vnoise(x * 0.25, y * 0.2, 999, 163) * 0.5;
-    const iu = Math.floor(u + (Math.floor(v) % 2) * 0.5), iv = Math.floor(v);
-    const fu = u + (Math.floor(v) % 2) * 0.5 - iu, fv = v - iv;
-    const joint = fu < 0.1 || fv < 0.16;
-    const tone = 0.76 + hash(iu, iv, 164) * 0.3;
-    const lit0 = -fu * 0.3 + (1 - fv) * 0.5 + (dith(x, y) - 0.5) * 0.5 - (d > rim - 0.12 ? 0.6 : 0);
-    let c = joint ? (vnoise(x * 0.5, y * 0.5, 999, 165) > 0.45 ? "#2f4a1c" : "#1c1814") : stoneCol(lit0 - 0.15, tone);
-    if (!joint && hash(iu, iv, 166) < 0.16 && vnoise(x * 0.3, y * 0.3, 999, 167) > 0.5) c = dith(x, y) < 0.5 ? "#4e6a2a" : "#36501e";
-    // portal light spilling on the flags in front of the ring
-    if (lit && !joint && c !== OUT) {
-      const gl = 1 - Math.hypot((x - CX) / 36, (y - BY + 6) / 11);
-      if (gl > 0 && dith(x, y) < gl * (0.5 + 0.2 * pulse)) c = lit0 > 0 ? "#c07a3e" : "#8a4e28";
+
+  // lower tier: a broad, sunken flagstone platform, moss in its joints and creeping up its sides
+  const flags = (face: Face, s: number, t: number, x: number, y: number, l: number, A: number, B: number, seed: number) => {
+    if (face === "top") {
+      const u = s * A / 6 + (Math.floor(t * B / 6) % 2) * 0.5, v = t * B / 6;
+      const iu = Math.floor(u), iv = Math.floor(v), fu = u - iu, fv = v - iv;
+      if (fu < 0.12 || fv < 0.12) return vnoise(x * 0.5, y * 0.5, 999, seed + 1) > 0.5 ? "#2f4a1c" : "#1c1814";
+      let c = stoneCol(l - 0.1 + (1 - fv) * 0.2, 0.74 + hash(iu, iv, seed + 2) * 0.3);
+      if (hash(iu, iv, seed + 3) < 0.14 && vnoise(x * 0.3, y * 0.3, 999, seed + 4) > 0.5) c = dith(x, y) < 0.5 ? "#4e6a2a" : "#36501e";
+      const gl = glowAt(x, y);
+      if (gl > 0 && dith(x, y) < gl * (0.55 + 0.2 * pulse)) c = l > 0.6 ? "#c88a52" : "#9a5a30";
+      return c;
     }
-    if (d > rim - 0.1) c = dith(x, y) < 0.5 ? "#2c4219" : "#3d5822";
-    px(x, y, c);
-  }
+    // sides: courses of dressed blocks
+    const rows = 2, row = Math.floor(t * rows), span = face === "left" ? A : B;
+    const k = s * span / 5 + row * 0.5, fk = k - Math.floor(k);
+    if (fk < 0.1 || Math.abs(t * rows - Math.round(t * rows)) < 0.12) return "#1c1814";
+    if (t < 0.4 && vnoise(x * 0.3, y * 0.4, 999, seed + 5) > 0.55) return dith(x, y) < 0.5 ? "#3d5822" : "#2c4219";
+    return undefined;
+  };
+  isoBox(px, 0, 30, 28, ZTOP1, 0.8, 211, (fc, s, t, x, y, l) => flags(fc, s, t, x, y, l, 30, 28, 220));
+  // upper tier
+  isoBox(px, ZTOP1, 26, 19, ZTOP2 - ZTOP1, 0.86, 212, (fc, s, t, x, y, l) => flags(fc, s, t, x, y, l, 26, 19, 230));
 
-  // the swirl of fire inside the ring (painted first: the ring's inner edge overlaps it)
-  if (lit) {
-    for (let y = RC - RI; y <= RC + RI; y++) for (let x = CX - RI; x <= CX + RI; x++) {
-      const dx = x - CX, dy = y - RC, r = Math.hypot(dx, dy) / RI;
+  // plinth: a carved block with a band of notches that burn when the portal is awake
+  isoBox(px, ZTOP2, PL.a, PL.b, PL.z, 0.88, 213, (fc, s, t, x, y, l) => {
+    if (fc === "top") return undefined;
+    if (Math.abs(t - 0.62) < 0.05) return "#26231f"; // carved band
+    if (t > 0.2 && t < 0.5) {
+      const span = fc === "left" ? PL.a * 2 : PL.b * 2, k = s * span / 5, fk = k - Math.floor(k);
+      if (fk > 0.35 && fk < 0.65) return lit ? (dith(x, y) < 0.4 + 0.4 * pulse ? FIRE[6] : FIRE[4]) : "#26231f";
+    }
+    if (hash(x, y, 214) < 0.025) return "#a7a37a";
+    if (t < 0.3 && vnoise(x * 0.25, y * 0.4, 999, 215) > 0.6) return dith(x, y) < 0.5 ? "#3d5822" : "#2c4219";
+    return undefined;
+  });
+
+  // the ring, in depth slices from the back (world -y) to the front face
+  const C0 = scr(0, 0, ZC);
+  const slice = (b: number, front: boolean) => {
+    const cx = C0.x + b * NX, cy = C0.y + b * NY;
+    for (let y = Math.floor(cy - RO * 1.2 - 7); y <= Math.ceil(cy + RO * 1.2); y++) for (let x = Math.floor(cx - RO - 2); x <= Math.ceil(cx + RO + 2); x++) {
+      const qx = x + 0.5 - cx, qy = y + 0.5 - cy;
+      const s = qx / UX, v = s * UY - qy; // along the ring (world x) and up
+      const r = Math.hypot(s, v);
+      const top = Math.atan2(s, v); // 0 at the top
+      const key = Math.abs(top) < Math.PI / BLOCKS;
+      const ro = RO + (key ? 5 : 0) + (vnoise(top * 6 + 9, 0, 999, 141) - 0.5) * 2, ri = RI + (vnoise(top * 7 + 4, 1, 999, 142) - 0.5) * 1.2;
+      if (r > ro || r < ri || ZC + v < ZP) continue; // the foot is sunk into the plinth
+      const bs = ((top / (Math.PI * 2)) * BLOCKS + 0.5 + BLOCKS * 4) % BLOCKS, bi = Math.floor(bs), fu = bs - bi;
+      if (!front) {
+        // a rim: outer rims face up and out, inner rims (the tunnel) face down and in; lit from the top left
+        const outer = r > (ro + ri) / 2;
+        const ny = v / r, nx = s / r;
+        let l = outer ? ny * 0.75 - nx * 0.25 - 0.35 : -ny * 0.65 + nx * 0.2 - 0.6;
+        l += (dith(x, y) - 0.5) * 0.45 + (vnoise(x * 0.3, y * 0.3, 999, 147) - 0.5) * 0.3;
+        let c = fu < 0.06 || fu > 0.96 ? "#1c1814" : stoneCol(l, 0.84 + hash(bi, 7, 144) * 0.2);
+        if (lit && !outer && dith(x, y) < 0.55 + 0.2 * pulse) c = l > -0.7 ? "#b8642a" : "#8a3e18"; // the tunnel lit by the swirl
+        px(x, y, c);
+        continue;
+      }
+      if (ro - r < 1.1 || r - ri < 1.1 || ZC + v - ZP < 0.8) { px(x, y, OUT); continue; }
+      const t = (r - ri) / (ro - ri);
+      if (fu < 0.07 || fu > 0.95) { px(x, y, OUT); continue; }
+      const nx = s / r, ny = v / r;
+      const bevel = t > 0.82 ? 1 : t < 0.16 ? -1 : 0;
+      let l = (ny * 0.6 - nx * 0.4) * 0.45 * bevel + 0.08 + (vnoise(x * 0.35, y * 0.25, 999, 143) - 0.5) * 0.55 + (dith(x, y) - 0.5) * 0.45
+        + (bevel === -1 ? -0.3 : 0) + (fu < 0.14 ? 0.28 : fu > 0.88 ? -0.32 : 0);
+      let c = stoneCol(l, 0.84 + hash(bi, 7, 144) * 0.2);
+      const moss = vnoise(x * 0.22, y * 0.2, 999, 145);
+      if ((nx < -0.2 && ny > -0.3 && moss > 0.58 && t > 0.5) || (ZC + v - ZP < 9 && moss > 0.5)) c = dith(x, y) < 0.5 + (moss - 0.5) ? (l > 0.2 ? "#5c7a30" : "#3d5822") : "#2c4219";
+      else if (hash(x, y, 146) < 0.03) c = "#a7a37a";
+      const ca = 0.9 + (r - ri) * 0.012 + Math.sin(r * 0.6) * 0.03; // a crack through the right-hand blocks
+      if (Math.abs(top - ca) < 0.024 && t > 0.1) c = OUT;
+      const u = (fu - 0.5) * 2.3, w = (t - 0.5) * 2.4;
+      if (rune(bi + (key ? 1 : 0), u, w)) c = lit ? (dith(x, y) < 0.3 + 0.45 * (0.5 + 0.5 * Math.sin(ph + bi * 0.7)) ? FIRE[7] : FIRE[5]) : "#25211c";
+      else if (lit && Math.hypot(u, w) < 0.9 && dith(x, y) < (0.9 - Math.hypot(u, w)) * 0.7) c = l > 0 ? "#c88a52" : "#8e5430";
+      else if (lit && t < 0.3 && dith(x, y) < (0.3 - t) * 2.2) c = l > 0 ? "#d88a46" : "#9a5228";
+      px(x, y, c);
+    }
+  };
+
+  // the fire swirl, a disc in the ring's middle plane
+  const swirl = () => {
+    const cx = C0.x, cy = C0.y;
+    for (let y = Math.floor(cy - RI * 1.2); y <= Math.ceil(cy + RI * 1.2); y++) for (let x = Math.floor(cx - RI); x <= Math.ceil(cx + RI); x++) {
+      const qx = x + 0.5 - cx, qy = y + 0.5 - cy;
+      const s = qx / UX, v = s * UY - qy, r = Math.hypot(s, v) / (RI - 0.5);
       if (r > 1) continue;
-      const a = Math.atan2(dy, dx);
-      // spiral bands turning slowly inwards, roughened by looping noise (one full turn per N frames)
+      const a = Math.atan2(v, s);
       const sw = a / (Math.PI * 2) + r * 0.9 - f / N;
       const n = vnoise(Math.cos(sw * Math.PI * 2) * 2.2 + 3, Math.sin(sw * Math.PI * 2) * 2.2 + r * 3, 999, 181);
       const spiral = 0.5 + 0.5 * Math.sin(sw * Math.PI * 4 + n * 3);
-      // dark smouldering heart, brighter flame-bands towards the rim, ragged by the noise
       const val = 0.12 + r * 0.62 + (spiral - 0.5) * 0.24 + (n - 0.5) * 0.55 + (dith(x, y) - 0.5) * 0.12 - (r < 0.3 ? 0.2 * (1 - r / 0.3) : 0);
       const i = band(val);
       px(x, y, i < 0 ? "#240806" : FIRE[Math.min(i, FIRE.length - 1)]);
     }
-  }
+  };
 
-  // plinth: a squat carved block the ring is set into, with a worn step in front
-  const pTop = BY - 26, pBot = BY - 4, pHW = 34;
-  for (let y = pTop; y <= pBot + 6; y++) for (let x = CX - pHW - 6; x <= CX + pHW + 6; x++) {
-    const step = y > pBot - 2;
-    const hw = step ? pHW + 5 : pHW - (y - pTop < 2 ? 1 : 0);
-    const dx = x - CX + (vnoise(x * 0.5, y * 0.5, 999, 171) - 0.5) * 1.2;
-    if (Math.abs(dx) > hw) continue;
-    if (hw - Math.abs(dx) < 1 || y === pTop || y === pBot + 6 || (step && y === pBot - 1)) { px(x, y, OUT); continue; }
-    const top = step ? y < pBot + 1 : y < pTop + 4;
-    let l = (top ? 0.6 : -dx / hw * 0.7 - 0.15) + (vnoise(x * 0.3, y * 0.3, 999, 172) - 0.5) * 0.5 + (dith(x, y) - 0.5) * 0.45;
-    let c = stoneCol(l, 0.86 + vnoise(x * 0.1, y * 0.1, 999, 173) * 0.16);
-    if (!step && y === pTop + 9 && Math.abs(dx) < hw - 3) c = "#26231f"; // carved band
-    if (!step && y > pTop + 10 && y < pTop + 17 && Math.abs(dx) < hw - 4) { // a row of carved notches, lit when awake
-      const k = Math.floor((dx + hw) / 6), lx = (dx + hw) % 6;
-      if (lx > 1.5 && lx < 3.5 && (k + y) % 2 === 0) c = lit ? (dith(x, y) < 0.4 + 0.4 * pulse ? FIRE[6] : FIRE[4]) : "#26231f";
-    }
-    if (hash(x, y, 174) < 0.025) c = "#a7a37a"; // lichen
-    if (vnoise(x * 0.25, y * 0.4, 999, 175) > 0.68 && (y > pBot - 6 || Math.abs(dx) > hw - 6)) c = dith(x, y) < 0.5 ? "#3d5822" : "#2c4219"; // moss at the corners
-    px(x, y, c);
-  }
+  for (let b = -DEPTH; b < 0; b += 0.5) slice(b, false);
+  if (lit) swirl();
+  for (let b = 0; b < DEPTH; b += 0.5) slice(b, false);
+  slice(DEPTH, true);
 
-  // the ring: carved voussoirs with dark joints, a proud keystone, moss on the lit shoulder, one deep crack
-  for (let y = RC - RO - 6; y <= RC + RO; y++) for (let x = CX - RO - 2; x <= CX + RO + 2; x++) {
-    const dx = x - CX, dy = y - RC, r = Math.hypot(dx, dy);
-    const a = Math.atan2(dy, dx); // 0 = east, -PI/2 = top
-    const top = -a - Math.PI / 2; // 0 at the top
-    const key = Math.abs(Math.atan2(Math.sin(top), Math.cos(top))) < Math.PI / BLOCKS; // the keystone stands out
-    const ro = RO + (key ? 5 : 0) + (vnoise(a * 6 + 9, 0, 999, 141) - 0.5) * 2.2, ri = RI + (vnoise(a * 7 + 4, 1, 999, 142) - 0.5) * 1.2;
-    if (r > ro || r < ri) continue;
-    if (y > pTop + 1) continue; // the foot of the ring is sunk into the plinth
-    if (ro - r < 1.2 || r - ri < 1.2) { px(x, y, OUT); continue; }
-    // block index and local coords (blocks are centred so one sits at the top)
-    const s = ((top / (Math.PI * 2)) * BLOCKS + 0.5 + BLOCKS * 4) % BLOCKS, bi = Math.floor(s), fu = s - bi;
-    const t = (r - ri) / (ro - ri); // 0 inner .. 1 outer
-    if (fu < 0.07 || fu > 0.95) { px(x, y, OUT); continue; } // joint between blocks
-    // shading: the face is lit from the top left, the inner and outer bevels catch more or less light
-    const nx = dx / r, ny = dy / r;
-    const bevel = t > 0.82 ? 1 : t < 0.16 ? -1 : 0;
-    let l = (-nx - ny) * 0.35 * bevel + 0.12 + (vnoise(x * 0.35, y * 0.25, 999, 143) - 0.5) * 0.6 + (dith(x, y) - 0.5) * 0.45
-      + (bevel === -1 ? -0.35 : 0) + (fu < 0.14 ? 0.3 : fu > 0.88 ? -0.35 : 0);
-    let c = stoneCol(l, 0.84 + hash(bi, 7, 144) * 0.2);
-    const moss = vnoise(x * 0.22, y * 0.2, 999, 145);
-    if ((nx < -0.2 && ny < 0.3 && moss > 0.58 && t > 0.5) || (y > pTop - 10 && moss > 0.5)) c = dith(x, y) < 0.5 + (moss - 0.5) ? (l > 0.2 ? "#5c7a30" : "#3d5822") : "#2c4219";
-    else if (hash(x, y, 146) < 0.03) c = "#a7a37a";
-    // a crack running through the right-hand blocks
-    const ca = 0.35 + (r - ri) * 0.012 + Math.sin(r * 0.6) * 0.03;
-    if (Math.abs(a + ca) < 0.022 && t > 0.1) c = OUT;
-    // the rune on this block, and its glow
-    const u = (fu - 0.5) * 2.3, v = (t - 0.5) * 2.4;
-    if (rune(bi + (key ? 1 : 0), u, v)) c = lit ? (dith(x, y) < 0.3 + 0.45 * (0.5 + 0.5 * Math.sin(ph + bi * 0.7)) ? FIRE[7] : FIRE[5]) : "#25211c";
-    else if (lit && Math.hypot(u, v) < 0.9 && dith(x, y) < (0.9 - Math.hypot(u, v)) * 0.7) c = l > 0 ? "#c88a52" : "#8e5430";
-    else if (lit && t < 0.3 && dith(x, y) < (0.3 - t) * 2.2) c = l > 0 ? "#d88a46" : "#9a5228"; // the inner edge lit by the swirl
-    px(x, y, c);
-  }
-
-  // sparks drifting slowly up from the swirl
+  // sparks drifting slowly up out of the swirl
   if (lit) {
     for (let k = 0; k < 9; k++) {
       const life = ((f / N) + hash(k, 1, 191)) % 1;
-      const x = Math.round(CX + (hash(k, 2, 191) - 0.5) * 40 + Math.sin(life * 6 + k) * 3);
-      const y = Math.round(RC + 10 - life * 64 - hash(k, 3, 191) * 8);
+      const x = Math.round(C0.x + (hash(k, 2, 191) - 0.5) * 36 + Math.sin(life * 6 + k) * 3);
+      const y = Math.round(C0.y + 10 - life * 66 - hash(k, 3, 191) * 8);
       px(x, y, life < 0.35 ? FIRE[7] : life < 0.7 ? FIRE[5] : FIRE[3]);
     }
   }
