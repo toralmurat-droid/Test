@@ -9,24 +9,24 @@ import { hiResTexture } from "./smooth";
 
 const W = 96, H = 112, CX = 48, BY = 93;
 
-const hash = (a: number, b: number, s = 0) => {
+export const hash = (a: number, b: number, s = 0) => {
   let h = Math.imul(a * 73 + 11 + s * 977, 374761393) ^ Math.imul(b + 5 + s * 131, 668265263);
   h = Math.imul(h ^ (h >>> 13), 1274126177);
   return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
 };
 const smooth = (t: number) => t * t * (3 - 2 * t);
 /** Value noise that repeats every `py` lattice steps in y, so the rising fire loops over the animation. */
-const vnoise = (x: number, y: number, py: number, s: number) => {
+export const vnoise = (x: number, y: number, py: number, s: number) => {
   const ix = Math.floor(x), iy = Math.floor(y), fx = smooth(x - ix), fy = smooth(y - iy);
   const m = (v: number) => ((v % py) + py) % py;
   const a = hash(ix, m(iy), s), b = hash(ix + 1, m(iy), s), c = hash(ix, m(iy + 1), s), d = hash(ix + 1, m(iy + 1), s);
   return a + (b - a) * fx + (c - a) * fy + (a - b - c + d) * fx * fy;
 };
 const BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5].map((v) => (v + 0.5) / 16);
-const dith = (x: number, y: number) => BAYER[(y & 3) * 4 + (x & 3)];
+export const dith = (x: number, y: number) => BAYER[(y & 3) * 4 + (x & 3)];
 
-const FIRE = ["#3a0f08", "#6e1a0a", "#a82c0c", "#d84a12", "#f2761c", "#ffa22e", "#ffcf52", "#fff0a8", "#fffbe8"];
-const FIRE_T = [0.2, 0.28, 0.36, 0.45, 0.55, 0.66, 0.77, 0.88, 0.97];
+export const FIRE = ["#3a0f08", "#6e1a0a", "#a82c0c", "#d84a12", "#f2761c", "#ffa22e", "#ffcf52", "#fff0a8", "#fffbe8"];
+export const FIRE_T = [0.2, 0.28, 0.36, 0.45, 0.55, 0.66, 0.77, 0.88, 0.97];
 
 const HOT = new Set([...FIRE.slice(2), "#ffb040", "#f06818", "#ffd060", "#ffc048", "#ff8a24", "#d04a12"]);
 

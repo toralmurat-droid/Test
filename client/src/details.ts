@@ -523,13 +523,18 @@ function makeTextures(scene: Phaser.Scene) {
 }
 
 /** Time of day as 0..1 of the 30-minute cycle, shared by every client via the wall clock (?time=day|dusk|night forces it). */
+/** 30-minute day: about 19 min daylight, 2 min dusk, 6 min night, 3 min dawn. */
+export const DAY_CYCLE_MS = 30 * 60 * 1000;
+const PAGE_START = Date.now();
+
 export function dayTime(nowMs: number): number {
   const forced = new URLSearchParams(location.search).get("time");
   if (forced === "night") return 0.81;
   if (forced === "dusk") return 0.685;
   if (forced === "day") return 0.3;
-  const CYCLE = 30 * 60 * 1000; // 30-minute day: about 19 min daylight, 2 min dusk, 6 min night, 3 min dawn
-  return (nowMs % CYCLE) / CYCLE;
+  // ?time=0.63 (testing aid): start the clock at that point of the day and let it run from there
+  if (forced !== null && forced.trim() !== "" && !isNaN(Number(forced))) return (Number(forced) + (nowMs - PAGE_START) / DAY_CYCLE_MS) % 1;
+  return (nowMs % DAY_CYCLE_MS) / DAY_CYCLE_MS;
 }
 
 /** Phase of the day: 0..1 darkness and a dusk warmth. t: 0-.65 day, .65-.72 dusk, .72-.9 night, .9-1 dawn. */
@@ -713,7 +718,7 @@ export class Details {
       scene.add.image(x, y, "lantern").setOrigin(0.5, 0).setDepth(-0.9);
       this.addLight(x, y + 5 * K, 0xffb347, 2.2, 0.75);
     }
-    // Banners hang on the palisade either side of each gate, lanterns light the way in
+    // Banners hang on the palisade either side of each gate (the gates are lit by the watch's torches, gateTorches.ts)
     const flap = "banner_flap";
     if (!scene.anims.exists(flap)) scene.anims.create({ key: flap, frames: scene.anims.generateFrameNumbers("banner", { frames: [0, 1, 2, 1] }), frameRate: 4, repeat: -1 });
     for (let ty = 0; ty < MAP_H; ty++) for (let tx = 0; tx < MAP_W; tx++) {
@@ -734,12 +739,10 @@ export class Details {
         const fb = scene.add.sprite(foot.x, foot.y - 62, "banner").setOrigin(0.5, 0).setDepth(foot.y + 1);
         isoAnchor(fb, foot);
         fb.play({ key: flap, startFrame: (tx + ty) % 3 });
-        this.addLight(foot.x, foot.y, 0xffa040, 3, 0.6);
         continue;
       }
       const b = scene.add.sprite((tx + 0.5) * TILE, ty * TILE + 5 * K, "banner").setOrigin(0.5, 0).setDepth(-0.9);
       b.play({ key: flap, startFrame: (tx + ty) % 3 });
-      this.addLight((tx + 0.5) * TILE, ty * TILE + 8 * K, 0xffa040, 3, 0.6);
     }
   }
 
