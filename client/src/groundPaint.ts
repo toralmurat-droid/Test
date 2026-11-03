@@ -80,6 +80,13 @@ let OWN = 1;
  * Colour + "height" of one material at a world point. The height lets materials poke into each other at
  * borders (cobbles over grass, grass over dirt) instead of a plain cross-fade.
  */
+const hx = (h: string) => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
+const BAYER4 = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5].map((v) => (v + 0.5) / 16 - 0.5);
+const COB = ["#3a3632", "#524d47", "#6a645b", "#837b70", "#9d9486"].map(hx);
+const COB_WARM = ["#3d342c", "#574b3f", "#706152", "#8a7966", "#a4917b"].map(hx);
+const COB_COOL = ["#33353a", "#4a4d52", "#62646a", "#7b7d82", "#95969a"].map(hx);
+const COB_LINE = hx("#1b1714"), JOINT = ["#241c15", "#3a2e22", "#4f4030"].map(hx), MOSSG = ["#2a3a1a", "#3e5424", "#566e30"].map(hx);
+
 function material(t: number, wx: number, wy: number, sx: number, sy: number, depth: number, now: number): number {
   let r = 0, g = 0, b = 0, ht = 0.5;
   // big, slow grime and damp patches shared by every land material (muted, weathered look)
@@ -172,30 +179,30 @@ function material(t: number, wx: number, wy: number, sx: number, sy: number, dep
       const decay = clamp01((0.85 - OWN) * 1.6);
       const hole = sstep(0.72, 0.8, vn(wx / 30, wy / 30, 39) * 0.75 + hash2(cid, 5, 40) * 0.25 + decay * 0.35);
       const missing = hash2(cid, 3, 29) < 0.04 + decay * 0.45 || hole > 0.5;
+      // Drawn like the bonfire: each sett a few flat tones from a stone ramp with ordered dithering, a dark outline,
+      // a lit rim on the top-left, so the square reads as hand-made pixel art rather than soft shading.
       const tone = 0.7 + best * 0.42, warm = hash2(cid, 1, 24);
-      r = (104 + 18 * warm) * tone; g = (100 + 9 * warm) * tone; b = (92 - 3 * warm) * tone;
-      // each stone sits at its own height and tilt: sunken ones dark, proud ones catch the light
       const tilt = (hash2(cid, 6, 41) - 0.5) * 0.9, sink = hash2(cid, 7, 42);
       const n = d1 / (C * 0.6), lit = -(bx * (1 + tilt) + by * (1 - tilt)) / (C * 0.6);
-      const k = (1 - 0.38 * n * n + 0.3 * lit * n) * (sink < 0.12 ? 0.84 : sink > 0.9 ? 1.08 : 1);
-      r *= k; g *= k; b *= k;
       const st = vn(wx * 0.8, wy * 0.8, 25) * 0.6 + vn(wx * 2.2, wy * 2.2, 26) * 0.4; // stone grain and chips
-      r *= 0.84 + st * 0.26; g *= 0.84 + st * 0.26; b *= 0.84 + st * 0.26;
-      // hairline cracks across some stones, chipped corners
-      if (hash2(cid, 8, 43) < 0.1) {
+      const dx0 = Math.floor(sx * 1.5), dy0 = Math.floor(sy * 1.5), dth = BAYER4[(dy0 & 3) * 4 + (dx0 & 3)];
+      let lv = (tone - 0.7) * 4 + 1.2 - n * n * 1.3 + lit * n * 1.4 + (st - 0.5) * 1.4 + dth * 0.9 + (sink < 0.12 ? -0.7 : sink > 0.9 ? 0.4 : 0);
+      if (hash2(cid, 8, 43) < 0.1) { // hairline cracks across some stones
         const an = hash2(cid, 9, 44) * Math.PI, cr = Math.abs(bx * Math.sin(an) - by * Math.cos(an) + (vn(wx * 1.3, wy * 1.3, 45) - 0.5) * 0.9);
-        if (cr < 0.16) { r *= 0.72; g *= 0.72; b *= 0.72; }
+        if (cr < 0.22) lv = -1;
       }
-      // joints vary: tight in places, wide and earthy in others
+      const rp = warm < 0.22 ? COB_WARM : warm > 0.9 ? COB_COOL : COB;
+      let c = lv < 0 ? COB_LINE : rp[Math.min(rp.length - 1, Math.floor(lv))];
       const jw = 0.35 + 0.5 * vn(wx / 14, wy / 14, 46);
-      const mortar = missing ? 0 : sstep(jw, jw + 1.1, edge);
-      const mr = 56 + grain * 12, mg = 45 + grain * 9, mb = 34;
-      r = mr + (r - mr) * mortar; g = mg + (g - mg) * mortar; b = mb + (b - mb) * mortar;
-      if (missing) { // loose gravel in the gaps
+      const mortar = missing ? 0 : edge > jw + 0.55 ? 1 : edge > jw ? 0.5 : 0;
+      if (mortar === 0.5) c = lit > 0.25 && n > 0.6 ? rp[rp.length - 2] : COB_LINE; // outline, catching light on the lit side
+      else if (mortar === 0) c = (grain + dth) > 0.55 ? JOINT[1] : JOINT[0];
+      if (missing) { // loose gravel and earth in the gaps
         const gc = hash2(Math.floor(wx * 1.1), Math.floor(wy * 1.1), 47);
-        if (gc < 0.3) { const t2 = 70 + gc * 160; r = t2; g = t2 * 0.94; b = t2 * 0.84; }
+        c = gc < 0.12 ? COB[3] : gc < 0.3 ? COB[1] : (grain + dth) > 0.6 ? JOINT[2] : JOINT[1];
       }
-      if (mortar < 0.6 && vn(wx / 24, wy / 24, 26) > 0.68) { r = 54 + grain * 10; g = 70 + grain * 10; b = 36; } // moss and weeds in the joints
+      if (mortar < 1 && vn(wx / 24, wy / 24, 26) + dth * 0.12 > 0.68) c = MOSSG[(grain + dth) > 0.55 ? 2 : (grain + dth) > 0.2 ? 1 : 0]; // moss in the joints
+      r = c[0]; g = c[1]; b = c[2];
       ht = (missing ? 0.3 : 0.55 + 0.4 * mortar) + (sink - 0.5) * 0.2;
       break;
     }
