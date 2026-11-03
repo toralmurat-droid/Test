@@ -32,7 +32,7 @@ export const NPCS: Npc[] = [
 export interface NpcDecor { prop: string; x: number; y: number; scale: number; animated?: boolean; solid?: [number, number, number, number]; flip?: boolean }
 export const NPC_DECOR: NpcDecor[] = [
   // Old Morwen's crooked hut, cauldron, candles and herbs
-  { prop: "witch_hut", x: 71, y: 63.1, scale: 0.65, animated: true, solid: [70.1, 62.35, 1.8, 0.75] },
+  { prop: "witch_hut", x: 71.6, y: 62.85, scale: 1.5, animated: true, solid: [70.5, 61.8, 1.75, 1.25] }, // big enough for Morwen to fit through the door
   { prop: "cauldron", x: 72.8, y: 64.05, scale: 0.55, animated: true, solid: [72.55, 63.8, 0.5, 0.25] },
   { prop: "candles", x: 70.05, y: 63.45, scale: 0.5, animated: true },
   { prop: "toadstools", x: 73.4, y: 63.3, scale: 0.5 },

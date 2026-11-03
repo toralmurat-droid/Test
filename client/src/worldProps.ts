@@ -3,6 +3,7 @@ import { TILE } from "../../shared/constants";
 import { AREAS, EMPTY, GROUND, OBJECTS, SIGNPOSTS, T, VILLAGE } from "../../shared/map";
 import { NPCS, NPC_DECOR } from "../../shared/npcs";
 import { CHESTS } from "../../shared/chests";
+import { SIEGE_SITES } from "../../shared/siege";
 
 /**
  * Standing world props with idle animations: spear racks with fluttering pennants, war pennants on tall poles,
@@ -13,11 +14,11 @@ import { CHESTS } from "../../shared/chests";
  * top left, weathered dark palette, 1px dark outline. Purely cosmetic: walk-through, client only.
  */
 const TX = 1.5; // texels per world px
-const OUTLINE = 0x15100d;
+export const OUTLINE = 0x15100d;
 
 // ---- painter -------------------------------------------------------------------------------------------
-type Px = (x: number, y: number, c: number, a?: number) => void;
-interface Pen {
+export type Px = (x: number, y: number, c: number, a?: number) => void;
+export interface Pen {
   px: Px;
   line(x0: number, y0: number, x1: number, y1: number, c: number): void;
   rect(x: number, y: number, w: number, h: number, c: number): void;
@@ -25,7 +26,7 @@ interface Pen {
   shaft(x0: number, y0: number, x1: number, y1: number, w?: number, cols?: [number, number, number]): void;
 }
 
-function pen(buf: Uint32Array, W: number, H: number): Pen {
+export function pen(buf: Uint32Array, W: number, H: number): Pen {
   const px: Px = (x, y, c, a = 1) => {
     x = Math.round(x); y = Math.round(y);
     if (x < 0 || y < 0 || x >= W || y >= H) return;
@@ -53,7 +54,7 @@ function pen(buf: Uint32Array, W: number, H: number): Pen {
 }
 
 /** Paints `frames` frames side by side, outlines each silhouette, and registers the spritesheet texture. */
-function sheet(scene: Phaser.Scene, key: string, w: number, h: number, frames: number, draw: (p: Pen, f: number) => void, shadow = 0.5) {
+export function sheet(scene: Phaser.Scene, key: string, w: number, h: number, frames: number, draw: (p: Pen, f: number) => void, shadow = 0.5) {
   if (scene.textures.exists(key)) return;
   const tex = scene.textures.createCanvas(key, w * frames, h)!;
   const ctx = tex.getContext();
@@ -87,16 +88,16 @@ function sheet(scene: Phaser.Scene, key: string, w: number, h: number, frames: n
 }
 
 // ---- palette (dark, weathered) -------------------------------------------------------------------------
-const WOOD: [number, number, number] = [0x7d5c3c, 0x5a3f28, 0x3a281a];
-const OLDWOOD: [number, number, number] = [0x6e665a, 0x504a40, 0x34302a];
-const IRON = { hi: 0xb4b8bc, mid: 0x7a7f86, lo: 0x43474d };
-const ROPE = 0x9a8458;
-const BONE = { hi: 0xe2dac4, mid: 0xb8ae94, lo: 0x7a705c };
+export const WOOD: [number, number, number] = [0x7d5c3c, 0x5a3f28, 0x3a281a];
+export const OLDWOOD: [number, number, number] = [0x6e665a, 0x504a40, 0x34302a];
+export const IRON = { hi: 0xb4b8bc, mid: 0x7a7f86, lo: 0x43474d };
+export const ROPE = 0x9a8458;
+export const BONE = { hi: 0xe2dac4, mid: 0xb8ae94, lo: 0x7a705c };
 const STRAW = [0xd2b46a, 0xb0924e, 0x86703a];
 const sway = (f: number, n: number) => Math.sin((f / n) * Math.PI * 2);
 
 /** Spear head pointing up with its tip at (x, y). */
-function spearHead(p: Pen, x: number, y: number) {
+export function spearHead(p: Pen, x: number, y: number) {
   for (let j = 0; j < 7; j++) {
     const half = j < 3 ? j * 0.5 : (6 - j) * 0.45 + 0.4;
     for (let i = -Math.round(half); i <= Math.round(half); i++) p.px(x + i, y + j, i < 0 ? IRON.hi : i > 0 ? IRON.lo : IRON.mid);
@@ -122,24 +123,118 @@ const BLUE: [number, number, number] = [0x3f5f9a, 0x2c4474, 0x1c2c4c];
 const BLACK: [number, number, number] = [0x4a4448, 0x34303a, 0x201c24];
 const RAG: [number, number, number] = [0x8a3a2a, 0x6a2a20, 0x401a14];
 
+// ---- weapon rack ---------------------------------------------------------------------------------------
+const BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5].map((v) => (v + 0.5) / 16);
+const dith = (x: number, y: number) => BAYER[(y & 3) * 4 + (x & 3)];
+/** Colour for a continuous shade `v` (0 = darkest step) with the fraction between two steps dithered. */
+const step = (pal: number[], v: number, x: number, y: number) => {
+  const c = Math.max(0, Math.min(pal.length - 1, v)), i = Math.floor(c);
+  return pal[Math.min(pal.length - 1, c - i > dith(x, y) ? i + 1 : i)];
+};
+const RW = [0x24160c, 0x3e2816, 0x5a3c22, 0x7a5634, 0x9a7448]; // weathered wood
+const RI = [0x23262b, 0x3f454d, 0x67707a, 0x98a2ac, 0xd2d9df]; // iron
+const RG = [0x5a3a10, 0x8a6020, 0xc0902e, 0xe8c25a];           // brass
+const RL = [0x2a1a12, 0x4a2c1a, 0x6e4426];                     // leather grips
+
+function weaponRack(p: Pen, f: number, pennants: boolean) {
+  const t = (f / N) * Math.PI * 2;
+  const yb = (x: number) => 58 + (x - 10) * 0.5; // the rack runs along a world axis: down-right on screen
+  const grain = (x: number, y: number) => (hash(x, y >> 1, 3) - 0.5) * 0.7;
+  /** A beam along the rack, `off` px above the ground line, lit on top. */
+  const beam = (x0: number, x1: number, off: number, th: number) => {
+    for (let x = x0; x <= x1; x++) for (let j = 0; j < th; j++) {
+      const y = Math.round(yb(x) - off) + j;
+      p.px(x, y, step(RW, 3.6 - j * (3 / Math.max(1, th - 1)) + grain(x, y), x, y));
+    }
+  };
+  /** An upright post, lit from the left. */
+  const post = (x: number, h: number, back = false) => {
+    const y0 = Math.round(yb(x));
+    for (let y = y0 - h; y <= y0; y++) for (let k = 0; k < 3; k++) p.px(x + k, y, step(RW, (back ? 1.6 : 3.2) - k * 1.1 + grain(x + k, y), x + k, y));
+    for (let k = -1; k < 4; k++) p.px(x + k, y0 - h - 1, step(RW, back ? 1.8 : 3.8 - (k + 1) * 0.5, x + k, y0 - h)); // cap
+  };
+  const shaftUp = (x: number, y0: number, y1: number, lean: number, pal = RW, w = 2) => {
+    for (let y = y1; y <= y0; y++) {
+      const xx = Math.round(x + lean * (y0 - y) / (y0 - y1));
+      for (let k = 0; k < w; k++) p.px(xx + k, y, step(pal, (w === 1 ? 2.6 : 3.3 - k * 1.6) + grain(xx, y) * 0.6, xx + k, y));
+    }
+  };
+  const blade = (x: number, y0: number, y1: number, pal = RI) => { // two-tone blade with a dithered sheen, tip at y1
+    for (let y = y1; y <= y0; y++) {
+      const tip = y - y1 < 2;
+      p.px(x, y, step(pal, 3.6 - (y - y1) / (y0 - y1) * 0.8, x, y));
+      if (!tip) p.px(x + 1, y, step(pal, 1.7 + ((y * 3) % 7 === 0 ? 1 : 0), x + 1, y));
+    }
+    p.px(x, y0 - 2, pal[2]); // fuller notch
+  };
+
+  // back trestle legs and the top bar (behind the weapons)
+  for (const x of [11, 43]) { const y0 = Math.round(yb(x)); for (let k = 0; k < 26; k++) { const xx = x + 4 - Math.round(k * 0.18), yy = y0 - 3 - k; p.px(xx, yy, step(RW, 1.4 + grain(xx, yy), xx, yy)); p.px(xx + 1, yy, RW[0]); } }
+  post(11, 30, true); post(43, 30, true);
+  beam(11, 45, 29, 3);
+
+  // weapons resting against the bar: spear, sword, halberd, sword, axe
+  const base = (x: number) => Math.round(yb(x) - 6);
+  { // spear
+    const x = 16, top = base(x) - 46;
+    shaftUp(x, base(x), top, 1, RW, 1);
+    for (let j = 0; j < 7; j++) { const h = j < 3 ? j * 0.5 : (6 - j) * 0.45 + 0.4; for (let i = -Math.round(h); i <= Math.round(h); i++) p.px(x + 1 + i, top - 7 + j, step(RI, 2.8 - i * 1.2, x + i, top + j)); }
+    p.px(x + 1, top, RL[2]); p.px(x, top + 1, RL[1]); p.px(x + 1, top + 1, RL[2]);
+    if (pennants) pennant(p, x + 2, top + 2, 9, 4, t, RED);
+  }
+  for (const [x, pal] of [[22, RI], [34, RI]] as const) { // swords standing point-down, hilt above the bar
+    const b0 = base(x), guard = b0 - 27;
+    blade(x, b0 - 1, guard + 1, pal as number[]);
+    for (let i = -2; i <= 3; i++) p.px(x + i, guard, step(x === 22 ? RG : RI, 3 - Math.abs(i - 0.5) * 0.6, x + i, guard)); // cross-guard
+    for (let y = guard - 5; y < guard; y++) { p.px(x, y, step(RL, 2 - ((y & 1) ? 0.8 : 0), x, y)); p.px(x + 1, y, RL[0]); } // wrapped grip
+    p.px(x, guard - 6, x === 22 ? RG[3] : RI[4]); p.px(x + 1, guard - 6, x === 22 ? RG[1] : RI[2]); p.px(x, guard - 7, x === 22 ? RG[2] : RI[3]); // pommel
+  }
+  { // halberd
+    const x = 28, top = base(x) - 48;
+    shaftUp(x, base(x), top, 0, RW, 2);
+    for (let j = 0; j < 4; j++) p.px(x + 1, top - 4 + j, step(RI, 3.5 - j * 0.4, x, top + j)); // spike
+    for (let j = 0; j < 8; j++) { const w = j < 2 ? 2 + j : j < 6 ? 4 + (j > 3 ? 1 : 0) : 7 - j; for (let i = 0; i < w; i++) p.px(x + 2 + i, top + 2 + j, step(RI, 3.6 - i * 0.55 - j * 0.12, x + i, top + j)); }
+    for (let j = 0; j < 3; j++) p.px(x - 1 - j, top + 4 + j, RI[2 - Math.min(1, j)]); // back hook
+    if (pennants) pennant(p, x + 2, top + 12, 8, 3, t + 1.9, BLUE);
+  }
+  { // axe
+    const x = 39, top = base(x) - 34;
+    shaftUp(x, base(x), top, 0, RW, 2);
+    for (let j = 0; j < 9; j++) { const w = j < 1 || j > 7 ? 3 : j < 3 || j > 5 ? 4 : 5; for (let i = 0; i < w; i++) p.px(x + 2 + i, top + j, step(RI, (i === w - 1 ? 4 : 3.1) - j * 0.18 - (i < 1 ? 1 : 0), x + i, top + j)); }
+    p.px(x, top - 1, RW[3]); p.px(x + 1, top - 1, RW[2]);
+  }
+
+  // front rail, front posts and the foot plank cover the weapons' lower ends
+  beam(11, 45, 9, 3);
+  post(9, 30); post(41, 30);
+  beam(8, 46, 1, 2);
+  for (const x of [17, 29]) { const y = Math.round(yb(x) - 8); p.px(x, y, RI[1]); p.px(x + 1, y, RI[3]); } // iron pegs
+
+  // round shield leaning on the right post: painted planks, iron rim and boss
+  const sx = 46, sy = Math.round(yb(46) - 9);
+  for (let y = sy - 8; y <= sy + 8; y++) for (let x = sx - 7; x <= sx + 6; x++) {
+    const dx = (x - sx + 0.3) / 6.4, dy = (y - sy) / 8.2, d = dx * dx + dy * dy;
+    if (d > 1) continue;
+    const lit = 2.2 - dx * 1.1 - dy * 0.7;
+    if (d > 0.74) p.px(x, y, step(RI, lit + 0.6, x, y));
+    else {
+      const half = (x - sx) * 0.4 + (y - sy) * 0.9 < 0; // quartered: faded red and bare wood
+      p.px(x, y, half ? step([0x3a0e0a, 0x5e1a12, 0x86281a, 0xa8402a], lit, x, y) : step(RW, lit + 0.4, x, y));
+      if ((x - sx + 20) % 3 === 0 && !half) p.px(x, y, RW[1]); // plank seams
+    }
+  }
+  for (let j = -1; j <= 1; j++) for (let i = -1; i <= 1; i++) p.px(sx + i, sy + j, step(RI, 3 - i - j, sx + i, sy + j));
+  p.px(sx - 1, sy - 1, RI[4]);
+}
+
 // ---- the props ------------------------------------------------------------------------------------------
 const N = 6; // animation frames per prop
 
 function makeTextures(scene: Phaser.Scene) {
-  // Spear rack: A-frame with five spears, two carrying pennants
-  sheet(scene, "wp_spear_rack", 42, 66, N, (p, f) => {
-    const t = (f / N) * Math.PI * 2;
-    p.shaft(4, 64, 8, 30, 2); p.shaft(34, 64, 30, 30, 2); // side legs
-    p.shaft(7, 30, 34, 30, 2); p.rect(6, 58, 30, 2, WOOD[1]); p.rect(6, 58, 30, 1, WOOD[0]); // top bar and base
-    for (let k = 0; k < 5; k++) {
-      const x = 10 + k * 5;
-      p.shaft(x - 1, 61, x + 1, 9 + (k % 2) * 3, 1, WOOD);
-      spearHead(p, x + 1, 2 + (k % 2) * 3);
-    }
-    p.line(7, 31, 34, 31, WOOD[2]);
-    pennant(p, 12, 12, 10, 4, t, RED);
-    pennant(p, 27, 12, 10, 4, t + 1.7, BLUE);
-  });
+  // Weapon racks (smithy and camps): iso-facing trestle rack with spears, swords, a halberd and an axe; the camp
+  // version flies two small pennants. Bonfire-style pixel art: flat colour steps, ordered dithering, dark outline.
+  sheet(scene, "wp_spear_rack", 56, 80, N, (p, f) => weaponRack(p, f, true), 0.45);
+  sheet(scene, "wp_weapon_rack", 56, 80, 1, (p, f) => weaponRack(p, f, false), 0.45);
 
   // War pennant: a tall pole with a long streamer flying right
   const warPole = (key: string, col: [number, number, number], torn: boolean) => sheet(scene, key, 44, 100, N, (p, f) => {
@@ -260,16 +355,14 @@ function makeTextures(scene: Phaser.Scene) {
     }
   }, 0.4);
 
-  // Broken spears stuck in the ground, a torn cloth on one, a shield half buried
+  // Broken spears stuck in the ground, a rope end on one, a shield half buried
   sheet(scene, "wp_spears_ground", 40, 54, N, (p, f) => {
     const t = (f / N) * Math.PI * 2;
     p.shaft(9, 52, 15, 12, 2, OLDWOOD); spearHead(p, 16, 5);
     p.shaft(22, 52, 18, 26, 2, OLDWOOD); p.px(17, 25, OLDWOOD[0]); p.px(19, 24, OLDWOOD[2]); // snapped
     p.shaft(30, 52, 34, 18, 2, OLDWOOD); spearHead(p, 35, 11);
-    for (let i = 0; i < 11; i++) {
-      const dy = Math.round(Math.sin(t + i * 0.6) * (0.3 + i * 0.15)), h = Math.max(2, 6 - Math.floor(i / 2.4));
-      for (let j = 0; j < h; j++) if (!(i > 6 && (i * 3 + j) % 5 === 0)) p.px(16 + i, 20 + j + dy, j === 0 ? BLACK[0] : j === h - 1 ? BLACK[2] : BLACK[1]);
-    }
+    // a frayed rope binding swinging from the snapped shaft (no cloth: no flags where the dead march)
+    for (let i = 0; i < 6; i++) p.px(19 + Math.round(Math.sin(t) * i * 0.25), 27 + i, i % 2 ? ROPE : 0x6a5a3a);
     // round shield leaning at the foot
     for (let y = 40; y < 53; y++) for (let x = 17; x < 31; x++) {
       const dx = (x - 24) / 7, dy = (y - 47) / 6.2;
@@ -300,6 +393,7 @@ function free(tx: number, ty: number, taken: Spot[], gap: number): boolean {
   if (NPC_DECOR.some((d) => Math.hypot(d.x * TILE - cx, d.y * TILE - cy) < 2 * TILE)) return false;
   if (CHESTS.some((c) => Math.hypot(c.x - cx, c.y - cy) < 2 * TILE)) return false;
   if (SIGNPOSTS.some((s) => Math.hypot((s.x + 0.5) * TILE - cx, (s.y + 0.5) * TILE - cy) < 2 * TILE)) return false;
+  if (SIEGE_SITES.some((s) => Math.abs(s.tx - tx) <= 9 && Math.abs(s.ty - ty) <= 4)) return false; // siege works
   return true;
 }
 
@@ -324,18 +418,16 @@ const byRoad = (r: number) => (tx: number, ty: number) => {
 
 function spots(): Spot[] {
   const out: Spot[] = [];
-  // Oakvale: lantern poles along the roads, a spear rack and pennants by the smithy, dummies to practise on
-  scatter(out, "Oakvale", "wp_spear_rack", 1, 3, (tx) => tx < VILLAGE.x0 + 10); // west side, by the smithy
+  // Oakvale: lantern poles along the roads, pennants, dummies to practise on (the smithy has its own weapon rack)
   scatter(out, "Oakvale", "wp_dummy", 2, 5, (tx, ty) => tx < VILLAGE.x0 + 9);
   scatter(out, "Oakvale", "wp_pennant_red", 2, 8);
   scatter(out, "Oakvale", "wp_lantern_pole", 6, 4, byRoad(1));
-  // Hunter's Camp and the Old Watchtower: spears and pennants
+  // Hunter's Camp: a spear rack and a dummy
   scatter(out, "Hunter's Camp", "wp_spear_rack", 1, 3);
   scatter(out, "Hunter's Camp", "wp_dummy", 1, 3);
-  scatter(out, "Old Watchtower", "wp_pennant_black", 2, 5);
+  // Skeleton lands (Watchtower, Keep, Barrows, Ruins): no flags or pennants, the dead don't camp. Their siege
+  // works are in siegeArt.ts; only old broken spears lie around.
   scatter(out, "Old Watchtower", "wp_spears_ground", 2, 4);
-  // Old battlefields: the keep and the barrows
-  scatter(out, "Greywatch Keep", "wp_pennant_black", 3, 6);
   scatter(out, "Greywatch Keep", "wp_spears_ground", 4, 4);
   scatter(out, "Barrow Downs", "wp_spears_ground", 4, 6);
   scatter(out, "Old Ruins", "wp_spears_ground", 2, 5);
@@ -350,13 +442,16 @@ function spots(): Spot[] {
 
 /** World-space height (px) of each prop: textures are 1.5 texels per world px. */
 const SIZE: Record<Kind, number> = {
-  wp_spear_rack: 66, wp_pennant_red: 100, wp_pennant_black: 100, wp_dummy: 58, wp_lantern_pole: 90, wp_skull_pike: 72, wp_net_rack: 50, wp_spears_ground: 54,
+  wp_spear_rack: 80, wp_pennant_red: 100, wp_pennant_black: 100, wp_dummy: 58, wp_lantern_pole: 90, wp_skull_pike: 72, wp_net_rack: 50, wp_spears_ground: 54,
 };
 const FPS: Record<Kind, number> = {
   wp_spear_rack: 6, wp_pennant_red: 7, wp_pennant_black: 6, wp_dummy: 3, wp_lantern_pole: 3, wp_skull_pike: 6, wp_net_rack: 3, wp_spears_ground: 5,
 };
 
 export const WORLD_PROP_SPOTS = spots();
+
+/** Paints the prop textures if needed (npcs.ts uses wp_weapon_rack for Brann's smithy). */
+export function worldPropTextures(scene: Phaser.Scene) { makeTextures(scene); }
 
 /** Adds the props to the scene. `light` gets called for every lantern (the day/night layer lights it after dusk). */
 export function addWorldProps(scene: Phaser.Scene, light?: (x: number, y: number) => void) {

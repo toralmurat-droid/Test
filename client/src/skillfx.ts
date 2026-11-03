@@ -49,7 +49,7 @@ const rnd = (a: number, b: number) => a + Math.random() * (b - a);
 /** Goo of the shooter blob's spit (not a skill style). */
 const GOO = [0xf3e5ff, 0xd1a6ff, 0xb57cff, 0x8e4fd6, 0x5b2c91];
 /** Basic and monster projectiles drawn here too (not only skill shots): their trails and impacts. */
-const BASIC_SHOTS = new Set(["fireball", "arrow", "bolt", "knife", "stone", "slimeball", "magicbolt", "shadowbolt"]);
+const BASIC_SHOTS = new Set(["fireball", "arrow", "bolt", "knife", "stone", "slimeball", "magicbolt", "shadowbolt", "skelthrow"]);
 
 /** World offset that shows as `h` px straight up on screen. */
 const lift = (h: number): [number, number] => (ISO ? [-h, -h] : [0, -h]);
@@ -877,6 +877,17 @@ export class SkillFx {
         d.fillStyle(0x5b2c91).fillCircle(0, 0.4, 2.9).fillStyle(0xb57cff).fillCircle(0, 0, 2.6).fillStyle(0xd1a6ff).fillCircle(-0.8, -0.9, 1).fillStyle(0xffffff).fillRect(-1.2, -1.4, 0.8, 0.8);
         return box(light(0x9d4edd, 0.26, 0.6), d);
       }
+      case "skelthrow": {
+        // A whole skeleton, curled up and tumbling: skull, rib cage, flailing arms and legs
+        const B = 0xe8e2d0, S = 0x8f887a;
+        d.lineStyle(1.2, S).lineBetween(-1, 1, -5, 4).lineBetween(1, 1, 5, 3.5).lineBetween(-1, -1, -4.5, -3.5).lineBetween(1, 2, 3, 6);
+        d.lineStyle(1, B).lineBetween(-1, 1, -5, 4).lineBetween(1, 1, 5, 3.5).lineBetween(-1, -1, -4.5, -3.5).lineBetween(1, 2, 3, 6);
+        d.fillStyle(S).fillEllipse(0, 1, 5, 6).fillStyle(B).fillEllipse(0, 0.6, 4.2, 5.2);
+        d.lineStyle(0.6, S).lineBetween(-1.8, 0, 1.8, 0).lineBetween(-1.6, 1.4, 1.6, 1.4).lineBetween(-1.3, 2.7, 1.3, 2.7);
+        d.fillStyle(B).fillCircle(0.5, -4, 2.6).fillStyle(0x1a1a1a).fillRect(-0.7, -4.6, 1, 1).fillRect(1, -4.6, 1, 1);
+        d.fillStyle(0xff5a3c).fillRect(-0.5, -4.4, 0.6, 0.6).fillRect(1.2, -4.4, 0.6, 0.6);
+        return box(d);
+      }
       case "magicbolt": {
         d.fillStyle(0x4cc9f0).fillCircle(0, 0, 2.4).fillStyle(0xd6f6ff).fillCircle(0, 0, 1.5).fillStyle(0xffffff).fillCircle(0, 0, 0.8);
         return box(light(0x4cc9f0, 0.4), d);
@@ -966,6 +977,10 @@ export class SkillFx {
           (g as any).angle += 500 * dt;
           if (Math.random() < 12 * dt) this.p(x, y, 0, pick(PALETTE.earth), { vz: -5, g: 60, life: 300, size: 1, add: false });
           break;
+        case "skelthrow":
+          (g as any).angle += 620 * dt; // tumbling end over end
+          if (Math.random() < 10 * dt) this.p(x, y, 4, pick([0xe8e2d0, 0xd8d0b8]), { vz: -8, g: 120, life: 420, size: 1, add: false }); // bits snapping off
+          break;
         case "slimeball": {
           const wob = 1 + 0.14 * Math.sin(age / 45);
           (g as any).setScale(wob, 2 - wob);
@@ -1032,6 +1047,15 @@ export class SkillFx {
           this.p(x, y, 3, pick(GOO), { vx: Math.cos(a) * sp, vy: Math.sin(a) * sp * 0.6, vz: rnd(15, 45), g: 160, drag: 1.5, life: rnd(350, 600), size: pick([1, 2, 2]), add: false });
         }
         this.glow(x, y, 0, 9, 0x9d4edd, 260, 0.6, true);
+        break;
+      case "skelthrow":
+        // it shatters: bones scatter over the ground
+        for (let i = 0; i < 16; i++) {
+          const a = Math.random() * Math.PI * 2, sp = rnd(25, 70);
+          this.p(x, y, 4, pick([0xe8e2d0, 0xd8d0b8, 0x8f887a]), { vx: Math.cos(a) * sp, vy: Math.sin(a) * sp * 0.6, vz: rnd(20, 50), g: 170, drag: 2, life: rnd(500, 800), size: pick([1, 2]), add: false });
+        }
+        this.burst(x, y, 1, "earth", 8, 45, 380, 1);
+        if (this.nearMe(x, y)) this.scene.cameras.main.shake(120, 0.004);
         break;
       case "magicbolt": this.burst(x, y, 3, "frost", 12, 60, 380); this.glow(x, y, 3, 12, 0x4cc9f0, 260); break;
       default: // shadowbolt

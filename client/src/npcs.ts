@@ -3,6 +3,7 @@ import "@fontsource/pixelify-sans/700.css";
 import "./npcs.css";
 import { pixelText } from "./pixeltext";
 import Phaser from "phaser";
+import { worldPropTextures } from "./worldProps";
 import { NPCS, NPC_DECOR, Npc, npcNear, TALK_RANGE } from "../../shared/npcs";
 import {
   CHAINS, chainState, npcPresent, npcQuestMark, questDef, questDialog, questObjective, questStep, Quester, questTargets, stepGoal, stepProgress,
@@ -77,8 +78,13 @@ export class NpcLayer {
 
   /** Hut, cauldron, forge… around the traders, plus Brann hammering at his anvil and the witch's bubbling brew. */
   private addSurroundings(scene: Phaser.Scene) {
+    worldPropTextures(scene);
     for (const d of NPC_DECOR) {
       const x = d.x * TILE, y = d.y * TILE;
+      if (d.prop === "weapon_rack") { // pixel-art rack shared with the camps (worldProps.ts)
+        scene.add.sprite(x, y, "wp_weapon_rack", 0).setOrigin(0.5, 1).setScale(0.62).setDepth(y).setFlipX(!!d.flip);
+        continue;
+      }
       const img = scene.add.sprite(x, y, "props", d.animated ? `${d.prop}_0` : d.prop).setOrigin(0.5, 1).setScale(d.scale).setDepth(y).setFlipX(!!d.flip);
       if (d.animated && scene.anims.exists(`props_${d.prop}`)) img.play(`props_${d.prop}`);
     }
