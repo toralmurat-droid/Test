@@ -254,6 +254,7 @@ function material(t: number, wx: number, wy: number, sx: number, sy: number, dep
         r = 70 + 18 * m; g = 60 + 14 * m; b = 44 + 8 * m;
         if (gr > 0.45) { const k = 0.8 + 0.4 * vn(sx / 1.1, sy / 3.2, 83); r = 62 * k; g = 80 * k; b = 40 * k; }
         if (hash2(Math.floor(wx), Math.floor(wy), 84) < 0.08) { r = 112; g = 106; b = 94; }
+        { const t = BAYER4[(Math.floor(sy * 1.5) & 3) * 4 + (Math.floor(sx * 1.5) & 3)]; r = Math.round(r / 14 + t) * 14; g = Math.round(g / 14 + t) * 14; b = Math.round(b / 14 + t) * 14; }
         ht = 0.35;
         break;
       }
@@ -271,6 +272,11 @@ function material(t: number, wx: number, wy: number, sx: number, sy: number, dep
       r = 48 + (r - 48) * j; g = 44 + (g - 44) * j; b = 36 + (b - 36) * j;
       if (j < 0.75 && vn(wx / 14, wy / 14, 75) > 0.42) { r = 56 + grain * 14; g = 74 + grain * 14; b = 36; } // grass in the joints
       if (vn(wx / 10, wy / 10, 89) > 0.7) { r = r * 0.6 + 50 * 0.4; g = g * 0.6 + 70 * 0.4; b = b * 0.6 + 34 * 0.4; } // moss creeping over
+      { // pixel style like the bonfire: flat dithered tone steps and a dark edge on each slab
+        const t = BAYER4[(Math.floor(sy * 1.5) & 3) * 4 + (Math.floor(sx * 1.5) & 3)];
+        r = Math.round(r / 14 + t) * 14; g = Math.round(g / 14 + t) * 14; b = Math.round(b / 14 + t) * 14;
+        if (e > 0.25 && e < 0.85) { r = 30; g = 26; b = 22; } else if (e >= 0.85 && e < 1.4 && lx + ly < 1) { r *= 1.15; g *= 1.15; b *= 1.15; }
+      }
       ht = 0.5 + 0.3 * j;
       break;
     }

@@ -1,3 +1,4 @@
+import { pixelize } from "./pixelize";
 import Phaser from "phaser";
 import { hiResTexture, overrideTexture, smoothCopy } from "./smooth";
 import { T } from "../../shared/map";
@@ -318,60 +319,116 @@ function herbRack(ctx: Ctx) {
   }
 }
 
+/**
+ * Old Morwen's hut, in the village's look: a low, crooked hovel of weathered grey planks on a fieldstone footing,
+ * under a heavy, sagging thatch gone green with moss. A patched door, a shuttered window with a faint sickly glow,
+ * herbs and bones hanging from the eave, a leaning stone chimney. Pixelized with the other props.
+ */
 function witchHut(ctx: Ctx, f: number) {
-  const I = new Iso(ctx, 50, 88);
-  I.shadow(-20, -16, 20, 16, 6, 0.55);
-  // stilts / stone footing
-  I.box(-19, 19, -15, 15, 0, 4, 0x5a554c, stones(ctx, 3, 0x5a554c, 0.9));
-  // walls of dark planks
-  I.box(-17, 17, -13, 13, 4, 30, 0x4a3828, planks(ctx, 9, 0x4e3a28), false);
-  // door on the left side (v = 13), round window on the right side (u = 17)
-  const d: Pt[] = [I.p(-4, 13, 4), I.p(5, 13, 4), I.p(5, 13, 19), I.p(0.5, 13, 23), I.p(-4, 13, 19)];
-  const dg = ctx.createLinearGradient(...d[0], ...d[1]); dg.addColorStop(0, "#5a2a6a"); dg.addColorStop(1, "#2e1238");
-  I.poly(d, dg, "#1a0e10", 0.6);
-  const [kx, ky] = I.p(3.5, 13, 11); ctx.fillStyle = "#c8a040"; ctx.beginPath(); ctx.arc(kx, ky, 0.7, 0, Math.PI * 2); ctx.fill();
-  const [wx, wy] = I.p(17, 0, 19);
-  glow(ctx, wx, wy, 9, "rgba(150,255,110,A)", 0.3 + 0.08 * (f % 2));
-  ctx.fillStyle = "#1a1410"; ctx.beginPath(); ctx.ellipse(wx, wy, 4.4, 5, -0.45, 0, Math.PI * 2); ctx.fill();
-  const wg = ctx.createRadialGradient(wx, wy, 0, wx, wy, 4); wg.addColorStop(0, "#e8ff9a"); wg.addColorStop(1, "#4a9a2a");
-  ctx.fillStyle = wg; ctx.beginPath(); ctx.ellipse(wx, wy, 3.5, 4.1, -0.45, 0, Math.PI * 2); ctx.fill();
-  ctx.strokeStyle = "#2a1c10"; ctx.lineWidth = 0.6; ctx.beginPath(); ctx.moveTo(wx - 3.2, wy + 1.6); ctx.lineTo(wx + 3.2, wy - 1.6); ctx.moveTo(wx - 1, wy - 3.8); ctx.lineTo(wx + 1, wy + 3.8); ctx.stroke();
-  // skull over the door
-  const [sx, sy] = I.p(0.5, 13, 27);
-  ctx.fillStyle = "#e8e0cc"; ctx.beginPath(); ctx.ellipse(sx, sy, 2, 2.2, 0, 0, Math.PI * 2); ctx.fill(); ctx.fillRect(sx - 1.2, sy + 1, 2.4, 1.6);
-  ctx.fillStyle = "#1a1410"; ctx.beginPath(); ctx.arc(sx - 0.8, sy, 0.55, 0, Math.PI * 2); ctx.arc(sx + 0.8, sy, 0.55, 0, Math.PI * 2); ctx.fill();
-  // steep, sagging roof: ridge along u, two planes
-  const ridgeZ = 58, eave = 26, o = 3;
-  const roofPlane = (pts: Pt[], light: number) => {
+  const I = new Iso(ctx, 50, 88), r = rng(61);
+  I.shadow(-21, -17, 21, 17, 6, 0.6);
+  // a footing of rough field stones, half sunk in the earth, with weeds
+  I.box(-19, 19, -15, 15, 0, 4, 0x4e4a42, stones(ctx, 3, 0x4e4a42, 0.85));
+  // walls: weathered grey-brown planks, darker and mossy toward the ground
+  I.box(-17, 17, -13, 13, 4, 27, 0x4c4236, planks(ctx, 9, 0x4c4236), false);
+  const grime = (pts: Pt[]) => { const g = ctx.createLinearGradient(pts[0][0], pts[0][1], pts[3][0], pts[3][1]); g.addColorStop(0, "rgba(30,34,18,0.7)"); g.addColorStop(1, "rgba(30,34,18,0)"); I.poly(pts, g); };
+  grime([I.p(-17, 13, 4), I.p(17, 13, 4), I.p(17, 13, 12), I.p(-17, 13, 12)]);
+  grime([I.p(17, 13, 4), I.p(17, -13, 4), I.p(17, -13, 12), I.p(17, 13, 12)]);
+  // corner posts, a little crooked
+  for (const [u, v] of [[-17, 13], [17, 13], [17, -13]] as const) {
+    ctx.strokeStyle = "#2e261e"; ctx.lineWidth = 2.2; ctx.beginPath(); ctx.moveTo(...I.p(u, v, 4)); ctx.lineTo(...I.p(u + 0.6, v, 28)); ctx.stroke();
+    ctx.strokeStyle = "#5e5244"; ctx.lineWidth = 0.7; ctx.beginPath(); ctx.moveTo(...I.p(u - 0.4, v, 4)); ctx.lineTo(...I.p(u + 0.2, v, 28)); ctx.stroke();
+  }
+  // a patch board nailed over a split, and a missing board showing the dark inside
+  I.poly([I.p(-14, 13, 15), I.p(-9, 13, 15), I.p(-9, 13, 22), I.p(-14, 13, 22)], "#5a4e3e");
+  I.poly([I.p(9, 13, 6), I.p(11, 13, 6), I.p(11, 13, 17), I.p(9, 13, 17)], "#16100c");
+  // the door: old planks with iron straps, sagging on its hinges
+  const d: Pt[] = [I.p(-4, 13, 4), I.p(4.5, 13, 4), I.p(4.5, 13, 19.5), I.p(-4, 13, 20.5)];
+  I.poly(d, "#3a2e22", "#16100c", 0.6);
+  for (const z of [7, 16]) { ctx.strokeStyle = "#2a2622"; ctx.lineWidth = 0.9; ctx.beginPath(); ctx.moveTo(...I.p(-4, 13, z + 0.3)); ctx.lineTo(...I.p(4.5, 13, z)); ctx.stroke(); }
+  for (let u = -2; u < 4.5; u += 2.2) { ctx.strokeStyle = "#241c14"; ctx.lineWidth = 0.3; ctx.beginPath(); ctx.moveTo(...I.p(u, 13, 4)); ctx.lineTo(...I.p(u, 13, 20)); ctx.stroke(); }
+  const [kx, ky] = I.p(3.2, 13, 11); ctx.fillStyle = "#6a6050"; ctx.fillRect(kx - 0.5, ky - 0.5, 1, 1);
+  // antlers nailed over the door instead of a sign
+  const [ax, ay] = I.p(0.3, 13, 24);
+  ctx.strokeStyle = "#c8bc9c"; ctx.lineWidth = 0.6;
+  for (const sd of [-1, 1]) { ctx.beginPath(); ctx.moveTo(ax, ay); ctx.quadraticCurveTo(ax + sd * 3, ay - 1, ax + sd * 4, ay - 4); ctx.moveTo(ax + sd * 2.4, ay - 1.2); ctx.lineTo(ax + sd * 2.2, ay - 3.2); ctx.stroke(); }
+  // a small window on the right side: a faint sickly glow behind a shutter that hangs askew
+  const W: Pt[] = [I.p(17, 4, 13), I.p(17, -4, 13), I.p(17, -4, 20), I.p(17, 4, 20)];
+  const [wx, wy] = I.p(17, 0, 16.5);
+  glow(ctx, wx, wy, 7, "rgba(150,200,90,A)", 0.16 + 0.05 * (f % 2));
+  I.poly(W, "#141a0e");
+  I.poly([I.p(17, 3, 14), I.p(17, -3, 14), I.p(17, -3, 19), I.p(17, 3, 19)], f % 2 ? "#6a8a3a" : "#5a7a32");
+  ctx.strokeStyle = "#2a2018"; ctx.lineWidth = 0.6; ctx.beginPath(); ctx.moveTo(...I.p(17, 0, 13)); ctx.lineTo(...I.p(17, 0, 20)); ctx.moveTo(...I.p(17, 4, 16.5)); ctx.lineTo(...I.p(17, -4, 16.5)); ctx.stroke();
+  I.poly([I.p(17, -4, 20), I.p(17, -9, 18.5), I.p(17, -9.5, 11.5), I.p(17, -4.5, 13)], "#3e3428", "#16100c", 0.4); // loose shutter
+  // heavy thatch: two sagging planes, ragged eaves, mossy and dark with rot
+  const ridgeZ = 52, eave = 24, o = 4;
+  const thatch = (pts: Pt[], light: number, seed: number) => {
     const g = ctx.createLinearGradient(...pts[0], ...pts[2]);
-    g.addColorStop(0, col(0x3e2a52, light * 1.15)); g.addColorStop(1, col(0x3e2a52, light * 0.75));
+    g.addColorStop(0, col(0x6a5c3a, light * 1.05)); g.addColorStop(1, col(0x4a4028, light * 0.8));
     I.poly(pts, g);
     ctx.save(); I.clip(pts);
-    // shingle rows
-    const r = rng(19);
-    for (let t = 0; t < 1; t += 0.085) {
-      const a: Pt = [pts[0][0] + (pts[3][0] - pts[0][0]) * t, pts[0][1] + (pts[3][1] - pts[0][1]) * t];
-      const b: Pt = [pts[1][0] + (pts[2][0] - pts[1][0]) * t, pts[1][1] + (pts[2][1] - pts[1][1]) * t];
-      ctx.strokeStyle = `rgba(15,8,20,${0.55})`; ctx.lineWidth = 0.45;
-      ctx.beginPath(); ctx.moveTo(...a); ctx.quadraticCurveTo((a[0] + b[0]) / 2, (a[1] + b[1]) / 2 + 1.2, ...b); ctx.stroke();
-      for (let s = 0; s < 12; s++) { const k = r(); ctx.fillStyle = `rgba(${k < 0.5 ? "90,70,110" : "20,12,26"},0.35)`; const x = a[0] + (b[0] - a[0]) * r(), y = a[1] + (b[1] - a[1]) * (x - a[0]) / ((b[0] - a[0]) || 1); ctx.fillRect(x, y - 1.8, 1.4, 1.6); }
+    const rr = rng(seed);
+    for (let k = 0; k < 520; k++) { // straw strokes running down the slope
+      const t = rr(), s2 = rr();
+      const x = pts[0][0] + (pts[1][0] - pts[0][0]) * t + (pts[3][0] - pts[0][0]) * s2, y = pts[0][1] + (pts[1][1] - pts[0][1]) * t + (pts[3][1] - pts[0][1]) * s2;
+      const dx = (pts[3][0] - pts[0][0]) * 0.06, dy = (pts[3][1] - pts[0][1]) * 0.06;
+      ctx.strokeStyle = rr() < 0.5 ? col(0x8a7a52, light * (0.8 + rr() * 0.35)) : col(0x3a3020, light);
+      ctx.lineWidth = 0.35; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + dx, y + dy); ctx.stroke();
     }
+    for (let k = 0; k < 7; k++) { // moss
+      const t = rr(), s2 = 0.2 + rr() * 0.75;
+      const x = pts[0][0] + (pts[1][0] - pts[0][0]) * t + (pts[3][0] - pts[0][0]) * s2, y = pts[0][1] + (pts[1][1] - pts[0][1]) * t + (pts[3][1] - pts[0][1]) * s2;
+      ctx.fillStyle = rr() < 0.5 ? "rgba(70,92,40,0.85)" : "rgba(52,70,30,0.85)";
+      ctx.beginPath(); ctx.ellipse(x, y, 2 + rr() * 3.5, 1.2 + rr() * 1.6, -0.45, 0, Math.PI * 2); ctx.fill();
+    }
+    // a rotten hollow where the thatch has slumped
+    ctx.fillStyle = "rgba(26,20,12,0.75)"; const hx = pts[0][0] + (pts[1][0] - pts[0][0]) * 0.62 + (pts[3][0] - pts[0][0]) * 0.45, hy = pts[0][1] + (pts[1][1] - pts[0][1]) * 0.62 + (pts[3][1] - pts[0][1]) * 0.45;
+    ctx.beginPath(); ctx.ellipse(hx, hy, 3.2, 1.6, -0.45, 0, Math.PI * 2); ctx.fill();
     ctx.restore();
   };
-  // ridge runs along u: the front plane faces down-left, the right end is a gable
-  const gable: Pt[] = [I.p(17, 13, 30), I.p(17, -13, 30), I.p(17, 0, ridgeZ - 2)];
-  ctx.save(); I.poly(gable, col(0x3a2a1e, 0.6)); I.clip(gable);
-  planks(ctx, 41, 0x3e2e20)("R", I.p(17, 13, 30), [1, -0.5], [0, -1], 26, ridgeZ - 30);
+  // gable end (right): weathered boards
+  const gable: Pt[] = [I.p(17, 13, 27), I.p(17, -13, 27), I.p(17, 0, ridgeZ - 2)];
+  ctx.save(); I.poly(gable, col(0x3e362a, 0.62)); I.clip(gable);
+  planks(ctx, 41, 0x3e362a)("R", I.p(17, 13, 27), [1, -0.5], [0, -1], 26, ridgeZ - 27);
   ctx.restore();
-  roofPlane([I.p(-17 - o, 0, ridgeZ), I.p(17 + o, 0, ridgeZ), I.p(17 + o, 13 + o, eave), I.p(-17 - o, 13 + o, eave)], 1.0);
-  // thick roof edge over the gable (barge boards)
-  ctx.strokeStyle = "#24182c"; ctx.lineWidth = 1.4; ctx.lineCap = "round";
+  // the front slope sags in the middle: built from two halves with a lower midpoint
+  const sag = 2.5;
+  // back slope first (seen above the ridge), darker
+  thatch([I.p(-17 - o, -13 - o, eave), I.p(17 + o, -13 - o, eave), I.p(17 + o, 0, ridgeZ), I.p(-17 - o, 0, ridgeZ - 1)], 0.72, 4);
+  thatch([I.p(-17 - o, 0, ridgeZ - 1), I.p(0, 0, ridgeZ - sag), I.p(0, 13 + o, eave - sag), I.p(-17 - o, 13 + o, eave)], 1, 5);
+  thatch([I.p(0, 0, ridgeZ - sag), I.p(17 + o, 0, ridgeZ), I.p(17 + o, 13 + o, eave), I.p(0, 13 + o, eave - sag)], 0.97, 6);
+  // ragged eave: straw hanging below the edge
+  for (let k = 0; k <= 40; k++) {
+    const u = -17 - o + ((34 + 2 * o) * k) / 40, z = eave - (Math.abs(u) < 8 ? sag * (1 - Math.abs(u) / 8) : 0);
+    const [x, y] = I.p(u, 13 + o, z), L = 1 + r() * 2.8;
+    ctx.strokeStyle = r() < 0.6 ? "#5a4c30" : "#3a3020"; ctx.lineWidth = 0.5; ctx.beginPath(); ctx.moveTo(x, y - 0.5); ctx.lineTo(x + (r() - 0.5), y + L); ctx.stroke();
+  }
+  // the gable's barge edge and a ridge of turf
+  ctx.strokeStyle = "#2a2218"; ctx.lineWidth = 1.4; ctx.lineCap = "round";
   ctx.beginPath(); ctx.moveTo(...I.p(17 + o, 13 + o, eave)); ctx.lineTo(...I.p(17 + o, 0, ridgeZ)); ctx.lineTo(...I.p(17 + o, -13 - o, eave)); ctx.stroke();
-  ctx.strokeStyle = "rgba(160,130,190,0.45)"; ctx.lineWidth = 0.5; ctx.beginPath(); ctx.moveTo(...I.p(-17 - o, 0, ridgeZ)); ctx.lineTo(...I.p(17 + o, 0, ridgeZ)); ctx.stroke();
-  // crooked chimney with green smoke
-  I.box(-10, -5, 2, 7, 44, 64, 0x5a5048, stones(ctx, 31, 0x5a5048, 0.9));
-  const [cx, cy] = I.p(-7.5, 4.5, 64);
-  for (let k = 0; k < 4; k++) { const t = (k + f * 0.25) % 4; ctx.fillStyle = `rgba(150,200,130,${0.3 - t * 0.06})`; ctx.beginPath(); ctx.ellipse(cx + t * 2.5, cy - 3 - t * 5, 2.5 + t, 1.8 + t * 0.6, 0, 0, Math.PI * 2); ctx.fill(); }
+  ctx.strokeStyle = "#3e5226"; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.moveTo(...I.p(-17 - o, 0, ridgeZ - 1)); ctx.quadraticCurveTo(...I.p(0, 0, ridgeZ - sag - 1), ...I.p(17 + o, 0, ridgeZ)); ctx.stroke();
+  // herbs and bones hanging under the eave
+  for (const [u, kind] of [[-12, 0], [-8.5, 1], [7, 0], [11, 2]] as const) {
+    const [x, y] = I.p(u, 13 + o - 1, eave - 1);
+    ctx.strokeStyle = "#8a7a5a"; ctx.lineWidth = 0.25; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x, y + 2.5); ctx.stroke();
+    if (kind === 1) { ctx.fillStyle = "#c8bc9c"; ctx.fillRect(x - 0.4, y + 2.5, 0.8, 3); ctx.fillRect(x - 1, y + 2.5, 2, 0.7); }
+    else { ctx.fillStyle = kind ? "#6a5a3a" : "#4e6030"; ctx.beginPath(); ctx.moveTo(x - 1.4, y + 2.5); ctx.lineTo(x + 1.4, y + 2.5); ctx.lineTo(x + 0.3, y + 7); ctx.lineTo(x - 0.4, y + 7); ctx.closePath(); ctx.fill(); }
+  }
+  // a leaning chimney of rough stones, with thin grey pixel smoke
+  I.box(-11, -6, 2, 7, 40, 60, 0x4e4a42, stones(ctx, 31, 0x4e4a42, 0.85));
+  const [cx, cy] = I.p(-8.5, 4.5, 60);
+  for (let k = 0; k < 4; k++) {
+    const t = (k + f * 0.25) % 4, px = cx + t * 2.2, py = cy - 3 - t * 5, rad = 1.6 + t * 0.8;
+    ctx.fillStyle = `rgba(${120 - t * 8},${124 - t * 8},${110 - t * 8},${0.55 - t * 0.12})`;
+    ctx.beginPath(); ctx.ellipse(px, py, rad, rad * 0.75, 0, 0, Math.PI * 2); ctx.fill();
+  }
+  // weeds along the footing
+  for (let k = 0; k < 14; k++) {
+    const onL = r() < 0.6, u = onL ? -19 + r() * 38 : 19, v = onL ? 15 : -15 + r() * 30;
+    const [x, y] = I.p(u, v, 0), h = 2 + r() * 3.5;
+    ctx.strokeStyle = r() < 0.5 ? "#4e6030" : "#3a4a24"; ctx.lineWidth = 0.4;
+    ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + (r() - 0.5) * 2, y - h); ctx.stroke();
+  }
 }
 
 /** Paints the props into a hi-res atlas copy and swaps it in. Call once after the "props" atlas has loaded. */
@@ -394,6 +451,7 @@ export function paintSmoothProps(scene: Phaser.Scene) {
     ctx.setTransform(S, 0, 0, S, fr.cutX * S, fr.cutY * S);
     draw(ctx, f);
     ctx.restore();
+    pixelize(ctx, fr.cutWidth * S, fr.cutHeight * S, 3, { ox: fr.cutX * S, oy: fr.cutY * S, step: 12, outline: 0.55 });
   };
   for (let f = 0; f < 4; f++) paint(`forge_${f}`, forge, f);
   paint("anvil", anvil);

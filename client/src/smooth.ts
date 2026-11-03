@@ -1,3 +1,4 @@
+import { pixelize } from "./pixelize";
 import Phaser from "phaser";
 
 /**
@@ -105,6 +106,9 @@ if (import.meta.env?.DEV) (globalThis as any).__HI = HI; // dev: lets tools read
  * A spritesheet texture of `frames` frames of w x h px (the size the game uses), painted `scale` times bigger with
  * smooth vector drawing: `draw` gets a context already scaled so it paints in w x h units, offset to frame f.
  */
+/** Painted decor that gets the pixelize pass (see pixelize.ts). Already pixel-made art (bonfire, bridges, stalls) is left out. */
+const PIXEL_STYLE = /^(up_|oak_|pine|bush|rw_|stk_|crop_)/;
+
 export function hiResTexture(scene: Phaser.Scene, key: string, w: number, h: number, frames: number, scale: number, draw: (ctx: CanvasRenderingContext2D, f: number) => void) {
   if (scene.textures.exists(key)) return;
   const hi = document.createElement("canvas");
@@ -116,6 +120,8 @@ export function hiResTexture(scene: Phaser.Scene, key: string, w: number, h: num
     ctx.beginPath(); ctx.rect(0, 0, w, h); ctx.clip();
     draw(ctx, f);
     ctx.restore();
+    // decor in the bonfire's pixel style: flat dithered tones and a dark outline, one colour per art pixel
+    if (PIXEL_STYLE.test(key)) pixelize(ctx, w * scale, h * scale, Math.max(1, Math.round(scale * 2 / 3)), { ox: f * w * scale, step: 12, outline: 0.55 });
   }
   HI.set(key, hi);
   const tex = scene.textures.createCanvas(key, w * frames, h)!;
