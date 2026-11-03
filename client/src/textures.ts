@@ -250,6 +250,7 @@ export const CRAWL_CROP = 0.6;
 export const MOB_LOOK: Record<string, { top: number; bar: number; oy: number; scale?: number }> = {
   skeletonmage: { top: 19, bar: 12, oy: 0.975 },
   necromancer: { top: 32, bar: 24, oy: 0.975, scale: 1.6 }, // elite: drawn big
+  demon: { top: 32, bar: 26, oy: 0.975, scale: 1.7 },
   motherblob: { top: 20, bar: 22, oy: 0.92 },
   blobling: { top: 8, bar: 8, oy: 0.9 },
   shooterblob: { top: 15, bar: 12, oy: 0.92 },
@@ -258,13 +259,14 @@ export const MOB_LOOK: Record<string, { top: number; bar: number; oy: number; sc
   crawler: { top: 10, bar: 10, oy: CRAWL_CROP },
 };
 
-const PAINTED_MOBS = ["slime", "blobling", "shooterblob", "warriorblob", "healerblob", "motherblob", "skeleton", "bandit", "skeletonmage", "necromancer"];
+const PAINTED_MOBS = ["slime", "blobling", "shooterblob", "warriorblob", "healerblob", "motherblob", "skeleton", "bandit", "skeletonmage", "necromancer", "demon", "crawler"];
 /** Painted humanoid monsters have taller frames (feet lower in the frame, label higher). */
 const PAINTED_LOOK: Record<string, { top: number; bar: number; oy: number; scale?: number }> = {
   // about hero height (heroes are 32 world px since the 48px sheets)
-  crawler: { top: 11, bar: 10, oy: CRAWL_CROP },
+  crawler: { top: 13, bar: 12, oy: 20 / 22 }, // own painted sheet: crawling on its arms
   skeleton: { top: 23, bar: 14, oy: 27.5 / 30 }, bandit: { top: 23, bar: 14, oy: 27.5 / 30 },
   skeletonmage: { top: 25, bar: 14, oy: 0.975 }, necromancer: { top: 40, bar: 26, oy: 0.975, scale: 1.45 },
+  demon: { top: 50, bar: 28, oy: 33 / 34, scale: 1.45 },
   // pixel sheets use even frame heights (whole texels at 1.5 per px)
   blobling: { top: 9, bar: 8, oy: 0.91 }, shooterblob: { top: 16, bar: 12, oy: 0.93 }, healerblob: { top: 16, bar: 12, oy: 0.93 },
 };
@@ -278,7 +280,7 @@ export function preloadPaintedMobs(scene: Phaser.Scene) {
 
 /** Monster sprite sheets, same 6-frame layout as personas (painted when the smooth look is on). */
 export function mobTexture(scene: Phaser.Scene, kind: string, level = 1, weapon = ""): string {
-  if (kind === "crawler") return mobTexture(scene, "skeleton", level, weapon); // a skeleton's upper half (cropped in TownScene)
+  if (kind === "crawler" && !(SMOOTH && scene.textures.exists("hd_mob_crawler"))) return mobTexture(scene, "skeleton", level, weapon); // pixel look: a skeleton's upper half (cropped in TownScene)
   if (SMOOTH && PAINTED_MOBS.includes(kind)) {
     const tier = level >= 10 ? 3 : level >= 5 ? 2 : 1;
     // skeletons carry a sword (base sheet), an axe, a spear or a bow
@@ -292,7 +294,7 @@ export function mobTexture(scene: Phaser.Scene, kind: string, level = 1, weapon 
       return key;
     }
   }
-  return pixelMobTexture(scene, kind, level);
+  return pixelMobTexture(scene, kind === "demon" ? "necromancer" : kind, level); // no pixel demon sheet: a necromancer stands in
 }
 
 function pixelMobTexture(scene: Phaser.Scene, kind: string, level = 1): string {

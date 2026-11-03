@@ -67,6 +67,7 @@ function blobPartsLayout(id: string, parts: string[]): BlobPart[] {
 
 interface Entity {
   merged?: number; // blobs fused into this monster (MERGE)
+  base?: number; // a monster's resting scale (kind size x merge growth): every squash/stretch starts and ends there
   parts?: Phaser.GameObjects.Graphics; // merged blob: colour patches, extra eyes and mouths of the blobs inside
   partsKey?: string; partsLayout?: BlobPart[];
   sprite: Phaser.GameObjects.Sprite;
@@ -396,8 +397,9 @@ export class TownScene extends Phaser.Scene {
     this.room.onMessage("mbwind", ({ id, kind, ms }) => {
       const e = this.entities.get(id);
       if (!e) return;
-      this.tweens.add({ targets: e.sprite, scaleX: kind === "slam" ? 1.3 : 1.15, scaleY: kind === "slam" ? 1.3 : 0.85, duration: ms, yoyo: false,
-        onComplete: () => e.sprite.setScale(1) });
+      const b = this.bodyScale(e);
+      this.tweens.add({ targets: e.sprite, scaleX: b * (kind === "slam" ? 1.3 : 1.15), scaleY: b * (kind === "slam" ? 1.3 : 0.85), duration: ms, yoyo: false,
+        onComplete: () => e.sprite.setScale(b) });
       this.floatText(e.sprite.x, e.sprite.y - e.top - 6, kind === "slam" ? "GROUND SLAM!" : "BOUNCE!", kind === "slam" ? "#ff5252" : "#ffb74d", PIXEL_FONT);
     });
     this.room.onMessage("mbhit", ({ kind, x, y, r }) => {
@@ -410,7 +412,7 @@ export class TownScene extends Phaser.Scene {
     this.room.onMessage("necrowind", ({ id, kind, ms, x, y, r }) => {
       const e = this.entities.get(id);
       if (e) {
-        this.tweens.add({ targets: e.sprite, scaleY: e.sprite.scaleY * 1.12, duration: ms / 2, yoyo: true });
+        this.squash(e, 1, 1.12, ms / 2);
         this.floatText(e.sprite.x, e.sprite.y - e.top - 6, kind === "circle" ? "DEATH CIRCLE!" : "RISE!", kind === "circle" ? "#b388ff" : "#7dff6a", PIXEL_FONT);
       }
       if (kind !== "circle") return;
@@ -437,6 +439,35 @@ export class TownScene extends Phaser.Scene {
       if (me && Math.hypot(me.sprite.x - x, me.sprite.y - y) < r * 2.5) this.cameras.main.shake(220, 0.007);
     });
     // Skeletons climb out of the ground: green flash and dust where each one appears
+    // Bone ritual: the skeletons fly apart, their bones arc through the air, land and slide into a pentagram that glows
+    this.room.onMessage("ritual", (msg) => this.boneRitual(msg));
+    this.room.onMessage("demonrise", ({ id, x, y }) => {
+      this.burst(x, y, 10, 0xff3d00, 520); this.burst(x, y - 10, 6, 0x2a0a0a, 640);
+      const e = this.entities.get(id);
+      if (e) { const b = this.bodyScale(e); this.tweens.add({ targets: e.sprite, scaleX: b, scaleY: { from: b * 0.2, to: b }, duration: 650, ease: "Back.Out" }); }
+      this.floatText(x, y - 56, "BONE DEMON!", "#ff5233", PIXEL_FONT);
+      const me = this.entities.get(this.me);
+      if (me && Math.hypot(me.sprite.x - x, me.sprite.y - y) < 400) this.cameras.main.shake(380, 0.01);
+    });
+    this.room.onMessage("demonwind", ({ id, ms }) => {
+      const e = this.entities.get(id);
+      if (!e) return;
+      this.squash(e, 1, 1.12, ms * 0.8);
+      e.sprite.setTint(0xff7043); this.time.delayedCall(ms, () => e.sprite.clearTint());
+      this.floatText(e.sprite.x, e.sprite.y - e.top - 6, "HELLFIRE!", "#ff7043", PIXEL_FONT);
+    });
+    this.room.onMessage("demonfire", ({ x, y, r }) => {
+      const g = this.add.graphics().setDepth(2); // scorched ground (flat, lies on the iso ground)
+      g.fillStyle(0xff5722, 0.55).fillCircle(x, y, r).fillStyle(0xffc107, 0.5).fillCircle(x, y, r * 0.55);
+      this.tweens.add({ targets: g, alpha: 0, duration: 650, onComplete: () => g.destroy() });
+      for (let i = 0; i < 12; i++) {
+        const a = (i / 12) * Math.PI * 2, d = r * (0.4 + Math.random() * 0.6);
+        this.burst(x + Math.cos(a) * d, y + Math.sin(a) * d, 3 + Math.random() * 3, i % 2 ? 0xff7043 : 0xffca28, 420);
+      }
+      const me = this.entities.get(this.me);
+      if (me && Math.hypot(me.sprite.x - x, me.sprite.y - y) < r * 3) this.cameras.main.shake(260, 0.009);
+    });
+    this.room.onMessage("banish", ({ x, y }) => { this.burst(x, y, 9, 0x4a148c, 600); this.burst(x, y - 12, 6, 0x111111, 700); });
     // A skeleton broke in two: bone chips fly, its upper half drags on
     this.room.onMessage("bonebreak", ({ x, y }) => {
       this.burst(x, y - 6, 6, 0xe8e2d0, 380);
@@ -451,7 +482,7 @@ export class TownScene extends Phaser.Scene {
     // Warrior blob lunges: quick stretch
     this.room.onMessage("blobcharge", ({ id }) => {
       const e = this.entities.get(id);
-      if (e) this.tweens.add({ targets: e.sprite, scaleX: e.sprite.scaleX * 1.25, scaleY: e.sprite.scaleY * 0.8, duration: 140, yoyo: true });
+      if (e) this.squash(e, 1.25, 0.8, 140);
     });
     // A hidden monster jumps out of its grave / tree
     this.room.onMessage("ambush", ({ id, x, y, victim }) => {
@@ -459,7 +490,8 @@ export class TownScene extends Phaser.Scene {
       if (!e) return;
       e.sprite.setPosition(x, y); e.tx = x; e.ty = y;
       this.floatText(x, y - e.top - 4, "!", "#ff5252");
-      this.tweens.add({ targets: e.sprite, scaleX: { from: 0.4, to: 1 }, scaleY: { from: 1.6, to: 1 }, duration: 220, ease: "Back.Out" });
+      const b = this.bodyScale(e);
+      this.tweens.add({ targets: e.sprite, scaleX: { from: b * 0.4, to: b }, scaleY: { from: b * 1.6, to: b }, duration: 220, ease: "Back.Out" });
       if (victim === this.me) this.cameras.main.shake(80, 0.002);
     });
     // Blob merging: the one in danger calls ("MERGE!"), the others rush in and melt into it
@@ -467,7 +499,7 @@ export class TownScene extends Phaser.Scene {
       const e = this.entities.get(id);
       if (!e) return;
       this.floatText(e.sprite.x, e.sprite.y - e.top - 6, "MERGE!", "#a5ff6b", PIXEL_FONT);
-      this.tweens.add({ targets: e.sprite, scaleY: e.sprite.scaleY * 1.12, duration: 160, yoyo: true, repeat: 1 });
+      this.squash(e, 1, 1.12, 160, 1);
     });
     this.room.onMessage("blobmerge", ({ into, x, y, level }) => {
       const h = this.entities.get(into);
@@ -478,7 +510,7 @@ export class TownScene extends Phaser.Scene {
     });
     this.room.onMessage("brood", ({ id }) => {
       const e = this.entities.get(id);
-      if (e) this.tweens.add({ targets: e.sprite, scaleX: e.sprite.scaleX * 1.15, scaleY: e.sprite.scaleY * 0.85, duration: 120, yoyo: true, repeat: 1 });
+      if (e) this.squash(e, 1.15, 0.85, 120, 1);
     });
     this.room.onMessage("swing", ({ id, step, variant, ax, ay }) => this.showSwing(id, step ?? 0, variant ?? 0, ax, ay));
     this.room.onMessage("sfx", (ev) => this.onSkillFx(ev));
@@ -653,6 +685,7 @@ export class TownScene extends Phaser.Scene {
     e.merged = n;
     const grow = 1 + MERGE.growPerBlob * (n - 1) * (p.kind === "motherblob" ? 0.5 : 1), base = MOB_LOOK[p.kind]?.scale ?? 1;
     e.top = (MOB_LOOK[p.kind]?.top ?? 14) * grow;
+    e.base = base * grow;
     this.tweens.killTweensOf(e.sprite);
     if (n > prev) this.tweens.add({ targets: e.sprite, scaleX: base * grow, scaleY: base * grow, duration: 260, ease: "Back.Out" });
     else e.sprite.setScale(base * grow);
@@ -662,7 +695,7 @@ export class TownScene extends Phaser.Scene {
     if (mob) {
       const sprite = this.add.sprite(p.x, p.y, mobTexture(this, p.kind, p.level, p.weapon), 0).setOrigin(0.5, MOB_LOOK[p.kind]?.oy ?? 0.85)
         .setScale(MOB_LOOK[p.kind]?.scale ?? 1);
-      if (p.kind === "crawler") sprite.setCrop(0, 0, sprite.frame.width, sprite.frame.height * CRAWL_CROP); // legs gone
+      if (p.kind === "crawler" && sprite.texture.key.startsWith("mob_skeleton")) sprite.setCrop(0, 0, sprite.frame.width, sprite.frame.height * CRAWL_CROP); // legs gone
       // The level tag is made when the monster comes on screen (see update): thousands of text canvases would cost a lot
       this.entities.set(id, { sprite, bar: isoAnchor(this.add.graphics(), sprite) as Phaser.GameObjects.Graphics, tx: p.x, ty: p.y, state: p, mob, top: MOB_LOOK[p.kind]?.top ?? 14 });
       if ((p.merged || 1) > 1) this.growMob(this.entities.get(id)!, p);
@@ -768,8 +801,95 @@ export class TownScene extends Phaser.Scene {
       });
     }
     // a wobble of the body as the goo tears off
-    const sx = e.sprite.scaleX, sy = e.sprite.scaleY;
-    if (!this.tweens.isTweening(e.sprite)) this.tweens.add({ targets: e.sprite, scaleX: sx * 1.12, scaleY: sy * 0.86, duration: 70, yoyo: true, ease: "Quad.easeOut", onComplete: () => e.sprite.setScale(sx, sy) });
+    if (!this.tweens.isTweening(e.sprite)) this.squash(e, 1.12, 0.86, 70);
+  }
+
+  /** A monster's resting scale: its kind's size times its merge growth. */
+  private bodyScale(e: { sprite: Phaser.GameObjects.Sprite; state: any; base?: number }) { return e.base ?? MOB_LOOK[e.state?.kind]?.scale ?? 1; }
+
+  /** Squash/stretch a monster from its resting size and back to exactly that size (never drifts, never deflates). */
+  private squash(e: { sprite: Phaser.GameObjects.Sprite; state: any; base?: number }, kx: number, ky: number, ms: number, repeat = 0) {
+    const b = this.bodyScale(e);
+    this.tweens.add({ targets: e.sprite, scaleX: { from: b, to: b * kx }, scaleY: { from: b, to: b * ky }, duration: ms, yoyo: true, repeat, ease: "Quad.easeOut", onComplete: () => e.sprite.setScale(b) });
+  }
+
+  /**
+   * Bone ritual (server BONES.ritual): each skeleton bursts into bones that fly in arcs (gravity, spin), land a little
+   * short, bounce and slide on into place along the lines of a pentagram, skulls on its points; then the star glows
+   * until the demon climbs out. Drawn on one flat ground painting, heights lifted straight up the screen.
+   */
+  private boneRitual({ x, y, r, bones: from, ms }: { x: number; y: number; r: number; bones: [number, number][]; ms: number }) {
+    const g = this.add.graphics().setDepth(2);
+    const V = [0, 1, 2, 3, 4].map((k) => { const a = -Math.PI / 2 + (k * Math.PI * 2) / 5; return [x + Math.cos(a) * r, y + Math.sin(a) * r * 0.9] as [number, number]; });
+    const PER = 7; // bones per skeleton: a skull and six long bones
+    const long = from.length * (PER - 1), perSeg = Math.ceil(long / 5);
+    type Bone = { sx: number; sy: number; lx: number; ly: number; tx: number; ty: number; a0: number; a1: number; spin: number; len: number; skull: boolean; delay: number; fly: number; h: number };
+    const list: Bone[] = [];
+    let li = 0;
+    from.forEach(([fx, fy], si) => {
+      for (let b = 0; b < PER; b++) {
+        let tx: number, ty: number, a1: number;
+        if (b === 0) { [tx, ty] = V[si % 5]; a1 = 0; } // skulls sit on the star's points
+        else {
+          const seg = li % 5, t = (Math.floor(li / 5) + 0.5) / perSeg; li++;
+          const [ax, ay] = V[seg], [bx, by] = V[(seg + 2) % 5];
+          tx = ax + (bx - ax) * t; ty = ay + (by - ay) * t; a1 = Math.atan2(by - ay, bx - ax);
+        }
+        const sx = fx + (Math.random() - 0.5) * 8, sy = fy - 8 + (Math.random() - 0.5) * 8, d = Math.hypot(tx - sx, ty - sy) || 1;
+        const slide = 4 + Math.random() * 7; // lands short of its spot and skids on
+        list.push({ sx, sy, tx, ty, lx: tx - ((tx - sx) / d) * slide, ly: ty - ((ty - sy) / d) * slide, a0: Math.random() * Math.PI, a1, spin: (Math.random() < 0.5 ? -1 : 1) * (4 + Math.random() * 6),
+          len: b === 0 ? 0 : 4 + Math.random() * 3, skull: b === 0, delay: si * 140 + Math.random() * 120, fly: 420 + d * 2.2, h: 14 + d * 0.25 });
+      }
+      this.burst(fx, fy - 8, 7, 0xe8e2d0, 320);
+    });
+    const SLIDE = 380, settle = Math.max(...list.map((b) => b.delay + b.fly + SLIDE)), glowAt = settle + 100, end = ms + 1600;
+    const lift = (px: number, py: number, z: number): [number, number] => (ISO ? [px - z, py - z] : [px, py - z]);
+    this.floatText(x, y - 30, "BONE RITUAL!", "#ff5233", PIXEL_FONT);
+    const clock = { t: 0 };
+    this.tweens.add({
+      targets: clock, t: end, duration: end, onComplete: () => g.destroy(),
+      onUpdate: () => {
+        const t = clock.t;
+        g.clear();
+        g.setAlpha(t > ms ? Math.max(0, 1 - (t - ms) / 1600) : 1);
+        // the star lights up once the bones are in place
+        if (t > glowAt) {
+          const k = Math.min(1, (t - glowAt) / 600), pulse = 0.65 + 0.35 * Math.sin(t / 90);
+          g.lineStyle(5, 0xff1744, 0.22 * k * pulse);
+          for (let s = 0; s < 5; s++) g.lineBetween(V[s][0], V[s][1], V[(s + 2) % 5][0], V[(s + 2) % 5][1]);
+          g.lineStyle(1.5, 0xff5252, 0.85 * k);
+          for (let s = 0; s < 5; s++) g.lineBetween(V[s][0], V[s][1], V[(s + 2) % 5][0], V[(s + 2) % 5][1]);
+          g.strokeEllipse(x, y, r * 2.3, r * 2.1);
+          g.fillStyle(0xff1744, 0.12 * k * pulse).fillEllipse(x, y, r * 2.3, r * 2.1);
+        }
+        for (const b of list) {
+          const u = t - b.delay;
+          if (u < 0) continue;
+          let px: number, py: number, z = 0, ang: number;
+          if (u < b.fly) {
+            const v = u / b.fly; // ballistic arc: straight over the ground, a parabola in height
+            px = b.sx + (b.lx - b.sx) * v; py = b.sy + (b.ly - b.sy) * v; z = 4 * b.h * v * (1 - v) + 8 * (1 - v);
+            ang = b.a0 + b.spin * v;
+          } else {
+            const v = Math.min(1, (u - b.fly) / SLIDE), ease = 1 - (1 - v) * (1 - v); // friction: fast then slower
+            px = b.lx + (b.tx - b.lx) * ease; py = b.ly + (b.ty - b.ly) * ease;
+            z = v < 0.35 ? 3 * Math.sin((v / 0.35) * Math.PI) : 0; // one small bounce on landing
+            const a = b.a0 + b.spin; ang = a + (b.a1 - a) * ease;
+          }
+          const [qx, qy] = lift(px, py, z);
+          if (z > 0.5) g.fillStyle(0x000000, 0.25).fillEllipse(px, py, 4, 2); // shadow under a bone in the air
+          if (b.skull) {
+            g.fillStyle(0xe8e2d0).fillCircle(qx, qy, 2.4);
+            g.fillStyle(0x1a1a1a).fillRect(qx - 1.3, qy - 0.6, 0.9, 0.9).fillRect(qx + 0.4, qy - 0.6, 0.9, 0.9);
+            if (t > glowAt) g.fillStyle(0xff1744, 0.9).fillRect(qx - 1.3, qy - 0.6, 0.9, 0.9).fillRect(qx + 0.4, qy - 0.6, 0.9, 0.9);
+          } else {
+            const dx = Math.cos(ang) * b.len / 2, dy = Math.sin(ang) * b.len / 2;
+            g.lineStyle(1.3, 0xd8d0b8).lineBetween(qx - dx, qy - dy, qx + dx, qy + dy);
+            g.fillStyle(0xf0ead8).fillCircle(qx - dx, qy - dy, 0.9).fillCircle(qx + dx, qy + dy, 0.9);
+          }
+        }
+      },
+    });
   }
 
   private burst(x: number, y: number, r: number, color: number, ms: number) {
@@ -1196,7 +1316,7 @@ export class TownScene extends Phaser.Scene {
         else if (attackFrames && !p.dead && now < (e.strikeUntil ?? 0)) e.sprite.setFrame(ATTACK_BASE[dir] + 1);
         else e.sprite.setFrame(FRAME_BASE[dir] + step);
         e.sprite.setFlipX(dir === "left");
-        if (p.kind === "crawler") e.sprite.setAngle(dir === "left" ? -16 : dir === "right" ? 16 : 0); // leaning on its arms
+        if (p.kind === "crawler" && e.sprite.isCropped) e.sprite.setAngle(dir === "left" ? -16 : dir === "right" ? 16 : 0); // leaning on its arms
         if (e.mob) e.sprite.setVisible(!p.dead && !p.hidden);
         else e.sprite.setAlpha(p.dead ? 0.35 : 1).setAngle(p.dead ? 90 : 0);
       }

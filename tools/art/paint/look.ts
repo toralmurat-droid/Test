@@ -54,6 +54,13 @@ export const MOB_LOOKS: Record<string, Look> = {
     legs: "robe", legCol: 0x2c3a9a, boots: 0x9a988a, bootStyle: "shoe",
     sleeve: 0x2f3fa6, arms: "cloth", weapon: "staff", orb: 0x7fe7ff, fx: 0xc8fbff,
   },
+  // summoned by a skeleton ritual (BONES.ritual): a hulking red brute with horns, a bone harness and a cleaver
+  demon: {
+    skin: 0xa8241c, hairStyle: "none", eyeGlow: 0xffd23c, skull: true, head: "horned", headCol: 0x3a1410, headTrim: 0xe8dcc0,
+    torso: "bare", torsoCol: 0xa8241c, harness: true, belt: 0x2a1410, buckle: 0xd8c27a,
+    legs: "fur", legCol: 0x2e1a14, boots: 0x3a1410, bootStyle: "bare",
+    sleeve: 0xa8241c, arms: "bare", bracer: 0x2a1410, weapon: "axe", fx: 0xff6a2a, build: 1.4, back: "pelt", capeCol: 0x1e0c0a,
+  },
   necromancer: {
     skin: 0xd2cbb4, skull: true, bones: true, eyeGlow: 0x7dff6a, head: "horned", headCol: 0x2a1838, headTrim: 0xd8d2bf,
     torso: "robe", torsoCol: 0x24152e, trim: 0x8e1b2e, sash: 0x8e1b2e,

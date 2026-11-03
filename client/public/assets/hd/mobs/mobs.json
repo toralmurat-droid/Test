@@ -88,5 +88,17 @@
   "h": 32,
   "scale": 1.5,
   "frames": 12
+ },
+ "mob_demon": {
+  "w": 28,
+  "h": 34,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_crawler": {
+  "w": 32,
+  "h": 22,
+  "scale": 1.5,
+  "frames": 12
  }
 }

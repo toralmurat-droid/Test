@@ -2,7 +2,7 @@ import type { IncomingMessage } from "node:http";
 import { Client, Room } from "colyseus";
 import { ArraySchema, MapSchema, Schema, type } from "@colyseus/schema";
 import {
-  AGGRO, aggroLevelFactor, BLOB_AI, BONES, BROOD, Dir, FACTION, FEUD, MERGE, MobDef, MOTHER, SKELETON_AI, HIT_RADIUS, mobScale, InputState, MOB_ATTACK_RANGE, MOBS, MobKind, rollSkeletonWeapon, SKELETON_BOW, SKELETON_WEAPONS, SkeletonWeapon, REGEN_DELAY_MS, REGEN_RAMP_MS, regenFromStamina, SAFE_REGEN_MULT,
+  AGGRO, aggroLevelFactor, BLOB_AI, BONES, DEMON, BROOD, Dir, FACTION, FEUD, MERGE, MobDef, MOTHER, SKELETON_AI, HIT_RADIUS, mobScale, InputState, MOB_ATTACK_RANGE, MOBS, MobKind, rollSkeletonWeapon, SKELETON_BOW, SKELETON_WEAPONS, SkeletonWeapon, REGEN_DELAY_MS, REGEN_RAMP_MS, regenFromStamina, SAFE_REGEN_MULT,
   RESPAWN_MS, TICK_RATE, TILE,
 } from "../shared/constants";
 import {
@@ -132,6 +132,7 @@ export class Mob extends Schema {
   canShoot = false; canCharge = false; canHeal = false; // abilities picked up by merging
   nextCall = 0; nextShot = 0;
   foe = ""; // blob vs undead feud (FEUD): the monster it is fighting
+  ritual = false; banishAt = 0; nextStomp = 0; // BONES.ritual: given to a demon summoning; demon: when it goes back, next Hellfire Stomp
   flankA = NaN; // BONES: side of the hero this skeleton closes in from (NaN = straight at him)
   hateId = ""; hate = 0; nextAggro = 0; threat = 0; // AGGRO: who hit it last and how much it hates them; level gap of the scariest hero near
 
@@ -579,6 +580,7 @@ export class TownRoom extends Room<TownState> {
     m.target = "";
     m.hidden = false; m.spot = ""; m.fleeing = false;
     m.specialKind = ""; m.specialAt = 0; m.nextBounce = 0; m.nextSlam = 0; m.nextRaise = 0; m.nextCircle = 0;
+    m.ritual = false; m.banishAt = 0; m.nextStomp = 0;
     m.foe = ""; m.hateId = ""; m.hate = 0; m.nextAggro = 0; m.threat = 0;
     m.merged = 1; m.parts = ""; m.summonFor = ""; m.mergeInto = ""; m.mergeCap = 0; m.nextCall = 0; m.nextShot = 0;
     m.canShoot = kind === "shooterblob"; m.canCharge = kind === "warriorblob"; m.canHeal = kind === "healerblob";
@@ -977,6 +979,84 @@ export class TownRoom extends Room<TownState> {
     });
   }
 
+  // ---- Bone Demon ritual (BONES.ritual) ----------------------------------------
+
+  private nextRitualCheck = 0;
+  private ritualCd = new Map<string, number>(); // hero -> no new ritual against him before this time
+  private static RITUAL_KINDS: MobKind[] = ["skeleton", "skeletonmage", "crawler"];
+
+  /** Skeletons that are losing badly to a hero give their bones to summon a demon. */
+  private checkRituals(now: number) {
+    if (now < this.nextRitualCheck) return;
+    const R = BONES.ritual;
+    this.nextRitualCheck = now + R.checkMs;
+    let demons = 0;
+    const packs = new Map<string, [string, Mob][]>();
+    this.state.mobs.forEach((m, id) => {
+      if (m.kind === "demon" && !m.dead) demons++;
+      if (m.dead || m.hidden || m.ritual || !m.target || !TownRoom.RITUAL_KINDS.includes(m.kind)) return;
+      const list = packs.get(m.target);
+      if (list) list.push([id, m]); else packs.set(m.target, [[id, m]]);
+    });
+    if (demons >= R.maxDemons) return;
+    for (const [pid, list] of packs) {
+      const p = this.state.players.get(pid);
+      if (!p || p.dead || (this.ritualCd.get(pid) ?? 0) > now) continue;
+      const near = list.filter(([, m]) => Math.hypot(m.x - p.x, m.y - p.y) <= R.near);
+      if (near.length < R.minPack) continue;
+      const lvl = near.reduce((s, [, m]) => s + m.level, 0) / near.length;
+      const hp = near.reduce((s, [, m]) => s + m.hp, 0) / near.reduce((s, [, m]) => s + m.maxHp, 0);
+      if (p.level - lvl < R.gap && hp > R.hpFrac) continue; // still holding their own
+      const cx = near.reduce((s, [, m]) => s + m.x, 0) / near.length, cy = near.reduce((s, [, m]) => s + m.y, 0) / near.length;
+      if (isSafeZone(cx, cy) || isSolidAt(cx, cy)) continue;
+      const chosen = near.sort((a, b) => Math.hypot(a[1].x - cx, a[1].y - cy) - Math.hypot(b[1].x - cx, b[1].y - cy)).slice(0, R.maxPack);
+      this.ritualCd.set(pid, now + R.cooldownMs);
+      const level = Math.max(...chosen.map(([, m]) => m.level)) + R.levelUp;
+      const bones = chosen.map(([, m]) => [Math.round(m.x), Math.round(m.y)]);
+      for (const [id, m] of chosen) { m.ritual = true; this.mobDied(m, id, "", ""); }
+      this.broadcast("ritual", { x: Math.round(cx), y: Math.round(cy), r: R.radius, bones, ms: R.castMs });
+      this.clock.setTimeout(() => this.summonDemon(cx, cy, level, pid), R.castMs);
+      demons++;
+      if (demons >= R.maxDemons) return;
+    }
+  }
+
+  private summonDemon(x: number, y: number, level: number, pid: string) {
+    const d = new Mob();
+    d.kind = "demon"; d.zone = -1;
+    d.x = d.homeX = x; d.y = d.homeY = y;
+    d.level = level;
+    d.hp = d.maxHp = Math.round(MOBS.demon.maxHp * mobScale(level, "hp"));
+    const now = Date.now();
+    d.banishAt = now + BONES.ritual.lifeMs; d.nextStomp = now + 2500; d.stunUntil = now + 700; // climbing out
+    if (this.state.players.get(pid)?.dead === false) { d.target = pid; this.addHate(d, pid, 0); }
+    const id = `d${++this.mobSeq}`;
+    this.state.mobs.set(id, d);
+    this.broadcast("demonrise", { id, x: Math.round(x), y: Math.round(y) });
+  }
+
+  /** Bone Demon's Hellfire Stomp; true while it is busy with it (it stands still). */
+  private demonSpecial(m: Mob, id: string, dist: number, now: number): boolean {
+    const S = DEMON.stomp;
+    if (m.specialAt) {
+      if (now < m.specialAt) return true;
+      m.specialAt = 0; m.winding = false; m.lastAttack = now; m.specialKind = "";
+      const dmg = Math.round(MOBS.demon.damage * mobScale(m.level, "damage") * S.dmgMult);
+      this.state.players.forEach((p, pid) => {
+        if (p.dead) return;
+        const dx = p.x - m.x, dy = p.y - m.y, d = Math.hypot(dx, dy);
+        if (d > S.radius) return;
+        this.damagePlayer(pid, dmg, "Bone Demon's Hellfire Stomp", d > 0.1 ? [dx / d, dy / d] : [0, 1], S.knockback, { atkLevel: m.level, from: id });
+      });
+      this.broadcast("demonfire", { id, x: Math.round(m.x), y: Math.round(m.y), r: S.radius });
+      return true;
+    }
+    if (m.broken || m.windUntil || now < m.nextStomp || dist > S.range) return false;
+    m.specialKind = "stomp"; m.specialAt = now + S.windupMs; m.nextStomp = now + S.everyMs; m.winding = true;
+    this.broadcast("demonwind", { id, ms: S.windupMs });
+    return true;
+  }
+
   // ---- Tick ---------------------------------------------------------------
 
   private update(dtMs: number) {
@@ -1021,6 +1101,7 @@ export class TownRoom extends Room<TownState> {
     this.state.items.forEach((it, id) => { if (now > it.expires) this.state.items.delete(id); });
     this.buildFeudGrid();
     this.assignFlanks();
+    this.checkRituals(now);
     this.state.mobs.forEach((m, id) => {
       tickUnit(this.host, id);
       const fx = statusOf(m, now);
@@ -1120,6 +1201,13 @@ export class TownRoom extends Room<TownState> {
   private updateMob(m: Mob, id: string, dt: number, now: number) {
     tickPoise(m, mobPoiseMax(m), dt, now);
     if (m.dead) { m.moving = false; m.winding = false; m.windUntil = 0; return; }
+    if (m.banishAt && now >= m.banishAt && !m.specialAt) {
+      // the summoned demon's time is up: it sinks back into the ground
+      this.broadcast("banish", { id, x: Math.round(m.x), y: Math.round(m.y) });
+      m.dead = true; m.hp = 0;
+      this.clock.setTimeout(() => this.state.mobs.delete(id), 500);
+      return;
+    }
     const def = MOBS[m.kind];
     m.stunned = now < m.stunUntil;
     if (m.stunned || m.broken) { m.winding = false; m.windUntil = 0; }
@@ -1207,6 +1295,8 @@ export class TownRoom extends Room<TownState> {
         }
       }
       if (input === STILL) m.dir = Math.abs(t.x - m.x) > Math.abs(t.y - m.y) ? (t.x > m.x ? "right" : "left") : (t.y > m.y ? "down" : "up");
+    } else if (t && m.kind === "demon" && this.demonSpecial(m, id, Math.hypot(t.x - m.x, t.y - m.y), now)) {
+      input = STILL;
     } else if (t && m.kind === "motherblob" && this.motherSpecial(m, id, Math.hypot(t.x - m.x, t.y - m.y), now)) {
       input = STILL;
     } else if (t) {
@@ -1623,7 +1713,7 @@ export class TownRoom extends Room<TownState> {
     m.dead = true; m.hp = 0;
     m.hidden = false; m.spot = ""; m.fleeing = false; m.foe = "";
     // A skeleton may break in two: its upper body drags itself on at whoever killed it
-    if (m.kind === "skeleton" && Math.random() < BONES.crawlChance) {
+    if (m.kind === "skeleton" && !m.ritual && Math.random() < BONES.crawlChance) {
       const x = m.x, y = m.y, level = m.level, weapon = m.weapon === "bow" ? "sword" : m.weapon, mother = m.mother;
       this.clock.setTimeout(() => this.spawnCrawler(x, y, level, weapon, mother, attackerId), BONES.crawlDelayMs);
     }
@@ -1640,7 +1730,7 @@ export class TownRoom extends Room<TownState> {
     if (zone) {
       zone.alive--;
       // Last monster of the zone down: tell everyone (the killer gets a big banner)
-      if (zone.alive <= 0) {
+      if (zone.alive <= 0 && attackerId) {
         const z = SPAWN_ZONES[m.zone];
         this.broadcast("zonecleared", { zone: z.name, by: attackerId, name: killerName, respawnSec: Math.round(z.respawnMs / 1000) });
       }
