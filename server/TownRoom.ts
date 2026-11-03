@@ -2,7 +2,7 @@ import type { IncomingMessage } from "node:http";
 import { Client, Room } from "colyseus";
 import { ArraySchema, MapSchema, Schema, type } from "@colyseus/schema";
 import {
-  BLOB_AI, BROOD, Dir, FACTION, FEUD, MERGE, MobDef, MOTHER, SKELETON_AI, HIT_RADIUS, mobScale, InputState, MOB_ATTACK_RANGE, MOBS, MobKind, rollSkeletonWeapon, SKELETON_BOW, SKELETON_WEAPONS, SkeletonWeapon, REGEN_DELAY_MS, REGEN_RAMP_MS, regenFromStamina, SAFE_REGEN_MULT,
+  AGGRO, aggroLevelFactor, BLOB_AI, BROOD, Dir, FACTION, FEUD, MERGE, MobDef, MOTHER, SKELETON_AI, HIT_RADIUS, mobScale, InputState, MOB_ATTACK_RANGE, MOBS, MobKind, rollSkeletonWeapon, SKELETON_BOW, SKELETON_WEAPONS, SkeletonWeapon, REGEN_DELAY_MS, REGEN_RAMP_MS, regenFromStamina, SAFE_REGEN_MULT,
   RESPAWN_MS, TICK_RATE, TILE,
 } from "../shared/constants";
 import {
@@ -131,7 +131,8 @@ export class Mob extends Schema {
   mergeCap = 0; // most blobs this one may hold (set at its first call)
   canShoot = false; canCharge = false; canHeal = false; // abilities picked up by merging
   nextCall = 0; nextShot = 0;
-  foe = ""; nextFoeScan = 0; // blob vs undead feud (FEUD): the monster it is fighting
+  foe = ""; // blob vs undead feud (FEUD): the monster it is fighting
+  hateId = ""; hate = 0; nextAggro = 0; threat = 0; // AGGRO: who hit it last and how much it hates them; level gap of the scariest hero near
 
   spot = ""; // hiding spot (tile "x,y") it is heading to or sitting in
   spotX = 0; spotY = 0; outX = 0; outY = 0; // spot centre, and the walkable tile it steps in/out from
@@ -564,7 +565,7 @@ export class TownRoom extends Room<TownState> {
     m.target = "";
     m.hidden = false; m.spot = ""; m.fleeing = false;
     m.specialKind = ""; m.specialAt = 0; m.nextBounce = 0; m.nextSlam = 0; m.nextRaise = 0; m.nextCircle = 0;
-    m.foe = ""; m.nextFoeScan = 0;
+    m.foe = ""; m.hateId = ""; m.hate = 0; m.nextAggro = 0; m.threat = 0;
     m.merged = 1; m.parts = ""; m.summonFor = ""; m.mergeInto = ""; m.mergeCap = 0; m.nextCall = 0; m.nextShot = 0;
     m.canShoot = kind === "shooterblob"; m.canCharge = kind === "warriorblob"; m.canHeal = kind === "healerblob";
     if (kind === "motherblob") m.nextBrood = Date.now() + BROOD.minMs + Math.random() * (BROOD.maxMs - BROOD.minMs);
@@ -669,6 +670,12 @@ export class TownRoom extends Room<TownState> {
       c.level = mother.level;
       c.hp = c.maxHp = Math.round(MOBS.blobling.maxHp * mobScale(c.level, "hp"));
       c.target = mother.target; // join the fight if mum is busy
+      if (mother.parts) {
+        // A merged Mother Blob buds mixed bloblings: one or two of the blobs she swallowed show on each
+        const kinds = mother.parts.split(",");
+        const pick = new Set([kinds[Math.floor(Math.random() * kinds.length)], kinds[Math.floor(Math.random() * kinds.length)]]);
+        c.parts = [...pick].join(",");
+      }
       this.state.mobs.set(`b${++this.mobSeq}`, c);
       return true;
     }
@@ -724,20 +731,46 @@ export class TownRoom extends Room<TownState> {
     return undefined;
   }
 
-  /** Look around for the nearest monster of the other side. */
-  private findFoe(m: Mob, now: number) {
-    m.nextFoeScan = now + FEUD.scanMs * (0.7 + Math.random() * 0.6);
+  /** Generated aggro: a blow makes the victim hate its attacker (hero or monster). */
+  private addHate(m: Mob, id: string, dmg: number) {
+    const add = AGGRO.hitBase + AGGRO.dmgMult * dmg / Math.max(1, m.maxHp);
+    m.hate = Math.min(AGGRO.max, (m.hateId === id ? m.hate : 0) + add);
+    m.hateId = id;
+    m.nextAggro = 0;
+  }
+
+  /**
+   * Aggro: score every hero in range and (blobs/undead) every rival monster around by closeness, level and the
+   * hate it has for them, and fight the top one. Also notes the level gap of the scariest hero around (m.threat).
+   */
+  private pickTarget(m: Mob, def: MobDef) {
+    let best = 0, target = "", foe = "";
+    m.threat = 0;
+    this.state.players.forEach((p, pid) => {
+      if (p.dead || isSafeZone(p.x, p.y) || Math.hypot(p.x - m.homeX, p.y - m.homeY) >= def.leash) return;
+      const d = Math.hypot(p.x - m.x, p.y - m.y);
+      const hated = pid === m.hateId ? m.hate : 0;
+      const range = hated > 0 ? def.aggroRange * 2 : def.aggroRange;
+      if (d >= range) return;
+      if (d < def.aggroRange) m.threat = Math.max(m.threat, p.level - m.level);
+      const score = Math.max(0, 1 - d / def.aggroRange) * aggroLevelFactor(m.level, p.level) + hated + (pid === m.target ? AGGRO.stick : 0);
+      if (score > best) { best = score; target = pid; }
+    });
     const side = FACTION[m.kind];
-    if (!side || m.mergeInto || m.summonFor) return;
-    let best = FEUD.range;
-    const cx = Math.floor(m.x / FEUD_CELL), cy = Math.floor(m.y / FEUD_CELL);
-    for (let gy = cy - 1; gy <= cy + 1; gy++) for (let gx = cx - 1; gx <= cx + 1; gx++) {
-      for (const [oid, o] of this.feudGrid.get(gx * 4096 + gy) ?? []) {
-        if (FACTION[o.kind] === side || o.dead || o.hidden || o.mergeInto) continue;
-        const d = Math.hypot(o.x - m.x, o.y - m.y);
-        if (d < best) { best = d; m.foe = oid; }
+    if (side && !m.mergeInto && !m.summonFor && Math.hypot(m.x - m.homeX, m.y - m.homeY) <= def.leash) {
+      const cx = Math.floor(m.x / FEUD_CELL), cy = Math.floor(m.y / FEUD_CELL);
+      for (let gy = cy - 1; gy <= cy + 1; gy++) for (let gx = cx - 1; gx <= cx + 1; gx++) {
+        for (const [oid, o] of this.feudGrid.get(gx * 4096 + gy) ?? []) {
+          if (FACTION[o.kind] === side || o.dead || o.hidden || o.mergeInto) continue;
+          const d = Math.hypot(o.x - m.x, o.y - m.y);
+          const hated = oid === m.hateId ? m.hate : 0;
+          if (d >= (hated > 0 || oid === m.foe ? FEUD.range * 2 : FEUD.range)) continue;
+          const score = AGGRO.rival * Math.max(0.05, 1 - d / FEUD.range) * aggroLevelFactor(m.level, o.level) + hated + (oid === m.foe ? AGGRO.stick : 0);
+          if (score > best) { best = score; target = ""; foe = oid; }
+        }
       }
     }
+    m.target = target; m.foe = foe;
   }
 
   /** Blobs and undead by map cell, rebuilt every tick, so a monster only checks its neighbours for a foe. */
@@ -755,6 +788,7 @@ export class TownRoom extends Room<TownState> {
   /** A monster's blow on another monster: no loot and no XP when it dies; the victim fights back. */
   private mobHitsMob(m: Mob, id: string, o: Mob, oid: string, dmg: number) {
     o.hp -= dmg;
+    this.addHate(o, id, dmg);
     if (!o.target && !o.foe) o.foe = id;
     const d = Math.hypot(o.x - m.x, o.y - m.y) || 1;
     const k = moveStep(o.x, o.y, pushInput([(o.x - m.x) / d, (o.y - m.y) / d]), 0.05);
@@ -765,8 +799,8 @@ export class TownRoom extends Room<TownState> {
 
   // ---- Blob merging -----------------------------------------------------------
 
-  /** Blobs that can call for help and fuse (not Mother Blobs). */
-  private static canMerge(m: Mob) { return m.kind !== "motherblob" && BLOB_KINDS.includes(m.kind); }
+  /** Blobs that can call for help and fuse (Mother Blobs too, Murat 2026-11-03). */
+  private static canMerge(m: Mob) { return BLOB_KINDS.includes(m.kind); }
 
   /** In danger: call the blobs around to fuse into this one, up to its cap. */
   private blobCall(m: Mob, id: string, now: number) {
@@ -794,12 +828,18 @@ export class TownRoom extends Room<TownState> {
 
   /** o melts into h: levels, HP and abilities add up; o is gone (its zone brings a fresh one back later). */
   private absorb(h: Mob, hid: string, o: Mob, oid: string) {
+    // A Mother Blob always ends up on the outside, so the merged blob keeps budding (with a mixed look)
+    if (o.kind === "motherblob" && h.kind !== "motherblob") {
+      o.mergeCap = Math.max(o.mergeCap, h.mergeCap); o.target ||= h.target; o.foe ||= h.foe;
+      [h, hid, o, oid] = [o, oid, h, hid];
+    }
     h.merged += o.merged; h.level += o.level;
     h.parts = [h.parts, o.kind, o.parts].filter(Boolean).join(",");
     h.maxHp += o.maxHp; h.hp = Math.min(h.maxHp, h.hp + o.hp);
     h.canShoot ||= o.canShoot; h.canCharge ||= o.canCharge; h.canHeal ||= o.canHeal;
     o.dead = true; o.hp = 0; o.mergeInto = ""; o.moving = false;
-    this.state.mobs.forEach((c) => { if (c.mergeInto === oid) c.mergeInto = ""; });
+    this.state.mobs.forEach((c) => { if (c.mergeInto === oid) c.mergeInto = c === h ? "" : hid; }); // its callers come to the new body
+    h.mergeInto = "";
     if (o.zone < 0) this.clock.setTimeout(() => this.state.mobs.delete(oid), 500);
     else { const zone = this.state.zones.get(SPAWN_ZONES[o.zone].name); if (zone) zone.alive--; }
     this.broadcast("blobmerge", { into: hid, from: oid, x: Math.round(o.x), y: Math.round(o.y), level: h.level, merged: h.merged });
@@ -1043,22 +1083,15 @@ export class TownRoom extends Room<TownState> {
     if (t && (t.dead || isSafeZone(t.x, t.y) || Math.hypot(m.x - m.homeX, m.y - m.homeY) > def.leash)) {
       m.target = ""; t = undefined;
     }
-    // Look for the nearest player in aggro range
-    if (!t) {
-      let best = def.aggroRange;
-      this.state.players.forEach((p, pid) => {
-        if (p.dead || isSafeZone(p.x, p.y)) return;
-        const d = Math.hypot(p.x - m.x, p.y - m.y);
-        if (d < best && Math.hypot(p.x - m.homeX, p.y - m.homeY) < def.leash) { best = d; m.target = pid; t = p; }
-      });
+    let foe: Mob | undefined = FACTION[m.kind] && !t ? this.foeOf(m, def) : undefined;
+    // Aggro: pick whoever it hates most, hero or rival monster
+    if (m.hate > 0) m.hate = Math.max(0, m.hate - AGGRO.decayPerSec * dt);
+    if (now >= m.nextAggro) {
+      m.nextAggro = now + AGGRO.everyMs * (0.8 + Math.random() * 0.4);
+      this.pickTarget(m, def);
+      t = m.target ? this.state.players.get(m.target) : undefined;
+      foe = m.foe ? this.state.mobs.get(m.foe) : undefined;
     }
-
-    // No hero to fight: blobs and undead go for each other (FEUD)
-    let foe: Mob | undefined;
-    if (!t && FACTION[m.kind]) {
-      foe = this.foeOf(m, def);
-      if (!foe && now >= m.nextFoeScan) { this.findFoe(m, now); foe = this.foeOf(m, def); }
-    } else if (t) m.foe = "";
 
     // Dizzy: run for the nearest grave/tree if there is one
     if (t && m.broken && !m.spot && HIDE.spots[m.kind]) this.claimSpot(m, m.x, m.y, HIDE.fleeRadius, now, true);
@@ -1077,10 +1110,11 @@ export class TownRoom extends Room<TownState> {
 
     if (m.canHeal && now >= m.nextHeal) this.blobHeal(m, id, now);
     // A blob in danger calls for help
-    if (t && TownRoom.canMerge(m) && now >= m.nextCall && !m.broken) {
+    if ((t || m.threat >= AGGRO.dangerGap) && TownRoom.canMerge(m) && now >= m.nextCall && !m.broken) {
       let crowd = 0;
       this.state.players.forEach((p) => { if (!p.dead && Math.hypot(p.x - m.x, p.y - m.y) <= MERGE.crowdRange) crowd++; });
-      if (m.hp < m.maxHp * MERGE.hpFrac || crowd >= MERGE.crowd) this.blobCall(m, id, now);
+      // In danger: badly hurt, crowded, or facing a hero far above its level (merging adds up their levels)
+      if (m.hp < m.maxHp * MERGE.hpFrac || crowd >= MERGE.crowd || m.threat >= AGGRO.dangerGap) this.blobCall(m, id, now);
     }
 
     let input: InputState;
@@ -1476,7 +1510,8 @@ export class TownRoom extends Room<TownState> {
     dmg = Math.max(1, Math.round(dmg * takenMult(m, Date.now())));
     this.bloodthirst(a, attackerId, Math.min(dmg, m.hp));
     m.hp = Math.max(0, m.hp - dmg);
-    m.target = attackerId; // fight back
+    this.addHate(m, attackerId, dmg); // fight back (generated aggro)
+    if (!m.foe) m.target = attackerId;
     const now = Date.now();
     // Initiative: drain poise; a solid hit interrupts the wind-up and delays the next attack
     const pmax = mobPoiseMax(m);

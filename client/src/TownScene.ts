@@ -644,7 +644,7 @@ export class TownScene extends Phaser.Scene {
   private growMob(e: Entity, p: any) {
     const n = p.merged || 1, prev = e.merged ?? 1;
     e.merged = n;
-    const grow = 1 + MERGE.growPerBlob * (n - 1), base = MOB_LOOK[p.kind]?.scale ?? 1;
+    const grow = 1 + MERGE.growPerBlob * (n - 1) * (p.kind === "motherblob" ? 0.5 : 1), base = MOB_LOOK[p.kind]?.scale ?? 1;
     e.top = (MOB_LOOK[p.kind]?.top ?? 14) * grow;
     this.tweens.killTweensOf(e.sprite);
     if (n > prev) this.tweens.add({ targets: e.sprite, scaleX: base * grow, scaleY: base * grow, duration: 260, ease: "Back.Out" });
