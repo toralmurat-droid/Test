@@ -326,42 +326,44 @@ function herbRack(ctx: Ctx) {
  */
 function witchHut(ctx: Ctx, f: number) {
   const I = new Iso(ctx, 50, 88), r = rng(61);
-  I.shadow(-21, -17, 21, 17, 6, 0.6);
+  I.shadow(-19, -15, 19, 15, 1, 0.55); // kept inside the frame
   // a footing of rough field stones, half sunk in the earth, with weeds
   I.box(-19, 19, -15, 15, 0, 4, 0x4e4a42, stones(ctx, 3, 0x4e4a42, 0.85));
   // walls: weathered grey-brown planks, darker and mossy toward the ground
-  I.box(-17, 17, -13, 13, 4, 27, 0x4c4236, planks(ctx, 9, 0x4c4236), false);
+  I.box(-17, 17, -13, 13, 4, 31, 0x4c4236, planks(ctx, 9, 0x4c4236), false);
   const grime = (pts: Pt[]) => { const g = ctx.createLinearGradient(pts[0][0], pts[0][1], pts[3][0], pts[3][1]); g.addColorStop(0, "rgba(30,34,18,0.7)"); g.addColorStop(1, "rgba(30,34,18,0)"); I.poly(pts, g); };
-  grime([I.p(-17, 13, 4), I.p(17, 13, 4), I.p(17, 13, 12), I.p(-17, 13, 12)]);
+  grime([I.p(-17, 13, 4), I.p(17, 13, 4), I.p(17, 13, 13), I.p(-17, 13, 13)]);
   grime([I.p(17, 13, 4), I.p(17, -13, 4), I.p(17, -13, 12), I.p(17, 13, 12)]);
   // corner posts, a little crooked
   for (const [u, v] of [[-17, 13], [17, 13], [17, -13]] as const) {
-    ctx.strokeStyle = "#2e261e"; ctx.lineWidth = 2.2; ctx.beginPath(); ctx.moveTo(...I.p(u, v, 4)); ctx.lineTo(...I.p(u + 0.6, v, 28)); ctx.stroke();
-    ctx.strokeStyle = "#5e5244"; ctx.lineWidth = 0.7; ctx.beginPath(); ctx.moveTo(...I.p(u - 0.4, v, 4)); ctx.lineTo(...I.p(u + 0.2, v, 28)); ctx.stroke();
+    ctx.strokeStyle = "#2e261e"; ctx.lineWidth = 2.2; ctx.beginPath(); ctx.moveTo(...I.p(u, v, 4)); ctx.lineTo(...I.p(u + 0.6, v, 32)); ctx.stroke();
+    ctx.strokeStyle = "#5e5244"; ctx.lineWidth = 0.7; ctx.beginPath(); ctx.moveTo(...I.p(u - 0.4, v, 4)); ctx.lineTo(...I.p(u + 0.2, v, 32)); ctx.stroke();
   }
   // a patch board nailed over a split, and a missing board showing the dark inside
-  I.poly([I.p(-14, 13, 15), I.p(-9, 13, 15), I.p(-9, 13, 22), I.p(-14, 13, 22)], "#5a4e3e");
-  I.poly([I.p(9, 13, 6), I.p(11, 13, 6), I.p(11, 13, 17), I.p(9, 13, 17)], "#16100c");
+  I.poly([I.p(-15, 13, 17), I.p(-10, 13, 17), I.p(-10, 13, 25), I.p(-15, 13, 25)], "#5a4e3e");
+  I.poly([I.p(10, 13, 6), I.p(12, 13, 6), I.p(12, 13, 19), I.p(10, 13, 19)], "#16100c");
   // the door: old planks with iron straps, sagging on its hinges
-  const d: Pt[] = [I.p(-4, 13, 4), I.p(4.5, 13, 4), I.p(4.5, 13, 19.5), I.p(-4, 13, 20.5)];
-  I.poly(d, "#3a2e22", "#16100c", 0.6);
-  for (const z of [7, 16]) { ctx.strokeStyle = "#2a2622"; ctx.lineWidth = 0.9; ctx.beginPath(); ctx.moveTo(...I.p(-4, 13, z + 0.3)); ctx.lineTo(...I.p(4.5, 13, z)); ctx.stroke(); }
-  for (let u = -2; u < 4.5; u += 2.2) { ctx.strokeStyle = "#241c14"; ctx.lineWidth = 0.3; ctx.beginPath(); ctx.moveTo(...I.p(u, 13, 4)); ctx.lineTo(...I.p(u, 13, 20)); ctx.stroke(); }
-  const [kx, ky] = I.p(3.2, 13, 11); ctx.fillStyle = "#6a6050"; ctx.fillRect(kx - 0.5, ky - 0.5, 1, 1);
+  const d: Pt[] = [I.p(-4.5, 13, 4), I.p(5, 13, 4), I.p(5, 13, 25.5), I.p(-4.5, 13, 26.5)];
+  I.poly([I.p(-5.5, 13, 4), I.p(6, 13, 4), I.p(6, 13, 27.5), I.p(-5.5, 13, 28.5)], "#6a5c48"); // door frame
+  I.poly(d, "#2a2018", "#16100c", 0.6);
+  ctx.strokeStyle = "rgba(200,170,90,0.55)"; ctx.lineWidth = 0.5; ctx.beginPath(); ctx.moveTo(...I.p(5, 13, 5)); ctx.lineTo(...I.p(5, 13, 25)); ctx.stroke(); // candlelight through the gap
+  for (const z of [8, 20]) { ctx.strokeStyle = "#5a5650"; ctx.lineWidth = 0.9; ctx.beginPath(); ctx.moveTo(...I.p(-4, 13, z + 0.3)); ctx.lineTo(...I.p(4.5, 13, z)); ctx.stroke(); }
+  for (let u = -2; u < 4.5; u += 2.2) { ctx.strokeStyle = "#241c14"; ctx.lineWidth = 0.3; ctx.beginPath(); ctx.moveTo(...I.p(u, 13, 4)); ctx.lineTo(...I.p(u, 13, 26)); ctx.stroke(); }
+  const [kx, ky] = I.p(3.6, 13, 14); ctx.fillStyle = "#6a6050"; ctx.fillRect(kx - 0.5, ky - 0.5, 1, 1);
   // antlers nailed over the door instead of a sign
-  const [ax, ay] = I.p(0.3, 13, 24);
+  const [ax, ay] = I.p(0.3, 13, 29);
   ctx.strokeStyle = "#c8bc9c"; ctx.lineWidth = 0.6;
   for (const sd of [-1, 1]) { ctx.beginPath(); ctx.moveTo(ax, ay); ctx.quadraticCurveTo(ax + sd * 3, ay - 1, ax + sd * 4, ay - 4); ctx.moveTo(ax + sd * 2.4, ay - 1.2); ctx.lineTo(ax + sd * 2.2, ay - 3.2); ctx.stroke(); }
   // a small window on the right side: a faint sickly glow behind a shutter that hangs askew
-  const W: Pt[] = [I.p(17, 4, 13), I.p(17, -4, 13), I.p(17, -4, 20), I.p(17, 4, 20)];
-  const [wx, wy] = I.p(17, 0, 16.5);
+  const W: Pt[] = [I.p(17, 4, 16), I.p(17, -4, 16), I.p(17, -4, 23), I.p(17, 4, 23)];
+  const [wx, wy] = I.p(17, 0, 19.5);
   glow(ctx, wx, wy, 7, "rgba(150,200,90,A)", 0.16 + 0.05 * (f % 2));
   I.poly(W, "#141a0e");
-  I.poly([I.p(17, 3, 14), I.p(17, -3, 14), I.p(17, -3, 19), I.p(17, 3, 19)], f % 2 ? "#6a8a3a" : "#5a7a32");
-  ctx.strokeStyle = "#2a2018"; ctx.lineWidth = 0.6; ctx.beginPath(); ctx.moveTo(...I.p(17, 0, 13)); ctx.lineTo(...I.p(17, 0, 20)); ctx.moveTo(...I.p(17, 4, 16.5)); ctx.lineTo(...I.p(17, -4, 16.5)); ctx.stroke();
-  I.poly([I.p(17, -4, 20), I.p(17, -9, 18.5), I.p(17, -9.5, 11.5), I.p(17, -4.5, 13)], "#3e3428", "#16100c", 0.4); // loose shutter
+  I.poly([I.p(17, 3, 17), I.p(17, -3, 17), I.p(17, -3, 22), I.p(17, 3, 22)], f % 2 ? "#6a8a3a" : "#5a7a32");
+  ctx.strokeStyle = "#2a2018"; ctx.lineWidth = 0.6; ctx.beginPath(); ctx.moveTo(...I.p(17, 0, 16)); ctx.lineTo(...I.p(17, 0, 23)); ctx.moveTo(...I.p(17, 4, 19.5)); ctx.lineTo(...I.p(17, -4, 19.5)); ctx.stroke();
+  I.poly([I.p(17, -4, 23), I.p(17, -9, 21.5), I.p(17, -9.5, 14.5), I.p(17, -4.5, 16)], "#3e3428", "#16100c", 0.4); // loose shutter
   // heavy thatch: two sagging planes, ragged eaves, mossy and dark with rot
-  const ridgeZ = 52, eave = 24, o = 4;
+  const ridgeZ = 56, eave = 28, o = 4;
   const thatch = (pts: Pt[], light: number, seed: number) => {
     const g = ctx.createLinearGradient(...pts[0], ...pts[2]);
     g.addColorStop(0, col(0x6a5c3a, light * 1.05)); g.addColorStop(1, col(0x4a4028, light * 0.8));
@@ -387,9 +389,9 @@ function witchHut(ctx: Ctx, f: number) {
     ctx.restore();
   };
   // gable end (right): weathered boards
-  const gable: Pt[] = [I.p(17, 13, 27), I.p(17, -13, 27), I.p(17, 0, ridgeZ - 2)];
+  const gable: Pt[] = [I.p(17, 13, 31), I.p(17, -13, 31), I.p(17, 0, ridgeZ - 2)];
   ctx.save(); I.poly(gable, col(0x3e362a, 0.62)); I.clip(gable);
-  planks(ctx, 41, 0x3e362a)("R", I.p(17, 13, 27), [1, -0.5], [0, -1], 26, ridgeZ - 27);
+  planks(ctx, 41, 0x3e362a)("R", I.p(17, 13, 31), [1, -0.5], [0, -1], 26, ridgeZ - 31);
   ctx.restore();
   // the front slope sags in the middle: built from two halves with a lower midpoint
   const sag = 2.5;
@@ -415,8 +417,8 @@ function witchHut(ctx: Ctx, f: number) {
     else { ctx.fillStyle = kind ? "#6a5a3a" : "#4e6030"; ctx.beginPath(); ctx.moveTo(x - 1.4, y + 2.5); ctx.lineTo(x + 1.4, y + 2.5); ctx.lineTo(x + 0.3, y + 7); ctx.lineTo(x - 0.4, y + 7); ctx.closePath(); ctx.fill(); }
   }
   // a leaning chimney of rough stones, with thin grey pixel smoke
-  I.box(-11, -6, 2, 7, 40, 60, 0x4e4a42, stones(ctx, 31, 0x4e4a42, 0.85));
-  const [cx, cy] = I.p(-8.5, 4.5, 60);
+  I.box(-11, -6, 2, 7, 44, 64, 0x4e4a42, stones(ctx, 31, 0x4e4a42, 0.85));
+  const [cx, cy] = I.p(-8.5, 4.5, 64);
   for (let k = 0; k < 4; k++) {
     const t = (k + f * 0.25) % 4, px = cx + t * 2.2, py = cy - 3 - t * 5, rad = 1.6 + t * 0.8;
     ctx.fillStyle = `rgba(${120 - t * 8},${124 - t * 8},${110 - t * 8},${0.55 - t * 0.12})`;
