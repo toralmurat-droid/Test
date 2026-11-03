@@ -49,7 +49,8 @@ export class WatchLayer {
         continue;
       }
       if (now < m.busyUntil) continue;
-      this.play(m, s.moving ? "walk" : "idle");
+      // walk only while he is really on his way (the sprite still catching up with the server counts too)
+      this.play(m, s.moving || Math.hypot(s.x - m.x, s.y - m.y) > 1.5 ? "walk" : "idle");
     }
   }
 }

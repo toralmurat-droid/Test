@@ -251,6 +251,8 @@ export class Watchman extends Schema {
   target = ""; // monster id he is fighting
   nextLook = 0; nextHit = 0; strikeAt = 0;
   crossing = false; // walking through the gate opening
+  stuckSince = 0; // when he last stopped making progress
+  ignore = ""; ignoreUntil = 0; // a monster he couldn't reach
 }
 
 export class TownState extends Schema {
@@ -1173,7 +1175,7 @@ export class TownRoom extends Room<TownState> {
       w.nextLook = now + 400;
       let bd = sight;
       for (const [oid, o] of this.watchSeen) {
-        if (o.dead || o.hidden) continue;
+        if (o.dead || o.hidden || (oid === w.ignore && now < w.ignoreUntil)) continue;
         const d = Math.hypot(o.x - P.x, o.y - P.y);
         if (d < bd) { bd = d; w.target = oid; t = o; }
       }
@@ -1201,11 +1203,23 @@ export class TownRoom extends Room<TownState> {
       const step = Math.min(d - stop, WATCH.speed * dt), ux = dx / d, uy = dy / d;
       const nx = w.x + ux * step, ny = w.y + uy * step;
       const free = (x: number, y: number) => { for (const [ox, oy] of [[-5, -5], [5, -5], [-5, 5], [5, 5]]) if (isSolidAt(x + ox, y + oy) || isDecorSolidAt(x + ox, y + oy)) return false; return true; };
+      const ox = w.x, oy = w.y;
       if (free(nx, w.y)) w.x = nx;
       if (free(w.x, ny)) w.y = ny;
-      w.ax = ux; w.ay = uy; w.moving = true;
+      w.ax = ux; w.ay = uy;
+      // Only walk when he really gets somewhere (Murat: guards marched on the spot when a wall was in the way)
+      const moved = Math.hypot(w.x - ox, w.y - oy) > step * 0.3;
+      w.moving = moved;
+      if (moved) w.stuckSince = 0;
+      else if (!w.stuckSince) w.stuckSince = now;
+      else if (now - w.stuckSince > 1200) {
+        // can't get there: give up on that monster (and ignore it a while), or stand where he is if it was his post
+        if (t) { w.ignore = w.target; w.ignoreUntil = now + 8000; w.target = ""; }
+        w.stuckSince = 0;
+      }
       return;
     }
+    w.stuckSince = 0;
     w.moving = false;
     if (t) {
       const td = Math.hypot(t.x - w.x, t.y - w.y) || 1;
