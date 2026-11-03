@@ -10,7 +10,7 @@
  * Keep the server rules in sync with this file when changing combat code.
  */
 import { CLASSES, CLASS_KINDS, ClassKind, COMBO_WINDOW_MS, DODGE, ENERGY, GUARD_REDUCTION } from "../../shared/classes";
-import { attackMult, cooldownMult, heroSpeed, magicMult, maxHpFromStats, statPoints, statsFor, STATS, Stats } from "../../shared/powers";
+import { attackMult, cooldownMult, critChance, heroSpeed, magicMult, maxHpFromStats, statPoints, statsFor, STATS, Stats } from "../../shared/powers";
 import { activeSkills, canLearn, SKILLS, SkillDef, talentBonus, talentMult, talentReduce } from "../../shared/skills";
 import {
   afterHit, atkSpeedMult, blocking, buffLifesteal, buffRegen, castSkill, ccImmune, charging, cooldownLeft, counterHit, dealtMult, FieldInst, HitOpts,
@@ -27,7 +27,7 @@ const REACT = 0.55; // chance per tick that a bot acts (about 40ms average react
 const KB_PX = PLAYER_SPEED * 0.12; // knockback distance per kb unit (moveStep(.., 0.12 * kb) at default speed)
 
 type Ranks = Record<string, number>;
-type Build = 0 | 1 | 2; // the branch the build rushes to its Lv 10 skill
+type Build = 0 | 1 | 2; // the branch the build rushes up first
 interface Shot { owner: F; x: number; dir: number; speed: number; range: number; traveled: number; radius: number; dmg: number; kb: number; miss: boolean; hit: boolean; basic: boolean; spec?: ShotSpec; pierced: boolean }
 interface Pending { at: number; fn: () => void }
 
@@ -41,7 +41,7 @@ class F {
   constructor(public id: string, public cls: ClassKind, public level: number, public t: Ranks, public eq: Equipped, pts: Stats) {
     const st = statsFor(cls, pts);
     const g = gearStats(cls, eq);
-    st.sta += g.sta; st.str += g.str; st.mag += g.mag;
+    st.sta += g.sta; st.str += g.str; st.mag += g.mag; st.dex += g.dex;
     this.s = st;
     this.maxHp = Math.round(maxHpFromStats(cls, st, level) * talentMult(cls, t, "hp"));
     this.hp = this.maxHp;
@@ -51,21 +51,21 @@ class F {
 }
 
 // ---- Typical builds -----------------------------------------------------------------------------------
-/** Spend the level's points: rush branch `main` to its Lv 10 skill, then a second branch, ranks last. */
+/** Spend the level's points: rush up branch `main`, then a second branch, ranks last. */
 function talentsFor(cls: ClassKind, level: number, main: Build): Ranks {
   const r: Ranks = {};
   const order = [main, (main + 1) % 3, (main + 2) % 3];
-  const byRow = (b: number) => SKILLS[cls].filter((x) => x.branch === b).sort((a, c) => a.row - c.row);
+  const byRow = (b: number) => SKILLS[cls].filter((x) => x.branch === b).sort((a, c) => a.req - c.req);
   const wish: string[] = [...byRow(order[0]), ...byRow(order[1]).slice(0, 3), ...byRow(order[0]), ...byRow(order[2]).slice(0, 2), ...byRow(order[0]), ...byRow(order[1])].map((x) => x.id);
   for (let pass = 0; pass < 4; pass++) for (const id of wish) if (canLearn(cls, level, r, id)) r[id] = (r[id] ?? 0) + 1;
   return r;
 }
 
-/** Stat points: ~60% into the attack stat, the rest into Stamina. */
+/** Stat points: ~50% into the attack stat, 20% Dexterity, the rest into Stamina. */
 function pointsFor(cls: ClassKind, level: number): Stats {
   const n = statPoints(level);
-  const atk = Math.round(n * 0.6);
-  const out: Stats = { sta: n - atk, str: 0, mag: 0 };
+  const atk = Math.round(n * 0.5), dex = Math.round(n * 0.2);
+  const out: Stats = { sta: n - atk - dex, str: 0, mag: 0, dex };
   out[STATS[cls].attackStat] += atk;
   return out;
 }
@@ -99,7 +99,11 @@ export class Duel {
       unit: (id) => f(id),
       canAct: (id) => { const u = f(id); return !!u && !u.dead && this.now >= u.stunUntil && !u.broken; },
       enemies: (x, _y, r, of) => { const t = f(of) === a ? b : a; return !t.dead && this.now >= t.invulnUntil && Math.abs(t.x - x) <= r ? [t.id] : []; },
-      hit: (att, tid, dmg, push, o) => { const A = f(att), T = f(tid); if (T) this.hit(A, T, dmg, Math.sign(push[0]) || 0, o); },
+      hit: (att, tid, dmg, push, o) => {
+        const A = f(att), T = f(tid);
+        if (A && o?.skill && !o.dot && !o.crit && this.rnd() < critChance(A.s, talentBonus(A.cls, A.t, "crit"))) { dmg *= 2; o = { ...o, crit: true }; }
+        if (T) this.hit(A, T, dmg, Math.sign(push[0]) || 0, o);
+      },
       heal: (id, amount) => { const u = f(id); if (u && !u.dead) u.hp = Math.min(u.maxHp, u.hp + amount); },
       aim: (id) => [f(id)?.face ?? 1, 0],
       face: (id, dx) => { const u = f(id); if (u && dx) u.face = Math.sign(dx); },
@@ -123,6 +127,7 @@ export class Duel {
       fear: (id, ms) => { const u = f(id); if (u) { u.slowUntil = Math.max(u.slowUntil, this.now + ms); u.sk.weakUntil = Math.max(u.sk.weakUntil, this.now + ms); } },
       weaponHit: (id) => { const u = f(id)!; return CLASSES[u.cls].damage * attackMult(u.cls, u.s); },
       magic: (id) => { const u = f(id)!; return magicMult(u.cls, u.s); },
+      stats: (id) => f(id)?.s,
       cooldownMult: (id) => { const u = f(id)!; return cooldownMult(u.cls, u.s, u.t); },
       fx: () => {},
     };
@@ -183,7 +188,7 @@ export class Duel {
     const spd = poiseSpeed(frac) * atkSpeedMult(a, now);
     a.attackReadyAt = now + (h.cooldownMs ?? def.attackCooldownMs) / spd;
     let dmg = Math.round(def.damage * attackMult(a.cls, a.s) * h.damage);
-    const crit = this.rnd() < talentBonus(a.cls, a.t, "crit") / 100;
+    const crit = this.rnd() < critChance(a.s, talentBonus(a.cls, a.t, "crit"));
     if (crit) dmg *= 2;
     if (h.lunge) a.x += a.face * h.lunge;
     if (def.projectile) return this.shoot(a, dmg, h.knockback, h.shotScale ?? 1);
@@ -234,11 +239,11 @@ export class Duel {
     return false;
   }
 
-  /** Bot: cast the best ready skill (highest row first). */
+  /** Bot: cast the best ready skill (highest level first). */
   castSkills(a: F, d: number, toward: number, incoming: boolean, tReach: number) {
     if (charging(a, this.now)) return;
     const ready = activeSkills(a.cls).filter((s) => (a.t[s.id] ?? 0) > 0 && cooldownLeft(s, a.sk, this.now, cooldownMult(a.cls, a.s, a.t)) <= 0 && a.energy >= (s.cost ?? 0))
-      .sort((x, y) => y.row - x.row);
+      .sort((x, y) => y.req - x.req);
     for (const s of ready) {
       if (s.consume && a.sk.stacks < 3 && !s.buff) continue; // wait for some stacks
       if (!this.useful(a, s, d, incoming, tReach)) continue;
@@ -387,7 +392,7 @@ const pct = (v: number) => `${Math.round(v * 100)}%`.padStart(5);
 
 if (process.argv[1]?.includes("duel")) {
   const n = Number(process.argv[2]) || 400;
-  const configs: [number, Build | undefined, string][] = [[1, undefined, ""], [5, undefined, ""], [10, undefined, " (random builds)"], [10, 0, " (branch 1 build)"], [10, 1, " (branch 2 build)"], [10, 2, " (branch 3 build)"]];
+  const configs: [number, Build | undefined, string][] = [[1, undefined, ""], [5, undefined, ""], [10, undefined, " (random builds)"], [25, undefined, " (random builds)"], [25, 0, " (branch 1 build)"], [25, 1, " (branch 2 build)"], [25, 2, " (branch 3 build)"]];
   for (const [level, build, label] of configs) {
     console.log(`\nLevel ${level}${label}: row hero's win rate vs column hero`);
     console.log("          " + CLASS_KINDS.map((c) => c.slice(0, 6).padStart(7)).join("") + "  overall");

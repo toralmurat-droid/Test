@@ -126,7 +126,7 @@ export class GearMenu {
   refresh(state: any) {
     if (!this.open || !state) return;
     const bagItems: string[] = Array.from(state.bag ?? []);
-    const sig = [state.cls, ...GEAR_SLOTS.map((s) => state[s]), ...bagItems, state.sta, state.str, state.mag, state.maxHp].join("|");
+    const sig = [state.cls, ...GEAR_SLOTS.map((s) => state[s]), ...bagItems, state.sta, state.str, state.mag, state.dex, state.maxHp].join("|");
     if (sig === this.sig) return;
     this.sig = sig;
     this.busyUntil = 0; // the server answered, accept clicks again
@@ -161,10 +161,10 @@ export class GearMenu {
     // Totals
     const g = gearStats(cls, Object.fromEntries(GEAR_SLOTS.map((s) => [s, state[s]])));
     const speed = gearSpeedMult(Object.fromEntries(GEAR_SLOTS.map((s) => [s, state[s]])));
-    const parts = (["sta", "str", "mag"] as StatKind[]).filter((k) => g[k]).map((k) => `+${g[k]} ${STAT_NAMES[k]}`);
+    const parts = (["sta", "str", "mag", "dex"] as StatKind[]).filter((k) => g[k]).map((k) => `+${g[k]} ${STAT_NAMES[k]}`);
     if (speed > 1) parts.push(`+${Math.round((speed - 1) * 100)}% speed`);
     document.getElementById("geartotal")!.textContent =
-      `${state.maxHp} HP · Stamina ${state.sta} · Strength ${state.str} · Magic ${state.mag}` + (parts.length ? `  (gear: ${parts.join(", ")})` : "");
+      `${state.maxHp} HP · Stamina ${state.sta} · Strength ${state.str} · Magic ${state.mag} · Dexterity ${state.dex ?? 0}` + (parts.length ? `  (gear: ${parts.join(", ")})` : "");
 
     // Bag
     const bag = document.getElementById("gearbag")!;

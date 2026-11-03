@@ -8,7 +8,7 @@ import {
 import {
   ATTACK_VARIANTS, CLASSES, ClassKind, COMBO_WINDOW_MS, DODGE, EMOTES, ENERGY, DASH_INVULN_MS, GUARD_REDUCTION, isClassKind, levelFromXp, MAX_XP, capLevel, PVP_KILL_XP,
 } from "../shared/classes";
-import { attackMult, cooldownMult, heroSpeed, magicMult, maxHpFromStats, SLOW_MOB, statsFor, statPoints } from "../shared/powers";
+import { attackMult, cooldownMult, critChance, heroSpeed, magicMult, maxHpFromStats, SLOW_MOB, statsFor, statPoints } from "../shared/powers";
 import { activeSkills, canLearn, cleanRanks, skillLearned, skillOf, talentBonus, talentMult, talentReduce } from "../shared/skills";
 import {
   afterHit, atkSpeedMult, blocking, buffLifesteal, buffRegen, castSkill, ccImmune, charging, counterHit, dealtMult, FieldInst, newRuntime,
@@ -60,10 +60,12 @@ export class Player extends Schema {
   @type("number") sta = 0;
   @type("number") str = 0;
   @type("number") mag = 0;
+  @type("number") dex = 0; // Dexterity: critical hit chance
   // Stat points the player assigned in the hero panel (shared/powers.ts statPoints)
   @type("number") ptSta = 0;
   @type("number") ptStr = 0;
   @type("number") ptMag = 0;
+  @type("number") ptDex = 0;
   @type("boolean") stunned = false;
   @type("boolean") slowed = false;
   @type("boolean") raging = false; // barbarian Rage active
@@ -528,7 +530,7 @@ export class TownRoom extends Room<TownState> {
     p.talents.forEach((v, k) => { talents[k] = v; });
     return {
       color: p.color, xp: p.xp, level: p.level, kills: p.kills, gold: p.gold, potions: p.potions,
-      ptSta: p.ptSta, ptStr: p.ptStr, ptMag: p.ptMag,
+      ptSta: p.ptSta, ptStr: p.ptStr, ptMag: p.ptMag, ptDex: p.ptDex,
       weapon: p.weapon, armour: p.armour, shoes: p.shoes, hat: p.hat, shield: p.shield, ranged: p.ranged,
       bag: p.bag.toArray(), talents, slots: p.slots.toArray(),
       questId: p.questId, questStage: p.questStage, questCount: p.questCount, questVer: QUEST_VERSION, kit: 1,
@@ -541,7 +543,7 @@ export class TownRoom extends Room<TownState> {
     p.color = num(s.color, p.color);
     p.xp = Math.min(MAX_XP, num(s.xp)); p.level = capLevel(num(s.level, 1)); p.kills = num(s.kills);
     p.gold = num(s.gold); p.potions = Math.min(MAX_POTIONS, num(s.potions));
-    p.ptSta = num(s.ptSta); p.ptStr = num(s.ptStr); p.ptMag = num(s.ptMag);
+    p.ptSta = num(s.ptSta); p.ptStr = num(s.ptStr); p.ptMag = num(s.ptMag); p.ptDex = num(s.ptDex);
     p.weapon = gear(s.weapon); p.armour = gear(s.armour); p.shoes = gear(s.shoes);
     p.hat = gear(s.hat); p.shield = gear(s.shield); p.ranged = gear(s.ranged);
     if (Array.isArray(s.bag)) setBag(p, s.bag.map(gear).filter(Boolean).slice(0, BAG_SIZE));
@@ -1412,9 +1414,9 @@ export class TownRoom extends Room<TownState> {
 
   private assignStat(id: string, k: string) {
     const p = this.state.players.get(id);
-    if (!p || (k !== "sta" && k !== "str" && k !== "mag")) return;
-    if (p.ptSta + p.ptStr + p.ptMag >= statPoints(p.level)) return;
-    if (k === "sta") p.ptSta++; else if (k === "str") p.ptStr++; else p.ptMag++;
+    if (!p || (k !== "sta" && k !== "str" && k !== "mag" && k !== "dex")) return;
+    if (p.ptSta + p.ptStr + p.ptMag + p.ptDex >= statPoints(p.level)) return;
+    if (k === "sta") p.ptSta++; else if (k === "str") p.ptStr++; else if (k === "mag") p.ptMag++; else p.ptDex++;
     this.applyStats(p);
   }
 
@@ -1422,7 +1424,7 @@ export class TownRoom extends Room<TownState> {
   private resetStats(id: string) {
     const p = this.state.players.get(id);
     if (!p || p.dead || Date.now() - p.lastHurt < 5000) return;
-    p.ptSta = p.ptStr = p.ptMag = 0;
+    p.ptSta = p.ptStr = p.ptMag = p.ptDex = 0;
     this.applyStats(p);
   }
 
@@ -1877,16 +1879,16 @@ export class TownRoom extends Room<TownState> {
 
   /** Recompute stats and max HP from class + level + equipped gear. */
   private applyStats(p: Player) {
-    const st = statsFor(p.cls, { sta: p.ptSta, str: p.ptStr, mag: p.ptMag });
+    const st = statsFor(p.cls, { sta: p.ptSta, str: p.ptStr, mag: p.ptMag, dex: p.ptDex });
     const g = gearStats(p.cls, this.equipped(p));
-    st.sta += g.sta; st.str += g.str; st.mag += g.mag;
-    p.sta = st.sta; p.str = st.str; p.mag = st.mag;
+    st.sta += g.sta; st.str += g.str; st.mag += g.mag; st.dex += g.dex;
+    p.sta = st.sta; p.str = st.str; p.mag = st.mag; p.dex = st.dex;
     const newMax = Math.round(maxHpFromStats(p.cls, st, p.level) * talentMult(p.cls, p.talents, "hp"));
     p.hp = Math.min(newMax, p.hp + Math.max(0, newMax - p.maxHp));
     p.maxHp = newMax;
   }
 
-  private stats(p: Player) { return { sta: p.sta, str: p.str, mag: p.mag }; }
+  private stats(p: Player) { return { sta: p.sta, str: p.str, mag: p.mag, dex: p.dex }; }
 
   /** Applies damage to a player. Returns true if it killed them. */
   private damagePlayer(tid: string, dmg: number, byName: string, push: [number, number], kbMul = 1, opts: HitOpts = {}): boolean {
@@ -1951,7 +1953,7 @@ export class TownRoom extends Room<TownState> {
     a.attackReadyAt = now + (hit.cooldownMs ?? def.attackCooldownMs) / atkSpeed;
     const off = aimOf(a);
     let dmg = Math.round(def.damage * attackMult(a.cls, this.stats(a)) * hit.damage);
-    const crit = Math.random() < talentBonus(a.cls, a.talents, "crit") / 100;
+    const crit = Math.random() < critChance(this.stats(a), talentBonus(a.cls, a.talents, "crit"));
     if (crit) dmg = Math.round(dmg * 2);
     a.emote = "";
     let variant = 0;
@@ -2039,7 +2041,12 @@ export class TownRoom extends Room<TownState> {
         return !t || (!isSafeZone(t.x, t.y) && now >= t.invulnUntil);
       });
     },
-    hit: (a, t, dmg, push, o) => this.hitTarget(a, t, dmg, push, o),
+    hit: (a, t, dmg, push, o) => {
+      // Skills crit too (Dexterity), except damage over time and the counters that already crit
+      const p = o?.skill && !o.dot && !o.crit ? this.state.players.get(a) : undefined;
+      if (p && Math.random() < critChance(this.stats(p), talentBonus(p.cls, p.talents, "crit"))) { dmg *= 2; o = { ...o, crit: true }; }
+      this.hitTarget(a, t, dmg, push, o);
+    },
     heal: (id, amount) => {
       const p = this.state.players.get(id);
       if (!p || p.dead || amount <= 0) return;
@@ -2114,6 +2121,7 @@ export class TownRoom extends Room<TownState> {
       return p ? CLASSES[p.cls].damage * attackMult(p.cls, this.stats(p)) : 0;
     },
     magic: (id) => { const p = this.state.players.get(id); return p ? magicMult(p.cls, this.stats(p)) : 1; },
+    stats: (id) => { const p = this.state.players.get(id); return p ? this.stats(p) : undefined; },
     cooldownMult: (id) => { const p = this.state.players.get(id); return p ? cooldownMult(p.cls, this.stats(p), p.talents) : 1; },
     fx: (ev) => this.broadcast("sfx", ev),
   };
