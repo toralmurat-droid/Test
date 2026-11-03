@@ -91,14 +91,17 @@ function limb(ctx: CanvasRenderingContext2D, x0: number, y0: number, x1: number,
   ctx.beginPath(); ctx.moveTo(x0 - w * 0.2, y0 - w * 0.2); ctx.quadraticCurveTo(mx - w * 0.2, my - w * 0.2, x1, y1); ctx.stroke();
 }
 
+/** Oak frames: 24x28 design units plus a margin on the sides and top (the trunk base stays 2 units above the bottom). */
+const OAK_PAD = 2, OAK_W = 24 + 2 * OAK_PAD, OAK_H = 28 + OAK_PAD;
+
 export function smoothTrees(scene: Phaser.Scene, K: number) {
   // Oaks: 24x28 design units (x K texture px), trunk base bottom centre, 2 sway frames
   for (const [key, seed, pal] of [
     ["oak_a", 3, [0x1a2e16, 0x2c4620, 0x44592a, 0x66743a]],
     ["oak_b", 7, [0x22301a, 0x3a4a24, 0x52602c, 0x747840]],
   ] as const) {
-    hiResTexture(scene, key, 24 * K, 28 * K, 2, S, (ctx, f) => {
-      ctx.scale(K, K);
+    hiResTexture(scene, key, OAK_W * K, OAK_H * K, 2, S, (ctx, f) => {
+      ctx.scale(K, K); ctx.translate(OAK_PAD, OAK_PAD);
       shadow(ctx, 12, 25.6, 9, 2.4);
       trunk(ctx, 12, 13, 26, 1.6);
       canopy(ctx, seed, 12, 10.5, 10.6, 8.8, pal as unknown as number[], f * 0.45);
@@ -106,8 +109,8 @@ export function smoothTrees(scene: Phaser.Scene, K: number) {
   }
   // More oaks, so a wood is not one tree repeated: a broad old one with a split crown, a sickly one with dead
   // branches through a thin canopy, a young narrow one; then a second, taller pine
-  hiResTexture(scene, "oak_c", 24 * K, 28 * K, 2, S, (ctx, f) => {
-    ctx.scale(K, K);
+  hiResTexture(scene, "oak_c", OAK_W * K, OAK_H * K, 2, S, (ctx, f) => {
+    ctx.scale(K, K); ctx.translate(OAK_PAD, OAK_PAD); // margin so swaying crowns are not cut at the frame edge
     shadow(ctx, 12, 25.6, 10, 2.6);
     trunk(ctx, 12, 12, 26, 2);
     limb(ctx, 12, 15, 6.5, 9, 0.7); limb(ctx, 12, 14, 17.5, 8.5, 0.7);
@@ -115,16 +118,16 @@ export function smoothTrees(scene: Phaser.Scene, K: number) {
     canopy(ctx, 37, 16.4, 9, 6.6, 6.4, [0x1e2c16, 0x34421f, 0x4c5629, 0x6c6c36], f * 0.5);
     canopy(ctx, 41, 12, 5.6, 5.4, 4.4, [0x22301a, 0x3c4a24, 0x56602c, 0x7a7642], f * 0.45);
   });
-  hiResTexture(scene, "oak_d", 24 * K, 28 * K, 2, S, (ctx, f) => {
-    ctx.scale(K, K);
+  hiResTexture(scene, "oak_d", OAK_W * K, OAK_H * K, 2, S, (ctx, f) => {
+    ctx.scale(K, K); ctx.translate(OAK_PAD, OAK_PAD); // margin so swaying crowns are not cut at the frame edge
     shadow(ctx, 12, 25.6, 8, 2.2);
     trunk(ctx, 12, 9, 26, 1.5);
     canopy(ctx, 53, 12.5, 11.5, 8.4, 6.8, [0x26301a, 0x40462a, 0x5c5a32, 0x7c7040], f * 0.4);
     // dead limbs poking out of the thin crown
     limb(ctx, 11, 11, 3.5, 4.5, 0.75); limb(ctx, 13, 10, 19, 3, 0.65);
   });
-  hiResTexture(scene, "oak_e", 24 * K, 28 * K, 2, S, (ctx, f) => {
-    ctx.scale(K, K);
+  hiResTexture(scene, "oak_e", OAK_W * K, OAK_H * K, 2, S, (ctx, f) => {
+    ctx.scale(K, K); ctx.translate(OAK_PAD, OAK_PAD); // margin so swaying crowns are not cut at the frame edge
     shadow(ctx, 12, 25.6, 6.5, 2);
     trunk(ctx, 12, 14, 26, 1.1);
     canopy(ctx, 67, 12, 11.5, 6.6, 9.4, [0x182a16, 0x2a4422, 0x40582c, 0x5e7036], f * 0.55);
@@ -164,8 +167,8 @@ export function smoothTrees(scene: Phaser.Scene, K: number) {
     }
   });
   // Bush: 16x16, round, with berries
-  hiResTexture(scene, "bush", 16 * K, 16 * K, 2, S, (ctx, f) => {
-    ctx.scale(K, K);
+  hiResTexture(scene, "bush", 18 * K, 16 * K, 2, S, (ctx, f) => {
+    ctx.scale(K, K); ctx.translate(1, 0); // 1 unit side margin so the swaying leaves are not cut
     shadow(ctx, 8, 14.6, 7, 1.8);
     canopy(ctx, 23, 8, 10.2, 6.6, 4.6, [0x1a2e16, 0x2c4620, 0x48612e, 0x748a44], f * 0.4);
     for (const [x, y] of [[10.5, 10], [5, 12], [11, 12.2], [8, 13], [6.5, 9]]) {
