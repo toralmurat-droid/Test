@@ -32,6 +32,7 @@ import { iconImg } from "./skillIcons";
 import { TalentMenu } from "./talents";
 import { IdeaBoard } from "./ideas";
 import { IntroPanel } from "./intro";
+import { afterLoading, hideLoading, loadingActive, loadingFor, setLoading } from "./loading";
 import { ISO, IsoView, isoAnchor, isoInput, screenDir, screenDir8 } from "./iso";
 import { SMOOTH } from "./isoflag";
 import { addPixelGrid } from "./pixelgrid";
@@ -174,6 +175,7 @@ export class TownScene extends Phaser.Scene {
   }
 
   preload() {
+    this.load.on("progress", (v: number) => setLoading("Loading the art", v * 0.45));
     preloadArt(this);
     preloadGear(this);
     preloadPaintedMobs(this);
@@ -285,6 +287,7 @@ export class TownScene extends Phaser.Scene {
     menuButton("ideabtn", toggleIdeas);
     this.setupChat();
 
+    setLoading("Joining Oakvale", 0.5);
     const proto = location.protocol === "https:" ? "wss" : "ws";
     const url = import.meta.env.DEV ? `${proto}://${location.hostname}:2567` : `${proto}://${location.host}`;
     try {
@@ -293,6 +296,7 @@ export class TownScene extends Phaser.Scene {
       const msg = typeof e?.message === "string" && e.message && !/websocket|connect/i.test(e.message) ? e.message : "Could not connect to server.";
       document.getElementById("status")!.textContent = msg;
       document.getElementById("play")!.removeAttribute("disabled");
+      hideLoading(true); // back to the login form
       this.game.destroy(true);
       return;
     }
@@ -328,7 +332,7 @@ export class TownScene extends Phaser.Scene {
     this.room.send("shrine"); // is the shrine spent right now?
     // First login of this hero: a short how-to-play panel, never shown again once closed
     this.intro = new IntroPanel(() => this.room?.send("introseen"));
-    this.room.onMessage("intro", () => { this.closeMenus(); this.intro?.show(); });
+    this.room.onMessage("intro", () => afterLoading(() => { this.closeMenus(); this.intro?.show(); }));
     this.room.send("intro");
     this.dial = new DayDial(document.getElementById("daydial") as HTMLCanvasElement);
 
@@ -1466,8 +1470,29 @@ export class TownScene extends Phaser.Scene {
     this.areaTimer = window.setTimeout(() => el.classList.remove("show"), 2500);
   }
 
+  private settled = 0;
+  private lastMid = { x: NaN, y: NaN };
+  /** Lift the loading screen once the hero is in, the camera has caught up with it and the ground around it is painted. */
+  private checkLoaded() {
+    if (!this.room) return;
+    const cam = this.cameras.main;
+    const moved = Math.hypot(cam.midPoint.x - this.lastMid.x, cam.midPoint.y - this.lastMid.y);
+    this.lastMid = { x: cam.midPoint.x, y: cam.midPoint.y };
+    const ground = IsoView.ground;
+    const pending = ground?.pending ?? 0, painted = ground?.painted ?? 0;
+    const hasMe = this.entities.has(this.me);
+    const ready = hasMe && moved < 0.5 && pending === 0;
+    if (!hasMe) setLoading("Joining Oakvale", 0.55);
+    else if (ground) setLoading("Painting the land", 0.6 + 0.38 * (painted / Math.max(1, painted + pending)));
+    else setLoading("Painting the land", 0.9);
+    this.settled = ready ? this.settled + 1 : 0;
+    // a few calm frames in a row so the first full frame is on screen; never hang longer than 20 s
+    if (this.settled >= 4 || loadingFor() > 20_000) hideLoading();
+  }
+
   update(_t: number, dtMs: number) {
     this.iso?.update(dtMs);
+    if (loadingActive()) this.checkLoaded();
     this.ambient?.update(this.time.now, dtMs);
     this.details?.update(this.time.now, dtMs);
     if (!this.room) return;
