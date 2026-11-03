@@ -753,7 +753,8 @@ export class TownRoom extends Room<TownState> {
       const range = hated > 0 ? def.aggroRange * 2 : def.aggroRange;
       if (d >= range) return;
       if (d < def.aggroRange) m.threat = Math.max(m.threat, p.level - m.level);
-      const score = Math.max(0, 1 - d / def.aggroRange) * aggroLevelFactor(m.level, p.level) + hated + (pid === m.target ? AGGRO.stick : 0);
+      const lf = m.merged > 1 ? Math.max(1, aggroLevelFactor(m.level, p.level)) : aggroLevelFactor(m.level, p.level); // a merged blob regrouped to fight: no hero scares it
+      const score = Math.max(0, 1 - d / def.aggroRange) * lf + hated + (pid === m.target ? AGGRO.stick : 0);
       if (score > best) { best = score; target = pid; }
     });
     const side = FACTION[m.kind];
@@ -842,6 +843,7 @@ export class TownRoom extends Room<TownState> {
     h.mergeInto = "";
     if (o.zone < 0) this.clock.setTimeout(() => this.state.mobs.delete(oid), 500);
     else { const zone = this.state.zones.get(SPAWN_ZONES[o.zone].name); if (zone) zone.alive--; }
+    h.nextAggro = 0; // done merging: pick a fight right away
     this.broadcast("blobmerge", { into: hid, from: oid, x: Math.round(o.x), y: Math.round(o.y), level: h.level, merged: h.merged });
     this.questSawMerge(h.x, h.y);
   }
