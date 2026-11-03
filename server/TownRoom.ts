@@ -23,7 +23,7 @@ import { sellPrice, SHOPS } from "../shared/shops";
 import { BLOB_KINDS, inZone, npcPresent, QUEST_VERSION, QUESTS, questStep, stepGoal, Summon, USE_RANGE } from "../shared/quests";
 import { findHideSpot, HIDE, noMobsAt, spawnPoint, SPAWN_ZONES, zoneCap } from "../shared/spawns";
 import { moveStep } from "../shared/movement";
-import { flush, HeroSave, loadHero, login, markChest, openedChests, saveHero } from "./accounts";
+import { flush, HeroSave, loadHero, login, markChest, openedChests, resetChests, saveHero } from "./accounts";
 import { chestById, chestLock, CHEST_RANGE, CHEST_RESPAWN_MS, CHESTS, GUARD_RESPAWN_MS, rollChest } from "../shared/chests";
 import { SLOT_COUNT } from "../shared/slots";
 import { heroPoise, MOB_COMBAT, POISE, poiseLevelMult, poiseSpeed } from "../shared/combat";
@@ -488,7 +488,8 @@ export class TownRoom extends Room<TownState> {
     p.name = auth?.name ?? `Hero${Math.floor(Math.random() * 1000)}`;
     p.color = typeof options?.color === "number" ? options.color : COLORS[Math.floor(Math.random() * COLORS.length)];
     p.cls = isClassKind(options?.cls) ? options.cls : "knight";
-    // "New game" on the login screen: start this class over (the old save is overwritten right away)
+    // "New game" on the login screen: start this class over (the old save is overwritten right away) and refill all chests
+    if (options?.newGame) resetChests(p.name);
     const save = options?.newGame ? undefined : loadHero(p.name, p.cls);
     if (save) this.restore(p, save);
     this.applyStats(p);

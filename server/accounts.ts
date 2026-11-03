@@ -90,6 +90,14 @@ export function openedChests(name: string, now = Date.now()): Record<string, num
   return { ...acc.chests };
 }
 
+/** New game: every loot chest is full again for this account. */
+export function resetChests(name: string) {
+  const acc = accounts[key(name)];
+  if (!acc?.chests) return;
+  delete acc.chests;
+  dirty = true;
+}
+
 /** Remember that this account emptied a chest until `refillAt`. */
 export function markChest(name: string, id: string, refillAt: number) {
   const acc = accounts[key(name)];
