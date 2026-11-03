@@ -1,5 +1,6 @@
 import { col, Iso, planks, rng, stones, type Pt as IPt } from "./smoothProps";
 import { hiResTexture } from "./smooth";
+import { pixelize } from "./pixelize";
 import { SMOOTH } from "./isoflag";
 import Phaser from "phaser";
 import { TILE } from "../../shared/constants";
@@ -501,6 +502,7 @@ export function buildStalls(scene: Phaser.Scene): Set<number> {
 }
 
 function stall(scene: Phaser.Scene, x0: number, y0: number, x1: number, y1: number, color: number) {
+  if (SMOOTH) return ruinedStall(scene, x0, y0, x1, y1, color);
   // footprint inside the tiles, a little inset
   const X0 = x0 * TILE + 3, Y0 = y0 * TILE + 6, X1 = (x1 + 1) * TILE - 3, Y1 = (y1 + 1) * TILE - 4;
   const COUNTER = 13, POST = 36, FRONT_EAVE = 27, OV = 7;
@@ -578,6 +580,137 @@ function stall(scene: Phaser.Scene, x0: number, y0: number, x1: number, y1: numb
   poly([S(X1 + OV, Y0 - 2, POST), S(X1 + OV, Y1 + OV, FRONT_EAVE), S(X1 + OV, Y1 + OV, FRONT_EAVE - 2), S(X1 + OV, Y0 - 2, POST - 2)], hex(color, 0.55));
   line(ctx, S(X0 - OV, Y1 + OV, FRONT_EAVE), S(X1 + OV, Y1 + OV, FRONT_EAVE), "rgba(60,20,20,0.5)");
   tex.refresh();
+  sliced(scene, key, X0, Y0, X1, Y1, left, topY, cw, ch, false);
+}
+
+/**
+ * A decrepit market stall in the bonfire's pixel style: weathered grey planks with gaps and a sprung board, one
+ * post leaning, a faded, stained awning that sags, with holes and a torn valance, empty broken crates and a rag
+ * for a cloth. Painted at 3x, then pixelized (one colour per 2/3 px, dithered tones, dark outline).
+ */
+function ruinedStall(scene: Phaser.Scene, x0: number, y0: number, x1: number, y1: number, color: number) {
+  const X0 = x0 * TILE + 3, Y0 = y0 * TILE + 6, X1 = (x1 + 1) * TILE - 3, Y1 = (y1 + 1) * TILE - 4;
+  const COUNTER = 12, POST = 34, FRONT_EAVE = 25, OV = 6;
+  const left = P(X0 - OV - 6, Y1 + OV + 6).x - 4, right = P(X1 + OV + 8, Y0 - OV).x + 4;
+  const topY = P(X0, Y0, POST + 6).y - 4, bottom = P(X1 + 10, Y1 + OV + 8).y + 4;
+  const cw = Math.ceil(right - left), ch = Math.ceil(bottom - topY);
+  const key = `stall_${x0}_${y0}`;
+  const R = rng(x0 * 131 + y0 * 7);
+  const fade = (c: number, k: number, m = 0.45) => { // sun-bleached and dirty: towards a grey-brown
+    const r = (c >> 16) & 255, g = (c >> 8) & 255, b = c & 255;
+    const mix = (v: number, t: number) => Math.min(255, (v + (t - v) * m) * k) | 0;
+    return `rgb(${mix(r, 120)},${mix(g, 104)},${mix(b, 84)})`;
+  };
+  const WOOD = ["#2a221c", "#3f342a", "#574a3c", "#6f604e", "#887862", "#a08f76"];
+  hiResTexture(scene, key, cw, ch, 1, 3, (ctx) => {
+    const S = (x: number, y: number, z = 0): Pt => { const p = P(x, y, z); return { x: p.x - left, y: p.y - topY }; };
+    const poly = (pts: Pt[], fill: string) => { ctx.beginPath(); pts.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y))); ctx.closePath(); ctx.fillStyle = fill; ctx.fill(); };
+    const quad = (a: [number, number, number], b: [number, number, number], c: [number, number, number], d: [number, number, number], f: string) => poly([S(...a), S(...b), S(...c), S(...d)], f);
+    /** A round, weathered post from the ground up, leaning by (lx, ly) at the top; lit on its west side. */
+    const post = (x: number, y: number, h: number, lx = 0, ly = 0) => {
+      const a = S(x, y, 0), b = S(x + lx, y + ly, h);
+      for (let i = -1.6; i <= 1.6; i += 0.4) {
+        ctx.strokeStyle = WOOD[Math.max(0, Math.min(5, Math.round(3 - i * 1.1 + (R() - 0.5) * 0.6)))];
+        ctx.lineWidth = 0.8; ctx.beginPath(); ctx.moveTo(a.x + i, a.y); ctx.lineTo(b.x + i, b.y); ctx.stroke();
+      }
+      if (R() < 0.6) { ctx.fillStyle = "#3e5424"; ctx.fillRect(a.x - 1.2, a.y - 3 - R() * 2, 2.4, 2.5); } // moss at the foot
+      ctx.fillStyle = WOOD[0]; ctx.fillRect(b.x - 1.5, b.y - 0.6, 3, 1); // split top
+    };
+    // ground: shadow, straw and splinters, a few rotten apples
+    poly([S(X0 - 2, Y1 + 2), S(X1 + 2, Y1 + 2), S(X1 + 10, Y1 + 8), S(X1 + 10, Y0 + 6), S(X1 + 2, Y0)], "rgba(0,0,0,0.28)");
+    for (let k = 0; k < 26; k++) {
+      const p = S(X0 - 4 + R() * (X1 - X0 + 14), Y1 + 1 + R() * (OV + 5));
+      ctx.strokeStyle = R() < 0.6 ? "#8a7a4a" : "#5a4a34"; ctx.lineWidth = 0.5;
+      const an = R() * Math.PI, L = 1 + R() * 2.5;
+      ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(p.x + Math.cos(an) * L, p.y + Math.sin(an) * L * 0.5); ctx.stroke();
+    }
+    for (let k = 0; k < 3; k++) { const p = S(X0 + R() * (X1 - X0), Y1 + 2 + R() * 5); ctx.fillStyle = "#5a2a1a"; ctx.fillRect(p.x - 0.9, p.y - 0.9, 1.8, 1.5); ctx.fillStyle = "#7a4a22"; ctx.fillRect(p.x - 0.6, p.y - 0.9, 0.7, 0.6); }
+    // back posts: the east one leans in
+    post(X0, Y0, POST); post(X1, Y0, POST - 2, -1.5, 1);
+    // counter: plank box. Top boards warped with gaps; the front has a missing board and one sprung loose
+    const nb = Math.max(4, Math.round((X1 - X0) / 4));
+    for (let i = 0; i < nb; i++) { // top boards run front to back
+      const ax = X0 + ((X1 - X0) * i) / nb, bx = X0 + ((X1 - X0) * (i + 1)) / nb - 0.6, z = COUNTER + (R() - 0.5) * 0.8;
+      quad([ax, Y0, z], [bx, Y0, z], [bx, Y1, z], [ax, Y1, z], WOOD[3 + (R() < 0.5 ? 1 : 0)]);
+      if (R() < 0.35) { const m = S((ax + bx) / 2, Y0 + R() * (Y1 - Y0) * 0.6, z); ctx.fillStyle = WOOD[1]; ctx.fillRect(m.x - 0.3, m.y, 0.6, 3); } // crack
+    }
+    // inside, seen through the gaps: dark
+    quad([X0, Y1, COUNTER], [X1, Y1, COUNTER], [X1, Y1, 0], [X0, Y1, 0], WOOD[0]);
+    quad([X1, Y0, COUNTER], [X1, Y1, COUNTER], [X1, Y1, 0], [X1, Y0, 0], WOOD[0]);
+    const gone = 1 + Math.floor(R() * 2), sprung = 0;
+    for (let z = 0, row = 0; z < COUNTER - 0.5; z += 3, row++) {
+      const t = WOOD[2 + (row % 2)], t2 = WOOD[1 + (row % 2)];
+      if (row !== gone) {
+        if (row === sprung) { // hanging off one nail, swung down at the west end
+          quad([X0 + 3, Y1 + 0.5, z + 2.6], [X1, Y1 + 0.5, z + 2.6], [X1, Y1 + 0.5, z], [X0 + 3, Y1 + 0.5, z - 3], t);
+        } else quad([X0, Y1, z + 2.6], [X1, Y1, z + 2.6], [X1, Y1, z], [X0, Y1, z], t);
+      }
+      if (row !== gone + 1) quad([X1, Y0, z + 2.6], [X1, Y1, z + 2.6], [X1, Y1, z], [X1, Y0, z], t2);
+    }
+    // a rag that was once the stall cloth, torn ragged at the bottom
+    const rag = S(X0 + 3, Y1, COUNTER);
+    ctx.fillStyle = fade(color, 0.7, 0.55); ctx.beginPath(); ctx.moveTo(rag.x, rag.y);
+    const rw = (X1 - X0) * 0.45;
+    for (let i = 0; i <= 8; i++) { const p = S(X0 + 3 + (rw * i) / 8, Y1, COUNTER - 3 - R() * 4); ctx.lineTo(p.x, p.y); }
+    const re = S(X0 + 3 + rw, Y1, COUNTER); ctx.lineTo(re.x, re.y); ctx.closePath(); ctx.fill();
+    // what is left on the counter: an empty crate with a split side, a cracked jar, a basket on its side
+    const gy = (Y0 + Y1) / 2 - 2;
+    const crate = (gx: number, gy2: number, z0: number, broken: boolean) => {
+      quad([gx, gy2, z0 + 4], [gx + 7, gy2, z0 + 4], [gx + 7, gy2 + 6, z0 + 4], [gx, gy2 + 6, z0 + 4], WOOD[1]); // empty inside
+      quad([gx, gy2 + 6, z0 + 4], [gx + 7, gy2 + 6, z0 + 4], [gx + 7, gy2 + 6, z0], [gx, gy2 + 6, z0], WOOD[3]);
+      quad([gx + 7, gy2, z0 + 4], [gx + 7, gy2 + 6, z0 + 4], [gx + 7, gy2 + 6, z0], [gx + 7, gy2, z0], WOOD[2]);
+      if (broken) quad([gx + 2, gy2 + 6, z0 + 4], [gx + 4.5, gy2 + 6, z0 + 4], [gx + 4, gy2 + 6, z0 + 1], [gx + 2.5, gy2 + 6, z0 + 2], WOOD[0]);
+    };
+    crate(X0 + 4, gy, COUNTER, true);
+    const jar = S(X1 - 8, gy + 3, COUNTER);
+    ctx.fillStyle = "#6a5a48"; ctx.beginPath(); ctx.ellipse(jar.x, jar.y - 2.5, 1.8, 2.6, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#8a7860"; ctx.fillRect(jar.x - 1.3, jar.y - 4.5, 0.8, 2.5);
+    ctx.strokeStyle = "#2a221c"; ctx.lineWidth = 0.4; ctx.beginPath(); ctx.moveTo(jar.x + 0.3, jar.y - 5); ctx.lineTo(jar.x - 0.4, jar.y - 2.6); ctx.lineTo(jar.x + 0.6, jar.y - 0.8); ctx.stroke();
+    // front posts: the east one has slipped and leans out, so the awning sags at that corner
+    post(X0, Y1, FRONT_EAVE); post(X1, Y1, FRONT_EAVE - 4, 1.5, 1.5);
+    // awning: a grid of small cloth quads so it can sag, fade and tear
+    const AX0 = X0 - OV, AW = X1 - X0 + 2 * OV, AY0 = Y0 - 2, AD = Y1 + OV - AY0;
+    const nStripe = Math.max(4, Math.round(AW / 6)), NU = nStripe * 4, NV = 9;
+    const at = (u: number, v: number): [number, number, number] => {
+      const sag = Math.sin(u * Math.PI) * v * 2.5 + (u > 0.65 ? ((u - 0.65) / 0.35) * v * 5 : 0);
+      return [AX0 + u * AW, AY0 + v * AD, POST + (FRONT_EAVE - POST) * v - sag];
+    };
+    const holes = [0, 1, 2].map(() => ({ u: 0.15 + R() * 0.7, v: 0.2 + R() * 0.6, r: 0.05 + R() * 0.07 }));
+    for (let i = 0; i < NU; i++) for (let j = 0; j < NV; j++) {
+      const u0 = i / NU, u1 = (i + 1) / NU, v0 = j / NV, v1 = (j + 1) / NV, uc = (u0 + u1) / 2, vc = (v0 + v1) / 2;
+      if (holes.some((h) => ((uc - h.u) / h.r) ** 2 + ((vc - h.v) / (h.r * 1.6)) ** 2 < 1)) continue;
+      if (uc > 0.74 + hash(i, j, 78) * 0.08 && vc > 0.42 + (uc - 0.74) * 0.6 + hash(i + 3, j, 79) * 0.1) continue; // the front east corner torn away
+      const stripe = Math.floor(uc * nStripe) % 2, stain = hash(i, j + x0 * 9, 77);
+      const k = 1.05 - vc * 0.25 - (stain < 0.18 ? 0.18 : 0) - (Math.sin(uc * Math.PI * 2 * nStripe) * 0.04);
+      const f = stripe ? fade(0xb0a48a, k * 0.92, 0.3) : fade(color, k * 0.82, 0.62);
+      quad(at(u0, v0), at(u1 + 0.002, v0), at(u1 + 0.002, v1 + 0.01), at(u0, v1 + 0.01), f);
+    }
+    // a patch sewn over an old tear
+    const pc = at(0.3 + R() * 0.2, 0.45);
+    ctx.fillStyle = "#6a5a40"; ctx.fillRect(S(...pc).x - 2, S(...pc).y - 1.5, 4, 3);
+    // the torn valance: strips of uneven length, some missing
+    for (let i = 0; i < nStripe * 2; i++) {
+      if (R() < 0.25) continue;
+      const u0 = i / (nStripe * 2), u1 = (i + 0.85) / (nStripe * 2), L = 2 + R() * 4.5;
+      const a = at(u0, 1), b = at(u1, 1);
+      const stripe = Math.floor(((u0 + u1) / 2) * nStripe) % 2;
+      quad(a, b, [b[0], b[1], b[2] - L], [a[0] + (R() - 0.5), a[1], a[2] - L * (0.6 + R() * 0.4)], stripe ? fade(0xa0947c, 0.75, 0.3) : fade(color, 0.62, 0.62));
+      if (u0 > 0.72) break; // nothing left to hang from the torn corner
+    }
+    // the torn-off corner hangs down as a limp flap
+    { const a = at(0.76, 0.45), b = at(0.84, 0.5); quad(a, b, [b[0] + 1, b[1] + 2, b[2] - 9], [a[0], a[1] + 2, a[2] - 12], fade(color, 0.5, 0.62)); }
+    // the awning's east edge shows its thickness
+    const e0 = at(1, 0), e1 = at(1, 1);
+    quad(e0, e1, [e1[0], e1[1], e1[2] - 1.5], [e0[0], e0[1], e0[2] - 1.5], fade(color, 0.45, 0.5));
+    // a cobweb between the west front post and the awning
+    const cwb = S(X0, Y1, FRONT_EAVE - 1);
+    ctx.strokeStyle = "rgba(220,220,210,0.55)"; ctx.lineWidth = 0.25;
+    for (let k = 0; k < 4; k++) { ctx.beginPath(); ctx.moveTo(cwb.x, cwb.y); ctx.lineTo(cwb.x + 4 - k, cwb.y - 1 + k * 1.4); ctx.stroke(); }
+    // a crate knocked off, lying on its side in front
+    crate(X1 - 2, Y1 + 3, 0, false);
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    pixelize(ctx, cw * 3, ch * 3, 2, { step: 12, outline: 0.5 });
+  });
   sliced(scene, key, X0, Y0, X1, Y1, left, topY, cw, ch, false);
 }
 

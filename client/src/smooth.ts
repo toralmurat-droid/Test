@@ -99,6 +99,7 @@ export function smoothCopy(img: HTMLCanvasElement | HTMLImageElement, key = ""):
 
 /** Hand-painted high-resolution sources by texture key (see hiResTexture): uploaded as they are, never enlarged. */
 const HI = new Map<string, HTMLCanvasElement>();
+if (import.meta.env?.DEV) (globalThis as any).__HI = HI; // dev: lets tools read the painted canvases
 
 /**
  * A spritesheet texture of `frames` frames of w x h px (the size the game uses), painted `scale` times bigger with

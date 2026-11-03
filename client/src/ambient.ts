@@ -6,7 +6,7 @@ import { ISO, isoAnchor } from "./iso";
 import { SMOOTH } from "./isoflag";
 import { smoothTrees } from "./smoothArt";
 import { hiResTexture } from "./smooth";
-import { paintBonfire } from "./bonfireArt";
+import { paintBonfire, smokeTexture } from "./bonfireArt";
 
 /**
  * Living-world layer for Oakvale. Purely cosmetic and client-side (collision still comes from shared/map.ts):
@@ -273,6 +273,20 @@ export class Ambient {
   }
 
   private smoke(x: number, y: number, scale: number) {
+    if (SMOOTH) {
+      // pixel smoke in the fire's style: dithered grey puffs that rise slowly, spread and fade, drifting with the wind
+      smokeTexture(this.scene);
+      return this.scene.add.particles(x, y, "smoke_px", {
+        frame: [0, 1, 2, 3],
+        lifespan: { min: 4200, max: 6200 },
+        speedY: { min: -6 * K, max: -3.5 * K },
+        speedX: { min: (WIND_X * 0.3 - 1) * K, max: (WIND_X * 0.3 + 1.2) * K },
+        accelerationX: WIND_X * 0.25 * K,
+        scale: { start: 0.45 * scale, end: 1.5 * scale },
+        alpha: { start: 0.5, end: 0 },
+        frequency: 420,
+      }).setDepth(25000);
+    }
     return this.scene.add.particles(x, y, "puff", {
       lifespan: { min: 2600, max: 3600 },
       speedY: { min: -12 * K, max: -7 * K },
@@ -296,8 +310,10 @@ export class Ambient {
         const glow = this.scene.add.image(cx, fy, "glow").setTint(0xffa040).setScale(6 * K).setAlpha(0.25).setBlendMode(Phaser.BlendModes.ADD).setDepth(-0.8);
         this.scene.tweens.add({ targets: glow, alpha: 0.4, scale: 6.6 * K, duration: 180, yoyo: true, repeat: -1, ease: "Sine.easeInOut", repeatDelay: 60 });
         const sparks = this.scene.add.particles(cx, fy - 9 * K, "spark", {
-          lifespan: { min: 500, max: 1100 }, speedY: { min: -30 * K, max: -14 * K }, speedX: { min: -8 * K, max: 10 * K },
-          scale: { start: 1.5, end: 0.4 }, alpha: { start: 1, end: 0 }, frequency: 140, blendMode: "ADD",
+          ...(SMOOTH
+            ? { lifespan: { min: 1300, max: 2200 }, speedY: { min: -12 * K, max: -5 * K }, speedX: { min: -2 * K, max: 2 * K }, accelerationX: WIND_X * 0.4 * K, scale: { start: 0.8, end: 0.2 }, frequency: 260 }
+            : { lifespan: { min: 500, max: 1100 }, speedY: { min: -30 * K, max: -14 * K }, speedX: { min: -8 * K, max: 10 * K }, scale: { start: 1.5, end: 0.4 }, frequency: 140 }),
+          alpha: { start: 1, end: 0 }, blendMode: "ADD",
         }).setDepth(25000);
         isoAnchor(sparks, { x: cx, y: fy });
         isoAnchor(this.smoke(cx, fy - 14 * K, 0.7), { x: cx, y: fy });
@@ -384,8 +400,10 @@ export class Ambient {
       const glow = this.scene.add.image(cx, cy - 10 * K, "glow").setTint(0xffa040).setScale(10 * K).setAlpha(0.3).setBlendMode(Phaser.BlendModes.ADD).setDepth(-0.8);
       this.scene.tweens.add({ targets: glow, alpha: 0.45, scale: 11 * K, duration: 220, yoyo: true, repeat: -1, ease: "Sine.easeInOut", repeatDelay: 40 });
       this.scene.add.particles(cx, cy - 14 * K, "spark", {
-        lifespan: { min: 700, max: 1600 }, speedY: { min: -45 * K, max: -18 * K }, speedX: { min: -14 * K, max: 14 * K },
-        scale: { start: SMOOTH ? 1 : 2, end: 0.3 }, alpha: { start: 1, end: 0 }, frequency: SMOOTH ? 90 : 60, blendMode: "ADD",
+        ...(SMOOTH
+          ? { lifespan: { min: 1600, max: 2800 }, speedY: { min: -16 * K, max: -7 * K }, speedX: { min: -3 * K, max: 3 * K }, accelerationX: WIND_X * 0.4 * K, scale: { start: 0.9, end: 0.2 }, frequency: 170 }
+          : { lifespan: { min: 700, max: 1600 }, speedY: { min: -45 * K, max: -18 * K }, speedX: { min: -14 * K, max: 14 * K }, scale: { start: 2, end: 0.3 }, frequency: 60 }),
+        alpha: { start: 1, end: 0 }, blendMode: "ADD",
       }).setDepth(25000);
       this.smoke(cx, cy - 24 * K, 1.1);
     }

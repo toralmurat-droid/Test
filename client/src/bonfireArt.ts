@@ -1,3 +1,5 @@
+import Phaser from "phaser";
+import { hiResTexture } from "./smooth";
 /**
  * Hand-built pixel bonfire (village square and camp fires): a sunk ash pit ringed with heat-cracked field stones,
  * a leaning pyre of split logs, and a fire field made of looping noise, banded into a fire palette with ordered
@@ -183,4 +185,25 @@ export function paintBonfire(g: CanvasRenderingContext2D, f: number, N: number, 
   log(px, CX + 18, BY + 10, CX + 30, BY + 4, 2.6, 21, f, N, 0.7);
   for (const s of ring) if (s.front) stone(px, s.x, s.y, s.w, s.h, s.k, true);
   g.restore();
+}
+
+/** Four 16x16 pixel smoke puffs: lumpy dithered blobs, lit from the top left, soft ragged edges. */
+export function smokeTexture(scene: Phaser.Scene) {
+  if (scene.textures.exists("smoke_px")) return;
+  const R = 16, C = R * 2; // two cells per px, like the fire
+  hiResTexture(scene, "smoke_px", R, R, 4, 4, (g, f) => {
+    g.scale(0.5, 0.5);
+    for (let y = 0; y < C; y++) for (let x = 0; x < C; x++) {
+      const dx = (x - C / 2 + 0.5) / (C / 2), dy = (y - C / 2 + 0.5) / (C / 2);
+      const lump = (vnoise(x * 0.22 + f * 9, y * 0.22, 999, 60 + f) - 0.5) * 0.55 + (vnoise(x * 0.5, y * 0.5 + f * 5, 999, 70 + f) - 0.5) * 0.2;
+      const d = Math.sqrt(dx * dx + dy * dy) + lump;
+      if (d > 0.95) continue;
+      const t = dith(x, y);
+      if (d > 0.78 && t > 0.35) continue; // ragged dithered rim
+      if (d > 0.6 && t > 0.75) continue;
+      const lit = -dx * 0.6 - dy * 0.8 + lump;
+      g.fillStyle = lit > 0.45 ? "#a8a29a" : lit > 0 ? "#8a847c" : lit > -0.45 ? "#6c6761" : "#524e4a";
+      g.fillRect(x, y, 1, 1);
+    }
+  });
 }
