@@ -154,14 +154,16 @@ export class Minimap {
     return Math.max(MIN_VIEW, Math.min(VIEW_W, ext * 0.6 + 8));
   }
 
-  /** Part of the world shown on the opened map: the explored area plus a fog margin. */
-  private region() {
-    if (this.bx1 < 0) return { x: 0, y: 0, w: MAP_W, h: MAP_H };
-    let w = Math.max(36, this.bx1 - this.bx0 + 1 + MAP_PAD * 2), hh = Math.max(28, this.by1 - this.by0 + 1 + MAP_PAD * 2);
-    w = Math.min(w, MAP_W); hh = Math.min(hh, MAP_H);
+  /**
+   * Part of the world shown on the opened map: the explored area plus a fog margin, widened to the canvas shape
+   * and zoomed (whole pixels per tile) so it fills the fixed-size frame.
+   */
+  private region(cw: number, ch: number) {
+    if (this.bx1 < 0) return { x: 0, y: 0, s: Math.max(1, Math.floor(Math.min(cw / MAP_W, ch / MAP_H))) };
+    const w = Math.max(24, this.bx1 - this.bx0 + 1 + MAP_PAD * 2), hh = Math.max(18, this.by1 - this.by0 + 1 + MAP_PAD * 2);
+    const s = Math.max(1, Math.floor(Math.min(cw / w, ch / hh)));
     const cx = (this.bx0 + this.bx1 + 1) / 2, cy = (this.by0 + this.by1 + 1) / 2;
-    const x = Math.max(0, Math.min(MAP_W - w, Math.round(cx - w / 2))), y = Math.max(0, Math.min(MAP_H - hh, Math.round(cy - hh / 2)));
-    return { x, y, w, h: hh };
+    return { x: Math.round((cx - cw / s / 2) * s) / s, y: Math.round((cy - ch / s / 2) * s) / s, s };
   }
 
   /** Marks the tiles around the player as discovered. */
@@ -219,13 +221,14 @@ export class Minimap {
     // World map (only while open)
     if (!this.isOpen) return;
     // Only the explored part (plus a fog margin) is framed, so the map grows as the world is discovered.
-    const R = this.region();
-    const maxW = Math.min(960, window.innerWidth - 32 - FRAME * 6 - 24), maxH = window.innerHeight - 32 - FRAME * 6 - 90;
-    const BIG = Math.max(2, Math.min(16, Math.floor(Math.min(maxW / R.w, maxH / R.h))));
-    if (this.big.width !== R.w * BIG || this.big.height !== R.h * BIG) {
-      this.big.width = R.w * BIG; this.big.height = R.h * BIG;
-      this.big.style.width = `${R.w * BIG}px`; this.big.style.height = `${R.h * BIG}px`;
+    // The frame keeps a fixed size; the explored part (plus a fog margin) is zoomed to fill it, so the map
+    // zooms out as the world is discovered and never shows how big the world is.
+    const cw = Math.max(240, Math.min(1100, window.innerWidth - 32 - FRAME * 6 - 24)), ch = Math.max(180, window.innerHeight - 32 - FRAME * 6 - 90);
+    if (this.big.width !== cw || this.big.height !== ch) {
+      this.big.width = cw; this.big.height = ch;
+      this.big.style.width = `${cw}px`; this.big.style.height = `${ch}px`;
     }
+    const R = this.region(cw, ch), BIG = R.s;
     const g = this.big.getContext("2d")!;
     g.imageSmoothingEnabled = false;
     g.fillStyle = FOG;
