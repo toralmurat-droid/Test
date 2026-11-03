@@ -523,7 +523,7 @@ function buildWorld() {
   curve([[191, 177], [192, 181], [cove.x + 14, cove.y + 5]], 1); // the fishers' track down from the Smugglers' Path
 
   // Roads to the new places
-  curve([[lake.x + 3, lake.y + lake.ry + 3], [104, 166], [110, 174], [rc(179) - 6, 179], [rc(179) + 6, 179], [salt.x - 1, lane]], 1); // Coast Road (lake → Saltmere)
+  curve([[lake.x + 3, lake.y + lake.ry + 3], [104, 166], [110, 174], [rc(178) - 6, 178], [rc(178) + 6, 178], [salt.x - 1, lane]], 1); // Coast Road (lake → Saltmere)
   curve([[keep.x + keep.w + 1, keep.y + 8], [216, 68], [228, 84], [band.x + band.w / 2, band.y - 2]], 1);                            // Bandit Trail (keep → Redfang)
   curve([[band.x + band.w / 2, band.y + band.h + 1], [244, 140], [222, 162], [194, 176], [170, 184], [salt.x + salt.w, lane + 1]], 1); // Smugglers' Path (Redfang → Saltmere)
 

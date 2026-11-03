@@ -1,6 +1,6 @@
 import Phaser from "phaser";
 import { MAP_H, MAP_W, TILE } from "../../shared/constants";
-import { BROKEN_BRIDGES, GROUND, MAKESHIFT_BRIDGES, T } from "../../shared/map";
+import { BROKEN_BRIDGES, GROUND, MAKESHIFT_BRIDGES, T, WORLD } from "../../shared/map";
 import { SMOOTH } from "./isoflag";
 import { hiResTexture } from "./smooth";
 
@@ -19,9 +19,31 @@ const HT = UP + IH + DOWN;
 
 const gnd = (x: number, y: number) => (x < 0 || y < 0 || x >= MAP_W || y >= MAP_H ? -1 : GROUND[y][x]);
 const isWater = (x: number, y: number) => { const g = gnd(x, y); return g === T.WATER || g === -1; };
-const isBridge = (x: number, y: number) => gnd(x, y) === T.BRIDGE;
 const BROKEN = new Set(BROKEN_BRIDGES.map((b) => b.y * MAP_W + b.x));
+/**
+ * Landings: the painted shore blurs the river's edge out past the water tiles, so a bridge that stopped at the last
+ * water tile looked short. Each crossing gets one more deck tile on the bank at both ends (drawn only: the bank is
+ * land and walkable anyway), so it reaches from bank to bank, ending on stone footings.
+ */
+const LANDING = (() => {
+  const set = new Set<number>(), real = (x: number, y: number) => gnd(x, y) === T.BRIDGE;
+  const land = (x: number, y: number) => { const g = gnd(x, y); return g >= 0 && g !== T.WATER && g !== T.BRIDGE; };
+  // wherever the road goes on from a bridge tile onto land, the deck runs on one more tile
+  for (let ty = 0; ty < MAP_H; ty++) for (let tx = 0; tx < MAP_W; tx++) {
+    if (!real(tx, ty)) continue;
+    // along the bridge's own run only, so a road turning off beside the bank doesn't get a stray deck
+    const ax = real(tx - 1, ty) || real(tx + 1, ty) || BROKEN.has(ty * MAP_W + tx - 1) || BROKEN.has(ty * MAP_W + tx + 1);
+    const ay = real(tx, ty - 1) || real(tx, ty + 1) || BROKEN.has((ty - 1) * MAP_W + tx) || BROKEN.has((ty + 1) * MAP_W + tx);
+    if (ax && ay) continue; // a junction
+    const nb = ax ? [[tx - 1, ty], [tx + 1, ty]] : ay ? [[tx, ty - 1], [tx, ty + 1]] : [[tx - 1, ty], [tx + 1, ty], [tx, ty - 1], [tx, ty + 1]];
+    for (const [i, j] of nb) if (land(i, j) && WORLD.roads.has(j * MAP_W + i)) set.add(j * MAP_W + i);
+  }
+  return set;
+})();
+const isLanding = (x: number, y: number) => x >= 0 && y >= 0 && x < MAP_W && y < MAP_H && LANDING.has(y * MAP_W + x);
+const isBridge = (x: number, y: number) => gnd(x, y) === T.BRIDGE || isLanding(x, y);
 const MAKESHIFT = new Set(MAKESHIFT_BRIDGES.map((b) => b.y * MAP_W + b.x));
+for (const k of LANDING) if ([1, -1, MAP_W, -MAP_W].some((d) => MAKESHIFT.has(k + d))) MAKESHIFT.add(k); // its landings are as narrow
 const isGap = (x: number, y: number) => x >= 0 && y >= 0 && x < MAP_W && y < MAP_H && BROKEN.has(y * MAP_W + x);
 const hash = (x: number, y: number, s: number) => {
   let h = (Math.imul(x, 374761393) + Math.imul(y, 668265263) + Math.imul(s, 982451653)) | 0;
@@ -517,12 +539,12 @@ function gapTex(scene: Phaser.Scene, gx: number, gy: number) {
 export function buildBridges(scene: Phaser.Scene, ground: number[][]): number[][] {
   const out = ground.map((r) => r.slice());
   const tiles: [number, number][] = [];
-  for (let ty = 0; ty < MAP_H; ty++) for (let tx = 0; tx < MAP_W; tx++) if (GROUND[ty][tx] === T.BRIDGE) tiles.push([tx, ty]);
+  for (let ty = 0; ty < MAP_H; ty++) for (let tx = 0; tx < MAP_W; tx++) if (GROUND[ty][tx] === T.BRIDGE || isLanding(tx, ty)) tiles.push([tx, ty]);
   tiles.sort((a, b) => a[0] + a[1] - (b[0] + b[1]));
   for (const [tx, ty] of tiles) {
     let waterIdx = T.WATER as number;
     for (const [i, j] of [[tx, ty - 1], [tx, ty + 1], [tx - 1, ty], [tx + 1, ty]]) if (gnd(i, j) === T.WATER) { waterIdx = ground[j][i]; break; }
-    out[ty][tx] = waterIdx;
+    if (!isLanding(tx, ty)) out[ty][tx] = waterIdx; // a landing stands on the bank
     const w: Sides = { n: isWater(tx, ty - 1), e: isWater(tx + 1, ty), s: isWater(tx, ty + 1), w: isWater(tx - 1, ty) };
     const br: Sides = { n: isBridge(tx, ty - 1), e: isBridge(tx + 1, ty), s: isBridge(tx, ty + 1), w: isBridge(tx - 1, ty) };
     const openX = !w.e || !w.w, openY = !w.n || !w.s;
