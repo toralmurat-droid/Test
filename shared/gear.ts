@@ -74,6 +74,7 @@ export const TIER_NAMES = ["", "Common", "Rare", "Epic"];
 export const GEAR_DROP: Record<MobKind, { chance: number; tiers: [number, number, number] }> = {
   slime: { chance: 0.06, tiers: [0.85, 0.15, 0] },
   skeleton: { chance: 0.15, tiers: [0.5, 0.38, 0.12] },
+  crawler: { chance: 0.02, tiers: [1, 0, 0] },
   motherblob: { chance: 0.25, tiers: [0.45, 0.4, 0.15] },
   blobling: { chance: 0.01, tiers: [1, 0, 0] },
   shooterblob: { chance: 0.08, tiers: [0.75, 0.22, 0.03] },

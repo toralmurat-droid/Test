@@ -28,7 +28,7 @@ export interface InputState {
   right: boolean;
 }
 
-export type MobKind = "slime" | "skeleton" | "motherblob" | "blobling" | "shooterblob" | "warriorblob" | "healerblob" | "bandit" | "skeletonmage" | "necromancer";
+export type MobKind = "slime" | "skeleton" | "motherblob" | "blobling" | "shooterblob" | "warriorblob" | "healerblob" | "bandit" | "skeletonmage" | "necromancer" | "crawler";
 
 export interface MobDef {
   name: string;
@@ -43,7 +43,7 @@ export interface MobDef {
 
 export const MOBS: Record<MobKind, MobDef> = {
   slime: { name: "Slime", maxHp: 40, speed: 45, damage: 8, attackCooldownMs: 1000, aggroRange: 80, leash: 140, xp: 10 },
-  skeleton: { name: "Skeleton", maxHp: 80, speed: 62, damage: 14, attackCooldownMs: 900, aggroRange: 110, leash: 200, xp: 25 },
+  skeleton: { name: "Skeleton", maxHp: 80, speed: 62, damage: 19, attackCooldownMs: 900, aggroRange: 110, leash: 200, xp: 25 },
   // Big, slow slime that buds off bloblings now and then (see BROOD)
   motherblob: { name: "Mother Blob", maxHp: 200, speed: 28, damage: 12, attackCooldownMs: 1300, aggroRange: 70, leash: 120, xp: 60 },
   // Tiny, quick, fragile children of a Mother Blob; they never respawn on their own
@@ -55,8 +55,9 @@ export const MOBS: Record<MobKind, MobDef> = {
   // Outlaws of Redfang Hollow: quick, hit hard, hood and red bandana
   bandit: { name: "Bandit", maxHp: 95, speed: 64, damage: 15, attackCooldownMs: 950, aggroRange: 120, leash: 200, xp: 30 },
   // Higher skeleton zones: a robed caster that throws magic bolts from range, and the elite Necromancer (see SKELETON_AI)
-  skeletonmage: { name: "Skeleton Mage", maxHp: 60, speed: 50, damage: 13, attackCooldownMs: 1900, aggroRange: 140, leash: 200, xp: 32 },
-  necromancer: { name: "Necromancer", maxHp: 520, speed: 38, damage: 18, attackCooldownMs: 1700, aggroRange: 150, leash: 230, xp: 240 },
+  skeletonmage: { name: "Skeleton Mage", maxHp: 60, speed: 50, damage: 17, attackCooldownMs: 1900, aggroRange: 140, leash: 200, xp: 32 },
+  necromancer: { name: "Necromancer", maxHp: 520, speed: 38, damage: 22, attackCooldownMs: 1700, aggroRange: 150, leash: 230, xp: 240 },
+  crawler: { name: "Crawling Skeleton", maxHp: 26, speed: 30, damage: 13, attackCooldownMs: 1000, aggroRange: 120, leash: 220, xp: 6 },
 };
 
 /** Elite monsters: much tougher than the rest of their zone, with a bigger look and an "Elite" tag. */
@@ -107,6 +108,12 @@ export const BLOB_AI = {
  * Blobs and the undead hate each other (Murat): where they meet they fight. A monster with no hero to fight
  * picks the nearest enemy of the other side within `range` px, and kills between monsters drop no loot or XP.
  */
+/**
+ * Skeletons (Murat 2026-11-03): a killed skeleton may break in two and its upper body crawls on fighting
+ * (`crawlChance`, appears after `crawlDelayMs`). Two or more skeletons on one hero spread out around him
+ * and close in from different sides (`flankTurn` = max radians they swing round per step of approach).
+ */
+export const BONES = { crawlChance: 0.35, crawlDelayMs: 650, flankTurn: 0.9, flankRadius: 0.8 };
 export const FEUD = { range: 90, dmgMult: 1 };
 
 /**
@@ -132,7 +139,7 @@ export function aggroLevelFactor(lvl: number, targetLvl: number) {
 }
 export const FACTION: Partial<Record<MobKind, "blob" | "undead">> = {
   slime: "blob", blobling: "blob", motherblob: "blob", shooterblob: "blob", warriorblob: "blob", healerblob: "blob",
-  skeleton: "undead", skeletonmage: "undead", necromancer: "undead",
+  skeleton: "undead", skeletonmage: "undead", necromancer: "undead", crawler: "undead",
 };
 
 /**

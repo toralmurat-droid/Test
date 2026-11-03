@@ -36,6 +36,7 @@ export const heroPoise = (cls: ClassKind, level: number) => Math.round(HERO_POIS
 export const MOB_COMBAT: Record<MobKind, { poise: number; windupMs: number }> = {
   slime: { poise: 30, windupMs: 350 },
   skeleton: { poise: 55, windupMs: 300 },
+  crawler: { poise: 20, windupMs: 320 },
   motherblob: { poise: 110, windupMs: 500 },
   blobling: { poise: 8, windupMs: 220 },
   shooterblob: { poise: 25, windupMs: 450 },
