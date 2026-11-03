@@ -103,3 +103,5 @@
 #chestprompt.open { display: block; }
 #chestprompt kbd { display: inline-block; padding: 0 5px; margin-right: 4px; border: 1px solid #e9c35a; border-radius: 3px; background: #4a3410; color: #fff; font: bold 13px var(--pixel-font); }
 #chestprompt .lv { color: #e9c35a; margin-left: 4px; }
+#chestprompt.locked { cursor: default; border-color: #8a6a3a; color: #d8c8a8; }
+#chestprompt .why { display: block; margin-top: 2px; color: #ff9d7a; font-weight: normal; }
