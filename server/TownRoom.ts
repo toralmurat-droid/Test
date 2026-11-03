@@ -2,7 +2,7 @@ import type { IncomingMessage } from "node:http";
 import { Client, Room } from "colyseus";
 import { ArraySchema, MapSchema, Schema, type } from "@colyseus/schema";
 import {
-  BLOB_AI, BROOD, Dir, MERGE, MOTHER, SKELETON_AI, HIT_RADIUS, mobScale, InputState, MOB_ATTACK_RANGE, MOBS, MobKind, rollSkeletonWeapon, SKELETON_BOW, SKELETON_WEAPONS, SkeletonWeapon, REGEN_DELAY_MS, REGEN_RAMP_MS, regenFromStamina, SAFE_REGEN_MULT,
+  BLOB_AI, BROOD, Dir, FACTION, FEUD, MERGE, MobDef, MOTHER, SKELETON_AI, HIT_RADIUS, mobScale, InputState, MOB_ATTACK_RANGE, MOBS, MobKind, rollSkeletonWeapon, SKELETON_BOW, SKELETON_WEAPONS, SkeletonWeapon, REGEN_DELAY_MS, REGEN_RAMP_MS, regenFromStamina, SAFE_REGEN_MULT,
   RESPAWN_MS, TICK_RATE, TILE,
 } from "../shared/constants";
 import {
@@ -130,6 +130,7 @@ export class Mob extends Schema {
   mergeCap = 0; // most blobs this one may hold (set at its first call)
   canShoot = false; canCharge = false; canHeal = false; // abilities picked up by merging
   nextCall = 0; nextShot = 0;
+  foe = ""; nextFoeScan = 0; // blob vs undead feud (FEUD): the monster it is fighting
 
   spot = ""; // hiding spot (tile "x,y") it is heading to or sitting in
   spotX = 0; spotY = 0; outX = 0; outY = 0; // spot centre, and the walkable tile it steps in/out from
@@ -319,6 +320,7 @@ function toward(x: number, y: number, tx: number, ty: number): InputState {
   return { right: dx > 2, left: dx < -2, down: dy > 2, up: dy < -2 };
 }
 
+const FEUD_CELL = 128; // px, >= FEUD.range
 /** Monsters with no player within this many px (square) doze until someone comes by. */
 const SLEEP_RANGE = 40 * TILE;
 
@@ -558,6 +560,7 @@ export class TownRoom extends Room<TownState> {
     m.target = "";
     m.hidden = false; m.spot = ""; m.fleeing = false;
     m.specialKind = ""; m.specialAt = 0; m.nextBounce = 0; m.nextSlam = 0; m.nextRaise = 0; m.nextCircle = 0;
+    m.foe = ""; m.nextFoeScan = 0;
     m.merged = 1; m.parts = ""; m.summonFor = ""; m.mergeInto = ""; m.mergeCap = 0; m.nextCall = 0; m.nextShot = 0;
     m.canShoot = kind === "shooterblob"; m.canCharge = kind === "warriorblob"; m.canHeal = kind === "healerblob";
     if (kind === "motherblob") m.nextBrood = Date.now() + BROOD.minMs + Math.random() * (BROOD.maxMs - BROOD.minMs);
@@ -705,6 +708,55 @@ export class TownRoom extends Room<TownState> {
     m.winding = true;
     this.broadcast("mbwind", { id, kind: m.specialKind, ms: m.specialKind === "slam" ? MOTHER.slam.windupMs : MOTHER.bounce.windupMs });
     return true;
+  }
+
+  // ---- Blob vs undead feud ------------------------------------------------------
+
+  /** The enemy monster this one is fighting, if it is still there to fight. */
+  private foeOf(m: Mob, def: MobDef): Mob | undefined {
+    const o = m.foe ? this.state.mobs.get(m.foe) : undefined;
+    if (o && !o.dead && !o.hidden && Math.hypot(m.x - m.homeX, m.y - m.homeY) <= def.leash && Math.hypot(o.x - m.x, o.y - m.y) <= FEUD.range * 2) return o;
+    m.foe = "";
+    return undefined;
+  }
+
+  /** Look around for the nearest monster of the other side. */
+  private findFoe(m: Mob, now: number) {
+    m.nextFoeScan = now + FEUD.scanMs * (0.7 + Math.random() * 0.6);
+    const side = FACTION[m.kind];
+    if (!side || m.mergeInto || m.summonFor) return;
+    let best = FEUD.range;
+    const cx = Math.floor(m.x / FEUD_CELL), cy = Math.floor(m.y / FEUD_CELL);
+    for (let gy = cy - 1; gy <= cy + 1; gy++) for (let gx = cx - 1; gx <= cx + 1; gx++) {
+      for (const [oid, o] of this.feudGrid.get(gx * 4096 + gy) ?? []) {
+        if (FACTION[o.kind] === side || o.dead || o.hidden || o.mergeInto) continue;
+        const d = Math.hypot(o.x - m.x, o.y - m.y);
+        if (d < best) { best = d; m.foe = oid; }
+      }
+    }
+  }
+
+  /** Blobs and undead by map cell, rebuilt every tick, so a monster only checks its neighbours for a foe. */
+  private feudGrid = new Map<number, [string, Mob][]>();
+  private buildFeudGrid() {
+    this.feudGrid.clear();
+    this.state.mobs.forEach((o, oid) => {
+      if (o.dead || o.summonFor || !FACTION[o.kind]) return;
+      const k = Math.floor(o.x / FEUD_CELL) * 4096 + Math.floor(o.y / FEUD_CELL);
+      const cell = this.feudGrid.get(k);
+      if (cell) cell.push([oid, o]); else this.feudGrid.set(k, [[oid, o]]);
+    });
+  }
+
+  /** A monster's blow on another monster: no loot and no XP when it dies; the victim fights back. */
+  private mobHitsMob(m: Mob, id: string, o: Mob, oid: string, dmg: number) {
+    o.hp -= dmg;
+    if (!o.target && !o.foe) o.foe = id;
+    const d = Math.hypot(o.x - m.x, o.y - m.y) || 1;
+    const k = moveStep(o.x, o.y, pushInput([(o.x - m.x) / d, (o.y - m.y) / d]), 0.05);
+    if (!isSafeZone(k.x, k.y) && !noMobsAt(k.x, k.y)) { o.x = k.x; o.y = k.y; }
+    this.broadcast("hit", { id: oid, dmg, crit: false, dot: false });
+    if (o.hp <= 0) { this.mobDied(o, oid, id, MOBS[m.kind].name); m.foe = ""; }
   }
 
   // ---- Blob merging -----------------------------------------------------------
@@ -862,6 +914,7 @@ export class TownRoom extends Room<TownState> {
       this.pickUp(p, pid);
     });
     this.state.items.forEach((it, id) => { if (now > it.expires) this.state.items.delete(id); });
+    this.buildFeudGrid();
     this.state.mobs.forEach((m, id) => {
       tickUnit(this.host, id);
       const fx = statusOf(m, now);
@@ -949,6 +1002,13 @@ export class TownRoom extends Room<TownState> {
       });
     }
 
+    // No hero to fight: blobs and undead go for each other (FEUD)
+    let foe: Mob | undefined;
+    if (!t && FACTION[m.kind]) {
+      foe = this.foeOf(m, def);
+      if (!foe && now >= m.nextFoeScan) { this.findFoe(m, now); foe = this.foeOf(m, def); }
+    } else if (t) m.foe = "";
+
     // Dizzy: run for the nearest grave/tree if there is one
     if (t && m.broken && !m.spot && HIDE.spots[m.kind]) this.claimSpot(m, m.x, m.y, HIDE.fleeRadius, now, true);
     // Heading for a hiding spot (a calm monster forgets it as soon as it has someone to fight)
@@ -1029,6 +1089,25 @@ export class TownRoom extends Room<TownState> {
       } else {
         input = toward(m.x, m.y, t.x, t.y);
       }
+    } else if (foe && !m.broken) {
+      // Fighting a monster of the other side: walk up and hit it (everyone brawls here, no special moves)
+      const dist = Math.hypot(foe.x - m.x, foe.y - m.y);
+      const melee = meleeOf(m);
+      if (dist <= melee.range || m.windUntil) {
+        input = STILL;
+        m.dir = Math.abs(foe.x - m.x) > Math.abs(foe.y - m.y) ? (foe.x > m.x ? "right" : "left") : (foe.y > m.y ? "down" : "up");
+        if (m.windUntil) {
+          if (now >= m.windUntil) {
+            m.windUntil = 0; m.winding = false; m.lastAttack = now;
+            if (dist <= melee.range + 6) {
+              this.broadcast("swing", { id });
+              this.mobHitsMob(m, id, foe, m.foe, Math.round(def.damage * melee.dmg * mobScale(m.level, "damage") * FEUD.dmgMult));
+            }
+          }
+        } else if (now - m.lastAttack >= def.attackCooldownMs * melee.cooldown) {
+          m.windUntil = now + melee.windupMs; m.winding = true;
+        }
+      } else input = toward(m.x, m.y, foe.x, foe.y);
     } else if (Math.hypot(m.x - m.homeX, m.y - m.homeY) > 40) {
       input = toward(m.x, m.y, m.homeX, m.homeY); // walk back home
     } else {
@@ -1043,7 +1122,7 @@ export class TownRoom extends Room<TownState> {
     }
 
     const charge = now < m.chargeUntil ? BLOB_AI.warrior.chargeMult : 1;
-    const speed = (t ? def.speed * (m.broken ? POISE.fleeSpeed : 1) * charge : def.speed * 0.5) * (m.slowed ? SLOW_MOB : 1);
+    const speed = (t || foe ? def.speed * (m.broken ? POISE.fleeSpeed : 1) * charge : def.speed * 0.5) * (m.slowed ? SLOW_MOB : 1);
     const r = moveStep(m.x, m.y, input, dt, speed);
     if (!isSafeZone(r.x, r.y) && !noMobsAt(r.x, r.y)) { m.x = r.x; m.y = r.y; }
     m.moving = r.moving;
@@ -1365,11 +1444,16 @@ export class TownRoom extends Room<TownState> {
     }
     this.broadcast("hit", { id: targetId, dmg, crit: !!opts.crit, dot: !!opts.dot });
     if (m.hp > 0) { afterHit(this.host, attackerId, targetId, opts); return; }
-    m.dead = true;
     if (a) this.questKill(attackerId, a, m);
-    m.hidden = false; m.spot = ""; m.fleeing = false;
     this.grantXp(attackerId, Math.round(def.xp * mobScale(m.level, "xp")), m);
     this.dropLoot(m.kind, m.x, m.y, mobScale(m.level, "gold"), m.level);
+    this.mobDied(m, targetId, attackerId, a?.name ?? "");
+  }
+
+  /** A monster is down: its raised dead crumble, it leaves its zone (which brings a fresh one back later). */
+  private mobDied(m: Mob, targetId: string, attackerId: string, killerName: string) {
+    m.dead = true; m.hp = 0;
+    m.hidden = false; m.spot = ""; m.fleeing = false; m.foe = "";
     if (m.kind === "necromancer") {
       // Its raised skeletons fall apart with it
       this.state.mobs.forEach((c, cid) => {
@@ -1385,7 +1469,7 @@ export class TownRoom extends Room<TownState> {
       // Last monster of the zone down: tell everyone (the killer gets a big banner)
       if (zone.alive <= 0) {
         const z = SPAWN_ZONES[m.zone];
-        this.broadcast("zonecleared", { zone: z.name, by: attackerId, name: a?.name ?? "", respawnSec: Math.round(z.respawnMs / 1000) });
+        this.broadcast("zonecleared", { zone: z.name, by: attackerId, name: killerName, respawnSec: Math.round(z.respawnMs / 1000) });
       }
     }
   }

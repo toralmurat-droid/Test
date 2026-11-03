@@ -104,6 +104,16 @@ export const BLOB_AI = {
 };
 
 /**
+ * Blobs and the undead hate each other (Murat): where they meet they fight. A monster with no hero to fight
+ * picks the nearest enemy of the other side within `range` px, and kills between monsters drop no loot or XP.
+ */
+export const FEUD = { range: 90, scanMs: 600, dmgMult: 1 };
+export const FACTION: Partial<Record<MobKind, "blob" | "undead">> = {
+  slime: "blob", blobling: "blob", motherblob: "blob", shooterblob: "blob", warriorblob: "blob", healerblob: "blob",
+  skeleton: "undead", skeletonmage: "undead", necromancer: "undead",
+};
+
+/**
  * Blob merging (Murat): a blob in danger (hurt, or facing several heroes) calls the blobs around it, and they
  * melt into one big blob. Levels, HP and abilities (shoot, charge, heal) add up. At most 5 blobs merge into a
  * blob below Lv 10, up to 10 into a higher one. Mother Blobs don't merge (bloblings do).
