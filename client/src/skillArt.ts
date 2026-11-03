@@ -552,17 +552,17 @@ const ART: Record<string, Draw> = {
     for (const [x, y] of [[5, 12], [12, 15], [18, 11], [8, 19], [16, 20], [20, 17], [3, 18]]) { p.spark(x, y, 1, ICE[3], "#ffffff"); }
     for (const [x, y] of [[9, 11], [14, 18], [21, 21]]) p.line(x, y, x - 2, y + 2, ICE[2]);
   },
-  w_spinshard: (p) => {
-    // four curved ice blades whirling around a bright core, with motion arcs
-    for (let k = 0; k < 4; k++) {
-      const a = k * Math.PI / 2 + 0.3, c = Math.cos(a), s = Math.sin(a);
-      p.poly([[12 + c * 10, 12 + s * 10], [12 - s * 3, 12 + c * 3], [12 + s * 1, 12 - c * 1]], ICE[2]);
-      p.line(12, 12, 12 + c * 9, 12 + s * 9, ICE[3]);
+  w_frozenorb: (p) => {
+    // an ice orb flying right, trailing frost, with small blasts of ice bursting off its path
+    for (const [x, y] of [[5, 7], [4, 17]]) { p.spark(x, y, 2, ICE[2], "#ffffff"); }
+    p.thick(2, 12, 11, 12, 3, ICE[1]); p.line(3, 12, 11, 12, ICE[2]);
+    for (let k = 0; k < 6; k++) {
+      const a = k * Math.PI / 3, c = Math.cos(a), s = Math.sin(a);
+      p.poly([[15 + c * 9, 12 + s * 9], [15 - s * 1.6, 12 + c * 1.6], [15 + s * 1.6, 12 - c * 1.6]], ICE[2]);
     }
-    p.disc(12, 12, 2.5, ICE[3]);
+    p.ball(15, 12, 5, ICE);
     p.outline();
-    p.ring(12, 12, 11, ICE[1], 0.5, 1.6); p.ring(12, 12, 11, ICE[1], 3.6, 4.7);
-    p.disc(12, 12, 1, "#ffffff"); p.spark(20, 4, 1, "#ffffff");
+    p.disc(13, 10, 1.5, "#ffffff");
   },
   // ===== Wizard: Storm =====
   w_missiles: (p) => {

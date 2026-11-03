@@ -14,7 +14,7 @@ import { attackMult, cooldownMult, critChance, heroSpeed, magicMult, maxHpFromSt
 import { activeSkills, canLearn, SKILLS, SkillDef, talentBonus, talentMult, talentReduce } from "../../shared/skills";
 import {
   afterHit, atkSpeedMult, blocking, buffLifesteal, buffRegen, castSkill, ccImmune, charging, cooldownLeft, counterHit, dealtMult, FieldInst, HitOpts,
-  newRuntime, shotEnd, shotHit, ShotSpec, SkillHost, speedMult, takenMult, tickField, tickUnit,
+  newRuntime, shotEnd, shotHit, shotPulse, ShotSpec, SkillHost, speedMult, takenMult, tickField, tickUnit,
 } from "../../shared/skillEngine";
 import { Equipped, GEAR, gearBlock, gearReachMult, gearSpeedMult, gearStats } from "../../shared/gear";
 import { heroPoise, POISE, poiseLevelMult, poiseSpeed } from "../../shared/combat";
@@ -28,7 +28,7 @@ const KB_PX = PLAYER_SPEED * 0.12; // knockback distance per kb unit (moveStep(.
 
 type Ranks = Record<string, number>;
 type Build = 0 | 1 | 2; // the branch the build rushes up first
-interface Shot { owner: F; x: number; dir: number; speed: number; range: number; traveled: number; radius: number; dmg: number; kb: number; miss: boolean; hit: boolean; basic: boolean; spec?: ShotSpec; pierced: boolean }
+interface Shot { owner: F; x: number; dir: number; speed: number; range: number; traveled: number; pulsed?: number; radius: number; dmg: number; kb: number; miss: boolean; hit: boolean; basic: boolean; spec?: ShotSpec; pierced: boolean }
 interface Pending { at: number; fn: () => void }
 
 class F {
@@ -338,6 +338,7 @@ export class Duel {
       for (let i = 0; i < n && !s.hit; i++) {
         s.x += s.dir * total / n; s.traveled += total / n;
         if (s.traveled >= s.range) { s.hit = true; if (s.spec) shotEnd(this.host, s.spec, s.x, 0); break; }
+        if (s.spec?.pulse && s.traveled - (s.pulsed ?? 0) >= s.spec.pulse.every) { s.pulsed = s.traveled; shotPulse(this.host, s.spec, s.x, 0); }
         const t = this.other(s.owner);
         if (!t.dead && !s.miss && !s.pierced && Math.abs(t.x - s.x) <= s.radius + HIT_RADIUS && now >= t.invulnUntil) {
           if (s.spec) {

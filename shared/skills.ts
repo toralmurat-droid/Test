@@ -58,6 +58,7 @@ export interface ShotDef extends HitEffects {
   explode?: number; // radius of the blast where it stops
   chain?: number; // jumps to this many more enemies nearby (lightning)
   field?: FieldDef; // leaves a ground effect where it stops
+  pulse?: { every: number; area: AreaDef }; // sets off `area` where it is, every `every` px it flies (Frozen Orb)
 }
 
 export interface MoveDef {
@@ -286,9 +287,10 @@ const S: Record<ClassKind, SkillDef[]> = <Record<ClassKind, SkillDef[]>><unknown
     { id: "w_blizzard", name: "Blizzard", type: "Ultimate", branch: 1, row: 4, style: "frost", cd: 20000, cost: 50, chargeMs: 300,
       desc: "Summon a blizzard ahead for 5s: ice rains down, hurting and slowing everyone inside.",
       field: { kind: "blizzard", r: 70, ahead: 56, ms: 5000, tickMs: 500, dmg: 11, slowMs: 900 } },
-    { id: "w_spinshard", name: "Spinning Ice Shard", type: "Attack", branch: 1, row: 4, style: "frost", cd: 0, cost: 10,
-      desc: "Hurl a whirling star of ice that flies very far: it cuts through up to 3 enemies and slows them. No cooldown: cast it as fast as your magic lasts.",
-      shots: { kind: "spinshard", speed: 340, range: 450, radius: 6, size: 1.6, dmg: 20, pierce: 2, slowMs: 1000, kb: 0.4 } },
+    { id: "w_frozenorb", name: "Frozen Orb", type: "Attack", branch: 1, row: 4, style: "frost", cd: 0, cost: 2,
+      desc: "Launch an orb of frozen magic that flies straight and very far through enemies. Every few steps it bursts with ice around it, and at the end it blows up in a big frost blast. No cooldown: cast it as fast as your magic lasts.",
+      shots: { kind: "frozenorb", speed: 200, range: 450, radius: 7, size: 1.6, dmg: 10, pierce: 99, slowMs: 1000, kb: 0.2, explode: 56,
+        pulse: { every: 50, area: { r: 30, dmg: 9, slowMs: 900, look: "nova" } } } },
 
     // Storm / arcane
     { id: "w_missiles", name: "Arcane Missiles", type: "Attack", branch: 2, row: 0, style: "arcane", cd: 4000, cost: 20,
@@ -446,7 +448,7 @@ const TREE: Record<string, Shape> = {
   w_nova: [1, undefined, ["mag", 3]], w_shards: [3, "w_nova", ["dex", 3]], w_armor: [7, "w_shards"], w_mirror: [10, "w_shards"],
   w_blizzard: [20, "w_mirror", ["mag", 4]],
   // the highest skill of the wizard: forks off Mirror Ice next to the Blizzard
-  w_spinshard: [26, "w_mirror", ["mag", 3]],
+  w_frozenorb: [26, "w_mirror", ["mag", 3]],
   // Wizard · Storm: one long limb, Mana Flow off the root
   w_missiles: [2, undefined, ["dex", 3]], w_flow: [12, "w_missiles"], w_blink: [5, "w_missiles", ["mag", 3]],
   w_static: [9, "w_blink", ["mag", 3]], w_storm: [24, "w_static", ["mag", 4]],
