@@ -2124,14 +2124,11 @@ export class TownRoom extends Room<TownState> {
 
   /**
    * Test command "/max": the hero jumps to the max level, learns every skill at max rank (actives go on free keys),
-   * spreads all stat points over the 4 stats, and gets full potions and gold. Only for account names listed in the TESTERS environment variable
-   * (comma separated, e.g. TESTERS=Clement,Murat). Off when TESTERS is not set. Saved like normal progress.
+   * spreads all stat points over the 4 stats, and gets full potions and gold. Any player can use it. Saved like normal progress.
    */
   private maxHero(client: Client) {
     const p = this.state.players.get(client.sessionId);
     if (!p) return;
-    const testers = String(process.env.TESTERS ?? "").split(",").map((n) => n.trim().toLowerCase()).filter(Boolean);
-    if (!testers.includes(p.name.toLowerCase())) return;
     const from = p.level;
     p.xp = MAX_XP;
     p.level = levelFromXp(MAX_XP);

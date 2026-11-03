@@ -42,11 +42,9 @@ You don't need to touch the server. Railway's **Deployments** tab shows each upd
 
 ## Test heroes (`/max`)
 
-To try every skill on the live game: Railway → service → **Variables** → add `TESTERS` with your account names,
-comma separated (e.g. `TESTERS=Clement,Murat`). Railway restarts the game. Then log in with one of those names and
-type `/max` in chat: the hero goes to level 99, learns every skill at max rank (actives go on keys 1-0), spreads
-all stat points over the 4 stats, and gets full potions and 100000 gold. It is saved like normal progress, per class
-(do it once on each class). Other players typing `/max` get nothing. Remove the variable to turn it off.
+Any player can type `/max` in chat: the hero they are playing goes to level 99, learns every skill at max rank
+(actives go on keys 1-0), spreads all stat points over the 4 stats, and gets full potions and 100000 gold.
+It is saved like normal progress, per class (do it once on each class).
 
 ## Good to know
 
