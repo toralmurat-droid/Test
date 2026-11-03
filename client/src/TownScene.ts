@@ -1899,7 +1899,7 @@ export class TownScene extends Phaser.Scene {
     }
 
     const meEnt = this.entities.get(this.me);
-    const others = [...this.entities].filter(([id, e]) => id !== this.me && !e.mob).map(([, e]) => e.sprite);
+    const others = [...this.entities].filter(([id, e]) => id !== this.me && !e.mob).map(([, e]) => ({ x: e.sprite.x, y: e.sprite.y, name: e.state?.name as string | undefined }));
     this.minimap?.draw(now, meEnt?.sprite, others);
     this.dial?.draw(now);
     if (meEnt) this.showArea(areaAt(meEnt.sprite.x, meEnt.sprite.y));
