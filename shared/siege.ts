@@ -2,6 +2,7 @@ import { TILE } from "./constants";
 import { AREAS, EMPTY, GROUND, OBJECTS, SIGNPOSTS, T } from "./map";
 import { NPCS, NPC_DECOR } from "./npcs";
 import { CHESTS } from "./chests";
+import { ENGINES } from "./quests";
 
 /**
  * The necromancer's war works. Skeletons were raised by a powerful necromancer to conquer the world: they don't
@@ -82,6 +83,19 @@ function buildSites(): SiegeSite[] {
 }
 
 export const SIEGE_SITES = buildSites();
+
+// The skeleton quest "Engines of the Dead" burns the engines at Stonecrag Quarry (shared/quests.ts ENGINES):
+// put its objects on those sites (quests.ts can't import this file: we need the chests, which need the quests).
+const NAMES: Record<EngineKind, string> = { catapult: "Half-built catapult", ram: "Half-built battering ram", tower: "Half-built siege tower" };
+{
+  const quarry = SIEGE_SITES.filter((s) => s.zone === "Stonecrag Quarry");
+  if (quarry.length) ENGINES.length = Math.min(ENGINES.length, quarry.length); // the step's goal follows the sites
+  quarry.forEach((s, i) => {
+    const o = ENGINES[i];
+    if (!o) return;
+    o.x = s.x; o.y = s.y + TILE * 0.6; o.name = NAMES[s.engine]; // just in front of it, where a hero can reach
+  });
+}
 
 function buildSlots(): WorkSlot[] {
   const out: WorkSlot[] = [];

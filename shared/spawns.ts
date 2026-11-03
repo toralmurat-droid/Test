@@ -33,7 +33,7 @@ export function noMobsAt(px: number, py: number): boolean {
 }
 
 /** Monsters per area. Rects come from the map's AREAS (shared/map.ts), so zones follow the map layout. */
-const ZONE_MOBS: { name: string; mobs: Partial<Record<MobKind, number>>; respawnMs: number; wild?: boolean; fixed?: boolean }[] = [
+const ZONE_MOBS: { name: string; mobs: Partial<Record<MobKind, number>>; respawnMs: number; wild?: boolean; fixed?: boolean; levels?: [number, number] }[] = [
   // Levels come from the distance to Oakvale (see zoneLevels)
   // Blob zones above Lv 3 add shooter + warrior blobs, above Lv 5 healer blobs too.
   // Skeleton zones from Lv 5 add skeleton mages; the deepest ones (Barrow Downs, the Keep) an elite Necromancer too.
@@ -42,14 +42,17 @@ const ZONE_MOBS: { name: string; mobs: Partial<Record<MobKind, number>>; respawn
   { name: "Goldenreach Farms", mobs: { slime: 18, motherblob: 2 }, respawnMs: 4500 },
   { name: "Mirror Pond", mobs: { slime: 8, shooterblob: 3, warriorblob: 3, motherblob: 2 }, respawnMs: 5250 },
   { name: "Misty Marsh", mobs: { slime: 15, motherblob: 2 }, respawnMs: 4500 },
-  { name: "Stonecrag Quarry", mobs: { skeleton: 10 }, respawnMs: 7500 },
-  { name: "Old Ruins", mobs: { skeleton: 12 }, respawnMs: 8250 },
-  { name: "Old Watchtower", mobs: { skeleton: 7, skeletonmage: 3 }, respawnMs: 8250 },
+  // The undead are the Pale Marshal's army (skeleton quest chain): their zones have set levels, a step tougher than
+  // the blobs around them, so the chain starts mid-way through the blob story and climbs along beside it (Murat 2026-11-03).
+  { name: "Stonecrag Quarry", mobs: { skeleton: 10 }, respawnMs: 7500, levels: [6, 8] },
+  { name: "Old Ruins", mobs: { skeleton: 10, skeletonmage: 3 }, respawnMs: 8250, levels: [8, 10] },
+  { name: "Old Watchtower", mobs: { skeleton: 7, skeletonmage: 3 }, respawnMs: 8250, levels: [10, 12] },
   // The wider world: further from Oakvale, tougher monsters
   { name: "Sunken Lake", mobs: { slime: 8, shooterblob: 4, warriorblob: 4, healerblob: 3, motherblob: 2 }, respawnMs: 6000 },
-  { name: "Barrow Downs", mobs: { skeleton: 14, skeletonmage: 5, necromancer: 1 }, respawnMs: 6750 },
+  { name: "Barrow Downs", mobs: { skeleton: 14, skeletonmage: 5, necromancer: 1 }, respawnMs: 6750, levels: [12, 14] },
+  { name: "Gravemoor Cemetery", mobs: { skeleton: 14, skeletonmage: 5, necromancer: 2 }, respawnMs: 6750, levels: [15, 17] },
   { name: "Thornwood", mobs: { slime: 8, shooterblob: 6, warriorblob: 6, healerblob: 4, motherblob: 2 }, respawnMs: 6000 },
-  { name: "Greywatch Keep", mobs: { skeleton: 11, skeletonmage: 5, necromancer: 2 }, respawnMs: 8250 },
+  { name: "Greywatch Keep", mobs: { skeleton: 11, skeletonmage: 5, necromancer: 2 }, respawnMs: 8250, levels: [18, 20] },
   // The coast and the far east (Saltmere itself stays monster-free, see NO_MOB_AREAS)
   // Redfang Hollow is a small organised camp (shared/bandits.ts): one bandit per post, no density scaling
   { name: "Redfang Hollow", mobs: { bandit: CAMP_POSTS.length }, respawnMs: 20000, fixed: true },
@@ -116,7 +119,7 @@ export const SPAWN_ZONES: SpawnZone[] = ZONE_MOBS.flatMap((z) => {
   const f = z.fixed ? 1 : Math.max(1, want / base); // fixed: hand-set count
   const mobs: Partial<Record<MobKind, number>> = {};
   for (const [k, n] of Object.entries(z.mobs) as [MobKind, number][]) mobs[k] = k === "necromancer" ? n : k === "motherblob" ? Math.max(n, Math.round(n * f / 4)) : Math.round(n * f); // big ones grow slower
-  const levels: [number, number] = z.wild && hi > 0 ? [lo, hi] : zoneLevels(r);
+  const levels: [number, number] = z.levels ?? (z.wild && hi > 0 ? [lo, hi] : zoneLevels(r));
   return [{ ...z, ...r, mobs, levels, respawnMs: Math.max(800, Math.round(z.respawnMs / f)) }];
 });
 

@@ -1,6 +1,11 @@
 import Phaser from "phaser";
 import { CHAR_SCALE, CHAR_ORIGIN, playCharAnim } from "./artAssets";
-import { allObjects, cocoonPresent, objectDone, QuestObject, QuestState, usableObjects, USE_RANGE } from "../../shared/quests";
+import { allObjects, cocoonPresent, objectDone, QuestObject, Quester, usableObjects, USE_RANGE } from "../../shared/quests";
+
+import "../../shared/siege"; // puts the quest's siege engines (ENGINES) on the skeletons' work sites
+
+type QuestState = Quester;
+import { TILE as TILE_PX } from "../../shared/constants";
 
 /**
  * Quest objects in the world (shared/quests.ts): spirit lanterns in the marsh, rotting shrines in the woods,
@@ -84,7 +89,73 @@ const HEART = [
   ".OOOOOOOOOOOOOOOOOO.",
 ];
 
+// Skeleton chain objects: green signal brazier, crypt seal, the Pale Marshal's phylactery (+ flames on burned siege engines)
+const BEACON = [
+  ".....F....F.....",
+  "....FF...FWF....",
+  "...FWF..FWWF.F..",
+  "..FWWWFFWWWFFWF.",
+  "..FWWWWWWWWWWWF.",
+  "...FWWYWWWYWWF..",
+  "....FWYYYYYWF...",
+  "..KKKKKKKKKKKK..",
+  ".KIIIIIIIIIIIIK.",
+  ".KILIILIILIILIK.",
+  "..KIIIIIIIIIIK..",
+  "...KKKKKKKKKK...",
+  "......KIIK......",
+  ".....KIIIIK.....",
+  "....KIILLIIK....",
+  "...KKKKKKKKKK...",
+];
+const CRYPT = [
+  "...KKKKKKKKKK...",
+  "..KSSSSSSSSSSK..",
+  ".KSLLSSSSSSSSSK.",
+  ".KSKKKKKKKKKKSK.",
+  ".KSKDDDDDDDDKSK.",
+  ".KSKDGDDDDGDKSK.",
+  ".KSKDDDGGDDDKSK.",
+  ".KSKDDGGGGDDKSK.",
+  ".KSKDDDGGDDDKSK.",
+  ".KSKDGDDDDGDKSK.",
+  ".KSKDDDDDDDDKSK.",
+  ".KSKDDDDDDDDKSK.",
+  "KSSSSSSSSSSSSSSK",
+  "KKKKKKKKKKKKKKKK",
+];
+const PHYLAC = [
+  "......KKKK......",
+  ".....KBBBBK.....",
+  "....KBLBBBBK....",
+  "...KKKKKKKKKK...",
+  "...KGGGWGGGGK...",
+  "..KGGWWWWGGGGK..",
+  "..KGWWYWWWGGGK..",
+  "..KGGWWWWGGGGK..",
+  "..KGGGWGGGGGGK..",
+  "...KGGGGGGGGK...",
+  "...KKKKKKKKKK...",
+  "....KBBLBBBK....",
+  "...KBBBBBBBBK...",
+  "..KSSSSSSSSSSK..",
+  ".KSLSSSSSSSSSSK.",
+  "KKKKKKKKKKKKKKKK",
+];
+
 function textures(scene: Phaser.Scene) {
+  // The siege engines themselves are the skeletons' work-site props (siegeArt.ts): a burned one just gets flames
+  rowsTexture(scene, "qobj_engine_fire", BEACON.slice(0, 7), { F: 0xb8461f, W: 0xff8c42, Y: 0xffe08a });
+  const br = { K, I: IRON, L: IRON_L };
+  rowsTexture(scene, "qobj_beacon", BEACON, { ...br, F: 0x2f8f3a, W: 0x7dff6a, Y: 0xe8ffd0 });
+  rowsTexture(scene, "qobj_beacon_out", BEACON.map((r, i) => (i < 7 ? r.replace(/[FWY]/g, ".") : r)), br);
+  const stn = { K, S: 0x8a8f96, L: 0xb9bec4 };
+  rowsTexture(scene, "qobj_crypt", CRYPT, { ...stn, D: 0x14101a, G: 0x5fe36a });
+  rowsTexture(scene, "qobj_crypt_sealed", CRYPT, { ...stn, D: 0x6b7178, G: 0xffd166 });
+  rowsTexture(scene, "qobj_phylactery", PHYLAC, { K, B: 0xd8cfb8, L: 0xf4eedc, S: 0x6b7178, G: 0x2f8f3a, W: 0x7dff6a, Y: 0xe8ffd0 });
+  rowsTexture(scene, "qobj_phylactery_broken", PHYLAC.map((r, i) => (i >= 3 && i <= 9 ? (i % 2 ? r.replace(/[GWY]/g, ".") : r.replace(/[GWY]/g, "B")) : r)),
+    { K, B: 0x8f877a, L: 0xb9b1a0, S: 0x6b7178 });
+
   const lan = { K, I: IRON, W: WOOD, L: WOOD_L };
   rowsTexture(scene, "qobj_lantern_off", LANTERN, { ...lan, G: 0x2d3a40, F: 0x3e4f57 });
   rowsTexture(scene, "qobj_lantern_on", LANTERN, { ...lan, I: IRON_L, G: 0x2f8f9e, F: 0x7ff3ff, W: 0xe8ffff });
@@ -95,6 +166,16 @@ function textures(scene: Phaser.Scene) {
   rowsTexture(scene, "qobj_heart", HEART, { K, P: 0x9b2c6b, L: 0xe26fa8, V: 0x5a1440, D: 0x6b1d4c, O: 0x4f9d3a });
   rowsTexture(scene, "qobj_heart_burnt", HEART, { K, P: 0x3a3436, L: 0x5a5254, V: 0xff8c42, D: 0x2a2426, O: 0x3a3436 });
 }
+
+/** First look and size of each kind, and its look once done. */
+const START: Record<string, string> = {
+  lantern: "qobj_lantern_off", shrine: "qobj_shrine_rot", heart: "qobj_heart",
+  engine: "qobj_engine_fire", beacon: "qobj_beacon", crypt: "qobj_crypt", phylactery: "qobj_phylactery",
+};
+const DONE: Record<string, string> = { engine: "qobj_engine_fire", beacon: "qobj_beacon_out", crypt: "qobj_crypt_sealed", phylactery: "qobj_phylactery_broken" };
+const SCALE: Record<string, number> = { heart: 2, shrine: 1.5, engine: 2.4, beacon: 1.4, crypt: 1.5, phylactery: 1.3 };
+/** Coloured light some objects give off until done. */
+const GLOW: Record<string, number> = { beacon: 0x7dff6a, crypt: 0x5fe36a, phylactery: 0x7dff6a };
 
 interface Drawn { o: QuestObject; img: Phaser.GameObjects.Image; glow?: Phaser.GameObjects.Arc; done?: boolean }
 
@@ -114,9 +195,14 @@ export class QuestObjects {
         scene.tweens.add({ targets: this.goo, scaleX: 1.08, scaleY: 0.94, duration: 700, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
         continue;
       }
-      const key = o.kind === "lantern" ? "qobj_lantern_off" : o.kind === "shrine" ? "qobj_shrine_rot" : "qobj_heart";
-      const img = scene.add.image(o.x, o.y, key).setOrigin(0.5, 1).setScale(o.kind === "heart" ? 2 : o.kind === "shrine" ? 1.5 : 1.4).setDepth(o.y);
+      const key = START[o.kind];
+      const img = scene.add.image(o.x, o.y, key).setOrigin(0.5, 1).setScale(SCALE[o.kind] ?? 1.4).setDepth(o.y);
       const d: Drawn = { o, img };
+      if (o.kind === "engine") { img.setVisible(false).setPosition(o.x, o.y - TILE_PX * 0.6).setDepth(o.y + 40); }
+      if (GLOW[o.kind]) {
+        d.glow = scene.add.circle(o.x, o.y - img.displayHeight * 0.6, 14, GLOW[o.kind], 0.22).setDepth(o.y + 1).setBlendMode(Phaser.BlendModes.ADD);
+        scene.tweens.add({ targets: d.glow, scale: 1.3, alpha: 0.1, duration: 700, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
+      }
       if (o.kind === "heart") scene.tweens.add({ targets: img, scaleX: 2.12, scaleY: 2.2, duration: 450, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
       this.drawn.push(d);
     }
@@ -127,7 +213,8 @@ export class QuestObjects {
     const o = allObjects().find((x) => x.id === id);
     if (!o) return;
     const d = { o };
-    const color = d.o.kind === "lantern" ? 0x7ff3ff : d.o.kind === "shrine" ? 0xffd166 : d.o.kind === "heart" ? 0xff8c42 : 0x9be564;
+    const color = d.o.kind === "lantern" ? 0x7ff3ff : d.o.kind === "shrine" || d.o.kind === "crypt" ? 0xffd166
+      : d.o.kind === "heart" || d.o.kind === "engine" ? 0xff8c42 : d.o.kind === "phylactery" ? 0xe8ffd0 : 0x9be564;
     for (let i = 0; i < 14; i++) {
       const a = Math.random() * Math.PI * 2, r = 8 + Math.random() * 14;
       const sp = this.scene.add.rectangle(d.o.x, d.o.y - 10, 2, 2, color).setDepth(d.o.y + 50);
@@ -158,6 +245,14 @@ export class QuestObjects {
         d.glow?.setVisible(done);
       } else if (d.o.kind === "shrine") {
         d.img.setTexture(done ? "qobj_shrine_clean" : "qobj_shrine_rot");
+      } else if (d.o.kind === "engine") {
+        // flames on the engine once this player burned it (the engine itself is a world prop)
+        d.img.setVisible(done);
+        if (done) this.scene.tweens.add({ targets: d.img, scaleY: 2.8, scaleX: 2.2, duration: 260, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
+        else this.scene.tweens.killTweensOf(d.img);
+      } else if (DONE[d.o.kind]) {
+        d.img.setTexture(done ? DONE[d.o.kind] : START[d.o.kind]);
+        d.glow?.setVisible(!done);
       } else if (d.o.kind === "heart") {
         d.img.setTexture(done ? "qobj_heart_burnt" : "qobj_heart");
         if (done) { this.scene.tweens.killTweensOf(d.img); d.img.setScale(2); }

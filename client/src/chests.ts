@@ -1,6 +1,6 @@
 import Phaser from "phaser";
 import { Chest, chestLock, CHESTS, CHEST_NAMES, CHEST_RANGE, ChestTier } from "../../shared/chests";
-import type { QuestState } from "../../shared/quests";
+import type { Quester as QuestState } from "../../shared/quests";
 import { isoAnchor } from "./iso";
 
 /**

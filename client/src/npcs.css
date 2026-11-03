@@ -105,3 +105,6 @@
 #chestprompt .lv { color: #e9c35a; margin-left: 4px; }
 #chestprompt.locked { cursor: default; border-color: #8a6a3a; color: #d8c8a8; }
 #chestprompt .why { display: block; margin-top: 2px; color: #ff9d7a; font-weight: normal; }
+
+/* One block per quest chain (blob story, skeleton story) */
+#questtracker .qt-block + .qt-block { margin-top: 6px; padding-top: 6px; border-top: 1px solid rgba(255, 209, 102, 0.25); }

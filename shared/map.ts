@@ -474,6 +474,53 @@ function buildWorld() {
   curve([[keep.x + keep.w + 1, keep.y + 8], [216, 68], [228, 84], [band.x + band.w / 2, band.y - 2]], 1);                            // Bandit Trail (keep → Redfang)
   curve([[band.x + band.w / 2, band.y + band.h + 1], [244, 140], [222, 162], [194, 176], [170, 184], [salt.x + salt.w, lane + 1]], 1); // Smugglers' Path (Redfang → Saltmere)
 
+  // Gravemoor Cemetery (deep south-eastern woods): the old valley's great burial ground, walled, with a mausoleum
+  // in the middle and four crypts. The Pale Marshal raises his recruits here (skeleton quest chain, shared/quests.ts).
+  const grave = { x: 182, y: 126, w: 34, h: 28 };
+  disk(grave.x + grave.w / 2, grave.y + grave.h / 2, grave.w / 2 + 4, grave.h / 2 + 4, (x, y, d) => {
+    setO(x, y, d > 0.8 && hash(x, y, 191) < 0.25 ? T.STUMP : EMPTY);
+    if (isGrass(ground[y][x])) setG(x, y, noise(x, y, 4, 192) > 0.74 ? T.DIRT : hash(x, y, 193) < 0.75 ? T.GRASS_DARK : T.TALL_GRASS);
+  });
+  const gcx = grave.x + Math.floor(grave.w / 2), gcy = grave.y + Math.floor(grave.h / 2);
+  // A low crumbling wall, a gate in the south and in the north
+  each(grave.x, grave.y, grave.w, grave.h, (i, j) => {
+    const edge = i === grave.x || j === grave.y || i === grave.x + grave.w - 1 || j === grave.y + grave.h - 1;
+    if (!edge) return;
+    if ((j === grave.y || j === grave.y + grave.h - 1) && Math.abs(i - gcx) <= 1) return; // gates
+    if (noise(i, j, 3, 194) > 0.3) setO(i, j, T.RUIN); else setG(i, j, T.RUBBLE);
+  });
+  // The aisles: a cross of dirt from gate to gate, and one along each side
+  rectG(gcx - 1, grave.y, 3, grave.h, T.DIRT);
+  rectG(grave.x + 1, gcy, grave.w - 2, 1, T.DIRT);
+  // Rows and rows of graves, the dead in ranks
+  for (let gy = grave.y + 2; gy < grave.y + grave.h - 2; gy += 2) for (let gx = grave.x + 2; gx < grave.x + grave.w - 2; gx += 2) {
+    if (Math.abs(gx - gcx) <= 2 || Math.abs(gy - gcy) <= 1) continue;
+    if (hash(gx, gy, 195) < 0.82) setO(gx, gy, T.GRAVE);
+  }
+  // The mausoleum in the middle (doorway south, onto the aisle)
+  const gmau = { x: gcx - 4, y: gcy - 7, w: 9, h: 6 };
+  rectG(gmau.x, gmau.y, gmau.w, gmau.h, T.FLAGS);
+  clearO(gmau.x - 1, gmau.y - 1, gmau.w + 2, gmau.h + 3);
+  for (let i = gmau.x; i < gmau.x + gmau.w; i++) for (let j = gmau.y; j < gmau.y + gmau.h; j++) {
+    const edge = i === gmau.x || j === gmau.y || i === gmau.x + gmau.w - 1 || j === gmau.y + gmau.h - 1;
+    if (!edge) { if (hash(i, j, 196) < 0.12) setG(i, j, T.RUBBLE); continue; }
+    if (j === gmau.y + gmau.h - 1 && Math.abs(i - gcx) <= 1) { setG(i, j, T.FLAGS); continue; }
+    if (noise(i, j, 3, 197) > 0.25) setO(i, j, T.RUIN); else setG(i, j, T.RUBBLE);
+  }
+  setO(gcx, gmau.y + 2, T.GRAVE); // the great tomb
+  // Four crypts, one in each quarter: small walled tombs with a doorway in the south wall (the quest seals it)
+  for (const [fx, fy] of [[0.2, 0.25], [0.8, 0.25], [0.2, 0.78], [0.8, 0.78]] as const) {
+    const cx = grave.x + Math.round(grave.w * fx), cy = grave.y + Math.round(grave.h * fy);
+    clearO(cx - 3, cy - 3, 7, 7);
+    rectG(cx - 2, cy - 2, 5, 5, T.FLAGS);
+    each(cx - 2, cy - 2, 5, 4, (i, j) => {
+      const edge = i === cx - 2 || i === cx + 2 || j === cy - 2 || j === cy + 1;
+      if (edge && !(i === cx && j === cy + 1)) setO(i, j, T.RUIN);
+    });
+    setO(cx, cy - 1, T.GRAVE); // the sarcophagus inside
+  }
+  curve([[gcx, grave.y + grave.h], [gcx + 2, grave.y + grave.h + 6], [204, 167], [208, 169]], 1);  // Gravemoor Lane (to the Smugglers' Path)
+
   // ---------- 12b. Signposts at the gates and road junctions (directions are worked out in SIGNPOSTS) ----------
   const posts: { x: number; y: number; to: string[] }[] = [];
   /** Puts a signpost on the nearest free tile beside (not on) a road, within 3 tiles of (x, y). */
@@ -527,6 +574,7 @@ function buildWorld() {
   graveyard(quarry.x + 20, quarry.y + 5, 3, 176);
   graveyard(keep.x - 3, keep.y + keep.h + 2, 3, 177);
   graveyard(keep.x + keep.w + 2, keep.y - 2, 3, 178);
+  signpost(208, 168, ["Gravemoor Cemetery", "Redfang Hollow", "Saltmere"]);                           // Gravemoor Lane
 
   // ---------- 13. Keep every road clear, with a 1-tile verge ----------
   for (const k of roads) {
@@ -609,6 +657,7 @@ function buildWorld() {
     { name: "Sunken Lake", x: lake.x - lake.rx - 6, y: lake.y - lake.ry - 6, w: lake.rx * 2 + 12, h: lake.ry * 2 + 12, mobs: ["slime"] },
     { name: "Greywatch Keep", x: keep.x - 6, y: keep.y - 6, w: keep.w + 12, h: keep.h + 12, mobs: ["skeleton", "skeletonmage", "necromancer"] },
     { name: "Thornwood", ...thorn, mobs: ["slime"] },
+    { name: "Gravemoor Cemetery", x: grave.x - 3, y: grave.y - 3, w: grave.w + 6, h: grave.h + 6, mobs: ["skeleton", "skeletonmage", "necromancer"] },
     { name: "Saltmere", ...salt },
     { name: "Redfang Hollow", x: band.x - 4, y: band.y - 4, w: band.w + 8, h: band.h + 8, mobs: ["bandit"] },
     { name: "Saltwind Coast", x: 0, y: 184, w: MAP_W, h: MAP_H - 184, mobs: ["slime"] },

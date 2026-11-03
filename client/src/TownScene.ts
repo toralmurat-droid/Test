@@ -1550,7 +1550,7 @@ export class TownScene extends Phaser.Scene {
         // Level tag coloured by how tough it is for me: grey easy, white even, orange tougher, red dangerous
         const diff = (p.level ?? 1) - ((this.room.state as any).players?.get(this.me)?.level ?? 1);
         const col = diff >= 3 ? "#ff5252" : diff >= 1 ? "#ffb74d" : diff >= -2 ? "#ffffff" : "#9e9e9e";
-        const txt = BOSS[p.kind as keyof typeof BOSS] ? `Boss Lv${p.level ?? 1}` : ELITE[p.kind as keyof typeof ELITE] ? `Elite Lv${p.level ?? 1}` : `Lv${p.level ?? 1}`;
+        const txt = p.title ? `${p.title} Lv${p.level ?? 1}` : BOSS[p.kind as keyof typeof BOSS] ? `Boss Lv${p.level ?? 1}` : ELITE[p.kind as keyof typeof ELITE] ? `Elite Lv${p.level ?? 1}` : `Lv${p.level ?? 1}`;
         if (e.label.text !== txt) e.label.setText(txt);
         if (e.lvlColor !== col) { e.label.setColor(col); e.lvlColor = col; }
         e.label.setVisible(!p.dead && !p.hidden);
