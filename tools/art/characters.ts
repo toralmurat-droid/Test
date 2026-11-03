@@ -743,7 +743,18 @@ const witch = human({
   pants: 0x3a2556, boots: 0x221a2e, belt: 0x8e44ad, weapon: "staff", fxCol: 0xc77dff, aura: 0xc77dff, gait: "stroll",
 });
 
-export const NPCS: Hero[] = [blacksmith, merchant, villager, guard, druid, witch];
+// Townsfolk who idle and wander about the village centre, and the watchmen holding the gates (client/src/villagers.ts, server watch)
+const folk = (name: string, gait: Hero["gait"] = "stroll") => human({
+  name, skin: 0xe0b08a, hair: 0x5a3a22, hairStyle: "short", shirt: 0x8a7a60, pants: 0x5a4a3a, boots: 0x3a2a1e, weapon: "none", gait,
+});
+const watchman = human({
+  name: "watchman", skin: 0xe0b08a, hair: 0x3a2a20, hairStyle: "short", beard: 0x3a2a20,
+  hat: { kind: "helm", col: 0x7d8288, trim: 0x55595e }, shirt: 0x6e7378, pants: 0x4a3a2a, boots: 0x2a2420, belt: 0x3a2618,
+  tabard: { col: 0x5e1e1e, emblem: 0xb08a3a }, weapon: "spear", gait: "march",
+});
+export const FOLK = ["peasant", "farmwife", "labourer", "elder", "goodwife"] as const;
+
+export const NPCS: Hero[] = [blacksmith, merchant, villager, guard, druid, witch, watchman, ...FOLK.map((n) => folk(n))];
 /** Pose data for monsters painted with the character painter (paint/mobs.ts); never drawn as pixel art. */
 const mobPose = (name: string, weapon: HumanOpts["weapon"]) => human({ name, skin: 0, hair: 0, hairStyle: "bald", shirt: 0, pants: 0, boots: 0, weapon });
 export const MOB_POSES: Record<string, Hero> = {

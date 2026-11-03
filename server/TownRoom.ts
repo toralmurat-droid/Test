@@ -17,8 +17,9 @@ import {
 import {
   ITEM_LIFETIME_MS, ItemKind, LOOT, MAX_POTIONS, PICKUP_RADIUS, POTION_COOLDOWN_MS, POTION_HEAL, PVP_GOLD_DROP,
 } from "../shared/items";
-import { isSafeZone, isSolidAt, randomSpawn } from "../shared/map";
-import { npcById, npcNear, TALK_RANGE } from "../shared/npcs";
+import { isSafeZone, isSolidAt, randomSpawn, VILLAGE } from "../shared/map";
+import { isDecorSolidAt, npcById, npcNear, TALK_RANGE } from "../shared/npcs";
+import { beyondWall, WATCH, WATCH_POSTS, WatchPost } from "../shared/watch";
 import { sellPrice, SHOPS } from "../shared/shops";
 import { BLOB_KINDS, inZone, npcPresent, QUEST_VERSION, QUESTS, questStep, stepGoal, Summon, USE_RANGE } from "../shared/quests";
 import { findHideSpot, HIDE, noMobsAt, spawnPoint, SPAWN_ZONES, zoneCap } from "../shared/spawns";
@@ -237,6 +238,21 @@ export class Field extends Schema {
   inst!: FieldInst;
 }
 
+/** A watchman of the village gate (shared/watch.ts). Can't be hurt; the client plays his walk/idle/thrust. */
+export class Watchman extends Schema {
+  @type("number") x = 0;
+  @type("number") y = 0;
+  @type("boolean") moving = false;
+  @type("number") ax = 0; // facing (world vector)
+  @type("number") ay = 1;
+  @type("number") swing = 0; // bumped on every spear thrust
+
+  post!: WatchPost;
+  target = ""; // monster id he is fighting
+  nextLook = 0; nextHit = 0; strikeAt = 0;
+  crossing = false; // walking through the gate opening
+}
+
 export class TownState extends Schema {
   @type({ map: Player }) players = new MapSchema<Player>();
   @type({ map: Mob }) mobs = new MapSchema<Mob>();
@@ -244,6 +260,7 @@ export class TownState extends Schema {
   @type({ map: Item }) items = new MapSchema<Item>();
   @type({ map: Zone }) zones = new MapSchema<Zone>();
   @type({ map: Field }) fields = new MapSchema<Field>();
+  @type({ map: Watchman }) watch = new MapSchema<Watchman>();
 }
 
 /** Extra effects of a hit. */
@@ -372,6 +389,13 @@ export class TownRoom extends Room<TownState> {
       }
       zone.alive = zone.cap;
     });
+
+    // The gate watch takes up its posts
+    for (const post of WATCH_POSTS) {
+      const w = new Watchman();
+      w.post = post; w.x = post.x; w.y = post.y; w.ax = -post.nx; w.ay = -post.ny; // looking out of the gate
+      this.state.watch.set(post.id, w);
+    }
 
     this.onMessage("input", (client, msg: InputState & { seq: number }) => {
       const p = this.state.players.get(client.sessionId);
@@ -1112,6 +1136,7 @@ export class TownRoom extends Room<TownState> {
     });
     this.updateZones(now);
     this.updateGuards(now);
+    this.updateWatch(dt, now);
     this.state.projectiles.forEach((s, id) => this.updateProjectile(s, id, dt));
     this.state.fields.forEach((f, id) => {
       if (!tickField(this.host, f.inst)) { this.state.fields.delete(id); return; }
@@ -1122,6 +1147,83 @@ export class TownRoom extends Room<TownState> {
       const due = this.pending.filter((x) => x.at <= now);
       if (due.length) { this.pending = this.pending.filter((x) => x.at > now); for (const x of due) x.fn(); }
     }
+  }
+
+  // ---- The gate watch (shared/watch.ts) -----------------------------------------
+
+  /** Monsters near the stockade, gathered once per look so 8 watchmen don't each scan the whole map. */
+  private watchSeen: [string, Mob][] = [];
+  private watchLookAt = 0;
+
+  private updateWatch(dt: number, now: number) {
+    if (now >= this.watchLookAt) {
+      this.watchLookAt = now + 400;
+      const m = (WATCH.leashTiles + 2) * TILE, x0 = VILLAGE.x0 * TILE - m, x1 = (VILLAGE.x1 + 1) * TILE + m, y0 = VILLAGE.y0 * TILE - m, y1 = (VILLAGE.y1 + 1) * TILE + m;
+      this.watchSeen = [];
+      this.state.mobs.forEach((o, oid) => { if (!o.dead && !o.hidden && o.x > x0 && o.x < x1 && o.y > y0 && o.y < y1) this.watchSeen.push([oid, o]); });
+    }
+    this.state.watch.forEach((w) => this.updateWatchman(w, dt, now));
+  }
+
+  private updateWatchman(w: Watchman, dt: number, now: number) {
+    const P = w.post, sight = WATCH.sightTiles * TILE, leash = WATCH.leashTiles * TILE;
+    let t = w.target ? this.state.mobs.get(w.target) : undefined;
+    if (t && (t.dead || t.hidden || Math.hypot(t.x - P.x, t.y - P.y) > leash)) { t = undefined; w.target = ""; }
+    if (now >= w.nextLook && !t) {
+      w.nextLook = now + 400;
+      let bd = sight;
+      for (const [oid, o] of this.watchSeen) {
+        if (o.dead || o.hidden) continue;
+        const d = Math.hypot(o.x - P.x, o.y - P.y);
+        if (d < bd) { bd = d; w.target = oid; t = o; }
+      }
+    }
+    // A thrust in progress lands, if the monster is still in reach
+    if (w.strikeAt && now >= w.strikeAt) {
+      w.strikeAt = 0;
+      if (t && Math.hypot(t.x - w.x, t.y - w.y) <= WATCH.reach * 1.4) this.watchHits(w, w.target, t, now);
+    }
+    if (w.strikeAt) { w.moving = false; return; } // planted for the thrust
+    let gx: number, gy: number, stop: number;
+    if (t) { gx = t.x; gy = t.y; stop = WATCH.reach * 0.8; }
+    else { gx = P.x; gy = P.y; stop = 2; }
+    // Out through the gate and back in through it, never straight into the stakes
+    const outW = beyondWall(P, w.x, w.y), outG = beyondWall(P, gx, gy);
+    if (outW !== outG) {
+      // line up a tile in front of the opening on his side, then step straight through it
+      const sd = outW ? -1 : 1, ax = P.gx + P.nx * sd * TILE, ay = P.gy + P.ny * sd * TILE;
+      if (!w.crossing && Math.hypot(w.x - ax, w.y - ay) > 4) { gx = ax; gy = ay; }
+      else { w.crossing = true; gx = P.gx - P.nx * sd * 1.2 * TILE; gy = P.gy - P.ny * sd * 1.2 * TILE; }
+      stop = 1;
+    } else w.crossing = false;
+    const dx = gx - w.x, dy = gy - w.y, d = Math.hypot(dx, dy);
+    if (d > stop) {
+      const step = Math.min(d - stop, WATCH.speed * dt), ux = dx / d, uy = dy / d;
+      const nx = w.x + ux * step, ny = w.y + uy * step;
+      const free = (x: number, y: number) => { for (const [ox, oy] of [[-5, -5], [5, -5], [-5, 5], [5, 5]]) if (isSolidAt(x + ox, y + oy) || isDecorSolidAt(x + ox, y + oy)) return false; return true; };
+      if (free(nx, w.y)) w.x = nx;
+      if (free(w.x, ny)) w.y = ny;
+      w.ax = ux; w.ay = uy; w.moving = true;
+      return;
+    }
+    w.moving = false;
+    if (t) {
+      const td = Math.hypot(t.x - w.x, t.y - w.y) || 1;
+      w.ax = (t.x - w.x) / td; w.ay = (t.y - w.y) / td;
+      if (now >= w.nextHit) { w.nextHit = now + WATCH.hitEveryMs; w.strikeAt = now + WATCH.windMs; w.swing++; }
+    } else if (Math.hypot(w.x - P.x, w.y - P.y) <= 2) { w.ax = -P.nx; w.ay = -P.ny; } // back on post, eyes on the road
+  }
+
+  /** A watchman's spear finds its mark: knockback, a short stagger, no loot or XP if it dies. */
+  private watchHits(w: Watchman, oid: string, o: Mob, now: number) {
+    const dmg = WATCH.damage(o.maxHp);
+    o.hp -= dmg;
+    o.stunUntil = Math.max(o.stunUntil, now + WATCH.stunMs);
+    const d = Math.hypot(o.x - w.x, o.y - w.y) || 1;
+    const k = moveStep(o.x, o.y, pushInput([(o.x - w.x) / d, (o.y - w.y) / d]), WATCH.knockback / 100, 100);
+    if (!isSafeZone(k.x, k.y)) { o.x = k.x; o.y = k.y; }
+    this.broadcast("hit", { id: oid, dmg, crit: false, dot: false });
+    if (o.hp <= 0) { this.mobDied(o, oid, "watch", "The village watch"); w.target = ""; }
   }
 
   /** When each lair chest's missing guardians come back (chest id -> server time). */
