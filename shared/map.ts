@@ -68,6 +68,9 @@ export const WRECK = { x: 27, y: 195, solid: [25, 194.3, 5.2, 1.1] as [number, n
 export const SAFE_ZONE = { x: 74, y: 55, w: 13, h: 11 };
 
 /** Column of the river's center for a given row (River Ashwell, east of the village). */
+/** Gullrock Cove: a fishers' smokehouse on a little bay east of Saltmere, burned and pillaged by Redfang raiders (Redfang quest chain). */
+export const GULLROCK = { x: 178, y: 182, w: 28, h: 12 };
+
 export const riverCenter = (y: number) => Math.round(118 + 3 * Math.sin(y / 11) + 1.5 * Math.sin(y / 5));
 
 /** Objects you can walk through (purely decorative, drawn over the player when they stand behind them). */
@@ -502,6 +505,21 @@ function buildWorld() {
   for (const [ox, oy, t] of [[band.x + 7, band.y + 14, T.CRATE], [band.x + 8, band.y + 14, T.CRATE], [band.x + 7, band.y + 15, T.BARREL],
     [band.x + 18, band.y + 13, T.HAY], [band.x + 20, band.y + 15, T.BARREL], [band.x + 16, band.y + 15, T.STUMP], [band.x + 14, band.y + 9, T.STUMP], [band.x + 10, band.y + 9, T.STUMP]] as const) setO(ox, oy, t);
 
+  // Gullrock Cove: the Saltmere fishers' smokehouse on the little bay east of town, burned out by Redfang raiders who
+  // camp among the broken barrels of salted cod (Redfang quest chain, shared/quests.ts)
+  const cove = GULLROCK;
+  each(cove.x, cove.y, cove.w, cove.h, (x, y) => {
+    if (objects[y][x] === T.TREE || objects[y][x] === T.PINE || objects[y][x] === T.BUSH) if (hash(x, y, 196) < 0.85) setO(x, y, EMPTY);
+    if (isGrass(ground[y][x]) && noise(x, y, 3, 197) > 0.68) setG(x, y, T.DIRT);
+  });
+  ruinBuilding(cove.x + 8, cove.y + 2, 5, 4, false, false, 198); // the burned smokehouse
+  setO(cove.x + 10, cove.y + 3, T.BARREL);
+  setO(cove.x + 15, cove.y + 6, T.CAMPFIRE); // the raiders' fire
+  for (const [ox, oy, t] of [[cove.x + 14, cove.y + 3, T.BARREL], [cove.x + 17, cove.y + 4, T.BARREL], [cove.x + 18, cove.y + 4, T.CRATE], [cove.x + 6, cove.y + 7, T.CRATE],
+    [cove.x + 13, cove.y + 8, T.BARREL], [cove.x + 19, cove.y + 7, T.STUMP], [cove.x + 12, cove.y + 6, T.STUMP], [cove.x + 21, cove.y + 3, T.HAY]] as const) setO(ox, oy, t);
+  for (const fx of [cove.x + 4, cove.x + 5, cove.x + 22, cove.x + 23]) setO(fx, cove.y + 8, T.FENCE); // net racks, half pulled down
+  curve([[191, 177], [192, 181], [cove.x + 14, cove.y + 5]], 1); // the fishers' track down from the Smugglers' Path
+
   // Roads to the new places
   curve([[lake.x + 3, lake.y + lake.ry + 3], [104, 166], [110, 174], [rc(179) - 6, 179], [rc(179) + 6, 179], [salt.x - 1, lane]], 1); // Coast Road (lake → Saltmere)
   curve([[keep.x + keep.w + 1, keep.y + 8], [216, 68], [228, 84], [band.x + band.w / 2, band.y - 2]], 1);                            // Bandit Trail (keep → Redfang)
@@ -730,6 +748,7 @@ function buildWorld() {
     { name: "Redfang Hollow", x: band.x - 4, y: band.y - 4, w: band.w + 8, h: band.h + 8, mobs: ["bandit"] },
     { name: "Brinewood", ...brine, mobs: ["slime"] },
     { name: "Heronwreck Strand", ...strand, mobs: ["slime"] },
+    { name: "Gullrock Cove", ...GULLROCK, mobs: ["bandit"] },
     { name: "Saltwind Coast", x: strand.x + strand.w, y: 184, w: MAP_W - strand.x - strand.w, h: MAP_H - 184, mobs: ["slime"] },
     { name: "River Ashwell", x: riverCenter(60) - 6, y: 0, w: 12, h: MAP_H },
     { name: "Whispering Woods", x: woodsX - 2, y: 0, w: MAP_W - woodsX + 2, h: 184, mobs: ["slime"] },

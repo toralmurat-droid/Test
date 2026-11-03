@@ -677,6 +677,8 @@ export class TownRoom extends Room<TownState> {
         m.camp = true; m.post = post; m.weapon = P.role; m.perch = P.role === "lookout";
         home = { ...postPos(P), level: home.level };
       }
+    } else if (kind === "bandit" && SPAWN_ZONES[zi]?.name === "Gullrock Cove") {
+      m.weapon = (["cutthroat", "brute", "archer", "cutthroat"] as const)[this.mobSeq % 4]; // the raiding party: a mix of roles
     }
     const def = mobDef(m);
     m.zone = zi;
@@ -2514,6 +2516,7 @@ export class TownRoom extends Room<TownState> {
     // Kills and drops count anywhere on the map: only the monster's type matters (Murat's rule)
     if (!s || !s.kinds?.includes(m.kind)) return;
     if (s.type === "kill" && (m.merged ?? 1) < (s.fused ?? 1)) return;
+    if (s.type === "kill" && s.own && m.summonFor !== id) return; // a named leader: only the one summoned for this player
     if (s.type === "kill") this.questProgress(id, p, c, q.questCount + 1);
     else if (s.type === "collect" && Math.random() < (s.chance?.[m.kind] ?? 0)) this.dropItem("quest", m.x, m.y, 1, s.item!, id);
   }

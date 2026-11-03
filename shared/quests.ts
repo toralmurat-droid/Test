@@ -1,5 +1,5 @@
 import { MobKind, TILE } from "./constants";
-import { AREAS, isSafeZone, isSolidAt, REDFANG, VILLAGE, WRECK } from "./map";
+import { AREAS, GULLROCK, isSafeZone, isSolidAt, REDFANG, VILLAGE, WRECK } from "./map";
 import { SPAWN_ZONES, SpawnZone } from "./spawns";
 import { npcById } from "./npcs";
 
@@ -126,6 +126,8 @@ export interface QuestStep {
   fused?: number;
   /** kill: a fused blob spawned for the player in the zone */
   summon?: Summon;
+  /** kill: only the monster summoned for this player counts (a named leader of a common kind, like Rask the Reaver) */
+  own?: boolean;
   /** kill / collect: how many */
   goal?: number;
   /** collect: item id in QUEST_ITEMS, and drop chance per kind */
@@ -576,13 +578,15 @@ export const BONE_QUESTS: QuestDef[] = [
 
 const SALT = AREAS.find((a) => a.name === "Saltmere")!;
 const RED_AREA = "Redfang Hollow";
+const COVE = "Gullrock Cove";
 
 /**
  * The story: the Redfang bandits come down the Smugglers' Path from their hollow in the eastern woods and bleed
  * Saltmere dry: the winter stores of salted cod, the boats, and now young Pell, Old Garrick's grandson, who went
  * up the path to get his boat back and never came down. Captain Hale hears of it from a gull-runner and sends the
- * hero to Saltmere (a town, no monsters); Old Garrick, the eldest fisherman, sends them on to Redfang Hollow.
- * Starts at level 16 (beside the end of the Pale Marshal story): Hale → Saltmere → Redfang Hollow (Lv 18-20)
+ * hero to Saltmere (a town, no monsters); Old Garrick, the eldest fisherman, sends them first to Gullrock Cove down
+ * the coast, where a raiding party is pillaging the fishers' smokehouse, then up the path to Redfang Hollow.
+ * Starts at level 16 (beside the end of the Pale Marshal story): Hale → Saltmere → Gullrock Cove (Lv 17-19) → Redfang Hollow (Lv 18-20)
  * → the Redfang Chief.
  */
 export const RED_QUESTS: QuestDef[] = [
@@ -612,26 +616,30 @@ export const RED_QUESTS: QuestDef[] = [
     after: "Old Garrick will be by the fire on the beach. Saltmere has nobody else to ask.",
   },
   {
-    id: "cod", title: "Salt and Steel", giver: "oldfisher", zone: RED_AREA, minLevel: 17,
-    description: `The Redfang bandits come down the Smugglers' Path and carry off Saltmere's winter stores. Old Garrick asked you to teach them a lesson at ${RED_AREA} and bring back the salted cod they stole.`,
+    id: "cod", title: "Salt and Steel", giver: "oldfisher", zone: COVE, minLevel: 17,
+    description: `A Redfang raiding party burned the fishers' smokehouse at ${COVE}, along the coast east of Saltmere, and is carrying off the town's winter stores. Old Garrick asked you to drive them off and bring back the salted cod.`,
     offer: [
-      "Every new moon they come down the Smugglers' Path, from the Redfang Hollow up in the eastern woods. Red rags on their arms, axes on their backs.",
-      "They took the winter stores. Every barrel of salted cod we put by. Without it, half this town won't see spring.",
-      `Go up the path to ${RED_AREA}. Show those Redfang dogs that Saltmere has teeth too, and bring back what you can of our cod.`,
-      "Mind the towers by their gates. The lookouts carry horns, and the whole camp comes running when they blow.",
+      "Three nights ago they came down the Smugglers' Path. Red rags on their arms, axes on their backs. The Redfang.",
+      `They didn't go home. They burned our smokehouse at ${COVE}, a little way east along the shore, and they've camped in the ashes, eating our winter stores.`,
+      "Every barrel of salted cod we put by is in that cove. Without it, half this town won't see spring.",
+      "Drive them off and bring back what you can. Their leader is a big brute with a red-dyed beard. Rask, they call him.",
     ],
-    acceptText: "I'll bring back your cod",
+    acceptText: "I'll drive them off",
     steps: [
-      { type: "kill", zone: RED_AREA, kinds: ["bandit"], goal: 8, text: "Slay 8 Redfang bandits", banner: ["New quest", "Salt and Steel"],
-        obj: "Redfang bandits slain: {n} / {goal}", nag: "{n} of {goal}. Pick them off one at a time, before the horns call the rest." },
-      { type: "collect", zone: RED_AREA, kinds: ["bandit", "banditchief"], item: "cod", goal: 5, chance: { bandit: 0.45, banditchief: 1 },
-        text: "Take back 5 Salted Cod from the bandits", banner: ["The Redfang bleed!", "Take back the stolen cod"], obj: "Salted Cod: {n} / {goal}",
-        nag: "{n} of {goal}. They carry it in their packs, the thieving gulls." },
-      { type: "talk", npc: "oldfisher", text: "Bring the cod to Old Garrick", banner: ["You have the cod", "Bring it to Old Garrick"],
+      { type: "kill", zone: COVE, kinds: ["bandit"], goal: 6, text: `Drive off the raiders: slay 6 Redfang bandits`, banner: ["New quest", "Salt and Steel"],
+        obj: "Redfang raiders slain: {n} / {goal}", nag: `{n} of {goal}. They are camped in the burned smokehouse at ${COVE}, east along the shore.` },
+      { type: "collect", zone: COVE, kinds: ["bandit"], item: "cod", goal: 5, chance: { bandit: 0.5 },
+        text: "Take back 5 Salted Cod from the raiders", banner: ["The raiders bleed!", "Take back the stolen cod"], obj: "Salted Cod: {n} / {goal}",
+        nag: "{n} of {goal}. They stuff it in their packs, the thieving gulls." },
+      { type: "kill", zone: COVE, kinds: ["bandit"], goal: 1,
+        summon: { parts: ["bandit"], level: 19, title: "Rask the Reaver", hpMult: 2.5, x: (GULLROCK.x + 15) * TILE, y: (GULLROCK.y + 7.7) * TILE }, own: true,
+        text: "Slay Rask, the raid leader", banner: ["Rask comes for you!", "Slay Rask the Reaver"], obj: "Rask the Reaver slain: {n} / {goal}",
+        nag: "Rask won't leave his share of the cod. He's by the raiders' fire." },
+      { type: "talk", npc: "oldfisher", text: "Bring the cod to Old Garrick", banner: ["The raiders are beaten", "Bring the cod to Old Garrick"],
         obj: "Bring the cod to Old Garrick (Saltmere beach)",
         say: [
-          "Our cod! That's Saltmere salt on it, I'd know it anywhere. Bless you.",
-          "There's something else, and I've not had the heart to say it. My grandson Pell went up that path to take his boat back. Alone. Three weeks ago.",
+          "Our cod! That's Saltmere salt on it, I'd know it anywhere. And Rask dead in the ashes? Bless you.",
+          "There's something else, and I've not had the heart to say it. My grandson Pell went up the Smugglers' Path to take his boat back from their camp, Redfang Hollow. Alone. Three weeks ago.",
           "He never came down. Here, take this. And when you're ready, come back to me. Please.",
         ],
         accept: "Claim reward" },
@@ -684,7 +692,7 @@ export interface QuestChain {
 export const CHAINS: QuestChain[] = [
   { id: "gloam", name: "The Gloam", quests: QUESTS, keys: ["questId", "questStage", "questCount"], version: QUEST_VERSION, verKey: "questVer" },
   { id: "bones", name: "The Pale Marshal", quests: BONE_QUESTS, keys: ["boneId", "boneStage", "boneCount"], version: 1, verKey: "boneVer" },
-  { id: "redfang", name: "The Redfang Debt", quests: RED_QUESTS, keys: ["redId", "redStage", "redCount"], version: 1, verKey: "redVer" },
+  { id: "redfang", name: "The Redfang Debt", quests: RED_QUESTS, keys: ["redId", "redStage", "redCount"], version: 2, verKey: "redVer" },
 ];
 
 /** Progress on one chain (chain undefined = the blob chain, so a Player passed as is reads as chain 0). */
