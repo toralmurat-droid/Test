@@ -1,6 +1,7 @@
 import Phaser from "phaser";
 import { ISO } from "./isoflag";
 import { AreaLook, FxStyle, skillById, SkillDef } from "../../shared/skills";
+import { paintSigil, ICON } from "./skillArt";
 
 /**
  * Skill visuals (shared/skills.ts): particles, light, lightning, falling blades and meteors, auras, enchanted
@@ -54,6 +55,8 @@ const BASIC_SHOTS = new Set(["fireball", "arrow", "bolt", "knife", "stone", "sli
 const lift = (h: number): [number, number] => (ISO ? [-h, -h] : [0, -h]);
 /** Screen-space vector between two world points (for drawing lightning and blades in a block). */
 const screenDelta = (dx: number, dy: number): [number, number] => (ISO ? [dx - dy, (dx + dy) / 2] : [dx, dy]);
+/** World offset that shows as `sx` px to the right on screen. */
+const side = (sx: number): [number, number] => (ISO ? [sx / 2, -sx / 2] : [sx, 0]);
 
 export class SkillFx {
   private parts: P[] = [];
@@ -222,6 +225,61 @@ export class SkillFx {
     this.scene.time.delayedCall(ms, () => { head.destroy(); land(); });
   }
 
+  // ---- skill sigils -------------------------------------------------------------------------------------
+
+  /** Texture of a skill's motif (the picture on its icon, client/src/skillArt.ts), made once. */
+  private sigilTex(id: string): string | undefined {
+    const key = "sig_" + id;
+    if (this.scene.textures.exists(key)) return key;
+    const art = paintSigil(id);
+    if (!art) return undefined;
+    const tex = this.scene.textures.createCanvas(key, ICON, ICON)!;
+    const c = tex.getContext();
+    art.forEach((col, i) => { if (col) { c.fillStyle = col; c.fillRect(i % ICON, Math.floor(i / ICON), 1, 1); } });
+    tex.refresh();
+    return key;
+  }
+
+  /**
+   * The skill's own picture flashes above the hero and bursts into its pixels, so every skill is recognizable
+   * at a glance. Top-row skills show it bigger, with a ring of light behind it.
+   */
+  sigil(id: string, skill: string, tier: number, big = false) {
+    const e = this.ent(id);
+    const key = this.sigilTex(skill);
+    const art = paintSigil(skill);
+    if (!e || !key || !art) return;
+    const s = skillById(skill);
+    const pal = PALETTE[s?.style ?? "steel"];
+    // whole screen pixels at zoom 3: 2/3 (2 px per art pixel), 1 for big ones
+    const scale = big || tier >= 3 ? 1 : 2 / 3;
+    const z = e.top + 14 + ICON * scale / 2; // above the name tag
+    const at = (): [number, number] => { const [lx, ly] = lift(z); return [e.sprite.x + lx, e.sprite.y + ly]; };
+    const [x0, y0] = at();
+    const img = this.scene.add.image(x0, y0, key).setDepth(DEPTH + 4).setScale(scale * 0.4).setAlpha(0);
+    if (tier >= 2.4 || big) this.glow(e.sprite.x, e.sprite.y, z, ICON * scale * 0.9, pal[2], 600, 0.7);
+    const hold = 380 + tier * 60;
+    this.scene.tweens.add({ targets: img, scale, alpha: 1, duration: 110, ease: "Back.Out" });
+    const follow = this.scene.time.addEvent({ delay: 16, loop: true, callback: () => { const ent = this.ent(id); if (ent) { const [lx, ly] = lift(z); img.setPosition(ent.sprite.x + lx, ent.sprite.y + ly); } } });
+    this.scene.time.delayedCall(hold, () => {
+      follow.remove();
+      const ent = this.ent(id) ?? e;
+      img.destroy();
+      // dissolve: every second pixel of the picture flies off as a spark of its own colour
+      for (let i = 0; i < art.length; i++) {
+        const col = art[i];
+        if (!col || (i + Math.floor(i / ICON)) % 2) continue;
+        const ax = (i % ICON) - ICON / 2 + 0.5, ay = ICON / 2 - Math.floor(i / ICON) - 0.5;
+        const [sx, sy] = side(ax * scale);
+        const c = parseInt(col.slice(1), 16);
+        this.p(ent.sprite.x + sx, ent.sprite.y + sy, z + ay * scale, c, {
+          vx: side(ax * 3)[0] + rnd(-6, 6), vy: side(ax * 3)[1] + rnd(-6, 6), vz: ay * 3 + rnd(10, 30), g: 40, drag: 2,
+          life: rnd(300, 520), size: scale * 1.5, size1: 0, add: false, depth: DEPTH + 3,
+        });
+      }
+    });
+  }
+
   // ---- server events ------------------------------------------------------------------------------------
 
   /** An "sfx" event from the server (shared/skillEngine.ts). */
@@ -237,6 +295,7 @@ export class SkillFx {
         if (!e) break;
         // Flash on the hero; buildups gather energy for the charge time
         this.glow(e.sprite.x, e.sprite.y, e.top * 0.5, 10 + 4 * tier, pal[2], 260, 0.6);
+        this.sigil(ev.id, ev.s, tier, s?.row === 4);
         if (ev.stacks > 0) this.burst(e.sprite.x, e.sprite.y, e.top * 0.6, style, 6 * ev.stacks, 60);
         if (ev.charge > 0) this.gather(ev.id, style, ev.charge, tier);
         break;

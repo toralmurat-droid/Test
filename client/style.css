@@ -269,7 +269,7 @@ html, body { margin: 0; height: 100%; background: #1b1b24; color: #eee; font: 14
 #slotpick .opt small { color: #aaa; font-size: 10px; }
 #slotpick .picon { width: 24px; height: 24px; flex: none; image-rendering: pixelated; }
 #slotpick .picon.none { display: flex; align-items: center; justify-content: center; color: #e63946; font-size: 16px; }
-.talent .ticon { width: 14px; height: 14px; vertical-align: -2px; margin-right: 3px; image-rendering: pixelated; }
+.talent .ticon { width: 24px; height: 24px; vertical-align: middle; margin: -3px 5px -3px -2px; image-rendering: pixelated; border-radius: 2px; }
 /* Death screen: "You died - killed by ..." in the pixel font, until respawn */
 #death { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
   background: radial-gradient(ellipse at center, rgba(60,0,0,.55), rgba(0,0,0,.25) 70%); pointer-events: none; z-index: 5;
