@@ -467,6 +467,18 @@ export class TownScene extends Phaser.Scene {
       const me = this.entities.get(this.me);
       if (me && Math.hypot(me.sprite.x - x, me.sprite.y - y) < r * 3) this.cameras.main.shake(260, 0.009);
     });
+    // Bone Demon rips a skeleton apart: its bones fly onto the demon (armour, then a blade)
+    this.room.onMessage("demonharvest", ({ id, from: [fx, fy], bones }) => {
+      const e = this.entities.get(id);
+      if (!e) return;
+      this.boneStream(fx, fy, e, 8);
+      this.time.delayedCall(520, () => { this.squash(e, 1.12, 0.9, 120); this.floatText(e.sprite.x, e.sprite.y - e.top - 6, bones >= 3 ? "BONE BLADE!" : "BONE ARMOUR!", "#e8e2d0", PIXEL_FONT); });
+    });
+    this.room.onMessage("demongrab", ({ id, from: [fx, fy] }) => {
+      this.burst(fx, fy - 8, 6, 0xe8e2d0, 260);
+      const e = this.entities.get(id);
+      if (e) { this.squash(e, 0.9, 1.15, 110); this.floatText(e.sprite.x, e.sprite.y - e.top - 6, "THROW!", "#ff7043", PIXEL_FONT); }
+    });
     this.room.onMessage("banish", ({ x, y }) => { this.burst(x, y, 9, 0x4a148c, 600); this.burst(x, y - 12, 6, 0x111111, 700); });
     // A skeleton broke in two: bone chips fly, its upper half drags on
     this.room.onMessage("bonebreak", ({ x, y }) => {
@@ -890,6 +902,73 @@ export class TownScene extends Phaser.Scene {
         }
       },
     });
+  }
+
+  /** A handful of bones arcing from a point onto a sprite (the Bone Demon taking a skeleton's bones). */
+  private boneStream(fx: number, fy: number, e: Entity, n: number) {
+    const g = this.add.graphics().setDepth(e.sprite.depth + 1);
+    const lift = (px: number, py: number, z: number): [number, number] => (ISO ? [px - z, py - z] : [px, py - z]);
+    const bones = [...Array(n)].map((_, i) => ({ delay: i * 35, spin: (Math.random() - 0.5) * 14, a0: Math.random() * 3, len: 3 + Math.random() * 3, ox: (Math.random() - 0.5) * 8, oy: (Math.random() - 0.5) * 8 }));
+    const clock = { t: 0 }, FLY = 420;
+    this.tweens.add({
+      targets: clock, t: FLY + n * 35, duration: FLY + n * 35, onComplete: () => g.destroy(),
+      onUpdate: () => {
+        g.clear();
+        for (const b of bones) {
+          const u = Math.min(1, Math.max(0, (clock.t - b.delay) / FLY));
+          if (u <= 0 || u >= 1) continue;
+          // target: the demon's body (its world position; the sprite stands on it)
+          const tx = e.state.x ?? fx, ty = e.state.y ?? fy;
+          const px = fx + b.ox + (tx - fx - b.ox) * u, py = fy + b.oy + (ty - fy - b.oy) * u;
+          const [qx, qy] = lift(px, py, 10 + 22 * u * (1 - u) * 4 * 0.5 + 14 * u);
+          const ang = b.a0 + b.spin * u, dx = Math.cos(ang) * b.len / 2, dy = Math.sin(ang) * b.len / 2;
+          g.lineStyle(1.3, 0xd8d0b8).lineBetween(qx - dx, qy - dy, qx + dx, qy + dy);
+          g.fillStyle(0xf0ead8).fillCircle(qx - dx, qy - dy, 0.9).fillCircle(qx + dx, qy + dy, 0.9);
+        }
+      },
+    });
+  }
+
+  /**
+   * Bone Demon's harvested bones (p.bones, server DEMON.harvest): 1 shoulder plates, 2 a rib cuirass,
+   * 3 a bone blade in its hand, 4 a spiked bone crown. Drawn over the sprite like a merged blob's patches.
+   */
+  private drawDemonBones(e: Entity, p: any, x: number, y: number) {
+    const g = (e.parts ??= isoAnchor(this.add.graphics(), e.sprite) as Phaser.GameObjects.Graphics);
+    g.clear().setVisible(true).setDepth(e.sprite.depth + 0.5);
+    const H = e.sprite.displayHeight * e.sprite.originY, W = e.sprite.displayWidth;
+    const flip = e.sprite.flipX ? -1 : 1, dir = this.dirOf(e), side = dir === "left" || dir === "right";
+    const B = 0xe8e2d0, S = 0x8f887a, n = p.bones;
+    const shY = y - H * 0.66, chestY = y - H * 0.5, sw = side ? W * 0.12 : W * 0.2;
+    // 1: shoulder plates with a spike each
+    for (const k of side ? [flip] : [-1, 1]) {
+      const sx = x + k * sw;
+      g.fillStyle(S).fillEllipse(sx, shY + 0.4, 6.4, 4.2).fillStyle(B).fillEllipse(sx, shY, 5.6, 3.6);
+      g.fillStyle(B).fillTriangle(sx + k * 1.5 - 1, shY - 1, sx + k * 1.5 + 1, shY - 1, sx + k * 3.2, shY - 5);
+    }
+    if (n >= 2 && dir !== "up") {
+      // rib cuirass: curved ribs over the chest and a sternum
+      for (let i = 0; i < 4; i++) {
+        const ry = chestY - 3 + i * 2.2, rw = (side ? 3.2 : 5.2) - i * 0.5;
+        g.lineStyle(1.6, S).beginPath().arc(x + (side ? flip * 1.5 : 0), ry - 2.2, rw, 0.35, Math.PI - 0.35).strokePath();
+        g.lineStyle(1, B).beginPath().arc(x + (side ? flip * 1.5 : 0), ry - 2.2, rw, 0.35, Math.PI - 0.35).strokePath();
+      }
+      if (!side) g.fillStyle(B).fillRect(x - 0.6, chestY - 4.5, 1.2, 8);
+    }
+    if (n >= 3) {
+      // bone blade held out to its weapon side: a jagged femur sword
+      const hx = x + (side ? flip * W * 0.22 : W * 0.24), hy = y - H * 0.42, tip = side ? flip : 0.6;
+      g.lineStyle(2.4, S).lineBetween(hx, hy, hx + tip * 9, hy - 11);
+      g.lineStyle(1.6, B).lineBetween(hx, hy, hx + tip * 9, hy - 11);
+      g.fillStyle(B).fillCircle(hx, hy, 1.4).fillCircle(hx + tip * 9, hy - 11, 1.3);
+      for (let i = 1; i <= 3; i++) g.fillStyle(B).fillTriangle(hx + tip * i * 2.4, hy - i * 2.9, hx + tip * i * 2.4 + 0.8, hy - i * 2.9 - 1.2, hx + tip * i * 2.4 + tip * 2.4, hy - i * 2.9 + 0.4);
+    }
+    if (n >= 4) {
+      // spiked crown of finger bones between the horns
+      const cy = y - H * 0.9;
+      for (let i = -2; i <= 2; i++) g.fillStyle(B).fillTriangle(x + i * 2 - 0.8, cy, x + i * 2 + 0.8, cy, x + i * 2, cy - 3.5 - (i === 0 ? 1.5 : 0));
+      g.fillStyle(S).fillRect(x - 5, cy - 0.5, 10, 1.4);
+    }
   }
 
   private burst(x: number, y: number, r: number, color: number, ms: number) {
@@ -1382,6 +1461,7 @@ export class TownScene extends Phaser.Scene {
         }
       } else if (e.mob && !p.dead) {
         if (p.parts) this.drawBlobParts(e, id, p, x, y);
+        else if (p.kind === "demon" && p.bones) this.drawDemonBones(e, p, x, y);
         const bw = Math.min(40, (MOB_LOOK[p.kind]?.bar || 14) * (1 + MERGE.growPerBlob * ((p.merged || 1) - 1)));
         if (ELITE[p.kind as keyof typeof ELITE]) e.bar.fillStyle(0xffc93c).fillRect(x - bw / 2 - 1, mobBarY - 1, bw + 2, 4); // elite: gold frame
         e.bar.fillStyle(0x000000).fillRect(x - bw / 2, mobBarY, bw, 2);
