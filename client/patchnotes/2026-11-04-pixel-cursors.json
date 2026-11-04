@@ -1,0 +1,9 @@
+{
+  "date": "2026-11-04",
+  "pr": 198,
+  "title": "Pixel mouse cursors",
+  "changes": [
+    "The mouse pointer is now a golden pixel arrow.",
+    "Pointing at a monster turns it into a small sword."
+  ]
+}

@@ -2,6 +2,7 @@ import Phaser from "phaser";
 import { InputState, TILE } from "../../shared/constants";
 import { findPath, type Pt } from "./pathfind";
 import { fromIso, isoX, isoY, ISO } from "./iso";
+import { setWorldCursor } from "./cursors";
 
 /**
  * Point-and-click controls.
@@ -112,9 +113,8 @@ export class PointerControls {
 
   private hover(p: Phaser.Input.Pointer) {
     const canvas = this.scene.game.canvas;
-    if (this.host.blocked()) { canvas.style.cursor = ""; return; }
-    const { enemy, spot } = this.pick(p);
-    canvas.style.cursor = enemy ? "crosshair" : spot ? "pointer" : "";
+    if (this.host.blocked()) { setWorldCursor(canvas, false); return; }
+    setWorldCursor(canvas, !!this.pick(p).enemy);
   }
 
   private down(p: Phaser.Input.Pointer) {

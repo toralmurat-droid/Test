@@ -3,6 +3,9 @@ import { initMusic, startMusic } from "./music";
 import { initSfx } from "./sfx";
 import { takeRejoin } from "./reconnect";
 import { showLoading } from "./loading";
+import { installCursors } from "./cursors";
+
+installCursors();
 import { TownScene } from "./TownScene";
 import { CLASSES, CLASS_KINDS, ClassKind, isClassKind } from "../../shared/classes";
 import { mountHeroCards } from "./heroCards";
