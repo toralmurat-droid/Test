@@ -13,7 +13,7 @@ import { TILE } from "../../shared/constants";
 import type { MapMarker } from "./minimap";
 import { QuestLog } from "./questlog";
 import { SHOPS, sellPrice } from "../../shared/shops";
-import { GEAR, gearName, itemText, TIER_NAMES } from "../../shared/gear";
+import { gearDef, gearName, itemLevel, itemText, TIER_NAMES } from "../../shared/gear";
 import { MAX_POTIONS } from "../../shared/items";
 import { CHAR_GROW, CHAR_SCALE, CHAR_ORIGIN, CharacterName, playCharAnim } from "./artAssets";
 import { iconCanvas, TIER_COLORS } from "./gear";
@@ -194,13 +194,13 @@ export class NpcLayer {
         return row("potion", qty > 1 ? `${qty} Healing Potions` : "Healing Potion", "#ff8a8a", `You carry ${potions}/${MAX_POTIONS} · drink with Q`,
           `${e.price} 🪙`, "sh-buy", i, gold < e.price || potions + qty > MAX_POTIONS);
       }
-      const d = GEAR[e.item];
-      return row(e.item, gearName(e.item, cls), TIER_COLORS[d.tier], `${TIER_NAMES[d.tier]} · ${itemText(e.item)}`, `${e.price} 🪙`, "sh-buy", i, gold < e.price);
+      const d = gearDef(e.item)!;
+      return row(e.item, gearName(e.item, cls), TIER_COLORS[d.tier], `${TIER_NAMES[d.tier]} · Lv ${itemLevel(e.item)} · ${itemText(e.item)}`, `${e.price} 🪙`, "sh-buy", i, gold < e.price);
     }).join("");
-    const sellable = shop.buys ? bag.map((id, i) => [id, i] as const).filter(([id]) => GEAR[id] && shop.buys!.includes(GEAR[id].slot)) : [];
+    const sellable = shop.buys ? bag.map((id, i) => [id, i] as const).filter(([id]) => gearDef(id) && shop.buys!.includes(gearDef(id)!.slot)) : [];
     const sell = shop.buys
       ? `<h4>Sell from your bag</h4>` + (sellable.length
-        ? sellable.map(([id, i]) => row(id, gearName(id, cls), TIER_COLORS[GEAR[id].tier], `${TIER_NAMES[GEAR[id].tier]} · ${itemText(id)}`, `Sell ${sellPrice(id)} 🪙`, "sh-sell", i, false)).join("")
+        ? sellable.map(([id, i]) => row(id, gearName(id, cls), TIER_COLORS[gearDef(id)!.tier], `${TIER_NAMES[gearDef(id)!.tier]} · Lv ${itemLevel(id)} · ${itemText(id)}`, `Sell ${sellPrice(id)} 🪙`, "sh-sell", i, false)).join("")
         : `<p class="sh-empty">No weapons in your bag. Unequip one in the Bag (G) to sell it.</p>`)
       : "";
     const quest = questDialog(n.id, q);

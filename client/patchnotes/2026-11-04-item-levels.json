@@ -1,0 +1,9 @@
+{
+  "date": "2026-11-04",
+  "title": "Item levels",
+  "changes": [
+    "Gear now has an item level (1 to 30): drops and chests match the monster or chest level, and higher levels give bigger bonuses.",
+    "Wearing gear needs a hero level and points in one stat (Strength, Magic, Stamina or Dexterity). Hover an item in the Bag (G) to see it.",
+    "High-level gear shows on your hero: sparkles from Lv 8, swing trails and spark steps from Lv 15, flames and auras from Lv 22, and a finishing shockwave with afterimages from Lv 28."
+  ]
+}
