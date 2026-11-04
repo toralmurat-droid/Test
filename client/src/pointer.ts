@@ -59,6 +59,9 @@ export class PointerControls {
   private stuckAt = 0;
   private stuckPos?: Pt;
   private stuck = 0;
+  private hovered?: string; // enemy under the mouse
+  private ring?: Phaser.GameObjects.Graphics; // marks the enemy that a click attacks (or would attack)
+  private ringOn = "";
 
   constructor(private scene: Phaser.Scene, private host: PointerHost) {
     scene.input.mouse?.disableContextMenu();
@@ -110,6 +113,9 @@ export class PointerControls {
       if (d !== undefined && d < ed) { ed = d; enemy = e; }
     }
     if (enemy) return { enemy };
+    // Just beside a (small, moving) monster still counts as clicking it
+    const near = this.nearest(this.world(p), 12);
+    if (near) return { enemy: near };
     let spot: ClickSpot | undefined, sd = Infinity;
     for (const o of this.host.spots()) {
       const d = this.inBox(s, o.x, o.y, o.w, o.h);
@@ -120,8 +126,39 @@ export class PointerControls {
 
   private hover(p: Phaser.Input.Pointer) {
     const canvas = this.scene.game.canvas;
-    if (this.host.blocked()) { setWorldCursor(canvas, false); return; }
-    setWorldCursor(canvas, !!this.pick(p).enemy);
+    if (this.host.blocked()) { setWorldCursor(canvas, false); this.hovered = undefined; return; }
+    const enemy = this.pick(p).enemy;
+    this.hovered = enemy?.id;
+    setWorldCursor(canvas, !!enemy);
+  }
+
+  /** A thin ring under the enemy being attacked (red) or under the mouse (faint), so it's clear who gets hit. */
+  drawRing() {
+    const goal = this.goal;
+    const chase = goal?.kind === "enemy" ? goal.id : undefined;
+    const e = (chase && this.host.enemy(chase)) || (this.hovered ? this.host.enemy(this.hovered) : undefined);
+    if (!e || e.dead) { this.ring?.setVisible(false); return; }
+    const g = (this.ring ??= this.scene.add.graphics().setDepth(1));
+    const key = `${e.id}|${chase ? 1 : 0}`;
+    if (key !== this.ringOn) {
+      this.ringOn = key;
+      const w = 14 + e.body * 2.2, h = w / 2;
+      g.clear();
+      g.lineStyle(1, 0x1a0c06, 0.55).strokeEllipse(0, 1, w, h);
+      g.lineStyle(1, chase ? 0xe0452b : 0xf2c14e, chase ? 0.95 : 0.6).strokeEllipse(0, 0, w, h);
+    }
+    g.setPosition(e.x, e.y).setVisible(true);
+  }
+
+  /** The nearest live enemy within `r` px of a world point. */
+  private nearest(w: Pt, r: number): ClickEnemy | undefined {
+    let best: ClickEnemy | undefined, bd = r;
+    for (const e of this.host.enemies()) {
+      if (e.dead) continue;
+      const d = Math.hypot(e.x - w.x, e.y - w.y);
+      if (d <= bd) { bd = d; best = e; }
+    }
+    return best;
   }
 
   private down(p: Phaser.Input.Pointer) {
@@ -184,6 +221,7 @@ export class PointerControls {
 
   /** The movement the mouse wants this frame, or undefined when the mouse is not steering. */
   update(stepMs: number): InputState | undefined {
+    this.drawRing();
     const goal = this.goal;
     if (!goal) return undefined;
     const me = this.host.me();
@@ -245,7 +283,12 @@ export class PointerControls {
     }
 
     // An enemy: chase it into reach, then attack (again and again while the button is held)
-    const e = this.host.enemy(goal.id);
+    let e = this.host.enemy(goal.id);
+    if ((!e || e.dead) && !goal.secondary && this.held === 0) {
+      // Still holding after the kill: go on with the next enemy under (or right next to) the mouse
+      const next = this.nearest(this.world(pointer), 40);
+      if (next) { goal.id = next.id; goal.fired = false; goal.tries = 0; e = next; this.route({ x: next.sx, y: next.sy }); }
+    }
     if (!e || e.dead) { this.goal = undefined; this.path = []; return STOP; }
     const holding = this.held === (goal.secondary ? 2 : 0);
     const reach = this.host.reach(goal.secondary) + (goal.secondary ? 0 : e.body);

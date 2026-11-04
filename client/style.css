@@ -2,24 +2,7 @@
 html, body { margin: 0; height: 100%; background: #1b1b24; color: #eee; font: 14px/1.4 monospace; overflow: hidden; }
 #game { position: fixed; inset: 0; }
 #game canvas { image-rendering: pixelated; }
-#join { position: fixed; inset: 0; display: grid; place-items: center; background: rgba(10,10,20,.75); z-index: 10; padding: 16px; }
-.panel { background: #2a2a3a; border: 3px solid #555a7a; padding: 24px; width: min(560px, 100%); max-height: 100%; overflow-y: auto; text-align: center; }
-.panel h1 { margin: 0 0 16px; font-size: 22px; color: #ffd166; }
-.panel input { width: 100%; padding: 8px; font: inherit; background: #15151f; color: #eee; border: 2px solid #555a7a; }
-#colors { display: flex; gap: 6px; justify-content: center; margin: 12px 0; flex-wrap: wrap; }
-#colors button { width: 28px; height: 28px; border: 3px solid transparent; cursor: pointer; }
-#colors button.sel { border-color: #fff; }
 /* Hero picker: equal cards, each with the hero animated on a patch of grass */
-#classes { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; margin: 14px 0 4px; }
-@media (max-width: 480px) { #classes { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
-.herocard { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 6px 4px 8px; font: inherit; background: #15151f; color: #eee; border: 2px solid #555a7a; cursor: pointer; min-width: 0; }
-.herocard canvas { width: 100%; aspect-ratio: 1; max-width: 96px; image-rendering: pixelated; background: radial-gradient(ellipse at 50% 88%, #4f8a41 0 30%, #3f6f34 31% 60%, #2b4d25 100%); border: 1px solid #000; }
-.herocard .hcname { font-weight: bold; margin-top: 4px; }
-.herocard .hcskill { font-size: 11px; color: #9aa0b8; }
-.herocard:hover { border-color: #8a90b8; }
-.herocard.sel { border-color: #ffd166; box-shadow: 0 0 0 1px #ffd166 inset; }
-.herocard.sel .hcname { color: #ffd166; }
-.herocard:focus-visible { outline: 2px solid #ffd166; outline-offset: 2px; }
 #classinfo { min-height: 2.8em; margin: 4px 0; }
 #ult { position: absolute; top: 76px; left: 12px; width: 200px; height: 14px; background: #222; border: 2px solid #000; }
 #ultfill { position: absolute; inset: 0 auto 0 0; width: 100%; background: #f77f00; }
@@ -72,26 +55,12 @@ html, body { margin: 0; height: 100%; background: #1b1b24; color: #eee; font: 14
 #skillfill { position: absolute; inset: 0 auto 0 0; width: 100%; background: #e9c46a; transition: width .15s linear; }
 #skillfill.magic { background: #4cc9f0; }
 #skilltext { position: absolute; inset: 0; display: grid; grid-template-columns: 1fr 14px 1fr; align-items: center; font-size: 12px; font-weight: bold; line-height: 1; font-variant-numeric: tabular-nums; color: #fff; text-shadow: 1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000; }
-#play { width: 100%; padding: 10px; font: inherit; font-weight: bold; background: #06d6a0; border: 0; cursor: pointer; }
 .help { color: #aaa; font-size: 12px; }
-#status { color: #ef476f; min-height: 1em; }
-#savepick, #savepick button { font-family: 'Pixelify Sans', monospace; -webkit-font-smoothing: none; }
-#savepick { width: min(420px, 100%); }
-#savepick h2 { margin: 0 0 8px; font-size: 22px; color: #ffd166; text-shadow: 2px 2px #000; }
-#savepick .help { font-size: 14px; color: #c9b89a; }
-#savebtns { display: grid; gap: 10px; margin: 16px 0 8px; }
-#savebtns button { padding: 12px; font-size: 17px; border: 3px solid #000; cursor: pointer; color: #111; box-shadow: inset -3px -3px rgba(0,0,0,.25), inset 3px 3px rgba(255,255,255,.25); }
-#savebtns button small { display: block; font-size: 13px; opacity: .8; }
-#savebtns .cont { background: #06d6a0; }
-#savebtns .fresh { background: #e9c46a; }
-#savebtns .danger { background: #ef476f; color: #fff; }
-#savebtns .plain { background: #555a7a; color: #eee; }
-#savepick .savelink { background: none; border: 0; color: #aaa; font-size: 14px; cursor: pointer; text-decoration: underline; }
 #hud { position: fixed; inset: 0; pointer-events: none; z-index: 5; }
 #hpbar { position: absolute; top: 12px; left: 12px; width: 200px; height: 16px; background: #400; border: 2px solid #000; }
 #hpfill { height: 100%; width: 100%; background: #e63946; transition: width .25s linear; }
 #hptext { position: absolute; inset: 0; display: grid; grid-template-columns: 1fr 14px 1fr; align-items: center; font-size: 12px; font-weight: bold; line-height: 1; font-variant-numeric: tabular-nums; color: #fff; text-shadow: 1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000; }
-#stats { position: absolute; top: 34px; left: 12px; text-shadow: 1px 1px #000; }
+#stats { position: absolute; top: 34px; left: 12px; text-shadow: 1px 1px #000; font-family: 'Pixelify Sans', monospace; -webkit-font-smoothing: none; }
 #feed { position: absolute; top: 350px; right: 12px; text-align: right; text-shadow: 1px 1px #000; }
 #chatlog { position: absolute; bottom: 44px; left: 12px; width: min(400px, calc(100% - 24px)); text-shadow: 1px 1px #000; }
 #chat { position: absolute; bottom: 12px; left: 12px; width: min(400px, calc(100% - 24px)); padding: 6px; font: inherit;
@@ -428,3 +397,45 @@ html, body { margin: 0; height: 100%; background: #1b1b24; color: #eee; font: 14
 #lvlnote { bottom: 162px; }
 /* Equipment panel (G): item levels and requirements, in the pixel font */
 #gear, #gear button { font-family: 'Pixelify Sans', monospace; }
+
+/* Start screens by the fire (fireside.ts paints the clearing; main.ts runs the steps). Weathered frames from weathered.ts. */
+#join { position: fixed; inset: 0; z-index: 10; background: #050406; overflow: hidden; font-family: var(--pixel-font, 'Pixelify Sans', monospace);
+  -webkit-font-smoothing: none; color: #eadfc8; }
+#fireside { position: absolute; inset: 0; width: 100%; height: 100%; image-rendering: pixelated; touch-action: manipulation; }
+#fslabels { position: absolute; inset: 0; pointer-events: none; }
+.fs-label { position: absolute; transform: translateX(-50%); white-space: nowrap; pointer-events: auto; cursor: pointer;
+  font-size: 14px; color: #c8b89a; text-shadow: 2px 2px 0 #050302, -1px -1px 0 #050302; padding: 0 4px; }
+.fs-label.hover { color: #f0e0b8; }
+.fs-label.sel { color: #ffcf52; }
+#fstitle { margin: 2px 0 10px; }
+#fstitle canvas { display: block; margin: 0 auto; max-width: 100%; height: auto; image-rendering: pixelated; }
+.fs-panel { position: absolute; left: 50%; bottom: max(14px, 3vh); transform: translateX(-50%); width: min(400px, calc(100vw - 32px));
+  max-height: calc(100vh - 28px); overflow-y: auto; text-align: center; padding: 4px 10px 6px;
+  border: 18px solid transparent; border-image: var(--wf-bronze) 9 fill / 18px / 0 repeat; image-rendering: pixelated;
+  text-shadow: 2px 2px #050302; }
+.fs-panel h2 { margin: 0 0 10px; font-size: 22px; font-weight: normal; color: #e3bf6a; letter-spacing: 1px; }
+.fs-panel input { display: block; width: 100%; margin: 0 0 8px; padding: 8px 10px; font: 16px var(--pixel-font, 'Pixelify Sans', monospace);
+  background: #0f0a06; color: #f0e0b8; border: 0; box-shadow: 0 0 0 2px #45331e, 0 0 0 4px #080504; outline: none; }
+.fs-panel input:focus { box-shadow: 0 0 0 2px #a8823a, 0 0 0 4px #080504; }
+.fs-panel input::placeholder { color: #6e5d48; }
+.fs-help { font-size: 14px; color: #a8977a; margin: 4px 0 10px; }
+.fs-hint { font-size: 13px; color: #7d6d56; margin: 8px 0 0; }
+.fs-skill { color: #e3bf6a; }
+.fs-btn { border: 6px solid transparent; border-image: var(--wf-btn) 4 fill / 6px / 0 repeat; image-rendering: pixelated; background: none;
+  color: #eadfc8; padding: 4px 12px; font: 17px var(--pixel-font, 'Pixelify Sans', monospace); text-shadow: 1px 1px #050302; cursor: pointer; }
+.fs-btn:hover:not([disabled]) { color: #ffd98a; filter: brightness(1.25); }
+.fs-btn[disabled] { opacity: .55; cursor: default; }
+.fs-btn small { display: block; font-size: 13px; color: #a8977a; }
+.fs-main { color: #ffcf52; }
+.fs-danger { color: #ff9d7a; }
+#play { width: 100%; }
+#status { color: #ff9d7a; min-height: 1.2em; margin: 8px 0 0; font-size: 14px; }
+#savebtns { display: grid; gap: 8px; margin: 8px 0; }
+#savebtns .fs-btn { padding: 6px 12px; }
+.fs-link { background: none; border: 0; color: #8a7a62; font: 14px var(--pixel-font, 'Pixelify Sans', monospace); cursor: pointer; text-decoration: underline; }
+.fs-link:hover { color: #c8b89a; }
+.fs-row { display: flex; gap: 8px; justify-content: center; }
+.fs-row .fs-main { flex: 1; }
+#colors { display: flex; gap: 6px; justify-content: center; margin: 4px 0 12px; flex-wrap: wrap; }
+#colors button { width: 22px; height: 22px; border: 0; cursor: pointer; box-shadow: 0 0 0 2px #080504, 0 0 0 3px #45331e; }
+#colors button.sel { box-shadow: 0 0 0 2px #080504, 0 0 0 4px #e3bf6a; }

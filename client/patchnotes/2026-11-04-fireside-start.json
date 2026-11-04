@@ -1,0 +1,9 @@
+{
+  "date": "2026-11-04",
+  "title": "Start by the fire",
+  "changes": [
+    "New start screens: log in by a night campfire with all five heroes standing round it.",
+    "After logging in, resume one of your saved heroes or start a new game.",
+    "For a new game, click a hero by the fire (or use the arrow keys) to choose them, then the world loads."
+  ]
+}

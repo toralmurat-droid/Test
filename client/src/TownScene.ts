@@ -1,4 +1,5 @@
 import Phaser from "phaser";
+import { quake } from "./camfx";
 import { reconnectSoon } from "./reconnect";
 import { Client, Room } from "colyseus.js";
 import { BOSS, ELITE, InputState, MERGE, MAP_H, MAP_W, regenFromStamina, TICK_RATE, TILE } from "../../shared/constants";
@@ -8,7 +9,7 @@ import { heroPoise, meleeReach, mobBody } from "../../shared/combat";
 import { moveStep } from "../../shared/movement";
 import { levelsAt, SPAWN_ZONES, zoneAt } from "../../shared/spawns";
 import { musicCombat, setMusicZone } from "./music";
-import { bindSfx, sfxFrame } from "./sfx";
+import { bindSfx, play as playSfx, sfxFrame } from "./sfx";
 import { attackMult, cooldownMult, critChance, heroSpeed, STATS, magicMult, STAT_KINDS, STAT_NAMES, StatKind, statPoints, HP_PER_STR } from "../../shared/powers";
 import { pointRange, skillOf, skillTarget, STACK_NAME, MAX_STACKS, talentBonus } from "../../shared/skills";
 import { SkillFx } from "./skillfx";
@@ -35,9 +36,9 @@ import { speechBubble } from "./weathered";
 import { ART_K, CHAR_GROW, CHAR_SCALE, CHARACTERS, CHAR_ORIGIN, CharacterName, createArtAnims, playCharAnim, preloadArt } from "./artAssets";
 import { Ambient } from "./ambient";
 import { Details } from "./details";
-import { activeOf, GearLayer, GearMenu, preloadGear, TIER_COLORS } from "./gear";
+import { activeOf, GearLayer, GearMenu, itemColor, preloadGear, RARITY_HEX } from "./gear";
 import { GearFx } from "./gearfx";
-import { baseId, gearDef, gearReachMult, gearSpeedMult } from "../../shared/gear";
+import { baseId, gearDef, gearReachMult, gearSpeedMult, itemRarity } from "../../shared/gear";
 import { talentMult, talentPoints, spentPoints } from "../../shared/talents";
 import { activeSkills, SLOT_COUNT, SLOT_KEYS, skillLearned } from "../../shared/slots";
 import { iconImg } from "./skillIcons";
@@ -509,10 +510,8 @@ export class TownScene extends Phaser.Scene {
         this.tweens.add({ targets: glow, scale: 1.4, alpha: 0.1, duration: 600, yoyo: true, repeat: -1 });
         img.once("destroy", () => glow.destroy());
       }
-      if (gear && gear.tier > 1) {
-        // Rare / epic drops sparkle
-        this.tweens.add({ targets: img, alpha: 0.65, duration: 400, yoyo: true, repeat: -1 });
-      }
+      const rarity = gear ? itemRarity(it.gear) : 0;
+      if (rarity > 0) this.lootGlow(img, it.x, it.y, rarity, it.y);
       // Gentle bob so loot catches the eye
       this.tweens.add({ targets: img, y: it.y - 2, duration: 500, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
       this.items.set(id, img);
@@ -530,7 +529,7 @@ export class TownScene extends Phaser.Scene {
         return;
       }
       if (kind === "gear") {
-        this.floatText(x, y - 6, `+${name}`, TIER_COLORS[gearDef(gear)?.tier ?? 1], PIXEL_FONT);
+        this.floatText(x, y - 6, `+${name}`, itemColor(gear), PIXEL_FONT);
         this.feed(`Found ${name}! Press G to equip`);
         return;
       }
@@ -566,7 +565,7 @@ export class TownScene extends Phaser.Scene {
       const ring = this.add.circle(x, y, 4).setStrokeStyle(kind === "slam" ? 3 : 2, kind === "slam" ? 0xff5252 : 0xffb74d, 0.9).setDepth(20000);
       this.tweens.add({ targets: ring, radius: r, alpha: 0, duration: kind === "slam" ? 420 : 300, onComplete: () => ring.destroy() });
       const me = this.entities.get(this.me);
-      if (me && Math.hypot(me.sprite.x - x, me.sprite.y - y) < r * 2.5) this.cameras.main.shake(kind === "slam" ? 260 : 120, kind === "slam" ? 0.008 : 0.004);
+      if (me && Math.hypot(me.sprite.x - x, me.sprite.y - y) < r * 2.5) quake(this, kind === "slam" ? 260 : 120, kind === "slam" ? 0.008 : 0.004);
     });
     // Necromancer: arms up while casting. Death Circle marks the ground first (a flat painting, so it lies on the iso ground too)
     this.room.onMessage("necrowind", ({ id, kind, ms, x, y, r }) => {
@@ -596,7 +595,7 @@ export class TownScene extends Phaser.Scene {
         this.burst(x + Math.cos(a) * d, y + Math.sin(a) * d * 0.9, 3, 0x7c4dff, 380);
       }
       const me = this.entities.get(this.me);
-      if (me && Math.hypot(me.sprite.x - x, me.sprite.y - y) < r * 2.5) this.cameras.main.shake(220, 0.007);
+      if (me && Math.hypot(me.sprite.x - x, me.sprite.y - y) < r * 2.5) quake(this, 220, 0.007);
     });
     // Skeletons climb out of the ground: green flash and dust where each one appears
     // Bone ritual: the skeletons fly apart, their bones arc through the air, land and slide into a pentagram that glows
@@ -620,7 +619,7 @@ export class TownScene extends Phaser.Scene {
       if (e) { const b = this.bodyScale(e); this.tweens.add({ targets: e.sprite, scaleX: b, scaleY: { from: b * 0.2, to: b }, duration: 650, ease: "Back.Out" }); }
       this.floatText(x, y - 56, "BONE DEMON!", "#ff5233", PIXEL_FONT);
       const me = this.entities.get(this.me);
-      if (me && Math.hypot(me.sprite.x - x, me.sprite.y - y) < 400) this.cameras.main.shake(380, 0.01);
+      if (me && Math.hypot(me.sprite.x - x, me.sprite.y - y) < 400) quake(this, 380, 0.01);
     });
     this.room.onMessage("demonwind", ({ id, ms }) => {
       const e = this.entities.get(id);
@@ -638,7 +637,7 @@ export class TownScene extends Phaser.Scene {
         this.burst(x + Math.cos(a) * d, y + Math.sin(a) * d, 3 + Math.random() * 3, i % 2 ? 0xff7043 : 0xffca28, 420);
       }
       const me = this.entities.get(this.me);
-      if (me && Math.hypot(me.sprite.x - x, me.sprite.y - y) < r * 3) this.cameras.main.shake(260, 0.009);
+      if (me && Math.hypot(me.sprite.x - x, me.sprite.y - y) < r * 3) quake(this, 260, 0.009);
     });
     // Bone Demon grabs a skeleton, lifts it, snaps it in two between its fists and straps the piece on
     this.room.onMessage("demonrip", (msg) => this.demonRip(msg));
@@ -738,7 +737,7 @@ export class TownScene extends Phaser.Scene {
         this.burst(x + Math.cos(a) * r * 0.7, y + Math.sin(a) * r * 0.7, 2.5, 0x8d6e63, 340);
       }
       const me = this.entities.get(this.me);
-      if (me && Math.hypot(me.sprite.x - x, me.sprite.y - y) < r * 2.5) this.cameras.main.shake(kind === "leap" ? 260 : 140, kind === "leap" ? 0.009 : 0.005);
+      if (me && Math.hypot(me.sprite.x - x, me.sprite.y - y) < r * 2.5) quake(this, kind === "leap" ? 260 : 140, kind === "leap" ? 0.009 : 0.005);
     });
     // The chief jumps: he glides to the mark while rising and falling
     this.room.onMessage("chiefleap", ({ id, x, y, ms }) => {
@@ -782,7 +781,7 @@ export class TownScene extends Phaser.Scene {
       this.floatText(x, y - e.top - 4, "!", "#ff5252");
       const b = this.bodyScale(e);
       this.tweens.add({ targets: e.sprite, scaleX: { from: b * 0.4, to: b }, scaleY: { from: b * 1.6, to: b }, duration: 220, ease: "Back.Out" });
-      if (victim === this.me) this.cameras.main.shake(80, 0.002);
+      if (victim === this.me) quake(this, 80, 0.002);
     });
     // Blob merging: the one in danger calls ("MERGE!"), the others rush in and melt into it
     this.room.onMessage("blobcall", ({ id }) => {
@@ -853,9 +852,12 @@ export class TownScene extends Phaser.Scene {
         blocked ? "#9ad1ff" : crit ? "#ffd60a" : id === this.me ? "#ff5d5d" : "#ffffff");
       e.sprite.setTintFill(0xffffff);
       this.time.delayedCall(80, () => e.sprite.clearTint());
-      if (e.hero && !e.state.dead) playCharAnim(e.sprite, e.hero, "hit", this.dirOf(e));
+      // A flinch never cuts a swing short: the attack you started keeps playing, so the fight stays readable
+      const cur = e.sprite.anims.currentAnim?.key ?? "";
+      const busy = e.sprite.anims.isPlaying && /_(swing|attack|cast)/.test(cur);
+      if (e.hero && !e.state.dead && !busy) playCharAnim(e.sprite, e.hero, "hit", this.dirOf(e));
       if (e.mob) this.gooSplat(e, dmg);
-      if (id === this.me) this.cameras.main.shake(100, 0.004);
+      if (id === this.me) quake(this, 100, 0.004);
     });
     // Initiative broken (shared/combat.ts): the target is dizzy and can't attack for a moment
     this.room.onMessage("broken", ({ id }) => {
@@ -871,7 +873,7 @@ export class TownScene extends Phaser.Scene {
       if (on && e) this.villagers?.shoutNear(e.sprite.x, e.sprite.y, shout);
       if (id === this.me) {
         (this.wrathBanner ??= new WrathBanner()).show(on, shout);
-        if (on) this.cameras.main.shake(300, 0.008);
+        if (on) quake(this, 300, 0.008);
       } else if (e) this.floatText(e.sprite.x, e.sprite.y - 22, on ? "Outlaw!" : "Pardoned", on ? "#ff5252" : "#d8f0c0", PIXEL_FONT);
     });
     // Our hero died: "You died - killed by <monster or player>" with a respawn countdown
@@ -1055,7 +1057,33 @@ export class TownScene extends Phaser.Scene {
     });
   }
 
-  private floatText(x: number, y: number, text: string, color: string, font = "monospace") {
+  /**
+   * Magic, Rare and Legendary drops on the ground (shared/gear.ts rarity): a soft glow in the rarity colour,
+   * plus a pixel light beam for Rare and Legendary, and a chime when one drops near you.
+   */
+  private lootGlow(img: Phaser.GameObjects.Image, x: number, y: number, rarity: number, depth: number) {
+    const col = RARITY_HEX[rarity];
+    const parts: Phaser.GameObjects.GameObject[] = [];
+    const glow = this.add.ellipse(x, y + 1, 16, 7, col, 0.55).setDepth(depth - 9).setBlendMode(Phaser.BlendModes.ADD);
+    this.tweens.add({ targets: glow, scaleX: 1.3, scaleY: 1.3, alpha: 0.25, duration: 700, yoyo: true, repeat: -1 });
+    parts.push(glow);
+    if (rarity >= 2) {
+      const w = rarity === 3 ? 5 : 3, h = rarity === 3 ? 72 : 48;
+      const tint = Phaser.Display.Color.IntegerToColor(col).lighten(25).color;
+      const beam = this.add.rectangle(x, y, w, h, col, 0.6).setOrigin(0.5, 1).setDepth(depth - 7);
+      const core = this.add.rectangle(x, y, 1, h * 0.85, tint, 0.9).setOrigin(0.5, 1).setDepth(depth - 6).setBlendMode(Phaser.BlendModes.ADD);
+      isoAnchor(beam, { x, y }); isoAnchor(core, { x, y });
+      beam.scaleY = 0; core.scaleY = 0;
+      this.tweens.add({ targets: [beam, core], scaleY: 1, duration: 260, ease: "Quad.easeOut" });
+      this.tweens.add({ targets: beam, alpha: 0.3, duration: 900, yoyo: true, repeat: -1, delay: 260 });
+      parts.push(beam, core);
+      // Only drops that appear while you play chime (not the ones already lying there when you join)
+      if (this.time.now > 4000) playSfx(rarity === 3 ? "lootLegendary" : "lootRare", x, y);
+    }
+    img.once("destroy", () => parts.forEach((p) => p.destroy()));
+  }
+
+  private floatText(x: number, y: number, text: string, color: string, font = PIXEL_FONT) {
     const t = this.add.text(x, y, text, {
       fontFamily: font, fontSize: "16px", color, stroke: "#000", strokeThickness: 3,
     }).setOrigin(0.5, 1).setScale(0.25).setResolution(2).setDepth(30000);
@@ -1195,7 +1223,7 @@ export class TownScene extends Phaser.Scene {
     if (cls) this.gearFx.swing(e, step, off[0], off[1], !!cls.projectile, id === this.me); // item level effects
     if (cls?.projectile) return; // the fireball itself is the visual
     // No hit-area shapes (Murat): the attack animation is the visual; the finisher still shakes the camera
-    if (step === 2 && id === this.me) this.cameras.main.shake(80, 0.003);
+    if (step === 2 && id === this.me) quake(this, 80, 0.003);
   }
 
   /** A struck blob loses some goo: blobs of slime fly off in little arcs and splat on the ground, then soak away. */
@@ -1428,7 +1456,7 @@ export class TownScene extends Phaser.Scene {
           // chips fly from the break (height above its feet) and fall around it
           for (let i = 0; i < 9; i++) debris.push({ x: mid[0], y: (Math.random() - 0.5) * 4, vx: (Math.random() - 0.5) * 70, vy: (Math.random() - 0.5) * 24, h: -mid[1], vh: 20 + Math.random() * 45, a: Math.random() * 3, va: (Math.random() - 0.5) * 18, len: 2 + Math.random() * 2.5 });
           const me = this.entities.get(this.me);
-          if (me && Math.hypot(me.sprite.x - ex, me.sprite.y - ey) < 260) this.cameras.main.shake(160, 0.006);
+          if (me && Math.hypot(me.sprite.x - ex, me.sprite.y - ey) < 260) quake(this, 160, 0.006);
         }
         // the halves in each fist, torn outward; then pressed onto the body until they are worn
         const fl = e.sprite.flipX ? -1 : 1;
@@ -1821,7 +1849,7 @@ export class TownScene extends Phaser.Scene {
     // The hero flashes gold for a moment
     sprite.setTintFill(0xffd166);
     this.time.delayedCall(120, () => sprite.clearTint());
-    if (mine) this.cameras.main.shake(260, 0.006);
+    if (mine) quake(this, 260, 0.006);
   }
 
   /** Big on-screen "zone cleared" banner for the player who killed the zone's last monster. */
@@ -1890,7 +1918,7 @@ export class TownScene extends Phaser.Scene {
       : isoInput(k.W.isDown || k.UP.isDown, k.S.isDown || k.DOWN.isDown, k.A.isDown || k.LEFT.isDown, k.D.isDown || k.RIGHT.isDown);
     // Point-and-click: the mouse steers until a movement key is pressed
     let want = next;
-    if (next.up || next.down || next.left || next.right) this.pointer?.cancel();
+    if (next.up || next.down || next.left || next.right) { this.pointer?.cancel(); this.pointer?.drawRing(); }
     else want = this.pointer?.update(Math.min(dtMs, 100)) ?? next;
     this.sendInput(want);
 

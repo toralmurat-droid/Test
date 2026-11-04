@@ -16,7 +16,7 @@ import { SHOPS, sellPrice } from "../../shared/shops";
 import { gearDef, gearName, itemLevel, itemText, TIER_NAMES } from "../../shared/gear";
 import { MAX_POTIONS } from "../../shared/items";
 import { CHAR_GROW, CHAR_SCALE, CHAR_ORIGIN, CharacterName, playCharAnim } from "./artAssets";
-import { iconCanvas, TIER_COLORS } from "./gear";
+import { iconCanvas, itemColor, rarityLabel } from "./gear";
 import { itemTexture } from "./textures";
 import { isoAnchor } from "./iso";
 
@@ -195,12 +195,12 @@ export class NpcLayer {
           `${e.price} 🪙`, "sh-buy", i, gold < e.price || potions + qty > MAX_POTIONS);
       }
       const d = gearDef(e.item)!;
-      return row(e.item, gearName(e.item, cls), TIER_COLORS[d.tier], `${TIER_NAMES[d.tier]} · Lv ${itemLevel(e.item)} · ${itemText(e.item)}`, `${e.price} 🪙`, "sh-buy", i, gold < e.price);
+      return row(e.item, gearName(e.item, cls), itemColor(e.item), `${rarityLabel(e.item)}${TIER_NAMES[d.tier]} · Lv ${itemLevel(e.item)} · ${itemText(e.item)}`, `${e.price} 🪙`, "sh-buy", i, gold < e.price);
     }).join("");
     const sellable = shop.buys ? bag.map((id, i) => [id, i] as const).filter(([id]) => gearDef(id) && shop.buys!.includes(gearDef(id)!.slot)) : [];
     const sell = shop.buys
       ? `<h4>Sell from your bag</h4>` + (sellable.length
-        ? sellable.map(([id, i]) => row(id, gearName(id, cls), TIER_COLORS[gearDef(id)!.tier], `${TIER_NAMES[gearDef(id)!.tier]} · Lv ${itemLevel(id)} · ${itemText(id)}`, `Sell ${sellPrice(id)} 🪙`, "sh-sell", i, false)).join("")
+        ? sellable.map(([id, i]) => row(id, gearName(id, cls), itemColor(id), `${rarityLabel(id)}${TIER_NAMES[gearDef(id)!.tier]} · Lv ${itemLevel(id)} · ${itemText(id)}`, `Sell ${sellPrice(id)} 🪙`, "sh-sell", i, false)).join("")
         : `<p class="sh-empty">No weapons in your bag. Unequip one in the Bag (G) to sell it.</p>`)
       : "";
     const quest = questDialog(n.id, q);
