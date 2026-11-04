@@ -183,6 +183,7 @@ export class Mob extends Schema {
   riteX = NaN; riteY = 0; // BONES.ritual: the point of the star this skeleton walks to before it throws itself in
   ritual = false; banishAt = 0; nextStomp = 0; nextHarvest = 0; nextToss = 0; // BONES.ritual: given to a demon summoning; demon: when it goes back, next Hellfire Stomp
   leg = 0; restUntil = 0; // carriers: 0 = taking a plank to the engine, 1 = going back to the yard; pause at each end
+  hist: number[] = []; // not synced: recent [time, x, y] samples, so a hero's swing can be judged where the monster was on their screen (REWIND_MS)
   dozeSlot = -1; lastTick = 0; dozy = false; // server tick bookkeeping for dozing monsters (TownRoom.dozing)
   flankA = NaN; // BONES: side of the hero this skeleton closes in from (NaN = straight at him)
   hateId = ""; hate = 0; nextAggro = 0; threat = 0; // AGGRO: who hit it last and how much it hates them; level gap of the scariest hero near
@@ -408,6 +409,13 @@ const FEUD_CELL = 128; // px, >= FEUD.range
 const SLEEP_RANGE = 28 * TILE; // the screen shows about 12 tiles each way, so they are always awake well before they come into view
 /** A dozing monster (no hero within SLEEP_RANGE) is updated once every this many ticks. */
 const DOZE_EVERY = 5;
+/**
+ * Lag forgiveness for melee basic attacks (Murat 2026-11-04: clicked monsters still got missed). A hero aims at the
+ * monster where their screen showed it, which is a network trip old; by the time the swing reaches the server, a
+ * walking (or fleeing) monster has moved on by a few px. A swing also hits a monster if it was in reach at any
+ * point during the last REWIND_MS.
+ */
+const REWIND_MS = 220;
 /** Monsters never (re)appear this close to a living hero (Murat): the zone tries another spot or waits. */
 const NO_SPAWN_RANGE = 10 * TILE;
 
@@ -1533,6 +1541,13 @@ export class TownRoom extends Room<TownState> {
       if (m.fx !== fx) m.fx = fx;
       this.updateMob(m, id, dt, now);
       if (m.perch) { m.x = m.homeX; m.y = m.homeY; m.moving = false; } // lookouts never leave their tower
+      // Position history for lag-forgiving swings (only kept while it moves)
+      const h = m.hist, n = h.length;
+      if (m.dead) { if (n) h.length = 0; }
+      else if (!n || h[n - 2] !== m.x || h[n - 1] !== m.y) {
+        h.push(now, m.x, m.y);
+        while (h.length > 3 && h[0] < now - REWIND_MS - 100) h.splice(0, 3);
+      }
     });
     dt = dtMs / 1000;
     this.updateZones(now);
@@ -2256,7 +2271,8 @@ export class TownRoom extends Room<TownState> {
         }
         continue;
       }
-      const hit = this.firstTargetAt(s.x, s.y, s.radius + HIT_RADIUS, s.owner, s.hitIds);
+      // Monsters are hit on their body: big ones are wider than a hero (HIT_RADIUS)
+      const hit = this.firstTargetAt(s.x, s.y, s.radius + HIT_RADIUS, s.owner, s.hitIds, (m) => Math.max(0, mobBody(m.kind) - HIT_RADIUS));
       if (hit) {
         if (s.spec) shotHit(this.host, s.spec, hit);
         else this.hitTarget(s.owner, hit, s.damage, [s.vx, s.vy], { kb: s.knockback, basic: s.basic });
@@ -2617,10 +2633,10 @@ export class TownRoom extends Room<TownState> {
     return out;
   }
 
-  private firstTargetAt(x: number, y: number, r: number, exclude: string, skip?: Set<string>): string | undefined {
+  private firstTargetAt(x: number, y: number, r: number, exclude: string, skip?: Set<string>, mobPad?: (m: Mob) => number): string | undefined {
     // Skip players who cannot be hurt right now (safe zone, dash) so shots pass through them
     const now = Date.now();
-    return this.targetsAround(x, y, r, exclude).find((id) => {
+    return this.targetsAround(x, y, r, exclude, mobPad).find((id) => {
       if (skip?.has(id)) return false;
       const p = this.state.players.get(id);
       return !p || (!isSafeZone(p.x, p.y) && now >= p.invulnUntil);
@@ -3354,7 +3370,19 @@ export class TownRoom extends Room<TownState> {
     const reach = (hit.range ?? def.attackRange) * reachMult;
     const hx = a.x + off[0] * SWING_AHEAD * reachMult, hy = a.y + off[1] * SWING_AHEAD * reachMult;
     // Monsters are hit on their body, not only at their feet (big ones are wide)
-    for (const tid of this.targetsAround(hx, hy, reach, id, (m) => mobBody(m.kind))) this.hitTarget(id, tid, dmg, off, { kb: hit.knockback, crit, basic: true });
+    const ids = this.targetsAround(hx, hy, reach, id, (m) => mobBody(m.kind));
+    // ...and monsters that were in reach a moment ago, where the hero's screen still showed them (REWIND_MS)
+    const since = now - REWIND_MS, R = reach + 16;
+    this.state.mobs.forEach((m, mid) => {
+      if (m.dead || m.hidden || Math.abs(m.x - hx) > R + 24 || Math.abs(m.y - hy) > R + 24 || ids.includes(mid)) return;
+      const h = m.hist, r = reach + mobBody(m.kind);
+      // newest first; the first sample older than the window still counts (it stood there into the window)
+      for (let i = h.length - 3; i >= 0; i -= 3) {
+        if (Math.hypot(h[i + 1] - hx, h[i + 2] - hy) <= r) { ids.push(mid); break; }
+        if (h[i] < since) break;
+      }
+    });
+    for (const tid of ids) this.hitTarget(id, tid, dmg, off, { kb: hit.knockback, crit, basic: true });
   }
 
   /** Fire one projectile from `a` (fireball or arrow), offset sideways by `lane` px. */

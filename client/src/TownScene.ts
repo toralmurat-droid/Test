@@ -1066,16 +1066,34 @@ export class TownScene extends Phaser.Scene {
     };
     const attackable = (id: string, e: Entity) => {
       if (e.state.dead || id === this.me) return false;
-      if (e.mob) return true;
+      // A monster tucked into a grave or tree can't be hurt (the server skips it): don't let a click swing at it
+      if (e.mob) return !e.state.hidden;
       const m = meEnt(); // other heroes only where fighting is allowed
       return !!m && !isSafeZone(e.sprite.x, e.sprite.y) && !isSafeZone(m.sprite.x, m.sprite.y);
     };
     // x/y: where it is drawn (for picking with the mouse); sx/sy: its newest server position (for reach and aim:
     // the drawn one plays ~110 ms behind, so a monster just knocked back still looked in reach)
-    const asEnemy = (id: string, e: Entity): ClickEnemy => ({
-      id, x: e.sprite.x, y: e.sprite.y, sx: e.tx ?? e.sprite.x, sy: e.ty ?? e.sprite.y,
-      h: e.top || 20, body: e.mob ? mobBody(e.state.kind) : 0, dead: !!e.state.dead, sprite: e.sprite,
-    });
+    // Walking speed from the last server updates (px/s), so arrows and fireballs can be aimed where it will be
+    const velocity = (e: Entity): [number, number] => {
+      const s = e.snaps, n = s?.length ?? 0;
+      if (!s || n < 2 || !e.state.moving) return [0, 0];
+      const b = s[n - 1];
+      let a = s[n - 2];
+      for (let i = n - 2; i >= 0 && b.t - s[i].t < 160; i--) a = s[i];
+      const dt = (b.t - a.t) / 1000;
+      if (dt < 0.03) return [0, 0];
+      let vx = (b.x - a.x) / dt, vy = (b.y - a.y) / dt;
+      const v = Math.hypot(vx, vy);
+      if (v > 140) { vx *= 140 / v; vy *= 140 / v; } // a knockback is not a walk
+      return [vx, vy];
+    };
+    const asEnemy = (id: string, e: Entity): ClickEnemy => {
+      const [vx, vy] = velocity(e);
+      return {
+        id, x: e.sprite.x, y: e.sprite.y, sx: e.tx ?? e.sprite.x, sy: e.ty ?? e.sprite.y, vx, vy,
+        h: e.top || 20, body: e.mob ? mobBody(e.state.kind) : 0, dead: !!e.state.dead, sprite: e.sprite,
+      };
+    };
     const secondarySkill = () => {
       const p = meEnt()?.state;
       const n = this.activeSlot;
@@ -1090,7 +1108,7 @@ export class TownScene extends Phaser.Scene {
       return def.projectile ? def.projectile.range * k * 0.8 : meleeReach(def.attackRange, k) - 4;
     };
     this.pointer = new PointerControls(this, {
-      me: () => { const e = meEnt(); return e ? { x: e.sprite.x, y: e.sprite.y, state: e.state } : undefined; },
+      me: () => { const e = meEnt(); return e ? { x: e.sprite.x, y: e.sprite.y, sx: e.tx, sy: e.ty, state: e.state } : undefined; },
       enemies: () => {
         const out: ClickEnemy[] = [];
         for (const [id, e] of this.entities) if (!e.culled && attackable(id, e)) out.push(asEnemy(id, e));
@@ -1111,6 +1129,14 @@ export class TownScene extends Phaser.Scene {
       speed: () => {
         const p = meEnt()?.state;
         return p ? heroSpeed(p.cls as ClassKind, p.slowed, p.spd ?? 1) * gearSpeedMult(activeOf(p)) : 80;
+      },
+      shotSpeed: (secondary) => {
+        const p = meEnt()?.state;
+        if (!p) return 0;
+        if (!secondary) return CLASSES[p.cls as ClassKind].projectile?.speed ?? 0;
+        if (secondarySkill()) return 0; // skills aim their own way
+        const rg = activeOf(p).ranged, shot = rg ? gearDef(rg)?.shot : undefined;
+        return shot?.speed ?? 0;
       },
       reach: (secondary) => {
         const p = meEnt()?.state;
