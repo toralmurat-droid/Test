@@ -196,6 +196,8 @@ const PIXEL_FONT = "'Pixelify Sans', monospace";
 /** Goo colours of the blobs (match their painted sheets), for the splash when one is struck. */
 const GOO: Record<string, number> = { slime: 0x5fae4c, blobling: 0x8cc955, shooterblob: 0x7f5cb8, warriorblob: 0xb94a32, healerblob: 0xd9aec6 };
 
+const tipEsc = (t: string) => t.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+
 export class TownScene extends Phaser.Scene {
   private room!: Room;
   private me = "";
@@ -1791,7 +1793,7 @@ export class TownScene extends Phaser.Scene {
       const learned = skillLearned(cls, mine.talents, a.id);
       const at = slots.indexOf(a.id);
       const where = !learned ? `🔒 learn it in the tree (T), Lv ${a.req}` : at === n ? "in this slot" : at >= 0 ? `now on key ${SLOT_KEYS[at]}` : "not on a key yet";
-      return `<button class="opt${learned ? "" : " locked"}${at === n ? " cur" : ""}" data-pick="${a.id}" title="${a.desc}">` +
+      return `<button class="opt${learned ? "" : " locked"}${at === n ? " cur" : ""}" data-pick="${a.id}" data-tiphead="${a.name}" data-tip="${tipEsc(a.desc)}">` +
         `${iconImg(a.id, "picon")}<span><b>${a.name}</b><small>${where}</small></span></button>`;
     }).join("");
     const empty = `<button class="opt clear" data-pick=""><span class="picon none">✕</span><span><b>Empty</b><small>clear key ${SLOT_KEYS[n]}</small></span></button>`;
@@ -1864,7 +1866,7 @@ export class TownScene extends Phaser.Scene {
       const shade = left > 0 ? `<div class="cd" style="height:${(left / h.cdMs) * 100}%"></div>` : "";
       const wait = left > 0 || h.cost > mine.energy ? " wait" : "";
       const power = skill;
-      return `<div class="slot${h.ult ? " ult" : ""}${wait}${picking}" data-slot="${i}" data-skill="${skill}" title="${h.name} · key ${SLOT_KEYS[i]} makes it the right-click skill · click to change · wheel to scroll · right-click to clear">` +
+      return `<div class="slot${h.ult ? " ult" : ""}${wait}${picking}" data-slot="${i}" data-skill="${skill}" data-tiphead="${h.name}" data-tip="${tipEsc(skillOf(cls, skill)?.desc ?? "")}" data-tiphint="Key ${SLOT_KEYS[i]} · click to change · wheel to scroll · right-click to clear">` +
         `${iconImg(power)}${shade}<kbd>${SLOT_KEYS[i]}</kbd>${left > 0 ? `<b>${Math.ceil(left / 1000)}</b>` : ""}</div>`;
     }).join("");
     const bar = document.getElementById("hotbar")!;

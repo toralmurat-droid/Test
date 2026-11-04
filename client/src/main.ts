@@ -5,10 +5,12 @@ import { takeRejoin } from "./reconnect";
 import { showLoading } from "./loading";
 import { installCursors } from "./cursors";
 import { installWeatheredFrames } from "./weathered";
+import { installTooltips } from "./tooltip";
 import "./weathered.css";
 
 installCursors();
 installWeatheredFrames();
+installTooltips();
 import { TownScene } from "./TownScene";
 import { CLASSES, CLASS_KINDS, ClassKind, isClassKind } from "../../shared/classes";
 import { mountFireside } from "./fireside";
