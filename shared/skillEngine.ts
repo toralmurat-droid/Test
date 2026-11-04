@@ -130,7 +130,7 @@ export function castSkill(h: SkillHost, id: string, skillId: string): boolean {
   const u = live(h, id);
   if (!u || !u.cls || !h.canAct(id)) return false;
   const s = skillOf(u.cls, skillId);
-  const rank = Math.min(3, rankOf(u.talents, skillId));
+  const rank = s?.cantrip ? 1 : Math.min(3, rankOf(u.talents, skillId));
   const now = h.now();
   if (!s || s.passive || rank <= 0 || now < u.sk.chargeUntil) return false;
   if (cooldownLeft(s, u.sk, now, h.cooldownMult(id)) > 0) return false;

@@ -444,3 +444,8 @@ html, body { margin: 0; height: 100%; background: #1b1b24; color: #eee; font: 14
 #colors { display: flex; gap: 6px; justify-content: center; margin: 4px 0 12px; flex-wrap: wrap; }
 #colors button { width: 22px; height: 22px; border: 0; cursor: pointer; box-shadow: 0 0 0 2px #080504, 0 0 0 3px #45331e; }
 #colors button.sel { box-shadow: 0 0 0 2px #080504, 0 0 0 4px #e3bf6a; }
+/* Left-click cell (weapon attack or the spell picked for the left click), before the 1..0 slots */
+#hotbar .slot.lmb { border-color: #b08a4a; margin-right: 6px; }
+#hotbar .slot.lmb img:not(.sicon) { width: 32px; height: 32px; image-rendering: pixelated; margin-bottom: 2px; }
+#hotbar .slot.lmb .fist { padding-bottom: 10px; color: #e8d8b0; }
+#slotpick .picon.fist { display: flex; align-items: center; justify-content: center; font-size: 8px; color: #e8d8b0; }

@@ -38,9 +38,31 @@ export interface GearDef {
   accent: number; // trim / glow
   style: string; // drawing style for the art generator
   shot?: ShotDef; // ranged slot only
+  /** Weapons: what kind of weapon it is. It decides the basic attack (bow = arrows, wand = magic bolts, sword = melee...).
+   *  Unset = the old "class weapon" that takes the shape of the hero's own weapon (shared/weapons.ts NATIVE_WEAPON). */
+  wtype?: WeaponType;
   /** Starting kit: only this class can wear it, it never drops from monsters or chests, and it is what makes the hero look like its class. */
   cls?: string;
 }
+
+/** Weapon kinds. The equipped main-hand weapon decides the basic attack for every class (shared/weapons.ts). */
+export type WeaponType = "sword" | "katana" | "axe" | "bow" | "staff" | "wand" | "fists";
+export const WEAPON_TYPE_NAMES: Record<WeaponType, string> = { sword: "Sword", katana: "Katana", axe: "Axe", bow: "Bow", staff: "Staff", wand: "Wand", fists: "Fists" };
+/** Short words for what the weapon does in any hero's hands (item tooltip). */
+export const WEAPON_USE: Record<WeaponType, string> = {
+  sword: "melee", katana: "fast melee", axe: "heavy melee", bow: "shoots arrows", staff: "fireballs", wand: "magic bolts, costs mana", fists: "punches",
+};
+/** The weapon each class is trained with: its class weapon and kit take this shape. */
+export const NATIVE_WEAPON: Record<ClassKind, WeaponType> = { knight: "sword", ninja: "katana", wizard: "staff", archer: "bow", barbarian: "axe" };
+/** Weapon kind in a hero's hand: none = fists, an old class weapon = the class's own kind. */
+export function weaponType(cls: string, weaponId?: string): WeaponType {
+  if (!weaponId) return "fists";
+  const d = gearDef(weaponId);
+  if (!d || d.slot !== "weapon") return "fists";
+  return d.wtype ?? NATIVE_WEAPON[(d.cls ?? cls) as ClassKind] ?? "sword";
+}
+/** Magic weapons (staves, wands) hit with Magic; everything else with Strength. */
+export const weaponStat = (t: WeaponType): "mag" | "str" => (t === "staff" || t === "wand" ? "mag" : "str");
 
 const G = (d: GearDef) => d;
 export const GEAR: Record<string, GearDef> = Object.fromEntries([
@@ -69,6 +91,17 @@ export const GEAR: Record<string, GearDef> = Object.fromEntries([
   G({ id: "h_cap", slot: "hat", tier: 1, name: "Feather Cap", bonus: { mag: 1, sta: 1, dex: 1 }, color: 0x3f7d3a, accent: 0xe63946, style: "cap" }),
   G({ id: "h_helm", slot: "hat", tier: 2, name: "Iron Helm", bonus: { sta: 3, str: 1 }, color: 0x9aa3ad, accent: 0x5a626c, style: "helm" }),
   G({ id: "h_crown", slot: "hat", tier: 3, name: "Golden Crown", bonus: { sta: 2, str: 2, mag: 3 }, color: 0xf2c14e, accent: 0xe63946, style: "crown" }),
+  // Typed weapons: they change how any hero attacks (an archer with a sword fights in melee, a knight with a bow shoots)
+  G({ id: "wb_hunt", slot: "weapon", tier: 1, wtype: "bow", name: "Hunting Bow", bonus: { atk: 2 }, color: 0x8a5a32, accent: 0xe9e2d0, style: "bow" }),
+  G({ id: "wb_recurve", slot: "weapon", tier: 2, wtype: "bow", name: "Recurve Bow", bonus: { atk: 4, dex: 1 }, color: 0x4a2e1c, accent: 0xd9a93a, style: "bow" }),
+  G({ id: "ws_arming", slot: "weapon", tier: 1, wtype: "sword", name: "Arming Sword", bonus: { atk: 2 }, color: 0xb9c2cc, accent: 0x8a5a32, style: "plain" }),
+  G({ id: "ws_bastard", slot: "weapon", tier: 2, wtype: "sword", name: "Bastard Sword", bonus: { atk: 4, sta: 1 }, color: 0xd6dde4, accent: 0xd9a93a, style: "plain" }),
+  G({ id: "wx_hand", slot: "weapon", tier: 1, wtype: "axe", name: "Hand Axe", bonus: { atk: 2 }, color: 0x8a939b, accent: 0x6b4226, style: "axe" }),
+  G({ id: "wk_tanto", slot: "weapon", tier: 2, wtype: "katana", name: "Wanderer's Katana", bonus: { atk: 3, dex: 1 }, color: 0xc9cdd6, accent: 0x8a2230, style: "plain" }),
+  G({ id: "wf_oak", slot: "weapon", tier: 1, wtype: "staff", name: "Oak Staff", bonus: { atk: 2 }, color: 0x7a4f2a, accent: 0x9be8ff, style: "long" }),
+  G({ id: "ww_ash", slot: "weapon", tier: 1, wtype: "wand", name: "Ash Wand", bonus: { atk: 2 }, color: 0xb08a5a, accent: 0x9be8ff, style: "wand" }),
+  G({ id: "ww_bone", slot: "weapon", tier: 2, wtype: "wand", name: "Bone Wand", bonus: { atk: 4, mag: 1 }, color: 0xe6dcc0, accent: 0xb36bff, style: "wand" }),
+  G({ id: "ww_star", slot: "weapon", tier: 3, wtype: "wand", name: "Starfire Wand", bonus: { atk: 7, mag: 1 }, color: 0x3a2a4a, accent: 0xffc247, style: "wand" }),
   ...starterKits(),
 ].map((d) => [d.id, d]));
 export const GEAR_IDS = Object.keys(GEAR);
@@ -201,11 +234,13 @@ export type Equipped = Partial<Record<GearSlot, string>>;
 /** Stat points added by the equipped items. Weapon `atk` goes to the class's attack stat. */
 export function gearStats(cls: string, eq: Equipped): Stats {
   const out: Stats = { sta: 0, str: 0, mag: 0, dex: 0 };
-  const atkStat = (STATS as Record<string, { attackStat: keyof Stats }>)[cls]?.attackStat ?? "str";
+  const clsStat = (STATS as Record<string, { attackStat: keyof Stats }>)[cls]?.attackStat ?? "str";
   for (const s of GEAR_SLOTS) {
     const b = eq[s] ? gearDef(eq[s]!)?.bonus : undefined;
     if (!b) continue;
     out.sta += b.sta ?? 0; out.str += b.str ?? 0; out.mag += b.mag ?? 0; out.dex += b.dex ?? 0;
+    // a weapon's attack goes to the stat it hits with (a wand: Magic, a sword: Strength), anything else to the class's
+    const atkStat = s === "weapon" ? weaponStat(weaponType(cls, eq.weapon)) : clsStat;
     out[atkStat] += b.atk ?? 0;
   }
   return out;
@@ -228,13 +263,12 @@ export function gearSpeedMult(eq: Equipped): number {
   return m;
 }
 
-const WEAPON_NOUN: Record<string, string> = { knight: "Sword", ninja: "Katana", wizard: "Staff", archer: "Bow", barbarian: "Axe" };
 
-/** Display name; weapons take the hero's weapon type ("Frost Katana"). */
+/** Display name; old class weapons take the hero's weapon type ("Frost Katana"), typed weapons keep their own name. */
 export function gearName(id: string, cls?: string): string {
   const d = gearDef(id);
   if (!d) return id;
-  const name = d.slot === "weapon" ? `${d.name} ${WEAPON_NOUN[cls ?? ""] ?? "Weapon"}` : d.name;
+  const name = d.slot === "weapon" && !d.wtype ? `${d.name} ${cls ? WEAPON_TYPE_NAMES[weaponType(cls, id)] : "Weapon"}` : d.name;
   const aff = itemAffixes(id);
   if (!aff.length) return name;
   // Strongest bonus gives the first word, the next one the "of ..." ending
@@ -262,9 +296,10 @@ export function bonusText(b: GearBonus): string {
 export function itemText(id: string): string {
   const d = gearDef(id);
   if (!d) return "";
+  const kind = d.wtype ? `${WEAPON_TYPE_NAMES[d.wtype]}: ${WEAPON_USE[d.wtype]}` : "";
   if (d.cls && !d.shot && !Object.keys(d.bonus).length) return "Starting gear";
   const shot = d.shot ? `${d.shot.damage} dmg, range ${d.shot.range}, every ${(d.shot.cooldownMs / 1000).toFixed(1)}s [${RANGED_KEY}]` : "";
-  return [shot, bonusText(d.bonus)].filter(Boolean).join(", ");
+  return [kind, shot, bonusText(d.bonus)].filter(Boolean).join(", ");
 }
 
 // ---- Item levels and requirements ----------------------------------------------------------------------

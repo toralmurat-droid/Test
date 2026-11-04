@@ -49,7 +49,7 @@ const weapons = (ids: string[]): ShopEntry[] => ids.map((base) => {
 export const SHOPS: Record<string, Shop> = {
   weaponsmith: {
     greeting: "Steel for every hand, friend. Have a look, or show me what you found out there.",
-    stock: weapons(["w_bronze", "w_ash", "w_frost", "w_long", "w_dragon", "w_sky", "r_sling", "r_knives", "r_crossbow"]),
+    stock: weapons(["w_bronze", "w_ash", "w_frost", "w_long", "w_dragon", "w_sky", "ws_arming", "wx_hand", "wb_hunt", "wf_oak", "r_sling", "r_knives", "r_crossbow"]),
     buys: ["weapon", "ranged"],
   },
   witch: {
@@ -59,6 +59,7 @@ export const SHOPS: Record<string, Shop> = {
       { item: "potion", qty: 3, price: Math.round(POTION_PRICE * 3 * 0.85) },
       { item: "mpotion", qty: 1, price: MANA_POTION_PRICE },
       { item: "mpotion", qty: 3, price: Math.round(MANA_POTION_PRICE * 3 * 0.85) },
+      ...weapons(["ww_ash", "ww_bone"]), // wands: magic bolts for any hero
     ],
   },
 };
