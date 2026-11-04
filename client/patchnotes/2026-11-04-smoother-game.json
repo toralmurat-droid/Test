@@ -1,5 +1,6 @@
 {
   "date": "2026-11-04",
+  "pr": 203,
   "title": "Smoother game",
   "changes": [
     "The server works about twice as fast, so fights stay smooth with many heroes online.",
