@@ -4,8 +4,8 @@ import { leaving, noteBuild, reconnectSoon, returnToStart, upgradeAnnounced } fr
 import { Client, Room } from "colyseus.js";
 import { BOSS, ELITE, InputState, MERGE, MAP_H, MAP_W, regenFromStamina, TICK_RATE, TILE } from "../../shared/constants";
 import { CLASSES, ClassKind, ENERGY, energyName, MAX_LEVEL, xpForLevel } from "../../shared/classes";
-import { canPay, MANA, manaRegen, MAX_MANA_POTIONS, maxManaFor, skillCost, unpackMana } from "../../shared/mana";
-import { MAX_POTIONS } from "../../shared/items";
+import { canPay, MANA, manaRegen, maxManaFor, skillCost, unpackMana } from "../../shared/mana";
+import { nextSize, potionAmount, PotionKind, potionName, POTION_SIZES, total, unpackPotions } from "../../shared/potions";
 import { GROUND, areaAt, isSafeZone } from "../../shared/map";
 import { heroPoise, meleeReach, mobBody } from "../../shared/combat";
 import { moveStep } from "../../shared/movement";
@@ -16,7 +16,7 @@ import { attackMult, cooldownMult, critChance, heroSpeed, STATS, magicMult, STAT
 import { NEED_TEXT, pointRange, SkillDef, skillOf, skillTarget, MAX_STACKS, talentBonus } from "../../shared/skills";
 import { SkillFx } from "./skillfx";
 import { displayGrid } from "./tileset";
-import { CRAWL_CROP, heroTexture, itemTexture, makeTileset, MOB_LOOK, mobTexture, preloadPaintedMobs } from "./textures";
+import { CRAWL_CROP, heroTexture, itemTexture, potionTex, makeTileset, MOB_LOOK, mobTexture, preloadPaintedMobs } from "./textures";
 import { Minimap } from "./minimap";
 import { GameMenu } from "./gamemenu";
 import { showMusicPanel, musicPanelOpen } from "./music";
@@ -542,7 +542,7 @@ export class TownScene extends Phaser.Scene {
       const gear = it.kind === "gear" && gearDef(it.gear);
       const img = gear
         ? this.add.image(it.x, it.y, "gear_icons", baseId(it.gear)).setScale(0.6 / ART_K).setDepth(it.y - 8)
-        : this.add.image(it.x, it.y, itemTexture(this, it.kind === "quest" ? `q_${it.gear}` : it.kind)).setDepth(it.y - 8);
+        : this.add.image(it.x, it.y, itemTexture(this, it.kind === "quest" ? `q_${it.gear}` : it.kind === "potion" || it.kind === "mpotion" ? potionTex(it.kind, Number(it.gear) || 0) : it.kind)).setDepth(it.y - 8);
       if (it.kind === "quest") {
         // Quest drops glow so they stand out from the gold
         const glow = this.add.circle(it.x, it.y, 6, 0xffd166, 0.3).setDepth(it.y - 9).setBlendMode(Phaser.BlendModes.ADD);
@@ -572,7 +572,7 @@ export class TownScene extends Phaser.Scene {
         this.feed(`Found ${name}! Press G to equip`);
         return;
       }
-      this.floatText(x, y - 6, kind === "gold" ? `+${amount} gold` : kind === "mpotion" ? "+1 mana potion" : "+1 potion",
+      this.floatText(x, y - 6, kind === "gold" ? `+${amount} gold` : `+${amount > 1 ? `${amount} ` : ""}${name || (kind === "mpotion" ? "mana potion" : "potion")}`,
         kind === "gold" ? "#ffc93c" : kind === "mpotion" ? "#8ab4ff" : "#ff8fa3", PIXEL_FONT);
     });
     this.room.onMessage("heal", ({ id, amount }) => {
@@ -1975,22 +1975,26 @@ export class TownScene extends Phaser.Scene {
 
   /** Healing (Q) and mana (V) potion cells right of the skill bar: the flask in pixel art, how many you carry. */
   private potionCells(mine: any) {
-    const cell = (kind: "potion" | "mpotion", key: string, n: number, name: string, max: number) => {
-      let url = this.weaponIcons.get(kind);
+    const pots = unpackPotions(mine.potions);
+    const cell = (kind: PotionKind, key: string) => {
+      const c = pots[kind], n = total(c), next = Math.max(0, nextSize(c)), tex = potionTex(kind, next);
+      const name = n ? potionName(kind, next) : kind === "mpotion" ? "Mana potion" : "Healing potion";
+      const sizes = c.map((k, s) => (k ? `${k} ${POTION_SIZES[s].name} (${potionAmount(kind, s)} ${kind === "mpotion" ? "mana" : "HP"})` : "")).filter(Boolean).join(", ");
+      let url = this.weaponIcons.get(tex);
       if (!url) {
-        const c = document.createElement("canvas");
-        c.width = c.height = 32;
-        const ctx = c.getContext("2d")!;
+        const cv = document.createElement("canvas");
+        cv.width = cv.height = 32;
+        const ctx = cv.getContext("2d")!;
         ctx.imageSmoothingEnabled = false;
-        ctx.drawImage(this.textures.get(itemTexture(this, kind)).getSourceImage() as CanvasImageSource, 0, 0, 8, 8, 0, 0, 32, 32);
-        url = c.toDataURL();
-        this.weaponIcons.set(kind, url);
+        ctx.drawImage(this.textures.get(itemTexture(this, tex)).getSourceImage() as CanvasImageSource, 0, 0, 8, 8, 0, 0, 32, 32);
+        url = cv.toDataURL();
+        this.weaponIcons.set(tex, url);
       }
       return `<div class="slot potion ${kind}${n > 0 ? "" : " wait"}" data-potion="${kind === "mpotion" ? "mana" : "hp"}" data-tiphead="${name}" ` +
-        `data-tip="${tipEsc(kind === "mpotion" ? "Refills half your mana." : "Heals 40% of your HP.")}" data-tiphint="Key ${key} or click to drink · you carry ${n}/${max}">` +
+        `data-tip="${tipEsc(sizes ? `You carry ${sizes}.` : "None left. Monsters, chests and Old Morwen have more.")}" data-tiphint="Key ${key} or click: drinks the smallest first">` +
         `<img src="${url}" alt=""><kbd>${key}</kbd><b class="count">${n}</b></div>`;
     };
-    return `<div class="potions">${cell("potion", "Q", mine.potions ?? 0, "Healing potion", MAX_POTIONS)}${cell("mpotion", "V", unpackMana(mine.mp).potions, "Mana potion", MAX_MANA_POTIONS)}</div>`;
+    return `<div class="potions">${cell("potion", "Q")}${cell("mpotion", "V")}</div>`;
   }
 
   private closeSlotPicker() {
@@ -2442,7 +2446,7 @@ export class TownScene extends Phaser.Scene {
       const cls0 = mine.cls as ClassKind;
       document.getElementById("stats")!.textContent =
         `${mine.dead ? "Respawning… " : safe}Lv ${mine.level} ${CLASSES[mine.cls as ClassKind].name} · ` +
-        `${mine.level >= MAX_LEVEL ? "XP MAX" : `XP ${mine.xp - cur}/${next - cur}`} · Gold ${mine.gold} · Potions ${mine.potions} · Mana potions ${unpackMana(mine.mp).potions} · Kills ${mine.kills} · Online ${online}` +
+        `${mine.level >= MAX_LEVEL ? "XP MAX" : `XP ${mine.xp - cur}/${next - cur}`} · Gold ${mine.gold} · Potions ${total(unpackPotions(mine.potions).potion)} · Mana potions ${total(unpackPotions(mine.potions).mpotion)} · Kills ${mine.kills} · Online ${online}` +
         (talentPoints(mine.level) > spentPoints(cls0, mine.talents) ? ` · ⭐ ${talentPoints(mine.level) - spentPoints(cls0, mine.talents)} skill point(s): press T` : "");
       const freePts = talentPoints(mine.level) - spentPoints(cls0, mine.talents);
       const badge = document.getElementById("treebadge")!;

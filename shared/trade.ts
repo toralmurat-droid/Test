@@ -47,7 +47,7 @@ export const STASH = (() => {
 })();
 
 export interface Offer { items: string[]; gold: number }
-export interface Side { bag: string[]; gold: number; offer: Offer }
+export interface Side { bag: string[]; gold: number; offer: Offer; reserved?: number } // reserved: bag slots taken by potion stacks
 
 /** `bag` without the items of `take` (each taken once), or null if one of them isn't there. */
 export function takeItems(bag: string[], take: string[]): string[] | null {
@@ -80,7 +80,7 @@ export function settle(a: Side, b: Side): { a: { bag: string[]; gold: number }; 
   if (!aLeft || !bLeft) return "An offered item is no longer in the bag";
   if (a.offer.gold > a.gold || b.offer.gold > b.gold || a.offer.gold < 0 || b.offer.gold < 0) return "Not enough gold any more";
   const aBag = [...aLeft, ...b.offer.items], bBag = [...bLeft, ...a.offer.items];
-  if (aBag.length > BAG_SIZE || bBag.length > BAG_SIZE) return "Not enough room in a bag";
+  if (aBag.length + (a.reserved ?? 0) > BAG_SIZE || bBag.length + (b.reserved ?? 0) > BAG_SIZE) return "Not enough room in a bag";
   return {
     a: { bag: aBag, gold: a.gold - a.offer.gold + b.offer.gold },
     b: { bag: bBag, gold: b.gold - b.offer.gold + a.offer.gold },

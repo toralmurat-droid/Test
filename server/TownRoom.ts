@@ -9,7 +9,10 @@ import {
 import {
   ATTACK_VARIANTS, CLASSES, ClassKind, COMBO_WINDOW_MS, DODGE, EMOTES, ENERGY, staminaRegen, DASH_INVULN_MS, GUARD_REDUCTION, isClassKind, levelFromXp, MAX_XP, capLevel, PVP_KILL_XP, xpForLevel,
 } from "../shared/classes";
-import { MANA_POTION_COOLDOWN_MS, MANA_POTION_DROP, MANA_POTION_RESTORE, manaRegen, MAX_MANA_POTIONS, maxManaFor, packMana, pay } from "../shared/mana";
+import { MANA_POTION_DROP, manaRegen, maxManaFor, packMana, pay } from "../shared/mana";
+import { Counts, dropSize, Potions, nextSize, noPotions, packPotions, potionAmount, potionName, PotionKind, potionSlots, POTION_COOLDOWN_MS, slotsAfter, SIZES, total } from "../shared/potions";
+/** Potion size from a ground item's `gear` field ("0".."2"). */
+const potSize = (g: string) => Math.max(0, Math.min(SIZES - 1, Math.floor(Number(g) || 0)));
 import { attackMult, cooldownMult, critChance, heroSpeed, magicMult, maxHpFromStats, SLOW_MOB, statsFor, statPoints } from "../shared/powers";
 import { AttackProfile, attackProfile, weaponAttackMult, weaponOk } from "../shared/weapons";
 import { activeSkills, canLearn, classSkills, cleanRanks, MAX_RANK, NEED_TEXT, skillLearned, skillOf, talentBonus, talentMult, talentReduce } from "../shared/skills";
@@ -18,7 +21,7 @@ import {
   imbueOf, shotEnd, shotHit, shotPulse, ShotSpec, SkillHost, speedMult, statusOf, takenMult, tickField, tickUnit, Unit,
 } from "../shared/skillEngine";
 import {
-  ITEM_LIFETIME_MS, ItemKind, LOOT, MAX_POTIONS, PICKUP_RADIUS, POTION_COOLDOWN_MS, POTION_HEAL, PVP_GOLD_DROP,
+  ITEM_LIFETIME_MS, ItemKind, LOOT, PICKUP_RADIUS, PVP_GOLD_DROP,
 } from "../shared/items";
 import { isSafeZone, isSolidAt, randomSpawn, VILLAGE } from "../shared/map";
 import { isDecorSolidAt, npcById, npcNear, TALK_RANGE } from "../shared/npcs";
@@ -75,7 +78,9 @@ export class Player extends Schema {
   @type("boolean") outlaw = false; // cast a skill inside Oakvale: the village attacks until they leave (shared/wrath.ts)
   @type("number") combo = 0; // which hit of the 3-hit combo was thrown last (0..2)
   @type("number") gold = 0;
+  // Healing and mana potions by size (shared/potions.ts), packed in one synced number (packPotions); `pots` is the server copy
   @type("number") potions = 0;
+  pots: Potions = noPotions();
   @type("number") seq = 0; // last processed input sequence (for client reconciliation)
   // Stats, auto-allocated on level up (see shared/powers.ts)
   @type("number") sta = 0;
@@ -94,7 +99,6 @@ export class Player extends Schema {
   @type("number") mp = 0;
   mana = 0;
   maxMana = 0;
-  mpotions = 0;
   lastManaPotion = 0;
   @type("boolean") rolling = false; // dodge roll in progress
   @type("boolean") broken = false; // poise broken: dizzy, can't attack (shared/combat.ts)
@@ -684,6 +688,7 @@ export class TownRoom extends Room<TownState> {
     if (options?.newGame) resetChests(p.name);
     const save = options?.newGame ? undefined : loadHero(p.name, p.cls);
     if (save) this.restore(p, save);
+    this.syncPotions(p);
     // A new hero (or New game) starts the guided first quest right away; heroes from before it existed skip it
     if (!save) this.qset(p, TUT_CHAIN, { questId: 0, questStage: 1, questCount: 0 });
     // New heroes (and saves from before class kits existed) put on the class's starting kit
@@ -722,7 +727,7 @@ export class TownRoom extends Room<TownState> {
     const talents: Record<string, number> = {};
     p.talents.forEach((v, k) => { talents[k] = v; });
     return {
-      color: p.color, xp: p.xp, level: p.level, kills: p.kills, gold: p.gold, potions: p.potions, mpotions: p.mpotions,
+      color: p.color, xp: p.xp, level: p.level, kills: p.kills, gold: p.gold, potions: total(p.pots.potion), pots: { potion: [...p.pots.potion], mpotion: [...p.pots.mpotion] },
       ptSta: p.ptSta, ptStr: p.ptStr, ptMag: p.ptMag, ptDex: p.ptDex,
       weapon: p.weapon, armour: p.armour, shoes: p.shoes, hat: p.hat, shield: p.shield, ranged: p.ranged,
       bag: p.bag.toArray(), talents, slots: p.slots.toArray(),
@@ -740,9 +745,10 @@ export class TownRoom extends Room<TownState> {
     const gear = (v: unknown) => (typeof v === "string" && isGearId(v) && canWear(p.cls, v) ? v : "");
     p.color = num(s.color, p.color);
     p.xp = Math.min(MAX_XP, num(s.xp)); p.level = capLevel(num(s.level, 1)); p.kills = num(s.kills);
-    p.gold = num(s.gold); p.potions = Math.min(MAX_POTIONS, num(s.potions));
-    // Heroes saved before mana potions existed start with a few
-    p.mpotions = Math.min(MAX_MANA_POTIONS, num(s.mpotions, 2));
+    p.gold = num(s.gold);
+    // Potions by size; saves from before potion sizes had plain counts (all Minor), and a few mana potions for heroes older than mana
+    const cnt = (v: unknown): Counts => (Array.isArray(v) ? [0, 1, 2].map((i) => Math.min(120, Math.max(0, Math.floor(num(v[i]))))) : [0, 0, 0]) as Counts;
+    p.pots = s.pots ? { potion: cnt(s.pots.potion), mpotion: cnt(s.pots.mpotion) } : { potion: [Math.min(50, num(s.potions)), 0, 0], mpotion: [Math.min(50, num(s.mpotions, 2)), 0, 0] };
     p.ptSta = num(s.ptSta); p.ptStr = num(s.ptStr); p.ptMag = num(s.ptMag); p.ptDex = num(s.ptDex);
     // A hero saved above today's level cap spent more points than his level gives: hand them back to place again
     if (p.ptSta + p.ptStr + p.ptMag + p.ptDex > statPoints(p.level)) p.ptSta = p.ptStr = p.ptMag = p.ptDex = 0;
@@ -2323,8 +2329,8 @@ export class TownRoom extends Room<TownState> {
     const def = LOOT[kind];
     const gold = Math.round((def.gold[0] + Math.floor(Math.random() * (def.gold[1] - def.gold[0] + 1))) * goldMult);
     if (gold > 0) this.dropItem("gold", x, y, gold);
-    if (Math.random() < potionChance(def.potionChance, level)) this.dropItem("potion", x, y, 1);
-    if (Math.random() < potionChance(def.potionChance, level) * MANA_POTION_DROP) this.dropItem("mpotion", x, y, 1);
+    if (Math.random() < potionChance(def.potionChance, level)) this.dropItem("potion", x, y, 1, String(dropSize(level)));
+    if (Math.random() < potionChance(def.potionChance, level) * MANA_POTION_DROP) this.dropItem("mpotion", x, y, 1, String(dropSize(level)));
     // the Hollow King, the first zone's final boss, leaves a little hoard
     for (let i = kind === "hollowking" ? 3 : 1; i > 0; i--) {
       const gear = rollGear(kind, level);
@@ -2344,43 +2350,63 @@ export class TownRoom extends Room<TownState> {
         this.questProgress(pid, p, c, this.qs(p, c).questCount + 1);
         return;
       }
-      if (it.kind === "potion") {
-        if (p.potions >= MAX_POTIONS) return; // full: leave it on the ground
-        p.potions += it.amount;
-      } else if (it.kind === "mpotion") {
-        if (p.mpotions >= MAX_MANA_POTIONS) return;
-        p.mpotions += it.amount;
-        this.syncMana(p);
+      if (it.kind === "potion" || it.kind === "mpotion") {
+        if (this.addPotions(p, it.kind, potSize(it.gear), it.amount) < it.amount) return; // no room in the bag: leave it on the ground
       } else if (it.kind === "gear") {
-        if (p.bag.length >= BAG_SIZE || !isGearId(it.gear)) return; // bag full: leave it
+        if (this.bagFull(p) || !isGearId(it.gear)) return; // bag full: leave it
         setBag(p, [...bagItems(p), it.gear]);
       } else {
         p.gold += it.amount;
       }
       this.state.items.delete(id);
-      this.clients.find((c) => c.sessionId === pid)?.send("pickup", { kind: it.kind, amount: it.amount, x: it.x, y: it.y, gear: it.gear, name: it.gear ? lvlName(it.gear, p.cls) : "" });
+      this.clients.find((c) => c.sessionId === pid)?.send("pickup", { kind: it.kind, amount: it.amount, x: it.x, y: it.y, gear: it.gear, name: it.kind === "gear" && it.gear ? lvlName(it.gear, p.cls) : it.kind === "potion" || it.kind === "mpotion" ? potionName(it.kind, potSize(it.gear)) : "" });
     });
+  }
+
+  /** Bag slots used: gear items plus potion stacks (POTION_STACK per slot). */
+  private bagUsed(p: Player) { return p.bag.length + potionSlots(p.pots); }
+  private bagFull(p: Player) { return this.bagUsed(p) >= BAG_SIZE; }
+
+  /** Puts up to `n` potions of one size in the bag, as far as the stacks have room. Returns how many went in. */
+  private addPotions(p: Player, kind: PotionKind, size: number, n: number): number {
+    let added = 0;
+    while (added < n && p.bag.length + slotsAfter(p.pots, kind, size, 1) <= BAG_SIZE) { p.pots[kind][size]++; added++; }
+    if (added) this.syncPotions(p);
+    return added;
+  }
+  private syncPotions(p: Player) {
+    const v = packPotions(p.pots);
+    if (p.potions !== v) p.potions = v;
+  }
+
+  /** Drinks the smallest potion of `kind` carried (Q healing, V mana). Returns the amount restored, 0 if none. */
+  private drink(p: Player, kind: PotionKind): number {
+    const size = nextSize(p.pots[kind]);
+    if (size < 0) return 0;
+    p.pots[kind][size]--;
+    this.syncPotions(p);
+    return potionAmount(kind, size);
   }
 
   private drinkPotion(id: string) {
     const p = this.state.players.get(id);
     const now = Date.now();
-    if (!p || p.dead || p.potions <= 0 || p.hp >= p.maxHp || now - p.lastPotion < POTION_COOLDOWN_MS) return;
+    if (!p || p.dead || p.hp >= p.maxHp || now - p.lastPotion < POTION_COOLDOWN_MS) return;
+    const heal = this.drink(p, "potion");
+    if (!heal) return;
     p.lastPotion = now;
-    p.potions--;
-    const heal = Math.round(p.maxHp * POTION_HEAL);
     p.hp = Math.min(p.maxHp, p.hp + heal);
     this.broadcast("heal", { id, amount: heal });
   }
 
-  /** Mana potion (V): refills MANA_POTION_RESTORE of max mana. */
+  /** Mana potion (V): the smallest one carried, a fixed amount of mana (shared/potions.ts). */
   private drinkManaPotion(id: string) {
     const p = this.state.players.get(id);
     const now = Date.now();
-    if (!p || p.dead || p.mpotions <= 0 || p.mana >= p.maxMana || now - p.lastManaPotion < MANA_POTION_COOLDOWN_MS) return;
+    if (!p || p.dead || p.mana >= p.maxMana || now - p.lastManaPotion < POTION_COOLDOWN_MS) return;
+    const amount = this.drink(p, "mpotion");
+    if (!amount) return;
     p.lastManaPotion = now;
-    p.mpotions--;
-    const amount = Math.round(p.maxMana * MANA_POTION_RESTORE);
     p.mana = Math.min(p.maxMana, p.mana + amount);
     this.syncMana(p);
     this.broadcast("mana", { id, amount });
@@ -2439,8 +2465,8 @@ export class TownRoom extends Room<TownState> {
     // Every stat point the level gives, spread evenly over the 4 stats (points already placed are reset first)
     const pts = statPoints(p.level), each = Math.floor(pts / 4), left = pts % 4;
     p.ptSta = each + (left > 0 ? 1 : 0); p.ptStr = each + (left > 1 ? 1 : 0); p.ptMag = each + (left > 2 ? 1 : 0); p.ptDex = each;
-    p.potions = MAX_POTIONS;
-    p.mpotions = MAX_MANA_POTIONS;
+    p.pots = { potion: [0, 0, 10], mpotion: [0, 0, 10] };
+    this.syncPotions(p);
     p.gold = Math.max(p.gold, 100000);
     this.applyStats(p);
     if (!p.dead) p.hp = p.maxHp;
@@ -2569,7 +2595,7 @@ export class TownRoom extends Room<TownState> {
 
   private unequip(id: string, slot: GearSlot) {
     const p = this.state.players.get(id);
-    if (!p || !GEAR_SLOTS.includes(slot) || !p[slot] || p.bag.length >= BAG_SIZE) return;
+    if (!p || !GEAR_SLOTS.includes(slot) || !p[slot] || this.bagFull(p)) return;
     setBag(p, [...bagItems(p), p[slot]]);
     p[slot] = "";
     this.applyStats(p);
@@ -2810,18 +2836,13 @@ export class TownRoom extends Room<TownState> {
     if (!p || !e) return;
     const no = (text: string) => client.send("shop", { ok: false, text });
     if (p.gold < e.price) return no("Not enough gold");
-    if (e.item === "potion") {
-      const qty = e.qty ?? 1;
-      if (p.potions + qty > MAX_POTIONS) return no(`You can carry ${MAX_POTIONS} potions at most`);
-      p.potions += qty;
-    } else if (e.item === "mpotion") {
-      const qty = e.qty ?? 1;
-      if (p.mpotions + qty > MAX_MANA_POTIONS) return no(`You can carry ${MAX_MANA_POTIONS} mana potions at most`);
-      p.mpotions += qty;
-      this.syncMana(p);
+    if (e.item === "potion" || e.item === "mpotion") {
+      const qty = e.qty ?? 1, size = e.size ?? 0;
+      if (p.bag.length + slotsAfter(p.pots, e.item, size, qty) > BAG_SIZE) return no("No room in your bag");
+      this.addPotions(p, e.item, size, qty);
     } else {
       if (!gearDef(e.item)) return;
-      if (p.bag.length >= BAG_SIZE) return no("Your bag is full");
+      if (this.bagFull(p)) return no("Your bag is full");
       setBag(p, [...bagItems(p), e.item]);
     }
     p.gold -= e.price;
@@ -2919,8 +2940,8 @@ export class TownRoom extends Room<TownState> {
     const pa = this.state.players.get(t.a), pb = this.state.players.get(t.b);
     if (!pa || !pb) return this.tradeStop(id, "Trade cancelled.");
     const r = settle(
-      { bag: bagItems(pa), gold: pa.gold, offer: t.offer[t.a] },
-      { bag: bagItems(pb), gold: pb.gold, offer: t.offer[t.b] },
+      { bag: bagItems(pa), gold: pa.gold, offer: t.offer[t.a], reserved: potionSlots(pa.pots) },
+      { bag: bagItems(pb), gold: pb.gold, offer: t.offer[t.b], reserved: potionSlots(pb.pots) },
     );
     if (typeof r === "string") {
       // Something moved since the offer (an item worn, sold, dropped, gold spent): show the trade again, unready
@@ -2978,7 +2999,7 @@ export class TownRoom extends Room<TownState> {
       st.items.push(bag.splice(i, 1)[0]);
     } else {
       if (i >= st.items.length) return;
-      if (bag.length >= BAG_SIZE) return this.stashSend(client, "Your bag is full");
+      if (bag.length + potionSlots(p.pots) >= BAG_SIZE) return this.stashSend(client, "Your bag is full");
       bag.push(st.items.splice(i, 1)[0]);
     }
     setBag(p, bag);
@@ -3034,9 +3055,12 @@ export class TownRoom extends Room<TownState> {
       return;
     }
     p.gold += d.reward.gold;
-    p.potions = Math.min(MAX_POTIONS, p.potions + d.reward.potions);
-    p.mpotions = Math.min(MAX_MANA_POTIONS, p.mpotions + Math.ceil(d.reward.potions / 2));
-    this.syncMana(p);
+    // Reward potions fit the hero's level; what the bag can't hold is put down at their feet
+    const rs = dropSize(p.level, () => 0.5);
+    for (const [kind, n] of [["potion", d.reward.potions], ["mpotion", Math.ceil(d.reward.potions / 2)]] as const) {
+      const left = n - this.addPotions(p, kind, rs, n);
+      if (left > 0) this.dropItem(kind, p.x, p.y + 8, left, String(rs));
+    }
     this.qset(p, c, { questId: q.questId + 1, questStage: 0 });
     this.sendQuest(id, p, c, true);
     this.grantXp(id, d.reward.xp, p);
@@ -3119,17 +3143,16 @@ export class TownRoom extends Room<TownState> {
     const loot = rollChest(c.level, c.tier);
     let row = 0; // stack the "+loot" texts so they don't overlap
     const got = (kind: ItemKind, amount: number, gear = "") =>
-      client.send("pickup", { kind, amount, x: c.x, y: c.y - 8 - 9 * row++, gear, name: gear ? lvlName(gear, p.cls) : "" });
+      client.send("pickup", { kind, amount, x: c.x, y: c.y - 8 - 9 * row++, gear, name: kind === "gear" ? lvlName(gear, p.cls) : kind === "potion" || kind === "mpotion" ? potionName(kind, potSize(gear)) : "" });
     p.gold += loot.gold;
     got("gold", loot.gold);
     for (let i = 0; i < loot.potions; i++) {
-      // Every other potion in a chest is a mana potion
-      if (i % 2 === 1) {
-        if (p.mpotions < MAX_MANA_POTIONS) { p.mpotions++; this.syncMana(p); got("mpotion", 1); } else this.dropItem("mpotion", c.x, c.y + 10, 1);
-      } else if (p.potions < MAX_POTIONS) { p.potions++; got("potion", 1); } else this.dropItem("potion", c.x, c.y + 10, 1);
+      // Every other potion in a chest is a mana potion; its size follows the chest's level
+      const kind: PotionKind = i % 2 === 1 ? "mpotion" : "potion", size = dropSize(c.level);
+      if (this.addPotions(p, kind, size, 1)) got(kind, 1, String(size)); else this.dropItem(kind, c.x, c.y + 10, 1, String(size));
     }
     for (const g of loot.gear) {
-      if (p.bag.length < BAG_SIZE) { setBag(p, [...bagItems(p), g]); got("gear", 1, g); } else this.dropItem("gear", c.x, c.y + 10, 1, g);
+      if (!this.bagFull(p)) { setBag(p, [...bagItems(p), g]); got("gear", 1, g); } else this.dropItem("gear", c.x, c.y + 10, 1, g);
     }
   }
 
@@ -3296,7 +3319,7 @@ export class TownRoom extends Room<TownState> {
   /** A quest step's gift: straight into the bag with a "+item" pop at the monster (on the ground if the bag is full). */
   private giveGift(id: string, p: Player, gear: string, at: { x: number; y: number }) {
     if (!isGearId(gear)) return;
-    if (p.bag.length >= BAG_SIZE) { this.dropItem("gear", at.x, at.y, 1, gear); return; }
+    if (this.bagFull(p)) { this.dropItem("gear", at.x, at.y, 1, gear); return; }
     setBag(p, [...bagItems(p), gear]);
     this.clients.find((cl) => cl.sessionId === id)?.send("pickup", { kind: "gear", amount: 1, x: at.x, y: at.y - 8, gear, name: lvlName(gear, p.cls) });
   }
@@ -3335,7 +3358,7 @@ export class TownRoom extends Room<TownState> {
 
   /** Writes the packed mana field (Player.mp) when the whole-number value changed. */
   private syncMana(p: Player) {
-    const mp = packMana(p.mana, p.maxMana, p.mpotions);
+    const mp = packMana(p.mana, p.maxMana, 0);
     if (p.mp !== mp) p.mp = mp;
   }
 

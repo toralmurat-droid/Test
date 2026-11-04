@@ -5,9 +5,6 @@ export type ItemKind = "gold" | "potion" | "mpotion" | "gear" | "quest"; // "gea
 
 export const PICKUP_RADIUS = 10; // px
 export const ITEM_LIFETIME_MS = 30000; // ground items vanish after this
-export const MAX_POTIONS = 5;
-export const POTION_HEAL = 0.4; // fraction of max HP
-export const POTION_COOLDOWN_MS = 1000;
 export const PVP_GOLD_DROP = 0.5; // fraction of gold a player drops when killed by another player
 
 export interface LootDef {

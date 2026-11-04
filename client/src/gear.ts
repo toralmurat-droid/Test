@@ -1,7 +1,9 @@
 import Phaser from "phaser";
 import { gearDef, itemText, LOOT_IDS, canWear, GEAR_SLOTS, gearName, gearStats, gearSpeedMult, GearSlot, BAG_SIZE, SLOT_NAMES, TIER_NAMES, baseId, itemRarity, RARITY_NAMES, affixLines, itemLevel, reqProblem, reqText, activeGear, HeroReqInfo, Equipped } from "../../shared/gear";
 import { STAT_NAMES, StatKind } from "../../shared/powers";
+import { potionAmount, potionName, potionStacks, POTION_STACK, unpackPotions } from "../../shared/potions";
 import { ART_K, CHAR_FRAME, HD_CHARS } from "./artAssets";
+import { itemTexture, potionTex } from "./textures";
 
 /**
  * Equipment on the client: overlay sprites that follow each hero frame for frame, and the equipment screen (G).
@@ -148,7 +150,7 @@ export class GearMenu {
   refresh(state: any) {
     if (!this.open || !state) return;
     const bagItems: string[] = Array.from(state.bag ?? []);
-    const sig = [state.cls, state.level, state.ptSta, state.ptStr, state.ptMag, state.ptDex, ...GEAR_SLOTS.map((s) => state[s]), ...bagItems, state.sta, state.str, state.mag, state.dex, state.maxHp].join("|");
+    const sig = [state.cls, state.level, state.ptSta, state.ptStr, state.ptMag, state.ptDex, ...GEAR_SLOTS.map((s) => state[s]), ...bagItems, state.potions, state.sta, state.str, state.mag, state.dex, state.maxHp].join("|");
     if (sig === this.sig) return;
     this.sig = sig;
     this.busyUntil = 0; // the server answered, accept clicks again
@@ -207,12 +209,31 @@ export class GearMenu {
     // Bag
     const bag = document.getElementById("gearbag")!;
     bag.innerHTML = "";
-    document.getElementById("gearbagtitle")!.textContent = `Bag ${bagItems.length}/${BAG_SIZE}`;
+    // Potion stacks (shared/potions.ts) take the bag slots after the gear, 10 of one size per slot
+    const stacks = potionStacks(unpackPotions(state.potions));
+    document.getElementById("gearbagtitle")!.textContent = `Bag ${bagItems.length + stacks.length}/${BAG_SIZE}`;
     for (let i = 0; i < BAG_SIZE; i++) {
       const id: string | undefined = bagItems[i];
       const cell = document.createElement("button");
       cell.className = "gcell";
-      if (id) {
+      const stack = id ? undefined : stacks[i - bagItems.length];
+      if (stack) {
+        const [kind, size, n] = stack;
+        const c = document.createElement("canvas");
+        c.width = c.height = 32;
+        const ctx = c.getContext("2d")!;
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(this.scene.textures.get(itemTexture(this.scene, potionTex(kind, size))).getSourceImage() as CanvasImageSource, 0, 0, 8, 8, 0, 0, 32, 32);
+        cell.appendChild(c);
+        cell.appendChild(Object.assign(document.createElement("span"), { className: "gcelllvl", textContent: String(n) }));
+        cell.style.borderColor = kind === "mpotion" ? "#3d5a9a" : "#7a4a4a";
+        cell.onmouseenter = () => {
+          if (info) info.innerHTML = `<b style="color:${kind === "mpotion" ? "#8ab4ff" : "#ff8a8a"}">${potionName(kind, size)}</b> ×${n}<br>` +
+            `${kind === "mpotion" ? `+${potionAmount(kind, size)} mana` : `Heals ${potionAmount(kind, size)} HP`}<br><small>Click or ${kind === "mpotion" ? "V" : "Q"}: drink (the smallest size goes first) · ${POTION_STACK} per slot</small>`;
+        };
+        cell.onmouseleave = () => { if (info) info.textContent = ""; };
+        cell.onclick = () => this.send(kind === "mpotion" ? "manapotion" : "potion", {});
+      } else if (id) {
         const d = gearDef(id)!;
         cell.appendChild(iconCanvas(this.scene, id));
         cell.style.borderColor = itemColor(id);
@@ -227,6 +248,6 @@ export class GearMenu {
       } else cell.disabled = true;
       bag.appendChild(cell);
     }
-    document.getElementById("gearempty")!.hidden = bagItems.length > 0 || GEAR_SLOTS.some((s) => state[s]);
+    document.getElementById("gearempty")!.hidden = bagItems.length + stacks.length > 0 || GEAR_SLOTS.some((s) => state[s]);
   }
 }

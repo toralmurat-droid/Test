@@ -7,7 +7,7 @@ import { STATS, type Stats } from "./powers";
  *   Stamina (Player.energy, ENERGY in shared/classes.ts): every hero, 100 points, refills fast. Pays for the dodge roll
  *     and for physical skills: sword swings, dashes, shouts, traps. Knight, Ninja, Archer and Barbarian lean on it.
  *   Mana (this file): a slow pool that grows with Magic. Pays for spells: the whole Wizard book, and the holy, spirit,
- *     jutsu and nature skills of the other classes. Mana potions (V) refill it.
+ *     jutsu and nature skills of the other classes. Mana potions (V, shared/potions.ts) refill it.
  *
  * A skill (shared/skills.ts SkillDef) costs `cost` Stamina and/or `mana` Mana, on top of its cooldown. Cheap skills
  * have short cooldowns and are limited by the pools; big skills are limited by their cooldown.
@@ -24,10 +24,6 @@ export const MANA = {
   restMult: 2, // regen out of combat (not hurt for REGEN_DELAY_MS)
 };
 
-export const MAX_MANA_POTIONS = 5;
-export const MANA_POTION_RESTORE = 0.5; // fraction of max mana
-export const MANA_POTION_COOLDOWN_MS = 1000;
-export const MANA_POTION_PRICE = 20;
 /** A mana potion drops this often compared with a healing potion (LOOT potionChance). */
 export const MANA_POTION_DROP = 0.8;
 

@@ -1,0 +1,10 @@
+{
+  "date": "2026-11-04",
+  "title": "Potion sizes and bag stacks",
+  "changes": [
+    "Healing and mana potions now come in three sizes: Minor (40 HP / 30 mana), Medium (90 / 60) and Greater (180 / 120). Stronger monsters and chests drop bigger ones.",
+    "Q and V always drink your smallest potion first, so the big ones are kept for hard fights.",
+    "Potions are picked up into your bag and stack 10 per slot. There is no longer a limit of 5.",
+    "Old Morwen sells Minor and Medium potions, one at a time or 5 at a time."
+  ]
+}

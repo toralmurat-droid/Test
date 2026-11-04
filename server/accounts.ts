@@ -8,7 +8,8 @@ export interface HeroSave {
   color: number;
   xp: number; level: number; kills: number;
   gold: number; potions: number;
-  mpotions?: number; // mana potions (shared/mana.ts)
+  mpotions?: number; // mana potions before potion sizes (old saves)
+  pots?: { potion: number[]; mpotion: number[] }; // potions by size (shared/potions.ts)
   ptSta: number; ptStr: number; ptMag: number; ptDex?: number;
   weapon: string; armour: string; shoes: string; hat: string; shield: string; ranged: string;
   bag: string[];
