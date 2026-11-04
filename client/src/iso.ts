@@ -80,19 +80,27 @@ export function isoInput(up: boolean, down: boolean, left: boolean, right: boole
 
 const BAKE_FROM: Partial<Record<number, number>> = { [T.FLOWERS]: T.GRASS, [T.FIELD]: T.DIRT, [T.CROPS]: T.DIRT };
 
-/** Builds the diamond tileset texture "tiles_iso" from the square "tiles" canvas. */
+/**
+ * The diamond tileset is split into two textures of ISO_ROWS rows each ("tiles_iso" = rows 0..63, "tiles_iso_b" =
+ * rows 64..127): one texture would be 4352 px tall, over the 4096 px limit of many phone GPUs, which then show no ground.
+ * The tilemap uses both as two tilesets (the second starts at gid ISO_ROWS * TILE_COUNT), so tile indices are unchanged.
+ */
+const ISO_ROWS = Math.ceil(ROWS / 2);
+const ISO_KEYS = ["tiles_iso", "tiles_iso_b"];
+
+/** Builds the diamond tileset textures from the square "tiles" canvas. */
 function bakeIsoTiles(scene: Phaser.Scene, ids?: number[]) {
   const src = (scene.textures.get("tiles") as Phaser.Textures.CanvasTexture).getSourceImage() as HTMLCanvasElement;
-  let tex = scene.textures.exists("tiles_iso") ? scene.textures.get("tiles_iso") as Phaser.Textures.CanvasTexture : undefined;
   const CW = IW + BLEED * 2, CH = IH + BLEED * 2;
-  if (!tex) tex = scene.textures.createCanvas("tiles_iso", TILE_COUNT * CW, ROWS * CH)!;
-  const ctx = tex.getContext();
-  ctx.imageSmoothingEnabled = false;
+  const texs = ISO_KEYS.map((key) => (scene.textures.exists(key) ? scene.textures.get(key) as Phaser.Textures.CanvasTexture
+    : scene.textures.createCanvas(key, TILE_COUNT * CW, ISO_ROWS * CH)!));
   const cols = ids ?? [...Array(TILE_COUNT).keys()];
   // Animation re-bakes only the rows the animation repaints (tileset.ts animatedRows); the first bake does them all
   const rows = ids ? Math.max(...ids.map((id) => animatedRows(BAKE_FROM[id] ?? id))) : ROWS;
   for (let row = 0; row < rows; row++) for (const id of cols) {
-    const ox = id * CW, oy = row * CH;
+    const ctx = texs[Math.floor(row / ISO_ROWS)].getContext();
+    ctx.imageSmoothingEnabled = false;
+    const ox = id * CW, oy = (row % ISO_ROWS) * CH;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(ox, oy, CW, CH);
     // (0,0)->(top vertex) (T,0)->(right) (0,T)->(left) (T,T)->(bottom); slightly enlarged into the bleed
@@ -101,9 +109,13 @@ function bakeIsoTiles(scene: Phaser.Scene, ids?: number[]) {
     const from = BAKE_FROM[id] ?? id; // flowers stand up as their own sprites (details.ts): plain grass under them
     ctx.drawImage(src, from * TILE, row * TILE, TILE, TILE, 0, 0, TILE, TILE);
   }
-  ctx.setTransform(1, 0, 0, 1, 0, 0);
-  if (ids) refreshRegions(scene, tex, ids.map((id) => [id * CW, 0, CW, rows * CH]));
-  else tex.refresh();
+  texs.forEach((tex, i) => {
+    tex.getContext().setTransform(1, 0, 0, 1, 0, 0);
+    const n = Math.min(ISO_ROWS, rows - i * ISO_ROWS); // rows baked in this texture
+    if (n <= 0) return;
+    if (ids) refreshRegions(scene, tex, ids.map((id) => [id * CW, 0, CW, n * CH]));
+    else tex.refresh();
+  });
 }
 
 /** Only the tiles whose diamond is on screen (Phaser's own iso cull walks the whole map every frame). */
@@ -144,7 +156,8 @@ export class IsoView {
       width: MAP_W, height: MAP_H, tileWidth: IW, tileHeight: IH, orientation: Phaser.Tilemaps.Orientation.ISOMETRIC,
     } as any);
     const map = new Phaser.Tilemaps.Tilemap(scene, data);
-    const tiles = map.addTilesetImage("tiles_iso", "tiles_iso", IW + BLEED * 2, IH + BLEED * 2, 0, 0, 0, { x: BLEED, y: BLEED })!;
+    const tiles = ISO_KEYS.map((key, i) =>
+      map.addTilesetImage(key, key, IW + BLEED * 2, IH + BLEED * 2, 0, 0, i * ISO_ROWS * TILE_COUNT, { x: BLEED, y: BLEED })!);
     const flatObjects = isoStanding(scene, objects);
     isoCrops(scene, ground, objects);
     const water = buildBridges(scene, ground); // bridges stand over the water
