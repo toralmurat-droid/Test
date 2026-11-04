@@ -915,7 +915,7 @@ export class TownScene extends Phaser.Scene {
     });
     this.room.onMessage("sfx", (ev) => this.onSkillFx(ev));
     bindSfx(this.room, () => this.me, this.entities as any); // sound effects (client/src/sfx.ts)
-    this.room.onMessage("boom", ({ x, y, r, kind }) => this.fx.impact(x, y, kind, r) ||
+    this.room.onMessage("boom", ({ x, y, r, kind, imb }) => this.fx.impact(x, y, kind, r, imb) ||
       (kind === "arrow" || kind === "stone" || kind === "knife" || kind === "bolt" ? this.burst(x, y, 3, 0xd7ccc8, 150)
       : kind === "magicbolt" || kind === "shadowbolt" ? this.burst(x, y, kind === "shadowbolt" ? 5 : 3, kind === "shadowbolt" ? 0x7dff6a : 0x7fe7ff, 220)
       : this.burst(x, y, 5, 0xff9f1c, 220))); // small impact puff only, never the splash area

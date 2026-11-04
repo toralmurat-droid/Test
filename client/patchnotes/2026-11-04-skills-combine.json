@@ -1,0 +1,9 @@
+{
+  "date": "2026-11-04",
+  "title": "Skills combine with enchantments",
+  "changes": [
+    "Enchantments now power up your other skills: with Fire Arrows lit, a Volley is a volley of fire arrows that sets every target ablaze.",
+    "Works for every enchantment (Fire Arrows, Holy Blade, Poison Blade, Blade Flurry) and every skill cast while it lasts: arrows, blasts, dashes, traps and sentries.",
+    "Enchanted arrows and skill blasts now glow and trail in the enchantment's colour."
+  ]
+}

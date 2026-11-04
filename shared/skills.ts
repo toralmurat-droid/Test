@@ -193,7 +193,7 @@ const S: Record<ClassKind, SkillDef[]> = <Record<ClassKind, SkillDef[]>><unknown
 
     // Crusade: holy auras, enchantments and blessings
     { id: "k_holyblade", name: "Holy Blade", type: "Enchant", branch: 2, row: 0, style: "holy", cd: 12000, mana: 20,
-      desc: "Bless your sword for 7s: every hit burns with holy fire.",
+      desc: "Bless your sword for 7s: every hit burns with holy fire, your skills too.",
       buff: { ms: 7000, onHit: { burn: [5, 2000] } } },
     { id: "k_consecrate", name: "Consecration", type: "Aura", branch: 2, row: 1, style: "holy", cd: 14000, mana: 25,
       desc: "Sanctify the ground under you for 5s: it burns enemies and heals you while you stand on it.",
@@ -232,7 +232,7 @@ const S: Record<ClassKind, SkillDef[]> = <Record<ClassKind, SkillDef[]>><unknown
       desc: "Throw three spinning shuriken in a fan.",
       shots: { kind: "shuriken", n: 3, spread: 26, speed: 260, range: 150, radius: 4, wpn: 1.0, kb: 0.4 } },
     { id: "n_flurry", name: "Blade Flurry", type: "Enchant", branch: 1, row: 1, style: "steel", cd: 12000, cost: 25,
-      desc: "Your blades blur for 5s: 40% faster attacks that make enemies bleed.",
+      desc: "Your blades blur for 5s: 40% faster attacks that make enemies bleed, your skills too.",
       buff: { ms: 5000, atkspd: 40, onHit: { burn: [3, 2000] } } },
     { id: "n_parry", name: "Shadow Parry", type: "Counter", branch: 1, row: 2, style: "shadow", cd: 8000, cost: 20,
       desc: "Stand ready for 0.7s. When struck, you vanish, appear behind the attacker and cut them deep.",
@@ -248,7 +248,7 @@ const S: Record<ClassKind, SkillDef[]> = <Record<ClassKind, SkillDef[]>><unknown
       desc: "Breathe a gout of fire ahead: damage and burning.",
       areas: [{ r: 26, ahead: 26, wpn: 1.8, burn: [4, 3000], kb: 0.6, look: "flame" }] },
     { id: "n_poison", name: "Poison Blade", type: "Enchant", branch: 2, row: 1, style: "poison", cd: 14000, cost: 10, mana: 10,
-      desc: "Coat your blades for 8s: every hit poisons.",
+      desc: "Coat your blades for 8s: every hit poisons, your skills too.",
       buff: { ms: 8000, onHit: { burn: [8, 3000] } } },
     { id: "n_caltrops", name: "Caltrops", type: "Trap", branch: 2, row: 2, style: "steel", cd: 10000, cost: 20,
       desc: "Scatter spikes ahead for 6s: enemies walking on them are hurt and slowed.",
@@ -356,7 +356,7 @@ const S: Record<ClassKind, SkillDef[]> = <Record<ClassKind, SkillDef[]>><unknown
 
     // Nature: enchanted arrows
     { id: "a_firearrows", name: "Fire Arrows", type: "Enchant", branch: 2, row: 0, style: "fire", cd: 12000, mana: 20,
-      desc: "Light your arrowheads for 8s: every arrow sets its target on fire.",
+      desc: "Light your arrowheads for 8s: every arrow sets its target on fire, skill arrows too (a Volley of fire arrows).",
       buff: { ms: 8000, onHit: { burn: [4, 3000] } } },
     { id: "a_frostarrow", name: "Frost Arrow", type: "Attack", branch: 2, row: 1, style: "frost", cd: 6000, cost: 10, mana: 12,
       desc: "An arrow of ice: it shatters on impact, slowing everyone near.",
