@@ -351,7 +351,8 @@ export class TalentMenu {
           if (nx) rows.push(`<p class="inext">Next rank: ${nx.total} (+${Math.round(RANK_POWER * 100)}% power, longer effects)</p>`);
         }
       } else if (r > 0 && r < MAX_RANK) rows.push(`<p class="inext">Next rank: longer, stronger effects</p>`);
-      rows.push(`<p class="icost">${(s.cd ?? 0) / 1000}s cooldown · ${s.cost ?? 0} ${cls === "wizard" ? "magic" : "stamina"}${s.chargeMs ? ` · charge ${s.chargeMs / 1000}s` : ""}</p>`);
+      const price = [s.cd ? `${s.cd / 1000}s cooldown` : "no cooldown", s.cost ? `<span class="ista">${s.cost} stamina</span>` : "", s.mana ? `<span class="imana">${s.mana} mana</span>` : ""];
+      rows.push(`<p class="icost">${price.filter(Boolean).join(" · ")}${s.chargeMs ? ` · charge ${s.chargeMs / 1000}s` : ""}</p>`);
     }
     const lp = Math.round((levelPower(s) - 1) * 100);
     const power = [lp > 0 ? `+${lp}% power from its level` : "", scaleText(s)].filter(Boolean).join(" · ");

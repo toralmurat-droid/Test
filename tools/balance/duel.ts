@@ -9,9 +9,10 @@
  * (a miss chance that grows with flight time) since the real game is 2D.
  * Keep the server rules in sync with this file when changing combat code.
  */
-import { CLASSES, CLASS_KINDS, ClassKind, COMBO_WINDOW_MS, DODGE, ENERGY, GUARD_REDUCTION } from "../../shared/classes";
+import { CLASSES, CLASS_KINDS, ClassKind, COMBO_WINDOW_MS, DODGE, ENERGY, GUARD_REDUCTION, staminaRegen } from "../../shared/classes";
 import { attackMult, cooldownMult, critChance, heroSpeed, magicMult, maxHpFromStats, statPoints, statsFor, STATS, Stats } from "../../shared/powers";
 import { activeSkills, canLearn, SKILLS, SkillDef, talentBonus, talentMult, talentReduce } from "../../shared/skills";
+import { canPay, manaRegen, maxManaFor, skillCost } from "../../shared/mana";
 import {
   afterHit, atkSpeedMult, blocking, buffLifesteal, buffRegen, castSkill, ccImmune, charging, cooldownLeft, counterHit, dealtMult, FieldInst, HitOpts,
   newRuntime, shotEnd, shotHit, shotPulse, ShotSpec, SkillHost, speedMult, takenMult, tickField, tickUnit,
@@ -32,7 +33,7 @@ interface Shot { owner: F; x: number; dir: number; speed: number; range: number;
 interface Pending { at: number; fn: () => void }
 
 class F {
-  x = 0; y = 0; face = 1; hp = 0; maxHp = 0; s: Stats; energy = ENERGY.max; dead = false;
+  x = 0; y = 0; face = 1; hp = 0; maxHp = 0; s: Stats; energy = ENERGY.max; mana = 0; maxMana = 0; dead = false;
   poiseLost = 0; lastPoiseHit = 0; brokenUntil = 0; steadyUntil = 0; broken = false;
   invulnUntil = 0; rollUntil = 0; rollDir = 0; lastDodge = -1e9; lastRanged = -1e9; lastHurt = 0;
   attackReadyAt = 0; lastAttack = 0; combo = 0; stunUntil = 0; slowUntil = 0; dealt = 0; lastMove = 0;
@@ -45,6 +46,7 @@ class F {
     this.s = st;
     this.maxHp = Math.round(maxHpFromStats(cls, st, level) * talentMult(cls, t, "hp"));
     this.hp = this.maxHp;
+    this.mana = this.maxMana = maxManaFor(st, level);
   }
   get poiseMax() { return heroPoise(this.cls, this.level); }
   get ranged() { return !!CLASSES[this.cls].projectile; }
@@ -242,7 +244,7 @@ export class Duel {
   /** Bot: cast the best ready skill (highest level first). */
   castSkills(a: F, d: number, toward: number, incoming: boolean, tReach: number) {
     if (charging(a, this.now)) return;
-    const ready = activeSkills(a.cls).filter((s) => (a.t[s.id] ?? 0) > 0 && cooldownLeft(s, a.sk, this.now, cooldownMult(a.cls, a.s, a.t)) <= 0 && a.energy >= (s.cost ?? 0))
+    const ready = activeSkills(a.cls).filter((s) => (a.t[s.id] ?? 0) > 0 && cooldownLeft(s, a.sk, this.now, cooldownMult(a.cls, a.s, a.t)) <= 0 && canPay(a, skillCost(s)))
       .sort((x, y) => y.req - x.req);
     for (const s of ready) {
       if (s.consume && a.sk.stacks < 3 && !s.buff) continue; // wait for some stacks
@@ -308,7 +310,8 @@ export class Duel {
       tickUnit(this.host, f.id);
       if (f.broken && now >= f.brokenUntil) { f.broken = false; f.poiseLost = 0; f.steadyUntil = now + POISE.steadyMs; }
       else if (!f.broken && f.poiseLost > 0 && now - f.lastPoiseHit >= POISE.regenDelayMs) f.poiseLost = Math.max(0, f.poiseLost - f.poiseMax * POISE.regenPerSec * TICK / 1000);
-      f.energy = Math.min(ENERGY.max, f.energy + ENERGY.regenPerSec * TICK / 1000);
+      f.energy = Math.min(ENERGY.max, f.energy + staminaRegen(f.cls) * TICK / 1000);
+      f.mana = Math.min(f.maxMana, f.mana + manaRegen(f.s, false, talentBonus(f.cls, f.t, "mana")) * TICK / 1000);
     }
     const order = this.rnd() < 0.5 ? [this.a, this.b] : [this.b, this.a];
     const moves = new Map<F, number>();

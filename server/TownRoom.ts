@@ -7,8 +7,9 @@ import {
   HOLLOW_KING,
 } from "../shared/constants";
 import {
-  ATTACK_VARIANTS, CLASSES, ClassKind, COMBO_WINDOW_MS, DODGE, EMOTES, ENERGY, DASH_INVULN_MS, GUARD_REDUCTION, isClassKind, levelFromXp, MAX_XP, capLevel, PVP_KILL_XP, xpForLevel,
+  ATTACK_VARIANTS, CLASSES, ClassKind, COMBO_WINDOW_MS, DODGE, EMOTES, ENERGY, staminaRegen, DASH_INVULN_MS, GUARD_REDUCTION, isClassKind, levelFromXp, MAX_XP, capLevel, PVP_KILL_XP, xpForLevel,
 } from "../shared/classes";
+import { MANA_POTION_COOLDOWN_MS, MANA_POTION_DROP, MANA_POTION_RESTORE, manaRegen, MAX_MANA_POTIONS, maxManaFor, packMana } from "../shared/mana";
 import { attackMult, cooldownMult, critChance, heroSpeed, magicMult, maxHpFromStats, SLOW_MOB, statsFor, statPoints } from "../shared/powers";
 import { activeSkills, canLearn, classSkills, cleanRanks, MAX_RANK, skillLearned, skillOf, talentBonus, talentMult, talentReduce } from "../shared/skills";
 import {
@@ -87,10 +88,16 @@ export class Player extends Schema {
   @type("number") ptDex = 0;
   @type("boolean") stunned = false;
   @type("boolean") slowed = false;
-  @type("boolean") raging = false; // barbarian Rage active
+  // Mana (shared/mana.ts): current, max and mana potions packed in one synced number (packMana), because the schema is at
+  // the 64-field limit. Took the old `raging` flag's place (the client reads Rage from `fx`). Server-side values below.
+  @type("number") mp = 0;
+  mana = 0;
+  maxMana = 0;
+  mpotions = 0;
+  lastManaPotion = 0;
   @type("boolean") rolling = false; // dodge roll in progress
   @type("boolean") broken = false; // poise broken: dizzy, can't attack (shared/combat.ts)
-  @type("number") energy = 100; // Stamina / Magic (ENERGY in shared/classes.ts)
+  @type("number") energy = 100; // Stamina (ENERGY in shared/classes.ts); spells spend mana (above)
   // Skills (shared/skillEngine.ts): stacks built by basic hits, speed multiplier from buffs and passives (client
   // prediction), and status words for the effects on screen (burn, mark, active auras and enchantments...)
   @type("number") stacks = 0;
@@ -526,6 +533,7 @@ export class TownRoom extends Room<TownState> {
     });
     this.onMessage("cast", (client, skill: string) => this.cast(client.sessionId, skill));
     this.onMessage("potion", (client) => this.drinkPotion(client.sessionId));
+    this.onMessage("manapotion", (client) => this.drinkManaPotion(client.sessionId));
     this.onMessage("dodge", (client) => this.dodge(client.sessionId));
     this.onMessage("equip", (client, i: number) => this.equip(client.sessionId, i));
     this.onMessage("unequip", (client, slot: GearSlot) => this.unequip(client.sessionId, slot));
@@ -711,7 +719,7 @@ export class TownRoom extends Room<TownState> {
     const talents: Record<string, number> = {};
     p.talents.forEach((v, k) => { talents[k] = v; });
     return {
-      color: p.color, xp: p.xp, level: p.level, kills: p.kills, gold: p.gold, potions: p.potions,
+      color: p.color, xp: p.xp, level: p.level, kills: p.kills, gold: p.gold, potions: p.potions, mpotions: p.mpotions,
       ptSta: p.ptSta, ptStr: p.ptStr, ptMag: p.ptMag, ptDex: p.ptDex,
       weapon: p.weapon, armour: p.armour, shoes: p.shoes, hat: p.hat, shield: p.shield, ranged: p.ranged,
       bag: p.bag.toArray(), talents, slots: p.slots.toArray(),
@@ -730,6 +738,8 @@ export class TownRoom extends Room<TownState> {
     p.color = num(s.color, p.color);
     p.xp = Math.min(MAX_XP, num(s.xp)); p.level = capLevel(num(s.level, 1)); p.kills = num(s.kills);
     p.gold = num(s.gold); p.potions = Math.min(MAX_POTIONS, num(s.potions));
+    // Heroes saved before mana potions existed start with a few
+    p.mpotions = Math.min(MAX_MANA_POTIONS, num(s.mpotions, 2));
     p.ptSta = num(s.ptSta); p.ptStr = num(s.ptStr); p.ptMag = num(s.ptMag); p.ptDex = num(s.ptDex);
     // A hero saved above today's level cap spent more points than his level gives: hand them back to place again
     if (p.ptSta + p.ptStr + p.ptMag + p.ptDex > statPoints(p.level)) p.ptSta = p.ptStr = p.ptMag = p.ptDex = 0;
@@ -1480,7 +1490,6 @@ export class TownRoom extends Room<TownState> {
       tickUnit(this.host, pid);
       p.stunned = now < p.stunUntil;
       p.slowed = now < p.slowUntil;
-      p.raging = p.sk.buffs.some((b) => b.until > now && (b.id === "b_rage" || b.id === "b_berserk"));
       p.guarding = blocking(p, now);
       p.stacks = p.sk.stacks;
       const fx = statusOf(p, now);
@@ -1490,10 +1499,15 @@ export class TownRoom extends Room<TownState> {
       const spd = Math.round(speedMult(p, now) * talentMult(p.cls, p.talents, "speed") * 1000) / 1000;
       if (p.spd !== spd) p.spd = spd;
       tickPoise(p, heroPoiseMax(p), dt, now);
-      if (p.dead) { p.moving = false; p.energy = ENERGY.max; return; }
+      if (p.dead) { p.moving = false; p.energy = ENERGY.max; p.mana = p.maxMana; this.syncMana(p); return; }
       for (let c = 0; c < CHAINS.length; c++) this.checkQuestPlace(pid, p, c);
       this.wakePortals(pid, p);
-      if (p.energy < ENERGY.max) p.energy = Math.min(ENERGY.max, p.energy + ENERGY.regenPerSec * dt);
+      if (p.energy < ENERGY.max) p.energy = Math.min(ENERGY.max, p.energy + staminaRegen(p.cls) * dt);
+      if (p.mana < p.maxMana) {
+        const resting = now - p.lastHurt > REGEN_DELAY_MS;
+        p.mana = Math.min(p.maxMana, p.mana + manaRegen(this.stats(p), resting, talentBonus(p.cls, p.talents, "mana")) * dt);
+      }
+      this.syncMana(p);
       p.rolling = now < p.rollUntil;
       const r = p.stunned || charging(p, now) // a buildup roots the hero
         ? { x: p.x, y: p.y, moving: false }
@@ -2307,6 +2321,7 @@ export class TownRoom extends Room<TownState> {
     const gold = Math.round((def.gold[0] + Math.floor(Math.random() * (def.gold[1] - def.gold[0] + 1))) * goldMult);
     if (gold > 0) this.dropItem("gold", x, y, gold);
     if (Math.random() < potionChance(def.potionChance, level)) this.dropItem("potion", x, y, 1);
+    if (Math.random() < potionChance(def.potionChance, level) * MANA_POTION_DROP) this.dropItem("mpotion", x, y, 1);
     // the Hollow King, the first zone's final boss, leaves a little hoard
     for (let i = kind === "hollowking" ? 3 : 1; i > 0; i--) {
       const gear = rollGear(kind, level);
@@ -2329,6 +2344,10 @@ export class TownRoom extends Room<TownState> {
       if (it.kind === "potion") {
         if (p.potions >= MAX_POTIONS) return; // full: leave it on the ground
         p.potions += it.amount;
+      } else if (it.kind === "mpotion") {
+        if (p.mpotions >= MAX_MANA_POTIONS) return;
+        p.mpotions += it.amount;
+        this.syncMana(p);
       } else if (it.kind === "gear") {
         if (p.bag.length >= BAG_SIZE || !isGearId(it.gear)) return; // bag full: leave it
         setBag(p, [...bagItems(p), it.gear]);
@@ -2349,6 +2368,19 @@ export class TownRoom extends Room<TownState> {
     const heal = Math.round(p.maxHp * POTION_HEAL);
     p.hp = Math.min(p.maxHp, p.hp + heal);
     this.broadcast("heal", { id, amount: heal });
+  }
+
+  /** Mana potion (V): refills MANA_POTION_RESTORE of max mana. */
+  private drinkManaPotion(id: string) {
+    const p = this.state.players.get(id);
+    const now = Date.now();
+    if (!p || p.dead || p.mpotions <= 0 || p.mana >= p.maxMana || now - p.lastManaPotion < MANA_POTION_COOLDOWN_MS) return;
+    p.lastManaPotion = now;
+    p.mpotions--;
+    const amount = Math.round(p.maxMana * MANA_POTION_RESTORE);
+    p.mana = Math.min(p.maxMana, p.mana + amount);
+    this.syncMana(p);
+    this.broadcast("mana", { id, amount });
   }
 
   // ---- Dodge roll ---------------------------------------------------------
@@ -2405,6 +2437,7 @@ export class TownRoom extends Room<TownState> {
     const pts = statPoints(p.level), each = Math.floor(pts / 4), left = pts % 4;
     p.ptSta = each + (left > 0 ? 1 : 0); p.ptStr = each + (left > 1 ? 1 : 0); p.ptMag = each + (left > 2 ? 1 : 0); p.ptDex = each;
     p.potions = MAX_POTIONS;
+    p.mpotions = MAX_MANA_POTIONS;
     p.gold = Math.max(p.gold, 100000);
     this.applyStats(p);
     if (!p.dead) p.hp = p.maxHp;
@@ -2768,6 +2801,11 @@ export class TownRoom extends Room<TownState> {
       const qty = e.qty ?? 1;
       if (p.potions + qty > MAX_POTIONS) return no(`You can carry ${MAX_POTIONS} potions at most`);
       p.potions += qty;
+    } else if (e.item === "mpotion") {
+      const qty = e.qty ?? 1;
+      if (p.mpotions + qty > MAX_MANA_POTIONS) return no(`You can carry ${MAX_MANA_POTIONS} mana potions at most`);
+      p.mpotions += qty;
+      this.syncMana(p);
     } else {
       if (!gearDef(e.item)) return;
       if (p.bag.length >= BAG_SIZE) return no("Your bag is full");
@@ -2984,6 +3022,8 @@ export class TownRoom extends Room<TownState> {
     }
     p.gold += d.reward.gold;
     p.potions = Math.min(MAX_POTIONS, p.potions + d.reward.potions);
+    p.mpotions = Math.min(MAX_MANA_POTIONS, p.mpotions + Math.ceil(d.reward.potions / 2));
+    this.syncMana(p);
     this.qset(p, c, { questId: q.questId + 1, questStage: 0 });
     this.sendQuest(id, p, c, true);
     this.grantXp(id, d.reward.xp, p);
@@ -3070,7 +3110,10 @@ export class TownRoom extends Room<TownState> {
     p.gold += loot.gold;
     got("gold", loot.gold);
     for (let i = 0; i < loot.potions; i++) {
-      if (p.potions < MAX_POTIONS) { p.potions++; got("potion", 1); } else this.dropItem("potion", c.x, c.y + 10, 1);
+      // Every other potion in a chest is a mana potion
+      if (i % 2 === 1) {
+        if (p.mpotions < MAX_MANA_POTIONS) { p.mpotions++; this.syncMana(p); got("mpotion", 1); } else this.dropItem("mpotion", c.x, c.y + 10, 1);
+      } else if (p.potions < MAX_POTIONS) { p.potions++; got("potion", 1); } else this.dropItem("potion", c.x, c.y + 10, 1);
     }
     for (const g of loot.gear) {
       if (p.bag.length < BAG_SIZE) { setBag(p, [...bagItems(p), g]); got("gear", 1, g); } else this.dropItem("gear", c.x, c.y + 10, 1, g);
@@ -3087,12 +3130,14 @@ export class TownRoom extends Room<TownState> {
     if (!p || p.dead || Math.hypot(SHRINE.x - p.x, SHRINE.y - p.y) > SHRINE_RANGE * 1.5) return;
     if (now < this.shrineReadyAt) { client.send("shrine", { left: this.shrineReadyAt - now }); return; }
     this.shrineReadyAt = now + SHRINE_COOLDOWN_MS;
-    const boon = rollBoon(p.hp < p.maxHp || p.energy < ENERGY.max);
+    const boon = rollBoon(p.hp < p.maxHp || p.energy < ENERGY.max || p.mana < p.maxMana);
     let amount = 0;
     if (boon === "heal") {
       amount = Math.round(p.maxHp - p.hp);
       p.hp = p.maxHp;
       p.energy = ENERGY.max;
+      p.mana = p.maxMana;
+      this.syncMana(p);
       if (amount > 0) this.broadcast("heal", { id, amount });
     } else if (boon === "xp") {
       amount = shrineXp(p.level);
@@ -3269,6 +3314,16 @@ export class TownRoom extends Room<TownState> {
     const newMax = Math.round(maxHpFromStats(p.cls, st, p.level) * talentMult(p.cls, p.talents, "hp"));
     p.hp = Math.min(newMax, p.hp + Math.max(0, newMax - p.maxHp));
     p.maxHp = newMax;
+    const newMana = maxManaFor(st, p.level);
+    p.mana = Math.min(newMana, p.mana + Math.max(0, newMana - p.maxMana));
+    p.maxMana = newMana;
+    this.syncMana(p);
+  }
+
+  /** Writes the packed mana field (Player.mp) when the whole-number value changed. */
+  private syncMana(p: Player) {
+    const mp = packMana(p.mana, p.maxMana, p.mpotions);
+    if (p.mp !== mp) p.mp = mp;
   }
 
   private stats(p: Player) { return { sta: p.sta, str: p.str, mag: p.mag, dex: p.dex }; }

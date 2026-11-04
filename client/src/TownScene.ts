@@ -4,6 +4,7 @@ import { leaving, noteBuild, reconnectSoon, returnToStart, upgradeAnnounced } fr
 import { Client, Room } from "colyseus.js";
 import { BOSS, ELITE, InputState, MERGE, MAP_H, MAP_W, regenFromStamina, TICK_RATE, TILE } from "../../shared/constants";
 import { CLASSES, ClassKind, DODGE, ENERGY, energyName, MAX_LEVEL, xpForLevel } from "../../shared/classes";
+import { canPay, Cost, MANA, manaRegen, maxManaFor, shortOf, skillCost, unpackMana } from "../../shared/mana";
 import { GROUND, areaAt, isSafeZone } from "../../shared/map";
 import { heroPoise, meleeReach, mobBody } from "../../shared/combat";
 import { moveStep } from "../../shared/movement";
@@ -319,6 +320,7 @@ export class TownScene extends Phaser.Scene {
     });
     this.setupHotbar();
     this.input.keyboard!.on("keydown-Q", () => { if (!this.chatting()) this.room?.send("potion"); });
+    this.input.keyboard!.on("keydown-V", () => { if (!this.chatting()) this.room?.send("manapotion"); });
     // Secondary ranged weapon from the equipment screen (sling, knives, crossbow)
     this.input.keyboard!.on("keydown-R", () => { if (!this.chatting()) this.room?.send("ranged"); });
     const dodge = () => { if (!this.chatting()) this.room?.send("dodge"); };
@@ -563,11 +565,16 @@ export class TownScene extends Phaser.Scene {
         this.feed(`Found ${name}! Press G to equip`);
         return;
       }
-      this.floatText(x, y - 6, kind === "gold" ? `+${amount} gold` : "+1 potion", kind === "gold" ? "#ffc93c" : "#ff8fa3", PIXEL_FONT);
+      this.floatText(x, y - 6, kind === "gold" ? `+${amount} gold` : kind === "mpotion" ? "+1 mana potion" : "+1 potion",
+        kind === "gold" ? "#ffc93c" : kind === "mpotion" ? "#8ab4ff" : "#ff8fa3", PIXEL_FONT);
     });
     this.room.onMessage("heal", ({ id, amount }) => {
       const e = this.entities.get(id);
       if (e) this.floatText(e.sprite.x, e.sprite.y - 14, `+${amount}`, "#7cfc00");
+    });
+    this.room.onMessage("mana", ({ id, amount }) => {
+      const e = this.entities.get(id);
+      if (e) this.floatText(e.sprite.x, e.sprite.y - 14, `+${amount} mana`, "#8ab4ff", PIXEL_FONT);
     });
 
     // A Mother Blob budding a blobling: quick wobble
@@ -1764,7 +1771,7 @@ export class TownScene extends Phaser.Scene {
       sta: `${mine.maxHp} max HP, regen ${regenFromStamina(st.sta)[1].toFixed(1)} HP/s`,
       str: STATS[cls].attackStat === "str" ? `attack ×${attackMult(cls, st).toFixed(2)}, +${HP_PER_STR} HP each` : `+${HP_PER_STR} HP per point`,
       mag: `${STATS[cls].attackStat === "mag" ? `attack ×${attackMult(cls, st).toFixed(2)}, +${HP_PER_STR} HP each, ` : ""}skills ×${magicMult(cls, st).toFixed(2)}, ` +
-        `cooldowns −${Math.round((1 - cooldownMult(cls, st, mine.talents)) * 100)}%`,
+        `cooldowns −${Math.round((1 - cooldownMult(cls, st, mine.talents)) * 100)}%, ${maxManaFor(st, lvl)} max mana`,
       dex: `${Math.round(critChance(st, talentBonus(cls, mine.talents, "crit")) * 100)}% critical hits (double damage), skills too`,
     };
     const pts: Record<StatKind, number> = { sta: mine.ptSta, str: mine.ptStr, mag: mine.ptMag, dex: mine.ptDex ?? 0 };
@@ -1781,6 +1788,7 @@ export class TownScene extends Phaser.Scene {
       ["Level", lvl >= MAX_LEVEL ? `${MAX_LEVEL} (max)` : `${lvl} · XP ${mine.xp - cur}/${next - cur}`],
       ["Health", `${Math.ceil(mine.hp)} / ${mine.maxHp}`],
       ["HP regen", `${regenFromStamina(st.sta)[1].toFixed(1)}/s resting · ${regenFromStamina(st.sta)[0].toFixed(1)}/s in a fight`],
+      ["Mana", `${unpackMana(mine.mp).mana} / ${unpackMana(mine.mp).maxMana} · ${manaRegen(st, false, talentBonus(cls, mine.talents, "mana")).toFixed(1)}/s (×${MANA.restMult} resting)`],
       ["Attack", `${dmg} damage${def.projectile ? " (ranged)" : ""}`],
       ["Attack speed", `${(1000 / def.attackCooldownMs).toFixed(1)} hits/s`],
       ["Critical hits", `${Math.round(critChance(st, talentBonus(cls, mine.talents, "crit")) * 100)}% chance, double damage`],
@@ -1887,16 +1895,17 @@ export class TownScene extends Phaser.Scene {
   /** Name, cooldown and cost of an active skill for the HUD. */
   private skillHud(cls: ClassKind, skill: string, cdm: number) {
     const s = skillOf(cls, skill);
-    return { name: s?.name ?? "?", cdMs: (s?.cd ?? 0) * cdm, last: this.lastCast[skill] ?? -Infinity, cost: s?.cost ?? 0, ult: s?.row === 4 };
+    return { name: s?.name ?? "?", cdMs: (s?.cd ?? 0) * cdm, last: this.lastCast[skill] ?? -Infinity, cost: s ? skillCost(s) : { stamina: 0, mana: 0 }, ult: s?.row === 4 };
   }
 
   /** HUD list of every action with its key and cooldown, under the skill bar. */
   private renderActions(mine: any, cls: ClassKind, cdm: number, now: number) {
-    const row = (key: string, name: string, cdMs: number, last: number, extra = "", locked = "", cost = 0) => {
+    const pools = { energy: mine.energy, mana: unpackMana(mine.mp).mana };
+    const row = (key: string, name: string, cdMs: number, last: number, extra = "", locked = "", cost: Cost = {}) => {
       const left = cdMs > 0 ? Math.max(0, cdMs - (now - last)) : 0;
-      const short = cost > mine.energy;
+      const short = shortOf(pools, cost);
       const state = locked ? "locked" : left > 0 || short ? "wait" : "";
-      const status = locked || (left > 0 ? `${(left / 1000).toFixed(1)}s` : short ? `needs ${cost}` : extra || "ready");
+      const status = locked || (left > 0 ? `${(left / 1000).toFixed(1)}s` : short === "mana" ? `needs ${cost.mana} mana` : short ? `needs ${cost.stamina} stamina` : extra || "ready");
       const fill = left > 0 ? `<div class="cd" style="width:${(1 - left / cdMs) * 100}%"></div>` : "";
       return `<li class="${state}${ult ? " ult" : ""}">${fill}<kbd>${key}</kbd><span class="n">${name}</span><span class="s">${status}</span></li>`;
     };
@@ -1916,8 +1925,9 @@ export class TownScene extends Phaser.Scene {
     const html = [
       row("L-click", CLASSES[cls].projectile ? "Shoot" : "Attack", 0, 0, mine.stacks > 0 ? `${STACK_NAME[cls]} ${mine.stacks}/${MAX_STACKS}` : "3-hit combo"),
       ...slotRows, ...unslotted,
-      row("Shift", "Dodge roll", DODGE.cooldownMs, this.lastDodge, "", "", ENERGY.cost.dodge),
+      row("Shift", "Dodge roll", DODGE.cooldownMs, this.lastDodge, "", "", { stamina: ENERGY.cost.dodge }),
       row("Q", "Potion", 0, 0, `×${mine.potions}`, mine.potions > 0 ? "" : "×0"),
+      ((n) => row("V", "Mana potion", 0, 0, `×${n}`, n > 0 ? "" : "×0"))(unpackMana(mine.mp).potions),
       // Secondary ranged weapon from the equipment screen, only when one is worn
       ...((rd) => (rd?.shot ? [row("R", rd.name, rd.shot.cooldownMs, this.lastRanged)] : []))(activeOf(mine).ranged ? gearDef(activeOf(mine).ranged!) : undefined),
     ].join("");
@@ -1931,7 +1941,7 @@ export class TownScene extends Phaser.Scene {
       const h = this.skillHud(cls, skill, cdm);
       const left = Math.max(0, h.cdMs - (now - h.last));
       const shade = left > 0 ? `<div class="cd" style="height:${(left / h.cdMs) * 100}%"></div>` : "";
-      const wait = left > 0 || h.cost > mine.energy ? " wait" : "";
+      const wait = left > 0 || !canPay(pools, h.cost) ? " wait" : "";
       const power = skill;
       return `<div class="slot${h.ult ? " ult" : ""}${wait}${picking}" data-slot="${i}" data-skill="${skill}" data-tiphead="${h.name}" data-tip="${tipEsc(skillOf(cls, skill)?.desc ?? "")}" data-tiphint="Key ${SLOT_KEYS[i]} · click to change · wheel to scroll · right-click to clear">` +
         `${iconImg(power)}${shade}<kbd>${SLOT_KEYS[i]}</kbd>${left > 0 ? `<b>${Math.ceil(left / 1000)}</b>` : ""}</div>`;
@@ -2198,7 +2208,8 @@ export class TownScene extends Phaser.Scene {
       // Status effects: yellow flicker for stunned, blue for slowed, red pulse for raging. A monster winding up shows
       // it in its pose; only sheets without attack frames (?pixel=1) still flash red.
       const windFlash = p.winding && e.sprite.texture.frameTotal <= 12;
-      if (!p.dead && (p.stunned || windFlash || p.slowed || p.raging)) {
+      const raging = !e.mob && /(^|,)b_(rage|berserk)(,|$)/.test(p.fx ?? "");
+      if (!p.dead && (p.stunned || windFlash || p.slowed || raging)) {
         e.sprite.setTint(p.stunned ? (Math.floor(now / 120) % 2 ? 0xfff176 : 0xffffff)
           : windFlash ? (Math.floor(now / 70) % 2 ? 0xff6b6b : 0xffffff)
           : p.slowed ? 0x90caf9 : (Math.floor(now / 200) % 2 ? 0xff8a80 : 0xffcdd2));
@@ -2326,7 +2337,7 @@ export class TownScene extends Phaser.Scene {
       const cls0 = mine.cls as ClassKind;
       document.getElementById("stats")!.textContent =
         `${mine.dead ? "Respawning… " : safe}Lv ${mine.level} ${CLASSES[mine.cls as ClassKind].name} · ` +
-        `${mine.level >= MAX_LEVEL ? "XP MAX" : `XP ${mine.xp - cur}/${next - cur}`} · Gold ${mine.gold} · Potions ${mine.potions} · Kills ${mine.kills} · Online ${online}` +
+        `${mine.level >= MAX_LEVEL ? "XP MAX" : `XP ${mine.xp - cur}/${next - cur}`} · Gold ${mine.gold} · Potions ${mine.potions} · Mana potions ${unpackMana(mine.mp).potions} · Kills ${mine.kills} · Online ${online}` +
         (talentPoints(mine.level) > spentPoints(cls0, mine.talents) ? ` · ⭐ ${talentPoints(mine.level) - spentPoints(cls0, mine.talents)} skill point(s): press T` : "");
       const freePts = talentPoints(mine.level) - spentPoints(cls0, mine.talents);
       const badge = document.getElementById("treebadge")!;
@@ -2347,11 +2358,13 @@ export class TownScene extends Phaser.Scene {
         : "";
       const cls = mine.cls as ClassKind;
       const cdm = cooldownMult(cls, { sta: mine.sta, str: mine.str, mag: mine.mag, dex: mine.dex ?? 0 }, mine.talents);
-      // Blue bar = Stamina (Magic for the Wizard), spent by skills, the ultimate and the dodge roll
+      // Yellow bar = Stamina (dodge roll and physical skills), blue bar = Mana (spells, shared/mana.ts)
       const fill = document.getElementById("skillfill") as HTMLElement;
       fill.style.width = `${(mine.energy / ENERGY.max) * 100}%`;
-      fill.classList.toggle("magic", cls === "wizard");
       this.barText("skilltext", energyName(cls), Math.floor(mine.energy), ENERGY.max);
+      const mn = unpackMana(mine.mp);
+      (document.getElementById("manafill") as HTMLElement).style.width = `${mn.maxMana ? (mn.mana / mn.maxMana) * 100 : 0}%`;
+      this.barText("manatext", "Mana", mn.mana, mn.maxMana);
       this.renderActions(mine, cls, cdm, now);
       (this.buffBar ??= new BuffBar(document.getElementById("hud")!)).update(mine.timers ?? "");
     }

@@ -1,5 +1,6 @@
 import { gearDef, itemLevel, itemRarity, withLevel } from "./gear";
 import { MAX_POTIONS } from "./items";
+import { MANA_POTION_PRICE } from "./mana";
 
 /**
  * Village shops. A shop is attached to an NPC (shared/npcs.ts) by id. The server checks distance, gold and bag space.
@@ -7,7 +8,7 @@ import { MAX_POTIONS } from "./items";
  * The smith sells set item levels (SHOP_LEVEL by tier): the best gear is still found out in the world.
  */
 export interface ShopEntry {
-  /** gear id, or "potion" */
+  /** gear id, "potion" (healing) or "mpotion" (mana) */
   item: string;
   qty?: number; // potions per purchase
   price: number;
@@ -52,10 +53,12 @@ export const SHOPS: Record<string, Shop> = {
     buys: ["weapon", "ranged"],
   },
   witch: {
-    greeting: "Hehehe... potions, freshly brewed. Bubbling with good health, mostly.",
+    greeting: "Hehehe... potions, freshly brewed. Red for your blood, blue for your magic. Bubbling, mostly.",
     stock: [
       { item: "potion", qty: 1, price: POTION_PRICE },
       { item: "potion", qty: 3, price: Math.round(POTION_PRICE * 3 * 0.85) },
+      { item: "mpotion", qty: 1, price: MANA_POTION_PRICE },
+      { item: "mpotion", qty: 3, price: Math.round(MANA_POTION_PRICE * 3 * 0.85) },
     ],
   },
 };
