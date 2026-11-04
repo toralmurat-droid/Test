@@ -1,5 +1,6 @@
 {
   "date": "2026-11-04",
+  "pr": 232,
   "title": "Menus in the weathered style",
   "changes": [
     "Every menu now has the same dark bronze-framed look as the game menu: hero, skills, bag, quest log, group, trading, stash, shops, villager talk and portal stones.",
