@@ -518,7 +518,7 @@ function loopTones(freqs: number[], type: OscillatorType, tremHz: number): Bed {
 }
 
 function makeBeds() {
-  wind = loopNoise("bandpass", 500, 0.8);
+  wind = loopNoise("lowpass", 380, 0.5);
   water = loopNoise("lowpass", 650, 0.5);
   fire = loopNoise("lowpass", 350, 0.7);
   hum = loopTones([196, 293.7, 392.5], "sine", 0.25);
@@ -563,9 +563,10 @@ function envTick() {
   if (water?.f) water.f.frequency.setTargetAtTime(560 + 120 * Math.sin(bedTime * 0.37), ctx.currentTime, 1);
   // Wind: stronger in open land, gusting; softer between houses, a bit louder at night
   const open = 1 - Math.min(1, (treeN + solidN * 1.5) / (n * 0.35));
-  const gust = 0.6 + 0.4 * Math.sin(bedTime * 0.23) * Math.sin(bedTime * 0.071 + 1);
-  set(wind, (0.03 + 0.07 * open) * gust * (town ? 0.5 : 1) * (1 + dark * 0.4), 1.2);
-  if (wind?.f) wind.f.frequency.setTargetAtTime(350 + 500 * gust, ctx.currentTime, 0.8);
+  // (soft and dark: a low breath that drifts, never a rushing hiss that sounds like rain)
+  const gust = 0.85 + 0.15 * Math.sin(bedTime * 0.23) * Math.sin(bedTime * 0.071 + 1);
+  set(wind, (0.012 + 0.028 * open) * gust * (town ? 0.5 : 1) * (1 + dark * 0.2), 2.5);
+  if (wind?.f) wind.f.frequency.setTargetAtTime(300 + 120 * gust, ctx.currentTime, 1.5);
   // Fire: closest campfire / bonfire crackles
   let fd = Infinity, fx = 0, fy = 0;
   for (const [x, y] of FIRES) { const d = Math.hypot(x - lx, y - ly); if (d < fd) { fd = d; fx = x; fy = y; } }
