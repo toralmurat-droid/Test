@@ -459,6 +459,15 @@ const meleeOf = (m: Mob) => {
 /** A trade between players a and b (server only). `v` goes up with every change of an offer. */
 interface Trade { a: string; b: string; v: number; offer: Record<string, Offer>; ready: Record<string, boolean> }
 
+const liveRooms = new Set<TownRoom>();
+let announced = false;
+/** The server is about to restart for an update: tell every player right away (TownScene shows the update notice). */
+export function announceUpgrade() {
+  if (announced) return;
+  announced = true;
+  liveRooms.forEach((r) => r.broadcast("upgrading", {}));
+}
+
 export class TownRoom extends Room<TownState> {
   maxClients = 50;
   private mobSeq = 0;
@@ -466,6 +475,7 @@ export class TownRoom extends Room<TownState> {
   private itemSeq = 0;
 
   onCreate() {
+    liveRooms.add(this);
     this.setState(new TownState());
     this.setPatchRate(1000 / TICK_RATE);
     this.setSimulationInterval((dt) => this.update(dt), 1000 / TICK_RATE);
@@ -682,6 +692,7 @@ export class TownRoom extends Room<TownState> {
   }
 
   onDispose() {
+    liveRooms.delete(this);
     this.state.players.forEach((p) => saveHero(p.name, p.cls, this.snapshot(p)));
     flush();
   }

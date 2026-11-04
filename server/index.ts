@@ -6,7 +6,7 @@ import zlib from "node:zlib";
 import express from "express";
 import { Server } from "colyseus";
 import { WebSocketTransport } from "@colyseus/ws-transport";
-import { TownRoom } from "./TownRoom";
+import { TownRoom, announceUpgrade } from "./TownRoom";
 import { ideaLog, publicLog } from "./ideaStore";
 import { allAccounts, peek } from "./accounts";
 
@@ -44,7 +44,16 @@ if (process.env.NODE_ENV === "production") {
     setHeaders: (res, file) => { if (/[\\/]assets[\\/][^\\/]+-[A-Za-z0-9_-]{8}\.\w+$/.test(file)) res.setHeader("Cache-Control", "public, max-age=31536000, immutable"); },
   }));
 }
-app.get("/health", (_req, res) => { res.send("ok"); });
+// Which build is running: a new deploy gets a new id, so a player who lost the connection can tell that an
+// update arrived (and show the "update" notice instead of "connection lost"). Railway sets RAILWAY_DEPLOYMENT_ID.
+const BUILD = process.env.RAILWAY_DEPLOYMENT_ID || process.env.RAILWAY_GIT_COMMIT_SHA || `start-${Date.now()}`;
+app.get("/health", (_req, res) => {
+  res.setHeader("Access-Control-Allow-Origin", "*"); // dev: the client runs on another port
+  res.setHeader("Access-Control-Expose-Headers", "X-Build");
+  res.setHeader("X-Build", BUILD);
+  res.setHeader("Cache-Control", "no-store");
+  res.send("ok");
+});
 // The player idea log (read-only), newest first
 app.get("/ideas.json", (_req, res) => { res.json(publicLog()); });
 
@@ -77,6 +86,9 @@ const httpServer = http.createServer(app);
 // perMessageDeflate: the browser and server squeeze every update (~35% fewer bytes, all browsers support it).
 // Level 1 is the fastest setting; tiny messages (inputs, chat) are sent as they are. WS_DEFLATE=0 turns it off.
 const deflate = process.env.WS_DEFLATE !== "0" && { threshold: 256, zlibDeflateOptions: { level: 1 } };
+// A deploy stops this server with SIGTERM: first tell every player an update is coming (so they see the update
+// notice, not "connection lost"), then Colyseus saves everyone and closes. Registered before the Server so it runs first.
+for (const sig of ["SIGTERM", "SIGINT"] as const) process.on(sig, () => announceUpgrade());
 const gameServer = new Server({ transport: new WebSocketTransport({ server: httpServer, perMessageDeflate: deflate }) });
 gameServer.define("town", TownRoom);
 
