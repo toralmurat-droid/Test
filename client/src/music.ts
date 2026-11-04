@@ -6,8 +6,9 @@ import { icon as pxIcon } from "./pixelicons";
  * (wind, birds, murmur, the smith's hammer) made in code.
  *
  * "Auto" (the default):
- * - Opening: "Hearth of Oakvale" starts on the login / loading screen (first click or key) and plays once per
- *   browser session, never looping. It fades out when the hero leaves the village, or ends on its own.
+ * - Opening: "Hearth of Oakvale" starts as soon as the game opens (or on the first click / key if the browser
+ *   waits for one) and loops through the start menus and the loading screen. In the world it plays on in the
+ *   starting village to its end, then the calm tune takes over; leaving the village fades it out.
  * - Calm: the Village tune with soft village sounds under it in Oakvale, Saltmere and the Hunter's Camp,
  *   the Countryside tune everywhere else (both loop).
  * - Battle: when the fighting around the hero heats up (hits near the hero, hits taken), the zone's battle
@@ -32,7 +33,6 @@ const TRACKS: Track[] = [
   { id: "country", name: "Countryside tune", url: "/assets/music/countryside-tune.mp3" },
   { id: "village-sounds", name: "Village sounds", ambience: true },
 ];
-const INTRO_KEY = "music:intro";
 const UNDEAD = ["skeleton", "skeletonmage", "necromancer"];
 const FIGHT = ["slime", "shooterblob", "warriorblob", "healerblob", "motherblob", "bandit"];
 const TOWNS = ["Oakvale", "Market Square", "Chapel of the Dawn", "The Rusty Tankard", "The Smithy", "Saltmere", "Hunter's Camp"];
@@ -64,8 +64,10 @@ let switchTimer: number | null = null;
 
 // Where the hero is (for Auto)
 let calmTrack = "village";
-/** The opening song still to play / playing this browser session */
-let intro = (() => { try { return sessionStorage.getItem(INTRO_KEY) !== "1"; } catch { return true; } })();
+/** The opening song is still to play / playing (every time the game opens) */
+let intro = true;
+/** The hero is in the world (false on the start menus and the loading screen) */
+let inWorld = false;
 let ambience: Ambience | null = null;
 let pendingCalm: string | null = null;
 let calmTimer: number | null = null;
@@ -139,11 +141,9 @@ function playTrack() {
       audioEl.addEventListener("ended", songEnded);
     }
     if (!audioEl.src.endsWith(track.url)) audioEl.src = track.url;
-    // The opening and battle songs play once in full; calm tunes and a picked song loop
-    audioEl.loop = settings.pick !== "auto" || (track.id !== "hearth" && battle?.track !== track.id);
-    if (track.id === "hearth" && settings.pick === "auto") {
-      try { sessionStorage.setItem(INTRO_KEY, "1"); } catch { /* private mode */ }
-    }
+    // Battle songs play once in full, the opening song loops until the hero is in the world;
+    // calm tunes and a picked song loop
+    audioEl.loop = settings.pick !== "auto" || (track.id === "hearth" ? !inWorld : battle?.track !== track.id);
     audioEl.currentTime = 0;
     if (mp3Gain) { mp3Gain.gain.cancelScheduledValues(ctx.currentTime); mp3Gain.gain.value = swellLevel(); }
     audioEl.play().catch(() => {});
@@ -171,7 +171,8 @@ async function begin() {
   master = ctx.createGain();
   master.gain.value = 0;
   master.connect(ctx.destination);
-  if (ctx.state === "suspended") await ctx.resume().catch(() => {});
+  // Try at once; if the browser still waits for a click / key, the unlock in startMusic starts it
+  if (ctx.state === "suspended") await Promise.race([ctx.resume().catch(() => {}), new Promise((r) => setTimeout(r, 300))]);
   if (targetGain() > 0) playTrack();
   fadeTo(targetGain(), FADE_IN);
   window.setInterval(tick, 250);
@@ -242,6 +243,11 @@ function tick() {
  * name. Cheap to call every frame.
  */
 export function setMusicZone(zone: string | undefined, mobs: Partial<Record<string, number>> | undefined, area: string) {
+  if (!inWorld) {
+    // In the world now: the opening song plays on to its end instead of looping
+    inWorld = true;
+    if (playing === "hearth" && audioEl) audioEl.loop = settings.pick !== "auto";
+  }
   const has = (kinds: string[]) => !!mobs && kinds.some((k) => (mobs[k] ?? 0) > 0);
   zoneName = zone;
   zoneBattle = has(UNDEAD) ? "pale-marshals" : has(FIGHT) ? "blob-slayer" : null;
@@ -274,13 +280,25 @@ export function startMusic(lastName: string) {
   load(lastName);
   const unlock = () => {
     if (!started) { void begin(); return; }
-    // Started without a click (e.g. back from a server restart): the browser wants one to play
-    if (ctx?.state === "suspended" || (audioEl?.paused && TRACKS.find((t) => t.id === playing)?.url)) apply(0.5);
+    // Started before any click: the browser wants one to play. The opening song then starts from the top.
+    if (ctx?.state === "suspended" || (audioEl?.paused && TRACKS.find((t) => t.id === playing)?.url)) {
+      if (playing === "hearth" && audioEl && !inWorld) audioEl.currentTime = 0;
+      apply(0.5);
+    }
     else { window.removeEventListener("pointerdown", unlock, true); window.removeEventListener("keydown", unlock, true); }
   };
   window.addEventListener("pointerdown", unlock, true);
   window.addEventListener("keydown", unlock, true);
   document.addEventListener("visibilitychange", () => apply(document.hidden ? FADE_OUT : FADE_IN));
+  // The opening song as soon as the game opens, where the browser allows sound without a click
+  void begin();
+}
+
+/** Back in after a server restart (auto rejoin): no opening song, straight to the zone's tune. */
+export function skipIntro() {
+  if (!intro) return;
+  intro = false;
+  if (playing === "hearth") switchTrack(FADE_IN);
 }
 
 /** Call once the player has logged in: their own settings, and the music menu. */

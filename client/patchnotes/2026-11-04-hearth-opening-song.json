@@ -1,0 +1,8 @@
+{
+  "date": "2026-11-04",
+  "title": "Opening song on every start",
+  "changes": [
+    "Hearth of Oakvale now plays every time you open the game, right away or on your first click.",
+    "It keeps playing through the start menus and the loading screen, then carries on in the starting village."
+  ]
+}

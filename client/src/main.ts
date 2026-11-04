@@ -1,5 +1,5 @@
 import Phaser from "phaser";
-import { initMusic, startMusic } from "./music";
+import { initMusic, skipIntro, startMusic } from "./music";
 import { initSfx } from "./sfx";
 import { takeBackToStart, takeRejoin } from "./reconnect";
 import { showLoading } from "./loading";
@@ -47,7 +47,7 @@ const fireside = mountFireside(document.getElementById("fireside") as HTMLCanvas
 
 const nameEl = document.getElementById("name") as HTMLInputElement;
 try { nameEl.value = localStorage.getItem("name") ?? ""; } catch { /* ignore */ }
-// Music starts on the login screen with the first click or key (the opening song, see music.ts)
+// The opening song starts as the game opens (or on the first click / key if the browser waits), see music.ts
 startMusic(nameEl.value.trim());
 
 const pwEl = document.getElementById("password") as HTMLInputElement;
@@ -213,6 +213,7 @@ show("login");
 // Back from a server restart: log straight back in with the same hero
 const rejoin = takeRejoin();
 if (rejoin) {
+  skipIntro(); // back after a server restart: the opening song only plays when the game is opened
   if (isClassKind(rejoin.cls)) cls = rejoin.cls;
   color = rejoin.color;
   launch(rejoin.name, rejoin.password, false);
