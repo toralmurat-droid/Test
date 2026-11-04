@@ -2497,6 +2497,7 @@ export class TownScene extends Phaser.Scene {
       (this.resBars ??= new ResourceBars(document.getElementById("hud")!)).update({
         level: mine.level, hp: mine.hp, maxHp: mine.maxHp, mp: mn.mana, maxMp: mn.maxMana, st: mine.energy, maxSt: ENERGY.max,
         xpFrac: mine.level >= MAX_LEVEL ? 1 : (mine.xp - cur) / Math.max(1, next - cur),
+        xp: mine.xp - cur, xpNeed: mine.level >= MAX_LEVEL ? undefined : next - cur,
       });
       this.renderActions(mine, cls, cdm, now);
       (this.buffBar ??= new BuffBar(document.getElementById("hud")!)).update(mine.timers ?? "");
