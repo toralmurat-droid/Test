@@ -1,0 +1,8 @@
+{
+  "date": "2026-11-04",
+  "title": "Max level 30",
+  "changes": [
+    "Heroes and monsters now stop at level 30 for now.",
+    "Heroes saved above level 30 drop to 30 and get their stat points back to place again."
+  ]
+}

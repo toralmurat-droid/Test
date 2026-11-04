@@ -665,6 +665,8 @@ export class TownRoom extends Room<TownState> {
     p.xp = Math.min(MAX_XP, num(s.xp)); p.level = capLevel(num(s.level, 1)); p.kills = num(s.kills);
     p.gold = num(s.gold); p.potions = Math.min(MAX_POTIONS, num(s.potions));
     p.ptSta = num(s.ptSta); p.ptStr = num(s.ptStr); p.ptMag = num(s.ptMag); p.ptDex = num(s.ptDex);
+    // A hero saved above today's level cap spent more points than his level gives: hand them back to place again
+    if (p.ptSta + p.ptStr + p.ptMag + p.ptDex > statPoints(p.level)) p.ptSta = p.ptStr = p.ptMag = p.ptDex = 0;
     p.weapon = gear(s.weapon); p.armour = gear(s.armour); p.shoes = gear(s.shoes);
     p.hat = gear(s.hat); p.shield = gear(s.shield); p.ranged = gear(s.ranged);
     if (Array.isArray(s.bag)) setBag(p, s.bag.map(gear).filter(Boolean).slice(0, BAG_SIZE));
