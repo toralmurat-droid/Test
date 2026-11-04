@@ -1,6 +1,6 @@
 {
   "date": "2026-11-04",
-  "pr": 0,
+  "pr": 242,
   "title": "Golden XP bar",
   "changes": [
     "The XP bar now sits above the skill slots, with a bronze frame and a golden fill.",
