@@ -1,7 +1,10 @@
 import Phaser from "phaser";
 import { ART_K as K } from "../../shared/constants";
 import { hiResTexture } from "./smooth";
-import { dith, hash, OUT, stoneCol, vnoise, type Px } from "./shrineArt";
+import { dith as dith1, hash, OUT, stoneCol, vnoise, type Px } from "./shrineArt";
+
+/** Ordered dither on the coarse 2x2-cell pixel (see chunky()), so each final pixel is one clean tone. */
+const dith = (x: number, y: number) => dith1(x >> 1, y >> 1);
 
 /**
  * Hand-built pixel art for the portal stones (shared/portals.ts), in the forest shrine's style (shrineArt.ts): one
@@ -37,10 +40,10 @@ const scr = (a: number, b: number, z: number) => ({ x: CX + a * UX + b * NX, y: 
 /** Carved rune `k` in block-local coords (u along the ring, v across it, about -1..1): true on its groove. */
 function rune(k: number, u: number, v: number): boolean {
   const kind = k % 4, a = Math.abs(u), b = Math.abs(v);
-  if (kind === 0) return (a < 0.14 && b < 0.62) || (Math.abs(u - v * 0.6) < 0.13 && v < 0 && v > -0.62);
-  if (kind === 1) return Math.abs(Math.hypot(u, v * 0.9) - 0.42) < 0.13 || (a < 0.13 && b < 0.13);
-  if (kind === 2) return (a < 0.13 && b < 0.62) || (b < 0.13 && a < 0.42) || (Math.abs(v + 0.45) < 0.12 && a < 0.3);
-  return Math.abs(Math.abs(u) - (0.55 - b * 0.5)) < 0.14 && b < 0.6;
+  if (kind === 0) return (a < 0.18 && b < 0.62) || (Math.abs(u - v * 0.6) < 0.18 && v < 0 && v > -0.62);
+  if (kind === 1) return Math.abs(Math.hypot(u, v * 0.9) - 0.42) < 0.18 || (a < 0.18 && b < 0.18);
+  if (kind === 2) return (a < 0.18 && b < 0.62) || (b < 0.18 && a < 0.42) || (Math.abs(v + 0.45) < 0.18 && a < 0.3);
+  return Math.abs(Math.abs(u) - (0.55 - b * 0.5)) < 0.18 && b < 0.6;
 }
 
 type Face = "top" | "left" | "right";
@@ -86,9 +89,11 @@ function isoBox(px: Px, z0: number, A: number, B: number, h: number, tone: numbe
 }
 
 function paintPortal(g: CanvasRenderingContext2D, f: number, N: number, lit: boolean) {
-  g.save();
-  g.scale(0.5, 0.5);
-  const px: Px = (x, y, c) => { g.fillStyle = c; g.fillRect(x, y, 1, 1); };
+  // painted one colour per cell on a scratch canvas, then coarsened to the decor's chunkier pixel (chunky() below)
+  const cv = document.createElement("canvas");
+  cv.width = W; cv.height = H;
+  const o = cv.getContext("2d")!;
+  const px: Px = (x, y, c) => { o.fillStyle = c; o.fillRect(x, y, 1, 1); };
   const ph = (f / N) * Math.PI * 2, pulse = 0.5 + 0.5 * Math.sin(ph);
   /** Portal light falling on a top face: strongest in front of the ring. */
   const glowAt = (x: number, y: number) => {
@@ -106,9 +111,9 @@ function paintPortal(g: CanvasRenderingContext2D, f: number, N: number, lit: boo
   // lower tier: a broad, sunken flagstone platform, moss in its joints and creeping up its sides
   const flags = (face: Face, s: number, t: number, x: number, y: number, l: number, A: number, B: number, seed: number) => {
     if (face === "top") {
-      const u = s * A / 6 + (Math.floor(t * B / 6) % 2) * 0.5, v = t * B / 6;
+      const u = s * A / 9 + (Math.floor(t * B / 9) % 2) * 0.5, v = t * B / 9;
       const iu = Math.floor(u), iv = Math.floor(v), fu = u - iu, fv = v - iv;
-      if (fu < 0.12 || fv < 0.12) return vnoise(x * 0.5, y * 0.5, 999, seed + 1) > 0.5 ? "#2f4a1c" : "#1c1814";
+      if (fu < 0.1 || fv < 0.1) return vnoise(x * 0.5, y * 0.5, 999, seed + 1) > 0.5 ? "#2f4a1c" : "#1c1814";
       let c = stoneCol(l - 0.1 + (1 - fv) * 0.2, 0.74 + hash(iu, iv, seed + 2) * 0.3);
       if (hash(iu, iv, seed + 3) < 0.14 && vnoise(x * 0.3, y * 0.3, 999, seed + 4) > 0.5) c = dith(x, y) < 0.5 ? "#4e6a2a" : "#36501e";
       const gl = glowAt(x, y);
@@ -159,7 +164,7 @@ function paintPortal(g: CanvasRenderingContext2D, f: number, N: number, lit: boo
         let l = outer ? ny * 0.75 - nx * 0.25 - 0.35 : -ny * 0.65 + nx * 0.2 - 0.6;
         l += (dith(x, y) - 0.5) * 0.45 + (vnoise(x * 0.3, y * 0.3, 999, 147) - 0.5) * 0.3;
         let c = fu < 0.06 || fu > 0.96 ? "#1c1814" : stoneCol(l, 0.84 + hash(bi, 7, 144) * 0.2);
-        if (lit && !outer && dith(x, y) < 0.55 + 0.2 * pulse) c = l > -0.7 ? "#b8642a" : "#8a3e18"; // the tunnel lit by the swirl
+        if (lit && !outer) c = l > -0.7 + (pulse - 0.5) * 0.2 ? "#b8642a" : "#8a3e18"; // the tunnel lit by the swirl
         px(x, y, c);
         continue;
       }
@@ -177,8 +182,7 @@ function paintPortal(g: CanvasRenderingContext2D, f: number, N: number, lit: boo
       const ca = 0.9 + (r - ri) * 0.012 + Math.sin(r * 0.6) * 0.03; // a crack through the right-hand blocks
       if (Math.abs(top - ca) < 0.024 && t > 0.1) c = OUT;
       const u = (fu - 0.5) * 2.3, w = (t - 0.5) * 2.4;
-      if (rune(bi + (key ? 1 : 0), u, w)) c = lit ? (dith(x, y) < 0.3 + 0.45 * (0.5 + 0.5 * Math.sin(ph + bi * 0.7)) ? FIRE[7] : FIRE[5]) : "#25211c";
-      else if (lit && Math.hypot(u, w) < 0.9 && dith(x, y) < (0.9 - Math.hypot(u, w)) * 0.7) c = l > 0 ? "#c88a52" : "#8e5430";
+      if (rune(bi + (key ? 1 : 0), u, w)) c = lit ? (0.5 + 0.5 * Math.sin(ph + bi * 0.7) > 0.5 ? FIRE[6] : FIRE[5]) : "#25211c";
       else if (lit && t < 0.3 && dith(x, y) < (0.3 - t) * 2.2) c = l > 0 ? "#d88a46" : "#9a5228";
       px(x, y, c);
     }
@@ -195,7 +199,7 @@ function paintPortal(g: CanvasRenderingContext2D, f: number, N: number, lit: boo
       const sw = a / (Math.PI * 2) + r * 0.9 - f / N;
       const n = vnoise(Math.cos(sw * Math.PI * 2) * 2.2 + 3, Math.sin(sw * Math.PI * 2) * 2.2 + r * 3, 999, 181);
       const spiral = 0.5 + 0.5 * Math.sin(sw * Math.PI * 4 + n * 3);
-      const val = 0.12 + r * 0.62 + (spiral - 0.5) * 0.24 + (n - 0.5) * 0.55 + (dith(x, y) - 0.5) * 0.12 - (r < 0.3 ? 0.2 * (1 - r / 0.3) : 0);
+      const val = 0.2 + r * 0.6 + (spiral - 0.5) * 0.24 + (n - 0.5) * 0.55 + (dith(x, y) - 0.5) * 0.12 - (r < 0.3 ? 0.2 * (1 - r / 0.3) : 0);
       const i = band(val);
       px(x, y, i < 0 ? "#240806" : FIRE[Math.min(i, FIRE.length - 1)]);
     }
@@ -215,7 +219,60 @@ function paintPortal(g: CanvasRenderingContext2D, f: number, N: number, lit: boo
       px(x, y, life < 0.35 ? FIRE[7] : life < 0.7 ? FIRE[5] : FIRE[3]);
     }
   }
+  const out = chunky(o);
+  g.save();
+  g.scale(0.5, 0.5);
+  g.imageSmoothingEnabled = false;
+  g.drawImage(out, 0, 0, W, H);
   g.restore();
+}
+
+/**
+ * Murat 2026-11-04: the fine one-cell painting stood out next to the trees and palisade. Each 2x2 block of cells
+ * becomes one pixel of its most common colour (darker wins a tie), tones are muted towards the world's weathered
+ * greys, and the silhouette gets a solid dark outline one block thick, like the rest of the decor.
+ */
+function chunky(o: CanvasRenderingContext2D): HTMLCanvasElement {
+  const B = 2, CW = W / B, CH = H / B;
+  const src = o.getImageData(0, 0, W, H).data;
+  const res = document.createElement("canvas");
+  res.width = CW; res.height = CH;
+  const rc = res.getContext("2d")!, img = rc.createImageData(CW, CH), d = img.data;
+  const solid = new Uint8Array(CW * CH); // 1 = opaque art, 2 = see-through shadow
+  for (let cy = 0; cy < CH; cy++) for (let cx = 0; cx < CW; cx++) {
+    const votes = new Map<number, number>();
+    let opaque = 0;
+    for (let j = 0; j < B; j++) for (let i = 0; i < B; i++) {
+      const k = ((cy * B + j) * W + cx * B + i) * 4;
+      if (src[k + 3] < 8) continue;
+      opaque++;
+      const key = (src[k] << 24 | src[k + 1] << 16 | src[k + 2] << 8 | src[k + 3]) >>> 0;
+      votes.set(key, (votes.get(key) ?? 0) + 1);
+    }
+    let best = -1, bn = 0, bl = 1e9;
+    for (const [key, n] of votes) {
+      const l = (key >>> 24) + ((key >>> 16) & 255) + ((key >>> 8) & 255);
+      if (n > bn || (n === bn && l < bl)) { best = key; bn = n; bl = l; }
+    }
+    if (best < 0 || opaque < 2) continue;
+    let r = best >>> 24, gg = (best >>> 16) & 255, b = (best >>> 8) & 255;
+    const a = best & 255, q = (cy * CW + cx) * 4;
+    // mute: pull towards a warm dark grey, keep fire colours bright
+    const hot = r > gg + 40 && r > 150;
+    if (!hot) { const m = (r + gg + b) / 3; r = (r * 0.7 + m * 0.3) * 0.86 + 6; gg = (gg * 0.7 + m * 0.3) * 0.84 + 4; b = (b * 0.7 + m * 0.3) * 0.8; }
+    d[q] = r; d[q + 1] = gg; d[q + 2] = b; d[q + 3] = a;
+    solid[cy * CW + cx] = a > 200 ? 1 : 2;
+  }
+  // outline: an art pixel next to empty or shadow becomes the dark outline colour
+  const edge: number[] = [];
+  for (let cy = 0; cy < CH; cy++) for (let cx = 0; cx < CW; cx++) {
+    if (solid[cy * CW + cx] !== 1) continue;
+    const open = (x: number, y: number) => x < 0 || y < 0 || x >= CW || y >= CH || solid[y * CW + x] !== 1;
+    if (open(cx - 1, cy) || open(cx + 1, cy) || open(cx, cy - 1) || open(cx, cy + 1)) edge.push(cy * CW + cx);
+  }
+  for (const e of edge) { const q = e * 4; d[q] = 0x15; d[q + 1] = 0x11; d[q + 2] = 0x0e; d[q + 3] = 255; }
+  rc.putImageData(img, 0, 0);
+  return res;
 }
 
 export const PORTAL_FRAMES = 8;
