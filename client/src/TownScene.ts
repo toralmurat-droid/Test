@@ -31,6 +31,7 @@ import { PORTALS, PORTAL_RANGE } from "../../shared/portals";
 import { PointerControls, type ClickEnemy, type ClickSpot } from "./pointer";
 import { warmPaths } from "./pathfind";
 import { pixelText } from "./pixeltext";
+import { speechBubble } from "./weathered";
 import { ART_K, CHAR_GROW, CHAR_SCALE, CHARACTERS, CHAR_ORIGIN, CharacterName, createArtAnims, playCharAnim, preloadArt } from "./artAssets";
 import { Ambient } from "./ambient";
 import { Details } from "./details";
@@ -104,7 +105,7 @@ interface Entity {
   culled?: boolean; // monster off screen: not drawn this frame
   top: number; // px from the feet to the top of the head, for the name label and chat bubble
   bar: Phaser.GameObjects.Graphics;
-  bubble?: Phaser.GameObjects.Text;
+  bubble?: Phaser.GameObjects.Image;
   shield?: Phaser.GameObjects.Graphics;
   tx: number; ty: number; // server target position
   snaps?: Snap[]; // recent server positions with local arrival time, played back a little late (see interpolate)
@@ -1782,10 +1783,7 @@ export class TownScene extends Phaser.Scene {
     const e = this.entities.get(id);
     if (!e) return;
     e.bubble?.destroy();
-    e.bubble = this.add.text(0, 0, text, {
-      fontFamily: "monospace", fontSize: "16px", color: "#000", backgroundColor: "#ffffffdd",
-      padding: { x: 4, y: 2 }, wordWrap: { width: 400 },
-    }).setOrigin(0.5, 1).setScale(0.25).setResolution(2).setDepth(20000);
+    e.bubble = speechBubble(this, e.sprite.x, e.sprite.y - e.top - 12, text);
     isoAnchor(e.bubble, e.sprite);
     const b = e.bubble;
     this.time.delayedCall(4000, () => { if (e.bubble === b) { b.destroy(); e.bubble = undefined; } });
@@ -2017,7 +2015,7 @@ export class TownScene extends Phaser.Scene {
         const col = myParty && p.party === myParty ? "#7cfc00" : "#ffffff";
         if (e.lvlColor !== col) { e.label.setColor(col); e.lvlColor = col; }
       }
-      e.bubble?.setPosition(x, y - e.top - 7);
+      e.bubble?.setPosition(x, y - e.top - 12); // above the name label
       e.bar.clear().setDepth(e.sprite.y + 1);
       this.fx.status(e, e.bar, dtMs / 1000);
       // Stacks built by basic hits (Valor, Ki, Fury...): small pips under the hero

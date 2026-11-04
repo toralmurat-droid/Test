@@ -60,7 +60,7 @@ export function addPixelGrid(cam: Phaser.Cameras.Scene2D.Camera) {
     fx.size = Math.max(1, Math.round(cam.zoom * ART_PX));
     copy();
     for (const o of scene.children.list as any[]) {
-      const text = o.type === "Text" && o.scrollFactorX !== 0;
+      const text = (o.type === "Text" || o.__worldText) && o.scrollFactorX !== 0;
       o.cameraFilter = text ? mainBit : uiBit; // bits set = cameras that skip the object
     }
   };

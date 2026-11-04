@@ -4,8 +4,11 @@ import { initSfx } from "./sfx";
 import { takeRejoin } from "./reconnect";
 import { showLoading } from "./loading";
 import { installCursors } from "./cursors";
+import { installWeatheredFrames } from "./weathered";
+import "./weathered.css";
 
 installCursors();
+installWeatheredFrames();
 import { TownScene } from "./TownScene";
 import { CLASSES, CLASS_KINDS, ClassKind, isClassKind } from "../../shared/classes";
 import { mountHeroCards } from "./heroCards";

@@ -1,0 +1,56 @@
+/* Weathered pixel frames for HUD notices and popups (weathered.ts paints the frames: --wf-bronze, --wf-gold,
+   --wf-blood, --wf-btn). Dark umber fill, aged bronze rim with rivets, parchment text, pixel font.
+   "body #id" so these win over the older per-feature styles loaded later. */
+body #partypanel, body #partyask, body #partytoast, body #npcprompt, body #chestprompt, body #lvlnote, body #patchnotice {
+  border: 18px solid transparent; border-image: var(--wf-bronze) 9 fill / 18px / 0 repeat; image-rendering: pixelated;
+  background: none; border-radius: 0; box-shadow: none; color: #eadfc8; text-shadow: 2px 2px #050302;
+  font-family: var(--pixel-font); -webkit-font-smoothing: none; -moz-osx-font-smoothing: grayscale; }
+body #partypanel { padding: 2px 6px; }
+body #partypanel h2, body #partypanel h3 { color: #e3bf6a; letter-spacing: 1px; }
+body #partypanel h2 { border-bottom: 2px solid #45331e; padding-bottom: 4px; }
+body #partypanel li small, body #partypanel .help, body #partyask small { color: #a8977a; }
+body #partypanel li { border-bottom: 1px dashed #3a2b1c; }
+
+/* Invite card: gilded, so it stands out */
+body #partyask { border-image-source: var(--wf-gold); padding: 0 8px 2px; top: auto; bottom: 170px; } /* clear of the hero and their speech bubble */
+body #partyask p { margin: 0 0 8px; }
+body #partyask b { color: #ffd98a; }
+
+/* Short group notices: a small gilded plaque */
+body #partytoast { border-image-source: var(--wf-gold); padding: 0 6px; color: #f0e0b8; top: 8%; }
+body #partytoast:empty { display: none; }
+
+/* Talk / open prompts */
+body #npcprompt, body #chestprompt { padding: 0 4px; color: #eadfc8; }
+body #chestprompt { border-image-source: var(--wf-gold); }
+body #chestprompt.locked { border-image-source: var(--wf-blood); color: #d8c8a8; }
+body #npcprompt kbd, body #chestprompt kbd { border: 0; border-radius: 0; background: #0f0a06; color: #e3bf6a; box-shadow: 0 0 0 2px #6a5232; }
+
+/* Attention notices (level up, new update): gilded, with an ember glow instead of the green pulse */
+body #lvlnote, body #patchnotice { border-image-source: var(--wf-gold); padding: 0 6px; color: #ffd98a;
+  animation: wf-ember 1.6s steps(4) infinite; }
+@keyframes wf-ember { 50% { filter: drop-shadow(0 0 6px rgba(255, 150, 40, .55)); } }
+
+/* Buttons: dark leather with a bronze lip */
+body #partypanel button, body #partyask button {
+  border: 6px solid transparent; border-image: var(--wf-btn) 4 fill / 6px / 0 repeat; image-rendering: pixelated;
+  background: none; color: #eadfc8; padding: 0 6px; font: 13px var(--pixel-font); text-shadow: 1px 1px #050302; cursor: pointer; }
+body #partypanel button:hover, body #partyask button:hover { color: #ffd98a; filter: brightness(1.25); }
+body #partyask button[data-act="yes"] { color: #c8f59a; }
+body #partyask button[data-act="no"] { color: #ff9d7a; }
+
+/* Group frame (members' HP): bronze title, iron-bound bars */
+body #partyframe .pt { color: #e3bf6a; font-family: var(--pixel-font); }
+body #partyframe .pb { height: 6px; background: #2a0e08; border: 0; box-shadow: 0 0 0 1px #080504, 0 0 0 2px #6a5232; margin-top: 2px; }
+body #partyframe .pb i { background: #b8322a; box-shadow: inset 0 2px #e05a40; }
+
+/* Kill feed and other passing notices: a dark strip with a bronze edge */
+body #feed > div { font-family: var(--pixel-font); -webkit-font-smoothing: none; color: #eadfc8; display: table; margin: 0 0 3px auto;
+  padding: 2px 8px; background: rgba(15, 10, 6, .82); border-right: 3px solid #a8823a; box-shadow: 0 0 0 1px #080504; text-shadow: 1px 1px #050302; }
+
+/* Chat log and chat box: pixel font, parchment text, a dark iron-edged input */
+body #chatlog { font-family: var(--pixel-font); -webkit-font-smoothing: none; color: #eadfc8; text-shadow: 1px 1px #050302, -1px 0 #050302; }
+body #chat { font-family: var(--pixel-font); -webkit-font-smoothing: none; color: #eadfc8; background: rgba(15, 10, 6, .85);
+  border: 2px solid #080504; box-shadow: inset 0 0 0 2px #45331e; border-radius: 0; outline: none; }
+body #chat:focus { box-shadow: inset 0 0 0 2px #a8823a; }
+body #chat::placeholder { color: #8a7a60; }
