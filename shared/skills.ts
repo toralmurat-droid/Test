@@ -113,6 +113,10 @@ export interface CounterDef {
   effects?: HitEffects;
 }
 
+/** What a skill needs in hand: a bow, any melee weapon (sword, katana, axe), or a shield. */
+export type WeaponNeed = "bow" | "melee" | "shield";
+export const NEED_TEXT: Record<WeaponNeed, string> = { bow: "a bow", melee: "a melee weapon", shield: "a shield" };
+
 export type SkillType = "Attack" | "Aura" | "War cry" | "Enchant" | "Buildup" | "Counter" | "Trap" | "Movement" | "Passive" | "Ultimate";
 
 export interface SkillDef {
@@ -131,6 +135,8 @@ export interface SkillDef {
   move?: MoveDef; areas?: AreaDef[]; shots?: ShotDef; field?: FieldDef; buff?: BuffDef; counter?: CounterDef;
   cry?: AreaDef; // war cry: hits everyone around (usually no damage, only effects)
   target?: SkillTarget; // how a right click aims it (worked out by skillTarget() when not set)
+  /** Weapon it needs in hand (shared/weapons.ts weaponOk): an archer holding an axe can't loose a Volley. */
+  needs?: WeaponNeed;
   /** Basic spell (CANTRIPS): known from Lv 1 without skill points, always rank 1, cheap and meant to be cast again and again. */
   cantrip?: boolean;
 }
@@ -483,7 +489,18 @@ const TREE: Record<string, Shape> = {
   b_slam: [1, undefined, ["sta", 2]], b_leap: [4, "b_slam", ["str", 3]], b_seismic: [10, "b_leap", ["str", 3]],
   b_thick: [7, "b_leap"], b_avalanche: [20, "b_thick", ["sta", 3]],
 };
+/**
+ * Skills that need the right weapon in hand (Murat 2026-11-04): bow skills need a bow, blade work needs a melee
+ * weapon, Shield Wall needs a shield. Spells, shouts, traps, auras and movement work with anything.
+ */
+const NEEDS: Record<string, WeaponNeed> = {
+  k_lunge: "melee", k_whirl: "melee", k_rush: "melee", k_judgement: "melee", k_riposte: "melee", k_holyblade: "melee", k_shield: "shield",
+  n_assassinate: "melee", n_cuts: "melee", n_flurry: "melee", n_parry: "melee", n_storm: "melee", n_poison: "melee",
+  a_volley: "bow", a_power: "bow", a_fan: "bow", a_rain: "bow", a_net: "bow", a_firearrows: "bow", a_frostarrow: "bow", a_phoenix: "bow",
+  b_cleave: "melee", b_berserk: "melee", b_whirlwind: "melee", b_slam: "melee",
+};
 for (const list of Object.values(S)) for (const sk of list) {
+  sk.needs = NEEDS[sk.id];
   const t = TREE[sk.id];
   if (!t) throw new Error(`skill ${sk.id} has no place in TREE`);
   sk.req = t[0]; sk.parent = t[1];

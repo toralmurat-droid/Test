@@ -11,8 +11,8 @@ import {
 } from "../shared/classes";
 import { MANA_POTION_COOLDOWN_MS, MANA_POTION_DROP, MANA_POTION_RESTORE, manaRegen, MAX_MANA_POTIONS, maxManaFor, packMana, pay } from "../shared/mana";
 import { attackMult, cooldownMult, critChance, heroSpeed, magicMult, maxHpFromStats, SLOW_MOB, statsFor, statPoints } from "../shared/powers";
-import { AttackProfile, attackProfile, weaponAttackMult } from "../shared/weapons";
-import { activeSkills, canLearn, classSkills, cleanRanks, MAX_RANK, skillLearned, skillOf, talentBonus, talentMult, talentReduce } from "../shared/skills";
+import { AttackProfile, attackProfile, weaponAttackMult, weaponOk } from "../shared/weapons";
+import { activeSkills, canLearn, classSkills, cleanRanks, MAX_RANK, NEED_TEXT, skillLearned, skillOf, talentBonus, talentMult, talentReduce } from "../shared/skills";
 import {
   afterHit, atkSpeedMult, blocking, buffLifesteal, buffRegen, castSkill, ccImmune, charging, counterHit, dealtMult, FieldInst, newRuntime,
   imbueOf, shotEnd, shotHit, shotPulse, ShotSpec, SkillHost, speedMult, statusOf, takenMult, tickField, tickUnit, Unit,
@@ -158,6 +158,7 @@ export class Player extends Schema {
   rollInput: InputState = { up: false, down: false, left: false, right: false };
   lastDodge = -Infinity;
   lastRanged = -Infinity;
+  lastWeaponNo = 0; // last "needs a bow" message (throttle)
   lastHurt = 0;
   wrathNext = 0; // next townsfolk blow on an outlaw
   lastPotion = 0;
@@ -2466,6 +2467,16 @@ export class TownRoom extends Room<TownState> {
   private cast(id: string, skill: string) {
     const p = this.state.players.get(id);
     if (!p || typeof skill !== "string" || p.rolling) return;
+    const def = skillOf(p.cls, skill);
+    if (def && skillLearned(p.cls, p.talents, skill) && !weaponOk(def, p.cls, this.equipped(p))) {
+      // Wrong weapon in hand (a Volley needs a bow): say so, at most once a second while the key is held
+      const now = Date.now();
+      if (now - p.lastWeaponNo > 1000) {
+        p.lastWeaponNo = now;
+        this.clients.find((c) => c.sessionId === id)?.send("gearno", { text: `${def.name} needs ${NEED_TEXT[def.needs!]}` });
+      }
+      return;
+    }
     if (castSkill(this.host, id, skill)) {
       p.emote = "";
       this.questDo(id, "cast");

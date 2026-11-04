@@ -13,7 +13,7 @@ import { levelsAt, SPAWN_ZONES, zoneAt } from "../../shared/spawns";
 import { musicCombat, setMusicZone } from "./music";
 import { bindSfx, play as playSfx, sfxFrame } from "./sfx";
 import { attackMult, cooldownMult, critChance, heroSpeed, STATS, magicMult, STAT_KINDS, STAT_NAMES, StatKind, statPoints, HP_PER_STR } from "../../shared/powers";
-import { pointRange, SkillDef, skillOf, skillTarget, MAX_STACKS, talentBonus } from "../../shared/skills";
+import { NEED_TEXT, pointRange, SkillDef, skillOf, skillTarget, MAX_STACKS, talentBonus } from "../../shared/skills";
 import { SkillFx } from "./skillfx";
 import { displayGrid } from "./tileset";
 import { CRAWL_CROP, heroTexture, itemTexture, makeTileset, MOB_LOOK, mobTexture, preloadPaintedMobs } from "./textures";
@@ -47,7 +47,7 @@ const LEFT_PICK = -2;
 const costWords = (s: { cost?: number; mana?: number }) => [s.mana ? `${s.mana} mana` : "", s.cost ? `${s.cost} stamina` : ""].filter(Boolean).join(" · ") || "free";
 import { GearFx } from "./gearfx";
 import { baseId, gearDef, gearReachMult, gearSpeedMult, itemRarity, WEAPON_TYPE_NAMES } from "../../shared/gear";
-import { attackProfile, ATTACK_WORDS, isWeaponType, poseSheet, profileOf, weaponAttackMult } from "../../shared/weapons";
+import { attackProfile, ATTACK_WORDS, isWeaponType, poseSheet, profileOf, weaponAttackMult, weaponOk } from "../../shared/weapons";
 import { talentMult, talentPoints, spentPoints } from "../../shared/talents";
 import { activeSkills, SLOT_COUNT, SLOT_KEYS, skillLearned } from "../../shared/slots";
 import { iconImg } from "./skillIcons";
@@ -1894,9 +1894,10 @@ export class TownScene extends Phaser.Scene {
     const opts = activeSkills(cls).map((a) => {
       const learned = skillLearned(cls, mine.talents, a.id);
       const at = slots.indexOf(a.id);
-      const where = !learned ? `🔒 learn it in the tree (T), Lv ${a.req}` : at === n ? "in this slot" : at >= 0 ? `now on key ${SLOT_KEYS[at]}` : "not on a key yet";
+      const where = !learned ? `🔒 learn it in the tree (T), Lv ${a.req}` : at === n ? "in this slot" : at >= 0 ? `now on key ${SLOT_KEYS[at]}` : "not on a key yet"
+      const need = a.needs ? ` · needs ${NEED_TEXT[a.needs]}` : "";
       return `<button class="opt${learned ? "" : " locked"}${at === n ? " cur" : ""}" data-pick="${a.id}" data-tiphead="${a.name}" data-tip="${tipEsc(a.desc)}">` +
-        `${iconImg(a.id, "picon")}<span><b>${a.name}</b><small>${where}</small></span></button>`;
+        `${iconImg(a.id, "picon")}<span><b>${a.name}</b><small>${where}${need}</small></span></button>`;
     }).join("");
     const empty = `<button class="opt clear" data-pick=""><span class="picon none">✕</span><span><b>Empty</b><small>clear key ${SLOT_KEYS[n]}</small></span></button>`;
     const pick = document.getElementById("slotpick")!;
@@ -1922,7 +1923,7 @@ export class TownScene extends Phaser.Scene {
       `${this.weaponIcon(mine, "picon")}<span><b>Weapon attack</b><small>${WEAPON_TYPE_NAMES[w.type]}: ${ATTACK_WORDS[w.type]}</small></span></button>`;
     const opts = activeSkills(cls).map((a) => {
       const learned = skillLearned(cls, mine.talents, a.id);
-      const where = !learned ? `🔒 learn it in the tree (T), Lv ${a.req}` : a.cantrip ? `basic spell · ${a.mana ?? 0} mana` : a.id === cur ? "on left click" : costWords(a);
+      const where = !learned ? `🔒 learn it in the tree (T), Lv ${a.req}` : a.cantrip ? `basic spell · ${a.mana ?? 0} mana` : a.id === cur ? "on left click" : costWords(a) + (a.needs ? ` · needs ${NEED_TEXT[a.needs]}` : "");
       return `<button class="opt${learned ? "" : " locked"}${a.id === cur ? " cur" : ""}" data-pick="${a.id}" data-tiphead="${a.name}" data-tip="${tipEsc(a.desc)}">` +
         `${iconImg(a.id, "picon")}<span><b>${a.name}</b><small>${where}</small></span></button>`;
     }).join("");
@@ -1997,6 +1998,12 @@ export class TownScene extends Phaser.Scene {
     this.pickSlot = -1;
   }
 
+  /** "Needs a bow" when the hero holds the wrong weapon for this skill (shared/weapons.ts weaponOk), else "". */
+  private unarmedFor(mine: any, cls: ClassKind, skill: string): string {
+    const s = skillOf(cls, skill);
+    return s?.needs && !weaponOk(s, cls, activeOf(mine)) ? `Needs ${NEED_TEXT[s.needs]}` : "";
+  }
+
   /** Name, cooldown and cost of an active skill for the HUD. */
   private skillHud(cls: ClassKind, skill: string, cdm: number) {
     const s = skillOf(cls, skill);
@@ -2017,8 +2024,9 @@ export class TownScene extends Phaser.Scene {
       const shade = left > 0 ? `<div class="cd" style="height:${(left / h.cdMs) * 100}%"></div>` : "";
       const wait = left > 0 || !canPay(pools, h.cost) ? " wait" : "";
       const power = skill;
-      return `<div class="slot${h.ult ? " ult" : ""}${wait}${picking}" data-slot="${i}" data-skill="${skill}" data-tiphead="${h.name}" data-tip="${tipEsc(skillOf(cls, skill)?.desc ?? "")}" data-tiphint="Key ${SLOT_KEYS[i]} · click to change · wheel to scroll · right-click to clear">` +
-        `${iconImg(power)}${shade}<kbd>${SLOT_KEYS[i]}</kbd>${left > 0 ? `<b>${Math.ceil(left / 1000)}</b>` : ""}</div>`;
+      const unarmed = this.unarmedFor(mine, cls, skill);
+      return `<div class="slot${h.ult ? " ult" : ""}${wait}${unarmed ? " unarmed" : ""}${picking}" data-slot="${i}" data-skill="${skill}" data-tiphead="${h.name}" data-tip="${tipEsc((unarmed ? `${unarmed}. ` : "") + (skillOf(cls, skill)?.desc ?? ""))}" data-tiphint="Key ${SLOT_KEYS[i]} · click to change · wheel to scroll · right-click to clear">` +
+        `${iconImg(power)}${shade}${unarmed ? `<i class="xout"></i>` : ""}<kbd>${SLOT_KEYS[i]}</kbd>${left > 0 && !unarmed ? `<b>${Math.ceil(left / 1000)}</b>` : ""}</div>`;
     }).join("");
     // Left-click cell first: the weapon (or the spell picked for the left click)
     const ls = this.leftSkill(), lpick = this.pickSlot === LEFT_PICK ? " picking" : "";
@@ -2027,8 +2035,9 @@ export class TownScene extends Phaser.Scene {
       const h = this.skillHud(cls, ls, cdm);
       const left = Math.max(0, h.cdMs - (now - h.last));
       const shade = left > 0 && h.cdMs >= 1000 ? `<div class="cd" style="height:${(left / h.cdMs) * 100}%"></div>` : "";
-      lcell = `<div class="slot lmb${!canPay(pools, h.cost) ? " wait" : ""}${lpick}" data-slot="L" data-tiphead="Left click: ${h.name}" data-tip="${tipEsc(skillOf(cls, ls)?.desc ?? "")}" data-tiphint="Click to change · wheel to scroll · right-click: back to the weapon">` +
-        `${iconImg(ls)}${shade}<kbd>L</kbd></div>`;
+      const unarmed = this.unarmedFor(mine, cls, ls);
+      lcell = `<div class="slot lmb${!canPay(pools, h.cost) ? " wait" : ""}${unarmed ? " unarmed" : ""}${lpick}" data-slot="L" data-tiphead="Left click: ${h.name}" data-tip="${tipEsc((unarmed ? `${unarmed}. ` : "") + (skillOf(cls, ls)?.desc ?? ""))}" data-tiphint="Click to change · wheel to scroll · right-click: back to the weapon">` +
+        `${iconImg(ls)}${shade}${unarmed ? `<i class="xout"></i>` : ""}<kbd>L</kbd></div>`;
     } else {
       const w = attackProfile(cls, activeOf(mine));
       lcell = `<div class="slot lmb${w.mana && !canPay(pools, { mana: w.mana }) ? " wait" : ""}${lpick}" data-slot="L" data-tiphead="Left click: ${WEAPON_TYPE_NAMES[w.type]}" data-tip="${tipEsc(`Weapon attack: ${ATTACK_WORDS[w.type]}.`)}" data-tiphint="Click to put a spell or skill on the left click instead">` +
