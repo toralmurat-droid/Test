@@ -57,11 +57,11 @@ export const MOBS: Record<MobKind, MobDef> = {
   // Higher skeleton zones: a robed caster that throws magic bolts from range, and the elite Necromancer (see SKELETON_AI)
   skeletonmage: { name: "Skeleton Mage", maxHp: 60, speed: 50, damage: 17, attackCooldownMs: 1900, aggroRange: 140, leash: 200, xp: 32 },
   necromancer: { name: "Necromancer", maxHp: 520, speed: 38, damage: 22, attackCooldownMs: 1700, aggroRange: 150, leash: 230, xp: 240 },
-  demon: { name: "Bone Demon", maxHp: 640, speed: 50, damage: 30, attackCooldownMs: 1300, aggroRange: 170, leash: 320, xp: 220 },
+  demon: { name: "Bone Demon", maxHp: 640, speed: 50, damage: 25, attackCooldownMs: 1300, aggroRange: 170, leash: 320, xp: 220 },
   // Boss of Redfang Hollow (shared/bandits.ts CHIEF): a big axeman who leaps at you and rallies his camp
-  banditchief: { name: "Redfang Chief", maxHp: 760, speed: 58, damage: 26, attackCooldownMs: 1150, aggroRange: 150, leash: 330, xp: 420 },
+  banditchief: { name: "Redfang Chief", maxHp: 1000, speed: 58, damage: 30, attackCooldownMs: 1150, aggroRange: 150, leash: 330, xp: 420 },
   // The first zone's final boss (Hollow Crown chain, shared/quests.ts CROWN_QUESTS; moves in HOLLOW_KING below)
-  hollowking: { name: "The Hollow King", maxHp: 900, speed: 54, damage: 26, attackCooldownMs: 1250, aggroRange: 220, leash: 420, xp: 900 },
+  hollowking: { name: "The Hollow King", maxHp: 900, speed: 54, damage: 27, attackCooldownMs: 1250, aggroRange: 220, leash: 420, xp: 900 },
   crawler: { name: "Crawling Skeleton", maxHp: 26, speed: 30, damage: 13, attackCooldownMs: 1000, aggroRange: 120, leash: 220, xp: 6 },
 };
 
@@ -78,7 +78,7 @@ export const BOSS: Partial<Record<MobKind, true>> = { banditchief: true, hollowk
 export const SKELETON_AI = {
   mage: { range: 120, keepAway: 60, shotSpeed: 140, shotRadius: 3 },
   necro: {
-    range: 140, keepAway: 70, shotSpeed: 165, shotRadius: 4, boltMult: 1.3,
+    range: 140, keepAway: 70, shotSpeed: 165, shotRadius: 4, boltMult: 1.15,
     raise: { everyMs: 10000, count: 2, max: 5, spread: 22, castMs: 800 },
     circle: { range: 150, radius: 38, windupMs: 1300, cooldownMs: 7500, dmgMult: 2 },
   },
@@ -205,7 +205,8 @@ export const MOTHER = {
 /** Mother Blob brood: every few seconds (random) she may bud a blobling, up to `perMother` alive at once. */
 export const BROOD = { minMs: 5000, maxMs: 12000, perMother: 4, worldCap: 160 };
 /** How a monster's level scales its base stats (level 1 = the MOBS numbers). */
-export const MOB_LEVEL = { hp: 0.3, damage: 0.12, xp: 0.25, gold: 0.2 }; // +x per level above 1
+// Balance pass 2026-11-04 (tools/balance/pve.ts): monsters kept up with heroes' gear and skills (was hp 0.3, damage 0.12, xp 0.25)
+export const MOB_LEVEL = { hp: 0.45, damage: 0.25, xp: 0.3, gold: 0.2 }; // +x per level above 1
 export function mobScale(level: number, stat: keyof typeof MOB_LEVEL): number {
   return 1 + MOB_LEVEL[stat] * (Math.max(1, level) - 1);
 }

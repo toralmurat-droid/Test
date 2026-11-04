@@ -41,7 +41,7 @@ import { chestById, chestLock, CHEST_RANGE, CHEST_RESPAWN_MS, CHESTS, GUARD_RESP
 import { encodeTimers, timerSig, timersOf } from "../shared/buffTimers";
 import { SLOT_COUNT } from "../shared/slots";
 import { groupDmgMult, groupHpMult, PARTY, together } from "../shared/party";
-import { heroPoise, MOB_COMBAT, mobBody, POISE, poiseLevelMult, poiseSpeed, SWING_AHEAD } from "../shared/combat";
+import { heroPoise, MOB_COMBAT, mobBody, POISE, poiseLevelMult, poiseSpeed, pvpDamageMult, SWING_AHEAD } from "../shared/combat";
 import {
   BAG_SIZE, Equipped, gearDef, GEAR_SLOTS, activeGear, reqProblem, itemLevel, HeroReqInfo, GearSlot, gearBlock, gearName, gearReachMult, gearSpeedMult, gearStats, isGearId, potionChance, rollGear, canWear, starterKit,
 } from "../shared/gear";
@@ -2743,6 +2743,7 @@ export class TownRoom extends Room<TownState> {
     const tp = this.state.players.get(targetId);
     if (tp) {
       const hpBefore = tp.hp;
+      if (a) dmg = Math.max(1, Math.round(dmg * pvpDamageMult(a.level, tp.level))); // hero vs hero (shared/combat.ts)
       const killed = this.damagePlayer(targetId, dmg, name, push, kb, { ...opts, atkLevel: a?.level });
       this.bloodthirst(a, attackerId, hpBefore - tp.hp);
       if (killed && a) {
