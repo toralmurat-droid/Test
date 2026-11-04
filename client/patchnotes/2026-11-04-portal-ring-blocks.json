@@ -1,0 +1,9 @@
+{
+  "date": "2026-11-04",
+  "title": "Portal ring blocks",
+  "changes": [
+    "The ring of every portal stone now has one carved block for each portal in the land.",
+    "A block lights up once you have awakened its portal. The top block is always the portal you stand at.",
+    "The small standing stones around the portals are gone."
+  ]
+}

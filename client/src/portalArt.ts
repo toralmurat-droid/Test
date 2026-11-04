@@ -1,7 +1,8 @@
 import Phaser from "phaser";
 import { ART_K as K } from "../../shared/constants";
-import { hiResTexture } from "./smooth";
+import { dropHiRes, hiResTexture } from "./smooth";
 import { dith as dith1, hash, OUT, stoneCol, vnoise, type Px } from "./shrineArt";
+import { PORTALS } from "../../shared/portals";
 
 /** Ordered dither on the coarse 2x2-cell pixel (see chunky()), so each final pixel is one clean tone. */
 const dith = (x: number, y: number) => dith1(x >> 1, y >> 1);
@@ -13,8 +14,9 @@ const dith = (x: number, y: number) => dith1(x >> 1, y >> 1);
  * platform and a carved plinth, each with a lit top, a mid-tone left face and a dark right face, carrying a thick ring
  * of carved voussoirs set along the world x axis. The ring is drawn in depth slices, so its inner and outer rims
  * show as side faces, and it faces the arrival side (world +y, screen down-left).
- *   "portal_lit_<v>": 8 animated frames: the runes burn orange and a slow fire-swirl fills the ring.
- *   "portal_cold_<v>": one frame: a dormant ring, runes dark, the opening empty (not found yet).
+ *   "portal_lit_<v>_<mask>": 8 animated frames: a slow fire-swirl fills the ring.
+ *   "portal_cold_<v>_<mask>": one frame: a dormant ring, the opening empty (not found yet).
+ * The ring has one block per portal; a block's rune burns once that portal is woken (bit k of mask = PORTALS[k]).
  */
 
 const W = 128, H = 184, CX = 64, BY = 140; // cells; BY = the platform's centre on the ground (the sprite's feet)
@@ -27,7 +29,9 @@ const PL = { a: 23, b: 9, z: 16 }; // plinth half-extents and height, on top of 
 const ZP = ZTOP2 + PL.z; // plinth top
 const RO = 37, RI = 23, DEPTH = 6; // ring outer / inner radius, half thickness (world y)
 const ZC = ZP + RO - 6; // ring centre height: its foot sinks into the plinth
-const BLOCKS = 13;
+/** One voussoir per portal stone in the land (Murat 2026-11-04): block k burns once this hero has woken portal
+ * (V + k) % BLOCKS, so the keystone at the top is always this stone's own portal. */
+const BLOCKS = PORTALS.length;
 /** Which stone is being painted (0..PORTALS-1): every portal wears differently (Murat 2026-11-04: "too perfect"). */
 let V = 0;
 const hv = (a: number, b: number, s: number) => hash(a, b, s + V * 1013);
@@ -100,8 +104,9 @@ function isoBox(px: Px, z0: number, A: number, B: number, h: number, tone: numbe
   }
 }
 
-function paintPortal(g: CanvasRenderingContext2D, f: number, N: number, lit: boolean, variant: number) {
+function paintPortal(g: CanvasRenderingContext2D, f: number, N: number, lit: boolean, variant: number, mask: number) {
   V = variant;
+  const woke = (bi: number) => (mask >> ((variant + bi) % BLOCKS)) & 1;
   // painted one colour per cell on a scratch canvas, then coarsened to the decor's chunkier pixel (chunky() below)
   const cv = document.createElement("canvas");
   cv.width = W; cv.height = H;
@@ -212,7 +217,8 @@ function paintPortal(g: CanvasRenderingContext2D, f: number, N: number, lit: boo
       }
       if (ro - r < 1.1 || r - ri < 1.1 || ZC + v - ZP < 0.8) { px(x, y, OUT); continue; }
       const t = (r - ri) / (ro - ri);
-      if (fu < 0.07 || fu > 0.95) { px(x, y, OUT); continue; }
+      // the joints round a woken portal's block glow, so even the blocks seen edge-on show which portals are found
+      if (fu < 0.07 || fu > 0.95) { px(x, y, woke(bi) && t > 0.12 && t < 0.9 ? FIRE[4] : OUT); continue; }
       const nx = s / r, ny = v / r;
       const bevel = t > 0.82 ? 1 : t < 0.16 ? -1 : 0;
       let l = (ny * 0.6 - nx * 0.4) * 0.45 * bevel + 0.08 + (vnoise(x * 0.35, y * 0.25, 999, 143) - 0.5) * 0.55 + (dith(x, y) - 0.5) * 0.45
@@ -226,8 +232,10 @@ function paintPortal(g: CanvasRenderingContext2D, f: number, N: number, lit: boo
         if (Math.abs(top - ca) < 0.026 && t > 0.12 + k * 0.15) c = OUT;
       }
       if (ny < 0.2 && hv(Math.floor(x / 2), bi, 153) < 0.25 && nv(x * 0.7, y * 0.06, 154) > 0.5 && t > 0.2) c = stoneCol(l - 0.45, 0.8); // rain streaks on the lower blocks
-      const u = (fu - 0.5) * 2.3, w = (t - 0.5) * 2.4;
-      if (rune(bi + (key ? 1 : 0), u, w)) c = lit ? (0.5 + 0.5 * Math.sin(ph + bi * 0.7) > 0.5 ? FIRE[6] : FIRE[5]) : "#25211c";
+      // the rune keeps its size on the wider blocks; it burns only once its portal is woken
+      const u = (fu - 0.5) * 2.3 * 9 / BLOCKS, w = (t - 0.5) * 2.4, on = woke(bi);
+      if (rune(bi + V, u, w)) c = on ? (0.5 + 0.5 * Math.sin(ph + bi * 0.7) > 0.5 ? FIRE[6] : FIRE[5]) : "#25211c";
+      else if (on && dith(x, y) < 0.22 - Math.abs(fu - 0.5) * 0.2) c = l > 0.1 ? FIRE[4] : FIRE[3]; // embers glowing in the stone
       else if (lit && t < 0.3 && dith(x, y) < (0.3 - t) * 2.2) c = l > 0 ? "#d88a46" : "#9a5228";
       px(x, y, c);
     }
@@ -339,61 +347,26 @@ function chunky(o: CanvasRenderingContext2D): HTMLCanvasElement {
 }
 
 export const PORTAL_FRAMES = 8;
-/** Builds "portal_lit" (animated) and "portal_cold". */
 /**
- * Builds stone `v`'s art, each worn its own way: "portal_lit_<v>" (animated, anim "portal_spin_<v>") or
- * "portal_cold_<v>". Painted on demand, so only the stones a hero actually sees cost anything.
+ * Builds stone `v`'s art, each worn its own way, for the set of woken portals `mask`: "portal_lit_<v>_<mask>" (animated,
+ * anim "portal_spin_<v>_<mask>") or "portal_cold_<v>_<mask>". Painted on demand, so only the stones a hero actually sees
+ * cost anything. Returns the "<v>_<mask>" id.
  */
-export function portalTexture(scene: Phaser.Scene, v: number, lit: boolean) {
-  const N = PORTAL_FRAMES;
-  if (lit && !scene.textures.exists(`portal_lit_${v}`)) {
-    hiResTexture(scene, `portal_lit_${v}`, PORTAL_FW * K, PORTAL_FH * K, N, 4, (g, f) => { g.scale(K, K); paintPortal(g, f, N, true, v); });
-    scene.anims.create({ key: `portal_spin_${v}`, frames: scene.anims.generateFrameNumbers(`portal_lit_${v}`, { start: 0, end: N - 1 }), frameRate: 8, repeat: -1 });
+export function portalTexture(scene: Phaser.Scene, v: number, lit: boolean, mask: number) {
+  const N = PORTAL_FRAMES, id = `${v}_${mask}`;
+  if (lit && !scene.textures.exists(`portal_lit_${id}`)) {
+    hiResTexture(scene, `portal_lit_${id}`, PORTAL_FW * K, PORTAL_FH * K, N, 4, (g, f) => { g.scale(K, K); paintPortal(g, f, N, true, v, mask); });
+    scene.anims.create({ key: `portal_spin_${id}`, frames: scene.anims.generateFrameNumbers(`portal_lit_${id}`, { start: 0, end: N - 1 }), frameRate: 8, repeat: -1 });
   }
-  if (!lit && !scene.textures.exists(`portal_cold_${v}`)) hiResTexture(scene, `portal_cold_${v}`, PORTAL_FW * K, PORTAL_FH * K, 1, 4, (g) => { g.scale(K, K); paintPortal(g, 0, N, false, v); });
+  if (!lit && !scene.textures.exists(`portal_cold_${id}`)) hiResTexture(scene, `portal_cold_${id}`, PORTAL_FW * K, PORTAL_FH * K, 1, 4, (g) => { g.scale(K, K); paintPortal(g, 0, N, false, v, mask); });
+  return id;
 }
 
-/**
- * The network stones (Murat 2026-11-04): a ring of small carved standing stones round every portal, one per portal
- * stone in the land. Stone k carries portal k's rune; it burns once this hero has woken portal k, so each stone
- * shows how much of the network is found. "portal_mark_<k>_lit" / "portal_mark_<k>_cold", one frame each.
- */
-const MX0 = CX - 12, MY0 = BY - 38, MW = 24, MH = 46; // crop of the scratch canvas, in cells
-export const MARK_FW = MW / 2, MARK_FH = MH / 2, MARK_FOOT = (BY - MY0) / MH;
-
-function paintMarker(g: CanvasRenderingContext2D, k: number, lit: boolean) {
-  V = 40 + k;
-  const cv = document.createElement("canvas");
-  cv.width = W; cv.height = H;
-  const o = cv.getContext("2d")!;
-  const px: Px = (x, y, c) => { o.fillStyle = c; o.fillRect(x, y, 1, 1); };
-  // shadow
-  for (let y = BY - 6; y <= BY + 6; y++) for (let x = CX - 12; x < CX + 12; x++) {
-    const ex = (x - CX - 2) / 11, ey = (y - BY - 1) / 5.5, d = ex * ex + ey * ey;
-    if (d < 1 && dith(x, y) < (1 - d) * 0.7) px(x, y, "rgba(10,8,6,0.45)");
-  }
-  // a short, leaning slab of stone, its top worn round: height and girth vary per stone
-  const h = 22 + Math.floor(hv(k, 1, 300) * 7), A = 5 + Math.floor(hv(k, 2, 300) * 2), B = 4;
-  const bar = 0.45 + (k % 3) * 0.12; // each stone's glyph sits its own way: a carved line and a crossbar
-  isoBox(px, 0, A, B, h, 0.95, 310 + k, (fc, s, t, x, y, l) => {
-    if (fc === "left") {
-      const line = Math.abs(s - 0.5) < 0.17 && t > 0.28 && t < 0.86;
-      const cross = k % 2 === 1 && Math.abs(t - bar) < 0.06 && Math.abs(s - 0.5) < 0.3;
-      const fork = k % 2 === 0 && k > 0 && t > 0.7 && t < 0.86 && Math.abs(Math.abs(s - 0.5) - (t - 0.7) * 1.6) < 0.1;
-      if (line || cross || fork) return lit ? (t > 0.5 && dith(x, y) < 0.5 ? FIRE[7] : FIRE[6]) : "#1c1814";
-    }
-    if (t < 0.35 && fc !== "top" && nv(x * 0.3, y * 0.4, 320 + k) > 0.5) return dith(x, y) < 0.5 ? "#3d5822" : "#2c4219"; // moss
-    if (hv(x, y, 330 + k) < 0.04) return "#a7a37a"; // lichen
-    return stoneCol(l + 0.22, 0.95);
-  });
-  const out = chunky(o);
-  g.imageSmoothingEnabled = false;
-  g.drawImage(out, MX0 / 2, MY0 / 2, MW / 2, MH / 2, 0, 0, MW / 2, MH / 2);
+/** Drops a stone's old art once it shows a newer one (each woken portal changes every stone's blocks). */
+export function dropPortalTexture(scene: Phaser.Scene, lit: boolean, id: string) {
+  const key = `portal_${lit ? "lit" : "cold"}_${id}`;
+  if (lit) scene.anims.remove(`portal_spin_${id}`);
+  scene.textures.remove(key);
+  dropHiRes(key);
 }
 
-/** Paints (once) network stone k in its state. */
-export function markerTexture(scene: Phaser.Scene, k: number, lit: boolean) {
-  const key = `portal_mark_${k}_${lit ? "lit" : "cold"}`;
-  if (!scene.textures.exists(key)) hiResTexture(scene, key, MARK_FW * K, MARK_FH * K, 1, 4, (g) => { g.scale(K, K); paintMarker(g, k, lit); });
-  return key;
-}

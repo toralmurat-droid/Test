@@ -131,6 +131,9 @@ export function hiResTexture(scene: Phaser.Scene, key: string, w: number, h: num
   tex.refresh();
 }
 
+/** Forgets a hiResTexture's big canvas (call when its texture is removed). */
+export const dropHiRes = (key: string) => HI.delete(key);
+
 /** Replaces what the GPU shows for an already loaded texture with a hand-painted high-res canvas (same layout). */
 export function overrideTexture(scene: Phaser.Scene, key: string, hi: HTMLCanvasElement) {
   HI.set(key, hi);
