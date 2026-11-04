@@ -16,16 +16,18 @@ import { setWorldCursor } from "./cursors";
  */
 
 /** x/y: drawn feet (for picking); sx/sy: newest server feet (for reach and aim); body: extra melee reach on it. */
-export interface ClickEnemy { id: string; x: number; y: number; sx: number; sy: number; h: number; body: number; dead: boolean; sprite?: Phaser.GameObjects.Sprite }
+export interface ClickEnemy { id: string; x: number; y: number; sx: number; sy: number; vx?: number; vy?: number; h: number; body: number; dead: boolean; sprite?: Phaser.GameObjects.Sprite }
 export interface ClickSpot { x: number; y: number; h: number; w: number; range: number; act: () => void }
 
 export interface PointerHost {
   /** Our hero: predicted feet position and its server state, or nothing (not in the world yet / dead). */
-  me(): { x: number; y: number; state: any } | undefined;
+  me(): { x: number; y: number; sx: number; sy: number; state: any } | undefined;
   enemies(): ClickEnemy[];
   enemy(id: string): ClickEnemy | undefined;
   spots(): ClickSpot[];
   speed(): number;
+  /** Flight speed (px/s) of the shot the basic attack / right click fires, 0 for melee and skills. */
+  shotSpeed(secondary: boolean): number;
   /** Reach (px, feet to feet) of the basic attack and of the secondary skill. */
   reach(secondary: boolean): number;
   /** Attack / use the secondary skill (the hero already faces the target). */
@@ -43,7 +45,7 @@ export interface PointerHost {
 type Goal =
   | { kind: "walk"; x: number; y: number }
   | { kind: "spot"; spot: ClickSpot }
-  | { kind: "enemy"; id: string; secondary: boolean; fired: boolean; tries?: number; since?: number }
+  | { kind: "enemy"; id: string; secondary: boolean; fired: boolean; tries?: number; since?: number; waitAt?: number }
   | { kind: "cast"; x: number; y: number; self?: boolean }
   | { kind: "castAt"; x: number; y: number };
 
@@ -61,6 +63,24 @@ export class PointerControls {
   private stuckPos?: Pt;
   private stuck = 0;
   private hovered?: string; // enemy under the mouse
+  private rtt = 150; // ms, click to server swing and back (measured in swung)
+  private firedAt = 0;
+
+  /**
+   * Where to aim at enemy `e`. Melee: its newest server position. Shots: where it will be when the shot gets
+   * there, if it keeps walking (the server sees our click half a round trip later, its position we know is half a
+   * round trip old, then the shot flies). Without this, arrows and fireballs flew behind walking monsters.
+   */
+  private aimAt(e: ClickEnemy, me: Pt, secondary: boolean): Pt {
+    const speed = this.host.shotSpeed(secondary), vx = e.vx ?? 0, vy = e.vy ?? 0;
+    if (!speed || (!vx && !vy)) return { x: e.sx, y: e.sy };
+    let x = e.sx, y = e.sy;
+    for (let i = 0; i < 3; i++) {
+      const t = Math.min(0.9, this.rtt / 1000 + Math.hypot(x - me.x, y - me.y) / speed);
+      x = e.sx + vx * t; y = e.sy + vy * t;
+    }
+    return { x, y };
+  }
   /** One-texel silhouettes (left, right, up, down) behind the enemy that a click attacks (or would attack). */
   private outline: Phaser.GameObjects.Sprite[] = [];
   private outlined?: { sprite: Phaser.GameObjects.Sprite; chase: boolean };
@@ -81,6 +101,8 @@ export class PointerControls {
 
   /** The server swung our basic attack: a single click on an enemy is done. */
   swung() {
+    // Round trip click -> server swing, smoothed: how far ahead to aim at a walking monster
+    if (this.firedAt) { this.rtt = this.rtt * 0.7 + Math.min(600, this.scene.time.now - this.firedAt) * 0.3; this.firedAt = 0; }
     const g = this.goal;
     if (g?.kind === "enemy" && !g.secondary) { g.fired = true; if (this.held !== 0) { this.goal = undefined; this.path = []; } }
   }
@@ -186,6 +208,7 @@ export class PointerControls {
     if (button !== 0 && button !== 2) return;
     this.held = button;
     this.stuck = 0;
+    this.firedAt = 0;
     const { enemy, spot } = this.pick(p);
     const target = button === 2 ? this.host.target() : "dir";
     if (button === 2 && target === "self") {
@@ -311,13 +334,20 @@ export class PointerControls {
     if (!e || e.dead) { this.goal = undefined; this.path = []; return STOP; }
     const holding = this.held === (goal.secondary ? 2 : 0);
     const reach = this.host.reach(goal.secondary) + (goal.secondary ? 0 : e.body);
-    if (Math.hypot(e.sx - me.x, e.sy - me.y) <= reach) {
+    const near = Math.hypot(e.sx - me.x, e.sy - me.y) <= reach;
+    // The swing happens where the SERVER has our hero. While walking that is a little behind what we see, and a
+    // knockback on the way can leave it further back: attack only once the server's hero is in reach too.
+    if (near && !goal.secondary && Math.hypot(e.sx - me.sx, e.sy - me.sy) > reach + 2) {
+      goal.waitAt ??= now;
+      if (now - goal.waitAt < 450) { this.path = []; return STOP; } // (never wait forever)
+    } else goal.waitAt = undefined;
+    if (near) {
       this.path = [];
       if (goal.secondary) {
         if (now - this.lastAct >= 220) {
           this.lastAct = now;
           this.host.stop();
-          this.host.send("face", { x: e.sx, y: e.sy });
+          this.host.send("face", this.aimAt(e, me, true));
           this.host.fire(true);
           goal.fired = true;
           if (!holding) this.goal = undefined;
@@ -332,7 +362,8 @@ export class PointerControls {
         if (!goal.tries) goal.since = now;
         goal.tries = (goal.tries ?? 0) + 1;
         this.host.stop();
-        this.host.send("face", { x: e.sx, y: e.sy });
+        this.host.send("face", this.aimAt(e, me, false));
+        if (!this.firedAt) this.firedAt = now;
         this.host.fire(false);
       }
       return STOP;
