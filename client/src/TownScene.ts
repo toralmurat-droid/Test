@@ -24,6 +24,7 @@ import { showMusicPanel, musicPanelOpen } from "./music";
 import { DayDial } from "./daydial";
 import { SignPanel } from "./signpanel";
 import { NpcLayer } from "./npcs";
+import { ANVIL_TOP, FORGE_FIRE } from "./smithy";
 import { Villagers } from "./villagers";
 import { WatchLayer } from "./watch";
 import { WrathBanner } from "./wrath";
@@ -435,10 +436,13 @@ export class TownScene extends Phaser.Scene {
     document.getElementById("hud")!.hidden = false;
     this.minimap = new Minimap(document.getElementById("minimap") as HTMLCanvasElement, this.opts.name);
     this.npcs = new NpcLayer(this, (type, msg) => this.room.send(type, msg));
-    // Morwen's camp after dusk: coal glow under her brew, lantern light in the tent doorway
+    // Morwen's camp and Brann's forge after dusk: coal glow under her brew, lantern light in the tent doorway
     for (const d of NPC_DECOR) {
       if (d.prop === "wc_rig") this.details?.addLight(d.x * TILE, d.y * TILE, 0xff6a2a, 1.5, 0.6, 0.15, 9, -7);
       if (d.prop === "wc_tent") this.details?.addLight(d.x * TILE, d.y * TILE, 0xffa040, 1.3, 0.5, 0.1, 17, 3);
+      // Brann's forge: the coal bed and the ash-pit arch; a faint glow off the blade cooling on the anvil
+      if (d.prop === "sm_forge") this.details?.addLight(d.x * TILE, d.y * TILE, 0xff7a2a, 2.1, 0.7, 0.2, FORGE_FIRE[1], FORGE_FIRE[0]);
+      if (d.prop === "sm_anvil") this.details?.addLight(d.x * TILE, d.y * TILE, 0xff6a2a, 0.35, 0.3, 0.1, ANVIL_TOP, 2);
     }
     this.villagers = new Villagers(this); // townsfolk idling on the square
     this.watch = new WatchLayer(this, (this.room.state as any).watch); // watchmen at the gates

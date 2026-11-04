@@ -36,10 +36,14 @@ export const NPC_DECOR: NpcDecor[] = [
   // Morwen's camp: her crimson bell tent and the alchemy rig with its floating rune stones (client/src/witchCamp.ts)
   { prop: "wc_tent", x: 70.9, y: 62.7, scale: 1, animated: true, solid: [70.25, 62.05, 1.3, 1.3] },
   { prop: "wc_rig", x: 72.8, y: 63.7, scale: 1, animated: true, solid: [72.5, 63.45, 0.6, 0.35] },
-  // Brann's smithy: forge with bellows, anvil, weapon rack
-  { prop: "forge", x: 70.4, y: 56.85, scale: 0.6, animated: true, solid: [69.85, 56.2, 1.1, 0.65] },
-  { prop: "anvil", x: 72.25, y: 57.65, scale: 0.5, solid: [72.05, 57.45, 0.4, 0.2] },
-  { prop: "weapon_rack", x: 73.3, y: 56.6, scale: 0.55, solid: [72.8, 56.3, 1.0, 0.3] },
+  // Brann's smithy (client/src/smithy.ts): stone forge with bellows and chimney, anvil on a stump, quench barrel,
+  // grindstone, tool bench with a coal heap, and the rack of weapons he sells
+  { prop: "sm_forge", x: 70.2, y: 56.7, scale: 1, animated: true, solid: [69.7, 56.35, 1.55, 0.7] },
+  { prop: "sm_bench", x: 69.0, y: 57.85, scale: 1, animated: true, solid: [68.6, 57.5, 0.9, 0.45] },
+  { prop: "sm_anvil", x: 72.25, y: 57.65, scale: 1, animated: true, solid: [71.95, 57.5, 0.55, 0.3] },
+  { prop: "sm_quench", x: 72.75, y: 58.35, scale: 1, animated: true, solid: [72.5, 58.15, 0.45, 0.4] },
+  { prop: "sm_grind", x: 70.65, y: 58.35, scale: 1, animated: true, solid: [70.35, 58.15, 0.6, 0.35] },
+  { prop: "sm_rack", x: 73.4, y: 56.6, scale: 1, animated: true, solid: [72.8, 56.35, 1.2, 0.4] },
 ];
 
 /** True if (px, py) is inside one of the NPC props that block movement. */
