@@ -8,7 +8,7 @@ import { heroPoise } from "../../shared/combat";
 import { moveStep } from "../../shared/movement";
 import { levelsAt, SPAWN_ZONES, zoneAt } from "../../shared/spawns";
 import { attackMult, cooldownMult, critChance, heroSpeed, STATS, magicMult, STAT_KINDS, STAT_NAMES, StatKind, statPoints, HP_PER_STR } from "../../shared/powers";
-import { skillOf, STACK_NAME, MAX_STACKS, talentBonus } from "../../shared/skills";
+import { pointRange, skillOf, skillTarget, STACK_NAME, MAX_STACKS, talentBonus } from "../../shared/skills";
 import { SkillFx } from "./skillfx";
 import { displayGrid } from "./tileset";
 import { CRAWL_CROP, heroTexture, itemTexture, makeTileset, MOB_LOOK, mobTexture, preloadPaintedMobs } from "./textures";
@@ -196,6 +196,8 @@ export class TownScene extends Phaser.Scene {
   private input_: InputState = { up: false, down: false, left: false, right: false };
   private seq = 0;
   private pointer?: PointerControls;
+  /** Hotbar slot the right click uses (keys 1..0 pick it). */
+  private activeSlot = 0;
   private npcs?: NpcLayer;
   private villagers?: Villagers;
   private watch?: WatchLayer;
@@ -291,7 +293,7 @@ export class TownScene extends Phaser.Scene {
         if (this.chatting()) return;
         const hover = this.talentMenu?.open ? this.talentMenu.hoveredActive() : undefined;
         if (hover) this.room?.send("assign", { slot: n, skill: hover });
-        else this.room?.send("useslot", n);
+        else this.activeSlot = n; // point-and-click: the key picks the right-click skill, the right click casts it
       };
       this.input.keyboard!.on(`keydown-${k}`, press);
       this.input.keyboard!.on(`keydown-NUMPAD_${k}`, press);
@@ -933,7 +935,8 @@ export class TownScene extends Phaser.Scene {
     const asEnemy = (id: string, e: Entity): ClickEnemy => ({ id, x: e.sprite.x, y: e.sprite.y, h: e.top || 20, dead: !!e.state.dead });
     const secondarySkill = () => {
       const p = meEnt()?.state;
-      const id = p?.slots?.at?.(0) ?? p?.slots?.[0];
+      const n = this.activeSlot;
+      const id = p?.slots?.at?.(n) ?? p?.slots?.[n];
       return p && id && skillLearned(p.cls, p.talents, id) ? skillOf(p.cls, id) : undefined;
     };
     const basicReach = (p: any) => {
@@ -968,6 +971,7 @@ export class TownScene extends Phaser.Scene {
         if (!p) return 0;
         if (!secondary) return basicReach(p);
         const s = secondarySkill();
+        if (s && skillTarget(s) === "point") return pointRange(s) * 0.9;
         if (s) {
           if (s.shots) return s.shots.range * 0.8;
           if (s.move) return Math.max(basicReach(p), s.move.dist * 0.8);
@@ -982,10 +986,12 @@ export class TownScene extends Phaser.Scene {
       fire: (secondary) => {
         if (!secondary) { this.room?.send("attack"); return; }
         const p = meEnt()?.state;
-        if (secondarySkill()) this.room?.send("useslot", 0);
+        if (secondarySkill()) this.room?.send("useslot", this.activeSlot);
         else if (p?.ranged && GEAR[p.ranged]?.shot) this.room?.send("ranged");
         else this.room?.send("attack");
       },
+      target: () => { const s = secondarySkill(); return s ? skillTarget(s) : "dir"; },
+      pointRange: () => { const s = secondarySkill(); return s ? pointRange(s) : 0; },
       send: (type, msg) => this.room?.send(type, msg),
       stop: () => this.sendInput({ up: false, down: false, left: false, right: false }),
       blocked: () => !this.room || loadingActive() || !!this.intro?.open,
@@ -1655,7 +1661,7 @@ export class TownScene extends Phaser.Scene {
       if (!skill) return "";
       const h = this.skillHud(cls, skill, cdm);
       ult = h.ult;
-      const r = row(i === 0 ? `${SLOT_KEYS[i]} · R-click` : SLOT_KEYS[i], h.name, h.cdMs, h.last, "", skillLearned(cls, mine.talents, skill as any) ? "" : "🔒", h.cost);
+      const r = row(i === this.activeSlot ? `${SLOT_KEYS[i]} · R-click` : SLOT_KEYS[i], h.name, h.cdMs, h.last, "", skillLearned(cls, mine.talents, skill as any) ? "" : "🔒", h.cost);
       ult = false;
       return r;
     });
@@ -1674,14 +1680,14 @@ export class TownScene extends Phaser.Scene {
     // Slot bar at the bottom: 10 cells, cooldown shading, click to choose a skill
     const cells = Array.from({ length: SLOT_COUNT }, (_, i) => {
       const skill = slots[i] ?? "";
-      const picking = this.pickSlot === i ? " picking" : "";
+      const picking = (this.pickSlot === i ? " picking" : "") + (this.activeSlot === i ? " active" : "");
       if (!skill) return `<div class="slot empty${picking}" data-slot="${i}" title="Click to put a skill on key ${SLOT_KEYS[i]}"><kbd>${SLOT_KEYS[i]}</kbd><i>+</i></div>`;
       const h = this.skillHud(cls, skill, cdm);
       const left = Math.max(0, h.cdMs - (now - h.last));
       const shade = left > 0 ? `<div class="cd" style="height:${(left / h.cdMs) * 100}%"></div>` : "";
       const wait = left > 0 || h.cost > mine.energy ? " wait" : "";
       const power = skill;
-      return `<div class="slot${h.ult ? " ult" : ""}${wait}${picking}" data-slot="${i}" data-skill="${skill}" title="${h.name} (key ${SLOT_KEYS[i]}) · click to change · wheel to scroll · right-click to clear">` +
+      return `<div class="slot${h.ult ? " ult" : ""}${wait}${picking}" data-slot="${i}" data-skill="${skill}" title="${h.name} · key ${SLOT_KEYS[i]} makes it the right-click skill · click to change · wheel to scroll · right-click to clear">` +
         `${iconImg(power)}${shade}<kbd>${SLOT_KEYS[i]}</kbd>${left > 0 ? `<b>${Math.ceil(left / 1000)}</b>` : ""}</div>`;
     }).join("");
     const bar = document.getElementById("hotbar")!;

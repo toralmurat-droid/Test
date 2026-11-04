@@ -49,6 +49,7 @@ export class Player extends Schema {
   @type("string") dir: Dir = "down";
   // Aim: unit vector of the last movement direction, diagonals included (attacks and shots go this way)
   @type("number") ax = 0;
+  aimDist = -1; // not synced: px to the spot last clicked with "face" (point skills read it once)
   @type("number") ay = 1;
   @type("boolean") moving = false;
   @type("number") hp = 100;
@@ -472,6 +473,7 @@ export class TownRoom extends Room<TownState> {
       const x = Number(msg?.x), y = Number(msg?.y);
       if (!p || p.dead || p.rolling || !Number.isFinite(x) || !Number.isFinite(y)) return;
       this.host.face(client.sessionId, x - p.x, y - p.y);
+      p.aimDist = Math.hypot(x - p.x, y - p.y);
     });
     this.onMessage("cast", (client, skill: string) => this.cast(client.sessionId, skill));
     this.onMessage("potion", (client) => this.drinkPotion(client.sessionId));
@@ -3015,6 +3017,13 @@ export class TownRoom extends Room<TownState> {
       if (p) return [p.ax, p.ay];
       const m = this.state.mobs.get(id);
       return m ? DIR_OFFSET[m.dir] : [0, 1];
+    },
+    aimDist: (id) => {
+      const p = this.state.players.get(id);
+      if (!p || p.aimDist < 0) return undefined;
+      const d = p.aimDist;
+      p.aimDist = -1;
+      return d;
     },
     face: (id, dx, dy) => {
       const p = this.state.players.get(id);
