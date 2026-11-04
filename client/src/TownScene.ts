@@ -46,7 +46,6 @@ import { TalentMenu } from "./talents";
 import { IdeaBoard } from "./ideas";
 import { PatchNotesPanel } from "./patchnotes";
 import { PartyUI } from "./party";
-import { IntroPanel } from "./intro";
 import { afterLoading, hideLoading, loadingActive, loadingFor, setLoading } from "./loading";
 import { ISO, IsoView, isoAnchor, isoInput, screenDir, screenDir8 } from "./iso";
 import { SMOOTH } from "./isoflag";
@@ -216,7 +215,6 @@ export class TownScene extends Phaser.Scene {
   private chatEl = document.getElementById("chat") as HTMLInputElement;
   private ideaBoard?: IdeaBoard;
   private party?: PartyUI;
-  private intro?: IntroPanel;
   private patchNotes?: PatchNotesPanel;
   private minimap?: Minimap;
   private dial?: DayDial;
@@ -433,11 +431,9 @@ export class TownScene extends Phaser.Scene {
       if (e) this.floatText(e.sprite.x, e.sprite.y - 22, "Not while fighting", "#ffa22e", PIXEL_FONT);
     });
     this.room.send("portals"); // which stones this hero has woken
-    // First login of this hero: a short how-to-play panel, never shown again once closed
-    this.intro = new IntroPanel(() => this.room?.send("introseen"));
-    this.room.onMessage("intro", () => afterLoading(() => { this.closeMenus(); this.intro?.show(); }));
     afterLoading(() => this.patchNotes?.announce());
-    this.room.send("intro");
+    // A new hero's guided first quest (First Steps) shows its banner once the loading screen is gone
+    afterLoading(() => this.room?.send("tutorial"));
     this.dial = new DayDial(document.getElementById("daydial") as HTMLCanvasElement);
 
     this.room.onStateChange(() => { patchSeq++; });
@@ -1036,7 +1032,7 @@ export class TownScene extends Phaser.Scene {
       pointRange: () => { const s = secondarySkill(); return s ? pointRange(s) : 0; },
       send: (type, msg) => this.room?.send(type, msg),
       stop: () => this.sendInput({ up: false, down: false, left: false, right: false }),
-      blocked: () => !this.room || loadingActive() || !!this.intro?.open,
+      blocked: () => !this.room || loadingActive(),
     });
   }
 
@@ -1577,7 +1573,6 @@ export class TownScene extends Phaser.Scene {
   }
 
   private closeMenus() {
-    this.intro?.close();
     for (const id of ["hero", "tree"]) document.getElementById(id)!.hidden = true;
     this.closeSlotPicker();
     this.npcs?.close();

@@ -1,0 +1,9 @@
+{
+  "date": "2026-11-04",
+  "title": "First Steps: a guided first quest",
+  "changes": [
+    "New heroes start with First Steps: Elder Rowan teaches walking, talking, fighting, gear and skills one step at a time.",
+    "Each step shows a short how-to line in the quest tracker.",
+    "The old welcome panel is gone."
+  ]
+}

@@ -100,7 +100,7 @@ export const USE_RANGE = 1.3 * TILE;
 
 // ---- Quest definitions ----
 
-export type StepType = "see" | "reach" | "talk" | "kill" | "collect" | "use" | "merge" | "ritual";
+export type StepType = "see" | "reach" | "talk" | "kill" | "collect" | "use" | "merge" | "ritual" | "equip" | "learn" | "cast";
 
 /** Bump when steps change: saves from an older version restart their current quest at the offer. */
 export const QUEST_VERSION = 3;
@@ -146,6 +146,12 @@ export interface QuestStep {
   obj: string;
   /** What the quest giver says while this step is in progress */
   nag?: string;
+  /** How-to line under the objective in the tracker (the guided first quest teaches one control per step) */
+  hint?: string;
+  /** kill: this item goes into the player's bag when the step is done (the first quest's weapon) */
+  gift?: string;
+  /** Finishing this step brings the hero up to at least this level (so the first quest can teach the skill tree) */
+  levelTo?: number;
 }
 
 export interface Reward { xp: number; gold: number; potions: number }
@@ -678,6 +684,61 @@ export const RED_QUESTS: QuestDef[] = [
   },
 ];
 
+// ---- First Steps: the guided first quest, one control per step (replaces the old wall-of-text intro) ----
+
+const ROWAN = npcById("druid")!;
+/**
+ * Every new hero starts this quest on their first login (no offer to accept). Each step teaches one thing:
+ * walking, talking, fighting, gear, the skill tree and the hotbar. The other chains' first offers wait until it
+ * is done (chainOpen). Heroes saved before it existed count it as done.
+ */
+export const TUT_QUESTS: QuestDef[] = [
+  {
+    id: "firststeps", title: "First Steps", giver: "druid", zone: FZ, minLevel: 1,
+    description: `Elder Rowan, the old druid by the village bonfire, is showing you how to look after yourself outside Oakvale's walls.`,
+    offer: ["Welcome to Oakvale, traveller. Let an old druid show you how to survive out there."],
+    acceptText: "Show me",
+    steps: [
+      { type: "reach", at: { x: ROWAN.x, y: ROWAN.y, r: 2.5 * TILE, label: "Elder Rowan" }, text: "Walk to Elder Rowan at the bonfire",
+        banner: ["New quest", "First Steps"], obj: "Walk to Elder Rowan at the bonfire",
+        hint: "Left-click the ground to walk there. Hold the button to keep walking. WASD works too." },
+      { type: "talk", npc: "druid", text: "Talk to Elder Rowan", banner: ["Well walked!", "Now talk to Elder Rowan"], obj: "Talk to Elder Rowan",
+        hint: "Left-click Rowan to talk to him, or press E when you stand next to him.",
+        say: [
+          "Ah, a new face by the fire. Welcome to Oakvale, traveller.",
+          `Blobs have been creeping out of ${FZN}, ${FZD} of the village. Slimy things, but weak. A good first fight.`,
+          "Go out of the gate and squash three of them. Then come and find me, I have a few more things to show you.",
+        ],
+        accept: "I'll squash 3 blobs" },
+      { type: "kill", kinds: BLOB_KINDS, zone: FZ, goal: 3, gift: "w_bronze", text: "Kill 3 blobs", banner: ["Quest updated", "Kill 3 blobs"],
+        obj: "Kill blobs: {n} / {goal}",
+        hint: `Leave the village ${FZD}. Left-click a blob to attack it, keep clicking to chain a combo. Q drinks a potion.`,
+        nag: `{n} of {goal}. ${FZ} lies ${FZD} of the village.` },
+      { type: "equip", levelTo: 2, text: "Wear the weapon the blob dropped", banner: ["A blob dropped a weapon!", "Wear it"],
+        obj: "Wear your new weapon", hint: "It went into your bag. Press G, then click the weapon to wear it.",
+        nag: "Press G and click that weapon to wear it." },
+      { type: "learn", text: "Learn a skill", banner: ["Level up!", "Learn your first skill"], obj: "Learn an active skill",
+        hint: "Each level gives a skill point. Press T and click a skill at the top of the tree to learn it.",
+        nag: "Press T and learn a skill with your point." },
+      { type: "cast", text: "Use your skill", banner: ["Skill learned!", "Now use it on a blob"], obj: "Use your new skill outside the village",
+        hint: "It sits on hotbar key 1. Press 1, then right-click to use it. No magic inside Oakvale: the villagers hate it!",
+        nag: "Press 1, then right-click. But not inside the village!" },
+      back("druid", "Elder Rowan", "village bonfire", [
+        "Look at you! Walking, fighting, a real weapon and a skill of your own.",
+        "Each level brings more: stat points in the hero panel (C) and skill points in the tree (T). Your quest log is on J, the map on M.",
+        "Take these potions. And sit a moment, friend. There is something else stirring out there.",
+      ], "Claim reward"),
+    ],
+    reward: { xp: 60, gold: 25, potions: 3 },
+    after: "The trees have been whispering to me. Sit by the fire, friend.",
+  },
+];
+export const TUT_CHAIN = 3;
+/** Is the guided first quest done (or from before it existed)? */
+export const tutorialDone = (p: Quester | undefined) => (p?.tutId ?? TUT_QUESTS.length) >= TUT_QUESTS.length;
+/** Can this chain offer new quests yet? Every story waits for the guided first quest. */
+export const chainOpen = (p: Quester | undefined, c: number) => c === TUT_CHAIN || tutorialDone(p);
+
 // ---- Chains: the blob story and the skeleton story run side by side, each with its own progress ----
 
 export interface QuestChain {
@@ -693,12 +754,13 @@ export const CHAINS: QuestChain[] = [
   { id: "gloam", name: "The Gloam", quests: QUESTS, keys: ["questId", "questStage", "questCount"], version: QUEST_VERSION, verKey: "questVer" },
   { id: "bones", name: "The Pale Marshal", quests: BONE_QUESTS, keys: ["boneId", "boneStage", "boneCount"], version: 1, verKey: "boneVer" },
   { id: "redfang", name: "The Redfang Debt", quests: RED_QUESTS, keys: ["redId", "redStage", "redCount"], version: 2, verKey: "redVer" },
+  { id: "tutorial", name: "First Steps", quests: TUT_QUESTS, keys: ["tutId", "tutStage", "tutCount"], version: 1, verKey: "tutVer" },
 ];
 
 /** Progress on one chain (chain undefined = the blob chain, so a Player passed as is reads as chain 0). */
 export interface QuestState { questId: number; questStage: number; questCount: number; level?: number; chain?: number }
 /** A player's progress on every chain: the Player schema fields (CHAINS[].keys). */
-export type Quester = { level?: number; questId?: number; questStage?: number; questCount?: number; boneId?: number; boneStage?: number; boneCount?: number; redId?: number; redStage?: number; redCount?: number };
+export type Quester = { level?: number; questId?: number; questStage?: number; questCount?: number; boneId?: number; boneStage?: number; boneCount?: number; redId?: number; redStage?: number; redCount?: number; tutId?: number; tutStage?: number; tutCount?: number };
 
 /** One chain's progress, read from the player's fields. */
 export function chainState(p: Quester | undefined, c: number): QuestState | undefined {
@@ -766,7 +828,10 @@ function chainMark(id: string, q: QuestState | undefined): "!" | "?" | "" {
 }
 /** Does this NPC have something to say about any quest right now? "?" wins over "!". */
 export function npcQuestMark(id: string, p: Quester | undefined): "!" | "?" | "" {
-  const marks = CHAINS.map((_, c) => chainMark(id, chainState(p, c) ?? { chain: c, questId: 0, questStage: 0, questCount: 0 }));
+  const marks = CHAINS.map((_, c) => {
+    const q = chainState(p, c) ?? { chain: c, questId: 0, questStage: 0, questCount: 0 };
+    return q.questStage === 0 && !chainOpen(p, c) ? "" : chainMark(id, q);
+  });
   return marks.includes("?") ? "?" : marks.includes("!") ? "!" : "";
 }
 
@@ -812,8 +877,15 @@ function chainDialog(id: string, q: QuestState): DialogPage | undefined {
  * With both chains wanting a word, a page that moves a quest on (a talk step, an offer) comes first.
  */
 export function questDialog(id: string, p: Quester | undefined): DialogPage | undefined {
-  const pages = CHAINS.map((_, c) => chainDialog(id, chainState(p, c) ?? { chain: c, questId: 0, questStage: 0, questCount: 0, level: 1 }))
-    .filter((x): x is DialogPage => !!x);
+  // The guided first quest talks first; the stories wait for it (chainOpen)
+  const order = [TUT_CHAIN, ...CHAINS.map((_, c) => c).filter((c) => c !== TUT_CHAIN)];
+  const pages = order.map((c) => {
+    const q = chainState(p, c) ?? { chain: c, questId: 0, questStage: 0, questCount: 0, level: 1 };
+    if (q.questStage === 0 && !chainOpen(p, c)) return undefined;
+    // The finished first quest only chats when nothing else has a word
+    if (c === TUT_CHAIN && q.questId >= TUT_QUESTS.length) return undefined;
+    return chainDialog(id, q);
+  }).filter((x): x is DialogPage => !!x);
   const best = pages.find((x) => x.accept) ?? pages[0];
   if (best) return best;
   return IDLE[id] ? { text: [IDLE[id]], bye: "Farewell", chain: 0 } : undefined;
@@ -840,6 +912,7 @@ export function questTargets(q: QuestState | undefined): QuestTarget[] {
     const n = npcById(s.npc!);
     return n ? [{ x: n.x, y: n.y, kind: "npc", label: n.name }] : [];
   }
+  if (s.type === "equip" || s.type === "learn") return []; // done in a menu, anywhere
   if (s.type === "reach") return [{ x: s.at!.x, y: s.at!.y, kind: "area", r: s.at!.r, label: s.at!.label }];
   if (s.type === "use") {
     return s.objects!.filter((o, i) => !(q!.questCount & (1 << i))).map((o) => ({ x: o.x, y: o.y, kind: "object" as const, label: o.name }));

@@ -1,5 +1,5 @@
 import { npcById } from "../../shared/npcs";
-import { CHAINS, chainState, QuestDef, questObjective, Quester, QuestState as QState, stepGoal, stepProgress } from "../../shared/quests";
+import { CHAINS, chainOpen, chainState, QuestDef, questObjective, Quester, QuestState as QState, stepGoal, stepProgress } from "../../shared/quests";
 
 type QuestState = Quester | undefined;
 
@@ -46,7 +46,7 @@ export class QuestLog {
       if (ch.quests[qid] && q.questStage > 0) active.push({ key: `${c}:${qid}`, d: ch.quests[qid], q, done: false });
       for (let i = qid - 1; i >= 0; i--) finished.push({ key: `${c}:${i}`, d: ch.quests[i], q, done: true });
       const next = ch.quests[qid];
-      if (next && q.questStage === 0 && (qid > 0 || c > 0 || (q.level ?? 1) >= next.minLevel)) {
+      if (next && q.questStage === 0 && chainOpen(p, c) && (qid > 0 || c > 0 || (q.level ?? 1) >= next.minLevel)) {
         hints.push((q.level ?? 1) >= next.minLevel ? `<b class="bang">!</b> ${npcById(next.giver)?.name} has a new quest for you.` : `${ch.name}: next quest at level ${next.minLevel}.`);
       }
     });

@@ -6,7 +6,7 @@ import Phaser from "phaser";
 import { worldPropTextures } from "./worldProps";
 import { NPCS, NPC_DECOR, Npc, npcNear, TALK_RANGE } from "../../shared/npcs";
 import {
-  CHAINS, chainState, npcPresent, npcQuestMark, questDef, questDialog, questObjective, questStep, Quester, questTargets, stepGoal, stepProgress,
+  CHAINS, chainOpen, chainState, TUT_CHAIN, npcPresent, npcQuestMark, questDef, questDialog, questObjective, questStep, Quester, questTargets, stepGoal, stepProgress,
 } from "../../shared/quests";
 import { QuestObjects } from "./questObjects";
 import { TILE } from "../../shared/constants";
@@ -182,7 +182,7 @@ export class NpcLayer {
     const shop = SHOPS[n.shop!];
     const gold = q?.gold ?? 0, potions = q?.potions ?? 0, cls = q?.cls;
     const bag = [...(q?.bag ?? [])];
-    const key = JSON.stringify([n.id, gold, potions, bag, this.shopMsg, q?.questId, q?.questStage, q?.boneId, q?.boneStage, q?.redId, q?.redStage]);
+    const key = JSON.stringify([n.id, gold, potions, bag, this.shopMsg, q?.questId, q?.questStage, q?.boneId, q?.boneStage, q?.redId, q?.redStage, q?.tutId, q?.tutStage]);
     if (key === this.stage) return;
     this.stage = key;
     const row = (icon: string, name: string, color: string, desc: string, btn: string, cls2: string, i: number, off: boolean) =>
@@ -236,7 +236,7 @@ export class NpcLayer {
     const page = questDialog(n.id, q);
     if (n.shop && (this.trading || !page)) return this.renderShop(n, q);
     this.dialog.classList.remove("shop");
-    const key = JSON.stringify([n.id, q?.questId, q?.questStage, q?.questCount, q?.boneId, q?.boneStage, q?.boneCount, q?.redId, q?.redStage, q?.redCount, q?.level]);
+    const key = JSON.stringify([n.id, q?.questId, q?.questStage, q?.questCount, q?.boneId, q?.boneStage, q?.boneCount, q?.redId, q?.redStage, q?.redCount, q?.tutId, q?.tutStage, q?.tutCount, q?.level]);
     if (key === this.stage) return;
     this.stage = key;
     const p = page ?? { text: ["Good day to you."], bye: "Farewell", chain: 0 };
@@ -277,7 +277,8 @@ export class NpcLayer {
       if (s.mark.text !== mark) s.mark.setText(mark);
     }
     // Map markers: "!" / "?" on NPCs, coins on traders, and the current quest targets of every chain
-    const states = CHAINS.map((_, c) => chainState(q, c));
+    // A story waiting for the guided first quest (chainOpen) shows nothing yet
+    const states = CHAINS.map((_, c) => chainState(q, c)).map((st, c) => (st && st.questStage === 0 && !chainOpen(q, c) ? undefined : st));
     const targets = this.log.tracked ? states.flatMap((st) => questTargets(st)) : [];
     this.markers = NPCS.filter(present).map((n): MapMarker => {
       const g = npcQuestMark(n.id, q);
@@ -294,7 +295,8 @@ export class NpcLayer {
     // On-screen tracker: one block per chain with its quest, current objective, progress bar and where to go
     let html = "";
     if (this.log.tracked) {
-      const blocks = states.map((st) => this.trackBlock(me, st)).filter(Boolean);
+      // The guided first quest on top
+      const blocks = [states[TUT_CHAIN], ...states.filter((_, c) => c !== TUT_CHAIN)].map((st) => this.trackBlock(me, st)).filter(Boolean);
       if (blocks.length) html = blocks.join("") + `<div class="qt-hint">J: quest log</div>`;
     }
     if (html !== this.trackerHtml) {
@@ -322,9 +324,10 @@ export class NpcLayer {
           const names = ["east", "south-east", "south", "south-west", "west", "north-west", "north", "north-east"];
           const k = (Math.round(Math.atan2(dy, dx) / (Math.PI / 4)) + 8) % 8;
           dir = `<div class="qt-dir">${arrows[k]} ${Math.round(d / TILE)} tiles ${names[k]}</div>`;
-        } else if (target.kind === "area") dir = `<div class="qt-dir">You are here</div>`;
+        } else if (target.kind === "area" && d <= 0) dir = `<div class="qt-dir">You are here</div>`;
       }
-      return `<div class="qt-block"><div class="qt-title">${def.title}</div><div class="qt-obj">${step.type === "talk" ? "➜ " : "• "}${obj}</div>${bar}${dir}</div>`;
+      const hint = step.hint ? `<div class="qt-hint2">${step.hint}</div>` : "";
+      return `<div class="qt-block"><div class="qt-title">${def.title}</div><div class="qt-obj">${step.type === "talk" ? "➜ " : "• "}${obj}</div>${bar}${dir}${hint}</div>`;
     }
     // Between quests: point to whoever has the next one (the blob chain's very first quest has its own "!" intro)
     if (q.questStage === 0 && (q.level ?? 1) >= def.minLevel && (q.questId > 0 || (q.chain ?? 0) > 0)) {

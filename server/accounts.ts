@@ -20,8 +20,8 @@ export interface HeroSave {
   redId?: number; redStage?: number; redCount?: number; redVer?: number;
   /** 1 once the hero has been given its class starting kit (older saves get it on their next login). */
   kit?: number;
-  /** 0 until the hero closed the first-login intro (missing on older saves = already seen). */
-  intro?: number;
+  /** The guided first quest (CHAINS[3], First Steps); missing on older saves = already done. */
+  tutId?: number; tutStage?: number; tutCount?: number; tutVer?: number;
   /** Portal stones this hero has woken (shared/portals.ts ids). */
   portals?: string[];
 }
