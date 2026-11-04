@@ -1,5 +1,6 @@
 import "./party.css";
 import { PARTY } from "../../shared/party";
+import { TRADE } from "../../shared/trade";
 
 /**
  * Player groups (shared/party.ts): the Group button / P key opens a panel to invite nearby heroes or leave,
@@ -20,7 +21,7 @@ export class PartyUI {
   private lastFrame = "";
   private lastAsk = "";
 
-  constructor(private send: (type: string, msg?: unknown) => void, private players: () => any, private me: () => string) {
+  constructor(private send: (type: string, msg?: unknown) => void, private players: () => any, private me: () => string, private onTrade?: (id: string) => void) {
     const hud = document.getElementById("hud")!;
     this.panel.id = "partypanel";
     this.panel.hidden = true;
@@ -35,6 +36,7 @@ export class PartyUI {
         const b = (ev.target as HTMLElement).closest("button");
         if (!b) return;
         if (b.dataset.inv) this.send("pinvite", { id: b.dataset.inv });
+        else if (b.dataset.trade) this.onTrade?.(b.dataset.trade);
         else if (b.dataset.act === "leave") this.send("pleave");
         else if (b.dataset.act === "close") this.close();
         else if (b.dataset.act === "yes" || b.dataset.act === "no") {
@@ -108,9 +110,10 @@ export class PartyUI {
     } else html += `<p class="help">You are not in a group. Group members can't hurt each other and share kill XP in the same zone, but monsters fight harder against a group.</p>`;
     html += `<h3>Heroes nearby</h3>`;
     html += near.length
-      ? `<ul>${near.map(([id, p]) => `<li>${esc(p.name)} <small>${p.cls} Lv${p.level}${p.party ? " · in a group" : ""}</small>`
-        + (p.party || full ? "" : ` <button data-inv="${esc(id)}">Invite</button>`) + `</li>`).join("")}</ul>`
-      : `<p class="help">Nobody close by. You can also type /invite name in chat.</p>`;
+      ? `<ul>${near.map(([id, p, d]) => `<li>${esc(p.name)} <small>${p.cls} Lv${p.level}${p.party ? " · in a group" : ""}</small>`
+        + ` <span class="pbtns">${p.party || full ? "" : `<button data-inv="${esc(id)}">Invite</button>`}`
+        + `${d <= TRADE.range ? ` <button data-trade="${esc(id)}">Trade</button>` : ""}</span></li>`).join("")}</ul>`
+      : `<p class="help">Nobody close by. You can also type /invite name or /trade name in chat.</p>`;
     html += `<p class="help">Max ${PARTY.maxSize} heroes · /leave in chat · P or Esc to close <button data-act="close">Close</button></p>`;
     if (html !== this.lastHtml) { this.panel.innerHTML = html; this.lastHtml = html; }
   }

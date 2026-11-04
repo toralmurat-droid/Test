@@ -1,0 +1,10 @@
+{
+  "date": "2026-11-04",
+  "title": "Trading and the Oakvale stash",
+  "changes": [
+    "Trade with other players: open Group (P) and press Trade next to a hero close by, or type /trade name in chat.",
+    "Each side puts up items from the bag and gold. The swap only happens when both press Ready, and any change takes back both Ready marks.",
+    "A stash chest now stands on the Oakvale market square. It holds 24 items and your gold, shared by all heroes of your account.",
+    "Items for other classes now stay in your bag when you log out, so you can pass gear between your heroes."
+  ]
+}

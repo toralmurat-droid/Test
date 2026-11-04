@@ -9,7 +9,8 @@
 #partypanel ul { list-style: none; margin: 0 0 6px; padding: 0; }
 #partypanel li { display: flex; align-items: center; gap: 6px; padding: 2px 0; }
 #partypanel li small, #partyframe small { color: #aaa; }
-#partypanel li button { margin-left: auto; }
+#partypanel li button, #partypanel li .pbtns { margin-left: auto; }
+#partypanel li .pbtns button { margin-left: 4px; }
 #partypanel .help { color: #aaa; font-size: 13px; margin: 4px 0; }
 #partypanel button, #partyask button { font-size: 13px; background: #15151f; color: #eee; border: 1px solid #555a7a; cursor: pointer; padding: 2px 8px; }
 #partypanel button:hover, #partyask button:hover { border-color: #ffd166; }

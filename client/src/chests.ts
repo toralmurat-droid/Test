@@ -192,6 +192,16 @@ function paint(scene: Phaser.Scene, key: string, tier: ChestTier, open: boolean)
 
 const keyFor = (tier: ChestTier, open: boolean) => `chest_${tier}_${open ? "open" : "shut"}`;
 
+/** A chest image standing at (x, y) like the loot chests (used by the stash, client/src/trade.ts). */
+export function chestImage(scene: Phaser.Scene, x: number, y: number, tier: ChestTier, open = false) {
+  paint(scene, keyFor(tier, open), tier, open);
+  return scene.add.image(x, y, keyFor(tier, open)).setOrigin((OX + BASE.sx) / TEX, (OY + BASE.sy) / TEX).setScale(1 / S).setDepth(y);
+}
+export function setChestOpen(img: Phaser.GameObjects.Image, tier: ChestTier, open: boolean) {
+  paint(img.scene, keyFor(tier, open), tier, open);
+  img.setTexture(keyFor(tier, open));
+}
+
 interface Drawn { c: Chest; img: Phaser.GameObjects.Image; open: boolean; lock: Phaser.GameObjects.Image; locked?: string }
 
 export class ChestLayer {
