@@ -49,7 +49,7 @@ html, body { margin: 0; height: 100%; background: #1b1b24; color: #eee; font: 14
 #heropowers li.locked { color: #777; }
 #heropowers li.new { color: #7cfc00; }
 #heropowers b { color: inherit; }
-#zone { position: absolute; top: 132px; left: 12px; font-size: 12px; color: #f4a261; text-shadow: 1px 1px #000; }
+#zone { position: absolute; top: 130px; left: 12px; font-size: 12px; color: #f4a261; text-shadow: 1px 1px #000; }
 .help { color: #aaa; font-size: 12px; }
 #hud { position: fixed; inset: 0; pointer-events: none; z-index: 5; }
 #stats { position: absolute; top: 112px; left: 12px; text-shadow: 1px 1px #000; font-family: 'Pixelify Sans', monospace; -webkit-font-smoothing: none; }
@@ -472,4 +472,9 @@ html, body { margin: 0; height: 100%; background: #1b1b24; color: #eee; font: 14
 #rbars .rb-st { height: 12px; --trk: #2A200C; --fil: #E0A92E; --hi: #FFE08A; --lo: #9A6F14; --edge: 2px; }
 #rbars .rb-mp .rb-txt, #rbars .rb-st .rb-txt { font-size: 11px; }
 #rbars .rb-xp { height: 4px; --trk: #1A1F12; box-shadow: 2px 0 0 #120D07, -2px 0 0 #120D07, 0 2px 0 #120D07, 0 -2px 0 #120D07; }
+/* XP bar takes the mouse for its hover tip; a taller invisible strip makes the 4 px bar easy to hit */
+#rbars .rb-xp { pointer-events: auto; }
+#rbars .rb-xp::after { content: ""; position: absolute; left: -4px; right: -4px; top: -5px; bottom: -6px; }
 #rbars .rb-xp .rb-fill { background: #7FD36A; box-shadow: none; transition: width .3s ease; }
+#gearbagtitle .gbgold { float: right; color: #e3bf6a; }
+#gearbagtitle .gbgold .pxi { width: 14px; height: 14px; vertical-align: -2px; margin-right: 3px; }

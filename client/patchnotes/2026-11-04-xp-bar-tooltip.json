@@ -1,0 +1,9 @@
+{
+  "date": "2026-11-04",
+  "pr": 241,
+  "title": "XP on hover, tidier top-left",
+  "changes": [
+    "Hover the green XP bar to see your XP and how much you need for the next level.",
+    "The long text line under the bars is gone. Gold now shows in the bag, skill points on the Skills button."
+  ]
+}

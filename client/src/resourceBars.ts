@@ -111,6 +111,7 @@ export class ResourceBars {
   private lvEl: HTMLElement;
   private level = -1;
   private xpPct = "";
+  private xpTip = "";
 
   constructor(hud: HTMLElement) {
     this.root = document.createElement("div");
@@ -124,6 +125,7 @@ export class ResourceBars {
     this.st = new Bar(stack, "st");
     this.xpBar = document.createElement("div");
     this.xpBar.className = "rb-bar rb-xp";
+    this.xpBar.setAttribute("data-tiphead", "Experience");
     this.xpBar.innerHTML = `<div class="rb-fill"></div>`;
     this.xpFill = this.xpBar.firstElementChild as HTMLElement;
     stack.appendChild(this.xpBar);
@@ -138,7 +140,7 @@ export class ResourceBars {
   }
   toggleNumbers() { this.setNumbers(this.root.classList.contains("rb-nonums")); }
 
-  update(s: { level: number; hp: number; maxHp: number; mp: number; maxMp: number; st: number; maxSt: number; xpFrac: number }) {
+  update(s: { level: number; hp: number; maxHp: number; mp: number; maxMp: number; st: number; maxSt: number; xpFrac: number; xp?: number; xpNeed?: number }) {
     this.hp.update(Math.ceil(s.hp), Math.round(s.maxHp));
     this.mp.update(Math.floor(s.mp), s.maxMp);
     this.st.update(Math.floor(s.st), s.maxSt);
@@ -151,5 +153,8 @@ export class ResourceBars {
     if (this.xpBar.style.width !== w) this.xpBar.style.width = w;
     const p = `${Math.max(0, Math.min(1, s.xpFrac)) * 100}%`;
     if (p !== this.xpPct) { this.xpFill.style.width = p; this.xpPct = p; }
+    // Hover tip (tooltip.ts): XP into this level / XP needed for the next one
+    const tipTxt = s.xpNeed === undefined ? "Max level" : `${Math.max(0, Math.floor(s.xp ?? 0))} / ${s.xpNeed} XP to level ${s.level + 1}`;
+    if (tipTxt !== this.xpTip) { this.xpBar.setAttribute("data-tip", tipTxt); this.xpTip = tipTxt; }
   }
 }
