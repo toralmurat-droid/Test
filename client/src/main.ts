@@ -1,5 +1,5 @@
 import Phaser from "phaser";
-import { initMusic } from "./music";
+import { initMusic, startMusic } from "./music";
 import { takeRejoin } from "./reconnect";
 import { showLoading } from "./loading";
 import { TownScene } from "./TownScene";
@@ -38,6 +38,8 @@ infoEl.textContent = CLASSES[cls].blurb;
 
 const nameEl = document.getElementById("name") as HTMLInputElement;
 try { nameEl.value = localStorage.getItem("name") ?? ""; } catch { /* ignore */ }
+// Music starts on the login screen with the first click or key (the opening song, see music.ts)
+startMusic(nameEl.value.trim());
 
 const pwEl = document.getElementById("password") as HTMLInputElement;
 
