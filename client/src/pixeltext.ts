@@ -11,7 +11,7 @@ export function pixelText(text: string, color = "#ffe8a3", size = 11, scale = 3)
   const w = Math.ceil(m.measureText(text).width) + pad * 2, h = size + pad * 2 + 3;
   const c = document.createElement("canvas");
   c.width = w; c.height = h;
-  const g = c.getContext("2d")!;
+  const g = c.getContext("2d", { willReadFrequently: true })!; // read back below: keep it off the GPU
   g.font = font; g.textBaseline = "top"; g.fillStyle = "#fff";
   g.fillText(text, pad, pad);
   // Hard pixels: no anti-aliasing

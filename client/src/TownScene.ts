@@ -1904,6 +1904,8 @@ export class TownScene extends Phaser.Scene {
     this.areaTimer = window.setTimeout(() => el.classList.remove("show"), 2500);
   }
 
+  private guards = new Map<string, number>();
+  private guardsAt = 0;
   private settled = 0;
   private lastMid = { x: NaN, y: NaN };
   /** Lift the loading screen once the hero is in, the camera has caught up with it and the ground around it is painted. */
@@ -1981,12 +1983,12 @@ export class TownScene extends Phaser.Scene {
         const off = e.sprite.x < v.x - M || e.sprite.x > v.right + M || e.sprite.y < v.y - M || e.sprite.y > v.bottom + M;
         if (off) {
           if (!e.culled) {
-            e.culled = true; e.sprite.setVisible(false); e.bar.clear(); e.parts?.clear(); e.bubble?.setVisible(false);
+            e.culled = true; e.sprite.setVisible(false); e.bar.clear().setVisible(false); e.parts?.clear(); e.bubble?.setVisible(false);
             e.label?.destroy(); e.label = undefined; e.lvlColor = undefined; this.siege.clear(id);
           }
           continue;
         }
-        if (e.culled) { e.culled = false; e.bubble?.setVisible(true); }
+        if (e.culled) { e.culled = false; e.bubble?.setVisible(true); e.bar.setVisible(true); }
         if (!e.label) {
           e.label = this.add.text(e.sprite.x, e.sprite.y, "", {
             fontFamily: "monospace", fontSize: "14px", color: "#ffffff", stroke: "#000", strokeThickness: 3,
@@ -2129,14 +2131,26 @@ export class TownScene extends Phaser.Scene {
     }
 
     const meEnt = this.entities.get(this.me);
-    const others = [...this.entities].filter(([id, e]) => id !== this.me && !e.mob).map(([, e]) => ({ x: e.sprite.x, y: e.sprite.y, name: e.state?.name as string | undefined }));
+    // Other heroes for the minimap (a plain loop: the entity list holds thousands of monsters, no per-frame copies)
+    const others: { x: number; y: number; name: string | undefined }[] = [];
+    let online = 0;
+    for (const [id, e] of this.entities) {
+      if (e.mob) continue;
+      online++;
+      if (id !== this.me) others.push({ x: e.sprite.x, y: e.sprite.y, name: e.state?.name as string | undefined });
+    }
     this.minimap?.draw(now, meEnt?.sprite, others);
     this.dial?.draw(now);
     if (meEnt) this.showArea(areaAt(meEnt.sprite.x, meEnt.sprite.y));
     this.signPanel.update(meEnt?.sprite);
     if (this.chests) {
-      const guards = new Map<string, number>(); // lair chest id -> living guardians
-      (this.room.state as any).mobs.forEach((m: any) => { if (m.guard && !m.dead) guards.set(m.guard, (guards.get(m.guard) ?? 0) + 1); });
+      // lair chest id -> living guardians (counted a few times a second: walking all monsters every frame is wasteful)
+      if (now >= this.guardsAt) {
+        this.guardsAt = now + 250;
+        const guards = this.guards; guards.clear();
+        (this.room.state as any).mobs.forEach((m: any) => { if (m.guard && !m.dead) guards.set(m.guard, (guards.get(m.guard) ?? 0) + 1); });
+      }
+      const guards = this.guards;
       this.chests.update(meEnt && !meEnt.state.dead ? meEnt.sprite : undefined, !!this.npcs?.isOpen, meEnt?.state, (cid) => guards.get(cid) ?? 0);
     }
     this.shrine?.update(meEnt && !meEnt.state.dead && !this.chests?.near ? meEnt.sprite : undefined, !!this.npcs?.isOpen);
@@ -2150,7 +2164,6 @@ export class TownScene extends Phaser.Scene {
       this.gearMenu?.refresh(mine);
       this.talentMenu?.refresh(mine);
       if (!document.getElementById("hero")!.hidden) this.showHeroMenu(this.heroFrom);
-      const online = [...this.entities.values()].filter((x) => !x.mob).length;
       const safe = isSafeZone(meEnt.sprite.x, meEnt.sprite.y) ? "🛡 Safe zone · " : "";
       (document.getElementById("hpfill") as HTMLElement).style.width = `${(mine.hp / mine.maxHp) * 100}%`;
       this.barText("hptext", "HP", Math.ceil(mine.hp), Math.round(mine.maxHp));

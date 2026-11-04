@@ -723,9 +723,12 @@ export function displayGrid(grid: number[][]): number[][] {
 /** Tiles that change over time (see `drawTileFrame`). */
 export const ANIMATED_TILES: number[] = [T.WATER, T.WHEEL, T.CAMPFIRE, T.TALL_GRASS, T.FLOWERS];
 
+/** How many rows (from the top) of an animated tile `drawTileFrame` repaints: the rest never change. */
+export const animatedRows = (id: number) => (VARIED.has(id) ? 4 : 1);
+
 /** Repaints one tile (all its variant rows) for animation frame `f` (same seeds, so only the moving parts change). */
 export function drawTileFrame(ctx: CanvasRenderingContext2D, id: number, f: number) {
-  const rows = VARIED.has(id) ? 4 : 1;
+  const rows = animatedRows(id);
   for (let r = 0; r < rows; r++) { ctx.clearRect(id * TILE, r * TILE, TILE, TILE); paint(ctx, id, r, f); }
 }
 

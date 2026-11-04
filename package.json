@@ -7,8 +7,10 @@
     "dev:server": "tsx watch server/index.ts",
     "dev:client": "vite",
     "live": "node scripts/live.mjs",
-    "build": "tsc --noEmit && vite build",
-    "start": "NODE_ENV=production tsx server/index.ts",
+    "build": "tsc --noEmit && vite build && npm run build:server",
+    "build:server": "esbuild server/index.ts --bundle --platform=node --format=cjs --packages=external --target=node22 --sourcemap --outfile=server-dist/index.cjs --log-level=warning",
+    "bench": "node tools/perf/run.mjs",
+    "start": "NODE_ENV=production node --enable-source-maps server-dist/index.cjs",
     "art": "tsx tools/art/generate.ts"
   },
   "dependencies": {
@@ -25,6 +27,7 @@
     "@types/node": "22.10.2",
     "colyseus.js": "0.15.28",
     "concurrently": "9.1.0",
+    "esbuild": "0.23.1",
     "phaser": "3.90.0",
     "typescript": "5.7.2",
     "vite": "5.4.11"
