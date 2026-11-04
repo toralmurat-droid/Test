@@ -1,0 +1,9 @@
+{
+  "date": "2026-11-04",
+  "pr": 193,
+  "title": "Sound effects",
+  "changes": [
+    "Sounds for monsters, skills, hits and the world, placed where they happen.",
+    "New SFX volume slider."
+  ]
+}

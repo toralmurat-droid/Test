@@ -1,0 +1,9 @@
+{
+  "date": "2026-11-03",
+  "pr": 174,
+  "title": "Other players on the maps",
+  "changes": [
+    "Other online heroes show as blue dots on the minimap and the world map (M), even in unexplored parts.",
+    "The world map labels them with their names."
+  ]
+}

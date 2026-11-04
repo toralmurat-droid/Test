@@ -41,6 +41,7 @@ import { activeSkills, SLOT_COUNT, SLOT_KEYS, skillLearned } from "../../shared/
 import { iconImg } from "./skillIcons";
 import { TalentMenu } from "./talents";
 import { IdeaBoard } from "./ideas";
+import { PatchNotesPanel } from "./patchnotes";
 import { PartyUI } from "./party";
 import { IntroPanel } from "./intro";
 import { afterLoading, hideLoading, loadingActive, loadingFor, setLoading } from "./loading";
@@ -212,6 +213,7 @@ export class TownScene extends Phaser.Scene {
   private ideaBoard?: IdeaBoard;
   private party?: PartyUI;
   private intro?: IntroPanel;
+  private patchNotes?: PatchNotesPanel;
   private minimap?: Minimap;
   private dial?: DayDial;
   private signPanel = new SignPanel();
@@ -358,6 +360,11 @@ export class TownScene extends Phaser.Scene {
     const toggleParty = () => { if (!this.party!.open) this.closeMenus(); this.party!.toggle(); };
     this.input.keyboard!.on("keydown-P", () => { if (!this.chatting()) toggleParty(); });
     menuButton("partybtn", toggleParty);
+    // Patch notes: what changed in each update (N or the News button)
+    const toggleNews = () => { if (!this.patchNotes!.open) this.closeMenus(); this.patchNotes!.toggle(); };
+    this.patchNotes = new PatchNotesPanel(toggleNews);
+    this.input.keyboard!.on("keydown-N", () => { if (!this.chatting()) toggleNews(); });
+    menuButton("newsbtn", toggleNews);
     this.setupChat();
     this.setupPointer();
 
@@ -422,6 +429,7 @@ export class TownScene extends Phaser.Scene {
     // First login of this hero: a short how-to-play panel, never shown again once closed
     this.intro = new IntroPanel(() => this.room?.send("introseen"));
     this.room.onMessage("intro", () => afterLoading(() => { this.closeMenus(); this.intro?.show(); }));
+    afterLoading(() => this.patchNotes?.announce());
     this.room.send("intro");
     this.dial = new DayDial(document.getElementById("daydial") as HTMLCanvasElement);
 
@@ -1500,6 +1508,7 @@ export class TownScene extends Phaser.Scene {
     this.gearMenu?.close();
     this.ideaBoard?.close();
     this.party?.close();
+    this.patchNotes?.close();
     this.portals?.close();
   }
 
