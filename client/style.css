@@ -209,7 +209,7 @@ html, body { margin: 0; height: 100%; background: #1b1b24; color: #eee; font: 14
 #statreset { font: inherit; font-size: 11px; background: #15151f; color: #eee; border: 1px solid #555a7a; cursor: pointer; padding: 2px 6px; }
 
 /* Signpost directions, shown while standing next to a signpost */
-#signpanel { display: none; position: absolute; left: 50%; bottom: 120px; transform: translateX(-50%); min-width: 200px; padding: 8px 14px 10px;
+#signpanel { display: none; position: absolute; left: 50%; bottom: 140px; transform: translateX(-50%); min-width: 200px; padding: 8px 14px 10px;
   background: #b07a44; border: 3px solid #5a3a1e; border-radius: 4px; box-shadow: inset 0 2px #d09a5c, inset 0 -3px #7a522a, 0 3px 8px rgba(0,0,0,.5);
   color: #2a1a0c; font: bold 14px monospace; pointer-events: none; }
 #signpanel.open { display: block; }
@@ -356,7 +356,7 @@ html, body { margin: 0; height: 100%; background: #1b1b24; color: #eee; font: 14
   font: bold 14px var(--pixel-font); -webkit-font-smoothing: none; color: #7cfc00; background: rgba(30,30,46,.92); border: 2px solid #7cfc00;
   padding: 6px 12px; max-width: calc(100% - 24px); animation: lvlnote-pulse 1.2s ease-in-out infinite; }
 /* Buff row (buffbar.ts): timed buffs and debuffs with icon + countdown, just above the slot bar */
-#buffs { position: absolute; left: 50%; bottom: 100px; transform: translateX(-50%); display: flex; gap: 4px; pointer-events: auto;
+#buffs { position: absolute; left: 50%; bottom: 134px; transform: translateX(-50%); display: flex; gap: 4px; pointer-events: auto;
   font-family: 'Pixelify Sans', monospace; -webkit-font-smoothing: none; max-width: calc(100% - 32px); flex-wrap: wrap; justify-content: center; }
 #buffs .buff { position: relative; width: 40px; height: 54px; display: flex; flex-direction: column; align-items: center; }
 #buffs .buff img, #buffs .buff i { width: 36px; height: 36px; image-rendering: pixelated; border: 2px solid #c9a227; background: #15151f;
@@ -371,7 +371,7 @@ html, body { margin: 0; height: 100%; background: #1b1b24; color: #eee; font: 14
 #buffs .buff.ending span { color: #ffd166; }
 #buffs .buff.gone { display: none; }
 @keyframes buff-blink { 50% { opacity: .45; } }
-#lvlnote { bottom: 162px; }
+#lvlnote { bottom: 194px; }
 /* Equipment panel (G): item levels and requirements, in the pixel font */
 #gear, #gear button { font-family: 'Pixelify Sans', monospace; }
 
@@ -471,10 +471,14 @@ html, body { margin: 0; height: 100%; background: #1b1b24; color: #eee; font: 14
 #rbars .rb-mp { height: 12px; --trk: #0F1630; --fil: #3B6FE0; --hi: #8FB0FF; --lo: #24459A; --edge: 2px; }
 #rbars .rb-st { height: 12px; --trk: #2A200C; --fil: #E0A92E; --hi: #FFE08A; --lo: #9A6F14; --edge: 2px; }
 #rbars .rb-mp .rb-txt, #rbars .rb-st .rb-txt { font-size: 11px; }
-#rbars .rb-xp { height: 4px; --trk: #1A1F12; box-shadow: 2px 0 0 #120D07, -2px 0 0 #120D07, 0 2px 0 #120D07, 0 -2px 0 #120D07; }
-/* XP bar takes the mouse for its hover tip; a taller invisible strip makes the 4 px bar easy to hit */
-#rbars .rb-xp { pointer-events: auto; }
-#rbars .rb-xp::after { content: ""; position: absolute; left: -4px; right: -4px; top: -5px; bottom: -6px; }
-#rbars .rb-xp .rb-fill { background: #7FD36A; box-shadow: none; transition: width .3s ease; }
+/* XP bar above the slot bar: bronze menu frame (weathered.ts --wf-bronze), gold fill, text only while hovered */
+#xpbar { position: absolute; left: 50%; bottom: 100px; transform: translateX(-50%); box-sizing: border-box; height: 28px; pointer-events: auto;
+  border: 9px solid transparent; border-image: var(--wf-bronze) 9 / 9px / 0 repeat; image-rendering: pixelated;
+  background: #1a120a content-box; }
+#xpbar .xp-fill { position: absolute; top: 0; bottom: 0; left: 0; background: #E0B84A; box-shadow: inset 0 2px 0 #FFE08A, inset 0 -2px 0 #9A6F14;
+  transition: width .3s ease; }
+#xpbar .xp-txt { position: absolute; inset: -2px 0; display: none; align-items: center; justify-content: center; color: #fff;
+  font: 11px/1 'Pixelify Sans', monospace; -webkit-font-smoothing: none; white-space: nowrap; text-shadow: 1px 1px 0 #000, -1px 0 0 #000, 0 -1px 0 #000; }
+#xpbar:hover .xp-txt { display: flex; }
 #gearbagtitle .gbgold { float: right; color: #e3bf6a; }
 #gearbagtitle .gbgold .pxi { width: 14px; height: 14px; vertical-align: -2px; margin-right: 3px; }
