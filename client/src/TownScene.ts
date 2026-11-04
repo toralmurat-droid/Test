@@ -53,6 +53,7 @@ import { ChestLayer } from "./chests";
 import { ShrineLayer } from "./shrine";
 import { PortalLayer } from "./portal";
 import { BOON_NAMES, WIND_BLESSING } from "../../shared/shrine";
+import { BuffBar } from "./buffbar";
 import { addWorldProps } from "./worldProps";
 import { addSiegeWorks } from "./siegeArt";
 import { SiegeWork } from "./siegeWork";
@@ -236,6 +237,7 @@ export class TownScene extends Phaser.Scene {
   private gearMenu?: GearMenu;
   private talentMenu?: TalentMenu;
   private hotbarHtml = "";
+  private buffBar?: BuffBar;
   private deathTimer?: number;
   private iso?: IsoView;
 
@@ -2110,6 +2112,7 @@ export class TownScene extends Phaser.Scene {
       fill.classList.toggle("magic", cls === "wizard");
       this.barText("skilltext", energyName(cls), Math.floor(mine.energy), ENERGY.max);
       this.renderActions(mine, cls, cdm, now);
+      (this.buffBar ??= new BuffBar(document.getElementById("hud")!)).update(mine.timers ?? "");
     }
   }
 }
