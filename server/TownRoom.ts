@@ -27,7 +27,8 @@ import { findHideSpot, HIDE, MOTHER_KEEP_OUT, noMobsAt, spawnPoint, SPAWN_ZONES,
 import { moveStep } from "../shared/movement";
 import { SLOTS_BY_ZONE, WORK_SLOTS } from "../shared/siege";
 import { BANDIT_AI, BANDIT_ROLES, CAMP_POSTS, CHIEF, clearWalk, findPath, postPos, roleOf } from "../shared/bandits";
-import { flush, HeroSave, loadHero, login, markChest, openedChests, resetChests, saveHero } from "./accounts";
+import { flush, HeroSave, loadHero, loadStash, login, markChest, openedChests, resetChests, saveHero, saveStash } from "./accounts";
+import { offerFrom, Offer, settle, STASH, STASH_GOLD_MAX, STASH_RANGE, STASH_SIZE, TRADE } from "../shared/trade";
 import { arrivalOf, cleanPortals, PORTAL_COMBAT_MS, PORTAL_RANGE, PORTAL_WAKE_RANGE, portalById, PORTALS } from "../shared/portals";
 import { rollBoon, shrineXp, SHRINE, SHRINE_COOLDOWN_MS, SHRINE_RANGE, WIND_BLESSING, WIND_BLESSING_ID } from "../shared/shrine";
 import { chestById, chestLock, CHEST_RANGE, CHEST_RESPAWN_MS, CHESTS, GUARD_RESPAWN_MS, rollChest } from "../shared/chests";
@@ -446,6 +447,9 @@ const meleeOf = (m: Mob) => {
   return { range: w?.range ?? MOB_ATTACK_RANGE, dmg: w?.dmg ?? (m.kind === "demon" ? 1 + DEMON.harvest.dmgPer * m.bones : 1), cooldown: w?.cooldown ?? 1, windupMs: w?.windupMs ?? MOB_COMBAT[m.kind].windupMs };
 };
 
+/** A trade between players a and b (server only). `v` goes up with every change of an offer. */
+interface Trade { a: string; b: string; v: number; offer: Record<string, Offer>; ready: Record<string, boolean> }
+
 export class TownRoom extends Room<TownState> {
   maxClients = 50;
   private mobSeq = 0;
@@ -522,6 +526,17 @@ export class TownRoom extends Room<TownState> {
     });
     this.onMessage("buy", (client, msg: { i: number }) => this.shopBuy(client, msg?.i));
     this.onMessage("sell", (client, msg: { i: number }) => this.shopSell(client, msg?.i));
+    // Trading between players and the account stash (shared/trade.ts)
+    this.onMessage("trade", (client, msg: { id?: string; name?: string }) => this.tradeAsk(client.sessionId, msg));
+    this.onMessage("tradeyes", (client, msg: { from?: string }) => this.tradeAnswer(client.sessionId, msg?.from, true));
+    this.onMessage("tradeno", (client, msg: { from?: string }) => this.tradeAnswer(client.sessionId, msg?.from, false));
+    this.onMessage("tradeoffer", (client, msg: { items?: unknown; gold?: unknown }) => this.tradeOffer(client.sessionId, msg));
+    this.onMessage("tradeready", (client, msg: { v?: number; ready?: boolean }) => this.tradeReady(client.sessionId, msg));
+    this.onMessage("tradecancel", (client) => this.tradeStop(client.sessionId, "Trade cancelled."));
+    this.onMessage("stash", (client) => this.stashSend(client));
+    this.onMessage("stashput", (client, msg: { i?: number }) => this.stashMove(client, "put", msg?.i));
+    this.onMessage("stashtake", (client, msg: { i?: number }) => this.stashMove(client, "take", msg?.i));
+    this.onMessage("stashgold", (client, msg: { n?: number }) => this.stashGold(client, msg?.n));
 
     // Player ideas: suggest (once a day), vote, and every hour the best idea wins (shared/ideas.ts)
     this.onMessage("idea", (client, text: string) => this.submitIdea(client, text));
@@ -542,6 +557,8 @@ export class TownRoom extends Room<TownState> {
       const v = text.trim().match(/^\/(up|down|unvote)\s+#?(\d+)$/i);
       if (v) return this.voteIdea(client, Number(v[2]), v[1].toLowerCase() === "up" ? 1 : v[1].toLowerCase() === "down" ? -1 : 0);
       if (/^\/max$/i.test(text.trim())) return this.maxHero(client);
+      const tr = text.trim().match(/^\/trade\s+(.+)$/i);
+      if (tr) return this.tradeAsk(client.sessionId, { name: tr[1] });
       const inv = text.trim().match(/^\/(?:invite|inv|group)\s+(.+)$/i);
       if (inv) return this.partyInvite(client.sessionId, { name: inv[1] });
       if (/^\/(leave|ungroup)$/i.test(text.trim())) return this.partyLeave(client.sessionId);
@@ -648,6 +665,8 @@ export class TownRoom extends Room<TownState> {
     if (p) saveHero(p.name, p.cls, this.snapshot(p));
     this.partyLeave(client.sessionId);
     this.invites.delete(client.sessionId);
+    this.tradeStop(client.sessionId, "The other hero left: trade cancelled.");
+    this.tradeAsks.delete(client.sessionId);
     this.state.players.delete(client.sessionId);
     this.unsummon(client.sessionId);
     this.addrs.delete(client.sessionId);
@@ -687,7 +706,8 @@ export class TownRoom extends Room<TownState> {
     if (p.ptSta + p.ptStr + p.ptMag + p.ptDex > statPoints(p.level)) p.ptSta = p.ptStr = p.ptMag = p.ptDex = 0;
     p.weapon = gear(s.weapon); p.armour = gear(s.armour); p.shoes = gear(s.shoes);
     p.hat = gear(s.hat); p.shield = gear(s.shield); p.ranged = gear(s.ranged);
-    if (Array.isArray(s.bag)) setBag(p, s.bag.map(gear).filter(Boolean).slice(0, BAG_SIZE));
+    // The bag may hold items for other classes (bought, traded or taken from the stash for another hero)
+    if (Array.isArray(s.bag)) setBag(p, s.bag.filter((v): v is string => isGearId(v)).slice(0, BAG_SIZE));
     // Old saves (before the skill tree rework) had other skill ids: those points come back to spend again
     for (const [k, v] of Object.entries(cleanRanks(p.cls, p.level, s.talents ?? {}))) p.talents.set(k, v);
     if (Array.isArray(s.slots)) s.slots.slice(0, SLOT_COUNT).forEach((v, i) => {
@@ -1426,6 +1446,7 @@ export class TownRoom extends Room<TownState> {
   private update(dtMs: number) {
     let dt = dtMs / 1000;
     const now = Date.now();
+    this.tradeTick();
     this.state.players.forEach((p, pid) => {
       tickUnit(this.host, pid);
       p.stunned = now < p.stunUntil;
@@ -2629,6 +2650,162 @@ export class TownRoom extends Room<TownState> {
     const price = sellPrice(gid);
     p.gold += price;
     client.send("shop", { ok: true, text: `+${price} gold` });
+  }
+
+  // ---- Trading and the stash (shared/trade.ts) --------------------------------
+  // The server owns every trade: offers are item ids taken from the bag, any change takes back both "Ready"
+  // marks (and bumps the version, so a Ready click made on an older view doesn't count), and the swap is
+  // checked again against both bags and purses at the moment it happens. Both heroes are saved right away.
+
+  /** Trade requests: asked player -> who asked, and until when. */
+  private tradeAsks = new Map<string, { from: string; until: number }>();
+  /** Open trades, under both players' ids. */
+  private trades = new Map<string, Trade>();
+
+  private tradeNote(id: string, text: string) {
+    this.clients.find((c) => c.sessionId === id)?.send("tradenote", { text });
+  }
+
+  private tradeAsk(id: string, msg: { id?: string; name?: string }) {
+    const me = this.state.players.get(id);
+    if (!me) return;
+    let tid = typeof msg?.id === "string" ? msg.id : "";
+    if (!tid && typeof msg?.name === "string") {
+      const want = msg.name.trim().toLowerCase();
+      this.state.players.forEach((p, pid) => { if (!tid && pid !== id && p.name.toLowerCase() === want) tid = pid; });
+    }
+    const t = this.state.players.get(tid);
+    if (!t || tid === id) return this.tradeNote(id, "No such player here.");
+    if (me.dead || t.dead) return this.tradeNote(id, "Nobody can trade while dead.");
+    if (this.trades.has(id)) return this.tradeNote(id, "You are already trading.");
+    if (this.trades.has(tid)) return this.tradeNote(id, `${t.name} is busy trading.`);
+    if (Math.hypot(me.x - t.x, me.y - t.y) > TRADE.range) return this.tradeNote(id, `Walk closer to ${t.name} to trade.`);
+    const prev = this.tradeAsks.get(tid);
+    if (prev && prev.from === id && prev.until > Date.now()) return this.tradeNote(id, `You already asked ${t.name}.`);
+    this.tradeAsks.set(tid, { from: id, until: Date.now() + TRADE.askMs });
+    this.clients.find((c) => c.sessionId === tid)?.send("tradeask", { from: id, name: me.name, ms: TRADE.askMs });
+    this.tradeNote(id, `Asked ${t.name} to trade.`);
+  }
+
+  private tradeAnswer(id: string, from: unknown, yes: boolean) {
+    const ask = this.tradeAsks.get(id);
+    const me = this.state.players.get(id);
+    if (!me || !ask || ask.from !== from) return;
+    this.tradeAsks.delete(id);
+    const host = this.state.players.get(ask.from);
+    if (!host || ask.until < Date.now()) return this.tradeNote(id, "That trade request has run out.");
+    if (!yes) return this.tradeNote(ask.from, `${me.name} doesn't want to trade.`);
+    if (this.trades.has(id) || this.trades.has(ask.from)) return this.tradeNote(id, "One of you is already trading.");
+    if (me.dead || host.dead || Math.hypot(me.x - host.x, me.y - host.y) > TRADE.breakRange) return this.tradeNote(id, `You are too far from ${host.name}.`);
+    const t: Trade = { a: ask.from, b: id, v: 1, offer: { [ask.from]: { items: [], gold: 0 }, [id]: { items: [], gold: 0 } }, ready: {} };
+    this.trades.set(ask.from, t); this.trades.set(id, t);
+    this.tradeView(t);
+  }
+
+  /** Sends both players the trade as they see it (theirs and the other side's offer). */
+  private tradeView(t: Trade) {
+    for (const [me, other] of [[t.a, t.b], [t.b, t.a]]) {
+      this.clients.find((c) => c.sessionId === me)?.send("tradeview", {
+        v: t.v, with: other, name: this.state.players.get(other)?.name ?? "",
+        mine: { ...t.offer[me], ready: !!t.ready[me] }, theirs: { ...t.offer[other], ready: !!t.ready[other] },
+      });
+    }
+  }
+
+  private tradeOffer(id: string, msg: { items?: unknown; gold?: unknown }) {
+    const t = this.trades.get(id), p = this.state.players.get(id);
+    if (!t || !p) return;
+    t.offer[id] = offerFrom(bagItems(p), p.gold, msg?.items, msg?.gold);
+    t.ready = {}; t.v++; // a changed offer must be looked at again by both
+    this.tradeView(t);
+  }
+
+  private tradeReady(id: string, msg: { v?: number; ready?: boolean }) {
+    const t = this.trades.get(id);
+    if (!t) return;
+    if (msg?.v !== t.v) return this.tradeView(t); // clicked on an older view of the offers
+    t.ready[id] = msg?.ready !== false;
+    if (!t.ready[t.a] || !t.ready[t.b]) return this.tradeView(t);
+    const pa = this.state.players.get(t.a), pb = this.state.players.get(t.b);
+    if (!pa || !pb) return this.tradeStop(id, "Trade cancelled.");
+    const r = settle(
+      { bag: bagItems(pa), gold: pa.gold, offer: t.offer[t.a] },
+      { bag: bagItems(pb), gold: pb.gold, offer: t.offer[t.b] },
+    );
+    if (typeof r === "string") {
+      // Something moved since the offer (an item worn, sold, dropped, gold spent): show the trade again, unready
+      t.ready = {}; t.v++;
+      for (const [who, pp] of [[t.a, pa], [t.b, pb]] as const) t.offer[who] = { items: t.offer[who].items.filter((g) => bagItems(pp).includes(g)), gold: Math.min(t.offer[who].gold, pp.gold) };
+      this.tradeNote(t.a, `${r}: check the offers again.`); this.tradeNote(t.b, `${r}: check the offers again.`);
+      return this.tradeView(t);
+    }
+    setBag(pa, r.a.bag); pa.gold = r.a.gold;
+    setBag(pb, r.b.bag); pb.gold = r.b.gold;
+    saveHero(pa.name, pa.cls, this.snapshot(pa)); saveHero(pb.name, pb.cls, this.snapshot(pb));
+    flush(); // a finished trade is on disk at once
+    this.trades.delete(t.a); this.trades.delete(t.b);
+    console.log(`Trade ${pa.name} <-> ${pb.name}: [${t.offer[t.a].items}] ${t.offer[t.a].gold}g for [${t.offer[t.b].items}] ${t.offer[t.b].gold}g`);
+    for (const [me, other] of [[t.a, pb], [t.b, pa]] as const) this.clients.find((c) => c.sessionId === me)?.send("tradeend", { ok: true, text: `Trade with ${other.name} done!` });
+  }
+
+  /** Ends a player's trade (if any) for both sides. */
+  private tradeStop(id: string, text: string) {
+    const t = this.trades.get(id);
+    if (!t) return;
+    this.trades.delete(t.a); this.trades.delete(t.b);
+    for (const pid of [t.a, t.b]) this.clients.find((c) => c.sessionId === pid)?.send("tradeend", { ok: false, text: pid === id && text.startsWith("The other") ? "Trade cancelled." : text });
+  }
+
+  /** Called every tick: a trade ends when a hero dies or they walk apart. */
+  private tradeTick() {
+    if (!this.trades.size) return;
+    for (const t of new Set(this.trades.values())) {
+      const pa = this.state.players.get(t.a), pb = this.state.players.get(t.b);
+      if (!pa || !pb) this.tradeStop(t.a, "Trade cancelled.");
+      else if (pa.dead || pb.dead) this.tradeStop(t.a, "Someone fell: trade cancelled.");
+      else if (Math.hypot(pa.x - pb.x, pa.y - pb.y) > TRADE.breakRange) this.tradeStop(t.a, "You walked apart: trade cancelled.");
+    }
+  }
+
+  private nearStash(p: Player | undefined): p is Player {
+    return !!p && !p.dead && Math.hypot(p.x - STASH.x, p.y - STASH.y) <= STASH_RANGE * 1.6;
+  }
+
+  private stashSend(client: Client, text = "") {
+    const p = this.state.players.get(client.sessionId);
+    if (!this.nearStash(p)) return;
+    client.send("stashview", { ...loadStash(p.name), text });
+  }
+
+  /** Bag item `i` into the stash, or stash item `i` into the bag. */
+  private stashMove(client: Client, dir: "put" | "take", i: unknown) {
+    const p = this.state.players.get(client.sessionId);
+    if (!this.nearStash(p) || typeof i !== "number" || !Number.isInteger(i) || i < 0) return;
+    const st = loadStash(p.name), bag = bagItems(p);
+    if (dir === "put") {
+      if (i >= bag.length || !isGearId(bag[i])) return;
+      if (st.items.length >= STASH_SIZE) return this.stashSend(client, "The stash is full");
+      st.items.push(bag.splice(i, 1)[0]);
+    } else {
+      if (i >= st.items.length) return;
+      if (bag.length >= BAG_SIZE) return this.stashSend(client, "Your bag is full");
+      bag.push(st.items.splice(i, 1)[0]);
+    }
+    setBag(p, bag);
+    saveStash(p.name, st, p.cls, this.snapshot(p));
+    this.stashSend(client);
+  }
+
+  /** n > 0 puts gold in, n < 0 takes it out. */
+  private stashGold(client: Client, n: unknown) {
+    const p = this.state.players.get(client.sessionId);
+    if (!this.nearStash(p) || typeof n !== "number" || !Number.isFinite(n)) return;
+    const st = loadStash(p.name);
+    const amt = n > 0 ? Math.min(Math.floor(n), p.gold, STASH_GOLD_MAX - st.gold) : -Math.min(Math.floor(-n), st.gold);
+    if (!amt) return this.stashSend(client);
+    st.gold += amt; p.gold -= amt;
+    saveStash(p.name, st, p.cls, this.snapshot(p));
+    this.stashSend(client);
   }
 
   // ---- Quest -------------------------------------------------------------

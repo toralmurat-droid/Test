@@ -46,6 +46,8 @@ import { TalentMenu } from "./talents";
 import { IdeaBoard } from "./ideas";
 import { PatchNotesPanel } from "./patchnotes";
 import { PartyUI } from "./party";
+import { StashUI, TradeUI } from "./trade";
+import { STASH, STASH_RANGE } from "../../shared/trade";
 import { afterLoading, hideLoading, loadingActive, loadingFor, setLoading } from "./loading";
 import { ISO, IsoView, isoAnchor, isoInput, screenDir, screenDir8 } from "./iso";
 import { SMOOTH } from "./isoflag";
@@ -215,6 +217,8 @@ export class TownScene extends Phaser.Scene {
   private chatEl = document.getElementById("chat") as HTMLInputElement;
   private ideaBoard?: IdeaBoard;
   private party?: PartyUI;
+  private trade?: TradeUI;
+  private stash?: StashUI;
   private patchNotes?: PatchNotesPanel;
   private minimap?: Minimap;
   private dial?: DayDial;
@@ -319,6 +323,7 @@ export class TownScene extends Phaser.Scene {
     this.input.keyboard!.on("keydown-E", () => {
       if (this.chatting()) return;
       if (!this.npcs?.isOpen && this.chests?.interact()) return; // a loot chest right here comes first
+      if (!this.npcs?.isOpen && this.stash?.interact()) return; // the account stash on the square
       if (!this.npcs?.isOpen && this.shrine?.interact()) return; // then the forest shrine
       if (!this.npcs?.isOpen && this.portals?.interact()) return; // then a portal stone's travel list
       this.npcs?.interact();
@@ -361,7 +366,8 @@ export class TownScene extends Phaser.Scene {
     this.input.keyboard!.on("keydown-I", () => { if (!this.chatting()) toggleIdeas(); });
     menuButton("ideabtn", toggleIdeas);
     // Player groups: invite nearby heroes / leave (P or the Group button)
-    this.party = new PartyUI((type, msg) => this.room?.send(type, msg), () => (this.room?.state as any)?.players, () => this.me);
+    this.party = new PartyUI((type, msg) => this.room?.send(type, msg), () => (this.room?.state as any)?.players, () => this.me,
+      (id) => { this.party?.close(); this.trade?.askTo(id); });
     const toggleParty = () => { if (!this.party!.open) this.closeMenus(); this.party!.toggle(); };
     this.input.keyboard!.on("keydown-P", () => { if (!this.chatting()) toggleParty(); });
     menuButton("partybtn", toggleParty);
@@ -404,6 +410,15 @@ export class TownScene extends Phaser.Scene {
     this.room.onMessage("chestopen", ({ id, refill }) => this.chests?.opened(id, refill));
     this.room.onMessage("chestlocked", () => {}); // the prompt already says why
     this.room.send("chests"); // which chests this account already emptied
+    // Trading between players and the account stash (client/src/trade.ts)
+    const myState = () => (this.room?.state as any)?.players?.get(this.me);
+    this.trade = new TradeUI(this, (type, msg) => this.room.send(type, msg), myState);
+    this.stash = new StashUI(this, (type, msg) => this.room.send(type, msg), myState);
+    this.room.onMessage("tradeask", ({ from, name, ms }) => this.trade?.asked(from, name, ms));
+    this.room.onMessage("tradeview", (v) => { if (!this.trade?.open) this.closeMenus(); this.trade?.show(v); });
+    this.room.onMessage("tradeend", ({ text, ok }) => this.trade?.ended(text, ok));
+    this.room.onMessage("tradenote", ({ text }) => this.trade?.notice(text));
+    this.room.onMessage("stashview", (v) => { if (!this.stash?.open) this.closeMenus(); this.stash?.show(v); });
     // The Whispering Woods shrine: one for everyone, spent for a while after each prayer
     this.shrine = new ShrineLayer(this, (type, msg) => this.room.send(type, msg), PIXEL_FONT);
     this.room.onMessage("shrine", ({ left, by, boon }) => {
@@ -996,6 +1011,7 @@ export class TownScene extends Phaser.Scene {
         for (const n of NPCS) if (npcPresent(n.id, p)) out.push({ x: n.x, y: n.y, w: 18, h: 30, range: TALK_RANGE, act: () => { if (!this.npcs?.isOpen) this.npcs?.interact(); } });
         for (const c of CHESTS) out.push({ x: c.x, y: c.y, w: 22, h: 18, range: CHEST_RANGE, act: () => this.chests?.interact() });
         out.push({ x: SHRINE.x, y: SHRINE.y, w: 26, h: 36, range: SHRINE_RANGE, act: () => this.shrine?.interact() });
+        out.push({ x: STASH.x, y: STASH.y, w: 22, h: 18, range: STASH_RANGE, act: () => { if (!this.stash?.open) this.stash?.interact(); } });
         for (const o of PORTALS) out.push({ x: o.x, y: o.y, w: 26, h: 40, range: PORTAL_RANGE, act: () => this.portals?.interact() });
         for (const { o } of usableObjects(p)) out.push({ x: o.x, y: o.y, w: 22, h: 22, range: USE_RANGE, act: () => this.room?.send("use", { id: o.id }) });
         return out;
@@ -1580,6 +1596,8 @@ export class TownScene extends Phaser.Scene {
     this.gearMenu?.close();
     this.ideaBoard?.close();
     this.party?.close();
+    this.trade?.close();
+    this.stash?.close();
     this.patchNotes?.close();
     this.portals?.close();
   }
@@ -1929,6 +1947,7 @@ export class TownScene extends Phaser.Scene {
     if (!this.room) return;
     this.villagers?.update(dtMs, this.outlawSpots());
     this.party?.update();
+    this.trade?.update();
     this.watch?.update(dtMs);
     this.torches?.update(this.time.now, (id) => !!this.watch?.striking(id));
     this.fx.update(dtMs);
@@ -2149,7 +2168,8 @@ export class TownScene extends Phaser.Scene {
       this.chests.update(meEnt && !meEnt.state.dead ? meEnt.sprite : undefined, !!this.npcs?.isOpen, meEnt?.state, (cid) => guards.get(cid) ?? 0);
     }
     this.shrine?.update(meEnt && !meEnt.state.dead && !this.chests?.near ? meEnt.sprite : undefined, !!this.npcs?.isOpen);
-    if (this.npcs) this.npcs.hidePrompt = !!this.chests?.near || !!this.shrine?.near || !!this.portals?.near;
+    this.stash?.update(meEnt && !meEnt.state.dead ? meEnt.sprite : undefined, !!this.npcs?.isOpen || !!this.chests?.near);
+    if (this.npcs) this.npcs.hidePrompt = !!this.chests?.near || !!this.shrine?.near || !!this.portals?.near || !!this.stash?.near;
     this.npcs?.update(meEnt && !meEnt.state.dead ? meEnt.sprite : undefined, meEnt?.state);
     this.portals?.update(meEnt && !meEnt.state.dead ? meEnt.sprite : undefined, !!this.npcs?.isOpen || !!this.chests?.near || !!this.shrine?.near);
     if (this.minimap && this.npcs) this.minimap.markers = this.portals ? [...this.npcs.markers, ...this.portals.markers()] : this.npcs.markers;

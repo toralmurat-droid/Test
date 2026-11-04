@@ -34,7 +34,11 @@ interface Account {
   heroes: Partial<Record<string, HeroSave>>;
   /** Loot chests this account opened: chest id -> time it refills (ms). Shared by all heroes of the account. */
   chests?: Record<string, number>;
+  /** The stash chest in Oakvale (shared/trade.ts): items and gold shared by all heroes of the account. */
+  stash?: Stash;
 }
+
+export interface Stash { items: string[]; gold: number }
 
 const FILE = path.resolve(process.env.SAVE_FILE ?? path.join(__dirname, "../data/saves.json"));
 let accounts: Record<string, Account> = {};
@@ -113,6 +117,24 @@ export function markChest(name: string, id: string, refillAt: number) {
   const acc = accounts[key(name)];
   if (!acc) return;
   (acc.chests ??= {})[id] = refillAt;
+  dirty = true;
+}
+
+/** A copy of the account's stash (empty if it never used one). */
+export function loadStash(name: string): Stash {
+  const s = accounts[key(name)]?.stash;
+  return { items: [...(s?.items ?? [])], gold: s?.gold ?? 0 };
+}
+
+/**
+ * Store the stash together with the hero that changed it, in one go: both end up in the same file write,
+ * so a crash can never leave an item both in the stash and in the hero's bag.
+ */
+export function saveStash(name: string, stash: Stash, cls: string, hero: HeroSave) {
+  const acc = accounts[key(name)];
+  if (!acc) return;
+  acc.stash = { items: [...stash.items], gold: stash.gold };
+  acc.heroes[cls] = hero;
   dirty = true;
 }
 
