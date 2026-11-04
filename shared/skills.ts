@@ -128,7 +128,11 @@ export interface SkillDef {
   consume?: boolean; // spends all stacks; buff.perStack / STACK_POWER per stack
   move?: MoveDef; areas?: AreaDef[]; shots?: ShotDef; field?: FieldDef; buff?: BuffDef; counter?: CounterDef;
   cry?: AreaDef; // war cry: hits everyone around (usually no damage, only effects)
+  target?: SkillTarget; // how a right click aims it (worked out by skillTarget() when not set)
 }
+
+/** Right-click aiming: on the hero itself, at the clicked spot, or toward the click. */
+export type SkillTarget = "self" | "point" | "dir";
 
 export interface BranchDef { name: string; color: string }
 
@@ -333,7 +337,7 @@ const S: Record<ClassKind, SkillDef[]> = <Record<ClassKind, SkillDef[]>><unknown
 
     // Trapper
     { id: "a_beartrap", name: "Bear Trap", type: "Trap", branch: 1, row: 0, style: "steel", cd: 8000, cost: 20,
-      desc: "Set an iron trap at your feet (20s). The first enemy to step on it is caught: damage and a long stun.",
+      desc: "Set an iron trap where you aim (20s). The first enemy to step on it is caught: damage and a long stun.",
       field: { kind: "beartrap", r: 14, ms: 20000, tickMs: 100, trap: true, burst: { r: 16, dmg: 18, stunMs: 1400, look: "spikes" } } },
     { id: "a_reflex", name: "Hunter's Reflex", type: "Counter", branch: 1, row: 1, style: "wind", cd: 8000, cost: 20,
       desc: "Stay alert for 0.7s. If struck, you dodge the blow, vault back and fire three arrows.",
@@ -570,4 +574,29 @@ export function cleanRanks(cls: ClassKind, level: number, saved: Record<string, 
   // Learn order must still be valid: drop skills whose parent is missing or that need a higher level (S is in tree order)
   for (const s of S[cls]) if (out[s.id] && (level < s.req || (s.parent && !out[s.parent]))) delete out[s.id];
   return spentPoints(cls, out) <= talentPoints(level) ? out : {};
+}
+
+/**
+ * How a skill is aimed with the mouse. Self: cast on the hero wherever you click (buffs, auras, war cries, counters).
+ * Point: lands on the clicked spot, up to pointRange() away (leaps, blinks, ground blasts, traps). Dir: goes off
+ * toward the click (shots, dashes, rolling waves).
+ */
+export function skillTarget(s: SkillDef): SkillTarget {
+  if (s.target) return s.target;
+  if (s.shots) return "dir";
+  if (s.move) return s.move.kind === "leap" || s.move.kind === "blink" ? "point" : s.move.kind === "multi" ? "self" : "dir";
+  if (s.areas?.length) {
+    if (s.areas.some((a) => a.line)) return "dir";
+    const ahead = Math.max(0, ...s.areas.filter((a) => !a.atStart).map((a) => a.ahead ?? 0));
+    return ahead >= 30 ? "point" : ahead > 0 ? "dir" : "self"; // a blast out there / a swing or breath in front
+  }
+  if (s.field) return s.field.follow || !(s.field.ahead || s.field.trap) ? "self" : "point";
+  return "self";
+}
+
+/** Furthest a "point" skill can be placed from the hero (px). */
+export function pointRange(s: SkillDef): number {
+  if (s.move && (s.move.kind === "leap" || s.move.kind === "blink")) return s.move.dist;
+  const ahead = Math.max(0, ...(s.areas ?? []).map((a) => a.ahead ?? 0), s.field?.ahead ?? 0);
+  return Math.max(90, ahead * 2.5);
 }

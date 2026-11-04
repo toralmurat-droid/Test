@@ -1,5 +1,5 @@
 import { ClassKind } from "./classes";
-import {
+import { pointRange, skillTarget,
   AreaDef, BuffDef, FieldDef, HitEffects, levelPower, MARK_TAKEN, MAX_STACKS, MoveDef, rankOf, rankPower, rankTime, Ranks, scalePower,
   ShotDef, SkillDef, skillOf, STACK_DECAY_MS, STACK_POWER, WEAK_DEALT,
 } from "./skills";
@@ -63,6 +63,8 @@ export interface SkillHost {
   hit(attacker: string, target: string, dmg: number, push: [number, number], o: HitOpts): void;
   heal(id: string, amount: number): void;
   aim(id: string): [number, number];
+  /** Distance to the spot the hero clicked for this cast (point skills), read once; undefined = no click. */
+  aimDist?(id: string): number | undefined;
   face(id: string, dx: number, dy: number): void;
   /** Walk `dist` px along (dx, dy), stopped by walls, in small steps; calls `each` after every step. */
   move(id: string, dx: number, dy: number, dist: number, each?: () => void): void;
@@ -115,6 +117,9 @@ export function castSkill(h: SkillHost, id: string, skillId: string): boolean {
   if ((u.energy ?? 0) < cost) return false;
   u.energy = (u.energy ?? 0) - cost;
   u.sk.last[s.id] = now;
+  // A clicked spot (point skills): how far from the hero it lands, within the skill's reach
+  const clicked = h.aimDist?.(id);
+  const at = skillTarget(s) === "point" && clicked !== undefined ? Math.max(0, Math.min(pointRange(s), clicked)) : undefined;
   let stacks = 0;
   if (s.consume) { stacks = u.sk.stacks; u.sk.stacks = 0; }
   const power = rankPower(rank) * levelPower(s) * scalePower(s, h.stats?.(id), STATS[u.cls].base) *
@@ -125,22 +130,31 @@ export function castSkill(h: SkillHost, id: string, skillId: string): boolean {
     h.later(s.chargeMs, () => {
       u.sk.chargeUntil = 0;
       if (!h.canAct(id)) { h.fx({ ev: "fizzle", id, s: s.id }); return; } // a stun breaks the buildup
-      release(h, id, s, rank, power, stacks);
+      release(h, id, s, rank, power, stacks, at);
     });
-  } else release(h, id, s, rank, power, stacks);
+  } else release(h, id, s, rank, power, stacks, at);
   return true;
 }
 
-function release(h: SkillHost, id: string, s: SkillDef, rank: number, power: number, stacks: number) {
+/** `at`: distance to the clicked spot for a point skill (leap/blink length, centre of the blast or field). */
+function release(h: SkillHost, id: string, s: SkillDef, rank: number, power: number, stacks: number, at?: number) {
   const u = live(h, id);
   if (!u) return;
   const t = rankTime(rank);
   const x0 = u.x, y0 = u.y;
-  if (s.move) doMove(h, id, s, s.move, power, t);
-  for (const a of s.areas ?? []) area(h, id, s, a, power, t, a.atStart ? [x0, y0] : undefined);
+  const [ax0, ay0] = h.aim(id);
+  if (s.move) doMove(h, id, s, s.move, power, t, at);
+  // Several blasts keep their spacing, scaled so the furthest lands on the clicked spot
+  const far = Math.max(0, ...(s.areas ?? []).map((a) => a.ahead ?? 0));
+  for (const a of s.areas ?? []) {
+    const spot = a.atStart ? [x0, y0] as [number, number]
+      : at !== undefined && (a.ahead ?? 0) > 0 && !s.move ? [x0 + ax0 * at * (a.ahead! / far), y0 + ay0 * at * (a.ahead! / far)] as [number, number]
+      : undefined;
+    area(h, id, s, a, power, t, spot);
+  }
   if (s.shots) fire(h, id, s.id, s.shots, rank, power, u.x, u.y, h.aim(id));
   if (s.field) {
-    const [ax, ay] = h.aim(id), d = s.field.ahead ?? 0;
+    const [ax, ay] = h.aim(id), d = at ?? s.field.ahead ?? 0;
     h.addField({ owner: id, skill: s.id, def: s.field, rank, power, x: u.x + ax * d, y: u.y + ay * d, until: h.now() + s.field.ms * t, nextTick: h.now() });
   }
   if (s.buff) addBuff(h, id, s.id, s.buff, rank, stacks);
@@ -164,7 +178,7 @@ export function addBuff(h: SkillHost, id: string, skill: string, b: BuffDef, ran
   h.fx({ ev: "buff", id, s: skill, ms: until - h.now() });
 }
 
-function doMove(h: SkillHost, id: string, s: SkillDef, m: MoveDef, power: number, t: number) {
+function doMove(h: SkillHost, id: string, s: SkillDef, m: MoveDef, power: number, t: number, at?: number) {
   const u = live(h, id)!;
   const now = h.now();
   const [ax, ay] = h.aim(id);
@@ -173,13 +187,13 @@ function doMove(h: SkillHost, id: string, s: SkillDef, m: MoveDef, power: number
   switch (m.kind) {
     case "dash": case "leap": {
       const cut = new Set<string>();
-      h.move(id, ax, ay, m.dist, () => { if (m.path) for (const e of h.enemies(u.x, u.y, 14, id)) cut.add(e); });
+      h.move(id, ax, ay, m.kind === "leap" && at !== undefined ? at : m.dist, () => { if (m.path) for (const e of h.enemies(u.x, u.y, 14, id)) cut.add(e); });
       for (const e of cut) h.hit(id, e, baseDmg(h, id, { wpn: m.path }) * power, [ax, ay], { skill: true, kb: 0.6 });
       break;
     }
     case "blink": case "back": {
       const dir = m.kind === "back" ? -1 : 1;
-      for (let d = m.dist; d >= 8; d -= 8) if (h.place(id, u.x + ax * d * dir, u.y + ay * d * dir)) break;
+      for (let d = m.kind === "blink" && at !== undefined ? at : m.dist; d >= 8; d -= 8) if (h.place(id, u.x + ax * d * dir, u.y + ay * d * dir)) break;
       break;
     }
     case "behind": {

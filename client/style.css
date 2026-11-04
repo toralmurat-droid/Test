@@ -362,6 +362,9 @@ html, body { margin: 0; height: 100%; background: #1b1b24; color: #eee; font: 14
 /* Pixelify Sans draws the "fi"/"fl" ligatures as a broken glyph ("Aght" for "fight"): spell letters out everywhere */
 *, *::before, *::after { font-variant-ligatures: none !important; font-feature-settings: "liga" 0, "clig" 0, "calt" 0 !important; }
 
+/* The right-click skill (picked with keys 1..0) */
+#hotbar .slot.active { border-color: #ffd166; box-shadow: inset 0 0 0 1px #ffd166, 0 0 6px rgba(255, 209, 102, .55); opacity: 1; }
+#hotbar .slot.active::after { content: "R"; position: absolute; top: 1px; right: 3px; font-weight: bold; font-size: 10px; color: #ffd166; }
 /* Background music (music.ts): button in the menu bar + small volume panel, in the pixel font */
 #musicbtn, #musicpanel, #musicpanel button { font-family: 'Pixelify Sans', monospace; }
 #musicpanel { position: absolute; right: 12px; bottom: 52px; z-index: 9; width: 180px; padding: 8px 10px; pointer-events: auto;

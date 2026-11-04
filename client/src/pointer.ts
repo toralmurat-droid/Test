@@ -6,7 +6,9 @@ import { fromIso, isoX, isoY, ISO } from "./iso";
 /**
  * Point-and-click controls.
  * Left click: ground = walk there (around walls and water), a villager / chest / shrine / portal = walk up and use it,
- * an enemy = walk into reach and use the basic attack. Right click: the secondary skill (hotbar slot 1), on an enemy
+ * an enemy = walk into reach and use the basic attack. Right click: the active skill (picked with keys 1..0), aimed by
+ * its target type: self skills go off on the hero, point skills land on the clicked spot (walking closer when it is too
+ * far), direction skills go toward the click. On an enemy
  * after walking into its reach, else toward the clicked spot. Holding a button keeps walking toward the pointer or
  * keeps attacking. Any movement key takes over from the mouse.
  */
@@ -25,6 +27,9 @@ export interface PointerHost {
   reach(secondary: boolean): number;
   /** Attack / use the secondary skill (the hero already faces the target). */
   fire(secondary: boolean): void;
+  /** How the active (right-click) skill is aimed, and how far a "point" one can be placed. */
+  target(): "self" | "point" | "dir";
+  pointRange(): number;
   send(type: string, msg?: unknown): void;
   /** Tell the server the hero stands still right now (before turning and attacking). */
   stop(): void;
@@ -36,7 +41,8 @@ type Goal =
   | { kind: "walk"; x: number; y: number }
   | { kind: "spot"; spot: ClickSpot }
   | { kind: "enemy"; id: string; secondary: boolean; fired: boolean }
-  | { kind: "cast"; x: number; y: number };
+  | { kind: "cast"; x: number; y: number; self?: boolean }
+  | { kind: "castAt"; x: number; y: number };
 
 const STOP: InputState = { up: false, down: false, left: false, right: false };
 
@@ -118,7 +124,19 @@ export class PointerControls {
     this.held = button;
     this.stuck = 0;
     const { enemy, spot } = this.pick(p);
-    if (enemy) {
+    const target = button === 2 ? this.host.target() : "dir";
+    if (button === 2 && target === "self") {
+      // Buffs, auras, war cries: on the hero, wherever the click was
+      this.goal = { kind: "cast", x: 0, y: 0, self: true };
+      this.path = [];
+      this.lastAct = 0;
+    } else if (button === 2 && target === "point" && !enemy) {
+      // Lands on the clicked spot: walk closer first when it is out of reach
+      const w = this.world(p), me = this.host.me()!;
+      if (Math.hypot(w.x - me.x, w.y - me.y) <= this.host.pointRange()) { this.goal = { kind: "cast", x: w.x, y: w.y }; this.path = []; this.lastAct = 0; }
+      else { this.goal = { kind: "castAt", x: w.x, y: w.y }; this.route(w); }
+      this.marker(w);
+    } else if (enemy) {
       this.goal = { kind: "enemy", id: enemy.id, secondary: button === 2, fired: false };
       this.route({ x: enemy.x, y: enemy.y });
     } else if (button === 2) {
@@ -185,10 +203,22 @@ export class PointerControls {
         if (this.held === 2) { const w = this.world(pointer); goal.x = w.x; goal.y = w.y; }
         this.lastAct = now;
         this.host.stop();
-        this.host.send("face", { x: goal.x, y: goal.y });
+        if (!goal.self) this.host.send("face", { x: goal.x, y: goal.y });
         this.host.fire(true);
         if (this.held !== 2) this.goal = undefined;
       }
+      return STOP;
+    }
+
+    if (goal.kind === "castAt") {
+      const near = Math.hypot(goal.x - me.x, goal.y - me.y) <= this.host.pointRange() * 0.95;
+      const r = near ? undefined : this.steer(me, stepMs);
+      if (r) return r;
+      // In reach (or as close as the way allows): cast on the spot
+      this.goal = undefined; this.path = [];
+      this.host.stop();
+      this.host.send("face", { x: goal.x, y: goal.y });
+      this.host.fire(true);
       return STOP;
     }
 
