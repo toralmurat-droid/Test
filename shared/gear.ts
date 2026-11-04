@@ -140,6 +140,7 @@ export const GEAR_DROP: Record<MobKind, { chance: number; tiers: [number, number
   skeletonmage: { chance: 0.16, tiers: [0.5, 0.38, 0.12] },
   necromancer: { chance: 0.75, tiers: [0.1, 0.5, 0.4] },
   banditchief: { chance: 1, tiers: [0, 0.45, 0.55] },
+  hollowking: { chance: 1, tiers: [0, 0.2, 0.8] },
 };
 
 export function isGearId(v: unknown): v is string {
@@ -193,7 +194,7 @@ export function rollGear(kind: MobKind, level = 1, rnd = Math.random): string | 
 }
 
 /** Bosses roll better rarities (multiplies the Magic/Rare/Legendary odds). */
-export const BOSS_LUCK: Partial<Record<MobKind, number>> = { demon: 3, necromancer: 2.5, banditchief: 3, motherblob: 2 };
+export const BOSS_LUCK: Partial<Record<MobKind, number>> = { demon: 3, necromancer: 2.5, banditchief: 3, motherblob: 2, hollowking: 5 };
 
 export type Equipped = Partial<Record<GearSlot, string>>;
 

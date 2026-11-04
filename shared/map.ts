@@ -85,6 +85,13 @@ export const SAFE_ZONE = { x: 74, y: 55, w: 13, h: 11 };
 /** Column of the river's center for a given row (River Ashwell, east of the village). */
 /** Gullrock Cove: a fishers' smokehouse on a little bay east of Saltmere, burned and pillaged by Redfang raiders (Redfang quest chain). */
 export const GULLROCK = { x: 178, y: 182, w: 28, h: 12 };
+/**
+ * The Hollow Throne (far north-east of the Whispering Woods): a ring of old crown-stones round a stone dais and the
+ * broken throne of Ostrevar, the Hollow King, the first zone's final boss (Hollow Crown chain, shared/quests.ts).
+ * `cx, cy` = the dais centre (tile), `r` = the ring of standing stones (tiles), WARDS = the three ward stones on it.
+ */
+export const HOLLOW = { x: 257, y: 18, w: 28, h: 25, cx: 271, cy: 31, r: 8.5 };
+export const HOLLOW_WARDS: [number, number][] = [[HOLLOW.cx - 7, HOLLOW.cy + 4], [HOLLOW.cx + 7, HOLLOW.cy + 4], [HOLLOW.cx, HOLLOW.cy - 8]];
 
 export const riverCenter = (y: number) => Math.round(118 + 3 * Math.sin(y / 11) + 1.5 * Math.sin(y / 5));
 
@@ -694,6 +701,20 @@ function buildWorld() {
 
   // ---------- 13a. The forest shrine (shared/shrine.ts): a small clearing beside the Bandit Trail, deep in the Whispering Woods ----------
   disk(SHRINE_SPOT.x + 0.5, SHRINE_SPOT.y + 0.5, 3.2, 2.8, (x, y) => { if (NATURE.has(objects[y][x])) setO(x, y, EMPTY); });
+  // ---------- 13b. The Hollow Throne: a clearing of dead grass and ash, a flagstone dais, the old king's throne ----------
+  {
+    const H = HOLLOW;
+    disk(H.cx + 0.5, H.cy + 0.5, 13, 11.5, (x, y, d) => {
+      setO(x, y, d > 0.85 && hash(x, y, 291) < 0.12 ? T.STUMP : EMPTY);
+      if (isGrass(ground[y][x])) setG(x, y, noise(x, y, 3, 292) > 0.6 ? T.DIRT : hash(x, y, 293) < 0.8 ? T.GRASS_DARK : T.TALL_GRASS);
+    });
+    // the dais: worn flagstones, cracked and heaved, rubble round its rim
+    disk(H.cx + 0.5, H.cy + 0.5, 6.6, 5.8, (x, y, d) => setG(x, y, d > 0.7 && hash(x, y, 294) < 0.45 ? T.RUBBLE : T.FLAGS));
+    // a few dead trunks at the edge of the clearing
+    for (const [ox, oy] of [[-11, -6], [10, -8], [12, 5], [-12, 6], [-4, 10]] as const) setO(H.cx + ox, H.cy + oy, T.STUMP);
+    // The King's Way: an old overgrown road from the shrine on the Bandit Trail up to the throne
+    curve([[SHRINE_SPOT.x + 2, SHRINE_SPOT.y - 1], [236, 66], [248, 56], [260, 47], [H.cx, H.cy + 7]], 1);
+  }
   // ---------- 13c. The portal stones (shared/portals.ts): a little clearing round each ----------
   for (const p of PORTAL_SPOTS) disk(p.x + 0.5, p.y + 0.5, 2.6, 2.2, (x, y) => { if (NATURE.has(objects[y][x])) setO(x, y, EMPTY); });
 
@@ -771,6 +792,7 @@ function buildWorld() {
     { name: "Brinewood", ...brine, mobs: ["slime"] },
     { name: "Heronwreck Strand", ...strand, mobs: ["slime"] },
     { name: "Gullrock Cove", ...GULLROCK, mobs: ["bandit"] },
+    { name: "The Hollow Throne", x: HOLLOW.x, y: HOLLOW.y, w: HOLLOW.w, h: HOLLOW.h },
     { name: "Saltwind Coast", x: strand.x + strand.w, y: 184, w: MAP_W - strand.x - strand.w, h: MAP_H - 184, mobs: ["slime"] },
     { name: "River Ashwell", x: riverCenter(60) - 6, y: 0, w: 12, h: MAP_H },
     { name: "Whispering Woods", x: woodsX - 2, y: 0, w: MAP_W - woodsX + 2, h: 184, mobs: ["slime"] },

@@ -28,7 +28,7 @@ export interface InputState {
   right: boolean;
 }
 
-export type MobKind = "slime" | "skeleton" | "motherblob" | "blobling" | "shooterblob" | "warriorblob" | "healerblob" | "bandit" | "skeletonmage" | "necromancer" | "crawler" | "demon" | "banditchief";
+export type MobKind = "slime" | "skeleton" | "motherblob" | "blobling" | "shooterblob" | "warriorblob" | "healerblob" | "bandit" | "skeletonmage" | "necromancer" | "crawler" | "demon" | "banditchief" | "hollowking";
 
 export interface MobDef {
   name: string;
@@ -60,13 +60,15 @@ export const MOBS: Record<MobKind, MobDef> = {
   demon: { name: "Bone Demon", maxHp: 640, speed: 50, damage: 30, attackCooldownMs: 1300, aggroRange: 170, leash: 320, xp: 220 },
   // Boss of Redfang Hollow (shared/bandits.ts CHIEF): a big axeman who leaps at you and rallies his camp
   banditchief: { name: "Redfang Chief", maxHp: 760, speed: 58, damage: 26, attackCooldownMs: 1150, aggroRange: 150, leash: 330, xp: 420 },
+  // The first zone's final boss (Hollow Crown chain, shared/quests.ts CROWN_QUESTS; moves in HOLLOW_KING below)
+  hollowking: { name: "The Hollow King", maxHp: 900, speed: 54, damage: 26, attackCooldownMs: 1250, aggroRange: 220, leash: 420, xp: 900 },
   crawler: { name: "Crawling Skeleton", maxHp: 26, speed: 30, damage: 13, attackCooldownMs: 1000, aggroRange: 120, leash: 220, xp: 6 },
 };
 
 /** Elite monsters: much tougher than the rest of their zone, with a bigger look and an "Elite" tag. */
-export const ELITE: Partial<Record<MobKind, true>> = { necromancer: true, demon: true, banditchief: true };
+export const ELITE: Partial<Record<MobKind, true>> = { necromancer: true, demon: true, banditchief: true, hollowking: true };
 /** Bosses: elites that lead a whole camp (tagged "Boss" instead of "Elite"). */
-export const BOSS: Partial<Record<MobKind, true>> = { banditchief: true };
+export const BOSS: Partial<Record<MobKind, true>> = { banditchief: true, hollowking: true };
 
 /**
  * Skeleton casters. Distances in px.
@@ -220,3 +222,17 @@ export const regionMobLevel = (l: number) => Math.min(REGION_LEVEL.mob, Math.max
 export const regionSpecialLevel = (l: number) => Math.min(REGION_LEVEL.special, Math.max(1, Math.round(l)));
 
 export const MOB_ATTACK_RANGE = 14; // px
+
+/**
+ * Ostrevar, the Hollow King: the first zone's final boss (Lv 30, summoned for the hero on the last step of the
+ * Hollow Crown chain). Every move is marked on the ground first, so it can be dodged. Distances in px.
+ * Crown Cleave: a wide sweep around him. Gloam Pools: green ooze wells up under the heroes near him, then bursts and
+ * slows. Below `servants.hpFrac` he calls his servants (skeletons and blobs, the Pale Marshal's and the Gloam's).
+ * Below `wrath.hpFrac` he grows faster and casts Crown's Wrath: a ring of ash all round him, only safe close to him.
+ */
+export const HOLLOW_KING = {
+  cleave: { range: 40, radius: 58, windupMs: 850, cooldownMs: 6500, dmgMult: 1.6, knockback: 2.5 },
+  pools: { range: 260, count: 3, spread: 46, radius: 34, windupMs: 1300, cooldownMs: 9000, dmgMult: 1.3, slowMs: 2500 },
+  servants: { hpFrac: 0.6, everyMs: 22000, castMs: 1100, kinds: ["skeleton", "warriorblob", "skeleton", "shooterblob"] as MobKind[], max: 4, levelDrop: 6 },
+  wrath: { hpFrac: 0.3, inner: 44, radius: 150, windupMs: 1600, cooldownMs: 12000, dmgMult: 2, speed: 1.25, cooldown: 0.8 },
+};

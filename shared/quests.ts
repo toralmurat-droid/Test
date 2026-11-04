@@ -1,5 +1,5 @@
 import { MobKind, TILE } from "./constants";
-import { AREAS, GULLROCK, isSafeZone, isSolidAt, REDFANG, VILLAGE, WRECK } from "./map";
+import { AREAS, GULLROCK, HOLLOW, HOLLOW_WARDS, isSafeZone, isSolidAt, REDFANG, VILLAGE, WRECK } from "./map";
 import { SPAWN_ZONES, SpawnZone } from "./spawns";
 import { npcById } from "./npcs";
 
@@ -23,7 +23,9 @@ export function isBlob(kind: string): boolean {
 export const UNDEAD_KINDS: MobKind[] = ["skeleton", "skeletonmage", "crawler", "necromancer", "demon"];
 const SKELETONS: MobKind[] = ["skeleton", "skeletonmage", "crawler"];
 
-const zoneByName = (name: string) => SPAWN_ZONES.find((z) => z.name === name) ?? SPAWN_ZONES[0];
+/** A spawn zone by name, else a map area (the Hollow Throne has no monsters of its own), else the first zone. */
+const zoneByName = (name: string): { name: string; x: number; y: number; w: number; h: number } =>
+  SPAWN_ZONES.find((z) => z.name === name) ?? AREAS.find((a) => a.name === name) ?? SPAWN_ZONES[0];
 const VCX = (VILLAGE.x0 + VILLAGE.x1) / 2, VCY = (VILLAGE.y0 + VILLAGE.y1) / 2;
 
 /**
@@ -45,7 +47,7 @@ function dirFromVillage(tx: number, ty: number): string {
   const k = (Math.round(Math.atan2(ty - VCY, tx - VCX) / (Math.PI / 4)) + 8) % 8;
   return ["east", "south-east", "south", "south-west", "west", "north-west", "north", "north-east"][k];
 }
-const zdir = (z: SpawnZone) => dirFromVillage(z.x + z.w / 2, z.y + z.h / 2);
+const zdir = (z: { x: number; y: number; w: number; h: number }) => dirFromVillage(z.x + z.w / 2, z.y + z.h / 2);
 
 /** Is (px, py) inside the named spawn zone's rect? */
 export function inZone(zone: string, px: number, py: number): boolean {
@@ -89,7 +91,7 @@ export const QUEST_ITEMS: Record<string, QuestItemDef> = {
 
 // ---- Map objects you use with E ----
 
-export type QuestObjectKind = "lantern" | "shrine" | "cocoon" | "heart" | "engine" | "beacon" | "crypt" | "phylactery";
+export type QuestObjectKind = "lantern" | "shrine" | "cocoon" | "heart" | "engine" | "beacon" | "crypt" | "phylactery" | "ward";
 export interface QuestObject { id: string; kind: QuestObjectKind; x: number; y: number; name: string; verb: string }
 
 const obj = (id: string, kind: QuestObjectKind, name: string, verb: string, area: string, fx: number, fy: number): QuestObject =>
@@ -684,6 +686,91 @@ export const RED_QUESTS: QuestDef[] = [
   },
 ];
 
+// ---- The Hollow Crown: the first zone's last story, once the other three are over ----
+
+const THRONE = "The Hollow Throne";
+const CROWN_DIR = dirFromVillage(HOLLOW.cx, HOLLOW.cy);
+/** The three ward-stones round the Hollow Throne (shared/map.ts HOLLOW_WARDS). */
+export const WARDS: QuestObject[] = HOLLOW_WARDS.map(([tx, ty], i) => objAt(`ward${i + 1}`, "ward", "Crown ward-stone", "Break", tx, ty));
+
+/**
+ * The story: a thousand years before Oakvale, Ostrevar was the first king of this valley. He would not give up his
+ * crown to death, so the first druids sealed him alive in his barrow under the Hollow Throne, far in the north-east
+ * woods, and ringed it with three ward-stones. In the long dark he learned to turn their wards into his strength,
+ * and to reach out: his crowned seal is on the cask that brought the Gloam ashore in the Grey Heron, on the
+ * phylactery that taught Vaeloth to cheat death, and on the grave-gold that paid the Redfang to bleed Saltmere. All
+ * three were to weaken the valley until he could rise. With his servants broken, he must rise himself.
+ * Opens once the Gloam, the Pale Marshal and the Redfang Debt are all done (chainOpen). Lv 24 talk quest, then the
+ * Lv 30 final boss of the first zone (Murat 2026-11-04: a final boss, not an endgame: it is beaten once, like the others).
+ */
+export const CROWN_QUESTS: QuestDef[] = [
+  {
+    id: "seal", title: "The Crowned Seal", giver: "druid", zone: "Oakvale", minLevel: 24,
+    description: "Elder Rowan found the same crowned seal on the Gloam's cask, the Marshal's phylactery and the Redfang's gold. One hand moved all three. Ask Captain Hale and Old Garrick what they know.",
+    offer: [
+      "Sit, friend. The Gloam is scattered, the Pale Marshal is dust, the Redfang have fled. Oakvale should sleep easy. I don't.",
+      "One thing has gnawed at me. The cask the Gloam came ashore in bore a seal: a crown, burned into the wood.",
+      "Hale's men found the same crown carved inside the Marshal's phylactery. And Old Garrick swears the Redfang paid their debts in old gold, stamped with a crown.",
+      "Three shadows, one hand. Ask Hale and Garrick what they know. I fear I already know the name.",
+    ],
+    acceptText: "I'll find out who",
+    steps: [
+      { type: "talk", npc: "captain", text: "Ask Captain Hale about the crowned seal", banner: ["New quest", "The Crowned Seal"],
+        obj: "Ask Captain Hale about the seal (east gate)",
+        say: [
+          "The crown? Aye, my sentries found it carved inside that cursed phylactery. I had a scholar look at it.",
+          "It's the crown of Ostrevar, the first king of this valley, from before Oakvale had a single roof. Old songs say he was buried far in the north-east woods, on a hill they called the Hollow Throne.",
+          "There's worse. Vaeloth's last orders were scratched on the wall of his hall. Three words: WAKE THE KING.",
+        ],
+        accept: "Garrick next", nag: "" },
+      { type: "talk", npc: "oldfisher", text: "Ask Old Garrick about the Redfang's gold", banner: ["The seal has a name", "Ask Old Garrick about the gold"],
+        obj: "Ask Old Garrick about the gold (Saltmere beach)",
+        say: [
+          "The crowned gold? Pell saw where it came from, poor lad. He heard everything, chained by that tent.",
+          "A tall figure in old rusted iron came to the chief by night, never once showing a face. It paid in grave-gold and wanted only one thing: blood and fear in the valley, as much as he could make.",
+          "It came down from the north-east, Pell said, by an old road past the forest shrine. The King's Way, it called it.",
+        ],
+        accept: "Back to Rowan", nag: "" },
+      back("druid", "Elder Rowan", "village bonfire", [
+        "Ostrevar. The Hollow King. So the old tale is true.",
+        "When he would not give up his crown to death, the first druids sealed him alive in his barrow and set three ward-stones round it. A thousand years he has lain there, reaching out through the Gloam, the dead and greedy men, to bleed the valley dry until he could rise.",
+        "You broke his servants. Now he must come out himself. Rest, and grow strong. When you are ready, I will tell you how to face him.",
+      ], "Claim reward"),
+    ],
+    reward: { xp: 2200, gold: 400, potions: 4 },
+    after: "Rest and grow strong, friend. When you are ready, the Hollow King is waiting.",
+  },
+  {
+    id: "king", title: "The Hollow King", giver: "druid", zone: THRONE, minLevel: 25,
+    description: `Ostrevar, the Hollow King, is rising from his barrow under ${THRONE}, far ${CROWN_DIR} of Oakvale up the King's Way from the forest shrine. Break the three ward-stones that feed him and end him.`,
+    offer: [
+      `Follow the King's Way from the forest shrine on the Bandit Trail, ${CROWN_DIR} to ${THRONE}. Three ward-stones stand round his dais.`,
+      "The wards were made to hold him, but he has turned them into his strength. Break all three and he will come out weaker. But he will come.",
+      "He fights with a crown-forged blade, the Gloam's ooze and his dead servants. Watch the ground: when it darkens, move. When the ash rises round him, get in close.",
+      "This is the last fight of this valley. Go, and come back to us.",
+    ],
+    acceptText: "I will end his reign",
+    steps: [
+      { type: "reach", at: { x: (HOLLOW.cx + 0.5) * TILE, y: (HOLLOW.cy + 0.5) * TILE, r: 9 * TILE, label: THRONE }, zone: THRONE,
+        text: `Find ${THRONE}`, banner: ["New quest", "The Hollow King"], obj: `Follow the King's Way ${CROWN_DIR} to ${THRONE}`,
+        nag: "The King's Way starts at the forest shrine on the Bandit Trail. Follow it into the deep woods." },
+      { type: "use", zone: THRONE, objects: WARDS, chest: false, text: "Break the three crown ward-stones", banner: [THRONE, "Break the three ward-stones"],
+        obj: "Ward-stones broken: {n} / {goal}", nag: "{n} of {goal}. They stand round his dais. Break them all." },
+      { type: "kill", zone: THRONE, kinds: ["hollowking"], goal: 1,
+        summon: { parts: ["hollowking"], level: 30, title: "Ostrevar, the Hollow King", hpMult: 1.5, x: (HOLLOW.cx + 0.5) * TILE, y: (HOLLOW.cy - 3.3) * TILE },
+        text: "Defeat Ostrevar, the Hollow King", banner: ["THE HOLLOW KING RISES", "Defeat Ostrevar"], obj: "The Hollow King defeated: {n} / {goal}",
+        nag: "He is on his throne and he is awake. End him!" },
+      back("druid", "Elder Rowan", "village bonfire", [
+        "I felt it. The whole wood breathed out at once, like a sleeper waking from a long, bad dream.",
+        "The Hollow King is gone, and his crown with him. No more seals, no more grave-gold, no more whispers in the dark.",
+        "You came to Oakvale a stranger and you saved this whole valley. Whatever lies beyond it, the road is yours now. Take this, with all our thanks.",
+      ], "Claim reward"),
+    ],
+    reward: { xp: 6000, gold: 1500, potions: 6 },
+    after: "The valley is free, thanks to you. Whatever lies beyond it, there is always a seat for you at this fire.",
+  },
+];
+
 // ---- First Steps: the guided first quest, one control per step (replaces the old wall-of-text intro) ----
 
 const ROWAN = npcById("druid")!;
@@ -737,7 +824,13 @@ export const TUT_CHAIN = 3;
 /** Is the guided first quest done (or from before it existed)? */
 export const tutorialDone = (p: Quester | undefined) => (p?.tutId ?? TUT_QUESTS.length) >= TUT_QUESTS.length;
 /** Can this chain offer new quests yet? Every story waits for the guided first quest. */
-export const chainOpen = (p: Quester | undefined, c: number) => c === TUT_CHAIN || tutorialDone(p);
+export const chainOpen = (p: Quester | undefined, c: number) =>
+  c === TUT_CHAIN || (tutorialDone(p) && (c !== CROWN_CHAIN || STORY_CHAINS.every((s) => chainDone(p, s))));
+/** The Hollow Crown waits for the three stories it ties together. */
+export const CROWN_CHAIN = 4;
+const STORY_CHAINS = [0, 1, 2];
+/** Every quest of this chain done. */
+export const chainDone = (p: Quester | undefined, c: number) => (chainState(p, c)?.questId ?? 0) >= CHAINS[c].quests.length;
 
 // ---- Chains: the blob story and the skeleton story run side by side, each with its own progress ----
 
@@ -749,23 +842,33 @@ export interface QuestChain {
   keys: [string, string, string];
   /** Bump when this chain's steps change (saved as `verKey`): older saves restart their current quest at the offer */
   version: number; verKey: string;
+  /**
+   * One synced Player field holding all three numbers (id * 10000 + stage * 100 + count), for chains added after the
+   * Player schema ran out of fields (Colyseus allows 64). `keys` are then only the save file's names.
+   */
+  packed?: string;
 }
+/** Pack / unpack a chain's progress into one number (QuestChain.packed). */
+export const packQuest = (id: number, stage: number, count: number) => id * 10000 + Math.min(99, stage) * 100 + Math.min(99, count);
+export const unpackQuest = (n: number) => ({ questId: Math.floor(n / 10000), questStage: Math.floor(n / 100) % 100, questCount: n % 100 });
 export const CHAINS: QuestChain[] = [
   { id: "gloam", name: "The Gloam", quests: QUESTS, keys: ["questId", "questStage", "questCount"], version: QUEST_VERSION, verKey: "questVer" },
   { id: "bones", name: "The Pale Marshal", quests: BONE_QUESTS, keys: ["boneId", "boneStage", "boneCount"], version: 1, verKey: "boneVer" },
   { id: "redfang", name: "The Redfang Debt", quests: RED_QUESTS, keys: ["redId", "redStage", "redCount"], version: 2, verKey: "redVer" },
   { id: "tutorial", name: "First Steps", quests: TUT_QUESTS, keys: ["tutId", "tutStage", "tutCount"], version: 1, verKey: "tutVer" },
+  { id: "crown", name: "The Hollow Crown", quests: CROWN_QUESTS, keys: ["crownId", "crownStage", "crownCount"], version: 1, verKey: "crownVer", packed: "crown" },
 ];
 
 /** Progress on one chain (chain undefined = the blob chain, so a Player passed as is reads as chain 0). */
 export interface QuestState { questId: number; questStage: number; questCount: number; level?: number; chain?: number }
 /** A player's progress on every chain: the Player schema fields (CHAINS[].keys). */
-export type Quester = { level?: number; questId?: number; questStage?: number; questCount?: number; boneId?: number; boneStage?: number; boneCount?: number; redId?: number; redStage?: number; redCount?: number; tutId?: number; tutStage?: number; tutCount?: number };
+export type Quester = { level?: number; questId?: number; questStage?: number; questCount?: number; boneId?: number; boneStage?: number; boneCount?: number; redId?: number; redStage?: number; redCount?: number; tutId?: number; tutStage?: number; tutCount?: number; crown?: number };
 
 /** One chain's progress, read from the player's fields. */
 export function chainState(p: Quester | undefined, c: number): QuestState | undefined {
   if (!p) return undefined;
-  const [a, b, n] = CHAINS[c].keys, r = p as Record<string, number | undefined>;
+  const [a, b, n] = CHAINS[c].keys, r = p as Record<string, number | undefined>, pk = CHAINS[c].packed;
+  if (pk) return { chain: c, ...unpackQuest(r[pk] ?? 0), level: p.level };
   return { chain: c, questId: r[a] ?? 0, questStage: r[b] ?? 0, questCount: r[n] ?? 0, level: p.level };
 }
 const chainOf = (q: QuestState | undefined) => CHAINS[q?.chain ?? 0];
@@ -932,7 +1035,7 @@ export function usableObjects(p: Quester | undefined): { o: QuestObject; i: numb
 
 /** Every quest object in the world, with whether it is done for this player (lit lanterns stay lit…). */
 export function allObjects(): QuestObject[] {
-  return [...LANTERNS, COCOON, ...SHRINES, BROOD_HEART, ...ENGINES, BEACON, ...CRYPTS, PHYLACTERY];
+  return [...LANTERNS, COCOON, ...SHRINES, BROOD_HEART, ...ENGINES, BEACON, ...CRYPTS, PHYLACTERY, ...WARDS];
 }
 export function objectDone(o: QuestObject, p: Quester | undefined): boolean {
   const c = CHAINS.findIndex((ch) => ch.quests.some((d) => d.steps.some((s) => s.objects?.includes(o))));

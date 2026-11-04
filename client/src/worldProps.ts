@@ -1,6 +1,7 @@
 import Phaser from "phaser";
 import { TILE } from "../../shared/constants";
-import { AREAS, EMPTY, GROUND, OBJECTS, REDFANG_TOWERS, SIGNPOSTS, T, VILLAGE, WRECK } from "../../shared/map";
+import { AREAS, EMPTY, GROUND, HOLLOW, HOLLOW_WARDS, OBJECTS, REDFANG_TOWERS, SIGNPOSTS, T, VILLAGE, WRECK } from "../../shared/map";
+import { standingStone, STONE_H, STONE_W, throne, THRONE_H, THRONE_W } from "./throneArt";
 import { NPCS, NPC_DECOR } from "../../shared/npcs";
 import { CHESTS } from "../../shared/chests";
 import { SIEGE_SITES } from "../../shared/siege";
@@ -566,7 +567,7 @@ function shipwreck(p: Pen, f: number) {
 }
 
 // ---- placement -------------------------------------------------------------------------------------------
-type Kind = "wp_shipwreck" | "wp_spear_rack" | "wp_pennant_red" | "wp_pennant_black" | "wp_dummy" | "wp_lantern_pole" | "wp_skull_pike" | "wp_net_rack" | "wp_spears_ground" | "wp_watchtower";
+type Kind = "wp_hollow_throne" | "wp_crownstone0" | "wp_crownstone1" | "wp_crownstone2" | "wp_shipwreck" | "wp_spear_rack" | "wp_pennant_red" | "wp_pennant_black" | "wp_dummy" | "wp_lantern_pole" | "wp_skull_pike" | "wp_net_rack" | "wp_spears_ground" | "wp_watchtower";
 interface Spot { kind: Kind; x: number; y: number; flip?: boolean }
 
 const hash = (x: number, y: number, s: number) => { let h = (x * 374761393 + y * 668265263 + s * 2147483647) | 0; h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; };
@@ -629,6 +630,17 @@ function spots(): Spot[] {
   scatter(out, "Redfang Hollow", "wp_spear_rack", 1, 4);
   // Heronwreck Strand: the Grey Heron (fixed spot, see WRECK in shared/map.ts)
   out.push({ kind: "wp_shipwreck", x: (WRECK.x + 0.5) * TILE, y: (WRECK.y + 0.6) * TILE });
+  // The Hollow Throne: Ostrevar's throne on its dais, and a ring of crown-stones round the clearing (the three
+  // ward-stones on the ring are quest objects, client/src/questObjects.ts)
+  out.push({ kind: "wp_hollow_throne", x: (HOLLOW.cx + 0.5) * TILE, y: (HOLLOW.cy - 3.6) * TILE });
+  const wardAng = HOLLOW_WARDS.map(([x, y]) => Math.atan2(y - HOLLOW.cy, x - HOLLOW.cx));
+  for (let i = 0; i < 12; i++) {
+    const a = (i / 12) * Math.PI * 2 + 0.2;
+    if (wardAng.some((w) => Math.abs(Math.atan2(Math.sin(a - w), Math.cos(a - w))) < 0.4)) continue;
+    if (Math.abs(Math.atan2(Math.sin(a - Math.PI / 2), Math.cos(a - Math.PI / 2))) < 0.3) continue; // the King's Way comes in from the south
+    const tx = HOLLOW.cx + 0.5 + Math.cos(a) * HOLLOW.r * 1.1, ty = HOLLOW.cy + 0.5 + Math.sin(a) * HOLLOW.r;
+    out.push({ kind: `wp_crownstone${i % 3}` as Kind, x: tx * TILE, y: ty * TILE, flip: hash(i, 3, 7) < 0.5 });
+  }
   // Saltmere: nets drying by the beach, lantern poles on the lane
   scatter(out, "Saltmere", "wp_net_rack", 3, 5);
   scatter(out, "Saltmere", "wp_lantern_pole", 3, 6);
@@ -637,11 +649,13 @@ function spots(): Spot[] {
 
 /** World-space height (px) of each prop: textures are 1.5 texels per world px. */
 const SIZE: Record<Kind, number> = {
+  wp_hollow_throne: THRONE_H / TX, wp_crownstone0: STONE_H / TX, wp_crownstone1: STONE_H / TX, wp_crownstone2: STONE_H / TX,
   wp_shipwreck: WRECK_H / TX,
   wp_spear_rack: 80, wp_pennant_red: 100, wp_pennant_black: 100, wp_dummy: 58, wp_lantern_pole: 90, wp_skull_pike: 72, wp_net_rack: 50, wp_spears_ground: 54,
   wp_watchtower: 84,
 };
 const FPS: Record<Kind, number> = {
+  wp_hollow_throne: 6, wp_crownstone0: 1, wp_crownstone1: 1, wp_crownstone2: 1,
   wp_shipwreck: 4,
   wp_spear_rack: 6, wp_pennant_red: 7, wp_pennant_black: 6, wp_dummy: 3, wp_lantern_pole: 3, wp_skull_pike: 6, wp_net_rack: 3, wp_spears_ground: 5,
   wp_watchtower: 6,
@@ -659,6 +673,8 @@ export function addWorldProps(scene: Phaser.Scene, light?: (x: number, y: number
   makeTextures(scene);
   watchtower(scene);
   sheet(scene, "wp_shipwreck", WRECK_W, WRECK_H, N, shipwreck, 0);
+  sheet(scene, "wp_hollow_throne", THRONE_W, THRONE_H, N, throne, 0);
+  for (const v of [0, 1, 2]) sheet(scene, `wp_crownstone${v}`, STONE_W, STONE_H, N, (p, f) => standingStone(p, f, 0, v), 0);
   for (const kind of Object.keys(SIZE) as Kind[]) {
     const key = `${kind}_idle`;
     if (!scene.anims.exists(key)) scene.anims.create({ key, frames: scene.anims.generateFrameNumbers(kind, { start: 0, end: N - 1 }), frameRate: FPS[kind], repeat: -1 });

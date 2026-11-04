@@ -750,6 +750,77 @@ export class TownScene extends Phaser.Scene {
       const me = this.entities.get(this.me);
       if (me && Math.hypot(me.sprite.x - x, me.sprite.y - y) < r * 2.5) quake(this, kind === "leap" ? 260 : 140, kind === "leap" ? 0.009 : 0.005);
     });
+    // The Hollow King (the first zone's final boss): every move is painted flat on the ground first, then lands.
+    // No screen shake or flash (Murat 2026-11-04): the ground marks and dust carry it.
+    this.room.onMessage("kingrise", ({ id, x, y }) => {
+      this.burst(x, y, 14, 0x9dff6a, 700); this.burst(x, y - 12, 8, 0x1a1420, 800);
+      const e = this.entities.get(id);
+      if (e) { const b = this.bodyScale(e); this.tweens.add({ targets: e.sprite, scaleX: b, scaleY: { from: b * 0.15, to: b }, duration: 900, ease: "Back.Out" }); }
+      this.floatText(x, y - 80, "THE HOLLOW KING RISES!", "#c8ff8a", PIXEL_FONT);
+    });
+    this.room.onMessage("hkwind", ({ id, kind, ms, x, y, r, inner, pts }) => {
+      const e = this.entities.get(id);
+      const NAME: Record<string, [string, string]> = { cleave: ["CROWN CLEAVE!", "#ffd27a"], pools: ["GLOAM POOLS!", "#9dff6a"], servants: ["RISE, MY SERVANTS!", "#c8ff8a"], wrath: ["CROWN'S WRATH! GET CLOSE!", "#e0b0ff"] };
+      const [label, col] = NAME[kind] ?? ["", "#ffffff"];
+      if (e) {
+        this.floatText(e.sprite.x, e.sprite.y - e.top - 6, label, col, PIXEL_FONT);
+        this.squash(e, 1, kind === "wrath" ? 1.14 : 1.08, ms * 0.8);
+      }
+      if (kind === "servants") { // green motes gather round his feet
+        for (let i = 0; i < 6; i++) this.time.delayedCall(i * (ms / 6), () => { const a = Math.random() * Math.PI * 2; this.burst(x + Math.cos(a) * 40, y + Math.sin(a) * 30, 3, 0x9dff6a, 420); });
+        return;
+      }
+      const g = this.add.graphics().setDepth(2);
+      const t0 = this.time.now;
+      const draw = () => {
+        const f = Math.min(1, (this.time.now - t0) / ms);
+        g.clear();
+        if (kind === "pools") {
+          for (const [px, py] of pts as [number, number][]) {
+            g.fillStyle(0x1f4a12, 0.3).fillEllipse(px, py, r * 2, r * 1.8).lineStyle(1.5, 0x9dff6a, 0.9).strokeEllipse(px, py, r * 2, r * 1.8);
+            g.fillStyle(0x6fdc3a, 0.35).fillEllipse(px, py, r * 2 * f, r * 1.8 * f);
+          }
+          return;
+        }
+        const cx = e?.sprite.x ?? x, cy = e?.sprite.y ?? y;
+        if (kind === "wrath") {
+          // a ring of ash: all of it hurts except the safe circle close to him
+          g.fillStyle(0x2a1238, 0.28).fillCircle(cx, cy, r).lineStyle(1.5, 0xc792ff, 0.9).strokeCircle(cx, cy, r);
+          g.lineStyle(2, 0xc792ff, 0.45 + 0.4 * f).strokeCircle(cx, cy, r * Math.max(inner / r, f));
+          g.fillStyle(0x0e0a10, 0.0).fillCircle(cx, cy, inner).lineStyle(2, 0xfff0b0, 0.95).strokeCircle(cx, cy, inner);
+          return;
+        }
+        g.fillStyle(0x2a1e08, 0.2).fillCircle(cx, cy, r).lineStyle(1.5, 0xe0b860, 0.85).strokeCircle(cx, cy, r);
+        g.fillStyle(0xa8843a, 0.24).fillCircle(cx, cy, r * f);
+      };
+      draw();
+      const ev = this.time.addEvent({ delay: 30, loop: true, callback: draw });
+      this.time.delayedCall(ms, () => { ev.remove(); g.destroy(); });
+    });
+    this.room.onMessage("hkhit", ({ kind, x, y, r, inner, pts }) => {
+      if (kind === "servants") {
+        for (const [px, py] of pts as [number, number][]) { this.burst(px, py, 7, 0x9dff6a, 520); this.burst(px, py - 4, 5, 0x5d4a3a, 600); }
+        return;
+      }
+      if (kind === "pools") {
+        for (const [px, py] of pts as [number, number][]) {
+          const g = this.add.graphics().setDepth(2);
+          g.fillStyle(0x6fdc3a, 0.6).fillEllipse(px, py, r * 2, r * 1.8);
+          this.tweens.add({ targets: g, alpha: 0, duration: 500, onComplete: () => g.destroy() });
+          for (let i = 0; i < 6; i++) { const a = (i / 6) * Math.PI * 2; this.burst(px + Math.cos(a) * r * 0.6, py + Math.sin(a) * r * 0.5, 2.5, 0x9dff6a, 420); }
+        }
+        return;
+      }
+      const wrath = kind === "wrath";
+      const ring = this.add.circle(x, y, wrath ? inner : 4).setStrokeStyle(3, wrath ? 0xc792ff : 0xffd27a, 0.9).setDepth(20000);
+      isoAnchor(ring, { x, y });
+      this.tweens.add({ targets: ring, radius: r, alpha: 0, duration: wrath ? 520 : 320, onComplete: () => ring.destroy() });
+      const n = wrath ? 16 : 8;
+      for (let i = 0; i < n; i++) {
+        const a = (i / n) * Math.PI * 2, d = wrath ? inner + (r - inner) * (0.4 + Math.random() * 0.6) : r * 0.7;
+        this.burst(x + Math.cos(a) * d, y + Math.sin(a) * d * 0.85, 2.5, wrath ? 0x4a3a52 : 0x8d6e63, 380);
+      }
+    });
     // The chief jumps: he glides to the mark while rising and falling
     this.room.onMessage("chiefleap", ({ id, x, y, ms }) => {
       const e = this.entities.get(id);

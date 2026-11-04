@@ -29,4 +29,5 @@ export const LOOT: Record<MobKind, LootDef> = {
   skeletonmage: { gold: [6, 14], potionChance: 0.35 },
   necromancer: { gold: [40, 80], potionChance: 1 },
   banditchief: { gold: [90, 160], potionChance: 1 },
+  hollowking: { gold: [400, 600], potionChance: 1 },
 };

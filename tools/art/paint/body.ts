@@ -927,9 +927,10 @@ function weapon(c: C2, r: Rig) {
   const glowAlong = (t0: number, t1: number, col: number) => { for (let t = t0; t <= t1; t += 1.2) glow(c, at(t)[0], at(t)[1], 1.5, col, 0.35); };
   switch (L.weapon) {
     case "sword": {
-      const len = 10.5 * W.long;
+      const big = L.bladeLen ?? 1, len = 10.5 * W.long * big;
       if (W.glowing) glowAlong(1.5, len, W.accent);
-      blade(c, h, u, n, 1.0, len, 1.05, W.blade);
+      blade(c, h, u, n, 1.0, len, 1.05 * Math.sqrt(big), W.blade);
+      if (big > 1) { line(c, [at(1.6), at(len * 0.8)], sh(W.blade, 0.4), 0.22, 0.9); glowAlong(len * 0.35, len * 0.75, L.fx); } // fuller, and the Gloam's light along it
       line(c, [at(1.3), at(len * 0.75)], sh(W.blade, 0.55), 0.18, 0.8);
       metal(c, poly([at(0.75, -1.7), at(0.75, 1.7), at(1.25, 1.7), at(1.25, -1.7)]), C(L.buckle ?? 0xd9a93a), at(0.5, -1.7), at(1.5, 1.7), 0.5);
       limb(c, at(-1.6), at(0.6), 0.6, 0.6, C(0x4a2a14));
