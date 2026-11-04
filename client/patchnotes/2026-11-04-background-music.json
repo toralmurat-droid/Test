@@ -1,0 +1,9 @@
+{
+  "date": "2026-11-04",
+  "pr": 184,
+  "title": "Background music",
+  "changes": [
+    "The game now has looping background music with fades.",
+    "Volume and mute are saved per player."
+  ]
+}

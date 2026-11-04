@@ -1,0 +1,8 @@
+{
+  "date": "2026-11-03",
+  "pr": 180,
+  "title": "Fixed cut-off props",
+  "changes": [
+    "The well and other props no longer get cut off at their edges."
+  ]
+}

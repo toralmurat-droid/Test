@@ -1,0 +1,10 @@
+{
+  "date": "2026-11-03",
+  "pr": 178,
+  "title": "Player groups",
+  "changes": [
+    "Press P to invite nearby heroes into a group.",
+    "No friendly fire inside a group and XP is shared in the zone.",
+    "Monsters get tougher when you fight as a group."
+  ]
+}

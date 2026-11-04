@@ -1,0 +1,9 @@
+{
+  "date": "2026-11-04",
+  "pr": 186,
+  "title": "Hotkeys pick your skill",
+  "changes": [
+    "Keys 1 to 0 choose your right-click skill (gold frame on the hotbar).",
+    "Each skill aims its own way: on yourself, on the clicked spot or toward it."
+  ]
+}

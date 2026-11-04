@@ -37,6 +37,10 @@ jobs:
             if echo "$runs" | grep -Eq ' (failure|cancelled|timed_out|action_required)$'; then
               echo "A check failed; not merging."; exit 1
             fi
+            # The patch-note check starts on the same event; wait until it exists
+            if ! gh api "repos/$GITHUB_REPOSITORY/commits/$SHA/check-runs" --jq '.check_runs[].name' | grep -qx 'patch-note'; then
+              sleep 10; continue
+            fi
             if ! echo "$runs" | grep -Eq '^(queued|in_progress|waiting|pending|requested)'; then
               echo "All other checks done."; exit 0
             fi

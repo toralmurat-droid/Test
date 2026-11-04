@@ -1,0 +1,10 @@
+{
+  "date": "2026-11-03",
+  "pr": 182,
+  "title": "Point-and-click controls",
+  "changes": [
+    "Left-click the ground to walk there, hold to keep walking.",
+    "Left-click a monster to walk up and attack it. Right-click casts your active skill.",
+    "WASD and Space still work."
+  ]
+}

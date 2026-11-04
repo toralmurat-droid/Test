@@ -1,0 +1,8 @@
+{
+  "date": "2026-11-03",
+  "pr": 171,
+  "title": "Blobs merge sooner",
+  "changes": [
+    "Blobs now merge into bigger blobs from level 4."
+  ]
+}
