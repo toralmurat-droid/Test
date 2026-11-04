@@ -1,4 +1,5 @@
 import Phaser from "phaser";
+import { quake } from "./camfx";
 import { ISO } from "./isoflag";
 import { AreaLook, FxStyle, skillById, SkillDef } from "../../shared/skills";
 import { paintSigil, ICON } from "./skillArt";
@@ -310,7 +311,7 @@ export class SkillFx {
         for (let k = 0; k < 3; k++) this.scene.time.delayedCall(k * 90, () => this.ring(ev.x, ev.y, ev.r * (0.6 + k * 0.25), style, Math.round(26 * tier), { life: 380, up: 6 }));
         this.ring(ev.x, ev.y, ev.r * 0.7, "earth", 18, { life: 500, add: false });
         if (e) { this.glow(ev.x, ev.y, e.top * 0.7, 16 * tier, pal[1], 400, 0.8); this.flashSprite(e, pal[1]); }
-        if (near) this.scene.cameras.main.shake(140, 0.003 * tier);
+        if (near) quake(this.scene, 140, 0.003 * tier);
         break;
       }
       case "buff": {
@@ -339,7 +340,7 @@ export class SkillFx {
         this.burst(ev.fx, ev.fy, e.top * 0.5, "steel", 10, 140, 250);
         if (ev.x !== ev.fx || ev.y !== ev.fy) for (let i = 0; i < 4; i++) this.ghost(e, ev.fx + (ev.x - ev.fx) * i / 4, ev.fy + (ev.y - ev.fy) * i / 4, pal[2], 0.4);
         if (ev.tx !== undefined) this.slash(ev.tx, ev.ty, 18, style, Math.atan2(ev.ty - ev.y, ev.tx - ev.x), 2.8);
-        if (near) this.scene.cameras.main.shake(90, 0.004);
+        if (near) quake(this.scene, 90, 0.004);
         break;
       }
       case "chain": {
@@ -357,7 +358,7 @@ export class SkillFx {
           this.bolt(ev.x2 + rnd(-6, 6), ev.y2, 140, ev.x2, ev.y2, 0, PALETTE.lightning, 2, 200);
           this.glow(ev.x2, ev.y2, 2, 26, 0xb3ecff, 260, 0.9, true);
           this.burst(ev.x2, ev.y2, 2, "lightning", 14, 80, 300);
-          if (this.nearMe(ev.x2, ev.y2)) this.scene.cameras.main.shake(70, 0.003);
+          if (this.nearMe(ev.x2, ev.y2)) quake(this.scene, 70, 0.003);
         } else {
           const z1 = e ? e.top * 0.7 : 14;
           this.bolt(ev.x1, ev.y1, z1, ev.x2, ev.y2, 10, PALETTE.lightning, 1);
@@ -453,7 +454,7 @@ export class SkillFx {
     const look: AreaLook = ev.look;
     const { x, y, r } = ev;
     const pal = PALETTE[style];
-    const shake = (ms: number, k: number) => { if (near) this.scene.cameras.main.shake(ms, k); };
+    const shake = (ms: number, k: number) => { if (near) quake(this.scene, ms, k); };
     switch (look) {
       case "slash": {
         const e = this.ent(ev.id);
@@ -503,7 +504,7 @@ export class SkillFx {
           this.ring(x, y, r * 1.2, "earth", 40, { life: 600, add: false, size: 2 });
           this.pillar(x, y, style, 160, 14, 600);
           this.glow(x, y, 4, r * 1.2, pal[1], 600, 0.6, true);
-          if (near) { this.scene.cameras.main.shake(320, 0.012); }
+          if (near) { quake(this.scene, 320, 0.012); }
         });
         break;
       }
@@ -515,7 +516,7 @@ export class SkillFx {
           this.burst(x, y, 2, style === "earth" ? "earth" : "fire", big ? 50 : 14, big ? 140 : 80, 700, 2);
           this.glow(x, y, 4, r * (big ? 1.8 : 1.2), 0xff9f1c, 500, 1, true);
           this.cracks(x, y, r * 0.8, 0x2b1d12);
-          if (near) this.scene.cameras.main.shake(big ? 300 : 120, big ? 0.012 : 0.004);
+          if (near) quake(this.scene, big ? 300 : 120, big ? 0.012 : 0.004);
         }, style === "earth" ? "rock" : "orb");
         break;
       }
@@ -1045,7 +1046,7 @@ export class SkillFx {
       this.glow(x, y, 4, r * 1.3, PALETTE[style][2], 450, 0.9, true);
       if (style === "fire") this.smoke(x, y, r * 0.5, big ? 10 : 4);
       if (kind === "net") this.ring(x, y, r, "earth", 12, { life: 300, add: false });
-      if (big && this.nearMe(x, y)) this.scene.cameras.main.shake(220, 0.008);
+      if (big && this.nearMe(x, y)) quake(this.scene, 220, 0.008);
     } else this.burst(x, y, 4, style, 8, 60, 300);
     return true;
   }
@@ -1077,7 +1078,7 @@ export class SkillFx {
           this.p(x, y, 4, pick([0xe8e2d0, 0xd8d0b8, 0x8f887a]), { vx: Math.cos(a) * sp, vy: Math.sin(a) * sp * 0.6, vz: rnd(20, 50), g: 170, drag: 2, life: rnd(500, 800), size: pick([1, 2]), add: false });
         }
         this.burst(x, y, 1, "earth", 8, 45, 380, 1);
-        if (this.nearMe(x, y)) this.scene.cameras.main.shake(120, 0.004);
+        if (this.nearMe(x, y)) quake(this.scene, 120, 0.004);
         break;
       case "magicbolt": this.burst(x, y, 3, "frost", 12, 60, 380); this.glow(x, y, 3, 12, 0x4cc9f0, 260); break;
       default: // shadowbolt

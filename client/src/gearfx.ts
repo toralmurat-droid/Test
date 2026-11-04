@@ -133,11 +133,10 @@ export class GearFx {
     if (!ranged) this.fx.slash(x + ax * 4, y + ay * 4, 12 + 2 * wr, style, Math.atan2(ISO ? (ax + ay) / 2 : ay, ISO ? ax - ay : ax), 2 + 0.3 * wr);
     if (wr >= 3) this.fx.burst(hx, hy, top * 0.45, style, 4 + 3 * (wr - 2), 50 + 15 * wr, 380);
     if (wr >= 4 && step === 2) {
-      // Finisher: shockwave ring, a pillar of light and a flash
+      // Finisher: shockwave ring and a pillar of light (no screen flash: it washed out the fight)
       this.fx.ring(x, y, 34, style, 26, { up: 26, life: 460, size: 2 });
       this.fx.pillar(x, y, style, 70, 6, 420);
       this.fx.glow(x, y, top * 0.5, 40, pal[1], 380, 0.9);
-      if (mine) e.sprite.scene.cameras.main.flash(90, 255, 240, 200, false);
     }
   }
 }
