@@ -10,7 +10,7 @@ import { nextSize, potionAmount, PotionKind, potionName, POTION_SIZES, total, un
 import { GROUND, areaAt, isSafeZone } from "../../shared/map";
 import { heroPoise, meleeReach, mobBody } from "../../shared/combat";
 import { moveStep } from "../../shared/movement";
-import { levelsAt, SPAWN_ZONES, zoneAt } from "../../shared/spawns";
+import { SPAWN_ZONES, zoneAt } from "../../shared/spawns";
 import { musicCombat, setMusicZone } from "./music";
 import { bindSfx, play as playSfx, sfxFrame } from "./sfx";
 import { attackMult, cooldownMult, critChance, heroSpeed, STATS, magicMult, STAT_KINDS, STAT_NAMES, StatKind, statPoints, HP_PER_STR } from "../../shared/powers";
@@ -2494,15 +2494,11 @@ export class TownScene extends Phaser.Scene {
       const hb = document.getElementById("herobadge")!;
       hb.hidden = freeStats <= 0;
       hb.textContent = String(freeStats);
-      // Monster zone status: how many are alive
+      // Zone under the hero drives the music
       const tx = meEnt.sprite.x / TILE, ty = meEnt.sprite.y / TILE;
       const zdef = zoneAt(Math.floor(tx), Math.floor(ty));
       setMusicZone(zdef?.name, zdef?.mobs, this.areaName);
       sfxFrame(this.me, this.entities as any);
-      const zone = zdef && (this.room.state as any).zones?.get(zdef.name);
-      document.getElementById("zone")!.innerHTML = zone
-        ? `${icon("swords")}${zone.name} (Lv ${levelsAt(zdef!, tx, ty).join("-")}): ${zone.alive}/${zone.cap} monsters`
-        : "";
       const cls = mine.cls as ClassKind;
       const cdm = cooldownMult(cls, { sta: mine.sta, str: mine.str, mag: mine.mag, dex: mine.dex ?? 0 }, mine.talents);
       // Top-left bars (resourceBars.ts): red HP, blue Mana (spells, shared/mana.ts), gold Stamina (dodge roll and physical skills), green XP
