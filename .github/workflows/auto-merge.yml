@@ -1,6 +1,6 @@
 # Automatically merges pull requests opened by Claude threads.
 # Only PRs from claude/* branches in THIS repo (never forks) into the
-# default branch are merged. Drafts are skipped. If the PR has conflicts
+# default branch are merged. Drafts are skipped (checked live). If the PR has conflicts
 # or a check fails, nothing is merged; it retries on the next push.
 name: Auto-merge Claude PRs
 
@@ -22,11 +22,24 @@ jobs:
   merge:
     if: >-
       github.event.pull_request.head.repo.full_name == github.repository &&
-      startsWith(github.event.pull_request.head.ref, 'claude/') &&
-      github.event.pull_request.draft == false
+      startsWith(github.event.pull_request.head.ref, 'claude/')
     runs-on: ubuntu-latest
     steps:
+      # Draft state is read live, not from the event: a push sent right next
+      # to "ready for review" can cancel the real run (cancel-in-progress),
+      # and an event-time draft check would then skip and leave the PR stuck.
+      - name: Skip drafts
+        id: draft
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          d=$(gh pr view "$PR" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft)
+          echo "draft=$d" >> "$GITHUB_OUTPUT"
+          [ "$d" = "true" ] && echo "PR is a draft; not merging." || true
+
       - name: Wait for other checks to pass
+        if: steps.draft.outputs.draft != 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SHA: ${{ github.event.pull_request.head.sha }}
@@ -49,6 +62,7 @@ jobs:
           echo "Timed out waiting for checks."; exit 1
 
       - name: Merge the PR
+        if: steps.draft.outputs.draft != 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR: ${{ github.event.pull_request.number }}
