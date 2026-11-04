@@ -367,7 +367,7 @@ html, body { margin: 0; height: 100%; background: #1b1b24; color: #eee; font: 14
 #hotbar .slot.active::after { content: "R"; position: absolute; top: 1px; right: 3px; font-weight: bold; font-size: 10px; color: #ffd166; }
 /* Background music (music.ts): button in the menu bar + small volume panel, in the pixel font */
 #musicbtn, #musicpanel, #musicpanel button { font-family: 'Pixelify Sans', monospace; }
-#musicpanel { position: absolute; right: 12px; bottom: 52px; z-index: 9; width: 220px; padding: 8px 10px; pointer-events: auto;
+#musicpanel { position: absolute; right: 12px; bottom: 52px; z-index: 9; width: 230px; padding: 8px 10px; pointer-events: auto;
   background: rgba(30,30,46,.95); border: 2px solid #555a7a; color: #eee; }
 #musicpanel[hidden] { display: none; }
 #musicpanel .mtitle { font-weight: bold; color: #ffd166; margin-bottom: 4px; }
@@ -380,3 +380,5 @@ html, body { margin: 0; height: 100%; background: #1b1b24; color: #eee; font: 14
 #musicpanel .mtrack { text-align: left; color: #eee; font-weight: normal; }
 #musicpanel .mtrack.sel { color: #ffd166; border-color: #ffd166; font-weight: bold; }
 #musicpanel .mtrack.sel::before { content: "▶ "; }
+#musicpanel #musicswell { width: 100%; margin-top: 6px; font-size: 12px; color: #eee; font-weight: normal; }
+#musicpanel #musicswell[hidden] { display: none; }
