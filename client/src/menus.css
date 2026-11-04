@@ -5,7 +5,7 @@
 /* ---------- Pixel icons ---------- */
 .pxi { width: 20px; height: 20px; image-rendering: pixelated; vertical-align: -5px; margin-right: 5px; flex: none; }
 small .pxi, .help .pxi, #slotpick small .pxi, #treeinfo .istat .pxi { width: 14px; height: 14px; vertical-align: -3px; margin-right: 3px; }
-#stats .pxi, #zone .pxi { width: 14px; height: 14px; vertical-align: -3px; margin-right: 3px; }
+#stats .pxi { width: 14px; height: 14px; vertical-align: -3px; margin-right: 3px; }
 .sh-row button .pxi, .sh-gold .pxi, .ql-reward .pxi { width: 16px; height: 16px; vertical-align: -4px; margin: 0 0 0 3px; }
 .ql-reward .pxi { margin: 0 4px 0 0; }
 .ql-steps .ic .pxi { width: 14px; height: 14px; vertical-align: -2px; margin: 0; }
