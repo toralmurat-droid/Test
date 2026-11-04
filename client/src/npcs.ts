@@ -15,16 +15,16 @@ import type { MapMarker } from "./minimap";
 import { QuestLog } from "./questlog";
 import { SHOPS, sellPrice } from "../../shared/shops";
 import { gearDef, gearName, itemLevel, itemText, TIER_NAMES } from "../../shared/gear";
-import { MAX_POTIONS } from "../../shared/items";
 import { CHAR_GROW, CHAR_SCALE, CHAR_ORIGIN, CharacterName, playCharAnim } from "./artAssets";
 import { iconCanvas, itemColor, rarityLabel } from "./gear";
-import { itemTexture } from "./textures";
-import { MAX_MANA_POTIONS, unpackMana } from "../../shared/mana";
+import { itemTexture, potionTex } from "./textures";
+import { potionAmount, potionName, slotsAfter, total, unpackPotions } from "../../shared/potions";
+import { BAG_SIZE } from "../../shared/gear";
 import { isoAnchor } from "./iso";
 
 type Me = { x: number; y: number } | undefined;
 /** The local player's synced state (only the fields NPCs care about). */
-type QuestState = (Quester & { gold?: number; potions?: number; mp?: number; cls?: string; bag?: Iterable<string> }) | undefined;
+type QuestState = (Quester & { gold?: number; potions?: number; cls?: string; bag?: Iterable<string> }) | undefined;
 
 /**
  * Village NPCs (shared/npcs.ts): sprites by the bonfire, "!"/"?" quest markers, an "E Talk" prompt when close,
@@ -182,24 +182,21 @@ export class NpcLayer {
   /** Shop page: stock to buy, and (for traders who buy) the player's matching bag items to sell. */
   private renderShop(n: Npc, q: QuestState) {
     const shop = SHOPS[n.shop!];
-    const gold = q?.gold ?? 0, potions = q?.potions ?? 0, cls = q?.cls, mpotions = unpackMana(q?.mp).potions;
+    const gold = q?.gold ?? 0, potions = q?.potions ?? 0, cls = q?.cls, pots = unpackPotions(potions);
     const bag = [...(q?.bag ?? [])];
-    const key = JSON.stringify([n.id, gold, potions, mpotions, bag, this.shopMsg, q?.questId, q?.questStage, q?.boneId, q?.boneStage, q?.redId, q?.redStage, q?.tutId, q?.tutStage]);
+    const key = JSON.stringify([n.id, gold, potions, bag, this.shopMsg, q?.questId, q?.questStage, q?.boneId, q?.boneStage, q?.redId, q?.redStage, q?.tutId, q?.tutStage]);
     if (key === this.stage) return;
     this.stage = key;
     const row = (icon: string, name: string, color: string, desc: string, btn: string, cls2: string, i: number, off: boolean) =>
       `<div class="sh-row"><span class="sh-icon" data-icon="${icon}"></span><span class="sh-info"><b style="color:${color}">${name}</b><small>${desc}</small></span>` +
       `<button class="${cls2}" data-i="${i}"${off ? " disabled" : ""}>${btn}</button></div>`;
     const buy = shop.stock.map((e, i) => {
-      if (e.item === "potion") {
-        const qty = e.qty ?? 1;
-        return row("potion", qty > 1 ? `${qty} Healing Potions` : "Healing Potion", "#ff8a8a", `You carry ${potions}/${MAX_POTIONS} · drink with Q`,
-          `${e.price}${pxIcon("coin")}`, "sh-buy", i, gold < e.price || potions + qty > MAX_POTIONS);
-      }
-      if (e.item === "mpotion") {
-        const qty = e.qty ?? 1;
-        return row("mpotion", qty > 1 ? `${qty} Mana Potions` : "Mana Potion", "#8ab4ff", `You carry ${mpotions}/${MAX_MANA_POTIONS} · drink with V`,
-          `${e.price}${pxIcon("coin")}`, "sh-buy", i, gold < e.price || mpotions + qty > MAX_MANA_POTIONS);
+      if (e.item === "potion" || e.item === "mpotion") {
+        const qty = e.qty ?? 1, size = e.size ?? 0, mana = e.item === "mpotion";
+        const room = bag.length + slotsAfter(pots, e.item, size, qty) <= BAG_SIZE;
+        return row(`${e.item}:${size}`, `${qty > 1 ? `${qty} × ` : ""}${potionName(e.item, size)}`, mana ? "#8ab4ff" : "#ff8a8a",
+          `${mana ? "+" : "Heals "}${potionAmount(e.item, size)}${mana ? " mana" : " HP"} · you carry ${total(pots[e.item])} · ${mana ? "V" : "Q"} · ${room ? "10 per bag slot" : "no room in your bag"}`,
+          `${e.price}${pxIcon("coin")}`, "sh-buy", i, gold < e.price || !room);
       }
       const d = gearDef(e.item)!;
       return row(e.item, gearName(e.item, cls), itemColor(e.item), `${rarityLabel(e.item)}${TIER_NAMES[d.tier]} · Lv ${itemLevel(e.item)} · ${itemText(e.item)}`, `${e.price}${pxIcon("coin")}`, "sh-buy", i, gold < e.price);
@@ -220,7 +217,7 @@ export class NpcLayer {
     if (talk) talk.onclick = () => { this.trading = false; this.stage = -1; };
     for (const el of this.dialog.querySelectorAll<HTMLElement>(".sh-icon")) {
       const id = el.dataset.icon!;
-      el.appendChild(id === "potion" || id === "mpotion" ? this.potionIcon(id) : iconCanvas(this.scene, id, 32));
+      el.appendChild(id.startsWith("potion:") || id.startsWith("mpotion:") ? this.potionIcon(potionTex(id.split(":")[0], Number(id.split(":")[1]))) : iconCanvas(this.scene, id, 32));
     }
     for (const b of this.dialog.querySelectorAll<HTMLButtonElement>(".sh-buy, .sh-sell")) {
       b.onclick = () => { this.send(b.classList.contains("sh-buy") ? "buy" : "sell", { i: Number(b.dataset.i) }); b.disabled = true; };

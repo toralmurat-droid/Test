@@ -1,6 +1,5 @@
 import { gearDef, itemLevel, itemRarity, withLevel } from "./gear";
-import { MAX_POTIONS } from "./items";
-import { MANA_POTION_PRICE } from "./mana";
+import { POTION_SIZES } from "./potions";
 
 /**
  * Village shops. A shop is attached to an NPC (shared/npcs.ts) by id. The server checks distance, gold and bag space.
@@ -11,6 +10,7 @@ export interface ShopEntry {
   /** gear id, "potion" (healing) or "mpotion" (mana) */
   item: string;
   qty?: number; // potions per purchase
+  size?: number; // potion size (shared/potions.ts POTION_SIZES)
   price: number;
 }
 
@@ -23,7 +23,6 @@ export interface Shop {
 
 export const GEAR_PRICE = [0, 60, 180, 450];
 export const SELL_RATE = 0.4;
-export const POTION_PRICE = 20;
 
 /** Price grows 12% per item level above 1. */
 export const PRICE_PER_LEVEL = 0.12;
@@ -55,13 +54,12 @@ export const SHOPS: Record<string, Shop> = {
   witch: {
     greeting: "Hehehe... potions, freshly brewed. Red for your blood, blue for your magic. Bubbling, mostly.",
     stock: [
-      { item: "potion", qty: 1, price: POTION_PRICE },
-      { item: "potion", qty: 3, price: Math.round(POTION_PRICE * 3 * 0.85) },
-      { item: "mpotion", qty: 1, price: MANA_POTION_PRICE },
-      { item: "mpotion", qty: 3, price: Math.round(MANA_POTION_PRICE * 3 * 0.85) },
-      ...weapons(["ww_ash", "ww_bone"]), // wands: magic bolts for any hero
+      // Minor and Medium flasks; Greater ones are only found out in the world
+      ...[0, 1].flatMap((size) => (["potion", "mpotion"] as const).flatMap((item) => [
+        { item, size, qty: 1, price: POTION_SIZES[size].price },
+        { item, size, qty: 5, price: Math.round(POTION_SIZES[size].price * 5 * 0.85) },
+      ])),
     ],
   },
 };
 
-export { MAX_POTIONS };

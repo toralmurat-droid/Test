@@ -95,6 +95,15 @@ const ITEM_ART: Record<string, { rows: string[]; pal: Record<string, number> }> 
   // Mana potion (shared/mana.ts): same flask, deep blue
   mpotion: { rows: ["...WW...", "...GG...", "..GRRG..", ".GRrRRG.", ".GRRRRG.", ".GRRRRG.", "..GGGG..", "........"],
     pal: { W: 0x8d6e63, G: 0xcfe8ff, R: 0x2f6bff, r: 0xa9c8ff } },
+  // Bigger flasks (shared/potions.ts sizes): Medium is a round flask, Greater a wide one with a gold band
+  potion1: { rows: ["...WW...", "...GG...", ".GRRRRG.", "GRrRRRRG", "GRRRRRRG", "GRRRRRRG", ".GRRRRG.", "..GGGG.."],
+    pal: { W: 0x8d6e63, G: 0xcfe8ff, R: 0xe63946, r: 0xffb3b3 } },
+  potion2: { rows: ["..YWWY..", "...GG...", ".GRRRRG.", "GRrrRRRG", "GRrRRRRG", "GRRRRRRG", "YGRRRRGY", ".YGGGGY."],
+    pal: { W: 0x8d6e63, G: 0xcfe8ff, R: 0xc1121f, r: 0xffb3b3, Y: 0xffc93c } },
+  mpotion1: { rows: ["...WW...", "...GG...", ".GRRRRG.", "GRrRRRRG", "GRRRRRRG", "GRRRRRRG", ".GRRRRG.", "..GGGG.."],
+    pal: { W: 0x8d6e63, G: 0xcfe8ff, R: 0x2f6bff, r: 0xa9c8ff } },
+  mpotion2: { rows: ["..YWWY..", "...GG...", ".GRRRRG.", "GRrrRRRG", "GRrRRRRG", "GRRRRRRG", "YGRRRRGY", ".YGGGGY."],
+    pal: { W: 0x8d6e63, G: 0xcfe8ff, R: 0x1f4fd0, r: 0xa9c8ff, Y: 0xffc93c } },
   // Quest drops (shared/quests.ts QUEST_ITEMS)
   q_jelly: { rows: ["........", "...GG...", "..GLGG..", ".GLGGGG.", ".GGGGGD.", "GGGGGGDD", ".GGDDDD.", "........"],
     pal: { G: 0x7bd36b, L: 0xd6ffcc, D: 0x3f9a3a } },
@@ -105,6 +114,9 @@ const ITEM_ART: Record<string, { rows: string[]; pal: Record<string, number> }> 
   q_cod: { rows: ["........", "........", ".T..SSS.", "TTSSLSSE", ".TSSSSSS", "TTSDDDS.", ".T......", "........"],
     pal: { T: 0x8a6a3a, S: 0xc9b48a, L: 0xf2ead2, D: 0x8f7a52, E: 0x2a2018 } },
 };
+
+/** Texture kind of a potion flask by size: "potion", "potion1", "potion2" (and "mpotion"...). */
+export const potionTex = (kind: string, size: number) => (size > 0 ? `${kind}${size}` : kind);
 
 /** Ground item texture by `Item.kind` (single frame). */
 export function itemTexture(scene: Phaser.Scene, kind: string): string {
