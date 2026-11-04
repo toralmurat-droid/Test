@@ -8,6 +8,7 @@ import { heroPoise } from "../../shared/combat";
 import { moveStep } from "../../shared/movement";
 import { levelsAt, SPAWN_ZONES, zoneAt } from "../../shared/spawns";
 import { musicCombat, setMusicZone } from "./music";
+import { bindSfx, sfxFrame } from "./sfx";
 import { attackMult, cooldownMult, critChance, heroSpeed, STATS, magicMult, STAT_KINDS, STAT_NAMES, StatKind, statPoints, HP_PER_STR } from "../../shared/powers";
 import { pointRange, skillOf, skillTarget, STACK_NAME, MAX_STACKS, talentBonus } from "../../shared/skills";
 import { SkillFx } from "./skillfx";
@@ -783,6 +784,7 @@ export class TownScene extends Phaser.Scene {
     });
     this.room.onMessage("swing", ({ id, step, variant, ax, ay }) => this.showSwing(id, step ?? 0, variant ?? 0, ax, ay));
     this.room.onMessage("sfx", (ev) => this.onSkillFx(ev));
+    bindSfx(this.room, () => this.me, this.entities as any); // sound effects (client/src/sfx.ts)
     this.room.onMessage("boom", ({ x, y, r, kind }) => this.fx.impact(x, y, kind, r) ||
       (kind === "arrow" || kind === "stone" || kind === "knife" || kind === "bolt" ? this.burst(x, y, 3, 0xd7ccc8, 150)
       : kind === "magicbolt" || kind === "shadowbolt" ? this.burst(x, y, kind === "shadowbolt" ? 5 : 3, kind === "shadowbolt" ? 0x7dff6a : 0x7fe7ff, 220)
@@ -2086,6 +2088,7 @@ export class TownScene extends Phaser.Scene {
       const tx = meEnt.sprite.x / TILE, ty = meEnt.sprite.y / TILE;
       const zdef = zoneAt(Math.floor(tx), Math.floor(ty));
       setMusicZone(zdef?.name, zdef?.mobs, this.areaName);
+      sfxFrame(this.me, this.entities as any);
       const zone = zdef && (this.room.state as any).zones?.get(zdef.name);
       document.getElementById("zone")!.textContent = zone
         ? `⚔ ${zone.name} (Lv ${levelsAt(zdef!, tx, ty).join("-")}): ${zone.alive}/${zone.cap} monsters`
