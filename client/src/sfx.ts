@@ -7,7 +7,7 @@
  *   follow where the hero stands. The village crowd/music lives in music.ts, not here.
  * - Footsteps for our hero (by ground: grass, stone, wood, sand) and heavy steps of big monsters.
  *
- * Volume + mute: a "Sound effects" slider added to the ♪ Music menu, remembered per player
+ * Volume + mute: a "Sound effects" slider added to the Music & sound panel (Esc game menu), remembered per player
  * (localStorage "sfx:<name>"). Starts at login (the Play click), or the next click / key press if the browser waits.
  */
 import { MAP_H, MAP_W, TILE } from "../../shared/constants";
