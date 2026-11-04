@@ -1,0 +1,8 @@
+{
+  "date": "2026-11-04",
+  "title": "Shift + click to attack in place",
+  "changes": [
+    "Hold Shift and left-click to attack right where you stand, toward the mouse, without walking. Hold the mouse button to keep attacking.",
+    "The dodge roll is now on F only (Shift no longer rolls)."
+  ]
+}
