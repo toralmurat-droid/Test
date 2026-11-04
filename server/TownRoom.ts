@@ -14,7 +14,7 @@ import { attackMult, cooldownMult, critChance, heroSpeed, magicMult, maxHpFromSt
 import { activeSkills, canLearn, classSkills, cleanRanks, MAX_RANK, skillLearned, skillOf, talentBonus, talentMult, talentReduce } from "../shared/skills";
 import {
   afterHit, atkSpeedMult, blocking, buffLifesteal, buffRegen, castSkill, ccImmune, charging, counterHit, dealtMult, FieldInst, newRuntime,
-  shotEnd, shotHit, shotPulse, ShotSpec, SkillHost, speedMult, statusOf, takenMult, tickField, tickUnit, Unit,
+  imbueOf, shotEnd, shotHit, shotPulse, ShotSpec, SkillHost, speedMult, statusOf, takenMult, tickField, tickUnit, Unit,
 } from "../shared/skillEngine";
 import {
   ITEM_LIFETIME_MS, ItemKind, LOOT, MAX_POTIONS, PICKUP_RADIUS, POTION_COOLDOWN_MS, POTION_HEAL, PVP_GOLD_DROP,
@@ -252,6 +252,7 @@ export class Projectile extends Schema {
   @type("string") owner = "";
   @type("number") size = 1; // visual scale (combo finisher fireballs are bigger)
   @type("string") kind = "fireball"; // "fireball" | "arrow" (client picks the visual)
+  @type("string") imb = ""; // FxStyle of the enchantment it carries (Fire Arrows: "fire"), "" = none
 
   knockback = 1;
   basic = false; // a basic attack (builds stacks, carries enchantments)
@@ -2298,7 +2299,7 @@ export class TownRoom extends Room<TownState> {
   }
 
   private explode(s: Projectile, id: string, _directHit = "") {
-    this.broadcast("boom", { x: s.x, y: s.y, r: s.spec?.explode ?? 0, kind: s.kind });
+    this.broadcast("boom", { x: s.x, y: s.y, r: s.spec?.explode ?? 0, kind: s.kind, imb: s.imb || undefined });
     this.state.projectiles.delete(id);
     if (s.spec) shotEnd(this.host, s.spec, s.x, s.y);
   }
@@ -3451,6 +3452,7 @@ export class TownRoom extends Room<TownState> {
     s.speed = def.speed; s.radius = def.radius * scale;
     s.range = def.range * gearReachMult(this.equipped(a));
     s.damage = dmg; s.knockback = knockback; s.basic = true;
+    s.imb = imbueOf(a as unknown as Unit, Date.now())?.style ?? ""; // enchanted arrows look the part
     this.state.projectiles.set(`s${++this.shotSeq}`, s);
   }
 
@@ -3555,6 +3557,7 @@ export class TownRoom extends Room<TownState> {
       s.dir = Math.abs(spec.vx) > Math.abs(spec.vy) ? (spec.vx > 0 ? "right" : "left") : spec.vy > 0 ? "down" : "up";
       s.kind = spec.kind; s.size = spec.size; s.speed = spec.speed; s.range = spec.range; s.radius = spec.radius;
       s.damage = spec.dmg; s.knockback = spec.kb ?? 1; s.pierce = spec.pierce; s.spec = spec;
+      s.imb = spec.imb?.style ?? "";
       this.state.projectiles.set(`s${++this.shotSeq}`, s);
     },
     addField: (inst) => {

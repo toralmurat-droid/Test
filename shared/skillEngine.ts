@@ -39,18 +39,26 @@ export const newRuntime = (): SkillRuntime => ({
 
 export interface Unit { x: number; y: number; dead: boolean; level: number; sk: SkillRuntime; cls?: ClassKind; talents?: Ranks; energy?: number; mana?: number; hp?: number; maxHp?: number }
 
-export interface HitOpts extends HitEffects { skill?: boolean; basic?: boolean; dot?: boolean; thorn?: boolean; crit?: boolean }
+/**
+ * An enchantment that rides along on a skill (Fire Arrows + Volley = a volley of fire arrows): the enchant skill's id,
+ * its look (FxStyle) and the effects its hits add. Taken when the skill goes off and kept by its shots and ground effects.
+ */
+export interface Imbue { id: string; style: string; fx: HitEffects }
+
+export interface HitOpts extends HitEffects { skill?: boolean; basic?: boolean; dot?: boolean; thorn?: boolean; crit?: boolean; imb?: Imbue }
 
 export interface ShotSpec extends HitEffects {
   owner: string; skill: string; x: number; y: number; vx: number; vy: number;
   kind: string; speed: number; range: number; radius: number; size: number; dmg: number;
   pierce: number; explode: number; chain: number; field?: FieldDef; rank: number; power: number;
   pulse?: ShotDef["pulse"]; pulses?: number; // pulses so far (turns the shard ring)
+  imb?: Imbue; // enchantment active when it was shot
 }
 
 export interface FieldInst {
   owner: string; skill: string; def: FieldDef; rank: number; power: number;
   x: number; y: number; until: number; nextTick: number;
+  imb?: Imbue; // enchantment active when it was cast (traps, sentries)
 }
 
 export interface SkillHost {
@@ -94,6 +102,18 @@ const effects = (e: HitEffects, t: number): HitEffects => ({
   stunMs: e.stunMs && e.stunMs * t, slowMs: e.slowMs && e.slowMs * t, kb: e.kb,
   burn: e.burn && [e.burn[0], e.burn[1] * t], markMs: e.markMs && e.markMs * t, weakMs: e.weakMs && e.weakMs * t, fearMs: e.fearMs && e.fearMs * t,
 });
+
+/**
+ * The enchantment (buff with onHit: Fire Arrows, Holy Blade, Poison Blade, Blade Flurry) that skills cast now carry,
+ * the latest one if several are up. Skills combine with it: their hits get its effects and their visuals its colour.
+ */
+export function imbueOf(u: Unit | undefined, now: number): Imbue | undefined {
+  if (!u?.cls) return undefined;
+  let best: ActiveBuff | undefined;
+  for (const b of u.sk.buffs) if (b.b.onHit && b.until > now) best = b; // addBuff pushes, so the last one is the newest
+  if (!best) return undefined;
+  return { id: best.id, style: skillOf(u.cls, best.id)?.style ?? "fire", fx: effects(best.b.onHit!, rankTime(best.rank)) };
+}
 
 function baseDmg(h: SkillHost, id: string, a: { wpn?: number; dmg?: number }): number {
   return (a.wpn ? a.wpn * h.weaponHit(id) : 0) + (a.dmg ? a.dmg * h.magic(id) : 0);
@@ -142,24 +162,26 @@ function release(h: SkillHost, id: string, s: SkillDef, rank: number, power: num
   const t = rankTime(rank);
   const x0 = u.x, y0 = u.y;
   const [ax0, ay0] = h.aim(id);
-  if (s.move) doMove(h, id, s, s.move, power, t, at);
+  // An enchantment that is up rides along on the skill's hits (not on the enchant itself)
+  const imb = s.buff?.onHit ? undefined : imbueOf(u, h.now());
+  if (s.move) doMove(h, id, s, s.move, power, t, at, imb);
   // Several blasts keep their spacing, scaled so the furthest lands on the clicked spot
   const far = Math.max(0, ...(s.areas ?? []).map((a) => a.ahead ?? 0));
   for (const a of s.areas ?? []) {
     const spot = a.atStart ? [x0, y0] as [number, number]
       : at !== undefined && (a.ahead ?? 0) > 0 && !s.move ? [x0 + ax0 * at * (a.ahead! / far), y0 + ay0 * at * (a.ahead! / far)] as [number, number]
       : undefined;
-    area(h, id, s, a, power, t, spot);
+    area(h, id, s, a, power, t, spot, false, imb);
   }
-  if (s.shots) fire(h, id, s.id, s.shots, rank, power, u.x, u.y, h.aim(id));
+  if (s.shots) fire(h, id, s.id, s.shots, rank, power, u.x, u.y, h.aim(id), imb);
   if (s.field) {
     const [ax, ay] = h.aim(id), d = at ?? s.field.ahead ?? 0;
-    h.addField({ owner: id, skill: s.id, def: s.field, rank, power, x: u.x + ax * d, y: u.y + ay * d, until: h.now() + s.field.ms * t, nextTick: h.now() });
+    h.addField({ owner: id, skill: s.id, def: s.field, rank, power, x: u.x + ax * d, y: u.y + ay * d, until: h.now() + s.field.ms * t, nextTick: h.now(), imb });
   }
   if (s.buff) addBuff(h, id, s.id, s.buff, rank, stacks);
   if (s.cry) {
     h.fx({ ev: "cry", id, s: s.id, x: u.x, y: u.y, r: s.cry.r });
-    area(h, id, s, s.cry, power, t, undefined, true);
+    area(h, id, s, s.cry, power, t, undefined, true, imb);
   }
   if (s.counter) {
     u.sk.counter = { until: h.now() + s.counter.ms * t, s, rank, power };
@@ -177,7 +199,7 @@ export function addBuff(h: SkillHost, id: string, skill: string, b: BuffDef, ran
   h.fx({ ev: "buff", id, s: skill, ms: until - h.now() });
 }
 
-function doMove(h: SkillHost, id: string, s: SkillDef, m: MoveDef, power: number, t: number, at?: number) {
+function doMove(h: SkillHost, id: string, s: SkillDef, m: MoveDef, power: number, t: number, at?: number, imb?: Imbue) {
   const u = live(h, id)!;
   const now = h.now();
   const [ax, ay] = h.aim(id);
@@ -187,7 +209,7 @@ function doMove(h: SkillHost, id: string, s: SkillDef, m: MoveDef, power: number
     case "dash": case "leap": {
       const cut = new Set<string>();
       h.move(id, ax, ay, m.kind === "leap" && at !== undefined ? at : m.dist, () => { if (m.path) for (const e of h.enemies(u.x, u.y, 14, id)) cut.add(e); });
-      for (const e of cut) h.hit(id, e, baseDmg(h, id, { wpn: m.path }) * power, [ax, ay], { skill: true, kb: 0.6 });
+      for (const e of cut) h.hit(id, e, baseDmg(h, id, { wpn: m.path }) * power, [ax, ay], { skill: true, kb: 0.6, imb });
       break;
     }
     case "blink": case "back": {
@@ -217,7 +239,7 @@ function doMove(h: SkillHost, id: string, s: SkillDef, m: MoveDef, power: number
           const fx = me.x, fy = me.y;
           behind(h, id, tid);
           h.fx({ ev: "move", id, s: s.id, kind: "blink", fx, fy, x: me.x, y: me.y, i });
-          h.hit(id, tid, baseDmg(h, id, { wpn: m.wpn ?? 1 }) * power, pushFrom(h, me.x, me.y, tid), { skill: true, kb: 0.3 });
+          h.hit(id, tid, baseDmg(h, id, { wpn: m.wpn ?? 1 }) * power, pushFrom(h, me.x, me.y, tid), { skill: true, kb: 0.3, imb });
         });
       }
       return;
@@ -245,7 +267,7 @@ function nearest(h: SkillHost, id: string, x: number, y: number, r: number): str
 }
 
 /** One area hit (and its waves). `at` fixes the centre; otherwise it is ahead of the hero (or on the hero, following them). */
-export function area(h: SkillHost, id: string, s: SkillDef | { id: string }, a: AreaDef, power: number, t: number, at?: [number, number], cry = false) {
+export function area(h: SkillHost, id: string, s: SkillDef | { id: string }, a: AreaDef, power: number, t: number, at?: [number, number], cry = false, imb?: Imbue) {
   const u = h.unit(id);
   if (!u) return;
   const [ax, ay] = h.aim(id);
@@ -259,13 +281,13 @@ export function area(h: SkillHost, id: string, s: SkillDef | { id: string }, a: 
       let [cx, cy] = fixed ?? [me.x, me.y];
       if (a.line) { cx += ax * a.line * i; cy += ay * a.line * i; }
       if (a.scatter) { const ang = Math.random() * Math.PI * 2, d = Math.sqrt(Math.random()) * a.scatter; cx += Math.cos(ang) * d; cy += Math.sin(ang) * d; }
-      if (!cry) h.fx({ ev: "area", id, s: s.id, x: cx, y: cy, r: a.r, look: a.look ?? "burst", i, n: waves });
+      if (!cry) h.fx({ ev: "area", id, s: s.id, x: cx, y: cy, r: a.r, look: a.look ?? "burst", i, n: waves, imb: imb?.style });
       for (const e of h.enemies(cx, cy, a.r, id)) {
         if (a.pull) {
           const tu = h.unit(e);
           if (tu) { const [px, py] = norm(cx - tu.x, cy - tu.y); h.move(e, px, py, Math.min(a.pull, Math.hypot(cx - tu.x, cy - tu.y))); }
         }
-        h.hit(id, e, dmg, pushFrom(h, cx, cy, e), { ...effects(a, t), skill: true, kb: a.kb ?? (dmg > 0 ? 1 : 0) });
+        h.hit(id, e, dmg, pushFrom(h, cx, cy, e), { ...effects(a, t), skill: true, kb: a.kb ?? (dmg > 0 ? 1 : 0), imb });
       }
     };
     const delay = (a.delayMs ?? 0) + i * (a.everyMs ?? 0);
@@ -273,7 +295,7 @@ export function area(h: SkillHost, id: string, s: SkillDef | { id: string }, a: 
   }
 }
 
-function fire(h: SkillHost, id: string, skill: string, d: ShotDef, rank: number, power: number, x: number, y: number, aim: [number, number]) {
+function fire(h: SkillHost, id: string, skill: string, d: ShotDef, rank: number, power: number, x: number, y: number, aim: [number, number], imb?: Imbue) {
   const n = d.n ?? 1;
   const base = Math.atan2(aim[1], aim[0]);
   const t = rankTime(rank);
@@ -287,7 +309,7 @@ function fire(h: SkillHost, id: string, skill: string, d: ShotDef, rank: number,
       owner: id, skill, x: x + vx * 6 - aim[1] * lane, y: y - 4 + vy * 6 + aim[0] * lane, vx, vy,
       kind: d.kind, speed: d.speed, range: d.range, radius: d.radius, size: d.size ?? 1, dmg,
       pierce: d.pierce ?? 0, explode: d.explode ?? 0, chain: d.chain ?? 0, field: d.field, rank, power, pulse: d.pulse,
-      ...effects(d, t),
+      ...effects(d, t), imb,
     });
   }
 }
@@ -297,7 +319,7 @@ function fire(h: SkillHost, id: string, skill: string, d: ShotDef, rank: number,
 /** A skill projectile hits `tid` (the host keeps flying it if it pierces). */
 export function shotHit(h: SkillHost, s: ShotSpec, tid: string) {
   const exploding = s.explode > 0 && s.pierce <= 0;
-  h.hit(s.owner, tid, s.dmg, [s.vx, s.vy], { stunMs: s.stunMs, slowMs: exploding ? undefined : s.slowMs, burn: s.burn, markMs: s.markMs, weakMs: s.weakMs, kb: s.kb ?? 1, skill: true });
+  h.hit(s.owner, tid, s.dmg, [s.vx, s.vy], { stunMs: s.stunMs, slowMs: exploding ? undefined : s.slowMs, burn: s.burn, markMs: s.markMs, weakMs: s.weakMs, kb: s.kb ?? 1, skill: true, imb: s.imb });
   if (s.chain > 0) chain(h, s.owner, tid, s.chain, s.dmg, s);
 }
 
@@ -315,7 +337,7 @@ function chain(h: SkillHost, owner: string, from: string, hops: number, dmg: num
     dmg *= 0.8;
     const n = h.unit(next)!;
     pts.push([n.x, n.y]);
-    h.hit(owner, next, dmg, pushFrom(h, cur.x, cur.y, next), { stunMs: e.stunMs, slowMs: e.slowMs, kb: 0.3, skill: true });
+    h.hit(owner, next, dmg, pushFrom(h, cur.x, cur.y, next), { stunMs: e.stunMs, slowMs: e.slowMs, kb: 0.3, skill: true, imb: (e as ShotSpec).imb });
     cur = n;
   }
   if (pts.length > 1) h.fx({ ev: "chain", id: owner, pts });
@@ -327,22 +349,22 @@ export function shotPulse(h: SkillHost, s: ShotSpec, x: number, y: number) {
   const p = s.pulse;
   if (!p) return;
   const i = s.pulses = (s.pulses ?? 0) + 1;
-  if (p.area) area(h, s.owner, { id: s.skill }, p.area, s.power, rankTime(s.rank), [x, y]);
+  if (p.area) area(h, s.owner, { id: s.skill }, p.area, s.power, rankTime(s.rank), [x, y], false, s.imb);
   if (p.shards) {
     const n = p.shards.n ?? 1;
     const a = Math.atan2(s.vy, s.vx) + (i * (p.turn ?? 0)) * Math.PI / 180;
     // n shots fanned over 360 * (n-1)/n degrees = evenly all around; fire() lifts shots 4 px, so start 4 px lower
-    fire(h, s.owner, s.skill, { ...p.shards, spread: 360 * (n - 1) / n }, s.rank, s.power, x, y + 4, [Math.cos(a), Math.sin(a)]);
+    fire(h, s.owner, s.skill, { ...p.shards, spread: 360 * (n - 1) / n }, s.rank, s.power, x, y + 4, [Math.cos(a), Math.sin(a)], s.imb);
   }
 }
 
 export function shotEnd(h: SkillHost, s: ShotSpec, x: number, y: number) {
   if (s.explode > 0) {
-    area(h, s.owner, { id: s.skill }, { r: s.explode, dmg: 0, slowMs: s.slowMs, burn: s.burn, kb: s.kb, look: "burst" }, 1, 1, [x, y]);
+    area(h, s.owner, { id: s.skill }, { r: s.explode, dmg: 0, slowMs: s.slowMs, burn: s.burn, kb: s.kb, look: "burst" }, 1, 1, [x, y], false, s.imb);
     // the explosion's damage is the projectile's own
-    if (s.dmg > 0) for (const e of h.enemies(x, y, s.explode, s.owner)) h.hit(s.owner, e, s.dmg * 0.6, pushFrom(h, x, y, e), { kb: s.kb ?? 1, skill: true });
+    if (s.dmg > 0) for (const e of h.enemies(x, y, s.explode, s.owner)) h.hit(s.owner, e, s.dmg * 0.6, pushFrom(h, x, y, e), { kb: s.kb ?? 1, skill: true, imb: s.imb });
   }
-  if (s.field) h.addField({ owner: s.owner, skill: s.skill, def: s.field, rank: s.rank, power: s.power, x, y, until: h.now() + s.field.ms * rankTime(s.rank), nextTick: h.now() });
+  if (s.field) h.addField({ owner: s.owner, skill: s.skill, def: s.field, rank: s.rank, power: s.power, x, y, until: h.now() + s.field.ms * rankTime(s.rank), nextTick: h.now(), imb: s.imb });
 }
 
 // ---- Ground effects ----------------------------------------------------------------------------------
@@ -362,7 +384,7 @@ export function tickField(h: SkillHost, f: FieldInst): boolean {
   const inside = h.enemies(f.x, f.y, d.r, f.owner);
   if (d.trap) {
     if (!inside.length) return true;
-    if (d.burst) area(h, f.owner, { id: f.skill }, d.burst, f.power, t, [f.x, f.y]);
+    if (d.burst) area(h, f.owner, { id: f.skill }, d.burst, f.power, t, [f.x, f.y], false, f.imb);
     return false;
   }
   if (d.zap) {
@@ -370,7 +392,7 @@ export function tickField(h: SkillHost, f: FieldInst): boolean {
     for (const e of pick) {
       const tu = h.unit(e)!;
       h.fx({ ev: "zap", id: f.owner, s: f.skill, x1: f.x, y1: f.y, x2: tu.x, y2: tu.y, sky: f.def.kind === "storm" });
-      h.hit(f.owner, e, d.zap.dmg * h.magic(f.owner) * f.power, [0, 0], { stunMs: d.zap.stunMs, kb: 0, skill: true });
+      h.hit(f.owner, e, d.zap.dmg * h.magic(f.owner) * f.power, [0, 0], { stunMs: d.zap.stunMs, kb: 0, skill: true, imb: f.imb });
     }
     // Storm: some bolts strike empty ground too, for the look
     if (d.kind === "storm" && pick.length < d.zap.n) {
@@ -384,12 +406,12 @@ export function tickField(h: SkillHost, f: FieldInst): boolean {
       const tu = h.unit(tid)!;
       const aim = norm(tu.x - f.x, tu.y - f.y);
       h.fx({ ev: "turret", id: f.owner, s: f.skill, x: f.x, y: f.y });
-      fire(h, f.owner, f.skill, d.turret, f.rank, f.power, f.x, f.y - 6, aim);
+      fire(h, f.owner, f.skill, d.turret, f.rank, f.power, f.x, f.y - 6, aim, f.imb);
     }
   }
   if (d.wpn || d.dmg || d.slowMs || d.weakMs) {
     const dmg = baseDmg(h, f.owner, d) * f.power;
-    for (const e of inside) h.hit(f.owner, e, dmg, pushFrom(h, f.x, f.y, e), { ...effects(d, t), kb: d.kb ?? 0, skill: true, dot: !d.kb });
+    for (const e of inside) h.hit(f.owner, e, dmg, pushFrom(h, f.x, f.y, e), { ...effects(d, t), kb: d.kb ?? 0, skill: true, dot: !d.kb, imb: f.imb });
   }
   if (d.heal && o && !o.dead && o.maxHp && Math.hypot(o.x - f.x, o.y - f.y) <= d.r) h.heal(f.owner, o.maxHp * d.heal / 100 * f.power);
   return true;
@@ -475,6 +497,10 @@ export function afterHit(h: SkillHost, from: string | undefined, tid: string, o:
       e.push(effects(b.b.onHit, rankTime(b.rank)));
       if (b.b.onHit.burn) h.fx({ ev: "enchanthit", id: from, s: b.id, x: t.x, y: t.y });
     }
+  } else if (o.imb && from && !o.dot) {
+    // A skill cast while enchanted (Fire Arrows + Volley): its hits carry the enchantment too
+    e.push(o.imb.fx);
+    h.fx({ ev: "enchanthit", id: from, s: o.imb.id, x: t.x, y: t.y });
   }
   const immune = ccImmune(t, now);
   for (const x of e) {

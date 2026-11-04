@@ -455,6 +455,13 @@ export class SkillFx {
     const { x, y, r } = ev;
     const pal = PALETTE[style];
     const shake = (ms: number, k: number) => { if (near) quake(this.scene, ms, k); };
+    // Cast while enchanted (Holy Blade + Cleave, Fire Arrows + Arrow Rain...): the blast also flares in the enchantment's colour
+    const imb = ev.imb as FxStyle;
+    if (PALETTE[imb] && imb !== style) {
+      this.ring(x, y, r * 0.8, imb, Math.round(14 * tier), { life: 360, up: 12 });
+      this.burst(x, y, 4, imb, Math.round(8 * tier), 60, 380);
+      if (imb === "fire") this.smoke(x, y, r * 0.4, 2);
+    }
     switch (look) {
       case "slash": {
         const e = this.ent(ev.id);
@@ -843,6 +850,12 @@ export class SkillFx {
         if (!BASIC_SHOTS.has(look)) return undefined;
         g = this.basicShot(look, s, size);
     }
+    // Enchanted (Fire Arrows + Volley...): the shot glows in the enchantment's colour; tickShots adds its flames
+    const imb = PALETTE[s.imb as FxStyle];
+    if (imb && g instanceof Phaser.GameObjects.Container) {
+      const light = this.scene.add.image(0, 0, "fx_glow").setTint(imb[1]).setBlendMode(Phaser.BlendModes.ADD).setScale(0.32 * size).setAlpha(0.7);
+      g.addAt(light, 0);
+    }
     this.shots.set(id, { s, g, look, born: this.t });
     return g;
   }
@@ -920,6 +933,12 @@ export class SkillFx {
       const ax = s.vx ?? 1, ay = s.vy ?? 0;
       const age = this.t - born;
       const n = (perSec: number) => { let c = Math.floor(perSec * dt); if (Math.random() < perSec * dt - c) c++; return c; };
+      // Enchanted shot: the head burns (or drips poison, shines holy...) with a short trail in that colour
+      const imb = s.imb as FxStyle;
+      if (PALETTE[imb]) {
+        for (let i = 0; i < n(70 * (s.size || 1)); i++) this.p(x + ax * rnd(0, 4), y + ay * rnd(0, 4), z + rnd(-1, 1), pick(PALETTE[imb]), { vx: -ax * 25 + rnd(-6, 6), vy: -ay * 25 + rnd(-6, 6), vz: rnd(3, 12), life: rnd(160, 320), size: pick([1, 1, 2]), size1: 0 });
+        if (imb === "fire" && Math.random() < 4 * dt) this.p(x - ax * 5, y - ay * 5, 2, pick([0x4a4a4a, 0x6d6d6d]), { vz: 10, life: 420, size: 2, size1: 3, alpha: 0.3, add: false, depth: DEPTH - 1 });
+      }
       switch (look) {
         case "shuriken": (g as any).angle += 1400 * dt; if (Math.random() < 0.4) this.p(x, y, 0, 0xffffff, { life: 120, depth: DEPTH - 1 }); break;
         case "net": (g as any).angle += 400 * dt; break;
@@ -1034,7 +1053,9 @@ export class SkillFx {
   }
 
   /** Impact of a skill projectile ("boom" message). */
-  impact(x: number, y: number, kind: string, r: number) {
+  impact(x: number, y: number, kind: string, r: number, imb?: string) {
+    const ip = PALETTE[imb as FxStyle];
+    if (ip) { this.burst(x, y, 4, imb as FxStyle, r > 0 ? 18 : 8, 60, 320); if (r > 0) this.ring(x, y, r, imb as FxStyle, 20, { life: 380, up: 10 }); }
     if (BASIC_SHOTS.has(kind)) { this.basicImpact(x, y, kind, r); return true; }
     const style: FxStyle | undefined = ({ shuriken: "steel", lightning: "lightning", dragon: "fire", phoenix: "fire", inferno: "fire", flamewave: "fire",
       iceshard: "frost", frozenorb: "frost", arcane: "arcane", powerarrow: "wind", frostarrow: "frost", net: "nature" } as Record<string, FxStyle>)[kind];
