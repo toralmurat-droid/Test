@@ -37,6 +37,8 @@ function lookOf(name: string): Look {
   if (!HERO_BODIES[name]) return L;
   if (kit) return { ...L, ...kit };
   // found gear on a bare hero: weapons take the class's weapon shape, body armour comes with matching leg wear
+  // typed weapons (GearDef.wtype) keep their own shape in any hero's hands: a sword on the archer, a bow on the knight
+  if (gear?.slot === "weapon" && L.weapon === "none" && gear.wtype && gear.wtype !== "fists") return { ...L, weapon: gear.wtype };
   if (gear?.slot === "weapon" && L.weapon === "none" && L.weaponKind) return { ...L, weapon: L.weaponKind };
   if (gear?.slot === "armour" && L.legs === "bare") {
     return gear.style === "plain" ? { ...L, legs: "trousers", legCol: sh(gear.color, 0.62) } : { ...L, legs: "mail", legCol: sh(gear.color, 0.78) };
@@ -1028,6 +1030,17 @@ function weapon(c: C2, r: Rig) {
       for (const k of [-1.4, -0.5, 0.4, 1.3]) fillShape(c, ellipseP(at(1.35, k)[0], at(1.35, k)[1], 0.16, 0.16), css(sh(bone, 1.3))); // its teeth
       break;
     }
+    case "wand": {
+      // a short rod with a glowing stone at the tip
+      const len = 6.8, wood = W.g ? W.blade : C(WOOD), stone = W.g ? W.accent : 0x9be8ff;
+      limb(c, at(-1.2), at(len), 0.5, 0.38, wood);
+      line(c, [at(0.4, -0.25), at(len - 0.6, -0.25)], sh(wood, 1.5), 0.1, 0.7);
+      limb(c, at(-1.4), at(0.8), 0.62, 0.62, C(0x3e2715)); // grip wrap
+      const tip = at(len + 0.9);
+      glow(c, tip[0], tip[1], 2.2, stone, 0.5 + (r.p.attack >= 0 ? 0.3 : 0));
+      vol(c, ellipseP(tip[0], tip[1], 0.8, 0.8), stone, [tip[0] - 0.9, tip[1] - 0.9, 1.8, 1.8], { ao: 0.15, hi: 1.6, spec: 0.8 });
+      break;
+    }
     case "dagger": {
       blade(c, h, u, n, 0.8, 5 * W.long, 0.8, W.blade);
       limb(c, at(-1), at(0.6), 0.55, 0.55, C(0x5a3a22));
@@ -1204,6 +1217,12 @@ function heroFx(c: C2, r: Rig) {
     case "bow":
       if (ph === 2 || ph === 3) arrowFly(c, [hx, hy], u, ph === 2 ? 9 : 15);
       return;
+    case "wand": {
+      const o: P = [hx + u[0] * 7.7, hy + u[1] * 7.7], st = weaponCols(r).g?.accent ?? 0x9be8ff;
+      if (ph === 0 || ph === 1) glow(c, o[0], o[1], 2.6 + ph, st, 0.7);
+      if (ph === 2) { glow(c, o[0] + u[0] * 4, o[1] + u[1] * 4, 3.5, 0x9a6bff, 0.6); glow(c, o[0] + u[0] * 4, o[1] + u[1] * 4, 1.4, 0xffffff, 1); }
+      return;
+    }
     case "spear":
       if (ph === 2) glow(c, hx + u[0] * 21, hy + u[1] * 21, 1.6, 0xffffff, 0.9);
       return;

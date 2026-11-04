@@ -838,7 +838,7 @@ export class SkillFx {
         g = this.scene.add.container(s.x, s.y, [glow(0x8be9ff, 0.5 * size).setPosition(0, 0), d]).setDepth(DEPTH);
         break;
       }
-      case "arcane": g = glow(0xc77dff, 0.3); break;
+      case "arcane": g = glow(0xc77dff, 0.3 * size); break;
       default:
         if (!BASIC_SHOTS.has(look)) return undefined;
         g = this.basicShot(look, s, size);

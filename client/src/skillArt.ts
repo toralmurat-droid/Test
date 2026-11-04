@@ -226,6 +226,26 @@ function backdrop(style: FxStyle, row: number, passive: boolean): string[] {
 type Draw = (p: Painter) => void;
 
 const ART: Record<string, Draw> = {
+  // ===== Wizard: basic spells (no tree, cast again and again) =====
+  w_spark: (p) => {
+    p.bolt([[5, 19], [10, 13], [8, 12], [14, 6], [12, 10], [16, 11], [19, 5]]);
+    p.outline();
+    p.spark(19, 5, 2, "#ffffff"); p.px(5, 19, LIT[2]); p.px(16, 15, LIT[3]);
+  },
+  w_firedart: (p) => {
+    p.thick(4, 20, 14, 10, 2, FIRE[1]); p.line(5, 20, 14, 11, FIRE[2]);
+    p.poly([[13, 8], [20, 4], [16, 11]], FIRE[2]);
+    p.disc(16, 8, 2.5, FIRE[2]); p.disc(16, 8, 1.2, FIRE[3]);
+    p.outline();
+    p.px(17, 7, "#ffffff"); p.px(3, 21, FIRE[0]); p.px(8, 19, "#fff176");
+  },
+  w_frostbolt: (p) => {
+    p.poly([[20, 4], [7, 14], [10, 17]], ICE[1]); p.poly([[20, 4], [8, 15], [9, 16]], ICE[2]);
+    p.line(19, 5, 9, 15, ICE[3]);
+    p.line(3, 21, 7, 17, ICE[1]); p.line(5, 21, 8, 18, ICE[2]);
+    p.outline();
+    p.px(20, 4, "#ffffff"); p.px(4, 17, "#ffffff"); p.px(12, 20, ICE[3]);
+  },
   // ===== Knight: Valor =====
   k_lunge: (p) => {
     p.sword(5, 19, 20, 4);

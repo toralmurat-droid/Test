@@ -35,7 +35,7 @@ function recolour(main: Canvas, pts: [number, number, number][], col: number, pa
   }
 }
 
-function hook(item: GearDef) {
+export function gearHook(item: GearDef) {
   return (part: GearPart, main: Canvas, mask: Canvas, p: Pose, _hero: string, g: GearCtx) => {
     if (PART_OF[item.slot] !== part) return;
     // These draw new shapes, so they run even when the part itself drew nothing
@@ -290,6 +290,11 @@ const ICONS: Record<string, string[]> = {
     "....MLLLLLLM....", "...MLLLLLLLLM...", "...MLLLLLLLLM...", "...DDDDDDDDDD...", "...ML.DDDD.LM...", "...ML......LM...",
     "....M......M....", "................", "................", "................",
   ],
+  wand: [
+    "................", "............AA..", "...........AAAA.", "...........AAAA.", "..........MLAA..", ".........MLD....",
+    "........MLD.....", ".......MLD......", "......MLD.......", ".....HHD........", "....HHD.........", "...HHD..........",
+    "..HHD...........", "..PD............", "................", "................",
+  ],
   bow: [
     ".....ALL........", ".....A.LM.......", ".....A..LM......", ".....A...LM.....", ".....A....LM....", ".....A....LM....",
     ".....A.....HH...", ".....A.....HH...", ".....A.....HH...", ".....A....LM....", ".....A....LM....", ".....A...LM.....",
@@ -310,7 +315,7 @@ const ICONS: Record<string, string[]> = {
 function icon(item: GearDef): Canvas {
   const c = new HiCanvas(16, 16, K);
   const rows = item.slot === "hat" ? ICONS[item.style === "crown" ? "crown" : item.style === "helm" ? "helm" : item.style === "hood" ? "hood" : item.style === "horned" ? "horned" : "hat"]
-    : item.slot === "weapon" && (item.style === "bow" || item.style === "axe") ? ICONS[item.style]
+    : item.slot === "weapon" && (item.style === "bow" || item.style === "axe" || item.style === "wand") ? ICONS[item.style]
     : item.slot === "armour" && item.style === "robe" ? ICONS.robe
     : item.slot === "shield" ? ICONS[item.style]
     : item.slot === "ranged" ? ICONS[item.style]
@@ -348,7 +353,7 @@ export function buildGear(out: string) {
     const plain = buildSheet(hero);
     // old pixel sheets still show the full class look, so class kits get no overlay there
     for (const id of LOOT_IDS) {
-      setGearHook(hook(GEAR[id]));
+      setGearHook(gearHook(GEAR[id]));
       diff(plain, buildSheet(hero)).save(`${out}/${hero.name}_${id}.png`);
     }
   }

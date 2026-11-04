@@ -12,7 +12,7 @@ import { levelsAt, SPAWN_ZONES, zoneAt } from "../../shared/spawns";
 import { musicCombat, setMusicZone } from "./music";
 import { bindSfx, play as playSfx, sfxFrame } from "./sfx";
 import { attackMult, cooldownMult, critChance, heroSpeed, STATS, magicMult, STAT_KINDS, STAT_NAMES, StatKind, statPoints, HP_PER_STR } from "../../shared/powers";
-import { pointRange, skillOf, skillTarget, STACK_NAME, MAX_STACKS, talentBonus } from "../../shared/skills";
+import { pointRange, SkillDef, skillOf, skillTarget, STACK_NAME, MAX_STACKS, talentBonus } from "../../shared/skills";
 import { SkillFx } from "./skillfx";
 import { displayGrid } from "./tileset";
 import { CRAWL_CROP, heroTexture, itemTexture, makeTileset, MOB_LOOK, mobTexture, preloadPaintedMobs } from "./textures";
@@ -39,9 +39,12 @@ import { speechBubble } from "./weathered";
 import { ART_K, CHAR_GROW, CHAR_SCALE, CHARACTERS, CHAR_ORIGIN, CharacterName, createArtAnims, playCharAnim, preloadArt } from "./artAssets";
 import { Ambient } from "./ambient";
 import { Details } from "./details";
-import { activeOf, GearLayer, GearMenu, itemColor, preloadGear, RARITY_HEX } from "./gear";
+import { activeOf, GearLayer, GearMenu, iconCanvas, itemColor, preloadGear, RARITY_HEX } from "./gear";
+/** pickSlot value while the slot list is choosing the left-click action. */
+const LEFT_PICK = -2;
 import { GearFx } from "./gearfx";
-import { baseId, gearDef, gearReachMult, gearSpeedMult, itemRarity } from "../../shared/gear";
+import { baseId, gearDef, gearReachMult, gearSpeedMult, itemRarity, WEAPON_TYPE_NAMES } from "../../shared/gear";
+import { attackProfile, ATTACK_WORDS, isWeaponType, profileOf, weaponAttackMult } from "../../shared/weapons";
 import { talentMult, talentPoints, spentPoints } from "../../shared/talents";
 import { activeSkills, SLOT_COUNT, SLOT_KEYS, skillLearned } from "../../shared/slots";
 import { iconImg } from "./skillIcons";
@@ -211,6 +214,8 @@ export class TownScene extends Phaser.Scene {
   private pointer?: PointerControls;
   /** Hotbar slot the right click uses (keys 1..0 pick it). */
   private activeSlot = 0;
+  /** What a left click on an enemy does: "" = the main-hand weapon's attack, or a skill / basic spell id. Saved per hero in this browser. */
+  private leftPick?: { hero: string; skill: string };
   private npcs?: NpcLayer;
   private villagers?: Villagers;
   private watch?: WatchLayer;
@@ -909,9 +914,9 @@ export class TownScene extends Phaser.Scene {
       const e = this.entities.get(id);
       if (e) this.squash(e, 1.15, 0.85, 120, 1);
     });
-    this.room.onMessage("swing", ({ id, step, variant, ax, ay }) => {
+    this.room.onMessage("swing", ({ id, step, variant, ax, ay, w }) => {
       if (id === this.me) this.pointer?.swung(); // the server took the click-attack
-      this.showSwing(id, step ?? 0, variant ?? 0, ax, ay);
+      this.showSwing(id, step ?? 0, variant ?? 0, ax, ay, w);
     });
     this.room.onMessage("sfx", (ev) => this.onSkillFx(ev));
     bindSfx(this.room, () => this.me, this.entities as any); // sound effects (client/src/sfx.ts)
@@ -1108,11 +1113,21 @@ export class TownScene extends Phaser.Scene {
       return p && id && skillLearned(p.cls, p.talents, id) ? skillOf(p.cls, id) : undefined;
     };
     const basicReach = (p: any) => {
-      const def = CLASSES[p.cls as ClassKind];
+      const def = attackProfile(p.cls, activeOf(p));
       const k = gearReachMult(activeOf(p));
       // Melee: what the server hits, minus a small margin for the time the click takes to get there
       // (it used to be a few px MORE than the server's reach, so swings at the edge always missed)
       return def.projectile ? def.projectile.range * k * 0.8 : meleeReach(def.attackRange, k) - 4;
+    };
+    /** How close to an enemy the hero must be for a skill to reach it. */
+    const skillReach = (s: SkillDef, p: any) => {
+      if (skillTarget(s) === "point") return pointRange(s) * 0.9;
+      if (s.shots) return s.shots.range * 0.8;
+      if (s.move) return Math.max(basicReach(p), s.move.dist * 0.8);
+      if (s.areas?.length) return Math.max(...s.areas.map((a) => (a.ahead ?? 0) + a.r * 0.7));
+      if (s.cry) return s.cry.r * 0.8;
+      if (s.field && !s.field.follow) return (s.field.ahead ?? 0) + s.field.r * 0.7;
+      return basicReach(p);
     };
     this.pointer = new PointerControls(this, {
       me: () => { const e = meEnt(); return e ? { x: e.sprite.x, y: e.sprite.y, sx: e.tx, sy: e.ty, state: e.state } : undefined; },
@@ -1148,22 +1163,19 @@ export class TownScene extends Phaser.Scene {
       reach: (secondary) => {
         const p = meEnt()?.state;
         if (!p) return 0;
-        if (!secondary) return basicReach(p);
+        if (!secondary) { const ls = this.leftSkill(); return ls ? skillReach(skillOf(p.cls, ls)!, p) : basicReach(p); }
         const s = secondarySkill();
-        if (s && skillTarget(s) === "point") return pointRange(s) * 0.9;
-        if (s) {
-          if (s.shots) return s.shots.range * 0.8;
-          if (s.move) return Math.max(basicReach(p), s.move.dist * 0.8);
-          if (s.areas?.length) return Math.max(...s.areas.map((a) => (a.ahead ?? 0) + a.r * 0.7));
-          if (s.cry) return s.cry.r * 0.8;
-          if (s.field && !s.field.follow) return (s.field.ahead ?? 0) + s.field.r * 0.7;
-          return basicReach(p);
-        }
+        if (s) return skillReach(s, p);
         const rg = activeOf(p).ranged, shot = rg ? gearDef(rg)?.shot : undefined;
         return shot ? shot.range * 0.8 : basicReach(p);
       },
       fire: (secondary) => {
-        if (!secondary) { this.room?.send("attack"); return; }
+        if (!secondary) {
+          // Left click: the weapon's attack, or the spell / skill chosen for it
+          const ls = this.leftSkill();
+          if (ls) this.room?.send("cast", ls); else this.room?.send("attack");
+          return;
+        }
         const p = meEnt()?.state;
         if (secondarySkill()) this.room?.send("useslot", this.activeSlot);
         else if (p && activeOf(p).ranged && gearDef(activeOf(p).ranged!)?.shot) this.room?.send("ranged");
@@ -1362,7 +1374,7 @@ export class TownScene extends Phaser.Scene {
     return variant % 2 ? "attack2" : "attack";
   }
 
-  private showSwing(id: string, step: number, variant: number, ax?: number, ay?: number) {
+  private showSwing(id: string, step: number, variant: number, ax?: number, ay?: number, w?: string) {
     const e = this.entities.get(id);
     if (!e) return;
     const dir = e.state.dir as string;
@@ -1372,7 +1384,8 @@ export class TownScene extends Phaser.Scene {
     // Aim can be diagonal (the server sends it); mobs and old messages fall back to the facing direction
     const off = typeof ax === "number" && typeof ay === "number" ? [ax, ay]
       : { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] }[dir] ?? [0, 1];
-    const cls = e.mob ? undefined : CLASSES[e.state.cls as ClassKind];
+    // The main-hand weapon decides the attack (shared/weapons.ts); the server says which one swung
+    const cls = e.mob ? undefined : (isWeaponType(w) ? profileOf(w) : attackProfile(e.state.cls, activeOf(e.state)));
     const hit = cls?.combo[step];
     // Mirror our own lunge locally so client prediction doesn't fight the server
     if (id === this.me && hit?.lunge) {
@@ -1780,17 +1793,17 @@ export class TownScene extends Phaser.Scene {
       const mine_ = pts[k] ? ` <span class="gain">(+${pts[k]})</span>` : "";
       return `${plus}<span>${STAT_NAMES[k]}</span><b>${st[k]}${mine_}</b><span class="note">${notes[k]}</span>`;
     }).join("");
-    const def = CLASSES[cls];
+    const wp = attackProfile(cls, activeOf(mine));
     const next = xpForLevel(lvl + 1), cur = xpForLevel(lvl);
-    const dmg = Math.round(def.damage * attackMult(cls, st) * talentMult(cls, mine.talents, "dmg"));
+    const dmg = Math.round(wp.damage * weaponAttackMult(cls, st, wp.type) * talentMult(cls, mine.talents, "dmg"));
     const speed = Math.round(heroSpeed(cls, false, mine.spd ?? 1) * gearSpeedMult(activeOf(mine)));
     const rows: [string, string][] = [
       ["Level", lvl >= MAX_LEVEL ? `${MAX_LEVEL} (max)` : `${lvl} · XP ${mine.xp - cur}/${next - cur}`],
       ["Health", `${Math.ceil(mine.hp)} / ${mine.maxHp}`],
       ["HP regen", `${regenFromStamina(st.sta)[1].toFixed(1)}/s resting · ${regenFromStamina(st.sta)[0].toFixed(1)}/s in a fight`],
       ["Mana", `${unpackMana(mine.mp).mana} / ${unpackMana(mine.mp).maxMana} · ${manaRegen(st, false, talentBonus(cls, mine.talents, "mana")).toFixed(1)}/s (×${MANA.restMult} resting)`],
-      ["Attack", `${dmg} damage${def.projectile ? " (ranged)" : ""}`],
-      ["Attack speed", `${(1000 / def.attackCooldownMs).toFixed(1)} hits/s`],
+      ["Attack", `${dmg} damage · ${WEAPON_TYPE_NAMES[wp.type]}: ${ATTACK_WORDS[wp.type]}`],
+      ["Attack speed", `${(1000 / wp.attackCooldownMs).toFixed(1)} hits/s`],
       ["Critical hits", `${Math.round(critChance(st, talentBonus(cls, mine.talents, "crit")) * 100)}% chance, double damage`],
       ["Initiative", `${heroPoise(cls, lvl)} · dizzy at 0`],
       ["Move speed", `${speed}`],
@@ -1819,6 +1832,7 @@ export class TownScene extends Phaser.Scene {
     bar.addEventListener("click", (ev) => {
       const cell = cellOf(ev);
       if (!cell) return;
+      if (cell.dataset.slot === "L") { if (!pick.hidden && this.pickSlot === LEFT_PICK) this.closeSlotPicker(); else this.openSlotPicker(LEFT_PICK); return; }
       const n = Number(cell.dataset.slot);
       if (!pick.hidden && this.pickSlot === n) this.closeSlotPicker(); else this.openSlotPicker(n);
     });
@@ -1826,6 +1840,7 @@ export class TownScene extends Phaser.Scene {
       const cell = cellOf(ev);
       if (!cell) return;
       ev.preventDefault();
+      if (cell.dataset.slot === "L") { this.setLeftSkill(""); return; } // back to the weapon
       if (cell.dataset.skill) this.room?.send("assign", { slot: Number(cell.dataset.slot), skill: "" });
     });
     // Wheel over a slot: cycle (empty) -> skill A -> skill B -> ... (learned skills only)
@@ -1837,6 +1852,11 @@ export class TownScene extends Phaser.Scene {
       const cls = mine.cls as ClassKind;
       const choices = ["", ...activeSkills(cls).filter((a) => skillLearned(cls, mine.talents, a.id)).map((a) => a.id)];
       if (choices.length < 2) return;
+      if (cell.dataset.slot === "L") {
+        const cur = Math.max(0, choices.indexOf(this.leftSkill()));
+        this.setLeftSkill(choices[(cur + (ev.deltaY > 0 ? 1 : -1) + choices.length) % choices.length]);
+        return;
+      }
       const n = Number(cell.dataset.slot);
       const cur = Math.max(0, choices.indexOf(mine.slots?.at(n) ?? ""));
       const next = choices[(cur + (ev.deltaY > 0 ? 1 : -1) + choices.length) % choices.length];
@@ -1845,7 +1865,8 @@ export class TownScene extends Phaser.Scene {
     pick.addEventListener("click", (ev) => {
       const opt = (ev.target as HTMLElement).closest("[data-pick]") as HTMLElement | null;
       if (!opt || opt.classList.contains("locked")) return;
-      this.room?.send("assign", { slot: this.pickSlot, skill: opt.dataset.pick });
+      if (this.pickSlot === LEFT_PICK) this.setLeftSkill(opt.dataset.pick ?? "");
+      else this.room?.send("assign", { slot: this.pickSlot, skill: opt.dataset.pick });
       this.closeSlotPicker();
     });
     // Clicking anywhere else closes the list
@@ -1863,6 +1884,7 @@ export class TownScene extends Phaser.Scene {
     const mine = this.entities.get(this.me)?.state;
     if (!mine) return;
     const cls = mine.cls as ClassKind;
+    if (n === LEFT_PICK) { this.openLeftPicker(mine, cls); return; }
     const slots: string[] = [...(mine.slots ?? [])];
     const opts = activeSkills(cls).map((a) => {
       const learned = skillLearned(cls, mine.talents, a.id);
@@ -1886,6 +1908,64 @@ export class TownScene extends Phaser.Scene {
       pick.style.bottom = `${hud.bottom - r.top + 6}px`;
     }
   }
+
+  /** Left click: the weapon's attack or any learned skill / basic spell (Murat 2026-11-04). */
+  private openLeftPicker(mine: any, cls: ClassKind) {
+    const cur = this.leftSkill();
+    const w = attackProfile(cls, activeOf(mine));
+    const weapon = `<button class="opt${cur ? "" : " cur"}" data-pick="" data-tiphead="${WEAPON_TYPE_NAMES[w.type]}" data-tip="${tipEsc(`Basic attack with what you hold: ${ATTACK_WORDS[w.type]}.`)}">` +
+      `${this.weaponIcon(mine, "picon")}<span><b>Weapon attack</b><small>${WEAPON_TYPE_NAMES[w.type]}: ${ATTACK_WORDS[w.type]}</small></span></button>`;
+    const opts = activeSkills(cls).map((a) => {
+      const learned = skillLearned(cls, mine.talents, a.id);
+      const where = !learned ? `🔒 learn it in the tree (T), Lv ${a.req}` : a.cantrip ? `basic spell · ${a.cost} Magic` : a.id === cur ? "on left click" : `${a.cost ?? 0} ${energyName(cls)}`;
+      return `<button class="opt${learned ? "" : " locked"}${a.id === cur ? " cur" : ""}" data-pick="${a.id}" data-tiphead="${a.name}" data-tip="${tipEsc(a.desc)}">` +
+        `${iconImg(a.id, "picon")}<span><b>${a.name}</b><small>${where}</small></span></button>`;
+    }).join("");
+    const pick = document.getElementById("slotpick")!;
+    pick.innerHTML = `<div class="ph">Left click on an enemy: choose</div><div class="plist">${weapon}${opts}</div>`;
+    this.pickSlot = LEFT_PICK;
+    pick.hidden = false;
+    const cell = document.querySelector(`#hotbar [data-slot="L"]`) as HTMLElement | null;
+    const hud = document.getElementById("hud")!.getBoundingClientRect();
+    if (cell) {
+      const r = cell.getBoundingClientRect();
+      pick.style.left = `${Math.max(8, Math.min(hud.width - pick.offsetWidth - 8, r.left - hud.left))}px`;
+      pick.style.bottom = `${hud.bottom - r.top + 6}px`;
+    }
+  }
+
+  /** The left-click skill, if it is still one this hero knows ("" = the weapon). */
+  private leftSkill(): string {
+    const mine = this.entities.get(this.me)?.state;
+    if (!mine) return "";
+    const hero = `${mine.name}|${mine.cls}`;
+    if (this.leftPick?.hero !== hero) {
+      let saved = "";
+      try { saved = localStorage.getItem(`leftclick:${hero}`) ?? ""; } catch { /* storage off */ }
+      this.leftPick = { hero, skill: saved };
+    }
+    const id = this.leftPick.skill;
+    return id && skillLearned(mine.cls, mine.talents, id) && !skillOf(mine.cls, id)?.passive ? id : "";
+  }
+
+  private setLeftSkill(id: string) {
+    this.leftSkill(); // loads leftPick for this hero
+    if (!this.leftPick) return;
+    this.leftPick.skill = id;
+    try { localStorage.setItem(`leftclick:${this.leftPick.hero}`, id); } catch { /* storage off */ }
+    this.actionsHtml = ""; this.hotbarHtml = "";
+  }
+
+  /** The main-hand weapon's icon (or a fist when empty-handed) as an <img>. */
+  private weaponIcon(mine: any, cls = "") {
+    const w = activeOf(mine).weapon;
+    if (!w) return `<span class="${cls} fist">Fists</span>`;
+    const key = baseId(w);
+    let url = this.weaponIcons.get(key);
+    if (!url) { url = iconCanvas(this, w, 32).toDataURL(); this.weaponIcons.set(key, url); }
+    return `<img class="${cls}" src="${url}" alt="">`;
+  }
+  private weaponIcons = new Map<string, string>();
 
   private closeSlotPicker() {
     document.getElementById("slotpick")!.hidden = true;
@@ -1923,7 +2003,12 @@ export class TownScene extends Phaser.Scene {
     const unslotted = activeSkills(cls).filter((a) => skillLearned(cls, mine.talents, a.id) && !slots.includes(a.id))
       .map((a) => row("–", a.name, 0, 0, "", "no key: click a slot below"));
     const html = [
-      row("L-click", CLASSES[cls].projectile ? "Shoot" : "Attack", 0, 0, mine.stacks > 0 ? `${STACK_NAME[cls]} ${mine.stacks}/${MAX_STACKS}` : "3-hit combo"),
+      ((ls) => {
+        if (ls) { const h = this.skillHud(cls, ls, cdm); return row("L-click", h.name, h.cdMs, h.last, "", "", h.cost); }
+        const w = attackProfile(cls, activeOf(mine));
+        return row("L-click", w.projectile ? `Shoot (${WEAPON_TYPE_NAMES[w.type]})` : `Attack (${WEAPON_TYPE_NAMES[w.type]})`, 0, 0,
+          mine.stacks > 0 ? `${STACK_NAME[cls]} ${mine.stacks}/${MAX_STACKS}` : w.cost ? `${w.cost} Magic a bolt` : "3-hit combo", "", w.cost ?? 0);
+      })(this.leftSkill()),
       ...slotRows, ...unslotted,
       row("Shift", "Dodge roll", DODGE.cooldownMs, this.lastDodge, "", "", { stamina: ENERGY.cost.dodge }),
       row("Q", "Potion", 0, 0, `×${mine.potions}`, mine.potions > 0 ? "" : "×0"),
@@ -1946,8 +2031,22 @@ export class TownScene extends Phaser.Scene {
       return `<div class="slot${h.ult ? " ult" : ""}${wait}${picking}" data-slot="${i}" data-skill="${skill}" data-tiphead="${h.name}" data-tip="${tipEsc(skillOf(cls, skill)?.desc ?? "")}" data-tiphint="Key ${SLOT_KEYS[i]} · click to change · wheel to scroll · right-click to clear">` +
         `${iconImg(power)}${shade}<kbd>${SLOT_KEYS[i]}</kbd>${left > 0 ? `<b>${Math.ceil(left / 1000)}</b>` : ""}</div>`;
     }).join("");
+    // Left-click cell first: the weapon (or the spell picked for the left click)
+    const ls = this.leftSkill(), lpick = this.pickSlot === LEFT_PICK ? " picking" : "";
+    let lcell: string;
+    if (ls) {
+      const h = this.skillHud(cls, ls, cdm);
+      const left = Math.max(0, h.cdMs - (now - h.last));
+      const shade = left > 0 && h.cdMs >= 1000 ? `<div class="cd" style="height:${(left / h.cdMs) * 100}%"></div>` : "";
+      lcell = `<div class="slot lmb${h.cost > mine.energy ? " wait" : ""}${lpick}" data-slot="L" data-tiphead="Left click: ${h.name}" data-tip="${tipEsc(skillOf(cls, ls)?.desc ?? "")}" data-tiphint="Click to change · wheel to scroll · right-click: back to the weapon">` +
+        `${iconImg(ls)}${shade}<kbd>L</kbd></div>`;
+    } else {
+      const w = attackProfile(cls, activeOf(mine));
+      lcell = `<div class="slot lmb${w.cost && w.cost > mine.energy ? " wait" : ""}${lpick}" data-slot="L" data-tiphead="Left click: ${WEAPON_TYPE_NAMES[w.type]}" data-tip="${tipEsc(`Weapon attack: ${ATTACK_WORDS[w.type]}.`)}" data-tiphint="Click to put a spell or skill on the left click instead">` +
+        `${this.weaponIcon(mine)}<kbd>L</kbd></div>`;
+    }
     const bar = document.getElementById("hotbar")!;
-    if (this.hotbarHtml !== cells) { bar.innerHTML = cells; this.hotbarHtml = cells; }
+    if (this.hotbarHtml !== lcell + cells) { bar.innerHTML = lcell + cells; this.hotbarHtml = lcell + cells; }
     const zone = document.getElementById("zone")!;
     zone.style.top = `${el.offsetTop + el.offsetHeight + 4}px`;
   }
@@ -1974,6 +2073,7 @@ export class TownScene extends Phaser.Scene {
     if (ev.ev === "cast") {
       const e = this.entities.get(ev.id);
       if (ev.id === this.me) this.lastCast[ev.s] = this.time.now;
+      if (ev.id === this.me && ev.s === this.leftSkill()) this.pointer?.swung(); // a left-click spell went off: that click is done
       if (e?.hero) playCharAnim(e.sprite, e.hero, "skill", this.dirOf(e));
     }
     if (ev.ev === "move" || ev.ev === "countered") {

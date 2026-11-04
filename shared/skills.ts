@@ -131,6 +131,8 @@ export interface SkillDef {
   move?: MoveDef; areas?: AreaDef[]; shots?: ShotDef; field?: FieldDef; buff?: BuffDef; counter?: CounterDef;
   cry?: AreaDef; // war cry: hits everyone around (usually no damage, only effects)
   target?: SkillTarget; // how a right click aims it (worked out by skillTarget() when not set)
+  /** Basic spell (CANTRIPS): known from Lv 1 without skill points, always rank 1, cheap and meant to be cast again and again. */
+  cantrip?: boolean;
 }
 
 /** Right-click aiming: on the hero itself, at the clicked spot, or toward the click. */
@@ -502,11 +504,30 @@ export function scalePower(s: SkillDef, stats?: Partial<Record<StatKind, number>
 /** The skills that grow out of `id`. */
 export const childrenOf = (cls: ClassKind, id: string) => S[cls].filter((x) => x.parent === id);
 
+/**
+ * Basic spells (Murat 2026-11-04): every caster knows these from Lv 1, no skill points, no tree. Cheap, short reach,
+ * a tiny cooldown: made to be cast again and again up close, e.g. bound to the left click. They cost Magic.
+ */
+export const CANTRIPS: Record<ClassKind, SkillDef[]> = {
+  knight: [], ninja: [], archer: [], barbarian: [],
+  wizard: [
+    { id: "w_spark", name: "Spark", type: "Attack", branch: 2, row: 0, req: 1, style: "lightning", cd: 300, cost: 3, cantrip: true,
+      desc: "A crackling spark at close range. Costs little Magic: cast it again and again.",
+      shots: { kind: "lightning", speed: 360, range: 85, radius: 5, dmg: 13, kb: 0.3 } },
+    { id: "w_firedart", name: "Fire Dart", type: "Attack", branch: 0, row: 0, req: 1, style: "fire", cd: 450, cost: 4, cantrip: true,
+      desc: "A quick dart of flame that sets the target smouldering for a moment.",
+      shots: { kind: "flamewave", speed: 300, range: 110, radius: 5, size: 0.55, dmg: 11, burn: [3, 1500], kb: 0.3 } },
+    { id: "w_frostbolt", name: "Frost Bolt", type: "Attack", branch: 1, row: 0, req: 1, style: "frost", cd: 500, cost: 5, cantrip: true,
+      desc: "A shard of ice that chills: the target slows down for a moment.",
+      shots: { kind: "iceshard", speed: 300, range: 120, radius: 4, dmg: 12, slowMs: 900, kb: 0.2 } },
+  ],
+};
+
 export const SKILLS = S;
 const BY_ID = new Map<string, SkillDef>();
-for (const list of Object.values(S)) for (const s of list) BY_ID.set(s.id, s);
+for (const list of [...Object.values(S), ...Object.values(CANTRIPS)]) for (const s of list) BY_ID.set(s.id, s);
 export const skillById = (id: string) => BY_ID.get(id);
-export const skillOf = (cls: ClassKind, id: string) => { const s = BY_ID.get(id); return s && S[cls].includes(s) ? s : undefined; };
+export const skillOf = (cls: ClassKind, id: string) => { const s = BY_ID.get(id); return s && (S[cls].includes(s) || CANTRIPS[cls]?.includes(s)) ? s : undefined; };
 export const isActive = (s: SkillDef) => !s.passive;
 export const maxRank = (_s: SkillDef) => MAX_RANK;
 
@@ -521,10 +542,11 @@ export const rankPower = (rank: number) => 1 + RANK_POWER * Math.max(0, rank - 1
 export const rankTime = (rank: number) => 1 + RANK_TIME * Math.max(0, rank - 1);
 
 /** The active skills a class can put on a key, in tree order. */
-export const activeSkills = (cls: ClassKind) => S[cls].filter(isActive);
+/** Every active skill of the class: its basic spells first, then the tree's. */
+export const activeSkills = (cls: ClassKind) => [...(CANTRIPS[cls] ?? []), ...S[cls].filter(isActive)];
 /** Every skill of a class (actives and passives), in tree order. */
 export const classSkills = (cls: ClassKind) => S[cls].slice();
-export const skillLearned = (cls: ClassKind, r: Ranks, id: string) => !!skillOf(cls, id) && rankOf(r, id) > 0;
+export const skillLearned = (cls: ClassKind, r: Ranks, id: string) => { const s = skillOf(cls, id); return !!s && (!!s.cantrip || rankOf(r, id) > 0); };
 
 
 export function talentPoints(level: number): number { return Math.max(0, level - 1); }
@@ -537,7 +559,7 @@ export type LockReason = "" | "max" | "level" | "above" | "points";
 /** Why skill `id` can't take one more rank right now ("" = it can). A skill needs its parent skill learned. */
 export function lockReason(cls: ClassKind, level: number, r: Ranks, id: string): LockReason {
   const n = skillOf(cls, id);
-  if (!n || rankOf(r, id) >= MAX_RANK) return "max";
+  if (!n || n.cantrip || rankOf(r, id) >= MAX_RANK) return "max";
   if (level < n.req) return "level";
   if (n.parent && rankOf(r, n.parent) < 1) return "above";
   if (spentPoints(cls, r) >= talentPoints(level)) return "points";

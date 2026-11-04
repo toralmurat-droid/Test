@@ -11,6 +11,7 @@ import {
 } from "../shared/classes";
 import { MANA_POTION_COOLDOWN_MS, MANA_POTION_DROP, MANA_POTION_RESTORE, manaRegen, MAX_MANA_POTIONS, maxManaFor, packMana } from "../shared/mana";
 import { attackMult, cooldownMult, critChance, heroSpeed, magicMult, maxHpFromStats, SLOW_MOB, statsFor, statPoints } from "../shared/powers";
+import { AttackProfile, attackProfile, weaponAttackMult } from "../shared/weapons";
 import { activeSkills, canLearn, classSkills, cleanRanks, MAX_RANK, skillLearned, skillOf, talentBonus, talentMult, talentReduce } from "../shared/skills";
 import {
   afterHit, atkSpeedMult, blocking, buffLifesteal, buffRegen, castSkill, ccImmune, charging, counterHit, dealtMult, FieldInst, newRuntime,
@@ -3381,8 +3382,11 @@ export class TownRoom extends Room<TownState> {
     const a = this.state.players.get(id);
     const now = Date.now();
     if (!a || a.dead || a.stunned || a.broken || charging(a, now)) return;
-    const def = CLASSES[a.cls];
     if (now < a.attackReadyAt) return;
+    // The main-hand weapon decides the attack (shared/weapons.ts): bow = arrows, sword = melee, wand = magic bolts...
+    const def = attackProfile(a.cls, this.equipped(a));
+    if (def.cost && a.energy < def.cost) return; // a wand needs Magic for every bolt
+    if (def.cost) a.energy -= def.cost;
     // Chain into the next combo hit if pressed soon enough after the last one, else restart (3rd hit = finisher)
     const step = a.lastAttack > 0 && now - a.attackReadyAt <= COMBO_WINDOW_MS && a.combo < 2 ? a.combo + 1 : 0;
     const hit = def.combo[step];
@@ -3392,7 +3396,7 @@ export class TownRoom extends Room<TownState> {
     const atkSpeed = poiseSpeed(poiseFrac(a, heroPoiseMax(a))) * atkSpeedMult(a, now);
     a.attackReadyAt = now + (hit.cooldownMs ?? def.attackCooldownMs) / atkSpeed;
     const off = aimOf(a);
-    let dmg = Math.round(def.damage * attackMult(a.cls, this.stats(a)) * hit.damage);
+    let dmg = Math.round(def.damage * weaponAttackMult(a.cls, this.stats(a), def.type) * hit.damage);
     const crit = Math.random() < critChance(this.stats(a), talentBonus(a.cls, a.talents, "crit"));
     if (crit) dmg = Math.round(dmg * 2);
     a.emote = "";
@@ -3406,7 +3410,7 @@ export class TownRoom extends Room<TownState> {
       }
       a.lastVariant = variant;
     }
-    this.broadcast("swing", { id, step, variant, ax: off[0], ay: off[1] });
+    this.broadcast("swing", { id, step, variant, ax: off[0], ay: off[1], w: def.type });
 
     if (hit.lunge) {
       for (let moved = 0; moved < hit.lunge; moved += 2) {
@@ -3417,7 +3421,7 @@ export class TownRoom extends Room<TownState> {
     }
 
     if (def.projectile) {
-      this.shoot(a, id, dmg, hit.knockback, hit.shotScale ?? 1);
+      this.shoot(a, id, dmg, hit.knockback, hit.shotScale ?? 1, 0, def.projectile);
       return;
     }
 
@@ -3440,9 +3444,8 @@ export class TownRoom extends Room<TownState> {
     for (const tid of ids) this.hitTarget(id, tid, dmg, off, { kb: hit.knockback, crit, basic: true });
   }
 
-  /** Fire one projectile from `a` (fireball or arrow), offset sideways by `lane` px. */
-  private shoot(a: Player, id: string, dmg: number, knockback: number, scale: number, lane = 0) {
-    const def = CLASSES[a.cls].projectile!;
+  /** Fire one projectile from `a` (fireball, arrow or magic bolt), offset sideways by `lane` px. */
+  private shoot(a: Player, id: string, dmg: number, knockback: number, scale: number, lane: number, def: NonNullable<AttackProfile["projectile"]>) {
     const off = aimOf(a);
     const s = new Projectile();
     // Lanes are perpendicular to the aim (for Volley)
