@@ -5,7 +5,10 @@
  * "Countryside tune" are small chiptunes made in code (no file).
  *
  * "Auto" (the default):
- * - Calm: the Village tune in Oakvale, Saltmere and the Hunter's Camp, the Countryside tune everywhere else.
+ * - Opening: "Hearth of Oakvale" starts on the login / loading screen (first click or key) and plays once per
+ *   browser session, never looping. It fades out when the hero leaves the village, or ends on its own.
+ * - Calm: village sounds (wind, birds, murmur, the smith's hammer; made in code) in Oakvale, Saltmere and the
+ *   Hunter's Camp, the Countryside tune everywhere else.
  * - Battle: when the fighting around the hero heats up (hits near the hero, hits taken), the zone's battle
  *   song comes in: The Pale Marshal's March where skeletons live, Blob Slayer for blobs and bandits.
  *   It starts quiet and swells as the battle intensifies (unless the player turned the swell off),
@@ -17,7 +20,7 @@
  * Settings are remembered per player name (localStorage "music:<name>").
  */
 
-type Track = { id: string; name: string; url?: string; song?: Song };
+type Track = { id: string; name: string; url?: string; song?: Song; ambience?: boolean };
 type Song = { bpm: number; melody: string[]; bass: string[] };
 
 /** "." holds the previous note, "_" is a rest. One token = one eighth note. Bass: two roots per bar. */
@@ -50,11 +53,14 @@ const COUNTRY_SONG: Song = {
 };
 
 const TRACKS: Track[] = [
+  { id: "hearth", name: "Hearth of Oakvale", url: "/assets/music/hearth-of-oakvale.mp3" },
   { id: "blob-slayer", name: "Blob Slayer", url: "/assets/music/blob-slayer.mp3" },
   { id: "pale-marshals", name: "The Pale Marshal's March", url: "/assets/music/pale-marshals-march.mp3" },
   { id: "village", name: "Village tune", song: VILLAGE_SONG },
   { id: "country", name: "Countryside tune", song: COUNTRY_SONG },
+  { id: "village-sounds", name: "Village sounds", ambience: true },
 ];
+const INTRO_KEY = "music:intro";
 const UNDEAD = ["skeleton", "skeletonmage", "necromancer"];
 const FIGHT = ["slime", "shooterblob", "warriorblob", "healerblob", "motherblob", "bandit"];
 const TOWNS = ["Oakvale", "Market Square", "Chapel of the Dawn", "The Rusty Tankard", "The Smithy", "Saltmere", "Hunter's Camp"];
@@ -86,7 +92,10 @@ let playing: string | null = null;
 let switchTimer: number | null = null;
 
 // Where the hero is (for Auto)
-let calmTrack = "village";
+let calmTrack = "village-sounds";
+/** The opening song still to play / playing this browser session */
+let intro = (() => { try { return sessionStorage.getItem(INTRO_KEY) !== "1"; } catch { return true; } })();
+let ambience: Ambience | null = null;
 let pendingCalm: string | null = null;
 let calmTimer: number | null = null;
 let zoneName: string | undefined;
@@ -133,6 +142,7 @@ function fadeTo(value: number, seconds: number) {
 
 function wantedTrack(): string {
   if (settings.pick !== "auto") return settings.pick;
+  if (intro) return "hearth";
   return battle?.track ?? calmTrack;
 }
 
@@ -147,6 +157,7 @@ function playTrack() {
   if (!ctx || !master) return;
   audioEl?.pause();
   chips.forEach((c) => c.stop());
+  ambience?.stop();
   const track = TRACKS.find((t) => t.id === wantedTrack()) ?? TRACKS[0];
   playing = track.id;
   if (track.url) {
@@ -155,11 +166,14 @@ function playTrack() {
       audioEl.preload = "auto";
       mp3Gain = ctx.createGain();
       ctx.createMediaElementSource(audioEl).connect(mp3Gain).connect(master);
-      audioEl.addEventListener("ended", battleOver);
+      audioEl.addEventListener("ended", songEnded);
     }
     if (!audioEl.src.endsWith(track.url)) audioEl.src = track.url;
-    // Battle songs play once in full; a picked song loops
+    // The opening and battle songs play once in full; a picked song loops
     audioEl.loop = settings.pick !== "auto";
+    if (track.id === "hearth" && settings.pick === "auto") {
+      try { sessionStorage.setItem(INTRO_KEY, "1"); } catch { /* private mode */ }
+    }
     audioEl.currentTime = 0;
     if (mp3Gain) { mp3Gain.gain.cancelScheduledValues(ctx.currentTime); mp3Gain.gain.value = swellLevel(); }
     audioEl.play().catch(() => {});
@@ -167,6 +181,9 @@ function playTrack() {
     let c = chips.get(track.id);
     if (!c) { c = new Chiptune(ctx, master, track.song); chips.set(track.id, c); }
     c.start();
+  } else if (track.ambience) {
+    ambience ??= new Ambience(ctx, master);
+    ambience.start();
   }
 }
 
@@ -174,6 +191,7 @@ function playTrack() {
 function resume() {
   const track = TRACKS.find((t) => t.id === playing);
   if (track?.url) audioEl?.play().catch(() => {});
+  else if (track?.ambience) ambience?.start();
   else if (playing) chips.get(playing)?.start();
 }
 
@@ -206,21 +224,28 @@ function apply(fadeSeconds: number) {
       if (targetGain() > 0) return;
       audioEl?.pause();
       chips.forEach((c) => c.stop());
+      ambience?.stop();
     }, fadeSeconds * 1000 + 50);
   }
 }
 
 /** Fade the old track out, start the wanted one and fade it in. */
-function switchTrack(fadeIn = 1.5) {
+function switchTrack(fadeIn = 1.5, fadeOut = FADE_OUT) {
   if (!started || targetGain() === 0) { playing = null; return; }
   if (wantedTrack() === playing && switchTimer === null) return;
   if (switchTimer !== null) clearTimeout(switchTimer);
-  fadeTo(0, FADE_OUT);
+  fadeTo(0, fadeOut);
   switchTimer = window.setTimeout(() => {
     switchTimer = null;
     playTrack();
     fadeTo(targetGain(), fadeIn);
-  }, FADE_OUT * 1000);
+  }, fadeOut * 1000);
+}
+
+/** An mp3 ended (only the opening and battle songs don't loop). */
+function songEnded() {
+  if (playing === "hearth" && intro) { intro = false; switchTrack(FADE_IN); return; }
+  battleOver();
 }
 
 /** The battle song ended: back to the calm tune, and this zone rests for 5 minutes. */
@@ -235,7 +260,7 @@ function tick() {
   heat *= Math.pow(0.5, 0.25 / HEAT_HALF_LIFE);
   if (heat < 0.05) heat = 0;
   if (settings.pick !== "auto" || targetGain() === 0) return;
-  if (!battle && zoneBattle && zoneName && heat >= HEAT_START && Date.now() >= (cooldownUntil.get(zoneName) ?? 0)) {
+  if (!battle && !intro && zoneBattle && zoneName && heat >= HEAT_START && Date.now() >= (cooldownUntil.get(zoneName) ?? 0)) {
     battle = { track: zoneBattle, zone: zoneName };
     switchTrack(1);
     return;
@@ -254,7 +279,7 @@ export function setMusicZone(zone: string | undefined, mobs: Partial<Record<stri
   const has = (kinds: string[]) => !!mobs && kinds.some((k) => (mobs[k] ?? 0) > 0);
   zoneName = zone;
   zoneBattle = has(UNDEAD) ? "pale-marshals" : has(FIGHT) ? "blob-slayer" : null;
-  const calm = !zone && TOWNS.includes(area) ? "village" : "country";
+  const calm = !zone && TOWNS.includes(area) ? "village-sounds" : "country";
   if (calm === pendingCalm) return;
   pendingCalm = calm;
   if (calmTimer !== null) clearTimeout(calmTimer);
@@ -264,7 +289,9 @@ export function setMusicZone(zone: string | undefined, mobs: Partial<Record<stri
   calmTimer = window.setTimeout(() => {
     calmTimer = null;
     calmTrack = calm;
-    if (settings.pick === "auto" && !battle) switchTrack();
+    // Leaving the village ends the opening song with a long fade
+    if (intro && started && calm !== "village-sounds") { intro = false; if (settings.pick === "auto") switchTrack(FADE_IN, 4); return; }
+    if (settings.pick === "auto" && !battle && !intro) switchTrack();
   }, started ? ZONE_SETTLE * 1000 : 0);
 }
 
@@ -273,18 +300,31 @@ export function musicCombat(points: number) {
   heat = Math.min(HEAT_FULL * 1.5, heat + points);
 }
 
-/** Call once the player has logged in. Music starts on the first click or key press. */
-export function initMusic(playerName: string) {
-  load(playerName);
+/**
+ * Call when the page opens (login screen). Music starts on the first click or key press, using the
+ * settings of the last player name typed on this device.
+ */
+export function startMusic(lastName: string) {
+  load(lastName);
   const unlock = () => {
-    window.removeEventListener("pointerdown", unlock, true);
-    window.removeEventListener("keydown", unlock, true);
-    void begin();
+    if (!started) { void begin(); return; }
+    // Started without a click (e.g. back from a server restart): the browser wants one to play
+    if (ctx?.state === "suspended" || (audioEl?.paused && TRACKS.find((t) => t.id === playing)?.url)) apply(0.5);
+    else { window.removeEventListener("pointerdown", unlock, true); window.removeEventListener("keydown", unlock, true); }
   };
   window.addEventListener("pointerdown", unlock, true);
   window.addEventListener("keydown", unlock, true);
   document.addEventListener("visibilitychange", () => apply(document.hidden ? FADE_OUT : FADE_IN));
+}
+
+/** Call once the player has logged in: their own settings, and the music menu. */
+export function initMusic(playerName: string) {
+  const before = { ...settings };
+  load(playerName);
   buildUi();
+  if (!started) { void begin(); return; }
+  if (before.pick !== settings.pick) switchTrack();
+  else if (before.volume !== settings.volume || before.muted !== settings.muted) apply(1);
 }
 
 function buildUi() {
@@ -319,6 +359,7 @@ function buildUi() {
       if (settings.pick === t.id) return;
       settings.pick = t.id;
       battle = null;
+      intro = false;
       save(); render(); switchTrack(); b.blur();
     };
     list.appendChild(b);
@@ -453,5 +494,110 @@ class Chiptune {
     s.connect(f).connect(g).connect(this.out);
     s.start(t);
     s.stop(t + 0.2);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Village sounds, made in code: wind, a murmur of voices, birds, now and then the smith's hammer.
+
+class Ambience {
+  private timer: number | null = null;
+  private loops: AudioScheduledSourceNode[] = [];
+  private out: GainNode;
+  private noise: AudioBuffer;
+  private nextBird = 0;
+  private nextHammer = 0;
+
+  constructor(private ctx: AudioContext, dest: AudioNode) {
+    this.out = ctx.createGain();
+    this.out.gain.value = 0.9;
+    this.out.connect(dest);
+    this.noise = ctx.createBuffer(1, ctx.sampleRate * 3, ctx.sampleRate);
+    const d = this.noise.getChannelData(0);
+    // Brown-ish noise: softer than white, like air
+    let last = 0;
+    for (let i = 0; i < d.length; i++) { last = (last + 0.02 * (Math.random() * 2 - 1)) / 1.02; d[i] = last * 3.5; }
+  }
+
+  start() {
+    if (this.timer !== null) return;
+    this.bed(320, 0.6, 0.22, 0.06);  // wind
+    this.bed(520, 1.4, 0.08, 0.17);  // distant voices
+    const now = this.ctx.currentTime;
+    this.nextBird = now + 1 + Math.random() * 2;
+    this.nextHammer = now + 4 + Math.random() * 6;
+    this.timer = window.setInterval(() => this.schedule(), 200);
+  }
+
+  stop() {
+    if (this.timer !== null) clearInterval(this.timer);
+    this.timer = null;
+    this.loops.forEach((n) => { try { n.stop(); } catch { /* already stopped */ } });
+    this.loops = [];
+  }
+
+  /** A looping noise bed through a band-pass, its loudness drifting slowly. */
+  private bed(freq: number, q: number, vol: number, lfoHz: number) {
+    const src = this.ctx.createBufferSource();
+    src.buffer = this.noise;
+    src.loop = true;
+    src.playbackRate.value = 0.9 + Math.random() * 0.2;
+    const f = this.ctx.createBiquadFilter();
+    f.type = "bandpass"; f.frequency.value = freq; f.Q.value = q;
+    const g = this.ctx.createGain();
+    g.gain.value = vol;
+    const lfo = this.ctx.createOscillator();
+    const depth = this.ctx.createGain();
+    lfo.frequency.value = lfoHz;
+    depth.gain.value = vol * 0.6;
+    lfo.connect(depth).connect(g.gain);
+    src.connect(f).connect(g).connect(this.out);
+    src.start(); lfo.start();
+    this.loops.push(src, lfo);
+  }
+
+  private schedule() {
+    const now = this.ctx.currentTime;
+    if (now >= this.nextBird) {
+      this.bird(now + 0.05);
+      this.nextBird = now + 1.5 + Math.random() * 5;
+    }
+    if (now >= this.nextHammer) {
+      const strikes = 2 + Math.floor(Math.random() * 4);
+      for (let i = 0; i < strikes; i++) this.clink(now + 0.05 + i * (0.42 + Math.random() * 0.06));
+      this.nextHammer = now + 9 + Math.random() * 14;
+    }
+  }
+
+  private bird(t: number) {
+    const base = 2600 + Math.random() * 1400;
+    const n = 1 + Math.floor(Math.random() * 4);
+    for (let i = 0; i < n; i++) {
+      const at = t + i * (0.11 + Math.random() * 0.05);
+      const o = this.ctx.createOscillator();
+      const g = this.ctx.createGain();
+      o.type = "sine";
+      o.frequency.setValueAtTime(base, at);
+      o.frequency.exponentialRampToValueAtTime(base * (1.25 + Math.random() * 0.3), at + 0.06);
+      g.gain.setValueAtTime(0, at);
+      g.gain.linearRampToValueAtTime(0.035, at + 0.01);
+      g.gain.exponentialRampToValueAtTime(0.0001, at + 0.09);
+      o.connect(g).connect(this.out);
+      o.start(at); o.stop(at + 0.1);
+    }
+  }
+
+  /** Hammer on the anvil, far off across the square. */
+  private clink(t: number) {
+    for (const [f, v] of [[1750, 0.03], [2630, 0.018], [4100, 0.008]] as const) {
+      const o = this.ctx.createOscillator();
+      const g = this.ctx.createGain();
+      o.type = "triangle";
+      o.frequency.value = f;
+      g.gain.setValueAtTime(v, t);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.35);
+      o.connect(g).connect(this.out);
+      o.start(t); o.stop(t + 0.4);
+    }
   }
 }
