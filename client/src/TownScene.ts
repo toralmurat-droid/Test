@@ -29,7 +29,7 @@ import { WrathBanner } from "./wrath";
 import { inVillage } from "../../shared/wrath";
 import { GateTorches } from "./gateTorches";
 import { npcPresent, QUEST_ITEMS, usableObjects, USE_RANGE } from "../../shared/quests";
-import { NPCS, TALK_RANGE } from "../../shared/npcs";
+import { NPCS, NPC_DECOR, TALK_RANGE } from "../../shared/npcs";
 import { CHESTS, CHEST_RANGE } from "../../shared/chests";
 import { SHRINE, SHRINE_RANGE } from "../../shared/shrine";
 import { PORTALS, PORTAL_RANGE } from "../../shared/portals";
@@ -428,6 +428,11 @@ export class TownScene extends Phaser.Scene {
     document.getElementById("hud")!.hidden = false;
     this.minimap = new Minimap(document.getElementById("minimap") as HTMLCanvasElement, this.opts.name);
     this.npcs = new NpcLayer(this, (type, msg) => this.room.send(type, msg));
+    // Morwen's camp after dusk: coal glow under her brew, lantern light in the tent doorway
+    for (const d of NPC_DECOR) {
+      if (d.prop === "wc_rig") this.details?.addLight(d.x * TILE, d.y * TILE, 0xff6a2a, 1.5, 0.6, 0.15, 9, -7);
+      if (d.prop === "wc_tent") this.details?.addLight(d.x * TILE, d.y * TILE, 0xffa040, 1.3, 0.5, 0.1, 17, 3);
+    }
     this.villagers = new Villagers(this); // townsfolk idling on the square
     this.watch = new WatchLayer(this, (this.room.state as any).watch); // watchmen at the gates
     this.torches = new GateTorches(this); // torches at the gates, lit by the watch at dusk

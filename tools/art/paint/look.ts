@@ -19,6 +19,9 @@ export interface Look {
   shield?: { col: number; trim: number; emblem: number; style: "kite" | "round" };
   back?: "cape" | "quiver" | "pelt"; capeCol?: number;
   orb?: number;   // glowing staff stone
+  lips?: number;    // painted lips (front view)
+  corset?: number;   // laced waist cincher over the bodice
+  palmFlame?: number; // a small witch-fire dancing over the open near hand
   fx: number;     // swing trail colour
   build?: number; // 1 = normal, >1 broader shoulders
   skull?: boolean;  // the face is a bare skull (eyeGlow lights its sockets)
@@ -265,12 +268,13 @@ export const LOOKS: Record<string, Look> = {
     sleeve: 0x4a6430, arms: "cloth",
     weapon: "druidstaff", orb: 0x9be564, fx: 0x9be564, back: "cape", capeCol: 0x3c5226,
   },
+  // Morwen: a young witch in a red dress, black corset bodice, bare arms and a tall black hat with a red band
   witch: {
-    skin: 0xbcd4a0, hair: 0x2a1f3d, hairStyle: "long", eye: 0x6a1b9a,
-    head: "witch", headCol: 0x2b2140, headTrim: 0x8e44ad,
-    torso: "robe", torsoCol: 0x46305f, trim: 0x8e44ad, sash: 0x8e44ad,
-    legs: "dress", legCol: 0x2f2244, boots: 0x221a2e, bootStyle: "shoe",
-    sleeve: 0x3a2556, arms: "cloth",
-    weapon: "witchstaff", orb: 0xc77dff, fx: 0xc77dff, back: "cape", capeCol: 0x231a33,
+    skin: 0xf0c8a8, hair: 0x1c1216, hairStyle: "long", eye: 0xd4a017, lips: 0xa01c2a,
+    head: "witch", headCol: 0x1e181e, headTrim: 0xb02a2e,
+    torso: "shirt", torsoCol: 0xb02a2e, corset: 0x1e1418,
+    legs: "dress", legCol: 0x9a1e24, trim: 0x3a0a10, boots: 0x1a1214, bootStyle: "shoe",
+    sleeve: 0xf0c8a8, arms: "bare", bracer: 0x1e1418,
+    weapon: "none", fx: 0xff6a3a, palmFlame: 0xff6a3a,
   },
 };

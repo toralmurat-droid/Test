@@ -4,6 +4,7 @@ import "@fontsource/pixelify-sans/700.css";
 import "./npcs.css";
 import { pixelText } from "./pixeltext";
 import Phaser from "phaser";
+import { CAMP_PIVOT, TX as CAMP_TX, witchCampTextures } from "./witchCamp";
 import { worldPropTextures } from "./worldProps";
 import { NPCS, NPC_DECOR, Npc, npcNear, TALK_RANGE } from "../../shared/npcs";
 import {
@@ -78,11 +79,16 @@ export class NpcLayer {
     this.objects = new QuestObjects(scene);
   }
 
-  /** Hut, cauldron, forge… around the traders, plus Brann hammering at his anvil and the witch's bubbling brew. */
+  /** Morwen's tent and alchemy rig, Brann's forge… around the traders, plus Brann hammering at his anvil. */
   private addSurroundings(scene: Phaser.Scene) {
     worldPropTextures(scene);
+    witchCampTextures(scene);
     for (const d of NPC_DECOR) {
       const x = d.x * TILE, y = d.y * TILE;
+      if (d.prop.startsWith("wc_")) { // pixel-art camp props, 1.5 texels per world px
+        scene.add.sprite(x, y, d.prop, 0).setOrigin(0.5, CAMP_PIVOT[d.prop]).setScale(1 / CAMP_TX).setDepth(y).setFlipX(!!d.flip).play(`${d.prop}_idle`);
+        continue;
+      }
       if (d.prop === "weapon_rack") { // pixel-art rack shared with the camps (worldProps.ts)
         scene.add.sprite(x, y, "wp_weapon_rack", 0).setOrigin(0.5, 1).setScale(0.62).setDepth(y).setFlipX(!!d.flip);
         continue;
@@ -109,14 +115,6 @@ export class NpcLayer {
         scene.time.delayedCall(400, () => this.sparks(ax, ay)); // hammer hits the anvil on the 3rd frame
       };
       scene.time.addEvent({ delay: 1600, loop: true, callback: strike });
-    }
-    const pot = NPC_DECOR.find((d) => d.prop === "cauldron");
-    if (pot) {
-      const px = pot.x * TILE, py = pot.y * TILE - 12;
-      scene.time.addEvent({ delay: 450, loop: true, callback: () => {
-        const b = scene.add.circle(px + (Math.random() - 0.5) * 7, py, 1 + Math.random(), 0x9be564, 0.85).setDepth(py + 40);
-        scene.tweens.add({ targets: b, y: py - 14 - Math.random() * 10, alpha: 0, scale: 1.6, duration: 1100, onComplete: () => b.destroy() });
-      } });
     }
   }
 
