@@ -5,6 +5,7 @@ import { iconImg } from "./skillIcons";
 import {
   BRANCHES, childrenOf, EFFECT_TEXT, levelPower, lockReason, MAX_RANK, RANK_POWER, rankOf, SkillDef, SKILLS, spentPoints, STACK_NAME,
   talentPoints,
+  NEED_TEXT,
 } from "../../shared/skills";
 import { damageText, scaleText, skillDamage } from "../../shared/skillInfo";
 
@@ -368,6 +369,6 @@ export class TalentMenu {
     const pips = Array.from({ length: MAX_RANK }, (_, i) => `<i class="${i < r ? "on" : ""}"></i>`).join("");
     info.innerHTML = `<div class="ihead" style="--c:${color}">${iconImg(s.id, "iicon")}<div><b>${s.name}</b>` +
       `<span class="ttype${s.passive ? " pas" : ""}">${s.type} · Lv ${s.req}</span><span class="pips">${pips}</span></div></div>` +
-      `<p class="idesc">${s.desc}</p>${rows.join("")}<p class="istat ${why === "" ? "can" : ""}">${status}${keyNote}</p>`;
+      `<p class="idesc">${s.desc}</p>${s.needs ? `<p class="idesc ineed">Needs ${NEED_TEXT[s.needs]} in hand.</p>` : ""}${rows.join("")}<p class="istat ${why === "" ? "can" : ""}">${status}${keyNote}</p>`;
   }
 }

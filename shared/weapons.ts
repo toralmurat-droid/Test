@@ -82,3 +82,11 @@ export function poseSheet(cls: ClassKind, eq: Equipped): string {
   const f = weaponFamily(weaponType(cls, eq.weapon));
   return f === nativeFamily(cls) ? cls : `${cls}-${f}`;
 }
+
+/** Does the hero hold what the skill needs (SkillDef.needs)? */
+export function weaponOk(s: { needs?: "bow" | "melee" | "shield" } | undefined, cls: string, eq: Equipped): boolean {
+  if (!s?.needs) return true;
+  if (s.needs === "shield") return !!eq.shield;
+  const t = weaponType(cls, eq.weapon);
+  return s.needs === "bow" ? t === "bow" : t === "sword" || t === "katana" || t === "axe";
+}
