@@ -332,7 +332,7 @@ export class TownScene extends Phaser.Scene {
     // Secondary ranged weapon from the equipment screen (sling, knives, crossbow)
     this.input.keyboard!.on("keydown-R", () => { if (!this.chatting()) this.room?.send("ranged"); });
     const dodge = () => { if (!this.chatting()) this.room?.send("dodge"); };
-    this.input.keyboard!.on("keydown-SHIFT", dodge);
+    // (Shift no longer rolls: held, it turns the left click into an attack in place, see pointer.ts)
     this.input.keyboard!.on("keydown-F", dodge);
     this.input.keyboard!.on("keydown-C", () => { if (!this.chatting()) this.toggleHeroMenu(); });
     this.input.keyboard!.on("keydown-E", () => {

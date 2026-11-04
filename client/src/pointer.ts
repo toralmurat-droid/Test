@@ -47,7 +47,8 @@ type Goal =
   | { kind: "spot"; spot: ClickSpot }
   | { kind: "enemy"; id: string; secondary: boolean; fired: boolean; tries?: number; since?: number; waitAt?: number }
   | { kind: "cast"; x: number; y: number; self?: boolean }
-  | { kind: "castAt"; x: number; y: number };
+  | { kind: "castAt"; x: number; y: number }
+  | { kind: "stand"; since?: number };
 
 const STOP: InputState = { up: false, down: false, left: false, right: false };
 
@@ -104,6 +105,7 @@ export class PointerControls {
     // Round trip click -> server swing, smoothed: how far ahead to aim at a walking monster
     if (this.firedAt) { this.rtt = this.rtt * 0.7 + Math.min(600, this.scene.time.now - this.firedAt) * 0.3; this.firedAt = 0; }
     const g = this.goal;
+    if (g?.kind === "stand" && this.held !== 0) this.goal = undefined;
     if (g?.kind === "enemy" && !g.secondary) { g.fired = true; if (this.held !== 0) { this.goal = undefined; this.path = []; } }
   }
 
@@ -211,7 +213,13 @@ export class PointerControls {
     this.firedAt = 0;
     const { enemy, spot } = this.pick(p);
     const target = button === 2 ? this.host.target() : "dir";
-    if (button === 2 && target === "self") {
+    if (button === 0 && (p.event as MouseEvent | undefined)?.shiftKey) {
+      // Shift + left click (Murat): the left-click attack right where you stand, toward the mouse, no walking.
+      // Hold the button to keep attacking.
+      this.goal = { kind: "stand" };
+      this.path = [];
+      this.lastAct = 0;
+    } else if (button === 2 && target === "self") {
       // Buffs, auras, war cries: on the hero, wherever the click was
       this.goal = { kind: "cast", x: 0, y: 0, self: true };
       this.path = [];
@@ -294,6 +302,23 @@ export class PointerControls {
         this.host.fire(true);
         if (this.held !== 2) this.goal = undefined;
       }
+      return STOP;
+    }
+
+    if (goal.kind === "stand") {
+      if (now - this.lastAct >= (this.held === 0 ? 110 : 300)) {
+        this.lastAct = now;
+        // Toward the enemy under the mouse if there is one (aimed like a click on it), else the mouse spot
+        const over = this.hovered ? this.host.enemy(this.hovered) : undefined;
+        const aim = over && !over.dead ? this.aimAt(over, me, false) : this.world(pointer);
+        goal.since ??= now;
+        this.host.stop();
+        this.host.send("face", aim);
+        if (!this.firedAt) this.firedAt = now;
+        this.host.fire(false);
+      }
+      // One click: keep asking until the server swings (it drops attacks while the last one cools down), max 1.5 s
+      if (this.held !== 0 && now - (goal.since ?? now) > 1500) this.goal = undefined;
       return STOP;
     }
 

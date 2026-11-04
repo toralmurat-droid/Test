@@ -15,7 +15,8 @@ let shown = 0;
 let waiting: (() => void)[] = [];
 
 const TIPS = [
-  "Watch the wind-up of big enemies and roll away (Shift or F).",
+  "Watch the wind-up of big enemies and roll away with F.",
+  "Hold Shift and left-click to attack where you stand, toward the mouse.",
   "Left-click the ground to walk there. Hold the button to keep walking.",
   "Left-click a monster to attack it. Hold the button to keep hitting for a 3-hit combo.",
   "Press 1 to 0 to pick your active skill, then right-click to cast it.",
