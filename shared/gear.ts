@@ -154,7 +154,7 @@ export function canWear(cls: string, id: string): boolean {
   return !!d && (!d.cls || d.cls === cls);
 }
 
-export const BAG_SIZE = 12;
+export const BAG_SIZE = 24;
 /** Base item grade (Bronze < Frost < Dragonfire). The item's colour comes from its rarity (RARITY_NAMES). */
 export const TIER_NAMES = ["", "Basic", "Fine", "Superior"];
 
