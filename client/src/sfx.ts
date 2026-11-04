@@ -130,7 +130,7 @@ function begin() {
   comp.threshold.value = -14; comp.knee.value = 10; comp.ratio.value = 6; comp.attack.value = 0.003; comp.release.value = 0.2;
   master.connect(comp).connect(ctx.destination);
   bus = ctx.createGain(); bus.connect(master);
-  bedBus = ctx.createGain(); bedBus.gain.value = 0.8; bedBus.connect(master);
+  bedBus = ctx.createGain(); bedBus.gain.value = 0.6; bedBus.connect(master);
   noiseBuf = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate);
   const d = noiseBuf.getChannelData(0);
   for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
@@ -519,7 +519,7 @@ function loopTones(freqs: number[], type: OscillatorType, tremHz: number): Bed {
 
 function makeBeds() {
   wind = loopNoise("bandpass", 500, 0.8);
-  water = loopNoise("bandpass", 900, 0.6);
+  water = loopNoise("lowpass", 650, 0.5);
   fire = loopNoise("lowpass", 350, 0.7);
   hum = loopTones([196, 293.7, 392.5], "sine", 0.25);
   portalHum = loopTones([65.4, 130.8, 98.2], "triangle", 1.3);
@@ -532,6 +532,9 @@ function makeBeds() {
     }
   }
 }
+
+/** Level of the background one-shots (fire crackle, birds, crickets, owl, chime). */
+const ENV = 0.75;
 
 const set = (b: Bed | null, v: number, tc = 0.6) => { if (b && ctx) b.g.gain.setTargetAtTime(v, ctx.currentTime, tc); };
 
@@ -554,10 +557,10 @@ function envTick() {
   const town = TOWNS.includes(area);
   const { dark } = dayPhase(dayTime(Date.now()));
 
-  // Water: rivers and lakes murmur
-  const wv = Math.min(0.32, waterN * 0.035);
-  set(water, wv);
-  if (water?.f) water.f.frequency.setTargetAtTime(700 + 300 * Math.sin(bedTime * 0.7), ctx.currentTime, 0.5);
+  // Water: a small stream, a soft low murmur (no hiss)
+  const wv = Math.min(0.07, waterN * 0.008) * (0.85 + 0.15 * Math.sin(bedTime * 0.5));
+  set(water, wv, 1.2);
+  if (water?.f) water.f.frequency.setTargetAtTime(560 + 120 * Math.sin(bedTime * 0.37), ctx.currentTime, 1);
   // Wind: stronger in open land, gusting; softer between houses, a bit louder at night
   const open = 1 - Math.min(1, (treeN + solidN * 1.5) / (n * 0.35));
   const gust = 0.6 + 0.4 * Math.sin(bedTime * 0.23) * Math.sin(bedTime * 0.071 + 1);
@@ -567,14 +570,14 @@ function envTick() {
   let fd = Infinity, fx = 0, fy = 0;
   for (const [x, y] of FIRES) { const d = Math.hypot(x - lx, y - ly); if (d < fd) { fd = d; fx = x; fy = y; } }
   const fk = Math.max(0, 1 - fd / (7 * TILE));
-  set(fire, 0.25 * fk * fk, 0.3);
+  set(fire, 0.2 * fk * fk, 0.3);
   if (fk > 0.05 && Math.random() < 0.9) for (let i = 0; i < 1 + Math.floor(Math.random() * 3); i++) {
-    play("crackle", fx + rnd(-8, 8), fy, 1, undefined, { key: "crackle" + i, minGap: 0, delay: Math.random() * 0.25 });
+    play("crackle", fx + rnd(-8, 8), fy, ENV, undefined, { key: "crackle" + i, minGap: 0, delay: Math.random() * 0.25 });
   }
   // Shrine: a soft choir hum close by
   const sd = Math.hypot(SHRINE.x - lx, SHRINE.y - ly);
   set(hum, 0.05 * Math.max(0, 1 - sd / (6 * TILE)) ** 2, 1);
-  if (sd < 6 * TILE && Math.random() < 0.03) play("chime", SHRINE.x, SHRINE.y, 0.7);
+  if (sd < 6 * TILE && Math.random() < 0.03) play("chime", SHRINE.x, SHRINE.y, 0.7 * ENV);
   // Portal stones: a deep hum
   let pd = Infinity;
   for (const p of PORTALS) pd = Math.min(pd, Math.hypot(p.x - lx, p.y - ly));
@@ -582,10 +585,10 @@ function envTick() {
   // Birds by day near trees, crickets and an owl at night
   const leafy = Math.min(1, treeN / 25) * (town ? 0.5 : 1);
   if (dark < 0.5) {
-    if (Math.random() < 0.06 + 0.2 * leafy) play("bird", lx + rnd(-260, 260), ly + rnd(-200, 200), 0.4 + 0.5 * leafy, Math.floor(Math.random() * 4), { key: "bird", minGap: 400 });
+    if (Math.random() < 0.06 + 0.2 * leafy) play("bird", lx + rnd(-260, 260), ly + rnd(-200, 200), (0.4 + 0.5 * leafy) * ENV, Math.floor(Math.random() * 4), { key: "bird", minGap: 400 });
   } else {
-    if (!town && Math.random() < 0.35) play("cricket", lx + rnd(-220, 220), ly + rnd(-180, 180), 0.5, undefined, { key: "cricket", minGap: 200 });
-    if (leafy > 0.3 && Math.random() < 0.01) play("owl", lx + rnd(-300, 300), ly + rnd(-250, 250), 0.7);
+    if (!town && Math.random() < 0.35) play("cricket", lx + rnd(-220, 220), ly + rnd(-180, 180), 0.5 * ENV, undefined, { key: "cricket", minGap: 200 });
+    if (leafy > 0.3 && Math.random() < 0.01) play("owl", lx + rnd(-300, 300), ly + rnd(-250, 250), 0.7 * ENV);
   }
 }
 

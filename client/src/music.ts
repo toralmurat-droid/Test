@@ -93,10 +93,10 @@ function save() {
   try { localStorage.setItem(storeKey, JSON.stringify(settings)); } catch { /* private mode */ }
 }
 
-/** Curve so the slider feels even to the ear; music sits under the game, so max is 0.6. */
+/** Curve so the slider feels even to the ear; music sits under the game, so max is 0.8. */
 function targetGain(): number {
   if (settings.muted || document.hidden) return 0;
-  return 0.6 * settings.volume * settings.volume;
+  return 0.8 * settings.volume * settings.volume;
 }
 
 function ramp(g: AudioParam, value: number, seconds: number) {
@@ -149,7 +149,7 @@ function playTrack() {
   }
   if (track.ambience || track.withSounds) {
     ambience ??= new Ambience(ctx, master);
-    ambience.setLevel(track.ambience ? 0.9 : 0.4);
+    ambience.setLevel(track.ambience ? 0.65 : 0.28);
     ambience.start();
   }
 }
