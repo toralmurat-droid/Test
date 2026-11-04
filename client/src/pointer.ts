@@ -1,7 +1,8 @@
 import Phaser from "phaser";
 import { InputState, TILE } from "../../shared/constants";
 import { findPath, type Pt } from "./pathfind";
-import { fromIso, isoX, isoY, ISO } from "./iso";
+import { fromIso, isoX, isoY, ISO, isoAnchor } from "./iso";
+import { ART_PX } from "./pixelgrid";
 import { setWorldCursor } from "./cursors";
 
 /**
@@ -15,7 +16,7 @@ import { setWorldCursor } from "./cursors";
  */
 
 /** x/y: drawn feet (for picking); sx/sy: newest server feet (for reach and aim); body: extra melee reach on it. */
-export interface ClickEnemy { id: string; x: number; y: number; sx: number; sy: number; h: number; body: number; dead: boolean }
+export interface ClickEnemy { id: string; x: number; y: number; sx: number; sy: number; h: number; body: number; dead: boolean; sprite?: Phaser.GameObjects.Sprite }
 export interface ClickSpot { x: number; y: number; h: number; w: number; range: number; act: () => void }
 
 export interface PointerHost {
@@ -60,8 +61,9 @@ export class PointerControls {
   private stuckPos?: Pt;
   private stuck = 0;
   private hovered?: string; // enemy under the mouse
-  private ring?: Phaser.GameObjects.Graphics; // marks the enemy that a click attacks (or would attack)
-  private ringOn = "";
+  /** One-texel silhouettes (left, right, up, down) behind the enemy that a click attacks (or would attack). */
+  private outline: Phaser.GameObjects.Sprite[] = [];
+  private outlined?: { sprite: Phaser.GameObjects.Sprite; chase: boolean };
 
   constructor(private scene: Phaser.Scene, private host: PointerHost) {
     scene.input.mouse?.disableContextMenu();
@@ -69,6 +71,8 @@ export class PointerControls {
     scene.input.on("pointerup", (p: Phaser.Input.Pointer) => { if (p.button === this.held) this.held = -1; });
     scene.input.on("gameout", () => { this.held = -1; });
     scene.input.on("pointermove", (p: Phaser.Input.Pointer) => this.hover(p));
+    // After the scene's update: the monster's frame, flip and squash for this frame are set by then
+    scene.events.on(Phaser.Scenes.Events.POST_UPDATE, () => this.syncOutline());
   }
 
   /** Stop whatever the mouse asked for (a movement key was pressed, the hero died...). */
@@ -132,22 +136,37 @@ export class PointerControls {
     setWorldCursor(canvas, !!enemy);
   }
 
-  /** A thin ring under the enemy being attacked (red) or under the mouse (faint), so it's clear who gets hit. */
+  /** A pixel outline around the enemy being attacked (red) or under the mouse (faint gold), so it's clear who gets hit. */
   drawRing() {
     const goal = this.goal;
     const chase = goal?.kind === "enemy" ? goal.id : undefined;
     const e = (chase && this.host.enemy(chase)) || (this.hovered ? this.host.enemy(this.hovered) : undefined);
-    if (!e || e.dead) { this.ring?.setVisible(false); return; }
-    const g = (this.ring ??= this.scene.add.graphics().setDepth(1));
-    const key = `${e.id}|${chase ? 1 : 0}`;
-    if (key !== this.ringOn) {
-      this.ringOn = key;
-      const w = 14 + e.body * 2.2, h = w / 2;
-      g.clear();
-      g.lineStyle(1, 0x1a0c06, 0.55).strokeEllipse(0, 1, w, h);
-      g.lineStyle(1, chase ? 0xe0452b : 0xf2c14e, chase ? 0.95 : 0.6).strokeEllipse(0, 0, w, h);
+    this.outlined = e && !e.dead && e.sprite ? { sprite: e.sprite, chase: !!chase } : undefined;
+  }
+
+  private static readonly OFFS = [[-1, 0], [1, 0], [0, -1], [0, 1]];
+
+  /** Copies the outlined monster's look (frame, flip, scale, crop) into the tinted silhouettes, one art pixel out. */
+  private syncOutline() {
+    const t = this.outlined, s = t?.sprite;
+    if (!t || !s || !s.active || !s.visible || s.alpha < 0.05) { for (const o of this.outline) o.setVisible(false); return; }
+    if (!this.outline.length) {
+      for (let i = 0; i < 4; i++) this.outline.push(this.scene.add.sprite(0, 0, s.texture.key).setVisible(false));
     }
-    g.setPosition(e.x, e.y).setVisible(true);
+    const color = t.chase ? 0xd2452e : 0xe8c46a, alpha = (t.chase ? 0.85 : 0.5) * s.alpha;
+    const crop = (s as any)._crop;
+    // One texel of the monster's own art (big monsters are scaled up), snapped to the screen's pixel grid
+    const step = ART_PX * Math.max(1, Math.round(Math.abs(s.scaleX) / ART_PX));
+    PointerControls.OFFS.forEach(([dx, dy], i) => {
+      const o = this.outline[i];
+      if (o.texture !== s.texture || o.frame !== s.frame) o.setTexture(s.texture.key, s.frame.name);
+      o.setOrigin(s.originX, s.originY).setScale(s.scaleX, s.scaleY).setFlip(s.flipX, s.flipY).setRotation(s.rotation);
+      if (s.isCropped && crop) o.setCrop(crop.x, crop.y, crop.width, crop.height); else if (o.isCropped) o.setCrop();
+      o.setTintFill(color).setAlpha(alpha).setVisible(true);
+      // Just under the monster; in the iso view it rides along with it, offset straight across the screen
+      o.setPosition(s.x + dx * step, s.y + dy * step).setDepth(s.depth - 0.05);
+      isoAnchor(o, s);
+    });
   }
 
   /** The nearest live enemy within `r` px of a world point. */

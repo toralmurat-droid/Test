@@ -1055,7 +1055,7 @@ export class TownScene extends Phaser.Scene {
     // the drawn one plays ~110 ms behind, so a monster just knocked back still looked in reach)
     const asEnemy = (id: string, e: Entity): ClickEnemy => ({
       id, x: e.sprite.x, y: e.sprite.y, sx: e.tx ?? e.sprite.x, sy: e.ty ?? e.sprite.y,
-      h: e.top || 20, body: e.mob ? mobBody(e.state.kind) : 0, dead: !!e.state.dead,
+      h: e.top || 20, body: e.mob ? mobBody(e.state.kind) : 0, dead: !!e.state.dead, sprite: e.sprite,
     });
     const secondarySkill = () => {
       const p = meEnt()?.state;
