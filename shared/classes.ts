@@ -126,8 +126,8 @@ export const energyName = (cls: string) => (cls === "wizard" ? "Magic" : "Stamin
 export const DODGE = { distance: 48, durationMs: 250, invulnMs: 300, cooldownMs: 1500 };
 
 // ---- Levels -------------------------------------------------------------
-/** Heroes and monsters both stop at Lv 99 (Murat). */
-export const MAX_LEVEL = 99;
+/** Heroes and monsters both stop at Lv 30 for now (Murat 2026-11-04; was 99). */
+export const MAX_LEVEL = 30;
 export const PVP_KILL_XP = 20;
 
 /** Total XP needed to reach `level` (level 1 = 0 XP). */
