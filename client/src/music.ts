@@ -389,8 +389,8 @@ class Ambience {
 
   start() {
     if (this.timer !== null) return;
-    this.bed(320, 0.6, 0.22, 0.06);  // wind
-    this.bed(520, 1.4, 0.08, 0.17);  // distant voices
+    this.bed(260, 0.7, 0.08, 0.06);  // wind, a soft breath under the tune
+    this.bed(520, 1.4, 0.05, 0.17);  // distant voices
     const now = this.ctx.currentTime;
     this.nextBird = now + 1 + Math.random() * 2;
     this.nextHammer = now + 4 + Math.random() * 6;
@@ -417,7 +417,7 @@ class Ambience {
     const lfo = this.ctx.createOscillator();
     const depth = this.ctx.createGain();
     lfo.frequency.value = lfoHz;
-    depth.gain.value = vol * 0.6;
+    depth.gain.value = vol * 0.3; // gentle drift, no big swells
     lfo.connect(depth).connect(g.gain);
     src.connect(f).connect(g).connect(this.out);
     src.start(); lfo.start();
