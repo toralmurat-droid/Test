@@ -4,6 +4,7 @@ import { ArraySchema, MapSchema, Schema, type } from "@colyseus/schema";
 import {
   AGGRO, aggroLevelFactor, BLOB_AI, BONES, DEMON, BROOD, Dir, FACTION, FEUD, MERGE, MobDef, MOTHER, SKELETON_AI, HIT_RADIUS, mobScale, regionMobLevel, regionSpecialLevel, InputState, MOB_ATTACK_RANGE, MOBS, MobKind, rollSkeletonWeapon, SKELETON_BOW, SKELETON_WEAPONS, SkeletonWeapon, REGEN_DELAY_MS, REGEN_RAMP_MS, regenFromStamina, SAFE_REGEN_MULT,
   RESPAWN_MS, TICK_RATE, TILE,
+  HOLLOW_KING,
 } from "../shared/constants";
 import {
   ATTACK_VARIANTS, CLASSES, ClassKind, COMBO_WINDOW_MS, DODGE, EMOTES, ENERGY, DASH_INVULN_MS, GUARD_REDUCTION, isClassKind, levelFromXp, MAX_XP, capLevel, PVP_KILL_XP, xpForLevel,
@@ -22,7 +23,7 @@ import { isDecorSolidAt, npcById, npcNear, TALK_RANGE } from "../shared/npcs";
 import { beyondWall, WATCH, WATCH_POSTS, WatchPost } from "../shared/watch";
 import { inVillage, WRATH } from "../shared/wrath";
 import { sellPrice, SHOPS } from "../shared/shops";
-import { BLOB_KINDS, CHAINS, chainOpen, chainState, inZone, isBlob, npcPresent, QuestState, questStep, stepGoal, Summon, TUT_CHAIN, TUT_QUESTS, USE_RANGE } from "../shared/quests";
+import { BLOB_KINDS, CHAINS, CROWN_CHAIN, packQuest, chainOpen, chainState, inZone, isBlob, npcPresent, QuestState, questStep, stepGoal, Summon, TUT_CHAIN, TUT_QUESTS, USE_RANGE } from "../shared/quests";
 import { findHideSpot, HIDE, MOTHER_KEEP_OUT, noMobsAt, spawnPoint, SPAWN_ZONES, villageDist, zoneCap } from "../shared/spawns";
 import { moveStep } from "../shared/movement";
 import { SLOTS_BY_ZONE, WORK_SLOTS } from "../shared/siege";
@@ -127,6 +128,9 @@ export class Player extends Schema {
   @type("number") tutId = 0;
   @type("number") tutStage = 0;
   @type("number") tutCount = 0;
+  // The Hollow Crown (CHAINS[4], the first zone's last story): id, stage and count packed in one number (QuestChain.packed),
+  // because the Player schema is at Colyseus's 64-field limit. This is the 64th: a new synced field needs one packed too.
+  @type("number") crown = 0;
   nextSummon = 0; // when the server may bring back this player's quest fused blob (QuestStep.summon)
   // Skill slots on keys 1..0 (shared/slots.ts): a skill id or "" (empty). Empty until the player assigns them.
   @type(["string"]) slots = new ArraySchema<string>(...Array(SLOT_COUNT).fill(""));
@@ -192,6 +196,8 @@ export class Mob extends Schema {
   nextHeal = 0; // healer blob
   specialKind = ""; specialAt = 0; nextBounce = 0; nextSlam = 0; // mother blob special moves (necromancer casts too)
   nextRaise = 0; nextCircle = 0; castX = 0; castY = 0; // necromancer: raise dead, Death Circle aim
+  pools: [number, number][] = []; // the Hollow King's Gloam Pools waiting to burst (HOLLOW_KING.pools)
+  servant = false; // called up by the Hollow King: fights for him, never starts a bone ritual
   // Redfang Hollow bandits (shared/bandits.ts): camp member, its post (CAMP_POSTS index), patrol progress, horn alert
   camp = false; post = -1; perch = false; pLeg = 0; pDir = 1; stuckSince = 0; detourUntil = 0;
   alertUntil = 0; alertHero = ""; nextHorn = 0; nextVolley = 0; rallyUntil = 0; chargeMult = 1; dashHit = false; reinforced = false;
@@ -424,6 +430,9 @@ const rangedOf = (m: Mob): RangedCfg | undefined =>
 /** A monster's stats: its kind's numbers, a bandit's role on top, and the camp's horn alert (they come from far). */
 function mobDef(m: Mob, now = Date.now()): MobDef {
   const base = MOBS[m.kind];
+  // The Hollow King grows faster once badly hurt (HOLLOW_KING.wrath)
+  if (m.kind === "hollowking") return m.hp < m.maxHp * HOLLOW_KING.wrath.hpFrac
+    ? { ...base, speed: base.speed * HOLLOW_KING.wrath.speed, attackCooldownMs: base.attackCooldownMs * HOLLOW_KING.wrath.cooldown } : base;
   if (m.kind !== "bandit" && m.kind !== "banditchief") return base;
   const r = m.kind === "bandit" ? BANDIT_ROLES[roleOf(m.weapon)] : undefined;
   const rally = now < m.rallyUntil;
@@ -691,6 +700,7 @@ export class TownRoom extends Room<TownState> {
       boneId: p.boneId, boneStage: p.boneStage, boneCount: p.boneCount, boneVer: CHAINS[1].version,
       redId: p.redId, redStage: p.redStage, redCount: p.redCount, redVer: CHAINS[2].version, kit: 1,
       tutId: p.tutId, tutStage: p.tutStage, tutCount: p.tutCount, tutVer: CHAINS[TUT_CHAIN].version,
+      ...(() => { const q = this.qs(p, CROWN_CHAIN); return { crownId: q.questId, crownStage: q.questStage, crownCount: q.questCount, crownVer: CHAINS[CROWN_CHAIN].version }; })(),
       portals: [...p.portals],
     };
   }
@@ -1080,7 +1090,7 @@ export class TownRoom extends Room<TownState> {
   // ---- Blob merging -----------------------------------------------------------
 
   /** Blobs that can call for help and fuse (Mother Blobs too, Murat 2026-11-03). */
-  private static canMerge(m: Mob) { return BLOB_KINDS.includes(m.kind); }
+  private static canMerge(m: Mob) { return BLOB_KINDS.includes(m.kind) && !m.servant; } // the Hollow King's servants stay his
 
   /** Blobs below MERGE.minLevel don't merge, unless a hero close by is on the "watch a blob call for help" quest step. */
   private mergeLevelOk(m: Mob) {
@@ -1284,7 +1294,7 @@ export class TownRoom extends Room<TownState> {
       const gx0 = Math.floor(p.x / FEUD_CELL), gy0 = Math.floor(p.y / FEUD_CELL);
       for (let gy = gy0 - cells; gy <= gy0 + cells; gy++) for (let gx = gx0 - cells; gx <= gx0 + cells; gx++) {
         for (const [id, m] of this.feudGrid.get(gx * 4096 + gy) ?? []) {
-          if (m.dead || m.hidden || m.ritual || !TownRoom.RITUAL_KINDS.includes(m.kind) || Math.hypot(m.x - p.x, m.y - p.y) > R.near) continue;
+          if (m.dead || m.hidden || m.ritual || m.servant || !TownRoom.RITUAL_KINDS.includes(m.kind) || Math.hypot(m.x - p.x, m.y - p.y) > R.near) continue;
           near.push([id, m]);
         }
       }
@@ -1830,6 +1840,8 @@ export class TownRoom extends Room<TownState> {
       if (input === STILL) m.dir = Math.abs(t.x - m.x) > Math.abs(t.y - m.y) ? (t.x > m.x ? "right" : "left") : (t.y > m.y ? "down" : "up");
     } else if (t && m.kind === "demon" && this.demonSpecial(m, id, Math.hypot(t.x - m.x, t.y - m.y), now)) {
       input = STILL;
+    } else if ((t || m.specialAt) && m.kind === "hollowking" && this.kingSpecial(m, id, t, t ? Math.hypot(t.x - m.x, t.y - m.y) : 0, now)) {
+      input = STILL;
     } else if (t && m.kind === "motherblob" && this.motherSpecial(m, id, Math.hypot(t.x - m.x, t.y - m.y), now)) {
       input = STILL;
     } else if ((t || m.specialAt) && (m.kind === "banditchief" || m.weapon === "brute") && this.banditSpecial(m, id, t, t ? Math.hypot(t.x - m.x, t.y - m.y) : 0, now)) {
@@ -2110,6 +2122,103 @@ export class TownRoom extends Room<TownState> {
     return true;
   }
 
+  /**
+   * The Hollow King's moves (HOLLOW_KING): every one is marked on the ground first ("hkwind"), then lands ("hkhit").
+   * Crown Cleave round him up close; Gloam Pools under the heroes near him; below 60% HP he calls his servants;
+   * below 30% Crown's Wrath, a ring of ash round him that only spares those standing close.
+   */
+  private kingSpecial(m: Mob, id: string, t: Player | undefined, dist: number, now: number): boolean {
+    const K = HOLLOW_KING, frac = m.hp / Math.max(1, m.maxHp);
+    const dmgOf = (mult: number) => Math.round(mobDef(m, now).damage * mobScale(m.level, "damage") * mult);
+    if (m.specialAt) {
+      if (now < m.specialAt) return true;
+      const kind = m.specialKind;
+      m.specialAt = 0; m.winding = false; m.lastAttack = now; m.specialKind = "";
+      if (kind === "cleave" || kind === "wrath") {
+        const C = kind === "cleave" ? K.cleave : K.wrath, inner = kind === "wrath" ? K.wrath.inner : 0, dmg = dmgOf(C.dmgMult);
+        this.state.players.forEach((p, pid) => {
+          if (p.dead) return;
+          const dx = p.x - m.x, dy = p.y - m.y, d = Math.hypot(dx, dy);
+          if (d > C.radius || d < inner) return;
+          this.damagePlayer(pid, dmg, kind === "cleave" ? "Hollow King's Crown Cleave" : "Hollow King's Crown's Wrath", d > 0.1 ? [dx / d, dy / d] : [0, 1],
+            kind === "cleave" ? K.cleave.knockback : 1.5, { atkLevel: m.level, from: id });
+        });
+        this.broadcast("hkhit", { id, kind, x: Math.round(m.x), y: Math.round(m.y), r: C.radius, inner });
+      } else if (kind === "pools") {
+        const dmg = dmgOf(K.pools.dmgMult);
+        for (const [x, y] of m.pools) this.state.players.forEach((p, pid) => {
+          if (p.dead || Math.hypot(p.x - x, p.y - y) > K.pools.radius) return;
+          this.damagePlayer(pid, dmg, "Hollow King's Gloam Pool", [0, 0], 0, { atkLevel: m.level, from: id, slowMs: K.pools.slowMs });
+        });
+        this.broadcast("hkhit", { id, kind, pts: m.pools.map(([x, y]) => [Math.round(x), Math.round(y)]), r: K.pools.radius });
+        m.pools = [];
+      } else if (kind === "servants") {
+        const pts: [number, number][] = [];
+        let mine = 0;
+        this.state.mobs.forEach((c) => { if (c.mother === id && !c.dead) mine++; });
+        for (const k of K.servants.kinds) {
+          if (mine >= K.servants.max) break;
+          const c = this.raiseServant(m, id, k);
+          if (c) { pts.push([Math.round(c.x), Math.round(c.y)]); mine++; }
+        }
+        this.broadcast("hkhit", { id, kind, pts });
+      }
+      return true;
+    }
+    if (!t || m.broken || m.windUntil || m.stunned) return false;
+    let mine = 0;
+    if (frac < K.servants.hpFrac) this.state.mobs.forEach((c) => { if (c.mother === id && !c.dead) mine++; });
+    const wind = (kind: string, ms: number, extra: Record<string, unknown> = {}) => {
+      m.specialKind = kind; m.specialAt = now + ms; m.winding = true;
+      this.broadcast("hkwind", { id, kind, ms, x: Math.round(m.x), y: Math.round(m.y), ...extra });
+    };
+    if (frac < K.wrath.hpFrac && now >= m.nextLeap && dist <= K.wrath.radius) {
+      m.nextLeap = now + K.wrath.cooldownMs;
+      wind("wrath", K.wrath.windupMs, { r: K.wrath.radius, inner: K.wrath.inner });
+    } else if (frac < K.servants.hpFrac && now >= m.nextRaise && mine < K.servants.max) {
+      m.nextRaise = now + K.servants.everyMs;
+      wind("servants", K.servants.castMs);
+    } else if (now >= m.nextCircle && dist <= K.pools.range && dist > K.cleave.range) {
+      // under the target and up to two more heroes close to him (or beside the target when alone)
+      m.nextCircle = now + K.pools.cooldownMs;
+      const near: Player[] = [t];
+      this.state.players.forEach((p) => { if (p !== t && !p.dead && near.length < K.pools.count && Math.hypot(p.x - m.x, p.y - m.y) <= K.pools.range) near.push(p); });
+      m.pools = [[t.x, t.y]];
+      for (let i = 1; i < K.pools.count; i++) {
+        const o = near[i], a = Math.random() * Math.PI * 2, r = K.pools.spread * (0.6 + Math.random() * 0.4);
+        m.pools.push(o ? [o.x, o.y] : [t.x + Math.cos(a) * r, t.y + Math.sin(a) * r * 0.8]);
+      }
+      wind("pools", K.pools.windupMs, { pts: m.pools.map(([x, y]) => [Math.round(x), Math.round(y)]), r: K.pools.radius });
+    } else if (now >= m.nextSweep && dist <= K.cleave.range) {
+      m.nextSweep = now + K.cleave.cooldownMs;
+      wind("cleave", K.cleave.windupMs, { r: K.cleave.radius });
+    } else return false;
+    return true;
+  }
+
+  /** One of the Hollow King's servants comes out of the ground beside him (belongs to him, crumbles when he falls). */
+  private raiseServant(k: Mob, kingId: string, kind: MobKind): Mob | undefined {
+    for (let i = 0; i < 10; i++) {
+      const a = Math.random() * Math.PI * 2, r = 30 + Math.random() * 40;
+      const x = k.x + Math.cos(a) * r, y = k.y + Math.sin(a) * r;
+      if (isSolidAt(x, y) || isSafeZone(x, y)) continue;
+      const c = new Mob();
+      c.kind = kind; c.zone = -1; c.mother = kingId; c.servant = true;
+      if (kind === "skeleton") c.weapon = rollSkeletonWeapon();
+      if (kind === "shooterblob") c.canShoot = true;
+      if (kind === "warriorblob") c.canCharge = true;
+      c.x = c.homeX = x; c.y = c.homeY = y;
+      c.level = regionMobLevel(k.level - HOLLOW_KING.servants.levelDrop);
+      c.hp = c.maxHp = Math.round(MOBS[kind].maxHp * mobScale(c.level, "hp"));
+      c.target = k.target;
+      if (c.target) this.addHate(c, c.target, 0);
+      c.stunUntil = Date.now() + 600; // climbing out
+      this.state.mobs.set(`r${++this.mobSeq}`, c);
+      return c;
+    }
+    return undefined;
+  }
+
   private updateProjectile(s: Projectile, id: string, dt: number) {
     const ox = s.vx, oy = s.vy;
     // Sub-step so fast shots never skip over a target or a thin wall
@@ -2171,8 +2280,11 @@ export class TownRoom extends Room<TownState> {
     const gold = Math.round((def.gold[0] + Math.floor(Math.random() * (def.gold[1] - def.gold[0] + 1))) * goldMult);
     if (gold > 0) this.dropItem("gold", x, y, gold);
     if (Math.random() < potionChance(def.potionChance, level)) this.dropItem("potion", x, y, 1);
-    const gear = rollGear(kind, level);
-    if (gear) this.dropItem("gear", x, y, 1, gear);
+    // the Hollow King, the first zone's final boss, leaves a little hoard
+    for (let i = kind === "hollowking" ? 3 : 1; i > 0; i--) {
+      const gear = rollGear(kind, level);
+      if (gear) this.dropItem("gear", x, y, 1, gear);
+    }
   }
 
   private pickUp(p: Player, pid: string) {
@@ -2590,8 +2702,8 @@ export class TownRoom extends Room<TownState> {
       const x = m.x, y = m.y, level = m.level, weapon = m.weapon === "bow" ? "sword" : m.weapon, mother = m.mother;
       this.clock.setTimeout(() => this.spawnCrawler(x, y, level, weapon, mother, attackerId), BONES.crawlDelayMs);
     }
-    if (m.kind === "necromancer") {
-      // Its raised skeletons fall apart with it
+    if (m.kind === "necromancer" || m.kind === "hollowking") {
+      // Its raised skeletons (the Hollow King's servants) fall apart with it
       this.state.mobs.forEach((c, cid) => {
         if (c.mother !== targetId || c.dead) return;
         c.dead = true; c.hp = 0;
@@ -2815,7 +2927,8 @@ export class TownRoom extends Room<TownState> {
   /** One chain's progress on this player. */
   private qs(p: Player, c: number): QuestState { return chainState(p, c)!; }
   private qset(p: Player, c: number, v: Partial<QuestState>) {
-    const [a, b, n] = CHAINS[c].keys, r = p as unknown as Record<string, number>;
+    const [a, b, n] = CHAINS[c].keys, r = p as unknown as Record<string, number>, pk = CHAINS[c].packed;
+    if (pk) { const q = { ...this.qs(p, c), ...v }; r[pk] = packQuest(q.questId, q.questStage, q.questCount); return; }
     if (v.questId !== undefined) r[a] = v.questId;
     if (v.questStage !== undefined) r[b] = v.questStage;
     if (v.questCount !== undefined) r[n] = v.questCount;
@@ -3028,6 +3141,11 @@ export class TownRoom extends Room<TownState> {
       if (host === "demon") { m.nextStomp = Date.now() + 2500; m.stunUntil = Date.now() + 700; } // climbing out
       this.state.mobs.set(id, m);
       if (host === "demon") this.broadcast("demonrise", { id, x: Math.round(m.x), y: Math.round(m.y) });
+      if (host === "hollowking") {
+        m.stunUntil = Date.now() + 1200; // rising from his throne
+        const t0 = Date.now(); m.nextSweep = t0 + 2500; m.nextCircle = t0 + 4500; // a breath before his first moves
+        this.broadcast("kingrise", { id, x: Math.round(m.x), y: Math.round(m.y) });
+      }
       return;
     }
     m.merged = sm.parts.length; m.parts = rest.join(","); m.mergeCap = m.merged;
@@ -3043,6 +3161,11 @@ export class TownRoom extends Room<TownState> {
     this.state.mobs.forEach((m, mid) => {
       if (m.summonFor !== pid || m.dead || (c !== undefined && m.summonChain !== c)) return;
       m.dead = true; m.hp = 0;
+      this.state.mobs.forEach((s, sid) => { // and whatever it called up (the Hollow King's servants)
+        if (s.mother !== mid || s.dead) return;
+        s.dead = true; s.hp = 0;
+        this.clock.setTimeout(() => this.state.mobs.delete(sid), 500);
+      });
       this.clock.setTimeout(() => this.state.mobs.delete(mid), 500);
     });
   }

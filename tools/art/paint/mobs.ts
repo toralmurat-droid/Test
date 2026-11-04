@@ -330,6 +330,7 @@ export function buildMobs(out: string, ONLY?: string[]) {
     humanoid("mob_skeletonmage", "skeletonmage", 24, 32, 31.2 / 32, 0.93),
     humanoid("mob_necromancer", "necromancer", 24, 32, 31.2 / 32, 0.93),
     humanoid("mob_demon", "demon", 28, 34, 33 / 34, 1.0, true),
+    humanoid("mob_hollowking", "hollowking", 44, 48, 42 / 48, 1.25),
     // wearing 1-4 harvested skeletons (look.ts demon1..4)
     ...[1, 2, 3, 4].map((n) => humanoid(`mob_demon${n}`, `demon${n}`, 28, 34, 33 / 34, 1.0, true)),
     // drawn on a 24x16 layout, 1.35x up into a 32x22 frame (about as long as a skeleton is tall)
@@ -350,7 +351,7 @@ export function buildMobs(out: string, ONLY?: string[]) {
       const c = body.getContext("2d"), sc = shadow.getContext("2d");
       c.scale(HI, HI); sc.scale(HI, HI);
       SH = sc; s.draw(c, f); SH = null;
-      const blob = !/skeleton|bandit|necromancer|demon|crawler/.test(s.key);
+      const blob = !/skeleton|bandit|necromancer|demon|crawler|hollowking/.test(s.key);
       const b = shrink(body, "mb", tw, th);
       pixelize(b, tw, th, true, blob ? { y0: Math.round(th * 0.7), y1: th, mud: 0.14, sat: 0.9 } : { y0: Math.round(th * 0.72), y1: th, mud: s.key.includes("bandit") ? 0.38 : 0.2 });
       const u = shrink(shadow, "ms", tw, th); pixelAlpha(u);

@@ -254,6 +254,7 @@ export const MOB_LOOK: Record<string, { top: number; bar: number; oy: number; sc
   necromancer: { top: 32, bar: 24, oy: 0.975, scale: 1.6 }, // elite: drawn big
   demon: { top: 32, bar: 26, oy: 0.975, scale: 1.7 },
   banditchief: { top: 34, bar: 28, oy: 0.85, scale: 1.6 }, // boss of Redfang Hollow
+  hollowking: { top: 40, bar: 34, oy: 0.975, scale: 2 }, // the first zone's final boss
   motherblob: { top: 20, bar: 22, oy: 0.92 },
   blobling: { top: 8, bar: 8, oy: 0.9 },
   shooterblob: { top: 15, bar: 12, oy: 0.92 },
@@ -262,7 +263,7 @@ export const MOB_LOOK: Record<string, { top: number; bar: number; oy: number; sc
   crawler: { top: 10, bar: 10, oy: CRAWL_CROP },
 };
 
-const PAINTED_MOBS = ["slime", "blobling", "shooterblob", "warriorblob", "healerblob", "motherblob", "skeleton", "bandit", "skeletonmage", "necromancer", "demon", "crawler", "banditchief"];
+const PAINTED_MOBS = ["slime", "blobling", "shooterblob", "warriorblob", "healerblob", "motherblob", "skeleton", "bandit", "skeletonmage", "necromancer", "demon", "crawler", "banditchief", "hollowking"];
 /** Painted humanoid monsters have taller frames (feet lower in the frame, label higher). */
 const PAINTED_LOOK: Record<string, { top: number; bar: number; oy: number; scale?: number }> = {
   // about hero height (heroes are 32 world px since the 48px sheets)
@@ -271,6 +272,7 @@ const PAINTED_LOOK: Record<string, { top: number; bar: number; oy: number; scale
   skeletonmage: { top: 25, bar: 14, oy: 0.975 }, necromancer: { top: 40, bar: 26, oy: 0.975, scale: 1.45 },
   demon: { top: 50, bar: 28, oy: 33 / 34, scale: 1.45 },
   banditchief: { top: 46, bar: 30, oy: 32 / 34, scale: 1.5 },
+  hollowking: { top: 62, bar: 38, oy: 42 / 48, scale: 1.6 }, // towers over the heroes
   // pixel sheets use even frame heights (whole texels at 1.5 per px)
   blobling: { top: 9, bar: 8, oy: 0.91 }, shooterblob: { top: 16, bar: 12, oy: 0.93 }, healerblob: { top: 16, bar: 12, oy: 0.93 },
 };
@@ -301,7 +303,7 @@ export function mobTexture(scene: Phaser.Scene, kind: string, level = 1, weapon 
       return key;
     }
   }
-  return pixelMobTexture(scene, kind === "demon" ? "necromancer" : kind, level); // no pixel demon sheet: a necromancer stands in
+  return pixelMobTexture(scene, kind === "demon" || kind === "hollowking" ? "necromancer" : kind, level); // no pixel demon sheet: a necromancer stands in
 }
 
 function pixelMobTexture(scene: Phaser.Scene, kind: string, level = 1): string {

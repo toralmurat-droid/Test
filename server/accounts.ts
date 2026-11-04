@@ -22,6 +22,8 @@ export interface HeroSave {
   kit?: number;
   /** The guided first quest (CHAINS[3], First Steps); missing on older saves = already done. */
   tutId?: number; tutStage?: number; tutCount?: number; tutVer?: number;
+  /** The Hollow Crown (CHAINS[4]), the first zone's last story. */
+  crownId?: number; crownStage?: number; crownCount?: number; crownVer?: number;
   /** Portal stones this hero has woken (shared/portals.ts ids). */
   portals?: string[];
 }

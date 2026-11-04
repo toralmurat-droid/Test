@@ -1,5 +1,5 @@
 /** How each painted character looks: materials, colours and kit. Poses and animation timing come from characters.ts. */
-export type HeadGear = "greathelm" | "ninjahood" | "wizardhat" | "hood" | "horned" | "cap" | "helm" | "bandana" | "wide" | "witch" | "none";
+export type HeadGear = "crown" | "greathelm" | "ninjahood" | "wizardhat" | "hood" | "horned" | "cap" | "helm" | "bandana" | "wide" | "witch" | "none";
 export type TorsoKind = "plate" | "wrap" | "robe" | "jerkin" | "bare" | "shirt" | "mail" | "leather";
 export type LegKind = "trousers" | "mail" | "wrapped" | "robe" | "fur" | "dress" | "bare";
 export type WeaponKind = "katana" | "sword" | "staff" | "bow" | "axe" | "hammer" | "spear" | "dagger" | "druidstaff" | "witchstaff" | "boneblade" | "none";
@@ -30,6 +30,8 @@ export interface Look {
   weaponKind?: WeaponKind; // what found weapons look like in this hero's hands (heroes start with weapon "none")
   /** Bone Demon (DEMON.harvest): skeleton pieces it wears, painted onto the body: 1 pauldrons, 2 rib cuirass, 3 bone blade, 4 skull crown. */
   boneArmour?: number;
+  /** Sword length/width multiplier (the Hollow King's greatsword). */
+  bladeLen?: number;
 }
 
 /** Monsters painted with the same body code (sheets built by paint/mobs.ts). */
@@ -92,6 +94,16 @@ export const MOB_LOOKS: Record<string, Look> = {
   get demon2(): Look { return { ...MOB_LOOKS.demon, boneArmour: 2 }; },
   get demon3(): Look { return { ...MOB_LOOKS.demon, boneArmour: 3, weapon: "boneblade" }; },
   get demon4(): Look { return { ...MOB_LOOKS.demon, boneArmour: 4, weapon: "boneblade" }; },
+  // Ostrevar, the Hollow King (the first zone's final boss): a crowned skull in blackened royal plate, a ragged
+  // purple tabard with his gold crown on it, a torn grave-cloak and a crown-forged greatsword; the Gloam's green in his eyes
+  hollowking: {
+    skin: 0xc9c2a8, skull: true, eyeGlow: 0xa6ff4a, head: "crown", headCol: 0xa8843a, headTrim: 0x9dff6a,
+    torso: "plate", torsoCol: 0x4a4d55, trim: 0xa8843a, tabard: { col: 0x34203f, trim: 0xa8843a, emblem: 0xd0aa4e },
+    belt: 0x24181c, buckle: 0xd0aa4e,
+    legs: "mail", legCol: 0x3e4048, boots: 0x3a3c44, bootStyle: "greave",
+    sleeve: 0x4a4d55, arms: "plate", glove: 0x2e3036, weapon: "sword", bladeLen: 1.45, fx: 0x9dff6a,
+    back: "cape", capeCol: 0x3a1218, build: 1.35,
+  },
   necromancer: {
     skin: 0xd2cbb4, skull: true, bones: true, eyeGlow: 0x7dff6a, head: "horned", headCol: 0x2a1838, headTrim: 0xd8d2bf,
     torso: "robe", torsoCol: 0x24152e, trim: 0x8e1b2e, sash: 0x8e1b2e,

@@ -6,6 +6,8 @@ import "../../shared/siege"; // puts the quest's siege engines (ENGINES) on the 
 
 type QuestState = Quester;
 import { TILE as TILE_PX } from "../../shared/constants";
+import { sheet } from "./worldProps";
+import { standingStone, STONE_H, STONE_W } from "./throneArt";
 
 /**
  * Quest objects in the world (shared/quests.ts): spirit lanterns in the marsh, rotting shrines in the woods,
@@ -144,6 +146,9 @@ const PHYLAC = [
 ];
 
 function textures(scene: Phaser.Scene) {
+  // The Hollow Throne's ward-stones: painted like the world props (throneArt.ts), still burning, then broken
+  sheet(scene, "qobj_ward", STONE_W, STONE_H, 1, (p, f) => standingStone(p, f, 1), 0);
+  sheet(scene, "qobj_ward_broken", STONE_W, STONE_H, 1, (p, f) => standingStone(p, f, 2), 0);
   // The siege engines themselves are the skeletons' work-site props (siegeArt.ts): a burned one just gets flames
   rowsTexture(scene, "qobj_engine_fire", BEACON.slice(0, 7), { F: 0xb8461f, W: 0xff8c42, Y: 0xffe08a });
   const br = { K, I: IRON, L: IRON_L };
@@ -170,12 +175,12 @@ function textures(scene: Phaser.Scene) {
 /** First look and size of each kind, and its look once done. */
 const START: Record<string, string> = {
   lantern: "qobj_lantern_off", shrine: "qobj_shrine_rot", heart: "qobj_heart",
-  engine: "qobj_engine_fire", beacon: "qobj_beacon", crypt: "qobj_crypt", phylactery: "qobj_phylactery",
+  engine: "qobj_engine_fire", beacon: "qobj_beacon", crypt: "qobj_crypt", phylactery: "qobj_phylactery", ward: "qobj_ward",
 };
-const DONE: Record<string, string> = { engine: "qobj_engine_fire", beacon: "qobj_beacon_out", crypt: "qobj_crypt_sealed", phylactery: "qobj_phylactery_broken" };
-const SCALE: Record<string, number> = { heart: 2, shrine: 1.5, engine: 2.4, beacon: 1.4, crypt: 1.5, phylactery: 1.3 };
+const DONE: Record<string, string> = { engine: "qobj_engine_fire", beacon: "qobj_beacon_out", crypt: "qobj_crypt_sealed", phylactery: "qobj_phylactery_broken", ward: "qobj_ward_broken" };
+const SCALE: Record<string, number> = { heart: 2, shrine: 1.5, engine: 2.4, beacon: 1.4, crypt: 1.5, phylactery: 1.3, ward: 1 / 1.5 };
 /** Coloured light some objects give off until done. */
-const GLOW: Record<string, number> = { beacon: 0x7dff6a, crypt: 0x5fe36a, phylactery: 0x7dff6a };
+const GLOW: Record<string, number> = { beacon: 0x7dff6a, crypt: 0x5fe36a, phylactery: 0x7dff6a, ward: 0x9dff6a };
 
 interface Drawn { o: QuestObject; img: Phaser.GameObjects.Image; glow?: Phaser.GameObjects.Arc; done?: boolean }
 
@@ -214,7 +219,7 @@ export class QuestObjects {
     if (!o) return;
     const d = { o };
     const color = d.o.kind === "lantern" ? 0x7ff3ff : d.o.kind === "shrine" || d.o.kind === "crypt" ? 0xffd166
-      : d.o.kind === "heart" || d.o.kind === "engine" ? 0xff8c42 : d.o.kind === "phylactery" ? 0xe8ffd0 : 0x9be564;
+      : d.o.kind === "heart" || d.o.kind === "engine" ? 0xff8c42 : d.o.kind === "phylactery" ? 0xe8ffd0 : d.o.kind === "ward" ? 0xc8ff8a : 0x9be564;
     for (let i = 0; i < 14; i++) {
       const a = Math.random() * Math.PI * 2, r = 8 + Math.random() * 14;
       const sp = this.scene.add.rectangle(d.o.x, d.o.y - 10, 2, 2, color).setDepth(d.o.y + 50);
