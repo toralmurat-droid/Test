@@ -1,5 +1,6 @@
 {
   "date": "2026-11-04",
+  "pr": 249,
   "title": "Quest menu and quest tracking",
   "changes": [
     "New Quests button under the minimap opens the quest log (J still works).",
