@@ -1,5 +1,6 @@
 {
   "date": "2026-11-04",
+  "pr": 238,
   "title": "Online heroes by the chat",
   "changes": [
     "The number of heroes online now sits right next to the chat box, so you can see who might read your message."
