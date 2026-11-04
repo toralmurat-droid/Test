@@ -1,0 +1,187 @@
+/* Every menu and panel in the look of the game menu (Esc): weathered bronze frame with a dark dithered fill
+   (weathered.ts paints --wf-bronze / --wf-gold / --wf-btn), gold pixel titles, parchment text, leather buttons with a
+   bronze lip, pixel icons (pixelicons.ts, class .pxi) instead of emoji. "body #id" so this wins over the older styles. */
+
+/* ---------- Pixel icons ---------- */
+.pxi { width: 20px; height: 20px; image-rendering: pixelated; vertical-align: -5px; margin-right: 5px; flex: none; }
+small .pxi, .help .pxi, #slotpick small .pxi, #treeinfo .istat .pxi { width: 14px; height: 14px; vertical-align: -3px; margin-right: 3px; }
+#stats .pxi, #zone .pxi { width: 14px; height: 14px; vertical-align: -3px; margin-right: 3px; }
+.sh-row button .pxi, .sh-gold .pxi, .ql-reward .pxi { width: 16px; height: 16px; vertical-align: -4px; margin: 0 0 0 3px; }
+.ql-reward .pxi { margin: 0 4px 0 0; }
+.ql-steps .ic .pxi { width: 14px; height: 14px; vertical-align: -2px; margin: 0; }
+button > .pxi:only-child { margin: 0; }
+
+/* ---------- Shared frame ---------- */
+body #hero, body #tree, body #gear, body #slotpick, body #npcdialog, body #questlog, body #portalmenu,
+body #tradepanel, body #stashpanel, body #tradeask, body #shrineprompt, body #portalprompt, body #stashprompt {
+  border: 18px solid transparent; border-image: var(--wf-bronze) 9 fill / 18px / 0 repeat; image-rendering: pixelated;
+  background: none; border-radius: 0; box-shadow: none; color: #eadfc8; text-shadow: 2px 2px #050302;
+  font-family: var(--pixel-font); -webkit-font-smoothing: none; -moz-osx-font-smoothing: grayscale; }
+body #hero, body #tree, body #gear, body #questlog, body #portalmenu, body #tradepanel, body #stashpanel { padding: 2px 8px 4px; }
+body #npcdialog { padding: 2px 8px 4px; font-size: 15px; }
+body #slotpick { padding: 0 4px 2px; width: 270px; }
+body #tradeask { border-image-source: var(--wf-gold); padding: 0 8px 2px; }
+body #shrineprompt, body #portalprompt, body #stashprompt { padding: 0 4px; color: #eadfc8; }
+body #stashprompt { border-image-source: var(--wf-gold); }
+
+/* Titles: centred gold with a dark rule under them, like "Menu" */
+body #hero h2, body #tree h2, body #gear h2, body #tradepanel h2, body #stashpanel h2, body #partypanel h2 {
+  margin: 0 0 6px; font-size: 20px; font-weight: normal; color: #e3bf6a; letter-spacing: 1px; text-align: center;
+  border-bottom: 2px solid #45331e; padding-bottom: 4px; text-shadow: 2px 2px #050302; }
+body #questlog .ql-head, body #portalmenu .pt-head { border-bottom: 2px solid #45331e; padding-bottom: 4px; margin-bottom: 8px; }
+body #questlog h2, body #portalmenu h2 { font: 20px var(--pixel-font); color: #e3bf6a; letter-spacing: 1px; }
+body #hero h3, body #gear h3, body #tradepanel h3, body #stashpanel h3, body #npcdialog h4, body #questlog h4 {
+  color: #c9a45a; font-weight: normal; letter-spacing: 1px; }
+body #hero .help, body #tree .help, body #gear .help, body #questlog .help, body #tradepanel .help, body #stashpanel .help { color: #a8977a; }
+body #hero b, body #gear b, body #tree b { font-weight: normal; }
+
+/* ---------- Buttons: dark leather with a bronze lip ---------- */
+body #menubtns button, body #gamemenubtn, body #statreset, body #treereset, body #npcdialog button, body #questlog .ql-close,
+body #portalmenu .pt-close, body #tradepanel button:not(.gcell), body #stashpanel button:not(.gcell), body #tradeask button,
+body #musicpanel #musicclose {
+  border: 6px solid transparent; border-image: var(--wf-btn) 4 fill / 6px / 0 repeat; image-rendering: pixelated; border-radius: 0;
+  background: none; color: #eadfc8; font: 14px var(--pixel-font); text-shadow: 1px 1px #050302; cursor: pointer; box-shadow: none; }
+body #menubtns button:hover, body #gamemenubtn:hover, body #statreset:hover, body #treereset:hover, body #npcdialog button:hover:not(:disabled),
+body #questlog .ql-close:hover, body #portalmenu .pt-close:hover, body #tradepanel button:not(.gcell):hover, body #stashpanel button:not(.gcell):hover,
+body #tradeask button:hover { color: #ffd98a; filter: brightness(1.25); border-color: transparent; }
+
+/* HUD menu bar (bottom right) */
+body #menubtns { gap: 4px; }
+body #menubtns button { display: inline-flex; align-items: center; padding: 2px 8px; font-size: 14px; color: #eadfc8; }
+body #menubtns button small { color: #a8977a; margin-left: 5px; font-size: 13px; }
+body #treebadge, body #herobadge, body #newsbadge, body #menubadge { top: -12px; right: -10px; border-radius: 0; background: #a8823a; color: #120c06;
+  font: 13px/16px var(--pixel-font); height: 18px; min-width: 18px; text-shadow: none; box-shadow: 0 0 0 2px #080504, inset 0 2px #e3bf6a; }
+@media (max-width: 600px) { body #menubtns button { padding: 2px 4px; } body #menubtns button .pxi { margin-right: 2px; } }
+
+body #statreset, body #treereset { font-size: 13px; padding: 0 6px; }
+body .statplus { width: 22px; height: 22px; padding: 0; border: 4px solid transparent; border-image: var(--wf-btn) 4 fill / 4px / 0 repeat;
+  background: none; color: #c8f59a; font: 14px/1 var(--pixel-font); text-shadow: 1px 1px #050302; image-rendering: pixelated; }
+body .statplus:hover { background: none; filter: brightness(1.3); color: #e4ffc8; }
+
+/* ---------- Hero (C) ---------- */
+body #herobanner { color: #c8f59a; text-align: center; font-weight: normal; }
+body #herostats .note, body #herochar span { color: #a8977a; }
+body #herostats .gain { color: #c8f59a; }
+
+/* ---------- Skill tree (T) and slot picker ---------- */
+body #treepoints { color: #a8977a; text-align: center; }
+body #treepoints .free { color: #c8f59a; }
+body #treepoints .treehint { color: #a8977a; }
+body .treewrap { border: 2px solid #45331e; box-shadow: 0 0 0 2px #080504; }
+body .tlv { color: #6a5232; border-bottom-color: #3a2b1c; }
+body .tlv.on { color: #e3bf6a; }
+body .tbough { background: #0f0a06; border-radius: 0; font-weight: normal; box-shadow: 0 0 0 2px #080504; }
+body .tnode { background: #0f0a06; border-color: #45331e; --k: #6a5232; }
+body .tnode .pips, body .tnode .nlv { background: #0f0a06; border-radius: 0; }
+body .tnode .nlv { color: #c9b48a; }
+body .tnode kbd { background: #e3bf6a; color: #120c06; }
+body .tnode:hover { outline-color: #ffd98a; }
+body #treeinfo { background: #0f0a06; border: 2px solid #45331e; box-shadow: inset 0 0 0 1px #080504; color: #d8ccb4; font-size: 13px; }
+body #treeinfo .ihead b { color: #f0e0b8; font-weight: normal; }
+body #treeinfo .ttype.pas, body #treeinfo .istat { color: #a8977a; }
+body #treeinfo .ipath { color: #a8977a; }
+body #treeinfo .istat.can { color: #c8f59a; }
+body #slotpick .ph { color: #e3bf6a; font-weight: normal; font-size: 14px; border-bottom: 2px solid #45331e; padding-bottom: 3px; text-align: center; }
+body #slotpick .opt { background: #0f0a06; border: 2px solid #45331e; color: #eadfc8; font-size: 13px; }
+body #slotpick .opt b { font-weight: normal; }
+body #slotpick .opt:hover { border-color: #a8823a; }
+body #slotpick .opt.cur { border-color: #e3bf6a; }
+body #slotpick .opt small { color: #a8977a; font-size: 12px; }
+body #slotpick .picon.none { color: inherit; }
+
+/* ---------- Equipment / bag (G) ---------- */
+body #gearpreview { background: radial-gradient(#3a2c1c, #140e08); border: 2px solid #45331e; box-shadow: 0 0 0 2px #080504; }
+body .gslot { background: #0f0a06; border: 2px solid #45331e; color: #eadfc8; font-size: 13px; }
+body .gslot:not(.empty):hover { border-color: #a8823a; }
+body .gslot.empty { color: #6d6250; }
+body .gslot small { color: #a8977a; }
+body .gicon { border-color: #3a2b1c; }
+body .gcell { background: #0f0a06; border: 2px solid #45331e; }
+body .gcell:not(:disabled):hover { background: #2a1f14; border-color: #a8823a; }
+body .gcelllvl, body .glvl { color: #e3bf6a; }
+body #geartotal, body #gearinfo { color: #d8ccb4; }
+
+/* ---------- Skill bar and potions: iron-bound slots ---------- */
+body #hotbar .slot { background: rgba(15, 10, 6, .9); border-color: #6a5232; box-shadow: 0 0 0 1px #080504; }
+body #hotbar .slot.lmb { border-color: #a8823a; }
+body #hotbar .slot kbd { color: #e3bf6a; }
+body #hotbar .slot:hover, body #hotbar .slot.picking { border-color: #ffd98a; }
+
+/* ---------- NPC dialogs and shops ---------- */
+body #npcdialog .nd-head { border-bottom: 2px solid #45331e; }
+body #npcdialog .nd-name { color: #e3bf6a; font-weight: normal; font-size: 18px; }
+body #npcdialog .nd-title { color: #a8977a; }
+body #npcdialog p { color: #eadfc8; }
+body #npcdialog button { padding: 0 8px; font-size: 14px; font-weight: normal; }
+body #npcdialog button.nd-accept { color: #c8f59a; background: none; }
+body #npcdialog button:disabled { color: #6d6250; filter: grayscale(1); opacity: 1; }
+body #npcdialog kbd, body #shrineprompt kbd, body #portalprompt kbd, body #stashprompt kbd {
+  border: 0; border-radius: 0; background: #0f0a06; color: #e3bf6a; box-shadow: 0 0 0 2px #6a5232; font-weight: normal; }
+body #npcdialog.shop { border-color: transparent; }
+body #npcdialog h4 { color: #c9a45a; }
+body #npcdialog .sh-gold b { color: #ffd98a; font-weight: normal; }
+body #npcdialog .sh-gold .ok { color: #c8f59a; }
+body #npcdialog .sh-gold .no { color: #ff9d7a; }
+body #npcdialog .sh-row { border-radius: 0; border-bottom: 1px dashed #3a2b1c; }
+body #npcdialog .sh-row:nth-child(odd) { background: rgba(15, 10, 6, .55); }
+body #npcdialog .sh-icon canvas { background: #0f0a06; border-radius: 0; box-shadow: 0 0 0 2px #45331e; }
+body #npcdialog .sh-info b { font-weight: normal; text-shadow: 1px 1px #050302; }
+body #npcdialog .sh-info small { color: #a8977a; }
+body #npcdialog .sh-buy, body #npcdialog .sh-sell { background: none; color: #ffd98a; }
+body #npcdialog .sh-empty { color: #a8977a; }
+body #npcdialog .nd-btns button.nd-bye { color: #c9b48a; }
+
+/* ---------- Quest log (J) and tracker ---------- */
+body #questlog .ql-close { padding: 0 2px; line-height: 0; }
+body #questlog .ql-cat, body #questlog .ql-meta, body #questlog .help { color: #a8977a; }
+body #questlog .ql-item { border-radius: 0; color: #d8ccb4; opacity: 1; }
+body #questlog .ql-item:hover { color: #ffd98a; }
+body #questlog .ql-item.sel { background: rgba(15, 10, 6, .7); border-left-color: #e3bf6a; color: #ffd98a; font-weight: normal; }
+body #questlog h3 { color: #e3bf6a; font-weight: normal; }
+body #questlog .ql-badge { background: #3e6a24; color: #e4ffc8; border-radius: 0; font-weight: normal; box-shadow: 0 0 0 1px #080504; }
+body #questlog .ql-steps .done { color: #8fae6a; }
+body #questlog .ql-steps .now { color: #f0e0b8; font-weight: normal; }
+body #questlog .ql-steps .now .ic { color: #e3bf6a; }
+body #questlog .ql-steps .todo { color: #6d6250; }
+body #questlog .ql-bar { background: #0f0a06; border-radius: 0; box-shadow: 0 0 0 1px #080504, 0 0 0 2px #6a5232; }
+body #questlog .ql-bar div { background: #6f9f3a; box-shadow: inset 0 2px #9fd060; }
+body #questlog .ql-now { color: #c9a45a; }
+body #questlog .ql-reward { font-weight: normal; color: #f0e0b8; }
+body #questlog .bang { color: #ffb030; }
+body #questlog .ql-trackrow input { accent-color: #b8893a; }
+body #questtracker { background: rgba(15, 10, 6, .82); border-left: 3px solid #a8823a; border-radius: 0; box-shadow: 0 0 0 1px #080504;
+  text-shadow: 1px 1px #050302; color: #eadfc8; }
+body #questtracker .qt-title { color: #e3bf6a; font-weight: normal; }
+body #questtracker .qt-obj { color: #eadfc8; }
+body #questtracker .qt-dir, body #questtracker .qt-hint { color: #a8977a; }
+body #questtracker .qt-hint2 { color: #d8ccb4; border-top-color: #45331e; }
+body #questtracker .qt-block + .qt-block { border-top-color: #45331e; }
+body #questtracker .qt-bar { background: #0f0a06; border-radius: 0; box-shadow: 0 0 0 1px #45331e; }
+body #questtracker .qt-bar div { background: #6f9f3a; }
+
+/* ---------- Portal stones ---------- */
+body #portalmenu .pt-close { padding: 0 2px; line-height: 0; }
+body #portalmenu .pt-row { border: 2px solid #45331e; border-radius: 0; background: #0f0a06; color: #eadfc8; font-weight: normal; }
+body #portalmenu button.pt-row:hover:not([disabled]) { background: #2a1f14; border-color: #a8823a; color: #ffd98a; }
+body #portalmenu .pt-row span { color: #a8977a; }
+body #portalmenu .pt-row.here { background: none; border-style: dashed; color: #a8977a; }
+body #portalmenu .pt-note { color: #a8977a; }
+body #portalmenu .pt-note.warn { color: #ff9d7a; }
+body #portalprompt .why, body #shrineprompt .why { color: #e3bf6a; }
+body #shrineprompt.spent { color: #a8977a; }
+
+/* ---------- Trading and stash ---------- */
+body .tside { border: 2px solid #45331e; background: rgba(15, 10, 6, .6); }
+body .tside.ready { border-color: #6f9f3a; }
+body .tready { color: #a8977a; }
+body .tside.ready .tready { color: #c8f59a; }
+body .tgold { color: #ffd98a; }
+body .tcell.picked { outline-color: #e3bf6a; }
+body #tradepanel .tbig, body #stashpanel .tbig { padding: 2px 14px; font-size: 15px; }
+body #tradepanel .tbig.go { color: #c8f59a; }
+body #tradeask small { color: #a8977a; }
+body #tradeask b { color: #ffd98a; font-weight: normal; }
+body #tradetoast { color: #ffd98a; font-family: var(--pixel-font); }
+
+/* ---------- Music panel close button ---------- */
+body #musicpanel #musicclose { padding: 0 2px; line-height: 0; }

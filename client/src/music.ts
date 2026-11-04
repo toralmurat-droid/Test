@@ -1,3 +1,4 @@
+import { icon as pxIcon } from "./pixelicons";
 /**
  * Background music.
  *
@@ -306,7 +307,7 @@ function buildUi() {
   const panel = document.createElement("div");
   panel.id = "musicpanel";
   panel.hidden = true;
-  panel.innerHTML = `<div class="mtitle">Music &amp; sound <button id="musicclose" title="Close (Esc)">✕</button></div>
+  panel.innerHTML = `<div class="mtitle">Music &amp; sound <button id="musicclose">${pxIcon("close")}</button></div>
     <div class="mlabel">Track</div>
     <div id="musictracks"></div>
     <div class="mlabel">Volume</div>

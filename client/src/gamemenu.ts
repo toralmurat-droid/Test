@@ -1,6 +1,8 @@
 // Game menu (Esc or the ☰ Menu button): one place for settings-type panels
 // (music & sound, ideas board, patch notes). Their own hotkeys (I, N) still work.
 
+import { icon } from "./pixelicons";
+
 export interface GameMenuItem { id: string; label: string; key?: string; onClick: () => void }
 
 export class GameMenu {
@@ -15,7 +17,7 @@ export class GameMenu {
     this.el.innerHTML = `<h2>Menu</h2>` +
       items.map((i) => `<button data-item="${i.id}">${i.label}${i.key ? ` <small>[${i.key}]</small>` : ""}` +
         (i.id === "news" ? `<span id="newsbadge" hidden></span>` : "") + `</button>`).join("") +
-      `<button data-item="close" class="gmclose">Back to game <small>[Esc]</small></button>`;
+      `<button data-item="close" class="gmclose">${icon("close")}Back to game <small>[Esc]</small></button>`;
     hud.appendChild(this.el);
     this.el.addEventListener("mousedown", (ev) => { if ((ev.target as HTMLElement).closest("button")) ev.preventDefault(); });
     this.el.addEventListener("keydown", (ev) => ev.stopPropagation());
@@ -31,8 +33,7 @@ export class GameMenu {
     // The one HUD button, with a badge when there are unread patch notes
     this.btn = document.createElement("button");
     this.btn.id = "gamemenubtn";
-    this.btn.title = "Game menu: music & sound, ideas, news (Esc)";
-    this.btn.innerHTML = `☰ Menu <small>[Esc]</small><span id="menubadge" hidden></span>`;
+    this.btn.innerHTML = `${icon("menu")}Menu <small>[Esc]</small><span id="menubadge" hidden></span>`;
     this.btn.tabIndex = -1;
     this.btn.addEventListener("mousedown", (ev) => ev.preventDefault());
     this.btn.addEventListener("click", (ev) => { if (ev.detail === 0) return; this.btn.blur(); this.toggle(); });
