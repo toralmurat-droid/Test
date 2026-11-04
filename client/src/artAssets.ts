@@ -73,6 +73,31 @@ export function createArtAnims(scene: Phaser.Scene) {
   }
 }
 
+const charPending = new Set<string>(), charFailed = new Set<string>(), errHooked = new WeakSet<Phaser.Scene>();
+/**
+ * A hero's sheet for another weapon stance ("archer-melee", shared/weapons.ts poseSheet), loaded the first time it is
+ * needed, with its animations. True when it can be used now; `done` runs once it has loaded.
+ */
+export function ensureCharSheet(scene: Phaser.Scene, name: string, done?: () => void): boolean {
+  if (scene.anims.exists(`${name}_idle_down`)) return true;
+  if (!HD_CHARS || charPending.has(name) || charFailed.has(name)) return false;
+  if (!errHooked.has(scene)) errHooked.add(scene), scene.load.on("loaderror", (f: any) => { if (charPending.delete(f?.key)) charFailed.add(f.key); });
+  charPending.add(name);
+  scene.load.spritesheet(name, `${CHAR_BASE}/${name}.${CHAR_EXT}`, { frameWidth: CHAR_FRAME, frameHeight: CHAR_FRAME });
+  scene.load.once(`filecomplete-spritesheet-${name}`, () => {
+    scene.textures.get(name).setFilter(Phaser.Textures.FilterMode.NEAREST);
+    const meta = scene.cache.json.get("characters_meta");
+    for (const [anim, a] of Object.entries<any>(meta.animations)) {
+      const key = `${name}_${anim}`;
+      if (!scene.anims.exists(key)) scene.anims.create({ key, frames: scene.anims.generateFrameNumbers(name, { frames: a.frames }), frameRate: a.fps, repeat: a.loop ? -1 : 0 });
+    }
+    charPending.delete(name);
+    done?.();
+  });
+  if (!scene.load.isLoading()) scene.load.start();
+  return false;
+}
+
 /** Play `${char}_${anim}_${dir}` with left handled by flipping the right-facing frames. */
 export function playCharAnim(sprite: Phaser.GameObjects.Sprite, char: CharacterName, anim: string, dir: string) {
   const left = dir.endsWith("left");

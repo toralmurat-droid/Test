@@ -67,3 +67,18 @@ export const ATTACK_WORDS: Record<WeaponType, string> = {
   sword: "melee swings", katana: "fast melee cuts", axe: "heavy melee chops", bow: "shoots arrows",
   staff: "throws fireballs", wand: `fires magic bolts (${WAND_COST} mana each)`, fists: "punches",
 };
+
+/**
+ * How a hero stands and swings: each class has its own family, and holding a weapon of another family switches the
+ * hero's animations to that family (an archer with a sword chops like a fighter instead of drawing a bow).
+ * Art convention: sheets `assets/hd/characters/{hero}-{family}.webp` and overlays `assets/hd/gear/{hero}-{family}_{item}.webp`.
+ */
+export type PoseFamily = "melee" | "bow" | "caster";
+export const POSE_FAMILIES: PoseFamily[] = ["melee", "bow", "caster"];
+export const weaponFamily = (t: WeaponType): PoseFamily => (t === "bow" ? "bow" : t === "staff" || t === "wand" ? "caster" : "melee");
+export const nativeFamily = (cls: ClassKind): PoseFamily => weaponFamily(NATIVE_WEAPON[cls]);
+/** Sheet name for a hero holding this weapon: the class itself, or "archer-melee" style for another family. */
+export function poseSheet(cls: ClassKind, eq: Equipped): string {
+  const f = weaponFamily(weaponType(cls, eq.weapon));
+  return f === nativeFamily(cls) ? cls : `${cls}-${f}`;
+}

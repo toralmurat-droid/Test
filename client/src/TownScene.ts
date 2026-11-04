@@ -36,7 +36,7 @@ import { PointerControls, type ClickEnemy, type ClickSpot } from "./pointer";
 import { warmPaths } from "./pathfind";
 import { pixelText } from "./pixeltext";
 import { speechBubble } from "./weathered";
-import { ART_K, CHAR_GROW, CHAR_SCALE, CHARACTERS, CHAR_ORIGIN, CharacterName, createArtAnims, playCharAnim, preloadArt } from "./artAssets";
+import { ART_K, CHAR_GROW, CHAR_SCALE, CHARACTERS, CHAR_ORIGIN, CharacterName, createArtAnims, ensureCharSheet, HD_CHARS, playCharAnim, preloadArt } from "./artAssets";
 import { Ambient } from "./ambient";
 import { Details } from "./details";
 import { activeOf, GearLayer, GearMenu, iconCanvas, itemColor, preloadGear, RARITY_HEX } from "./gear";
@@ -46,7 +46,7 @@ const LEFT_PICK = -2;
 const costWords = (s: { cost?: number; mana?: number }) => [s.mana ? `${s.mana} mana` : "", s.cost ? `${s.cost} stamina` : ""].filter(Boolean).join(" · ") || "free";
 import { GearFx } from "./gearfx";
 import { baseId, gearDef, gearReachMult, gearSpeedMult, itemRarity, WEAPON_TYPE_NAMES } from "../../shared/gear";
-import { attackProfile, ATTACK_WORDS, isWeaponType, profileOf, weaponAttackMult } from "../../shared/weapons";
+import { attackProfile, ATTACK_WORDS, isWeaponType, poseSheet, profileOf, weaponAttackMult } from "../../shared/weapons";
 import { talentMult, talentPoints, spentPoints } from "../../shared/talents";
 import { activeSkills, SLOT_COUNT, SLOT_KEYS, skillLearned } from "../../shared/slots";
 import { iconImg } from "./skillIcons";
@@ -2273,6 +2273,14 @@ export class TownScene extends Phaser.Scene {
       }
       const dir = this.dirOf(e) as any;
       if (e.hero) {
+        // Holding a weapon of another family switches the stance sheet (an archer with a sword fights like a fighter)
+        const stance = (HD_CHARS ? poseSheet(p.cls, activeOf(p)) : p.cls) as CharacterName;
+        if (stance !== e.hero && ensureCharSheet(this, stance)) {
+          const cur = e.sprite.anims.currentAnim?.key.slice(e.hero.length) ?? "";
+          e.hero = stance;
+          e.gear?.setHero(stance);
+          if (cur && this.anims.exists(`${stance}${cur}`)) e.sprite.play(`${stance}${cur}`, true);
+        }
         // Let one-shot attack/hit/skill animations finish before going back to walk/idle
         const key = e.sprite.anims.currentAnim?.key ?? "";
         const oneShot = e.sprite.anims.isPlaying && /_(attack\d?|swing\d|hit|skill|idle[23]|dodge)_/.test(key);

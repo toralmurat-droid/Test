@@ -731,6 +731,16 @@ const guard = human({
 });
 
 export const HEROES: Hero[] = [ninja, wizard, knight, archer, barbarian];
+
+/**
+ * A hero holding a weapon of another family (shared/weapons.ts POSE_FAMILY): same body and look, but the idle stance
+ * and attack swings of the hero who fights that way (melee: the barbarian's chops, bow: the archer's draw, caster:
+ * the wizard's casts). The name stays the hero's own, so the painted look is unchanged.
+ */
+export function poseVariant(hero: Hero, family: "melee" | "bow" | "caster"): Hero {
+  const donor = family === "melee" ? barbarian : family === "bow" ? archer : wizard;
+  return { ...hero, swing: donor.swing, kind1: donor.kind1, moves: donor.moves, idleAngle: donor.idleAngle, weaponKind: donor.weaponKind };
+}
 const druid = human({
   name: "druid", skin: 0xe8b68c, hair: 0xe9e4d8, hairStyle: "long", beard: 0xf3efe6,
   hat: { kind: "hood", col: 0x4f6b32, trim: 0x8a6a3a }, shirt: 0x5f7f3a, sleeve: 0x4f6b32, vest: 0x7a5a32,
