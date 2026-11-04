@@ -233,20 +233,28 @@ function paintPortal(g: CanvasRenderingContext2D, f: number, N: number, lit: boo
     }
   };
 
-  // the fire swirl, a disc in the ring's middle plane
+  // the fire swirl: a tunnel of fire sinking back through the ring (world -y, screen up-right) to a dark eye. Each
+  // pixel shows the deepest ring of the tunnel that still covers it, so the walls recede and the centre falls away.
+  const DEEP = 34, SHIFT = RI * 0.42, SHRINK = 0.74;
   const swirl = () => {
     const cx = C0.x, cy = C0.y;
     for (let y = Math.floor(cy - RI * 1.2); y <= Math.ceil(cy + RI * 1.2); y++) for (let x = Math.floor(cx - RI); x <= Math.ceil(cx + RI); x++) {
       const qx = x + 0.5 - cx, qy = y + 0.5 - cy;
-      const s = qx / UX, v = s * UY - qy, r = Math.hypot(s, v) / (RI - 0.5);
-      if (r > 1) continue;
-      const a = Math.atan2(v, s);
-      const sw = a / (Math.PI * 2) + r * 0.9 - f / N;
-      const n = vnoise(Math.cos(sw * Math.PI * 2) * 2.2 + 3, Math.sin(sw * Math.PI * 2) * 2.2 + r * 3, 999, 181);
-      const spiral = 0.5 + 0.5 * Math.sin(sw * Math.PI * 4 + n * 3);
-      const val = 0.2 + r * 0.6 + (spiral - 0.5) * 0.24 + (n - 0.5) * 0.55 + (dith(x, y) - 0.5) * 0.12 - (r < 0.3 ? 0.2 * (1 - r / 0.3) : 0);
+      const s0 = qx / UX, v0 = s0 * UY - qy;
+      if (Math.hypot(s0, v0) > RI - 0.5) continue;
+      let d = 0, a = 0, rr = 0;
+      for (let k = DEEP; k >= 0; k--) {
+        const t = k / DEEP, R = (RI - 0.5) * (1 - SHRINK * t);
+        const ds = s0 - SHIFT * t, dv = v0 - SHIFT * t, rk = Math.hypot(ds, dv);
+        if (rk <= R) { d = t; a = Math.atan2(dv, ds); rr = rk / R; break; }
+      }
+      // bands spiral down the tunnel and turn slowly (one turn per N frames); deeper = darker
+      const sw = a / (Math.PI * 2) + d * 1.6 - f / N;
+      const n = vnoise(Math.cos(sw * Math.PI * 2) * 2 + 3, Math.sin(sw * Math.PI * 2) * 2 + d * 4, 999, 181);
+      const spiral = 0.5 + 0.5 * Math.sin(sw * Math.PI * 6 + n * 2.5);
+      const val = 0.98 - d * 0.82 + (spiral - 0.5) * 0.3 + (n - 0.5) * 0.35 + (rr > 0.9 ? 0.08 : 0) + (dith(x, y) - 0.5) * 0.1;
       const i = band(val);
-      px(x, y, i < 0 ? "#240806" : FIRE[Math.min(i, FIRE.length - 1)]);
+      px(x, y, d > 0.97 ? "#120403" : i < 0 ? "#240806" : FIRE[Math.min(i, FIRE.length - 1)]);
     }
   };
 
@@ -255,16 +263,26 @@ function paintPortal(g: CanvasRenderingContext2D, f: number, N: number, lit: boo
   for (let b = 0; b < DEPTH; b += 0.5) slice(b, false);
   slice(DEPTH, true);
 
-  // sparks drifting slowly up out of the swirl
+  // pixels of fire escaping out of the tunnel towards the viewer (world +y, screen down-left), growing as they come
+  const sparks: [number, number, number, string][] = [];
   if (lit) {
-    for (let k = 0; k < 9; k++) {
+    for (let k = 0; k < 32; k++) {
       const life = ((f / N) + hash(k, 1, 191)) % 1;
-      const x = Math.round(C0.x + (hash(k, 2, 191) - 0.5) * 36 + Math.sin(life * 6 + k) * 3);
-      const y = Math.round(C0.y + 10 - life * 66 - hash(k, 3, 191) * 8);
-      px(x, y, life < 0.35 ? FIRE[7] : life < 0.7 ? FIRE[5] : FIRE[3]);
+      const a0 = hash(k, 2, 191) * Math.PI * 2, r0 = (0.25 + hash(k, 3, 191) * 0.5) * RI;
+      const spread = 1 + life * 1.6, rise = k % 3 === 0 ? life * 26 : life * 6; // every third one drifts up like an ember
+      const s = Math.cos(a0) * r0 * spread, v = Math.sin(a0) * r0 * spread + rise;
+      const b = DEPTH + life * 46; // out along world +y, over the platform and the grass
+      // snapped to the coarse 2x2 pixel (chunky()), so each spark survives as a clean block
+      const x = Math.round(C0.x + s * UX + b * NX) & ~1, y = Math.round(C0.y + s * UY - v + b * NY) & ~1;
+      const sz = life < 0.7 && k % 2 === 0 ? 6 : 4;
+      const c = life < 0.3 ? FIRE[7] : life < 0.6 ? FIRE[6] : life < 0.85 ? FIRE[5] : FIRE[3];
+      sparks.push([x, y, sz, c]);
     }
   }
   const out = chunky(o);
+  // the sparks go on after chunky(), so they keep their glow and get no dark outline
+  const oc = out.getContext("2d")!;
+  for (const [x, y, sz, c] of sparks) { oc.fillStyle = c; oc.fillRect(x >> 1, y >> 1, sz >> 1, sz >> 1); }
   g.save();
   g.scale(0.5, 0.5);
   g.imageSmoothingEnabled = false;
