@@ -17,7 +17,7 @@ import type { StatKind } from "./powers";
  * damage scaled by Magic (like the old ultimates). Every extra rank adds RANK_POWER to damage and RANK_TIME to durations.
  */
 
-export type TalentEffect = "dmg" | "skill" | "crit" | "lifesteal" | "hp" | "armor" | "speed" | "cdr" | "regen";
+export type TalentEffect = "dmg" | "skill" | "crit" | "lifesteal" | "hp" | "armor" | "speed" | "cdr" | "regen" | "mana";
 
 /** Look of a skill's effects on the client (colours and particle style). */
 export type FxStyle =
@@ -123,7 +123,9 @@ export interface SkillDef {
   scale?: { stat: StatKind; per: number }; // +per% skill power for every point of `stat` above the class's base
   style: FxStyle;
   passive?: { effect: TalentEffect; perRank: number };
-  cd?: number; cost?: number; // ms, energy
+  cd?: number; // ms
+  cost?: number; // Stamina (physical skills)
+  mana?: number; // Mana (spells): shared/mana.ts
   chargeMs?: number; // buildup: roots the hero while charging (a stun cancels it)
   consume?: boolean; // spends all stacks; buff.perStack / STACK_POWER per stack
   move?: MoveDef; areas?: AreaDef[]; shots?: ShotDef; field?: FieldDef; buff?: BuffDef; counter?: CounterDef;
@@ -158,18 +160,18 @@ const S: Record<ClassKind, SkillDef[]> = <Record<ClassKind, SkillDef[]>><unknown
   // ---------------------------------------------------------------- KNIGHT
   knight: [
     // Valor: sword offense
-    { id: "k_lunge", name: "Lunging Strike", type: "Attack", branch: 0, row: 0, style: "steel", cd: 5000, cost: 20,
+    { id: "k_lunge", name: "Lunging Strike", type: "Attack", branch: 0, row: 0, style: "steel", cd: 5000, cost: 25,
       desc: "Lunge forward and run your blade through whoever stands at the end.",
       move: { kind: "dash", dist: 40 }, areas: [{ r: 22, ahead: 10, wpn: 1.8, kb: 1.5, look: "slash" }] },
-    { id: "k_whirl", name: "Whirling Slash", type: "Attack", branch: 0, row: 1, style: "steel", cd: 7000, cost: 25,
+    { id: "k_whirl", name: "Whirling Slash", type: "Attack", branch: 0, row: 1, style: "steel", cd: 7000, cost: 30,
       desc: "Spin with your sword out: hits everything around you twice.",
       areas: [{ r: 34, wpn: 1.0, kb: 0.8, waves: 2, everyMs: 180, look: "slash" }] },
     { id: "k_mastery", name: "Blade Mastery", type: "Passive", branch: 0, row: 2, style: "steel", passive: { effect: "dmg", perRank: 5 },
       desc: "Years of drills: more damage with everything." },
-    { id: "k_rush", name: "Valor Rush", type: "Buildup", branch: 0, row: 3, style: "holy", cd: 10000, cost: 30, consume: true,
+    { id: "k_rush", name: "Valor Rush", type: "Buildup", branch: 0, row: 3, style: "holy", cd: 10000, cost: 35, consume: true,
       desc: "Spend your Valor: charge through the enemy line, cutting everyone on the way. Each Valor stack adds 25%.",
       move: { kind: "dash", dist: 72, path: 1.4, invulnMs: 300 }, areas: [{ r: 30, wpn: 0.8, kb: 1.5, look: "slash" }] },
-    { id: "k_judgement", name: "Judgement Blade", type: "Ultimate", branch: 0, row: 4, style: "holy", cd: 20000, cost: 50, chargeMs: 600,
+    { id: "k_judgement", name: "Judgement Blade", type: "Ultimate", branch: 0, row: 4, style: "holy", cd: 20000, cost: 30, mana: 30, chargeMs: 600,
       desc: "Raise your sword to the sky. A giant blade of light falls ahead of you: huge damage, stuns.",
       areas: [{ r: 48, ahead: 46, dmg: 100, stunMs: 1200, kb: 2, look: "sword" }] },
 
@@ -190,19 +192,19 @@ const S: Record<ClassKind, SkillDef[]> = <Record<ClassKind, SkillDef[]>><unknown
       areas: [{ r: 56, dmg: 28, stunMs: 1100, kb: 0.5, look: "slam" }, { r: 76, dmg: 12, delayMs: 450, waves: 2, everyMs: 400, slowMs: 800, look: "spikes" }] },
 
     // Crusade: holy auras, enchantments and blessings
-    { id: "k_holyblade", name: "Holy Blade", type: "Enchant", branch: 2, row: 0, style: "holy", cd: 12000, cost: 20,
+    { id: "k_holyblade", name: "Holy Blade", type: "Enchant", branch: 2, row: 0, style: "holy", cd: 12000, mana: 20,
       desc: "Bless your sword for 7s: every hit burns with holy fire.",
       buff: { ms: 7000, onHit: { burn: [5, 2000] } } },
-    { id: "k_consecrate", name: "Consecration", type: "Aura", branch: 2, row: 1, style: "holy", cd: 14000, cost: 30,
+    { id: "k_consecrate", name: "Consecration", type: "Aura", branch: 2, row: 1, style: "holy", cd: 14000, mana: 25,
       desc: "Sanctify the ground under you for 5s: it burns enemies and heals you while you stand on it.",
       field: { kind: "consecrate", r: 42, ms: 5000, tickMs: 500, dmg: 8, heal: 1.2 } },
-    { id: "k_rally", name: "Rally", type: "War cry", branch: 2, row: 2, style: "holy", cd: 16000, cost: 25,
+    { id: "k_rally", name: "Rally", type: "War cry", branch: 2, row: 2, style: "holy", cd: 16000, cost: 15, mana: 15,
       desc: "Lift your banner: heal 12% HP, +15% damage and speed for 6s, and nearby enemies are weakened.",
       buff: { ms: 6000, dmg: 15, speed: 15, heal: 12 }, cry: { r: 64, weakMs: 4000, look: "nova" } },
-    { id: "k_aura", name: "Sacred Aura", type: "Aura", branch: 2, row: 3, style: "holy", cd: 20000, cost: 35,
+    { id: "k_aura", name: "Sacred Aura", type: "Aura", branch: 2, row: 3, style: "holy", cd: 20000, mana: 30,
       desc: "A halo of light surrounds you for 10s: it sears enemies close to you and slowly heals you.",
       field: { kind: "sacred", r: 46, ms: 10000, tickMs: 500, follow: true, dmg: 4 }, buff: { ms: 10000, regen: 1.2 } },
-    { id: "k_wrath", name: "Heaven's Wrath", type: "Ultimate", branch: 2, row: 4, style: "holy", cd: 22000, cost: 50, chargeMs: 500,
+    { id: "k_wrath", name: "Heaven's Wrath", type: "Ultimate", branch: 2, row: 4, style: "holy", cd: 22000, cost: 20, mana: 35, chargeMs: 500,
       desc: "Call down the heavens: six pillars of light crash around you, each one stunning.",
       areas: [{ r: 26, dmg: 34, stunMs: 400, waves: 6, everyMs: 160, scatter: 64, delayMs: 100, look: "pillar" }] },
   ],
@@ -213,15 +215,15 @@ const S: Record<ClassKind, SkillDef[]> = <Record<ClassKind, SkillDef[]>><unknown
     { id: "n_step", name: "Shadow Step", type: "Movement", branch: 0, row: 0, style: "shadow", cd: 2500, cost: 20,
       desc: "Melt into shadow and reappear ahead, untouchable for a moment.",
       move: { kind: "blink", dist: 56, invulnMs: 250 } },
-    { id: "n_smoke", name: "Smoke Bomb", type: "Aura", branch: 0, row: 1, style: "shadow", cd: 12000, cost: 25,
+    { id: "n_smoke", name: "Smoke Bomb", type: "Aura", branch: 0, row: 1, style: "shadow", cd: 12000, cost: 30,
       desc: "Throw down a cloud of smoke for 4s: enemies inside are blinded (weakened) and slowed.",
       field: { kind: "smoke", r: 40, ms: 4000, tickMs: 400, weakMs: 600, slowMs: 600 } },
     { id: "n_swift", name: "Swift Feet", type: "Passive", branch: 0, row: 2, style: "wind", passive: { effect: "speed", perRank: 4 },
       desc: "Light as a cat: move faster." },
-    { id: "n_assassinate", name: "Assassinate", type: "Buildup", branch: 0, row: 3, style: "shadow", cd: 10000, cost: 30, consume: true,
+    { id: "n_assassinate", name: "Assassinate", type: "Buildup", branch: 0, row: 3, style: "shadow", cd: 10000, cost: 40, consume: true,
       desc: "Spend your Ki: vanish and strike the nearest enemy from behind. Each Ki stack adds 25%.",
       move: { kind: "behind", dist: 110, invulnMs: 200 }, areas: [{ r: 20, wpn: 2.4, kb: 1, look: "slash" }] },
-    { id: "n_cuts", name: "Thousand Cuts", type: "Ultimate", branch: 0, row: 4, style: "shadow", cd: 18000, cost: 50,
+    { id: "n_cuts", name: "Thousand Cuts", type: "Ultimate", branch: 0, row: 4, style: "shadow", cd: 18000, cost: 55,
       desc: "Become a shadow: blink from enemy to enemy six times, slashing each one. Untouchable meanwhile.",
       move: { kind: "multi", dist: 96, hits: 6, everyMs: 150, wpn: 0.6, invulnMs: 450 } },
 
@@ -242,19 +244,19 @@ const S: Record<ClassKind, SkillDef[]> = <Record<ClassKind, SkillDef[]>><unknown
       areas: [{ r: 44, wpn: 1.1, kb: 0.2, pull: 6, waves: 5, everyMs: 150, look: "slash" }] },
 
     // Spirit: elemental jutsu
-    { id: "n_flame", name: "Flame Jutsu", type: "Attack", branch: 2, row: 0, style: "fire", cd: 5000, cost: 20,
+    { id: "n_flame", name: "Flame Jutsu", type: "Attack", branch: 2, row: 0, style: "fire", cd: 5000, mana: 12,
       desc: "Breathe a gout of fire ahead: damage and burning.",
       areas: [{ r: 26, ahead: 26, wpn: 1.8, burn: [4, 3000], kb: 0.6, look: "flame" }] },
-    { id: "n_poison", name: "Poison Blade", type: "Enchant", branch: 2, row: 1, style: "poison", cd: 14000, cost: 20,
+    { id: "n_poison", name: "Poison Blade", type: "Enchant", branch: 2, row: 1, style: "poison", cd: 14000, cost: 10, mana: 10,
       desc: "Coat your blades for 8s: every hit poisons.",
       buff: { ms: 8000, onHit: { burn: [8, 3000] } } },
     { id: "n_caltrops", name: "Caltrops", type: "Trap", branch: 2, row: 2, style: "steel", cd: 10000, cost: 20,
       desc: "Scatter spikes ahead for 6s: enemies walking on them are hurt and slowed.",
       field: { kind: "caltrops", r: 30, ahead: 36, ms: 6000, tickMs: 400, dmg: 5, slowMs: 600 } },
-    { id: "n_lightning", name: "Lightning Jutsu", type: "Attack", branch: 2, row: 3, style: "lightning", cd: 9000, cost: 30,
+    { id: "n_lightning", name: "Lightning Jutsu", type: "Attack", branch: 2, row: 3, style: "lightning", cd: 9000, mana: 25,
       desc: "Hurl a lightning bolt that jumps to 3 more enemies, stunning each.",
       shots: { kind: "lightning", speed: 420, range: 170, radius: 5, wpn: 3.2, stunMs: 350, chain: 3 } },
-    { id: "n_dragon", name: "Fire Dragon", type: "Ultimate", branch: 2, row: 4, style: "fire", cd: 18000, cost: 50, chargeMs: 450,
+    { id: "n_dragon", name: "Fire Dragon", type: "Ultimate", branch: 2, row: 4, style: "fire", cd: 18000, cost: 15, mana: 40, chargeMs: 450,
       desc: "Gather your chakra and release a fire dragon: it tears through everyone in its path and explodes.",
       shots: { kind: "dragon", speed: 200, range: 190, radius: 10, size: 2, wpn: 5, burn: [6, 3000], pierce: 99, explode: 44 } },
   ],
@@ -262,57 +264,57 @@ const S: Record<ClassKind, SkillDef[]> = <Record<ClassKind, SkillDef[]>><unknown
   // ---------------------------------------------------------------- WIZARD
   wizard: [
     // Fire
-    { id: "w_wave", name: "Flame Wave", type: "Attack", branch: 0, row: 0, style: "fire", cd: 5000, cost: 20,
+    { id: "w_wave", name: "Flame Wave", type: "Attack", branch: 0, row: 0, style: "fire", cd: 5000, mana: 18,
       desc: "Send a rolling wave of fire forward: it burns everything it passes.",
       shots: { kind: "flamewave", speed: 160, range: 130, radius: 10, size: 1.5, dmg: 30, burn: [4, 2000], pierce: 99, kb: 0.4 } },
     { id: "w_pyro", name: "Pyromancy", type: "Passive", branch: 0, row: 1, style: "fire", passive: { effect: "skill", perRank: 7 },
       desc: "Fire answers you: more skill damage." },
-    { id: "w_firewall", name: "Fire Wall", type: "Aura", branch: 0, row: 2, style: "fire", cd: 12000, cost: 30,
+    { id: "w_firewall", name: "Fire Wall", type: "Aura", branch: 0, row: 2, style: "fire", cd: 12000, mana: 30,
       desc: "Raise a wall of flame ahead for 4s: enemies inside burn.",
       field: { kind: "fire", r: 34, ahead: 44, ms: 4000, tickMs: 400, dmg: 10 } },
-    { id: "w_orb", name: "Inferno Orb", type: "Buildup", branch: 0, row: 3, style: "fire", cd: 11000, cost: 35, chargeMs: 600, consume: true,
+    { id: "w_orb", name: "Inferno Orb", type: "Buildup", branch: 0, row: 3, style: "fire", cd: 11000, mana: 35, chargeMs: 600, consume: true,
       desc: "Gather fire into a huge orb, then hurl it: it explodes in a big blast. Arcane stacks make it stronger.",
       shots: { kind: "inferno", speed: 150, range: 160, radius: 9, size: 2.2, dmg: 100, explode: 50, burn: [5, 2000], kb: 2 } },
-    { id: "w_meteor", name: "Meteor Shower", type: "Ultimate", branch: 0, row: 4, style: "fire", cd: 20000, cost: 50, chargeMs: 400,
+    { id: "w_meteor", name: "Meteor Shower", type: "Ultimate", branch: 0, row: 4, style: "fire", cd: 20000, mana: 55, chargeMs: 400,
       desc: "Pull meteors from the sky: one giant impact ahead, four smaller ones around it, and burning ground.",
       areas: [{ r: 50, ahead: 56, dmg: 80, kb: 2, delayMs: 450, look: "meteor" },
         { r: 26, ahead: 56, dmg: 24, waves: 4, everyMs: 170, delayMs: 650, scatter: 50, burn: [5, 2000], look: "meteor" }],
       field: { kind: "fire", r: 46, ahead: 56, ms: 3000, tickMs: 500, dmg: 5 } },
 
     // Frost
-    { id: "w_nova", name: "Frost Nova", type: "Attack", branch: 1, row: 0, style: "frost", cd: 7000, cost: 25,
+    { id: "w_nova", name: "Frost Nova", type: "Attack", branch: 1, row: 0, style: "frost", cd: 7000, mana: 25,
       desc: "Blast ice all around you: damage and a 2.5s slow.",
       areas: [{ r: 46, dmg: 30, slowMs: 2500, look: "nova" }] },
-    { id: "w_shards", name: "Ice Shards", type: "Attack", branch: 1, row: 1, style: "frost", cd: 5000, cost: 20,
+    { id: "w_shards", name: "Ice Shards", type: "Attack", branch: 1, row: 1, style: "frost", cd: 5000, mana: 14,
       desc: "Fire five shards of ice in a fan: each one slows.",
       shots: { kind: "iceshard", n: 5, spread: 40, speed: 280, range: 150, radius: 4, dmg: 11, slowMs: 1200, kb: 0.3 } },
-    { id: "w_armor", name: "Frost Armor", type: "Enchant", branch: 1, row: 2, style: "frost", cd: 16000, cost: 25,
+    { id: "w_armor", name: "Frost Armor", type: "Enchant", branch: 1, row: 2, style: "frost", cd: 16000, mana: 25,
       desc: "Ice armour for 8s: take 25% less damage, and whoever hits you is chilled.",
       buff: { ms: 8000, armor: 25, thorns: { slowMs: 1200, dmg: 6 } } },
-    { id: "w_mirror", name: "Mirror Ice", type: "Counter", branch: 1, row: 3, style: "frost", cd: 10000, cost: 25,
+    { id: "w_mirror", name: "Mirror Ice", type: "Counter", branch: 1, row: 3, style: "frost", cd: 10000, mana: 18,
       desc: "Encase yourself in a mirror of ice for 0.9s: the next hit shatters it, freezing the attacker and reflecting the damage.",
       counter: { ms: 900, reflect: 1, effects: { stunMs: 1000 }, area: { r: 34, dmg: 55, slowMs: 1500, look: "nova" } } },
-    { id: "w_blizzard", name: "Blizzard", type: "Ultimate", branch: 1, row: 4, style: "frost", cd: 20000, cost: 50, chargeMs: 300,
+    { id: "w_blizzard", name: "Blizzard", type: "Ultimate", branch: 1, row: 4, style: "frost", cd: 20000, mana: 55, chargeMs: 300,
       desc: "Summon a blizzard ahead for 5s: ice rains down, hurting and slowing everyone inside.",
       field: { kind: "blizzard", r: 70, ahead: 56, ms: 5000, tickMs: 500, dmg: 11, slowMs: 900 } },
-    { id: "w_frozenorb", name: "Frozen Orb", type: "Attack", branch: 1, row: 4, style: "frost", cd: 0, cost: 2,
-      desc: "Launch an orb of frozen magic that flies straight and very far through enemies. As it goes it keeps spitting ice shards all around it in a turning spiral, and at the end it blows up in a big frost blast. No cooldown: cast it as fast as your magic lasts.",
+    { id: "w_frozenorb", name: "Frozen Orb", type: "Attack", branch: 1, row: 4, style: "frost", cd: 0, mana: 20,
+      desc: "Launch an orb of frozen magic that flies straight and very far through enemies. As it goes it keeps spitting ice shards all around it in a turning spiral, and at the end it blows up in a big frost blast. No cooldown: cast it as fast as your mana lasts.",
       shots: { kind: "frozenorb", speed: 200, range: 450, radius: 7, size: 1.6, dmg: 10, pierce: 99, slowMs: 1000, kb: 0.2, explode: 56,
         pulse: { every: 40, turn: 25, shards: { kind: "iceshard", n: 4, speed: 230, range: 80, radius: 4, dmg: 6, slowMs: 700, kb: 0.2 } } } },
 
     // Storm / arcane
-    { id: "w_missiles", name: "Arcane Missiles", type: "Attack", branch: 2, row: 0, style: "arcane", cd: 4000, cost: 20,
+    { id: "w_missiles", name: "Arcane Missiles", type: "Attack", branch: 2, row: 0, style: "arcane", cd: 4000, mana: 15,
       desc: "Three arcane missiles shoot out in a tight spread.",
       shots: { kind: "arcane", n: 3, spread: 14, speed: 300, range: 170, radius: 4, dmg: 13, kb: 0.4 } },
-    { id: "w_blink", name: "Blink", type: "Movement", branch: 2, row: 1, style: "arcane", cd: 6000, cost: 20,
+    { id: "w_blink", name: "Blink", type: "Movement", branch: 2, row: 1, style: "arcane", cd: 6000, cost: 20, mana: 8,
       desc: "Teleport ahead. The rift you leave behind explodes.",
       areas: [{ r: 30, dmg: 40, kb: 1, look: "burst", atStart: true }], move: { kind: "blink", dist: 72, invulnMs: 200 } },
-    { id: "w_static", name: "Static Field", type: "Aura", branch: 2, row: 2, style: "lightning", cd: 16000, cost: 30,
+    { id: "w_static", name: "Static Field", type: "Aura", branch: 2, row: 2, style: "lightning", cd: 16000, mana: 30,
       desc: "Crackle with lightning for 8s: every 0.6s a bolt strikes an enemy near you.",
       field: { kind: "static", r: 62, ms: 8000, tickMs: 600, follow: true, zap: { n: 1, dmg: 9, stunMs: 150 } } },
-    { id: "w_flow", name: "Mana Flow", type: "Passive", branch: 2, row: 3, style: "arcane", passive: { effect: "cdr", perRank: 5 },
-      desc: "Magic flows freely: skills recharge faster." },
-    { id: "w_storm", name: "Thunderstorm", type: "Ultimate", branch: 2, row: 4, style: "lightning", cd: 20000, cost: 50, chargeMs: 600,
+    { id: "w_flow", name: "Mana Flow", type: "Passive", branch: 2, row: 3, style: "arcane", passive: { effect: "mana", perRank: 20 },
+      desc: "Magic flows freely: your mana refills faster." },
+    { id: "w_storm", name: "Thunderstorm", type: "Ultimate", branch: 2, row: 4, style: "lightning", cd: 20000, mana: 55, chargeMs: 600,
       desc: "Storm clouds gather over you, then lightning hammers the area for 3s, stunning whatever it hits.",
       field: { kind: "storm", r: 96, ms: 3000, tickMs: 300, zap: { n: 2, dmg: 18, stunMs: 300 } } },
   ],
@@ -320,7 +322,7 @@ const S: Record<ClassKind, SkillDef[]> = <Record<ClassKind, SkillDef[]>><unknown
   // ---------------------------------------------------------------- ARCHER
   archer: [
     // Marksman
-    { id: "a_volley", name: "Volley", type: "Attack", branch: 0, row: 0, style: "steel", cd: 6000, cost: 25,
+    { id: "a_volley", name: "Volley", type: "Attack", branch: 0, row: 0, style: "steel", cd: 6000, cost: 30,
       desc: "Fire three arrows side by side.",
       shots: { kind: "arrow", n: 3, lanes: 8, speed: 300, range: 175, radius: 4, wpn: 0.6, kb: 0.8 } },
     { id: "a_power", name: "Power Shot", type: "Buildup", branch: 0, row: 1, style: "wind", cd: 7000, cost: 25, chargeMs: 450,
@@ -328,7 +330,7 @@ const S: Record<ClassKind, SkillDef[]> = <Record<ClassKind, SkillDef[]>><unknown
       shots: { kind: "powerarrow", speed: 420, range: 240, radius: 5, size: 1.5, wpn: 2.6, pierce: 99, kb: 3 } },
     { id: "a_aim", name: "Steady Aim", type: "Passive", branch: 0, row: 2, style: "steel", passive: { effect: "dmg", perRank: 5 },
       desc: "Breathe, aim, release: more damage." },
-    { id: "a_fan", name: "Fan of Arrows", type: "Buildup", branch: 0, row: 3, style: "steel", cd: 10000, cost: 30, consume: true,
+    { id: "a_fan", name: "Fan of Arrows", type: "Buildup", branch: 0, row: 3, style: "steel", cd: 10000, cost: 35, consume: true,
       desc: "Spend your Focus: loose a wide fan of seven arrows. Each Focus stack adds 25%.",
       shots: { kind: "arrow", n: 7, spread: 70, speed: 300, range: 170, radius: 4, wpn: 0.7, kb: 0.8 } },
     { id: "a_rain", name: "Arrow Rain", type: "Ultimate", branch: 0, row: 4, style: "steel", cd: 16000, cost: 50,
@@ -348,23 +350,23 @@ const S: Record<ClassKind, SkillDef[]> = <Record<ClassKind, SkillDef[]>><unknown
     { id: "a_net", name: "Net Shot", type: "Attack", branch: 1, row: 3, style: "nature", cd: 10000, cost: 25,
       desc: "Shoot a weighted net: it tangles the first enemy (rooted 1.6s) and slows everyone near it.",
       shots: { kind: "net", speed: 260, range: 160, radius: 6, size: 1.4, wpn: 3.3, stunMs: 1600, explode: 30, slowMs: 1500 } },
-    { id: "a_sentry", name: "Hunter's Sentry", type: "Ultimate", branch: 1, row: 4, style: "nature", cd: 22000, cost: 50,
+    { id: "a_sentry", name: "Hunter's Sentry", type: "Ultimate", branch: 1, row: 4, style: "nature", cd: 22000, cost: 30, mana: 25,
       desc: "Plant a carved sentry totem for 10s. Its glowing eye fires arrows at every enemy that comes near.",
       field: { kind: "sentry", r: 140, ms: 10000, tickMs: 450, turret: { kind: "arrow", speed: 320, range: 160, radius: 4, dmg: 13, kb: 0.4 } } },
 
     // Nature: enchanted arrows
-    { id: "a_firearrows", name: "Fire Arrows", type: "Enchant", branch: 2, row: 0, style: "fire", cd: 12000, cost: 20,
+    { id: "a_firearrows", name: "Fire Arrows", type: "Enchant", branch: 2, row: 0, style: "fire", cd: 12000, mana: 20,
       desc: "Light your arrowheads for 8s: every arrow sets its target on fire.",
       buff: { ms: 8000, onHit: { burn: [4, 3000] } } },
-    { id: "a_frostarrow", name: "Frost Arrow", type: "Attack", branch: 2, row: 1, style: "frost", cd: 6000, cost: 20,
+    { id: "a_frostarrow", name: "Frost Arrow", type: "Attack", branch: 2, row: 1, style: "frost", cd: 6000, cost: 10, mana: 12,
       desc: "An arrow of ice: it shatters on impact, slowing everyone near.",
       shots: { kind: "frostarrow", speed: 320, range: 190, radius: 4, size: 1.2, wpn: 1.9, explode: 28, slowMs: 2000, kb: 0.8 } },
-    { id: "a_windwalk", name: "Wind Walk", type: "Aura", branch: 2, row: 2, style: "wind", cd: 14000, cost: 25,
+    { id: "a_windwalk", name: "Wind Walk", type: "Aura", branch: 2, row: 2, style: "wind", cd: 14000, mana: 25,
       desc: "The wind carries you for 5s: 40% faster and 25% harder to hurt.",
       buff: { ms: 5000, speed: 40, armor: 25 } },
     { id: "a_feast", name: "Hunter's Feast", type: "Passive", branch: 2, row: 3, style: "nature", passive: { effect: "lifesteal", perRank: 3 },
       desc: "Every kill feeds you: heal part of the damage you deal." },
-    { id: "a_phoenix", name: "Phoenix Arrow", type: "Ultimate", branch: 2, row: 4, style: "fire", cd: 20000, cost: 50, chargeMs: 500,
+    { id: "a_phoenix", name: "Phoenix Arrow", type: "Ultimate", branch: 2, row: 4, style: "fire", cd: 20000, cost: 15, mana: 40, chargeMs: 500,
       desc: "Your arrow bursts into a phoenix: it burns through every enemy, explodes and leaves the ground on fire.",
       shots: { kind: "phoenix", speed: 230, range: 210, radius: 10, size: 2, wpn: 2.8, pierce: 99, explode: 48, burn: [6, 3000], kb: 1.5,
         field: { kind: "fire", r: 40, ms: 3000, tickMs: 500, dmg: 6 } } },
@@ -389,19 +391,19 @@ const S: Record<ClassKind, SkillDef[]> = <Record<ClassKind, SkillDef[]>><unknown
       field: { kind: "whirlwind", r: 38, ms: 2500, tickMs: 200, follow: true, wpn: 0.35, kb: 0.3 }, buff: { ms: 2500, immune: true, speed: 10 } },
 
     // Warcry
-    { id: "b_battlecry", name: "Battle Cry", type: "War cry", branch: 1, row: 0, style: "spirit", cd: 12000, cost: 20,
-      desc: "Bellow a battle cry: +15% damage for 6s, and enemies around you are weakened.",
-      buff: { ms: 6000, dmg: 15 }, cry: { r: 64, weakMs: 4000, look: "nova" } },
-    { id: "b_howl", name: "Terrifying Howl", type: "War cry", branch: 1, row: 1, style: "spirit", cd: 14000, cost: 25,
+    { id: "b_battlecry", name: "Battle Cry", type: "War cry", branch: 1, row: 0, style: "spirit", cd: 12000, cost: 15,
+      desc: "Bellow a battle cry: +20% damage for 6s, and enemies around you are weakened.",
+      buff: { ms: 6000, dmg: 20 }, cry: { r: 64, weakMs: 4000, look: "nova" } },
+    { id: "b_howl", name: "Terrifying Howl", type: "War cry", branch: 1, row: 1, style: "spirit", cd: 12000, cost: 15,
       desc: "A howl so savage that monsters around you flee in terror and heroes falter.",
       cry: { r: 72, fearMs: 2000, look: "nova" } },
-    { id: "b_retaliate", name: "Retaliate", type: "Counter", branch: 1, row: 2, style: "blood", cd: 8000, cost: 20,
+    { id: "b_retaliate", name: "Retaliate", type: "Counter", branch: 1, row: 2, style: "blood", cd: 6000, cost: 15,
       desc: "Brace for 0.8s. The next hit only makes you angrier: you explode in a roar that hits all around.",
       counter: { ms: 800, area: { r: 42, wpn: 1.8, kb: 2, look: "slam" }, buff: { ms: 3000, dmg: 15 } } },
-    { id: "b_drums", name: "War Drums", type: "Aura", branch: 1, row: 3, style: "spirit", cd: 20000, cost: 30,
+    { id: "b_drums", name: "War Drums", type: "Aura", branch: 1, row: 3, style: "spirit", cd: 14000, cost: 25,
       desc: "Ancestral drums beat around you for 10s: +20% attack speed, and each beat jolts nearby enemies.",
       field: { kind: "drums", r: 52, ms: 10000, tickMs: 800, follow: true, dmg: 5, slowMs: 500 }, buff: { ms: 10000, atkspd: 20 } },
-    { id: "b_ancestors", name: "Call of the Ancestors", type: "Ultimate", branch: 1, row: 4, style: "spirit", cd: 22000, cost: 50, chargeMs: 600,
+    { id: "b_ancestors", name: "Call of the Ancestors", type: "Ultimate", branch: 1, row: 4, style: "spirit", cd: 22000, cost: 20, mana: 35, chargeMs: 600,
       desc: "Call your ancestors: ghostly warriors rise and slam the ground around you three times, and their spirit shields you.",
       areas: [{ r: 68, dmg: 22, kb: 1, waves: 3, everyMs: 350, look: "spirit" }], buff: { ms: 6000, armor: 25 } },
 
@@ -562,6 +564,7 @@ export const EFFECT_TEXT: Record<TalentEffect, (v: number) => string> = {
   speed: (v) => `+${v}% move speed`,
   cdr: (v) => `-${v}% skill cooldowns`,
   regen: (v) => `+${v}% max HP regen per second`,
+  mana: (v) => `+${v}% mana regen`,
 };
 
 /** Drop unknown skills (old saves) and anything above what the level allows. */

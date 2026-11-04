@@ -92,6 +92,9 @@ const ITEM_ART: Record<string, { rows: string[]; pal: Record<string, number> }> 
     pal: { C: 0xffc93c, c: 0xd99a1e, r: 0xfff3b0 } },
   potion: { rows: ["...WW...", "...GG...", "..GRRG..", ".GRrRRG.", ".GRRRRG.", ".GRRRRG.", "..GGGG..", "........"],
     pal: { W: 0x8d6e63, G: 0xcfe8ff, R: 0xe63946, r: 0xffb3b3 } },
+  // Mana potion (shared/mana.ts): same flask, deep blue
+  mpotion: { rows: ["...WW...", "...GG...", "..GRRG..", ".GRrRRG.", ".GRRRRG.", ".GRRRRG.", "..GGGG..", "........"],
+    pal: { W: 0x8d6e63, G: 0xcfe8ff, R: 0x2f6bff, r: 0xa9c8ff } },
   // Quest drops (shared/quests.ts QUEST_ITEMS)
   q_jelly: { rows: ["........", "...GG...", "..GLGG..", ".GLGGGG.", ".GGGGGD.", "GGGGGGDD", ".GGDDDD.", "........"],
     pal: { G: 0x7bd36b, L: 0xd6ffcc, D: 0x3f9a3a } },

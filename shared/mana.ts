@@ -1,0 +1,75 @@
+import type { ClassKind } from "./classes";
+import { STATS, type Stats } from "./powers";
+
+/**
+ * Mana and Stamina: two pools that pay for skills (Murat 2026-11-04: "skills should be a mix of mana + cooldown").
+ *
+ *   Stamina (Player.energy, ENERGY in shared/classes.ts): every hero, 100 points, refills fast. Pays for the dodge roll
+ *     and for physical skills: sword swings, dashes, shouts, traps. Knight, Ninja, Archer and Barbarian lean on it.
+ *   Mana (this file): a slow pool that grows with Magic. Pays for spells: the whole Wizard book, and the holy, spirit,
+ *     jutsu and nature skills of the other classes. Mana potions (V) refill it.
+ *
+ * A skill (shared/skills.ts SkillDef) costs `cost` Stamina and/or `mana` Mana, on top of its cooldown. Cheap skills
+ * have short cooldowns and are limited by the pools; big skills are limited by their cooldown.
+ *
+ * Player.mp (synced) packs current mana, max mana and mana potions into one number (packMana), because the Player
+ * schema is at Colyseus's 64-field limit.
+ */
+export const MANA = {
+  base: 50, // max mana of a hero with 0 Magic
+  perMag: 6, // max mana per point of Magic
+  perLevel: 2, // max mana per hero level above 1
+  regenBase: 1, // mana per second
+  regenPerMag: 0.4, // ...plus this per point of Magic
+  restMult: 2, // regen out of combat (not hurt for REGEN_DELAY_MS)
+};
+
+export const MAX_MANA_POTIONS = 5;
+export const MANA_POTION_RESTORE = 0.5; // fraction of max mana
+export const MANA_POTION_COOLDOWN_MS = 1000;
+export const MANA_POTION_PRICE = 20;
+/** A mana potion drops this often compared with a healing potion (LOOT potionChance). */
+export const MANA_POTION_DROP = 0.8;
+
+export function maxManaFor(s: Stats, level = 1): number {
+  return Math.round(MANA.base + MANA.perMag * s.mag + MANA.perLevel * (level - 1));
+}
+
+/** Mana per second; `bonusPct` from the skill tree (Mana Flow). */
+export function manaRegen(s: Stats, resting = false, bonusPct = 0): number {
+  return (MANA.regenBase + MANA.regenPerMag * s.mag) * (resting ? MANA.restMult : 1) * (1 + bonusPct / 100);
+}
+
+/** Class base mana at level 1, for the class picker. */
+export const baseMana = (cls: ClassKind) => maxManaFor(STATS[cls].base);
+
+export interface Cost { stamina?: number; mana?: number }
+export interface Payer { energy?: number; mana?: number }
+
+/** What a skill costs: `cost` is Stamina, `mana` is Mana. */
+export const skillCost = (s: { cost?: number; mana?: number }): Required<Cost> => ({ stamina: s.cost ?? 0, mana: s.mana ?? 0 });
+
+/** Which pool is short ("" = can pay). */
+export function shortOf(u: Payer, c: Cost): "" | "stamina" | "mana" {
+  if ((c.stamina ?? 0) > (u.energy ?? 0)) return "stamina";
+  if ((c.mana ?? 0) > (u.mana ?? 0)) return "mana";
+  return "";
+}
+export const canPay = (u: Payer, c: Cost) => shortOf(u, c) === "";
+/** Spends the cost if both pools have enough. Returns false (and spends nothing) otherwise. */
+export function pay(u: Payer, c: Cost): boolean {
+  if (!canPay(u, c)) return false;
+  if (c.stamina) u.energy = (u.energy ?? 0) - c.stamina;
+  if (c.mana) u.mana = (u.mana ?? 0) - c.mana;
+  return true;
+}
+
+// ---- Player.mp packing: potions * 1e6 + max * 1e3 + floor(current) (each part 0..999) ----------------
+export function packMana(cur: number, max: number, potions: number): number {
+  const m = Math.min(999, Math.max(0, Math.round(max)));
+  return Math.min(9, Math.max(0, potions)) * 1e6 + m * 1e3 + Math.min(m, Math.max(0, Math.floor(cur)));
+}
+export function unpackMana(mp: number | undefined): { mana: number; maxMana: number; potions: number } {
+  const v = Math.max(0, Math.floor(mp ?? 0));
+  return { mana: v % 1000, maxMana: Math.floor(v / 1000) % 1000, potions: Math.floor(v / 1e6) };
+}

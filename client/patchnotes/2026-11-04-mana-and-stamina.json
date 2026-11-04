@@ -1,0 +1,10 @@
+{
+  "date": "2026-11-04",
+  "title": "Mana, mana potions and skill costs",
+  "changes": [
+    "New blue Mana bar under Stamina. Spells cost mana: the whole Wizard book, plus holy, spirit, jutsu and nature skills of the other heroes. Magic raises your mana and how fast it refills.",
+    "Fighters live on Stamina: Knight, Ninja, Archer and Barbarian pay for sword swings, dashes, shouts and traps with it, and refill it faster than the Wizard.",
+    "Mana potions: press V to drink one (refills half your mana). Monsters and chests drop them, and Old Morwen sells them next to her healing potions.",
+    "Every skill was rebalanced around its cooldown plus its stamina and/or mana cost; the skill tree shows both."
+  ]
+}

@@ -4,6 +4,7 @@ import { pointRange, skillTarget,
   ShotDef, SkillDef, skillOf, STACK_DECAY_MS, STACK_POWER, WEAK_DEALT,
 } from "./skills";
 import { Stats, STATS } from "./powers";
+import { pay, skillCost } from "./mana";
 
 /**
  * Runs the skills of shared/skills.ts. It knows nothing about the room: the server (server/TownRoom.ts) and the
@@ -36,7 +37,7 @@ export const newRuntime = (): SkillRuntime => ({
   burnUntil: 0, burnDps: 0, burnBy: "", burnNext: 0, markUntil: 0, weakUntil: 0,
 });
 
-export interface Unit { x: number; y: number; dead: boolean; level: number; sk: SkillRuntime; cls?: ClassKind; talents?: Ranks; energy?: number; hp?: number; maxHp?: number }
+export interface Unit { x: number; y: number; dead: boolean; level: number; sk: SkillRuntime; cls?: ClassKind; talents?: Ranks; energy?: number; mana?: number; hp?: number; maxHp?: number }
 
 export interface HitOpts extends HitEffects { skill?: boolean; basic?: boolean; dot?: boolean; thorn?: boolean; crit?: boolean }
 
@@ -113,9 +114,7 @@ export function castSkill(h: SkillHost, id: string, skillId: string): boolean {
   const now = h.now();
   if (!s || s.passive || rank <= 0 || now < u.sk.chargeUntil) return false;
   if (cooldownLeft(s, u.sk, now, h.cooldownMult(id)) > 0) return false;
-  const cost = s.cost ?? 0;
-  if ((u.energy ?? 0) < cost) return false;
-  u.energy = (u.energy ?? 0) - cost;
+  if (!pay(u, skillCost(s))) return false; // Stamina and/or Mana (shared/mana.ts)
   u.sk.last[s.id] = now;
   // A clicked spot (point skills): how far from the hero it lands, within the skill's reach
   const clicked = h.aimDist?.(id);
