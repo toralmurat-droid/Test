@@ -36,8 +36,10 @@ import { SLOT_COUNT } from "../shared/slots";
 import { groupDmgMult, groupHpMult, PARTY, together } from "../shared/party";
 import { heroPoise, MOB_COMBAT, POISE, poiseLevelMult, poiseSpeed } from "../shared/combat";
 import {
-  BAG_SIZE, Equipped, GEAR, GEAR_SLOTS, GearSlot, gearBlock, gearName, gearReachMult, gearSpeedMult, gearStats, isGearId, potionChance, rollGear, canWear, starterKit,
+  BAG_SIZE, Equipped, gearDef, GEAR_SLOTS, activeGear, reqProblem, itemLevel, HeroReqInfo, GearSlot, gearBlock, gearName, gearReachMult, gearSpeedMult, gearStats, isGearId, potionChance, rollGear, canWear, starterKit,
 } from "../shared/gear";
+/** "Frost Katana Lv 17" for pickup messages. */
+const lvlName = (id: string, cls: string) => `${gearName(id, cls)}${itemLevel(id) > 1 ? ` Lv ${itemLevel(id)}` : ""}`;
 import { Asker, boardFor, submit, tick as ideaTick, vote as ideaVote } from "../shared/ideas";
 import { hashAddr, ideaLog, saveIdeas } from "./ideaStore";
 
@@ -2124,7 +2126,7 @@ export class TownRoom extends Room<TownState> {
         p.gold += it.amount;
       }
       this.state.items.delete(id);
-      this.clients.find((c) => c.sessionId === pid)?.send("pickup", { kind: it.kind, amount: it.amount, x: it.x, y: it.y, gear: it.gear, name: it.gear ? gearName(it.gear, p.cls) : "" });
+      this.clients.find((c) => c.sessionId === pid)?.send("pickup", { kind: it.kind, amount: it.amount, x: it.x, y: it.y, gear: it.gear, name: it.gear ? lvlName(it.gear, p.cls) : "" });
     });
   }
 
@@ -2280,16 +2282,23 @@ export class TownRoom extends Room<TownState> {
     for (const [slot, id] of Object.entries(starterKit(p.cls)) as [GearSlot, string][]) if (!p[slot] && !have.has(id)) p[slot] = id;
   }
 
+  /** Worn items that count (requirements met, see shared/gear.ts activeGear). */
   private equipped(p: Player): Equipped {
-    return Object.fromEntries(GEAR_SLOTS.map((s) => [s, p[s]]));
+    return activeGear(Object.fromEntries(GEAR_SLOTS.map((s) => [s, p[s]])), this.reqInfo(p));
+  }
+
+  private reqInfo(p: Player): HeroReqInfo {
+    return { cls: p.cls, level: p.level, pts: { sta: p.ptSta, str: p.ptStr, mag: p.ptMag, dex: p.ptDex } };
   }
 
   /** Wear the bag item at index `i`; whatever was in that slot goes back to the bag. */
   private equip(id: string, i: number) {
     const p = this.state.players.get(id);
     if (!p || typeof i !== "number" || i < 0 || i >= p.bag.length) return;
-    const gid = p.bag.at(i), def = gid ? GEAR[gid] : undefined;
+    const gid = p.bag.at(i), def = gid ? gearDef(gid) : undefined;
     if (!gid || !def || !canWear(p.cls, gid)) return;
+    const why = reqProblem(gid, this.reqInfo(p)); // item level and stat requirements
+    if (why) { this.clients.find((c) => c.sessionId === id)?.send("gearno", { text: why }); return; }
     const slot: GearSlot = def.slot;
     const old = p[slot];
     const items = [...bagItems(p)];
@@ -2543,7 +2552,7 @@ export class TownRoom extends Room<TownState> {
       if (p.potions + qty > MAX_POTIONS) return no(`You can carry ${MAX_POTIONS} potions at most`);
       p.potions += qty;
     } else {
-      if (!GEAR[e.item]) return;
+      if (!gearDef(e.item)) return;
       if (p.bag.length >= BAG_SIZE) return no("Your bag is full");
       setBag(p, [...bagItems(p), e.item]);
     }
@@ -2555,7 +2564,7 @@ export class TownRoom extends Room<TownState> {
     const p = this.state.players.get(client.sessionId);
     const shop = p && !p.dead ? this.shopNear(p) : undefined;
     if (!p || !shop?.buys || typeof i !== "number" || i < 0 || i >= p.bag.length) return;
-    const gid = p.bag.at(i), def = gid ? GEAR[gid] : undefined;
+    const gid = p.bag.at(i), def = gid ? gearDef(gid) : undefined;
     if (!gid || !def || !shop.buys.includes(def.slot)) return;
     const items = [...bagItems(p)];
     items.splice(i, 1);
@@ -2667,7 +2676,7 @@ export class TownRoom extends Room<TownState> {
     const loot = rollChest(c.level, c.tier);
     let row = 0; // stack the "+loot" texts so they don't overlap
     const got = (kind: ItemKind, amount: number, gear = "") =>
-      client.send("pickup", { kind, amount, x: c.x, y: c.y - 8 - 9 * row++, gear, name: gear ? gearName(gear, p.cls) : "" });
+      client.send("pickup", { kind, amount, x: c.x, y: c.y - 8 - 9 * row++, gear, name: gear ? lvlName(gear, p.cls) : "" });
     p.gold += loot.gold;
     got("gold", loot.gold);
     for (let i = 0; i < loot.potions; i++) {
@@ -2972,7 +2981,8 @@ export class TownRoom extends Room<TownState> {
   private fireRanged(id: string) {
     const a = this.state.players.get(id);
     const now = Date.now();
-    const shot = a?.ranged ? GEAR[a.ranged]?.shot : undefined;
+    const ranged = a ? this.equipped(a).ranged : undefined;
+    const shot = ranged ? gearDef(ranged)?.shot : undefined;
     if (!a || !shot || a.dead || a.stunned || a.broken || a.rolling || now - a.lastRanged < shot.cooldownMs) return;
     a.lastRanged = now;
     a.emote = "";

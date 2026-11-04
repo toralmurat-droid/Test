@@ -34,8 +34,9 @@ import { pixelText } from "./pixeltext";
 import { ART_K, CHAR_GROW, CHAR_SCALE, CHARACTERS, CHAR_ORIGIN, CharacterName, createArtAnims, playCharAnim, preloadArt } from "./artAssets";
 import { Ambient } from "./ambient";
 import { Details } from "./details";
-import { GearLayer, GearMenu, preloadGear, TIER_COLORS } from "./gear";
-import { GEAR, gearReachMult, gearSpeedMult } from "../../shared/gear";
+import { activeOf, GearLayer, GearMenu, preloadGear, TIER_COLORS } from "./gear";
+import { GearFx } from "./gearfx";
+import { baseId, gearDef, gearReachMult, gearSpeedMult } from "../../shared/gear";
 import { talentMult, talentPoints, spentPoints } from "../../shared/talents";
 import { activeSkills, SLOT_COUNT, SLOT_KEYS, skillLearned } from "../../shared/slots";
 import { iconImg } from "./skillIcons";
@@ -225,6 +226,7 @@ export class TownScene extends Phaser.Scene {
   private areaTimer?: number;
   private shots = new Map<string, { g: Phaser.GameObjects.GameObject & { x: number; y: number }; tx: number; ty: number; at: number; dx: number; dy: number; spd: number }>();
   private fx!: SkillFx;
+  private gearFx!: GearFx; // item level effects on heroes
   private lastCast: Record<string, number> = {}; // local clock (ms) of my last cast of each skill, for cooldowns
   private items = new Map<string, Phaser.GameObjects.Image>();
   private lastDodge = -Infinity;
@@ -254,6 +256,7 @@ export class TownScene extends Phaser.Scene {
 
   async create() {
     this.fx = new SkillFx(this, (id) => this.entities.get(id), () => this.me);
+    this.gearFx = new GearFx(this.fx);
     makeTileset(this);
     createArtAnims(this);
     if (SMOOTH) paintSmoothProps(this); // painted iso forge, anvil, witch hut… in place of the front-view pixel props
@@ -495,9 +498,9 @@ export class TownScene extends Phaser.Scene {
     const items = (this.room.state as any).items;
     items.onAdd((it: any, id: string) => {
       if (it.kind === "quest" && it.owner !== this.room.sessionId) return; // someone else's quest drop
-      const gear = it.kind === "gear" && GEAR[it.gear];
+      const gear = it.kind === "gear" && gearDef(it.gear);
       const img = gear
-        ? this.add.image(it.x, it.y, "gear_icons", it.gear).setScale(0.6 / ART_K).setDepth(it.y - 8)
+        ? this.add.image(it.x, it.y, "gear_icons", baseId(it.gear)).setScale(0.6 / ART_K).setDepth(it.y - 8)
         : this.add.image(it.x, it.y, itemTexture(this, it.kind === "quest" ? `q_${it.gear}` : it.kind)).setDepth(it.y - 8);
       if (it.kind === "quest") {
         // Quest drops glow so they stand out from the gold
@@ -514,13 +517,19 @@ export class TownScene extends Phaser.Scene {
       this.items.set(id, img);
     });
     items.onRemove((_it: any, id: string) => { this.items.get(id)?.destroy(); this.items.delete(id); });
+    // Equipping an item the hero isn't strong enough for yet (item level / stat requirements, shared/gear.ts)
+    this.room.onMessage("gearno", ({ text }) => {
+      const me = this.entities.get(this.me);
+      if (me) this.floatText(me.sprite.x, me.sprite.y - me.top - 6, text, "#ff6b6b", PIXEL_FONT);
+      this.feed(text);
+    });
     this.room.onMessage("pickup", ({ kind, amount, x, y, gear, name }) => {
       if (kind === "quest") {
         this.floatText(x, y - 6, `+1 ${QUEST_ITEMS[gear]?.name ?? ""}`, "#ffd166", PIXEL_FONT);
         return;
       }
       if (kind === "gear") {
-        this.floatText(x, y - 6, `+${name}`, TIER_COLORS[GEAR[gear]?.tier ?? 1], PIXEL_FONT);
+        this.floatText(x, y - 6, `+${name}`, TIER_COLORS[gearDef(gear)?.tier ?? 1], PIXEL_FONT);
         this.feed(`Found ${name}! Press G to equip`);
         return;
       }
@@ -958,7 +967,7 @@ export class TownScene extends Phaser.Scene {
     };
     const basicReach = (p: any) => {
       const def = CLASSES[p.cls as ClassKind];
-      const k = gearReachMult(p);
+      const k = gearReachMult(activeOf(p));
       return def.projectile ? def.projectile.range * k * 0.8 : 12 * k + def.attackRange * k * 0.9 + 4;
     };
     this.pointer = new PointerControls(this, {
@@ -981,7 +990,7 @@ export class TownScene extends Phaser.Scene {
       },
       speed: () => {
         const p = meEnt()?.state;
-        return p ? heroSpeed(p.cls as ClassKind, p.slowed, p.spd ?? 1) * gearSpeedMult(p) : 80;
+        return p ? heroSpeed(p.cls as ClassKind, p.slowed, p.spd ?? 1) * gearSpeedMult(activeOf(p)) : 80;
       },
       reach: (secondary) => {
         const p = meEnt()?.state;
@@ -997,14 +1006,14 @@ export class TownScene extends Phaser.Scene {
           if (s.field && !s.field.follow) return (s.field.ahead ?? 0) + s.field.r * 0.7;
           return basicReach(p);
         }
-        const shot = p.ranged ? GEAR[p.ranged]?.shot : undefined;
+        const rg = activeOf(p).ranged, shot = rg ? gearDef(rg)?.shot : undefined;
         return shot ? shot.range * 0.8 : basicReach(p);
       },
       fire: (secondary) => {
         if (!secondary) { this.room?.send("attack"); return; }
         const p = meEnt()?.state;
         if (secondarySkill()) this.room?.send("useslot", this.activeSlot);
-        else if (p?.ranged && GEAR[p.ranged]?.shot) this.room?.send("ranged");
+        else if (p && activeOf(p).ranged && gearDef(activeOf(p).ranged!)?.shot) this.room?.send("ranged");
         else this.room?.send("attack");
       },
       target: () => { const s = secondarySkill(); return s ? skillTarget(s) : "dir"; },
@@ -1172,6 +1181,7 @@ export class TownScene extends Phaser.Scene {
         e.sprite.setPosition(r.x, r.y);
       }
     }
+    if (cls) this.gearFx.swing(e, step, off[0], off[1], !!cls.projectile, id === this.me); // item level effects
     if (cls?.projectile) return; // the fireball itself is the visual
     // No hit-area shapes (Murat): the attack animation is the visual; the finisher still shakes the camera
     if (step === 2 && id === this.me) this.cameras.main.shake(80, 0.003);
@@ -1548,7 +1558,7 @@ export class TownScene extends Phaser.Scene {
     const def = CLASSES[cls];
     const next = xpForLevel(lvl + 1), cur = xpForLevel(lvl);
     const dmg = Math.round(def.damage * attackMult(cls, st) * talentMult(cls, mine.talents, "dmg"));
-    const speed = Math.round(heroSpeed(cls, false, mine.spd ?? 1) * gearSpeedMult(mine));
+    const speed = Math.round(heroSpeed(cls, false, mine.spd ?? 1) * gearSpeedMult(activeOf(mine)));
     const rows: [string, string][] = [
       ["Level", lvl >= MAX_LEVEL ? `${MAX_LEVEL} (max)` : `${lvl} · XP ${mine.xp - cur}/${next - cur}`],
       ["Health", `${Math.ceil(mine.hp)} / ${mine.maxHp}`],
@@ -1691,7 +1701,7 @@ export class TownScene extends Phaser.Scene {
       row("Shift", "Dodge roll", DODGE.cooldownMs, this.lastDodge, "", "", ENERGY.cost.dodge),
       row("Q", "Potion", 0, 0, `×${mine.potions}`, mine.potions > 0 ? "" : "×0"),
       // Secondary ranged weapon from the equipment screen, only when one is worn
-      ...(mine.ranged && GEAR[mine.ranged]?.shot ? [row("R", GEAR[mine.ranged].name, GEAR[mine.ranged].shot!.cooldownMs, this.lastRanged)] : []),
+      ...((rd) => (rd?.shot ? [row("R", rd.name, rd.shot.cooldownMs, this.lastRanged)] : []))(activeOf(mine).ranged ? gearDef(activeOf(mine).ranged!) : undefined),
     ].join("");
     const el = document.getElementById("actions")!;
     if (this.actionsHtml !== html) { el.innerHTML = html; this.actionsHtml = html; }
@@ -1884,7 +1894,7 @@ export class TownScene extends Phaser.Scene {
       const rooted = typeof p.fx === "string" && p.fx.includes("charge"); // a buildup roots the hero
       if (id === this.me && !p.dead && !p.stunned && !p.rolling && !rooted) {
         // Client-side prediction with the same movement code the server runs
-        const r = moveStep(e.sprite.x, e.sprite.y, this.input_, step / 1000, heroSpeed(p.cls as ClassKind, p.slowed, p.spd ?? 1) * gearSpeedMult(p));
+        const r = moveStep(e.sprite.x, e.sprite.y, this.input_, step / 1000, heroSpeed(p.cls as ClassKind, p.slowed, p.spd ?? 1) * gearSpeedMult(activeOf(p)));
         e.sprite.setPosition(r.x, r.y);
         if (!r.moving) {
           // Ease toward authoritative position while idle (same pull at any frame rate)
@@ -1977,6 +1987,7 @@ export class TownScene extends Phaser.Scene {
         e.statusTint = true;
       } else if (e.statusTint) { e.sprite.clearTint(); e.statusTint = false; }
       e.gear?.sync(e.sprite, p);
+      if (e.gear) this.gearFx.tick(e, dtMs, moving);
 
       const x = Math.round(e.sprite.x), y = Math.round(e.sprite.y);
       // Monsters: HP bar over the head, level tag just above it

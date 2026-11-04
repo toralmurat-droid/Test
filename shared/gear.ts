@@ -1,5 +1,7 @@
 import type { MobKind } from "./constants";
-import { STATS, Stats } from "./powers";
+import { MAX_LEVEL } from "./classes";
+import { STATS, Stats, StatKind, statsFor } from "./powers";
+import type { ClassKind } from "./classes";
 
 /**
  * Equipment: six slots, each item adds stats and is drawn on the hero.
@@ -115,7 +117,7 @@ export function starterKit(cls: string): Equipped {
 
 /** Class kits only fit their own class; everything else fits anyone. */
 export function canWear(cls: string, id: string): boolean {
-  const d = GEAR[id];
+  const d = gearDef(id);
   return !!d && (!d.cls || d.cls === cls);
 }
 
@@ -140,7 +142,9 @@ export const GEAR_DROP: Record<MobKind, { chance: number; tiers: [number, number
 };
 
 export function isGearId(v: unknown): v is string {
-  return typeof v === "string" && v in GEAR;
+  if (typeof v !== "string") return false;
+  const base = baseId(v);
+  return base in GEAR && withLevel(base, itemLevel(v)) === v;
 }
 
 /**
@@ -174,7 +178,7 @@ export function rollGear(kind: MobKind, level = 1, rnd = Math.random): string | 
   let r = rnd(), tier = 1;
   for (let i = 0; i < 3; i++) { if (r < d.tiers[i]) { tier = i + 1; break; } r -= d.tiers[i]; }
   const pool = LOOT_IDS.filter((id) => GEAR[id].tier === tier);
-  return pool[Math.floor(rnd() * pool.length)];
+  return withLevel(pool[Math.floor(rnd() * pool.length)], level);
 }
 
 export type Equipped = Partial<Record<GearSlot, string>>;
@@ -184,7 +188,7 @@ export function gearStats(cls: string, eq: Equipped): Stats {
   const out: Stats = { sta: 0, str: 0, mag: 0, dex: 0 };
   const atkStat = (STATS as Record<string, { attackStat: keyof Stats }>)[cls]?.attackStat ?? "str";
   for (const s of GEAR_SLOTS) {
-    const b = eq[s] ? GEAR[eq[s]!]?.bonus : undefined;
+    const b = eq[s] ? gearDef(eq[s]!)?.bonus : undefined;
     if (!b) continue;
     out.sta += b.sta ?? 0; out.str += b.str ?? 0; out.mag += b.mag ?? 0; out.dex += b.dex ?? 0;
     out[atkStat] += b.atk ?? 0;
@@ -194,18 +198,18 @@ export function gearStats(cls: string, eq: Equipped): Stats {
 
 /** Melee reach / projectile range multiplier from long weapons. */
 export function gearReachMult(eq: Equipped): number {
-  return 1 + ((eq.weapon ? GEAR[eq.weapon]?.bonus.reach : 0) ?? 0);
+  return 1 + ((eq.weapon ? gearDef(eq.weapon)?.bonus.reach : 0) ?? 0);
 }
 
 /** Fraction of damage the equipped shield blocks. */
 export function gearBlock(eq: Equipped): number {
-  return (eq.shield ? GEAR[eq.shield]?.bonus.block : 0) ?? 0;
+  return (eq.shield ? gearDef(eq.shield)?.bonus.block : 0) ?? 0;
 }
 
 /** Move speed multiplier from shoes (and anything else with `speed`). */
 export function gearSpeedMult(eq: Equipped): number {
   let m = 1;
-  for (const s of GEAR_SLOTS) m += (eq[s] ? GEAR[eq[s]!]?.bonus.speed : 0) ?? 0;
+  for (const s of GEAR_SLOTS) m += (eq[s] ? gearDef(eq[s]!)?.bonus.speed : 0) ?? 0;
   return m;
 }
 
@@ -213,7 +217,7 @@ const WEAPON_NOUN: Record<string, string> = { knight: "Sword", ninja: "Katana", 
 
 /** Display name; weapons take the hero's weapon type ("Frost Katana"). */
 export function gearName(id: string, cls?: string): string {
-  const d = GEAR[id];
+  const d = gearDef(id);
   if (!d) return id;
   return d.slot === "weapon" ? `${d.name} ${WEAPON_NOUN[cls ?? ""] ?? "Weapon"}` : d.name;
 }
@@ -225,6 +229,7 @@ export function bonusText(b: GearBonus): string {
   if (b.sta) parts.push(`+${b.sta} Stamina`);
   if (b.str) parts.push(`+${b.str} Strength`);
   if (b.mag) parts.push(`+${b.mag} Magic`);
+  if (b.dex) parts.push(`+${b.dex} Dexterity`);
   if (b.speed) parts.push(`+${Math.round(b.speed * 100)}% speed`);
   if (b.reach) parts.push(`+${Math.round(b.reach * 100)}% reach`);
   if (b.block) parts.push(`blocks ${Math.round(b.block * 100)}% damage`);
@@ -233,9 +238,112 @@ export function bonusText(b: GearBonus): string {
 
 /** Full description of an item: bonuses, plus damage/range for ranged weapons. */
 export function itemText(id: string): string {
-  const d = GEAR[id];
+  const d = gearDef(id);
   if (!d) return "";
   if (d.cls && !d.shot && !Object.keys(d.bonus).length) return "Starting gear";
   const shot = d.shot ? `${d.shot.damage} dmg, range ${d.shot.range}, every ${(d.shot.cooldownMs / 1000).toFixed(1)}s [${RANGED_KEY}]` : "";
   return [shot, bonusText(d.bonus)].filter(Boolean).join(", ");
 }
+
+// ---- Item levels and requirements ----------------------------------------------------------------------
+/**
+ * Every found item has an item level (1..MAX_LEVEL), written after the base id: "w_frost@17" (level 1 = plain id,
+ * class kits are always level 1). Drops and chests roll at the monster / chest level, shops sell set levels.
+ * Bonuses grow with the level, and so do the requirements to wear it: the hero's level and points in one stat
+ * (class base + points placed, gear does not count). Higher levels also look stronger on the hero (client/src/gearfx.ts).
+ */
+export const ITEM_MAX_LEVEL = MAX_LEVEL;
+/** Whole-number bonuses (stats, attack, shot damage) grow this much per item level above 1 (Lv 30 = x2.3). */
+export const ILVL_GROWTH = 0.045;
+/** Fraction bonuses (speed, reach, block) grow more gently (Lv 30 = x1.44). */
+export const ILVL_GROWTH_FRAC = 0.015;
+/** Stat points needed per item level, by tier (Common, Rare, Epic). */
+export const REQ_PER_LEVEL = [0, 0.35, 0.5, 0.65];
+/** The stat each slot asks for. Weapons ask for the class's attack stat (Strength, or Magic for the Wizard). */
+export const REQ_STAT: Record<GearSlot, StatKind | "attack"> = { weapon: "attack", ranged: "dex", shield: "str", armour: "sta", hat: "sta", shoes: "dex" };
+
+export function baseId(id: string): string {
+  const k = id.indexOf("@");
+  return k < 0 ? id : id.slice(0, k);
+}
+
+export function itemLevel(id: string): number {
+  const k = id.indexOf("@");
+  if (k < 0) return 1;
+  const n = Number(id.slice(k + 1));
+  return Number.isInteger(n) ? Math.min(ITEM_MAX_LEVEL, Math.max(1, n)) : 1;
+}
+
+/** Item id for a base item at a level (class kits and level 1 keep the plain id). */
+export function withLevel(base: string, level: number): string {
+  const b = baseId(base);
+  const l = Math.min(ITEM_MAX_LEVEL, Math.max(1, Math.round(level)));
+  return l <= 1 || GEAR[b]?.cls ? b : `${b}@${l}`;
+}
+
+const growInt = (v: number | undefined, l: number) => (v ? Math.round(v * (1 + ILVL_GROWTH * (l - 1))) : v);
+const growFrac = (v: number | undefined, l: number) => (v ? Math.round(v * (1 + ILVL_GROWTH_FRAC * (l - 1)) * 1000) / 1000 : v);
+
+const defCache = new Map<string, GearDef>();
+/** Item definition with its bonuses scaled to the item level. `id` is the full id; art and icons use baseId(id). */
+export function gearDef(id: string): GearDef | undefined {
+  const hit = defCache.get(id);
+  if (hit) return hit;
+  const d = GEAR[baseId(id)];
+  if (!d) return undefined;
+  const l = itemLevel(id);
+  if (l <= 1) return d;
+  const b = d.bonus;
+  const bonus: GearBonus = Object.fromEntries(Object.entries({
+    atk: growInt(b.atk, l), sta: growInt(b.sta, l), str: growInt(b.str, l), mag: growInt(b.mag, l), dex: growInt(b.dex, l),
+    speed: growFrac(b.speed, l), reach: growFrac(b.reach, l), block: growFrac(b.block, l),
+  }).filter(([, v]) => v !== undefined));
+  const out: GearDef = { ...d, id, bonus, shot: d.shot && { ...d.shot, damage: growInt(d.shot.damage, l)! } };
+  defCache.set(id, out);
+  return out;
+}
+
+export interface GearReq { level: number; stat: StatKind; points: number }
+
+/** What a hero of this class needs to wear the item. */
+export function gearReq(id: string, cls: string): GearReq {
+  const d = gearDef(id), l = itemLevel(id);
+  const slot = d?.slot ?? "weapon";
+  const want = REQ_STAT[slot];
+  const stat: StatKind = want === "attack" ? (STATS as Record<string, { attackStat: StatKind }>)[cls]?.attackStat ?? "str" : want;
+  if (!d || d.cls || l <= 1) return { level: 1, stat, points: 0 };
+  return { level: l, stat, points: Math.round(l * REQ_PER_LEVEL[d.tier]) };
+}
+
+/** A hero's level and own stat points (class base + points placed, without gear). */
+export interface HeroReqInfo { cls: string; level: number; pts: Partial<Stats> }
+
+export function ownStats(h: HeroReqInfo): Stats {
+  return statsFor(h.cls as ClassKind, h.pts);
+}
+
+/** Why the hero can't wear the item yet ("Needs Lv 12", "Needs 9 Strength"), or "" when they can. */
+export function reqProblem(id: string, h: HeroReqInfo): string {
+  const r = gearReq(id, h.cls);
+  const miss: string[] = [];
+  if (h.level < r.level) miss.push(`Lv ${r.level}`);
+  if (r.points && ownStats(h)[r.stat] < r.points) miss.push(`${r.points} ${STAT_LABEL[r.stat]}`);
+  return miss.length ? `Needs ${miss.join(" and ")}` : "";
+}
+
+export const meetsReq = (id: string, h: HeroReqInfo) => !reqProblem(id, h);
+
+/** The worn items that count: a piece whose requirements are no longer met (stat points reset) gives nothing. */
+export function activeGear(eq: Equipped, h: HeroReqInfo): Equipped {
+  const out: Equipped = {};
+  for (const s of GEAR_SLOTS) if (eq[s] && meetsReq(eq[s]!, h)) out[s] = eq[s];
+  return out;
+}
+
+/** "Lv 17 · needs 11 Strength" line for menus. */
+export function reqText(id: string, cls: string): string {
+  const r = gearReq(id, cls);
+  return `Item Lv ${itemLevel(id)}` + (r.points ? ` · needs ${r.points} ${STAT_LABEL[r.stat]}` : "");
+}
+
+const STAT_LABEL: Record<StatKind, string> = { sta: "Stamina", str: "Strength", mag: "Magic", dex: "Dexterity" };
