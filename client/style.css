@@ -361,3 +361,14 @@ html, body { margin: 0; height: 100%; background: #1b1b24; color: #eee; font: 14
 #loading .ld-tip { font-size: 13px; color: #8a7a62; max-width: min(420px, 90vw); margin-top: 12px; }
 /* Pixelify Sans draws the "fi"/"fl" ligatures as a broken glyph ("Aght" for "fight"): spell letters out everywhere */
 *, *::before, *::after { font-variant-ligatures: none !important; font-feature-settings: "liga" 0, "clig" 0, "calt" 0 !important; }
+
+/* Background music (music.ts): button in the menu bar + small volume panel, in the pixel font */
+#musicbtn, #musicpanel, #musicpanel button { font-family: 'Pixelify Sans', monospace; }
+#musicpanel { position: absolute; right: 12px; bottom: 52px; z-index: 9; width: 180px; padding: 8px 10px; pointer-events: auto;
+  background: rgba(30,30,46,.95); border: 2px solid #555a7a; color: #eee; }
+#musicpanel[hidden] { display: none; }
+#musicpanel .mtitle { font-weight: bold; color: #ffd166; margin-bottom: 4px; }
+#musicpanel input[type=range] { width: 100%; accent-color: #ffd166; }
+#musicpanel .mrow { display: flex; align-items: center; justify-content: space-between; margin-top: 4px; }
+#musicpanel button { font-size: 13px; font-weight: bold; color: #ffd166; background: #15151f; border: 2px solid #555a7a; padding: 2px 8px; cursor: pointer; }
+#musicpanel button:hover { border-color: #ffd166; }
