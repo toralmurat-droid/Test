@@ -808,10 +808,10 @@ export function sfxFrame(meId: string, ents: Map<string, Ent>) {
     }
     wasDead.set(id, dead);
     if (dead) continue;
-    // Footsteps: our hero (and other heroes close by, softer); the Bone Demon and Mother Blobs stomp / splosh
+    // Heavy steps: the Bone Demon and Mother Blobs stomp / splosh, crawlers drag (heroes walk silently)
     const big = e.mob && (st.kind === "demon" || st.kind === "motherblob" || (st.merged ?? 1) >= 4);
     const crawler = e.mob && st.kind === "crawler";
-    if (!e.mob || big || crawler) {
+    if (big || crawler) {
       const a = stepAcc.get(id) ?? { x: e.sprite.x, y: e.sprite.y, d: 0 };
       const moved = Math.hypot(e.sprite.x - a.x, e.sprite.y - a.y);
       a.x = e.sprite.x; a.y = e.sprite.y;
@@ -820,11 +820,8 @@ export function sfxFrame(meId: string, ents: Map<string, Ent>) {
         const stride = big ? 26 : crawler ? 30 : 17;
         if (a.d >= stride && !st.rolling) {
           a.d = 0;
-          const self = id === meId;
           if (big) play(st.kind === "demon" ? "stomp" : "blobLunge", e.sprite.x, e.sprite.y, st.kind === "demon" ? 1 : 0.4, 0.5, { key: "st" + id, minGap: 150 });
-          else if (crawler) play("crawl", e.sprite.x, e.sprite.y, 0.8, undefined, { key: "cr" + id, minGap: 300 });
-          else if (self) play("step", undefined, undefined, 1, groundKind(e.sprite.x, e.sprite.y), { key: "step", minGap: 120 });
-          else if (Math.hypot(dx, dy) < 6 * TILE) play("step", e.sprite.x, e.sprite.y, 0.6, groundKind(e.sprite.x, e.sprite.y), { key: "st" + id, minGap: 120 });
+          else play("crawl", e.sprite.x, e.sprite.y, 0.8, undefined, { key: "cr" + id, minGap: 300 });
         }
       } else if (moved >= 30) a.d = 0;
       stepAcc.set(id, a);
