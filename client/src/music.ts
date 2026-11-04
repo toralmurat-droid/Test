@@ -3,25 +3,37 @@
  *
  * - Tracks are listed in TRACKS below. MP3 tracks live in client/public/assets/music/;
  *   the "Village tune" is a small chiptune made in code (no file).
+ * - "Auto" (default) picks the track by zone: skeleton zones play The Pale Marshal's March,
+ *   blob and bandit zones Blob Slayer, the village, towns and roads the Village tune.
  * - Starts after the first click / key press (browsers block sound before that), fades in,
  *   fades out when muted or when the tab is hidden, and crossfades when the track changes.
- * - Track, volume and mute are remembered per player name (localStorage "music:<name>").
- * - UI: the "Music" button in the bottom-right menu opens the music menu (track, volume, mute).
+ * - Track choice, volume and mute are remembered per player name (localStorage "music:<name>").
+ * - UI: the "Music" button in the bottom-right menu opens the music menu (auto / track, volume, mute).
  */
 
 type Track = { id: string; name: string; url?: string };
 const TRACKS: Track[] = [
   { id: "blob-slayer", name: "Blob Slayer", url: "/assets/music/blob-slayer.mp3" },
+  { id: "pale-marshals", name: "The Pale Marshal's March", url: "/assets/music/pale-marshals-march.mp3" },
   { id: "village", name: "Village tune" },
 ];
+/** Zone moods for "Auto": which track fits the monsters living there. */
+const UNDEAD = ["skeleton", "skeletonmage", "necromancer"];
+const FIGHT = ["slime", "shooterblob", "warriorblob", "healerblob", "motherblob", "bandit"];
+/** Seconds the hero must stay in a zone before Auto changes the song (no ping-pong on borders). */
+const ZONE_SETTLE = 2;
 const FADE_IN = 2.5;
 const FADE_OUT = 0.8;
 
-type Settings = { volume: number; muted: boolean; track: string };
+/** pick: "auto" (by zone) or a track id */
+type Settings = { volume: number; muted: boolean; pick: string };
 
 let ctx: AudioContext | null = null;
 let master: GainNode | null = null;
-let settings: Settings = { volume: 0.5, muted: false, track: TRACKS[0].id };
+let settings: Settings = { volume: 0.5, muted: false, pick: "auto" };
+let zoneTrack = "village";
+let pendingZoneTrack: string | null = null;
+let zoneTimer: number | null = null;
 let storeKey = "music";
 let started = false;
 let audioEl: HTMLAudioElement | null = null;
@@ -37,7 +49,7 @@ function load(name: string) {
       const s = JSON.parse(raw);
       if (typeof s.volume === "number") settings.volume = Math.min(1, Math.max(0, s.volume));
       if (typeof s.muted === "boolean") settings.muted = s.muted;
-      if (TRACKS.some((t) => t.id === s.track)) settings.track = s.track;
+      if (s.pick === "auto" || TRACKS.some((t) => t.id === s.pick)) settings.pick = s.pick;
     }
   } catch { /* private mode */ }
 }
@@ -60,12 +72,16 @@ function fadeTo(value: number, seconds: number) {
   g.linearRampToValueAtTime(value, t + seconds);
 }
 
+function wantedTrack(): string {
+  return settings.pick === "auto" ? zoneTrack : settings.pick;
+}
+
 /** Stop whatever plays and start the chosen track (the caller handles the fades). */
 function playTrack() {
   if (!ctx || !master) return;
   audioEl?.pause();
   chip?.stop();
-  const track = TRACKS.find((t) => t.id === settings.track) ?? TRACKS[0];
+  const track = TRACKS.find((t) => t.id === wantedTrack()) ?? TRACKS[0];
   playing = track.id;
   if (track.url) {
     if (!audioEl) {
@@ -125,6 +141,7 @@ function apply(fadeSeconds: number) {
 /** Fade the old track out, start the new one and fade it in. */
 function switchTrack() {
   if (!started || targetGain() === 0) { playing = null; return; }
+  if (wantedTrack() === playing && switchTimer === null) return;
   if (switchTimer !== null) clearTimeout(switchTimer);
   fadeTo(0, FADE_OUT);
   switchTimer = window.setTimeout(() => {
@@ -132,6 +149,27 @@ function switchTrack() {
     playTrack();
     fadeTo(targetGain(), 1.5);
   }, FADE_OUT * 1000);
+}
+
+/**
+ * Tell the music which monsters live where the hero stands (the spawn zone's `mobs`, or undefined
+ * outside any monster zone). Cheap to call every frame; Auto changes the song once the hero settles.
+ */
+export function setMusicZone(mobs?: Partial<Record<string, number>>) {
+  const has = (kinds: string[]) => !!mobs && kinds.some((k) => (mobs[k] ?? 0) > 0);
+  const t = has(UNDEAD) ? "pale-marshals" : has(FIGHT) ? "blob-slayer" : "village";
+  if (t === pendingZoneTrack) return;
+  pendingZoneTrack = t;
+  if (zoneTimer !== null) clearTimeout(zoneTimer);
+  zoneTimer = null;
+  if (t === zoneTrack) return;
+  // First reading after login: no wait, so the right song starts at once
+  const delay = started ? ZONE_SETTLE * 1000 : 0;
+  zoneTimer = window.setTimeout(() => {
+    zoneTimer = null;
+    zoneTrack = t;
+    if (settings.pick === "auto") switchTrack();
+  }, delay);
 }
 
 /** Call once the player has logged in. Music starts on the first click or key press. */
@@ -170,13 +208,14 @@ function buildUi() {
   hud.appendChild(panel);
 
   const list = panel.querySelector("#musictracks") as HTMLElement;
-  const trackBtns = TRACKS.map((t) => {
+  const choices = [{ id: "auto", name: "Auto (by zone)" }, ...TRACKS];
+  const trackBtns = choices.map((t) => {
     const b = document.createElement("button");
     b.className = "mtrack";
     b.textContent = t.name;
     b.onclick = () => {
-      if (settings.track === t.id) return;
-      settings.track = t.id;
+      if (settings.pick === t.id) return;
+      settings.pick = t.id;
       save(); render(); switchTrack(); b.blur();
     };
     list.appendChild(b);
@@ -190,7 +229,7 @@ function buildUi() {
     pct.textContent = `${Math.round(settings.volume * 100)}%`;
     mute.textContent = settings.muted ? "Unmute" : "Mute";
     btn.textContent = settings.muted || settings.volume === 0 ? "♪ Off" : "♪ Music";
-    TRACKS.forEach((t, i) => trackBtns[i].classList.toggle("sel", t.id === settings.track));
+    choices.forEach((t, i) => trackBtns[i].classList.toggle("sel", t.id === settings.pick));
   }
   render();
 
