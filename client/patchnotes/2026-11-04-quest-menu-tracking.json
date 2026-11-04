@@ -1,0 +1,9 @@
+{
+  "date": "2026-11-04",
+  "title": "Quest menu and quest tracking",
+  "changes": [
+    "New Quests button under the minimap opens the quest log (J still works).",
+    "Pick which quests to track: tick the box next to each active quest, or use the Track button.",
+    "Only tracked quests show in the on-screen tracker and on the map."
+  ]
+}
