@@ -14,8 +14,8 @@ export interface AttackProfile {
   attackRange: number; // melee reach, px (0 for ranged)
   projectile?: ClassDef["projectile"] | { speed: number; range: number; radius: number; kind: "arcane" };
   combo: ClassDef["combo"];
-  /** Magic spent per shot (wands). */
-  cost?: number;
+  /** Mana spent per shot (wands, shared/mana.ts). */
+  mana?: number;
 }
 
 /** The class each weapon kind comes from: that class's attack numbers are the weapon's. */
@@ -24,7 +24,7 @@ const OWNER: Partial<Record<WeaponType, ClassKind>> = Object.fromEntries(
 
 const WAND_COST = 6;
 const WAND: AttackProfile = {
-  type: "wand", damage: 19, attackCooldownMs: 380, attackRange: 0, cost: WAND_COST,
+  type: "wand", damage: 19, attackCooldownMs: 380, attackRange: 0, mana: WAND_COST,
   projectile: { speed: 330, range: 165, radius: 4, kind: "arcane" },
   combo: [
     { damage: 1, knockback: 0.4 },
@@ -65,5 +65,5 @@ export function weaponAttackMult(cls: ClassKind, s: Stats, type: WeaponType): nu
 /** HUD / tooltip words for the basic attack. */
 export const ATTACK_WORDS: Record<WeaponType, string> = {
   sword: "melee swings", katana: "fast melee cuts", axe: "heavy melee chops", bow: "shoots arrows",
-  staff: "throws fireballs", wand: `fires magic bolts (${WAND_COST} Magic each)`, fists: "punches",
+  staff: "throws fireballs", wand: `fires magic bolts (${WAND_COST} mana each)`, fists: "punches",
 };

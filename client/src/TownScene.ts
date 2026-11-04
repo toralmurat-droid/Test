@@ -42,6 +42,8 @@ import { Details } from "./details";
 import { activeOf, GearLayer, GearMenu, iconCanvas, itemColor, preloadGear, RARITY_HEX } from "./gear";
 /** pickSlot value while the slot list is choosing the left-click action. */
 const LEFT_PICK = -2;
+/** "12 mana · 20 stamina" for a skill list. */
+const costWords = (s: { cost?: number; mana?: number }) => [s.mana ? `${s.mana} mana` : "", s.cost ? `${s.cost} stamina` : ""].filter(Boolean).join(" · ") || "free";
 import { GearFx } from "./gearfx";
 import { baseId, gearDef, gearReachMult, gearSpeedMult, itemRarity, WEAPON_TYPE_NAMES } from "../../shared/gear";
 import { attackProfile, ATTACK_WORDS, isWeaponType, profileOf, weaponAttackMult } from "../../shared/weapons";
@@ -1917,7 +1919,7 @@ export class TownScene extends Phaser.Scene {
       `${this.weaponIcon(mine, "picon")}<span><b>Weapon attack</b><small>${WEAPON_TYPE_NAMES[w.type]}: ${ATTACK_WORDS[w.type]}</small></span></button>`;
     const opts = activeSkills(cls).map((a) => {
       const learned = skillLearned(cls, mine.talents, a.id);
-      const where = !learned ? `🔒 learn it in the tree (T), Lv ${a.req}` : a.cantrip ? `basic spell · ${a.cost} Magic` : a.id === cur ? "on left click" : `${a.cost ?? 0} ${energyName(cls)}`;
+      const where = !learned ? `🔒 learn it in the tree (T), Lv ${a.req}` : a.cantrip ? `basic spell · ${a.mana ?? 0} mana` : a.id === cur ? "on left click" : costWords(a);
       return `<button class="opt${learned ? "" : " locked"}${a.id === cur ? " cur" : ""}" data-pick="${a.id}" data-tiphead="${a.name}" data-tip="${tipEsc(a.desc)}">` +
         `${iconImg(a.id, "picon")}<span><b>${a.name}</b><small>${where}</small></span></button>`;
     }).join("");
@@ -2000,14 +2002,15 @@ export class TownScene extends Phaser.Scene {
       ult = false;
       return r;
     });
-    const unslotted = activeSkills(cls).filter((a) => skillLearned(cls, mine.talents, a.id) && !slots.includes(a.id))
+    const ls0 = this.leftSkill();
+    const unslotted = activeSkills(cls).filter((a) => !a.cantrip && a.id !== ls0 && skillLearned(cls, mine.talents, a.id) && !slots.includes(a.id))
       .map((a) => row("–", a.name, 0, 0, "", "no key: click a slot below"));
     const html = [
       ((ls) => {
         if (ls) { const h = this.skillHud(cls, ls, cdm); return row("L-click", h.name, h.cdMs, h.last, "", "", h.cost); }
         const w = attackProfile(cls, activeOf(mine));
         return row("L-click", w.projectile ? `Shoot (${WEAPON_TYPE_NAMES[w.type]})` : `Attack (${WEAPON_TYPE_NAMES[w.type]})`, 0, 0,
-          mine.stacks > 0 ? `${STACK_NAME[cls]} ${mine.stacks}/${MAX_STACKS}` : w.cost ? `${w.cost} Magic a bolt` : "3-hit combo", "", w.cost ?? 0);
+          mine.stacks > 0 ? `${STACK_NAME[cls]} ${mine.stacks}/${MAX_STACKS}` : w.mana ? `${w.mana} mana a bolt` : "3-hit combo", "", { mana: w.mana ?? 0 });
       })(this.leftSkill()),
       ...slotRows, ...unslotted,
       row("Shift", "Dodge roll", DODGE.cooldownMs, this.lastDodge, "", "", { stamina: ENERGY.cost.dodge }),
@@ -2038,11 +2041,11 @@ export class TownScene extends Phaser.Scene {
       const h = this.skillHud(cls, ls, cdm);
       const left = Math.max(0, h.cdMs - (now - h.last));
       const shade = left > 0 && h.cdMs >= 1000 ? `<div class="cd" style="height:${(left / h.cdMs) * 100}%"></div>` : "";
-      lcell = `<div class="slot lmb${h.cost > mine.energy ? " wait" : ""}${lpick}" data-slot="L" data-tiphead="Left click: ${h.name}" data-tip="${tipEsc(skillOf(cls, ls)?.desc ?? "")}" data-tiphint="Click to change · wheel to scroll · right-click: back to the weapon">` +
+      lcell = `<div class="slot lmb${!canPay(pools, h.cost) ? " wait" : ""}${lpick}" data-slot="L" data-tiphead="Left click: ${h.name}" data-tip="${tipEsc(skillOf(cls, ls)?.desc ?? "")}" data-tiphint="Click to change · wheel to scroll · right-click: back to the weapon">` +
         `${iconImg(ls)}${shade}<kbd>L</kbd></div>`;
     } else {
       const w = attackProfile(cls, activeOf(mine));
-      lcell = `<div class="slot lmb${w.cost && w.cost > mine.energy ? " wait" : ""}${lpick}" data-slot="L" data-tiphead="Left click: ${WEAPON_TYPE_NAMES[w.type]}" data-tip="${tipEsc(`Weapon attack: ${ATTACK_WORDS[w.type]}.`)}" data-tiphint="Click to put a spell or skill on the left click instead">` +
+      lcell = `<div class="slot lmb${w.mana && !canPay(pools, { mana: w.mana }) ? " wait" : ""}${lpick}" data-slot="L" data-tiphead="Left click: ${WEAPON_TYPE_NAMES[w.type]}" data-tip="${tipEsc(`Weapon attack: ${ATTACK_WORDS[w.type]}.`)}" data-tiphint="Click to put a spell or skill on the left click instead">` +
         `${this.weaponIcon(mine)}<kbd>L</kbd></div>`;
     }
     const bar = document.getElementById("hotbar")!;

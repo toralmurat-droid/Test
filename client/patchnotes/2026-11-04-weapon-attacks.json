@@ -3,7 +3,7 @@
   "title": "Your weapon decides your attack",
   "changes": [
     "The basic attack now follows the weapon in your hand: a bow shoots, a sword or axe fights up close, a staff throws fireballs, bare hands punch. An archer with a sword is a melee fighter, a wizard with a sword too.",
-    "New weapons to find: bows, swords, an axe, a katana, a staff and three wands. Wands fire quick magic bolts that cost Magic.",
+    "New weapons to find: bows, swords, an axe, a katana, a staff and three wands. Wands fire quick magic bolts that cost mana.",
     "Wizards know three basic spells from level 1, no skill points needed: Spark, Fire Dart and Frost Bolt. Cheap and short-range, made to cast again and again.",
     "The new L cell left of the skill bar sets what a left click on an enemy does: your weapon attack, or any spell or skill you know."
   ]

@@ -50,7 +50,7 @@ export type WeaponType = "sword" | "katana" | "axe" | "bow" | "staff" | "wand" |
 export const WEAPON_TYPE_NAMES: Record<WeaponType, string> = { sword: "Sword", katana: "Katana", axe: "Axe", bow: "Bow", staff: "Staff", wand: "Wand", fists: "Fists" };
 /** Short words for what the weapon does in any hero's hands (item tooltip). */
 export const WEAPON_USE: Record<WeaponType, string> = {
-  sword: "melee", katana: "fast melee", axe: "heavy melee", bow: "shoots arrows", staff: "fireballs", wand: "magic bolts, costs Magic", fists: "punches",
+  sword: "melee", katana: "fast melee", axe: "heavy melee", bow: "shoots arrows", staff: "fireballs", wand: "magic bolts, costs mana", fists: "punches",
 };
 /** The weapon each class is trained with: its class weapon and kit take this shape. */
 export const NATIVE_WEAPON: Record<ClassKind, WeaponType> = { knight: "sword", ninja: "katana", wizard: "staff", archer: "bow", barbarian: "axe" };

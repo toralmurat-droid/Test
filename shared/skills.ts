@@ -506,18 +506,18 @@ export const childrenOf = (cls: ClassKind, id: string) => S[cls].filter((x) => x
 
 /**
  * Basic spells (Murat 2026-11-04): every caster knows these from Lv 1, no skill points, no tree. Cheap, short reach,
- * a tiny cooldown: made to be cast again and again up close, e.g. bound to the left click. They cost Magic.
+ * a tiny cooldown: made to be cast again and again up close, e.g. bound to the left click. They cost a little mana.
  */
 export const CANTRIPS: Record<ClassKind, SkillDef[]> = {
   knight: [], ninja: [], archer: [], barbarian: [],
   wizard: [
-    { id: "w_spark", name: "Spark", type: "Attack", branch: 2, row: 0, req: 1, style: "lightning", cd: 300, cost: 3, cantrip: true,
-      desc: "A crackling spark at close range. Costs little Magic: cast it again and again.",
+    { id: "w_spark", name: "Spark", type: "Attack", branch: 2, row: 0, req: 1, style: "lightning", cd: 300, mana: 3, cantrip: true,
+      desc: "A crackling spark at close range. Costs little mana: cast it again and again.",
       shots: { kind: "lightning", speed: 360, range: 85, radius: 5, dmg: 13, kb: 0.3 } },
-    { id: "w_firedart", name: "Fire Dart", type: "Attack", branch: 0, row: 0, req: 1, style: "fire", cd: 450, cost: 4, cantrip: true,
+    { id: "w_firedart", name: "Fire Dart", type: "Attack", branch: 0, row: 0, req: 1, style: "fire", cd: 450, mana: 4, cantrip: true,
       desc: "A quick dart of flame that sets the target smouldering for a moment.",
       shots: { kind: "flamewave", speed: 300, range: 110, radius: 5, size: 0.55, dmg: 11, burn: [3, 1500], kb: 0.3 } },
-    { id: "w_frostbolt", name: "Frost Bolt", type: "Attack", branch: 1, row: 0, req: 1, style: "frost", cd: 500, cost: 5, cantrip: true,
+    { id: "w_frostbolt", name: "Frost Bolt", type: "Attack", branch: 1, row: 0, req: 1, style: "frost", cd: 500, mana: 5, cantrip: true,
       desc: "A shard of ice that chills: the target slows down for a moment.",
       shots: { kind: "iceshard", speed: 300, range: 120, radius: 4, dmg: 12, slowMs: 900, kb: 0.2 } },
   ],
