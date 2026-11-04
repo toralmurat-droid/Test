@@ -1,4 +1,5 @@
 import Phaser from "phaser";
+import { icon as pxIcon } from "./pixelicons";
 import { ART_K as K } from "../../shared/constants";
 import { PORTAL_COMBAT_MS, PORTAL_RANGE, PORTALS, portalById, type Portal } from "../../shared/portals";
 import { markerTexture, portalTexture, MARK_FOOT, PORTAL_FOOT } from "./portalArt";
@@ -122,7 +123,7 @@ export class PortalLayer {
       : `<button class="pt-row" data-to="${p.id}"${fight ? " disabled" : ""}>${p.name}<span>Travel</span></button>`).join("");
     const lone = list.length < 2 ? `<p class="pt-note">Find more portal stones out in the wilds to travel between them.</p>` : "";
     const why = fight && list.length > 1 ? `<p class="pt-note warn">The stone will not open while you are fighting.</p>` : "";
-    this.menu.innerHTML = `<div class="pt-head"><h2>Portal stones</h2><button class="pt-close" aria-label="Close">x</button></div>${rows}${lone}${why}`;
+    this.menu.innerHTML = `<div class="pt-head"><h2>Portal stones</h2><button class="pt-close" aria-label="Close">${pxIcon("close")}</button></div>${rows}${lone}${why}`;
   }
 
   /** Map markers for the woken stones. */

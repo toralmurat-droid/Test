@@ -1,4 +1,5 @@
 import "@fontsource/pixelify-sans/400.css";
+import { icon as pxIcon } from "./pixelicons";
 import "@fontsource/pixelify-sans/700.css";
 import "./npcs.css";
 import { pixelText } from "./pixeltext";
@@ -195,20 +196,20 @@ export class NpcLayer {
         const room = bag.length + slotsAfter(pots, e.item, size, qty) <= BAG_SIZE;
         return row(`${e.item}:${size}`, `${qty > 1 ? `${qty} × ` : ""}${potionName(e.item, size)}`, mana ? "#8ab4ff" : "#ff8a8a",
           `${mana ? "+" : "Heals "}${potionAmount(e.item, size)}${mana ? " mana" : " HP"} · you carry ${total(pots[e.item])} · ${mana ? "V" : "Q"} · ${room ? "10 per bag slot" : "no room in your bag"}`,
-          `${e.price} 🪙`, "sh-buy", i, gold < e.price || !room);
+          `${e.price}${pxIcon("coin")}`, "sh-buy", i, gold < e.price || !room);
       }
       const d = gearDef(e.item)!;
-      return row(e.item, gearName(e.item, cls), itemColor(e.item), `${rarityLabel(e.item)}${TIER_NAMES[d.tier]} · Lv ${itemLevel(e.item)} · ${itemText(e.item)}`, `${e.price} 🪙`, "sh-buy", i, gold < e.price);
+      return row(e.item, gearName(e.item, cls), itemColor(e.item), `${rarityLabel(e.item)}${TIER_NAMES[d.tier]} · Lv ${itemLevel(e.item)} · ${itemText(e.item)}`, `${e.price}${pxIcon("coin")}`, "sh-buy", i, gold < e.price);
     }).join("");
     const sellable = shop.buys ? bag.map((id, i) => [id, i] as const).filter(([id]) => gearDef(id) && shop.buys!.includes(gearDef(id)!.slot)) : [];
     const sell = shop.buys
       ? `<h4>Sell from your bag</h4>` + (sellable.length
-        ? sellable.map(([id, i]) => row(id, gearName(id, cls), itemColor(id), `${rarityLabel(id)}${TIER_NAMES[gearDef(id)!.tier]} · Lv ${itemLevel(id)} · ${itemText(id)}`, `Sell ${sellPrice(id)} 🪙`, "sh-sell", i, false)).join("")
+        ? sellable.map(([id, i]) => row(id, gearName(id, cls), itemColor(id), `${rarityLabel(id)}${TIER_NAMES[gearDef(id)!.tier]} · Lv ${itemLevel(id)} · ${itemText(id)}`, `Sell ${sellPrice(id)}${pxIcon("coin")}`, "sh-sell", i, false)).join("")
         : `<p class="sh-empty">No weapons in your bag. Unequip one in the Bag (G) to sell it.</p>`)
       : "";
     const quest = questDialog(n.id, q);
     this.dialog.innerHTML = this.head(n) + `<p>${shop.greeting}</p>` +
-      `<div class="sh-gold">Your gold: <b>${gold} 🪙</b> ${this.shopMsg}</div>` +
+      `<div class="sh-gold">Your gold: <b>${gold}${pxIcon("coin")}</b> ${this.shopMsg}</div>` +
       `<h4>For sale</h4><div class="sh-list">${buy}</div>${sell}` +
       `<div class="nd-btns">${quest ? `<button class="nd-talk">Talk</button>` : ""}<button class="nd-bye">Goodbye <kbd>E</kbd></button></div>`;
     this.dialog.classList.add("shop");
