@@ -6,7 +6,7 @@ import {
   RESPAWN_MS, TICK_RATE, TILE,
 } from "../shared/constants";
 import {
-  ATTACK_VARIANTS, CLASSES, ClassKind, COMBO_WINDOW_MS, DODGE, EMOTES, ENERGY, DASH_INVULN_MS, GUARD_REDUCTION, isClassKind, levelFromXp, MAX_XP, capLevel, PVP_KILL_XP,
+  ATTACK_VARIANTS, CLASSES, ClassKind, COMBO_WINDOW_MS, DODGE, EMOTES, ENERGY, DASH_INVULN_MS, GUARD_REDUCTION, isClassKind, levelFromXp, MAX_XP, capLevel, PVP_KILL_XP, xpForLevel,
 } from "../shared/classes";
 import { attackMult, cooldownMult, critChance, heroSpeed, magicMult, maxHpFromStats, SLOW_MOB, statsFor, statPoints } from "../shared/powers";
 import { activeSkills, canLearn, classSkills, cleanRanks, MAX_RANK, skillLearned, skillOf, talentBonus, talentMult, talentReduce } from "../shared/skills";
@@ -22,7 +22,7 @@ import { isDecorSolidAt, npcById, npcNear, TALK_RANGE } from "../shared/npcs";
 import { beyondWall, WATCH, WATCH_POSTS, WatchPost } from "../shared/watch";
 import { inVillage, WRATH } from "../shared/wrath";
 import { sellPrice, SHOPS } from "../shared/shops";
-import { BLOB_KINDS, CHAINS, chainState, inZone, isBlob, npcPresent, QuestState, questStep, stepGoal, Summon, USE_RANGE } from "../shared/quests";
+import { BLOB_KINDS, CHAINS, chainOpen, chainState, inZone, isBlob, npcPresent, QuestState, questStep, stepGoal, Summon, TUT_CHAIN, TUT_QUESTS, USE_RANGE } from "../shared/quests";
 import { findHideSpot, HIDE, MOTHER_KEEP_OUT, noMobsAt, spawnPoint, SPAWN_ZONES, villageDist, zoneCap } from "../shared/spawns";
 import { moveStep } from "../shared/movement";
 import { SLOTS_BY_ZONE, WORK_SLOTS } from "../shared/siege";
@@ -122,13 +122,16 @@ export class Player extends Schema {
   @type("number") redId = 0;
   @type("number") redStage = 0;
   @type("number") redCount = 0;
+  // The guided first quest (First Steps), CHAINS[3] (TUT_CHAIN). New heroes start on step 1.
+  @type("number") tutId = 0;
+  @type("number") tutStage = 0;
+  @type("number") tutCount = 0;
   nextSummon = 0; // when the server may bring back this player's quest fused blob (QuestStep.summon)
   // Skill slots on keys 1..0 (shared/slots.ts): a skill id or "" (empty). Empty until the player assigns them.
   @type(["string"]) slots = new ArraySchema<string>(...Array(SLOT_COUNT).fill(""));
 
   input: InputState = { up: false, down: false, left: false, right: false };
   lastAttack = 0;
-  introSeen = false; // closed the first-login game intro (saved, never synced)
   portals = new Set<string>(); // portal stones this hero has woken (shared/portals.ts; saved, never synced)
   lastSpecial = -Infinity;
   // Hidden initiative / poise (shared/combat.ts)
@@ -512,11 +515,10 @@ export class TownRoom extends Room<TownState> {
     this.onMessage("portals", (client) => this.sendPortals(client));
     this.onMessage("travel", (client, msg: { to?: string }) => this.travel(client, msg?.to));
     this.onMessage("shrine", (client) => client.send("shrine", { left: Math.max(0, this.shrineReadyAt - Date.now()) }));
-    // First-login game intro: shown once per hero, until it is closed
-    this.onMessage("intro", (client) => { if (this.state.players.get(client.sessionId)?.introSeen === false) client.send("intro"); });
-    this.onMessage("introseen", (client) => {
+    // The client is ready (loading screen gone): a hero on the first step of First Steps gets its banner
+    this.onMessage("tutorial", (client) => {
       const p = this.state.players.get(client.sessionId);
-      if (p && !p.introSeen) { p.introSeen = true; saveHero(p.name, p.cls, this.snapshot(p)); }
+      if (p && p.tutId === 0 && p.tutStage === 1) this.sendQuest(client.sessionId, p, TUT_CHAIN);
     });
     this.onMessage("buy", (client, msg: { i: number }) => this.shopBuy(client, msg?.i));
     this.onMessage("sell", (client, msg: { i: number }) => this.shopSell(client, msg?.i));
@@ -627,7 +629,8 @@ export class TownRoom extends Room<TownState> {
     if (options?.newGame) resetChests(p.name);
     const save = options?.newGame ? undefined : loadHero(p.name, p.cls);
     if (save) this.restore(p, save);
-    p.introSeen = !!save && save.intro !== 0; // heroes from before the intro existed skip it
+    // A new hero (or New game) starts the guided first quest right away; heroes from before it existed skip it
+    if (!save) this.qset(p, TUT_CHAIN, { questId: 0, questStage: 1, questCount: 0 });
     // New heroes (and saves from before class kits existed) put on the class's starting kit
     if (!save?.kit) this.wearKit(p);
     this.applyStats(p);
@@ -668,7 +671,7 @@ export class TownRoom extends Room<TownState> {
       questId: p.questId, questStage: p.questStage, questCount: p.questCount, questVer: CHAINS[0].version,
       boneId: p.boneId, boneStage: p.boneStage, boneCount: p.boneCount, boneVer: CHAINS[1].version,
       redId: p.redId, redStage: p.redStage, redCount: p.redCount, redVer: CHAINS[2].version, kit: 1,
-      intro: p.introSeen ? 1 : 0,
+      tutId: p.tutId, tutStage: p.tutStage, tutCount: p.tutCount, tutVer: CHAINS[TUT_CHAIN].version,
       portals: [...p.portals],
     };
   }
@@ -692,6 +695,8 @@ export class TownRoom extends Room<TownState> {
     });
     for (const id of cleanPortals(s.portals)) p.portals.add(id);
     const sv = s as unknown as Record<string, unknown>;
+    // Saves from before the guided first quest count it as done
+    if (sv.tutVer === undefined) sv.tutId = TUT_QUESTS.length;
     CHAINS.forEach((ch, c) => {
       const [a, b, n] = ch.keys;
       const st = { questId: Math.min(ch.quests.length, num(sv[a])), questStage: num(sv[b]), questCount: num(sv[n]) };
@@ -2255,6 +2260,7 @@ export class TownRoom extends Room<TownState> {
     const sk = skillOf(p.cls, tid)!;
     if (first && !sk.passive) {
       this.broadcast("power", { id, name: sk.name });
+      this.questDo(id, "learn");
       // A new active goes on the first free key
       const free = p.slots.toArray().indexOf("");
       if (free >= 0) p.slots.setAt(free, tid);
@@ -2267,6 +2273,7 @@ export class TownRoom extends Room<TownState> {
     if (!p || typeof skill !== "string" || p.rolling) return;
     if (castSkill(this.host, id, skill)) {
       p.emote = "";
+      this.questDo(id, "cast");
       if (!p.outlaw && inVillage(p.x, p.y)) this.setOutlaw(id, p, true);
     }
   }
@@ -2351,6 +2358,7 @@ export class TownRoom extends Room<TownState> {
     setBag(p, items);
     p[slot] = gid;
     this.applyStats(p);
+    this.questDo(id, "equip");
   }
 
   private unequip(id: string, slot: GearSlot) {
@@ -2647,7 +2655,16 @@ export class TownRoom extends Room<TownState> {
     if (!d) return;
     this.qset(p, c, { questCount: 0 });
     this.unsummon(id, c);
-    if (q.questStage < d.steps.length) { this.qset(p, c, { questStage: q.questStage + 1 }); this.sendQuest(id, p, c); return; }
+    const done = d.steps[q.questStage - 1];
+    if (done?.levelTo && p.level < done.levelTo) this.grantXp(id, xpForLevel(done.levelTo) - p.xp, p);
+    if (q.questStage < d.steps.length) {
+      this.qset(p, c, { questStage: q.questStage + 1 });
+      this.sendQuest(id, p, c);
+      // Already did what the new step teaches (learned an active skill before getting here): straight on
+      const s = d.steps[q.questStage];
+      if (s.type === "learn" && activeSkills(p.cls).some((k) => skillLearned(p.cls, p.talents, k.id))) this.nextStep(id, p, c);
+      return;
+    }
     p.gold += d.reward.gold;
     p.potions = Math.min(MAX_POTIONS, p.potions + d.reward.potions);
     this.qset(p, c, { questId: q.questId + 1, questStage: 0 });
@@ -2664,6 +2681,13 @@ export class TownRoom extends Room<TownState> {
     if (n >= stepGoal(s)) this.nextStep(id, p, c);
   }
 
+  /** The hero did something a step teaches (wore an item, learned or used a skill): finish that step on every chain. */
+  private questDo(id: string, type: "equip" | "learn" | "cast") {
+    const p = this.state.players.get(id);
+    if (!p) return;
+    for (let c = 0; c < CHAINS.length; c++) if (questStep(this.qs(p, c))?.type === type) this.nextStep(id, p, c);
+  }
+
   private nearNpc(p: Player, npc: string): boolean {
     const n = npcById(npc);
     return !!n && npcPresent(npc, p) && Math.hypot(n.x - p.x, n.y - p.y) <= TALK_RANGE * 1.5;
@@ -2676,7 +2700,7 @@ export class TownRoom extends Room<TownState> {
     const q = this.qs(p, c), d = CHAINS[c].quests[q.questId];
     if (!d) return;
     if (q.questStage === 0) {
-      if (p.level >= d.minLevel && this.nearNpc(p, d.giver)) this.nextStep(id, p, c);
+      if (p.level >= d.minLevel && chainOpen(p, c) && this.nearNpc(p, d.giver)) this.nextStep(id, p, c);
       return;
     }
     const s = questStep(q);
@@ -2879,8 +2903,17 @@ export class TownRoom extends Room<TownState> {
     if (!s || !s.kinds?.includes(m.kind)) return;
     if (s.type === "kill" && (m.merged ?? 1) < (s.fused ?? 1)) return;
     if (s.type === "kill" && s.own && m.summonFor !== id) return; // a named leader: only the one summoned for this player
+    if (s.type === "kill" && s.gift && q.questCount + 1 >= stepGoal(s)) this.giveGift(id, p, s.gift, m);
     if (s.type === "kill") this.questProgress(id, p, c, q.questCount + 1);
     else if (s.type === "collect" && Math.random() < (s.chance?.[m.kind] ?? 0)) this.dropItem("quest", m.x, m.y, 1, s.item!, id);
+  }
+
+  /** A quest step's gift: straight into the bag with a "+item" pop at the monster (on the ground if the bag is full). */
+  private giveGift(id: string, p: Player, gear: string, at: { x: number; y: number }) {
+    if (!isGearId(gear)) return;
+    if (p.bag.length >= BAG_SIZE) { this.dropItem("gear", at.x, at.y, 1, gear); return; }
+    setBag(p, [...bagItems(p), gear]);
+    this.clients.find((cl) => cl.sessionId === id)?.send("pickup", { kind: "gear", amount: 1, x: at.x, y: at.y - 8, gear, name: lvlName(gear, p.cls) });
   }
 
   private grantXp(id: string, amount: number, at: { x: number; y: number }) {

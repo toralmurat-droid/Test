@@ -109,17 +109,8 @@
 /* One block per quest chain (blob story, skeleton story) */
 #questtracker .qt-block + .qt-block { margin-top: 6px; padding-top: 6px; border-top: 1px solid rgba(255, 209, 102, 0.25); }
 
-/* First-login game intro (client/src/intro.ts) */
-#intro { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(460px, calc(100% - 32px));
-  max-height: calc(100% - 32px); overflow: auto; background: rgba(24,20,16,.96); border: 3px solid #6b5a3a; padding: 14px 18px;
-  pointer-events: auto; z-index: 12; color: #eadfc8; font: 13px/1.45 var(--pixel-font); -webkit-font-smoothing: none; text-align: left; }
-#intro h2 { margin: 0 0 6px; font-size: 20px; color: #ffd166; text-align: center; }
-#intro h3 { margin: 10px 0 2px; font-size: 14px; color: #f4a261; }
-#intro p { margin: 0; }
-#intro .introhint { margin-top: 10px; color: #a89878; text-align: center; }
-#intro button { display: block; margin: 12px auto 0; padding: 6px 16px; font: bold 14px var(--pixel-font); background: #6b5a3a;
-  color: #fff4d6; border: 2px solid #ffd166; cursor: pointer; }
-#intro button:hover { background: #806b44; }
+/* How-to line of the guided first quest's steps in the tracker (shared/quests.ts QuestStep.hint) */
+#questtracker .qt-hint2 { color: #e8d9a8; font-size: 13px; line-height: 1.3; margin-top: 4px; padding-top: 3px; border-top: 1px solid rgba(255,209,102,.25); }
 
 /* Whispering Woods shrine (client/src/shrine.ts) */
 #shrineprompt { display: none; position: absolute; left: 50%; bottom: 120px; transform: translateX(-50%); padding: 6px 12px; pointer-events: auto; cursor: pointer;

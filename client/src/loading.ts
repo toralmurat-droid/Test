@@ -1,7 +1,7 @@
 // Loading screen: a pixel bonfire on a dark field that covers the game from the moment the player presses Play
 // (or comes back after a server update) until the art is loaded, the hero has joined, the camera has settled
 // and the painted ground around it is done, then it fades out. The "Game is upgrading!" notice
-// (reconnect.ts) sits above it, and the first-login intro waits for it to be gone (afterLoading).
+// (reconnect.ts) sits above it, and the first quest banner waits for it to be gone (afterLoading).
 import { paintBonfire } from "./bonfireArt";
 
 export const FRAMES = 8, FW = 96, FH = 112; // bonfire art is 48x56 design units, drawn at 2 cells per unit
@@ -96,7 +96,7 @@ export function hideLoading(instant = false) {
   setTimeout(done, FADE_MS);
 }
 
-/** Run now, or once the loading screen is gone (used by the first-login intro). */
+/** Run now, or once the loading screen is gone (used by the first quest banner). */
 export function afterLoading(cb: () => void) {
   if (box) waiting.push(cb); else cb();
 }
