@@ -263,6 +263,7 @@ export class TownScene extends Phaser.Scene {
   private hotbarHtml = "";
   private buffBar?: BuffBar;
   private resBars?: ResourceBars;
+  private statsShown = "";
   private deathTimer?: number;
   private iso?: IsoView;
 
@@ -2469,10 +2470,10 @@ export class TownScene extends Phaser.Scene {
       const safe = isSafeZone(meEnt.sprite.x, meEnt.sprite.y) ? `${icon("shield")}Safe zone · ` : "";
       const next = xpForLevel(mine.level + 1), cur = xpForLevel(mine.level);
       const cls0 = mine.cls as ClassKind;
-      document.getElementById("stats")!.innerHTML =
-        `${mine.dead ? "Respawning… " : safe}Lv ${mine.level} ${CLASSES[mine.cls as ClassKind].name} · ` +
-        `${mine.level >= MAX_LEVEL ? "XP MAX" : `XP ${mine.xp - cur}/${next - cur}`} · Gold ${mine.gold} · Potions ${total(unpackPotions(mine.potions).potion)} · Mana potions ${total(unpackPotions(mine.potions).mpotion)} · Kills ${mine.kills}` +
-        (talentPoints(mine.level) > spentPoints(cls0, mine.talents) ? ` · ${icon("star")}${talentPoints(mine.level) - spentPoints(cls0, mine.talents)} skill point(s): press T` : "");
+      // Level and XP live on the bars (resourceBars.ts), gold in the bag, potions on the flasks, skill points on the
+      // Skills button badge: this line only flags the safe zone or a respawn
+      const statsHtml = mine.dead ? "Respawning… " : safe.replace(" · ", "");
+      if (statsHtml !== this.statsShown) { this.statsShown = statsHtml; document.getElementById("stats")!.innerHTML = statsHtml; }
       const freePts = talentPoints(mine.level) - spentPoints(cls0, mine.talents);
       const badge = document.getElementById("treebadge")!;
       badge.hidden = freePts <= 0;

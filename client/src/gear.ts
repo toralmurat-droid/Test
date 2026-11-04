@@ -1,3 +1,4 @@
+import { icon } from "./pixelicons";
 import Phaser from "phaser";
 import { gearDef, itemText, LOOT_IDS, canWear, GEAR_SLOTS, gearName, gearStats, gearSpeedMult, GearSlot, BAG_SIZE, SLOT_NAMES, TIER_NAMES, baseId, itemRarity, RARITY_NAMES, affixLines, itemLevel, reqProblem, reqText, activeGear, HeroReqInfo, Equipped } from "../../shared/gear";
 import { STAT_NAMES, StatKind } from "../../shared/powers";
@@ -150,7 +151,7 @@ export class GearMenu {
   refresh(state: any) {
     if (!this.open || !state) return;
     const bagItems: string[] = Array.from(state.bag ?? []);
-    const sig = [state.cls, state.level, state.ptSta, state.ptStr, state.ptMag, state.ptDex, ...GEAR_SLOTS.map((s) => state[s]), ...bagItems, state.potions, state.sta, state.str, state.mag, state.dex, state.maxHp].join("|");
+    const sig = [state.cls, state.level, state.ptSta, state.ptStr, state.ptMag, state.ptDex, ...GEAR_SLOTS.map((s) => state[s]), ...bagItems, state.potions, state.gold, state.sta, state.str, state.mag, state.dex, state.maxHp].join("|");
     if (sig === this.sig) return;
     this.sig = sig;
     this.busyUntil = 0; // the server answered, accept clicks again
@@ -211,7 +212,7 @@ export class GearMenu {
     bag.innerHTML = "";
     // Potion stacks (shared/potions.ts) take the bag slots after the gear, 10 of one size per slot
     const stacks = potionStacks(unpackPotions(state.potions));
-    document.getElementById("gearbagtitle")!.textContent = `Bag ${bagItems.length + stacks.length}/${BAG_SIZE}`;
+    document.getElementById("gearbagtitle")!.innerHTML = `Bag ${bagItems.length + stacks.length}/${BAG_SIZE} <span class="gbgold">${icon("coin")}${state.gold ?? 0} gold</span>`;
     for (let i = 0; i < BAG_SIZE; i++) {
       const id: string | undefined = bagItems[i];
       const cell = document.createElement("button");
