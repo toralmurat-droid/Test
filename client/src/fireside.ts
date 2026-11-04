@@ -166,7 +166,10 @@ export function mountFireside(canvas: HTMLCanvasElement, labelHost: HTMLElement,
   const embers: { x: number; y: number; vx: number; vy: number; life: number; max: number }[] = [];
 
   const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
-  let raf = 0, fireF = 0, fireT = 0, flick = 0, last = performance.now();
+  let raf = 0, fireF = 0, fireT = 0, flick = 0, flame = 1, last = performance.now();
+  const lightCv = document.createElement("canvas");
+  lightCv.width = lightCv.height = 64;
+  const lightCtx = lightCv.getContext("2d", { willReadFrequently: true })!;
   const duration = (a: AnimDef) => (a.frames.length * 1000) / a.fps;
 
   function drawHero(h: Hero, now: number) {
@@ -191,22 +194,43 @@ export function mountFireside(canvas: HTMLCanvasElement, labelHost: HTMLElement,
     const hp = (S * 4) / 3 * (48 / fw); // device px per sheet pixel
     const f = feet(h);
     const flip = !sel && h.slot.flip;
-    // shadow (and a gold ring under the chosen hero), dithered on the cell grid
+    // direction from the hero to the heart of the flames (cells), and how strongly the fire reaches it
+    const lx = cx - f.x, ly = cy - 22 - (f.y - 26), ld = Math.hypot(lx, ly) || 1;
+    const ux = lx / ld, uy = ly / ld;
+    const reach = Math.max(0, Math.min(1, 1.25 - ld / 190)) * flame;
+    // ground: a cast shadow stretching away from the fire, a contact shadow, and a gold ring under the chosen hero
+    const gx = f.x - cx, gy = (f.y - cy) * 2.1, gd = Math.hypot(gx, gy) || 1, sx = gx / gd, sy = gy / gd;
+    const len = 20 + 12 * reach;
+    for (let y = -16; y <= 16; y++) for (let x = -34; x <= 34; x++) {
+      const along = x * sx + y * 2.1 * sy, across = Math.abs(-x * sy + y * 2.1 * sx);
+      if (along < 0 || along > len) continue;
+      const half = 7 * (1 - along / len) + 2;
+      if (across > half || dith(f.x + x, f.y + y) > 0.62 - (along / len) * 0.45) continue;
+      g.fillStyle = "rgba(4,3,2,0.5)";
+      g.fillRect((f.x + x) * S, (f.y + y) * S, S, S);
+    }
     for (let y = -4; y <= 4; y++) for (let x = -16; x <= 16; x++) {
       const e = (x / 16) ** 2 + (y / 4) ** 2;
       if (e > 1) continue;
       const ring = sel && e > 0.55 && dith(f.x + x, f.y + y) < 0.75;
-      if (!ring && dith(f.x + x, f.y + y) > 0.55 - e * 0.4) continue;
-      g.fillStyle = ring ? (e > 0.8 ? "#a8823a" : "#e3bf6a") : "rgba(4,3,2,0.55)";
+      const contact = (x / 10) ** 2 + (y / 2.6) ** 2 < 1 && dith(f.x + x, f.y + y) < 0.6;
+      if (!ring && !contact) continue;
+      g.fillStyle = ring ? (e > 0.8 ? "#a8823a" : "#e3bf6a") : "rgba(4,3,2,0.6)";
       g.fillRect((f.x + x) * S, (f.y + y) * S, S, S);
     }
+    // the hero, lit by the fire on the sheet's own pixel grid
+    lightCtx.clearRect(0, 0, fw, fw);
+    lightCtx.save();
+    if (flip) { lightCtx.translate(fw, 0); lightCtx.scale(-1, 1); }
+    for (const im of [h.img, ...h.kit]) {
+      if (im.complete && im.naturalWidth) lightCtx.drawImage(im, (fr % cols) * fw, Math.floor(fr / cols) * fw, fw, fw, 0, 0, fw, fw);
+    }
+    lightCtx.restore();
+    firelight(lightCtx, fw, ux, uy, reach);
     g.save();
     g.translate(f.x * S, f.y * S + S);
-    if (flip) g.scale(-1, 1);
     const dw = fw * hp, ox = -dw / 2, oy = -dw * (29 / 32);
-    for (const im of [h.img, ...h.kit]) {
-      if (im.complete && im.naturalWidth) g.drawImage(im, (fr % cols) * fw, Math.floor(fr / cols) * fw, fw, fw, Math.round(ox), Math.round(oy), dw, dw);
-    }
+    g.drawImage(lightCv, 0, 0, fw, fw, Math.round(ox), Math.round(oy), dw, dw);
     g.restore();
   }
 
@@ -229,7 +253,7 @@ export function mountFireside(canvas: HTMLCanvasElement, labelHost: HTMLElement,
     if ((canvas.parentElement as HTMLElement | null)?.style.display === "none") { api.stop(); return; } // in the game now
     raf = requestAnimationFrame(frame);
     const dt = Math.min(100, now - last); last = now;
-    if (!reduce && now - fireT > 110) { fireT = now; fireF = (fireF + 1) % FRAMES; flick = Math.random() < 0.35 ? 1 : 0; }
+    if (!reduce && now - fireT > 110) { fireT = now; fireF = (fireF + 1) % FRAMES; flick = Math.random() < 0.35 ? 1 : 0; flame = 0.86 + Math.random() * 0.14; }
     g.imageSmoothingEnabled = false;
     g.drawImage(ground[flick] ?? ground[0], 0, 0, cw * S, ch * S);
     // heroes behind the fire, the fire, then heroes in front of it
@@ -315,4 +339,48 @@ function pine(px: (x: number, y: number, c: string) => void, x0: number, y0: num
       }
     }
   }
+}
+
+/**
+ * Firelight on a hero sprite (in place, on the sheet's pixels): the side turned to the fire is warmed and the
+ * outline pixels facing it catch a hot orange rim; the far side sinks into a cool night shadow.
+ * (ux, uy) points from the hero to the fire; reach is how strongly the fire lights it (0..1).
+ */
+function firelight(g: CanvasRenderingContext2D, fw: number, ux: number, uy: number, reach: number) {
+  const img = g.getImageData(0, 0, fw, fw), d = img.data;
+  const a = (x: number, y: number) => (x < 0 || y < 0 || x >= fw || y >= fw ? 0 : d[(y * fw + x) * 4 + 3]);
+  // the sprite's extent, so "facing the fire" is measured across the body
+  let x0 = fw, x1 = 0, y0 = fw, y1 = 0;
+  for (let y = 0; y < fw; y++) for (let x = 0; x < fw; x++) if (a(x, y) > 40) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
+  if (x1 < x0) return;
+  const mx = (x0 + x1) / 2, my = (y0 + y1) / 2, hw = Math.max(4, (x1 - x0) / 2), hh = Math.max(4, (y1 - y0) / 2);
+  for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
+    const i = (y * fw + x) * 4;
+    if (d[i + 3] < 40) continue;
+    // where the pixel sits across the body, towards (+1) or away from (-1) the fire
+    const side = Math.max(-1, Math.min(1, ((x - mx) / hw) * ux + ((y - my) / hh) * uy * 0.6));
+    // rim: the first transparent pixel towards the fire is 1, 2 or 3 steps away
+    let rim = 0;
+    for (let k = 1; k <= 3; k++) if (a(Math.round(x + ux * k), Math.round(y + uy * k)) < 40) { rim = k === 1 ? 1 : k === 2 ? 0.55 : 0.25; break; }
+    let back = 0;
+    for (let k = 1; k <= 2; k++) if (a(Math.round(x - ux * k), Math.round(y - uy * k)) < 40) { back = k === 1 ? 1 : 0.5; break; }
+    // a fire in front of the hero (below it on screen) lights the whole face turned to the viewer too
+    const front = Math.max(0, uy) * 0.55 * (1 - Math.max(0, (my - y) / hh) * 0.4);
+    const lit = reach * Math.min(1, 0.5 + 0.5 * side + front), shade = reach * (0.35 * Math.max(0, -side) + 0.25 * back * (1 - rim));
+    let r = d[i], gg = d[i + 1], b = d[i + 2];
+    // night ambient first: everything a little darker and cooler, more so away from the fire
+    const amb = 0.8 - shade * 0.6;
+    r *= amb; gg *= amb; b *= amb * 1.04;
+    // warm fill on the lit half
+    r = r * (1 + 0.55 * lit) + 34 * lit; gg = gg * (1 + 0.18 * lit) + 12 * lit; b = b * (1 - 0.25 * lit);
+    // hot rim on the edge facing the flames, banded to a few fire tones so it stays pixel-art
+    if (rim > 0 && side > -0.2) {
+      const k = rim * reach;
+      const [cr, cg, cb] = k > 0.6 ? [255, 176, 72] : k > 0.35 ? [232, 112, 36] : [168, 66, 22];
+      const m = Math.min(0.85, k * 1.1);
+      r = r + (cr - r) * m; gg = gg + (cg - gg) * m; b = b + (cb - b) * m;
+    }
+    d[i] = Math.min(255, r); d[i + 1] = Math.min(255, gg); d[i + 2] = Math.min(255, b);
+  }
+  g.putImageData(img, 0, 0);
 }
