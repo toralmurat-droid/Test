@@ -1,45 +1,100 @@
 /**
  * Background music.
  *
- * - Tracks are listed in TRACKS below. MP3 tracks live in client/public/assets/music/;
- *   the "Village tune" is a small chiptune made in code (no file).
- * - "Auto" (default) picks the track by zone: skeleton zones play The Pale Marshal's March,
- *   blob and bandit zones Blob Slayer, the village, towns and roads the Village tune.
- * - Starts after the first click / key press (browsers block sound before that), fades in,
- *   fades out when muted or when the tab is hidden, and crossfades when the track changes.
- * - Track choice, volume and mute are remembered per player name (localStorage "music:<name>").
- * - UI: the "Music" button in the bottom-right menu opens the music menu (auto / track, volume, mute).
+ * Tracks (TRACKS below): MP3 songs live in client/public/assets/music/; the "Village tune" and the
+ * "Countryside tune" are small chiptunes made in code (no file).
+ *
+ * "Auto" (the default):
+ * - Calm: the Village tune in Oakvale, Saltmere and the Hunter's Camp, the Countryside tune everywhere else.
+ * - Battle: when the fighting around the hero heats up (hits near the hero, hits taken), the zone's battle
+ *   song comes in: The Pale Marshal's March where skeletons live, Blob Slayer for blobs and bandits.
+ *   It starts quiet and swells as the battle intensifies (unless the player turned the swell off),
+ *   plays once in full, then the calm tune returns. That zone's battle song can come back after 5 minutes
+ *   if the hero is still fighting there.
+ * A manually picked track just loops at the set volume.
+ *
+ * Starts after the first click / key press (browsers block sound before that); fades on mute / hidden tab.
+ * Settings are remembered per player name (localStorage "music:<name>").
  */
 
-type Track = { id: string; name: string; url?: string };
+type Track = { id: string; name: string; url?: string; song?: Song };
+type Song = { bpm: number; melody: string[]; bass: string[] };
+
+/** "." holds the previous note, "_" is a rest. One token = one eighth note. Bass: two roots per bar. */
+const VILLAGE_SONG: Song = {
+  bpm: 92,
+  melody: [
+    "D4 . A4 . G4 F4 E4 D4", "E4 F4 G4 . A4 . . .", "C5 . B4 A4 G4 . A4 F4", "E4 . D4 . . . _ _",
+    "D4 . A4 . G4 F4 E4 D4", "E4 F4 G4 . A4 . C5 .", "D5 . C5 A4 G4 . E4 F4", "D4 . . . . . _ _",
+    "A4 . D5 . C5 . A4 .", "G4 A4 B4 . A4 . . .", "F4 . G4 A4 E4 . F4 G4", "A4 . . . . . _ _",
+    "D5 . C5 . A4 . G4 .", "F4 G4 A4 . E4 . D4 .", "C4 . D4 E4 F4 . E4 C4", "D4 . . . . . _ _",
+  ].join(" ").split(" "),
+  bass: [
+    "D D", "C C", "F G", "A A", "D D", "C A", "F C", "D D",
+    "D D", "G G", "F C", "A A", "D D", "F A", "C C", "D D",
+  ].join(" ").split(" "),
+};
+/** A lighter walking tune in G mixolydian for the roads and fields. */
+const COUNTRY_SONG: Song = {
+  bpm: 104,
+  melody: [
+    "G4 . B4 D5 . B4 A4 G4", "A4 . B4 . G4 . E4 .", "D4 . G4 . A4 B4 C5 B4", "A4 . . . . . _ _",
+    "G4 . B4 D5 . B4 A4 G4", "A4 B4 C5 . B4 A4 G4 .", "E4 . F4 . G4 A4 F4 D4", "G4 . . . . . _ _",
+    "D5 . . B4 C5 . A4 .", "B4 . G4 . A4 . F4 .", "G4 . E4 . F4 G4 A4 F4", "D4 . . . . . _ _",
+    "G4 . B4 . A4 . F4 .", "G4 A4 B4 C5 D5 . B4 .", "C5 . A4 . F4 . A4 .", "G4 . . . . . _ _",
+  ].join(" ").split(" "),
+  bass: [
+    "G G", "D D", "G C", "D D", "G G", "F C", "C D", "G G",
+    "G G", "G D", "C F", "D D", "G D", "G G", "F F", "G G",
+  ].join(" ").split(" "),
+};
+
 const TRACKS: Track[] = [
   { id: "blob-slayer", name: "Blob Slayer", url: "/assets/music/blob-slayer.mp3" },
   { id: "pale-marshals", name: "The Pale Marshal's March", url: "/assets/music/pale-marshals-march.mp3" },
-  { id: "village", name: "Village tune" },
+  { id: "village", name: "Village tune", song: VILLAGE_SONG },
+  { id: "country", name: "Countryside tune", song: COUNTRY_SONG },
 ];
-/** Zone moods for "Auto": which track fits the monsters living there. */
 const UNDEAD = ["skeleton", "skeletonmage", "necromancer"];
 const FIGHT = ["slime", "shooterblob", "warriorblob", "healerblob", "motherblob", "bandit"];
-/** Seconds the hero must stay in a zone before Auto changes the song (no ping-pong on borders). */
-const ZONE_SETTLE = 2;
+const TOWNS = ["Oakvale", "Market Square", "Chapel of the Dawn", "The Rusty Tankard", "The Smithy", "Saltmere", "Hunter's Camp"];
+
 const FADE_IN = 2.5;
 const FADE_OUT = 0.8;
+/** Seconds the hero must stay in a place before the calm tune changes (no ping-pong on borders). */
+const ZONE_SETTLE = 2;
+/** Battle heat: points per hit near the hero / taken by the hero, halves every HEAT_HALF_LIFE seconds. */
+const HEAT_START = 5;
+const HEAT_FULL = 16;
+const HEAT_HALF_LIFE = 8;
+/** The swell: a battle song starts at this share of the set volume and rises to full. */
+const SWELL_FLOOR = 0.35;
+const BATTLE_COOLDOWN_MS = 5 * 60 * 1000;
 
-/** pick: "auto" (by zone) or a track id */
-type Settings = { volume: number; muted: boolean; pick: string };
+/** pick: "auto" or a track id. swell: battle songs rise with the fighting (off = fixed volume). */
+type Settings = { volume: number; muted: boolean; pick: string; swell: boolean };
 
 let ctx: AudioContext | null = null;
 let master: GainNode | null = null;
-let settings: Settings = { volume: 0.5, muted: false, pick: "auto" };
-let zoneTrack = "village";
-let pendingZoneTrack: string | null = null;
-let zoneTimer: number | null = null;
+let mp3Gain: GainNode | null = null;
+let settings: Settings = { volume: 0.5, muted: false, pick: "auto", swell: true };
 let storeKey = "music";
 let started = false;
 let audioEl: HTMLAudioElement | null = null;
-let chip: Chiptune | null = null;
+const chips = new Map<string, Chiptune>();
 let playing: string | null = null;
 let switchTimer: number | null = null;
+
+// Where the hero is (for Auto)
+let calmTrack = "village";
+let pendingCalm: string | null = null;
+let calmTimer: number | null = null;
+let zoneName: string | undefined;
+let zoneBattle: string | null = null;
+// Battle state
+let heat = 0;
+let battle: { track: string; zone: string } | null = null;
+const cooldownUntil = new Map<string, number>();
 
 function load(name: string) {
   storeKey = `music:${name.toLowerCase()}`;
@@ -49,6 +104,7 @@ function load(name: string) {
       const s = JSON.parse(raw);
       if (typeof s.volume === "number") settings.volume = Math.min(1, Math.max(0, s.volume));
       if (typeof s.muted === "boolean") settings.muted = s.muted;
+      if (typeof s.swell === "boolean") settings.swell = s.swell;
       if (s.pick === "auto" || TRACKS.some((t) => t.id === s.pick)) settings.pick = s.pick;
     }
   } catch { /* private mode */ }
@@ -64,38 +120,53 @@ function targetGain(): number {
   return 0.6 * settings.volume * settings.volume;
 }
 
-function fadeTo(value: number, seconds: number) {
-  if (!ctx || !master) return;
-  const g = master.gain, t = ctx.currentTime;
+function ramp(g: AudioParam, value: number, seconds: number) {
+  if (!ctx) return;
+  const t = ctx.currentTime;
   g.cancelScheduledValues(t);
   g.setValueAtTime(g.value, t);
   g.linearRampToValueAtTime(value, t + seconds);
 }
-
-function wantedTrack(): string {
-  return settings.pick === "auto" ? zoneTrack : settings.pick;
+function fadeTo(value: number, seconds: number) {
+  if (master) ramp(master.gain, value, seconds);
 }
 
-/** Stop whatever plays and start the chosen track (the caller handles the fades). */
+function wantedTrack(): string {
+  if (settings.pick !== "auto") return settings.pick;
+  return battle?.track ?? calmTrack;
+}
+
+/** Share of the set volume for the mp3 now playing: swells with the battle heat in Auto. */
+function swellLevel(): number {
+  if (!battle || settings.pick !== "auto" || !settings.swell) return 1;
+  return SWELL_FLOOR + (1 - SWELL_FLOOR) * Math.min(1, Math.max(0, (heat - HEAT_START) / (HEAT_FULL - HEAT_START)));
+}
+
+/** Stop whatever plays and start the wanted track (the caller handles the fades). */
 function playTrack() {
   if (!ctx || !master) return;
   audioEl?.pause();
-  chip?.stop();
+  chips.forEach((c) => c.stop());
   const track = TRACKS.find((t) => t.id === wantedTrack()) ?? TRACKS[0];
   playing = track.id;
   if (track.url) {
     if (!audioEl) {
       audioEl = new Audio();
-      audioEl.loop = true;
       audioEl.preload = "auto";
-      ctx.createMediaElementSource(audioEl).connect(master);
+      mp3Gain = ctx.createGain();
+      ctx.createMediaElementSource(audioEl).connect(mp3Gain).connect(master);
+      audioEl.addEventListener("ended", battleOver);
     }
     if (!audioEl.src.endsWith(track.url)) audioEl.src = track.url;
+    // Battle songs play once in full; a picked song loops
+    audioEl.loop = settings.pick !== "auto";
     audioEl.currentTime = 0;
+    if (mp3Gain) { mp3Gain.gain.cancelScheduledValues(ctx.currentTime); mp3Gain.gain.value = swellLevel(); }
     audioEl.play().catch(() => {});
-  } else {
-    chip ??= new Chiptune(ctx, master);
-    chip.start();
+  } else if (track.song) {
+    let c = chips.get(track.id);
+    if (!c) { c = new Chiptune(ctx, master, track.song); chips.set(track.id, c); }
+    c.start();
   }
 }
 
@@ -103,7 +174,7 @@ function playTrack() {
 function resume() {
   const track = TRACKS.find((t) => t.id === playing);
   if (track?.url) audioEl?.play().catch(() => {});
-  else chip?.start();
+  else if (playing) chips.get(playing)?.start();
 }
 
 async function begin() {
@@ -118,6 +189,7 @@ async function begin() {
   if (ctx.state === "suspended") await ctx.resume().catch(() => {});
   if (targetGain() > 0) playTrack();
   fadeTo(targetGain(), FADE_IN);
+  window.setInterval(tick, 250);
 }
 
 function apply(fadeSeconds: number) {
@@ -133,13 +205,13 @@ function apply(fadeSeconds: number) {
     setTimeout(() => {
       if (targetGain() > 0) return;
       audioEl?.pause();
-      chip?.stop();
+      chips.forEach((c) => c.stop());
     }, fadeSeconds * 1000 + 50);
   }
 }
 
-/** Fade the old track out, start the new one and fade it in. */
-function switchTrack() {
+/** Fade the old track out, start the wanted one and fade it in. */
+function switchTrack(fadeIn = 1.5) {
   if (!started || targetGain() === 0) { playing = null; return; }
   if (wantedTrack() === playing && switchTimer === null) return;
   if (switchTimer !== null) clearTimeout(switchTimer);
@@ -147,29 +219,58 @@ function switchTrack() {
   switchTimer = window.setTimeout(() => {
     switchTimer = null;
     playTrack();
-    fadeTo(targetGain(), 1.5);
+    fadeTo(targetGain(), fadeIn);
   }, FADE_OUT * 1000);
 }
 
+/** The battle song ended: back to the calm tune, and this zone rests for 5 minutes. */
+function battleOver() {
+  if (!battle) return;
+  cooldownUntil.set(battle.zone, Date.now() + BATTLE_COOLDOWN_MS);
+  battle = null;
+  switchTrack(FADE_IN);
+}
+
+function tick() {
+  heat *= Math.pow(0.5, 0.25 / HEAT_HALF_LIFE);
+  if (heat < 0.05) heat = 0;
+  if (settings.pick !== "auto" || targetGain() === 0) return;
+  if (!battle && zoneBattle && zoneName && heat >= HEAT_START && Date.now() >= (cooldownUntil.get(zoneName) ?? 0)) {
+    battle = { track: zoneBattle, zone: zoneName };
+    switchTrack(1);
+    return;
+  }
+  // The swell follows the fighting, smoothly (both ways, never below the floor)
+  if (battle && playing === battle.track && mp3Gain && ctx && switchTimer === null) {
+    mp3Gain.gain.setTargetAtTime(swellLevel(), ctx.currentTime, 0.8);
+  }
+}
+
 /**
- * Tell the music which monsters live where the hero stands (the spawn zone's `mobs`, or undefined
- * outside any monster zone). Cheap to call every frame; Auto changes the song once the hero settles.
+ * Where the hero stands: the monster zone (name + its `mobs`, or undefined outside any) and the area
+ * name. Cheap to call every frame.
  */
-export function setMusicZone(mobs?: Partial<Record<string, number>>) {
+export function setMusicZone(zone: string | undefined, mobs: Partial<Record<string, number>> | undefined, area: string) {
   const has = (kinds: string[]) => !!mobs && kinds.some((k) => (mobs[k] ?? 0) > 0);
-  const t = has(UNDEAD) ? "pale-marshals" : has(FIGHT) ? "blob-slayer" : "village";
-  if (t === pendingZoneTrack) return;
-  pendingZoneTrack = t;
-  if (zoneTimer !== null) clearTimeout(zoneTimer);
-  zoneTimer = null;
-  if (t === zoneTrack) return;
-  // First reading after login: no wait, so the right song starts at once
-  const delay = started ? ZONE_SETTLE * 1000 : 0;
-  zoneTimer = window.setTimeout(() => {
-    zoneTimer = null;
-    zoneTrack = t;
-    if (settings.pick === "auto") switchTrack();
-  }, delay);
+  zoneName = zone;
+  zoneBattle = has(UNDEAD) ? "pale-marshals" : has(FIGHT) ? "blob-slayer" : null;
+  const calm = !zone && TOWNS.includes(area) ? "village" : "country";
+  if (calm === pendingCalm) return;
+  pendingCalm = calm;
+  if (calmTimer !== null) clearTimeout(calmTimer);
+  calmTimer = null;
+  if (calm === calmTrack) return;
+  // First reading after login: no wait, so the right tune starts at once
+  calmTimer = window.setTimeout(() => {
+    calmTimer = null;
+    calmTrack = calm;
+    if (settings.pick === "auto" && !battle) switchTrack();
+  }, started ? ZONE_SETTLE * 1000 : 0);
+}
+
+/** Fighting near the hero: a hit on a monster nearby (1) or on the hero (3). */
+export function musicCombat(points: number) {
+  heat = Math.min(HEAT_FULL * 1.5, heat + points);
 }
 
 /** Call once the player has logged in. Music starts on the first click or key press. */
@@ -204,11 +305,12 @@ function buildUi() {
     <div id="musictracks"></div>
     <div class="mlabel">Volume</div>
     <input id="musicvol" type="range" min="0" max="100" step="1" aria-label="Music volume">
-    <div class="mrow"><span id="musicpct"></span><button id="musicmute"></button></div>`;
+    <div class="mrow"><span id="musicpct"></span><button id="musicmute"></button></div>
+    <button id="musicswell" title="Auto: battle songs start quiet and grow louder as the fight heats up"></button>`;
   hud.appendChild(panel);
 
   const list = panel.querySelector("#musictracks") as HTMLElement;
-  const choices = [{ id: "auto", name: "Auto (by zone)" }, ...TRACKS];
+  const choices = [{ id: "auto", name: "Auto (calm + battle)" }, ...TRACKS];
   const trackBtns = choices.map((t) => {
     const b = document.createElement("button");
     b.className = "mtrack";
@@ -216,6 +318,7 @@ function buildUi() {
     b.onclick = () => {
       if (settings.pick === t.id) return;
       settings.pick = t.id;
+      battle = null;
       save(); render(); switchTrack(); b.blur();
     };
     list.appendChild(b);
@@ -224,10 +327,13 @@ function buildUi() {
   const vol = panel.querySelector("#musicvol") as HTMLInputElement;
   const pct = panel.querySelector("#musicpct") as HTMLElement;
   const mute = panel.querySelector("#musicmute") as HTMLButtonElement;
+  const swell = panel.querySelector("#musicswell") as HTMLButtonElement;
   function render() {
     vol.value = String(Math.round(settings.volume * 100));
     pct.textContent = `${Math.round(settings.volume * 100)}%`;
     mute.textContent = settings.muted ? "Unmute" : "Mute";
+    swell.textContent = `Battle swell: ${settings.swell ? "On" : "Off (fixed volume)"}`;
+    swell.hidden = settings.pick !== "auto";
     btn.textContent = settings.muted || settings.volume === 0 ? "♪ Off" : "♪ Music";
     choices.forEach((t, i) => trackBtns[i].classList.toggle("sel", t.id === settings.pick));
   }
@@ -243,29 +349,14 @@ function buildUi() {
   };
   vol.onchange = () => vol.blur();
   mute.onclick = () => { settings.muted = !settings.muted; save(); render(); apply(settings.muted ? FADE_OUT : 1.2); mute.blur(); };
+  swell.onclick = () => { settings.swell = !settings.swell; save(); render(); swell.blur(); };
   document.addEventListener("pointerdown", (e) => {
     if (!panel.hidden && !panel.contains(e.target as Node) && e.target !== btn) panel.hidden = true;
   });
 }
 
 // ---------------------------------------------------------------------------
-// Built-in placeholder: a quiet medieval-sounding chiptune in D dorian, ~45 s loop.
-// "." holds the previous note, "_" is a rest. One token = one eighth note.
-
-const MELODY = [
-  // A
-  "D4 . A4 . G4 F4 E4 D4", "E4 F4 G4 . A4 . . .", "C5 . B4 A4 G4 . A4 F4", "E4 . D4 . . . _ _",
-  "D4 . A4 . G4 F4 E4 D4", "E4 F4 G4 . A4 . C5 .", "D5 . C5 A4 G4 . E4 F4", "D4 . . . . . _ _",
-  // B
-  "A4 . D5 . C5 . A4 .", "G4 A4 B4 . A4 . . .", "F4 . G4 A4 E4 . F4 G4", "A4 . . . . . _ _",
-  "D5 . C5 . A4 . G4 .", "F4 G4 A4 . E4 . D4 .", "C4 . D4 E4 F4 . E4 C4", "D4 . . . . . _ _",
-].join(" ").split(" ");
-
-/** Bass: two roots per bar (each played as root, fifth on quarter notes). */
-const BASS = [
-  "D D", "C C", "F G", "A A", "D D", "C A", "F C", "D D",
-  "D D", "G G", "F C", "A A", "D D", "F A", "C C", "D D",
-].join(" ").split(" ");
+// Chiptune player for the code-made tunes (square + triangle lead, triangle bass, soft hand drum).
 
 const NOTE: Record<string, number> = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
 function midi(n: string): number { return 12 * (Number(n.slice(1)) + 1) + NOTE[n[0]]; }
@@ -275,11 +366,16 @@ class Chiptune {
   private timer: number | null = null;
   private step = 0;
   private nextTime = 0;
-  private readonly eighth = 60 / 92 / 2; // 92 bpm
+  private readonly eighth: number;
   private noise: AudioBuffer;
   private out: GainNode;
+  private readonly melody: string[];
+  private readonly bass: string[];
 
-  constructor(private ctx: AudioContext, dest: AudioNode) {
+  constructor(private ctx: AudioContext, dest: AudioNode, song: Song) {
+    this.eighth = 60 / song.bpm / 2;
+    this.melody = song.melody;
+    this.bass = song.bass;
     this.out = ctx.createGain();
     this.out.gain.value = 0.5;
     // Soft low-pass so the square wave sounds like a reed pipe, not a buzzer
@@ -307,22 +403,22 @@ class Chiptune {
     while (this.nextTime < this.ctx.currentTime + 0.15) {
       this.playStep(this.step, this.nextTime);
       this.nextTime += this.eighth;
-      this.step = (this.step + 1) % MELODY.length;
+      this.step = (this.step + 1) % this.melody.length;
     }
   }
 
   private playStep(i: number, t: number) {
-    const tok = MELODY[i];
+    const tok = this.melody[i];
     if (tok !== "." && tok !== "_") {
       let len = 1;
-      while (MELODY[(i + len) % MELODY.length] === "." && len < 8) len++;
+      while (this.melody[(i + len) % this.melody.length] === "." && len < 8) len++;
       const f = freq(midi(tok));
       this.tone("square", f, t, len * this.eighth * 0.95, 0.07);
       this.tone("triangle", f, t, len * this.eighth * 0.95, 0.12);
     }
     const inBar = i % 8;
     if (inBar % 2 === 0) {
-      const root = BASS[Math.floor(i / 8) * 2 + (inBar >= 4 ? 1 : 0)];
+      const root = this.bass[Math.floor(i / 8) * 2 + (inBar >= 4 ? 1 : 0)];
       const m = midi(root + "2") + (inBar % 4 === 2 ? 7 : 0);
       this.tone("triangle", freq(m), t, this.eighth * 1.8, 0.22);
     }

@@ -7,7 +7,7 @@ import { GROUND, areaAt, isSafeZone } from "../../shared/map";
 import { heroPoise } from "../../shared/combat";
 import { moveStep } from "../../shared/movement";
 import { levelsAt, SPAWN_ZONES, zoneAt } from "../../shared/spawns";
-import { setMusicZone } from "./music";
+import { musicCombat, setMusicZone } from "./music";
 import { attackMult, cooldownMult, critChance, heroSpeed, STATS, magicMult, STAT_KINDS, STAT_NAMES, StatKind, statPoints, HP_PER_STR } from "../../shared/powers";
 import { pointRange, skillOf, skillTarget, STACK_NAME, MAX_STACKS, talentBonus } from "../../shared/skills";
 import { SkillFx } from "./skillfx";
@@ -820,6 +820,10 @@ export class TownScene extends Phaser.Scene {
       const e = this.entities.get(id);
       if (!e) return;
       if (id === this.me) this.portals?.hurt();
+      // Battle music heat: hits on the hero count most, fights close by count too
+      const meE = this.entities.get(this.me);
+      if (id === this.me) musicCombat(3);
+      else if (e.mob && meE && Math.hypot(e.sprite.x - meE.sprite.x, e.sprite.y - meE.sprite.y) < 10 * TILE) musicCombat(1);
       this.floatText(e.sprite.x, e.sprite.y - 14, crit ? `CRIT -${dmg}` : `-${dmg}`,
         blocked ? "#9ad1ff" : crit ? "#ffd60a" : id === this.me ? "#ff5d5d" : "#ffffff");
       e.sprite.setTintFill(0xffffff);
@@ -2081,7 +2085,7 @@ export class TownScene extends Phaser.Scene {
       // Monster zone status: how many are alive
       const tx = meEnt.sprite.x / TILE, ty = meEnt.sprite.y / TILE;
       const zdef = zoneAt(Math.floor(tx), Math.floor(ty));
-      setMusicZone(zdef?.mobs);
+      setMusicZone(zdef?.name, zdef?.mobs, this.areaName);
       const zone = zdef && (this.room.state as any).zones?.get(zdef.name);
       document.getElementById("zone")!.textContent = zone
         ? `⚔ ${zone.name} (Lv ${levelsAt(zdef!, tx, ty).join("-")}): ${zone.alive}/${zone.cap} monsters`
