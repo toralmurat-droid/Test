@@ -449,3 +449,11 @@ html, body { margin: 0; height: 100%; background: #1b1b24; color: #eee; font: 14
 #hotbar .slot.lmb img:not(.sicon) { width: 32px; height: 32px; image-rendering: pixelated; margin-bottom: 2px; }
 #hotbar .slot.lmb .fist { padding-bottom: 10px; color: #e8d8b0; }
 #slotpick .picon.fist { display: flex; align-items: center; justify-content: center; font-size: 8px; color: #e8d8b0; }
+/* Healing (Q) and mana (V) potions left of the skill bar, with how many you carry */
+#hotbar .potions { display: flex; gap: 3px; margin-right: 6px; }
+#hotbar .slot.potion { border-color: #7a4a4a; cursor: pointer; }
+#hotbar .slot.potion.mpotion { border-color: #3d5a9a; }
+#hotbar .slot.potion img { width: 32px; height: 32px; image-rendering: pixelated; margin-bottom: 2px; }
+#hotbar .slot.potion.wait img { filter: grayscale(.8) brightness(.7); }
+#hotbar .slot.potion b.count { top: auto; bottom: 1px; right: 3px; font-size: 13px; }
+#hotbar .slot.potion.wait b.count { color: #999; }
