@@ -19,14 +19,19 @@ export function takeRejoin(): Rejoin | null {
 }
 
 let started = false;
-/** Show the "updating" notice and come back as soon as the server is up again. */
-export function reconnectSoon(login: Rejoin) {
+/**
+ * Show a notice and come back as soon as the server answers again. `upgrading` = the server closed the
+ * connection on purpose (a deploy shuts it down gracefully, close code 4000); otherwise the connection was lost.
+ */
+export function reconnectSoon(login: Rejoin, upgrading = false) {
   if (started) return;
   started = true;
   const box = document.createElement("div");
   box.style.cssText = "position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;" +
     "background:rgba(10,10,16,.72);color:#f4e9d0;text-align:center;font:20px " + PIXEL_FONT + ";";
-  box.innerHTML = "<div>Game is upgrading!<br><small style='font-size:14px;opacity:.8'>Back in a moment, your hero is saved.</small></div>";
+  box.innerHTML = upgrading
+    ? "<div>Game is upgrading!<br><small style='font-size:14px;opacity:.8'>Back in a moment, your hero is saved.</small></div>"
+    : "<div>Connection lost<br><small style='font-size:14px;opacity:.8'>Reconnecting... your hero is saved.</small></div>";
   document.body.appendChild(box);
   const base = import.meta.env.DEV ? `${location.protocol}//${location.hostname}:2567` : "";
   const tryAgain = async () => {
@@ -41,5 +46,5 @@ export function reconnectSoon(login: Rejoin) {
     setTimeout(tryAgain, 2000);
   };
   // Give the old server a moment to hand over to the new one
-  setTimeout(tryAgain, 1500);
+  setTimeout(tryAgain, upgrading ? 1500 : 500);
 }
