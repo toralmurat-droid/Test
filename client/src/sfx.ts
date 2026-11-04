@@ -35,7 +35,7 @@ let voices = 0;
 const MAX_VOICES = 28;
 const lastPlay = new Map<string, number>();
 /** Sounds that ring for seconds (kept connected longer). */
-const LONG = new Set(["horn", "ritual", "ritualCall", "demonRise", "demonRoar", "shrine", "portalTravel", "portalWake", "necroWind", "heroDie", "levelup", "owl", "chime", "warcry", "motherInflate", "demonFire", "skelDie"]);
+const LONG = new Set(["lootRare", "lootLegendary", "horn", "ritual", "ritualCall", "demonRise", "demonRoar", "shrine", "portalTravel", "portalWake", "necroWind", "heroDie", "levelup", "owl", "chime", "warcry", "motherInflate", "demonFire", "skelDie"]);
 const AMBIENT = new Set(["crackle", "bird", "cricket", "chime", "owl", "step", "skelIdle", "blobGurgle", "crawl"]);
 
 const TOWNS = ["Oakvale", "Market Square", "Chapel of the Dawn", "The Rusty Tankard", "The Smithy", "Saltmere", "Hunter's Camp"];
@@ -309,6 +309,8 @@ const R: Record<string, Recipe> = {
   coins: (o, t, v) => { for (let i = 0; i < 4; i++) { const tt = t + i * 0.045 + rnd(0, 0.02); clank(o, tt, 0.12 * v, rnd(2600, 3600)); } },
   potion: (o, t, v) => { for (let i = 0; i < 3; i++) tone(o, t + i * 0.09, { f: 300 + i * 70, f2: 600 + i * 90, dur: 0.08, vol: 0.18 * v }); },
   gear: (o, t, v) => { clank(o, t, 0.2 * v, 1500); [0, 7, 12].forEach((s, i) => tone(o, t + 0.05 + i * 0.05, { type: "triangle", f: 1046 * 2 ** (s / 12), dur: 0.3, vol: 0.08 * v })); },
+  lootRare: (o, t, v) => [0, 7, 12].forEach((s, i) => bell(o, t + i * 0.07, 784 * 2 ** (s / 12), 1.1, 0.09 * v)),
+  lootLegendary: (o, t, v) => { thud(o, t, 70, 0.4 * v, 0.3); [0, 4, 7, 12, 16, 19].forEach((s, i) => bell(o, t + 0.05 + i * 0.07, 523 * 2 ** (s / 12), 1.8, 0.1 * v)); },
   chest: (o, t, v) => { tone(o, t, { type: "sawtooth", f: 95, f2: 140, dur: 0.45, vol: 0.12 * v, vib: 12, vibHz: 18, att: 0.05 }); noise(o, t, { type: "bandpass", f: 700, q: 4, dur: 0.4, vol: 0.12 * v, att: 0.1 }); thud(o, t + 0.45, 140, 0.3 * v, 0.12); },
   shrine: (o, t, v) => { [0, 7, 12, 19].forEach((s, i) => bell(o, t + i * 0.12, 392 * 2 ** (s / 12), 2.2, 0.12 * v)); },
   portalTravel: (o, t, v) => { tone(o, t, { f: 120, f2: 900, dur: 0.9, vol: 0.2 * v, att: 0.3, vib: 20, vibHz: 9 }); whoosh(o, t, 200, 3000, 0.9, 0.4 * v); bell(o, t + 0.8, 784, 1.2, 0.12 * v); },

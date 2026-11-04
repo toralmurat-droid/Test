@@ -1,0 +1,10 @@
+{
+  "date": "2026-11-04",
+  "title": "Magic, Rare and Legendary loot",
+  "changes": [
+    "Found gear can roll as Magic (blue), Rare (gold) or Legendary (orange) with random extra bonuses and its own name.",
+    "Rare and Legendary drops shine with a light beam and ring a chime.",
+    "Bosses and big chests roll better loot; rarer items sell for more.",
+    "Damage numbers and the stats line now use the pixel font."
+  ]
+}
