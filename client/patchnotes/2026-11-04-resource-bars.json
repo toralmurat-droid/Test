@@ -1,0 +1,12 @@
+{
+  "date": "2026-11-04",
+  "pr": 239,
+  "title": "New health, mana and stamina bars",
+  "changes": [
+    "New top-left bars with a gold frame and a level shield.",
+    "Bars grow longer as your hero gets stronger, then show tick marks.",
+    "A pale trail shows how much a hit took away.",
+    "A thin green bar shows your XP.",
+    "Turn the numbers on the bars on or off in the Esc menu."
+  ]
+}

@@ -4,7 +4,7 @@ import { chargeIcon } from "./chargeIcon";
 import { leaving, noteBuild, reconnectSoon, returnToStart, upgradeAnnounced } from "./reconnect";
 import { Client, Room } from "colyseus.js";
 import { BOSS, ELITE, InputState, MERGE, MAP_H, MAP_W, regenFromStamina, TICK_RATE, TILE } from "../../shared/constants";
-import { CLASSES, ClassKind, ENERGY, energyName, MAX_LEVEL, xpForLevel } from "../../shared/classes";
+import { CLASSES, ClassKind, ENERGY, MAX_LEVEL, xpForLevel } from "../../shared/classes";
 import { canPay, MANA, manaRegen, maxManaFor, skillCost, unpackMana } from "../../shared/mana";
 import { nextSize, potionAmount, PotionKind, potionName, POTION_SIZES, total, unpackPotions } from "../../shared/potions";
 import { GROUND, areaAt, isSafeZone } from "../../shared/map";
@@ -73,6 +73,7 @@ import { addSiegeWorks } from "./siegeArt";
 import { SiegeWork } from "./siegeWork";
 import { PERCH_LIFT } from "../../shared/bandits";
 import { icon, fillIcons } from "./pixelicons";
+import { ResourceBars } from "./resourceBars";
 
 /** One painted bit on a merged blob, in body-relative units (-1..1 across the body). */
 interface BlobPart { kind: "patch" | "eye" | "mouth"; u: number; v: number; r: number; col: number }
@@ -261,6 +262,7 @@ export class TownScene extends Phaser.Scene {
   private talentMenu?: TalentMenu;
   private hotbarHtml = "";
   private buffBar?: BuffBar;
+  private resBars?: ResourceBars;
   private deathTimer?: number;
   private iso?: IsoView;
 
@@ -405,6 +407,7 @@ export class TownScene extends Phaser.Scene {
       { id: "music", label: `${icon("note")}Music &amp; sound`, onClick: toggleMusic },
       { id: "ideas", label: `${icon("candle")}Ideas board`, key: "I", onClick: toggleIdeas },
       { id: "news", label: `${icon("scroll")}News`, key: "N", onClick: toggleNews },
+      { id: "barnums", label: `${icon("potion")}Bar numbers on / off`, onClick: () => this.resBars?.toggleNumbers() },
       { id: "quit", label: `${icon("fire")}Save and return to start screen`, onClick: () => void this.saveAndQuit() },
     ]);
     this.patchNotes = new PatchNotesPanel(toggleNews);
@@ -1825,14 +1828,6 @@ export class TownScene extends Phaser.Scene {
     el.hidden = false;
   }
 
-  /** Bar label: name and current value right of centre, "/" exactly in the middle, max on the left of the right half,
-   * so the HP and Stamina numbers line up with each other. */
-  private barText(id: string, label: string, cur: number, max: number) {
-    const html = `<span class="l">${label} <b>${cur}</b></span><span class="sep">/</span><span class="r">${max}</span>`;
-    const el = document.getElementById(id)!;
-    if (el.innerHTML !== html) el.innerHTML = html;
-  }
-
   /**
    * Skill slot bar (keys 1..0). Click a slot to open a list of your skills (icon, name, where it is now) and pick
    * one; the mouse wheel over a slot scrolls through the choices directly; right-click empties it. Keys use the slot.
@@ -2472,8 +2467,6 @@ export class TownScene extends Phaser.Scene {
       this.talentMenu?.refresh(mine);
       if (!document.getElementById("hero")!.hidden) this.showHeroMenu(this.heroFrom);
       const safe = isSafeZone(meEnt.sprite.x, meEnt.sprite.y) ? `${icon("shield")}Safe zone · ` : "";
-      (document.getElementById("hpfill") as HTMLElement).style.width = `${(mine.hp / mine.maxHp) * 100}%`;
-      this.barText("hptext", "HP", Math.ceil(mine.hp), Math.round(mine.maxHp));
       const next = xpForLevel(mine.level + 1), cur = xpForLevel(mine.level);
       const cls0 = mine.cls as ClassKind;
       document.getElementById("stats")!.innerHTML =
@@ -2499,13 +2492,12 @@ export class TownScene extends Phaser.Scene {
         : "";
       const cls = mine.cls as ClassKind;
       const cdm = cooldownMult(cls, { sta: mine.sta, str: mine.str, mag: mine.mag, dex: mine.dex ?? 0 }, mine.talents);
-      // Yellow bar = Stamina (dodge roll and physical skills), blue bar = Mana (spells, shared/mana.ts)
-      const fill = document.getElementById("skillfill") as HTMLElement;
-      fill.style.width = `${(mine.energy / ENERGY.max) * 100}%`;
-      this.barText("skilltext", energyName(cls), Math.floor(mine.energy), ENERGY.max);
+      // Top-left bars (resourceBars.ts): red HP, blue Mana (spells, shared/mana.ts), gold Stamina (dodge roll and physical skills), green XP
       const mn = unpackMana(mine.mp);
-      (document.getElementById("manafill") as HTMLElement).style.width = `${mn.maxMana ? (mn.mana / mn.maxMana) * 100 : 0}%`;
-      this.barText("manatext", "Mana", mn.mana, mn.maxMana);
+      (this.resBars ??= new ResourceBars(document.getElementById("hud")!)).update({
+        level: mine.level, hp: mine.hp, maxHp: mine.maxHp, mp: mn.mana, maxMp: mn.maxMana, st: mine.energy, maxSt: ENERGY.max,
+        xpFrac: mine.level >= MAX_LEVEL ? 1 : (mine.xp - cur) / Math.max(1, next - cur),
+      });
       this.renderActions(mine, cls, cdm, now);
       (this.buffBar ??= new BuffBar(document.getElementById("hud")!)).update(mine.timers ?? "");
     }
