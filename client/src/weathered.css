@@ -64,3 +64,54 @@ body #tip b { display: block; color: #e3bf6a; font-weight: normal; font-size: 14
 body #tip p { margin: 0; }
 body #tip b + p { margin-top: 3px; }
 body #tip small { display: block; margin-top: 5px; padding-top: 4px; border-top: 1px dashed #45331e; color: #a8977a; font-size: 13px; }
+
+/* Game menu (Esc / ☰ Menu, gamemenu.ts) and the music & sound panel it opens: weathered bronze frames */
+body #gamemenu, body #musicpanel {
+  border: 18px solid transparent; border-image: var(--wf-bronze) 9 fill / 18px / 0 repeat; image-rendering: pixelated;
+  background: none; border-radius: 0; box-shadow: none; color: #eadfc8; text-shadow: 2px 2px #050302;
+  font-family: var(--pixel-font); -webkit-font-smoothing: none; -moz-osx-font-smoothing: grayscale; }
+body #gamemenu { position: absolute; left: 50%; top: 45%; transform: translate(-50%, -50%); z-index: 20; pointer-events: auto;
+  width: min(260px, calc(100% - 32px)); padding: 0 6px 2px; display: flex; flex-direction: column; gap: 6px; }
+body #gamemenu[hidden] { display: none; }
+body #gamemenu h2 { margin: 0 0 2px; font-size: 20px; color: #e3bf6a; letter-spacing: 1px; text-align: center;
+  border-bottom: 2px solid #45331e; padding-bottom: 4px; }
+body #gamemenu button, body #musicpanel button {
+  border: 6px solid transparent; border-image: var(--wf-btn) 4 fill / 6px / 0 repeat; image-rendering: pixelated;
+  background: none; color: #eadfc8; font: 14px var(--pixel-font); text-shadow: 1px 1px #050302; cursor: pointer; }
+body #gamemenu button { position: relative; padding: 2px 8px; text-align: left; }
+body #gamemenu button small { color: #a8977a; float: right; }
+body #gamemenu button.gmclose { margin-top: 4px; color: #c9b48a; }
+body #gamemenu button:hover, body #musicpanel button:hover { color: #ffd98a; filter: brightness(1.25); }
+body #musicpanel { right: 12px; bottom: 52px; width: 250px; padding: 0 6px 2px; max-height: calc(100% - 80px); overflow: auto; }
+body #musicpanel .mtitle { display: flex; justify-content: space-between; align-items: center; color: #e3bf6a; font-size: 16px; }
+body #musicpanel .mtitle button { padding: 0 4px; font-size: 12px; }
+body #musicpanel .mlabel { color: #a8977a; }
+body #musicpanel .mtrack { color: #eadfc8; font-size: 13px; padding: 0 6px; }
+body #musicpanel .mtrack.sel { color: #ffd98a; }
+body #musicpanel #musicswell { color: #eadfc8; }
+body #musicpanel input[type=range] { accent-color: #b8893a; }
+
+/* Ideas board and patch notes: the same weathered bronze frame as the other menus */
+body #ideas, body #patchnotes {
+  border: 18px solid transparent; border-image: var(--wf-bronze) 9 fill / 18px / 0 repeat; image-rendering: pixelated;
+  background: none; border-radius: 0; box-shadow: none; color: #eadfc8; text-shadow: 2px 2px #050302;
+  font-family: var(--pixel-font); -webkit-font-smoothing: none; -moz-osx-font-smoothing: grayscale; padding: 2px 8px; }
+body #ideas h2, body #patchnotes h2 { color: #e3bf6a; letter-spacing: 1px; text-align: center; border-bottom: 2px solid #45331e; padding-bottom: 4px; }
+body #ideas .help, body #ideawinner, body #ideacount, body .ideacard .head, body #patchnotes .pnhint, body #patchnotes .pndate { color: #a8977a; }
+body #ideacountdown { color: #e3bf6a; }
+body #ideatext { background: #0f0a06; color: #eadfc8; border: 2px solid #45331e; font-family: var(--pixel-font); }
+body #ideatext:focus { border-color: #b8893a; }
+body .ideacard { background: rgba(15, 10, 6, .7); border: 0; border-bottom: 1px dashed #3a2b1c; }
+body .ideacard.mine { box-shadow: inset 3px 0 #b8893a; }
+body .ideacard .votes button { color: #8a7a5e; text-shadow: 1px 1px #050302; }
+body .ideacard .votes button.on, body .ideacard .votes button:not(:disabled):hover { color: #ffd98a; }
+body #patchnotes .pn { border-top: 1px dashed #3a2b1c; }
+body #ideas button:not(.votes button), body #ideatabs button, body #ideasend, body #patchnotes button {
+  border: 6px solid transparent; border-image: var(--wf-btn) 4 fill / 6px / 0 repeat; image-rendering: pixelated;
+  background: none; color: #eadfc8; padding: 0 8px; font: 13px var(--pixel-font); text-shadow: 1px 1px #050302; cursor: pointer; }
+body .ideacard .votes button { border: 0; background: none; padding: 2px 6px; }
+body #ideatabs button { color: #a8977a; }
+body #ideatabs button.on { color: #ffd98a; filter: brightness(1.3); }
+body #ideasend { color: #c8f59a; }
+body #ideasend:disabled { color: #6d6250; cursor: default; filter: grayscale(1); }
+body #ideas button:hover, body #patchnotes button:hover { filter: brightness(1.25); color: #ffd98a; }

@@ -1,6 +1,6 @@
 import Phaser from "phaser";
 import { quake } from "./camfx";
-import { reconnectSoon } from "./reconnect";
+import { leaving, reconnectSoon, returnToStart } from "./reconnect";
 import { Client, Room } from "colyseus.js";
 import { BOSS, ELITE, InputState, MERGE, MAP_H, MAP_W, regenFromStamina, TICK_RATE, TILE } from "../../shared/constants";
 import { CLASSES, ClassKind, DODGE, ENERGY, energyName, MAX_LEVEL, xpForLevel } from "../../shared/classes";
@@ -16,6 +16,8 @@ import { SkillFx } from "./skillfx";
 import { displayGrid } from "./tileset";
 import { CRAWL_CROP, heroTexture, itemTexture, makeTileset, MOB_LOOK, mobTexture, preloadPaintedMobs } from "./textures";
 import { Minimap } from "./minimap";
+import { GameMenu } from "./gamemenu";
+import { showMusicPanel, musicPanelOpen } from "./music";
 import { DayDial } from "./daydial";
 import { SignPanel } from "./signpanel";
 import { NpcLayer } from "./npcs";
@@ -223,6 +225,8 @@ export class TownScene extends Phaser.Scene {
   private stash?: StashUI;
   private patchNotes?: PatchNotesPanel;
   private minimap?: Minimap;
+  private gameMenu?: GameMenu;
+  private quitting = false; // "Save and return to start screen" in progress
   private dial?: DayDial;
   private signPanel = new SignPanel();
   private ambient?: Ambient;
@@ -321,7 +325,6 @@ export class TownScene extends Phaser.Scene {
     this.input.keyboard!.on("keydown-SHIFT", dodge);
     this.input.keyboard!.on("keydown-F", dodge);
     this.input.keyboard!.on("keydown-C", () => { if (!this.chatting()) this.toggleHeroMenu(); });
-    this.input.keyboard!.on("keydown-ESC", () => this.closeMenus());
     this.input.keyboard!.on("keydown-E", () => {
       if (this.chatting()) return;
       if (!this.npcs?.isOpen && this.chests?.interact()) return; // a loot chest right here comes first
@@ -360,24 +363,38 @@ export class TownScene extends Phaser.Scene {
     menuButton("herobtn", () => this.toggleHeroMenu());
     menuButton("treebtn", () => this.toggleTree());
     this.guardHudButtons();
-    window.addEventListener("keydown", (ev) => { if (ev.key === "Escape") this.closeMenus(); });
+    // Esc closes whatever is open; with nothing open it opens the game menu (music & sound, ideas, news)
+    let escHadOpen = false;
+    window.addEventListener("keydown", (ev) => { if (ev.key === "Escape") escHadOpen = this.anyMenuOpen(); }, true);
+    window.addEventListener("keydown", (ev) => {
+      if (ev.key !== "Escape") return;
+      const a = document.activeElement;
+      const typing = a instanceof HTMLInputElement || a instanceof HTMLTextAreaElement;
+      this.closeMenus();
+      if (!escHadOpen && !typing) this.gameMenu?.show();
+    });
     this.talentMenu = new TalentMenu((type, msg) => this.room?.send(type, msg));
     this.input.keyboard!.on("keydown-T", () => { if (!this.chatting()) this.toggleTree(); });
     this.ideaBoard = new IdeaBoard((type, msg) => this.room?.send(type, msg));
     const toggleIdeas = () => { if (!this.ideaBoard!.open) this.closeMenus(); this.ideaBoard!.toggle(); };
     this.input.keyboard!.on("keydown-I", () => { if (!this.chatting()) toggleIdeas(); });
-    menuButton("ideabtn", toggleIdeas);
     // Player groups: invite nearby heroes / leave (P or the Group button)
     this.party = new PartyUI((type, msg) => this.room?.send(type, msg), () => (this.room?.state as any)?.players, () => this.me,
       (id) => { this.party?.close(); this.trade?.askTo(id); });
     const toggleParty = () => { if (!this.party!.open) this.closeMenus(); this.party!.toggle(); };
     this.input.keyboard!.on("keydown-P", () => { if (!this.chatting()) toggleParty(); });
     menuButton("partybtn", toggleParty);
-    // Patch notes: what changed in each update (N or the News button)
+    // Patch notes: what changed in each update (N, or News in the Esc game menu)
     const toggleNews = () => { if (!this.patchNotes!.open) this.closeMenus(); this.patchNotes!.toggle(); };
+    const toggleMusic = () => { const open = musicPanelOpen(); this.closeMenus(); if (!open) showMusicPanel(true); };
+    this.gameMenu = new GameMenu([ // before the patch notes: it holds their badge
+      { id: "music", label: "♪ Music &amp; sound", onClick: toggleMusic },
+      { id: "ideas", label: "💡 Ideas board", key: "I", onClick: toggleIdeas },
+      { id: "news", label: "📜 News", key: "N", onClick: toggleNews },
+      { id: "quit", label: "💾 Save and return to start screen", onClick: () => void this.saveAndQuit() },
+    ]);
     this.patchNotes = new PatchNotesPanel(toggleNews);
     this.input.keyboard!.on("keydown-N", () => { if (!this.chatting()) toggleNews(); });
-    menuButton("newsbtn", toggleNews);
     this.setupChat();
     this.setupPointer();
 
@@ -996,11 +1013,11 @@ export class TownScene extends Phaser.Scene {
     });
     // Server restart (every deploy): show a notice and log back in by itself
     const login = { name: this.opts.name, password: this.opts.password, cls: this.opts.cls, color: this.opts.color };
-    this.room.onLeave((code: number) => { this.feed("Disconnected from server"); reconnectSoon(login, code === 4000); });
+    this.room.onLeave((code: number) => { if (this.quitting) return; this.feed("Disconnected from server"); reconnectSoon(login, code === 4000); });
     // A connection that silently died (no updates for 15s) is treated the same way
     let lastPatch = Date.now();
     this.room.onStateChange(() => { lastPatch = Date.now(); });
-    window.setInterval(() => { if (Date.now() - lastPatch > 15_000) reconnectSoon(login); }, 3000);
+    window.setInterval(() => { if (!this.quitting && Date.now() - lastPatch > 15_000) reconnectSoon(login); }, 3000);
   }
 
   /**
@@ -1673,6 +1690,28 @@ export class TownScene extends Phaser.Scene {
     this.stash?.close();
     this.patchNotes?.close();
     this.portals?.close();
+    this.gameMenu?.close();
+    showMusicPanel(false);
+  }
+
+  /** Game menu: leave the world (the server saves the hero as they leave), then back to the fireside screens. */
+  private async saveAndQuit() {
+    if (this.quitting || leaving()) return;
+    this.quitting = true;
+    this.closeMenus();
+    this.feed("💾 Saving your hero…");
+    const login = { name: this.opts.name, password: this.opts.password };
+    try { await Promise.race([this.room?.leave(true), new Promise((r) => setTimeout(r, 3000))]); } catch { /* already gone */ }
+    returnToStart(login);
+  }
+
+  /** True when any menu or panel is on screen (Esc then closes it instead of opening the game menu). */
+  private anyMenuOpen() {
+    const shown = (id: string) => { const e = document.getElementById(id); return !!e && !e.hidden; };
+    return shown("hero") || shown("tree") || shown("slotpick") || musicPanelOpen() ||
+      !!(this.npcs?.isOpen || this.npcs?.log.open || this.gearMenu?.open || this.ideaBoard?.open || this.party?.open ||
+        this.trade?.open || this.stash?.open || this.patchNotes?.open || this.portals?.isOpen || this.minimap?.isOpen ||
+        this.gameMenu?.open || this.talentMenu?.open);
   }
 
   /** Opens the hero menu. After level-ups (`from` = level before them) it highlights the gains. */

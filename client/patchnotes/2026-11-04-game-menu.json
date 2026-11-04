@@ -1,0 +1,10 @@
+{
+  "date": "2026-11-04",
+  "title": "Game menu",
+  "changes": [
+    "Press Esc (or click ☰ Menu) to open the new game menu: Music & sound, Ideas board and News are now in one place.",
+    "New in the menu: Save and return to start screen, to go back to the fire and resume or start a new game.",
+    "The Ideas board, News and Music & sound panels now use the same weathered frames as the other menus.",
+    "I and N still open the Ideas board and News directly. Esc still closes any open window first."
+  ]
+}

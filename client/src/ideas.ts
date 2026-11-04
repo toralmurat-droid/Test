@@ -1,7 +1,7 @@
 import { BoardView, IDEA, IdeaView, STATUS_TEXT, waitText } from "../../shared/ideas";
 
 /**
- * The Ideas board (I key or the 💡 button): suggest one idea a day, vote on others, see the hourly winner.
+ * The Ideas board (I key, or Ideas board in the Esc game menu): suggest one idea a day, vote on others, see the hourly winner.
  * The server owns the log (shared/ideas.ts); this only shows it and sends "idea" / "ideavote" / "ideas".
  */
 type Tab = "top" | "new" | "mine" | "history";

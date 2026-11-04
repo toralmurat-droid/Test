@@ -1,7 +1,7 @@
 import Phaser from "phaser";
 import { initMusic, startMusic } from "./music";
 import { initSfx } from "./sfx";
-import { takeRejoin } from "./reconnect";
+import { takeBackToStart, takeRejoin } from "./reconnect";
 import { showLoading } from "./loading";
 import { installCursors } from "./cursors";
 import { installWeatheredFrames } from "./weathered";
@@ -216,3 +216,6 @@ if (rejoin) {
   color = rejoin.color;
   launch(rejoin.name, rejoin.password, false);
 }
+// Back from the game menu's "Save and return to start screen": log in again and show Resume / New game
+const back = rejoin ? null : takeBackToStart();
+if (back) { nameEl.value = back.name; pwEl.value = back.password; void start(); }

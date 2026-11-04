@@ -1,4 +1,4 @@
-// In-game patch notes (N or the News button).
+// In-game patch notes (N, or News in the Esc game menu).
 // One JSON file per update in client/patchnotes/ (see client/patchnotes/README.md).
 // One file per PR means parallel PRs never conflict on this list.
 

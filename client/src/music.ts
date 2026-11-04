@@ -292,20 +292,21 @@ export function initMusic(playerName: string) {
   else if (before.volume !== settings.volume || before.muted !== settings.muted) apply(1);
 }
 
-function buildUi() {
-  const bar = document.getElementById("menubtns");
-  const hud = document.getElementById("hud");
-  if (!bar || !hud || document.getElementById("musicbtn")) return;
+/** Shows or hides the music & sound panel (opened from the game menu). */
+export function showMusicPanel(show?: boolean) {
+  const panel = document.getElementById("musicpanel");
+  if (panel) panel.hidden = show === undefined ? !panel.hidden : !show;
+}
+export function musicPanelOpen() { return !document.getElementById("musicpanel")?.hidden; }
 
-  const btn = document.createElement("button");
-  btn.id = "musicbtn";
-  btn.title = "Music menu: track, volume, mute";
-  bar.prepend(btn);
+function buildUi() {
+  const hud = document.getElementById("hud");
+  if (!hud || document.getElementById("musicpanel")) return;
 
   const panel = document.createElement("div");
   panel.id = "musicpanel";
   panel.hidden = true;
-  panel.innerHTML = `<div class="mtitle">Music</div>
+  panel.innerHTML = `<div class="mtitle">Music &amp; sound <button id="musicclose" title="Close (Esc)">✕</button></div>
     <div class="mlabel">Track</div>
     <div id="musictracks"></div>
     <div class="mlabel">Volume</div>
@@ -340,14 +341,13 @@ function buildUi() {
     mute.textContent = settings.muted ? "Unmute" : "Mute";
     swell.textContent = `Battle swell: ${settings.swell ? "On" : "Off (fixed volume)"}`;
     swell.hidden = settings.pick !== "auto";
-    btn.textContent = settings.muted || settings.volume === 0 ? "♪ Off" : "♪ Music";
     choices.forEach((t, i) => trackBtns[i].classList.toggle("sel", t.id === settings.pick));
   }
   render();
 
   // Keep game keys (WASD, numbers...) from firing while the menu has focus
   panel.addEventListener("keydown", (e) => e.stopPropagation());
-  btn.onclick = (e) => { e.stopPropagation(); panel.hidden = !panel.hidden; btn.blur(); };
+  (panel.querySelector("#musicclose") as HTMLButtonElement).onclick = () => { panel.hidden = true; };
   vol.oninput = () => {
     settings.volume = Number(vol.value) / 100;
     if (settings.volume > 0) settings.muted = false;
@@ -357,7 +357,7 @@ function buildUi() {
   mute.onclick = () => { settings.muted = !settings.muted; save(); render(); apply(settings.muted ? FADE_OUT : 1.2); mute.blur(); };
   swell.onclick = () => { settings.swell = !settings.swell; save(); render(); swell.blur(); };
   document.addEventListener("pointerdown", (e) => {
-    if (!panel.hidden && !panel.contains(e.target as Node) && e.target !== btn) panel.hidden = true;
+    if (!panel.hidden && !panel.contains(e.target as Node) && !(e.target as HTMLElement).closest?.("#gamemenu")) panel.hidden = true;
   });
 }
 

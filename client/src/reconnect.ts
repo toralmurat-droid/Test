@@ -48,3 +48,26 @@ export function reconnectSoon(login: Rejoin, upgrading = false) {
   // Give the old server a moment to hand over to the new one
   setTimeout(tryAgain, upgrading ? 1500 : 500);
 }
+
+const BACK_KEY = "backtostart";
+
+/** "Save and return to start screen": stops the auto-reconnect, remembers the login, reloads to the fireside. */
+export function returnToStart(login: { name: string; password: string }) {
+  started = true; // the room closing now is on purpose: no "Connection lost" notice
+  try { sessionStorage.setItem(BACK_KEY, JSON.stringify({ ...login, at: Date.now() })); } catch { /* ignore */ }
+  location.reload();
+}
+
+/** Login left by returnToStart (read once): the start screen logs in and shows Resume / New game. */
+export function takeBackToStart(): { name: string; password: string } | null {
+  try {
+    const raw = sessionStorage.getItem(BACK_KEY);
+    sessionStorage.removeItem(BACK_KEY);
+    if (!raw) return null;
+    const r = JSON.parse(raw);
+    return Date.now() - (r.at ?? 0) < 60_000 ? r : null;
+  } catch { return null; }
+}
+
+/** True once the game is leaving on purpose or reconnecting (later drops are ignored). */
+export function leaving() { return started; }

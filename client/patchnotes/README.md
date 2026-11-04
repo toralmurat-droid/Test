@@ -1,6 +1,6 @@
 # Patch notes
 
-Shown in game with **N** or the **📜 News** button (client/src/patchnotes.ts).
+Shown in game with **N** or **📜 News** in the game menu (Esc) (client/src/patchnotes.ts).
 Players get a "New update" notice and a badge for entries they have not seen yet.
 
 **Every PR that changes the game adds one new file here.** One file per PR, so
