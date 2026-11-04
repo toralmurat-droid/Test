@@ -1,28 +1,33 @@
 /**
  * Background music.
  *
- * - Drop an MP3 at client/public/assets/music/theme.mp3 and it is used (looped).
- *   Without it, a small built-in chiptune loop (made in code, no file) plays instead.
+ * - Tracks are listed in TRACKS below. MP3 tracks live in client/public/assets/music/;
+ *   the "Village tune" is a small chiptune made in code (no file).
  * - Starts after the first click / key press (browsers block sound before that), fades in,
- *   fades out when muted or when the tab is hidden, and fades back in.
- * - Volume and mute are remembered per player name (localStorage "music:<name>").
- * - UI: the "Music" button in the bottom-right menu opens a small panel (slider + mute).
+ *   fades out when muted or when the tab is hidden, and crossfades when the track changes.
+ * - Track, volume and mute are remembered per player name (localStorage "music:<name>").
+ * - UI: the "Music" button in the bottom-right menu opens the music menu (track, volume, mute).
  */
 
-const TRACK_URLS = ["/assets/music/theme.mp3", "/assets/music/theme.ogg"];
+type Track = { id: string; name: string; url?: string };
+const TRACKS: Track[] = [
+  { id: "blob-slayer", name: "Blob Slayer", url: "/assets/music/blob-slayer.mp3" },
+  { id: "village", name: "Village tune" },
+];
 const FADE_IN = 2.5;
 const FADE_OUT = 0.8;
 
-type Settings = { volume: number; muted: boolean };
+type Settings = { volume: number; muted: boolean; track: string };
 
 let ctx: AudioContext | null = null;
 let master: GainNode | null = null;
-let settings: Settings = { volume: 0.5, muted: false };
+let settings: Settings = { volume: 0.5, muted: false, track: TRACKS[0].id };
 let storeKey = "music";
 let started = false;
 let audioEl: HTMLAudioElement | null = null;
 let chip: Chiptune | null = null;
-let trackChecked: Promise<string | null> | null = null;
+let playing: string | null = null;
+let switchTimer: number | null = null;
 
 function load(name: string) {
   storeKey = `music:${name.toLowerCase()}`;
@@ -32,6 +37,7 @@ function load(name: string) {
       const s = JSON.parse(raw);
       if (typeof s.volume === "number") settings.volume = Math.min(1, Math.max(0, s.volume));
       if (typeof s.muted === "boolean") settings.muted = s.muted;
+      if (TRACKS.some((t) => t.id === s.track)) settings.track = s.track;
     }
   } catch { /* private mode */ }
 }
@@ -54,20 +60,34 @@ function fadeTo(value: number, seconds: number) {
   g.linearRampToValueAtTime(value, t + seconds);
 }
 
-/** Is a real audio file sitting in assets/music? (a missing file comes back as 404 or as the HTML page) */
-function findTrack(): Promise<string | null> {
-  if (!trackChecked) {
-    trackChecked = (async () => {
-      for (const url of TRACK_URLS) {
-        try {
-          const r = await fetch(url, { method: "HEAD" });
-          if (r.ok && (r.headers.get("content-type") ?? "").startsWith("audio")) return url;
-        } catch { /* offline */ }
-      }
-      return null;
-    })();
+/** Stop whatever plays and start the chosen track (the caller handles the fades). */
+function playTrack() {
+  if (!ctx || !master) return;
+  audioEl?.pause();
+  chip?.stop();
+  const track = TRACKS.find((t) => t.id === settings.track) ?? TRACKS[0];
+  playing = track.id;
+  if (track.url) {
+    if (!audioEl) {
+      audioEl = new Audio();
+      audioEl.loop = true;
+      audioEl.preload = "auto";
+      ctx.createMediaElementSource(audioEl).connect(master);
+    }
+    if (!audioEl.src.endsWith(track.url)) audioEl.src = track.url;
+    audioEl.currentTime = 0;
+    audioEl.play().catch(() => {});
+  } else {
+    chip ??= new Chiptune(ctx, master);
+    chip.start();
   }
-  return trackChecked;
+}
+
+/** Resume the current track (after mute / hidden tab) without restarting it. */
+function resume() {
+  const track = TRACKS.find((t) => t.id === playing);
+  if (track?.url) audioEl?.play().catch(() => {});
+  else chip?.start();
 }
 
 async function begin() {
@@ -80,18 +100,7 @@ async function begin() {
   master.gain.value = 0;
   master.connect(ctx.destination);
   if (ctx.state === "suspended") await ctx.resume().catch(() => {});
-
-  const url = await findTrack();
-  if (url) {
-    audioEl = new Audio(url);
-    audioEl.loop = true;
-    audioEl.preload = "auto";
-    ctx.createMediaElementSource(audioEl).connect(master);
-    await audioEl.play().catch(() => {});
-  } else {
-    chip = new Chiptune(ctx, master);
-    chip.start();
-  }
+  if (targetGain() > 0) playTrack();
   fadeTo(targetGain(), FADE_IN);
 }
 
@@ -100,8 +109,7 @@ function apply(fadeSeconds: number) {
   const target = targetGain();
   if (target > 0) {
     ctx?.resume().catch(() => {});
-    audioEl?.play().catch(() => {});
-    chip?.start();
+    if (playing === null) playTrack(); else resume();
   }
   fadeTo(target, fadeSeconds);
   // Fully silent: stop the work (and the mp3) once the fade is done
@@ -114,10 +122,21 @@ function apply(fadeSeconds: number) {
   }
 }
 
+/** Fade the old track out, start the new one and fade it in. */
+function switchTrack() {
+  if (!started || targetGain() === 0) { playing = null; return; }
+  if (switchTimer !== null) clearTimeout(switchTimer);
+  fadeTo(0, FADE_OUT);
+  switchTimer = window.setTimeout(() => {
+    switchTimer = null;
+    playTrack();
+    fadeTo(targetGain(), 1.5);
+  }, FADE_OUT * 1000);
+}
+
 /** Call once the player has logged in. Music starts on the first click or key press. */
 export function initMusic(playerName: string) {
   load(playerName);
-  void findTrack();
   const unlock = () => {
     window.removeEventListener("pointerdown", unlock, true);
     window.removeEventListener("keydown", unlock, true);
@@ -136,29 +155,46 @@ function buildUi() {
 
   const btn = document.createElement("button");
   btn.id = "musicbtn";
-  btn.title = "Music: volume and mute";
+  btn.title = "Music menu: track, volume, mute";
   bar.prepend(btn);
 
   const panel = document.createElement("div");
   panel.id = "musicpanel";
   panel.hidden = true;
   panel.innerHTML = `<div class="mtitle">Music</div>
+    <div class="mlabel">Track</div>
+    <div id="musictracks"></div>
+    <div class="mlabel">Volume</div>
     <input id="musicvol" type="range" min="0" max="100" step="1" aria-label="Music volume">
     <div class="mrow"><span id="musicpct"></span><button id="musicmute"></button></div>`;
   hud.appendChild(panel);
 
+  const list = panel.querySelector("#musictracks") as HTMLElement;
+  const trackBtns = TRACKS.map((t) => {
+    const b = document.createElement("button");
+    b.className = "mtrack";
+    b.textContent = t.name;
+    b.onclick = () => {
+      if (settings.track === t.id) return;
+      settings.track = t.id;
+      save(); render(); switchTrack(); b.blur();
+    };
+    list.appendChild(b);
+    return b;
+  });
   const vol = panel.querySelector("#musicvol") as HTMLInputElement;
   const pct = panel.querySelector("#musicpct") as HTMLElement;
   const mute = panel.querySelector("#musicmute") as HTMLButtonElement;
-  const render = () => {
+  function render() {
     vol.value = String(Math.round(settings.volume * 100));
     pct.textContent = `${Math.round(settings.volume * 100)}%`;
     mute.textContent = settings.muted ? "Unmute" : "Mute";
     btn.textContent = settings.muted || settings.volume === 0 ? "♪ Off" : "♪ Music";
-  };
+    TRACKS.forEach((t, i) => trackBtns[i].classList.toggle("sel", t.id === settings.track));
+  }
   render();
 
-  // Keep game keys (WASD, numbers...) from firing while the slider has focus
+  // Keep game keys (WASD, numbers...) from firing while the menu has focus
   panel.addEventListener("keydown", (e) => e.stopPropagation());
   btn.onclick = (e) => { e.stopPropagation(); panel.hidden = !panel.hidden; btn.blur(); };
   vol.oninput = () => {
