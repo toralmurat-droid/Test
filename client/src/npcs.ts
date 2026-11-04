@@ -6,6 +6,8 @@ import { pixelText } from "./pixeltext";
 import Phaser from "phaser";
 import { CAMP_PIVOT, TX as CAMP_TX, witchCampTextures } from "./witchCamp";
 import { worldPropTextures } from "./worldProps";
+import { ANVIL_TOP, FORGE_FLUE, SMITHY_ORIGIN, TX as SMITHY_TX, smithyTextures } from "./smithy";
+import { smokeTexture } from "./bonfireArt";
 import { NPCS, NPC_DECOR, Npc, npcNear, TALK_RANGE } from "../../shared/npcs";
 import {
   CHAINS, chainOpen, chainState, TUT_CHAIN, npcPresent, npcQuestMark, questDef, questDialog, questObjective, questStep, Quester, questTargets, stepGoal, stepProgress,
@@ -83,10 +85,17 @@ export class NpcLayer {
   private addSurroundings(scene: Phaser.Scene) {
     worldPropTextures(scene);
     witchCampTextures(scene);
+    smithyTextures(scene);
     for (const d of NPC_DECOR) {
       const x = d.x * TILE, y = d.y * TILE;
       if (d.prop.startsWith("wc_")) { // pixel-art camp props, 1.5 texels per world px
         scene.add.sprite(x, y, d.prop, 0).setOrigin(0.5, CAMP_PIVOT[d.prop]).setScale(1 / CAMP_TX).setDepth(y).setFlipX(!!d.flip).play(`${d.prop}_idle`);
+        continue;
+      }
+      if (d.prop.startsWith("sm_")) { // Brann's smithy, same pixel grid
+        const [ox, oy] = SMITHY_ORIGIN[d.prop];
+        scene.add.sprite(x, y, d.prop, 0).setOrigin(ox, oy).setScale(1 / SMITHY_TX).setDepth(y).setFlipX(!!d.flip).play({ key: `${d.prop}_idle`, startFrame: Math.floor(d.x * 7) % 12 });
+        if (d.prop === "sm_forge") this.chimneySmoke(scene, x, y);
         continue;
       }
       if (d.prop === "weapon_rack") { // pixel-art rack shared with the camps (worldProps.ts)
@@ -96,10 +105,10 @@ export class NpcLayer {
       const img = scene.add.sprite(x, y, "props", d.animated ? `${d.prop}_0` : d.prop).setOrigin(0.5, 1).setScale(d.scale).setDepth(y).setFlipX(!!d.flip);
       if (d.animated && scene.anims.exists(`props_${d.prop}`)) img.play(`props_${d.prop}`);
     }
-    const brann = NPCS.find((n) => n.id === "weaponsmith"), anvil = NPC_DECOR.find((d) => d.prop === "anvil");
+    const brann = NPCS.find((n) => n.id === "weaponsmith"), anvil = NPC_DECOR.find((d) => d.prop === "sm_anvil");
     const smith = brann && this.sprites.get(brann.id)?.sprite;
     if (brann && anvil && smith) {
-      const ax = anvil.x * TILE, ay = anvil.y * TILE - 7;
+      const ax = anvil.x * TILE - 2, ay = anvil.y * TILE - ANVIL_TOP;
       // A slower take on his attack swing, so the hammer blow reads clearly
       const dir = brann.dir === "left" ? "right" : brann.dir;
       const key = `${brann.sprite}_hammer_${dir}`;
@@ -116,6 +125,22 @@ export class NpcLayer {
       };
       scene.time.addEvent({ delay: 1600, loop: true, callback: strike });
     }
+  }
+
+  /** Pixel smoke rising slowly out of the forge chimney, drifting with the wind like the village chimneys. */
+  private chimneySmoke(scene: Phaser.Scene, x: number, y: number) {
+    smokeTexture(scene);
+    const smoke = scene.add.particles(x + FORGE_FLUE[0], y - FORGE_FLUE[1], "smoke_px", {
+      frame: [0, 1, 2, 3],
+      lifespan: { min: 4200, max: 6000 },
+      speedY: { min: -11, max: -7 },
+      speedX: { min: 1, max: 4 },
+      accelerationX: 1.5,
+      scale: { start: 0.35, end: 1.2 },
+      alpha: { start: 0.55, end: 0 },
+      frequency: 380,
+    }).setDepth(25000);
+    isoAnchor(smoke, { x, y });
   }
 
   private sparks(x: number, y: number) {

@@ -17,8 +17,8 @@ import {
   afterHit, atkSpeedMult, blocking, buffLifesteal, buffRegen, castSkill, ccImmune, charging, cooldownLeft, counterHit, dealtMult, FieldInst, HitOpts,
   newRuntime, shotEnd, shotHit, shotPulse, ShotSpec, SkillHost, speedMult, takenMult, tickField, tickUnit,
 } from "../../shared/skillEngine";
-import { Equipped, GEAR, gearBlock, gearReachMult, gearSpeedMult, gearStats } from "../../shared/gear";
-import { heroPoise, POISE, poiseLevelMult, poiseSpeed } from "../../shared/combat";
+import { Equipped, GEAR, gearBlock, gearDef, gearReachMult, gearSpeedMult, gearStats, meetsReq, withLevel } from "../../shared/gear";
+import { heroPoise, POISE, poiseLevelMult, poiseSpeed, pvpDamageMult } from "../../shared/combat";
 import { COMBAT_REGEN_PER_STA, HIT_RADIUS, PLAYER_SPEED, REGEN_DELAY_MS, REGEN_PER_STA, REGEN_RAMP_MS } from "../../shared/constants";
 
 const TICK = 50; // ms, server runs at 20 Hz
@@ -32,12 +32,15 @@ type Build = 0 | 1 | 2; // the branch the build rushes up first
 interface Shot { owner: F; x: number; dir: number; speed: number; range: number; traveled: number; pulsed?: number; radius: number; dmg: number; kb: number; miss: boolean; hit: boolean; basic: boolean; spec?: ShotSpec; pierced: boolean }
 interface Pending { at: number; fn: () => void }
 
-class F {
+export class F {
   x = 0; y = 0; face = 1; hp = 0; maxHp = 0; s: Stats; energy = ENERGY.max; mana = 0; maxMana = 0; dead = false;
   poiseLost = 0; lastPoiseHit = 0; brokenUntil = 0; steadyUntil = 0; broken = false;
   invulnUntil = 0; rollUntil = 0; rollDir = 0; lastDodge = -1e9; lastRanged = -1e9; lastHurt = 0;
   attackReadyAt = 0; lastAttack = 0; combo = 0; stunUntil = 0; slowUntil = 0; dealt = 0; lastMove = 0;
   sk = newRuntime();
+  /** Monster fighters (tools/balance/pve.ts): body size (melee hits reach its edge) and its stats. */
+  body = 0;
+  mob?: { reach: number; ranged: boolean };
   get talents() { return this.t; }
   constructor(public id: string, public cls: ClassKind, public level: number, public t: Ranks, public eq: Equipped, pts: Stats) {
     const st = statsFor(cls, pts);
@@ -49,12 +52,12 @@ class F {
     this.mana = this.maxMana = maxManaFor(st, level);
   }
   get poiseMax() { return heroPoise(this.cls, this.level); }
-  get ranged() { return !!CLASSES[this.cls].projectile; }
+  get ranged() { return this.mob ? this.mob.ranged : !!CLASSES[this.cls].projectile; }
 }
 
 // ---- Typical builds -----------------------------------------------------------------------------------
 /** Spend the level's points: rush up branch `main`, then a second branch, ranks last. */
-function talentsFor(cls: ClassKind, level: number, main: Build): Ranks {
+export function talentsFor(cls: ClassKind, level: number, main: Build): Ranks {
   const r: Ranks = {};
   const order = [main, (main + 1) % 3, (main + 2) % 3];
   const byRow = (b: number) => SKILLS[cls].filter((x) => x.branch === b).sort((a, c) => a.req - c.req);
@@ -64,7 +67,7 @@ function talentsFor(cls: ClassKind, level: number, main: Build): Ranks {
 }
 
 /** Stat points: ~50% into the attack stat, 20% Dexterity, the rest into Stamina. */
-function pointsFor(cls: ClassKind, level: number): Stats {
+export function pointsFor(cls: ClassKind, level: number): Stats {
   const n = statPoints(level);
   const atk = Math.round(n * 0.5), dex = Math.round(n * 0.2);
   const out: Stats = { sta: n - atk - dex, str: 0, mag: 0, dex };
@@ -72,35 +75,49 @@ function pointsFor(cls: ClassKind, level: number): Stats {
   return out;
 }
 
-/** Gear by level: nothing at 1, common (tier 1) at 5, rare (tier 2) at 10. Melee heroes carry a shield. */
-function gearFor(cls: ClassKind, level: number): Equipped {
+/**
+ * Gear by level, the way drops come in (shared/gear.ts gearDropOdds): nothing below 5, Basic (tier 1) pieces from 5,
+ * Fine (tier 2) weapon and armour from 10 and the rest from 15, Superior (tier 3) weapon and armour from 20 and the
+ * rest from 25. Items are a couple of levels under the hero. A piece whose requirements the hero can't meet falls back
+ * to a lower tier or item level.
+ */
+const GEAR_SETS: Record<1 | 2 | 3, Equipped> = {
+  1: { weapon: "w_bronze", armour: "a_leather", shoes: "s_leather", hat: "h_cap", ranged: "r_sling", shield: "sh_wood" },
+  2: { weapon: "w_frost", armour: "a_chain", shoes: "s_swift", hat: "h_helm", ranged: "r_knives", shield: "sh_iron" },
+  3: { weapon: "w_dragon", armour: "a_royal", shoes: "s_winged", hat: "h_crown", ranged: "r_crossbow", shield: "sh_dragon" },
+};
+const MAIN_SLOTS = new Set(["weapon", "armour"]);
+export function gearFor(cls: ClassKind, level: number, pts?: Stats): Equipped {
   if (level < 5) return {};
-  const t2 = level >= 10;
-  return {
-    weapon: t2 ? "w_frost" : "w_bronze",
-    armour: t2 ? "a_chain" : "a_leather",
-    shoes: t2 ? "s_swift" : "s_leather",
-    hat: t2 ? "h_helm" : "h_cap",
-    ranged: t2 ? "r_knives" : "r_sling",
-    shield: t2 ? "sh_iron" : "sh_wood",
-  };
+  const who = { cls, level, pts: pts ?? pointsFor(cls, level) };
+  const out: Equipped = {};
+  for (const slot of Object.keys(GEAR_SETS[1]) as (keyof Equipped)[]) {
+    const lead = MAIN_SLOTS.has(slot) ? 0 : 5;
+    const top = level >= 20 + lead ? 3 : level >= 10 + lead ? 2 : 1;
+    search: for (let t = top; t >= 1; t--) for (let l = level - 2; l >= 1; l -= 2) {
+      const id = withLevel(GEAR_SETS[t as 1 | 2 | 3][slot]!, l);
+      if (meetsReq(id, who)) { out[slot] = id; break search; }
+    }
+  }
+  return out;
 }
 
 // ---- Duel -----------------------------------------------------------------------------------------------
 export class Duel {
   now = 0; shots: Shot[] = []; pending: Pending[] = []; fields: FieldInst[] = [];
   host: SkillHost;
-  constructor(public a: F, public b: F, public rnd = Math.random) {
+  constructor(public a: F, public b: F, public rnd = Math.random, t0 = 0) {
+    this.now = t0;
     const d = 100 + rnd() * 60;
     a.x = (ARENA - d) / 2; b.x = a.x + d; a.face = 1; b.face = -1;
-    const f = (id: string) => (id === a.id ? a : id === b.id ? b : undefined);
+    const f = (id: string) => this.byId(id);
     const clamp = (x: number) => Math.max(0, Math.min(ARENA, x));
     this.host = {
       now: () => this.now,
       later: (ms, fn) => this.pending.push({ at: this.now + ms, fn }),
       unit: (id) => f(id),
       canAct: (id) => { const u = f(id); return !!u && !u.dead && this.now >= u.stunUntil && !u.broken; },
-      enemies: (x, _y, r, of) => { const t = f(of) === a ? b : a; return !t.dead && this.now >= t.invulnUntil && Math.abs(t.x - x) <= r ? [t.id] : []; },
+      enemies: (x, _y, r, of) => { const o = f(of); return o ? this.foes(o).filter((t) => !t.dead && this.now >= t.invulnUntil && Math.abs(t.x - x) <= r + t.body).map((t) => t.id) : []; },
       hit: (att, tid, dmg, push, o) => {
         const A = f(att), T = f(tid);
         if (A && o?.skill && !o.dot && !o.crit && this.rnd() < critChance(A.s, talentBonus(A.cls, A.t, "crit"))) { dmg *= 2; o = { ...o, crit: true }; }
@@ -117,7 +134,7 @@ export class Duel {
       place: (id, x) => { const u = f(id); if (!u) return false; u.x = clamp(x); return true; },
       invuln: (id, until) => { const u = f(id); if (u) u.invulnUntil = Math.max(u.invulnUntil, until); },
       shoot: (sp) => {
-        const o = f(sp.owner)!, t = o === a ? b : a;
+        const o = f(sp.owner)!, t = this.other(o);
         const dir = Math.sign(sp.vx) || o.face;
         // Fanned shots: in 2D they spread sideways, so only the ones whose line passes the target can hit
         const dist = Math.abs(t.x - sp.x);
@@ -135,6 +152,12 @@ export class Duel {
     };
   }
   other(f: F) { return f === this.a ? this.b : this.a; }
+  /** Everyone in the fight, and the ones `f` fights (PvE packs override these). */
+  units(): F[] { return [this.a, this.b]; }
+  foes(f: F): F[] { return [this.other(f)]; }
+  byId(id: string): F | undefined { return this.units().find((u) => u.id === id); }
+  /** undefined = still fighting, null = draw. */
+  outcome(): F | null | undefined { return this.a.dead || this.b.dead ? (this.a.dead && this.b.dead ? null : this.a.dead ? this.b : this.a) : undefined; }
 
   damage(t: F, dmg: number, by: F | undefined, push: number, kbMul: number, o: HitOpts): boolean {
     const now = this.now;
@@ -173,11 +196,12 @@ export class Duel {
 
   hit(a: F | undefined, t: F, dmg: number, push: number, o: HitOpts = {}) {
     if (a) dmg = dmg * talentMult(a.cls, a.t, "dmg") * (o.skill && !o.dot ? talentMult(a.cls, a.t, "skill") : 1) * dealtMult(a, this.now);
+    if (a && !a.mob && !t.mob) dmg *= pvpDamageMult(a.level, t.level); // hero vs hero, like server hitTarget
     this.damage(t, Math.max(1, Math.round(dmg)), a, push, o.kb ?? 1, o);
   }
 
   /** Targets within r of point x (the other fighter only). */
-  around(a: F, x: number, r: number) { const t = this.other(a); return !t.dead && Math.abs(t.x - x) <= r ? [t] : []; }
+  around(a: F, x: number, r: number) { return this.foes(a).filter((t) => !t.dead && Math.abs(t.x - x) <= r + t.body); }
 
   attack(a: F) {
     const now = this.now;
@@ -212,7 +236,7 @@ export class Duel {
   }
 
   fireRanged(a: F) {
-    const shot = a.eq.ranged ? GEAR[a.eq.ranged]?.shot : undefined;
+    const shot = a.eq.ranged ? gearDef(a.eq.ranged)?.shot : undefined;
     const now = this.now;
     if (!shot || a.dead || now < a.stunUntil || a.broken || now < a.rollUntil || now - a.lastRanged < shot.cooldownMs || charging(a, now)) return false;
     a.lastRanged = now;
@@ -244,7 +268,7 @@ export class Duel {
   /** Bot: cast the best ready skill (highest level first). */
   castSkills(a: F, d: number, toward: number, incoming: boolean, tReach: number) {
     if (charging(a, this.now)) return;
-    const ready = activeSkills(a.cls).filter((s) => (a.t[s.id] ?? 0) > 0 && cooldownLeft(s, a.sk, this.now, cooldownMult(a.cls, a.s, a.t)) <= 0 && canPay(a, skillCost(s)))
+    const ready = activeSkills(a.cls).filter((s) => (s.cantrip || (a.t[s.id] ?? 0) > 0) && cooldownLeft(s, a.sk, this.now, cooldownMult(a.cls, a.s, a.t)) <= 0 && canPay(a, skillCost(s)))
       .sort((x, y) => y.req - x.req);
     for (const s of ready) {
       if (s.consume && a.sk.stacks < 3 && !s.buff) continue; // wait for some stacks
@@ -263,6 +287,10 @@ export class Duel {
     return true;
   }
 
+  /** Hooks for the PvE simulator (tools/balance/pve.ts): monster brains and speeds. */
+  brain(f: F): number { return this.think(f); }
+  speedOf(f: F): number { return heroSpeed(f.cls, this.now < f.slowUntil, speedMult(f, this.now) * talentMult(f.cls, f.t, "speed")) * gearSpeedMult(f.eq); }
+
   // ---- Bot -----------------------------------------------------------------------------------------------
   /** Returns the move direction (-1, 0, 1) for this tick and fires actions. */
   think(a: F): number {
@@ -272,7 +300,7 @@ export class Duel {
     const def = CLASSES[a.cls];
     const rm = gearReachMult(a.eq);
     const meleeReach = (12 + def.attackRange) * rm;
-    const tReach = t.ranged ? 999 : (12 + CLASSES[t.cls].attackRange) * gearReachMult(t.eq) + 6;
+    const tReach = t.ranged ? 999 : t.mob ? t.mob.reach + 6 : (12 + CLASSES[t.cls].attackRange) * gearReachMult(t.eq) + 6;
     const canSpend = (c: number) => a.energy - c >= 20; // keep some for skills
     const incoming = this.shots.find((s) => s.owner === t && !s.hit && Math.sign(a.x - s.x) === s.dir && Math.abs(a.x - s.x) < 40 && !s.miss);
     if (now < a.stunUntil) return 0;
@@ -282,7 +310,8 @@ export class Duel {
     this.castSkills(a, d, toward, !!incoming, tReach);
     // Dodge incoming shots sometimes (human reaction), ranged heroes roll away from melee
     if (incoming && this.rnd() < 0.3 && canSpend(ENERGY.cost.dodge + 10)) this.dodge(a, a.ranged ? -toward : toward);
-    if (!a.ranged && t.ranged && d > 70 && canSpend(ENERGY.cost.dodge + ENERGY.cost.special) && this.rnd() < 0.1) this.dodge(a, toward);
+    // Melee heroes roll in on shooters (what players do: the roll is the gap closer everyone has)
+    if (!a.ranged && t.ranged && d > 50 && d < 160 && canSpend(ENERGY.cost.dodge + 10) && this.rnd() < 0.35) this.dodge(a, toward);
     if (now < a.rollUntil) return 0;
 
     if (a.ranged) {
@@ -297,8 +326,9 @@ export class Duel {
       if (d > range * 0.9) return toward;
       return 0;
     }
-    // Melee: chase and swing
+    // Melee: chase and swing, but don't swing into a raised counter stance (players see it and wait it out)
     a.face = toward;
+    if (t.sk.counter && now < t.sk.counter.until && d <= meleeReach + 10 && this.rnd() < 0.75) return d < meleeReach ? -toward : 0;
     if (d <= meleeReach) { this.attack(a); return d < meleeReach * 0.5 ? 0 : toward; }
     if (d > meleeReach + 20 && d < 150) this.fireRanged(a);
     return toward;
@@ -306,24 +336,24 @@ export class Duel {
 
   step(): F | null | undefined {
     const now = this.now;
-    for (const f of [this.a, this.b]) {
+    for (const f of this.units()) {
       tickUnit(this.host, f.id);
       if (f.broken && now >= f.brokenUntil) { f.broken = false; f.poiseLost = 0; f.steadyUntil = now + POISE.steadyMs; }
       else if (!f.broken && f.poiseLost > 0 && now - f.lastPoiseHit >= POISE.regenDelayMs) f.poiseLost = Math.max(0, f.poiseLost - f.poiseMax * POISE.regenPerSec * TICK / 1000);
       f.energy = Math.min(ENERGY.max, f.energy + staminaRegen(f.cls) * TICK / 1000);
       f.mana = Math.min(f.maxMana, f.mana + manaRegen(f.s, false, talentBonus(f.cls, f.t, "mana")) * TICK / 1000);
     }
-    const order = this.rnd() < 0.5 ? [this.a, this.b] : [this.b, this.a];
+    const order = this.rnd() < 0.5 ? this.units() : this.units().reverse();
     const moves = new Map<F, number>();
-    for (const f of order) if (!f.dead) { const m = this.think(f); f.lastMove = m; moves.set(f, m); }
-    for (const f of [this.a, this.b]) f.x = Math.max(0, Math.min(ARENA, f.x));
-    for (const f of [this.a, this.b]) {
+    for (const f of order) if (!f.dead) { const m = this.brain(f); f.lastMove = m; moves.set(f, m); }
+    for (const f of this.units()) f.x = Math.max(0, Math.min(ARENA, f.x));
+    for (const f of this.units()) {
       if (f.dead) continue;
       const dt = TICK / 1000;
       if (now < f.stunUntil || charging(f, now)) continue;
       if (now < f.rollUntil) { f.x += f.rollDir * DODGE.distance / (DODGE.durationMs / 1000) * dt; continue; }
       const m = moves.get(f) ?? 0;
-      const sp = heroSpeed(f.cls, now < f.slowUntil, speedMult(f, now) * talentMult(f.cls, f.t, "speed")) * gearSpeedMult(f.eq);
+      const sp = this.speedOf(f);
       f.x += m * sp * dt;
       if (m) f.face = m;
       // regen
@@ -334,7 +364,7 @@ export class Duel {
       }
     }
     // projectiles
-    for (const f of [this.a, this.b]) f.x = Math.max(0, Math.min(ARENA, f.x));
+    for (const f of this.units()) f.x = Math.max(0, Math.min(ARENA, f.x));
     for (const s of this.shots) {
       if (s.hit) continue;
       const total = s.speed * TICK / 1000, n = Math.max(1, Math.ceil(total / 4));
@@ -342,8 +372,8 @@ export class Duel {
         s.x += s.dir * total / n; s.traveled += total / n;
         if (s.traveled >= s.range) { s.hit = true; if (s.spec) shotEnd(this.host, s.spec, s.x, 0); break; }
         if (s.spec?.pulse && s.traveled - (s.pulsed ?? 0) >= s.spec.pulse.every) { s.pulsed = s.traveled; shotPulse(this.host, s.spec, s.x, 0); }
-        const t = this.other(s.owner);
-        if (!t.dead && !s.miss && !s.pierced && Math.abs(t.x - s.x) <= s.radius + HIT_RADIUS && now >= t.invulnUntil) {
+        const t = this.foes(s.owner).find((t) => !t.dead && Math.abs(t.x - s.x) <= s.radius + HIT_RADIUS + t.body && now >= t.invulnUntil);
+        if (t && !s.miss && !s.pierced) {
           if (s.spec) {
             shotHit(this.host, s.spec, t.id);
             if (s.spec.pierce > 0) { s.pierced = true; continue; }
@@ -361,8 +391,7 @@ export class Duel {
     this.pending = this.pending.filter((p) => p.at > now);
     for (const p of due) p.fn();
     this.now += TICK;
-    if (this.a.dead || this.b.dead) return this.a.dead && this.b.dead ? null : this.a.dead ? this.b : this.a;
-    return undefined;
+    return this.outcome();
   }
 
   run(): F | null {
@@ -376,7 +405,8 @@ export class Duel {
 }
 
 export function make(id: string, cls: ClassKind, level: number, build: Build) {
-  return new F(id, cls, level, talentsFor(cls, level, build), gearFor(cls, level), pointsFor(cls, level));
+  const pts = pointsFor(cls, level);
+  return new F(id, cls, level, talentsFor(cls, level, build), gearFor(cls, level, pts), pts);
 }
 
 /** Win rate of `x` against `y` (draws count half), side swapped every fight; each hero picks a random build. */
@@ -394,16 +424,38 @@ export function winRate(x: ClassKind, y: ClassKind, level: number, n: number, bu
 
 const pct = (v: number) => `${Math.round(v * 100)}%`.padStart(5);
 
+/** Overall win rate of every class against the others at one level (random builds unless `build` is set). */
+export function overallAt(level: number, n: number, build?: Build): Record<ClassKind, number> {
+  const out = {} as Record<ClassKind, number>;
+  for (const x of CLASS_KINDS) out[x] = CLASS_KINDS.filter((y) => y !== x).reduce((s, y) => s + winRate(x, y, level, n, build), 0) / (CLASS_KINDS.length - 1);
+  return out;
+}
+
 if (process.argv[1]?.includes("duel")) {
   const n = Number(process.argv[2]) || 400;
-  const configs: [number, Build | undefined, string][] = [[1, undefined, ""], [5, undefined, ""], [10, undefined, " (random builds)"], [25, undefined, " (random builds)"], [25, 0, " (branch 1 build)"], [25, 1, " (branch 2 build)"], [25, 2, " (branch 3 build)"]];
-  for (const [level, build, label] of configs) {
-    console.log(`\nLevel ${level}${label}: row hero's win rate vs column hero`);
-    console.log("          " + CLASS_KINDS.map((c) => c.slice(0, 6).padStart(7)).join("") + "  overall");
+  const brief = process.argv.includes("--brief");
+  const levels = [1, 5, 10, 15, 20, 25, 30];
+  const summary: Record<string, string[]> = Object.fromEntries(CLASS_KINDS.map((c) => [c, []]));
+  for (const level of levels) {
+    if (!brief) {
+      console.log(`\nLevel ${level} (random builds): row hero's win rate vs column hero`);
+      console.log("          " + CLASS_KINDS.map((c) => c.slice(0, 6).padStart(7)).join("") + "  overall");
+    }
     for (const x of CLASS_KINDS) {
-      const row = CLASS_KINDS.map((y) => (x === y ? 0.5 : winRate(x, y, level, n, build)));
+      const row = CLASS_KINDS.map((y) => (x === y ? 0.5 : winRate(x, y, level, n)));
       const overall = row.reduce((s, v, i) => s + (CLASS_KINDS[i] === x ? 0 : v), 0) / (CLASS_KINDS.length - 1);
-      console.log(x.padEnd(10) + row.map((v, i) => (CLASS_KINDS[i] === x ? "    -  " : pct(v) + "  ")).join("") + pct(overall));
+      summary[x].push(pct(overall));
+      if (!brief) console.log(x.padEnd(10) + row.map((v, i) => (CLASS_KINDS[i] === x ? "    -  " : pct(v) + "  ")).join("") + pct(overall));
+    }
+  }
+  console.log("\nOverall PvP win rate by level (random builds)");
+  console.log("          " + levels.map((l) => `Lv${l}`.padStart(6)).join(""));
+  for (const c of CLASS_KINDS) console.log(c.padEnd(10) + summary[c].map((v) => v.padStart(6)).join(""));
+  if (process.argv.includes("--branches")) for (const b of [0, 1, 2] as Build[]) {
+    console.log(`\nBranch ${b + 1} builds, overall`);
+    for (const level of [10, 20, 30]) {
+      const o = overallAt(level, n, b);
+      console.log(`Lv${level}`.padEnd(6) + CLASS_KINDS.map((c) => `${c.slice(0, 6)} ${pct(o[c])}`).join("  "));
     }
   }
 }
