@@ -1,0 +1,10 @@
+{
+  "date": "2026-11-04",
+  "title": "Calmer, clearer combat",
+  "changes": [
+    "The screen no longer shakes every time you get hit, swing a finisher or cast a skill. Only huge blows like boss slams give a small nudge.",
+    "No more white screen flash on high-level weapon finishers.",
+    "Getting hit no longer cuts your own swing short, so your attacks always play out.",
+    "A red ring now marks the monster you're attacking (a gold ring shows the one under your mouse). Clicking right next to a small monster counts as clicking it, and if you keep holding the button after a kill, you move on to the next monster under your mouse."
+  ]
+}
