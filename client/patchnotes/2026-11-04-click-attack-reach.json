@@ -1,0 +1,10 @@
+{
+  "date": "2026-11-04",
+  "title": "Sharper click attacks",
+  "changes": [
+    "Clicking a monster now walks you right into sword reach, so melee swings no longer whiff at the edge.",
+    "Your hero aims at where the monster really is, not where it was a moment ago (no more swinging at a spot it was knocked away from).",
+    "Big monsters like the Mother Blob, Bone Demon and Redfang Chief can be hit on their edge, not only in their middle.",
+    "A click during your attack cooldown now waits and swings as soon as it can, instead of doing nothing."
+  ]
+}

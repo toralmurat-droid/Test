@@ -34,7 +34,7 @@ import { chestById, chestLock, CHEST_RANGE, CHEST_RESPAWN_MS, CHESTS, GUARD_RESP
 import { encodeTimers, timerSig, timersOf } from "../shared/buffTimers";
 import { SLOT_COUNT } from "../shared/slots";
 import { groupDmgMult, groupHpMult, PARTY, together } from "../shared/party";
-import { heroPoise, MOB_COMBAT, POISE, poiseLevelMult, poiseSpeed } from "../shared/combat";
+import { heroPoise, MOB_COMBAT, mobBody, POISE, poiseLevelMult, poiseSpeed, SWING_AHEAD } from "../shared/combat";
 import {
   BAG_SIZE, Equipped, gearDef, GEAR_SLOTS, activeGear, reqProblem, itemLevel, HeroReqInfo, GearSlot, gearBlock, gearName, gearReachMult, gearSpeedMult, gearStats, isGearId, potionChance, rollGear, canWear, starterKit,
 } from "../shared/gear";
@@ -2403,7 +2403,7 @@ export class TownRoom extends Room<TownState> {
   // ---- Combat -------------------------------------------------------------
 
   /** All live, hittable targets (players and mobs) within `r` of (x,y), except `exclude`. */
-  private targetsAround(x: number, y: number, r: number, exclude: string): string[] {
+  private targetsAround(x: number, y: number, r: number, exclude: string, mobPad?: (m: Mob) => number): string[] {
     const out: string[] = [];
     const me = this.state.players.get(exclude);
     this.state.players.forEach((t, tid) => {
@@ -2411,7 +2411,7 @@ export class TownRoom extends Room<TownState> {
       if (tid !== exclude && !t.dead && Math.hypot(t.x - x, t.y - y) <= r) out.push(tid);
     });
     this.state.mobs.forEach((m, mid) => {
-      if (!m.dead && !m.hidden && Math.hypot(m.x - x, m.y - y) <= r) out.push(mid);
+      if (!m.dead && !m.hidden && Math.hypot(m.x - x, m.y - y) <= r + (mobPad ? mobPad(m) : 0)) out.push(mid);
     });
     return out;
   }
@@ -2959,8 +2959,9 @@ export class TownRoom extends Room<TownState> {
 
     const reachMult = gearReachMult(this.equipped(a)); // long weapons
     const reach = (hit.range ?? def.attackRange) * reachMult;
-    const hx = a.x + off[0] * 12 * reachMult, hy = a.y + off[1] * 12 * reachMult;
-    for (const tid of this.targetsAround(hx, hy, reach, id)) this.hitTarget(id, tid, dmg, off, { kb: hit.knockback, crit, basic: true });
+    const hx = a.x + off[0] * SWING_AHEAD * reachMult, hy = a.y + off[1] * SWING_AHEAD * reachMult;
+    // Monsters are hit on their body, not only at their feet (big ones are wide)
+    for (const tid of this.targetsAround(hx, hy, reach, id, (m) => mobBody(m.kind))) this.hitTarget(id, tid, dmg, off, { kb: hit.knockback, crit, basic: true });
   }
 
   /** Fire one projectile from `a` (fireball or arrow), offset sideways by `lane` px. */

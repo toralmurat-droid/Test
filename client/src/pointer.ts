@@ -14,7 +14,8 @@ import { setWorldCursor } from "./cursors";
  * keeps attacking. Any movement key takes over from the mouse.
  */
 
-export interface ClickEnemy { id: string; x: number; y: number; h: number; dead: boolean }
+/** x/y: drawn feet (for picking); sx/sy: newest server feet (for reach and aim); body: extra melee reach on it. */
+export interface ClickEnemy { id: string; x: number; y: number; sx: number; sy: number; h: number; body: number; dead: boolean }
 export interface ClickSpot { x: number; y: number; h: number; w: number; range: number; act: () => void }
 
 export interface PointerHost {
@@ -41,7 +42,7 @@ export interface PointerHost {
 type Goal =
   | { kind: "walk"; x: number; y: number }
   | { kind: "spot"; spot: ClickSpot }
-  | { kind: "enemy"; id: string; secondary: boolean; fired: boolean }
+  | { kind: "enemy"; id: string; secondary: boolean; fired: boolean; tries?: number; since?: number }
   | { kind: "cast"; x: number; y: number; self?: boolean }
   | { kind: "castAt"; x: number; y: number };
 
@@ -70,6 +71,12 @@ export class PointerControls {
   /** Stop whatever the mouse asked for (a movement key was pressed, the hero died...). */
   cancel() { this.goal = undefined; this.path = []; this.held = -1; }
   get active() { return !!this.goal; }
+
+  /** The server swung our basic attack: a single click on an enemy is done. */
+  swung() {
+    const g = this.goal;
+    if (g?.kind === "enemy" && !g.secondary) { g.fired = true; if (this.held !== 0) { this.goal = undefined; this.path = []; } }
+  }
 
   // ---- picking -------------------------------------------------------------------------------------------
 
@@ -138,7 +145,7 @@ export class PointerControls {
       this.marker(w);
     } else if (enemy) {
       this.goal = { kind: "enemy", id: enemy.id, secondary: button === 2, fired: false };
-      this.route({ x: enemy.x, y: enemy.y });
+      this.route({ x: enemy.sx, y: enemy.sy });
     } else if (button === 2) {
       // Secondary skill toward the clicked spot, without walking
       const w = this.world(p);
@@ -241,21 +248,36 @@ export class PointerControls {
     const e = this.host.enemy(goal.id);
     if (!e || e.dead) { this.goal = undefined; this.path = []; return STOP; }
     const holding = this.held === (goal.secondary ? 2 : 0);
-    if (Math.hypot(e.x - me.x, e.y - me.y) <= this.host.reach(goal.secondary)) {
+    const reach = this.host.reach(goal.secondary) + (goal.secondary ? 0 : e.body);
+    if (Math.hypot(e.sx - me.x, e.sy - me.y) <= reach) {
       this.path = [];
-      if (now - this.lastAct >= (goal.secondary ? 220 : 110)) {
+      if (goal.secondary) {
+        if (now - this.lastAct >= 220) {
+          this.lastAct = now;
+          this.host.stop();
+          this.host.send("face", { x: e.sx, y: e.sy });
+          this.host.fire(true);
+          goal.fired = true;
+          if (!holding) this.goal = undefined;
+        }
+        return STOP;
+      }
+      // Basic attack. Held: swing again and again. One click: keep asking until the server swings (it drops the
+      // attack while the last one is still cooling down), so a click never just walks up and does nothing.
+      if (!holding && (goal.tries ?? 0) > 0 && now - (goal.since ?? now) > 1500) { this.goal = undefined; return STOP; }
+      if (now - this.lastAct >= (holding ? 110 : 300)) {
         this.lastAct = now;
+        if (!goal.tries) goal.since = now;
+        goal.tries = (goal.tries ?? 0) + 1;
         this.host.stop();
-        this.host.send("face", { x: e.x, y: e.y });
-        this.host.fire(goal.secondary);
-        goal.fired = true;
-        if (!holding) this.goal = undefined;
+        this.host.send("face", { x: e.sx, y: e.sy });
+        this.host.fire(false);
       }
       return STOP;
     }
     if (goal.fired && !holding) { this.goal = undefined; return STOP; }
-    if (!this.pathTo || Math.hypot(e.x - this.pathTo.x, e.y - this.pathTo.y) > TILE * 0.75 || (now - this.lastRepath > 600 && !this.path.length)) {
-      this.route({ x: e.x, y: e.y });
+    if (!this.pathTo || Math.hypot(e.sx - this.pathTo.x, e.sy - this.pathTo.y) > TILE * 0.75 || (now - this.lastRepath > 600 && !this.path.length)) {
+      this.route({ x: e.sx, y: e.sy });
     }
     return this.steer(me, stepMs) ?? STOP;
   }
