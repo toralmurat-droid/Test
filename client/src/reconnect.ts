@@ -3,7 +3,6 @@
 // then reload the page and log the player straight back in with the same hero.
 // An update (the server said "upgrading", closed with code 4000, or came back as a new build) gets a cheerful
 // gilded "New lands are being forged!" notice; anything else gets a plain "Connection lost" one.
-import { pixelText } from "./pixeltext";
 
 const KEY = "rejoin";
 
@@ -58,7 +57,10 @@ function show(upgrade: boolean) {
   box.replaceChildren();
   const card = document.createElement("div");
   card.className = "card";
-  card.append(pixelText(upgrade ? "New lands are being forged!" : "Connection lost", upgrade ? "#ffd98a" : "#e8b8a0", 11, 3));
+  // Same clean gold heading as the Esc menu (the outlined pixelText title was too heavy to read at this size)
+  const title = document.createElement("h2");
+  title.textContent = upgrade ? "New lands are being forged!" : "Connection lost";
+  card.append(title);
   const sub = document.createElement("p");
   sub.textContent = upgrade ? "An update is on its way. Your hero is saved and will be back in a moment!" : "Reconnecting... your hero is saved.";
   card.append(sub);

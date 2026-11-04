@@ -123,6 +123,8 @@ body #reconnectnote .card { max-width: 520px; text-align: center; padding: 4px 1
   color: #eadfc8; text-shadow: 2px 2px #050302; font: 16px var(--pixel-font); -webkit-font-smoothing: none; }
 body #reconnectnote.upgrade .card { animation: wf-ember 1.6s steps(4) infinite; }
 body #reconnectnote.lost .card { border-image-source: var(--wf-blood); }
-body #reconnectnote canvas { display: block; margin: 0 auto 6px; max-width: 100%; height: auto !important; }
+body #reconnectnote h2 { margin: 2px 0 6px; font: 26px var(--pixel-font); color: #e3bf6a; letter-spacing: 1px;
+  text-shadow: 2px 2px #050302; border-bottom: 2px solid #45331e; padding-bottom: 6px; }
+body #reconnectnote.lost h2 { color: #e8a890; }
 body #reconnectnote p { margin: 4px 0 8px; }
 body #reconnectnote small { display: block; font-size: 13px; color: #a8977a; min-height: 1.3em; }
