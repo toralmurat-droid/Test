@@ -1,8 +1,11 @@
 // Keeps players in the game when the server restarts (every deploy restarts it).
 // When the connection drops, a notice appears, we wait until the new server answers /health,
 // then reload the page and log the player straight back in with the same hero.
+// An update (the server said "upgrading", closed with code 4000, or came back as a new build) gets a cheerful
+// gilded "New lands are being forged!" notice; anything else gets a plain "Connection lost" one.
+import { pixelText } from "./pixeltext";
+
 const KEY = "rejoin";
-const PIXEL_FONT = "'Pixelify Sans', monospace";
 
 export interface Rejoin { name: string; password: string; cls: string; color: number }
 
@@ -18,6 +21,57 @@ export function takeRejoin(): Rejoin | null {
   } catch { return null; }
 }
 
+const base = import.meta.env.DEV ? `${location.protocol}//${location.hostname}:2567` : "";
+/** The build that served this page (server header X-Build), so a restart into a new build reads as an update. */
+let myBuild: string | null = null;
+async function health(): Promise<string | null | false> {
+  const r = await fetch(`${base}/health`, { cache: "no-store" });
+  return r.ok ? r.headers.get("X-Build") : false;
+}
+/** Called once in the game: remember which build we joined. */
+export function noteBuild() {
+  if (myBuild === null) health().then((b) => { if (b) myBuild = b; }).catch(() => { /* ignore */ });
+}
+
+let upgradeSaid = false;
+/** The server announced it is restarting for an update (sent just before it closes). */
+export function upgradeAnnounced() { upgradeSaid = true; box && show(true); }
+
+const LINES = [
+  "The smiths are hammering in something new...",
+  "Fresh adventures are being carted to Oakvale...",
+  "The bards are tuning up new tales...",
+  "Stoking the bonfire for your return...",
+];
+
+let box: HTMLDivElement | null = null;
+let shownUpgrade = false;
+function show(upgrade: boolean) {
+  if (!box) {
+    box = document.createElement("div");
+    box.id = "reconnectnote";
+    document.body.appendChild(box);
+  }
+  if (box.childElementCount && shownUpgrade === upgrade) return;
+  shownUpgrade = upgrade;
+  box.className = upgrade ? "upgrade" : "lost";
+  box.replaceChildren();
+  const card = document.createElement("div");
+  card.className = "card";
+  card.append(pixelText(upgrade ? "New lands are being forged!" : "Connection lost", upgrade ? "#ffd98a" : "#e8b8a0", 11, 3));
+  const sub = document.createElement("p");
+  sub.textContent = upgrade ? "An update is on its way. Your hero is saved and will be back in a moment!" : "Reconnecting... your hero is saved.";
+  card.append(sub);
+  if (upgrade) {
+    const flav = document.createElement("small");
+    let i = Math.floor(Math.random() * LINES.length);
+    flav.textContent = LINES[i];
+    const t = window.setInterval(() => { if (!box?.contains(flav)) { clearInterval(t); return; } i = (i + 1) % LINES.length; flav.textContent = LINES[i]; }, 3500);
+    card.append(flav);
+  }
+  box.append(card);
+}
+
 let started = false;
 /**
  * Show a notice and come back as soon as the server answers again. `upgrading` = the server closed the
@@ -26,19 +80,14 @@ let started = false;
 export function reconnectSoon(login: Rejoin, upgrading = false) {
   if (started) return;
   started = true;
-  const box = document.createElement("div");
-  box.style.cssText = "position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;" +
-    "background:rgba(10,10,16,.72);color:#f4e9d0;text-align:center;font:20px " + PIXEL_FONT + ";";
-  box.innerHTML = upgrading
-    ? "<div>Game is upgrading!<br><small style='font-size:14px;opacity:.8'>Back in a moment, your hero is saved.</small></div>"
-    : "<div>Connection lost<br><small style='font-size:14px;opacity:.8'>Reconnecting... your hero is saved.</small></div>";
-  document.body.appendChild(box);
-  const base = import.meta.env.DEV ? `${location.protocol}//${location.hostname}:2567` : "";
+  show(upgrading || upgradeSaid);
   const tryAgain = async () => {
     try {
-      const r = await fetch(`${base}/health`, { cache: "no-store" });
-      if (r.ok) {
+      const b = await health();
+      if (b !== false) {
+        const fresh = b !== null && myBuild !== null && b !== myBuild;
         try { sessionStorage.setItem(KEY, JSON.stringify({ ...login, at: Date.now() })); } catch { /* ignore */ }
+        if (fresh && !shownUpgrade) { show(true); setTimeout(() => location.reload(), 1800); return; } // let them see it
         location.reload();
         return;
       }
@@ -46,7 +95,7 @@ export function reconnectSoon(login: Rejoin, upgrading = false) {
     setTimeout(tryAgain, 2000);
   };
   // Give the old server a moment to hand over to the new one
-  setTimeout(tryAgain, upgrading ? 1500 : 500);
+  setTimeout(tryAgain, upgrading || upgradeSaid ? 1500 : 500);
 }
 
 const BACK_KEY = "backtostart";

@@ -1,0 +1,9 @@
+{
+  "date": "2026-11-04",
+  "pr": 220,
+  "title": "Update notice",
+  "changes": [
+    "When the game updates you now see \"New lands are being forged!\" instead of \"Connection lost\".",
+    "You are logged back in by yourself once the update is in."
+  ]
+}

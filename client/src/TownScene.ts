@@ -1,6 +1,6 @@
 import Phaser from "phaser";
 import { quake } from "./camfx";
-import { leaving, reconnectSoon, returnToStart } from "./reconnect";
+import { leaving, noteBuild, reconnectSoon, returnToStart, upgradeAnnounced } from "./reconnect";
 import { Client, Room } from "colyseus.js";
 import { BOSS, ELITE, InputState, MERGE, MAP_H, MAP_W, regenFromStamina, TICK_RATE, TILE } from "../../shared/constants";
 import { CLASSES, ClassKind, DODGE, ENERGY, energyName, MAX_LEVEL, xpForLevel } from "../../shared/classes";
@@ -1013,6 +1013,8 @@ export class TownScene extends Phaser.Scene {
     });
     // Server restart (every deploy): show a notice and log back in by itself
     const login = { name: this.opts.name, password: this.opts.password, cls: this.opts.cls, color: this.opts.color };
+    noteBuild();
+    this.room.onMessage("upgrading", () => upgradeAnnounced());
     this.room.onLeave((code: number) => { if (this.quitting) return; this.feed("Disconnected from server"); reconnectSoon(login, code === 4000); });
     // A connection that silently died (no updates for 15s) is treated the same way
     let lastPatch = Date.now();

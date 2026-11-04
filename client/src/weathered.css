@@ -115,3 +115,14 @@ body #ideatabs button.on { color: #ffd98a; filter: brightness(1.3); }
 body #ideasend { color: #c8f59a; }
 body #ideasend:disabled { color: #6d6250; cursor: default; filter: grayscale(1); }
 body #ideas button:hover, body #patchnotes button:hover { filter: brightness(1.25); color: #ffd98a; }
+/* Reconnect notice (reconnect.ts): gilded "New lands are being forged!" for an update, blood-red "Connection lost" otherwise */
+body #reconnectnote { position: fixed; inset: 0; z-index: 9999; display: flex; align-items: center; justify-content: center;
+  background: rgba(8, 6, 4, .74); padding: 16px; }
+body #reconnectnote .card { max-width: 520px; text-align: center; padding: 4px 14px 2px;
+  border: 18px solid transparent; border-image: var(--wf-gold) 9 fill / 18px / 0 repeat; image-rendering: pixelated;
+  color: #eadfc8; text-shadow: 2px 2px #050302; font: 16px var(--pixel-font); -webkit-font-smoothing: none; }
+body #reconnectnote.upgrade .card { animation: wf-ember 1.6s steps(4) infinite; }
+body #reconnectnote.lost .card { border-image-source: var(--wf-blood); }
+body #reconnectnote canvas { display: block; margin: 0 auto 6px; max-width: 100%; height: auto !important; }
+body #reconnectnote p { margin: 4px 0 8px; }
+body #reconnectnote small { display: block; font-size: 13px; color: #a8977a; min-height: 1.3em; }
