@@ -209,6 +209,19 @@ const MAPS: Record<string, string[]> = {
     ".oBooGo...",
     "oBo..oo...",
   ],
+  // Online players: two hooded heads side by side (one gold, one blue)
+  people: [
+    "..oo......",
+    ".oggo..oo.",
+    ".oggo.ouuo",
+    "..oo..ouuo",
+    ".oGGo..oo.",
+    "oGggGooUUo",
+    "oGggGoUuuU",
+    "oGggGoUuuU",
+    "oGggGoUuuU",
+    "oooooooooo",
+  ],
 };
 
 const cache = new Map<string, string>();

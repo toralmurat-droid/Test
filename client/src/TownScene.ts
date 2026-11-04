@@ -229,6 +229,7 @@ export class TownScene extends Phaser.Scene {
   private shrine?: ShrineLayer;
   private portals?: PortalLayer;
   private chatEl = document.getElementById("chat") as HTMLInputElement;
+  private onlineShown = -1; // online hero count last written next to the chat box
   private ideaBoard?: IdeaBoard;
   private party?: PartyUI;
   private trade?: TradeUI;
@@ -364,6 +365,7 @@ export class TownScene extends Phaser.Scene {
     this.input.keyboard!.on("keydown-G", () => { if (!this.chatting()) toggleGear(); });
     // Always reachable with the mouse too (even while typing in chat, in combat or while dead)
     fillIcons(document.getElementById("menubtns")!);
+    fillIcons(document.getElementById("online")!);
     const menuButton = (id: string, onClick: () => void) => {
       const b = document.getElementById(id)!;
       b.addEventListener("mousedown", (ev) => ev.preventDefault()); // never take focus (Space/Enter must not click it)
@@ -2421,6 +2423,7 @@ export class TownScene extends Phaser.Scene {
       if (id !== this.me) others.push({ x: e.sprite.x, y: e.sprite.y, name: e.state?.name as string | undefined });
     }
     this.minimap?.draw(now, meEnt?.sprite, others);
+    if (online !== this.onlineShown) { this.onlineShown = online; document.getElementById("onlinecount")!.textContent = String(online); }
     this.dial?.draw(now);
     if (meEnt) this.showArea(areaAt(meEnt.sprite.x, meEnt.sprite.y));
     this.signPanel.update(meEnt?.sprite);
@@ -2453,7 +2456,7 @@ export class TownScene extends Phaser.Scene {
       const cls0 = mine.cls as ClassKind;
       document.getElementById("stats")!.innerHTML =
         `${mine.dead ? "Respawning… " : safe}Lv ${mine.level} ${CLASSES[mine.cls as ClassKind].name} · ` +
-        `${mine.level >= MAX_LEVEL ? "XP MAX" : `XP ${mine.xp - cur}/${next - cur}`} · Gold ${mine.gold} · Potions ${total(unpackPotions(mine.potions).potion)} · Mana potions ${total(unpackPotions(mine.potions).mpotion)} · Kills ${mine.kills} · Online ${online}` +
+        `${mine.level >= MAX_LEVEL ? "XP MAX" : `XP ${mine.xp - cur}/${next - cur}`} · Gold ${mine.gold} · Potions ${total(unpackPotions(mine.potions).potion)} · Mana potions ${total(unpackPotions(mine.potions).mpotion)} · Kills ${mine.kills}` +
         (talentPoints(mine.level) > spentPoints(cls0, mine.talents) ? ` · ${icon("star")}${talentPoints(mine.level) - spentPoints(cls0, mine.talents)} skill point(s): press T` : "");
       const freePts = talentPoints(mine.level) - spentPoints(cls0, mine.talents);
       const badge = document.getElementById("treebadge")!;
