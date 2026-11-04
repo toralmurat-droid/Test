@@ -68,3 +68,16 @@ export function poiseLevelMult(attackerLevel: number, targetLevel: number): numb
   const m = d > 0 ? 1 - POISE_LEVEL.perLevelAbove * d : 1 - POISE_LEVEL.perLevelBelow * d;
   return Math.min(POISE_LEVEL.max, Math.max(POISE_LEVEL.min, m));
 }
+
+/**
+ * Melee reach. A basic swing hits everything whose body is within `range` of a point 12 px in front of the hero
+ * (both scaled by long weapons). Monsters have a body: big ones (Mother Blob, Bone Demon, the Chief) can be hit
+ * on their edge, not only at their feet. Heroes count as a point, so PvP reach stays as it was.
+ */
+export const SWING_AHEAD = 12;
+const MOB_BODY: Partial<Record<MobKind, number>> = {
+  motherblob: 14, demon: 12, banditchief: 10, necromancer: 8, warriorblob: 7, blobling: 3, crawler: 4,
+};
+export const mobBody = (kind: MobKind) => MOB_BODY[kind] ?? 6;
+/** Farthest a target's feet can be from the hero's feet and still be hit, straight ahead. */
+export const meleeReach = (range: number, reachMult: number, body = 0) => (SWING_AHEAD + range) * reachMult + body;

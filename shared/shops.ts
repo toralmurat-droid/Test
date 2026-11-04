@@ -1,9 +1,10 @@
-import { GEAR } from "./gear";
+import { gearDef, itemLevel, withLevel } from "./gear";
 import { MAX_POTIONS } from "./items";
 
 /**
  * Village shops. A shop is attached to an NPC (shared/npcs.ts) by id. The server checks distance, gold and bag space.
- * Gear prices come from the item tier; shops buy back what they sell at SELL_RATE of the price.
+ * Gear prices come from the item tier and item level; shops buy back what they sell at SELL_RATE of the price.
+ * The smith sells set item levels (SHOP_LEVEL by tier): the best gear is still found out in the world.
  */
 export interface ShopEntry {
   /** gear id, or "potion" */
@@ -23,15 +24,24 @@ export const GEAR_PRICE = [0, 60, 180, 450];
 export const SELL_RATE = 0.4;
 export const POTION_PRICE = 20;
 
+/** Price grows 12% per item level above 1. */
+export const PRICE_PER_LEVEL = 0.12;
+/** Item level of shop stock, by tier (Common, Rare, Epic). */
+export const SHOP_LEVEL = [0, 1, 6, 12];
+
 export function gearPrice(id: string): number {
-  return GEAR_PRICE[GEAR[id]?.tier ?? 0] ?? 0;
+  const d = gearDef(id);
+  return d ? Math.round((GEAR_PRICE[d.tier] ?? 0) * (1 + PRICE_PER_LEVEL * (itemLevel(id) - 1))) : 0;
 }
 
 export function sellPrice(id: string): number {
   return Math.max(1, Math.floor(gearPrice(id) * SELL_RATE));
 }
 
-const weapons = (ids: string[]): ShopEntry[] => ids.map((item) => ({ item, price: gearPrice(item) }));
+const weapons = (ids: string[]): ShopEntry[] => ids.map((base) => {
+  const item = withLevel(base, SHOP_LEVEL[gearDef(base)?.tier ?? 1]);
+  return { item, price: gearPrice(item) };
+});
 
 export const SHOPS: Record<string, Shop> = {
   weaponsmith: {

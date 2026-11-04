@@ -1,5 +1,5 @@
 import Phaser from "phaser";
-import { GEAR, itemText, LOOT_IDS, canWear, GEAR_SLOTS, gearName, gearStats, gearSpeedMult, GearSlot, BAG_SIZE, SLOT_NAMES, TIER_NAMES } from "../../shared/gear";
+import { gearDef, itemText, LOOT_IDS, canWear, GEAR_SLOTS, gearName, gearStats, gearSpeedMult, GearSlot, BAG_SIZE, SLOT_NAMES, TIER_NAMES, baseId, itemLevel, reqProblem, reqText, activeGear, HeroReqInfo, Equipped } from "../../shared/gear";
 import { STAT_NAMES, StatKind } from "../../shared/powers";
 import { ART_K, CHAR_FRAME, HD_CHARS } from "./artAssets";
 
@@ -27,7 +27,7 @@ function ensureGear(scene: Phaser.Scene, hero: string, id: string, done?: () => 
   if (scene.textures.exists(key)) return true;
   if (!HD_CHARS || pending.has(key) || !GEAR_HEROES.includes(hero)) return false;
   pending.add(key);
-  scene.load.spritesheet(key, `assets/hd/gear/${hero}_${id}.webp`, { frameWidth: CHAR_FRAME, frameHeight: CHAR_FRAME });
+  scene.load.spritesheet(key, `assets/hd/gear/${hero}_${baseId(id)}.webp`, { frameWidth: CHAR_FRAME, frameHeight: CHAR_FRAME });
   scene.load.once(`filecomplete-spritesheet-${key}`, () => {
     pending.delete(key);
     scene.textures.get(key).setFilter(Phaser.Textures.FilterMode.NEAREST); // pixel art: keep texels crisp
@@ -38,7 +38,15 @@ function ensureGear(scene: Phaser.Scene, hero: string, id: string, done?: () => 
   return false;
 }
 
-export const gearKey = (hero: string, id: string) => `gear_${hero}_${id}`;
+/** Overlay texture of an item on a hero (every item level of an item looks the same; gearfx.ts adds the effects). */
+export const gearKey = (hero: string, id: string) => `gear_${hero}_${baseId(id)}`;
+
+/** Level and own stat points of a hero state, for the item requirements. */
+export const reqInfoOf = (state: any): HeroReqInfo =>
+  ({ cls: state.cls, level: state.level ?? 1, pts: { sta: state.ptSta ?? 0, str: state.ptStr ?? 0, mag: state.ptMag ?? 0, dex: state.ptDex ?? 0 } });
+
+/** The worn items that count for a hero state (requirements met). */
+export const activeOf = (state: any): Equipped => activeGear(Object.fromEntries(GEAR_SLOTS.map((s) => [s, state[s]])), reqInfoOf(state));
 
 /**
  * Drawn order on top of the hero (each overlay already has the right pixels hidden behind the body).
@@ -63,7 +71,7 @@ export class GearLayer {
         return;
       }
       if (!s) s = this.sprites[slot] = this.scene.add.sprite(base.x, base.y, key, 0);
-      if (this.ids[slot] !== id) { s.setTexture(key, 0); this.ids[slot] = id; }
+      if (this.ids[slot] !== key) { s.setTexture(key, 0); this.ids[slot] = key; }
       s.setFrame(base.frame.name);
       s.setPosition(base.x, base.y).setOrigin(base.originX, base.originY).setScale(base.scaleX, base.scaleY);
       s.setFlipX(base.flipX).setAngle(base.angle).setAlpha(base.alpha).setVisible(base.visible);
@@ -91,7 +99,7 @@ export function iconCanvas(scene: Phaser.Scene, id: string, size = 32): HTMLCanv
   c.width = c.height = size;
   const ctx = c.getContext("2d")!;
   ctx.imageSmoothingEnabled = false;
-  drawFrame(scene, ctx, "gear_icons", id, 0, 0, size / (16 * ART_K));
+  drawFrame(scene, ctx, "gear_icons", baseId(id), 0, 0, size / (16 * ART_K));
   return c;
 }
 
@@ -126,11 +134,24 @@ export class GearMenu {
   refresh(state: any) {
     if (!this.open || !state) return;
     const bagItems: string[] = Array.from(state.bag ?? []);
-    const sig = [state.cls, ...GEAR_SLOTS.map((s) => state[s]), ...bagItems, state.sta, state.str, state.mag, state.dex, state.maxHp].join("|");
+    const sig = [state.cls, state.level, state.ptSta, state.ptStr, state.ptMag, state.ptDex, ...GEAR_SLOTS.map((s) => state[s]), ...bagItems, state.sta, state.str, state.mag, state.dex, state.maxHp].join("|");
     if (sig === this.sig) return;
     this.sig = sig;
     this.busyUntil = 0; // the server answered, accept clicks again
     const cls = state.cls as string;
+    const hero = reqInfoOf(state);
+    const info = document.getElementById("gearinfo");
+    if (info) info.textContent = "";
+    /** Item details shown under the bag on hover (pixel font, unlike a browser tooltip). */
+    const hover = (el: HTMLElement, id: string, extra: string) => {
+      el.onmouseenter = () => {
+        if (!info) return;
+        const d = gearDef(id)!, why = reqProblem(id, hero);
+        info.innerHTML = `<b style="color:${TIER_COLORS[d.tier]}">${gearName(id, cls)}</b> <span class="glvl">Lv ${itemLevel(id)}</span> · ${TIER_NAMES[d.tier]} ${SLOT_NAMES[d.slot]}<br>` +
+          `${itemText(id) || "No bonus"}<br><span class="${why ? "gbad" : "gok"}">${why || reqText(id, cls)}</span>${extra ? `<br><small>${extra}</small>` : ""}`;
+      };
+      el.onmouseleave = () => { if (info) info.textContent = ""; };
+    };
 
     // Hero preview with everything worn
     const pv = document.getElementById("gearpreview") as HTMLCanvasElement;
@@ -150,17 +171,19 @@ export class GearMenu {
       const icon = id ? iconCanvas(this.scene, id) : Object.assign(document.createElement("span"), { className: "gicon" });
       row.appendChild(icon);
       const txt = document.createElement("span");
+      const why = id ? reqProblem(id, hero) : "";
       txt.innerHTML = id
-        ? `<b style="color:${TIER_COLORS[GEAR[id].tier]}">${gearName(id, cls)}</b><br><small>${itemText(id)}</small>`
+        ? `<b style="color:${TIER_COLORS[gearDef(id)!.tier]}">${gearName(id, cls)}</b>${itemLevel(id) > 1 ? ` <span class="glvl">Lv ${itemLevel(id)}</span>` : ""}<br>` +
+          (why ? `<small class="gbad">Inactive: ${why}</small>` : `<small>${itemText(id)}</small>`)
         : `<b>${SLOT_NAMES[slot]}</b><br><small>empty</small>`;
       row.appendChild(txt);
-      if (id) { row.title = "Click to take off"; row.onclick = () => this.act("unequip", slot); }
+      if (id) { row.onclick = () => this.act("unequip", slot); hover(row, id, "Click to take off"); }
       slots.appendChild(row);
     }
 
     // Totals
-    const g = gearStats(cls, Object.fromEntries(GEAR_SLOTS.map((s) => [s, state[s]])));
-    const speed = gearSpeedMult(Object.fromEntries(GEAR_SLOTS.map((s) => [s, state[s]])));
+    const g = gearStats(cls, activeOf(state));
+    const speed = gearSpeedMult(activeOf(state));
     const parts = (["sta", "str", "mag", "dex"] as StatKind[]).filter((k) => g[k]).map((k) => `+${g[k]} ${STAT_NAMES[k]}`);
     if (speed > 1) parts.push(`+${Math.round((speed - 1) * 100)}% speed`);
     document.getElementById("geartotal")!.textContent =
@@ -175,13 +198,14 @@ export class GearMenu {
       const cell = document.createElement("button");
       cell.className = "gcell";
       if (id) {
-        const d = GEAR[id];
+        const d = gearDef(id)!;
         cell.appendChild(iconCanvas(this.scene, id));
         cell.style.borderColor = TIER_COLORS[d.tier];
-        const fits = canWear(cls, id);
-        cell.title = `${gearName(id, cls)} (${TIER_NAMES[d.tier]} ${SLOT_NAMES[d.slot]})\n${itemText(id)}\n` +
-          (fits ? "Click: equip · Right-click: drop" : `Only a ${d.cls} can wear this · Right-click: drop`);
+        const fits = canWear(cls, id), why = fits ? reqProblem(id, hero) : "";
+        if (itemLevel(id) > 1) cell.appendChild(Object.assign(document.createElement("span"), { className: "gcelllvl" + (why ? " gbad" : ""), textContent: String(itemLevel(id)) }));
+        hover(cell, id, fits ? (why ? "Too strong for you yet · Right-click: drop" : "Click: equip · Right-click: drop") : `Only a ${d.cls} can wear this · Right-click: drop`);
         if (!fits) cell.style.opacity = "0.5";
+        else if (why) cell.classList.add("glocked");
         cell.onclick = () => this.act("equip", i);
         cell.oncontextmenu = (ev) => { ev.preventDefault(); this.act("dropgear", i); };
       } else cell.disabled = true;

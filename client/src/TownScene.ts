@@ -4,7 +4,7 @@ import { Client, Room } from "colyseus.js";
 import { BOSS, ELITE, InputState, MERGE, MAP_H, MAP_W, regenFromStamina, TICK_RATE, TILE } from "../../shared/constants";
 import { CLASSES, ClassKind, DODGE, ENERGY, energyName, MAX_LEVEL, xpForLevel } from "../../shared/classes";
 import { GROUND, areaAt, isSafeZone } from "../../shared/map";
-import { heroPoise } from "../../shared/combat";
+import { heroPoise, meleeReach, mobBody } from "../../shared/combat";
 import { moveStep } from "../../shared/movement";
 import { levelsAt, SPAWN_ZONES, zoneAt } from "../../shared/spawns";
 import { musicCombat, setMusicZone } from "./music";
@@ -31,11 +31,13 @@ import { PORTALS, PORTAL_RANGE } from "../../shared/portals";
 import { PointerControls, type ClickEnemy, type ClickSpot } from "./pointer";
 import { warmPaths } from "./pathfind";
 import { pixelText } from "./pixeltext";
+import { speechBubble } from "./weathered";
 import { ART_K, CHAR_GROW, CHAR_SCALE, CHARACTERS, CHAR_ORIGIN, CharacterName, createArtAnims, playCharAnim, preloadArt } from "./artAssets";
 import { Ambient } from "./ambient";
 import { Details } from "./details";
-import { GearLayer, GearMenu, preloadGear, TIER_COLORS } from "./gear";
-import { GEAR, gearReachMult, gearSpeedMult } from "../../shared/gear";
+import { activeOf, GearLayer, GearMenu, preloadGear, TIER_COLORS } from "./gear";
+import { GearFx } from "./gearfx";
+import { baseId, gearDef, gearReachMult, gearSpeedMult } from "../../shared/gear";
 import { talentMult, talentPoints, spentPoints } from "../../shared/talents";
 import { activeSkills, SLOT_COUNT, SLOT_KEYS, skillLearned } from "../../shared/slots";
 import { iconImg } from "./skillIcons";
@@ -103,7 +105,7 @@ interface Entity {
   culled?: boolean; // monster off screen: not drawn this frame
   top: number; // px from the feet to the top of the head, for the name label and chat bubble
   bar: Phaser.GameObjects.Graphics;
-  bubble?: Phaser.GameObjects.Text;
+  bubble?: Phaser.GameObjects.Image;
   shield?: Phaser.GameObjects.Graphics;
   tx: number; ty: number; // server target position
   snaps?: Snap[]; // recent server positions with local arrival time, played back a little late (see interpolate)
@@ -225,6 +227,7 @@ export class TownScene extends Phaser.Scene {
   private areaTimer?: number;
   private shots = new Map<string, { g: Phaser.GameObjects.GameObject & { x: number; y: number }; tx: number; ty: number; at: number; dx: number; dy: number; spd: number }>();
   private fx!: SkillFx;
+  private gearFx!: GearFx; // item level effects on heroes
   private lastCast: Record<string, number> = {}; // local clock (ms) of my last cast of each skill, for cooldowns
   private items = new Map<string, Phaser.GameObjects.Image>();
   private lastDodge = -Infinity;
@@ -254,6 +257,7 @@ export class TownScene extends Phaser.Scene {
 
   async create() {
     this.fx = new SkillFx(this, (id) => this.entities.get(id), () => this.me);
+    this.gearFx = new GearFx(this.fx);
     makeTileset(this);
     createArtAnims(this);
     if (SMOOTH) paintSmoothProps(this); // painted iso forge, anvil, witch hut… in place of the front-view pixel props
@@ -495,9 +499,9 @@ export class TownScene extends Phaser.Scene {
     const items = (this.room.state as any).items;
     items.onAdd((it: any, id: string) => {
       if (it.kind === "quest" && it.owner !== this.room.sessionId) return; // someone else's quest drop
-      const gear = it.kind === "gear" && GEAR[it.gear];
+      const gear = it.kind === "gear" && gearDef(it.gear);
       const img = gear
-        ? this.add.image(it.x, it.y, "gear_icons", it.gear).setScale(0.6 / ART_K).setDepth(it.y - 8)
+        ? this.add.image(it.x, it.y, "gear_icons", baseId(it.gear)).setScale(0.6 / ART_K).setDepth(it.y - 8)
         : this.add.image(it.x, it.y, itemTexture(this, it.kind === "quest" ? `q_${it.gear}` : it.kind)).setDepth(it.y - 8);
       if (it.kind === "quest") {
         // Quest drops glow so they stand out from the gold
@@ -514,13 +518,19 @@ export class TownScene extends Phaser.Scene {
       this.items.set(id, img);
     });
     items.onRemove((_it: any, id: string) => { this.items.get(id)?.destroy(); this.items.delete(id); });
+    // Equipping an item the hero isn't strong enough for yet (item level / stat requirements, shared/gear.ts)
+    this.room.onMessage("gearno", ({ text }) => {
+      const me = this.entities.get(this.me);
+      if (me) this.floatText(me.sprite.x, me.sprite.y - me.top - 6, text, "#ff6b6b", PIXEL_FONT);
+      this.feed(text);
+    });
     this.room.onMessage("pickup", ({ kind, amount, x, y, gear, name }) => {
       if (kind === "quest") {
         this.floatText(x, y - 6, `+1 ${QUEST_ITEMS[gear]?.name ?? ""}`, "#ffd166", PIXEL_FONT);
         return;
       }
       if (kind === "gear") {
-        this.floatText(x, y - 6, `+${name}`, TIER_COLORS[GEAR[gear]?.tier ?? 1], PIXEL_FONT);
+        this.floatText(x, y - 6, `+${name}`, TIER_COLORS[gearDef(gear)?.tier ?? 1], PIXEL_FONT);
         this.feed(`Found ${name}! Press G to equip`);
         return;
       }
@@ -792,7 +802,10 @@ export class TownScene extends Phaser.Scene {
       const e = this.entities.get(id);
       if (e) this.squash(e, 1.15, 0.85, 120, 1);
     });
-    this.room.onMessage("swing", ({ id, step, variant, ax, ay }) => this.showSwing(id, step ?? 0, variant ?? 0, ax, ay));
+    this.room.onMessage("swing", ({ id, step, variant, ax, ay }) => {
+      if (id === this.me) this.pointer?.swung(); // the server took the click-attack
+      this.showSwing(id, step ?? 0, variant ?? 0, ax, ay);
+    });
     this.room.onMessage("sfx", (ev) => this.onSkillFx(ev));
     bindSfx(this.room, () => this.me, this.entities as any); // sound effects (client/src/sfx.ts)
     this.room.onMessage("boom", ({ x, y, r, kind }) => this.fx.impact(x, y, kind, r) ||
@@ -949,7 +962,12 @@ export class TownScene extends Phaser.Scene {
       const m = meEnt(); // other heroes only where fighting is allowed
       return !!m && !isSafeZone(e.sprite.x, e.sprite.y) && !isSafeZone(m.sprite.x, m.sprite.y);
     };
-    const asEnemy = (id: string, e: Entity): ClickEnemy => ({ id, x: e.sprite.x, y: e.sprite.y, h: e.top || 20, dead: !!e.state.dead });
+    // x/y: where it is drawn (for picking with the mouse); sx/sy: its newest server position (for reach and aim:
+    // the drawn one plays ~110 ms behind, so a monster just knocked back still looked in reach)
+    const asEnemy = (id: string, e: Entity): ClickEnemy => ({
+      id, x: e.sprite.x, y: e.sprite.y, sx: e.tx ?? e.sprite.x, sy: e.ty ?? e.sprite.y,
+      h: e.top || 20, body: e.mob ? mobBody(e.state.kind) : 0, dead: !!e.state.dead,
+    });
     const secondarySkill = () => {
       const p = meEnt()?.state;
       const n = this.activeSlot;
@@ -958,8 +976,10 @@ export class TownScene extends Phaser.Scene {
     };
     const basicReach = (p: any) => {
       const def = CLASSES[p.cls as ClassKind];
-      const k = gearReachMult(p);
-      return def.projectile ? def.projectile.range * k * 0.8 : 12 * k + def.attackRange * k * 0.9 + 4;
+      const k = gearReachMult(activeOf(p));
+      // Melee: what the server hits, minus a small margin for the time the click takes to get there
+      // (it used to be a few px MORE than the server's reach, so swings at the edge always missed)
+      return def.projectile ? def.projectile.range * k * 0.8 : meleeReach(def.attackRange, k) - 4;
     };
     this.pointer = new PointerControls(this, {
       me: () => { const e = meEnt(); return e ? { x: e.sprite.x, y: e.sprite.y, state: e.state } : undefined; },
@@ -981,7 +1001,7 @@ export class TownScene extends Phaser.Scene {
       },
       speed: () => {
         const p = meEnt()?.state;
-        return p ? heroSpeed(p.cls as ClassKind, p.slowed, p.spd ?? 1) * gearSpeedMult(p) : 80;
+        return p ? heroSpeed(p.cls as ClassKind, p.slowed, p.spd ?? 1) * gearSpeedMult(activeOf(p)) : 80;
       },
       reach: (secondary) => {
         const p = meEnt()?.state;
@@ -997,14 +1017,14 @@ export class TownScene extends Phaser.Scene {
           if (s.field && !s.field.follow) return (s.field.ahead ?? 0) + s.field.r * 0.7;
           return basicReach(p);
         }
-        const shot = p.ranged ? GEAR[p.ranged]?.shot : undefined;
+        const rg = activeOf(p).ranged, shot = rg ? gearDef(rg)?.shot : undefined;
         return shot ? shot.range * 0.8 : basicReach(p);
       },
       fire: (secondary) => {
         if (!secondary) { this.room?.send("attack"); return; }
         const p = meEnt()?.state;
         if (secondarySkill()) this.room?.send("useslot", this.activeSlot);
-        else if (p?.ranged && GEAR[p.ranged]?.shot) this.room?.send("ranged");
+        else if (p && activeOf(p).ranged && gearDef(activeOf(p).ranged!)?.shot) this.room?.send("ranged");
         else this.room?.send("attack");
       },
       target: () => { const s = secondarySkill(); return s ? skillTarget(s) : "dir"; },
@@ -1172,6 +1192,7 @@ export class TownScene extends Phaser.Scene {
         e.sprite.setPosition(r.x, r.y);
       }
     }
+    if (cls) this.gearFx.swing(e, step, off[0], off[1], !!cls.projectile, id === this.me); // item level effects
     if (cls?.projectile) return; // the fireball itself is the visual
     // No hit-area shapes (Murat): the attack animation is the visual; the finisher still shakes the camera
     if (step === 2 && id === this.me) this.cameras.main.shake(80, 0.003);
@@ -1548,7 +1569,7 @@ export class TownScene extends Phaser.Scene {
     const def = CLASSES[cls];
     const next = xpForLevel(lvl + 1), cur = xpForLevel(lvl);
     const dmg = Math.round(def.damage * attackMult(cls, st) * talentMult(cls, mine.talents, "dmg"));
-    const speed = Math.round(heroSpeed(cls, false, mine.spd ?? 1) * gearSpeedMult(mine));
+    const speed = Math.round(heroSpeed(cls, false, mine.spd ?? 1) * gearSpeedMult(activeOf(mine)));
     const rows: [string, string][] = [
       ["Level", lvl >= MAX_LEVEL ? `${MAX_LEVEL} (max)` : `${lvl} · XP ${mine.xp - cur}/${next - cur}`],
       ["Health", `${Math.ceil(mine.hp)} / ${mine.maxHp}`],
@@ -1691,7 +1712,7 @@ export class TownScene extends Phaser.Scene {
       row("Shift", "Dodge roll", DODGE.cooldownMs, this.lastDodge, "", "", ENERGY.cost.dodge),
       row("Q", "Potion", 0, 0, `×${mine.potions}`, mine.potions > 0 ? "" : "×0"),
       // Secondary ranged weapon from the equipment screen, only when one is worn
-      ...(mine.ranged && GEAR[mine.ranged]?.shot ? [row("R", GEAR[mine.ranged].name, GEAR[mine.ranged].shot!.cooldownMs, this.lastRanged)] : []),
+      ...((rd) => (rd?.shot ? [row("R", rd.name, rd.shot.cooldownMs, this.lastRanged)] : []))(activeOf(mine).ranged ? gearDef(activeOf(mine).ranged!) : undefined),
     ].join("");
     const el = document.getElementById("actions")!;
     if (this.actionsHtml !== html) { el.innerHTML = html; this.actionsHtml = html; }
@@ -1762,10 +1783,7 @@ export class TownScene extends Phaser.Scene {
     const e = this.entities.get(id);
     if (!e) return;
     e.bubble?.destroy();
-    e.bubble = this.add.text(0, 0, text, {
-      fontFamily: "monospace", fontSize: "16px", color: "#000", backgroundColor: "#ffffffdd",
-      padding: { x: 4, y: 2 }, wordWrap: { width: 400 },
-    }).setOrigin(0.5, 1).setScale(0.25).setResolution(2).setDepth(20000);
+    e.bubble = speechBubble(this, e.sprite.x, e.sprite.y - e.top - 12, text);
     isoAnchor(e.bubble, e.sprite);
     const b = e.bubble;
     this.time.delayedCall(4000, () => { if (e.bubble === b) { b.destroy(); e.bubble = undefined; } });
@@ -1886,7 +1904,7 @@ export class TownScene extends Phaser.Scene {
       const rooted = typeof p.fx === "string" && p.fx.includes("charge"); // a buildup roots the hero
       if (id === this.me && !p.dead && !p.stunned && !p.rolling && !rooted) {
         // Client-side prediction with the same movement code the server runs
-        const r = moveStep(e.sprite.x, e.sprite.y, this.input_, step / 1000, heroSpeed(p.cls as ClassKind, p.slowed, p.spd ?? 1) * gearSpeedMult(p));
+        const r = moveStep(e.sprite.x, e.sprite.y, this.input_, step / 1000, heroSpeed(p.cls as ClassKind, p.slowed, p.spd ?? 1) * gearSpeedMult(activeOf(p)));
         e.sprite.setPosition(r.x, r.y);
         if (!r.moving) {
           // Ease toward authoritative position while idle (same pull at any frame rate)
@@ -1979,6 +1997,7 @@ export class TownScene extends Phaser.Scene {
         e.statusTint = true;
       } else if (e.statusTint) { e.sprite.clearTint(); e.statusTint = false; }
       e.gear?.sync(e.sprite, p);
+      if (e.gear) this.gearFx.tick(e, dtMs, moving);
 
       const x = Math.round(e.sprite.x), y = Math.round(e.sprite.y);
       // Monsters: HP bar over the head, level tag just above it
@@ -1998,7 +2017,7 @@ export class TownScene extends Phaser.Scene {
         const col = myParty && p.party === myParty ? "#7cfc00" : "#ffffff";
         if (e.lvlColor !== col) { e.label.setColor(col); e.lvlColor = col; }
       }
-      e.bubble?.setPosition(x, y - e.top - 7);
+      e.bubble?.setPosition(x, y - e.top - 12); // above the name label
       e.bar.clear().setDepth(e.sprite.y + 1);
       this.fx.status(e, e.bar, dtMs / 1000);
       // Stacks built by basic hits (Valor, Ki, Fury...): small pips under the hero

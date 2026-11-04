@@ -5,9 +5,9 @@ import { isDecorSolidAt, NPCS } from "../../shared/npcs";
 import { CHAR_ORIGIN, CHAR_SCALE, CharacterName, playCharAnim } from "./artAssets";
 import { faceOf } from "./watch";
 import { isoAnchor } from "./iso";
+import { speechBubble } from "./weathered";
 import { WRATH } from "../../shared/wrath";
 
-const PIXEL_FONT = "'Pixelify Sans', monospace";
 
 /**
  * Townsfolk of Oakvale (Murat 2026-11-03): they idle, stroll about the market square and stop to chat with each other.
@@ -23,7 +23,7 @@ interface Folk {
   name: CharacterName; sprite: Phaser.GameObjects.Sprite;
   x: number; y: number; tx: number; ty: number; speed: number;
   mode: Mode; until: number; face: string; anim: string; nextFlavour: number; backAt: number;
-  nextBlow?: number; nextShout?: number; bubble?: Phaser.GameObjects.Text; stuck?: number;
+  nextBlow?: number; nextShout?: number; bubble?: Phaser.GameObjects.Image; stuck?: number;
 }
 
 const free = (x: number, y: number) => {
@@ -107,9 +107,7 @@ export class Villagers {
   /** A shout over a villager's head (pixel font), gone after a couple of seconds. */
   private shout(f: Folk, text: string) {
     f.bubble?.destroy();
-    const b = this.scene.add.text(f.x, f.y - 30, text, {
-      fontFamily: PIXEL_FONT, fontSize: "16px", color: "#ffdddd", stroke: "#3a0000", strokeThickness: 4,
-    }).setOrigin(0.5, 1).setScale(0.25).setResolution(2).setDepth(20000);
+    const b = speechBubble(this.scene, f.x, f.y - 30, text, "shout");
     isoAnchor(b, f);
     f.bubble = b;
     this.scene.time.delayedCall(2200, () => { if (f.bubble === b) { b.destroy(); f.bubble = undefined; } });
