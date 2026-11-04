@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-04",
+  "title": "Smoother walk-up attacks",
+  "changes": [
+    "Clicking a monster no longer makes your hero slide back a step before the first hit: they stop right where they arrive and swing."
+  ]
+}
