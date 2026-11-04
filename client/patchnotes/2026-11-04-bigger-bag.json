@@ -1,0 +1,9 @@
+{
+  "date": "2026-11-04",
+  "pr": 235,
+  "title": "Bigger bag",
+  "changes": [
+    "Your bag now holds 24 items instead of 12 (two more rows).",
+    "Everything already in your bag is kept."
+  ]
+}
