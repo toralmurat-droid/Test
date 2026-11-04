@@ -4,7 +4,6 @@ html, body { margin: 0; height: 100%; background: #1b1b24; color: #eee; font: 14
 #game canvas { image-rendering: pixelated; }
 /* Hero picker: equal cards, each with the hero animated on a patch of grass */
 #classinfo { min-height: 2.8em; margin: 4px 0; }
-#ult { position: absolute; top: 76px; left: 12px; width: 200px; height: 14px; background: #222; border: 2px solid #000; }
 #ultfill { position: absolute; inset: 0 auto 0 0; width: 100%; background: #f77f00; }
 #ulttext { position: relative; font-size: 11px; padding-left: 4px; line-height: 10px; text-shadow: 1px 1px #000; }
 #gear { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(420px, calc(100% - 32px));
@@ -50,19 +49,10 @@ html, body { margin: 0; height: 100%; background: #1b1b24; color: #eee; font: 14
 #heropowers li.locked { color: #777; }
 #heropowers li.new { color: #7cfc00; }
 #heropowers b { color: inherit; }
-#zone { position: absolute; top: 102px; left: 12px; font-size: 12px; color: #f4a261; text-shadow: 1px 1px #000; }
-#skill { position: absolute; top: 56px; left: 12px; width: 200px; height: 16px; background: #222; border: 2px solid #000; }
-#skillfill { position: absolute; inset: 0 auto 0 0; width: 100%; background: #e9c46a; transition: width .15s linear; }
-#mana { position: absolute; top: 78px; left: 12px; width: 200px; height: 16px; background: #0d1a33; border: 2px solid #000; }
-#manafill { position: absolute; inset: 0 auto 0 0; width: 100%; background: #2f6bff; transition: width .15s linear; }
-#manatext { position: absolute; inset: 0; display: grid; grid-template-columns: 1fr 14px 1fr; align-items: center; font-size: 12px; font-weight: bold; line-height: 1; font-variant-numeric: tabular-nums; color: #fff; text-shadow: 1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000; }
-#skilltext { position: absolute; inset: 0; display: grid; grid-template-columns: 1fr 14px 1fr; align-items: center; font-size: 12px; font-weight: bold; line-height: 1; font-variant-numeric: tabular-nums; color: #fff; text-shadow: 1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000; }
+#zone { position: absolute; top: 132px; left: 12px; font-size: 12px; color: #f4a261; text-shadow: 1px 1px #000; }
 .help { color: #aaa; font-size: 12px; }
 #hud { position: fixed; inset: 0; pointer-events: none; z-index: 5; }
-#hpbar { position: absolute; top: 12px; left: 12px; width: 200px; height: 16px; background: #400; border: 2px solid #000; }
-#hpfill { height: 100%; width: 100%; background: #e63946; transition: width .25s linear; }
-#hptext { position: absolute; inset: 0; display: grid; grid-template-columns: 1fr 14px 1fr; align-items: center; font-size: 12px; font-weight: bold; line-height: 1; font-variant-numeric: tabular-nums; color: #fff; text-shadow: 1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000; }
-#stats { position: absolute; top: 34px; left: 12px; text-shadow: 1px 1px #000; font-family: 'Pixelify Sans', monospace; -webkit-font-smoothing: none; }
+#stats { position: absolute; top: 112px; left: 12px; text-shadow: 1px 1px #000; font-family: 'Pixelify Sans', monospace; -webkit-font-smoothing: none; }
 #feed { position: absolute; top: 350px; right: 12px; text-align: right; text-shadow: 1px 1px #000; }
 #chatlog { position: absolute; bottom: 44px; left: 12px; width: min(400px, calc(100% - 24px)); text-shadow: 1px 1px #000; }
 #chat { position: absolute; bottom: 12px; left: 12px; width: min(400px, calc(100% - 24px)); padding: 6px; font: inherit;
@@ -239,11 +229,6 @@ html, body { margin: 0; height: 100%; background: #1b1b24; color: #eee; font: 14
 #hotbar .slot .cd { position: absolute; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,.55); }
 #hotbar .slot:hover, #hotbar .slot.picking { border-color: #7cfc00; opacity: 1; }
 /* HP / Stamina numbers: "/" sits at the exact centre of both bars, so the two lines up */
-#hptext, #skilltext, #manatext { font-family: 'Pixelify Sans', monospace; -webkit-font-smoothing: none; }
-#hptext .l, #skilltext .l, #manatext .l { text-align: right; white-space: nowrap; }
-#hptext .l b, #skilltext .l b, #manatext .l b { font-weight: bold; }
-#hptext .sep, #skilltext .sep, #manatext .sep { text-align: center; }
-#hptext .r, #skilltext .r, #manatext .r { text-align: left; }
 
 /* Ideas board (I): suggest one idea a day, vote, hourly winner (client/src/ideas.ts) */
 #ideas { position: absolute; left: 50%; top: calc(50% - 30px); transform: translate(-50%, -50%); width: min(460px, calc(100% - 32px));
@@ -449,3 +434,34 @@ html, body { margin: 0; height: 100%; background: #1b1b24; color: #eee; font: 14
 #hotbar .slot .xout { position: absolute; left: 50%; top: 50%; width: 24px; height: 24px; transform: translate(-50%, -40%); pointer-events: none;
   image-rendering: pixelated; background: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' shape-rendering='crispEdges'><rect x='0' y='0' width='1' height='1' fill='%232a0a0a'/><rect x='0' y='1' width='1' height='1' fill='%232a0a0a'/><rect x='0' y='2' width='1' height='1' fill='%232a0a0a'/><rect x='0' y='9' width='1' height='1' fill='%232a0a0a'/><rect x='0' y='10' width='1' height='1' fill='%232a0a0a'/><rect x='0' y='11' width='1' height='1' fill='%232a0a0a'/><rect x='1' y='0' width='1' height='1' fill='%232a0a0a'/><rect x='1' y='2' width='1' height='1' fill='%232a0a0a'/><rect x='1' y='3' width='1' height='1' fill='%232a0a0a'/><rect x='1' y='8' width='1' height='1' fill='%232a0a0a'/><rect x='1' y='9' width='1' height='1' fill='%232a0a0a'/><rect x='1' y='11' width='1' height='1' fill='%232a0a0a'/><rect x='2' y='0' width='1' height='1' fill='%232a0a0a'/><rect x='2' y='1' width='1' height='1' fill='%232a0a0a'/><rect x='2' y='3' width='1' height='1' fill='%232a0a0a'/><rect x='2' y='4' width='1' height='1' fill='%232a0a0a'/><rect x='2' y='7' width='1' height='1' fill='%232a0a0a'/><rect x='2' y='8' width='1' height='1' fill='%232a0a0a'/><rect x='2' y='10' width='1' height='1' fill='%232a0a0a'/><rect x='2' y='11' width='1' height='1' fill='%232a0a0a'/><rect x='3' y='1' width='1' height='1' fill='%232a0a0a'/><rect x='3' y='2' width='1' height='1' fill='%232a0a0a'/><rect x='3' y='4' width='1' height='1' fill='%232a0a0a'/><rect x='3' y='5' width='1' height='1' fill='%232a0a0a'/><rect x='3' y='6' width='1' height='1' fill='%232a0a0a'/><rect x='3' y='7' width='1' height='1' fill='%232a0a0a'/><rect x='3' y='9' width='1' height='1' fill='%232a0a0a'/><rect x='3' y='10' width='1' height='1' fill='%232a0a0a'/><rect x='4' y='2' width='1' height='1' fill='%232a0a0a'/><rect x='4' y='3' width='1' height='1' fill='%232a0a0a'/><rect x='4' y='5' width='1' height='1' fill='%232a0a0a'/><rect x='4' y='6' width='1' height='1' fill='%232a0a0a'/><rect x='4' y='8' width='1' height='1' fill='%232a0a0a'/><rect x='4' y='9' width='1' height='1' fill='%232a0a0a'/><rect x='5' y='3' width='1' height='1' fill='%232a0a0a'/><rect x='5' y='4' width='1' height='1' fill='%232a0a0a'/><rect x='5' y='7' width='1' height='1' fill='%232a0a0a'/><rect x='5' y='8' width='1' height='1' fill='%232a0a0a'/><rect x='6' y='3' width='1' height='1' fill='%232a0a0a'/><rect x='6' y='4' width='1' height='1' fill='%232a0a0a'/><rect x='6' y='7' width='1' height='1' fill='%232a0a0a'/><rect x='6' y='8' width='1' height='1' fill='%232a0a0a'/><rect x='7' y='2' width='1' height='1' fill='%232a0a0a'/><rect x='7' y='3' width='1' height='1' fill='%232a0a0a'/><rect x='7' y='5' width='1' height='1' fill='%232a0a0a'/><rect x='7' y='6' width='1' height='1' fill='%232a0a0a'/><rect x='7' y='8' width='1' height='1' fill='%232a0a0a'/><rect x='7' y='9' width='1' height='1' fill='%232a0a0a'/><rect x='8' y='1' width='1' height='1' fill='%232a0a0a'/><rect x='8' y='2' width='1' height='1' fill='%232a0a0a'/><rect x='8' y='4' width='1' height='1' fill='%232a0a0a'/><rect x='8' y='5' width='1' height='1' fill='%232a0a0a'/><rect x='8' y='6' width='1' height='1' fill='%232a0a0a'/><rect x='8' y='7' width='1' height='1' fill='%232a0a0a'/><rect x='8' y='9' width='1' height='1' fill='%232a0a0a'/><rect x='8' y='10' width='1' height='1' fill='%232a0a0a'/><rect x='9' y='0' width='1' height='1' fill='%232a0a0a'/><rect x='9' y='1' width='1' height='1' fill='%232a0a0a'/><rect x='9' y='3' width='1' height='1' fill='%232a0a0a'/><rect x='9' y='4' width='1' height='1' fill='%232a0a0a'/><rect x='9' y='7' width='1' height='1' fill='%232a0a0a'/><rect x='9' y='8' width='1' height='1' fill='%232a0a0a'/><rect x='9' y='10' width='1' height='1' fill='%232a0a0a'/><rect x='9' y='11' width='1' height='1' fill='%232a0a0a'/><rect x='10' y='0' width='1' height='1' fill='%232a0a0a'/><rect x='10' y='2' width='1' height='1' fill='%232a0a0a'/><rect x='10' y='3' width='1' height='1' fill='%232a0a0a'/><rect x='10' y='8' width='1' height='1' fill='%232a0a0a'/><rect x='10' y='9' width='1' height='1' fill='%232a0a0a'/><rect x='10' y='11' width='1' height='1' fill='%232a0a0a'/><rect x='11' y='0' width='1' height='1' fill='%232a0a0a'/><rect x='11' y='1' width='1' height='1' fill='%232a0a0a'/><rect x='11' y='2' width='1' height='1' fill='%232a0a0a'/><rect x='11' y='9' width='1' height='1' fill='%232a0a0a'/><rect x='11' y='10' width='1' height='1' fill='%232a0a0a'/><rect x='11' y='11' width='1' height='1' fill='%232a0a0a'/><rect x='1' y='1' width='1' height='1' fill='%23e63946'/><rect x='1' y='10' width='1' height='1' fill='%23e63946'/><rect x='2' y='2' width='1' height='1' fill='%23e63946'/><rect x='2' y='9' width='1' height='1' fill='%23e63946'/><rect x='3' y='3' width='1' height='1' fill='%23e63946'/><rect x='3' y='8' width='1' height='1' fill='%23e63946'/><rect x='4' y='4' width='1' height='1' fill='%23e63946'/><rect x='4' y='7' width='1' height='1' fill='%23e63946'/><rect x='5' y='5' width='1' height='1' fill='%23e63946'/><rect x='5' y='6' width='1' height='1' fill='%23e63946'/><rect x='6' y='5' width='1' height='1' fill='%23e63946'/><rect x='6' y='6' width='1' height='1' fill='%23e63946'/><rect x='7' y='4' width='1' height='1' fill='%23e63946'/><rect x='7' y='7' width='1' height='1' fill='%23e63946'/><rect x='8' y='3' width='1' height='1' fill='%23e63946'/><rect x='8' y='8' width='1' height='1' fill='%23e63946'/><rect x='9' y='2' width='1' height='1' fill='%23e63946'/><rect x='9' y='9' width='1' height='1' fill='%23e63946'/><rect x='10' y='1' width='1' height='1' fill='%23e63946'/><rect x='10' y='10' width='1' height='1' fill='%23e63946'/></svg>") center / 100% 100% no-repeat; }
 #talents .ineed, .ineed { color: #ff8a80; }
+
+/* Top-left resource HUD (resourceBars.ts, Murat's "3b" design): level shield + pixel-capsule bars that grow with
+   max values, then cap and show tick marks. Flat rects only, no radius; the stepped corners come from the frame. */
+#rbars { position: absolute; top: 20px; left: 20px; display: flex; gap: 12px; align-items: flex-start; }
+#rbars .rb-crest { position: relative; width: 60px; height: 74px; flex: none; }
+#rbars .rb-crest canvas { position: absolute; inset: 0; width: 60px; height: 74px; image-rendering: pixelated; }
+#rbars .rb-crest span { position: absolute; left: 0; right: 0; text-align: center; font-family: 'Pixelify Sans', monospace;
+  -webkit-font-smoothing: none; line-height: 1; text-shadow: 1px 1px 0 #3a0a10; }
+#rbars .rb-lv { top: 12px; font-size: 9px; color: #F2C9A0; letter-spacing: 1px; }
+#rbars .rb-num { top: 23px; font-size: 22px; color: #FFE9A8; }
+#rbars .rb-stack { display: flex; flex-direction: column; gap: 9px; padding: 4px 0 0 4px; }
+#rbars .rb-bar { position: relative; transition: width .4s steps(8); background: var(--trk);
+  box-shadow: 2px 0 0 #E0B84A, -2px 0 0 #E0B84A, 0 2px 0 #E0B84A, 0 -2px 0 #E0B84A, 4px 0 0 #120D07, -4px 0 0 #120D07,
+    0 4px 0 #120D07, 0 -4px 0 #120D07, 2px 2px 0 #120D07, -2px 2px 0 #120D07, 2px -2px 0 #120D07, -2px -2px 0 #120D07; }
+#rbars .rb-fill, #rbars .rb-ghost, #rbars .rb-ticks { position: absolute; top: 0; bottom: 0; left: 0; }
+#rbars .rb-ghost { background: #F2E6C8; transition: width .35s ease; }
+#rbars .rb-fill { background: var(--fil); box-shadow: inset 0 var(--edge) 0 var(--hi), inset 0 calc(-1 * var(--edge)) 0 var(--lo);
+  transition: width .12s ease; }
+#rbars .rb-ticks { right: 0; opacity: 0; transition: opacity .3s;
+  background-image: linear-gradient(to right, transparent calc(100% - 1px), rgba(18, 13, 7, .7) calc(100% - 1px)); }
+#rbars .rb-txt { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: #fff;
+  font-family: 'Pixelify Sans', monospace; -webkit-font-smoothing: none; line-height: 1; white-space: nowrap;
+  font-variant-numeric: tabular-nums; text-shadow: 1px 1px 0 #000; }
+#rbars.rb-nonums .rb-txt { display: none; }
+#rbars .rb-hp { height: 18px; --trk: #2A0F12; --fil: #C8323C; --hi: #EA6670; --lo: #8C1F28; --edge: 3px; }
+#rbars .rb-hp .rb-txt { font-size: 13px; }
+#rbars .rb-mp { height: 12px; --trk: #0F1630; --fil: #3B6FE0; --hi: #8FB0FF; --lo: #24459A; --edge: 2px; }
+#rbars .rb-st { height: 12px; --trk: #2A200C; --fil: #E0A92E; --hi: #FFE08A; --lo: #9A6F14; --edge: 2px; }
+#rbars .rb-mp .rb-txt, #rbars .rb-st .rb-txt { font-size: 11px; }
+#rbars .rb-xp { height: 4px; --trk: #1A1F12; box-shadow: 2px 0 0 #120D07, -2px 0 0 #120D07, 0 2px 0 #120D07, 0 -2px 0 #120D07; }
+#rbars .rb-xp .rb-fill { background: #7FD36A; box-shadow: none; transition: width .3s ease; }
