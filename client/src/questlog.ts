@@ -4,32 +4,52 @@ import { CHAINS, chainOpen, chainState, QuestDef, questObjective, Quester, Quest
 
 type QuestState = Quester | undefined;
 
-const TRACK_KEY = "quest:untracked";
+/** Old switch: "1" = nothing tracked */
+const OLD_TRACK_KEY = "quest:untracked";
+/** Chain ids (CHAINS[].id) the player chose not to track, as JSON */
+const TRACK_KEY = "quest:untrackedChains";
 
-/** Quest log window (J): active and finished quests, steps, progress and rewards, with a "track" switch. */
+/** Quest log window (J or the Quests button under the minimap): active and finished quests, steps,
+ *  progress and rewards. The player picks which active quests are tracked on screen and on the map. */
 export class QuestLog {
   private el = document.createElement("div");
   private html = "";
   /** Quest shown on the right ("chain:index"); "" = the current one */
   private sel = "";
-  tracked = true;
+  /** Chains whose active quest is hidden from the tracker and the map */
+  private untracked = new Set<string>();
 
   constructor() {
     this.el.id = "questlog";
     this.el.hidden = true;
     document.getElementById("hud")?.appendChild(this.el);
-    try { this.tracked = localStorage.getItem(TRACK_KEY) !== "1"; } catch { /* ignore */ }
+    try {
+      const raw = localStorage.getItem(TRACK_KEY);
+      if (raw) for (const id of JSON.parse(raw) as string[]) this.untracked.add(id);
+      else if (localStorage.getItem(OLD_TRACK_KEY) === "1") for (const ch of CHAINS) this.untracked.add(ch.id);
+    } catch { /* ignore */ }
     this.el.addEventListener("click", (ev) => {
       const t = ev.target as HTMLElement;
       if (t.closest(".ql-close")) this.toggle(false);
+      const tr = t.closest<HTMLElement>("[data-track]");
+      if (tr) { this.setTracked(Number(tr.dataset.track), !this.isTracked(Number(tr.dataset.track))); ev.stopPropagation(); return; }
       const item = t.closest<HTMLElement>(".ql-item");
       if (item) { this.sel = item.dataset.q ?? ""; this.html = ""; }
-      if (t.closest(".ql-track")) {
-        this.tracked = (t.closest(".ql-track") as HTMLInputElement).checked;
-        try { localStorage.setItem(TRACK_KEY, this.tracked ? "0" : "1"); } catch { /* ignore */ }
-        this.html = "";
-      }
     });
+  }
+
+  /** Is chain c's active quest shown in the tracker and on the map? */
+  isTracked(c: number) { return !this.untracked.has(CHAINS[c]?.id ?? ""); }
+
+  /** At least one chain tracked (NPC "!" marks then get a rim arrow on the minimap) */
+  get anyTracked() { return CHAINS.some((_, c) => this.isTracked(c)); }
+
+  setTracked(c: number, on: boolean) {
+    const id = CHAINS[c]?.id;
+    if (!id) return;
+    if (on) this.untracked.delete(id); else this.untracked.add(id);
+    try { localStorage.setItem(TRACK_KEY, JSON.stringify([...this.untracked])); } catch { /* ignore */ }
+    this.html = "";
   }
 
   get open() { return !this.el.hidden; }
@@ -59,7 +79,11 @@ export class QuestLog {
       const cur = all.find((e) => e.key === this.sel) ?? all[0];
       const { d, q, done } = cur;
       const stage = q.questStage, count = q.questCount;
-      const item = (e: Entry) => `<div class="ql-item${e === cur ? " sel" : ""}" data-q="${e.key}">${e.d.title}</div>`;
+      const chainOf = (e: Entry) => e.q.chain ?? 0;
+      // Active quests carry a small track box right in the list
+      const box = (e: Entry) => e.done ? "" :
+        `<span class="ql-tbox${this.isTracked(chainOf(e)) ? " on" : ""}" data-track="${chainOf(e)}">${this.isTracked(chainOf(e)) ? pxIcon("check") : ""}</span>`;
+      const item = (e: Entry) => `<div class="ql-item${e === cur ? " sel" : ""}${!e.done && this.isTracked(chainOf(e)) ? " tracked" : ""}" data-q="${e.key}">${box(e)}<span class="ql-name">${e.d.title}</span></div>`;
       const hint = hints.map((h) => `<p class="ql-next">${h}</p>`).join("");
       // Only steps already reached are shown; later ones stay hidden until the quest gets there
       const reached = done ? d.steps.length : stage;
@@ -74,7 +98,7 @@ export class QuestLog {
       const r = d.reward;
       body =
         `<div class="ql-list">` +
-        (active.length ? `<div class="ql-cat">Active</div>${active.map(item).join("")}` : "") +
+        (active.length ? `<div class="ql-cat">Active <span class="ql-cathint">track</span></div>${active.map(item).join("")}` : "") +
         (finished.length ? `<div class="ql-cat">Completed</div>${finished.map(item).join("")}` : "") +
         `${hint}</div>` +
         `<div class="ql-detail">` +
@@ -84,10 +108,10 @@ export class QuestLog {
         `<h4>Objectives</h4><ul class="ql-steps">${steps}</ul>` +
         (done ? "" : `<p class="ql-now">${questObjective(q)}</p>`) +
         `<h4>Reward${done ? " (received)" : ""}</h4><div class="ql-reward"><span>${pxIcon("star")}${r.xp} XP</span><span>${pxIcon("coin")}${r.gold} gold</span><span>${pxIcon("potion")}${r.potions} potions</span></div>` +
-        (done ? "" : `<label class="ql-trackrow"><input type="checkbox" class="ql-track"${this.tracked ? " checked" : ""}> Track on screen and map</label>`) +
+        (done ? "" : `<button class="ql-trackbtn${this.isTracked(q.chain ?? 0) ? " on" : ""}" data-track="${q.chain ?? 0}">${this.isTracked(q.chain ?? 0) ? `${pxIcon("check")} Tracked on screen and map` : "Track this quest"}</button>`) +
         `</div>`;
     }
-    const html = `<div class="ql-head"><h2>Quest log</h2><button class="ql-close">${pxIcon("close")}</button></div><div class="ql-body">${body}</div><p class="help">J to close</p>`;
+    const html = `<div class="ql-head"><h2>Quest log</h2><button class="ql-close">${pxIcon("close")}</button></div><div class="ql-body">${body}</div><p class="help">Tick the quests to follow on screen and on the map · J to close</p>`;
     if (html !== this.html) { this.html = html; this.el.innerHTML = html; }
   }
 }

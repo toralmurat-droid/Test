@@ -306,10 +306,11 @@ export class NpcLayer {
     // Map markers: "!" / "?" on NPCs, coins on traders, and the current quest targets of every chain
     // A story waiting for the guided first quest (chainOpen) shows nothing yet
     const states = CHAINS.map((_, c) => chainState(q, c)).map((st, c) => (st && st.questStage === 0 && !chainOpen(q, c) ? undefined : st));
-    const targets = this.log.tracked ? states.flatMap((st) => questTargets(st)) : [];
+    const tracked = states.map((st, c) => (this.log.isTracked(c) ? st : undefined));
+    const targets = tracked.flatMap((st) => questTargets(st));
     this.markers = NPCS.filter(present).map((n): MapMarker => {
       const g = npcQuestMark(n.id, q);
-      if (g) return { x: n.x, y: n.y, glyph: g, color: "#ffd166", label: n.name, track: this.log.tracked };
+      if (g) return { x: n.x, y: n.y, glyph: g, color: "#ffd166", label: n.name, track: this.log.anyTracked };
       if (n.shop) return { x: n.x, y: n.y, glyph: "$", color: "#f2c14e", label: n.title };
       return { x: n.x, y: n.y, glyph: "•", color: "#b9f27c", label: n.name };
     });
@@ -321,9 +322,9 @@ export class NpcLayer {
 
     // On-screen tracker: one block per chain with its quest, current objective, progress bar and where to go
     let html = "";
-    if (this.log.tracked) {
-      // The guided first quest on top
-      const blocks = [states[TUT_CHAIN], ...states.filter((_, c) => c !== TUT_CHAIN)].map((st) => this.trackBlock(me, st)).filter(Boolean);
+    {
+      // The guided first quest on top; only the quests the player chose to track
+      const blocks = [tracked[TUT_CHAIN], ...tracked.filter((_, c) => c !== TUT_CHAIN)].map((st) => this.trackBlock(me, st)).filter(Boolean);
       if (blocks.length) html = blocks.join("") + `<div class="qt-hint">J: quest log</div>`;
     }
     if (html !== this.trackerHtml) {

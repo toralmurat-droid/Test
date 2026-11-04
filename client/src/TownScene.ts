@@ -351,12 +351,17 @@ export class TownScene extends Phaser.Scene {
       if (!this.npcs?.isOpen && this.portals?.interact()) return; // then a portal stone's travel list
       this.npcs?.interact();
     });
-    this.input.keyboard!.on("keydown-J", () => {
-      if (this.chatting() || !this.npcs) return;
+    const toggleQuestLog = () => {
+      if (!this.npcs) return;
       const open = this.npcs.log.open;
       this.closeMenus();
       this.npcs.log.toggle(!open);
-    });
+    };
+    this.input.keyboard!.on("keydown-J", () => { if (!this.chatting()) toggleQuestLog(); });
+    // Quests button under the minimap
+    const questBtn = document.getElementById("questbtn")!;
+    fillIcons(questBtn);
+    questBtn.onclick = (ev) => { ev.stopPropagation(); toggleQuestLog(); questBtn.blur(); };
     document.getElementById("lvlnote")!.onclick = () => this.toggleHeroMenu();
     // Hero panel: assign stat points / reset them (buttons never keep focus, so Space can't click them)
     const heroEl = document.getElementById("hero")!;
