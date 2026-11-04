@@ -208,4 +208,15 @@ export function mobScale(level: number, stat: keyof typeof MOB_LEVEL): number {
   return 1 + MOB_LEVEL[stat] * (Math.max(1, level) - 1);
 }
 
+/**
+ * Level ceilings of the starting region (Oakvale and everything on today's map), Murat 2026-11-04: regular monsters
+ * top out at Lv 25 (the quests end around Lv 19-24), while merged blobs, Bone Demons, elites and bosses may reach
+ * Lv 30. Heroes and later regions keep the global cap of 99 (MAX_LEVEL in classes.ts).
+ */
+export const REGION_LEVEL = { mob: 25, special: 30 };
+/** A regular monster's level, held under the region's ceiling. */
+export const regionMobLevel = (l: number) => Math.min(REGION_LEVEL.mob, Math.max(1, Math.round(l)));
+/** A merged blob, demon, elite or boss: its own, higher ceiling. */
+export const regionSpecialLevel = (l: number) => Math.min(REGION_LEVEL.special, Math.max(1, Math.round(l)));
+
 export const MOB_ATTACK_RANGE = 14; // px

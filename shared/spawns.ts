@@ -1,4 +1,4 @@
-import { MobKind, TILE } from "./constants";
+import { MobKind, regionMobLevel, TILE } from "./constants";
 import { AREAS, isSafeZone, isSolidAt, OBJECTS, T, VILLAGE } from "./map";
 import { CAMP_POSTS } from "./bandits";
 
@@ -55,25 +55,27 @@ const ZONE_MOBS: { name: string; mobs: Partial<Record<MobKind, number>>; respawn
   { name: "Goldenreach Farms", mobs: { slime: 18, motherblob: 2 }, respawnMs: 4500 },
   { name: "Mirror Pond", mobs: { slime: 8, shooterblob: 3, warriorblob: 3, motherblob: 2 }, respawnMs: 5250 },
   { name: "Misty Marsh", mobs: { slime: 15, motherblob: 2 }, respawnMs: 4500 },
+  // Set-level zones span the quest's minimum level to +3 (Murat 2026-11-04: average to difficult). Nothing regular
+  // goes past REGION_LEVEL.mob (25) in this region.
   // The undead are the Pale Marshal's army (skeleton quest chain): their zones have set levels, a step tougher than
   // the blobs around them, so the chain starts mid-way through the blob story and climbs along beside it (Murat 2026-11-03).
-  { name: "Stonecrag Quarry", mobs: { skeleton: 10 }, respawnMs: 7500, levels: [6, 8] },
-  { name: "Old Ruins", mobs: { skeleton: 10, skeletonmage: 3 }, respawnMs: 8250, levels: [8, 10] },
-  { name: "Old Watchtower", mobs: { skeleton: 7, skeletonmage: 3 }, respawnMs: 8250, levels: [10, 12] },
+  { name: "Stonecrag Quarry", mobs: { skeleton: 10 }, respawnMs: 7500, levels: [6, 9] },
+  { name: "Old Ruins", mobs: { skeleton: 10, skeletonmage: 3 }, respawnMs: 8250, levels: [8, 11] },
+  { name: "Old Watchtower", mobs: { skeleton: 7, skeletonmage: 3 }, respawnMs: 8250, levels: [10, 13] },
   // The wider world: further from Oakvale, tougher monsters
   { name: "Sunken Lake", mobs: { slime: 8, shooterblob: 4, warriorblob: 4, healerblob: 3, motherblob: 2 }, respawnMs: 6000 },
-  { name: "Barrow Downs", mobs: { skeleton: 14, skeletonmage: 5, necromancer: 1 }, respawnMs: 6750, levels: [12, 14] },
-  { name: "Gravemoor Cemetery", mobs: { skeleton: 14, skeletonmage: 5, necromancer: 2 }, respawnMs: 6750, levels: [15, 17] },
+  { name: "Barrow Downs", mobs: { skeleton: 14, skeletonmage: 5, necromancer: 1 }, respawnMs: 6750, levels: [12, 15] },
+  { name: "Gravemoor Cemetery", mobs: { skeleton: 14, skeletonmage: 5, necromancer: 2 }, respawnMs: 6750, levels: [15, 18] },
   { name: "Thornwood", mobs: { slime: 8, shooterblob: 6, warriorblob: 6, healerblob: 4, motherblob: 2 }, respawnMs: 6000 },
-  { name: "Greywatch Keep", mobs: { skeleton: 11, skeletonmage: 5, necromancer: 2 }, respawnMs: 8250, levels: [18, 20] },
+  { name: "Greywatch Keep", mobs: { skeleton: 11, skeletonmage: 5, necromancer: 2 }, respawnMs: 8250, levels: [19, 22] },
   // The coast and the far east (Saltmere itself stays monster-free, see NO_MOB_AREAS)
   // Redfang Hollow is a small organised camp (shared/bandits.ts): one bandit per post, no density scaling
-  { name: "Redfang Hollow", mobs: { bandit: CAMP_POSTS.length }, respawnMs: 20000, fixed: true },
+  { name: "Redfang Hollow", mobs: { bandit: CAMP_POSTS.length }, respawnMs: 20000, fixed: true, levels: [19, 22] },
   // The west coast, where the Gloam's story ends (blob quests 6 and 7): set levels so the chain climbs evenly
-  { name: "Brinewood", mobs: { slime: 8, shooterblob: 6, warriorblob: 6, healerblob: 5, motherblob: 2 }, respawnMs: 6000, levels: [10, 12] },
-  { name: "Heronwreck Strand", mobs: { slime: 8, shooterblob: 5, warriorblob: 5, healerblob: 4, motherblob: 3 }, respawnMs: 6000, levels: [12, 14] },
+  { name: "Brinewood", mobs: { slime: 8, shooterblob: 6, warriorblob: 6, healerblob: 5, motherblob: 2 }, respawnMs: 6000, levels: [10, 13] },
+  { name: "Heronwreck Strand", mobs: { slime: 8, shooterblob: 5, warriorblob: 5, healerblob: 4, motherblob: 3 }, respawnMs: 6000, levels: [12, 15] },
   // Redfang raiders pillaging the Saltmere fishers' smokehouse (Redfang quest chain), on the coast well away from their camp
-  { name: "Gullrock Cove", mobs: { bandit: 6 }, respawnMs: 12000, fixed: true, levels: [17, 19] },
+  { name: "Gullrock Cove", mobs: { bandit: 6 }, respawnMs: 12000, fixed: true, levels: [17, 20] },
   { name: "Saltwind Coast", mobs: { slime: 14, shooterblob: 5, warriorblob: 5, healerblob: 4, motherblob: 2 }, respawnMs: 4500 },
   { name: "Whispering Woods", mobs: { slime: 10, shooterblob: 4, warriorblob: 4, healerblob: 3, motherblob: 2 }, respawnMs: 5250, wild: true }, // broad areas last: zone lookups take the first match
   // Everything west of the river that no named area covers: fields, roads and woods around Oakvale
@@ -137,7 +139,8 @@ export const SPAWN_ZONES: SpawnZone[] = ZONE_MOBS.flatMap((z) => {
   const f = z.fixed ? 1 : Math.max(1, want / base); // fixed: hand-set count
   const mobs: Partial<Record<MobKind, number>> = {};
   for (const [k, n] of Object.entries(z.mobs) as [MobKind, number][]) mobs[k] = k === "necromancer" ? n : k === "motherblob" ? Math.max(n, Math.round(n * f / 4)) : Math.round(n * f); // big ones grow slower
-  const levels: [number, number] = z.levels ?? (z.wild && hi > 0 ? [lo, hi] : zoneLevels(r));
+  const raw: [number, number] = z.levels ?? (z.wild && hi > 0 ? [lo, hi] : zoneLevels(r));
+  const levels: [number, number] = [regionMobLevel(raw[0]), regionMobLevel(raw[1])];
   return [{ ...z, ...r, mobs, levels, respawnMs: Math.max(800, Math.round(z.respawnMs / f)) }];
 });
 
@@ -159,7 +162,7 @@ export function randomPointInZone(z: SpawnZone, kind?: MobKind): { x: number; y:
 /** Where and at what level a monster of this kind appears. In wild zones the level follows the spot. */
 export function spawnPoint(z: SpawnZone, kind: MobKind): { x: number; y: number; level: number } {
   const min = KIND_MIN_LEVEL[kind] ?? 1;
-  if (!z.wild) return { ...randomPointInZone(z, kind), level: Math.max(min, rollLevel(z)) };
+  if (!z.wild) return { ...randomPointInZone(z, kind), level: regionMobLevel(Math.max(min, rollLevel(z))) };
   let best = randomPointInZone(z, kind), lvl = 0;
   for (let i = 0; i < 25; i++) {
     const p = i ? randomPointInZone(z, kind) : best;
@@ -167,7 +170,7 @@ export function spawnPoint(z: SpawnZone, kind: MobKind): { x: number; y: number;
     if (l > lvl) { best = p; lvl = l; }
     if (l >= min) break; // variants only out where the levels are high enough
   }
-  return { ...best, level: Math.max(min, lvl) };
+  return { ...best, level: regionMobLevel(Math.max(min, lvl)) };
 }
 
 /** The monster zone a tile belongs to (wild zones leave out the named areas inside them). */
@@ -179,7 +182,7 @@ export function zoneAt(tx: number, ty: number): SpawnZone | undefined {
 export function levelsAt(z: SpawnZone, tx: number, ty: number): [number, number] {
   if (!z.wild) return z.levels;
   const l = baseLevelAt(tx, ty);
-  return [l, l + 2];
+  return [regionMobLevel(l), regionMobLevel(l + 2)];
 }
 
 /**

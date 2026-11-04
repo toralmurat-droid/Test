@@ -479,7 +479,7 @@ export const BONE_QUESTS: QuestDef[] = [
         banner: ["The fire is out!", "Beat a skeleton pack, and watch"], obj: "Beat a pack of 3+ skeletons and watch what they do",
         nag: "Fight a pack of them. Hurt them badly, and see what they do when they are losing." },
       { type: "kill", zone: BZ.tower.name, kinds: ["demon"], goal: 1,
-        summon: { parts: ["demon"], level: 13, title: "Bone Demon", ...spotIn(BZ.tower.name, 0.5, 0.75) },
+        summon: { parts: ["demon"], level: 14, title: "Bone Demon", ...spotIn(BZ.tower.name, 0.5, 0.75) },
         text: "Slay a Bone Demon", banner: ["They gave their bones to a demon!", "Slay the Bone Demon"], obj: "Bone Demon slain: {n} / {goal}",
         nag: "A demon made of their own bones. Stay out of its stomp, and bring it down." },
       back("captain", "Captain Hale", "east gate", [
@@ -506,7 +506,7 @@ export const BONE_QUESTS: QuestDef[] = [
         text: "Collect 5 Grave Dust from the undead", banner: ["New quest", "What the Barrows Hold"], obj: "Grave Dust: {n} / {goal}",
         nag: "{n} of {goal}. The crawlers shed the most dust." },
       { type: "kill", zone: BZ.barrow.name, kinds: ["necromancer"], goal: 1,
-        summon: { parts: ["necromancer"], level: 15, title: "Raiser of the Barrows", ...spotIn(BZ.barrow.name, 0.49, 0.6) },
+        summon: { parts: ["necromancer"], level: 16, title: "Raiser of the Barrows", ...spotIn(BZ.barrow.name, 0.49, 0.6) },
         text: "Slay the necromancer raising the barrow kings", banner: ["Dust gathered!", "Slay the Raiser of the Barrows"], obj: "Necromancer slain: {n} / {goal}",
         nag: "He stands before the old mausoleum. Kill him and his raised dead crumble with him." },
       back("druid", "Elder Rowan", "village bonfire", [
@@ -560,7 +560,7 @@ export const BONE_QUESTS: QuestDef[] = [
       { type: "use", zone: BZ.keep.name, objects: [PHYLACTERY], text: "Shatter the Marshal's phylactery", banner: ["His guard has fallen!", "Shatter the phylactery"],
         obj: "Shatter the phylactery", nag: "It stands before the great hall. Break it!" },
       { type: "kill", zone: BZ.keep.name, kinds: ["necromancer"], goal: 1,
-        summon: { parts: ["necromancer"], level: 22, title: "Vaeloth, the Pale Marshal", hpMult: 3, ...spotIn(BZ.keep.name, 0.5, 0.65) },
+        summon: { parts: ["necromancer"], level: 24, title: "Vaeloth, the Pale Marshal", hpMult: 3, ...spotIn(BZ.keep.name, 0.5, 0.65) },
         text: "Defeat Vaeloth, the Pale Marshal", banner: ["THE PALE MARSHAL RISES", "Defeat Vaeloth"], obj: "The Pale Marshal defeated: {n} / {goal}",
         nag: "He's out of his hall and he's angry. Finish him!" },
       back("captain", "Captain Hale", "east gate", [
@@ -632,7 +632,7 @@ export const RED_QUESTS: QuestDef[] = [
         text: "Take back 5 Salted Cod from the raiders", banner: ["The raiders bleed!", "Take back the stolen cod"], obj: "Salted Cod: {n} / {goal}",
         nag: "{n} of {goal}. They stuff it in their packs, the thieving gulls." },
       { type: "kill", zone: COVE, kinds: ["bandit"], goal: 1,
-        summon: { parts: ["bandit"], level: 19, title: "Rask the Reaver", hpMult: 2.5, x: (GULLROCK.x + 15) * TILE, y: (GULLROCK.y + 7.7) * TILE }, own: true,
+        summon: { parts: ["bandit"], level: 21, title: "Rask the Reaver", hpMult: 2.5, x: (GULLROCK.x + 15) * TILE, y: (GULLROCK.y + 7.7) * TILE }, own: true,
         text: "Slay Rask, the raid leader", banner: ["Rask comes for you!", "Slay Rask the Reaver"], obj: "Rask the Reaver slain: {n} / {goal}",
         nag: "Rask won't leave his share of the cod. He's by the raiders' fire." },
       { type: "talk", npc: "oldfisher", text: "Bring the cod to Old Garrick", banner: ["The raiders are beaten", "Bring the cod to Old Garrick"],

@@ -2,7 +2,7 @@ import type { IncomingMessage } from "node:http";
 import { Client, Room } from "colyseus";
 import { ArraySchema, MapSchema, Schema, type } from "@colyseus/schema";
 import {
-  AGGRO, aggroLevelFactor, BLOB_AI, BONES, DEMON, BROOD, Dir, FACTION, FEUD, MERGE, MobDef, MOTHER, SKELETON_AI, HIT_RADIUS, mobScale, InputState, MOB_ATTACK_RANGE, MOBS, MobKind, rollSkeletonWeapon, SKELETON_BOW, SKELETON_WEAPONS, SkeletonWeapon, REGEN_DELAY_MS, REGEN_RAMP_MS, regenFromStamina, SAFE_REGEN_MULT,
+  AGGRO, aggroLevelFactor, BLOB_AI, BONES, DEMON, BROOD, Dir, FACTION, FEUD, MERGE, MobDef, MOTHER, SKELETON_AI, HIT_RADIUS, mobScale, regionMobLevel, regionSpecialLevel, InputState, MOB_ATTACK_RANGE, MOBS, MobKind, rollSkeletonWeapon, SKELETON_BOW, SKELETON_WEAPONS, SkeletonWeapon, REGEN_DELAY_MS, REGEN_RAMP_MS, regenFromStamina, SAFE_REGEN_MULT,
   RESPAWN_MS, TICK_RATE, TILE,
 } from "../shared/constants";
 import {
@@ -1085,7 +1085,7 @@ export class TownRoom extends Room<TownState> {
       o.mergeCap = Math.max(o.mergeCap, h.mergeCap); o.target ||= h.target; o.foe ||= h.foe;
       [h, hid, o, oid] = [o, oid, h, hid];
     }
-    h.merged += o.merged; h.level = capLevel(h.level + o.level);
+    h.merged += o.merged; h.level = regionSpecialLevel(h.level + o.level); // levels add up, to the region's Lv 30 ceiling
     h.parts = [h.parts, o.kind, o.parts].filter(Boolean).join(",");
     h.maxHp += o.maxHp; h.hp = Math.min(h.maxHp, h.hp + o.hp);
     h.canShoot ||= o.canShoot; h.canCharge ||= o.canCharge; h.canHeal ||= o.canHeal;
@@ -1258,7 +1258,7 @@ export class TownRoom extends Room<TownState> {
       const chosen = pack.sort((a, b) => Math.hypot(a[1].x - cx, a[1].y - cy) - Math.hypot(b[1].x - cx, b[1].y - cy)).slice(0, R.maxPack);
       this.ritualCd.set(pid, now + R.cooldownMs);
       // the demon answers the threat: never far below the hero it was called against
-      const level = Math.max(Math.max(...chosen.map(([, m]) => m.level)) + R.levelUp, p.level - R.belowHero);
+      const level = regionSpecialLevel(Math.max(Math.max(...chosen.map(([, m]) => m.level)) + R.levelUp, p.level - R.belowHero));
       // Murat 2026-11-03: they first walk up to the points of the star, then throw themselves in (updateRites)
       chosen.forEach(([, m], k) => {
         const a = -Math.PI / 2 + (k * Math.PI * 2) / 5;
@@ -1588,7 +1588,7 @@ export class TownRoom extends Room<TownState> {
       if (!isSolidAt(tx, ty)) { x = tx; y = ty; break; }
     }
     m.x = m.homeX = x; m.y = m.homeY = y;
-    m.level = Math.max(1, c.level - 1);
+    m.level = kind === "banditchief" ? regionSpecialLevel(c.level - 1) : regionMobLevel(c.level - 1);
     m.hp = m.maxHp = Math.round(MOBS[kind].maxHp * mobScale(m.level, "hp"));
     if (kind === "banditchief") { m.camp = true; m.post = -1; } // leads the camp: hears the horn, rallies his men
   }
@@ -2752,7 +2752,7 @@ export class TownRoom extends Room<TownState> {
     const m = new Mob();
     m.kind = host; m.zone = -1; m.summonFor = pid; m.summonChain = c;
     m.x = m.homeX = sm.x; m.y = m.homeY = sm.y;
-    m.level = capLevel(sm.level);
+    m.level = regionSpecialLevel(sm.level);
     m.title = sm.title ?? "";
     const id = `q${++this.mobSeq}`;
     if (!isBlob(host)) {
