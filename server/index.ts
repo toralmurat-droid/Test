@@ -86,10 +86,14 @@ const httpServer = http.createServer(app);
 // perMessageDeflate: the browser and server squeeze every update (~35% fewer bytes, all browsers support it).
 // Level 1 is the fastest setting; tiny messages (inputs, chat) are sent as they are. WS_DEFLATE=0 turns it off.
 const deflate = process.env.WS_DEFLATE !== "0" && { threshold: 256, zlibDeflateOptions: { level: 1 } };
-// A deploy stops this server with SIGTERM: first tell every player an update is coming (so they see the update
-// notice, not "connection lost"), then Colyseus saves everyone and closes. Registered before the Server so it runs first.
-for (const sig of ["SIGTERM", "SIGINT"] as const) process.on(sig, () => announceUpgrade());
 const gameServer = new Server({ transport: new WebSocketTransport({ server: httpServer, perMessageDeflate: deflate }) });
 gameServer.define("town", TownRoom);
+// A deploy stops this server with SIGTERM. Colyseus then saves everyone and closes each connection with code 4000.
+// First tell every player an update is coming (they see the update notice, not "connection lost"). Updates are
+// compressed (perMessageDeflate), which happens in the background: without the short waits the process exited
+// before the message and the clean close were sent, so players only saw the connection drop.
+const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+gameServer.onBeforeShutdown(async () => { announceUpgrade(); await wait(400); });
+gameServer.onShutdown(() => wait(800));
 
 gameServer.listen(PORT).then(() => console.log(`Game server on http://localhost:${PORT}`));
