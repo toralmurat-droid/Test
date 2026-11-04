@@ -217,6 +217,8 @@ export class TownScene extends Phaser.Scene {
   private entities = new Map<string, Entity>();
   private keys!: Record<string, Phaser.Input.Keyboard.Key>;
   private input_: InputState = { up: false, down: false, left: false, right: false };
+  private stopSeq = 0; // seq of our last "stand still" input
+  private stoppedAt = 0;
   private seq = 0;
   private pointer?: PointerControls;
   /** Hotbar slot the right click uses (keys 1..0 pick it). */
@@ -1086,6 +1088,8 @@ export class TownScene extends Phaser.Scene {
     if (next.up === i.up && next.down === i.down && next.left === i.left && next.right === i.right) return;
     this.input_ = { ...next };
     this.room?.send("input", { ...next, seq: ++this.seq });
+    // Stopping: the server's position still runs behind ours until it has read this stop (see the idle easing)
+    if (!next.up && !next.down && !next.left && !next.right) { this.stopSeq = this.seq; this.stoppedAt = this.time.now; }
   }
 
   /** Mouse controls (client/src/pointer.ts): click to walk, talk, open, attack; right click for the slot 1 skill. */
@@ -2259,7 +2263,11 @@ export class TownScene extends Phaser.Scene {
         // Client-side prediction with the same movement code the server runs
         const r = moveStep(e.sprite.x, e.sprite.y, this.input_, step / 1000, heroSpeed(p.cls as ClassKind, p.slowed, p.spd ?? 1) * gearSpeedMult(activeOf(p)));
         e.sprite.setPosition(r.x, r.y);
-        if (!r.moving) {
+        // Just stopped: the server's hero is still walking up behind ours (it hasn't read the stop yet, and its last
+        // update is older still). Easing toward that stale spot slid the hero back a step before each attack (Murat).
+        // So wait until the server has the stop and stands still too, then settle on its spot.
+        const settled = ((p.seq ?? 0) >= this.stopSeq && !p.moving) || now - this.stoppedAt > 1000;
+        if (!r.moving && settled) {
           // Ease toward authoritative position while idle (same pull at any frame rate)
           const k = ease(0.2);
           e.sprite.x += (e.tx - e.sprite.x) * k;
