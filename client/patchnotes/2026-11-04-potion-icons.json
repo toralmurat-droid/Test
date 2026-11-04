@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-04",
+  "title": "Potion icons on the skill bar",
+  "changes": [
+    "Healing and mana potions now sit left of the skill bar as pixel flasks with how many you carry. Click one, or press Q or V, to drink it."
+  ]
+}
