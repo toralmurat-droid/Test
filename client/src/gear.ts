@@ -32,7 +32,7 @@ const pending = new Set<string>();
 function ensureGear(scene: Phaser.Scene, hero: string, id: string, done?: () => void) {
   const key = gearKey(hero, id);
   if (scene.textures.exists(key)) return true;
-  if (!HD_CHARS || pending.has(key) || !GEAR_HEROES.includes(hero)) return false;
+  if (!HD_CHARS || pending.has(key) || !GEAR_HEROES.includes(hero.split("-")[0])) return false; // "archer-melee": a stance sheet
   pending.add(key);
   scene.load.spritesheet(key, `assets/hd/gear/${hero}_${baseId(id)}.webp`, { frameWidth: CHAR_FRAME, frameHeight: CHAR_FRAME });
   scene.load.once(`filecomplete-spritesheet-${key}`, () => {
@@ -67,6 +67,13 @@ export class GearLayer {
   private ids: Partial<Record<GearSlot, string>> = {};
 
   constructor(private scene: Phaser.Scene, private hero: string) {}
+
+  /** The hero changed stance (another weapon family): overlays come from that sheet's set now. */
+  setHero(hero: string) {
+    if (hero === this.hero) return;
+    this.hero = hero;
+    this.ids = {}; // re-texture every overlay on the next sync
+  }
 
   sync(base: Phaser.GameObjects.Sprite, state: any) {
     LAYER_ORDER.forEach((slot, i) => {
