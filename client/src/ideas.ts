@@ -25,7 +25,7 @@ export class IdeaBoard {
     el.id = "ideas";
     el.hidden = true;
     el.innerHTML = `
-      <h2>💡 Ideas board</h2>
+      <h2>Ideas board</h2>
       <div id="ideatop"><span id="ideacountdown"></span><span id="ideawinner"></span></div>
       <div id="ideasubmit">
         <textarea id="ideatext" maxlength="${IDEA.maxChars}" rows="3" placeholder="Suggest one improvement for the game (one idea per day)"></textarea>

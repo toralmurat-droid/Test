@@ -1,4 +1,5 @@
 import { npcById } from "../../shared/npcs";
+import { icon as pxIcon } from "./pixelicons";
 import { CHAINS, chainOpen, chainState, QuestDef, questObjective, Quester, QuestState as QState, stepGoal, stepProgress } from "../../shared/quests";
 
 type QuestState = Quester | undefined;
@@ -64,7 +65,7 @@ export class QuestLog {
       const reached = done ? d.steps.length : stage;
       const steps = d.steps.slice(0, reached).map((st, i) => {
         const state = done || i + 1 < stage ? "done" : "now";
-        const icon = state === "done" ? "✓" : "➜";
+        const icon = state === "done" ? pxIcon("check") : "➜";
         const goal = stepGoal(st), n = state === "done" ? goal : stepProgress(st, count);
         const extra = goal > 1 && state === "now"
           ? `<div class="ql-bar"><div style="width:${(n / goal) * 100}%"></div><span>${n} / ${goal}</span></div>` : "";
@@ -82,11 +83,11 @@ export class QuestLog {
         `<p>${d.description}</p>` +
         `<h4>Objectives</h4><ul class="ql-steps">${steps}</ul>` +
         (done ? "" : `<p class="ql-now">${questObjective(q)}</p>`) +
-        `<h4>Reward${done ? " (received)" : ""}</h4><div class="ql-reward"><span>⭐ ${r.xp} XP</span><span>🪙 ${r.gold} gold</span><span>🧪 ${r.potions} potions</span></div>` +
+        `<h4>Reward${done ? " (received)" : ""}</h4><div class="ql-reward"><span>${pxIcon("star")}${r.xp} XP</span><span>${pxIcon("coin")}${r.gold} gold</span><span>${pxIcon("potion")}${r.potions} potions</span></div>` +
         (done ? "" : `<label class="ql-trackrow"><input type="checkbox" class="ql-track"${this.tracked ? " checked" : ""}> Track on screen and map</label>`) +
         `</div>`;
     }
-    const html = `<div class="ql-head"><h2>Quest log</h2><button class="ql-close">✕</button></div><div class="ql-body">${body}</div><p class="help">J to close</p>`;
+    const html = `<div class="ql-head"><h2>Quest log</h2><button class="ql-close">${pxIcon("close")}</button></div><div class="ql-body">${body}</div><p class="help">J to close</p>`;
     if (html !== this.html) { this.html = html; this.el.innerHTML = html; }
   }
 }

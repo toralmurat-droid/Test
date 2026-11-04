@@ -7,6 +7,7 @@ import { installCursors } from "./cursors";
 import { installWeatheredFrames } from "./weathered";
 import { installTooltips } from "./tooltip";
 import "./weathered.css";
+import "./menus.css";
 
 installCursors();
 installWeatheredFrames();

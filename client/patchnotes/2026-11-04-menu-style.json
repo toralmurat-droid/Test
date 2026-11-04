@@ -1,0 +1,9 @@
+{
+  "date": "2026-11-04",
+  "title": "Menus in the weathered style",
+  "changes": [
+    "Every menu now has the same dark bronze-framed look as the game menu: hero, skills, bag, quest log, group, trading, stash, shops, villager talk and portal stones.",
+    "The Hero, Skills, Bag, Group and Menu buttons have the new look with small pixel icons, and no longer show a hover box.",
+    "Emoji icons in menus are replaced by pixel-art icons."
+  ]
+}

@@ -1,4 +1,5 @@
 import { ClassKind, CLASSES } from "../../shared/classes";
+import { icon as pxIcon } from "./pixelicons";
 import { SLOT_KEYS } from "../../shared/slots";
 import { Stats } from "../../shared/powers";
 import { iconImg } from "./skillIcons";
@@ -363,8 +364,8 @@ export class TalentMenu {
     rows.push(`<p class="ipath">${parent ? `Grows from ${parent.name}. ` : "Root of the branch. "}${kids.length ? `Leads to ${kids.map((k) => k.name).join(" and ")}.` : "Dead end: nothing grows higher."}</p>`);
     const slots: string[] = [...(state.slots ?? [])];
     const slot = slots.indexOf(s.id);
-    const status = why === "max" ? "Fully learned" : why === "" ? "Click to learn" : why === "level" ? `🔒 Needs level ${s.req}` :
-      why === "above" ? `🔒 Learn ${parent ? parent.name : "the skill below"} first` : r > 0 ? "Learned · no points left" : "No points left";
+    const status = why === "max" ? "Fully learned" : why === "" ? "Click to learn" : why === "level" ? `${pxIcon("lock")}Needs level ${s.req}` :
+      why === "above" ? `${pxIcon("lock")}Learn ${parent ? parent.name : "the skill below"} first` : r > 0 ? "Learned · no points left" : "No points left";
     const keyNote = !s.passive && r > 0 ? (slot >= 0 ? ` · on key ${SLOT_KEYS[slot]}` : " · hover it and press 1-0 to put it on a key") : "";
     const pips = Array.from({ length: MAX_RANK }, (_, i) => `<i class="${i < r ? "on" : ""}"></i>`).join("");
     info.innerHTML = `<div class="ihead" style="--c:${color}">${iconImg(s.id, "iicon")}<div><b>${s.name}</b>` +

@@ -71,6 +71,7 @@ import { addWorldProps } from "./worldProps";
 import { addSiegeWorks } from "./siegeArt";
 import { SiegeWork } from "./siegeWork";
 import { PERCH_LIFT } from "../../shared/bandits";
+import { icon, fillIcons } from "./pixelicons";
 
 /** One painted bit on a merged blob, in body-relative units (-1..1 across the body). */
 interface BlobPart { kind: "patch" | "eye" | "mouth"; u: number; v: number; r: number; col: number }
@@ -362,6 +363,7 @@ export class TownScene extends Phaser.Scene {
     const toggleGear = () => this.gearMenu?.toggle(this.entities.get(this.me)?.state);
     this.input.keyboard!.on("keydown-G", () => { if (!this.chatting()) toggleGear(); });
     // Always reachable with the mouse too (even while typing in chat, in combat or while dead)
+    fillIcons(document.getElementById("menubtns")!);
     const menuButton = (id: string, onClick: () => void) => {
       const b = document.getElementById(id)!;
       b.addEventListener("mousedown", (ev) => ev.preventDefault()); // never take focus (Space/Enter must not click it)
@@ -397,10 +399,10 @@ export class TownScene extends Phaser.Scene {
     const toggleNews = () => { if (!this.patchNotes!.open) this.closeMenus(); this.patchNotes!.toggle(); };
     const toggleMusic = () => { const open = musicPanelOpen(); this.closeMenus(); if (!open) showMusicPanel(true); };
     this.gameMenu = new GameMenu([ // before the patch notes: it holds their badge
-      { id: "music", label: "♪ Music &amp; sound", onClick: toggleMusic },
-      { id: "ideas", label: "💡 Ideas board", key: "I", onClick: toggleIdeas },
-      { id: "news", label: "📜 News", key: "N", onClick: toggleNews },
-      { id: "quit", label: "💾 Save and return to start screen", onClick: () => void this.saveAndQuit() },
+      { id: "music", label: `${icon("note")}Music &amp; sound`, onClick: toggleMusic },
+      { id: "ideas", label: `${icon("candle")}Ideas board`, key: "I", onClick: toggleIdeas },
+      { id: "news", label: `${icon("scroll")}News`, key: "N", onClick: toggleNews },
+      { id: "quit", label: `${icon("fire")}Save and return to start screen`, onClick: () => void this.saveAndQuit() },
     ]);
     this.patchNotes = new PatchNotesPanel(toggleNews);
     this.input.keyboard!.on("keydown-N", () => { if (!this.chatting()) toggleNews(); });
@@ -983,7 +985,7 @@ export class TownScene extends Phaser.Scene {
       if (!e) return;
       this.floatText(e.sprite.x, e.sprite.y - 22, id === this.me ? "Dizzy!" : "Broken!", "#ffd166");
     });
-    this.room.onMessage("kill", ({ killer, victim }) => this.feed(`${killer} ⚔ ${victim}`));
+    this.room.onMessage("kill", ({ killer, victim }) => this.feed(`${killer} slew ${victim}`));
     // No magic in Oakvale (shared/wrath.ts): a hero cast a skill inside the village, or got out again
     this.room.onMessage("wrath", ({ id, on, left, shout }) => {
       const e = this.entities.get(id);
@@ -1022,7 +1024,7 @@ export class TownScene extends Phaser.Scene {
       if (!this.ideaBoard?.open) this.feed(text);
     });
     this.room.onMessage("ideawin", ({ id, text, author }) => {
-      this.feed(`💡 Idea #${id} by ${author} won this hour's vote!`);
+      this.feed(`Idea #${id} by ${author} won this hour's vote!`);
       this.chatMessage("", "Ideas", `Idea #${id} "${text.slice(0, 80)}" won this hour's vote! It goes to the builders.`);
     });
     // Server restart (every deploy): show a notice and log back in by itself
@@ -1749,7 +1751,7 @@ export class TownScene extends Phaser.Scene {
     if (this.quitting || leaving()) return;
     this.quitting = true;
     this.closeMenus();
-    this.feed("💾 Saving your hero…");
+    this.feed("Saving your hero…");
     const login = { name: this.opts.name, password: this.opts.password };
     try { await Promise.race([this.room?.leave(true), new Promise((r) => setTimeout(r, 3000))]); } catch { /* already gone */ }
     returnToStart(login);
@@ -1894,12 +1896,12 @@ export class TownScene extends Phaser.Scene {
     const opts = activeSkills(cls).map((a) => {
       const learned = skillLearned(cls, mine.talents, a.id);
       const at = slots.indexOf(a.id);
-      const where = !learned ? `🔒 learn it in the tree (T), Lv ${a.req}` : at === n ? "in this slot" : at >= 0 ? `now on key ${SLOT_KEYS[at]}` : "not on a key yet"
+      const where = !learned ? `${icon("lock")}learn it in the tree (T), Lv ${a.req}` : at === n ? "in this slot" : at >= 0 ? `now on key ${SLOT_KEYS[at]}` : "not on a key yet"
       const need = a.needs ? ` · needs ${NEED_TEXT[a.needs]}` : "";
       return `<button class="opt${learned ? "" : " locked"}${at === n ? " cur" : ""}" data-pick="${a.id}" data-tiphead="${a.name}" data-tip="${tipEsc(a.desc)}">` +
         `${iconImg(a.id, "picon")}<span><b>${a.name}</b><small>${where}${need}</small></span></button>`;
     }).join("");
-    const empty = `<button class="opt clear" data-pick=""><span class="picon none">✕</span><span><b>Empty</b><small>clear key ${SLOT_KEYS[n]}</small></span></button>`;
+    const empty = `<button class="opt clear" data-pick=""><span class="picon none">${icon("close")}</span><span><b>Empty</b><small>clear key ${SLOT_KEYS[n]}</small></span></button>`;
     const pick = document.getElementById("slotpick")!;
     pick.innerHTML = `<div class="ph">Key ${SLOT_KEYS[n]}: choose a skill</div><div class="plist">${opts}${slots[n] ? empty : ""}</div>`;
     this.pickSlot = n;
@@ -1923,7 +1925,7 @@ export class TownScene extends Phaser.Scene {
       `${this.weaponIcon(mine, "picon")}<span><b>Weapon attack</b><small>${WEAPON_TYPE_NAMES[w.type]}: ${ATTACK_WORDS[w.type]}</small></span></button>`;
     const opts = activeSkills(cls).map((a) => {
       const learned = skillLearned(cls, mine.talents, a.id);
-      const where = !learned ? `🔒 learn it in the tree (T), Lv ${a.req}` : a.cantrip ? `basic spell · ${a.mana ?? 0} mana` : a.id === cur ? "on left click" : costWords(a) + (a.needs ? ` · needs ${NEED_TEXT[a.needs]}` : "");
+      const where = !learned ? `${icon("lock")}learn it in the tree (T), Lv ${a.req}` : a.cantrip ? `basic spell · ${a.mana ?? 0} mana` : a.id === cur ? "on left click" : costWords(a) + (a.needs ? ` · needs ${NEED_TEXT[a.needs]}` : "");
       return `<button class="opt${learned ? "" : " locked"}${a.id === cur ? " cur" : ""}" data-pick="${a.id}" data-tiphead="${a.name}" data-tip="${tipEsc(a.desc)}">` +
         `${iconImg(a.id, "picon")}<span><b>${a.name}</b><small>${where}</small></span></button>`;
     }).join("");
@@ -2435,15 +2437,15 @@ export class TownScene extends Phaser.Scene {
       this.gearMenu?.refresh(mine);
       this.talentMenu?.refresh(mine);
       if (!document.getElementById("hero")!.hidden) this.showHeroMenu(this.heroFrom);
-      const safe = isSafeZone(meEnt.sprite.x, meEnt.sprite.y) ? "🛡 Safe zone · " : "";
+      const safe = isSafeZone(meEnt.sprite.x, meEnt.sprite.y) ? `${icon("shield")}Safe zone · ` : "";
       (document.getElementById("hpfill") as HTMLElement).style.width = `${(mine.hp / mine.maxHp) * 100}%`;
       this.barText("hptext", "HP", Math.ceil(mine.hp), Math.round(mine.maxHp));
       const next = xpForLevel(mine.level + 1), cur = xpForLevel(mine.level);
       const cls0 = mine.cls as ClassKind;
-      document.getElementById("stats")!.textContent =
+      document.getElementById("stats")!.innerHTML =
         `${mine.dead ? "Respawning… " : safe}Lv ${mine.level} ${CLASSES[mine.cls as ClassKind].name} · ` +
         `${mine.level >= MAX_LEVEL ? "XP MAX" : `XP ${mine.xp - cur}/${next - cur}`} · Gold ${mine.gold} · Potions ${mine.potions} · Mana potions ${unpackMana(mine.mp).potions} · Kills ${mine.kills} · Online ${online}` +
-        (talentPoints(mine.level) > spentPoints(cls0, mine.talents) ? ` · ⭐ ${talentPoints(mine.level) - spentPoints(cls0, mine.talents)} skill point(s): press T` : "");
+        (talentPoints(mine.level) > spentPoints(cls0, mine.talents) ? ` · ${icon("star")}${talentPoints(mine.level) - spentPoints(cls0, mine.talents)} skill point(s): press T` : "");
       const freePts = talentPoints(mine.level) - spentPoints(cls0, mine.talents);
       const badge = document.getElementById("treebadge")!;
       badge.hidden = freePts <= 0;
@@ -2458,8 +2460,8 @@ export class TownScene extends Phaser.Scene {
       setMusicZone(zdef?.name, zdef?.mobs, this.areaName);
       sfxFrame(this.me, this.entities as any);
       const zone = zdef && (this.room.state as any).zones?.get(zdef.name);
-      document.getElementById("zone")!.textContent = zone
-        ? `⚔ ${zone.name} (Lv ${levelsAt(zdef!, tx, ty).join("-")}): ${zone.alive}/${zone.cap} monsters`
+      document.getElementById("zone")!.innerHTML = zone
+        ? `${icon("swords")}${zone.name} (Lv ${levelsAt(zdef!, tx, ty).join("-")}): ${zone.alive}/${zone.cap} monsters`
         : "";
       const cls = mine.cls as ClassKind;
       const cdm = cooldownMult(cls, { sta: mine.sta, str: mine.str, mag: mine.mag, dex: mine.dex ?? 0 }, mine.talents);
