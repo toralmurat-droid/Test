@@ -22,5 +22,6 @@ RUN mkdir -p /app/data
 
 # The host sets PORT; 2567 is the fallback
 EXPOSE 2567
-# Run node directly (not through npx) so Railway's stop signal reaches the game: it then saves everyone before exiting
-CMD ["node", "--import", "tsx", "server/index.ts"]
+# Run node directly (not through npx) so Railway's stop signal reaches the game: it then saves everyone before exiting.
+# The server is pre-bundled into one plain JavaScript file by `npm run build` (faster ticks, less memory than tsx).
+CMD ["node", "--enable-source-maps", "server-dist/index.cjs"]

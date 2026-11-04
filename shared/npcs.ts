@@ -46,10 +46,24 @@ export const NPC_DECOR: NpcDecor[] = [
 ];
 
 /** True if (px, py) is inside one of the NPC props that block movement. */
+/** Box (tiles) around every solid trader prop: most collision checks are far from it and stop there. */
+let decorBox: [number, number, number, number] | undefined;
+function decorBounds(): [number, number, number, number] {
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const d of NPC_DECOR) {
+    const r = d.solid;
+    if (!r) continue;
+    x0 = Math.min(x0, r[0]); y0 = Math.min(y0, r[1]); x1 = Math.max(x1, r[0] + r[2]); y1 = Math.max(y1, r[1] + r[3]);
+  }
+  return [x0, y0, x1, y1];
+}
+
 export function isDecorSolidAt(px: number, py: number): boolean {
   const tx = px / TILE, ty = py / TILE;
   const w = WRECK.solid;
   if (tx >= w[0] && ty >= w[1] && tx < w[0] + w[2] && ty < w[1] + w[3]) return true; // the Grey Heron's hull
+  const b = (decorBox ??= decorBounds());
+  if (tx < b[0] || ty < b[1] || tx >= b[2] || ty >= b[3]) return false;
   for (const d of NPC_DECOR) {
     const r = d.solid;
     if (r && tx >= r[0] && ty >= r[1] && tx < r[0] + r[2] && ty < r[1] + r[3]) return true;

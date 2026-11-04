@@ -1,0 +1,9 @@
+{
+  "date": "2026-11-04",
+  "title": "Smoother game",
+  "changes": [
+    "The server works about twice as fast, so fights stay smooth with many heroes online.",
+    "About half as much data is sent to your browser: less lag on slow connections.",
+    "Animated water and grass no longer make the game stutter on weaker computers."
+  ]
+}

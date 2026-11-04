@@ -45,13 +45,13 @@ export class Player extends Schema {
   @type("string") name = "";
   @type("string") cls: ClassKind = "knight";
   @type("number") color = 0xffffff;
-  @type("number") x = 0;
-  @type("number") y = 0;
+  @type("float32") x = 0;
+  @type("float32") y = 0;
   @type("string") dir: Dir = "down";
   // Aim: unit vector of the last movement direction, diagonals included (attacks and shots go this way)
-  @type("number") ax = 0;
+  @type("float32") ax = 0;
   aimDist = -1; // not synced: px to the spot last clicked with "face" (point skills read it once)
-  @type("number") ay = 1;
+  @type("float32") ay = 1;
   @type("boolean") moving = false;
   @type("number") hp = 100;
   @type("number") maxHp = 100;
@@ -168,6 +168,7 @@ export class Mob extends Schema {
   riteX = NaN; riteY = 0; // BONES.ritual: the point of the star this skeleton walks to before it throws itself in
   ritual = false; banishAt = 0; nextStomp = 0; nextHarvest = 0; nextToss = 0; // BONES.ritual: given to a demon summoning; demon: when it goes back, next Hellfire Stomp
   leg = 0; restUntil = 0; // carriers: 0 = taking a plank to the engine, 1 = going back to the yard; pause at each end
+  dozeSlot = -1; lastTick = 0; dozy = false; // server tick bookkeeping for dozing monsters (TownRoom.dozing)
   flankA = NaN; // BONES: side of the hero this skeleton closes in from (NaN = straight at him)
   hateId = ""; hate = 0; nextAggro = 0; threat = 0; // AGGRO: who hit it last and how much it hates them; level gap of the scariest hero near
 
@@ -185,8 +186,8 @@ export class Mob extends Schema {
   alertUntil = 0; alertHero = ""; nextHorn = 0; nextVolley = 0; rallyUntil = 0; chargeMult = 1; dashHit = false; reinforced = false;
   nextSweep = 0; nextLeap = 0; nextCry = 0;
   path: [number, number][] = []; pathAt = 0; pathTX = 0; pathTY = 0; // the way round walls (gates), see seek
-  @type("number") x = 0;
-  @type("number") y = 0;
+  @type("float32") x = 0;
+  @type("float32") y = 0;
   @type("string") dir: Dir = "down";
   @type("boolean") moving = false;
   @type("number") hp = 0;
@@ -218,11 +219,11 @@ export class Mob extends Schema {
 }
 
 export class Projectile extends Schema {
-  @type("number") x = 0;
-  @type("number") y = 0;
+  @type("float32") x = 0;
+  @type("float32") y = 0;
   @type("string") dir: Dir = "down";
-  @type("number") vx = 0; // flight direction (unit vector, may be diagonal)
-  @type("number") vy = 1;
+  @type("float32") vx = 0; // flight direction (unit vector, may be diagonal)
+  @type("float32") vy = 1;
   @type("string") owner = "";
   @type("number") size = 1; // visual scale (combo finisher fireballs are bigger)
   @type("string") kind = "fireball"; // "fireball" | "arrow" (client picks the visual)
@@ -278,11 +279,11 @@ export class Field extends Schema {
 
 /** A watchman of the village gate (shared/watch.ts). Can't be hurt; the client plays his walk/idle/thrust. */
 export class Watchman extends Schema {
-  @type("number") x = 0;
-  @type("number") y = 0;
+  @type("float32") x = 0;
+  @type("float32") y = 0;
   @type("boolean") moving = false;
-  @type("number") ax = 0; // facing (world vector)
-  @type("number") ay = 1;
+  @type("float32") ax = 0; // facing (world vector)
+  @type("float32") ay = 1;
   @type("number") swing = 0; // bumped on every spear thrust
 
   post!: WatchPost;
@@ -387,7 +388,9 @@ function toward(x: number, y: number, tx: number, ty: number): InputState {
 
 const FEUD_CELL = 128; // px, >= FEUD.range
 /** Monsters with no player within this many px (square) doze until someone comes by. */
-const SLEEP_RANGE = 40 * TILE;
+const SLEEP_RANGE = 28 * TILE; // the screen shows about 12 tiles each way, so they are always awake well before they come into view
+/** A dozing monster (no hero within SLEEP_RANGE) is updated once every this many ticks. */
+const DOZE_EVERY = 5;
 /** Monsters never (re)appear this close to a living hero (Murat): the zone tries another spot or waits. */
 const NO_SPAWN_RANGE = 10 * TILE;
 
@@ -827,7 +830,9 @@ export class TownRoom extends Room<TownState> {
     m.nextHeal = now + BLOB_AI.healer.everyMs;
     let best: Mob | undefined, bestId = "", worst = 0.999;
     this.state.mobs.forEach((o, oid) => {
-      if (o.dead || o.hidden || !BLOB_KINDS.includes(o.kind as MobKind) || Math.hypot(o.x - m.x, o.y - m.y) > BLOB_AI.healer.range) return;
+      const R = BLOB_AI.healer.range;
+      if (Math.abs(o.x - m.x) > R || Math.abs(o.y - m.y) > R) return; // cheap box test first
+      if (o.dead || o.hidden || !BLOB_KINDS.includes(o.kind as MobKind) || Math.hypot(o.x - m.x, o.y - m.y) > R) return;
       const f = o.hp / o.maxHp;
       if (f < worst) { worst = f; best = o; bestId = oid; }
     });
@@ -1387,8 +1392,27 @@ export class TownRoom extends Room<TownState> {
 
   // ---- Tick ---------------------------------------------------------------
 
+  private tickNo = 0;
+  private dozeSeq = 0;
+
+  /**
+   * True when updateMob would do nothing but let the monster doze: no hero within SLEEP_RANGE, no target or rival,
+   * not burning, stunned, walking to a rite, being banished or merging. Mirrors the early returns of updateMob.
+   */
+  private dozing(m: Mob, heroes: Player[], now: number): boolean {
+    if (m.dead || m.target || m.foe || m.banishAt || m.ritual || m.mergeInto || m.spot || m.specialAt || m.windUntil) return false;
+    if (now < m.stunUntil || now < m.sk.burnUntil || m.broken || m.moving) return false;
+    return !this.heroNear(m, heroes);
+  }
+
+  private heroNear(m: Mob, heroes: Player[]): boolean {
+    const x = m.x, y = m.y;
+    for (const p of heroes) if (Math.abs(p.x - x) < SLEEP_RANGE && Math.abs(p.y - y) < SLEEP_RANGE) return true;
+    return false;
+  }
+
   private update(dtMs: number) {
-    const dt = dtMs / 1000;
+    let dt = dtMs / 1000;
     const now = Date.now();
     this.state.players.forEach((p, pid) => {
       tickUnit(this.host, pid);
@@ -1431,16 +1455,32 @@ export class TownRoom extends Room<TownState> {
       this.updateWrath(pid, p, now);
     });
     this.state.items.forEach((it, id) => { if (now > it.expires) this.state.items.delete(id); });
-    this.buildFeudGrid();
+    const tick = ++this.tickNo;
+    if (tick % 2 === 0) this.buildFeudGrid(); // monsters move a few px per tick, a grid cell is 128 px
     this.assignFlanks();
     this.checkRituals(now);
+    // Live heroes, gathered once so each monster's "anyone near?" check is a plain array scan
+    const awake: Player[] = [];
+    this.state.players.forEach((p) => { if (!p.dead) awake.push(p); });
     this.state.mobs.forEach((m, id) => {
+      // A dozing monster far from every hero (nothing it could do this tick) only gets its upkeep every DOZE_EVERY ticks
+      if (m.dozeSlot < 0) m.dozeSlot = this.dozeSeq++ % DOZE_EVERY;
+      const slot = (tick + m.dozeSlot) % DOZE_EVERY === 0;
+      // between its upkeep ticks a dozing monster only checks whether a hero came near
+      if (m.dozy && !slot && !this.heroNear(m, awake)) return;
+      m.dozy = this.dozing(m, awake, now);
+      if (m.dozy) {
+        if (!slot) return;
+        dt = Math.min(1, (now - (m.lastTick || now - dtMs)) / 1000); // poise recovers for the whole time it dozed
+      } else dt = dtMs / 1000;
+      m.lastTick = now;
       tickUnit(this.host, id);
       const fx = statusOf(m, now);
       if (m.fx !== fx) m.fx = fx;
       this.updateMob(m, id, dt, now);
       if (m.perch) { m.x = m.homeX; m.y = m.homeY; m.moving = false; } // lookouts never leave their tower
     });
+    dt = dtMs / 1000;
     this.updateZones(now);
     this.updateGuards(now);
     this.updateWatch(dt, now);
@@ -2402,7 +2442,11 @@ export class TownRoom extends Room<TownState> {
       if (tid !== exclude && !t.dead && Math.hypot(t.x - x, t.y - y) <= r) out.push(tid);
     });
     this.state.mobs.forEach((m, mid) => {
-      if (!m.dead && !m.hidden && Math.hypot(m.x - x, m.y - y) <= r) out.push(mid);
+      const dx = m.x - x; // cheap box test first: there are thousands of monsters and most are far away
+      if (dx > r || dx < -r) return;
+      const dy = m.y - y;
+      if (dy > r || dy < -r) return;
+      if (!m.dead && !m.hidden && Math.hypot(dx, dy) <= r) out.push(mid);
     });
     return out;
   }

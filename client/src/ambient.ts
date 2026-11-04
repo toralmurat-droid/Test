@@ -1,7 +1,8 @@
 import Phaser from "phaser";
 import { ART_K as K, MAP_H, MAP_W, TILE } from "../../shared/constants";
 import { AREAS, EMPTY, GROUND, OBJECTS, T } from "../../shared/map";
-import { ANIMATED_TILES, drawTileFrame } from "./tileset";
+import { ANIMATED_TILES, animatedRows, drawTileFrame } from "./tileset";
+import { refreshRegions } from "./texupload";
 import { ISO, isoAnchor } from "./iso";
 import { SMOOTH } from "./isoflag";
 import { smoothTrees } from "./smoothArt";
@@ -496,7 +497,8 @@ export class Ambient {
         if (id === T.TALL_GRASS || id === T.FLOWERS) { if (this.frame % 2) continue; drawTileFrame(ctx, id, this.frame >> 1); }
         else drawTileFrame(ctx, id, this.frame);
       }
-      tex.refresh();
+      // upload just the repainted tiles, not the whole 1440x4096 tileset
+      refreshRegions(scene, tex, ANIMATED_TILES.map((id) => [id * TILE, 0, TILE, animatedRows(id) * TILE]));
     }
 
     const cam = scene.cameras.main.worldView;

@@ -90,6 +90,8 @@ export const riverCenter = (y: number) => Math.round(118 + 3 * Math.sin(y / 11) 
 
 /** Objects you can walk through (purely decorative, drawn over the player when they stand behind them). */
 const WALKABLE_OBJECTS = new Set<number>([T.BUSH]);
+/** Solid flag per tile (1 = blocks), filled once the world is built: the hot collision check reads one byte. */
+let SOLID: Uint8Array | null = null;
 const NATURE = new Set<number>([T.TREE, T.PINE, T.BUSH, T.ROCK, T.STUMP]);
 
 function buildWorld() {
@@ -779,6 +781,11 @@ function buildWorld() {
 export const WORLD = buildWorld();
 export const GROUND = WORLD.ground;
 export const OBJECTS = WORLD.objects;
+SOLID = new Uint8Array(MAP_W * MAP_H);
+for (let ty = 0; ty < MAP_H; ty++) for (let tx = 0; tx < MAP_W; tx++) {
+  const o = OBJECTS[ty][tx];
+  SOLID[ty * MAP_W + tx] = (o !== EMPTY && !WALKABLE_OBJECTS.has(o)) || GROUND[ty][tx] === T.WATER ? 1 : 0;
+}
 export const AREAS = WORLD.areas;
 /** Water tiles where a bridge span has collapsed (the broken bridges to the Old Ruins and the Old Watchtower). */
 export const BROKEN_BRIDGES = WORLD.broken;
@@ -865,6 +872,7 @@ export function signpostNear(px: number, py: number, reach = 1.6): Signpost | un
 
 export function isSolidTile(tx: number, ty: number): boolean {
   if (tx < 0 || ty < 0 || tx >= MAP_W || ty >= MAP_H) return true;
+  if (SOLID && (tx | 0) === tx && (ty | 0) === ty) return SOLID[ty * MAP_W + tx] === 1;
   const o = OBJECTS[ty][tx];
   return (o !== EMPTY && !WALKABLE_OBJECTS.has(o)) || GROUND[ty][tx] === T.WATER;
 }

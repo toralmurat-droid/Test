@@ -1,7 +1,8 @@
 import Phaser from "phaser";
 import { MAP_H, MAP_W, TILE } from "../../shared/constants";
 import { T, TILE_COUNT } from "../../shared/map";
-import { ROWS, ANIMATED_TILES } from "./tileset";
+import { ROWS, ANIMATED_TILES, animatedRows } from "./tileset";
+import { refreshRegions } from "./texupload";
 import { BUILDINGS, buildBarns, buildHouses, buildStalls, ruinWallTexture } from "./isobuild";
 import { buildBridges } from "./isobridge";
 
@@ -88,7 +89,9 @@ function bakeIsoTiles(scene: Phaser.Scene, ids?: number[]) {
   const ctx = tex.getContext();
   ctx.imageSmoothingEnabled = false;
   const cols = ids ?? [...Array(TILE_COUNT).keys()];
-  for (let row = 0; row < ROWS; row++) for (const id of cols) {
+  // Animation re-bakes only the rows the animation repaints (tileset.ts animatedRows); the first bake does them all
+  const rows = ids ? Math.max(...ids.map((id) => animatedRows(BAKE_FROM[id] ?? id))) : ROWS;
+  for (let row = 0; row < rows; row++) for (const id of cols) {
     const ox = id * CW, oy = row * CH;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(ox, oy, CW, CH);
@@ -99,7 +102,8 @@ function bakeIsoTiles(scene: Phaser.Scene, ids?: number[]) {
     ctx.drawImage(src, from * TILE, row * TILE, TILE, TILE, 0, 0, TILE, TILE);
   }
   ctx.setTransform(1, 0, 0, 1, 0, 0);
-  tex.refresh();
+  if (ids) refreshRegions(scene, tex, ids.map((id) => [id * CW, 0, CW, rows * CH]));
+  else tex.refresh();
 }
 
 /** Only the tiles whose diamond is on screen (Phaser's own iso cull walks the whole map every frame). */
