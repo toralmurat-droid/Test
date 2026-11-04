@@ -5,7 +5,7 @@
  */
 import { skillById } from "../../shared/skills";
 import { PALETTE } from "./skillfx";
-import { paintSkill, ICON } from "./skillArt";
+import { paintSkill, paintStatus, ICON } from "./skillArt";
 
 type Icon = { pal: Record<string, string>; px: string[] };
 
@@ -281,7 +281,7 @@ export function skillIcon(id: string): string {
   if (cache.has(id)) return cache.get(id)!;
   if (typeof document === "undefined") return "";
   // Skill tree skills: the 24x24 painted icon (client/src/skillArt.ts)
-  const art = paintSkill(id);
+  const art = paintSkill(id) ?? paintStatus(id);
   if (art) {
     const c = document.createElement("canvas");
     c.width = ICON; c.height = ICON;

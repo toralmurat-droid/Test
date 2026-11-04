@@ -866,3 +866,67 @@ export function paintSigil(id: string): string[] | undefined {
 }
 
 export const ART_IDS = Object.keys(ART);
+
+// ---- Status icons for the HUD buff row (client/src/buffbar.ts): boons and debuffs that are not skills ----------------
+/** [style for the backdrop glow, frame row, harmful]. Debuffs get a blood-red frame so they read as bad at a glance. */
+const STATUS_ART: Record<string, [FxStyle, number, boolean, Draw]> = {
+  // Shrine Blessing of the Wind: a white feather riding green gusts
+  shrine_wind: ["wind", 3, false, (p) => {
+    p.poly([[5, 19], [15, 5], [19, 4], [18, 8], [8, 19]], BONE[2]);
+    p.line(6, 19, 18, 5, BONE[0]);
+    for (const [x, y] of [[9, 13], [11, 11], [13, 9], [15, 7]]) p.line(x, y, x + 3, y + 1, BONE[1]);
+    p.outline();
+    p.ring(12, 13, 9, WIND[2], Math.PI * 0.9, Math.PI * 1.5);
+    p.ring(12, 13, 6, WIND[3], Math.PI * 0.1, Math.PI * 0.7);
+    p.line(2, 8, 7, 8, WIND[2]); p.line(16, 17, 21, 17, WIND[2]); p.line(18, 20, 21, 20, WIND[1]);
+    p.px(19, 4, "#ffffff");
+  }],
+  // Stunned: little gold stars circling a dazed head
+  stun: ["holy", 0, true, (p) => {
+    p.ball(12, 15, 5, SKIN);
+    p.outline();
+    p.ring(12, 8, 7, GOLD[1], 0, Math.PI * 2, 2.5);
+    p.spark(5, 8, 2, GOLD[2]); p.spark(18, 7, 2, GOLD[2]); p.spark(12, 10, 1, GOLD[3]);
+    p.line(10, 15, 11, 16, OUT); p.line(11, 15, 10, 16, OUT); p.line(14, 15, 15, 16, OUT); p.line(15, 15, 14, 16, OUT);
+  }],
+  // Slowed: a frosted hourglass
+  slow: ["frost", 0, true, (p) => {
+    p.rect(6, 3, 12, 2, WOOD[2]); p.rect(6, 19, 12, 2, WOOD[1]);
+    p.poly([[8, 5], [16, 5], [12, 12]], ICE[1]); p.poly([[12, 12], [16, 19], [8, 19]], ICE[1]);
+    p.poly([[10, 6], [14, 6], [12, 10]], ICE[3]); p.poly([[12, 14], [15, 19], [9, 19]], ICE[2]);
+    p.line(12, 10, 12, 16, ICE[3]);
+    p.outline();
+    p.spark(18, 11, 2, ICE[3]); p.px(6, 13, ICE[3]);
+  }],
+  // Burning: a roaring flame
+  burn: ["fire", 0, true, (p) => { p.flame(12, 21, 17, 12, FIRE); p.outline(); p.px(7, 6, FIRE[3]); p.px(17, 8, FIRE[2]); }],
+  // Marked: a red crosshair (takes more damage)
+  mark: ["blood", 0, true, (p) => {
+    p.ring(12, 12, 7, BLOOD[2]); p.ring(12, 12, 6, BLOOD[1]);
+    p.thick(12, 2, 12, 7, 2, BLOOD[2]); p.thick(12, 17, 12, 22, 2, BLOOD[2]);
+    p.thick(2, 12, 7, 12, 2, BLOOD[2]); p.thick(17, 12, 22, 12, 2, BLOOD[2]);
+    p.outline();
+    p.px(12, 12, "#ffffff"); p.px(13, 12, BLOOD[3]);
+  }],
+  // Weakened: a sword snapped in two (deals less damage)
+  weak: ["shadow", 0, true, (p) => {
+    p.sword(4, 20, 11, 13, IRON, IRON);
+    p.thick(14, 10, 20, 4, 2, IRON[2]); p.line(14, 10, 20, 4, IRON[3]);
+    p.outline();
+    p.px(12, 11, SHAD[3]); p.px(13, 12, SHAD[2]); p.px(11, 9, SHAD[2]);
+  }],
+};
+
+/** 24x24 colours for a status (boon or debuff) that is not a skill, or undefined. */
+export function paintStatus(id: string): string[] | undefined {
+  const a = STATUS_ART[id];
+  if (!a) return undefined;
+  const [style, row, bad, draw] = a;
+  const p = new Painter();
+  draw(p);
+  const back = backdrop(style, row, false);
+  if (bad) for (let i = 0; i < ICON; i++) {
+    back[i] = BLOOD[1]; back[(ICON - 1) * ICON + i] = BLOOD[0]; back[i * ICON] = BLOOD[1]; back[i * ICON + ICON - 1] = BLOOD[0];
+  }
+  return back.map((b, i) => p.fx[i] || p.g[i] || b);
+}

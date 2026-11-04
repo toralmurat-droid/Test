@@ -402,3 +402,20 @@ html, body { margin: 0; height: 100%; background: #1b1b24; color: #eee; font: 14
 #patchnotice { position: absolute; right: 12px; bottom: 56px; pointer-events: auto; cursor: pointer; z-index: 8;
   font: bold 14px var(--pixel-font); -webkit-font-smoothing: none; color: #7cfc00; background: rgba(30,30,46,.92); border: 2px solid #7cfc00;
   padding: 6px 12px; max-width: calc(100% - 24px); animation: lvlnote-pulse 1.2s ease-in-out infinite; }
+/* Buff row (buffbar.ts): timed buffs and debuffs with icon + countdown, just above the slot bar */
+#buffs { position: absolute; left: 50%; bottom: 100px; transform: translateX(-50%); display: flex; gap: 4px; pointer-events: auto;
+  font-family: 'Pixelify Sans', monospace; -webkit-font-smoothing: none; max-width: calc(100% - 32px); flex-wrap: wrap; justify-content: center; }
+#buffs .buff { position: relative; width: 40px; height: 54px; display: flex; flex-direction: column; align-items: center; }
+#buffs .buff img, #buffs .buff i { width: 36px; height: 36px; image-rendering: pixelated; border: 2px solid #c9a227; background: #15151f;
+  box-shadow: 0 0 0 1px #000; }
+#buffs .buff i { display: grid; place-items: center; font-style: normal; color: #aaa; }
+#buffs .buff.bad img, #buffs .buff.bad i { border-color: #b3202a; }
+#buffs .buff .sweep { position: absolute; top: 2px; left: 2px; width: 36px; height: 0; max-height: 36px; background: rgba(0,0,0,.6); }
+#buffs .buff span { font-size: 13px; line-height: 14px; color: #fff; text-shadow: 1px 1px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000;
+  font-variant-numeric: tabular-nums; white-space: nowrap; }
+#buffs .buff.bad span { color: #ff8a80; }
+#buffs .buff.ending img { animation: buff-blink .5s steps(2) infinite; }
+#buffs .buff.ending span { color: #ffd166; }
+#buffs .buff.gone { display: none; }
+@keyframes buff-blink { 50% { opacity: .45; } }
+#lvlnote { bottom: 162px; }

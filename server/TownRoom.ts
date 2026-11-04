@@ -31,6 +31,7 @@ import { flush, HeroSave, loadHero, login, markChest, openedChests, resetChests,
 import { arrivalOf, cleanPortals, PORTAL_COMBAT_MS, PORTAL_RANGE, PORTAL_WAKE_RANGE, portalById, PORTALS } from "../shared/portals";
 import { rollBoon, shrineXp, SHRINE, SHRINE_COOLDOWN_MS, SHRINE_RANGE, WIND_BLESSING, WIND_BLESSING_ID } from "../shared/shrine";
 import { chestById, chestLock, CHEST_RANGE, CHEST_RESPAWN_MS, CHESTS, GUARD_RESPAWN_MS, rollChest } from "../shared/chests";
+import { encodeTimers, timerSig, timersOf } from "../shared/buffTimers";
 import { SLOT_COUNT } from "../shared/slots";
 import { groupDmgMult, groupHpMult, PARTY, together } from "../shared/party";
 import { heroPoise, MOB_COMBAT, POISE, poiseLevelMult, poiseSpeed } from "../shared/combat";
@@ -86,6 +87,10 @@ export class Player extends Schema {
   @type("number") stacks = 0;
   @type("number") spd = 1;
   @type("string") fx = "";
+  // Timed buffs/debuffs with ms left for the HUD buff row (shared/buffTimers.ts), rewritten only when they change
+  @type("string") timers = "";
+  timerSig = "";
+  timerSeq = 0;
   @type("string") party = ""; // player group id ("" = solo); shared/party.ts
   // Equipment (shared/gear.ts): equipped item ids ("" = empty) and the unequipped items carried.
   // Each slot must stay a synced @type field, or the client never sees it (the sword vanished from the menu).
@@ -1394,6 +1399,8 @@ export class TownRoom extends Room<TownState> {
       p.stacks = p.sk.stacks;
       const fx = statusOf(p, now);
       if (p.fx !== fx) p.fx = fx;
+      const timers = timersOf(p, now), sig = timerSig(timers);
+      if (sig !== p.timerSig) { p.timerSig = sig; p.timers = encodeTimers(++p.timerSeq, timers, now); }
       const spd = Math.round(speedMult(p, now) * talentMult(p.cls, p.talents, "speed") * 1000) / 1000;
       if (p.spd !== spd) p.spd = spd;
       tickPoise(p, heroPoiseMax(p), dt, now);
