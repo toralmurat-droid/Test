@@ -541,7 +541,7 @@ export const BONE_QUESTS: QuestDef[] = [
       { type: "use", zone: BZ.grave.name, objects: CRYPTS, text: "Seal the 4 crypts with Rowan's ward", banner: ["The ranks are broken!", "Seal the 4 crypts"],
         obj: "Crypts sealed: {n} / {goal}", nag: "{n} of {goal} crypts sealed. One in each corner of the cemetery." },
       { type: "kill", zone: BZ.grave.name, kinds: ["demon"], goal: 1,
-        summon: { parts: ["demon"], level: 19, title: "Gravemoor Horror", hpMult: 2, ...spotIn(BZ.grave.name, 0.51, 0.53) },
+        summon: { parts: ["demon"], level: 19, title: "Gravemoor Horror", hpMult: 1.6, ...spotIn(BZ.grave.name, 0.51, 0.53) },
         text: "Destroy the Gravemoor Horror", banner: ["THE GROUND SHAKES", "The Gravemoor Horror rises"], obj: "Gravemoor Horror slain: {n} / {goal}",
         nag: "It rose before the mausoleum. Every bone the crypts held, in one body. Destroy it!" },
       back("captain", "Captain Hale", "east gate", [
@@ -568,7 +568,7 @@ export const BONE_QUESTS: QuestDef[] = [
       { type: "use", zone: BZ.keep.name, objects: [PHYLACTERY], text: "Shatter the Marshal's phylactery", banner: ["His guard has fallen!", "Shatter the phylactery"],
         obj: "Shatter the phylactery", nag: "It stands before the great hall. Break it!" },
       { type: "kill", zone: BZ.keep.name, kinds: ["necromancer"], goal: 1,
-        summon: { parts: ["necromancer"], level: 24, title: "Vaeloth, the Pale Marshal", hpMult: 3, ...spotIn(BZ.keep.name, 0.5, 0.65) },
+        summon: { parts: ["necromancer"], level: 24, title: "Vaeloth, the Pale Marshal", hpMult: 2.5, ...spotIn(BZ.keep.name, 0.5, 0.65) },
         text: "Defeat Vaeloth, the Pale Marshal", banner: ["THE PALE MARSHAL RISES", "Defeat Vaeloth"], obj: "The Pale Marshal defeated: {n} / {goal}",
         nag: "He's out of his hall and he's angry. Finish him!" },
       back("captain", "Captain Hale", "east gate", [
@@ -640,7 +640,7 @@ export const RED_QUESTS: QuestDef[] = [
         text: "Take back 5 Salted Cod from the raiders", banner: ["The raiders bleed!", "Take back the stolen cod"], obj: "Salted Cod: {n} / {goal}",
         nag: "{n} of {goal}. They stuff it in their packs, the thieving gulls." },
       { type: "kill", zone: COVE, kinds: ["bandit"], goal: 1,
-        summon: { parts: ["bandit"], level: 21, title: "Rask the Reaver", hpMult: 2.5, x: (GULLROCK.x + 15) * TILE, y: (GULLROCK.y + 7.7) * TILE }, own: true,
+        summon: { parts: ["bandit"], level: 21, title: "Rask the Reaver", hpMult: 3.5, x: (GULLROCK.x + 15) * TILE, y: (GULLROCK.y + 7.7) * TILE }, own: true,
         text: "Slay Rask, the raid leader", banner: ["Rask comes for you!", "Slay Rask the Reaver"], obj: "Rask the Reaver slain: {n} / {goal}",
         nag: "Rask won't leave his share of the cod. He's by the raiders' fire." },
       { type: "talk", npc: "oldfisher", text: "Bring the cod to Old Garrick", banner: ["The raiders are beaten", "Bring the cod to Old Garrick"],
@@ -757,7 +757,7 @@ export const CROWN_QUESTS: QuestDef[] = [
       { type: "use", zone: THRONE, objects: WARDS, chest: false, text: "Break the three crown ward-stones", banner: [THRONE, "Break the three ward-stones"],
         obj: "Ward-stones broken: {n} / {goal}", nag: "{n} of {goal}. They stand round his dais. Break them all." },
       { type: "kill", zone: THRONE, kinds: ["hollowking"], goal: 1,
-        summon: { parts: ["hollowking"], level: 30, title: "Ostrevar, the Hollow King", hpMult: 1.5, x: (HOLLOW.cx + 0.5) * TILE, y: (HOLLOW.cy - 3.3) * TILE },
+        summon: { parts: ["hollowking"], level: 30, title: "Ostrevar, the Hollow King", hpMult: 2, x: (HOLLOW.cx + 0.5) * TILE, y: (HOLLOW.cy - 3.3) * TILE },
         text: "Defeat Ostrevar, the Hollow King", banner: ["THE HOLLOW KING RISES", "Defeat Ostrevar"], obj: "The Hollow King defeated: {n} / {goal}",
         nag: "He is on his throne and he is awake. End him!" },
       back("druid", "Elder Rowan", "village bonfire", [

@@ -1,0 +1,10 @@
+{
+  "date": "2026-11-04",
+  "title": "Balance pass: tougher monsters, closer duels",
+  "changes": [
+    "Monsters grow much stronger with their level: higher-level zones and bosses are now a real fight. They give a little more XP too.",
+    "Duels between heroes last longer at high level (heroes deal less damage to each other as they level), and all five classes were retuned so fights at the same level are close.",
+    "Wizard spells Spark, Fire Dart and Frost Bolt now replace a basic attack instead of firing on top of it. Frozen Orb has a short cooldown and hits a bit softer.",
+    "Skills scale less with your attributes; Barbarian Earth and Ancestor skills now grow with your axe. Many skill numbers changed: check your skill sheet (T)."
+  ]
+}

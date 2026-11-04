@@ -29,7 +29,7 @@ export const POISE = {
 } as const;
 
 /** Base poise per hero (+12% per level above 1, so it keeps up with damage growth). Heavy fighters hold their ground longer. */
-export const HERO_POISE: Record<ClassKind, number> = { knight: 90, barbarian: 80, archer: 55, ninja: 70, wizard: 55 };
+export const HERO_POISE: Record<ClassKind, number> = { knight: 90, barbarian: 80, archer: 55, ninja: 90, wizard: 55 };
 export const heroPoise = (cls: ClassKind, level: number) => Math.round(HERO_POISE[cls] * (1 + 0.12 * (Math.max(1, level) - 1)));
 
 /** Monster poise (scaled like HP by level) and attack wind-up. */
@@ -54,6 +54,17 @@ export const MOB_COMBAT: Record<MobKind, { poise: number; windupMs: number }> = 
 export function poiseSpeed(frac: number): number {
   if (frac >= POISE.slowBelow) return 1;
   return POISE.minSpeed + (1 - POISE.minSpeed) * Math.max(0, frac) / POISE.slowBelow;
+}
+
+/**
+ * Hero against hero (balance pass 2026-11-04): damage between heroes shrinks as they level, so high-level duels last
+ * a few seconds instead of ending with the first ultimate. Lv 1 = full damage, Lv 10 = 74%, Lv 20 = 57%, Lv 30 = 46%
+ * (the two heroes' average level). Monsters are not affected.
+ */
+export const PVP_DAMAGE = { perLevel: 0.04 } as const;
+export function pvpDamageMult(attackerLevel: number, targetLevel: number): number {
+  const lvl = ((attackerLevel || 1) + (targetLevel || 1)) / 2;
+  return 1 / (1 + PVP_DAMAGE.perLevel * Math.max(0, lvl - 1));
 }
 
 /** Attack speed bonus while raging (Barbarian). */

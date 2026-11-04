@@ -37,7 +37,9 @@ export const newRuntime = (): SkillRuntime => ({
   burnUntil: 0, burnDps: 0, burnBy: "", burnNext: 0, markUntil: 0, weakUntil: 0,
 });
 
-export interface Unit { x: number; y: number; dead: boolean; level: number; sk: SkillRuntime; cls?: ClassKind; talents?: Ranks; energy?: number; mana?: number; hp?: number; maxHp?: number }
+export interface Unit { x: number; y: number; dead: boolean; level: number; sk: SkillRuntime; cls?: ClassKind; talents?: Ranks; energy?: number; mana?: number; hp?: number; maxHp?: number;
+  /** Heroes: when the next basic attack may go off. Cantrips share this timer (they are a basic attack you cast). */
+  attackReadyAt?: number }
 
 /**
  * An enchantment that rides along on a skill (Fire Arrows + Volley = a volley of fire arrows): the enchant skill's id,
@@ -134,8 +136,11 @@ export function castSkill(h: SkillHost, id: string, skillId: string): boolean {
   const now = h.now();
   if (!s || s.passive || rank <= 0 || now < u.sk.chargeUntil) return false;
   if (cooldownLeft(s, u.sk, now, h.cooldownMult(id)) > 0) return false;
+  // Cantrips take the place of a basic attack (balance pass 2026-11-04): they wait for it and hold the next one back
+  if (s.cantrip && now < (u.attackReadyAt ?? 0)) return false;
   if (!pay(u, skillCost(s))) return false; // Stamina and/or Mana (shared/mana.ts)
   u.sk.last[s.id] = now;
+  if (s.cantrip) u.attackReadyAt = now + (s.cd ?? 0);
   // A clicked spot (point skills): how far from the hero it lands, within the skill's reach
   const clicked = h.aimDist?.(id);
   const at = skillTarget(s) === "point" && clicked !== undefined ? Math.max(0, Math.min(pointRange(s), clicked)) : undefined;
