@@ -3,8 +3,8 @@ import { quake } from "./camfx";
 import { leaving, noteBuild, reconnectSoon, returnToStart, upgradeAnnounced } from "./reconnect";
 import { Client, Room } from "colyseus.js";
 import { BOSS, ELITE, InputState, MERGE, MAP_H, MAP_W, regenFromStamina, TICK_RATE, TILE } from "../../shared/constants";
-import { CLASSES, ClassKind, DODGE, ENERGY, energyName, MAX_LEVEL, xpForLevel } from "../../shared/classes";
-import { canPay, Cost, MANA, manaRegen, MAX_MANA_POTIONS, maxManaFor, shortOf, skillCost, unpackMana } from "../../shared/mana";
+import { CLASSES, ClassKind, ENERGY, energyName, MAX_LEVEL, xpForLevel } from "../../shared/classes";
+import { canPay, MANA, manaRegen, MAX_MANA_POTIONS, maxManaFor, skillCost, unpackMana } from "../../shared/mana";
 import { MAX_POTIONS } from "../../shared/items";
 import { GROUND, areaAt, isSafeZone } from "../../shared/map";
 import { heroPoise, meleeReach, mobBody } from "../../shared/combat";
@@ -13,7 +13,7 @@ import { levelsAt, SPAWN_ZONES, zoneAt } from "../../shared/spawns";
 import { musicCombat, setMusicZone } from "./music";
 import { bindSfx, play as playSfx, sfxFrame } from "./sfx";
 import { attackMult, cooldownMult, critChance, heroSpeed, STATS, magicMult, STAT_KINDS, STAT_NAMES, StatKind, statPoints, HP_PER_STR } from "../../shared/powers";
-import { pointRange, SkillDef, skillOf, skillTarget, STACK_NAME, MAX_STACKS, talentBonus } from "../../shared/skills";
+import { pointRange, SkillDef, skillOf, skillTarget, MAX_STACKS, talentBonus } from "../../shared/skills";
 import { SkillFx } from "./skillfx";
 import { displayGrid } from "./tileset";
 import { CRAWL_CROP, heroTexture, itemTexture, makeTileset, MOB_LOOK, mobTexture, preloadPaintedMobs } from "./textures";
@@ -250,7 +250,6 @@ export class TownScene extends Phaser.Scene {
   private items = new Map<string, Phaser.GameObjects.Image>();
   private lastDodge = -Infinity;
   private lastRanged = -Infinity;
-  private actionsHtml = ""; // local clock (ms) of my last dodge roll
   private heroFrom?: number;
   private heroSig = "";
   private levelFrom?: number; // level before the level-ups the player hasn't looked at yet
@@ -1959,7 +1958,7 @@ export class TownScene extends Phaser.Scene {
     if (!this.leftPick) return;
     this.leftPick.skill = id;
     try { localStorage.setItem(`leftclick:${this.leftPick.hero}`, id); } catch { /* storage off */ }
-    this.actionsHtml = ""; this.hotbarHtml = "";
+    this.hotbarHtml = "";
   }
 
   /** The main-hand weapon's icon (or a fist when empty-handed) as an <img>. */
@@ -1973,7 +1972,7 @@ export class TownScene extends Phaser.Scene {
   }
   private weaponIcons = new Map<string, string>();
 
-  /** Healing (Q) and mana (V) potion cells left of the skill bar: the flask in pixel art, how many you carry. */
+  /** Healing (Q) and mana (V) potion cells right of the skill bar: the flask in pixel art, how many you carry. */
   private potionCells(mine: any) {
     const cell = (kind: "potion" | "mpotion", key: string, n: number, name: string, max: number) => {
       let url = this.weaponIcons.get(kind);
@@ -2004,47 +2003,10 @@ export class TownScene extends Phaser.Scene {
     return { name: s?.name ?? "?", cdMs: (s?.cd ?? 0) * cdm, last: this.lastCast[skill] ?? -Infinity, cost: s ? skillCost(s) : { stamina: 0, mana: 0 }, ult: s?.row === 4 };
   }
 
-  /** HUD list of every action with its key and cooldown, under the skill bar. */
+  /** Skill bar at the bottom: potions, the left-click cell and the 10 slots (the old text list of actions is gone, Murat 2026-11-04). */
   private renderActions(mine: any, cls: ClassKind, cdm: number, now: number) {
     const pools = { energy: mine.energy, mana: unpackMana(mine.mp).mana };
-    const row = (key: string, name: string, cdMs: number, last: number, extra = "", locked = "", cost: Cost = {}) => {
-      const left = cdMs > 0 ? Math.max(0, cdMs - (now - last)) : 0;
-      const short = shortOf(pools, cost);
-      const state = locked ? "locked" : left > 0 || short ? "wait" : "";
-      const status = locked || (left > 0 ? `${(left / 1000).toFixed(1)}s` : short === "mana" ? `needs ${cost.mana} mana` : short ? `needs ${cost.stamina} stamina` : extra || "ready");
-      const fill = left > 0 ? `<div class="cd" style="width:${(1 - left / cdMs) * 100}%"></div>` : "";
-      return `<li class="${state}${ult ? " ult" : ""}">${fill}<kbd>${key}</kbd><span class="n">${name}</span><span class="s">${status}</span></li>`;
-    };
-    let ult = false;
     const slots: string[] = [...(mine.slots ?? [])];
-    // Assigned slots first, then learned skills still waiting for a slot
-    const slotRows = slots.map((skill, i) => {
-      if (!skill) return "";
-      const h = this.skillHud(cls, skill, cdm);
-      ult = h.ult;
-      const r = row(i === this.activeSlot ? `${SLOT_KEYS[i]} · R-click` : SLOT_KEYS[i], h.name, h.cdMs, h.last, "", skillLearned(cls, mine.talents, skill as any) ? "" : "🔒", h.cost);
-      ult = false;
-      return r;
-    });
-    const ls0 = this.leftSkill();
-    const unslotted = activeSkills(cls).filter((a) => !a.cantrip && a.id !== ls0 && skillLearned(cls, mine.talents, a.id) && !slots.includes(a.id))
-      .map((a) => row("–", a.name, 0, 0, "", "no key: click a slot below"));
-    const html = [
-      ((ls) => {
-        if (ls) { const h = this.skillHud(cls, ls, cdm); return row("L-click", h.name, h.cdMs, h.last, "", "", h.cost); }
-        const w = attackProfile(cls, activeOf(mine));
-        return row("L-click", w.projectile ? `Shoot (${WEAPON_TYPE_NAMES[w.type]})` : `Attack (${WEAPON_TYPE_NAMES[w.type]})`, 0, 0,
-          mine.stacks > 0 ? `${STACK_NAME[cls]} ${mine.stacks}/${MAX_STACKS}` : w.mana ? `${w.mana} mana a bolt` : "3-hit combo", "", { mana: w.mana ?? 0 });
-      })(this.leftSkill()),
-      ...slotRows, ...unslotted,
-      row("Shift", "Dodge roll", DODGE.cooldownMs, this.lastDodge, "", "", { stamina: ENERGY.cost.dodge }),
-      row("Q", "Potion", 0, 0, `×${mine.potions}`, mine.potions > 0 ? "" : "×0"),
-      ((n) => row("V", "Mana potion", 0, 0, `×${n}`, n > 0 ? "" : "×0"))(unpackMana(mine.mp).potions),
-      // Secondary ranged weapon from the equipment screen, only when one is worn
-      ...((rd) => (rd?.shot ? [row("R", rd.name, rd.shot.cooldownMs, this.lastRanged)] : []))(activeOf(mine).ranged ? gearDef(activeOf(mine).ranged!) : undefined),
-    ].join("");
-    const el = document.getElementById("actions")!;
-    if (this.actionsHtml !== html) { el.innerHTML = html; this.actionsHtml = html; }
     // Slot bar at the bottom: 10 cells, cooldown shading, click to choose a skill
     const cells = Array.from({ length: SLOT_COUNT }, (_, i) => {
       const skill = slots[i] ?? "";
@@ -2073,10 +2035,8 @@ export class TownScene extends Phaser.Scene {
         `${this.weaponIcon(mine)}<kbd>L</kbd></div>`;
     }
     const bar = document.getElementById("hotbar")!;
-    const all = this.potionCells(mine) + lcell + cells;
+    const all = lcell + cells + this.potionCells(mine); // potions right of the skill keys (Murat 2026-11-04)
     if (this.hotbarHtml !== all) { bar.innerHTML = all; this.hotbarHtml = all; }
-    const zone = document.getElementById("zone")!;
-    zone.style.top = `${el.offsetTop + el.offsetHeight + 4}px`;
   }
 
   private showDodge(msg: { id: string; dir: string }) {

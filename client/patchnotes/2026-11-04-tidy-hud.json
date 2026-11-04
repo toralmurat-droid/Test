@@ -1,0 +1,8 @@
+{
+  "date": "2026-11-04",
+  "title": "Tidier HUD",
+  "changes": [
+    "The list of keys and actions under the bars is gone: the skill bar already shows your skills, left click and potions.",
+    "Healing and mana potions now sit to the right of the skill keys."
+  ]
+}
