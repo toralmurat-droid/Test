@@ -2,7 +2,7 @@ import Phaser from "phaser";
 import { icon as pxIcon } from "./pixelicons";
 import { ART_K as K } from "../../shared/constants";
 import { PORTAL_COMBAT_MS, PORTAL_RANGE, PORTALS, portalById, type Portal } from "../../shared/portals";
-import { markerTexture, portalTexture, MARK_FOOT, PORTAL_FOOT } from "./portalArt";
+import { dropPortalTexture, portalTexture, PORTAL_FOOT } from "./portalArt";
 
 /** ?look=... (map viewing aid): paint every stone up front, so a parked camera sees them. */
 const PORTAL_LOOK = new URLSearchParams(location.search).has("look");
@@ -16,12 +16,10 @@ import type { MapMarker } from "./minimap";
  * travel list: only the stones this hero has woken, so the rest of the network stays a secret until found.
  */
 const SCALE = 0.62;
-/** The network stones round each portal: one per portal stone, lit once that portal is woken (Murat 2026-11-04). */
-const MARK_R = 1.85 * 32;
-type Mark = { img: Phaser.GameObjects.Image; glow: Phaser.GameObjects.Image; lit?: boolean };
+type Stone = { img: Phaser.GameObjects.Sprite; glow: Phaser.GameObjects.Image; p: Portal; v: number; shown: string };
 
 export class PortalLayer {
-  private stones = new Map<string, { img: Phaser.GameObjects.Sprite; glow: Phaser.GameObjects.Image; marks: Mark[]; p: Portal; v: number; shown: "" | "lit" | "cold" }>();
+  private stones = new Map<string, Stone>();
   private found = new Set<string>();
   private prompt = document.createElement("div");
   private menu = document.createElement("div");
@@ -38,17 +36,7 @@ export class PortalLayer {
         .setBlendMode(Phaser.BlendModes.ADD).setDepth(-0.8).setVisible(false);
       isoAnchor(glow, { x: p.x, y: p.y });
       scene.tweens.add({ targets: glow, alpha: 0.36, scale: 5.5 * K, duration: 1600, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
-      // a gap is left in front of the arch (world +y), where heroes arrive
-      const marks = PORTALS.map((_, k): Mark => {
-        const a = Math.PI / 2 + ((k + 0.5) / PORTALS.length) * Math.PI * 2;
-        const x = p.x + Math.cos(a) * MARK_R, y = p.y + Math.sin(a) * MARK_R * 0.9;
-        const mi = scene.add.image(x, y, "__DEFAULT").setOrigin(0.5, MARK_FOOT).setScale(SCALE).setDepth(y).setVisible(false);
-        const mg = scene.add.image(x, y - 12, "glow").setTint(0xff8a24).setScale(1.4 * K).setAlpha(0.3)
-          .setBlendMode(Phaser.BlendModes.ADD).setDepth(-0.8).setVisible(false);
-        isoAnchor(mg, { x, y });
-        return { img: mi, glow: mg };
-      });
-      this.stones.set(p.id, { img, glow, marks, p, v, shown: "" });
+      this.stones.set(p.id, { img, glow, p, v, shown: "" });
     });
     const hud = document.getElementById("hud")!;
     this.prompt.id = "portalprompt";
@@ -71,7 +59,7 @@ export class PortalLayer {
   /** Woken portals of this hero, from the server; `woke` = the one just found. */
   setFound(ids: string[], woke?: string) {
     this.found = new Set(ids);
-    for (const s of this.stones.values()) if (s.shown) { this.show(s); this.showMarks(s); }
+    // the stones already painted are repainted by update(), one per frame: their ring blocks show the woken portals
     const p = portalById(woke);
     if (p) {
       this.burst(p, 26);
@@ -131,36 +119,33 @@ export class PortalLayer {
     return PORTALS.filter((p) => this.found.has(p.id)).map((p) => ({ x: p.x, y: p.y, glyph: "◆", color: "#ff9a3c", label: p.name }));
   }
 
-  /** Paints (once) and shows this stone's art for its state: dark until found, burning once woken. */
-  private show(s: { img: Phaser.GameObjects.Sprite; glow: Phaser.GameObjects.Image; marks: Mark[]; p: Portal; v: number; shown: "" | "lit" | "cold" }) {
-    const lit = this.found.has(s.p.id), want = lit ? "lit" : "cold";
-    if (s.shown === want) return;
-    portalTexture(this.scene, s.v, lit);
-    s.shown = want;
-    if (lit) s.img.play({ key: `portal_spin_${s.v}`, startFrame: (s.v * 3) % 8 });
-    else { s.img.stop(); s.img.setTexture(`portal_cold_${s.v}`, 0); }
-    s.img.setOrigin(0.5, PORTAL_FOOT).setVisible(true);
-    s.glow.setVisible(lit);
-    this.showMarks(s);
+  /** The art this stone should show: dark until found, burning once woken, with one ring block lit per woken portal. */
+  private want(s: Stone) {
+    let mask = 0;
+    PORTALS.forEach((q, k) => { if (this.found.has(q.id)) mask |= 1 << k; });
+    return { lit: this.found.has(s.p.id), mask, key: `${this.found.has(s.p.id) ? "lit" : "cold"}:${s.v}_${mask}` };
   }
 
-  /** Network stone k round this portal burns once portal k is woken. */
-  private showMarks(s: { marks: Mark[] }) {
-    PORTALS.forEach((q, k) => {
-      const m = s.marks[k], lit = this.found.has(q.id);
-      if (m.lit === lit) return;
-      m.lit = lit;
-      m.img.setTexture(markerTexture(this.scene, k, lit)).setOrigin(0.5, MARK_FOOT).setVisible(true);
-      m.glow.setVisible(lit);
-    });
+  /** Paints and shows this stone's art for its state, dropping the art it showed before. */
+  private show(s: Stone) {
+    const w = this.want(s);
+    if (s.shown === w.key) return;
+    const id = portalTexture(this.scene, s.v, w.lit, w.mask);
+    if (w.lit) s.img.play({ key: `portal_spin_${id}`, startFrame: (s.v * 3) % 8 });
+    else { s.img.stop(); s.img.setTexture(`portal_cold_${id}`, 0); }
+    s.img.setOrigin(0.5, PORTAL_FOOT).setVisible(true);
+    s.glow.setVisible(w.lit);
+    if (s.shown) { const [st, old] = s.shown.split(":"); dropPortalTexture(this.scene, st === "lit", old); }
+    s.shown = w.key;
   }
 
   update(me: { x: number; y: number } | undefined, blocked: boolean) {
-    // paint the art of stones coming into view, one per frame (seven worn stones at once would stall the game)
+    // paint the art of stones coming into view, or out of date since a portal woke, one per frame (seven worn stones
+    // at once would stall the game)
     for (const s of this.stones.values()) {
-      if (s.shown) continue;
-      const d = me ? Math.hypot(s.p.x - me.x, s.p.y - me.y) : Infinity;
-      if (d < 30 * 32 || PORTAL_LOOK) { this.show(s); break; }
+      if (s.shown ? s.shown === this.want(s).key : !(PORTAL_LOOK || (me && Math.hypot(s.p.x - me.x, s.p.y - me.y) < 30 * 32))) continue;
+      this.show(s);
+      break;
     }
     let at: Portal | undefined;
     if (me) for (const p of PORTALS) if (this.found.has(p.id) && Math.hypot(p.x - me.x, p.y - me.y) <= PORTAL_RANGE) at = p;
