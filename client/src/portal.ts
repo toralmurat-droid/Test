@@ -1,7 +1,10 @@
 import Phaser from "phaser";
 import { ART_K as K } from "../../shared/constants";
 import { PORTAL_COMBAT_MS, PORTAL_RANGE, PORTALS, portalById, type Portal } from "../../shared/portals";
-import { portalTextures, PORTAL_FOOT } from "./portalArt";
+import { portalTexture, PORTAL_FOOT } from "./portalArt";
+
+/** ?look=... (map viewing aid): paint every stone up front, so a parked camera sees them. */
+const PORTAL_LOOK = new URLSearchParams(location.search).has("look");
 import { isoAnchor } from "./iso";
 import { pixelText } from "./pixeltext";
 import type { MapMarker } from "./minimap";
@@ -14,7 +17,7 @@ import type { MapMarker } from "./minimap";
 const SCALE = 0.62;
 
 export class PortalLayer {
-  private stones = new Map<string, { img: Phaser.GameObjects.Sprite; glow: Phaser.GameObjects.Image; p: Portal }>();
+  private stones = new Map<string, { img: Phaser.GameObjects.Sprite; glow: Phaser.GameObjects.Image; p: Portal; v: number; shown: "" | "lit" | "cold" }>();
   private found = new Set<string>();
   private prompt = document.createElement("div");
   private menu = document.createElement("div");
@@ -24,15 +27,15 @@ export class PortalLayer {
   near = false;
 
   constructor(private scene: Phaser.Scene, private send: (type: string, msg?: unknown) => void) {
-    portalTextures(scene);
-    for (const p of PORTALS) {
-      const img = scene.add.sprite(p.x, p.y, "portal_cold", 0).setOrigin(0.5, PORTAL_FOOT).setScale(SCALE).setDepth(p.y);
+    PORTALS.forEach((p, v) => {
+      // each stone is worn its own way; its art is painted only once a hero comes near (see show())
+      const img = scene.add.sprite(p.x, p.y, "__DEFAULT").setOrigin(0.5, PORTAL_FOOT).setScale(SCALE).setDepth(p.y).setVisible(false);
       const glow = scene.add.image(p.x, p.y - 26, "glow").setTint(0xff8a24).setScale(5 * K).setAlpha(0.24)
         .setBlendMode(Phaser.BlendModes.ADD).setDepth(-0.8).setVisible(false);
       isoAnchor(glow, { x: p.x, y: p.y });
       scene.tweens.add({ targets: glow, alpha: 0.36, scale: 5.5 * K, duration: 1600, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
-      this.stones.set(p.id, { img, glow, p });
-    }
+      this.stones.set(p.id, { img, glow, p, v, shown: "" });
+    });
     const hud = document.getElementById("hud")!;
     this.prompt.id = "portalprompt";
     this.prompt.onclick = () => this.interact();
@@ -54,12 +57,7 @@ export class PortalLayer {
   /** Woken portals of this hero, from the server; `woke` = the one just found. */
   setFound(ids: string[], woke?: string) {
     this.found = new Set(ids);
-    for (const [id, s] of this.stones) {
-      const lit = this.found.has(id);
-      if (lit && !s.img.anims.isPlaying) s.img.play({ key: "portal_spin", startFrame: (id.length * 3) % 8 });
-      else if (!lit) { s.img.stop(); s.img.setTexture("portal_cold", 0); }
-      s.glow.setVisible(lit);
-    }
+    for (const s of this.stones.values()) if (s.shown) this.show(s);
     const p = portalById(woke);
     if (p) {
       this.burst(p, 26);
@@ -119,7 +117,25 @@ export class PortalLayer {
     return PORTALS.filter((p) => this.found.has(p.id)).map((p) => ({ x: p.x, y: p.y, glyph: "◆", color: "#ff9a3c", label: p.name }));
   }
 
+  /** Paints (once) and shows this stone's art for its state: dark until found, burning once woken. */
+  private show(s: { img: Phaser.GameObjects.Sprite; glow: Phaser.GameObjects.Image; p: Portal; v: number; shown: "" | "lit" | "cold" }) {
+    const lit = this.found.has(s.p.id), want = lit ? "lit" : "cold";
+    if (s.shown === want) return;
+    portalTexture(this.scene, s.v, lit);
+    s.shown = want;
+    if (lit) s.img.play({ key: `portal_spin_${s.v}`, startFrame: (s.v * 3) % 8 });
+    else { s.img.stop(); s.img.setTexture(`portal_cold_${s.v}`, 0); }
+    s.img.setOrigin(0.5, PORTAL_FOOT).setVisible(true);
+    s.glow.setVisible(lit);
+  }
+
   update(me: { x: number; y: number } | undefined, blocked: boolean) {
+    // paint the art of stones coming into view, one per frame (seven worn stones at once would stall the game)
+    for (const s of this.stones.values()) {
+      if (s.shown) continue;
+      const d = me ? Math.hypot(s.p.x - me.x, s.p.y - me.y) : Infinity;
+      if (d < 30 * 32 || PORTAL_LOOK) { this.show(s); break; }
+    }
     let at: Portal | undefined;
     if (me) for (const p of PORTALS) if (this.found.has(p.id) && Math.hypot(p.x - me.x, p.y - me.y) <= PORTAL_RANGE) at = p;
     if (at !== this.at) { this.at = at; if (!at) this.close(); else if (this.isOpen) this.render(); }
