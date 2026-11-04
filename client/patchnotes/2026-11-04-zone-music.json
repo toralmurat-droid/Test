@@ -1,0 +1,9 @@
+{
+  "date": "2026-11-04",
+  "pr": 188,
+  "title": "Zone music",
+  "changes": [
+    "Pale Marshal's March plays in skeleton zones.",
+    "Auto mode picks music by zone."
+  ]
+}

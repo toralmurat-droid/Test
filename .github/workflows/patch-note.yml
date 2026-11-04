@@ -1,0 +1,52 @@
+# Every game change needs a player-facing patch note: one new JSON file in
+# client/patchnotes/ (see client/patchnotes/README.md). PRs with nothing a
+# player can notice put "[no patch note]" in the title or body instead.
+name: Patch note
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, ready_for_review, edited]
+    branches: [claude/relaxed-wozniak-cjs85z]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  patch-note:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check for a patch note
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR: ${{ github.event.pull_request.number }}
+          TITLE: ${{ github.event.pull_request.title }}
+          BODY: ${{ github.event.pull_request.body }}
+        run: |
+          if printf '%s\n%s' "$TITLE" "$BODY" | grep -qi '\[no patch note\]'; then
+            echo "Marked [no patch note]; skipping."; exit 0
+          fi
+          files=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR/files" --paginate \
+            --jq '.[] | select(.status == "added" or .status == "modified") | .filename' | grep -E '^client/patchnotes/[^/]+\.json$' || true)
+          if [ -z "$files" ]; then
+            echo "::error::Add a patch note: a new file client/patchnotes/YYYY-MM-DD-slug.json (see client/patchnotes/README.md), or put [no patch note] in the PR title/body."
+            exit 1
+          fi
+          echo "Patch note files:"; echo "$files"
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Validate patch note files
+        run: |
+          node -e '
+            const fs = require("fs"), dir = "client/patchnotes"; let bad = 0;
+            for (const f of fs.readdirSync(dir).filter((f) => f.endsWith(".json"))) {
+              try {
+                const n = JSON.parse(fs.readFileSync(dir + "/" + f, "utf8"));
+                const ok = /^\d{4}-\d{2}-\d{2}$/.test(n.date) && typeof n.title === "string" && n.title &&
+                  Array.isArray(n.changes) && n.changes.length && n.changes.every((c) => typeof c === "string" && c) &&
+                  (n.pr === undefined || Number.isInteger(n.pr));
+                if (!ok) { bad++; console.log("::error file=" + dir + "/" + f + "::Needs date YYYY-MM-DD, title, changes[] (strings), optional pr number"); }
+              } catch (e) { bad++; console.log("::error file=" + dir + "/" + f + "::Invalid JSON: " + e.message); }
+            }
+            process.exit(bad ? 1 : 0);'

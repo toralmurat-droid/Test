@@ -1,0 +1,9 @@
+{
+  "date": "2026-11-03",
+  "pr": 175,
+  "title": "No magic in Oakvale",
+  "changes": [
+    "Casting spells inside Oakvale makes you an outlaw.",
+    "The watch and villagers attack spellcasters until they leave the village."
+  ]
+}
