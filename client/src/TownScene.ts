@@ -4,7 +4,7 @@ import { Client, Room } from "colyseus.js";
 import { BOSS, ELITE, InputState, MERGE, MAP_H, MAP_W, regenFromStamina, TICK_RATE, TILE } from "../../shared/constants";
 import { CLASSES, ClassKind, DODGE, ENERGY, energyName, MAX_LEVEL, xpForLevel } from "../../shared/classes";
 import { GROUND, areaAt, isSafeZone } from "../../shared/map";
-import { heroPoise } from "../../shared/combat";
+import { heroPoise, meleeReach, mobBody } from "../../shared/combat";
 import { moveStep } from "../../shared/movement";
 import { levelsAt, SPAWN_ZONES, zoneAt } from "../../shared/spawns";
 import { musicCombat, setMusicZone } from "./music";
@@ -801,7 +801,10 @@ export class TownScene extends Phaser.Scene {
       const e = this.entities.get(id);
       if (e) this.squash(e, 1.15, 0.85, 120, 1);
     });
-    this.room.onMessage("swing", ({ id, step, variant, ax, ay }) => this.showSwing(id, step ?? 0, variant ?? 0, ax, ay));
+    this.room.onMessage("swing", ({ id, step, variant, ax, ay }) => {
+      if (id === this.me) this.pointer?.swung(); // the server took the click-attack
+      this.showSwing(id, step ?? 0, variant ?? 0, ax, ay);
+    });
     this.room.onMessage("sfx", (ev) => this.onSkillFx(ev));
     bindSfx(this.room, () => this.me, this.entities as any); // sound effects (client/src/sfx.ts)
     this.room.onMessage("boom", ({ x, y, r, kind }) => this.fx.impact(x, y, kind, r) ||
@@ -958,7 +961,12 @@ export class TownScene extends Phaser.Scene {
       const m = meEnt(); // other heroes only where fighting is allowed
       return !!m && !isSafeZone(e.sprite.x, e.sprite.y) && !isSafeZone(m.sprite.x, m.sprite.y);
     };
-    const asEnemy = (id: string, e: Entity): ClickEnemy => ({ id, x: e.sprite.x, y: e.sprite.y, h: e.top || 20, dead: !!e.state.dead });
+    // x/y: where it is drawn (for picking with the mouse); sx/sy: its newest server position (for reach and aim:
+    // the drawn one plays ~110 ms behind, so a monster just knocked back still looked in reach)
+    const asEnemy = (id: string, e: Entity): ClickEnemy => ({
+      id, x: e.sprite.x, y: e.sprite.y, sx: e.tx ?? e.sprite.x, sy: e.ty ?? e.sprite.y,
+      h: e.top || 20, body: e.mob ? mobBody(e.state.kind) : 0, dead: !!e.state.dead,
+    });
     const secondarySkill = () => {
       const p = meEnt()?.state;
       const n = this.activeSlot;
@@ -968,7 +976,9 @@ export class TownScene extends Phaser.Scene {
     const basicReach = (p: any) => {
       const def = CLASSES[p.cls as ClassKind];
       const k = gearReachMult(activeOf(p));
-      return def.projectile ? def.projectile.range * k * 0.8 : 12 * k + def.attackRange * k * 0.9 + 4;
+      // Melee: what the server hits, minus a small margin for the time the click takes to get there
+      // (it used to be a few px MORE than the server's reach, so swings at the edge always missed)
+      return def.projectile ? def.projectile.range * k * 0.8 : meleeReach(def.attackRange, k) - 4;
     };
     this.pointer = new PointerControls(this, {
       me: () => { const e = meEnt(); return e ? { x: e.sprite.x, y: e.sprite.y, state: e.state } : undefined; },
