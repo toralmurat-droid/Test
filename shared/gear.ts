@@ -122,7 +122,8 @@ export function canWear(cls: string, id: string): boolean {
 }
 
 export const BAG_SIZE = 12;
-export const TIER_NAMES = ["", "Common", "Rare", "Epic"];
+/** Base item grade (Bronze < Frost < Dragonfire). The item's colour comes from its rarity (RARITY_NAMES). */
+export const TIER_NAMES = ["", "Basic", "Fine", "Superior"];
 
 /** Chance a monster drops a piece of gear, and the odds of tier 1/2/3. */
 export const GEAR_DROP: Record<MobKind, { chance: number; tiers: [number, number, number] }> = {
@@ -144,7 +145,17 @@ export const GEAR_DROP: Record<MobKind, { chance: number; tiers: [number, number
 export function isGearId(v: unknown): v is string {
   if (typeof v !== "string") return false;
   const base = baseId(v);
-  return base in GEAR && withLevel(base, itemLevel(v)) === v;
+  if (!(base in GEAR)) return false;
+  const plain = withLevel(base, itemLevel(v));
+  if (plain === v) return true;
+  // With random bonuses: they must be valid for this item and written the canonical way
+  if (GEAR[base].cls || plainId(v) !== plain) return false;
+  const r = itemRarity(v), aff = itemAffixes(v);
+  if (r === 0 || aff.length < RARITY_AFFIXES[r][0] || aff.length > RARITY_AFFIXES[r][1]) return false;
+  const lvl = itemLevel(v), slot = GEAR[base].slot;
+  if (new Set(aff.map((a) => a.key)).size !== aff.length) return false;
+  if (aff.some((a) => !affixFits(a.key, slot) || a.value < 1 || a.value > affixMax(a.key, lvl, r))) return false;
+  return withAffixes(plain, r, aff) === v;
 }
 
 /**
@@ -178,8 +189,11 @@ export function rollGear(kind: MobKind, level = 1, rnd = Math.random): string | 
   let r = rnd(), tier = 1;
   for (let i = 0; i < 3; i++) { if (r < d.tiers[i]) { tier = i + 1; break; } r -= d.tiers[i]; }
   const pool = LOOT_IDS.filter((id) => GEAR[id].tier === tier);
-  return withLevel(pool[Math.floor(rnd() * pool.length)], level);
+  return rollAffixes(withLevel(pool[Math.floor(rnd() * pool.length)], level), BOSS_LUCK[kind] ?? 1, rnd);
 }
+
+/** Bosses roll better rarities (multiplies the Magic/Rare/Legendary odds). */
+export const BOSS_LUCK: Partial<Record<MobKind, number>> = { demon: 3, necromancer: 2.5, banditchief: 3, motherblob: 2 };
 
 export type Equipped = Partial<Record<GearSlot, string>>;
 
@@ -219,7 +233,14 @@ const WEAPON_NOUN: Record<string, string> = { knight: "Sword", ninja: "Katana", 
 export function gearName(id: string, cls?: string): string {
   const d = gearDef(id);
   if (!d) return id;
-  return d.slot === "weapon" ? `${d.name} ${WEAPON_NOUN[cls ?? ""] ?? "Weapon"}` : d.name;
+  const name = d.slot === "weapon" ? `${d.name} ${WEAPON_NOUN[cls ?? ""] ?? "Weapon"}` : d.name;
+  const aff = itemAffixes(id);
+  if (!aff.length) return name;
+  // Strongest bonus gives the first word, the next one the "of ..." ending
+  const top = [...aff].sort((a, b) => b.value / affixMax(b.key, itemLevel(id), 3) - a.value / affixMax(a.key, itemLevel(id), 3));
+  const pre = AFFIXES[top[0].key].prefix;
+  const suf = top[1] ? ` ${AFFIXES[top[1].key].suffix}` : "";
+  return `${pre} ${name}${suf}`;
 }
 
 /** "+4 attack, +1 Magic" style summary. */
@@ -262,15 +283,23 @@ export const REQ_PER_LEVEL = [0, 0.35, 0.5, 0.65];
 /** The stat each slot asks for. Weapons ask for the class's attack stat (Strength, or Magic for the Wizard). */
 export const REQ_STAT: Record<GearSlot, StatKind | "attack"> = { weapon: "attack", ranged: "dex", shield: "str", armour: "sta", hat: "sta", shoes: "dex" };
 
-export function baseId(id: string): string {
-  const k = id.indexOf("@");
+/** The id without its random bonuses ("w_frost@17~R:atk3,dex2" -> "w_frost@17"). */
+export function plainId(id: string): string {
+  const k = id.indexOf("~");
   return k < 0 ? id : id.slice(0, k);
 }
 
+export function baseId(id: string): string {
+  const p = plainId(id);
+  const k = p.indexOf("@");
+  return k < 0 ? p : p.slice(0, k);
+}
+
 export function itemLevel(id: string): number {
-  const k = id.indexOf("@");
+  const p = plainId(id);
+  const k = p.indexOf("@");
   if (k < 0) return 1;
-  const n = Number(id.slice(k + 1));
+  const n = Number(p.slice(k + 1));
   return Number.isInteger(n) ? Math.min(ITEM_MAX_LEVEL, Math.max(1, n)) : 1;
 }
 
@@ -292,12 +321,19 @@ export function gearDef(id: string): GearDef | undefined {
   const d = GEAR[baseId(id)];
   if (!d) return undefined;
   const l = itemLevel(id);
-  if (l <= 1) return d;
+  const affixes = itemAffixes(id);
+  if (l <= 1 && !affixes.length) return d;
   const b = d.bonus;
   const bonus: GearBonus = Object.fromEntries(Object.entries({
     atk: growInt(b.atk, l), sta: growInt(b.sta, l), str: growInt(b.str, l), mag: growInt(b.mag, l), dex: growInt(b.dex, l),
     speed: growFrac(b.speed, l), reach: growFrac(b.reach, l), block: growFrac(b.block, l),
   }).filter(([, v]) => v !== undefined));
+  // Random bonuses add on top of the base item's
+  for (const a of affixes) {
+    const key = AFFIXES[a.key].bonus;
+    const add = a.key === "spd" ? a.value / 100 : a.value;
+    bonus[key] = Math.round(((bonus[key] ?? 0) + add) * 1000) / 1000;
+  }
   const out: GearDef = { ...d, id, bonus, shot: d.shot && { ...d.shot, damage: growInt(d.shot.damage, l)! } };
   defCache.set(id, out);
   return out;
@@ -347,3 +383,107 @@ export function reqText(id: string, cls: string): string {
 }
 
 const STAT_LABEL: Record<StatKind, string> = { sta: "Stamina", str: "Strength", mag: "Magic", dex: "Dexterity" };
+
+// ---- Rarity and random bonuses ----------------------------------------------------------------------------
+/**
+ * Found items roll a rarity: Plain (no extra bonuses), Magic (1-2), Rare (3) or Legendary (4, bigger rolls).
+ * The random bonuses are written after the level: "w_frost@17~R:atk3,dex2,sta4" (M = Magic, R = Rare, L = Legendary).
+ * gearDef() adds them to the item's bonus, gearName() names the item after the two strongest ("Cruel Frost Sword of the Bear").
+ * Bonuses grow with the item level (affixMax). Shops sell Plain items only, class kits never roll.
+ */
+export type Rarity = 0 | 1 | 2 | 3;
+export const RARITY_NAMES = ["Plain", "Magic", "Rare", "Legendary"];
+const RARITY_CODE = ["", "M", "R", "L"];
+/** Min and max number of random bonuses per rarity. */
+export const RARITY_AFFIXES: [number, number][] = [[0, 0], [1, 2], [3, 3], [4, 4]];
+/** Base odds of Magic, Rare and Legendary on a found item, and how much they grow per item level above 1. */
+export const RARITY_ODDS = { magic: 0.3, rare: 0.07, legendary: 0.01, perLevel: { magic: 0.006, rare: 0.004, legendary: 0.0015 } };
+/** Legendary bonuses roll this much higher. */
+const LEGENDARY_BOOST = 1.5;
+
+export type AffixKey = "atk" | "sta" | "str" | "mag" | "dex" | "spd";
+interface AffixDef { bonus: keyof GearBonus; prefix: string; suffix: string; base: number; perLevel: number; slots?: GearSlot[] }
+export const AFFIXES: Record<AffixKey, AffixDef> = {
+  atk: { bonus: "atk", prefix: "Cruel", suffix: "of Slaughter", base: 2, perLevel: 0.2 },
+  sta: { bonus: "sta", prefix: "Sturdy", suffix: "of the Bear", base: 2, perLevel: 0.25 },
+  str: { bonus: "str", prefix: "Mighty", suffix: "of the Ox", base: 2, perLevel: 0.2 },
+  mag: { bonus: "mag", prefix: "Arcane", suffix: "of the Magi", base: 2, perLevel: 0.2 },
+  dex: { bonus: "dex", prefix: "Keen", suffix: "of Precision", base: 2, perLevel: 0.2 },
+  // percent move speed, shoes only
+  spd: { bonus: "speed", prefix: "Swift", suffix: "of Haste", base: 3, perLevel: 0.15, slots: ["shoes"] },
+};
+export const AFFIX_KEYS = Object.keys(AFFIXES) as AffixKey[];
+export interface Affix { key: AffixKey; value: number }
+
+export const affixFits = (key: AffixKey, slot: GearSlot) => !AFFIXES[key].slots || AFFIXES[key].slots!.includes(slot);
+
+/** Highest value a bonus can roll at this item level and rarity. */
+export function affixMax(key: AffixKey, level: number, rarity: Rarity): number {
+  const a = AFFIXES[key];
+  return Math.floor((a.base + a.perLevel * (level - 1)) * (rarity === 3 ? LEGENDARY_BOOST : 1));
+}
+
+export function itemRarity(id: string): Rarity {
+  const k = id.indexOf("~");
+  if (k < 0) return 0;
+  const r = RARITY_CODE.indexOf(id.charAt(k + 1));
+  return (r > 0 ? r : 0) as Rarity;
+}
+
+export function itemAffixes(id: string): Affix[] {
+  const k = id.indexOf("~");
+  if (k < 0) return [];
+  const body = id.slice(k + 3); // after "~R:"
+  if (!body) return [];
+  const out: Affix[] = [];
+  for (const part of body.split(",")) {
+    const m = /^([a-z]+)(\d+)$/.exec(part);
+    if (!m || !(m[1] in AFFIXES)) continue;
+    out.push({ key: m[1] as AffixKey, value: Number(m[2]) });
+  }
+  return out;
+}
+
+/** Item id with a rarity and bonuses ("w_frost@17" + Rare + [atk 3] -> "w_frost@17~R:atk3"). */
+export function withAffixes(plain: string, rarity: Rarity, affixes: Affix[]): string {
+  if (!rarity || !affixes.length) return plainId(plain);
+  const sorted = [...affixes].sort((a, b) => AFFIX_KEYS.indexOf(a.key) - AFFIX_KEYS.indexOf(b.key));
+  return `${plainId(plain)}~${RARITY_CODE[rarity]}:${sorted.map((a) => `${a.key}${a.value}`).join(",")}`;
+}
+
+/** Magic / Rare / Legendary odds for an item level (luck > 1 for bosses). */
+export function rarityOdds(level: number, luck = 1): [number, number, number] {
+  const n = Math.max(0, level - 1), O = RARITY_ODDS;
+  return [
+    Math.min(0.5, (O.magic + O.perLevel.magic * n) * luck),
+    Math.min(0.3, (O.rare + O.perLevel.rare * n) * luck),
+    Math.min(0.12, (O.legendary + O.perLevel.legendary * n) * luck),
+  ];
+}
+
+/** Roll a rarity and random bonuses onto a plain found item. */
+export function rollAffixes(plain: string, luck = 1, rnd = Math.random): string {
+  const d = GEAR[baseId(plain)];
+  if (!d || d.cls) return plain;
+  const lvl = itemLevel(plain);
+  const [magic, rare, leg] = rarityOdds(lvl, luck);
+  const r = rnd();
+  const rarity: Rarity = r < leg ? 3 : r < leg + rare ? 2 : r < leg + rare + magic ? 1 : 0;
+  if (!rarity) return plainId(plain);
+  const [lo, hi] = RARITY_AFFIXES[rarity];
+  const count = lo + Math.floor(rnd() * (hi - lo + 1));
+  const pool = AFFIX_KEYS.filter((k) => affixFits(k, d.slot));
+  const out: Affix[] = [];
+  while (out.length < count && pool.length) {
+    const key = pool.splice(Math.floor(rnd() * pool.length), 1)[0];
+    const max = affixMax(key, lvl, rarity);
+    const min = Math.max(1, Math.ceil(max * (rarity === 3 ? 0.6 : 0.3)));
+    out.push({ key, value: min + Math.floor(rnd() * (max - min + 1)) });
+  }
+  return withAffixes(plain, rarity, out);
+}
+
+/** One line per random bonus, for menus ("+3 attack", "+5% speed"). */
+export function affixLines(id: string): string[] {
+  return itemAffixes(id).map((a) => a.key === "spd" ? `+${a.value}% speed` : bonusText({ [AFFIXES[a.key].bonus]: a.value }));
+}

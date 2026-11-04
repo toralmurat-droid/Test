@@ -1,4 +1,4 @@
-import { gearDef, itemLevel, withLevel } from "./gear";
+import { gearDef, itemLevel, itemRarity, withLevel } from "./gear";
 import { MAX_POTIONS } from "./items";
 
 /**
@@ -28,10 +28,12 @@ export const POTION_PRICE = 20;
 export const PRICE_PER_LEVEL = 0.12;
 /** Item level of shop stock, by tier (Common, Rare, Epic). */
 export const SHOP_LEVEL = [0, 1, 6, 12];
+/** Magic, Rare and Legendary items sell for more (Plain, Magic, Rare, Legendary). */
+export const RARITY_PRICE = [1, 1.5, 2.5, 4];
 
 export function gearPrice(id: string): number {
   const d = gearDef(id);
-  return d ? Math.round((GEAR_PRICE[d.tier] ?? 0) * (1 + PRICE_PER_LEVEL * (itemLevel(id) - 1))) : 0;
+  return d ? Math.round((GEAR_PRICE[d.tier] ?? 0) * (1 + PRICE_PER_LEVEL * (itemLevel(id) - 1)) * RARITY_PRICE[itemRarity(id)]) : 0;
 }
 
 export function sellPrice(id: string): number {

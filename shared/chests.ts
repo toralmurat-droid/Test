@@ -1,7 +1,7 @@
 import { T, AREAS, GROUND, OBJECTS, EMPTY, areaInfoAt, isSolidTile } from "./map";
 import { MobKind, MOBS, TILE } from "./constants";
 import { baseLevelAt, SPAWN_ZONES, zoneLevels } from "./spawns";
-import { GEAR, LOOT_IDS, LOOT_LEVEL, withLevel } from "./gear";
+import { GEAR, LOOT_IDS, LOOT_LEVEL, rollAffixes, withLevel } from "./gear";
 import { CHAINS, objectDone, QuestObject, Quester } from "./quests";
 
 /**
@@ -147,7 +147,7 @@ export function rollChest(level: number, tier: ChestTier, rnd = Math.random): Ch
     const r = rnd();
     const t = r < epic ? 3 : r < epic + rare ? 2 : 1;
     const pool = LOOT_IDS.filter((id) => GEAR[id].tier === t);
-    gear.push(withLevel(pool[Math.floor(rnd() * pool.length)], level)); // item level = chest level
+    gear.push(rollAffixes(withLevel(pool[Math.floor(rnd() * pool.length)], level), 1 + 0.5 * (tier - 1), rnd)); // item level = chest level
   }
   return { gold, potions, gear };
 }

@@ -9,7 +9,7 @@ import { heroPoise, meleeReach, mobBody } from "../../shared/combat";
 import { moveStep } from "../../shared/movement";
 import { levelsAt, SPAWN_ZONES, zoneAt } from "../../shared/spawns";
 import { musicCombat, setMusicZone } from "./music";
-import { bindSfx, sfxFrame } from "./sfx";
+import { bindSfx, play as playSfx, sfxFrame } from "./sfx";
 import { attackMult, cooldownMult, critChance, heroSpeed, STATS, magicMult, STAT_KINDS, STAT_NAMES, StatKind, statPoints, HP_PER_STR } from "../../shared/powers";
 import { pointRange, skillOf, skillTarget, STACK_NAME, MAX_STACKS, talentBonus } from "../../shared/skills";
 import { SkillFx } from "./skillfx";
@@ -36,9 +36,9 @@ import { speechBubble } from "./weathered";
 import { ART_K, CHAR_GROW, CHAR_SCALE, CHARACTERS, CHAR_ORIGIN, CharacterName, createArtAnims, playCharAnim, preloadArt } from "./artAssets";
 import { Ambient } from "./ambient";
 import { Details } from "./details";
-import { activeOf, GearLayer, GearMenu, preloadGear, TIER_COLORS } from "./gear";
+import { activeOf, GearLayer, GearMenu, itemColor, preloadGear, RARITY_HEX } from "./gear";
 import { GearFx } from "./gearfx";
-import { baseId, gearDef, gearReachMult, gearSpeedMult } from "../../shared/gear";
+import { baseId, gearDef, gearReachMult, gearSpeedMult, itemRarity } from "../../shared/gear";
 import { talentMult, talentPoints, spentPoints } from "../../shared/talents";
 import { activeSkills, SLOT_COUNT, SLOT_KEYS, skillLearned } from "../../shared/slots";
 import { iconImg } from "./skillIcons";
@@ -510,10 +510,8 @@ export class TownScene extends Phaser.Scene {
         this.tweens.add({ targets: glow, scale: 1.4, alpha: 0.1, duration: 600, yoyo: true, repeat: -1 });
         img.once("destroy", () => glow.destroy());
       }
-      if (gear && gear.tier > 1) {
-        // Rare / epic drops sparkle
-        this.tweens.add({ targets: img, alpha: 0.65, duration: 400, yoyo: true, repeat: -1 });
-      }
+      const rarity = gear ? itemRarity(it.gear) : 0;
+      if (rarity > 0) this.lootGlow(img, it.x, it.y, rarity, it.y);
       // Gentle bob so loot catches the eye
       this.tweens.add({ targets: img, y: it.y - 2, duration: 500, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
       this.items.set(id, img);
@@ -531,7 +529,7 @@ export class TownScene extends Phaser.Scene {
         return;
       }
       if (kind === "gear") {
-        this.floatText(x, y - 6, `+${name}`, TIER_COLORS[gearDef(gear)?.tier ?? 1], PIXEL_FONT);
+        this.floatText(x, y - 6, `+${name}`, itemColor(gear), PIXEL_FONT);
         this.feed(`Found ${name}! Press G to equip`);
         return;
       }
@@ -1059,7 +1057,33 @@ export class TownScene extends Phaser.Scene {
     });
   }
 
-  private floatText(x: number, y: number, text: string, color: string, font = "monospace") {
+  /**
+   * Magic, Rare and Legendary drops on the ground (shared/gear.ts rarity): a soft glow in the rarity colour,
+   * plus a pixel light beam for Rare and Legendary, and a chime when one drops near you.
+   */
+  private lootGlow(img: Phaser.GameObjects.Image, x: number, y: number, rarity: number, depth: number) {
+    const col = RARITY_HEX[rarity];
+    const parts: Phaser.GameObjects.GameObject[] = [];
+    const glow = this.add.ellipse(x, y + 1, 16, 7, col, 0.55).setDepth(depth - 9).setBlendMode(Phaser.BlendModes.ADD);
+    this.tweens.add({ targets: glow, scaleX: 1.3, scaleY: 1.3, alpha: 0.25, duration: 700, yoyo: true, repeat: -1 });
+    parts.push(glow);
+    if (rarity >= 2) {
+      const w = rarity === 3 ? 5 : 3, h = rarity === 3 ? 72 : 48;
+      const tint = Phaser.Display.Color.IntegerToColor(col).lighten(25).color;
+      const beam = this.add.rectangle(x, y, w, h, col, 0.6).setOrigin(0.5, 1).setDepth(depth - 7);
+      const core = this.add.rectangle(x, y, 1, h * 0.85, tint, 0.9).setOrigin(0.5, 1).setDepth(depth - 6).setBlendMode(Phaser.BlendModes.ADD);
+      isoAnchor(beam, { x, y }); isoAnchor(core, { x, y });
+      beam.scaleY = 0; core.scaleY = 0;
+      this.tweens.add({ targets: [beam, core], scaleY: 1, duration: 260, ease: "Quad.easeOut" });
+      this.tweens.add({ targets: beam, alpha: 0.3, duration: 900, yoyo: true, repeat: -1, delay: 260 });
+      parts.push(beam, core);
+      // Only drops that appear while you play chime (not the ones already lying there when you join)
+      if (this.time.now > 4000) playSfx(rarity === 3 ? "lootLegendary" : "lootRare", x, y);
+    }
+    img.once("destroy", () => parts.forEach((p) => p.destroy()));
+  }
+
+  private floatText(x: number, y: number, text: string, color: string, font = PIXEL_FONT) {
     const t = this.add.text(x, y, text, {
       fontFamily: font, fontSize: "16px", color, stroke: "#000", strokeThickness: 3,
     }).setOrigin(0.5, 1).setScale(0.25).setResolution(2).setDepth(30000);

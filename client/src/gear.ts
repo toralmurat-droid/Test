@@ -1,5 +1,5 @@
 import Phaser from "phaser";
-import { gearDef, itemText, LOOT_IDS, canWear, GEAR_SLOTS, gearName, gearStats, gearSpeedMult, GearSlot, BAG_SIZE, SLOT_NAMES, TIER_NAMES, baseId, itemLevel, reqProblem, reqText, activeGear, HeroReqInfo, Equipped } from "../../shared/gear";
+import { gearDef, itemText, LOOT_IDS, canWear, GEAR_SLOTS, gearName, gearStats, gearSpeedMult, GearSlot, BAG_SIZE, SLOT_NAMES, TIER_NAMES, baseId, itemRarity, RARITY_NAMES, affixLines, itemLevel, reqProblem, reqText, activeGear, HeroReqInfo, Equipped } from "../../shared/gear";
 import { STAT_NAMES, StatKind } from "../../shared/powers";
 import { ART_K, CHAR_FRAME, HD_CHARS } from "./artAssets";
 
@@ -10,6 +10,13 @@ import { ART_K, CHAR_FRAME, HD_CHARS } from "./artAssets";
 const GEAR_HEROES = ["ninja", "wizard", "knight", "archer", "barbarian"];
 const BASE = "assets/gear";
 export const TIER_COLORS = ["", "#e0e0e0", "#4cc9f0", "#c77dff"];
+/** Item colour by rarity (shared/gear.ts RARITY_NAMES): Plain, Magic, Rare, Legendary. */
+export const RARITY_COLORS = ["#e0e0e0", "#6f8fff", "#ffd84a", "#ff8c1a"];
+export const RARITY_HEX = [0xe0e0e0, 0x6f8fff, 0xffd84a, 0xff8c1a];
+export const itemColor = (id: string) => RARITY_COLORS[itemRarity(id)];
+/** "Rare Fine Weapon" label, plus the random bonuses as coloured lines. */
+export const rarityLabel = (id: string) => { const r = itemRarity(id); return r ? `<span style="color:${RARITY_COLORS[r]}">${RARITY_NAMES[r]}</span> ` : ""; };
+export const affixHtml = (id: string) => affixLines(id).map((l) => `<span style="color:${itemColor(id)}">${l}</span>`).join("<br>");
 
 export function preloadGear(scene: Phaser.Scene) {
   scene.load.atlas("gear_icons", `${BASE}/icons.png`, `${BASE}/icons.json`);
@@ -147,8 +154,9 @@ export class GearMenu {
       el.onmouseenter = () => {
         if (!info) return;
         const d = gearDef(id)!, why = reqProblem(id, hero);
-        info.innerHTML = `<b style="color:${TIER_COLORS[d.tier]}">${gearName(id, cls)}</b> <span class="glvl">Lv ${itemLevel(id)}</span> · ${TIER_NAMES[d.tier]} ${SLOT_NAMES[d.slot]}<br>` +
-          `${itemText(id) || "No bonus"}<br><span class="${why ? "gbad" : "gok"}">${why || reqText(id, cls)}</span>${extra ? `<br><small>${extra}</small>` : ""}`;
+        const aff = affixHtml(id);
+        info.innerHTML = `<b style="color:${itemColor(id)}">${gearName(id, cls)}</b> <span class="glvl">Lv ${itemLevel(id)}</span> · ${rarityLabel(id)}${TIER_NAMES[d.tier]} ${SLOT_NAMES[d.slot]}<br>` +
+          `${itemText(id) || "No bonus"}<br>${aff ? `${aff}<br>` : ""}<span class="${why ? "gbad" : "gok"}">${why || reqText(id, cls)}</span>${extra ? `<br><small>${extra}</small>` : ""}`;
       };
       el.onmouseleave = () => { if (info) info.textContent = ""; };
     };
@@ -173,7 +181,7 @@ export class GearMenu {
       const txt = document.createElement("span");
       const why = id ? reqProblem(id, hero) : "";
       txt.innerHTML = id
-        ? `<b style="color:${TIER_COLORS[gearDef(id)!.tier]}">${gearName(id, cls)}</b>${itemLevel(id) > 1 ? ` <span class="glvl">Lv ${itemLevel(id)}</span>` : ""}<br>` +
+        ? `<b style="color:${itemColor(id)}">${gearName(id, cls)}</b>${itemLevel(id) > 1 ? ` <span class="glvl">Lv ${itemLevel(id)}</span>` : ""}<br>` +
           (why ? `<small class="gbad">Inactive: ${why}</small>` : `<small>${itemText(id)}</small>`)
         : `<b>${SLOT_NAMES[slot]}</b><br><small>empty</small>`;
       row.appendChild(txt);
@@ -200,7 +208,8 @@ export class GearMenu {
       if (id) {
         const d = gearDef(id)!;
         cell.appendChild(iconCanvas(this.scene, id));
-        cell.style.borderColor = TIER_COLORS[d.tier];
+        cell.style.borderColor = itemColor(id);
+        if (itemRarity(id) >= 2) cell.style.boxShadow = `inset 0 0 6px ${itemColor(id)}`;
         const fits = canWear(cls, id), why = fits ? reqProblem(id, hero) : "";
         if (itemLevel(id) > 1) cell.appendChild(Object.assign(document.createElement("span"), { className: "gcelllvl" + (why ? " gbad" : ""), textContent: String(itemLevel(id)) }));
         hover(cell, id, fits ? (why ? "Too strong for you yet · Right-click: drop" : "Click: equip · Right-click: drop") : `Only a ${d.cls} can wear this · Right-click: drop`);
