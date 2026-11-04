@@ -1,5 +1,6 @@
 import Phaser from "phaser";
 import { quake } from "./camfx";
+import { chargeIcon } from "./chargeIcon";
 import { leaving, noteBuild, reconnectSoon, returnToStart, upgradeAnnounced } from "./reconnect";
 import { Client, Room } from "colyseus.js";
 import { BOSS, ELITE, InputState, MERGE, MAP_H, MAP_W, regenFromStamina, TICK_RATE, TILE } from "../../shared/constants";
@@ -13,7 +14,7 @@ import { levelsAt, SPAWN_ZONES, zoneAt } from "../../shared/spawns";
 import { musicCombat, setMusicZone } from "./music";
 import { bindSfx, play as playSfx, sfxFrame } from "./sfx";
 import { attackMult, cooldownMult, critChance, heroSpeed, STATS, magicMult, STAT_KINDS, STAT_NAMES, StatKind, statPoints, HP_PER_STR } from "../../shared/powers";
-import { NEED_TEXT, pointRange, SkillDef, skillOf, skillTarget, MAX_STACKS, talentBonus } from "../../shared/skills";
+import { NEED_TEXT, pointRange, SkillDef, skillOf, skillTarget, MAX_STACKS, STACK_DECAY_MS, STACK_NAME, talentBonus } from "../../shared/skills";
 import { SkillFx } from "./skillfx";
 import { displayGrid } from "./tileset";
 import { CRAWL_CROP, heroTexture, itemTexture, potionTex, makeTileset, MOB_LOOK, mobTexture, preloadPaintedMobs } from "./textures";
@@ -2018,6 +2019,30 @@ export class TownScene extends Phaser.Scene {
     return { name: s?.name ?? "?", cdMs: (s?.cd ?? 0) * cdm, last: this.lastCast[skill] ?? -Infinity, cost: s ? skillCost(s) : { stamina: 0, mana: 0 }, ult: s?.row === 4 };
   }
 
+  private chargeSeen = { n: 0, at: 0 }; // our stacks last frame, and when the newest one was built
+
+  /**
+   * Charges (Valor, Ki, Arcane, Focus, Fury) left of the skill keys: a crystal icon, the count, 5 pips and a shade
+   * that fills as they fade (STACK_DECAY_MS after the last hit). Only shown while a skill on the bar (or on the left
+   * click) spends them (Murat 2026-11-04).
+   */
+  private chargeCell(mine: any, cls: ClassKind, ls: string, slots: string[], now: number): string {
+    const n = Math.max(0, Math.min(MAX_STACKS, mine.stacks | 0));
+    if (n > this.chargeSeen.n) this.chargeSeen.at = now; // a hit built one (the server's clock isn't sent)
+    this.chargeSeen.n = n;
+    const users = [ls, ...slots].filter((id, i, a) => id && a.indexOf(id) === i)
+      .map((id) => skillOf(cls, id)).filter((sd) => sd?.consume && skillLearned(cls, mine.talents, sd.id));
+    if (!users.length) return "";
+    const name = STACK_NAME[cls];
+    const left = n > 0 ? Math.max(0, STACK_DECAY_MS - (now - this.chargeSeen.at)) : 0;
+    const shade = n > 0 ? `<div class="cd" style="height:${Math.round((1 - left / STACK_DECAY_MS) * 50) * 2}%"></div>` : "";
+    const pips = Array.from({ length: MAX_STACKS }, (_, i) => `<i class="${i < n ? "on" : ""}"></i>`).join("");
+    const tip = `Built by your basic hits, up to ${MAX_STACKS}. They fade ${STACK_DECAY_MS / 1000} s after your last hit. ` +
+      `Spent by ${users.map((u) => u!.name).join(", ")}: each one makes it stronger.`;
+    return `<div class="slot charge${n ? "" : " wait"}" data-tiphead="${name} ${n}/${MAX_STACKS}" data-tip="${tipEsc(tip)}">` +
+      `<img class="sicon" src="${chargeIcon(cls)}" alt="" draggable="false">${shade}${n ? `<b>${n}</b>` : ""}<span class="pips">${pips}</span></div>`;
+  }
+
   /** Skill bar at the bottom: potions, the left-click cell and the 10 slots (the old text list of actions is gone, Murat 2026-11-04). */
   private renderActions(mine: any, cls: ClassKind, cdm: number, now: number) {
     const pools = { energy: mine.energy, mana: unpackMana(mine.mp).mana };
@@ -2052,7 +2077,7 @@ export class TownScene extends Phaser.Scene {
         `${this.weaponIcon(mine)}<kbd>L</kbd></div>`;
     }
     const bar = document.getElementById("hotbar")!;
-    const all = lcell + cells + this.potionCells(mine); // potions right of the skill keys (Murat 2026-11-04)
+    const all = this.chargeCell(mine, cls, ls, slots, now) + lcell + cells + this.potionCells(mine); // potions right of the skill keys (Murat 2026-11-04)
     if (this.hotbarHtml !== all) { bar.innerHTML = all; this.hotbarHtml = all; }
   }
 
@@ -2352,10 +2377,7 @@ export class TownScene extends Phaser.Scene {
       e.bubble?.setPosition(x, y - e.top - 12); // above the name label
       e.bar.clear().setDepth(e.sprite.y + 1);
       this.fx.status(e, e.bar, dtMs / 1000);
-      // Stacks built by basic hits (Valor, Ki, Fury...): small pips under the hero
-      if (!e.mob && !p.dead && p.stacks > 0) {
-        for (let i = 0; i < MAX_STACKS; i++) e.bar.fillStyle(i < p.stacks ? 0xffd166 : 0x000000, i < p.stacks ? 1 : 0.5).fillRect(x - 7 + i * 3, y + 6, 2, 2);
-      }
+      // (Stacks built by basic hits are shown by the skill keys, see chargeCell: no pips under the hero, Murat 2026-11-04)
       const maxHp = p.maxHp;
       if (!e.mob) {
         if (p.guarding && !p.dead) {

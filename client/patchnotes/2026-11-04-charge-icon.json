@@ -1,0 +1,9 @@
+{
+  "date": "2026-11-04",
+  "title": "Charges by your skill keys",
+  "changes": [
+    "Your class charges (Valor, Ki, Arcane, Focus, Fury) now show as a crystal left of your skill keys, with the count and a shade that fills as they fade.",
+    "It only appears when a skill on your bar spends them. Hover it to see which skill and how they work.",
+    "The small squares under your hero are gone."
+  ]
+}
