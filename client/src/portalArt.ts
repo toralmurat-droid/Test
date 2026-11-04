@@ -13,8 +13,8 @@ const dith = (x: number, y: number) => dith1(x >> 1, y >> 1);
  * platform and a carved plinth, each with a lit top, a mid-tone left face and a dark right face, carrying a thick ring
  * of carved voussoirs set along the world x axis. The ring is drawn in depth slices, so its inner and outer rims
  * show as side faces, and it faces the arrival side (world +y, screen down-left).
- *   "portal_lit": 8 animated frames: the runes burn orange and a slow fire-swirl fills the ring.
- *   "portal_cold": one frame: a dormant ring, runes dark, the opening empty (not found yet).
+ *   "portal_lit_<v>": 8 animated frames: the runes burn orange and a slow fire-swirl fills the ring.
+ *   "portal_cold_<v>": one frame: a dormant ring, runes dark, the opening empty (not found yet).
  */
 
 const W = 128, H = 184, CX = 64, BY = 140; // cells; BY = the platform's centre on the ground (the sprite's feet)
@@ -28,6 +28,10 @@ const ZP = ZTOP2 + PL.z; // plinth top
 const RO = 37, RI = 23, DEPTH = 6; // ring outer / inner radius, half thickness (world y)
 const ZC = ZP + RO - 6; // ring centre height: its foot sinks into the plinth
 const BLOCKS = 13;
+/** Which stone is being painted (0..PORTALS-1): every portal wears differently (Murat 2026-11-04: "too perfect"). */
+let V = 0;
+const hv = (a: number, b: number, s: number) => hash(a, b, s + V * 1013);
+const nv = (x: number, y: number, s: number) => vnoise(x, y, 999, s + V * 131);
 
 /** Portal fire, dark to bright (the village bonfire's ramp). */
 const FIRE = ["#3a0f08", "#6e1a0a", "#a82c0c", "#d84a12", "#f2761c", "#ffa22e", "#ffcf52", "#fff0a8"];
@@ -81,6 +85,14 @@ function isoBox(px: Px, z0: number, A: number, B: number, h: number, tone: numbe
       }
     }
     if (!face) continue;
+    // wear: the edges are chipped and the corners crumbled (a dark broken face where stone has flaked off)
+    const ea = face === "top" ? Math.min(A - Math.abs(a), B - Math.abs(b)) : face === "left" ? Math.min(A - Math.abs(qx + B), z0 + h - ((qx + 2 * B) / 2 - qy)) : Math.min(B - Math.abs(A - qx), z0 + h - ((2 * A - qx) / 2 - qy));
+    const chip = nv(x * 0.22, y * 0.22, seed + 7);
+    if (ea < 3.2 && chip > 0.66) {
+      if (ea < 1.6 && chip > 0.72) continue; // a bite out of the silhouette
+      px(x, y, dith(x, y) < 0.5 ? "#2a2622" : "#3a3631");
+      continue;
+    }
     if (edge) { px(x, y, OUT); continue; }
     const n = (vnoise(x * 0.3, y * 0.3, 999, seed) - 0.5) * 0.5 + (dith(x, y) - 0.5) * 0.45;
     const lit = (face === "top" ? 0.62 : face === "left" ? 0.05 : -0.55) + n;
@@ -88,7 +100,8 @@ function isoBox(px: Px, z0: number, A: number, B: number, h: number, tone: numbe
   }
 }
 
-function paintPortal(g: CanvasRenderingContext2D, f: number, N: number, lit: boolean) {
+function paintPortal(g: CanvasRenderingContext2D, f: number, N: number, lit: boolean, variant: number) {
+  V = variant;
   // painted one colour per cell on a scratch canvas, then coarsened to the decor's chunkier pixel (chunky() below)
   const cv = document.createElement("canvas");
   cv.width = W; cv.height = H;
@@ -113,9 +126,15 @@ function paintPortal(g: CanvasRenderingContext2D, f: number, N: number, lit: boo
     if (face === "top") {
       const u = s * A / 9 + (Math.floor(t * B / 9) % 2) * 0.5, v = t * B / 9;
       const iu = Math.floor(u), iv = Math.floor(v), fu = u - iu, fv = v - iv;
-      if (fu < 0.1 || fv < 0.1) return vnoise(x * 0.5, y * 0.5, 999, seed + 1) > 0.5 ? "#2f4a1c" : "#1c1814";
-      let c = stoneCol(l - 0.1 + (1 - fv) * 0.2, 0.74 + hash(iu, iv, seed + 2) * 0.3);
-      if (hash(iu, iv, seed + 3) < 0.14 && vnoise(x * 0.3, y * 0.3, 999, seed + 4) > 0.5) c = dith(x, y) < 0.5 ? "#4e6a2a" : "#36501e";
+      if (fu < 0.1 || fv < 0.1) return nv(x * 0.5, y * 0.5, seed + 1) > 0.45 ? "#2f4a1c" : "#1c1814";
+      const slab = hv(iu, iv, seed + 6);
+      if (slab < 0.09) return nv(x * 0.4, y * 0.4, seed + 8) > 0.5 ? (dith(x, y) < 0.5 ? "#3d5822" : "#2c4219") : "#3a2e22"; // a slab gone: earth and grass
+      const sunk = slab > 0.82; // sunk or tilted: darker, its far edge in shadow
+      if (sunk && fv < 0.24) return "#24201c";
+      let c = stoneCol(l - 0.1 - (sunk ? 0.35 : 0) + (1 - fv) * (slab > 0.7 ? 0.45 : 0.2), 0.7 + hv(iu, iv, seed + 2) * 0.32);
+      if (Math.abs(nv(x * 0.12, y * 0.12, seed + 9) - 0.5) < 0.025) c = "#1c1814"; // cracks wandering across the slabs
+      if (hv(iu, iv, seed + 3) < 0.22 && nv(x * 0.3, y * 0.3, seed + 4) > 0.45) c = dith(x, y) < 0.5 ? "#4e6a2a" : "#36501e";
+      else if (hv(x, y, seed + 10) < 0.03) c = "#a7a37a"; // lichen
       const gl = glowAt(x, y);
       if (gl > 0 && dith(x, y) < gl * (0.55 + 0.2 * pulse)) c = l > 0.6 ? "#c88a52" : "#9a5a30";
       return c;
@@ -124,12 +143,27 @@ function paintPortal(g: CanvasRenderingContext2D, f: number, N: number, lit: boo
     const rows = 2, row = Math.floor(t * rows), span = face === "left" ? A : B;
     const k = s * span / 5 + row * 0.5, fk = k - Math.floor(k);
     if (fk < 0.1 || Math.abs(t * rows - Math.round(t * rows)) < 0.12) return "#1c1814";
-    if (t < 0.4 && vnoise(x * 0.3, y * 0.4, 999, seed + 5) > 0.55) return dith(x, y) < 0.5 ? "#3d5822" : "#2c4219";
+    if (t < 0.5 && nv(x * 0.3, y * 0.4, seed + 5) > 0.5) return dith(x, y) < 0.5 ? "#3d5822" : "#2c4219";
+    const blk = hv(Math.floor(k), row, seed + 11);
+    if (blk < 0.18) return stoneCol(l - 0.4, 0.72); // a weathered, darker block
     return undefined;
   };
   isoBox(px, 0, 30, 28, ZTOP1, 0.8, 211, (fc, s, t, x, y, l) => flags(fc, s, t, x, y, l, 30, 28, 220));
   // upper tier
   isoBox(px, ZTOP1, 26, 19, ZTOP2 - ZTOP1, 0.86, 212, (fc, s, t, x, y, l) => flags(fc, s, t, x, y, l, 26, 19, 230));
+
+  // fallen chips of stone lying on the lower tier and in the grass
+  for (let k = 0; k < 4; k++) {
+    const onTier = k < 2, side = hv(k, 1, 160) < 0.5;
+    const a0 = onTier ? (side ? (hv(k, 2, 160) - 0.5) * 44 : 27.5) : (hv(k, 2, 160) - 0.5) * 50;
+    const b0 = onTier ? (side ? 23.5 : (hv(k, 3, 160) - 0.5) * 40) : 31 + hv(k, 3, 160) * 4;
+    const c = scr(a0, b0, onTier ? ZTOP1 : 0), rw = 2.6 + hv(k, 4, 160) * 2, rh = 1.6 + hv(k, 5, 160);
+    for (let y = Math.floor(c.y - rh - 3); y <= c.y + 1; y++) for (let x = Math.floor(c.x - rw - 1); x <= c.x + rw + 1; x++) {
+      const dx = (x - c.x) / rw, dy = (y - c.y + rh) / (rh + 1.5), d = dx * dx + dy * dy;
+      if (d > 1) continue;
+      px(x, y, d > 0.6 ? OUT : stoneCol(-dx * 0.6 - dy * 0.5 + (dith(x, y) - 0.5) * 0.4, 0.8));
+    }
+  }
 
   // plinth: a carved block with a band of notches that burn when the portal is awake
   isoBox(px, ZTOP2, PL.a, PL.b, PL.z, 0.88, 213, (fc, s, t, x, y, l) => {
@@ -139,8 +173,12 @@ function paintPortal(g: CanvasRenderingContext2D, f: number, N: number, lit: boo
       const span = fc === "left" ? PL.a * 2 : PL.b * 2, k = s * span / 5, fk = k - Math.floor(k);
       if (fk > 0.35 && fk < 0.65) return lit ? (dith(x, y) < 0.4 + 0.4 * pulse ? FIRE[6] : FIRE[4]) : "#26231f";
     }
-    if (hash(x, y, 214) < 0.025) return "#a7a37a";
-    if (t < 0.3 && vnoise(x * 0.25, y * 0.4, 999, 215) > 0.6) return dith(x, y) < 0.5 ? "#3d5822" : "#2c4219";
+    if (hv(x, y, 214) < 0.03) return "#a7a37a";
+    if (t < 0.4 && nv(x * 0.25, y * 0.4, 215) > 0.52) return dith(x, y) < 0.5 ? "#3d5822" : "#2c4219";
+    // a crack running down the long face, and dark rain streaks under the band
+    const cs = 0.3 + hv(1, 2, 216) * 0.4;
+    if (fc === "left" && Math.abs(s - cs - (1 - t) * 0.06 - Math.sin(t * 9) * 0.015) < 0.012) return OUT;
+    if (t < 0.58 && hv(Math.floor(x / 2), 0, 217) < 0.3 && nv(x * 0.6, y * 0.05, 218) > 0.45) return stoneCol(l - 0.45, 0.8);
     return undefined;
   });
 
@@ -154,9 +192,13 @@ function paintPortal(g: CanvasRenderingContext2D, f: number, N: number, lit: boo
       const r = Math.hypot(s, v);
       const top = Math.atan2(s, v); // 0 at the top
       const key = Math.abs(top) < Math.PI / BLOCKS;
-      const ro = RO + (key ? 5 : 0) + (vnoise(top * 6 + 9, 0, 999, 141) - 0.5) * 2, ri = RI + (vnoise(top * 7 + 4, 1, 999, 142) - 0.5) * 1.2;
-      if (r > ro || r < ri || ZC + v < ZP) continue; // the foot is sunk into the plinth
       const bs = ((top / (Math.PI * 2)) * BLOCKS + 0.5 + BLOCKS * 4) % BLOCKS, bi = Math.floor(bs), fu = bs - bi;
+      // every block sits a little proud or sunk, and two of them have lost a chunk off their outer edge
+      const lump = (hv(bi, 3, 148) - 0.5) * 4.5 + (nv(top * 6 + 9, 0, 141) - 0.5) * 2.4;
+      const broken = bi === Math.floor(hv(0, 1, 149) * BLOCKS) || bi === Math.floor(hv(0, 2, 149) * BLOCKS);
+      const bite = broken ? Math.max(0, 7 - Math.abs(fu - 0.5 - (hv(bi, 4, 150) - 0.5) * 0.4) * 22) * (0.7 + nv(top * 30, 2, 151) * 0.6) : 0;
+      const ro = RO + (key ? 5 : 0) + lump - bite, ri = RI + (nv(top * 7 + 4, 1, 142) - 0.5) * 1.6;
+      if (r > ro || r < ri || ZC + v < ZP) continue; // the foot is sunk into the plinth
       if (!front) {
         // a rim: outer rims face up and out, inner rims (the tunnel) face down and in; lit from the top left
         const outer = r > (ro + ri) / 2;
@@ -179,8 +221,11 @@ function paintPortal(g: CanvasRenderingContext2D, f: number, N: number, lit: boo
       const moss = vnoise(x * 0.22, y * 0.2, 999, 145);
       if ((nx < -0.2 && ny > -0.3 && moss > 0.58 && t > 0.5) || (ZC + v - ZP < 9 && moss > 0.5)) c = dith(x, y) < 0.5 + (moss - 0.5) ? (l > 0.2 ? "#5c7a30" : "#3d5822") : "#2c4219";
       else if (hash(x, y, 146) < 0.03) c = "#a7a37a";
-      const ca = 0.9 + (r - ri) * 0.012 + Math.sin(r * 0.6) * 0.03; // a crack through the right-hand blocks
-      if (Math.abs(top - ca) < 0.024 && t > 0.1) c = OUT;
+      for (let k = 0; k < 3; k++) { // cracks through a few blocks, wandering as they run outwards
+        const ca = (hv(k, 5, 152) - 0.5) * 5.6 + (r - ri) * (hv(k, 6, 152) - 0.5) * 0.03 + Math.sin(r * 0.7 + k) * 0.03;
+        if (Math.abs(top - ca) < 0.026 && t > 0.12 + k * 0.15) c = OUT;
+      }
+      if (ny < 0.2 && hv(Math.floor(x / 2), bi, 153) < 0.25 && nv(x * 0.7, y * 0.06, 154) > 0.5 && t > 0.2) c = stoneCol(l - 0.45, 0.8); // rain streaks on the lower blocks
       const u = (fu - 0.5) * 2.3, w = (t - 0.5) * 2.4;
       if (rune(bi + (key ? 1 : 0), u, w)) c = lit ? (0.5 + 0.5 * Math.sin(ph + bi * 0.7) > 0.5 ? FIRE[6] : FIRE[5]) : "#25211c";
       else if (lit && t < 0.3 && dith(x, y) < (0.3 - t) * 2.2) c = l > 0 ? "#d88a46" : "#9a5228";
@@ -277,10 +322,15 @@ function chunky(o: CanvasRenderingContext2D): HTMLCanvasElement {
 
 export const PORTAL_FRAMES = 8;
 /** Builds "portal_lit" (animated) and "portal_cold". */
-export function portalTextures(scene: Phaser.Scene) {
-  if (scene.textures.exists("portal_lit")) return;
+/**
+ * Builds stone `v`'s art, each worn its own way: "portal_lit_<v>" (animated, anim "portal_spin_<v>") or
+ * "portal_cold_<v>". Painted on demand, so only the stones a hero actually sees cost anything.
+ */
+export function portalTexture(scene: Phaser.Scene, v: number, lit: boolean) {
   const N = PORTAL_FRAMES;
-  hiResTexture(scene, "portal_lit", PORTAL_FW * K, PORTAL_FH * K, N, 4, (g, f) => { g.scale(K, K); paintPortal(g, f, N, true); });
-  hiResTexture(scene, "portal_cold", PORTAL_FW * K, PORTAL_FH * K, 1, 4, (g) => { g.scale(K, K); paintPortal(g, 0, N, false); });
-  scene.anims.create({ key: "portal_spin", frames: scene.anims.generateFrameNumbers("portal_lit", { start: 0, end: N - 1 }), frameRate: 8, repeat: -1 });
+  if (lit && !scene.textures.exists(`portal_lit_${v}`)) {
+    hiResTexture(scene, `portal_lit_${v}`, PORTAL_FW * K, PORTAL_FH * K, N, 4, (g, f) => { g.scale(K, K); paintPortal(g, f, N, true, v); });
+    scene.anims.create({ key: `portal_spin_${v}`, frames: scene.anims.generateFrameNumbers(`portal_lit_${v}`, { start: 0, end: N - 1 }), frameRate: 8, repeat: -1 });
+  }
+  if (!lit && !scene.textures.exists(`portal_cold_${v}`)) hiResTexture(scene, `portal_cold_${v}`, PORTAL_FW * K, PORTAL_FH * K, 1, 4, (g) => { g.scale(K, K); paintPortal(g, 0, N, false, v); });
 }
