@@ -112,6 +112,8 @@ export class ResourceBars {
   private level = -1;
   private xpPct = "";
   private xpTip = "";
+  private xpTxt: HTMLElement;
+  private xpW = -1;
 
   constructor(hud: HTMLElement) {
     this.root = document.createElement("div");
@@ -123,12 +125,13 @@ export class ResourceBars {
     this.hp = new Bar(stack, "hp");
     this.mp = new Bar(stack, "mp");
     this.st = new Bar(stack, "st");
+    // XP bar sits above the slot bar (Murat): bronze menu frame, gold fill, progress text inside on hover
     this.xpBar = document.createElement("div");
-    this.xpBar.className = "rb-bar rb-xp";
-    this.xpBar.setAttribute("data-tiphead", "Experience");
-    this.xpBar.innerHTML = `<div class="rb-fill"></div>`;
+    this.xpBar.id = "xpbar";
+    this.xpBar.innerHTML = `<div class="xp-fill"></div><span class="xp-txt"></span>`;
     this.xpFill = this.xpBar.firstElementChild as HTMLElement;
-    stack.appendChild(this.xpBar);
+    this.xpTxt = this.xpBar.lastElementChild as HTMLElement;
+    hud.appendChild(this.xpBar);
     hud.prepend(this.root);
     this.setNumbers(ResourceBars.numbersOn());
   }
@@ -149,12 +152,14 @@ export class ResourceBars {
       this.level = s.level;
       this.lvEl.textContent = String(s.level);
     }
-    const w = this.hp.el.style.width;
-    if (this.xpBar.style.width !== w) this.xpBar.style.width = w;
+    // Same width as the slot bar under it
+    const hb = document.getElementById("hotbar");
+    const w = hb ? hb.offsetWidth : 0;
+    if (w > 0 && w !== this.xpW) { this.xpBar.style.width = `${w}px`; this.xpW = w; }
     const p = `${Math.max(0, Math.min(1, s.xpFrac)) * 100}%`;
     if (p !== this.xpPct) { this.xpFill.style.width = p; this.xpPct = p; }
-    // Hover tip (tooltip.ts): XP into this level / XP needed for the next one
+    // Shown inside the bar on hover: XP into this level / XP needed for the next one
     const tipTxt = s.xpNeed === undefined ? "Max level" : `${Math.max(0, Math.floor(s.xp ?? 0))} / ${s.xpNeed} XP to level ${s.level + 1}`;
-    if (tipTxt !== this.xpTip) { this.xpBar.setAttribute("data-tip", tipTxt); this.xpTip = tipTxt; }
+    if (tipTxt !== this.xpTip) { this.xpTxt.textContent = tipTxt; this.xpTip = tipTxt; }
   }
 }

@@ -1,0 +1,9 @@
+{
+  "date": "2026-11-04",
+  "pr": 242,
+  "title": "Golden XP bar",
+  "changes": [
+    "The XP bar now sits above the skill slots, with a bronze frame and a golden fill.",
+    "Hover it to read your XP right inside the bar."
+  ]
+}
