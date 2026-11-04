@@ -840,7 +840,7 @@ export class TownScene extends Phaser.Scene {
         note.hidden = false;
       }
     });
-    this.room.onMessage("hit", ({ id, dmg, blocked, crit }) => {
+    this.room.onMessage("hit", ({ id, dmg, blocked, crit, dot, kx, ky }) => {
       const e = this.entities.get(id);
       if (!e) return;
       if (id === this.me) this.portals?.hurt();
@@ -849,9 +849,12 @@ export class TownScene extends Phaser.Scene {
       if (id === this.me) musicCombat(3);
       else if (e.mob && meE && Math.hypot(e.sprite.x - meE.sprite.x, e.sprite.y - meE.sprite.y) < 10 * TILE) musicCombat(1);
       this.floatText(e.sprite.x, e.sprite.y - 14, crit ? `CRIT -${dmg}` : `-${dmg}`,
-        blocked ? "#9ad1ff" : crit ? "#ffd60a" : id === this.me ? "#ff5d5d" : "#ffffff");
+        blocked ? "#9ad1ff" : crit ? "#ffd60a" : id === this.me ? "#ff5d5d" : "#ffffff", PIXEL_FONT, crit ? 1.8 : dot ? 0.8 : 1);
+      // Hit feel without freezes or camera effects (Murat wants fluid combat): a short white flash,
+      // a tiny squash and a 2-3 px nudge away from the blow. Damage over time only flickers.
       e.sprite.setTintFill(0xffffff);
-      this.time.delayedCall(80, () => e.sprite.clearTint());
+      this.time.delayedCall(dot ? 40 : 70, () => e.sprite.clearTint());
+      if (!dot && !blocked) this.flinch(e, kx ?? 0, ky ?? 0, crit);
       // A flinch never cuts a swing short: the attack you started keeps playing, so the fight stays readable
       const cur = e.sprite.anims.currentAnim?.key ?? "";
       const busy = e.sprite.anims.isPlaying && /_(swing|attack|cast)/.test(cur);
@@ -909,7 +912,7 @@ export class TownScene extends Phaser.Scene {
     });
     // Server restart (every deploy): show a notice and log back in by itself
     const login = { name: this.opts.name, password: this.opts.password, cls: this.opts.cls, color: this.opts.color };
-    this.room.onLeave(() => { this.feed("Disconnected from server"); reconnectSoon(login); });
+    this.room.onLeave((code: number) => { this.feed("Disconnected from server"); reconnectSoon(login, code === 4000); });
     // A connection that silently died (no updates for 15s) is treated the same way
     let lastPatch = Date.now();
     this.room.onStateChange(() => { lastPatch = Date.now(); });
@@ -1083,13 +1086,36 @@ export class TownScene extends Phaser.Scene {
     img.once("destroy", () => parts.forEach((p) => p.destroy()));
   }
 
-  private floatText(x: number, y: number, text: string, color: string, font = PIXEL_FONT) {
+  /**
+   * Visual flinch of a hit: the sprite is nudged a few pixels along the hit direction and eases back, with a small
+   * squash. Only the drawing moves (an offset on the sprite's origin), so movement smoothing and positions are untouched.
+   */
+  private flinch(e: Entity, kx: number, ky: number, crit: boolean) {
+    const s = e.sprite as Phaser.GameObjects.Sprite & { flinchTween?: Phaser.Tweens.Tween };
+    if (s.flinchTween?.isPlaying()) return;
+    const px = (crit ? 3 : 2) * kx, py = (crit ? 3 : 2) * ky;
+    const ox = s.originX, oy = s.originY, w = s.width || 1, h = s.height || 1;
+    if (px || py) {
+      s.flinchTween = this.tweens.add({
+        targets: s, originX: ox - px / w, originY: oy - py / h, duration: 50, yoyo: true, ease: "Quad.easeOut",
+        onComplete: () => s.setOrigin(ox, oy), onStop: () => s.setOrigin(ox, oy),
+      });
+    }
+    if (e.mob) this.squash(e, crit ? 1.12 : 1.06, crit ? 0.88 : 0.94, 60);
+  }
+
+  private floatText(x: number, y: number, text: string, color: string, font = PIXEL_FONT, size = 1) {
     const t = this.add.text(x, y, text, {
       fontFamily: font, fontSize: "16px", color, stroke: "#000", strokeThickness: 3,
-    }).setOrigin(0.5, 1).setScale(0.25).setResolution(2).setDepth(30000);
+    }).setOrigin(0.5, 1).setScale(0.25 * size).setResolution(2).setDepth(30000);
     // iso view: callers lift the text above a hero's feet; rise straight up from there on screen
     isoAnchor(t, { x, y: y + 14 });
-    this.tweens.add({ targets: t, y: y - 10, alpha: 0, duration: 800, onComplete: () => t.destroy() });
+    if (size > 1) {
+      // Big numbers (crits) pop in, then rise
+      t.setScale(0.25 * size * 1.4);
+      this.tweens.add({ targets: t, scale: 0.25 * size, duration: 120, ease: "Back.easeOut" });
+    }
+    this.tweens.add({ targets: t, y: y - 10, alpha: 0, duration: size > 1 ? 1000 : 800, delay: size > 1 ? 150 : 0, onComplete: () => t.destroy() });
   }
 
   /** Merged blob: paint the swallowed blobs' colours, eyes and mouths over its body (follows squash tweens). */

@@ -39,6 +39,11 @@ import {
   BAG_SIZE, Equipped, gearDef, GEAR_SLOTS, activeGear, reqProblem, itemLevel, HeroReqInfo, GearSlot, gearBlock, gearName, gearReachMult, gearSpeedMult, gearStats, isGearId, potionChance, rollGear, canWear, starterKit,
 } from "../shared/gear";
 /** "Frost Katana Lv 17" for pickup messages. */
+/** Hit direction for the client's flinch nudge (unit vector, 1 decimal), or undefined when there is no push. */
+const hitDir = (push: [number, number]) => {
+  const l = Math.hypot(push[0], push[1]);
+  return l > 0 ? { kx: Math.round((push[0] / l) * 10) / 10, ky: Math.round((push[1] / l) * 10) / 10 } : {};
+};
 const lvlName = (id: string, cls: string) => `${gearName(id, cls)}${itemLevel(id) > 1 ? ` Lv ${itemLevel(id)}` : ""}`;
 import { Asker, boardFor, submit, tick as ideaTick, vote as ideaVote } from "../shared/ideas";
 import { hashAddr, ideaLog, saveIdeas } from "./ideaStore";
@@ -2493,7 +2498,7 @@ export class TownRoom extends Room<TownState> {
       const k = moveStep(m.x, m.y, pushInput(push), 0.1 * kb);
       if (!isSafeZone(k.x, k.y) && !noMobsAt(k.x, k.y)) { m.x = k.x; m.y = k.y; }
     }
-    this.broadcast("hit", { id: targetId, dmg, crit: !!opts.crit, dot: !!opts.dot });
+    this.broadcast("hit", { id: targetId, dmg, crit: !!opts.crit, dot: !!opts.dot, ...(opts.dot ? {} : hitDir(push)) });
     if (m.hp > 0) { afterHit(this.host, attackerId, targetId, opts); return; }
     if (a) for (let c = 0; c < CHAINS.length; c++) this.questKill(attackerId, a, m, c);
     // Kill XP: every group member in the same zone gets it (the killer alone when solo)
@@ -2898,7 +2903,7 @@ export class TownRoom extends Room<TownState> {
       const kb = moveStep(t.x, t.y, pushInput(push), 0.12 * kbMul);
       t.x = kb.x; t.y = kb.y;
     }
-    this.broadcast("hit", { id: tid, dmg, blocked: guarded, crit: !!opts.crit, dot: !!opts.dot });
+    this.broadcast("hit", { id: tid, dmg, blocked: guarded, crit: !!opts.crit, dot: !!opts.dot, ...(opts.dot ? {} : hitDir(push)) });
     if (t.hp > 0) { afterHit(this.host, opts.from, tid, opts); return false; }
     t.dead = true;
     t.guarding = false;

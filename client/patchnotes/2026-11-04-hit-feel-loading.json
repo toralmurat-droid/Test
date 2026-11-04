@@ -1,0 +1,9 @@
+{
+  "date": "2026-11-04",
+  "title": "Punchier hits, faster loading",
+  "changes": [
+    "Hits now flash, nudge the target back a little and squash monsters; critical hits show a big popping number.",
+    "The game downloads about 1.6 MB less when it starts.",
+    "A lost connection now says \"Connection lost\" instead of \"Game is upgrading!\"."
+  ]
+}

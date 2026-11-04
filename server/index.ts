@@ -1,6 +1,8 @@
 import http from "node:http";
 import path from "node:path";
 import crypto from "node:crypto";
+import fs from "node:fs";
+import zlib from "node:zlib";
 import express from "express";
 import { Server } from "colyseus";
 import { WebSocketTransport } from "@colyseus/ws-transport";
@@ -14,7 +16,33 @@ const app = express();
 // In production, serve the built client from the same server
 if (process.env.NODE_ENV === "production") {
   const dist = path.resolve(__dirname, "../dist");
-  app.use(express.static(dist));
+  // Text files (the 2 MB game script, styles, data) go out gzipped: about 4x smaller, so the game loads faster.
+  // Compressed once per file and kept in memory (the built files never change while the server runs).
+  const gz = new Map<string, Buffer | null>();
+  const TEXT = /\.(js|css|html|json|svg|txt)$/;
+  app.use((req, res, next) => {
+    if (req.method !== "GET" || !/\bgzip\b/.test(String(req.headers["accept-encoding"] ?? ""))) return next();
+    const rel = req.path === "/" ? "/index.html" : req.path;
+    if (!TEXT.test(rel)) return next();
+    const file = path.join(dist, path.normalize(rel));
+    if (!file.startsWith(dist + path.sep)) return next();
+    let body = gz.get(file);
+    if (body === undefined) {
+      try { body = zlib.gzipSync(fs.readFileSync(file), { level: 9 }); } catch { body = null; }
+      gz.set(file, body);
+    }
+    if (!body) return next();
+    res.setHeader("Content-Encoding", "gzip");
+    res.setHeader("Vary", "Accept-Encoding");
+    res.type(path.extname(file));
+    // Vite's hashed files (assets/name-HASH.js) never change: let the browser keep them
+    if (/\/assets\/[^/]+-[A-Za-z0-9_-]{8}\.\w+$/.test(rel)) res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+    else res.setHeader("Cache-Control", "no-cache");
+    res.end(body);
+  });
+  app.use(express.static(dist, {
+    setHeaders: (res, file) => { if (/[\\/]assets[\\/][^\\/]+-[A-Za-z0-9_-]{8}\.\w+$/.test(file)) res.setHeader("Cache-Control", "public, max-age=31536000, immutable"); },
+  }));
 }
 app.get("/health", (_req, res) => { res.send("ok"); });
 // The player idea log (read-only), newest first
