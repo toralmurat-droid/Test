@@ -1,4 +1,5 @@
 import Phaser from "phaser";
+import { initMusic } from "./music";
 import { takeRejoin } from "./reconnect";
 import { showLoading } from "./loading";
 import { TownScene } from "./TownScene";
@@ -120,6 +121,7 @@ async function start() {
 
 function launch(name: string, password: string, newGame: boolean) {
   showPick(false);
+  initMusic(name);
   status.textContent = "Connecting…";
   heroCards.stop();
   showLoading(); // covers everything until the world is fully drawn (TownScene hides it)
