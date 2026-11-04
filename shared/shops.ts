@@ -52,7 +52,7 @@ export const SHOPS: Record<string, Shop> = {
     buys: ["weapon", "ranged"],
   },
   witch: {
-    greeting: "Hehehe... potions, freshly brewed. Red for your blood, blue for your magic. Bubbling, mostly.",
+    greeting: "Fresh from the still, darling. Red for your blood, blue for your magic. Try not to stare.",
     stock: [
       // Minor and Medium flasks; Greater ones are only found out in the world
       ...[0, 1].flatMap((size) => (["potion", "mpotion"] as const).flatMap((item) => [

@@ -139,6 +139,7 @@ interface Hero {
   gait?: "sneak" | "march" | "float" | "swagger" | "light" | "stroll";
   weaponKind: string;
   idleAngle: Record<Dir, number>;
+  hipHand?: boolean;
 }
 
 // ---------- shared body bits ----------
@@ -489,6 +490,7 @@ interface HumanOpts {
   fxCol?: number;
   aura?: number;
   gait?: Hero["gait"];
+  hipHand?: boolean; // idles with the free hand on the hip
 }
 
 function human(o: HumanOpts): Hero {
@@ -518,7 +520,7 @@ function human(o: HumanOpts): Hero {
     kind1: o.weapon === "bow" ? "shot" : o.weapon === "spear" ? "thrust" : "slash",
     moves: moves[o.weapon],
     aura: o.aura, cols: { sleeve, hand: o.skin }, weaponKind: o.weapon, gait: o.gait ?? "stroll",
-    idleAngle: idle[o.weapon],
+    idleAngle: idle[o.weapon], hipHand: o.hipHand,
     legs(d, top) { standardLegs(d, top, o.pants, o.boots); },
     torso(d) {
       const dir = d.p.dir;
@@ -748,9 +750,9 @@ const druid = human({
 });
 
 const witch = human({
-  name: "witch", skin: 0xcfe0b0, hair: 0x2a1f3d, hairStyle: "long", eye: 0x6a1b9a,
-  hat: { kind: "witch", col: 0x2e2340, trim: 0x8e44ad }, shirt: 0x4a2f6b, sleeve: 0x3a2556, apron: 0x2e2340,
-  pants: 0x3a2556, boots: 0x221a2e, belt: 0x8e44ad, weapon: "staff", fxCol: 0xc77dff, aura: 0xc77dff, gait: "stroll",
+  name: "witch", skin: 0xf0c8a8, hair: 0x1c1216, hairStyle: "long", eye: 0xd4a017,
+  hat: { kind: "witch", col: 0x1e181e, trim: 0xb02a2e }, shirt: 0xb02a2e, sleeve: 0xf0c8a8, vest: 0x1e1418,
+  pants: 0x9a1e24, boots: 0x1a1214, belt: 0x2a1610, weapon: "none", fxCol: 0xff6a3a, gait: "swagger", hipHand: true,
 });
 
 // Townsfolk who idle and wander about the village centre, and the watchmen holding the gates (client/src/villagers.ts, server watch)
@@ -1087,7 +1089,12 @@ export function animFrames(hero: Hero, anim: string, dir: Dir): Canvas[] {
   fluidHero = PAINTED && hasLook(hero.name);
   const B = (t: number) => base(dir, t);
   switch (anim) {
-    case "idle": return [0, 0, 0, 1, 1, 1].map((bob, t) => renderFrame(hero, { ...B(t), bob, expr: t === 5 ? "blink" : "n" }));
+    case "idle": {
+      // hand on the hip, weight on one leg (Morwen)
+      const hip: Record<Dir, [number, number]> | undefined = hero.hipHand ? { down: [21.6, 21.0], up: [9.4, 21.0], right: [16.6, 21.2] } : undefined;
+      const palm: Record<Dir, [number, number]> = { down: [9.6, 20.4], up: [22.4, 20.4], right: [18.6, 19.6] }; // the other hand held open at the waist
+      return [0, 0, 0, 1, 1, 1].map((bob, t) => renderFrame(hero, { ...B(t), bob, expr: t === 5 ? "blink" : "n", farHand: hip?.[dir], hand: hip ? palm[dir] : undefined, headDx: hip && dir !== "right" ? (t < 3 ? 0.6 : 0.3) : undefined }));
+    }
     case "idle2": {
       const look = dir === "right" ? [0, -1, -1, -1, 0, 0] : [0, -1, -1, 1, 1, 0];
       return look.map((headDx, t) => renderFrame(hero, { ...B(t), headDx, bob: t === 5 ? 1 : 0, expr: t === 2 ? "blink" : "n" }));

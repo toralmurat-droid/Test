@@ -18,7 +18,7 @@ export const NPCS: Npc[] = [
   { id: "druid", name: "Elder Rowan", title: "Druid", sprite: "druid", x: (ROADS.RX + 3) * TILE, y: (ROADS.RY + 1.7) * TILE, dir: "left" },
   // Traders around the market square
   { id: "weaponsmith", name: "Brann", title: "Weapons merchant", sprite: "blacksmith", x: 71.6 * TILE, y: 57.5 * TILE, dir: "right", shop: "weaponsmith" },
-  { id: "witch", name: "Old Morwen", title: "Potion witch", sprite: "witch", x: 71.95 * TILE, y: 63.95 * TILE, dir: "right", shop: "witch" },
+  { id: "witch", name: "Morwen", title: "Potion witch", sprite: "witch", x: 71.95 * TILE, y: 63.95 * TILE, dir: "right", shop: "witch" },
   // Tobin the fisherman: only home once you free him from the blob cocoon at Sunken Lake (shared/quests.ts npcPresent)
   { id: "fisher", name: "Tobin", title: "Fisherman", sprite: "villager", x: 85.5 * TILE, y: 61.4 * TILE, dir: "left" },
   // Captain Hale of the watch, just inside the east gate: gives the skeleton quest chain (shared/quests.ts BONE_QUESTS)
@@ -33,12 +33,9 @@ export const NPCS: Npc[] = [
  */
 export interface NpcDecor { prop: string; x: number; y: number; scale: number; animated?: boolean; solid?: [number, number, number, number]; flip?: boolean }
 export const NPC_DECOR: NpcDecor[] = [
-  // Old Morwen's crooked hut, cauldron, candles and herbs
-  { prop: "witch_hut", x: 71.6, y: 62.85, scale: 1.5, animated: true, solid: [70.5, 61.8, 1.75, 1.25] }, // big enough for Morwen to fit through the door
-  { prop: "cauldron", x: 72.8, y: 64.05, scale: 0.55, animated: true, solid: [72.55, 63.8, 0.5, 0.25] },
-  { prop: "candles", x: 70.05, y: 63.45, scale: 0.5, animated: true },
-  { prop: "toadstools", x: 73.4, y: 63.3, scale: 0.5 },
-  { prop: "herb_rack", x: 72.9, y: 62.55, scale: 0.5 },
+  // Morwen's camp: her crimson bell tent and the alchemy rig with its floating rune stones (client/src/witchCamp.ts)
+  { prop: "wc_tent", x: 70.9, y: 62.7, scale: 1, animated: true, solid: [70.25, 62.05, 1.3, 1.3] },
+  { prop: "wc_rig", x: 72.8, y: 63.7, scale: 1, animated: true, solid: [72.5, 63.45, 0.6, 0.35] },
   // Brann's smithy: forge with bellows, anvil, weapon rack
   { prop: "forge", x: 70.4, y: 56.85, scale: 0.6, animated: true, solid: [69.85, 56.2, 1.1, 0.65] },
   { prop: "anvil", x: 72.25, y: 57.65, scale: 0.5, solid: [72.05, 57.45, 0.4, 0.2] },

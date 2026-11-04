@@ -259,7 +259,8 @@ function skirt(c: C2, r: Rig) {
   const hw = 2.9 * r.b, hem = 28.1;
   let pts: P[];
   if (r.R) {
-    const back = Math.min(f0[0], f1[0]) - 1.6, front = Math.max(f0[0], f1[0]) + 1.9;
+    const flare = L.legs === "dress" ? 0.9 : 0; // a dress falls wider than a robe
+    const back = Math.min(f0[0], f1[0]) - 1.6 - flare, front = Math.max(f0[0], f1[0]) + 1.9 + flare;
     pts = [[r.cx - 2.0, hy], [r.cx + 2.1, hy], [front - 0.4, hem - 2.5], [front, hem], [(front + back) / 2, hem + 0.45], [back, hem], [back + 0.2, hem - 2]];
   } else {
     const sw = r.p.stride * 0.6;
@@ -418,6 +419,7 @@ function torso(c: C2, r: Rig) {
     if (L.vest) vest(c, r, s);
     if (L.apron) apron(c, r);
     if (L.tabard) tabard(c, r);
+    if (L.corset !== undefined) corset(c, r, s);
   }
   // belt / sash
   const by = hipY - 1.1;
@@ -479,6 +481,19 @@ function vest(c: C2, r: Rig, s: Shape) {
       const v = poly([[cx - 2.5, sy - 1.2], [cx + 1.2, sy - 1.2], [cx + 1.8, sy + 3], [cx + 1.3, hipY + 1], [cx - 2.5, hipY + 1]]);
       vol(c, v, col, [cx - 2.5, sy - 1.2, 4.6, hipY - sy + 2], { ao: 0.25 });
     } else vol(c, (cc) => cc.rect(cx - 5, sy - 2, 10, hipY - sy + 3), col, [cx - 4, sy - 1.2, 8, hipY - sy + 2], { ao: 0.25 });
+  });
+}
+
+/** Laced waist cincher over a dress bodice: dark, pointed at the front, gold lacing up the middle. */
+function corset(c: C2, r: Rig, s: Shape) {
+  const { cx, sy, hipY } = r, col = C(r.L.corset!), lace = 0xd9a93a, y0 = sy + 2.4, y1 = hipY + 0.6;
+  clipTo(c, s, () => {
+    const v = r.R ? poly([[cx - 2.6, y0 + 0.4], [cx + 2.2, y0 - 0.2], [cx + 2.4, y1 - 0.4], [cx + 1.6, y1 + 0.5], [cx - 2.6, y1]])
+      : poly([[cx - 5, y0 + 0.5], [cx, y0 - 0.5], [cx + 5, y0 + 0.5], [cx + 5, y1 - 0.4], [cx, y1 + 0.8], [cx - 5, y1 - 0.4]]);
+    vol(c, v, col, [cx - 4, y0, 8, y1 - y0 + 1], { ao: 0.25 });
+    const zig: P[] = [];
+    for (let k = 0; k <= 5; k++) zig.push([cx + (k % 2 ? 0.45 : -0.45) + (r.R ? 1.7 : 0), y0 + 0.2 + k * (y1 - y0 - 0.4) / 5]);
+    if (r.dir !== "up" || !r.R) line(c, zig, lace, 0.16, r.dir === "up" ? 0.55 : 0.8);
   });
 }
 
@@ -694,6 +709,7 @@ function head(c: C2, r: Rig) {
     line(c, [[qx + 0.12 + fo * 0.4, hy + 0.5], [qx + 0.28 + fo * 0.5, hy + 1.25], [qx - 0.05, hy + 1.35]], sh(skin, 0.6), 0.18, 0.7);
     if (!L.beard || L.beardStyle === "stubble") {
       if (r.p.expr === "happy") curve(c, [qx - 0.6, hy + 1.75], [qx, hy + 2.25], [qx + 0.6, hy + 1.75], sh(skin, 0.4), 0.2);
+      else if (L.lips !== undefined) { fillShape(c, ellipseP(qx + 0.1, hy + 1.85, 0.62, 0.3), css(C(L.lips))); line(c, [[qx - 0.4, hy + 1.85], [qx + 0.65, hy + 1.75]], sh(L.lips, 0.55), 0.14, 0.9); }
       else line(c, [[qx - 0.45, hy + 1.85], [qx + 0.45, hy + 1.85]], sh(skin, 0.5), 0.2, 0.8);
     }
   } else if (r.R && !covered) {
@@ -1412,6 +1428,7 @@ export function paintFrame(name: string, p: PoseLike, info: FrameInfo, withShado
     weaponNow(); arm(c, r, "near");
   }
 
+  if (L.palmFlame !== undefined && p.attack < 0 && dir !== "up") palmFlame(c, r, L.palmFlame);
   if (PIX) return pixelFrame(body, under, r, K, S, flash, withShadow);
   const out = post(body, S), oc = out.getContext("2d");
   oc.save(); oc.scale(S, S);
@@ -1436,6 +1453,16 @@ export function paintFrame(name: string, p: PoseLike, info: FrameInfo, withShado
   const hc = new HiCanvas(32, 32, K);
   hc.data.set(img.data);
   return hc;
+}
+
+/** A small witch-fire dancing a little above the open near hand: red-orange tongue, yellow heart. */
+function palmFlame(c: C2, r: Rig, col: number) {
+  const [x, y0] = r.nearH, t = r.p.t, sw = Math.sin(t * 1.9) * 0.45, y = y0 - 1.1 - Math.abs(Math.sin(t * 1.3)) * 0.3;
+  const tall = 3.4 + Math.sin(t * 2.3) * 0.5;
+  const outer = blobPath([[x - 1.25, y], [x - 1.0, y - 1.3], [x - 0.3 + sw * 0.5, y - tall * 0.7], [x + sw, y - tall], [x + 0.6 + sw * 0.4, y - tall * 0.55], [x + 1.25, y - 0.9], [x + 1.0, y + 0.45], [x, y + 0.75]]);
+  fillShape(c, outer, css(sh(col, 0.85)));
+  fillShape(c, blobPath([[x - 0.75, y], [x - 0.2 + sw * 0.4, y - tall * 0.55], [x + 0.5 + sw * 0.3, y - tall * 0.35], [x + 0.75, y - 0.2], [x, y + 0.45]]), css(C(0xffa040)));
+  fillShape(c, ellipseP(x + sw * 0.15, y - 0.35, 0.42, 0.55), css(C(0xffe08a)));
 }
 
 // ---------------------------------------------------------------- pixel-art output
