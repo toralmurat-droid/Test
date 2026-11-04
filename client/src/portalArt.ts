@@ -352,3 +352,48 @@ export function portalTexture(scene: Phaser.Scene, v: number, lit: boolean) {
   }
   if (!lit && !scene.textures.exists(`portal_cold_${v}`)) hiResTexture(scene, `portal_cold_${v}`, PORTAL_FW * K, PORTAL_FH * K, 1, 4, (g) => { g.scale(K, K); paintPortal(g, 0, N, false, v); });
 }
+
+/**
+ * The network stones (Murat 2026-11-04): a ring of small carved standing stones round every portal, one per portal
+ * stone in the land. Stone k carries portal k's rune; it burns once this hero has woken portal k, so each stone
+ * shows how much of the network is found. "portal_mark_<k>_lit" / "portal_mark_<k>_cold", one frame each.
+ */
+const MX0 = CX - 12, MY0 = BY - 38, MW = 24, MH = 46; // crop of the scratch canvas, in cells
+export const MARK_FW = MW / 2, MARK_FH = MH / 2, MARK_FOOT = (BY - MY0) / MH;
+
+function paintMarker(g: CanvasRenderingContext2D, k: number, lit: boolean) {
+  V = 40 + k;
+  const cv = document.createElement("canvas");
+  cv.width = W; cv.height = H;
+  const o = cv.getContext("2d")!;
+  const px: Px = (x, y, c) => { o.fillStyle = c; o.fillRect(x, y, 1, 1); };
+  // shadow
+  for (let y = BY - 6; y <= BY + 6; y++) for (let x = CX - 12; x < CX + 12; x++) {
+    const ex = (x - CX - 2) / 11, ey = (y - BY - 1) / 5.5, d = ex * ex + ey * ey;
+    if (d < 1 && dith(x, y) < (1 - d) * 0.7) px(x, y, "rgba(10,8,6,0.45)");
+  }
+  // a short, leaning slab of stone, its top worn round: height and girth vary per stone
+  const h = 22 + Math.floor(hv(k, 1, 300) * 7), A = 5 + Math.floor(hv(k, 2, 300) * 2), B = 4;
+  const bar = 0.45 + (k % 3) * 0.12; // each stone's glyph sits its own way: a carved line and a crossbar
+  isoBox(px, 0, A, B, h, 0.95, 310 + k, (fc, s, t, x, y, l) => {
+    if (fc === "left") {
+      const line = Math.abs(s - 0.5) < 0.17 && t > 0.28 && t < 0.86;
+      const cross = k % 2 === 1 && Math.abs(t - bar) < 0.06 && Math.abs(s - 0.5) < 0.3;
+      const fork = k % 2 === 0 && k > 0 && t > 0.7 && t < 0.86 && Math.abs(Math.abs(s - 0.5) - (t - 0.7) * 1.6) < 0.1;
+      if (line || cross || fork) return lit ? (t > 0.5 && dith(x, y) < 0.5 ? FIRE[7] : FIRE[6]) : "#1c1814";
+    }
+    if (t < 0.35 && fc !== "top" && nv(x * 0.3, y * 0.4, 320 + k) > 0.5) return dith(x, y) < 0.5 ? "#3d5822" : "#2c4219"; // moss
+    if (hv(x, y, 330 + k) < 0.04) return "#a7a37a"; // lichen
+    return stoneCol(l + 0.22, 0.95);
+  });
+  const out = chunky(o);
+  g.imageSmoothingEnabled = false;
+  g.drawImage(out, MX0 / 2, MY0 / 2, MW / 2, MH / 2, 0, 0, MW / 2, MH / 2);
+}
+
+/** Paints (once) network stone k in its state. */
+export function markerTexture(scene: Phaser.Scene, k: number, lit: boolean) {
+  const key = `portal_mark_${k}_${lit ? "lit" : "cold"}`;
+  if (!scene.textures.exists(key)) hiResTexture(scene, key, MARK_FW * K, MARK_FH * K, 1, 4, (g) => { g.scale(K, K); paintMarker(g, k, lit); });
+  return key;
+}

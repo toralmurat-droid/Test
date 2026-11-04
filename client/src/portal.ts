@@ -1,7 +1,7 @@
 import Phaser from "phaser";
 import { ART_K as K } from "../../shared/constants";
 import { PORTAL_COMBAT_MS, PORTAL_RANGE, PORTALS, portalById, type Portal } from "../../shared/portals";
-import { portalTexture, PORTAL_FOOT } from "./portalArt";
+import { markerTexture, portalTexture, MARK_FOOT, PORTAL_FOOT } from "./portalArt";
 
 /** ?look=... (map viewing aid): paint every stone up front, so a parked camera sees them. */
 const PORTAL_LOOK = new URLSearchParams(location.search).has("look");
@@ -15,9 +15,12 @@ import type { MapMarker } from "./minimap";
  * travel list: only the stones this hero has woken, so the rest of the network stays a secret until found.
  */
 const SCALE = 0.62;
+/** The network stones round each portal: one per portal stone, lit once that portal is woken (Murat 2026-11-04). */
+const MARK_R = 1.85 * 32;
+type Mark = { img: Phaser.GameObjects.Image; glow: Phaser.GameObjects.Image; lit?: boolean };
 
 export class PortalLayer {
-  private stones = new Map<string, { img: Phaser.GameObjects.Sprite; glow: Phaser.GameObjects.Image; p: Portal; v: number; shown: "" | "lit" | "cold" }>();
+  private stones = new Map<string, { img: Phaser.GameObjects.Sprite; glow: Phaser.GameObjects.Image; marks: Mark[]; p: Portal; v: number; shown: "" | "lit" | "cold" }>();
   private found = new Set<string>();
   private prompt = document.createElement("div");
   private menu = document.createElement("div");
@@ -34,7 +37,17 @@ export class PortalLayer {
         .setBlendMode(Phaser.BlendModes.ADD).setDepth(-0.8).setVisible(false);
       isoAnchor(glow, { x: p.x, y: p.y });
       scene.tweens.add({ targets: glow, alpha: 0.36, scale: 5.5 * K, duration: 1600, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
-      this.stones.set(p.id, { img, glow, p, v, shown: "" });
+      // a gap is left in front of the arch (world +y), where heroes arrive
+      const marks = PORTALS.map((_, k): Mark => {
+        const a = Math.PI / 2 + ((k + 0.5) / PORTALS.length) * Math.PI * 2;
+        const x = p.x + Math.cos(a) * MARK_R, y = p.y + Math.sin(a) * MARK_R * 0.9;
+        const mi = scene.add.image(x, y, "__DEFAULT").setOrigin(0.5, MARK_FOOT).setScale(SCALE).setDepth(y).setVisible(false);
+        const mg = scene.add.image(x, y - 12, "glow").setTint(0xff8a24).setScale(1.4 * K).setAlpha(0.3)
+          .setBlendMode(Phaser.BlendModes.ADD).setDepth(-0.8).setVisible(false);
+        isoAnchor(mg, { x, y });
+        return { img: mi, glow: mg };
+      });
+      this.stones.set(p.id, { img, glow, marks, p, v, shown: "" });
     });
     const hud = document.getElementById("hud")!;
     this.prompt.id = "portalprompt";
@@ -57,7 +70,7 @@ export class PortalLayer {
   /** Woken portals of this hero, from the server; `woke` = the one just found. */
   setFound(ids: string[], woke?: string) {
     this.found = new Set(ids);
-    for (const s of this.stones.values()) if (s.shown) this.show(s);
+    for (const s of this.stones.values()) if (s.shown) { this.show(s); this.showMarks(s); }
     const p = portalById(woke);
     if (p) {
       this.burst(p, 26);
@@ -118,7 +131,7 @@ export class PortalLayer {
   }
 
   /** Paints (once) and shows this stone's art for its state: dark until found, burning once woken. */
-  private show(s: { img: Phaser.GameObjects.Sprite; glow: Phaser.GameObjects.Image; p: Portal; v: number; shown: "" | "lit" | "cold" }) {
+  private show(s: { img: Phaser.GameObjects.Sprite; glow: Phaser.GameObjects.Image; marks: Mark[]; p: Portal; v: number; shown: "" | "lit" | "cold" }) {
     const lit = this.found.has(s.p.id), want = lit ? "lit" : "cold";
     if (s.shown === want) return;
     portalTexture(this.scene, s.v, lit);
@@ -127,6 +140,18 @@ export class PortalLayer {
     else { s.img.stop(); s.img.setTexture(`portal_cold_${s.v}`, 0); }
     s.img.setOrigin(0.5, PORTAL_FOOT).setVisible(true);
     s.glow.setVisible(lit);
+    this.showMarks(s);
+  }
+
+  /** Network stone k round this portal burns once portal k is woken. */
+  private showMarks(s: { marks: Mark[] }) {
+    PORTALS.forEach((q, k) => {
+      const m = s.marks[k], lit = this.found.has(q.id);
+      if (m.lit === lit) return;
+      m.lit = lit;
+      m.img.setTexture(markerTexture(this.scene, k, lit)).setOrigin(0.5, MARK_FOOT).setVisible(true);
+      m.glow.setVisible(lit);
+    });
   }
 
   update(me: { x: number; y: number } | undefined, blocked: boolean) {
