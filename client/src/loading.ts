@@ -4,7 +4,7 @@
 // (reconnect.ts) sits above it, and the first-login intro waits for it to be gone (afterLoading).
 import { paintBonfire } from "./bonfireArt";
 
-const FRAMES = 8, FW = 96, FH = 112; // bonfire art is 48x56 design units, drawn at 2 cells per unit
+export const FRAMES = 8, FW = 96, FH = 112; // bonfire art is 48x56 design units, drawn at 2 cells per unit
 const FADE_MS = 450;
 
 let box: HTMLDivElement | null = null;
@@ -27,7 +27,8 @@ const TIPS = [
   "Zones get harder the further you go from Oakvale.",
 ];
 
-function bonfireStrip(): HTMLCanvasElement {
+/** All bonfire frames side by side, FW x FH each (also used by the fireside start screen). */
+export function bonfireStrip(): HTMLCanvasElement {
   const c = document.createElement("canvas");
   c.width = FW * FRAMES; c.height = FH;
   const g = c.getContext("2d")!;
