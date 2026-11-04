@@ -4,7 +4,8 @@ import { leaving, noteBuild, reconnectSoon, returnToStart, upgradeAnnounced } fr
 import { Client, Room } from "colyseus.js";
 import { BOSS, ELITE, InputState, MERGE, MAP_H, MAP_W, regenFromStamina, TICK_RATE, TILE } from "../../shared/constants";
 import { CLASSES, ClassKind, DODGE, ENERGY, energyName, MAX_LEVEL, xpForLevel } from "../../shared/classes";
-import { canPay, Cost, MANA, manaRegen, maxManaFor, shortOf, skillCost, unpackMana } from "../../shared/mana";
+import { canPay, Cost, MANA, manaRegen, MAX_MANA_POTIONS, maxManaFor, shortOf, skillCost, unpackMana } from "../../shared/mana";
+import { MAX_POTIONS } from "../../shared/items";
 import { GROUND, areaAt, isSafeZone } from "../../shared/map";
 import { heroPoise, meleeReach, mobBody } from "../../shared/combat";
 import { moveStep } from "../../shared/movement";
@@ -1832,6 +1833,9 @@ export class TownScene extends Phaser.Scene {
     const pick = document.getElementById("slotpick")!;
     const cellOf = (ev: Event) => (ev.target as HTMLElement).closest("[data-slot]") as HTMLElement | null;
     bar.addEventListener("click", (ev) => {
+      // Potion cells left of the bar: click drinks one (same as Q / V)
+      const potion = (ev.target as HTMLElement).closest("[data-potion]") as HTMLElement | null;
+      if (potion) { this.room?.send(potion.dataset.potion === "mana" ? "manapotion" : "potion"); return; }
       const cell = cellOf(ev);
       if (!cell) return;
       if (cell.dataset.slot === "L") { if (!pick.hidden && this.pickSlot === LEFT_PICK) this.closeSlotPicker(); else this.openSlotPicker(LEFT_PICK); return; }
@@ -1969,6 +1973,26 @@ export class TownScene extends Phaser.Scene {
   }
   private weaponIcons = new Map<string, string>();
 
+  /** Healing (Q) and mana (V) potion cells left of the skill bar: the flask in pixel art, how many you carry. */
+  private potionCells(mine: any) {
+    const cell = (kind: "potion" | "mpotion", key: string, n: number, name: string, max: number) => {
+      let url = this.weaponIcons.get(kind);
+      if (!url) {
+        const c = document.createElement("canvas");
+        c.width = c.height = 32;
+        const ctx = c.getContext("2d")!;
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(this.textures.get(itemTexture(this, kind)).getSourceImage() as CanvasImageSource, 0, 0, 8, 8, 0, 0, 32, 32);
+        url = c.toDataURL();
+        this.weaponIcons.set(kind, url);
+      }
+      return `<div class="slot potion ${kind}${n > 0 ? "" : " wait"}" data-potion="${kind === "mpotion" ? "mana" : "hp"}" data-tiphead="${name}" ` +
+        `data-tip="${tipEsc(kind === "mpotion" ? "Refills half your mana." : "Heals 40% of your HP.")}" data-tiphint="Key ${key} or click to drink · you carry ${n}/${max}">` +
+        `<img src="${url}" alt=""><kbd>${key}</kbd><b class="count">${n}</b></div>`;
+    };
+    return `<div class="potions">${cell("potion", "Q", mine.potions ?? 0, "Healing potion", MAX_POTIONS)}${cell("mpotion", "V", unpackMana(mine.mp).potions, "Mana potion", MAX_MANA_POTIONS)}</div>`;
+  }
+
   private closeSlotPicker() {
     document.getElementById("slotpick")!.hidden = true;
     this.pickSlot = -1;
@@ -2049,7 +2073,8 @@ export class TownScene extends Phaser.Scene {
         `${this.weaponIcon(mine)}<kbd>L</kbd></div>`;
     }
     const bar = document.getElementById("hotbar")!;
-    if (this.hotbarHtml !== lcell + cells) { bar.innerHTML = lcell + cells; this.hotbarHtml = lcell + cells; }
+    const all = this.potionCells(mine) + lcell + cells;
+    if (this.hotbarHtml !== all) { bar.innerHTML = all; this.hotbarHtml = all; }
     const zone = document.getElementById("zone")!;
     zone.style.top = `${el.offsetTop + el.offsetHeight + 4}px`;
   }
