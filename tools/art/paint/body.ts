@@ -3,6 +3,7 @@ import { HiCanvas } from "../canvas";
 import {
   C2, P, blobPath, canvas, clipTo, css, curve, ellipseP, fillShape, glow, grain, hashStr, ik, limb, line, metal, mix, poly, rad, rng, sh, Shape, vol,
 } from "./brush";
+import { drawFormWeapon, formOf } from "./weaponArt";
 import { HeadGear, HERO_BODIES, LINEN, Look, LOOKS, MOB_LOOKS, TorsoKind } from "./look";
 
 /**
@@ -28,6 +29,9 @@ let PIX = false;
 export function setPaintPixel(on: boolean) { PIX = on; }
 /** The item being "worn" while the gear generator renders overlay sheets (null = plain hero). */
 export function setPaintGear(g: GearDef | null) { gear = g; }
+let form: GearDef | null = null;
+/** The weapon item (found gear or class kit) being drawn: it picks the weapon's own form (weaponArt.ts). */
+export function setPaintForm(d: GearDef | null) { form = d; }
 let kit: Partial<Look> | null = null;
 /** A class-kit item being "worn" (look.ts KITS): its Look fields go on top of the bare hero body. */
 export function setPaintKit(k: Partial<Look> | null) { kit = k; }
@@ -943,6 +947,8 @@ function weapon(c: C2, r: Rig) {
   const at = (t: number, o = 0): P => [h[0] + u[0] * t + n[0] * o, h[1] + u[1] * t + n[1] * o];
   const W = weaponCols(r);
   const glowAlong = (t0: number, t1: number, col: number) => { for (let t = t0; t <= t1; t += 1.2) glow(c, at(t)[0], at(t)[1], 1.5, col, 0.35); };
+  const f = form ? formOf(form.id, L.weapon) : null;
+  if (f && form && drawFormWeapon({ c, h, u, n, kind: L.weapon, f, blade: C(form.color), accent: form.accent, long: W.long, attack: r.p.attack, move: r.p.move, C })) return;
   switch (L.weapon) {
     case "sword": {
       const big = L.bladeLen ?? 1, len = 10.5 * W.long * big;
@@ -1553,4 +1559,35 @@ function pixelFrame(body: ReturnType<typeof canvas>, under: ReturnType<typeof ca
   };
   for (let i = 0; i < o.length; i += 4) { over(u, i); over(b, i); over(f, i); }
   return hc;
+}
+
+// ---------------------------------------------------------------- weapon icons (bag, menus, drops)
+/**
+ * A weapon item painted on its own, laid diagonally (grip bottom-left, tip top-right) with the same form as on the
+ * hero (weaponArt.ts), fitted into a `px` x `px` pixel-art icon. Returns RGBA data, or null if it has no form.
+ */
+export function paintWeaponIcon(d: GearDef, kind: string, px: number): Uint8ClampedArray | null {
+  const f = formOf(d.id, kind);
+  if (!f) return null;
+  const U = 48, S = 8, N = U * S;
+  const cv = scratch("icon", N, N), c = cv.getContext("2d");
+  c.scale(S, S);
+  const u: P = [Math.SQRT1_2, -Math.SQRT1_2], n: P = [Math.SQRT1_2, Math.SQRT1_2];
+  const long = d.style.startsWith("long") ? 1 + (d.bonus.reach ?? 0) * 0.9 : 1;
+  const ok = drawFormWeapon({ c, h: [17, 31], u, n, kind, f, blade: d.color, accent: d.accent, long, attack: -1, C: (x) => x });
+  if (!ok) return null;
+  // fit the painted weapon into the icon, keeping its aspect
+  const img = c.getImageData(0, 0, N, N).data;
+  let x0 = N, y0 = N, x1 = 0, y1 = 0;
+  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) if (img[(y * N + x) * 4 + 3] > 40) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+  if (x1 <= x0) return null;
+  const side = Math.max(x1 - x0, y1 - y0) + 1, pad = side * 0.08;
+  const out = scratch("iconfit", px, px), oc = out.getContext("2d");
+  oc.imageSmoothingEnabled = true; (oc as any).imageSmoothingQuality = "high";
+  const k = px / (side + pad * 2);
+  oc.drawImage(cv, x0 - pad - (side - (x1 - x0 + 1)) / 2, y0 - pad - (side - (y1 - y0 + 1)) / 2, side + pad * 2, side + pad * 2, 0, 0, px, px);
+  void k;
+  const data = oc.getImageData(0, 0, px, px).data;
+  pixelize(data, px, px, true);
+  return data;
 }

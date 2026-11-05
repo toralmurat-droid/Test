@@ -48,6 +48,7 @@ const LEFT_PICK = -2;
 /** "12 mana · 20 stamina" for a skill list. */
 const costWords = (s: { cost?: number; mana?: number }) => [s.mana ? `${s.mana} mana` : "", s.cost ? `${s.cost} stamina` : ""].filter(Boolean).join(" · ") || "free";
 import { GearFx } from "./gearfx";
+import { Element, ELEMENT_COLORS } from "../../shared/elements";
 import { baseId, gearDef, gearReachMult, gearSpeedMult, itemRarity, WEAPON_TYPE_NAMES } from "../../shared/gear";
 import { attackProfile, ATTACK_WORDS, isWeaponType, poseSheet, profileOf, weaponAttackMult, weaponOk } from "../../shared/weapons";
 import { talentMult, talentPoints, spentPoints } from "../../shared/talents";
@@ -980,7 +981,7 @@ export class TownScene extends Phaser.Scene {
         note.hidden = false;
       }
     });
-    this.room.onMessage("hit", ({ id, dmg, blocked, crit, dot, kx, ky }) => {
+    this.room.onMessage("hit", ({ id, dmg, blocked, crit, dot, kx, ky, el }) => {
       const e = this.entities.get(id);
       if (!e) return;
       if (id === this.me) this.portals?.hurt();
@@ -989,7 +990,10 @@ export class TownScene extends Phaser.Scene {
       if (id === this.me) musicCombat(3);
       else if (e.mob && meE && Math.hypot(e.sprite.x - meE.sprite.x, e.sprite.y - meE.sprite.y) < 10 * TILE) musicCombat(1);
       this.floatText(e.sprite.x, e.sprite.y - 14, crit ? `CRIT -${dmg}` : `-${dmg}`,
-        blocked ? "#9ad1ff" : crit ? "#ffd60a" : id === this.me ? "#ff5d5d" : "#ffffff", PIXEL_FONT, crit ? 1.8 : dot ? 0.8 : 1);
+        blocked ? "#9ad1ff" : crit ? "#ffd60a" : id === this.me ? "#ff5d5d" : el && ELEMENT_COLORS[el as Element] ? `#${ELEMENT_COLORS[el as Element].toString(16).padStart(6, "0")}` : "#ffffff",
+        PIXEL_FONT, crit ? 1.8 : dot ? 0.8 : 1);
+      // damage type (shared/elements.ts): embers, frost shards, venom splash or a holy glint on the target
+      if (el && ELEMENT_COLORS[el as Element] && el !== "physical") this.gearFx.impact(e.sprite.x, e.sprite.y, e.top, el as Element, !!dot);
       // Hit feel without freezes or camera effects (Murat wants fluid combat): a short white flash,
       // a tiny squash and a 2-3 px nudge away from the blow. Damage over time only flickers.
       e.sprite.setTintFill(0xffffff);

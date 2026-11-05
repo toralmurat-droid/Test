@@ -4,7 +4,7 @@ import type { Canvas } from "../canvas";
 import { buildSheet, HEROES, NPCS, setPainted } from "../characters";
 import { diff } from "../gear";
 import { GEAR, GEAR_IDS } from "../../../shared/gear";
-import { setPaintGear, setPaintKit } from "./body";
+import { setPaintForm, setPaintGear, setPaintKit } from "./body";
 import { KITS } from "./look";
 
 /** Painted-then-pixelated character sheets: same layout and animations as the old ones, 36px frames (1.5 texels per world px), PNG-quality WebP. */
@@ -23,6 +23,7 @@ export function wear(d: (typeof GEAR)[string] | null) {
   const kit = d?.cls ? KITS[d.cls]?.[d.slot as keyof (typeof KITS)[string]] ?? null : null;
   setPaintKit(kit);
   setPaintGear(d && !d.cls ? d : null);
+  setPaintForm(d?.slot === "weapon" ? d : null);
 }
 
 export function buildPainted(out: string, opts: { gear?: boolean; only?: string[] } = {}) {

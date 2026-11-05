@@ -1,6 +1,7 @@
 import { icon } from "./pixelicons";
 import Phaser from "phaser";
-import { gearDef, itemText, LOOT_IDS, canWear, GEAR_SLOTS, gearName, gearStats, gearSpeedMult, GearSlot, BAG_SIZE, SLOT_NAMES, TIER_NAMES, baseId, itemRarity, RARITY_NAMES, affixLines, itemLevel, reqProblem, reqText, activeGear, HeroReqInfo, Equipped } from "../../shared/gear";
+import { gearDef, itemText, LOOT_IDS, canWear, GEAR_SLOTS, gearName, gearStats, gearSpeedMult, GearSlot, BAG_SIZE, SLOT_NAMES, TIER_NAMES, baseId, itemRarity, RARITY_NAMES, affixLines, itemLevel, reqProblem, reqText, activeGear, HeroReqInfo, Equipped, weaponElements, gearResist } from "../../shared/gear";
+import { ELEMENTS, ELEMENT_NAMES } from "../../shared/elements";
 import { STAT_NAMES, StatKind } from "../../shared/powers";
 import { potionAmount, potionName, potionStacks, POTION_STACK, unpackPotions } from "../../shared/potions";
 import { ART_K, CHAR_FRAME, HD_CHARS } from "./artAssets";
@@ -204,6 +205,11 @@ export class GearMenu {
     const speed = gearSpeedMult(activeOf(state));
     const parts = (["sta", "str", "mag", "dex"] as StatKind[]).filter((k) => g[k]).map((k) => `+${g[k]} ${STAT_NAMES[k]}`);
     if (speed > 1) parts.push(`+${Math.round((speed - 1) * 100)}% speed`);
+    // damage types (shared/elements.ts): what the weapon deals besides Physical, and what the gear resists
+    const we = weaponElements(activeOf(state));
+    if (we.conv) parts.push(`${Math.round(we.conv.share * 100)}% ${ELEMENT_NAMES[we.conv.el]} hits`);
+    for (const e of ELEMENTS) if (we.flat[e]) parts.push(`+${we.flat[e]} ${ELEMENT_NAMES[e]} damage`);
+    for (const e of ELEMENTS) { const r = gearResist(activeOf(state), e); if (r) parts.push(`${ELEMENT_NAMES[e]} resist ${Math.round(r * 100)}%`); }
     document.getElementById("geartotal")!.textContent =
       `${state.maxHp} HP · Stamina ${state.sta} · Strength ${state.str} · Magic ${state.mag} · Dexterity ${state.dex ?? 0}` + (parts.length ? `  (gear: ${parts.join(", ")})` : "");
 

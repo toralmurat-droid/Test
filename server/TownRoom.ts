@@ -15,6 +15,8 @@ import { Counts, dropSize, Potions, nextSize, noPotions, packPotions, potionAmou
 const potSize = (g: string) => Math.max(0, Math.min(SIZES - 1, Math.floor(Number(g) || 0)));
 import { attackMult, cooldownMult, critChance, heroSpeed, magicMult, maxHpFromStats, SLOW_MOB, statsFor, statPoints } from "../shared/powers";
 import { AttackProfile, attackProfile, weaponAttackMult, weaponOk } from "../shared/weapons";
+import { Element, ElemPart, ELEMENT_FX, mobAffinity, MOB_SHOT_ELEMENT } from "../shared/elements";
+import { gearResist, splitHit } from "../shared/gear";
 import { activeSkills, canLearn, classSkills, cleanRanks, MAX_RANK, NEED_TEXT, skillLearned, skillOf, talentBonus, talentMult, talentReduce } from "../shared/skills";
 import {
   afterHit, atkSpeedMult, blocking, buffLifesteal, buffRegen, castSkill, ccImmune, charging, counterHit, dealtMult, FieldInst, newRuntime,
@@ -266,6 +268,8 @@ export class Projectile extends Schema {
   pierce = 0; // extra targets it can pass through
   mobLevel = 0; // > 0: a monster's shot (only hurts players); its level, kept even if the shooter dies mid-flight
   mobName = "";
+  mobEl?: Element; // a monster's magic shot element (MOB_SHOT_ELEMENT)
+  parts?: ElemPart[]; // a hero's elemental share (basic attacks)
   hitIds = new Set<string>();
   traveled = 0;
   pulsed = 0; // distance at the last pulse (ShotSpec.pulse)
@@ -343,6 +347,9 @@ interface HitOpts {
   basic?: boolean; dot?: boolean; thorn?: boolean; burn?: [number, number]; markMs?: number; weakMs?: number; fearMs?: number;
   from?: string; // attacker id (hero or monster), for counters and thorns
   wrath?: boolean; // the village punishing an outlaw: lands even on the safe square
+  parts?: ElemPart[]; // a hero's elemental damage on top of the (physical) dmg (shared/elements.ts)
+  el?: Element; // the element the hit shows as (damage number colour)
+  mobEl?: Element; // a monster's elemental attack: the hero's resistance cuts it
 }
 
 const COLORS = [0xe74c3c, 0x3498db, 0x2ecc71, 0xf1c40f, 0x9b59b6, 0xe67e22, 0x1abc9c, 0xecf0f1];
@@ -898,7 +905,7 @@ export class TownRoom extends Room<TownState> {
     const dx = tx - m.x, dy = ty - m.y, d = Math.hypot(dx, dy) || 1;
     s.x = m.x; s.y = m.y - 4; s.vx = dx / d; s.vy = dy / d;
     const def = mobDef(m);
-    s.owner = id; s.kind = cfg.shot; s.mobLevel = m.level || 1; s.mobName = def.name;
+    s.owner = id; s.kind = cfg.shot; s.mobLevel = m.level || 1; s.mobName = def.name; s.mobEl = MOB_SHOT_ELEMENT[m.kind as keyof typeof MOB_SHOT_ELEMENT];
     s.speed = cfg.shotSpeed; s.range = cfg.range * 1.4; s.radius = cfg.shotRadius;
     s.damage = Math.round(def.damage * mobScale(m.level, "damage") * (cfg.mult ?? 1));
     this.state.projectiles.set(`s${++this.shotSeq}`, s);
@@ -1209,7 +1216,7 @@ export class TownRoom extends Room<TownState> {
           if (p.dead) return;
           const dx = p.x - m.castX, dy = p.y - m.castY, d = Math.hypot(dx, dy);
           if (d > N.circle.radius) return;
-          this.damagePlayer(pid, dmg, "Necromancer's Death Circle", d > 0.1 ? [dx / d, dy / d] : [0, 1], 1.5, { atkLevel: m.level, from: id });
+          this.damagePlayer(pid, dmg, "Necromancer's Death Circle", d > 0.1 ? [dx / d, dy / d] : [0, 1], 1.5, { atkLevel: m.level, from: id, mobEl: "poison" });
         });
         this.broadcast("necrohit", { id, x: m.castX, y: m.castY, r: N.circle.radius });
       } else {
@@ -1459,7 +1466,7 @@ export class TownRoom extends Room<TownState> {
         if (p.dead) return;
         const dx = p.x - m.x, dy = p.y - m.y, d = Math.hypot(dx, dy);
         if (d > S.radius) return;
-        this.damagePlayer(pid, dmg, "Bone Demon's Hellfire Stomp", d > 0.1 ? [dx / d, dy / d] : [0, 1], S.knockback, { atkLevel: m.level, from: id });
+        this.damagePlayer(pid, dmg, "Bone Demon's Hellfire Stomp", d > 0.1 ? [dx / d, dy / d] : [0, 1], S.knockback, { atkLevel: m.level, from: id, mobEl: "fire" });
       });
       this.broadcast("demonfire", { id, x: Math.round(m.x), y: Math.round(m.y), r: S.radius });
       return true;
@@ -2190,14 +2197,14 @@ export class TownRoom extends Room<TownState> {
           const dx = p.x - m.x, dy = p.y - m.y, d = Math.hypot(dx, dy);
           if (d > C.radius || d < inner) return;
           this.damagePlayer(pid, dmg, kind === "cleave" ? "Hollow King's Crown Cleave" : "Hollow King's Crown's Wrath", d > 0.1 ? [dx / d, dy / d] : [0, 1],
-            kind === "cleave" ? K.cleave.knockback : 1.5, { atkLevel: m.level, from: id });
+            kind === "cleave" ? K.cleave.knockback : 1.5, { atkLevel: m.level, from: id, mobEl: kind === "cleave" ? undefined : "cold" });
         });
         this.broadcast("hkhit", { id, kind, x: Math.round(m.x), y: Math.round(m.y), r: C.radius, inner });
       } else if (kind === "pools") {
         const dmg = dmgOf(K.pools.dmgMult);
         for (const [x, y] of m.pools) this.state.players.forEach((p, pid) => {
           if (p.dead || Math.hypot(p.x - x, p.y - y) > K.pools.radius) return;
-          this.damagePlayer(pid, dmg, "Hollow King's Gloam Pool", [0, 0], 0, { atkLevel: m.level, from: id, slowMs: K.pools.slowMs });
+          this.damagePlayer(pid, dmg, "Hollow King's Gloam Pool", [0, 0], 0, { atkLevel: m.level, from: id, slowMs: K.pools.slowMs, mobEl: "cold" });
         });
         this.broadcast("hkhit", { id, kind, pts: m.pools.map(([x, y]) => [Math.round(x), Math.round(y)]), r: K.pools.radius });
         m.pools = [];
@@ -2289,7 +2296,7 @@ export class TownRoom extends Room<TownState> {
           if (!pid && !p.dead && !isSafeZone(p.x, p.y) && now >= p.invulnUntil && Math.hypot(p.x - s.x, p.y - s.y) <= s.radius + HIT_RADIUS) pid = k;
         });
         if (pid) {
-          this.damagePlayer(pid, s.damage, s.mobName, [s.vx, s.vy], 0.5, { atkLevel: s.mobLevel });
+          this.damagePlayer(pid, s.damage, s.mobName, [s.vx, s.vy], 0.5, { atkLevel: s.mobLevel, mobEl: s.mobEl });
           return this.explode(s, id, pid);
         }
         continue;
@@ -2298,7 +2305,7 @@ export class TownRoom extends Room<TownState> {
       const hit = this.firstTargetAt(s.x, s.y, s.radius + HIT_RADIUS, s.owner, s.hitIds, (m) => Math.max(0, mobBody(m.kind) - HIT_RADIUS));
       if (hit) {
         if (s.spec) shotHit(this.host, s.spec, hit);
-        else this.hitTarget(s.owner, hit, s.damage, [s.vx, s.vy], { kb: s.knockback, basic: s.basic });
+        else this.hitTarget(s.owner, hit, s.damage, [s.vx, s.vy], { kb: s.knockback, basic: s.basic, parts: s.parts });
         // Piercing arrows keep flying through a few targets
         if (s.pierce > 0) { s.pierce--; s.hitIds.add(hit); continue; }
         return this.explode(s, id, hit);
@@ -2735,6 +2742,23 @@ export class TownRoom extends Room<TownState> {
   private hitTarget(attackerId: string, targetId: string, dmg: number, push: [number, number], opts: HitOpts = {}) {
     const a = this.state.players.get(attackerId);
     if (a?.party && this.state.players.get(targetId)?.party === a.party) return; // group mates can't hurt each other
+    // Elemental parts (shared/elements.ts): monsters take more or less of each, heroes resist; poison comes later
+    const riders: ElemPart[] = [];
+    if (opts.parts?.length) {
+      const tp0 = this.state.players.get(targetId), tm0 = tp0 ? undefined : this.state.mobs.get(targetId);
+      let top = 0;
+      for (const p of opts.parts) {
+        const amt = p.amt * (tp0 ? 1 - gearResist(this.equipped(tp0), p.el) : tm0 ? mobAffinity(tm0.kind, p.el) : 1);
+        if (amt <= 0) continue;
+        if (p.el !== "poison") dmg += amt;
+        riders.push({ el: p.el, amt });
+        if (amt > top) { top = amt; opts = { ...opts, el: p.el }; }
+      }
+      const cold = riders.find((r) => r.el === "cold");
+      if (cold) opts = { ...opts, slowMs: Math.max(opts.slowMs ?? 0, tp0 ? ELEMENT_FX.cold.heroSlowMs : ELEMENT_FX.cold.mobSlowMs) };
+      opts = { ...opts, parts: undefined };
+      if (riders.length) this.elementRiders(attackerId, targetId, riders);
+    }
     if (a) dmg = dmg * talentMult(a.cls, a.talents, "dmg") * (opts.skill && !opts.dot ? talentMult(a.cls, a.talents, "skill") : 1) * dealtMult(a, Date.now());
     dmg = Math.max(1, Math.round(dmg));
     opts = { ...opts, from: attackerId };
@@ -2783,7 +2807,7 @@ export class TownRoom extends Room<TownState> {
       const k = moveStep(m.x, m.y, pushInput(push), 0.1 * kb);
       if (!isSafeZone(k.x, k.y) && !noMobsAt(k.x, k.y)) { m.x = k.x; m.y = k.y; }
     }
-    this.broadcast("hit", { id: targetId, dmg, crit: !!opts.crit, dot: !!opts.dot, ...(opts.dot ? {} : hitDir(push)) });
+    this.broadcast("hit", { id: targetId, dmg, crit: !!opts.crit, dot: !!opts.dot, el: opts.el, ...(opts.dot ? {} : hitDir(push)) });
     if (m.hp > 0) { afterHit(this.host, attackerId, targetId, opts); return; }
     if (a) for (let c = 0; c < CHAINS.length; c++) this.questKill(attackerId, a, m, c);
     // Kill XP: every group member in the same zone gets it (the killer alone when solo)
@@ -2791,6 +2815,19 @@ export class TownRoom extends Room<TownState> {
     for (const pid of a?.party ? this.groupNear(attackerId, m.x, m.y) : [attackerId]) this.grantXp(pid, xp, m);
     this.dropLoot(m.kind, m.x, m.y, mobScale(m.level, "gold") * (m.kind === "bandit" ? BANDIT_ROLES[roleOf(m.weapon)].loot : 1), m.level);
     this.mobDied(m, targetId, attackerId, a?.name ?? "");
+  }
+
+  /** Burns and poison of a hero's elemental hit: damage ticks over the next seconds (shared/elements.ts ELEMENT_FX). */
+  private elementRiders(attackerId: string, targetId: string, riders: ElemPart[]) {
+    for (const r of riders) {
+      const f = r.el === "fire" ? (Math.random() < ELEMENT_FX.fire.chance ? ELEMENT_FX.fire : undefined) : r.el === "poison" ? ELEMENT_FX.poison : undefined;
+      if (!f) continue;
+      const each = (r.amt * f.total) / f.ticks;
+      if (each < 0.5) continue;
+      for (let i = 1; i <= f.ticks; i++) {
+        this.host.later(f.tickMs * i, () => this.hitTarget(attackerId, targetId, each, [0, 0], { dot: true, kb: 0, el: r.el }));
+      }
+    }
   }
 
   /** A monster is down: its raised dead crumble, it leaves its zone (which brings a fresh one back later). */
@@ -3382,6 +3419,8 @@ export class TownRoom extends Room<TownState> {
     dmg = Math.max(1, Math.round(dmg * talentReduce(t.cls, t.talents, "armor") * takenMult(t, now)));
     const block = gearBlock(this.equipped(t)); // equipped shield
     if (block) dmg = Math.max(1, Math.round(dmg * (1 - block)));
+    // A monster's fire, cold or poison attack: the hero's resistances (armour, shield, hat) cut it
+    if (opts.mobEl) dmg = Math.max(1, Math.round(dmg * (1 - gearResist(this.equipped(t), opts.mobEl))));
     // Unstoppable buffs (Berserk, Whirlwind): ignore stun, slow and knockback
     const unstoppable = ccImmune(t, now);
     if (opts.stunMs && !guarded && !unstoppable) t.stunUntil = Math.max(t.stunUntil, now + opts.stunMs);
@@ -3399,7 +3438,7 @@ export class TownRoom extends Room<TownState> {
       const kb = moveStep(t.x, t.y, pushInput(push), 0.12 * kbMul);
       t.x = kb.x; t.y = kb.y;
     }
-    this.broadcast("hit", { id: tid, dmg, blocked: guarded, crit: !!opts.crit, dot: !!opts.dot, ...(opts.dot ? {} : hitDir(push)) });
+    this.broadcast("hit", { id: tid, dmg, blocked: guarded, crit: !!opts.crit, dot: !!opts.dot, el: opts.el ?? opts.mobEl, ...(opts.dot ? {} : hitDir(push)) });
     if (t.hp > 0) { afterHit(this.host, opts.from, tid, opts); return false; }
     t.dead = true;
     t.guarding = false;
@@ -3437,6 +3476,10 @@ export class TownRoom extends Room<TownState> {
     let dmg = Math.round(def.damage * weaponAttackMult(a.cls, this.stats(a), def.type) * hit.damage);
     const crit = Math.random() < critChance(this.stats(a), talentBonus(a.cls, a.talents, "crit"));
     if (crit) dmg = Math.round(dmg * 2);
+    // Fire, cold, poison and faith: part of the hit changes element, elemental bonuses add to it (shared/elements.ts)
+    const split = splitHit(this.equipped(a), dmg, hit.damage * (crit ? 2 : 1));
+    dmg = split.phys;
+    const parts = split.parts.length ? split.parts : undefined;
     a.emote = "";
     let variant = 0;
     if (step < 2) {
@@ -3459,7 +3502,7 @@ export class TownRoom extends Room<TownState> {
     }
 
     if (def.projectile) {
-      this.shoot(a, id, dmg, hit.knockback, hit.shotScale ?? 1, 0, def.projectile);
+      this.shoot(a, id, dmg, hit.knockback, hit.shotScale ?? 1, 0, def.projectile, parts);
       return;
     }
 
@@ -3479,11 +3522,11 @@ export class TownRoom extends Room<TownState> {
         if (h[i] < since) break;
       }
     });
-    for (const tid of ids) this.hitTarget(id, tid, dmg, off, { kb: hit.knockback, crit, basic: true });
+    for (const tid of ids) this.hitTarget(id, tid, dmg, off, { kb: hit.knockback, crit, basic: true, parts });
   }
 
   /** Fire one projectile from `a` (fireball, arrow or magic bolt), offset sideways by `lane` px. */
-  private shoot(a: Player, id: string, dmg: number, knockback: number, scale: number, lane: number, def: NonNullable<AttackProfile["projectile"]>) {
+  private shoot(a: Player, id: string, dmg: number, knockback: number, scale: number, lane: number, def: NonNullable<AttackProfile["projectile"]>, parts?: ElemPart[]) {
     const off = aimOf(a);
     const s = new Projectile();
     // Lanes are perpendicular to the aim (for Volley)
@@ -3491,7 +3534,7 @@ export class TownRoom extends Room<TownState> {
     s.dir = a.dir; s.vx = off[0]; s.vy = off[1]; s.owner = id; s.size = scale; s.kind = def.kind;
     s.speed = def.speed; s.radius = def.radius * scale;
     s.range = def.range * gearReachMult(this.equipped(a));
-    s.damage = dmg; s.knockback = knockback; s.basic = true;
+    s.damage = dmg; s.knockback = knockback; s.basic = true; s.parts = parts;
     s.imb = imbueOf(a as unknown as Unit, Date.now())?.style ?? ""; // enchanted arrows look the part
     this.state.projectiles.set(`s${++this.shotSeq}`, s);
   }
