@@ -726,6 +726,11 @@ export class TownScene extends Phaser.Scene {
       const e = this.entities.get(id);
       if (e) { this.squash(e, 0.9, 1.15, 110); this.floatText(e.sprite.x, e.sprite.y - e.top - 6, "THROW!", "#ff7043", PIXEL_FONT); }
     });
+    // By day the dead lie back down in the earth (shared/daynight.ts): a puff of grave dirt where one stood
+    this.room.onMessage("gravesink", ({ x, y }) => { this.burst(x, y, 5, 0x6d5a45, 520); this.burst(x, y - 6, 3, 0xe8e2d0, 380); });
+    this.room.onMessage("undeadnight", ({ up }) => {
+      this.feed(up ? "Night falls. The dead climb out of their graves..." : "Dawn breaks. The dead sink back into the earth.");
+    });
     this.room.onMessage("banish", ({ x, y }) => { this.burst(x, y, 9, 0x4a148c, 600); this.burst(x, y - 12, 6, 0x111111, 700); });
     // A skeleton broke in two: bone chips fly, its upper half drags on
     this.room.onMessage("bonebreak", ({ x, y }) => {
