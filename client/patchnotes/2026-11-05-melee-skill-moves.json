@@ -1,0 +1,11 @@
+{
+  "date": "2026-11-05",
+  "pr": 258,
+  "title": "Big melee skills get their own moves",
+  "changes": [
+    "Lunging Strike, Whirling Slash, Valor Rush, Judgement Blade, Earthquake, Cleave, Ground Slam, Leap, Avalanche, Whirlwind and the ninja's shadow strikes now play their own full-body animation: a wind-up, the blow and a recovery.",
+    "Heroes coil before a lunge, spin with the blade out on every hit of a whirl, heave the weapon overhead before a slam and crash down from a leap, with afterimages and dust.",
+    "Big melee blows now land a split second after the wind-up, right when the animation strikes. A stun during the wind-up cancels the skill.",
+    "Walking cuts the recovery short, and a new attack or a roll cuts the whole move, so combat stays fluid."
+  ]
+}

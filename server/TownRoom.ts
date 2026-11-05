@@ -19,7 +19,7 @@ import { Element, ElemPart, ELEMENT_FX, mobAffinity, MOB_MELEE_ELEMENT, MOB_SHOT
 import { gearResist, splitHit } from "../shared/gear";
 import { activeSkills, canLearn, classSkills, cleanRanks, MAX_RANK, NEED_TEXT, skillLearned, skillOf, talentBonus, talentMult, talentReduce } from "../shared/skills";
 import {
-  afterHit, atkSpeedMult, blocking, buffLifesteal, buffRegen, castSkill, ccImmune, charging, counterHit, dealtMult, FieldInst, newRuntime,
+  afterHit, atkSpeedMult, blocking, buffLifesteal, buffRegen, castSkill, ccImmune, charging, winding, counterHit, dealtMult, FieldInst, newRuntime,
   imbueOf, shotEnd, shotHit, shotPulse, ShotSpec, SkillHost, speedMult, statusOf, takenMult, tickField, tickUnit, Unit,
 } from "../shared/skillEngine";
 import {
@@ -3683,7 +3683,7 @@ export class TownRoom extends Room<TownState> {
   private playerAttack(id: string) {
     const a = this.state.players.get(id);
     const now = Date.now();
-    if (!a || a.dead || a.stunned || a.broken || charging(a, now)) return;
+    if (!a || a.dead || a.stunned || a.broken || charging(a, now) || winding(a, now)) return; // a buildup or melee wind-up holds the swing
     if (now < a.attackReadyAt) return;
     // The main-hand weapon decides the attack (shared/weapons.ts): bow = arrows, sword = melee, wand = magic bolts...
     const def = attackProfile(a.cls, this.equipped(a));

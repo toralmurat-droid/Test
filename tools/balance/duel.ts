@@ -14,7 +14,7 @@ import { attackMult, cooldownMult, critChance, heroSpeed, magicMult, maxHpFromSt
 import { activeSkills, canLearn, SKILLS, SkillDef, talentBonus, talentMult, talentReduce } from "../../shared/skills";
 import { canPay, manaRegen, maxManaFor, skillCost } from "../../shared/mana";
 import {
-  afterHit, atkSpeedMult, blocking, buffLifesteal, buffRegen, castSkill, ccImmune, charging, cooldownLeft, counterHit, dealtMult, FieldInst, HitOpts,
+  afterHit, atkSpeedMult, blocking, buffLifesteal, buffRegen, castSkill, ccImmune, charging, winding, cooldownLeft, counterHit, dealtMult, FieldInst, HitOpts,
   newRuntime, shotEnd, shotHit, shotPulse, ShotSpec, SkillHost, speedMult, takenMult, tickField, tickUnit,
 } from "../../shared/skillEngine";
 import { Equipped, GEAR, gearBlock, gearDef, gearReachMult, gearSpeedMult, gearStats, meetsReq, withLevel } from "../../shared/gear";
@@ -205,7 +205,7 @@ export class Duel {
 
   attack(a: F) {
     const now = this.now;
-    if (a.dead || now < a.stunUntil || a.broken || now < a.attackReadyAt || now < a.rollUntil || charging(a, now)) return;
+    if (a.dead || now < a.stunUntil || a.broken || now < a.attackReadyAt || now < a.rollUntil || charging(a, now) || winding(a, now)) return;
     const def = CLASSES[a.cls];
     const step = a.lastAttack > 0 && now - a.attackReadyAt <= COMBO_WINDOW_MS && a.combo < 2 ? a.combo + 1 : 0;
     const h = def.combo[step];

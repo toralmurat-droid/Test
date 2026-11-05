@@ -28,12 +28,13 @@ export interface SkillRuntime {
   buffs: ActiveBuff[];
   counter?: { until: number; s: SkillDef; rank: number; power: number };
   chargeUntil: number; // buildup: rooted until then
+  windUntil: number; // melee wind-up (SkillDef.windMs): no other skill or basic attack until the blow lands
   stacks: number; stackAt: number;
   burnUntil: number; burnDps: number; burnBy: string; burnNext: number;
   markUntil: number; weakUntil: number;
 }
 export const newRuntime = (): SkillRuntime => ({
-  last: {}, buffs: [], chargeUntil: 0, stacks: 0, stackAt: 0,
+  last: {}, buffs: [], chargeUntil: 0, windUntil: 0, stacks: 0, stackAt: 0,
   burnUntil: 0, burnDps: 0, burnBy: "", burnNext: 0, markUntil: 0, weakUntil: 0,
 });
 
@@ -127,6 +128,12 @@ export function cooldownLeft(s: SkillDef, sk: SkillRuntime, now: number, cdm: nu
 
 // ---- Casting -----------------------------------------------------------------------------------------
 
+/**
+ * Melee skills with a wind-up (SkillDef.windMs) reach this much further (px): the foe had the wind-up to step back, and
+ * without it the blow whiffs much more than the skill before it (tools/balance/duel.ts).
+ */
+export const WIND_REACH = 6;
+
 /** A hero presses a skill. Returns true if it was cast. */
 export function castSkill(h: SkillHost, id: string, skillId: string): boolean {
   const u = live(h, id);
@@ -134,7 +141,7 @@ export function castSkill(h: SkillHost, id: string, skillId: string): boolean {
   const s = skillOf(u.cls, skillId);
   const rank = s?.cantrip ? 1 : Math.min(3, rankOf(u.talents, skillId));
   const now = h.now();
-  if (!s || s.passive || rank <= 0 || now < u.sk.chargeUntil) return false;
+  if (!s || s.passive || rank <= 0 || now < u.sk.chargeUntil || now < (u.sk.windUntil ?? 0)) return false;
   if (cooldownLeft(s, u.sk, now, h.cooldownMult(id)) > 0) return false;
   // Cantrips take the place of a basic attack (balance pass 2026-11-04): they wait for it and hold the next one back
   if (s.cantrip && now < (u.attackReadyAt ?? 0)) return false;
@@ -148,12 +155,17 @@ export function castSkill(h: SkillHost, id: string, skillId: string): boolean {
   if (s.consume) { stacks = u.sk.stacks; u.sk.stacks = 0; }
   const power = rankPower(rank) * levelPower(s) * scalePower(s, h.stats?.(id), STATS[u.cls].base) *
     (s.consume && !s.buff?.perStack ? 1 + STACK_POWER * stacks : 1);
-  h.fx({ ev: "cast", id, s: s.id, rank, stacks, charge: s.chargeMs ?? 0, x: u.x, y: u.y });
-  if (s.chargeMs) {
-    u.sk.chargeUntil = now + s.chargeMs;
-    h.later(s.chargeMs, () => {
-      u.sk.chargeUntil = 0;
-      if (!h.canAct(id)) { h.fx({ ev: "fizzle", id, s: s.id }); return; } // a stun breaks the buildup
+  h.fx({ ev: "cast", id, s: s.id, rank, stacks, charge: s.chargeMs ?? 0, wind: s.windMs ?? 0, x: u.x, y: u.y });
+  // A buildup charges (rooted, a stun breaks it). A big melee blow winds up first, so it lands with the animation's
+  // strike (client/src/skillMoves.ts): the hero keeps moving and can't swing or cast meanwhile, and nothing breaks it
+  // (rooting it or letting stuns cancel it cost knights and barbarians up to 10% of their duels, tools/balance/duel.ts)
+  const hold = (s.chargeMs ?? 0) + (s.windMs ?? 0);
+  if (hold > 0) {
+    if (s.chargeMs) u.sk.chargeUntil = now + hold;
+    if (s.windMs) u.sk.windUntil = now + hold;
+    h.later(hold, () => {
+      u.sk.chargeUntil = 0; u.sk.windUntil = 0;
+      if (s.chargeMs && !h.canAct(id)) { h.fx({ ev: "fizzle", id, s: s.id }); return; } // a stun breaks the buildup
       release(h, id, s, rank, power, stacks, at);
     });
   } else release(h, id, s, rank, power, stacks, at);
@@ -177,7 +189,8 @@ function release(h: SkillHost, id: string, s: SkillDef, rank: number, power: num
       : at !== undefined && (a.ahead ?? 0) > 0 && !s.move ? [x0 + ax0 * at * (a.ahead! / far), y0 + ay0 * at * (a.ahead! / far)] as [number, number]
       : undefined;
     // After a leap the blast lands with the hero, not at take-off
-    const def = s.move?.kind === "leap" && !a.atStart ? { ...a, delayMs: Math.max(a.delayMs ?? 0, LEAP_MS) } : a;
+    const leapt = s.move?.kind === "leap" && !a.atStart ? { ...a, delayMs: Math.max(a.delayMs ?? 0, LEAP_MS) } : a;
+    const def = s.windMs ? { ...leapt, r: leapt.r + WIND_REACH } : leapt;
     area(h, id, s, def, power, t, spot, false, imb);
   }
   if (s.shots) fire(h, id, s.id, s.shots, rank, power, u.x, u.y, h.aim(id), imb);
@@ -458,6 +471,8 @@ export const buffRegen = (u: Unit | undefined, now: number) => sum(u, now, "rege
 export const blocking = (u: Unit | undefined, now: number) => buffsOf(u, now).some((b) => b.b.block);
 export const ccImmune = (u: Unit | undefined, now: number) => buffsOf(u, now).some((b) => b.b.immune);
 export const charging = (u: Unit | undefined, now: number) => !!u && now < u.sk.chargeUntil;
+/** In a melee skill's wind-up: no basic attack until its blow lands. */
+export const winding = (u: Unit | undefined, now: number) => !!u && now < (u.sk.windUntil ?? 0);
 
 /**
  * Before a hit lands on `tid`: a counter stance eats it and strikes back. Returns true when the hit is cancelled.
@@ -544,7 +559,7 @@ export function tickUnit(h: SkillHost, id: string) {
   if (!u) return;
   const now = h.now();
   const sk = u.sk;
-  if (u.dead) { sk.burnUntil = 0; sk.buffs = []; sk.counter = undefined; sk.stacks = 0; sk.chargeUntil = 0; return; }
+  if (u.dead) { sk.burnUntil = 0; sk.buffs = []; sk.counter = undefined; sk.stacks = 0; sk.chargeUntil = 0; sk.windUntil = 0; return; }
   if (sk.buffs.length && sk.buffs.some((b) => b.until <= now)) sk.buffs = sk.buffs.filter((b) => b.until > now);
   if (sk.counter && now >= sk.counter.until) sk.counter = undefined;
   if (sk.stacks > 0 && now - sk.stackAt > STACK_DECAY_MS) sk.stacks = 0;

@@ -1,5 +1,6 @@
 import { Canvas, HiCanvas, shade } from "./canvas";
 import { DiagAlt, FrameInfo, hasLook, paintFrame, setPaintPixel } from "./paint/body";
+import { MOVE_HEROES, MOVE_SHEET } from "../../client/src/skillMoveData";
 
 export type Dir = "down" | "up" | "right";
 export const DIRS: Dir[] = ["down", "up", "right"];
@@ -103,6 +104,15 @@ export const ANIMS: { name: string; frames: number; fps: number; loop: boolean }
   { name: "hit2", frames: 3, fps: 10, loop: false },   // heavy knockback
   { name: "ko2", frames: 4, fps: 6, loop: false },     // falls forward
 ];
+
+/**
+ * Skill moves (Murat 2026-11-05): whole-body poses for the big melee skills, played as micro sequences by the client
+ * (client/src/skillMoves.ts). Painted heroes only, in their own sheet ({hero}-moves.webp) so the base sheets and their
+ * gear overlays stay as they are. 8 frames each: see skillPose for what each frame is.
+ */
+export const MOVE_ANIMS: { name: string; frames: number; fps: number; loop: boolean }[] =
+  MOVE_SHEET.map((name) => ({ name, frames: PAINT_COLS, fps: 20, loop: false }));
+export { MOVE_HEROES };
 
 interface D {
   c: Canvas; p: Pose;
@@ -1085,7 +1095,95 @@ function walk2Fluid(hero: Hero, dir: Dir, B: (t: number) => Pose): Canvas[] {
   });
 }
 
+/** The weapon shoulder of the old 32px rig, per facing (hands are placed relative to it). */
+const SHOULDER: Record<Dir, [number, number]> = { down: [9.5, 17.5], up: [21.5, 17.5], right: [15.5, 17.5] };
+/**
+ * One skill-move pose. f = hand forward along the facing, u = hand up, s = hand out to the weapon side;
+ * rel = blade angle from the facing (mirrored facing up, kept off straight-down facing down so it stays in the frame).
+ */
+interface SkillKey { f: number; u: number; s?: number; rel: number; abs?: boolean; crouch?: number; lean?: number; stride?: number; run?: boolean; bob?: number;
+  jump?: number; two?: boolean; expr?: Pose["expr"]; dust?: number }
+function skillPose(hero: Hero, dir: Dir, t: number, k: SkillKey): Canvas {
+  const [fx, fy] = FACE[dir], [sx, sy] = SHOULDER[dir];
+  const side = k.s ?? 0;
+  const hand: [number, number] = [sx + fx * k.f + (dir === "down" ? -side : dir === "up" ? side : 0), sy + fy * k.f - k.u + (dir === "right" ? side * 0.5 : 0)];
+  let ang = k.abs ? k.rel : FACE_ANGLE[dir] + (dir === "up" ? -k.rel : k.rel);
+  if (!k.abs && dir === "down") { const n = ((ang % 360) + 360) % 360; if (n > 40 && n < 140) ang += n <= 100 ? 40 - n : 140 - n; }
+  // two-handed grip: the free hand closes on the haft just below the weapon hand
+  const far: [number, number] | undefined = k.two && !hero.shield ? [hand[0] + (dir === "down" ? 2 : dir === "up" ? -2 : -1), hand[1] + 1] : undefined;
+  const pose: Pose = { ...base(dir, t), hand, wAng: ang, farHand: far, crouch: k.crouch ?? 0, lean: k.lean ?? 0, stride: k.stride ?? 0,
+    run: k.run, bob: k.bob ?? 0, expr: k.expr ?? "n" };
+  const f = k.jump ? jumped(renderFrame(hero, pose, false), k.jump) : renderFrame(hero, pose);
+  if (k.dust) { dust(f, 16 - fx * 6 - 4, 29, k.dust); dust(f, 16 - fx * 6 + 5, 29, k.dust); }
+  return f;
+}
+
+/** Frames of a skill move (MOVE_ANIMS). */
+function skillMoveFrames(hero: Hero, anim: string, dir: Dir): Canvas[] {
+  const KEYS: Record<string, SkillKey[]> = {
+    // coil back on the rear foot, drive forward into a long low thrust, hold it, step back into guard
+    lunge: [
+      { f: -2.5, u: 1, rel: -8, crouch: 1.5, lean: 1, stride: -0.3 },
+      { f: -4, u: 0.5, rel: -12, crouch: 2.5, lean: 1.8, stride: -0.5, expr: "squint" },
+      { f: 2, u: 1, rel: -2, crouch: 1.6, lean: -1.5, stride: 0.8, run: true },
+      { f: 5, u: 1, rel: 0, crouch: 2, lean: -2.6, stride: 1, run: true, expr: "squint", dust: 1 },
+      { f: 5, u: 1.2, rel: 2, crouch: 2, lean: -2.6, stride: 1, run: true, expr: "squint" },
+      { f: 4.5, u: 1, rel: 6, crouch: 1.8, lean: -2.2, stride: 1, run: true },
+      { f: 2, u: 0, rel: 25, crouch: 1.2, lean: -1, stride: 0.6 },
+      { f: 1, u: 0, rel: 45, crouch: 0.5, stride: 0.3 },
+    ],
+    // blade cocked behind, then the spin pose (the client turns it through every facing), then unwinding
+    whirl: [
+      { f: -3, u: 0, s: 2, rel: 165, crouch: 1.5, lean: 1, expr: "squint" },
+      { f: 3, u: 1, s: 2, rel: 55, crouch: 1.8, stride: 0.4 },
+      { f: 4.5, u: 1.5, rel: 0, crouch: 1.8, stride: 0.4, expr: "squint" },
+      { f: 3, u: 1, s: -2, rel: -55, crouch: 1.8, stride: 0.4 },
+      { f: 3, u: 1, rel: 25, crouch: 1.2, stride: 0.3 },
+      { f: 2, u: 0.5, rel: 50, crouch: 0.8 },
+      { f: 1.5, u: 0, rel: 70, crouch: 0.4 },
+      { f: 1, u: 0, rel: 80 },
+    ],
+    // gather low, heave the weapon high over the head on the toes, crash it into the ground, rise
+    slam: [
+      { f: -1, u: -2, rel: 150, crouch: 2, two: true },
+      { f: -1.5, u: 3.5, rel: -145, bob: -1, two: true },
+      { f: -2.5, u: 4, rel: -165, two: true, jump: 2, expr: "squint" },
+      { f: 4, u: -2, rel: 35, crouch: 2.5, lean: -1.5, stride: 0.6, two: true, expr: "squint" },
+      { f: 5, u: -4, rel: 55, crouch: 3.6, lean: -2, stride: 0.7, two: true, expr: "squint", dust: 2 },
+      { f: 5, u: -4, rel: 58, crouch: 3.3, lean: -2, stride: 0.7, two: true },
+      { f: 3, u: -2, rel: 50, crouch: 1.8, lean: -1, stride: 0.4 },
+      { f: 1.5, u: 0, rel: 65, crouch: 0.6 },
+    ],
+    // deep crouch, spring up with the weapon raised, tuck at the top, swing down, land hard and rise
+    leap: [
+      { f: -2, u: -1, rel: 160, crouch: 3.2, lean: 1, expr: "squint" },
+      { f: 0, u: 5, rel: -120, stride: 0.6, jump: 2, two: true },
+      { f: -2, u: 4, rel: -160, crouch: 1.5, stride: 0.4, jump: 4, two: true },
+      { f: -2.5, u: 3.5, rel: -172, crouch: 1, jump: 4, two: true },
+      { f: 3, u: 2, rel: -30, stride: 0.6, jump: 2, two: true, expr: "squint" },
+      { f: 5, u: -4, rel: 58, crouch: 3.6, lean: -2, stride: 0.8, two: true, expr: "squint", dust: 2 },
+      { f: 3, u: -2, rel: 50, crouch: 2, lean: -1, stride: 0.5 },
+      { f: 1.5, u: 0, rel: 65, crouch: 0.6 },
+    ],
+    // twist far back, the weapon behind the shoulders, then one huge sweep across the front carried by the hips
+    cleave: [
+      { f: -3, u: 2, s: -2, rel: 200, crouch: 1, lean: 1.5, stride: 0.3, two: true },
+      { f: -4, u: 3, s: -2, rel: 218, crouch: 1.6, lean: 2, stride: 0.4, two: true, expr: "squint" },
+      { f: 1, u: 2, rel: 290, crouch: 2, stride: 0.8, two: true },
+      { f: 4.5, u: 0, rel: 0, crouch: 2.6, lean: -1.6, stride: 1, run: true, two: true, expr: "squint" },
+      { f: 3.5, u: -1.5, s: 2, rel: 55, crouch: 2.6, lean: -2, stride: 1, run: true, expr: "squint", dust: 1 },
+      { f: 1.5, u: -2.5, s: 3, rel: 105, crouch: 2.2, lean: -1.5, stride: 0.9, run: true },
+      { f: 1, u: -1, rel: 85, crouch: 1.4, lean: -0.5, stride: 0.5 },
+      { f: 1, u: 0, rel: 65, crouch: 0.5, stride: 0.2 },
+    ],
+    // the blade raised straight to the sky in both hands (held while charging), breathing
+    raise: [0, 1, 2, 3, 4, 5, 6, 7].map((i) => ({ f: 0, u: 6, rel: -90, abs: true, two: true, bob: i % 4 < 2 ? -0.5 : 0, crouch: i === 0 ? 1 : 0, stride: 0.2 })),
+  };
+  return KEYS[anim].map((k, t) => skillPose(hero, dir, t, k));
+}
+
 export function animFrames(hero: Hero, anim: string, dir: Dir): Canvas[] {
+  if (MOVE_ANIMS.some((a) => a.name === anim)) { fluidHero = PAINTED && hasLook(hero.name); return skillMoveFrames(hero, anim, dir); }
   fluidHero = PAINTED && hasLook(hero.name);
   const B = (t: number) => base(dir, t);
   switch (anim) {
@@ -1313,6 +1411,16 @@ export function buildSheet(hero: Hero) {
   const dirs: SheetDir[] = painted ? PAINT_DIRS : DIRS, cols = painted ? PAINT_COLS : COLS, anims = animsOf(painted);
   const sheet = new Canvas(FW * cols, FH * anims.length * dirs.length);
   anims.forEach((a, ai) => dirs.forEach((dir, di) => {
+    sheetFrames(hero, a.name, dir).forEach((f, fi) => sheet.blit(f, fi * FW, (ai * dirs.length + di) * FH));
+  }));
+  return sheet;
+}
+
+/** The skill-move sheet of a painted hero: MOVE_ANIMS x PAINT_DIRS rows of PAINT_COLS frames. */
+export function buildMovesSheet(hero: Hero) {
+  const dirs = PAINT_DIRS, cols = PAINT_COLS;
+  const sheet = new Canvas(FW * cols, FH * MOVE_ANIMS.length * dirs.length);
+  MOVE_ANIMS.forEach((a, ai) => dirs.forEach((dir, di) => {
     sheetFrames(hero, a.name, dir).forEach((f, fi) => sheet.blit(f, fi * FW, (ai * dirs.length + di) * FH));
   }));
   return sheet;

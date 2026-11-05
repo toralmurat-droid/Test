@@ -1,7 +1,8 @@
 import { icon } from "./pixelicons";
 import Phaser from "phaser";
-import { gearDef, itemText, LOOT_IDS, canWear, GEAR_SLOTS, gearName, gearStats, gearSpeedMult, GearSlot, BAG_SIZE, SLOT_NAMES, TIER_NAMES, baseId, itemRarity, RARITY_NAMES, affixLines, itemLevel, reqProblem, reqText, activeGear, HeroReqInfo, Equipped, weaponElements, gearResist } from "../../shared/gear";
+import { gearDef, itemText, LOOT_IDS, canWear, GEAR_SLOTS, gearName, gearStats, gearSpeedMult, GearSlot, BAG_SIZE, SLOT_NAMES, TIER_NAMES, baseId, itemRarity, RARITY_NAMES, affixLines, itemLevel, reqProblem, reqText, activeGear, HeroReqInfo, Equipped, weaponElements, gearResist, weaponType } from "../../shared/gear";
 import { ELEMENTS, ELEMENT_NAMES } from "../../shared/elements";
+import { nativeFamily, weaponFamily } from "../../shared/weapons";
 import { STAT_NAMES, StatKind } from "../../shared/powers";
 import { potionAmount, potionName, potionStacks, POTION_STACK, unpackPotions } from "../../shared/potions";
 import { ART_K, CHAR_FRAME, HD_CHARS } from "./artAssets";
@@ -80,11 +81,13 @@ export class GearLayer {
   }
 
   sync(base: Phaser.GameObjects.Sprite, state: any) {
+    // A skill move draws the body from the hero's {hero}-moves sheet (skillMoves.ts): the overlays follow it there
+    const sheet = base.texture.key === `${this.hero}-moves` ? base.texture.key : this.hero;
     LAYER_ORDER.forEach((slot, i) => {
       const id: string = state[slot] ?? "";
-      const key = id ? gearKey(this.hero, id) : "";
+      const key = id ? gearKey(sheet, id) : "";
       let s = this.sprites[slot];
-      if (!key || !ensureGear(this.scene, this.hero, id)) {
+      if (!key || !ensureGear(this.scene, sheet, id)) {
         if (s) { s.destroy(); delete this.sprites[slot]; delete this.ids[slot]; }
         return;
       }
@@ -96,6 +99,26 @@ export class GearLayer {
       s.setDepth(base.depth + 0.01 * (i + 1));
       if (base.isTinted) { s.setTint(base.tintTopLeft); s.tintFill = base.tintFill; } else if (s.isTinted) s.clearTint();
     });
+  }
+
+  /**
+   * True when every worn item's overlay for another sheet of this hero (a skill-move sheet) has loaded; starts the
+   * loads. A ranged or caster weapon has no skill-move overlay (melee skills need a melee weapon): false.
+   */
+  ready(sheet: string, state: any): boolean {
+    let ok = true;
+    for (const slot of LAYER_ORDER) {
+      const id: string = state[slot] ?? "";
+      if (!id) continue;
+      if (slot === "weapon" && weaponFamily(weaponType(state.cls, id)) !== nativeFamily(state.cls)) return false;
+      if (!ensureGear(this.scene, sheet, id)) ok = false;
+    }
+    return ok;
+  }
+
+  /** Every overlay sprite (for afterimages). */
+  each(fn: (s: Phaser.GameObjects.Sprite, slot: GearSlot) => void) {
+    for (const [slot, s] of Object.entries(this.sprites)) if (s) fn(s, slot as GearSlot);
   }
 
   destroy() {
