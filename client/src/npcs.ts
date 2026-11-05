@@ -24,6 +24,8 @@ import { itemTexture, potionTex } from "./textures";
 import { potionAmount, potionName, slotsAfter, total, unpackPotions } from "../../shared/potions";
 import { BAG_SIZE } from "../../shared/gear";
 import { isoAnchor } from "./iso";
+import { msUntilUndeadNight } from "../../shared/daynight";
+import { dayTime } from "./details";
 
 type Me = { x: number; y: number } | undefined;
 /** The local player's synced state (only the fields NPCs care about). */
@@ -354,7 +356,11 @@ export class NpcLayer {
           dir = `<div class="qt-dir">${arrows[k]} ${Math.round(d / TILE)} tiles ${names[k]}</div>`;
         } else if (target.kind === "area" && d <= 0) dir = `<div class="qt-dir">You are here</div>`;
       }
-      const hint = step.hint ? `<div class="qt-hint2">${step.hint}</div>` : "";
+      let hint = step.hint ? `<div class="qt-hint2">${step.hint}</div>` : "";
+      if (step.night) { // the dead's bosses only walk at night (shared/daynight.ts)
+        const wait = msUntilUndeadNight(dayTime(Date.now()));
+        hint += `<div class="qt-hint2 qt-night">${wait ? `Only at night. The dead rise in ${Math.max(1, Math.ceil(wait / 60000))} min.` : "Night: the dead are up."}</div>`;
+      }
       return `<div class="qt-block"><div class="qt-title">${def.title}</div><div class="qt-obj">${step.type === "talk" ? "➜ " : "• "}${obj}</div>${bar}${dir}${hint}</div>`;
     }
     // Between quests: point to whoever has the next one (the blob chain's very first quest has its own "!" intro)

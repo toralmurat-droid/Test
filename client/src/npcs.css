@@ -148,3 +148,4 @@
 #portaltoast { position: absolute; top: 18%; left: 16px; right: 16px; text-align: center; opacity: 0; transition: opacity .5s; pointer-events: none; }
 #portaltoast canvas { display: block; margin: 0 auto; max-width: calc(100vw - 32px); }
 #portaltoast.show { opacity: 1; }
+#questtracker .qt-night { color: #b8c4ff; }
