@@ -1,0 +1,10 @@
+{
+  "date": "2026-11-05",
+  "title": "Bounty boards and clearer fights",
+  "changes": [
+    "Bounty boards stand on the Market Square and beside every portal stone. Pick a hunt that fits your level; it pays XP and gold the moment the last monster falls.",
+    "The monster under your mouse or under attack shows its name, damage numbers are bigger, and your own name steps aside when a monster stands right next to you.",
+    "Gold is picked up from a couple of steps away.",
+    "Item finds no longer hide behind the quest tracker, and the first quest's skill hint matches the new keys."
+  ]
+}

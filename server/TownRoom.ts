@@ -24,8 +24,9 @@ import {
   imbueOf, shotEnd, shotHit, shotPulse, ShotSpec, SkillHost, speedMult, statusOf, takenMult, tickField, tickUnit, Unit,
 } from "../shared/skillEngine";
 import {
-  ITEM_LIFETIME_MS, ItemKind, LOOT, PICKUP_RADIUS, PVP_GOLD_DROP,
+  ITEM_LIFETIME_MS, ItemKind, LOOT, GOLD_PICKUP_RADIUS, PICKUP_RADIUS, PVP_GOLD_DROP,
 } from "../shared/items";
+import { bountyCounts, bountyOffers, cleanBounty, nearestBoard, type BountyState } from "../shared/bounty";
 import { DOORS, DOOR_RANGE, doorById, doorDist, isSafeZone, isSolidAt, randomSpawn, setDoorOpen, VILLAGE, type Door } from "../shared/map";
 import { isDecorSolidAt, npcById, npcNear, TALK_RANGE } from "../shared/npcs";
 import { beyondWall, WATCH, WATCH_POSTS, WatchPost } from "../shared/watch";
@@ -157,6 +158,8 @@ export class Player extends Schema {
   input: InputState = { up: false, down: false, left: false, right: false };
   lastAttack = 0;
   portals = new Set<string>(); // portal stones this hero has woken (shared/portals.ts; saved, never synced)
+  bounty?: BountyState; // bounty board hunt in progress (shared/bounty.ts; saved, sent by message)
+  bountyDone = 0;
   lastSpecial = -Infinity;
   // Hidden initiative / poise (shared/combat.ts)
   poiseLost = 0;
@@ -603,6 +606,7 @@ export class TownRoom extends Room<TownState> {
     this.onMessage("pray", (client) => this.pray(client));
     this.onMessage("portals", (client) => this.sendPortals(client));
     this.onMessage("travel", (client, msg: { to?: string }) => this.travel(client, msg?.to));
+    this.onMessage("bounty", (client, msg: { take?: number; drop?: boolean }) => this.bountyMsg(client, msg ?? {}));
     this.onMessage("shrine", (client) => client.send("shrine", { left: Math.max(0, this.shrineReadyAt - Date.now()) }));
     // The client is ready (loading screen gone): a hero on the first step of First Steps gets its banner
     this.onMessage("tutorial", (client) => {
@@ -833,6 +837,7 @@ export class TownRoom extends Room<TownState> {
         return [[a, q.questId], [b, q.questStage], [n, q.questCount], [ch.verKey, ch.version]];
       })),
       portals: [...p.portals],
+      bounty: p.bounty, bountyDone: p.bountyDone,
     };
   }
 
@@ -858,6 +863,8 @@ export class TownRoom extends Room<TownState> {
       p.slots[i] = typeof v === "string" && skillLearned(p.cls, p.talents, v) && skillOf(p.cls, v)?.passive === undefined ? v : "";
     });
     for (const id of cleanPortals(s.portals)) p.portals.add(id);
+    p.bountyDone = Math.max(0, Math.floor(num(s.bountyDone)));
+    p.bounty = cleanBounty(s.bounty);
     const sv = s as unknown as Record<string, unknown>;
     // Saves from before the guided first quest count it as done
     if (sv.tutVer === undefined) sv.tutId = TUT_QUESTS.length;
@@ -2909,7 +2916,7 @@ export class TownRoom extends Room<TownState> {
 
   private pickUp(p: Player, pid: string) {
     this.state.items.forEach((it, id) => {
-      if (Math.hypot(it.x - p.x, it.y - p.y) > PICKUP_RADIUS) return;
+      if (Math.hypot(it.x - p.x, it.y - p.y) > (it.kind === "gold" ? GOLD_PICKUP_RADIUS : PICKUP_RADIUS)) return;
       if (it.kind === "quest") {
         if (it.owner !== pid) return; // someone else's quest drop
         this.state.items.delete(id);
@@ -3373,6 +3380,7 @@ export class TownRoom extends Room<TownState> {
     this.broadcast("hit", { id: targetId, dmg, crit: !!opts.crit, dot: !!opts.dot, el: opts.el, ...(opts.dot ? {} : hitDir(push)) });
     if (m.hp > 0) { afterHit(this.host, attackerId, targetId, opts); return; }
     if (a) for (let c = 0; c < CHAINS.length; c++) this.questKill(attackerId, a, m, c);
+    if (a) this.bountyKill(attackerId, a, m);
     // Kill XP: every group member in the same zone gets it (the killer alone when solo)
     const xp = Math.round(def.xp * mobScale(m.level, "xp"));
     for (const pid of a?.party ? this.groupNear(attackerId, m.x, m.y) : [attackerId]) this.grantXp(pid, xp, m);
@@ -3835,6 +3843,33 @@ export class TownRoom extends Room<TownState> {
   }
 
   // ---- Portal stones (shared/portals.ts) -----------------------------------------
+
+  // ---- Bounty boards (shared/bounty.ts) ------------------------------------------------------------------
+
+  /** "bounty": {} = show me (offers if I'm at a board, and my hunt), {take: i} = take offer i, {drop: true} = give up. */
+  private bountyMsg(client: Client, msg: { take?: number; drop?: boolean }) {
+    const p = this.state.players.get(client.sessionId);
+    if (!p) return;
+    const board = nearestBoard(p.x, p.y);
+    const offers = board ? bountyOffers(p.level, p.bountyDone) : [];
+    if (msg.drop) p.bounty = undefined;
+    else if (typeof msg.take === "number" && board && !p.bounty && offers[msg.take]) p.bounty = { ...offers[msg.take], n: 0 };
+    client.send("bounty", { board: board?.id ?? "", offers, active: p.bounty ?? null });
+  }
+
+  /** A monster died to this hero: does it count for their bounty? The last kill pays out on the spot. */
+  private bountyKill(id: string, p: Player, m: Mob) {
+    const b = p.bounty;
+    if (!bountyCounts(b, m.kind, m.level)) return;
+    b!.n++;
+    const client = this.clients.find((c) => c.sessionId === id);
+    if (b!.n < b!.goal) { client?.send("bounty", { active: b }); return; }
+    p.bounty = undefined;
+    p.bountyDone++;
+    p.gold += b!.gold;
+    this.grantXp(id, b!.xp, p);
+    client?.send("bounty", { active: null, done: b });
+  }
 
   private sendPortals(client: Client, woke?: string) {
     const p = this.state.players.get(client.sessionId);

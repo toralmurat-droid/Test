@@ -1,3 +1,4 @@
+import type { BountyState } from "../shared/bounty";
 // Player accounts: name + password, with one saved hero per class.
 // Saves live in a JSON file on the server (SAVE_FILE, default data/saves.json).
 import fs from "node:fs";
@@ -30,6 +31,8 @@ export interface HeroSave {
   beastId?: number; beastStage?: number; beastCount?: number; beastVer?: number;
   /** Portal stones this hero has woken (shared/portals.ts ids). */
   portals?: string[];
+  /** Bounty board hunt in progress (shared/bounty.ts) and how many this hero has finished. */
+  bounty?: BountyState; bountyDone?: number;
 }
 
 interface Account {
