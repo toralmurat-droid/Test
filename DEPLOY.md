@@ -33,7 +33,13 @@ Simple, connects to GitHub directly, supports WebSockets and persistent disks (v
 
 With the branch connected in step 3, Railway rebuilds and restarts the game **every time a PR is merged**
 (a new commit on that branch). Work done in Claude threads auto-merges, so it reaches the live game a few minutes later.
-Saves on the volume are kept across updates. Players are disconnected for a few seconds during each restart.
+Saves on the volume are kept across updates. Players see a short "New lands are being forged!" notice during
+each restart, then come back by themselves, right where they stood (spot, health, mana, stamina, group and chat;
+the server hands these over in `data/handoff.json`).
+
+`railway.json` holds the deploy settings, so nothing needs setting by hand: Railway waits for `/health` before
+sending players to a new build, and gives the old one 15 seconds after the stop signal to save everyone.
+(With a volume attached, Railway cannot run the old and new build side by side, so a few seconds of restart remain.)
 
 ## How you keep working from here
 

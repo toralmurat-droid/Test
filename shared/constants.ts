@@ -28,6 +28,33 @@ export interface InputState {
   down: boolean;
   left: boolean;
   right: boolean;
+  /**
+   * Exact walking direction (world, unit vector) from point-and-click, so the hero walks straight at any angle like
+   * in Diablo 2 instead of in 8 directions. The keys above still say roughly where (for facing and animation).
+   */
+  vx?: number;
+  vy?: number;
+}
+
+/** Point-and-click walking angles are rounded to this many steps, so the client only sends a new input on a real turn. */
+export const WALK_ANGLES = 64;
+
+/** The exact walking direction of an input, if it has a valid one. */
+export function inputDir(i: InputState): [number, number] | undefined {
+  const x = i.vx, y = i.vy;
+  if (typeof x !== "number" || typeof y !== "number" || !Number.isFinite(x) || !Number.isFinite(y)) return undefined;
+  const l = Math.hypot(x, y);
+  return l > 0.01 ? [x / l, y / l] : undefined;
+}
+
+/** Input walking toward (dx, dy) at any angle (rounded to WALK_ANGLES), with the keys set to the nearest of 8 directions. */
+export function dirInput(dx: number, dy: number): InputState {
+  if (!dx && !dy) return { up: false, down: false, left: false, right: false };
+  const step = (Math.PI * 2) / WALK_ANGLES;
+  const a = Math.round(Math.atan2(dy, dx) / step) * step;
+  const vx = Math.round(Math.cos(a) * 1e4) / 1e4, vy = Math.round(Math.sin(a) * 1e4) / 1e4;
+  const k = 0.38; // ~ sin 22.5 degrees
+  return { up: vy < -k, down: vy > k, left: vx < -k, right: vx > k, vx, vy };
 }
 
 export type MobKind = "slime" | "skeleton" | "motherblob" | "blobling" | "shooterblob" | "warriorblob" | "healerblob" | "bandit" | "skeletonmage" | "necromancer" | "crawler" | "demon" | "banditchief" | "hollowking"

@@ -1,7 +1,7 @@
 import Phaser from "phaser";
 import { quake } from "./camfx";
 import { chargeIcon } from "./chargeIcon";
-import { leaving, noteBuild, reconnectSoon, returnToStart, upgradeAnnounced } from "./reconnect";
+import { leaving, noteBuild, reconnectSoon, returnToStart, takeCarried, upgradeAnnounced } from "./reconnect";
 import { Client, Room } from "colyseus.js";
 import { BOSS, ELITE, InputState, MERGE, MAP_H, MAP_W, regenFromStamina, TICK_RATE, TILE } from "../../shared/constants";
 import { CLASSES, ClassKind, ENERGY, MAX_LEVEL, xpForLevel } from "../../shared/classes";
@@ -46,6 +46,9 @@ import { Details } from "./details";
 import { activeOf, GearLayer, GearMenu, iconCanvas, itemColor, preloadGear, RARITY_HEX } from "./gear";
 /** pickSlot value while the slot list is choosing the left-click action. */
 const LEFT_PICK = -2;
+/** pickSlot value while the slot list is choosing the right-click (and Space) action. */
+const RIGHT_PICK = -3;
+type ClickSide = "left" | "right";
 /** "12 mana · 20 stamina" for a skill list. */
 const costWords = (s: { cost?: number; mana?: number }) => [s.mana ? `${s.mana} mana` : "", s.cost ? `${s.cost} stamina` : ""].filter(Boolean).join(" · ") || "free";
 import { GearFx } from "./gearfx";
@@ -226,10 +229,11 @@ export class TownScene extends Phaser.Scene {
   private stoppedAt = 0;
   private seq = 0;
   private pointer?: PointerControls;
-  /** Hotbar slot the right click uses (keys 1..0 pick it). */
-  private activeSlot = 0;
-  /** What a left click on an enemy does: "" = the main-hand weapon's attack, or a skill / basic spell id. Saved per hero in this browser. */
-  private leftPick?: { hero: string; skill: string };
+  /**
+   * What a left / right click (and Space) does: "" = the main-hand weapon's attack, or a skill / basic spell id.
+   * Saved per hero in this browser (Murat 2026-11-05: both clicks take any skill or the weapon attack).
+   */
+  private clickPick: Partial<Record<ClickSide, { hero: string; skill: string }>> = {};
   private npcs?: NpcLayer;
   private villagers?: Villagers;
   private watch?: WatchLayer;
@@ -345,7 +349,7 @@ export class TownScene extends Phaser.Scene {
         if (this.chatting()) return;
         const hover = this.talentMenu?.open ? this.talentMenu.hoveredActive() : undefined;
         if (hover) this.room?.send("assign", { slot: n, skill: hover });
-        else this.activeSlot = n; // point-and-click: the key picks the right-click skill, the right click casts it
+        else this.castSlot(n); // the key casts its skill right away, toward the mouse cursor (Murat 2026-11-05)
       };
       this.input.keyboard!.on(`keydown-${k}`, press);
       this.input.keyboard!.on(`keydown-NUMPAD_${k}`, press);
@@ -1096,6 +1100,9 @@ export class TownScene extends Phaser.Scene {
     // Server restart (every deploy): show a notice and log back in by itself
     const login = { name: this.opts.name, password: this.opts.password, cls: this.opts.cls, color: this.opts.color };
     noteBuild();
+    // Back from a restart: the chat as it was (what changed shows in the patch notes' "New update" notice)
+    const chatlog = document.getElementById("chatlog")!;
+    for (const t of takeCarried()) { const el = document.createElement("div"); el.textContent = t; chatlog.prepend(el); }
     this.room.onMessage("upgrading", () => upgradeAnnounced());
     this.room.onLeave((code: number) => { if (this.quitting) return; this.feed("Disconnected from server"); reconnectSoon(login, code === 4000); });
     // A connection that silently died (no updates for 15s) is treated the same way
@@ -1133,14 +1140,14 @@ export class TownScene extends Phaser.Scene {
   /** Send the held movement directions to the server when they change. */
   private sendInput(next: InputState) {
     const i = this.input_;
-    if (next.up === i.up && next.down === i.down && next.left === i.left && next.right === i.right) return;
+    if (next.up === i.up && next.down === i.down && next.left === i.left && next.right === i.right && next.vx === i.vx && next.vy === i.vy) return;
     this.input_ = { ...next };
     this.room?.send("input", { ...next, seq: ++this.seq });
     // Stopping: the server's position still runs behind ours until it has read this stop (see the idle easing)
     if (!next.up && !next.down && !next.left && !next.right) { this.stopSeq = this.seq; this.stoppedAt = this.time.now; }
   }
 
-  /** Mouse controls (client/src/pointer.ts): click to walk, talk, open, attack; right click for the slot 1 skill. */
+  /** Mouse controls (client/src/pointer.ts): click to walk, talk, open, attack; right click / Space for the right-click action. */
   private setupPointer() {
     warmPaths(); // the walk grid, while the loading screen is still up
     if (import.meta.env.DEV) (window as any).__town = this; // for local test scripts
@@ -1179,10 +1186,8 @@ export class TownScene extends Phaser.Scene {
       };
     };
     const secondarySkill = () => {
-      const p = meEnt()?.state;
-      const n = this.activeSlot;
-      const id = p?.slots?.at?.(n) ?? p?.slots?.[n];
-      return p && id && skillLearned(p.cls, p.talents, id) ? skillOf(p.cls, id) : undefined;
+      const p = meEnt()?.state, id = this.rightSkill();
+      return p && id ? skillOf(p.cls, id) : undefined;
     };
     const basicReach = (p: any) => {
       const def = attackProfile(p.cls, activeOf(p));
@@ -1227,20 +1232,17 @@ export class TownScene extends Phaser.Scene {
       shotSpeed: (secondary) => {
         const p = meEnt()?.state;
         if (!p) return 0;
-        if (!secondary) return CLASSES[p.cls as ClassKind].projectile?.speed ?? 0;
-        if (secondarySkill()) return 0; // skills aim their own way
-        const rg = activeOf(p).ranged, shot = rg ? gearDef(rg)?.shot : undefined;
-        return shot?.speed ?? 0;
+        if (secondary && secondarySkill()) return 0; // skills aim their own way
+        return CLASSES[p.cls as ClassKind].projectile?.speed ?? 0;
       },
       reach: (secondary) => {
         const p = meEnt()?.state;
         if (!p) return 0;
         if (!secondary) { const ls = this.leftSkill(); return ls ? skillReach(skillOf(p.cls, ls)!, p) : basicReach(p); }
         const s = secondarySkill();
-        if (s) return skillReach(s, p);
-        const rg = activeOf(p).ranged, shot = rg ? gearDef(rg)?.shot : undefined;
-        return shot ? shot.range * 0.8 : basicReach(p);
+        return s ? skillReach(s, p) : basicReach(p);
       },
+      edgeReach: (secondary) => !secondary || !secondarySkill(),
       fire: (secondary) => {
         if (!secondary) {
           // Left click: the weapon's attack, or the spell / skill chosen for it
@@ -1248,10 +1250,9 @@ export class TownScene extends Phaser.Scene {
           if (ls) this.room?.send("cast", ls); else this.room?.send("attack");
           return;
         }
-        const p = meEnt()?.state;
-        if (secondarySkill()) this.room?.send("useslot", this.activeSlot);
-        else if (p && activeOf(p).ranged && gearDef(activeOf(p).ranged!)?.shot) this.room?.send("ranged");
-        else this.room?.send("attack");
+        // Right click / Space: the skill chosen for it, or the weapon's attack
+        const rs = this.rightSkill();
+        if (rs) this.room?.send("cast", rs); else this.room?.send("attack");
       },
       target: () => { const s = secondarySkill(); return s ? skillTarget(s) : "dir"; },
       pointRange: () => { const s = secondarySkill(); return s ? pointRange(s) : 0; },
@@ -1899,7 +1900,9 @@ export class TownScene extends Phaser.Scene {
       if (potion) { this.room?.send(potion.dataset.potion === "mana" ? "manapotion" : "potion"); return; }
       const cell = cellOf(ev);
       if (!cell) return;
-      if (cell.dataset.slot === "L") { if (!pick.hidden && this.pickSlot === LEFT_PICK) this.closeSlotPicker(); else this.openSlotPicker(LEFT_PICK); return; }
+      for (const [key, n] of [["L", LEFT_PICK], ["R", RIGHT_PICK]] as const) {
+        if (cell.dataset.slot === key) { if (!pick.hidden && this.pickSlot === n) this.closeSlotPicker(); else this.openSlotPicker(n); return; }
+      }
       const n = Number(cell.dataset.slot);
       if (!pick.hidden && this.pickSlot === n) this.closeSlotPicker(); else this.openSlotPicker(n);
     });
@@ -1907,7 +1910,8 @@ export class TownScene extends Phaser.Scene {
       const cell = cellOf(ev);
       if (!cell) return;
       ev.preventDefault();
-      if (cell.dataset.slot === "L") { this.setLeftSkill(""); return; } // back to the weapon
+      if (cell.dataset.slot === "L") { this.setClickSkill("left", ""); return; } // back to the weapon
+      if (cell.dataset.slot === "R") { this.setClickSkill("right", ""); return; }
       if (cell.dataset.skill) this.room?.send("assign", { slot: Number(cell.dataset.slot), skill: "" });
     });
     // Wheel over a slot: cycle (empty) -> skill A -> skill B -> ... (learned skills only)
@@ -1919,9 +1923,10 @@ export class TownScene extends Phaser.Scene {
       const cls = mine.cls as ClassKind;
       const choices = ["", ...activeSkills(cls).filter((a) => skillLearned(cls, mine.talents, a.id)).map((a) => a.id)];
       if (choices.length < 2) return;
-      if (cell.dataset.slot === "L") {
-        const cur = Math.max(0, choices.indexOf(this.leftSkill()));
-        this.setLeftSkill(choices[(cur + (ev.deltaY > 0 ? 1 : -1) + choices.length) % choices.length]);
+      if (cell.dataset.slot === "L" || cell.dataset.slot === "R") {
+        const side: ClickSide = cell.dataset.slot === "L" ? "left" : "right";
+        const cur = Math.max(0, choices.indexOf(this.clickSkill(side)));
+        this.setClickSkill(side, choices[(cur + (ev.deltaY > 0 ? 1 : -1) + choices.length) % choices.length]);
         return;
       }
       const n = Number(cell.dataset.slot);
@@ -1932,7 +1937,8 @@ export class TownScene extends Phaser.Scene {
     pick.addEventListener("click", (ev) => {
       const opt = (ev.target as HTMLElement).closest("[data-pick]") as HTMLElement | null;
       if (!opt || opt.classList.contains("locked")) return;
-      if (this.pickSlot === LEFT_PICK) this.setLeftSkill(opt.dataset.pick ?? "");
+      if (this.pickSlot === LEFT_PICK) this.setClickSkill("left", opt.dataset.pick ?? "");
+      else if (this.pickSlot === RIGHT_PICK) this.setClickSkill("right", opt.dataset.pick ?? "");
       else this.room?.send("assign", { slot: this.pickSlot, skill: opt.dataset.pick });
       this.closeSlotPicker();
     });
@@ -1951,7 +1957,7 @@ export class TownScene extends Phaser.Scene {
     const mine = this.entities.get(this.me)?.state;
     if (!mine) return;
     const cls = mine.cls as ClassKind;
-    if (n === LEFT_PICK) { this.openLeftPicker(mine, cls); return; }
+    if (n === LEFT_PICK || n === RIGHT_PICK) { this.openClickPicker(mine, cls, n === LEFT_PICK ? "left" : "right"); return; }
     const slots: string[] = [...(mine.slots ?? [])];
     const opts = activeSkills(cls).map((a) => {
       const learned = skillLearned(cls, mine.talents, a.id);
@@ -1977,23 +1983,24 @@ export class TownScene extends Phaser.Scene {
     }
   }
 
-  /** Left click: the weapon's attack or any learned skill / basic spell (Murat 2026-11-04). */
-  private openLeftPicker(mine: any, cls: ClassKind) {
-    const cur = this.leftSkill();
+  /** Left or right click: the weapon's attack or any learned skill / basic spell (Murat 2026-11-04 / 11-05). */
+  private openClickPicker(mine: any, cls: ClassKind, side: ClickSide) {
+    const cur = this.clickSkill(side);
     const w = attackProfile(cls, activeOf(mine));
     const weapon = `<button class="opt${cur ? "" : " cur"}" data-pick="" data-tiphead="${WEAPON_TYPE_NAMES[w.type]}" data-tip="${tipEsc(`Basic attack with what you hold: ${ATTACK_WORDS[w.type]}.`)}">` +
       `${this.weaponIcon(mine, "picon")}<span><b>Weapon attack</b><small>${WEAPON_TYPE_NAMES[w.type]}: ${ATTACK_WORDS[w.type]}</small></span></button>`;
     const opts = activeSkills(cls).map((a) => {
       const learned = skillLearned(cls, mine.talents, a.id);
-      const where = !learned ? `${icon("lock")}learn it in the tree (T), Lv ${a.req}` : a.cantrip ? `basic spell · ${a.mana ?? 0} mana` : a.id === cur ? "on left click" : costWords(a) + (a.needs ? ` · needs ${NEED_TEXT[a.needs]}` : "");
+      const where = !learned ? `${icon("lock")}learn it in the tree (T), Lv ${a.req}` : a.cantrip ? `basic spell · ${a.mana ?? 0} mana` : a.id === cur ? `on ${side} click` : costWords(a) + (a.needs ? ` · needs ${NEED_TEXT[a.needs]}` : "");
       return `<button class="opt${learned ? "" : " locked"}${a.id === cur ? " cur" : ""}" data-pick="${a.id}" data-tiphead="${a.name}" data-tip="${tipEsc(a.desc)}">` +
         `${iconImg(a.id, "picon")}<span><b>${a.name}</b><small>${where}</small></span></button>`;
     }).join("");
     const pick = document.getElementById("slotpick")!;
-    pick.innerHTML = `<div class="ph">Left click on an enemy: choose</div><div class="plist">${weapon}${opts}</div>`;
-    this.pickSlot = LEFT_PICK;
+    const head = side === "left" ? "Left click on an enemy: choose" : "Right click and Space: choose";
+    pick.innerHTML = `<div class="ph">${head}</div><div class="plist">${weapon}${opts}</div>`;
+    this.pickSlot = side === "left" ? LEFT_PICK : RIGHT_PICK;
     pick.hidden = false;
-    const cell = document.querySelector(`#hotbar [data-slot="L"]`) as HTMLElement | null;
+    const cell = document.querySelector(`#hotbar [data-slot="${side === "left" ? "L" : "R"}"]`) as HTMLElement | null;
     const hud = document.getElementById("hud")!.getBoundingClientRect();
     if (cell) {
       const r = cell.getBoundingClientRect();
@@ -2002,26 +2009,40 @@ export class TownScene extends Phaser.Scene {
     }
   }
 
-  /** The left-click skill, if it is still one this hero knows ("" = the weapon). */
-  private leftSkill(): string {
+  /** The left- or right-click skill, if it is still one this hero knows ("" = the weapon). */
+  private clickSkill(side: ClickSide): string {
     const mine = this.entities.get(this.me)?.state;
     if (!mine) return "";
     const hero = `${mine.name}|${mine.cls}`;
-    if (this.leftPick?.hero !== hero) {
+    let pick = this.clickPick[side];
+    if (pick?.hero !== hero) {
       let saved = "";
-      try { saved = localStorage.getItem(`leftclick:${hero}`) ?? ""; } catch { /* storage off */ }
-      this.leftPick = { hero, skill: saved };
+      try { saved = localStorage.getItem(`${side}click:${hero}`) ?? ""; } catch { /* storage off */ }
+      pick = this.clickPick[side] = { hero, skill: saved };
     }
-    const id = this.leftPick.skill;
+    const id = pick.skill;
     return id && skillLearned(mine.cls, mine.talents, id) && !skillOf(mine.cls, id)?.passive ? id : "";
   }
+  private leftSkill() { return this.clickSkill("left"); }
+  private rightSkill() { return this.clickSkill("right"); }
 
-  private setLeftSkill(id: string) {
-    this.leftSkill(); // loads leftPick for this hero
-    if (!this.leftPick) return;
-    this.leftPick.skill = id;
-    try { localStorage.setItem(`leftclick:${this.leftPick.hero}`, id); } catch { /* storage off */ }
+  private setClickSkill(side: ClickSide, id: string) {
+    this.clickSkill(side); // loads the pick for this hero
+    const pick = this.clickPick[side];
+    if (!pick) return;
+    pick.skill = id;
+    try { localStorage.setItem(`${side}click:${pick.hero}`, id); } catch { /* storage off */ }
     this.hotbarHtml = "";
+  }
+
+  /** Skill key 1..0: cast that slot's skill now, aimed at the mouse cursor (self skills just go off). */
+  private castSlot(n: number) {
+    const mine = this.entities.get(this.me)?.state;
+    const id = mine?.slots?.at?.(n);
+    const s = id ? skillOf(mine.cls, id) : undefined;
+    if (!s || !this.room || loadingActive()) return;
+    if (skillTarget(s) !== "self") { const aim = this.pointer?.cursorAim(); if (aim) this.room.send("face", aim); }
+    this.room.send("useslot", n);
   }
 
   /** The main-hand weapon's icon (or a fist when empty-handed) as an <img>. */
@@ -2083,11 +2104,11 @@ export class TownScene extends Phaser.Scene {
    * that fills as they fade (STACK_DECAY_MS after the last hit). Only shown while a skill on the bar (or on the left
    * click) spends them (Murat 2026-11-04).
    */
-  private chargeCell(mine: any, cls: ClassKind, ls: string, slots: string[], now: number): string {
+  private chargeCell(mine: any, cls: ClassKind, clicks: string[], slots: string[], now: number): string {
     const n = Math.max(0, Math.min(MAX_STACKS, mine.stacks | 0));
     if (n > this.chargeSeen.n) this.chargeSeen.at = now; // a hit built one (the server's clock isn't sent)
     this.chargeSeen.n = n;
-    const users = [ls, ...slots].filter((id, i, a) => id && a.indexOf(id) === i)
+    const users = [...clicks, ...slots].filter((id, i, a) => id && a.indexOf(id) === i)
       .map((id) => skillOf(cls, id)).filter((sd) => sd?.consume && skillLearned(cls, mine.talents, sd.id));
     if (!users.length) return "";
     const name = STACK_NAME[cls];
@@ -2107,7 +2128,7 @@ export class TownScene extends Phaser.Scene {
     // Slot bar at the bottom: 10 cells, cooldown shading, click to choose a skill
     const cells = Array.from({ length: SLOT_COUNT }, (_, i) => {
       const skill = slots[i] ?? "";
-      const picking = (this.pickSlot === i ? " picking" : "") + (this.activeSlot === i ? " active" : "");
+      const picking = (this.pickSlot === i ? " picking" : "");
       if (!skill) return `<div class="slot empty${picking}" data-slot="${i}" title="Click to put a skill on key ${SLOT_KEYS[i]}"><kbd>${SLOT_KEYS[i]}</kbd><i>+</i></div>`;
       const h = this.skillHud(cls, skill, cdm);
       const left = Math.max(0, h.cdMs - (now - h.last));
@@ -2118,23 +2139,26 @@ export class TownScene extends Phaser.Scene {
       return `<div class="slot${h.ult ? " ult" : ""}${wait}${unarmed ? " unarmed" : ""}${picking}" data-slot="${i}" data-skill="${skill}" data-tiphead="${h.name}" data-tip="${tipEsc((unarmed ? `${unarmed}. ` : "") + (skillOf(cls, skill)?.desc ?? ""))}" data-tiphint="Key ${SLOT_KEYS[i]} · click to change · wheel to scroll · right-click to clear">` +
         `${iconImg(power)}${shade}${unarmed ? `<i class="xout"></i>` : ""}<kbd>${SLOT_KEYS[i]}</kbd>${left > 0 && !unarmed ? `<b>${Math.ceil(left / 1000)}</b>` : ""}</div>`;
     }).join("");
-    // Left-click cell first: the weapon (or the spell picked for the left click)
-    const ls = this.leftSkill(), lpick = this.pickSlot === LEFT_PICK ? " picking" : "";
-    let lcell: string;
-    if (ls) {
-      const h = this.skillHud(cls, ls, cdm);
-      const left = Math.max(0, h.cdMs - (now - h.last));
-      const shade = left > 0 && h.cdMs >= 1000 ? `<div class="cd" style="height:${(left / h.cdMs) * 100}%"></div>` : "";
-      const unarmed = this.unarmedFor(mine, cls, ls);
-      lcell = `<div class="slot lmb${!canPay(pools, h.cost) ? " wait" : ""}${unarmed ? " unarmed" : ""}${lpick}" data-slot="L" data-tiphead="Left click: ${h.name}" data-tip="${tipEsc((unarmed ? `${unarmed}. ` : "") + (skillOf(cls, ls)?.desc ?? ""))}" data-tiphint="Click to change · wheel to scroll · right-click: back to the weapon">` +
-        `${iconImg(ls)}${shade}${unarmed ? `<i class="xout"></i>` : ""}<kbd>L</kbd></div>`;
-    } else {
+    // Left- and right-click cells first: the weapon, or the spell / skill picked for that click
+    const clickCell = (side: ClickSide) => {
+      const sk = this.clickSkill(side), key = side === "left" ? "L" : "R", Side = side === "left" ? "Left click" : "Right click / Space";
+      const pk = this.pickSlot === (side === "left" ? LEFT_PICK : RIGHT_PICK) ? " picking" : "";
+      if (sk) {
+        const h = this.skillHud(cls, sk, cdm);
+        const left = Math.max(0, h.cdMs - (now - h.last));
+        const shade = left > 0 && h.cdMs >= 1000 ? `<div class="cd" style="height:${(left / h.cdMs) * 100}%"></div>` : "";
+        const unarmed = this.unarmedFor(mine, cls, sk);
+        return `<div class="slot lmb ${side}${!canPay(pools, h.cost) ? " wait" : ""}${unarmed ? " unarmed" : ""}${pk}" data-slot="${key}" data-tiphead="${Side}: ${h.name}" data-tip="${tipEsc((unarmed ? `${unarmed}. ` : "") + (skillOf(cls, sk)?.desc ?? ""))}" data-tiphint="Click to change · wheel to scroll · right-click: back to the weapon">` +
+          `${iconImg(sk)}${shade}${unarmed ? `<i class="xout"></i>` : ""}<kbd>${key}</kbd></div>`;
+      }
       const w = attackProfile(cls, activeOf(mine));
-      lcell = `<div class="slot lmb${w.mana && !canPay(pools, { mana: w.mana }) ? " wait" : ""}${lpick}" data-slot="L" data-tiphead="Left click: ${WEAPON_TYPE_NAMES[w.type]}" data-tip="${tipEsc(`Weapon attack: ${ATTACK_WORDS[w.type]}.`)}" data-tiphint="Click to put a spell or skill on the left click instead">` +
-        `${this.weaponIcon(mine)}<kbd>L</kbd></div>`;
-    }
+      return `<div class="slot lmb ${side}${w.mana && !canPay(pools, { mana: w.mana }) ? " wait" : ""}${pk}" data-slot="${key}" data-tiphead="${Side}: ${WEAPON_TYPE_NAMES[w.type]}" data-tip="${tipEsc(`Weapon attack: ${ATTACK_WORDS[w.type]}.`)}" data-tiphint="Click to put a spell or skill on this click instead">` +
+        `${this.weaponIcon(mine)}<kbd>${key}</kbd></div>`;
+    };
+    const ls = this.leftSkill(), rs = this.rightSkill();
+    const lcell = clickCell("left") + clickCell("right");
     const bar = document.getElementById("hotbar")!;
-    const all = this.chargeCell(mine, cls, ls, slots, now) + lcell + cells + this.potionCells(mine); // potions right of the skill keys (Murat 2026-11-04)
+    const all = this.chargeCell(mine, cls, [ls, rs], slots, now) + lcell + cells + this.potionCells(mine); // potions right of the skill keys (Murat 2026-11-04)
     if (this.hotbarHtml !== all) { bar.innerHTML = all; this.hotbarHtml = all; }
   }
 

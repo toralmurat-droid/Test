@@ -4,7 +4,7 @@ import { ArraySchema, MapSchema, Schema, type } from "@colyseus/schema";
 import {
   AGGRO, aggroLevelFactor, BLOB_AI, BONES, DEMON, BROOD, Dir, FACTION, FEUD, MERGE, MobDef, MOTHER, SKELETON_AI, HIT_RADIUS, mobScale, regionMobLevel, regionSpecialLevel, InputState, MOB_ATTACK_RANGE, MOBS, MobKind, rollSkeletonWeapon, SKELETON_BOW, SKELETON_WEAPONS, SkeletonWeapon, REGEN_DELAY_MS, REGEN_RAMP_MS, regenFromStamina, SAFE_REGEN_MULT,
   RESPAWN_MS, TICK_RATE, TILE,
-  HOLLOW_KING, ELEM_BLOB, ELEM_MOVE, BEAST, BEAST_KINDS, BEAST_MOVES, BEAST_RIDER, type BeastMove,
+  HOLLOW_KING, ELEM_BLOB, ELEM_MOVE, inputDir, BEAST, BEAST_KINDS, BEAST_MOVES, BEAST_RIDER, type BeastMove,
 } from "../shared/constants";
 import { arrivalAt, LINK_RANGE, linkById, LINKS } from "../shared/dungeon";
 import {
@@ -58,6 +58,7 @@ const hitDir = (push: [number, number]) => {
 const lvlName = (id: string, cls: string) => `${gearName(id, cls)}${itemLevel(id) > 1 ? ` Lv ${itemLevel(id)}` : ""}`;
 import { Asker, boardFor, submit, tick as ideaTick, vote as ideaVote } from "../shared/ideas";
 import { hashAddr, ideaLog, saveIdeas } from "./ideaStore";
+import { dropLive, LiveState, rememberLive, takeLive } from "./handoff";
 
 export class Player extends Schema {
   @type("string") name = "";
@@ -367,6 +368,8 @@ const pushInput = (o: [number, number]): InputState => ({ up: o[1] < 0, down: o[
 
 /** Unit vector of the keys held (diagonals included), or null when not moving. */
 function aimFromInput(i: InputState): [number, number] | null {
+  const v = (i.up || i.down || i.left || i.right) && inputDir(i);
+  if (v) return v;
   const x = (i.right ? 1 : 0) - (i.left ? 1 : 0), y = (i.down ? 1 : 0) - (i.up ? 1 : 0);
   if (!x && !y) return null;
   const l = Math.hypot(x, y);
@@ -518,7 +521,7 @@ let announced = false;
 export function announceUpgrade() {
   if (announced) return;
   announced = true;
-  liveRooms.forEach((r) => r.broadcast("upgrading", {}));
+  liveRooms.forEach((r) => { r.rememberAll(); r.broadcast("upgrading", {}); });
 }
 
 export class TownRoom extends Room<TownState> {
@@ -557,6 +560,8 @@ export class TownRoom extends Room<TownState> {
       const p = this.state.players.get(client.sessionId);
       if (!p) return;
       p.input = { up: !!msg.up, down: !!msg.down, left: !!msg.left, right: !!msg.right };
+      const v = inputDir(msg); // point-and-click: exact walking angle
+      if (v) { p.input.vx = v[0]; p.input.vy = v[1]; }
       p.seq = msg.seq | 0;
     });
 
@@ -730,7 +735,12 @@ export class TownRoom extends Room<TownState> {
     p.hp = p.maxHp;
     const s = randomSpawn();
     p.x = s.x; p.y = s.y;
+    // Back after an update (or a dropped connection): right where they stood, as hurt as they were, in their group
+    if (options?.newGame) dropLive(p.name, p.cls);
+    const back = options?.newGame ? undefined : takeLive(p.name, p.cls);
+    if (back) this.resume(p, back);
     this.state.players.set(client.sessionId, p);
+    if (back?.group.length) this.regroupOnJoin(client.sessionId, p, back.group);
     this.sendBoard(client); // the Ideas board is ready as soon as it is opened
     console.log(`${p.name} the ${CLASSES[p.cls].name} joined (${this.clients.length} online)`);
   }
@@ -738,6 +748,7 @@ export class TownRoom extends Room<TownState> {
   onLeave(client: Client) {
     const p = this.state.players.get(client.sessionId);
     if (p) saveHero(p.name, p.cls, this.snapshot(p));
+    if (p && !announced) this.rememberHero(client.sessionId, p); // during an update everyone was remembered together (groups intact)
     this.partyLeave(client.sessionId);
     this.invites.delete(client.sessionId);
     this.tradeStop(client.sessionId, "The other hero left: trade cancelled.");
@@ -751,6 +762,47 @@ export class TownRoom extends Room<TownState> {
     liveRooms.delete(this);
     this.state.players.forEach((p) => saveHero(p.name, p.cls, this.snapshot(p)));
     flush();
+  }
+
+  // ---- Seamless updates (server/handoff.ts) --------------------------------
+
+  /** Groups to put back together after an update: hero name (lower case) -> the names they grouped with. */
+  private regroup = new Map<string, { names: string[]; until: number }>();
+
+  private rememberHero(id: string, p: Player) {
+    if (p.dead) return; // the dead come back at the square anyway
+    const group = p.party ? this.members(p.party).filter((m) => m !== id).map((m) => this.state.players.get(m)!.name) : [];
+    rememberLive(p.name, p.cls, { x: p.x, y: p.y, dir: p.dir, hp: p.hp, mana: p.mana, energy: p.energy, group });
+  }
+
+  /** The server is going down for an update: remember every hero at once, before anyone leaves and groups break up. */
+  rememberAll() { this.state.players.forEach((p, id) => this.rememberHero(id, p)); }
+
+  private resume(p: Player, s: LiveState) {
+    const fin = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
+    if (fin(s.x) && fin(s.y) && !isSolidAt(s.x, s.y) && !isDecorSolidAt(s.x, s.y)) { p.x = s.x; p.y = s.y; }
+    if (s.dir === "up" || s.dir === "down" || s.dir === "left" || s.dir === "right") p.dir = s.dir;
+    if (fin(s.hp)) p.hp = Math.max(1, Math.min(p.maxHp, Math.round(s.hp)));
+    if (fin(s.mana)) { p.mana = Math.max(0, Math.min(p.maxMana, s.mana)); this.syncMana(p); }
+    if (fin(s.energy)) p.energy = Math.max(0, Math.min(ENERGY.max, s.energy));
+  }
+
+  /** A returning hero finds the friends they grouped with before the update (whoever comes back second joins them up). */
+  private regroupOnJoin(id: string, me: Player, names: string[]) {
+    const now = Date.now();
+    const mine = me.name.toLowerCase();
+    this.regroup.forEach((v, k) => { if (v.until < now) this.regroup.delete(k); });
+    this.regroup.set(mine, { names: names.map((n) => n.toLowerCase()), until: now + 3 * 60_000 });
+    if (me.party) return;
+    this.state.players.forEach((o, oid) => {
+      if (me.party || oid === id) return;
+      const theirs = this.regroup.get(o.name.toLowerCase());
+      if (!theirs?.names.includes(mine) || !names.some((n) => n.toLowerCase() === o.name.toLowerCase())) return;
+      if (o.party && this.members(o.party).length >= PARTY.maxSize) return;
+      if (!o.party) o.party = `g${++this.partySeq}`;
+      me.party = o.party;
+      for (const pid of this.members(o.party)) this.tell(pid, pid === id ? `Back together with ${o.name}'s group.` : `${me.name} is back in the group.`);
+    });
   }
 
   // ---- Saves (server/accounts.ts) -------------------------------------------

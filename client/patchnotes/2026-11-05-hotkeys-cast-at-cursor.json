@@ -1,0 +1,10 @@
+{
+  "date": "2026-11-05",
+  "pr": 260,
+  "title": "Skill keys cast at the cursor",
+  "changes": [
+    "Keys 1 to 0 now cast their skill right away, toward the mouse cursor.",
+    "The skill bar has an R cell next to L: put any skill or your weapon attack on the right click, like the left click.",
+    "Right click and Space start as your weapon attack until you pick a skill for them."
+  ]
+}
