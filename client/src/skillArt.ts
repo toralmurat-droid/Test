@@ -864,6 +864,160 @@ const ART: Record<string, Draw> = {
     p.outline();
     for (const [x, y] of [[3, 12], [11, 14], [18, 11]]) p.line(x, y, x + 2, y - 2, EARTH[3]);
   },
+  // ===== Vampire: Blood =====
+  v_bolt: (p) => {
+    // a spinning bolt of blood with a dripping tail
+    for (let i = 0; i < 9; i++) { const t = i / 8; p.disc(4 + t * 11, 20 - t * 11, 0.6 + t * 1.6, i % 2 ? BLOOD[1] : BLOOD[0]); }
+    p.ball(16, 8, 4.5, BLOOD);
+    p.poly([[13, 5], [19, 3], [17, 9]], BLOOD[2]);
+    p.outline();
+    p.px(14, 6, "#ffffff"); p.px(15, 6, BLOOD[3]);
+    for (const [x, y] of [[6, 22], [9, 21], [11, 18]]) p.line(x, y, x, y + 1, BLOOD[2]);
+  },
+  v_boil: (p) => {
+    // a bubbling pool of blood, steaming
+    p.disc(12, 18, 10, BLOOD[0], 4); p.disc(12, 17, 9, BLOOD[1], 3.2);
+    for (const [x, y, r] of [[8, 15, 2.5], [14, 13, 3], [18, 16, 1.8], [11, 10, 1.6]]) { p.ball(x, y, r, BLOOD); }
+    p.outline();
+    for (const [x, y] of [[7, 13], [13, 11], [17, 15]]) p.px(x, y, "#ffffff");
+    for (const x of [6, 12, 18]) { p.px(x, 6, BLOOD[3]); p.px(x + 1, 4, BLOOD[2]); p.px(x, 2, BLOOD[1]); }
+  },
+  v_pact: (p) => {
+    // a sealed scroll with a blood seal and a dagger
+    p.rect(4, 6, 16, 12, BONE[2]); p.rect(4, 6, 16, 2, BONE[3]); p.rect(4, 16, 16, 2, BONE[1]);
+    p.disc(4, 12, 2, BONE[1], 6); p.disc(20, 12, 2, BONE[1], 6);
+    for (let i = 0; i < 4; i++) p.line(7, 9 + i * 2, 15 - (i % 2) * 3, 9 + i * 2, BONE[0]);
+    p.ball(15, 15, 3.2, BLOOD);
+    p.outline();
+    p.px(14, 14, BLOOD[3]); p.line(15, 18, 15, 21, BLOOD[2]); p.px(15, 22, BLOOD[1]);
+  },
+  v_exsang: (p) => {
+    // streams of blood pulled inward to a dark heart
+    p.ball(12, 12, 4, ["#2a0000", "#6d0000", "#b71c1c", "#ff8a80"]);
+    for (let k = 0; k < 6; k++) {
+      const a = k * Math.PI / 3 + 0.3;
+      for (let d = 5; d < 11; d++) { const b = a + (d - 5) * 0.12; p.disc(12 + Math.cos(b) * d, 12 + Math.sin(b) * d, d > 9 ? 1.2 : 0.6, d % 2 ? BLOOD[2] : BLOOD[1]); }
+    }
+    p.outline();
+    p.px(11, 11, "#ffffff");
+    for (const [x, y] of [[2, 5], [22, 8], [4, 20], [20, 20]]) p.px(x, y, BLOOD[3]);
+  },
+  v_tide: (p) => {
+    // a rolling wave of blood with spikes rising out of it
+    p.rect(0, 19, 24, 5, BLOOD[0]);
+    p.poly([[0, 19], [5, 13], [10, 16], [15, 9], [20, 13], [24, 11], [24, 20], [0, 20]], BLOOD[1]);
+    for (const [x, h] of [[4, 8], [11, 11], [18, 14]]) { p.poly([[x - 2, 19], [x, 19 - h], [x + 2, 19]], BLOOD[2]); p.line(x, 19 - h, x - 1, 18, BLOOD[3]); }
+    p.outline();
+    p.px(18, 5, "#ffffff"); p.px(11, 8, "#ffffff");
+    for (const x of [2, 8, 14, 21]) p.px(x, 21, BLOOD[2]);
+  },
+  // ===== Vampire: Night =====
+  v_mist: (p) => {
+    // a cloaked figure dissolving into red mist
+    p.poly([[9, 5], [15, 5], [17, 20], [7, 20]], SHAD[1]); p.poly([[9, 5], [12, 5], [12, 20], [7, 20]], SHAD[2]);
+    p.ball(12, 6, 2.6, ["#5e5560", "#bdb0b8", "#e6dcd6", "#ffffff"]);
+    p.poly([[8, 7], [12, 10], [16, 7], [17, 3], [12, 8], [7, 3]], CLOTH_R[1]);
+    p.outline();
+    p.px(11, 6, "#ff2d2d"); p.px(13, 6, "#ff2d2d");
+    for (const [x, y, c] of [[18, 12, 2], [20, 15, 1], [19, 18, 2], [21, 10, 3], [22, 16, 1], [17, 21, 2]] as [number, number, number][]) p.px(x, y, CLOTH_R[c]);
+  },
+  v_bats: (p) => {
+    // three bats in flight
+    const bat = (x: number, y: number, s: number) => {
+      p.poly([[x, y], [x - 5 * s, y - 3 * s], [x - 4 * s, y], [x - 6 * s, y + 1 * s], [x - 2 * s, y + 2 * s]], SHAD[2]);
+      p.poly([[x, y], [x + 5 * s, y - 3 * s], [x + 4 * s, y], [x + 6 * s, y + 1 * s], [x + 2 * s, y + 2 * s]], SHAD[1]);
+      p.line(x - 1, y, x - 5 * s, y - 3 * s, SHAD[3]); p.line(x + 1, y, x + 5 * s, y - 3 * s, SHAD[2]);
+      p.disc(x, y + 0.5 * s, 1.4 * s, "#2a1d3a"); p.px(x - 1, y - 1.2 * s, "#2a1d3a"); p.px(x + 1, y - 1.2 * s, "#2a1d3a");
+    };
+    bat(12, 8, 1.4); bat(5, 17, 0.9); bat(18, 18, 1);
+    p.outline();
+    p.px(11, 8, "#ff2d2d"); p.px(13, 8, "#ff2d2d"); p.px(5, 17, "#ff2d2d"); p.px(18, 18, "#ff2d2d");
+  },
+  v_gaze: (p) => {
+    // two burning red eyes in the dark
+    p.disc(12, 12, 10, SHAD[0], 6);
+    for (const x of [7, 17]) { p.disc(x, 12, 3.5, "#3a0000", 2); p.disc(x, 12, 2.6, "#c0182a", 1.4); p.rect(x, 11, 1, 3, OUT); }
+    p.poly([[3, 9], [10, 10], [10, 9], [4, 7]], SHAD[2]); p.poly([[21, 9], [14, 10], [14, 9], [20, 7]], SHAD[2]);
+    p.outline();
+    p.px(6, 11, "#ffffff"); p.px(16, 11, "#ffffff");
+    p.ring(12, 12, 11, BLOOD[1], Math.PI * 0.15, Math.PI * 0.85, 9); p.ring(12, 12, 11, BLOOD[1], Math.PI * 1.15, Math.PI * 1.85, 9);
+  },
+  v_cloak: (p) => {
+    // a high-collared cloak spread like wings, lined in red
+    p.poly([[12, 4], [22, 8], [20, 21], [12, 17], [4, 21], [2, 8]], SHAD[0]);
+    p.poly([[12, 6], [19, 9], [17, 19], [12, 15], [7, 19], [5, 9]], CLOTH_R[0]);
+    p.poly([[12, 6], [12, 15], [7, 19], [5, 9]], CLOTH_R[1]);
+    p.poly([[8, 3], [12, 7], [16, 3], [16, 7], [12, 10], [8, 7]], SHAD[1]);
+    p.outline();
+    for (const [x, y] of [[3, 13], [21, 13], [12, 20]]) p.px(x, y, SHAD[3]);
+    p.px(12, 11, GOLD[2]);
+  },
+  v_nightfall: (p) => {
+    // a blood moon over a black sky with bats
+    p.rect(1, 1, 22, 22, "#07040e");
+    p.ball(13, 10, 6.5, ["#4a0000", "#9b1b1b", "#e63946", "#ff8a80"]);
+    p.disc(16, 8, 5.5, "#07040e");
+    p.poly([[1, 23], [1, 18], [5, 15], [9, 18], [14, 14], [19, 18], [23, 16], [23, 23]], SHAD[0]);
+    p.outline();
+    p.poly([[5, 7], [2, 5], [4, 8]], OUT); p.poly([[5, 7], [8, 5], [6, 8]], OUT);
+    for (const [x, y] of [[3, 3], [20, 4], [21, 12]]) p.px(x, y, SHAD[3]);
+  },
+  // ===== Vampire: Fang =====
+  v_rend: (p) => {
+    // a thin blade leaving a red crescent
+    p.ring(12, 13, 10, BLOOD[1], Math.PI * 1.0, Math.PI * 1.85, 8); p.ring(12, 13, 9, BLOOD[2], Math.PI * 1.05, Math.PI * 1.8, 7);
+    p.sword(5, 20, 18, 5, STEEL, ["#2a0610", "#6d0f1f", "#a8102a", "#ff9aa8"]);
+    p.outline();
+    for (const [x, y] of [[4, 9], [6, 6], [3, 13]]) { p.px(x, y, BLOOD[2]); p.px(x, y + 1, BLOOD[1]); }
+  },
+  v_thirst: (p) => {
+    // a blade with blood running down it into a goblet
+    p.sword(12, 15, 12, 1, STEEL, ["#2a0610", "#6d0f1f", "#a8102a", "#ff9aa8"]);
+    p.line(12, 3, 12, 13, BLOOD[2]);
+    p.poly([[6, 15], [18, 15], [16, 19], [8, 19]], GOLD[1]); p.poly([[6, 15], [12, 15], [12, 19], [8, 19]], GOLD[2]);
+    p.rect(11, 19, 2, 3, GOLD[1]); p.rect(8, 22, 8, 1, GOLD[0]);
+    p.disc(12, 15.5, 5, BLOOD[1], 0.8);
+    p.outline();
+    p.px(7, 16, GOLD[3]); p.px(12, 14, BLOOD[3]);
+  },
+  v_hunger: (p) => {
+    // a pale mouth with long fangs and a drop of blood
+    p.poly([[3, 7], [21, 7], [19, 14], [12, 17], [5, 14]], "#5a0d12");
+    p.poly([[3, 7], [21, 7], [20, 9], [4, 9]], "#e6dcd6");
+    p.poly([[6, 9], [8, 9], [7, 16]], "#ffffff"); p.poly([[16, 9], [18, 9], [17, 16]], "#ffffff");
+    for (const x of [9, 11, 13]) p.rect(x, 9, 2, 2, "#f2ece6");
+    p.poly([[5, 14], [12, 17], [19, 14], [19, 16], [12, 20], [5, 16]], "#e6dcd6");
+    p.outline();
+    p.ball(7, 19, 1.4, BLOOD); p.px(7, 17, BLOOD[2]);
+  },
+  v_pounce: (p) => {
+    // a dark shape leaping down with claws out, motion streaks behind
+    for (const [x0, y0, x1, y1] of [[1, 4, 8, 9], [2, 9, 8, 12], [3, 1, 9, 6]]) p.line(x0, y0, x1, y1, SHAD[2]);
+    p.poly([[8, 7], [15, 8], [20, 14], [17, 19], [11, 15]], SHAD[1]); p.poly([[8, 7], [15, 8], [13, 12]], CLOTH_R[1]);
+    p.ball(16, 9, 2.4, ["#5e5560", "#bdb0b8", "#e6dcd6", "#ffffff"]);
+    for (const [x, y] of [[18, 19], [20, 18], [22, 16]]) p.line(x, y - 3, x, y, BONE[3]);
+    p.outline();
+    p.px(17, 9, "#ff2d2d");
+    p.spark(20, 21, 2, BLOOD[2], "#ffffff");
+  },
+  v_frenzy: (p) => {
+    // crossed red slashes around a screaming pale face
+    p.ball(12, 12, 5, ["#5e5560", "#bdb0b8", "#e6dcd6", "#ffffff"]);
+    p.rect(10, 14, 4, 2, "#3a0000"); p.px(10, 14, "#ffffff"); p.px(13, 14, "#ffffff");
+    p.poly([[8, 8], [11, 10], [11, 11], [8, 10]], "#1a0a10"); p.poly([[16, 8], [13, 10], [13, 11], [16, 10]], "#1a0a10");
+    p.outline();
+    p.px(10, 11, "#ff2d2d"); p.px(14, 11, "#ff2d2d");
+    p.thick(2, 3, 9, 20, 2, BLOOD[2]); p.thick(22, 3, 15, 20, 2, BLOOD[2]); p.line(3, 3, 9, 19, BLOOD[3]); p.line(21, 3, 15, 19, BLOOD[3]);
+    for (const [x, y] of [[4, 22], [20, 22], [12, 2]]) p.px(x, y, BLOOD[1]);
+  },
+  v_leech: (p) => {
+    // a single drop of blood flicked from a pale hand
+    p.poly([[2, 20], [8, 15], [11, 16], [9, 19], [5, 22]], "#e6dcd6"); p.poly([[8, 15], [11, 13], [12, 14], [11, 16]], "#bdb0b8");
+    p.ball(16, 8, 3.2, BLOOD, 4); p.poly([[14, 5], [16, 1], [18, 5]], BLOOD[2]);
+    p.outline();
+    p.px(15, 7, "#ffffff");
+    for (const [x, y] of [[13, 12], [12, 14]]) p.px(x, y, BLOOD[2]);
+  },
 };
 
 /** 24x24 colours ("" = transparent) for a skill, or undefined if the skill has no art. */

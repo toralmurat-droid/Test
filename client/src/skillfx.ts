@@ -375,6 +375,21 @@ export class SkillFx {
       }
       case "enchanthit": this.burst(ev.x, ev.y, 8, style, 6, 50, 300); break;
       case "thorns": this.burst(ev.x, ev.y, 10, style, 12, 70, 300); break;
+      case "drain": {
+        // The vampire drinks: drops of blood fly from the victim back into him, and he flushes red for a moment
+        const v = this.ent(ev.t);
+        if (!e || !v) break;
+        const x0 = v.sprite.x, y0 = v.sprite.y, z0 = v.top * 0.55;
+        const dx = e.sprite.x - x0, dy = e.sprite.y - y0, d = Math.max(8, Math.hypot(dx, dy));
+        const ms = Math.min(420, 140 + d * 2.2);
+        for (let i = 0; i < 7; i++) {
+          const k = 1000 / (ms * rnd(0.85, 1.1));
+          this.p(x0 + rnd(-3, 3), y0 + rnd(-2, 2), z0 + rnd(-3, 3), pick(PALETTE.blood.slice(1, 4)),
+            { vx: dx * k, vy: dy * k, vz: (e.top * 0.55 - z0) * k + rnd(-10, 10), life: ms, size: pick([1, 1, 2]), size1: 0, add: false });
+        }
+        this.scene.time.delayedCall(ms * 0.8, () => { const me = this.ent(ev.id); if (me) this.glow(me.sprite.x, me.sprite.y, me.top * 0.5, 9, 0xe63946, 220, 0.45); });
+        break;
+      }
     }
   }
 
@@ -785,6 +800,29 @@ export class SkillFx {
           if (chance(10)) this.ring(x, y, r * 0.7, "earth", 3, { life: 300, add: false });
           break;
         }
+        case "nightcloak": {
+          // Living darkness swirling around the vampire, with red sparks of stolen blood
+          const a = this.t / 220;
+          for (let i = 0; i < n(26 * area); i++) {
+            const b = a + Math.random() * Math.PI * 2, rr = r * rnd(0.35, 0.95);
+            this.p(x + Math.cos(b) * rr, y + Math.sin(b) * rr, rnd(0, 14), pick(PALETTE.shadow.slice(2)), { vx: -Math.sin(b) * 30, vy: Math.cos(b) * 30, vz: rnd(4, 12), life: rnd(400, 700), size: pick([2, 3, 3]), size1: 1, alpha: 0.55, add: false, depth: DEPTH - 1 });
+          }
+          if (chance(5)) this.p(x + rnd(-r, r) * 0.6, y + rnd(-r, r) * 0.4, rnd(4, 14), pick(PALETTE.blood), { vz: 12, life: 380, size: 1, size1: 0 });
+          break;
+        }
+        case "nightfall": {
+          // A starless dark settles on the ground; motes of blood rise from it toward the caster
+          for (let i = 0; i < n(40 * area); i++) {
+            const a = Math.random() * Math.PI * 2, d = Math.sqrt(Math.random()) * r;
+            this.p(x + Math.cos(a) * d, y + Math.sin(a) * d, rnd(0, 4), pick([0x07040e, 0x140b2b, 0x1a1033, 0x311b92]), { vx: rnd(-4, 4), vy: rnd(-4, 4), vz: rnd(1, 4), life: rnd(700, 1100), size: pick([4, 5, 6]), size1: 7, alpha: 0.5, add: false, depth: GROUND_DEPTH });
+          }
+          for (let i = 0; i < n(10 * area); i++) {
+            const a = Math.random() * Math.PI * 2, d = Math.sqrt(Math.random()) * r;
+            this.p(x + Math.cos(a) * d, y + Math.sin(a) * d, 1, pick(PALETTE.blood.slice(1, 4)), { vz: rnd(15, 30), life: rnd(500, 800), size: 1, size1: 0 });
+          }
+          if (this.t - born < 400) this.ring(x, y, r, "shadow", 20, { life: 500, up: 6, add: false });
+          break;
+        }
         case "drums": {
           // A beat every 0.8 s: a pulse of spirit light
           const beat = Math.floor((this.t - born) / 800), last = (f as any).__beat ?? -1;
@@ -848,6 +886,24 @@ export class SkillFx {
         break;
       }
       case "arcane": g = glow(0xc77dff, 0.3 * size); break;
+      case "bloodbolt": {
+        // A clot of dark blood with a bright wet heart, wobbling as it flies (tickShots leaves the drips)
+        const d = this.scene.add.graphics();
+        d.fillStyle(0x6d0000).fillCircle(0, 0.3, 3.1 * size).fillStyle(0xb71c1c).fillCircle(0, 0, 2.6 * size)
+          .fillStyle(0xe63946).fillCircle(-0.4 * size, -0.4 * size, 1.6 * size).fillStyle(0xffcdd2).fillRect(-1.2 * size, -1.3 * size, 0.9, 0.9);
+        g = this.scene.add.container(s.x, s.y, [glow(0xb71c1c, 0.32 * size).setPosition(0, 0).setAlpha(0.6), d]).setDepth(DEPTH);
+        break;
+      }
+      case "bat": {
+        // A little bat: dark body, two wings that beat in tickShots, red eyes
+        const d = this.scene.add.graphics();
+        const wing = (k: number) => { d.fillStyle(0x2a1d3a).fillTriangle(0, 0, k * 5.5, -2.5, k * 4.5, 1.5); d.fillStyle(0x5e35b1).fillTriangle(0, -0.3, k * 5.5, -2.5, k * 3, -0.6); };
+        wing(-1); wing(1);
+        d.fillStyle(0x1a1033).fillCircle(0, 0.3, 1.6).fillRect(-1.2, -2, 0.8, 1.2).fillRect(0.4, -2, 0.8, 1.2);
+        d.fillStyle(0xff2d2d).fillRect(-0.9, -0.3, 0.6, 0.6).fillRect(0.3, -0.3, 0.6, 0.6);
+        g = this.scene.add.container(s.x, s.y, [d]).setDepth(DEPTH);
+        break;
+      }
       default:
         if (!BASIC_SHOTS.has(look)) return undefined;
         g = this.basicShot(look, s, size);
@@ -999,6 +1055,19 @@ export class SkillFx {
           this.p(x - Math.cos(a) * 3, y - Math.sin(a) * 3, 0, pick(PALETTE.arcane), { life: 260, size: 1, size1: 0 });
           break;
         }
+        case "bloodbolt": {
+          const sz = s.size || 1;
+          (g as any).setScale(1 + 0.12 * Math.sin(age / 40), 1 - 0.1 * Math.sin(age / 40));
+          for (let i = 0; i < n(55 * sz); i++) this.p(x - ax * rnd(1, 4), y - ay * rnd(1, 4), rnd(-1, 1), pick(PALETTE.blood.slice(2)), { vx: -ax * 18, vy: -ay * 18, vz: -rnd(5, 15), g: 90, life: rnd(220, 380), size: pick([1, 1, 2]), size1: 0, add: false });
+          break;
+        }
+        case "bat": {
+          // wings beat as it flies
+          const beat = Math.sin(age / 32);
+          (g as any).setScale(1, 0.55 + 0.45 * Math.abs(beat));
+          if (Math.random() < 6 * dt) this.p(x, y, 0, pick(PALETTE.shadow), { life: 200, size: 1, size1: 0, add: false });
+          break;
+        }
         case "powerarrow": for (let i = 0; i < n(60); i++) this.p(x - ax * 5, y - ay * 5, 0, pick(PALETTE.wind), { life: 250, size: 1, size1: 0 }); break;
         case "frostarrow": for (let i = 0; i < n(50); i++) this.p(x - ax * 5, y - ay * 5, 0, pick(PALETTE.frost), { life: 300, size: 1, size1: 0 }); break;
         // ---- basic and monster shots
@@ -1060,7 +1129,7 @@ export class SkillFx {
     if (ip) { this.burst(x, y, 4, imb as FxStyle, r > 0 ? 18 : 8, 60, 320); if (r > 0) this.ring(x, y, r, imb as FxStyle, 20, { life: 380, up: 10 }); }
     if (BASIC_SHOTS.has(kind)) { this.basicImpact(x, y, kind, r); return true; }
     const style: FxStyle | undefined = ({ shuriken: "steel", lightning: "lightning", dragon: "fire", phoenix: "fire", inferno: "fire", flamewave: "fire",
-      iceshard: "frost", frozenorb: "frost", arcane: "arcane", powerarrow: "wind", frostarrow: "frost", net: "nature" } as Record<string, FxStyle>)[kind];
+      iceshard: "frost", frozenorb: "frost", arcane: "arcane", powerarrow: "wind", frostarrow: "frost", net: "nature", bloodbolt: "blood", bat: "shadow" } as Record<string, FxStyle>)[kind];
     if (!style) return false;
     if (r > 0) {
       const big = r >= 44;

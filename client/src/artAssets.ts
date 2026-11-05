@@ -7,7 +7,7 @@ import { SMOOTH } from "./isoflag";
  * (flipX for left), plus downright | upright (flipX for downleft | upleft) in the iso sheets.
  * Props/items: texture atlases "props" and "items" with frame names like "barrel", "potion_health".
  */
-export const CHARACTERS = ["ninja", "wizard", "knight", "archer", "barbarian", "blacksmith", "merchant", "villager", "guard", "druid", "witch", "watchman", "peasant", "farmwife", "labourer", "elder", "goodwife"] as const;
+export const CHARACTERS = ["ninja", "wizard", "knight", "archer", "barbarian", "vampire", "blacksmith", "merchant", "villager", "guard", "druid", "witch", "watchman", "peasant", "farmwife", "labourer", "elder", "goodwife"] as const;
 export const NPC_NAMES = ["blacksmith", "merchant", "villager", "guard", "druid", "witch", "watchman", "peasant", "farmwife", "labourer", "elder", "goodwife"] as const;
 export type CharacterName = (typeof CHARACTERS)[number];
 export const CHAR_ANIMS = ["idle", "walk", "attack", "attack2", "attack3", "attack4", "attack5", "hit", "ko", "skill", "idle2", "idle3", "run", "wave", "cheer", "laugh", "sit", "sleep", "walk2", "dodge", "jump", "block", "hit2", "ko2"] as const;

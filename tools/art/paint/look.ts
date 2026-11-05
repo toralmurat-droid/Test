@@ -30,6 +30,7 @@ export interface Look {
   mask?: number;    // cloth over the lower face
   rags?: number;    // tattered cloth hanging off a skeleton
   harness?: boolean; // leather strap across a bare chest (barbarian kit)
+  collar?: number; // tall stand-up collar on the cape, this colour inside (vampire kit)
   weaponKind?: WeaponKind; // what found weapons look like in this hero's hands (heroes start with weapon "none")
   /** Bone Demon (DEMON.harvest): skeleton pieces it wears, painted onto the body: 1 pauldrons, 2 rib cuirass, 3 bone blade, 4 skull crown. */
   boneArmour?: number;
@@ -211,6 +212,8 @@ export const HERO_BODIES: Record<string, Look> = {
   wizard: bare({ skin: 0xecc39c, hair: 0xe9e7ef, hairStyle: "long", beard: 0xeeeef4, beardStyle: "long", weaponKind: "staff", orb: 0x5ee6ff, fx: 0xc8fbff }),
   archer: bare({ skin: 0xe8b07e, hair: 0xb8662a, hairStyle: "ponytail", weaponKind: "bow", fx: 0xe8f7c8 }),
   barbarian: bare({ skin: 0xd99a6a, hair: 0xc8631f, hairStyle: "long", beard: 0xc8631f, beardStyle: "full", build: 1.12, weaponKind: "axe", fx: 0xffe0c0 }),
+  // pale as ash, black hair swept back, red eyes; slim
+  vampire: bare({ skin: 0xd6c3bd, eye: 0xc0182a, hair: 0x15111a, hairStyle: "short", build: 0.97, weaponKind: "sword", fx: 0xff5a6a }),
 };
 
 /**
@@ -255,6 +258,17 @@ export const KITS: Record<string, Partial<Record<"weapon" | "shield" | "armour" 
     armour: { harness: true, belt: 0x3a2414, buckle: 0xb8b8b8, legs: "fur", legCol: 0x6a4527, bracer: 0x4a3020, back: "pelt", capeCol: 0x8a6a48 },
     shoes: { boots: 0x45301e, bootStyle: "leather" },
     weapon: { weapon: "axe" },
+  },
+  // a noble of the night: dark wine coat with old-gold trim, black cape with a tall blood-red collar, iron circlet, thin blade
+  vampire: {
+    hat: { head: "crown", headCol: 0x55515c, headTrim: 0xc0182a },
+    armour: {
+      torso: "jerkin", torsoCol: 0x3a1422, trim: 0xb08a3a, belt: 0x1a1014, buckle: 0xb08a3a,
+      legs: "trousers", legCol: 0x1c1820, sleeve: 0x3a1422, arms: "cloth", glove: 0x141016,
+      back: "cape", capeCol: 0x17101a, collar: 0x8e0f22,
+    },
+    shoes: { boots: 0x1a1216, bootStyle: "leather" },
+    weapon: { weapon: "sword" },
   },
 };
 

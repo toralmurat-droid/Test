@@ -553,6 +553,7 @@ function backItem(c: C2, r: Rig, front: boolean) {
       const s = blobPath([[cx - 3.6 * r.b, sy - 0.4], [cx + 3.6 * r.b, sy - 0.4], [cx + 4.1 + flut * 0.2, hipY + 5.3], [cx, hipY + 5.8], [cx - 4.1 - flut * 0.2, hipY + 5.3]]);
       vol(c, s, sh(col, 0.75), [cx - 4, sy, 8, hipY - sy + 6], { ao: 0.3 });
     }
+    if (L.collar !== undefined) capeCollar(c, r, front);
   } else if (L.back === "quiver") {
     const draw = () => {
       const qa: P = r.dir === "up" ? [cx + 2.1, sy - 1.8] : r.R ? [cx - 2.4, sy - 1.6] : [cx + 2.6, sy - 1.6];
@@ -672,6 +673,35 @@ function arm(c: C2, r: Rig, which: "near" | "far") {
     if (armoured || L.trim) clipTo(c, ps, () => { c.beginPath(); ps(c); c.strokeStyle = css(C(armoured ? gear!.accent : L.trim!), 0.9); c.lineWidth = 0.4; c.stroke(); });
   }
   if ((L.boneArmour ?? 0) >= 1) bonePauldron(c, r, s, isNear);
+}
+
+/**
+ * A tall stand-up collar on the cape (the vampire's Nightcoat): stiff dark cloth flaring up behind the head, lined in
+ * `collar`. Behind the head when it faces us or the side, a low band across the nape seen from behind.
+ */
+function capeCollar(c: C2, r: Rig, front: boolean) {
+  const L = r.L, { cx, sy } = r, hy = r.head[1], col = C(L.capeCol!), lin = C(L.collar!);
+  if (r.dir === "up") {
+    if (!front) return;
+    const s = blobPath([[cx - 3.2 * r.b, sy + 0.4], [cx - 3.3 * r.b, hy + 0.9], [cx - 1.2, hy + 1.9], [cx + 1.2, hy + 1.9], [cx + 3.3 * r.b, hy + 0.9], [cx + 3.2 * r.b, sy + 0.4]]);
+    vol(c, s, col, [cx - 3.4, hy, 6.8, sy - hy + 1], { ao: 0.35 });
+    curve(c, [cx - 3.0, hy + 1.1], [cx, hy + 2.4], [cx + 3.0, hy + 1.1], sh(col, 1.5), 0.25, 0.7);
+    return;
+  }
+  if (front) return;
+  if (r.R && !r.diag) {
+    // side view: the collar stands up behind the nape
+    const s = blobPath([[cx - 0.4, sy - 0.2], [cx - 2.4, hy + 0.2], [cx - 3.2, hy + 0.8], [cx - 2.6, sy + 0.8]]);
+    vol(c, s, col, [cx - 3.5, hy, 3.5, sy - hy + 1], { ao: 0.35 });
+    fillShape(c, blobPath([[cx - 0.7, sy - 0.3], [cx - 2.2, hy + 0.6], [cx - 2.0, sy + 0.2]]), css(lin));
+    return;
+  }
+  // facing us (or turned 3/4): a red-lined fan rising from the shoulders to above the ears
+  const o = r.diag ? -0.5 : 0, w = 3.7 * r.b;
+  const s = blobPath([[cx - w + o, sy + 0.6], [cx - w - 0.3 + o, hy + 0.2], [cx - 2.0 + o, hy + 1.4], [cx + 2.0 + o, hy + 1.4], [cx + w + 0.3 + o, hy + 0.2], [cx + w + o, sy + 0.6]]);
+  vol(c, s, col, [cx - w - 1, hy, 2 * w + 2, sy - hy + 1], { ao: 0.3 });
+  const inner = blobPath([[cx - w + 0.7 + o, sy + 0.2], [cx - w + 0.3 + o, hy + 0.8], [cx - 2.0 + o, hy + 1.9], [cx + 2.0 + o, hy + 1.9], [cx + w - 0.3 + o, hy + 0.8], [cx + w - 0.7 + o, sy + 0.2]]);
+  vol(c, inner, lin, [cx - w, hy + 0.5, 2 * w, sy - hy], { ao: 0.4, hi: 1.15 });
 }
 
 // ---------------------------------------------------------------- head

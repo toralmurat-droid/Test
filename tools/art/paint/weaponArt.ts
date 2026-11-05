@@ -27,6 +27,7 @@ const F: Record<string, Form & { by?: Partial<Record<string, Form>> }> = {
   wizard_weapon: { top: "orb" },
   archer_weapon: { bow: "self" },
   barbarian_weapon: { head: "broad", grip: 0x5a3a22 },
+  vampire_weapon: { edge: "straight", len: 1.06, wid: 0.72, guard: "ringcross", pommel: "gem", gem: 0xc0182a, grip: 0x1a1014, fuller: true, trim: 0x9e1b2c },
   // old class weapons (shape follows the class)
   w_bronze: { edge: "leaf", guard: "disc", pommel: "ball", len: 0.92, head: "beard", top: "gnarl", bow: "self" },
   w_frost: { edge: "crystal", guard: "wide", pommel: "gem", gem: 0xa2e8ff, head: "crystal", top: "crystal", bow: "recurve", deco: "frost" },

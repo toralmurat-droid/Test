@@ -61,7 +61,7 @@ export const WEAPON_USE: Record<WeaponType, string> = {
   sword: "melee", katana: "fast melee", axe: "heavy melee", bow: "shoots arrows", staff: "fireballs", wand: "magic bolts, costs mana", fists: "punches",
 };
 /** The weapon each class is trained with: its class weapon and kit take this shape. */
-export const NATIVE_WEAPON: Record<ClassKind, WeaponType> = { knight: "sword", ninja: "katana", wizard: "staff", archer: "bow", barbarian: "axe" };
+export const NATIVE_WEAPON: Record<ClassKind, WeaponType> = { knight: "sword", ninja: "katana", wizard: "staff", archer: "bow", barbarian: "axe", vampire: "sword" };
 /** Weapon kind in a hero's hand: none = fists, an old class weapon = the class's own kind. */
 export function weaponType(cls: string, weaponId?: string): WeaponType {
   if (!weaponId) return "fists";
@@ -150,6 +150,10 @@ function starterKits(): GearDef[] {
     k("barbarian", "armour", "Fur Kilt", 0x6a4527, 0x8a6a48, "fur"),
     k("barbarian", "hat", "Horned Helm", 0x7d8792, 0xeadfc6, "horned"),
     k("barbarian", "shoes", "Fur-lined Boots", 0x45301e, 0x8a6a48, "plain"),
+    k("vampire", "weapon", "Bloodletter", 0x8e96a6, 0x9e1b2c, "plain"),
+    k("vampire", "armour", "Nightcoat", 0x2a1520, 0xb08a3a, "trim"),
+    k("vampire", "hat", "Night Circlet", 0x4a4650, 0xc0182a, "crown"),
+    k("vampire", "shoes", "Riding Boots", 0x1e1418, 0x5a3a2a, "plain"),
   ];
 }
 

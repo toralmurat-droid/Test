@@ -1,7 +1,7 @@
 import type { ClassKind } from "../../shared/classes";
 
 /**
- * Pixel icon of a class's charges (Valor, Ki, Arcane, Focus, Fury), shown by the skill keys when an equipped skill
+ * Pixel icon of a class's charges (Valor, Ki, Arcane, Focus, Fury, Blood), shown by the skill keys when an equipped skill
  * spends them. A small faceted crystal in the class colour, drawn in code at 16x16 and scaled up crisp.
  */
 const PAL: Record<ClassKind, [string, string, string]> = {
@@ -11,6 +11,7 @@ const PAL: Record<ClassKind, [string, string, string]> = {
   wizard: ["#2a1450", "#7b4fd6", "#e2d0ff"],
   archer: ["#203812", "#6aa43a", "#e3f5b0"],
   barbarian: ["#4a1408", "#d0601e", "#ffe08a"],
+  vampire: ["#2a0610", "#a8102a", "#ff9aa8"],
 };
 
 // Crystal shape: o = outline, d = dark facet, b = body, l = light facet, w = glint

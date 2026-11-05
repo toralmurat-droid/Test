@@ -34,6 +34,7 @@ export interface HitEffects {
   weakMs?: number; // deals WEAK_DEALT less damage
   fearMs?: number; // monsters run away dizzy; heroes are slowed and weakened
   pull?: number; // px pulled toward the centre
+  drain?: number; // % of the damage dealt that heals the attacker (vampire blood magic)
 }
 
 export interface AreaDef extends HitEffects {
@@ -130,6 +131,8 @@ export interface SkillDef {
   cd?: number; // ms
   cost?: number; // Stamina (physical skills)
   mana?: number; // Mana (spells): shared/mana.ts
+  /** Blood magic (vampire): also costs this % of max HP. Can't be cast with that little HP left, and never kills. */
+  blood?: number;
   chargeMs?: number; // buildup: roots the hero while charging (a stun cancels it)
   /** Melee wind-up: the hero gathers for this long (rooted, a stun cancels it) before the blow lands, matching the animation (client/src/skillMoves.ts). */
   windMs?: number;
@@ -179,7 +182,7 @@ export function impactMs(look: AreaLook | undefined, r: number): number {
     default: return 0;
   }
 }
-export const STACK_NAME: Record<ClassKind, string> = { knight: "Valor", ninja: "Ki", wizard: "Arcane", archer: "Focus", barbarian: "Fury" };
+export const STACK_NAME: Record<ClassKind, string> = { knight: "Valor", ninja: "Ki", wizard: "Arcane", archer: "Focus", barbarian: "Fury", vampire: "Blood" };
 
 export const BRANCHES: Record<ClassKind, [BranchDef, BranchDef, BranchDef]> = {
   knight: [{ name: "Valor", color: "#e63946" }, { name: "Bulwark", color: "#4cc9f0" }, { name: "Crusade", color: "#ffd166" }],
@@ -187,6 +190,7 @@ export const BRANCHES: Record<ClassKind, [BranchDef, BranchDef, BranchDef]> = {
   wizard: [{ name: "Fire", color: "#f77f00" }, { name: "Frost", color: "#4cc9f0" }, { name: "Storm", color: "#b388ff" }],
   archer: [{ name: "Marksman", color: "#e63946" }, { name: "Trapper", color: "#a68a64" }, { name: "Nature", color: "#7cfc00" }],
   barbarian: [{ name: "Fury", color: "#e63946" }, { name: "Warcry", color: "#ffd166" }, { name: "Earth", color: "#a68a64" }],
+  vampire: [{ name: "Blood", color: "#c1121f" }, { name: "Night", color: "#9d4edd" }, { name: "Fang", color: "#c0c8d8" }],
 };
 
 const S: Record<ClassKind, SkillDef[]> = <Record<ClassKind, SkillDef[]>><unknown>{
@@ -456,6 +460,60 @@ const S: Record<ClassKind, SkillDef[]> = <Record<ClassKind, SkillDef[]>><unknown
       desc: "Leap high into the air and come down like a mountain: a huge stun blast, then boulders rain around you.",
       move: { kind: "leap", dist: 90, invulnMs: 300 },
       areas: [{ r: 62, wpn: 1.5, stunMs: 450, kb: 2, delayMs: 350, look: "slam" }, { r: 22, wpn: 0.35, waves: 6, everyMs: 120, delayMs: 600, scatter: 72, look: "meteor" }] },
+
+  ],
+  // ---------------------------------------------------------------- VAMPIRE
+  // Warrior and caster in one (Murat 2026-11-05). Blood magic costs some of his own HP (blood) as well as mana, and
+  // most of his hits drink part of the damage back (drain): he pays in blood and takes it back from his enemies.
+  vampire: [
+    // Blood: blood magic (Magic)
+    { id: "v_bolt", name: "Blood Bolt", type: "Attack", branch: 0, row: 0, style: "blood", cd: 2000, mana: 8, blood: 3,
+      desc: "Hurl a bolt of your own blood. It bursts in the target, and you drink back 20% of the damage.",
+      shots: { kind: "bloodbolt", speed: 260, range: 160, radius: 5, dmg: 30, drain: 20, kb: 0.6 } },
+    { id: "v_boil", name: "Boil Blood", type: "Attack", branch: 0, row: 1, style: "blood", cd: 6000, mana: 16, blood: 4,
+      desc: "Make the blood of everyone at the spot boil: they are hurt and bleed for 3s.",
+      areas: [{ r: 30, ahead: 44, dmg: 22, burn: [8, 3000], kb: 0.4, look: "burst" }] },
+    { id: "v_pact", name: "Blood Pact", type: "Passive", branch: 0, row: 2, style: "blood", passive: { effect: "skill", perRank: 7 },
+      desc: "An old oath sealed in blood: all your skills hit harder." },
+    { id: "v_exsang", name: "Exsanguinate", type: "Buildup", branch: 0, row: 3, style: "blood", cd: 12000, mana: 20, consume: true,
+      desc: "Spend your Blood: tear the blood out of everyone around you, pull them in and drink a quarter of it. Each Blood stack adds 25%.",
+      areas: [{ r: 50, dmg: 32, drain: 25, pull: 8, kb: 0, look: "nova" }] },
+    { id: "v_tide", name: "Crimson Tide", type: "Ultimate", branch: 0, row: 4, style: "blood", cd: 20000, mana: 35, blood: 8, chargeMs: 400,
+      desc: "Open your veins: a wave of blood spikes rolls out ahead, slowing everything it hits and feeding you 10% of the damage.",
+      areas: [{ r: 24, ahead: 22, dmg: 38, drain: 10, slowMs: 700, kb: 1.2, waves: 6, everyMs: 100, line: 22, look: "spikes" }] },
+
+    // Night: mist, bats and dread (Mana)
+    { id: "v_mist", name: "Mist Form", type: "Movement", branch: 1, row: 0, style: "shadow", cd: 3500, cost: 20,
+      desc: "Dissolve into mist and drift ahead, untouchable for a moment. The mist you leave behind chills whoever stands in it.",
+      move: { kind: "blink", dist: 64, invulnMs: 400 }, areas: [{ r: 24, dmg: 10, slowMs: 900, atStart: true, look: "smoke" }] },
+    { id: "v_bats", name: "Bat Swarm", type: "Attack", branch: 1, row: 1, style: "shadow", cd: 4000, mana: 14,
+      desc: "Five bats burst from your cloak and bite whatever they reach, bringing a little blood back to you.",
+      shots: { kind: "bat", n: 5, spread: 50, speed: 210, range: 140, radius: 4, dmg: 16, drain: 10, kb: 0.2 } },
+    { id: "v_gaze", name: "Mesmerize", type: "War cry", branch: 1, row: 2, style: "shadow", cd: 14000, mana: 15,
+      desc: "Fix everyone around you with a red stare that drinks from them: monsters flee in dread, heroes falter, and all of them are weakened for 3s.",
+      cry: { r: 64, dmg: 18, drain: 15, fearMs: 1600, weakMs: 3000, look: "nova" } },
+    { id: "v_cloak", name: "Cloak of Night", type: "Aura", branch: 1, row: 3, style: "shadow", cd: 18000, mana: 25,
+      desc: "Wrap yourself in living darkness for 8s: it gnaws at enemies close to you, slows them and feeds you; you take 10% less damage.",
+      field: { kind: "nightcloak", r: 44, ms: 8000, tickMs: 600, follow: true, dmg: 13, drain: 20, slowMs: 500 }, buff: { ms: 8000, armor: 10 } },
+    { id: "v_nightfall", name: "Nightfall", type: "Ultimate", branch: 1, row: 4, style: "shadow", cd: 24000, mana: 40, chargeMs: 500,
+      desc: "Call down a starless night for 5s: the darkness saps every enemy inside and feeds you, and you hunt faster, healing on every hit.",
+      field: { kind: "nightfall", r: 72, ms: 5000, tickMs: 500, dmg: 14, drain: 15, weakMs: 800, slowMs: 600 }, buff: { ms: 5000, lifesteal: 8, speed: 15 } },
+
+    // Fang: the blade (Strength, Stamina)
+    { id: "v_rend", name: "Crimson Slash", type: "Attack", branch: 2, row: 0, style: "blood", windMs: 60, cd: 4500, cost: 20,
+      desc: "A quick, cruel slash: the wound bleeds, and you drink 10% of the damage.",
+      areas: [{ r: 26, ahead: 12, wpn: 2.3, burn: [5, 2000], drain: 10, kb: 1.2, look: "slash" }] },
+    { id: "v_thirst", name: "Thirst", type: "Enchant", branch: 2, row: 1, style: "blood", cd: 11000, cost: 15, mana: 10,
+      desc: "Your blade thirsts for 7s: every hit, your skills too, makes them bleed, and you heal 8% of the damage you deal.",
+      buff: { ms: 7000, lifesteal: 8, onHit: { burn: [3, 2000] } } },
+    { id: "v_hunger", name: "Undying Hunger", type: "Passive", branch: 2, row: 2, style: "blood", passive: { effect: "lifesteal", perRank: 2 },
+      desc: "The hunger never sleeps: heal part of all the damage you deal." },
+    { id: "v_pounce", name: "Night Pounce", type: "Attack", branch: 2, row: 3, style: "shadow", windMs: 70, cd: 10000, cost: 30,
+      desc: "Pounce on your prey and sink your teeth in: a heavy blow that stuns, and you drink 15% of it.",
+      move: { kind: "dash", dist: 56, invulnMs: 200 }, areas: [{ r: 22, ahead: 8, wpn: 2.2, stunMs: 350, drain: 15, kb: 1, look: "slash" }] },
+    { id: "v_frenzy", name: "Blood Frenzy", type: "Ultimate", branch: 2, row: 4, style: "blood", windMs: 80, cd: 18000, cost: 40,
+      desc: "Lose yourself to the hunger: four blood-red slashes all around you, then 4.5s of frenzy: faster hits that heal you, and nothing stops you.",
+      areas: [{ r: 40, wpn: 0.6, drain: 10, kb: 0.3, waves: 4, everyMs: 140, look: "slash" }], buff: { ms: 4500, atkspd: 20, lifesteal: 6, immune: true } },
   ],
 };
 
@@ -514,6 +572,15 @@ const TREE: Record<string, Shape> = {
   // Barbarian · Earth: Leap forks into the Seismic Wave (dead end) and Thick Skin on to the Avalanche
   b_slam: [1, undefined, ["sta", 1]], b_leap: [4, "b_slam", ["str", 2]], b_seismic: [10, "b_leap", ["str", 2]],
   b_thick: [7, "b_leap"], b_avalanche: [20, "b_thick", ["sta", 2]],
+  // Vampire · Blood: the bolt forks into Boil Blood, ending in Exsanguinate (dead end), and the Pact on to the Crimson Tide
+  v_bolt: [1, undefined, ["mag", 2]], v_boil: [4, "v_bolt", ["mag", 2]], v_exsang: [11, "v_boil", ["mag", 2.5]],
+  v_pact: [7, "v_bolt"], v_tide: [22, "v_pact", ["mag", 2.5]],
+  // Vampire · Night: Mesmerize hangs off the mist; the bats grow into the cloak and Nightfall
+  v_mist: [1], v_gaze: [6, "v_mist"], v_bats: [4, "v_mist", ["mag", 2]], v_cloak: [10, "v_bats", ["mag", 2]],
+  v_nightfall: [21, "v_cloak", ["mag", 2.5]],
+  // Vampire · Fang: Thirst leads to the Hunger (dead end); the slash grows into the Pounce and the Frenzy
+  v_rend: [1, undefined, ["str", 2]], v_thirst: [3, "v_rend"], v_hunger: [8, "v_thirst"], v_pounce: [9, "v_rend", ["str", 2]],
+  v_frenzy: [20, "v_pounce", ["str", 2.5]],
 };
 /**
  * Skills that need the right weapon in hand (Murat 2026-11-04): bow skills need a bow, blade work needs a melee
@@ -524,6 +591,7 @@ const NEEDS: Record<string, WeaponNeed> = {
   n_assassinate: "melee", n_cuts: "melee", n_flurry: "melee", n_parry: "melee", n_storm: "melee", n_poison: "melee",
   a_volley: "bow", a_power: "bow", a_fan: "bow", a_rain: "bow", a_net: "bow", a_firearrows: "bow", a_frostarrow: "bow", a_phoenix: "bow",
   b_cleave: "melee", b_berserk: "melee", b_whirlwind: "melee", b_slam: "melee",
+  v_rend: "melee", v_pounce: "melee", v_frenzy: "melee", v_thirst: "melee",
 };
 /** Second prerequisites (Diablo 2 style): skill id -> other skills that must be learned first. */
 const REQUIRES: Record<string, string[]> = {
@@ -580,6 +648,12 @@ export const childrenOf = (cls: ClassKind, id: string) => S[cls].filter((x) => x
  */
 export const CANTRIPS: Record<ClassKind, SkillDef[]> = {
   knight: [], ninja: [], archer: [], barbarian: [],
+  // The vampire's one basic spell: a flick of blood up close that drinks a little back (Murat 2026-11-05: warrior caster)
+  vampire: [
+    { id: "v_leech", name: "Leech", type: "Attack", branch: 0, row: 0, req: 1, style: "blood", cd: 450, mana: 4, cantrip: true,
+      desc: "Flick a drop of blood at a foe close by and drink a little of theirs back. Costs little mana: cast it again and again.",
+      shots: { kind: "bloodbolt", speed: 300, range: 95, radius: 4, size: 0.6, dmg: 12, drain: 15, kb: 0.2 } },
+  ],
   wizard: [
     { id: "w_spark", name: "Spark", type: "Attack", branch: 2, row: 0, req: 1, style: "lightning", cd: 300, mana: 3, cantrip: true,
       desc: "A crackling spark at close range. Costs little mana: cast it again and again.",

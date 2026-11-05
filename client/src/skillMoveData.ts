@@ -18,7 +18,7 @@ export type MoveAnim = (typeof MOVE_SHEET)[number];
 export const MOVE_DIRS = ["down", "up", "right", "downright", "upright"] as const;
 export const MOVE_COLS = 8;
 /** Heroes with melee skills (drawn in their native, melee stance). */
-export const MOVE_HEROES = ["knight", "ninja", "barbarian"];
+export const MOVE_HEROES = ["knight", "ninja", "barbarian", "vampire"];
 
 /** One pose run of a sequence: frames `f` of anim `a` play evenly over `ms`. */
 export interface Step {
@@ -113,6 +113,25 @@ export const MOVES: Record<string, Seq> = {
   },
   b_whirlwind: { // spins as long as the whirlwind lasts (the hero can walk meanwhile)
     act: [S("whirl", [2], 200, { spin: 1, ghost: 40, repeat: true })],
+    rec: [S("whirl", [4, 5, 6, 7], 180)],
+  },
+  // Vampire
+  v_rend: { // a quick twist and a cruel cut across the front
+    wind: [S("cleave", [1], 60, { fill: true })],
+    act: [S("cleave", [2], 30), S("cleave", [3], 40, { ghost: 14 }), S("cleave", [4, 5], 130)],
+    rec: [S("cleave", [6, 7], 140)],
+  },
+  v_mist: { // sink into the mist, gone, and step out of it ahead
+    act: [S("lunge", [1], 50), S("lunge", [2], 110, { hide: true }), S("lunge", [6, 7], 140)],
+  },
+  v_pounce: { // crouch low, spring at the prey, the blade driven in, hold it there to drink
+    wind: [S("leap", [0], 70, { fill: true })],
+    act: [S("lunge", [2], 50, { ghost: 12, lift: [0, 4] }), S("lunge", [3], 50, { ghost: 12, lift: [4, 0], dust: 8 }), S("lunge", [4, 5], 180)],
+    rec: [S("lunge", [6, 7], 150)],
+  },
+  v_frenzy: { // four turns, one per slash wave, blade out
+    wind: [S("whirl", [0], 80, { fill: true })],
+    act: [S("whirl", [2], 560, { spin: 4, ghost: 22, dust: 10 })],
     rec: [S("whirl", [4, 5, 6, 7], 180)],
   },
 };

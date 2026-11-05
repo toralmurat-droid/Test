@@ -1,4 +1,4 @@
-// Start screen backdrop: a night clearing with the village bonfire in the middle and the five heroes standing round it.
+// Start screen backdrop: a night clearing with the village bonfire in the middle and the six heroes standing round it.
 // Painted like the bonfire (bonfireArt.ts): a few flat tones per material, Bayer dithering, one colour per art cell.
 // The ground is painted once per screen size on the bonfire's cell grid; heroes use their own sheets at 4/3 of a cell
 // (the same proportion as in game), so both stay crisp at whole device pixels.
@@ -18,11 +18,12 @@ const BASE_X = 48, BASE_Y = 93; // where the fire pit sits inside a bonfire fram
 
 /** Where each hero stands, in cells from the fire's base, and which way it faces the fire. */
 const SLOTS: { dx: number; dy: number; dir: string; flip: boolean }[] = [
-  { dx: -128, dy: 12, dir: "right", flip: false },
-  { dx: -84, dy: -46, dir: "downright", flip: false },
-  { dx: 0, dy: -94, dir: "down", flip: false },
-  { dx: 84, dy: -46, dir: "downright", flip: true },
-  { dx: 128, dy: 12, dir: "right", flip: true },
+  { dx: -132, dy: 14, dir: "right", flip: false },
+  { dx: -102, dy: -40, dir: "downright", flip: false },
+  { dx: -40, dy: -88, dir: "downright", flip: false },
+  { dx: 40, dy: -88, dir: "downright", flip: true },
+  { dx: 102, dy: -40, dir: "downright", flip: true },
+  { dx: 132, dy: 14, dir: "right", flip: true },
 ];
 
 interface Hero {

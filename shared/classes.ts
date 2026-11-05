@@ -2,10 +2,10 @@
  * Hero classes. All gameplay numbers live here so the server and client agree.
  * Art convention: the client picks a sprite by `Player.cls` ("knight" | "ninja" | "wizard").
  */
-export type ClassKind = "knight" | "ninja" | "wizard" | "archer" | "barbarian";
-export const CLASS_KINDS: ClassKind[] = ["knight", "ninja", "wizard", "archer", "barbarian"];
+export type ClassKind = "knight" | "ninja" | "wizard" | "archer" | "barbarian" | "vampire";
+export const CLASS_KINDS: ClassKind[] = ["knight", "ninja", "wizard", "archer", "barbarian", "vampire"];
 
-export type SpecialKind = "guard" | "dash" | "nova" | "volley" | "rage";
+export type SpecialKind = "guard" | "dash" | "nova" | "volley" | "rage" | "drain";
 
 /**
  * One hit of the 3-hit attack combo. Pressing attack again within COMBO_WINDOW_MS after the previous hit's
@@ -100,6 +100,18 @@ export const CLASSES: Record<ClassKind, ClassDef> = {
     ],
     blurb: "Axe brawler. Rage: hit harder and move faster for 4s.",
   },
+  // Warrior and caster in one (Murat 2026-11-05): a pale noble with a thin blade who fights up close and works blood magic.
+  // Frailer than the fighters, but almost every skill drinks back part of the damage it deals (HitEffects.drain).
+  vampire: {
+    name: "Vampire", maxHp: 110, speed: 98, damage: 22, attackCooldownMs: 460, attackRange: 20,
+    special: { kind: "drain", name: "Drain", cooldownMs: 8000 },
+    combo: [
+      { damage: 1, knockback: 0.8 },
+      { damage: 1.05, knockback: 0.8 },
+      { damage: 1.65, knockback: 1.6, range: 26, lunge: 12, cooldownMs: 700 }, // a lunging thrust that draws blood
+    ],
+    blurb: "Blade and blood magic. Every hit drinks back some of the life he spills.",
+  },
 };
 
 /**
@@ -111,6 +123,10 @@ export const ATTACK_VARIANTS = 4;
 /** Chat commands like "/wave". Art convention: animation names match. Moving or fighting cancels them. */
 export const EMOTES = ["wave", "cheer", "laugh", "sit", "sleep"] as const;
 export type Emote = (typeof EMOTES)[number];
+
+/** Class trait: % of the damage of every basic hit (any weapon) that heals the hero. The vampire drinks what he spills. */
+export const BASIC_DRAIN: Partial<Record<ClassKind, number>> = { vampire: 5 };
+export const basicDrain = (cls: string) => BASIC_DRAIN[cls as ClassKind] ?? 0;
 
 export const GUARD_REDUCTION = 0.5; // knight shield blocks this fraction of damage
 export const DASH_INVULN_MS = 250; // ninja is untouchable right after a dash
@@ -124,7 +140,7 @@ export const ENERGY = { max: 100, regenPerSec: 14, cost: { special: 30, ult: 50,
  * Stamina per second by class: the fighters live on Stamina, the Wizard on Mana (Murat 2026-11-04: "some characters
  * rely more on stamina spend"). Wizard Stamina only pays for the dodge roll and Blink.
  */
-export const STAMINA_REGEN: Record<ClassKind, number> = { knight: 16, ninja: 16, wizard: 8, archer: 15, barbarian: 18 };
+export const STAMINA_REGEN: Record<ClassKind, number> = { knight: 16, ninja: 16, wizard: 8, archer: 15, barbarian: 18, vampire: 13 };
 export const staminaRegen = (cls: ClassKind) => STAMINA_REGEN[cls] ?? ENERGY.regenPerSec;
 export const energyName = (_cls?: string) => "Stamina";
 
