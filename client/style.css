@@ -470,14 +470,15 @@ html, body { margin: 0; height: 100%; background: #1b1b24; color: #eee; font: 14
 #rbars .rb-mp { height: 12px; --trk: #0F1630; --fil: #3B6FE0; --hi: #8FB0FF; --lo: #24459A; --edge: 2px; }
 #rbars .rb-st { height: 12px; --trk: #2A200C; --fil: #E0A92E; --hi: #FFE08A; --lo: #9A6F14; --edge: 2px; }
 #rbars .rb-mp .rb-txt, #rbars .rb-st .rb-txt { font-size: 11px; }
-/* XP bar above the slot bar: bronze menu frame (weathered.ts --wf-bronze), gold fill, text only while hovered */
-#xpbar { position: absolute; left: 50%; bottom: 100px; transform: translateX(-50%); box-sizing: border-box; height: 28px; pointer-events: auto;
-  border: 9px solid transparent; border-image: var(--wf-bronze) 9 / 9px / 0 repeat; image-rendering: pixelated;
-  background: #1a120a content-box; }
-#xpbar .xp-fill { position: absolute; top: 0; bottom: 0; left: 0; background: #E0B84A; box-shadow: inset 0 2px 0 #FFE08A, inset 0 -2px 0 #9A6F14;
+/* XP bar above the slot bar: thin bronze rim in the menu colours, gold fill, text only while hovered */
+#xpbar { position: absolute; left: 50%; bottom: 100px; transform: translateX(-50%); box-sizing: border-box; height: 12px; pointer-events: auto;
+  background: #1a120a; border: 2px solid #a8823a; border-top-color: #c9a050; border-bottom-color: #6a5232;
+  box-shadow: 0 0 0 1px #080504, inset 0 0 0 1px #080504; }
+#xpbar::after { content: ""; position: absolute; left: 0; right: 0; top: -6px; bottom: -4px; } /* easier to hover */
+#xpbar .xp-fill { position: absolute; top: 1px; bottom: 1px; left: 1px; max-width: calc(100% - 2px); background: #E0B84A; box-shadow: inset 0 1px 0 #FFE08A, inset 0 -1px 0 #9A6F14;
   transition: width .3s ease; }
-#xpbar .xp-txt { position: absolute; inset: -2px 0; display: none; align-items: center; justify-content: center; color: #fff;
-  font: 11px/1 'Pixelify Sans', monospace; -webkit-font-smoothing: none; white-space: nowrap; text-shadow: 1px 1px 0 #000, -1px 0 0 #000, 0 -1px 0 #000; }
+#xpbar .xp-txt { position: absolute; inset: -4px 0; display: none; align-items: center; justify-content: center; color: #fff;
+  font: 10px/1 'Pixelify Sans', monospace; -webkit-font-smoothing: none; white-space: nowrap; text-shadow: 1px 1px 0 #000, -1px 0 0 #000, 0 -1px 0 #000, 1px 0 0 #000; }
 #xpbar:hover .xp-txt { display: flex; }
 #gearbagtitle .gbgold { float: right; color: #e3bf6a; }
 #gearbagtitle .gbgold .pxi { width: 14px; height: 14px; vertical-align: -2px; margin-right: 3px; }
