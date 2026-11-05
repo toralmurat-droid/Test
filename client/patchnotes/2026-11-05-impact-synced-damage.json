@@ -1,5 +1,6 @@
 {
   "date": "2026-11-05",
+  "pr": 252,
   "title": "Spells hit when they land",
   "changes": [
     "Judgement Blade, meteors and arrow rains now deal their damage the moment they crash into the ground, not when they appear.",
