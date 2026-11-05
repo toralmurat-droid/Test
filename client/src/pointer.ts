@@ -205,16 +205,20 @@ export class PointerControls {
     return best;
   }
 
-  private down(p: Phaser.Input.Pointer) {
+  /** Space bar (Murat): exactly a right click at the mouse cursor; holding Space is holding the right button. */
+  spaceDown() { this.down(this.scene.input.activePointer, 2); }
+  spaceUp() { if (this.held === 2) this.held = -1; }
+
+  private down(p: Phaser.Input.Pointer, forced?: number) {
     if (this.host.blocked() || !this.host.me()) return;
-    const button = p.button;
+    const button = forced ?? p.button;
     if (button !== 0 && button !== 2) return;
     this.held = button;
     this.stuck = 0;
     this.firedAt = 0;
     const { enemy, spot } = this.pick(p);
     const target = button === 2 ? this.host.target() : "dir";
-    if (button === 0 && (p.event as MouseEvent | undefined)?.shiftKey) {
+    if (button === 0 && forced === undefined && (p.event as MouseEvent | undefined)?.shiftKey) {
       // Shift + left click (Murat): the left-click attack right where you stand, toward the mouse, no walking.
       // Hold the button to keep attacking.
       this.goal = { kind: "stand" };
