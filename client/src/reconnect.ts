@@ -1,10 +1,13 @@
 // Keeps players in the game when the server restarts (every deploy restarts it).
 // When the connection drops, a notice appears, we wait until the new server answers /health,
-// then reload the page and log the player straight back in with the same hero.
+// then reload the page and log the player straight back in with the same hero. The server puts the hero back
+// where they stood (server/handoff.ts), the chat lines are carried over, and after an update the new build is
+// fetched while the notice is still up, so the reload is short.
 // An update (the server said "upgrading", closed with code 4000, or came back as a new build) gets a cheerful
 // gilded "New lands are being forged!" notice; anything else gets a plain "Connection lost" one.
 
 const KEY = "rejoin";
+const BACKSTORY = "rejoinchat";
 
 export interface Rejoin { name: string; password: string; cls: string; color: number }
 
@@ -62,7 +65,7 @@ function show(upgrade: boolean) {
   title.textContent = upgrade ? "New lands are being forged!" : "Connection lost";
   card.append(title);
   const sub = document.createElement("p");
-  sub.textContent = upgrade ? "An update is on its way. Your hero is saved and will be back in a moment!" : "Reconnecting... your hero is saved.";
+  sub.textContent = upgrade ? "An update is on its way. Your hero is saved and will be back right where you stood!" : "Reconnecting... your hero is saved.";
   card.append(sub);
   if (upgrade) {
     const flav = document.createElement("small");
@@ -72,6 +75,36 @@ function show(upgrade: boolean) {
     card.append(flav);
   }
   box.append(card);
+}
+
+/** Keep the chat lines on screen over the reload. */
+function carry() {
+  const chat = [...(document.getElementById("chatlog")?.children ?? [])].map((el) => el.textContent ?? "").filter(Boolean);
+  try { sessionStorage.setItem(BACKSTORY, JSON.stringify({ chat, at: Date.now() })); } catch { /* ignore */ }
+}
+/** Chat lines carried over a reconnect, newest first (read once). */
+export function takeCarried(): string[] {
+  try {
+    const raw = sessionStorage.getItem(BACKSTORY);
+    sessionStorage.removeItem(BACKSTORY);
+    const r = raw ? JSON.parse(raw) : null;
+    if (!r || Date.now() - (r.at ?? 0) > 5 * 60_000 || !Array.isArray(r.chat)) return [];
+    return r.chat.filter((t: unknown) => typeof t === "string").slice(-8).reverse();
+  } catch { return []; }
+}
+
+/**
+ * Fetch the new build's page and scripts into the browser cache while the notice is still up, so the reload
+ * right after is quick (Vite's hashed files are cached for good). Gives up after a few seconds.
+ */
+async function prefetchBuild() {
+  if (import.meta.env.DEV) return;
+  const work = (async () => {
+    const html = await (await fetch("/", { cache: "no-store" })).text();
+    const urls = [...html.matchAll(/(?:src|href)="(\/assets\/[^"]+)"/g)].map((m) => m[1]);
+    await Promise.all(urls.map((u) => fetch(u).then((r) => r.arrayBuffer()).catch(() => null)));
+  })().catch(() => null);
+  await Promise.race([work, new Promise((r) => setTimeout(r, 6000))]);
 }
 
 let started = false;
@@ -88,13 +121,17 @@ export function reconnectSoon(login: Rejoin, upgrading = false) {
       const b = await health();
       if (b !== false) {
         const fresh = b !== null && myBuild !== null && b !== myBuild;
+        const updated = fresh || shownUpgrade;
+        const late = fresh && !shownUpgrade; // the update notice was not up yet: show it for a moment
         try { sessionStorage.setItem(KEY, JSON.stringify({ ...login, at: Date.now() })); } catch { /* ignore */ }
-        if (fresh && !shownUpgrade) { show(true); setTimeout(() => location.reload(), 1800); return; } // let them see it
+        carry();
+        if (late) show(true);
+        if (updated) await Promise.all([prefetchBuild(), new Promise((r) => setTimeout(r, late ? 1200 : 0))]);
         location.reload();
         return;
       }
     } catch { /* server still restarting */ }
-    setTimeout(tryAgain, 2000);
+    setTimeout(tryAgain, 1000); // check every second: back in the game as soon as the new server is up
   };
   // Give the old server a moment to hand over to the new one
   setTimeout(tryAgain, upgrading || upgradeSaid ? 1500 : 500);

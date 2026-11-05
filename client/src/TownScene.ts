@@ -1,7 +1,7 @@
 import Phaser from "phaser";
 import { quake } from "./camfx";
 import { chargeIcon } from "./chargeIcon";
-import { leaving, noteBuild, reconnectSoon, returnToStart, upgradeAnnounced } from "./reconnect";
+import { leaving, noteBuild, reconnectSoon, returnToStart, takeCarried, upgradeAnnounced } from "./reconnect";
 import { Client, Room } from "colyseus.js";
 import { BOSS, ELITE, InputState, MERGE, MAP_H, MAP_W, regenFromStamina, TICK_RATE, TILE } from "../../shared/constants";
 import { CLASSES, ClassKind, ENERGY, MAX_LEVEL, xpForLevel } from "../../shared/classes";
@@ -1079,6 +1079,9 @@ export class TownScene extends Phaser.Scene {
     // Server restart (every deploy): show a notice and log back in by itself
     const login = { name: this.opts.name, password: this.opts.password, cls: this.opts.cls, color: this.opts.color };
     noteBuild();
+    // Back from a restart: the chat as it was (what changed shows in the patch notes' "New update" notice)
+    const chatlog = document.getElementById("chatlog")!;
+    for (const t of takeCarried()) { const el = document.createElement("div"); el.textContent = t; chatlog.prepend(el); }
     this.room.onMessage("upgrading", () => upgradeAnnounced());
     this.room.onLeave((code: number) => { if (this.quitting) return; this.feed("Disconnected from server"); reconnectSoon(login, code === 4000); });
     // A connection that silently died (no updates for 15s) is treated the same way

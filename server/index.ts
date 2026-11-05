@@ -9,6 +9,7 @@ import { WebSocketTransport } from "@colyseus/ws-transport";
 import { TownRoom, announceUpgrade } from "./TownRoom";
 import { ideaLog, publicLog } from "./ideaStore";
 import { allAccounts, peek } from "./accounts";
+import { writeHandoff } from "./handoff";
 
 const PORT = Number(process.env.PORT ?? 2567);
 const app = express();
@@ -18,19 +19,35 @@ if (process.env.NODE_ENV === "production") {
   const dist = path.resolve(__dirname, "../dist");
   // Text files (the 2 MB game script, styles, data) go out gzipped: about 4x smaller, so the game loads faster.
   // Compressed once per file and kept in memory (the built files never change while the server runs).
-  const gz = new Map<string, Buffer | null>();
+  const gz = new Map<string, Promise<Buffer | null>>();
+  const squeeze = (file: string) => {
+    let p = gz.get(file);
+    if (!p) {
+      p = fs.promises.readFile(file)
+        .then((raw) => new Promise<Buffer | null>((ok) => zlib.gzip(raw, { level: 9 }, (err, out) => ok(err ? null : out))))
+        .catch(() => null);
+      gz.set(file, p);
+    }
+    return p;
+  };
   const TEXT = /\.(js|css|html|json|svg|txt)$/;
-  app.use((req, res, next) => {
+  // After a deploy every player reloads at once: squeeze the files right at start (in the background), not on
+  // the first request, so returning players are not kept waiting
+  const warm = (dir: string) => {
+    for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {
+      const file = path.join(dir, ent.name);
+      if (ent.isDirectory()) warm(file);
+      else if (TEXT.test(ent.name)) void squeeze(file);
+    }
+  };
+  setImmediate(() => { try { warm(dist); } catch { /* no build yet */ } });
+  app.use(async (req, res, next) => {
     if (req.method !== "GET" || !/\bgzip\b/.test(String(req.headers["accept-encoding"] ?? ""))) return next();
     const rel = req.path === "/" ? "/index.html" : req.path;
     if (!TEXT.test(rel)) return next();
     const file = path.join(dist, path.normalize(rel));
     if (!file.startsWith(dist + path.sep)) return next();
-    let body = gz.get(file);
-    if (body === undefined) {
-      try { body = zlib.gzipSync(fs.readFileSync(file), { level: 9 }); } catch { body = null; }
-      gz.set(file, body);
-    }
+    const body = await squeeze(file);
     if (!body) return next();
     res.setHeader("Content-Encoding", "gzip");
     res.setHeader("Vary", "Accept-Encoding");
@@ -94,6 +111,7 @@ gameServer.define("town", TownRoom);
 // before the message and the clean close were sent, so players only saw the connection drop.
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 gameServer.onBeforeShutdown(async () => { announceUpgrade(); await wait(400); });
-gameServer.onShutdown(() => wait(800));
+// The rooms are gone by now (everyone saved and remembered where they stood): hand those spots to the next server
+gameServer.onShutdown(() => { writeHandoff(); return wait(800); });
 
 gameServer.listen(PORT).then(() => console.log(`Game server on http://localhost:${PORT}`));
