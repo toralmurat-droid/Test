@@ -1,5 +1,6 @@
 {
   "date": "2026-11-05",
+  "pr": 262,
   "title": "Smooth click-to-walk",
   "changes": [
     "Clicking the ground now walks your hero straight there at any angle, not only in 8 directions.",
