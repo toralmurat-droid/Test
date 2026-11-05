@@ -9,6 +9,7 @@ import { TILE as TILE_PX } from "../../shared/constants";
 import { sheet } from "./worldProps";
 import { standingStone, STONE_H, STONE_W } from "./throneArt";
 import { heartShard, LandEl, SHARD_H, SHARD_W } from "./elementArt";
+import { dungeonQuestTextures } from "./dungeonArt";
 
 /**
  * Quest objects in the world (shared/quests.ts): spirit lanterns in the marsh, rotting shrines in the woods,
@@ -181,11 +182,12 @@ function textures(scene: Phaser.Scene) {
 const START: Record<string, string> = {
   lantern: "qobj_lantern_off", shrine: "qobj_shrine_rot", heart: "qobj_heart",
   engine: "qobj_engine_fire", beacon: "qobj_beacon", crypt: "qobj_crypt", phylactery: "qobj_phylactery", ward: "qobj_ward",
+  silk: "qobj_silk", totem: "qobj_totem",
 };
-const DONE: Record<string, string> = { engine: "qobj_engine_fire", beacon: "qobj_beacon_out", crypt: "qobj_crypt_sealed", phylactery: "qobj_phylactery_broken", ward: "qobj_ward_broken" };
-const SCALE: Record<string, number> = { shard: 1 / 1.5, heart: 2, shrine: 1.5, engine: 2.4, beacon: 1.4, crypt: 1.5, phylactery: 1.3, ward: 1 / 1.5 };
+const DONE: Record<string, string> = { engine: "qobj_engine_fire", beacon: "qobj_beacon_out", crypt: "qobj_crypt_sealed", phylactery: "qobj_phylactery_broken", ward: "qobj_ward_broken", silk: "qobj_silk_cut", totem: "qobj_totem_burnt" };
+const SCALE: Record<string, number> = { shard: 1 / 1.5, heart: 2, shrine: 1.5, engine: 2.4, beacon: 1.4, crypt: 1.5, phylactery: 1.3, ward: 1 / 1.5, silk: 1 / 1.5, totem: 1 / 1.5 };
 /** Coloured light some objects give off until done. */
-const GLOW: Record<string, number> = { beacon: 0x7dff6a, crypt: 0x5fe36a, phylactery: 0x7dff6a, ward: 0x9dff6a };
+const GLOW: Record<string, number> = { beacon: 0x7dff6a, crypt: 0x5fe36a, phylactery: 0x7dff6a, ward: 0x9dff6a, totem: 0xff6a2a };
 
 interface Drawn { o: QuestObject; img: Phaser.GameObjects.Image; glow?: Phaser.GameObjects.Arc; done?: boolean; anim?: Phaser.GameObjects.Sprite }
 
@@ -196,6 +198,7 @@ export class QuestObjects {
 
   constructor(private scene: Phaser.Scene) {
     textures(scene);
+    dungeonQuestTextures(scene);
     for (const o of allObjects()) {
       if (o.kind === "cocoon") {
         // Tobin, stuck in a wobbling bubble of green goo
@@ -232,7 +235,7 @@ export class QuestObjects {
     if (!o) return;
     const d = { o };
     const color = d.o.kind === "shard" ? ({ poison: 0x9be564, cold: 0xd6f6ff, fire: 0xffa848, shock: 0xbcd0ff } as Record<string, number>)[d.o.id.slice(6)] ?? 0xffffff : d.o.kind === "lantern" ? 0x7ff3ff : d.o.kind === "shrine" || d.o.kind === "crypt" ? 0xffd166
-      : d.o.kind === "heart" || d.o.kind === "engine" ? 0xff8c42 : d.o.kind === "phylactery" ? 0xe8ffd0 : d.o.kind === "ward" ? 0xc8ff8a : 0x9be564;
+      : d.o.kind === "heart" || d.o.kind === "engine" ? 0xff8c42 : d.o.kind === "phylactery" ? 0xe8ffd0 : d.o.kind === "ward" ? 0xc8ff8a : d.o.kind === "silk" ? 0xe8e4d4 : d.o.kind === "totem" ? 0xff7a2a : 0x9be564;
     for (let i = 0; i < 14; i++) {
       const a = Math.random() * Math.PI * 2, r = 8 + Math.random() * 14;
       const sp = this.scene.add.rectangle(d.o.x, d.o.y - 10, 2, 2, color).setDepth(d.o.y + 50);

@@ -2,7 +2,9 @@ export const TILE = 32; // px per tile (same pixel size as the 32px heroes)
 /** Tile art was first designed on a 16-unit grid: K = fine pixels per design unit. */
 export const ART_K = TILE / 16;
 export const MAP_W = 288; // tiles
-export const MAP_H = 216; // tiles
+/** Rows of the overworld (Oakvale's valley). The map is taller: under it lies the Mawdeep Warrens (shared/dungeon.ts). */
+export const WORLD_H = 216; // tiles
+export const MAP_H = 288; // tiles: the overworld plus the underground band (rows WORLD_H..MAP_H)
 export const TICK_RATE = 20; // server updates per second
 export const PLAYER_SPEED = 90; // px per second (default; classes override, see classes.ts)
 export const PLAYER_RADIUS = 5; // collision half-size in px
@@ -56,7 +58,9 @@ export function dirInput(dx: number, dy: number): InputState {
 }
 
 export type MobKind = "slime" | "skeleton" | "motherblob" | "blobling" | "shooterblob" | "warriorblob" | "healerblob" | "bandit" | "skeletonmage" | "necromancer" | "crawler" | "demon" | "banditchief" | "hollowking"
-  | "venomblob" | "frostblob" | "fireblob" | "stormblob";
+  | "venomblob" | "frostblob" | "fireblob" | "stormblob"
+  // the beast-folk of the Mawdeep Warrens (shared/dungeon.ts, BEAST below): men and women sewn into animal hides
+  | "gnawkin" | "tuskborn" | "silkwretch" | "duskwing" | "packlord" | "hornbrute" | "hidemother";
 
 export interface MobDef {
   name: string;
@@ -96,12 +100,20 @@ export const MOBS: Record<MobKind, MobDef> = {
   frostblob: { name: "Frost Blob", maxHp: 125, speed: 42, damage: 14, attackCooldownMs: 1250, aggroRange: 110, leash: 180, xp: 34 },
   fireblob: { name: "Fire Blob", maxHp: 110, speed: 48, damage: 15, attackCooldownMs: 1150, aggroRange: 125, leash: 190, xp: 36 },
   stormblob: { name: "Storm Blob", maxHp: 95, speed: 62, damage: 13, attackCooldownMs: 1000, aggroRange: 120, leash: 200, xp: 38 },
+  // The beast-folk of the Mawdeep Warrens (Murat 2026-11-05): their moves come from the beast sewn into them (BEAST below)
+  gnawkin: { name: "Gnawkin", maxHp: 62, speed: 74, damage: 11, attackCooldownMs: 760, aggroRange: 130, leash: 230, xp: 26 },
+  tuskborn: { name: "Tuskborn", maxHp: 140, speed: 54, damage: 18, attackCooldownMs: 1300, aggroRange: 120, leash: 240, xp: 40 },
+  silkwretch: { name: "Silkwretch", maxHp: 86, speed: 58, damage: 13, attackCooldownMs: 1100, aggroRange: 150, leash: 230, xp: 36 },
+  duskwing: { name: "Duskwing", maxHp: 76, speed: 70, damage: 12, attackCooldownMs: 950, aggroRange: 150, leash: 250, xp: 34 },
+  packlord: { name: "Gorehowl the Packlord", maxHp: 560, speed: 66, damage: 24, attackCooldownMs: 1100, aggroRange: 170, leash: 330, xp: 320 },
+  hornbrute: { name: "The Hornbrute", maxHp: 700, speed: 52, damage: 28, attackCooldownMs: 1400, aggroRange: 160, leash: 330, xp: 360 },
+  hidemother: { name: "The Hide-Mother", maxHp: 950, speed: 50, damage: 28, attackCooldownMs: 1300, aggroRange: 240, leash: 480, xp: 1000 },
 };
 
 /** Elite monsters: much tougher than the rest of their zone, with a bigger look and an "Elite" tag. */
-export const ELITE: Partial<Record<MobKind, true>> = { necromancer: true, demon: true, banditchief: true, hollowking: true };
+export const ELITE: Partial<Record<MobKind, true>> = { necromancer: true, demon: true, banditchief: true, hollowking: true, packlord: true, hornbrute: true, hidemother: true };
 /** Bosses: elites that lead a whole camp (tagged "Boss" instead of "Elite"). */
-export const BOSS: Partial<Record<MobKind, true>> = { banditchief: true, hollowking: true };
+export const BOSS: Partial<Record<MobKind, true>> = { banditchief: true, hollowking: true, hidemother: true };
 
 /**
  * Skeleton casters. Distances in px.
@@ -289,3 +301,49 @@ export const HOLLOW_KING = {
   servants: { hpFrac: 0.6, everyMs: 22000, castMs: 1100, kinds: ["skeleton", "warriorblob", "skeleton", "shooterblob"] as MobKind[], max: 4, levelDrop: 6 },
   wrath: { hpFrac: 0.3, inner: 44, radius: 150, windupMs: 1600, cooldownMs: 12000, dmgMult: 2, speed: 1.25, cooldown: 0.8 },
 };
+
+/**
+ * The beast-folk of the Mawdeep Warrens (Murat 2026-11-05: dark mixes of humans and animals, each attacking like the
+ * animal it was sewn to). Every move is marked on the ground before it lands so it can be dodged. Distances in px,
+ * damage as a multiple of the monster's own levelled damage. Server: TownRoom.beastSpecial, client: beastFx.ts.
+ *
+ * Gnawkin (rat): quick, in packs; its Plague Bite leaves a sickness that eats at you (poison over time).
+ * Tuskborn (boar): paws the ground and Gores, a straight charge that throws whoever is in its way.
+ * Silkwretch (spider): hangs back and spits Web where you stand: anyone caught is stuck fast for a moment; venom bite.
+ * Duskwing (bat): Screech, a cone of sound that slows; Swoop, a dive onto you that drinks your blood to heal itself.
+ * Gorehowl the Packlord (wolf, elite): Pounce onto a marked spot; Howl calls Gnawkin out of the dark and drives his kin wild; Rending Bite bleeds.
+ * The Hornbrute (bull, elite): Stampede, a long charge it can turn once; Stomp, a ring that knocks back and stuns.
+ * The Hide-Mother (bear, boss): Maul, a wide cleave; Roar, a ring that slows; below 60% she calls her brood; below 35%
+ * she rages and brings the roof down (falling stones under the heroes).
+ */
+export type BeastMove = "gore" | "web" | "screech" | "swoop" | "pounce" | "howl" | "stampede" | "stomp" | "maul" | "roar" | "brood" | "rockfall";
+export const BEAST = {
+  gore: { min: 34, max: 130, windupMs: 700, rushMs: 420, reach: 135, width: 14, cooldownMs: 6000, dmgMult: 1.7, knockback: 3 },
+  web: { min: 40, max: 135, windupMs: 500, flightMs: 520, radius: 22, cooldownMs: 5200, rootMs: 1300, dmgMult: 0.6 },
+  screech: { range: 70, reach: 84, halfAngle: 0.55, windupMs: 600, cooldownMs: 6500, dmgMult: 1.1, slowMs: 2200 },
+  swoop: { min: 45, max: 140, windupMs: 450, rushMs: 320, cooldownMs: 5000, dmgMult: 1.4, heal: 0.6 },
+  pounce: { min: 50, max: 150, windupMs: 650, rushMs: 380, radius: 30, cooldownMs: 6000, dmgMult: 1.8, knockback: 2 },
+  howl: { everyMs: 18000, castMs: 900, range: 220, rallyMs: 8000, rallySpeed: 1.25, rallyDmg: 1.25, summon: ["gnawkin", "gnawkin"] as MobKind[], max: 4, levelDrop: 4 },
+  stampede: { min: 40, max: 170, windupMs: 850, rushMs: 650, reach: 175, width: 20, cooldownMs: 8000, dmgMult: 2, knockback: 3.5 },
+  stomp: { range: 42, radius: 62, windupMs: 800, cooldownMs: 7000, dmgMult: 1.4, knockback: 2.5, stunMs: 700 },
+  maul: { range: 46, reach: 64, halfAngle: 0.9, windupMs: 800, cooldownMs: 5200, dmgMult: 1.7, knockback: 2.5 },
+  roar: { range: 160, radius: 120, inner: 0, windupMs: 1100, cooldownMs: 11000, dmgMult: 0.8, slowMs: 3000 },
+  brood: { hpFrac: 0.6, everyMs: 20000, castMs: 1000, kinds: ["gnawkin", "tuskborn", "gnawkin", "duskwing"] as MobKind[], max: 4, levelDrop: 4 },
+  rockfall: { hpFrac: 0.35, range: 260, count: 4, spread: 50, radius: 26, windupMs: 1300, cooldownMs: 8000, dmgMult: 1.5, speed: 1.2, cooldown: 0.8 },
+  /** Riders on a plain blow: the Gnawkin's plague and the Packlord's bleeding bite (ticks of damage after the hit). */
+  plague: { ticks: 4, tickMs: 600, dmgMult: 0.25 },
+  bleed: { ticks: 3, tickMs: 500, dmgMult: 0.35 },
+  venom: { ticks: 3, tickMs: 600, dmgMult: 0.2 },
+};
+/** Moves of each beast (checked in this order: the first one ready and in range is used). */
+export const BEAST_MOVES: Partial<Record<MobKind, BeastMove[]>> = {
+  tuskborn: ["gore"],
+  silkwretch: ["web"],
+  duskwing: ["screech", "swoop"],
+  packlord: ["howl", "pounce"],
+  hornbrute: ["stomp", "stampede"],
+  hidemother: ["rockfall", "brood", "roar", "maul"],
+};
+/** Damage over time after a plain blow (BEAST.plague / bleed / venom). */
+export const BEAST_RIDER: Partial<Record<MobKind, "plague" | "bleed" | "venom">> = { gnawkin: "plague", packlord: "bleed", silkwretch: "venom", hidemother: "bleed" };
+export const BEAST_KINDS: MobKind[] = ["gnawkin", "tuskborn", "silkwretch", "duskwing", "packlord", "hornbrute", "hidemother"];

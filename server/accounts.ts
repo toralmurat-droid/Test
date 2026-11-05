@@ -26,6 +26,8 @@ export interface HeroSave {
   tutId?: number; tutStage?: number; tutCount?: number; tutVer?: number;
   /** The Hollow Crown (CHAINS[4]), the first zone's last story. */
   crownId?: number; crownStage?: number; crownCount?: number; crownVer?: number;
+  /** The Hide Rite (CHAINS[5]), the Mawdeep Warrens' story. */
+  beastId?: number; beastStage?: number; beastCount?: number; beastVer?: number;
   /** Portal stones this hero has woken (shared/portals.ts ids). */
   portals?: string[];
 }
