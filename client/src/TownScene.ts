@@ -326,7 +326,9 @@ export class TownScene extends Phaser.Scene {
 
     // Keys without capture so typing in chat still works
     this.keys = this.input.keyboard!.addKeys("W,A,S,D,UP,DOWN,LEFT,RIGHT,SPACE,SHIFT,Q,C,G,T,F,R,E,J", false) as any;
-    this.input.keyboard!.on("keydown-SPACE", () => { if (!this.chatting()) this.room?.send("attack"); });
+    // Space = right click at the mouse cursor (Murat 2026-11-05; it used to be a plain basic attack)
+    this.input.keyboard!.on("keydown-SPACE", (ev: KeyboardEvent) => { if (!ev.repeat && !this.chatting()) this.pointer?.spaceDown(); });
+    this.input.keyboard!.on("keyup-SPACE", () => this.pointer?.spaceUp());
     // Skill slots 1..0 (top row or numpad). With the skill tree open and the mouse over a learned skill,
     // the number key puts that skill in the slot instead of using it.
     const names = ["ONE", "TWO", "THREE", "FOUR", "FIVE", "SIX", "SEVEN", "EIGHT", "NINE", "ZERO"];
@@ -1083,7 +1085,7 @@ export class TownScene extends Phaser.Scene {
 
   /**
    * Game keys must never "press" an on-screen button. Some browsers keep focus on a clicked button, and then
-   * Space (attack) or Enter would click it again, e.g. opening the bag. Keyboard clicks on HUD buttons are dropped.
+   * Space (right-click skill) or Enter would click it again, e.g. opening the bag. Keyboard clicks on HUD buttons are dropped.
    */
   private guardHudButtons() {
     const hud = document.getElementById("hud")!;

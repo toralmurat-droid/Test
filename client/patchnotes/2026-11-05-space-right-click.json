@@ -1,0 +1,8 @@
+{
+  "date": "2026-11-05",
+  "title": "Space bar uses your skill",
+  "changes": [
+    "Space now does the same as a right click: it uses your selected skill at the mouse cursor. Hold Space to keep using it.",
+    "Space no longer does a basic attack; use the left click for that."
+  ]
+}
