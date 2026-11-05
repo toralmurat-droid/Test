@@ -77,11 +77,12 @@ import { SiegeWork } from "./siegeWork";
 import { PERCH_LIFT } from "../../shared/bandits";
 import { icon, fillIcons } from "./pixelicons";
 import { ResourceBars } from "./resourceBars";
+import { bindElemFx } from "./elemFx";
 
 /** One painted bit on a merged blob, in body-relative units (-1..1 across the body). */
 interface BlobPart { kind: "patch" | "eye" | "mouth"; u: number; v: number; r: number; col: number }
 /** Body colours of the blob kinds, for the patches and eye rims of merged blobs. */
-const BLOB_COLORS: Record<string, number> = { slime: 0x7bd36b, blobling: 0xa6e86b, shooterblob: 0x9b6bd6, warriorblob: 0xd9573b, healerblob: 0xf5d0e6 };
+const BLOB_COLORS: Record<string, number> = { slime: 0x7bd36b, blobling: 0xa6e86b, shooterblob: 0x9b6bd6, warriorblob: 0xd9573b, healerblob: 0xf5d0e6, venomblob: 0x8fd13a, frostblob: 0x8fd0f0, fireblob: 0xe8622a, stormblob: 0x7f7cf0 };
 
 /**
  * Layout of a merged blob's extra features: a colour patch per swallowed blob, about two eyes and one mouth
@@ -209,7 +210,7 @@ const CONGRATS = [
 const PIXEL_FONT = "'Pixelify Sans', monospace";
 
 /** Goo colours of the blobs (match their painted sheets), for the splash when one is struck. */
-const GOO: Record<string, number> = { slime: 0x5fae4c, blobling: 0x8cc955, shooterblob: 0x7f5cb8, warriorblob: 0xb94a32, healerblob: 0xd9aec6 };
+const GOO: Record<string, number> = { slime: 0x5fae4c, blobling: 0x8cc955, shooterblob: 0x7f5cb8, warriorblob: 0xb94a32, healerblob: 0xd9aec6, venomblob: 0x6aa82a, frostblob: 0x9fd8f4, fireblob: 0xd04a1a, stormblob: 0x6a6ad8 };
 
 const tipEsc = (t: string) => t.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
 
@@ -627,6 +628,12 @@ export class TownScene extends Phaser.Scene {
       this.floatText(b.sprite.x, b.sprite.y - b.top - 6, `+${amount}`, "#7cfc00", PIXEL_FONT);
     });
     // Mother Blob special: she swells up (wind-up), then a shockwave ring; the slam also shakes the screen
+    // The elemental blobs' moves: venom splurt, frost nova, fire breath, storm sparks (client/src/elemFx.ts)
+    bindElemFx(this.room, {
+      scene: this, fx: this.fx, ent: (id) => this.entities.get(id),
+      say: (x, y, text, color) => this.floatText(x, y, text, color, PIXEL_FONT),
+      squash: (id, kx, ky, ms) => { const e = this.entities.get(id); if (e) this.squash(e, kx, ky, ms / 2); },
+    });
     this.room.onMessage("mbwind", ({ id, kind, ms }) => {
       const e = this.entities.get(id);
       if (!e) return;

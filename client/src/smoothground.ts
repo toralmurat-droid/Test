@@ -1,6 +1,6 @@
 import Phaser from "phaser";
 import { MAP_H, MAP_W, TILE } from "../../shared/constants";
-import { EMPTY, OBJECTS, T } from "../../shared/map";
+import { ELEMENT_LANDS, EMPTY, OBJECTS, T } from "../../shared/map";
 import type { GroundData } from "./groundPaint";
 
 /**
@@ -30,7 +30,7 @@ export class SmoothGround {
       const o = OBJECTS[y][x];
       if (o !== EMPTY && SOLID.has(o)) solid[y * MAP_W + x] = 1;
     }
-    const data: GroundData = { w: MAP_W, h: MAP_H, tile: TILE, ground: g, solid };
+    const data: GroundData = { w: MAP_W, h: MAP_H, tile: TILE, ground: g, solid, lands: ELEMENT_LANDS.map((l) => ({ x: l.x, y: l.y, w: l.w, h: l.h, el: l.el })) };
     const n = Math.max(1, Math.min(4, (navigator.hardwareConcurrency || 2) - 1));
     for (let i = 0; i < n; i++) {
       const w = new Worker(new URL("./groundWorker.ts", import.meta.url), { type: "module" });
