@@ -54,6 +54,8 @@ type Goal =
   | { kind: "stand"; since?: number };
 
 const STOP: InputState = { up: false, down: false, left: false, right: false };
+/** Holding the right button (or Space) asks for the spell this often, ms: Diablo 2 style hold-to-cast. */
+const CAST_REPEAT_MS = 90;
 
 export class PointerControls {
   private goal?: Goal;
@@ -311,7 +313,8 @@ export class PointerControls {
     }
 
     if (goal.kind === "cast") {
-      if (now - this.lastAct >= 250) {
+      // Held: ask again soon, so the next cast goes off the moment the cooldown allows (the server drops early tries)
+      if (now - this.lastAct >= (this.held === 2 ? CAST_REPEAT_MS : 250)) {
         if (this.held === 2) { const w = this.world(pointer); goal.x = w.x; goal.y = w.y; }
         this.lastAct = now;
         this.host.stop();
@@ -395,7 +398,7 @@ export class PointerControls {
     if (near) {
       this.path = [];
       if (goal.secondary) {
-        if (now - this.lastAct >= 220) {
+        if (now - this.lastAct >= (holding ? CAST_REPEAT_MS : 220)) {
           this.lastAct = now;
           this.host.stop();
           this.host.send("face", this.aimAt(e, me, true));

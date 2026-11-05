@@ -13,7 +13,7 @@ export interface DmgInfo { parts: DmgPart[]; total: number; burn?: number; stack
 export function skillDamage(cls: ClassKind, s: SkillDef, rank: number, st: Stats): DmgInfo | undefined {
   if (s.passive) return undefined;
   const r = Math.max(1, rank);
-  const power = rankPower(r) * levelPower(s) * scalePower(s, st, STATS[cls].base);
+  const power = rankPower(r) * levelPower(s) * (s.power ?? 1) * scalePower(s, st, STATS[cls].base);
   const t = rankTime(r);
   const wpnHit = CLASSES[cls].damage * attackMult(cls, st), mag = magicMult(cls, st);
   const base = (a: { wpn?: number; dmg?: number }) => ((a.wpn ?? 0) * wpnHit + (a.dmg ?? 0) * mag) * power;

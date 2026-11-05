@@ -153,7 +153,7 @@ export function castSkill(h: SkillHost, id: string, skillId: string): boolean {
   const at = skillTarget(s) === "point" && clicked !== undefined ? Math.max(0, Math.min(pointRange(s), clicked)) : undefined;
   let stacks = 0;
   if (s.consume) { stacks = u.sk.stacks; u.sk.stacks = 0; }
-  const power = rankPower(rank) * levelPower(s) * scalePower(s, h.stats?.(id), STATS[u.cls].base) *
+  const power = rankPower(rank) * levelPower(s) * (s.power ?? 1) * scalePower(s, h.stats?.(id), STATS[u.cls].base) *
     (s.consume && !s.buff?.perStack ? 1 + STACK_POWER * stacks : 1);
   h.fx({ ev: "cast", id, s: s.id, rank, stacks, charge: s.chargeMs ?? 0, wind: s.windMs ?? 0, x: u.x, y: u.y });
   // A buildup charges (rooted, a stun breaks it). A big melee blow winds up first, so it lands with the animation's
