@@ -1,5 +1,6 @@
 {
   "date": "2026-11-05",
+  "pr": 265,
   "title": "Wizard skill tree, Diablo 2 style",
   "changes": [
     "Wizard skills now unlock in tiers at levels 1, 6, 12, 18 and 24, and Frozen Orb at level 30. If one of your skills moved to a higher tier, its points come back to spend again.",
