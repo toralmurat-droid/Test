@@ -5,7 +5,7 @@ import { Stats } from "../../shared/powers";
 import { iconImg } from "./skillIcons";
 import {
   BRANCHES, childrenOf, EFFECT_TEXT, levelPower, lockReason, MAX_RANK, RANK_POWER, rankOf, SkillDef, SKILLS, spentPoints, STACK_NAME,
-  talentPoints,
+  synergyPower, talentPoints,
   NEED_TEXT,
 } from "../../shared/skills";
 import { damageText, scaleText, skillDamage } from "../../shared/skillInfo";
@@ -18,9 +18,10 @@ import { damageText, scaleText, skillDamage } from "../../shared/skillInfo";
  * Learned actives go on keys 1-0: hover the skill and press a number key, or click a key slot at the bottom.
  */
 const W = 600, H = 470; // tree area, CSS px (the canvas is drawn at half that: 2 px per art pixel)
-const TOP = 34, GROUND = H - 46, MAX_REQ = 24;
-// square-root scale: the early levels, where most skills sit, get more room
-const yOf = (req: number) => GROUND - 40 - Math.sqrt((req - 1) / (MAX_REQ - 1)) * (GROUND - 40 - TOP);
+const TOP = 34, GROUND = H - 46;
+// square-root scale: the early levels, where most skills sit, get more room. `top`: the class's highest skill level
+// (24 for most, 30 for the wizard's Diablo 2 style tiers) sits at the top.
+const yOf = (req: number, top: number) => GROUND - 40 - Math.sqrt(Math.min(1, (req - 1) / Math.max(1, top - 1))) * (GROUND - 40 - TOP);
 const GAP = 66; // a skill sits at least this far above the one it grows from
 
 interface Node { s: SkillDef; x: number; y: number }
@@ -115,6 +116,7 @@ export class TalentMenu {
   /** Where each skill sits: three boughs side by side; inside a bough the leaves are spread evenly, a parent sits above the middle of its children's base. */
   private layout(cls: ClassKind): Node[] {
     const out: Node[] = [];
+    const topReq = Math.max(24, ...SKILLS[cls].map((s) => s.req));
     for (let b = 0; b < 3; b++) {
       const list = SKILLS[cls].filter((s) => s.branch === b);
       const root = list.find((s) => !s.parent)!;
@@ -140,7 +142,7 @@ export class TalentMenu {
       const ys = new Map<string, number>();
       for (const s of list) { // list is in tree order: parents first
         const py = s.parent ? ys.get(s.parent)! : Infinity;
-        const y = Math.min(yOf(s.req), py - GAP);
+        const y = Math.min(yOf(s.req, topReq), py - GAP);
         ys.set(s.id, y);
         out.push({ s, x: Math.round(Math.max(36, Math.min(W - 36, s.parent ? xOf(s) : cx))), y: Math.round(Math.max(TOP, y)) });
       }
@@ -344,12 +346,12 @@ export class TalentMenu {
       rows.push(`<p class="ifx">${r > 0 ? EFFECT_TEXT[s.passive.effect](+(s.passive.perRank * r).toFixed(1)) + " now" : ""}</p>`);
       rows.push(`<p class="inext">${EFFECT_TEXT[s.passive.effect](s.passive.perRank)} per rank</p>`);
     } else {
-      const now = skillDamage(cls, s, Math.max(1, r), st);
+      const now = skillDamage(cls, s, Math.max(1, r), st, ranks);
       if (now) {
         rows.push(`<div class="idmg"><span>Damage${r > 0 ? ` (rank ${r})` : ""}</span><b>${now.total}</b></div><p class="iparts">${damageText(now)}</p>`);
         if (now.stacks) rows.push(`<p class="iparts">${now.stacks}</p>`);
         if (r > 0 && r < MAX_RANK) {
-          const nx = skillDamage(cls, s, r + 1, st);
+          const nx = skillDamage(cls, s, r + 1, st, ranks);
           if (nx) rows.push(`<p class="inext">Next rank: ${nx.total} (+${Math.round(RANK_POWER * 100)}% power, longer effects)</p>`);
         }
       } else if (r > 0 && r < MAX_RANK) rows.push(`<p class="inext">Next rank: longer, stronger effects</p>`);
@@ -359,13 +361,22 @@ export class TalentMenu {
     const lp = Math.round((levelPower(s) - 1) * 100);
     const power = [lp > 0 ? `+${lp}% power from its level` : "", scaleText(s)].filter(Boolean).join(" · ");
     if (power && !s.passive) rows.push(`<p class="iscale">${power}</p>`);
+    // Diablo 2 style synergies: which skills feed this one, and how much they add right now
+    if (s.synergy?.length) {
+      const nameOf = (id: string) => SKILLS[cls].find((x) => x.id === id)?.name ?? id;
+      const now = Math.round((synergyPower(s, ranks) - 1) * 100);
+      rows.push(`<p class="iscale">Synergies: ${s.synergy.map((y) => `+${y.pct}% per rank of ${nameOf(y.from)}`).join(", ")}${now > 0 ? ` (now +${now}%)` : ""}</p>`);
+    }
     const kids = childrenOf(cls, s.id);
     const parent = s.parent && SKILLS[cls].find((x) => x.id === s.parent);
-    rows.push(`<p class="ipath">${parent ? `Grows from ${parent.name}. ` : "Root of the branch. "}${kids.length ? `Leads to ${kids.map((k) => k.name).join(" and ")}.` : "Dead end: nothing grows higher."}</p>`);
+    const missing = (s.requires ?? []).filter((q) => rankOf(ranks, q) < 1).map((q) => SKILLS[cls].find((x) => x.id === q)?.name ?? q);
+    const also = (s.requires ?? []).map((q) => SKILLS[cls].find((x) => x.id === q)?.name ?? q);
+    rows.push(`<p class="ipath">${parent ? `Grows from ${parent.name}${also.length ? `, and needs ${also.join(" and ")}` : ""}. ` : "Root of the branch. "}${kids.length ? `Leads to ${kids.map((k) => k.name).join(" and ")}.` : "Dead end: nothing grows higher."}</p>`);
     const slots: string[] = [...(state.slots ?? [])];
     const slot = slots.indexOf(s.id);
     const status = why === "max" ? "Fully learned" : why === "" ? "Click to learn" : why === "level" ? `${pxIcon("lock")}Needs level ${s.req}` :
-      why === "above" ? `${pxIcon("lock")}Learn ${parent ? parent.name : "the skill below"} first` : r > 0 ? "Learned · no points left" : "No points left";
+      why === "above" ? `${pxIcon("lock")}Learn ${parent ? parent.name : "the skill below"} first` :
+      why === "requires" ? `${pxIcon("lock")}Learn ${missing.join(" and ")} first` : r > 0 ? "Learned · no points left" : "No points left";
     const keyNote = !s.passive && r > 0 ? (slot >= 0 ? ` · on key ${SLOT_KEYS[slot]}` : " · hover it and press 1-0 to put it on a key") : "";
     const pips = Array.from({ length: MAX_RANK }, (_, i) => `<i class="${i < r ? "on" : ""}"></i>`).join("");
     info.innerHTML = `<div class="ihead" style="--c:${color}">${iconImg(s.id, "iicon")}<div><b>${s.name}</b>` +

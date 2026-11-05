@@ -1,0 +1,10 @@
+{
+  "date": "2026-11-05",
+  "title": "Wizard skill tree, Diablo 2 style",
+  "changes": [
+    "Wizard skills now unlock in tiers at levels 1, 6, 12, 18 and 24, and Frozen Orb at level 30. If one of your skills moved to a higher tier, its points come back to spend again.",
+    "Some spells need a second skill: Meteor Shower needs Inferno Orb, Frozen Orb needs Blizzard, and Thunderstorm needs Mana Flow.",
+    "Synergies: each wizard spell gets +3 to +5% damage per rank of related spells (shown in the skill tree), so investing in one school pays off.",
+    "Meteor Shower, Blizzard and Thunderstorm get a short 0.3 second charge-up again."
+  ]
+}

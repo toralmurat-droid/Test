@@ -1,6 +1,6 @@
 import { CLASSES, ClassKind } from "./classes";
 import { attackMult, magicMult, Stats, STATS, STAT_NAMES } from "./powers";
-import { AreaDef, levelPower, rankPower, rankTime, scalePower, ShotDef, SkillDef, STACK_POWER, STACK_NAME } from "./skills";
+import { AreaDef, levelPower, rankPower, Ranks, rankTime, scalePower, ShotDef, SkillDef, STACK_POWER, STACK_NAME, synergyPower } from "./skills";
 
 /**
  * Damage numbers for the skill sheet (client/src/talents.ts), computed with the same rules as
@@ -10,10 +10,10 @@ import { AreaDef, levelPower, rankPower, rankTime, scalePower, ShotDef, SkillDef
 export interface DmgPart { what: string; per: number; n: number }
 export interface DmgInfo { parts: DmgPart[]; total: number; burn?: number; stacks?: string }
 
-export function skillDamage(cls: ClassKind, s: SkillDef, rank: number, st: Stats): DmgInfo | undefined {
+export function skillDamage(cls: ClassKind, s: SkillDef, rank: number, st: Stats, ranks?: Ranks): DmgInfo | undefined {
   if (s.passive) return undefined;
   const r = Math.max(1, rank);
-  const power = rankPower(r) * levelPower(s) * (s.power ?? 1) * scalePower(s, st, STATS[cls].base);
+  const power = rankPower(r) * levelPower(s) * (s.power ?? 1) * synergyPower(s, ranks) * scalePower(s, st, STATS[cls].base);
   const t = rankTime(r);
   const wpnHit = CLASSES[cls].damage * attackMult(cls, st), mag = magicMult(cls, st);
   const base = (a: { wpn?: number; dmg?: number }) => ((a.wpn ?? 0) * wpnHit + (a.dmg ?? 0) * mag) * power;
