@@ -98,9 +98,12 @@ export function floorAt(tx: number, ty: number): Floor | undefined {
 export const underground = (py: number) => py >= WORLD_H * TILE;
 export const floorAtPx = (px: number, py: number) => floorAt(Math.floor(px / TILE), Math.floor(py / TILE));
 
-/** Elite lairs and the boss den (map areas, tile rects): the Packlord's chamber, the Hornbrute's byre. */
+/**
+ * Elite lairs and the boss den (map areas, tile rects): the Packlord's chamber, the Hornbrute's byre, and the mini-boss
+ * zones (Old Gnasher's warren on the first floor, the Weaver's loom on the second). Each lair's guardians keep a chest (chests.ts).
+ */
 const lair = (f: Floor, i: number, name: string) => { const c = f.chambers[i]; return { name, x: Math.round(f.x + c.x - c.rx - 1), y: Math.round(f.y + c.y - c.ry - 1), w: Math.round(c.rx * 2 + 2), h: Math.round(c.ry * 2 + 2) }; };
-export const LAIRS = [lair(F2, 5, "Gorehowl's Lair"), lair(F3, 3, "The Hornbrute's Byre"), lair(F3, 4, "The Hide-Mother's Bed")];
+export const LAIRS = [lair(F2, 5, "Gorehowl's Lair"), lair(F3, 3, "The Hornbrute's Byre"), lair(F3, 4, "The Hide-Mother's Bed"), lair(F1, 7, "Gnasher's Warren"), lair(F2, 1, "The Weaver's Loom")];
 /** The boss den's centre (tile): the Hide-Mother rises from her bed of hides here. */
 export const DEN = { x: F3.x + F3.chambers[4].x, y: F3.y + F3.chambers[4].y };
 /** The three hide totems round her bed (quest objects, tiles). */

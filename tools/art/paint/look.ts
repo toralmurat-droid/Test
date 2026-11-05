@@ -37,8 +37,12 @@ export interface Look {
   bladeLen?: number;
   /** Beast-folk of the Mawdeep (shared/dungeon.ts): the animal head whose hide this man or woman was sewn into. */
   beast?: BeastHead;
+  /** The other half of the beast-folk: a man's face, the animal's head flayed back as a hood (the rest is beast). */
+  beastHood?: boolean;
+  /** What the rite grew on their backs: a naked tail, spider legs, wings that beat. */
+  tail?: number; spiderLegs?: number; wings?: { col: number; kind: "bat" | "feather" };
 }
-export type BeastHead = "rat" | "boar" | "spider" | "bat" | "wolf" | "bull" | "bear";
+export type BeastHead = "rat" | "boar" | "spider" | "bat" | "wolf" | "bull" | "bear" | "crow";
 
 /** Monsters painted with the same body code (sheets built by paint/mobs.ts). */
 export const MOB_LOOKS: Record<string, Look> = {
@@ -104,10 +108,46 @@ export const MOB_LOOKS: Record<string, Look> = {
     torso: "wrap", torsoCol: 0x8a8476, trim: 0x6e685c, legs: "wrapped", legCol: 0x7e786c, boots: 0x5a544a, bootStyle: "wrap",
     sleeve: 0x8a8476, arms: "wrap", glove: 0x2a2228, weapon: "none", fx: 0xd8ffc0,
   },
-  duskwing: { // bat: black fur, great ears, a cloak of wing-membrane
+  duskwing: { // bat: black fur, great ears, wing-membrane grown from the shoulders: it flies
     skin: 0x7a6662, beast: "bat", hairStyle: "none", head: "none", eyeGlow: 0xffe080,
     torso: "leather", torsoCol: 0x2e2426, trim: 0x1a1416, belt: 0x1a1416, legs: "fur", legCol: 0x2a2224, boots: 0x1e181a, bootStyle: "wrap",
-    sleeve: 0x2e2426, arms: "cloth", glove: 0x1e181a, weapon: "dagger", fx: 0xffe8c0, back: "cape", capeCol: 0x3a2628,
+    sleeve: 0x2e2426, arms: "cloth", glove: 0x1e181a, weapon: "dagger", fx: 0xffe8c0, wings: { col: 0x3a2628, kind: "bat" },
+  },
+  // the other half of each kind: a man's face under the flayed animal head, but the body gone over to the beast
+  gnawkin_folk: { // a bone-slinger: furred all over, claws, a naked tail; throws stones and bones
+    skin: 0xb09a8a, hairStyle: "none", beast: "rat", beastHood: true, head: "none", eye: 0x3a1010,
+    torso: "bare", torsoCol: 0x6e655c, belt: 0x2e2218, legs: "fur", legCol: 0x5e554c, boots: 0x6a5f56, bootStyle: "bare",
+    sleeve: 0x6e655c, arms: "bare", glove: 0x2a2018, weapon: "none", fx: 0xd8d0c0, tail: 0xa08078,
+  },
+  tuskborn_folk: { // a bristle-backed brute with a man's scowl under the boar's snout, a hatchet
+    skin: 0xa07a5e, hairStyle: "none", beard: 0x3a2a20, beardStyle: "stubble", beast: "boar", beastHood: true, head: "none",
+    torso: "bare", torsoCol: 0x3e3028, belt: 0x241a14, buckle: 0x6a5a48, harness: true, legs: "fur", legCol: 0x3a2c22, boots: 0x2a201a, bootStyle: "bare",
+    sleeve: 0x3e3028, arms: "bare", glove: 0x1e1610, weapon: "axe", fx: 0xffd0a0, build: 1.3,
+  },
+  silkwretch_folk: { // chitin where the skin was, spider legs out of the back, a woman's face under the spider's
+    skin: 0xc0b4a6, hairStyle: "none", beast: "spider", beastHood: true, head: "none", eye: 0x1a3a10, lips: 0x5a3a3a,
+    torso: "leather", torsoCol: 0x2a2228, trim: 0x4a3a44, legs: "wrapped", legCol: 0x3a3036, boots: 0x2a2228, bootStyle: "wrap",
+    sleeve: 0x2a2228, arms: "bare", glove: 0x1a1418, weapon: "none", fx: 0xd8ffc0, spiderLegs: 0x2e262c,
+  },
+  duskwing_folk: { // a pale face under the bat's ears, wings of skin, a hooked knife
+    skin: 0xb8a8a0, hairStyle: "none", beast: "bat", beastHood: true, head: "none", eye: 0x3a2a10,
+    torso: "bare", torsoCol: 0x2e2426, belt: 0x1a1416, legs: "fur", legCol: 0x2a2224, boots: 0x1e181a, bootStyle: "bare",
+    sleeve: 0x2e2426, arms: "bare", glove: 0x1e181a, weapon: "dagger", fx: 0xffe8c0, wings: { col: 0x4a2e30, kind: "bat" },
+  },
+  crowseer: { // a crow-folk seer: beaked, black-feathered, flies on crow wings and casts hexes from a bone staff
+    skin: 0x6a6070, beast: "crow", hairStyle: "none", head: "none", eyeGlow: 0xb8a8ff,
+    torso: "robe", torsoCol: 0x1e1a22, trim: 0x5a4a6a, sash: 0x3a2a4a, legs: "robe", legCol: 0x1a161e, boots: 0x3a3438, bootStyle: "bare",
+    sleeve: 0x1e1a22, arms: "cloth", glove: 0x3a3438, weapon: "staff", orb: 0xa890ff, fx: 0xc8b8ff, wings: { col: 0x1e1a24, kind: "feather" },
+  },
+  gnasher: { // Old Gnasher, the rat-queen of the Gnawing Halls: huge, mangy, a robe of rat pelts, a meat cleaver
+    skin: 0x7a6e64, beast: "rat", hairStyle: "none", head: "none", eyeGlow: 0xff3a2a,
+    torso: "robe", torsoCol: 0x4e463e, trim: 0x2e2620, sash: 0x5a1a12, legs: "fur", legCol: 0x4e463e, boots: 0x6a5f56, bootStyle: "bare",
+    sleeve: 0x5e554c, arms: "bare", glove: 0x2a2018, weapon: "axe", fx: 0xd8d0c0, back: "pelt", capeCol: 0x5a5148, tail: 0xa08078, build: 1.45,
+  },
+  weaver: { // the Weaver of the Silk Pens: a spider-matron on eight legs of chitin, swathed in silk, a staff hung with cocoons
+    skin: 0xb8b0a2, beast: "spider", hairStyle: "none", head: "none", eyeGlow: 0x9dff6a,
+    torso: "robe", torsoCol: 0xb0aa9c, trim: 0x6e685c, sash: 0x3a3036, legs: "robe", legCol: 0x9a9486, boots: 0x2a2228, bootStyle: "wrap",
+    sleeve: 0xa8a294, arms: "wrap", glove: 0x2a2228, weapon: "staff", orb: 0x9dff6a, fx: 0xd8ffc0, spiderLegs: 0x2a2228, build: 1.35,
   },
   packlord: { // Gorehowl: a hulking wolf-man, grey pelt, a notched axe, bone trinkets
     skin: 0x9a8a7a, beast: "wolf", hairStyle: "none", head: "none", eyeGlow: 0xffd23c,

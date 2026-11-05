@@ -50,7 +50,7 @@ export const MOB_AFFINITY: Partial<Record<MobKind, Partial<Record<Element, numbe
 export const mobAffinity = (kind: string, el: Element) => MOB_AFFINITY[kind as MobKind]?.[el] ?? 1;
 
 /** The element of a monster's magic shot (hero resistances apply to it). Unset = Physical. */
-export const MOB_SHOT_ELEMENT: Partial<Record<MobKind, Element>> = { shooterblob: "poison", skeletonmage: "cold", necromancer: "poison", hollowking: "cold" };
+export const MOB_SHOT_ELEMENT: Partial<Record<MobKind, Element>> = { shooterblob: "poison", skeletonmage: "cold", necromancer: "poison", hollowking: "cold", crowseer: "poison" };
 /** The element of a monster's melee blows and special moves (unset = Physical). */
 export const MOB_MELEE_ELEMENT: Partial<Record<MobKind, Element>> = { venomblob: "poison", frostblob: "cold", fireblob: "fire", stormblob: "shock" };
 

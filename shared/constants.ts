@@ -60,7 +60,7 @@ export function dirInput(dx: number, dy: number): InputState {
 export type MobKind = "slime" | "skeleton" | "motherblob" | "blobling" | "shooterblob" | "warriorblob" | "healerblob" | "bandit" | "skeletonmage" | "necromancer" | "crawler" | "demon" | "banditchief" | "hollowking"
   | "venomblob" | "frostblob" | "fireblob" | "stormblob"
   // the beast-folk of the Mawdeep Warrens (shared/dungeon.ts, BEAST below): men and women sewn into animal hides
-  | "gnawkin" | "tuskborn" | "silkwretch" | "duskwing" | "packlord" | "hornbrute" | "hidemother";
+  | "gnawkin" | "tuskborn" | "silkwretch" | "duskwing" | "packlord" | "hornbrute" | "hidemother" | "crowseer" | "gnasher" | "weaver";
 
 export interface MobDef {
   name: string;
@@ -105,13 +105,16 @@ export const MOBS: Record<MobKind, MobDef> = {
   tuskborn: { name: "Tuskborn", maxHp: 140, speed: 54, damage: 18, attackCooldownMs: 1300, aggroRange: 120, leash: 240, xp: 40 },
   silkwretch: { name: "Silkwretch", maxHp: 86, speed: 58, damage: 13, attackCooldownMs: 1100, aggroRange: 150, leash: 230, xp: 36 },
   duskwing: { name: "Duskwing", maxHp: 76, speed: 70, damage: 12, attackCooldownMs: 950, aggroRange: 150, leash: 250, xp: 34 },
+  crowseer: { name: "Crowseer", maxHp: 70, speed: 60, damage: 15, attackCooldownMs: 1700, aggroRange: 170, leash: 250, xp: 40 },
+  gnasher: { name: "Old Gnasher", maxHp: 480, speed: 68, damage: 21, attackCooldownMs: 1000, aggroRange: 160, leash: 300, xp: 260 },
+  weaver: { name: "The Weaver", maxHp: 520, speed: 54, damage: 22, attackCooldownMs: 1300, aggroRange: 190, leash: 300, xp: 280 },
   packlord: { name: "Gorehowl the Packlord", maxHp: 560, speed: 66, damage: 24, attackCooldownMs: 1100, aggroRange: 170, leash: 330, xp: 320 },
   hornbrute: { name: "The Hornbrute", maxHp: 700, speed: 52, damage: 28, attackCooldownMs: 1400, aggroRange: 160, leash: 330, xp: 360 },
   hidemother: { name: "The Hide-Mother", maxHp: 950, speed: 50, damage: 28, attackCooldownMs: 1300, aggroRange: 240, leash: 480, xp: 1000 },
 };
 
 /** Elite monsters: much tougher than the rest of their zone, with a bigger look and an "Elite" tag. */
-export const ELITE: Partial<Record<MobKind, true>> = { necromancer: true, demon: true, banditchief: true, hollowking: true, packlord: true, hornbrute: true, hidemother: true };
+export const ELITE: Partial<Record<MobKind, true>> = { necromancer: true, demon: true, banditchief: true, hollowking: true, packlord: true, hornbrute: true, hidemother: true, gnasher: true, weaver: true };
 /** Bosses: elites that lead a whole camp (tagged "Boss" instead of "Elite"). */
 export const BOSS: Partial<Record<MobKind, true>> = { banditchief: true, hollowking: true, hidemother: true };
 
@@ -341,9 +344,21 @@ export const BEAST_MOVES: Partial<Record<MobKind, BeastMove[]>> = {
   silkwretch: ["web"],
   duskwing: ["screech", "swoop"],
   packlord: ["howl", "pounce"],
+  crowseer: ["screech"],
+  gnasher: ["howl", "pounce"],
+  weaver: ["brood", "web"],
   hornbrute: ["stomp", "stampede"],
   hidemother: ["rockfall", "brood", "roar", "maul"],
 };
 /** Damage over time after a plain blow (BEAST.plague / bleed / venom). */
-export const BEAST_RIDER: Partial<Record<MobKind, "plague" | "bleed" | "venom">> = { gnawkin: "plague", packlord: "bleed", silkwretch: "venom", hidemother: "bleed" };
-export const BEAST_KINDS: MobKind[] = ["gnawkin", "tuskborn", "silkwretch", "duskwing", "packlord", "hornbrute", "hidemother"];
+export const BEAST_RIDER: Partial<Record<MobKind, "plague" | "bleed" | "venom">> = { gnawkin: "plague", packlord: "bleed", silkwretch: "venom", hidemother: "bleed", gnasher: "plague", weaver: "venom" };
+/** Who answers a beast's Brood or Howl (default BEAST.brood.kinds / BEAST.howl.summon). */
+export const BEAST_BROOD: Partial<Record<MobKind, MobKind[]>> = { gnasher: ["gnawkin", "gnawkin", "gnawkin"], weaver: ["silkwretch", "silkwretch"] };
+/**
+ * Half-folk variants (Mob.weapon "folk", Murat 2026-11-05): a man's face under the flayed animal head, the body gone
+ * over to the beast. Gnawkin bone-slingers throw stones from range; the rest fight like their kind.
+ */
+export const BEAST_FOLK: Partial<Record<MobKind, number>> = { gnawkin: 0.4, tuskborn: 0.35, silkwretch: 0.4, duskwing: 0.4 };
+/** Beast-folk that fly (drawn hovering, client textures.ts). */
+export const BEAST_FLYERS: MobKind[] = ["duskwing", "crowseer"];
+export const BEAST_KINDS: MobKind[] = ["gnawkin", "tuskborn", "silkwretch", "duskwing", "packlord", "hornbrute", "hidemother", "crowseer", "gnasher", "weaver"];

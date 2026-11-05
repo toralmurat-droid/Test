@@ -832,8 +832,8 @@
   "frames": 12
  },
  "mob_duskwing": {
-  "w": 24,
-  "h": 32,
+  "w": 32,
+  "h": 38,
   "scale": 1.5,
   "frames": 12
  },
@@ -852,6 +852,48 @@
  "mob_hidemother": {
   "w": 44,
   "h": 48,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_gnawkin_folk": {
+  "w": 24,
+  "h": 30,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_tuskborn_folk": {
+  "w": 26,
+  "h": 32,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_silkwretch_folk": {
+  "w": 30,
+  "h": 30,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_duskwing_folk": {
+  "w": 32,
+  "h": 38,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_crowseer": {
+  "w": 32,
+  "h": 40,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_gnasher": {
+  "w": 34,
+  "h": 38,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_weaver": {
+  "w": 42,
+  "h": 40,
   "scale": 1.5,
   "frames": 12
  }

@@ -114,6 +114,84 @@ export function wallTexture(scene: Phaser.Scene, hW: number, v: number): string 
 }
 
 // ---------------------------------------------------------------------------------------------------------
+// Gates: a timber barricade block per gate tile (same iso block as the walls), and the posts it hangs from
+// ---------------------------------------------------------------------------------------------------------
+export const GATE_H = 30; // world px
+/** Old dark timber, darkest to lightest. */
+const TIMBER = [0x150f0b, 0x22180f, 0x302215, 0x40301d, 0x523e26, 0x664e31, 0x7c623e];
+
+/**
+ * A block of lashed timber: a top of sawn stake ends (end grain, a few split), faces of upright planks with dark
+ * gaps, two rusted iron bands with rivets, rope lashing, claw gouges and a damp, rotten foot.
+ */
+export function gateTexture(scene: Phaser.Scene, v: number): string {
+  const key = `dg_gate_${v}`;
+  if (scene.textures.exists(key)) return key;
+  const HT = Math.round(GATE_H * TX), W = BLOCK_W, H = BLOCK_TOP + HT;
+  const tex = scene.textures.createCanvas(key, W, H)!;
+  const ctx = tex.getContext();
+  const img = ctx.createImageData(W, H), d = img.data;
+  const set = (x: number, y: number, c: number) => { const o = (y * W + x) * 4; d[o] = (c >> 16) & 255; d[o + 1] = (c >> 8) & 255; d[o + 2] = c & 255; d[o + 3] = 255; };
+  const P = 7; // plank width (texels along a face)
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const ex = Math.abs(x + 0.5 - 48) / 48 + Math.abs(y + 0.5 - 24) / 24;
+    if (ex <= 1) {
+      // the top: round stake ends in rows, end-grain rings, dark between them
+      const a = (x - 48) / 2 + (y - 24), b = -(x - 48) / 2 + (y - 24); // iso axes
+      const ca = Math.round(a / 7) * 7, cb = Math.round(b / 7) * 7, r = Math.hypot(a - ca, b - cb);
+      let lv = r < 3.2 ? 4 + (r < 1.2 ? -1 : 0) + Math.round(Math.sin(r * 2.6) * 0.6 + dth(x, y)) : 1;
+      if (r < 3.2 && hash(ca, cb, 51 + v) < 0.2 && Math.abs(a - ca) < 0.6) lv = 1; // a split stake
+      if (ex > 0.95) lv = Math.max(lv, 3);
+      set(x, y, TIMBER[Math.max(0, Math.min(6, lv))]);
+      continue;
+    }
+    let face = 0, u = 0, w = 0;
+    if (x < 48) { const t = 24 + (x + 0.5) / 2; if (y >= t && y < t + HT) { face = 1; u = x; w = y - t; } }
+    else { const t = 24 + (W - x - 0.5) / 2; if (y >= t && y < t + HT) { face = 2; u = x - 48; w = y - t; } }
+    if (!face) continue;
+    const pk = Math.floor((u + (face === 2 ? 3 : 0)) / P), pu = (u + (face === 2 ? 3 : 0)) % P;
+    const tone = hash(pk, face, 52 + v);
+    let lv = (face === 1 ? 4.2 : 2.9) + (tone - 0.5) * 1.2 + dth(x, y) * 0.8;
+    lv += (vn(pk * 3 + 0.5, w / 5, 53 + v) - 0.5) * 1.1; // grain
+    if (pu === 0) lv = 0.5; // gap between planks
+    else if (pu === 1) lv += 0.6; // lit edge
+    else if (pu === P - 1) lv -= 0.8;
+    if (w < 2) lv += 0.9;
+    lv -= Math.max(0, w - (HT - 8)) / 8 * 1.8; // damp foot
+    let c = TIMBER[Math.max(0, Math.min(6, Math.floor(lv)))];
+    // iron bands with rivets
+    for (const bw of [Math.round(HT * 0.24), Math.round(HT * 0.68)]) {
+      if (w >= bw && w < bw + 3) {
+        c = w === bw ? (face === 1 ? IRON.mid : IRON.lo) : w === bw + 2 ? 0x1c1a18 : face === 1 ? 0x5c5148 : 0x3e3630;
+        if (hash(u, bw, 54) < 0.25) c = 0x6a3e22; // rust
+        if (pu === 3 && w === bw + 1) c = face === 1 ? IRON.hi : IRON.mid;
+      }
+    }
+    // rope lashing near the top of each plank
+    if (w >= 3 && w < 6 && pu > 0 && (pu + w) % 2 === 0 && hash(pk, 1, 55 + v) < 0.7) c = face === 1 ? ROPE : 0x6e5e3e;
+    // claw gouges: three pale strokes on some planks
+    if (hash(pk, 2, 56 + v) < 0.12 && w > HT * 0.35 && w < HT * 0.6 && (pu === 2 || pu === 4) && (w + pu) % 3 !== 0) c = face === 1 ? 0x8c7450 : 0x5e4a32;
+    set(x, y, c);
+  }
+  ctx.putImageData(img, 0, 0);
+  tex.refresh();
+  tex.setFilter(Phaser.Textures.FilterMode.NEAREST);
+  return key;
+}
+
+export const GATEPOST = { w: 26, h: 76 };
+/** A gate's heavy post: a squared trunk with iron bands, a horned skull nailed on top and the hinge chains. */
+function gatePost(p: Pen, v: number) {
+  const { w, h } = GATEPOST, cx = Math.round(w / 2);
+  p.shaft(cx, 16, cx, h - 2, 5, OLDWOOD);
+  for (const y of [28, h - 18]) { p.shaft(cx - 3, y, cx + 3, y, 2, [IRON.mid, IRON.lo, 0x1c1a18]); p.px(cx - 1, y, IRON.hi); }
+  for (let k = 0; k < 6; k++) { const y = 34 + k * 3; p.px(cx + 4, y, IRON.lo); p.px(cx + 5, y + 1, IRON.mid); p.px(cx + 4, y + 2, IRON.lo); } // the hinge chain
+  skull(p, cx, 11, v !== 1);
+  // rags tied under the skull
+  for (let j = 0; j < 10; j++) for (let i = 0; i < 3; i++) if (hash(i, j, v + 61) < 0.8 - j * 0.05) p.px(cx - 5 - i - Math.round(j * 0.2), 19 + j, j % 3 === 0 ? 0x3a2418 : 0x5a1c14);
+}
+
+// ---------------------------------------------------------------------------------------------------------
 // Props
 // ---------------------------------------------------------------------------------------------------------
 export const BRAZIER = { w: 26, h: 44, frames: 6 };
@@ -479,6 +557,7 @@ export function dungeonTextures(scene: Phaser.Scene) {
   plain(scene, "dg_web", WEB.w, WEB.h, 3, web);
   plain(scene, "dg_bed", BED.w, BED.h, 1, hideBed);
   sheet(scene, "dg_spike", SPIKE.w, SPIKE.h, 3, spike, 0.5);
+  sheet(scene, "dg_gatepost", GATEPOST.w, GATEPOST.h, 2, gatePost, 0.5);
   // a pale shaft of daylight falling down the sinkhole
   if (!scene.textures.exists("dg_beam")) {
     const t = scene.textures.createCanvas("dg_beam", 32, 128)!, c = t.getContext();

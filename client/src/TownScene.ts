@@ -376,6 +376,7 @@ export class TownScene extends Phaser.Scene {
     this.input.keyboard!.on("keydown-E", () => {
       if (this.chatting()) return;
       if (!this.npcs?.isOpen && this.chests?.interact()) return; // a loot chest right here comes first
+      if (!this.npcs?.isOpen && this.dungeon?.nearDoor) { this.room?.send("door", { id: this.dungeon.nearDoor.id }); return; } // a Mawdeep gate
       if (!this.npcs?.isOpen && this.stash?.interact()) return; // the account stash on the square
       if (!this.npcs?.isOpen && this.shrine?.interact()) return; // then the forest shrine
       if (!this.npcs?.isOpen && this.portals?.interact()) return; // then a portal stone's travel list
@@ -541,7 +542,7 @@ export class TownScene extends Phaser.Scene {
     afterLoading(() => this.room?.send("tutorial"));
     this.dial = new DayDial(document.getElementById("daydial") as HTMLCanvasElement);
 
-    this.room.onStateChange(() => { patchSeq++; });
+    this.room.onStateChange((st: any) => { patchSeq++; this.dungeon?.setDoors(st.doors ?? ""); });
     const players = (this.room.state as any).players;
     players.onAdd((p: any, id: string) => {
       this.addEntity(id, p);
@@ -852,6 +853,7 @@ export class TownScene extends Phaser.Scene {
       this.time.delayedCall(ms, () => { ev.remove(); g.destroy(); });
     });
     this.room.onMessage("bhit", ({ kind, x, y, r }) => {
+      if (kind !== "cleave" && kind !== "leap" && kind !== "sweep") return; // the beast-folk's moves land in beastFx.ts
       const ring = this.add.circle(x, y, 4).setStrokeStyle(3, kind === "cleave" ? 0xffb74d : 0xff5252, 0.9).setDepth(20000);
       isoAnchor(ring, { x, y });
       this.tweens.add({ targets: ring, radius: r, alpha: 0, duration: 320, onComplete: () => ring.destroy() });

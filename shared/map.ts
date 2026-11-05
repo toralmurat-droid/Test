@@ -959,6 +959,60 @@ for (let ty = 0; ty < FULL_H; ty++) for (let tx = 0; tx < MAP_W; tx++) {
   SOLID[ty * MAP_W + tx] = (o !== EMPTY && !WALKABLE_OBJECTS.has(o)) || GROUND[ty][tx] === T.WATER ? 1 : 0;
 }
 export const AREAS = WORLD.areas;
+
+/**
+ * Mawdeep gates (Murat 2026-11-05: "doors to open"): a timber barricade across every tunnel that leads into an elite
+ * lair or the Hide-Mother's den. They start shut (solid); a hero opens one (server "door" message) and it swings
+ * shut again a while after nobody stands in it. Deterministic like the map: server and clients compute the same tiles.
+ */
+export interface Door { id: string; x: number; y: number; tiles: number[]; floor: number }
+export const DOOR_RANGE = 1.8; // tiles from the nearest gate tile to work it
+const DOOR_ROOMS: Record<number, number[]> = { 1: [7], 2: [1, 5], 3: [3, 4] };
+function placeDoors(): Door[] {
+  const out: Door[] = [];
+  for (const f of FLOORS) for (const ci of DOOR_ROOMS[f.id] ?? []) {
+    const C = f.chambers[ci], cx = f.x + C.x, cy = f.y + C.y;
+    const ell = (x: number, y: number) => Math.hypot((x - cx) / C.rx, (y - cy) / C.ry);
+    f.tunnels.forEach(([a, b, bend]) => {
+      if (a !== ci && b !== ci) return;
+      if (out.some((d) => d.floor === f.id && (d.id === `gate_${f.id}_${a}_${b}` || d.id === `gate_${f.id}_${b}_${a}`))) return; // one gate per tunnel
+      const A = f.chambers[a], B = f.chambers[b];
+      const ax = f.x + A.x, ay = f.y + A.y, bx = f.x + B.x, by = f.y + B.y;
+      const mx = (ax + bx) / 2 - (by - ay) * bend * 0.12, my = (ay + by) / 2 + (bx - ax) * bend * 0.12;
+      const at = (t: number) => { const u = 1 - t; return [u * u * ax + 2 * u * t * mx + t * t * bx, u * u * ay + 2 * u * t * my + t * t * by]; };
+      // walk out of the lair along the tunnel until clear of its ragged rim
+      let t = a === ci ? 0 : 1; const dt = a === ci ? 0.005 : -0.005;
+      while (t >= 0 && t <= 1 && ell(at(t)[0], at(t)[1]) < 1.5) t += dt;
+      const [px, py] = at(t), [qx, qy] = at(t + dt);
+      const len = Math.hypot(qx - px, qy - py) || 1, ux = (qx - px) / len, uy = (qy - py) / len;
+      const tiles: number[] = [];
+      for (let y = Math.floor(py - 4); y <= py + 4; y++) for (let x = Math.floor(px - 4); x <= px + 4; x++) {
+        const dx = x + 0.5 - px, dy = y + 0.5 - py;
+        if (Math.abs(dx * ux + dy * uy) > 0.85 || Math.abs(-dx * uy + dy * ux) > 3.2) continue;
+        if (SOLID![y * MAP_W + x] || ell(x + 0.5, y + 0.5) < 1.25) continue;
+        tiles.push(y * MAP_W + x);
+      }
+      if (!tiles.length || out.some((d) => d.tiles.some((k) => tiles.includes(k)))) return;
+      out.push({ id: `gate_${f.id}_${ci}_${a === ci ? b : a}`, x: px, y: py, tiles, floor: f.id });
+    });
+  }
+  return out;
+}
+export const DOORS: Door[] = placeDoors();
+for (const d of DOORS) for (const k of d.tiles) SOLID[k] = 1;
+/** Open or shut a gate (server and client keep the same SOLID). */
+export function setDoorOpen(id: string, open: boolean) {
+  const d = DOORS.find((g) => g.id === id);
+  if (d) for (const k of d.tiles) SOLID![k] = open ? 0 : 1;
+}
+export const doorById = (id: unknown) => DOORS.find((d) => d.id === id);
+/** Distance in tiles from (px,py) in px to the nearest tile of gate d. */
+export function doorDist(d: Door, px: number, py: number): number {
+  const tx = px / TILE, ty = py / TILE;
+  let best = Infinity;
+  for (const k of d.tiles) best = Math.min(best, Math.hypot((k % MAP_W) + 0.5 - tx, ((k / MAP_W) | 0) + 0.5 - ty));
+  return best;
+}
 /** Water tiles where a bridge span has collapsed (the broken bridges to the Old Ruins and the Old Watchtower). */
 export const BROKEN_BRIDGES = WORLD.broken;
 /** Tiles of the small makeshift bridge east of the Sunken Lake (narrow, no railings). */

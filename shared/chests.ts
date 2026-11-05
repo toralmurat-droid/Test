@@ -1,5 +1,5 @@
 import { T, AREAS, GROUND, OBJECTS, EMPTY, areaInfoAt, isSolidTile, ELEMENT_LANDS } from "./map";
-import { MobKind, MOBS, TILE } from "./constants";
+import { MobKind, MOBS, TILE, WORLD_H } from "./constants";
 import { baseLevelAt, SPAWN_ZONES, zoneLevels } from "./spawns";
 import { GEAR, LOOT_IDS, LOOT_LEVEL, rollAffixes, withLevel } from "./gear";
 import { CHAINS, objectDone, QuestObject, Quester } from "./quests";
@@ -57,13 +57,18 @@ const LAIRS: { area: string; guards: Partial<Record<MobKind, number>>; at?: [num
   { area: "Rimewater Hollow", guards: { frostblob: 2, warriorblob: 1 }, at: [0.25, 0.7] },
   { area: "Cinder Scar", guards: { fireblob: 2, warriorblob: 1 }, at: [0.7, 0.65] },
   { area: "Stormbreak Crags", guards: { stormblob: 3 }, at: [0.65, 0.3] },
+  // the Mawdeep Warrens (Murat 2026-11-05: mini-boss zones with chests): each elite keeps its hoard in its lair
+  { area: "Gnasher's Warren", guards: { gnasher: 1, gnawkin: 2 } },
+  { area: "The Weaver's Loom", guards: { weaver: 1, silkwretch: 2 } },
+  { area: "Gorehowl's Lair", guards: { packlord: 1, gnawkin: 2 } },
+  { area: "The Hornbrute's Byre", guards: { hornbrute: 1, tuskborn: 1 } },
 ];
 
 const PATHS = new Set<number>([T.DIRT, T.COBBLE, T.BRIDGE, T.WATER]);
 /** Open ground (not a road), free all around in radius r, not inside a bush; `front`: also nothing tall just in front of it. */
 function openSpot(tx: number, ty: number, r: number, front: boolean): boolean {
   for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
-    if (isSolidTile(tx + dx, ty + dy) || PATHS.has(GROUND[ty + dy]?.[tx + dx])) return false;
+    if (isSolidTile(tx + dx, ty + dy) || (PATHS.has(GROUND[ty + dy]?.[tx + dx]) && ty < WORLD_H)) return false; // the Mawdeep is all earth floor
   }
   if (OBJECTS[ty]?.[tx] !== EMPTY) return false;
   // Iso view: nothing solid just in front (south/east), or a roof or tree would hide the chest
