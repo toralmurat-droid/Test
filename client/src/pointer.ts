@@ -31,9 +31,11 @@ export interface PointerHost {
   shotSpeed(secondary: boolean): number;
   /** Reach (px, feet to feet) of the basic attack and of the secondary skill. */
   reach(secondary: boolean): number;
+  /** Does that reach count from the enemy's edge (weapon swings and the left click), not its feet? */
+  edgeReach(secondary: boolean): boolean;
   /** Attack / use the secondary skill (the hero already faces the target). */
   fire(secondary: boolean): void;
-  /** How the active (right-click) skill is aimed, and how far a "point" one can be placed. */
+  /** How the right-click skill is aimed, and how far a "point" one can be placed. */
   target(): "self" | "point" | "dir";
   pointRange(): number;
   send(type: string, msg?: unknown): void;
@@ -209,6 +211,14 @@ export class PointerControls {
   spaceDown() { this.down(this.scene.input.activePointer, 2); }
   spaceUp() { if (this.held === 2) this.held = -1; }
 
+  /** Where a skill key aims (Murat 2026-11-05): the enemy under the mouse (led like a click on it), else the mouse spot. */
+  cursorAim(): Pt | undefined {
+    const me = this.host.me();
+    if (!me) return undefined;
+    const over = this.hovered ? this.host.enemy(this.hovered) : undefined;
+    return over && !over.dead ? this.aimAt(over, me, true) : this.world(this.scene.input.activePointer);
+  }
+
   private down(p: Phaser.Input.Pointer, forced?: number) {
     if (this.host.blocked() || !this.host.me()) return;
     const button = forced ?? p.button;
@@ -363,7 +373,7 @@ export class PointerControls {
     }
     if (!e || e.dead) { this.goal = undefined; this.path = []; return STOP; }
     const holding = this.held === (goal.secondary ? 2 : 0);
-    const reach = this.host.reach(goal.secondary) + (goal.secondary ? 0 : e.body);
+    const reach = this.host.reach(goal.secondary) + (this.host.edgeReach(goal.secondary) ? e.body : 0);
     // A walking monster: the server swings about half a round trip after we ask, so judge reach where it will be
     // by then, and notice when it is getting away from us.
     const vx = e.vx ?? 0, vy = e.vy ?? 0, lead = Math.min(0.3, this.rtt / 2000);
