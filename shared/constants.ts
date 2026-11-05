@@ -74,7 +74,7 @@ export interface MobDef {
 }
 
 export const MOBS: Record<MobKind, MobDef> = {
-  slime: { name: "Slime", maxHp: 40, speed: 45, damage: 8, attackCooldownMs: 1000, aggroRange: 80, leash: 140, xp: 10 },
+  slime: { name: "Blob", maxHp: 40, speed: 45, damage: 8, attackCooldownMs: 1000, aggroRange: 80, leash: 140, xp: 10 },
   skeleton: { name: "Skeleton", maxHp: 80, speed: 62, damage: 19, attackCooldownMs: 900, aggroRange: 110, leash: 200, xp: 25 },
   // Big, slow slime that buds off bloblings now and then (see BROOD)
   motherblob: { name: "Mother Blob", maxHp: 200, speed: 28, damage: 12, attackCooldownMs: 1300, aggroRange: 70, leash: 120, xp: 60 },

@@ -55,6 +55,8 @@ export class NpcLayer {
   readonly log = new QuestLog();
   /** Quest giver / trader / quest area markers for the minimap and world map. */
   markers: MapMarker[] = [];
+  /** Extra tracker block: the bounty hunt in progress (client/src/bounty.ts). */
+  extraBlock = "";
 
   constructor(private scene: Phaser.Scene, private send: (type: string, msg?: unknown) => void) {
     const hud = document.getElementById("hud")!;
@@ -328,6 +330,7 @@ export class NpcLayer {
     {
       // The guided first quest on top; only the quests the player chose to track
       const blocks = [tracked[TUT_CHAIN], ...tracked.filter((_, c) => c !== TUT_CHAIN)].map((st) => this.trackBlock(me, st)).filter(Boolean);
+      if (this.extraBlock) blocks.push(this.extraBlock);
       if (blocks.length) html = blocks.join("") + `<div class="qt-hint">J: quest log</div>`;
     }
     if (html !== this.trackerHtml) {

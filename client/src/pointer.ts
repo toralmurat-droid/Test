@@ -69,6 +69,10 @@ export class PointerControls {
   private stuckPos?: Pt;
   private stuck = 0;
   private hovered?: string; // enemy under the mouse
+  /** The enemy under the mouse (its label shows its name). */
+  get hoverId() { return this.hovered; }
+  /** The enemy being chased or attacked by a click. */
+  get targetId() { return this.goal?.kind === "enemy" ? this.goal.id : undefined; }
   private rtt = 150; // ms, click to server swing and back (measured in swung)
   private firedAt = 0;
   private heading?: [number, number]; // direction the route walked last frame

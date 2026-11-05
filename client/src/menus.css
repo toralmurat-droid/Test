@@ -13,37 +13,37 @@ button > .pxi:only-child { margin: 0; }
 
 /* ---------- Shared frame ---------- */
 body #hero, body #tree, body #gear, body #slotpick, body #npcdialog, body #questlog, body #portalmenu,
-body #tradepanel, body #stashpanel, body #tradeask, body #shrineprompt, body #portalprompt, body #stashprompt {
+body #tradepanel, body #stashpanel, body #tradeask, body #shrineprompt, body #portalprompt, body #stashprompt, body #bountypanel, body #boardprompt {
   border: 18px solid transparent; border-image: var(--wf-bronze) 9 fill / 18px / 0 repeat; image-rendering: pixelated;
   background: none; border-radius: 0; box-shadow: none; color: #eadfc8; text-shadow: 2px 2px #050302;
   font-family: var(--pixel-font); -webkit-font-smoothing: none; -moz-osx-font-smoothing: grayscale; }
-body #hero, body #tree, body #gear, body #questlog, body #portalmenu, body #tradepanel, body #stashpanel { padding: 2px 8px 4px; }
+body #hero, body #tree, body #gear, body #questlog, body #portalmenu, body #tradepanel, body #stashpanel, body #bountypanel { padding: 2px 8px 4px; }
 body #npcdialog { padding: 2px 8px 4px; font-size: 15px; }
 body #slotpick { padding: 0 4px 2px; width: 270px; }
 body #tradeask { border-image-source: var(--wf-gold); padding: 0 8px 2px; }
-body #shrineprompt, body #portalprompt, body #stashprompt { padding: 0 4px; color: #eadfc8; }
-body #stashprompt { border-image-source: var(--wf-gold); }
+body #shrineprompt, body #portalprompt, body #stashprompt, body #boardprompt { padding: 0 4px; color: #eadfc8; }
+body #stashprompt, body #boardprompt { border-image-source: var(--wf-gold); }
 
 /* Titles: centred gold with a dark rule under them, like "Menu" */
-body #hero h2, body #tree h2, body #gear h2, body #tradepanel h2, body #stashpanel h2, body #partypanel h2 {
+body #hero h2, body #tree h2, body #gear h2, body #tradepanel h2, body #stashpanel h2, body #partypanel h2, body #bountypanel h2 {
   margin: 0 0 6px; font-size: 20px; font-weight: normal; color: #e3bf6a; letter-spacing: 1px; text-align: center;
   border-bottom: 2px solid #45331e; padding-bottom: 4px; text-shadow: 2px 2px #050302; }
 body #questlog .ql-head, body #portalmenu .pt-head { border-bottom: 2px solid #45331e; padding-bottom: 4px; margin-bottom: 8px; }
 body #questlog h2, body #portalmenu h2 { font: 20px var(--pixel-font); color: #e3bf6a; letter-spacing: 1px; }
-body #hero h3, body #gear h3, body #tradepanel h3, body #stashpanel h3, body #npcdialog h4, body #questlog h4 {
+body #hero h3, body #gear h3, body #tradepanel h3, body #stashpanel h3, body #npcdialog h4, body #questlog h4, body #bountypanel h3 {
   color: #c9a45a; font-weight: normal; letter-spacing: 1px; }
-body #hero .help, body #tree .help, body #gear .help, body #questlog .help, body #tradepanel .help, body #stashpanel .help { color: #a8977a; }
+body #hero .help, body #tree .help, body #gear .help, body #questlog .help, body #tradepanel .help, body #stashpanel .help, body #bountypanel .help { color: #a8977a; }
 body #hero b, body #gear b, body #tree b { font-weight: normal; }
 
 /* ---------- Buttons: dark leather with a bronze lip ---------- */
 body #menubtns button, body #questbtn, body #gamemenubtn, body #statreset, body #treereset, body #npcdialog button, body #questlog .ql-close,
 body #portalmenu .pt-close, body #tradepanel button:not(.gcell), body #stashpanel button:not(.gcell), body #tradeask button,
-body #musicpanel #musicclose {
+body #musicpanel #musicclose, body #bountypanel button:not(.gcell) {
   border: 6px solid transparent; border-image: var(--wf-btn) 4 fill / 6px / 0 repeat; image-rendering: pixelated; border-radius: 0;
   background: none; color: #eadfc8; font: 14px var(--pixel-font); text-shadow: 1px 1px #050302; cursor: pointer; box-shadow: none; }
 body #menubtns button:hover, body #questbtn:hover, body #gamemenubtn:hover, body #statreset:hover, body #treereset:hover, body #npcdialog button:hover:not(:disabled),
 body #questlog .ql-close:hover, body #portalmenu .pt-close:hover, body #tradepanel button:not(.gcell):hover, body #stashpanel button:not(.gcell):hover,
-body #tradeask button:hover { color: #ffd98a; filter: brightness(1.25); border-color: transparent; }
+body #tradeask button:hover, body #bountypanel button:not(.gcell):hover { color: #ffd98a; filter: brightness(1.25); border-color: transparent; }
 
 /* HUD menu bar (bottom right) */
 body #menubtns { gap: 4px; }
@@ -115,7 +115,7 @@ body #npcdialog p { color: #eadfc8; }
 body #npcdialog button { padding: 0 8px; font-size: 14px; font-weight: normal; }
 body #npcdialog button.nd-accept { color: #c8f59a; background: none; }
 body #npcdialog button:disabled { color: #6d6250; filter: grayscale(1); opacity: 1; }
-body #npcdialog kbd, body #shrineprompt kbd, body #portalprompt kbd, body #stashprompt kbd {
+body #npcdialog kbd, body #shrineprompt kbd, body #portalprompt kbd, body #stashprompt kbd, body #boardprompt kbd {
   border: 0; border-radius: 0; background: #0f0a06; color: #e3bf6a; box-shadow: 0 0 0 2px #6a5232; font-weight: normal; }
 body #npcdialog.shop { border-color: transparent; }
 body #npcdialog h4 { color: #c9a45a; }
@@ -177,7 +177,7 @@ body .tready { color: #a8977a; }
 body .tside.ready .tready { color: #c8f59a; }
 body .tgold { color: #ffd98a; }
 body .tcell.picked { outline-color: #e3bf6a; }
-body #tradepanel .tbig, body #stashpanel .tbig { padding: 2px 14px; font-size: 15px; }
+body #tradepanel .tbig, body #stashpanel .tbig, body #bountypanel .tbig { padding: 2px 14px; font-size: 15px; }
 body #tradepanel .tbig.go { color: #c8f59a; }
 body #tradeask small { color: #a8977a; }
 body #tradeask b { color: #ffd98a; font-weight: normal; }
