@@ -1119,7 +1119,7 @@ export class TownScene extends Phaser.Scene {
   /** Send the held movement directions to the server when they change. */
   private sendInput(next: InputState) {
     const i = this.input_;
-    if (next.up === i.up && next.down === i.down && next.left === i.left && next.right === i.right) return;
+    if (next.up === i.up && next.down === i.down && next.left === i.left && next.right === i.right && next.vx === i.vx && next.vy === i.vy) return;
     this.input_ = { ...next };
     this.room?.send("input", { ...next, seq: ++this.seq });
     // Stopping: the server's position still runs behind ours until it has read this stop (see the idle easing)

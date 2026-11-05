@@ -4,7 +4,7 @@ import { ArraySchema, MapSchema, Schema, type } from "@colyseus/schema";
 import {
   AGGRO, aggroLevelFactor, BLOB_AI, BONES, DEMON, BROOD, Dir, FACTION, FEUD, MERGE, MobDef, MOTHER, SKELETON_AI, HIT_RADIUS, mobScale, regionMobLevel, regionSpecialLevel, InputState, MOB_ATTACK_RANGE, MOBS, MobKind, rollSkeletonWeapon, SKELETON_BOW, SKELETON_WEAPONS, SkeletonWeapon, REGEN_DELAY_MS, REGEN_RAMP_MS, regenFromStamina, SAFE_REGEN_MULT,
   RESPAWN_MS, TICK_RATE, TILE,
-  HOLLOW_KING, ELEM_BLOB, ELEM_MOVE,
+  HOLLOW_KING, ELEM_BLOB, ELEM_MOVE, inputDir,
 } from "../shared/constants";
 import {
   ATTACK_VARIANTS, CLASSES, ClassKind, COMBO_WINDOW_MS, DODGE, EMOTES, ENERGY, staminaRegen, DASH_INVULN_MS, GUARD_REDUCTION, isClassKind, levelFromXp, MAX_XP, capLevel, PVP_KILL_XP, xpForLevel,
@@ -362,6 +362,8 @@ const pushInput = (o: [number, number]): InputState => ({ up: o[1] < 0, down: o[
 
 /** Unit vector of the keys held (diagonals included), or null when not moving. */
 function aimFromInput(i: InputState): [number, number] | null {
+  const v = (i.up || i.down || i.left || i.right) && inputDir(i);
+  if (v) return v;
   const x = (i.right ? 1 : 0) - (i.left ? 1 : 0), y = (i.down ? 1 : 0) - (i.up ? 1 : 0);
   if (!x && !y) return null;
   const l = Math.hypot(x, y);
@@ -549,6 +551,8 @@ export class TownRoom extends Room<TownState> {
       const p = this.state.players.get(client.sessionId);
       if (!p) return;
       p.input = { up: !!msg.up, down: !!msg.down, left: !!msg.left, right: !!msg.right };
+      const v = inputDir(msg); // point-and-click: exact walking angle
+      if (v) { p.input.vx = v[0]; p.input.vy = v[1]; }
       p.seq = msg.seq | 0;
     });
 
