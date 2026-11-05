@@ -159,6 +159,8 @@ export interface QuestStep {
   hint?: string;
   /** kill: this item goes into the player's bag when the step is done (the first quest's weapon) */
   gift?: string;
+  /** Only at night: the dead's bosses and rituals keep the night (shared/daynight.ts); the tracker says when it falls */
+  night?: boolean;
   /** Finishing this step brings the hero up to at least this level (so the first quest can teach the skill tree) */
   levelTo?: number;
 }
@@ -549,6 +551,7 @@ export const BONE_QUESTS: QuestDef[] = [
       "You there. You have the look of someone who can swing a blade. I have a job the watch can't spare men for.",
       `Last night my sentries saw skeletons on the road by ${BZ.quarry.name}, ${zdir(BZ.quarry)} of the gate. Marching. In step. Four abreast.`,
       "The dead don't march, friend. Not unless someone is giving the orders. Go and see what they are up to.",
+      "By day most of them lie in the earth and only a work gang stays up. After dark they all climb out, so pick your hour.",
     ],
     acceptText: "I'll scout the quarry",
     steps: [
@@ -601,6 +604,7 @@ export const BONE_QUESTS: QuestDef[] = [
       `Every night a green fire burns on ${BZ.tower.name}, ${zdir(BZ.tower)} of here. Every night, more of them on the roads.`,
       "It's a muster signal. The dead gather to it like soldiers to a drum.",
       "Put it out. And be careful: my scouts say when the bones are losing, they do something... unholy. If you see it, I want to know.",
+      "Whatever it is, they only do it under the night sky. Douse the fire by day if you like, but wait for dark for the rest.",
     ],
     acceptText: "I'll put it out",
     steps: [
@@ -608,11 +612,11 @@ export const BONE_QUESTS: QuestDef[] = [
         obj: "Douse the green signal fire", nag: "The fire is at the foot of the old tower. Press E to douse it." },
       { type: "ritual", zone: BZ.tower.name, kinds: SKELETONS, text: "Beat a pack of skeletons and watch what they do",
         banner: ["The fire is out!", "Beat a skeleton pack, and watch"], obj: "Beat a pack of 3+ skeletons and watch what they do",
-        nag: "Fight a pack of them. Hurt them badly, and see what they do when they are losing." },
+        nag: "Wait for nightfall, then fight a pack of them. Hurt them badly, and see what they do when they are losing.", night: true },
       { type: "kill", zone: BZ.tower.name, kinds: ["demon"], goal: 1,
         summon: { parts: ["demon"], level: 14, title: "Bone Demon", ...spotIn(BZ.tower.name, 0.5, 0.75) },
         text: "Slay a Bone Demon", banner: ["They gave their bones to a demon!", "Slay the Bone Demon"], obj: "Bone Demon slain: {n} / {goal}",
-        nag: "A demon made of their own bones. Stay out of its stomp, and bring it down." },
+        nag: "A demon made of their own bones, and it only walks at night. Stay out of its stomp, and bring it down.", night: true },
       back("captain", "Captain Hale", "east gate", [
         "A demon, built from the bones of the fallen. Gods.",
         "And this was nailed to the beacon: marching orders, signed with the same sigil as the stones. Vaeloth, Marshal of Greywatch.",
@@ -630,6 +634,7 @@ export const BONE_QUESTS: QuestDef[] = [
       "He was the last Marshal of Greywatch Keep. When the keep fell, he would not lie down. He bound his soul in a phylactery and learned the dark art, so his watch would never end.",
       "Now he wants more than a keep. He wants the world, and every grave is a soldier to him.",
       `His necromancers raise the old kings' warriors in ${BZ.barrow.name}, ${zdir(BZ.barrow)} of here. Bring me 5 handfuls of grave dust for a ward, and kill one of his raisers.`,
+      "Gather the dust when you like. But the raisers are his priests of the dark: they only come out of the barrows after nightfall.",
     ],
     acceptText: "I'll go to the barrows",
     steps: [
@@ -639,7 +644,7 @@ export const BONE_QUESTS: QuestDef[] = [
       { type: "kill", zone: BZ.barrow.name, kinds: ["necromancer"], goal: 1,
         summon: { parts: ["necromancer"], level: 16, title: "Raiser of the Barrows", ...spotIn(BZ.barrow.name, 0.49, 0.6) },
         text: "Slay the necromancer raising the barrow kings", banner: ["Dust gathered!", "Slay the Raiser of the Barrows"], obj: "Necromancer slain: {n} / {goal}",
-        nag: "He stands before the old mausoleum. Kill him and his raised dead crumble with him." },
+        nag: "After dark he stands before the old mausoleum. Kill him and his raised dead crumble with him.", night: true },
       back("druid", "Elder Rowan", "village bonfire", [
         "With this dust I can make a ward that holds a crypt shut. One handful per crypt.",
         "The raiser carried a map. Look: Gravemoor Cemetery, deep in the south-eastern woods. The great graveyard of the old valley. A thousand graves.",
@@ -656,6 +661,7 @@ export const BONE_QUESTS: QuestDef[] = [
       "Rowan's ward. Four handfuls, four crypts. It will have to do.",
       `${BZ.grave.name} lies ${zdir(BZ.grave)} of here, past the Smugglers' Path. Every grave there is a recruit waiting for its orders.`,
       "Thin their ranks, seal the crypts so no more rise, and kill whatever he has set to guard them. I'll hold the gate.",
+      "Go by day if you want fewer of them about. But whatever guards those crypts will only wake once the sun is down.",
     ],
     acceptText: "For Oakvale",
     steps: [
@@ -666,7 +672,7 @@ export const BONE_QUESTS: QuestDef[] = [
       { type: "kill", zone: BZ.grave.name, kinds: ["demon"], goal: 1,
         summon: { parts: ["demon"], level: 19, title: "Gravemoor Horror", hpMult: 1.6, ...spotIn(BZ.grave.name, 0.51, 0.53) },
         text: "Destroy the Gravemoor Horror", banner: ["THE GROUND SHAKES", "The Gravemoor Horror rises"], obj: "Gravemoor Horror slain: {n} / {goal}",
-        nag: "It rose before the mausoleum. Every bone the crypts held, in one body. Destroy it!" },
+        nag: "At nightfall it rises before the mausoleum. Every bone the crypts held, in one body. Destroy it!", night: true },
       back("captain", "Captain Hale", "east gate", [
         "Sealed. All four. No more recruits for the Marshal.",
         "But my scouts say the dead are falling back east, all of them. To Greywatch Keep.",
@@ -678,22 +684,23 @@ export const BONE_QUESTS: QuestDef[] = [
   },
   {
     id: "marshal", title: "The Pale Marshal", giver: "captain", zone: BZ.keep.name, minLevel: 18,
-    description: `Vaeloth, the Pale Marshal, waits in ${BZ.keep.name} with what is left of his army. Kill his lieutenants, shatter the phylactery that holds his soul, and end him.`,
+    description: `Vaeloth, the Pale Marshal, waits in ${BZ.keep.name} with what is left of his army. Kill his lieutenants, shatter the phylactery that holds his soul, and end him. He and his necromancers only walk at night.`,
     offer: [
       `It's time. Vaeloth sits in the great hall of ${BZ.keep.name}, ${zdir(BZ.keep)} of here, with his best around him.`,
       "Rowan says as long as his phylactery stands, he can't truly die. Two of his necromancers guard it.",
       "Kill them. Shatter the phylactery. And when he comes for you, and he will, put the Pale Marshal in the ground for good.",
+      "One more thing: by day his hall is half asleep and his necromancers lie with him. Go at night. That is when the Marshal holds court.",
     ],
     acceptText: "I will end his watch",
     steps: [
       { type: "kill", zone: BZ.keep.name, kinds: ["necromancer"], goal: 2, text: "Slay 2 of the Marshal's necromancers", banner: ["New quest", "The Pale Marshal"],
-        obj: "Necromancers slain: {n} / {goal}", nag: "{n} of {goal}. Kill them fast, before they raise more dead around you." },
+        obj: "Necromancers slain: {n} / {goal}", nag: "{n} of {goal}. They walk only at night. Kill them fast, before they raise more dead around you.", night: true },
       { type: "use", zone: BZ.keep.name, objects: [PHYLACTERY], text: "Shatter the Marshal's phylactery", banner: ["His guard has fallen!", "Shatter the phylactery"],
         obj: "Shatter the phylactery", nag: "It stands before the great hall. Break it!" },
       { type: "kill", zone: BZ.keep.name, kinds: ["necromancer"], goal: 1,
         summon: { parts: ["necromancer"], level: 24, title: "Vaeloth, the Pale Marshal", hpMult: 2.5, ...spotIn(BZ.keep.name, 0.5, 0.65) },
         text: "Defeat Vaeloth, the Pale Marshal", banner: ["THE PALE MARSHAL RISES", "Defeat Vaeloth"], obj: "The Pale Marshal defeated: {n} / {goal}",
-        nag: "He's out of his hall and he's angry. Finish him!" },
+        nag: "Come nightfall he's out of his hall, and he's angry. Finish him!", night: true },
       back("captain", "Captain Hale", "east gate", [
         "My sentries say every skeleton on the roads just... fell. Collapsed where it stood, like puppets with the strings cut.",
         "Vaeloth's watch is over. Three hundred years, and you ended it.",
@@ -865,10 +872,11 @@ export const CROWN_QUESTS: QuestDef[] = [
   },
   {
     id: "king", title: "The Hollow King", giver: "druid", zone: THRONE, minLevel: 25,
-    description: `Ostrevar, the Hollow King, is rising from his barrow under ${THRONE}, far ${CROWN_DIR} of Oakvale up the King's Way from the forest shrine. Break the three ward-stones that feed him and end him.`,
+    description: `Ostrevar, the Hollow King, is rising from his barrow under ${THRONE}, far ${CROWN_DIR} of Oakvale up the King's Way from the forest shrine. Break the three ward-stones that feed him, and end him when he rises after dark.`,
     offer: [
       `Follow the King's Way from the forest shrine on the Bandit Trail, ${CROWN_DIR} to ${THRONE}. Three ward-stones stand round his dais.`,
       "The wards were made to hold him, but he has turned them into his strength. Break all three and he will come out weaker. But he will come.",
+      "Break the stones whenever you like. But he is of the dead now, and the dead keep the night: he will only rise from his throne after dark.",
       "He fights with a crown-forged blade, the Gloam's ooze and his dead servants. Watch the ground: when it darkens, move. When the ash rises round him, get in close.",
       "This is the last fight of this valley. Go, and come back to us.",
     ],
@@ -882,7 +890,7 @@ export const CROWN_QUESTS: QuestDef[] = [
       { type: "kill", zone: THRONE, kinds: ["hollowking"], goal: 1,
         summon: { parts: ["hollowking"], level: 30, title: "Ostrevar, the Hollow King", hpMult: 2, x: (HOLLOW.cx + 0.5) * TILE, y: (HOLLOW.cy - 3.3) * TILE },
         text: "Defeat Ostrevar, the Hollow King", banner: ["THE HOLLOW KING RISES", "Defeat Ostrevar"], obj: "The Hollow King defeated: {n} / {goal}",
-        nag: "He is on his throne and he is awake. End him!" },
+        nag: "When night falls he wakes on his throne. End him!", night: true },
       back("druid", "Elder Rowan", "village bonfire", [
         "I felt it. The whole wood breathed out at once, like a sleeper waking from a long, bad dream.",
         "The Hollow King is gone, and his crown with him. No more seals, no more grave-gold, no more whispers in the dark.",

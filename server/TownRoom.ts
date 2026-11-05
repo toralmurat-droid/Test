@@ -34,6 +34,7 @@ import { BLOB_KINDS, CHAINS, CROWN_CHAIN, packQuest, chainOpen, chainState, inZo
 import { findHideSpot, HIDE, MOTHER_KEEP_OUT, noMobsAt, spawnPoint, SPAWN_ZONES, villageDist, zoneCap } from "../shared/spawns";
 import { moveStep } from "../shared/movement";
 import { SLOTS_BY_ZONE, WORK_SLOTS } from "../shared/siege";
+import { DAY_CYCLE_MS, dayFrac, isUndeadNight, NIGHT_BOSSES, UNDEAD_NIGHT } from "../shared/daynight";
 import { BANDIT_AI, BANDIT_ROLES, CAMP_POSTS, CHIEF, clearWalk, findPath, postPos, roleOf } from "../shared/bandits";
 import { flush, HeroSave, loadHero, loadStash, login, markChest, openedChests, resetChests, saveHero, saveStash } from "./accounts";
 import { offerFrom, Offer, settle, STASH, STASH_GOLD_MAX, STASH_RANGE, STASH_SIZE, TRADE } from "../shared/trade";
@@ -427,6 +428,18 @@ function toward(x: number, y: number, tx: number, ty: number): InputState {
 }
 
 const FEUD_CELL = 128; // px, >= FEUD.range
+const BOOT = Date.now();
+/** Time of day on the server (the wall clock, like every client); DAY_TIME=day|night|0..1 forces it for local tests. */
+function worldDayFrac(now: number): number {
+  const f = process.env.DAY_TIME;
+  if (f === "night") return 0.8;
+  if (f === "day") return 0.3;
+  if (f && !isNaN(Number(f))) return (Number(f) + (now - BOOT) / DAY_CYCLE_MS) % 1;
+  return dayFrac(now);
+}
+/** Spawn zones of the dead (every kind in them is undead): they keep the night (shared/daynight.ts). */
+const UNDEAD_ZONES = new Set(SPAWN_ZONES.flatMap((z, zi) => (Object.keys(z.mobs) as MobKind[]).every((k) => FACTION[k] === "undead") ? [zi] : []));
+
 /** Monsters with no player within this many px (square) doze until someone comes by. */
 const SLEEP_RANGE = 28 * TILE; // the screen shows about 12 tiles each way, so they are always awake well before they come into view
 /** A dozing monster (no hero within SLEEP_RANGE) is updated once every this many ticks. */
@@ -1445,7 +1458,7 @@ export class TownRoom extends Room<TownState> {
   /** Skeletons that are losing badly to a hero give their bones to summon a demon. */
   private checkRituals(now: number) {
     this.updateRites(now);
-    if (now < this.nextRitualCheck) return;
+    if (!this.undeadUp || now < this.nextRitualCheck) return; // the dead only give their bones under the night sky
     const R = BONES.ritual;
     this.nextRitualCheck = now + R.checkMs;
     let demons = 0;
@@ -1670,6 +1683,7 @@ export class TownRoom extends Room<TownState> {
     const tick = ++this.tickNo;
     if (tick % 2 === 0) this.buildFeudGrid(); // monsters move a few px per tick, a grid cell is 128 px
     this.assignFlanks();
+    this.updateUndeadNight(now);
     this.checkRituals(now);
     // Live heroes, gathered once so each monster's "anyone near?" check is a plain array scan
     const awake: Player[] = [];
@@ -1869,24 +1883,93 @@ export class TownRoom extends Room<TownState> {
     return n;
   }
 
+  // ---- The dead keep the night (shared/daynight.ts, Murat 2026-11-05) -------------------------------------
+
+  /** True from mid-dusk to late dawn: skeleton zones are full, rituals happen, necromancers and other undead bosses walk. */
+  private undeadUp = isUndeadNight(worldDayFrac(Date.now()));
+  private nextUndeadCheck = 0;
+
+  /** How many of an undead zone's monsters stay up by day (never its necromancers). */
+  private dayCap(zi: number, cap: number): number {
+    const bosses = NIGHT_BOSSES.reduce((n, k) => n + (SPAWN_ZONES[zi].mobs[k] ?? 0), 0);
+    return Math.ceil(Math.max(0, cap - bosses) * UNDEAD_NIGHT.dayShare);
+  }
+
+  /** Dusk and dawn: tell everyone; by day the idle dead away from heroes sink back into the earth. */
+  private updateUndeadNight(now: number) {
+    if (now < this.nextUndeadCheck) return;
+    this.nextUndeadCheck = now + 1000;
+    const up = isUndeadNight(worldDayFrac(now));
+    if (up !== this.undeadUp) {
+      this.undeadUp = up;
+      this.broadcast("undeadnight", { up });
+      SPAWN_ZONES.forEach((z) => { const zone = this.state.zones.get(z.name); if (zone) zone.nextAt = 0; }); // restart the timers at the new pace
+    }
+    if (up) return;
+    // Who could go to ground this second: per undead zone, plus the bosses out of their zone (quest and ritual summons)
+    const idle = (m: Mob) => !m.dead && !m.target && !m.ritual && !m.guard && !m.mergeInto && m.specialAt === 0 && !this.playerNear(m.x, m.y, UNDEAD_NIGHT.sinkClear);
+    const byZone = new Map<number, [string, Mob][]>();
+    this.state.mobs.forEach((m, id) => {
+      if (m.dead) return;
+      if (m.zone < 0) {
+        if (NIGHT_BOSSES.includes(m.kind) && !m.target && m.specialAt === 0) this.sinkMob(m, id); // no fight on: back to the grave
+        return;
+      }
+      if (!UNDEAD_ZONES.has(m.zone) || !idle(m)) return;
+      (byZone.get(m.zone) ?? byZone.set(m.zone, []).get(m.zone)!).push([id, m]);
+    });
+    byZone.forEach((list, zi) => {
+      const zone = this.state.zones.get(SPAWN_ZONES[zi].name);
+      if (!zone) return;
+      // bosses first, then the idle, the siege workers last (they are the busy few who stay up)
+      list.sort(([, a], [, b]) => Number(NIGHT_BOSSES.includes(b.kind)) - Number(NIGHT_BOSSES.includes(a.kind)) || Number(!!a.work) - Number(!!b.work));
+      let over = zone.alive - this.dayCap(zi, zone.cap);
+      for (const [id, m] of list.slice(0, 4)) {
+        if (NIGHT_BOSSES.includes(m.kind)) { this.sinkMob(m, id); continue; }
+        if (over-- <= 0) break;
+        this.sinkMob(m, id);
+      }
+    });
+  }
+
+  /** One of the dead lies back down in the earth until night: gone without loot or XP, back when its zone refills. */
+  private sinkMob(m: Mob, id: string) {
+    this.broadcast(NIGHT_BOSSES.includes(m.kind) ? "banish" : "gravesink", { id, x: Math.round(m.x), y: Math.round(m.y) });
+    m.dead = true; m.hp = 0; m.hidden = false; m.work = ""; m.spot = ""; m.target = ""; m.moving = false; m.banishAt = 0;
+    this.state.mobs.forEach((c, cid) => { // its raised dead (a necromancer's, the Hollow King's servants) go with it
+      if (c.mother !== id || c.dead) return;
+      c.dead = true; c.hp = 0;
+      this.clock.setTimeout(() => this.state.mobs.delete(cid), 500);
+    });
+    if (m.zone < 0) { this.clock.setTimeout(() => this.state.mobs.delete(id), 500); return; }
+    const zone = this.state.zones.get(SPAWN_ZONES[m.zone].name);
+    if (zone) zone.alive--;
+  }
+
   /** Per-zone respawn timers: while a zone is below its cap, revive one dead monster every respawnMs. */
   private updateZones(now: number) {
     SPAWN_ZONES.forEach((z, zi) => {
       const zone = this.state.zones.get(z.name)!;
-      if (zone.alive >= zone.cap) { zone.nextAt = 0; if (zone.nextIn) zone.nextIn = 0; return; }
-      if (!zone.nextAt) zone.nextAt = now + z.respawnMs;
+      // The dead keep the night: by day only a few of them are up and no necromancer walks; by night they climb out fast
+      const undead = UNDEAD_ZONES.has(zi), day = undead && !this.undeadUp;
+      const cap = day ? this.dayCap(zi, zone.cap) : zone.cap;
+      const every = undead && !day ? Math.min(z.respawnMs, UNDEAD_NIGHT.riseMs) : z.respawnMs;
+      if (zone.alive >= cap) { zone.nextAt = 0; if (zone.nextIn) zone.nextIn = 0; return; }
+      if (!zone.nextAt || zone.nextAt > now + every) zone.nextAt = now + every;
       if (now >= zone.nextAt) {
         let revived = false, blocked = false;
         this.state.mobs.forEach((m, id) => {
           if (revived || blocked || !m.dead || m.zone !== zi) return;
+          if (day && NIGHT_BOSSES.includes(m.kind)) return;
           const at = this.freeSpawnPoint(zi, m.kind);
           if (!at) { blocked = true; return; }
           this.spawnMob(m.kind, zi, id, at);
+          if (undead) this.broadcast("necroraise", { pts: [[Math.round(m.x), Math.round(m.y)]], rise: 1 }); // climbing out of the ground
           revived = true;
         });
         if (revived) zone.alive++;
         // No free spot (a hero is standing all over a small zone): try again shortly
-        zone.nextAt = blocked ? now + 2000 : zone.alive < zone.cap ? now + z.respawnMs : 0;
+        zone.nextAt = blocked ? now + 2000 : zone.alive < cap ? now + every : 0;
       }
       const secs = zone.nextAt ? Math.ceil((zone.nextAt - now) / 1000) : 0;
       if (zone.nextIn !== secs) zone.nextIn = secs;
@@ -3465,7 +3548,7 @@ export class TownRoom extends Room<TownState> {
     const s = questStep(this.qs(p, c));
     if (s?.summon && s.zone && inZone(s.zone, p.x, p.y)) {
       const now = Date.now();
-      if (now >= p.nextSummon) {
+      if (now >= p.nextSummon && (this.undeadUp || !NIGHT_BOSSES.includes(s.summon.parts[0]))) { // the dead's bosses only rise at night
         p.nextSummon = now + 15000;
         let mine = false;
         this.state.mobs.forEach((m) => { if (m.summonFor === id && m.summonChain === c && !m.dead) mine = true; });

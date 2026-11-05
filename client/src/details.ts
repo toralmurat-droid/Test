@@ -3,6 +3,7 @@ import { isoAnchor, isoScreen } from "./iso";
 import Phaser from "phaser";
 import { ART_K as K, MAP_H, MAP_W, TILE } from "../../shared/constants";
 import { AREAS, EMPTY, GROUND, OBJECTS, T, VILLAGE } from "../../shared/map";
+import { DAY_CYCLE_MS as CYCLE, dayFrac } from "../../shared/daynight";
 
 /**
  * Fine detail for Oakvale, all cosmetic and client-side:
@@ -524,7 +525,7 @@ function makeTextures(scene: Phaser.Scene) {
 
 /** Time of day as 0..1 of the 30-minute cycle, shared by every client via the wall clock (?time=day|dusk|night forces it). */
 /** 30-minute day: about 19 min daylight, 2 min dusk, 6 min night, 3 min dawn. */
-export const DAY_CYCLE_MS = 30 * 60 * 1000;
+export { DAY_CYCLE_MS } from "../../shared/daynight";
 const PAGE_START = Date.now();
 
 export function dayTime(nowMs: number): number {
@@ -533,8 +534,8 @@ export function dayTime(nowMs: number): number {
   if (forced === "dusk") return 0.685;
   if (forced === "day") return 0.3;
   // ?time=0.63 (testing aid): start the clock at that point of the day and let it run from there
-  if (forced !== null && forced.trim() !== "" && !isNaN(Number(forced))) return (Number(forced) + (nowMs - PAGE_START) / DAY_CYCLE_MS) % 1;
-  return (nowMs % DAY_CYCLE_MS) / DAY_CYCLE_MS;
+  if (forced !== null && forced.trim() !== "" && !isNaN(Number(forced))) return (Number(forced) + (nowMs - PAGE_START) / CYCLE) % 1;
+  return dayFrac(nowMs);
 }
 
 /** Phase of the day: 0..1 darkness and a dusk warmth. t: 0-.65 day, .65-.72 dusk, .72-.9 night, .9-1 dawn. */
