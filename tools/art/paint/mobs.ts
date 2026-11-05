@@ -39,7 +39,8 @@ const RIP: Record<"down" | "up" | "right", { hold: [P, P]; snap: [P, P]; don: [P
 
 // ---------------------------------------------------------------- humanoid monsters (character painter)
 const PK = 5; // painter resolution for these
-function humanoid(key: string, kind: string, w: number, h: number, oy: number, scale: number, rip = false): Sheet {
+/** `lift`: flyers hover this many px above their shadow, bobbing with each wingbeat. */
+function humanoid(key: string, kind: string, w: number, h: number, oy: number, scale: number, rip = false, lift = 0): Sheet {
   const hands: number[][] = [];
   const frames = [...Array(FRAMES + (rip ? RIP_FRAMES : 0)).keys()].map((f) => {
     const fr = humanoidFrame(kind, f);
@@ -55,7 +56,8 @@ function humanoid(key: string, kind: string, w: number, h: number, oy: number, s
       img.data.set(fr.data); x.putImageData(img, 0, 0);
       if (SH) { SH.save(); SH.translate(w / 2, oy * h); SH.scale(1, 0.3); SH.fillStyle = "rgba(0,0,0,0.42)"; SH.beginPath(); SH.arc(0, 0, 6.5 * scale, 0, Math.PI * 2); SH.fill(); SH.restore(); }
       // logical unit (16, 29) = the feet -> (w/2, oy*h) in world px
-      c.save(); c.translate(w / 2, oy * h); c.scale(scale, scale); c.translate(-16, -29);
+      const up = lift ? lift + Math.sin(f * 1.7) * 1.2 : 0;
+      c.save(); c.translate(w / 2, oy * h - up); c.scale(scale, scale); c.translate(-16, -29);
       c.imageSmoothingEnabled = true; (c as any).imageSmoothingQuality = "high";
       c.drawImage(n, 0, 0, 32, 32);
       c.restore();
@@ -430,7 +432,15 @@ export function buildMobs(out: string, ONLY?: string[]) {
     humanoid("mob_gnawkin", "gnawkin", 20, 30, 27.5 / 30, 0.82),
     humanoid("mob_tuskborn", "tuskborn", 26, 32, 29.5 / 32, 0.95),
     humanoid("mob_silkwretch", "silkwretch", 20, 30, 27.5 / 30, 0.86),
-    humanoid("mob_duskwing", "duskwing", 24, 32, 29.5 / 32, 0.88),
+    humanoid("mob_duskwing", "duskwing", 32, 38, 36 / 38, 0.88, false, 7),
+    // the half-folk variants (Mob.weapon "folk"), the crow-folk seers that fly and cast, and the mini-bosses
+    humanoid("mob_gnawkin_folk", "gnawkin_folk", 24, 30, 27.5 / 30, 0.82),
+    humanoid("mob_tuskborn_folk", "tuskborn_folk", 26, 32, 29.5 / 32, 0.95),
+    humanoid("mob_silkwretch_folk", "silkwretch_folk", 30, 30, 27.5 / 30, 0.86),
+    humanoid("mob_duskwing_folk", "duskwing_folk", 32, 38, 36 / 38, 0.88, false, 7),
+    humanoid("mob_crowseer", "crowseer", 32, 40, 38 / 40, 0.9, false, 8),
+    humanoid("mob_gnasher", "gnasher", 34, 38, 35.5 / 38, 1.15),
+    humanoid("mob_weaver", "weaver", 42, 40, 37.5 / 40, 1.15),
     humanoid("mob_packlord", "packlord", 30, 36, 34 / 36, 1.08),
     humanoid("mob_hornbrute", "hornbrute", 40, 40, 37.5 / 40, 1.2),
     humanoid("mob_hidemother", "hidemother", 44, 48, 44 / 48, 1.32),
@@ -454,7 +464,7 @@ export function buildMobs(out: string, ONLY?: string[]) {
       const c = body.getContext("2d"), sc = shadow.getContext("2d");
       c.scale(HI, HI); sc.scale(HI, HI);
       SH = sc; s.draw(c, f); SH = null;
-      const blob = !/skeleton|bandit|necromancer|demon|crawler|hollowking|gnawkin|tuskborn|silkwretch|duskwing|packlord|hornbrute|hidemother/.test(s.key);
+      const blob = !/skeleton|bandit|necromancer|demon|crawler|hollowking|gnawkin|tuskborn|silkwretch|duskwing|packlord|hornbrute|hidemother|crowseer|gnasher|weaver/.test(s.key);
       const b = shrink(body, "mb", tw, th);
       pixelize(b, tw, th, true, blob ? { y0: Math.round(th * 0.7), y1: th, mud: 0.14, sat: 0.9 } : { y0: Math.round(th * 0.72), y1: th, mud: s.key.includes("bandit") ? 0.38 : 0.2 });
       const u = shrink(shadow, "ms", tw, th); pixelAlpha(u);

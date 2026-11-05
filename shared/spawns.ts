@@ -86,11 +86,14 @@ const ZONE_MOBS: { name: string; mobs: Partial<Record<MobKind, number>>; respawn
   // The Mawdeep Warrens (shared/dungeon.ts): three floors of beast-folk under the woods, a step past the elemental
   // wilds and up to the region's ceiling. Hand-set counts (a warren full of packs, not a carpet of monsters).
   // The lairs come first so their elites keep their own zone.
-  { name: "Gorehowl's Lair", mobs: { packlord: 1 }, respawnMs: 150000, fixed: true, levels: [26, 26] },
-  { name: "The Hornbrute's Byre", mobs: { hornbrute: 1 }, respawnMs: 150000, fixed: true, levels: [27, 27] },
-  { name: "The Gnawing Halls", mobs: { gnawkin: 26, tuskborn: 10 }, respawnMs: 7000, fixed: true, levels: [21, 23] },
-  { name: "The Silk Pens", mobs: { silkwretch: 14, duskwing: 12, gnawkin: 10 }, respawnMs: 7000, fixed: true, levels: [23, 25] },
-  { name: "The Hide-Mother's Den", mobs: { tuskborn: 9, duskwing: 9, silkwretch: 8, gnawkin: 8 }, respawnMs: 8000, fixed: true, levels: [24, 25] },
+  // the elites and mini-bosses guard their lair's chest (chests.ts LAIRS): no zone spawns of their own, only the lair's levels
+  { name: "Gorehowl's Lair", mobs: {}, respawnMs: 150000, fixed: true, levels: [26, 26] },
+  { name: "The Hornbrute's Byre", mobs: {}, respawnMs: 150000, fixed: true, levels: [27, 27] },
+  { name: "Gnasher's Warren", mobs: {}, respawnMs: 150000, fixed: true, levels: [23, 23] },
+  { name: "The Weaver's Loom", mobs: {}, respawnMs: 150000, fixed: true, levels: [25, 25] },
+  { name: "The Gnawing Halls", mobs: { gnawkin: 24, tuskborn: 10, crowseer: 3 }, respawnMs: 7000, fixed: true, levels: [21, 23] },
+  { name: "The Silk Pens", mobs: { silkwretch: 13, duskwing: 10, gnawkin: 9, crowseer: 5 }, respawnMs: 7000, fixed: true, levels: [23, 25] },
+  { name: "The Hide-Mother's Den", mobs: { tuskborn: 9, duskwing: 8, silkwretch: 7, gnawkin: 7, crowseer: 5 }, respawnMs: 8000, fixed: true, levels: [24, 25] },
   { name: "Saltwind Coast", mobs: { slime: 14, shooterblob: 5, warriorblob: 5, healerblob: 4, motherblob: 2 }, respawnMs: 4500 },
   { name: "Whispering Woods", mobs: { slime: 10, shooterblob: 4, warriorblob: 4, healerblob: 3, motherblob: 2 }, respawnMs: 5250, wild: true }, // broad areas last: zone lookups take the first match
   // Everything west of the river that no named area covers: fields, roads and woods around Oakvale

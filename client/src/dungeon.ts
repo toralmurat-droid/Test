@@ -1,9 +1,10 @@
 import Phaser from "phaser";
-import { TILE, WORLD_H } from "../../shared/constants";
-import { isSolidTile } from "../../shared/map";
+import { MAP_W, TILE, WORLD_H } from "../../shared/constants";
+import { DOOR_RANGE, DOORS, doorDist, isSolidTile, setDoorOpen, type Door } from "../../shared/map";
+import { refreshWalk } from "./pathfind";
 import { BRAZIERS, DEN, Floor, FLOORS, floorNo, LINKS, SINKHOLE } from "../../shared/dungeon";
 import { ISO, isoAnchor, isoScreen, isoX, isoY } from "./iso";
-import { BLOCK_TOP, BRAZIER, dungeonTextures, ROPE_ART, TX, WALL_LOW, WALL_TALL, wallTexture } from "./dungeonArt";
+import { BLOCK_TOP, BRAZIER, dungeonTextures, GATE_H, GATEPOST, gateTexture, ROPE_ART, TX, WALL_LOW, WALL_TALL, wallTexture } from "./dungeonArt";
 
 /**
  * The Mawdeep Warrens on the client (shared/dungeon.ts): the sinkhole in the Whispering Woods, and down below, cave
@@ -28,6 +29,8 @@ export interface DungeonHost {
   heroes(): { x: number; y: number }[];
 }
 
+const DOOR_TILES = new Set(DOORS.flatMap((d) => d.tiles));
+
 interface Light { x: number; y: number; r: number; flicker: number; seed: number }
 
 export class DungeonView {
@@ -40,6 +43,12 @@ export class DungeonView {
   /** True while the local hero is below ground (Details turns the day/night tint off then). */
   underground = false;
   floor = 0;
+  /** Gates seen open (server TownState.doors), and each built gate's barricade blocks. */
+  private doorsOpen = new Set<string>();
+  private doorsRaw = "";
+  private gates = new Map<string, Phaser.GameObjects.Image[]>();
+  /** The gate within reach of the local hero (E works it), if any. */
+  nearDoor?: Door;
 
   constructor(private scene: Phaser.Scene, private host: DungeonHost, private font: string) {
     dungeonTextures(scene);
@@ -61,7 +70,7 @@ export class DungeonView {
     if (this.built.has(f.id)) return;
     this.built.add(f.id);
     const s = this.scene;
-    const open = (x: number, y: number) => x > f.x && y > f.y && x < f.x + f.w - 1 && y < f.y + f.h - 1 && !isSolidTile(x, y);
+    const open = (x: number, y: number) => x > f.x && y > f.y && x < f.x + f.w - 1 && y < f.y + f.h - 1 && (!isSolidTile(x, y) || DOOR_TILES.has(y * MAP_W + x));
     // Cave walls: every rock tile next to the floor is a block, tall unless the floor lies behind it on screen
     // (then low, so nothing on the floor is ever hidden).
     if (ISO) for (let ty = f.y; ty < f.y + f.h; ty++) for (let tx = f.x; tx < f.x + f.w; tx++) {
@@ -74,6 +83,24 @@ export class DungeonView {
       const cx = (tx + 0.5) * TILE, cy = (ty + 0.5) * TILE;
       const img = s.add.image(cx, cy, key).setScale(1 / TX).setDepth(cy);
       img.setOrigin(0.5, (BLOCK_TOP / 2 + h * TX) / (BLOCK_TOP + h * TX));
+    }
+    // Gates into the lairs: a timber block per tile while shut, and a skull-topped post at each end
+    for (const d of DOORS.filter((g) => g.floor === f.id)) {
+      const blocks = d.tiles.map((k, i) => {
+        const cx = ((k % MAP_W) + 0.5) * TILE, cy = (((k / MAP_W) | 0) + 0.5) * TILE;
+        const img = s.add.image(cx, cy, gateTexture(s, i % 3)).setScale(1 / TX).setDepth(cy);
+        return img.setOrigin(0.5, (BLOCK_TOP / 2 + GATE_H * TX) / (BLOCK_TOP + GATE_H * TX)).setVisible(!this.doorsOpen.has(d.id));
+      });
+      this.gates.set(d.id, blocks);
+      let ends: [number, number] = [d.tiles[0], d.tiles[0]], far = -1;
+      for (const a of d.tiles) for (const b of d.tiles) {
+        const dd = Math.hypot((a % MAP_W) - (b % MAP_W), ((a / MAP_W) | 0) - ((b / MAP_W) | 0));
+        if (dd > far) { far = dd; ends = [a, b]; }
+      }
+      ends.forEach((k, i) => {
+        const x = ((k % MAP_W) + 0.5) * TILE, y = (((k / MAP_W) | 0) + 0.5) * TILE;
+        s.add.image(x, y + 1, "dg_gatepost", i).setOrigin(0.5, 1 - 2 / GATEPOST.h).setScale(1 / TX).setDepth(y + 1);
+      });
     }
     // Ropes and stairs
     for (const l of LINKS.filter((k) => k.floor === f.id)) {
@@ -135,6 +162,25 @@ export class DungeonView {
     }
   }
 
+  /** The server's open gates changed: open/shut them here too (collisions, click-to-walk paths, the barricades). */
+  setDoors(raw: string) {
+    if (raw === this.doorsRaw) return;
+    this.doorsRaw = raw;
+    const now = new Set(raw ? raw.split(",") : []);
+    for (const d of DOORS) {
+      const open = now.has(d.id);
+      if (open === this.doorsOpen.has(d.id)) continue;
+      setDoorOpen(d.id, open);
+      refreshWalk(d.tiles);
+      for (const img of this.gates.get(d.id) ?? []) {
+        this.scene.tweens.killTweensOf(img);
+        if (open) this.scene.tweens.add({ targets: img, alpha: 0, duration: 260, onComplete: () => img.setVisible(false) });
+        else { img.setVisible(true).setAlpha(0); this.scene.tweens.add({ targets: img, alpha: 1, duration: 260 }); }
+      }
+    }
+    this.doorsOpen = now;
+  }
+
   /** Builds the floor the hero is on, moves the darkness and its lights with the camera, labels nearby links. */
   update(now: number) {
     const me = this.host.me();
@@ -148,7 +194,14 @@ export class DungeonView {
     else this.drawDark(now);
     // the label over a rope or stair within reach
     const l = me && LINKS.find((k) => Math.hypot(k.x - me.x, k.y - me.y) < 3 * TILE);
-    if (l && this.label) {
+    this.nearDoor = fl && me ? DOORS.find((d) => d.floor === fl && doorDist(d, me.x, me.y) <= DOOR_RANGE) : undefined;
+    if (this.nearDoor && this.label) {
+      const d = this.nearDoor, text = this.doorsOpen.has(d.id) ? "E: Shut the gate" : "E: Open the gate";
+      if (this.label.text !== text) this.label.setText(text);
+      const x = d.x * TILE, y = d.y * TILE;
+      this.label.setPosition(x, y - GATE_H - 6).setVisible(true);
+      isoAnchor(this.label, { x, y });
+    } else if (l && this.label) {
       if (this.label.text !== l.label) this.label.setText(l.label);
       this.label.setPosition(l.x, l.y - (l.id === "f1up" ? 40 : l.down ? 10 : 60)).setVisible(true);
       isoAnchor(this.label, { x: l.x, y: l.y });

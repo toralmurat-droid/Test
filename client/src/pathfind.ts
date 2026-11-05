@@ -51,6 +51,18 @@ function grid(): Uint8Array {
   return (walkGrid = w);
 }
 
+/** A Mawdeep gate opened or shut: work those tiles (and their neighbours, a hero is round) out again. */
+export function refreshWalk(tiles: number[]) {
+  if (!walkGrid) return;
+  for (const k of tiles) {
+    const x = k % MAP_W, y = (k / MAP_W) | 0;
+    for (let j = y - 2; j <= y + 2; j++) for (let i = x - 2; i <= x + 2; i++) {
+      if (i < 0 || j < 0 || i >= MAP_W || j >= MAP_H) continue;
+      walkGrid[j * MAP_W + i] = blocked((i + 0.5) * TILE, (j + 0.5) * TILE) ? 0 : 1;
+    }
+  }
+}
+
 let scr: { run: number; stamp: Uint32Array; g: Float64Array; parent: Int32Array; closed: Uint8Array } | undefined;
 function scratch() {
   const n = MAP_W * MAP_H;

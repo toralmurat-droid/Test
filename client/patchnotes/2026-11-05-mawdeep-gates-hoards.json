@@ -1,0 +1,10 @@
+{
+  "date": "2026-11-05",
+  "title": "Mawdeep: gates, hoards and new beast-folk",
+  "changes": [
+    "Timber gates now bar every tunnel into the lairs of the Mawdeep. Press E to open one. It swings shut a minute later once nobody stands in it.",
+    "Mini-boss lairs: Old Gnasher's warren on the first floor and the Weaver's loom on the second. Each elite, like Gorehowl and the Hornbrute, now guards a chest that opens once its keepers fall.",
+    "Beast-folk come both ways now: some are beasts with a man's body, others are men wearing the beast's hide. Hide-wearing gnawkin sling bones from afar.",
+    "Things fly down there: duskwings hover on bat wings, and the crow-headed Crowseer casts shadow bolts and screeches from above."
+  ]
+}

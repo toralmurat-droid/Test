@@ -4,7 +4,7 @@ import { ArraySchema, MapSchema, Schema, type } from "@colyseus/schema";
 import {
   AGGRO, aggroLevelFactor, BLOB_AI, BONES, DEMON, BROOD, Dir, FACTION, FEUD, MERGE, MobDef, MOTHER, SKELETON_AI, HIT_RADIUS, mobScale, regionMobLevel, regionSpecialLevel, InputState, MOB_ATTACK_RANGE, MOBS, MobKind, rollSkeletonWeapon, SKELETON_BOW, SKELETON_WEAPONS, SkeletonWeapon, REGEN_DELAY_MS, REGEN_RAMP_MS, regenFromStamina, SAFE_REGEN_MULT,
   RESPAWN_MS, TICK_RATE, TILE,
-  HOLLOW_KING, ELEM_BLOB, ELEM_MOVE, inputDir, BEAST, BEAST_KINDS, BEAST_MOVES, BEAST_RIDER, type BeastMove,
+  HOLLOW_KING, ELEM_BLOB, ELEM_MOVE, inputDir, ELITE, BEAST, BEAST_BROOD, BEAST_FOLK, BEAST_KINDS, BEAST_MOVES, BEAST_RIDER, type BeastMove,
 } from "../shared/constants";
 import { arrivalAt, LINK_RANGE, linkById, LINKS } from "../shared/dungeon";
 import {
@@ -26,7 +26,7 @@ import {
 import {
   ITEM_LIFETIME_MS, ItemKind, LOOT, PICKUP_RADIUS, PVP_GOLD_DROP,
 } from "../shared/items";
-import { isSafeZone, isSolidAt, randomSpawn, VILLAGE } from "../shared/map";
+import { DOORS, DOOR_RANGE, doorById, doorDist, isSafeZone, isSolidAt, randomSpawn, setDoorOpen, VILLAGE, type Door } from "../shared/map";
 import { isDecorSolidAt, npcById, npcNear, TALK_RANGE } from "../shared/npcs";
 import { beyondWall, WATCH, WATCH_POSTS, WatchPost } from "../shared/watch";
 import { inVillage, WRATH } from "../shared/wrath";
@@ -348,6 +348,7 @@ export class TownState extends Schema {
   @type({ map: Zone }) zones = new MapSchema<Zone>();
   @type({ map: Field }) fields = new MapSchema<Field>();
   @type({ map: Watchman }) watch = new MapSchema<Watchman>();
+  @type("string") doors = ""; // open Mawdeep gates, comma separated (shared/map.ts DOORS)
 }
 
 /** Extra effects of a hit. */
@@ -438,6 +439,7 @@ function toward(x: number, y: number, tx: number, ty: number): InputState {
 
 const FEUD_CELL = 128; // px, >= FEUD.range
 const BOOT = Date.now();
+const DOOR_OPEN_MS = 60_000; // an opened Mawdeep gate swings shut a minute later, once nobody stands in it
 /** Time of day on the server (the wall clock, like every client); DAY_TIME=day|night|0..1 forces it for local tests. */
 function worldDayFrac(now: number): number {
   const f = process.env.DAY_TIME;
@@ -471,7 +473,10 @@ const RANGED: Partial<Record<MobKind, RangedCfg>> = {
   skeletonmage: { ...SKELETON_AI.mage, far: SKELETON_AI.mage.range * 0.85, shot: "magicbolt" },
   venomblob: { keepAway: ELEM_BLOB.splurt.keepAway, far: ELEM_BLOB.splurt.range * 0.85, range: ELEM_BLOB.splurt.range, shot: "", shotSpeed: 0, shotRadius: 0 }, // lobs poison (elemSpecial)
   necromancer: { ...SKELETON_AI.necro, far: SKELETON_AI.necro.range * 0.8, shot: "shadowbolt", mult: SKELETON_AI.necro.boltMult },
+  crowseer: { ...SKELETON_AI.mage, range: 135, keepAway: 70, far: 135 * 0.85, shot: "shadowbolt", mult: 1.1 }, // the crow-folk's hexes
 };
+/** Gnawkin bone-slingers (the half-folk variant, BEAST_FOLK): stones from a sling. */
+const BONE_SLING: RangedCfg = { range: 115, keepAway: 55, far: 115 * 0.85, shot: "stone", shotSpeed: 150, shotRadius: 3, mult: 0.9 };
 
 const BOW_SKELETON: RangedCfg = { ...SKELETON_BOW, range: SKELETON_WEAPONS.bow.range, far: SKELETON_WEAPONS.bow.range * 0.85, shot: "arrow", mult: SKELETON_WEAPONS.bow.dmg };
 const BANDIT_BOW: RangedCfg = { ...BANDIT_AI.bow, far: BANDIT_AI.bow.range * 0.85, shot: "arrow" };
@@ -479,6 +484,7 @@ const LOOKOUT_BOW: RangedCfg = { ...BANDIT_AI.lookoutBow, keepAway: 0, far: 1e9,
 const rangedOf = (m: Mob): RangedCfg | undefined =>
   m.kind === "skeleton" && m.weapon === "bow" ? BOW_SKELETON
   : m.kind === "bandit" ? (m.weapon === "archer" ? BANDIT_BOW : m.weapon === "lookout" ? LOOKOUT_BOW : undefined)
+  : m.kind === "gnawkin" && m.weapon === "folk" ? BONE_SLING
   : RANGED[m.kind];
 /** A monster's stats: its kind's numbers, a bandit's role on top, and the camp's horn alert (they come from far). */
 function mobDef(m: Mob, now = Date.now()): MobDef {
@@ -593,6 +599,7 @@ export class TownRoom extends Room<TownState> {
     this.onMessage("use", (client, msg: { id: string }) => this.useQuestObject(client.sessionId, msg?.id));
     this.onMessage("chest", (client, msg: { id: string }) => this.openChest(client, msg?.id));
     this.onMessage("chests", (client) => this.sendChests(client));
+    this.onMessage("door", (client, msg: { id: string }) => this.workDoor(client, msg?.id));
     this.onMessage("pray", (client) => this.pray(client));
     this.onMessage("portals", (client) => this.sendPortals(client));
     this.onMessage("travel", (client, msg: { to?: string }) => this.travel(client, msg?.to));
@@ -622,6 +629,7 @@ export class TownRoom extends Room<TownState> {
     this.onMessage("ideavote", (client, msg: { id: number; v: number }) => this.voteIdea(client, Number(msg?.id), Number(msg?.v)));
     this.onMessage("ideas", (client) => this.sendBoard(client));
     this.clock.setInterval(() => this.ideaRound(), 5000);
+    this.clock.setInterval(() => this.tickDoors(), 1000);
 
     this.onMessage("pinvite", (client, msg: { id?: string; name?: string }) => this.partyInvite(client.sessionId, msg));
     this.onMessage("paccept", (client, msg: { from?: string }) => this.partyAnswer(client.sessionId, msg?.from, true));
@@ -881,7 +889,7 @@ export class TownRoom extends Room<TownState> {
     const m = this.state.mobs.get(id) ?? new Mob();
     let home = at ?? spawnPoint(SPAWN_ZONES[zi], kind);
     m.kind = kind;
-    m.weapon = kind === "skeleton" ? rollSkeletonWeapon() : "";
+    m.weapon = kind === "skeleton" ? rollSkeletonWeapon() : Math.random() < (BEAST_FOLK[kind] ?? 0) ? "folk" : ""; // beast-folk: half get the other half-folk look
     m.camp = false; m.post = -1; m.perch = false; m.pLeg = 0; m.pDir = 1; m.stuckSince = 0; m.detourUntil = 0;
     m.alertUntil = 0; m.alertHero = ""; m.nextHorn = 0; m.nextVolley = 0; m.rallyUntil = 0; m.chargeMult = 1; m.dashHit = false; m.reinforced = false;
     m.nextSweep = 0; m.nextLeap = 0; m.nextCry = 0;
@@ -1938,7 +1946,7 @@ export class TownRoom extends Room<TownState> {
       if (!isSolidAt(tx, ty)) { x = tx; y = ty; break; }
     }
     m.x = m.homeX = x; m.y = m.homeY = y;
-    m.level = kind === "banditchief" ? regionSpecialLevel(c.level - 1) : regionMobLevel(c.level - 1);
+    m.level = kind === "banditchief" || ELITE[kind] ? regionSpecialLevel(c.level - 1) : regionMobLevel(c.level - 1);
     m.hp = m.maxHp = Math.round(MOBS[kind].maxHp * mobScale(m.level, "hp"));
     if (kind === "banditchief") { m.camp = true; m.post = -1; } // leads the camp: hears the horn, rallies his men
   }
@@ -2736,7 +2744,7 @@ export class TownRoom extends Room<TownState> {
           const H = kind === "howl" ? B.howl : B.brood, pts: [number, number][] = [];
           let mine = 0;
           this.state.mobs.forEach((c) => { if (c.mother === id && !c.dead) mine++; });
-          for (const k of (kind === "howl" ? B.howl.summon : B.brood.kinds)) {
+          for (const k of (BEAST_BROOD[m.kind] ?? (kind === "howl" ? B.howl.summon : B.brood.kinds))) {
             if (mine >= H.max) break;
             const c = this.raiseKin(m, id, k, H.levelDrop);
             if (c) { pts.push([Math.round(c.x), Math.round(c.y)]); mine++; }
@@ -3737,6 +3745,36 @@ export class TownRoom extends Room<TownState> {
     if (!p) return;
     const now = Date.now();
     client.send("chests", Object.fromEntries(Object.entries(openedChests(p.name, now)).map(([id, t]) => [id, t - now])));
+  }
+
+  // ---- Mawdeep gates (shared/map.ts DOORS) ---------------------------------
+  /** Open gate id -> when it may swing shut on its own. */
+  private openDoors = new Map<string, number>();
+  private doorBusy(d: Door): boolean {
+    const inIt = (x: number, y: number) => Math.abs(x - d.x * TILE) < 6 * TILE && Math.abs(y - d.y * TILE) < 6 * TILE && doorDist(d, x, y) < 1.1;
+    for (const p of this.state.players.values()) if (inIt(p.x, p.y)) return true;
+    for (const m of this.state.mobs.values()) if (!m.dead && inIt(m.x, m.y)) return true;
+    return false;
+  }
+  private setDoor(d: Door, open: boolean) {
+    setDoorOpen(d.id, open);
+    if (open) this.openDoors.set(d.id, Date.now() + DOOR_OPEN_MS); else this.openDoors.delete(d.id);
+    this.state.doors = [...this.openDoors.keys()].join(",");
+  }
+  /** E at a gate: open it, or pull it shut again if nobody stands in it. */
+  private workDoor(client: Client, id: unknown) {
+    const p = this.state.players.get(client.sessionId), d = doorById(id);
+    if (!p || p.dead || !d || doorDist(d, p.x, p.y) > DOOR_RANGE + 0.6) return;
+    if (!this.openDoors.has(d.id)) this.setDoor(d, true);
+    else if (!this.doorBusy(d)) this.setDoor(d, false);
+  }
+  private tickDoors() {
+    const now = Date.now();
+    for (const d of DOORS) {
+      const open = this.openDoors.get(d.id);
+      if (open === undefined) { if (this.doorBusy(d)) this.setDoor(d, true); continue; } // never shut anyone inside a gate (e.g. after a deploy)
+      if (now >= open && !this.doorBusy(d)) this.setDoor(d, false);
+    }
   }
 
   private openChest(client: Client, cid: unknown) {
