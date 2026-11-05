@@ -1,5 +1,6 @@
 {
   "date": "2026-11-05",
+  "pr": 261,
   "title": "Smoother updates",
   "changes": [
     "When the game updates, your hero comes back right where you stood, with the same health, mana and stamina.",
