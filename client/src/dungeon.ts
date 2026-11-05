@@ -2,7 +2,9 @@ import Phaser from "phaser";
 import { MAP_W, TILE, WORLD_H } from "../../shared/constants";
 import { DOOR_RANGE, DOORS, doorDist, isSolidTile, setDoorOpen, type Door } from "../../shared/map";
 import { refreshWalk } from "./pathfind";
-import { BRAZIERS, DEN, Floor, FLOORS, floorNo, LINKS, SINKHOLE } from "../../shared/dungeon";
+import { BRAZIERS, COCOONS, DEN, Floor, FLOORS, floorNo, LINKS, SINKHOLE, TOTEMS } from "../../shared/dungeon";
+import { CHESTS } from "../../shared/chests";
+import { GORE, goreTextures } from "./goreArt";
 import { ISO, isoAnchor, isoScreen, isoX, isoY } from "./iso";
 import { BLOCK_TOP, BRAZIER, dungeonTextures, GATE_H, GATEPOST, gateTexture, ROPE_ART, TX, WALL_LOW, WALL_TALL, wallTexture } from "./dungeonArt";
 
@@ -31,6 +33,35 @@ export interface DungeonHost {
 
 const DOOR_TILES = new Set(DOORS.flatMap((d) => d.tiles));
 
+/**
+ * What each chamber was used for (Murat 2026-11-05: gore only where it fits how the place is used). Villagers come
+ * down the sinkhole, are kept in cages and silk pens, dragged to the butchery and the skinning floor, sewn into hides
+ * on the third floor; what is left goes to the midden or the elites' lairs. Drag smears run along those tunnels.
+ */
+type Role = "landing" | "cages" | "butchery" | "midden" | "torture" | "pens" | "stitch" | "lair" | "byre" | "den";
+const STORY: Record<number, { rooms: Record<number, Role>; drags: [number, number][] }> = {
+  1: { rooms: { 0: "landing", 2: "cages", 3: "butchery", 1: "midden", 7: "lair" }, drags: [[0, 2], [2, 3], [3, 1], [3, 7]] },
+  2: { rooms: { 2: "pens", 4: "pens", 7: "pens", 3: "torture", 5: "lair" }, drags: [[2, 3], [7, 3], [4, 5], [3, 5]] },
+  3: { rooms: { 2: "cages", 1: "stitch", 3: "byre", 4: "den" }, drags: [[2, 1], [1, 3], [2, 4]] },
+};
+/** Props per role: texture, frames to pick from, how many, standing (by the walls) or flat on the floor. */
+type Recipe = [key: string, frames: number[], n: number, standing: boolean];
+const RECIPES: Record<Role, Recipe[]> = {
+  landing: [["dg_blood", [0, 1], 1, false], ["dg_remains", [3], 1, false]],
+  cages: [["dg_cage", [0, 1], 4, true], ["dg_blood", [0, 1, 2, 3], 2, false], ["dg_remains", [3], 1, false]],
+  pens: [["dg_cage", [0, 1], 2, true], ["dg_blood", [0, 2], 1, false]],
+  butchery: [["dg_block", [0, 1], 2, false], ["dg_hook", [0, 1, 2], 4, true], ["dg_blood", [0, 1, 2, 3], 4, false], ["dg_remains", [1, 3], 2, false]],
+  midden: [["dg_remains", [0, 1, 2, 3], 6, false], ["dg_blood", [1, 3], 2, false], ["dg_hook", [2], 1, true]],
+  torture: [["dg_frame", [0], 4, true], ["dg_block", [1], 2, false], ["dg_hook", [0, 1, 2], 3, true], ["dg_blood", [0, 1, 2, 3], 7, false], ["dg_remains", [0, 2], 3, false]],
+  stitch: [["dg_slab", [0], 2, false], ["dg_frame", [1], 2, true], ["dg_block", [1], 1, false], ["dg_cage", [1], 1, true], ["dg_blood", [0, 1, 2], 4, false], ["dg_remains", [1], 1, false]],
+  lair: [["dg_remains", [0, 1, 2, 3], 4, false], ["dg_blood", [0, 1, 3], 3, false], ["dg_hook", [2], 1, true]],
+  byre: [["dg_pike", [0, 1], 3, true], ["dg_remains", [0, 3], 2, false], ["dg_blood", [1], 2, false]],
+  den: [["dg_pike", [0, 1], 6, true], ["dg_blood", [0, 1, 2, 3], 4, false], ["dg_remains", [0, 1, 2], 3, false]],
+};
+const ORIGIN: Record<string, number> = { // feet row of each standing sheet (fraction of its height)
+  dg_hook: 1 - 2 / GORE.hook.h, dg_cage: 1 - 2 / GORE.cage.h, dg_frame: 1 - 3 / GORE.frame.h, dg_pike: 1 - 2 / GORE.pike.h,
+};
+
 interface Light { x: number; y: number; r: number; flicker: number; seed: number }
 
 export class DungeonView {
@@ -52,6 +83,7 @@ export class DungeonView {
 
   constructor(private scene: Phaser.Scene, private host: DungeonHost, private font: string) {
     dungeonTextures(scene);
+    goreTextures(scene);
     this.surface();
     this.label = scene.add.text(0, 0, "", { fontFamily: font, fontSize: "16px", color: "#e8d7a8", stroke: "#000", strokeThickness: 3 })
       .setOrigin(0.5, 1).setScale(0.25).setResolution(2).setDepth(30000).setVisible(false);
@@ -128,6 +160,7 @@ export class DungeonView {
     }
     // The Hide-Mother's bed of hides
     if (f.id === 3) s.add.image((DEN.x + 0.5) * TILE, (DEN.y + 0.5) * TILE, "dg_bed").setScale(1 / TX).setDepth(DECAL);
+    this.story(f, open);
     // Beast-folk clutter: racks, skull poles and bones; webs in the Silk Pens; stalagmites everywhere
     const avoid = [...LINKS.filter((k) => k.floor === f.id).map((k) => [k.x, k.y]), ...BRAZIERS.map(([x, y]) => [(x + 0.5) * TILE, (y + 0.5) * TILE]), [(DEN.x + 0.5) * TILE, (DEN.y + 0.5) * TILE]];
     const placed: number[][] = [];
@@ -159,6 +192,64 @@ export class DungeonView {
       const x = (tx + 0.5) * TILE, y = (ty + 0.5) * TILE;
       if (avoid.some(([ax, ay]) => Math.hypot(ax - x, ay - y) < 2 * TILE)) continue;
       s.add.image(x, y, "dg_spike", k % 3).setOrigin(0.5, 1).setScale(1 / TX).setDepth(y);
+    }
+  }
+
+  /** The grim story of each chamber (STORY): cages, hooks, frames, slabs, blood and remains, and the drag smears between them. */
+  private story(f: Floor, open: (x: number, y: number) => boolean) {
+    const st = STORY[f.id];
+    if (!st) return;
+    const s = this.scene, T = TILE;
+    const keep = [...LINKS.filter((k) => k.floor === f.id).map((k) => [k.x, k.y, 2.4]), ...BRAZIERS.map(([x, y]) => [(x + 0.5) * T, (y + 0.5) * T, 1.6]),
+      ...CHESTS.map((c) => [c.x, c.y, 2]), ...[...COCOONS, ...TOTEMS].map(([x, y]) => [(x + 0.5) * T, (y + 0.5) * T, 2]),
+      ...DOORS.filter((d) => d.floor === f.id).map((d) => [d.x * T, d.y * T, 3.2]), [(DEN.x + 0.5) * T, (DEN.y + 0.5) * T, 4.5]];
+    const placed: [number, number, number][] = [];
+    for (const [ci, role] of Object.entries(st.rooms)) {
+      const c = f.chambers[Number(ci)], cx = f.x + c.x, cy = f.y + c.y;
+      RECIPES[role].forEach(([key, frames, n, standing], ri) => {
+        for (let k = 0, got = 0; k < n * 12 && got < n; k++) {
+          const sd = f.id * 977 + Number(ci) * 131 + ri * 17;
+          const a = hash(sd, k, 61) * Math.PI * 2;
+          const r = standing ? 0.45 + 0.35 * hash(sd, k, 62) : role === "den" && key === "dg_pike" ? 0.42 : 0.15 + 0.6 * Math.sqrt(hash(sd, k, 62));
+          const tx = Math.floor(cx + Math.cos(a) * c.rx * r), ty = Math.floor(cy + Math.sin(a) * c.ry * r);
+          if (!open(tx, ty) || (standing && !open(tx + 1, ty + 1))) continue;
+          const x = (tx + 0.5) * T, y = (ty + 0.5) * T, gap = standing ? 1.9 : 1.3;
+          if (keep.some(([kx, ky, kr]) => Math.hypot(kx - x, ky - y) < kr * T && !(role === "den" && key === "dg_pike" && kr === 4.5))) continue;
+          if (placed.some(([px, py, pg]) => Math.hypot(px - x, py - y) < Math.max(gap, pg) * T)) continue;
+          placed.push([x, y, gap]);
+          got++;
+          const fr = frames[Math.floor(hash(tx, ty, 63) * frames.length)], flip = hash(tx, ty, 64) < 0.5;
+          if (!standing && key !== "dg_block" && key !== "dg_slab") s.add.image(x, y, key, fr).setScale(1 / TX).setDepth(DECAL).setFlipX(flip);
+          else s.add.image(x, y, key, fr).setOrigin(0.5, ORIGIN[key] ?? 0.92).setScale(1 / TX).setDepth(y).setFlipX(flip);
+        }
+      });
+    }
+    // Drag smears along the tunnels the victims were hauled through (same curve as map.ts carveFloor)
+    for (const [a, b] of st.drags) {
+      const tun = f.tunnels.find(([p, q]) => (p === a && q === b) || (p === b && q === a));
+      if (!tun) continue;
+      const [p, q, bend] = tun, A = f.chambers[p], B = f.chambers[q];
+      const ax = f.x + A.x, ay = f.y + A.y, bx = f.x + B.x, by = f.y + B.y;
+      const mx = (ax + bx) / 2 - (by - ay) * bend * 0.12, my = (ay + by) / 2 + (bx - ax) * bend * 0.12;
+      const at = (t: number) => { const u = 1 - t; return [u * u * ax + 2 * u * t * mx + t * t * bx, u * u * ay + 2 * u * t * my + t * t * by]; };
+      const len = Math.hypot(bx - ax, by - ay), steps = Math.ceil(len / 1.3);
+      for (let k = 1; k < steps; k++) {
+        let t = k / steps;
+        if (p !== a) t = 1 - t; // from a towards b
+        if (hash(f.id * 7 + a, k, 71) < 0.22) continue; // gaps where it dried or was trodden out
+        const [px, py] = at(t), [qx, qy] = at(Math.min(1, Math.max(0, t + (p === a ? 0.01 : -0.01))));
+        const jx = (hash(a, k, 72) - 0.5) * 0.6, jy = (hash(b, k, 73) - 0.5) * 0.6;
+        const tx = Math.floor(px + jx), ty = Math.floor(py + jy);
+        if (!open(tx, ty)) continue;
+        const dx = qx - px, dy = qy - py;
+        let ang = ISO ? Math.atan2((dx + dy) / 2, dx - dy) : Math.atan2(dy, dx);
+        const back = ang < 0 || ang >= Math.PI; // the art points one way: turn it half round for the other
+        if (ang < 0) ang += Math.PI; if (ang >= Math.PI) ang -= Math.PI;
+        const fr = Math.round(ang / (Math.PI / 4)) % 4;
+        const img = s.add.image((px + jx) * T, (py + jy) * T, "dg_drag", fr).setScale(1 / TX).setDepth(DECAL);
+        if (back) img.setFlipX(true).setFlipY(true); // half a turn
+        if (hash(a, k, 74) < 0.18) s.add.image((px - jx) * T, (py - jy) * T, "dg_blood", 3).setScale(0.5 / TX).setDepth(DECAL);
+      }
     }
   }
 

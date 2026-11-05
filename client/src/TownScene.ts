@@ -853,6 +853,7 @@ export class TownScene extends Phaser.Scene {
       this.time.delayedCall(ms, () => { ev.remove(); g.destroy(); });
     });
     this.room.onMessage("bhit", ({ kind, x, y, r }) => {
+      if (kind !== "cleave" && kind !== "leap" && kind !== "sweep") return; // the beast-folk's moves land in beastFx.ts
       const ring = this.add.circle(x, y, 4).setStrokeStyle(3, kind === "cleave" ? 0xffb74d : 0xff5252, 0.9).setDepth(20000);
       isoAnchor(ring, { x, y });
       this.tweens.add({ targets: ring, radius: r, alpha: 0, duration: 320, onComplete: () => ring.destroy() });
