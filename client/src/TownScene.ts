@@ -3,7 +3,7 @@ import { quake } from "./camfx";
 import { chargeIcon } from "./chargeIcon";
 import { leaving, noteBuild, reconnectSoon, returnToStart, takeCarried, upgradeAnnounced } from "./reconnect";
 import { Client, Room } from "colyseus.js";
-import { BOSS, ELITE, InputState, MERGE, MAP_H, MAP_W, regenFromStamina, TICK_RATE, TILE } from "../../shared/constants";
+import { BOSS, ELITE, InputState, MERGE, MOBS, type MobKind, MAP_H, MAP_W, regenFromStamina, TICK_RATE, TILE } from "../../shared/constants";
 import { CLASSES, ClassKind, ENERGY, MAX_LEVEL, xpForLevel } from "../../shared/classes";
 import { canPay, MANA, manaRegen, maxManaFor, skillCost, unpackMana } from "../../shared/mana";
 import { nextSize, potionAmount, PotionKind, potionName, POTION_SIZES, total, unpackPotions } from "../../shared/potions";
@@ -71,6 +71,8 @@ import { addPixelGrid } from "./pixelgrid";
 import { paintSmoothProps } from "./smoothProps";
 import { ChestLayer } from "./chests";
 import { ShrineLayer } from "./shrine";
+import { BOARD_H, BOARD_W, BountyUI } from "./bounty";
+import { BOARDS, BOARD_RANGE } from "../../shared/bounty";
 import { PortalLayer } from "./portal";
 import { BOON_NAMES, WIND_BLESSING } from "../../shared/shrine";
 import { BuffBar } from "./buffbar";
@@ -246,6 +248,7 @@ export class TownScene extends Phaser.Scene {
   private torches?: GateTorches;
   private chests?: ChestLayer;
   private shrine?: ShrineLayer;
+  private bounty?: BountyUI;
   private portals?: PortalLayer;
   private chatEl = document.getElementById("chat") as HTMLInputElement;
   private onlineShown = -1; // online hero count last written next to the chat box
@@ -269,6 +272,7 @@ export class TownScene extends Phaser.Scene {
   private moves!: SkillMoves; // melee skill micro sequences (skillMoves.ts)
   private gearFx!: GearFx; // item level effects on heroes
   private lastCast: Record<string, number> = {}; // local clock (ms) of my last cast of each skill, for cooldowns
+  private mobByMeAt = -1e9; // last time a monster stood right by my hero (my name label hides then)
   private items = new Map<string, Phaser.GameObjects.Image>();
   private lastDodge = -Infinity;
   private rootUntil = 0; // local clock: my dash is gliding to the server's spot until then (no prediction)
@@ -378,6 +382,8 @@ export class TownScene extends Phaser.Scene {
       if (!this.npcs?.isOpen && this.chests?.interact()) return; // a loot chest right here comes first
       if (!this.npcs?.isOpen && this.dungeon?.nearDoor) { this.room?.send("door", { id: this.dungeon.nearDoor.id }); return; } // a Mawdeep gate
       if (!this.npcs?.isOpen && this.stash?.interact()) return; // the account stash on the square
+      if (this.bounty?.open) { this.bounty.close(); return; }
+      if (!this.npcs?.isOpen && this.bounty?.interact()) return; // a bounty board
       if (!this.npcs?.isOpen && this.shrine?.interact()) return; // then the forest shrine
       if (!this.npcs?.isOpen && this.portals?.interact()) return; // then a portal stone's travel list
       this.npcs?.interact();
@@ -505,6 +511,13 @@ export class TownScene extends Phaser.Scene {
     this.room.onMessage("stashview", (v) => { if (!this.stash?.open) this.closeMenus(); this.stash?.show(v); });
     // The Whispering Woods shrine: one for everyone, spent for a while after each prayer
     this.shrine = new ShrineLayer(this, (type, msg) => this.room.send(type, msg), PIXEL_FONT);
+    // Bounty boards on the square and by every portal stone (shared/bounty.ts)
+    this.bounty = new BountyUI(this, (type, msg) => this.room.send(type, msg), PIXEL_FONT);
+    this.room.onMessage("bounty", (v) => this.bounty?.show(v, (text, color) => {
+      const me = this.entities.get(this.me)?.sprite;
+      if (me) this.floatText(me.x, me.y - 30, text, color, PIXEL_FONT, 1.3);
+      this.feed(text);
+    }));
     this.room.onMessage("shrine", ({ left, by, boon }) => {
       this.shrine?.setLeft(left);
       if (!boon) return;
@@ -634,6 +647,13 @@ export class TownScene extends Phaser.Scene {
         this.floatText(x, y - 6, `+${name}`, itemColor(gear), PIXEL_FONT);
         this.feed(`Found ${name}! Press G to equip`);
         return;
+      }
+      const meS = this.entities.get(this.me)?.sprite;
+      if (kind === "gold" && meS) {
+        // Scooped up from a short way off: the coin hops into the hero's purse
+        const coin = this.add.image(x, y, itemTexture(this, "gold")).setDepth(y);
+        this.tweens.add({ targets: coin, x: meS.x, y: meS.y - 6, duration: 180, ease: "Quad.easeIn", onComplete: () => coin.destroy() });
+        x = meS.x; y = meS.y - 8;
       }
       this.floatText(x, y - 6, kind === "gold" ? `+${amount} gold` : `+${amount > 1 ? `${amount} ` : ""}${name || (kind === "mpotion" ? "mana potion" : "potion")}`,
         kind === "gold" ? "#ffc93c" : kind === "mpotion" ? "#8ab4ff" : "#ff8fa3", PIXEL_FONT);
@@ -1046,7 +1066,7 @@ export class TownScene extends Phaser.Scene {
       else if (e.mob && meE && Math.hypot(e.sprite.x - meE.sprite.x, e.sprite.y - meE.sprite.y) < 10 * TILE) musicCombat(1);
       this.floatText(e.sprite.x, e.sprite.y - 14, crit ? `CRIT -${dmg}` : `-${dmg}`,
         blocked ? "#9ad1ff" : crit ? "#ffd60a" : id === this.me ? "#ff5d5d" : el && ELEMENT_COLORS[el as Element] ? `#${ELEMENT_COLORS[el as Element].toString(16).padStart(6, "0")}` : "#ffffff",
-        PIXEL_FONT, crit ? 1.8 : dot ? 0.8 : 1);
+        PIXEL_FONT, crit ? 1.8 : dot ? 0.9 : 1.3, true);
       // damage type (shared/elements.ts): embers, frost shards, venom splash or a holy glint on the target
       if (el && ELEMENT_COLORS[el as Element] && el !== "physical") this.gearFx.impact(e.sprite.x, e.sprite.y, e.top, el as Element, !!dot);
       // Hit feel without freezes or camera effects (Murat wants fluid combat): a short white flash,
@@ -1232,6 +1252,7 @@ export class TownScene extends Phaser.Scene {
         for (const n of NPCS) if (npcPresent(n.id, p)) out.push({ x: n.x, y: n.y, w: 18, h: 30, range: TALK_RANGE, act: () => { if (!this.npcs?.isOpen) this.npcs?.interact(); } });
         for (const c of CHESTS) out.push({ x: c.x, y: c.y, w: 22, h: 18, range: CHEST_RANGE, act: () => this.chests?.interact() });
         out.push({ x: SHRINE.x, y: SHRINE.y, w: 26, h: 36, range: SHRINE_RANGE, act: () => this.shrine?.interact() });
+        for (const b of BOARDS) out.push({ x: b.x, y: b.y, w: BOARD_W, h: BOARD_H, range: BOARD_RANGE, act: () => { if (!this.bounty?.open) this.bounty?.interact(); } });
         out.push({ x: STASH.x, y: STASH.y, w: 22, h: 18, range: STASH_RANGE, act: () => { if (!this.stash?.open) this.stash?.interact(); } });
         for (const o of PORTALS) out.push({ x: o.x, y: o.y, w: 26, h: 40, range: PORTAL_RANGE, act: () => this.portals?.interact() });
         for (const { o } of usableObjects(p)) out.push({ x: o.x, y: o.y, w: 22, h: 22, range: USE_RANGE, act: () => this.room?.send("use", { id: o.id }) });
@@ -1338,18 +1359,20 @@ export class TownScene extends Phaser.Scene {
     if (e.mob) this.squash(e, crit ? 1.12 : 1.06, crit ? 0.88 : 0.94, 60);
   }
 
-  private floatText(x: number, y: number, text: string, color: string, font = PIXEL_FONT, size = 1) {
+  private floatText(x: number, y: number, text: string, color: string, font = PIXEL_FONT, size = 1, jitter = false) {
+    // Damage numbers spread a little sideways so fast hits don't print on top of each other
+    if (jitter) x += (Math.random() - 0.5) * 10;
     const t = this.add.text(x, y, text, {
       fontFamily: font, fontSize: "16px", color, stroke: "#000", strokeThickness: 3,
     }).setOrigin(0.5, 1).setScale(0.25 * size).setResolution(2).setDepth(30000);
     // iso view: callers lift the text above a hero's feet; rise straight up from there on screen
     isoAnchor(t, { x, y: y + 14 });
-    if (size > 1) {
+    if (size > 1.5) {
       // Big numbers (crits) pop in, then rise
       t.setScale(0.25 * size * 1.4);
       this.tweens.add({ targets: t, scale: 0.25 * size, duration: 120, ease: "Back.easeOut" });
     }
-    this.tweens.add({ targets: t, y: y - 10, alpha: 0, duration: size > 1 ? 1000 : 800, delay: size > 1 ? 150 : 0, onComplete: () => t.destroy() });
+    this.tweens.add({ targets: t, y: y - 10, alpha: 0, duration: size > 1.5 ? 1000 : 800, delay: size > 1.5 ? 150 : 0, onComplete: () => t.destroy() });
   }
 
   /** Merged blob: paint the swallowed blobs' colours, eyes and mouths over its body (follows squash tweens). */
@@ -1416,7 +1439,7 @@ export class TownScene extends Phaser.Scene {
       ? this.add.sprite(p.x, p.y, hero, 0).setOrigin(CHAR_ORIGIN.x, CHAR_ORIGIN.y).setScale(HERO_SCALE)
       : this.add.sprite(p.x, p.y, heroTexture(this, p.cls, p.color), 0).setOrigin(0.5, 0.85);
     const label = this.add.text(p.x, p.y, p.name, {
-      fontFamily: "monospace", fontSize: "16px", color: id === this.me ? "#ffd166" : "#ffffff",
+      fontFamily: PIXEL_FONT, fontSize: "16px", color: id === this.me ? "#ffd166" : "#ffffff",
       stroke: "#000", strokeThickness: 3,
     }).setOrigin(0.5, 1).setScale(0.25).setResolution(2);
     isoAnchor(label, sprite);
@@ -1821,6 +1844,7 @@ export class TownScene extends Phaser.Scene {
     this.party?.close();
     this.trade?.close();
     this.stash?.close();
+    this.bounty?.close();
     this.patchNotes?.close();
     this.portals?.close();
     this.gameMenu?.close();
@@ -1843,7 +1867,7 @@ export class TownScene extends Phaser.Scene {
     const shown = (id: string) => { const e = document.getElementById(id); return !!e && !e.hidden; };
     return shown("hero") || shown("tree") || shown("slotpick") || musicPanelOpen() ||
       !!(this.npcs?.isOpen || this.npcs?.log.open || this.gearMenu?.open || this.ideaBoard?.open || this.party?.open ||
-        this.trade?.open || this.stash?.open || this.patchNotes?.open || this.portals?.isOpen || this.minimap?.isOpen ||
+        this.trade?.open || this.stash?.open || this.bounty?.open || this.patchNotes?.open || this.portals?.isOpen || this.minimap?.isOpen ||
         this.gameMenu?.open || this.talentMenu?.open);
   }
 
@@ -2215,6 +2239,9 @@ export class TownScene extends Phaser.Scene {
     const el = document.createElement("div");
     el.textContent = text;
     const feed = document.getElementById("feed")!;
+    // The feed sits under the quest tracker on the right, never behind it (it was hidden there)
+    const qt = document.getElementById("questtracker"), r = qt && qt.offsetParent ? qt.getBoundingClientRect() : undefined;
+    feed.style.top = r && r.height ? `${Math.round(r.bottom + 8)}px` : "";
     feed.prepend(el);
     setTimeout(() => el.remove(), 5000);
   }
@@ -2395,7 +2422,7 @@ export class TownScene extends Phaser.Scene {
         if (e.culled) { e.culled = false; e.bubble?.setVisible(true); e.bar.setVisible(true); }
         if (!e.label) {
           e.label = this.add.text(e.sprite.x, e.sprite.y, "", {
-            fontFamily: "monospace", fontSize: "14px", color: "#ffffff", stroke: "#000", strokeThickness: 3,
+            fontFamily: PIXEL_FONT, fontSize: "14px", color: "#ffffff", stroke: "#000", strokeThickness: 3,
           }).setOrigin(0.5, 1).setScale(0.25).setResolution(2);
           isoAnchor(e.label, e.sprite);
         }
@@ -2478,10 +2505,19 @@ export class TownScene extends Phaser.Scene {
         // Level tag coloured by how tough it is for me: grey easy, white even, orange tougher, red dangerous
         const diff = (p.level ?? 1) - ((this.room.state as any).players?.get(this.me)?.level ?? 1);
         const col = diff >= 3 ? "#ff5252" : diff >= 1 ? "#ffb74d" : diff >= -2 ? "#ffffff" : "#9e9e9e";
-        const txt = p.title ? `${p.title} Lv${p.level ?? 1}` : BOSS[p.kind as keyof typeof BOSS] ? `Boss Lv${p.level ?? 1}` : ELITE[p.kind as keyof typeof ELITE] ? `Elite Lv${p.level ?? 1}` : `Lv${p.level ?? 1}`;
+        // The monster under the mouse or being attacked also shows its name (just "LvN" otherwise: less clutter)
+        const named = id === this.pointer?.hoverId || id === this.pointer?.targetId;
+        const kindName = named ? (MOBS[p.kind as MobKind]?.name ?? "") : "";
+        const lv = `Lv${p.level ?? 1}`;
+        const txt = p.title ? `${p.title} ${lv}` : BOSS[p.kind as keyof typeof BOSS] ? `${kindName || "Boss"} ${lv}` : ELITE[p.kind as keyof typeof ELITE] ? `Elite ${kindName ? kindName + " " : ""}${lv}` : kindName ? `${kindName} ${lv}` : lv;
+        // A monster right next to my hero: my own name steps aside so the two labels never overlap
+        const meS = this.entities.get(this.me)?.sprite;
+        if (meS && !p.dead && Math.abs(e.sprite.x - meS.x) < 1.5 * TILE && Math.abs(e.sprite.y - meS.y) < 1.5 * TILE) this.mobByMeAt = now;
         if (e.label.text !== txt) e.label.setText(txt);
         if (e.lvlColor !== col) { e.label.setColor(col); e.lvlColor = col; }
         e.label.setVisible(!p.dead && !p.hidden);
+      } else if (e.label && id === this.me) {
+        e.label.setVisible(now - this.mobByMeAt > 300);
       } else if (e.label && id !== this.me) {
         // Group members: green name
         const myParty = (this.room.state as any).players?.get(this.me)?.party;
@@ -2570,10 +2606,11 @@ export class TownScene extends Phaser.Scene {
     }
     this.shrine?.update(meEnt && !meEnt.state.dead && !this.chests?.near ? meEnt.sprite : undefined, !!this.npcs?.isOpen);
     this.stash?.update(meEnt && !meEnt.state.dead ? meEnt.sprite : undefined, !!this.npcs?.isOpen || !!this.chests?.near);
-    if (this.npcs) this.npcs.hidePrompt = !!this.chests?.near || !!this.shrine?.near || !!this.portals?.near || !!this.stash?.near;
+    this.bounty?.update(meEnt && !meEnt.state.dead ? meEnt.sprite : undefined, !!this.npcs?.isOpen || !!this.chests?.near || !!this.stash?.near);
+    if (this.npcs) { this.npcs.hidePrompt = !!this.chests?.near || !!this.shrine?.near || !!this.portals?.near || !!this.stash?.near || !!this.bounty?.near; this.npcs.extraBlock = this.bounty?.trackerBlock() ?? ""; }
     this.npcs?.update(meEnt && !meEnt.state.dead ? meEnt.sprite : undefined, meEnt?.state);
     this.portals?.update(meEnt && !meEnt.state.dead ? meEnt.sprite : undefined, !!this.npcs?.isOpen || !!this.chests?.near || !!this.shrine?.near);
-    if (this.minimap && this.npcs) this.minimap.markers = this.portals ? [...this.npcs.markers, ...this.portals.markers()] : this.npcs.markers;
+    if (this.minimap && this.npcs) this.minimap.markers = [...this.npcs.markers, ...(this.portals?.markers() ?? []), ...(this.bounty?.markers() ?? [])];
 
     const mine = meEnt?.state;
     if (mine) {

@@ -4,6 +4,8 @@ import type { MobKind } from "./constants";
 export type ItemKind = "gold" | "potion" | "mpotion" | "gear" | "quest"; // "gear": Item.gear holds the id (shared/gear.ts); "quest": quest item id (shared/quests.ts)
 
 export const PICKUP_RADIUS = 10; // px
+/** Gold is scooped up from a little further away, as in most ARPGs: no walking onto every coin. */
+export const GOLD_PICKUP_RADIUS = 72; // px (about 2 tiles)
 export const ITEM_LIFETIME_MS = 30000; // ground items vanish after this
 export const PVP_GOLD_DROP = 0.5; // fraction of gold a player drops when killed by another player
 

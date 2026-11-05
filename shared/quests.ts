@@ -1050,8 +1050,8 @@ export const TUT_QUESTS: QuestDef[] = [
         hint: "Each level gives a skill point. Press T and click a skill at the top of the tree to learn it.",
         nag: "Press T and learn a skill with your point." },
       { type: "cast", text: "Use your skill", banner: ["Skill learned!", "Now use it on a blob"], obj: "Use your new skill outside the village",
-        hint: "It sits on hotbar key 1. Press 1, then right-click to use it. No magic inside Oakvale: the villagers hate it!",
-        nag: "Press 1, then right-click. But not inside the village!" },
+        hint: "It sits on hotbar key 1. Point the mouse at a blob and press 1 to use it. No magic inside Oakvale: the villagers hate it!",
+        nag: "Point at a blob and press 1. But not inside the village!" },
       back("druid", "Elder Rowan", "village bonfire", [
         "Look at you! Walking, fighting, a real weapon and a skill of your own.",
         "Each level brings more: stat points in the hero panel (C) and skill points in the tree (T). Your quest log is on J, the map on M.",
