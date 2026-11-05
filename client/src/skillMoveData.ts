@@ -11,6 +11,8 @@
  *   cleave 0 twist back, 1 deeper, 2 sweep starts, 3 across the front, 4 through, 5 follow-through, 6-7 recover
  *   raise  0-7 blade raised to the sky, breathing (charging)
  */
+import { LEAP_MS } from "../../shared/skills"; // a leap's hop through the air (skillfx.showMove), the slam lands with it
+
 export const MOVE_SHEET = ["lunge", "whirl", "slam", "leap", "cleave", "raise"] as const;
 export type MoveAnim = (typeof MOVE_SHEET)[number];
 export const MOVE_DIRS = ["down", "up", "right", "downright", "upright"] as const;
@@ -33,8 +35,6 @@ export interface Step {
 }
 export interface Seq { wind?: Step[]; act: Step[]; rec?: Step[] }
 
-/** The leap hop in skillfx.showMove. */
-export const LEAP_MS = 260;
 
 const S = (a: MoveAnim, f: number[], ms: number, o: Partial<Step> = {}): Step => ({ a, f, ms, ...o });
 const cuts = (n: number) => [...Array(n).keys()].map((i) => i % 2 ? S("lunge", [3, 4], 75, { ghost: 22 }) : S("cleave", [3, 4], 75, { ghost: 22 }));

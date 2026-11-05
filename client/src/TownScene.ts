@@ -259,7 +259,7 @@ export class TownScene extends Phaser.Scene {
   private lastCast: Record<string, number> = {}; // local clock (ms) of my last cast of each skill, for cooldowns
   private items = new Map<string, Phaser.GameObjects.Image>();
   private lastDodge = -Infinity;
-  private rootUntil = 0; // local clock: my skill wind-up holds me in place until then
+  private rootUntil = 0; // local clock: my dash is gliding to the server's spot until then (no prediction)
   private lastRanged = -Infinity;
   private heroFrom?: number;
   private heroSig = "";
@@ -2134,8 +2134,6 @@ export class TownScene extends Phaser.Scene {
       if (ev.id === this.me && ev.s === this.leftSkill()) this.pointer?.swung(); // a left-click spell went off: that click is done
       // Big melee skills play their own wind-up / action / recovery sequence; everything else the cast animation
       if (e?.hero && !this.moves.start(ev.id, e, ev, this.dirOf(e))) playCharAnim(e.sprite, e.hero, "skill", this.dirOf(e));
-      // Our own wind-up roots us at once (the server's "charge" status comes a round trip later)
-      if (ev.id === this.me && (ev.wind ?? 0) + (ev.charge ?? 0) > 0) this.rootUntil = this.time.now + ev.wind + ev.charge;
     }
     if (ev.ev === "move" || ev.ev === "countered") {
       const e = this.entities.get(ev.id);
@@ -2283,7 +2281,7 @@ export class TownScene extends Phaser.Scene {
     const ease = (k: number) => 1 - Math.pow(1 - k, step / (1000 / 60));
     for (const [id, e] of this.entities) {
       const p = e.state;
-      const rooted = (typeof p.fx === "string" && p.fx.includes("charge")) || (id === this.me && this.time.now < this.rootUntil); // a buildup or wind-up roots the hero
+      const rooted = (typeof p.fx === "string" && p.fx.includes("charge")) || (id === this.me && this.time.now < this.rootUntil); // a buildup roots the hero, a dash glides
       if (id === this.me && !p.dead && !p.stunned && !p.rolling && !rooted) {
         // Client-side prediction with the same movement code the server runs
         const r = moveStep(e.sprite.x, e.sprite.y, this.input_, step / 1000, heroSpeed(p.cls as ClassKind, p.slowed, p.spd ?? 1) * gearSpeedMult(activeOf(p)));
