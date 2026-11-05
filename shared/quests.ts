@@ -2,6 +2,7 @@ import { MobKind, TILE } from "./constants";
 import { AREAS, ELEMENT_LANDS, GULLROCK, HOLLOW, HOLLOW_WARDS, isSafeZone, isSolidAt, REDFANG, VILLAGE, WRECK } from "./map";
 import { SPAWN_ZONES, SpawnZone } from "./spawns";
 import { npcById } from "./npcs";
+import { chamberAt, COCOONS, DEN, FLOORS, SINKHOLE, TOTEMS } from "./dungeon";
 
 /**
  * The blob quest chain. Quests are done one after the other, each in a blob zone a little further from
@@ -94,11 +95,12 @@ export const QUEST_ITEMS: Record<string, QuestItemDef> = {
   venom: { name: "Venom Sac", plural: "Venom Sacs" },
   cinder: { name: "Cinder Heart", plural: "Cinder Hearts" },
   stormglass: { name: "Storm Glass", plural: "Storm Glass" },
+  charm: { name: "Hide Charm", plural: "Hide Charms" },
 };
 
 // ---- Map objects you use with E ----
 
-export type QuestObjectKind = "lantern" | "shrine" | "cocoon" | "heart" | "engine" | "beacon" | "crypt" | "phylactery" | "ward" | "shard";
+export type QuestObjectKind = "lantern" | "shrine" | "cocoon" | "heart" | "engine" | "beacon" | "crypt" | "phylactery" | "ward" | "shard" | "silk" | "totem";
 export interface QuestObject { id: string; kind: QuestObjectKind; x: number; y: number; name: string; verb: string }
 
 const obj = (id: string, kind: QuestObjectKind, name: string, verb: string, area: string, fx: number, fy: number): QuestObject =>
@@ -902,6 +904,115 @@ export const CROWN_QUESTS: QuestDef[] = [
   },
 ];
 
+// ---- The Hide Rite: the Mawdeep Warrens under the Whispering Woods (shared/dungeon.ts) ----
+
+const [HALLS, PENS, DENF] = FLOORS;
+const pxAt = ([tx, ty]: [number, number], r: number, label: string) => ({ x: (tx + 0.5) * TILE, y: (ty + 0.5) * TILE, r: r * TILE, label });
+const SINK_DIR = dirFromVillage(SINKHOLE.x, SINKHOLE.y);
+/** Trappers wrapped in silk in the Silk Pens, and the three hide totems round the Hide-Mother's bed. */
+export const SILK: QuestObject[] = COCOONS.map(([tx, ty], i) => objAt(`silk${i + 1}`, "silk", "Trapper in a silk cocoon", "Cut free", tx, ty));
+export const HIDE_TOTEMS: QuestObject[] = TOTEMS.map(([tx, ty], i) => objAt(`totem${i + 1}`, "totem", "Hide totem", "Burn", tx, ty));
+const BEAST_FOLK: MobKind[] = ["gnawkin", "tuskborn", "silkwretch", "duskwing"];
+
+/**
+ * The story (Murat 2026-11-05): in the Long Hunger, a winter so hard the valley ate its dogs, an old trapper-wife named
+ * Ursk led Oakvale's starving hunters down into the Mawdeep, a cave under the woods, and taught them the Hide Rite:
+ * sew a beast's skin into your own and its strength is yours. Rat for cunning, boar for might, wolf for the hunt.
+ * They never came back up as men. Last month the ground fell in north of the Redfang trail and the Mawdeep was open
+ * again. Now trappers go missing: the beast-folk take them below to be sewn into new hides, and the Hide-Mother
+ * herself, more bear than woman now, waits on her bed of skins at the bottom.
+ * Its own chain, open once First Steps is done; it climbs from Lv 21 to the region's ceiling, beside the elemental
+ * wilds and before the Hollow Crown.
+ */
+export const BEAST_QUESTS: QuestDef[] = [
+  {
+    id: "ground", title: "Gone to Ground", giver: "captain", zone: HALLS.name, minLevel: 21,
+    description: `Trappers have vanished in the woods ${SINK_DIR} of Oakvale, where the ground fell in north of the Redfang trail. Captain Hale wants to know what took them.`,
+    offer: [
+      "You've a strong arm and a stronger stomach. Good. I need both.",
+      `Four trappers went out past the Redfang trail last week, ${SINK_DIR} of here. None came back. A hunter found the ground torn open there, a great sinkhole, with claw marks all round its lip.`,
+      "Something dragged them down. Something with hands AND claws. Find out what, and kill as much of it as you can.",
+    ],
+    acceptText: "I'll go down",
+    steps: [
+      { type: "reach", at: pxAt([SINKHOLE.x, SINKHOLE.y], 4, "Mawdeep Sinkhole"), zone: "Mawdeep Sinkhole", text: "Find the sinkhole in the Whispering Woods",
+        banner: ["New quest", "Gone to Ground"], obj: `Find the sinkhole north of the Redfang trail (${SINK_DIR})`,
+        nag: "Take the trail toward Redfang Hollow. The sinkhole is in the trees just north of it." },
+      { type: "reach", at: pxAt(chamberAt(HALLS, 0), 6, HALLS.name), zone: HALLS.name, text: "Climb down into the Mawdeep",
+        banner: ["The Mawdeep", "Climb down the rope"], obj: "Climb down the rope into the dark", nag: "The rope hangs into the sinkhole. Climb down." },
+      { type: "kill", kinds: BEAST_FOLK, zone: HALLS.name, goal: 10, text: "Kill 10 beast-folk", banner: ["They were people once", "Kill 10 beast-folk"],
+        obj: "Beast-folk slain: {n} / {goal}", nag: "{n} of {goal}. The tunnels are full of them." },
+      { type: "collect", item: "charm", kinds: BEAST_FOLK, chance: { gnawkin: 0.3, tuskborn: 0.45, silkwretch: 0.4, duskwing: 0.4 }, zone: HALLS.name, goal: 4,
+        text: "Take 4 Hide Charms from the beast-folk", banner: ["Bone and hide", "Take 4 Hide Charms"], obj: "Hide Charms: {n} / {goal}",
+        nag: "{n} of {goal}. They wear them sewn into their skin." },
+      back("witch", "Morwen", "her tent by the square", [
+        "Give those here. Don't touch them more than you must.",
+        "These are Hide Charms. Bone needle, gut thread, a tuft of the beast. I've only ever seen them drawn, in my grandmother's book, on the page she tore half out.",
+        "The Hide Rite. In the Long Hunger an old trapper-wife called Ursk took the starving hunters down into the Mawdeep and sewed beasts into them. Rat, boar, wolf. They came back strong and they never came back up.",
+        "If the charms are fresh, the rite is being done again. Down there. On the trappers.",
+      ], "Claim reward"),
+    ],
+    reward: { xp: 1800, gold: 300, potions: 3 },
+    after: "Burn your clothes when you're done down there. Hide smell never comes out.",
+  },
+  {
+    id: "pens", title: "The Silk Pens", giver: "witch", zone: PENS.name, minLevel: 23,
+    description: `The beast-folk keep their captives wrapped in silk on the Mawdeep's second floor, the Silk Pens. Cut the trappers free and kill Gorehowl the Packlord, who keeps the pens.`,
+    offer: [
+      "The rite takes days. A hide must be cured, a man must be starved first so the beast takes. If they took the trappers last week, some may still be breathing.",
+      "My grandmother's book says they kept their catch below the first halls, wound in spider silk like flies in a larder. The Silk Pens.",
+      "And a wolf-man guarded them. Gorehowl, the first of Ursk's hunters, the Packlord. If he still lives he'll hear you coming. He howls, and the little rat-things come running.",
+      "Cut the trappers loose. Kill the wolf. Then tell Hale his men are coming home.",
+    ],
+    acceptText: "I'll cut them free",
+    steps: [
+      { type: "reach", at: pxAt(chamberAt(PENS, 0), 6, PENS.name), zone: PENS.name, text: "Go down to the Silk Pens",
+        banner: ["New quest", "The Silk Pens"], obj: "Find the stair down at the far end of the Gnawing Halls",
+        nag: "The stair down is at the far end of the Gnawing Halls, past the boar wallow." },
+      { type: "use", zone: PENS.name, objects: SILK, chest: false, text: "Cut the trappers free of the silk", banner: [PENS.name, "Cut the trappers free"],
+        obj: "Trappers cut free: {n} / {goal}", nag: "{n} of {goal}. They hang in the pens off the side tunnels." },
+      { type: "kill", kinds: ["packlord"], zone: "Gorehowl's Lair", goal: 1, text: "Kill Gorehowl the Packlord", banner: ["A howl in the dark", "Kill Gorehowl the Packlord"],
+        obj: "Gorehowl the Packlord slain: {n} / {goal}", nag: "His lair is the big chamber on the east side of the pens. Mind his pounce." },
+      back("captain", "Captain Hale", "east gate", [
+        "Three of them stumbled in at the gate this morning, white as milk, covered in that sticky muck. The fourth didn't make it out of the silk.",
+        "Wenn, the eldest, keeps saying one word. 'Mother'. She says they were waiting for 'the Mother' to wake and choose which beast each of them would be.",
+        "You did good work down there. Rest. I'll get what I can out of her.",
+      ], "Claim reward"),
+    ],
+    reward: { xp: 2400, gold: 380, potions: 4 },
+    after: "Wenn is sleeping now. Mostly. She still screams when the dogs bark.",
+  },
+  {
+    id: "mother", title: "The Hide-Mother", giver: "captain", zone: DENF.name, minLevel: 25,
+    description: `At the bottom of the Mawdeep the Hide-Mother sleeps on a bed of skins, ringed by three hide totems that keep the rite alive. Burn the totems, and end her when she wakes.`,
+    offer: [
+      "Wenn told me the rest. At the very bottom, past a byre where a bull-man stamps, there's a den. A great bed of hides, and on it something that was a woman once and is mostly bear now.",
+      "Ursk. The Hide-Mother. The same Ursk from the Long Hunger, three hundred years gone. The rite keeps her. Three totems of bone and skin stand round her bed, and as long as they stand the rite goes on.",
+      "Burn the totems. She'll wake, and she will be angry. Watch the roof when she rages: Wenn says the whole den shakes.",
+      "End it. For the trappers, and for the hunters she took the first time.",
+    ],
+    acceptText: "I'll end the rite",
+    steps: [
+      { type: "reach", at: pxAt([DEN.x, DEN.y], 11, "The Hide-Mother's Bed"), zone: DENF.name, text: "Find the Hide-Mother's den",
+        banner: ["New quest", "The Hide-Mother"], obj: "Go down to the bottom of the Mawdeep and find her den",
+        nag: "The stair to the den is at the far end of the Silk Pens, past Gorehowl's lair." },
+      { type: "use", zone: DENF.name, objects: HIDE_TOTEMS, chest: false, text: "Burn the three hide totems", banner: ["The Hide-Mother's Bed", "Burn the three hide totems"],
+        obj: "Hide totems burned: {n} / {goal}", nag: "{n} of {goal}. They stand round her bed." },
+      { type: "kill", kinds: ["hidemother"], zone: DENF.name, goal: 1, own: true,
+        summon: { parts: ["hidemother"], level: 28, title: "Grandam Ursk, the Hide-Mother", hpMult: 1.6, x: (DEN.x + 0.5) * TILE, y: (DEN.y - 1.5) * TILE },
+        text: "Defeat the Hide-Mother", banner: ["THE HIDE-MOTHER WAKES", "Defeat Grandam Ursk"], obj: "The Hide-Mother defeated: {n} / {goal}",
+        nag: "She is awake. End her!" },
+      back("captain", "Captain Hale", "east gate", [
+        "You're back. You're... mostly you. Good.",
+        "The hunters say the woods went quiet last night. Not a rat-squeal, not a howl. Even the sinkhole stopped breathing out that warm stink.",
+        "Ursk is gone and her rite with her. Whatever's left down there are beasts now, nothing more. Take this. You've earned the whole valley's thanks, and the trappers' most of all.",
+      ], "Claim reward"),
+    ],
+    reward: { xp: 4200, gold: 900, potions: 5 },
+    after: "The trappers have taken to wearing bells. Can't say I blame them.",
+  },
+];
+
 // ---- First Steps: the guided first quest, one control per step (replaces the old wall-of-text intro) ----
 
 const ROWAN = npcById("druid")!;
@@ -953,7 +1064,7 @@ export const TUT_QUESTS: QuestDef[] = [
 ];
 export const TUT_CHAIN = 3;
 /** Is the guided first quest done (or from before it existed)? */
-export const tutorialDone = (p: Quester | undefined) => (p?.tutId ?? TUT_QUESTS.length) >= TUT_QUESTS.length;
+export const tutorialDone = (p: Quester | undefined) => p?.tut === undefined || unpackQuest(p.tut).questId >= TUT_QUESTS.length;
 /** Can this chain offer new quests yet? Every story waits for the guided first quest. */
 export const chainOpen = (p: Quester | undefined, c: number) =>
   c === TUT_CHAIN || (tutorialDone(p) && (c !== CROWN_CHAIN || STORY_CHAINS.every((s) => storyDone(p, s))));
@@ -989,14 +1100,15 @@ export const CHAINS: QuestChain[] = [
   { id: "gloam", name: "The Gloam", quests: QUESTS, keys: ["questId", "questStage", "questCount"], version: QUEST_VERSION, verKey: "questVer" },
   { id: "bones", name: "The Pale Marshal", quests: BONE_QUESTS, keys: ["boneId", "boneStage", "boneCount"], version: 1, verKey: "boneVer" },
   { id: "redfang", name: "The Redfang Debt", quests: RED_QUESTS, keys: ["redId", "redStage", "redCount"], version: 2, verKey: "redVer" },
-  { id: "tutorial", name: "First Steps", quests: TUT_QUESTS, keys: ["tutId", "tutStage", "tutCount"], version: 1, verKey: "tutVer" },
+  { id: "tutorial", name: "First Steps", quests: TUT_QUESTS, keys: ["tutId", "tutStage", "tutCount"], version: 1, verKey: "tutVer", packed: "tut" },
   { id: "crown", name: "The Hollow Crown", quests: CROWN_QUESTS, keys: ["crownId", "crownStage", "crownCount"], version: 1, verKey: "crownVer", packed: "crown" },
+  { id: "beast", name: "The Hide Rite", quests: BEAST_QUESTS, keys: ["beastId", "beastStage", "beastCount"], version: 1, verKey: "beastVer", packed: "beast" },
 ];
 
 /** Progress on one chain (chain undefined = the blob chain, so a Player passed as is reads as chain 0). */
 export interface QuestState { questId: number; questStage: number; questCount: number; level?: number; chain?: number }
 /** A player's progress on every chain: the Player schema fields (CHAINS[].keys). */
-export type Quester = { level?: number; questId?: number; questStage?: number; questCount?: number; boneId?: number; boneStage?: number; boneCount?: number; redId?: number; redStage?: number; redCount?: number; tutId?: number; tutStage?: number; tutCount?: number; crown?: number };
+export type Quester = { level?: number; questId?: number; questStage?: number; questCount?: number; boneId?: number; boneStage?: number; boneCount?: number; redId?: number; redStage?: number; redCount?: number; tut?: number; crown?: number; beast?: number };
 
 /** One chain's progress, read from the player's fields. */
 export function chainState(p: Quester | undefined, c: number): QuestState | undefined {
@@ -1169,7 +1281,7 @@ export function usableObjects(p: Quester | undefined): { o: QuestObject; i: numb
 
 /** Every quest object in the world, with whether it is done for this player (lit lanterns stay lit…). */
 export function allObjects(): QuestObject[] {
-  return [...LANTERNS, COCOON, ...SHRINES, BROOD_HEART, ...SHARDS, ...ENGINES, BEACON, ...CRYPTS, PHYLACTERY, ...WARDS];
+  return [...LANTERNS, COCOON, ...SHRINES, BROOD_HEART, ...SHARDS, ...ENGINES, BEACON, ...CRYPTS, PHYLACTERY, ...WARDS, ...SILK, ...HIDE_TOTEMS];
 }
 export function objectDone(o: QuestObject, p: Quester | undefined): boolean {
   const c = CHAINS.findIndex((ch) => ch.quests.some((d) => d.steps.some((s) => s.objects?.includes(o))));

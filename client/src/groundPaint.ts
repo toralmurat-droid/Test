@@ -16,6 +16,11 @@ export interface GroundData {
   solid: Uint8Array;
   /** The elemental wilds (shared/map.ts ELEMENT_LANDS): rects in tiles whose ground turns blighted, frosted, burned or storm-scoured. */
   lands?: { x: number; y: number; w: number; h: number; el: string }[];
+  /**
+   * The underground band (shared/dungeon.ts): from row y0 the sea fades into the dark, from row rock on, solid tiles
+   * are bare black rock and the open ones the dank earth of the Mawdeep's floors.
+   */
+  cave?: { y0: number; rock: number };
 }
 
 // Tile ids (shared/map.ts T)
@@ -43,7 +48,7 @@ const clamp01 = (v: number) => (v < 0 ? 0 : v > 1 ? 1 : v);
 const sstep = (a: number, b: number, v: number) => { const t = clamp01((v - a) / (b - a)); return t * t * (3 - 2 * t); };
 
 /** Precomputed fields at tile resolution, interpolated per pixel. */
-export interface Fields { depth: Float32Array; ao: Float32Array }
+export interface Fields { depth: Float32Array; ao: Float32Array; rock?: Float32Array }
 
 export function makeFields(g: GroundData): Fields {
   const { w, h, ground, solid } = g;
@@ -71,7 +76,13 @@ export function makeFields(g: GroundData): Fields {
     }
     ao[y * w + x] = Math.min(1, s);
   }
-  return { depth, ao };
+  // Rock mass of the underground: solid tiles below the sea band (black past the cave walls)
+  let rock: Float32Array | undefined;
+  if (g.cave) {
+    rock = new Float32Array(w * h);
+    for (let y = g.cave.rock; y < h; y++) for (let x = 0; x < w; x++) rock[y * w + x] = solid[y * w + x];
+  }
+  return { depth, ao, rock };
 }
 
 const out3 = new Float32Array(3);
@@ -87,6 +98,8 @@ const BAYER4 = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5].map((v) =>
 const COB = ["#3a3632", "#524d47", "#6a645b", "#837b70", "#9d9486"].map(hx);
 const COB_WARM = ["#3d342c", "#574b3f", "#706152", "#8a7966", "#a4917b"].map(hx);
 const COB_COOL = ["#33353a", "#4a4d52", "#62646a", "#7b7d82", "#95969a"].map(hx);
+/** The black of solid rock and of the dark past the sea (a touch above the page background). */
+const VOID = [16, 13, 15];
 const COB_LINE = hx("#1b1714"), JOINT = ["#241c15", "#3a2e22", "#4f4030"].map(hx), MOSSG = ["#2a3a1a", "#3e5424", "#566e30"].map(hx);
 
 function material(t: number, wx: number, wy: number, sx: number, sy: number, depth: number, now: number): number {
@@ -440,6 +453,21 @@ export function paintChunk(g: GroundData, f: Fields, sx0: number, sy0: number, c
         // contact shadow around walls, rocks and posts
         const ao = field(f.ao, wx / tile - 0.5, wy / tile - 0.5);
         if (ao > 0) { const k = 1 - 0.45 * ao; r *= k; gg *= k; b *= k; }
+      }
+      if (g.cave && wy / tile >= g.cave.y0 - 8) {
+        const ty = wy / tile, cv = g.cave;
+        if (ty < cv.rock) { // the open sea runs out into the dark
+          const k = sstep(cv.y0 - 8, cv.rock, ty + (vn(wx / 30, wy / 30, 350) - 0.5) * 3);
+          r += (VOID[0] - r) * k; gg += (VOID[1] - gg) * k; b += (VOID[2] - b) * k;
+        } else {
+          // dank cave earth: cold, dim, damp; the tunnels' floors are what the wall blocks stand round
+          const lum = r * 0.3 + gg * 0.55 + b * 0.15, damp = vn(wx / 18, wy / 18, 351);
+          r = (lum * 0.92 + r * 0.08) * 0.64 * (0.9 + 0.2 * damp); gg = (lum * 0.92 + gg * 0.08) * 0.58 * (0.9 + 0.2 * damp); b = (lum * 0.92 + b * 0.08) * 0.56 * (0.92 + 0.2 * damp);
+          if (damp > 0.72) { r *= 0.8; gg *= 0.86; b *= 0.9; } // seeping wet patches
+          const rk = field(f.rock!, wx / tile - 0.5, wy / tile - 0.5) + (vn(wx / 6, wy / 6, 352) - 0.5) * 0.3;
+          const k = sstep(0.3, 0.62, rk);
+          r += (VOID[0] - r) * k; gg += (VOID[1] - gg) * k; b += (VOID[2] - b) * k;
+        }
       }
       if (lands.length) {
         const tx = wx / tile, ty = wy / tile;

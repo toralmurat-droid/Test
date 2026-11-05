@@ -81,6 +81,8 @@ import { PERCH_LIFT } from "../../shared/bandits";
 import { icon, fillIcons } from "./pixelicons";
 import { ResourceBars } from "./resourceBars";
 import { bindElemFx } from "./elemFx";
+import { bindBeastFx } from "./beastFx";
+import { DungeonView } from "./dungeon";
 
 /** One painted bit on a merged blob, in body-relative units (-1..1 across the body). */
 interface BlobPart { kind: "patch" | "eye" | "mouth"; u: number; v: number; r: number; col: number }
@@ -283,6 +285,7 @@ export class TownScene extends Phaser.Scene {
   private statsShown = "";
   private deathTimer?: number;
   private iso?: IsoView;
+  private dungeon?: DungeonView;
 
   constructor(private opts: { name: string; password: string; color: number; cls: ClassKind; newGame?: boolean }) {
     super("town");
@@ -315,6 +318,11 @@ export class TownScene extends Phaser.Scene {
     addWorldProps(this, (x, y, lift, dx) => this.details?.addLight(x, y, 0xffb347, 2.2, 0.75, 0.08, lift, dx)); // spear racks, pennants, dummies, lantern poles...
     addSiegeWorks(this); // the necromancer's half-built siege engines in the skeleton lands
     this.siege = new SiegeWork(this);
+    // The Mawdeep Warrens below the woods: cave walls, braziers, ropes and stairs, and the dark down there
+    this.dungeon = new DungeonView(this, {
+      me: () => { const e = this.entities.get(this.me); return e ? { x: e.sprite.x, y: e.sprite.y } : undefined; },
+      heroes: () => [...this.entities.values()].filter((e) => !e.mob && e.sprite.visible).map((e) => ({ x: e.sprite.x, y: e.sprite.y })),
+    }, PIXEL_FONT);
 
     const cam = this.cameras.main;
     cam.setBounds(0, 0, MAP_W * TILE, MAP_H * TILE);
@@ -516,6 +524,13 @@ export class TownScene extends Phaser.Scene {
       e.sprite.setPosition(x, y); e.tx = x; e.ty = y; e.lastX = x; e.lastY = y; // a jump, not a walk
       if (id === this.me) { this.portals?.close(); this.cameras.main.fadeIn(900, 40, 14, 4); } // a warm flash while the new place is drawn
     });
+    // Down a rope or a stair in the Mawdeep (shared/dungeon.ts LINKS): a jump to the other end, a fade through the dark
+    this.room.onMessage("descend", ({ id, x, y }) => {
+      const e = this.entities.get(id);
+      if (!e) return;
+      e.sprite.setPosition(x, y); e.tx = x; e.ty = y; e.lastX = x; e.lastY = y;
+      if (id === this.me) this.cameras.main.fadeIn(700, 6, 4, 3);
+    });
     this.room.onMessage("travelno", () => {
       const e = this.entities.get(this.me);
       if (e) this.floatText(e.sprite.x, e.sprite.y - 22, "Not while fighting", "#ffa22e", PIXEL_FONT);
@@ -646,6 +661,12 @@ export class TownScene extends Phaser.Scene {
     // Mother Blob special: she swells up (wind-up), then a shockwave ring; the slam also shakes the screen
     // The elemental blobs' moves: venom splurt, frost nova, fire breath, storm sparks (client/src/elemFx.ts)
     bindElemFx(this.room, {
+      scene: this, fx: this.fx, ent: (id) => this.entities.get(id),
+      say: (x, y, text, color) => this.floatText(x, y, text, color, PIXEL_FONT),
+      squash: (id, kx, ky, ms) => { const e = this.entities.get(id); if (e) this.squash(e, kx, ky, ms / 2); },
+    });
+    // The beast-folk's moves in the Mawdeep Warrens (client/src/beastFx.ts)
+    bindBeastFx(this.room, {
       scene: this, fx: this.fx, ent: (id) => this.entities.get(id),
       say: (x, y, text, color) => this.floatText(x, y, text, color, PIXEL_FONT),
       squash: (id, kx, ky, ms) => { const e = this.entities.get(id); if (e) this.squash(e, kx, ky, ms / 2); },
@@ -2298,6 +2319,8 @@ export class TownScene extends Phaser.Scene {
     this.iso?.update(dtMs);
     if (loadingActive()) this.checkLoaded();
     this.ambient?.update(this.time.now, dtMs);
+    this.dungeon?.update(this.time.now);
+    if (this.details) this.details.underground = !!this.dungeon?.underground;
     this.details?.update(this.time.now, dtMs);
     if (!this.room) return;
     this.villagers?.update(dtMs, this.outlawSpots());

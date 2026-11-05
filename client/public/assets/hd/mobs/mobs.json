@@ -812,5 +812,47 @@
   "h": 18,
   "scale": 1.5,
   "frames": 12
+ },
+ "mob_gnawkin": {
+  "w": 20,
+  "h": 30,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_tuskborn": {
+  "w": 26,
+  "h": 32,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_silkwretch": {
+  "w": 20,
+  "h": 30,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_duskwing": {
+  "w": 24,
+  "h": 32,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_packlord": {
+  "w": 30,
+  "h": 36,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_hornbrute": {
+  "w": 40,
+  "h": 40,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_hidemother": {
+  "w": 44,
+  "h": 48,
+  "scale": 1.5,
+  "frames": 12
  }
 }

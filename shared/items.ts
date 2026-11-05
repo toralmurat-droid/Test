@@ -31,4 +31,11 @@ export const LOOT: Record<MobKind, LootDef> = {
   necromancer: { gold: [40, 80], potionChance: 1 },
   banditchief: { gold: [90, 160], potionChance: 1 },
   hollowking: { gold: [400, 600], potionChance: 1 },
+  gnawkin: { gold: [5, 12], potionChance: 0.25 },
+  tuskborn: { gold: [10, 22], potionChance: 0.35 },
+  silkwretch: { gold: [8, 18], potionChance: 0.3 },
+  duskwing: { gold: [8, 16], potionChance: 0.3 },
+  packlord: { gold: [70, 130], potionChance: 1 },
+  hornbrute: { gold: [80, 150], potionChance: 1 },
+  hidemother: { gold: [300, 480], potionChance: 1 },
 };

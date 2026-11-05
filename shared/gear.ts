@@ -190,6 +190,13 @@ export const GEAR_DROP: Record<MobKind, { chance: number; tiers: [number, number
   necromancer: { chance: 0.75, tiers: [0.1, 0.5, 0.4] },
   banditchief: { chance: 1, tiers: [0, 0.45, 0.55] },
   hollowking: { chance: 1, tiers: [0, 0.2, 0.8] },
+  gnawkin: { chance: 0.12, tiers: [0.35, 0.45, 0.2] },
+  tuskborn: { chance: 0.18, tiers: [0.25, 0.45, 0.3] },
+  silkwretch: { chance: 0.16, tiers: [0.3, 0.45, 0.25] },
+  duskwing: { chance: 0.16, tiers: [0.3, 0.45, 0.25] },
+  packlord: { chance: 0.9, tiers: [0, 0.45, 0.55] },
+  hornbrute: { chance: 0.9, tiers: [0, 0.4, 0.6] },
+  hidemother: { chance: 1, tiers: [0, 0.25, 0.75] },
 };
 
 export function isGearId(v: unknown): v is string {

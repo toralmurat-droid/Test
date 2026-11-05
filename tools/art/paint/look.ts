@@ -35,7 +35,10 @@ export interface Look {
   boneArmour?: number;
   /** Sword length/width multiplier (the Hollow King's greatsword). */
   bladeLen?: number;
+  /** Beast-folk of the Mawdeep (shared/dungeon.ts): the animal head whose hide this man or woman was sewn into. */
+  beast?: BeastHead;
 }
+export type BeastHead = "rat" | "boar" | "spider" | "bat" | "wolf" | "bull" | "bear";
 
 /** Monsters painted with the same body code (sheets built by paint/mobs.ts). */
 export const MOB_LOOKS: Record<string, Look> = {
@@ -84,6 +87,42 @@ export const MOB_LOOKS: Record<string, Look> = {
     torso: "robe", torsoCol: 0x2f3fa6, trim: 0xe0b440, sash: 0x1a2466,
     legs: "robe", legCol: 0x2c3a9a, boots: 0x9a988a, bootStyle: "shoe",
     sleeve: 0x2f3fa6, arms: "cloth", weapon: "staff", orb: 0x7fe7ff, fx: 0xc8fbff,
+  },
+  // ---- the beast-folk of the Mawdeep Warrens: valley folk sewn into animal hides by the Hide-Mother's rite
+  gnawkin: { // rat: a starved, hunched wretch in mangy rat hide, a rusty shiv
+    skin: 0x7a6e64, beast: "rat", hairStyle: "none", head: "none", eyeGlow: 0xff3a2a,
+    torso: "bare", torsoCol: 0x7a6e64, belt: 0x2e2218, harness: true, legs: "fur", legCol: 0x5e554c, boots: 0x6a5f56, bootStyle: "bare",
+    sleeve: 0x7a6e64, arms: "bare", bracer: 0x3a2e24, weapon: "dagger", fx: 0xd8d0c0, back: "pelt", capeCol: 0x5a5148,
+  },
+  tuskborn: { // boar: a broad brute under a bristly boar hide, a spiked club
+    skin: 0xa07a5e, beast: "boar", hairStyle: "none", head: "none", eyeGlow: 0xffa23a,
+    torso: "leather", torsoCol: 0x3e3028, trim: 0x241a14, belt: 0x241a14, buckle: 0x6a5a48, legs: "fur", legCol: 0x3a2c22, boots: 0x2a201a, bootStyle: "wrap",
+    sleeve: 0xa07a5e, arms: "bare", bracer: 0x3e3028, glove: 0x241a14, weapon: "hammer", fx: 0xffd0a0, back: "pelt", capeCol: 0x33281f, build: 1.3,
+  },
+  silkwretch: { // spider: a thin, pale thing wound in grubby silk, many eyes, fangs
+    skin: 0xb8b0a2, beast: "spider", hairStyle: "none", head: "none", eyeGlow: 0x9dff6a,
+    torso: "wrap", torsoCol: 0x8a8476, trim: 0x6e685c, legs: "wrapped", legCol: 0x7e786c, boots: 0x5a544a, bootStyle: "wrap",
+    sleeve: 0x8a8476, arms: "wrap", glove: 0x2a2228, weapon: "none", fx: 0xd8ffc0,
+  },
+  duskwing: { // bat: black fur, great ears, a cloak of wing-membrane
+    skin: 0x7a6662, beast: "bat", hairStyle: "none", head: "none", eyeGlow: 0xffe080,
+    torso: "leather", torsoCol: 0x2e2426, trim: 0x1a1416, belt: 0x1a1416, legs: "fur", legCol: 0x2a2224, boots: 0x1e181a, bootStyle: "wrap",
+    sleeve: 0x2e2426, arms: "cloth", glove: 0x1e181a, weapon: "dagger", fx: 0xffe8c0, back: "cape", capeCol: 0x3a2628,
+  },
+  packlord: { // Gorehowl: a hulking wolf-man, grey pelt, a notched axe, bone trinkets
+    skin: 0x9a8a7a, beast: "wolf", hairStyle: "none", head: "none", eyeGlow: 0xffd23c,
+    torso: "leather", torsoCol: 0x4a4440, trim: 0x2a2624, belt: 0x2a1e16, buckle: 0xd8d0b8, harness: true, legs: "fur", legCol: 0x5a5652, boots: 0x2a2420, bootStyle: "wrap",
+    sleeve: 0x9a8a7a, arms: "bare", bracer: 0x3a2e24, glove: 0x2a1e16, weapon: "axe", fx: 0xff8a70, back: "pelt", capeCol: 0x6a6662, build: 1.35,
+  },
+  hornbrute: { // the Hornbrute: a giant under a black bull's hide, horns wider than a door, a stone maul
+    skin: 0x8a6a56, beast: "bull", hairStyle: "none", head: "none", eyeGlow: 0xff3a2a,
+    torso: "bare", torsoCol: 0x8a6a56, belt: 0x241a14, buckle: 0xc9a050, harness: true, legs: "fur", legCol: 0x2e221c, boots: 0x1e1612, bootStyle: "wrap",
+    sleeve: 0x8a6a56, arms: "bare", bracer: 0x2e221c, glove: 0x241a14, weapon: "hammer", fx: 0xffb0a0, back: "pelt", capeCol: 0x2a201a, build: 1.5,
+  },
+  hidemother: { // Grandam Ursk, the Hide-Mother: a she-bear's head and a robe of stitched hides, a staff of bones
+    skin: 0x9a7a60, beast: "bear", hairStyle: "none", head: "none", eyeGlow: 0xff8a2a,
+    torso: "robe", torsoCol: 0x5a4030, trim: 0x8a6a48, sash: 0x6a1a12, legs: "robe", legCol: 0x4a3426, boots: 0x2a1e16, bootStyle: "wrap",
+    sleeve: 0x5a4030, arms: "cloth", glove: 0x3a2a1e, weapon: "staff", orb: 0xff4a2a, fx: 0xff8a50, back: "pelt", capeCol: 0x4a3626, build: 1.45,
   },
   // summoned by a skeleton ritual (BONES.ritual): a hulking red brute with horns, a bone harness and a cleaver
   demon: {

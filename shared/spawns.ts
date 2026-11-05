@@ -1,6 +1,7 @@
-import { MobKind, regionMobLevel, TILE } from "./constants";
+import { ELITE, MobKind, regionMobLevel, regionSpecialLevel, TILE } from "./constants";
 import { AREAS, isSafeZone, isSolidAt, OBJECTS, T, VILLAGE } from "./map";
 import { CAMP_POSTS } from "./bandits";
+import { LAIRS } from "./dungeon";
 
 /**
  * Monster spawn zones. Each zone keeps up to `mobs[kind]` monsters alive. Every `respawnMs` its timer fires
@@ -82,6 +83,14 @@ const ZONE_MOBS: { name: string; mobs: Partial<Record<MobKind, number>>; respawn
   { name: "Rimewater Hollow", mobs: { frostblob: 10, warriorblob: 3, healerblob: 2, motherblob: 1 }, respawnMs: 6000, levels: [17, 20] },
   { name: "Cinder Scar", mobs: { fireblob: 10, warriorblob: 3, shooterblob: 3, motherblob: 1 }, respawnMs: 6000, levels: [20, 23] },
   { name: "Stormbreak Crags", mobs: { stormblob: 12, warriorblob: 3, shooterblob: 3, motherblob: 2 }, respawnMs: 6000, levels: [22, 25] },
+  // The Mawdeep Warrens (shared/dungeon.ts): three floors of beast-folk under the woods, a step past the elemental
+  // wilds and up to the region's ceiling. Hand-set counts (a warren full of packs, not a carpet of monsters).
+  // The lairs come first so their elites keep their own zone.
+  { name: "Gorehowl's Lair", mobs: { packlord: 1 }, respawnMs: 150000, fixed: true, levels: [26, 26] },
+  { name: "The Hornbrute's Byre", mobs: { hornbrute: 1 }, respawnMs: 150000, fixed: true, levels: [27, 27] },
+  { name: "The Gnawing Halls", mobs: { gnawkin: 26, tuskborn: 10 }, respawnMs: 7000, fixed: true, levels: [21, 23] },
+  { name: "The Silk Pens", mobs: { silkwretch: 14, duskwing: 12, gnawkin: 10 }, respawnMs: 7000, fixed: true, levels: [23, 25] },
+  { name: "The Hide-Mother's Den", mobs: { tuskborn: 9, duskwing: 9, silkwretch: 8, gnawkin: 8 }, respawnMs: 8000, fixed: true, levels: [24, 25] },
   { name: "Saltwind Coast", mobs: { slime: 14, shooterblob: 5, warriorblob: 5, healerblob: 4, motherblob: 2 }, respawnMs: 4500 },
   { name: "Whispering Woods", mobs: { slime: 10, shooterblob: 4, warriorblob: 4, healerblob: 3, motherblob: 2 }, respawnMs: 5250, wild: true }, // broad areas last: zone lookups take the first match
   // Everything west of the river that no named area covers: fields, roads and woods around Oakvale
@@ -124,6 +133,7 @@ function spawnable(z: { name: string; wild?: boolean }, tx: number, ty: number):
   const v = VILLAGE;
   if (tx >= v.x0 - 2 && tx <= v.x1 + 2 && ty >= v.y0 - 2 && ty <= v.y1 + 2) return false;
   if (z.wild && claimedByArea(z.name, tx, ty)) return false;
+  if (LAIRS.some((l) => l.name !== z.name && inRect(l, tx, ty))) return false; // a lair is its elite's alone (and the boss bed nobody's)
   const x = (tx + 0.5) * TILE, y = (ty + 0.5) * TILE;
   if (isSafeZone(x, y) || noMobsAt(x, y)) return false;
   return !isSolidAt(x - 6, y - 6) && !isSolidAt(x + 6, y + 6) && !isSolidAt(x - 6, y + 6) && !isSolidAt(x + 6, y - 6);
@@ -146,7 +156,8 @@ export const SPAWN_ZONES: SpawnZone[] = ZONE_MOBS.flatMap((z) => {
   const mobs: Partial<Record<MobKind, number>> = {};
   for (const [k, n] of Object.entries(z.mobs) as [MobKind, number][]) mobs[k] = k === "necromancer" ? n : k === "motherblob" ? Math.max(n, Math.round(n * f / 4)) : Math.round(n * f); // big ones grow slower
   const raw: [number, number] = z.levels ?? (z.wild && hi > 0 ? [lo, hi] : zoneLevels(r));
-  const levels: [number, number] = [regionMobLevel(raw[0]), regionMobLevel(raw[1])];
+  const lvl = (Object.keys(z.mobs) as MobKind[]).every((k) => ELITE[k]) ? regionSpecialLevel : regionMobLevel; // an elite's lair: the special ceiling
+  const levels: [number, number] = [lvl(raw[0]), lvl(raw[1])];
   return [{ ...z, ...r, mobs, levels, respawnMs: Math.max(800, Math.round(z.respawnMs / f)) }];
 });
 
@@ -168,7 +179,7 @@ export function randomPointInZone(z: SpawnZone, kind?: MobKind): { x: number; y:
 /** Where and at what level a monster of this kind appears. In wild zones the level follows the spot. */
 export function spawnPoint(z: SpawnZone, kind: MobKind): { x: number; y: number; level: number } {
   const min = KIND_MIN_LEVEL[kind] ?? 1;
-  if (!z.wild) return { ...randomPointInZone(z, kind), level: regionMobLevel(Math.max(min, rollLevel(z))) };
+  if (!z.wild) return { ...randomPointInZone(z, kind), level: (ELITE[kind] ? regionSpecialLevel : regionMobLevel)(Math.max(min, rollLevel(z))) };
   let best = randomPointInZone(z, kind), lvl = 0;
   for (let i = 0; i < 25; i++) {
     const p = i ? randomPointInZone(z, kind) : best;

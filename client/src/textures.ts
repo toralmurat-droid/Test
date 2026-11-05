@@ -1,5 +1,5 @@
 import Phaser from "phaser";
-import { TILE } from "../../shared/constants";
+import { BEAST_KINDS, TILE } from "../../shared/constants";
 import { TILE_COUNT } from "../../shared/map";
 import { ROWS, drawTileset } from "./tileset";
 import { SMOOTH } from "./isoflag";
@@ -285,7 +285,7 @@ export const MOB_LOOK: Record<string, { top: number; bar: number; oy: number; sc
   crawler: { top: 10, bar: 10, oy: CRAWL_CROP },
 };
 
-const PAINTED_MOBS = ["slime", "blobling", "shooterblob", "warriorblob", "healerblob", "motherblob", "venomblob", "frostblob", "fireblob", "stormblob", "skeleton", "bandit", "skeletonmage", "necromancer", "demon", "crawler", "banditchief", "hollowking"];
+const PAINTED_MOBS = ["slime", "blobling", "shooterblob", "warriorblob", "healerblob", "motherblob", "venomblob", "frostblob", "fireblob", "stormblob", "skeleton", "bandit", "skeletonmage", "necromancer", "demon", "crawler", "banditchief", "hollowking", "gnawkin", "tuskborn", "silkwretch", "duskwing", "packlord", "hornbrute", "hidemother"];
 /** Painted humanoid monsters have taller frames (feet lower in the frame, label higher). */
 const PAINTED_LOOK: Record<string, { top: number; bar: number; oy: number; scale?: number }> = {
   // about hero height (heroes are 32 world px since the 48px sheets)
@@ -295,6 +295,11 @@ const PAINTED_LOOK: Record<string, { top: number; bar: number; oy: number; scale
   demon: { top: 50, bar: 28, oy: 33 / 34, scale: 1.45 },
   banditchief: { top: 46, bar: 30, oy: 32 / 34, scale: 1.5 },
   hollowking: { top: 62, bar: 38, oy: 42 / 48, scale: 1.6 }, // towers over the heroes
+  // the Mawdeep's beast-folk (tools/art/paint/look.ts): the elites and the Hide-Mother drawn big
+  gnawkin: { top: 25, bar: 14, oy: 27.5 / 30 }, silkwretch: { top: 25, bar: 14, oy: 27.5 / 30 },
+  tuskborn: { top: 28, bar: 16, oy: 29.5 / 32 }, duskwing: { top: 28, bar: 16, oy: 29.5 / 32 },
+  packlord: { top: 48, bar: 28, oy: 34 / 36, scale: 1.4 }, hornbrute: { top: 56, bar: 32, oy: 37.5 / 40, scale: 1.45 },
+  hidemother: { top: 66, bar: 38, oy: 44 / 48, scale: 1.6 },
   // pixel sheets use even frame heights (whole texels at 1.5 per px)
   blobling: { top: 9, bar: 8, oy: 0.91 }, shooterblob: { top: 16, bar: 12, oy: 0.93 }, healerblob: { top: 16, bar: 12, oy: 0.93 },
   venomblob: { top: 17, bar: 12, oy: 0.93 }, frostblob: { top: 20, bar: 14, oy: 0.94 }, fireblob: { top: 19, bar: 14, oy: 0.94 }, stormblob: { top: 18, bar: 12, oy: 0.93 },
@@ -326,7 +331,7 @@ export function mobTexture(scene: Phaser.Scene, kind: string, level = 1, weapon 
       return key;
     }
   }
-  return pixelMobTexture(scene, kind === "demon" || kind === "hollowking" ? "necromancer" : kind, level); // no pixel demon sheet: a necromancer stands in
+  return pixelMobTexture(scene, kind === "demon" || kind === "hollowking" ? "necromancer" : BEAST_KINDS.includes(kind as any) ? "bandit" : kind, level); // no pixel demon sheet: a necromancer stands in
 }
 
 function pixelMobTexture(scene: Phaser.Scene, kind: string, level = 1): string {
