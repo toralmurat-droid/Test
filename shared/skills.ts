@@ -141,6 +141,8 @@ export interface SkillDef {
   needs?: WeaponNeed;
   /** Basic spell (CANTRIPS): known from Lv 1 without skill points, always rank 1, cheap and meant to be cast again and again. */
   cantrip?: boolean;
+  /** Damage multiplier: quick spells that can be cast again and again hit softer per cast (wizard, Diablo 2 style). */
+  power?: number;
 }
 
 /** Right-click aiming: on the hero itself, at the clicked spot, or toward the click. */
@@ -291,57 +293,57 @@ const S: Record<ClassKind, SkillDef[]> = <Record<ClassKind, SkillDef[]>><unknown
   // ---------------------------------------------------------------- WIZARD
   wizard: [
     // Fire
-    { id: "w_wave", name: "Flame Wave", type: "Attack", branch: 0, row: 0, style: "fire", cd: 5000, mana: 18,
+    { id: "w_wave", name: "Flame Wave", type: "Attack", branch: 0, row: 0, style: "fire", cd: 1500, power: 0.44, mana: 12,
       desc: "Send a rolling wave of fire forward: it burns everything it passes.",
       shots: { kind: "flamewave", speed: 160, range: 130, radius: 10, size: 1.5, dmg: 30, burn: [4, 2000], pierce: 99, kb: 0.4 } },
     { id: "w_pyro", name: "Pyromancy", type: "Passive", branch: 0, row: 1, style: "fire", passive: { effect: "skill", perRank: 7 },
       desc: "Fire answers you: more skill damage." },
-    { id: "w_firewall", name: "Fire Wall", type: "Aura", branch: 0, row: 2, style: "fire", cd: 12000, mana: 30,
+    { id: "w_firewall", name: "Fire Wall", type: "Aura", branch: 0, row: 2, style: "fire", cd: 6000, power: 0.59, mana: 25,
       desc: "Raise a wall of flame ahead for 4s: enemies inside burn.",
       field: { kind: "fire", r: 34, ahead: 44, ms: 4000, tickMs: 400, dmg: 10 } },
-    { id: "w_orb", name: "Inferno Orb", type: "Buildup", branch: 0, row: 3, style: "fire", cd: 11000, mana: 35, chargeMs: 600, consume: true,
+    { id: "w_orb", name: "Inferno Orb", type: "Buildup", branch: 0, row: 3, style: "fire", cd: 4000, power: 0.5, mana: 24, chargeMs: 200, consume: true,
       desc: "Gather fire into a huge orb, then hurl it: it explodes in a big blast. Arcane stacks make it stronger.",
       shots: { kind: "inferno", speed: 150, range: 160, radius: 9, size: 2.2, dmg: 100, explode: 50, burn: [5, 2000], kb: 2 } },
-    { id: "w_meteor", name: "Meteor Shower", type: "Ultimate", branch: 0, row: 4, style: "fire", cd: 20000, mana: 55, chargeMs: 400,
+    { id: "w_meteor", name: "Meteor Shower", type: "Ultimate", branch: 0, row: 4, style: "fire", cd: 7000, power: 0.41, mana: 31,
       desc: "Pull meteors from the sky: one giant impact ahead, four smaller ones around it, and burning ground.",
       areas: [{ r: 50, ahead: 56, dmg: 95, kb: 2, delayMs: 450, look: "meteor" },
         { r: 26, ahead: 56, dmg: 24, waves: 4, everyMs: 170, delayMs: 650, scatter: 50, burn: [5, 2000], look: "meteor" }],
       field: { kind: "fire", r: 46, ahead: 56, ms: 3000, tickMs: 500, dmg: 5 } },
 
     // Frost
-    { id: "w_nova", name: "Frost Nova", type: "Attack", branch: 1, row: 0, style: "frost", cd: 7000, mana: 25,
-      desc: "Blast ice all around you: damage and a 1.8s slow.",
-      areas: [{ r: 46, dmg: 30, slowMs: 1800, look: "nova" }] },
-    { id: "w_shards", name: "Ice Shards", type: "Attack", branch: 1, row: 1, style: "frost", cd: 5000, mana: 14,
+    { id: "w_nova", name: "Frost Nova", type: "Attack", branch: 1, row: 0, style: "frost", cd: 3500, power: 0.59, mana: 21,
+      desc: "Blast ice all around you: damage and a 1.1s slow.",
+      areas: [{ r: 46, dmg: 30, slowMs: 1100, look: "nova" }] },
+    { id: "w_shards", name: "Ice Shards", type: "Attack", branch: 1, row: 1, style: "frost", cd: 1200, power: 0.38, mana: 7,
       desc: "Fire five shards of ice in a fan: each one slows.",
-      shots: { kind: "iceshard", n: 5, spread: 40, speed: 280, range: 150, radius: 4, dmg: 10, slowMs: 700, kb: 0.3 } },
-    { id: "w_armor", name: "Frost Armor", type: "Enchant", branch: 1, row: 2, style: "frost", cd: 16000, mana: 25,
+      shots: { kind: "iceshard", n: 5, spread: 40, speed: 280, range: 150, radius: 4, dmg: 10, slowMs: 400, kb: 0.3 } },
+    { id: "w_armor", name: "Frost Armor", type: "Enchant", branch: 1, row: 2, style: "frost", cd: 8000, mana: 25,
       desc: "Ice armour for 8s: take 20% less damage, and whoever hits you is chilled.",
       buff: { ms: 8000, armor: 20, thorns: { slowMs: 1200, dmg: 6 } } },
-    { id: "w_mirror", name: "Mirror Ice", type: "Counter", branch: 1, row: 3, style: "frost", cd: 10000, mana: 18,
+    { id: "w_mirror", name: "Mirror Ice", type: "Counter", branch: 1, row: 3, style: "frost", cd: 8000, power: 0.78, mana: 20,
       desc: "Encase yourself in a mirror of ice for 0.9s: the next hit shatters it, freezing the attacker and reflecting the damage.",
       counter: { ms: 900, reflect: 0.7, effects: { stunMs: 700 }, area: { r: 34, dmg: 40, slowMs: 1500, look: "nova" } } },
-    { id: "w_blizzard", name: "Blizzard", type: "Ultimate", branch: 1, row: 4, style: "frost", cd: 20000, mana: 55, chargeMs: 300,
+    { id: "w_blizzard", name: "Blizzard", type: "Ultimate", branch: 1, row: 4, style: "frost", cd: 6000, power: 0.38, mana: 29,
       desc: "Summon a blizzard ahead for 5s: ice rains down, hurting and slowing everyone inside.",
       field: { kind: "blizzard", r: 70, ahead: 56, ms: 5000, tickMs: 500, dmg: 11, slowMs: 900 } },
-    { id: "w_frozenorb", name: "Frozen Orb", type: "Attack", branch: 1, row: 4, style: "frost", cd: 1200, mana: 30,
+    { id: "w_frozenorb", name: "Frozen Orb", type: "Attack", branch: 1, row: 4, style: "frost", cd: 1000, power: 0.72, mana: 30,
       desc: "Launch an orb of frozen magic that flies straight and very far through enemies. As it goes it keeps spitting ice shards all around it in a turning spiral, and at the end it blows up in a big frost blast. A very short cooldown: cast it again and again while your mana lasts.",
-      shots: { kind: "frozenorb", speed: 200, range: 450, radius: 7, size: 1.6, dmg: 8, pierce: 99, slowMs: 1000, kb: 0.2, explode: 56,
-        pulse: { every: 40, turn: 25, shards: { kind: "iceshard", n: 4, speed: 230, range: 80, radius: 4, dmg: 3, slowMs: 700, kb: 0.2 } } } },
+      shots: { kind: "frozenorb", speed: 200, range: 450, radius: 7, size: 1.6, dmg: 8, pierce: 99, slowMs: 500, kb: 0.2, explode: 56,
+        pulse: { every: 40, turn: 25, shards: { kind: "iceshard", n: 4, speed: 230, range: 80, radius: 4, dmg: 3, slowMs: 400, kb: 0.2 } } } },
 
     // Storm / arcane
-    { id: "w_missiles", name: "Arcane Missiles", type: "Attack", branch: 2, row: 0, style: "arcane", cd: 4000, mana: 15,
+    { id: "w_missiles", name: "Arcane Missiles", type: "Attack", branch: 2, row: 0, style: "arcane", cd: 1000, power: 0.4, mana: 8,
       desc: "Three arcane missiles shoot out in a tight spread.",
       shots: { kind: "arcane", n: 3, spread: 14, speed: 300, range: 170, radius: 4, dmg: 11, kb: 0.4 } },
-    { id: "w_blink", name: "Blink", type: "Movement", branch: 2, row: 1, style: "arcane", cd: 6000, cost: 20, mana: 8,
+    { id: "w_blink", name: "Blink", type: "Movement", branch: 2, row: 1, style: "arcane", cd: 4000, cost: 20, mana: 8,
       desc: "Teleport ahead. The rift you leave behind explodes.",
       areas: [{ r: 30, dmg: 40, kb: 1, look: "burst", atStart: true }], move: { kind: "blink", dist: 72, invulnMs: 200 } },
-    { id: "w_static", name: "Static Field", type: "Aura", branch: 2, row: 2, style: "lightning", cd: 16000, mana: 30,
+    { id: "w_static", name: "Static Field", type: "Aura", branch: 2, row: 2, style: "lightning", cd: 10000, power: 0.68, mana: 29,
       desc: "Crackle with lightning for 8s: every 0.6s a bolt strikes an enemy near you.",
       field: { kind: "static", r: 62, ms: 8000, tickMs: 600, follow: true, zap: { n: 1, dmg: 11, stunMs: 150 } } },
     { id: "w_flow", name: "Mana Flow", type: "Passive", branch: 2, row: 3, style: "arcane", passive: { effect: "mana", perRank: 20 },
       desc: "Magic flows freely: your mana refills faster." },
-    { id: "w_storm", name: "Thunderstorm", type: "Ultimate", branch: 2, row: 4, style: "lightning", cd: 20000, mana: 55, chargeMs: 400,
+    { id: "w_storm", name: "Thunderstorm", type: "Ultimate", branch: 2, row: 4, style: "lightning", cd: 8000, power: 0.45, mana: 34,
       desc: "Storm clouds gather over you, then lightning hammers the area for 3s, stunning whatever it hits.",
       field: { kind: "storm", r: 96, ms: 3000, tickMs: 300, zap: { n: 2, dmg: 18, stunMs: 300 } } },
   ],

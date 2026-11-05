@@ -217,6 +217,9 @@ const GOO: Record<string, number> = { slime: 0x5fae4c, blobling: 0x8cc955, shoot
 
 const tipEsc = (t: string) => t.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
 
+/** While a skill key, the right mouse button or Space is held, the spell is asked for this often (ms). */
+const CAST_REPEAT_MS = 90;
+
 export class TownScene extends Phaser.Scene {
   private room!: Room;
   private me = "";
@@ -226,6 +229,8 @@ export class TownScene extends Phaser.Scene {
   private stopSeq = 0; // seq of our last "stand still" input
   private stoppedAt = 0;
   private seq = 0;
+  private heldSlot = -1; // skill key (0..9) held down: it keeps casting
+  private slotCastAt = 0;
   private pointer?: PointerControls;
   /**
    * What a left / right click (and Space) does: "" = the main-hand weapon's attack, or a skill / basic spell id.
@@ -337,15 +342,20 @@ export class TownScene extends Phaser.Scene {
     // the number key puts that skill in the slot instead of using it.
     const names = ["ONE", "TWO", "THREE", "FOUR", "FIVE", "SIX", "SEVEN", "EIGHT", "NINE", "ZERO"];
     names.forEach((k, n) => {
-      const press = () => {
-        if (this.chatting()) return;
+      const press = (ev?: KeyboardEvent) => {
+        if (ev?.repeat || this.chatting()) return; // held keys repeat in update(), at the cast rate, not the OS key repeat
         const hover = this.talentMenu?.open ? this.talentMenu.hoveredActive() : undefined;
-        if (hover) this.room?.send("assign", { slot: n, skill: hover });
-        else this.castSlot(n); // the key casts its skill right away, toward the mouse cursor (Murat 2026-11-05)
+        if (hover) { this.room?.send("assign", { slot: n, skill: hover }); return; }
+        this.castSlot(n); // the key casts its skill right away, toward the mouse cursor (Murat 2026-11-05)
+        this.heldSlot = n; this.slotCastAt = this.time.now;
       };
+      const release = () => { if (this.heldSlot === n) this.heldSlot = -1; };
       this.input.keyboard!.on(`keydown-${k}`, press);
       this.input.keyboard!.on(`keydown-NUMPAD_${k}`, press);
+      this.input.keyboard!.on(`keyup-${k}`, release);
+      this.input.keyboard!.on(`keyup-NUMPAD_${k}`, release);
     });
+    window.addEventListener("blur", () => { this.heldSlot = -1; }); // the key-up never comes when the window loses focus
     this.setupHotbar();
     this.input.keyboard!.on("keydown-Q", () => { if (!this.chatting()) this.room?.send("potion"); });
     this.input.keyboard!.on("keydown-V", () => { if (!this.chatting()) this.room?.send("manapotion"); });
@@ -2302,6 +2312,12 @@ export class TownScene extends Phaser.Scene {
     let want = next;
     if (next.up || next.down || next.left || next.right) { this.pointer?.cancel(); this.pointer?.drawRing(); }
     else want = this.pointer?.update(Math.min(dtMs, 100)) ?? next;
+    // A skill key held down keeps casting toward the mouse, like holding a spell in Diablo 2 (the server drops
+    // the tries that come before the cooldown or without the mana, so asking often just means no wasted time)
+    if (this.heldSlot >= 0) {
+      if (typing || !this.input.keyboard?.enabled) this.heldSlot = -1;
+      else if (this.time.now - this.slotCastAt >= CAST_REPEAT_MS) { this.slotCastAt = this.time.now; this.castSlot(this.heldSlot); }
+    }
     this.sendInput(want);
 
     const now = this.time.now, wall = performance.now();

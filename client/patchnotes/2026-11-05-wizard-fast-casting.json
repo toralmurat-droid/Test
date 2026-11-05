@@ -1,0 +1,9 @@
+{
+  "date": "2026-11-05",
+  "title": "Faster wizard casting",
+  "changes": [
+    "Wizard spells come back much faster (most attack spells in 1 to 2.5 seconds) and cost less mana; each cast hits a bit softer to make up for it.",
+    "Meteor Shower, Blizzard and Thunderstorm go off at once, with no charge-up.",
+    "Hold a skill key, the right mouse button or Space to keep casting toward the mouse: the next cast goes off the moment it is ready."
+  ]
+}
