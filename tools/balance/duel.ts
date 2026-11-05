@@ -9,7 +9,7 @@
  * (a miss chance that grows with flight time) since the real game is 2D.
  * Keep the server rules in sync with this file when changing combat code.
  */
-import { CLASSES, CLASS_KINDS, ClassKind, COMBO_WINDOW_MS, DODGE, ENERGY, GUARD_REDUCTION, staminaRegen } from "../../shared/classes";
+import { basicDrain, CLASSES, CLASS_KINDS, ClassKind, COMBO_WINDOW_MS, DODGE, ENERGY, GUARD_REDUCTION, staminaRegen } from "../../shared/classes";
 import { attackMult, cooldownMult, critChance, heroSpeed, magicMult, maxHpFromStats, statPoints, statsFor, STATS, Stats } from "../../shared/powers";
 import { activeSkills, canLearn, SKILLS, SkillDef, talentBonus, talentMult, talentReduce } from "../../shared/skills";
 import { canPay, manaRegen, maxManaFor, skillCost } from "../../shared/mana";
@@ -66,12 +66,15 @@ export function talentsFor(cls: ClassKind, level: number, main: Build): Ranks {
   return r;
 }
 
-/** Stat points: ~50% into the attack stat, 20% Dexterity, the rest into Stamina. */
-export function pointsFor(cls: ClassKind, level: number): Stats {
+/**
+ * Stat points: ~50% into the attack stat, 20% Dexterity, the rest into Stamina. The vampire is a hybrid: a Blood or
+ * Night build (branch 0/1, spells) puts its attack points into Magic, a Fang build (blade) into Strength.
+ */
+export function pointsFor(cls: ClassKind, level: number, build?: Build): Stats {
   const n = statPoints(level);
   const atk = Math.round(n * 0.5), dex = Math.round(n * 0.2);
   const out: Stats = { sta: n - atk - dex, str: 0, mag: 0, dex };
-  out[STATS[cls].attackStat] += atk;
+  out[cls === "vampire" && build !== undefined && build < 2 ? "mag" : STATS[cls].attackStat] += atk;
   return out;
 }
 
@@ -186,7 +189,7 @@ export class Duel {
     const dealt = before - t.hp;
     if (by) {
       by.dealt += dealt;
-      const share = talentBonus(by.cls, by.t, "lifesteal") / 100 + buffLifesteal(by, now);
+      const share = talentBonus(by.cls, by.t, "lifesteal") / 100 + buffLifesteal(by, now) + (o.drain ?? 0) / 100;
       if (share > 0 && !by.dead && dealt > 0) by.hp = Math.min(by.maxHp, by.hp + dealt * share);
     }
     if (t.hp <= 0) { t.dead = true; return true; }
@@ -195,6 +198,7 @@ export class Duel {
   }
 
   hit(a: F | undefined, t: F, dmg: number, push: number, o: HitOpts = {}) {
+    if (a && o.basic && basicDrain(a.cls)) o = { ...o, drain: (o.drain ?? 0) + basicDrain(a.cls) }; // vampire trait, like server hitTarget
     if (a) dmg = dmg * talentMult(a.cls, a.t, "dmg") * (o.skill && !o.dot ? talentMult(a.cls, a.t, "skill") : 1) * dealtMult(a, this.now);
     if (a && !a.mob && !t.mob) dmg *= pvpDamageMult(a.level, t.level); // hero vs hero, like server hitTarget
     this.damage(t, Math.max(1, Math.round(dmg)), a, push, o.kb ?? 1, o);
@@ -272,6 +276,8 @@ export class Duel {
       .sort((x, y) => y.req - x.req);
     for (const s of ready) {
       if (s.consume && a.sk.stacks < 3 && !s.buff) continue; // wait for some stacks
+      // A melee hero in reach swings its weapon instead of casting a weaker basic spell (vampire Leech)
+      if (s.cantrip && !a.ranged && d <= (12 + CLASSES[a.cls].attackRange) * gearReachMult(a.eq)) continue;
       if (!this.useful(a, s, d, incoming, tReach)) continue;
       a.face = toward;
       if (castSkill(this.host, a.id, s.id)) return;
@@ -405,7 +411,7 @@ export class Duel {
 }
 
 export function make(id: string, cls: ClassKind, level: number, build: Build) {
-  const pts = pointsFor(cls, level);
+  const pts = pointsFor(cls, level, build);
   return new F(id, cls, level, talentsFor(cls, level, build), gearFor(cls, level, pts), pts);
 }
 

@@ -8,7 +8,7 @@ import {
 } from "../shared/constants";
 import { arrivalAt, LINK_RANGE, linkById, LINKS } from "../shared/dungeon";
 import {
-  ATTACK_VARIANTS, CLASSES, ClassKind, COMBO_WINDOW_MS, DODGE, EMOTES, ENERGY, staminaRegen, DASH_INVULN_MS, GUARD_REDUCTION, isClassKind, levelFromXp, MAX_XP, capLevel, PVP_KILL_XP, xpForLevel,
+  ATTACK_VARIANTS, basicDrain, CLASSES, ClassKind, COMBO_WINDOW_MS, DODGE, EMOTES, ENERGY, staminaRegen, DASH_INVULN_MS, GUARD_REDUCTION, isClassKind, levelFromXp, MAX_XP, capLevel, PVP_KILL_XP, xpForLevel,
 } from "../shared/classes";
 import { MANA_POTION_DROP, manaRegen, maxManaFor, packMana, pay } from "../shared/mana";
 import { Counts, dropSize, Potions, nextSize, noPotions, packPotions, potionAmount, potionName, PotionKind, potionSlots, POTION_COOLDOWN_MS, slotsAfter, SIZES, total } from "../shared/potions";
@@ -20,7 +20,7 @@ import { Element, ElemPart, ELEMENT_FX, mobAffinity, MOB_MELEE_ELEMENT, MOB_SHOT
 import { gearResist, splitHit } from "../shared/gear";
 import { activeSkills, canLearn, classSkills, cleanRanks, MAX_RANK, NEED_TEXT, skillLearned, skillOf, talentBonus, talentMult, talentReduce } from "../shared/skills";
 import {
-  afterHit, atkSpeedMult, blocking, buffLifesteal, buffRegen, castSkill, ccImmune, charging, winding, counterHit, dealtMult, FieldInst, newRuntime,
+  afterHit, atkSpeedMult, blocking, bloodCost, buffLifesteal, buffRegen, castSkill, ccImmune, charging, winding, counterHit, dealtMult, FieldInst, newRuntime,
   imbueOf, shotEnd, shotHit, shotPulse, ShotSpec, SkillHost, speedMult, statusOf, takenMult, tickField, tickUnit, Unit,
 } from "../shared/skillEngine";
 import {
@@ -363,6 +363,7 @@ interface HitOpts {
   parts?: ElemPart[]; // a hero's elemental damage on top of the (physical) dmg (shared/elements.ts)
   el?: Element; // the element the hit shows as (damage number colour)
   mobEl?: Element; // a monster's elemental attack: the hero's resistance cuts it
+  drain?: number; // % of the damage dealt that heals the attacker (vampire skills)
 }
 
 const COLORS = [0xe74c3c, 0x3498db, 0x2ecc71, 0xf1c40f, 0x9b59b6, 0xe67e22, 0x1abc9c, 0xecf0f1];
@@ -762,6 +763,7 @@ export class TownRoom extends Room<TownState> {
     if (p) saveHero(p.name, p.cls, this.snapshot(p));
     if (p && !announced) this.rememberHero(client.sessionId, p); // during an update everyone was remembered together (groups intact)
     this.partyLeave(client.sessionId);
+    this.lastDrainFx.delete(client.sessionId);
     this.invites.delete(client.sessionId);
     this.tradeStop(client.sessionId, "The other hero left: trade cancelled.");
     this.tradeAsks.delete(client.sessionId);
@@ -3079,6 +3081,12 @@ export class TownRoom extends Room<TownState> {
       }
       return;
     }
+    if (def?.blood && skillLearned(p.cls, p.talents, skill) && p.hp <= bloodCost(def, p) + 1) {
+      // Blood magic with too little life left to pay for it
+      const now = Date.now();
+      if (now - p.lastWeaponNo > 1000) { p.lastWeaponNo = now; this.clients.find((c) => c.sessionId === id)?.send("gearno", { text: `Too little blood left for ${def.name}` }); }
+      return;
+    }
     if (castSkill(this.host, id, skill)) {
       p.emote = "";
       this.questDo(id, "cast");
@@ -3299,18 +3307,25 @@ export class TownRoom extends Room<TownState> {
   }
 
   /** Lifesteal (passives like Bloodthirst, and buffs): heal a share of the damage dealt. */
-  private bloodthirst(a: Player | undefined, id: string, dealt: number) {
+  private lastDrainFx = new Map<string, number>();
+  private bloodthirst(a: Player | undefined, id: string, dealt: number, drain = 0, target?: string) {
     if (!a || a.dead || dealt <= 0) return;
-    const share = talentBonus(a.cls, a.talents, "lifesteal") / 100 + buffLifesteal(a, Date.now());
+    const share = talentBonus(a.cls, a.talents, "lifesteal") / 100 + buffLifesteal(a, Date.now()) + drain / 100; // drain: the skill's own (vampire)
     if (share <= 0) return;
     const heal = dealt * share;
     a.hp = Math.min(a.maxHp, a.hp + heal);
+    // A skill that drinks blood shows it: a red thread from the victim back to the vampire (client/src/skillfx.ts "drain")
+    if (drain > 0 && target) {
+      const now = Date.now();
+      if (now - (this.lastDrainFx.get(id) ?? 0) >= 120) { this.lastDrainFx.set(id, now); this.broadcast("sfx", { ev: "drain", id, t: target }); }
+    }
   }
 
   /** A player (`attackerId`) hits a player or mob. */
   private hitTarget(attackerId: string, targetId: string, dmg: number, push: [number, number], opts: HitOpts = {}) {
     const a = this.state.players.get(attackerId);
     if (a?.party && this.state.players.get(targetId)?.party === a.party) return; // group mates can't hurt each other
+    if (opts.basic && a && basicDrain(a.cls)) opts = { ...opts, drain: (opts.drain ?? 0) + basicDrain(a.cls) }; // vampire trait
     // Elemental parts (shared/elements.ts): monsters take more or less of each, heroes resist; poison comes later
     const riders: ElemPart[] = [];
     if (opts.parts?.length) {
@@ -3338,7 +3353,7 @@ export class TownRoom extends Room<TownState> {
       const hpBefore = tp.hp;
       if (a) dmg = Math.max(1, Math.round(dmg * pvpDamageMult(a.level, tp.level))); // hero vs hero (shared/combat.ts)
       const killed = this.damagePlayer(targetId, dmg, name, push, kb, { ...opts, atkLevel: a?.level });
-      this.bloodthirst(a, attackerId, hpBefore - tp.hp);
+      this.bloodthirst(a, attackerId, hpBefore - tp.hp, opts.drain, targetId);
       if (killed && a) {
         const victim = this.state.players.get(targetId)!;
         a.kills++;
@@ -3356,7 +3371,7 @@ export class TownRoom extends Room<TownState> {
     // A group fighting together faces a tougher monster (shared/party.ts): it soaks more per hit
     if (a?.party) dmg = Math.max(1, Math.round(dmg / groupHpMult(this.groupNear(attackerId, m.x, m.y).length)));
     if (m.bones) dmg = Math.max(1, Math.round(dmg * (1 - DEMON.harvest.armorPer * m.bones))); // Bone Demon's bone armour
-    this.bloodthirst(a, attackerId, Math.min(dmg, m.hp));
+    this.bloodthirst(a, attackerId, Math.min(dmg, m.hp), opts.drain, targetId);
     m.hp = Math.max(0, m.hp - dmg);
     this.addHate(m, attackerId, dmg); // fight back (generated aggro)
     if (!opts.dot && (m.kind === "stormblob" || m.parts)) this.stormSparks(m, targetId, Date.now());

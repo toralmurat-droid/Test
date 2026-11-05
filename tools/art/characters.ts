@@ -722,6 +722,15 @@ const barbarian = human({
   hat: { kind: "horned", col: 0x8a939b, trim: 0x5b6470 }, shirt: 0, bareChest: true, pants: 0x7a5230, boots: 0x4a3020, belt: 0x3a2a1a,
   weapon: "axe", fxCol: 0xffe0c0, aura: 0xff5a3c, gait: "swagger",
 });
+// Pale noble of the night: wine coat, black cape, thin blade. Fights with the knight's sword cuts (no shield) and sneaks.
+const vampire: Hero = {
+  ...human({
+    name: "vampire", skin: 0xddd0ca, hair: 0x15111a, hairStyle: "short", eye: 0xc0182a,
+    shirt: 0x3a1422, sleeve: 0x3a1422, vest: 0x17101a, pants: 0x1c1820, boots: 0x1a1216, belt: 0xb08a3a,
+    weapon: "dagger", fxCol: 0xff5a6a, aura: 0xc1121f, gait: "sneak",
+  }),
+  swing: knight.swing, kind1: knight.kind1, moves: knight.moves, idleAngle: knight.idleAngle, weaponKind: "sword",
+};
 const blacksmith = human({
   name: "blacksmith", skin: 0xd99a6c, hair: 0x2b2b2b, hairStyle: "bald", beard: 0x2b2b2b,
   shirt: 0xb8a48a, pants: 0x4a4a52, boots: 0x2a2a2a, apron: 0x6e4526, weapon: "hammer", fxCol: 0xffb703,
@@ -742,7 +751,7 @@ const guard = human({
   tabard: { col: 0xb5262f, emblem: 0xf2c14e }, weapon: "spear",
 });
 
-export const HEROES: Hero[] = [ninja, wizard, knight, archer, barbarian];
+export const HEROES: Hero[] = [ninja, wizard, knight, archer, barbarian, vampire];
 
 /**
  * A hero holding a weapon of another family (shared/weapons.ts POSE_FAMILY): same body and look, but the idle stance

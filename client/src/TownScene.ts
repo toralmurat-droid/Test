@@ -50,7 +50,7 @@ const LEFT_PICK = -2;
 const RIGHT_PICK = -3;
 type ClickSide = "left" | "right";
 /** "12 mana · 20 stamina" for a skill list. */
-const costWords = (s: { cost?: number; mana?: number }) => [s.mana ? `${s.mana} mana` : "", s.cost ? `${s.cost} stamina` : ""].filter(Boolean).join(" · ") || "free";
+const costWords = (s: { cost?: number; mana?: number; blood?: number }) => [s.mana ? `${s.mana} mana` : "", s.cost ? `${s.cost} stamina` : "", s.blood ? `${s.blood}% HP` : ""].filter(Boolean).join(" · ") || "free";
 import { GearFx } from "./gearfx";
 import { Element, ELEMENT_COLORS } from "../../shared/elements";
 import { baseId, gearDef, gearReachMult, gearSpeedMult, itemRarity, WEAPON_TYPE_NAMES } from "../../shared/gear";
@@ -2136,7 +2136,7 @@ export class TownScene extends Phaser.Scene {
   private chargeSeen = { n: 0, at: 0 }; // our stacks last frame, and when the newest one was built
 
   /**
-   * Charges (Valor, Ki, Arcane, Focus, Fury) left of the skill keys: a crystal icon, the count, 5 pips and a shade
+   * Charges (Valor, Ki, Arcane, Focus, Fury, Blood) left of the skill keys: a crystal icon, the count, 5 pips and a shade
    * that fills as they fade (STACK_DECAY_MS after the last hit). Only shown while a skill on the bar (or on the left
    * click) spends them (Murat 2026-11-04).
    */

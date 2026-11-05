@@ -153,7 +153,7 @@ export function installSmoothTextures() {
     if (SKIP.test(key) || src.isRenderTexture || src.isVideo || src.isGLTexture || src.compressionAlgorithm) return false;
     if (!src.renderer?.gl) return false;
     // Already-detailed art (64px heroes, NPCs, gear) only needs filtering
-    if (/^(knight|ninja|wizard|archer|barbarian|blacksmith|merchant|villager|guard|druid|witch|gear_|hero)/.test(key) && !src.isCanvas) return false;
+    if (/^(knight|ninja|wizard|archer|barbarian|vampire|blacksmith|merchant|villager|guard|druid|witch|gear_|hero)/.test(key) && !src.isCanvas) return false;
     return src.image instanceof HTMLCanvasElement || src.image instanceof HTMLImageElement;
   };
   const init = TS.init;

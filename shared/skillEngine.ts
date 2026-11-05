@@ -104,6 +104,7 @@ const pushFrom = (h: SkillHost, x: number, y: number, tid: string): [number, num
 const effects = (e: HitEffects, t: number): HitEffects => ({
   stunMs: e.stunMs && e.stunMs * t, slowMs: e.slowMs && e.slowMs * t, kb: e.kb,
   burn: e.burn && [e.burn[0], e.burn[1] * t], markMs: e.markMs && e.markMs * t, weakMs: e.weakMs && e.weakMs * t, fearMs: e.fearMs && e.fearMs * t,
+  drain: e.drain,
 });
 
 /**
@@ -145,7 +146,10 @@ export function castSkill(h: SkillHost, id: string, skillId: string): boolean {
   if (cooldownLeft(s, u.sk, now, h.cooldownMult(id)) > 0) return false;
   // Cantrips take the place of a basic attack (balance pass 2026-11-04): they wait for it and hold the next one back
   if (s.cantrip && now < (u.attackReadyAt ?? 0)) return false;
+  const blood = bloodCost(s, u);
+  if (blood > 0 && (u.hp ?? 0) <= blood + 1) return false; // blood magic: not enough life left to pay with
   if (!pay(u, skillCost(s))) return false; // Stamina and/or Mana (shared/mana.ts)
+  if (blood > 0) u.hp = Math.max(1, (u.hp ?? 0) - blood);
   u.sk.last[s.id] = now;
   if (s.cantrip) u.attackReadyAt = now + (s.cd ?? 0);
   // A clicked spot (point skills): how far from the hero it lands, within the skill's reach
@@ -171,6 +175,9 @@ export function castSkill(h: SkillHost, id: string, skillId: string): boolean {
   } else release(h, id, s, rank, power, stacks, at);
   return true;
 }
+
+/** HP a blood-magic skill (SkillDef.blood) costs this unit. */
+export const bloodCost = (s: SkillDef, u: Unit | undefined) => (s.blood && u?.maxHp ? Math.round(u.maxHp * s.blood / 100) : 0);
 
 /** `at`: distance to the clicked spot for a point skill (leap/blink length, centre of the blast or field). */
 function release(h: SkillHost, id: string, s: SkillDef, rank: number, power: number, stacks: number, at?: number) {
@@ -345,7 +352,7 @@ function fire(h: SkillHost, id: string, skill: string, d: ShotDef, rank: number,
 /** A skill projectile hits `tid` (the host keeps flying it if it pierces). */
 export function shotHit(h: SkillHost, s: ShotSpec, tid: string) {
   const exploding = s.explode > 0 && s.pierce <= 0;
-  h.hit(s.owner, tid, s.dmg, [s.vx, s.vy], { stunMs: s.stunMs, slowMs: exploding ? undefined : s.slowMs, burn: s.burn, markMs: s.markMs, weakMs: s.weakMs, kb: s.kb ?? 1, skill: true, imb: s.imb });
+  h.hit(s.owner, tid, s.dmg, [s.vx, s.vy], { stunMs: s.stunMs, slowMs: exploding ? undefined : s.slowMs, burn: s.burn, markMs: s.markMs, weakMs: s.weakMs, drain: s.drain, kb: s.kb ?? 1, skill: true, imb: s.imb });
   if (s.chain > 0) chain(h, s.owner, tid, s.chain, s.dmg, s);
 }
 

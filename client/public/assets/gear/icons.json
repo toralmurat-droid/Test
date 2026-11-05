@@ -439,12 +439,44 @@
     "w": 32,
     "h": 32
    }
+  },
+  "vampire_weapon": {
+   "frame": {
+    "x": 1760,
+    "y": 0,
+    "w": 32,
+    "h": 32
+   }
+  },
+  "vampire_armour": {
+   "frame": {
+    "x": 1792,
+    "y": 0,
+    "w": 32,
+    "h": 32
+   }
+  },
+  "vampire_hat": {
+   "frame": {
+    "x": 1824,
+    "y": 0,
+    "w": 32,
+    "h": 32
+   }
+  },
+  "vampire_shoes": {
+   "frame": {
+    "x": 1856,
+    "y": 0,
+    "w": 32,
+    "h": 32
+   }
   }
  },
  "meta": {
   "image": "icons.png",
   "size": {
-   "w": 1760,
+   "w": 1888,
    "h": 32
   },
   "scale": 1
