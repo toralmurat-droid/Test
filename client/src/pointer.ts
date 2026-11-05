@@ -1,5 +1,6 @@
 import Phaser from "phaser";
 import { InputState, TILE } from "../../shared/constants";
+import { blocked } from "../../shared/movement";
 import { findPath, type Pt } from "./pathfind";
 import { fromIso, isoX, isoY, ISO, isoAnchor } from "./iso";
 import { ART_PX } from "./pixelgrid";
@@ -359,12 +360,21 @@ export class PointerControls {
     if (!e || e.dead) { this.goal = undefined; this.path = []; return STOP; }
     const holding = this.held === (goal.secondary ? 2 : 0);
     const reach = this.host.reach(goal.secondary) + (goal.secondary ? 0 : e.body);
-    const near = Math.hypot(e.sx - me.x, e.sy - me.y) <= reach;
+    // A walking monster: the server swings about half a round trip after we ask, so judge reach where it will be
+    // by then, and notice when it is getting away from us.
+    const vx = e.vx ?? 0, vy = e.vy ?? 0, lead = Math.min(0.3, this.rtt / 2000);
+    const tx = e.sx + vx * lead, ty = e.sy + vy * lead;
+    const dist = Math.hypot(tx - me.x, ty - me.y);
+    const fleeing = !goal.secondary && Math.hypot(vx, vy) > 8 && vx * (tx - me.x) + vy * (ty - me.y) > 0;
+    const near = dist <= reach;
+    // Chasing one that runs (Murat): keep walking after it while swinging instead of stopping for every hit. The
+    // server lets a hero swing on the move, so this is just steering toward it (straight, when nothing is between).
+    const pursue = fleeing && dist > reach * 0.55 && this.clearLine(me, { x: tx, y: ty }) ? this.toward(me, tx, ty) : undefined;
     // The swing happens where the SERVER has our hero. While walking that is a little behind what we see, and a
     // knockback on the way can leave it further back: attack only once the server's hero is in reach too.
-    if (near && !goal.secondary && Math.hypot(e.sx - me.sx, e.sy - me.sy) > reach + 2) {
+    if (near && !goal.secondary && Math.hypot(tx - me.sx, ty - me.sy) > reach + 2) {
       goal.waitAt ??= now;
-      if (now - goal.waitAt < 450) { this.path = []; return STOP; } // (never wait forever)
+      if (now - goal.waitAt < 450) { this.path = []; return pursue ?? STOP; } // (never wait forever)
     } else goal.waitAt = undefined;
     if (near) {
       this.path = [];
@@ -386,18 +396,34 @@ export class PointerControls {
         this.lastAct = now;
         if (!goal.tries) goal.since = now;
         goal.tries = (goal.tries ?? 0) + 1;
-        this.host.stop();
-        this.host.send("face", this.aimAt(e, me, false));
+        if (!pursue) this.host.stop();
+        this.host.send("face", pursue ? { x: tx, y: ty } : this.aimAt(e, me, false));
         if (!this.firedAt) this.firedAt = now;
         this.host.fire(false);
       }
-      return STOP;
+      return pursue ?? STOP;
     }
     if (goal.fired && !holding) { this.goal = undefined; return STOP; }
+    // Close and nothing in the way: run straight at it (tile routes zig-zag and lag behind a monster on the move)
+    if (dist < TILE * 3 && this.clearLine(me, { x: tx, y: ty })) { this.path = []; return this.toward(me, tx, ty); }
     if (!this.pathTo || Math.hypot(e.sx - this.pathTo.x, e.sy - this.pathTo.y) > TILE * 0.75 || (now - this.lastRepath > 600 && !this.path.length)) {
-      this.route({ x: e.sx, y: e.sy });
+      this.route({ x: tx, y: ty });
     }
     return this.steer(me, stepMs) ?? STOP;
+  }
+
+  /** Keys that walk straight toward (x, y): 8 directions, a diagonal only when it is really diagonal. */
+  private toward(me: Pt, x: number, y: number): InputState {
+    const dx = x - me.x, dy = y - me.y, d = Math.hypot(dx, dy) || 1;
+    const ux = dx / d, uy = dy / d, k = 0.38; // ~ sin 22.5 degrees
+    return { up: uy < -k, down: uy > k, left: ux < -k, right: ux > k };
+  }
+
+  /** Nothing that blocks walking on the straight line between two points? */
+  private clearLine(a: Pt, b: Pt): boolean {
+    const d = Math.hypot(b.x - a.x, b.y - a.y), n = Math.ceil(d / 4);
+    for (let i = 1; i < n; i++) if (blocked(a.x + (b.x - a.x) * i / n, a.y + (b.y - a.y) * i / n)) return false;
+    return true;
   }
 
   /** Keys to press to follow the route (diagonal first, then straight, like the tile path). Undefined at the end. */

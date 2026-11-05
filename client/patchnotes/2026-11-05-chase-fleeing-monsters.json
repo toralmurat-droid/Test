@@ -1,0 +1,8 @@
+{
+  "date": "2026-11-05",
+  "title": "Chasing monsters that run away",
+  "changes": [
+    "When you click a monster that runs away, your hero keeps running after it and swings on the move instead of stopping for every hit.",
+    "Close to a monster, your hero runs straight at it instead of zig-zagging along the path."
+  ]
+}
