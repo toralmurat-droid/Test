@@ -6,11 +6,19 @@ html, body { margin: 0; height: 100%; background: #1b1b24; color: #eee; font: 14
 #classinfo { min-height: 2.8em; margin: 4px 0; }
 #ultfill { position: absolute; inset: 0 auto 0 0; width: 100%; background: #f77f00; }
 #ulttext { position: relative; font-size: 11px; padding-left: 4px; line-height: 10px; text-shadow: 1px 1px #000; }
-#gear { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(420px, calc(100% - 32px));
-  max-height: calc(100% - 32px); overflow: auto; background: rgba(30,30,46,.96); border: 3px solid #555a7a; padding: 14px 16px;
+/* Bag sits between the top HUD and the XP bar (bottom 100px + 28px) so it never covers the XP bar or the hotkeys:
+   top/bottom + margin auto centres it in that band, max-height keeps it inside, wide two-column layout keeps it short. */
+#gear { position: absolute; left: 50%; top: 12px; bottom: 140px; height: fit-content; margin: auto 0; transform: translateX(-50%);
+  width: min(720px, calc(100% - 32px)); max-height: calc(100% - 152px); overflow: auto; background: rgba(30,30,46,.96); border: 3px solid #555a7a; padding: 14px 16px;
   pointer-events: auto; z-index: 7; }
 #gear h2 { margin: 0 0 8px; font-size: 18px; color: #ffd166; }
 #gear h3 { margin: 10px 0 6px; font-size: 14px; color: #ccc; }
+#gearcols { display: flex; gap: 16px; align-items: flex-start; }
+#gearleft { flex: 1 1 0; min-width: 0; }
+#gearright { flex: 1 1 0; min-width: 0; }
+#gearright h3 { margin-top: 0; }
+.gearhelp { margin: 6px 0 0; font-size: 12px; text-align: center; }
+@media (max-width: 640px) { #gearcols { flex-direction: column; gap: 0; } #gearleft, #gearright { flex: none; width: 100%; } }
 #geartop { display: flex; gap: 12px; align-items: center; }
 #gearpreview { width: 128px; height: 128px; flex: none; image-rendering: pixelated; background: radial-gradient(#3d5a3a, #22301f); border: 2px solid #555a7a; }
 #gearslots { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 0; }
