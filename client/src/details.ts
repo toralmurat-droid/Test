@@ -556,6 +556,8 @@ export class Details {
   private ducks: Duck[] = [];
   private pond: [number, number][] = [];
   private fireflies?: (dark: number) => void;
+  /** The local hero is in the Mawdeep (dungeon.ts draws the dark there): no day/night tint, no lanterns. */
+  underground = false;
 
   private layers: { update(view: Phaser.Geom.Rectangle): void }[] = [];
 
@@ -781,7 +783,8 @@ export class Details {
   }
 
   update(now: number, dtMs: number) {
-    const { dark, warm } = dayPhase(dayTime(Date.now()));
+    const ph = this.underground ? { dark: 0, warm: 0 } : dayPhase(dayTime(Date.now()));
+    const { dark, warm } = ph;
     this.night.setAlpha(dark * 0.85);
     this.dusk.setAlpha(warm * 0.12);
     this.windows.setAlpha(Math.min(1, dark * 1.2) * 0.9);

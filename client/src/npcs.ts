@@ -14,6 +14,7 @@ import {
 } from "../../shared/quests";
 import { QuestObjects } from "./questObjects";
 import { TILE } from "../../shared/constants";
+import { routeVia } from "../../shared/dungeon";
 import type { MapMarker } from "./minimap";
 import { QuestLog } from "./questlog";
 import { SHOPS, sellPrice } from "../../shared/shops";
@@ -209,7 +210,7 @@ export class NpcLayer {
     const shop = SHOPS[n.shop!];
     const gold = q?.gold ?? 0, potions = q?.potions ?? 0, cls = q?.cls, pots = unpackPotions(potions);
     const bag = [...(q?.bag ?? [])];
-    const key = JSON.stringify([n.id, gold, potions, bag, this.shopMsg, q?.questId, q?.questStage, q?.boneId, q?.boneStage, q?.redId, q?.redStage, q?.tutId, q?.tutStage]);
+    const key = JSON.stringify([n.id, gold, potions, bag, this.shopMsg, q?.questId, q?.questStage, q?.boneId, q?.boneStage, q?.redId, q?.redStage, q?.tut, q?.crown, q?.beast]);
     if (key === this.stage) return;
     this.stage = key;
     const row = (icon: string, name: string, color: string, desc: string, btn: string, cls2: string, i: number, off: boolean) =>
@@ -265,7 +266,7 @@ export class NpcLayer {
     const page = questDialog(n.id, q);
     if (n.shop && (this.trading || !page)) return this.renderShop(n, q);
     this.dialog.classList.remove("shop");
-    const key = JSON.stringify([n.id, q?.questId, q?.questStage, q?.questCount, q?.boneId, q?.boneStage, q?.boneCount, q?.redId, q?.redStage, q?.redCount, q?.tutId, q?.tutStage, q?.tutCount, q?.level]);
+    const key = JSON.stringify([n.id, q?.questId, q?.questStage, q?.questCount, q?.boneId, q?.boneStage, q?.boneCount, q?.redId, q?.redStage, q?.redCount, q?.tut, q?.crown, q?.beast, q?.level]);
     if (key === this.stage) return;
     this.stage = key;
     const p = page ?? { text: ["Good day to you."], bye: "Farewell", chain: 0 };
@@ -346,7 +347,10 @@ export class NpcLayer {
       const bar = goal > 1 ? `<div class="qt-bar"><div style="width:${(n / goal) * 100}%"></div></div>` : "";
       let dir = "";
       // Point at the nearest target
-      const target = me && targets.length ? targets.reduce((a, b) => (Math.hypot(a.x - me.x, a.y - me.y) <= Math.hypot(b.x - me.x, b.y - me.y) ? a : b)) : undefined;
+      let target = me && targets.length ? targets.reduce((a, b) => (Math.hypot(a.x - me.x, a.y - me.y) <= Math.hypot(b.x - me.x, b.y - me.y) ? a : b)) : undefined;
+      // On another floor of the Mawdeep (or above it): point at the rope or stair first
+      const via = target && me ? routeVia(target.x, target.y, me.x, me.y) : undefined;
+      if (via) target = { x: via.x, y: via.y, kind: "object", label: via.label };
       if (target && me) {
         const dx = target.x - me.x, dy = target.y - me.y, d = Math.hypot(dx, dy) - (target.r ?? 0);
         if (d > TILE * 2) {
@@ -355,6 +359,7 @@ export class NpcLayer {
           const k = (Math.round(Math.atan2(dy, dx) / (Math.PI / 4)) + 8) % 8;
           dir = `<div class="qt-dir">${arrows[k]} ${Math.round(d / TILE)} tiles ${names[k]}</div>`;
         } else if (target.kind === "area" && d <= 0) dir = `<div class="qt-dir">You are here</div>`;
+        if (via) dir += `<div class="qt-hint2">${via.label}</div>`;
       }
       let hint = step.hint ? `<div class="qt-hint2">${step.hint}</div>` : "";
       if (step.night) { // the dead's bosses only walk at night (shared/daynight.ts)

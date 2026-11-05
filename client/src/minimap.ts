@@ -1,4 +1,5 @@
-import { MAP_H, MAP_W, TILE } from "../../shared/constants";
+import { MAP_H, MAP_W, TILE, WORLD_H } from "../../shared/constants";
+import { floorAt, SEA_END } from "../../shared/dungeon";
 import { AREAS, EMPTY, GROUND, OBJECTS } from "../../shared/map";
 import { createTilesetCanvas, tileColors } from "./tileset";
 import { ISO } from "./isoflag";
@@ -57,7 +58,8 @@ export class Minimap {
     const b = this.colors.getContext("2d")!;
     for (let y = 0; y < MAP_H; y++) for (let x = 0; x < MAP_W; x++) {
       const o = OBJECTS[y][x];
-      b.fillStyle = colors[o !== EMPTY ? o : GROUND[y][x]];
+      // the Mawdeep: black rock, dim cave floors
+      b.fillStyle = y >= SEA_END ? (o !== EMPTY ? "#0d0b0c" : "#4a3d33") : colors[o !== EMPTY ? o : GROUND[y][x]];
       b.fillRect(x, y, 1, 1);
     }
     this.fogCtx = this.fog.getContext("2d")!;
@@ -121,7 +123,7 @@ export class Minimap {
       if (!s) return;
       const bin = atob(s);
       if (bin.length === this.seen.length) { for (let i = 0; i < bin.length; i++) this.seen[i] = bin.charCodeAt(i); return; }
-      for (const [ow, oh] of [[224, 168], [160, 120]]) { // saved before the map grew: same coordinates, copy row by row
+      for (const [ow, oh] of [[288, 216], [224, 168], [160, 120]]) { // saved before the map grew: same coordinates, copy row by row
         if (bin.length !== ow * oh) continue;
         for (let y = 0; y < oh && y < MAP_H; y++) for (let x = 0; x < ow && x < MAP_W; x++) this.seen[y * MAP_W + x] = bin.charCodeAt(y * ow + x);
       }
@@ -147,6 +149,7 @@ export class Minimap {
   }
 
   private grow(x: number, y: number) {
+    if (y >= WORLD_H) return; // the world map frames the overworld; below ground it frames the floor you are on
     if (x < this.bx0) this.bx0 = x; if (x > this.bx1) this.bx1 = x;
     if (y < this.by0) this.by0 = y; if (y > this.by1) this.by1 = y;
   }
@@ -161,7 +164,12 @@ export class Minimap {
    * Part of the world shown on the opened map: the explored area plus a fog margin, widened to the canvas shape
    * and zoomed (whole pixels per tile) so it fills the fixed-size frame.
    */
-  private region(cw: number, ch: number) {
+  private region(cw: number, ch: number, me?: P) {
+    const f = me && floorAt(Math.floor(me.x / TILE), Math.floor(me.y / TILE));
+    if (f) {
+      const s = Math.max(1, Math.floor(Math.min(cw / f.w, ch / f.h)));
+      return { x: f.x + f.w / 2 - cw / s / 2, y: f.y + f.h / 2 - ch / s / 2, s };
+    }
     if (this.bx1 < 0) return { x: 0, y: 0, s: Math.max(1, Math.floor(Math.min(cw / MAP_W, ch / MAP_H))) };
     const w = Math.max(24, this.bx1 - this.bx0 + 1 + MAP_PAD * 2), hh = Math.max(18, this.by1 - this.by0 + 1 + MAP_PAD * 2);
     const s = Math.max(1, Math.floor(Math.min(cw / w, ch / hh)));
@@ -231,7 +239,7 @@ export class Minimap {
       this.big.width = cw; this.big.height = ch;
       this.big.style.width = `${cw}px`; this.big.style.height = `${ch}px`;
     }
-    const R = this.region(cw, ch), BIG = R.s;
+    const R = this.region(cw, ch, me), BIG = R.s;
     const g = this.big.getContext("2d")!;
     g.imageSmoothingEnabled = false;
     g.fillStyle = FOG;

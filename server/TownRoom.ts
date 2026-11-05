@@ -4,8 +4,9 @@ import { ArraySchema, MapSchema, Schema, type } from "@colyseus/schema";
 import {
   AGGRO, aggroLevelFactor, BLOB_AI, BONES, DEMON, BROOD, Dir, FACTION, FEUD, MERGE, MobDef, MOTHER, SKELETON_AI, HIT_RADIUS, mobScale, regionMobLevel, regionSpecialLevel, InputState, MOB_ATTACK_RANGE, MOBS, MobKind, rollSkeletonWeapon, SKELETON_BOW, SKELETON_WEAPONS, SkeletonWeapon, REGEN_DELAY_MS, REGEN_RAMP_MS, regenFromStamina, SAFE_REGEN_MULT,
   RESPAWN_MS, TICK_RATE, TILE,
-  HOLLOW_KING, ELEM_BLOB, ELEM_MOVE,
+  HOLLOW_KING, ELEM_BLOB, ELEM_MOVE, BEAST, BEAST_KINDS, BEAST_MOVES, BEAST_RIDER, type BeastMove,
 } from "../shared/constants";
+import { arrivalAt, LINK_RANGE, linkById, LINKS } from "../shared/dungeon";
 import {
   ATTACK_VARIANTS, CLASSES, ClassKind, COMBO_WINDOW_MS, DODGE, EMOTES, ENERGY, staminaRegen, DASH_INVULN_MS, GUARD_REDUCTION, isClassKind, levelFromXp, MAX_XP, capLevel, PVP_KILL_XP, xpForLevel,
 } from "../shared/classes";
@@ -140,12 +141,14 @@ export class Player extends Schema {
   @type("number") redStage = 0;
   @type("number") redCount = 0;
   // The guided first quest (First Steps), CHAINS[3] (TUT_CHAIN). New heroes start on step 1.
-  @type("number") tutId = 0;
-  @type("number") tutStage = 0;
-  @type("number") tutCount = 0;
+  // ...packed like the Hollow Crown below (QuestChain.packed), which freed two fields for the Hide Rite chain
+  @type("number") tut = 0;
   // The Hollow Crown (CHAINS[4], the first zone's last story): id, stage and count packed in one number (QuestChain.packed),
   // because the Player schema is at Colyseus's 64-field limit. This is the 64th: a new synced field needs one packed too.
   @type("number") crown = 0;
+  // The Hide Rite (CHAINS[5], the Mawdeep Warrens' beast-folk): packed the same way
+  @type("number") beast = 0;
+  linkLock = ""; // the Mawdeep rope/stair a hero just came out of (shared/dungeon.ts LINKS): not taken again until they step off it
   nextSummon = 0; // when the server may bring back this player's quest fused blob (QuestStep.summon)
   // Skill slots on keys 1..0 (shared/slots.ts): a skill id or "" (empty). Empty until the player assigns them.
   @type(["string"]) slots = new ArraySchema<string>(...Array(SLOT_COUNT).fill(""));
@@ -216,6 +219,9 @@ export class Mob extends Schema {
   pools: [number, number][] = []; // the Hollow King's Gloam Pools waiting to burst (HOLLOW_KING.pools)
   nextSplurt = 0; nextNova = 0; nextBreath = 0; nextSparks = 0; aimX = 0; aimY = 1; // elemental blob moves (ELEM_BLOB)
   servant = false; // called up by the Hollow King: fights for him, never starts a bone ritual
+  // Beast-folk of the Mawdeep (BEAST): each move's next use, and a rush in progress (gore, stampede, swoop, pounce)
+  bcd: Partial<Record<BeastMove, number>> = {};
+  rushUntil = 0; rushVX = 0; rushVY = 0; rushTurn = 0; rushKind = ""; rushHit: string[] = []; rushDone = false;
   // Redfang Hollow bandits (shared/bandits.ts): camp member, its post (CAMP_POSTS index), patrol progress, horn alert
   camp = false; post = -1; perch = false; pLeg = 0; pDir = 1; stuckSince = 0; detourUntil = 0;
   alertUntil = 0; alertHero = ""; nextHorn = 0; nextVolley = 0; rallyUntil = 0; chargeMult = 1; dashHit = false; reinforced = false;
@@ -477,6 +483,9 @@ function mobDef(m: Mob, now = Date.now()): MobDef {
   // The Hollow King grows faster once badly hurt (HOLLOW_KING.wrath)
   if (m.kind === "hollowking") return m.hp < m.maxHp * HOLLOW_KING.wrath.hpFrac
     ? { ...base, speed: base.speed * HOLLOW_KING.wrath.speed, attackCooldownMs: base.attackCooldownMs * HOLLOW_KING.wrath.cooldown } : base;
+  // The Hide-Mother rages when badly hurt; the Packlord's Howl drives his kin wild (BEAST)
+  if (m.kind === "hidemother" && m.hp < m.maxHp * BEAST.rockfall.hpFrac) return { ...base, speed: base.speed * BEAST.rockfall.speed, attackCooldownMs: base.attackCooldownMs * BEAST.rockfall.cooldown };
+  if (BEAST_KINDS.includes(m.kind)) return now < m.rallyUntil ? { ...base, speed: base.speed * BEAST.howl.rallySpeed, damage: base.damage * BEAST.howl.rallyDmg } : base;
   if (m.kind !== "bandit" && m.kind !== "banditchief") return base;
   const r = m.kind === "bandit" ? BANDIT_ROLES[roleOf(m.weapon)] : undefined;
   const rally = now < m.rallyUntil;
@@ -586,7 +595,8 @@ export class TownRoom extends Room<TownState> {
     // The client is ready (loading screen gone): a hero on the first step of First Steps gets its banner
     this.onMessage("tutorial", (client) => {
       const p = this.state.players.get(client.sessionId);
-      if (p && p.tutId === 0 && p.tutStage === 1) this.sendQuest(client.sessionId, p, TUT_CHAIN);
+      const q = p && this.qs(p, TUT_CHAIN);
+      if (p && q && q.questId === 0 && q.questStage === 1) this.sendQuest(client.sessionId, p, TUT_CHAIN);
     });
     this.onMessage("buy", (client, msg: { i: number }) => this.shopBuy(client, msg?.i));
     this.onMessage("sell", (client, msg: { i: number }) => this.shopSell(client, msg?.i));
@@ -756,8 +766,12 @@ export class TownRoom extends Room<TownState> {
       questId: p.questId, questStage: p.questStage, questCount: p.questCount, questVer: CHAINS[0].version,
       boneId: p.boneId, boneStage: p.boneStage, boneCount: p.boneCount, boneVer: CHAINS[1].version,
       redId: p.redId, redStage: p.redStage, redCount: p.redCount, redVer: CHAINS[2].version, kit: 1,
-      tutId: p.tutId, tutStage: p.tutStage, tutCount: p.tutCount, tutVer: CHAINS[TUT_CHAIN].version,
-      ...(() => { const q = this.qs(p, CROWN_CHAIN); return { crownId: q.questId, crownStage: q.questStage, crownCount: q.questCount, crownVer: CHAINS[CROWN_CHAIN].version }; })(),
+      // packed chains (First Steps, the Hollow Crown, the Hide Rite) are saved under their own three names
+      ...Object.fromEntries(CHAINS.flatMap((ch, c) => {
+        if (!ch.packed) return [];
+        const q = this.qs(p, c), [a, b, n] = ch.keys;
+        return [[a, q.questId], [b, q.questStage], [n, q.questCount], [ch.verKey, ch.version]];
+      })),
       portals: [...p.portals],
     };
   }
@@ -1651,6 +1665,7 @@ export class TownRoom extends Room<TownState> {
       if (p.dead) { p.moving = false; p.energy = ENERGY.max; p.mana = p.maxMana; this.syncMana(p); return; }
       for (let c = 0; c < CHAINS.length; c++) this.checkQuestPlace(pid, p, c);
       this.wakePortals(pid, p);
+      this.useLinks(pid, p);
       if (p.energy < ENERGY.max) p.energy = Math.min(ENERGY.max, p.energy + staminaRegen(p.cls) * dt);
       if (p.mana < p.maxMana) {
         const resting = now - p.lastHurt > REGEN_DELAY_MS;
@@ -2105,6 +2120,8 @@ export class TownRoom extends Room<TownState> {
       input = STILL;
     } else if ((t || m.specialAt) && (ELEM_MOVE[m.kind] || m.parts) && TownRoom.elemMoves(m).length && this.elemSpecial(m, id, t, t ? Math.hypot(t.x - m.x, t.y - m.y) : 0, now)) {
       input = STILL;
+    } else if ((t || m.specialAt || m.rushUntil) && BEAST_MOVES[m.kind] && this.beastSpecial(m, id, t, t ? Math.hypot(t.x - m.x, t.y - m.y) : 0, now)) {
+      input = STILL;
     } else if (t && m.kind === "motherblob" && this.motherSpecial(m, id, Math.hypot(t.x - m.x, t.y - m.y), now)) {
       input = STILL;
     } else if ((t || m.specialAt) && (m.kind === "banditchief" || m.weapon === "brute") && this.banditSpecial(m, id, t, t ? Math.hypot(t.x - m.x, t.y - m.y) : 0, now)) {
@@ -2145,8 +2162,9 @@ export class TownRoom extends Room<TownState> {
             if (dist <= melee.range + 6) {
               this.broadcast("swing", { id });
               const mel = MOB_MELEE_ELEMENT[m.kind];
-              this.damagePlayer(m.target, Math.round(def.damage * melee.dmg * mobScale(m.level, "damage")), def.name, DIR_OFFSET[m.dir], 1,
+              const died = this.damagePlayer(m.target, Math.round(def.damage * melee.dmg * mobScale(m.level, "damage")), def.name, DIR_OFFSET[m.dir], 1,
                 { atkLevel: m.level, from: id, mobEl: mel, slowMs: mel === "cold" ? ELEMENT_FX.cold.heroSlowMs : undefined });
+              if (!died && BEAST_RIDER[m.kind]) this.beastRider(m, id, m.target);
             }
           }
         } else if (now - m.lastAttack >= def.attackCooldownMs * melee.cooldown / poiseSpeed(poiseFrac(m, mobPoiseMax(m)))) {
@@ -2482,6 +2500,281 @@ export class TownRoom extends Room<TownState> {
       return c;
     }
     return undefined;
+  }
+
+  // ---- The Mawdeep Warrens (shared/dungeon.ts): ropes and stairs, and the beast-folk's moves (BEAST) ----------------
+
+  /** Walking onto a rope or stair takes the hero to its other end (not straight back: they must step off first). */
+  private useLinks(pid: string, p: Player) {
+    if (p.linkLock) {
+      const l = linkById(p.linkLock);
+      if (l && Math.hypot(l.x - p.x, l.y - p.y) <= LINK_RANGE * 1.6) return;
+      p.linkLock = "";
+    }
+    for (const l of LINKS) {
+      if (Math.abs(l.x - p.x) > LINK_RANGE || Math.abs(l.y - p.y) > LINK_RANGE || Math.hypot(l.x - p.x, l.y - p.y) > LINK_RANGE) continue;
+      const dest = linkById(l.to);
+      if (!dest) return;
+      const at = arrivalAt(dest);
+      p.x = at.x; p.y = at.y; p.moving = false;
+      p.rollUntil = 0; p.rolling = false; p.emote = "";
+      p.linkLock = dest.id;
+      this.broadcast("descend", { id: pid, from: l.id, to: dest.id, down: l.down, x: Math.round(at.x), y: Math.round(at.y) });
+      return;
+    }
+  }
+
+  /** The sickness, bleeding or venom a beast's plain bite leaves (BEAST.plague / bleed / venom). */
+  private beastRider(m: Mob, id: string, pid: string) {
+    const kind = BEAST_RIDER[m.kind]!, R = BEAST[kind], name = `${mobDef(m).name}'s ${kind === "plague" ? "plague" : kind === "bleed" ? "rending bite" : "venom"}`;
+    const tick = Math.max(1, Math.round(MOBS[m.kind].damage * mobScale(m.level, "damage") * R.dmgMult));
+    const el = kind === "bleed" ? undefined : "poison";
+    for (let i = 1; i <= R.ticks; i++) this.host.later(R.tickMs * i, () => this.damagePlayer(pid, tick, name, [0, 0], 0, { dot: true, mobEl: el, el, atkLevel: m.level }));
+  }
+
+  /** A beast's called kin (the Packlord's Howl, the Hide-Mother's brood): out of the dark beside it, fights for it, gone when it falls. */
+  private raiseKin(b: Mob, bid: string, kind: MobKind, levelDrop: number): Mob | undefined {
+    for (let i = 0; i < 12; i++) {
+      const a = Math.random() * Math.PI * 2, r = 40 + Math.random() * 50;
+      const x = b.x + Math.cos(a) * r, y = b.y + Math.sin(a) * r;
+      if (isSolidAt(x, y) || isSolidAt(x - 6, y - 6) || isSolidAt(x + 6, y + 6)) continue;
+      const c = new Mob();
+      c.kind = kind; c.zone = -1; c.mother = bid; c.servant = true;
+      c.x = c.homeX = x; c.y = c.homeY = y;
+      c.level = regionMobLevel(b.level - levelDrop);
+      c.hp = c.maxHp = Math.round(MOBS[kind].maxHp * mobScale(c.level, "hp"));
+      c.target = b.target;
+      if (c.target) this.addHate(c, c.target, 0);
+      c.stunUntil = Date.now() + 500; // scrambling out of a burrow
+      const cid = `k${++this.mobSeq}`;
+      this.state.mobs.set(cid, c);
+      return c;
+    }
+    return undefined;
+  }
+
+  /**
+   * The beast-folk's moves (BEAST, BEAST_MOVES): each is marked on the ground first ("bwind"), then lands ("bhit").
+   * Gore, Stampede, Swoop and Pounce are rushes: the beast hurtles along for a moment, hitting whoever it touches.
+   * Returns true while busy (it stands still or rushes on its own). `t` may be gone while a move it started lands.
+   */
+  private beastSpecial(m: Mob, id: string, t: Player | undefined, dist: number, now: number): boolean {
+    const B = BEAST, def = mobDef(m, now), name = def.name;
+    const dmgOf = (mult: number) => Math.max(1, Math.round(def.damage * mobScale(m.level, "damage") * mult));
+    const facing = (x: number, y: number) => { m.dir = Math.abs(x - m.x) > Math.abs(y - m.y) ? (x > m.x ? "right" : "left") : (y > m.y ? "down" : "up"); };
+    // every hero in a shape: f(dx, dy, d) decides
+    const heroes = (f: (dx: number, dy: number, d: number, p: Player) => boolean, hit: (pid: string, p: Player, dx: number, dy: number, d: number) => void) =>
+      this.state.players.forEach((p, pid) => {
+        if (p.dead) return;
+        const dx = p.x - m.x, dy = p.y - m.y, d = Math.hypot(dx, dy);
+        if (f(dx, dy, d, p)) hit(pid, p, dx, dy, d);
+      });
+    const away = (dx: number, dy: number, d: number): [number, number] => (d > 0.1 ? [dx / d, dy / d] : [m.aimX, m.aimY]);
+
+    // ---- a rush in progress
+    if (m.rushUntil) {
+      const kind = m.rushKind as BeastMove;
+      const dt = 1 / TICK_RATE;
+      if (kind === "stampede" && m.rushTurn && now >= m.rushTurn && t) {
+        // the bull swings round once toward its target, mid-charge
+        m.rushTurn = 0;
+        const sp = Math.hypot(m.rushVX, m.rushVY), d = Math.max(0.1, dist);
+        const nx = (t.x - m.x) / d, ny = (t.y - m.y) / d, ox = m.rushVX / sp, oy = m.rushVY / sp;
+        const k = 0.6; // not a full turn: it can still be sidestepped
+        const vx = ox * (1 - k) + nx * k, vy = oy * (1 - k) + ny * k, l = Math.hypot(vx, vy) || 1;
+        m.rushVX = vx / l * sp; m.rushVY = vy / l * sp; m.aimX = vx / l; m.aimY = vy / l;
+        this.broadcast("bturn", { id, ax: m.aimX, ay: m.aimY });
+      }
+      let stop = now >= m.rushUntil;
+      if (!stop) {
+        // sub-steps so it never jumps a wall or a hero
+        const steps = 3;
+        for (let i = 0; i < steps && !stop; i++) {
+          const nx = m.x + m.rushVX * dt / steps, ny = m.y + m.rushVY * dt / steps;
+          if (isSolidAt(nx, ny) || isSolidAt(nx + Math.sign(m.rushVX) * 6, ny) || isSolidAt(nx, ny + Math.sign(m.rushVY) * 4) || !this.canStep(m, nx, ny)) { stop = true; break; }
+          m.x = nx; m.y = ny;
+          if (kind === "gore" || kind === "stampede") {
+            const G = kind === "gore" ? B.gore : B.stampede, w = G.width / 2 + 6;
+            heroes((dx, dy, d) => d <= w, (pid, _p, dx, dy) => {
+              if (m.rushHit.includes(pid)) return;
+              m.rushHit.push(pid);
+              // thrown off to the side it was standing on, and forward
+              const side = dx * -m.aimY + dy * m.aimX >= 0 ? 1 : -1;
+              const push: [number, number] = [m.aimX * 0.6 - m.aimY * side * 0.8, m.aimY * 0.6 + m.aimX * side * 0.8];
+              this.damagePlayer(pid, dmgOf(G.dmgMult), `${name}'s ${kind === "gore" ? "Gore" : "Stampede"}`, push, G.knockback, { atkLevel: m.level, from: id });
+            });
+          } else if (kind === "swoop" && t && !m.rushHit.length && dist <= 14) {
+            m.rushHit.push(m.target);
+            const dmg = dmgOf(B.swoop.dmgMult);
+            this.damagePlayer(m.target, dmg, `${name}'s Swoop`, [m.aimX, m.aimY], 1, { atkLevel: m.level, from: id });
+            m.hp = Math.min(m.maxHp, m.hp + Math.round(dmg * B.swoop.heal)); // drinks the blood it draws
+            this.broadcast("bhit", { id, kind: "swoop", x: Math.round(m.x), y: Math.round(m.y), heal: Math.round(dmg * B.swoop.heal) });
+            stop = true;
+          }
+        }
+      }
+      m.moving = true;
+      if (stop) {
+        m.rushUntil = 0; m.moving = false; m.lastAttack = now;
+        if (kind === "pounce") {
+          const P = B.pounce;
+          heroes((_dx, _dy, d) => d <= P.radius, (pid, _p, dx, dy, d) => this.damagePlayer(pid, dmgOf(P.dmgMult), `${name}'s Pounce`, away(dx, dy, d), P.knockback, { atkLevel: m.level, from: id }));
+          this.broadcast("bhit", { id, kind, x: Math.round(m.x), y: Math.round(m.y), r: P.radius });
+        } else if (kind !== "swoop" || !m.rushHit.length) this.broadcast("bhit", { id, kind, x: Math.round(m.x), y: Math.round(m.y) });
+        m.rushHit = [];
+      }
+      return true;
+    }
+
+    // ---- a move landing
+    if (m.specialAt && m.specialKind.startsWith("b:")) {
+      if (now < m.specialAt) return true;
+      const kind = m.specialKind.slice(2) as BeastMove;
+      m.specialAt = 0; m.specialKind = ""; m.winding = false; m.lastAttack = now;
+      const x = Math.round(m.x), y = Math.round(m.y);
+      const rush = (ms: number, tx: number, ty: number, speed?: number) => {
+        const dx = tx - m.x, dy = ty - m.y, d = Math.max(1, Math.hypot(dx, dy));
+        const sp = speed ?? d / (ms / 1000);
+        m.aimX = dx / d; m.aimY = dy / d; m.rushVX = m.aimX * sp; m.rushVY = m.aimY * sp;
+        m.rushUntil = now + ms; m.rushKind = kind; m.rushHit = []; m.rushTurn = kind === "stampede" ? now + ms * 0.45 : 0;
+        facing(tx, ty);
+        this.broadcast("brush", { id, kind, ms, ax: m.aimX, ay: m.aimY });
+      };
+      switch (kind) {
+        case "gore": rush(B.gore.rushMs, m.x + m.aimX * B.gore.reach, m.y + m.aimY * B.gore.reach); break;
+        case "stampede": rush(B.stampede.rushMs, m.x + m.aimX * B.stampede.reach, m.y + m.aimY * B.stampede.reach); break;
+        case "pounce": rush(B.pounce.rushMs, m.castX, m.castY); break;
+        case "swoop": rush(B.swoop.rushMs, t ? t.x : m.castX, t ? t.y : m.castY, (t ? Math.max(dist, 40) : 80) / (B.swoop.rushMs / 1000) * 1.15); break;
+        case "web": {
+          const W = B.web, tx = m.castX, ty = m.castY, level = m.level, dmg = dmgOf(W.dmgMult);
+          this.broadcast("bshot", { id, kind, x0: x, y0: y - 8, x: Math.round(tx), y: Math.round(ty), ms: W.flightMs, r: W.radius });
+          this.host.later(W.flightMs, () => this.state.players.forEach((p, pid) => {
+            if (p.dead || Math.hypot(p.x - tx, p.y - ty) > W.radius) return;
+            this.damagePlayer(pid, dmg, `${name}'s Web`, [0, 0], 0, { atkLevel: level, from: id, stunMs: W.rootMs, slowMs: W.rootMs + 800 });
+          }));
+          break;
+        }
+        case "screech": case "maul": {
+          const C = kind === "screech" ? B.screech : B.maul, cos = Math.cos(C.halfAngle);
+          heroes((dx, dy, d) => d <= C.reach && (d < 8 || (dx * m.aimX + dy * m.aimY) / d >= cos), (pid, _p, dx, dy, d) => {
+            if (kind === "screech") this.damagePlayer(pid, dmgOf(C.dmgMult), `${name}'s Screech`, away(dx, dy, d), 0.5, { atkLevel: m.level, from: id, slowMs: B.screech.slowMs });
+            else this.damagePlayer(pid, dmgOf(C.dmgMult), `${name}'s Maul`, away(dx, dy, d), B.maul.knockback, { atkLevel: m.level, from: id });
+          });
+          this.broadcast("bhit", { id, kind, x, y, ax: m.aimX, ay: m.aimY, reach: C.reach, half: C.halfAngle });
+          break;
+        }
+        case "stomp": case "roar": {
+          const R = kind === "stomp" ? B.stomp : B.roar;
+          heroes((_dx, _dy, d) => d <= R.radius, (pid, _p, dx, dy, d) => {
+            if (kind === "stomp") this.damagePlayer(pid, dmgOf(R.dmgMult), `${name}'s Stomp`, away(dx, dy, d), B.stomp.knockback, { atkLevel: m.level, from: id, stunMs: B.stomp.stunMs });
+            else this.damagePlayer(pid, dmgOf(R.dmgMult), `${name}'s Roar`, away(dx, dy, d), 1.2, { atkLevel: m.level, from: id, slowMs: B.roar.slowMs });
+          });
+          this.broadcast("bhit", { id, kind, x, y, r: R.radius });
+          break;
+        }
+        case "rockfall": {
+          const R = B.rockfall, dmg = dmgOf(R.dmgMult);
+          for (const [px, py] of m.pools) heroes((dx, dy) => Math.hypot(dx + m.x - px, dy + m.y - py) <= R.radius, (pid) =>
+            this.damagePlayer(pid, dmg, `${name}'s Falling Stones`, [0, 0], 0, { atkLevel: m.level, from: id, stunMs: 400 }));
+          this.broadcast("bhit", { id, kind, pts: m.pools.map(([a, b]) => [Math.round(a), Math.round(b)]), r: R.radius });
+          m.pools = [];
+          break;
+        }
+        case "howl": case "brood": {
+          const H = kind === "howl" ? B.howl : B.brood, pts: [number, number][] = [];
+          let mine = 0;
+          this.state.mobs.forEach((c) => { if (c.mother === id && !c.dead) mine++; });
+          for (const k of (kind === "howl" ? B.howl.summon : B.brood.kinds)) {
+            if (mine >= H.max) break;
+            const c = this.raiseKin(m, id, k, H.levelDrop);
+            if (c) { pts.push([Math.round(c.x), Math.round(c.y)]); mine++; }
+          }
+          if (kind === "howl") {
+            // every beast in earshot is driven wild for a while (faster, harder blows)
+            const until = now + B.howl.rallyMs;
+            this.state.mobs.forEach((c) => { if (!c.dead && BEAST_KINDS.includes(c.kind) && Math.hypot(c.x - m.x, c.y - m.y) <= B.howl.range) c.rallyUntil = until; });
+          }
+          this.broadcast("bhit", { id, kind, x, y, pts, r: kind === "howl" ? B.howl.range : 0 });
+          break;
+        }
+      }
+      return true;
+    }
+
+    // ---- pick a move
+    if (!t || m.broken || m.windUntil || m.stunned || m.specialAt) return false;
+    const frac = m.hp / Math.max(1, m.maxHp);
+    let mine = -1;
+    const kin = () => { if (mine < 0) { mine = 0; this.state.mobs.forEach((c) => { if (c.mother === id && !c.dead) mine++; }); } return mine; };
+    const wind = (kind: BeastMove, ms: number, extra: Record<string, unknown>) => {
+      m.specialKind = `b:${kind}`; m.specialAt = now + ms; m.winding = true;
+      this.broadcast("bwind", { id, kind, ms, x: Math.round(m.x), y: Math.round(m.y), ...extra });
+    };
+    const aimAt = (x: number, y: number) => { const d = Math.max(0.1, Math.hypot(x - m.x, y - m.y)); m.aimX = (x - m.x) / d; m.aimY = (y - m.y) / d; facing(x, y); };
+    for (const kind of BEAST_MOVES[m.kind]!) {
+      const C = B[kind] as { cooldownMs?: number; everyMs?: number };
+      const cd = C.cooldownMs ?? C.everyMs ?? 6000;
+      const next = m.bcd[kind];
+      if (next === undefined) { m.bcd[kind] = now + cd * (0.25 + Math.random() * 0.5); continue; } // not all at once when it first sees you
+      if (now < next) continue;
+      let ok = true;
+      switch (kind) {
+        case "gore": case "stampede": {
+          const G = B[kind];
+          if (dist < G.min || dist > G.max) { ok = false; break; }
+          aimAt(t.x, t.y);
+          wind(kind, G.windupMs, { x2: Math.round(m.x + m.aimX * G.reach), y2: Math.round(m.y + m.aimY * G.reach), w: G.width });
+          break;
+        }
+        case "pounce": case "swoop": case "web": {
+          const P = B[kind];
+          if (dist < P.min || dist > P.max) { ok = false; break; }
+          m.castX = t.x; m.castY = t.y; aimAt(t.x, t.y);
+          wind(kind, P.windupMs, kind === "swoop" ? {} : { tx: Math.round(t.x), ty: Math.round(t.y), r: (P as { radius: number }).radius });
+          break;
+        }
+        case "screech": case "maul": {
+          const C2 = B[kind];
+          if (dist > C2.range) { ok = false; break; }
+          aimAt(t.x, t.y);
+          wind(kind, C2.windupMs, { ax: m.aimX, ay: m.aimY, reach: C2.reach, half: C2.halfAngle });
+          break;
+        }
+        case "stomp": case "roar": {
+          const R = B[kind];
+          if (dist > R.range) { ok = false; break; }
+          wind(kind, R.windupMs, { r: R.radius });
+          break;
+        }
+        case "howl": {
+          if (dist > B.howl.range) { ok = false; break; }
+          wind(kind, B.howl.castMs, { r: B.howl.range });
+          break;
+        }
+        case "brood": {
+          if (frac >= B.brood.hpFrac || kin() >= B.brood.max) { ok = false; break; }
+          wind(kind, B.brood.castMs, {});
+          break;
+        }
+        case "rockfall": {
+          const R = B.rockfall;
+          if (frac >= R.hpFrac || dist > R.range) { ok = false; break; }
+          // under the target and the heroes near her, and a few stones at random round them
+          m.pools = [[t.x, t.y]];
+          this.state.players.forEach((p) => { if (p !== t && !p.dead && m.pools.length < R.count && Math.hypot(p.x - m.x, p.y - m.y) <= R.range) m.pools.push([p.x, p.y]); });
+          while (m.pools.length < R.count) {
+            const a = Math.random() * Math.PI * 2, r = R.spread * (0.6 + Math.random() * 0.6);
+            m.pools.push([t.x + Math.cos(a) * r, t.y + Math.sin(a) * r * 0.8]);
+          }
+          wind(kind, R.windupMs, { pts: m.pools.map(([a, b]) => [Math.round(a), Math.round(b)]), r: R.radius });
+          break;
+        }
+      }
+      if (!ok) continue;
+      m.bcd[kind] = now + cd;
+      return true;
+    }
+    return false;
   }
 
   private updateProjectile(s: Projectile, id: string, dt: number) {
@@ -3066,8 +3359,8 @@ export class TownRoom extends Room<TownState> {
       const x = m.x, y = m.y, level = m.level, weapon = m.weapon === "bow" ? "sword" : m.weapon, mother = m.mother;
       this.clock.setTimeout(() => this.spawnCrawler(x, y, level, weapon, mother, attackerId), BONES.crawlDelayMs);
     }
-    if (m.kind === "necromancer" || m.kind === "hollowking") {
-      // Its raised skeletons (the Hollow King's servants) fall apart with it
+    if (m.kind === "necromancer" || m.kind === "hollowking" || m.kind === "packlord" || m.kind === "hidemother") {
+      // Its raised skeletons (the Packlord's and the Hide-Mother's called kin) (the Hollow King's servants) fall apart with it
       this.state.mobs.forEach((c, cid) => {
         if (c.mother !== targetId || c.dead) return;
         c.dead = true; c.hp = 0;
@@ -3514,6 +3807,11 @@ export class TownRoom extends Room<TownState> {
       if (host === "demon") { m.nextStomp = Date.now() + 2500; m.stunUntil = Date.now() + 700; } // climbing out
       this.state.mobs.set(id, m);
       if (host === "demon") this.broadcast("demonrise", { id, x: Math.round(m.x), y: Math.round(m.y) });
+      if (host === "hidemother") {
+        m.stunUntil = Date.now() + 1400; // heaving herself up off her bed of hides
+        m.bcd = { maul: Date.now() + 2500, roar: Date.now() + 5000 };
+        this.broadcast("beastrise", { id, x: Math.round(m.x), y: Math.round(m.y) });
+      }
       if (host === "hollowking") {
         m.stunUntil = Date.now() + 1200; // rising from his throne
         const t0 = Date.now(); m.nextSweep = t0 + 2500; m.nextCircle = t0 + 4500; // a breath before his first moves

@@ -1,4 +1,8 @@
-import { MAP_H, MAP_W, PLAYER_RADIUS, TILE, type MobKind } from "./constants";
+import { MAP_H as FULL_H, MAP_W, PLAYER_RADIUS, TILE, WORLD_H, type MobKind } from "./constants";
+import { FLOORS, LAIRS, SEA_END, SINKHOLE, type Floor } from "./dungeon";
+
+/** The overworld's rows: the world generator (and everything above ground) works on these; under them lies the Mawdeep (shared/dungeon.ts). */
+const MAP_H = WORLD_H;
 
 /**
  * Oakvale and its surroundings — the starting region (288×216 tiles).
@@ -123,7 +127,7 @@ let SOLID: Uint8Array | null = null;
 const NATURE = new Set<number>([T.TREE, T.PINE, T.BUSH, T.ROCK, T.STUMP]);
 
 function buildWorld() {
-  const grid = (v: number) => Array.from({ length: MAP_H }, () => Array<number>(MAP_W).fill(v));
+  const grid = (v: number) => Array.from({ length: FULL_H }, () => Array<number>(MAP_W).fill(v));
   const ground = grid(T.GRASS);
   const objects = grid(EMPTY);
   const roads = new Set<number>(); // every road/bridge tile, kept clear of obstacles
@@ -785,6 +789,13 @@ function buildWorld() {
   // ---------- 13c. The portal stones (shared/portals.ts): a little clearing round each ----------
   for (const p of PORTAL_SPOTS) disk(p.x + 0.5, p.y + 0.5, 2.6, 2.2, (x, y) => { if (NATURE.has(objects[y][x])) setO(x, y, EMPTY); });
 
+  // ---------- 13d. The Mawdeep sinkhole (shared/dungeon.ts): a ragged clearing of bare earth and stones, a path from the Redfang trail ----------
+  disk(SINKHOLE.x + 0.5, SINKHOLE.y + 0.5, 4.6, 3.8, (x, y, d) => {
+    setO(x, y, d > 0.8 && hash(x, y, 301) < 0.22 ? T.ROCK : EMPTY);
+    if (isGrass(ground[y][x])) setG(x, y, d < 0.55 || hash(x, y, 302) < 0.5 ? T.DIRT : T.GRASS_DARK);
+  });
+  curve([[SINKHOLE.x, SINKHOLE.y + 3], [SINKHOLE.x + 1, SINKHOLE.y + 7], [SINKHOLE.x - 1, 108], [SINKHOLE.x, 111]], 1, T.DIRT);
+
   // ---------- 14. Reachability: carve through nature to any pocket the player can't reach ----------
   const solid = (x: number, y: number) => !inMap(x, y) || (objects[y][x] !== EMPTY && !WALKABLE_OBJECTS.has(objects[y][x])) || ground[y][x] === T.WATER;
   const flood = (sx: number, sy: number) => {
@@ -865,14 +876,66 @@ function buildWorld() {
     { name: "River Ashwell", x: riverCenter(60) - 6, y: 0, w: 12, h: MAP_H },
     { name: "Whispering Woods", x: woodsX - 2, y: 0, w: MAP_W - woodsX + 2, h: 184, mobs: ["slime"] },
   ];
+  // ---------- 15. Underground: the sea runs on past the coast, then solid rock with the Mawdeep's floors dug into it ----------
+  for (let y = WORLD_H; y < FULL_H; y++) for (let x = 0; x < MAP_W; x++) {
+    ground[y][x] = y < SEA_END ? T.WATER : T.DIRT;
+    objects[y][x] = y < SEA_END ? EMPTY : T.ROCK;
+  }
+  for (const f of FLOORS) carveFloor(f, ground, objects);
+  areas.unshift(...LAIRS.map((l) => ({ ...l, mobs: [] as MobKind[] })),
+    ...FLOORS.map((f) => ({ name: f.name, x: f.x, y: f.y, w: f.w, h: f.h, mobs: [] as MobKind[] })),
+    { name: "Mawdeep Sinkhole", x: SINKHOLE.x - 5, y: SINKHOLE.y - 5, w: 11, h: 10 });
   return { ground, objects, areas, posts, roads, broken, makeshift };
+}
+
+/**
+ * Digs one Mawdeep floor out of the rock: ragged chambers joined by winding tunnels, earth underfoot, old flagstones in
+ * the halls the beast-folk took over, rubble along the walls. Deterministic like the rest of the world.
+ */
+function carveFloor(f: Floor, ground: number[][], objects: number[][]) {
+  const open = (x: number, y: number) => {
+    if (x <= f.x || y <= f.y || x >= f.x + f.w - 1 || y >= f.y + f.h - 1) return; // a rim of rock all round
+    objects[y][x] = EMPTY;
+  };
+  const S = 400 + f.id * 17;
+  f.chambers.forEach((c, i) => {
+    const cx = f.x + c.x, cy = f.y + c.y;
+    for (let y = Math.floor(cy - c.ry - 3); y <= cy + c.ry + 3; y++) for (let x = Math.floor(cx - c.rx - 3); x <= cx + c.rx + 3; x++) {
+      const a = Math.atan2(y - cy, x - cx), wob = 1 + 0.18 * (noise(Math.cos(a) * 3 + i * 7, Math.sin(a) * 3, 1, S) - 0.5) * 2 + 0.08 * (hash(x, y, S + 1) - 0.5);
+      const d = Math.hypot((x + 0.5 - cx) / c.rx, (y + 0.5 - cy) / c.ry);
+      if (d > wob) continue;
+      open(x, y);
+      if (c.flags && d < 0.72 * wob && hash(x, y, S + 2) < 0.92) ground[y][x] = d > 0.6 * wob && hash(x, y, S + 3) < 0.5 ? T.RUBBLE : T.FLAGS;
+    }
+  });
+  for (const [a, b, bend] of f.tunnels) {
+    const A = f.chambers[a], B = f.chambers[b];
+    const ax = f.x + A.x, ay = f.y + A.y, bx = f.x + B.x, by = f.y + B.y;
+    const mx = (ax + bx) / 2 - (by - ay) * bend * 0.12, my = (ay + by) / 2 + (bx - ax) * bend * 0.12; // bend sideways
+    const n = Math.ceil(Math.hypot(bx - ax, by - ay) * 2);
+    for (let k = 0; k <= n; k++) {
+      const t = k / n, u = 1 - t;
+      const px = u * u * ax + 2 * u * t * mx + t * t * bx, py = u * u * ay + 2 * u * t * my + t * t * by;
+      const r = 1.35 + 0.55 * noise(px, py, 4, S + 5);
+      for (let y = Math.floor(py - r - 1); y <= py + r + 1; y++) for (let x = Math.floor(px - r - 1); x <= px + r + 1; x++) {
+        if (Math.hypot(x + 0.5 - px, y + 0.5 - py) <= r) open(x, y);
+      }
+    }
+  }
+  // loose rocks and rubble: stones fallen from the walls (only where they block nothing important)
+  for (let y = f.y + 1; y < f.y + f.h - 1; y++) for (let x = f.x + 1; x < f.x + f.w - 1; x++) {
+    if (objects[y][x] !== EMPTY) continue;
+    let walls = 0;
+    for (const [i, j] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) if (objects[y + j][x + i] === T.ROCK) walls++;
+    if (walls >= 1 && ground[y][x] === T.DIRT && hash(x, y, S + 7) < 0.35) ground[y][x] = T.RUBBLE;
+  }
 }
 
 export const WORLD = buildWorld();
 export const GROUND = WORLD.ground;
 export const OBJECTS = WORLD.objects;
-SOLID = new Uint8Array(MAP_W * MAP_H);
-for (let ty = 0; ty < MAP_H; ty++) for (let tx = 0; tx < MAP_W; tx++) {
+SOLID = new Uint8Array(MAP_W * FULL_H);
+for (let ty = 0; ty < FULL_H; ty++) for (let tx = 0; tx < MAP_W; tx++) {
   const o = OBJECTS[ty][tx];
   SOLID[ty * MAP_W + tx] = (o !== EMPTY && !WALKABLE_OBJECTS.has(o)) || GROUND[ty][tx] === T.WATER ? 1 : 0;
 }
@@ -961,7 +1024,7 @@ export function signpostNear(px: number, py: number, reach = 1.6): Signpost | un
 }
 
 export function isSolidTile(tx: number, ty: number): boolean {
-  if (tx < 0 || ty < 0 || tx >= MAP_W || ty >= MAP_H) return true;
+  if (tx < 0 || ty < 0 || tx >= MAP_W || ty >= FULL_H) return true;
   if (SOLID && (tx | 0) === tx && (ty | 0) === ty) return SOLID[ty * MAP_W + tx] === 1;
   const o = OBJECTS[ty][tx];
   return (o !== EMPTY && !WALKABLE_OBJECTS.has(o)) || GROUND[ty][tx] === T.WATER;

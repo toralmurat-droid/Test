@@ -1,5 +1,5 @@
 import Phaser from "phaser";
-import { MAP_H, MAP_W, TILE } from "../../shared/constants";
+import { MAP_H, MAP_W, TILE, WORLD_H } from "../../shared/constants";
 import { T, TILE_COUNT } from "../../shared/map";
 import { ROWS, ANIMATED_TILES, animatedRows } from "./tileset";
 import { refreshRegions } from "./texupload";
@@ -636,6 +636,7 @@ export function isoStanding(scene: Phaser.Scene, objects: number[][]): number[][
   for (let ty = 0; ty < MAP_H; ty++) for (let tx = 0; tx < MAP_W; tx++) {
     const index = objects[ty][tx], t = id(index);
     if (t < 0) continue;
+    if (ty >= WORLD_H) { out[ty][tx] = -1; continue; } // the Mawdeep's rock: cave walls (dungeon.ts), not rocks
     const cx = (tx + 0.5) * TILE, cy = (ty + 0.5) * TILE;
     if (houses.has(ty * MAP_W + tx)) { out[ty][tx] = -1; continue; }
     if (t === T.CAMPFIRE) { out[ty][tx] = -1; continue; } // an upright fire sprite (ambient.ts)
