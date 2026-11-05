@@ -1,5 +1,5 @@
 import Phaser from "phaser";
-import { InputState, TILE } from "../../shared/constants";
+import { dirInput, InputState, TILE, WALK_ANGLES } from "../../shared/constants";
 import { blocked } from "../../shared/movement";
 import { findPath, type Pt } from "./pathfind";
 import { fromIso, isoX, isoY, ISO, isoAnchor } from "./iso";
@@ -69,6 +69,7 @@ export class PointerControls {
   private hovered?: string; // enemy under the mouse
   private rtt = 150; // ms, click to server swing and back (measured in swung)
   private firedAt = 0;
+  private heading?: [number, number]; // direction the route walked last frame
 
   /**
    * Where to aim at enemy `e`. Melee: its newest server position. Shots: where it will be when the shot gets
@@ -268,6 +269,7 @@ export class PointerControls {
   private route(to: Pt) {
     const me = this.host.me();
     if (!me) return;
+    this.heading = undefined;
     this.path = findPath(me, to);
     this.pathTo = { x: to.x, y: to.y };
     this.lastRepath = this.scene.time.now;
@@ -426,11 +428,18 @@ export class PointerControls {
     return this.steer(me, stepMs) ?? STOP;
   }
 
-  /** Keys that walk straight toward (x, y): 8 directions, a diagonal only when it is really diagonal. */
+  /** Walk straight toward (x, y) at any angle (Diablo 2 style), not just the 8 key directions. */
   private toward(me: Pt, x: number, y: number): InputState {
-    const dx = x - me.x, dy = y - me.y, d = Math.hypot(dx, dy) || 1;
-    const ux = dx / d, uy = dy / d, k = 0.38; // ~ sin 22.5 degrees
-    return { up: uy < -k, down: uy > k, left: ux < -k, right: ux > k };
+    const dx = x - me.x, dy = y - me.y, h = this.heading;
+    // Keep the angle we walk at while the wanted one is still close to it: rounding to WALK_ANGLES otherwise flips
+    // between two neighbours every frame (a wobble, and a new input to the server each time)
+    if (h && (dx || dy)) {
+      const off = Math.abs(Math.atan2(h[0] * dy - h[1] * dx, h[0] * dx + h[1] * dy));
+      if (off < (Math.PI * 2 / WALK_ANGLES) * 0.8) return dirInput(h[0], h[1]);
+    }
+    const go = dirInput(dx, dy);
+    this.heading = go.vx !== undefined ? [go.vx, go.vy!] : undefined;
+    return go;
   }
 
   /** Nothing that blocks walking on the straight line between two points? */
@@ -440,14 +449,18 @@ export class PointerControls {
     return true;
   }
 
-  /** Keys to press to follow the route (diagonal first, then straight, like the tile path). Undefined at the end. */
+  /** Input that follows the route, straight at any angle. Undefined at the end. */
   private steer(me: { x: number; y: number; state: any }, stepMs: number): InputState | undefined {
-    const tol = Math.max(1.5, this.host.speed() * stepMs / 1000 * 1.1);
+    const tol = Math.max(2, this.host.speed() * stepMs / 1000 * 1.1);
     while (this.path.length) {
-      const w = this.path[0];
-      if (Math.abs(w.x - me.x) <= tol && Math.abs(w.y - me.y) <= tol) this.path.shift();
+      const w = this.path[0], dx = w.x - me.x, dy = w.y - me.y, d = Math.hypot(dx, dy);
+      // Reached, or just walked past it (at an exact angle the hero can slide by a waypoint without touching it;
+      // turning back for it looked like a stumble at the end of every walk)
+      const passed = this.heading && d < TILE && dx * this.heading[0] + dy * this.heading[1] <= 0;
+      if (d <= tol || passed) this.path.shift();
       else break;
     }
+    if (!this.path.length) this.heading = undefined;
     if (!this.path.length) return undefined;
     // Stuck on something (a monster, a corner the server sees differently): find a new way, then give up
     const now = this.scene.time.now;
@@ -459,8 +472,12 @@ export class PointerControls {
       this.route(this.pathTo);
       if (!this.path.length) return undefined;
     }
+    // Cut corners like Diablo 2: head straight for the farthest waypoint that a straight walk can reach
+    // (the tile route only goes in 8 directions and turns on tile centres)
+    for (let k = Math.min(this.path.length - 1, 6); k > 0; k--) {
+      if (this.clearLine(me, this.path[k])) { this.path.splice(0, k); break; }
+    }
     const w = this.path[0];
-    const dx = w.x - me.x, dy = w.y - me.y;
-    return { up: dy < -tol, down: dy > tol, left: dx < -tol, right: dx > tol };
+    return this.toward(me, w.x, w.y);
   }
 }

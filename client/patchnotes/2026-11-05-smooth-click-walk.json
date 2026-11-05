@@ -1,0 +1,8 @@
+{
+  "date": "2026-11-05",
+  "title": "Smooth click-to-walk",
+  "changes": [
+    "Clicking the ground now walks your hero straight there at any angle, not only in 8 directions.",
+    "Routes around walls cut the corners instead of zig-zagging from tile to tile."
+  ]
+}

@@ -1,4 +1,4 @@
-import { InputState, PLAYER_RADIUS, PLAYER_SPEED } from "./constants";
+import { InputState, inputDir, PLAYER_RADIUS, PLAYER_SPEED } from "./constants";
 import { isSolidAt as mapSolidAt } from "./map";
 import { isDecorSolidAt } from "./npcs";
 
@@ -20,6 +20,9 @@ export function moveStep(x: number, y: number, input: InputState, dtSec: number,
   let dx = (input.right ? 1 : 0) - (input.left ? 1 : 0);
   let dy = (input.down ? 1 : 0) - (input.up ? 1 : 0);
   if (dx && dy) { dx *= Math.SQRT1_2; dy *= Math.SQRT1_2; }
+  // Point-and-click walks at its exact angle (only while a key direction says it is walking at all)
+  const v = (dx || dy) ? inputDir(input) : undefined;
+  if (v) [dx, dy] = v;
   const nx = x + dx * speed * dtSec;
   const ny = y + dy * speed * dtSec;
   // Resolve axes separately so players slide along walls
