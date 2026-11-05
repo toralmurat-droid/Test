@@ -12,7 +12,7 @@
  */
 import { MAP_H, MAP_W, TILE } from "../../shared/constants";
 import { GROUND, OBJECTS, T, areaAt } from "../../shared/map";
-import { skillById } from "../../shared/skills";
+import { impactMs, skillById } from "../../shared/skills";
 import { SHRINE } from "../../shared/shrine";
 import { PORTALS } from "../../shared/portals";
 import { dayPhase, dayTime } from "./details";
@@ -707,7 +707,13 @@ export function bindSfx(room: any, me: () => string, ents: Map<string, Ent>) {
       case "cast": pos("cast", 1, style); break;
       case "fizzle": pos("fizzle"); break;
       case "move": pos(ev.kind === "blink" ? "zap" : "dodge", 0.7, undefined, { key: "mv" + ev.id, minGap: 80 }); break;
-      case "area": play("area", ev.x, ev.y, ev.i ? 0.6 : 1, { look: ev.look, style, tier: s?.row ?? 0 }, { key: "area" + ev.id, minGap: 60 }); break;
+      case "area": {
+        // A falling blade / meteor / arrow rain sounds when it lands, with its damage
+        const boom = () => play("area", ev.x, ev.y, ev.i ? 0.6 : 1, { look: ev.look, style, tier: s?.row ?? 0 }, { key: "area" + ev.id, minGap: 60 });
+        const land = impactMs(ev.look, ev.r ?? 0);
+        if (land > 0) setTimeout(boom, land); else boom();
+        break;
+      }
       case "cry": pos("cry", 1, hpitch(at(ev.id)?.state)); break;
       case "buff": pos("buff", 0.8, style); break;
       case "counter": pos("counter"); break;

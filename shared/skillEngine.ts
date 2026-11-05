@@ -1,5 +1,5 @@
 import { ClassKind } from "./classes";
-import { pointRange, skillTarget,
+import { impactMs, LEAP_MS, pointRange, skillTarget,
   AreaDef, BuffDef, FieldDef, HitEffects, levelPower, MARK_TAKEN, MAX_STACKS, MoveDef, rankOf, rankPower, rankTime, Ranks, scalePower,
   ShotDef, SkillDef, skillOf, STACK_DECAY_MS, STACK_POWER, WEAK_DEALT,
 } from "./skills";
@@ -178,7 +178,9 @@ function release(h: SkillHost, id: string, s: SkillDef, rank: number, power: num
     const spot = a.atStart ? [x0, y0] as [number, number]
       : at !== undefined && (a.ahead ?? 0) > 0 && !s.move ? [x0 + ax0 * at * (a.ahead! / far), y0 + ay0 * at * (a.ahead! / far)] as [number, number]
       : undefined;
-    area(h, id, s, a, power, t, spot, false, imb);
+    // After a leap the blast lands with the hero, not at take-off
+    const def = s.move?.kind === "leap" && !a.atStart ? { ...a, delayMs: Math.max(a.delayMs ?? 0, LEAP_MS) } : a;
+    area(h, id, s, def, power, t, spot, false, imb);
   }
   if (s.shots) fire(h, id, s.id, s.shots, rank, power, u.x, u.y, h.aim(id), imb);
   if (s.field) {
@@ -289,13 +291,19 @@ export function area(h: SkillHost, id: string, s: SkillDef | { id: string }, a: 
       if (a.line) { cx += ax * a.line * i; cy += ay * a.line * i; }
       if (a.scatter) { const ang = Math.random() * Math.PI * 2, d = Math.sqrt(Math.random()) * a.scatter; cx += Math.cos(ang) * d; cy += Math.sin(ang) * d; }
       if (!cry) h.fx({ ev: "area", id, s: s.id, x: cx, y: cy, r: a.r, look: a.look ?? "burst", i, n: waves, imb: imb?.style });
-      for (const e of h.enemies(cx, cy, a.r, id)) {
-        if (a.pull) {
-          const tu = h.unit(e);
-          if (tu) { const [px, py] = norm(cx - tu.x, cy - tu.y); h.move(e, px, py, Math.min(a.pull, Math.hypot(cx - tu.x, cy - tu.y))); }
+      const strike = () => {
+        if (!h.unit(id)) return;
+        for (const e of h.enemies(cx, cy, a.r, id)) {
+          if (a.pull) {
+            const tu = h.unit(e);
+            if (tu) { const [px, py] = norm(cx - tu.x, cy - tu.y); h.move(e, px, py, Math.min(a.pull, Math.hypot(cx - tu.x, cy - tu.y))); }
+          }
+          h.hit(id, e, dmg, pushFrom(h, cx, cy, e), { ...effects(a, t), skill: true, kb: a.kb ?? (dmg > 0 ? 1 : 0), imb });
         }
-        h.hit(id, e, dmg, pushFrom(h, cx, cy, e), { ...effects(a, t), skill: true, kb: a.kb ?? (dmg > 0 ? 1 : 0), imb });
-      }
+      };
+      // A falling blade / meteor / arrow rain hurts when it lands (impactMs), in step with its animation
+      const land = cry ? 0 : impactMs(a.look, a.r);
+      if (land > 0) h.later(land, strike); else strike();
     };
     const delay = (a.delayMs ?? 0) + i * (a.everyMs ?? 0);
     if (delay > 0) h.later(delay, go); else go();

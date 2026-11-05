@@ -1,0 +1,8 @@
+{
+  "date": "2026-11-05",
+  "title": "Opening song plays once",
+  "changes": [
+    "Hearth of Oakvale loops on the start screens, plays once when you enter the world, then the usual village, countryside and battle music takes over.",
+    "Each battle theme now waits 5 minutes after it last played before it can play again, anywhere on the map."
+  ]
+}

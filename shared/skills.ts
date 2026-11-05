@@ -156,6 +156,23 @@ export const STACK_POWER = 0.25; // +25% damage per stack spent, unless the skil
 export const STACK_DECAY_MS = 6000; // stacks fade after this long without landing a hit
 export const MARK_TAKEN = 0.25;
 export const WEAK_DEALT = 0.25;
+/**
+ * Impact timing: skills whose look falls from the sky deal their damage when it lands, not when it appears.
+ * The client animations (client/src/skillfx.ts) use these same numbers, so the hit, the damage numbers and the
+ * crash all happen on the same frame.
+ */
+export const LEAP_MS = 260; // a leap's hop through the air; its blasts land when the hero comes down
+export const SWORD_FALL_MS = 260; // Judgement Blade
+export const METEOR_FALL_MS = 420, SMALL_METEOR_FALL_MS = 260; // big meteors (r >= 40) fall slower
+export const RAIN_FALL_MS = 220; // arrows of a rain hit the ground around this time
+export function impactMs(look: AreaLook | undefined, r: number): number {
+  switch (look) {
+    case "sword": return SWORD_FALL_MS;
+    case "meteor": return r >= 40 ? METEOR_FALL_MS : SMALL_METEOR_FALL_MS;
+    case "rain": return RAIN_FALL_MS;
+    default: return 0;
+  }
+}
 export const STACK_NAME: Record<ClassKind, string> = { knight: "Valor", ninja: "Ki", wizard: "Arcane", archer: "Focus", barbarian: "Fury" };
 
 export const BRANCHES: Record<ClassKind, [BranchDef, BranchDef, BranchDef]> = {

@@ -1,7 +1,7 @@
 import Phaser from "phaser";
 import { quake } from "./camfx";
 import { ISO } from "./isoflag";
-import { AreaLook, FxStyle, skillById, SkillDef } from "../../shared/skills";
+import { AreaLook, FxStyle, impactMs, LEAP_MS, RAIN_FALL_MS, skillById, SkillDef, SWORD_FALL_MS } from "../../shared/skills";
 import { paintSigil, ICON } from "./skillArt";
 
 /**
@@ -33,6 +33,7 @@ export const PALETTE: Record<FxStyle, number[]> = {
 /** Effect strength by tree row (Lv 1 .. Lv 10). */
 const TIER = [1, 1.35, 1.8, 2.4, 3.2];
 const DEPTH = 9500;
+const ARROW_DROP_MS = 150; // one arrow of a rain falling from the sky
 const GROUND_DEPTH = 9400;
 
 interface P {
@@ -445,7 +446,7 @@ export class SkillFx {
     }
     if (leap && e) {
       // Hop the sprite along an arc for the look
-      const sp = e.sprite, start = this.t, ms = 260;
+      const sp = e.sprite, start = this.t, ms = LEAP_MS;
       this.emit(ms, 16, () => { const k = Math.min(1, (this.t - start) / ms); sp.y = ev.y - Math.sin(k * Math.PI) * 10; });
     }
   }
@@ -517,7 +518,7 @@ export class SkillFx {
       }
       case "meteor": {
         const big = r >= 40;
-        this.fall(x, y, style === "earth" ? "earth" : "fire", big ? 420 : 260, big ? 14 : 7, () => {
+        this.fall(x, y, style === "earth" ? "earth" : "fire", impactMs("meteor", r), big ? 14 : 7, () => {
           this.ring(x, y, r, "fire", big ? 80 : 24, { life: 500, up: 40, size: 2 });
           this.ring(x, y, r * 0.8, "earth", big ? 40 : 12, { life: 600, add: false, size: 2 });
           this.burst(x, y, 2, style === "earth" ? "earth" : "fire", big ? 50 : 14, big ? 140 : 80, 700, 2);
@@ -532,7 +533,8 @@ export class SkillFx {
         for (let i = 0; i < 6 + 3 * tier; i++) {
           const a = Math.random() * Math.PI * 2, d = Math.sqrt(Math.random()) * r;
           const ax = x + Math.cos(a) * d, ay = y + Math.sin(a) * d;
-          this.scene.time.delayedCall(Math.random() * 160, () => this.arrowDrop(ax, ay));
+          // each arrow falls ARROW_DROP_MS; they land spread around RAIN_FALL_MS, when the rain hurts
+          this.scene.time.delayedCall(Math.max(0, RAIN_FALL_MS - ARROW_DROP_MS + rnd(-60, 60)), () => this.arrowDrop(ax, ay));
         }
         break;
       }
@@ -616,7 +618,7 @@ export class SkillFx {
     const [lx, ly] = lift(70);
     const a = this.scene.add.image(x + lx, y + ly, "fx_px").setDisplaySize(1, 8).setTint(0xe8d8b0).setDepth(DEPTH);
     const [gx, gy] = lift(4);
-    this.scene.tweens.add({ targets: a, x: x + gx, y: y + gy, duration: 150, ease: "Quad.easeIn", onComplete: () => {
+    this.scene.tweens.add({ targets: a, x: x + gx, y: y + gy, duration: ARROW_DROP_MS, ease: "Quad.easeIn", onComplete: () => {
       a.destroy();
       this.burst(x, y, 1, "earth", 3, 30, 250);
       const stuck = this.scene.add.image(x + gx, y + gy, "fx_px").setDisplaySize(1, 4).setTint(0x8d6e63).setDepth(y);
@@ -637,11 +639,11 @@ export class SkillFx {
     const [lx, ly] = lift(160), [gx, gy] = lift(0);
     g.setPosition(x + lx, y + ly).setAlpha(0);
     this.scene.tweens.add({ targets: g, alpha: 1, duration: 80 });
-    this.scene.tweens.add({ targets: g, x: x + gx, y: y + gy, duration: 260, ease: "Quad.easeIn", onComplete: () => {
+    this.scene.tweens.add({ targets: g, x: x + gx, y: y + gy, duration: SWORD_FALL_MS, ease: "Quad.easeIn", onComplete: () => {
       land();
       this.scene.tweens.add({ targets: g, alpha: 0, duration: 700, delay: 250, onComplete: () => g.destroy() });
     } });
-    this.emit(260, 20, () => this.p(g.x - lx * 0 + rnd(-W, W), g.y, 0, pick(pal), { vz: 0, vy: rnd(-10, 10), life: 300, size: 2, size1: 0, depth: DEPTH + 2 }));
+    this.emit(SWORD_FALL_MS, 20, () => this.p(g.x - lx * 0 + rnd(-W, W), g.y, 0, pick(pal), { vz: 0, vy: rnd(-10, 10), life: 300, size: 2, size1: 0, depth: DEPTH + 2 }));
     void r;
   }
 
