@@ -25,11 +25,11 @@ export interface GearBonus {
   reach?: number; // fraction, 0.4 = melee reach and projectile range +40%
   block?: number; // fraction of incoming damage the shield stops
   // Elemental damage added to every basic hit (weapons), and resistances in percent (armour, shields, hats). shared/elements.ts
-  fireDmg?: number; coldDmg?: number; poisonDmg?: number; faithDmg?: number;
-  fireRes?: number; coldRes?: number; poisonRes?: number; faithRes?: number;
+  fireDmg?: number; coldDmg?: number; poisonDmg?: number; faithDmg?: number; shockDmg?: number;
+  fireRes?: number; coldRes?: number; poisonRes?: number; faithRes?: number; shockRes?: number;
 }
-const DMG_KEY: Record<Element, keyof GearBonus> = { fire: "fireDmg", cold: "coldDmg", poison: "poisonDmg", faith: "faithDmg" };
-const RES_KEY: Record<Element, keyof GearBonus> = { fire: "fireRes", cold: "coldRes", poison: "poisonRes", faith: "faithRes" };
+const DMG_KEY: Record<Element, keyof GearBonus> = { fire: "fireDmg", cold: "coldDmg", poison: "poisonDmg", faith: "faithDmg", shock: "shockDmg" };
+const RES_KEY: Record<Element, keyof GearBonus> = { fire: "fireRes", cold: "coldRes", poison: "poisonRes", faith: "faithRes", shock: "shockRes" };
 
 /** Secondary ranged weapon: fired with RANGED_KEY, independent of the class attack. */
 export interface ShotDef { damage: number; range: number; speed: number; cooldownMs: number; kind: "stone" | "knife" | "bolt" }
@@ -181,6 +181,10 @@ export const GEAR_DROP: Record<MobKind, { chance: number; tiers: [number, number
   shooterblob: { chance: 0.08, tiers: [0.75, 0.22, 0.03] },
   warriorblob: { chance: 0.12, tiers: [0.6, 0.32, 0.08] },
   healerblob: { chance: 0.1, tiers: [0.7, 0.25, 0.05] },
+  venomblob: { chance: 0.15, tiers: [0.4, 0.42, 0.18] },
+  frostblob: { chance: 0.16, tiers: [0.35, 0.45, 0.2] },
+  fireblob: { chance: 0.16, tiers: [0.3, 0.45, 0.25] },
+  stormblob: { chance: 0.17, tiers: [0.25, 0.45, 0.3] },
   bandit: { chance: 0.18, tiers: [0.45, 0.4, 0.15] },
   skeletonmage: { chance: 0.16, tiers: [0.5, 0.38, 0.12] },
   necromancer: { chance: 0.75, tiers: [0.1, 0.5, 0.4] },
@@ -380,9 +384,9 @@ export function gearDef(id: string): GearDef | undefined {
   const bonus: GearBonus = Object.fromEntries(Object.entries({
     atk: growInt(b.atk, l), sta: growInt(b.sta, l), str: growInt(b.str, l), mag: growInt(b.mag, l), dex: growInt(b.dex, l),
     speed: growFrac(b.speed, l), reach: growFrac(b.reach, l), block: growFrac(b.block, l),
-    fireDmg: growInt(b.fireDmg, l), coldDmg: growInt(b.coldDmg, l), poisonDmg: growInt(b.poisonDmg, l), faithDmg: growInt(b.faithDmg, l),
+    fireDmg: growInt(b.fireDmg, l), coldDmg: growInt(b.coldDmg, l), poisonDmg: growInt(b.poisonDmg, l), faithDmg: growInt(b.faithDmg, l), shockDmg: growInt(b.shockDmg, l),
     // resistances grow gently, like the other percent bonuses
-    fireRes: growPct(b.fireRes, l), coldRes: growPct(b.coldRes, l), poisonRes: growPct(b.poisonRes, l), faithRes: growPct(b.faithRes, l),
+    fireRes: growPct(b.fireRes, l), coldRes: growPct(b.coldRes, l), poisonRes: growPct(b.poisonRes, l), faithRes: growPct(b.faithRes, l), shockRes: growPct(b.shockRes, l),
   }).filter(([, v]) => v !== undefined));
   // Random bonuses add on top of the base item's
   for (const a of affixes) {
@@ -457,7 +461,7 @@ export const RARITY_ODDS = { magic: 0.3, rare: 0.07, legendary: 0.01, perLevel: 
 /** Legendary bonuses roll this much higher. */
 const LEGENDARY_BOOST = 1.5;
 
-export type AffixKey = "atk" | "sta" | "str" | "mag" | "dex" | "spd" | "fdm" | "cdm" | "pdm" | "hdm" | "fre" | "cre" | "pre" | "hre";
+export type AffixKey = "atk" | "sta" | "str" | "mag" | "dex" | "spd" | "fdm" | "cdm" | "pdm" | "hdm" | "fre" | "cre" | "pre" | "hre" | "sdm" | "sre";
 interface AffixDef { bonus: keyof GearBonus; prefix: string; suffix: string; base: number; perLevel: number; slots?: GearSlot[] }
 export const AFFIXES: Record<AffixKey, AffixDef> = {
   atk: { bonus: "atk", prefix: "Cruel", suffix: "of Slaughter", base: 2, perLevel: 0.2 },
@@ -477,6 +481,9 @@ export const AFFIXES: Record<AffixKey, AffixDef> = {
   cre: { bonus: "coldRes", prefix: "Furred", suffix: "of Warmth", base: 6, perLevel: 0.5, slots: ["armour", "shield", "hat"] },
   pre: { bonus: "poisonRes", prefix: "Purified", suffix: "of Remedy", base: 6, perLevel: 0.5, slots: ["armour", "shield", "hat"] },
   hre: { bonus: "faithRes", prefix: "Heathen", suffix: "of Heresy", base: 6, perLevel: 0.5, slots: ["armour", "shield", "hat"] },
+  // Electric (Murat 2026-11-05): new keys go last so older item ids keep their affix order
+  sdm: { bonus: "shockDmg", prefix: "Crackling", suffix: "of Storms", base: 2, perLevel: 0.25, slots: ["weapon"] },
+  sre: { bonus: "shockRes", prefix: "Grounded", suffix: "of the Lodestone", base: 6, perLevel: 0.5, slots: ["armour", "shield", "hat"] },
 };
 export const AFFIX_KEYS = Object.keys(AFFIXES) as AffixKey[];
 export interface Affix { key: AffixKey; value: number }

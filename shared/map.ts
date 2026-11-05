@@ -93,6 +93,27 @@ export const GULLROCK = { x: 178, y: 182, w: 28, h: 12 };
 export const HOLLOW = { x: 257, y: 18, w: 28, h: 25, cx: 271, cy: 31, r: 8.5 };
 export const HOLLOW_WARDS: [number, number][] = [[HOLLOW.cx - 7, HOLLOW.cy + 4], [HOLLOW.cx + 7, HOLLOW.cy + 4], [HOLLOW.cx, HOLLOW.cy - 8]];
 
+/**
+ * The elemental wilds (Murat 2026-11-05): four places deep in the eastern woods where pieces of the Gloam that fled
+ * the Brood Heart soaked up the land and turned elemental (blob quests 8-11, shared/quests.ts). Each has its own
+ * ground (the client tints the painted ground and the trees by `el`) and its own blob. Tougher the further east.
+ */
+export const ELEMENT_LANDS = [
+  { name: "Blightmire Fen", el: "poison", x: 150, y: 78, w: 26, h: 36 },
+  { name: "Rimewater Hollow", el: "cold", x: 224, y: 3, w: 32, h: 30 },
+  { name: "Cinder Scar", el: "fire", x: 248, y: 58, w: 38, h: 34 },
+  { name: "Stormbreak Crags", el: "shock", x: 240, y: 132, w: 46, h: 48 },
+] as const;
+export type ElementLand = (typeof ELEMENT_LANDS)[number];
+/** The elemental land at a tile, with how deep inside it is (0 at the edge, 1 from `fade` tiles in). */
+export function elementLandAt(tx: number, ty: number, fade = 4): { land: ElementLand; k: number } | undefined {
+  for (const land of ELEMENT_LANDS) {
+    const d = Math.min(tx - land.x, land.x + land.w - tx, ty - land.y, land.y + land.h - ty);
+    if (d > 0) return { land, k: Math.min(1, d / fade) };
+  }
+  return undefined;
+}
+
 export const riverCenter = (y: number) => Math.round(118 + 3 * Math.sin(y / 11) + 1.5 * Math.sin(y / 5));
 
 /** Objects you can walk through (purely decorative, drawn over the player when they stand behind them). */
@@ -613,6 +634,52 @@ function buildWorld() {
     if (inMap(ox, oy) && ground[oy][ox] !== T.WATER) setO(ox, oy, t);
   curve([[mau.x + 4, mau.y + mau.h + 2], [42, 160], [34, 170], [30, 180], [WRECK.x, WRECK.y - 4]], 1); // Wreck Trail (barrows → Brinewood → the strand)
 
+  // ---------- 12a4. The elemental wilds (ELEMENT_LANDS) ----------
+  const LAND = Object.fromEntries(ELEMENT_LANDS.map((l) => [l.el, l])) as Record<ElementLand["el"], ElementLand>;
+  const free = (x: number, y: number) => !roads.has(y * MAP_W + x);
+  // Blightmire Fen: a rotting bog of dark reeds and poisoned pools, dead trunks and thick brush
+  { const L = LAND.poison;
+    each(L.x, L.y, L.w, L.h, (x, y) => {
+      if (!isGrass(ground[y][x])) return;
+      const n = noise(x, y, 3, 301) * 0.7 + noise(x, y, 7, 306) * 0.3, edge = Math.min(x - L.x, L.x + L.w - 1 - x, y - L.y, L.y + L.h - 1 - y);
+      if (n > 0.66 && edge > 2 && free(x, y)) { setG(x, y, T.WATER); setO(x, y, EMPTY); return; }
+      setG(x, y, noise(x, y, 4, 302) > 0.55 ? T.TALL_GRASS : T.GRASS_DARK);
+      const o = objects[y][x];
+      if (o === T.TREE || o === T.PINE) setO(x, y, hash(x, y, 303) < 0.45 ? T.STUMP : hash(x, y, 304) < 0.6 ? T.BUSH : EMPTY);
+      else if (o === EMPTY && hash(x, y, 305) < 0.07) setO(x, y, T.BUSH);
+    }); }
+  // Rimewater Hollow: a frozen hollow of frosted pines and grey boulders round a black, half-frozen tarn
+  { const L = LAND.cold, cx = L.x + L.w / 2, cy = L.y + L.h / 2 + 1;
+    each(L.x, L.y, L.w, L.h, (x, y) => {
+      if (isGrass(ground[y][x])) setG(x, y, hash(x, y, 311) < 0.75 ? T.GRASS_DARK : T.GRASS);
+      const o = objects[y][x];
+      if (o === T.TREE || o === T.BUSH) setO(x, y, hash(x, y, 312) < 0.55 ? T.PINE : EMPTY);
+      else if (o === EMPTY && hash(x, y, 313) < 0.025) setO(x, y, T.ROCK);
+    });
+    disk(cx, cy, 6.5, 4.6, (x, y, d) => { if (d < 0.8 || noise(x, y, 2, 314) > 0.4) { setG(x, y, T.WATER); setO(x, y, EMPTY); } });
+    disk(cx, cy, 10, 7.5, (x, y) => { if (ground[y][x] !== T.WATER && NATURE.has(objects[y][x]) && hash(x, y, 315) < 0.8) setO(x, y, EMPTY); }); // open shore round the tarn
+    curve([[glade.x + 5, glade.y - 1], [210, 15], [L.x - 2, 14], [L.x + 6, 15]], 1, T.DIRT, deer); // deer trail from the Thornwood glade
+  }
+  // Cinder Scar: a burned-out scar of ash and cracked earth, charred stumps and blackened boulders
+  { const L = LAND.fire;
+    each(L.x, L.y, L.w, L.h, (x, y) => {
+      if (ground[y][x] === T.WATER) return;
+      const edge = Math.min(x - L.x, L.x + L.w - 1 - x, y - L.y, L.y + L.h - 1 - y);
+      if (isGrass(ground[y][x]) && edge + noise(x, y, 3, 321) * 4 > 3) setG(x, y, noise(x, y, 4, 322) > 0.5 ? T.DIRT : T.GRASS_DARK);
+      const o = objects[y][x];
+      if (o === T.TREE || o === T.PINE || o === T.BUSH) setO(x, y, hash(x, y, 323) < 0.35 ? T.STUMP : EMPTY);
+      else if (o === EMPTY && hash(x, y, 324) < 0.03) setO(x, y, hash(x, y, 325) < 0.6 ? T.ROCK : T.STUMP);
+    }); }
+  // Stormbreak Crags: a high stony heath of split boulders and lightning-struck pines, where the storms break
+  { const L = LAND.shock;
+    each(L.x, L.y, L.w, L.h, (x, y) => {
+      if (ground[y][x] === T.WATER || ground[y][x] === T.SAND) return;
+      if (isGrass(ground[y][x])) setG(x, y, noise(x, y, 5, 331) > 0.6 ? T.DIRT : T.GRASS_DARK);
+      const o = objects[y][x];
+      if (o === T.TREE || o === T.BUSH) setO(x, y, hash(x, y, 332) < 0.25 ? T.PINE : hash(x, y, 333) < 0.3 ? T.STUMP : EMPTY);
+      else if (o === EMPTY && free(x, y) && (noise(x, y, 3, 334) > 0.72 || hash(x, y, 335) < 0.02)) setO(x, y, T.ROCK);
+    }); }
+
   // ---------- 12b. Signposts at the gates and road junctions (directions are worked out in SIGNPOSTS) ----------
   const posts: { x: number; y: number; to: string[] }[] = [];
   /** Puts a signpost on the nearest free tile beside (not on) a road, within 3 tiles of (x, y). */
@@ -794,6 +861,7 @@ function buildWorld() {
     { name: "Gullrock Cove", ...GULLROCK, mobs: ["bandit"] },
     { name: "The Hollow Throne", x: HOLLOW.x, y: HOLLOW.y, w: HOLLOW.w, h: HOLLOW.h },
     { name: "Saltwind Coast", x: strand.x + strand.w, y: 184, w: MAP_W - strand.x - strand.w, h: MAP_H - 184, mobs: ["slime"] },
+    ...ELEMENT_LANDS.map((l) => ({ name: l.name, x: l.x, y: l.y, w: l.w, h: l.h, mobs: [({ poison: "venomblob", cold: "frostblob", fire: "fireblob", shock: "stormblob" } as const)[l.el]] as MobKind[] })),
     { name: "River Ashwell", x: riverCenter(60) - 6, y: 0, w: 12, h: MAP_H },
     { name: "Whispering Woods", x: woodsX - 2, y: 0, w: MAP_W - woodsX + 2, h: 184, mobs: ["slime"] },
   ];

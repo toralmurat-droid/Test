@@ -5,6 +5,8 @@ import { standingStone, STONE_H, STONE_W, throne, THRONE_H, THRONE_W } from "./t
 import { NPCS, NPC_DECOR } from "../../shared/npcs";
 import { CHESTS } from "../../shared/chests";
 import { SIEGE_SITES } from "../../shared/siege";
+import { ELEMENT_LANDS } from "../../shared/map";
+import { emberVent, iceSpikes, ICE_H, ICE_W, stormStone, STORM_H, STORM_W, venomCaps, VENOM_H, VENOM_W, VENT_H, VENT_W } from "./elementArt";
 
 /**
  * Standing world props with idle animations: spear racks with fluttering pennants, war pennants on tall poles,
@@ -235,6 +237,10 @@ function makeTextures(scene: Phaser.Scene) {
   // Weapon racks (smithy and camps): iso-facing trestle rack with spears, swords, a halberd and an axe; the camp
   // version flies two small pennants. Bonfire-style pixel art: flat colour steps, ordered dithering, dark outline.
   sheet(scene, "wp_spear_rack", 56, 80, N, (p, f) => weaponRack(p, f, true), 0.45);
+  sheet(scene, "wp_venom_caps", VENOM_W, VENOM_H, N, venomCaps, 0.4);
+  sheet(scene, "wp_ice_spikes", ICE_W, ICE_H, N, iceSpikes, 0.45);
+  sheet(scene, "wp_ember_vent", VENT_W, VENT_H, N, emberVent, 0.4);
+  sheet(scene, "wp_storm_stone", STORM_W, STORM_H, N, stormStone, 0.5);
   sheet(scene, "wp_weapon_rack", 56, 80, 1, (p, f) => weaponRack(p, f, false), 0.45);
 
   // War pennant: a tall pole with a long streamer flying right
@@ -567,7 +573,8 @@ function shipwreck(p: Pen, f: number) {
 }
 
 // ---- placement -------------------------------------------------------------------------------------------
-type Kind = "wp_hollow_throne" | "wp_crownstone0" | "wp_crownstone1" | "wp_crownstone2" | "wp_shipwreck" | "wp_spear_rack" | "wp_pennant_red" | "wp_pennant_black" | "wp_dummy" | "wp_lantern_pole" | "wp_skull_pike" | "wp_net_rack" | "wp_spears_ground" | "wp_watchtower";
+type Kind = "wp_hollow_throne" | "wp_crownstone0" | "wp_crownstone1" | "wp_crownstone2" | "wp_shipwreck" | "wp_spear_rack" | "wp_pennant_red" | "wp_pennant_black" | "wp_dummy" | "wp_lantern_pole" | "wp_skull_pike" | "wp_net_rack" | "wp_spears_ground" | "wp_watchtower"
+  | "wp_venom_caps" | "wp_ice_spikes" | "wp_ember_vent" | "wp_storm_stone";
 interface Spot { kind: Kind; x: number; y: number; flip?: boolean }
 
 const hash = (x: number, y: number, s: number) => { let h = (x * 374761393 + y * 668265263 + s * 2147483647) | 0; h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; };
@@ -644,6 +651,9 @@ function spots(): Spot[] {
   // Saltmere: nets drying by the beach, lantern poles on the lane
   scatter(out, "Saltmere", "wp_net_rack", 3, 5);
   scatter(out, "Saltmere", "wp_lantern_pole", 3, 6);
+  // The elemental wilds (elementArt.ts): each land's own growths and scars
+  const LAND_PROP = { poison: "wp_venom_caps", cold: "wp_ice_spikes", fire: "wp_ember_vent", shock: "wp_storm_stone" } as const;
+  for (const l of ELEMENT_LANDS) scatter(out, l.name, LAND_PROP[l.el], Math.round(l.w * l.h / 90), 4);
   return out;
 }
 
@@ -653,12 +663,14 @@ const SIZE: Record<Kind, number> = {
   wp_shipwreck: WRECK_H / TX,
   wp_spear_rack: 80, wp_pennant_red: 100, wp_pennant_black: 100, wp_dummy: 58, wp_lantern_pole: 90, wp_skull_pike: 72, wp_net_rack: 50, wp_spears_ground: 54,
   wp_watchtower: 84,
+  wp_venom_caps: VENOM_H / TX, wp_ice_spikes: ICE_H / TX, wp_ember_vent: VENT_H / TX, wp_storm_stone: STORM_H / TX,
 };
 const FPS: Record<Kind, number> = {
   wp_hollow_throne: 6, wp_crownstone0: 1, wp_crownstone1: 1, wp_crownstone2: 1,
   wp_shipwreck: 4,
   wp_spear_rack: 6, wp_pennant_red: 7, wp_pennant_black: 6, wp_dummy: 3, wp_lantern_pole: 3, wp_skull_pike: 6, wp_net_rack: 3, wp_spears_ground: 5,
   wp_watchtower: 6,
+  wp_venom_caps: 4, wp_ice_spikes: 4, wp_ember_vent: 6, wp_storm_stone: 8,
 };
 
 export const WORLD_PROP_SPOTS = spots();

@@ -1,5 +1,5 @@
 import { MobKind, TILE } from "./constants";
-import { AREAS, GULLROCK, HOLLOW, HOLLOW_WARDS, isSafeZone, isSolidAt, REDFANG, VILLAGE, WRECK } from "./map";
+import { AREAS, ELEMENT_LANDS, GULLROCK, HOLLOW, HOLLOW_WARDS, isSafeZone, isSolidAt, REDFANG, VILLAGE, WRECK } from "./map";
 import { SPAWN_ZONES, SpawnZone } from "./spawns";
 import { npcById } from "./npcs";
 
@@ -7,14 +7,18 @@ import { npcById } from "./npcs";
  * The blob quest chain. Quests are done one after the other, each in a blob zone a little further from
  * Oakvale and a little tougher (North Meadow → Goldenreach Farms → Misty Marsh → Mirror Pond → Sunken Lake →
  * Brinewood → the wreck of the Grey Heron on Heronwreck Strand). The whole chain stays west of River Ashwell
- * and ends on the coast, where the Gloam first came ashore (Murat 2026-11-03).
+ * and ends on the coast, where the Gloam first came ashore (Murat 2026-11-03). Quests 8-11 (Murat 2026-11-05) follow the
+ * four pieces that tore free when the Brood Heart burned, east across the river into the elemental wilds (ELEMENT_LANDS):
+ * Blightmire Fen (poison, Lv 14) → Rimewater Hollow (frost, Lv 17) → Cinder Scar (fire, Lv 20) → Stormbreak Crags (storm, Lv 23).
  *
  * Progress lives on the server: Player.questId = index in QUESTS, Player.questStage = 0 before the quest is
  * accepted, then 1..steps.length for the step being worked on (stage s = steps[s - 1]); Player.questCount =
  * progress on that step (kills / items, or a bitmask of the objects already used). Claiming the reward at
  * the last step moves on to the next quest (questId + 1, stage 0). questId === QUESTS.length = chain done.
  */
-export const BLOB_KINDS: MobKind[] = ["slime", "motherblob", "blobling", "shooterblob", "warriorblob", "healerblob"];
+export const BLOB_KINDS: MobKind[] = ["slime", "motherblob", "blobling", "shooterblob", "warriorblob", "healerblob", "venomblob", "frostblob", "fireblob", "stormblob"];
+/** The four elemental blobs of the eastern wilds (blob quests 8-11). */
+export const ELEMENT_BLOBS: MobKind[] = ["venomblob", "frostblob", "fireblob", "stormblob"];
 
 export function isBlob(kind: string): boolean {
   return (BLOB_KINDS as string[]).includes(kind);
@@ -87,11 +91,14 @@ export const QUEST_ITEMS: Record<string, QuestItemDef> = {
   shot: { name: "Sigil Stone", plural: "Sigil Stones" },
   dust: { name: "Grave Dust", plural: "Grave Dust" },
   cod: { name: "Salted Cod", plural: "Salted Cod" },
+  venom: { name: "Venom Sac", plural: "Venom Sacs" },
+  cinder: { name: "Cinder Heart", plural: "Cinder Hearts" },
+  stormglass: { name: "Storm Glass", plural: "Storm Glass" },
 };
 
 // ---- Map objects you use with E ----
 
-export type QuestObjectKind = "lantern" | "shrine" | "cocoon" | "heart" | "engine" | "beacon" | "crypt" | "phylactery" | "ward";
+export type QuestObjectKind = "lantern" | "shrine" | "cocoon" | "heart" | "engine" | "beacon" | "crypt" | "phylactery" | "ward" | "shard";
 export interface QuestObject { id: string; kind: QuestObjectKind; x: number; y: number; name: string; verb: string }
 
 const obj = (id: string, kind: QuestObjectKind, name: string, verb: string, area: string, fx: number, fy: number): QuestObject =>
@@ -192,6 +199,13 @@ export const SHRINES: QuestObject[] = [
   obj("shrine2", "shrine", "Rotting shrine", "Cleanse", "Brinewood", 0.5, 0.75),
   obj("shrine3", "shrine", "Rotting shrine", "Cleanse", "Brinewood", 0.8, 0.35),
 ];
+/** The four Heart Shards of the elemental wilds, one in each land (the id ends in its element). */
+const shardIn = (land: string, el: string, fx: number, fy: number) => obj(`shard_${el}`, "shard", `${({ poison: "Venom", cold: "Rime", fire: "Cinder", shock: "Storm" } as Record<string, string>)[el]} Shard`, "Shatter", land, fx, fy);
+const LANDS = Object.fromEntries(ELEMENT_LANDS.map((l) => [l.el, l.name])) as Record<string, string>;
+export const SHARDS: QuestObject[] = [
+  shardIn(LANDS.poison, "poison", 0.45, 0.55), shardIn(LANDS.cold, "cold", 0.5, 0.25), shardIn(LANDS.fire, "fire", 0.4, 0.4), shardIn(LANDS.shock, "shock", 0.5, 0.6),
+];
+const TARN = ELEMENT_LANDS[1];
 /** In the breach of the Grey Heron's hull, where it has lain since the wreck. */
 export const BROOD_HEART: QuestObject = { id: "heart", kind: "heart", name: "Brood Heart", verb: "Burn", x: (WRECK.x + 0.8) * TILE, y: (WRECK.y + 0.9) * TILE };
 
@@ -381,7 +395,116 @@ export const QUESTS: QuestDef[] = [
       back("druid", "Elder Rowan", "village bonfire", ["I felt it, all the way here. The whole valley sighed, and the sea with it.", "There will always be blobs, friend, but with no heart to call them, they will never find each other again. Oakvale owes you everything."], "Claim reward"),
     ],
     reward: { xp: 1600, gold: 500, potions: 5 },
-    after: "The land is quieter thanks to you. The pieces wander alone again. May the old oaks shelter you, friend.",
+    after: "The land is quieter thanks to you. But something troubles Morwen, she says the jelly in her flasks still hums. Go and see her when you are stronger.",
+  },
+  // ---- The elemental wilds (Murat 2026-11-05): the four pieces that fled when the heart burned ----
+  {
+    id: "fen", title: "Venom in the Fen", giver: "witch", zone: LANDS.poison, minLevel: 14,
+    description: `When the Brood Heart burned, four great pieces of the Gloam tore free and fled east across the river. One sank into ${LANDS.poison}, ${zdir(ELEMENT_LANDS[0])} of Oakvale, and drank the bog's poison. Morwen wants its venom, and the shard of the heart it carries smashed.`,
+    offer: [
+      "Darling, you're back. Listen. My jelly still hums. Fainter, but it hums.",
+      "When the heart burned, it burst. Four great pieces flew out of the fire, each with a sliver of the heart inside, and fled east over the river.",
+      `One crawled into ${LANDS.poison}. The bog was already poison, and the piece drank it. Now every blob there spits venom like a toad.`,
+      "Kill a few, bring me their venom sacs, and find the shard it hides. Smash it, darling. Mind the puddles, they eat boots.",
+    ],
+    acceptText: "I'll go to the fen",
+    steps: [
+      { type: "kill", zone: LANDS.poison, kinds: ["venomblob"], goal: 6, text: "Kill 6 venom blobs", banner: ["New quest", "Venom in the Fen"],
+        obj: "Venom blobs: {n} / {goal}", nag: "{n} of {goal}. When one puffs up, step out of the green mark before the glob lands." },
+      { type: "collect", zone: LANDS.poison, kinds: ["venomblob"], item: "venom", goal: 4, chance: { venomblob: 0.5 },
+        text: "Collect 4 Venom Sacs", banner: ["Quest updated", "Collect 4 Venom Sacs"], obj: "Venom Sacs: {n} / {goal}",
+        nag: "{n} of {goal} sacs. Only the venom blobs have them." },
+      { type: "use", zone: LANDS.poison, objects: [SHARDS[0]], text: "Shatter the Venom Shard", banner: ["The sacs are full!", "Find and shatter the Venom Shard"],
+        obj: `Shatter the Venom Shard (${LANDS.poison})`, nag: "The shard lies in the heart of the fen. Press E beside it." },
+      { type: "kill", zone: LANDS.poison, kinds: ELEMENT_BLOBS, fused: 3, goal: 1,
+        summon: { parts: ["venomblob", "venomblob", "healerblob"], level: 18, title: "Blightmaw", ...spotIn(LANDS.poison, 0.5, 0.45) },
+        text: "Slay Blightmaw", banner: ["The shard bursts!", "Its keeper rises from the bog: slay Blightmaw"], obj: "Blightmaw slain: {n} / {goal}",
+        nag: "Three blobs in one, spitting venom and mending itself. Keep moving, never stand in the puddles." },
+      back("witch", "Morwen", "her tent", ["Venom sacs, still twitching. Lovely. I'll brew you something against this muck.", "And the shard? Gone. One piece fewer that remembers. Rowan will want to hear about the other three."], "Claim reward"),
+    ],
+    reward: { xp: 2000, gold: 550, potions: 4 },
+    after: "Rowan has news of the second piece, darling. Something cold.",
+  },
+  {
+    id: "tarn", title: "The Frozen Tarn", giver: "druid", zone: LANDS.cold, minLevel: 17,
+    description: `The second piece of the Gloam crept north-east into ${LANDS.cold}, where a black tarn never thaws. Its blobs have turned to ice and blast frost at anyone who comes near. Elder Rowan asked you to find the tarn and shatter the Rime Shard.`,
+    offer: [
+      "Morwen told me. Four pieces, four shards of the heart. I should have seen it.",
+      `The trees in the north-east have gone silent. Frost in summer, around a black tarn in ${LANDS.cold}. A piece of the Gloam lies under that ice.`,
+      "Its blobs have turned cold as the tarn. When you get close they swell up and burst into a ring of frost. It will slow you, so do not let them surround you.",
+      "Find the tarn, thin the frost blobs, and shatter the Rime Shard.",
+    ],
+    acceptText: "I'll find the tarn",
+    steps: [
+      { type: "reach", zone: LANDS.cold, at: { x: (TARN.x + TARN.w / 2) * TILE, y: (TARN.y + TARN.h / 2 + 1) * TILE, r: 7 * TILE, label: "The black tarn" },
+        text: `Find the black tarn in ${LANDS.cold}`, banner: ["New quest", "The Frozen Tarn"], obj: `Find the black tarn (${LANDS.cold})`,
+        nag: `The tarn lies in the middle of ${LANDS.cold}, ${zdir(TARN)} of Oakvale. Take the trail east from the Thornwood glade.` },
+      { type: "kill", zone: LANDS.cold, kinds: ["frostblob"], goal: 8, text: "Kill 8 frost blobs", banner: ["The tarn is frozen black", "Kill 8 frost blobs"],
+        obj: "Frost blobs: {n} / {goal}", nag: "{n} of {goal}. When one swells and the ring of ice appears, get out of it." },
+      { type: "use", zone: LANDS.cold, objects: [SHARDS[1]], text: "Shatter the Rime Shard", banner: ["Quest updated", "Shatter the Rime Shard"],
+        obj: "Shatter the Rime Shard (north shore of the tarn)", nag: "The shard stands on the north shore. Press E beside it." },
+      { type: "kill", zone: LANDS.cold, kinds: ELEMENT_BLOBS, fused: 3, goal: 1,
+        summon: { parts: ["frostblob", "frostblob", "warriorblob"], level: 21, title: "Rimeheart", ...spotIn(LANDS.cold, 0.5, 0.75) },
+        text: "Slay Rimeheart", banner: ["The ice cracks!", "Rimeheart climbs out of the tarn"], obj: "Rimeheart slain: {n} / {goal}",
+        nag: "It lunges and freezes. Fight it at range, or strike and step back before the nova." },
+      back("druid", "Elder Rowan", "village bonfire", ["The frost is lifting off the north-east. I can feel the birds coming back.", "Two shards remain. Brann says the woods past the Keep are burning and nothing puts the fire out."], "Claim reward"),
+    ],
+    reward: { xp: 2500, gold: 650, potions: 4 },
+    after: "Brann wants you at the forge. Something about fire that burns without wood.",
+  },
+  {
+    id: "scar", title: "Fire in the Scar", giver: "weaponsmith", zone: LANDS.fire, minLevel: 20,
+    description: `The third piece of the Gloam burned a scar through the woods east of Greywatch Keep: ${LANDS.fire}. Its blobs breathe fire like little dragons. Brann wants their cinder hearts for his forge, and the Cinder Shard broken.`,
+    offer: [
+      `There's a fire burning out past the Keep that needs no wood. ${LANDS.fire}, the hunters call it now. Ash and cracked earth for a mile.`,
+      "The blobs there breathe fire. Like dragons, I swear it! They rear back, and then the whole ground in front of them goes up.",
+      "Their hearts don't go out when they die. Cinder hearts, hot as my forge on its best day. Bring me four, and I'll make you something worth the burns.",
+      "And break that shard. Don't stand in front of them when they rear back.",
+    ],
+    acceptText: "I'll bring the cinders",
+    steps: [
+      { type: "kill", zone: LANDS.fire, kinds: ["fireblob"], goal: 8, text: "Kill 8 fire blobs", banner: ["New quest", "Fire in the Scar"],
+        obj: "Fire blobs: {n} / {goal}", nag: "{n} of {goal}. When one rears back, the cone in front of it burns. Step to the side." },
+      { type: "collect", zone: LANDS.fire, kinds: ["fireblob"], item: "cinder", goal: 4, chance: { fireblob: 0.45 },
+        text: "Collect 4 Cinder Hearts", banner: ["Quest updated", "Collect 4 Cinder Hearts"], obj: "Cinder Hearts: {n} / {goal}",
+        nag: "{n} of {goal} hearts. Only the fire blobs carry them." },
+      { type: "use", zone: LANDS.fire, objects: [SHARDS[2]], text: "Shatter the Cinder Shard", banner: ["The hearts are glowing!", "Shatter the Cinder Shard"],
+        obj: `Shatter the Cinder Shard (${LANDS.fire})`, nag: "The shard burns in the middle of the scar. Press E beside it." },
+      { type: "kill", zone: LANDS.fire, kinds: ELEMENT_BLOBS, fused: 4, goal: 1,
+        summon: { parts: ["fireblob", "fireblob", "warriorblob", "shooterblob"], level: 24, title: "Cindermaw", ...spotIn(LANDS.fire, 0.45, 0.5) },
+        text: "Slay Cindermaw", banner: ["The scar roars!", "Cindermaw rises from the ash"], obj: "Cindermaw slain: {n} / {goal}",
+        nag: "Four blobs in one, breathing fire, charging and spitting. Frost hurts it most." },
+      back("weaponsmith", "Brann", "his forge", ["Four cinder hearts! Feel that heat. I'll be quenching blades in this for a year.", "Here, your pay, and my thanks. Rowan says the last piece fled south-east, where the storms break."], "Claim reward"),
+    ],
+    reward: { xp: 3000, gold: 800, potions: 5 },
+    after: "Rowan's waiting for you. The last piece is the worst of them, he says.",
+  },
+  {
+    id: "storm", title: "Heart of the Storm", giver: "druid", zone: LANDS.shock, minLevel: 23,
+    description: `The last piece of the Gloam fled to ${LANDS.shock}, south-east of Redfang Hollow, where every storm in the valley breaks. Its blobs crackle with lightning and throw sparks when struck. The Storm Shard is the last sliver of the heart: shatter it before it calls the others back.`,
+    offer: [
+      "Three shards broken. One left, and it is the one I fear.",
+      `The last piece fled to ${LANDS.shock}, south-east past Redfang Hollow. Lightning strikes there every night, and the piece has drunk it.`,
+      "Its blobs are quick, and when you strike them, sparks fly off and crackle on the ground. Hit and step away, or you will dance on embers of lightning.",
+      "And it has been calling. Whatever is left of the other three pieces answers it. When you break the Storm Shard, all of it will come at you at once.",
+    ],
+    acceptText: "I will finish it",
+    steps: [
+      { type: "kill", zone: LANDS.shock, kinds: ["stormblob"], goal: 8, text: "Kill 8 storm blobs", banner: ["New quest", "Heart of the Storm"],
+        obj: "Storm blobs: {n} / {goal}", nag: "{n} of {goal}. Don't stand in the sparks they throw off." },
+      { type: "collect", zone: LANDS.shock, kinds: ["stormblob"], item: "stormglass", goal: 3, chance: { stormblob: 0.4 },
+        text: "Collect 3 Storm Glass", banner: ["Quest updated", "Collect 3 Storm Glass"], obj: "Storm Glass: {n} / {goal}",
+        nag: "{n} of {goal}. Where lightning strikes a storm blob, the jelly turns to glass." },
+      { type: "use", zone: LANDS.shock, objects: [SHARDS[3]], text: "Shatter the Storm Shard", banner: ["The glass hums with thunder", "Shatter the Storm Shard"],
+        obj: `Shatter the Storm Shard (${LANDS.shock})`, nag: "The shard stands among the split boulders. Press E beside it." },
+      { type: "kill", zone: LANDS.shock, kinds: ELEMENT_BLOBS, fused: 5, goal: 1,
+        summon: { parts: ["stormblob", "fireblob", "frostblob", "venomblob", "warriorblob"], level: 27, title: "The Fourfold Gloam", ...spotIn(LANDS.shock, 0.5, 0.5) },
+        text: "Destroy the Fourfold Gloam", banner: ["THE FOURFOLD GLOAM", "Every piece answers the storm"], obj: "The Fourfold Gloam destroyed: {n} / {goal}",
+        nag: "Venom, frost, fire and storm in one body. Watch the ground: every move is marked before it lands." },
+      back("druid", "Elder Rowan", "village bonfire", ["The storm broke over the crags and then... quiet. Real quiet, for the first time since the Grey Heron sank.", "No heart, no shards. The pieces are only blobs again, and they will stay that way. Oakvale owes you twice over, friend."], "Claim reward"),
+    ],
+    reward: { xp: 4000, gold: 1000, potions: 6 },
+    after: "The land is quiet, truly quiet. The pieces wander alone again. May the old oaks shelter you, friend.",
   },
 ];
 
@@ -825,10 +948,13 @@ export const TUT_CHAIN = 3;
 export const tutorialDone = (p: Quester | undefined) => (p?.tutId ?? TUT_QUESTS.length) >= TUT_QUESTS.length;
 /** Can this chain offer new quests yet? Every story waits for the guided first quest. */
 export const chainOpen = (p: Quester | undefined, c: number) =>
-  c === TUT_CHAIN || (tutorialDone(p) && (c !== CROWN_CHAIN || STORY_CHAINS.every((s) => chainDone(p, s))));
+  c === TUT_CHAIN || (tutorialDone(p) && (c !== CROWN_CHAIN || STORY_CHAINS.every((s) => storyDone(p, s))));
 /** The Hollow Crown waits for the three stories it ties together. */
 export const CROWN_CHAIN = 4;
 const STORY_CHAINS = [0, 1, 2];
+/** The Gloam's first story (quests 1-7) is what the Hollow Crown needs; the elemental wilds (8-11) are extra. */
+export const GLOAM_STORY = 7;
+const storyDone = (p: Quester | undefined, c: number) => c === 0 ? (chainState(p, 0)?.questId ?? 0) >= GLOAM_STORY : chainDone(p, c);
 /** Every quest of this chain done. */
 export const chainDone = (p: Quester | undefined, c: number) => (chainState(p, c)?.questId ?? 0) >= CHAINS[c].quests.length;
 
@@ -1035,7 +1161,7 @@ export function usableObjects(p: Quester | undefined): { o: QuestObject; i: numb
 
 /** Every quest object in the world, with whether it is done for this player (lit lanterns stay lit…). */
 export function allObjects(): QuestObject[] {
-  return [...LANTERNS, COCOON, ...SHRINES, BROOD_HEART, ...ENGINES, BEACON, ...CRYPTS, PHYLACTERY, ...WARDS];
+  return [...LANTERNS, COCOON, ...SHRINES, BROOD_HEART, ...SHARDS, ...ENGINES, BEACON, ...CRYPTS, PHYLACTERY, ...WARDS];
 }
 export function objectDone(o: QuestObject, p: Quester | undefined): boolean {
   const c = CHAINS.findIndex((ch) => ch.quests.some((d) => d.steps.some((s) => s.objects?.includes(o))));

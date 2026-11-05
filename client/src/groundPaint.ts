@@ -14,6 +14,8 @@ export interface GroundData {
   ground: Int16Array;
   /** 1 where a solid thing stands (walls, palisade, rocks): ground around it gets a soft contact shadow. */
   solid: Uint8Array;
+  /** The elemental wilds (shared/map.ts ELEMENT_LANDS): rects in tiles whose ground turns blighted, frosted, burned or storm-scoured. */
+  lands?: { x: number; y: number; w: number; h: number; el: string }[];
 }
 
 // Tile ids (shared/map.ts T)
@@ -303,8 +305,55 @@ function material(t: number, wx: number, wy: number, sx: number, sy: number, dep
 /**
  * Paints the screen rectangle [sx0, sx0 + cw) x [sy0, sy0 + ch) at `res` pixels per screen px into RGBA `px`.
  */
+/**
+ * The ground of an elemental land over the normal ground colour (k = how deep inside, 0..1, wavy at the edges).
+ * Poison: sickly yellow-green bog with oily sheen on the pools. Cold: hoar-frost on the grass, the tarn iced over
+ * with cracks. Fire: ash and char with glowing ember cracks. Shock: slate-grey scoured earth with glassy blue scorch lines.
+ */
+function landTint(el: string, k: number, r: number, g: number, b: number, wx: number, wy: number, sx: number, sy: number, wet: boolean): [number, number, number] {
+  const lum = (r * 0.3 + g * 0.55 + b * 0.15) / 255, dth = BAYER4[(Math.floor(sy * 1.5) & 3) * 4 + (Math.floor(sx * 1.5) & 3)];
+  let tr = r, tg = g, tb = b;
+  if (el === "poison") {
+    if (wet) { const s = vn(sx / 6, sy / 2.5, 301); tr = 46 + 30 * s; tg = 70 + 40 * s; tb = 22 + 12 * s; if (s > 0.78) { tr = 150; tg = 118; tb = 170; } } // oily violet sheen
+    else { tr = 40 + 120 * lum; tg = 46 + 118 * lum; tb = 14 + 34 * lum; if (vn(wx / 9, wy / 9, 302) > 0.74) { tr *= 0.7; tg *= 0.62; tb *= 0.7; } }
+  } else if (el === "cold") {
+    if (wet) { // ice: pale blue-grey, cracks along Voronoi-ish lines, a little shine
+      const c = Math.abs(vn(wx / 7, wy / 7, 311) - vn(wx / 7 + 3.1, wy / 7, 312));
+      tr = 120 + 40 * lum; tg = 150 + 40 * lum; tb = 170 + 30 * lum;
+      if (c < 0.035) { tr *= 0.72; tg *= 0.78; tb *= 0.85; } else if (vn(sx / 10, sy / 3, 313) > 0.75) { tr += 40; tg += 40; tb += 34; }
+    } else {
+      const rime = vn(wx / 14, wy / 14, 314) * 0.6 + vn(wx / 3, wy / 3, 315) * 0.4 + dth * 0.2;
+      tr = 60 + 110 * lum; tg = 72 + 112 * lum; tb = 84 + 120 * lum;
+      if (rime > 0.55) { tr = 178 + 30 * lum; tg = 196 + 30 * lum; tb = 212 + 30 * lum; } // white frost patches
+    }
+  } else if (el === "fire") {
+    tr = 38 + 70 * lum; tg = 32 + 56 * lum; tb = 28 + 44 * lum; // ash and char
+    if (vn(wx / 20, wy / 20, 321) > 0.6) { tr *= 0.6; tg *= 0.55; tb *= 0.55; } // burned black patches
+    const C = 26, gx = Math.floor(wx / C), gy = Math.floor(wy / C); // ember cracks: glowing lines on big cells
+    let d1 = 1e9, d2 = 1e9;
+    for (let j = -1; j <= 1; j++) for (let i = -1; i <= 1; i++) {
+      const qx = (gx + i + hash2(gx + i, gy + j, 322)) * C, qy = (gy + j + hash2(gx + i, gy + j, 323)) * C;
+      const d = Math.hypot(wx - qx, wy - qy);
+      if (d < d1) { d2 = d1; d1 = d; } else if (d < d2) d2 = d;
+    }
+    const e = d2 - d1;
+    if (e < 0.9 && vn(wx / 10, wy / 10, 324) > 0.5) { const hot = vn(wx / 4, wy / 4, 325); tr = 200 + 55 * hot; tg = 70 + 80 * hot; tb = 20 + 20 * hot; }
+    else if (e < 2) { tr *= 0.7; tg *= 0.62; tb *= 0.6; }
+  } else if (el === "shock") {
+    tr = 52 + 80 * lum; tg = 56 + 82 * lum; tb = 70 + 96 * lum; // slate, scoured
+    const fl = Math.abs(vn(wx / 16, wy / 16, 331) - 0.5) * 2; // lightning scars: thin glassy streaks
+    if (fl < 0.035 && vn(wx / 30, wy / 30, 332) > 0.55) { tr = 150; tg = 170; tb = 255; }
+    else if (fl < 0.08 && vn(wx / 30, wy / 30, 332) > 0.55) { tr *= 0.6; tg *= 0.6; tb *= 0.7; }
+  }
+  return [r + (tr - r) * k, g + (tg - g) * k, b + (tb - b) * k];
+}
+
 export function paintChunk(g: GroundData, f: Fields, sx0: number, sy0: number, cw: number, ch: number, res: number, px: Uint8ClampedArray) {
   const { w, h, tile, ground } = g;
+  // lands that touch this chunk (world box of the iso rectangle, in tiles, with a margin)
+  const wxs = [sy0 + sx0 / 2, sy0 + (sx0 + cw) / 2, sy0 + ch + sx0 / 2, sy0 + ch + (sx0 + cw) / 2], wys = [sy0 - sx0 / 2, sy0 - (sx0 + cw) / 2, sy0 + ch - sx0 / 2, sy0 + ch - (sx0 + cw) / 2];
+  const bx0 = Math.min(...wxs) / tile - 3, bx1 = Math.max(...wxs) / tile + 3, by0 = Math.min(...wys) / tile - 3, by1 = Math.max(...wys) / tile + 3;
+  const lands = (g.lands ?? []).filter((l) => l.x < bx1 && l.x + l.w > bx0 && l.y < by1 && l.y + l.h > by0);
   const W = Math.round(cw * res), H = Math.round(ch * res);
   const wt = new Float32Array(NT);
   const types: number[] = [];
@@ -391,6 +440,14 @@ export function paintChunk(g: GroundData, f: Fields, sx0: number, sy0: number, c
         // contact shadow around walls, rocks and posts
         const ao = field(f.ao, wx / tile - 0.5, wy / tile - 0.5);
         if (ao > 0) { const k = 1 - 0.45 * ao; r *= k; gg *= k; b *= k; }
+      }
+      if (lands.length) {
+        const tx = wx / tile, ty = wy / tile;
+        for (const l of lands) {
+          const d = Math.min(tx - l.x, l.x + l.w - tx, ty - l.y, l.y + l.h - ty) + (vn(wx / 40, wy / 40, 340) - 0.5) * 5 + (vn(wx / 9, wy / 9, 341) - 0.5) * 1.5;
+          if (d <= 0) continue;
+          [r, gg, b] = landTint(l.el, Math.min(1, d / 3.5) * 0.9, r, gg, b, wx, wy, sx, sy, t1 === WATER);
+        }
       }
       for (const t of types) wt[t] = 0;
       const o = (j * W + i) * 4;
