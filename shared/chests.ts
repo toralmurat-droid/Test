@@ -1,4 +1,4 @@
-import { T, AREAS, GROUND, OBJECTS, EMPTY, areaInfoAt, isSolidTile } from "./map";
+import { T, AREAS, GROUND, OBJECTS, EMPTY, areaInfoAt, isSolidTile, ELEMENT_LANDS } from "./map";
 import { MobKind, MOBS, TILE } from "./constants";
 import { baseLevelAt, SPAWN_ZONES, zoneLevels } from "./spawns";
 import { GEAR, LOOT_IDS, LOOT_LEVEL, rollAffixes, withLevel } from "./gear";
@@ -52,6 +52,11 @@ const LAIRS: { area: string; guards: Partial<Record<MobKind, number>>; at?: [num
   { area: "Whispering Woods", guards: { motherblob: 1, warriorblob: 1 }, at: [0.75, 0.75] },
   // new lairs go last: chest ids are lair_<index>, saved per account
   { area: "Gravemoor Cemetery", guards: { necromancer: 1, skeleton: 2 }, at: [0.5, 0.38] }, // the hoard in the great mausoleum
+  // the elemental wilds (Murat 2026-11-05)
+  { area: "Blightmire Fen", guards: { motherblob: 1, venomblob: 2 }, at: [0.6, 0.3] },
+  { area: "Rimewater Hollow", guards: { frostblob: 2, warriorblob: 1 }, at: [0.25, 0.7] },
+  { area: "Cinder Scar", guards: { fireblob: 2, warriorblob: 1 }, at: [0.7, 0.65] },
+  { area: "Stormbreak Crags", guards: { stormblob: 3 }, at: [0.65, 0.3] },
 ];
 
 const PATHS = new Set<number>([T.DIRT, T.COBBLE, T.BRIDGE, T.WATER]);
@@ -108,7 +113,8 @@ function placeChests(): Chest[] {
     if (!s) return;
     // the skeleton zones have set levels (shared/spawns.ts), above what the distance alone would give
     const zl = st.zone ? SPAWN_ZONES.find((z) => z.name === st.zone)?.levels : undefined;
-    const level = c && zl ? zl[1] + 2 : baseLevelAt(s.tx, s.ty) + 3;
+    const setLevels = c || ELEMENT_LANDS.some((l) => l.name === st.zone); // the elemental wilds have set levels too
+    const level = setLevels && zl ? zl[1] + 2 : baseLevelAt(s.tx, s.ty) + 3;
     out.push({ id: c ? `${ch.id}_${qi + 1}_${si + 1}` : `story_${qi + 1}_${si + 1}`, ...pos(s.tx, s.ty), level, tier: chestTier(level), area: q.title,
       story: { objects: st.objects, hint: st.text } });
   })));

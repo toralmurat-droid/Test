@@ -76,6 +76,12 @@ const ZONE_MOBS: { name: string; mobs: Partial<Record<MobKind, number>>; respawn
   { name: "Heronwreck Strand", mobs: { slime: 8, shooterblob: 5, warriorblob: 5, healerblob: 4, motherblob: 3 }, respawnMs: 6000, levels: [12, 15] },
   // Redfang raiders pillaging the Saltmere fishers' smokehouse (Redfang quest chain), on the coast well away from their camp
   { name: "Gullrock Cove", mobs: { bandit: 6 }, respawnMs: 12000, fixed: true, levels: [17, 20] },
+  // The elemental wilds deep in the eastern woods (blob quests 8-11): each its own elemental blob, set levels from the end
+  // of the Gloam's first story (Lv 12-15) up to the region's ceiling, climbing toward the Hollow Crown (Lv 24+)
+  { name: "Blightmire Fen", mobs: { venomblob: 10, slime: 3, healerblob: 3, motherblob: 1 }, respawnMs: 6000, levels: [14, 17] },
+  { name: "Rimewater Hollow", mobs: { frostblob: 10, warriorblob: 3, healerblob: 2, motherblob: 1 }, respawnMs: 6000, levels: [17, 20] },
+  { name: "Cinder Scar", mobs: { fireblob: 10, warriorblob: 3, shooterblob: 3, motherblob: 1 }, respawnMs: 6000, levels: [20, 23] },
+  { name: "Stormbreak Crags", mobs: { stormblob: 12, warriorblob: 3, shooterblob: 3, motherblob: 2 }, respawnMs: 6000, levels: [22, 25] },
   { name: "Saltwind Coast", mobs: { slime: 14, shooterblob: 5, warriorblob: 5, healerblob: 4, motherblob: 2 }, respawnMs: 4500 },
   { name: "Whispering Woods", mobs: { slime: 10, shooterblob: 4, warriorblob: 4, healerblob: 3, motherblob: 2 }, respawnMs: 5250, wild: true }, // broad areas last: zone lookups take the first match
   // Everything west of the river that no named area covers: fields, roads and woods around Oakvale
@@ -92,7 +98,7 @@ const WILD_RECTS: Record<string, { x: number; y: number; w: number; h: number }>
  */
 export const DENSITY = { tilesPerMob: 9, wildTilesPerMob: 12 };
 /** Blob variants only appear from these levels (Murat: shooter + warrior above Lv 3, healer above Lv 5). */
-export const KIND_MIN_LEVEL: Partial<Record<MobKind, number>> = { shooterblob: 4, warriorblob: 4, healerblob: 6 };
+export const KIND_MIN_LEVEL: Partial<Record<MobKind, number>> = { shooterblob: 4, warriorblob: 4, healerblob: 6, venomblob: 12, frostblob: 14, fireblob: 16, stormblob: 18 };
 
 /**
  * Monster levels grow with distance from the village centre: zones next to Oakvale are level 1-3,
@@ -190,7 +196,7 @@ export function levelsAt(z: SpawnZone, tx: number, ty: number): [number, number]
  * (only its eyes peek out) and jumps out when a player walks close. Dizzy (broken) monsters run for cover too.
  */
 export const HIDE = {
-  spots: { skeleton: [T.GRAVE], skeletonmage: [T.GRAVE], slime: [T.TREE, T.PINE], blobling: [T.TREE, T.PINE], shooterblob: [T.TREE, T.PINE], healerblob: [T.TREE, T.PINE] } as Partial<Record<MobKind, number[]>>,
+  spots: { skeleton: [T.GRAVE], skeletonmage: [T.GRAVE], slime: [T.TREE, T.PINE], blobling: [T.TREE, T.PINE], shooterblob: [T.TREE, T.PINE], healerblob: [T.TREE, T.PINE], frostblob: [T.PINE] } as Partial<Record<MobKind, number[]>>,
   idleChance: 0.06, // per wander decision, chance an idle monster goes to hide
   idleRadius: 7, // tiles from home to look for a spot
   fleeRadius: 6, // tiles from the monster when it's dizzy

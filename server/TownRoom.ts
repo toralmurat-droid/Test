@@ -4,7 +4,7 @@ import { ArraySchema, MapSchema, Schema, type } from "@colyseus/schema";
 import {
   AGGRO, aggroLevelFactor, BLOB_AI, BONES, DEMON, BROOD, Dir, FACTION, FEUD, MERGE, MobDef, MOTHER, SKELETON_AI, HIT_RADIUS, mobScale, regionMobLevel, regionSpecialLevel, InputState, MOB_ATTACK_RANGE, MOBS, MobKind, rollSkeletonWeapon, SKELETON_BOW, SKELETON_WEAPONS, SkeletonWeapon, REGEN_DELAY_MS, REGEN_RAMP_MS, regenFromStamina, SAFE_REGEN_MULT,
   RESPAWN_MS, TICK_RATE, TILE,
-  HOLLOW_KING,
+  HOLLOW_KING, ELEM_BLOB, ELEM_MOVE,
 } from "../shared/constants";
 import {
   ATTACK_VARIANTS, CLASSES, ClassKind, COMBO_WINDOW_MS, DODGE, EMOTES, ENERGY, staminaRegen, DASH_INVULN_MS, GUARD_REDUCTION, isClassKind, levelFromXp, MAX_XP, capLevel, PVP_KILL_XP, xpForLevel,
@@ -15,7 +15,7 @@ import { Counts, dropSize, Potions, nextSize, noPotions, packPotions, potionAmou
 const potSize = (g: string) => Math.max(0, Math.min(SIZES - 1, Math.floor(Number(g) || 0)));
 import { attackMult, cooldownMult, critChance, heroSpeed, magicMult, maxHpFromStats, SLOW_MOB, statsFor, statPoints } from "../shared/powers";
 import { AttackProfile, attackProfile, weaponAttackMult, weaponOk } from "../shared/weapons";
-import { Element, ElemPart, ELEMENT_FX, mobAffinity, MOB_SHOT_ELEMENT } from "../shared/elements";
+import { Element, ElemPart, ELEMENT_FX, mobAffinity, MOB_MELEE_ELEMENT, MOB_SHOT_ELEMENT } from "../shared/elements";
 import { gearResist, splitHit } from "../shared/gear";
 import { activeSkills, canLearn, classSkills, cleanRanks, MAX_RANK, NEED_TEXT, skillLearned, skillOf, talentBonus, talentMult, talentReduce } from "../shared/skills";
 import {
@@ -214,6 +214,7 @@ export class Mob extends Schema {
   specialKind = ""; specialAt = 0; nextBounce = 0; nextSlam = 0; // mother blob special moves (necromancer casts too)
   nextRaise = 0; nextCircle = 0; castX = 0; castY = 0; // necromancer: raise dead, Death Circle aim
   pools: [number, number][] = []; // the Hollow King's Gloam Pools waiting to burst (HOLLOW_KING.pools)
+  nextSplurt = 0; nextNova = 0; nextBreath = 0; nextSparks = 0; aimX = 0; aimY = 1; // elemental blob moves (ELEM_BLOB)
   servant = false; // called up by the Hollow King: fights for him, never starts a bone ritual
   // Redfang Hollow bandits (shared/bandits.ts): camp member, its post (CAMP_POSTS index), patrol progress, horn alert
   camp = false; post = -1; perch = false; pLeg = 0; pDir = 1; stuckSince = 0; detourUntil = 0;
@@ -459,6 +460,7 @@ const RANGED: Partial<Record<MobKind, RangedCfg>> = {
   shooterblob: { ...BLOB_AI.shooter, far: BLOB_AI.shooter.range * 0.85, shot: "slimeball" },
   healerblob: { keepAway: BLOB_AI.healer.keepAway, far: BLOB_AI.healer.range, range: BLOB_AI.healer.range, shot: "", shotSpeed: 0, shotRadius: 0 },
   skeletonmage: { ...SKELETON_AI.mage, far: SKELETON_AI.mage.range * 0.85, shot: "magicbolt" },
+  venomblob: { keepAway: ELEM_BLOB.splurt.keepAway, far: ELEM_BLOB.splurt.range * 0.85, range: ELEM_BLOB.splurt.range, shot: "", shotSpeed: 0, shotRadius: 0 }, // lobs poison (elemSpecial)
   necromancer: { ...SKELETON_AI.necro, far: SKELETON_AI.necro.range * 0.8, shot: "shadowbolt", mult: SKELETON_AI.necro.boltMult },
 };
 
@@ -817,6 +819,7 @@ export class TownRoom extends Room<TownState> {
     m.camp = false; m.post = -1; m.perch = false; m.pLeg = 0; m.pDir = 1; m.stuckSince = 0; m.detourUntil = 0;
     m.alertUntil = 0; m.alertHero = ""; m.nextHorn = 0; m.nextVolley = 0; m.rallyUntil = 0; m.chargeMult = 1; m.dashHit = false; m.reinforced = false;
     m.nextSweep = 0; m.nextLeap = 0; m.nextCry = 0;
+    m.nextSplurt = 0; m.nextNova = 0; m.nextBreath = 0; m.nextSparks = 0;
     if (kind === "bandit" && SPAWN_ZONES[zi]?.name === "Redfang Hollow") {
       // The camp: every bandit takes the first free post (its role, spot and patrol route)
       const post = this.freePost(id);
@@ -1060,6 +1063,123 @@ export class TownRoom extends Room<TownState> {
     m.winding = true;
     this.broadcast("mbwind", { id, kind: m.specialKind, ms: m.specialKind === "slam" ? MOTHER.slam.windupMs : MOTHER.bounce.windupMs });
     return true;
+  }
+
+  // ---- Elemental blobs (ELEM_BLOB) -----------------------------------------------
+
+  /** Venom puddles and storm sparks on the ground: they hurt heroes standing in them every tick. */
+  private hazards: { x: number; y: number; r: number; until: number; next: number; tickMs: number; dmg: number; el: Element; by: string; level: number; name: string }[] = [];
+
+  /** The elemental moves of a blob: its own, and those of every elemental blob it swallowed. */
+  private static elemMoves(m: Mob): string[] {
+    const own = ELEM_MOVE[m.kind];
+    if (!m.parts) return own ? [own] : [];
+    const out = own ? [own] : [];
+    for (const k of m.parts.split(",")) { const mv = ELEM_MOVE[k as MobKind]; if (mv && !out.includes(mv)) out.push(mv); }
+    return out;
+  }
+  /** The blob's own damage at its level, times `mult`. */
+  private elemDmg(m: Mob, mult: number) { return Math.max(1, Math.round(MOBS[m.kind].damage * mobScale(m.level, "damage") * mult)); }
+  /** A ground hazard; `ms` long, hurting every `tickMs`. */
+  private addHazard(m: Mob, id: string, x: number, y: number, r: number, ms: number, tickMs: number, dmg: number, el: Element, now: number) {
+    this.hazards.push({ x, y, r, until: now + ms, next: now + 150, tickMs, dmg, el, by: id, level: m.level, name: mobDef(m).name });
+  }
+  private updateHazards(now: number) {
+    if (!this.hazards.length) return;
+    this.hazards = this.hazards.filter((h) => h.until > now);
+    for (const h of this.hazards) {
+      if (now < h.next) continue;
+      h.next = now + h.tickMs;
+      this.state.players.forEach((p, pid) => {
+        if (p.dead || Math.abs(p.x - h.x) > h.r || Math.abs(p.y - h.y) > h.r || Math.hypot(p.x - h.x, p.y - h.y) > h.r) return;
+        this.damagePlayer(pid, h.dmg, h.name, [0, 0], 0, { dot: true, mobEl: h.el, atkLevel: h.level, el: h.el });
+      });
+    }
+  }
+
+  /**
+   * Splurt (venom), Frost Nova (frost) and Fire Breath (fire): a wind-up painted on the ground, then the move lands.
+   * Returns true while it is busy (it stands still). `t` may be gone while a move it started is still landing.
+   */
+  private elemSpecial(m: Mob, id: string, t: Player | undefined, dist: number, now: number): boolean {
+    const E = ELEM_BLOB;
+    if (m.specialAt && (m.specialKind === "splurt" || m.specialKind === "nova" || m.specialKind === "breath")) {
+      if (now < m.specialAt) return true;
+      const kind = m.specialKind;
+      m.specialAt = 0; m.specialKind = ""; m.winding = false; m.lastAttack = now;
+      const name = mobDef(m).name;
+      if (kind === "splurt") {
+        // the glob flies to where the hero stands NOW (step out of the marked spot to dodge it)
+        const tx = t ? t.x : m.castX, ty = t ? t.y : m.castY, S = E.splurt;
+        this.broadcast("venomspit", { id, x0: Math.round(m.x), y0: Math.round(m.y - 6), x: Math.round(tx), y: Math.round(ty), ms: S.flightMs, r: S.puddle.radius, puddleMs: S.puddle.ms });
+        const dmg = this.elemDmg(m, S.dmgMult), tick = this.elemDmg(m, S.puddle.dmgMult), level = m.level;
+        this.host.later(S.flightMs, () => {
+          this.state.players.forEach((p, pid) => {
+            if (p.dead || Math.hypot(p.x - tx, p.y - ty) > S.puddle.radius) return;
+            this.damagePlayer(pid, dmg, `${name}'s venom`, [0, 0], 0, { mobEl: "poison", atkLevel: level, from: id });
+          });
+          this.addHazard(m, id, tx, ty, S.puddle.radius, S.puddle.ms, S.puddle.tickMs, tick, "poison", Date.now());
+        });
+      } else if (kind === "nova") {
+        const N = E.nova, dmg = this.elemDmg(m, N.dmgMult);
+        this.state.players.forEach((p, pid) => {
+          const dx = p.x - m.x, dy = p.y - m.y, d = Math.hypot(dx, dy);
+          if (p.dead || d > N.radius) return;
+          this.damagePlayer(pid, dmg, `${name}'s Frost Nova`, d > 0.1 ? [dx / d, dy / d] : [0, 1], 1, { mobEl: "cold", slowMs: N.slowMs, atkLevel: m.level, from: id });
+        });
+        this.broadcast("frostnova", { id, x: Math.round(m.x), y: Math.round(m.y), r: N.radius });
+      } else {
+        const B = E.breath, dmg = this.elemDmg(m, B.dmgMult), burn = this.elemDmg(m, B.burn.dmgMult), cos = Math.cos(B.halfAngle);
+        this.state.players.forEach((p, pid) => {
+          const dx = p.x - m.x, dy = p.y - m.y, d = Math.hypot(dx, dy);
+          if (p.dead || d > B.reach || (d > 8 && (dx * m.aimX + dy * m.aimY) / d < cos)) return;
+          if (!this.damagePlayer(pid, dmg, `${name}'s Fire Breath`, d > 0.1 ? [dx / d, dy / d] : [m.aimX, m.aimY], 1, { mobEl: "fire", atkLevel: m.level, from: id })) {
+            for (let i = 1; i <= B.burn.ticks; i++) this.host.later(B.burn.tickMs * i, () => this.damagePlayer(pid, burn, `${name}'s flames`, [0, 0], 0, { dot: true, mobEl: "fire", el: "fire" }));
+          }
+        });
+        this.broadcast("firebreath", { id, x: Math.round(m.x), y: Math.round(m.y), ax: m.aimX, ay: m.aimY, reach: B.reach, half: B.halfAngle });
+      }
+      return true;
+    }
+    if (!t || m.specialAt || m.broken || m.windUntil) return false;
+    const moves = TownRoom.elemMoves(m);
+    const face = () => { m.dir = Math.abs(t.x - m.x) > Math.abs(t.y - m.y) ? (t.x > m.x ? "right" : "left") : (t.y > m.y ? "down" : "up"); };
+    if (moves.includes("nova") && now >= m.nextNova && dist <= E.nova.range) {
+      m.specialKind = "nova"; m.specialAt = now + E.nova.windupMs; m.nextNova = now + E.nova.cooldownMs;
+      this.broadcast("elemwind", { id, kind: "nova", ms: E.nova.windupMs, x: Math.round(m.x), y: Math.round(m.y), r: E.nova.radius });
+    } else if (moves.includes("breath") && now >= m.nextBreath && dist <= E.breath.range) {
+      const d = Math.max(0.1, dist);
+      m.aimX = (t.x - m.x) / d; m.aimY = (t.y - m.y) / d;
+      m.specialKind = "breath"; m.specialAt = now + E.breath.windupMs; m.nextBreath = now + E.breath.cooldownMs;
+      this.broadcast("elemwind", { id, kind: "breath", ms: E.breath.windupMs, x: Math.round(m.x), y: Math.round(m.y), ax: m.aimX, ay: m.aimY, reach: E.breath.reach, half: E.breath.halfAngle });
+    } else if (moves.includes("splurt") && now >= m.nextSplurt && dist <= E.splurt.range && dist > 20) {
+      m.castX = t.x; m.castY = t.y;
+      m.specialKind = "splurt"; m.specialAt = now + E.splurt.windupMs; m.nextSplurt = now + E.splurt.cooldownMs;
+      this.broadcast("elemwind", { id, kind: "splurt", ms: E.splurt.windupMs });
+    } else return false;
+    face();
+    m.winding = true; m.windUntil = 0;
+    return true;
+  }
+
+  /** A Storm Blob that is hit throws off sparks that crackle on the ground around it for a moment. */
+  private stormSparks(m: Mob, id: string, now: number) {
+    const S = ELEM_BLOB.sparks;
+    if (now < m.nextSparks || !TownRoom.elemMoves(m).includes("sparks")) return;
+    m.nextSparks = now + S.everyMs;
+    let mine = 0;
+    for (const h of this.hazards) if (h.by === id && h.el === "shock") mine++;
+    const n = Math.min(S.count, S.max - mine);
+    if (n <= 0) return;
+    const pts: [number, number][] = [], dmg = this.elemDmg(m, S.dmgMult);
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * Math.PI * 2, d = 12 + Math.random() * (S.spread - 12);
+      const x = m.x + Math.cos(a) * d, y = m.y + Math.sin(a) * d * 0.8;
+      if (isSolidAt(x, y)) continue;
+      pts.push([Math.round(x), Math.round(y)]);
+      this.addHazard(m, id, x, y, S.radius, S.ms, S.tickMs, dmg, "shock", now);
+    }
+    if (pts.length) this.broadcast("sparks", { id, pts, ms: S.ms, r: S.radius });
   }
 
   // ---- Blob vs undead feud ------------------------------------------------------
@@ -1598,6 +1718,7 @@ export class TownRoom extends Room<TownState> {
     this.updateGuards(now);
     this.updateWatch(dt, now);
     this.state.projectiles.forEach((s, id) => this.updateProjectile(s, id, dt));
+    this.updateHazards(now);
     this.state.fields.forEach((f, id) => {
       if (!tickField(this.host, f.inst)) { this.state.fields.delete(id); return; }
       if (f.follow) { f.x = f.inst.x; f.y = f.inst.y; }
@@ -1962,6 +2083,7 @@ export class TownRoom extends Room<TownState> {
       const melee = meleeOf(m);
       input = dist < cfg.keepAway ? toward(m.x, m.y, m.x * 2 - t.x, m.y * 2 - t.y) : dist > cfg.far ? this.go(m, t.x, t.y, now) : STILL;
       if (m.kind === "necromancer" && this.necroSpell(m, id, t, dist, now)) input = STILL;
+      else if (ELEM_MOVE[m.kind] && this.elemSpecial(m, id, t, dist, now)) input = STILL;
       else if (cfg.shot) {
         if (m.windUntil) {
           input = STILL;
@@ -1980,6 +2102,8 @@ export class TownRoom extends Room<TownState> {
     } else if (t && m.kind === "demon" && this.demonSpecial(m, id, Math.hypot(t.x - m.x, t.y - m.y), now)) {
       input = STILL;
     } else if ((t || m.specialAt) && m.kind === "hollowking" && this.kingSpecial(m, id, t, t ? Math.hypot(t.x - m.x, t.y - m.y) : 0, now)) {
+      input = STILL;
+    } else if ((t || m.specialAt) && (ELEM_MOVE[m.kind] || m.parts) && TownRoom.elemMoves(m).length && this.elemSpecial(m, id, t, t ? Math.hypot(t.x - m.x, t.y - m.y) : 0, now)) {
       input = STILL;
     } else if (t && m.kind === "motherblob" && this.motherSpecial(m, id, Math.hypot(t.x - m.x, t.y - m.y), now)) {
       input = STILL;
@@ -2020,7 +2144,9 @@ export class TownRoom extends Room<TownState> {
             m.windUntil = 0; m.winding = false; m.lastAttack = now;
             if (dist <= melee.range + 6) {
               this.broadcast("swing", { id });
-              this.damagePlayer(m.target, Math.round(def.damage * melee.dmg * mobScale(m.level, "damage")), def.name, DIR_OFFSET[m.dir], 1, { atkLevel: m.level, from: id });
+              const mel = MOB_MELEE_ELEMENT[m.kind];
+              this.damagePlayer(m.target, Math.round(def.damage * melee.dmg * mobScale(m.level, "damage")), def.name, DIR_OFFSET[m.dir], 1,
+                { atkLevel: m.level, from: id, mobEl: mel, slowMs: mel === "cold" ? ELEMENT_FX.cold.heroSlowMs : undefined });
             }
           }
         } else if (now - m.lastAttack >= def.attackCooldownMs * melee.cooldown / poiseSpeed(poiseFrac(m, mobPoiseMax(m)))) {
@@ -2873,6 +2999,7 @@ export class TownRoom extends Room<TownState> {
     this.bloodthirst(a, attackerId, Math.min(dmg, m.hp));
     m.hp = Math.max(0, m.hp - dmg);
     this.addHate(m, attackerId, dmg); // fight back (generated aggro)
+    if (!opts.dot && (m.kind === "stormblob" || m.parts)) this.stormSparks(m, targetId, Date.now());
     if (!m.foe) m.target = attackerId;
     const now = Date.now();
     // Initiative: drain poise; a solid hit interrupts the wind-up and delays the next attack
@@ -2903,6 +3030,7 @@ export class TownRoom extends Room<TownState> {
   /** Burns and poison of a hero's elemental hit: damage ticks over the next seconds (shared/elements.ts ELEMENT_FX). */
   private elementRiders(attackerId: string, targetId: string, riders: ElemPart[]) {
     for (const r of riders) {
+      if (r.el === "shock") { this.shockArc(attackerId, targetId, r.amt); continue; }
       const f = r.el === "fire" ? (Math.random() < ELEMENT_FX.fire.chance ? ELEMENT_FX.fire : undefined) : r.el === "poison" ? ELEMENT_FX.poison : undefined;
       if (!f) continue;
       const each = (r.amt * f.total) / f.ticks;
@@ -2911,6 +3039,22 @@ export class TownRoom extends Room<TownState> {
         this.host.later(f.tickMs * i, () => this.hitTarget(attackerId, targetId, each, [0, 0], { dot: true, kb: 0, el: r.el }));
       }
     }
+  }
+
+  /** Electric: part of the shock leaps from the monster that was hit to the nearest other monster close by. */
+  private shockArc(attackerId: string, targetId: string, amt: number) {
+    const from = this.state.mobs.get(targetId), F = ELEMENT_FX.shock;
+    if (!from || amt * F.arc < 0.5) return;
+    let best = "", bd = F.range;
+    this.state.mobs.forEach((o, oid) => {
+      if (oid === targetId || o.dead || o.hidden || Math.abs(o.x - from.x) > bd || Math.abs(o.y - from.y) > bd) return;
+      const d = Math.hypot(o.x - from.x, o.y - from.y);
+      if (d < bd) { bd = d; best = oid; }
+    });
+    if (!best) return;
+    const to = this.state.mobs.get(best)!;
+    this.broadcast("arc", { x0: Math.round(from.x), y0: Math.round(from.y), x1: Math.round(to.x), y1: Math.round(to.y) });
+    this.hitTarget(attackerId, best, amt * F.arc * mobAffinity(to.kind, "shock"), [0, 0], { kb: 0, el: "shock" });
   }
 
   /** A monster is down: its raised dead crumble, it leaves its zone (which brings a fresh one back later). */

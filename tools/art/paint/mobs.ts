@@ -79,7 +79,7 @@ function humanoidFrame(kind: string, f: number) {
 
 // ---------------------------------------------------------------- blobs
 interface BlobPal { G: number; L: number; D: number; E: number }
-interface BlobOpts { bodyH: number; extra?: "shooter" | "warrior" | "healer" | "mother1" | "mother2" | "mother3"; seed?: number }
+interface BlobOpts { bodyH: number; extra?: "shooter" | "warrior" | "healer" | "mother1" | "mother2" | "mother3" | "venom" | "frost" | "fire" | "storm"; seed?: number }
 
 function blobFrame(c: C2, w: number, h: number, pal: BlobPal, o: BlobOpts, f: number) {
   const { dir, pose } = frameOf(f), squish = pose === "step";
@@ -145,6 +145,47 @@ function blobFrame(c: C2, w: number, h: number, pal: BlobPal, o: BlobOpts, f: nu
       fillShape(c, ellipseP(bx, by, s * 1.1, s * 0.8), css(mix(pal.L, bile, 0.5), 0.5));
       fillShape(c, ellipseP(bx + s * 0.3, by, s * 0.25, s * 0.25), css(gunk, 0.7));
     }
+  }
+  // elemental skins (Murat 2026-11-05): what each piece of the Gloam soaked up shows through its jelly
+  const ex = o.extra;
+  if (ex === "fire") {
+    // a crust of black cinder plates floating on molten jelly, the cracks between them glowing
+    const cr = rng(seed * 53 + 1);
+    for (let k = 0; k < 9; k++) {
+      const px = cx + (cr() - 0.5) * rx * 1.8, py = base - 0.6 - cr() * ry * 0.95, pr = 0.9 + cr() * rx * 0.22;
+      const pts: P[] = [];
+      for (let v = 0; v < 6; v++) { const a = v / 6 * Math.PI * 2 + cr() * 0.4; pts.push([px + Math.cos(a) * pr * (0.75 + cr() * 0.4), py + Math.sin(a) * pr * 0.65 * (0.75 + cr() * 0.4)]); }
+      fillShape(c, poly(pts), css(0x231210, 0.92));
+      line(c, [pts[0], pts[1], pts[2]], 0x4a2a20, 0.22, 0.8); // lit rim on the plate
+    }
+    glow(c, cx, base - ry * 0.35, rx * 0.9, 0xff8a2a, wind ? 0.55 : 0.32);
+  } else if (ex === "frost") {
+    // rime: white frost crusting over the top, frozen bubbles and a cold blue core
+    const fr = rng(seed * 59 + 2);
+    for (let k = 0; k < 16; k++) {
+      const a = Math.PI * (1.05 + fr() * 0.9), d = 0.55 + fr() * 0.45;
+      fillShape(c, ellipseP(cx + Math.cos(a) * rx * d, base - 0.2 + Math.sin(a) * ry * d, 0.35 + fr() * 0.5, 0.25 + fr() * 0.3), css(0xf4fbff, 0.75));
+    }
+    for (let k = 0; k < 4; k++) { const bx = cx + (fr() - 0.5) * rx, by = base - ry * (0.2 + fr() * 0.5); c.beginPath(); c.arc(bx, by, 0.3 + fr() * 0.4, 0, Math.PI * 2); c.strokeStyle = css(0xe8f8ff, 0.7); c.lineWidth = 0.14; c.stroke(); }
+    glow(c, cx + rx * 0.1, base - ry * 0.35, rx * 0.6, 0x9fdcff, 0.3);
+  } else if (ex === "venom") {
+    // purple bruises and dark veins of poison running through it
+    const vr = rng(seed * 61 + 3);
+    for (let k = 0; k < 5; k++) {
+      let x0 = cx + (vr() - 0.5) * rx * 1.4, y0 = base - vr() * ry * 0.3; const pts: P[] = [[x0, y0]];
+      for (let v = 0; v < 4; v++) { x0 += (vr() - 0.5) * 1.6; y0 -= 0.6 + vr() * 0.9; pts.push([x0, y0]); }
+      line(c, pts, 0x3a1440, 0.22, 0.7);
+    }
+    for (let k = 0; k < 6; k++) fillShape(c, ellipseP(cx + (vr() - 0.5) * rx * 1.6, base - vr() * ry * 0.9, 0.4 + vr() * 0.6, 0.3 + vr() * 0.4), css(0x6a2a6a, 0.3));
+  } else if (ex === "storm") {
+    // lightning trapped inside: a bright zigzag flickering through the jelly, a new shape every frame
+    const lr = rng(seed * 67 + f * 7 + 4);
+    for (let k = 0; k < 2; k++) {
+      let x0 = cx - rx * 0.7 + lr() * rx * 0.3, y0 = base - ry * (0.2 + lr() * 0.5); const pts: P[] = [[x0, y0]];
+      while (x0 < cx + rx * 0.7) { x0 += 0.8 + lr() * 1.0; y0 += (lr() - 0.5) * 1.6; pts.push([x0, Math.min(base - 0.5, Math.max(top + 1, y0))]); }
+      line(c, pts, 0x8fa8ff, 0.55, 0.45); line(c, pts, 0xf6f8ff, 0.2, 0.95);
+    }
+    glow(c, cx, base - ry * 0.4, rx * 0.8, 0x8090f8, 0.35);
   }
   // dim rim light along the top-left edge
   c.beginPath(); dome(c); c.strokeStyle = css(mix(pal.L, bile, 0.3), 0.3); c.lineWidth = 0.5; c.translate(0.35, 0.35); c.stroke();
@@ -213,6 +254,55 @@ function blobFrame(c: C2, w: number, h: number, pal: BlobPal, o: BlobOpts, f: nu
     c.beginPath(); c.arc(0, 0, rx * 0.55, 0, Math.PI * 2); c.strokeStyle = css(0xffd54f, 0.95); c.lineWidth = 0.9; c.stroke(); c.restore();
     glow(c, cx, top - 1.4, rx * 0.8, 0xffd54f, 0.35);
     if (dir !== "up") { const gx = dir === "right" ? cx + rx * 0.3 : cx, gy = base - ry * 0.18; line(c, [[gx, gy - 1.1], [gx, gy + 1.1]], 0x43c463, 0.75); line(c, [[gx - 1.1, gy], [gx + 1.1, gy]], 0x43c463, 0.75); }
+  } else if (x === "fire") {
+    // flames licking up from the crown of its head, flickering per frame; it rears back to breathe them out
+    const fl = rng(f * 13 + 5), n = 5;
+    for (let k = 0; k < n; k++) {
+      const u = (k + 0.5) / n, fx = cx - rx * 0.55 + u * rx * 1.1, fy = top + ry * 0.12 + Math.abs(u - 0.5) * ry * 0.5;
+      const hgt = (1.6 + fl() * 1.6) * (1 - Math.abs(u - 0.5) * 0.9) * (wind ? 1.5 : 1), lean = (fl() - 0.5) * 0.8 - (dir === "right" ? 0.4 : 0);
+      const tongue = blobPath([[fx - 0.7, fy + 0.4], [fx - 0.35, fy - hgt * 0.5], [fx + lean, fy - hgt], [fx + 0.4, fy - hgt * 0.45], [fx + 0.7, fy + 0.4]]);
+      fillShape(c, tongue, css(0xe0461a, 0.95));
+      fillShape(c, blobPath([[fx - 0.35, fy + 0.3], [fx + lean * 0.6, fy - hgt * 0.62], [fx + 0.35, fy + 0.3]]), css(0xffb347, 0.95));
+      fillShape(c, ellipseP(fx, fy, 0.25, 0.3), css(0xfff0a8));
+    }
+    glow(c, cx, top, rx * 0.9, 0xff8a2a, 0.4);
+    for (let k = 0; k < 3; k++) fillShape(c, ellipseP(cx + (fl() - 0.5) * rx * 1.4, top - 2 - fl() * 3, 0.22, 0.22), css(0xffd27a, 0.9)); // embers
+  } else if (x === "frost") {
+    // a crown of ice spikes growing out of its top, icicles hanging off the rim
+    for (const [u, hgt, w2] of [[-0.55, 2.2, 0.9], [-0.15, 3.6, 1.1], [0.22, 2.9, 1.0], [0.55, 1.8, 0.8]] as const) {
+      const bx = cx + u * rx, by = top + ry * (0.18 + Math.abs(u) * 0.35), tip: P = [bx + u * 0.9, by - hgt * (wind ? 1.2 : 1)];
+      fillShape(c, poly([[bx - w2, by + 0.3], tip, [bx + w2, by + 0.3]]), css(0x9fd0f0, 0.96));
+      fillShape(c, poly([[bx - w2, by + 0.3], tip, [bx - w2 * 0.1, by + 0.3]]), css(0xeaf8ff, 0.96)); // lit facet
+      line(c, [[bx - w2 * 0.05, by + 0.2], tip], 0xffffff, 0.12, 0.9);
+    }
+    for (let k = 0; k < 4; k++) { const ix = cx - rx * 0.8 + k * rx * 0.5, iy = base - 0.4; fillShape(c, poly([[ix - 0.35, iy - 0.2], [ix + 0.35, iy - 0.2], [ix + 0.05, iy + 0.9 + (k % 2) * 0.5]]), css(0xdff4ff, 0.9)); }
+    glow(c, cx - rx * 0.1, top - 1, rx * 0.7, 0xbfe8ff, 0.3);
+  } else if (x === "venom") {
+    // swollen poison sacs on its back, glowing green; they bulge when it is about to spit
+    const sw = wind ? 1.35 : strike ? 0.8 : 1;
+    for (const [u, v, r0] of [[-0.45, 0.25, 1.5], [0.35, 0.18, 1.8], [-0.02, 0.05, 1.2]] as const) {
+      const sx2 = cx + u * rx, sy2 = top + ry * v + 0.8, r = r0 * sw * Math.max(0.8, w / 14);
+      fillShape(c, ellipseP(sx2, sy2, r * 1.08, r), css(0x2a3e12, 0.95));
+      fillShape(c, ellipseP(sx2, sy2 - 0.1, r * 0.95, r * 0.88), css(0x8fd13a, 0.92));
+      line(c, [[sx2 - r * 0.6, sy2 + r * 0.2], [sx2 - r * 0.1, sy2 - r * 0.3], [sx2 + r * 0.4, sy2 + r * 0.1]], 0x3a5a14, 0.18, 0.8); // veins
+      fillShape(c, ellipseP(sx2 - r * 0.35, sy2 - r * 0.4, r * 0.3, r * 0.22), "rgba(240,255,200,0.85)");
+      glow(c, sx2, sy2, r * 1.8, 0x9be564, 0.25);
+    }
+    // a drip of venom off its lip
+    if (dir !== "up") limb(c, [cx + 0.6, base - ry * 0.25], [cx + 0.7, base - ry * 0.25 + 1.2 + (f % 3) * 0.4], 0.35, 0.22, 0xb4e04e);
+  } else if (x === "storm") {
+    // hair of crackling static standing up on end, and sparks jumping off it
+    const st = rng(f * 17 + 9);
+    for (let k = 0; k < 6; k++) {
+      const u = (k + 0.5) / 6 - 0.5, bx = cx + u * rx * 1.4, by = top + ry * (0.15 + Math.abs(u) * 0.6);
+      const len = 1.4 + st() * 1.4 + (wind ? 0.8 : 0), pts: P[] = [[bx, by]];
+      let px = bx, py = by;
+      for (let v = 0; v < 3; v++) { px += u * 0.8 + (st() - 0.5) * 0.9; py -= len / 3; pts.push([px, py]); }
+      line(c, pts, 0x4e4ac8, 0.45, 0.9); line(c, pts, 0xd8e0ff, 0.16, 0.95);
+    }
+    for (let k = 0; k < 3; k++) { const a = st() * Math.PI * 2, d = rx * (0.9 + st() * 0.4); const sx3 = cx + Math.cos(a) * d, sy3 = base - ry * 0.5 + Math.sin(a) * ry * 0.6;
+      line(c, [[sx3, sy3], [sx3 + 0.5, sy3 - 0.4], [sx3 + 0.2, sy3 - 0.8], [sx3 + 0.8, sy3 - 1.2]], 0xf6f8ff, 0.2, 0.95); }
+    glow(c, cx, top, rx * 0.8, 0x8090f8, 0.35);
   } else if (x === "mother1" || x === "mother3") {
     // a gold tiara with a ruby (tier 1), an iron spiked crown (tier 3)
     const iron = x === "mother3", tw = rx * 0.5, ty = top + 0.6;
@@ -315,6 +405,11 @@ export function buildMobs(out: string, ONLY?: string[]) {
     blobSheet("mob_shooterblob", 14, 18, { G: 0x9068cc, L: 0xe2ccff, D: 0x4e2f80, E: 0x1e0f33 }, { bodyH: 10, extra: "shooter" }),
     blobSheet("mob_warriorblob", 16, 18, { G: 0xd0543a, L: 0xffb59e, D: 0x7f2a19, E: 0x2a0d06 }, { bodyH: 10, extra: "warrior" }),
     blobSheet("mob_healerblob", 14, 18, { G: 0xf0c6de, L: 0xffffff, D: 0xb57a9b, E: 0x3a1a2e }, { bodyH: 10, extra: "healer" }),
+    // the elemental blobs of the eastern wilds (Murat 2026-11-05)
+    blobSheet("mob_venomblob", 14, 18, { G: 0x7aa82e, L: 0xe0ff9a, D: 0x34501a, E: 0x1a0a20 }, { bodyH: 10, extra: "venom", seed: 21 }),
+    blobSheet("mob_frostblob", 16, 20, { G: 0x86bfe6, L: 0xf2fcff, D: 0x2f5f8f, E: 0x0e1a2c }, { bodyH: 11, extra: "frost", seed: 22 }),
+    blobSheet("mob_fireblob", 16, 20, { G: 0xd8521e, L: 0xffd27a, D: 0x6a1a08, E: 0x1a0604 }, { bodyH: 11, extra: "fire", seed: 23 }),
+    blobSheet("mob_stormblob", 14, 18, { G: 0x6a6ad8, L: 0xd8e0ff, D: 0x26206e, E: 0x0a0820 }, { bodyH: 10, extra: "storm", seed: 24 }),
     blobSheet("mob_motherblob", 24, 22, { G: 0x3a9684, L: 0xb8f2e0, D: 0x1c5448, E: 0x10302a }, { bodyH: 17, extra: "mother1", seed: 9 }),
     blobSheet("mob_motherblob2", 24, 22, { G: 0x2c8796, L: 0xb0eef5, D: 0x184c56, E: 0x0b2a30 }, { bodyH: 17, extra: "mother2", seed: 10 }),
     blobSheet("mob_motherblob3", 24, 22, { G: 0x553b96, L: 0xd3c2ff, D: 0x2f205f, E: 0x140a2a }, { bodyH: 17, extra: "mother3", seed: 11 }),

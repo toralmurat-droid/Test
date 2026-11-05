@@ -788,5 +788,29 @@
   "h": 48,
   "scale": 1.5,
   "frames": 12
+ },
+ "mob_venomblob": {
+  "w": 14,
+  "h": 18,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_frostblob": {
+  "w": 16,
+  "h": 20,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_fireblob": {
+  "w": 16,
+  "h": 20,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_stormblob": {
+  "w": 14,
+  "h": 18,
+  "scale": 1.5,
+  "frames": 12
  }
 }

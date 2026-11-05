@@ -28,7 +28,8 @@ export interface InputState {
   right: boolean;
 }
 
-export type MobKind = "slime" | "skeleton" | "motherblob" | "blobling" | "shooterblob" | "warriorblob" | "healerblob" | "bandit" | "skeletonmage" | "necromancer" | "crawler" | "demon" | "banditchief" | "hollowking";
+export type MobKind = "slime" | "skeleton" | "motherblob" | "blobling" | "shooterblob" | "warriorblob" | "healerblob" | "bandit" | "skeletonmage" | "necromancer" | "crawler" | "demon" | "banditchief" | "hollowking"
+  | "venomblob" | "frostblob" | "fireblob" | "stormblob";
 
 export interface MobDef {
   name: string;
@@ -63,6 +64,11 @@ export const MOBS: Record<MobKind, MobDef> = {
   // The first zone's final boss (Hollow Crown chain, shared/quests.ts CROWN_QUESTS; moves in HOLLOW_KING below)
   hollowking: { name: "The Hollow King", maxHp: 900, speed: 54, damage: 27, attackCooldownMs: 1250, aggroRange: 220, leash: 420, xp: 900 },
   crawler: { name: "Crawling Skeleton", maxHp: 26, speed: 30, damage: 13, attackCooldownMs: 1000, aggroRange: 120, leash: 220, xp: 6 },
+  // Elemental blobs (Murat 2026-11-05): pieces of the Gloam that fled east and soaked up the wild places (ELEM_BLOB below)
+  venomblob: { name: "Venom Blob", maxHp: 80, speed: 40, damage: 10, attackCooldownMs: 1400, aggroRange: 135, leash: 190, xp: 30 },
+  frostblob: { name: "Frost Blob", maxHp: 125, speed: 42, damage: 14, attackCooldownMs: 1250, aggroRange: 110, leash: 180, xp: 34 },
+  fireblob: { name: "Fire Blob", maxHp: 110, speed: 48, damage: 15, attackCooldownMs: 1150, aggroRange: 125, leash: 190, xp: 36 },
+  stormblob: { name: "Storm Blob", maxHp: 95, speed: 62, damage: 13, attackCooldownMs: 1000, aggroRange: 120, leash: 200, xp: 38 },
 };
 
 /** Elite monsters: much tougher than the rest of their zone, with a bigger look and an "Elite" tag. */
@@ -170,6 +176,7 @@ export function aggroLevelFactor(lvl: number, targetLvl: number) {
 // Outlaws (Redfang Hollow) fight both: their patrols pick fights with whatever lives in the woods
 export const FACTION: Partial<Record<MobKind, "blob" | "undead" | "outlaw">> = {
   slime: "blob", blobling: "blob", motherblob: "blob", shooterblob: "blob", warriorblob: "blob", healerblob: "blob",
+  venomblob: "blob", frostblob: "blob", fireblob: "blob", stormblob: "blob",
   skeleton: "undead", skeletonmage: "undead", necromancer: "undead", crawler: "undead", demon: "undead",
   bandit: "outlaw", banditchief: "outlaw",
 };
@@ -201,6 +208,24 @@ export const MOTHER = {
   bounce: { level: 5, range: 34, radius: 42, windupMs: 600, cooldownMs: 7000, dmgMult: 0.8, knockback: 3 },
   slam: { level: 10, range: 70, radius: 66, windupMs: 900, cooldownMs: 15000, dmgMult: 1.8, knockback: 2, swarm: 5 },
 };
+
+/**
+ * Elemental blobs (Murat 2026-11-05), each with one move that is painted on the ground before it lands. Distances in px,
+ * damage as a multiple of the blob's own (levelled) damage.
+ * Venom Blob: hangs back and splurts a glob of poison at you; where it lands a puddle stays and poisons whoever stands in it.
+ * Frost Blob: when you come close it swells and lets off a Frost Nova, a ring of ice that chills (slows) everyone in it.
+ * Fire Blob: rears back and breathes a cone of fire like a dragon; it can set you alight.
+ * Storm Blob: quick and twitchy; every time it is hit it throws off sparks that crackle on the ground for a moment.
+ * A merged blob that swallowed one of them keeps its move (TownRoom.elemSpecial).
+ */
+export const ELEM_BLOB = {
+  splurt: { range: 120, keepAway: 55, windupMs: 550, flightMs: 650, cooldownMs: 3200, dmgMult: 0.9, puddle: { radius: 20, ms: 4000, tickMs: 500, dmgMult: 0.3 } },
+  nova: { range: 46, radius: 60, windupMs: 800, cooldownMs: 6500, dmgMult: 1.5, slowMs: 1800 },
+  breath: { range: 72, reach: 82, halfAngle: 0.5, windupMs: 750, cooldownMs: 5500, dmgMult: 1.7, burn: { ticks: 3, tickMs: 500, dmgMult: 0.25 } },
+  sparks: { everyMs: 800, count: 3, spread: 42, radius: 11, ms: 2400, tickMs: 450, dmgMult: 0.55, max: 9 },
+};
+/** Which move each elemental blob kind brings (a merged blob gets the moves of every elemental blob inside it). */
+export const ELEM_MOVE: Partial<Record<MobKind, "splurt" | "nova" | "breath" | "sparks">> = { venomblob: "splurt", frostblob: "nova", fireblob: "breath", stormblob: "sparks" };
 
 /** Mother Blob brood: every few seconds (random) she may bud a blobling, up to `perMother` alive at once. */
 export const BROOD = { minMs: 5000, maxMs: 12000, perMother: 4, worldCap: 160 };

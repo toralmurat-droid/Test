@@ -40,7 +40,7 @@ const STYLE: Record<string, FxStyle> = {
   h_cap: "nature", h_helm: "steel", h_crown: "holy",
 };
 /** Effect style of each damage type. */
-export const ELEMENT_STYLE: Record<Element, FxStyle> = { fire: "fire", cold: "frost", poison: "poison", faith: "holy" };
+export const ELEMENT_STYLE: Record<Element, FxStyle> = { fire: "fire", cold: "frost", poison: "poison", faith: "holy", shock: "lightning" };
 /** An item's style: its element when it has one, plain steel for other weapons, else the item's own look. */
 const styleOf = (id: string): FxStyle => {
   const el = itemElement(id);
@@ -161,6 +161,9 @@ export class GearFx {
       case "faith": // golden motes rise slowly and circle
         fx.p(px + rnd(-2, 2), py, z, pick(pal), { vz: rnd(5, 12), vx: rnd(-3, 3), life: rnd(500, 800), size: big, size1: 0, add: true, spin: rnd(-3, 3) });
         break;
+      case "shock": // quick crackles that jump about the blade
+        fx.p(px, py, z, pick(pal), { vx: rnd(-30, 30), vy: rnd(-12, 12), vz: rnd(-20, 20), drag: 6, life: rnd(90, 160), size: big, size1: 0, add: true });
+        break;
     }
     if (wr >= 4 && chance(4)) fx.glow(hx, hy, top * 0.42, 6, pal[2], 420, 0.5);
   }
@@ -175,6 +178,7 @@ export class GearFx {
         case "cold": this.fx.p(x, y, z, pick(pal), { vx: Math.cos(a) * v, vy: Math.sin(a) * v * 0.5, vz: rnd(10, 30), g: 120, life: rnd(260, 380), size: pick([1, 2]), size1: 0 }); break;
         case "poison": this.fx.p(x, y, z, pick(pal.slice(1)), { vx: Math.cos(a) * v * 0.7, vy: Math.sin(a) * v * 0.35, vz: rnd(15, 35), g: 160, life: rnd(300, 420), size: 1, size1: 1 }); break;
         case "faith": this.fx.p(x + Math.cos(a) * 3, y + Math.sin(a) * 2, z, pick(pal), { vz: rnd(14, 26), life: rnd(320, 480), size: 1, size1: 0, add: true }); break;
+        case "shock": this.fx.p(x, y, z, pick(pal), { vx: Math.cos(a) * v * 1.4, vy: Math.sin(a) * v * 0.7, vz: rnd(-10, 30), drag: 5, life: rnd(120, 220), size: 1, size1: 0, add: true }); break;
       }
     }
     if (!dot && el === "faith") this.fx.glow(x, y, z, 7, pal[1], 260, 0.6);

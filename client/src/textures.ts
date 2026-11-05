@@ -113,6 +113,12 @@ const ITEM_ART: Record<string, { rows: string[]; pal: Record<string, number> }> 
     pal: { G: 0x6fbf3a, P: 0x4a2f6b, L: 0x8e6bbf, D: 0x2a1a3d } },
   q_cod: { rows: ["........", "........", ".T..SSS.", "TTSSLSSE", ".TSSSSSS", "TTSDDDS.", ".T......", "........"],
     pal: { T: 0x8a6a3a, S: 0xc9b48a, L: 0xf2ead2, D: 0x8f7a52, E: 0x2a2018 } },
+  q_venom: { rows: ["....K...", "...KGK..", "..KGLGK.", ".KGLGGGK", ".KGGGGDK", ".KGGGDDK", "..KDDDK.", "...KK..."],
+    pal: { K: 0x1a2410, G: 0x8fd13a, L: 0xe4ff9a, D: 0x4c7a1c } },
+  q_cinder: { rows: ["...KK...", "..KRYK..", ".KRYWYK.", "KRRYYRRK", "KDRRRRDK", ".KDRRDK.", "..KDDK..", "...KK..."],
+    pal: { K: 0x1a0e0a, R: 0xe0521e, Y: 0xffb347, W: 0xfff2b0, D: 0x7a2412 } },
+  q_stormglass: { rows: ["....K...", "...KLK..", "..KLBVK.", ".KLBBVK.", ".KBWBVVK", "..KBBVK.", "..KVVK..", "...KK..."],
+    pal: { K: 0x14122a, L: 0xe8f4ff, B: 0x8fb8ff, W: 0xffffff, V: 0x6a4fd8 } },
 };
 
 /** Texture kind of a potion flask by size: "potion", "potion1", "potion2" (and "mpotion"...). */
@@ -275,10 +281,11 @@ export const MOB_LOOK: Record<string, { top: number; bar: number; oy: number; sc
   shooterblob: { top: 15, bar: 12, oy: 0.92 },
   warriorblob: { top: 16, bar: 14, oy: 0.92 },
   healerblob: { top: 15, bar: 12, oy: 0.92 },
+  venomblob: { top: 15, bar: 12, oy: 0.92 }, frostblob: { top: 17, bar: 14, oy: 0.92 }, fireblob: { top: 17, bar: 14, oy: 0.92 }, stormblob: { top: 16, bar: 12, oy: 0.92 },
   crawler: { top: 10, bar: 10, oy: CRAWL_CROP },
 };
 
-const PAINTED_MOBS = ["slime", "blobling", "shooterblob", "warriorblob", "healerblob", "motherblob", "skeleton", "bandit", "skeletonmage", "necromancer", "demon", "crawler", "banditchief", "hollowking"];
+const PAINTED_MOBS = ["slime", "blobling", "shooterblob", "warriorblob", "healerblob", "motherblob", "venomblob", "frostblob", "fireblob", "stormblob", "skeleton", "bandit", "skeletonmage", "necromancer", "demon", "crawler", "banditchief", "hollowking"];
 /** Painted humanoid monsters have taller frames (feet lower in the frame, label higher). */
 const PAINTED_LOOK: Record<string, { top: number; bar: number; oy: number; scale?: number }> = {
   // about hero height (heroes are 32 world px since the 48px sheets)
@@ -290,6 +297,7 @@ const PAINTED_LOOK: Record<string, { top: number; bar: number; oy: number; scale
   hollowking: { top: 62, bar: 38, oy: 42 / 48, scale: 1.6 }, // towers over the heroes
   // pixel sheets use even frame heights (whole texels at 1.5 per px)
   blobling: { top: 9, bar: 8, oy: 0.91 }, shooterblob: { top: 16, bar: 12, oy: 0.93 }, healerblob: { top: 16, bar: 12, oy: 0.93 },
+  venomblob: { top: 17, bar: 12, oy: 0.93 }, frostblob: { top: 20, bar: 14, oy: 0.94 }, fireblob: { top: 19, bar: 14, oy: 0.94 }, stormblob: { top: 18, bar: 12, oy: 0.93 },
 };
 /** Painted monster sheets (tools/art/paint/mobs.ts), loaded by preloadPaintedMobs for the smooth look. */
 export function preloadPaintedMobs(scene: Phaser.Scene) {

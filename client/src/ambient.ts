@@ -1,6 +1,7 @@
 import Phaser from "phaser";
 import { ART_K as K, MAP_H, MAP_W, TILE } from "../../shared/constants";
-import { AREAS, EMPTY, GROUND, OBJECTS, T } from "../../shared/map";
+import { AREAS, elementLandAt, EMPTY, GROUND, OBJECTS, T } from "../../shared/map";
+import { LAND_TREE_TINT } from "./elementArt";
 import { ANIMATED_TILES, animatedRows, drawTileFrame } from "./tileset";
 import { refreshRegions } from "./texupload";
 import { ISO, isoAnchor } from "./iso";
@@ -243,6 +244,8 @@ export class Ambient {
       const key = t === T.PINE ? "pine" : t === T.BUSH ? "bush" : oaks[Math.floor(r() * oaks.length)];
       const s = this.scene.add.sprite((x + 0.5) * TILE + (t === T.BUSH ? 0 : Math.round((r() * 2 - 1) * K)), (y + 1) * TILE, key, 0)
         .setOrigin(0.5, 1).setDepth((y + 1) * TILE - 2).setTint(tints[Math.floor(r() * tints.length)]);
+      const land = elementLandAt(x + 0.5, y + 0.5, 3); // the elemental wilds: frosted, blighted, charred or storm-grey trees
+      if (land && ((x * 7919 + y * 104729) % 97) / 97 < 0.35 + land.k * 0.65) s.setTint(LAND_TREE_TINT[land.land.el]);
       if (r() < (SMOOTH ? 0.5 : t === T.BUSH ? 0 : 0.25)) s.setFlipX(true);
       if (SMOOTH) s.setScale(t === T.BUSH ? 0.85 + r() * 0.3 : 0.82 + r() * 0.36); // no two trees the same size
       s.setData("ph", r() * 0.6);
