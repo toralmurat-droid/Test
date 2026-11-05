@@ -184,14 +184,14 @@ addEventListener("keydown", (e: KeyboardEvent) => {
   } else if (e.key === "Enter") { begin(); e.preventDefault(); }
 });
 
-function launch(name: string, password: string, newGame: boolean) {
+function launch(name: string, password: string, newGame: boolean, back = false) {
   // if the server turns the hero away, the login form is what shows under the loading screen
   show("login");
   playBtn.setAttribute("disabled", "");
   initMusic(name);
   initSfx(name);
   status.textContent = "Connecting…";
-  showLoading(); // covers everything until the world is fully drawn (TownScene hides it)
+  showLoading(back ? "Back to where you stood…" : undefined); // covers everything until the world is fully drawn (TownScene hides it)
   if (SMOOTH) installSmoothTextures();
   new Phaser.Game({
     type: Phaser.AUTO,
@@ -216,7 +216,7 @@ if (rejoin) {
   skipIntro(); // back after a server restart: the opening song only plays when the game is opened
   if (isClassKind(rejoin.cls)) cls = rejoin.cls;
   color = rejoin.color;
-  launch(rejoin.name, rejoin.password, false);
+  launch(rejoin.name, rejoin.password, false, true);
 }
 // Back from the game menu's "Save and return to start screen": log in again and show Resume / New game
 const back = rejoin ? null : takeBackToStart();

@@ -1,0 +1,10 @@
+{
+  "date": "2026-11-05",
+  "pr": 261,
+  "title": "Smoother updates",
+  "changes": [
+    "When the game updates, your hero comes back right where you stood, with the same health, mana and stamina.",
+    "Your group is put back together after an update, and the chat stays on screen.",
+    "The game opens faster, and comes back faster after an update: the new version downloads while the notice is still showing."
+  ]
+}
