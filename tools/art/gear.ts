@@ -1,3 +1,6 @@
+import { paintWeaponIcon } from "./paint/body";
+import { NATIVE_WEAPON } from "../../shared/gear";
+import type { ClassKind } from "../../shared/classes";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { Canvas, HiCanvas, shade } from "./canvas";
 import { buildSheet, GearCtx, GearPart, HEROES, K, Pose, setGearHook } from "./characters";
@@ -314,6 +317,16 @@ const ICONS: Record<string, string[]> = {
 
 function icon(item: GearDef): Canvas {
   const c = new HiCanvas(16, 16, K);
+  // weapons: painted with their own form, like on the hero (paint/weaponArt.ts)
+  if (item.slot === "weapon") {
+    const kind = item.wtype ?? (item.cls ? NATIVE_WEAPON[item.cls as ClassKind] : "sword");
+    const d = paintWeaponIcon(item, kind, 16 * K);
+    if (d) {
+      c.data.set(d);
+      if (item.tier === 3) for (const [x, y] of [[1, 1], [14, 3], [2, 12]]) c.px(x, y, 0xffffff, 200);
+      return c;
+    }
+  }
   const rows = item.slot === "hat" ? ICONS[item.style === "crown" ? "crown" : item.style === "helm" ? "helm" : item.style === "hood" ? "hood" : item.style === "horned" ? "horned" : "hat"]
     : item.slot === "weapon" && (item.style === "bow" || item.style === "axe" || item.style === "wand") ? ICONS[item.style]
     : item.slot === "armour" && item.style === "robe" ? ICONS.robe

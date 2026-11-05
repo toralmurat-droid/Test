@@ -1,5 +1,6 @@
 import type { FxStyle } from "../../shared/skills";
-import { baseId, GearSlot, itemLevel } from "../../shared/gear";
+import { baseId, GearSlot, itemElement, itemLevel } from "../../shared/gear";
+import type { Element } from "../../shared/elements";
 import { ISO } from "./isoflag";
 import { activeOf } from "./gear";
 import { FxEntity, PALETTE, SkillFx } from "./skillfx";
@@ -12,6 +13,10 @@ import { FxEntity, PALETTE, SkillFx } from "./skillfx";
  *   Lv 28+  mythic: combo finishers burst into a shockwave and pillar of light, boots leave afterimages,
  *                   a glow under the feet
  * Only worn items whose requirements are met count (activeOf). Particles are SkillFx's, so they work in iso too.
+ *
+ * Damage types (shared/elements.ts) pick the look: a fire weapon sheds embers, a cold one frost mist and flakes, a
+ * poison one drips venom, a faith one floats golden motes. Even a Lv 1 elemental weapon shows a faint sign of its
+ * element; the rank makes it richer. This is Tier I (the first zone); later tiers are planned in project memory.
  */
 export const FX_LEVELS = [8, 15, 22, 28];
 export const FX_RANK_NAMES = ["", "Glint", "Trail", "Flame", "Mythic"];
@@ -34,7 +39,14 @@ const STYLE: Record<string, FxStyle> = {
   s_leather: "earth", s_swift: "wind", s_winged: "spirit",
   h_cap: "nature", h_helm: "steel", h_crown: "holy",
 };
-const styleOf = (id: string): FxStyle => STYLE[baseId(id)] ?? "arcane";
+/** Effect style of each damage type. */
+export const ELEMENT_STYLE: Record<Element, FxStyle> = { fire: "fire", cold: "frost", poison: "poison", faith: "holy" };
+/** An item's style: its element when it has one, plain steel for other weapons, else the item's own look. */
+const styleOf = (id: string): FxStyle => {
+  const el = itemElement(id);
+  if (el) return ELEMENT_STYLE[el];
+  return baseId(id).startsWith("w") ? "steel" : STYLE[baseId(id)] ?? "arcane";
+};
 const pick = <T>(a: T[]) => a[Math.floor(Math.random() * a.length)];
 const rnd = (a: number, b: number) => a + Math.random() * (b - a);
 
@@ -62,11 +74,14 @@ export class GearFx {
 
     // Weapon: glints, then a constant elemental flame along the blade, then a glow under the feet
     const w = worn.weapon, wr = rank("weapon");
-    if (w && wr) {
+    const wel = w ? itemElement(w) : undefined;
+    if (w && (wr || wel)) {
       const pal = PALETTE[styleOf(w)];
       const [hx, hy] = this.hand(e);
-      if (chance(2.5 * wr)) fx.p(hx + rnd(-3, 3), hy + rnd(-2, 2), top * 0.45 + rnd(-4, 5), 0xffffff, { life: 120, size: 2, size1: 0 });
-      if (wr >= 3 && chance(16 + 10 * (wr - 3))) {
+      if (wr && chance(2.5 * wr)) fx.p(hx + rnd(-3, 3), hy + rnd(-2, 2), top * 0.45 + rnd(-4, 5), 0xffffff, { life: 120, size: 2, size1: 0 });
+      // the element's sign: faint at Lv 1, a steady stream from Flame rank
+      if (wel) this.elementIdle(wel, hx, hy, top, wr, chance);
+      else if (wr >= 3 && chance(16 + 10 * (wr - 3))) {
         fx.p(hx + rnd(-3, 3), hy + rnd(-2, 2), top * 0.4 + rnd(-4, 6), pick(pal), { vz: rnd(14, 32), vx: rnd(-4, 4), vy: rnd(-3, 3), life: rnd(260, 480), size: pick([1, 1, 2]), size1: 0 });
       }
       if (wr >= 4 && chance(3)) fx.glow(x, y, 0, 14, pal[2], 600, 0.45, true);
@@ -123,13 +138,59 @@ export class GearFx {
     }
   }
 
+  /**
+   * Idle sign of a weapon's element at the hand. Rank 0-1: a particle now and then; 2: more often;
+   * 3+ (Flame): a steady stream in the element's own motion; 4 (Mythic): plus a soft light.
+   */
+  private elementIdle(el: Element, hx: number, hy: number, top: number, wr: number, chance: (perSec: number) => boolean) {
+    const fx = this.fx, pal = PALETTE[ELEMENT_STYLE[el]];
+    const rate = wr <= 1 ? 1.2 : wr === 2 ? 3 : wr === 3 ? 14 : 22;
+    if (!chance(rate)) return;
+    const z = top * 0.42 + rnd(-4, 6), px = hx + rnd(-3, 3), py = hy + rnd(-2, 2);
+    const big = wr >= 3 ? pick([1, 1, 2]) : 1;
+    switch (el) {
+      case "fire": // embers flicker up
+        fx.p(px, py, z, pick(pal), { vz: rnd(16, 34), vx: rnd(-5, 5), vy: rnd(-3, 3), life: rnd(260, 480), size: big, size1: 0, add: true });
+        break;
+      case "cold": // frost mist sinks, flakes drift
+        fx.p(px, py, z, pick(pal), { vz: rnd(-14, -4), vx: rnd(-6, 6), vy: rnd(-2, 2), drag: 2, life: rnd(420, 700), size: big, size1: 0, alpha: 0.85 });
+        break;
+      case "poison": // venom drips off the blade to the ground
+        fx.p(px, py, z * 0.8, pick(pal.slice(1)), { vz: rnd(-4, 0), g: 140, life: rnd(380, 560), size: 1, size1: 1 });
+        break;
+      case "faith": // golden motes rise slowly and circle
+        fx.p(px + rnd(-2, 2), py, z, pick(pal), { vz: rnd(5, 12), vx: rnd(-3, 3), life: rnd(500, 800), size: big, size1: 0, add: true, spin: rnd(-3, 3) });
+        break;
+    }
+    if (wr >= 4 && chance(4)) fx.glow(hx, hy, top * 0.42, 6, pal[2], 420, 0.5);
+  }
+
+  /** A hero's hit landed with an element (server "hit" with el): a small impact in its colour on the target. */
+  impact(x: number, y: number, top: number, el: Element, dot: boolean) {
+    const pal = PALETTE[ELEMENT_STYLE[el]], z = top * 0.5, n = dot ? 2 : 5;
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * Math.PI * 2, v = rnd(20, 45);
+      switch (el) {
+        case "fire": this.fx.p(x + rnd(-3, 3), y, z + rnd(-4, 4), pick(pal), { vz: rnd(20, 40), vx: Math.cos(a) * v * 0.4, vy: Math.sin(a) * v * 0.2, life: rnd(240, 400), size: 1, size1: 0, add: true }); break;
+        case "cold": this.fx.p(x, y, z, pick(pal), { vx: Math.cos(a) * v, vy: Math.sin(a) * v * 0.5, vz: rnd(10, 30), g: 120, life: rnd(260, 380), size: pick([1, 2]), size1: 0 }); break;
+        case "poison": this.fx.p(x, y, z, pick(pal.slice(1)), { vx: Math.cos(a) * v * 0.7, vy: Math.sin(a) * v * 0.35, vz: rnd(15, 35), g: 160, life: rnd(300, 420), size: 1, size1: 1 }); break;
+        case "faith": this.fx.p(x + Math.cos(a) * 3, y + Math.sin(a) * 2, z, pick(pal), { vz: rnd(14, 26), life: rnd(320, 480), size: 1, size1: 0, add: true }); break;
+      }
+    }
+    if (!dot && el === "faith") this.fx.glow(x, y, z, 7, pal[1], 260, 0.6);
+  }
+
   /** A hero attacked (combo step 0..2): weapon trails, sparks, and a finisher flourish on mythic weapons. */
   swing(e: FxEntity, step: number, ax: number, ay: number, ranged: boolean, mine: boolean) {
     const w = activeOf(e.state).weapon, wr = fxRank(w);
-    if (!w || wr < 2) return;
+    if (!w) return;
     const style = styleOf(w), pal = PALETTE[style];
     const x = e.sprite.x, y = e.sprite.y, top = e.top;
     const hx = x + ax * 8, hy = y + ay * 8;
+    // Elemental weapons of any level: a few sparks of the element off the swing / at the bow
+    const el = itemElement(w);
+    if (el && wr < 2) { this.fx.burst(hx, hy, top * 0.45, style, 2 + wr * 2, 40, 300); return; }
+    if (wr < 2) return;
     if (!ranged) this.fx.slash(x + ax * 4, y + ay * 4, 12 + 2 * wr, style, Math.atan2(ISO ? (ax + ay) / 2 : ay, ISO ? ax - ay : ax), 2 + 0.3 * wr);
     if (wr >= 3) this.fx.burst(hx, hy, top * 0.45, style, 4 + 3 * (wr - 2), 50 + 15 * wr, 380);
     if (wr >= 4 && step === 2) {

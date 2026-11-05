@@ -1,0 +1,10 @@
+{
+  "date": "2026-11-05",
+  "title": "Sharper weapons and damage types",
+  "changes": [
+    "Every weapon is redrawn bigger with its own shape: leaf, wavy, crystal and broad blades, new guards, axe heads, bows and staff tops.",
+    "New damage types: Fire can set foes alight, Cold slows, Poison hurts over time, Faith smites the undead. Monsters are weak or resistant to some.",
+    "New weapons: Pilgrim's Sword (Faith), Ember Axe (Fire) and Thornbow (Poison). Some armour, shields and hats now resist elements.",
+    "Elemental weapons show their element in the hand and on every hit, richer at higher item levels."
+  ]
+}
