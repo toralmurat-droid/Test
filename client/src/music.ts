@@ -7,15 +7,15 @@ import { icon as pxIcon } from "./pixelicons";
  *
  * "Auto" (the default):
  * - Opening: "Hearth of Oakvale" starts as soon as the game opens (or on the first click / key if the browser
- *   waits for one) and loops through the start menus and the loading screen. In the world it plays on in the
- *   starting village to its end, then the calm tune takes over; leaving the village fades it out.
+ *   waits for one) and loops through the start menus and the loading screen. In the world it plays on ONCE
+ *   to its end, then the normal rules take over; leaving the village fades it out. Never again this page.
  * - Calm: the Village tune with soft village sounds under it in Oakvale, Saltmere and the Hunter's Camp,
  *   the Countryside tune everywhere else (both loop).
  * - Battle: when the fighting around the hero heats up (hits near the hero, hits taken), the zone's battle
  *   song comes in: The Pale Marshal's March where skeletons live, Blob Slayer for blobs and bandits.
  *   It starts quiet and swells as the battle intensifies (unless the player turned the swell off),
- *   plays once in full, then the calm tune returns. That zone's battle song can come back after 5 minutes
- *   if the hero is still fighting there.
+ *   plays once in full, then the calm tune returns. The same battle song only comes back 5 minutes after
+ *   it last played (anywhere on the map).
  * A manually picked track just loops at the set volume.
  *
  * Starts after the first click / key press (browsers block sound before that); fades on mute / hidden tab.
@@ -76,6 +76,7 @@ let zoneBattle: string | null = null;
 // Battle state
 let heat = 0;
 let battle: { track: string; zone: string } | null = null;
+/** Battle song id -> time it may play again (5 min after it last played). */
 const cooldownUntil = new Map<string, number>();
 
 function load(name: string) {
@@ -115,6 +116,8 @@ function fadeTo(value: number, seconds: number) {
 
 function wantedTrack(): string {
   if (settings.pick !== "auto") return settings.pick;
+  // In the world the opening song never starts over (e.g. after a mute): it only carries on
+  if (intro && inWorld && playing !== "hearth") intro = false;
   if (intro) return "hearth";
   return battle?.track ?? calmTrack;
 }
@@ -215,10 +218,10 @@ function songEnded() {
   battleOver();
 }
 
-/** The battle song ended: back to the calm tune, and this zone rests for 5 minutes. */
+/** The battle song ended: back to the calm tune, and this song rests for 5 minutes. */
 function battleOver() {
   if (!battle) return;
-  cooldownUntil.set(battle.zone, Date.now() + BATTLE_COOLDOWN_MS);
+  cooldownUntil.set(battle.track, Date.now() + BATTLE_COOLDOWN_MS);
   battle = null;
   switchTrack(FADE_IN);
 }
@@ -227,8 +230,12 @@ function tick() {
   heat *= Math.pow(0.5, 0.25 / HEAT_HALF_LIFE);
   if (heat < 0.05) heat = 0;
   if (settings.pick !== "auto" || targetGain() === 0) return;
-  if (!battle && !intro && zoneBattle && zoneName && heat >= HEAT_START && Date.now() >= (cooldownUntil.get(zoneName) ?? 0)) {
+  // The opening song in the world never loops (it plays once, then the normal rules)
+  if (inWorld && playing === "hearth" && audioEl?.loop) audioEl.loop = false;
+  if (!battle && !intro && zoneBattle && zoneName && heat >= HEAT_START && Date.now() >= (cooldownUntil.get(zoneBattle) ?? 0)) {
     battle = { track: zoneBattle, zone: zoneName };
+    // rests from its start too, so a song cut short does not come straight back
+    cooldownUntil.set(zoneBattle, Date.now() + BATTLE_COOLDOWN_MS);
     switchTrack(1);
     return;
   }
@@ -247,6 +254,8 @@ export function setMusicZone(zone: string | undefined, mobs: Partial<Record<stri
     // In the world now: the opening song plays on to its end instead of looping
     inWorld = true;
     if (playing === "hearth" && audioEl) audioEl.loop = settings.pick !== "auto";
+    // Not playing it now (muted, another track picked, ...): no opening song later in the game
+    else if (intro) intro = false;
   }
   const has = (kinds: string[]) => !!mobs && kinds.some((k) => (mobs[k] ?? 0) > 0);
   zoneName = zone;
