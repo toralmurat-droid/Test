@@ -1,5 +1,6 @@
 {
   "date": "2026-11-05",
+  "pr": 264,
   "title": "Faster wizard casting",
   "changes": [
     "Wizard spells come back much faster (most attack spells in 1 to 2.5 seconds) and cost less mana; each cast hits a bit softer to make up for it.",
