@@ -1,5 +1,6 @@
 {
   "date": "2026-11-05",
+  "pr": 260,
   "title": "Skill keys cast at the cursor",
   "changes": [
     "Keys 1 to 0 now cast their skill right away, toward the mouse cursor.",
