@@ -131,6 +131,8 @@ export interface SkillDef {
   cost?: number; // Stamina (physical skills)
   mana?: number; // Mana (spells): shared/mana.ts
   chargeMs?: number; // buildup: roots the hero while charging (a stun cancels it)
+  /** Melee wind-up: the hero gathers for this long (rooted, a stun cancels it) before the blow lands, matching the animation (client/src/skillMoves.ts). */
+  windMs?: number;
   consume?: boolean; // spends all stacks; buff.perStack / STACK_POWER per stack
   move?: MoveDef; areas?: AreaDef[]; shots?: ShotDef; field?: FieldDef; buff?: BuffDef; counter?: CounterDef;
   cry?: AreaDef; // war cry: hits everyone around (usually no damage, only effects)
@@ -168,15 +170,15 @@ const S: Record<ClassKind, SkillDef[]> = <Record<ClassKind, SkillDef[]>><unknown
   // ---------------------------------------------------------------- KNIGHT
   knight: [
     // Valor: sword offense
-    { id: "k_lunge", name: "Lunging Strike", type: "Attack", branch: 0, row: 0, style: "steel", cd: 5000, cost: 25,
+    { id: "k_lunge", name: "Lunging Strike", type: "Attack", branch: 0, row: 0, style: "steel", windMs: 120, cd: 5000, cost: 25,
       desc: "Lunge forward and run your blade through whoever stands at the end.",
       move: { kind: "dash", dist: 40 }, areas: [{ r: 22, ahead: 10, wpn: 2, kb: 1.5, look: "slash" }] },
-    { id: "k_whirl", name: "Whirling Slash", type: "Attack", branch: 0, row: 1, style: "steel", cd: 7000, cost: 30,
+    { id: "k_whirl", name: "Whirling Slash", type: "Attack", branch: 0, row: 1, style: "steel", windMs: 110, cd: 7000, cost: 30,
       desc: "Spin with your sword out: hits everything around you twice.",
       areas: [{ r: 34, wpn: 1.0, kb: 0.8, waves: 2, everyMs: 180, look: "slash" }] },
     { id: "k_mastery", name: "Blade Mastery", type: "Passive", branch: 0, row: 2, style: "steel", passive: { effect: "dmg", perRank: 5 },
       desc: "Years of drills: more damage with everything." },
-    { id: "k_rush", name: "Valor Rush", type: "Buildup", branch: 0, row: 3, style: "holy", cd: 10000, cost: 35, consume: true,
+    { id: "k_rush", name: "Valor Rush", type: "Buildup", branch: 0, row: 3, style: "holy", windMs: 140, cd: 10000, cost: 35, consume: true,
       desc: "Spend your Valor: charge through the enemy line, cutting everyone on the way. Each Valor stack adds 25%.",
       move: { kind: "dash", dist: 72, path: 1.6, invulnMs: 300 }, areas: [{ r: 30, wpn: 0.8, kb: 1.5, look: "slash" }] },
     { id: "k_judgement", name: "Judgement Blade", type: "Ultimate", branch: 0, row: 4, style: "holy", cd: 20000, cost: 30, mana: 30, chargeMs: 600,
@@ -195,7 +197,7 @@ const S: Record<ClassKind, SkillDef[]> = <Record<ClassKind, SkillDef[]>><unknown
     { id: "k_taunt", name: "Challenging Roar", type: "War cry", branch: 1, row: 3, style: "blood", cd: 14000, cost: 25,
       desc: "Roar a challenge: enemies around are marked (take 25% more damage) and slowed; you take 15% less for 5s.",
       cry: { r: 72, markMs: 5000, slowMs: 1500, look: "nova" }, buff: { ms: 5000, armor: 15 } },
-    { id: "k_quake", name: "Earthquake", type: "Ultimate", branch: 1, row: 4, style: "earth", cd: 18000, cost: 50,
+    { id: "k_quake", name: "Earthquake", type: "Ultimate", branch: 1, row: 4, style: "earth", windMs: 150, cd: 18000, cost: 50,
       desc: "Slam the ground: the earth splits around you, stunning everything, then two aftershocks roll out.",
       areas: [{ r: 56, dmg: 28, stunMs: 1100, kb: 0.5, look: "slam" }, { r: 76, dmg: 12, delayMs: 450, waves: 2, everyMs: 400, slowMs: 800, look: "spikes" }] },
 
@@ -228,7 +230,7 @@ const S: Record<ClassKind, SkillDef[]> = <Record<ClassKind, SkillDef[]>><unknown
       field: { kind: "smoke", r: 40, ms: 4000, tickMs: 400, weakMs: 600, slowMs: 600 } },
     { id: "n_swift", name: "Swift Feet", type: "Passive", branch: 0, row: 2, style: "wind", passive: { effect: "speed", perRank: 4 },
       desc: "Light as a cat: move faster." },
-    { id: "n_assassinate", name: "Assassinate", type: "Buildup", branch: 0, row: 3, style: "shadow", cd: 10000, cost: 40, consume: true,
+    { id: "n_assassinate", name: "Assassinate", type: "Buildup", branch: 0, row: 3, style: "shadow", windMs: 80, cd: 10000, cost: 40, consume: true,
       desc: "Spend your Ki: vanish and strike the nearest enemy from behind. Each Ki stack adds 25%.",
       move: { kind: "behind", dist: 110, invulnMs: 200 }, areas: [{ r: 20, wpn: 3, kb: 1, look: "slash" }] },
     { id: "n_cuts", name: "Thousand Cuts", type: "Ultimate", branch: 0, row: 4, style: "shadow", cd: 18000, cost: 55,
@@ -247,7 +249,7 @@ const S: Record<ClassKind, SkillDef[]> = <Record<ClassKind, SkillDef[]>><unknown
       counter: { ms: 700, blink: "behind", wpn: 2.8, effects: { kb: 1 } } },
     { id: "n_vital", name: "Vital Points", type: "Passive", branch: 1, row: 3, style: "blood", passive: { effect: "crit", perRank: 4 },
       desc: "You know where it hurts: more critical hits." },
-    { id: "n_storm", name: "Blade Storm", type: "Ultimate", branch: 1, row: 4, style: "steel", cd: 15000, cost: 50,
+    { id: "n_storm", name: "Blade Storm", type: "Ultimate", branch: 1, row: 4, style: "steel", windMs: 90, cd: 15000, cost: 50,
       desc: "Spin into a storm of steel: five hits on everything around you, pulling enemies in.",
       areas: [{ r: 44, wpn: 0.9, kb: 0.2, pull: 6, waves: 5, everyMs: 150, look: "slash" }] },
 
@@ -386,7 +388,7 @@ const S: Record<ClassKind, SkillDef[]> = <Record<ClassKind, SkillDef[]>><unknown
     { id: "b_rage", name: "Rage", type: "Aura", branch: 0, row: 0, style: "blood", cd: 12000, cost: 25,
       desc: "Fly into a rage for 5s: +15% damage, +20% speed and +15% attack speed.",
       buff: { ms: 5000, dmg: 15, speed: 20, atkspd: 15 } },
-    { id: "b_cleave", name: "Cleave", type: "Attack", branch: 0, row: 1, style: "blood", cd: 5000, cost: 20,
+    { id: "b_cleave", name: "Cleave", type: "Attack", branch: 0, row: 1, style: "blood", windMs: 160, cd: 5000, cost: 20,
       desc: "A huge sweeping axe blow that hits everyone in front of you.",
       areas: [{ r: 34, ahead: 16, wpn: 1.9, kb: 2, look: "slash" }] },
     { id: "b_bloodthirst", name: "Bloodthirst", type: "Passive", branch: 0, row: 2, style: "blood", passive: { effect: "lifesteal", perRank: 5 },
@@ -416,18 +418,18 @@ const S: Record<ClassKind, SkillDef[]> = <Record<ClassKind, SkillDef[]>><unknown
       areas: [{ r: 68, wpn: 0.8, kb: 1, waves: 3, everyMs: 350, look: "spirit" }], buff: { ms: 6000, armor: 25 } },
 
     // Earth
-    { id: "b_slam", name: "Ground Slam", type: "Attack", branch: 2, row: 0, style: "earth", cd: 6000, cost: 20,
+    { id: "b_slam", name: "Ground Slam", type: "Attack", branch: 2, row: 0, style: "earth", windMs: 140, cd: 6000, cost: 20,
       desc: "Smash the ground: hurts and stuns everything around you.",
       areas: [{ r: 38, wpn: 1.2, stunMs: 450, kb: 1, look: "slam" }] },
-    { id: "b_leap", name: "Leap", type: "Movement", branch: 2, row: 1, style: "earth", cd: 7000, cost: 25,
+    { id: "b_leap", name: "Leap", type: "Movement", branch: 2, row: 1, style: "earth", windMs: 80, cd: 7000, cost: 25,
       desc: "Leap forward and crash down, hurting everything where you land.",
       move: { kind: "leap", dist: 64, invulnMs: 300 }, areas: [{ r: 40, wpn: 1.3, kb: 2, look: "slam" }] },
     { id: "b_thick", name: "Thick Skin", type: "Passive", branch: 2, row: 2, style: "earth", passive: { effect: "hp", perRank: 6 },
       desc: "Hide like a bear: more max HP." },
-    { id: "b_seismic", name: "Seismic Wave", type: "Attack", branch: 2, row: 3, style: "earth", cd: 10000, cost: 30,
+    { id: "b_seismic", name: "Seismic Wave", type: "Attack", branch: 2, row: 3, style: "earth", windMs: 110, cd: 10000, cost: 30,
       desc: "Stomp and send a wave of stone spikes bursting out of the ground ahead.",
       areas: [{ r: 22, ahead: 20, wpn: 0.5, kb: 1.5, slowMs: 600, waves: 5, everyMs: 90, line: 20, look: "spikes" }] },
-    { id: "b_avalanche", name: "Avalanche", type: "Ultimate", branch: 2, row: 4, style: "earth", cd: 22000, cost: 50,
+    { id: "b_avalanche", name: "Avalanche", type: "Ultimate", branch: 2, row: 4, style: "earth", windMs: 110, cd: 22000, cost: 50,
       desc: "Leap high into the air and come down like a mountain: a huge stun blast, then boulders rain around you.",
       move: { kind: "leap", dist: 90, invulnMs: 300 },
       areas: [{ r: 62, wpn: 1.5, stunMs: 450, kb: 2, delayMs: 350, look: "slam" }, { r: 22, wpn: 0.35, waves: 6, everyMs: 120, delayMs: 600, scatter: 72, look: "meteor" }] },

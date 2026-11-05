@@ -4,6 +4,7 @@ import { buildObjects } from "./objects";
 import { buildGear } from "./gear";
 import { buildPainted, PAINT_K } from "./paint/sheets";
 import { buildPoseVariants } from "./paint/pose-variants";
+import { buildSkillMoves } from "./paint/skill-moves";
 import { buildMobs } from "./paint/mobs";
 
 const OUT = "client/public/assets";
@@ -45,6 +46,7 @@ buildGear(OUT + "/gear");
 const args = process.argv.slice(2), hdOnly = args[0] === "--hd-only";
 buildPainted(OUT + "/hd", { only: hdOnly ? args.slice(1) : [] });
 buildPoseVariants(OUT + "/hd", hdOnly ? args.slice(1) : []); // other weapon stances (archer-melee...), slow: ~20 s a sheet
+buildSkillMoves(OUT + "/hd", hdOnly ? args.slice(1) : []); // big melee skill poses (client/src/skillMoveData.ts)
 buildMobs(OUT + "/hd/mobs");
 writeFileSync(`${OUT}/hd/characters/characters.json`, JSON.stringify({
   ...JSON.parse(readFileSync(`${OUT}/characters/characters.json`, "utf8")),

@@ -148,10 +148,12 @@ export function castSkill(h: SkillHost, id: string, skillId: string): boolean {
   if (s.consume) { stacks = u.sk.stacks; u.sk.stacks = 0; }
   const power = rankPower(rank) * levelPower(s) * scalePower(s, h.stats?.(id), STATS[u.cls].base) *
     (s.consume && !s.buff?.perStack ? 1 + STACK_POWER * stacks : 1);
-  h.fx({ ev: "cast", id, s: s.id, rank, stacks, charge: s.chargeMs ?? 0, x: u.x, y: u.y });
-  if (s.chargeMs) {
-    u.sk.chargeUntil = now + s.chargeMs;
-    h.later(s.chargeMs, () => {
+  h.fx({ ev: "cast", id, s: s.id, rank, stacks, charge: s.chargeMs ?? 0, wind: s.windMs ?? 0, x: u.x, y: u.y });
+  // A buildup charges, a big melee blow winds up first (same rules: rooted, a stun breaks it)
+  const hold = (s.chargeMs ?? 0) + (s.windMs ?? 0);
+  if (hold > 0) {
+    u.sk.chargeUntil = now + hold;
+    h.later(hold, () => {
       u.sk.chargeUntil = 0;
       if (!h.canAct(id)) { h.fx({ ev: "fizzle", id, s: s.id }); return; } // a stun breaks the buildup
       release(h, id, s, rank, power, stacks, at);

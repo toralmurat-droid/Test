@@ -16,6 +16,7 @@ import { bindSfx, play as playSfx, sfxFrame } from "./sfx";
 import { attackMult, cooldownMult, critChance, heroSpeed, STATS, magicMult, STAT_KINDS, STAT_NAMES, StatKind, statPoints, HP_PER_STR } from "../../shared/powers";
 import { NEED_TEXT, pointRange, SkillDef, skillOf, skillTarget, MAX_STACKS, STACK_DECAY_MS, STACK_NAME, talentBonus } from "../../shared/skills";
 import { SkillFx } from "./skillfx";
+import { movesSheet, SkillMoves } from "./skillMoves";
 import { displayGrid } from "./tileset";
 import { CRAWL_CROP, heroTexture, itemTexture, potionTex, makeTileset, MOB_LOOK, mobTexture, preloadPaintedMobs } from "./textures";
 import { Minimap } from "./minimap";
@@ -253,10 +254,12 @@ export class TownScene extends Phaser.Scene {
   private areaTimer?: number;
   private shots = new Map<string, { g: Phaser.GameObjects.GameObject & { x: number; y: number }; tx: number; ty: number; at: number; dx: number; dy: number; spd: number }>();
   private fx!: SkillFx;
+  private moves!: SkillMoves; // melee skill micro sequences (skillMoves.ts)
   private gearFx!: GearFx; // item level effects on heroes
   private lastCast: Record<string, number> = {}; // local clock (ms) of my last cast of each skill, for cooldowns
   private items = new Map<string, Phaser.GameObjects.Image>();
   private lastDodge = -Infinity;
+  private rootUntil = 0; // local clock: my skill wind-up holds me in place until then
   private lastRanged = -Infinity;
   private heroFrom?: number;
   private heroSig = "";
@@ -285,6 +288,7 @@ export class TownScene extends Phaser.Scene {
   async create() {
     this.fx = new SkillFx(this, (id) => this.entities.get(id), () => this.me);
     this.gearFx = new GearFx(this.fx);
+    this.moves = new SkillMoves(this, this.fx);
     makeTileset(this);
     createArtAnims(this);
     if (SMOOTH) paintSmoothProps(this); // painted iso forge, anvil, witch hut… in place of the front-view pixel props
@@ -1002,7 +1006,7 @@ export class TownScene extends Phaser.Scene {
       // A flinch never cuts a swing short: the attack you started keeps playing, so the fight stays readable
       const cur = e.sprite.anims.currentAnim?.key ?? "";
       const busy = e.sprite.anims.isPlaying && /_(swing|attack|cast)/.test(cur);
-      if (e.hero && !e.state.dead && !busy) playCharAnim(e.sprite, e.hero, "hit", this.dirOf(e));
+      if (e.hero && !e.state.dead && !busy && !this.moves.active(id)) playCharAnim(e.sprite, e.hero, "hit", this.dirOf(e));
       if (e.mob) this.gooSplat(e, dmg);
       if (id === this.me) quake(this, 100, 0.004);
     });
@@ -1412,7 +1416,7 @@ export class TownScene extends Phaser.Scene {
     if (!e) return;
     const dir = e.state.dir as string;
     if (typeof ax === "number" && typeof ay === "number") e.vdir = (e.hero ? screenDir8 : screenDir)(ax, ay, e.vdir ?? dir);
-    if (e.hero) playCharAnim(e.sprite, e.hero, this.attackAnim(e.hero, step, variant), this.dirOf(e));
+    if (e.hero) { this.moves.stop(id, e); playCharAnim(e.sprite, e.hero, this.attackAnim(e.hero, step, variant), this.dirOf(e)); }
     if (e.mob) e.strikeUntil = this.time.now + 240;
     // Aim can be diagonal (the server sends it); mobs and old messages fall back to the facing direction
     const off = typeof ax === "number" && typeof ay === "number" ? [ax, ay]
@@ -2103,6 +2107,7 @@ export class TownScene extends Phaser.Scene {
     const e = this.entities.get(msg.id);
     if (!e) return;
     if (msg.id === this.me) this.lastDodge = this.time.now;
+    if (e.hero) this.moves.stop(msg.id, e);
     if (e.hero) playCharAnim(e.sprite, e.hero, "dodge", (ISO ? this.worldToScreenDir(msg.dir, true) : msg.dir) as any);
     // A couple of fading after-images and a dust puff
     for (let i = 1; i <= 3; i++) {
@@ -2122,11 +2127,17 @@ export class TownScene extends Phaser.Scene {
       const e = this.entities.get(ev.id);
       if (ev.id === this.me) this.lastCast[ev.s] = this.time.now;
       if (ev.id === this.me && ev.s === this.leftSkill()) this.pointer?.swung(); // a left-click spell went off: that click is done
-      if (e?.hero) playCharAnim(e.sprite, e.hero, "skill", this.dirOf(e));
+      // Big melee skills play their own wind-up / action / recovery sequence; everything else the cast animation
+      if (e?.hero && !this.moves.start(ev.id, e, ev, this.dirOf(e))) playCharAnim(e.sprite, e.hero, "skill", this.dirOf(e));
+      // Our own wind-up roots us at once (the server's "charge" status comes a round trip later)
+      if (ev.id === this.me && (ev.wind ?? 0) + (ev.charge ?? 0) > 0) this.rootUntil = this.time.now + ev.wind + ev.charge;
     }
     if (ev.ev === "move" || ev.ev === "countered") {
       const e = this.entities.get(ev.id);
       if (e) { e.tx = ev.x; e.ty = ev.y; e.chaseUntil = this.time.now + 250; }
+      if (ev.ev === "move") this.moves.onMove(ev.id, ev);
+      // A dash glides (skillfx no longer snaps it): hold our prediction off while the sprite catches up
+      if (ev.ev === "move" && ev.kind === "dash" && ev.id === this.me) this.rootUntil = Math.max(this.rootUntil, this.time.now + 140);
     }
     this.fx.onEvent(ev);
   }
@@ -2267,7 +2278,7 @@ export class TownScene extends Phaser.Scene {
     const ease = (k: number) => 1 - Math.pow(1 - k, step / (1000 / 60));
     for (const [id, e] of this.entities) {
       const p = e.state;
-      const rooted = typeof p.fx === "string" && p.fx.includes("charge"); // a buildup roots the hero
+      const rooted = (typeof p.fx === "string" && p.fx.includes("charge")) || (id === this.me && this.time.now < this.rootUntil); // a buildup or wind-up roots the hero
       if (id === this.me && !p.dead && !p.stunned && !p.rolling && !rooted) {
         // Client-side prediction with the same movement code the server runs
         const r = moveStep(e.sprite.x, e.sprite.y, this.input_, step / 1000, heroSpeed(p.cls as ClassKind, p.slowed, p.spd ?? 1) * gearSpeedMult(activeOf(p)));
@@ -2330,12 +2341,16 @@ export class TownScene extends Phaser.Scene {
           e.gear?.setHero(stance);
           if (cur && this.anims.exists(`${stance}${cur}`)) e.sprite.play(`${stance}${cur}`, true);
         }
+        // Skill-move sheets (and the gear for them) load ahead, so the first big skill already plays its sequence
+        if (e.gear && this.moves.prefetch(e.hero)) e.gear.ready(movesSheet(e.hero), p);
         // Let one-shot attack/hit/skill animations finish before going back to walk/idle
         const key = e.sprite.anims.currentAnim?.key ?? "";
         const oneShot = e.sprite.anims.isPlaying && /_(attack\d?|swing\d|hit|skill|idle[23]|dodge)_/.test(key);
         if (moving || p.dead) e.idleSince = undefined;
         else e.idleSince ??= now;
-        if (p.dead) {
+        if (this.moves.tick(id, e, moving)) {
+          // a skill sequence is drawing the hero this frame
+        } else if (p.dead) {
           if (!key.includes("_ko_")) playCharAnim(e.sprite, e.hero, "ko", dir);
         } else if (!oneShot) {
           if (!moving && p.emote && this.anims.exists(`${e.hero}_${p.emote}_down`)) {

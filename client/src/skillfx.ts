@@ -421,7 +421,7 @@ export class SkillFx {
 
   private showMove(ev: any, s: SkillDef | undefined, style: FxStyle, e?: FxEntity) {
     const pal = PALETTE[style];
-    if (e) { e.sprite.setPosition(ev.x, ev.y); }
+    if (e && ev.kind !== "dash") e.sprite.setPosition(ev.x, ev.y); // a dash glides there (TownScene eases to the server spot)
     const n = 6;
     if (ev.kind === "blink" || ev.kind === "back" || ev.kind === "behind") {
       // Vanish in a puff, reappear in another
