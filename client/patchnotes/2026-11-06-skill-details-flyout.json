@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-06",
+  "title": "Skill details beside the tree",
+  "changes": [
+    "In the Skills tab, what a skill does now opens in its own panel beside the tree, so you can read it without scrolling."
+  ]
+}

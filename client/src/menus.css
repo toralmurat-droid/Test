@@ -269,3 +269,11 @@ body .gcell.gjunk canvas { filter: grayscale(.8) brightness(.55); }
 body .gcell.gjunk::after { content: ""; position: absolute; inset: 6px; pointer-events: none;
   background: linear-gradient(45deg, transparent calc(50% - 2px), #c0402c calc(50% - 2px), #c0402c calc(50% + 2px), transparent calc(50% + 2px)),
               linear-gradient(-45deg, transparent calc(50% - 2px), #c0402c calc(50% - 2px), #c0402c calc(50% + 2px), transparent calc(50% + 2px)); opacity: .8; }
+
+/* Skills tab: the skill details open as a flyout to the left of the side panel, so the tree and what a skill does
+   are both on screen without scrolling. Narrow screens keep them under the tree. */
+@media (min-width: 1060px) {
+  body #spbody #treeinfo { position: fixed; top: 130px; right: calc(12px + min(680px, 100% - 24px) + 6px); width: 340px; min-width: 0;
+    max-height: calc(100% - 270px); overflow: auto; z-index: 8; padding: 4px 8px 8px;
+    border: 18px solid transparent; border-image: var(--wf-bronze) 9 fill / 18px / 0 repeat; background: none; box-shadow: none; image-rendering: pixelated; }
+}
