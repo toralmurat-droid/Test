@@ -52,6 +52,21 @@ Any player can type `/max` in chat: the hero they are playing goes to level 99, 
 (actives go on keys 1-0), spreads all stat points over the 4 stats, and gets full potions and 100000 gold.
 It is saved like normal progress, per class (do it once on each class).
 
+## Saves in PostgreSQL (recommended before going public)
+
+By default accounts live in `data/saves.json` on the volume. With a `DATABASE_URL` the game keeps them in
+PostgreSQL instead: one row per account, only changed accounts are written, and each write is one transaction
+(a trade is saved on both sides or not at all). Railway backs up its Postgres databases.
+
+1. In the Railway project: **+ New** → **Database** → **PostgreSQL**.
+2. Game service → **Variables** → add `DATABASE_URL` = `${{Postgres.DATABASE_URL}}` (Railway offers it in the list).
+3. Redeploy. On the first start, the table is empty, so the game imports every account from `data/saves.json`
+   once (the log says `Postgres: imported N account(s)`). Keep the volume: the idea log and the handoff file stay
+   there, and the old `saves.json` stays as a copy.
+
+To go back to the file, remove `DATABASE_URL` (accounts changed meanwhile are then only in Postgres:
+download them first with `/admin/backup`).
+
 ## Anti-abuse limits
 
 `server/ratelimit.ts` holds every limit (one place to tune them):

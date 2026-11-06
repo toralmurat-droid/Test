@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-06",
+  "title": "Safer saves",
+  "changes": [
+    "Hero progress is saved more safely, so a server crash can no longer lose the last minutes of play after everyone had left the world."
+  ]
+}

@@ -8,7 +8,7 @@ import { Server } from "colyseus";
 import { WebSocketTransport } from "@colyseus/ws-transport";
 import { TownRoom, announceUpgrade } from "./TownRoom";
 import { ideaLog, publicLog } from "./ideaStore";
-import { allAccounts, peek } from "./accounts";
+import { allAccounts, flushFinal, initAccounts, peek } from "./accounts";
 import { writeHandoff } from "./handoff";
 import { clientIp } from "./ratelimit";
 
@@ -113,6 +113,10 @@ gameServer.define("town", TownRoom);
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 gameServer.onBeforeShutdown(async () => { announceUpgrade(); await wait(400); });
 // The rooms are gone by now (everyone saved and remembered where they stood): hand those spots to the next server
-gameServer.onShutdown(() => { writeHandoff(); return wait(800); });
+gameServer.onShutdown(async () => { writeHandoff(); await flushFinal(); await wait(800); });
 
-gameServer.listen(PORT).then(() => console.log(`Game server on http://localhost:${PORT}`));
+// Accounts first (Postgres when DATABASE_URL is set): players must never join before their saves are loaded
+initAccounts()
+  .then(() => gameServer.listen(PORT))
+  .then(() => console.log(`Game server on http://localhost:${PORT}`))
+  .catch((e) => { console.error("Could not start:", e); process.exit(1); });

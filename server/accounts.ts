@@ -1,9 +1,9 @@
 import type { BountyState } from "../shared/bounty";
 // Player accounts: name + password, with one saved hero per class.
 // Saves live in a JSON file on the server (SAVE_FILE, default data/saves.json).
-import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
+import { jsonStore, postgresStore, readJsonFile, Store } from "./store";
 import { FailDelay, isLocalIp, KeyedLimiter, LOGIN_BURST, LOGIN_PER_SEC, SIGNUP_BURST, SIGNUP_PER_SEC } from "./ratelimit";
 
 export interface HeroSave {
@@ -51,11 +51,17 @@ interface Account {
 export interface Stash { items: string[]; gold: number }
 
 const FILE = path.resolve(process.env.SAVE_FILE ?? path.join(__dirname, "../data/saves.json"));
-let accounts: Record<string, Account> = {};
-try {
-  accounts = JSON.parse(fs.readFileSync(FILE, "utf8"));
-} catch (e: any) {
-  if (e?.code !== "ENOENT") console.error("Could not read saves file:", e);
+// JSON saves load right away (the bench and tests import this module directly); Postgres loads in initAccounts()
+let store: Store<Account> = jsonStore<Account>(FILE);
+let accounts: Record<string, Account> = process.env.DATABASE_URL ? {} : readJsonFile<Account>(FILE);
+
+/** Opens the account store. With DATABASE_URL the accounts come from Postgres (imported once from SAVE_FILE). */
+export async function initAccounts() {
+  const url = process.env.DATABASE_URL;
+  if (!url) return;
+  store = await postgresStore<Account>(url, FILE);
+  accounts = await store.load();
+  console.log(`Accounts: Postgres, ${Object.keys(accounts).length} account(s)`);
 }
 
 export const NAME_RE = /^[A-Za-z0-9_ -]{3,16}$/;
@@ -183,50 +189,47 @@ export function saveStash(name: string, stash: Stash, cls: string, hero: HeroSav
   markDirty(key(name));
 }
 
-let dirty = false;
-function markDirty(_k: string) { dirty = true; }
+/** Accounts changed since the last write. */
+const dirty = new Set<string>();
+function markDirty(k: string) { dirty.add(k); }
 
 let writing: Promise<void> | null = null;
 let again = false;
 /**
- * Write all saves to disk in the background (atomic: temp file then rename). The old sync write froze the game
- * world for the whole write every 5 s. A call while a write runs queues one more write right after it.
+ * Write the changed accounts in the background (JSON: whole file, atomic temp + rename; Postgres: changed rows in
+ * one transaction). The old sync write froze the game world for the whole write every 5 s. A call while a write
+ * runs queues one more write right after it.
  */
 export function flush(): Promise<void> {
   if (writing) { again = true; return writing; }
-  dirty = false;
-  const body = JSON.stringify(accounts);
-  writing = (async () => {
-    try {
-      await fs.promises.mkdir(path.dirname(FILE), { recursive: true });
-      await fs.promises.writeFile(FILE + ".tmp", body);
-      if (closing) return; // the shutdown write (newer) already happened: never put older data over it
-      await fs.promises.rename(FILE + ".tmp", FILE);
-    } catch (e) {
-      dirty = true;
-      console.error("Could not write saves file:", e);
-    }
-  })().finally(() => {
-    writing = null;
-    if (again) { again = false; void flush(); }
-  });
+  if (!dirty.size) return Promise.resolve();
+  const keys = [...dirty];
+  dirty.clear();
+  // Postgres: copied now, so changes made while the write runs go into the next one
+  // (the JSON store turns everything into text before its first await, which is the same snapshot)
+  const changed: Record<string, Account> = {};
+  if (store.kind === "postgres") for (const k of keys) if (accounts[k]) changed[k] = structuredClone(accounts[k]);
+  writing = store.save(changed, accounts)
+    .catch((e) => {
+      for (const k of keys) dirty.add(k);
+      console.error("Could not write saves:", e);
+    })
+    .finally(() => {
+      writing = null;
+      if (again) { again = false; void flush(); }
+    });
   return writing;
 }
 
-/** Write all saves now, blocking (only while the server shuts down, when nothing else must run first). */
-let closing = false;
-export function flushSync() {
-  closing = true;
-  try {
-    fs.mkdirSync(path.dirname(FILE), { recursive: true });
-    fs.writeFileSync(FILE + ".sync.tmp", JSON.stringify(accounts));
-    fs.renameSync(FILE + ".sync.tmp", FILE);
-    dirty = false;
-  } catch (e) {
-    console.error("Could not write saves file:", e);
+/** Last write while the server shuts down: JSON writes everything at once (blocking), Postgres waits for its writes. */
+export async function flushFinal() {
+  if (store.saveSync) {
+    try { store.saveSync(accounts); dirty.clear(); } catch (e) { console.error("Could not write saves file:", e); }
+    return;
   }
+  while (writing || dirty.size) await (writing ?? flush());
 }
-setInterval(() => { if (dirty) void flush(); }, 5000).unref();
+setInterval(() => { if (dirty.size) void flush(); }, 5000).unref();
 
 /** All accounts as stored on disk (password hashes, never passwords), for the admin backup download. */
 export function allAccounts() {

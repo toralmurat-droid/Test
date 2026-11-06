@@ -29,3 +29,12 @@ test("accounts: new accounts per address are capped", async () => {
   for (let i = 0; i < 12; i++) made.push(await acc.login(`Spam${i}`, "longenough", "9.9.9.9").then(() => true, () => false));
   assert.equal(made.filter(Boolean).length, 10);
 });
+
+test("accounts: background saves keep working after a blocking final write (room emptied, not shutdown)", async () => {
+  const acc = await import("../server/accounts");
+  await acc.flushFinal();
+  await acc.login("Later", "longenough", "5.5.5.5");
+  await acc.flush();
+  const disk = JSON.parse(fs.readFileSync(process.env.SAVE_FILE!, "utf8"));
+  assert.ok(disk.later, "account made after the final write is on disk");
+});
