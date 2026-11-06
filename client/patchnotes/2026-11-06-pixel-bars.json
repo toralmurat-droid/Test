@@ -1,0 +1,9 @@
+{
+  "date": "2026-11-06",
+  "title": "Pixel bars, tidy HUD",
+  "changes": [
+    "Health, mana, stamina and XP bars and the level shield are redrawn in the same chunky pixels as the world, with darker, weathered colours.",
+    "Long place names under the minimap stay on one line and no longer cover the Quests button.",
+    "The little number badges on the bottom buttons no longer cover your hotkey slots."
+  ]
+}

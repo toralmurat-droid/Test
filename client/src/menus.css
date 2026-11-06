@@ -49,8 +49,10 @@ body #tradeask button:hover, body #bountypanel button:not(.gcell):hover { color:
 body #menubtns { gap: 4px; }
 body #menubtns button { display: inline-flex; align-items: center; padding: 2px 8px; font-size: 18px; font-family: var(--pixel-font); color: #eadfc8; }
 body #menubtns button small { color: #a8977a; margin-left: 5px; font-size: 18px; font-family: var(--pixel-font); }
-body #treebadge, body #herobadge, body #newsbadge, body #menubadge { top: -12px; right: -10px; border-radius: 0; background: #a8823a; color: #120c06;
-  font: 18px/16px var(--pixel-font); height: 18px; min-width: 18px; text-shadow: none; box-shadow: 0 0 0 2px #080504, inset 0 2px #e3bf6a; }
+/* Badges sit on the button's own top-right corner (not above it), so they never cover the hotbar slots */
+body #treebadge, body #herobadge, body #newsbadge, body #menubadge { top: -2px; right: -2px; border-radius: 0; background: #a8823a; color: #120c06;
+  font: 12px/14px var(--tiny-font); height: 14px; min-width: 14px; padding: 0 2px; box-sizing: border-box; text-shadow: none;
+  box-shadow: 0 0 0 2px #080504, inset 0 2px #e3bf6a; }
 @media (max-width: 600px) { body #menubtns button { padding: 2px 4px; } body #menubtns button .pxi { margin-right: 2px; } }
 
 body #statreset, body #treereset { font-size: 18px; font-family: var(--pixel-font); padding: 0 6px; }
