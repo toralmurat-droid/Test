@@ -87,7 +87,7 @@ html, body { margin: 0; height: 100%; background: #1b1b24; color: #eee; font: 18
 #worldmap .wm-r { right: -39px; top: 50%; transform: translateY(-50%); }
 #worldmap .wm-b { bottom: -39px; left: 50%; transform: translateX(-50%); }
 #worldmap .wm-hint { color: #c9b89a; font: 18px var(--pixel-font); -webkit-font-smoothing: none; margin-top: 6px; text-shadow: 2px 2px #000; }
-#location { position: absolute; left: 0; right: 0; bottom: -46px; text-align: center; font-size: 18px; font-family: var(--pixel-font); color: #ffd166; text-shadow: 2px 2px #000; }
+#location { position: absolute; left: -60px; right: -30px; bottom: -46px; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 18px; font-family: var(--pixel-font); color: #ffd166; text-shadow: 2px 2px #000; }
 #area { position: absolute; top: 18%; left: 0; right: 0; display: flex; flex-direction: column; align-items: center; gap: 2px;
   pointer-events: none; opacity: 0; transition: opacity .6s; }
 #area canvas { display: block; max-width: calc(100vw - 32px); object-fit: contain; }
@@ -461,11 +461,15 @@ html, body { margin: 0; height: 100%; background: #1b1b24; color: #eee; font: 18
 #rbars .rb-num { top: 23px; font-size: 22px; font-family: var(--title-font); color: #FFE9A8; }
 #rbars .rb-stack { display: flex; flex-direction: column; gap: 9px; padding: 4px 0 0 4px; }
 #rbars .rb-bar { position: relative; transition: width .4s steps(8); background: var(--trk);
-  box-shadow: 2px 0 0 #E0B84A, -2px 0 0 #E0B84A, 0 2px 0 #E0B84A, 0 -2px 0 #E0B84A, 4px 0 0 #120D07, -4px 0 0 #120D07,
+  box-shadow: 2px 0 0 #A8823A, -2px 0 0 #C9A050, 0 2px 0 #7A5A26, 0 -2px 0 #E3BF6A, 4px 0 0 #120D07, -4px 0 0 #120D07,
     0 4px 0 #120D07, 0 -4px 0 #120D07, 2px 2px 0 #120D07, -2px 2px 0 #120D07, 2px -2px 0 #120D07, -2px -2px 0 #120D07; }
 #rbars .rb-fill, #rbars .rb-ghost, #rbars .rb-ticks { position: absolute; top: 0; bottom: 0; left: 0; }
 #rbars .rb-ghost { background: #F2E6C8; transition: width .35s ease; }
-#rbars .rb-fill { background: var(--fil); box-shadow: inset 0 var(--edge) 0 var(--hi), inset 0 calc(-1 * var(--edge)) 0 var(--lo);
+/* Fill: flat colour ramp like the world art (lit row on top, shadow row at the bottom) with a 2x2-pixel dither band
+   between each ramp step, instead of a smooth gradient */
+#rbars .rb-fill { box-shadow: inset 0 2px 0 var(--hi), inset 0 -2px 0 var(--lo);
+  background: repeating-conic-gradient(var(--hi) 0 25%, transparent 0 50%) 0 2px / 4px 2px repeat-x,
+    repeating-conic-gradient(var(--lo) 0 25%, transparent 0 50%) 0 calc(100% - 2px) / 4px 2px repeat-x, var(--fil);
   transition: width .12s ease; }
 #rbars .rb-ticks { right: 0; opacity: 0; transition: opacity .3s;
   background-image: linear-gradient(to right, transparent calc(100% - 1px), rgba(18, 13, 7, .7) calc(100% - 1px)); }
@@ -473,17 +477,18 @@ html, body { margin: 0; height: 100%; background: #1b1b24; color: #eee; font: 18
   font-family: var(--pixel-font); -webkit-font-smoothing: none; line-height: 1; white-space: nowrap;
   font-variant-numeric: tabular-nums; text-shadow: 2px 2px 0 #000; }
 #rbars.rb-nonums .rb-txt { display: none; }
-#rbars .rb-hp { height: 18px; --trk: #2A0F12; --fil: #C8323C; --hi: #EA6670; --lo: #8C1F28; --edge: 3px; }
+#rbars .rb-hp { height: 18px; --trk: #1E0B0D; --fil: #A8262F; --hi: #D4525A; --lo: #6A141B; }
 #rbars .rb-hp .rb-txt { font-size: 18px; font-family: var(--pixel-font); }
-#rbars .rb-mp { height: 12px; --trk: #0F1630; --fil: #3B6FE0; --hi: #8FB0FF; --lo: #24459A; --edge: 2px; }
-#rbars .rb-st { height: 12px; --trk: #2A200C; --fil: #E0A92E; --hi: #FFE08A; --lo: #9A6F14; --edge: 2px; }
-#rbars .rb-mp .rb-txt, #rbars .rb-st .rb-txt { font-size: 18px; font-family: var(--pixel-font); }
+#rbars .rb-mp { height: 12px; --trk: #0B1024; --fil: #2D55B0; --hi: #6E92E0; --lo: #1A2E6A; }
+#rbars .rb-st { height: 12px; --trk: #1E170A; --fil: #BF8A22; --hi: #E8C25A; --lo: #6E4C10; }
+/* the thin bars take the tiny letters, so the numbers fit inside them */
+#rbars .rb-mp .rb-txt, #rbars .rb-st .rb-txt { font-size: 12px; font-family: var(--tiny-font); }
 /* XP bar above the slot bar: thin bronze rim in the menu colours, gold fill, text only while hovered */
 #xpbar { position: absolute; left: 50%; bottom: 100px; transform: translateX(-50%); box-sizing: border-box; height: 12px; pointer-events: auto;
-  background: #1a120a; border: 2px solid #a8823a; border-top-color: #c9a050; border-bottom-color: #6a5232;
-  box-shadow: 0 0 0 1px #080504, inset 0 0 0 1px #080504; }
+  height: 14px; background: #1a120a; border: 2px solid #a8823a; border-top-color: #c9a050; border-bottom-color: #6a5232;
+  box-shadow: 0 0 0 2px #080504, inset 0 0 0 2px #080504; }
 #xpbar::after { content: ""; position: absolute; left: 0; right: 0; top: -6px; bottom: -4px; } /* easier to hover */
-#xpbar .xp-fill { position: absolute; top: 1px; bottom: 1px; left: 1px; max-width: calc(100% - 2px); background: #E0B84A; box-shadow: inset 0 1px 0 #FFE08A, inset 0 -1px 0 #9A6F14;
+#xpbar .xp-fill { position: absolute; top: 2px; bottom: 2px; left: 2px; max-width: calc(100% - 4px); background: #BF8A22; box-shadow: inset 0 2px 0 #E8C25A, inset 0 -2px 0 #6E4C10;
   transition: width .3s ease; }
 #xpbar .xp-txt { position: absolute; inset: -4px 0; display: none; align-items: center; justify-content: center; color: #fff;
   font: 12px/1 var(--tiny-font); -webkit-font-smoothing: none; white-space: nowrap; text-shadow: 2px 2px 0 #000, -2px 0 0 #000, 0 -2px 0 #000, 2px 0 0 #000; }

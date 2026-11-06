@@ -85,20 +85,34 @@ class Bar {
   }
 }
 
-/** Pentagon shield drawn row by row so the slanted sides are clean pixel stairs. */
+/** Pentagon shield drawn row by row so the slanted sides are clean pixel stairs. Painted at half size and shown 2x,
+ * so every pixel is 2x2 screen px like the world art: dark outline, gold rim lit from the top-left, worn red field. */
 function drawCrest(c: HTMLCanvasElement) {
-  c.width = 60; c.height = 74;
+  c.width = 30; c.height = 37;
   const g = c.getContext("2d")!;
-  const shield = (x0: number, y0: number, w: number, h: number, col: string) => {
-    g.fillStyle = col;
-    const knee = Math.round(h * 0.62);
+  const rows = (x0: number, y0: number, w: number, h: number) => {
+    const knee = Math.round(h * 0.62), out: [number, number][] = [];
     for (let y = 0; y < h; y++) {
       const rw = y < knee ? w : Math.max(2, Math.round((w * (h - y)) / (h - knee) / 2) * 2);
-      g.fillRect(x0 + (w - rw) / 2, y0 + y, rw, 1);
+      out.push([x0 + (w - rw) / 2, rw]);
     }
+    return out;
   };
-  shield(0, 0, 60, 74, "#E0B84A");
-  shield(4, 4, 52, 66, "#8C1F28");
+  const fill = (x0: number, y0: number, w: number, h: number, col: string, lit?: string, dark?: string) => {
+    rows(x0, y0, w, h).forEach(([x, rw], y) => {
+      g.fillStyle = col; g.fillRect(x, y0 + y, rw, 1);
+      if (lit && y < 1) { g.fillStyle = lit; g.fillRect(x, y0 + y, rw, 1); }
+      if (lit) { g.fillStyle = lit; g.fillRect(x, y0 + y, 1, 1); }
+      if (dark) { g.fillStyle = dark; g.fillRect(x + rw - 1, y0 + y, 1, 1); }
+    });
+  };
+  fill(0, 0, 30, 37, "#120D07");
+  fill(1, 1, 28, 35, "#C9A050", "#E8C25A", "#7A5A26");
+  fill(3, 3, 24, 31, "#120D07");
+  fill(4, 4, 22, 29, "#7E1A22", "#A0303A", "#55101A");
+  // a few worn, darker specks on the field (fixed pattern, so it never flickers)
+  g.fillStyle = "#64141B";
+  for (const [x, y] of [[7, 22], [20, 9], [18, 25], [9, 12], [14, 29]]) g.fillRect(x, y, 1, 1);
 }
 
 export class ResourceBars {
