@@ -1,0 +1,9 @@
+{
+  "date": "2026-11-06",
+  "title": "Ambush in the Redfang woods",
+  "changes": [
+    "Redfang bandits now hide up in the trees along the trails around their camp. You won't see them until you walk right under them.",
+    "When you do, they drop out of the branches and land beside you with a stab, and the rest of their group jumps down after them.",
+    "Once the fight is over, any survivors climb back up into the trees and wait for the next traveller."
+  ]
+}

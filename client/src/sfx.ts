@@ -437,6 +437,8 @@ const R: Record<string, Recipe> = {
   leap: (o, t, v) => { R.grunt(o, t, v); whoosh(o, t, 300, 1200, 0.5, 0.35 * v); },
   dash: (o, t, v) => { noise(o, t, { type: "lowpass", f: 900, dur: 0.12, vol: 0.25 * v }); whoosh(o, t, 800, 2000, 0.15, 0.25 * v); },
   toolDrop: (o, t, v) => { clank(o, t, 0.2 * v, 900); thud(o, t + 0.05, 160, 0.2 * v, 0.1); },
+  // branches shaking, a shout, the thump of the landing
+  treeDrop: (o, t, v, pitch = 1) => { noise(o, t, { type: "bandpass", f: 2600, q: 0.8, dur: 0.35, vol: 0.3 * v }); R.shout(o, t + 0.05, v * 0.9, pitch); thud(o, t + 0.38, 90, 0.45 * v, 0.2); },
   ambush: (o, t, v) => { noise(o, t, { type: "lowpass", f: 700, dur: 0.25, vol: 0.4 * v }); whoosh(o, t, 400, 2000, 0.2, 0.3 * v); },
 };
 
@@ -762,6 +764,7 @@ export function bindSfx(room: any, me: () => string, ents: Map<string, Ent>) {
   on("reinforce", ({ id }) => P("shout2", id, 1, idPitch(id, 0.85), { reach: 1.3 }));
   on("workdrop", ({ id }) => { P("toolDrop", id, 0.8, undefined, { key: "wd" + id }); P("alert", id, 0.7, idPitch(id, 0.9), { delay: 0.1 }); });
   on("ambush", ({ x, y }) => play("ambush", x, y));
+  on("bambush", ({ id, x0, y0 }) => play("treeDrop", x0, y0, 1, idPitch(id)));
 
   // ---- shots flying (monster and hero projectiles): the launch sound for monsters' shots
   const shots = room.state?.projectiles;
