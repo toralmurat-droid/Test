@@ -48,40 +48,51 @@
     <div id="hotbar"></div>
     <div id="slotpick" hidden></div>
     <button id="lvlnote" hidden></button>
-    <div id="hero" hidden>
-      <div id="herobanner"></div>
-      <h2 id="herotitle"></h2>
-      <div id="herostats"></div>
-      <p class="help">1 stat point per level, 3 at levels 3, 5, 8 and 10. <button id="statreset">Reset points</button> free, out of combat</p>
-      <h3>Character</h3>
-      <div id="herochar"></div>
-      <p class="help">Skills are in the skill tree: press T.</p>
-      <p class="help">C to close</p>
-    </div>
-    <div id="tree" hidden>
-      <h2 id="treetitle"></h2>
-      <p id="treepoints"></p>
-      <div id="treebranches"></div>
-      <p class="help"><button id="treereset">Reset points</button> free, out of combat · T to close</p>
-    </div>
-    <div id="gear" hidden>
-      <h2>Equipment</h2>
-      <div id="gearcols">
-        <div id="gearleft">
-          <div id="geartop">
-            <canvas id="gearpreview" width="128" height="128"></canvas>
-            <div id="gearslots"></div>
-          </div>
-          <p id="geartotal"></p>
+    <div id="sidepanel" hidden>
+      <div id="sptabs">
+        <button data-tab="hero"><i data-icon="shield"></i>Character <small>[C]</small></button>
+        <button data-tab="gear"><i data-icon="bag"></i>Inventory <small>[G]</small></button>
+        <button data-tab="tree"><i data-icon="star"></i>Skills <small>[T]</small></button>
+        <button id="spclose"><i data-icon="close"></i></button>
+      </div>
+      <div id="spsheet"></div>
+      <div id="spbody">
+        <div id="hero" hidden>
+          <div id="herobanner"></div>
+          <h2 id="herotitle"></h2>
+          <div id="herostats"></div>
+          <p class="help">1 stat point per level, 3 at levels 3, 5, 8 and 10. <button id="statreset">Reset points</button> free, out of combat</p>
+          <h3>Character</h3>
+          <div id="herochar"></div>
+          <p class="help">C or Esc to close</p>
         </div>
-        <div id="gearright">
-          <h3 id="gearbagtitle">Bag</h3>
-          <div id="gearbag"></div>
-          <p id="gearinfo"></p>
-          <p id="gearempty" class="help">No gear yet. Monsters sometimes drop weapons, armour, shoes and hats: walk over them to pick them up.</p>
+        <div id="tree" hidden>
+          <h2 id="treetitle"></h2>
+          <p id="treepoints"></p>
+          <div id="treebranches"></div>
+          <p class="help"><button id="treereset">Reset points</button> free, out of combat · T to close</p>
+        </div>
+        <div id="gear" hidden>
+          <div id="gearcols">
+            <div id="gearleft">
+              <div id="geartop">
+                <canvas id="gearpreview" width="128" height="128"></canvas>
+                <div id="gearslots"></div>
+              </div>
+              <p id="geartotal"></p>
+            </div>
+            <div id="gearright">
+              <h3 id="gearbagtitle">Bag</h3>
+              <div id="geartools" class="gtools"><button id="gsort">Sort</button><button id="gjunk">Mark useless</button><button id="gdropjunk" hidden>Drop useless</button></div>
+              <div id="gearbag"></div>
+              <p id="gearinfo"></p>
+              <div id="gearfilter" class="gtools"><span>Loot filter</span><button id="gfrar">Pick up: All gear</button><button id="gfcls">Any class</button></div>
+              <p id="gearempty" class="help">No gear yet. Monsters sometimes drop weapons, armour, shoes and hats: walk over them to pick them up.</p>
+            </div>
+          </div>
+          <p class="help gearhelp">Click an item to wear it · click a worn item to take it off · right-click to drop · G or Esc to close</p>
         </div>
       </div>
-      <p class="help gearhelp">Click an item to wear it · click a worn item to take it off · right-click to drop · G or Esc to close</p>
     </div>
     <div id="menubtns">
       <button id="herobtn"><i data-icon="shield"></i>Hero <small>[C]</small><span id="herobadge" class="badge" hidden></span></button>

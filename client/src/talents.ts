@@ -3,6 +3,7 @@ import { icon as pxIcon } from "./pixelicons";
 import { SLOT_KEYS } from "../../shared/slots";
 import { Stats } from "../../shared/powers";
 import { iconImg } from "./skillIcons";
+import { SheetPreview, talentsOf } from "./sidepanel";
 import {
   BRANCHES, childrenOf, EFFECT_TEXT, levelPower, lockReason, MAX_RANK, RANK_POWER, rankOf, SkillDef, SKILLS, spentPoints, STACK_NAME,
   synergyPower, talentPoints,
@@ -34,13 +35,23 @@ export class TalentMenu {
   private cls?: ClassKind;
   private state: any;
 
-  constructor(private send: (type: string, msg?: unknown) => void) {
+  constructor(private send: (type: string, msg?: unknown) => void, private preview: (p?: SheetPreview) => void = () => {}) {
     this.el.addEventListener("mouseover", (ev) => {
       const t = (ev.target as HTMLElement).closest("[data-talent]") as HTMLElement | null;
+      const was = this.hover;
       this.hover = t?.dataset.talent ?? "";
+      // the side panel's stats block shows what one more rank would change (passives: health, damage, defense...)
+      if (this.hover !== was) {
+        const def = this.cls && this.hover ? SKILLS[this.cls].find((n) => n.id === this.hover) : undefined;
+        if (def && t!.classList.contains("can")) {
+          const ranks = talentsOf(this.state);
+          ranks[def.id] = (ranks[def.id] ?? 0) + 1;
+          this.preview({ label: `learn ${def.name}${ranks[def.id] > 1 ? ` rank ${ranks[def.id]}` : ""}`, talents: ranks });
+        } else this.preview();
+      }
       if (this.hover && this.hover !== this.shown) this.details(this.hover);
     });
-    this.el.addEventListener("mouseleave", () => { this.hover = ""; });
+    this.el.addEventListener("mouseleave", () => { this.hover = ""; this.preview(); });
     this.el.addEventListener("click", (ev) => {
       const t = (ev.target as HTMLElement).closest("[data-talent]") as HTMLElement | null;
       if (t && t.classList.contains("can")) this.send("learn", t.dataset.talent);
@@ -59,7 +70,8 @@ export class TalentMenu {
     const btn = this.el.querySelector(`[data-talent="${this.hover}"][data-active]`) as HTMLElement | null;
     return btn?.dataset.active;
   }
-  toggle(state: any) { if (this.open) this.el.hidden = true; else { this.el.hidden = false; this.sig = ""; this.refresh(state); } }
+  /** The side panel just showed the Skills tab: draw it now. */
+  reset(state: any) { this.sig = ""; this.refresh(state); }
 
   private stats(): Stats {
     const m = this.state;

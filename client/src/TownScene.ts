@@ -61,6 +61,9 @@ import { talentMult, talentPoints, spentPoints } from "../../shared/talents";
 import { activeSkills, SLOT_COUNT, SLOT_KEYS, skillLearned } from "../../shared/slots";
 import { iconImg } from "./skillIcons";
 import { TalentMenu } from "./talents";
+import { SidePanel, SideTab } from "./sidepanel";
+import { lootFilter, onLootFilter } from "./lootfilter";
+import { passesFilter } from "../../shared/heroSheet";
 import { IdeaBoard } from "./ideas";
 import { PatchNotesPanel } from "./patchnotes";
 import { PartyUI } from "./party";
@@ -287,6 +290,7 @@ export class TownScene extends Phaser.Scene {
   private clearedTimer?: number;
   private gearMenu?: GearMenu;
   private talentMenu?: TalentMenu;
+  private side?: SidePanel;
   private hotbarHtml = "";
   private buffBar?: BuffBar;
   private resBars?: ResourceBars;
@@ -413,8 +417,20 @@ export class TownScene extends Phaser.Scene {
       if (b?.dataset.stat) this.room?.send("stat", b.dataset.stat);
       else if (b?.id === "statreset") this.room?.send("resetstats");
     });
-    this.gearMenu = new GearMenu(this, (type, msg) => this.room?.send(type, msg));
-    const toggleGear = () => this.gearMenu?.toggle(this.entities.get(this.me)?.state);
+    // Hovering a + shows in the side panel's stats block what that point would change
+    heroEl.addEventListener("mouseover", (ev) => {
+      const k = ((ev.target as HTMLElement).closest("button") as HTMLElement | null)?.dataset.stat as StatKind | undefined;
+      const mine = this.entities.get(this.me)?.state;
+      if (!k || !mine) { this.side?.setPreview(); return; }
+      const pts = { sta: mine.ptSta, str: mine.ptStr, mag: mine.ptMag, dex: mine.ptDex ?? 0 };
+      pts[k]++;
+      this.side?.setPreview({ label: `add a point to ${STAT_NAMES[k]}`, pts });
+    });
+    heroEl.addEventListener("mouseleave", () => this.side?.setPreview());
+    // Character / Inventory / Skills share one side panel with tabs and a live stats block (sidepanel.ts)
+    this.side = new SidePanel((tab) => this.openSide(tab, false), () => this.side?.close());
+    this.gearMenu = new GearMenu(this, (type, msg) => this.room?.send(type, msg), (p) => this.side?.setPreview(p));
+    const toggleGear = () => this.openSide("gear");
     this.input.keyboard!.on("keydown-G", () => { if (!this.chatting()) toggleGear(); });
     // Always reachable with the mouse too (even while typing in chat, in combat or while dead)
     fillIcons(document.getElementById("menubtns")!);
@@ -439,7 +455,7 @@ export class TownScene extends Phaser.Scene {
       this.closeMenus();
       if (!escHadOpen && !typing) this.gameMenu?.show();
     });
-    this.talentMenu = new TalentMenu((type, msg) => this.room?.send(type, msg));
+    this.talentMenu = new TalentMenu((type, msg) => this.room?.send(type, msg), (p) => this.side?.setPreview(p));
     this.input.keyboard!.on("keydown-T", () => { if (!this.chatting()) this.toggleTree(); });
     this.ideaBoard = new IdeaBoard((type, msg) => this.room?.send(type, msg));
     const toggleIdeas = () => { if (!this.ideaBoard!.open) this.closeMenus(); this.ideaBoard!.toggle(); };
@@ -470,6 +486,7 @@ export class TownScene extends Phaser.Scene {
     const url = import.meta.env.DEV ? `${proto}://${location.hostname}:2567` : `${proto}://${location.host}`;
     try {
       this.room = await new Client(url).joinOrCreate("town", this.opts);
+      this.room.send("lootfilter", lootFilter());
     } catch (e: any) {
       const msg = typeof e?.message === "string" && e.message && !/websocket|connect/i.test(e.message) ? e.message : "Could not connect to server.";
       document.getElementById("status")!.textContent = msg;
@@ -638,12 +655,23 @@ export class TownScene extends Phaser.Scene {
         img.once("destroy", () => glow.destroy());
       }
       const rarity = gear ? itemRarity(it.gear) : 0;
-      if (rarity > 0) this.lootGlow(img, it.x, it.y, rarity, it.y);
+      if (gear) img.setData("gear", it.gear);
+      // gear the loot filter skips is drawn faded and without its glow
+      const skip = gear && !passesFilter(lootFilter(), this.opts.cls, it.gear);
+      if (skip) img.setAlpha(0.4);
+      else if (rarity > 0) this.lootGlow(img, it.x, it.y, rarity, it.y);
       // Gentle bob so loot catches the eye
       this.tweens.add({ targets: img, y: it.y - 2, duration: 500, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
       this.items.set(id, img);
     });
     items.onRemove((_it: any, id: string) => { this.items.get(id)?.destroy(); this.items.delete(id); });
+    onLootFilter("town", () => {
+      this.room?.send("lootfilter", lootFilter());
+      for (const img of this.items.values()) {
+        const g = img.getData("gear");
+        if (g) img.setAlpha(passesFilter(lootFilter(), this.opts.cls, g) ? 1 : 0.4);
+      }
+    });
     // Equipping an item the hero isn't strong enough for yet (item level / stat requirements, shared/gear.ts)
     this.room.onMessage("gearno", ({ text }) => {
       const me = this.entities.get(this.me);
@@ -1833,25 +1861,37 @@ export class TownScene extends Phaser.Scene {
 
   // ---- Hero menu (stats + powers) -----------------------------------------
 
-  private toggleHeroMenu() {
-    const el = document.getElementById("hero")!;
-    if (el.hidden) { this.closeMenus(); this.showHeroMenu(this.levelFrom); } else el.hidden = true;
-    this.levelFrom = undefined;
-    document.getElementById("lvlnote")!.hidden = true;
-  }
+  private toggleHeroMenu() { this.openSide("hero"); }
 
-  /** Skill tree on top of everything else (only one menu open at a time). */
-  private toggleTree() {
-    if (!this.talentMenu?.open) this.closeMenus();
-    this.talentMenu?.toggle(this.entities.get(this.me)?.state);
+  /** Skill tree tab of the side panel. */
+  private toggleTree() { this.openSide("tree"); }
+
+  /**
+   * Opens the side panel on a tab (C, G, T, the HUD buttons or the panel's own tabs). The key of the tab already
+   * shown closes the panel (`toggle`); another key switches tab. Other menus close when the panel opens.
+   */
+  private openSide(tab: SideTab, toggle = true) {
+    const side = this.side;
+    if (!side) return;
+    if (side.open && side.tab === tab) { if (toggle) side.close(); return; }
+    if (!side.open) this.closeMenus();
+    side.show(tab);
+    const mine = this.entities.get(this.me)?.state;
+    if (tab === "hero") {
+      this.heroSig = "";
+      this.showHeroMenu(this.levelFrom);
+      this.levelFrom = undefined;
+      document.getElementById("lvlnote")!.hidden = true;
+    } else if (tab === "gear") this.gearMenu?.reset(mine);
+    else this.talentMenu?.reset(mine);
+    side.refresh(mine);
   }
 
   private closeMenus() {
-    for (const id of ["hero", "tree"]) document.getElementById(id)!.hidden = true;
+    this.side?.close();
     this.closeSlotPicker();
     this.npcs?.close();
     this.npcs?.log.toggle(false);
-    this.gearMenu?.close();
     this.ideaBoard?.close();
     this.party?.close();
     this.trade?.close();
@@ -2629,6 +2669,7 @@ export class TownScene extends Phaser.Scene {
       this.gearMenu?.refresh(mine);
       this.talentMenu?.refresh(mine);
       if (!document.getElementById("hero")!.hidden) this.showHeroMenu(this.heroFrom);
+      this.side?.refresh(mine);
       const safe = isSafeZone(meEnt.sprite.x, meEnt.sprite.y) ? `${icon("shield")}Safe zone · ` : "";
       const next = xpForLevel(mine.level + 1), cur = xpForLevel(mine.level);
       const cls0 = mine.cls as ClassKind;
