@@ -19,6 +19,8 @@ export interface Shop {
   stock: ShopEntry[];
   /** Gear slots this shop buys from the player's bag (none = buys nothing) */
   buys?: string[];
+  /** This shop mends worn gear (shared/upkeep.ts) */
+  repairs?: boolean;
 }
 
 export const GEAR_PRICE = [0, 60, 180, 450];
@@ -50,6 +52,7 @@ export const SHOPS: Record<string, Shop> = {
     greeting: "Steel for every hand, friend. Have a look, or show me what you found out there.",
     stock: weapons(["w_bronze", "w_ash", "w_frost", "w_long", "w_dragon", "w_sky", "ws_arming", "wx_hand", "wb_hunt", "wf_oak", "r_sling", "r_knives", "r_crossbow"]),
     buys: ["weapon", "ranged"],
+    repairs: true,
   },
   witch: {
     greeting: "Fresh from the still, darling. Red for your blood, blue for your magic. Try not to stare.",

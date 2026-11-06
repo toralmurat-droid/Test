@@ -11,6 +11,7 @@ import { canPay, MANA, manaRegen, maxManaFor, skillCost, unpackMana } from "../.
 import { nextSize, potionAmount, PotionKind, potionName, POTION_SIZES, total, unpackPotions } from "../../shared/potions";
 import { GROUND, areaAt, isSafeZone } from "../../shared/map";
 import { heroPoise, meleeReach, mobBody } from "../../shared/combat";
+import { respecCost, wearMult } from "../../shared/upkeep";
 import { moveStep } from "../../shared/movement";
 import { SPAWN_ZONES, zoneAt } from "../../shared/spawns";
 import { musicCombat, setMusicZone } from "./music";
@@ -1961,7 +1962,7 @@ export class TownScene extends Phaser.Scene {
     const st = { sta: mine.sta, str: mine.str, mag: mine.mag, dex: mine.dex ?? 0 }; // includes gear bonuses
     const free = statPoints(lvl) - (mine.ptSta + mine.ptStr + mine.ptMag + (mine.ptDex ?? 0));
     // Rebuild only when something shown changed (called every frame while open)
-    const sig = [lvl, mine.xp, Math.ceil(mine.hp), mine.maxHp, st.sta, st.str, st.mag, st.dex, free, mine.kills, mine.gold, from].join("|");
+    const sig = [lvl, mine.xp, Math.ceil(mine.hp), mine.maxHp, st.sta, st.str, st.mag, st.dex, free, mine.kills, mine.gold, mine.wear, from].join("|");
     const el = document.getElementById("hero")!;
     if (!el.hidden && sig === this.heroSig) return;
     this.heroSig = sig;
@@ -1998,8 +1999,11 @@ export class TownScene extends Phaser.Scene {
       ["Initiative", `${heroPoise(cls, lvl)} · dizzy at 0`],
       ["Move speed", `${speed}`],
       ["Kills · Gold", `${mine.kills} · ${mine.gold}`],
+      ["Gear condition", `${100 - (mine.wear ?? 0)}%${mine.wear ? ` · gear stats −${Math.round((1 - wearMult(mine.wear)) * 100)}% · repair at Brann's smithy` : ""}`],
     ];
     document.getElementById("herochar")!.innerHTML = rows.map(([k, v]) => `<span>${k}</span><b>${v}</b>`).join("");
+    const rc = respecCost(lvl), rcEl = document.getElementById("statresetcost");
+    if (rcEl) rcEl.textContent = rc ? `${rc} gold` : "free (up to level 5)";
     el.hidden = false;
   }
 

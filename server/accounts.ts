@@ -34,6 +34,8 @@ export interface HeroSave {
   portals?: string[];
   /** Bounty board hunt in progress (shared/bounty.ts) and how many this hero has finished. */
   bounty?: BountyState; bountyDone?: number;
+  /** Gear wear 0-100 (shared/upkeep.ts). */
+  wear?: number;
 }
 
 interface Account {

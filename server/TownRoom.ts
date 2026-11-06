@@ -63,6 +63,7 @@ import { Asker, boardFor, submit, tick as ideaTick, vote as ideaVote } from "../
 import { hashAddr, ideaLog, saveIdeas } from "./ideaStore";
 import { dropLive, LiveState, rememberLive, takeLive } from "./handoff";
 import { MobView } from "./mobView";
+import { repairCost, respecCost, WEAR, wearMult } from "../shared/upkeep";
 import { ASK_BURST, ASK_PER_SEC, Bucket, CHAT_BURST, CHAT_PER_SEC, clientIp, isLocalIp, MSG_BURST, MSG_KICK_AFTER, MSG_KICK_WINDOW_MS, MSG_PER_SEC } from "./ratelimit";
 
 export class Player extends Schema {
@@ -154,6 +155,7 @@ export class Player extends Schema {
   @type("number") crown = 0;
   // The Hide Rite (CHAINS[5], the Mawdeep Warrens' beast-folk): packed the same way
   @type("number") beast = 0;
+  @type("number") wear = 0; // gear wear 0-100 (shared/upkeep.ts): each death adds some, the smith repairs it for gold
   linkLock = ""; // the Mawdeep rope/stair a hero just came out of (shared/dungeon.ts LINKS): not taken again until they step off it
   nextSummon = 0; // when the server may bring back this player's quest fused blob (QuestStep.summon)
   // Skill slots on keys 1..0 (shared/slots.ts): a skill id or "" (empty). Empty until the player assigns them.
@@ -639,6 +641,7 @@ export class TownRoom extends Room<TownState> {
     });
     this.onMessage("buy", (client, msg: { i: number }) => this.shopBuy(client, msg?.i));
     this.onMessage("sell", (client, msg: { i: number }) => this.shopSell(client, msg?.i));
+    this.onMessage("repair", (client) => this.repairGear(client));
     // Trading between players and the account stash (shared/trade.ts)
     this.onMessage("trade", (client, msg: { id?: string; name?: string }) => { if (this.allow("ask", client)) this.tradeAsk(client.sessionId, msg); });
     this.onMessage("tradeyes", (client, msg: { from?: string }) => this.tradeAnswer(client.sessionId, msg?.from, true));
@@ -902,7 +905,7 @@ export class TownRoom extends Room<TownState> {
         return [[a, q.questId], [b, q.questStage], [n, q.questCount], [ch.verKey, ch.version]];
       })),
       portals: [...p.portals],
-      bounty: p.bounty, bountyDone: p.bountyDone,
+      bounty: p.bounty, bountyDone: p.bountyDone, wear: p.wear,
     };
   }
 
@@ -929,6 +932,7 @@ export class TownRoom extends Room<TownState> {
     });
     for (const id of cleanPortals(s.portals)) p.portals.add(id);
     p.bountyDone = Math.max(0, Math.floor(num(s.bountyDone)));
+    p.wear = Math.min(WEAR.max, Math.max(0, Math.round(num(s.wear))));
     p.bounty = cleanBounty(s.bounty);
     const sv = s as unknown as Record<string, unknown>;
     // Saves from before the guided first quest count it as done
@@ -3190,8 +3194,18 @@ export class TownRoom extends Room<TownState> {
   private resetStats(id: string) {
     const p = this.state.players.get(id);
     if (!p || p.dead || Date.now() - p.lastHurt < 5000) return;
+    if (!(p.ptSta || p.ptStr || p.ptMag || p.ptDex)) return;
+    if (!this.payReset(id, p, "stat points")) return;
     p.ptSta = p.ptStr = p.ptMag = p.ptDex = 0;
     this.applyStats(p);
+  }
+
+  /** Takes the reset fee (shared/upkeep.ts respecCost); false with a note when the hero can't pay. */
+  private payReset(id: string, p: Player, what: string): boolean {
+    const cost = respecCost(p.level);
+    if (p.gold < cost) { this.note(id, `Resetting your ${what} costs ${cost} gold at level ${p.level}. You have ${p.gold}.`); return false; }
+    if (cost) { p.gold -= cost; this.note(id, `Your ${what} are reset (${cost} gold).`); }
+    return true;
   }
 
   // ---- Skill tree ---------------------------------------------------------
@@ -3305,6 +3319,8 @@ export class TownRoom extends Room<TownState> {
   private respec(id: string) {
     const p = this.state.players.get(id);
     if (!p || p.dead || Date.now() - p.lastHurt < 5000) return;
+    if (!p.talents.size) return;
+    if (!this.payReset(id, p, "skill points")) return;
     p.talents.clear();
     for (let i = 0; i < SLOT_COUNT; i++) p.slots.setAt(i, "");
     this.applyStats(p);
@@ -3654,6 +3670,20 @@ export class TownRoom extends Room<TownState> {
   private shopNear(p: Player) {
     const n = npcNear(p.x, p.y, TALK_RANGE * 1.5);
     return n?.shop ? SHOPS[n.shop] : undefined;
+  }
+
+  /** The smith mends all worn gear for gold (shared/upkeep.ts repairCost). */
+  private repairGear(client: Client) {
+    const p = this.state.players.get(client.sessionId);
+    const shop = p && !p.dead ? this.shopNear(p) : undefined;
+    if (!p || !shop?.repairs) return;
+    const cost = repairCost(GEAR_SLOTS.map((s) => p[s]), p.wear);
+    if (!cost) return client.send("shop", { ok: false, text: "Your gear is in good shape" });
+    if (p.gold < cost) return client.send("shop", { ok: false, text: `Repairs cost ${cost} gold` });
+    p.gold -= cost;
+    p.wear = 0;
+    this.applyStats(p);
+    client.send("shop", { ok: true, text: `Repaired for ${cost} gold` });
   }
 
   private shopBuy(client: Client, i: unknown) {
@@ -4239,8 +4269,8 @@ export class TownRoom extends Room<TownState> {
   /** Recompute stats and max HP from class + level + equipped gear. */
   private applyStats(p: Player) {
     const st = statsFor(p.cls, { sta: p.ptSta, str: p.ptStr, mag: p.ptMag, dex: p.ptDex });
-    const g = gearStats(p.cls, this.equipped(p));
-    st.sta += g.sta; st.str += g.str; st.mag += g.mag; st.dex += g.dex;
+    const g = gearStats(p.cls, this.equipped(p)), wm = wearMult(p.wear); // worn gear gives less (shared/upkeep.ts)
+    st.sta += Math.round(g.sta * wm); st.str += Math.round(g.str * wm); st.mag += Math.round(g.mag * wm); st.dex += Math.round(g.dex * wm);
     p.sta = st.sta; p.str = st.str; p.mag = st.mag; p.dex = st.dex;
     const newMax = Math.round(maxHpFromStats(p.cls, st, p.level) * talentMult(p.cls, p.talents, "hp"));
     p.hp = Math.min(newMax, p.hp + Math.max(0, newMax - p.maxHp));
@@ -4299,6 +4329,11 @@ export class TownRoom extends Room<TownState> {
     if (t.hp > 0) { afterHit(this.host, opts.from, tid, opts); return false; }
     t.dead = true;
     t.guarding = false;
+    // Dying wears the gear (shared/upkeep.ts): it gives less until the smith repairs it
+    if (t.wear < WEAR.max) {
+      t.wear = Math.min(WEAR.max, t.wear + WEAR.perDeath);
+      this.applyStats(t);
+    }
     this.broadcast("kill", { killer: byName, victim: t.name });
     // The victim gets a "You died - killed by ..." screen until they respawn
     this.clients.find((c) => c.sessionId === tid)?.send("died", { by: byName, ms: RESPAWN_MS });
