@@ -18,7 +18,8 @@ import { routeVia } from "../../shared/dungeon";
 import type { MapMarker } from "./minimap";
 import { QuestLog } from "./questlog";
 import { SHOPS, sellPrice } from "../../shared/shops";
-import { gearDef, gearName, itemLevel, itemText, TIER_NAMES } from "../../shared/gear";
+import { GEAR_SLOTS, GearSlot, gearDef, gearName, itemLevel, itemText, TIER_NAMES } from "../../shared/gear";
+import { repairCost, WEAR, wearMult } from "../../shared/upkeep";
 import { CHAR_GROW, CHAR_SCALE, CHAR_ORIGIN, CharacterName, playCharAnim } from "./artAssets";
 import { iconCanvas, itemColor, rarityLabel } from "./gear";
 import { itemTexture, potionTex } from "./textures";
@@ -31,7 +32,7 @@ import { TEXT_FONT, TITLE_FONT, TEXT_PX, TITLE_PX, WT } from "./pixelfont";
 
 type Me = { x: number; y: number } | undefined;
 /** The local player's synced state (only the fields NPCs care about). */
-type QuestState = (Quester & { gold?: number; potions?: number; cls?: string; bag?: Iterable<string> }) | undefined;
+type QuestState = (Quester & { gold?: number; potions?: number; cls?: string; bag?: Iterable<string>; wear?: number } & Partial<Record<GearSlot, string>>) | undefined;
 
 /**
  * Village NPCs (shared/npcs.ts): sprites by the bonfire, "!"/"?" quest markers, an "E Talk" prompt when close,
@@ -213,7 +214,7 @@ export class NpcLayer {
     const shop = SHOPS[n.shop!];
     const gold = q?.gold ?? 0, potions = q?.potions ?? 0, cls = q?.cls, pots = unpackPotions(potions);
     const bag = [...(q?.bag ?? [])];
-    const key = JSON.stringify([n.id, gold, potions, bag, this.shopMsg, q?.questId, q?.questStage, q?.boneId, q?.boneStage, q?.redId, q?.redStage, q?.tut, q?.crown, q?.beast]);
+    const key = JSON.stringify([n.id, gold, potions, bag, q?.wear, ...GEAR_SLOTS.map((s) => q?.[s]), this.shopMsg, q?.questId, q?.questStage, q?.boneId, q?.boneStage, q?.redId, q?.redStage, q?.tut, q?.crown, q?.beast]);
     if (key === this.stage) return;
     this.stage = key;
     const row = (icon: string, name: string, color: string, desc: string, btn: string, cls2: string, i: number, off: boolean) =>
@@ -236,10 +237,16 @@ export class NpcLayer {
         ? sellable.map(([id, i]) => row(id, gearName(id, cls), itemColor(id), `${rarityLabel(id)}${TIER_NAMES[gearDef(id)!.tier]} · Lv ${itemLevel(id)} · ${itemText(id)}`, `Sell ${sellPrice(id)}${pxIcon("coin")}`, "sh-sell", i, false)).join("")
         : `<p class="sh-empty">No weapons in your bag. Unequip one in the Bag (G) to sell it.</p>`)
       : "";
+    const wear = q?.wear ?? 0, fix = shop.repairs ? repairCost(GEAR_SLOTS.map((s) => q?.[s]), wear) : 0;
+    const repair = shop.repairs
+      ? `<h4>Repairs</h4><div class="sh-row"><span class="sh-info"><b>Your gear: ${100 - wear}% condition</b>` +
+        `<small>${wear ? `Worn gear gives ${Math.round((1 - wearMult(wear)) * 100)}% less of its stats. Each death wears it ${WEAR.perDeath}%.` : "Like new. Each death wears it a little."}</small></span>` +
+        `<button class="sh-repair"${!fix || gold < fix ? " disabled" : ""}>${fix ? `Repair ${fix}${pxIcon("coin")}` : "Nothing to mend"}</button></div>`
+      : "";
     const quest = questDialog(n.id, q);
     this.dialog.innerHTML = this.head(n) + `<p>${shop.greeting}</p>` +
       `<div class="sh-gold">Your gold: <b>${gold}${pxIcon("coin")}</b> ${this.shopMsg}</div>` +
-      `<h4>For sale</h4><div class="sh-list">${buy}</div>${sell}` +
+      `<h4>For sale</h4><div class="sh-list">${buy}</div>${sell}${repair}` +
       `<div class="nd-btns">${quest ? `<button class="nd-talk">Talk</button>` : ""}<button class="nd-bye">Goodbye <kbd>E</kbd></button></div>`;
     this.dialog.classList.add("shop");
     const talk = this.dialog.querySelector<HTMLButtonElement>(".nd-talk");
@@ -251,6 +258,8 @@ export class NpcLayer {
     for (const b of this.dialog.querySelectorAll<HTMLButtonElement>(".sh-buy, .sh-sell")) {
       b.onclick = () => { this.send(b.classList.contains("sh-buy") ? "buy" : "sell", { i: Number(b.dataset.i) }); b.disabled = true; };
     }
+    const fixBtn = this.dialog.querySelector<HTMLButtonElement>(".sh-repair");
+    if (fixBtn) fixBtn.onclick = () => { this.send("repair", {}); fixBtn.disabled = true; };
     this.dialog.querySelector<HTMLButtonElement>(".nd-bye")!.onclick = () => this.close();
   }
 

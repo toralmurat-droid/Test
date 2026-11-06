@@ -1,3 +1,4 @@
+import { respecCost } from "../../shared/upkeep";
 import { ClassKind, CLASSES } from "../../shared/classes";
 import { icon as pxIcon } from "./pixelicons";
 import { SLOT_KEYS } from "../../shared/slots";
@@ -92,6 +93,8 @@ export class TalentMenu {
     if (sig === this.sig) return;
     this.sig = sig;
     const free = talentPoints(state.level) - spentPoints(cls, ranks);
+    const rc = respecCost(state.level), rcEl = document.getElementById("treeresetcost");
+    if (rcEl) rcEl.textContent = rc ? `${rc} gold` : "free (up to level 5)";
     document.getElementById("treetitle")!.textContent = `${CLASSES[cls].name} skills`;
     document.getElementById("treepoints")!.innerHTML = (free > 0
       ? `<b class="free">${free} skill point${free > 1 ? "s" : ""} to spend</b>`

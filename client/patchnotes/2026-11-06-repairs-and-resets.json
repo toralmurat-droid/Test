@@ -1,0 +1,9 @@
+{
+  "date": "2026-11-06",
+  "title": "Gear repairs and paid resets",
+  "changes": [
+    "Each death wears your gear a little: worn gear gives less of its stats (up to half at 0% condition).",
+    "Brann the smith repairs all your gear for gold. The hero panel (C) shows your gear condition.",
+    "Resetting stat points or the skill tree is still free up to level 5, then costs 15 gold per hero level."
+  ]
+}
