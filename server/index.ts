@@ -10,6 +10,7 @@ import { TownRoom, announceUpgrade } from "./TownRoom";
 import { ideaLog, publicLog } from "./ideaStore";
 import { allAccounts, peek } from "./accounts";
 import { writeHandoff } from "./handoff";
+import { clientIp } from "./ratelimit";
 
 const PORT = Number(process.env.PORT ?? 2567);
 const app = express();
@@ -94,8 +95,8 @@ app.use("/account", (req, res, next) => {
   if (req.method === "OPTIONS") { res.sendStatus(204); return; }
   next();
 });
-app.post("/account", express.json({ limit: "2kb" }), (req, res) => {
-  try { res.json(peek(req.body?.name, req.body?.password)); }
+app.post("/account", express.json({ limit: "2kb" }), async (req, res) => {
+  try { res.json(await peek(req.body?.name, req.body?.password, clientIp(req))); }
   catch (e: any) { res.status(401).json({ error: String(e?.message ?? e) }); }
 });
 

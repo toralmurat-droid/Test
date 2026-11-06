@@ -40,7 +40,7 @@ import { moveStep } from "../shared/movement";
 import { SLOTS_BY_ZONE, WORK_SLOTS } from "../shared/siege";
 import { DAY_CYCLE_MS, dayFrac, isUndeadNight, NIGHT_BOSSES, UNDEAD_NIGHT } from "../shared/daynight";
 import { AMBUSH, BANDIT_AI, BANDIT_ROLES, CAMP_POSTS, CHIEF, clearWalk, findPath, postPos, roleOf } from "../shared/bandits";
-import { flush, HeroSave, loadHero, loadStash, login, markChest, openedChests, resetChests, saveHero, saveStash } from "./accounts";
+import { flush, flushSync, HeroSave, loadHero, loadStash, login, markChest, openedChests, resetChests, saveHero, saveStash } from "./accounts";
 import { offerFrom, Offer, settle, STASH, STASH_GOLD_MAX, STASH_RANGE, STASH_SIZE, TRADE } from "../shared/trade";
 import { arrivalOf, cleanPortals, PORTAL_COMBAT_MS, PORTAL_RANGE, PORTAL_WAKE_RANGE, portalById, PORTALS } from "../shared/portals";
 import { rollBoon, shrineXp, SHRINE, SHRINE_COOLDOWN_MS, SHRINE_RANGE, WIND_BLESSING, WIND_BLESSING_ID } from "../shared/shrine";
@@ -63,6 +63,7 @@ import { Asker, boardFor, submit, tick as ideaTick, vote as ideaVote } from "../
 import { hashAddr, ideaLog, saveIdeas } from "./ideaStore";
 import { dropLive, LiveState, rememberLive, takeLive } from "./handoff";
 import { MobView } from "./mobView";
+import { ASK_BURST, ASK_PER_SEC, Bucket, CHAT_BURST, CHAT_PER_SEC, clientIp, isLocalIp, MSG_BURST, MSG_KICK_AFTER, MSG_KICK_WINDOW_MS, MSG_PER_SEC } from "./ratelimit";
 
 export class Player extends Schema {
   @type("string") name = "";
@@ -557,6 +558,7 @@ export class TownRoom extends Room<TownState> {
 
   onCreate() {
     liveRooms.add(this);
+    this.limitMessages();
     this.setState(new TownState());
     // Monsters near each hero go out just before every state patch, so both halves of an update arrive together
     this.onMessage("mvready", (c) => this.mobView.ready(c));
@@ -638,7 +640,7 @@ export class TownRoom extends Room<TownState> {
     this.onMessage("buy", (client, msg: { i: number }) => this.shopBuy(client, msg?.i));
     this.onMessage("sell", (client, msg: { i: number }) => this.shopSell(client, msg?.i));
     // Trading between players and the account stash (shared/trade.ts)
-    this.onMessage("trade", (client, msg: { id?: string; name?: string }) => this.tradeAsk(client.sessionId, msg));
+    this.onMessage("trade", (client, msg: { id?: string; name?: string }) => { if (this.allow("ask", client)) this.tradeAsk(client.sessionId, msg); });
     this.onMessage("tradeyes", (client, msg: { from?: string }) => this.tradeAnswer(client.sessionId, msg?.from, true));
     this.onMessage("tradeno", (client, msg: { from?: string }) => this.tradeAnswer(client.sessionId, msg?.from, false));
     this.onMessage("tradeoffer", (client, msg: { items?: unknown; gold?: unknown }) => this.tradeOffer(client.sessionId, msg));
@@ -659,14 +661,14 @@ export class TownRoom extends Room<TownState> {
     // in the area-of-interest change), so the client's "connection died" check needs something to hear.
     this.clock.setInterval(() => this.broadcast("hb", 0), 4000);
 
-    this.onMessage("pinvite", (client, msg: { id?: string; name?: string }) => this.partyInvite(client.sessionId, msg));
+    this.onMessage("pinvite", (client, msg: { id?: string; name?: string }) => { if (this.allow("ask", client)) this.partyInvite(client.sessionId, msg); });
     this.onMessage("paccept", (client, msg: { from?: string }) => this.partyAnswer(client.sessionId, msg?.from, true));
     this.onMessage("pdecline", (client, msg: { from?: string }) => this.partyAnswer(client.sessionId, msg?.from, false));
     this.onMessage("pleave", (client) => this.partyLeave(client.sessionId));
 
     this.onMessage("chat", (client, text: string) => {
       const p = this.state.players.get(client.sessionId);
-      if (!p || typeof text !== "string") return;
+      if (!p || typeof text !== "string" || !this.allow("chat", client)) return;
       const idea = text.trim().match(/^\/idea\s+([\s\S]+)$/i);
       if (idea) return this.submitIdea(client, idea[1]);
       const v = text.trim().match(/^\/(up|down|unvote)\s+#?(\d+)$/i);
@@ -687,20 +689,52 @@ export class TownRoom extends Room<TownState> {
     });
   }
 
+  // ---- Anti-abuse (server/ratelimit.ts) -------------------------------------
+  private msgBuckets = new Map<string, { b: Bucket; over: number; since: number }>();
+  private chatBuckets = new Map<string, Bucket>();
+  private askBuckets = new Map<string, Bucket>();
+
+  /**
+   * Every message handler registered after this goes through a per-client budget: past it, messages are dropped,
+   * and a client that keeps flooding is disconnected. Colyseus 0.15 has no built-in limit (maxMessagesPerSecond is 0.16+).
+   */
+  private limitMessages() {
+    const on = this.onMessage.bind(this) as (type: string, cb: (c: Client, m: any) => void) => void;
+    (this as any).onMessage = (type: string, cb: (c: Client, m: any) => void) => on(type, (c: Client, m: any) => {
+      let e = this.msgBuckets.get(c.sessionId);
+      const now = Date.now();
+      if (!e) this.msgBuckets.set(c.sessionId, (e = { b: new Bucket(MSG_PER_SEC, MSG_BURST), over: 0, since: now }));
+      if (!e.b.take(now)) {
+        if (now - e.since > MSG_KICK_WINDOW_MS) { e.over = 0; e.since = now; }
+        if (++e.over === MSG_KICK_AFTER) { console.warn(`Flood: ${c.sessionId} disconnected`); c.leave(4429); }
+        return;
+      }
+      cb(c, m);
+    });
+  }
+
+  /** Chat lines, invites: a smaller budget per client (each one reaches other players' screens). */
+  private allow(kind: "chat" | "ask", c: Client) {
+    const map = kind === "chat" ? this.chatBuckets : this.askBuckets;
+    let b = map.get(c.sessionId);
+    if (!b) map.set(c.sessionId, (b = kind === "chat" ? new Bucket(CHAT_PER_SEC, CHAT_BURST) : new Bucket(ASK_PER_SEC, ASK_BURST)));
+    if (b.take()) return true;
+    if (kind === "chat") c.send("chat", { id: "", name: "Oakvale", text: "You are talking too fast. Wait a moment." });
+    return false;
+  }
+
   /** Remembers a hashed network address per player, so one person can't suggest or vote twice with alt heroes. */
   private addrs = new Map<string, string | undefined>();
 
   /** Name + password check (server/accounts.ts); a new name creates the account. Also notes the network address for ideas. */
-  onAuth(client: Client, options: { name?: string; password?: string }, request?: IncomingMessage) {
-    const name = login(options?.name, options?.password);
+  async onAuth(client: Client, options: { name?: string; password?: string }, request?: IncomingMessage) {
+    const ip = clientIp(request);
+    const name = await login(options?.name, options?.password, ip);
     let online = false;
     this.state.players.forEach((o) => { if (o.name.toLowerCase() === name.toLowerCase()) online = true; });
     if (online) throw new Error("This hero is already playing");
-    const fwd = process.env.TRUST_PROXY ? String(request?.headers["x-forwarded-for"] ?? "").split(",")[0].trim() : "";
-    const ip = fwd || request?.socket?.remoteAddress || "";
     // Local addresses are skipped so several tabs on one computer can still test ideas and votes
-    const local = !ip || ip === "::1" || ip.startsWith("127.") || ip.startsWith("::ffff:127.");
-    this.addrs.set(client.sessionId, local ? undefined : hashAddr(ip));
+    this.addrs.set(client.sessionId, isLocalIp(ip) ? undefined : hashAddr(ip));
     return { name };
   }
 
@@ -795,12 +829,15 @@ export class TownRoom extends Room<TownState> {
     this.state.players.delete(client.sessionId);
     this.unsummon(client.sessionId);
     this.addrs.delete(client.sessionId);
+    this.msgBuckets.delete(client.sessionId);
+    this.chatBuckets.delete(client.sessionId);
+    this.askBuckets.delete(client.sessionId);
   }
 
   onDispose() {
     liveRooms.delete(this);
     this.state.players.forEach((p) => saveHero(p.name, p.cls, this.snapshot(p)));
-    flush();
+    flushSync();
   }
 
   // ---- Seamless updates (server/handoff.ts) --------------------------------
@@ -3739,7 +3776,7 @@ export class TownRoom extends Room<TownState> {
     setBag(pa, r.a.bag); pa.gold = r.a.gold;
     setBag(pb, r.b.bag); pb.gold = r.b.gold;
     saveHero(pa.name, pa.cls, this.snapshot(pa)); saveHero(pb.name, pb.cls, this.snapshot(pb));
-    flush(); // a finished trade is on disk at once
+    void flush(); // a finished trade is on disk at once
     this.trades.delete(t.a); this.trades.delete(t.b);
     console.log(`Trade ${pa.name} <-> ${pb.name}: [${t.offer[t.a].items}] ${t.offer[t.a].gold}g for [${t.offer[t.b].items}] ${t.offer[t.b].gold}g`);
     for (const [me, other] of [[t.a, pb], [t.b, pa]] as const) this.clients.find((c) => c.sessionId === me)?.send("tradeend", { ok: true, text: `Trade with ${other.name} done!` });
