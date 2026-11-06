@@ -1,5 +1,6 @@
 {
   "date": "2026-11-06",
+  "pr": 272,
   "title": "One pixel look",
   "changes": [
     "Every menu, button, quest note, chat line and name over a head now uses one chunky pixel font, in the style of the zone titles.",
