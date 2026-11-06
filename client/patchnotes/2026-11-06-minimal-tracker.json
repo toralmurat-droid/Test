@@ -1,5 +1,6 @@
 {
   "date": "2026-11-06",
+  "pr": 275,
   "title": "Cleaner quest tracker",
   "changes": [
     "The quest tracker on screen now only shows the quest, your current goal and which way to go. Tips are still in the quest log (J).",
