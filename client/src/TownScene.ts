@@ -1,4 +1,6 @@
 import Phaser from "phaser";
+import { MobFeed } from "./mobFeed";
+import type { MobViewMsg } from "../../shared/mobView";
 import { quake } from "./camfx";
 import { chargeIcon } from "./chargeIcon";
 import { leaving, noteBuild, reconnectSoon, returnToStart, takeCarried, upgradeAnnounced } from "./reconnect";
@@ -226,6 +228,8 @@ const CAST_REPEAT_MS = 90;
 
 export class TownScene extends Phaser.Scene {
   private room!: Room;
+  /** The monsters near the hero (the server only sends those), see mobFeed.ts. */
+  private mobs = new MobFeed();
   private me = "";
   private entities = new Map<string, Entity>();
   private keys!: Record<string, Phaser.Input.Keyboard.Key>;
@@ -570,7 +574,14 @@ export class TownScene extends Phaser.Scene {
     });
     players.onRemove((_p: any, id: string) => this.removeEntity(id));
 
-    const mobs = (this.room.state as any).mobs;
+    // Monsters come in their own message (only those near the hero), just before the state patch of the same update
+    const mobs = (this.mobs = new MobFeed()); // fresh each join: the server starts over too
+    let mobSeq = -1;
+    this.room.onMessage("mv", (msg: MobViewMsg) => {
+      if (patchSeq === mobSeq) patchSeq++; // no state patch since the last one: this is a new update all the same
+      mobSeq = patchSeq;
+      mobs.apply(msg);
+    });
     mobs.onAdd((m: any, id: string) => {
       this.addEntity(id, m, true);
       m.onChange(() => {
@@ -588,6 +599,7 @@ export class TownScene extends Phaser.Scene {
       });
     });
     mobs.onRemove((_m: any, id: string) => this.removeEntity(id));
+    this.room.send("mvready");
 
     const shots = (this.room.state as any).projectiles;
     shots.onAdd((s: any, id: string) => {
@@ -2599,7 +2611,7 @@ export class TownScene extends Phaser.Scene {
       if (now >= this.guardsAt) {
         this.guardsAt = now + 250;
         const guards = this.guards; guards.clear();
-        (this.room.state as any).mobs.forEach((m: any) => { if (m.guard && !m.dead) guards.set(m.guard, (guards.get(m.guard) ?? 0) + 1); });
+        this.mobs.forEach((m: any) => { if (m.guard && !m.dead) guards.set(m.guard, (guards.get(m.guard) ?? 0) + 1); });
       }
       const guards = this.guards;
       this.chests.update(meEnt && !meEnt.state.dead ? meEnt.sprite : undefined, !!this.npcs?.isOpen, meEnt?.state, (cid) => guards.get(cid) ?? 0);

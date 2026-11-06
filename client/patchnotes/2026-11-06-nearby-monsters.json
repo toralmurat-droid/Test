@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-06",
+  "title": "Lighter connection",
+  "changes": [
+    "Your game now only receives the monsters around you instead of every monster in the world, so it loads faster and uses about four times less internet."
+  ]
+}
