@@ -1,0 +1,36 @@
+# Every PR into the default branch must typecheck, pass the tests, build, and boot.
+# auto-merge.yml waits for this check: a PR that fails it is never merged (nothing reaches the live game).
+name: CI
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, ready_for_review]
+    branches: [claude/relaxed-wozniak-cjs85z]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install
+        run: npm ci --no-audit --no-fund
+      - name: Unit tests
+        run: npm test
+      - name: Typecheck and build (same as the Dockerfile)
+        run: npm run build
+      - name: Smoke test (the built server boots and a hero can log in)
+        run: node tools/smoke.mjs
