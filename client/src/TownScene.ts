@@ -4,7 +4,7 @@ import type { MobViewMsg } from "../../shared/mobView";
 import { quake } from "./camfx";
 import { chargeIcon } from "./chargeIcon";
 import { leaving, noteBuild, reconnectSoon, returnToStart, takeCarried, upgradeAnnounced } from "./reconnect";
-import { Client, Room } from "colyseus.js";
+import { Client, getStateCallbacks, Room } from "colyseus.js";
 import { BOSS, ELITE, InputState, MERGE, MOBS, type MobKind, MAP_H, MAP_W, regenFromStamina, TICK_RATE, TILE } from "../../shared/constants";
 import { CLASSES, ClassKind, ENERGY, MAX_LEVEL, xpForLevel } from "../../shared/classes";
 import { canPay, MANA, manaRegen, maxManaFor, skillCost, unpackMana } from "../../shared/mana";
@@ -512,7 +512,9 @@ export class TownScene extends Phaser.Scene {
       if (d.prop === "sm_anvil") this.details?.addLight(d.x * TILE, d.y * TILE, 0xff6a2a, 0.35, 0.3, 0.1, ANVIL_TOP, 2);
     }
     this.villagers = new Villagers(this); // townsfolk idling on the square
-    this.watch = new WatchLayer(this, (this.room.state as any).watch); // watchmen at the gates
+    // Colyseus 0.16: change callbacks go through the state callback proxy (the state itself only holds data)
+    const $ = getStateCallbacks(this.room) as (v: any) => any;
+    this.watch = new WatchLayer(this, $(this.room.state).watch); // watchmen at the gates
     this.torches = new GateTorches(this); // torches at the gates, lit by the watch at dusk
     this.watch.torches = this.torches;
     this.room.onMessage("quest", (msg) => this.npcs?.onQuest(msg));
@@ -579,10 +581,10 @@ export class TownScene extends Phaser.Scene {
     this.dial = new DayDial(document.getElementById("daydial") as HTMLCanvasElement);
 
     this.room.onStateChange((st: any) => { patchSeq++; this.dungeon?.setDoors(st.doors ?? ""); });
-    const players = (this.room.state as any).players;
+    const players = $(this.room.state).players;
     players.onAdd((p: any, id: string) => {
       this.addEntity(id, p);
-      p.onChange(() => {
+      $(p).onChange(() => {
         const e = this.entities.get(id);
         if (!e) return;
         e.tx = p.x; e.ty = p.y;
@@ -620,14 +622,14 @@ export class TownScene extends Phaser.Scene {
     mobs.onRemove((_m: any, id: string) => this.removeEntity(id));
     this.room.send("mvready");
 
-    const shots = (this.room.state as any).projectiles;
+    const shots = $(this.room.state).projectiles;
     shots.onAdd((s: any, id: string) => {
       const size = s.size || 1;
       // Every kind has its own look, trail and impact in skillfx.ts; a plain fireball is the fallback
       const g = this.fx.addShot(id, s) ?? this.add.circle(s.x, s.y, 2.5 * size, 0xff9f1c).setStrokeStyle(1, 0xffe066).setDepth(9000);
       const shot = { g, tx: s.x, ty: s.y, at: this.time.now, dx: s.vx ?? 0, dy: s.vy ?? 0, spd: 0 };
       this.shots.set(id, shot);
-      s.onChange(() => {
+      $(s).onChange(() => {
         // Learn the flight speed from the server updates so the shot can glide between them (see update)
         const now = this.time.now, gap = now - shot.at;
         if (gap > 5) {
@@ -639,11 +641,11 @@ export class TownScene extends Phaser.Scene {
     });
     shots.onRemove((_s: any, id: string) => { this.shots.get(id)?.g.destroy(); this.shots.delete(id); this.fx.removeShot(id); });
     // Skill ground effects (shared/skills.ts fields)
-    const fields = (this.room.state as any).fields;
+    const fields = $(this.room.state).fields;
     fields?.onAdd((f: any, id: string) => this.fx.addField(id, f));
     fields?.onRemove((_f: any, id: string) => this.fx.removeField(id));
 
-    const items = (this.room.state as any).items;
+    const items = $(this.room.state).items;
     items.onAdd((it: any, id: string) => {
       if (it.kind === "quest" && it.owner !== this.room.sessionId) return; // someone else's quest drop
       const gear = it.kind === "gear" && gearDef(it.gear);

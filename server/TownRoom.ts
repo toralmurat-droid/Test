@@ -1,5 +1,4 @@
-import type { IncomingMessage } from "node:http";
-import { Client, Room } from "colyseus";
+import { type AuthContext, Client, Room } from "colyseus";
 import { ArraySchema, MapSchema, Schema, type } from "@colyseus/schema";
 import {
   AGGRO, aggroLevelFactor, BLOB_AI, BONES, DEMON, BROOD, Dir, FACTION, FEUD, MERGE, MobDef, MOTHER, SKELETON_AI, HIT_RADIUS, mobScale, regionMobLevel, regionSpecialLevel, InputState, MOB_ATTACK_RANGE, MOBS, MobKind, rollSkeletonWeapon, SKELETON_BOW, SKELETON_WEAPONS, SkeletonWeapon, REGEN_DELAY_MS, REGEN_RAMP_MS, regenFromStamina, SAFE_REGEN_MULT,
@@ -730,8 +729,8 @@ export class TownRoom extends Room<TownState> {
   private addrs = new Map<string, string | undefined>();
 
   /** Name + password check (server/accounts.ts); a new name creates the account. Also notes the network address for ideas. */
-  async onAuth(client: Client, options: { name?: string; password?: string }, request?: IncomingMessage) {
-    const ip = clientIp(request);
+  async onAuth(client: Client, options: { name?: string; password?: string }, context: AuthContext) {
+    const ip = clientIp(context?.req ?? { headers: context?.headers ?? {}, socket: { remoteAddress: String(context?.ip ?? "") } });
     const name = await login(options?.name, options?.password, ip);
     let online = false;
     this.state.players.forEach((o) => { if (o.name.toLowerCase() === name.toLowerCase()) online = true; });
@@ -3245,7 +3244,7 @@ export class TownRoom extends Room<TownState> {
       this.questDo(id, "learn");
       // A new active goes on the first free key
       const free = p.slots.toArray().indexOf("");
-      if (free >= 0) p.slots.setAt(free, tid);
+      if (free >= 0) p.slots[free] = tid;
     }
     this.applyStats(p);
   }
@@ -3311,8 +3310,8 @@ export class TownRoom extends Room<TownState> {
     const skill = msg.skill;
     if (typeof skill !== "string") return;
     if (skill && (!skillLearned(p.cls, p.talents, skill) || skillOf(p.cls, skill)?.passive)) return;
-    if (skill) for (let i = 0; i < SLOT_COUNT; i++) if (p.slots.at(i) === skill) p.slots.setAt(i, "");
-    p.slots.setAt(msg.slot, skill);
+    if (skill) for (let i = 0; i < SLOT_COUNT; i++) if (p.slots.at(i) === skill) p.slots[i] = "";
+    p.slots[msg.slot] = skill;
   }
 
   /** Free reset of all skill points, only out of combat. */
@@ -3322,7 +3321,7 @@ export class TownRoom extends Room<TownState> {
     if (!p.talents.size) return;
     if (!this.payReset(id, p, "skill points")) return;
     p.talents.clear();
-    for (let i = 0; i < SLOT_COUNT; i++) p.slots.setAt(i, "");
+    for (let i = 0; i < SLOT_COUNT; i++) p.slots[i] = "";
     this.applyStats(p);
   }
 

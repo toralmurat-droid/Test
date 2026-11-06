@@ -12,7 +12,7 @@ async function main() {
   process.env.SAVE_FILE = path.join(os.tmpdir(), `bench-saves-${process.pid}.json`);
   process.env.IDEAS_FILE = path.join(os.tmpdir(), `bench-ideas-${process.pid}.json`);
   const colyseus: any = await import("colyseus");
-  const { Server, Room } = colyseus.Server ? colyseus : colyseus.default;
+  const { Server } = colyseus.Server ? colyseus : colyseus.default;
   const { WebSocketTransport } = await import("@colyseus/ws-transport");
   const { TownRoom } = await import("../../server/TownRoom");
   const { isSolidAt } = await import("../../shared/map");
@@ -21,9 +21,15 @@ async function main() {
   const ticks: number[] = [], patches: number[] = [];
   let room: any;
   const proto = TownRoom.prototype as any, update = proto.update;
-  proto.update = function (dt: number) { room = this; const t = performance.now(); update.call(this, dt); ticks.push(performance.now() - t); };
-  const rp = Room.prototype, broadcastPatch = rp.broadcastPatch;
-  rp.broadcastPatch = function () { const t = performance.now(); const r = broadcastPatch.call(this); patches.push(performance.now() - t); return r; };
+  proto.update = function (dt: number) {
+    if (room !== this) {
+      room = this;
+      // Time each state patch: wrapped on the room itself (Colyseus 0.16 calls this.broadcastPatch() from its own timer)
+      const bp = this.broadcastPatch;
+      this.broadcastPatch = function (...a: unknown[]) { const t = performance.now(); const r = bp.apply(this, a); patches.push(performance.now() - t); return r; };
+    }
+    const t = performance.now(); update.call(this, dt); ticks.push(performance.now() - t);
+  };
 
   const httpServer = http.createServer();
   const gs = new Server({ transport: new WebSocketTransport({ server: httpServer, ...(process.env.DEFLATE ? { perMessageDeflate: { threshold: 256, zlibDeflateOptions: { level: 1 } } } : {}) } as any) });

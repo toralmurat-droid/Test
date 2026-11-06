@@ -196,7 +196,8 @@ function launch(name: string, password: string, newGame: boolean, back = false) 
   showLoading(back ? "Back to where you stood…" : undefined); // covers everything until the world is fully drawn (TownScene hides it)
   if (SMOOTH) installSmoothTextures();
   // the pixel fonts must be ready first, or the world's name labels bake in a fallback font
-  void fontsReady.then(() => new Phaser.Game({
+  // window.__game: lets the browser tests (and the console) look at the running game
+  void fontsReady.then(() => ((window as any).__game = new Phaser.Game({
     type: Phaser.AUTO,
     parent: "game",
     pixelArt: !SMOOTH,
@@ -204,7 +205,7 @@ function launch(name: string, password: string, newGame: boolean, back = false) 
     backgroundColor: "#1b1b24",
     scale: { mode: Phaser.Scale.RESIZE, width: window.innerWidth, height: window.innerHeight },
     scene: [new TownScene({ name, password, color, cls, newGame })],
-  }));
+  })));
 }
 
 document.getElementById("play")!.onclick = start;

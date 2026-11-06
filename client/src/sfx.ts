@@ -1,3 +1,4 @@
+import { getStateCallbacks } from "colyseus.js";
 /**
  * Sound effects, all made in code with WebAudio (no sound files).
  *
@@ -767,7 +768,7 @@ export function bindSfx(room: any, me: () => string, ents: Map<string, Ent>) {
   on("bambush", ({ id, x0, y0 }) => play("treeDrop", x0, y0, 1, idPitch(id)));
 
   // ---- shots flying (monster and hero projectiles): the launch sound for monsters' shots
-  const shots = room.state?.projectiles;
+  const shots = room.state?.projectiles && (getStateCallbacks(room) as (v: any) => any)(room.state).projectiles;
   shots?.onAdd?.((s: any) => {
     const k = s.kind as string;
     const mob = !!s.mobName;

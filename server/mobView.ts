@@ -8,6 +8,12 @@ function wire(m: any, i: number): unknown {
   return i === X_FIELD || i === Y_FIELD ? Math.round(v * POS_SCALE) : v;
 }
 
+/**
+ * Each schema instance's change tree (@colyseus/schema 3: the "~changes" key, see its src/types/symbols.ts).
+ * `indexedOperations` holds field index -> operation for every field set since the last discard().
+ */
+const CHANGES = "~changes";
+
 const CELL = 8; // tiles per bucket of the grid used to find the monsters near a hero
 
 /**
@@ -31,10 +37,11 @@ export class MobView {
     mobs.forEach((m, id) => {
       // Each monster's wire values, kept up to date from its own schema change list (field index -> change), so a
       // monster that did nothing costs nothing and a busy one is worked out once however many heroes see it
-      const ch: Map<number, unknown> = m.$changes.changes;
-      if (!m._wv) { m._wv = new Array(n); for (let i = 0; i < n; i++) m._wv[i] = wire(m, i); m._wt = tick; }
-      else if (ch.size) { for (const i of ch.keys()) if (i >= 0 && i < n) m._wv[i] = wire(m, i); m._wt = tick; }
-      if (ch.size) ch.clear();
+      const ct = m[CHANGES], ops: Record<string, number> | undefined = ct?.indexedOperations;
+      let changed = false;
+      if (!m._wv) { m._wv = new Array(n); for (let i = 0; i < n; i++) m._wv[i] = wire(m, i); m._wt = tick; changed = true; }
+      else if (ops) for (const k in ops) { const i = +k; if (i >= 0 && i < n) m._wv[i] = wire(m, i); m._wt = tick; changed = true; }
+      if (ops && (changed || ct.changes.operations.length)) ct.discard(); // monsters are not in the synced state: nothing else reads these
       const k = Math.floor(m.x / TILE / CELL) * 4096 + Math.floor(m.y / TILE / CELL);
       let b = grid.get(k); if (!b) grid.set(k, (b = []));
       b.push([id, m]);
