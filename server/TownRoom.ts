@@ -5,6 +5,7 @@ import {
   AGGRO, aggroLevelFactor, BLOB_AI, BONES, DEMON, BROOD, Dir, FACTION, FEUD, MERGE, MobDef, MOTHER, SKELETON_AI, HIT_RADIUS, mobScale, regionMobLevel, regionSpecialLevel, InputState, MOB_ATTACK_RANGE, MOBS, MobKind, rollSkeletonWeapon, SKELETON_BOW, SKELETON_WEAPONS, SkeletonWeapon, REGEN_DELAY_MS, REGEN_RAMP_MS, regenFromStamina, SAFE_REGEN_MULT,
   RESPAWN_MS, TICK_RATE, TILE,
   HOLLOW_KING, ELEM_BLOB, ELEM_MOVE, inputDir, ELITE, BEAST, BEAST_BROOD, BEAST_FOLK, BEAST_KINDS, BEAST_MOVES, BEAST_RIDER, type BeastMove,
+  MAP_W, MAP_H,
 } from "../shared/constants";
 import { arrivalAt, LINK_RANGE, linkById, LINKS } from "../shared/dungeon";
 import {
@@ -461,6 +462,14 @@ const UNDEAD_ZONES = new Set(SPAWN_ZONES.flatMap((z, zi) => (Object.keys(z.mobs)
 const SLEEP_RANGE = 28 * TILE; // the screen shows about 12 tiles each way, so they are always awake well before they come into view
 /** A dozing monster (no hero within SLEEP_RANGE) is updated once every this many ticks. */
 const DOZE_EVERY = 5;
+/**
+ * Frozen monsters: the map is cut into WARM_CELL squares, and each tick the squares that reach within
+ * SLEEP_RANGE + WARM_PAD of a living hero are marked warm. A dozing monster in a cold square is skipped outright
+ * (no upkeep, no checks), so monsters where nobody plays cost nothing and the world can grow without slowing the tick.
+ */
+const WARM_CELL = 8 * TILE;
+const WARM_PAD = 4 * TILE; // > FEUD.range: an awake monster still sees every rival it could pick a fight with
+const WARM_COLS = Math.ceil(MAP_W * TILE / WARM_CELL), WARM_ROWS = Math.ceil(MAP_H * TILE / WARM_CELL);
 /**
  * Lag forgiveness for melee basic attacks (Murat 2026-11-04: clicked monsters still got missed). A hero aims at the
  * monster where their screen showed it, which is a network trip old; by the time the swing reaches the server, a
@@ -1333,7 +1342,7 @@ export class TownRoom extends Room<TownState> {
   private buildFeudGrid() {
     this.feudGrid.clear();
     this.state.mobs.forEach((o, oid) => {
-      if (o.dead || o.summonFor || !FACTION[o.kind]) return;
+      if (o.dead || o.summonFor || !FACTION[o.kind] || (o.dozy && this.cold(o.x, o.y))) return; // frozen ones fight no one
       const k = Math.floor(o.x / FEUD_CELL) * 4096 + Math.floor(o.y / FEUD_CELL);
       const cell = this.feudGrid.get(k);
       if (cell) cell.push([oid, o]); else this.feudGrid.set(k, [[oid, o]]);
@@ -1704,6 +1713,26 @@ export class TownRoom extends Room<TownState> {
 
   private tickNo = 0;
   private dozeSeq = 0;
+  /** 1 = a hero is within reach of this WARM_CELL square (see WARM_CELL). */
+  private warm = new Uint8Array(WARM_COLS * WARM_ROWS);
+
+  private markWarm(heroes: Player[]) {
+    const w = this.warm;
+    w.fill(0);
+    const r = SLEEP_RANGE + WARM_PAD;
+    for (const p of heroes) {
+      const x0 = Math.max(0, Math.floor((p.x - r) / WARM_CELL)), x1 = Math.min(WARM_COLS - 1, Math.floor((p.x + r) / WARM_CELL));
+      const y0 = Math.max(0, Math.floor((p.y - r) / WARM_CELL)), y1 = Math.min(WARM_ROWS - 1, Math.floor((p.y + r) / WARM_CELL));
+      for (let y = y0; y <= y1; y++) w.fill(1, y * WARM_COLS + x0, y * WARM_COLS + x1 + 1);
+    }
+  }
+
+  /** True when no living hero is anywhere near: a dozing monster here is frozen (see WARM_CELL). */
+  private cold(x: number, y: number): boolean {
+    const cx = Math.floor(x / WARM_CELL), cy = Math.floor(y / WARM_CELL);
+    if (cx < 0 || cy < 0 || cx >= WARM_COLS || cy >= WARM_ROWS) return true;
+    return this.warm[cy * WARM_COLS + cx] === 0;
+  }
 
   /**
    * True when updateMob would do nothing but let the monster doze: no hero within SLEEP_RANGE, no target or rival,
@@ -1772,14 +1801,17 @@ export class TownRoom extends Room<TownState> {
     });
     this.state.items.forEach((it, id) => { if (now > it.expires) this.state.items.delete(id); });
     const tick = ++this.tickNo;
+    // Live heroes, gathered once so each monster's "anyone near?" check is a plain array scan
+    const awake: Player[] = [];
+    this.state.players.forEach((p) => { if (!p.dead) awake.push(p); });
+    this.markWarm(awake);
     if (tick % 2 === 0) this.buildFeudGrid(); // monsters move a few px per tick, a grid cell is 128 px
     this.assignFlanks();
     this.updateUndeadNight(now);
     this.checkRituals(now);
-    // Live heroes, gathered once so each monster's "anyone near?" check is a plain array scan
-    const awake: Player[] = [];
-    this.state.players.forEach((p) => { if (!p.dead) awake.push(p); });
     this.state.mobs.forEach((m, id) => {
+      // Frozen: dozing where no hero is anywhere near. Nothing to do; it wakes when a hero's warm squares reach it
+      if (m.dozy && !m.target && this.cold(m.x, m.y)) return;
       // A dozing monster far from every hero (nothing it could do this tick) only gets its upkeep every DOZE_EVERY ticks
       if (m.dozeSlot < 0) m.dozeSlot = this.dozeSeq++ % DOZE_EVERY;
       const slot = (tick + m.dozeSlot) % DOZE_EVERY === 0;
@@ -1788,7 +1820,7 @@ export class TownRoom extends Room<TownState> {
       m.dozy = this.dozing(m, awake, now);
       if (m.dozy) {
         if (!slot) return;
-        dt = Math.min(1, (now - (m.lastTick || now - dtMs)) / 1000); // poise recovers for the whole time it dozed
+        dt = Math.min(600, (now - (m.lastTick || now - dtMs)) / 1000); // poise recovers for the whole time it dozed (or lay frozen); a dozing monster does nothing else with dt
       } else dt = dtMs / 1000;
       m.lastTick = now;
       tickUnit(this.host, id);
