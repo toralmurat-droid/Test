@@ -57,7 +57,7 @@ export class FailDelay {
 }
 
 /** The player's address: the first X-Forwarded-For hop behind a trusted proxy (TRUST_PROXY, e.g. Railway), else the socket. */
-export function clientIp(req?: IncomingMessage): string {
+export function clientIp(req?: Pick<IncomingMessage, "headers"> & { socket?: { remoteAddress?: string } }): string {
   const fwd = process.env.TRUST_PROXY ? String(req?.headers["x-forwarded-for"] ?? "").split(",")[0].trim() : "";
   return fwd || req?.socket?.remoteAddress || "";
 }

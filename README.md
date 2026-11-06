@@ -3,7 +3,7 @@
 A browser-based online multiplayer pixel brawler set in a small town.
 
 - **Client:** Phaser 3 + TypeScript (Vite)
-- **Server:** Colyseus 0.15 (Node.js). The server is authoritative: it runs movement, combat and respawns.
+- **Server:** Colyseus 0.16 (Node.js, `@colyseus/schema` 3). The server is authoritative: it runs movement, combat and respawns.
 - **Shared:** map, movement and constants used by both sides (`shared/`)
 
 ## Put it online

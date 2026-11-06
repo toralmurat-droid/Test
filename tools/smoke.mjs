@@ -30,10 +30,16 @@ const room = await new Client(`ws://localhost:${PORT}`).joinOrCreate("town", { n
 for (let i = 0; i < 50 && !room.state?.players?.get(room.sessionId); i++) await wait(100);
 const me = room.state.players.get(room.sessionId);
 if (!me || me.name !== "SmokeHero") fail("hero not in the world state");
+// Monsters come in their own "mv" message once the client says it is ready (server/mobView.ts)
+let mobs = 0;
+room.onMessage("mv", (m) => { mobs += m?.a?.length ?? 0; });
+room.send("mvready");
 room.send("input", { up: true, down: false, left: false, right: false, seq: 1 });
-await wait(500);
+for (let i = 0; i < 50 && !mobs; i++) await wait(100);
+if (!mobs) fail("no monsters received");
+await wait(1500); // several patches with monster changes
 await room.leave();
-console.log(`SMOKE OK: hero at ${Math.round(me.x)},${Math.round(me.y)}`);
+console.log(`SMOKE OK: hero at ${Math.round(me.x)},${Math.round(me.y)}, ${mobs} monsters in view`);
 server.kill("SIGTERM");
 await new Promise((r) => server.once("exit", r));
 process.exit(0);
