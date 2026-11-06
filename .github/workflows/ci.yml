@@ -18,6 +18,17 @@ jobs:
   check:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # A throwaway Postgres for the account-store tests and the smoke test on Postgres
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: ci
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgresql://postgres:ci@localhost:5432/postgres
     steps:
       - uses: actions/checkout@v4
         with:
@@ -34,3 +45,5 @@ jobs:
         run: npm run build
       - name: Smoke test (the built server boots and a hero can log in)
         run: node tools/smoke.mjs
+      - name: Smoke test on Postgres (DATABASE_URL)
+        run: DATABASE_URL="$TEST_DATABASE_URL" node tools/smoke.mjs
