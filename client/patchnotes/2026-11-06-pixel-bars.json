@@ -1,5 +1,6 @@
 {
   "date": "2026-11-06",
+  "pr": 274,
   "title": "Pixel bars, tidy HUD",
   "changes": [
     "Health, mana, stamina and XP bars and the level shield are redrawn in the same chunky pixels as the world, with darker, weathered colours.",
