@@ -60,6 +60,7 @@ const lvlName = (id: string, cls: string) => `${gearName(id, cls)}${itemLevel(id
 import { Asker, boardFor, submit, tick as ideaTick, vote as ideaVote } from "../shared/ideas";
 import { hashAddr, ideaLog, saveIdeas } from "./ideaStore";
 import { dropLive, LiveState, rememberLive, takeLive } from "./handoff";
+import { MobView } from "./mobView";
 
 export class Player extends Schema {
   @type("string") name = "";
@@ -345,7 +346,8 @@ export class Watchman extends Schema {
 
 export class TownState extends Schema {
   @type({ map: Player }) players = new MapSchema<Player>();
-  @type({ map: Mob }) mobs = new MapSchema<Mob>();
+  /** Not synced: each hero gets only the monsters near them, see server/mobView.ts. */
+  mobs = new Map<string, Mob>();
   @type({ map: Projectile }) projectiles = new MapSchema<Projectile>();
   @type({ map: Item }) items = new MapSchema<Item>();
   @type({ map: Zone }) zones = new MapSchema<Zone>();
@@ -538,11 +540,15 @@ export class TownRoom extends Room<TownState> {
   maxClients = 50;
   private mobSeq = 0;
   private shotSeq = 0;
+  private mobView = new MobView();
   private itemSeq = 0;
 
   onCreate() {
     liveRooms.add(this);
     this.setState(new TownState());
+    // Monsters near each hero go out just before every state patch, so both halves of an update arrive together
+    this.onMessage("mvready", (c) => this.mobView.ready(c));
+    this.onBeforePatch = () => this.mobView.send(this.clients, this.state.mobs, (sid) => this.state.players.get(sid));
     this.setPatchRate(1000 / TICK_RATE);
     this.setSimulationInterval((dt) => this.update(dt), 1000 / TICK_RATE);
     // Autosave everyone every 30 s, so a crash loses at most that much
@@ -759,6 +765,7 @@ export class TownRoom extends Room<TownState> {
   }
 
   onLeave(client: Client) {
+    this.mobView.leave(client);
     const p = this.state.players.get(client.sessionId);
     if (p) saveHero(p.name, p.cls, this.snapshot(p));
     if (p && !announced) this.rememberHero(client.sessionId, p); // during an update everyone was remembered together (groups intact)

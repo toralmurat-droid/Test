@@ -11,6 +11,7 @@ async function main() {
     const room = await new Client(`ws://localhost:${port}`).joinOrCreate("town", { name: `bot${i}p${process.pid % 10000}`, password: "benchpass1", cls: classes[i % classes.length], newGame: true });
     (room.connection as any).transport.ws.addEventListener("message", (e: any) => { const b = Buffer.from(e.data); bytes += b.length; if (process.env.DEFLATE_EST) { raw += b.length; packed += b.length > 256 ? zlib.deflateRawSync(b, { level: 1 }).length : b.length; } });
     room.onMessage("*", () => {});
+    room.send("mvready"); // be fed the monsters near it, like the game client
     rooms.push(room);
   }
   process.send!({ joined: true });
