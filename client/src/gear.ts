@@ -7,6 +7,9 @@ import { STAT_NAMES, StatKind } from "../../shared/powers";
 import { potionAmount, potionName, potionStacks, POTION_STACK, unpackPotions } from "../../shared/potions";
 import { ART_K, CHAR_FRAME, HD_CHARS } from "./artAssets";
 import { itemTexture, potionTex } from "./textures";
+import { uselessItem, wearing } from "../../shared/heroSheet";
+import { SheetPreview, sheetHero, wornOf } from "./sidepanel";
+import { bagPref, lootFilter, setBagPref, setLootFilter } from "./lootfilter";
 
 /**
  * Equipment on the client: overlay sprites that follow each hero frame for frame, and the equipment screen (G).
@@ -150,10 +153,29 @@ export class GearMenu {
   private sig = "";
   private busyUntil = 0; // one action at a time: a double-click must not swap an item in and straight back out
 
-  constructor(private scene: Phaser.Scene, private send: (type: string, msg: unknown) => void) {
+  private sorted = bagPref("sort");
+  private marks = bagPref("junk");
+  private dropAsk = 0; // "Drop useless" asks once: the second click within 3 s drops
+
+  constructor(private scene: Phaser.Scene, private send: (type: string, msg: unknown) => void, private preview: (p?: SheetPreview) => void = () => {}) {
     // Buttons never keep keyboard focus, so Space/Enter in a fight can't click a bag item by accident
     this.el.addEventListener("mousedown", (ev) => { if ((ev.target as HTMLElement).closest("button")) ev.preventDefault(); });
+    const btn = (id: string, fn: () => void) => { const b = document.getElementById(id)!; b.tabIndex = -1; b.onclick = () => { fn(); this.sig = ""; }; };
+    btn("gsort", () => { this.sorted = !this.sorted; setBagPref("sort", this.sorted); });
+    btn("gjunk", () => { this.marks = !this.marks; setBagPref("junk", this.marks); this.dropAsk = 0; });
+    btn("gdropjunk", () => {
+      const list = this.junk;
+      if (!list.length) return;
+      if (performance.now() > this.dropAsk) { this.dropAsk = performance.now() + 3000; setTimeout(() => { this.sig = ""; }, 3100); return; }
+      this.dropAsk = 0;
+      this.act("dropgears", list);
+    });
+    btn("gfrar", () => { const f = lootFilter(); setLootFilter({ ...f, minRarity: (f.minRarity + 1) % 4 }); });
+    btn("gfcls", () => { const f = lootFilter(); setLootFilter({ ...f, ownClass: !f.ownClass }); });
   }
+
+  /** Bag indexes of the items that would raise no stat (shared/heroSheet.ts uselessItem). */
+  private junk: number[] = [];
 
   /** Sends a bag action unless the previous one is still waiting for the server's update (max 800 ms). */
   private act(type: string, msg: unknown) {
@@ -163,19 +185,14 @@ export class GearMenu {
   }
 
   get open() { return !this.el.hidden; }
-  /** Opens on top of any other menu; works in combat, while dead and while chatting (via the Bag button). */
-  toggle(state: any) {
-    if (this.open) { this.close(); return; }
-    for (const id of ["hero", "tree"]) { const other = document.getElementById(id); if (other) other.hidden = true; }
-    this.el.hidden = false; this.sig = ""; this.refresh(state);
-  }
-  close() { this.el.hidden = true; }
+  /** The side panel just showed the Inventory tab: draw it now. */
+  reset(state: any) { this.sig = ""; this.refresh(state); }
 
   /** Rebuild only when something gear-related changed. */
   refresh(state: any) {
     if (!this.open || !state) return;
     const bagItems: string[] = Array.from(state.bag ?? []);
-    const sig = [state.cls, state.level, state.ptSta, state.ptStr, state.ptMag, state.ptDex, ...GEAR_SLOTS.map((s) => state[s]), ...bagItems, state.potions, state.gold, state.sta, state.str, state.mag, state.dex, state.maxHp].join("|");
+    const sig = [this.sorted, this.marks, this.dropAsk > performance.now(), lootFilter().minRarity, lootFilter().ownClass, JSON.stringify(Array.from(state.talents?.entries?.() ?? [])), state.cls, state.level, state.ptSta, state.ptStr, state.ptMag, state.ptDex, ...GEAR_SLOTS.map((s) => state[s]), ...bagItems, state.potions, state.gold, state.sta, state.str, state.mag, state.dex, state.maxHp].join("|");
     if (sig === this.sig) return;
     this.sig = sig;
     this.busyUntil = 0; // the server answered, accept clicks again
@@ -184,15 +201,19 @@ export class GearMenu {
     const info = document.getElementById("gearinfo");
     if (info) info.textContent = "";
     /** Item details shown under the bag on hover (pixel font, unlike a browser tooltip). */
-    const hover = (el: HTMLElement, id: string, extra: string) => {
+    const sh = sheetHero(state), worn = wornOf(state);
+    const hover = (el: HTMLElement, id: string, extra: string, slot?: GearSlot) => {
       el.onmouseenter = () => {
+        // the sheet block on top of the side panel shows what wearing (or taking off) this item changes
+        if (slot) { const eq = { ...worn }; delete eq[slot]; this.preview({ label: `take off ${gearName(id, cls)}`, eq }); }
+        else if (canWear(cls, id)) this.preview({ label: `wear ${gearName(id, cls)}${reqProblem(id, hero) ? " (once you meet its needs)" : ""}`, eq: wearing(worn, id) });
         if (!info) return;
         const d = gearDef(id)!, why = reqProblem(id, hero);
         const aff = affixHtml(id);
         info.innerHTML = `<b style="color:${itemColor(id)}">${gearName(id, cls)}</b> <span class="glvl">Lv ${itemLevel(id)}</span> · ${rarityLabel(id)}${TIER_NAMES[d.tier]} ${SLOT_NAMES[d.slot]}<br>` +
           `${itemText(id) || "No bonus"}<br>${aff ? `${aff}<br>` : ""}<span class="${why ? "gbad" : "gok"}">${why || reqText(id, cls)}</span>${extra ? `<br><small>${extra}</small>` : ""}`;
       };
-      el.onmouseleave = () => { if (info) info.textContent = ""; };
+      el.onmouseleave = () => { this.preview(); if (info) info.textContent = ""; };
     };
 
     // Hero preview with everything worn
@@ -219,7 +240,7 @@ export class GearMenu {
           (why ? `<small class="gbad">Inactive: ${why}</small>` : `<small>${itemText(id)}</small>`)
         : `<b>${SLOT_NAMES[slot]}</b><br><small>empty</small>`;
       row.appendChild(txt);
-      if (id) { row.onclick = () => this.act("unequip", slot); hover(row, id, "Click to take off"); }
+      if (id) { row.onclick = () => this.act("unequip", slot); hover(row, id, "Click to take off", slot); }
       slots.appendChild(row);
     }
 
@@ -242,11 +263,34 @@ export class GearMenu {
     // Potion stacks (shared/potions.ts) take the bag slots after the gear, 10 of one size per slot
     const stacks = potionStacks(unpackPotions(state.potions));
     document.getElementById("gearbagtitle")!.innerHTML = `Bag ${bagItems.length + stacks.length}/${BAG_SIZE} <span class="gbgold">${icon("coin")}${state.gold ?? 0} gold</span>`;
-    for (let i = 0; i < BAG_SIZE; i++) {
+    // Useless items: wearing them would raise no number on the sheet (or the class can't wear them)
+    this.junk = bagItems.map((id, i) => (uselessItem(sh, worn, id) ? i : -1)).filter((i) => i >= 0);
+    const junk = new Set(this.junk);
+    // Display order: as picked up, or sorted by slot, then rarity and level (the server keeps its own order)
+    const order = bagItems.map((_, i) => i);
+    if (this.sorted) {
+      const key = (id: string) => [GEAR_SLOTS.indexOf(gearDef(id)?.slot ?? "weapon"), -itemRarity(id), -itemLevel(id)];
+      order.sort((a, b) => {
+        const ka = key(bagItems[a]), kb = key(bagItems[b]);
+        return (Number(junk.has(a)) - Number(junk.has(b))) || ka[0] - kb[0] || ka[1] - kb[1] || ka[2] - kb[2] || a - b;
+      });
+    }
+    const asking = this.dropAsk > performance.now();
+    const tog = (id: string, on: boolean, text: string) => { const b = document.getElementById(id)!; b.classList.toggle("on", on); b.textContent = text; };
+    tog("gsort", this.sorted, this.sorted ? "Sorted" : "Sort");
+    tog("gjunk", this.marks, `Mark useless${this.junk.length ? ` (${this.junk.length})` : ""}`);
+    const dropBtn = document.getElementById("gdropjunk")!;
+    dropBtn.hidden = !this.marks || !this.junk.length;
+    tog("gdropjunk", asking, asking ? `Sure? Drop ${this.junk.length}` : "Drop useless");
+    const f = lootFilter();
+    tog("gfrar", f.minRarity > 0, `Pick up: ${["All gear", "Magic+", "Rare+", "Legendary"][f.minRarity]}`);
+    tog("gfcls", f.ownClass, f.ownClass ? "My class only" : "Any class");
+    for (let n = 0; n < BAG_SIZE; n++) {
+      const i = n < order.length ? order[n] : n;
       const id: string | undefined = bagItems[i];
       const cell = document.createElement("button");
       cell.className = "gcell";
-      const stack = id ? undefined : stacks[i - bagItems.length];
+      const stack = id ? undefined : stacks[n - bagItems.length];
       if (stack) {
         const [kind, size, n] = stack;
         const c = document.createElement("canvas");
@@ -270,7 +314,8 @@ export class GearMenu {
         if (itemRarity(id) >= 2) cell.style.boxShadow = `inset 0 0 6px ${itemColor(id)}`;
         const fits = canWear(cls, id), why = fits ? reqProblem(id, hero) : "";
         if (itemLevel(id) > 1) cell.appendChild(Object.assign(document.createElement("span"), { className: "gcelllvl" + (why ? " gbad" : ""), textContent: String(itemLevel(id)) }));
-        hover(cell, id, fits ? (why ? "Too strong for you yet · Right-click: drop" : "Click: equip · Right-click: drop") : `Only a ${d.cls} can wear this · Right-click: drop`);
+        hover(cell, id, (junk.has(i) ? "Useless: raises no stat · " : "") + (fits ? (why ? "Too strong for you yet · Right-click: drop" : "Click: equip · Right-click: drop") : `Only a ${d.cls} can wear this · Right-click: drop`));
+        if (this.marks && junk.has(i)) cell.classList.add("gjunk");
         if (!fits) cell.style.opacity = "0.5";
         else if (why) cell.classList.add("glocked");
         cell.onclick = () => this.act("equip", i);

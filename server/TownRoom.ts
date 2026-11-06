@@ -19,6 +19,7 @@ import { attackMult, cooldownMult, critChance, heroSpeed, magicMult, maxHpFromSt
 import { AttackProfile, attackProfile, weaponAttackMult, weaponOk } from "../shared/weapons";
 import { Element, ElemPart, ELEMENT_FX, mobAffinity, MOB_MELEE_ELEMENT, MOB_SHOT_ELEMENT } from "../shared/elements";
 import { gearResist, splitHit } from "../shared/gear";
+import { cleanFilter, LootFilter, passesFilter } from "../shared/heroSheet";
 import { activeSkills, canLearn, classSkills, cleanRanks, MAX_RANK, NEED_TEXT, skillLearned, skillOf, talentBonus, talentMult, talentReduce } from "../shared/skills";
 import {
   afterHit, atkSpeedMult, blocking, bloodCost, buffLifesteal, buffRegen, castSkill, ccImmune, charging, winding, counterHit, dealtMult, FieldInst, newRuntime,
@@ -606,6 +607,8 @@ export class TownRoom extends Room<TownState> {
     this.onMessage("equip", (client, i: number) => this.equip(client.sessionId, i));
     this.onMessage("unequip", (client, slot: GearSlot) => this.unequip(client.sessionId, slot));
     this.onMessage("dropgear", (client, i: number) => this.dropGear(client.sessionId, i));
+    this.onMessage("dropgears", (client, list: number[]) => this.dropGears(client.sessionId, list));
+    this.onMessage("lootfilter", (client, f: unknown) => { this.lootFilters.set(client.sessionId, cleanFilter(f)); });
     this.onMessage("ranged", (client) => this.fireRanged(client.sessionId));
     this.onMessage("useslot", (client, n: number) => this.useSlot(client.sessionId, n));
     this.onMessage("assign", (client, msg: { slot: number; skill: string }) => this.assignSlot(client.sessionId, msg));
@@ -781,6 +784,7 @@ export class TownRoom extends Room<TownState> {
     this.partyLeave(client.sessionId);
     this.lastDrainFx.delete(client.sessionId);
     this.invites.delete(client.sessionId);
+    this.lootFilters.delete(client.sessionId);
     this.tradeStop(client.sessionId, "The other hero left: trade cancelled.");
     this.tradeAsks.delete(client.sessionId);
     this.state.players.delete(client.sessionId);
@@ -2971,6 +2975,8 @@ export class TownRoom extends Room<TownState> {
         if (this.addPotions(p, it.kind, potSize(it.gear), it.amount) < it.amount) return; // no room in the bag: leave it on the ground
       } else if (it.kind === "gear") {
         if (this.bagFull(p) || !isGearId(it.gear)) return; // bag full: leave it
+        const f = this.lootFilters.get(pid);
+        if (f && !passesFilter(f, p.cls, it.gear)) return; // the hero's loot filter skips it (side panel, Inventory tab)
         setBag(p, [...bagItems(p), it.gear]);
       } else {
         p.gold += it.amount;
@@ -3235,6 +3241,21 @@ export class TownRoom extends Room<TownState> {
     const off = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] }[p.dir];
     this.dropItem("gear", p.x + off[0] * (PICKUP_RADIUS + 10), p.y + off[1] * (PICKUP_RADIUS + 10), 1, gid);
   }
+
+  /** Throw several bag items on the ground at once (the bag's "Drop useless" button), in one bag update. */
+  private dropGears(id: string, list: number[]) {
+    const p = this.state.players.get(id);
+    if (!p || !Array.isArray(list)) return;
+    const idx = new Set(list.filter((i) => Number.isInteger(i) && i >= 0 && i < p.bag.length));
+    if (!idx.size) return;
+    const items = [...bagItems(p)];
+    setBag(p, items.filter((_, i) => !idx.has(i)));
+    const off = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] }[p.dir];
+    for (const i of idx) this.dropItem("gear", p.x + off[0] * (PICKUP_RADIUS + 10), p.y + off[1] * (PICKUP_RADIUS + 10), 1, items[i]);
+  }
+
+  /** Loot filters by session (not synced: only this server needs them; the client sends its own on join). */
+  private lootFilters = new Map<string, LootFilter>();
 
   // ---- Player groups (shared/party.ts) --------------------------------------
 

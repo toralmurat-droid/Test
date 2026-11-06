@@ -1,0 +1,10 @@
+{
+  "date": "2026-11-06",
+  "title": "Character side panel",
+  "changes": [
+    "Character, Inventory and Skills now open in one panel on the right side, with tabs (C, G, T or click a tab).",
+    "A stats block (health, mana, defense, attack, damage, magic, spell damage, crit) stays on top and updates live. Hover an item, a skill or a stat point to see what it would change in green or red.",
+    "Bag tools: sort your bag, mark items that raise no stat, and drop them all at once.",
+    "Loot filter: choose to pick up only Magic, Rare or Legendary gear, or only gear your class can wear. Skipped drops look faded on the ground."
+  ]
+}
