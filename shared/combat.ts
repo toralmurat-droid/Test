@@ -81,6 +81,14 @@ export function pvpDamageMult(attackerLevel: number, targetLevel: number): numbe
   return 1 / (1 + PVP_DAMAGE.perLevel * Math.max(0, lvl - 1));
 }
 
+/**
+ * Newcomer protection: heroes up to this level can't hurt other heroes and can't be hurt by them (both ways, so a
+ * protected hero can't pick fights it can't lose). Monsters and the village watch still hit them.
+ */
+export const PVP_PROTECT_LEVEL = 10;
+export const pvpProtected = (attackerLevel: number, targetLevel: number) =>
+  (attackerLevel || 1) <= PVP_PROTECT_LEVEL || (targetLevel || 1) <= PVP_PROTECT_LEVEL;
+
 /** Attack speed bonus while raging (Barbarian). */
 export const RAGE_ATTACK_SPEED = 1.15;
 
