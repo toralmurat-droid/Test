@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-06",
+  "title": "No more surprise reloads",
+  "changes": [
+    "Standing still in a quiet spot no longer makes the game reload by itself every minute or so."
+  ]
+}

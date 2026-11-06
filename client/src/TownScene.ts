@@ -1178,9 +1178,13 @@ export class TownScene extends Phaser.Scene {
     for (const t of takeCarried()) { const el = document.createElement("div"); el.textContent = t; chatlog.prepend(el); }
     this.room.onMessage("upgrading", () => upgradeAnnounced());
     this.room.onLeave((code: number) => { if (this.quitting) return; this.feed("Disconnected from server"); reconnectSoon(login, code === 4000); });
-    // A connection that silently died (no updates for 15s) is treated the same way
+    // A connection that silently died (nothing heard for 15s) is treated the same way. A quiet spot sends no
+    // state patch, so the server's heartbeat ("hb", every 4s) and the monster feed also count as signs of life.
     let lastPatch = Date.now();
-    this.room.onStateChange(() => { lastPatch = Date.now(); });
+    const alive = () => { lastPatch = Date.now(); };
+    this.room.onStateChange(alive);
+    this.room.onMessage("hb", alive);
+    this.room.onMessage("mv", alive);
     window.setInterval(() => { if (!this.quitting && Date.now() - lastPatch > 15_000) reconnectSoon(login); }, 3000);
   }
 
