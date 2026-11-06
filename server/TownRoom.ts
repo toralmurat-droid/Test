@@ -653,6 +653,9 @@ export class TownRoom extends Room<TownState> {
     this.onMessage("ideas", (client) => this.sendBoard(client));
     this.clock.setInterval(() => this.ideaRound(), 5000);
     this.clock.setInterval(() => this.tickDoors(), 1000);
+    // Heartbeat: a hero standing still where nothing moves gets no state patch at all (monsters left the state
+    // in the area-of-interest change), so the client's "connection died" check needs something to hear.
+    this.clock.setInterval(() => this.broadcast("hb", 0), 4000);
 
     this.onMessage("pinvite", (client, msg: { id?: string; name?: string }) => this.partyInvite(client.sessionId, msg));
     this.onMessage("paccept", (client, msg: { from?: string }) => this.partyAnswer(client.sessionId, msg?.from, true));
