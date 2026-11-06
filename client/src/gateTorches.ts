@@ -10,8 +10,9 @@ import { hiResTexture } from "./smooth";
 
 /**
  * Gate torches (Murat 2026-11-03: "the light at the village entrance must come from something you can see"). A tall
- * torch is planted in the ground just inside each gate post of the Oakvale stockade, one per watchman. Cold by day;
- * at dusk each watchman walks over, kneels to light his torch and walks back to his post. They burn all night and
+ * torch is planted in the ground just outside each gate post of the Oakvale stockade, one per watchman (Murat
+ * 2026-11-06: the torches stand on the outside of the barricade). Cold by day; at dusk each watchman walks out
+ * through the gate, kneels to light his torch and walks back in to his post. They burn all night and
  * gutter out at dawn. Everything follows the shared day clock, so every player sees the same thing (client only).
  * Drawn in the bonfire's pixel style (bonfireArt.ts): flat tones, ordered dithering, dark outlines, two cells per unit.
  */
@@ -25,12 +26,13 @@ const KNEEL = 2200, LINGER = 700, GROW = 900;
 const TW = 14, TH = 42, HEAD = 33; // the flame's base is HEAD px above the foot
 const FW = 12, FH = 26;
 
-export interface GateTorch { id: string; x: number; y: number; post: WatchPost; litAt: number; stand: { x: number; y: number } }
+type Pt = { x: number; y: number };
+export interface GateTorch { id: string; x: number; y: number; post: WatchPost; litAt: number; stand: Pt; route: Pt[] }
 
 const ROAD = new Set<number>([T.COBBLE, T.DIRT]);
 const walkable = (x: number, y: number) => !isSolidAt(x, y) && !isDecorSolidAt(x, y);
 
-/** One torch per watch post: beside the gate post on that guard's side of the opening, just inside the wall. */
+/** One torch per watch post: beside the gate post on that guard's side of the opening, just outside the wall. */
 function buildTorches(): GateTorch[] {
   const out: GateTorch[] = [];
   WATCH_POSTS.forEach((p, i) => {
@@ -42,15 +44,18 @@ function buildTorches(): GateTorch[] {
       const tx = Math.floor((p.gx + ax * side * k * TILE) / TILE), ty = Math.floor((p.gy + ay * side * k * TILE) / TILE);
       if (OBJECTS[ty]?.[tx] !== EMPTY) { along = (k - 0.5) * TILE + TILE * 0.35; break; }
     }
-    let x = p.gx + ax * side * along + p.nx * 0.75 * TILE, y = p.gy + ay * side * along + p.ny * 0.75 * TILE;
-    // keep it off the road and out of the way: slide along the wall until it stands on grass, then step in if blocked
+    const ox = -p.nx, oy = -p.ny; // outward normal
+    let x = p.gx + ax * side * along + ox * 0.75 * TILE, y = p.gy + ay * side * along + oy * 0.75 * TILE;
+    // keep it off the road and out of the way: slide along the wall until it stands on grass, then step out if blocked
     const onRoad = (x: number, y: number) => ROAD.has(GROUND[Math.floor(y / TILE)]?.[Math.floor(x / TILE)]);
     for (let d = 0; d < 8 && onRoad(x, y); d++) { x += ax * side * 0.25 * TILE; y += ay * side * 0.25 * TILE; }
-    for (let d = 0; d < 6 && !walkable(x, y); d++) { x += p.nx * 0.2 * TILE; y += p.ny * 0.2 * TILE; }
+    for (let d = 0; d < 6 && !walkable(x, y); d++) { x += ox * 0.2 * TILE; y += oy * 0.2 * TILE; }
     // where the watchman kneels: beside the torch, on the side nearest the viewer (lowest on screen) so the torch doesn't hide him
-    const options = [[p.nx, p.ny], [ax, ay], [-ax, -ay]].map(([dx, dy]) => ({ x: x + dx * 13, y: y + dy * 13 })).filter((o) => walkable(o.x, o.y));
-    const stand = options.sort((a, b) => b.x + b.y - (a.x + a.y))[0] ?? { x: x + p.nx * 13, y: y + p.ny * 13 };
-    out.push({ id: p.id, x, y, post: p, litAt: LIGHT_AT + (i % 2) * LIGHT_STAGGER, stand });
+    const options = [[ox, oy], [ax, ay], [-ax, -ay]].map(([dx, dy]) => ({ x: x + dx * 13, y: y + dy * 13 })).filter((o) => walkable(o.x, o.y));
+    const stand = options.sort((a, b) => b.x + b.y - (a.x + a.y))[0] ?? { x: x + ox * 13, y: y + oy * 13 };
+    // his way there: from his post to the opening, out through it, then over to the torch
+    const route = [{ x: p.gx + p.nx * 0.9 * TILE, y: p.gy + p.ny * 0.9 * TILE }, { x: p.gx + ox * 0.9 * TILE, y: p.gy + oy * 0.9 * TILE }, stand];
+    out.push({ id: p.id, x, y, post: p, litAt: LIGHT_AT + (i % 2) * LIGHT_STAGGER, stand, route });
   });
   return out;
 }
@@ -233,16 +238,27 @@ export class GateTorches {
   errand(postId: string, from: { x: number; y: number }): Errand | null {
     const g = this.live.find((l) => l.t.id === postId)?.t;
     if (!g) return null;
-    const walk = (Math.hypot(g.stand.x - from.x, g.stand.y - from.y) / WATCH.speed) * 1000 * 1.6; // an unhurried pace
+    const pts = [from, ...g.route], legs = pts.slice(1).map((b, k) => Math.hypot(b.x - pts[k].x, b.y - pts[k].y));
+    const len = legs.reduce((a, b) => a + b, 0) || 1;
+    const walk = (len / WATCH.speed) * 1000 * 1.6; // an unhurried pace
     const e = -msUntil(g.litAt, dayTime(Date.now())) + KNEEL; // ms since he reached the torch
-    const lerp = (k: number, a: { x: number; y: number }, b: { x: number; y: number }) => ({ x: a.x + (b.x - a.x) * k, y: a.y + (b.y - a.y) * k });
+    /** Point at fraction k (0 post .. 1 torch) along his route through the gate, and the way he faces going out. */
+    const along = (k: number) => {
+      let d = Math.max(0, Math.min(1, k)) * len;
+      for (let i = 0; i < legs.length; i++) {
+        const a = pts[i], b = pts[i + 1];
+        if (d <= legs[i] || i === legs.length - 1) { const f = legs[i] ? Math.min(1, d / legs[i]) : 1; return { x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f, dx: b.x - a.x, dy: b.y - a.y }; }
+        d -= legs[i];
+      }
+      return { ...g.stand, dx: 0, dy: 0 };
+    };
     const to = { dx: g.x - g.stand.x, dy: g.y - g.stand.y };
     if (e < -walk || e > KNEEL + LINGER + walk) return null;
-    if (e < 0) { const p = lerp(1 + e / walk, from, g.stand); return { ...p, dx: g.stand.x - from.x, dy: g.stand.y - from.y, anim: "walk" }; }
+    if (e < 0) return { ...along(1 + e / walk), anim: "walk" };
     if (e < KNEEL) return { ...g.stand, ...to, anim: "skill" };
     if (e < KNEEL + LINGER) return { ...g.stand, ...to, anim: "idle" };
-    const p = lerp((e - KNEEL - LINGER) / walk, g.stand, from);
-    return { ...p, dx: from.x - g.stand.x, dy: from.y - g.stand.y, anim: "walk" };
+    const p = along(1 - (e - KNEEL - LINGER) / walk);
+    return { x: p.x, y: p.y, dx: -p.dx, dy: -p.dy, anim: "walk" };
   }
 
   update(now: number, striking: (postId: string) => boolean) {
