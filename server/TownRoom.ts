@@ -48,7 +48,7 @@ import { chestById, chestLock, CHEST_RANGE, CHEST_RESPAWN_MS, CHESTS, GUARD_RESP
 import { encodeTimers, timerSig, timersOf } from "../shared/buffTimers";
 import { SLOT_COUNT } from "../shared/slots";
 import { groupDmgMult, groupHpMult, PARTY, together } from "../shared/party";
-import { heroPoise, MOB_COMBAT, mobBody, POISE, poiseLevelMult, poiseSpeed, pvpDamageMult, SWING_AHEAD } from "../shared/combat";
+import { heroPoise, MOB_COMBAT, mobBody, POISE, poiseLevelMult, poiseSpeed, PVP_PROTECT_LEVEL, pvpDamageMult, pvpProtected, SWING_AHEAD } from "../shared/combat";
 import {
   BAG_SIZE, Equipped, gearDef, GEAR_SLOTS, activeGear, reqProblem, itemLevel, HeroReqInfo, GearSlot, gearBlock, gearName, gearReachMult, gearSpeedMult, gearStats, isGearId, potionChance, rollGear, canWear, starterKit,
 } from "../shared/gear";
@@ -812,6 +812,7 @@ export class TownRoom extends Room<TownState> {
     this.state.players.set(client.sessionId, p);
     if (back?.group.length) this.regroupOnJoin(client.sessionId, p, back.group);
     this.sendBoard(client); // the Ideas board is ready as soon as it is opened
+    if (p.level <= PVP_PROTECT_LEVEL) this.note(client.sessionId, `Newcomer protection: until level ${PVP_PROTECT_LEVEL + 1}, other heroes can't hurt you (and you can't hurt them).`);
     console.log(`${p.name} the ${CLASSES[p.cls].name} joined (${this.clients.length} online)`);
   }
 
@@ -3459,6 +3460,7 @@ export class TownRoom extends Room<TownState> {
     const me = this.state.players.get(exclude);
     this.state.players.forEach((t, tid) => {
       if (me?.party && t.party === me.party) return; // no friendly fire inside a group
+      if (me && pvpProtected(me.level, t.level)) return; // newcomer protection (shared/combat.ts): shots pass through
       if (tid !== exclude && !t.dead && Math.hypot(t.x - x, t.y - y) <= r) out.push(tid);
     });
     this.state.mobs.forEach((m, mid) => {
@@ -3507,6 +3509,8 @@ export class TownRoom extends Room<TownState> {
   private hitTarget(attackerId: string, targetId: string, dmg: number, push: [number, number], opts: HitOpts = {}) {
     const a = this.state.players.get(attackerId);
     if (a?.party && this.state.players.get(targetId)?.party === a.party) return; // group mates can't hurt each other
+    const tp1 = a && this.state.players.get(targetId);
+    if (a && tp1 && pvpProtected(a.level, tp1.level)) return; // newcomer protection, also for damage over time and riders
     if (opts.basic && a && basicDrain(a.cls)) opts = { ...opts, drain: (opts.drain ?? 0) + basicDrain(a.cls) }; // vampire trait
     // Elemental parts (shared/elements.ts): monsters take more or less of each, heroes resist; poison comes later
     const riders: ElemPart[] = [];
@@ -4223,7 +4227,13 @@ export class TownRoom extends Room<TownState> {
       this.applyStats(p); // new stat points are assigned by the player in the hero panel
       if (!p.dead) p.hp = p.maxHp; // full heal on level up
       this.broadcast("levelup", { id, level: lvl, from });
+      if (from <= PVP_PROTECT_LEVEL && lvl > PVP_PROTECT_LEVEL) this.note(id, `Level ${lvl}: your newcomer protection has ended. Other heroes can fight you outside the Market Square now.`);
     }
+  }
+
+  /** A line in one player's chat from the game itself. */
+  private note(id: string, text: string) {
+    this.clients.find((c) => c.sessionId === id)?.send("chat", { id: "", name: "Oakvale", text });
   }
 
   /** Recompute stats and max HP from class + level + equipped gear. */
