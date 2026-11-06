@@ -3,6 +3,7 @@ import { runesLit, SHRINE, SHRINE_RANGE, SHRINE_RUNES } from "../../shared/shrin
 import { ART_K as K } from "../../shared/constants";
 import { shrineTextures, SHRINE_FOOT } from "./shrineArt";
 import { isoAnchor } from "./iso";
+import { TEXT_FONT, TEXT_PX, WT } from "./pixelfont";
 
 /**
  * The Whispering Woods shrine (shared/shrine.ts). Ready: the wisp flame burns, the rune glows and every rune stone
@@ -27,8 +28,8 @@ export class ShrineLayer {
     this.img = scene.add.sprite(x, y, "shrine_ready", 0).setOrigin(0.5, SHRINE_FOOT).setScale(SCALE).setDepth(y);
     this.glow = scene.add.image(x, y - 14, "glow").setTint(0x52dcc2).setScale(4 * K).setAlpha(0.22).setBlendMode(Phaser.BlendModes.ADD).setDepth(-0.8);
     scene.tweens.add({ targets: this.glow, alpha: 0.34, scale: 4.4 * K, duration: 1400, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
-    this.timer = scene.add.text(x, y - 74, "", { fontFamily: font, fontSize: "16px", color: "#9cf3dc", stroke: "#000", strokeThickness: 3 })
-      .setOrigin(0.5, 1).setScale(0.3).setResolution(2).setDepth(29000).setVisible(false);
+    this.timer = scene.add.text(x, y - 74, "", { fontFamily: TEXT_FONT, fontSize: `${TEXT_PX}px`, color: "#9cf3dc", stroke: "#000", strokeThickness: 2 })
+      .setOrigin(0.5, 1).setScale(WT).setResolution(1).setDepth(29000).setVisible(false);
     isoAnchor(this.timer, { x, y });
     this.prompt.id = "shrineprompt";
     this.prompt.onclick = () => this.interact();

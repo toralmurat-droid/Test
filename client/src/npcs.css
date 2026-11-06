@@ -7,101 +7,101 @@
 
 /* Village NPCs (client/src/npcs.ts): talk prompt, dialog, quest tracker */
 #npcprompt { display: none; position: absolute; left: 50%; bottom: 120px; transform: translateX(-50%); padding: 6px 12px; pointer-events: auto; cursor: pointer;
-  background: rgba(20,28,14,.85); border: 2px solid #6f8f3a; border-radius: 4px; color: #e8f5d0; font: bold 13px var(--pixel-font); }
+  background: rgba(20,28,14,.85); border: 2px solid #6f8f3a; border-radius: 4px; color: #e8f5d0; font: 18px var(--pixel-font); }
 #npcprompt.open { display: block; }
-#npcprompt kbd, #npcdialog kbd { display: inline-block; padding: 0 5px; margin-right: 4px; border: 1px solid #9bbf5a; border-radius: 3px; background: #2a3a18; color: #fff; font: bold 13px var(--pixel-font); }
+#npcprompt kbd, #npcdialog kbd { display: inline-block; padding: 0 5px; margin-right: 4px; border: 1px solid #9bbf5a; border-radius: 3px; background: #2a3a18; color: #fff; font: 18px var(--pixel-font); }
 #npcdialog { display: none; position: absolute; left: 50%; bottom: 100px; transform: translateX(-50%); width: min(460px, calc(100% - 32px)); padding: 12px 16px;
   background: #e9dcb8; border: 3px solid #4f6b32; border-radius: 6px; box-shadow: inset 0 0 0 2px #c9b98a, 0 4px 12px rgba(0,0,0,.6);
-  color: #2a1f10; font: 16px/1.35 var(--pixel-font); pointer-events: auto; z-index: 20; }
+  color: #2a1f10; font: 18px/1.35 var(--pixel-font); pointer-events: auto; z-index: 20; }
 #npcdialog.open { display: block; }
 #npcdialog p { margin: 6px 0; }
 #npcdialog .nd-head { display: flex; align-items: baseline; gap: 8px; border-bottom: 1px solid #b8a676; padding-bottom: 4px; margin-bottom: 6px; }
-#npcdialog .nd-name { font: bold 16px var(--pixel-font); color: #3d5a1e; }
-#npcdialog .nd-title { font: 13px var(--pixel-font); color: #7a6a44; text-transform: uppercase; letter-spacing: 1px; }
+#npcdialog .nd-name { font: 18px var(--pixel-font); color: #3d5a1e; }
+#npcdialog .nd-title { font: 18px var(--pixel-font); color: #7a6a44; text-transform: uppercase; letter-spacing: 2px; }
 #npcdialog .nd-btns { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; margin-top: 10px; }
-#npcdialog button { font: bold 13px var(--pixel-font); padding: 6px 12px; border-radius: 4px; cursor: pointer; border: 2px solid #4f6b32; background: #f5ecd2; color: #2a1f10; }
+#npcdialog button { font: 18px var(--pixel-font); padding: 6px 12px; border-radius: 4px; cursor: pointer; border: 2px solid #4f6b32; background: #f5ecd2; color: #2a1f10; }
 #npcdialog button.nd-accept { background: #4f6b32; color: #fff; }
 #npcdialog button:hover { filter: brightness(1.1); }
 #npcdialog button:disabled { opacity: .5; cursor: default; }
-#questtracker { display: none; position: absolute; top: 296px; right: 12px; width: 190px; padding: 6px 9px; background: rgba(0,0,0,.55);
-  border-left: 3px solid #ffd166; border-radius: 3px; font: 14px var(--pixel-font); text-shadow: 1px 1px #000; }
+#questtracker { display: none; position: absolute; top: 296px; right: 12px; width: 240px; padding: 6px 9px; background: rgba(0,0,0,.55);
+  border-left: 3px solid #ffd166; border-radius: 3px; font: 18px var(--pixel-font); text-shadow: 2px 2px #000; }
 #questtracker.open { display: block; }
-#questtracker .qt-title { color: #ffd166; font-weight: bold; margin-bottom: 2px; }
+#questtracker .qt-title { color: #ffd166;  margin-bottom: 2px; }
 #questtracker .qt-obj { color: #fff; }
 #questtoast { position: absolute; top: 24%; left: 16px; right: 16px; text-align: center; opacity: 0; transition: opacity .5s; pointer-events: none; text-shadow: 2px 2px #000, 0 0 10px #000; }
 #questtoast.show { opacity: 1; animation: cleared-pop .5s ease-out; }
-#questtoast .big { font-size: 26px; font-weight: bold; color: #b9f27c; }
-#questtoast .small { font-size: 15px; color: #fff; margin-top: 4px; }
-@media (max-width: 600px) { #questtracker { top: 196px; width: 160px; } #feed { top: 200px; } #npcdialog { bottom: 60px; font-size: 13px; } }
+#questtoast .big { font-size: 22px; font-family: var(--title-font);  color: #b9f27c; }
+#questtoast .small { font-size: 18px; font-family: var(--pixel-font); color: #fff; margin-top: 4px; }
+@media (max-width: 600px) { #questtracker { top: 196px; width: 176px; } #feed { top: 200px; } #npcdialog { bottom: 60px; font-size: 18px; font-family: var(--pixel-font); } }
 
 /* Shops (weapons merchant, potion witch) */
 #npcdialog.shop { width: min(520px, calc(100% - 32px)); max-height: calc(100vh - 160px); overflow-y: auto; border-color: #8b5e34; }
-#npcdialog h4 { margin: 10px 0 4px; font: bold 13px var(--pixel-font); color: #6b4a22; text-transform: uppercase; letter-spacing: 1px; }
-#npcdialog .sh-gold { font: 13px var(--pixel-font); }
+#npcdialog h4 { margin: 10px 0 4px; font: 18px var(--pixel-font); color: #6b4a22; text-transform: uppercase; letter-spacing: 2px; }
+#npcdialog .sh-gold { font: 18px var(--pixel-font); }
 #npcdialog .sh-gold .ok { color: #2e7d32; margin-left: 8px; }
 #npcdialog .sh-gold .no { color: #b3262e; margin-left: 8px; }
 #npcdialog .sh-row { display: flex; align-items: center; gap: 8px; padding: 3px 4px; border-radius: 4px; }
 #npcdialog .sh-row:nth-child(odd) { background: rgba(120,90,40,.1); }
 #npcdialog .sh-icon canvas { display: block; width: 32px; height: 32px; image-rendering: pixelated; background: #2a2118; border-radius: 3px; }
-#npcdialog .sh-info { flex: 1; display: flex; flex-direction: column; font: 13px var(--pixel-font); min-width: 0; }
-#npcdialog .sh-info b { text-shadow: 1px 1px 0 #3a2a10; font-size: 13px; }
+#npcdialog .sh-info { flex: 1; display: flex; flex-direction: column; font: 18px var(--pixel-font); min-width: 0; }
+#npcdialog .sh-info b { text-shadow: 2px 2px 0 #3a2a10; font-size: 18px; font-family: var(--pixel-font); }
 #npcdialog .sh-info small { color: #5a4a30; }
 #npcdialog .sh-row button { white-space: nowrap; padding: 4px 10px; }
 #npcdialog .sh-buy { background: #8b5e34; color: #fff; border-color: #5a3a1e; }
 #npcdialog .sh-sell { background: #f5ecd2; }
-#npcdialog .sh-empty { font: 13px var(--pixel-font); color: #7a6a44; }
+#npcdialog .sh-empty { font: 18px var(--pixel-font); color: #7a6a44; }
 
 /* Quest log (J) */
 #questlog { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: min(620px, calc(100% - 32px)); max-height: calc(100vh - 140px); overflow-y: auto;
   background: #e9dcb8; border: 3px solid #8b5e34; border-radius: 6px; box-shadow: inset 0 0 0 2px #c9b98a, 0 6px 18px rgba(0,0,0,.6);
-  color: #2a1f10; font: 16px/1.35 var(--pixel-font); pointer-events: auto; z-index: 21; padding: 10px 16px 6px; }
+  color: #2a1f10; font: 18px/1.35 var(--pixel-font); pointer-events: auto; z-index: 21; padding: 10px 16px 6px; }
 #questlog[hidden] { display: none; }
 #questlog .ql-head { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #b8a676; margin-bottom: 8px; }
-#questlog h2 { margin: 0; font: bold 18px var(--pixel-font); color: #6b4a22; }
-#questlog .ql-close { border: 0; background: none; font: bold 18px var(--pixel-font); cursor: pointer; color: #6b4a22; }
+#questlog h2 { margin: 0; font: 22px var(--title-font); color: #6b4a22; }
+#questlog .ql-close { border: 0; background: none; font: 22px var(--title-font); cursor: pointer; color: #6b4a22; }
 #questlog .ql-body { display: flex; gap: 14px; }
-#questlog .ql-list { flex: 0 0 150px; font: 13px var(--pixel-font); }
-#questlog .ql-cat { color: #7a6a44; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px; }
+#questlog .ql-list { flex: 0 0 150px; font: 18px var(--pixel-font); }
+#questlog .ql-cat { color: #7a6a44; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 4px; }
 #questlog .ql-item { padding: 4px 6px; border-radius: 3px; border-left: 3px solid transparent; cursor: pointer; margin-bottom: 2px; opacity: .8; }
-#questlog .ql-item.sel { background: rgba(139,94,52,.18); border-left-color: #ffb703; font-weight: bold; opacity: 1; }
-#questlog .ql-next { font-size: 13px; margin-top: 8px; }
+#questlog .ql-item.sel { background: rgba(139,94,52,.18); border-left-color: #ffb703;  opacity: 1; }
+#questlog .ql-next { font-size: 18px; font-family: var(--pixel-font); margin-top: 8px; }
 #questlog .ql-detail { flex: 1; min-width: 0; }
-#questlog h3 { margin: 0; font: bold 16px var(--pixel-font); color: #3d5a1e; }
-#questlog h4 { margin: 10px 0 4px; font: bold 13px var(--pixel-font); color: #6b4a22; text-transform: uppercase; letter-spacing: 1px; }
-#questlog .ql-meta { font: 13px var(--pixel-font); color: #7a6a44; }
-#questlog .ql-badge { font: bold 13px var(--pixel-font); background: #2e7d32; color: #fff; padding: 1px 6px; border-radius: 8px; vertical-align: middle; }
-#questlog .ql-steps { list-style: none; margin: 0; padding: 0; font: 13px var(--pixel-font); }
+#questlog h3 { margin: 0; font: 18px var(--pixel-font); color: #3d5a1e; }
+#questlog h4 { margin: 10px 0 4px; font: 18px var(--pixel-font); color: #6b4a22; text-transform: uppercase; letter-spacing: 2px; }
+#questlog .ql-meta { font: 18px var(--pixel-font); color: #7a6a44; }
+#questlog .ql-badge { font: 18px var(--pixel-font); background: #2e7d32; color: #fff; padding: 1px 6px; border-radius: 8px; vertical-align: middle; }
+#questlog .ql-steps { list-style: none; margin: 0; padding: 0; font: 18px var(--pixel-font); }
 #questlog .ql-steps li { padding: 2px 0; }
-#questlog .ql-steps .ic { display: inline-block; width: 20px; font-weight: bold; }
+#questlog .ql-steps .ic { display: inline-block; width: 20px;  }
 #questlog .ql-steps .done { color: #6f8f3a; text-decoration: line-through; }
-#questlog .ql-steps .now { color: #2a1f10; font-weight: bold; }
+#questlog .ql-steps .now { color: #2a1f10;  }
 #questlog .ql-steps .now .ic { color: #d97a00; }
 #questlog .ql-steps .todo { color: #9a8a64; }
 #questlog .ql-bar { position: relative; height: 14px; margin: 3px 0 2px 20px; background: #3a2a10; border-radius: 3px; overflow: hidden; max-width: 260px; }
 #questlog .ql-bar div { height: 100%; background: linear-gradient(#9be564, #4f8f2a); }
-#questlog .ql-bar span { position: absolute; inset: 0; text-align: center; font: bold 12px/14px var(--pixel-font); color: #fff; text-shadow: 1px 1px #000; }
+#questlog .ql-bar span { position: absolute; inset: 0; text-align: center; font: 18px/14px var(--pixel-font); color: #fff; text-shadow: 2px 2px #000; }
 #questlog .ql-now { color: #6b4a22; }
-#questlog .ql-reward { display: flex; gap: 12px; flex-wrap: wrap; font: bold 13px var(--pixel-font); }
-#questlog .ql-trackrow { display: block; margin-top: 10px; font: 13px var(--pixel-font); cursor: pointer; }
-#questlog .ql-none { font: 13px var(--pixel-font); }
+#questlog .ql-reward { display: flex; gap: 12px; flex-wrap: wrap; font: 18px var(--pixel-font); }
+#questlog .ql-trackrow { display: block; margin-top: 10px; font: 18px var(--pixel-font); cursor: pointer; }
+#questlog .ql-none { font: 18px var(--pixel-font); }
 #questlog .bang { color: #d97a00; }
-#questlog .help { text-align: right; font: 13px var(--pixel-font); color: #7a6a44; margin: 6px 0 0; }
+#questlog .help { text-align: right; font: 18px var(--pixel-font); color: #7a6a44; margin: 6px 0 0; }
 @media (max-width: 600px) { #questlog .ql-body { flex-direction: column; } #questlog .ql-list { flex: none; } }
 
 /* Tracker: steps, progress bar, direction */
 #questtracker { cursor: pointer; pointer-events: auto; }
 #questtracker .qt-bar { position: relative; height: 8px; margin-top: 3px; background: #222; border-radius: 2px; overflow: hidden; }
 #questtracker .qt-bar div { height: 100%; background: #9be564; transition: width .3s; }
-#questtracker .qt-dir { color: #c9b89a; font-size: 13px; margin-top: 2px; }
-#questtracker .qt-hint { color: #8a8a8a; font-size: 12px; margin-top: 2px; }
+#questtracker .qt-dir { color: #c9b89a; font-size: 18px; font-family: var(--pixel-font); margin-top: 2px; }
+#questtracker .qt-hint { color: #8a8a8a; font-size: 18px; font-family: var(--pixel-font); margin-top: 2px; }
 #questtracker.flash { animation: qt-flash .8s ease-out; }
 @keyframes qt-flash { 0% { background: rgba(255,209,102,.6); } 100% { background: rgba(0,0,0,.55); } }
 
 /* Loot chests (client/src/chests.ts): same look as the talk prompt, gold border */
 #chestprompt { display: none; position: absolute; left: 50%; bottom: 120px; transform: translateX(-50%); padding: 6px 12px; pointer-events: auto; cursor: pointer;
-  background: rgba(32,22,8,.88); border: 2px solid #c9962b; border-radius: 4px; color: #fff3cf; font: bold 13px var(--pixel-font); white-space: nowrap; }
+  background: rgba(32,22,8,.88); border: 2px solid #c9962b; border-radius: 4px; color: #fff3cf; font: 18px var(--pixel-font); white-space: nowrap; }
 #chestprompt.open { display: block; }
-#chestprompt kbd { display: inline-block; padding: 0 5px; margin-right: 4px; border: 1px solid #e9c35a; border-radius: 3px; background: #4a3410; color: #fff; font: bold 13px var(--pixel-font); }
+#chestprompt kbd { display: inline-block; padding: 0 5px; margin-right: 4px; border: 1px solid #e9c35a; border-radius: 3px; background: #4a3410; color: #fff; font: 18px var(--pixel-font); }
 #chestprompt .lv { color: #e9c35a; margin-left: 4px; }
 #chestprompt.locked { cursor: default; border-color: #8a6a3a; color: #d8c8a8; }
 #chestprompt .why { display: block; margin-top: 2px; color: #ff9d7a; font-weight: normal; }
@@ -110,33 +110,33 @@
 #questtracker .qt-block + .qt-block { margin-top: 6px; padding-top: 6px; border-top: 1px solid rgba(255, 209, 102, 0.25); }
 
 /* How-to line of the guided first quest's steps in the tracker (shared/quests.ts QuestStep.hint) */
-#questtracker .qt-hint2 { color: #e8d9a8; font-size: 13px; line-height: 1.3; margin-top: 4px; padding-top: 3px; border-top: 1px solid rgba(255,209,102,.25); }
+#questtracker .qt-hint2 { color: #e8d9a8; font-size: 18px; font-family: var(--pixel-font); line-height: 1.3; margin-top: 4px; padding-top: 3px; border-top: 1px solid rgba(255,209,102,.25); }
 
 /* Whispering Woods shrine (client/src/shrine.ts) */
 #shrineprompt { display: none; position: absolute; left: 50%; bottom: 120px; transform: translateX(-50%); padding: 6px 12px; pointer-events: auto; cursor: pointer;
-  background: rgba(8,26,24,.88); border: 2px solid #25b8a6; border-radius: 4px; color: #e2fff4; font: bold 13px var(--pixel-font); white-space: nowrap;
+  background: rgba(8,26,24,.88); border: 2px solid #25b8a6; border-radius: 4px; color: #e2fff4; font: 18px var(--pixel-font); white-space: nowrap;
   -webkit-font-smoothing: none; -moz-osx-font-smoothing: grayscale; }
 #shrineprompt.open { display: block; }
-#shrineprompt kbd { display: inline-block; padding: 0 5px; margin-right: 4px; border: 1px solid #52dcc2; border-radius: 3px; background: #0b4a48; color: #fff; font: bold 13px var(--pixel-font); }
+#shrineprompt kbd { display: inline-block; padding: 0 5px; margin-right: 4px; border: 1px solid #52dcc2; border-radius: 3px; background: #0b4a48; color: #fff; font: 18px var(--pixel-font); }
 #shrineprompt.spent { cursor: default; border-color: #3f6e66; color: #b8d8d0; }
 #shrineprompt .why { display: block; margin-top: 2px; color: #9cf3dc; font-weight: normal; }
 
 /* Portal stones (client/src/portal.ts): prompt, travel list and "Portal awakened" banner */
 #portalprompt { display: none; position: absolute; left: 50%; bottom: 120px; transform: translateX(-50%); padding: 6px 12px; pointer-events: auto; cursor: pointer;
-  background: rgba(30,14,6,.9); border: 2px solid #f2761c; border-radius: 4px; color: #fff0a8; font: bold 13px var(--pixel-font); white-space: nowrap;
+  background: rgba(30,14,6,.9); border: 2px solid #f2761c; border-radius: 4px; color: #fff0a8; font: 18px var(--pixel-font); white-space: nowrap;
   -webkit-font-smoothing: none; -moz-osx-font-smoothing: grayscale; }
 #portalprompt.open { display: block; }
-#portalprompt kbd { display: inline-block; padding: 0 5px; margin-right: 4px; border: 1px solid #ffa22e; border-radius: 3px; background: #6e1a0a; color: #fff; font: bold 13px var(--pixel-font); }
+#portalprompt kbd { display: inline-block; padding: 0 5px; margin-right: 4px; border: 1px solid #ffa22e; border-radius: 3px; background: #6e1a0a; color: #fff; font: 18px var(--pixel-font); }
 #portalprompt .why { display: block; margin-top: 2px; color: #ffa22e; font-weight: normal; }
 #portalmenu { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: min(340px, calc(100% - 32px)); max-height: calc(100vh - 140px); overflow-y: auto;
   padding: 10px 12px 12px; pointer-events: auto; background: rgba(22,12,8,.95); border: 2px solid #a82c0c; border-radius: 4px; box-shadow: 0 0 0 2px #000, 0 0 24px rgba(242,118,28,.35);
-  color: #fff0a8; font: 13px var(--pixel-font); -webkit-font-smoothing: none; -moz-osx-font-smoothing: grayscale; }
+  color: #fff0a8; font: 18px var(--pixel-font); -webkit-font-smoothing: none; -moz-osx-font-smoothing: grayscale; }
 #portalmenu[hidden] { display: none; }
 #portalmenu .pt-head { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #6e1a0a; margin-bottom: 8px; padding-bottom: 4px; }
-#portalmenu h2 { margin: 0; font: bold 18px var(--pixel-font); color: #ffa22e; }
-#portalmenu .pt-close { border: 0; background: none; font: bold 18px var(--pixel-font); color: #ffa22e; cursor: pointer; }
+#portalmenu h2 { margin: 0; font: 22px var(--title-font); color: #ffa22e; }
+#portalmenu .pt-close { border: 0; background: none; font: 22px var(--title-font); color: #ffa22e; cursor: pointer; }
 #portalmenu .pt-row { display: flex; width: 100%; justify-content: space-between; align-items: center; gap: 8px; box-sizing: border-box; margin: 0 0 4px; padding: 6px 8px;
-  border: 1px solid #6e1a0a; border-radius: 3px; background: rgba(110,26,10,.25); color: #fff0a8; font: bold 13px var(--pixel-font); text-align: left; }
+  border: 1px solid #6e1a0a; border-radius: 3px; background: rgba(110,26,10,.25); color: #fff0a8; font: 18px var(--pixel-font); text-align: left; }
 #portalmenu button.pt-row { cursor: pointer; }
 #portalmenu button.pt-row:hover:not([disabled]) { background: rgba(216,74,18,.45); border-color: #f2761c; }
 #portalmenu button.pt-row[disabled] { opacity: .5; cursor: default; }

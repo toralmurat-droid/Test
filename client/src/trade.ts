@@ -5,6 +5,7 @@ import { STASH, STASH_RANGE, STASH_SIZE, TRADE } from "../../shared/trade";
 import { affixHtml, iconCanvas, itemColor, reqInfoOf } from "./gear";
 import { chestImage, setChestOpen } from "./chests";
 import { isoAnchor } from "./iso";
+import { TEXT_FONT, TEXT_PX, WT } from "./pixelfont";
 
 /**
  * Player trading and the account stash (shared/trade.ts; the server checks everything).
@@ -215,8 +216,8 @@ export class StashUI {
   constructor(private scene: Phaser.Scene, private send: Send, private mine: () => any) {
     this.img = chestImage(scene, STASH.x, STASH.y, 2);
     const label = scene.add.text(STASH.x, STASH.y - 18, "Stash", {
-      fontFamily: "'Pixelify Sans', monospace", fontSize: "16px", color: "#e9c35a", stroke: "#000", strokeThickness: 3,
-    }).setOrigin(0.5, 1).setScale(0.25).setResolution(2).setDepth(STASH.y + 1);
+      fontFamily: TEXT_FONT, fontSize: `${TEXT_PX}px`, color: "#e9c35a", stroke: "#000", strokeThickness: 2,
+    }).setOrigin(0.5, 1).setScale(WT).setResolution(1).setDepth(STASH.y + 1);
     isoAnchor(label, { x: STASH.x, y: STASH.y });
     this.prompt.id = "stashprompt";
     this.prompt.innerHTML = `<kbd>E</kbd> Open your stash`;

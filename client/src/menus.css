@@ -18,7 +18,7 @@ body #tradepanel, body #stashpanel, body #tradeask, body #shrineprompt, body #po
   background: none; border-radius: 0; box-shadow: none; color: #eadfc8; text-shadow: 2px 2px #050302;
   font-family: var(--pixel-font); -webkit-font-smoothing: none; -moz-osx-font-smoothing: grayscale; }
 body #hero, body #tree, body #gear, body #questlog, body #portalmenu, body #tradepanel, body #stashpanel, body #bountypanel { padding: 2px 8px 4px; }
-body #npcdialog { padding: 2px 8px 4px; font-size: 15px; }
+body #npcdialog { padding: 2px 8px 4px; font-size: 18px; font-family: var(--pixel-font); }
 body #slotpick { padding: 0 4px 2px; width: 270px; }
 body #tradeask { border-image-source: var(--wf-gold); padding: 0 8px 2px; }
 body #shrineprompt, body #portalprompt, body #stashprompt, body #boardprompt { padding: 0 4px; color: #eadfc8; }
@@ -26,12 +26,12 @@ body #stashprompt, body #boardprompt { border-image-source: var(--wf-gold); }
 
 /* Titles: centred gold with a dark rule under them, like "Menu" */
 body #hero h2, body #tree h2, body #gear h2, body #tradepanel h2, body #stashpanel h2, body #partypanel h2, body #bountypanel h2 {
-  margin: 0 0 6px; font-size: 20px; font-weight: normal; color: #e3bf6a; letter-spacing: 1px; text-align: center;
+  margin: 0 0 6px; font-size: 22px; font-family: var(--title-font); font-weight: normal; color: #e3bf6a; letter-spacing: 2px; text-align: center;
   border-bottom: 2px solid #45331e; padding-bottom: 4px; text-shadow: 2px 2px #050302; }
 body #questlog .ql-head, body #portalmenu .pt-head { border-bottom: 2px solid #45331e; padding-bottom: 4px; margin-bottom: 8px; }
-body #questlog h2, body #portalmenu h2 { font: 20px var(--pixel-font); color: #e3bf6a; letter-spacing: 1px; }
+body #questlog h2, body #portalmenu h2 { font: 22px var(--title-font); color: #e3bf6a; letter-spacing: 2px; }
 body #hero h3, body #gear h3, body #tradepanel h3, body #stashpanel h3, body #npcdialog h4, body #questlog h4, body #bountypanel h3 {
-  color: #c9a45a; font-weight: normal; letter-spacing: 1px; }
+  color: #c9a45a; font-weight: normal; letter-spacing: 2px; }
 body #hero .help, body #tree .help, body #gear .help, body #questlog .help, body #tradepanel .help, body #stashpanel .help, body #bountypanel .help { color: #a8977a; }
 body #hero b, body #gear b, body #tree b { font-weight: normal; }
 
@@ -40,22 +40,22 @@ body #menubtns button, body #questbtn, body #gamemenubtn, body #statreset, body 
 body #portalmenu .pt-close, body #tradepanel button:not(.gcell), body #stashpanel button:not(.gcell), body #tradeask button,
 body #musicpanel #musicclose, body #bountypanel button:not(.gcell) {
   border: 6px solid transparent; border-image: var(--wf-btn) 4 fill / 6px / 0 repeat; image-rendering: pixelated; border-radius: 0;
-  background: none; color: #eadfc8; font: 14px var(--pixel-font); text-shadow: 1px 1px #050302; cursor: pointer; box-shadow: none; }
+  background: none; color: #eadfc8; font: 18px var(--pixel-font); text-shadow: 2px 2px #050302; cursor: pointer; box-shadow: none; }
 body #menubtns button:hover, body #questbtn:hover, body #gamemenubtn:hover, body #statreset:hover, body #treereset:hover, body #npcdialog button:hover:not(:disabled),
 body #questlog .ql-close:hover, body #portalmenu .pt-close:hover, body #tradepanel button:not(.gcell):hover, body #stashpanel button:not(.gcell):hover,
 body #tradeask button:hover, body #bountypanel button:not(.gcell):hover { color: #ffd98a; filter: brightness(1.25); border-color: transparent; }
 
 /* HUD menu bar (bottom right) */
 body #menubtns { gap: 4px; }
-body #menubtns button { display: inline-flex; align-items: center; padding: 2px 8px; font-size: 14px; color: #eadfc8; }
-body #menubtns button small { color: #a8977a; margin-left: 5px; font-size: 13px; }
+body #menubtns button { display: inline-flex; align-items: center; padding: 2px 8px; font-size: 18px; font-family: var(--pixel-font); color: #eadfc8; }
+body #menubtns button small { color: #a8977a; margin-left: 5px; font-size: 18px; font-family: var(--pixel-font); }
 body #treebadge, body #herobadge, body #newsbadge, body #menubadge { top: -12px; right: -10px; border-radius: 0; background: #a8823a; color: #120c06;
-  font: 13px/16px var(--pixel-font); height: 18px; min-width: 18px; text-shadow: none; box-shadow: 0 0 0 2px #080504, inset 0 2px #e3bf6a; }
+  font: 18px/16px var(--pixel-font); height: 18px; min-width: 18px; text-shadow: none; box-shadow: 0 0 0 2px #080504, inset 0 2px #e3bf6a; }
 @media (max-width: 600px) { body #menubtns button { padding: 2px 4px; } body #menubtns button .pxi { margin-right: 2px; } }
 
-body #statreset, body #treereset { font-size: 13px; padding: 0 6px; }
+body #statreset, body #treereset { font-size: 18px; font-family: var(--pixel-font); padding: 0 6px; }
 body .statplus { width: 22px; height: 22px; padding: 0; border: 4px solid transparent; border-image: var(--wf-btn) 4 fill / 4px / 0 repeat;
-  background: none; color: #c8f59a; font: 14px/1 var(--pixel-font); text-shadow: 1px 1px #050302; image-rendering: pixelated; }
+  background: none; color: #c8f59a; font: 18px/1 var(--pixel-font); text-shadow: 2px 2px #050302; image-rendering: pixelated; }
 body .statplus:hover { background: none; filter: brightness(1.3); color: #e4ffc8; }
 
 /* ---------- Hero (C) ---------- */
@@ -76,22 +76,22 @@ body .tnode .pips, body .tnode .nlv { background: #0f0a06; border-radius: 0; }
 body .tnode .nlv { color: #c9b48a; }
 body .tnode kbd { background: #e3bf6a; color: #120c06; }
 body .tnode:hover { outline-color: #ffd98a; }
-body #treeinfo { background: #0f0a06; border: 2px solid #45331e; box-shadow: inset 0 0 0 1px #080504; color: #d8ccb4; font-size: 13px; }
+body #treeinfo { background: #0f0a06; border: 2px solid #45331e; box-shadow: inset 0 0 0 1px #080504; color: #d8ccb4; font-size: 18px; font-family: var(--pixel-font); }
 body #treeinfo .ihead b { color: #f0e0b8; font-weight: normal; }
 body #treeinfo .ttype.pas, body #treeinfo .istat { color: #a8977a; }
 body #treeinfo .ipath { color: #a8977a; }
 body #treeinfo .istat.can { color: #c8f59a; }
-body #slotpick .ph { color: #e3bf6a; font-weight: normal; font-size: 14px; border-bottom: 2px solid #45331e; padding-bottom: 3px; text-align: center; }
-body #slotpick .opt { background: #0f0a06; border: 2px solid #45331e; color: #eadfc8; font-size: 13px; }
+body #slotpick .ph { color: #e3bf6a; font-weight: normal; font-size: 18px; font-family: var(--pixel-font); border-bottom: 2px solid #45331e; padding-bottom: 3px; text-align: center; }
+body #slotpick .opt { background: #0f0a06; border: 2px solid #45331e; color: #eadfc8; font-size: 18px; font-family: var(--pixel-font); }
 body #slotpick .opt b { font-weight: normal; }
 body #slotpick .opt:hover { border-color: #a8823a; }
 body #slotpick .opt.cur { border-color: #e3bf6a; }
-body #slotpick .opt small { color: #a8977a; font-size: 12px; }
+body #slotpick .opt small { color: #a8977a; font-size: 18px; font-family: var(--pixel-font); }
 body #slotpick .picon.none { color: inherit; }
 
 /* ---------- Equipment / bag (G) ---------- */
 body #gearpreview { background: radial-gradient(#3a2c1c, #140e08); border: 2px solid #45331e; box-shadow: 0 0 0 2px #080504; }
-body .gslot { background: #0f0a06; border: 2px solid #45331e; color: #eadfc8; font-size: 13px; }
+body .gslot { background: #0f0a06; border: 2px solid #45331e; color: #eadfc8; font-size: 18px; font-family: var(--pixel-font); }
 body .gslot:not(.empty):hover { border-color: #a8823a; }
 body .gslot.empty { color: #6d6250; }
 body .gslot small { color: #a8977a; }
@@ -109,10 +109,10 @@ body #hotbar .slot:hover, body #hotbar .slot.picking { border-color: #ffd98a; }
 
 /* ---------- NPC dialogs and shops ---------- */
 body #npcdialog .nd-head { border-bottom: 2px solid #45331e; }
-body #npcdialog .nd-name { color: #e3bf6a; font-weight: normal; font-size: 18px; }
+body #npcdialog .nd-name { color: #e3bf6a; font-weight: normal; font-size: 22px; font-family: var(--title-font); }
 body #npcdialog .nd-title { color: #a8977a; }
 body #npcdialog p { color: #eadfc8; }
-body #npcdialog button { padding: 0 8px; font-size: 14px; font-weight: normal; }
+body #npcdialog button { padding: 0 8px; font-size: 18px; font-family: var(--pixel-font); font-weight: normal; }
 body #npcdialog button.nd-accept { color: #c8f59a; background: none; }
 body #npcdialog button:disabled { color: #6d6250; filter: grayscale(1); opacity: 1; }
 body #npcdialog kbd, body #shrineprompt kbd, body #portalprompt kbd, body #stashprompt kbd, body #boardprompt kbd {
@@ -125,7 +125,7 @@ body #npcdialog .sh-gold .no { color: #ff9d7a; }
 body #npcdialog .sh-row { border-radius: 0; border-bottom: 1px dashed #3a2b1c; }
 body #npcdialog .sh-row:nth-child(odd) { background: rgba(15, 10, 6, .55); }
 body #npcdialog .sh-icon canvas { background: #0f0a06; border-radius: 0; box-shadow: 0 0 0 2px #45331e; }
-body #npcdialog .sh-info b { font-weight: normal; text-shadow: 1px 1px #050302; }
+body #npcdialog .sh-info b { font-weight: normal; text-shadow: 2px 2px #050302; }
 body #npcdialog .sh-info small { color: #a8977a; }
 body #npcdialog .sh-buy, body #npcdialog .sh-sell { background: none; color: #ffd98a; }
 body #npcdialog .sh-empty { color: #a8977a; }
@@ -150,7 +150,7 @@ body #questlog .ql-reward { font-weight: normal; color: #f0e0b8; }
 body #questlog .bang { color: #ffb030; }
 body #questlog .ql-trackrow input { accent-color: #b8893a; }
 body #questtracker { background: rgba(15, 10, 6, .82); border-left: 3px solid #a8823a; border-radius: 0; box-shadow: 0 0 0 1px #080504;
-  text-shadow: 1px 1px #050302; color: #eadfc8; }
+  text-shadow: 2px 2px #050302; color: #eadfc8; }
 body #questtracker .qt-title { color: #e3bf6a; font-weight: normal; }
 body #questtracker .qt-obj { color: #eadfc8; }
 body #questtracker .qt-dir, body #questtracker .qt-hint { color: #a8977a; }
@@ -177,7 +177,7 @@ body .tready { color: #a8977a; }
 body .tside.ready .tready { color: #c8f59a; }
 body .tgold { color: #ffd98a; }
 body .tcell.picked { outline-color: #e3bf6a; }
-body #tradepanel .tbig, body #stashpanel .tbig, body #bountypanel .tbig { padding: 2px 14px; font-size: 15px; }
+body #tradepanel .tbig, body #stashpanel .tbig, body #bountypanel .tbig { padding: 2px 14px; font-size: 18px; font-family: var(--pixel-font); }
 body #tradepanel .tbig.go { color: #c8f59a; }
 body #tradeask small { color: #a8977a; }
 body #tradeask b { color: #ffd98a; font-weight: normal; }
@@ -189,15 +189,15 @@ body #musicpanel #musicclose { padding: 0 2px; line-height: 0; }
 /* ---------- Online heroes count, right next to the chat box ---------- */
 body #chat, body #chatlog { width: min(400px, calc(100% - 140px)); }
 body #online { position: absolute; bottom: 12px; left: calc(18px + min(400px, calc(100% - 140px))); height: 30px; box-sizing: border-box;
-  display: flex; align-items: center; padding: 0 8px; font: 15px var(--pixel-font); -webkit-font-smoothing: none; color: #e3bf6a;
-  background: rgba(15, 10, 6, .85); border: 2px solid #080504; box-shadow: inset 0 0 0 2px #45331e; text-shadow: 1px 1px #050302;
+  display: flex; align-items: center; padding: 0 8px; font: 18px var(--pixel-font); -webkit-font-smoothing: none; color: #e3bf6a;
+  background: rgba(15, 10, 6, .85); border: 2px solid #080504; box-shadow: inset 0 0 0 2px #45331e; text-shadow: 2px 2px #050302;
   font-variant-numeric: tabular-nums; pointer-events: auto; white-space: nowrap; }
 body #online .pxi { width: 16px; height: 16px; vertical-align: -3px; margin-right: 5px; }
 
 /* Quests button under the minimap + per-quest track boxes in the quest log */
 body #questbtn { position: absolute; left: 50%; bottom: -80px; transform: translateX(-50%); display: inline-flex; align-items: center;
-  padding: 2px 8px; font-size: 14px; white-space: nowrap; pointer-events: auto; }
-body #questbtn small { color: #a8977a; margin-left: 5px; font-size: 13px; }
+  padding: 2px 8px; font-size: 18px; font-family: var(--pixel-font); white-space: nowrap; pointer-events: auto; }
+body #questbtn small { color: #a8977a; margin-left: 5px; font-size: 18px; font-family: var(--pixel-font); }
 body #questbtn .pxi { margin-right: 4px; }
 body #questlog .ql-item { display: flex; align-items: center; gap: 6px; }
 body #questlog .ql-cathint { float: right; text-transform: none; letter-spacing: 0; }
@@ -208,6 +208,6 @@ body #questlog .ql-tbox .pxi { width: 10px; height: 10px; margin: 0; }
 body #questlog .ql-item:not(.tracked) .ql-name { opacity: .75; }
 body #questlog .ql-trackbtn { display: inline-flex; align-items: center; gap: 4px; margin-top: 10px; padding: 2px 8px;
   border: 6px solid transparent; border-image: var(--wf-btn) 4 fill / 6px / 0 repeat; image-rendering: pixelated; background: none;
-  color: #eadfc8; font: 14px var(--pixel-font); text-shadow: 1px 1px #050302; cursor: pointer; }
+  color: #eadfc8; font: 18px var(--pixel-font); text-shadow: 2px 2px #050302; cursor: pointer; }
 body #questlog .ql-trackbtn.on { color: #b9e08a; }
 body #questlog .ql-trackbtn:hover { color: #ffd98a; filter: brightness(1.25); }

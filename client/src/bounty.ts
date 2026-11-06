@@ -3,6 +3,7 @@ import { BOARD_RANGE, BOARDS, bountyTitle, type Bounty, type BountyState } from 
 import { BOARD_FOOT, boardTexture } from "./bountyArt";
 import { isoAnchor } from "./iso";
 import type { MapMarker } from "./minimap";
+import { TEXT_FONT, TEXT_PX, WT } from "./pixelfont";
 
 /**
  * Bounty boards (shared/bounty.ts): the board sprites with a gold "!" while you have no hunt, an "E Read the
@@ -26,8 +27,8 @@ export class BountyUI {
     boardTexture(scene);
     for (const b of BOARDS) {
       scene.add.image(b.x, b.y, "bounty_board").setOrigin(0.5, BOARD_FOOT).setScale(SCALE).setDepth(b.y);
-      const m = scene.add.text(b.x, b.y - 46, "!", { fontFamily: font, fontSize: "16px", color: "#ffd166", stroke: "#000", strokeThickness: 3 })
-        .setOrigin(0.5, 1).setScale(0.35).setResolution(2).setDepth(29000);
+      const m = scene.add.text(b.x, b.y - 46, "!", { fontFamily: TEXT_FONT, fontSize: `${TEXT_PX}px`, color: "#ffd166", stroke: "#000", strokeThickness: 2 })
+        .setOrigin(0.5, 1).setScale(WT).setResolution(1).setDepth(29000);
       isoAnchor(m, { x: b.x, y: b.y });
       scene.tweens.add({ targets: m, y: b.y - 49, duration: 700, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
       this.marks.push(m);

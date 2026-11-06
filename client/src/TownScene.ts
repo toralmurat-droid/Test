@@ -87,6 +87,7 @@ import { ResourceBars } from "./resourceBars";
 import { bindElemFx } from "./elemFx";
 import { bindBeastFx } from "./beastFx";
 import { DungeonView } from "./dungeon";
+import { TEXT_FONT, TEXT_PX, WT } from "./pixelfont";
 
 /** One painted bit on a merged blob, in body-relative units (-1..1 across the body). */
 interface BlobPart { kind: "patch" | "eye" | "mouth"; u: number; v: number; r: number; col: number }
@@ -216,7 +217,7 @@ const CONGRATS = [
 ];
 
 /** Pixel font (loaded with the NPC styles) for new in-world text. */
-const PIXEL_FONT = "'Pixelify Sans', monospace";
+const PIXEL_FONT = TEXT_FONT;
 
 /** Goo colours of the blobs (match their painted sheets), for the splash when one is struck. */
 const GOO: Record<string, number> = { slime: 0x5fae4c, blobling: 0x8cc955, shooterblob: 0x7f5cb8, warriorblob: 0xb94a32, healerblob: 0xd9aec6, venomblob: 0x6aa82a, frostblob: 0x9fd8f4, fireblob: 0xd04a1a, stormblob: 0x6a6ad8 };
@@ -1375,14 +1376,15 @@ export class TownScene extends Phaser.Scene {
     // Damage numbers spread a little sideways so fast hits don't print on top of each other
     if (jitter) x += (Math.random() - 0.5) * 10;
     const t = this.add.text(x, y, text, {
-      fontFamily: font, fontSize: "16px", color, stroke: "#000", strokeThickness: 3,
-    }).setOrigin(0.5, 1).setScale(0.25 * size).setResolution(2).setDepth(30000);
+      fontFamily: font, fontSize: `${TEXT_PX}px`, color, stroke: "#000", strokeThickness: 2,
+    }).setOrigin(0.5, 1).setScale(WT * Math.max(1, Math.round(size))).setResolution(1).setDepth(30000);
     // iso view: callers lift the text above a hero's feet; rise straight up from there on screen
     isoAnchor(t, { x, y: y + 14 });
     if (size > 1.5) {
       // Big numbers (crits) pop in, then rise
-      t.setScale(0.25 * size * 1.4);
-      this.tweens.add({ targets: t, scale: 0.25 * size, duration: 120, ease: "Back.easeOut" });
+      // whole-number scales keep every font pixel square (2x2 or 4x4 screen px)
+      t.setScale(WT * Math.round(size) * 1.5);
+      this.tweens.add({ targets: t, scale: WT * Math.round(size), duration: 120, ease: "Back.easeOut" });
     }
     this.tweens.add({ targets: t, y: y - 10, alpha: 0, duration: size > 1.5 ? 1000 : 800, delay: size > 1.5 ? 150 : 0, onComplete: () => t.destroy() });
   }
@@ -1451,9 +1453,9 @@ export class TownScene extends Phaser.Scene {
       ? this.add.sprite(p.x, p.y, hero, 0).setOrigin(CHAR_ORIGIN.x, CHAR_ORIGIN.y).setScale(HERO_SCALE)
       : this.add.sprite(p.x, p.y, heroTexture(this, p.cls, p.color), 0).setOrigin(0.5, 0.85);
     const label = this.add.text(p.x, p.y, p.name, {
-      fontFamily: PIXEL_FONT, fontSize: "16px", color: id === this.me ? "#ffd166" : "#ffffff",
-      stroke: "#000", strokeThickness: 3,
-    }).setOrigin(0.5, 1).setScale(0.25).setResolution(2);
+      fontFamily: TEXT_FONT, fontSize: `${TEXT_PX}px`, color: id === this.me ? "#ffd166" : "#ffffff",
+      stroke: "#000", strokeThickness: 2,
+    }).setOrigin(0.5, 1).setScale(WT).setResolution(1);
     isoAnchor(label, sprite);
     const bar = isoAnchor(this.add.graphics(), sprite) as Phaser.GameObjects.Graphics;
     const gear = hero ? new GearLayer(this, hero) : undefined;
@@ -2434,8 +2436,8 @@ export class TownScene extends Phaser.Scene {
         if (e.culled) { e.culled = false; e.bubble?.setVisible(true); e.bar.setVisible(true); }
         if (!e.label) {
           e.label = this.add.text(e.sprite.x, e.sprite.y, "", {
-            fontFamily: PIXEL_FONT, fontSize: "14px", color: "#ffffff", stroke: "#000", strokeThickness: 3,
-          }).setOrigin(0.5, 1).setScale(0.25).setResolution(2);
+            fontFamily: TEXT_FONT, fontSize: `${TEXT_PX}px`, color: "#ffffff", stroke: "#000", strokeThickness: 2,
+          }).setOrigin(0.5, 1).setScale(WT).setResolution(1);
           isoAnchor(e.label, e.sprite);
         }
       }
