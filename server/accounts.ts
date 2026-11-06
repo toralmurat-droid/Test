@@ -4,6 +4,7 @@ import type { BountyState } from "../shared/bounty";
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
+import { FailDelay, isLocalIp, KeyedLimiter, LOGIN_BURST, LOGIN_PER_SEC, SIGNUP_BURST, SIGNUP_PER_SEC } from "./ratelimit";
 
 export interface HeroSave {
   color: number;
@@ -58,37 +59,72 @@ try {
 }
 
 export const NAME_RE = /^[A-Za-z0-9_ -]{3,16}$/;
+/** Old accounts may still log in with 4+ characters; new accounts need 8 (NIST SP 800-63B minimum). */
 export const MIN_PASSWORD = 4;
+export const MIN_NEW_PASSWORD = 8;
 
 const key = (name: string) => name.trim().toLowerCase();
-const hashPw = (pw: string, salt: string) => crypto.scryptSync(pw, salt, 32).toString("hex");
+// scrypt runs on the libuv thread pool (async): the sync version froze the whole game world ~35 ms per login
+const scryptAsync = (pw: string, salt: string) => new Promise<Buffer>((ok, ko) => crypto.scrypt(pw, salt, 32, (e, k) => (e ? ko(e) : ok(k))));
+const hashPw = async (pw: string, salt: string) => (await scryptAsync(pw, salt)).toString("hex");
+const same = async (pw: string, acc: Account) => crypto.timingSafeEqual(await scryptAsync(pw, acc.salt), Buffer.from(acc.hash, "hex"));
+
+// Brute force and account spam: per address and per account (server/ratelimit.ts)
+const loginTries = new KeyedLimiter(LOGIN_PER_SEC, LOGIN_BURST);
+const signups = new KeyedLimiter(SIGNUP_PER_SEC, SIGNUP_BURST, 60 * 60_000);
+const fails = new FailDelay();
+
+function throttle(ip: string, k: string) {
+  if (!isLocalIp(ip) && !loginTries.take(ip)) throw new Error("Too many login attempts. Wait a moment and try again.");
+  const w = fails.wait(k);
+  if (w) throw new Error(`Too many wrong passwords for this name. Try again in ${Math.ceil(w / 1000)} s.`);
+}
+
+async function check(acc: Account, k: string, pw: string) {
+  if (!(await same(pw, acc))) {
+    fails.fail(k);
+    throw new Error("Wrong password for this name (or the name is taken)");
+  }
+  fails.ok(k);
+}
 
 /** Log in, or create the account if the name is free. Throws a message the player can read. */
-export function login(nameIn: unknown, pwIn: unknown): string {
+export async function login(nameIn: unknown, pwIn: unknown, ip = ""): Promise<string> {
   const name = String(nameIn ?? "").trim();
   const pw = String(pwIn ?? "");
   if (!NAME_RE.test(name)) throw new Error("Name: 3 to 16 letters, numbers, spaces, - or _");
   if (pw.length < MIN_PASSWORD || pw.length > 64) throw new Error(`Password: at least ${MIN_PASSWORD} characters`);
-  const acc = accounts[key(name)];
-  if (!acc) {
-    const salt = crypto.randomBytes(16).toString("hex");
-    accounts[key(name)] = { name, salt, hash: hashPw(pw, salt), created: Date.now(), heroes: {} };
-    flush();
-    return name;
+  const k = key(name);
+  throttle(ip, k);
+  const acc = accounts[k];
+  if (acc) {
+    await check(acc, k, pw);
+    return acc.name;
   }
-  const ok = crypto.timingSafeEqual(Buffer.from(hashPw(pw, acc.salt), "hex"), Buffer.from(acc.hash, "hex"));
-  if (!ok) throw new Error("Wrong password for this name (or the name is taken)");
-  return acc.name;
+  if (pw.length < MIN_NEW_PASSWORD) throw new Error(`New account: the password needs at least ${MIN_NEW_PASSWORD} characters`);
+  if (!isLocalIp(ip) && !signups.take(ip)) throw new Error("Too many new accounts from this network. Try again later.");
+  const salt = crypto.randomBytes(16).toString("hex");
+  const hash = await hashPw(pw, salt);
+  // Someone else may have taken the name while the hash was computed: then this is a normal login try
+  const raced = accounts[k];
+  if (raced) {
+    await check(raced, k, pw);
+    return raced.name;
+  }
+  accounts[k] = { name, salt, hash, created: Date.now(), heroes: {} };
+  markDirty(k);
+  return name;
 }
 
 /** Check a name + password without creating anything. Lists the saved heroes (class -> level). */
-export function peek(nameIn: unknown, pwIn: unknown): { exists: boolean; heroes: Record<string, number> } {
+export async function peek(nameIn: unknown, pwIn: unknown, ip = ""): Promise<{ exists: boolean; heroes: Record<string, number> }> {
   const name = String(nameIn ?? "").trim();
-  const pw = String(pwIn ?? "");
-  const acc = accounts[key(name)];
+  const pw = String(pwIn ?? "").slice(0, 64);
+  const k = key(name);
+  throttle(ip, k);
+  const acc = accounts[k];
   if (!acc) return { exists: false, heroes: {} };
-  const ok = crypto.timingSafeEqual(Buffer.from(hashPw(pw.slice(0, 64), acc.salt), "hex"), Buffer.from(acc.hash, "hex"));
-  if (!ok) throw new Error("Wrong password for this name (or the name is taken)");
+  await check(acc, k, pw);
   const heroes: Record<string, number> = {};
   for (const [cls, h] of Object.entries(acc.heroes)) if (h) heroes[cls] = h.level || 1;
   return { exists: true, heroes };
@@ -102,7 +138,7 @@ export function saveHero(name: string, cls: string, hero: HeroSave) {
   const acc = accounts[key(name)];
   if (!acc) return;
   acc.heroes[cls] = hero;
-  dirty = true;
+  markDirty(key(name));
 }
 
 /** Chests this account has opened that have not refilled yet (id -> refill time, ms). Drops expired entries. */
@@ -118,7 +154,7 @@ export function resetChests(name: string) {
   const acc = accounts[key(name)];
   if (!acc?.chests) return;
   delete acc.chests;
-  dirty = true;
+  markDirty(key(name));
 }
 
 /** Remember that this account emptied a chest until `refillAt`. */
@@ -126,7 +162,7 @@ export function markChest(name: string, id: string, refillAt: number) {
   const acc = accounts[key(name)];
   if (!acc) return;
   (acc.chests ??= {})[id] = refillAt;
-  dirty = true;
+  markDirty(key(name));
 }
 
 /** A copy of the account's stash (empty if it never used one). */
@@ -144,22 +180,53 @@ export function saveStash(name: string, stash: Stash, cls: string, hero: HeroSav
   if (!acc) return;
   acc.stash = { items: [...stash.items], gold: stash.gold };
   acc.heroes[cls] = hero;
-  dirty = true;
+  markDirty(key(name));
 }
 
 let dirty = false;
-/** Write all saves to disk (atomic: temp file then rename). */
-export function flush() {
+function markDirty(_k: string) { dirty = true; }
+
+let writing: Promise<void> | null = null;
+let again = false;
+/**
+ * Write all saves to disk in the background (atomic: temp file then rename). The old sync write froze the game
+ * world for the whole write every 5 s. A call while a write runs queues one more write right after it.
+ */
+export function flush(): Promise<void> {
+  if (writing) { again = true; return writing; }
+  dirty = false;
+  const body = JSON.stringify(accounts);
+  writing = (async () => {
+    try {
+      await fs.promises.mkdir(path.dirname(FILE), { recursive: true });
+      await fs.promises.writeFile(FILE + ".tmp", body);
+      if (closing) return; // the shutdown write (newer) already happened: never put older data over it
+      await fs.promises.rename(FILE + ".tmp", FILE);
+    } catch (e) {
+      dirty = true;
+      console.error("Could not write saves file:", e);
+    }
+  })().finally(() => {
+    writing = null;
+    if (again) { again = false; void flush(); }
+  });
+  return writing;
+}
+
+/** Write all saves now, blocking (only while the server shuts down, when nothing else must run first). */
+let closing = false;
+export function flushSync() {
+  closing = true;
   try {
     fs.mkdirSync(path.dirname(FILE), { recursive: true });
-    fs.writeFileSync(FILE + ".tmp", JSON.stringify(accounts));
-    fs.renameSync(FILE + ".tmp", FILE);
+    fs.writeFileSync(FILE + ".sync.tmp", JSON.stringify(accounts));
+    fs.renameSync(FILE + ".sync.tmp", FILE);
     dirty = false;
   } catch (e) {
     console.error("Could not write saves file:", e);
   }
 }
-setInterval(() => { if (dirty) flush(); }, 5000).unref();
+setInterval(() => { if (dirty) void flush(); }, 5000).unref();
 
 /** All accounts as stored on disk (password hashes, never passwords), for the admin backup download. */
 export function allAccounts() {

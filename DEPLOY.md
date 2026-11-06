@@ -52,6 +52,17 @@ Any player can type `/max` in chat: the hero they are playing goes to level 99, 
 (actives go on keys 1-0), spreads all stat points over the 4 stats, and gets full potions and 100000 gold.
 It is saved like normal progress, per class (do it once on each class).
 
+## Anti-abuse limits
+
+`server/ratelimit.ts` holds every limit (one place to tune them):
+- each player: 200 game messages a second (burst 400); a client that floods far past that is disconnected;
+- chat: 1 line a second (burst 5); trade and group invites: 1 every 2 s (burst 4);
+- logins: 60 tries at once per network address, then 1 a second; 5 wrong passwords on one name, then each try waits
+  longer (1 s, 2 s, 4 s ... up to 15 min);
+- new accounts: 10 per network address, then 1 every 2 minutes; the password needs 8+ characters (old accounts keep theirs).
+
+Local addresses (127.0.0.1, ::1) are never limited, so testing in several tabs keeps working.
+
 ## Good to know
 
 - **Backups**: the volume is the only copy of player accounts. Railway can back up volumes (volume → Backups); turn it on.

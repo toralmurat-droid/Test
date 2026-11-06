@@ -1,0 +1,10 @@
+{
+  "date": "2026-11-06",
+  "title": "Smoother logins, no more chat floods",
+  "changes": [
+    "Heroes logging in no longer make the whole world stutter for everyone else.",
+    "Chat is limited to a few lines a second, so nobody can flood it.",
+    "New accounts need a password of 8 characters or more. Existing accounts keep working.",
+    "Too many wrong passwords on one name now make the next try wait a little."
+  ]
+}
