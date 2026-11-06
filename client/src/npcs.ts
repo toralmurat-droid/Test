@@ -27,6 +27,7 @@ import { BAG_SIZE } from "../../shared/gear";
 import { isoAnchor } from "./iso";
 import { msUntilUndeadNight } from "../../shared/daynight";
 import { dayTime } from "./details";
+import { TEXT_FONT, TITLE_FONT, TEXT_PX, TITLE_PX, WT } from "./pixelfont";
 
 type Me = { x: number; y: number } | undefined;
 /** The local player's synced state (only the fields NPCs care about). */
@@ -72,11 +73,11 @@ export class NpcLayer {
       playCharAnim(sprite, n.sprite as CharacterName, "idle", n.dir);
       sprite.setInteractive({ useHandCursor: true }).on("pointerdown", () => { if (this.near === n) this.open(n); });
       const label = scene.add.text(n.x, n.y - Math.round(21 * CHAR_GROW), n.name, {
-        fontFamily: "monospace", fontSize: "16px", color: n.shop ? "#ffd166" : "#b9f27c", stroke: "#000", strokeThickness: 3,
-      }).setOrigin(0.5, 1).setScale(0.25).setResolution(2).setDepth(n.y + 1);
+        fontFamily: TEXT_FONT, fontSize: `${TEXT_PX}px`, color: n.shop ? "#ffd166" : "#b9f27c", stroke: "#000", strokeThickness: 2,
+      }).setOrigin(0.5, 1).setScale(WT).setResolution(1).setDepth(n.y + 1);
       const mark = scene.add.text(n.x, n.y - Math.round(25 * CHAR_GROW), "", {
-        fontFamily: "monospace", fontSize: "40px", fontStyle: "bold", color: "#ffd166", stroke: "#000", strokeThickness: 6,
-      }).setOrigin(0.5, 1).setScale(0.25).setResolution(2).setDepth(n.y + 1);
+        fontFamily: TITLE_FONT, fontSize: `${TITLE_PX}px`, color: "#ffd166", stroke: "#000", strokeThickness: 2,
+      }).setOrigin(0.5, 1).setScale(WT).setResolution(1).setDepth(n.y + 1);
       scene.tweens.add({ targets: mark, y: n.y - Math.round(27 * CHAR_GROW), duration: 600, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
       // iso view: name and quest mark stand straight above the NPC, not at a world point north of it
       isoAnchor(label, sprite); isoAnchor(mark, sprite);

@@ -1,5 +1,6 @@
 import Phaser from "phaser";
 import { ART_PX } from "./pixelgrid";
+import { TEXT_FONT, TEXT_PX } from "./pixelfont";
 
 /**
  * Dark, weathered pixel-art look for speech bubbles and HUD notices, painted like the village bonfire (bonfireArt.ts):
@@ -89,7 +90,7 @@ const TEXT_COL: Record<BubbleKind, string> = { say: "#eadfc8", shout: "#ffb49a" 
 const RIM: Record<BubbleKind, Ramp> = { say: RAMPS.bronze, shout: RAMPS.blood };
 
 const R = 3; // canvas px per art px: the frame is painted in R x R blocks, the text drawn at that finer grid
-const FONT_PX = 18; // ≈ 12 screen px at the default zoom, like the old bubbles
+const FONT_PX = TEXT_PX * R; // the game's pixel font, one font pixel = one art pixel (2x2 screen px at the default zoom)
 let bubbleN = 0;
 
 /**
@@ -97,11 +98,11 @@ let bubbleN = 0;
  * pixel font (hard edges, no anti-aliasing). Origin is the tail tip. The texture is freed when the image is destroyed.
  */
 export function speechBubble(scene: Phaser.Scene, x: number, y: number, text: string, kind: BubbleKind = "say") {
-  const font = `${FONT_PX}px 'Pixelify Sans', monospace`;
+  const font = `${FONT_PX}px ${TEXT_FONT}`;
   const m = document.createElement("canvas").getContext("2d")!;
   m.font = font;
   // word wrap: at most 300 canvas px of text per line
-  const maxW = 300, words = text.split(/\s+/), lines: string[] = [];
+  const maxW = 480, words = text.split(/\s+/), lines: string[] = [];
   let cur = "";
   for (const w of words) {
     const t = cur ? `${cur} ${w}` : w;
@@ -109,7 +110,7 @@ export function speechBubble(scene: Phaser.Scene, x: number, y: number, text: st
   }
   if (cur) lines.push(cur);
   const tw = Math.max(...lines.map((l) => m.measureText(l).width), 1);
-  const lineH = FONT_PX + 2;
+  const lineH = FONT_PX + R * 2;
   // panel size in art px: 5 px of rim/padding each side
   const aw = Math.max(14, Math.ceil(tw / R) + 10), ah = Math.ceil((lines.length * lineH) / R) + 9;
   const tail = 4;
@@ -136,9 +137,9 @@ export function speechBubble(scene: Phaser.Scene, x: number, y: number, text: st
   const t = document.createElement("canvas");
   t.width = c.width; t.height = c.height;
   const tg = t.getContext("2d")!;
-  tg.font = font; tg.textBaseline = "top"; tg.textAlign = "center"; tg.fillStyle = "#fff";
-  const top = Math.round((c.height - tail * R - lines.length * lineH) / 2) + 1;
-  lines.forEach((l, i) => tg.fillText(l, c.width / 2, top + i * lineH));
+  tg.font = font; tg.textBaseline = "top"; tg.textAlign = "left"; tg.fillStyle = "#fff";
+  const top = R * Math.round((c.height - tail * R - lines.length * lineH) / 2 / R); // on the art-pixel grid
+  lines.forEach((l, i) => tg.fillText(l, R * Math.round((c.width - m.measureText(l).width) / 2 / R), top + i * lineH));
   const src = tg.getImageData(0, 0, t.width, t.height).data;
   const out = g.getImageData(0, 0, c.width, c.height), d = out.data;
   const col = [1, 3, 5].map((i) => parseInt(TEXT_COL[kind].slice(i, i + 2), 16));
@@ -146,7 +147,7 @@ export function speechBubble(scene: Phaser.Scene, x: number, y: number, text: st
   const on = (i: number) => src[i * 4 + 3] > 110;
   for (let i = W * t.height - 1; i >= 0; i--) {
     if (on(i)) { d[i * 4] = col[0]; d[i * 4 + 1] = col[1]; d[i * 4 + 2] = col[2]; continue; }
-    const s = i - W - 1; // shadow 1px down-right
+    const s = i - W * R - R; // shadow one art pixel down-right
     if (s >= 0 && on(s)) { d[i * 4] = 8; d[i * 4 + 1] = 5; d[i * 4 + 2] = 3; }
   }
   g.putImageData(out, 0, 0);

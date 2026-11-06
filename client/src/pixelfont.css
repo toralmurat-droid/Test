@@ -1,0 +1,25 @@
+/* One pixel font family for every text in the game, drawn on the same 2x2-screen-pixel grid as the world art
+   (pixelgrid.ts), in the style of the zone title "Oakvale Outskirts". Built by tools/font/build-fonts.py.
+   Only use these sizes, so every font pixel is exactly 2 (or 3) screen pixels:
+   - var(--title-font): 22px (2x), 33px (3x), 44px (4x)  - headings, titles
+   - var(--pixel-font): 18px (2x)                         - all other text
+   - var(--tiny-font):  12px (2x)                         - key hints, slot numbers, small badges */
+@font-face { font-family: "Oakvale Title"; src: url("/fonts/oakvale-title.woff2") format("woff2"); font-display: block; }
+@font-face { font-family: "Oakvale Text"; src: url("/fonts/oakvale-text.woff2") format("woff2"); font-display: block; }
+@font-face { font-family: "Oakvale Tiny"; src: url("/fonts/oakvale-tiny.woff2") format("woff2"); font-display: block; }
+html:root {
+  --pixel-font: "Oakvale Text", "Pixelify Sans", monospace;
+  --title-font: "Oakvale Title", "Oakvale Text", "Pixelify Sans", monospace;
+  --tiny-font: "Oakvale Tiny", "Oakvale Text", "Pixelify Sans", monospace;
+  /* hard 2px black outline + drop shadow, like the zone title */
+  --px-outline: 2px 0 #050302, -2px 0 #050302, 0 2px #050302, 0 -2px #050302, 2px 2px #050302, -2px -2px #050302, 2px -2px #050302, -2px 2px #050302, 2px 4px #050302;
+}
+/* Bitmap glyphs: no fake bold/italic smearing, no smoothing */
+html, body, body *, input, button, textarea, select {
+  font-synthesis: none; -webkit-font-smoothing: none; -moz-osx-font-smoothing: grayscale; font-kerning: none;
+}
+body input, body button, body textarea, body select { font-family: var(--pixel-font); }
+body small, body kbd { font-family: var(--tiny-font) !important; font-size: 12px !important; }
+/* Headings use the title letters */
+body h1, body h2 { font-family: var(--title-font); font-size: 22px; font-weight: normal; }
+body h3, body h4 { font-family: var(--pixel-font); font-size: 18px; font-weight: normal; }

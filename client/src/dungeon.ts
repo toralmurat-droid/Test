@@ -7,6 +7,7 @@ import { CHESTS } from "../../shared/chests";
 import { GORE, goreTextures } from "./goreArt";
 import { ISO, isoAnchor, isoScreen, isoX, isoY } from "./iso";
 import { BLOCK_TOP, BRAZIER, dungeonTextures, GATE_H, GATEPOST, gateTexture, ROPE_ART, TX, WALL_LOW, WALL_TALL, wallTexture } from "./dungeonArt";
+import { TEXT_FONT, TEXT_PX, WT } from "./pixelfont";
 
 /**
  * The Mawdeep Warrens on the client (shared/dungeon.ts): the sinkhole in the Whispering Woods, and down below, cave
@@ -85,8 +86,8 @@ export class DungeonView {
     dungeonTextures(scene);
     goreTextures(scene);
     this.surface();
-    this.label = scene.add.text(0, 0, "", { fontFamily: font, fontSize: "16px", color: "#e8d7a8", stroke: "#000", strokeThickness: 3 })
-      .setOrigin(0.5, 1).setScale(0.25).setResolution(2).setDepth(30000).setVisible(false);
+    this.label = scene.add.text(0, 0, "", { fontFamily: TEXT_FONT, fontSize: `${TEXT_PX}px`, color: "#e8d7a8", stroke: "#000", strokeThickness: 2 })
+      .setOrigin(0.5, 1).setScale(WT).setResolution(1).setDepth(30000).setVisible(false);
   }
 
   /** The sinkhole's mouth in the woods, with the rope staked at its lip. */
