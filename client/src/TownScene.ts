@@ -1031,6 +1031,19 @@ export class TownScene extends Phaser.Scene {
       e.chaseUntil = this.time.now + 200; // let the little hop play instead of the snapshot playback
       this.tweens.add({ targets: e.sprite, y: { from: e.sprite.y - 3, to: e.sprite.y }, duration: 180, ease: "Quad.easeIn" });
     });
+    // A Redfang ambusher drops out of a tree (shared/bandits.ts AMBUSH): leaves shake loose, it jumps down beside the hero
+    this.room.onMessage("bambush", ({ id, x0, y0, x, y, ms }) => {
+      this.leafFall(x0, y0 - 18);
+      const e = this.entities.get(id);
+      if (!e) return;
+      e.sprite.setPosition(x0, y0).setVisible(true);
+      e.tx = x; e.ty = y; e.snaps = [{ t: patchTime(), x, y }];
+      e.leapUntil = this.time.now + ms + 300;
+      this.floatText(x0, y0 - e.top - 10, "!", "#ff5252", PIXEL_FONT);
+      const b = this.bodyScale(e);
+      this.tweens.add({ targets: e.sprite, scaleX: { from: b * 0.85, to: b * 1.25 }, scaleY: { from: b * 1.2, to: b * 1.25 }, duration: ms / 2, yoyo: true, ease: "Sine.easeOut", onComplete: () => e.sprite.setScale(b) });
+      this.time.delayedCall(ms, () => { this.burst(x, y, 4, 0x8d6e63, 300); this.squash(e, 1.2, 0.8, 110, 1); });
+    });
     this.room.onMessage("ambush", ({ id, x, y, victim }) => {
       const e = this.entities.get(id);
       if (!e) return;
@@ -1860,6 +1873,16 @@ export class TownScene extends Phaser.Scene {
     }
   }
 
+  /** A handful of leaves shaken loose from a tree, fluttering down. */
+  private leafFall(x: number, y: number) {
+    const cols = [0x4f7a3a, 0x6b8f3e, 0x8a6b2f, 0x3d5e2c];
+    for (let i = 0; i < 12; i++) {
+      const lx = x + (Math.random() - 0.5) * 22, ly = y + (Math.random() - 0.5) * 10;
+      const leaf = this.add.rectangle(lx, ly, 3, 2, cols[i % cols.length]).setDepth(20000);
+      this.tweens.add({ targets: leaf, x: lx + (Math.random() - 0.5) * 18, y: ly + 18 + Math.random() * 14, alpha: 0, angle: Math.random() * 180, duration: 600 + Math.random() * 500, ease: "Sine.easeIn", onComplete: () => leaf.destroy() });
+    }
+  }
+
   private burst(x: number, y: number, r: number, color: number, ms: number) {
     const g = this.add.circle(x, y, r, color, 0.5).setStrokeStyle(1, color).setDepth(10000);
     this.tweens.add({ targets: g, scale: 1.8, alpha: 0, duration: ms, onComplete: () => g.destroy() });
@@ -2602,7 +2625,9 @@ export class TownScene extends Phaser.Scene {
         }
       }
       e.parts?.clear();
-      if (e.mob && !p.dead && p.hidden) {
+      if (e.mob && !p.dead && p.hidden && p.weapon === "ambusher") {
+        // up in a tree: nothing shows at all (that's the point of an ambush)
+      } else if (e.mob && !p.dead && p.hidden) {
         // Hiding in a grave or tree: only a pair of eyes peeks out (and blinks now and then)
         e.bar.setDepth(20000);
         const blink = (now + x * 53 + y * 31) % 3200 < 160;

@@ -12,15 +12,20 @@ import { isSolidAt, isSolidTile, REDFANG, REDFANG_TOWERS } from "./map";
  * - The leader, the Redfang Chief, is a boss guarding the camp's loot chest (shared/chests.ts): Sweep, Leap,
  *   War Cry (rallies the camp) and, once badly hurt, calls two more cutthroats out of the huts.
  *
+ * - Ambushers (Murat 2026-11-06) hide up in the trees of the woods round the camp, in small groups along the trails.
+ *   Nothing shows until a hero walks right under them: then they drop out of the branches, land beside him with a
+ *   stab, and the rest of their group follows. Once the fight is over they climb back up into a tree.
+ *
  * Bandits are MobKind "bandit" with a role kept in Mob.weapon (synced, so the client picks the matching sheet).
  */
-export type BanditRole = "cutthroat" | "brute" | "archer" | "lookout";
+export type BanditRole = "cutthroat" | "brute" | "archer" | "lookout" | "ambusher";
 
 /** Role multipliers on the bandit's base stats (MOBS.bandit). `loot` scales the gold it drops. */
 export const BANDIT_ROLES: Record<BanditRole, { name: string; hp: number; dmg: number; speed: number; cooldown: number; xp: number; poise: number; loot: number }> = {
   cutthroat: { name: "Cutthroat", hp: 2.2, dmg: 1.3, speed: 1.12, cooldown: 0.9, xp: 2.4, poise: 1.2, loot: 2 },
   brute: { name: "Brute", hp: 3.6, dmg: 1.7, speed: 0.82, cooldown: 1.35, xp: 3.4, poise: 2.2, loot: 2.5 },
   archer: { name: "Bandit Archer", hp: 1.7, dmg: 1, speed: 1, cooldown: 1, xp: 2.2, poise: 1, loot: 2 },
+  ambusher: { name: "Ambusher", hp: 1.9, dmg: 1.2, speed: 1.15, cooldown: 0.9, xp: 2.4, poise: 1.1, loot: 2 },
   lookout: { name: "Lookout", hp: 1.6, dmg: 0.95, speed: 0, cooldown: 1, xp: 2.2, poise: 1.4, loot: 2 },
 };
 
@@ -43,6 +48,14 @@ export const BANDIT_AI = {
   // ...and win those fights: damage they deal to monsters, and take from them
   feud: { dealt: 2.5, taken: 0.4 },
 };
+
+/**
+ * Ambushers in the trees. `range` px: a hero this close below the tree makes it drop; it lands `landGap` px from him
+ * after a `flightMs` jump and hits everyone within `radius` (a short stagger, no screen shake). Hidden ones of the same
+ * group within `callRange` follow it out, one after another (`staggerMs`). Back in a tree within `treeRadius` tiles of
+ * its post once nothing is left to fight.
+ */
+export const AMBUSH = { range: 64, landGap: 20, flightMs: 380, radius: 30, dmgMult: 0.9, stunMs: 250, callRange: 7 * TILE, staggerMs: [180, 520] as const, treeRadius: 4, seekMs: 20000 };
 
 /** The boss. Stats in MOBS.banditchief. */
 export const CHIEF = {
@@ -74,6 +87,9 @@ export const CAMP_POSTS: BanditPost[] = [
   { role: "archer", at: [252, 100], route: [[252, 100], [242, 93], [234, 88], [226, 80]] },
   { role: "cutthroat", at: [251, 121], route: [[251, 121], [250, 126], [248, 132], [245, 138], [241, 143]] },
   { role: "archer", at: [252, 121], route: [[252, 121], [251, 126], [249, 132], [246, 138], [242, 143]] },
+  // Ambushers: two per grove, up in the trees beside the trails round the camp (the bandits' own woods)
+  ...([[236, 94], [256, 94], [234, 106], [244, 127], [271, 113]] as [number, number][])
+    .flatMap((at): BanditPost[] => [{ role: "ambusher", at }, { role: "ambusher", at }]),
 ];
 /** Lookouts stand a hair in front of their tower so they are drawn on its platform. */
 export const PERCH_DY = 2;

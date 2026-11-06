@@ -39,7 +39,7 @@ import { findHideSpot, HIDE, MOTHER_KEEP_OUT, noMobsAt, spawnPoint, SPAWN_ZONES,
 import { moveStep } from "../shared/movement";
 import { SLOTS_BY_ZONE, WORK_SLOTS } from "../shared/siege";
 import { DAY_CYCLE_MS, dayFrac, isUndeadNight, NIGHT_BOSSES, UNDEAD_NIGHT } from "../shared/daynight";
-import { BANDIT_AI, BANDIT_ROLES, CAMP_POSTS, CHIEF, clearWalk, findPath, postPos, roleOf } from "../shared/bandits";
+import { AMBUSH, BANDIT_AI, BANDIT_ROLES, CAMP_POSTS, CHIEF, clearWalk, findPath, postPos, roleOf } from "../shared/bandits";
 import { flush, HeroSave, loadHero, loadStash, login, markChest, openedChests, resetChests, saveHero, saveStash } from "./accounts";
 import { offerFrom, Offer, settle, STASH, STASH_GOLD_MAX, STASH_RANGE, STASH_SIZE, TRADE } from "../shared/trade";
 import { arrivalOf, cleanPortals, PORTAL_COMBAT_MS, PORTAL_RANGE, PORTAL_WAKE_RANGE, portalById, PORTALS } from "../shared/portals";
@@ -233,6 +233,8 @@ export class Mob extends Schema {
   camp = false; post = -1; perch = false; pLeg = 0; pDir = 1; stuckSince = 0; detourUntil = 0;
   alertUntil = 0; alertHero = ""; nextHorn = 0; nextVolley = 0; rallyUntil = 0; chargeMult = 1; dashHit = false; reinforced = false;
   nextSweep = 0; nextLeap = 0; nextCry = 0;
+  // Ambushers (AMBUSH): up in a tree; a call from their group to drop on a hero; the jump out in flight
+  ambusher = false; ambushAt = 0; ambushHero = ""; flyUntil = 0; flyMs = 0; flyX0 = 0; flyY0 = 0; flyX = 0; flyY = 0;
   path: [number, number][] = []; pathAt = 0; pathTX = 0; pathTY = 0; // the way round walls (gates), see seek
   @type("float32") x = 0;
   @type("float32") y = 0;
@@ -925,13 +927,14 @@ export class TownRoom extends Room<TownState> {
     m.camp = false; m.post = -1; m.perch = false; m.pLeg = 0; m.pDir = 1; m.stuckSince = 0; m.detourUntil = 0;
     m.alertUntil = 0; m.alertHero = ""; m.nextHorn = 0; m.nextVolley = 0; m.rallyUntil = 0; m.chargeMult = 1; m.dashHit = false; m.reinforced = false;
     m.nextSweep = 0; m.nextLeap = 0; m.nextCry = 0;
+    m.ambusher = false; m.ambushAt = 0; m.ambushHero = ""; m.flyUntil = 0;
     m.nextSplurt = 0; m.nextNova = 0; m.nextBreath = 0; m.nextSparks = 0;
     if (kind === "bandit" && SPAWN_ZONES[zi]?.name === "Redfang Hollow") {
       // The camp: every bandit takes the first free post (its role, spot and patrol route)
       const post = this.freePost(id);
       if (post >= 0) {
         const P = CAMP_POSTS[post];
-        m.camp = true; m.post = post; m.weapon = P.role; m.perch = P.role === "lookout";
+        m.camp = true; m.post = post; m.weapon = P.role; m.perch = P.role === "lookout"; m.ambusher = P.role === "ambusher";
         home = { ...postPos(P), level: home.level };
       }
     } else if (kind === "bandit" && SPAWN_ZONES[zi]?.name === "Gullrock Cove") {
@@ -955,6 +958,8 @@ export class TownRoom extends Room<TownState> {
     m.canShoot = kind === "shooterblob"; m.canCharge = kind === "warriorblob"; m.canHeal = kind === "healerblob";
     if (kind === "motherblob") m.nextBrood = Date.now() + BROOD.minMs + Math.random() * (BROOD.maxMs - BROOD.minMs);
     if (!this.state.mobs.has(id)) this.state.mobs.set(id, m);
+    // An ambusher is already up in its tree when it comes (nobody is near: spawns keep NO_SPAWN_RANGE from heroes)
+    if (m.ambusher && this.treeFor(m, Date.now())) this.hide(m, id, Date.now());
   }
 
   // ---- Siege works (shared/siege.ts) ------------------------------------------
@@ -1076,15 +1081,78 @@ export class TownRoom extends Room<TownState> {
   private updateHidden(m: Mob, id: string, dt: number, now: number) {
     m.moving = false;
     if (m.hp < m.maxHp) m.hp = Math.min(m.maxHp, m.hp + m.maxHp * HIDE.regenPerSec * dt);
-    let victim = "", best = HIDE.ambushRange;
+    if (m.ambusher && m.ambushAt && now >= m.ambushAt) {
+      // its group has dropped on a hero: it follows
+      const p = this.state.players.get(m.ambushHero);
+      m.ambushAt = 0;
+      if (p && !p.dead && !isSafeZone(p.x, p.y) && Math.hypot(p.x - m.x, p.y - m.y) < AMBUSH.callRange * 1.5) return this.leapOut(m, id, m.ambushHero, now);
+    }
+    let victim = "", best = m.ambusher ? AMBUSH.range : HIDE.ambushRange;
     this.state.players.forEach((p, pid) => {
       if (p.dead || isSafeZone(p.x, p.y)) return;
+      if (m.ambusher && aggroLevelFactor(m.level, p.level) <= 0) return; // a hero far above them is left to pass (same as aggro)
       const d = Math.hypot(p.x - m.x, p.y - m.y);
       if (d < best) { best = d; victim = pid; }
     });
     if (m.broken) return;
+    if (m.ambusher) { if (victim) this.leapOut(m, id, victim, now); return; } // they wait up there as long as it takes
     if (victim) this.popOut(m, id, victim);
     else if (now > m.hideUntil) this.popOut(m, id, "");
+  }
+
+  /** An ambusher picks a free tree near its post to climb (walks to it, hides on arrival). False if none is free. */
+  private treeFor(m: Mob, now: number): boolean {
+    const taken = new Set<string>();
+    this.state.mobs.forEach((o) => { if (o !== m && o.spot && !o.dead) taken.add(o.spot); });
+    const s = findHideSpot(m.kind, m.homeX, m.homeY, AMBUSH.treeRadius, taken, HIDE.spots.slime);
+    if (!s) return false;
+    m.spot = s.key; m.spotX = s.x; m.spotY = s.y; m.outX = s.outX; m.outY = s.outY;
+    m.seekUntil = now + AMBUSH.seekMs; m.fleeing = false;
+    return true;
+  }
+
+  /** Drop out of the tree onto a hero: a jump that lands beside him (see the flight in updateMob); the group follows. */
+  private leapOut(m: Mob, id: string, heroId: string, now: number) {
+    const p = this.state.players.get(heroId)!;
+    m.hidden = false; m.spot = ""; m.ambushAt = 0;
+    const dx = m.x - p.x, dy = m.y - p.y, d = Math.hypot(dx, dy) || 1;
+    // land between the tree and the hero, a step from him (or on either side, or by the tree if those are blocked)
+    let lx = m.outX, ly = m.outY;
+    for (const a of [0, 0.7, -0.7, 1.4, -1.4]) {
+      const c = Math.cos(a), sn = Math.sin(a), ux = (dx * c - dy * sn) / d, uy = (dx * sn + dy * c) / d;
+      const x = p.x + ux * AMBUSH.landGap, y = p.y + uy * AMBUSH.landGap;
+      if (!isSolidAt(x - 5, y - 5) && !isSolidAt(x + 5, y + 5) && !isSolidAt(x - 5, y + 5) && !isSolidAt(x + 5, y - 5) && this.canStep(m, x, y)) { lx = x; ly = y; break; }
+    }
+    m.flyX0 = m.x; m.flyY0 = m.y; m.flyX = lx; m.flyY = ly; m.flyMs = AMBUSH.flightMs; m.flyUntil = now + AMBUSH.flightMs;
+    m.target = heroId; m.foe = ""; m.nextAggro = now + AGGRO.everyMs * 2;
+    this.addHate(m, heroId, 0);
+    m.dir = Math.abs(lx - m.x) > Math.abs(ly - m.y) ? (lx > m.x ? "right" : "left") : (ly > m.y ? "down" : "up");
+    this.broadcast("bambush", { id, x0: Math.round(m.x), y0: Math.round(m.y), x: Math.round(lx), y: Math.round(ly), ms: AMBUSH.flightMs, victim: heroId });
+    // the rest of its group drops too, one after another
+    let k = 0;
+    this.state.mobs.forEach((o) => {
+      if (o === m || !o.ambusher || !o.hidden || o.dead || o.ambushAt || Math.hypot(o.x - m.x, o.y - m.y) > AMBUSH.callRange) return;
+      const [a, b] = AMBUSH.staggerMs;
+      o.ambushAt = now + a + k++ * (b - a) / 2 + Math.random() * 120; o.ambushHero = heroId;
+    });
+  }
+
+  /** The jump out of the tree: glides to the landing spot, then stabs everyone it lands next to. */
+  private ambushFlight(m: Mob, id: string, now: number) {
+    m.moving = false; m.winding = false; m.windUntil = 0;
+    if (now < m.flyUntil) {
+      const k = 1 - (m.flyUntil - now) / m.flyMs;
+      m.x = m.flyX0 + (m.flyX - m.flyX0) * k; m.y = m.flyY0 + (m.flyY - m.flyY0) * k;
+      return;
+    }
+    m.flyUntil = 0; m.x = m.flyX; m.y = m.flyY; m.lastAttack = now;
+    const dmg = Math.round(mobDef(m, now).damage * mobScale(m.level, "damage") * AMBUSH.dmgMult);
+    this.state.players.forEach((p, pid) => {
+      if (p.dead) return;
+      const dx = p.x - m.x, dy = p.y - m.y, d = Math.hypot(dx, dy);
+      if (d > AMBUSH.radius) return;
+      this.damagePlayer(pid, dmg, "Ambusher's Drop", d > 0.1 ? [dx / d, dy / d] : [0, 1], 0.6, { atkLevel: m.level, from: id, stunMs: AMBUSH.stunMs });
+    });
   }
 
   private popOut(m: Mob, id: string, victim: string) {
@@ -2106,6 +2174,12 @@ export class TownRoom extends Room<TownState> {
     });
   }
 
+  /** Like playerNear, but fallen heroes count too (they still watch). */
+  private anyPlayerNear(x: number, y: number, r: number): boolean {
+    for (const p of this.state.players.values()) if (Math.abs(p.x - x) < r && Math.abs(p.y - y) < r) return true;
+    return false;
+  }
+
   private playerNear(x: number, y: number, r: number): boolean {
     for (const p of this.state.players.values()) if (!p.dead && Math.abs(p.x - x) < r && Math.abs(p.y - y) < r) return true;
     return false;
@@ -2132,12 +2206,18 @@ export class TownRoom extends Room<TownState> {
       m.moving = r.moving; m.dir = dirFromInput(go, m.dir);
       return;
     }
+    if (m.flyUntil) return this.ambushFlight(m, id, now);
     m.stunned = now < m.stunUntil;
     if (m.stunned || m.broken) { m.winding = false; m.windUntil = 0; }
     m.slowed = now < m.slowUntil;
     if (m.stunned) { m.moving = false; return; }
     // Nobody around: the monster dozes (no wandering, no budding), which keeps big monster counts cheap
-    if (!m.target && !this.playerNear(m.x, m.y, SLEEP_RANGE)) { if (m.moving) m.moving = false; return; }
+    if (!m.target && !this.playerNear(m.x, m.y, SLEEP_RANGE)) {
+      if (m.moving) m.moving = false;
+      // an ambusher left standing about with nobody (not even a fallen hero) to see: it is back up its tree
+      if (m.ambusher && !m.hidden && !m.broken && !this.anyPlayerNear(m.x, m.y, SLEEP_RANGE) && (m.spot || this.treeFor(m, now))) this.hide(m, id, now);
+      return;
+    }
     if (m.kind === "motherblob" && now >= m.nextBrood) this.brood(m, id, now);
     if (m.hidden) return this.updateHidden(m, id, dt, now);
     // Answering a merge call: rush to the caller and fuse on contact
@@ -2183,7 +2263,7 @@ export class TownRoom extends Room<TownState> {
     if (m.spot && now > m.seekUntil) { m.spot = ""; m.fleeing = false; }
     if (m.spot) {
       if (Math.hypot(m.outX - m.x, m.outY - m.y) < 5) return this.hide(m, id, now);
-      const go = toward(m.x, m.y, m.outX, m.outY);
+      const go = m.ambusher ? this.go(m, m.outX, m.outY, now) : toward(m.x, m.y, m.outX, m.outY); // ambushers know their woods
       const r = moveStep(m.x, m.y, go, dt, def.speed * (m.fleeing ? POISE.fleeSpeed : 0.6) * (m.slowed ? SLOW_MOB : 1));
       if (this.canStep(m, r.x, r.y)) { m.x = r.x; m.y = r.y; }
       m.moving = r.moving;
@@ -2319,6 +2399,8 @@ export class TownRoom extends Room<TownState> {
       } else input = this.go(m, foe.x, foe.y, now);
     } else if (m.job >= 0 && !m.guard) {
       input = this.work(m, now); // back to the siege works
+    } else if (m.ambusher && !m.broken && this.treeFor(m, now)) {
+      input = STILL; // nothing left to fight: back up into a tree (walks there next tick)
     } else if (m.camp && CAMP_POSTS[m.post]?.route) {
       input = this.patrolStep(m, now); // walk the trail, back and forth
     } else if (Math.hypot(m.x - m.homeX, m.y - m.homeY) > 40) {
@@ -2404,7 +2486,7 @@ export class TownRoom extends Room<TownState> {
     if (!this.state.players.has(heroId)) return;
     const ids: string[] = [];
     this.state.mobs.forEach((o, oid) => {
-      if (o.dead || !(o.camp || o.kind === "banditchief") || Math.hypot(o.x - x, o.y - y) > r) return;
+      if (o.dead || o.hidden || !(o.camp || o.kind === "banditchief") || Math.hypot(o.x - x, o.y - y) > r) return; // ambushers stay up in their trees
       o.alertUntil = now + BANDIT_AI.horn.alertMs; o.alertHero = heroId;
       if (o.perch) return; // lookouts keep shooting from their towers
       if (!o.target) { o.target = heroId; o.foe = ""; o.nextAggro = now + AGGRO.everyMs; ids.push(oid); }

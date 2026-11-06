@@ -223,8 +223,7 @@ export const HIDE = {
 export interface HideSpot { key: string; x: number; y: number; outX: number; outY: number }
 
 /** Nearest free hiding spot for `kind` within `radius` tiles of (px,py), with a walkable tile next to it to step in from. */
-export function findHideSpot(kind: MobKind, px: number, py: number, radius: number, taken: Set<string>): HideSpot | undefined {
-  const ids = HIDE.spots[kind];
+export function findHideSpot(kind: MobKind, px: number, py: number, radius: number, taken: Set<string>, ids = HIDE.spots[kind]): HideSpot | undefined {
   if (!ids) return undefined;
   const cx = Math.floor(px / TILE), cy = Math.floor(py / TILE);
   let best: HideSpot | undefined, bestD = Infinity;
