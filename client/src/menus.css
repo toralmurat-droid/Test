@@ -197,7 +197,7 @@ body #online { position: absolute; bottom: 12px; left: calc(18px + min(400px, ca
 body #online .pxi { width: 16px; height: 16px; vertical-align: -3px; margin-right: 5px; }
 
 /* Quests button under the minimap + per-quest track boxes in the quest log */
-body #questbtn { position: absolute; left: 50%; bottom: -80px; transform: translateX(-50%); display: inline-flex; align-items: center;
+body #questbtn { position: absolute; left: 50%; bottom: -104px; transform: translateX(-50%); display: inline-flex; align-items: center;
   padding: 2px 8px; font-size: 18px; font-family: var(--pixel-font); white-space: nowrap; pointer-events: auto; }
 body #questbtn small { color: #a8977a; margin-left: 5px; font-size: 18px; font-family: var(--pixel-font); }
 body #questbtn .pxi { margin-right: 4px; }
