@@ -162,7 +162,18 @@ body #questtracker { background: rgba(15, 10, 6, .42); }
 #questtracker .qt-title { cursor: pointer; }
 #questtracker .qt-title::before { content: "▾ "; color: #a8977a; }
 #questtracker .qt-block.folded .qt-title::before { content: "▸ "; }
-#questtracker .qt-block.folded > :not(.qt-title) { display: none; }
+#questtracker .qt-block.folded .qt-body { display: none; }
+/* each quest is a card: a header (fold arrow, title, follow button) and a body (objective, progress bar) */
+#questtracker { pointer-events: auto; }
+#questtracker .qt-block { background: rgba(15, 10, 6, .35); border: 1px solid rgba(168,130,58,.35); padding: 3px 6px 4px; margin-bottom: 4px; }
+#questtracker .qt-block + .qt-block { border-top: 1px solid rgba(168,130,58,.35); }
+#questtracker .qt-block.following { border-color: #e3bf6a; box-shadow: 0 0 6px rgba(227,191,106,.35); }
+#questtracker .qt-head { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+#questtracker .qt-head .qt-title { flex: 1; margin: 0; }
+#questtracker .qt-follow { flex: none; width: 20px; height: 20px; padding: 0; line-height: 1; font: 15px var(--pixel-font); color: #e3bf6a; cursor: pointer;
+  background: #0f0a06; border: 1px solid #6b4c22; }
+#questtracker .qt-block.following .qt-follow { background: #3a2a12; border-color: #e3bf6a; color: #ffe9a8; }
+#questtracker .qt-body { margin-top: 2px; }
 
 /* the quest pointer: an arrow on a ring around the hero toward the objective, with its distance in steps */
 #questpointer { position: absolute; left: 0; top: 0; width: 0; height: 0; pointer-events: none; z-index: 6; }
@@ -170,3 +181,4 @@ body #questtracker { background: rgba(15, 10, 6, .42); }
 #questpointer i { position: absolute; left: -13px; top: -10px; width: 0; height: 0; border-left: 26px solid #e3bf6a; border-top: 10px solid transparent; border-bottom: 10px solid transparent;
   filter: drop-shadow(0 0 2px #000) drop-shadow(0 0 4px rgba(227,191,106,.6)); transform-origin: 13px 10px; }
 #questpointer b { position: absolute; left: -16px; top: 12px; width: 32px; text-align: center; font: 16px var(--pixel-font); color: #ffe9a8; text-shadow: 1px 1px 0 #000, -1px -1px 0 #000; font-weight: normal; }
+body #hud #questtracker { background: transparent; border-left: none; box-shadow: none; padding: 0; } /* the cards carry their own see-through background */
