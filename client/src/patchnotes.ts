@@ -2,21 +2,25 @@
 // One JSON file per update in client/patchnotes/ (see client/patchnotes/README.md).
 // One file per PR means parallel PRs never conflict on this list.
 
-export interface PatchNote { id: string; num: number; date: string; pr?: number; title: string; changes: string[] }
+export interface PatchNote { id: string; num: number; date: string; patch?: number; pr?: number; title: string; changes: string[] }
 
-const files = import.meta.glob<{ default: Omit<PatchNote, "id"> }>("../patchnotes/*.json", { eager: true });
+const files = import.meta.glob<{ default: Omit<PatchNote, "id" | "num"> }>("../patchnotes/*.json", { eager: true });
 
-/** Oldest first: by date, then by PR number (notes without one go last that day), then by file name. */
+/** Order for notes not numbered yet: by date, then PR number (none last), then file name. */
 const byAge = (a: Omit<PatchNote, "num">, b: Omit<PatchNote, "num">) =>
   a.date.localeCompare(b.date) || (a.pr ?? Infinity) - (b.pr ?? Infinity) || a.id.localeCompare(b.id);
 
-/** Newest first. Each note gets its patch number (1 = oldest) at build time from
- *  that order, so PRs never hand-assign numbers and never conflict over them. */
-export const PATCH_NOTES: PatchNote[] = Object.entries(files)
-  .map(([path, mod]) => ({ ...mod.default, id: path.replace(/^.*\//, "").replace(/\.json$/, "") }))
-  .sort(byAge)
-  .map((n, i) => ({ ...n, num: i + 1 }))
-  .reverse();
+const all = Object.entries(files)
+  .map(([path, mod]) => ({ ...mod.default, id: path.replace(/^.*\//, "").replace(/\.json$/, "") }));
+
+/** Newest first. "patch" is stamped into each note right after its PR merges
+ *  (tools/patchnote-numbers.mjs, in merge order), so numbers never change or repeat.
+ *  A note merged but not stamped yet gets the next number after the highest one. */
+let next = Math.max(0, ...all.map((n) => (Number.isInteger(n.patch) ? n.patch! : 0)));
+export const PATCH_NOTES: PatchNote[] = [
+  ...all.filter((n) => Number.isInteger(n.patch)).map((n) => ({ ...n, num: n.patch! })),
+  ...all.filter((n) => !Number.isInteger(n.patch)).sort(byAge).map((n) => ({ ...n, num: ++next })),
+].sort((a, b) => b.num - a.num);
 
 const SEEN_KEY = "patchnotes-seen";
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);

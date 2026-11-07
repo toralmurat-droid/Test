@@ -1,5 +1,6 @@
 {
   "date": "2026-11-03",
+  "patch": 1,
   "pr": 171,
   "title": "Blobs merge sooner",
   "changes": [

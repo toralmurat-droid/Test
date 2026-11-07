@@ -1,5 +1,6 @@
 {
   "date": "2026-11-07",
+  "patch": 122,
   "title": "PvP at any level",
   "changes": [
     "Heroes can now fight other heroes at any level, not only from level 11.",

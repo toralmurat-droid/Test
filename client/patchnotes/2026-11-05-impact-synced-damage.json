@@ -1,5 +1,6 @@
 {
   "date": "2026-11-05",
+  "patch": 80,
   "pr": 252,
   "title": "Spells hit when they land",
   "changes": [

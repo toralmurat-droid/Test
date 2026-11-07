@@ -1,5 +1,6 @@
 {
   "date": "2026-11-04",
+  "patch": 70,
   "pr": 241,
   "title": "XP on hover, tidier top-left",
   "changes": [

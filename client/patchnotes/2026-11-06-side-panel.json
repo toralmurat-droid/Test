@@ -1,5 +1,6 @@
 {
   "date": "2026-11-06",
+  "patch": 100,
   "title": "Character side panel",
   "changes": [
     "Character, Inventory and Skills now open in one panel on the right side, with tabs (C, G, T or click a tab).",

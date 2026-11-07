@@ -1,5 +1,6 @@
 {
   "date": "2026-11-04",
+  "patch": 29,
   "title": "Item levels",
   "changes": [
     "Gear now has an item level (1 to 30): drops and chests match the monster or chest level, and higher levels give bigger bonuses.",

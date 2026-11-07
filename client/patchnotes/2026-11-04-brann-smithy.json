@@ -1,5 +1,6 @@
 {
   "date": "2026-11-04",
+  "patch": 71,
   "title": "Brann's smithy rebuilt",
   "changes": [
     "Brann now works at a stone forge with a chimney, glowing coals and bellows that pump the fire brighter.",

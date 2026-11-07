@@ -33,6 +33,9 @@ jobs:
             exit 1
           fi
           echo "Patch note files:"; echo "$files"
+          added=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR/files" --paginate \
+            --jq '.[] | select(.status == "added") | .filename' | grep -E '^client/patchnotes/[^/]+\.json$' || true)
+          echo "ADDED<<EOF" >> "$GITHUB_ENV"; echo "$added" >> "$GITHUB_ENV"; echo "EOF" >> "$GITHUB_ENV"
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha }}
@@ -45,8 +48,11 @@ jobs:
                 const n = JSON.parse(fs.readFileSync(dir + "/" + f, "utf8"));
                 const ok = /^\d{4}-\d{2}-\d{2}$/.test(n.date) && typeof n.title === "string" && n.title &&
                   Array.isArray(n.changes) && n.changes.length && n.changes.every((c) => typeof c === "string" && c) &&
-                  (n.pr === undefined || Number.isInteger(n.pr));
-                if (!ok) { bad++; console.log("::error file=" + dir + "/" + f + "::Needs date YYYY-MM-DD, title, changes[] (strings), optional pr number"); }
+                  (n.pr === undefined || Number.isInteger(n.pr)) && (n.patch === undefined || Number.isInteger(n.patch));
+                if (ok && n.patch !== undefined && (process.env.ADDED || "").split("\n").includes(dir + "/" + f)) {
+                  bad++; console.log("::error file=" + dir + "/" + f + "::Do not set \"patch\": the number is added automatically after merge"); continue;
+                }
+                if (!ok) { bad++; console.log("::error file=" + dir + "/" + f + "::Needs date YYYY-MM-DD, title, changes[] (strings), optional pr and patch numbers"); }
               } catch (e) { bad++; console.log("::error file=" + dir + "/" + f + "::Invalid JSON: " + e.message); }
             }
             process.exit(bad ? 1 : 0);'

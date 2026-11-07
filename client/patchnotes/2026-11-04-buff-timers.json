@@ -1,5 +1,6 @@
 {
   "date": "2026-11-04",
+  "patch": 28,
   "title": "Buff timers",
   "changes": [
     "Every timed effect on your hero now shows above the skill bar with its icon and a countdown: skill buffs, counter stances and the shrine's Blessing of the Wind.",

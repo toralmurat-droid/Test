@@ -1,5 +1,6 @@
 {
   "date": "2026-11-04",
+  "patch": 37,
   "title": "Punchier hits, faster loading",
   "changes": [
     "Hits now flash, nudge the target back a little and squash monsters; critical hits show a big popping number.",

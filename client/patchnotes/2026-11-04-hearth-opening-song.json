@@ -1,5 +1,6 @@
 {
   "date": "2026-11-04",
+  "patch": 74,
   "title": "Opening song on every start",
   "changes": [
     "Hearth of Oakvale now plays every time you open the game, right away or on your first click.",

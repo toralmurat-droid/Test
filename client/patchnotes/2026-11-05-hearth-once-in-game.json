@@ -1,5 +1,6 @@
 {
   "date": "2026-11-05",
+  "patch": 83,
   "title": "Opening song plays once",
   "changes": [
     "Hearth of Oakvale loops on the start screens, plays once when you enter the world, then the usual village, countryside and battle music takes over.",

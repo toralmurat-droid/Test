@@ -1,5 +1,6 @@
 {
   "date": "2026-11-04",
+  "patch": 31,
   "title": "Weathered speech bubbles and notices",
   "changes": [
     "Speech bubbles are now dark, bronze-rimmed pixel plaques that match the village art. Angry villagers shout in blood-red ones.",
