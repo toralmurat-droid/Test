@@ -4,5 +4,6 @@
   "changes": [
     "The bottom bar is much wider with bigger icons that grow with your screen.",
     "Separators split it into your click attacks, your skill keys and your potions, and the menu buttons now sit on the bar to the right of them."
-  ]
+  ],
+  "pr": 329
 }
