@@ -26,6 +26,7 @@ import { movesSheet, SkillMoves } from "./skillMoves";
 import { displayGrid } from "./tileset";
 import { CRAWL_CROP, heroTexture, itemTexture, potionTex, makeTileset, MOB_LOOK, mobTexture, preloadPaintedMobs } from "./textures";
 import { Minimap } from "./minimap";
+import { cycleWorldScale, onWorldScale, worldScaleName } from "./worldscale";
 import { GameMenu } from "./gamemenu";
 import { showMusicPanel, musicPanelOpen } from "./music";
 import { DayDial } from "./daydial";
@@ -476,12 +477,17 @@ export class TownScene extends Phaser.Scene {
       { id: "news", label: `${icon("scroll")}News`, key: "N", onClick: toggleNews },
       { id: "barnums", label: `${icon("potion")}Bar numbers on / off`, onClick: () => this.resBars?.toggleNumbers() },
       { id: "keys", label: "", onClick: () => { setKeyMode(keyMode() === "classic" ? "spells" : "classic"); this.gameMenu?.show(); } },
+      { id: "worldsize", label: "", onClick: () => { cycleWorldScale(); this.gameMenu?.show(); } },
       { id: "quit", label: `${icon("fire")}Save and return to start screen`, onClick: () => void this.saveAndQuit() },
     ]);
     // Keyboard layout setting (client/src/keymode.ts): its entry says which one is on; clicking switches
     const keysLabel = () => this.gameMenu?.setLabel("keys", `${icon("scroll")}Keyboard: ${keyModeName()} <small>click to switch</small>`);
     keysLabel();
     onKeyMode(keysLabel);
+    // World size on screen (client/src/worldscale.ts): Auto fits the window, clicking steps through the crisp sizes
+    const sizeLabel = () => this.gameMenu?.setLabel("worldsize", `${icon("star")}World size: ${worldScaleName()} <small>click to switch</small>`);
+    sizeLabel();
+    onWorldScale(sizeLabel);
     this.patchNotes = new PatchNotesPanel(toggleNews);
     this.input.keyboard!.on("keydown-N", () => { if (!this.chatting()) toggleNews(); });
     this.setupChat();

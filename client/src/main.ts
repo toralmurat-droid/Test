@@ -21,6 +21,7 @@ import { installSmoothTextures } from "./smooth";
 import "@fontsource/pixelify-sans/400.css";
 import "./pixelfont.css";
 import { fontsReady } from "./pixelfont";
+import { attachWorldScale, initWorldScale, worldCanvasSize } from "./worldscale";
 
 const COLORS = [0xe74c3c, 0x3498db, 0x2ecc71, 0xf1c40f, 0x9b59b6, 0xe67e22, 0x1abc9c, 0xecf0f1];
 let color = COLORS[Math.floor(Math.random() * COLORS.length)];
@@ -198,15 +199,16 @@ function launch(name: string, password: string, newGame: boolean, back = false) 
   status.textContent = "Connecting…";
   showLoading(back ? "Back to where you stood…" : undefined); // covers everything until the world is fully drawn (TownScene hides it)
   if (SMOOTH) installSmoothTextures();
+  initWorldScale(); // the world canvas is 1/k of the window, scaled up by k (game menu: World size)
   // the pixel fonts must be ready first, or the world's name labels bake in a fallback font
   // window.__game: lets the browser tests (and the console) look at the running game
-  void fontsReady.then(() => ((window as any).__game = new Phaser.Game({
+  void fontsReady.then(() => attachWorldScale((window as any).__game = new Phaser.Game({
     type: Phaser.AUTO,
     parent: "game",
     pixelArt: !SMOOTH,
     antialias: SMOOTH,
     backgroundColor: "#1b1b24",
-    scale: { mode: Phaser.Scale.RESIZE, width: window.innerWidth, height: window.innerHeight },
+    scale: { mode: Phaser.Scale.RESIZE, ...worldCanvasSize() },
     scene: [new TownScene({ name, password, color, cls, newGame })],
   })));
 }
