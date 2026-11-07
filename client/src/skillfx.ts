@@ -34,7 +34,11 @@ export const PALETTE: Record<FxStyle, number[]> = {
 /** Effect strength by tree row (Lv 1 .. Lv 10). */
 const TIER = [1, 1.35, 1.8, 2.4, 3.2];
 const DEPTH = 9500;
-const ARROW_DROP_MS = 150; // one arrow of a rain falling from the sky
+const ARROW_DROP_MS = 150;
+/** Exsanguinate: how long the stolen blood streams in, how long a drop flies; the last drops land (and the blood bursts back up into the cloud) at SIPHON_END_MS. */
+/** Exsanguinate: height of the blood cloud over the vampire. */
+const BLOOD_CLOUD_Z = 44;
+const SIPHON_STREAM_MS = 900, SIPHON_FLY_MS = 420, SIPHON_END_MS = SIPHON_STREAM_MS + SIPHON_FLY_MS * 0.8; // one arrow of a rain falling from the sky
 const GROUND_DEPTH = 9400;
 
 interface P {
@@ -301,7 +305,7 @@ export class SkillFx {
         if (!e) break;
         // Flash on the hero; buildups gather energy for the charge time
         this.glow(e.sprite.x, e.sprite.y, e.top * 0.5, 10 + 4 * tier, pal[2], 260, 0.6);
-        this.sigil(ev.id, ev.s, tier, s?.row === 4);
+        if (ev.s !== "v_exsang") this.sigil(ev.id, ev.s, tier, s?.row === 4); // Exsanguinate: its blood cloud gathers there instead
         if (ev.stacks > 0) this.burst(e.sprite.x, e.sprite.y, e.top * 0.6, style, 6 * ev.stacks, 60);
         if (ev.charge > 0) this.gather(ev.id, style, ev.charge, tier);
         break;
@@ -498,7 +502,7 @@ export class SkillFx {
     const pts: [number, number][] = ev.pts ?? [];
     const me0 = this.ent(ev.id);
     if (!me0 || !pts.length) return;
-    const STREAM = 900, FLY = 420, G = 300;
+    const STREAM = SIPHON_STREAM_MS, FLY = SIPHON_FLY_MS, G = 300;
     for (const [vx, vy] of pts) {
       this.burst(vx, vy, 10, "blood", 16, 70, 420);
       this.glow(vx, vy, 8, 12, 0xb71c1c, 300, 0.7);
@@ -522,13 +526,14 @@ export class SkillFx {
         this.p(hx + Math.cos(b) * rr, hy + Math.sin(b) * rr * 0.6, rnd(2, me.top), pick(PALETTE.blood), { vx: -Math.sin(b) * 90, vy: Math.cos(b) * 50, vz: rnd(10, 30), life: 220, size: pick([1, 2]), size1: 0 });
       }
     });
-    this.scene.time.delayedCall(STREAM + FLY * 0.8, () => {
+    this.scene.time.delayedCall(SIPHON_END_MS, () => {
       const me = this.ent(ev.id);
       if (!me) return;
       this.glow(me.sprite.x, me.sprite.y, me.top * 0.5, 18 + 3 * pts.length, 0xe63946, 450, 0.8);
       this.ring(me.sprite.x, me.sprite.y, 34, "blood", 44, { life: 420, up: 16, size: 2 });
       this.rise(me.sprite.x, me.sprite.y, 10, "blood", 26, me.top + 16, 650);
-      this.bloodBeam(me.sprite.x, me.sprite.y, 96, 16, 560);
+      // the blood bursts back up out of him into the cloud over his head (bloodRite), which then breaks up
+      this.bloodBeam(me.sprite.x, me.sprite.y, BLOOD_CLOUD_Z + 4, 16, 560);
       this.flashSprite(me, 0xe63946);
     });
   }
@@ -542,7 +547,7 @@ export class SkillFx {
   private bloodRite(ev: any, r: number) {
     const T = BLOOD_RITE_MS, start = this.t;
     const SPILL = 0.32, LIFT = 0.82; // phases, as parts of T: spill, lift into the orb, then the orb pulls in
-    const H = 42; // the orb's height over the ground (well over the head)
+    const H = BLOOD_CLOUD_Z; // the cloud's height over the ground (well over the head)
     const dark = PALETTE.blood.slice(2, 5), bright = PALETTE.blood.slice(1, 4);
     const pool: [number, number][] = []; // spots of spilled blood round the feet (offsets from the vampire)
     for (let i = 0; i < 14; i++) { const a = (i / 14) * Math.PI * 2 + rnd(-0.2, 0.2), d = rnd(10, 26); pool.push([Math.cos(a) * d, Math.sin(a) * d * 0.8]); }
@@ -572,13 +577,25 @@ export class SkillFx {
         }
         // the pool drains away into them
         for (let i = 0; i < 2; i++) { const [ox, oy] = pick(pool); this.p(x + ox, y + oy, 1, pick(dark), { vx: -ox * 1.5, vy: -oy * 1.5, vz: 30, life: 260, size: 2, size1: 1, add: false }); }
-        this.orb(x, y, H, 3 + u * 9, k);
       } else {
-        // The orb pulls in on itself, beating faster, before it breaks
-        const u = (k - LIFT) / (1 - LIFT);
-        this.orb(x, y, H, 12 - u * 7, k);
+        // The cloud churns and draws in on itself, red lightning flickering inside, before it strikes
+        if (Math.random() < 0.4) { // a crooked flicker of red lightning in pixel steps
+          const a = Math.random() * Math.PI * 2; let px = x + Math.cos(a) * 12, py = y + Math.sin(a) * 6, pz = H + rnd(-2, 3);
+          for (let i = 0; i < 6; i++) { this.p(px, py, pz, i % 2 ? 0xff5252 : 0xffcdd2, { life: 90, size: 2, size1: 2 }); px -= Math.cos(a) * 4 + rnd(-1.5, 1.5); py -= Math.sin(a) * 2 + rnd(-1, 1); pz += rnd(-2.5, 2.5); }
+        }
         for (let i = 0; i < 3; i++) { const a = Math.random() * Math.PI * 2, d = rnd(14, 22); this.p(x + Math.cos(a) * d, y + Math.sin(a) * d * 0.6, H + rnd(-8, 8), pick(bright), { vx: -Math.cos(a) * d * 6, vy: -Math.sin(a) * d * 3.6, life: 160, size: 1, size1: 0 }); }
       }
+    });
+    // The blood cloud: it gathers over his head from the first moment, swells as the blood climbs into it, strikes, and
+    // hangs there until the stolen blood bursts back up into it (SIPHON_END_MS after the strike); then it breaks up
+    const CLOUD_FORM = T * 0.55, GONE = T + SIPHON_END_MS + 120, FADE = 520;
+    this.emit(GONE + FADE, 20, () => {
+      const me = this.ent(ev.id);
+      if (!me) return;
+      const el = this.t - start;
+      const grow = Math.min(1, 0.25 + 0.75 * el / CLOUD_FORM), fade = el < GONE ? 0 : (el - GONE) / FADE;
+      const rx = 22 * grow * (1 + fade * 0.8), n = Math.round((el < GONE ? 16 : 16 * (1 - fade)) * (0.5 + grow * 0.5));
+      this.bloodCloud(me.sprite.x, me.sprite.y, H, rx, n, fade);
     });
     // a low red light under the vampire while the pool lies there
     const me0 = this.ent(ev.id);
@@ -587,10 +604,10 @@ export class SkillFx {
       const me = this.ent(ev.id);
       if (!me) return;
       const x = me.sprite.x, y = me.sprite.y;
-      // The orb breaks: blood crashes straight down on the vampire...
+      // The cloud strikes: blood crashes straight down out of it onto the vampire...
       for (let i = 0; i < 26; i++) this.p(x + rnd(-6, 6), y + rnd(-4, 4), H + rnd(-6, 6), pick(bright), { vx: rnd(-20, 20), vy: rnd(-12, 12), vz: rnd(-260, -160), g: 200, life: 280, size: pick([1, 2, 2]), size1: 1, add: false });
       this.glow(x, y, H, 22, 0xff1744, 260, 0.9);
-      this.bloodBeam(x, y, H + 24, 12, 380, true);
+      this.bloodBeam(x, y, H - 2, 12, 380, true);
       // ...and the blood mist all round the area collapses into him (the Exsanguinate look from before)
       for (let i = 0; i < 48; i++) {
         const a = (i / 48) * Math.PI * 2, F = rnd(0.35, 0.5);
@@ -648,17 +665,26 @@ export class SkillFx {
     });
   }
 
-  /** The beating crimson orb of the blood ritual: a dark core with bright drops orbiting it. */
-  private orb(x: number, y: number, h: number, rad: number, k: number) {
-    const beat = 1 + 0.25 * Math.sin(k * Math.PI * 2 * (3 + k * 5));
-    const rr = rad * beat;
-    for (let i = 0; i < 3; i++) {
-      const a = this.t / 60 + (i * Math.PI * 2) / 3 + rnd(-0.3, 0.3);
-      this.p(x + Math.cos(a) * rr, y + Math.sin(a) * rr * 0.5, h + Math.sin(a * 1.7) * rr * 0.6, pick(PALETTE.blood.slice(0, 3)), { vx: -Math.sin(a) * rr * 5, vy: Math.cos(a) * rr * 2.5, life: 110, size: pick([1, 2]), size1: 0 });
+  /**
+   * One beat of the blood cloud: `n` puffs of dark clotted red in chunky pixel blocks in an ellipse `rx` wide at height
+   * `h`, a lit red underside, rolling slowly; `fade` 0..1 breaks it up (the puffs drift apart and thin out).
+   */
+  private bloodCloud(x: number, y: number, h: number, rx: number, n: number, fade: number) {
+    const roll = this.t / 400;
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * Math.PI * 2, d = Math.sqrt(Math.random());
+      // a flat ellipse on screen (wide, not tilted along the iso diagonals)
+      const sx = Math.cos(a) * d * rx, sy = Math.sin(a) * d * rx * 0.3;
+      const [ox, oy] = ISO ? [sy + sx / 2, sy - sx / 2] : [sx, sy];
+      const oz = rnd(-3, 4) * (1 - d * 0.5);
+      const under = oz < -1;
+      this.p(x + ox, y + oy, h + oz, under ? pick([0xb71c1c, 0x8e0f16, 0xe63946]) : pick([0x2a0306, 0x3d060b, 0x5a0a10, 0x6d0000]), {
+        vx: Math.cos(roll) * 2 + ox * fade * 2.5, vy: Math.sin(roll) * 2 + oy * fade * 2.5, vz: fade * rnd(4, 14),
+        life: rnd(320, 460), size: pick([3, 4, 4, 5]) * (1 - fade * 0.4), size1: 3, alpha: 0.95 * (1 - fade * 0.6), add: false });
     }
-    for (let i = 0; i < 2; i++) this.p(x + rnd(-1, 1) * rr * 0.5, y + rnd(-1, 1) * rr * 0.3, h + rnd(-1, 1) * rr * 0.5, pick(PALETTE.blood.slice(2, 5)), { life: 90, size: Math.max(2, Math.round(rr * 0.7)), size1: 1, add: false });
-    if (Math.random() < 0.25) this.glow(x, y, h, rr * 2, 0xb71c1c, 180, 0.5);
+    if (fade === 0 && Math.random() < 0.15) this.glow(x, y, h - 2, rx * 1.2, 0x8e0f16, 220, 0.35);
   }
+
 
   /** Boil Blood took hold: the victim's blood erupts out of it once (then bubbles while it boils, see status()). */
   private boilErupt(e: FxEntity) {
