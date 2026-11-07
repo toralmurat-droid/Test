@@ -40,7 +40,8 @@ export type FxStyle =
 
 /** What an area hit looks like when it lands. */
 export type AreaLook =
-  | "slam" | "nova" | "slash" | "pillar" | "meteor" | "rain" | "sword" | "spikes" | "spirit" | "bolt" | "smoke" | "flame" | "burst";
+  | "slam" | "nova" | "slash" | "pillar" | "meteor" | "rain" | "sword" | "spikes" | "spirit" | "bolt" | "smoke" | "flame" | "burst"
+  | "bloodrite"; // Exsanguinate: a blood ritual over the caster, the nova lands when it ends (BLOOD_RITE_MS)
 
 export interface HitEffects {
   stunMs?: number; slowMs?: number; kb?: number;
@@ -239,11 +240,13 @@ export const LEAP_MS = 260; // a leap's hop through the air; its blasts land whe
 export const SWORD_FALL_MS = 260; // Judgement Blade
 export const METEOR_FALL_MS = 420, SMALL_METEOR_FALL_MS = 260; // big meteors (r >= 40) fall slower
 export const RAIN_FALL_MS = 220; // arrows of a rain hit the ground around this time
+export const BLOOD_RITE_MS = 720; // Exsanguinate: blood spills, rises into a crimson orb over the vampire, then crashes down
 export function impactMs(look: AreaLook | undefined, r: number): number {
   switch (look) {
     case "sword": return SWORD_FALL_MS;
     case "meteor": return r >= 40 ? METEOR_FALL_MS : SMALL_METEOR_FALL_MS;
     case "rain": return RAIN_FALL_MS;
+    case "bloodrite": return BLOOD_RITE_MS;
     default: return 0;
   }
 }
@@ -545,7 +548,7 @@ const S: Record<ClassKind, SkillDef[]> = <Record<ClassKind, SkillDef[]>><unknown
       field: { kind: "bloodward", r: 16, ms: 4000, tickMs: 1000, follow: true }, buff: { ms: 4000, armor: 40, immune: true } },
     { id: "v_exsang", name: "Exsanguinate", type: "Buildup", branch: 0, row: 3, style: "blood", cd: 12000, mana: 20, consume: true,
       desc: "Spend your Blood: tear the blood out of everyone in a wide circle around you in streams that pour into you, pull them in and drink a quarter of it. Every bleed on them bursts at once (Hemorrhage). Each Blood stack adds 25%.",
-      areas: [{ r: 110, dmg: 32, drain: 25, pull: 16, kb: 0, look: "nova", siphon: true, rupture: 1 }] },
+      areas: [{ r: 110, dmg: 32, drain: 25, pull: 16, kb: 0, look: "bloodrite", siphon: true, rupture: 1 }] },
     { id: "v_tide", name: "Crimson Tide", type: "Ultimate", branch: 0, row: 4, style: "blood", cd: 20000, mana: 35, blood: 8, chargeMs: 400,
       desc: "Open your veins: a wave of blood spikes rolls out ahead, slowing everything it hits and feeding you 10% of the damage, then a red rain falls around you and every drop that lands feeds you too.",
       areas: [{ r: 24, ahead: 22, dmg: 38, drain: 10, slowMs: 700, kb: 1.2, waves: 6, everyMs: 100, line: 22, look: "spikes" },
