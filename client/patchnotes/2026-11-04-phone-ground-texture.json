@@ -1,5 +1,6 @@
 {
   "date": "2026-11-04",
+  "patch": 39,
   "title": "Ground shows on more phones",
   "changes": [
     "The ground art is now split in two smaller pieces, so phones that could not load it see the world properly."

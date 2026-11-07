@@ -13,6 +13,7 @@ permissions:
   contents: write
   pull-requests: write
   checks: read
+  actions: write
 
 concurrency:
   group: auto-merge-${{ github.event.pull_request.number }}
@@ -71,7 +72,10 @@ jobs:
         run: |
           for i in 1 2 3 4 5 6; do
             if gh pr merge "$PR" --repo "$GITHUB_REPOSITORY" --merge --match-head-commit "$SHA"; then
-              echo "Merged."; exit 0
+              echo "Merged."
+              # Merges made with GITHUB_TOKEN start no push workflows, so start patch numbering here.
+              gh workflow run patch-numbers.yml --repo "$GITHUB_REPOSITORY" --ref claude/relaxed-wozniak-cjs85z || true
+              exit 0
             fi
             sleep 10
           done

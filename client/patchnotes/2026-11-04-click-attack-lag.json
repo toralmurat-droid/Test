@@ -1,5 +1,6 @@
 {
   "date": "2026-11-04",
+  "patch": 50,
   "title": "Click attacks land more often",
   "changes": [
     "Melee swings now forgive the network delay: if the monster was in reach on your screen, the hit counts even if it just stepped away.",

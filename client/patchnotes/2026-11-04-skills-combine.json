@@ -1,5 +1,6 @@
 {
   "date": "2026-11-04",
+  "patch": 53,
   "title": "Skills combine with enchantments",
   "changes": [
     "Enchantments now power up your other skills: with Fire Arrows lit, a Volley is a volley of fire arrows that sets every target ablaze.",

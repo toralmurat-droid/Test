@@ -1,5 +1,6 @@
 {
   "date": "2026-11-04",
+  "patch": 44,
   "title": "Weathered tooltips",
   "changes": [
     "Hovering a skill on the hotkey bar now shows its name and description in the same dark bronze frame as the other menus.",

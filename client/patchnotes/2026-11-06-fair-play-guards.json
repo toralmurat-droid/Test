@@ -1,5 +1,6 @@
 {
   "date": "2026-11-06",
+  "patch": 108,
   "title": "Smoother logins, no more chat floods",
   "changes": [
     "Heroes logging in no longer make the whole world stutter for everyone else.",

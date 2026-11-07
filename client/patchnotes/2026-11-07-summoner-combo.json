@@ -1,5 +1,6 @@
 {
   "date": "2026-11-07",
+  "patch": 116,
   "title": "Summoner combo, staves and swords fixed",
   "changes": [
     "The Summoner has its own 3-hit staff combo: two quick bolts, then an elemental burst in your attuned element.",

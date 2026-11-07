@@ -1,5 +1,6 @@
 {
   "date": "2026-11-06",
+  "patch": 110,
   "title": "Newcomer protection",
   "changes": [
     "Heroes up to level 10 can no longer be attacked by other heroes, and can't attack them either.",

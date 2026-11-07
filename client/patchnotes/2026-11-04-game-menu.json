@@ -1,5 +1,6 @@
 {
   "date": "2026-11-04",
+  "patch": 47,
   "title": "Game menu",
   "changes": [
     "Press Esc (or click ☰ Menu) to open the new game menu: Music & sound, Ideas board and News are now in one place.",

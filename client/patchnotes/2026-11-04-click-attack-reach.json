@@ -1,5 +1,6 @@
 {
   "date": "2026-11-04",
+  "patch": 30,
   "title": "Sharper click attacks",
   "changes": [
     "Clicking a monster now walks you right into sword reach, so melee swings no longer whiff at the edge.",

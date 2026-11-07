@@ -1,5 +1,6 @@
 {
   "date": "2026-11-04",
+  "patch": 51,
   "title": "Mana, mana potions and skill costs",
   "changes": [
     "New blue Mana bar under Stamina. Spells cost mana: the whole Wizard book, plus holy, spirit, jutsu and nature skills of the other heroes. Magic raises your mana and how fast it refills.",

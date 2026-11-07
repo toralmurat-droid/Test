@@ -1,5 +1,6 @@
 {
   "date": "2026-11-04",
+  "patch": 48,
   "title": "Numbered patch notes",
   "changes": [
     "Every update in the News panel now has its own number, like Patch #42, counting up from the very first one."

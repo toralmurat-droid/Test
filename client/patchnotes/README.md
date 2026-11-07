@@ -21,8 +21,9 @@ File name: `YYYY-MM-DD-short-slug.json` (date the PR is opened, UTC).
 ```
 
 - `pr` is optional (add it once the PR number is known; it orders same-day entries).
-- Do not add a patch number: the game numbers notes itself ("Patch #1" = oldest),
-  in order of date, then `pr`, then file name.
+- Do not add a `patch` number: right after your PR merges, a workflow
+  (`.github/workflows/patch-numbers.yml`) writes the next number into your file,
+  in merge order. Numbers never change or repeat once given. Never edit `patch`.
 - Keep it short: 1 to 4 changes.
 - A PR with nothing players can notice (CI, tools, docs) can skip the note:
   put `[no patch note]` in the PR title or body. The "Patch note" check enforces this.

@@ -1,5 +1,6 @@
 {
   "date": "2026-11-04",
+  "patch": 33,
   "title": "Firelight on the start screen",
   "changes": [
     "On the start screen the bonfire now lights the heroes: warm glow and a hot rim on the side facing the flames, and long shadows cast away from the fire."

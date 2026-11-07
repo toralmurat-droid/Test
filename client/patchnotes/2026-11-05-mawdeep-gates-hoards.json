@@ -1,5 +1,6 @@
 {
   "date": "2026-11-05",
+  "patch": 94,
   "title": "Mawdeep: gates, hoards and new beast-folk",
   "changes": [
     "Timber gates now bar every tunnel into the lairs of the Mawdeep. Press E to open one. It swings shut a minute later once nobody stands in it.",

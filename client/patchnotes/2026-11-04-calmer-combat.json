@@ -1,5 +1,6 @@
 {
   "date": "2026-11-04",
+  "patch": 35,
   "title": "Calmer, clearer combat",
   "changes": [
     "The screen no longer shakes every time you get hit, swing a finisher or cast a skill. Only huge blows like boss slams give a small nudge.",

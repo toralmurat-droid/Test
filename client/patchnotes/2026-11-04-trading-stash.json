@@ -1,5 +1,6 @@
 {
   "date": "2026-11-04",
+  "patch": 41,
   "title": "Trading and the Oakvale stash",
   "changes": [
     "Trade with other players: open Group (P) and press Trade next to a hero close by, or type /trade name in chat.",

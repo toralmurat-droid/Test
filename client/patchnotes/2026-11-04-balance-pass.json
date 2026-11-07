@@ -1,5 +1,6 @@
 {
   "date": "2026-11-04",
+  "patch": 72,
   "title": "Balance pass: tougher monsters, closer duels",
   "changes": [
     "Monsters grow much stronger with their level: higher-level zones and bosses are now a real fight. They give a little more XP too.",
