@@ -1,5 +1,6 @@
 {
   "date": "2026-11-07",
+  "patch": 138,
   "pr": 311,
   "title": "Smoother on a shaky connection",
   "changes": [
