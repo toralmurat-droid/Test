@@ -68,6 +68,8 @@ export interface AreaDef extends HitEffects {
   atStart?: boolean; // lands where the hero stood before moving (Blink)
   /** Exsanguinate: streams of blood run from everyone it hits into the caster (client "siphon" event). */
   siphon?: boolean;
+  /** Hemorrhage (Exsanguinate): a bleeding target takes this share of what its bleed had left to deal, all at once, and stops bleeding. */
+  rupture?: number;
 }
 
 export interface ShotDef extends HitEffects {
@@ -109,9 +111,10 @@ export interface FieldDef extends HitEffects {
   /**
    * Blood Link: a tether from the caster to one enemy within `range` px (the one nearest the aim, picked when cast; no
    * enemy = not cast). Per tick it deals `dmg`/`wpn` to that enemy only (with its drain, slow...). It snaps when the
-   * enemy dies or gets further than `breakAt` px.
+   * enemy dies or gets further than `breakAt` px. With `give`, a group ally nearer the aim than any enemy can be bound
+   * instead (Transfusion): each tick the caster pays `give`% of max HP and the ally heals 1.5 times that.
    */
-  link?: { range: number; breakAt: number };
+  link?: { range: number; breakAt: number; give?: number };
   /** Nightfall: it is night inside (night passives such as Child of the Night count it as night). */
   night?: boolean;
 }
@@ -130,6 +133,8 @@ export interface BuffDef {
   onHit?: HitEffects & { wpn?: number; chain?: number }; // enchantment: added to basic attacks (and arrows)
   thorns?: HitEffects & { wpn?: number; dmg?: number }; // hits whoever strikes you in melee range
   perStack?: number; // +% damage per stack spent (with SkillDef.consume)
+  /** Bloodline (Thirst): group allies within this many px get the same buff with half its lifesteal. */
+  group?: number;
 }
 
 export interface CounterDef {
@@ -159,7 +164,13 @@ export interface SkillDef {
   scale?: { stat: StatKind; per: number }; // +per% skill power for every point of `stat` above the class's base
   style: FxStyle;
   /** `blood`: while learned, every skill (not the basic spell) also costs this % of max HP (Blood Pact). */
-  passive?: { effect: TalentEffect; perRank: number; blood?: number };
+  passive?: {
+    effect: TalentEffect; perRank: number; blood?: number;
+    /** Rise Again (Blood Pact): a killing blow leaves the hero at `hp`% life instead, once every `cdMs`. */
+    rise?: { hp: number; cdMs: number };
+    /** Bloodlust (Undying Hunger): every kill gives this buff. */
+    kill?: BuffDef;
+  };
   cd?: number; // ms
   cost?: number; // Stamina (physical skills)
   mana?: number; // Mana (spells): shared/mana.ts
@@ -192,6 +203,8 @@ export interface SkillDef {
   devour?: FangDef;
   /** Vampire Bite: bite the fleshy foe nearest the aim; a weak monster may fall and rise as a thrall (shared/devour.ts THRALL). */
   bite?: FangDef;
+  /** Vampire Charm: the foe nearest the aim within `range` px: a monster fights for the hero for `ms`; a hero, boss or elite is dazed for `daze` ms instead. */
+  charm?: { range: number; ms: number; daze: number };
 }
 
 /**
@@ -199,7 +212,9 @@ export interface SkillDef {
  * `wpn`/`dmg` and drinks `drain`%. A monster at or below `below` of its life (+5% per extra rank) is eaten whole (Devour,
  * healing `heal`% of max life) or, with `chance` (+10% per extra rank), turned into a thrall (Bite).
  */
-export interface FangDef { range: number; wpn?: number; dmg?: number; drain?: number; below: number; heal?: number; chance?: number }
+export interface FangDef { range: number; wpn?: number; dmg?: number; drain?: number; below: number; heal?: number; chance?: number;
+  /** Ancient Lord (Devour): eating a monster whole gives this buff. */
+  fed?: BuffDef }
 export const FANG_BELOW_PER_RANK = 0.05, FANG_CHANCE_PER_RANK = 0.1;
 
 /** Right-click aiming: on the hero itself, at the clicked spot, or toward the click. */
@@ -512,60 +527,73 @@ const S: Record<ClassKind, SkillDef[]> = <Record<ClassKind, SkillDef[]>><unknown
   // Warrior and caster in one (Murat 2026-11-05). Blood magic costs some of his own HP (blood) as well as mana, and
   // most of his hits drink part of the damage back (drain): he pays in blood and takes it back from his enemies.
   vampire: [
-    // Blood: blood magic (Magic)
+    // Blood: blood magic (Magic). Rebuilt from Murat's picks (2026-11-07): Lance, Ward, Transfusion, Rise Again, Hemorrhage, Blood Rain
     { id: "v_link", name: "Blood Link", type: "Attack", branch: 0, row: 0, style: "blood", cd: 7000, mana: 12, target: "dir",
-      desc: "Bind yourself to the foe nearest your aim with a cord of blood for 3s and pump their life into you: it hurts them, slows them and heals you for half of it. The cord snaps if they get too far away.",
-      field: { kind: "bloodlink", r: 0, ms: 3000, tickMs: 300, follow: true, dmg: 7, drain: 50, slowMs: 400, link: { range: 120, breakAt: 170 } } },
+      desc: "Bind yourself to the foe nearest your aim with a cord of blood for 3s and pump their life into you: it hurts them, slows them and heals you for half of it. Aim at a group ally instead and the cord carries your own blood to them: you give a little of your life each pulse and they heal half as much again. The cord snaps if they get too far away.",
+      field: { kind: "bloodlink", r: 0, ms: 3000, tickMs: 300, follow: true, dmg: 7, drain: 50, slowMs: 400, link: { range: 120, breakAt: 170, give: 2 } } },
+    { id: "v_lance", name: "Blood Lance", type: "Attack", branch: 0, row: 1, style: "blood", cd: 5000, mana: 14, blood: 3,
+      desc: "Draw a spear of your own blood and hurl it: it runs through up to four foes in a line and leaves each of them bleeding.",
+      shots: { kind: "bloodlance", speed: 330, range: 175, radius: 4, dmg: 26, pierce: 3, burn: [6, 2500], bleed: "drip", drain: 10, kb: 0.5 } },
     { id: "v_boil", name: "Boil Blood", type: "Attack", branch: 0, row: 1, style: "blood", cd: 6000, mana: 16, blood: 4,
       desc: "Make the blood of everyone at the spot boil: they swell with bubbling blood, are hurt and bleed for 3s.",
       areas: [{ r: 30, ahead: 44, dmg: 22, burn: [8, 3000], bleed: "boil", kb: 0.4, look: "burst" }] },
-    { id: "v_pact", name: "Blood Pact", type: "Passive", branch: 0, row: 2, style: "blood", passive: { effect: "skill", perRank: 7, blood: 2 },
-      desc: "An old oath sealed in blood: all your skills hit harder, but every skill you cast also costs 2% of your life." },
+    { id: "v_pact", name: "Blood Pact", type: "Passive", branch: 0, row: 2, style: "blood",
+      passive: { effect: "skill", perRank: 7, blood: 2, rise: { hp: 30, cdMs: 180000 } },
+      desc: "An old oath sealed in blood: all your skills hit harder, but every skill you cast also costs 2% of your life. Once every 3 minutes, a killing blow leaves you standing in a pool of blood at 30% life instead." },
+    { id: "v_ward", name: "Sanguine Ward", type: "Aura", branch: 0, row: 3, style: "blood", cd: 15000, mana: 15, blood: 6, target: "self",
+      desc: "Spill your blood into a hardened red shell around you for 4s: you take 40% less damage and nothing knocks you about.",
+      field: { kind: "bloodward", r: 16, ms: 4000, tickMs: 1000, follow: true }, buff: { ms: 4000, armor: 40, immune: true } },
     { id: "v_exsang", name: "Exsanguinate", type: "Buildup", branch: 0, row: 3, style: "blood", cd: 12000, mana: 20, consume: true,
-      desc: "Spend your Blood: tear the blood out of everyone around you in streams that pour into you, pull them in and drink a quarter of it. Each Blood stack adds 25%.",
-      areas: [{ r: 50, dmg: 32, drain: 25, pull: 8, kb: 0, look: "nova", siphon: true }] },
+      desc: "Spend your Blood: tear the blood out of everyone in a wide circle around you in streams that pour into you, pull them in and drink a quarter of it. Every bleed on them bursts at once (Hemorrhage). Each Blood stack adds 25%.",
+      areas: [{ r: 110, dmg: 32, drain: 25, pull: 16, kb: 0, look: "nova", siphon: true, rupture: 1 }] },
     { id: "v_tide", name: "Crimson Tide", type: "Ultimate", branch: 0, row: 4, style: "blood", cd: 20000, mana: 35, blood: 8, chargeMs: 400,
-      desc: "Open your veins: a wave of blood spikes rolls out ahead, slowing everything it hits and feeding you 10% of the damage.",
-      areas: [{ r: 24, ahead: 22, dmg: 38, drain: 10, slowMs: 700, kb: 1.2, waves: 6, everyMs: 100, line: 22, look: "spikes" }] },
+      desc: "Open your veins: a wave of blood spikes rolls out ahead, slowing everything it hits and feeding you 10% of the damage, then a red rain falls around you and every drop that lands feeds you too.",
+      areas: [{ r: 24, ahead: 22, dmg: 38, drain: 10, slowMs: 700, kb: 1.2, waves: 6, everyMs: 100, line: 22, look: "spikes" },
+        { r: 20, dmg: 12, drain: 15, kb: 0, waves: 10, everyMs: 120, delayMs: 500, scatter: 80, look: "rain" }] },
 
-    // Night: mist, bats and dread (Mana)
+    // Night: mist, bats, rats and the dark (Mana)
     { id: "v_mist", name: "Mist Form", type: "Movement", branch: 1, row: 0, style: "shadow", cd: 3500, cost: 20,
-      desc: "Dissolve into mist and drift ahead, untouchable for a moment. The mist you leave behind chills whoever stands in it.",
-      move: { kind: "blink", dist: 64, invulnMs: 400 }, areas: [{ r: 24, dmg: 10, slowMs: 900, atStart: true, look: "smoke" }] },
+      desc: "Dissolve into mist and a flutter of bats and drift far ahead, over water, fences and walls, untouchable for a moment. The mist you leave behind chills whoever stands in it.",
+      move: { kind: "blink", dist: 110, invulnMs: 450 }, areas: [{ r: 24, dmg: 10, slowMs: 900, atStart: true, look: "smoke" }] },
     { id: "v_bats", name: "Bat Swarm", type: "Attack", branch: 1, row: 1, style: "shadow", cd: 4000, mana: 14,
-      desc: "A swarm of bats bursts from your cloak, flutters ahead in a tight cloud and bites whatever it reaches, bringing a little blood back to you.",
-      shots: { kind: "bat", n: 8, spread: 22, speed: 200, range: 115, radius: 3, dmg: 10, drain: 10, kb: 0.1 } },
-    { id: "v_gaze", name: "Mesmerize", type: "War cry", branch: 1, row: 2, style: "shadow", cd: 14000, mana: 15,
-      desc: "Fix everyone around you with a red stare that drinks from them: monsters flee in dread, heroes falter, and all of them are weakened for 3s.",
-      cry: { r: 64, dmg: 18, drain: 15, fearMs: 1600, weakMs: 3000, look: "nova" } },
+      desc: "A swarm of bats bursts from your cloak, flutters ahead in a tight cloud and bites whatever it reaches, bringing a little blood back to you. More bats stay behind and whirl round you for 3s as a living shield: they bite anyone close and you take 10% less damage.",
+      shots: { kind: "bat", n: 8, spread: 22, speed: 200, range: 115, radius: 3, dmg: 10, drain: 10, kb: 0.1 },
+      field: { kind: "batring", r: 26, ms: 3000, tickMs: 500, follow: true, dmg: 7, drain: 20 }, buff: { ms: 3000, armor: 10 } },
+    { id: "v_gaze", name: "Charm", type: "Attack", branch: 1, row: 2, style: "shadow", cd: 16000, mana: 18, target: "dir",
+      desc: "Catch the eye of the foe nearest your aim. A monster falls under your spell and fights at your side for 5s, then wakes up. Heroes, bosses and elites are too strong-willed: they falter instead, dazed and weakened for 2s.",
+      charm: { range: 100, ms: 5000, daze: 2000 } },
     { id: "v_nightborn", name: "Child of the Night", type: "Passive", branch: 1, row: 2, style: "shadow", passive: { effect: "night", perRank: 6 },
       desc: "The dark is yours. At night, and inside a Nightfall, you hit harder, heal from the damage you deal and move faster." },
-    { id: "v_cloak", name: "Cloak of Night", type: "Aura", branch: 1, row: 3, style: "shadow", cd: 18000, mana: 25,
-      desc: "Wrap yourself in living darkness for 8s: it gnaws at enemies close to you, slows them and feeds you; you take 10% less damage.",
-      field: { kind: "nightcloak", r: 44, ms: 8000, tickMs: 600, follow: true, dmg: 13, drain: 20, slowMs: 500 }, buff: { ms: 8000, armor: 10 } },
+    { id: "v_rats", name: "Rat Plague", type: "Attack", branch: 1, row: 3, style: "poison", cd: 9000, mana: 20,
+      desc: "A carpet of plague rats pours out of the dark and scurries ahead: they bite through everything in their way, slowing it and leaving it sick for 3s.",
+      shots: { kind: "rat", n: 7, lanes: 7, speed: 130, range: 160, radius: 5, dmg: 10, pierce: 2, burn: [5, 3000], slowMs: 700, kb: 0 } },
+    { id: "v_soil", name: "Native Soil", type: "Aura", branch: 1, row: 3, style: "shadow", cd: 20000, mana: 22, target: "self",
+      desc: "Spill a box of your grave earth at your feet for 8s: while you stand on it you heal quickly, and it clings to the feet of your enemies.",
+      field: { kind: "gravesoil", r: 40, ms: 8000, tickMs: 500, heal: 1.5, slowMs: 500 } },
     { id: "v_nightfall", name: "Nightfall", type: "Ultimate", branch: 1, row: 4, style: "shadow", cd: 24000, mana: 40, chargeMs: 500,
-      desc: "Call down a starless night on the land around you for 10s: it is night there (Child of the Night wakes), the darkness saps every enemy inside and feeds you, and for 5s you hunt faster, healing on every hit.",
-      field: { kind: "nightfall", r: 96, ms: 10000, tickMs: 500, dmg: 8, drain: 15, weakMs: 800, slowMs: 600, night: true }, buff: { ms: 5000, lifesteal: 8, speed: 15 } },
+      desc: "Call down a starless night and a cold fog on the land around you for 10s: it is night there (Child of the Night wakes), the fog slows every enemy inside, weakens them and feeds you, and for 5s you hunt faster, healing on every hit.",
+      field: { kind: "nightfall", r: 96, ms: 10000, tickMs: 500, dmg: 8, drain: 15, weakMs: 1200, slowMs: 1000, night: true }, buff: { ms: 5000, lifesteal: 8, speed: 15 } },
 
-    // Fang: the blade (Strength, Stamina)
+    // Fang: the blade and the hunt (Strength, Stamina)
     { id: "v_rend", name: "Crimson Slash", type: "Attack", branch: 2, row: 0, style: "blood", windMs: 60, cd: 4500, cost: 20,
       desc: "A quick, cruel slash: the wound bleeds, and you drink 10% of the damage.",
       areas: [{ r: 26, ahead: 12, wpn: 2.3, burn: [5, 2000], drain: 10, kb: 1.2, look: "slash" }] },
     { id: "v_thirst", name: "Thirst", type: "Enchant", branch: 2, row: 1, style: "blood", cd: 11000, cost: 15, mana: 10,
-      desc: "Your blade thirsts for 7s: every hit, your skills too, makes them bleed, and you heal 8% of the damage you deal.",
-      buff: { ms: 7000, lifesteal: 8, onHit: { burn: [3, 2000] } } },
-    { id: "v_hunger", name: "Undying Hunger", type: "Passive", branch: 2, row: 2, style: "blood", passive: { effect: "lifesteal", perRank: 2 },
-      desc: "The hunger never sleeps: heal part of all the damage you deal." },
+      desc: "Your blade thirsts for 7s: every hit, your skills too, makes them bleed, and you heal 8% of the damage you deal. Your bloodline shares it: group allies near you heal 4% of theirs.",
+      buff: { ms: 7000, lifesteal: 8, onHit: { burn: [3, 2000] }, group: 140 } },
+    { id: "v_hunger", name: "Undying Hunger", type: "Passive", branch: 2, row: 2, style: "blood",
+      passive: { effect: "lifesteal", perRank: 2, kill: { ms: 3000, speed: 20, atkspd: 15 } },
+      desc: "The hunger never sleeps: heal part of all the damage you deal. Every kill sends a rush of bloodlust through you: faster steps and faster blows for 3s." },
     { id: "v_pounce", name: "Night Pounce", type: "Attack", branch: 2, row: 3, style: "shadow", windMs: 70, cd: 10000, cost: 30,
-      desc: "Pounce on your prey and sink your teeth in: a heavy blow that stuns, and you drink 15% of it.",
-      move: { kind: "dash", dist: 56, invulnMs: 200 }, areas: [{ r: 22, ahead: 8, wpn: 2.2, stunMs: 350, drain: 15, kb: 1, look: "slash" }] },
-    { id: "v_frenzy", name: "Blood Frenzy", type: "Ultimate", branch: 2, row: 4, style: "blood", windMs: 80, cd: 18000, cost: 40,
-      desc: "Lose yourself to the hunger: four blood-red slashes all around you, then 4.5s of frenzy: faster hits that heal you, and nothing stops you.",
-      areas: [{ r: 40, wpn: 0.6, drain: 10, kb: 0.3, waves: 4, everyMs: 140, look: "slash" }], buff: { ms: 4500, atkspd: 20, lifesteal: 6, immune: true } },
+      desc: "Melt into the shadows and step out right behind the nearest foe, then sink your teeth in: a heavy blow that stuns, and you drink 15% of it.",
+      move: { kind: "behind", dist: 80, invulnMs: 250 }, areas: [{ r: 22, ahead: 8, wpn: 2.2, stunMs: 350, drain: 15, kb: 1, look: "slash" }] },
+    { id: "v_brides", name: "The Brides", type: "Ultimate", branch: 2, row: 4, style: "shadow", cd: 22000, mana: 35, chargeMs: 300,
+      desc: "Call your three pale brides out of the night for 8s: they circle you and dart at your enemies, slashing up to three of them every moment and feeding you part of the blood.",
+      field: { kind: "brides", r: 80, ms: 8000, tickMs: 600, follow: true, zap: { n: 3, dmg: 22 }, drain: 15 } },
     // Murat 2026-11-07: eat monsters to take on what they are, bite them to make thralls. Both need flesh.
     { id: "v_devour", name: "Devour", type: "Attack", branch: 2, row: 1, style: "blood", cd: 6000, cost: 20, target: "dir",
-      desc: "Tear into the foe with flesh nearest your aim. A monster below 30% life is eaten whole: it dies, you heal 8% of your life and keep a little of what it was, more for every one of its kind you eat (blobs: life, elemental blobs: skill damage, bandits: damage, beast-folk: speed). Skeletons and golems have nothing to eat.",
-      devour: { range: 44, wpn: 1.6, drain: 20, below: 0.3, heal: 8 } },
+      desc: "Tear into the foe with flesh nearest your aim. A monster below 30% life is eaten whole: it dies, you heal 8% of your life, the fresh blood makes you 12% stronger for 8s, and you keep a little of what it was, more for every one of its kind you eat (blobs: life, elemental blobs: skill damage, bandits: damage, beast-folk: speed). Skeletons and golems have nothing to eat.",
+      devour: { range: 44, wpn: 1.6, drain: 20, below: 0.3, heal: 8, fed: { ms: 8000, dmg: 12 } } },
     { id: "v_bite", name: "Bite", type: "Summon", branch: 2, row: 2, style: "blood", cd: 9000, mana: 15, target: "dir",
       desc: "Sink your fangs into the foe with flesh nearest your aim and drink. A monster below 40% life may fall and rise as your thrall for 3 minutes (40% chance, more with ranks). You keep up to 2 thralls (3 from rank 2); a new one sends the oldest away. Skeletons and golems have no blood to take.",
       bite: { range: 44, wpn: 1.2, drain: 30, below: 0.4, chance: 0.4 } },
@@ -685,16 +713,16 @@ const TREE: Record<string, Shape> = {
   // Barbarian · Earth: Leap forks into the Seismic Wave (dead end) and Thick Skin on to the Avalanche
   b_slam: [1, undefined, ["sta", 1]], b_leap: [4, "b_slam", ["str", 2]], b_seismic: [10, "b_leap", ["str", 2]],
   b_thick: [7, "b_leap"], b_avalanche: [20, "b_thick", ["sta", 2]],
-  // Vampire · Blood: the Blood Link forks into Boil Blood, ending in Exsanguinate (dead end), and the Pact on to the Crimson Tide
-  v_link: [1, undefined, ["mag", 2]], v_boil: [4, "v_link", ["mag", 2]], v_exsang: [11, "v_boil", ["mag", 2.5]],
-  v_pact: [7, "v_link"], v_tide: [22, "v_pact", ["mag", 2.5]],
-  // Vampire · Night: Mesmerize hangs off the mist; the bats grow into the cloak and Nightfall
-  v_mist: [1], v_gaze: [6, "v_mist"], v_nightborn: [8, "v_gaze"], v_bats: [4, "v_mist", ["mag", 2]], v_cloak: [10, "v_bats", ["mag", 2]],
-  v_nightfall: [21, "v_cloak", ["mag", 2.5]],
-  // Vampire · Fang: Thirst leads to the Hunger (dead end); the slash grows into the Pounce and the Frenzy
+  // Vampire · Blood: the Blood Link forks into the Lance (dead end), Boil Blood (ending in Exsanguinate) and the Pact,
+  // which leads on to the Ward (dead end) and the Crimson Tide
+  v_link: [1, undefined, ["mag", 2]], v_lance: [3, "v_link", ["mag", 2]], v_boil: [4, "v_link", ["mag", 2]], v_exsang: [11, "v_boil", ["mag", 2.5]],
+  v_pact: [7, "v_link"], v_ward: [12, "v_pact", ["sta", 2]], v_tide: [22, "v_pact", ["mag", 2.5]],
+  // Vampire · Night: Charm hangs off the mist and leads to the passive and the soil (dead end); the bats grow into the rats and Nightfall
+  v_mist: [1], v_gaze: [6, "v_mist"], v_nightborn: [8, "v_gaze"], v_soil: [13, "v_nightborn"], v_bats: [4, "v_mist", ["mag", 2]],
+  v_rats: [10, "v_bats", ["mag", 2]], v_nightfall: [21, "v_rats", ["mag", 2.5]],
+  // Vampire · Fang: Thirst leads to the Hunger (dead end); the slash grows into the Pounce and the Brides; Devour, then Bite
   v_rend: [1, undefined, ["str", 2]], v_thirst: [3, "v_rend"], v_hunger: [8, "v_thirst"], v_pounce: [9, "v_rend", ["str", 2]],
-  v_frenzy: [20, "v_pounce", ["str", 2.5]],
-  // Devour off the slash, Bite after it (Murat 2026-11-07)
+  v_brides: [20, "v_pounce", ["mag", 2.5]],
   v_devour: [4, "v_rend", ["str", 2]], v_bite: [7, "v_devour", ["mag", 2]],
 };
 /**
@@ -706,7 +734,7 @@ const NEEDS: Record<string, WeaponNeed> = {
   n_assassinate: "melee", n_cuts: "melee", n_flurry: "melee", n_parry: "melee", n_storm: "melee", n_poison: "melee",
   a_volley: "bow", a_power: "bow", a_fan: "bow", a_rain: "bow", a_net: "bow", a_firearrows: "bow", a_frostarrow: "bow", a_phoenix: "bow",
   b_cleave: "melee", b_berserk: "melee", b_whirlwind: "melee", b_slam: "melee",
-  v_rend: "melee", v_pounce: "melee", v_frenzy: "melee", v_thirst: "melee",
+  v_rend: "melee", v_pounce: "melee", v_thirst: "melee",
 };
 /** Second prerequisites (Diablo 2 style): skill id -> other skills that must be learned first. */
 const REQUIRES: Record<string, string[]> = {
@@ -891,7 +919,8 @@ export const EFFECT_TEXT: Record<TalentEffect, (v: number) => string> = {
 
 /** Drop unknown skills (old saves) and anything above what the level allows. */
 /** Skills that were replaced: old id -> new id. Saved ranks (and slots) move over, so the skills above them stay learned. */
-export const REPLACED_SKILLS: Record<string, string> = { v_bolt: "v_link" }; // Murat 2026-11-07: Blood Bolt -> Blood Link
+// Murat 2026-11-07: Blood Bolt -> Blood Link; tree rebuild: Cloak of Night -> Rat Plague, Blood Frenzy -> The Brides
+export const REPLACED_SKILLS: Record<string, string> = { v_bolt: "v_link", v_cloak: "v_rats", v_frenzy: "v_brides" };
 
 export function cleanRanks(cls: ClassKind, level: number, saved: Record<string, number>): Record<string, number> {
   const out: Record<string, number> = {};

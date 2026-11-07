@@ -355,6 +355,17 @@ export class SkillFx {
         break;
       }
       case "zap": {
+        if (ev.s === "v_brides") {
+          // A pale bride darts from the circle at the victim: a ghostly streak, then a white slash and a spurt of blood
+          const a = Math.atan2(ev.y2 - ev.y1, ev.x2 - ev.x1);
+          for (let i = 0; i < 6; i++) {
+            const u = i / 5;
+            this.p(ev.x1 + (ev.x2 - ev.x1) * u, ev.y1 + (ev.y2 - ev.y1) * u, 12, pick([0xf3e5f5, 0xe1bee7, 0xffffff]), { life: 160 + i * 30, size: 2, size1: 0, alpha: 0.7 });
+          }
+          this.slash(ev.x2, ev.y2, 12, "shadow", a, 2.2);
+          this.burst(ev.x2, ev.y2, 10, "blood", 6, 50, 260);
+          break;
+        }
         if (ev.sky) {
           this.bolt(ev.x2 + rnd(-6, 6), ev.y2, 140, ev.x2, ev.y2, 0, PALETTE.lightning, 2, 200);
           this.glow(ev.x2, ev.y2, 2, 26, 0xb3ecff, 260, 0.9, true);
@@ -374,6 +385,43 @@ export class SkillFx {
         break;
       }
       case "siphon": this.siphon(ev); break;
+      case "rupture": {
+        // Hemorrhage: the bleed bursts all at once, a fountain of blood out of the victim
+        const v = this.ent(ev.t);
+        const x = v?.sprite.x ?? ev.x, y = v?.sprite.y ?? ev.y, z = (v?.top ?? 16) * 0.5;
+        this.burst(x, y, z, "blood", 22, 110, 480);
+        for (let i = 0; i < 10; i++) this.p(x + rnd(-2, 2), y, z, pick(PALETTE.blood.slice(1, 4)), { vx: rnd(-40, 40), vy: rnd(-20, 20), vz: rnd(60, 110), g: 320, life: rnd(400, 600), size: pick([1, 2, 2]), size1: 1, add: false });
+        this.glow(x, y, z, 14, 0xb71c1c, 260, 0.7);
+        break;
+      }
+      case "charm": {
+        // Charm: a red stare locks on; a ring of shadow closes round the victim and its eyes glow under the spell
+        const v = this.ent(ev.t);
+        if (e && v) this.bolt(e.sprite.x, e.sprite.y, e.top * 0.8, v.sprite.x, v.sprite.y, v.top * 0.7, PALETTE.shadow, 1, 220);
+        const x = v?.sprite.x ?? ev.x, y = v?.sprite.y ?? ev.y, top = v?.top ?? 16;
+        this.ring(x, y, 16, "shadow", 22, { life: 520, up: 6 });
+        this.rise(x, y, 10, "shadow", 14, top, 700);
+        this.glow(x, y, top * 0.8, 9, 0xff2d6f, 500, 0.8);
+        if (v) this.flashSprite(v, 0x9575cd);
+        break;
+      }
+      case "uncharm": {
+        // The spell breaks: a puff of violet dust
+        const v = this.ent(ev.t);
+        this.burst(v?.sprite.x ?? ev.x, v?.sprite.y ?? ev.y, (v?.top ?? 16) * 0.7, "shadow", 12, 60, 360);
+        break;
+      }
+      case "rise": {
+        // Rise Again: a pool of blood spreads under the fallen vampire, then surges up round him as he stands
+        if (!e) break;
+        const x = e.sprite.x, y = e.sprite.y;
+        this.ring(x, y, 22, "blood", 30, { life: 600, up: 2, add: false });
+        this.rise(x, y, 18, "blood", 40, e.top, 900);
+        this.glow(x, y, e.top * 0.5, 22, 0xe63946, 700, 0.8);
+        this.scene.time.delayedCall(250, () => { const m = this.ent(ev.id); if (m) this.flashSprite(m, 0xe63946); });
+        if (near) quake(this.scene, 120, 0.004);
+        break;
+      }
       case "fang": {
         // Devour / Bite: the jaws snap shut on the victim, two white fangs and a spurt of blood
         const v = this.ent(ev.t);
@@ -825,6 +873,21 @@ export class SkillFx {
       // Blood Link: the cord is redrawn every frame between the vampire and his victim (tickFields)
       objs.push(this.scene.add.graphics().setDepth(DEPTH - 2));
       this.ring(f.x, f.y, 14, "blood", 14, { life: 300, up: 10 });
+    } else if (k === "gravesoil") {
+      // Native Soil: a patch of dark grave earth spilled on the ground, clods and a few bone chips
+      const g = this.scene.add.graphics().setPosition(f.x + 0.01, f.y + 0.01).setDepth(GROUND_DEPTH);
+      const sq = ISO ? 0.5 : 0.7;
+      g.fillStyle(0x1b120d, 0.75).fillEllipse(0, 0, f.r * 2, f.r * 2 * sq);
+      g.fillStyle(0x2e1f16, 0.8).fillEllipse(0, 0, f.r * 1.6, f.r * 1.6 * sq);
+      for (let i = 0; i < 26; i++) {
+        const a = Math.random() * Math.PI * 2, d = Math.sqrt(Math.random()) * f.r * 0.85;
+        const px = Math.round(Math.cos(a) * d), py = Math.round(Math.sin(a) * d * sq);
+        g.fillStyle(pick([0x3e2a1d, 0x4a3324, 0x24170f])).fillRect(px, py, pick([2, 2, 3]), pick([1, 2]));
+      }
+      g.fillStyle(0xd8d0b8);
+      for (let i = 0; i < 4; i++) { const a = Math.random() * Math.PI * 2, d = rnd(4, f.r * 0.7); g.fillRect(Math.round(Math.cos(a) * d), Math.round(Math.sin(a) * d * sq), 2, 1); }
+      objs.push(g);
+      this.rise(f.x, f.y, f.r * 0.8, "shadow", 16, 20, 700);
     } else if (k === "beartrap" || k === "firetrap" || k === "sentry" || k === "caltrops") {
       const g = this.scene.add.graphics().setPosition(f.x + 0.01, f.y + 0.01).setDepth(f.y - 1);
       if (k === "beartrap") {
@@ -995,7 +1058,7 @@ export class SkillFx {
           // Gulps of blood travel along it toward the vampire
           const phase = (this.t / 420) % 1;
           for (let j = 0; j < 3; j++) {
-            const u = (phase + j / 3) % 1, [px, py] = at(u);
+            const u0 = (phase + j / 3) % 1, u = f.ally ? 1 - u0 : u0, [px, py] = at(u); // Transfusion: the blood runs to the ally
             g.fillStyle(0xff5252, 1).fillRect(Math.round(px) - 1, Math.round(py) - 1, 3, 3);
             g.fillStyle(0xffcdd2, 1).fillRect(Math.round(px), Math.round(py) - 1, 1, 1);
           }
@@ -1004,14 +1067,48 @@ export class SkillFx {
           if (chance(4)) this.glow(o.sprite.x, o.sprite.y, o.top * 0.5, 8, 0xe63946, 200, 0.35);
           break;
         }
-        case "nightcloak": {
-          // Living darkness swirling around the vampire, with red sparks of stolen blood
-          const a = this.t / 220;
-          for (let i = 0; i < n(26 * area); i++) {
-            const b = a + Math.random() * Math.PI * 2, rr = r * rnd(0.35, 0.95);
-            this.p(x + Math.cos(b) * rr, y + Math.sin(b) * rr, rnd(0, 14), pick(PALETTE.shadow.slice(2)), { vx: -Math.sin(b) * 30, vy: Math.cos(b) * 30, vz: rnd(4, 12), life: rnd(400, 700), size: pick([2, 3, 3]), size1: 1, alpha: 0.55, add: false, depth: DEPTH - 1 });
+        case "bloodward": {
+          // Sanguine Ward: a shell of hardened blood turning round the vampire, glinting
+          const a = this.t / 160;
+          for (let i = 0; i < 8; i++) {
+            const b = a + (i * Math.PI * 2) / 8, z = 6 + ((i % 3) * 7);
+            this.p(x + Math.cos(b) * 13, y + Math.sin(b) * 13 * 0.6, z, i % 2 ? 0xb71c1c : 0x6d0000, { life: 60, size: 2, size1: 2, add: false });
           }
-          if (chance(5)) this.p(x + rnd(-r, r) * 0.6, y + rnd(-r, r) * 0.4, rnd(4, 14), pick(PALETTE.blood), { vz: 12, life: 380, size: 1, size1: 0 });
+          if (chance(6)) this.p(x + rnd(-10, 10), y + rnd(-4, 4), rnd(4, 22), 0xffcdd2, { life: 140, size: 1, size1: 0 });
+          if (chance(3)) this.glow(x, y, 12, 14, 0xb71c1c, 260, 0.3);
+          break;
+        }
+        case "batring": {
+          // Bats left behind whirl round the vampire as a living shield
+          const a = this.t / 180;
+          for (let i = 0; i < 5; i++) {
+            const b = a + (i * Math.PI * 2) / 5, rr = r * (0.75 + 0.2 * Math.sin(this.t / 90 + i)), z = 10 + 6 * Math.sin(this.t / 70 + i * 2);
+            const flap = Math.abs(Math.sin(this.t / 30 + i)) > 0.5 ? 3 : 1;
+            const bx = x + Math.cos(b) * rr, by = y + Math.sin(b) * rr * 0.6;
+            this.p(bx, by, z, 0x1a1033, { life: 50, size: flap, size1: flap, add: false });
+            this.p(bx, by, z + 1, 0xff2d2d, { life: 50, size: 1, size1: 1, add: false });
+          }
+          break;
+        }
+        case "gravesoil": {
+          // Grave dust and pale motes of the dead rising from the earth; red ones run into the vampire standing on it
+          if (chance(10 * area)) this.p(x + rnd(-r, r) * 0.8, y + rnd(-r, r) * 0.4, 0, pick([0x4a3324, 0x5d4037, 0x3e2a1d]), { vz: rnd(6, 14), life: rnd(500, 800), size: 2, size1: 3, alpha: 0.5, add: false, depth: GROUND_DEPTH + 1 });
+          if (chance(6 * area)) this.p(x + rnd(-r, r) * 0.7, y + rnd(-r, r) * 0.35, 1, pick([0xd1c4e9, 0x9575cd]), { vz: rnd(12, 24), life: rnd(600, 900), size: 1, size1: 0 });
+          const me = this.ent(f.owner);
+          if (me && Math.hypot(me.sprite.x - x, me.sprite.y - y) <= r && chance(8)) this.p(me.sprite.x + rnd(-6, 6), me.sprite.y + rnd(-2, 2), 0, pick(PALETTE.blood.slice(1, 4)), { vz: rnd(20, 40), life: 400, size: 1, size1: 0 });
+          break;
+        }
+        case "brides": {
+          // The Brides: three pale, veiled women circling the vampire, trailing white mist and long dark hair
+          const a = this.t / 520;
+          for (let i = 0; i < 3; i++) {
+            const b = a + (i * Math.PI * 2) / 3, rr = r * 0.45, bx = x + Math.cos(b) * rr, by = y + Math.sin(b) * rr * 0.6, z = 6 + 2 * Math.sin(this.t / 200 + i);
+            for (let k = 0; k < 4; k++) this.p(bx, by, z + k * 4, k === 3 ? 0xffffff : pick([0xf3e5f5, 0xe1bee7, 0xd1c4e9]), { life: 60, size: k === 3 ? 3 : 3, size1: 3, alpha: 0.6 - k * 0.05, add: false });
+            this.p(bx + 1, by, z + 15, 0x1a1033, { life: 60, size: 2, size1: 2, alpha: 0.8, add: false }); // hair
+            this.p(bx - 1, by + 1, z + 13, 0xff2d2d, { life: 60, size: 1, size1: 1, add: false }); // eye
+            if (chance(12)) this.p(bx, by, z, 0xe1bee7, { vx: -Math.sin(b) * 20, vy: Math.cos(b) * 12, vz: -4, life: 360, size: 2, size1: 0, alpha: 0.35, add: false });
+          }
+          if (this.t - born < 400) this.ring(x, y, r * 0.45, "shadow", 18, { life: 500, up: 8 });
           break;
         }
         case "nightfall": {
@@ -1023,6 +1120,11 @@ export class SkillFx {
           for (let i = 0; i < n(10 * area); i++) {
             const a = Math.random() * Math.PI * 2, d = Math.sqrt(Math.random()) * r;
             this.p(x + Math.cos(a) * d, y + Math.sin(a) * d, 1, pick(PALETTE.blood.slice(1, 4)), { vz: rnd(15, 30), life: rnd(500, 800), size: 1, size1: 0 });
+          }
+          // ...and a cold fog rolling low over it
+          for (let i = 0; i < n(8 * area); i++) {
+            const a = Math.random() * Math.PI * 2, d = Math.sqrt(Math.random()) * r;
+            this.p(x + Math.cos(a) * d, y + Math.sin(a) * d, rnd(2, 8), pick([0x9e9eb8, 0xbdbdd0, 0x7e7e98]), { vx: rnd(-8, 8), vy: rnd(-3, 3), life: rnd(1200, 1800), size: pick([6, 8]), size1: 10, alpha: 0.18, add: false, depth: DEPTH - 1 });
           }
           if (this.t - born < 400) this.ring(x, y, r, "shadow", 20, { life: 500, up: 6, add: false });
           break;
@@ -1113,6 +1215,30 @@ export class SkillFx {
         d.fillStyle(0x6d0000).fillCircle(0, 0.3, 3.1 * size).fillStyle(0xb71c1c).fillCircle(0, 0, 2.6 * size)
           .fillStyle(0xe63946).fillCircle(-0.4 * size, -0.4 * size, 1.6 * size).fillStyle(0xffcdd2).fillRect(-1.2 * size, -1.3 * size, 0.9, 0.9);
         g = this.scene.add.container(s.x, s.y, [glow(0xb71c1c, 0.32 * size).setPosition(0, 0).setAlpha(0.6), d]).setDepth(DEPTH);
+        break;
+      }
+      case "bloodlance": {
+        // A spear of dark, set blood: a long shaft with a bright wet point, drawn along the flight
+        const d = this.scene.add.graphics();
+        d.fillStyle(0x4a0000).fillRect(-9, -1, 12, 2);
+        d.fillStyle(0x9b1b1b).fillRect(-8, -0.5, 11, 1);
+        d.fillStyle(0xe63946).fillTriangle(3, -2.2, 3, 2.2, 9, 0);
+        d.fillStyle(0xffcdd2).fillTriangle(4, -0.6, 4, 0.6, 8, 0);
+        g = this.scene.add.container(s.x, s.y, [glow(0xb71c1c, 0.3).setPosition(2, 0).setAlpha(0.6), d]).setDepth(DEPTH).setAngle(deg);
+        break;
+      }
+      case "rat": {
+        // A plague rat scurrying: grey-brown body, pink tail, beady red eye (tickShots makes it scamper)
+        const d = this.scene.add.graphics();
+        d.fillStyle(0x000000, 0.25).fillEllipse(0, 2.2, 7, 2);
+        d.fillStyle(0xd48a9a).fillRect(-7, 0.5, 4, 0.8);
+        d.fillStyle(0x4e4038).fillEllipse(-0.5, 0, 6.5, 3.6);
+        d.fillStyle(0x6d5b50).fillEllipse(-0.5, -0.6, 4.5, 1.8);
+        d.fillStyle(0x4e4038).fillTriangle(2, -1.6, 2, 1.6, 4.8, 0.2);
+        d.fillStyle(0x8d7b70).fillRect(1.4, -2.4, 1, 1);
+        d.fillStyle(0xff2d2d).fillRect(3, -0.8, 0.8, 0.8);
+        g = this.scene.add.container(s.x, s.y, [d]).setDepth(DEPTH);
+        if (Math.abs(deg) > 90) d.setScale(-1, 1);
         break;
       }
       case "bat": {
@@ -1282,6 +1408,18 @@ export class SkillFx {
           for (let i = 0; i < n(55 * sz); i++) this.p(x - ax * rnd(1, 4), y - ay * rnd(1, 4), rnd(-1, 1), pick(PALETTE.blood.slice(2)), { vx: -ax * 18, vy: -ay * 18, vz: -rnd(5, 15), g: 90, life: rnd(220, 380), size: pick([1, 1, 2]), size1: 0, add: false });
           break;
         }
+        case "bloodlance":
+          for (let i = 0; i < n(70); i++) this.p(x - ax * rnd(4, 9), y - ay * rnd(4, 9), rnd(-1, 1), pick(PALETTE.blood.slice(2)), { vx: -ax * 15, vy: -ay * 15, vz: -rnd(4, 12), g: 90, life: rnd(200, 340), size: 1, size1: 0, add: false });
+          break;
+        case "rat": {
+          // Scampering: each rat hops and wiggles on its own beat, kicking up a little dust and green sickness
+          const c = g as Phaser.GameObjects.Container, d = c.list[0] as Phaser.GameObjects.Graphics | undefined;
+          const ph = (s.__ph ??= Math.random() * 100);
+          d?.setPosition(-ay * Math.sin(age / 45 + ph) * 2, ax * Math.sin(age / 45 + ph) * 2 - Math.abs(Math.sin(age / 35 + ph)) * 1.5);
+          if (Math.random() < 6 * dt) this.p(x, y, 0, pick([0x6d5b50, 0x8d7b70]), { vz: 6, life: 260, size: 1, size1: 0, add: false, depth: GROUND_DEPTH + 1 });
+          if (Math.random() < 4 * dt) this.p(x, y, 3, pick(PALETTE.poison.slice(1, 4)), { vz: 10, life: 360, size: 1, size1: 0 });
+          break;
+        }
         case "bat": {
           // A swarm, not a line: each bat flutters on its own erratic path round its true spot (side to side and up
           // and down, different rhythms), wings beating fast, with tiny bats and shadow flitting round the cloud
@@ -1357,7 +1495,7 @@ export class SkillFx {
     if (ip) { this.burst(x, y, 4, imb as FxStyle, r > 0 ? 18 : 8, 60, 320); if (r > 0) this.ring(x, y, r, imb as FxStyle, 20, { life: 380, up: 10 }); }
     if (BASIC_SHOTS.has(kind)) { this.basicImpact(x, y, kind, r); return true; }
     const style: FxStyle | undefined = ({ shuriken: "steel", lightning: "lightning", dragon: "fire", phoenix: "fire", inferno: "fire", flamewave: "fire",
-      iceshard: "frost", frozenorb: "frost", arcane: "arcane", powerarrow: "wind", frostarrow: "frost", net: "nature", bloodbolt: "blood", bat: "shadow" } as Record<string, FxStyle>)[kind];
+      iceshard: "frost", frozenorb: "frost", arcane: "arcane", powerarrow: "wind", frostarrow: "frost", net: "nature", bloodbolt: "blood", bat: "shadow", bloodlance: "blood", rat: "poison" } as Record<string, FxStyle>)[kind];
     if (!style) return false;
     if (r > 0) {
       const big = r >= 44;

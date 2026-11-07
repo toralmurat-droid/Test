@@ -1,7 +1,7 @@
 import { ClassKind } from "./classes";
 import { impactMs, nightBuff, passiveBlood, talentBonus, LEAP_MS, pointRange, skillTarget,
   AreaDef, BuffDef, FieldDef, HitEffects, levelPower, MARK_TAKEN, MAX_STACKS, MoveDef, rankOf, rankPower, rankTime, Ranks, scalePower, synergyPower, withMods, maxRank,
-  ShotDef, SkillDef, skillOf, STACK_DECAY_MS, STACK_POWER, WEAK_DEALT, FANG_BELOW_PER_RANK, FANG_CHANCE_PER_RANK,
+  ShotDef, SkillDef, skillOf, SKILLS, STACK_DECAY_MS, STACK_POWER, WEAK_DEALT, FANG_BELOW_PER_RANK, FANG_CHANCE_PER_RANK,
 } from "./skills";
 import { Stats, STATS } from "./powers";
 import { pay, skillCost } from "./mana";
@@ -67,6 +67,7 @@ export interface FieldInst {
   x: number; y: number; until: number; nextTick: number;
   imb?: Imbue; // enchantment active when it was cast (traps, sentries)
   target?: string; // Blood Link: the enemy on the other end of the cord
+  ally?: boolean; // Blood Link bound to a group ally (Transfusion): blood flows to them instead
 }
 
 export interface SkillHost {
@@ -110,6 +111,12 @@ export interface SkillHost {
   devour?(id: string, target: string, dmg: number, heal: number): boolean;
   /** Bite: monster `target` falls and rises as the hero's thrall. False when it can't be turned. */
   thrall?(id: string, target: string, dmg: number, power: number, rank: number): boolean;
+  /** Group allies of `of` (alive heroes in the same group) within r of (x, y), not `of` itself. Missing = no groups. */
+  allies?(x: number, y: number, r: number, of: string): string[];
+  /** Can this unit be charmed (a plain monster: not a hero, summon, boss or elite)? */
+  charmable?(id: string): boolean;
+  /** Charm: monster `target` fights for the hero for `ms`. False when it can't be charmed. */
+  charm?(id: string, target: string, ms: number): boolean;
 }
 
 const live = (h: SkillHost, id: string) => { const u = h.unit(id); return u && !u.dead ? u : undefined; };
@@ -162,7 +169,8 @@ export function castSkill(h: SkillHost, id: string, skillId: string): boolean {
   const now = h.now();
   if (!s || s.passive || rank <= 0 || now < u.sk.chargeUntil || now < (u.sk.windUntil ?? 0)) return false;
   if (cooldownLeft(s, u.sk, now, h.cooldownMult(id)) > 0) return false;
-  if (s.field?.link && !linkTarget(h, id, s.field.link.range)) return false; // Blood Link: nobody in reach to bind
+  if (s.field?.link && !linkPick(h, id, s.field.link)) return false; // Blood Link: nobody in reach to bind
+  if (s.charm && !charmTarget(h, id, s.charm.range)) return false; // Charm: nobody in reach
   const fang = s.devour ?? s.bite;
   if (fang && !fangTarget(h, id, fang.range)) return false; // Devour / Bite: nothing with flesh in reach
   // Cantrips take the place of a basic attack (balance pass 2026-11-04): they wait for it and hold the next one back
@@ -222,6 +230,28 @@ export function linkTarget(h: SkillHost, id: string, range: number): string | un
   return best;
 }
 
+/**
+ * What a Blood Link binds: the enemy nearest the aim (linkTarget) or, when the link can give (Transfusion), a group ally
+ * if one is nearer the aimed spot than that enemy.
+ */
+export function linkPick(h: SkillHost, id: string, link: { range: number; give?: number }): { t: string; ally: boolean } | undefined {
+  const u = live(h, id);
+  if (!u) return undefined;
+  const foe = linkTarget(h, id, link.range);
+  if (!link.give || !h.allies) return foe ? { t: foe, ally: false } : undefined;
+  const [ax, ay] = h.aim(id);
+  const px = u.x + ax * link.range * 0.5, py = u.y + ay * link.range * 0.5;
+  const dist = (tid: string) => { const t = h.unit(tid)!; return Math.hypot(t.x - px, t.y - py); };
+  let best: string | undefined, bd = foe ? dist(foe) : Infinity;
+  for (const a of h.allies(u.x, u.y, link.range, id)) { const d = dist(a); if (d < bd) { bd = d; best = a; } }
+  return best ? { t: best, ally: true } : foe ? { t: foe, ally: false } : undefined;
+}
+
+/** Charm: the foe nearest the spot half `range` along the aim, within `range` (a monster to charm, or a hero to daze). */
+export function charmTarget(h: SkillHost, id: string, range: number): string | undefined {
+  return linkTarget(h, id, range);
+}
+
 /** Devour / Bite: the foe with flesh (shared/devour.ts) within `range`, the one nearest the spot half that far along the aim. */
 export function fangTarget(h: SkillHost, id: string, range: number): string | undefined {
   const u = live(h, id);
@@ -252,7 +282,10 @@ function fangStrike(h: SkillHost, id: string, s: SkillDef, rank: number, power: 
   const dmg = baseDmg(h, id, f) * power;
   h.fx({ ev: "fang", id, s: s.id, t: tid, x: t.x, y: t.y });
   const weak = fangWeak(t, f.below, rank);
-  if (s.devour && weak && h.devour?.(id, tid, dmg, f.heal ?? 0)) return;
+  if (s.devour && weak && h.devour?.(id, tid, dmg, f.heal ?? 0)) {
+    if (f.fed) addBuff(h, id, s.id, f.fed, rank); // Ancient Lord: the fresh blood makes him stronger for a while
+    return;
+  }
   if (s.bite && weak && Math.random() < (f.chance ?? 0) + FANG_CHANCE_PER_RANK * (rank - 1) && h.thrall?.(id, tid, dmg, power, rank)) return;
   h.hit(id, tid, dmg, pushFrom(h, u.x, u.y, tid), { skill: true, drain: f.drain, kb: 0.4, imb });
 }
@@ -280,13 +313,27 @@ function release(h: SkillHost, id: string, s: SkillDef, rank: number, power: num
   }
   if (s.shots) fire(h, id, s.id, s.shots, rank, power, u.x, u.y, h.aim(id), imb);
   if (s.devour || s.bite) fangStrike(h, id, s, rank, power, imb);
+  if (s.charm) {
+    const tid = charmTarget(h, id, s.charm.range), tu = tid && h.unit(tid);
+    if (tid && tu) {
+      h.face(id, tu.x - u.x, tu.y - u.y);
+      const won = !!h.charmable?.(tid) && !!h.charm?.(id, tid, s.charm.ms * t);
+      // Heroes (and monsters too strong-willed: bosses, elites) can't be charmed: they falter, dazed and weakened
+      if (!won) h.hit(id, tid, 0, [0, 0], { skill: true, kb: 0, fearMs: s.charm.daze * t, weakMs: s.charm.daze * t });
+      h.fx({ ev: "charm", id, t: tid, x: Math.round(tu.x), y: Math.round(tu.y), ms: won ? s.charm.ms * t : 0 });
+    }
+  }
   if (s.field) {
     const [ax, ay] = h.aim(id), d = at ?? s.field.ahead ?? 0;
-    const target = s.field.link ? linkTarget(h, id, s.field.link.range) : undefined;
-    if (target) { const tu = h.unit(target)!; h.face(id, tu.x - u.x, tu.y - u.y); }
-    if (!s.field.link || target) h.addField({ owner: id, skill: s.id, def: s.field, rank, power, x: u.x + ax * d, y: u.y + ay * d, until: h.now() + s.field.ms * t, nextTick: h.now(), imb, target });
+    const pick = s.field.link ? linkPick(h, id, s.field.link) : undefined;
+    if (pick) { const tu = h.unit(pick.t)!; h.face(id, tu.x - u.x, tu.y - u.y); }
+    if (!s.field.link || pick) h.addField({ owner: id, skill: s.id, def: s.field, rank, power, x: u.x + ax * d, y: u.y + ay * d, until: h.now() + s.field.ms * t, nextTick: h.now(), imb, target: pick?.t, ally: pick?.ally || undefined });
   }
-  if (s.buff) addBuff(h, id, s.id, s.buff, rank, stacks);
+  if (s.buff) {
+    addBuff(h, id, s.id, s.buff, rank, stacks);
+    // Bloodline: group allies close by share the buff, at half its lifesteal
+    if (s.buff.group && h.allies) for (const a of h.allies(u.x, u.y, s.buff.group, id)) addBuff(h, a, s.id, { ms: s.buff.ms, lifesteal: (s.buff.lifesteal ?? 0) / 2 }, rank);
+  }
   if (s.cry) {
     h.fx({ ev: "cry", id, s: s.id, x: u.x, y: u.y, r: s.cry.r });
     area(h, id, s, s.cry, power, t, undefined, true, imb);
@@ -399,11 +446,19 @@ export function area(h: SkillHost, id: string, s: SkillDef | { id: string }, a: 
         // Exsanguinate: a stream of blood from every victim into the caster
         if (a.siphon && hit.length) h.fx({ ev: "siphon", id, s: s.id, pts: hit.map((e) => { const tu = h.unit(e)!; return [Math.round(tu.x), Math.round(tu.y)]; }) });
         for (const e of hit) {
+          // Hemorrhage: a bleeding foe takes what is left of its bleed all at once
+          let extra = 0;
+          const tu0 = a.rupture ? h.unit(e) : undefined;
+          if (tu0 && h.now() < tu0.sk.burnUntil && tu0.sk.burnBy) {
+            extra = tu0.sk.burnDps * (tu0.sk.burnUntil - h.now()) / 1000 * a.rupture!;
+            tu0.sk.burnUntil = 0;
+            h.fx({ ev: "rupture", id, t: e, x: Math.round(tu0.x), y: Math.round(tu0.y) });
+          }
           if (a.pull) {
             const tu = h.unit(e);
             if (tu) { const [px, py] = norm(cx - tu.x, cy - tu.y); h.move(e, px, py, Math.min(a.pull, Math.hypot(cx - tu.x, cy - tu.y))); }
           }
-          h.hit(id, e, dmg, pushFrom(h, cx, cy, e), { ...effects(a, t), skill: true, kb: a.kb ?? (dmg > 0 ? 1 : 0), imb });
+          h.hit(id, e, dmg + extra, pushFrom(h, cx, cy, e), { ...effects(a, t), skill: true, kb: a.kb ?? (dmg > 0 ? 1 : 0), imb });
         }
       };
       // A falling blade / meteor / arrow rain hurts when it lands (impactMs), in step with its animation
@@ -501,10 +556,19 @@ export function tickField(h: SkillHost, f: FieldInst): boolean {
   }
   // Blood Link: the cord snaps when the bound enemy dies or gets too far away
   const tu = f.def.link ? (f.target ? live(h, f.target) : undefined) : undefined;
-  if (f.def.link && (!tu || !o || Math.hypot(tu.x - o.x, tu.y - o.y) > f.def.link.breakAt)) return false;
+  if (f.def.link && (!tu || !o || o.dead || Math.hypot(tu.x - o.x, tu.y - o.y) > f.def.link.breakAt)) return false;
   if (now < f.nextTick) return true;
   f.nextTick = now + f.def.tickMs;
   const d = f.def, t = rankTime(f.rank);
+  if (d.link && f.ally) {
+    // Transfusion: the vampire's blood runs down the cord into the ally (never below 1 HP of his own)
+    const give = Math.round((o!.maxHp ?? 0) * (d.link.give ?? 0) / 100);
+    if (give <= 0 || (o!.hp ?? 0) <= give + 1) return false;
+    o!.hp = (o!.hp ?? 0) - give;
+    h.heal(f.target!, give * 1.5 * f.power);
+    h.fx({ ev: "drain", id: f.target, t: f.owner });
+    return true;
+  }
   if (d.link) {
     h.hit(f.owner, f.target!, baseDmg(h, f.owner, d) * f.power, [0, 0], { ...effects(d, t), kb: 0, skill: true, dot: true, imb: f.imb });
     return true;
@@ -521,7 +585,7 @@ export function tickField(h: SkillHost, f: FieldInst): boolean {
       const tu = h.unit(e);
       if (!tu) continue; // gone this tick (a summon in the balance sims has no unit)
       h.fx({ ev: "zap", id: f.owner, s: f.skill, x1: f.x, y1: f.y, x2: tu.x, y2: tu.y, sky: f.def.kind === "storm" });
-      h.hit(f.owner, e, d.zap.dmg * h.magic(f.owner) * f.power, [0, 0], { stunMs: d.zap.stunMs, kb: 0, skill: true, imb: f.imb });
+      h.hit(f.owner, e, d.zap.dmg * h.magic(f.owner) * f.power, [0, 0], { stunMs: d.zap.stunMs, drain: d.drain, kb: 0, skill: true, imb: f.imb });
     }
     // Storm: some bolts strike empty ground too, for the look
     if (d.kind === "storm" && pick.length < d.zap.n) {
@@ -660,6 +724,39 @@ export function afterHit(h: SkillHost, from: string | undefined, tid: string, o:
       h.fx({ ev: "thorns", id: tid, s: b.id, x: a.x, y: a.y });
     }
   }
+}
+
+/** Bloodlust (passive.kill): the hero `id` just killed someone; learned passives with a kill buff give it. */
+export function onKill(h: SkillHost, id: string) {
+  const u = live(h, id);
+  if (!u?.cls) return;
+  for (const s of SKILLS[u.cls]) {
+    const r = rankOf(u.talents, s.id);
+    if (r > 0 && s.passive?.kill) addBuff(h, id, s.id, s.passive.kill, r);
+  }
+}
+
+/**
+ * Rise Again (passive.rise, Blood Pact): a blow that would kill hero `id` leaves them at the passive's share of their
+ * life instead, once per its cooldown. Returns true when they rose (the host must not kill them).
+ */
+export function riseAgain(h: SkillHost, id: string): boolean {
+  const u = h.unit(id);
+  if (!u?.cls || !u.maxHp) return false;
+  const now = h.now();
+  for (const s of SKILLS[u.cls]) {
+    const rise = s.passive?.rise;
+    if (!rise || rankOf(u.talents, s.id) <= 0) continue;
+    const key = "rise:" + s.id;
+    if (now - (u.sk.last[key] ?? -Infinity) < rise.cdMs) continue;
+    u.sk.last[key] = now;
+    u.hp = Math.max(1, Math.round(u.maxHp * rise.hp / 100));
+    h.invuln(id, now + 1200);
+    h.fx({ ev: "rise", id, s: s.id, x: Math.round(u.x), y: Math.round(u.y) });
+    h.fx({ ev: "buff", id, s: s.id, ms: rise.cdMs }); // the buff row counts down until it is ready again
+    return true;
+  }
+  return false;
 }
 
 const NIGHT_BUFF_ID = "v_nightborn";

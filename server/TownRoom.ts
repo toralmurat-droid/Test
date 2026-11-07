@@ -21,7 +21,7 @@ import { gearResist, splitHit } from "../shared/gear";
 import { cleanFilter, LootFilter, passesFilter } from "../shared/heroSheet";
 import { activeSkills, canLearn, classSkills, cleanRanks, levelPower, REPLACED_SKILLS, maxRank, topRank, NEED_TEXT, rankOf, rankPower, scalePower, skillById, skillLearned, skillOf, talentBonus, talentMult, talentReduce } from "../shared/skills";
 import {
-  afterHit, atkSpeedMult, blocking, bloodCost, buffLifesteal, buffRegen, castSkill, ccImmune, fangTarget, charging, winding, counterHit, dealtMult, FieldInst, newRuntime,
+  afterHit, atkSpeedMult, blocking, bloodCost, buffLifesteal, buffRegen, castSkill, ccImmune, fangTarget, onKill, riseAgain, charging, winding, counterHit, dealtMult, FieldInst, newRuntime,
   imbueOf, shotEnd, shotHit, shotPulse, ShotSpec, SkillHost, speedMult, statusOf, takenMult, tickField, tickUnit, Unit,
 } from "../shared/skillEngine";
 import {
@@ -207,6 +207,7 @@ export class Mob extends Schema {
   summonFor = ""; // quest monster (QuestStep.summon): session id of the player it was spawned for
   summonAt = 0; nextPick = 0; // when it was called (the oldest goes first past SUMMON.max), next target choice
   thrall = false; // Bite (shared/devour.ts): a monster turned into a vampire's thrall (a summon that keeps its own kind)
+  charmUntil = 0; // Charm (v_gaze): a zone monster fighting for a vampire (owner set) until then, then it goes back to being itself
   sPower = 1; // a summon's damage multiplier (skill rank, the owner's Ruin talent, the golems fused into a Colossus)
   summonChain = 0; // ...and the quest chain of that step
   @type("string") title = ""; // quest boss name shown over it instead of "Elite" (QuestStep.summon.title)
@@ -339,6 +340,7 @@ export class Field extends Schema {
   @type("number") ms = 0; // total length
   @type("boolean") follow = false;
   @type("string") target = ""; // Blood Link: the enemy on the other end of the cord
+  @type("boolean") ally = false; // Blood Link bound to a group ally (Transfusion): the blood flows to them
   inst!: FieldInst;
 }
 
@@ -1569,6 +1571,30 @@ export class TownRoom extends Room<TownState> {
     return m;
   }
 
+  /** Can a vampire Charm this monster? Not heroes, summons and thralls, elites and bosses, quest monsters or the Hollow King's servants. */
+  private charmable(tid: string): Mob | undefined {
+    const m = this.state.mobs.get(tid);
+    if (!m || m.dead || m.owner || m.summonFor || m.servant || m.hidden || ELITE[m.kind] || BOSS[m.kind]) return undefined;
+    return m;
+  }
+
+  /** Charm: the monster fights for the vampire as a summon until charmUntil, then it is a plain monster of its zone again. */
+  private charm(id: string, tid: string, ms: number): boolean {
+    const m = this.charmable(tid), now = Date.now();
+    if (!m || !this.state.players.get(id)) return false;
+    m.owner = id; m.charmUntil = now + ms; m.banishAt = m.charmUntil; m.sPower = 1;
+    m.target = ""; m.foe = ""; m.hateId = ""; m.hate = 0; m.windUntil = 0; m.winding = false; m.broken = false;
+    this.summons.set(tid, m);
+    return true;
+  }
+
+  /** The charm wears off (or its vampire left or died): the monster is itself again and turns on whoever is closest. */
+  private uncharm(id: string, m: Mob) {
+    this.summons.delete(id);
+    m.owner = ""; m.charmUntil = 0; m.banishAt = 0; m.target = ""; m.foe = ""; m.windUntil = 0; m.winding = false;
+    this.broadcast("sfx", { ev: "uncharm", t: id, x: Math.round(m.x), y: Math.round(m.y) });
+  }
+
   /** The blow that finishes a weak monster for Devour / Bite: an ordinary kill (XP, loot, quests), shown with the skill's damage. */
   private fangKill(id: string, tid: string, m: Mob, dmg: number): boolean {
     const p = this.state.players.get(id);
@@ -1625,6 +1651,7 @@ export class TownRoom extends Room<TownState> {
   /** Sends a summon back (its time is up, its owner left or died, or it was replaced). */
   private dismiss(id: string, show = true) {
     const m = this.summons.get(id);
+    if (m?.charmUntil && !m.dead) return this.uncharm(id, m); // a charmed monster isn't sent away, it wakes up
     this.summons.delete(id);
     if (!m || m.dead) return;
     m.dead = true; m.hp = 0;
@@ -3918,7 +3945,8 @@ export class TownRoom extends Room<TownState> {
     }
     this.broadcast("hit", { id: targetId, dmg, crit: !!opts.crit, dot: !!opts.dot, el: opts.el, ...(opts.dot ? {} : hitDir(push)) });
     if (m.hp > 0) { afterHit(this.host, attackerId, targetId, opts); return; }
-    if (m.owner) { this.mobDied(m, targetId, attackerId, a?.name ?? ""); return; } // a summon: no XP, no loot, no quest credit
+    if (a) onKill(this.host, attackerId); // Bloodlust
+    if (m.owner && !m.charmUntil) { this.mobDied(m, targetId, attackerId, a?.name ?? ""); return; } // a summon: no XP, no loot, no quest credit
     if (a) for (let c = 0; c < CHAINS.length; c++) this.questKill(attackerId, a, m, c);
     if (a) this.bountyKill(attackerId, a, m);
     // Kill XP: every group member in the same zone gets it (the killer alone when solo)
@@ -3962,6 +3990,7 @@ export class TownRoom extends Room<TownState> {
   private mobDied(m: Mob, targetId: string, attackerId: string, killerName: string) {
     m.dead = true; m.hp = 0;
     if (m.owner) this.summons.delete(targetId);
+    if (m.charmUntil) { m.owner = ""; m.charmUntil = 0; m.banishAt = 0; } // a charmed monster dies as the zone monster it is
     m.hidden = false; m.spot = ""; m.fleeing = false; m.foe = "";
     // A skeleton may break in two: its upper body drags itself on at whoever killed it
     if (m.kind === "skeleton" && !m.ritual && Math.random() < BONES.crawlChance) {
@@ -4659,7 +4688,9 @@ export class TownRoom extends Room<TownState> {
     }
     this.broadcast("hit", { id: tid, dmg, blocked: guarded, crit: !!opts.crit, dot: !!opts.dot, el: opts.el ?? opts.mobEl, ...(opts.dot ? {} : hitDir(push)) });
     if (t.hp > 0) { afterHit(this.host, opts.from, tid, opts); return false; }
+    if (riseAgain(this.host, tid)) return false; // Blood Pact: a killing blow leaves the vampire standing
     t.dead = true;
+    if (opts.from && this.state.players.has(opts.from)) onKill(this.host, opts.from); // Bloodlust
     t.guarding = false;
     // No magic in Oakvale: dying pays for it, the hero comes back a free citizen (villagers and watch stand down)
     this.setOutlaw(tid, t, false);
@@ -4824,6 +4855,16 @@ export class TownRoom extends Room<TownState> {
       return !!m && !!familyOf(m.kind);
     },
     devour: (id, tid, dmg, heal) => this.devour(id, tid, dmg, heal),
+    allies: (x, y, r, of) => {
+      const me = this.state.players.get(of);
+      if (!me?.party) return [];
+      return this.members(me.party).filter((pid) => {
+        const p = this.state.players.get(pid)!;
+        return pid !== of && !p.dead && Math.hypot(p.x - x, p.y - y) <= r;
+      });
+    },
+    charmable: (id) => !!this.charmable(id),
+    charm: (id, tid, ms) => this.charm(id, tid, ms),
     thrall: (id, tid, dmg, power, rank) => this.makeThrall(id, tid, dmg, power, rank),
     isNight: (id) => {
       const u = this.state.players.get(id) ?? this.state.mobs.get(id);
@@ -4905,7 +4946,7 @@ export class TownRoom extends Room<TownState> {
     addField: (inst) => {
       const f = new Field();
       f.kind = inst.def.kind; f.skill = inst.skill; f.owner = inst.owner; f.x = inst.x; f.y = inst.y; f.r = inst.def.r;
-      f.ms = inst.until - Date.now(); f.follow = !!inst.def.follow; f.inst = inst; f.target = inst.target ?? "";
+      f.ms = inst.until - Date.now(); f.follow = !!inst.def.follow; f.inst = inst; f.target = inst.target ?? ""; f.ally = !!inst.ally;
       // Only one of each ground effect per hero (recasting a trap moves it)
       this.state.fields.forEach((o, oid) => { if (o.owner === inst.owner && o.skill === inst.skill && inst.def.trap) this.state.fields.delete(oid); });
       this.state.fields.set(`f${++this.fieldSeq}`, f);
