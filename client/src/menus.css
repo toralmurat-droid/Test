@@ -305,3 +305,39 @@ body .tnode .trank { position: absolute; right: -34px; bottom: -3px; width: 24px
 body .tnode.has .trank, body .tnode.max .trank { border-color: #8a6a3a; }
 body .tfoot { position: absolute; left: 0; right: 0; bottom: 0; padding: 8px 0 9px; text-align: center; background: linear-gradient(#262523, #141414); border-top: 2px solid #5a5953;
   color: #d0453c; font-size: 16px; font-family: var(--pixel-font); letter-spacing: 2px; text-transform: uppercase; }
+
+/* Side panel in two columns (Murat 2026-11-07): the tabs on top, a fixed stats column on the left of every screen,
+   the screen itself (character, inventory, skills) on the right */
+body #sidepanel { display: grid; grid-template-columns: 196px minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); column-gap: 10px;
+  width: min(880px, calc(100% - 24px)); }
+body #sidepanel > #sptabs { grid-column: 1 / -1; }
+body #sidepanel > #spsheet { grid-column: 1; grid-row: 2; margin: 6px 0 0; overflow: auto; min-height: 0; padding-right: 2px; }
+body #sidepanel > #spbody { grid-column: 2; grid-row: 2; }
+.spsec { background: #0f0a06; border: 2px solid #45331e; box-shadow: inset 0 0 0 1px #080504; padding: 2px 7px 4px; margin-bottom: 6px; }
+.spsec h4 { margin: 0 0 2px; font: 13px var(--pixel-font); color: #e3bf6a; text-transform: uppercase; letter-spacing: 1px; border-bottom: 1px solid #45331e; }
+.sprow { display: flex; align-items: baseline; gap: 4px; font-size: 13px; line-height: 1.45; }
+.sprow span { flex: 1; color: #a8977a; }
+.sprow b { font-weight: normal; color: #f0e0b8; }
+.sprow em { font-style: normal; font-size: 12px; }
+.sprow.up b, .sprow em.up { color: #c8f59a; } .sprow.down b, .sprow em.down { color: #ff8a70; }
+body #sidepanel .spnote { white-space: normal; text-align: left; }
+@media (max-width: 760px) { body #sidepanel { grid-template-columns: 1fr; } body #sidepanel > #spsheet { grid-row: auto; max-height: 30vh; } body #sidepanel > #spbody { grid-column: 1; grid-row: auto; } }
+
+/* Inventory as a paper doll: the hero in the middle, the worn gear around (hat, armour, shoes on the left; weapon,
+   shield, ranged on the right) */
+body #spbody #gearleft { flex: 0 0 300px; }
+body #spbody #geartop { display: grid; grid-template-columns: 86px 1fr 86px; grid-template-rows: repeat(3, 76px); gap: 6px; align-items: stretch;
+  background: radial-gradient(ellipse at 50% 55%, #2a2016, #0f0a06 70%); border: 2px solid #45331e; padding: 6px; }
+body #spbody #gearslots { display: contents; }
+body #spbody #gearpreview { grid-column: 2; grid-row: 1 / 4; width: 100%; height: auto; max-width: 140px; align-self: center; justify-self: center; }
+body #spbody .gslot { flex-direction: column; justify-content: center; align-items: center; text-align: center; padding: 3px; gap: 2px; min-width: 0; }
+body #spbody .gslot small, body #spbody .gslot .glvl, body #spbody .gslot br { display: none; }
+body #spbody .gslot b { font-size: 11px; line-height: 1.1; display: block; max-width: 78px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+body #spbody .gslot canvas, body #spbody .gslot .gicon { width: 40px; height: 40px; }
+body #spbody .gslot.slot-hat { grid-column: 1; grid-row: 1; }
+body #spbody .gslot.slot-armour { grid-column: 1; grid-row: 2; }
+body #spbody .gslot.slot-shoes { grid-column: 1; grid-row: 3; }
+body #spbody .gslot.slot-weapon { grid-column: 3; grid-row: 1; }
+body #spbody .gslot.slot-shield { grid-column: 3; grid-row: 2; }
+body #spbody .gslot.slot-ranged { grid-column: 3; grid-row: 3; }
+body #spbody #geartotal { display: none; } /* the stats column on the left shows all of it */

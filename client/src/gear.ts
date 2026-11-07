@@ -231,7 +231,7 @@ export class GearMenu {
     for (const slot of GEAR_SLOTS) {
       const id: string = state[slot];
       const row = document.createElement("button");
-      row.className = "gslot" + (id ? "" : " empty");
+      row.className = `gslot slot-${slot}` + (id ? "" : " empty"); // slot-*: its place around the hero (paper doll, menus.css)
       const icon = id ? iconCanvas(this.scene, id) : Object.assign(document.createElement("span"), { className: "gicon" });
       row.appendChild(icon);
       const txt = document.createElement("span");
