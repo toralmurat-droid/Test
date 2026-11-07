@@ -1,5 +1,6 @@
 {
   "date": "2026-11-07",
+  "pr": 312,
   "title": "Quest tracker on the left, named menu tiles",
   "changes": [
     "The quest tracker moved to the left side of the screen.",
