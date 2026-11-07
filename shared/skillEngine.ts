@@ -485,11 +485,12 @@ function fire(h: SkillHost, id: string, skill: string, d: ShotDef, rank: number,
     const k = n > 1 ? i - (n - 1) / 2 : 0;
     const ang = base + (d.spread && n > 1 ? (k * d.spread / (n - 1)) * Math.PI / 180 : 0) + (d.jitter ? (Math.random() * 2 - 1) * d.jitter.deg * Math.PI / 180 : 0);
     const speed = d.jitter ? d.speed * (1 + (Math.random() * 2 - 1) * d.jitter.speed) : d.speed;
+    const range = d.jitter?.range ? d.range * (1 + (Math.random() * 2 - 1) * d.jitter.range) : d.range;
     const vx = Math.cos(ang), vy = Math.sin(ang);
     const lane = d.lanes ? k * d.lanes : 0;
     h.shoot({
       owner: id, skill, x: x + vx * 6 - aim[1] * lane, y: y - 4 + vy * 6 + aim[0] * lane, vx, vy,
-      kind: d.kind, speed, range: d.range, radius: d.radius, size: d.size ?? 1, dmg,
+      kind: d.kind, speed, range, radius: d.radius, size: d.size ?? 1, dmg,
       pierce: d.pierce ?? 0, explode: d.explode ?? 0, chain: d.chain ?? 0, field: d.field, rank, power, pulse: d.pulse,
       ...effects(d, t), imb,
     });

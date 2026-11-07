@@ -1491,16 +1491,21 @@ export class SkillFx {
           break;
         }
         case "bat": {
-          // Bats pouring out of the cloak: each one fades in a moment after the next, starts close to its neighbours and
-          // drifts wider as it flies, on one slow, smooth flutter of its own (no jitter), wings beating fast
+          // Bats pouring out of the cloak, each on its own erratic flight: ragged start times, different sizes and wing
+          // beats, wide swoops that drift and change side, and now and then a sharp dart or dip like a real bat
           const c = g as Phaser.GameObjects.Container, d = c.list[0] as Phaser.GameObjects.Graphics | undefined;
-          const ph = (s.__ph ??= Math.random() * 100), fq = (s.__fq ??= rnd(0.8, 1.25)), late = (s.__late ??= rnd(0, 110));
-          const out = Math.min(1, Math.max(0, age - late) / 160); // 0 -> 1 as it leaves the cloak
+          const ph = (s.__ph ??= Math.random() * 100), fq = (s.__fq ??= rnd(0.6, 1.5)), late = (s.__late ??= Math.random() ** 1.6 * 220);
+          const sz = (s.__sz ??= rnd(0.75, 1.2)), sw = (s.__sw ??= rnd(2.5, 8) * (Math.random() < 0.5 ? -1 : 1));
+          const out = Math.min(1, Math.max(0, age - late) / 140); // 0 -> 1 as it leaves the cloak
           c.setAlpha(out);
-          const side = Math.sin(age / (130 * fq) + ph) * 3.5 * out;
-          const bob = Math.sin(age / (95 * fq) + ph * 1.7) * 2 * out - 2 - 3 * (1 - out);
+          // Darts: a short jerk sideways/up at random moments, eased back out
+          if (out >= 1 && !(s.__dt > 0) && Math.random() < 2.2 * dt) { s.__dt = 1; s.__dx = rnd(-7, 7); s.__dy = rnd(-6, 3); }
+          if (s.__dt > 0) s.__dt = Math.max(0, s.__dt - dt * rnd(3, 6));
+          const dart = s.__dt > 0 ? Math.sin(s.__dt * Math.PI) : 0;
+          const side = (Math.sin(age / (140 * fq) + ph) * sw + Math.sin(age / (53 * fq) + ph * 2.3) * 2 + (s.__dx ?? 0) * dart) * out;
+          const bob = (Math.sin(age / (90 * fq) + ph * 1.7) * 2.5 + (s.__dy ?? 0) * dart) * out - 2 - 3 * (1 - out);
           if (d) d.setPosition(-ay * side, ax * side + bob);
-          d?.setScale(0.6 + 0.4 * out, (0.45 + 0.55 * Math.abs(Math.sin(age / (24 * fq) + ph))) * (0.6 + 0.4 * out));
+          d?.setScale((0.6 + 0.4 * out) * sz, (0.45 + 0.55 * Math.abs(Math.sin(age / (22 * fq) + ph))) * (0.6 + 0.4 * out) * sz);
           if (out > 0.5 && Math.random() < 2.5 * dt) this.p(x - ax * 3, y - ay * 3, 4, pick(PALETTE.shadow.slice(2)), { vx: -ax * 12, vy: -ay * 12, life: 260, size: 2, size1: 0, alpha: 0.4, add: false });
           break;
         }
