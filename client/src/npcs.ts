@@ -1,4 +1,5 @@
 import "@fontsource/pixelify-sans/400.css";
+import { actionKey } from "./keymode";
 import { icon as pxIcon } from "./pixelicons";
 import "@fontsource/pixelify-sans/700.css";
 import "./npcs.css";
@@ -225,7 +226,7 @@ export class NpcLayer {
         const qty = e.qty ?? 1, size = e.size ?? 0, mana = e.item === "mpotion";
         const room = bag.length + slotsAfter(pots, e.item, size, qty) <= BAG_SIZE;
         return row(`${e.item}:${size}`, `${qty > 1 ? `${qty} × ` : ""}${potionName(e.item, size)}`, mana ? "#8ab4ff" : "#ff8a8a",
-          `${mana ? "+" : "Heals "}${potionAmount(e.item, size)}${mana ? " mana" : " HP"} · you carry ${total(pots[e.item])} · ${mana ? "V" : "Q"} · ${room ? "10 per bag slot" : "no room in your bag"}`,
+          `${mana ? "+" : "Heals "}${potionAmount(e.item, size)}${mana ? " mana" : " HP"} · you carry ${total(pots[e.item])} · ${actionKey(mana ? "mana" : "potion")} · ${room ? "10 per bag slot" : "no room in your bag"}`,
           `${e.price}${pxIcon("coin")}`, "sh-buy", i, gold < e.price || !room);
       }
       const d = gearDef(e.item)!;

@@ -232,7 +232,7 @@ const ART: Record<string, Draw> = {
     p.outline();
     p.spark(19, 5, 2, "#ffffff"); p.px(5, 19, LIT[2]); p.px(16, 15, LIT[3]);
   },
-  w_firedart: (p) => {
+  w_firebolt: (p) => {
     p.thick(4, 20, 14, 10, 2, FIRE[1]); p.line(5, 20, 14, 11, FIRE[2]);
     p.poly([[13, 8], [20, 4], [16, 11]], FIRE[2]);
     p.disc(16, 8, 2.5, FIRE[2]); p.disc(16, 8, 1.2, FIRE[3]);

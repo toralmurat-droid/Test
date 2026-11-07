@@ -1,7 +1,7 @@
 import { respecCost } from "../../shared/upkeep";
 import { ClassKind, CLASSES } from "../../shared/classes";
 import { icon as pxIcon } from "./pixelicons";
-import { SLOT_KEYS } from "../../shared/slots";
+import { slotKey } from "./keymode";
 import { Stats } from "../../shared/powers";
 import { iconImg } from "./skillIcons";
 import { SheetPreview, talentsOf } from "./sidepanel";
@@ -110,7 +110,7 @@ export class TalentMenu {
       const why = lockReason(cls, state.level, ranks, s.id);
       const stt = why === "max" ? "max" : why === "" ? "can" : why === "points" ? (r > 0 ? "has" : "off") : "locked";
       const slot = !s.passive ? slots.indexOf(s.id) : -1;
-      const key = slot >= 0 ? `<kbd>${SLOT_KEYS[slot]}</kbd>` : "";
+      const key = slot >= 0 ? `<kbd>${slotKey(slot)}</kbd>` : "";
       const pips = Array.from({ length: MAX_RANK }, (_, i) => `<i class="${i < r ? "on" : ""}"></i>`).join("");
       const leaf = childrenOf(cls, s.id).length === 0;
       const act = !s.passive && r > 0 ? ` data-active="${s.id}"` : "";
@@ -392,7 +392,7 @@ export class TalentMenu {
     const status = why === "max" ? "Fully learned" : why === "" ? "Click to learn" : why === "level" ? `${pxIcon("lock")}Needs level ${s.req}` :
       why === "above" ? `${pxIcon("lock")}Learn ${parent ? parent.name : "the skill below"} first` :
       why === "requires" ? `${pxIcon("lock")}Learn ${missing.join(" and ")} first` : r > 0 ? "Learned · no points left" : "No points left";
-    const keyNote = !s.passive && r > 0 ? (slot >= 0 ? ` · on key ${SLOT_KEYS[slot]}` : " · hover it and press 1-0 to put it on a key") : "";
+    const keyNote = !s.passive && r > 0 ? (slot >= 0 ? ` · on key ${slotKey(slot)}` : ` · hover it and press ${slotKey(0)}-${slotKey(8)} to put it on a key`) : "";
     const pips = Array.from({ length: MAX_RANK }, (_, i) => `<i class="${i < r ? "on" : ""}"></i>`).join("");
     info.innerHTML = `<div class="ihead" style="--c:${color}">${iconImg(s.id, "iicon")}<div><b>${s.name}</b>` +
       `<span class="ttype${s.passive ? " pas" : ""}">${s.type} · Lv ${s.req}</span><span class="pips">${pips}</span></div></div>` +
