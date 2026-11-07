@@ -4728,6 +4728,14 @@ export class TownRoom extends Room<TownState> {
       if (p) this.summon(id, GOLEM_OF[attuneOf(p.attune)], undefined, power);
     },
     colossus: (id, power, ms) => { this.summonColossus(id, power, ms); },
+    isNight: (id) => {
+      const u = this.state.players.get(id) ?? this.state.mobs.get(id);
+      if (!u) return false;
+      if (isUndeadNight(worldDayFrac(Date.now()))) return true;
+      let inside = false;
+      this.state.fields.forEach((f) => { if (!inside && f.inst.def.night && Math.hypot(u.x - f.x, u.y - f.y) <= f.r) inside = true; });
+      return inside;
+    },
     attune: (id) => {
       const p = this.state.players.get(id);
       if (!p) return;

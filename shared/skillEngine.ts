@@ -1,5 +1,5 @@
 import { ClassKind } from "./classes";
-import { impactMs, passiveBlood, LEAP_MS, pointRange, skillTarget,
+import { impactMs, nightBuff, passiveBlood, talentBonus, LEAP_MS, pointRange, skillTarget,
   AreaDef, BuffDef, FieldDef, HitEffects, levelPower, MARK_TAKEN, MAX_STACKS, MoveDef, rankOf, rankPower, rankTime, Ranks, scalePower, synergyPower,
   ShotDef, SkillDef, skillOf, STACK_DECAY_MS, STACK_POWER, WEAK_DEALT,
 } from "./skills";
@@ -102,6 +102,8 @@ export interface SkillHost {
   summon?(id: string, power: number): void;
   colossus?(id: string, power: number, ms: number): void;
   attune?(id: string): void;
+  /** Is it night where this unit stands (the world clock, or inside a Nightfall)? Night passives need it. */
+  isNight?(id: string): boolean;
 }
 
 const live = (h: SkillHost, id: string) => { const u = h.unit(id); return u && !u.dead ? u : undefined; };
@@ -615,6 +617,8 @@ export function afterHit(h: SkillHost, from: string | undefined, tid: string, o:
   }
 }
 
+const NIGHT_BUFF_ID = "v_nightborn";
+
 /** Every tick for every hero and monster. */
 export function tickUnit(h: SkillHost, id: string) {
   const u = h.unit(id);
@@ -625,6 +629,13 @@ export function tickUnit(h: SkillHost, id: string) {
   if (sk.buffs.length && sk.buffs.some((b) => b.until <= now)) sk.buffs = sk.buffs.filter((b) => b.until > now);
   if (sk.counter && now >= sk.counter.until) sk.counter = undefined;
   if (sk.stacks > 0 && now - sk.stackAt > STACK_DECAY_MS) sk.stacks = 0;
+  // Child of the Night: at night the passive keeps a short buff topped up (it runs out a second or two after dawn)
+  const night = u.cls && u.talents ? talentBonus(u.cls, u.talents, "night") : 0;
+  if (night > 0 && h.isNight?.(id)) {
+    const b = sk.buffs.find((x) => x.id === NIGHT_BUFF_ID);
+    if (b) { if (b.until - now < 600) b.until = now + 2000; } // topped up in steps: the HUD buff row isn't resent every tick
+    else { sk.buffs.push({ id: NIGHT_BUFF_ID, until: now + 2000, b: { ms: 2000, ...nightBuff(night) }, rank: 1, stacks: 0 }); h.fx({ ev: "buff", id, s: NIGHT_BUFF_ID, ms: 2000 }); }
+  }
   if (now < sk.burnUntil && now >= sk.burnNext) {
     sk.burnNext = now + 500;
     h.hit(sk.burnBy, id, Math.max(1, sk.burnDps * 0.5), [0, 0], { dot: true, kb: 0, skill: true });

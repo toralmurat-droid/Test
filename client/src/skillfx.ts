@@ -496,6 +496,7 @@ export class SkillFx {
     const pal = PALETTE[style];
     if (e && ev.kind !== "dash") e.sprite.setPosition(ev.x, ev.y); // a dash glides there (TownScene eases to the server spot)
     const n = 6;
+    if (s?.id === "v_mist" && ev.kind === "blink") { this.mistForm(ev, e); return; }
     if (ev.kind === "blink" || ev.kind === "back" || ev.kind === "behind") {
       // Vanish in a puff, reappear in another
       for (const [x, y, k] of [[ev.fx, ev.fy, 1], [ev.x, ev.y, 0.8]] as const) {
@@ -727,6 +728,40 @@ export class SkillFx {
     void r;
   }
 
+  /** One soft puff of night mist that swirls round (cx, cy) as it drifts and swells. */
+  private mistPuff(x: number, y: number, cx: number, cy: number, life = rnd(700, 1200), big = 1) {
+    const a = Math.atan2(y - cy, x - cx), sw = rnd(14, 26);
+    this.p(x, y, rnd(0, 12), pick([0xc9c2d9, 0xa99fc0, 0x8a80a8, 0xe0dbea, 0x6f6690]), {
+      vx: -Math.sin(a) * sw + rnd(-5, 5), vy: Math.cos(a) * sw * 0.6 + rnd(-4, 4), vz: rnd(2, 9), drag: 0.8, life,
+      size: pick([4, 5, 6, 7]) * big, size1: rnd(9, 13) * big, alpha: rnd(0.32, 0.5), add: false, depth: DEPTH - 1,
+    });
+  }
+
+  /**
+   * Mist Form: the vampire bursts into a thick, rolling cloud of pale night mist that keeps swirling where he stood,
+   * a stream of mist drifts along his path, and the mist gathers back into him where he lands.
+   */
+  private mistForm(ev: any, e?: FxEntity) {
+    const { fx, fy, x, y } = ev;
+    // the burst: a dense cloud right away
+    for (let i = 0; i < 40; i++) { const a = Math.random() * Math.PI * 2, d = Math.sqrt(Math.random()) * 18; this.mistPuff(fx + Math.cos(a) * d, fy + Math.sin(a) * d * 0.7, fx, fy, rnd(800, 1300), 1.2); }
+    this.glow(fx, fy, 8, 16, 0x9575cd, 300, 0.5);
+    // it keeps rolling where he stood (the chilling mist that hurts)
+    this.emit(1100, 45, () => { for (let i = 0; i < 4; i++) { const a = Math.random() * Math.PI * 2, d = Math.sqrt(Math.random()) * 22; this.mistPuff(fx + Math.cos(a) * d, fy + Math.sin(a) * d * 0.7, fx, fy); } });
+    // the path: a drifting ribbon of mist with a few faint ghosts of him inside it
+    for (let i = 0; i <= 14; i++) {
+      const t = i / 14, px = fx + (x - fx) * t, py = fy + (y - fy) * t;
+      this.scene.time.delayedCall(i * 18, () => { for (let k = 0; k < 3; k++) this.mistPuff(px + rnd(-4, 4), py + rnd(-3, 3), px, py, rnd(500, 900), 0.9); });
+    }
+    if (e) for (let i = 1; i < 4; i++) this.ghost(e, fx + (x - fx) * i / 4, fy + (y - fy) * i / 4, 0xb39ddb, 0.22, 260);
+    // gathering back into him
+    for (let i = 0; i < 22; i++) {
+      const a = Math.random() * Math.PI * 2, d = rnd(14, 24), T = rnd(0.25, 0.4);
+      this.p(x + Math.cos(a) * d, y + Math.sin(a) * d * 0.7, rnd(4, 14), pick([0xc9c2d9, 0xa99fc0, 0xe0dbea]), { vx: -Math.cos(a) * d / T, vy: -Math.sin(a) * d * 0.7 / T, life: T * 1000, size: pick([3, 4, 5]), size1: 2, alpha: 0.45, add: false, depth: DEPTH - 1 });
+    }
+    this.scene.time.delayedCall(300, () => this.glow(x, y, 8, 12, 0xb39ddb, 260, 0.5));
+  }
+
   private smoke(x: number, y: number, r: number, n: number) {
     for (let i = 0; i < n; i++) {
       const a = Math.random() * Math.PI * 2, d = Math.sqrt(Math.random()) * r;
@@ -953,6 +988,23 @@ export class SkillFx {
         }
       }
     }
+  }
+
+  /**
+   * How much a Nightfall near (x, y) darkens the world (0..1): it is night there while it lasts, fading in and out.
+   * TownScene feeds it to the day/night tint (client/src/details.ts nightOverride).
+   */
+  nightK(x: number, y: number): number {
+    let k = 0;
+    for (const { f, born } of this.fields.values()) {
+      if (f.kind !== "nightfall") continue;
+      const age = this.t - born, left = f.ms - age;
+      if (left <= 0) continue;
+      const fade = Math.min(1, age / 700, left / 900);
+      const d = Math.hypot(x - f.x, y - f.y), edge = f.r + 140;
+      if (d < edge) k = Math.max(k, fade * Math.min(1, (edge - d) / 120));
+    }
+    return k;
   }
 
   // ---- projectiles --------------------------------------------------------------------------------------
@@ -1183,10 +1235,17 @@ export class SkillFx {
           break;
         }
         case "bat": {
-          // wings beat as it flies
-          const beat = Math.sin(age / 32);
-          (g as any).setScale(1, 0.55 + 0.45 * Math.abs(beat));
-          if (Math.random() < 6 * dt) this.p(x, y, 0, pick(PALETTE.shadow), { life: 200, size: 1, size1: 0, add: false });
+          // A swarm, not a line: each bat flutters on its own erratic path round its true spot (side to side and up
+          // and down, different rhythms), wings beating fast, with tiny bats and shadow flitting round the cloud
+          const c = g as Phaser.GameObjects.Container, d = c.list[0] as Phaser.GameObjects.Graphics | undefined;
+          const ph = (s.__ph ??= Math.random() * 100), fq = (s.__fq ??= rnd(0.7, 1.4));
+          const side = Math.sin(age / (70 * fq) + ph) * 4 + Math.sin(age / 37 + ph * 2) * 2;
+          const bob = Math.sin(age / (55 / fq) + ph * 3) * 3 - 3;
+          if (d) d.setPosition(-ay * side, ax * side + bob);
+          const beat = Math.sin(age / (22 * fq) + ph);
+          d?.setScale(1, 0.45 + 0.55 * Math.abs(beat));
+          if (Math.random() < 5 * dt) this.p(x + rnd(-6, 6), y + rnd(-5, 5), rnd(2, 10), 0x1a1033, { vx: rnd(-30, 30), vy: rnd(-20, 20), life: 180, size: 2, size1: 1, add: false });
+          if (Math.random() < 4 * dt) this.p(x, y, 0, pick(PALETTE.shadow.slice(2)), { life: 260, size: 2, size1: 0, alpha: 0.5, add: false, depth: GROUND_DEPTH });
           break;
         }
         case "powerarrow": for (let i = 0; i < n(60); i++) this.p(x - ax * 5, y - ay * 5, 0, pick(PALETTE.wind), { life: 250, size: 1, size1: 0 }); break;

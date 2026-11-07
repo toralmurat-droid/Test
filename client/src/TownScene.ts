@@ -2516,7 +2516,11 @@ export class TownScene extends Phaser.Scene {
     if (loadingActive()) this.checkLoaded();
     this.ambient?.update(this.time.now, dtMs);
     this.dungeon?.update(this.time.now);
-    if (this.details) this.details.underground = !!this.dungeon?.underground;
+    if (this.details) {
+      this.details.underground = !!this.dungeon?.underground;
+      const me = this.entities?.get(this.me)?.state;
+      this.details.nightOverride = me && this.fx ? this.fx.nightK(me.x, me.y) : 0; // a vampire's Nightfall: night around the local hero
+    }
     this.details?.update(this.time.now, dtMs);
     if (!this.room) return;
     this.villagers?.update(dtMs, this.outlawSpots());

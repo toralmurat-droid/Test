@@ -1,0 +1,10 @@
+{
+  "date": "2026-11-07",
+  "pr": 299,
+  "title": "Vampire: masters of the night",
+  "changes": [
+    "New Night passive, Child of the Night: at night you hit harder, heal from the damage you deal and move faster.",
+    "Nightfall now turns the land around you into night for 10s, and Child of the Night counts it as night.",
+    "Mist Form leaves a thick, rolling cloud of mist, and Bat Swarm flies out as a real swarm in a tighter cloud."
+  ]
+}
