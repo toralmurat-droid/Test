@@ -115,7 +115,7 @@ export const CLASSES: Record<ClassKind, ClassDef> = {
   // The Summoner (Murat 2026-11-07): a masked occultist who fights through elemental golems (shared/summons.ts).
   // Frail and slow, a weak staff bolt of their own: the golems tank and hit, the Summoner keeps them alive and armed.
   summoner: {
-    name: "Summoner", maxHp: 92, speed: 86, damage: 17, attackCooldownMs: 650, attackRange: 0,
+    name: "Summoner", maxHp: 100, speed: 86, damage: 17, attackCooldownMs: 650, attackRange: 0,
     projectile: { speed: 230, range: 160, radius: 6, kind: "fireball" },
     special: { kind: "summon", name: "Elemental Golem", cooldownMs: 8000 },
     combo: [

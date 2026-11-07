@@ -13,7 +13,7 @@
  */
 import { basicDrain, CLASSES, CLASS_KINDS, ClassKind, COMBO_WINDOW_MS, DODGE, ENERGY, GUARD_REDUCTION, staminaRegen } from "../../shared/classes";
 import { attackMult, cooldownMult, critChance, heroSpeed, magicMult, maxHpFromStats, statPoints, statsFor, STATS, Stats } from "../../shared/powers";
-import { activeSkills, canLearn, SKILLS, SkillDef, talentBonus, talentMult, talentReduce } from "../../shared/skills";
+import { activeSkills, canLearn, levelPower, rankPower, scalePower, skillById, SKILLS, SkillDef, talentBonus, talentMult, talentReduce } from "../../shared/skills";
 import { canPay, manaRegen, maxManaFor, skillCost } from "../../shared/mana";
 import {
   afterHit, atkSpeedMult, blocking, buffLifesteal, buffRegen, castSkill, ccImmune, charging, winding, cooldownLeft, counterHit, dealtMult, FieldInst, HitOpts,
@@ -72,7 +72,7 @@ export class GolemF extends F {
     super(id, owner.cls, owner.level, {}, {}, { sta: 0, str: 0, mag: 0, dex: 0 });
     const fuse = 1 + SUMMON.colossusPerGolem * fused, def = MOBS[kind];
     this.s = { sta: 0, str: 0, mag: 0, dex: 0 };
-    this.maxHp = this.hp = Math.round(def.maxHp * mobScale(owner.level, "hp") * power * fuse * talentMult(owner.cls, owner.t, "summonHp"));
+    this.maxHp = this.hp = Math.round(def.maxHp * mobScale(owner.level, "hp") * fuse * talentMult(owner.cls, owner.t, "summonHp")); // no skill power on life, like the server
     this.sPower = power * fuse * talentMult(owner.cls, owner.t, "summonDmg");
     this.body = mobBody(kind);
     this.mob = { reach: 14, ranged: false };
@@ -139,8 +139,9 @@ export class Duel {
   /** Summoner golems on both sides (GolemF), alive or not. */
   summons: GolemF[] = []; summonSeq = 0;
   host: SkillHost;
+  t0: number;
   constructor(public a: F, public b: F, public rnd = Math.random, t0 = 0) {
-    this.now = t0;
+    this.now = t0; this.t0 = t0;
     const d = 100 + rnd() * 60;
     a.x = (ARENA - d) / 2; b.x = a.x + d; a.face = 1; b.face = -1;
     const f = (id: string) => this.byId(id);
@@ -195,6 +196,19 @@ export class Duel {
   }
   /** Living golems of this hero. */
   golemsOf(o: F) { return this.summons.filter((g) => g.owner === o && !g.dead); }
+  /** Bound golem (server TownRoom.autoGolems): a Summoner with no golem gets one after SUMMON.autoMs (the fight starts with one out). */
+  autoAt = new Map<F, number>();
+  autoGolems() {
+    for (const o of this.units()) {
+      if (o.cls !== "summoner" || o.dead || o instanceof GolemF || o.mob) continue;
+      if (this.golemsOf(o).length) { this.autoAt.delete(o); continue; }
+      const at = this.autoAt.get(o);
+      if (at === undefined) { this.autoAt.set(o, this.now + (this.now <= this.t0 ? 0 : SUMMON.autoMs)); continue; }
+      if (this.now < at) continue;
+      this.autoAt.delete(o);
+      this.addGolem(o, GOLEM_OF[attuneOf(o.attune)], golemPower(o), 0);
+    }
+  }
   /** Call a golem (server TownRoom.summon): past SUMMON.max the oldest goes back. */
   addGolem(o: F, kind: SummonKind, power: number, fused: number) {
     const mine = this.golemsOf(o);
@@ -221,6 +235,12 @@ export class Duel {
     const guarded = blocking(t, now);
     if (guarded) dmg = Math.max(1, Math.round(dmg * (1 - GUARD_REDUCTION)));
     dmg = Math.max(1, Math.round(dmg * talentReduce(t.cls, t.t, "armor") * takenMult(t, now)));
+    // Stone Bond (server damagePlayer): the hero's nearest golem within SUMMON.bondRange takes part of the blow
+    if (!(t instanceof GolemF) && dmg > 1) {
+      let g: GolemF | undefined, bd: number = SUMMON.bondRange;
+      for (const c of this.golemsOf(t)) if (Math.abs(c.x - t.x) < bd) { bd = Math.abs(c.x - t.x); g = c; }
+      if (g) { const part = Math.round(dmg * SUMMON.guardShare); dmg -= part; g.hp -= part; if (g.hp <= 0) g.dead = true; }
+    }
     const block = gearBlock(t.eq);
     if (block) dmg = Math.max(1, Math.round(dmg * (1 - block)));
     const unstoppable = ccImmune(t, now);
@@ -427,6 +447,7 @@ export class Duel {
 
   step(): F | null | undefined {
     const now = this.now;
+    this.autoGolems();
     for (const f of this.units()) {
       tickUnit(this.host, f.id);
       if (f.broken && now >= f.brokenUntil) { f.broken = false; f.poiseLost = 0; f.steadyUntil = now + POISE.steadyMs; }
@@ -493,6 +514,13 @@ export class Duel {
     const fa = this.a.hp / this.a.maxHp, fb = this.b.hp / this.b.maxHp;
     return Math.abs(fa - fb) < 0.02 ? null : fa > fb ? this.a : this.b;
   }
+}
+
+/** What the Elemental Golem skill gives this hero (castSkill's power: rank, skill level, Magic); rank 1 if not learned. */
+export function golemPower(o: F) {
+  const s = skillById("su_golem");
+  if (!s) return 1;
+  return rankPower(Math.max(1, Math.min(3, o.t[s.id] ?? 0))) * levelPower(s) * scalePower(s, o.s, STATS[o.cls].base);
 }
 
 export function make(id: string, cls: ClassKind, level: number, build: Build) {

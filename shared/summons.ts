@@ -36,6 +36,25 @@ export const SUMMON = {
   linkRegen: 0.01,
   /** Colossus: each golem fused into it adds this much life and damage; its slam hits everyone this close to the target. */
   colossusPerGolem: 0.25, colossusSlam: 34,
+  /**
+   * Bound golem (Murat 2026-11-07): a Summoner with no summon out gets one by itself after `autoMs`, anywhere but the
+   * safe zone, in the attuned element and as strong as their Elemental Golem skill (rank 1 if not learned yet).
+   */
+  autoMs: 5000,
+  /**
+   * Guardian: a monster the owner hits hates the owner's golem instead, when one is fighting next to it (within
+   * `guardRange` px of the monster). Monsters away from the golems still go for the Summoner.
+   */
+  guardRange: 3 * 32,
+  /** Monsters pick a summon over a hero by this much more (it stands in front of its owner). */
+  taunt: 0.3,
+  /** Stone Bond reaches golems this close to their owner (px). */
+  bondRange: 6 * 32,
+  /**
+   * Stone Bond (balance pass 2026-11-07, tools/balance/duel.ts): the owner's nearest golem within guardRange takes this
+   * share of every blow the owner takes. The Summoner was dying in ~5 s to any melee hero before the golems mattered.
+   */
+  guardShare: 0.3,
 } as const;
 
 /** Is this mob kind a summon (never part of a spawn zone, never drops loot)? */

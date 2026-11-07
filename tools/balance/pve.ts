@@ -21,7 +21,8 @@ import { activeSkills, SKILLS } from "../../shared/skills";
 import { canPay, manaRegen, skillCost } from "../../shared/mana";
 import { castSkill, cooldownLeft } from "../../shared/skillEngine";
 import { staminaRegen, ENERGY } from "../../shared/classes";
-import { Duel, F, make } from "./duel";
+import { Duel, F, GolemF, make } from "./duel";
+import { SUMMON } from "../../shared/summons";
 
 type Build = 0 | 1 | 2;
 
@@ -117,9 +118,20 @@ export class PveDuel extends Duel {
     super(hero, mobs[0], Math.random, t0);
     for (const m of mobs.slice(1)) m.x = Math.max(0, Math.min(480, mobs[0].x + (Math.random() - 0.3) * 40));
   }
-  units(): F[] { return [this.hero, ...this.mobs]; }
-  foes(f: F): F[] { return f === this.hero ? this.mobs : [this.hero]; }
+  units(): F[] { return [this.hero, ...this.mobs, ...this.summons.filter((g) => !g.dead)]; }
+  /** The hero and its golems fight the monsters; monsters fight the hero and the golems. */
+  foes(f: F): F[] { return f === this.hero || f instanceof GolemF ? this.mobs : [this.hero, ...this.golemsOf(this.hero)]; }
+  /**
+   * Who a monster goes for: a golem close by (server: the golems take the anger of their owner's hits, SUMMON.guardRange,
+   * and monsters favour them, SUMMON.taunt), else the hero.
+   */
+  mobTarget(m: MobF): F {
+    let best: F = this.hero, bd = SUMMON.guardRange;
+    for (const g of this.golemsOf(this.hero)) { const d = Math.abs(g.x - m.x); if (d < bd) { bd = d; best = g; } }
+    return best;
+  }
   other(f: F): F {
+    if (f instanceof MobF) return this.mobTarget(f);
     if (f !== this.hero) return this.hero;
     let best = this.mobs[0], bd = Infinity;
     for (const m of this.mobs) if (!m.dead && Math.abs(m.x - f.x) < bd) { bd = Math.abs(m.x - f.x); best = m; }
@@ -135,6 +147,7 @@ export class PveDuel extends Duel {
 
   brain(f: F): number {
     if (f instanceof MobF) return this.mobBrain(f);
+    if (f instanceof GolemF) return this.golemBrain(f);
     return this.heroBrain(f);
   }
 
@@ -168,13 +181,12 @@ export class PveDuel extends Duel {
     return this.think(h);
   }
 
-  mobHit(m: MobF, mult: number, extra: { kb?: number; stunMs?: number; slowMs?: number } = {}) {
-    const h = this.hero;
+  mobHit(m: MobF, mult: number, extra: { kb?: number; stunMs?: number; slowMs?: number } = {}, h: F = this.mobTarget(m)) {
     this.hit(m, h, Math.round(m.spec.dmg * mult), Math.sign(h.x - m.x) || 1, { kb: extra.kb ?? 1, stunMs: extra.stunMs, slowMs: extra.slowMs });
   }
 
   mobBrain(m: MobF): number {
-    const now = this.now, h = this.hero, S = m.spec;
+    const now = this.now, h = this.mobTarget(m), S = m.spec;
     const d = Math.abs(h.x - m.x), toward = Math.sign(h.x - m.x) || 1;
     if (now < m.stunUntil) { m.windUntil = 0; m.windKind = undefined; return 0; }
     if (m.broken) { m.windUntil = 0; m.windKind = undefined; return -toward; }
@@ -192,7 +204,11 @@ export class PveDuel extends Duel {
       if (s.shot) { this.mobShot(m, s.shot.speed, s.shot.radius, s.mult); return 0; }
       if (s.leap) m.x = Math.max(0, Math.min(480, m.windX - toward * 10));
       const cx = s.at === "self" || s.leap ? m.x : m.windX, dist = Math.abs(h.x - cx);
-      if (dist <= s.radius && !(s.inner && dist <= s.inner)) this.mobHit(m, s.mult, { kb: s.kb, stunMs: s.stunMs, slowMs: s.slowMs });
+      // an area special hits the hero and every golem inside it
+      for (const v of this.foes(m)) {
+        const dv = Math.abs(v.x - cx);
+        if (!v.dead && dv <= s.radius + v.body && !(s.inner && dv <= s.inner)) this.mobHit(m, s.mult, { kb: s.kb, stunMs: s.stunMs, slowMs: s.slowMs }, v);
+      }
       return 0;
     }
     // Specials first
@@ -221,7 +237,7 @@ export class PveDuel extends Duel {
   }
 
   mobShot(m: MobF, speed: number, radius: number, mult: number) {
-    const h = this.hero;
+    const h = this.mobTarget(m);
     const miss = Math.random() < this.missChance(Math.abs(h.x - m.x), speed);
     this.shots.push({ owner: m, x: m.x, dir: Math.sign(h.x - m.x) || 1, speed, range: 260, traveled: 0, radius, dmg: Math.round(m.spec.dmg * mult), kb: 0.6, miss, hit: false, basic: false, pierced: false });
   }
