@@ -1,0 +1,10 @@
+{
+  "date": "2026-11-07",
+  "pr": 297,
+  "title": "Screen size for everything",
+  "changes": [
+    "Screen size in the game menu (Esc) is now a dropdown, from 50% to 300%.",
+    "It now sizes the whole screen: the world, menus, bars, map and tooltips together.",
+    "Auto now also zooms out on smaller or scaled screens, so nothing looks cramped."
+  ]
+}
