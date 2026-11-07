@@ -1,0 +1,9 @@
+{
+  "date": "2026-11-07",
+  "title": "Quest tracker on the left, named menu tiles",
+  "changes": [
+    "The quest tracker moved to the left side of the screen.",
+    "The menu tiles at the bottom right show their names again.",
+    "The Blizzard storm stays centred on the wizard while walking."
+  ]
+}
