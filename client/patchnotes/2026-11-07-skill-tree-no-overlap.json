@@ -1,0 +1,8 @@
+{
+  "date": "2026-11-07",
+  "title": "Tidier skill trees",
+  "changes": [
+    "Skill tiles on the skill tree never overlap anymore, even where one skill opens three others (Vampire Blood and Fang).",
+    "Busy schools get a wider column, and the rank number now sits in the corner of each tile."
+  ]
+}

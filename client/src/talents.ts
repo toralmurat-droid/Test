@@ -4,6 +4,7 @@ import { icon as pxIcon } from "./pixelicons";
 import { slotKey } from "./keymode";
 import { Stats } from "../../shared/powers";
 import { iconImg } from "./skillIcons";
+import { Node, treeLayout } from "./treeLayout";
 import { SheetPreview, talentsOf } from "./sidepanel";
 import {
   BRANCHES, childrenOf, EFFECT_TEXT, levelPower, lockReason, maxRank, RANK_POWER, rankOf, SkillDef, SKILLS, spentPoints, STACK_NAME,
@@ -20,13 +21,6 @@ import { damageText, scaleText, skillDamage } from "../../shared/skillInfo";
  * Learned actives go on keys 1-0: hover the skill and press a number key, or click a key slot at the bottom.
  */
 const W = 620, H = 520; // the stone slab with the three schools side by side, CSS px
-const TOP = 34, GROUND = H - 46;
-// square-root scale: the early levels, where most skills sit, get more room. `top`: the class's highest skill level
-// (24 for most, 30 for the wizard's Diablo 2 style tiers) sits at the top.
-const yOf = (req: number, top: number) => GROUND - 40 - Math.sqrt(Math.min(1, (req - 1) / Math.max(1, top - 1))) * (GROUND - 40 - TOP);
-const GAP = 66; // a skill sits at least this far above the one it grows from
-
-interface Node { s: SkillDef; x: number; y: number }
 
 export class TalentMenu {
   private el = document.getElementById("tree")!;
@@ -102,7 +96,7 @@ export class TalentMenu {
       `<span class="treehint">Follow the stone paths: a node needs the one before it. Upgrades change the spell at the start of their path. ` +
       `Basic hits build ${STACK_NAME[cls]} (up to 5) for some skills.</span>`;
 
-    const layout = this.layout(cls);
+    const { nodes: layout, cols } = treeLayout(cls, W, H);
     const colors = BRANCHES[cls].map((b) => b.color);
     let html = `<canvas class="treeart" width="${W}" height="${H}"></canvas><div class="treebox">`;
     for (const n of layout) {
@@ -118,47 +112,15 @@ export class TalentMenu {
       html += `<button class="tnode ${stt}${s.passive ? " passive" : ""}${s.row === 4 ? " ult" : ""}${leaf ? " leaf" : ""}" data-talent="${s.id}"${act} ` +
         `style="left:${n.x}px;top:${n.y}px;--c:${colors[s.branch]}">${iconImg(s.id, "nicon")}${key}${lvl}<span class="pips">${pips}</span><span class="trank">${r || ""}</span></button>`;
     }
-    BRANCHES[cls].forEach((b, i) => { html += `<div class="tschool" style="left:${(W / 3) * (i + 0.5)}px;--c:${b.color}">${b.name}</div>`; });
+    BRANCHES[cls].forEach((b, i) => { html += `<div class="tschool" style="left:${cols[i].mid}px;--c:${b.color}">${b.name}</div>`; });
     html += `<div class="tfoot">${free > 0 ? `${free} skill choice${free > 1 ? "s" : ""} remaining` : "No skill choices remaining"}</div>`;
     html += `</div>`;
     const box = document.getElementById("treebranches")!;
     box.innerHTML = `<div class="treecol"><div class="treewrap theme-${cls}" style="width:${W}px;height:${H}px">${html}</div></div><div id="treeinfo"></div>`;
-    this.paint(box.querySelector("canvas.treeart") as HTMLCanvasElement, cls, layout, ranks, colors);
+    this.paint(box.querySelector("canvas.treeart") as HTMLCanvasElement, cls, layout, ranks, colors, cols.slice(1).map((c) => c.x0));
     this.shown = "";
     const pick = this.hover || nodes.find((n) => lockReason(cls, state.level, ranks, n.id) === "")?.id || nodes[0].id;
     this.details(pick);
-  }
-
-  /**
-   * Where each skill sits, Diablo 2 style, all schools on one page (Murat 2026-11-07): one column per school, its
-   * root at the top, every step of a path one row lower; the ends of the paths are spread across the column and a
-   * parent sits above the middle of its children.
-   */
-  private layout(cls: ClassKind): Node[] {
-    const out: Node[] = [];
-    const colW = W / 3;
-    for (let br = 0; br < 3; br++) {
-      const list = SKILLS[cls].filter((s) => s.branch === br);
-      const root = list.find((s) => !s.parent);
-      if (!root) continue;
-      const depth = (s: SkillDef) => { let d = 0, q = s.parent; while (q) { d++; q = list.find((x) => x.id === q)?.parent; } return d; };
-      const maxD = Math.max(1, ...list.map(depth));
-      const leaves: string[] = [];
-      const walk = (s: SkillDef) => { const kids = childrenOf(cls, s.id).sort((x, y) => x.req - y.req); if (!kids.length) leaves.push(s.id); kids.forEach(walk); };
-      walk(root);
-      const cx = colW * (br + 0.5) - 14; // a little left of centre: the rank boxes sit to the right of the tiles
-      const step = leaves.length > 1 ? Math.min(104, (colW - 96) / (leaves.length - 1)) : 0;
-      const xs = new Map<string, number>();
-      leaves.forEach((id, i) => xs.set(id, cx + (i - (leaves.length - 1) / 2) * step));
-      const xOf = (s: SkillDef): number => {
-        if (xs.has(s.id)) return xs.get(s.id)!;
-        const kids = childrenOf(cls, s.id), x = kids.reduce((a, k) => a + xOf(k), 0) / kids.length;
-        xs.set(s.id, x); return x;
-      };
-      const rowH = Math.min(110, (H - 170) / maxD);
-      for (const s of list) out.push({ s, x: Math.round(xOf(s)), y: Math.round(92 + depth(s) * rowH) });
-    }
-    return out;
   }
 
   /**
@@ -166,7 +128,7 @@ export class TalentMenu {
    * in an iron frame, and a chiselled arrow from each skill down to the ones it opens (diagonal when they sit apart).
    * Learned arrows are lit in the school's colour. Painted at 1 canvas px per CSS px.
    */
-  private paint(cv: HTMLCanvasElement, cls: ClassKind, nodes: Node[], ranks: any, colors: string[]) {
+  private paint(cv: HTMLCanvasElement, cls: ClassKind, nodes: Node[], ranks: any, colors: string[], dividers: number[]) {
     const g = cv.getContext("2d")!;
     const w = cv.width, h = cv.height;
     let seed = 13;
@@ -183,7 +145,7 @@ export class TalentMenu {
     for (let i = 0; i < 2600; i++) { g.fillStyle = `rgba(${rnd() < 0.5 ? th.grain : "10,10,10"},${0.05 + rnd() * 0.1})`; g.fillRect(rnd() * w, rnd() * h, 1 + rnd() * 2, 1); }
     th.motif?.(g, w, h, rnd);
     // faint carved lines between the schools
-    for (const x of [w / 3, (2 * w) / 3]) { g.fillStyle = "rgba(0,0,0,0.35)"; g.fillRect(x - 1, 30, 2, h - 80); g.fillStyle = "rgba(255,255,255,0.06)"; g.fillRect(x + 1, 30, 1, h - 80); }
+    for (const x of dividers) { g.fillStyle = "rgba(0,0,0,0.35)"; g.fillRect(x - 1, 30, 2, h - 80); g.fillStyle = "rgba(255,255,255,0.06)"; g.fillRect(x + 1, 30, 1, h - 80); }
     for (let i = 0; i < 14; i++) {
       let x = rnd() * w, y = rnd() * h; g.beginPath(); g.moveTo(x, y);
       for (let k = 0; k < 7; k++) { x += (rnd() - 0.5) * 50; y += (rnd() - 0.3) * 40; g.lineTo(x, y); }
