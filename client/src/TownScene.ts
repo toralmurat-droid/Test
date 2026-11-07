@@ -579,6 +579,7 @@ export class TownScene extends Phaser.Scene {
     document.getElementById("hud")!.hidden = false;
     this.minimap = new Minimap(document.getElementById("minimap") as HTMLCanvasElement, this.opts.name);
     this.npcs = new NpcLayer(this, (type, msg) => this.room.send(type, msg));
+    this.npcs.objects.setLight((x, y, lift) => this.details?.addLight(x, y, 0x7ff3ff, 1.5, 0.55, 0.06, lift)); // lit spirit lanterns shine at night
     // Morwen's camp and Brann's forge after dusk: coal glow under her brew, lantern light in the tent doorway
     for (const d of NPC_DECOR) {
       if (d.prop === "wc_rig") this.details?.addLight(d.x * TILE, d.y * TILE, 0xff6a2a, 1.5, 0.6, 0.15, 9, -7);
