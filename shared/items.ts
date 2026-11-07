@@ -15,6 +15,8 @@ export interface LootDef {
 }
 
 export const LOOT: Record<MobKind, LootDef> = {
+  golem_fire: { gold: [0, 0], potionChance: 0 }, golem_cold: { gold: [0, 0], potionChance: 0 },
+  golem_poison: { gold: [0, 0], potionChance: 0 }, golem_shock: { gold: [0, 0], potionChance: 0 },
   slime: { gold: [1, 4], potionChance: 0.15 },
   skeleton: { gold: [5, 12], potionChance: 0.3 },
   crawler: { gold: [0, 2], potionChance: 0.05 },

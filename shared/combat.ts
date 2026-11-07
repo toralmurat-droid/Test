@@ -34,6 +34,8 @@ export const heroPoise = (cls: ClassKind, level: number) => Math.round(HERO_POIS
 
 /** Monster poise (scaled like HP by level) and attack wind-up. */
 export const MOB_COMBAT: Record<MobKind, { poise: number; windupMs: number }> = {
+  golem_fire: { poise: 140, windupMs: 420 }, golem_cold: { poise: 160, windupMs: 420 },
+  golem_poison: { poise: 140, windupMs: 420 }, golem_shock: { poise: 120, windupMs: 380 },
   slime: { poise: 30, windupMs: 350 },
   skeleton: { poise: 55, windupMs: 300 },
   crawler: { poise: 20, windupMs: 320 },
@@ -110,6 +112,7 @@ export function poiseLevelMult(attackerLevel: number, targetLevel: number): numb
  */
 export const SWING_AHEAD = 12;
 const MOB_BODY: Partial<Record<MobKind, number>> = {
+  golem_fire: 9, golem_cold: 9, golem_poison: 9, golem_shock: 9,
   motherblob: 14, demon: 12, hollowking: 13, banditchief: 10, necromancer: 8, warriorblob: 7, blobling: 3, crawler: 4,
 };
 export const mobBody = (kind: MobKind) => MOB_BODY[kind] ?? 6;
