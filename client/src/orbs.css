@@ -41,3 +41,5 @@ body.orbhud-on #menubtns button small { position: absolute; left: 2px; bottom: 1
 body.orbhud-on #rbars .rb-crest { display: none; }
 @media (max-width: 1100px) { #orbhud .garg { display: none; } }
 @media (max-width: 860px) { #orbhud .orb { transform: scale(.65); transform-origin: bottom center; } }
+/* side panels stop above the orb bar (it is about 130 px tall with the statues) */
+body.orbhud-on #sidepanel { max-height: calc(100% - 150px); z-index: 11; }

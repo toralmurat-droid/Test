@@ -280,15 +280,28 @@ body .gcell.gjunk::after { content: ""; position: absolute; inset: 6px; pointer-
     border: 18px solid transparent; border-image: var(--wf-bronze) 9 fill / 18px / 0 repeat; background: none; box-shadow: none; image-rendering: pixelated; }
 }
 
-/* Skill tree as stone paths (talents.ts paint): the nodes are round stone medallions set in sockets, upgrades smaller */
-body .tnode { border-radius: 50%; border: 3px solid #5a5148; background: #0d0b09; padding: 0; width: 56px; height: 56px;
-  box-shadow: 0 0 0 2px #0a0807, inset 0 0 0 2px #1a1612, 0 4px 6px rgba(0,0,0,.7); }
-body .tnode::before { display: none; }
-body .tnode .nicon { width: 50px; height: 50px; border-radius: 50%; box-shadow: inset 0 0 0 2px rgba(0,0,0,.6); }
-body .tnode.passive { width: 46px; height: 46px; }
-body .tnode.passive .nicon { width: 40px; height: 40px; }
-body .tnode.has, body .tnode.max, body .tnode.can { border-color: var(--c); box-shadow: 0 0 0 2px #0a0807, 0 0 10px var(--c), 0 4px 6px rgba(0,0,0,.7); }
-@keyframes tpulse { 50% { box-shadow: 0 0 0 2px #0a0807, 0 0 16px 3px var(--c); } }
-body .tnode .pips { bottom: -10px; border-radius: 6px; border: 1px solid #3a322a; }
-body .tbough { background: #1a1612; border: 2px solid #4a3f33; border-bottom-color: currentColor; border-radius: 4px; box-shadow: 0 3px 4px rgba(0,0,0,.6); }
-body .treewrap { border-color: #2a231c; }
+/* Skill tree, Diablo 2 style (talents.ts): school tabs, a grey stone slab, square bronze-framed tiles with a rank box,
+   carved arrows painted on the slab, "N skill choices remaining" along the bottom */
+body .treecol { display: flex; flex-direction: column; flex: none; }
+body .ttabs { display: flex; gap: 0; background: #141414; border: 3px solid #141414; border-bottom: none; }
+body .ttab { flex: 1; font: inherit; font-size: 15px; font-family: var(--pixel-font); letter-spacing: 1px; text-transform: uppercase; color: #b9b4a8; padding: 8px 6px 7px;
+  background: linear-gradient(#3a3936, #262523); border: 2px solid #4e4c47; border-bottom-color: #141414; cursor: pointer; }
+body .ttab.on { color: #f0e6c8; background: linear-gradient(#55534d, #3a3936); border-color: #8a6a3a; box-shadow: inset 0 -3px 0 var(--c); }
+body .ttab:hover { color: #fff; }
+body .treewrap { border: none; }
+body .tnode { border-radius: 2px; width: 60px; height: 60px; padding: 0; background: #1a1612;
+  border: 3px solid #8a6a3a; box-shadow: 0 0 0 2px #1b1510, inset 0 0 0 2px #3e2e1a, 3px 4px 0 1px rgba(0,0,0,.45); }
+body .tnode::before { display: block; inset: 2px; background:
+  radial-gradient(circle, #c9a050 1px, transparent 1.6px) 0 0 / 6px 6px no-repeat, radial-gradient(circle, #c9a050 1px, transparent 1.6px) 100% 0 / 6px 6px no-repeat,
+  radial-gradient(circle, #c9a050 1px, transparent 1.6px) 0 100% / 6px 6px no-repeat, radial-gradient(circle, #c9a050 1px, transparent 1.6px) 100% 100% / 6px 6px no-repeat; }
+body .tnode .nicon { width: 50px; height: 50px; margin: 2px; border-radius: 0; box-shadow: inset 0 0 0 1px #000; }
+body .tnode.passive { width: 60px; height: 60px; border-radius: 2px; }
+body .tnode.passive .nicon { width: 50px; height: 50px; border-radius: 0; }
+body .tnode.has, body .tnode.max, body .tnode.can { border-color: #c9a050; box-shadow: 0 0 0 2px #1b1510, inset 0 0 0 2px #3e2e1a, 0 0 10px var(--c), 3px 4px 0 1px rgba(0,0,0,.45); }
+@keyframes tpulse { 50% { box-shadow: 0 0 0 2px #1b1510, inset 0 0 0 2px #3e2e1a, 0 0 16px 3px var(--c); } }
+body .tnode .pips { display: none; }
+body .tnode .trank { position: absolute; right: -34px; bottom: -3px; width: 24px; height: 24px; box-sizing: border-box; display: flex; align-items: center; justify-content: center;
+  background: #161615; border: 2px solid #5a5953; box-shadow: inset 0 0 0 1px #000; color: #f0e6c8; font-size: 15px; font-family: var(--pixel-font); }
+body .tnode.has .trank, body .tnode.max .trank { border-color: #8a6a3a; }
+body .tfoot { position: absolute; left: 0; right: 0; bottom: 0; padding: 8px 0 9px; text-align: center; background: linear-gradient(#262523, #141414); border-top: 2px solid #5a5953;
+  color: #d0453c; font-size: 16px; font-family: var(--pixel-font); letter-spacing: 2px; text-transform: uppercase; }
