@@ -1,5 +1,6 @@
 {
   "date": "2026-11-07",
+  "patch": 128,
   "title": "Smoother walking",
   "changes": [
     "Your hero no longer jumps back to an old spot while walking, even with a slow connection or a lag spike.",
