@@ -1,5 +1,6 @@
 {
   "date": "2026-11-07",
+  "pr": 322,
   "title": "Quest cards and following a quest",
   "changes": [
     "Each quest is its own card: click its header to fold or open it. A started quest shows just its goal with the progress bar below.",
