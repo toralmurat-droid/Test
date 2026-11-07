@@ -57,5 +57,24 @@ export const SUMMON = {
   guardShare: 0.3,
 } as const;
 
+/**
+ * Level used for a summon's life and damage scaling (monster scaling, shared/constants.ts mobScale). Past `soft`, only
+ * `rate` of each level counts (balance pass 2026-11-07: the Summoner topped every class at Lv 25-30). The level shown
+ * on the golem stays the owner's.
+ */
+export const SUMMON_SCALE = { soft: 20, rate: 0.4 } as const;
+export const summonScaleLevel = (level: number) => (level <= SUMMON_SCALE.soft ? level : SUMMON_SCALE.soft + (level - SUMMON_SCALE.soft) * SUMMON_SCALE.rate);
+
+/**
+ * Stone Bond share for an owner of this level: SUMMON.guardShare up to Lv 20, then down to `low` at Lv 25 and after.
+ * It is what carries the Summoner (duels: 28-30% without it), and at Lv 25-30 the full share put them above every class.
+ */
+export const BOND = { from: 20, to: 25, low: 0.22 } as const;
+export function bondShare(level: number): number {
+  if (level <= BOND.from) return SUMMON.guardShare;
+  const t = Math.min(1, (level - BOND.from) / (BOND.to - BOND.from));
+  return SUMMON.guardShare + (BOND.low - SUMMON.guardShare) * t;
+}
+
 /** Is this mob kind a summon (never part of a spawn zone, never drops loot)? */
 export const isSummonMob = (kind: MobKind) => isSummonKind(kind);

@@ -63,3 +63,14 @@ test("bound golem, Stone Bond, monsters turn on the golem", async () => {
     await srv.stop();
   }
 });
+
+test("high-level brakes: Stone Bond tapers from Lv 20 to 25, golem scaling slows past Lv 20", async () => {
+  const { bondShare, BOND, summonScaleLevel, SUMMON_SCALE } = await import("../shared/summons");
+  assert.equal(bondShare(1), SUMMON.guardShare);
+  assert.equal(bondShare(BOND.from), SUMMON.guardShare);
+  assert.ok(bondShare(BOND.from + 2) < SUMMON.guardShare && bondShare(BOND.from + 2) > BOND.low);
+  assert.equal(bondShare(BOND.to), BOND.low);
+  assert.equal(bondShare(30), BOND.low);
+  assert.equal(summonScaleLevel(SUMMON_SCALE.soft), SUMMON_SCALE.soft);
+  assert.equal(summonScaleLevel(30), SUMMON_SCALE.soft + (30 - SUMMON_SCALE.soft) * SUMMON_SCALE.rate);
+});
