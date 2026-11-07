@@ -1,0 +1,11 @@
+{
+  "date": "2026-11-07",
+  "pr": 313,
+  "title": "Rank 6 spells, a turned map and a torch",
+  "changes": [
+    "The wizard's three spells now go up to rank 6; their upgrades stay at 3 ranks.",
+    "The big map (M) is turned like the world, so up on the map is up on the screen.",
+    "Quests sit at the top left on a see-through background; click a quest's title to fold it. Safe zone is now shown under the minimap, and the menu buttons are one row with their full names.",
+    "Press L to light a torch: at night it lights up a much wider circle around you."
+  ]
+}

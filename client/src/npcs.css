@@ -156,3 +156,10 @@
 #questtracker .qt-block + .qt-block { margin-top: 6px; }
 /* the quest tracker sits on the left, under the zone line (Murat 2026-11-07) */
 #questtracker { right: auto; left: 12px; top: 150px; }
+/* higher up, see-through, each quest folds to its title (click the title) */
+#questtracker { top: 20px; }
+body #questtracker { background: rgba(15, 10, 6, .42); }
+#questtracker .qt-title { cursor: pointer; }
+#questtracker .qt-title::before { content: "▾ "; color: #a8977a; }
+#questtracker .qt-block.folded .qt-title::before { content: "▸ "; }
+#questtracker .qt-block.folded > :not(.qt-title) { display: none; }

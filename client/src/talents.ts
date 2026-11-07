@@ -6,7 +6,7 @@ import { Stats } from "../../shared/powers";
 import { iconImg } from "./skillIcons";
 import { SheetPreview, talentsOf } from "./sidepanel";
 import {
-  BRANCHES, childrenOf, EFFECT_TEXT, levelPower, lockReason, MAX_RANK, RANK_POWER, rankOf, SkillDef, SKILLS, spentPoints, STACK_NAME,
+  BRANCHES, childrenOf, EFFECT_TEXT, levelPower, lockReason, maxRank, RANK_POWER, rankOf, SkillDef, SKILLS, spentPoints, STACK_NAME,
   synergyPower, talentPoints, withMods, type SkillMod,
   NEED_TEXT,
 } from "../../shared/skills";
@@ -111,7 +111,7 @@ export class TalentMenu {
       const stt = why === "max" ? "max" : why === "" ? "can" : why === "points" ? (r > 0 ? "has" : "off") : "locked";
       const slot = !s.passive ? slots.indexOf(s.id) : -1;
       const key = slot >= 0 ? `<kbd>${slotKey(slot)}</kbd>` : "";
-      const pips = Array.from({ length: MAX_RANK }, (_, i) => `<i class="${i < r ? "on" : ""}"></i>`).join("");
+      const pips = Array.from({ length: maxRank(s) }, (_, i) => `<i class="${i < r ? "on" : ""}"></i>`).join("");
       const leaf = childrenOf(cls, s.id).length === 0;
       const act = !s.passive && r > 0 ? ` data-active="${s.id}"` : "";
       const lvl = why === "level" ? `<span class="nlv">Lv ${s.req}</span>` : "";
@@ -254,11 +254,11 @@ export class TalentMenu {
       if (now) {
         rows.push(`<div class="idmg"><span>Damage${r > 0 ? ` (rank ${r})` : ""}</span><b>${now.total}</b></div><p class="iparts">${damageText(now)}</p>`);
         if (now.stacks) rows.push(`<p class="iparts">${now.stacks}</p>`);
-        if (r > 0 && r < MAX_RANK) {
+        if (r > 0 && r < maxRank(s)) {
           const nx = skillDamage(cls, sm, r + 1, st, ranks);
           if (nx) rows.push(`<p class="inext">Next rank: ${nx.total} (+${Math.round(RANK_POWER * 100)}% power, longer effects)</p>`);
         }
-      } else if (r > 0 && r < MAX_RANK) rows.push(`<p class="inext">Next rank: longer, stronger effects</p>`);
+      } else if (r > 0 && r < maxRank(s)) rows.push(`<p class="inext">Next rank: longer, stronger effects</p>`);
       const price = [s.cd ? `${s.cd / 1000}s cooldown` : "no cooldown", s.cost ? `<span class="ista">${s.cost} stamina</span>` : "", s.mana ? `<span class="imana">${s.mana} mana</span>` : "", s.blood ? `<span class="iblood">${s.blood}% HP</span>` : ""];
       rows.push(`<p class="icost">${price.filter(Boolean).join(" · ")}${s.chargeMs ? ` · charge ${s.chargeMs / 1000}s` : ""}</p>`);
     }
@@ -282,7 +282,7 @@ export class TalentMenu {
       why === "above" ? `${pxIcon("lock")}Learn ${parent ? parent.name : "the skill below"} first` :
       why === "requires" ? `${pxIcon("lock")}Learn ${missing.join(" and ")} first` : r > 0 ? "Learned · no points left" : "No points left";
     const keyNote = !s.passive && r > 0 ? (slot >= 0 ? ` · on key ${slotKey(slot)}` : ` · hover it and press ${slotKey(0)}-${slotKey(8)} to put it on a key`) : "";
-    const pips = Array.from({ length: MAX_RANK }, (_, i) => `<i class="${i < r ? "on" : ""}"></i>`).join("");
+    const pips = Array.from({ length: maxRank(s) }, (_, i) => `<i class="${i < r ? "on" : ""}"></i>`).join("");
     info.innerHTML = `<div class="ihead" style="--c:${color}">${iconImg(s.id, "iicon")}<div><b>${s.name}</b>` +
       `<span class="ttype${s.passive ? " pas" : ""}">${s.type} · Lv ${s.req}</span><span class="pips">${pips}</span></div></div>` +
       `<p class="idesc">${s.desc}</p>${s.needs ? `<p class="idesc ineed">Needs ${NEED_TEXT[s.needs]} in hand.</p>` : ""}${rows.join("")}<p class="istat ${why === "" ? "can" : ""}">${status}${keyNote}</p>`;

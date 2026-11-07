@@ -152,6 +152,7 @@ export type SkillType = "Attack" | "Aura" | "War cry" | "Enchant" | "Buildup" | 
 export interface SkillDef {
   id: string; name: string; type: SkillType; desc: string;
   mod?: SkillMod; // an upgrade node: learned ranks change the spell `mod.of` (see withMods)
+  maxRank?: number; // ranks it can take (default MAX_RANK); the wizard's spells go to 6 (Murat 2026-11-07)
   branch: 0 | 1 | 2; row: 0 | 1 | 2 | 3 | 4;
   req: number; // hero level needed (filled from TREE)
   parent?: string; // skill that must be learned first (none = root of its branch)
@@ -352,7 +353,7 @@ const S: Record<ClassKind, SkillDef[]> = <Record<ClassKind, SkillDef[]>><unknown
   // Three schools of magic, one spell each for now (Murat 2026-11-07): Fire, Frost, Thunder.
   wizard: [
     // Fire
-    { id: "w_firebolt", name: "Fire Bolt", type: "Attack", branch: 0, row: 0, style: "fire", cd: 450, mana: 5,
+    { id: "w_firebolt", name: "Fire Bolt", type: "Attack", branch: 0, row: 0, style: "fire", maxRank: 6, cd: 450, mana: 5,
       desc: "Hurl a bolt of fire at your foe: it burns them for a moment. Cheap and quick: cast it again and again.",
       shots: { kind: "fireball", speed: 280, range: 200, radius: 6, size: 1.3, dmg: 11, burn: [2, 1500], kb: 0.6 } },
     { id: "w_fb_split", name: "Split Bolt", type: "Upgrade", branch: 0, row: 1, style: "fire", passive: { effect: "upgrade", perRank: 0 },
@@ -368,7 +369,7 @@ const S: Record<ClassKind, SkillDef[]> = <Record<ClassKind, SkillDef[]>><unknown
     { id: "w_fb_inferno", name: "Inferno", type: "Upgrade", branch: 0, row: 3, style: "fire", passive: { effect: "upgrade", perRank: 0 },
       desc: "Fire Bolt's blast grows (+8 px per rank) and its burn is hotter (+40% per rank).", mod: { of: "w_firebolt", explode: 8, burn: 40 } },
     // Frost
-    { id: "w_blizzard", name: "Blizzard", type: "Aura", branch: 1, row: 0, style: "frost", cd: 9000, mana: 22,
+    { id: "w_blizzard", name: "Blizzard", type: "Aura", branch: 1, row: 0, style: "frost", maxRank: 6, cd: 9000, mana: 22,
       desc: "A storm of snow and ice turns around you for 6s and moves with you, hurting and slowing every enemy close by.",
       field: { kind: "frostwhirl", r: 56, ms: 6000, tickMs: 500, follow: true, dmg: 6, slowMs: 800 } },
     { id: "w_bz_wide", name: "Wide Storm", type: "Upgrade", branch: 1, row: 1, style: "frost", passive: { effect: "upgrade", perRank: 0 },
@@ -384,7 +385,7 @@ const S: Record<ClassKind, SkillDef[]> = <Record<ClassKind, SkillDef[]>><unknown
     { id: "w_bz_bite2", name: "Frostbite", type: "Upgrade", branch: 1, row: 3, style: "frost", passive: { effect: "upgrade", perRank: 0 },
       desc: "The Blizzard strikes more often: ticks 12% faster per rank.", mod: { of: "w_blizzard", tick: 12 } },
     // Thunder
-    { id: "w_storm", name: "Thunder", type: "Attack", branch: 2, row: 0, style: "lightning", cd: 6000, mana: 20,
+    { id: "w_storm", name: "Thunder", type: "Attack", branch: 2, row: 0, style: "lightning", maxRank: 6, cd: 6000, mana: 20,
       desc: "Call thunder down on a spot: for 2.5s lightning hammers the zone, striking and stunning the enemies inside.",
       field: { kind: "storm", r: 56, ahead: 70, ms: 2500, tickMs: 300, zap: { n: 2, dmg: 11, stunMs: 250 } } },
     { id: "w_th_fork", name: "Forked Lightning", type: "Upgrade", branch: 2, row: 1, style: "lightning", passive: { effect: "upgrade", perRank: 0 },
@@ -736,7 +737,7 @@ export function withMods(cls: ClassKind, r: Ranks | undefined, s: SkillDef): Ski
   let any = false;
   for (const m of S[cls] ?? []) {
     if (m.mod?.of !== s.id) continue;
-    const k = Math.min(MAX_RANK, rankOf(r, m.id));
+    const k = Math.min(maxRank(m), rankOf(r, m.id));
     if (k <= 0) continue;
     any = true;
     for (const key of Object.keys(t) as (keyof typeof t)[]) t[key] += (m.mod[key] ?? 0) * k;
@@ -770,7 +771,7 @@ export function withMods(cls: ClassKind, r: Ranks | undefined, s: SkillDef): Ski
 /** Synergy multiplier of a skill: 1 + its SYNERGY bonuses for the ranks the hero has in those skills. */
 export function synergyPower(s: SkillDef, r: Ranks | undefined): number {
   let pct = 0;
-  for (const y of s.synergy ?? []) pct += y.pct * Math.min(MAX_RANK, rankOf(r, y.from));
+  for (const y of s.synergy ?? []) pct += y.pct * Math.min(maxRank(BY_ID.get(y.from)), rankOf(r, y.from));
   return 1 + pct / 100;
 }
 
@@ -812,7 +813,9 @@ for (const list of [...Object.values(S), ...Object.values(CANTRIPS)]) for (const
 export const skillById = (id: string) => BY_ID.get(id);
 export const skillOf = (cls: ClassKind, id: string) => { const s = BY_ID.get(id); return s && (S[cls].includes(s) || CANTRIPS[cls]?.includes(s)) ? s : undefined; };
 export const isActive = (s: SkillDef) => !s.passive;
-export const maxRank = (_s: SkillDef) => MAX_RANK;
+export const maxRank = (s: SkillDef | undefined) => s?.maxRank ?? MAX_RANK;
+/** The highest rank any skill of the class can reach (how many learning passes "learn everything" needs). */
+export const topRank = (cls: ClassKind) => Math.max(MAX_RANK, ...(S[cls] ?? []).map((s) => maxRank(s)));
 
 // ---- Ranks -------------------------------------------------------------------------------------------
 /** Ranks per skill id. Works with a plain object or a Colyseus MapSchema. */
@@ -835,14 +838,14 @@ export const skillLearned = (cls: ClassKind, r: Ranks, id: string) => { const s 
 export function talentPoints(level: number): number { return Math.max(0, level - 1); }
 
 export function spentPoints(cls: ClassKind, r: Ranks): number {
-  return S[cls].reduce((s, n) => s + Math.min(MAX_RANK, rankOf(r, n.id)), 0);
+  return S[cls].reduce((s, n) => s + Math.min(maxRank(n), rankOf(r, n.id)), 0);
 }
 
 export type LockReason = "" | "max" | "level" | "above" | "requires" | "points";
 /** Why skill `id` can't take one more rank right now ("" = it can). A skill needs its parent skill learned. */
 export function lockReason(cls: ClassKind, level: number, r: Ranks, id: string): LockReason {
   const n = skillOf(cls, id);
-  if (!n || n.cantrip || rankOf(r, id) >= MAX_RANK) return "max";
+  if (!n || n.cantrip || rankOf(r, id) >= maxRank(n)) return "max";
   if (level < n.req) return "level";
   if (n.parent && rankOf(r, n.parent) < 1) return "above";
   if (n.requires?.some((q) => rankOf(r, q) < 1)) return "requires";
@@ -854,7 +857,7 @@ export const canLearn = (cls: ClassKind, level: number, r: Ranks, id: string) =>
 /** Total passive bonus for an effect, in percent (e.g. 12 = +12%). */
 export function talentBonus(cls: ClassKind, r: Ranks, effect: TalentEffect): number {
   let v = 0;
-  for (const s of S[cls]) if (s.passive?.effect === effect) v += s.passive.perRank * Math.min(MAX_RANK, rankOf(r, s.id));
+  for (const s of S[cls]) if (s.passive?.effect === effect) v += s.passive.perRank * Math.min(maxRank(s), rankOf(r, s.id));
   return v;
 }
 /** The buff Child of the Night gives at night, from its total passive value `v` (perRank x rank). */
@@ -896,7 +899,7 @@ export function cleanRanks(cls: ClassKind, level: number, saved: Record<string, 
   for (const [from, to] of Object.entries(REPLACED_SKILLS)) if (saved[from] && !saved[to]) saved[to] = saved[from];
   for (const s of S[cls]) {
     const v = saved[s.id];
-    if (typeof v === "number" && v > 0) out[s.id] = Math.min(MAX_RANK, Math.floor(v));
+    if (typeof v === "number" && v > 0) out[s.id] = Math.min(maxRank(s), Math.floor(v));
   }
   // Learn order must still be valid: drop skills whose parent is missing or that need a higher level (S is in tree order)
   for (const s of S[cls]) if (out[s.id] && (level < s.req || (s.parent && !out[s.parent]) || s.requires?.some((q) => !out[q]))) delete out[s.id];

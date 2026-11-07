@@ -113,6 +113,9 @@ export class Minimap {
 
   get isOpen() { return this.overlay.classList.contains("open"); }
 
+  /** True while the turned (iso) world map draws its markers: their glyphs turn back upright. */
+  private turned = false;
+
   toggle(open = !this.isOpen) {
     this.overlay.classList.toggle("open", open);
     this.last = 0;
@@ -246,8 +249,24 @@ export class Minimap {
     g.imageSmoothingEnabled = false;
     g.fillStyle = FOG;
     g.fillRect(0, 0, this.big.width, this.big.height);
+    // Iso view (Murat 2026-11-07): the world map turns 45 degrees like the minimap, so up on the map is up on the
+    // screen; the map is drawn turned, the labels are placed at the turned spots but stay upright
+    const K = 0.78, C45 = Math.SQRT1_2;
+    const T = (x: number, y: number): [number, number] => {
+      if (!ISO) return [x, y];
+      const dx = x - cw / 2, dy = y - ch / 2;
+      return [cw / 2 + K * (dx * C45 - dy * C45), ch / 2 + K * (dx * C45 + dy * C45)];
+    };
+    g.save();
+    if (ISO) { g.translate(cw / 2, ch / 2); g.rotate(Math.PI / 4); g.scale(K, K); g.translate(-cw / 2, -ch / 2); }
     g.drawImage(this.colors, -R.x * BIG, -R.y * BIG, MAP_W * BIG, MAP_H * BIG);
     g.drawImage(this.fog, -R.x * BIG, -R.y * BIG, MAP_W * BIG, MAP_H * BIG);
+    this.turned = ISO;
+    this.drawMarkers(g, BIG, R.x, R.y, false);
+    this.turned = false;
+    for (const o of others) { dot(g, o, BIG, R.x, R.y, "#000", 5); dot(g, o, BIG, R.x, R.y, ALLY, 3); }
+    if (me) { dot(g, me, BIG, R.x, R.y, "#000", 6); dot(g, me, BIG, R.x, R.y, "#ffd166", 4); }
+    g.restore();
     g.font = `13px ${PF}`;
     g.textAlign = "center";
     const named = new Set<string>();
@@ -256,24 +275,21 @@ export class Minimap {
       if (named.has(a.name) || a.w * a.h > 2500) continue; // skip the huge background regions
       const ax = Math.floor(a.x + a.w / 2), ay = Math.floor(a.y + a.h / 2);
       if (this.seen[ay * MAP_W + ax] < 200) continue;
-      const lx = (ax - R.x) * BIG, ly = (ay - R.y) * BIG, half = g.measureText(a.name).width / 2 + 4;
+      const [lx, ly] = T((ax - R.x) * BIG, (ay - R.y) * BIG), half = g.measureText(a.name).width / 2 + 4;
       if (boxes.some(([bx, by, bh]) => Math.abs(by - ly) < 16 && Math.abs(bx - lx) < bh + half)) continue; // don't overlap labels
       boxes.push([lx, ly, half]);
       named.add(a.name);
       g.fillStyle = "#000"; g.fillText(a.name, lx + 1, ly + 1);
       g.fillStyle = "#ffe8a3"; g.fillText(a.name, lx, ly);
     }
-    this.drawMarkers(g, BIG, R.x, R.y, false);
-    // Other online heroes: blue dot + name above it
+    // Other online heroes: name above their dot (the dots are drawn with the map, above)
     g.font = `11px ${PF}`; g.textAlign = "center"; g.textBaseline = "alphabetic";
     for (const o of others) {
-      dot(g, o, BIG, R.x, R.y, "#000", 5); dot(g, o, BIG, R.x, R.y, ALLY, 3);
       if (!o.name) continue;
-      const lx = Math.round((o.x / TILE - R.x) * BIG), ly = Math.round((o.y / TILE - R.y) * BIG) - 8;
+      const [px, py] = T((o.x / TILE - R.x) * BIG, (o.y / TILE - R.y) * BIG), lx = Math.round(px), ly = Math.round(py) - 8;
       g.fillStyle = "#000"; g.fillText(o.name, lx + 1, ly + 1);
       g.fillStyle = ALLY; g.fillText(o.name, lx, ly);
     }
-    if (me) { dot(g, me, BIG, R.x, R.y, "#000", 6); dot(g, me, BIG, R.x, R.y, "#ffd166", 4); }
   }
 
   /**
@@ -310,15 +326,18 @@ export class Minimap {
         const size = mini ? (m.track ? 14 : 11) : (m.track ? 18 : 14);
         g.font = `bold ${size}px ${PF}`; g.textAlign = "center"; g.textBaseline = "middle";
         g.save(); g.translate(x, y);
-        if (mini && ISO) g.rotate(-Math.PI / 4); // stays upright once the iso minimap is turned
+        if ((mini || this.turned) && ISO) g.rotate(-Math.PI / 4); // stays upright once the iso map is turned
         g.lineWidth = 3; g.strokeStyle = "#000"; g.strokeText(m.glyph, 0, 0);
         g.fillStyle = m.color; g.fillText(m.glyph, 0, 0);
         g.restore();
       }
       if (!mini && m.label && (m.track || m.r)) {
         g.font = `11px ${PF}`; g.textAlign = "center"; g.textBaseline = "alphabetic";
-        g.fillStyle = "#000"; g.fillText(m.label, x + 1, y + (m.r ? 4 : 18) + 1);
-        g.fillStyle = m.color; g.fillText(m.label, x, y + (m.r ? 4 : 18));
+        g.save(); g.translate(x, y);
+        if (this.turned && ISO) g.rotate(-Math.PI / 4); // upright on the turned world map
+        g.fillStyle = "#000"; g.fillText(m.label, 1, (m.r ? 4 : 18) + 1);
+        g.fillStyle = m.color; g.fillText(m.label, 0, m.r ? 4 : 18);
+        g.restore();
       }
     }
   }

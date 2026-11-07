@@ -1,6 +1,6 @@
 import { ClassKind } from "./classes";
 import { impactMs, nightBuff, passiveBlood, talentBonus, LEAP_MS, pointRange, skillTarget,
-  AreaDef, BuffDef, FieldDef, HitEffects, levelPower, MARK_TAKEN, MAX_STACKS, MoveDef, rankOf, rankPower, rankTime, Ranks, scalePower, synergyPower, withMods,
+  AreaDef, BuffDef, FieldDef, HitEffects, levelPower, MARK_TAKEN, MAX_STACKS, MoveDef, rankOf, rankPower, rankTime, Ranks, scalePower, synergyPower, withMods, maxRank,
   ShotDef, SkillDef, skillOf, STACK_DECAY_MS, STACK_POWER, WEAK_DEALT, FANG_BELOW_PER_RANK, FANG_CHANCE_PER_RANK,
 } from "./skills";
 import { Stats, STATS } from "./powers";
@@ -158,7 +158,7 @@ export function castSkill(h: SkillHost, id: string, skillId: string): boolean {
   if (!u || !u.cls || !h.canAct(id)) return false;
   const base = skillOf(u.cls, skillId);
   const s = base && withMods(u.cls, u.talents, base); // learned upgrade nodes (more bolts, bigger radius, shorter cooldown...)
-  const rank = s?.cantrip ? 1 : Math.min(3, rankOf(u.talents, skillId));
+  const rank = s?.cantrip ? 1 : Math.min(maxRank(s), rankOf(u.talents, skillId));
   const now = h.now();
   if (!s || s.passive || rank <= 0 || now < u.sk.chargeUntil || now < (u.sk.windUntil ?? 0)) return false;
   if (cooldownLeft(s, u.sk, now, h.cooldownMult(id)) > 0) return false;

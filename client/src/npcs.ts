@@ -53,6 +53,8 @@ export class NpcLayer {
   readonly objects: QuestObjects;
   private nearObj?: ReturnType<QuestObjects["near"]>;
   private trackerHtml = "";
+  /** Quest titles folded down to their title line in the tracker. */
+  private folded = new Set<string>((() => { try { return JSON.parse(localStorage.getItem("qtfolded") ?? "[]") as string[]; } catch { return []; } })());
   private stage: unknown = -1;
   private shopMsg = "";
   readonly log = new QuestLog();
@@ -69,7 +71,16 @@ export class NpcLayer {
     this.toast.id = "questtoast";
     hud.append(this.prompt, this.dialog, this.tracker, this.toast);
     this.prompt.onclick = () => this.interact();
-    this.tracker.onclick = () => this.log.toggle(true);
+    // Click a quest's title to fold it down to that line (remembered); anywhere else opens the quest log
+    this.tracker.onclick = (ev) => {
+      const t = (ev.target as HTMLElement).closest(".qt-title") as HTMLElement | null;
+      const key = t?.textContent ?? "";
+      if (!t || !key) { this.log.toggle(true); return; }
+      if (this.folded.has(key)) this.folded.delete(key); else this.folded.add(key);
+      try { localStorage.setItem("qtfolded", JSON.stringify([...this.folded])); } catch { /* storage off */ }
+      this.trackerHtml = ""; // redraw on the next update
+      this.tracker.querySelectorAll(".qt-block").forEach((b) => { const title = b.querySelector(".qt-title")?.textContent ?? ""; b.classList.toggle("folded", this.folded.has(title)); });
+    };
     for (const n of NPCS) {
       const sprite = scene.add.sprite(n.x, n.y, n.sprite, 0).setOrigin(CHAR_ORIGIN.x, CHAR_ORIGIN.y).setScale(CHAR_SCALE).setDepth(n.y);
       playCharAnim(sprite, n.sprite as CharacterName, "idle", n.dir);
@@ -380,12 +391,12 @@ export class NpcLayer {
         const wait = msUntilUndeadNight(dayTime(Date.now()));
         hint += `<div class="qt-hint2 qt-night">${wait ? `Only at night. The dead rise in ${Math.max(1, Math.ceil(wait / 60000))} min.` : "Night: the dead are up."}</div>`;
       }
-      return `<div class="qt-block"><div class="qt-title">${def.title}</div><div class="qt-obj">${step.type === "talk" ? "➜ " : "• "}${obj}</div>${bar}${dir}${hint}</div>`;
+      return `<div class="qt-block${this.folded.has(def.title) ? " folded" : ""}"><div class="qt-title">${def.title}</div><div class="qt-obj">${step.type === "talk" ? "➜ " : "• "}${obj}</div>${bar}${dir}${hint}</div>`;
     }
     // Between quests: point to whoever has the next one (the blob chain's very first quest has its own "!" intro)
     if (q.questStage === 0 && (q.level ?? 1) >= def.minLevel && (q.questId > 0 || (q.chain ?? 0) > 0)) {
       const giver = NPCS.find((n) => n.id === def.giver);
-      return `<div class="qt-block"><div class="qt-title">New quest available</div><div class="qt-obj">➜ Talk to ${giver?.name ?? ""} <b class="bang">!</b></div></div>`;
+      return `<div class="qt-block${this.folded.has("New quest available") ? " folded" : ""}"><div class="qt-title">New quest available</div><div class="qt-obj">➜ Talk to ${giver?.name ?? ""} <b class="bang">!</b></div></div>`;
     }
     return "";
   }
