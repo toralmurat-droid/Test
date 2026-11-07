@@ -1,0 +1,8 @@
+{
+  "date": "2026-11-07",
+  "title": "Vampire and Summoner only",
+  "changes": [
+    "Only the Vampire and the Summoner can be played for now. The Knight, Ninja, Wizard, Archer and Barbarian are archived.",
+    "Heroes of archived classes are kept safe with their level and gear, but cannot be played for now."
+  ]
+}

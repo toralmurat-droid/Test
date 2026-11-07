@@ -13,7 +13,7 @@ installCursors();
 installWeatheredFrames();
 installTooltips();
 import { TownScene } from "./TownScene";
-import { CLASSES, CLASS_KINDS, ClassKind, isClassKind } from "../../shared/classes";
+import { ACTIVE_CLASSES, ARCHIVED_CLASSES, CLASSES, ClassKind, isActiveClass } from "../../shared/classes";
 import { mountFireside } from "./fireside";
 import { pixelText } from "./pixeltext";
 import { SMOOTH } from "./isoflag";
@@ -42,7 +42,7 @@ for (const c of COLORS) {
 // Start screens, all by the fire: log in -> resume a saved hero or start a new game -> pick a hero round the fire -> loading
 let saved: string | null = null;
 try { saved = localStorage.getItem("cls"); } catch { /* ignore */ }
-let cls: ClassKind = isClassKind(saved) ? saved : "knight";
+let cls: ClassKind = isActiveClass(saved) ? saved : ACTIVE_CLASSES[0];
 
 document.getElementById("fstitle")!.appendChild(pixelText("Pixel Town Brawl", "#ffcf52", 12, 2));
 const fireside = mountFireside(document.getElementById("fireside") as HTMLCanvasElement, document.getElementById("fslabels")!, (k) => pickHero(k));
@@ -71,13 +71,13 @@ function show(s: Step) {
   }
   if (s === "hero") {
     const labels: Partial<Record<ClassKind, string>> = {};
-    for (const k of CLASS_KINDS) labels[k] = account.heroes[k] ? `${CLASSES[k].name} · lv ${account.heroes[k]}` : CLASSES[k].name;
+    for (const k of ACTIVE_CLASSES) labels[k] = account.heroes[k] ? `${CLASSES[k].name} · lv ${account.heroes[k]}` : CLASSES[k].name;
     fireside.setMode("pick", labels);
     fireside.select(cls);
     pickHero(cls);
   } else if (s === "resume") {
     const labels: Partial<Record<ClassKind, string>> = {};
-    for (const k of CLASS_KINDS) if (account.heroes[k]) labels[k] = `${CLASSES[k].name} · lv ${account.heroes[k]}`;
+    for (const k of ACTIVE_CLASSES) if (account.heroes[k]) labels[k] = `${CLASSES[k].name} · lv ${account.heroes[k]}`;
     fireside.setMode("rest", labels);
   } else fireside.setMode("rest");
 }
@@ -111,12 +111,15 @@ const btnRow = (host: HTMLElement, cssClass: string, label: string, sub: string,
 function resumeMenu() {
   const { name } = account;
   document.getElementById("savetitle")!.textContent = `Welcome back, ${name}`;
-  const kinds = CLASS_KINDS.filter((k) => account.heroes[k]).sort((a, b) => (a === cls ? -1 : b === cls ? 1 : account.heroes[b] - account.heroes[a]));
-  document.getElementById("savetext")!.textContent = kinds.length > 1 ? "Your heroes wait by the fire." : "Your hero waits by the fire.";
+  const kinds = ACTIVE_CLASSES.filter((k) => account.heroes[k]).sort((a, b) => (a === cls ? -1 : b === cls ? 1 : account.heroes[b] - account.heroes[a]));
+  const archived = ARCHIVED_CLASSES.filter((k) => account.heroes[k]);
+  document.getElementById("savetext")!.textContent = kinds.length > 1 ? "Your heroes wait by the fire." : kinds.length ? "Your hero waits by the fire." : "Choose a new hero by the fire.";
   const btns = document.getElementById("savebtns")!;
   btns.replaceChildren();
   for (const k of kinds) btnRow(btns, "fs-main", `Resume: ${CLASSES[k].name}`, `Level ${account.heroes[k]}, with your gear, gold and quests`, () => { cls = k; remember(); launch(account.name, account.password, false); });
   btnRow(btns, "", "New game", "Choose a hero by the fire", () => show("hero"));
+  // archived classes: the save is kept, but the hero cannot be played for now
+  for (const k of archived) btnRow(btns, "fs-locked", `${CLASSES[k].name} (archived)`, `Level ${account.heroes[k]} kept safe, not playable for now`, () => {}).setAttribute("disabled", "");
   show("resume");
 }
 
@@ -179,9 +182,9 @@ document.getElementById("pkback")!.onclick = () => {
 };
 addEventListener("keydown", (e: KeyboardEvent) => {
   if (step !== "hero" || heroPanel.hidden) return;
-  const i = CLASS_KINDS.indexOf(cls);
+  const i = ACTIVE_CLASSES.indexOf(cls);
   if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
-    const k = CLASS_KINDS[(i + (e.key === "ArrowLeft" ? CLASS_KINDS.length - 1 : 1)) % CLASS_KINDS.length];
+    const k = ACTIVE_CLASSES[(i + (e.key === "ArrowLeft" ? ACTIVE_CLASSES.length - 1 : 1)) % ACTIVE_CLASSES.length];
     fireside.select(k); pickHero(k); e.preventDefault();
   } else if (e.key === "Enter") { begin(); e.preventDefault(); }
 });
@@ -218,7 +221,7 @@ show("login");
 const rejoin = takeRejoin();
 if (rejoin) {
   skipIntro(); // back after a server restart: the opening song only plays when the game is opened
-  if (isClassKind(rejoin.cls)) cls = rejoin.cls;
+  if (isActiveClass(rejoin.cls)) cls = rejoin.cls;
   color = rejoin.color;
   launch(rejoin.name, rejoin.password, false, true);
 }

@@ -11,7 +11,7 @@
  * Colossus slam, Vital Link) and can be hit by the other hero's swings, shots and areas. The bots aim at the hero.
  * Keep the server rules in sync with this file when changing combat code.
  */
-import { basicDrain, CLASSES, CLASS_KINDS, ClassKind, COMBO_WINDOW_MS, DODGE, ENERGY, GUARD_REDUCTION, staminaRegen } from "../../shared/classes";
+import { basicDrain, CLASSES, ACTIVE_CLASSES, ClassKind, COMBO_WINDOW_MS, DODGE, ENERGY, GUARD_REDUCTION, staminaRegen } from "../../shared/classes";
 import { attackMult, cooldownMult, critChance, heroSpeed, magicMult, maxHpFromStats, statPoints, statsFor, STATS, Stats } from "../../shared/powers";
 import { activeSkills, canLearn, levelPower, rankPower, scalePower, skillById, SKILLS, SkillDef, talentBonus, talentMult, talentReduce } from "../../shared/skills";
 import { canPay, manaRegen, maxManaFor, skillCost } from "../../shared/mana";
@@ -546,7 +546,7 @@ const pct = (v: number) => `${Math.round(v * 100)}%`.padStart(5);
 /** Overall win rate of every class against the others at one level (random builds unless `build` is set). */
 export function overallAt(level: number, n: number, build?: Build): Record<ClassKind, number> {
   const out = {} as Record<ClassKind, number>;
-  for (const x of CLASS_KINDS) out[x] = CLASS_KINDS.filter((y) => y !== x).reduce((s, y) => s + winRate(x, y, level, n, build), 0) / (CLASS_KINDS.length - 1);
+  for (const x of ACTIVE_CLASSES) out[x] = ACTIVE_CLASSES.filter((y) => y !== x).reduce((s, y) => s + winRate(x, y, level, n, build), 0) / (ACTIVE_CLASSES.length - 1);
   return out;
 }
 
@@ -554,27 +554,27 @@ if (process.argv[1]?.includes("duel")) {
   const n = Number(process.argv[2]) || 400;
   const brief = process.argv.includes("--brief");
   const levels = [1, 5, 10, 15, 20, 25, 30];
-  const summary: Record<string, string[]> = Object.fromEntries(CLASS_KINDS.map((c) => [c, []]));
+  const summary: Record<string, string[]> = Object.fromEntries(ACTIVE_CLASSES.map((c) => [c, []]));
   for (const level of levels) {
     if (!brief) {
       console.log(`\nLevel ${level} (random builds): row hero's win rate vs column hero`);
-      console.log("          " + CLASS_KINDS.map((c) => c.slice(0, 6).padStart(7)).join("") + "  overall");
+      console.log("          " + ACTIVE_CLASSES.map((c) => c.slice(0, 6).padStart(7)).join("") + "  overall");
     }
-    for (const x of CLASS_KINDS) {
-      const row = CLASS_KINDS.map((y) => (x === y ? 0.5 : winRate(x, y, level, n)));
-      const overall = row.reduce((s, v, i) => s + (CLASS_KINDS[i] === x ? 0 : v), 0) / (CLASS_KINDS.length - 1);
+    for (const x of ACTIVE_CLASSES) {
+      const row = ACTIVE_CLASSES.map((y) => (x === y ? 0.5 : winRate(x, y, level, n)));
+      const overall = row.reduce((s, v, i) => s + (ACTIVE_CLASSES[i] === x ? 0 : v), 0) / (ACTIVE_CLASSES.length - 1);
       summary[x].push(pct(overall));
-      if (!brief) console.log(x.padEnd(10) + row.map((v, i) => (CLASS_KINDS[i] === x ? "    -  " : pct(v) + "  ")).join("") + pct(overall));
+      if (!brief) console.log(x.padEnd(10) + row.map((v, i) => (ACTIVE_CLASSES[i] === x ? "    -  " : pct(v) + "  ")).join("") + pct(overall));
     }
   }
   console.log("\nOverall PvP win rate by level (random builds)");
   console.log("          " + levels.map((l) => `Lv${l}`.padStart(6)).join(""));
-  for (const c of CLASS_KINDS) console.log(c.padEnd(10) + summary[c].map((v) => v.padStart(6)).join(""));
+  for (const c of ACTIVE_CLASSES) console.log(c.padEnd(10) + summary[c].map((v) => v.padStart(6)).join(""));
   if (process.argv.includes("--branches")) for (const b of [0, 1, 2] as Build[]) {
     console.log(`\nBranch ${b + 1} builds, overall`);
     for (const level of [10, 20, 30]) {
       const o = overallAt(level, n, b);
-      console.log(`Lv${level}`.padEnd(6) + CLASS_KINDS.map((c) => `${c.slice(0, 6)} ${pct(o[c])}`).join("  "));
+      console.log(`Lv${level}`.padEnd(6) + ACTIVE_CLASSES.map((c) => `${c.slice(0, 6)} ${pct(o[c])}`).join("  "));
     }
   }
 }

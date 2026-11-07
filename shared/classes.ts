@@ -5,6 +5,16 @@
 export type ClassKind = "knight" | "ninja" | "wizard" | "archer" | "barbarian" | "vampire" | "summoner";
 export const CLASS_KINDS: ClassKind[] = ["knight", "ninja", "wizard", "archer", "barbarian", "vampire", "summoner"];
 
+/**
+ * Playable classes (Murat 2026-11-07): only these can be picked, played and are used by balance sims.
+ * The rest are archived: code, art and saves are kept, but heroes of those classes cannot be played.
+ */
+export const ACTIVE_CLASSES: ClassKind[] = ["vampire", "summoner"];
+export const ARCHIVED_CLASSES: ClassKind[] = CLASS_KINDS.filter((c) => !ACTIVE_CLASSES.includes(c));
+export function isActiveClass(v: unknown): v is ClassKind {
+  return typeof v === "string" && (ACTIVE_CLASSES as string[]).includes(v);
+}
+
 export type SpecialKind = "guard" | "dash" | "nova" | "volley" | "rage" | "drain" | "summon";
 
 /**

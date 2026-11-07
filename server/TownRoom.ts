@@ -8,7 +8,7 @@ import {
 } from "../shared/constants";
 import { arrivalAt, LINK_RANGE, linkById, LINKS } from "../shared/dungeon";
 import {
-  ATTACK_VARIANTS, basicDrain, CLASSES, ClassKind, COMBO_WINDOW_MS, DODGE, EMOTES, ENERGY, staminaRegen, DASH_INVULN_MS, GUARD_REDUCTION, isClassKind, levelFromXp, MAX_XP, capLevel, PVP_KILL_XP, xpForLevel,
+  ATTACK_VARIANTS, basicDrain, CLASSES, ClassKind, COMBO_WINDOW_MS, DODGE, EMOTES, ENERGY, staminaRegen, DASH_INVULN_MS, GUARD_REDUCTION, isActiveClass, isClassKind, levelFromXp, MAX_XP, capLevel, PVP_KILL_XP, xpForLevel,
 } from "../shared/classes";
 import { MANA_POTION_DROP, manaRegen, maxManaFor, packMana, pay } from "../shared/mana";
 import { Counts, dropSize, Potions, nextSize, noPotions, packPotions, potionAmount, potionName, PotionKind, potionSlots, POTION_COOLDOWN_MS, slotsAfter, SIZES, total } from "../shared/potions";
@@ -556,6 +556,9 @@ export function announceUpgrade() {
   liveRooms.forEach((r) => { r.rememberAll(); r.broadcast("upgrading", {}); });
 }
 
+/** Only active classes can be played (shared/classes.ts ACTIVE_CLASSES); tests may still run archived ones. */
+const playable = (c: unknown): c is ClassKind => isActiveClass(c) || (process.env.ALLOW_ARCHIVED_CLASSES === "1" && isClassKind(c));
+
 export class TownRoom extends Room<TownState> {
   maxClients = 50;
   private mobSeq = 0;
@@ -735,7 +738,8 @@ export class TownRoom extends Room<TownState> {
   private addrs = new Map<string, string | undefined>();
 
   /** Name + password check (server/accounts.ts); a new name creates the account. Also notes the network address for ideas. */
-  async onAuth(client: Client, options: { name?: string; password?: string }, context: AuthContext) {
+  async onAuth(client: Client, options: { name?: string; password?: string; cls?: string }, context: AuthContext) {
+    if (!playable(options?.cls)) throw new Error("This class is archived and cannot be played for now");
     const ip = clientIp(context?.req ?? { headers: context?.headers ?? {}, socket: { remoteAddress: String(context?.ip ?? "") } });
     const name = await login(options?.name, options?.password, ip);
     let online = false;
@@ -798,7 +802,7 @@ export class TownRoom extends Room<TownState> {
     const p = new Player();
     p.name = auth?.name ?? `Hero${Math.floor(Math.random() * 1000)}`;
     p.color = typeof options?.color === "number" ? options.color : COLORS[Math.floor(Math.random() * COLORS.length)];
-    p.cls = isClassKind(options?.cls) ? options.cls : "knight";
+    p.cls = playable(options?.cls) ? options.cls : "vampire";
     // "New game" on the login screen: start this class over (the old save is overwritten right away) and refill all chests
     if (options?.newGame) resetChests(p.name);
     const save = options?.newGame ? undefined : loadHero(p.name, p.cls);
