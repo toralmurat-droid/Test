@@ -600,6 +600,8 @@ export class TownRoom extends Room<TownState> {
       this.state.watch.set(post.id, w);
     }
 
+    // Connection check: the client times the round trip and shows it next to the online count
+    this.onMessage("ping", (client, t: number) => { if (typeof t === "number") client.send("pong", t); });
     this.onMessage("input", (client, msg: InputState & { seq: number }) => {
       const p = this.state.players.get(client.sessionId);
       if (!p) return;
