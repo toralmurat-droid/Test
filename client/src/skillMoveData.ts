@@ -137,11 +137,6 @@ export const MOVES: Record<string, Seq> = {
     act: [S("lunge", [2], 50, { ghost: 10 }), S("lunge", [4, 5], 200)],
     rec: [S("lunge", [6, 7], 140)],
   },
-  v_frenzy: { // four turns, one per slash wave, blade out
-    wind: [S("whirl", [0], 80, { fill: true })],
-    act: [S("whirl", [2], 560, { spin: 4, ghost: 22, dust: 10 })],
-    rec: [S("whirl", [4, 5, 6, 7], 180)],
-  },
 };
 
 /** Frame index of a pose in a {hero}-moves sheet. */

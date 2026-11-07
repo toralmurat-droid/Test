@@ -581,6 +581,7 @@ export class TownScene extends Phaser.Scene {
     document.getElementById("hud")!.hidden = false;
     this.minimap = new Minimap(document.getElementById("minimap") as HTMLCanvasElement, this.opts.name);
     this.npcs = new NpcLayer(this, (type, msg) => this.room.send(type, msg));
+    this.npcs.objects.setLight((x, y, lift) => this.details?.addLight(x, y, 0x7ff3ff, 1.5, 0.55, 0.06, lift)); // lit spirit lanterns shine at night
     // Morwen's camp and Brann's forge after dusk: coal glow under her brew, lantern light in the tent doorway
     for (const d of NPC_DECOR) {
       if (d.prop === "wc_rig") this.details?.addLight(d.x * TILE, d.y * TILE, 0xff6a2a, 1.5, 0.6, 0.15, 9, -7);
@@ -1357,6 +1358,24 @@ export class TownScene extends Phaser.Scene {
     // Small gaps are timing noise (a server tick is ~5 px of walking): leave them to the idle settle
     if (Math.hypot(ex, ey) < 8) { this.corrX = this.corrY = 0; return; }
     this.corrX = ex; this.corrY = ey;
+  }
+
+  /** Frames drawn in the last second, shown next to the ping (a slow computer also makes the ping read high). */
+  private fpsFrom = 0; private fpsFrames = 0; private fpsWorst = 0; private fpsLast = 0;
+  private countFps(wall: number) {
+    if (this.fpsLast) this.fpsWorst = Math.max(this.fpsWorst, wall - this.fpsLast);
+    this.fpsLast = wall;
+    if (!this.fpsFrom) { this.fpsFrom = wall; return; }
+    this.fpsFrames++;
+    if (wall - this.fpsFrom < 1000) return;
+    const fps = Math.round(this.fpsFrames * 1000 / (wall - this.fpsFrom));
+    const el = document.getElementById("fps");
+    if (el) {
+      el.textContent = `${fps}fps`;
+      el.className = fps < 25 || this.fpsWorst > 250 ? "bad" : fps < 45 || this.fpsWorst > 100 ? "meh" : "";
+      el.title = `Frames per second your computer draws (60 is smooth). Slowest frame in the last second: ${Math.round(this.fpsWorst)} ms`;
+    }
+    this.fpsFrom = wall; this.fpsFrames = 0; this.fpsWorst = 0;
   }
 
   /** Round trip to the server, measured every 2 s with a ping, shown next to the online count. */
@@ -2665,6 +2684,7 @@ export class TownScene extends Phaser.Scene {
     this.sendInput(want);
 
     const now = this.time.now, wall = performance.now();
+    this.countFps(wall);
     // Long frames (a hiccup, a hidden tab) are capped so prediction never leaps through a wall
     const step = Math.min(dtMs, 100);
     stepInterpDelay(step);

@@ -1,0 +1,12 @@
+{
+  "date": "2026-11-07",
+  "patch": 144,
+  "pr": 317,
+  "title": "The Vampire's new skill trees",
+  "changes": [
+    "The Vampire's three trees now have 7 skills each, with new ones: Blood Lance, Sanguine Ward, Charm, Rat Plague, Native Soil and The Brides.",
+    "Exsanguinate now reaches a wide circle and bursts every bleed at once. Blood Link can carry your blood to a group ally, and Blood Pact saves you from one killing blow every 3 minutes.",
+    "Mist Form goes much further, Bat Swarm leaves a shield of bats, Night Pounce steps out behind your prey, and Thirst is shared with your group.",
+    "Cloak of Night and Blood Frenzy are gone: points spent on them move to Rat Plague and The Brides."
+  ]
+}

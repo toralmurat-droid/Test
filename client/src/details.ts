@@ -708,10 +708,11 @@ export class Details {
    * A warm light that fades in at dusk (used for lanterns, also by worldProps.ts). (x, y) is the foot of whatever holds
    * the light; `lift` raises the glow to the flame itself (world px above the foot), `dx` shifts it sideways.
    */
-  addLight(x: number, y: number, color: number, scale: number, base: number, flicker = 0.08, lift = 0, dx = 0) {
+  addLight(x: number, y: number, color: number, scale: number, base: number, flicker = 0.08, lift = 0, dx = 0): Phaser.GameObjects.Image {
     const img = this.scene.add.image(x + dx, y - lift, "light").setTint(color).setScale(scale).setBlendMode(Phaser.BlendModes.ADD).setDepth(27500).setAlpha(0);
     if (lift || dx) isoAnchor(img, { x, y }); // iso: keep it up at the lamp, not skewed onto the ground
     this.lights.push({ img, base, flicker });
+    return img;
   }
 
   private lanternsAndBanners() {

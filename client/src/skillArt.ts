@@ -975,6 +975,25 @@ const ART: Record<string, Draw> = {
     p.outline();
     p.px(4, 14, "#ffffff"); p.px(16, 8, BLOOD[2]); p.px(20, 9, BLOOD[2]);
   },
+  v_lance: (p) => {
+    // a long spear of set blood flying corner to corner, a bright wet point and drops shaken off its shaft
+    p.thick(3, 21, 17, 7, 2, BLOOD[0]); p.line(4, 20, 17, 7, BLOOD[1]);
+    p.poly([[15, 5], [22, 2], [19, 9]], BLOOD[2]); p.poly([[17, 5], [21, 3], [19, 7]], BLOOD[3]);
+    p.poly([[2, 19], [5, 22], [3, 23], [1, 21]], BLOOD[1]);
+    p.outline();
+    p.px(20, 4, "#ffffff");
+    for (const [x, y] of [[8, 19], [12, 16], [6, 13], [15, 13]]) p.px(x, y, BLOOD[2]);
+  },
+  v_ward: (p) => {
+    // a hardened shell of blood around a pale figure, cracks of light in it
+    p.disc(12, 13, 10, BLOOD[0], 10); p.disc(12, 13, 8.5, BLOOD[1], 8.5);
+    p.ring(12, 13, 7, BLOOD[2], Math.PI * 1.1, Math.PI * 1.7, 7);
+    p.poly([[10, 11], [14, 11], [15, 20], [9, 20]], SHAD[1]);
+    p.ball(12, 9, 2.4, ["#5e5560", "#bdb0b8", "#e6dcd6", "#ffffff"]);
+    p.outline();
+    p.px(11, 9, "#ff2d2d"); p.px(13, 9, "#ff2d2d");
+    for (const [x, y] of [[5, 7], [19, 9], [6, 18], [18, 19]]) p.px(x, y, BLOOD[3]);
+  },
   v_boil: (p) => {
     // a bubbling pool of blood, steaming
     p.disc(12, 18, 10, BLOOD[0], 4); p.disc(12, 17, 9, BLOOD[1], 3.2);
@@ -1056,15 +1075,28 @@ const ART: Record<string, Draw> = {
     p.px(14, 20, "#ffffff"); p.px(16, 20, "#ffffff");
     for (const [x, y] of [[20, 3], [22, 8], [17, 5]]) p.px(x, y, "#fff3c4");
   },
-  v_cloak: (p) => {
-    // a high-collared cloak spread like wings, lined in red
-    p.poly([[12, 4], [22, 8], [20, 21], [12, 17], [4, 21], [2, 8]], SHAD[0]);
-    p.poly([[12, 6], [19, 9], [17, 19], [12, 15], [7, 19], [5, 9]], CLOTH_R[0]);
-    p.poly([[12, 6], [12, 15], [7, 19], [5, 9]], CLOTH_R[1]);
-    p.poly([[8, 3], [12, 7], [16, 3], [16, 7], [12, 10], [8, 7]], SHAD[1]);
+  v_rats: (p) => {
+    // a pack of plague rats pouring forward, red eyes, green sickness over them
+    const rat = (x: number, y: number, k: number) => {
+      p.disc(x, y, 3.2 * k, EARTH[1], 1.8 * k); p.disc(x - 0.5, y - 0.6 * k, 2.2 * k, EARTH[2], 0.9 * k);
+      p.poly([[x + 2.5 * k, y - 1.5 * k], [x + 5 * k, y], [x + 2.5 * k, y + 1.2 * k]], EARTH[1]);
+      p.line(x - 3 * k, y + 0.5, x - 6 * k, y + 1.5, "#d48a9a");
+      p.px(x + 1.5 * k, y - 2.2 * k, EARTH[3]);
+    };
+    rat(7, 18, 1); rat(15, 14, 1.15); rat(9, 9, 0.85);
     p.outline();
-    for (const [x, y] of [[3, 13], [21, 13], [12, 20]]) p.px(x, y, SHAD[3]);
-    p.px(12, 11, GOLD[2]);
+    p.px(19, 14, "#ff2d2d"); p.px(11, 18, "#ff2d2d"); p.px(12, 9, "#ff2d2d");
+    for (const [x, y, c] of [[18, 5, 2], [20, 8, 1], [4, 4, 2], [22, 20, 1]] as [number, number, number][]) p.px(x, y, POIS[c]);
+  },
+  v_soil: (p) => {
+    // an open coffin of grave earth with a red glow rising from it
+    p.poly([[8, 3], [16, 3], [19, 8], [16, 22], [8, 22], [5, 8]], WOOD[1]);
+    p.poly([[9, 5], [15, 5], [17, 8], [15, 20], [9, 20], [7, 8]], EARTH[0]);
+    for (const [x, y] of [[10, 9], [13, 12], [11, 16], [14, 17], [12, 7]]) p.px(x, y, EARTH[2]);
+    p.rect(11, 13, 2, 1, BONE[2]);
+    p.outline();
+    p.line(12, 2, 12, 0, BLOOD[2]); p.px(10, 1, BLOOD[1]); p.px(14, 1, BLOOD[1]);
+    p.px(6, 8, WOOD[3]); p.px(18, 8, WOOD[2]);
   },
   v_nightfall: (p) => {
     // a blood moon over a black sky with bats
@@ -1114,15 +1146,18 @@ const ART: Record<string, Draw> = {
     p.px(17, 9, "#ff2d2d");
     p.spark(20, 21, 2, BLOOD[2], "#ffffff");
   },
-  v_frenzy: (p) => {
-    // crossed red slashes around a screaming pale face
-    p.ball(12, 12, 5, ["#5e5560", "#bdb0b8", "#e6dcd6", "#ffffff"]);
-    p.rect(10, 14, 4, 2, "#3a0000"); p.px(10, 14, "#ffffff"); p.px(13, 14, "#ffffff");
-    p.poly([[8, 8], [11, 10], [11, 11], [8, 10]], "#1a0a10"); p.poly([[16, 8], [13, 10], [13, 11], [16, 10]], "#1a0a10");
+  v_brides: (p) => {
+    // three pale veiled brides with long dark hair and red eyes, circling in white mist
+    const bride = (x: number, y: number, k: number) => {
+      p.poly([[x - 2.5 * k, y], [x + 2.5 * k, y], [x + 3.5 * k, y + 8 * k], [x - 3.5 * k, y + 8 * k]], "#e6dcd6");
+      p.poly([[x - 2.5 * k, y], [x, y], [x - 0.5 * k, y + 8 * k], [x - 3.5 * k, y + 8 * k]], "#bdb0b8");
+      p.ball(x, y - 1.5 * k, 2 * k, ["#5e5560", "#bdb0b8", "#f2ece6", "#ffffff"]);
+      p.poly([[x - 2.4 * k, y - 3 * k], [x + 2.4 * k, y - 3 * k], [x + 2.8 * k, y + 3 * k], [x + 1.6 * k, y], [x - 1.6 * k, y], [x - 2.8 * k, y + 3 * k]], "#1a1033");
+    };
+    bride(12, 5, 1.1); bride(5, 12, 0.85); bride(19, 12, 0.85);
     p.outline();
-    p.px(10, 11, "#ff2d2d"); p.px(14, 11, "#ff2d2d");
-    p.thick(2, 3, 9, 20, 2, BLOOD[2]); p.thick(22, 3, 15, 20, 2, BLOOD[2]); p.line(3, 3, 9, 19, BLOOD[3]); p.line(21, 3, 15, 19, BLOOD[3]);
-    for (const [x, y] of [[4, 22], [20, 22], [12, 2]]) p.px(x, y, BLOOD[1]);
+    p.px(11, 4, "#ff2d2d"); p.px(13, 4, "#ff2d2d"); p.px(5, 11, "#ff2d2d"); p.px(19, 11, "#ff2d2d");
+    for (const [x, y] of [[3, 22], [12, 23], [21, 22]]) p.px(x, y, "#f3e5f5");
   },
   v_devour: (p) => {
     // a gaping pale maw with long fangs closing on a torn chunk of red flesh, blood dripping
