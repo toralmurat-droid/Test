@@ -191,8 +191,12 @@ function patchTime(): number {
   if (stampSeq === patchSeq) return stamp;
   stampSeq = patchSeq;
   const now = performance.now(), guess = stamp + 1000 / TICK_RATE;
-  stamp = Math.abs(now - guess) > 250 ? now : Math.min(now, guess + (now - guess) * 0.1);
+  // Late by a lot (a quiet spot with no updates, or a long stall): start the clock again from now. Otherwise keep the
+  // 50 ms rhythm, even for updates that arrive bunched up right after a late one: capping those at "now" stamped them
+  // a millisecond apart, so their steps played back in a few ms and heroes and monsters jumped instead of walking.
+  stamp = now - guess > 250 || guess - now > 300 ? now : guess + (now - guess) * 0.1;
   lateness = Math.max(now - stamp, lateness * 0.99);
+  if (stamp > now) lateness = Math.max(stamp - now, lateness); // early stamps (a bunch after a late one) need the slack too
   return stamp;
 }
 /** Record a server position for an entity (several field changes of one update count once). */
@@ -1275,6 +1279,7 @@ export class TownScene extends Phaser.Scene {
     this.room.onStateChange(alive);
     this.room.onMessage("hb", alive);
     this.room.onMessage("mv", alive);
+    this.startPing();
     window.setInterval(() => { if (!this.quitting && Date.now() - lastPatch > 15_000) reconnectSoon(login); }, 3000);
   }
 
@@ -1341,6 +1346,21 @@ export class TownScene extends Phaser.Scene {
     // Small gaps are timing noise (a server tick is ~5 px of walking): leave them to the idle settle
     if (Math.hypot(ex, ey) < 8) { this.corrX = this.corrY = 0; return; }
     this.corrX = ex; this.corrY = ey;
+  }
+
+  /** Round trip to the server, measured every 2 s with a ping, shown next to the online count. */
+  private startPing() {
+    let ms = 0;
+    this.room?.onMessage("pong", (t: number) => {
+      const d = Math.max(0, performance.now() - t);
+      ms = ms ? ms * 0.7 + d * 0.3 : d;
+      const el = document.getElementById("ping");
+      if (el) { el.textContent = `${Math.round(ms)}ms`; el.className = ms > 250 ? "bad" : ms > 140 ? "meh" : ""; }
+    });
+    const ping = () => this.room?.send("ping", performance.now());
+    ping();
+    const timer = window.setInterval(ping, 2000);
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => window.clearInterval(timer));
   }
 
   /** Send the held movement directions to the server when they change. */

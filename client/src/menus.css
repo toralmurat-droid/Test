@@ -195,6 +195,11 @@ body #online { position: absolute; bottom: 12px; left: calc(18px + min(400px, ca
   background: rgba(15, 10, 6, .85); border: 2px solid #080504; box-shadow: inset 0 0 0 2px #45331e; text-shadow: 2px 2px #050302;
   font-variant-numeric: tabular-nums; pointer-events: auto; white-space: nowrap; }
 body #online .pxi { width: 16px; height: 16px; vertical-align: -3px; margin-right: 5px; }
+/* Connection round trip after the count: green when fine, amber when slow, red when bad */
+body #online #ping:not(:empty) { margin-left: 8px; padding-left: 8px; border-left: 2px solid #45331e; color: #9fb07a; }
+body #online:has(#ping:not(:empty)) #onlinelbl { display: none; } /* room is short next to the HUD buttons: count + ping */
+body #online #ping.meh { color: #e0a040; }
+body #online #ping.bad { color: #e05a3a; }
 
 /* Quests button under the minimap + per-quest track boxes in the quest log */
 body #questbtn { position: absolute; left: 50%; bottom: -104px; transform: translateX(-50%); display: inline-flex; align-items: center;
