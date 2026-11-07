@@ -187,7 +187,19 @@ export interface SkillDef {
   colossus?: { ms: number };
   /** Summoner basic spell: turns the element the next golem (and the Colossus) is called in. */
   attune?: boolean;
+  /** Vampire Devour: bite the fleshy foe nearest the aim; a weak monster is eaten whole (shared/devour.ts feast). */
+  devour?: FangDef;
+  /** Vampire Bite: bite the fleshy foe nearest the aim; a weak monster may fall and rise as a thrall (shared/devour.ts THRALL). */
+  bite?: FangDef;
 }
+
+/**
+ * Devour / Bite: grabs the foe with flesh (not skeletons, undead or golems) nearest the aim within `range` px. Deals
+ * `wpn`/`dmg` and drinks `drain`%. A monster at or below `below` of its life (+5% per extra rank) is eaten whole (Devour,
+ * healing `heal`% of max life) or, with `chance` (+10% per extra rank), turned into a thrall (Bite).
+ */
+export interface FangDef { range: number; wpn?: number; dmg?: number; drain?: number; below: number; heal?: number; chance?: number }
+export const FANG_BELOW_PER_RANK = 0.05, FANG_CHANCE_PER_RANK = 0.1;
 
 /** Right-click aiming: on the hero itself, at the clicked spot, or toward the click. */
 export type SkillTarget = "self" | "point" | "dir";
@@ -549,6 +561,13 @@ const S: Record<ClassKind, SkillDef[]> = <Record<ClassKind, SkillDef[]>><unknown
     { id: "v_frenzy", name: "Blood Frenzy", type: "Ultimate", branch: 2, row: 4, style: "blood", windMs: 80, cd: 18000, cost: 40,
       desc: "Lose yourself to the hunger: four blood-red slashes all around you, then 4.5s of frenzy: faster hits that heal you, and nothing stops you.",
       areas: [{ r: 40, wpn: 0.6, drain: 10, kb: 0.3, waves: 4, everyMs: 140, look: "slash" }], buff: { ms: 4500, atkspd: 20, lifesteal: 6, immune: true } },
+    // Murat 2026-11-07: eat monsters to take on what they are, bite them to make thralls. Both need flesh.
+    { id: "v_devour", name: "Devour", type: "Attack", branch: 2, row: 1, style: "blood", cd: 6000, cost: 20, target: "dir",
+      desc: "Tear into the foe with flesh nearest your aim. A monster below 30% life is eaten whole: it dies, you heal 8% of your life and keep a little of what it was, more for every one of its kind you eat (blobs: life, elemental blobs: skill damage, bandits: damage, beast-folk: speed). Skeletons and golems have nothing to eat.",
+      devour: { range: 44, wpn: 1.6, drain: 20, below: 0.3, heal: 8 } },
+    { id: "v_bite", name: "Bite", type: "Summon", branch: 2, row: 2, style: "blood", cd: 9000, mana: 15, target: "dir",
+      desc: "Sink your fangs into the foe with flesh nearest your aim and drink. A monster below 40% life may fall and rise as your thrall for 3 minutes (40% chance, more with ranks). You keep up to 2 thralls (3 from rank 2); a new one sends the oldest away. Skeletons and golems have no blood to take.",
+      bite: { range: 44, wpn: 1.2, drain: 30, below: 0.4, chance: 0.4 } },
   ],
 
   // ---------------------------------------------------------------- SUMMONER
@@ -674,6 +693,8 @@ const TREE: Record<string, Shape> = {
   // Vampire · Fang: Thirst leads to the Hunger (dead end); the slash grows into the Pounce and the Frenzy
   v_rend: [1, undefined, ["str", 2]], v_thirst: [3, "v_rend"], v_hunger: [8, "v_thirst"], v_pounce: [9, "v_rend", ["str", 2]],
   v_frenzy: [20, "v_pounce", ["str", 2.5]],
+  // Devour off the slash, Bite after it (Murat 2026-11-07)
+  v_devour: [4, "v_rend", ["str", 2]], v_bite: [7, "v_devour", ["mag", 2]],
 };
 /**
  * Skills that need the right weapon in hand (Murat 2026-11-04): bow skills need a bow, blade work needs a melee

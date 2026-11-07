@@ -3,7 +3,7 @@ import { ArraySchema, MapSchema, Schema, type } from "@colyseus/schema";
 import {
   AGGRO, aggroLevelFactor, BLOB_AI, BONES, DEMON, BROOD, Dir, FACTION, FEUD, MERGE, MobDef, MOTHER, SKELETON_AI, HIT_RADIUS, mobScale, regionMobLevel, regionSpecialLevel, InputState, MOB_ATTACK_RANGE, MOBS, MobKind, rollSkeletonWeapon, SKELETON_BOW, SKELETON_WEAPONS, SkeletonWeapon, REGEN_DELAY_MS, REGEN_RAMP_MS, regenFromStamina, SAFE_REGEN_MULT,
   RESPAWN_MS, TICK_RATE, TILE,
-  HOLLOW_KING, ELEM_BLOB, ELEM_MOVE, inputDir, ELITE, BEAST, BEAST_BROOD, BEAST_FOLK, BEAST_KINDS, BEAST_MOVES, BEAST_RIDER, type BeastMove,
+  HOLLOW_KING, ELEM_BLOB, ELEM_MOVE, inputDir, ELITE, BOSS, BEAST, BEAST_BROOD, BEAST_FOLK, BEAST_KINDS, BEAST_MOVES, BEAST_RIDER, type BeastMove,
   MAP_W, MAP_H,
 } from "../shared/constants";
 import { arrivalAt, LINK_RANGE, linkById, LINKS } from "../shared/dungeon";
@@ -21,7 +21,7 @@ import { gearResist, splitHit } from "../shared/gear";
 import { cleanFilter, LootFilter, passesFilter } from "../shared/heroSheet";
 import { activeSkills, canLearn, classSkills, cleanRanks, levelPower, REPLACED_SKILLS, MAX_RANK, NEED_TEXT, rankOf, rankPower, scalePower, skillById, skillLearned, skillOf, talentBonus, talentMult, talentReduce } from "../shared/skills";
 import {
-  afterHit, atkSpeedMult, blocking, bloodCost, buffLifesteal, buffRegen, castSkill, ccImmune, charging, winding, counterHit, dealtMult, FieldInst, newRuntime,
+  afterHit, atkSpeedMult, blocking, bloodCost, buffLifesteal, buffRegen, castSkill, ccImmune, fangTarget, charging, winding, counterHit, dealtMult, FieldInst, newRuntime,
   imbueOf, shotEnd, shotHit, shotPulse, ShotSpec, SkillHost, speedMult, statusOf, takenMult, tickField, tickUnit, Unit,
 } from "../shared/skillEngine";
 import {
@@ -64,6 +64,7 @@ import { dropLive, LiveState, rememberLive, takeLive } from "./handoff";
 import { MobView } from "./mobView";
 import { repairCost, respecCost, WEAR, wearMult } from "../shared/upkeep";
 import { attuneOf, bondShare, GOLEM_OF, isSummonKind, SUMMON, summonElement, summonScaleLevel, type SummonKind } from "../shared/summons";
+import { cleanFeast, familyOf, type Feast, feastMult, THRALL, thrallMax } from "../shared/devour";
 import { ASK_BURST, ASK_PER_SEC, Bucket, CHAT_BURST, CHAT_PER_SEC, clientIp, isLocalIp, MSG_BURST, MSG_KICK_AFTER, MSG_KICK_WINDOW_MS, MSG_PER_SEC } from "./ratelimit";
 
 export class Player extends Schema {
@@ -159,6 +160,7 @@ export class Player extends Schema {
   @type("number") wear = 0; // gear wear 0-100 (shared/upkeep.ts): each death adds some, the smith repairs it for gold
   linkLock = ""; // the Mawdeep rope/stair a hero just came out of (shared/dungeon.ts LINKS): not taken again until they step off it
   nextSummon = 0; // when the server may bring back this player's quest fused blob (QuestStep.summon)
+  feast: Feast = {}; // Devour (shared/devour.ts): monsters eaten per family, saved; sent to the owner as "feast"
   // Skill slots on keys 1..0 (shared/slots.ts): a skill id or "" (empty). Empty until the player assigns them.
   @type(["string"]) slots = new ArraySchema<string>(...Array(SLOT_COUNT).fill(""));
 
@@ -204,6 +206,7 @@ export class Mob extends Schema {
   @type("string") parts = ""; // kinds of the blobs swallowed, comma-separated: the client paints their colours, eyes and mouths on it
   summonFor = ""; // quest monster (QuestStep.summon): session id of the player it was spawned for
   summonAt = 0; nextPick = 0; // when it was called (the oldest goes first past SUMMON.max), next target choice
+  thrall = false; // Bite (shared/devour.ts): a monster turned into a vampire's thrall (a summon that keeps its own kind)
   sPower = 1; // a summon's damage multiplier (skill rank, the owner's Ruin talent, the golems fused into a Colossus)
   summonChain = 0; // ...and the quest chain of that step
   @type("string") title = ""; // quest boss name shown over it instead of "Elite" (QuestStep.summon.title)
@@ -825,6 +828,7 @@ export class TownRoom extends Room<TownState> {
     this.state.players.set(client.sessionId, p);
     if (back?.group.length) this.regroupOnJoin(client.sessionId, p, back.group);
     this.sendBoard(client); // the Ideas board is ready as soon as it is opened
+    if (Object.keys(p.feast).length) client.send("feast", { feast: p.feast }); // Devour: what this hero has eaten
     console.log(`${p.name} the ${CLASSES[p.cls].name} joined (${this.clients.length} online)`);
   }
 
@@ -915,7 +919,7 @@ export class TownRoom extends Room<TownState> {
         return [[a, q.questId], [b, q.questStage], [n, q.questCount], [ch.verKey, ch.version]];
       })),
       portals: [...p.portals],
-      bounty: p.bounty, bountyDone: p.bountyDone, wear: p.wear,
+      bounty: p.bounty, bountyDone: p.bountyDone, wear: p.wear, feast: { ...p.feast },
     };
   }
 
@@ -945,6 +949,7 @@ export class TownRoom extends Room<TownState> {
     p.bountyDone = Math.max(0, Math.floor(num(s.bountyDone)));
     p.wear = Math.min(WEAR.max, Math.max(0, Math.round(num(s.wear))));
     p.bounty = cleanBounty(s.bounty);
+    p.feast = cleanFeast(s.feast);
     const sv = s as unknown as Record<string, unknown>;
     // Saves from before the guided first quest count it as done
     if (sv.tutVer === undefined) sv.tutId = TUT_QUESTS.length;
@@ -1552,6 +1557,68 @@ export class TownRoom extends Room<TownState> {
     return this.summon(ownerId, "golem_colossus", undefined, power, fused.length);
   }
 
+  // ---- Devour and Bite (shared/devour.ts) ---------------------------------------
+
+  /** Can the vampire eat / turn this monster? Not heroes, summons and thralls, elites and bosses, quest monsters, the fleshless. */
+  private fangable(tid: string): Mob | undefined {
+    const m = this.state.mobs.get(tid);
+    if (!m || m.dead || m.owner || m.summonFor || m.servant || ELITE[m.kind] || BOSS[m.kind] || !familyOf(m.kind)) return undefined;
+    return m;
+  }
+
+  /** The blow that finishes a weak monster for Devour / Bite: an ordinary kill (XP, loot, quests), shown with the skill's damage. */
+  private fangKill(id: string, tid: string, m: Mob, dmg: number): boolean {
+    const p = this.state.players.get(id);
+    if (!p) return false;
+    m.hp = 1;
+    const d = Math.hypot(m.x - p.x, m.y - p.y) || 1;
+    this.hitTarget(id, tid, dmg, [(m.x - p.x) / d, (m.y - p.y) / d], { skill: true, kb: 0 });
+    return m.dead;
+  }
+
+  /** Devour: the weak monster is eaten whole. The vampire heals and keeps one more meal of its family (FEAST). */
+  private devour(id: string, tid: string, dmg: number, heal: number): boolean {
+    const p = this.state.players.get(id), m = this.fangable(tid);
+    const fam = m && familyOf(m.kind);
+    if (!p || !m || !fam) return false;
+    const x = Math.round(m.x), y = Math.round(m.y);
+    if (!this.fangKill(id, tid, m, dmg)) return false;
+    p.feast = { ...p.feast, [fam]: (p.feast[fam] ?? 0) + 1 };
+    p.feast = cleanFeast(p.feast); // capped at FEAST_MAX
+    this.host.heal(id, p.maxHp * heal / 100);
+    this.applyStats(p); // blobs give life
+    this.broadcast("sfx", { ev: "devour", id, t: tid, x, y, fam });
+    this.sendFeast(id, p, fam);
+    return true;
+  }
+
+  /** Tells a hero what they have eaten so far (their character sheet shows it). `fam`: the family just eaten. */
+  private sendFeast(id: string, p: Player, fam?: string) {
+    this.clients.find((c) => c.sessionId === id)?.send("feast", { feast: p.feast, fam });
+  }
+
+  /** Bite: the weak monster falls and rises as the vampire's thrall, as the monster it was. Past the cap the oldest goes. */
+  private makeThrall(id: string, tid: string, dmg: number, power: number, rank: number): boolean {
+    const p = this.state.players.get(id), m = this.fangable(tid);
+    if (!p || !m) return false;
+    const kind = m.kind, level = m.level, weapon = m.weapon, x = m.x, y = m.y;
+    if (!this.fangKill(id, tid, m, dmg)) return false;
+    const mine = [...this.summons].filter(([, t]) => t.owner === id && t.thrall).sort((a, b) => a[1].summonAt - b[1].summonAt);
+    while (mine.length >= thrallMax(rank)) { const [oid] = mine.shift()!; this.dismiss(oid); }
+    const t = new Mob(), now = Date.now();
+    t.kind = kind; t.zone = -1; t.owner = id; t.thrall = true; t.summonAt = now; t.weapon = weapon;
+    t.level = capLevel(Math.min(level, p.level));
+    t.hp = t.maxHp = Math.round(MOBS[kind].maxHp * mobScale(t.level, "hp"));
+    t.sPower = THRALL.dmg * power;
+    t.x = t.homeX = x; t.y = t.homeY = y;
+    t.banishAt = now + THRALL.lifeMs; t.stunUntil = now + 700; // getting back up
+    const sid = `t${++this.summonSeq}`;
+    this.state.mobs.set(sid, t);
+    this.summons.set(sid, t);
+    this.broadcast("sfx", { ev: "thrall", id, t: sid, x: Math.round(x), y: Math.round(y) });
+    return true;
+  }
+
   /** Sends a summon back (its time is up, its owner left or died, or it was replaced). */
   private dismiss(id: string, show = true) {
     const m = this.summons.get(id);
@@ -1675,7 +1742,7 @@ export class TownRoom extends Room<TownState> {
   /** A summon's blow: dealt in its owner's name (they get the kill), part of it in the golem's element; a monster turns on the golem. */
   private summonStrike(m: Mob, id: string, tid: string, t: { x: number; y: number }, def: MobDef) {
     const dmg = def.damage * mobScale(summonScaleLevel(m.level), "damage") * m.sPower;
-    const el = summonElement(m.kind, m.weapon);
+    const el = summonElement(m.kind, m.weapon), share = m.thrall ? 0 : SUMMON.elementShare; // a thrall hits as the monster it was
     this.broadcast("swing", { id });
     // The Colossus slams the ground: everyone of the owner's foes close to its target is hit
     const targets = m.kind === "golem_colossus" ? this.summonFoesAround(m, t.x, t.y, SUMMON.colossusSlam) : [tid];
@@ -1684,7 +1751,7 @@ export class TownRoom extends Room<TownState> {
       const f = this.state.players.get(fid) ?? this.state.mobs.get(fid);
       if (!f) continue;
       const d = Math.hypot(f.x - m.x, f.y - m.y) || 1, push: [number, number] = [(f.x - m.x) / d, (f.y - m.y) / d];
-      this.hitTarget(m.owner, fid, dmg * (1 - SUMMON.elementShare), push, { kb: 0.6, parts: [{ el, amt: dmg * SUMMON.elementShare }] });
+      this.hitTarget(m.owner, fid, dmg * (1 - share), push, { kb: 0.6, parts: share ? [{ el, amt: dmg * share }] : undefined });
       const victim = this.state.mobs.get(fid);
       if (victim && !victim.dead && !victim.owner) { this.addHate(victim, id, dmg); victim.foe = id; victim.target = ""; } // the golem tanks
     }
@@ -2106,7 +2173,7 @@ export class TownRoom extends Room<TownState> {
       if (p.fx !== fx) p.fx = fx;
       const timers = timersOf(p, now), sig = timerSig(timers);
       if (sig !== p.timerSig) { p.timerSig = sig; p.timers = encodeTimers(++p.timerSeq, timers, now); }
-      const spd = Math.round(speedMult(p, now) * talentMult(p.cls, p.talents, "speed") * 1000) / 1000;
+      const spd = Math.round(speedMult(p, now) * talentMult(p.cls, p.talents, "speed") * feastMult(p.feast, "speed") * 1000) / 1000;
       if (p.spd !== spd) p.spd = spd;
       tickPoise(p, heroPoiseMax(p), dt, now);
       if (p.dead) { p.moving = false; p.energy = ENERGY.max; p.mana = p.maxMana; this.syncMana(p); return; }
@@ -3495,6 +3562,13 @@ export class TownRoom extends Room<TownState> {
       if (now - p.lastWeaponNo > 1000) { p.lastWeaponNo = now; this.clients.find((c) => c.sessionId === id)?.send("gearno", { text: `Too little blood left for ${def.name}` }); }
       return;
     }
+    const fang = def && skillLearned(p.cls, p.talents, skill) ? def.devour ?? def.bite : undefined;
+    if (fang && !fangTarget(this.host, id, fang.range)) {
+      // Devour / Bite with nothing that has flesh in reach (skeletons and golems have none)
+      const now = Date.now();
+      if (now - p.lastWeaponNo > 1000) { p.lastWeaponNo = now; this.clients.find((c) => c.sessionId === id)?.send("gearno", { text: def!.devour ? "Nothing to eat here" : "Nothing to bite here" }); }
+      return;
+    }
     if (castSkill(this.host, id, skill)) {
       p.emote = "";
       this.questDo(id, "cast");
@@ -3772,7 +3846,7 @@ export class TownRoom extends Room<TownState> {
       opts = { ...opts, parts: undefined };
       if (riders.length) this.elementRiders(attackerId, targetId, riders);
     }
-    if (a) dmg = dmg * talentMult(a.cls, a.talents, "dmg") * (opts.skill && !opts.dot ? talentMult(a.cls, a.talents, "skill") : 1) * dealtMult(a, Date.now());
+    if (a) dmg = dmg * talentMult(a.cls, a.talents, "dmg") * feastMult(a.feast, "dmg") * (opts.skill && !opts.dot ? talentMult(a.cls, a.talents, "skill") * feastMult(a.feast, "skill") : 1) * dealtMult(a, Date.now());
     dmg = Math.max(1, Math.round(dmg));
     opts = { ...opts, from: attackerId };
     const name = a?.name ?? "???";
@@ -4506,7 +4580,7 @@ export class TownRoom extends Room<TownState> {
     const g = gearStats(p.cls, this.equipped(p)), wm = wearMult(p.wear); // worn gear gives less (shared/upkeep.ts)
     st.sta += Math.round(g.sta * wm); st.str += Math.round(g.str * wm); st.mag += Math.round(g.mag * wm); st.dex += Math.round(g.dex * wm);
     p.sta = st.sta; p.str = st.str; p.mag = st.mag; p.dex = st.dex;
-    const newMax = Math.round(maxHpFromStats(p.cls, st, p.level) * talentMult(p.cls, p.talents, "hp"));
+    const newMax = Math.round(maxHpFromStats(p.cls, st, p.level) * talentMult(p.cls, p.talents, "hp") * feastMult(p.feast, "hp"));
     p.hp = Math.min(newMax, p.hp + Math.max(0, newMax - p.maxHp));
     p.maxHp = newMax;
     const newMana = maxManaFor(st, p.level);
@@ -4728,6 +4802,13 @@ export class TownRoom extends Room<TownState> {
       if (p) this.summon(id, GOLEM_OF[attuneOf(p.attune)], undefined, power);
     },
     colossus: (id, power, ms) => { this.summonColossus(id, power, ms); },
+    flesh: (id) => {
+      if (this.state.players.has(id)) return true;
+      const m = this.state.mobs.get(id);
+      return !!m && !!familyOf(m.kind);
+    },
+    devour: (id, tid, dmg, heal) => this.devour(id, tid, dmg, heal),
+    thrall: (id, tid, dmg, power, rank) => this.makeThrall(id, tid, dmg, power, rank),
     isNight: (id) => {
       const u = this.state.players.get(id) ?? this.state.mobs.get(id);
       if (!u) return false;

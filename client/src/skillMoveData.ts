@@ -129,6 +129,14 @@ export const MOVES: Record<string, Seq> = {
     act: [S("lunge", [2], 50, { ghost: 12, lift: [0, 4] }), S("lunge", [3], 50, { ghost: 12, lift: [4, 0], dust: 8 }), S("lunge", [4, 5], 180)],
     rec: [S("lunge", [6, 7], 150)],
   },
+  v_devour: { // lunge at the prey and tear into it, then hunch over the meal
+    act: [S("lunge", [2], 50, { ghost: 12 }), S("lunge", [3, 4], 170, { dust: 6 })],
+    rec: [S("lunge", [6, 7], 150)],
+  },
+  v_bite: { // a quick lunge, fangs in, and hold to drink
+    act: [S("lunge", [2], 50, { ghost: 10 }), S("lunge", [4, 5], 200)],
+    rec: [S("lunge", [6, 7], 140)],
+  },
   v_frenzy: { // four turns, one per slash wave, blade out
     wind: [S("whirl", [0], 80, { fill: true })],
     act: [S("whirl", [2], 560, { spin: 4, ghost: 22, dust: 10 })],

@@ -1,7 +1,7 @@
 import { ClassKind } from "./classes";
 import { impactMs, nightBuff, passiveBlood, talentBonus, LEAP_MS, pointRange, skillTarget,
   AreaDef, BuffDef, FieldDef, HitEffects, levelPower, MARK_TAKEN, MAX_STACKS, MoveDef, rankOf, rankPower, rankTime, Ranks, scalePower, synergyPower, withMods,
-  ShotDef, SkillDef, skillOf, STACK_DECAY_MS, STACK_POWER, WEAK_DEALT,
+  ShotDef, SkillDef, skillOf, STACK_DECAY_MS, STACK_POWER, WEAK_DEALT, FANG_BELOW_PER_RANK, FANG_CHANCE_PER_RANK,
 } from "./skills";
 import { Stats, STATS } from "./powers";
 import { pay, skillCost } from "./mana";
@@ -104,6 +104,12 @@ export interface SkillHost {
   attune?(id: string): void;
   /** Is it night where this unit stands (the world clock, or inside a Nightfall)? Night passives need it. */
   isNight?(id: string): boolean;
+  /** Has this unit flesh to eat or bite (not skeletons, the undead or golems)? Missing = everyone has. */
+  flesh?(id: string): boolean;
+  /** Devour: eat monster `target` whole with a blow of `dmg` (it dies). False when it can't be eaten (a hero, an elite...). */
+  devour?(id: string, target: string, dmg: number, heal: number): boolean;
+  /** Bite: monster `target` falls and rises as the hero's thrall. False when it can't be turned. */
+  thrall?(id: string, target: string, dmg: number, power: number, rank: number): boolean;
 }
 
 const live = (h: SkillHost, id: string) => { const u = h.unit(id); return u && !u.dead ? u : undefined; };
@@ -157,6 +163,8 @@ export function castSkill(h: SkillHost, id: string, skillId: string): boolean {
   if (!s || s.passive || rank <= 0 || now < u.sk.chargeUntil || now < (u.sk.windUntil ?? 0)) return false;
   if (cooldownLeft(s, u.sk, now, h.cooldownMult(id)) > 0) return false;
   if (s.field?.link && !linkTarget(h, id, s.field.link.range)) return false; // Blood Link: nobody in reach to bind
+  const fang = s.devour ?? s.bite;
+  if (fang && !fangTarget(h, id, fang.range)) return false; // Devour / Bite: nothing with flesh in reach
   // Cantrips take the place of a basic attack (balance pass 2026-11-04): they wait for it and hold the next one back
   if (s.cantrip && now < (u.attackReadyAt ?? 0)) return false;
   const blood = bloodCost(s, u);
@@ -214,6 +222,41 @@ export function linkTarget(h: SkillHost, id: string, range: number): string | un
   return best;
 }
 
+/** Devour / Bite: the foe with flesh (shared/devour.ts) within `range`, the one nearest the spot half that far along the aim. */
+export function fangTarget(h: SkillHost, id: string, range: number): string | undefined {
+  const u = live(h, id);
+  if (!u) return undefined;
+  const [ax, ay] = h.aim(id);
+  const px = u.x + ax * range * 0.5, py = u.y + ay * range * 0.5;
+  let best: string | undefined, bd = Infinity;
+  for (const e of h.enemies(u.x, u.y, range, id)) {
+    if (h.flesh && !h.flesh(e)) continue;
+    const t = h.unit(e)!;
+    const d = Math.hypot(t.x - px, t.y - py);
+    if (d < bd) { bd = d; best = e; }
+  }
+  return best;
+}
+
+/** Is `t` weak enough to be eaten / turned: at or below `below` of its life (+5% per rank above 1)? */
+export const fangWeak = (t: Unit, below: number, rank: number) =>
+  !!t.maxHp && (t.hp ?? 0) <= t.maxHp * (below + FANG_BELOW_PER_RANK * Math.max(0, rank - 1));
+
+/** Devour / Bite goes off: the vampire lunges at the foe and bites; a weak monster is eaten or turned. */
+function fangStrike(h: SkillHost, id: string, s: SkillDef, rank: number, power: number, imb?: Imbue) {
+  const f = (s.devour ?? s.bite)!;
+  const u = live(h, id), tid = fangTarget(h, id, f.range);
+  const t = tid ? h.unit(tid) : undefined;
+  if (!u || !tid || !t) return;
+  h.face(id, t.x - u.x, t.y - u.y);
+  const dmg = baseDmg(h, id, f) * power;
+  h.fx({ ev: "fang", id, s: s.id, t: tid, x: t.x, y: t.y });
+  const weak = fangWeak(t, f.below, rank);
+  if (s.devour && weak && h.devour?.(id, tid, dmg, f.heal ?? 0)) return;
+  if (s.bite && weak && Math.random() < (f.chance ?? 0) + FANG_CHANCE_PER_RANK * (rank - 1) && h.thrall?.(id, tid, dmg, power, rank)) return;
+  h.hit(id, tid, dmg, pushFrom(h, u.x, u.y, tid), { skill: true, drain: f.drain, kb: 0.4, imb });
+}
+
 /** `at`: distance to the clicked spot for a point skill (leap/blink length, centre of the blast or field). */
 function release(h: SkillHost, id: string, s: SkillDef, rank: number, power: number, stacks: number, at?: number) {
   const u = live(h, id);
@@ -236,6 +279,7 @@ function release(h: SkillHost, id: string, s: SkillDef, rank: number, power: num
     area(h, id, s, def, power, t, spot, false, imb);
   }
   if (s.shots) fire(h, id, s.id, s.shots, rank, power, u.x, u.y, h.aim(id), imb);
+  if (s.devour || s.bite) fangStrike(h, id, s, rank, power, imb);
   if (s.field) {
     const [ax, ay] = h.aim(id), d = at ?? s.field.ahead ?? 0;
     const target = s.field.link ? linkTarget(h, id, s.field.link.range) : undefined;

@@ -3,6 +3,11 @@ import { Equipped, GEAR_SLOTS } from "../../shared/gear";
 import { heroSheet, Sheet, SheetHero, SHEET_ROWS } from "../../shared/heroSheet";
 import { fillIcons } from "./pixelicons";
 import { ELEMENTS, ELEMENT_NAMES, type Element } from "../../shared/elements";
+import { Feast, feastLines } from "../../shared/devour";
+
+/** What my hero has eaten with Devour (the server sends it as "feast"). */
+let myFeast: Feast = {};
+export const setMyFeast = (f: Feast) => { myFeast = f ?? {}; };
 
 /**
  * Side panel (right side of the screen) holding the Character (C), Inventory (G) and Skills (T) screens as tabs.
@@ -20,7 +25,7 @@ export function sheetHero(state: any): SheetHero {
   return {
     cls: state.cls as ClassKind, level: state.level ?? 1,
     pts: { sta: state.ptSta ?? 0, str: state.ptStr ?? 0, mag: state.ptMag ?? 0, dex: state.ptDex ?? 0 },
-    talents: talentsOf(state),
+    talents: talentsOf(state), feast: myFeast,
   };
 }
 export function talentsOf(state: any): Record<string, number> {
@@ -95,11 +100,13 @@ export class SidePanel {
     const rs = (e: Element) => row(ELEMENT_NAMES[e], now.res[e] ?? 0, (next ?? now).res[e] ?? 0, true);
     const sec = (title: string, body: string) => `<div class="spsec"><h4>${title}</h4>${body}</div>`;
     void SHEET_ROWS;
+    const fed = feastLines(myFeast); // Devour: what the hero has eaten
     this.sheetEl.innerHTML =
       sec("Offense", sheetRow("atk", "Attack") + sheetRow("dps", "Damage / s") + sheetRow("spell", "Spell damage", true) + sheetRow("crit", "Critical chance", true)) +
       sec("Defense", sheetRow("hp", "Health") + sheetRow("mana", "Mana") + sheetRow("def", "Damage blocked", true) + sheetRow("speed", "Move speed")) +
       sec("Attributes", st("str", "Strength") + st("sta", "Stamina") + st("mag", "Magic") + st("dex", "Dexterity")) +
       sec("Resistances", ELEMENTS.map(rs).join("")) +
+      (fed.length ? sec("Devoured", fed.map((l) => `<div class="sprow"><span>${l}</span></div>`).join("")) : "") +
       `<div class="spnote">${p ? `If you ${p.label}` : "Hover an item or a skill to see what it changes"}</div>`;
   }
 }
