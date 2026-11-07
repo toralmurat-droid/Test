@@ -77,7 +77,7 @@ export interface ShotDef extends HitEffects {
   /** Each rank above 1 adds this many projectiles (`n`, the fan widening with them) and/or extra targets passed through. */
   perRank?: { n?: number; pierce?: number };
   /** A ragged swarm, not a neat fan (Rat Plague): each shot's speed varies by up to ±`speed` (share) and its angle by ±`deg`. */
-  jitter?: { speed: number; deg: number };
+  jitter?: { speed: number; deg: number; range?: number };
   kind: string; // projectile look (client)
   n?: number; spread?: number; // n shots fanned over `spread` degrees
   lanes?: number; // or n shots side by side, this many px apart
@@ -568,7 +568,7 @@ const S: Record<ClassKind, SkillDef[]> = <Record<ClassKind, SkillDef[]>><unknown
       move: { kind: "blink", dist: 110, invulnMs: 450 }, areas: [{ r: 24, dmg: 10, slowMs: 900, atStart: true, look: "smoke" }] },
     { id: "v_bats", name: "Bat Swarm", type: "Attack", branch: 1, row: 1, style: "shadow", cd: 4000, mana: 14,
       desc: "A swarm of bats pours out of your cloak and spreads ahead, biting whatever it reaches and bringing a little blood back to you: 6 bats, 2 more each rank. More bats stay behind and whirl round you for 3s as a living shield: they bite anyone close and you take 10% less damage.",
-      shots: { kind: "bat", n: 6, perRank: { n: 2 }, spread: 26, speed: 170, range: 120, radius: 3, dmg: 10, drain: 10, kb: 0.1 },
+      shots: { kind: "bat", n: 6, perRank: { n: 2 }, spread: 26, jitter: { speed: 0.35, deg: 9, range: 0.25 }, speed: 170, range: 120, radius: 3, dmg: 10, drain: 10, kb: 0.1 },
       field: { kind: "batring", r: 26, ms: 3000, tickMs: 500, follow: true, dmg: 7, drain: 20 }, buff: { ms: 3000, armor: 10 } },
     { id: "v_gaze", name: "Charm", type: "Attack", branch: 1, row: 2, style: "shadow", cd: 16000, mana: 18, target: "dir",
       desc: "Catch the eye of the foe nearest your aim. A monster falls under your spell and fights at your side for 5s, then wakes up. Heroes, bosses and elites are too strong-willed: they falter instead, dazed and weakened for 2s.",

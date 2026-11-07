@@ -1,0 +1,8 @@
+{
+  "date": "2026-11-07",
+  "pr": 325,
+  "title": "Bats fly wild",
+  "changes": [
+    "Bat Swarm no longer fans out in a neat line: each bat leaves at its own moment, flies at its own speed and reach, swoops and darts on its own path."
+  ]
+}
