@@ -1,5 +1,5 @@
 import { ClassKind } from "./classes";
-import { impactMs, LEAP_MS, pointRange, skillTarget,
+import { impactMs, passiveBlood, LEAP_MS, pointRange, skillTarget,
   AreaDef, BuffDef, FieldDef, HitEffects, levelPower, MARK_TAKEN, MAX_STACKS, MoveDef, rankOf, rankPower, rankTime, Ranks, scalePower, synergyPower,
   ShotDef, SkillDef, skillOf, STACK_DECAY_MS, STACK_POWER, WEAK_DEALT,
 } from "./skills";
@@ -32,10 +32,14 @@ export interface SkillRuntime {
   stacks: number; stackAt: number;
   burnUntil: number; burnDps: number; burnBy: string; burnNext: number;
   markUntil: number; weakUntil: number;
+  /** How the running burn looks: "" flames, "drip" blood dripping (bleed), "boil" bubbling blood (Boil Blood). */
+  bleed: "" | "drip" | "boil";
+  /** Vampire Leech: until then, hits by `leechBy` on this unit also give them a Blood stack. */
+  leechUntil: number; leechBy: string;
 }
 export const newRuntime = (): SkillRuntime => ({
   last: {}, buffs: [], chargeUntil: 0, windUntil: 0, stacks: 0, stackAt: 0,
-  burnUntil: 0, burnDps: 0, burnBy: "", burnNext: 0, markUntil: 0, weakUntil: 0,
+  burnUntil: 0, burnDps: 0, burnBy: "", burnNext: 0, markUntil: 0, weakUntil: 0, bleed: "", leechUntil: 0, leechBy: "",
 });
 
 export interface Unit { x: number; y: number; dead: boolean; level: number; sk: SkillRuntime; cls?: ClassKind; talents?: Ranks; energy?: number; mana?: number; hp?: number; maxHp?: number;
@@ -62,6 +66,7 @@ export interface FieldInst {
   owner: string; skill: string; def: FieldDef; rank: number; power: number;
   x: number; y: number; until: number; nextTick: number;
   imb?: Imbue; // enchantment active when it was cast (traps, sentries)
+  target?: string; // Blood Link: the enemy on the other end of the cord
 }
 
 export interface SkillHost {
@@ -108,7 +113,7 @@ const pushFrom = (h: SkillHost, x: number, y: number, tid: string): [number, num
 const effects = (e: HitEffects, t: number): HitEffects => ({
   stunMs: e.stunMs && e.stunMs * t, slowMs: e.slowMs && e.slowMs * t, kb: e.kb,
   burn: e.burn && [e.burn[0], e.burn[1] * t], markMs: e.markMs && e.markMs * t, weakMs: e.weakMs && e.weakMs * t, fearMs: e.fearMs && e.fearMs * t,
-  drain: e.drain,
+  drain: e.drain, leechMs: e.leechMs && e.leechMs * t, bleed: e.bleed,
 });
 
 /**
@@ -148,6 +153,7 @@ export function castSkill(h: SkillHost, id: string, skillId: string): boolean {
   const now = h.now();
   if (!s || s.passive || rank <= 0 || now < u.sk.chargeUntil || now < (u.sk.windUntil ?? 0)) return false;
   if (cooldownLeft(s, u.sk, now, h.cooldownMult(id)) > 0) return false;
+  if (s.field?.link && !linkTarget(h, id, s.field.link.range)) return false; // Blood Link: nobody in reach to bind
   // Cantrips take the place of a basic attack (balance pass 2026-11-04): they wait for it and hold the next one back
   if (s.cantrip && now < (u.attackReadyAt ?? 0)) return false;
   const blood = bloodCost(s, u);
@@ -180,8 +186,30 @@ export function castSkill(h: SkillHost, id: string, skillId: string): boolean {
   return true;
 }
 
-/** HP a blood-magic skill (SkillDef.blood) costs this unit. */
-export const bloodCost = (s: SkillDef, u: Unit | undefined) => (s.blood && u?.maxHp ? Math.round(u.maxHp * s.blood / 100) : 0);
+/**
+ * HP a skill costs this unit: its own blood magic (SkillDef.blood) plus what learned passives add to every skill
+ * (Blood Pact, passive.blood; not the basic spell).
+ */
+export const bloodCost = (s: SkillDef, u: Unit | undefined) => {
+  if (!u?.maxHp) return 0;
+  const pct = (s.blood ?? 0) + (s.cantrip || !u.cls ? 0 : passiveBlood(u.cls, u.talents));
+  return pct > 0 ? Math.round(u.maxHp * pct / 100) : 0;
+};
+
+/** The enemy a Blood Link binds: within `range`, the one nearest the spot half that far along the aim. */
+export function linkTarget(h: SkillHost, id: string, range: number): string | undefined {
+  const u = live(h, id);
+  if (!u) return undefined;
+  const [ax, ay] = h.aim(id);
+  const px = u.x + ax * range * 0.5, py = u.y + ay * range * 0.5;
+  let best: string | undefined, bd = Infinity;
+  for (const e of h.enemies(u.x, u.y, range, id)) {
+    const t = h.unit(e)!;
+    const d = Math.hypot(t.x - px, t.y - py);
+    if (d < bd) { bd = d; best = e; }
+  }
+  return best;
+}
 
 /** `at`: distance to the clicked spot for a point skill (leap/blink length, centre of the blast or field). */
 function release(h: SkillHost, id: string, s: SkillDef, rank: number, power: number, stacks: number, at?: number) {
@@ -207,7 +235,9 @@ function release(h: SkillHost, id: string, s: SkillDef, rank: number, power: num
   if (s.shots) fire(h, id, s.id, s.shots, rank, power, u.x, u.y, h.aim(id), imb);
   if (s.field) {
     const [ax, ay] = h.aim(id), d = at ?? s.field.ahead ?? 0;
-    h.addField({ owner: id, skill: s.id, def: s.field, rank, power, x: u.x + ax * d, y: u.y + ay * d, until: h.now() + s.field.ms * t, nextTick: h.now(), imb });
+    const target = s.field.link ? linkTarget(h, id, s.field.link.range) : undefined;
+    if (target) { const tu = h.unit(target)!; h.face(id, tu.x - u.x, tu.y - u.y); }
+    if (!s.field.link || target) h.addField({ owner: id, skill: s.id, def: s.field, rank, power, x: u.x + ax * d, y: u.y + ay * d, until: h.now() + s.field.ms * t, nextTick: h.now(), imb, target });
   }
   if (s.buff) addBuff(h, id, s.id, s.buff, rank, stacks);
   if (s.cry) {
@@ -318,7 +348,10 @@ export function area(h: SkillHost, id: string, s: SkillDef | { id: string }, a: 
       if (!cry) h.fx({ ev: "area", id, s: s.id, x: cx, y: cy, r: a.r, look: a.look ?? "burst", i, n: waves, imb: imb?.style });
       const strike = () => {
         if (!h.unit(id)) return;
-        for (const e of h.enemies(cx, cy, a.r, id)) {
+        const hit = h.enemies(cx, cy, a.r, id);
+        // Exsanguinate: a stream of blood from every victim into the caster
+        if (a.siphon && hit.length) h.fx({ ev: "siphon", id, s: s.id, pts: hit.map((e) => { const tu = h.unit(e)!; return [Math.round(tu.x), Math.round(tu.y)]; }) });
+        for (const e of hit) {
           if (a.pull) {
             const tu = h.unit(e);
             if (tu) { const [px, py] = norm(cx - tu.x, cy - tu.y); h.move(e, px, py, Math.min(a.pull, Math.hypot(cx - tu.x, cy - tu.y))); }
@@ -359,7 +392,8 @@ function fire(h: SkillHost, id: string, skill: string, d: ShotDef, rank: number,
 /** A skill projectile hits `tid` (the host keeps flying it if it pierces). */
 export function shotHit(h: SkillHost, s: ShotSpec, tid: string) {
   const exploding = s.explode > 0 && s.pierce <= 0;
-  h.hit(s.owner, tid, s.dmg, [s.vx, s.vy], { stunMs: s.stunMs, slowMs: exploding ? undefined : s.slowMs, burn: s.burn, markMs: s.markMs, weakMs: s.weakMs, drain: s.drain, kb: s.kb ?? 1, skill: true, imb: s.imb });
+  h.hit(s.owner, tid, s.dmg, [s.vx, s.vy], { stunMs: s.stunMs, slowMs: exploding ? undefined : s.slowMs, burn: s.burn, markMs: s.markMs, weakMs: s.weakMs, drain: s.drain,
+    leechMs: s.leechMs, bleed: s.bleed, kb: s.kb ?? 1, skill: true, imb: s.imb });
   if (s.chain > 0) chain(h, s.owner, tid, s.chain, s.dmg, s);
 }
 
@@ -418,9 +452,16 @@ export function tickField(h: SkillHost, f: FieldInst): boolean {
     if (!o || o.dead) return false;
     f.x = o.x; f.y = o.y;
   }
+  // Blood Link: the cord snaps when the bound enemy dies or gets too far away
+  const tu = f.def.link ? (f.target ? live(h, f.target) : undefined) : undefined;
+  if (f.def.link && (!tu || !o || Math.hypot(tu.x - o.x, tu.y - o.y) > f.def.link.breakAt)) return false;
   if (now < f.nextTick) return true;
   f.nextTick = now + f.def.tickMs;
   const d = f.def, t = rankTime(f.rank);
+  if (d.link) {
+    h.hit(f.owner, f.target!, baseDmg(h, f.owner, d) * f.power, [0, 0], { ...effects(d, t), kb: 0, skill: true, dot: true, imb: f.imb });
+    return true;
+  }
   const inside = h.enemies(f.x, f.y, d.r, f.owner);
   if (d.trap) {
     if (!inside.length) return true;
@@ -544,16 +585,22 @@ export function afterHit(h: SkillHost, from: string | undefined, tid: string, o:
     e.push(o.imb.fx);
     h.fx({ ev: "enchanthit", id: from, s: o.imb.id, x: t.x, y: t.y });
   }
+  // Leech: while the foe still bleeds from it, every hit the vampire lands (not the bleed itself) gives a Blood stack
+  if (a && from && !o.dot && !o.thorn && !o.leechMs && now < t.sk.leechUntil && t.sk.leechBy === from) {
+    a.sk.stacks = Math.min(MAX_STACKS, a.sk.stacks + 1);
+    a.sk.stackAt = now;
+  }
   const immune = ccImmune(t, now);
   for (const x of e) {
     if (x.burn && from) {
       const [dps, ms] = x.burn;
       // keep the stronger burn
       if (now >= t.sk.burnUntil || dps * ms >= t.sk.burnDps * (t.sk.burnUntil - now)) {
-        t.sk.burnDps = dps * (a ? h.magic(from) : 1); t.sk.burnUntil = now + ms; t.sk.burnBy = from;
+        t.sk.burnDps = dps * (a ? h.magic(from) : 1); t.sk.burnUntil = now + ms; t.sk.burnBy = from; t.sk.bleed = x.bleed ?? "";
         if (t.sk.burnNext < now) t.sk.burnNext = now + 500;
       }
     }
+    if (x.leechMs && from) { t.sk.leechUntil = Math.max(t.sk.leechUntil, now + x.leechMs); t.sk.leechBy = from; }
     if (x.markMs) t.sk.markUntil = Math.max(t.sk.markUntil, now + x.markMs);
     if (x.weakMs) t.sk.weakUntil = Math.max(t.sk.weakUntil, now + x.weakMs);
     if (x.fearMs && !immune) h.fear(tid, x.fearMs);
@@ -586,7 +633,7 @@ export function tickUnit(h: SkillHost, id: string) {
 /** Status words for the client (comma list): burn, mark, weak, counter, charge and active buff skill ids. */
 export function statusOf(u: Unit, now: number): string {
   const sk = u.sk, out: string[] = [];
-  if (now < sk.burnUntil) out.push("burn");
+  if (now < sk.burnUntil) out.push(sk.bleed === "boil" ? "boil" : sk.bleed === "drip" ? "bleed" : "burn");
   if (now < sk.markUntil) out.push("mark");
   if (now < sk.weakUntil) out.push("weak");
   if (sk.counter && now < sk.counter.until) out.push("counter:" + sk.counter.s.id);

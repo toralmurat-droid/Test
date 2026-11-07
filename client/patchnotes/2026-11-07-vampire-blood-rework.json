@@ -1,0 +1,10 @@
+{
+  "date": "2026-11-07",
+  "title": "Vampire: blood rework",
+  "changes": [
+    "Blood Bolt is gone. New Blood Link: bind a foe with a cord of blood and pump its life into you. Heroes who had Blood Bolt keep their points in Blood Link.",
+    "Leech now makes the foe bleed for 4s, and every hit you land on it while it bleeds gives you a Blood stack.",
+    "Boil Blood makes its victims erupt and bubble, and Exsanguinate tears streams of blood out of every foe around you.",
+    "Blood Pact now costs 2% of your life on every skill you cast."
+  ]
+}

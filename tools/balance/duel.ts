@@ -337,6 +337,7 @@ export class Duel {
       return d <= reach - 4 && d >= at - ar.r;
     }
     if (s.shots) return d <= s.shots.range * 0.9;
+    if (s.field?.link) return d <= s.field.link.range - 10; // Blood Link: anyone in reach
     if (s.field) return s.field.trap ? d < 70 : d <= (s.field.ahead ?? 0) + s.field.r - 4;
     if (s.cry) return d <= s.cry.r - 6;
     if (s.move) return a.ranged ? false : d > 40 && d < s.move.dist + 30;
