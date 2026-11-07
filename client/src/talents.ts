@@ -7,7 +7,7 @@ import { iconImg } from "./skillIcons";
 import { SheetPreview, talentsOf } from "./sidepanel";
 import {
   BRANCHES, childrenOf, EFFECT_TEXT, levelPower, lockReason, MAX_RANK, RANK_POWER, rankOf, SkillDef, SKILLS, spentPoints, STACK_NAME,
-  synergyPower, talentPoints,
+  synergyPower, talentPoints, withMods, type SkillMod,
   NEED_TEXT,
 } from "../../shared/skills";
 import { damageText, scaleText, skillDamage } from "../../shared/skillInfo";
@@ -99,12 +99,12 @@ export class TalentMenu {
     document.getElementById("treepoints")!.innerHTML = (free > 0
       ? `<b class="free">${free} skill point${free > 1 ? "s" : ""} to spend</b>`
       : state.level < 2 ? "You start with a basic attack only. Reach level 2 for your first skill point." : "No points left. You get 1 point per level.") +
-      `<span class="treehint">Climb the tree: a skill needs the one it grows from. Higher skills hit harder; leafy ends lead nowhere higher. ` +
+      `<span class="treehint">Follow the stone paths: a node needs the one before it. Upgrades change the spell at the start of their path. ` +
       `Basic hits build ${STACK_NAME[cls]} (up to 5) for some skills.</span>`;
 
     const layout = this.layout(cls);
     const colors = BRANCHES[cls].map((b) => b.color);
-    let html = `<canvas class="treeart" width="${W / 2}" height="${H / 2}"></canvas><div class="treebox">`;
+    let html = `<canvas class="treeart" width="${W}" height="${H}"></canvas><div class="treebox">`;
     for (const n of layout) {
       const s = n.s, r = rankOf(ranks, s.id);
       const why = lockReason(cls, state.level, ranks, s.id);
@@ -166,182 +166,79 @@ export class TalentMenu {
   }
 
   /** The tree itself, as pixel art (2 CSS px per pixel): trunk, boughs, limbs, roots, leaves. */
+  /**
+   * The tree as stone paths (Murat 2026-11-07: "a curved path in stone, not an ugly tree"; Path of Exile / Diablo
+   * inspired): a dark carved slate panel, a curving cobbled path from each node to the one it needs, lit with an inlay
+   * of the school's colour once learned, and a stone socket under every node. Painted at 1 canvas px per CSS px.
+   */
   private paint(cv: HTMLCanvasElement, cls: ClassKind, nodes: Node[], ranks: any, colors: string[]) {
     const g = cv.getContext("2d")!;
     const w = cv.width, h = cv.height;
-    let seed = 7;
+    let seed = 11;
     const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
-    g.clearRect(0, 0, w, h);
-    // night sky with stars, then ground
-    for (let y = 0; y < h; y++) { g.fillStyle = y % 4 < 2 ? "#151726" : "#171a2b"; g.fillRect(0, y, w, 1); }
-    for (let i = 0; i < 60; i++) { g.fillStyle = rnd() < 0.3 ? "#6a6f9a" : "#3a3e60"; g.fillRect(Math.floor(rnd() * w), Math.floor(rnd() * h * 0.8), 1, 1); }
-    const gy = GROUND / 2;
-    g.fillStyle = "#2a2018"; g.fillRect(0, gy, w, h - gy);
-    g.fillStyle = "#3a2c1e"; g.fillRect(0, gy, w, 2);
-    for (let i = 0; i < 70; i++) { g.fillStyle = rnd() < 0.5 ? "#33281c" : "#241b14"; g.fillRect(Math.floor(rnd() * w), gy + 3 + Math.floor(rnd() * (h - gy - 3)), 2, 1); }
-    for (let i = 0; i < 40; i++) { g.fillStyle = rnd() < 0.5 ? "#3f6b2a" : "#2d5220"; g.fillRect(Math.floor(rnd() * w), gy - 1, 1, 1 + Math.floor(rnd() * 2)); }
-
-    const img = g.getImageData(0, 0, w, h), px = img.data;
-    const rgb = (c: string) => [parseInt(c.slice(1, 3), 16), parseInt(c.slice(3, 5), 16), parseInt(c.slice(5, 7), 16)];
-    const put = (x: number, y: number, c: number[]) => {
-      if (x < 0 || y < 0 || x >= w || y >= h) return;
-      const i = (y * w + x) * 4; px[i] = c[0]; px[i + 1] = c[1]; px[i + 2] = c[2]; px[i + 3] = 255;
-    };
-    const BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5].map((v) => (v + 0.5) / 16 - 0.5);
-    const dith = (x: number, y: number) => BAYER[(y & 3) * 4 + (x & 3)];
-    // bark ramps: outline, deep groove, shadow, body, light, highlight (live wood warm, dead wood ashen)
-    const BARK = ["#1a0f08", "#3a2414", "#4e321d", "#664429", "#85603a", "#a8835a"].map(rgb);
-    const DEAD = ["#141218", "#27222c", "#36303d", "#463f4e", "#5a5263", "#736a7c"].map(rgb);
-
-    /** A limb: cubic curve from (x0,y0) to (x1,y1), radius r0 tapering to r1, flared at the base, bark-shaded, light from the upper left. */
-    interface Limb { pts: [number, number, number, number, number][]; live: boolean; seed: number }
-    const limbs: Limb[] = [];
-    const limb = (x0: number, y0: number, c1x: number, c1y: number, c2x: number, c2y: number, x1: number, y1: number,
-      r0: number, r1: number, live: boolean, flare = 0.35, wob = 0.8) => {
-      const len = Math.hypot(x1 - x0, y1 - y0) + Math.hypot(c1x - x0, c1y - y0) * 0.5;
-      const n = Math.max(8, Math.ceil(len * 2));
-      const sd = rnd() * 100;
-      const pts: Limb["pts"] = [];
-      let along = 0, lx = x0, ly = y0;
-      for (let i = 0; i <= n; i++) {
-        const t = i / n, u = 1 - t;
-        let x = u * u * u * x0 + 3 * u * u * t * c1x + 3 * u * t * t * c2x + t * t * t * x1;
-        let y = u * u * u * y0 + 3 * u * u * t * c1y + 3 * u * t * t * c2y + t * t * t * y1;
-        // a little organic wobble, none at the ends so joints stay put
-        const k = Math.sin(t * Math.PI) * wob * Math.sin(t * 9 + sd);
-        const dx = x - lx, dy = y - ly, dl = Math.hypot(dx, dy) || 1;
-        x += (-dy / dl) * k; y += (dx / dl) * k;
-        along += Math.hypot(x - lx, y - ly); lx = x; ly = y;
-        const r = r1 + (r0 - r1) * Math.pow(u, 1.3) + r0 * flare * Math.pow(u, 6);
-        pts.push([x, y, r, along, t]);
-      }
-      limbs.push({ pts, live, seed: sd });
-      return (t: number) => pts[Math.round(Math.max(0, Math.min(1, t)) * n)];
-    };
-    /** Rasterize every limb: first all outlines, then all wood, so joints merge into one piece of wood. */
-    const drawLimbs = () => {
-      const L = [-0.62, -0.78];
-      for (const pass of [0, 1]) for (const lb of limbs) {
-        const k = lb.live ? BARK : DEAD;
-        let minX = 1e9, minY = 1e9, maxX = -1e9, maxY = -1e9;
-        for (const [x, y, r] of lb.pts) { minX = Math.min(minX, x - r - 2); minY = Math.min(minY, y - r - 2); maxX = Math.max(maxX, x + r + 2); maxY = Math.max(maxY, y + r + 2); }
-        for (let py = Math.floor(minY); py <= maxY; py++) for (let qx = Math.floor(minX); qx <= maxX; qx++) {
-          const cx = qx + 0.5, cy = py + 0.5;
-          let best = 1e9, bi = 0;
-          for (let i = 0; i < lb.pts.length; i++) {
-            const p = lb.pts[i], d = Math.hypot(cx - p[0], cy - p[1]) - p[2];
-            if (d < best) { best = d; bi = i; }
-          }
-          if (pass === 0) { if (best <= 1) put(qx, py, k[0]); continue; }
-          if (best > 0) continue;
-          const p = lb.pts[bi], r = Math.max(0.6, p[2]);
-          const ox = (cx - p[0]) / r, oy = (cy - p[1]) / r;
-          // shading: lit side faces the upper left, rim of shadow on the far side
-          let v = -(ox * L[0] + oy * L[1]) * 0.9 + dith(qx, py) * 0.55;
-          // bark grooves running along the limb, wavy, only on wood thick enough to show them
-          const nb = lb.pts[Math.min(bi + 1, lb.pts.length - 1)], pb = lb.pts[Math.max(bi - 1, 0)];
-          const tx = nb[0] - pb[0], ty = nb[1] - pb[1], tl = Math.hypot(tx, ty) || 1;
-          const side = ((cx - p[0]) * -ty + (cy - p[1]) * tx) / tl; // signed px across the limb
-          let groove = false;
-          if (r >= 3) {
-            const g2 = side * 0.33 + Math.sin(p[3] * 0.33 + lb.seed + side) * 0.35;
-            groove = Math.abs(g2 - Math.round(g2)) < 0.13 && Math.sin(p[3] * 0.7 + lb.seed * 3 + Math.round(g2) * 2) > -0.5;
-          }
-          let c: number;
-          if (v > 0.62) c = 1; else if (v > 0.2) c = 2; else if (v > -0.3) c = 3; else if (v > -0.7) c = 4; else c = 5;
-          if (groove) c = Math.max(1, c - 2);
-          put(qx, py, k[c]);
-        }
-      }
-    };
-    // leaves: little pixel clumps (outline, two greens dithered, sunlit tips), tinted toward the branch colour on crowns
-    const LEAF = ["#0f2209", "#24461a", "#2f6020", "#3f7a2a", "#5f9e38", "#8cc85a"].map(rgb);
-    const clumps: [number, number, number, number[] | undefined][] = [];
-    const clump = (x: number, y: number, r: number, tint?: string) => clumps.push([x, y, r, tint ? rgb(tint) : undefined]);
-    const drawLeaves = () => {
-      for (const pass of [0, 1]) for (const [x, y, r, tint] of clumps) {
-        for (let py = Math.floor(y - r - 2); py <= y + r + 2; py++) for (let qx = Math.floor(x - r - 2); qx <= x + r + 2; qx++) {
-          const dx = qx + 0.5 - x, dy = (py + 0.5 - y) * 1.15;
-          // lumpy edge
-          const d = Math.hypot(dx, dy) - r - Math.sin(Math.atan2(dy, dx) * 5 + x) * 0.7;
-          if (pass === 0) { if (d <= 1) put(qx, py, LEAF[0]); continue; }
-          if (d > 0) continue;
-          const v = (-dx - dy) / (r + 0.5) * 0.8 + dith(qx, py) * 0.7;
-          const c = v > 0.75 ? 5 : v > 0.25 ? 4 : v > -0.25 ? 3 : v > -0.7 ? 2 : 1;
-          put(qx, py, tint && c >= 4 && ((qx * 7 + py * 3) % 5 === 0) ? tint : LEAF[c]);
-        }
-      }
-    };
-
-    const P = new Map(nodes.map((n) => [n.s.id, { x: n.x / 2, y: n.y / 2 }]));
-    const learned = (id: string) => rankOf(ranks, id) > 0;
-    const tx = w / 2;
-    // roots spread out over the ground, thick at the trunk, thin at the tips
-    for (const [dx, len, dy] of [[-1, 40, 9], [1, 44, 8], [-0.55, 24, 13], [0.6, 26, 14], [-0.15, 12, 15]]) {
-      const ex = tx + dx * len, ey = gy + dy;
-      limb(tx + dx * 6, gy - 6, tx + dx * 14, gy, ex - dx * len * 0.35, ey - 2, ex, ey, 6, 0.6, true, 0.2, 0.6);
+    // slate: dark, mottled, a carved frame
+    const bg = g.createRadialGradient(w / 2, h * 0.45, 40, w / 2, h / 2, Math.max(w, h) * 0.7);
+    bg.addColorStop(0, "#24211e"); bg.addColorStop(1, "#0d0c0b");
+    g.fillStyle = bg; g.fillRect(0, 0, w, h);
+    for (let i = 0; i < 900; i++) { g.fillStyle = `rgba(${rnd() < 0.5 ? "255,240,220" : "0,0,0"},${0.02 + rnd() * 0.05})`; g.fillRect(rnd() * w, rnd() * h, 1 + rnd() * 3, 1 + rnd() * 2); }
+    for (let i = 0; i < 26; i++) { // hairline cracks
+      let x = rnd() * w, y = rnd() * h; g.strokeStyle = "rgba(0,0,0,0.35)"; g.lineWidth = 1; g.beginPath(); g.moveTo(x, y);
+      for (let k = 0; k < 5; k++) { x += (rnd() - 0.5) * 30; y += (rnd() - 0.5) * 30; g.lineTo(x, y); } g.stroke();
     }
-    // trunk: flared base, slight lean, splits around the middle of the canvas
-    const fork = { x: tx + 1, y: gy - 22 };
-    limb(tx, gy + 4, tx - 2, gy - 6, tx + 3, gy - 14, fork.x, fork.y, 13, 10, true, 0.45, 0.4);
-    // three boughs leave the trunk going up, then arc out to each branch root
-    const roots = [0, 1, 2].map((b) => nodes.find((n) => n.s.branch === b && !n.s.parent)!);
-    roots.forEach((r) => {
-      const rx = r.x / 2, ry = r.y / 2 + 6, dx = rx - fork.x;
-      // side boughs leave lower down the trunk so they can rise gently instead of humping over
-      const side = Math.abs(dx) > 20, sy = side ? Math.min(fork.y + 12, ry + 10) : fork.y;
-      const sx = fork.x + Math.sign(dx) * (side ? 6 : 0), rise = Math.max(6, sy - ry);
-      limb(sx, sy, sx + dx * 0.35, sy - rise * 0.25 - 4, rx - dx * 0.25, ry + rise * 0.5 + 6, rx, ry, side ? 5.5 : 8, side ? 2.8 : 3.6, true, 0.6, 1.2);
-    });
-    // limbs: S-curves from the parent up to the child, thick near the trunk, thin at the top; learned limbs are live wood
-    const depthOf = (s: SkillDef) => { let d = 0, p = s.parent; while (p) { d++; p = nodes.find((x) => x.s.id === p)?.s.parent; } return d; };
-    const sorted = [...nodes].sort((a, b) => depthOf(a.s) - depthOf(b.s));
-    for (const n of sorted) {
-      const c = P.get(n.s.id)!;
-      const d = depthOf(n.s);
-      const live = n.s.parent ? learned(n.s.parent) : true;
-      if (n.s.parent) {
-        const p = P.get(n.s.parent)!;
-        const dx = c.x - p.x, L = Math.abs(p.y - c.y);
-        const pt = limb(p.x + Math.sign(dx) * Math.min(3, Math.abs(dx) * 0.1), p.y - 6, p.x + dx * 0.15, p.y - L * 0.45,
-          c.x - dx * 0.2, c.y + L * 0.4, c.x, c.y + 4, Math.max(2.2, 5 - d * 0.9), Math.max(1.2, 3.4 - d * 0.7), live, 0.3, 1.1);
-        // side twigs: bare spikes on dead wood, a leaf clump at the tip on live wood
-        for (const [t, side] of [[0.35, dx >= 0 ? -1 : 1], [0.7, dx >= 0 ? 1 : -1]] as [number, number][]) {
-          if (L < 30) continue;
-          const [x, y] = pt(t);
-          const ex = x + side * (6 + rnd() * 4), ey = y - 5 - rnd() * 4;
-          limb(x, y, x + side * 2, y - 2, ex - side * 1, ey + 2, ex, ey, 1.4, 0.5, learned(n.s.id) || live, 0, 0.2);
-          if (learned(n.s.id)) clump(ex, ey - 1, 2.5 + rnd());
-        }
-      }
-      // every skill sits on a stub that pokes out above it, so the limb never just stops at the frame
-      const leaf = childrenOf(cls, n.s.id).length === 0;
-      const lv = learned(n.s.id);
-      if (leaf) {
-        const sx = (rnd() - 0.5) * 6;
-        limb(c.x, c.y, c.x + sx * 0.3, c.y - 10, c.x + sx, c.y - 15, c.x + sx * 1.4, c.y - 19, 2.2, 0.5, lv || live, 0, 0.3);
-      }
+    g.strokeStyle = "#060505"; g.lineWidth = 6; g.strokeRect(3, 3, w - 6, h - 6);
+    g.strokeStyle = "#4a3f33"; g.lineWidth = 2; g.strokeRect(7, 7, w - 14, h - 14);
+    // one faint carved circle per school around its root
+    const byId = new Map(nodes.map((n) => [n.s.id, n]));
+    for (const n of nodes) if (!n.s.parent) {
+      g.strokeStyle = "rgba(160,140,110,0.12)"; g.lineWidth = 2; g.beginPath(); g.arc(n.x, n.y, 34, 0, Math.PI * 2); g.stroke();
+      g.strokeStyle = "rgba(0,0,0,0.5)"; g.lineWidth = 1; g.beginPath(); g.arc(n.x, n.y + 1, 34, 0, Math.PI * 2); g.stroke();
     }
-    // crowns: every dead end gets a canopy (lush when learned, a few dry leaves when not); learned forks sprout a tuft
+    // paths: from the ground (roots) or from the parent node, curving, cobbled
+    type Seg = { x0: number; y0: number; cx: number; cy: number; x1: number; y1: number; lit: boolean; col: string };
+    const segs: Seg[] = [];
     for (const n of nodes) {
-      const c = P.get(n.s.id)!;
-      const leaf = childrenOf(cls, n.s.id).length === 0;
-      const tint = colors[n.s.branch];
-      if (leaf && learned(n.s.id)) {
-        const big = n.s.row === 4 ? 1.35 : 1;
-        for (let i = 0; i < 9; i++) {
-          const a = -Math.PI / 2 + (i / 8 - 0.5) * Math.PI * 1.5, d = (8 + rnd() * 6) * big;
-          clump(c.x + Math.cos(a) * d * 1.25, c.y - 6 + Math.sin(a) * d * 0.9, (4 + rnd() * 2.5) * big, tint);
-        }
-      } else if (leaf) {
-        for (let i = 0; i < 3; i++) clump(c.x + (rnd() - 0.5) * 22, c.y - 14 - rnd() * 6, 2 + rnd() * 1.2);
-      } else if (learned(n.s.id)) {
-        clump(c.x - 13, c.y - 3, 3.2); clump(c.x + 13, c.y - 5, 3);
+      const lit = rankOf(ranks, n.s.id) > 0, col = colors[n.s.branch];
+      const p = n.s.parent ? byId.get(n.s.parent) : undefined;
+      const x0 = p ? p.x : n.x, y0 = p ? p.y : GROUND + 10;
+      // every path winds: it swings out to one side (alternating along the path) before reaching the node
+      let hsh = 0; for (const ch of n.s.id) hsh = (hsh * 31 + ch.charCodeAt(0)) | 0;
+      const side = hsh & 1 ? 1 : -1, swing = 16 + (Math.abs(hsh) % 9);
+      segs.push({ x0, y0, cx: (x0 + n.x) / 2 + side * swing + (n.x - x0) * 0.2, cy: (y0 + n.y) / 2, x1: n.x, y1: n.y, lit, col });
+    }
+    const curve = (s: Seg) => { g.beginPath(); g.moveTo(s.x0, s.y0); g.quadraticCurveTo(s.cx, s.cy, s.x1, s.y1); };
+    g.lineCap = "round"; g.lineJoin = "round";
+    for (const s of segs) { curve(s); g.strokeStyle = "rgba(0,0,0,0.7)"; g.lineWidth = 17; g.stroke(); } // drop shadow / carved bed
+    for (const s of segs) { curve(s); g.strokeStyle = "#3a352f"; g.lineWidth = 13; g.stroke(); }
+    for (const s of segs) { curve(s); g.strokeStyle = "#57504a"; g.lineWidth = 9; g.stroke(); }
+    // cobbles: joints across the path and worn lighter stones
+    for (const s of segs) {
+      const len = Math.hypot(s.x1 - s.x0, s.y1 - s.y0) + 10, k = Math.max(3, Math.floor(len / 9));
+      for (let i = 1; i < k; i++) {
+        const t = i / k, u = 1 - t;
+        const x = u * u * s.x0 + 2 * u * t * s.cx + t * t * s.x1, y = u * u * s.y0 + 2 * u * t * s.cy + t * t * s.y1;
+        const dx = 2 * u * (s.cx - s.x0) + 2 * t * (s.x1 - s.cx), dy = 2 * u * (s.cy - s.y0) + 2 * t * (s.y1 - s.cy), d = Math.hypot(dx, dy) || 1;
+        const nx = -dy / d, ny = dx / d;
+        g.strokeStyle = "rgba(20,17,14,0.8)"; g.lineWidth = 1.2;
+        g.beginPath(); g.moveTo(x - nx * 4.5, y - ny * 4.5); g.lineTo(x + nx * 4.5, y + ny * 4.5); g.stroke();
+        g.fillStyle = `rgba(150,140,125,${0.1 + rnd() * 0.15})`; g.fillRect(x - nx * 2 - 1.5, y - ny * 2 - 1.5, 3, 2);
       }
     }
-    drawLimbs();
-    drawLeaves();
-    g.putImageData(img, 0, 0);
+    // learned paths: a glowing inlay in the school's colour
+    for (const s of segs) if (s.lit) {
+      g.save(); g.shadowColor = s.col; g.shadowBlur = 8;
+      curve(s); g.strokeStyle = s.col; g.lineWidth = 2.5; g.stroke();
+      g.restore();
+    }
+    // stone sockets under the nodes
+    for (const n of nodes) {
+      const r = n.s.passive ? 30 : 35;
+      const sg = g.createRadialGradient(n.x - 6, n.y - 6, 4, n.x, n.y, r);
+      sg.addColorStop(0, "#6a625a"); sg.addColorStop(0.7, "#3b3631"); sg.addColorStop(1, "#151210");
+      g.fillStyle = "rgba(0,0,0,0.6)"; g.beginPath(); g.arc(n.x + 2, n.y + 3, r, 0, Math.PI * 2); g.fill();
+      g.fillStyle = sg; g.beginPath(); g.arc(n.x, n.y, r, 0, Math.PI * 2); g.fill();
+      if (rankOf(ranks, n.s.id) > 0) { g.save(); g.shadowColor = colors[n.s.branch]; g.shadowBlur = 12; g.strokeStyle = colors[n.s.branch]; g.lineWidth = 2; g.beginPath(); g.arc(n.x, n.y, r - 2, 0, Math.PI * 2); g.stroke(); g.restore(); }
+    }
+    void cls;
   }
 
   /** Side panel: everything about one skill. */
@@ -357,16 +254,22 @@ export class TalentMenu {
     const st = this.stats();
     const color = BRANCHES[cls][s.branch].color;
     const rows: string[] = [];
-    if (s.passive) {
+    if (s.mod) {
+      // an upgrade node: what it does per rank, and in total now
+      const spell = SKILLS[cls].find((x) => x.id === s.mod!.of);
+      rows.push(`<p class="inext">Upgrades ${spell?.name ?? "a spell"}: ${modText(s.mod, 1)} per rank</p>`);
+      if (r > 0) rows.push(`<p class="ifx">Now: ${modText(s.mod, r)}</p>`);
+    } else if (s.passive) {
       rows.push(`<p class="ifx">${r > 0 ? EFFECT_TEXT[s.passive.effect](+(s.passive.perRank * r).toFixed(1)) + " now" : ""}</p>`);
       rows.push(`<p class="inext">${EFFECT_TEXT[s.passive.effect](s.passive.perRank)} per rank</p>`);
     } else {
-      const now = skillDamage(cls, s, Math.max(1, r), st, ranks);
+      const sm = withMods(cls, ranks, s); // with the upgrades learned on its paths
+      const now = skillDamage(cls, sm, Math.max(1, r), st, ranks);
       if (now) {
         rows.push(`<div class="idmg"><span>Damage${r > 0 ? ` (rank ${r})` : ""}</span><b>${now.total}</b></div><p class="iparts">${damageText(now)}</p>`);
         if (now.stacks) rows.push(`<p class="iparts">${now.stacks}</p>`);
         if (r > 0 && r < MAX_RANK) {
-          const nx = skillDamage(cls, s, r + 1, st, ranks);
+          const nx = skillDamage(cls, sm, r + 1, st, ranks);
           if (nx) rows.push(`<p class="inext">Next rank: ${nx.total} (+${Math.round(RANK_POWER * 100)}% power, longer effects)</p>`);
         }
       } else if (r > 0 && r < MAX_RANK) rows.push(`<p class="inext">Next rank: longer, stronger effects</p>`);
@@ -398,4 +301,13 @@ export class TalentMenu {
       `<span class="ttype${s.passive ? " pas" : ""}">${s.type} · Lv ${s.req}</span><span class="pips">${pips}</span></div></div>` +
       `<p class="idesc">${s.desc}</p>${s.needs ? `<p class="idesc ineed">Needs ${NEED_TEXT[s.needs]} in hand.</p>` : ""}${rows.join("")}<p class="istat ${why === "" ? "can" : ""}">${status}${keyNote}</p>`;
   }
+}
+
+/** "+2 bolts, +30% damage" for `k` ranks of an upgrade node. */
+function modText(m: SkillMod, k: number): string {
+  const p = (v: number | undefined, what: string) => (v ? `${v * k > 0 ? "+" : ""}${v * k}% ${what}` : "");
+  const a = (v: number | undefined, one: string, many: string, unit = "") => (v ? `+${v * k}${unit} ${v * k === 1 ? one : many}` : "");
+  return [a(m.n, "bolt", "bolts"), a(m.zap, "strike", "strikes"), a(m.pierce, "enemy pierced", "enemies pierced"), a(m.explode, "blast radius", "blast radius", " px"),
+    p(m.dmg, "damage"), p(m.radius, "radius"), p(m.ms, "duration"), p(m.tick, "faster ticks"), p(m.slow, "slow"), p(m.stun, "stun"), p(m.speed, "range"),
+    p(m.burn, "burn"), p(m.cd, "cooldown"), p(m.mana, "mana")].filter(Boolean).join(", ");
 }

@@ -20,7 +20,7 @@ import { SPAWN_ZONES, zoneAt } from "../../shared/spawns";
 import { musicCombat, setMusicZone } from "./music";
 import { bindSfx, play as playSfx, sfxFrame } from "./sfx";
 import { attackMult, cooldownMult, critChance, heroSpeed, STATS, magicMult, STAT_KINDS, STAT_NAMES, StatKind, statPoints, HP_PER_STR } from "../../shared/powers";
-import { NEED_TEXT, pointRange, SkillDef, skillOf, skillTarget, MAX_STACKS, STACK_DECAY_MS, STACK_NAME, talentBonus } from "../../shared/skills";
+import { NEED_TEXT, pointRange, SkillDef, skillOf, skillTarget, MAX_STACKS, STACK_DECAY_MS, STACK_NAME, talentBonus, withMods } from "../../shared/skills";
 import { SkillFx } from "./skillfx";
 import { movesSheet, SkillMoves } from "./skillMoves";
 import { displayGrid } from "./tileset";
@@ -2331,7 +2331,8 @@ export class TownScene extends Phaser.Scene {
   /** Name, cooldown and cost of an active skill for the HUD. */
   private skillHud(cls: ClassKind, skill: string, cdm: number) {
     const s = skillOf(cls, skill);
-    return { name: s?.name ?? "?", cdMs: (s?.cd ?? 0) * cdm, last: this.lastCast[skill] ?? -Infinity, cost: s ? skillCost(s) : { stamina: 0, mana: 0 }, ult: s?.row === 4 };
+    const m = s && withMods(cls, this.entities.get(this.me)?.state?.talents, s); // upgrade nodes change cooldown and cost
+    return { name: s?.name ?? "?", cdMs: (m?.cd ?? 0) * cdm, last: this.lastCast[skill] ?? -Infinity, cost: m ? skillCost(m) : { stamina: 0, mana: 0 }, ult: s?.row === 4 };
   }
 
   private chargeSeen = { n: 0, at: 0 }; // our stacks last frame, and when the newest one was built

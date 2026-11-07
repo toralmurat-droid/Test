@@ -1,6 +1,6 @@
 import { ClassKind } from "./classes";
 import { impactMs, nightBuff, passiveBlood, talentBonus, LEAP_MS, pointRange, skillTarget,
-  AreaDef, BuffDef, FieldDef, HitEffects, levelPower, MARK_TAKEN, MAX_STACKS, MoveDef, rankOf, rankPower, rankTime, Ranks, scalePower, synergyPower,
+  AreaDef, BuffDef, FieldDef, HitEffects, levelPower, MARK_TAKEN, MAX_STACKS, MoveDef, rankOf, rankPower, rankTime, Ranks, scalePower, synergyPower, withMods,
   ShotDef, SkillDef, skillOf, STACK_DECAY_MS, STACK_POWER, WEAK_DEALT,
 } from "./skills";
 import { Stats, STATS } from "./powers";
@@ -150,7 +150,8 @@ export const WIND_REACH = 6;
 export function castSkill(h: SkillHost, id: string, skillId: string): boolean {
   const u = live(h, id);
   if (!u || !u.cls || !h.canAct(id)) return false;
-  const s = skillOf(u.cls, skillId);
+  const base = skillOf(u.cls, skillId);
+  const s = base && withMods(u.cls, u.talents, base); // learned upgrade nodes (more bolts, bigger radius, shorter cooldown...)
   const rank = s?.cantrip ? 1 : Math.min(3, rankOf(u.talents, skillId));
   const now = h.now();
   if (!s || s.passive || rank <= 0 || now < u.sk.chargeUntil || now < (u.sk.windUntil ?? 0)) return false;
