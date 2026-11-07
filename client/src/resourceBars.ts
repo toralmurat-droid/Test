@@ -164,6 +164,7 @@ export class ResourceBars {
     this.hp.update(Math.ceil(s.hp), Math.round(s.maxHp));
     this.mp.update(Math.floor(s.mp), s.maxMp);
     this.orbs.update(s.hp, s.maxHp, s.mp, s.maxMp);
+    this.orbs.setLevel(s.level);
     if (s.level !== this.level) {
       if (this.level >= 0) { this.xpFill.style.transition = "none"; this.xpFill.style.width = "0%"; void this.xpFill.offsetWidth; this.xpFill.style.transition = ""; }
       this.level = s.level;
