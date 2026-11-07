@@ -1,5 +1,6 @@
 {
   "date": "2026-11-07",
+  "pr": 333,
   "title": "Heat and overload",
   "changes": [
     "Stamina is gone: physical skills and the dodge roll now build Heat, shown by a glowing gauge on the left side of the screen.",
