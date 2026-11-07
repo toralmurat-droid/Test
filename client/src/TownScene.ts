@@ -857,7 +857,7 @@ export class TownScene extends Phaser.Scene {
       const ring = this.add.circle(x, y, 4).setStrokeStyle(kind === "slam" ? 3 : 2, kind === "slam" ? 0xff5252 : 0xffb74d, 0.9).setDepth(20000);
       this.tweens.add({ targets: ring, radius: r, alpha: 0, duration: kind === "slam" ? 420 : 300, onComplete: () => ring.destroy() });
       const me = this.entities.get(this.me);
-      if (me && Math.hypot(me.sprite.x - x, me.sprite.y - y) < r * 2.5) quake(this, kind === "slam" ? 260 : 120, kind === "slam" ? 0.008 : 0.004);
+      if (me && Math.hypot(me.sprite.x - x, me.sprite.y - y) < r * 2.5 && kind === "slam") quake(this, 260, 0.008, "major-boss"); // Mother Blob slam
     });
     // Necromancer: arms up while casting. Death Circle marks the ground first (a flat painting, so it lies on the iso ground too)
     this.room.onMessage("necrowind", ({ id, kind, ms, x, y, r }) => {
@@ -886,8 +886,7 @@ export class TownScene extends Phaser.Scene {
         const a = (i / 10) * Math.PI * 2, d = Math.random() * r;
         this.burst(x + Math.cos(a) * d, y + Math.sin(a) * d * 0.9, 3, 0x7c4dff, 380);
       }
-      const me = this.entities.get(this.me);
-      if (me && Math.hypot(me.sprite.x - x, me.sprite.y - y) < r * 2.5) quake(this, 220, 0.007);
+      // no screen shake: only major bosses shake the screen (Murat 2026-11-07)
     });
     // Skeletons climb out of the ground: green flash and dust where each one appears
     // Bone ritual: the skeletons fly apart, their bones arc through the air, land and slide into a pentagram that glows
@@ -911,7 +910,7 @@ export class TownScene extends Phaser.Scene {
       if (e) { const b = this.bodyScale(e); this.tweens.add({ targets: e.sprite, scaleX: b, scaleY: { from: b * 0.2, to: b }, duration: 650, ease: "Back.Out" }); }
       this.floatText(x, y - 56, "BONE DEMON!", "#ff5233", PIXEL_FONT);
       const me = this.entities.get(this.me);
-      if (me && Math.hypot(me.sprite.x - x, me.sprite.y - y) < 400) quake(this, 380, 0.01);
+      if (me && Math.hypot(me.sprite.x - x, me.sprite.y - y) < 400) quake(this, 380, 0.01, "major-boss"); // Bone Demon rises
     });
     this.room.onMessage("demonwind", ({ id, ms }) => {
       const e = this.entities.get(id);
@@ -929,7 +928,7 @@ export class TownScene extends Phaser.Scene {
         this.burst(x + Math.cos(a) * d, y + Math.sin(a) * d, 3 + Math.random() * 3, i % 2 ? 0xff7043 : 0xffca28, 420);
       }
       const me = this.entities.get(this.me);
-      if (me && Math.hypot(me.sprite.x - x, me.sprite.y - y) < r * 3) quake(this, 260, 0.009);
+      if (me && Math.hypot(me.sprite.x - x, me.sprite.y - y) < r * 3) quake(this, 260, 0.009, "major-boss"); // Bone Demon hellfire
     });
     // Bone Demon grabs a skeleton, lifts it, snaps it in two between its fists and straps the piece on
     this.room.onMessage("demonrip", (msg) => this.demonRip(msg));
@@ -1035,7 +1034,7 @@ export class TownScene extends Phaser.Scene {
         this.burst(x + Math.cos(a) * r * 0.7, y + Math.sin(a) * r * 0.7, 2.5, 0x8d6e63, 340);
       }
       const me = this.entities.get(this.me);
-      if (me && Math.hypot(me.sprite.x - x, me.sprite.y - y) < r * 2.5) quake(this, kind === "leap" ? 260 : 140, kind === "leap" ? 0.009 : 0.005);
+      if (me && Math.hypot(me.sprite.x - x, me.sprite.y - y) < r * 2.5 && kind === "leap") quake(this, 260, 0.009, "major-boss"); // Redfang Chief leap
     });
     // The Hollow King (the first zone's final boss): every move is painted flat on the ground first, then lands.
     // No screen shake or flash (Murat 2026-11-04): the ground marks and dust carry it.
@@ -1163,7 +1162,6 @@ export class TownScene extends Phaser.Scene {
       this.floatText(x, y - e.top - 4, "!", "#ff5252");
       const b = this.bodyScale(e);
       this.tweens.add({ targets: e.sprite, scaleX: { from: b * 0.4, to: b }, scaleY: { from: b * 1.6, to: b }, duration: 220, ease: "Back.Out" });
-      if (victim === this.me) quake(this, 80, 0.002);
     });
     // Blob merging: the one in danger calls ("MERGE!"), the others rush in and melt into it
     this.room.onMessage("blobcall", ({ id }) => {
@@ -1245,7 +1243,6 @@ export class TownScene extends Phaser.Scene {
       const busy = e.sprite.anims.isPlaying && /_(swing|attack|cast)/.test(cur);
       if (e.hero && !e.state.dead && !busy && !this.moves.active(id)) playCharAnim(e.sprite, e.hero, "hit", this.dirOf(e));
       if (e.mob) this.gooSplat(e, dmg);
-      if (id === this.me) quake(this, 100, 0.004);
     });
     // Initiative broken (shared/combat.ts): the target is dizzy and can't attack for a moment
     this.room.onMessage("broken", ({ id }) => {
@@ -1261,7 +1258,7 @@ export class TownScene extends Phaser.Scene {
       if (on && e) this.villagers?.shoutNear(e.sprite.x, e.sprite.y, shout);
       if (id === this.me) {
         (this.wrathBanner ??= new WrathBanner()).show(on, shout);
-        if (on) quake(this, 300, 0.008);
+        if (on) quake(this, 300, 0.008, "village-guards");
       } else if (e) this.floatText(e.sprite.x, e.sprite.y - 22, on ? "Outlaw!" : "Pardoned", on ? "#ff5252" : "#d8f0c0", PIXEL_FONT);
     });
     // Our hero died: "You died - killed by <monster or player>" with a respawn countdown
@@ -1990,8 +1987,6 @@ export class TownScene extends Phaser.Scene {
           this.floatText(cx, cy - 10, "CRACK!", "#e8e2d0", PIXEL_FONT);
           // chips fly from the break (height above its feet) and fall around it
           for (let i = 0; i < 9; i++) debris.push({ x: mid[0], y: (Math.random() - 0.5) * 4, vx: (Math.random() - 0.5) * 70, vy: (Math.random() - 0.5) * 24, h: -mid[1], vh: 20 + Math.random() * 45, a: Math.random() * 3, va: (Math.random() - 0.5) * 18, len: 2 + Math.random() * 2.5 });
-          const me = this.entities.get(this.me);
-          if (me && Math.hypot(me.sprite.x - ex, me.sprite.y - ey) < 260) quake(this, 160, 0.006);
         }
         // the halves in each fist, torn outward; then pressed onto the body until they are worn
         const fl = e.sprite.flipX ? -1 : 1;
@@ -2601,7 +2596,7 @@ export class TownScene extends Phaser.Scene {
     // The hero flashes gold for a moment
     sprite.setTintFill(0xffd166);
     this.time.delayedCall(120, () => sprite.clearTint());
-    if (mine) quake(this, 260, 0.006);
+    if (mine) quake(this, 260, 0.006, "level-up");
   }
 
   /** Big on-screen "zone cleared" banner for the player who killed the zone's last monster. */
