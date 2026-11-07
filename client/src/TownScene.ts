@@ -1756,8 +1756,7 @@ export class TownScene extends Phaser.Scene {
     }
     if (cls) this.gearFx.swing(e, step, off[0], off[1], !!cls.projectile, id === this.me); // item level effects
     if (cls?.projectile) return; // the fireball itself is the visual
-    // No hit-area shapes (Murat): the attack animation is the visual; the finisher still shakes the camera
-    if (step === 2 && id === this.me) quake(this, 80, 0.003);
+    // No hit-area shapes (Murat): the attack animation is the visual. No screen shake from hero attacks or skills.
   }
 
   /** A struck blob loses some goo: blobs of slime fly off in little arcs and splat on the ground, then soak away. */
