@@ -33,7 +33,7 @@ test("summons: cap, PvP rules, no reward for killing one, they fight monsters fo
     assert.ok(!room.summons.has(s1) && room.summons.has(s2) && room.summons.has(s3));
     const g = room.state.mobs.get(s2);
 
-    // The owner can't hurt their own golem; another level 20 hero can; a protected owner's golem is safe from them
+    // The owner can't hurt their own golem; another hero can, at any level (no newcomer protection)
     const hp0 = g.hp;
     room.hitTarget(a.sessionId, s2, 30, [0, 0], {});
     assert.equal(g.hp, hp0, "own golem untouched");
@@ -42,14 +42,14 @@ test("summons: cap, PvP rules, no reward for killing one, they fight monsters fo
     const hp1 = g.hp;
     A.level = 8;
     room.hitTarget(b.sessionId, s2, 30, [0, 0], {});
-    assert.equal(g.hp, hp1, "protected owner's golem untouched");
+    assert.ok(g.hp < hp1, "a low-level owner's golem can be hurt too");
     A.level = 20;
 
-    // The golem picks the enemy hero (PvP), not a protected one, never its owner
+    // The golem picks the enemy hero (PvP) at any level, never its owner
     g.x = x; g.y = y; B.x = x + 20;
     assert.equal(room.summonTarget(g, a.sessionId, A), b.sessionId);
     B.level = 5;
-    assert.equal(room.summonTarget(g, a.sessionId, A), "", "protected hero is left alone");
+    assert.equal(room.summonTarget(g, a.sessionId, A), b.sessionId, "low-level hero is a target too");
     B.level = 20;
 
     // Killing a golem gives no XP

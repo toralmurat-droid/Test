@@ -84,10 +84,10 @@ export function pvpDamageMult(attackerLevel: number, targetLevel: number): numbe
 }
 
 /**
- * Newcomer protection: heroes up to this level can't hurt other heroes and can't be hurt by them (both ways, so a
- * protected hero can't pick fights it can't lose). Monsters and the village watch still hit them.
+ * Newcomer protection: heroes up to this level can't hurt other heroes and can't be hurt by them (both ways).
+ * 0 = off (Murat 2026-11-07): any hero can fight any other hero outside the Market Square, at any level.
  */
-export const PVP_PROTECT_LEVEL = 10;
+export const PVP_PROTECT_LEVEL = 0;
 export const pvpProtected = (attackerLevel: number, targetLevel: number) =>
   (attackerLevel || 1) <= PVP_PROTECT_LEVEL || (targetLevel || 1) <= PVP_PROTECT_LEVEL;
 
