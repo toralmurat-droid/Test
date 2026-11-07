@@ -115,7 +115,10 @@ function drawCrest(c: HTMLCanvasElement) {
   for (const [x, y] of [[7, 22], [20, 9], [18, 25], [9, 12], [14, 29]]) g.fillRect(x, y, 1, 1);
 }
 
+import { OrbHud } from "./orbs";
+
 export class ResourceBars {
+  private orbs: OrbHud;
   private root: HTMLElement;
   private hp: Bar;
   private mp: Bar;
@@ -147,12 +150,14 @@ export class ResourceBars {
     this.xpTxt = this.xpBar.lastElementChild as HTMLElement;
     hud.appendChild(this.xpBar);
     hud.prepend(this.root);
+    this.orbs = new OrbHud(hud); // health and mana live in the orbs at the bottom; the top-left keeps level and stamina
     this.setNumbers(ResourceBars.numbersOn());
   }
 
   static numbersOn() { try { return localStorage.getItem(NUMS_KEY) !== "0"; } catch { return true; } }
   setNumbers(on: boolean) {
     this.root.classList.toggle("rb-nonums", !on);
+    this.orbs?.setNumbers(on);
     try { localStorage.setItem(NUMS_KEY, on ? "1" : "0"); } catch { /* private window */ }
   }
   toggleNumbers() { this.setNumbers(this.root.classList.contains("rb-nonums")); }
@@ -161,6 +166,7 @@ export class ResourceBars {
     this.hp.update(Math.ceil(s.hp), Math.round(s.maxHp));
     this.mp.update(Math.floor(s.mp), s.maxMp);
     this.st.update(Math.floor(s.st), s.maxSt);
+    this.orbs.update(s.hp, s.maxHp, s.mp, s.maxMp);
     if (s.level !== this.level) {
       if (this.level >= 0) { this.xpFill.style.transition = "none"; this.xpFill.style.width = "0%"; void this.xpFill.offsetWidth; this.xpFill.style.transition = ""; }
       this.level = s.level;

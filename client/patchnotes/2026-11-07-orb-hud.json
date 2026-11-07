@@ -1,0 +1,9 @@
+{
+  "date": "2026-11-07",
+  "title": "Health and mana orbs",
+  "changes": [
+    "New bottom bar: a red health orb and a blue mana orb, each guarded by a stone gargoyle, with the experience bar, your skills and potions on a bronze plate between them.",
+    "Spell keys layout: when a prompt says E (talk, open a chest, use a portal...), E does that instead of casting its spell.",
+    "Blizzard's storm is a little lighter on the frame rate."
+  ]
+}

@@ -393,6 +393,8 @@ export class TownScene extends Phaser.Scene {
     this.input.keyboard!.on("keydown", (ev: KeyboardEvent) => {
       if (this.chatting() || ev.ctrlKey || ev.metaKey || ev.altKey) return;
       const n = slotOfKey(ev);
+      // Spell keys: E is a spell key, but when a prompt says "E: talk / open / use" right here, E does that instead
+      if (n >= 0 && ev.key.toUpperCase() === "E" && keyMode() === "spells" && this.canUse()) { if (!ev.repeat) this.useKey(); return; }
       if (n >= 0) { slotPress(n, ev); return; }
       const act = actionOfKey(ev);
       if (act && !ev.repeat) this.keyAction(act);
@@ -2197,6 +2199,12 @@ export class TownScene extends Phaser.Scene {
     pick.skill = id;
     try { localStorage.setItem(`${side}click:${pick.hero}`, id); } catch { /* storage off */ }
     this.hotbarHtml = "";
+  }
+
+  /** Something to talk to, open or use right here (one of the "E: ..." prompts is up, or a dialog is open)? */
+  private canUse(): boolean {
+    return !!this.npcs?.isOpen || !!this.bounty?.open || !!this.dungeon?.nearDoor ||
+      !!document.querySelector("#npcprompt.open, #chestprompt.open, #boardprompt.open, #portalprompt.open, #shrineprompt.open, #stashprompt.open");
   }
 
   /** A game key of the current keyboard layout (client/src/keymode.ts) was pressed. */

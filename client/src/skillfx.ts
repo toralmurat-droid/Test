@@ -830,13 +830,13 @@ export class SkillFx {
           // The wizard's Blizzard (Murat 2026-11-07): a storm turning round the hero. Three spiral arms of snow and ice
           // sweep round (the arms rotate, each flake is thrown along the turn), fast flakes whip round the rim.
           const spin = this.t / 260;
-          for (let i = 0; i < n(200 * area); i++) {
+          for (let i = 0; i < n(100 * area); i++) { // (kept moderate: hundreds of live flakes cost frames)
             const arm = Math.floor(Math.random() * 3), u = Math.random();
             const d = r * (0.25 + 0.75 * u), a = spin + arm * (Math.PI * 2 / 3) + u * 2.2 + rnd(-0.18, 0.18);
             const ca = Math.cos(a), sa = Math.sin(a), sp = 70 + 60 * u; // outer flakes move faster
             this.p(x + ca * d, y + sa * d, rnd(4, 26), pick([0xffffff, 0xd6f6ff, 0xa2e8ff, 0x4cc9f0]), { vx: -sa * sp, vy: ca * sp, vz: rnd(-10, 10), life: rnd(260, 460), size: pick([1, 2, 2, 3]), size1: 1, add: true });
           }
-          for (let i = 0; i < n(90 * area); i++) { // the rim: a fast white ring
+          for (let i = 0; i < n(40 * area); i++) { // the rim: a fast white ring
             const a = Math.random() * Math.PI * 2, ca = Math.cos(a), sa = Math.sin(a);
             this.p(x + ca * r, y + sa * r, rnd(2, 18), 0xe8f8ff, { vx: -sa * 150, vy: ca * 150, life: 220, size: 2, size1: 0, add: true });
           }
