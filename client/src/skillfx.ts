@@ -513,11 +513,11 @@ export class SkillFx {
       if (!me) return;
       const hx = me.sprite.x, hy = me.sprite.y, hz = me.top * 0.55;
       for (const [vx, vy] of pts) {
-        for (let k = 0; k < 4; k++) {
+        for (let k = 0; k < 6; k++) {
           const T = FLY * rnd(0.85, 1.15) / 1000;
           const x0 = vx + rnd(-3, 3), y0 = vy + rnd(-2, 2), z0 = rnd(6, 14);
           const vz = (hz - z0 + (G * T * T) / 2) / T; // an arc that lands on the vampire's chest after T
-          this.p(x0, y0, z0, pick(PALETTE.blood.slice(1, 5)), { vx: (hx - x0) / T, vy: (hy - y0) / T, vz, g: G, life: T * 1000, size: pick([2, 2, 3, 3]), size1: 1.5, add: false });
+          this.p(x0, y0, z0, pick(PALETTE.blood.slice(1, 5)), { vx: (hx - x0) / T, vy: (hy - y0) / T, vz, g: G, life: T * 1000, size: pick([2, 3, 3, 4]), size1: 2, add: false });
         }
       }
       // the vortex round the vampire
@@ -533,7 +533,7 @@ export class SkillFx {
       this.glow(me.sprite.x, me.sprite.y, me.top * 0.5, 18 + 3 * pts.length, 0xe63946, 450, 0.8);
       this.ring(me.sprite.x, me.sprite.y, 34, "blood", 44, { life: 420, up: 16, size: 2 });
       this.rise(me.sprite.x, me.sprite.y, 10, "blood", 26, me.top + 16, 650);
-      this.pillar(me.sprite.x, me.sprite.y, "blood", 70, 7, 450);
+      this.bloodBeam(me.sprite.x, me.sprite.y, 96, 16, 560);
       this.flashSprite(me, 0xe63946);
     });
   }
@@ -595,7 +595,7 @@ export class SkillFx {
       // The orb breaks: blood crashes straight down on the vampire...
       for (let i = 0; i < 26; i++) this.p(x + rnd(-6, 6), y + rnd(-4, 4), H + rnd(-6, 6), pick(bright), { vx: rnd(-20, 20), vy: rnd(-12, 12), vz: rnd(-260, -160), g: 200, life: 280, size: pick([1, 2, 2]), size1: 1, add: false });
       this.glow(x, y, H, 22, 0xff1744, 260, 0.9);
-      this.pillar(x, y, "blood", H + 10, 6, 320);
+      this.bloodBeam(x, y, H + 24, 12, 380, true);
       // ...and the blood mist all round the area collapses into him (the Exsanguinate look from before)
       for (let i = 0; i < 48; i++) {
         const a = (i / 48) * Math.PI * 2, F = rnd(0.35, 0.5);
@@ -604,6 +604,52 @@ export class SkillFx {
       this.ring(x, y, r, "blood", 60, { life: 380, up: 10 });
       this.ring(x, y, r * 0.6, "blood", 26, { life: 300, up: 30, size: 2 });
       this.glow(x, y, 2, r, 0x6d0000, 500, 0.5, true);
+    });
+  }
+
+  /**
+   * A thick column of blood in chunky pixel blocks (Exsanguinate): a ragged dark rim, red body, bright core, redrawn every
+   * few frames so the edges churn; `down` pours it from the top onto the ground first. Drops spray off its sides.
+   */
+  private bloodBeam(x: number, y: number, h: number, w: number, ms: number, down = false) {
+    const g = this.scene.add.graphics().setDepth(DEPTH + 1);
+    g.setPosition(x + 0.01, y + 0.01);
+    const start = this.t, ROW = 2;
+    const draw = () => {
+      const k = Math.min(1, (this.t - start) / ms);
+      g.clear();
+      const grow = down ? Math.min(1, k / 0.18) : Math.min(1, k / 0.12); // how much of the height is there yet
+      const thin = k < 0.55 ? 1 : 1 - (k - 0.55) / 0.45; // it narrows away at the end
+      const top = -h, bottom = down ? -h + h * grow : 0, from = down ? top : -h * grow;
+      g.setAlpha(Math.min(1, 1.6 - k));
+      for (let ry = Math.floor(from / ROW) * ROW; ry < bottom; ry += ROW) {
+        const u = -ry / h; // 0 ground .. 1 top
+        const flare = 1 + 0.6 * Math.max(0, 0.25 - u) * 4; // wider where it hits the ground
+        const half = Math.max(1, Math.round((w / 2) * thin * flare * (0.85 + Math.random() * 0.3)));
+        const core = Math.max(0, Math.round(half * 0.35)), inner = Math.max(1, Math.round(half * 0.65));
+        const jl = Math.round(Math.random() * 2) - 1, jr = Math.round(Math.random() * 2) - 1;
+        g.fillStyle(0x4a0000, 0.9).fillRect(-half - 1 + jl, ry, half * 2 + 2 - jl + jr, ROW);
+        g.fillStyle(0xb71c1c, 1).fillRect(-half + jl, ry, half * 2 - jl + jr, ROW);
+        g.fillStyle(0xe63946, 1).fillRect(-inner, ry, inner * 2, ROW);
+        if (core) g.fillStyle(0xffcdd2, 1).fillRect(-core, ry, core * 2, ROW);
+      }
+    };
+    draw();
+    this.emit(ms, 40, () => {
+      draw();
+      // chunky drops flung off the column
+      const z = rnd(4, h * 0.9);
+      for (let i = 0; i < 3; i++) {
+        const a = Math.random() * Math.PI * 2;
+        this.p(x, y, z, pick(PALETTE.blood.slice(1, 5)), { vx: Math.cos(a) * rnd(30, 70), vy: Math.sin(a) * rnd(18, 40), vz: rnd(10, 60), g: 260, life: rnd(350, 600), size: pick([2, 3, 3]), size1: 1, add: false });
+      }
+    });
+    this.scene.time.delayedCall(ms, () => g.destroy());
+    // a splash where it meets the ground, and a red light round it
+    this.scene.time.delayedCall(down ? ms * 0.18 : 0, () => {
+      this.ring(x, y, w * 2.2, "blood", 30, { life: 420, up: 24, size: 2, add: false });
+      this.glow(x, y, h * 0.4, w * 2.5, 0xe63946, ms, 0.6);
+      this.glow(x, y, 2, w * 3, 0x6d0000, ms, 0.5, true);
     });
   }
 
@@ -631,6 +677,7 @@ export class SkillFx {
     this.flashSprite(e, 0xff1744);
   }
   private boiling = new WeakSet<object>();
+  private linkPulse = new WeakMap<object, number>();
 
   private nearMe(x?: number, y?: number) {
     const me = this.ent(this.meId());
@@ -1079,6 +1126,16 @@ export class SkillFx {
       // Blood Link: the cord is redrawn every frame between the vampire and his victim (tickFields)
       objs.push(this.scene.add.graphics().setDepth(DEPTH - 2));
       this.ring(f.x, f.y, 14, "blood", 14, { life: 300, up: 10 });
+      // The cord lashes out: a whip of blood shoots from the vampire into the victim and bursts out of it
+      const o = this.ent(f.owner), t = f.target ? this.ent(f.target) : undefined;
+      if (o && t) {
+        const x0 = o.sprite.x, y0 = o.sprite.y, z0 = o.top * 0.55, x1 = t.sprite.x, y1 = t.sprite.y, z1 = t.top * 0.5, T = 0.14;
+        for (let i = 0; i < 16; i++) {
+          const k = i / 16;
+          this.p(x0, y0, z0, pick(PALETTE.blood.slice(0, 4)), { vx: (x1 - x0) / T, vy: (y1 - y0) / T, vz: (z1 - z0) / T, life: T * 1000 * (0.4 + k * 0.6), size: 2, size1: 1, add: false });
+        }
+        this.scene.time.delayedCall(T * 1000, () => { const v = this.ent(f.target); if (v) { this.burst(v.sprite.x, v.sprite.y, v.top * 0.5, "blood", 18, 70, 380); this.glow(v.sprite.x, v.sprite.y, v.top * 0.5, 12, 0xe63946, 260, 0.7); } });
+      }
     } else if (k === "gravesoil") {
       // Native Soil: a patch of dark grave earth spilled on the ground, clods and a few bone chips
       const g = this.scene.add.graphics().setPosition(f.x + 0.01, f.y + 0.01).setDepth(GROUND_DEPTH);
@@ -1254,23 +1311,49 @@ export class SkillFx {
           const [ol, om] = lift(o.top * 0.55), [tl, tm] = lift(tg.top * 0.5);
           const x0 = tg.sprite.x + tl, y0 = tg.sprite.y + tm, x1 = o.sprite.x + ol, y1 = o.sprite.y + om;
           const len = Math.hypot(x1 - x0, y1 - y0), sag = Math.min(14, len * 0.12);
-          const at = (u: number): [number, number] => [x0 + (x1 - x0) * u + Math.sin(u * 9 + this.t / 90) * 0.8, y0 + (y1 - y0) * u + Math.sin(u * Math.PI) * sag];
+          const at = (u: number): [number, number] => [x0 + (x1 - x0) * u + Math.sin(u * 9 + this.t / 90) * 0.8, y0 + (y1 - y0) * u - Math.sin(u * Math.PI) * sag]; // arches up like the stream of drops
           const SEG = Math.max(6, Math.round(len / 5));
           const beat = 0.5 + 0.5 * Math.sin(this.t / 110);
-          g.lineStyle(3, 0x4a0000, 0.85);
-          g.beginPath(); g.moveTo(x0, y0); for (let i = 1; i <= SEG; i++) { const [px, py] = at(i / SEG); g.lineTo(px, py); } g.strokePath();
-          g.lineStyle(1, 0xe63946, 0.7 + 0.3 * beat);
-          g.beginPath(); g.moveTo(x0, y0); for (let i = 1; i <= SEG; i++) { const [px, py] = at(i / SEG); g.lineTo(px, py); } g.strokePath();
-          // Gulps of blood travel along it toward the vampire
-          const phase = (this.t / 420) % 1;
-          for (let j = 0; j < 3; j++) {
-            const u0 = (phase + j / 3) % 1, u = f.ally ? 1 - u0 : u0, [px, py] = at(u); // Transfusion: the blood runs to the ally
-            g.fillStyle(0xff5252, 1).fillRect(Math.round(px) - 1, Math.round(py) - 1, 3, 3);
-            g.fillStyle(0xffcdd2, 1).fillRect(Math.round(px), Math.round(py) - 1, 1, 1);
+          // drawn in whole pixel blocks (no smooth lines): a dark sheath, a red body and a core that throbs
+          const steps = Math.max(8, Math.round(len));
+          for (let i = 0; i <= steps; i++) {
+            const [px, py] = at(i / steps), qx = Math.round(px), qy = Math.round(py);
+            g.fillStyle(0x4a0000, 0.8).fillRect(qx - 1, qy - 1, 3, 3);
+          }
+          for (let i = 0; i <= steps; i++) {
+            const [px, py] = at(i / steps), qx = Math.round(px), qy = Math.round(py);
+            const wave = Math.sin(i / steps * 14 - this.t / (f.ally ? -60 : 60)); // bulges running along it toward the drinker
+            g.fillStyle(wave > 0.6 ? 0xff5252 : 0xb71c1c, 1).fillRect(qx, qy - (wave > 0.6 ? 1 : 0), wave > 0.6 ? 2 : 1, wave > 0.6 ? 2 : 1);
+            if (wave > 0.9 && beat > 0.5) g.fillStyle(0xffcdd2, 1).fillRect(qx, qy - 1, 1, 1);
+          }
+          // Blood torn out of the victim flies to the vampire in a steady arcing stream, as in Exsanguinate
+          // (Transfusion: it runs the other way, out of the vampire into the ally)
+          const [src, dst] = f.ally ? [o, tg] : [tg, o];
+          const sx = src.sprite.x, sy = src.sprite.y, sz = src.top * 0.5, dx = dst.sprite.x, dy = dst.sprite.y, dz = dst.top * 0.55;
+          const G = 260;
+          const drop = (big: boolean) => {
+            const T = rnd(0.3, 0.42) * (big ? 0.9 : 1), x0 = sx + rnd(-3, 3), y0 = sy + rnd(-2, 2), z0 = sz + rnd(-3, 3);
+            this.p(x0, y0, z0, pick(big ? PALETTE.blood.slice(1, 4) : PALETTE.blood.slice(1, 5)), {
+              vx: (dx - x0) / T, vy: (dy - y0) / T, vz: (dz - z0 + (G * T * T) / 2) / T, g: G, life: T * 1000,
+              size: big ? pick([3, 3, 4]) : pick([2, 2, 3]), size1: big ? 2 : 1.5, add: false });
+          };
+          for (let i = n(140); i > 0; i--) drop(false);
+          // Each pulse of the link (a hit) gulps a thick spurt out of the source, and the drinker flares as it lands
+          const pulse = Math.floor((this.t - born) / (f.tickMs || 300));
+          if (pulse !== this.linkPulse.get(f)) {
+            this.linkPulse.set(f, pulse);
+            for (let i = 0; i < 10; i++) drop(true);
+            this.burst(sx, sy, sz, "blood", 6, 45, 300);
+            this.glow(sx, sy, sz, 7, 0xb71c1c, 220, 0.5);
+            this.scene.time.delayedCall(330, () => { const d = this.ent(f.ally ? f.target : f.owner); if (d) this.glow(d.sprite.x, d.sprite.y, d.top * 0.55, 10, 0xe63946, 240, 0.55); });
+          }
+          // a small red vortex round the drinker, where the stream pours in
+          const va = this.t / 70;
+          for (let i = 0; i < n(40); i++) {
+            const bb = va + rnd(0, Math.PI * 2), rr = rnd(6, 10);
+            this.p(dx + Math.cos(bb) * rr, dy + Math.sin(bb) * rr * 0.6, rnd(dz * 0.4, dz * 1.3), pick(PALETTE.blood), { vx: -Math.sin(bb) * 60, vy: Math.cos(bb) * 34, vz: rnd(5, 20), life: 200, size: pick([1, 2]), size1: 0 });
           }
           if (chance(10)) { const [px, py] = at(Math.random()); this.p(px, py, 0, pick(PALETTE.blood.slice(2, 5)), { vy: 18, g: 0, life: 300, size: 1, size1: 0, add: false }); }
-          if (chance(8)) this.burst(tg.sprite.x, tg.sprite.y, tg.top * 0.5, "blood", 2, 30, 250);
-          if (chance(4)) this.glow(o.sprite.x, o.sprite.y, o.top * 0.5, 8, 0xe63946, 200, 0.35);
           break;
         }
         case "bloodward": {
