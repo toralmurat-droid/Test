@@ -1,5 +1,6 @@
 {
   "date": "2026-11-07",
+  "pr": 311,
   "title": "Smoother on a shaky connection",
   "changes": [
     "After a connection hiccup, heroes and monsters walk on smoothly instead of skipping ahead.",
