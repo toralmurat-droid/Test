@@ -1,0 +1,10 @@
+{
+  "date": "2026-11-07",
+  "pr": 293,
+  "title": "World size fits your screen",
+  "changes": [
+    "The world now grows to fit big screens, so heroes and monsters no longer look tiny on large monitors.",
+    "New World size setting in the game menu (Esc): Auto, or pick a size from 50% to 300%. Pixels always stay crisp.",
+    "Bigger sizes show less of the world and run faster; smaller sizes show more."
+  ]
+}
