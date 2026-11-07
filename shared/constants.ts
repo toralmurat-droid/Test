@@ -62,7 +62,7 @@ export type MobKind = "slime" | "skeleton" | "motherblob" | "blobling" | "shoote
   // the beast-folk of the Mawdeep Warrens (shared/dungeon.ts, BEAST below): men and women sewn into animal hides
   | "gnawkin" | "tuskborn" | "silkwretch" | "duskwing" | "packlord" | "hornbrute" | "hidemother" | "crowseer" | "gnasher" | "weaver"
   // summoned by heroes (shared/summons.ts): they fight for their owner
-  | "golem_fire" | "golem_cold" | "golem_poison" | "golem_shock";
+  | "golem_fire" | "golem_cold" | "golem_poison" | "golem_shock" | "golem_colossus";
 
 export interface MobDef {
   name: string;
@@ -81,6 +81,8 @@ export const MOBS: Record<MobKind, MobDef> = {
   golem_cold: { name: "Frost Golem", maxHp: 170, speed: 66, damage: 13, attackCooldownMs: 1200, aggroRange: 160, leash: 256, xp: 0 },
   golem_poison: { name: "Venom Golem", maxHp: 150, speed: 70, damage: 12, attackCooldownMs: 1100, aggroRange: 160, leash: 256, xp: 0 },
   golem_shock: { name: "Storm Golem", maxHp: 130, speed: 76, damage: 15, attackCooldownMs: 1000, aggroRange: 160, leash: 256, xp: 0 },
+  // the Summoner's ultimate: the golems fused into one giant (its element is in Mob.weapon)
+  golem_colossus: { name: "Colossus", maxHp: 420, speed: 64, damage: 30, attackCooldownMs: 1500, aggroRange: 180, leash: 256, xp: 0 },
   slime: { name: "Blob", maxHp: 40, speed: 45, damage: 8, attackCooldownMs: 1000, aggroRange: 80, leash: 140, xp: 10 },
   skeleton: { name: "Skeleton", maxHp: 80, speed: 62, damage: 19, attackCooldownMs: 900, aggroRange: 110, leash: 200, xp: 25 },
   // Big, slow slime that buds off bloblings now and then (see BROOD)

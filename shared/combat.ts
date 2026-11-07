@@ -29,13 +29,13 @@ export const POISE = {
 } as const;
 
 /** Base poise per hero (+12% per level above 1, so it keeps up with damage growth). Heavy fighters hold their ground longer. */
-export const HERO_POISE: Record<ClassKind, number> = { knight: 90, barbarian: 80, archer: 55, ninja: 90, wizard: 55, vampire: 70 };
+export const HERO_POISE: Record<ClassKind, number> = { knight: 90, barbarian: 80, archer: 55, ninja: 90, wizard: 55, vampire: 70, summoner: 55 };
 export const heroPoise = (cls: ClassKind, level: number) => Math.round(HERO_POISE[cls] * (1 + 0.12 * (Math.max(1, level) - 1)));
 
 /** Monster poise (scaled like HP by level) and attack wind-up. */
 export const MOB_COMBAT: Record<MobKind, { poise: number; windupMs: number }> = {
   golem_fire: { poise: 140, windupMs: 420 }, golem_cold: { poise: 160, windupMs: 420 },
-  golem_poison: { poise: 140, windupMs: 420 }, golem_shock: { poise: 120, windupMs: 380 },
+  golem_poison: { poise: 140, windupMs: 420 }, golem_shock: { poise: 120, windupMs: 380 }, golem_colossus: { poise: 400, windupMs: 560 },
   slime: { poise: 30, windupMs: 350 },
   skeleton: { poise: 55, windupMs: 300 },
   crawler: { poise: 20, windupMs: 320 },
@@ -112,7 +112,7 @@ export function poiseLevelMult(attackerLevel: number, targetLevel: number): numb
  */
 export const SWING_AHEAD = 12;
 const MOB_BODY: Partial<Record<MobKind, number>> = {
-  golem_fire: 9, golem_cold: 9, golem_poison: 9, golem_shock: 9,
+  golem_fire: 9, golem_cold: 9, golem_poison: 9, golem_shock: 9, golem_colossus: 14,
   motherblob: 14, demon: 12, hollowking: 13, banditchief: 10, necromancer: 8, warriorblob: 7, blobling: 3, crawler: 4,
 };
 export const mobBody = (kind: MobKind) => MOB_BODY[kind] ?? 6;

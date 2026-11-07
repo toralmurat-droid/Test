@@ -32,6 +32,7 @@ Gameplay:
   - **Wizard:** ranged fireballs. Skill *Nova*: blast everything around you.
   - **Archer:** long-range arrows. Skill *Volley*: 3 arrows side by side. Ultimate *Arrow Rain*.
   - **Barbarian:** axe brawler. Skill *Rage*: +30% damage and +20% speed for 5s. Ultimate *Leap*.
+  - **Summoner** (`shared/summons.ts`): fights through elemental golems. *Attune* (basic spell) cycles fire, frost, venom and storm; *Elemental Golem* calls one in that element (2 at most, 90s each; they fight monsters and, PvP rules allowing, rival heroes, and the Summoner gets the kills). *Vital Link* (Lv 3), *Conjured Blade* (Lv 5), *Conjured Armour* (Lv 8), and the *Colossus* ultimate (Lv 10): the golems fuse into one giant for 30s.
 - **Combos:** the basic attack alternates two hits. With the **3-Hit Combo** skill (skill tree, Lv 1) a 3rd hit in a row (press attack again within 0.7s) is a finisher: Knight wide slam, Ninja lunge, Wizard big fireball, Archer power shot, Barbarian axe smash. Tuned in `combo` in `shared/classes.ts`.
 - **Attack variety:** normal hits pick 1 of 4 attack moves at random (never the same twice in a row).
 - **Dodge roll** (F): every hero rolls 48px in the move direction (or facing), untouchable for 0.3s, 1.5s cooldown. Tuned in `DODGE` in `shared/classes.ts`.

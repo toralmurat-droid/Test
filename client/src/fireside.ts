@@ -17,12 +17,14 @@ const SHOWCASE = ["idle3", "swing1", "swing2", "attack3", "skill", "cheer"];
 const BASE_X = 48, BASE_Y = 93; // where the fire pit sits inside a bonfire frame (cells)
 
 /** Where each hero stands, in cells from the fire's base, and which way it faces the fire. */
+// Seven seats on the arc behind the fire (one per class), every 30 degrees from the left end to the right end
 const SLOTS: { dx: number; dy: number; dir: string; flip: boolean }[] = [
   { dx: -132, dy: 14, dir: "right", flip: false },
-  { dx: -102, dy: -40, dir: "downright", flip: false },
-  { dx: -40, dy: -88, dir: "downright", flip: false },
-  { dx: 40, dy: -88, dir: "downright", flip: true },
-  { dx: 102, dy: -40, dir: "downright", flip: true },
+  { dx: -114, dy: -37, dir: "downright", flip: false },
+  { dx: -66, dy: -74, dir: "downright", flip: false },
+  { dx: 0, dy: -88, dir: "down", flip: false },
+  { dx: 66, dy: -74, dir: "downright", flip: true },
+  { dx: 114, dy: -37, dir: "downright", flip: true },
   { dx: 132, dy: 14, dir: "right", flip: true },
 ];
 

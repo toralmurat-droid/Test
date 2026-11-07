@@ -74,10 +74,10 @@ function rigFor(dir: GolemDir, pose: GolemPose): Rig {
 }
 
 /** Paint one golem frame in world px on `c` (already scaled to the hi-res factor). */
-export function paintGolem(c: C2, style: GolemStyle, el: GolemElement, dir: GolemDir, pose: GolemPose, seed = 7) {
+export function paintGolem(c: C2, style: GolemStyle, el: GolemElement, dir: GolemDir, pose: GolemPose, seed = 7, shadow: C2 = c) {
   const E = GOLEM_ELEMENT[el], g = rigFor(dir, pose), front = dir === "down";
-  // ground shadow
-  fillShape(c, ellipseP(GOLEM_W / 2, FOOT + 0.5, 13, 3.2), "rgba(0,0,0,0.32)");
+  // ground shadow (on its own layer in the monster sheets, so pixelize keeps it)
+  fillShape(shadow, ellipseP(GOLEM_W / 2, FOOT + 0.5, 13, 3.2), "rgba(0,0,0,0.32)");
   const parts = PAINTERS[style];
   // far limbs first, then body, near limbs, head
   if (dir !== "up") { parts.leg(c, g, g.fF, E, seed + 1, true); parts.arm(c, g, g.shF, g.hF, E, seed + 2, true); }
@@ -250,8 +250,8 @@ const runic: Painter = {
 const PAINTERS: Record<GolemStyle, Painter> = { monolith, elemental, runic };
 
 /** paintGolem with the element the elemental style draws its substance with. */
-export function paintGolemFrame(c: C2, style: GolemStyle, el: GolemElement, dir: GolemDir, pose: GolemPose, seed = 7) {
+export function paintGolemFrame(c: C2, style: GolemStyle, el: GolemElement, dir: GolemDir, pose: GolemPose, seed = 7, shadow?: C2) {
   curEl = el;
-  paintGolem(c, style, el, dir, pose, seed);
+  paintGolem(c, style, el, dir, pose, seed, shadow ?? c);
 }
 
