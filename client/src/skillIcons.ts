@@ -248,6 +248,10 @@ const GLYPHS: Record<string, string[]> = {
 
 /** Glyph per skill id (skills with a hand-made icon above are not listed). */
 const SKILL_GLYPH: Record<string, string> = {
+  // wizard upgrade nodes (tinted in their school's colours)
+  w_fb_split: "star4", w_fb_heat: "flame", w_fb_haste: "wind", w_fb_burst: "burst", w_fb_pierce: "arrow", w_fb_inferno: "up",
+  w_bz_wide: "flake", w_bz_bite: "crit", w_bz_last: "halo", w_bz_freeze: "mirror", w_bz_age: "wind", w_bz_bite2: "spikes",
+  w_th_fork: "bolt", w_th_charge: "up", w_th_wide: "cloud", w_th_stun: "star4", w_th_long: "halo", w_th_swift: "wind",
   k_lunge: "sword", k_whirl: "swirl", k_mastery: "up", k_rush: "sword", k_judgement: "sword", k_riposte: "crit", k_ironskin: "fist",
   k_taunt: "mouth", k_holyblade: "sword", k_consecrate: "halo", k_rally: "star4", k_aura: "halo", k_wrath: "burst",
   n_smoke: "smoke", n_swift: "boot", n_assassinate: "crit", n_cuts: "swirl", n_shuriken: "star4", n_flurry: "wind", n_parry: "mirror",

@@ -18,7 +18,20 @@ import type { StatKind } from "./powers";
  */
 
 export type TalentEffect = "dmg" | "skill" | "crit" | "lifesteal" | "hp" | "armor" | "speed" | "cdr" | "regen" | "mana"
-  | "summonHp" | "summonDmg"; // the Summoner's golems (shared/summons.ts): +% life, +% damage
+  | "summonHp" | "summonDmg" // the Summoner's golems (shared/summons.ts): +% life, +% damage
+  | "upgrade"; // an upgrade node (SkillDef.mod): changes one spell instead of giving a bonus
+
+/**
+ * Upgrade nodes (Murat 2026-11-07): instead of more spells, a school's tree upgrades its one spell. Each value is per
+ * rank: n/zap/pierce add, explode adds px, the others are % (cd and mana negative = cheaper / shorter).
+ */
+export interface SkillMod {
+  of: string; // the spell it upgrades
+  n?: number; // more projectiles (fanned)
+  dmg?: number; cd?: number; mana?: number;
+  radius?: number; ms?: number; tick?: number; slow?: number; stun?: number; speed?: number; burn?: number;
+  zap?: number; pierce?: number; explode?: number;
+}
 
 /** Look of a skill's effects on the client (colours and particle style). */
 export type FxStyle =
@@ -131,10 +144,11 @@ export interface CounterDef {
 export type WeaponNeed = "bow" | "melee" | "shield";
 export const NEED_TEXT: Record<WeaponNeed, string> = { bow: "a bow", melee: "a melee weapon", shield: "a shield" };
 
-export type SkillType = "Attack" | "Aura" | "War cry" | "Enchant" | "Buildup" | "Counter" | "Trap" | "Movement" | "Passive" | "Ultimate" | "Summon";
+export type SkillType = "Attack" | "Aura" | "War cry" | "Enchant" | "Buildup" | "Counter" | "Trap" | "Movement" | "Passive" | "Ultimate" | "Summon" | "Upgrade";
 
 export interface SkillDef {
   id: string; name: string; type: SkillType; desc: string;
+  mod?: SkillMod; // an upgrade node: learned ranks change the spell `mod.of` (see withMods)
   branch: 0 | 1 | 2; row: 0 | 1 | 2 | 3 | 4;
   req: number; // hero level needed (filled from TREE)
   parent?: string; // skill that must be learned first (none = root of its branch)
@@ -326,14 +340,50 @@ const S: Record<ClassKind, SkillDef[]> = <Record<ClassKind, SkillDef[]>><unknown
     { id: "w_firebolt", name: "Fire Bolt", type: "Attack", branch: 0, row: 0, style: "fire", cd: 450, mana: 5,
       desc: "Hurl a bolt of fire at your foe: it burns them for a moment. Cheap and quick: cast it again and again.",
       shots: { kind: "fireball", speed: 280, range: 200, radius: 6, size: 1.3, dmg: 11, burn: [2, 1500], kb: 0.6 } },
+    { id: "w_fb_split", name: "Split Bolt", type: "Upgrade", branch: 0, row: 1, style: "fire", passive: { effect: "upgrade", perRank: 0 },
+      desc: "Fire Bolt splits: +1 bolt per rank, fanned out (each bolt 10% weaker per rank).", mod: { of: "w_firebolt", n: 1, dmg: -10 } },
+    { id: "w_fb_heat", name: "Searing Heat", type: "Upgrade", branch: 0, row: 1, style: "fire", passive: { effect: "upgrade", perRank: 0 },
+      desc: "Fire Bolt hits harder: +15% damage per rank.", mod: { of: "w_firebolt", dmg: 15 } },
+    { id: "w_fb_haste", name: "Quick Hands", type: "Upgrade", branch: 0, row: 2, style: "fire", passive: { effect: "upgrade", perRank: 0 },
+      desc: "Fire Bolt comes back sooner and costs less: -12% cooldown and -10% mana per rank.", mod: { of: "w_firebolt", cd: -12, mana: -10 } },
+    { id: "w_fb_burst", name: "Combustion", type: "Upgrade", branch: 0, row: 2, style: "fire", passive: { effect: "upgrade", perRank: 0 },
+      desc: "Fire Bolt explodes where it hits, burning everything close: +12 px blast radius per rank.", mod: { of: "w_firebolt", explode: 12 } },
+    { id: "w_fb_pierce", name: "Piercing Flames", type: "Upgrade", branch: 0, row: 3, style: "fire", passive: { effect: "upgrade", perRank: 0 },
+      desc: "Fire Bolt goes through: +1 enemy pierced per rank, and +15% range.", mod: { of: "w_firebolt", pierce: 1, speed: 15 } },
+    { id: "w_fb_inferno", name: "Inferno", type: "Upgrade", branch: 0, row: 3, style: "fire", passive: { effect: "upgrade", perRank: 0 },
+      desc: "Fire Bolt's blast grows (+8 px per rank) and its burn is hotter (+40% per rank).", mod: { of: "w_firebolt", explode: 8, burn: 40 } },
     // Frost
     { id: "w_blizzard", name: "Blizzard", type: "Aura", branch: 1, row: 0, style: "frost", cd: 9000, mana: 22,
       desc: "A storm of snow and ice turns around you for 6s and moves with you, hurting and slowing every enemy close by.",
       field: { kind: "frostwhirl", r: 56, ms: 6000, tickMs: 500, follow: true, dmg: 6, slowMs: 800 } },
+    { id: "w_bz_wide", name: "Wide Storm", type: "Upgrade", branch: 1, row: 1, style: "frost", passive: { effect: "upgrade", perRank: 0 },
+      desc: "The Blizzard reaches further: +15% radius per rank.", mod: { of: "w_blizzard", radius: 15 } },
+    { id: "w_bz_bite", name: "Biting Cold", type: "Upgrade", branch: 1, row: 1, style: "frost", passive: { effect: "upgrade", perRank: 0 },
+      desc: "The Blizzard bites harder: +15% damage per rank.", mod: { of: "w_blizzard", dmg: 15 } },
+    { id: "w_bz_last", name: "Lasting Storm", type: "Upgrade", branch: 1, row: 2, style: "frost", passive: { effect: "upgrade", perRank: 0 },
+      desc: "The Blizzard lasts longer: +20% duration per rank.", mod: { of: "w_blizzard", ms: 20 } },
+    { id: "w_bz_freeze", name: "Deep Freeze", type: "Upgrade", branch: 1, row: 2, style: "frost", passive: { effect: "upgrade", perRank: 0 },
+      desc: "The Blizzard's chill lasts longer: +30% slow time per rank.", mod: { of: "w_blizzard", slow: 30 } },
+    { id: "w_bz_age", name: "Ice Age", type: "Upgrade", branch: 1, row: 3, style: "frost", passive: { effect: "upgrade", perRank: 0 },
+      desc: "The Blizzard comes back sooner: -15% cooldown per rank.", mod: { of: "w_blizzard", cd: -15 } },
+    { id: "w_bz_bite2", name: "Frostbite", type: "Upgrade", branch: 1, row: 3, style: "frost", passive: { effect: "upgrade", perRank: 0 },
+      desc: "The Blizzard strikes more often: ticks 12% faster per rank.", mod: { of: "w_blizzard", tick: 12 } },
     // Thunder
     { id: "w_storm", name: "Thunder", type: "Attack", branch: 2, row: 0, style: "lightning", cd: 6000, mana: 20,
       desc: "Call thunder down on a spot: for 2.5s lightning hammers the zone, striking and stunning the enemies inside.",
       field: { kind: "storm", r: 56, ahead: 70, ms: 2500, tickMs: 300, zap: { n: 2, dmg: 11, stunMs: 250 } } },
+    { id: "w_th_fork", name: "Forked Lightning", type: "Upgrade", branch: 2, row: 1, style: "lightning", passive: { effect: "upgrade", perRank: 0 },
+      desc: "Thunder strikes more: +1 bolt per strike per rank (each 10% weaker per rank).", mod: { of: "w_storm", zap: 1, dmg: -10 } },
+    { id: "w_th_charge", name: "Charged", type: "Upgrade", branch: 2, row: 1, style: "lightning", passive: { effect: "upgrade", perRank: 0 },
+      desc: "Thunder hits harder: +15% damage per rank.", mod: { of: "w_storm", dmg: 15 } },
+    { id: "w_th_wide", name: "Wide Thunder", type: "Upgrade", branch: 2, row: 2, style: "lightning", passive: { effect: "upgrade", perRank: 0 },
+      desc: "Thunder covers more ground: +15% radius per rank.", mod: { of: "w_storm", radius: 15 } },
+    { id: "w_th_stun", name: "Paralysis", type: "Upgrade", branch: 2, row: 2, style: "lightning", passive: { effect: "upgrade", perRank: 0 },
+      desc: "Thunder stuns longer: +30% stun per rank.", mod: { of: "w_storm", stun: 30 } },
+    { id: "w_th_long", name: "Long Storm", type: "Upgrade", branch: 2, row: 3, style: "lightning", passive: { effect: "upgrade", perRank: 0 },
+      desc: "Thunder rages longer: +25% duration per rank.", mod: { of: "w_storm", ms: 25 } },
+    { id: "w_th_swift", name: "Swift Storm", type: "Upgrade", branch: 2, row: 3, style: "lightning", passive: { effect: "upgrade", perRank: 0 },
+      desc: "Thunder comes back sooner: -15% cooldown per rank.", mod: { of: "w_storm", cd: -15 } },
   ],
 
   // ---------------------------------------------------------------- ARCHER
@@ -585,6 +635,13 @@ const TREE: Record<string, Shape> = {
   n_lightning: [12, "n_flame", ["mag", 2]], n_dragon: [24, "n_lightning", ["mag", 2.5]],
   // Wizard: three schools, one spell each (Murat 2026-11-07)
   w_firebolt: [1, undefined, ["mag", 2]], w_blizzard: [1, undefined, ["mag", 2]], w_storm: [1, undefined, ["mag", 2]],
+  // Upgrades of each spell (Murat 2026-11-07): two paths per school, tiers at levels 3, 8 and 14
+  w_fb_split: [3, "w_firebolt"], w_fb_haste: [8, "w_fb_split"], w_fb_pierce: [14, "w_fb_haste"],
+  w_fb_heat: [3, "w_firebolt"], w_fb_burst: [8, "w_fb_heat"], w_fb_inferno: [14, "w_fb_burst"],
+  w_bz_wide: [3, "w_blizzard"], w_bz_last: [8, "w_bz_wide"], w_bz_age: [14, "w_bz_last"],
+  w_bz_bite: [3, "w_blizzard"], w_bz_freeze: [8, "w_bz_bite"], w_bz_bite2: [14, "w_bz_freeze"],
+  w_th_fork: [3, "w_storm"], w_th_wide: [8, "w_th_fork"], w_th_long: [14, "w_th_wide"],
+  w_th_charge: [3, "w_storm"], w_th_stun: [8, "w_th_charge"], w_th_swift: [14, "w_th_stun"],
   // Archer · Marksman: Power Shot forks into the Fan (dead end) and Steady Aim on to the Arrow Rain
   a_volley: [1, undefined, ["dex", 2]], a_power: [4, "a_volley", ["str", 2]], a_fan: [10, "a_power", ["dex", 2]],
   a_aim: [7, "a_power"], a_rain: [20, "a_aim", ["dex", 2]],
@@ -642,6 +699,47 @@ for (const list of Object.values(S)) for (const sk of list) {
 // Tree order: parents before children, lower levels first
 for (const list of Object.values(S)) list.sort((a, b) => a.branch - b.branch || depth(a, list) - depth(b, list) || a.req - b.req);
 function depth(s: SkillDef, list: SkillDef[]): number { let d = 0, p = s.parent; while (p) { d++; p = list.find((x) => x.id === p)?.parent; } return d; }
+
+/**
+ * Spell `s` with the hero's learned upgrade nodes (SkillDef.mod) applied: more bolts, bigger radius, shorter cooldown...
+ * Returns `s` itself when nothing upgrades it. Damage upgrades go into `power`.
+ */
+export function withMods(cls: ClassKind, r: Ranks | undefined, s: SkillDef): SkillDef {
+  if (!r || s.mod || s.passive) return s;
+  const t: Required<Omit<SkillMod, "of">> = { n: 0, dmg: 0, cd: 0, mana: 0, radius: 0, ms: 0, tick: 0, slow: 0, stun: 0, speed: 0, burn: 0, zap: 0, pierce: 0, explode: 0 };
+  let any = false;
+  for (const m of S[cls] ?? []) {
+    if (m.mod?.of !== s.id) continue;
+    const k = Math.min(MAX_RANK, rankOf(r, m.id));
+    if (k <= 0) continue;
+    any = true;
+    for (const key of Object.keys(t) as (keyof typeof t)[]) t[key] += (m.mod[key] ?? 0) * k;
+  }
+  if (!any) return s;
+  const pct = (v: number) => Math.max(0.1, 1 + v / 100);
+  const o: SkillDef = { ...s, power: (s.power ?? 1) * pct(t.dmg) };
+  if (s.cd) o.cd = Math.round(s.cd * pct(t.cd));
+  if (s.mana) o.mana = Math.max(1, Math.round(s.mana * pct(t.mana)));
+  if (s.shots) {
+    const d = { ...s.shots };
+    if (t.n) { const n = (d.n ?? 1) + t.n; d.n = n; d.spread = Math.max(d.spread ?? 0, 12 * (n - 1)); }
+    if (t.pierce) d.pierce = (d.pierce ?? 0) + t.pierce;
+    if (t.explode) d.explode = (d.explode ?? 0) + t.explode;
+    if (t.speed) { d.speed *= pct(t.speed); d.range *= pct(t.speed); }
+    if (t.burn && d.burn) d.burn = [d.burn[0] * pct(t.burn), d.burn[1]];
+    o.shots = d;
+  }
+  if (s.field) {
+    const f = { ...s.field };
+    f.r *= pct(t.radius); f.ms *= pct(t.ms);
+    if (t.tick) f.tickMs = Math.max(100, f.tickMs / pct(t.tick));
+    if (f.slowMs) f.slowMs *= pct(t.slow);
+    if (f.zap) f.zap = { ...f.zap, n: f.zap.n + t.zap, stunMs: f.zap.stunMs && f.zap.stunMs * pct(t.stun) };
+    if (f.ahead && t.radius) f.ahead *= pct(t.radius);
+    o.field = f;
+  }
+  return o;
+}
 
 /** Synergy multiplier of a skill: 1 + its SYNERGY bonuses for the ranks the hero has in those skills. */
 export function synergyPower(s: SkillDef, r: Ranks | undefined): number {
@@ -755,6 +853,7 @@ export const EFFECT_TEXT: Record<TalentEffect, (v: number) => string> = {
   mana: (v) => `+${v}% mana regen`,
   summonHp: (v) => `+${v}% golem life`,
   summonDmg: (v) => `+${v}% golem damage`,
+  upgrade: () => "",
 };
 
 /** Drop unknown skills (old saves) and anything above what the level allows. */

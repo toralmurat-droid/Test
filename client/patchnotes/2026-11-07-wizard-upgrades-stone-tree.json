@@ -1,0 +1,9 @@
+{
+  "date": "2026-11-07",
+  "title": "Wizard upgrade paths and a stone skill tree",
+  "changes": [
+    "The wizard's tree now upgrades its three spells instead of adding new ones: two paths per school, three tiers (levels 3, 8 and 14), three ranks each.",
+    "Fire Bolt can split into more bolts, explode, pierce and cast faster; Blizzard can grow wider, last longer, freeze longer and tick faster; Thunder can fork into more strikes, cover more ground and stun longer.",
+    "The skill tree is drawn as winding stone paths with round stone medallions that glow in the school's colour once learned."
+  ]
+}
