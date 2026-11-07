@@ -1,5 +1,6 @@
 {
   "date": "2026-11-07",
+  "pr": 293,
   "title": "World size fits your screen",
   "changes": [
     "The world now grows to fit big screens, so heroes and monsters no longer look tiny on large monitors.",
