@@ -1,5 +1,6 @@
 {
   "date": "2026-11-07",
+  "patch": 130,
   "title": "Cleaner top-left HUD",
   "changes": [
     "The gold stamina bar is gone from the top-left corner. Only the level shield stays there."
