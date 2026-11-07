@@ -1,0 +1,10 @@
+{
+  "date": "2026-11-07",
+  "patch": 165,
+  "pr": 335,
+  "title": "Fewer screen shakes",
+  "changes": [
+    "The screen now only shakes for big boss blows, level-up and the village guards' wrath.",
+    "Necromancers, brutes and skeleton rips no longer shake the screen."
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "date": "2026-11-08",
+  "patch": 162,
+  "title": "Masterwork gear: Legendary, every 3 levels up to 30",
+  "changes": [
+    "Brann's masterwork pieces are now Legendary with four bonuses at their highest, sold at levels 15, 18, 21, 24, 27 and 30 (pick the level in the shop)",
+    "They are expensive: 10,000 gold at level 15 up to 100,000 at level 30 (they sell back like any Legendary)",
+    "Hovering a piece in the shop shows the stats you would get even if you don't meet its needs yet, and each piece lists what it needs in red",
+    "Quest marker: the gold ring sits centred on the target, and the arrow circles the middle of your hero",
+    "/max gives 1,000,000 gold to try the masterwork gear"
+  ],
+  "pr": 332
+}
