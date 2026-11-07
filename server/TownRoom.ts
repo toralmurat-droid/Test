@@ -14,12 +14,12 @@ import { MANA_POTION_DROP, manaRegen, maxManaFor, packMana, pay } from "../share
 import { Counts, dropSize, Potions, nextSize, noPotions, packPotions, potionAmount, potionName, PotionKind, potionSlots, POTION_COOLDOWN_MS, slotsAfter, SIZES, total } from "../shared/potions";
 /** Potion size from a ground item's `gear` field ("0".."2"). */
 const potSize = (g: string) => Math.max(0, Math.min(SIZES - 1, Math.floor(Number(g) || 0)));
-import { attackMult, cooldownMult, critChance, heroSpeed, magicMult, maxHpFromStats, SLOW_MOB, statsFor, statPoints } from "../shared/powers";
+import { attackMult, cooldownMult, critChance, heroSpeed, magicMult, maxHpFromStats, SLOW_MOB, STATS, statsFor, statPoints } from "../shared/powers";
 import { AttackProfile, attackProfile, weaponAttackMult, weaponOk } from "../shared/weapons";
 import { Element, ElemPart, ELEMENT_FX, mobAffinity, MOB_MELEE_ELEMENT, MOB_SHOT_ELEMENT } from "../shared/elements";
 import { gearResist, splitHit } from "../shared/gear";
 import { cleanFilter, LootFilter, passesFilter } from "../shared/heroSheet";
-import { activeSkills, canLearn, classSkills, cleanRanks, MAX_RANK, NEED_TEXT, rankOf, skillLearned, skillOf, talentBonus, talentMult, talentReduce } from "../shared/skills";
+import { activeSkills, canLearn, classSkills, cleanRanks, levelPower, MAX_RANK, NEED_TEXT, rankOf, rankPower, scalePower, skillById, skillLearned, skillOf, talentBonus, talentMult, talentReduce } from "../shared/skills";
 import {
   afterHit, atkSpeedMult, blocking, bloodCost, buffLifesteal, buffRegen, castSkill, ccImmune, charging, winding, counterHit, dealtMult, FieldInst, newRuntime,
   imbueOf, shotEnd, shotHit, shotPulse, ShotSpec, SkillHost, speedMult, statusOf, takenMult, tickField, tickUnit, Unit,
@@ -1461,7 +1461,7 @@ export class TownRoom extends Room<TownState> {
       if (o.dead || Math.abs(o.x - m.x) > def.aggroRange || Math.abs(o.y - m.y) > def.aggroRange) continue;
       const d = Math.hypot(o.x - m.x, o.y - m.y), hated = sid === m.hateId ? m.hate : 0;
       if (d >= (hated > 0 ? def.aggroRange * 2 : def.aggroRange) || Math.hypot(o.x - m.homeX, o.y - m.homeY) >= def.leash) continue;
-      const score = Math.max(0, 1 - d / def.aggroRange) + hated + (sid === m.foe ? AGGRO.stick : 0);
+      const score = Math.max(0, 1 - d / def.aggroRange) + SUMMON.taunt + hated + (sid === m.foe ? AGGRO.stick : 0);
       if (score > best) { best = score; target = ""; foe = sid; }
     }
     m.target = target; m.foe = foe;
@@ -1519,7 +1519,8 @@ export class TownRoom extends Room<TownState> {
     m.kind = kind; m.zone = -1; m.owner = ownerId; m.summonAt = now;
     m.level = capLevel(level ?? p.level);
     const fuse = 1 + SUMMON.colossusPerGolem * fused;
-    m.hp = m.maxHp = Math.round(MOBS[kind].maxHp * mobScale(m.level, "hp") * power * fuse * talentMult(p.cls, p.talents, "summonHp"));
+    // Life does not take the skill's power (rank, Magic): it made golems 3-4x tougher than monsters of their level
+    m.hp = m.maxHp = Math.round(MOBS[kind].maxHp * mobScale(m.level, "hp") * fuse * talentMult(p.cls, p.talents, "summonHp"));
     m.sPower = power * fuse * talentMult(p.cls, p.talents, "summonDmg");
     m.weapon = kind === "golem_colossus" ? attuneOf(p.attune) : "";
     // a free spot beside the hero (behind them if blocked)
@@ -1553,6 +1554,50 @@ export class TownRoom extends Room<TownState> {
     m.dead = true; m.hp = 0;
     if (show) this.broadcast("banish", { id, x: Math.round(m.x), y: Math.round(m.y) });
     this.clock.setTimeout(() => this.state.mobs.delete(id), 500);
+  }
+
+  /** The hero's living summon closest to them, within SUMMON.bondRange (Stone Bond takes part of their blows). */
+  private bondOf(heroId: string, p: { x: number; y: number }): [string, Mob] | undefined {
+    let best: [string, Mob] | undefined, bd: number = SUMMON.bondRange;
+    for (const [sid, g] of this.summons) {
+      if (g.owner !== heroId || g.dead) continue;
+      const d = Math.hypot(g.x - p.x, g.y - p.y);
+      if (d < bd) { bd = d; best = [sid, g]; }
+    }
+    return best;
+  }
+
+  /** The owner's living summon closest to monster m, within SUMMON.guardRange (the one that takes its anger). */
+  private guardOf(ownerId: string, m: Mob): string | undefined {
+    let best: string | undefined, bd = SUMMON.guardRange;
+    for (const [sid, g] of this.summons) {
+      if (g.owner !== ownerId || g.dead) continue;
+      const d = Math.hypot(g.x - m.x, g.y - m.y);
+      if (d < bd) { bd = d; best = sid; }
+    }
+    return best;
+  }
+
+  /** Bound golem: a Summoner outside the safe zone with no summon out gets one after SUMMON.autoMs. */
+  private nextAuto = new Map<string, number>();
+  private autoAt = 0;
+  private autoGolems(now: number) {
+    this.state.players.forEach((p, pid) => {
+      if (p.cls !== "summoner" || p.dead || isSafeZone(p.x, p.y)) { this.nextAuto.delete(pid); return; }
+      for (const g of this.summons.values()) if (g.owner === pid && !g.dead) { this.nextAuto.delete(pid); return; }
+      const at = this.nextAuto.get(pid);
+      if (at === undefined) { this.nextAuto.set(pid, now + SUMMON.autoMs); return; }
+      if (now < at) return;
+      this.nextAuto.delete(pid);
+      this.summon(pid, GOLEM_OF[attuneOf(p.attune)], undefined, this.golemPower(p));
+    });
+  }
+
+  /** What the Elemental Golem skill would give this hero (castSkill's power: rank, skill level, Magic). */
+  private golemPower(p: Player) {
+    const s = skillById("su_golem");
+    if (!s) return 1;
+    return rankPower(Math.max(1, Math.min(MAX_RANK, rankOf(p.talents, s.id)))) * levelPower(s) * scalePower(s, this.stats(p), STATS[p.cls].base);
   }
 
   /** Every summon of this hero goes back (they left, or died). */
@@ -2044,6 +2089,7 @@ export class TownRoom extends Room<TownState> {
     let dt = dtMs / 1000;
     const now = Date.now();
     this.tradeTick();
+    if (now >= this.autoAt) { this.autoAt = now + 500; this.autoGolems(now); }
     this.state.players.forEach((p, pid) => {
       tickUnit(this.host, pid);
       p.stunned = now < p.stunUntil;
@@ -3752,9 +3798,13 @@ export class TownRoom extends Room<TownState> {
     this.bloodthirst(a, attackerId, Math.min(dmg, m.hp), opts.drain, targetId);
     m.hp = Math.max(0, m.hp - dmg);
     this.addHate(m, attackerId, dmg); // fight back (generated aggro)
+    // Guardian (shared/summons.ts): a Summoner's golem close by draws the monster's anger instead of its owner
+    const guard = a && !m.owner ? this.guardOf(attackerId, m) : undefined;
+    if (guard) { this.addHate(m, guard, dmg); m.foe = guard; m.target = ""; }
     if (!opts.dot && (m.kind === "stormblob" || m.parts)) this.stormSparks(m, targetId, Date.now());
     if (!m.foe) m.target = attackerId;
     const now = Date.now();
+
     // Initiative: drain poise; a solid hit interrupts the wind-up and delays the next attack
     const pmax = mobPoiseMax(m);
     // Higher-level monsters are harder to make dizzy
@@ -4486,6 +4536,14 @@ export class TownRoom extends Room<TownState> {
     if (block) dmg = Math.max(1, Math.round(dmg * (1 - block)));
     // A monster's fire, cold or poison attack: the hero's resistances (armour, shield, hat) cut it
     if (opts.mobEl) dmg = Math.max(1, Math.round(dmg * (1 - gearResist(this.equipped(t), opts.mobEl))));
+    // Stone Bond (shared/summons.ts): the hero's nearest golem takes part of the blow
+    const bond = this.bondOf(tid, t);
+    if (bond && dmg > 1) {
+      const part = Math.round(dmg * SUMMON.guardShare);
+      dmg -= part;
+      bond[1].hp -= part;
+      if (bond[1].hp <= 0) this.mobDied(bond[1], bond[0], opts.from ?? "", byName);
+    }
     // Unstoppable buffs (Berserk, Whirlwind): ignore stun, slow and knockback
     const unstoppable = ccImmune(t, now);
     if (opts.stunMs && !guarded && !unstoppable) t.stunUntil = Math.max(t.stunUntil, now + opts.stunMs);

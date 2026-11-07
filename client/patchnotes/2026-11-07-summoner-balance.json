@@ -1,0 +1,10 @@
+{
+  "date": "2026-11-07",
+  "title": "Summoner: golems that guard",
+  "changes": [
+    "Bound golem: outside the safe zone, a Summoner with no golem gets one by itself after 5 seconds, from level 1.",
+    "Stone Bond: your nearest golem takes 30% of every blow aimed at you. The Summoner has a bit more life too.",
+    "Monsters now turn on the golem fighting them, even when the Summoner hits them.",
+    "Conjured Armour (40% less damage, regen, no stuns) and Conjured Blade (more damage, heals on hit) last longer and come back sooner."
+  ]
+}
