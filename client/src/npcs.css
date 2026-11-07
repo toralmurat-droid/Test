@@ -157,9 +157,16 @@
 /* the quest tracker sits on the left, under the zone line (Murat 2026-11-07) */
 #questtracker { right: auto; left: 12px; top: 150px; }
 /* higher up, see-through, each quest folds to its title (click the title) */
-#questtracker { top: 20px; }
+#questtracker { left: auto; right: 12px; top: 276px; } /* back on the right, under the minimap (Murat 2026-11-07) */
 body #questtracker { background: rgba(15, 10, 6, .42); }
 #questtracker .qt-title { cursor: pointer; }
 #questtracker .qt-title::before { content: "▾ "; color: #a8977a; }
 #questtracker .qt-block.folded .qt-title::before { content: "▸ "; }
 #questtracker .qt-block.folded > :not(.qt-title) { display: none; }
+
+/* the quest pointer: an arrow on a ring around the hero toward the objective, with its distance in steps */
+#questpointer { position: absolute; left: 0; top: 0; width: 0; height: 0; pointer-events: none; z-index: 6; }
+#questpointer[hidden] { display: none; }
+#questpointer i { position: absolute; left: -13px; top: -10px; width: 0; height: 0; border-left: 26px solid #e3bf6a; border-top: 10px solid transparent; border-bottom: 10px solid transparent;
+  filter: drop-shadow(0 0 2px #000) drop-shadow(0 0 4px rgba(227,191,106,.6)); transform-origin: 13px 10px; }
+#questpointer b { position: absolute; left: -16px; top: 12px; width: 32px; text-align: center; font: 16px var(--pixel-font); color: #ffe9a8; text-shadow: 1px 1px 0 #000, -1px -1px 0 #000; font-weight: normal; }

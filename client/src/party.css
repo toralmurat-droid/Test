@@ -14,7 +14,7 @@
 #partypanel .help { color: #aaa; font-size: 18px; font-family: var(--pixel-font); margin: 4px 0; }
 #partypanel button, #partyask button { font-size: 18px; font-family: var(--pixel-font); background: #15151f; color: #eee; border: 1px solid #555a7a; cursor: pointer; padding: 2px 8px; }
 #partypanel button:hover, #partyask button:hover { border-color: #ffd166; }
-#partyframe { position: absolute; left: 12px; top: 42%; width: 150px; pointer-events: none; text-shadow: 2px 2px #000; }
+#partyframe { position: absolute; left: 12px; top: 20px; width: 150px; pointer-events: none; text-shadow: 2px 2px #000; }
 #partyframe .pt { font-size: 18px; font-family: var(--pixel-font); color: #7cfc00; margin-bottom: 2px; }
 #partyframe .pm { margin-bottom: 5px; }
 #partyframe .pn { display: block; font-size: 18px; font-family: var(--pixel-font); color: #b9ff8a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
