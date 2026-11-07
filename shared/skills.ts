@@ -586,9 +586,9 @@ const S: Record<ClassKind, SkillDef[]> = <Record<ClassKind, SkillDef[]>><unknown
       field: { kind: "nightfall", r: 96, ms: 10000, tickMs: 500, dmg: 8, drain: 15, weakMs: 1200, slowMs: 1000, night: true }, buff: { ms: 5000, lifesteal: 8, speed: 15 } },
 
     // Fang: the blade and the hunt (Strength, Stamina)
-    { id: "v_rend", name: "Crimson Slash", type: "Attack", branch: 2, row: 0, style: "blood", windMs: 60, cd: 4500, cost: 20,
+    { id: "v_rend", name: "Crimson Slash", type: "Attack", branch: 2, row: 0, style: "blood", windMs: 60, cost: 30,
       desc: "A quick, cruel slash: the wound bleeds, and you drink 10% of the damage.",
-      areas: [{ r: 26, ahead: 12, wpn: 2.3, burn: [5, 2000], drain: 10, kb: 1.2, look: "slash" }] },
+      areas: [{ r: 26, ahead: 12, wpn: 1.5, burn: [5, 2000], drain: 10, kb: 1.2, look: "slash" }] },
     { id: "v_thirst", name: "Thirst", type: "Enchant", branch: 2, row: 1, style: "blood", cd: 11000, cost: 15, mana: 10,
       desc: "Your blade thirsts for 7s: every hit, your skills too, makes them bleed, and you heal 8% of the damage you deal. Your bloodline shares it: group allies near you heal 4% of theirs.",
       buff: { ms: 7000, lifesteal: 8, onHit: { burn: [3, 2000] }, group: 140 } },
