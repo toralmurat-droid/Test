@@ -15,6 +15,7 @@ import {
 } from "../../shared/quests";
 import { QuestObjects } from "./questObjects";
 import { TILE } from "../../shared/constants";
+import { ISO } from "./isoflag";
 import { routeVia } from "../../shared/dungeon";
 import type { MapMarker } from "./minimap";
 import { QuestLog } from "./questlog";
@@ -53,8 +54,18 @@ export class NpcLayer {
   readonly objects: QuestObjects;
   private nearObj?: ReturnType<QuestObjects["near"]>;
   private trackerHtml = "";
-  /** Quest titles folded down to their title line in the tracker. */
+  /**
+   * Folding in the tracker (Murat 2026-11-07): a quest is folded to its title by default and opens once it is started;
+   * a click on the title flips that, remembered per title ("opened" for folded-by-default ones, "folded" for started ones).
+   */
   private folded = new Set<string>((() => { try { return JSON.parse(localStorage.getItem("qtfolded") ?? "[]") as string[]; } catch { return []; } })());
+  private opened = new Set<string>((() => { try { return JSON.parse(localStorage.getItem("qtopened") ?? "[]") as string[]; } catch { return []; } })());
+  private isFolded(title: string, started: boolean) { return started ? this.folded.has(title) : !this.opened.has(title); }
+  /** Arrow around the hero pointing to the first tracked objective, with its distance in steps (tiles). */
+  private pointer = document.createElement("div");
+  private aim?: { dx: number; dy: number; d: number };
+  /** The local hero's feet on the screen, HUD px (TownScene sets it every frame). */
+  heroScreen?: { x: number; y: number };
   private stage: unknown = -1;
   private shopMsg = "";
   readonly log = new QuestLog();
@@ -68,18 +79,21 @@ export class NpcLayer {
     this.prompt.id = "npcprompt";
     this.dialog.id = "npcdialog";
     this.tracker.id = "questtracker";
+    this.pointer.id = "questpointer";
     this.toast.id = "questtoast";
-    hud.append(this.prompt, this.dialog, this.tracker, this.toast);
+    hud.append(this.prompt, this.dialog, this.tracker, this.toast, this.pointer);
     this.prompt.onclick = () => this.interact();
     // Click a quest's title to fold it down to that line (remembered); anywhere else opens the quest log
     this.tracker.onclick = (ev) => {
       const t = (ev.target as HTMLElement).closest(".qt-title") as HTMLElement | null;
       const key = t?.textContent ?? "";
       if (!t || !key) { this.log.toggle(true); return; }
-      if (this.folded.has(key)) this.folded.delete(key); else this.folded.add(key);
-      try { localStorage.setItem("qtfolded", JSON.stringify([...this.folded])); } catch { /* storage off */ }
+      const block = t.closest(".qt-block") as HTMLElement, started = block.dataset.started === "1";
+      const set = started ? this.folded : this.opened;
+      if (set.has(key)) set.delete(key); else set.add(key);
+      try { localStorage.setItem("qtfolded", JSON.stringify([...this.folded])); localStorage.setItem("qtopened", JSON.stringify([...this.opened])); } catch { /* storage off */ }
       this.trackerHtml = ""; // redraw on the next update
-      this.tracker.querySelectorAll(".qt-block").forEach((b) => { const title = b.querySelector(".qt-title")?.textContent ?? ""; b.classList.toggle("folded", this.folded.has(title)); });
+      block.classList.toggle("folded", this.isFolded(key, started));
     };
     for (const n of NPCS) {
       const sprite = scene.add.sprite(n.x, n.y, n.sprite, 0).setOrigin(CHAR_ORIGIN.x, CHAR_ORIGIN.y).setScale(CHAR_SCALE).setDepth(n.y);
@@ -349,6 +363,7 @@ export class NpcLayer {
 
     // On-screen tracker: one block per chain with its quest, current objective, progress bar and where to go
     let html = "";
+    this.aim = undefined;
     {
       // The guided first quest on top; only the quests the player chose to track
       const blocks = [tracked[TUT_CHAIN], ...tracked.filter((_, c) => c !== TUT_CHAIN)].map((st) => this.trackBlock(me, st)).filter(Boolean);
@@ -360,6 +375,23 @@ export class NpcLayer {
       this.tracker.innerHTML = html;
       this.tracker.classList.toggle("open", !!html);
     }
+    this.drawPointer();
+  }
+
+  /** The quest pointer: an arrow on a ring around the hero (the middle of the screen) toward the objective, and its distance. */
+  private drawPointer() {
+    const a = this.aim;
+    const h = this.heroScreen;
+    if (!a || !h) { this.pointer.hidden = true; return; }
+    // iso view: a world direction turns on screen (screen x = x - y, screen y = (x + y) / 2)
+    const sx = ISO ? a.dx - a.dy : a.dx, sy = ISO ? (a.dx + a.dy) / 2 : a.dy;
+    const ang = Math.atan2(sy, sx), R = 62;
+    this.pointer.hidden = false;
+    this.pointer.style.left = `${h.x + Math.cos(ang) * R}px`;
+    this.pointer.style.top = `${h.y - 20 + Math.sin(ang) * R}px`; // around the middle of the body
+    const steps = String(Math.round(a.d / TILE));
+    if (this.pointer.dataset.s !== steps) { this.pointer.dataset.s = steps; this.pointer.innerHTML = `<i></i><b>${steps}</b>`; }
+    (this.pointer.firstElementChild as HTMLElement).style.transform = `rotate(${ang}rad)`;
   }
 
   /** Tracker block for one chain ("" when it has nothing to show). */
@@ -378,6 +410,7 @@ export class NpcLayer {
       if (via) target = { x: via.x, y: via.y, kind: "object", label: via.label };
       if (target && me) {
         const dx = target.x - me.x, dy = target.y - me.y, d = Math.hypot(dx, dy) - (target.r ?? 0);
+        if (d > TILE * 2 && !this.aim) this.aim = { dx, dy, d };
         if (d > TILE * 2) {
           const arrows = ["→", "↘", "↓", "↙", "←", "↖", "↑", "↗"];
           const names = ["east", "south-east", "south", "south-west", "west", "north-west", "north", "north-east"];
@@ -391,12 +424,13 @@ export class NpcLayer {
         const wait = msUntilUndeadNight(dayTime(Date.now()));
         hint += `<div class="qt-hint2 qt-night">${wait ? `Only at night. The dead rise in ${Math.max(1, Math.ceil(wait / 60000))} min.` : "Night: the dead are up."}</div>`;
       }
-      return `<div class="qt-block${this.folded.has(def.title) ? " folded" : ""}"><div class="qt-title">${def.title}</div><div class="qt-obj">${step.type === "talk" ? "➜ " : "• "}${obj}</div>${bar}${dir}${hint}</div>`;
+      const started = q.questStage > 0;
+      return `<div class="qt-block${this.isFolded(def.title, started) ? " folded" : ""}" data-started="${started ? 1 : 0}"><div class="qt-title">${def.title}</div><div class="qt-obj">${step.type === "talk" ? "➜ " : "• "}${obj}</div>${bar}${dir}${hint}</div>`;
     }
     // Between quests: point to whoever has the next one (the blob chain's very first quest has its own "!" intro)
     if (q.questStage === 0 && (q.level ?? 1) >= def.minLevel && (q.questId > 0 || (q.chain ?? 0) > 0)) {
       const giver = NPCS.find((n) => n.id === def.giver);
-      return `<div class="qt-block${this.folded.has("New quest available") ? " folded" : ""}"><div class="qt-title">New quest available</div><div class="qt-obj">➜ Talk to ${giver?.name ?? ""} <b class="bang">!</b></div></div>`;
+      return `<div class="qt-block${this.isFolded("New quest available", false) ? " folded" : ""}" data-started="0"><div class="qt-title">New quest available</div><div class="qt-obj">➜ Talk to ${giver?.name ?? ""} <b class="bang">!</b></div></div>`;
     }
     return "";
   }

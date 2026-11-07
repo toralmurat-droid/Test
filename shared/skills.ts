@@ -353,7 +353,7 @@ const S: Record<ClassKind, SkillDef[]> = <Record<ClassKind, SkillDef[]>><unknown
   // Three schools of magic, one spell each for now (Murat 2026-11-07): Fire, Frost, Thunder.
   wizard: [
     // Fire
-    { id: "w_firebolt", name: "Fire Bolt", type: "Attack", branch: 0, row: 0, style: "fire", maxRank: 6, cd: 450, mana: 5,
+    { id: "w_firebolt", name: "Fire Bolt", type: "Attack", branch: 0, row: 0, style: "fire", cd: 450, mana: 5,
       desc: "Hurl a bolt of fire at your foe: it burns them for a moment. Cheap and quick: cast it again and again.",
       shots: { kind: "fireball", speed: 280, range: 200, radius: 6, size: 1.3, dmg: 11, burn: [2, 1500], kb: 0.6 } },
     { id: "w_fb_split", name: "Split Bolt", type: "Upgrade", branch: 0, row: 1, style: "fire", passive: { effect: "upgrade", perRank: 0 },
@@ -361,7 +361,7 @@ const S: Record<ClassKind, SkillDef[]> = <Record<ClassKind, SkillDef[]>><unknown
     { id: "w_fb_heat", name: "Searing Heat", type: "Upgrade", branch: 0, row: 1, style: "fire", passive: { effect: "upgrade", perRank: 0 },
       desc: "Fire Bolt hits harder: +15% damage per rank.", mod: { of: "w_firebolt", dmg: 15 } },
     { id: "w_fb_haste", name: "Quick Hands", type: "Upgrade", branch: 0, row: 2, style: "fire", passive: { effect: "upgrade", perRank: 0 },
-      desc: "Fire Bolt comes back sooner and costs less: -12% cooldown and -10% mana per rank.", mod: { of: "w_firebolt", cd: -12, mana: -10 } },
+      desc: "Fire Bolt comes back sooner and costs less: -6% cooldown and -5% mana per rank.", mod: { of: "w_firebolt", cd: -6, mana: -5 } },
     { id: "w_fb_burst", name: "Combustion", type: "Upgrade", branch: 0, row: 2, style: "fire", passive: { effect: "upgrade", perRank: 0 },
       desc: "Fire Bolt explodes where it hits, burning everything close: +12 px blast radius per rank.", mod: { of: "w_firebolt", explode: 12 } },
     { id: "w_fb_pierce", name: "Piercing Flames", type: "Upgrade", branch: 0, row: 3, style: "fire", passive: { effect: "upgrade", perRank: 0 },
@@ -369,7 +369,7 @@ const S: Record<ClassKind, SkillDef[]> = <Record<ClassKind, SkillDef[]>><unknown
     { id: "w_fb_inferno", name: "Inferno", type: "Upgrade", branch: 0, row: 3, style: "fire", passive: { effect: "upgrade", perRank: 0 },
       desc: "Fire Bolt's blast grows (+8 px per rank) and its burn is hotter (+40% per rank).", mod: { of: "w_firebolt", explode: 8, burn: 40 } },
     // Frost
-    { id: "w_blizzard", name: "Blizzard", type: "Aura", branch: 1, row: 0, style: "frost", maxRank: 6, cd: 9000, mana: 22,
+    { id: "w_blizzard", name: "Blizzard", type: "Aura", branch: 1, row: 0, style: "frost", cd: 9000, mana: 22,
       desc: "A storm of snow and ice turns around you for 6s and moves with you, hurting and slowing every enemy close by.",
       field: { kind: "frostwhirl", r: 56, ms: 6000, tickMs: 500, follow: true, dmg: 6, slowMs: 800 } },
     { id: "w_bz_wide", name: "Wide Storm", type: "Upgrade", branch: 1, row: 1, style: "frost", passive: { effect: "upgrade", perRank: 0 },
@@ -381,11 +381,11 @@ const S: Record<ClassKind, SkillDef[]> = <Record<ClassKind, SkillDef[]>><unknown
     { id: "w_bz_freeze", name: "Deep Freeze", type: "Upgrade", branch: 1, row: 2, style: "frost", passive: { effect: "upgrade", perRank: 0 },
       desc: "The Blizzard's chill lasts longer: +30% slow time per rank.", mod: { of: "w_blizzard", slow: 30 } },
     { id: "w_bz_age", name: "Ice Age", type: "Upgrade", branch: 1, row: 3, style: "frost", passive: { effect: "upgrade", perRank: 0 },
-      desc: "The Blizzard comes back sooner: -15% cooldown per rank.", mod: { of: "w_blizzard", cd: -15 } },
+      desc: "The Blizzard comes back sooner: -7.5% cooldown per rank.", mod: { of: "w_blizzard", cd: -7.5 } },
     { id: "w_bz_bite2", name: "Frostbite", type: "Upgrade", branch: 1, row: 3, style: "frost", passive: { effect: "upgrade", perRank: 0 },
       desc: "The Blizzard strikes more often: ticks 12% faster per rank.", mod: { of: "w_blizzard", tick: 12 } },
     // Thunder
-    { id: "w_storm", name: "Thunder", type: "Attack", branch: 2, row: 0, style: "lightning", maxRank: 6, cd: 6000, mana: 20,
+    { id: "w_storm", name: "Thunder", type: "Attack", branch: 2, row: 0, style: "lightning", cd: 6000, mana: 20,
       desc: "Call thunder down on a spot: for 2.5s lightning hammers the zone, striking and stunning the enemies inside.",
       field: { kind: "storm", r: 56, ahead: 70, ms: 2500, tickMs: 300, zap: { n: 2, dmg: 11, stunMs: 250 } } },
     { id: "w_th_fork", name: "Forked Lightning", type: "Upgrade", branch: 2, row: 1, style: "lightning", passive: { effect: "upgrade", perRank: 0 },
@@ -399,7 +399,7 @@ const S: Record<ClassKind, SkillDef[]> = <Record<ClassKind, SkillDef[]>><unknown
     { id: "w_th_long", name: "Long Storm", type: "Upgrade", branch: 2, row: 3, style: "lightning", passive: { effect: "upgrade", perRank: 0 },
       desc: "Thunder rages longer: +25% duration per rank.", mod: { of: "w_storm", ms: 25 } },
     { id: "w_th_swift", name: "Swift Storm", type: "Upgrade", branch: 2, row: 3, style: "lightning", passive: { effect: "upgrade", perRank: 0 },
-      desc: "Thunder comes back sooner: -15% cooldown per rank.", mod: { of: "w_storm", cd: -15 } },
+      desc: "Thunder comes back sooner: -7.5% cooldown per rank.", mod: { of: "w_storm", cd: -7.5 } },
   ],
 
   // ---------------------------------------------------------------- ARCHER
@@ -714,6 +714,8 @@ const REQUIRES: Record<string, string[]> = {
 /** Synergies (Diablo 2 style): skill id -> +pct% damage per rank of each `from` skill. */
 const SYNERGY: Record<string, { from: string; pct: number }[]> = {
 };
+// Every wizard skill, spells and upgrades alike, takes 6 ranks (Murat 2026-11-07)
+for (const sk of S.wizard) sk.maxRank = 6;
 for (const list of Object.values(S)) for (const sk of list) {
   sk.needs = NEEDS[sk.id];
   sk.requires = REQUIRES[sk.id];

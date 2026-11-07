@@ -1,0 +1,10 @@
+{
+  "date": "2026-11-07",
+  "title": "Quest pointer and a cleaner screen",
+  "changes": [
+    "An arrow around your hero points to your current quest objective and shows how many steps away it is.",
+    "Quests are back on the right. Each quest stays folded until you start it; click its title to open or fold it.",
+    "The menu buttons (with Quests) are big icons beside the angel; chat sits in the bottom-left corner; your group is listed at the top left; the safe zone line is gone.",
+    "Every wizard skill now goes to rank 6, upgrades included."
+  ]
+}

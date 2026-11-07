@@ -77,7 +77,7 @@ import { PartyUI } from "./party";
 import { StashUI, TradeUI } from "./trade";
 import { STASH, STASH_RANGE } from "../../shared/trade";
 import { afterLoading, hideLoading, loadingActive, loadingFor, setLoading } from "./loading";
-import { ISO, IsoView, isoAnchor, isoInput, screenDir, screenDir8 } from "./iso";
+import { ISO, IsoView, isoAnchor, isoInput, isoX, isoY, screenDir, screenDir8 } from "./iso";
 import { SMOOTH } from "./isoflag";
 import { addPixelGrid } from "./pixelgrid";
 import { paintSmoothProps } from "./smoothProps";
@@ -467,6 +467,8 @@ export class TownScene extends Phaser.Scene {
     this.input.keyboard!.on("keydown-J", () => { if (!this.chatting()) toggleQuestLog(); });
     // Quests button under the minimap
     const questBtn = document.getElementById("questbtn")!;
+    document.getElementById("menubtns")!.prepend(questBtn); // with the other menu tiles beside the angel
+    questBtn.title = "Quests (J)";
     fillIcons(questBtn);
     questBtn.onclick = (ev) => { ev.stopPropagation(); toggleQuestLog(); questBtn.blur(); };
     document.getElementById("lvlnote")!.onclick = () => this.toggleHeroMenu();
@@ -2623,6 +2625,18 @@ export class TownScene extends Phaser.Scene {
       this.details.nightOverride = me && this.fx ? this.fx.nightK(me.x, me.y) : 0; // a vampire's Nightfall: night around the local hero
       const meSprite = this.entities?.get(this.me)?.sprite;
       this.details.hero = meSprite && !me?.dead ? { x: meSprite.x, y: meSprite.y, torch: this.torch } : undefined;
+      // where the hero stands on the screen, in HUD px (the quest pointer circles it)
+      if (this.npcs) {
+        if (meSprite && !me?.dead) {
+          const cam = this.cameras.main, cv = this.game.canvas, cr = cv.getBoundingClientRect();
+          const hud = document.getElementById("hud")!, hr = hud.getBoundingClientRect(), k = hr.width / (hud.offsetWidth || hr.width) || 1;
+          const wx = ISO ? isoX(meSprite.x, meSprite.y) : meSprite.x, wy = ISO ? isoY(meSprite.x, meSprite.y) : meSprite.y;
+          // camera px: zoom around the camera's middle (scroll is in iso space; worldView is not, at this point)
+          const px = (wx - cam.scrollX - cam.width / 2) * cam.zoom + cam.width / 2, py = (wy - cam.scrollY - cam.height / 2) * cam.zoom + cam.height / 2;
+          const sx = (cam.x + px) * (cr.width / cv.width), sy = (cam.y + py) * (cr.height / cv.height);
+          this.npcs.heroScreen = { x: (cr.left + sx - hr.left) / k, y: (cr.top + sy - hr.top) / k };
+        } else this.npcs.heroScreen = undefined;
+      }
     }
     this.details?.update(this.time.now, dtMs);
     if (!this.room) return;
@@ -2921,7 +2935,8 @@ export class TownScene extends Phaser.Scene {
       const cls0 = mine.cls as ClassKind;
       // Level and XP live on the bars (resourceBars.ts), gold in the bag, potions on the flasks, skill points on the
       // Skills button badge: this line only flags the safe zone or a respawn
-      const statsHtml = mine.dead ? "Respawning… " : safe.replace(" · ", "");
+      const statsHtml = mine.dead ? "Respawning… " : ""; // (the safe zone line was removed, Murat 2026-11-07)
+      void safe;
       if (statsHtml !== this.statsShown) { this.statsShown = statsHtml; document.getElementById("stats")!.innerHTML = statsHtml; }
       const freePts = talentPoints(mine.level) - spentPoints(cls0, mine.talents);
       const badge = document.getElementById("treebadge")!;
