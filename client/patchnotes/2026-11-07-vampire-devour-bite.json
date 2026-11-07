@@ -1,5 +1,6 @@
 {
   "date": "2026-11-07",
+  "patch": 136,
   "title": "Vampire: Devour and Bite",
   "changes": [
     "New Fang skill Devour (Lv 4): tear into a monster; one below 30% life is eaten whole, heals you and leaves you a little stronger for good, more for every one of its kind (blobs: life, elemental blobs: skill damage, bandits: damage, beast-folk: speed, up to 20 of each).",
