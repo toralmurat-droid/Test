@@ -285,8 +285,8 @@ export class TownScene extends Phaser.Scene {
   private useKey = () => {}; // E / G: talk, open, use what is right here
   private bagKey = () => {};
   private heldSlot = -1;
-  /** The torch is lit (L): a much wider light around the hero at night. Remembered in the browser. */
-  private torch = (() => { try { return localStorage.getItem("torch") === "1"; } catch { return false; } })(); // skill key (0..9) held down: it keeps casting
+  /** The torch (L): a flame in the hero's hand and a wide pool of light at night and underground. Lit unless put out; remembered. */
+  private torch = (() => { try { return localStorage.getItem("torch") !== "0"; } catch { return true; } })();
   private slotCastAt = 0;
   private pointer?: PointerControls;
   /**
@@ -2638,6 +2638,7 @@ export class TownScene extends Phaser.Scene {
     this.iso?.update(dtMs);
     if (loadingActive()) this.checkLoaded();
     this.ambient?.update(this.time.now, dtMs);
+    if (this.dungeon) { this.dungeon.torch = this.torch && !this.entities?.get(this.me)?.state?.dead; this.dungeon.night = this.details?.darkNow ?? 0; }
     this.dungeon?.update(this.time.now);
     if (this.details) {
       this.details.underground = !!this.dungeon?.underground;

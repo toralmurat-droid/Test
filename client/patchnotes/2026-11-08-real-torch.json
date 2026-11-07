@@ -1,0 +1,9 @@
+{
+  "date": "2026-11-08",
+  "title": "A real torch at night and in the Mawdeep",
+  "changes": [
+    "Your hero now carries a lit torch: a flame in the hand and a wide, flickering pool of warm light that cuts through the dark",
+    "Works at night and down in the Mawdeep; the torch is lit by default, L puts it out or lights it again",
+    "Bottom bar: on screens where it leaves too little room, the statues step aside and chat moves up above the bar"
+  ]
+}

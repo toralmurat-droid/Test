@@ -560,6 +560,11 @@ export class Details {
   hero?: { x: number; y: number; torch: boolean };
   private heroGlow?: Phaser.GameObjects.Image;
   private heroCore?: Phaser.GameObjects.Image;
+  private heroFlame?: Phaser.GameObjects.Sprite;
+  private heroFlameLit?: Phaser.GameObjects.Sprite;
+  private flameFoot = { x: 0, y: 0 };
+  /** How dark it is right now above ground (0 day .. 1 night), for the torch's dark-with-holes (dungeon.ts). */
+  darkNow = 0;
   /** The local hero is in the Mawdeep (dungeon.ts draws the dark there): no day/night tint, no lanterns. */
   underground = false;
   /** A vampire's Nightfall close by (SkillFx.nightK): it is night here whatever the clock says (0..1). */
@@ -792,7 +797,10 @@ export class Details {
   update(now: number, dtMs: number) {
     const ph = this.underground ? { dark: 0, warm: 0 } : dayPhase(dayTime(Date.now()));
     const dark = this.underground ? 0 : Math.max(ph.dark, this.nightOverride), warm = ph.warm * (1 - this.nightOverride);
-    this.night.setAlpha(dark * 0.85);
+    this.darkNow = dark;
+    // a lit torch at night: the dark around it is drawn as an overlay with a hole (dungeon.ts), so the tint goes lighter
+    const torchNight = !!this.hero?.torch && !this.underground;
+    this.night.setAlpha(dark * (torchNight ? 0.6 : 0.85));
     this.dusk.setAlpha(warm * 0.12);
     this.windows.setAlpha(Math.min(1, dark * 1.2) * 0.9);
     const cam = this.scene.cameras.main.worldView;
@@ -804,14 +812,29 @@ export class Details {
       l.img.setAlpha(dark * (l.base + f * l.flicker));
     }
     this.fireflies?.(dark);
-    // The hero's own light: a faint glow at night; a torch widens it a lot and flickers like a flame
-    if (this.hero && dark > 0.05) {
+    // The hero's own light: a faint glow at night; a lit torch (L) is a real flame in the hand and a warm pool of light,
+    // at night and down in the Mawdeep (the dark around it is cut away by dungeon.ts)
+    const lightK = this.underground ? 1 : dark;
+    const torch = !!this.hero?.torch && lightK > 0.05;
+    if (this.hero && lightK > 0.05 && (torch || !this.underground)) {
       this.heroGlow ??= this.scene.add.image(0, 0, "light").setBlendMode(Phaser.BlendModes.ADD).setDepth(27500);
       this.heroCore ??= this.scene.add.image(0, 0, "light").setBlendMode(Phaser.BlendModes.ADD).setDepth(27501);
-      const t = this.hero.torch, f = Math.sin(now / 70) * 0.5 + Math.sin(now / 23 + 1.3) * 0.5;
-      this.heroGlow.setPosition(this.hero.x, this.hero.y - 6).setTint(t ? 0xffa64a : 0xb8c4ff).setScale(t ? 9 + f * 0.25 : 3.2).setAlpha(dark * (t ? 0.62 + f * 0.05 : 0.22)).setVisible(true);
-      this.heroCore.setPosition(this.hero.x, this.hero.y - 6).setTint(0xffd27a).setScale(t ? 3.4 + f * 0.15 : 1).setAlpha(t ? dark * 0.55 : 0).setVisible(t);
+      const f = Math.sin(now / 70) * 0.5 + Math.sin(now / 23 + 1.3) * 0.5;
+      this.heroGlow.setPosition(this.hero.x, this.hero.y - 6).setTint(torch ? 0xff9a3c : 0xb8c4ff).setScale(torch ? 8 + f * 0.3 : 3.2).setAlpha(lightK * (torch ? 0.2 + f * 0.03 : 0.22)).setVisible(true);
+      this.heroCore.setPosition(this.hero.x, this.hero.y - 6).setTint(0xffc870).setScale(torch ? 2.8 + f * 0.15 : 1).setAlpha(torch ? lightK * 0.18 : 0).setVisible(torch);
     } else { this.heroGlow?.setVisible(false); this.heroCore?.setVisible(false); }
+    // the torch itself: a flame held up beside the hero (the gate torches' flame, gateTorches.ts)
+    if (this.hero && torch && this.scene.textures.exists("torch_flame")) {
+      if (!this.heroFlame) {
+        this.heroFlame = this.scene.add.sprite(0, 0, "torch_flame", 0).setOrigin(0.5, 1).setScale(0.75);
+        this.heroFlameLit = this.scene.add.sprite(0, 0, "torch_flame_lit", 0).setOrigin(0.5, 1).setScale(0.75).setBlendMode(Phaser.BlendModes.ADD).setDepth(27600);
+        this.heroFlame.play("torch_flame_burn"); this.heroFlameLit.play("torch_flame_lit_burn");
+        isoAnchor(this.heroFlame, this.flameFoot); isoAnchor(this.heroFlameLit, this.flameFoot);
+      }
+      this.flameFoot.x = this.hero.x; this.flameFoot.y = this.hero.y;
+      this.heroFlame.setPosition(this.hero.x + 9, this.hero.y - 20).setDepth(this.hero.y + 0.4).setVisible(true);
+      this.heroFlameLit!.setPosition(this.hero.x + 9, this.hero.y - 20).setAlpha(0.55 + lightK * 0.35).setVisible(true);
+    } else { this.heroFlame?.setVisible(false); this.heroFlameLit?.setVisible(false); }
 
     // Ducks paddle to a random spot on the pond, rest, then paddle on
     for (const d of this.ducks) {
