@@ -346,3 +346,7 @@ body #spbody .gslot.slot-weapon { grid-column: 3; grid-row: 1; }
 body #spbody .gslot.slot-shield { grid-column: 3; grid-row: 2; }
 body #spbody .gslot.slot-ranged { grid-column: 3; grid-row: 3; }
 body #spbody #geartotal { display: none; } /* the stats column on the left shows all of it */
+/* all schools on one slab: a carved name plate on top of each column */
+body .tschool { position: absolute; top: 18px; transform: translateX(-50%); padding: 3px 12px 4px; font: 14px var(--pixel-font); letter-spacing: 2px;
+  text-transform: uppercase; color: #f0e6c8; background: linear-gradient(#2c2a27, #171614); border: 2px solid #5a5953; border-bottom-color: var(--c);
+  box-shadow: 0 3px 4px rgba(0,0,0,.6), inset 0 -2px 0 var(--c); white-space: nowrap; }
