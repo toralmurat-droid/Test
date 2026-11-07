@@ -1,5 +1,6 @@
 {
   "date": "2026-11-07",
+  "pr": 319,
   "title": "Instant healing potions",
   "changes": [
     "Healing potions no longer have a cooldown: drink as many as you like, one per press, back to back.",
