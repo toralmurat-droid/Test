@@ -1,0 +1,8 @@
+{
+  "date": "2026-11-07",
+  "title": "Smoother monsters",
+  "changes": [
+    "Fast monsters no longer jump from spot to spot while they charge or chase you.",
+    "On a shaky connection, monsters and other heroes now glide steadily instead of freezing and then jumping ahead."
+  ]
+}
