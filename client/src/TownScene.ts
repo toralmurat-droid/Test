@@ -286,7 +286,7 @@ export class TownScene extends Phaser.Scene {
   private useKey = () => {}; // E / G: talk, open, use what is right here
   private bagKey = () => {};
   private heldSlot = -1;
-  /** The torch (L): a flame in the hero's hand and a wide pool of light at night and underground. Lit unless put out; remembered. */
+  /** The torch (L): a wide pool of light (no flame drawn on the hero) at night and underground. Lit unless put out; remembered. */
   private torch = (() => { try { return localStorage.getItem("torch") !== "0"; } catch { return true; } })();
   private slotCastAt = 0;
   private pointer?: PointerControls;

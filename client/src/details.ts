@@ -560,9 +560,6 @@ export class Details {
   hero?: { x: number; y: number; torch: boolean };
   private heroGlow?: Phaser.GameObjects.Image;
   private heroCore?: Phaser.GameObjects.Image;
-  private heroFlame?: Phaser.GameObjects.Sprite;
-  private heroFlameLit?: Phaser.GameObjects.Sprite;
-  private flameFoot = { x: 0, y: 0 };
   /** How dark it is right now above ground (0 day .. 1 night), for the torch's dark-with-holes (dungeon.ts). */
   darkNow = 0;
   /** The local hero is in the Mawdeep (dungeon.ts draws the dark there): no day/night tint, no lanterns. */
@@ -812,7 +809,7 @@ export class Details {
       l.img.setAlpha(dark * (l.base + f * l.flicker));
     }
     this.fireflies?.(dark);
-    // The hero's own light: a faint glow at night; a lit torch (L) is a real flame in the hand and a warm pool of light,
+    // The hero's own light: a faint glow at night; a lit torch (L) is a warm pool of light (no flame drawn on the hero),
     // at night and down in the Mawdeep (the dark around it is cut away by dungeon.ts)
     const lightK = this.underground ? 1 : dark;
     const torch = !!this.hero?.torch && lightK > 0.05;
@@ -823,18 +820,7 @@ export class Details {
       this.heroGlow.setPosition(this.hero.x, this.hero.y - 6).setTint(torch ? 0xff9a3c : 0xb8c4ff).setScale(torch ? 8 + f * 0.3 : 3.2).setAlpha(lightK * (torch ? 0.2 + f * 0.03 : 0.22)).setVisible(true);
       this.heroCore.setPosition(this.hero.x, this.hero.y - 6).setTint(0xffc870).setScale(torch ? 2.8 + f * 0.15 : 1).setAlpha(torch ? lightK * 0.18 : 0).setVisible(torch);
     } else { this.heroGlow?.setVisible(false); this.heroCore?.setVisible(false); }
-    // the torch itself: a flame held up beside the hero (the gate torches' flame, gateTorches.ts)
-    if (this.hero && torch && this.scene.textures.exists("torch_flame")) {
-      if (!this.heroFlame) {
-        this.heroFlame = this.scene.add.sprite(0, 0, "torch_flame", 0).setOrigin(0.5, 1).setScale(0.75);
-        this.heroFlameLit = this.scene.add.sprite(0, 0, "torch_flame_lit", 0).setOrigin(0.5, 1).setScale(0.75).setBlendMode(Phaser.BlendModes.ADD).setDepth(27600);
-        this.heroFlame.play("torch_flame_burn"); this.heroFlameLit.play("torch_flame_lit_burn");
-        isoAnchor(this.heroFlame, this.flameFoot); isoAnchor(this.heroFlameLit, this.flameFoot);
-      }
-      this.flameFoot.x = this.hero.x; this.flameFoot.y = this.hero.y;
-      this.heroFlame.setPosition(this.hero.x + 9, this.hero.y - 20).setDepth(this.hero.y + 0.4).setVisible(true);
-      this.heroFlameLit!.setPosition(this.hero.x + 9, this.hero.y - 20).setAlpha(0.55 + lightK * 0.35).setVisible(true);
-    } else { this.heroFlame?.setVisible(false); this.heroFlameLit?.setVisible(false); }
+    // No flame sprite on the hero: only the light (Murat 2026-11-07)
 
     // Ducks paddle to a random spot on the pond, rest, then paddle on
     for (const d of this.ducks) {
