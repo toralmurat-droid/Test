@@ -21,7 +21,7 @@ type P = { x: number; y: number };
 export type OtherHero = P & { name?: string };
 const ALLY = "#5ec8ff"; // other players (own hero is gold)
 /** Something to point at on the maps: a quest giver ("!" / "?"), a trader, or a quest area (circle). */
-export interface MapMarker { x: number; y: number; glyph: string; color: string; r?: number; label?: string; track?: boolean }
+export interface MapMarker { x: number; y: number; glyph: string; color: string; r?: number; label?: string; track?: boolean; /** a drawn stair icon (the Mawdeep's ways down and up) */ stair?: "down" | "up"; /** only once that spot is discovered */ fogged?: boolean }
 
 /**
  * Minimap with fog of war: only places the player has been near are shown, and the minimap only
@@ -322,7 +322,19 @@ export class Minimap {
         g.restore();
         continue;
       }
-      if (m.glyph) {
+      if (m.fogged && this.seen[Math.floor(m.y / TILE) * MAP_W + Math.floor(m.x / TILE)] < 100) continue;
+      if (m.stair) {
+        // a little flight of steps and an arrow, drawn in pixels so it reads at any size
+        const u = mini ? 2 : 3;
+        g.save(); g.translate(Math.round(x), Math.round(y));
+        if ((mini || this.turned) && ISO) g.rotate(-Math.PI / 4);
+        const box = (bx: number, by: number, bw: number, bh: number, c: string) => { g.fillStyle = c; g.fillRect(bx * u, by * u, bw * u, bh * u); };
+        box(-4, -4, 9, 9, "#000");
+        for (let k = 0; k < 3; k++) box(-3 + k * 2, -3 + k * 2, 7 - k * 2, 1, m.color); // steps
+        if (m.stair === "down") { box(-1, 1, 3, 1, m.color); box(0, 2, 1, 2, m.color); box(-3, 2, 1, 1, m.color); box(-2, 3, 1, 1, m.color); }
+        else { box(-3, 1, 1, 3, m.color); box(-4, 2, 3, 1, m.color); }
+        g.restore();
+      } else if (m.glyph) {
         const size = mini ? (m.track ? 14 : 11) : (m.track ? 18 : 14);
         g.font = `bold ${size}px ${PF}`; g.textAlign = "center"; g.textBaseline = "middle";
         g.save(); g.translate(x, y);
@@ -331,12 +343,12 @@ export class Minimap {
         g.fillStyle = m.color; g.fillText(m.glyph, 0, 0);
         g.restore();
       }
-      if (!mini && m.label && (m.track || m.r)) {
+      if (!mini && m.label && (m.track || m.r || m.stair)) {
         g.font = `11px ${PF}`; g.textAlign = "center"; g.textBaseline = "alphabetic";
         g.save(); g.translate(x, y);
         if (this.turned && ISO) g.rotate(-Math.PI / 4); // upright on the turned world map
-        g.fillStyle = "#000"; g.fillText(m.label, 1, (m.r ? 4 : 18) + 1);
-        g.fillStyle = m.color; g.fillText(m.label, 0, m.r ? 4 : 18);
+        g.fillStyle = "#000"; g.fillText(m.label, 1, (m.r ? 4 : m.stair ? 22 : 18) + 1);
+        g.fillStyle = m.color; g.fillText(m.label, 0, m.r ? 4 : m.stair ? 22 : 18);
         g.restore();
       }
     }
