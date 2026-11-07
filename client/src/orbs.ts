@@ -2,7 +2,7 @@ import "./orbs.css";
 
 /**
  * Bottom HUD in the Diablo style (Murat 2026-11-07, from his reference picture): a red health orb on the left and a
- * blue mana orb on the right, framed in bronze, each guarded by a crouching stone gargoyle, with a dark plate between
+ * blue mana orb on the right, framed in bronze, guarded by a demon statue (left) and an angel statue (right), with a dark plate between
  * them holding the XP bar, the skill bar and the potions (#hotbar and #xpbar are laid over the plate).
  *
  * The orbs are pixel art drawn per pixel (ImageData) at 1 canvas px per CSS px: glass sphere, liquid filled to the
@@ -63,32 +63,74 @@ function drawOrb(ctx: CanvasRenderingContext2D, frac: number, pal: Pal, t: numbe
   ctx.putImageData(img, 0, 0);
 }
 
-/** A crouching stone gargoyle (pixel art, drawn small and shown scaled up), facing `side`. */
-function drawGargoyle(cv: HTMLCanvasElement, mirror: boolean) {
-  const W = 30, H = 40;
-  cv.width = W; cv.height = H;
+/**
+ * The two statues guarding the orbs (Murat 2026-11-07): a demon of dark red stone on the left, an angel of pale marble
+ * on the right. Painted small (44 x 60) with shapes and shown scaled up, pixelated.
+ */
+const ST_W = 44, ST_H = 60;
+function statueCanvas(cv: HTMLCanvasElement) {
+  cv.width = ST_W; cv.height = ST_H;
   const g = cv.getContext("2d")!;
-  g.imageSmoothingEnabled = false;
-  if (mirror) { g.translate(W, 0); g.scale(-1, 1); }
-  const px = (x: number, y: number, w: number, h: number, c: string) => { g.fillStyle = c; g.fillRect(x, y, w, h); };
-  const D = "#1a1714", M = "#3a342c", L = "#5e554a", H2 = "#857a6a", EYE = "#c0392b";
-  // plinth
-  px(2, 34, 26, 6, D); px(3, 34, 24, 2, L); px(3, 36, 24, 3, M);
-  // folded wing behind (a jagged fan)
-  for (let i = 0; i < 6; i++) px(3 + i * 2, 8 + i * 2, 3, 22 - i * 2, i % 2 ? D : M);
-  px(2, 6, 3, 4, D); px(4, 5, 2, 2, M);
-  // haunches and body
-  px(12, 22, 14, 12, D); px(13, 22, 12, 11, M); px(14, 23, 6, 4, L);
-  px(15, 14, 10, 10, D); px(16, 14, 8, 9, M); px(17, 15, 4, 3, L);
-  // arms down to the plinth, claws
-  px(23, 22, 4, 12, D); px(24, 22, 2, 11, M); px(22, 33, 6, 1, H2);
-  // head: brow, snout, horns, glowing eye
-  px(19, 6, 10, 9, D); px(20, 7, 8, 7, M); px(21, 7, 4, 2, L);
-  px(26, 11, 4, 3, D); px(27, 11, 2, 2, M); // snout
-  px(19, 2, 2, 5, D); px(18, 1, 2, 2, M); px(25, 3, 2, 4, D); px(26, 2, 2, 2, M); // horns
-  px(24, 9, 2, 1, EYE);
-  px(27, 14, 1, 2, H2); px(29, 14, 1, 1, H2); // fangs
-  px(16, 23, 1, 1, H2); px(14, 30, 1, 1, H2); // worn highlights
+  const poly = (pts: number[][], c: string) => { g.fillStyle = c; g.beginPath(); g.moveTo(pts[0][0], pts[0][1]); for (const p of pts.slice(1)) g.lineTo(p[0], p[1]); g.closePath(); g.fill(); };
+  const ell = (x: number, y: number, rx: number, ry: number, c: string, rot = 0) => { g.fillStyle = c; g.beginPath(); g.ellipse(x, y, rx, ry, rot, 0, Math.PI * 2); g.fill(); };
+  const line = (pts: number[][], c: string, w: number) => { g.strokeStyle = c; g.lineWidth = w; g.lineCap = "round"; g.beginPath(); g.moveTo(pts[0][0], pts[0][1]); for (const p of pts.slice(1)) g.lineTo(p[0], p[1]); g.stroke(); };
+  const plinth = (dark: string, mid: string, light: string) => {
+    poly([[5, 51], [39, 51], [41, 60], [3, 60]], dark); poly([[6, 51], [38, 51], [38, 53], [6, 53]], light); poly([[5, 54], [39, 54], [40, 59], [4, 59]], mid);
+    line([[8, 56], [36, 56]], dark, 0.6);
+  };
+  return { g, poly, ell, line, plinth };
+}
+
+function drawDemon(cv: HTMLCanvasElement) {
+  const { g, poly, ell, line, plinth } = statueCanvas(cv);
+  const D = "#1c1010", M = "#3c2220", L = "#5e3a33", H = "#80564a";
+  // bat wings spread behind: ribs and a ragged membrane
+  for (const s of [-1, 1]) {
+    const cx = 22, x = (v: number) => cx + s * v;
+    poly([[x(3), 26], [x(18), 6], [x(21), 3], [x(20), 12], [x(22), 16], [x(17), 22], [x(19), 27], [x(12), 30], [x(9), 36]], D);
+    poly([[x(4), 26], [x(17), 9], [x(18), 14], [x(15), 21], [x(10), 28]], M);
+    line([[x(4), 26], [x(18), 7]], L, 0.9); line([[x(6), 27], [x(19), 17]], L, 0.7); line([[x(8), 29], [x(16), 24]], L, 0.7);
+  }
+  // crouched body, hunched shoulders, clawed arms down to the plinth
+  ell(22, 41, 9, 10, D); ell(22, 40, 8, 9, M); ell(20, 37, 4, 5, L);
+  poly([[13, 33], [31, 33], [28, 42], [16, 42]], M);
+  line([[14, 36], [12, 44], [13, 50]], D, 3); line([[30, 36], [32, 44], [31, 50]], D, 3);
+  line([[14, 36], [12, 44], [13, 50]], L, 1.2); line([[30, 36], [32, 44], [31, 50]], M, 1.4);
+  for (const x of [11, 13, 15, 29, 31, 33]) line([[x, 50], [x - 0.5, 51.5]], H, 0.7); // claws
+  // tail curling round the plinth
+  line([[28, 47], [36, 49], [39, 46], [37, 43]], D, 1.6); poly([[36, 42], [39, 40], [38, 44]], M);
+  // head: snout, brow, curved horns, glowing eyes
+  ell(22, 28, 5.5, 5, D); ell(22, 27.5, 4.6, 4.2, M); ell(21, 26.5, 2.2, 1.6, L);
+  poly([[19, 30], [25, 30], [23, 33], [21, 33]], M);
+  for (const s of [-1, 1]) { line([[22 + s * 3, 24], [22 + s * 7, 20], [22 + s * 7.5, 15], [22 + s * 5.5, 13]], D, 2.2); line([[22 + s * 3, 24], [22 + s * 7, 20], [22 + s * 7.5, 15]], H, 0.7); }
+  g.fillStyle = "#ff4a2e"; g.fillRect(19, 27, 1.6, 1); g.fillRect(23.4, 27, 1.6, 1);
+  g.fillStyle = "rgba(255,80,40,0.35)"; g.fillRect(18, 26, 8, 3);
+  plinth("#140c0b", "#2e1c1a", "#4a302b");
+}
+
+function drawAngel(cv: HTMLCanvasElement) {
+  const { g, poly, ell, line, plinth } = statueCanvas(cv);
+  const D = "#4a4640", M = "#8a847a", L = "#b8b1a4", H = "#e2dccd";
+  // halo
+  g.strokeStyle = "#e8c56a"; g.lineWidth = 1.4; g.beginPath(); g.ellipse(22, 9, 6, 2, 0, 0, Math.PI * 2); g.stroke();
+  g.strokeStyle = "rgba(255,226,140,0.35)"; g.lineWidth = 3; g.stroke();
+  // feathered wings raised behind
+  for (const s of [-1, 1]) {
+    const x = (v: number) => 22 + s * v;
+    poly([[x(3), 22], [x(9), 8], [x(16), 2], [x(20), 5], [x(19), 14], [x(20), 22], [x(16), 30], [x(18), 38], [x(10), 40], [x(5), 34]], D);
+    poly([[x(4), 22], [x(10), 10], [x(16), 4], [x(18), 8], [x(17), 16], [x(14), 28], [x(8), 34]], M);
+    for (let k = 0; k < 5; k++) line([[x(6 + k * 2), 14 + k * 3], [x(10 + k * 2.2), 26 + k * 2.5]], L, 0.8); // feathers
+    line([[x(10), 9], [x(16), 4]], H, 0.8);
+  }
+  // robed body, folds falling to the plinth
+  poly([[16, 22], [28, 22], [32, 51], [12, 51]], D); poly([[17, 22], [27, 22], [30, 50], [14, 50]], M);
+  for (const x of [17, 20, 23, 26]) line([[x + 1, 30], [x, 50]], D, 0.6);
+  line([[18, 24], [16, 49]], L, 1); line([[19, 24], [18, 40]], H, 0.6);
+  // hands together in prayer, head bowed
+  poly([[20, 27], [24, 27], [22.5, 22], [21.5, 22]], L); line([[17, 27], [20, 28]], M, 1.4); line([[27, 27], [24, 28]], M, 1.4);
+  ell(22, 16.5, 3.6, 4.2, D); ell(22, 16.5, 3, 3.6, L); ell(21, 15.5, 1.4, 1.6, H);
+  poly([[18.5, 14], [25.5, 14], [26, 21], [18, 21]], "rgba(74,70,64,0.6)"); // veil of hair
+  plinth("#3a3732", "#6a655c", "#9e978a");
 }
 
 export class OrbHud {
@@ -98,6 +140,7 @@ export class OrbHud {
   private mpTxt: HTMLElement;
   private plate: HTMLElement;
   private root: HTMLElement;
+  private level: HTMLElement;
   private last = { hp: -1, mp: -1, at: 0, w: -1 };
 
   constructor(hud: HTMLElement) {
@@ -109,14 +152,22 @@ export class OrbHud {
       `<div class="orb mp" title="Mana"><canvas width="${SIZE}" height="${SIZE}"></canvas><span></span></div>` +
       `<canvas class="garg left"></canvas><canvas class="garg right"></canvas>`;
     hud.prepend(this.root);
+    // on the HUD itself (not in #orbhud's layer), so it sits over the XP bar
+    this.level = document.createElement("div");
+    this.level.id = "orblevel"; this.level.title = "Level";
+    this.level.innerHTML = "<small>LV</small><b></b>";
+    hud.appendChild(this.level);
     this.plate = this.root.querySelector("#orbplate")!;
     [this.hp, this.mp] = Array.from(this.root.querySelectorAll(".orb canvas")) as HTMLCanvasElement[];
     [this.hpTxt, this.mpTxt] = Array.from(this.root.querySelectorAll(".orb span")) as HTMLElement[];
     const [gl, gr] = Array.from(this.root.querySelectorAll(".garg")) as HTMLCanvasElement[];
-    drawGargoyle(gl, false);
-    drawGargoyle(gr, true);
+    drawDemon(gl);
+    drawAngel(gr);
     document.body.classList.add("orbhud-on");
   }
+
+  /** The hero's level, in the bronze medallion over the XP bar. */
+  setLevel(n: number) { const b = this.level.lastElementChild!; if (b.textContent !== String(n)) b.textContent = String(n); }
 
   /** Values written inside the orbs all the time (the "bar numbers" setting), else only on hover. */
   setNumbers(on: boolean) { this.root.classList.toggle("nums", on); }
@@ -127,7 +178,7 @@ export class OrbHud {
     // the plate is as wide as the skill bar laid over it; the orbs sit at its ends
     const bar = document.getElementById("hotbar");
     const w = bar ? bar.offsetWidth : 0;
-    if (w > 0 && w !== this.last.w) { this.root.style.setProperty("--barw", `${w}px`); this.last.w = w; }
+    if (w > 0 && w !== this.last.w) { document.body.style.setProperty("--barw", `${w}px`); this.last.w = w; } // the menu buttons use it too
     const moving = (fh > 0 && fh < 1) || (fm > 0 && fm < 1);
     if (Math.abs(fh - this.last.hp) < 0.004 && Math.abs(fm - this.last.mp) < 0.004 && (!moving || now - this.last.at < 120)) return;
     const t = now / 1000;

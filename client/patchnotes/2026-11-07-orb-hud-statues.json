@@ -1,0 +1,9 @@
+{
+  "date": "2026-11-07",
+  "title": "Demon and angel statues",
+  "changes": [
+    "A demon statue guards the health orb and an angel statue the mana orb.",
+    "Your level is now shown in a bronze medallion in the middle of the experience bar.",
+    "The Hero, Skills, Bag, Group and Menu buttons are small tiles at the bottom right, beside the mana orb."
+  ]
+}
