@@ -27,21 +27,40 @@ function blob(ctx: CanvasRenderingContext2D, x: number, y: number, rx: number, r
   ctx.beginPath(); ctx.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2); ctx.fill();
 }
 
-function trunk(ctx: CanvasRenderingContext2D, cx: number, top: number, base: number, w: number) {
-  const g = ctx.createLinearGradient(cx - w, 0, cx + w, 0);
-  g.addColorStop(0, "#4e4640"); g.addColorStop(0.45, "#2e2620"); g.addColorStop(1, "#110d0a"); // weathered grey-brown bark (gloomy look, Murat 2026-11-07)
+/** A gnarled trunk: a twisting, uneven column flaring into roots at the base, deep bark furrows, light from the left. */
+function trunk(ctx: CanvasRenderingContext2D, cx: number, top: number, base: number, w: number, seed = 5) {
+  const r = rng(seed * 13 + 7);
+  const n = 8, side = (k: number) => {
+    const pts: [number, number][] = [];
+    for (let i = 0; i <= n; i++) {
+      const t = i / n, y = top + (base - top) * t;
+      const flare = Math.pow(t, 5) * w * 1.9; // the base spreads into roots
+      pts.push([cx + k * (w * (0.5 + 0.18 * t) + flare) + Math.sin(t * 5 + seed) * w * 0.22 + (r() - 0.5) * w * 0.12, y]);
+    }
+    return pts;
+  };
+  const L = side(-1), R = side(1);
+  const g = ctx.createLinearGradient(cx - w * 1.6, 0, cx + w * 1.6, 0);
+  g.addColorStop(0, "#5a524a"); g.addColorStop(0.35, "#38302a"); g.addColorStop(0.75, "#1c1714"); g.addColorStop(1, "#0c0a08");
   ctx.fillStyle = g;
-  ctx.beginPath();
-  ctx.moveTo(cx - w * 0.55, top);
-  ctx.quadraticCurveTo(cx - w * 0.6, base - 3, cx - w * 1.5, base);
-  ctx.quadraticCurveTo(cx, base - 0.8, cx + w * 1.5, base);
-  ctx.quadraticCurveTo(cx + w * 0.6, base - 3, cx + w * 0.55, top);
+  ctx.beginPath(); ctx.moveTo(L[0][0], L[0][1]);
+  for (const p of L) ctx.lineTo(p[0], p[1]);
+  // roots along the ground between the two sides
+  ctx.quadraticCurveTo(cx - w * 0.6, base - 0.9, cx, base - 0.3); ctx.quadraticCurveTo(cx + w * 0.6, base - 0.9, R[n][0], R[n][1]);
+  for (let i = n; i >= 0; i--) ctx.lineTo(R[i][0], R[i][1]);
   ctx.closePath(); ctx.fill();
-  // bark lines
-  ctx.strokeStyle = "rgba(40,22,10,0.45)"; ctx.lineWidth = 0.18;
-  for (let i = 0; i < 4; i++) {
-    const x = cx - w * 0.35 + i * w * 0.25;
-    ctx.beginPath(); ctx.moveTo(x, top + 1 + i * 0.7); ctx.quadraticCurveTo(x + 0.2, (top + base) / 2, x - 0.1 + (i % 2) * 0.3, base - 0.8); ctx.stroke();
+  // furrows and ridges of the bark
+  ctx.lineCap = "round";
+  for (let k = 0; k < 9; k++) {
+    const x0 = cx + (r() - 0.5) * w * 1.1, y0 = top + r() * (base - top) * 0.6, len = (base - top) * (0.3 + r() * 0.5);
+    ctx.strokeStyle = k % 3 ? "rgba(8,6,5,0.55)" : "rgba(120,110,98,0.28)"; ctx.lineWidth = k % 3 ? 0.22 : 0.14;
+    ctx.beginPath(); ctx.moveTo(x0, y0); ctx.bezierCurveTo(x0 + (r() - 0.5) * 0.8, y0 + len * 0.33, x0 + (r() - 0.5) * 0.8, y0 + len * 0.66, x0 + (r() - 0.5) * 0.6, y0 + len); ctx.stroke();
+  }
+  // moss creeping up the shaded side
+  for (let k = 0; k < 18; k++) {
+    const t = 0.55 + r() * 0.45, y = top + (base - top) * t;
+    ctx.fillStyle = `rgba(${40 + r() * 20},${58 + r() * 20},${34},${0.35 + r() * 0.3})`;
+    ctx.beginPath(); ctx.ellipse(cx + w * (0.2 + r() * 0.5), y, 0.25 + r() * 0.3, 0.18 + r() * 0.2, 0, 0, Math.PI * 2); ctx.fill();
   }
 }
 
@@ -64,12 +83,12 @@ function canopy(ctx: CanvasRenderingContext2D, seed: number, cx: number, cy: num
     ctx.beginPath(); ctx.ellipse(cx + Math.cos(ang) * rx * d, cy + Math.sin(ang) * ry * d + ry * 0.1, 0.9 + r() * 1.2, 0.6 + r() * 0.8, r() * 3, 0, Math.PI * 2); ctx.fill();
   }
   // leaf clusters (some past the edge, so the silhouette is ragged)
-  for (let k = 0; k < 480; k++) {
+  for (let k = 0; k < 900; k++) {
     const ang = r() * Math.PI * 2, d = Math.sqrt(r()) * 1.06;
     const x = cx + Math.cos(ang) * rx * d, y = cy + Math.sin(ang) * ry * d;
     const lit = (-(x - cx) / rx - (y - cy) / ry) * 0.5 + 0.5 + (r() - 0.5) * 0.35; // 0 = shade, 1 = sun
     const c = lit > 0.78 ? hi : lit > 0.52 ? light : lit > 0.3 ? mid : dark;
-    const s = 0.45 + r() * 0.55;
+    const s = 0.3 + r() * 0.45; // small, many: a painted leaf mass, not blobs
     ctx.fillStyle = rgb(c, 0.9 + r() * 0.2, 0.9);
     ctx.beginPath(); ctx.ellipse(x, y, s, s * 0.7, r() * Math.PI, 0, Math.PI * 2); ctx.fill();
   }
@@ -136,11 +155,19 @@ export function smoothTrees(scene: Phaser.Scene, K: number) {
   hiResTexture(scene, "oak_f", OAK_W * K, OAK_H * K, 2, S, (ctx, f) => {
     ctx.scale(K, K); ctx.translate(OAK_PAD, OAK_PAD);
     shadow(ctx, 12, 25.6, 6, 1.8);
-    trunk(ctx, 12, 8, 26, 1.4);
-    const sw = f * 0.3;
-    limb(ctx, 12, 14, 5 + sw, 7, 0.9); limb(ctx, 7 + sw * 0.6, 9.5, 3 + sw, 4, 0.45); limb(ctx, 8 + sw * 0.6, 10, 9 + sw, 3, 0.4);
-    limb(ctx, 12.2, 12, 19 + sw, 6, 0.85); limb(ctx, 17 + sw * 0.7, 7.8, 21 + sw, 3.5, 0.4); limb(ctx, 16 + sw * 0.6, 8.6, 14.5 + sw, 2.5, 0.35);
-    limb(ctx, 12, 9, 11.5 + sw, 1.5, 0.6); limb(ctx, 12, 18, 7.5, 15.5, 0.5);
+    trunk(ctx, 12, 12, 26, 1.5, 9);
+    const r = rng(91), sw = f * 0.3;
+    // a gnarled crown: each branch splits into two or three twisting, thinner ones
+    const branch = (x: number, y: number, ang: number, len: number, w: number, depth: number) => {
+      const x1 = x + Math.cos(ang) * len + sw * (1 - y / 26), y1 = y + Math.sin(ang) * len;
+      limb(ctx, x, y, x1, y1, w);
+      if (depth <= 0 || w < 0.18) return;
+      const kids = 2 + (r() < 0.35 ? 1 : 0);
+      for (let k = 0; k < kids; k++) branch(x1, y1, ang + (k - (kids - 1) / 2) * (0.5 + r() * 0.35) + (r() - 0.5) * 0.3, len * (0.62 + r() * 0.15), w * 0.62, depth - 1);
+    };
+    branch(12, 13, -Math.PI / 2 - 0.55, 5, 0.9, 3);
+    branch(12, 12.5, -Math.PI / 2 + 0.5, 5.4, 0.85, 3);
+    branch(12, 12, -Math.PI / 2, 4.2, 0.7, 3);
   });
   // Pines: tall, dark, ragged conifers with drooping, uneven tiers (no two alike: a full one and a gaunt one)
   const conifer = (key: string, seed: number, tiers: number, gaunt: boolean) => hiResTexture(scene, key, 20 * K, 30 * K, 2, S, (ctx, f) => {

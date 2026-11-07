@@ -107,7 +107,8 @@ if (import.meta.env?.DEV) (globalThis as any).__HI = HI; // dev: lets tools read
  * smooth vector drawing: `draw` gets a context already scaled so it paints in w x h units, offset to frame f.
  */
 /** Painted decor that gets the pixelize pass (see pixelize.ts). Already pixel-made art (bonfire, bridges, stalls) is left out. */
-const PIXEL_STYLE = /^(up_|oak_|pine|bush|rw_|stk_|crop_)/;
+// Trees and bushes are left painted (Murat 2026-11-07: Path of Exile / Diablo look, not cartoon pixel art)
+const PIXEL_STYLE = /^(up_|rw_|stk_|crop_)/;
 
 export function hiResTexture(scene: Phaser.Scene, key: string, w: number, h: number, frames: number, scale: number, draw: (ctx: CanvasRenderingContext2D, f: number) => void) {
   if (scene.textures.exists(key)) return;
