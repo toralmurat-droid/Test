@@ -1043,6 +1043,19 @@ const ART: Record<string, Draw> = {
     p.px(6, 11, "#ffffff"); p.px(16, 11, "#ffffff");
     p.ring(12, 12, 11, BLOOD[1], Math.PI * 0.15, Math.PI * 0.85, 9); p.ring(12, 12, 11, BLOOD[1], Math.PI * 1.15, Math.PI * 1.85, 9);
   },
+  v_nightborn: (p) => {
+    // a blood-red crescent moon over a pale vampire face with burning eyes
+    for (let y = 1; y < 15; y++) for (let x = 1; x < 15; x++) {
+      if (Math.hypot(x - 7, y - 7.5) <= 6 && Math.hypot(x - 9.6, y - 6) > 4.8) p.px(x, y, x + y < 11 ? BLOOD[0] : BLOOD[1]);
+    }
+    p.disc(15, 16, 5, "#e6dcd6", 6);
+    p.poly([[9, 13], [15, 9], [21, 13], [19, 14], [15, 12], [11, 14]], SHAD[0]);
+    p.poly([[10, 20], [12, 23], [18, 23], [20, 20], [15, 22]], SHAD[1]);
+    p.outline();
+    p.rect(12, 16, 2, 1, "#ff2d2d"); p.rect(17, 16, 2, 1, "#ff2d2d");
+    p.px(14, 20, "#ffffff"); p.px(16, 20, "#ffffff");
+    for (const [x, y] of [[20, 3], [22, 8], [17, 5]]) p.px(x, y, "#fff3c4");
+  },
   v_cloak: (p) => {
     // a high-collared cloak spread like wings, lined in red
     p.poly([[12, 4], [22, 8], [20, 21], [12, 17], [4, 21], [2, 8]], SHAD[0]);

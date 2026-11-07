@@ -127,3 +127,26 @@ test("Exsanguinate sends a blood stream from every victim; Boil Blood makes them
   w.step(1000);
   assert.equal(statusOf(w.units.get("a")!, w.h.now()), "boil");
 });
+
+test("Child of the Night: a buff only while it is night where the vampire stands", () => {
+  const w = world();
+  let night = false;
+  w.h.isNight = () => night;
+  const v = w.add("v", 0, 0, { cls: "vampire", talents: ranks(["v_mist", "v_gaze", "v_nightborn"]) });
+  w.step(100);
+  assert.equal(v.sk.buffs.length, 0, "no buff by day");
+  night = true;
+  w.step(100);
+  const b = v.sk.buffs.find((x) => x.id === "v_nightborn");
+  assert.ok(b, "buff at night");
+  assert.deepEqual([b!.b.dmg, b!.b.lifesteal, b!.b.speed], [18, 6, 9]);
+  night = false;
+  w.step(2500);
+  assert.equal(v.sk.buffs.length, 0, "gone after dawn");
+});
+
+test("Nightfall marks its ground as night", () => {
+  const nf = skillOf("vampire", "v_nightfall")!;
+  assert.equal(nf.field?.night, true);
+  assert.equal(skillOf("vampire", "v_nightborn")?.parent, "v_gaze");
+});
