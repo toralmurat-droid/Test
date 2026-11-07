@@ -247,6 +247,12 @@ export class TownScene extends Phaser.Scene {
   private stopSeq = 0; // seq of our last "stand still" input
   private stoppedAt = 0;
   private seq = 0;
+  // Reconciling our predicted hero with the server while walking (see reconcile)
+  private sentAt = new Map<number, number>(); // input seq -> performance.now() it left
+  private ackSeq = 0; // newest input seq the server has echoed back
+  private rtt = 150; // smoothed ms from sending an input to seeing it in a server update
+  private predHist: Snap[] = []; // where our predicted hero stood, recent frames (performance.now())
+  private corrX = 0; private corrY = 0; // server - prediction still to be blended in
   private useKey = () => {}; // E / G: talk, open, use what is right here
   private bagKey = () => {};
   private heldSlot = -1; // skill key (0..9) held down: it keeps casting
@@ -621,6 +627,7 @@ export class TownScene extends Phaser.Scene {
         if (!e) return;
         e.tx = p.x; e.ty = p.y;
         pushSnap(e, p.x, p.y);
+        if (id === this.me) { this.reconcile(e, p); return; }
         // Snap on respawn / large correction
         if (Math.hypot(e.sprite.x - p.x, e.sprite.y - p.y) > 48) { e.sprite.setPosition(p.x, p.y); e.snaps = [{ t: patchTime(), x: p.x, y: p.y }]; }
       });
@@ -1274,12 +1281,41 @@ export class TownScene extends Phaser.Scene {
     if (el) box.innerHTML = `Next golem: <b style="color:${ATTUNE_COLOR[el]}">${ATTUNE_NAME[el]}</b>`;
   }
 
+  /**
+   * A server update for our own hero. While walking, the server's spot runs one round trip behind our prediction, so it
+   * is compared with where we stood that long ago: the difference (a knockback, a push, a wall the two sides resolved
+   * differently) is blended in over a few frames. Before, walking was never corrected and the gap grew until it passed
+   * 48 px, then the hero jumped back to a stale spot (and on any lag spike, since the gap is speed x ping).
+   */
+  private reconcile(e: Entity, p: any) {
+    const now = performance.now();
+    const s = p.seq ?? 0;
+    if (s > this.ackSeq) {
+      const t0 = this.sentAt.get(s);
+      if (t0 !== undefined) this.rtt += (Math.min(1000, Math.max(20, now - t0)) - this.rtt) * 0.2;
+      this.ackSeq = s;
+    }
+    const dx = p.x - e.sprite.x, dy = p.y - e.sprite.y;
+    // Respawn, portal, teleport: far beyond what lag explains
+    if (Math.hypot(dx, dy) > 160 || p.dead) {
+      e.sprite.setPosition(p.x, p.y); this.predHist = []; this.corrX = this.corrY = 0; return;
+    }
+    const then = interpolate(this.predHist, now - this.rtt);
+    if (!then) return;
+    const ex = p.x - then.x, ey = p.y - then.y;
+    // Small gaps are timing noise (a server tick is ~5 px of walking): leave them to the idle settle
+    if (Math.hypot(ex, ey) < 8) { this.corrX = this.corrY = 0; return; }
+    this.corrX = ex; this.corrY = ey;
+  }
+
   /** Send the held movement directions to the server when they change. */
   private sendInput(next: InputState) {
     const i = this.input_;
     if (next.up === i.up && next.down === i.down && next.left === i.left && next.right === i.right && next.vx === i.vx && next.vy === i.vy) return;
     this.input_ = { ...next };
     this.room?.send("input", { ...next, seq: ++this.seq });
+    this.sentAt.set(this.seq, performance.now());
+    this.sentAt.delete(this.seq - 64);
     // Stopping: the server's position still runs behind ours until it has read this stop (see the idle easing)
     if (!next.up && !next.down && !next.left && !next.right) { this.stopSeq = this.seq; this.stoppedAt = this.time.now; }
   }
@@ -2559,11 +2595,19 @@ export class TownScene extends Phaser.Scene {
         // Client-side prediction with the same movement code the server runs
         const r = moveStep(e.sprite.x, e.sprite.y, this.input_, step / 1000, heroSpeed(p.cls as ClassKind, p.slowed, p.spd ?? 1) * gearSpeedMult(activeOf(p)));
         e.sprite.setPosition(r.x, r.y);
+        if (this.corrX || this.corrY) {
+          // Blend in the server's correction; the history moves with it so the next update doesn't count it twice
+          const k = ease(0.12), cx = this.corrX * k, cy = this.corrY * k;
+          e.sprite.x += cx; e.sprite.y += cy; this.corrX -= cx; this.corrY -= cy;
+          for (const h of this.predHist) { h.x += cx; h.y += cy; }
+          if (Math.abs(this.corrX) + Math.abs(this.corrY) < 0.3) this.corrX = this.corrY = 0;
+        }
         // Just stopped: the server's hero is still walking up behind ours (it hasn't read the stop yet, and its last
         // update is older still). Easing toward that stale spot slid the hero back a step before each attack (Murat).
         // So wait until the server has the stop and stands still too, then settle on its spot.
         const settled = ((p.seq ?? 0) >= this.stopSeq && !p.moving) || now - this.stoppedAt > 1000;
         if (!r.moving && settled) {
+          this.corrX = this.corrY = 0;
           // Ease toward authoritative position while idle (same pull at any frame rate)
           const k = ease(0.2);
           e.sprite.x += (e.tx - e.sprite.x) * k;
@@ -2571,6 +2615,7 @@ export class TownScene extends Phaser.Scene {
         }
       } else if (id === this.me || now < (e.leapUntil ?? 0) || now < (e.chaseUntil ?? 0)) {
         // Our own hero while rolling/stunned, a leap or a dash: follow the server closely
+        if (id === this.me) this.corrX = this.corrY = 0;
         const k = ease(id === this.me || p.rolling ? 0.5 : 0.25);
         e.sprite.x += (e.tx - e.sprite.x) * k;
         e.sprite.y += (e.ty - e.sprite.y) * k;
@@ -2579,6 +2624,11 @@ export class TownScene extends Phaser.Scene {
         // instead of lurching once per server update (and stopping when one comes in late)
         const at = interpolate(e.snaps ?? [], wall - INTERP_DELAY);
         if (at) e.sprite.setPosition(at.x, at.y);
+      }
+      if (id === this.me) {
+        const h = this.predHist;
+        h.push({ t: wall, x: e.sprite.x, y: e.sprite.y });
+        while (h.length > 2 && wall - h[0].t > 1500) h.shift();
       }
       // Monsters off screen: hide them and skip the per-frame drawing (there are a lot of them)
       if (e.mob) {
