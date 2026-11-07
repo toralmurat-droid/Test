@@ -19,11 +19,11 @@ import { ISO } from "./isoflag";
 import { routeVia } from "../../shared/dungeon";
 import type { MapMarker } from "./minimap";
 import { QuestLog } from "./questlog";
-import { SHOPS, sellPrice } from "../../shared/shops";
-import { GEAR_SLOTS, GearSlot, gearDef, gearName, itemLevel, itemText, TIER_NAMES } from "../../shared/gear";
+import { MASTER_LEVELS, SHOPS, sellPrice } from "../../shared/shops";
+import { GEAR_SLOTS, GearSlot, gearDef, gearName, itemLevel, itemRarity, itemText, reqProblem, TIER_NAMES } from "../../shared/gear";
 import { repairCost, WEAR, wearMult } from "../../shared/upkeep";
 import { CHAR_GROW, CHAR_SCALE, CHAR_ORIGIN, CharacterName, playCharAnim } from "./artAssets";
-import { iconCanvas, itemColor, rarityLabel } from "./gear";
+import { iconCanvas, itemColor, rarityLabel, reqInfoOf } from "./gear";
 import { itemTexture, potionTex } from "./textures";
 import { potionAmount, potionName, slotsAfter, total, unpackPotions } from "../../shared/potions";
 import { BAG_SIZE } from "../../shared/gear";
@@ -70,7 +70,7 @@ export class NpcLayer {
   private goalRing?: Phaser.GameObjects.Graphics;
   private goalBeam?: Phaser.GameObjects.Image;
   /** The local hero's feet on the screen, HUD px (TownScene sets it every frame). */
-  heroScreen?: { x: number; y: number };
+  heroScreen?: { x: number; y: number; lift?: number };
   private stage: unknown = -1;
   private shopMsg = "";
   readonly log = new QuestLog();
@@ -216,6 +216,8 @@ export class NpcLayer {
   onShopOpen?: (open: boolean) => void;
   onPreview?: (id?: string) => void;
   private shopOpen = false;
+  /** Masterwork level picked in the shop (undefined: the best the hero can wear). */
+  private masterLv?: number;
 
   close() {
     if (this.shopOpen) { this.shopOpen = false; this.onPreview?.(); this.onShopOpen?.(false); }
@@ -263,13 +265,15 @@ export class NpcLayer {
     const shop = SHOPS[n.shop!];
     const gold = q?.gold ?? 0, potions = q?.potions ?? 0, cls = q?.cls, pots = unpackPotions(potions);
     const bag = [...(q?.bag ?? [])];
-    const key = JSON.stringify([n.id, gold, potions, bag, q?.wear, ...GEAR_SLOTS.map((s) => q?.[s]), this.shopMsg, q?.questId, q?.questStage, q?.boneId, q?.boneStage, q?.redId, q?.redStage, q?.tut, q?.crown, q?.beast]);
+    // masterwork: one level shown at a time (picked with the buttons), by default the best one the hero can wear
+    const master = this.masterLv ?? [...MASTER_LEVELS].reverse().find((l) => l <= (q?.level ?? 1)) ?? MASTER_LEVELS[0];
+    const key = JSON.stringify([n.id, master, gold, potions, bag, q?.level, (q as any)?.ptSta, (q as any)?.ptStr, (q as any)?.ptMag, (q as any)?.ptDex, q?.wear, ...GEAR_SLOTS.map((s) => q?.[s]), this.shopMsg, q?.questId, q?.questStage, q?.boneId, q?.boneStage, q?.redId, q?.redStage, q?.tut, q?.crown, q?.beast]);
     if (key === this.stage) return;
     this.stage = key;
     const row = (icon: string, name: string, color: string, desc: string, btn: string, cls2: string, i: number, off: boolean) =>
       `<div class="sh-row"><span class="sh-icon" data-icon="${icon}"></span><span class="sh-info"><b style="color:${color}">${name}</b><small>${desc}</small></span>` +
       `<button class="${cls2}" data-i="${i}"${off ? " disabled" : ""}>${btn}</button></div>`;
-    let lastLv = 0;
+    let masterHead = false;
     const buy = shop.stock.map((e, i) => {
       if (e.item === "potion" || e.item === "mpotion") {
         const qty = e.qty ?? 1, size = e.size ?? 0, mana = e.item === "mpotion";
@@ -278,10 +282,17 @@ export class NpcLayer {
           `${mana ? "+" : "Heals "}${potionAmount(e.item, size)}${mana ? " mana" : " HP"} · you carry ${total(pots[e.item])} · ${actionKey(mana ? "mana" : "potion")} · ${room ? "10 per bag slot" : "no room in your bag"}`,
           `${e.price}${pxIcon("coin")}`, "sh-buy", i, gold < e.price || !room);
       }
-      const d = gearDef(e.item)!, lv = itemLevel(e.item);
-      const head = lv !== lastLv && lv >= 18 ? `<h5 class="sh-lv">Masterwork · Lv ${lv}</h5>` : "";
-      lastLv = lv;
-      return head + row(e.item, gearName(e.item, cls), itemColor(e.item), `${rarityLabel(e.item)}${TIER_NAMES[d.tier]} · Lv ${itemLevel(e.item)} · ${itemText(e.item)}`, `${e.price}${pxIcon("coin")}`, "sh-buy", i, gold < e.price);
+      const d = gearDef(e.item)!, lv = itemLevel(e.item), isMaster = itemRarity(e.item) === 3;
+      if (isMaster && lv !== master) return "";
+      let head = "";
+      if (isMaster && !masterHead) {
+        masterHead = true;
+        head = `<h5 class="sh-lv">Masterwork · Legendary, forged by Brann</h5><div class="sh-lvpick">` +
+          MASTER_LEVELS.map((l) => `<button data-lv="${l}"${l === master ? ' class="on"' : ""}>Lv ${l}</button>`).join("") + `</div>`;
+      }
+      const why = q ? reqProblem(e.item, reqInfoOf(q)) : "";
+      return head + row(e.item, gearName(e.item, cls), itemColor(e.item), `${rarityLabel(e.item)}${TIER_NAMES[d.tier]} · Lv ${itemLevel(e.item)} · ${itemText(e.item)}${why ? ` · <span class="sh-need">${why}</span>` : ""}`,
+        `${e.price.toLocaleString("en-US")}${pxIcon("coin")}`, "sh-buy", i, gold < e.price);
     }).join("");
     const sellable = shop.buys ? bag.map((id, i) => [id, i] as const).filter(([id]) => gearDef(id) && shop.buys!.includes(gearDef(id)!.slot)) : [];
     const sell = shop.buys
@@ -303,6 +314,7 @@ export class NpcLayer {
     this.dialog.classList.add("shop");
     const talk = this.dialog.querySelector<HTMLButtonElement>(".nd-talk");
     if (talk) talk.onclick = () => { this.trading = false; this.stage = -1; };
+    for (const b of this.dialog.querySelectorAll<HTMLButtonElement>(".sh-lvpick button")) b.onclick = () => { this.masterLv = Number(b.dataset.lv); this.stage = -1; };
     // hovering a piece for sale shows what wearing it would change in the stats beside (the bag opens with the shop)
     for (const r of this.dialog.querySelectorAll<HTMLElement>(".sh-row")) {
       const id = r.querySelector<HTMLElement>(".sh-icon")?.dataset.icon;
@@ -422,10 +434,11 @@ export class NpcLayer {
     if (!a || !h) { this.pointer.hidden = true; return; }
     // iso view: a world direction turns on screen (screen x = x - y, screen y = (x + y) / 2)
     const sx = ISO ? a.dx - a.dy : a.dx, sy = ISO ? (a.dx + a.dy) / 2 : a.dy;
-    const ang = Math.atan2(sy, sx), R = 62;
+    // the ring is centred on the middle of the hero's body (lift: half his height on screen, it follows the zoom)
+    const lift = h.lift ?? 20, ang = Math.atan2(sy, sx), R = Math.max(56, lift * 1.9);
     this.pointer.hidden = false;
     this.pointer.style.left = `${h.x + Math.cos(ang) * R}px`;
-    this.pointer.style.top = `${h.y - 20 + Math.sin(ang) * R}px`; // around the middle of the body
+    this.pointer.style.top = `${h.y - lift + Math.sin(ang) * R * 0.8}px`;
     const steps = String(Math.round(a.d / TILE));
     if (this.pointer.dataset.s !== steps) { this.pointer.dataset.s = steps; this.pointer.innerHTML = `<i></i><b>${steps}</b>`; }
     (this.pointer.firstElementChild as HTMLElement).style.transform = `rotate(${ang}rad)`;
@@ -438,9 +451,10 @@ export class NpcLayer {
     this.goalRing ??= this.scene.add.graphics();
     this.goalBeam ??= this.scene.add.image(0, 0, "light").setTint(0xffd27a).setBlendMode(Phaser.BlendModes.ADD).setOrigin(0.5, 0.85);
     const t = this.scene.time.now / 1000, r = Math.max(10, Math.min(g.r || 12, 60)), k = 1 + Math.sin(t * 3) * 0.08;
-    this.goalRing.clear().setVisible(true).setPosition(g.x, g.y).setDepth(g.y - 1);
-    this.goalRing.lineStyle(2, 0xe3bf6a, 0.9).strokeEllipse(0, 0, r * 2 * k, r * k);
-    this.goalRing.lineStyle(1, 0xffe9a8, 0.5).strokeEllipse(0, 0, r * 1.3 * k, r * 0.65 * k);
+    // circles in world space at the target: the iso view lays the Graphics flat on the ground, centred on the spot
+    this.goalRing.clear().setVisible(true).setPosition(0, 0).setDepth(1);
+    this.goalRing.lineStyle(2, 0xe3bf6a, 0.9).strokeCircle(g.x, g.y, r * k);
+    this.goalRing.lineStyle(1, 0xffe9a8, 0.5).strokeCircle(g.x, g.y, r * 0.65 * k);
     this.goalBeam.setVisible(true).setPosition(g.x, g.y).setDepth(g.y).setScale(0.6, 2.6).setAlpha(0.45 + Math.sin(t * 3) * 0.12);
   }
 

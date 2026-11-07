@@ -185,3 +185,7 @@ body #hud #questtracker { background: transparent; border-left: none; box-shadow
 /* A shop opens the bag beside it (TownScene onShopOpen): the shop moves to the left, the bag and stats stay on the right */
 body.shopping #npcdialog.shop { left: 12px; top: 12px; bottom: auto; transform: none; width: max(340px, min(520px, calc(100% - 932px))); max-height: calc(100% - 200px); }
 #npcdialog .sh-lv { margin: 10px 0 2px; font: 16px var(--pixel-font); color: #8b5e34; border-bottom: 1px solid #b89a5a; letter-spacing: 1px; }
+#npcdialog .sh-lvpick { display: flex; flex-wrap: wrap; gap: 4px; margin: 2px 0 6px; }
+#npcdialog .sh-lvpick button { padding: 2px 8px; font: 15px var(--pixel-font); background: #f5ecd2; }
+#npcdialog .sh-lvpick button.on { background: #8b5e34; color: #ffe9a8; border-color: #5a3a1e; }
+#npcdialog .sh-need { color: #b3262e; }
