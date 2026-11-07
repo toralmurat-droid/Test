@@ -7,6 +7,7 @@ import path from "node:path";
 
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), "room-test-"));
 process.env.SAVE_FILE ??= path.join(dir, "saves.json");
+process.env.ALLOW_ARCHIVED_CLASSES ??= "1"; // tests still cover the archived classes
 process.env.IDEAS_FILE ??= path.join(dir, "ideas.json");
 
 export async function startRoom() {

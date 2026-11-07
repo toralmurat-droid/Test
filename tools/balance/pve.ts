@@ -12,7 +12,7 @@
  * Monsters raised or called mid-fight (Necromancer skeletons, Chief reinforcements, the King's servants) are left out,
  * so boss win rates read a bit high.
  */
-import { CLASS_KINDS, ClassKind } from "../../shared/classes";
+import { ACTIVE_CLASSES, ClassKind } from "../../shared/classes";
 import { BANDIT_AI, BANDIT_ROLES, CHIEF } from "../../shared/bandits";
 import { BLOB_AI, DEMON, HOLLOW_KING, MOB_ATTACK_RANGE, MOB_LEVEL, MOBS, MobKind, mobScale, MOTHER, SKELETON_AI, SKELETON_BOW, SKELETON_WEAPONS, SkeletonWeapon, REGEN_DELAY_MS, REGEN_PER_STA } from "../../shared/constants";
 import { MOB_COMBAT, mobBody, POISE, poiseSpeed } from "../../shared/combat";
@@ -331,11 +331,11 @@ if (process.argv[1]?.includes("pve")) {
     const levels = [2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30];
     console.log(`Zone runs: ${CHAIN} encounters (1-3 monsters) in a row vs monsters of the hero's level to +2 (capped 25), 3 heal + 3 mana potions.`);
     console.log("Cell = cleared% / HP lost per kill / seconds per kill / potions drunk per run");
-    console.log("Lv".padEnd(5) + CLASS_KINDS.map((c) => c.padEnd(22)).join(""));
+    console.log("Lv".padEnd(5) + ACTIVE_CLASSES.map((c) => c.padEnd(22)).join(""));
     const tot: Record<string, { w: number; n: number }> = {};
     for (const L of levels) {
       let line = String(L).padEnd(5);
-      for (const c of CLASS_KINDS) {
+      for (const c of ACTIVE_CLASSES) {
         let won = 0, hp = 0, sec = 0, pots = 0;
         for (let i = 0; i < n; i++) {
           const r = zoneRun(c, L, (i % 3) as Build, () => L + Math.floor(Math.random() * 3));
@@ -346,14 +346,14 @@ if (process.argv[1]?.includes("pve")) {
       }
       console.log(line);
     }
-    console.log("all".padEnd(5) + CLASS_KINDS.map((c) => pct(tot[c].w / tot[c].n).padEnd(22)).join(""));
+    console.log("all".padEnd(5) + ACTIVE_CLASSES.map((c) => pct(tot[c].w / tot[c].n).padEnd(22)).join(""));
   }
   if (doBosses) {
     console.log("\nBosses (solo, hero 1 level below unless capped, 5 heal + 5 mana potions). Cell = win% / avg fight s / boss HP left when lost");
-    console.log("".padEnd(24) + CLASS_KINDS.map((c) => c.padEnd(18)).join(""));
+    console.log("".padEnd(24) + ACTIVE_CLASSES.map((c) => c.padEnd(18)).join(""));
     for (const b of BOSSES) {
       let line = b.name.padEnd(24);
-      for (const c of CLASS_KINDS) {
+      for (const c of ACTIVE_CLASSES) {
         let won = 0, sec = 0, left = 0, lostN = 0;
         for (let i = 0; i < n; i++) {
           const r = bossRun(c, b, (i % 3) as Build);

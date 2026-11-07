@@ -2,7 +2,7 @@
 // Painted like the bonfire (bonfireArt.ts): a few flat tones per material, Bayer dithering, one colour per art cell.
 // The ground is painted once per screen size on the bonfire's cell grid; heroes use their own sheets at 4/3 of a cell
 // (the same proportion as in game), so both stay crisp at whole device pixels.
-import { CLASSES, ClassKind, CLASS_KINDS } from "../../shared/classes";
+import { ACTIVE_CLASSES, CLASSES, ClassKind } from "../../shared/classes";
 import { CHAR_BASE, CHAR_EXT, HD_CHARS } from "./artAssets";
 import { GEAR_SLOTS, starterKit } from "../../shared/gear";
 import { bonfireStrip, FRAMES, FW, FH } from "./loading";
@@ -134,11 +134,13 @@ export function mountFireside(canvas: HTMLCanvasElement, labelHost: HTMLElement,
   }
 
   // ---- heroes ----
-  const heroes: Hero[] = CLASS_KINDS.map((k, i) => {
+  // only playable classes sit by the fire; with few of them they take the seats nearest the middle
+  const seats = ACTIVE_CLASSES.length <= 2 ? [2, 4] : ACTIVE_CLASSES.length <= 3 ? [2, 3, 4] : SLOTS.map((_, i) => i);
+  const heroes: Hero[] = ACTIVE_CLASSES.map((k, i) => {
     const label = document.createElement("div");
     label.className = "fs-label";
     labelHost.appendChild(label);
-    return { k, slot: SLOTS[i % SLOTS.length], img: null, kit: [], anim: "idle", t0: 0, step: 0, nextFidget: 2000 + Math.random() * 4000, label };
+    return { k, slot: SLOTS[seats[i % seats.length]], img: null, kit: [], anim: "idle", t0: 0, step: 0, nextFidget: 2000 + Math.random() * 4000, label };
   });
   let meta: Meta | null = null;
   fetch(`${CHAR_BASE}/characters.json`).then((r) => r.json()).then((m) => { meta = m; }).catch(() => { /* names still show */ });

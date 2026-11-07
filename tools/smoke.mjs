@@ -26,7 +26,7 @@ for (let i = 0; ; i++) {
 const page = await fetch(`http://localhost:${PORT}/`);
 if (!page.ok || !(await page.text()).includes("<html")) fail("client page not served");
 
-const room = await new Client(`ws://localhost:${PORT}`).joinOrCreate("town", { name: "SmokeHero", password: "smokepass1", cls: "knight", newGame: true });
+const room = await new Client(`ws://localhost:${PORT}`).joinOrCreate("town", { name: "SmokeHero", password: "smokepass1", cls: "vampire", newGame: true });
 for (let i = 0; i < 50 && !room.state?.players?.get(room.sessionId); i++) await wait(100);
 const me = room.state.players.get(room.sessionId);
 if (!me || me.name !== "SmokeHero") fail("hero not in the world state");
