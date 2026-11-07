@@ -63,7 +63,7 @@ import { hashAddr, ideaLog, saveIdeas } from "./ideaStore";
 import { dropLive, LiveState, rememberLive, takeLive } from "./handoff";
 import { MobView } from "./mobView";
 import { repairCost, respecCost, WEAR, wearMult } from "../shared/upkeep";
-import { attuneOf, GOLEM_OF, isSummonKind, SUMMON, summonElement, type SummonKind } from "../shared/summons";
+import { attuneOf, bondShare, GOLEM_OF, isSummonKind, SUMMON, summonElement, summonScaleLevel, type SummonKind } from "../shared/summons";
 import { ASK_BURST, ASK_PER_SEC, Bucket, CHAT_BURST, CHAT_PER_SEC, clientIp, isLocalIp, MSG_BURST, MSG_KICK_AFTER, MSG_KICK_WINDOW_MS, MSG_PER_SEC } from "./ratelimit";
 
 export class Player extends Schema {
@@ -1520,7 +1520,7 @@ export class TownRoom extends Room<TownState> {
     m.level = capLevel(level ?? p.level);
     const fuse = 1 + SUMMON.colossusPerGolem * fused;
     // Life does not take the skill's power (rank, Magic): it made golems 3-4x tougher than monsters of their level
-    m.hp = m.maxHp = Math.round(MOBS[kind].maxHp * mobScale(m.level, "hp") * fuse * talentMult(p.cls, p.talents, "summonHp"));
+    m.hp = m.maxHp = Math.round(MOBS[kind].maxHp * mobScale(summonScaleLevel(m.level), "hp") * fuse * talentMult(p.cls, p.talents, "summonHp"));
     m.sPower = power * fuse * talentMult(p.cls, p.talents, "summonDmg");
     m.weapon = kind === "golem_colossus" ? attuneOf(p.attune) : "";
     // a free spot beside the hero (behind them if blocked)
@@ -1668,7 +1668,7 @@ export class TownRoom extends Room<TownState> {
 
   /** A summon's blow: dealt in its owner's name (they get the kill), part of it in the golem's element; a monster turns on the golem. */
   private summonStrike(m: Mob, id: string, tid: string, t: { x: number; y: number }, def: MobDef) {
-    const dmg = def.damage * mobScale(m.level, "damage") * m.sPower;
+    const dmg = def.damage * mobScale(summonScaleLevel(m.level), "damage") * m.sPower;
     const el = summonElement(m.kind, m.weapon);
     this.broadcast("swing", { id });
     // The Colossus slams the ground: everyone of the owner's foes close to its target is hit
@@ -4539,7 +4539,7 @@ export class TownRoom extends Room<TownState> {
     // Stone Bond (shared/summons.ts): the hero's nearest golem takes part of the blow
     const bond = this.bondOf(tid, t);
     if (bond && dmg > 1) {
-      const part = Math.round(dmg * SUMMON.guardShare);
+      const part = Math.round(dmg * bondShare(t.level));
       dmg -= part;
       bond[1].hp -= part;
       if (bond[1].hp <= 0) this.mobDied(bond[1], bond[0], opts.from ?? "", byName);

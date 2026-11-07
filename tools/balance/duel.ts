@@ -23,7 +23,7 @@ import { Equipped, GEAR, gearBlock, gearDef, gearReachMult, gearSpeedMult, gearS
 import { heroPoise, POISE, poiseLevelMult, poiseSpeed, pvpDamageMult } from "../../shared/combat";
 import { COMBAT_REGEN_PER_STA, HIT_RADIUS, MOBS, mobScale, PLAYER_SPEED, REGEN_DELAY_MS, REGEN_PER_STA, REGEN_RAMP_MS } from "../../shared/constants";
 import { MOB_COMBAT, mobBody } from "../../shared/combat";
-import { attuneOf, GOLEM_OF, SUMMON, type SummonKind } from "../../shared/summons";
+import { attuneOf, bondShare, GOLEM_OF, SUMMON, summonScaleLevel, type SummonKind } from "../../shared/summons";
 
 const TICK = 50; // ms, server runs at 20 Hz
 const MAX_MS = 60000;
@@ -72,7 +72,7 @@ export class GolemF extends F {
     super(id, owner.cls, owner.level, {}, {}, { sta: 0, str: 0, mag: 0, dex: 0 });
     const fuse = 1 + SUMMON.colossusPerGolem * fused, def = MOBS[kind];
     this.s = { sta: 0, str: 0, mag: 0, dex: 0 };
-    this.maxHp = this.hp = Math.round(def.maxHp * mobScale(owner.level, "hp") * fuse * talentMult(owner.cls, owner.t, "summonHp")); // no skill power on life, like the server
+    this.maxHp = this.hp = Math.round(def.maxHp * mobScale(summonScaleLevel(owner.level), "hp") * fuse * talentMult(owner.cls, owner.t, "summonHp")); // no skill power on life, like the server
     this.sPower = power * fuse * talentMult(owner.cls, owner.t, "summonDmg");
     this.body = mobBody(kind);
     this.mob = { reach: 14, ranged: false };
@@ -239,7 +239,7 @@ export class Duel {
     if (!(t instanceof GolemF) && dmg > 1) {
       let g: GolemF | undefined, bd: number = SUMMON.bondRange;
       for (const c of this.golemsOf(t)) if (Math.abs(c.x - t.x) < bd) { bd = Math.abs(c.x - t.x); g = c; }
-      if (g) { const part = Math.round(dmg * SUMMON.guardShare); dmg -= part; g.hp -= part; if (g.hp <= 0) g.dead = true; }
+      if (g) { const part = Math.round(dmg * bondShare(t.level)); dmg -= part; g.hp -= part; if (g.hp <= 0) g.dead = true; }
     }
     const block = gearBlock(t.eq);
     if (block) dmg = Math.max(1, Math.round(dmg * (1 - block)));
@@ -387,7 +387,7 @@ export class Duel {
     if (g.windUntil) {
       if (now < g.windUntil) return 0;
       g.windUntil = 0; g.lastAtk = now;
-      const dmg = def.damage * mobScale(g.level, "damage") * g.sPower;
+      const dmg = def.damage * mobScale(summonScaleLevel(g.level), "damage") * g.sPower;
       const hits = g.kind === "golem_colossus" ? this.foes(g).filter((c) => !c.dead && Math.abs(c.x - t!.x) <= SUMMON.colossusSlam + c.body) : Math.abs(t.x - g.x) <= reach + 6 ? [t] : [];
       for (const c of hits) this.hit(o, c, dmg, Math.sign(c.x - g.x) || toward, { kb: 0.6 });
       return 0;

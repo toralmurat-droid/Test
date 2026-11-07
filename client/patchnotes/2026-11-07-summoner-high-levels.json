@@ -1,0 +1,8 @@
+{
+  "date": "2026-11-07",
+  "title": "Summoner: high levels",
+  "changes": [
+    "Past level 20, golems grow more slowly with your level.",
+    "Stone Bond eases off from level 20 to 25: your golem takes 22% of the blows aimed at you instead of 30%."
+  ]
+}
