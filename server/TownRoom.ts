@@ -63,6 +63,7 @@ import { hashAddr, ideaLog, saveIdeas } from "./ideaStore";
 import { dropLive, LiveState, rememberLive, takeLive } from "./handoff";
 import { MobView } from "./mobView";
 import { repairCost, respecCost, WEAR, wearMult } from "../shared/upkeep";
+import { isSummonKind, SUMMON, SUMMON_ELEMENT, type SummonKind } from "../shared/summons";
 import { ASK_BURST, ASK_PER_SEC, Bucket, CHAT_BURST, CHAT_PER_SEC, clientIp, isLocalIp, MSG_BURST, MSG_KICK_AFTER, MSG_KICK_WINDOW_MS, MSG_PER_SEC } from "./ratelimit";
 
 export class Player extends Schema {
@@ -201,6 +202,7 @@ export class Mob extends Schema {
   @type("number") job = -1; // its WORK_SLOTS index (-1: no job); the client reads it to know where it works
   @type("string") parts = ""; // kinds of the blobs swallowed, comma-separated: the client paints their colours, eyes and mouths on it
   summonFor = ""; // quest monster (QuestStep.summon): session id of the player it was spawned for
+  summonAt = 0; nextPick = 0; // when it was called (the oldest goes first past SUMMON.max), next target choice
   summonChain = 0; // ...and the quest chain of that step
   @type("string") title = ""; // quest boss name shown over it instead of "Elite" (QuestStep.summon.title)
   mergeInto = ""; // answering a call: id of the blob it is rushing to fuse with
@@ -250,6 +252,8 @@ export class Mob extends Schema {
   @type("boolean") broken = false; // poise broken: dizzy, runs away (shared/combat.ts)
   @type("boolean") winding = false; // winding up an attack (telegraph)
   @type("string") fx = ""; // skill effects on it (burn, mark, weak), see Player.fx
+  // Keep the synced fields in the order of shared/mobView.ts MOB_FIELDS (server/mobView.ts sends them by index)
+  @type("string") owner = ""; // a hero's summon (shared/summons.ts): session id of the hero it fights for
   sk = newRuntime();
 
   stunUntil = 0;
@@ -831,6 +835,7 @@ export class TownRoom extends Room<TownState> {
     this.tradeAsks.delete(client.sessionId);
     this.state.players.delete(client.sessionId);
     this.unsummon(client.sessionId);
+    this.dismissAll(client.sessionId);
     this.addrs.delete(client.sessionId);
     this.msgBuckets.delete(client.sessionId);
     this.chatBuckets.delete(client.sessionId);
@@ -1450,6 +1455,14 @@ export class TownRoom extends Room<TownState> {
         }
       }
     }
+    // Heroes' summons are fair game for every monster (they are hit like a rival monster)
+    if (!m.mergeInto && !m.summonFor && !m.perch) for (const [sid, o] of this.summons) {
+      if (o.dead || Math.abs(o.x - m.x) > def.aggroRange || Math.abs(o.y - m.y) > def.aggroRange) continue;
+      const d = Math.hypot(o.x - m.x, o.y - m.y), hated = sid === m.hateId ? m.hate : 0;
+      if (d >= (hated > 0 ? def.aggroRange * 2 : def.aggroRange) || Math.hypot(o.x - m.homeX, o.y - m.homeY) >= def.leash) continue;
+      const score = Math.max(0, 1 - d / def.aggroRange) + hated + (sid === m.foe ? AGGRO.stick : 0);
+      if (score > best) { best = score; target = ""; foe = sid; }
+    }
     m.target = target; m.foe = foe;
   }
 
@@ -1478,6 +1491,129 @@ export class TownRoom extends Room<TownState> {
     if (!isSafeZone(k.x, k.y) && !noMobsAt(k.x, k.y)) { o.x = k.x; o.y = k.y; }
     this.broadcast("hit", { id: oid, dmg, crit: false, dot: false });
     if (o.hp <= 0) { this.mobDied(o, oid, id, MOBS[m.kind].name); m.foe = ""; }
+  }
+
+  // ---- Summons (shared/summons.ts) --------------------------------------------
+
+  /** Living summons by id, so monsters and heroes find them without scanning every monster. */
+  private summons = new Map<string, Mob>();
+  private summonSeq = 0;
+
+  /** May this hero hurt that summon? Never their own or their group's, never across newcomer protection, never in the safe zone. */
+  private canHurtSummon(heroId: string, m: Mob): boolean {
+    if (m.owner === heroId) return false;
+    const a = this.state.players.get(heroId), o = this.state.players.get(m.owner);
+    if (!a || !o) return !!a;
+    if (a.party && a.party === o.party) return false;
+    return !pvpProtected(a.level, o.level) && !isSafeZone(m.x, m.y);
+  }
+
+  /** A hero calls up a summon next to them. Past SUMMON.max, their oldest summon goes back. Returns its id. */
+  summon(ownerId: string, kind: SummonKind, level?: number): string | undefined {
+    const p = this.state.players.get(ownerId);
+    if (!p || p.dead || !isSummonKind(kind)) return undefined;
+    const mine = [...this.summons].filter(([, m]) => m.owner === ownerId).sort((x, y) => x[1].summonAt - y[1].summonAt);
+    while (mine.length >= SUMMON.max) { const [oid] = mine.shift()!; this.dismiss(oid); }
+    const m = new Mob(), now = Date.now();
+    m.kind = kind; m.zone = -1; m.owner = ownerId; m.summonAt = now;
+    m.level = capLevel(level ?? p.level);
+    m.hp = m.maxHp = Math.round(MOBS[kind].maxHp * mobScale(m.level, "hp"));
+    // a free spot beside the hero (behind them if blocked)
+    let x = p.x, y = p.y;
+    for (const [dx, dy] of [[-18, 6], [18, 6], [0, 16], [0, -16], [0, 0]]) {
+      if (!isSolidAt(p.x + dx, p.y + dy)) { x = p.x + dx; y = p.y + dy; break; }
+    }
+    m.x = m.homeX = x; m.y = m.homeY = y;
+    m.banishAt = now + SUMMON.lifeMs; m.stunUntil = now + 500; // rising out of the ground
+    const id = `s${++this.summonSeq}`;
+    this.state.mobs.set(id, m);
+    this.summons.set(id, m);
+    this.broadcast("summon", { id, owner: ownerId, kind, x: Math.round(x), y: Math.round(y) });
+    return id;
+  }
+
+  /** Sends a summon back (its time is up, its owner left or died, or it was replaced). */
+  private dismiss(id: string) {
+    const m = this.summons.get(id);
+    this.summons.delete(id);
+    if (!m || m.dead) return;
+    m.dead = true; m.hp = 0;
+    this.broadcast("banish", { id, x: Math.round(m.x), y: Math.round(m.y) });
+    this.clock.setTimeout(() => this.state.mobs.delete(id), 500);
+  }
+
+  /** Every summon of this hero goes back (they left, or died). */
+  private dismissAll(ownerId: string) {
+    for (const [id, m] of [...this.summons]) if (m.owner === ownerId) this.dismiss(id);
+  }
+
+  /** The enemy a summon fights: the nearest foe of its owner around it, first whoever is attacking the owner. */
+  private summonTarget(m: Mob, ownerId: string, o: Player): string {
+    let best = "", bs = 0;
+    const R = SUMMON.aggroRange;
+    const near = (x: number, y: number) => Math.hypot(x - m.x, y - m.y) < R && Math.hypot(x - o.x, y - o.y) < SUMMON.leash;
+    this.state.mobs.forEach((t, tid) => {
+      if (t === m || t.dead || t.hidden || Math.abs(t.x - m.x) > R || Math.abs(t.y - m.y) > R) return;
+      if (t.owner ? !this.canHurtSummon(ownerId, t) : isSafeZone(t.x, t.y)) return;
+      if (!near(t.x, t.y)) return;
+      const score = 1 - Math.hypot(t.x - m.x, t.y - m.y) / R + (t.target === ownerId || t.foe === ownerId ? 1 : 0) + (tid === m.target ? AGGRO.stick : 0);
+      if (score > bs) { bs = score; best = tid; }
+    });
+    this.state.players.forEach((t, tid) => {
+      if (tid === ownerId || t.dead || isSafeZone(t.x, t.y) || (o.party && t.party === o.party) || pvpProtected(o.level, t.level)) return;
+      if (!near(t.x, t.y)) return;
+      const score = 1 - Math.hypot(t.x - m.x, t.y - m.y) / R + (tid === m.target ? AGGRO.stick : 0);
+      if (score > bs) { bs = score; best = tid; }
+    });
+    return best;
+  }
+
+  /** A summon's turn: follow the owner, fight their enemies, crumble when its time is up. */
+  private updateSummon(m: Mob, id: string, dt: number, now: number) {
+    const o = this.state.players.get(m.owner);
+    if (!o || o.dead || now >= m.banishAt) return this.dismiss(id);
+    m.stunned = now < m.stunUntil;
+    m.slowed = now < m.slowUntil;
+    if (m.stunned || m.broken) { m.winding = false; m.windUntil = 0; }
+    if (m.stunned) { m.moving = false; return; }
+    const def = mobDef(m, now);
+    if (now >= m.nextPick) { m.nextPick = now + 400; m.target = this.summonTarget(m, m.owner, o); }
+    const tp = m.target ? this.state.players.get(m.target) : undefined;
+    const tm = !tp && m.target ? this.state.mobs.get(m.target) : undefined;
+    const t = tp ?? tm;
+    if (t && ((tp && (tp.dead || isSafeZone(tp.x, tp.y))) || (tm && (tm.dead || tm.hidden)))) m.target = "";
+    let input: InputState = STILL;
+    const toOwner = Math.hypot(o.x - m.x, o.y - m.y);
+    if (toOwner > SUMMON.leash * 2.5) {
+      // left far behind (the owner went through a portal, or into the village): it comes back beside them
+      if (!isSolidAt(o.x, o.y + 12) && !isSafeZone(o.x, o.y + 12)) { m.x = o.x; m.y = o.y + 12; m.target = ""; }
+    } else if (m.target && t && !m.broken) {
+      const dist = Math.hypot(t.x - m.x, t.y - m.y), melee = meleeOf(m), reach = melee.range + (tm ? mobBody(tm.kind) : 4);
+      if (dist <= reach || m.windUntil) {
+        m.dir = Math.abs(t.x - m.x) > Math.abs(t.y - m.y) ? (t.x > m.x ? "right" : "left") : (t.y > m.y ? "down" : "up");
+        if (m.windUntil) {
+          if (now >= m.windUntil) {
+            m.windUntil = 0; m.winding = false; m.lastAttack = now;
+            if (dist <= reach + 6) this.summonStrike(m, id, m.target, t, def);
+          }
+        } else if (now - m.lastAttack >= def.attackCooldownMs) { m.windUntil = now + MOB_COMBAT[m.kind].windupMs; m.winding = true; }
+      } else input = toward(m.x, m.y, t.x, t.y);
+    } else if (toOwner > SUMMON.followRange) input = toward(m.x, m.y, o.x, o.y);
+    const r = moveStep(m.x, m.y, input, dt, def.speed * (m.slowed ? SLOW_MOB : 1));
+    if (this.canStep(m, r.x, r.y)) { m.x = r.x; m.y = r.y; m.homeX = m.x; m.homeY = m.y; }
+    m.moving = r.moving && input !== STILL;
+    if (input !== STILL) m.dir = dirFromInput(input, m.dir);
+  }
+
+  /** A summon's blow: dealt in its owner's name (they get the kill), part of it in the golem's element; a monster turns on the golem. */
+  private summonStrike(m: Mob, id: string, tid: string, t: { x: number; y: number }, def: MobDef) {
+    const dmg = def.damage * mobScale(m.level, "damage");
+    const d = Math.hypot(t.x - m.x, t.y - m.y) || 1, push: [number, number] = [(t.x - m.x) / d, (t.y - m.y) / d];
+    const el = SUMMON_ELEMENT[m.kind as SummonKind];
+    this.broadcast("swing", { id });
+    this.hitTarget(m.owner, tid, dmg * (1 - SUMMON.elementShare), push, { kb: 0.6, parts: [{ el, amt: dmg * SUMMON.elementShare }] });
+    const victim = this.state.mobs.get(tid);
+    if (victim && !victim.dead && !victim.owner) { this.addHate(victim, id, dmg); victim.foe = id; victim.target = ""; } // the golem tanks
   }
 
   // ---- Blob merging -----------------------------------------------------------
@@ -2229,6 +2365,7 @@ export class TownRoom extends Room<TownState> {
   private updateMob(m: Mob, id: string, dt: number, now: number) {
     tickPoise(m, mobPoiseMax(m), dt, now);
     if (m.dead) { m.moving = false; m.winding = false; m.windUntil = 0; return; }
+    if (m.owner) return this.updateSummon(m, id, dt, now);
     if (m.banishAt && now >= m.banishAt && !m.specialAt) {
       // the summoned demon's time is up: it sinks back into the ground
       this.broadcast("banish", { id, x: Math.round(m.x), y: Math.round(m.y) });
@@ -2281,7 +2418,7 @@ export class TownRoom extends Room<TownState> {
     if (t && (t.dead || isSafeZone(t.x, t.y) || Math.hypot(m.x - m.homeX, m.y - m.homeY) > def.leash)) {
       m.target = ""; t = undefined;
     }
-    let foe: Mob | undefined = FACTION[m.kind] && !t ? this.foeOf(m, def) : undefined;
+    let foe: Mob | undefined = (FACTION[m.kind] || this.state.mobs.get(m.foe)?.owner) && !t ? this.foeOf(m, def) : undefined;
     // Aggro: pick whoever it hates most, hero or rival monster
     if (m.hate > 0) m.hate = Math.max(0, m.hate - AGGRO.decayPerSec * dt);
     if (now >= m.nextAggro) {
@@ -3483,6 +3620,7 @@ export class TownRoom extends Room<TownState> {
       if (dx > R || dx < -R) return;
       const dy = m.y - y;
       if (dy > R || dy < -R) return;
+      if (m.owner && me && !this.canHurtSummon(exclude, m)) return; // own / group / protected heroes' summons
       if (!m.dead && !m.hidden && Math.hypot(dx, dy) <= r + (mobPad ? mobPad(m) : 0)) out.push(mid);
     });
     return out;
@@ -3566,6 +3704,7 @@ export class TownRoom extends Room<TownState> {
     }
     const m = this.state.mobs.get(targetId);
     if (!m || m.dead) return;
+    if (m.owner && a && !this.canHurtSummon(attackerId, m)) return;
     const def = mobDef(m);
     if (a && (m.camp || m.kind === "banditchief")) this.banditShout(m, targetId, attackerId, Date.now());
     dmg = Math.max(1, Math.round(dmg * takenMult(m, Date.now())));
@@ -3595,6 +3734,7 @@ export class TownRoom extends Room<TownState> {
     }
     this.broadcast("hit", { id: targetId, dmg, crit: !!opts.crit, dot: !!opts.dot, el: opts.el, ...(opts.dot ? {} : hitDir(push)) });
     if (m.hp > 0) { afterHit(this.host, attackerId, targetId, opts); return; }
+    if (m.owner) { this.mobDied(m, targetId, attackerId, a?.name ?? ""); return; } // a summon: no XP, no loot, no quest credit
     if (a) for (let c = 0; c < CHAINS.length; c++) this.questKill(attackerId, a, m, c);
     if (a) this.bountyKill(attackerId, a, m);
     // Kill XP: every group member in the same zone gets it (the killer alone when solo)
@@ -3637,6 +3777,7 @@ export class TownRoom extends Room<TownState> {
   /** A monster is down: its raised dead crumble, it leaves its zone (which brings a fresh one back later). */
   private mobDied(m: Mob, targetId: string, attackerId: string, killerName: string) {
     m.dead = true; m.hp = 0;
+    if (m.owner) this.summons.delete(targetId);
     m.hidden = false; m.spot = ""; m.fleeing = false; m.foe = "";
     // A skeleton may break in two: its upper body drags itself on at whoever killed it
     if (m.kind === "skeleton" && !m.ritual && Math.random() < BONES.crawlChance) {
