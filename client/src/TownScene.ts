@@ -284,7 +284,9 @@ export class TownScene extends Phaser.Scene {
   private corrX = 0; private corrY = 0; // server - prediction still to be blended in
   private useKey = () => {}; // E / G: talk, open, use what is right here
   private bagKey = () => {};
-  private heldSlot = -1; // skill key (0..9) held down: it keeps casting
+  private heldSlot = -1;
+  /** The torch is lit (L): a much wider light around the hero at night. Remembered in the browser. */
+  private torch = (() => { try { return localStorage.getItem("torch") === "1"; } catch { return false; } })(); // skill key (0..9) held down: it keeps casting
   private slotCastAt = 0;
   private pointer?: PointerControls;
   /**
@@ -436,6 +438,13 @@ export class TownScene extends Phaser.Scene {
     });
     this.input.keyboard!.on("keyup", (ev: KeyboardEvent) => { if (this.heldSlot >= 0 && slotOfKey(ev) === this.heldSlot) this.heldSlot = -1; });
     window.addEventListener("blur", () => { this.heldSlot = -1; }); // the key-up never comes when the window loses focus
+    // L: light or put out the torch (a wider light around the hero at night)
+    this.input.keyboard!.on("keydown-L", (ev: KeyboardEvent) => {
+      if (ev.repeat || this.chatting()) return;
+      this.torch = !this.torch;
+      try { localStorage.setItem("torch", this.torch ? "1" : "0"); } catch { /* storage off */ }
+      this.chatMessage("", "Torch", this.torch ? "You light your torch (L to put it out)." : "You put out your torch.");
+    });
     onKeyMode(() => { this.heldSlot = -1; this.hotbarHtml = ""; this.keyLabels(); });
     this.keyLabels();
     this.setupHotbar();
@@ -2612,6 +2621,8 @@ export class TownScene extends Phaser.Scene {
       this.details.underground = !!this.dungeon?.underground;
       const me = this.entities?.get(this.me)?.state;
       this.details.nightOverride = me && this.fx ? this.fx.nightK(me.x, me.y) : 0; // a vampire's Nightfall: night around the local hero
+      const meSprite = this.entities?.get(this.me)?.sprite;
+      this.details.hero = meSprite && !me?.dead ? { x: meSprite.x, y: meSprite.y, torch: this.torch } : undefined;
     }
     this.details?.update(this.time.now, dtMs);
     if (!this.room) return;

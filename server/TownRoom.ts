@@ -19,7 +19,7 @@ import { AttackProfile, attackProfile, weaponAttackMult, weaponOk } from "../sha
 import { Element, ElemPart, ELEMENT_FX, mobAffinity, MOB_MELEE_ELEMENT, MOB_SHOT_ELEMENT } from "../shared/elements";
 import { gearResist, splitHit } from "../shared/gear";
 import { cleanFilter, LootFilter, passesFilter } from "../shared/heroSheet";
-import { activeSkills, canLearn, classSkills, cleanRanks, levelPower, REPLACED_SKILLS, MAX_RANK, NEED_TEXT, rankOf, rankPower, scalePower, skillById, skillLearned, skillOf, talentBonus, talentMult, talentReduce } from "../shared/skills";
+import { activeSkills, canLearn, classSkills, cleanRanks, levelPower, REPLACED_SKILLS, maxRank, topRank, NEED_TEXT, rankOf, rankPower, scalePower, skillById, skillLearned, skillOf, talentBonus, talentMult, talentReduce } from "../shared/skills";
 import {
   afterHit, atkSpeedMult, blocking, bloodCost, buffLifesteal, buffRegen, castSkill, ccImmune, fangTarget, charging, winding, counterHit, dealtMult, FieldInst, newRuntime,
   imbueOf, shotEnd, shotHit, shotPulse, ShotSpec, SkillHost, speedMult, statusOf, takenMult, tickField, tickUnit, Unit,
@@ -1672,7 +1672,7 @@ export class TownRoom extends Room<TownState> {
   private golemPower(p: Player) {
     const s = skillById("su_golem");
     if (!s) return 1;
-    return rankPower(Math.max(1, Math.min(MAX_RANK, rankOf(p.talents, s.id)))) * levelPower(s) * scalePower(s, this.stats(p), STATS[p.cls].base);
+    return rankPower(Math.max(1, Math.min(maxRank(s), rankOf(p.talents, s.id)))) * levelPower(s) * scalePower(s, this.stats(p), STATS[p.cls].base);
   }
 
   /** Every summon of this hero goes back (they left, or died). */
@@ -3516,7 +3516,7 @@ export class TownRoom extends Room<TownState> {
     p.xp = MAX_XP;
     p.level = levelFromXp(MAX_XP);
     // Skills are in tree order (parents first), so one pass per rank learns them all
-    for (let pass = 0; pass < MAX_RANK; pass++) for (const sk of classSkills(p.cls)) this.learnTalent(client.sessionId, sk.id);
+    for (let pass = 0; pass < topRank(p.cls); pass++) for (const sk of classSkills(p.cls)) this.learnTalent(client.sessionId, sk.id);
     // Every stat point the level gives, spread evenly over the 4 stats (points already placed are reset first)
     const pts = statPoints(p.level), each = Math.floor(pts / 4), left = pts % 4;
     p.ptSta = each + (left > 0 ? 1 : 0); p.ptStr = each + (left > 1 ? 1 : 0); p.ptMag = each + (left > 2 ? 1 : 0); p.ptDex = each;

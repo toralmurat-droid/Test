@@ -556,6 +556,10 @@ export class Details {
   private ducks: Duck[] = [];
   private pond: [number, number][] = [];
   private fireflies?: (dark: number) => void;
+  /** The local hero's light at night: a faint glow, or a torch's big flickering one (Murat 2026-11-07, L key). */
+  hero?: { x: number; y: number; torch: boolean };
+  private heroGlow?: Phaser.GameObjects.Image;
+  private heroCore?: Phaser.GameObjects.Image;
   /** The local hero is in the Mawdeep (dungeon.ts draws the dark there): no day/night tint, no lanterns. */
   underground = false;
   /** A vampire's Nightfall close by (SkillFx.nightK): it is night here whatever the clock says (0..1). */
@@ -799,6 +803,14 @@ export class Details {
       l.img.setAlpha(dark * (l.base + f * l.flicker));
     }
     this.fireflies?.(dark);
+    // The hero's own light: a faint glow at night; a torch widens it a lot and flickers like a flame
+    if (this.hero && dark > 0.05) {
+      this.heroGlow ??= this.scene.add.image(0, 0, "light").setBlendMode(Phaser.BlendModes.ADD).setDepth(27500);
+      this.heroCore ??= this.scene.add.image(0, 0, "light").setBlendMode(Phaser.BlendModes.ADD).setDepth(27501);
+      const t = this.hero.torch, f = Math.sin(now / 70) * 0.5 + Math.sin(now / 23 + 1.3) * 0.5;
+      this.heroGlow.setPosition(this.hero.x, this.hero.y - 6).setTint(t ? 0xffa64a : 0xb8c4ff).setScale(t ? 9 + f * 0.25 : 3.2).setAlpha(dark * (t ? 0.62 + f * 0.05 : 0.22)).setVisible(true);
+      this.heroCore.setPosition(this.hero.x, this.hero.y - 6).setTint(0xffd27a).setScale(t ? 3.4 + f * 0.15 : 1).setAlpha(t ? dark * 0.55 : 0).setVisible(t);
+    } else { this.heroGlow?.setVisible(false); this.heroCore?.setVisible(false); }
 
     // Ducks paddle to a random spot on the pond, rest, then paddle on
     for (const d of this.ducks) {
