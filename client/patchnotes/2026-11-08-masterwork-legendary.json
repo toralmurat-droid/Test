@@ -7,5 +7,6 @@
     "Hovering a piece in the shop shows the stats you would get even if you don't meet its needs yet, and each piece lists what it needs in red",
     "Quest marker: the gold ring sits centred on the target, and the arrow circles the middle of your hero",
     "/max gives 1,000,000 gold to try the masterwork gear"
-  ]
+  ],
+  "pr": 332
 }
