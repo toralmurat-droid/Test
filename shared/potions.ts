@@ -2,7 +2,7 @@
  * Healing and mana potions in 3 sizes (Murat 2026-11-04). Each size restores a fixed amount. Bigger flasks drop from
  * higher-level monsters and chests. Potions are carried in the bag: up to POTION_STACK of one size and kind share a
  * bag slot. Q drinks a healing potion and V a mana potion, always the smallest size you carry, so the big ones are
- * kept for later.
+ * kept for later. Healing potions can be drunk back to back with no cooldown; the heal lands instantly.
  *
  * Synced: Player.potions packs the six counts in one number (packPotions), because the Player schema is at its
  * 64-field limit. Ground items: kind "potion" / "mpotion", the size index in Item.gear ("0".."2").
@@ -10,6 +10,7 @@
 export type PotionKind = "potion" | "mpotion";
 export const POTION_KINDS: PotionKind[] = ["potion", "mpotion"];
 export const POTION_STACK = 10;
+/** Mana potions only: healing potions have no cooldown and no limit, each heals its full amount at once (Murat 2026-11-07). */
 export const POTION_COOLDOWN_MS = 1000;
 
 export interface PotionSize { name: string; heal: number; mana: number; price: number }

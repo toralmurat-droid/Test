@@ -184,7 +184,6 @@ export class Player extends Schema {
   lastWeaponNo = 0; // last "needs a bow" message (throttle)
   lastHurt = 0;
   wrathNext = 0; // next townsfolk blow on an outlaw
-  lastPotion = 0;
   attackReadyAt = 0;
   lastVariant = -1;
   stunUntil = 0;
@@ -3463,11 +3462,10 @@ export class TownRoom extends Room<TownState> {
 
   private drinkPotion(id: string) {
     const p = this.state.players.get(id);
-    const now = Date.now();
-    if (!p || p.dead || p.hp >= p.maxHp || now - p.lastPotion < POTION_COOLDOWN_MS) return;
+    // No cooldown, no limit: every press drinks one and heals its full amount at once (Murat 2026-11-07)
+    if (!p || p.dead || p.hp >= p.maxHp) return;
     const heal = this.drink(p, "potion");
     if (!heal) return;
-    p.lastPotion = now;
     p.hp = Math.min(p.maxHp, p.hp + heal);
     this.broadcast("heal", { id, amount: heal });
   }

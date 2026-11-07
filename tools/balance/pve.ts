@@ -154,9 +154,10 @@ export class PveDuel extends Duel {
   heroBrain(h: F): number {
     const now = this.now, P = this.pack;
     // Potions: heal under 40%, mana when a caster runs dry
+    // Healing potions: no cooldown, instant (drinks until back above 40% or out)
+    while (h.hp < h.maxHp * 0.4 && P.heal > 0) { P.heal--; P.healUsed++; h.hp = Math.min(h.maxHp, h.hp + POTION_SIZES[P.size].heal); }
     if (now - P.lastDrink >= POTION_COOLDOWN_MS) {
-      if (h.hp < h.maxHp * 0.4 && P.heal > 0) { P.heal--; P.healUsed++; P.lastDrink = now; h.hp = Math.min(h.maxHp, h.hp + POTION_SIZES[P.size].heal); }
-      else if (h.mana < Math.min(30, h.maxMana * 0.25) && P.mana > 0 && activeSkills(h.cls).some((s) => s.mana && (s.cantrip || (h.t[s.id] ?? 0) > 0))) {
+      if (h.mana < Math.min(30, h.maxMana * 0.25) && P.mana > 0 && activeSkills(h.cls).some((s) => s.mana && (s.cantrip || (h.t[s.id] ?? 0) > 0))) {
         P.mana--; P.manaUsed++; P.lastDrink = now; h.mana = Math.min(h.maxMana, h.mana + POTION_SIZES[P.size].mana);
       }
     }
