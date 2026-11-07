@@ -1,5 +1,6 @@
 {
   "date": "2026-11-07",
+  "pr": 313,
   "title": "Rank 6 spells, a turned map and a torch",
   "changes": [
     "The wizard's three spells now go up to rank 6; their upgrades stay at 3 ranks.",
