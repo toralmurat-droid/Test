@@ -1,0 +1,9 @@
+{
+  "date": "2026-11-07",
+  "title": "Skill tree, Diablo style",
+  "changes": [
+    "The skill tree now shows one school at a time, picked with tabs at the top.",
+    "Skills sit on a grey stone slab as square bronze-framed tiles with their rank beside them, joined by carved arrows that light up in the school's colour once learned.",
+    "The bottom of the tree shows how many skill choices you have left, and the skill window no longer hides behind the orb bar."
+  ]
+}

@@ -19,7 +19,7 @@ import { damageText, scaleText, skillDamage } from "../../shared/skillInfo";
  * Hover a skill to read it (damage for your current stats, attribute scaling, cost), click it to spend a point.
  * Learned actives go on keys 1-0: hover the skill and press a number key, or click a key slot at the bottom.
  */
-const W = 600, H = 470; // tree area, CSS px (the canvas is drawn at half that: 2 px per art pixel)
+const W = 420, H = 540; // the stone slab of one school (one tab), CSS px
 const TOP = 34, GROUND = H - 46;
 // square-root scale: the early levels, where most skills sit, get more room. `top`: the class's highest skill level
 // (24 for most, 30 for the wizard's Diablo 2 style tiers) sits at the top.
@@ -33,6 +33,7 @@ export class TalentMenu {
   private sig = "";
   private hover = "";
   private shown = "";
+  private tab = 0; // the school shown (Diablo 2 style: one tree per tab)
   private cls?: ClassKind;
   private state: any;
 
@@ -54,6 +55,8 @@ export class TalentMenu {
     });
     this.el.addEventListener("mouseleave", () => { this.hover = ""; this.preview(); });
     this.el.addEventListener("click", (ev) => {
+      const tab = (ev.target as HTMLElement).closest("[data-ttab]") as HTMLElement | null;
+      if (tab) { this.tab = Number(tab.dataset.ttab) || 0; this.sig = ""; if (this.state) this.refresh(this.state); return; }
       const t = (ev.target as HTMLElement).closest("[data-talent]") as HTMLElement | null;
       if (t && t.classList.contains("can")) this.send("learn", t.dataset.talent);
       if (t) this.details(t.dataset.talent!);
@@ -89,7 +92,7 @@ export class TalentMenu {
     const nodes = SKILLS[cls];
     const slots: string[] = [...(state.slots ?? [])];
     const st = this.stats();
-    const sig = [cls, state.level, slots.join(","), st.sta, st.str, st.mag, st.dex, ...nodes.map((n) => rankOf(ranks, n.id))].join("|");
+    const sig = [cls, this.tab, state.level, slots.join(","), st.sta, st.str, st.mag, st.dex, ...nodes.map((n) => rankOf(ranks, n.id))].join("|");
     if (sig === this.sig) return;
     this.sig = sig;
     const free = talentPoints(state.level) - spentPoints(cls, ranks);
@@ -116,127 +119,103 @@ export class TalentMenu {
       const act = !s.passive && r > 0 ? ` data-active="${s.id}"` : "";
       const lvl = why === "level" ? `<span class="nlv">Lv ${s.req}</span>` : "";
       html += `<button class="tnode ${stt}${s.passive ? " passive" : ""}${s.row === 4 ? " ult" : ""}${leaf ? " leaf" : ""}" data-talent="${s.id}"${act} ` +
-        `style="left:${n.x}px;top:${n.y}px;--c:${colors[s.branch]}">${iconImg(s.id, "nicon")}${key}${lvl}<span class="pips">${pips}</span></button>`;
+        `style="left:${n.x}px;top:${n.y}px;--c:${colors[s.branch]}">${iconImg(s.id, "nicon")}${key}${lvl}<span class="pips">${pips}</span><span class="trank">${r || ""}</span></button>`;
     }
-    BRANCHES[cls].forEach((b, i) => { html += `<div class="tbough" style="left:${W * (i * 2 + 1) / 6}px;top:${GROUND + 8}px;color:${b.color}">${b.name}</div>`; });
+    html += `<div class="tfoot">${free > 0 ? `${free} skill choice${free > 1 ? "s" : ""} remaining` : "No skill choices remaining"}</div>`;
     html += `</div>`;
     const box = document.getElementById("treebranches")!;
-    box.innerHTML = `<div class="treewrap" style="width:${W}px;height:${H}px">${html}</div><div id="treeinfo"></div>`;
+    const tabs = BRANCHES[cls].map((b, i) => `<button class="ttab${i === this.tab ? " on" : ""}" data-ttab="${i}" style="--c:${b.color}">${b.name}</button>`).join("");
+    box.innerHTML = `<div class="treecol"><div class="ttabs">${tabs}</div><div class="treewrap" style="width:${W}px;height:${H}px">${html}</div></div><div id="treeinfo"></div>`;
     this.paint(box.querySelector("canvas.treeart") as HTMLCanvasElement, cls, layout, ranks, colors);
     this.shown = "";
     const pick = this.hover || nodes.find((n) => lockReason(cls, state.level, ranks, n.id) === "")?.id || nodes[0].id;
     this.details(pick);
   }
 
-  /** Where each skill sits: three boughs side by side; inside a bough the leaves are spread evenly, a parent sits above the middle of its children's base. */
+  /**
+   * Where each skill of the open school (tab) sits, Diablo 2 style: the root at the top, every step of a path one row
+   * lower; the ends of the paths are spread across the slab and a parent sits above the middle of its children.
+   */
   private layout(cls: ClassKind): Node[] {
-    const out: Node[] = [];
-    const topReq = Math.max(24, ...SKILLS[cls].map((s) => s.req));
-    for (let b = 0; b < 3; b++) {
-      const list = SKILLS[cls].filter((s) => s.branch === b);
-      const root = list.find((s) => !s.parent)!;
-      const leaves: string[] = [];
-      const walk = (s: SkillDef) => {
-        const kids = childrenOf(cls, s.id).sort((x, y) => x.req - y.req);
-        if (!kids.length) leaves.push(s.id);
-        // the earlier (lower) child goes to the outside so limbs do not cross
-        (b === 0 ? kids : b === 2 ? [...kids].reverse() : kids).forEach(walk);
-      };
-      walk(root);
-      const cx = W * (b * 2 + 1) / 6, span = W / 3 - 40;
-      const step = leaves.length > 1 ? Math.min(78, span / (leaves.length - 1)) : 0;
-      const xs = new Map<string, number>();
-      leaves.forEach((id, i) => xs.set(id, cx + (i - (leaves.length - 1) / 2) * step));
-      const xOf = (s: SkillDef): number => {
-        if (xs.has(s.id)) return xs.get(s.id)!;
-        const kids = childrenOf(cls, s.id);
-        const x = kids.reduce((a, k) => a + xOf(k), 0) / kids.length;
-        xs.set(s.id, x);
-        return x;
-      };
-      const ys = new Map<string, number>();
-      for (const s of list) { // list is in tree order: parents first
-        const py = s.parent ? ys.get(s.parent)! : Infinity;
-        const y = Math.min(yOf(s.req, topReq), py - GAP);
-        ys.set(s.id, y);
-        out.push({ s, x: Math.round(Math.max(36, Math.min(W - 36, s.parent ? xOf(s) : cx))), y: Math.round(Math.max(TOP, y)) });
-      }
-    }
-    return out;
+    const list = SKILLS[cls].filter((s) => s.branch === this.tab);
+    const root = list.find((s) => !s.parent);
+    if (!root) return [];
+    const depth = (s: SkillDef) => { let d = 0, q = s.parent; while (q) { d++; q = list.find((x) => x.id === q)?.parent; } return d; };
+    const maxD = Math.max(1, ...list.map(depth));
+    const leaves: string[] = [];
+    const walk = (s: SkillDef) => { const kids = childrenOf(cls, s.id).sort((x, y) => x.req - y.req); if (!kids.length) leaves.push(s.id); kids.forEach(walk); };
+    walk(root);
+    const step = leaves.length > 1 ? Math.min(170, (W - 150) / (leaves.length - 1)) : 0;
+    const xs = new Map<string, number>();
+    leaves.forEach((id, i) => xs.set(id, W / 2 + (i - (leaves.length - 1) / 2) * step));
+    const xOf = (s: SkillDef): number => {
+      if (xs.has(s.id)) return xs.get(s.id)!;
+      const kids = childrenOf(cls, s.id), x = kids.reduce((a, k) => a + xOf(k), 0) / kids.length;
+      xs.set(s.id, x); return x;
+    };
+    const rowH = Math.min(110, (H - 140) / maxD);
+    return list.map((s) => ({ s, x: Math.round(xOf(s)), y: Math.round(62 + depth(s) * rowH) }));
   }
 
   /** The tree itself, as pixel art (2 CSS px per pixel): trunk, boughs, limbs, roots, leaves. */
   /**
-   * The tree as stone paths (Murat 2026-11-07: "a curved path in stone, not an ugly tree"; Path of Exile / Diablo
-   * inspired): a dark carved slate panel, a curving cobbled path from each node to the one it needs, lit with an inlay
-   * of the school's colour once learned, and a stone socket under every node. Painted at 1 canvas px per CSS px.
+   * The tree on a grey stone slab, Diablo 2 style (Murat 2026-11-07, from his reference picture): mottled, cracked stone
+   * in an iron frame, and a chiselled arrow from each skill down to the ones it opens (diagonal when they sit apart).
+   * Learned arrows are lit in the school's colour. Painted at 1 canvas px per CSS px.
    */
   private paint(cv: HTMLCanvasElement, cls: ClassKind, nodes: Node[], ranks: any, colors: string[]) {
     const g = cv.getContext("2d")!;
     const w = cv.width, h = cv.height;
-    let seed = 11;
+    let seed = 13;
     const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
-    // slate: dark, mottled, a carved frame
-    const bg = g.createRadialGradient(w / 2, h * 0.45, 40, w / 2, h / 2, Math.max(w, h) * 0.7);
-    bg.addColorStop(0, "#24211e"); bg.addColorStop(1, "#0d0c0b");
-    g.fillStyle = bg; g.fillRect(0, 0, w, h);
-    for (let i = 0; i < 900; i++) { g.fillStyle = `rgba(${rnd() < 0.5 ? "255,240,220" : "0,0,0"},${0.02 + rnd() * 0.05})`; g.fillRect(rnd() * w, rnd() * h, 1 + rnd() * 3, 1 + rnd() * 2); }
-    for (let i = 0; i < 26; i++) { // hairline cracks
-      let x = rnd() * w, y = rnd() * h; g.strokeStyle = "rgba(0,0,0,0.35)"; g.lineWidth = 1; g.beginPath(); g.moveTo(x, y);
-      for (let k = 0; k < 5; k++) { x += (rnd() - 0.5) * 30; y += (rnd() - 0.5) * 30; g.lineTo(x, y); } g.stroke();
+    // grey stone: base, big soft blotches, grain, cracks
+    g.fillStyle = "#4b4a47"; g.fillRect(0, 0, w, h);
+    for (let i = 0; i < 70; i++) {
+      const x = rnd() * w, y = rnd() * h, r = 20 + rnd() * 70, dark = rnd() < 0.5;
+      const gr = g.createRadialGradient(x, y, 0, x, y, r);
+      gr.addColorStop(0, dark ? "rgba(20,20,20,0.18)" : "rgba(140,138,130,0.14)"); gr.addColorStop(1, "rgba(0,0,0,0)");
+      g.fillStyle = gr; g.fillRect(x - r, y - r, r * 2, r * 2);
     }
-    g.strokeStyle = "#060505"; g.lineWidth = 6; g.strokeRect(3, 3, w - 6, h - 6);
-    g.strokeStyle = "#4a3f33"; g.lineWidth = 2; g.strokeRect(7, 7, w - 14, h - 14);
-    // one faint carved circle per school around its root
+    for (let i = 0; i < 2600; i++) { g.fillStyle = `rgba(${rnd() < 0.5 ? "190,186,176" : "18,18,18"},${0.05 + rnd() * 0.1})`; g.fillRect(rnd() * w, rnd() * h, 1 + rnd() * 2, 1); }
+    for (let i = 0; i < 14; i++) {
+      let x = rnd() * w, y = rnd() * h; g.beginPath(); g.moveTo(x, y);
+      for (let k = 0; k < 7; k++) { x += (rnd() - 0.5) * 50; y += (rnd() - 0.3) * 40; g.lineTo(x, y); }
+      g.strokeStyle = "rgba(25,24,22,0.55)"; g.lineWidth = 1.2; g.stroke();
+      g.strokeStyle = "rgba(150,146,138,0.18)"; g.lineWidth = 1; g.translate(1, 1); g.stroke(); g.translate(-1, -1);
+    }
+    const vg = g.createRadialGradient(w / 2, h / 2, Math.min(w, h) * 0.3, w / 2, h / 2, Math.max(w, h) * 0.75);
+    vg.addColorStop(0, "rgba(0,0,0,0)"); vg.addColorStop(1, "rgba(0,0,0,0.45)");
+    g.fillStyle = vg; g.fillRect(0, 0, w, h);
+    // iron frame with an inner bevel
+    g.strokeStyle = "#141414"; g.lineWidth = 10; g.strokeRect(5, 5, w - 10, h - 10);
+    g.strokeStyle = "#5c5b57"; g.lineWidth = 2; g.strokeRect(10, 10, w - 20, h - 20);
+    g.strokeStyle = "#232322"; g.lineWidth = 2; g.strokeRect(12, 12, w - 24, h - 24);
+    // chiselled arrows: parent's bottom edge to the child's top edge
+    const T = 30; // half a tile
     const byId = new Map(nodes.map((n) => [n.s.id, n]));
-    for (const n of nodes) if (!n.s.parent) {
-      g.strokeStyle = "rgba(160,140,110,0.12)"; g.lineWidth = 2; g.beginPath(); g.arc(n.x, n.y, 34, 0, Math.PI * 2); g.stroke();
-      g.strokeStyle = "rgba(0,0,0,0.5)"; g.lineWidth = 1; g.beginPath(); g.arc(n.x, n.y + 1, 34, 0, Math.PI * 2); g.stroke();
-    }
-    // paths: from the ground (roots) or from the parent node, curving, cobbled
-    type Seg = { x0: number; y0: number; cx: number; cy: number; x1: number; y1: number; lit: boolean; col: string };
-    const segs: Seg[] = [];
     for (const n of nodes) {
-      const lit = rankOf(ranks, n.s.id) > 0, col = colors[n.s.branch];
       const p = n.s.parent ? byId.get(n.s.parent) : undefined;
-      const x0 = p ? p.x : n.x, y0 = p ? p.y : GROUND + 10;
-      // every path winds: it swings out to one side (alternating along the path) before reaching the node
-      let hsh = 0; for (const ch of n.s.id) hsh = (hsh * 31 + ch.charCodeAt(0)) | 0;
-      const side = hsh & 1 ? 1 : -1, swing = 16 + (Math.abs(hsh) % 9);
-      segs.push({ x0, y0, cx: (x0 + n.x) / 2 + side * swing + (n.x - x0) * 0.2, cy: (y0 + n.y) / 2, x1: n.x, y1: n.y, lit, col });
-    }
-    const curve = (s: Seg) => { g.beginPath(); g.moveTo(s.x0, s.y0); g.quadraticCurveTo(s.cx, s.cy, s.x1, s.y1); };
-    g.lineCap = "round"; g.lineJoin = "round";
-    for (const s of segs) { curve(s); g.strokeStyle = "rgba(0,0,0,0.7)"; g.lineWidth = 17; g.stroke(); } // drop shadow / carved bed
-    for (const s of segs) { curve(s); g.strokeStyle = "#3a352f"; g.lineWidth = 13; g.stroke(); }
-    for (const s of segs) { curve(s); g.strokeStyle = "#57504a"; g.lineWidth = 9; g.stroke(); }
-    // cobbles: joints across the path and worn lighter stones
-    for (const s of segs) {
-      const len = Math.hypot(s.x1 - s.x0, s.y1 - s.y0) + 10, k = Math.max(3, Math.floor(len / 9));
-      for (let i = 1; i < k; i++) {
-        const t = i / k, u = 1 - t;
-        const x = u * u * s.x0 + 2 * u * t * s.cx + t * t * s.x1, y = u * u * s.y0 + 2 * u * t * s.cy + t * t * s.y1;
-        const dx = 2 * u * (s.cx - s.x0) + 2 * t * (s.x1 - s.cx), dy = 2 * u * (s.cy - s.y0) + 2 * t * (s.y1 - s.cy), d = Math.hypot(dx, dy) || 1;
-        const nx = -dy / d, ny = dx / d;
-        g.strokeStyle = "rgba(20,17,14,0.8)"; g.lineWidth = 1.2;
-        g.beginPath(); g.moveTo(x - nx * 4.5, y - ny * 4.5); g.lineTo(x + nx * 4.5, y + ny * 4.5); g.stroke();
-        g.fillStyle = `rgba(150,140,125,${0.1 + rnd() * 0.15})`; g.fillRect(x - nx * 2 - 1.5, y - ny * 2 - 1.5, 3, 2);
-      }
-    }
-    // learned paths: a glowing inlay in the school's colour
-    for (const s of segs) if (s.lit) {
-      g.save(); g.shadowColor = s.col; g.shadowBlur = 8;
-      curve(s); g.strokeStyle = s.col; g.lineWidth = 2.5; g.stroke();
-      g.restore();
-    }
-    // stone sockets under the nodes
-    for (const n of nodes) {
-      const r = n.s.passive ? 30 : 35;
-      const sg = g.createRadialGradient(n.x - 6, n.y - 6, 4, n.x, n.y, r);
-      sg.addColorStop(0, "#6a625a"); sg.addColorStop(0.7, "#3b3631"); sg.addColorStop(1, "#151210");
-      g.fillStyle = "rgba(0,0,0,0.6)"; g.beginPath(); g.arc(n.x + 2, n.y + 3, r, 0, Math.PI * 2); g.fill();
-      g.fillStyle = sg; g.beginPath(); g.arc(n.x, n.y, r, 0, Math.PI * 2); g.fill();
-      if (rankOf(ranks, n.s.id) > 0) { g.save(); g.shadowColor = colors[n.s.branch]; g.shadowBlur = 12; g.strokeStyle = colors[n.s.branch]; g.lineWidth = 2; g.beginPath(); g.arc(n.x, n.y, r - 2, 0, Math.PI * 2); g.stroke(); g.restore(); }
+      if (!p) continue;
+      const lit = rankOf(ranks, n.s.id) > 0, col = colors[n.s.branch];
+      let x0 = p.x, y0 = p.y + T + 4, x1 = n.x, y1 = n.y - T - 6;
+      if (Math.abs(n.x - p.x) > 20) { x0 += Math.sign(n.x - p.x) * 18; x1 -= Math.sign(n.x - p.x) * 10; } // diagonal from the corner
+      const a = Math.atan2(y1 - y0, x1 - x0), ca = Math.cos(a), sa = Math.sin(a);
+      const shaft = (dx: number, dy: number, c: string, lw: number) => {
+        g.strokeStyle = c; g.lineWidth = lw; g.lineCap = "butt";
+        g.beginPath(); g.moveTo(x0 + dx, y0 + dy); g.lineTo(x1 - ca * 9 + dx, y1 - sa * 9 + dy); g.stroke();
+      };
+      const head = (dx: number, dy: number, c: string, k = 1) => {
+        g.fillStyle = c; g.beginPath();
+        g.moveTo(x1 + dx, y1 + dy);
+        g.lineTo(x1 - ca * 13 * k - sa * 9 * k + dx, y1 - sa * 13 * k + ca * 9 * k + dy);
+        g.lineTo(x1 - ca * 13 * k + sa * 9 * k + dx, y1 - sa * 13 * k - ca * 9 * k + dy);
+        g.closePath(); g.fill();
+      };
+      // carved groove: light lower-right lip, dark cut, mid floor (lit: glowing inlay)
+      shaft(1, 1, "rgba(160,156,148,0.55)", 9); head(1, 1, "rgba(160,156,148,0.55)");
+      shaft(0, 0, "#1d1d1c", 9); head(0, 0, "#1d1d1c");
+      shaft(0.6, 0.6, lit ? col : "#33332f", 5); head(0.6, 0.6, lit ? col : "#33332f", 0.62);
+      if (lit) { g.save(); g.shadowColor = col; g.shadowBlur = 8; shaft(0.6, 0.6, col, 2); g.restore(); }
     }
     void cls;
   }
