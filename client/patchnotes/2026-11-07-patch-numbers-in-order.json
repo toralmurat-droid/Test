@@ -1,5 +1,6 @@
 {
   "date": "2026-11-07",
+  "patch": 123,
   "title": "Patch numbers in order",
   "changes": [
     "Patch numbers in the News panel now follow the order updates went live, and never repeat or change."
