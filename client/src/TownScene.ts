@@ -1358,6 +1358,24 @@ export class TownScene extends Phaser.Scene {
     this.corrX = ex; this.corrY = ey;
   }
 
+  /** Frames drawn in the last second, shown next to the ping (a slow computer also makes the ping read high). */
+  private fpsFrom = 0; private fpsFrames = 0; private fpsWorst = 0; private fpsLast = 0;
+  private countFps(wall: number) {
+    if (this.fpsLast) this.fpsWorst = Math.max(this.fpsWorst, wall - this.fpsLast);
+    this.fpsLast = wall;
+    if (!this.fpsFrom) { this.fpsFrom = wall; return; }
+    this.fpsFrames++;
+    if (wall - this.fpsFrom < 1000) return;
+    const fps = Math.round(this.fpsFrames * 1000 / (wall - this.fpsFrom));
+    const el = document.getElementById("fps");
+    if (el) {
+      el.textContent = `${fps}fps`;
+      el.className = fps < 25 || this.fpsWorst > 250 ? "bad" : fps < 45 || this.fpsWorst > 100 ? "meh" : "";
+      el.title = `Frames per second your computer draws (60 is smooth). Slowest frame in the last second: ${Math.round(this.fpsWorst)} ms`;
+    }
+    this.fpsFrom = wall; this.fpsFrames = 0; this.fpsWorst = 0;
+  }
+
   /** Round trip to the server, measured every 2 s with a ping, shown next to the online count. */
   private startPing() {
     let ms = 0;
@@ -2652,6 +2670,7 @@ export class TownScene extends Phaser.Scene {
     this.sendInput(want);
 
     const now = this.time.now, wall = performance.now();
+    this.countFps(wall);
     // Long frames (a hiccup, a hidden tab) are capped so prediction never leaps through a wall
     const step = Math.min(dtMs, 100);
     stepInterpDelay(step);

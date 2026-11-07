@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-07",
+  "title": "Frame rate counter",
+  "changes": [
+    "Next to your ping you now see how many frames per second your computer draws. It turns orange or red when the game is struggling, and hovering it shows the slowest recent frame."
+  ]
+}
