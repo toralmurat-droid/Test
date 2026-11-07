@@ -558,9 +558,8 @@ const S: Record<ClassKind, SkillDef[]> = <Record<ClassKind, SkillDef[]>><unknown
       desc: "Spend your Blood: tear the blood out of everyone in a wide circle around you in streams that pour into you, pull them in and drink a quarter of it. Every bleed on them bursts at once (Hemorrhage). Each Blood stack adds 25%.",
       areas: [{ r: 110, dmg: 32, drain: 25, pull: 16, kb: 0, look: "bloodrite", siphon: true, rupture: 1 }] },
     { id: "v_tide", name: "Crimson Tide", type: "Ultimate", branch: 0, row: 4, style: "blood", cd: 20000, mana: 35, blood: 8, chargeMs: 400,
-      desc: "Open your veins: a wave of blood spikes rolls out ahead, slowing everything it hits and feeding you 10% of the damage, then a red rain falls around you and every drop that lands feeds you too.",
-      areas: [{ r: 24, ahead: 22, dmg: 38, drain: 10, slowMs: 700, kb: 1.2, waves: 6, everyMs: 100, line: 22, look: "spikes" },
-        { r: 20, dmg: 12, drain: 15, kb: 0, waves: 10, everyMs: 120, delayMs: 500, scatter: 80, look: "rain" }] },
+      desc: "Open your veins: a wave of blood spikes rolls out ahead, slowing everything it hits and feeding you 15% of the damage.",
+      areas: [{ r: 24, ahead: 22, dmg: 50, drain: 15, slowMs: 700, kb: 1.2, waves: 6, everyMs: 100, line: 22, look: "spikes" }] },
 
     // Night: mist, bats, rats and the dark (Mana)
     { id: "v_mist", name: "Mist Form", type: "Movement", branch: 1, row: 0, style: "shadow", cd: 3500, cost: 20,
