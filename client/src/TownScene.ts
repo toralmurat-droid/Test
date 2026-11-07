@@ -1576,7 +1576,7 @@ export class TownScene extends Phaser.Scene {
     const off = typeof ax === "number" && typeof ay === "number" ? [ax, ay]
       : { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] }[dir] ?? [0, 1];
     // The main-hand weapon decides the attack (shared/weapons.ts); the server says which one swung
-    const cls = e.mob ? undefined : (isWeaponType(w) ? profileOf(w) : attackProfile(e.state.cls, activeOf(e.state)));
+    const cls = e.mob ? undefined : (isWeaponType(w) ? profileOf(w, e.state.cls) : attackProfile(e.state.cls, activeOf(e.state)));
     const hit = cls?.combo[step];
     // Mirror our own lunge locally so client prediction doesn't fight the server
     if (id === this.me && hit?.lunge) {

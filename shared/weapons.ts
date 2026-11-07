@@ -18,9 +18,13 @@ export interface AttackProfile {
   mana?: number;
 }
 
-/** The class each weapon kind comes from: that class's attack numbers are the weapon's. */
-const OWNER: Partial<Record<WeaponType, ClassKind>> = Object.fromEntries(
-  (Object.entries(NATIVE_WEAPON) as [ClassKind, WeaponType][]).map(([c, t]) => [t, c]));
+/**
+ * The class each weapon kind comes from, for heroes who are not trained with it: the first class with that native
+ * weapon (sword = Knight, staff = Wizard). Before, the last one won, so every staff fought with the Summoner's numbers
+ * and every sword with the Vampire's.
+ */
+const OWNER: Partial<Record<WeaponType, ClassKind>> = {};
+for (const [c, t] of Object.entries(NATIVE_WEAPON) as [ClassKind, WeaponType][]) if (!OWNER[t]) OWNER[t] = c;
 
 const WAND_COST = 6;
 const WAND: AttackProfile = {
@@ -44,16 +48,18 @@ const FISTS: AttackProfile = {
 
 export const isWeaponType = (v: unknown): v is WeaponType => typeof v === "string" && v in ATTACK_WORDS;
 
-export function profileOf(type: WeaponType): AttackProfile {
+/** The basic attack of this weapon kind; a class trained with it (its native weapon) fights with its own numbers and combo. */
+export function profileOf(type: WeaponType, cls?: string): AttackProfile {
   if (type === "wand") return WAND;
   if (type === "fists") return FISTS;
-  const c = CLASSES[OWNER[type]!];
+  const own = cls && NATIVE_WEAPON[cls as ClassKind] === type ? (cls as ClassKind) : OWNER[type]!;
+  const c = CLASSES[own];
   return { type, damage: c.damage, attackCooldownMs: c.attackCooldownMs, attackRange: c.attackRange, projectile: c.projectile, combo: c.combo };
 }
 
 /** The basic attack of a hero with this gear on. */
 export function attackProfile(cls: string, eq: Equipped): AttackProfile {
-  return profileOf(weaponType(cls, eq.weapon));
+  return profileOf(weaponType(cls, eq.weapon), cls);
 }
 
 /** Damage multiplier of the basic attack: the weapon's stat (Magic for staves and wands, Strength otherwise) above the class's base. */

@@ -18,6 +18,8 @@ export interface ComboHit {
   knockback: number; // multiplier on normal knockback
   lunge?: number; // px the hero steps forward with the hit
   shotScale?: number; // wizard: projectile size multiplier
+  /** Summoner: this share of the hit is in the hero's attuned element (shared/summons.ts ATTUNE_ORDER). */
+  attune?: number;
   cooldownMs?: number; // override of attackCooldownMs before the next input counts
 }
 
@@ -118,10 +120,11 @@ export const CLASSES: Record<ClassKind, ClassDef> = {
     name: "Summoner", maxHp: 100, speed: 86, damage: 17, attackCooldownMs: 650, attackRange: 0,
     projectile: { speed: 230, range: 160, radius: 6, kind: "fireball" },
     special: { kind: "summon", name: "Elemental Golem", cooldownMs: 8000 },
+    // Its own staff combo (Murat 2026-11-07): two quick bolts, then an elemental burst in the attuned element
     combo: [
-      { damage: 1, knockback: 0.8 },
-      { damage: 1, knockback: 0.8 },
-      { damage: 1.5, knockback: 1.6, shotScale: 1.4, cooldownMs: 900 }, // a bigger bolt
+      { damage: 1, knockback: 0.6 },
+      { damage: 1.05, knockback: 0.6, cooldownMs: 560 },
+      { damage: 1.8, knockback: 2, shotScale: 1.6, attune: 0.5, cooldownMs: 950 }, // elemental burst
     ],
     blurb: "Calls elemental golems that fight for them: cycle the element, then summon fire, frost, venom or storm.",
   },
