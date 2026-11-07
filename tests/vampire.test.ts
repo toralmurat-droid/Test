@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { CANTRIPS, cleanRanks, MAX_RANK, SKILLS, skillOf } from "../shared/skills";
+import { BLOOD_RITE_MS, CANTRIPS, cleanRanks, MAX_RANK, SKILLS, skillOf } from "../shared/skills";
 import { afterHit, bloodCost, castSkill, FieldInst, HitOpts, newRuntime, shotHit, ShotSpec, SkillHost, statusOf, tickField, tickUnit, Unit } from "../shared/skillEngine";
 import { ART_IDS } from "../client/src/skillArt";
 
@@ -164,9 +164,11 @@ test("Exsanguinate reaches a wide circle, and Hemorrhage bursts what is left of 
   const w = world();
   const v = w.add("v", 0, 0, { cls: "vampire", talents: ranks(["v_link", "v_boil", "v_exsang"]), mana: 999, energy: 999 });
   const m = w.add("m", 90, 0);
-  m.sk.burnUntil = w.h.now() + 2000; m.sk.burnDps = 10; m.sk.burnBy = "v";
+  m.sk.burnUntil = w.h.now() + BLOOD_RITE_MS + 2000; m.sk.burnDps = 10; m.sk.burnBy = "v"; // 2 s of bleed left when the ritual ends
   assert.ok(castSkill(w.h, "v", "v_exsang"));
-  w.step(10);
+  w.step(BLOOD_RITE_MS - 20);
+  assert.ok(!w.hits.some((x) => x.to === "m" && !x.o.dot), "no damage before the blood ritual ends");
+  w.step(20);
   const hit = w.hits.find((x) => x.to === "m" && !x.o.dot)!;
   assert.ok(hit, "a foe 90 px away is caught");
   assert.ok(w.fx.some((e) => e.ev === "rupture" && e.t === "m"));
@@ -175,7 +177,7 @@ test("Exsanguinate reaches a wide circle, and Hemorrhage bursts what is left of 
   const w2 = world();
   w2.add("v", 0, 0, { cls: "vampire", talents: v.talents, mana: 999, energy: 999 });
   w2.add("m", 90, 0);
-  castSkill(w2.h, "v", "v_exsang"); w2.step(10);
+  castSkill(w2.h, "v", "v_exsang"); w2.step(BLOOD_RITE_MS + 20);
   assert.ok(Math.abs(hit.dmg - w2.hits.find((x) => x.to === "m")!.dmg - 20) < 0.01);
 });
 

@@ -1,7 +1,7 @@
 import Phaser from "phaser";
 import { quake } from "./camfx";
 import { ISO } from "./isoflag";
-import { AreaLook, FxStyle, impactMs, LEAP_MS, RAIN_FALL_MS, skillById, SkillDef, SWORD_FALL_MS } from "../../shared/skills";
+import { AreaLook, BLOOD_RITE_MS, FxStyle, impactMs, LEAP_MS, RAIN_FALL_MS, skillById, SkillDef, SWORD_FALL_MS } from "../../shared/skills";
 import { paintSigil, ICON } from "./skillArt";
 
 /**
@@ -530,6 +530,87 @@ export class SkillFx {
     });
   }
 
+  /**
+   * Exsanguinate's ritual (BLOOD_RITE_MS, the damage lands at its end): the vampire raises his blade and blood spills out
+   * of him onto the ground all round; the pool lifts off in spiralling threads that gather into a beating crimson orb
+   * high over his head; the orb shrinks, then bursts and crashes down on him, and the blood mist of the whole area
+   * collapses into him (the streams out of every victim come with the server's "siphon" at the same moment).
+   */
+  private bloodRite(ev: any, r: number) {
+    const T = BLOOD_RITE_MS, start = this.t;
+    const SPILL = 0.32, LIFT = 0.82; // phases, as parts of T: spill, lift into the orb, then the orb pulls in
+    const H = 42; // the orb's height over the ground (well over the head)
+    const dark = PALETTE.blood.slice(2, 5), bright = PALETTE.blood.slice(1, 4);
+    const pool: [number, number][] = []; // spots of spilled blood round the feet (offsets from the vampire)
+    for (let i = 0; i < 14; i++) { const a = (i / 14) * Math.PI * 2 + rnd(-0.2, 0.2), d = rnd(10, 26); pool.push([Math.cos(a) * d, Math.sin(a) * d * 0.8]); }
+    this.emit(T, 20, () => {
+      const me = this.ent(ev.id);
+      if (!me) return;
+      const x = me.sprite.x, y = me.sprite.y, k = (this.t - start) / T, top = me.top;
+      if (k < SPILL) {
+        // Blood pours out of the vampire's chest and splashes down round him, spreading into a dark pool
+        for (let i = 0; i < 3; i++) {
+          const [ox, oy] = pick(pool), F = rnd(0.22, 0.3), z0 = top * 0.55;
+          this.p(x + rnd(-2, 2), y, z0, pick(bright), { vx: ox / F, vy: oy / F, vz: (-z0 + 160 * F * F) / F, g: 320, life: F * 1000, size: pick([1, 2, 2]), size1: 1, add: false });
+        }
+        for (let i = 0; i < 2; i++) {
+          const [ox, oy] = pick(pool);
+          this.p(x + ox * k / SPILL, y + oy * k / SPILL, 0, pick(dark), { vx: ox * 0.6, vy: oy * 0.6, life: T * (1 - k) * 0.9, size: pick([2, 3]), size1: 3, alpha: 0.9, add: false, depth: GROUND_DEPTH });
+        }
+      } else if (k < LIFT) {
+        // The pool lifts off the ground: threads of blood spiral up from it into the orb over his head
+        const u = (k - SPILL) / (LIFT - SPILL);
+        // three helices of blood climbing from the pool into the orb, narrowing as they rise
+        for (let j = 0; j < 3; j++) {
+          for (let n = 0; n < 8; n++) {
+            const h = rnd(0, H) * Math.min(1, u * 2.5), rad = 3 + 14 * (1 - h / H), a = this.t / 90 + (j * Math.PI * 2) / 3 + h / 9;
+            this.p(x + Math.cos(a) * rad, y + Math.sin(a) * rad * 0.7, h, pick(n % 3 ? bright : dark), { vz: 60, vx: -Math.sin(a) * 20, vy: Math.cos(a) * 14, life: 200, size: 2, size1: 1, add: false });
+          }
+        }
+        // the pool drains away into them
+        for (let i = 0; i < 2; i++) { const [ox, oy] = pick(pool); this.p(x + ox, y + oy, 1, pick(dark), { vx: -ox * 1.5, vy: -oy * 1.5, vz: 30, life: 260, size: 2, size1: 1, add: false }); }
+        this.orb(x, y, H, 3 + u * 9, k);
+      } else {
+        // The orb pulls in on itself, beating faster, before it breaks
+        const u = (k - LIFT) / (1 - LIFT);
+        this.orb(x, y, H, 12 - u * 7, k);
+        for (let i = 0; i < 3; i++) { const a = Math.random() * Math.PI * 2, d = rnd(14, 22); this.p(x + Math.cos(a) * d, y + Math.sin(a) * d * 0.6, H + rnd(-8, 8), pick(bright), { vx: -Math.cos(a) * d * 6, vy: -Math.sin(a) * d * 3.6, life: 160, size: 1, size1: 0 }); }
+      }
+    });
+    // a low red light under the vampire while the pool lies there
+    const me0 = this.ent(ev.id);
+    if (me0) this.glow(me0.sprite.x, me0.sprite.y, 2, 30, 0x6d0000, T * 0.8, 0.45, true);
+    this.scene.time.delayedCall(T, () => {
+      const me = this.ent(ev.id);
+      if (!me) return;
+      const x = me.sprite.x, y = me.sprite.y;
+      // The orb breaks: blood crashes straight down on the vampire...
+      for (let i = 0; i < 26; i++) this.p(x + rnd(-6, 6), y + rnd(-4, 4), H + rnd(-6, 6), pick(bright), { vx: rnd(-20, 20), vy: rnd(-12, 12), vz: rnd(-260, -160), g: 200, life: 280, size: pick([1, 2, 2]), size1: 1, add: false });
+      this.glow(x, y, H, 22, 0xff1744, 260, 0.9);
+      this.pillar(x, y, "blood", H + 10, 6, 320);
+      // ...and the blood mist all round the area collapses into him (the Exsanguinate look from before)
+      for (let i = 0; i < 48; i++) {
+        const a = (i / 48) * Math.PI * 2, F = rnd(0.35, 0.5);
+        this.p(x + Math.cos(a) * r, y + Math.sin(a) * r, rnd(2, 10), pick(PALETTE.blood.slice(1, 5)), { vx: -Math.cos(a) * r / F, vy: -Math.sin(a) * r / F, vz: rnd(10, 30), life: F * 1000, size: pick([2, 2, 3]), size1: 1, add: false });
+      }
+      this.ring(x, y, r, "blood", 60, { life: 380, up: 10 });
+      this.ring(x, y, r * 0.6, "blood", 26, { life: 300, up: 30, size: 2 });
+      this.glow(x, y, 2, r, 0x6d0000, 500, 0.5, true);
+    });
+  }
+
+  /** The beating crimson orb of the blood ritual: a dark core with bright drops orbiting it. */
+  private orb(x: number, y: number, h: number, rad: number, k: number) {
+    const beat = 1 + 0.25 * Math.sin(k * Math.PI * 2 * (3 + k * 5));
+    const rr = rad * beat;
+    for (let i = 0; i < 3; i++) {
+      const a = this.t / 60 + (i * Math.PI * 2) / 3 + rnd(-0.3, 0.3);
+      this.p(x + Math.cos(a) * rr, y + Math.sin(a) * rr * 0.5, h + Math.sin(a * 1.7) * rr * 0.6, pick(PALETTE.blood.slice(0, 3)), { vx: -Math.sin(a) * rr * 5, vy: Math.cos(a) * rr * 2.5, life: 110, size: pick([1, 2]), size1: 0 });
+    }
+    for (let i = 0; i < 2; i++) this.p(x + rnd(-1, 1) * rr * 0.5, y + rnd(-1, 1) * rr * 0.3, h + rnd(-1, 1) * rr * 0.5, pick(PALETTE.blood.slice(2, 5)), { life: 90, size: Math.max(2, Math.round(rr * 0.7)), size1: 1, add: false });
+    if (Math.random() < 0.25) this.glow(x, y, h, rr * 2, 0xb71c1c, 180, 0.5);
+  }
+
   /** Boil Blood took hold: the victim's blood erupts out of it once (then bubbles while it boils, see status()). */
   private boilErupt(e: FxEntity) {
     const x = e.sprite.x, y = e.sprite.y, top = e.top;
@@ -629,15 +710,8 @@ export class SkillFx {
       this.burst(x, y, 4, imb, Math.round(8 * tier), 60, 380);
       if (imb === "fire") this.smoke(x, y, r * 0.4, 2);
     }
-    // Exsanguinate: a ring of blood mist all round collapses into the vampire (the streams from victims come with "siphon")
-    if (s?.id === "v_exsang") {
-      for (let i = 0; i < 48; i++) {
-        const a = (i / 48) * Math.PI * 2, T = rnd(0.35, 0.5);
-        this.p(x + Math.cos(a) * r, y + Math.sin(a) * r, rnd(2, 10), pick(PALETTE.blood.slice(1, 5)), { vx: -Math.cos(a) * r / T, vy: -Math.sin(a) * r / T, vz: rnd(10, 30), life: T * 1000, size: pick([2, 2, 3]), size1: 1, add: false });
-      }
-      this.glow(x, y, 2, r, 0x6d0000, 500, 0.5, true);
-    }
     switch (look) {
+      case "bloodrite": this.bloodRite(ev, r); break;
       case "slash": {
         const e = this.ent(ev.id);
         const ang = e ? Math.atan2(e.state.ay ?? 1, e.state.ax ?? 0) + (ev.i % 2 ? Math.PI : 0) : Math.random() * 6;

@@ -352,6 +352,12 @@ const R: Record<string, Recipe> = {
     else whoosh(o, t, 300, 1600, 0.3, 0.4 * v);
     styleChime(o, t + 0.02, style, 0.3 * v, big);
   },
+  // Exsanguinate's ritual: a low pulse that climbs and beats faster as the blood rises (the area sound lands at its end)
+  bloodRite: (o, t, v) => {
+    tone(o, t, { type: "sawtooth", f: 55, f2: 150, dur: 0.72, vol: 0.12 * v, att: 0.3, vib: 8, vibHz: 6 });
+    noise(o, t, { type: "lowpass", f: 250, f2: 1200, dur: 0.72, vol: 0.22 * v, att: 0.4 });
+    for (let i = 0; i < 4; i++) thud(o, t + [0, 0.28, 0.48, 0.62][i], 70 + i * 10, (0.25 + i * 0.08) * v, 0.12);
+  },
   cry: (o, t, v, pitch = 1) => voice(o, t, { f: 140 * pitch, f2: 120 * pitch, dur: 0.6, vol: 0.4 * v, vowel: [600, 1000], vowel2: [750, 1200], att: 0.04, rough: 0.05 }),
   buff: (o, t, v, style) => { tone(o, t, { type: "triangle", f: 400, f2: 1200, dur: 0.4, vol: 0.12 * v }); styleChime(o, t + 0.1, style, 0.2 * v, 0.7); },
   counter: (o, t, v) => clank(o, t, 0.35 * v, 1700),
@@ -714,6 +720,7 @@ export function bindSfx(room: any, me: () => string, ents: Map<string, Ent>) {
         // A falling blade / meteor / arrow rain sounds when it lands, with its damage
         const boom = () => play("area", ev.x, ev.y, ev.i ? 0.6 : 1, { look: ev.look, style, tier: s?.row ?? 0 }, { key: "area" + ev.id, minGap: 60 });
         const land = impactMs(ev.look, ev.r ?? 0);
+        if (ev.look === "bloodrite") pos("bloodRite");
         if (land > 0) setTimeout(boom, land); else boom();
         break;
       }
