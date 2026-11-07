@@ -1,5 +1,6 @@
 {
   "date": "2026-11-07",
+  "pr": 307,
   "title": "New character and inventory screens",
   "changes": [
     "The Character, Inventory and Skills screens share a fixed column of stats on the left: offense, defense, attributes and resistances, showing what a hovered item, point or skill would change.",
