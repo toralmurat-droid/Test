@@ -1,4 +1,5 @@
 import { icon } from "./pixelicons";
+import { actionKey } from "./keymode";
 import Phaser from "phaser";
 import { gearDef, itemText, LOOT_IDS, canWear, GEAR_SLOTS, gearName, gearStats, gearSpeedMult, GearSlot, BAG_SIZE, SLOT_NAMES, TIER_NAMES, baseId, itemRarity, RARITY_NAMES, affixLines, itemLevel, reqProblem, reqText, activeGear, HeroReqInfo, Equipped, weaponElements, gearResist, weaponType } from "../../shared/gear";
 import { ELEMENTS, ELEMENT_NAMES } from "../../shared/elements";
@@ -303,7 +304,7 @@ export class GearMenu {
         cell.style.borderColor = kind === "mpotion" ? "#3d5a9a" : "#7a4a4a";
         cell.onmouseenter = () => {
           if (info) info.innerHTML = `<b style="color:${kind === "mpotion" ? "#8ab4ff" : "#ff8a8a"}">${potionName(kind, size)}</b> ×${n}<br>` +
-            `${kind === "mpotion" ? `+${potionAmount(kind, size)} mana` : `Heals ${potionAmount(kind, size)} HP`}<br><small>Click or ${kind === "mpotion" ? "V" : "Q"}: drink (the smallest size goes first) · ${POTION_STACK} per slot</small>`;
+            `${kind === "mpotion" ? `+${potionAmount(kind, size)} mana` : `Heals ${potionAmount(kind, size)} HP`}<br><small>Click or ${actionKey(kind === "mpotion" ? "mana" : "potion")}: drink (the smallest size goes first) · ${POTION_STACK} per slot</small>`;
         };
         cell.onmouseleave = () => { if (info) info.textContent = ""; };
         cell.onclick = () => this.send(kind === "mpotion" ? "manapotion" : "potion", {});

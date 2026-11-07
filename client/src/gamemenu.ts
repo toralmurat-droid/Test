@@ -46,6 +46,12 @@ export class GameMenu {
     new MutationObserver(sync).observe(news, { attributes: true, childList: true, characterData: true, subtree: true });
   }
 
+  /** Change an entry's text (a setting that shows its current value). */
+  setLabel(id: string, html: string) {
+    const b = this.el.querySelector(`[data-item="${id}"]`);
+    if (b) b.innerHTML = html;
+  }
+
   get open() { return !this.el.hidden; }
   show() { this.el.hidden = false; }
   close() { this.el.hidden = true; }

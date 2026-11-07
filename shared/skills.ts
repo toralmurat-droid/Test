@@ -194,7 +194,7 @@ export const STACK_NAME: Record<ClassKind, string> = { knight: "Valor", ninja: "
 export const BRANCHES: Record<ClassKind, [BranchDef, BranchDef, BranchDef]> = {
   knight: [{ name: "Valor", color: "#e63946" }, { name: "Bulwark", color: "#4cc9f0" }, { name: "Crusade", color: "#ffd166" }],
   ninja: [{ name: "Shadow", color: "#9d4edd" }, { name: "Steel", color: "#c0c8d8" }, { name: "Spirit", color: "#f77f00" }],
-  wizard: [{ name: "Fire", color: "#f77f00" }, { name: "Frost", color: "#4cc9f0" }, { name: "Storm", color: "#b388ff" }],
+  wizard: [{ name: "Fire", color: "#f77f00" }, { name: "Frost", color: "#4cc9f0" }, { name: "Thunder", color: "#ffd60a" }],
   archer: [{ name: "Marksman", color: "#e63946" }, { name: "Trapper", color: "#a68a64" }, { name: "Nature", color: "#7cfc00" }],
   barbarian: [{ name: "Fury", color: "#e63946" }, { name: "Warcry", color: "#ffd166" }, { name: "Earth", color: "#a68a64" }],
   vampire: [{ name: "Blood", color: "#c1121f" }, { name: "Night", color: "#9d4edd" }, { name: "Fang", color: "#c0c8d8" }],
@@ -307,61 +307,20 @@ const S: Record<ClassKind, SkillDef[]> = <Record<ClassKind, SkillDef[]>><unknown
   ],
 
   // ---------------------------------------------------------------- WIZARD
+  // Three schools of magic, one spell each for now (Murat 2026-11-07): Fire, Frost, Thunder.
   wizard: [
     // Fire
-    { id: "w_wave", name: "Flame Wave", type: "Attack", branch: 0, row: 0, style: "fire", cd: 1500, power: 0.42, mana: 8,
-      desc: "Send a rolling wave of fire forward: it burns everything it passes.",
-      shots: { kind: "flamewave", speed: 160, range: 130, radius: 10, size: 1.5, dmg: 30, burn: [4, 2000], pierce: 99, kb: 0.4 } },
-    { id: "w_pyro", name: "Pyromancy", type: "Passive", branch: 0, row: 1, style: "fire", passive: { effect: "skill", perRank: 7 },
-      desc: "Fire answers you: more skill damage." },
-    { id: "w_firewall", name: "Fire Wall", type: "Aura", branch: 0, row: 2, style: "fire", cd: 6000, power: 0.62, mana: 19,
-      desc: "Raise a wall of flame ahead for 4s: enemies inside burn.",
-      field: { kind: "fire", r: 34, ahead: 44, ms: 4000, tickMs: 400, dmg: 10 } },
-    { id: "w_orb", name: "Inferno Orb", type: "Buildup", branch: 0, row: 3, style: "fire", cd: 4000, power: 0.42, mana: 15, chargeMs: 200, consume: true,
-      desc: "Gather fire into a huge orb, then hurl it: it explodes in a big blast. Arcane stacks make it stronger.",
-      shots: { kind: "inferno", speed: 150, range: 160, radius: 9, size: 2.2, dmg: 100, explode: 50, burn: [5, 2000], kb: 2 } },
-    { id: "w_meteor", name: "Meteor Shower", type: "Ultimate", branch: 0, row: 4, style: "fire", cd: 7000, power: 0.46, mana: 25, chargeMs: 300,
-      desc: "Pull meteors from the sky: one giant impact ahead, four smaller ones around it, and burning ground.",
-      areas: [{ r: 50, ahead: 56, dmg: 95, kb: 2, delayMs: 450, look: "meteor" },
-        { r: 26, ahead: 56, dmg: 24, waves: 4, everyMs: 170, delayMs: 650, scatter: 50, burn: [5, 2000], look: "meteor" }],
-      field: { kind: "fire", r: 46, ahead: 56, ms: 3000, tickMs: 500, dmg: 5 } },
-
+    { id: "w_firebolt", name: "Fire Bolt", type: "Attack", branch: 0, row: 0, style: "fire", cd: 450, mana: 5,
+      desc: "Hurl a bolt of fire at your foe: it burns them for a moment. Cheap and quick: cast it again and again.",
+      shots: { kind: "fireball", speed: 280, range: 200, radius: 6, size: 1.3, dmg: 11, burn: [2, 1500], kb: 0.6 } },
     // Frost
-    { id: "w_nova", name: "Frost Nova", type: "Attack", branch: 1, row: 0, style: "frost", cd: 3500, power: 0.63, mana: 16,
-      desc: "Blast ice all around you: damage and a 1.1s slow.",
-      areas: [{ r: 46, dmg: 30, slowMs: 1100, look: "nova" }] },
-    { id: "w_shards", name: "Ice Shards", type: "Attack", branch: 1, row: 1, style: "frost", cd: 1200, power: 0.32, mana: 4,
-      desc: "Fire five shards of ice in a fan: each one slows.",
-      shots: { kind: "iceshard", n: 5, spread: 40, speed: 280, range: 150, radius: 4, dmg: 10, slowMs: 400, kb: 0.3 } },
-    { id: "w_armor", name: "Frost Armor", type: "Enchant", branch: 1, row: 2, style: "frost", cd: 15000, mana: 25,
-      desc: "Ice armour for 8s: take 20% less damage, and whoever hits you is chilled.",
-      buff: { ms: 8000, armor: 20, thorns: { slowMs: 1200, dmg: 6 } } },
-    { id: "w_mirror", name: "Mirror Ice", type: "Counter", branch: 1, row: 3, style: "frost", cd: 8000, power: 0.77, mana: 14,
-      desc: "Encase yourself in a mirror of ice for 0.9s: the next hit shatters it, freezing the attacker and reflecting the damage.",
-      counter: { ms: 900, reflect: 0.7, effects: { stunMs: 700 }, area: { r: 34, dmg: 40, slowMs: 1500, look: "nova" } } },
-    { id: "w_blizzard", name: "Blizzard", type: "Ultimate", branch: 1, row: 4, style: "frost", cd: 6000, power: 0.39, mana: 21, chargeMs: 300,
-      desc: "Summon a blizzard ahead for 5s: ice rains down, hurting and slowing everyone inside.",
-      field: { kind: "blizzard", r: 70, ahead: 56, ms: 5000, tickMs: 500, dmg: 11, slowMs: 900 } },
-    { id: "w_frozenorb", name: "Frozen Orb", type: "Attack", branch: 1, row: 4, style: "frost", cd: 1000, power: 0.89, mana: 27,
-      desc: "Launch an orb of frozen magic that flies straight and very far through enemies. As it goes it keeps spitting ice shards all around it in a turning spiral, and at the end it blows up in a big frost blast. A very short cooldown: cast it again and again while your mana lasts.",
-      shots: { kind: "frozenorb", speed: 200, range: 450, radius: 7, size: 1.6, dmg: 8, pierce: 99, slowMs: 500, kb: 0.2, explode: 56,
-        pulse: { every: 40, turn: 25, shards: { kind: "iceshard", n: 4, speed: 230, range: 80, radius: 4, dmg: 3, slowMs: 400, kb: 0.2 } } } },
-
-    // Storm / arcane
-    { id: "w_missiles", name: "Arcane Missiles", type: "Attack", branch: 2, row: 0, style: "arcane", cd: 1000, power: 0.37, mana: 6,
-      desc: "Three arcane missiles shoot out in a tight spread.",
-      shots: { kind: "arcane", n: 3, spread: 14, speed: 300, range: 170, radius: 4, dmg: 11, kb: 0.4 } },
-    { id: "w_blink", name: "Blink", type: "Movement", branch: 2, row: 1, style: "arcane", cd: 4000, cost: 20, mana: 8,
-      desc: "Teleport ahead. The rift you leave behind explodes.",
-      areas: [{ r: 30, dmg: 40, kb: 1, look: "burst", atStart: true }], move: { kind: "blink", dist: 72, invulnMs: 200 } },
-    { id: "w_static", name: "Static Field", type: "Aura", branch: 2, row: 2, style: "lightning", cd: 14000, power: 0.92, mana: 28,
-      desc: "Crackle with lightning for 8s: every 0.6s a bolt strikes an enemy near you.",
-      field: { kind: "static", r: 62, ms: 8000, tickMs: 600, follow: true, zap: { n: 1, dmg: 11, stunMs: 150 } } },
-    { id: "w_flow", name: "Mana Flow", type: "Passive", branch: 2, row: 3, style: "arcane", passive: { effect: "mana", perRank: 20 },
-      desc: "Magic flows freely: your mana refills faster." },
-    { id: "w_storm", name: "Thunderstorm", type: "Ultimate", branch: 2, row: 4, style: "lightning", cd: 8000, power: 0.53, mana: 29, chargeMs: 300,
-      desc: "Storm clouds gather over you, then lightning hammers the area for 3s, stunning whatever it hits.",
-      field: { kind: "storm", r: 96, ms: 3000, tickMs: 300, zap: { n: 2, dmg: 18, stunMs: 300 } } },
+    { id: "w_blizzard", name: "Blizzard", type: "Aura", branch: 1, row: 0, style: "frost", cd: 9000, mana: 22,
+      desc: "A blizzard swirls around you for 6s and moves with you: ice rains on every enemy close by, hurting and slowing them.",
+      field: { kind: "blizzard", r: 56, ms: 6000, tickMs: 500, follow: true, dmg: 6, slowMs: 800 } },
+    // Thunder
+    { id: "w_storm", name: "Thunder", type: "Attack", branch: 2, row: 0, style: "lightning", cd: 6000, mana: 20,
+      desc: "Call thunder down on a spot: for 2.5s lightning hammers the zone, striking and stunning the enemies inside.",
+      field: { kind: "storm", r: 56, ahead: 70, ms: 2500, tickMs: 300, zap: { n: 2, dmg: 11, stunMs: 250 } } },
   ],
 
   // ---------------------------------------------------------------- ARCHER
@@ -611,17 +570,8 @@ const TREE: Record<string, Shape> = {
   // Ninja · Spirit: fire splits into poison craft (dead end) and lightning, which leads to the dragon
   n_flame: [2, undefined, ["mag", 2]], n_poison: [5, "n_flame"], n_caltrops: [9, "n_poison", ["dex", 1]],
   n_lightning: [12, "n_flame", ["mag", 2]], n_dragon: [24, "n_lightning", ["mag", 2.5]],
-  // Wizard (Diablo 2 style, Murat 2026-11-05): skills unlock in tiers at levels 1, 6, 12, 18 and 24, Frozen Orb at 30;
-  // some need a second skill (REQUIRES) and spells grow with the ranks of their neighbours (SYNERGY).
-  // Fire: the wall forks into the Inferno Orb and the Meteor Shower, which needs both
-  w_wave: [1, undefined, ["mag", 2]], w_firewall: [6, "w_wave", ["mag", 2]], w_pyro: [12, "w_wave"],
-  w_orb: [18, "w_firewall", ["mag", 2.5]], w_meteor: [24, "w_firewall", ["mag", 2.5]],
-  // Frost: Frozen Orb, the last skill of the wizard, forks off Mirror Ice next to the Blizzard and needs it
-  w_nova: [1, undefined, ["mag", 2]], w_shards: [6, "w_nova", ["dex", 2]], w_armor: [12, "w_shards"], w_mirror: [18, "w_shards"],
-  w_blizzard: [24, "w_mirror", ["mag", 2.5]], w_frozenorb: [30, "w_mirror", ["mag", 2]],
-  // Storm: one long limb, Mana Flow off the root
-  w_missiles: [1, undefined, ["dex", 2]], w_blink: [6, "w_missiles", ["mag", 2]], w_static: [12, "w_blink", ["mag", 2]],
-  w_flow: [18, "w_missiles"], w_storm: [24, "w_static", ["mag", 2.5]],
+  // Wizard: three schools, one spell each (Murat 2026-11-07)
+  w_firebolt: [1, undefined, ["mag", 2]], w_blizzard: [1, undefined, ["mag", 2]], w_storm: [1, undefined, ["mag", 2]],
   // Archer · Marksman: Power Shot forks into the Fan (dead end) and Steady Aim on to the Arrow Rain
   a_volley: [1, undefined, ["dex", 2]], a_power: [4, "a_volley", ["str", 2]], a_fan: [10, "a_power", ["dex", 2]],
   a_aim: [7, "a_power"], a_rain: [20, "a_aim", ["dex", 2]],
@@ -663,21 +613,9 @@ const NEEDS: Record<string, WeaponNeed> = {
 };
 /** Second prerequisites (Diablo 2 style): skill id -> other skills that must be learned first. */
 const REQUIRES: Record<string, string[]> = {
-  w_meteor: ["w_orb"], w_frozenorb: ["w_blizzard"], w_storm: ["w_flow"],
 };
 /** Synergies (Diablo 2 style): skill id -> +pct% damage per rank of each `from` skill. */
 const SYNERGY: Record<string, { from: string; pct: number }[]> = {
-  w_wave: [{ from: "w_firewall", pct: 4 }, { from: "w_orb", pct: 4 }],
-  w_firewall: [{ from: "w_wave", pct: 4 }, { from: "w_meteor", pct: 3 }],
-  w_orb: [{ from: "w_wave", pct: 5 }, { from: "w_firewall", pct: 3 }],
-  w_meteor: [{ from: "w_firewall", pct: 4 }, { from: "w_orb", pct: 4 }],
-  w_nova: [{ from: "w_shards", pct: 4 }, { from: "w_blizzard", pct: 3 }],
-  w_shards: [{ from: "w_nova", pct: 4 }, { from: "w_frozenorb", pct: 3 }],
-  w_blizzard: [{ from: "w_shards", pct: 4 }, { from: "w_nova", pct: 4 }],
-  w_frozenorb: [{ from: "w_shards", pct: 4 }, { from: "w_blizzard", pct: 4 }],
-  w_missiles: [{ from: "w_static", pct: 4 }, { from: "w_storm", pct: 3 }],
-  w_static: [{ from: "w_missiles", pct: 4 }],
-  w_storm: [{ from: "w_static", pct: 4 }, { from: "w_missiles", pct: 4 }],
 };
 for (const list of Object.values(S)) for (const sk of list) {
   sk.needs = NEEDS[sk.id];
@@ -728,17 +666,7 @@ export const CANTRIPS: Record<ClassKind, SkillDef[]> = {
       desc: "Flick a drop of blood at a foe close by and drink a little of theirs back. Costs little mana: cast it again and again.",
       shots: { kind: "bloodbolt", speed: 300, range: 95, radius: 4, size: 0.6, dmg: 12, drain: 15, kb: 0.2 } },
   ],
-  wizard: [
-    { id: "w_spark", name: "Spark", type: "Attack", branch: 2, row: 0, req: 1, style: "lightning", cd: 300, mana: 3, cantrip: true,
-      desc: "A crackling spark at close range. Costs little mana: cast it again and again.",
-      shots: { kind: "lightning", speed: 360, range: 85, radius: 5, dmg: 13, kb: 0.3 } },
-    { id: "w_firedart", name: "Fire Dart", type: "Attack", branch: 0, row: 0, req: 1, style: "fire", cd: 450, mana: 4, cantrip: true,
-      desc: "A quick dart of flame that sets the target smouldering for a moment.",
-      shots: { kind: "flamewave", speed: 300, range: 110, radius: 5, size: 0.55, dmg: 11, burn: [3, 1500], kb: 0.3 } },
-    { id: "w_frostbolt", name: "Frost Bolt", type: "Attack", branch: 1, row: 0, req: 1, style: "frost", cd: 500, mana: 5, cantrip: true,
-      desc: "A shard of ice that chills: the target slows down for a moment.",
-      shots: { kind: "iceshard", speed: 300, range: 120, radius: 4, dmg: 12, slowMs: 600, kb: 0.2 } },
-  ],
+  wizard: [], // the wizard has no basic spells: its three schools are in the tree (Murat 2026-11-07)
 };
 
 export const SKILLS = S;
