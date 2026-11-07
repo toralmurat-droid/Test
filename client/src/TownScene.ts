@@ -166,7 +166,20 @@ interface Snap { t: number; x: number; y: number }
  * Other heroes and monsters are drawn this far in the past, so there is always a newer server position to glide
  * towards. The server sends 20 updates a second (one per 50 ms) and some arrive late; 2 updates of slack hides that.
  */
-const INTERP_DELAY = 2.2 * (1000 / TICK_RATE);
+const INTERP_DELAY = 2.2 * (1000 / TICK_RATE); // the least we play back behind the server
+/** How late updates arrive (ms past their smoothed stamp): the peak, fading over a few seconds. */
+let lateness = 0;
+/**
+ * How far behind the newest update others are played back (ms). A fixed 110 ms ran dry on a jittery connection or
+ * a busy server: monsters froze, then jumped ahead when the late updates came in. It now grows with the lateness
+ * seen lately (up to 350 ms) and shrinks back slowly on a steady one; see stepInterpDelay.
+ */
+let interpDelay = INTERP_DELAY;
+function stepInterpDelay(dtMs: number) {
+  const want = Math.min(350, Math.max(INTERP_DELAY, 60 + lateness * 1.2));
+  const max = dtMs * 0.03; // at most 3% faster or slower playback, so the change itself isn't seen
+  interpDelay += Math.max(-max, Math.min(max, want - interpDelay));
+}
 /**
  * Server update clock. Updates leave the server every 50 ms but reach us unevenly (network, a busy server, a second
  * player's traffic), so each one is stamped with a smoothed time: the last stamp + 50 ms, nudged slowly towards
@@ -178,6 +191,7 @@ function patchTime(): number {
   stampSeq = patchSeq;
   const now = performance.now(), guess = stamp + 1000 / TICK_RATE;
   stamp = Math.abs(now - guess) > 250 ? now : Math.min(now, guess + (now - guess) * 0.1);
+  lateness = Math.max(now - stamp, lateness * 0.99);
   return stamp;
 }
 /** Record a server position for an entity (several field changes of one update count once). */
@@ -187,6 +201,16 @@ function pushSnap(e: { snaps?: Snap[] }, x: number, y: number) {
   if (last && t - last.t < 1) { last.x = x; last.y = y; return; }
   s.push({ t, x, y });
   if (s.length > 12) s.splice(0, s.length - 12);
+}
+/**
+ * A teleport (respawn, portal, a monster moved home) rather than movement: the new server spot is far from the last
+ * one, or the drawn sprite is very far behind. Played-back entities trail the server by interpDelay, so measuring
+ * from the sprite (as before, at 48 px) snapped fast movers on a laggy connection.
+ */
+function teleported(e: { snaps?: Snap[]; sprite: { x: number; y: number } }, x: number, y: number): boolean {
+  const s = e.snaps, n = s?.length ?? 0;
+  const prev = n >= 2 ? s![n - 2] : undefined; // the newest snap is the spot just pushed
+  return (!!prev && Math.hypot(x - prev.x, y - prev.y) > 64) || Math.hypot(e.sprite.x - x, e.sprite.y - y) > 240;
 }
 /** Where the entity was at local time t, from its snapshots: blended between the two around t, or carried a little past the last. */
 function interpolate(s: Snap[], t: number): { x: number; y: number } | undefined {
@@ -629,7 +653,7 @@ export class TownScene extends Phaser.Scene {
         pushSnap(e, p.x, p.y);
         if (id === this.me) { this.reconcile(e, p); return; }
         // Snap on respawn / large correction
-        if (Math.hypot(e.sprite.x - p.x, e.sprite.y - p.y) > 48) { e.sprite.setPosition(p.x, p.y); e.snaps = [{ t: patchTime(), x: p.x, y: p.y }]; }
+        if (teleported(e, p.x, p.y)) { e.sprite.setPosition(p.x, p.y); e.snaps = [{ t: patchTime(), x: p.x, y: p.y }]; }
       });
     });
     players.onRemove((_p: any, id: string) => this.removeEntity(id));
@@ -654,7 +678,7 @@ export class TownScene extends Phaser.Scene {
           const key = mobTexture(this, m.kind, m.level, m.weapon, m.bones);
           if (e.sprite.texture.key !== key) { e.sprite.setTexture(key, 0); this.perch(e, m); }
         }
-        if (Math.hypot(e.sprite.x - m.x, e.sprite.y - m.y) > 48 && !(this.time.now < (e.leapUntil ?? 0))) { e.sprite.setPosition(m.x, m.y); e.snaps = [{ t: patchTime(), x: m.x, y: m.y }]; }
+        if (teleported(e, m.x, m.y) && !(this.time.now < (e.leapUntil ?? 0))) { e.sprite.setPosition(m.x, m.y); e.snaps = [{ t: patchTime(), x: m.x, y: m.y }]; }
         if ((m.merged || 1) !== (e.merged ?? 1)) this.growMob(e, m);
       });
     });
@@ -2587,6 +2611,7 @@ export class TownScene extends Phaser.Scene {
     const now = this.time.now, wall = performance.now();
     // Long frames (a hiccup, a hidden tab) are capped so prediction never leaps through a wall
     const step = Math.min(dtMs, 100);
+    stepInterpDelay(step);
     // An easing written for 60 fps (k per frame), adjusted so it pulls just as hard at 30, 120 or 144 fps
     const ease = (k: number) => 1 - Math.pow(1 - k, step / (1000 / 60));
     for (const [id, e] of this.entities) {
@@ -2623,7 +2648,7 @@ export class TownScene extends Phaser.Scene {
       } else {
         // Everyone else: play back their server positions a little late, so they glide at an even speed
         // instead of lurching once per server update (and stopping when one comes in late)
-        const at = interpolate(e.snaps ?? [], wall - INTERP_DELAY);
+        const at = interpolate(e.snaps ?? [], wall - interpDelay);
         if (at) e.sprite.setPosition(at.x, at.y);
       }
       if (id === this.me) {
