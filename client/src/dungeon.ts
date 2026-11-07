@@ -74,6 +74,10 @@ export class DungeonView {
   private amount = 0; // 0 above ground .. 1 below
   /** True while the local hero is below ground (Details turns the day/night tint off then). */
   underground = false;
+  /** Night above ground (0..1, set by the scene). With the torch lit the same dark-with-holes is laid over the night. */
+  night = 0;
+  /** The local hero carries a lit torch (L): a much wider, flickering, warm pool of light. */
+  torch = false;
   floor = 0;
   /** Gates seen open (server TownState.doors), and each built gate's barricade blocks. */
   private doorsOpen = new Set<string>();
@@ -281,8 +285,9 @@ export class DungeonView {
     this.underground = fl > 0;
     if (fl) this.build(FLOORS[fl - 1]);
     // fade the dark in / out over a few frames (a cut through the fade-in after a descent)
-    this.amount += ((fl ? 1 : 0) - this.amount) * 0.25;
-    if (this.amount < 0.01 && !fl) { this.amount = 0; this.dark?.setVisible(false); }
+    const want = fl ? 1 : this.torch ? this.night * 0.6 : 0;
+    this.amount += (want - this.amount) * (fl ? 0.25 : 0.08);
+    if (this.amount < 0.01 && !want) { this.amount = 0; this.dark?.setVisible(false); }
     else this.drawDark(now);
     // the label over a rope or stair within reach
     const l = me && LINKS.find((k) => Math.hypot(k.x - me.x, k.y - me.y) < 3 * TILE);
@@ -320,7 +325,7 @@ export class DungeonView {
     const ctx = this.darkTex.getContext(), k = DW / cw;
     ctx.globalCompositeOperation = "source-over";
     ctx.clearRect(0, 0, DW, DH);
-    ctx.fillStyle = "rgba(4,3,6,0.95)";
+    ctx.fillStyle = this.floor ? "rgba(4,3,6,0.95)" : "rgba(3,5,14,0.9)"; // the night is a cold blue-black
     ctx.fillRect(0, 0, DW, DH);
     ctx.globalCompositeOperation = "destination-out";
     const hole = (x: number, y: number, r: number, a: number) => {
@@ -333,11 +338,15 @@ export class DungeonView {
       ctx.beginPath(); ctx.arc(sx, sy, sr, 0, Math.PI * 2); ctx.fill();
       ctx.restore();
     };
-    for (const l of this.lights) {
+    if (this.floor) for (const l of this.lights) {
       const f = l.flicker ? 1 + (Math.sin(now / 90 + l.seed) * 0.5 + Math.sin(now / 37 + l.seed * 3) * 0.5) * l.flicker : 1;
       hole(l.x, l.y, l.r * f, 0.92);
     }
-    for (const h of this.host.heroes()) hole(h.x, h.y - 8, (me && h.x === me.x && h.y === me.y ? 5.2 : 3.6) * TILE, 0.88);
+    const tf = 1 + (Math.sin(now / 70) * 0.5 + Math.sin(now / 23 + 1.3) * 0.3) * 0.05; // a flame's flicker
+    for (const h of this.host.heroes()) {
+      const mine = !!me && h.x === me.x && h.y === me.y;
+      hole(h.x, h.y - 8, (mine ? (this.torch ? 8.5 * tf : 5.2) : 3.6) * TILE, mine && this.torch ? 0.97 : 0.88);
+    }
     this.darkTex.refresh();
   }
 }

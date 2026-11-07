@@ -2,7 +2,7 @@
    chat and the menu buttons move up out of the way. --barw = the skill bar's width, set by orbs.ts. */
 body { --barw: 640px; }
 #orbhud { position: absolute; left: 0; right: 0; bottom: 0; height: 0; pointer-events: none; z-index: 7; }
-#orbplate { position: absolute; left: 50%; bottom: 6px; width: calc(var(--barw) + 44px); height: 84px; transform: translateX(-50%); box-sizing: border-box;
+#orbplate { position: absolute; left: 50%; bottom: 6px; width: calc(var(--barw) + 44px); height: calc(var(--slot) * 0.9 + 46px); transform: translateX(-50%); box-sizing: border-box;
   background: linear-gradient(#211a14, #120e0b 60%, #0b0907); border: 3px solid #1a120b; border-top-color: #2a1d10;
   box-shadow: inset 0 0 0 2px #6b4c22, inset 0 3px 0 2px #b08a4a, inset 0 -2px 0 2px #3a2812, 0 4px 14px rgba(0,0,0,.7);
   border-radius: 6px 6px 2px 2px; }
@@ -19,7 +19,7 @@ body { --barw: 640px; }
 
 /* what sits on the plate, and what moves out of its way */
 body.orbhud-on #hotbar { bottom: 16px; }
-body.orbhud-on #xpbar { bottom: 66px; z-index: 8; }
+body.orbhud-on #xpbar { bottom: calc(var(--slot) * 0.9 + 24px); z-index: 8; }
 body.orbhud-on #rbars .rb-hp, body.orbhud-on #rbars .rb-mp { display: none; }
 body.orbhud-on #lvlnote { bottom: 176px; }
 body.orbhud-on #attune { bottom: 150px; }
@@ -27,14 +27,22 @@ body.orbhud-on #attune { bottom: 150px; }
 body.orbhud-on #chat { bottom: 8px; left: 8px; width: max(150px, calc(50% - var(--barw) / 2 - 204px)); box-sizing: border-box; }
 body.orbhud-on #chatlog { bottom: 46px; left: 8px; width: max(150px, calc(50% - var(--barw) / 2 - 204px)); font-size: 14px; }
 body.orbhud-on #online { bottom: auto; top: 20px; left: auto; right: 220px; } /* the online count and ping go to the top, left of the minimap */
-/* menu buttons: big icon tiles, no text, 1.5x a spell slot, right of the angel statue (the Quests button joins them) */
-body.orbhud-on #menubtns { bottom: 8px; right: 8px; left: calc(50% + var(--barw) / 2 + 112px + 78px); width: auto; display: flex; flex-wrap: wrap-reverse;
-  justify-content: flex-start; align-content: flex-start; gap: 6px; }
-body.orbhud-on #menubtns button { font-size: 0; width: 66px; height: 66px; padding: 0; display: flex; align-items: center; justify-content: center; flex: none; position: relative; transform: none; left: auto; bottom: auto; }
-body.orbhud-on #menubtns button .pxi { width: 40px; height: 40px; margin: 0; }
-body.orbhud-on #menubtns button small { display: none; }
+/* One wide row on the plate (Murat 2026-11-07): skill bar | menu buttons. Slots grow with the window (--slot) */
+body { --slot: clamp(40px, 3.1vw, 58px); }
+#hudbar { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); display: flex; align-items: center; gap: 8px; z-index: 9; pointer-events: none; }
+body.orbhud-on #hudbar #hotbar { position: static; transform: none; bottom: auto; left: auto; pointer-events: auto; align-items: center; }
+body.orbhud-on #hotbar .slot { width: var(--slot); height: calc(var(--slot) * 0.9); }
+body.orbhud-on #hotbar .slot .sicon { width: calc(var(--slot) * 0.6); height: calc(var(--slot) * 0.6); }
+body.orbhud-on #hotbar .slot.lmb img:not(.sicon) { width: calc(var(--slot) * 0.66); height: calc(var(--slot) * 0.66); }
+body.orbhud-on #hotbar .slot.lmb.right { margin-right: 0; }
+#hudbar .hsep, #hotbar .hsep { flex: none; width: 2px; align-self: stretch; margin: 2px 4px; background: linear-gradient(transparent, #b08a4a 20%, #b08a4a 80%, transparent); box-shadow: 1px 0 0 #1a120b; }
+body.orbhud-on #hudbar #menubtns { position: static; display: flex; flex-wrap: nowrap; gap: 3px; width: auto; left: auto; right: auto; bottom: auto; pointer-events: auto; }
+body.orbhud-on #hudbar #menubtns button { font-size: 0; width: var(--slot); height: calc(var(--slot) * 0.9); padding: 0; display: flex; align-items: center; justify-content: center;
+  flex: none; position: relative; transform: none; left: auto; bottom: auto; }
+body.orbhud-on #hudbar #menubtns button .pxi { width: calc(var(--slot) * 0.55); height: calc(var(--slot) * 0.55); margin: 0; }
+body.orbhud-on #hudbar #menubtns button small { display: none; }
 /* the level: a bronze medallion in the middle of the XP bar (the top-left crest goes) */
-#orblevel { position: absolute; left: 50%; bottom: 52px; transform: translateX(-50%); width: 40px; height: 40px; border-radius: 50%; box-sizing: border-box;
+#orblevel { position: absolute; left: 50%; bottom: calc(var(--slot) * 0.9 + 10px); transform: translateX(-50%); width: 40px; height: 40px; border-radius: 50%; box-sizing: border-box;
   background: radial-gradient(circle at 40% 35%, #5a1a20, #2a0a0e 70%); border: 3px solid #c9a050; box-shadow: 0 0 0 2px #1a120b, 0 3px 6px rgba(0,0,0,.7), inset 0 0 0 1px #7a5a26;
   display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1; z-index: 10; pointer-events: auto; }
 #orblevel small { font-size: 8px; font-family: var(--tiny-font); color: #f2c9a0; letter-spacing: 1px; }
@@ -46,8 +54,7 @@ body.orbhud-on #rbars .rb-crest { display: none; }
 body.orbhud-on #sidepanel { max-height: calc(100% - 205px); z-index: 11; } /* above the orb bar and the menu tiles */
 /* "Respawning" under the minimap (the safe zone line is gone) */
 body #stats { top: 280px; left: auto; right: 40px; text-align: right; }
-/* narrow screens: too little room left of the health orb for both, so chat wins over the demon statue */
-@media (max-width: 1400px) {
-  #orbhud .garg.left { display: none; }
-  body.orbhud-on #chat, body.orbhud-on #chatlog { width: min(200px, calc(50% - var(--barw) / 2 - 130px)); min-width: 140px; }
-}
+/* little room left of the health orb (orbs.ts sets hud-tight): the statues go and chat moves up above the bar */
+body.hud-tight #orbhud .garg { display: none; }
+body.hud-tight.orbhud-on #chat { bottom: 132px; width: min(300px, 30vw); }
+body.hud-tight.orbhud-on #chatlog { bottom: 170px; width: min(300px, 30vw); }

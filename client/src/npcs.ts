@@ -212,7 +212,13 @@ export class NpcLayer {
     else if (this.near) this.open(this.near);
   }
 
+  /** The scene opens the bag beside a shop (stats to compare) and shows what a piece for sale would change. */
+  onShopOpen?: (open: boolean) => void;
+  onPreview?: (id?: string) => void;
+  private shopOpen = false;
+
   close() {
+    if (this.shopOpen) { this.shopOpen = false; this.onPreview?.(); this.onShopOpen?.(false); }
     this.talking = undefined;
     this.dialog.classList.remove("open");
   }
@@ -263,6 +269,7 @@ export class NpcLayer {
     const row = (icon: string, name: string, color: string, desc: string, btn: string, cls2: string, i: number, off: boolean) =>
       `<div class="sh-row"><span class="sh-icon" data-icon="${icon}"></span><span class="sh-info"><b style="color:${color}">${name}</b><small>${desc}</small></span>` +
       `<button class="${cls2}" data-i="${i}"${off ? " disabled" : ""}>${btn}</button></div>`;
+    let lastLv = 0;
     const buy = shop.stock.map((e, i) => {
       if (e.item === "potion" || e.item === "mpotion") {
         const qty = e.qty ?? 1, size = e.size ?? 0, mana = e.item === "mpotion";
@@ -271,14 +278,16 @@ export class NpcLayer {
           `${mana ? "+" : "Heals "}${potionAmount(e.item, size)}${mana ? " mana" : " HP"} · you carry ${total(pots[e.item])} · ${actionKey(mana ? "mana" : "potion")} · ${room ? "10 per bag slot" : "no room in your bag"}`,
           `${e.price}${pxIcon("coin")}`, "sh-buy", i, gold < e.price || !room);
       }
-      const d = gearDef(e.item)!;
-      return row(e.item, gearName(e.item, cls), itemColor(e.item), `${rarityLabel(e.item)}${TIER_NAMES[d.tier]} · Lv ${itemLevel(e.item)} · ${itemText(e.item)}`, `${e.price}${pxIcon("coin")}`, "sh-buy", i, gold < e.price);
+      const d = gearDef(e.item)!, lv = itemLevel(e.item);
+      const head = lv !== lastLv && lv >= 18 ? `<h5 class="sh-lv">Masterwork · Lv ${lv}</h5>` : "";
+      lastLv = lv;
+      return head + row(e.item, gearName(e.item, cls), itemColor(e.item), `${rarityLabel(e.item)}${TIER_NAMES[d.tier]} · Lv ${itemLevel(e.item)} · ${itemText(e.item)}`, `${e.price}${pxIcon("coin")}`, "sh-buy", i, gold < e.price);
     }).join("");
     const sellable = shop.buys ? bag.map((id, i) => [id, i] as const).filter(([id]) => gearDef(id) && shop.buys!.includes(gearDef(id)!.slot)) : [];
     const sell = shop.buys
       ? `<h4>Sell from your bag</h4>` + (sellable.length
         ? sellable.map(([id, i]) => row(id, gearName(id, cls), itemColor(id), `${rarityLabel(id)}${TIER_NAMES[gearDef(id)!.tier]} · Lv ${itemLevel(id)} · ${itemText(id)}`, `Sell ${sellPrice(id)}${pxIcon("coin")}`, "sh-sell", i, false)).join("")
-        : `<p class="sh-empty">No weapons in your bag. Unequip one in the Bag (G) to sell it.</p>`)
+        : `<p class="sh-empty">Nothing to sell in your bag. Take a piece off in the Bag to sell it.</p>`)
       : "";
     const wear = q?.wear ?? 0, fix = shop.repairs ? repairCost(GEAR_SLOTS.map((s) => q?.[s]), wear) : 0;
     const repair = shop.repairs
@@ -294,6 +303,14 @@ export class NpcLayer {
     this.dialog.classList.add("shop");
     const talk = this.dialog.querySelector<HTMLButtonElement>(".nd-talk");
     if (talk) talk.onclick = () => { this.trading = false; this.stage = -1; };
+    // hovering a piece for sale shows what wearing it would change in the stats beside (the bag opens with the shop)
+    for (const r of this.dialog.querySelectorAll<HTMLElement>(".sh-row")) {
+      const id = r.querySelector<HTMLElement>(".sh-icon")?.dataset.icon;
+      if (!id || !gearDef(id) || !r.querySelector(".sh-buy")) continue;
+      r.onmouseenter = () => this.onPreview?.(id);
+      r.onmouseleave = () => this.onPreview?.();
+    }
+    if (!this.shopOpen) { this.shopOpen = true; this.onShopOpen?.(true); }
     for (const el of this.dialog.querySelectorAll<HTMLElement>(".sh-icon")) {
       const id = el.dataset.icon!;
       el.appendChild(id.startsWith("potion:") || id.startsWith("mpotion:") ? this.potionIcon(potionTex(id.split(":")[0], Number(id.split(":")[1]))) : iconCanvas(this.scene, id, 32));
@@ -321,6 +338,7 @@ export class NpcLayer {
     const page = questDialog(n.id, q);
     if (n.shop && (this.trading || !page)) return this.renderShop(n, q);
     this.dialog.classList.remove("shop");
+    if (this.shopOpen) { this.shopOpen = false; this.onPreview?.(); }
     const key = JSON.stringify([n.id, q?.questId, q?.questStage, q?.questCount, q?.boneId, q?.boneStage, q?.boneCount, q?.redId, q?.redStage, q?.redCount, q?.tut, q?.crown, q?.beast, q?.level]);
     if (key === this.stage) return;
     this.stage = key;

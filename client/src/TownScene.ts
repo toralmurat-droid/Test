@@ -61,16 +61,16 @@ type ClickSide = "left" | "right";
 const costWords = (s: { cost?: number; mana?: number; blood?: number }) => [s.mana ? `${s.mana} mana` : "", s.cost ? `${s.cost} stamina` : "", s.blood ? `${s.blood}% HP` : ""].filter(Boolean).join(" · ") || "free";
 import { GearFx } from "./gearfx";
 import { Element, ELEMENT_COLORS } from "../../shared/elements";
-import { baseId, gearDef, gearReachMult, gearSpeedMult, itemRarity, WEAPON_TYPE_NAMES } from "../../shared/gear";
+import { baseId, canWear, gearName, gearDef, gearReachMult, gearSpeedMult, itemRarity, WEAPON_TYPE_NAMES } from "../../shared/gear";
 import { attackProfile, ATTACK_WORDS, isWeaponType, poseSheet, profileOf, weaponAttackMult, weaponOk } from "../../shared/weapons";
 import { talentMult, talentPoints, spentPoints } from "../../shared/talents";
 import { activeSkills, skillLearned } from "../../shared/slots";
 import { actionKey, actionOfKey, type KeyAction, keyMode, keyModeName, onKeyMode, setKeyMode, slotCount, slotKey, slotOfKey, wasdWalks } from "./keymode";
 import { iconImg } from "./skillIcons";
 import { TalentMenu } from "./talents";
-import { setMyFeast, SidePanel, SideTab } from "./sidepanel";
+import { setMyFeast, SidePanel, SideTab, wornOf } from "./sidepanel";
 import { lootFilter, onLootFilter } from "./lootfilter";
-import { passesFilter } from "../../shared/heroSheet";
+import { passesFilter, wearing } from "../../shared/heroSheet";
 import { IdeaBoard } from "./ideas";
 import { PatchNotesPanel } from "./patchnotes";
 import { PartyUI } from "./party";
@@ -285,8 +285,8 @@ export class TownScene extends Phaser.Scene {
   private useKey = () => {}; // E / G: talk, open, use what is right here
   private bagKey = () => {};
   private heldSlot = -1;
-  /** The torch is lit (L): a much wider light around the hero at night. Remembered in the browser. */
-  private torch = (() => { try { return localStorage.getItem("torch") === "1"; } catch { return false; } })(); // skill key (0..9) held down: it keeps casting
+  /** The torch (L): a flame in the hero's hand and a wide pool of light at night and underground. Lit unless put out; remembered. */
+  private torch = (() => { try { return localStorage.getItem("torch") !== "0"; } catch { return true; } })();
   private slotCastAt = 0;
   private pointer?: PointerControls;
   /**
@@ -581,6 +581,22 @@ export class TownScene extends Phaser.Scene {
     document.getElementById("hud")!.hidden = false;
     this.minimap = new Minimap(document.getElementById("minimap") as HTMLCanvasElement, this.opts.name);
     this.npcs = new NpcLayer(this, (type, msg) => this.room.send(type, msg));
+    // A shop opens the bag beside it (Murat 2026-11-08): the stats block shows what a piece for sale would change
+    let bagByShop = false;
+    this.npcs.onShopOpen = (open) => {
+      const side = this.side;
+      if (!side) return;
+      if (open && !side.open) { side.show("gear"); this.gearMenu?.reset(this.entities.get(this.me)?.state); bagByShop = true; }
+      else if (open && side.tab !== "gear") { side.show("gear"); this.gearMenu?.reset(this.entities.get(this.me)?.state); }
+      else if (!open && bagByShop) { side.close(); bagByShop = false; }
+      document.body.classList.toggle("shopping", open);
+    };
+    this.npcs.onPreview = (id) => {
+      const st = this.entities.get(this.me)?.state;
+      if (!id || !st) return this.side?.setPreview();
+      const cls = st.cls as string;
+      this.side?.setPreview(canWear(cls, id) ? { label: `wear ${gearName(id, cls)}`, eq: wearing(wornOf(st), id) } : undefined);
+    };
     this.npcs.objects.setLight((x, y, lift) => this.details?.addLight(x, y, 0x7ff3ff, 1.5, 0.55, 0.06, lift)); // lit spirit lanterns shine at night
     // Morwen's camp and Brann's forge after dusk: coal glow under her brew, lantern light in the tent doorway
     for (const d of NPC_DECOR) {
@@ -2483,7 +2499,8 @@ export class TownScene extends Phaser.Scene {
     const ls = this.leftSkill(), rs = this.rightSkill();
     const lcell = clickCell("left") + clickCell("right");
     const bar = document.getElementById("hotbar")!;
-    const all = this.chargeCell(mine, cls, [ls, rs], slots, now) + lcell + cells + this.potionCells(mine); // potions right of the skill keys (Murat 2026-11-04)
+    // vertical separators between the click attacks, the skill keys and the potions (Murat 2026-11-07)
+    const all = this.chargeCell(mine, cls, [ls, rs], slots, now) + lcell + `<i class="hsep"></i>` + cells + `<i class="hsep"></i>` + this.potionCells(mine); // potions right of the skill keys (Murat 2026-11-04)
     if (this.hotbarHtml !== all) { bar.innerHTML = all; this.hotbarHtml = all; }
   }
 
@@ -2637,6 +2654,7 @@ export class TownScene extends Phaser.Scene {
     this.iso?.update(dtMs);
     if (loadingActive()) this.checkLoaded();
     this.ambient?.update(this.time.now, dtMs);
+    if (this.dungeon) { this.dungeon.torch = this.torch && !this.entities?.get(this.me)?.state?.dead; this.dungeon.night = this.details?.darkNow ?? 0; }
     this.dungeon?.update(this.time.now);
     if (this.details) {
       this.details.underground = !!this.dungeon?.underground;

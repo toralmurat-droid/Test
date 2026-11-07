@@ -171,7 +171,7 @@ export class ResourceBars {
       this.lvEl.textContent = String(s.level);
     }
     // Same width as the slot bar under it
-    const hb = document.getElementById("hotbar");
+    const hb = document.getElementById("hudbar") ?? document.getElementById("hotbar");
     const w = hb ? hb.offsetWidth : 0;
     if (w > 0 && w !== this.xpW) { this.xpBar.style.width = `${w}px`; this.xpW = w; }
     const p = `${Math.max(0, Math.min(1, s.xpFrac)) * 100}%`;
