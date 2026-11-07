@@ -3,6 +3,7 @@ import { quake } from "./camfx";
 import { ISO } from "./isoflag";
 import { AreaLook, BLOOD_RITE_MS, FxStyle, impactMs, LEAP_MS, RAIN_FALL_MS, skillById, SkillDef, SWORD_FALL_MS } from "../../shared/skills";
 import { paintSigil, ICON } from "./skillArt";
+import { MIST_DISSOLVE_MS, MIST_LINGER_MS, MIST_REFORM_AT_MS, MIST_REFORM_MS, MIST_REVEAL_MS } from "./skillMoveData";
 
 /**
  * Skill visuals (shared/skills.ts): particles, light, lightning, falling blades and meteors, auras, enchanted
@@ -43,7 +44,10 @@ interface P {
 
 interface Emitter { until: number; next: number; every: number; fn: () => void }
 
-export interface FxEntity { sprite: Phaser.GameObjects.Sprite; top: number; state: any; hero?: string }
+export interface FxEntity {
+  sprite: Phaser.GameObjects.Sprite; top: number; state: any; hero?: string;
+  gear?: { each(fn: (s: Phaser.GameObjects.Sprite) => void): void }; // worn gear overlays (gear.ts GearLayer)
+}
 
 const pick = <T>(a: T[]) => a[Math.floor(Math.random() * a.length)];
 const rnd = (a: number, b: number) => a + Math.random() * (b - a);
@@ -909,28 +913,152 @@ export class SkillFx {
   }
 
   /**
-   * Mist Form: the vampire bursts into a thick, rolling cloud of pale night mist that keeps swirling where he stood,
-   * a stream of mist drifts along his path, and the mist gathers back into him where he lands.
+   * The hero as it looks right now (body + worn gear overlays), as coloured pixels: screen offsets from the feet,
+   * one per texel. For effects that take the hero apart and put it back together (Mist Form).
+   */
+  private heroPixels(e: FxEntity): { dx: number; dy: number; h: number; c: number }[] {
+    const layers: Phaser.GameObjects.Sprite[] = [e.sprite];
+    e.gear?.each((g) => layers.push(g));
+    const s = e.sprite, W = s.frame.cutWidth, H = s.frame.cutHeight;
+    const grid = new Map<number, number>(); // texel -> colour, the top layer wins
+    for (const l of layers) {
+      const data = this.frameData(l.texture.key, l.frame.name);
+      if (!data || data.w !== W || data.h !== H) continue;
+      for (let i = 0; i < W * H; i++) if (data.px[i * 4 + 3] > 140) grid.set(i, (data.px[i * 4] << 16) | (data.px[i * 4 + 1] << 8) | data.px[i * 4 + 2]);
+    }
+    const out: { dx: number; dy: number; h: number; c: number }[] = [];
+    const sx = s.scaleX * (s.flipX ? -1 : 1), sy = s.scaleY;
+    for (const [i, c] of grid) {
+      const px = i % W, py = Math.floor(i / W);
+      const dy = (py + 0.5 - s.originY * H) * sy;
+      out.push({ dx: (px + 0.5 - s.originX * W) * sx, dy, h: Math.max(0, -dy), c });
+    }
+    return out;
+  }
+
+  private frames = new Map<string, { w: number; h: number; px: Uint8ClampedArray } | null>();
+  /** The RGBA texels of one texture frame (cached). */
+  private frameData(key: string, name: string | number) {
+    const id = `${key}#${name}`;
+    if (this.frames.has(id)) return this.frames.get(id);
+    let res: { w: number; h: number; px: Uint8ClampedArray } | null = null;
+    try {
+      const f = this.scene.textures.getFrame(key, name);
+      const img = f?.source?.image as CanvasImageSource | undefined;
+      if (f && img) {
+        const c = document.createElement("canvas");
+        c.width = f.cutWidth; c.height = f.cutHeight;
+        const ctx = c.getContext("2d", { willReadFrequently: true })!;
+        ctx.drawImage(img, f.cutX, f.cutY, f.cutWidth, f.cutHeight, 0, 0, f.cutWidth, f.cutHeight);
+        res = { w: f.cutWidth, h: f.cutHeight, px: ctx.getImageData(0, 0, f.cutWidth, f.cutHeight).data };
+      }
+    } catch { res = null; } // a tainted or missing image: no pixels, the mist alone still plays
+    if (this.frames.size > 400) this.frames.clear();
+    this.frames.set(id, res);
+    return res;
+  }
+
+  /**
+   * Mist Form: the vampire comes apart into mist, top first, pixel by pixel; each grain pales into the mist colour
+   * and swirls off into a rolling cloud. A ribbon of mist drifts along his path, the mist gathers again where he
+   * lands and he is rebuilt from it, feet first. The cloud he left keeps rolling a moment, then thins away.
    */
   private mistForm(ev: any, e?: FxEntity) {
     const { fx, fy, x, y } = ev;
-    // the burst: a dense cloud right away
-    for (let i = 0; i < 40; i++) { const a = Math.random() * Math.PI * 2, d = Math.sqrt(Math.random()) * 18; this.mistPuff(fx + Math.cos(a) * d, fy + Math.sin(a) * d * 0.7, fx, fy, rnd(800, 1300), 1.2); }
-    this.glow(fx, fy, 8, 16, 0x9575cd, 300, 0.5);
-    // it keeps rolling where he stood (the chilling mist that hurts)
-    this.emit(1100, 45, () => { for (let i = 0; i < 4; i++) { const a = Math.random() * Math.PI * 2, d = Math.sqrt(Math.random()) * 22; this.mistPuff(fx + Math.cos(a) * d, fy + Math.sin(a) * d * 0.7, fx, fy); } });
-    // the path: a drifting ribbon of mist with a few faint ghosts of him inside it
+    const MIST = [0xc9c2d9, 0xa99fc0, 0x8a80a8, 0xe0dbea, 0x6f6690];
+    const shape = e ? this.heroPixels(e) : [];
+    const H = shape.reduce((m, q) => Math.max(m, q.h), 1);
+    const depth = e ? e.sprite.depth : DEPTH - 1;
+    const mix = (a: number, b: number, k: number) => {
+      const ch = (sh: number) => Math.round(((a >> sh) & 255) + (((b >> sh) & 255) - ((a >> sh) & 255)) * k);
+      return (ch(16) << 16) | (ch(8) << 8) | ch(0);
+    };
+    const px = Math.max(1, e ? Math.abs(e.sprite.scaleX) : 1);
+
+    // 1. Dissolve where he stood (a copy of him, as he is drawn now)
+    if (shape.length) {
+      const g = this.scene.add.graphics().setDepth(depth).setPosition(fx, fy);
+      const grains = shape.map((q) => {
+        const a = Math.atan2(q.dy + H * 0.5, q.dx) + rnd(-0.6, 0.6);
+        return { ...q, at: (1 - q.h / H) * MIST_DISSOLVE_MS * 0.55 + rnd(0, MIST_DISSOLVE_MS * 0.3), life: rnd(240, 380),
+          vx: Math.cos(a) * rnd(8, 22) + rnd(-6, 6), vy: -rnd(10, 26), sw: rnd(-1, 1), m: pick(MIST), puff: Math.random() < 0.06 };
+      });
+      const t0 = this.t;
+      this.emit(MIST_DISSOLVE_MS + 420, 16, () => {
+        const t = this.t - t0;
+        g.clear();
+        for (const q of grains) {
+          const k = (t - q.at) / q.life;
+          if (k >= 1) continue;
+          if (k <= 0) { g.fillStyle(q.c, 1).fillRect(q.dx - px / 2, q.dy - px / 2, px, px); continue; }
+          if (q.puff && k > 0.5) { q.puff = false; this.mistPuff(fx + q.dx * 0.6, fy + 2, fx, fy, rnd(900, 1400), 0.8); }
+          const s = k * q.life / 1000, sw = Math.sin(k * Math.PI * 1.5) * 5 * q.sw;
+          g.fillStyle(mix(q.c, q.m, Math.min(1, k * 2.2)), 1 - k * k)
+            .fillRect(q.dx + q.vx * s + sw - px / 2, q.dy + q.vy * s - px / 2, px, px);
+        }
+      });
+      this.scene.time.delayedCall(MIST_DISSOLVE_MS + 460, () => g.destroy());
+    }
+    // the cloud swells as he comes apart, then keeps rolling where he stood (the chilling mist that hurts)...
+    const t0 = this.t;
+    // (it builds up from his feet as the grains drift off, so he is still seen coming apart at first)
+    this.emit(MIST_DISSOLVE_MS, 30, () => {
+      const k = (this.t - t0) / MIST_DISSOLVE_MS;
+      for (let i = 0; i < Math.round(k * 5); i++) { const a = Math.random() * Math.PI * 2, d = Math.sqrt(Math.random()) * 16; this.mistPuff(fx + Math.cos(a) * d, fy + Math.sin(a) * d * 0.7 + 3, fx, fy, rnd(900, 1400), 0.6 + k * 0.6); }
+    });
+    this.glow(fx, fy, 10, 16, 0x9575cd, 360, 0.35);
+    // ...and lingers a moment, thinning out, before it is gone
+    this.emit(MIST_LINGER_MS, 50, () => {
+      const k = (this.t - t0) / MIST_LINGER_MS, n = k < 0.45 ? 3 : Math.random() < 1.6 * (1 - k) ? 1 : 0;
+      for (let i = 0; i < n; i++) { const a = Math.random() * Math.PI * 2, d = Math.sqrt(Math.random()) * 22; this.mistPuff(fx + Math.cos(a) * d, fy + Math.sin(a) * d * 0.7, fx, fy, rnd(1000, 1600), 1 - k * 0.3); }
+    });
+
+    // 2. The path: a ribbon of mist drifting from there to here
     for (let i = 0; i <= 14; i++) {
-      const t = i / 14, px = fx + (x - fx) * t, py = fy + (y - fy) * t;
-      this.scene.time.delayedCall(i * 18, () => { for (let k = 0; k < 3; k++) this.mistPuff(px + rnd(-4, 4), py + rnd(-3, 3), px, py, rnd(500, 900), 0.9); });
+      const t = i / 14, qx = fx + (x - fx) * t, qy = fy + (y - fy) * t;
+      this.scene.time.delayedCall(MIST_DISSOLVE_MS * 0.5 + i * 18, () => { for (let k = 0; k < 3; k++) this.mistPuff(qx + rnd(-4, 4), qy + rnd(-3, 3), qx, qy, rnd(600, 1000), 0.85); });
     }
-    if (e) for (let i = 1; i < 4; i++) this.ghost(e, fx + (x - fx) * i / 4, fy + (y - fy) * i / 4, 0xb39ddb, 0.22, 260);
-    // gathering back into him
-    for (let i = 0; i < 22; i++) {
-      const a = Math.random() * Math.PI * 2, d = rnd(14, 24), T = rnd(0.25, 0.4);
-      this.p(x + Math.cos(a) * d, y + Math.sin(a) * d * 0.7, rnd(4, 14), pick([0xc9c2d9, 0xa99fc0, 0xe0dbea]), { vx: -Math.cos(a) * d / T, vy: -Math.sin(a) * d * 0.7 / T, life: T * 1000, size: pick([3, 4, 5]), size1: 2, alpha: 0.45, add: false, depth: DEPTH - 1 });
-    }
-    this.scene.time.delayedCall(300, () => this.glow(x, y, 8, 12, 0xb39ddb, 260, 0.5));
+
+    // 3. Reform: the mist gathers where he lands and he is rebuilt from it, feet first
+    const reformAt = MIST_REFORM_AT_MS - 140;
+    this.scene.time.delayedCall(reformAt, () => {
+      for (let i = 0; i < 18; i++) { const a = Math.random() * Math.PI * 2, d = rnd(10, 20); this.mistPuff(x + Math.cos(a) * d, y + Math.sin(a) * d * 0.7, x, y, rnd(500, 800), 0.9); }
+    });
+    if (shape.length) this.scene.time.delayedCall(MIST_REFORM_AT_MS, () => {
+      // rebuilt into the pose he shows when he appears (his hidden frame by now), else the one he left in
+      const me = e && this.ent(ev.id);
+      const now = me ? this.heroPixels(me) : [];
+      const to = now.length ? now : shape, H2 = to.reduce((m, q) => Math.max(m, q.h), 1);
+      const g = this.scene.add.graphics().setDepth(me ? me.sprite.depth + 0.5 : depth).setPosition(x, y);
+      const grains = to.map((q) => {
+        const a = Math.random() * Math.PI * 2, d = rnd(8, 20);
+        return { ...q, at: (q.h / H2) * MIST_REFORM_MS * 0.45 + rnd(0, MIST_REFORM_MS * 0.2), life: rnd(140, 220),
+          ox: Math.cos(a) * d, oy: Math.sin(a) * d * 0.6 + rnd(0, 6), m: pick(MIST) };
+      });
+      const t1 = this.t, ms = MIST_REVEAL_MS - MIST_REFORM_AT_MS;
+      this.emit(ms, 16, () => {
+        const t = this.t - t1;
+        g.clear();
+        for (const q of grains) {
+          const k = Math.min(1, (t - q.at) / q.life);
+          if (k <= 0) continue;
+          const ease = 1 - (1 - k) * (1 - k), sw = (1 - ease);
+          g.fillStyle(mix(q.m, q.c, ease), 0.35 + 0.65 * ease)
+            .fillRect(q.dx + q.ox * sw - px / 2, q.dy + q.oy * sw - px / 2, px, px);
+        }
+      });
+      this.scene.time.delayedCall(ms + 20, () => g.destroy());
+    });
+    else this.scene.time.delayedCall(MIST_REFORM_AT_MS, () => this.glow(x, y, 8, 12, 0xb39ddb, 260, 0.5));
+    // a few wisps stay round his feet a moment after he is whole again
+    this.scene.time.delayedCall(MIST_REVEAL_MS - 60, () => {
+      const t2 = this.t;
+      this.emit(900, 70, () => {
+        if (Math.random() > 1.2 * (1 - (this.t - t2) / 900)) return;
+        const a = Math.random() * Math.PI * 2, d = rnd(6, 14);
+        this.mistPuff(x + Math.cos(a) * d, y + Math.sin(a) * d * 0.7, x, y, rnd(800, 1200), 0.75);
+      });
+    });
   }
 
   private smoke(x: number, y: number, r: number, n: number) {
