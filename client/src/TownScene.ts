@@ -6,7 +6,7 @@ import { chargeIcon } from "./chargeIcon";
 import { leaving, noteBuild, reconnectSoon, returnToStart, takeCarried, upgradeAnnounced } from "./reconnect";
 import { Client, getStateCallbacks, Room } from "colyseus.js";
 import { BOSS, ELITE, InputState, MERGE, MOBS, type MobKind, MAP_H, MAP_W, regenFromStamina, TICK_RATE, TILE } from "../../shared/constants";
-import { CLASSES, ClassKind, ENERGY, MAX_LEVEL, xpForLevel } from "../../shared/classes";
+import { CLASSES, ClassKind, MAX_LEVEL, xpForLevel } from "../../shared/classes";
 import { canPay, MANA, manaRegen, maxManaFor, skillCost, unpackMana } from "../../shared/mana";
 import { nextSize, potionAmount, PotionKind, potionName, POTION_SIZES, total, unpackPotions } from "../../shared/potions";
 import { GROUND, areaAt, isSafeZone } from "../../shared/map";
@@ -2868,10 +2868,10 @@ export class TownScene extends Phaser.Scene {
       sfxFrame(this.me, this.entities as any);
       const cls = mine.cls as ClassKind;
       const cdm = cooldownMult(cls, { sta: mine.sta, str: mine.str, mag: mine.mag, dex: mine.dex ?? 0 }, mine.talents);
-      // Top-left bars (resourceBars.ts): red HP, blue Mana (spells, shared/mana.ts), gold Stamina (dodge roll and physical skills), green XP
+      // Top-left bars (resourceBars.ts): red HP, blue Mana (spells, shared/mana.ts), green XP
       const mn = unpackMana(mine.mp);
       (this.resBars ??= new ResourceBars(document.getElementById("hud")!)).update({
-        level: mine.level, hp: mine.hp, maxHp: mine.maxHp, mp: mn.mana, maxMp: mn.maxMana, st: mine.energy, maxSt: ENERGY.max,
+        level: mine.level, hp: mine.hp, maxHp: mine.maxHp, mp: mn.mana, maxMp: mn.maxMana,
         xpFrac: mine.level >= MAX_LEVEL ? 1 : (mine.xp - cur) / Math.max(1, next - cur),
         xp: mine.xp - cur, xpNeed: mine.level >= MAX_LEVEL ? undefined : next - cur,
       });
