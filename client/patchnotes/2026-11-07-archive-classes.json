@@ -1,5 +1,6 @@
 {
   "date": "2026-11-07",
+  "pr": 290,
   "title": "Vampire and Summoner only",
   "changes": [
     "Only the Vampire and the Summoner can be played for now. The Knight, Ninja, Wizard, Archer and Barbarian are archived.",
