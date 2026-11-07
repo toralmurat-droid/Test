@@ -1,5 +1,6 @@
 {
   "date": "2026-11-07",
+  "pr": 338,
   "title": "Hero light without the flame",
   "changes": [
     "Your hero's light at night and underground no longer shows a small flame beside you; the warm pool of light stays the same."
