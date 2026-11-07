@@ -1,3 +1,4 @@
+import { uiScale } from "./worldscale";
 import { MAP_H, MAP_W, TILE, WORLD_H } from "../../shared/constants";
 import { floorAt, SEA_END } from "../../shared/dungeon";
 import { AREAS, EMPTY, GROUND, OBJECTS } from "../../shared/map";
@@ -234,7 +235,8 @@ export class Minimap {
     // Only the explored part (plus a fog margin) is framed, so the map grows as the world is discovered.
     // The frame keeps a fixed size; the explored part (plus a fog margin) is zoomed to fill it, so the map
     // zooms out as the world is discovered and never shows how big the world is.
-    const cw = Math.max(240, Math.min(1100, window.innerWidth - 32 - FRAME * 6 - 24)), ch = Math.max(180, window.innerHeight - 32 - FRAME * 6 - 90);
+    const z = uiScale(), vw = window.innerWidth / z, vh = window.innerHeight / z; // the map overlay is zoomed (worldscale.ts)
+    const cw = Math.max(240, Math.min(1100, Math.round(vw - 32 - FRAME * 6 - 24))), ch = Math.max(180, Math.round(vh - 32 - FRAME * 6 - 90));
     if (this.big.width !== cw || this.big.height !== ch) {
       this.big.width = cw; this.big.height = ch;
       this.big.style.width = `${cw}px`; this.big.style.height = `${ch}px`;

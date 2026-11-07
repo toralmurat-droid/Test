@@ -3,7 +3,12 @@
 
 import { icon } from "./pixelicons";
 
-export interface GameMenuItem { id: string; label: string; key?: string; onClick: () => void }
+export interface GameMenuChoice { value: string; label: string; on: boolean; dim?: boolean; wide?: boolean }
+/** An entry; with `choices` it is a dropdown: clicking opens the list under it and the menu stays open. */
+export interface GameMenuItem {
+  id: string; label: string; key?: string; onClick: () => void;
+  choices?: () => GameMenuChoice[]; note?: string; onChoose?: (value: string) => void;
+}
 
 export class GameMenu {
   private el: HTMLElement;
@@ -25,7 +30,14 @@ export class GameMenu {
       const b = (ev.target as HTMLElement).closest("button") as HTMLButtonElement | null;
       if (!b) return;
       b.blur();
+      if (b.dataset.choice !== undefined) {
+        const it = items.find((i) => i.id === b.closest<HTMLElement>(".gmdrop")?.dataset.for);
+        it?.onChoose?.(b.dataset.choice);
+        this.closeDrop();
+        return;
+      }
       const it = items.find((i) => i.id === b.dataset.item);
+      if (it?.choices) { this.toggleDrop(it, b); return; }
       this.close();
       it?.onClick();
     });
@@ -52,8 +64,29 @@ export class GameMenu {
     if (b) b.innerHTML = html;
   }
 
+  private drop?: HTMLElement;
+  private toggleDrop(it: GameMenuItem, b: HTMLElement) {
+    const was = this.drop?.dataset.for;
+    this.closeDrop();
+    if (was === it.id) return;
+    const d = document.createElement("div");
+    d.className = "gmdrop";
+    d.dataset.for = it.id;
+    d.innerHTML = it.choices!().map((c) =>
+      `<button data-choice="${c.value}" class="${[c.on ? "on" : "", c.dim ? "dim" : "", c.wide ? "wide" : ""].join(" ").trim()}">${c.label}</button>`).join("") +
+      (it.note ? `<small class="gmnote">${it.note}</small>` : "");
+    b.classList.add("open");
+    b.after(d);
+    this.drop = d;
+  }
+  private closeDrop() {
+    this.drop?.previousElementSibling?.classList.remove("open");
+    this.drop?.remove();
+    this.drop = undefined;
+  }
+
   get open() { return !this.el.hidden; }
   show() { this.el.hidden = false; }
-  close() { this.el.hidden = true; }
+  close() { this.el.hidden = true; this.closeDrop(); }
   toggle() { if (this.open) this.close(); else this.show(); }
 }

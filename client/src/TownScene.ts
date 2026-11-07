@@ -26,7 +26,7 @@ import { movesSheet, SkillMoves } from "./skillMoves";
 import { displayGrid } from "./tileset";
 import { CRAWL_CROP, heroTexture, itemTexture, potionTex, makeTileset, MOB_LOOK, mobTexture, preloadPaintedMobs } from "./textures";
 import { Minimap } from "./minimap";
-import { cycleWorldScale, onWorldScale, worldScaleName } from "./worldscale";
+import { SCREEN_SIZES, isSharp, onWorldScale, pct, setWorldScale, uiScale, worldScale, worldScaleName, worldScaleSetting } from "./worldscale";
 import { GameMenu } from "./gamemenu";
 import { showMusicPanel, musicPanelOpen } from "./music";
 import { DayDial } from "./daydial";
@@ -492,15 +492,22 @@ export class TownScene extends Phaser.Scene {
       { id: "news", label: `${icon("scroll")}News`, key: "N", onClick: toggleNews },
       { id: "barnums", label: `${icon("potion")}Bar numbers on / off`, onClick: () => this.resBars?.toggleNumbers() },
       { id: "keys", label: "", onClick: () => { setKeyMode(keyMode() === "classic" ? "spells" : "classic"); this.gameMenu?.show(); } },
-      { id: "worldsize", label: "", onClick: () => { cycleWorldScale(); this.gameMenu?.show(); } },
+      { id: "worldsize", label: "", onClick: () => {},
+        // Screen size dropdown (client/src/worldscale.ts): world, menus and bars together
+        choices: () => [
+          { value: "auto", label: `Auto: fits window (${pct(worldScale())})`, on: worldScaleSetting() === "auto", wide: true },
+          ...SCREEN_SIZES.map((k) => ({ value: String(k), label: pct(k), on: worldScaleSetting() === k, dim: !isSharp(k) })),
+        ],
+        note: "Bright sizes keep pixels sharp",
+        onChoose: (v) => setWorldScale(v === "auto" ? "auto" : Number(v)) },
       { id: "quit", label: `${icon("fire")}Save and return to start screen`, onClick: () => void this.saveAndQuit() },
     ]);
     // Keyboard layout setting (client/src/keymode.ts): its entry says which one is on; clicking switches
     const keysLabel = () => this.gameMenu?.setLabel("keys", `${icon("scroll")}Keyboard: ${keyModeName()} <small>click to switch</small>`);
     keysLabel();
     onKeyMode(keysLabel);
-    // World size on screen (client/src/worldscale.ts): Auto fits the window, clicking steps through the crisp sizes
-    const sizeLabel = () => this.gameMenu?.setLabel("worldsize", `${icon("star")}World size: ${worldScaleName()} <small>click to switch</small>`);
+    // Screen size (client/src/worldscale.ts): its entry shows the size in use
+    const sizeLabel = () => this.gameMenu?.setLabel("worldsize", `${icon("star")}Screen size: ${worldScaleName()} <small>choose</small>`);
     sizeLabel();
     onWorldScale(sizeLabel);
     this.patchNotes = new PatchNotesPanel(toggleNews);
@@ -2142,10 +2149,10 @@ export class TownScene extends Phaser.Scene {
     const cell = document.querySelector(`#hotbar [data-slot="${n}"]`) as HTMLElement | null;
     const hud = document.getElementById("hud")!.getBoundingClientRect();
     if (cell) {
-      const r = cell.getBoundingClientRect();
+      const r = cell.getBoundingClientRect(), z = uiScale(); // screen px -> the zoomed HUD's px
       const w = pick.offsetWidth;
-      pick.style.left = `${Math.max(8, Math.min(hud.width - w - 8, r.left - hud.left + r.width / 2 - w / 2))}px`;
-      pick.style.bottom = `${hud.bottom - r.top + 6}px`;
+      pick.style.left = `${Math.max(8, Math.min(hud.width / z - w - 8, (r.left - hud.left + r.width / 2) / z - w / 2))}px`;
+      pick.style.bottom = `${(hud.bottom - r.top) / z + 6}px`;
     }
   }
 
@@ -2169,9 +2176,9 @@ export class TownScene extends Phaser.Scene {
     const cell = document.querySelector(`#hotbar [data-slot="${side === "left" ? "L" : "R"}"]`) as HTMLElement | null;
     const hud = document.getElementById("hud")!.getBoundingClientRect();
     if (cell) {
-      const r = cell.getBoundingClientRect();
-      pick.style.left = `${Math.max(8, Math.min(hud.width - pick.offsetWidth - 8, r.left - hud.left))}px`;
-      pick.style.bottom = `${hud.bottom - r.top + 6}px`;
+      const r = cell.getBoundingClientRect(), z = uiScale(); // screen px -> the zoomed HUD's px
+      pick.style.left = `${Math.max(8, Math.min(hud.width / z - pick.offsetWidth - 8, (r.left - hud.left) / z))}px`;
+      pick.style.bottom = `${(hud.bottom - r.top) / z + 6}px`;
     }
   }
 
@@ -2401,7 +2408,7 @@ export class TownScene extends Phaser.Scene {
     const feed = document.getElementById("feed")!;
     // The feed sits under the quest tracker on the right, never behind it (it was hidden there)
     const qt = document.getElementById("questtracker"), r = qt && qt.offsetParent ? qt.getBoundingClientRect() : undefined;
-    feed.style.top = r && r.height ? `${Math.round(r.bottom + 8)}px` : "";
+    feed.style.top = r && r.height ? `${Math.round(r.bottom / uiScale() + 8)}px` : ""; // the HUD is zoomed (worldscale.ts)
     feed.prepend(el);
     setTimeout(() => el.remove(), 5000);
   }

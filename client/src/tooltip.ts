@@ -7,6 +7,7 @@
  * - HUD parts that redraw while hovered (the skill bar during cooldowns) keep their tip: it follows whatever is
  *   under the mouse again.
  */
+import { uiScale } from "./worldscale";
 
 let tip: HTMLDivElement | null = null;
 let target: HTMLElement | null = null;
@@ -52,13 +53,14 @@ function render() {
   }
   tip.style.display = "block";
   // Above the element, centred, kept on screen; below it when there is no room above
-  const r = target.getBoundingClientRect();
-  const w = tip.offsetWidth, h = tip.offsetHeight;
-  const x = Math.round(Math.min(Math.max(4, r.left + r.width / 2 - w / 2), innerWidth - w - 4));
-  let y = Math.round(r.top - h - 6);
-  if (y < 4) y = Math.round(Math.min(r.bottom + 6, innerHeight - h - 4));
-  tip.style.left = `${x}px`;
-  tip.style.top = `${y}px`;
+  // The tip is zoomed with the HUD (Screen size, worldscale.ts): measure in screen px, place in its own px
+  const z = uiScale(), r = target.getBoundingClientRect();
+  const w = tip.offsetWidth * z, h = tip.offsetHeight * z;
+  const x = Math.min(Math.max(4, r.left + r.width / 2 - w / 2), innerWidth - w - 4);
+  let y = r.top - h - 6;
+  if (y < 4) y = Math.min(r.bottom + 6, innerHeight - h - 4);
+  tip.style.left = `${Math.round(x / z)}px`;
+  tip.style.top = `${Math.round(y / z)}px`;
 }
 
 function show(el: HTMLElement) {
