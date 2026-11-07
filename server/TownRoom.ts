@@ -4571,6 +4571,8 @@ export class TownRoom extends Room<TownState> {
     if (t.hp > 0) { afterHit(this.host, opts.from, tid, opts); return false; }
     t.dead = true;
     t.guarding = false;
+    // No magic in Oakvale: dying pays for it, the hero comes back a free citizen (villagers and watch stand down)
+    this.setOutlaw(tid, t, false);
     // Dying wears the gear (shared/upkeep.ts): it gives less until the smith repairs it
     if (t.wear < WEAR.max) {
       t.wear = Math.min(WEAR.max, t.wear + WEAR.perDeath);
@@ -4726,6 +4728,14 @@ export class TownRoom extends Room<TownState> {
       if (p) this.summon(id, GOLEM_OF[attuneOf(p.attune)], undefined, power);
     },
     colossus: (id, power, ms) => { this.summonColossus(id, power, ms); },
+    isNight: (id) => {
+      const u = this.state.players.get(id) ?? this.state.mobs.get(id);
+      if (!u) return false;
+      if (isUndeadNight(worldDayFrac(Date.now()))) return true;
+      let inside = false;
+      this.state.fields.forEach((f) => { if (!inside && f.inst.def.night && Math.hypot(u.x - f.x, u.y - f.y) <= f.r) inside = true; });
+      return inside;
+    },
     attune: (id) => {
       const p = this.state.players.get(id);
       if (!p) return;

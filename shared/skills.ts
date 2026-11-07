@@ -18,6 +18,7 @@ import type { StatKind } from "./powers";
  */
 
 export type TalentEffect = "dmg" | "skill" | "crit" | "lifesteal" | "hp" | "armor" | "speed" | "cdr" | "regen" | "mana"
+  | "night" // vampire Child of the Night: stronger at night (nightBuff)
   | "summonHp" | "summonDmg" // the Summoner's golems (shared/summons.ts): +% life, +% damage
   | "upgrade"; // an upgrade node (SkillDef.mod): changes one spell instead of giving a bonus
 
@@ -111,6 +112,8 @@ export interface FieldDef extends HitEffects {
    * enemy dies or gets further than `breakAt` px.
    */
   link?: { range: number; breakAt: number };
+  /** Nightfall: it is night inside (night passives such as Child of the Night count it as night). */
+  night?: boolean;
 }
 
 export interface BuffDef {
@@ -517,17 +520,19 @@ const S: Record<ClassKind, SkillDef[]> = <Record<ClassKind, SkillDef[]>><unknown
       desc: "Dissolve into mist and drift ahead, untouchable for a moment. The mist you leave behind chills whoever stands in it.",
       move: { kind: "blink", dist: 64, invulnMs: 400 }, areas: [{ r: 24, dmg: 10, slowMs: 900, atStart: true, look: "smoke" }] },
     { id: "v_bats", name: "Bat Swarm", type: "Attack", branch: 1, row: 1, style: "shadow", cd: 4000, mana: 14,
-      desc: "Five bats burst from your cloak and bite whatever they reach, bringing a little blood back to you.",
-      shots: { kind: "bat", n: 5, spread: 50, speed: 210, range: 140, radius: 4, dmg: 16, drain: 10, kb: 0.2 } },
+      desc: "A swarm of bats bursts from your cloak, flutters ahead in a tight cloud and bites whatever it reaches, bringing a little blood back to you.",
+      shots: { kind: "bat", n: 8, spread: 22, speed: 200, range: 115, radius: 3, dmg: 10, drain: 10, kb: 0.1 } },
     { id: "v_gaze", name: "Mesmerize", type: "War cry", branch: 1, row: 2, style: "shadow", cd: 14000, mana: 15,
       desc: "Fix everyone around you with a red stare that drinks from them: monsters flee in dread, heroes falter, and all of them are weakened for 3s.",
       cry: { r: 64, dmg: 18, drain: 15, fearMs: 1600, weakMs: 3000, look: "nova" } },
+    { id: "v_nightborn", name: "Child of the Night", type: "Passive", branch: 1, row: 2, style: "shadow", passive: { effect: "night", perRank: 6 },
+      desc: "The dark is yours. At night, and inside a Nightfall, you hit harder, heal from the damage you deal and move faster." },
     { id: "v_cloak", name: "Cloak of Night", type: "Aura", branch: 1, row: 3, style: "shadow", cd: 18000, mana: 25,
       desc: "Wrap yourself in living darkness for 8s: it gnaws at enemies close to you, slows them and feeds you; you take 10% less damage.",
       field: { kind: "nightcloak", r: 44, ms: 8000, tickMs: 600, follow: true, dmg: 13, drain: 20, slowMs: 500 }, buff: { ms: 8000, armor: 10 } },
     { id: "v_nightfall", name: "Nightfall", type: "Ultimate", branch: 1, row: 4, style: "shadow", cd: 24000, mana: 40, chargeMs: 500,
-      desc: "Call down a starless night for 5s: the darkness saps every enemy inside and feeds you, and you hunt faster, healing on every hit.",
-      field: { kind: "nightfall", r: 72, ms: 5000, tickMs: 500, dmg: 14, drain: 15, weakMs: 800, slowMs: 600 }, buff: { ms: 5000, lifesteal: 8, speed: 15 } },
+      desc: "Call down a starless night on the land around you for 10s: it is night there (Child of the Night wakes), the darkness saps every enemy inside and feeds you, and for 5s you hunt faster, healing on every hit.",
+      field: { kind: "nightfall", r: 96, ms: 10000, tickMs: 500, dmg: 8, drain: 15, weakMs: 800, slowMs: 600, night: true }, buff: { ms: 5000, lifesteal: 8, speed: 15 } },
 
     // Fang: the blade (Strength, Stamina)
     { id: "v_rend", name: "Crimson Slash", type: "Attack", branch: 2, row: 0, style: "blood", windMs: 60, cd: 4500, cost: 20,
@@ -664,7 +669,7 @@ const TREE: Record<string, Shape> = {
   v_link: [1, undefined, ["mag", 2]], v_boil: [4, "v_link", ["mag", 2]], v_exsang: [11, "v_boil", ["mag", 2.5]],
   v_pact: [7, "v_link"], v_tide: [22, "v_pact", ["mag", 2.5]],
   // Vampire · Night: Mesmerize hangs off the mist; the bats grow into the cloak and Nightfall
-  v_mist: [1], v_gaze: [6, "v_mist"], v_bats: [4, "v_mist", ["mag", 2]], v_cloak: [10, "v_bats", ["mag", 2]],
+  v_mist: [1], v_gaze: [6, "v_mist"], v_nightborn: [8, "v_gaze"], v_bats: [4, "v_mist", ["mag", 2]], v_cloak: [10, "v_bats", ["mag", 2]],
   v_nightfall: [21, "v_cloak", ["mag", 2.5]],
   // Vampire · Fang: Thirst leads to the Hunger (dead end); the slash grows into the Pounce and the Frenzy
   v_rend: [1, undefined, ["str", 2]], v_thirst: [3, "v_rend"], v_hunger: [8, "v_thirst"], v_pounce: [9, "v_rend", ["str", 2]],
@@ -831,6 +836,9 @@ export function talentBonus(cls: ClassKind, r: Ranks, effect: TalentEffect): num
   for (const s of S[cls]) if (s.passive?.effect === effect) v += s.passive.perRank * Math.min(MAX_RANK, rankOf(r, s.id));
   return v;
 }
+/** The buff Child of the Night gives at night, from its total passive value `v` (perRank x rank). */
+export const nightBuff = (v: number) => ({ dmg: v, lifesteal: Math.round(v / 3), speed: Math.round(v / 2) });
+
 /** % of max HP that every skill costs on top of its own price (learned passives with passive.blood: Blood Pact). */
 export function passiveBlood(cls: ClassKind, r: Ranks | undefined): number {
   let v = 0;
@@ -851,6 +859,7 @@ export const EFFECT_TEXT: Record<TalentEffect, (v: number) => string> = {
   cdr: (v) => `-${v}% skill cooldowns`,
   regen: (v) => `+${v}% max HP regen per second`,
   mana: (v) => `+${v}% mana regen`,
+  night: (v) => { const b = nightBuff(v); return `At night: +${b.dmg}% damage, heal ${b.lifesteal}% of damage dealt, +${b.speed}% move speed`; },
   summonHp: (v) => `+${v}% golem life`,
   summonDmg: (v) => `+${v}% golem damage`,
   upgrade: () => "",

@@ -558,6 +558,8 @@ export class Details {
   private fireflies?: (dark: number) => void;
   /** The local hero is in the Mawdeep (dungeon.ts draws the dark there): no day/night tint, no lanterns. */
   underground = false;
+  /** A vampire's Nightfall close by (SkillFx.nightK): it is night here whatever the clock says (0..1). */
+  nightOverride = 0;
 
   private layers: { update(view: Phaser.Geom.Rectangle): void }[] = [];
 
@@ -784,7 +786,7 @@ export class Details {
 
   update(now: number, dtMs: number) {
     const ph = this.underground ? { dark: 0, warm: 0 } : dayPhase(dayTime(Date.now()));
-    const { dark, warm } = ph;
+    const dark = this.underground ? 0 : Math.max(ph.dark, this.nightOverride), warm = ph.warm * (1 - this.nightOverride);
     this.night.setAlpha(dark * 0.85);
     this.dusk.setAlpha(warm * 0.12);
     this.windows.setAlpha(Math.min(1, dark * 1.2) * 0.9);
