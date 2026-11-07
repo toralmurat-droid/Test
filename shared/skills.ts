@@ -77,7 +77,7 @@ export interface ShotDef extends HitEffects {
   /** Each rank above 1 adds this many projectiles (`n`, the fan widening with them) and/or extra targets passed through. */
   perRank?: { n?: number; pierce?: number };
   /** A ragged swarm, not a neat fan (Rat Plague): each shot's speed varies by up to ±`speed` (share) and its angle by ±`deg`. */
-  jitter?: { speed: number; deg: number };
+  jitter?: { speed: number; deg: number; range?: number };
   kind: string; // projectile look (client)
   n?: number; spread?: number; // n shots fanned over `spread` degrees
   lanes?: number; // or n shots side by side, this many px apart
@@ -568,7 +568,7 @@ const S: Record<ClassKind, SkillDef[]> = <Record<ClassKind, SkillDef[]>><unknown
       move: { kind: "blink", dist: 110, invulnMs: 450 }, areas: [{ r: 24, dmg: 10, slowMs: 900, atStart: true, look: "smoke" }] },
     { id: "v_bats", name: "Bat Swarm", type: "Attack", branch: 1, row: 1, style: "shadow", cd: 4000, mana: 14,
       desc: "A swarm of bats pours out of your cloak and spreads ahead, biting whatever it reaches and bringing a little blood back to you: 6 bats, 2 more each rank. More bats stay behind and whirl round you for 3s as a living shield: they bite anyone close and you take 10% less damage.",
-      shots: { kind: "bat", n: 6, perRank: { n: 2 }, spread: 26, speed: 170, range: 120, radius: 3, dmg: 10, drain: 10, kb: 0.1 },
+      shots: { kind: "bat", n: 6, perRank: { n: 2 }, spread: 26, jitter: { speed: 0.35, deg: 9, range: 0.25 }, speed: 170, range: 120, radius: 3, dmg: 10, drain: 10, kb: 0.1 },
       field: { kind: "batring", r: 26, ms: 3000, tickMs: 500, follow: true, dmg: 7, drain: 20 }, buff: { ms: 3000, armor: 10 } },
     { id: "v_gaze", name: "Charm", type: "Attack", branch: 1, row: 2, style: "shadow", cd: 16000, mana: 18, target: "dir",
       desc: "Catch the eye of the foe nearest your aim. A monster falls under your spell and fights at your side for 5s, then wakes up. Heroes, bosses and elites are too strong-willed: they falter instead, dazed and weakened for 2s.",
@@ -586,9 +586,9 @@ const S: Record<ClassKind, SkillDef[]> = <Record<ClassKind, SkillDef[]>><unknown
       field: { kind: "nightfall", r: 96, ms: 10000, tickMs: 500, dmg: 8, drain: 15, weakMs: 1200, slowMs: 1000, night: true }, buff: { ms: 5000, lifesteal: 8, speed: 15 } },
 
     // Fang: the blade and the hunt (Strength, Stamina)
-    { id: "v_rend", name: "Crimson Slash", type: "Attack", branch: 2, row: 0, style: "blood", windMs: 60, cd: 4500, cost: 20,
+    { id: "v_rend", name: "Crimson Slash", type: "Attack", branch: 2, row: 0, style: "blood", windMs: 60, cost: 30,
       desc: "A quick, cruel slash: the wound bleeds, and you drink 10% of the damage.",
-      areas: [{ r: 26, ahead: 12, wpn: 2.3, burn: [5, 2000], drain: 10, kb: 1.2, look: "slash" }] },
+      areas: [{ r: 26, ahead: 12, wpn: 1.5, burn: [5, 2000], drain: 10, kb: 1.2, look: "slash" }] },
     { id: "v_thirst", name: "Thirst", type: "Enchant", branch: 2, row: 1, style: "blood", cd: 11000, cost: 15, mana: 10,
       desc: "Your blade thirsts for 7s: every hit, your skills too, makes them bleed, and you heal 8% of the damage you deal. Your bloodline shares it: group allies near you heal 4% of theirs.",
       buff: { ms: 7000, lifesteal: 8, onHit: { burn: [3, 2000] }, group: 140 } },

@@ -3,6 +3,7 @@ import { quake } from "./camfx";
 import { ISO } from "./isoflag";
 import { AreaLook, BLOOD_RITE_MS, FxStyle, impactMs, LEAP_MS, RAIN_FALL_MS, skillById, SkillDef, SWORD_FALL_MS } from "../../shared/skills";
 import { paintSigil, ICON } from "./skillArt";
+import { MIST_DISSOLVE_MS, MIST_LINGER_MS, MIST_REFORM_AT_MS, MIST_REFORM_MS, MIST_REVEAL_MS } from "./skillMoveData";
 
 /**
  * Skill visuals (shared/skills.ts): particles, light, lightning, falling blades and meteors, auras, enchanted
@@ -33,7 +34,11 @@ export const PALETTE: Record<FxStyle, number[]> = {
 /** Effect strength by tree row (Lv 1 .. Lv 10). */
 const TIER = [1, 1.35, 1.8, 2.4, 3.2];
 const DEPTH = 9500;
-const ARROW_DROP_MS = 150; // one arrow of a rain falling from the sky
+const ARROW_DROP_MS = 150;
+/** Exsanguinate: how long the stolen blood streams in, how long a drop flies; the last drops land (and the blood bursts back up into the cloud) at SIPHON_END_MS. */
+/** Exsanguinate: height of the blood cloud over the vampire. */
+const BLOOD_CLOUD_Z = 44;
+const SIPHON_STREAM_MS = 900, SIPHON_FLY_MS = 420, SIPHON_END_MS = SIPHON_STREAM_MS + SIPHON_FLY_MS * 0.8; // one arrow of a rain falling from the sky
 const GROUND_DEPTH = 9400;
 
 interface P {
@@ -43,7 +48,10 @@ interface P {
 
 interface Emitter { until: number; next: number; every: number; fn: () => void }
 
-export interface FxEntity { sprite: Phaser.GameObjects.Sprite; top: number; state: any; hero?: string }
+export interface FxEntity {
+  sprite: Phaser.GameObjects.Sprite; top: number; state: any; hero?: string;
+  gear?: { each(fn: (s: Phaser.GameObjects.Sprite) => void): void }; // worn gear overlays (gear.ts GearLayer)
+}
 
 const pick = <T>(a: T[]) => a[Math.floor(Math.random() * a.length)];
 const rnd = (a: number, b: number) => a + Math.random() * (b - a);
@@ -297,7 +305,7 @@ export class SkillFx {
         if (!e) break;
         // Flash on the hero; buildups gather energy for the charge time
         this.glow(e.sprite.x, e.sprite.y, e.top * 0.5, 10 + 4 * tier, pal[2], 260, 0.6);
-        this.sigil(ev.id, ev.s, tier, s?.row === 4);
+        if (ev.s !== "v_exsang") this.sigil(ev.id, ev.s, tier, s?.row === 4); // Exsanguinate: its blood cloud gathers there instead
         if (ev.stacks > 0) this.burst(e.sprite.x, e.sprite.y, e.top * 0.6, style, 6 * ev.stacks, 60);
         if (ev.charge > 0) this.gather(ev.id, style, ev.charge, tier);
         break;
@@ -494,7 +502,7 @@ export class SkillFx {
     const pts: [number, number][] = ev.pts ?? [];
     const me0 = this.ent(ev.id);
     if (!me0 || !pts.length) return;
-    const STREAM = 900, FLY = 420, G = 300;
+    const STREAM = SIPHON_STREAM_MS, FLY = SIPHON_FLY_MS, G = 300;
     for (const [vx, vy] of pts) {
       this.burst(vx, vy, 10, "blood", 16, 70, 420);
       this.glow(vx, vy, 8, 12, 0xb71c1c, 300, 0.7);
@@ -504,11 +512,11 @@ export class SkillFx {
       if (!me) return;
       const hx = me.sprite.x, hy = me.sprite.y, hz = me.top * 0.55;
       for (const [vx, vy] of pts) {
-        for (let k = 0; k < 4; k++) {
+        for (let k = 0; k < 6; k++) {
           const T = FLY * rnd(0.85, 1.15) / 1000;
           const x0 = vx + rnd(-3, 3), y0 = vy + rnd(-2, 2), z0 = rnd(6, 14);
           const vz = (hz - z0 + (G * T * T) / 2) / T; // an arc that lands on the vampire's chest after T
-          this.p(x0, y0, z0, pick(PALETTE.blood.slice(1, 5)), { vx: (hx - x0) / T, vy: (hy - y0) / T, vz, g: G, life: T * 1000, size: pick([2, 2, 3, 3]), size1: 1.5, add: false });
+          this.p(x0, y0, z0, pick(PALETTE.blood.slice(1, 5)), { vx: (hx - x0) / T, vy: (hy - y0) / T, vz, g: G, life: T * 1000, size: pick([2, 3, 3, 4]), size1: 2, add: false });
         }
       }
       // the vortex round the vampire
@@ -518,13 +526,14 @@ export class SkillFx {
         this.p(hx + Math.cos(b) * rr, hy + Math.sin(b) * rr * 0.6, rnd(2, me.top), pick(PALETTE.blood), { vx: -Math.sin(b) * 90, vy: Math.cos(b) * 50, vz: rnd(10, 30), life: 220, size: pick([1, 2]), size1: 0 });
       }
     });
-    this.scene.time.delayedCall(STREAM + FLY * 0.8, () => {
+    this.scene.time.delayedCall(SIPHON_END_MS, () => {
       const me = this.ent(ev.id);
       if (!me) return;
       this.glow(me.sprite.x, me.sprite.y, me.top * 0.5, 18 + 3 * pts.length, 0xe63946, 450, 0.8);
       this.ring(me.sprite.x, me.sprite.y, 34, "blood", 44, { life: 420, up: 16, size: 2 });
       this.rise(me.sprite.x, me.sprite.y, 10, "blood", 26, me.top + 16, 650);
-      this.pillar(me.sprite.x, me.sprite.y, "blood", 70, 7, 450);
+      // the blood bursts back up out of him into the cloud over his head (bloodRite), which then breaks up
+      this.bloodBeam(me.sprite.x, me.sprite.y, BLOOD_CLOUD_Z + 4, 16, 560);
       this.flashSprite(me, 0xe63946);
     });
   }
@@ -538,7 +547,7 @@ export class SkillFx {
   private bloodRite(ev: any, r: number) {
     const T = BLOOD_RITE_MS, start = this.t;
     const SPILL = 0.32, LIFT = 0.82; // phases, as parts of T: spill, lift into the orb, then the orb pulls in
-    const H = 42; // the orb's height over the ground (well over the head)
+    const H = BLOOD_CLOUD_Z; // the cloud's height over the ground (well over the head)
     const dark = PALETTE.blood.slice(2, 5), bright = PALETTE.blood.slice(1, 4);
     const pool: [number, number][] = []; // spots of spilled blood round the feet (offsets from the vampire)
     for (let i = 0; i < 14; i++) { const a = (i / 14) * Math.PI * 2 + rnd(-0.2, 0.2), d = rnd(10, 26); pool.push([Math.cos(a) * d, Math.sin(a) * d * 0.8]); }
@@ -568,13 +577,25 @@ export class SkillFx {
         }
         // the pool drains away into them
         for (let i = 0; i < 2; i++) { const [ox, oy] = pick(pool); this.p(x + ox, y + oy, 1, pick(dark), { vx: -ox * 1.5, vy: -oy * 1.5, vz: 30, life: 260, size: 2, size1: 1, add: false }); }
-        this.orb(x, y, H, 3 + u * 9, k);
       } else {
-        // The orb pulls in on itself, beating faster, before it breaks
-        const u = (k - LIFT) / (1 - LIFT);
-        this.orb(x, y, H, 12 - u * 7, k);
+        // The cloud churns and draws in on itself, red lightning flickering inside, before it strikes
+        if (Math.random() < 0.4) { // a crooked flicker of red lightning in pixel steps
+          const a = Math.random() * Math.PI * 2; let px = x + Math.cos(a) * 12, py = y + Math.sin(a) * 6, pz = H + rnd(-2, 3);
+          for (let i = 0; i < 6; i++) { this.p(px, py, pz, i % 2 ? 0xff5252 : 0xffcdd2, { life: 90, size: 2, size1: 2 }); px -= Math.cos(a) * 4 + rnd(-1.5, 1.5); py -= Math.sin(a) * 2 + rnd(-1, 1); pz += rnd(-2.5, 2.5); }
+        }
         for (let i = 0; i < 3; i++) { const a = Math.random() * Math.PI * 2, d = rnd(14, 22); this.p(x + Math.cos(a) * d, y + Math.sin(a) * d * 0.6, H + rnd(-8, 8), pick(bright), { vx: -Math.cos(a) * d * 6, vy: -Math.sin(a) * d * 3.6, life: 160, size: 1, size1: 0 }); }
       }
+    });
+    // The blood cloud: it gathers over his head from the first moment, swells as the blood climbs into it, strikes, and
+    // hangs there until the stolen blood bursts back up into it (SIPHON_END_MS after the strike); then it breaks up
+    const CLOUD_FORM = T * 0.55, GONE = T + SIPHON_END_MS + 120, FADE = 520;
+    this.emit(GONE + FADE, 20, () => {
+      const me = this.ent(ev.id);
+      if (!me) return;
+      const el = this.t - start;
+      const grow = Math.min(1, 0.25 + 0.75 * el / CLOUD_FORM), fade = el < GONE ? 0 : (el - GONE) / FADE;
+      const rx = 22 * grow * (1 + fade * 0.8), n = Math.round((el < GONE ? 16 : 16 * (1 - fade)) * (0.5 + grow * 0.5));
+      this.bloodCloud(me.sprite.x, me.sprite.y, H, rx, n, fade);
     });
     // a low red light under the vampire while the pool lies there
     const me0 = this.ent(ev.id);
@@ -583,10 +604,10 @@ export class SkillFx {
       const me = this.ent(ev.id);
       if (!me) return;
       const x = me.sprite.x, y = me.sprite.y;
-      // The orb breaks: blood crashes straight down on the vampire...
+      // The cloud strikes: blood crashes straight down out of it onto the vampire...
       for (let i = 0; i < 26; i++) this.p(x + rnd(-6, 6), y + rnd(-4, 4), H + rnd(-6, 6), pick(bright), { vx: rnd(-20, 20), vy: rnd(-12, 12), vz: rnd(-260, -160), g: 200, life: 280, size: pick([1, 2, 2]), size1: 1, add: false });
       this.glow(x, y, H, 22, 0xff1744, 260, 0.9);
-      this.pillar(x, y, "blood", H + 10, 6, 320);
+      this.bloodBeam(x, y, H - 2, 12, 380, true);
       // ...and the blood mist all round the area collapses into him (the Exsanguinate look from before)
       for (let i = 0; i < 48; i++) {
         const a = (i / 48) * Math.PI * 2, F = rnd(0.35, 0.5);
@@ -598,17 +619,72 @@ export class SkillFx {
     });
   }
 
-  /** The beating crimson orb of the blood ritual: a dark core with bright drops orbiting it. */
-  private orb(x: number, y: number, h: number, rad: number, k: number) {
-    const beat = 1 + 0.25 * Math.sin(k * Math.PI * 2 * (3 + k * 5));
-    const rr = rad * beat;
-    for (let i = 0; i < 3; i++) {
-      const a = this.t / 60 + (i * Math.PI * 2) / 3 + rnd(-0.3, 0.3);
-      this.p(x + Math.cos(a) * rr, y + Math.sin(a) * rr * 0.5, h + Math.sin(a * 1.7) * rr * 0.6, pick(PALETTE.blood.slice(0, 3)), { vx: -Math.sin(a) * rr * 5, vy: Math.cos(a) * rr * 2.5, life: 110, size: pick([1, 2]), size1: 0 });
-    }
-    for (let i = 0; i < 2; i++) this.p(x + rnd(-1, 1) * rr * 0.5, y + rnd(-1, 1) * rr * 0.3, h + rnd(-1, 1) * rr * 0.5, pick(PALETTE.blood.slice(2, 5)), { life: 90, size: Math.max(2, Math.round(rr * 0.7)), size1: 1, add: false });
-    if (Math.random() < 0.25) this.glow(x, y, h, rr * 2, 0xb71c1c, 180, 0.5);
+  /**
+   * A thick column of blood in chunky pixel blocks (Exsanguinate): a ragged dark rim, red body, bright core, redrawn every
+   * few frames so the edges churn; `down` pours it from the top onto the ground first. Drops spray off its sides.
+   */
+  private bloodBeam(x: number, y: number, h: number, w: number, ms: number, down = false) {
+    const g = this.scene.add.graphics().setDepth(DEPTH + 1);
+    g.setPosition(x + 0.01, y + 0.01);
+    const start = this.t, ROW = 2;
+    const draw = () => {
+      const k = Math.min(1, (this.t - start) / ms);
+      g.clear();
+      const grow = down ? Math.min(1, k / 0.18) : Math.min(1, k / 0.12); // how much of the height is there yet
+      const thin = k < 0.55 ? 1 : 1 - (k - 0.55) / 0.45; // it narrows away at the end
+      const top = -h, bottom = down ? -h + h * grow : 0, from = down ? top : -h * grow;
+      g.setAlpha(Math.min(1, 1.6 - k));
+      for (let ry = Math.floor(from / ROW) * ROW; ry < bottom; ry += ROW) {
+        const u = -ry / h; // 0 ground .. 1 top
+        const flare = 1 + 0.6 * Math.max(0, 0.25 - u) * 4; // wider where it hits the ground
+        const half = Math.max(1, Math.round((w / 2) * thin * flare * (0.85 + Math.random() * 0.3)));
+        const core = Math.max(0, Math.round(half * 0.35)), inner = Math.max(1, Math.round(half * 0.65));
+        const jl = Math.round(Math.random() * 2) - 1, jr = Math.round(Math.random() * 2) - 1;
+        g.fillStyle(0x4a0000, 0.9).fillRect(-half - 1 + jl, ry, half * 2 + 2 - jl + jr, ROW);
+        g.fillStyle(0xb71c1c, 1).fillRect(-half + jl, ry, half * 2 - jl + jr, ROW);
+        g.fillStyle(0xe63946, 1).fillRect(-inner, ry, inner * 2, ROW);
+        if (core) g.fillStyle(0xffcdd2, 1).fillRect(-core, ry, core * 2, ROW);
+      }
+    };
+    draw();
+    this.emit(ms, 40, () => {
+      draw();
+      // chunky drops flung off the column
+      const z = rnd(4, h * 0.9);
+      for (let i = 0; i < 3; i++) {
+        const a = Math.random() * Math.PI * 2;
+        this.p(x, y, z, pick(PALETTE.blood.slice(1, 5)), { vx: Math.cos(a) * rnd(30, 70), vy: Math.sin(a) * rnd(18, 40), vz: rnd(10, 60), g: 260, life: rnd(350, 600), size: pick([2, 3, 3]), size1: 1, add: false });
+      }
+    });
+    this.scene.time.delayedCall(ms, () => g.destroy());
+    // a splash where it meets the ground, and a red light round it
+    this.scene.time.delayedCall(down ? ms * 0.18 : 0, () => {
+      this.ring(x, y, w * 2.2, "blood", 30, { life: 420, up: 24, size: 2, add: false });
+      this.glow(x, y, h * 0.4, w * 2.5, 0xe63946, ms, 0.6);
+      this.glow(x, y, 2, w * 3, 0x6d0000, ms, 0.5, true);
+    });
   }
+
+  /**
+   * One beat of the blood cloud: `n` puffs of dark clotted red in chunky pixel blocks in an ellipse `rx` wide at height
+   * `h`, a lit red underside, rolling slowly; `fade` 0..1 breaks it up (the puffs drift apart and thin out).
+   */
+  private bloodCloud(x: number, y: number, h: number, rx: number, n: number, fade: number) {
+    const roll = this.t / 400;
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * Math.PI * 2, d = Math.sqrt(Math.random());
+      // a flat ellipse on screen (wide, not tilted along the iso diagonals)
+      const sx = Math.cos(a) * d * rx, sy = Math.sin(a) * d * rx * 0.3;
+      const [ox, oy] = ISO ? [sy + sx / 2, sy - sx / 2] : [sx, sy];
+      const oz = rnd(-3, 4) * (1 - d * 0.5);
+      const under = oz < -1;
+      this.p(x + ox, y + oy, h + oz, under ? pick([0xb71c1c, 0x8e0f16, 0xe63946]) : pick([0x2a0306, 0x3d060b, 0x5a0a10, 0x6d0000]), {
+        vx: Math.cos(roll) * 2 + ox * fade * 2.5, vy: Math.sin(roll) * 2 + oy * fade * 2.5, vz: fade * rnd(4, 14),
+        life: rnd(320, 460), size: pick([3, 4, 4, 5]) * (1 - fade * 0.4), size1: 3, alpha: 0.95 * (1 - fade * 0.6), add: false });
+    }
+    if (fade === 0 && Math.random() < 0.15) this.glow(x, y, h - 2, rx * 1.2, 0x8e0f16, 220, 0.35);
+  }
+
 
   /** Boil Blood took hold: the victim's blood erupts out of it once (then bubbles while it boils, see status()). */
   private boilErupt(e: FxEntity) {
@@ -622,6 +698,7 @@ export class SkillFx {
     this.flashSprite(e, 0xff1744);
   }
   private boiling = new WeakSet<object>();
+  private linkPulse = new WeakMap<object, number>();
 
   private nearMe(x?: number, y?: number) {
     const me = this.ent(this.meId());
@@ -972,28 +1049,152 @@ export class SkillFx {
   }
 
   /**
-   * Mist Form: the vampire bursts into a thick, rolling cloud of pale night mist that keeps swirling where he stood,
-   * a stream of mist drifts along his path, and the mist gathers back into him where he lands.
+   * The hero as it looks right now (body + worn gear overlays), as coloured pixels: screen offsets from the feet,
+   * one per texel. For effects that take the hero apart and put it back together (Mist Form).
+   */
+  private heroPixels(e: FxEntity): { dx: number; dy: number; h: number; c: number }[] {
+    const layers: Phaser.GameObjects.Sprite[] = [e.sprite];
+    e.gear?.each((g) => layers.push(g));
+    const s = e.sprite, W = s.frame.cutWidth, H = s.frame.cutHeight;
+    const grid = new Map<number, number>(); // texel -> colour, the top layer wins
+    for (const l of layers) {
+      const data = this.frameData(l.texture.key, l.frame.name);
+      if (!data || data.w !== W || data.h !== H) continue;
+      for (let i = 0; i < W * H; i++) if (data.px[i * 4 + 3] > 140) grid.set(i, (data.px[i * 4] << 16) | (data.px[i * 4 + 1] << 8) | data.px[i * 4 + 2]);
+    }
+    const out: { dx: number; dy: number; h: number; c: number }[] = [];
+    const sx = s.scaleX * (s.flipX ? -1 : 1), sy = s.scaleY;
+    for (const [i, c] of grid) {
+      const px = i % W, py = Math.floor(i / W);
+      const dy = (py + 0.5 - s.originY * H) * sy;
+      out.push({ dx: (px + 0.5 - s.originX * W) * sx, dy, h: Math.max(0, -dy), c });
+    }
+    return out;
+  }
+
+  private frames = new Map<string, { w: number; h: number; px: Uint8ClampedArray } | null>();
+  /** The RGBA texels of one texture frame (cached). */
+  private frameData(key: string, name: string | number) {
+    const id = `${key}#${name}`;
+    if (this.frames.has(id)) return this.frames.get(id);
+    let res: { w: number; h: number; px: Uint8ClampedArray } | null = null;
+    try {
+      const f = this.scene.textures.getFrame(key, name);
+      const img = f?.source?.image as CanvasImageSource | undefined;
+      if (f && img) {
+        const c = document.createElement("canvas");
+        c.width = f.cutWidth; c.height = f.cutHeight;
+        const ctx = c.getContext("2d", { willReadFrequently: true })!;
+        ctx.drawImage(img, f.cutX, f.cutY, f.cutWidth, f.cutHeight, 0, 0, f.cutWidth, f.cutHeight);
+        res = { w: f.cutWidth, h: f.cutHeight, px: ctx.getImageData(0, 0, f.cutWidth, f.cutHeight).data };
+      }
+    } catch { res = null; } // a tainted or missing image: no pixels, the mist alone still plays
+    if (this.frames.size > 400) this.frames.clear();
+    this.frames.set(id, res);
+    return res;
+  }
+
+  /**
+   * Mist Form: the vampire comes apart into mist, top first, pixel by pixel; each grain pales into the mist colour
+   * and swirls off into a rolling cloud. A ribbon of mist drifts along his path, the mist gathers again where he
+   * lands and he is rebuilt from it, feet first. The cloud he left keeps rolling a moment, then thins away.
    */
   private mistForm(ev: any, e?: FxEntity) {
     const { fx, fy, x, y } = ev;
-    // the burst: a dense cloud right away
-    for (let i = 0; i < 40; i++) { const a = Math.random() * Math.PI * 2, d = Math.sqrt(Math.random()) * 18; this.mistPuff(fx + Math.cos(a) * d, fy + Math.sin(a) * d * 0.7, fx, fy, rnd(800, 1300), 1.2); }
-    this.glow(fx, fy, 8, 16, 0x9575cd, 300, 0.5);
-    // it keeps rolling where he stood (the chilling mist that hurts)
-    this.emit(1100, 45, () => { for (let i = 0; i < 4; i++) { const a = Math.random() * Math.PI * 2, d = Math.sqrt(Math.random()) * 22; this.mistPuff(fx + Math.cos(a) * d, fy + Math.sin(a) * d * 0.7, fx, fy); } });
-    // the path: a drifting ribbon of mist with a few faint ghosts of him inside it
+    const MIST = [0xc9c2d9, 0xa99fc0, 0x8a80a8, 0xe0dbea, 0x6f6690];
+    const shape = e ? this.heroPixels(e) : [];
+    const H = shape.reduce((m, q) => Math.max(m, q.h), 1);
+    const depth = e ? e.sprite.depth : DEPTH - 1;
+    const mix = (a: number, b: number, k: number) => {
+      const ch = (sh: number) => Math.round(((a >> sh) & 255) + (((b >> sh) & 255) - ((a >> sh) & 255)) * k);
+      return (ch(16) << 16) | (ch(8) << 8) | ch(0);
+    };
+    const px = Math.max(1, e ? Math.abs(e.sprite.scaleX) : 1);
+
+    // 1. Dissolve where he stood (a copy of him, as he is drawn now)
+    if (shape.length) {
+      const g = this.scene.add.graphics().setDepth(depth).setPosition(fx, fy);
+      const grains = shape.map((q) => {
+        const a = Math.atan2(q.dy + H * 0.5, q.dx) + rnd(-0.6, 0.6);
+        return { ...q, at: (1 - q.h / H) * MIST_DISSOLVE_MS * 0.55 + rnd(0, MIST_DISSOLVE_MS * 0.3), life: rnd(240, 380),
+          vx: Math.cos(a) * rnd(8, 22) + rnd(-6, 6), vy: -rnd(10, 26), sw: rnd(-1, 1), m: pick(MIST), puff: Math.random() < 0.06 };
+      });
+      const t0 = this.t;
+      this.emit(MIST_DISSOLVE_MS + 420, 16, () => {
+        const t = this.t - t0;
+        g.clear();
+        for (const q of grains) {
+          const k = (t - q.at) / q.life;
+          if (k >= 1) continue;
+          if (k <= 0) { g.fillStyle(q.c, 1).fillRect(q.dx - px / 2, q.dy - px / 2, px, px); continue; }
+          if (q.puff && k > 0.5) { q.puff = false; this.mistPuff(fx + q.dx * 0.6, fy + 2, fx, fy, rnd(900, 1400), 0.8); }
+          const s = k * q.life / 1000, sw = Math.sin(k * Math.PI * 1.5) * 5 * q.sw;
+          g.fillStyle(mix(q.c, q.m, Math.min(1, k * 2.2)), 1 - k * k)
+            .fillRect(q.dx + q.vx * s + sw - px / 2, q.dy + q.vy * s - px / 2, px, px);
+        }
+      });
+      this.scene.time.delayedCall(MIST_DISSOLVE_MS + 460, () => g.destroy());
+    }
+    // the cloud swells as he comes apart, then keeps rolling where he stood (the chilling mist that hurts)...
+    const t0 = this.t;
+    // (it builds up from his feet as the grains drift off, so he is still seen coming apart at first)
+    this.emit(MIST_DISSOLVE_MS, 30, () => {
+      const k = (this.t - t0) / MIST_DISSOLVE_MS;
+      for (let i = 0; i < Math.round(k * 5); i++) { const a = Math.random() * Math.PI * 2, d = Math.sqrt(Math.random()) * 16; this.mistPuff(fx + Math.cos(a) * d, fy + Math.sin(a) * d * 0.7 + 3, fx, fy, rnd(900, 1400), 0.6 + k * 0.6); }
+    });
+    this.glow(fx, fy, 10, 16, 0x9575cd, 360, 0.35);
+    // ...and lingers a moment, thinning out, before it is gone
+    this.emit(MIST_LINGER_MS, 50, () => {
+      const k = (this.t - t0) / MIST_LINGER_MS, n = k < 0.45 ? 3 : Math.random() < 1.6 * (1 - k) ? 1 : 0;
+      for (let i = 0; i < n; i++) { const a = Math.random() * Math.PI * 2, d = Math.sqrt(Math.random()) * 22; this.mistPuff(fx + Math.cos(a) * d, fy + Math.sin(a) * d * 0.7, fx, fy, rnd(1000, 1600), 1 - k * 0.3); }
+    });
+
+    // 2. The path: a ribbon of mist drifting from there to here
     for (let i = 0; i <= 14; i++) {
-      const t = i / 14, px = fx + (x - fx) * t, py = fy + (y - fy) * t;
-      this.scene.time.delayedCall(i * 18, () => { for (let k = 0; k < 3; k++) this.mistPuff(px + rnd(-4, 4), py + rnd(-3, 3), px, py, rnd(500, 900), 0.9); });
+      const t = i / 14, qx = fx + (x - fx) * t, qy = fy + (y - fy) * t;
+      this.scene.time.delayedCall(MIST_DISSOLVE_MS * 0.5 + i * 18, () => { for (let k = 0; k < 3; k++) this.mistPuff(qx + rnd(-4, 4), qy + rnd(-3, 3), qx, qy, rnd(600, 1000), 0.85); });
     }
-    if (e) for (let i = 1; i < 4; i++) this.ghost(e, fx + (x - fx) * i / 4, fy + (y - fy) * i / 4, 0xb39ddb, 0.22, 260);
-    // gathering back into him
-    for (let i = 0; i < 22; i++) {
-      const a = Math.random() * Math.PI * 2, d = rnd(14, 24), T = rnd(0.25, 0.4);
-      this.p(x + Math.cos(a) * d, y + Math.sin(a) * d * 0.7, rnd(4, 14), pick([0xc9c2d9, 0xa99fc0, 0xe0dbea]), { vx: -Math.cos(a) * d / T, vy: -Math.sin(a) * d * 0.7 / T, life: T * 1000, size: pick([3, 4, 5]), size1: 2, alpha: 0.45, add: false, depth: DEPTH - 1 });
-    }
-    this.scene.time.delayedCall(300, () => this.glow(x, y, 8, 12, 0xb39ddb, 260, 0.5));
+
+    // 3. Reform: the mist gathers where he lands and he is rebuilt from it, feet first
+    const reformAt = MIST_REFORM_AT_MS - 140;
+    this.scene.time.delayedCall(reformAt, () => {
+      for (let i = 0; i < 18; i++) { const a = Math.random() * Math.PI * 2, d = rnd(10, 20); this.mistPuff(x + Math.cos(a) * d, y + Math.sin(a) * d * 0.7, x, y, rnd(500, 800), 0.9); }
+    });
+    if (shape.length) this.scene.time.delayedCall(MIST_REFORM_AT_MS, () => {
+      // rebuilt into the pose he shows when he appears (his hidden frame by now), else the one he left in
+      const me = e && this.ent(ev.id);
+      const now = me ? this.heroPixels(me) : [];
+      const to = now.length ? now : shape, H2 = to.reduce((m, q) => Math.max(m, q.h), 1);
+      const g = this.scene.add.graphics().setDepth(me ? me.sprite.depth + 0.5 : depth).setPosition(x, y);
+      const grains = to.map((q) => {
+        const a = Math.random() * Math.PI * 2, d = rnd(8, 20);
+        return { ...q, at: (q.h / H2) * MIST_REFORM_MS * 0.45 + rnd(0, MIST_REFORM_MS * 0.2), life: rnd(140, 220),
+          ox: Math.cos(a) * d, oy: Math.sin(a) * d * 0.6 + rnd(0, 6), m: pick(MIST) };
+      });
+      const t1 = this.t, ms = MIST_REVEAL_MS - MIST_REFORM_AT_MS;
+      this.emit(ms, 16, () => {
+        const t = this.t - t1;
+        g.clear();
+        for (const q of grains) {
+          const k = Math.min(1, (t - q.at) / q.life);
+          if (k <= 0) continue;
+          const ease = 1 - (1 - k) * (1 - k), sw = (1 - ease);
+          g.fillStyle(mix(q.m, q.c, ease), 0.35 + 0.65 * ease)
+            .fillRect(q.dx + q.ox * sw - px / 2, q.dy + q.oy * sw - px / 2, px, px);
+        }
+      });
+      this.scene.time.delayedCall(ms + 20, () => g.destroy());
+    });
+    else this.scene.time.delayedCall(MIST_REFORM_AT_MS, () => this.glow(x, y, 8, 12, 0xb39ddb, 260, 0.5));
+    // a few wisps stay round his feet a moment after he is whole again
+    this.scene.time.delayedCall(MIST_REVEAL_MS - 60, () => {
+      const t2 = this.t;
+      this.emit(900, 70, () => {
+        if (Math.random() > 1.2 * (1 - (this.t - t2) / 900)) return;
+        const a = Math.random() * Math.PI * 2, d = rnd(6, 14);
+        this.mistPuff(x + Math.cos(a) * d, y + Math.sin(a) * d * 0.7, x, y, rnd(800, 1200), 0.75);
+      });
+    });
   }
 
   private smoke(x: number, y: number, r: number, n: number) {
@@ -1014,6 +1215,16 @@ export class SkillFx {
       // Blood Link: the cord is redrawn every frame between the vampire and his victim (tickFields)
       objs.push(this.scene.add.graphics().setDepth(DEPTH - 2));
       this.ring(f.x, f.y, 14, "blood", 14, { life: 300, up: 10 });
+      // The cord lashes out: a whip of blood shoots from the vampire into the victim and bursts out of it
+      const o = this.ent(f.owner), t = f.target ? this.ent(f.target) : undefined;
+      if (o && t) {
+        const x0 = o.sprite.x, y0 = o.sprite.y, z0 = o.top * 0.55, x1 = t.sprite.x, y1 = t.sprite.y, z1 = t.top * 0.5, T = 0.14;
+        for (let i = 0; i < 16; i++) {
+          const k = i / 16;
+          this.p(x0, y0, z0, pick(PALETTE.blood.slice(0, 4)), { vx: (x1 - x0) / T, vy: (y1 - y0) / T, vz: (z1 - z0) / T, life: T * 1000 * (0.4 + k * 0.6), size: 2, size1: 1, add: false });
+        }
+        this.scene.time.delayedCall(T * 1000, () => { const v = this.ent(f.target); if (v) { this.burst(v.sprite.x, v.sprite.y, v.top * 0.5, "blood", 18, 70, 380); this.glow(v.sprite.x, v.sprite.y, v.top * 0.5, 12, 0xe63946, 260, 0.7); } });
+      }
     } else if (k === "gravesoil") {
       // Native Soil: a patch of dark grave earth spilled on the ground, clods and a few bone chips
       const g = this.scene.add.graphics().setPosition(f.x + 0.01, f.y + 0.01).setDepth(GROUND_DEPTH);
@@ -1199,23 +1410,49 @@ export class SkillFx {
           const [ol, om] = lift(o.top * 0.55), [tl, tm] = lift(tg.top * 0.5);
           const x0 = tg.sprite.x + tl, y0 = tg.sprite.y + tm, x1 = o.sprite.x + ol, y1 = o.sprite.y + om;
           const len = Math.hypot(x1 - x0, y1 - y0), sag = Math.min(14, len * 0.12);
-          const at = (u: number): [number, number] => [x0 + (x1 - x0) * u + Math.sin(u * 9 + this.t / 90) * 0.8, y0 + (y1 - y0) * u + Math.sin(u * Math.PI) * sag];
+          const at = (u: number): [number, number] => [x0 + (x1 - x0) * u + Math.sin(u * 9 + this.t / 90) * 0.8, y0 + (y1 - y0) * u - Math.sin(u * Math.PI) * sag]; // arches up like the stream of drops
           const SEG = Math.max(6, Math.round(len / 5));
           const beat = 0.5 + 0.5 * Math.sin(this.t / 110);
-          g.lineStyle(3, 0x4a0000, 0.85);
-          g.beginPath(); g.moveTo(x0, y0); for (let i = 1; i <= SEG; i++) { const [px, py] = at(i / SEG); g.lineTo(px, py); } g.strokePath();
-          g.lineStyle(1, 0xe63946, 0.7 + 0.3 * beat);
-          g.beginPath(); g.moveTo(x0, y0); for (let i = 1; i <= SEG; i++) { const [px, py] = at(i / SEG); g.lineTo(px, py); } g.strokePath();
-          // Gulps of blood travel along it toward the vampire
-          const phase = (this.t / 420) % 1;
-          for (let j = 0; j < 3; j++) {
-            const u0 = (phase + j / 3) % 1, u = f.ally ? 1 - u0 : u0, [px, py] = at(u); // Transfusion: the blood runs to the ally
-            g.fillStyle(0xff5252, 1).fillRect(Math.round(px) - 1, Math.round(py) - 1, 3, 3);
-            g.fillStyle(0xffcdd2, 1).fillRect(Math.round(px), Math.round(py) - 1, 1, 1);
+          // drawn in whole pixel blocks (no smooth lines): a dark sheath, a red body and a core that throbs
+          const steps = Math.max(8, Math.round(len));
+          for (let i = 0; i <= steps; i++) {
+            const [px, py] = at(i / steps), qx = Math.round(px), qy = Math.round(py);
+            g.fillStyle(0x4a0000, 0.8).fillRect(qx - 1, qy - 1, 3, 3);
+          }
+          for (let i = 0; i <= steps; i++) {
+            const [px, py] = at(i / steps), qx = Math.round(px), qy = Math.round(py);
+            const wave = Math.sin(i / steps * 14 - this.t / (f.ally ? -60 : 60)); // bulges running along it toward the drinker
+            g.fillStyle(wave > 0.6 ? 0xff5252 : 0xb71c1c, 1).fillRect(qx, qy - (wave > 0.6 ? 1 : 0), wave > 0.6 ? 2 : 1, wave > 0.6 ? 2 : 1);
+            if (wave > 0.9 && beat > 0.5) g.fillStyle(0xffcdd2, 1).fillRect(qx, qy - 1, 1, 1);
+          }
+          // Blood torn out of the victim flies to the vampire in a steady arcing stream, as in Exsanguinate
+          // (Transfusion: it runs the other way, out of the vampire into the ally)
+          const [src, dst] = f.ally ? [o, tg] : [tg, o];
+          const sx = src.sprite.x, sy = src.sprite.y, sz = src.top * 0.5, dx = dst.sprite.x, dy = dst.sprite.y, dz = dst.top * 0.55;
+          const G = 260;
+          const drop = (big: boolean) => {
+            const T = rnd(0.3, 0.42) * (big ? 0.9 : 1), x0 = sx + rnd(-3, 3), y0 = sy + rnd(-2, 2), z0 = sz + rnd(-3, 3);
+            this.p(x0, y0, z0, pick(big ? PALETTE.blood.slice(1, 4) : PALETTE.blood.slice(1, 5)), {
+              vx: (dx - x0) / T, vy: (dy - y0) / T, vz: (dz - z0 + (G * T * T) / 2) / T, g: G, life: T * 1000,
+              size: big ? pick([3, 3, 4]) : pick([2, 2, 3]), size1: big ? 2 : 1.5, add: false });
+          };
+          for (let i = n(140); i > 0; i--) drop(false);
+          // Each pulse of the link (a hit) gulps a thick spurt out of the source, and the drinker flares as it lands
+          const pulse = Math.floor((this.t - born) / (f.tickMs || 300));
+          if (pulse !== this.linkPulse.get(f)) {
+            this.linkPulse.set(f, pulse);
+            for (let i = 0; i < 10; i++) drop(true);
+            this.burst(sx, sy, sz, "blood", 6, 45, 300);
+            this.glow(sx, sy, sz, 7, 0xb71c1c, 220, 0.5);
+            this.scene.time.delayedCall(330, () => { const d = this.ent(f.ally ? f.target : f.owner); if (d) this.glow(d.sprite.x, d.sprite.y, d.top * 0.55, 10, 0xe63946, 240, 0.55); });
+          }
+          // a small red vortex round the drinker, where the stream pours in
+          const va = this.t / 70;
+          for (let i = 0; i < n(40); i++) {
+            const bb = va + rnd(0, Math.PI * 2), rr = rnd(6, 10);
+            this.p(dx + Math.cos(bb) * rr, dy + Math.sin(bb) * rr * 0.6, rnd(dz * 0.4, dz * 1.3), pick(PALETTE.blood), { vx: -Math.sin(bb) * 60, vy: Math.cos(bb) * 34, vz: rnd(5, 20), life: 200, size: pick([1, 2]), size1: 0 });
           }
           if (chance(10)) { const [px, py] = at(Math.random()); this.p(px, py, 0, pick(PALETTE.blood.slice(2, 5)), { vy: 18, g: 0, life: 300, size: 1, size1: 0, add: false }); }
-          if (chance(8)) this.burst(tg.sprite.x, tg.sprite.y, tg.top * 0.5, "blood", 2, 30, 250);
-          if (chance(4)) this.glow(o.sprite.x, o.sprite.y, o.top * 0.5, 8, 0xe63946, 200, 0.35);
           break;
         }
         case "bloodward": {
@@ -1565,16 +1802,21 @@ export class SkillFx {
           break;
         }
         case "bat": {
-          // Bats pouring out of the cloak: each one fades in a moment after the next, starts close to its neighbours and
-          // drifts wider as it flies, on one slow, smooth flutter of its own (no jitter), wings beating fast
+          // Bats pouring out of the cloak, each on its own erratic flight: ragged start times, different sizes and wing
+          // beats, wide swoops that drift and change side, and now and then a sharp dart or dip like a real bat
           const c = g as Phaser.GameObjects.Container, d = c.list[0] as Phaser.GameObjects.Graphics | undefined;
-          const ph = (s.__ph ??= Math.random() * 100), fq = (s.__fq ??= rnd(0.8, 1.25)), late = (s.__late ??= rnd(0, 110));
-          const out = Math.min(1, Math.max(0, age - late) / 160); // 0 -> 1 as it leaves the cloak
+          const ph = (s.__ph ??= Math.random() * 100), fq = (s.__fq ??= rnd(0.6, 1.5)), late = (s.__late ??= Math.random() ** 1.6 * 220);
+          const sz = (s.__sz ??= rnd(0.75, 1.2)), sw = (s.__sw ??= rnd(2.5, 8) * (Math.random() < 0.5 ? -1 : 1));
+          const out = Math.min(1, Math.max(0, age - late) / 140); // 0 -> 1 as it leaves the cloak
           c.setAlpha(out);
-          const side = Math.sin(age / (130 * fq) + ph) * 3.5 * out;
-          const bob = Math.sin(age / (95 * fq) + ph * 1.7) * 2 * out - 2 - 3 * (1 - out);
+          // Darts: a short jerk sideways/up at random moments, eased back out
+          if (out >= 1 && !(s.__dt > 0) && Math.random() < 2.2 * dt) { s.__dt = 1; s.__dx = rnd(-7, 7); s.__dy = rnd(-6, 3); }
+          if (s.__dt > 0) s.__dt = Math.max(0, s.__dt - dt * rnd(3, 6));
+          const dart = s.__dt > 0 ? Math.sin(s.__dt * Math.PI) : 0;
+          const side = (Math.sin(age / (140 * fq) + ph) * sw + Math.sin(age / (53 * fq) + ph * 2.3) * 2 + (s.__dx ?? 0) * dart) * out;
+          const bob = (Math.sin(age / (90 * fq) + ph * 1.7) * 2.5 + (s.__dy ?? 0) * dart) * out - 2 - 3 * (1 - out);
           if (d) d.setPosition(-ay * side, ax * side + bob);
-          d?.setScale(0.6 + 0.4 * out, (0.45 + 0.55 * Math.abs(Math.sin(age / (24 * fq) + ph))) * (0.6 + 0.4 * out));
+          d?.setScale((0.6 + 0.4 * out) * sz, (0.45 + 0.55 * Math.abs(Math.sin(age / (22 * fq) + ph))) * (0.6 + 0.4 * out) * sz);
           if (out > 0.5 && Math.random() < 2.5 * dt) this.p(x - ax * 3, y - ay * 3, 4, pick(PALETTE.shadow.slice(2)), { vx: -ax * 12, vy: -ay * 12, life: 260, size: 2, size1: 0, alpha: 0.4, add: false });
           break;
         }
