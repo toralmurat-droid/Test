@@ -182,3 +182,6 @@ body #questtracker { background: rgba(15, 10, 6, .42); }
   filter: drop-shadow(0 0 2px #000) drop-shadow(0 0 4px rgba(227,191,106,.6)); transform-origin: 13px 10px; }
 #questpointer b { position: absolute; left: -16px; top: 12px; width: 32px; text-align: center; font: 16px var(--pixel-font); color: #ffe9a8; text-shadow: 1px 1px 0 #000, -1px -1px 0 #000; font-weight: normal; }
 body #hud #questtracker { background: transparent; border-left: none; box-shadow: none; padding: 0; } /* the cards carry their own see-through background */
+/* A shop opens the bag beside it (TownScene onShopOpen): the shop moves to the left, the bag and stats stay on the right */
+body.shopping #npcdialog.shop { left: 12px; top: 12px; bottom: auto; transform: none; width: max(340px, min(520px, calc(100% - 932px))); max-height: calc(100% - 200px); }
+#npcdialog .sh-lv { margin: 10px 0 2px; font: 16px var(--pixel-font); color: #8b5e34; border-bottom: 1px solid #b89a5a; letter-spacing: 1px; }

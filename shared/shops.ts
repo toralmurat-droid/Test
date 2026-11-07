@@ -30,6 +30,10 @@ export const SELL_RATE = 0.4;
 export const PRICE_PER_LEVEL = 0.12;
 /** Item level of shop stock, by tier (Common, Rare, Epic). */
 export const SHOP_LEVEL = [0, 1, 6, 12];
+/** Masterwork stock (Murat 2026-11-08: better items up to the max level): the best piece of every slot at these levels. */
+export const MASTER_LEVELS = [18, 24, 30];
+/** The best base item of each kind, sold as masterwork. */
+export const MASTER_BASES = ["w_dragon", "w_sky", "ww_star", "r_crossbow", "sh_dragon", "a_royal", "h_crown", "s_winged"];
 /** Magic, Rare and Legendary items sell for more (Plain, Magic, Rare, Legendary). */
 export const RARITY_PRICE = [1, 1.5, 2.5, 4];
 
@@ -47,11 +51,22 @@ const weapons = (ids: string[]): ShopEntry[] => ids.map((base) => {
   return { item, price: gearPrice(item) };
 });
 
+const atLevel = (ids: string[], level: number): ShopEntry[] => ids.map((base) => {
+  const item = withLevel(base, level);
+  return { item, price: gearPrice(item) };
+});
+
 export const SHOPS: Record<string, Shop> = {
   weaponsmith: {
     greeting: "Steel for every hand, friend. Have a look, or show me what you found out there.",
-    stock: weapons(["w_bronze", "w_ash", "w_frost", "w_long", "w_dragon", "w_sky", "ws_arming", "wx_hand", "wb_hunt", "wf_oak", "r_sling", "r_knives", "r_crossbow"]),
-    buys: ["weapon", "ranged"],
+    stock: [
+      ...weapons(["w_bronze", "w_ash", "w_frost", "w_long", "w_dragon", "w_sky", "ws_arming", "wx_hand", "wb_hunt", "wf_oak", "r_sling", "r_knives", "r_crossbow"]),
+      // armour, shields, hats and boots at their tier's level
+      ...weapons(["sh_wood", "sh_iron", "sh_dragon", "a_leather", "a_chain", "a_royal", "h_cap", "h_helm", "h_crown", "s_leather", "s_swift", "s_winged"]),
+      // masterwork: the best of each slot at higher levels, up to the max level
+      ...MASTER_LEVELS.flatMap((lv) => atLevel(MASTER_BASES, lv)),
+    ],
+    buys: ["weapon", "ranged", "shield", "armour", "hat", "shoes"],
     repairs: true,
   },
   witch: {
