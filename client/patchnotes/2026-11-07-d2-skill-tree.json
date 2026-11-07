@@ -1,5 +1,6 @@
 {
   "date": "2026-11-07",
+  "pr": 305,
   "title": "Skill tree, Diablo style",
   "changes": [
     "The skill tree now shows one school at a time, picked with tabs at the top.",
