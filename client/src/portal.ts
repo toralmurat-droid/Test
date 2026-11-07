@@ -140,7 +140,7 @@ export class PortalLayer {
   }
 
   update(me: { x: number; y: number } | undefined, blocked: boolean) {
-    // paint the art of stones coming into view, or out of date since a portal woke, one per frame (eight worn stones
+    // paint the art of stones coming into view, or out of date since a portal woke, one per frame (seven worn stones
     // at once would stall the game)
     for (const s of this.stones.values()) {
       if (s.shown ? s.shown === this.want(s).key : !(PORTAL_LOOK || (me && Math.hypot(s.p.x - me.x, s.p.y - me.y) < 30 * 32))) continue;

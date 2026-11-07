@@ -73,8 +73,6 @@ export const PORTAL_SPOTS = [
   { id: "ruins", name: "Old Ruins", x: 150, y: 59 },
   { id: "keep", name: "Greywatch Keep", x: 196, y: 69 },
   { id: "gravemoor", name: "Gravemoor Cemetery", x: 210, y: 120 },
-  // On the lip of the Mawdeep sinkhole (shared/dungeon.ts SINKHOLE 214,99), east of the hole, opposite the rope stake
-  { id: "mawdeep", name: "Mawdeep Sinkhole", x: 218, y: 100 },
 ] as const;
 export const REDFANG = { x: 240, y: 102, w: 24, h: 18 };
 export const REDFANG_TOWERS: [number, number][] = [[254, 103], [249, 118], [241, 108]];
@@ -793,8 +791,7 @@ function buildWorld() {
 
   // ---------- 13d. The Mawdeep sinkhole (shared/dungeon.ts): a ragged clearing of bare earth and stones, a path from the Redfang trail ----------
   disk(SINKHOLE.x + 0.5, SINKHOLE.y + 0.5, 4.6, 3.8, (x, y, d) => {
-    const nearStone = PORTAL_SPOTS.some((p) => Math.abs(p.x - x) <= 2 && Math.abs(p.y - y) <= 2); // keep the portal stone's clearing free
-    setO(x, y, !nearStone && d > 0.8 && hash(x, y, 301) < 0.22 ? T.ROCK : EMPTY);
+    setO(x, y, d > 0.8 && hash(x, y, 301) < 0.22 ? T.ROCK : EMPTY);
     if (isGrass(ground[y][x])) setG(x, y, d < 0.55 || hash(x, y, 302) < 0.5 ? T.DIRT : T.GRASS_DARK);
   });
   curve([[SINKHOLE.x, SINKHOLE.y + 3], [SINKHOLE.x + 1, SINKHOLE.y + 7], [SINKHOLE.x - 1, 108], [SINKHOLE.x, 111]], 1, T.DIRT);
