@@ -80,6 +80,12 @@ body #gamemenu button, body #musicpanel button {
   background: none; color: #eadfc8; font: 18px var(--pixel-font); text-shadow: 2px 2px #050302; cursor: pointer; }
 body #gamemenu button { position: relative; padding: 2px 8px; text-align: left; }
 body #gamemenu button small { color: #a8977a; float: right; }
+body #gamemenu .gmdrop { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; margin: -2px 0 2px; }
+body #gamemenu .gmdrop button { min-width: 0; padding: 2px 0; text-align: center; }
+body #gamemenu .gmdrop button.wide { grid-column: 1 / -1; }
+body #gamemenu .gmdrop button.on { color: #ffd98a; filter: brightness(1.35); }
+body #gamemenu .gmdrop button.dim { color: #8f8068; }
+body #gamemenu .gmdrop .gmnote { grid-column: 1 / -1; color: #a8977a; text-align: center; }
 body #gamemenu button.gmclose { margin-top: 4px; color: #c9b48a; }
 body #gamemenu button:hover, body #musicpanel button:hover { color: #ffd98a; filter: brightness(1.25); }
 body #musicpanel { right: 12px; bottom: 52px; width: 250px; padding: 0 6px 2px; max-height: calc(100% - 80px); overflow: auto; }
