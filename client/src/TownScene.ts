@@ -2483,7 +2483,8 @@ export class TownScene extends Phaser.Scene {
     const ls = this.leftSkill(), rs = this.rightSkill();
     const lcell = clickCell("left") + clickCell("right");
     const bar = document.getElementById("hotbar")!;
-    const all = this.chargeCell(mine, cls, [ls, rs], slots, now) + lcell + cells + this.potionCells(mine); // potions right of the skill keys (Murat 2026-11-04)
+    // vertical separators between the click attacks, the skill keys and the potions (Murat 2026-11-07)
+    const all = this.chargeCell(mine, cls, [ls, rs], slots, now) + lcell + `<i class="hsep"></i>` + cells + `<i class="hsep"></i>` + this.potionCells(mine); // potions right of the skill keys (Murat 2026-11-04)
     if (this.hotbarHtml !== all) { bar.innerHTML = all; this.hotbarHtml = all; }
   }
 

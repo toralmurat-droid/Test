@@ -152,6 +152,15 @@ export class OrbHud {
       `<div class="orb mp" title="Mana"><canvas width="${SIZE}" height="${SIZE}"></canvas><span></span></div>` +
       `<canvas class="garg left"></canvas><canvas class="garg right"></canvas>`;
     hud.prepend(this.root);
+    // One row on the plate: the skill bar, a separator, then the menu buttons (Murat 2026-11-07)
+    const row = document.createElement("div");
+    row.id = "hudbar";
+    const hotbar = document.getElementById("hotbar"), menu = document.getElementById("menubtns");
+    if (hotbar && menu) {
+      hotbar.parentElement!.insertBefore(row, hotbar);
+      const sep = document.createElement("i"); sep.className = "hsep";
+      row.append(hotbar, sep, menu);
+    }
     // on the HUD itself (not in #orbhud's layer), so it sits over the XP bar
     this.level = document.createElement("div");
     this.level.id = "orblevel"; this.level.title = "Level";
@@ -176,7 +185,7 @@ export class OrbHud {
     const now = performance.now();
     const fh = maxHp > 0 ? hp / maxHp : 0, fm = maxMp > 0 ? mp / maxMp : 0;
     // the plate is as wide as the skill bar laid over it; the orbs sit at its ends
-    const bar = document.getElementById("hotbar");
+    const bar = document.getElementById("hudbar") ?? document.getElementById("hotbar");
     const w = bar ? bar.offsetWidth : 0;
     if (w > 0 && w !== this.last.w) { document.body.style.setProperty("--barw", `${w}px`); this.last.w = w; } // the menu buttons use it too
     const moving = (fh > 0 && fh < 1) || (fm > 0 && fm < 1);
