@@ -54,15 +54,7 @@ body.orbhud-on #rbars .rb-crest { display: none; }
 body.orbhud-on #sidepanel { max-height: calc(100% - 205px); z-index: 11; } /* above the orb bar and the menu tiles */
 /* "Respawning" under the minimap (the safe zone line is gone) */
 body #stats { top: 280px; left: auto; right: 40px; text-align: right; }
-/* narrow screens: too little room left of the health orb for both, so chat wins over the demon statue */
-@media (max-width: 1400px) {
-  #orbhud .garg.left { display: none; }
-  body.orbhud-on #chat, body.orbhud-on #chatlog { width: min(200px, calc(50% - var(--barw) / 2 - 130px)); min-width: 140px; }
-}
-
-/* narrower screens: the wide bar needs the room, so the statues go and chat moves up above the bar */
-@media (max-width: 1500px) {
-  #orbhud .garg { display: none; }
-  body.orbhud-on #chat { bottom: 120px; }
-  body.orbhud-on #chatlog { bottom: 158px; }
-}
+/* little room left of the health orb (orbs.ts sets hud-tight): the statues go and chat moves up above the bar */
+body.hud-tight #orbhud .garg { display: none; }
+body.hud-tight.orbhud-on #chat { bottom: 132px; width: min(300px, 30vw); }
+body.hud-tight.orbhud-on #chatlog { bottom: 170px; width: min(300px, 30vw); }

@@ -144,6 +144,7 @@ export class OrbHud {
   private last = { hp: -1, mp: -1, at: 0, w: -1 };
 
   constructor(hud: HTMLElement) {
+    addEventListener("resize", () => requestAnimationFrame(() => this.layout()));
     this.root = document.createElement("div");
     this.root.id = "orbhud";
     this.root.innerHTML =
@@ -181,13 +182,20 @@ export class OrbHud {
   /** Values written inside the orbs all the time (the "bar numbers" setting), else only on hover. */
   setNumbers(on: boolean) { this.root.classList.toggle("nums", on); }
 
-  update(hp: number, maxHp: number, mp: number, maxMp: number) {
-    const now = performance.now();
-    const fh = maxHp > 0 ? hp / maxHp : 0, fm = maxMp > 0 ? mp / maxMp : 0;
-    // the plate is as wide as the skill bar laid over it; the orbs sit at its ends
+  /** The plate is as wide as the skill bar laid over it; the orbs sit at its ends. Also run on window resize. */
+  layout() {
     const bar = document.getElementById("hudbar") ?? document.getElementById("hotbar");
     const w = bar ? bar.offsetWidth : 0;
     if (w > 0 && w !== this.last.w) { document.body.style.setProperty("--barw", `${w}px`); this.last.w = w; } // the menu buttons use it too
+    // Room left of the health orb: too little for chat beside the demon statue -> the statue goes, chat moves up
+    const tight = w > 0 && (innerWidth - w) / 2 - 112 < 330;
+    if (tight !== document.body.classList.contains("hud-tight")) document.body.classList.toggle("hud-tight", tight);
+  }
+
+  update(hp: number, maxHp: number, mp: number, maxMp: number) {
+    const now = performance.now();
+    const fh = maxHp > 0 ? hp / maxHp : 0, fm = maxMp > 0 ? mp / maxMp : 0;
+    this.layout();
     const moving = (fh > 0 && fh < 1) || (fm > 0 && fm < 1);
     if (Math.abs(fh - this.last.hp) < 0.004 && Math.abs(fm - this.last.mp) < 0.004 && (!moving || now - this.last.at < 120)) return;
     const t = now / 1000;
