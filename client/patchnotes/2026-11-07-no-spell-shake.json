@@ -1,0 +1,9 @@
+{
+  "date": "2026-11-07",
+  "pr": 334,
+  "title": "Calmer spells",
+  "changes": [
+    "Hero skills and spells no longer shake the screen, for every class.",
+    "Boss slams and other monster blows still give their short nudge."
+  ]
+}

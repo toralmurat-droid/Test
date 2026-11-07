@@ -1,5 +1,4 @@
 import Phaser from "phaser";
-import { quake } from "./camfx";
 import { ISO } from "./isoflag";
 import { AreaLook, BLOOD_RITE_MS, FxStyle, impactMs, LEAP_MS, RAIN_FALL_MS, skillById, SkillDef, SWORD_FALL_MS } from "../../shared/skills";
 import { paintSigil, ICON } from "./skillArt";
@@ -12,7 +11,8 @@ import { MIST_DISSOLVE_MS, MIST_LINGER_MS, MIST_REFORM_AT_MS, MIST_REFORM_MS, MI
  * Particles are tiny square sprites with a height (z) above the ground, so they rise and fall correctly in both
  * the top-down and the isometric view (the iso view projects every sprite's world x/y each frame, see iso.ts).
  * The server sends "sfx" events (shared/skillEngine.ts); statuses and ground effects come from the room state.
- * Higher-row skills get more particles, more light and screen shake (TIER).
+ * Higher-row skills get more particles and more light (TIER). Hero skills NEVER shake the screen
+ * (Murat 2026-11-07); tests/no-hero-shake.test.ts fails CI if a shake is added here.
  */
 
 export const PALETTE: Record<FxStyle, number[]> = {
@@ -320,7 +320,6 @@ export class SkillFx {
         for (let k = 0; k < 3; k++) this.scene.time.delayedCall(k * 90, () => this.ring(ev.x, ev.y, ev.r * (0.6 + k * 0.25), style, Math.round(26 * tier), { life: 380, up: 6 }));
         this.ring(ev.x, ev.y, ev.r * 0.7, "earth", 18, { life: 500, add: false });
         if (e) { this.glow(ev.x, ev.y, e.top * 0.7, 16 * tier, pal[1], 400, 0.8); this.flashSprite(e, pal[1]); }
-        if (near) quake(this.scene, 140, 0.003 * tier);
         break;
       }
       case "buff": {
@@ -349,7 +348,6 @@ export class SkillFx {
         this.burst(ev.fx, ev.fy, e.top * 0.5, "steel", 10, 140, 250);
         if (ev.x !== ev.fx || ev.y !== ev.fy) for (let i = 0; i < 4; i++) this.ghost(e, ev.fx + (ev.x - ev.fx) * i / 4, ev.fy + (ev.y - ev.fy) * i / 4, pal[2], 0.4);
         if (ev.tx !== undefined) this.slash(ev.tx, ev.ty, 18, style, Math.atan2(ev.ty - ev.y, ev.tx - ev.x), 2.8);
-        if (near) quake(this.scene, 90, 0.004);
         break;
       }
       case "chain": {
@@ -426,7 +424,6 @@ export class SkillFx {
         this.rise(x, y, 18, "blood", 40, e.top, 900);
         this.glow(x, y, e.top * 0.5, 22, 0xe63946, 700, 0.8);
         this.scene.time.delayedCall(250, () => { const m = this.ent(ev.id); if (m) this.flashSprite(m, 0xe63946); });
-        if (near) quake(this.scene, 120, 0.004);
         break;
       }
       case "fang": {
@@ -778,7 +775,6 @@ export class SkillFx {
     const look: AreaLook = ev.look;
     const { x, y, r } = ev;
     const pal = PALETTE[style];
-    const shake = (ms: number, k: number) => { if (near) quake(this.scene, ms, k); };
     // Cast while enchanted (Holy Blade + Cleave, Fire Arrows + Arrow Rain...): the blast also flares in the enchantment's colour
     const imb = ev.imb as FxStyle;
     if (PALETTE[imb] && imb !== style) {
@@ -810,7 +806,6 @@ export class SkillFx {
         this.burst(x, y, 2, style, Math.round(14 * tier), 90, 600, 2);
         for (let i = 0; i < 4 * tier; i++) this.rock(x, y, r);
         this.glow(x, y, 2, r, pal[2], 260, 0.4, true);
-        shake(200, 0.004 * tier);
         break;
       }
       case "spikes": {
@@ -819,14 +814,12 @@ export class SkillFx {
           this.spike(x + Math.cos(a) * d, y + Math.sin(a) * d, style, 6 + tier * 2);
         }
         this.ring(x, y, r, "earth", Math.round(10 * tier), { life: 300, add: false });
-        shake(80, 0.002 * tier);
         break;
       }
       case "pillar": {
         this.pillar(x, y, style, 110, 6 + tier, 420);
         this.ring(x, y, r, style, Math.round(18 * tier), { life: 360, up: 18 });
         this.burst(x, y, 2, style, Math.round(10 * tier), 70, 500);
-        shake(90, 0.003);
         break;
       }
       case "sword": {
@@ -836,7 +829,6 @@ export class SkillFx {
           this.ring(x, y, r * 1.2, "earth", 40, { life: 600, add: false, size: 2 });
           this.pillar(x, y, style, 160, 14, 600);
           this.glow(x, y, 4, r * 1.2, pal[1], 600, 0.6, true);
-          if (near) { quake(this.scene, 320, 0.012); }
         });
         break;
       }
@@ -848,7 +840,6 @@ export class SkillFx {
           this.burst(x, y, 2, style === "earth" ? "earth" : "fire", big ? 50 : 14, big ? 140 : 80, 700, 2);
           this.glow(x, y, 4, r * (big ? 1.8 : 1.2), 0xff9f1c, 500, 1, true);
           this.cracks(x, y, r * 0.8, 0x2b1d12);
-          if (near) quake(this.scene, big ? 300 : 120, big ? 0.012 : 0.004);
         }, style === "earth" ? "rock" : "orb");
         break;
       }
@@ -877,7 +868,6 @@ export class SkillFx {
         }
         this.ring(x, y, r, style, Math.round(40 * tier / 2), { life: 450, up: 16 });
         this.cracks(x, y, r * 0.7, pal[4]);
-        shake(160, 0.006);
         break;
       }
       case "flame": {
@@ -898,7 +888,6 @@ export class SkillFx {
         this.ring(x, y, r, style, Math.round(30 * tier), { life: 360, up: 16 });
         this.burst(x, y, 4, style, Math.round(16 * tier), 90, 450);
         this.glow(x, y, 6, r * 1.1, pal[2], 300, 0.8, true);
-        shake(100, 0.003 * tier);
       }
     }
   }
@@ -932,7 +921,6 @@ export class SkillFx {
     this.ripple(x, y, 58, 0xb3ecff, 420);
     this.scene.time.delayedCall(90, () => this.ripple(x, y, 40, 0xffffff, 320));
     this.crawl(x, y, 54, 0x9be8ff, 0x1b1410);
-    if (this.nearMe(x, y)) { const cam = this.scene.cameras.main; if (!cam.shakeEffect.isRunning) cam.shake(240, 0.0042); }
   }
 
   /** A ring running out over the ground from a point (flat, squashed by the iso view). */
@@ -1895,7 +1883,6 @@ export class SkillFx {
       this.glow(x, y, 4, r * 1.3, PALETTE[style][2], 450, 0.9, true);
       if (style === "fire") this.smoke(x, y, r * 0.5, big ? 10 : 4);
       if (kind === "net") this.ring(x, y, r, "earth", 12, { life: 300, add: false });
-      if (big && this.nearMe(x, y)) quake(this.scene, 220, 0.008);
     } else this.burst(x, y, 4, style, 8, 60, 300);
     return true;
   }
@@ -1934,7 +1921,6 @@ export class SkillFx {
           this.p(x, y, 4, pick([0xe8e2d0, 0xd8d0b8, 0x8f887a]), { vx: Math.cos(a) * sp, vy: Math.sin(a) * sp * 0.6, vz: rnd(20, 50), g: 170, drag: 2, life: rnd(500, 800), size: pick([1, 2]), add: false });
         }
         this.burst(x, y, 1, "earth", 8, 45, 380, 1);
-        if (this.nearMe(x, y)) quake(this.scene, 120, 0.004);
         break;
       case "magicbolt": this.burst(x, y, 3, "frost", 12, 60, 380); this.glow(x, y, 3, 12, 0x4cc9f0, 260); break;
       default: // shadowbolt
