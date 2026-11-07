@@ -1,0 +1,10 @@
+{
+  "date": "2026-11-07",
+  "pr": 291,
+  "title": "The Wizard returns: Fire, Frost and Thunder",
+  "changes": [
+    "The Wizard can be played again, rebuilt around three schools of magic with one spell each for now: Fire Bolt, Blizzard (a storm around you that hurts and slows) and Thunder (lightning hammers the spot you pick).",
+    "New keyboard option in the menu (Esc): spell keys. Spells go on W E R T 1 2 3 4 5, the mouse walks, C opens the bag, D and F drink healing and mana potions, H is your character, K your skills, G uses things and X rolls.",
+    "Old wizard skills are gone: their points come back to spend on the new spells."
+  ]
+}

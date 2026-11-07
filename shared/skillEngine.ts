@@ -430,7 +430,8 @@ export function tickField(h: SkillHost, f: FieldInst): boolean {
   if (d.zap) {
     const pick = [...inside].sort(() => Math.random() - 0.5).slice(0, d.zap.n);
     for (const e of pick) {
-      const tu = h.unit(e)!;
+      const tu = h.unit(e);
+      if (!tu) continue; // gone this tick (a summon in the balance sims has no unit)
       h.fx({ ev: "zap", id: f.owner, s: f.skill, x1: f.x, y1: f.y, x2: tu.x, y2: tu.y, sky: f.def.kind === "storm" });
       h.hit(f.owner, e, d.zap.dmg * h.magic(f.owner) * f.power, [0, 0], { stunMs: d.zap.stunMs, kb: 0, skill: true, imb: f.imb });
     }

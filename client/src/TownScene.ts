@@ -62,7 +62,8 @@ import { Element, ELEMENT_COLORS } from "../../shared/elements";
 import { baseId, gearDef, gearReachMult, gearSpeedMult, itemRarity, WEAPON_TYPE_NAMES } from "../../shared/gear";
 import { attackProfile, ATTACK_WORDS, isWeaponType, poseSheet, profileOf, weaponAttackMult, weaponOk } from "../../shared/weapons";
 import { talentMult, talentPoints, spentPoints } from "../../shared/talents";
-import { activeSkills, SLOT_COUNT, SLOT_KEYS, skillLearned } from "../../shared/slots";
+import { activeSkills, skillLearned } from "../../shared/slots";
+import { actionKey, actionOfKey, type KeyAction, keyMode, keyModeName, onKeyMode, setKeyMode, slotCount, slotKey, slotOfKey, wasdWalks } from "./keymode";
 import { iconImg } from "./skillIcons";
 import { TalentMenu } from "./talents";
 import { SidePanel, SideTab } from "./sidepanel";
@@ -245,6 +246,8 @@ export class TownScene extends Phaser.Scene {
   private stopSeq = 0; // seq of our last "stand still" input
   private stoppedAt = 0;
   private seq = 0;
+  private useKey = () => {}; // E / G: talk, open, use what is right here
+  private bagKey = () => {};
   private heldSlot = -1; // skill key (0..9) held down: it keeps casting
   private slotCastAt = 0;
   private pointer?: PointerControls;
@@ -363,35 +366,29 @@ export class TownScene extends Phaser.Scene {
     // Space = right click at the mouse cursor (Murat 2026-11-05; it used to be a plain basic attack)
     this.input.keyboard!.on("keydown-SPACE", (ev: KeyboardEvent) => { if (!ev.repeat && !this.chatting()) this.pointer?.spaceDown(); });
     this.input.keyboard!.on("keyup-SPACE", () => this.pointer?.spaceUp());
-    // Skill slots 1..0 (top row or numpad). With the skill tree open and the mouse over a learned skill,
-    // the number key puts that skill in the slot instead of using it.
-    const names = ["ONE", "TWO", "THREE", "FOUR", "FIVE", "SIX", "SEVEN", "EIGHT", "NINE", "ZERO"];
-    names.forEach((k, n) => {
-      const press = (ev?: KeyboardEvent) => {
-        if (ev?.repeat || this.chatting()) return; // held keys repeat in update(), at the cast rate, not the OS key repeat
-        const hover = this.talentMenu?.open ? this.talentMenu.hoveredActive() : undefined;
-        if (hover) { this.room?.send("assign", { slot: n, skill: hover }); return; }
-        this.castSlot(n); // the key casts its skill right away, toward the mouse cursor (Murat 2026-11-05)
-        this.heldSlot = n; this.slotCastAt = this.time.now;
-      };
-      const release = () => { if (this.heldSlot === n) this.heldSlot = -1; };
-      this.input.keyboard!.on(`keydown-${k}`, press);
-      this.input.keyboard!.on(`keydown-NUMPAD_${k}`, press);
-      this.input.keyboard!.on(`keyup-${k}`, release);
-      this.input.keyboard!.on(`keyup-NUMPAD_${k}`, release);
+    // Skill slots and the other game keys come from the keyboard layout picked in the game menu (client/src/keymode.ts):
+    // classic (skills on 1-0) or spell keys (W E R T 1-5). With the skill tree open and the mouse over a learned skill,
+    // a slot key puts that skill in the slot instead of using it.
+    const slotPress = (n: number, ev: KeyboardEvent) => {
+      if (ev.repeat) return; // held keys repeat in update(), at the cast rate, not the OS key repeat
+      const hover = this.talentMenu?.open ? this.talentMenu.hoveredActive() : undefined;
+      if (hover) { this.room?.send("assign", { slot: n, skill: hover }); return; }
+      this.castSlot(n); // the key casts its skill right away, toward the mouse cursor (Murat 2026-11-05)
+      this.heldSlot = n; this.slotCastAt = this.time.now;
+    };
+    this.input.keyboard!.on("keydown", (ev: KeyboardEvent) => {
+      if (this.chatting() || ev.ctrlKey || ev.metaKey || ev.altKey) return;
+      const n = slotOfKey(ev);
+      if (n >= 0) { slotPress(n, ev); return; }
+      const act = actionOfKey(ev);
+      if (act && !ev.repeat) this.keyAction(act);
     });
+    this.input.keyboard!.on("keyup", (ev: KeyboardEvent) => { if (this.heldSlot >= 0 && slotOfKey(ev) === this.heldSlot) this.heldSlot = -1; });
     window.addEventListener("blur", () => { this.heldSlot = -1; }); // the key-up never comes when the window loses focus
+    onKeyMode(() => { this.heldSlot = -1; this.hotbarHtml = ""; this.keyLabels(); });
+    this.keyLabels();
     this.setupHotbar();
-    this.input.keyboard!.on("keydown-Q", () => { if (!this.chatting()) this.room?.send("potion"); });
-    this.input.keyboard!.on("keydown-V", () => { if (!this.chatting()) this.room?.send("manapotion"); });
-    // Secondary ranged weapon from the equipment screen (sling, knives, crossbow)
-    this.input.keyboard!.on("keydown-R", () => { if (!this.chatting()) this.room?.send("ranged"); });
-    const dodge = () => { if (!this.chatting()) this.room?.send("dodge"); };
-    // (Shift no longer rolls: held, it turns the left click into an attack in place, see pointer.ts)
-    this.input.keyboard!.on("keydown-F", dodge);
-    this.input.keyboard!.on("keydown-C", () => { if (!this.chatting()) this.toggleHeroMenu(); });
-    this.input.keyboard!.on("keydown-E", () => {
-      if (this.chatting()) return;
+    this.useKey = () => {
       if (!this.npcs?.isOpen && this.chests?.interact()) return; // a loot chest right here comes first
       if (!this.npcs?.isOpen && this.dungeon?.nearDoor) { this.room?.send("door", { id: this.dungeon.nearDoor.id }); return; } // a Mawdeep gate
       if (!this.npcs?.isOpen && this.stash?.interact()) return; // the account stash on the square
@@ -400,7 +397,7 @@ export class TownScene extends Phaser.Scene {
       if (!this.npcs?.isOpen && this.shrine?.interact()) return; // then the forest shrine
       if (!this.npcs?.isOpen && this.portals?.interact()) return; // then a portal stone's travel list
       this.npcs?.interact();
-    });
+    };
     const toggleQuestLog = () => {
       if (!this.npcs) return;
       const open = this.npcs.log.open;
@@ -436,7 +433,7 @@ export class TownScene extends Phaser.Scene {
     this.side = new SidePanel((tab) => this.openSide(tab, false), () => this.side?.close());
     this.gearMenu = new GearMenu(this, (type, msg) => this.room?.send(type, msg), (p) => this.side?.setPreview(p));
     const toggleGear = () => this.openSide("gear");
-    this.input.keyboard!.on("keydown-G", () => { if (!this.chatting()) toggleGear(); });
+    this.bagKey = toggleGear;
     // Always reachable with the mouse too (even while typing in chat, in combat or while dead)
     fillIcons(document.getElementById("menubtns")!);
     fillIcons(document.getElementById("online")!);
@@ -461,7 +458,6 @@ export class TownScene extends Phaser.Scene {
       if (!escHadOpen && !typing) this.gameMenu?.show();
     });
     this.talentMenu = new TalentMenu((type, msg) => this.room?.send(type, msg), (p) => this.side?.setPreview(p));
-    this.input.keyboard!.on("keydown-T", () => { if (!this.chatting()) this.toggleTree(); });
     this.ideaBoard = new IdeaBoard((type, msg) => this.room?.send(type, msg));
     const toggleIdeas = () => { if (!this.ideaBoard!.open) this.closeMenus(); this.ideaBoard!.toggle(); };
     this.input.keyboard!.on("keydown-I", () => { if (!this.chatting()) toggleIdeas(); });
@@ -479,8 +475,13 @@ export class TownScene extends Phaser.Scene {
       { id: "ideas", label: `${icon("candle")}Ideas board`, key: "I", onClick: toggleIdeas },
       { id: "news", label: `${icon("scroll")}News`, key: "N", onClick: toggleNews },
       { id: "barnums", label: `${icon("potion")}Bar numbers on / off`, onClick: () => this.resBars?.toggleNumbers() },
+      { id: "keys", label: "", onClick: () => { setKeyMode(keyMode() === "classic" ? "spells" : "classic"); this.gameMenu?.show(); } },
       { id: "quit", label: `${icon("fire")}Save and return to start screen`, onClick: () => void this.saveAndQuit() },
     ]);
+    // Keyboard layout setting (client/src/keymode.ts): its entry says which one is on; clicking switches
+    const keysLabel = () => this.gameMenu?.setLabel("keys", `${icon("scroll")}Keyboard: ${keyModeName()} <small>click to switch</small>`);
+    keysLabel();
+    onKeyMode(keysLabel);
     this.patchNotes = new PatchNotesPanel(toggleNews);
     this.input.keyboard!.on("keydown-N", () => { if (!this.chatting()) toggleNews(); });
     this.setupChat();
@@ -2106,14 +2107,14 @@ export class TownScene extends Phaser.Scene {
     const opts = activeSkills(cls).map((a) => {
       const learned = skillLearned(cls, mine.talents, a.id);
       const at = slots.indexOf(a.id);
-      const where = !learned ? `${icon("lock")}learn it in the tree (T), Lv ${a.req}` : at === n ? "in this slot" : at >= 0 ? `now on key ${SLOT_KEYS[at]}` : "not on a key yet"
+      const where = !learned ? `${icon("lock")}learn it in the tree (${actionKey("tree")}), Lv ${a.req}` : at === n ? "in this slot" : at >= 0 ? `now on key ${slotKey(at)}` : "not on a key yet"
       const need = a.needs ? ` · needs ${NEED_TEXT[a.needs]}` : "";
       return `<button class="opt${learned ? "" : " locked"}${at === n ? " cur" : ""}" data-pick="${a.id}" data-tiphead="${a.name}" data-tip="${tipEsc(a.desc)}">` +
         `${iconImg(a.id, "picon")}<span><b>${a.name}</b><small>${where}${need}</small></span></button>`;
     }).join("");
-    const empty = `<button class="opt clear" data-pick=""><span class="picon none">${icon("close")}</span><span><b>Empty</b><small>clear key ${SLOT_KEYS[n]}</small></span></button>`;
+    const empty = `<button class="opt clear" data-pick=""><span class="picon none">${icon("close")}</span><span><b>Empty</b><small>clear key ${slotKey(n)}</small></span></button>`;
     const pick = document.getElementById("slotpick")!;
-    pick.innerHTML = `<div class="ph">Key ${SLOT_KEYS[n]}: choose a skill</div><div class="plist">${opts}${slots[n] ? empty : ""}</div>`;
+    pick.innerHTML = `<div class="ph">Key ${slotKey(n)}: choose a skill</div><div class="plist">${opts}${slots[n] ? empty : ""}</div>`;
     this.pickSlot = n;
     pick.hidden = false;
     // Sit just above the clicked slot
@@ -2135,7 +2136,7 @@ export class TownScene extends Phaser.Scene {
       `${this.weaponIcon(mine, "picon")}<span><b>Weapon attack</b><small>${WEAPON_TYPE_NAMES[w.type]}: ${ATTACK_WORDS[w.type]}</small></span></button>`;
     const opts = activeSkills(cls).map((a) => {
       const learned = skillLearned(cls, mine.talents, a.id);
-      const where = !learned ? `${icon("lock")}learn it in the tree (T), Lv ${a.req}` : a.cantrip ? `basic spell · ${a.mana ?? 0} mana` : a.id === cur ? `on ${side} click` : costWords(a) + (a.needs ? ` · needs ${NEED_TEXT[a.needs]}` : "");
+      const where = !learned ? `${icon("lock")}learn it in the tree (${actionKey("tree")}), Lv ${a.req}` : a.cantrip ? `basic spell · ${a.mana ?? 0} mana` : a.id === cur ? `on ${side} click` : costWords(a) + (a.needs ? ` · needs ${NEED_TEXT[a.needs]}` : "");
       return `<button class="opt${learned ? "" : " locked"}${a.id === cur ? " cur" : ""}" data-pick="${a.id}" data-tiphead="${a.name}" data-tip="${tipEsc(a.desc)}">` +
         `${iconImg(a.id, "picon")}<span><b>${a.name}</b><small>${where}</small></span></button>`;
     }).join("");
@@ -2177,6 +2178,28 @@ export class TownScene extends Phaser.Scene {
     pick.skill = id;
     try { localStorage.setItem(`${side}click:${pick.hero}`, id); } catch { /* storage off */ }
     this.hotbarHtml = "";
+  }
+
+  /** A game key of the current keyboard layout (client/src/keymode.ts) was pressed. */
+  private keyAction(a: KeyAction) {
+    switch (a) {
+      case "potion": this.room?.send("potion"); break;
+      case "mana": this.room?.send("manapotion"); break;
+      case "ranged": this.room?.send("ranged"); break; // secondary ranged weapon (sling, knives, crossbow)
+      case "dodge": this.room?.send("dodge"); break;
+      case "hero": this.toggleHeroMenu(); break;
+      case "interact": this.useKey(); break;
+      case "bag": this.bagKey(); break;
+      case "tree": this.toggleTree(); break;
+    }
+  }
+
+  /** The key hints on the HUD buttons and side panel tabs follow the keyboard layout. */
+  private keyLabels() {
+    const set = (sel: string, a: KeyAction) => document.querySelectorAll(sel).forEach((el) => { el.textContent = `[${actionKey(a)}]`; });
+    set("#herobtn small, [data-tab=hero] small", "hero");
+    set("#bagbtn small, [data-tab=gear] small", "bag");
+    set("#treebtn small, [data-tab=tree] small", "tree");
   }
 
   /** Skill key 1..0: cast that slot's skill now, aimed at the mouse cursor (self skills just go off). */
@@ -2221,7 +2244,7 @@ export class TownScene extends Phaser.Scene {
         `data-tip="${tipEsc(sizes ? `You carry ${sizes}.` : "None left. Monsters, chests and Old Morwen have more.")}" data-tiphint="Key ${key} or click: drinks the smallest first">` +
         `<img src="${url}" alt=""><kbd>${key}</kbd><b class="count">${n}</b></div>`;
     };
-    return `<div class="potions">${cell("potion", "Q")}${cell("mpotion", "V")}</div>`;
+    return `<div class="potions">${cell("potion", actionKey("potion"))}${cell("mpotion", actionKey("mana"))}</div>`;
   }
 
   private closeSlotPicker() {
@@ -2270,22 +2293,24 @@ export class TownScene extends Phaser.Scene {
     const pools = { energy: mine.energy, mana: unpackMana(mine.mp).mana };
     const slots: string[] = [...(mine.slots ?? [])];
     // Slot bar at the bottom: 10 cells, cooldown shading, click to choose a skill
-    const cells = Array.from({ length: SLOT_COUNT }, (_, i) => {
+    const cells = Array.from({ length: slotCount() }, (_, i) => {
       const skill = slots[i] ?? "";
       const picking = (this.pickSlot === i ? " picking" : "");
-      if (!skill) return `<div class="slot empty${picking}" data-slot="${i}" title="Click to put a skill on key ${SLOT_KEYS[i]}"><kbd>${SLOT_KEYS[i]}</kbd><i>+</i></div>`;
+      if (!skill) return `<div class="slot empty${picking}" data-slot="${i}" title="Click to put a skill on key ${slotKey(i)}"><kbd>${slotKey(i)}</kbd><i>+</i></div>`;
       const h = this.skillHud(cls, skill, cdm);
       const left = Math.max(0, h.cdMs - (now - h.last));
       const shade = left > 0 ? `<div class="cd" style="height:${(left / h.cdMs) * 100}%"></div>` : "";
       const wait = left > 0 || !canPay(pools, h.cost) ? " wait" : "";
       const power = skill;
       const unarmed = this.unarmedFor(mine, cls, skill);
-      return `<div class="slot${h.ult ? " ult" : ""}${wait}${unarmed ? " unarmed" : ""}${picking}" data-slot="${i}" data-skill="${skill}" data-tiphead="${h.name}" data-tip="${tipEsc((unarmed ? `${unarmed}. ` : "") + (skillOf(cls, skill)?.desc ?? ""))}" data-tiphint="Key ${SLOT_KEYS[i]} · click to change · wheel to scroll · right-click to clear">` +
-        `${iconImg(power)}${shade}${unarmed ? `<i class="xout"></i>` : ""}<kbd>${SLOT_KEYS[i]}</kbd>${left > 0 && !unarmed ? `<b>${Math.ceil(left / 1000)}</b>` : ""}</div>`;
+      return `<div class="slot${h.ult ? " ult" : ""}${wait}${unarmed ? " unarmed" : ""}${picking}" data-slot="${i}" data-skill="${skill}" data-tiphead="${h.name}" data-tip="${tipEsc((unarmed ? `${unarmed}. ` : "") + (skillOf(cls, skill)?.desc ?? ""))}" data-tiphint="Key ${slotKey(i)} · click to change · wheel to scroll · right-click to clear">` +
+        `${iconImg(power)}${shade}${unarmed ? `<i class="xout"></i>` : ""}<kbd>${slotKey(i)}</kbd>${left > 0 && !unarmed ? `<b>${Math.ceil(left / 1000)}</b>` : ""}</div>`;
     }).join("");
     // Left- and right-click cells first: the weapon, or the spell / skill picked for that click
     const clickCell = (side: ClickSide) => {
       const sk = this.clickSkill(side), key = side === "left" ? "L" : "R", Side = side === "left" ? "Left click" : "Right click / Space";
+      // Spell keys: R is a spell key there, so the click cells say which mouse button they are
+      const label = keyMode() === "spells" ? (side === "left" ? "LMB" : "RMB") : key;
       const pk = this.pickSlot === (side === "left" ? LEFT_PICK : RIGHT_PICK) ? " picking" : "";
       if (sk) {
         const h = this.skillHud(cls, sk, cdm);
@@ -2293,11 +2318,11 @@ export class TownScene extends Phaser.Scene {
         const shade = left > 0 && h.cdMs >= 1000 ? `<div class="cd" style="height:${(left / h.cdMs) * 100}%"></div>` : "";
         const unarmed = this.unarmedFor(mine, cls, sk);
         return `<div class="slot lmb ${side}${!canPay(pools, h.cost) ? " wait" : ""}${unarmed ? " unarmed" : ""}${pk}" data-slot="${key}" data-tiphead="${Side}: ${h.name}" data-tip="${tipEsc((unarmed ? `${unarmed}. ` : "") + (skillOf(cls, sk)?.desc ?? ""))}" data-tiphint="Click to change · wheel to scroll · right-click: back to the weapon">` +
-          `${iconImg(sk)}${shade}${unarmed ? `<i class="xout"></i>` : ""}<kbd>${key}</kbd></div>`;
+          `${iconImg(sk)}${shade}${unarmed ? `<i class="xout"></i>` : ""}<kbd>${label}</kbd></div>`;
       }
       const w = attackProfile(cls, activeOf(mine));
       return `<div class="slot lmb ${side}${w.mana && !canPay(pools, { mana: w.mana }) ? " wait" : ""}${pk}" data-slot="${key}" data-tiphead="${Side}: ${WEAPON_TYPE_NAMES[w.type]}" data-tip="${tipEsc(`Weapon attack: ${ATTACK_WORDS[w.type]}.`)}" data-tiphint="Click to put a spell or skill on this click instead">` +
-        `${this.weaponIcon(mine)}<kbd>${key}</kbd></div>`;
+        `${this.weaponIcon(mine)}<kbd>${label}</kbd></div>`;
     };
     const ls = this.leftSkill(), rs = this.rightSkill();
     const lcell = clickCell("left") + clickCell("right");
@@ -2470,7 +2495,8 @@ export class TownScene extends Phaser.Scene {
     const typing = this.chatting();
     const next: InputState = typing
       ? { up: false, down: false, left: false, right: false }
-      : isoInput(k.W.isDown || k.UP.isDown, k.S.isDown || k.DOWN.isDown, k.A.isDown || k.LEFT.isDown, k.D.isDown || k.RIGHT.isDown);
+      : wasdWalks() ? isoInput(k.W.isDown || k.UP.isDown, k.S.isDown || k.DOWN.isDown, k.A.isDown || k.LEFT.isDown, k.D.isDown || k.RIGHT.isDown)
+      : isoInput(k.UP.isDown, k.DOWN.isDown, k.LEFT.isDown, k.RIGHT.isDown); // spell keys: W/E/R/T cast, the mouse (or arrows) walks
     // Point-and-click: the mouse steers until a movement key is pressed
     let want = next;
     if (next.up || next.down || next.left || next.right) { this.pointer?.cancel(); this.pointer?.drawRing(); }
