@@ -1,0 +1,9 @@
+{
+  "date": "2026-11-07",
+  "title": "Phone fixes",
+  "changes": [
+    "On a phone held sideways, the Log in button is back in view.",
+    "No more chat line covering the skill keys when a new hero logs in.",
+    "On a narrow phone screen, the hero names round the fire no longer overlap or run off the edge."
+  ]
+}
