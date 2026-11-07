@@ -54,58 +54,68 @@ function plain(scene: Phaser.Scene, key: string, w: number, h: number, frames: n
 export const WALL_TALL = 46, WALL_LOW = 9; // world px
 export const BLOCK_W = 96, BLOCK_TOP = 48;
 
+/** Open floor around a wall tile: bit 1 north, 2 west, 4 south, 8 east. */
+export const OPEN_N = 1, OPEN_W = 2, OPEN_S = 4, OPEN_E = 8;
+const VOIDC = 0x100d0f; // the rock mass beyond the walls (groundPaint's VOID)
+const PERIOD = 4, FC = 8; // face pattern repeats every 4 tiles (192 texels = 24 chunk cells), so faces run on seamlessly
+
 /**
- * A block of raw cave rock: a near-black top (the rock mass goes on into the dark) and two hewn faces of
- * jointed rock chunks, cracks between them, strata, roots hanging from the top and a damp foot.
+ * A cave wall tile (Murat 2026-11-07: only the inside should look like a wall, no blocky border): a rock face only on
+ * the sides that look onto open floor (south and east faces, which the iso view shows), its pattern carried on from
+ * tile to tile so a run of wall reads as one rough face; the top is the dark rock mass itself, with only a crumbly
+ * lit lip along the edges that meet the room. Walls with no floor in front are just that dark mass at ground level.
+ * `px`/`py` are the tile's position (mod 4) for the seamless faces.
  */
-export function wallTexture(scene: Phaser.Scene, hW: number, v: number): string {
-  const key = `dg_wall_${hW}_${v}`;
+export function wallTexture(scene: Phaser.Scene, hW: number, open: number, px: number, py: number): string {
+  const faces = open & (OPEN_S | OPEN_E);
+  if (!faces) { px = 0; py = 0; } // a bare top: where it is doesn't matter
+  const key = `dg_wall_${hW}_${open}_${px}_${py}`;
   if (scene.textures.exists(key)) return key;
   const HT = Math.round(hW * TX), W = BLOCK_W, H = BLOCK_TOP + HT;
   const tex = scene.textures.createCanvas(key, W, H)!;
   const ctx = tex.getContext();
   const img = ctx.createImageData(W, H), d = img.data;
-  const set = (x: number, y: number, c: number[]) => { const o = (y * W + x) * 4; d[o] = c[0]; d[o + 1] = c[1]; d[o + 2] = c[2]; d[o + 3] = 255; };
-  const C = 8.5;
+  const set = (x: number, y: number, c: number) => { const o = (y * W + x) * 4; d[o] = (c >> 16) & 255; d[o + 1] = (c >> 8) & 255; d[o + 2] = c & 255; d[o + 3] = 255; };
+  const P = PERIOD * 48, cells = P / FC;
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
-    const inTop = Math.abs(x + 0.5 - 48) / 48 + Math.abs(y + 0.5 - 24) / 24 <= 1;
-    if (inTop) {
-      // the top: the rock mass going on into the dark, near black, only a crumbly lip at the very front edge
-      const ex = Math.abs(x + 0.5 - 48) / 48 + Math.abs(y + 0.5 - 24) / 24;
-      const n = vn(x / 5 + v * 9, y / 3, 11) + dth(x, y) * 0.5;
-      let lv = n > 0.85 ? 1 : 0;
-      if (y + 0.5 > 24 && ex > 0.94 && hash(x, v, 12) < 0.7) lv = 2;
-      set(x, y, rgb(ROCK[lv]));
+    const ex = Math.abs(x + 0.5 - 48) / 48 + Math.abs(y + 0.5 - 24) / 24;
+    if (ex <= 1) {
+      // the top: the dark rock mass; a ragged lit lip only along the edges that meet open floor
+      let c = vn(x / 7 + px * 13, y / 4 + py * 7, 11) + dth(x, y) * 0.4 > 0.9 ? 0x16120f : VOIDC;
+      const north = x >= 48 && y < 24, west = x < 48 && y < 24, south = x < 48 && y >= 24, east = x >= 48 && y >= 24;
+      const edgeOpen = (north && open & OPEN_N) || (west && open & OPEN_W) || (south && open & OPEN_S) || (east && open & OPEN_E);
+      if (edgeOpen && ex > 0.9 - hash(x, y, 12) * 0.06) c = ex > 0.96 ? ROCK[3] : ROCK[2];
+      set(x, y, c);
       continue;
     }
     let face = 0, u = 0, w = 0;
     if (x < 48) { const t = 24 + (x + 0.5) / 2; if (y >= t && y < t + HT) { face = 1; u = x; w = y - t; } }
     else { const t = 24 + (W - x - 0.5) / 2; if (y >= t && y < t + HT) { face = 2; u = x - 48; w = y - t; } }
-    if (!face) continue;
-    // rock chunks: a Voronoi of stretched cells on the face
-    const fu = u + face * 97 + v * 53, fv = w * 1.25;
-    const gx = Math.floor(fu / C), gy = Math.floor(fv / C);
+    if (!face || !(face === 1 ? open & OPEN_S : open & OPEN_E)) continue;
+    // world position along the face, so the next tile's face carries on from this one
+    const uw = (face === 1 ? px * 48 + u : (((PERIOD - py) % PERIOD) * 48) + u) % P;
+    const fu = uw, fv = w * 1.25 + face * 3;
+    const gx = Math.floor(fu / FC), gy = Math.floor(fv / FC);
     let d1 = 1e9, d2 = 1e9, cid = 0, bx = 0, by = 0;
     for (let j = -1; j <= 1; j++) for (let i = -1; i <= 1; i++) {
-      const cx = gx + i, cy = gy + j;
-      const px = (cx + 0.15 + hash(cx, cy, 21) * 0.7) * C, py = (cy + 0.15 + hash(cx, cy, 22) * 0.7) * C;
-      const dx = fu - px, dy = fv - py, dd = Math.sqrt(dx * dx + dy * dy);
-      if (dd < d1) { d2 = d1; d1 = dd; cid = cx * 7919 + cy; bx = dx; by = dy; } else if (dd < d2) d2 = dd;
+      const cxw = ((gx + i) % cells + cells) % cells, cy = gy + j;
+      const ppx = (gx + i + 0.15 + hash(cxw, cy, 21 + face) * 0.7) * FC, ppy = (cy + 0.15 + hash(cxw, cy, 22 + face) * 0.7) * FC;
+      const dx = fu - ppx, dy = fv - ppy, dd = Math.sqrt(dx * dx + dy * dy);
+      if (dd < d1) { d2 = d1; d1 = dd; cid = cxw * 7919 + cy; bx = dx; by = dy; } else if (dd < d2) d2 = dd;
     }
-    const tone = hash(cid, 3, 23), lit = -(bx * (face === 1 ? 0.8 : 0.3) + by) / C;
-    let lv = (face === 1 ? 3.1 : 2.0) + (tone - 0.5) * 1.4 + lit * 1.3 - (d1 / C) * (d1 / C) * 0.9 + dth(x, y) * 0.9;
-    lv += Math.sin(w * 0.55 + vn(u / 9, w / 9, 31 + v) * 5) * 0.25; // strata
+    const tone = hash(cid, 3, 23 + face), lit = -(bx * (face === 1 ? 0.8 : 0.3) + by) / FC;
+    let lv = (face === 1 ? 3.1 : 2.0) + (tone - 0.5) * 1.4 + lit * 1.3 - (d1 / FC) * (d1 / FC) * 0.9 + dth(x, y) * 0.9;
+    lv += Math.sin(w * 0.55 + Math.sin(uw / P * Math.PI * 4) * 2.2) * 0.25; // strata
     if (w < 2) lv += 1.2; // the lit lip
     lv -= Math.max(0, w - (HT - 7)) / 7 * 1.6; // damp, dark foot
     if (d2 - d1 < 0.9) lv = w < 2 ? 2 : 0.4; // cracks between chunks
     let c = ROCK[Math.max(0, Math.min(ROCK.length - 1, Math.floor(lv)))];
     // roots and pale threads of fungus hanging from the top of the face
-    const col = u + face * 61 + v * 13;
+    const col = uw + face * 61;
     if (hash(col, 0, 41) < 0.05 && w < 4 + hash(col, 1, 42) * HT * 0.5) c = (w & 3) === 0 ? 0x2c2016 : 0x46321f;
     if (hash(col, 2, 43) < 0.012 && w < 10) c = 0x8a8a76;
-    // a wet seep catching the light
-    if (face === 1 && vn(u / 6 + v, w / 14, 44) > 0.8 && (x + y) % 3 === 0) c = 0x6f6a62;
-    set(x, y, rgb(c));
+    if (face === 1 && vn(uw / 6, w / 14, 44) > 0.8 && (x + y) % 3 === 0) c = 0x6f6a62; // a wet seep
+    set(x, y, c);
   }
   ctx.putImageData(img, 0, 0);
   tex.refresh();
@@ -116,87 +126,78 @@ export function wallTexture(scene: Phaser.Scene, hW: number, v: number): string 
 // ---------------------------------------------------------------------------------------------------------
 // Gates: a timber barricade block per gate tile (same iso block as the walls), and the posts it hangs from
 // ---------------------------------------------------------------------------------------------------------
-export const GATE_H = 30; // world px
-/** Old dark timber, darkest to lightest. */
-const TIMBER = [0x150f0b, 0x22180f, 0x302215, 0x40301d, 0x523e26, 0x664e31, 0x7c623e];
+
+/** A gate's opening, in world px: how high the portcullis is, and the frame round it. */
+export const GATE_OPEN_H = 34, GATE_FRAME_H = 40, GATE_FRAMES = 8;
+export interface GateShape { sx: number; sy: number; len: number; w: number; h: number; ox: number; oy: number }
+/**
+ * The geometry of a gate seen in iso: `sx, sy` the screen step per world px along the gate's line, `len` its length in
+ * world px; texture size `w, h` (texels) and its foot centre `ox, oy` (texels).
+ */
+export function gateShape(sx: number, sy: number, len: number): GateShape {
+  const w = Math.ceil((Math.abs(sx) * len + 20) * TX), h = Math.ceil((GATE_FRAME_H + 16 + Math.abs(sy) * len) * TX);
+  return { sx, sy, len, w, h, ox: w / 2, oy: h - Math.ceil((Math.abs(sy) * len / 2 + 4) * TX) };
+}
 
 /**
- * A block of lashed timber: a top of sawn stake ends (end grain, a few split), faces of upright planks with dark
- * gaps, two rusted iron bands with rivets, rope lashing, claw gouges and a damp, rotten foot.
+ * A lair gate (Murat 2026-11-07: proper gates with a proper animation): two squared timber posts, a heavy lintel with
+ * a horned skull, and a portcullis of iron-shod stakes between them, drawn along the gate's line in iso. Frame f lifts
+ * the portcullis f/(GATE_FRAMES-1) of the way up into the lintel, so the sheet plays forward to open, back to shut.
  */
-export function gateTexture(scene: Phaser.Scene, v: number): string {
-  const key = `dg_gate_${v}`;
-  if (scene.textures.exists(key)) return key;
-  const HT = Math.round(GATE_H * TX), W = BLOCK_W, H = BLOCK_TOP + HT;
-  const tex = scene.textures.createCanvas(key, W, H)!;
-  const ctx = tex.getContext();
-  const img = ctx.createImageData(W, H), d = img.data;
-  const set = (x: number, y: number, c: number) => { const o = (y * W + x) * 4; d[o] = (c >> 16) & 255; d[o + 1] = (c >> 8) & 255; d[o + 2] = c & 255; d[o + 3] = 255; };
-  const P = 7; // plank width (texels along a face)
-  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
-    const ex = Math.abs(x + 0.5 - 48) / 48 + Math.abs(y + 0.5 - 24) / 24;
-    if (ex <= 1) {
-      // the top: round stake ends in rows, end-grain rings, dark between them
-      const a = (x - 48) / 2 + (y - 24), b = -(x - 48) / 2 + (y - 24); // iso axes
-      const ca = Math.round(a / 7) * 7, cb = Math.round(b / 7) * 7, r = Math.hypot(a - ca, b - cb);
-      let lv = r < 3.2 ? 4 + (r < 1.2 ? -1 : 0) + Math.round(Math.sin(r * 2.6) * 0.6 + dth(x, y)) : 1;
-      if (r < 3.2 && hash(ca, cb, 51 + v) < 0.2 && Math.abs(a - ca) < 0.6) lv = 1; // a split stake
-      if (ex > 0.95) lv = Math.max(lv, 3);
-      set(x, y, TIMBER[Math.max(0, Math.min(6, lv))]);
-      continue;
+export function gateSheet(scene: Phaser.Scene, key: string, g: GateShape) {
+  if (scene.textures.exists(key)) return;
+  const L = g.len * TX, sx = g.sx, sy = g.sy, HO = GATE_OPEN_H * TX, HF = GATE_FRAME_H * TX;
+  const base = (t: number) => [g.ox + sx * (t - 0.5) * L, g.oy + sy * (t - 0.5) * L]; // t 0..1 along the gate's foot
+  const along = Math.hypot(sx, sy) * L; // screen length in texels
+  sheet(scene, key, g.w, g.h, GATE_FRAMES, (p, f) => {
+    const rise = HO * f / (GATE_FRAMES - 1);
+    // the portcullis: stakes every few texels, two iron-banded rails, spiked feet; clipped under the lintel
+    const nBars = Math.max(3, Math.round(along / 9));
+    for (let b = 0; b <= nBars; b++) {
+      const t = 0.04 + 0.92 * b / nBars, [bx, by] = base(t), top = by - HO, x = Math.round(bx);
+      const y0 = Math.max(top + 2, by - HO - rise), y1 = by - rise - 2;
+      for (let y = Math.ceil(y0); y <= y1; y++) {
+        p.px(x - 2, y, OLDWOOD[0]); p.px(x - 1, y, OLDWOOD[1]); p.px(x, y, OLDWOOD[1]); p.px(x + 1, y, OLDWOOD[2]);
+        if ((y + b * 3) % 11 === 0) p.px(x - 1, y, OLDWOOD[2]);
+      }
+      if (by - rise > top + 2) { const ty = Math.round(by - rise - 2); p.rect(x - 2, ty - 1, 4, 2, IRON.lo); p.px(x - 1, ty + 1, IRON.mid); p.px(x, ty + 1, IRON.lo); p.px(x - 1, ty + 2, IRON.hi); } // iron-shod points
     }
-    let face = 0, u = 0, w = 0;
-    if (x < 48) { const t = 24 + (x + 0.5) / 2; if (y >= t && y < t + HT) { face = 1; u = x; w = y - t; } }
-    else { const t = 24 + (W - x - 0.5) / 2; if (y >= t && y < t + HT) { face = 2; u = x - 48; w = y - t; } }
-    if (!face) continue;
-    const pk = Math.floor((u + (face === 2 ? 3 : 0)) / P), pu = (u + (face === 2 ? 3 : 0)) % P;
-    const tone = hash(pk, face, 52 + v);
-    let lv = (face === 1 ? 4.2 : 2.9) + (tone - 0.5) * 1.2 + dth(x, y) * 0.8;
-    lv += (vn(pk * 3 + 0.5, w / 5, 53 + v) - 0.5) * 1.1; // grain
-    if (pu === 0) lv = 0.5; // gap between planks
-    else if (pu === 1) lv += 0.6; // lit edge
-    else if (pu === P - 1) lv -= 0.8;
-    if (w < 2) lv += 0.9;
-    lv -= Math.max(0, w - (HT - 8)) / 8 * 1.8; // damp foot
-    let c = TIMBER[Math.max(0, Math.min(6, Math.floor(lv)))];
-    // iron bands with rivets
-    for (const bw of [Math.round(HT * 0.24), Math.round(HT * 0.68)]) {
-      if (w >= bw && w < bw + 3) {
-        c = w === bw ? (face === 1 ? IRON.mid : IRON.lo) : w === bw + 2 ? 0x1c1a18 : face === 1 ? 0x5c5148 : 0x3e3630;
-        if (hash(u, bw, 54) < 0.25) c = 0x6a3e22; // rust
-        if (pu === 3 && w === bw + 1) c = face === 1 ? IRON.hi : IRON.mid;
+    for (const rf of [0.28, 0.72]) {
+      for (let k = 0; k <= along; k++) {
+        const t = k / along, [bx, by] = base(t), y = by - rise - HO * rf, top = by - HO;
+        if (y < top + 3) continue;
+        p.px(bx, y, IRON.hi); p.px(bx, y + 1, IRON.mid); p.px(bx, y + 2, IRON.lo);
+        if (k % 9 === 4) p.px(bx, y + 1, IRON.hi); // rivets
       }
     }
-    // rope lashing near the top of each plank
-    if (w >= 3 && w < 6 && pu > 0 && (pu + w) % 2 === 0 && hash(pk, 1, 55 + v) < 0.7) c = face === 1 ? ROPE : 0x6e5e3e;
-    // claw gouges: three pale strokes on some planks
-    if (hash(pk, 2, 56 + v) < 0.12 && w > HT * 0.35 && w < HT * 0.6 && (pu === 2 || pu === 4) && (w + pu) % 3 !== 0) c = face === 1 ? 0x8c7450 : 0x5e4a32;
-    set(x, y, c);
-  }
-  ctx.putImageData(img, 0, 0);
-  tex.refresh();
-  tex.setFilter(Phaser.Textures.FilterMode.NEAREST);
-  return key;
+    // the posts
+    for (const t of [0, 1]) {
+      const [bx, by] = base(t), x = Math.round(bx) - 5;
+      p.shaft(x, by - HF, x, by, 10, OLDWOOD);
+      for (const yy of [by - HF + 9, by - HF / 2, by - 8]) { p.rect(x, yy, 10, 3, IRON.lo); p.rect(x, yy, 10, 1, IRON.mid); p.px(x + 2, yy + 1, IRON.hi); p.px(x + 7, yy + 1, IRON.hi); }
+    }
+    // the lintel, along the top of the opening, heavy and dark, lit on its upper edge
+    for (let k = -4; k <= along + 4; k++) {
+      const t = k / along, [bx, by] = base(t), y = by - HF;
+      for (let j = -2; j < 10; j++) p.px(bx, y + j, j < 0 ? OLDWOOD[0] : j > 7 ? 0x241a12 : (k * 7 + j * 3) % 13 === 0 ? OLDWOOD[2] : j === 4 && k % 14 < 2 ? IRON.mid : OLDWOOD[1]);
+    }
+    const [mx, my] = base(0.5);
+    skull(p, Math.round(mx), Math.round(my - HF - 6), true);
+    // ropes from the lintel down to the portcullis' top rail
+    if (rise < HO - 6) for (const t of [0.25, 0.75]) {
+      const [bx, by] = base(t);
+      for (let y = by - HF + 8; y < by - rise - HO * 0.72; y++) p.px(bx + ((y & 1) ? 1 : 0), y, ROPE);
+    }
+  }, 0);
 }
 
-export const GATEPOST = { w: 26, h: 76 };
-/** A gate's heavy post: a squared trunk with iron bands, a horned skull nailed on top and the hinge chains. */
-function gatePost(p: Pen, v: number) {
-  const { w, h } = GATEPOST, cx = Math.round(w / 2);
-  p.shaft(cx, 16, cx, h - 2, 5, OLDWOOD);
-  for (const y of [28, h - 18]) { p.shaft(cx - 3, y, cx + 3, y, 2, [IRON.mid, IRON.lo, 0x1c1a18]); p.px(cx - 1, y, IRON.hi); }
-  for (let k = 0; k < 6; k++) { const y = 34 + k * 3; p.px(cx + 4, y, IRON.lo); p.px(cx + 5, y + 1, IRON.mid); p.px(cx + 4, y + 2, IRON.lo); } // the hinge chain
-  skull(p, cx, 11, v !== 1);
-  // rags tied under the skull
-  for (let j = 0; j < 10; j++) for (let i = 0; i < 3; i++) if (hash(i, j, v + 61) < 0.8 - j * 0.05) p.px(cx - 5 - i - Math.round(j * 0.2), 19 + j, j % 3 === 0 ? 0x3a2418 : 0x5a1c14);
-}
 
 // ---------------------------------------------------------------------------------------------------------
 // Props
 // ---------------------------------------------------------------------------------------------------------
 export const BRAZIER = { w: 26, h: 44, frames: 6 };
 export const ROPE_ART = { w: 16, h: 210, frames: 4 };
-export const PIT = { w: 132, h: 72 };
+export const PIT = { w: 132, h: 64 };
 export const STAIR_UP = { w: 84, h: 96 };
 export const SINK = { w: 168, h: 92 };
 
@@ -255,28 +256,106 @@ function rope(p: Pen, f: number) {
   }
 }
 
-/** A stairwell cut down into the rock: rough treads going down into black, a rim of fitted stones. */
+/**
+ * The stair down: a stone-lined well in the floor (an iso diamond) with steps going down away from the viewer into
+ * the dark. The far walls show their courses of blocks, each tread has a lit lip and the shadow of the one above,
+ * the treads dim with depth, and a faint warm glow comes up from far below (the next floor's torches), so it reads
+ * as a way on, not a pit. A timber frame and big rim stones round the mouth.
+ */
 function pit(p: Pen) {
-  const { w, h } = PIT, cx = w / 2, cy = h / 2, hw = w / 2 - 12, hh = h / 2 - 6;
-  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
-    const e = Math.abs(x + 0.5 - cx) / hw + Math.abs(y + 0.5 - cy) / hh;
-    if (e <= 1) {
-      // steps: bands across the hole, lit treads and dark risers, deeper is darker, then black
-      const t = (y + 0.5 - (cy - hh)) / (hh * 2) + (x - cx) / (hw * 6);
-      const k = Math.floor(t * 9), ph = t * 9 - k;
-      const deep = Math.min(1, t * 1.25);
-      const base = ph < 0.35 ? 5 : 2;
-      let lv = Math.round((base - deep * 5.5) + dth(x, y) * 0.8);
-      if (e > 0.9) lv -= 1;
-      p.px(x, y, ROCK[Math.max(0, Math.min(6, lv))]);
-    } else if (e <= 1.22) {
-      // rim stones
-      const a = Math.atan2((y - cy) / hh, (x - cx) / hw), cell = Math.floor((a + Math.PI) * 4.5);
-      const ring = (e - 1) / 0.22, edge = Math.abs(((a + Math.PI) * 4.5) % 1 - 0.5) > 0.42 || ring > 0.85;
-      const lit = y < cy ? 1 : 0;
-      p.px(x, y, edge ? OUTLINE : ROCK[Math.min(6, 3 + lit + (hash(cell, 0, 5) < 0.4 ? 1 : 0) - (ring > 0.6 ? 1 : 0))]);
+  const { w, h } = PIT, cx = w / 2, cy = 30, hw = w / 2 - 12, hh = 26, STEPS = 6, SH = 5, DEEP = STEPS * SH;
+  // world square a,b in [-1,1] (a east, b south) seen in iso; z is depth below the floor (texels)
+  const scr = (a: number, b: number, z: number) => [cx + (a - b) * hw / 2, cy + (a + b) * hh / 2 + z];
+  const inHole = (x: number, y: number) => Math.abs(x + 0.5 - cx) / hw + Math.abs(y + 0.5 - cy) / hh <= 1;
+  const stepOf = (b: number) => Math.min(STEPS - 1, Math.floor((1 - b) / 2 * STEPS)); // 0 nearest .. far = deepest
+  const zOf = (b: number) => (stepOf(b) + 1) * SH;
+  const put = (a: number, b: number, z: number, c: number) => {
+    const [x, y] = scr(a, b, z), X = Math.floor(x), Y = Math.floor(y);
+    if (inHole(X, Y)) p.px(X, Y, c);
+  };
+  const N = 220;
+  // 1. the west wall (a = -1), its foot following the steps down: in shadow, courses of blocks
+  for (let i = 0; i <= N; i++) {
+    const b = -1 + 2 * i / N, zf = zOf(b);
+    for (let z = 0; z <= zf; z += 0.5) {
+      const row = Math.floor(z / 4), u = (b + 1) * 30 + (row % 2) * 4, joint = z % 4 < 0.7 || u % 8 < 0.8;
+      let lv = 2.2 - z / DEEP * 1.6 + (hash(Math.floor(u / 8), row, 83) - 0.5) * 0.8 + (joint ? -1.1 : 0);
+      if (z < 1.2) lv += 1;
+      put(-1, b, z, ROCK[Math.max(0, Math.min(6, Math.round(lv)))]);
     }
   }
+  // 2. the north wall (a over -1..1 at b = -1), lit from the west, with the dark arch the stair goes on into
+  for (let i = 0; i <= N; i++) {
+    const a = -1 + 2 * i / N;
+    for (let z = 0; z <= DEEP; z += 0.5) {
+      const row = Math.floor(z / 4), u = (a + 1) * 30 + (row % 2) * 4, joint = z % 4 < 0.7 || u % 8 < 0.8;
+      let lv = 3.1 - z / DEEP * 1.8 + (hash(Math.floor(u / 8), row, 84) - 0.5) * 0.8 + (joint ? -1.1 : 0);
+      if (z < 1.2) lv += 1;
+      let c = ROCK[Math.max(0, Math.min(6, Math.round(lv)))];
+      const ah = DEEP - z, archH = 17 - Math.max(0, (Math.abs(a) - 0.18) / 0.27) ** 2 * 7;
+      if (Math.abs(a) < 0.45 && ah < archH) { // the opening, black, a warm glow from far below at its foot
+        c = ah < 3 ? 0x4a220e : ah < 6 ? 0x2a140a : 0x080606;
+        if (Math.abs(ah - archH) < 1.2) c = ROCK[4]; // the arch's stones
+      }
+      put(a, -1, z, c);
+    }
+  }
+  // 3. the treads, far to near: each a little lower than the one before it, lit lip at its far edge
+  for (let i = 0; i <= N; i++) {
+    const b = -1 + 2 * i / N, k = stepOf(b), z = zOf(b), fr = ((1 - b) / 2 * STEPS) % 1; // fr 0 near edge .. 1 far edge
+    for (let jj = 0; jj <= N; jj++) {
+      const a = -1 + 2 * jj / N;
+      const [x, y] = scr(a, b, z);
+      let lv = 5.6 - k * 0.75 + dth(Math.floor(x), Math.floor(y)) * 0.7;
+      if (fr > 0.82) lv += 1.2; // the worn lip where it drops to the next step
+      if (fr < 0.14) lv -= 1.4; // under the lip of the step above
+      if (a < -0.8) lv -= 1.2; // shade of the west wall
+      if (hash(Math.floor(a * 30), k, 85) < 0.06) lv -= 1; // chips
+      let c = ROCK[Math.max(0, Math.min(6, Math.round(lv)))];
+      if (k === STEPS - 1 && Math.abs(a) < 0.45) c = fr > 0.6 ? 0x3a1a0c : 0x2a1810; // the glow on the last step
+      put(a, b, z, c);
+    }
+  }
+  // 4. rim stones, and a timber frame along the two near edges
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const e = Math.abs(x + 0.5 - cx) / hw + Math.abs(y + 0.5 - cy) / hh;
+    if (e <= 1 || e > 1.24) continue;
+    const a = Math.atan2((y - cy) / hh, (x - cx) / hw), cell = Math.floor((a + Math.PI) * 4.5);
+    const ring = (e - 1) / 0.24, near = y > cy + 1;
+    if (near && ring < 0.55) {
+      const grain = (Math.round(x * 0.5 + (x < cx ? -y : y)) % 5 === 0);
+      p.px(x, y, ring < 0.12 ? OLDWOOD[0] : ring > 0.42 ? OUTLINE : grain ? OLDWOOD[2] : OLDWOOD[1]);
+      continue;
+    }
+    const edge = Math.abs(((a + Math.PI) * 4.5) % 1 - 0.5) > 0.42 || ring > 0.85;
+    p.px(x, y, edge ? OUTLINE : ROCK[Math.min(6, 3 + (y < cy ? 1 : 0) + (hash(cell, 0, 5) < 0.4 ? 1 : 0) - (ring > 0.6 ? 1 : 0))]);
+  }
+  for (const [px, py] of [[cx - hw - 4, cy + 1], [cx + hw + 3, cy + 1], [cx, cy + hh + 4]]) { p.px(px, py, IRON.hi); p.px(px + 1, py, IRON.lo); p.px(px, py + 1, IRON.mid); }
+}
+
+export const TORCH = { w: 18, h: 58, frames: 6 };
+/** A torch on a stake: a squared post, an iron cup, a pitch-soaked rag burning in it. */
+function torchPost(p: Pen, f: number) {
+  const { h } = TORCH, cx = 9;
+  p.shaft(cx - 1, 22, cx - 1, h - 2, 3, OLDWOOD);
+  for (const y of [30, h - 10]) { p.px(cx - 1, y, ROPE); p.px(cx, y, ROPE); p.px(cx + 1, y, 0x6e5e3e); }
+  // the cup
+  for (let y = 16; y <= 22; y++) {
+    const hw = Math.round(4 - Math.max(0, y - 19) * 0.8);
+    for (let x = -hw; x <= hw; x++) p.px(cx + x, y, x < -hw + 1 ? IRON.hi : x > hw - 1 ? IRON.lo : y === 16 ? IRON.hi : IRON.mid);
+  }
+  for (let x = -3; x <= 3; x++) p.px(cx + x, 15, hash(x, f, 5) < 0.5 ? 0xffb04a : 0xc4461a);
+  // the flame
+  for (let x = -4; x <= 4; x++) {
+    const base = 1 - Math.abs(x) / 5;
+    const fh = Math.round(3 + base * 10 * (0.7 + 0.3 * Math.sin(f * 1.7 + x * 1.3)) + hash(x, f, 7) * 2);
+    const lean = Math.round(Math.sin(f * 1.05 + 0.5) * 1.2);
+    for (let k = 0; k < fh; k++) {
+      const t = k / fh, ci = Math.min(FLAME.length - 1, Math.floor(t * 4.2 + Math.abs(x) * 0.3));
+      p.px(cx + x + (k > fh * 0.5 ? lean : 0), 14 - k, FLAME[ci]);
+    }
+  }
+  if (f % 2 === 0) p.px(cx + ((f * 3) % 5) - 2, 1 + (f % 3), 0xffd36a); // a spark
 }
 
 /** Steps hewn up into the rock toward a black opening, with a wooden lintel and a skull nailed over it. */
@@ -548,6 +627,8 @@ export function dungeonTextures(scene: Phaser.Scene) {
   sheet(scene, "dg_rope", ROPE_ART.w, ROPE_ART.h, ROPE_ART.frames, rope, 0);
   if (!scene.anims.exists("dg_rope_sway")) scene.anims.create({ key: "dg_rope_sway", frames: scene.anims.generateFrameNumbers("dg_rope", { start: 0, end: ROPE_ART.frames - 1 }), frameRate: 3, repeat: -1, yoyo: true });
   plain(scene, "dg_pit", PIT.w, PIT.h, 1, pit);
+  sheet(scene, "dg_torch", TORCH.w, TORCH.h, TORCH.frames, torchPost, 0.5);
+  if (!scene.anims.exists("dg_torch_burn")) scene.anims.create({ key: "dg_torch_burn", frames: scene.anims.generateFrameNumbers("dg_torch", { start: 0, end: TORCH.frames - 1 }), frameRate: 10, repeat: -1 });
   sheet(scene, "dg_stair_up", STAIR_UP.w, STAIR_UP.h, 1, stairUp, 0.5);
   plain(scene, "dg_sinkhole", SINK.w, SINK.h, 1, sinkhole);
   sheet(scene, "dg_stake", 32, 36, 1, ropeStake, 0.4);
@@ -557,7 +638,6 @@ export function dungeonTextures(scene: Phaser.Scene) {
   plain(scene, "dg_web", WEB.w, WEB.h, 3, web);
   plain(scene, "dg_bed", BED.w, BED.h, 1, hideBed);
   sheet(scene, "dg_spike", SPIKE.w, SPIKE.h, 3, spike, 0.5);
-  sheet(scene, "dg_gatepost", GATEPOST.w, GATEPOST.h, 2, gatePost, 0.5);
   // a pale shaft of daylight falling down the sinkhole
   if (!scene.textures.exists("dg_beam")) {
     const t = scene.textures.createCanvas("dg_beam", 32, 128)!, c = t.getContext();

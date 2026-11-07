@@ -80,6 +80,8 @@ export const LINKS: Link[] = [
   { id: "f2up", label: "Go up to the Gnawing Halls", ...at(f2in[0] - 2, f2in[1] - 2), to: "f1down", down: false, floor: 2 },
   { id: "f2down", label: "Go down to the Hide-Mother's Den", ...at(f2down[0] + 1, f2down[1] + 1), to: "f3up", down: true, floor: 2 },
   { id: "f3up", label: "Go up to the Silk Pens", ...at(f3in[0] - 2, f3in[1] - 2), to: "f2down", down: false, floor: 3 },
+  // The way out from the bottom (Murat 2026-11-07): an old rope hanging down a crack in the den's roof, up to the woods
+  { id: "f3out", label: "Climb the rope back to the woods", ...at(F3.x + F3.chambers[4].x + 8, F3.y + F3.chambers[4].y + 3), to: "sink", down: false, floor: 3 },
 ];
 export const LINK_RANGE = 0.75 * TILE;
 /** Where a hero arriving through link `l` stands: two steps out of it, toward the chamber. */
