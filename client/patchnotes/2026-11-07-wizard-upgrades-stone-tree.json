@@ -1,5 +1,6 @@
 {
   "date": "2026-11-07",
+  "pr": 302,
   "title": "Wizard upgrade paths and a stone skill tree",
   "changes": [
     "The wizard's tree now upgrades its three spells instead of adding new ones: two paths per school, three tiers (levels 3, 8 and 14), three ranks each.",
