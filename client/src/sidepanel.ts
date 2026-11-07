@@ -2,7 +2,7 @@ import { ClassKind } from "../../shared/classes";
 import { Equipped, GEAR_SLOTS } from "../../shared/gear";
 import { heroSheet, Sheet, SheetHero, SHEET_ROWS } from "../../shared/heroSheet";
 import { fillIcons } from "./pixelicons";
-import { ELEMENTS, ELEMENT_NAMES } from "../../shared/elements";
+import { ELEMENTS, ELEMENT_NAMES, type Element } from "../../shared/elements";
 
 /**
  * Side panel (right side of the screen) holding the Character (C), Inventory (G) and Skills (T) screens as tabs.
@@ -82,20 +82,24 @@ export class SidePanel {
     const sig = JSON.stringify([now, next, p?.label]);
     if (sig === this.sig) return;
     this.sig = sig;
-    const fmt = (v: number, pct?: boolean) => `${v}${pct ? "%" : ""}`;
-    const cells = SHEET_ROWS.map(({ key, label, pct }) => {
-      const v = now[key] as number, n = next ? (next[key] as number) : v, d = n - v;
+    // A fixed column on the left of every tab (Murat 2026-11-07): offense, defense, attributes, resistances, each with
+    // what a hovered item / point / skill would change
+    const row = (label: string, v: number, n: number, pct = false) => {
+      const d = n - v;
       const delta = d ? `<em class="${d > 0 ? "up" : "down"}">${d > 0 ? "+" : ""}${d}${pct ? "%" : ""}</em>` : "";
-      return `<div class="spstat${d ? (d > 0 ? " up" : " down") : ""}"><span>${label}</span><b>${fmt(next ? n : v, pct)}</b>${delta}</div>`;
-    }).join("");
-    const res = resLine(now);
-    this.sheetEl.innerHTML = `<div class="spgrid">${cells}</div>` +
-      `<div class="spnote">${p ? `If you ${p.label}` : res || "Hover an item or a skill to see what it changes"}</div>`;
+      return `<div class="sprow${d ? (d > 0 ? " up" : " down") : ""}"><span>${label}</span><b>${n}${pct ? "%" : ""}</b>${delta}</div>`;
+    };
+    const get = (k: keyof Sheet) => [now[k] as number, next ? (next[k] as number) : (now[k] as number)] as const;
+    const sheetRow = (k: keyof Sheet, label: string, pct = false) => { const [v, n] = get(k); return row(label, v, n, pct); };
+    const st = (k: keyof Sheet["stats"], label: string) => row(label, now.stats[k] ?? 0, (next ?? now).stats[k] ?? 0);
+    const rs = (e: Element) => row(ELEMENT_NAMES[e], now.res[e] ?? 0, (next ?? now).res[e] ?? 0, true);
+    const sec = (title: string, body: string) => `<div class="spsec"><h4>${title}</h4>${body}</div>`;
+    void SHEET_ROWS;
+    this.sheetEl.innerHTML =
+      sec("Offense", sheetRow("atk", "Attack") + sheetRow("dps", "Damage / s") + sheetRow("spell", "Spell damage", true) + sheetRow("crit", "Critical chance", true)) +
+      sec("Defense", sheetRow("hp", "Health") + sheetRow("mana", "Mana") + sheetRow("def", "Damage blocked", true) + sheetRow("speed", "Move speed")) +
+      sec("Attributes", st("str", "Strength") + st("sta", "Stamina") + st("mag", "Magic") + st("dex", "Dexterity")) +
+      sec("Resistances", ELEMENTS.map(rs).join("")) +
+      `<div class="spnote">${p ? `If you ${p.label}` : "Hover an item or a skill to see what it changes"}</div>`;
   }
-}
-
-/** "Resist: Fire 10% · Cold 5%" line (only the resists the gear gives). */
-function resLine(s: Sheet): string {
-  const parts = ELEMENTS.filter((e) => s.res[e]).map((e) => `${ELEMENT_NAMES[e]} ${s.res[e]}%`);
-  return parts.length ? `Resist: ${parts.join(" · ")}` : "";
 }
