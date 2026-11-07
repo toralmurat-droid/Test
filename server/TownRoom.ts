@@ -11,7 +11,7 @@ import {
   ATTACK_VARIANTS, basicDrain, CLASSES, ClassKind, COMBO_WINDOW_MS, DODGE, EMOTES, ENERGY, staminaRegen, DASH_INVULN_MS, GUARD_REDUCTION, isActiveClass, isClassKind, levelFromXp, MAX_XP, capLevel, PVP_KILL_XP, xpForLevel,
 } from "../shared/classes";
 import { MANA_POTION_DROP, manaRegen, maxManaFor, packMana, pay } from "../shared/mana";
-import { Counts, dropSize, Potions, nextSize, noPotions, packPotions, potionAmount, potionName, PotionKind, potionSlots, POTION_COOLDOWN_MS, slotsAfter, SIZES, total } from "../shared/potions";
+import { Counts, dropSize, Potions, nextSize, noPotions, packPotions, potionAmount, potionName, PotionKind, potionSlots, POTION_COOLDOWN_MS, POTION_STACK, slotsAfter, SIZES, total } from "../shared/potions";
 /** Potion size from a ground item's `gear` field ("0".."2"). */
 const potSize = (g: string) => Math.max(0, Math.min(SIZES - 1, Math.floor(Number(g) || 0)));
 import { attackMult, cooldownMult, critChance, heroSpeed, magicMult, maxHpFromStats, SLOW_MOB, STATS, statsFor, statPoints } from "../shared/powers";
@@ -628,6 +628,7 @@ export class TownRoom extends Room<TownState> {
     this.onMessage("unequip", (client, slot: GearSlot) => this.unequip(client.sessionId, slot));
     this.onMessage("dropgear", (client, i: number) => this.dropGear(client.sessionId, i));
     this.onMessage("dropgears", (client, list: number[]) => this.dropGears(client.sessionId, list));
+    this.onMessage("droppotion", (client, m: { kind?: string; size?: number; n?: number }) => this.dropPotions(client.sessionId, m));
     this.onMessage("lootfilter", (client, f: unknown) => { this.lootFilters.set(client.sessionId, cleanFilter(f)); });
     this.onMessage("ranged", (client) => this.fireRanged(client.sessionId));
     this.onMessage("useslot", (client, n: number) => this.useSlot(client.sessionId, n));
@@ -3693,6 +3694,19 @@ export class TownRoom extends Room<TownState> {
     setBag(p, items.filter((_, i) => !idx.has(i)));
     const off = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] }[p.dir];
     for (const i of idx) this.dropItem("gear", p.x + off[0] * (PICKUP_RADIUS + 10), p.y + off[1] * (PICKUP_RADIUS + 10), 1, items[i]);
+  }
+
+  /** Throw one bag stack of potions on the ground (right-click on a potion slot in the bag): one ground item for the stack. */
+  private dropPotions(id: string, m: { kind?: string; size?: number; n?: number }) {
+    const p = this.state.players.get(id);
+    if (!p || !m || (m.kind !== "potion" && m.kind !== "mpotion") || !Number.isInteger(m.size) || m.size! < 0 || m.size! >= SIZES) return;
+    const kind: PotionKind = m.kind, size = m.size!;
+    const n = Math.min(p.pots[kind][size], POTION_STACK, Number.isInteger(m.n) && m.n! > 0 ? m.n! : POTION_STACK);
+    if (n <= 0) return;
+    p.pots[kind][size] -= n;
+    this.syncPotions(p);
+    const off = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] }[p.dir];
+    this.dropItem(kind, p.x + off[0] * (PICKUP_RADIUS + 10), p.y + off[1] * (PICKUP_RADIUS + 10), n, String(size));
   }
 
   /** Loot filters by session (not synced: only this server needs them; the client sends its own on join). */
