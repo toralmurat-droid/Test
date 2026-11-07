@@ -1124,6 +1124,27 @@ const ART: Record<string, Draw> = {
     p.thick(2, 3, 9, 20, 2, BLOOD[2]); p.thick(22, 3, 15, 20, 2, BLOOD[2]); p.line(3, 3, 9, 19, BLOOD[3]); p.line(21, 3, 15, 19, BLOOD[3]);
     for (const [x, y] of [[4, 22], [20, 22], [12, 2]]) p.px(x, y, BLOOD[1]);
   },
+  v_devour: (p) => {
+    // a gaping pale maw with long fangs closing on a torn chunk of red flesh, blood dripping
+    p.poly([[2, 4], [22, 4], [20, 8], [4, 8]], "#e6dcd6"); p.poly([[2, 4], [22, 4], [21, 5], [3, 5]], "#ffffff");
+    p.poly([[5, 8], [7, 8], [6, 14]], "#ffffff"); p.poly([[17, 8], [19, 8], [18, 14]], "#ffffff");
+    for (const x of [9, 11, 13]) p.poly([[x, 8], [x + 2, 8], [x + 1, 10]], "#f2ece6");
+    p.ball(12, 15, 4.2, ["#3a0000", "#8c1a1a", "#c94040", "#f2a0a0"], 3.2);
+    p.poly([[8, 14], [10, 12], [11, 15]], "#f2d7c9"); p.px(14, 13, "#f2d7c9");
+    p.poly([[3, 19], [21, 19], [19, 22], [5, 22]], "#e6dcd6"); p.poly([[6, 19], [8, 19], [7, 16]], "#ffffff"); p.poly([[16, 19], [18, 19], [17, 16]], "#ffffff");
+    p.outline();
+    for (const [x, y] of [[10, 19], [14, 20], [12, 23]]) { p.px(x, y, BLOOD[2]); p.px(x, y - 1, BLOOD[1]); }
+  },
+  v_bite: (p) => {
+    // two bleeding fang marks on pale skin, and the thrall rising behind them with red eyes
+    p.poly([[4, 23], [6, 11], [12, 6], [18, 11], [20, 23]], SHAD[0]);
+    p.ball(12, 9, 3.4, ["#140b2b", "#35208a", "#4b2fa0", "#6a45c2"]);
+    p.rect(2, 15, 20, 8, "#d9cfc9"); p.rect(2, 15, 20, 1, "#f2ece6");
+    for (const x of [8, 15]) { p.disc(x, 18, 1.4, "#5a0d12"); p.px(x, 18, "#2a0000"); }
+    p.outline();
+    p.px(10, 9, "#ff2d2d"); p.px(14, 9, "#ff2d2d");
+    for (const x of [8, 15]) { p.line(x, 20, x, 22, BLOOD[2]); p.px(x, 23, BLOOD[1]); }
+  },
   v_leech: (p) => {
     // a single drop of blood flicked from a pale hand
     p.poly([[2, 20], [8, 15], [11, 16], [9, 19], [5, 22]], "#e6dcd6"); p.poly([[8, 15], [11, 13], [12, 14], [11, 16]], "#bdb0b8");

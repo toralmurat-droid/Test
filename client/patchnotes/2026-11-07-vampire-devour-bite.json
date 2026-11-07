@@ -1,0 +1,9 @@
+{
+  "date": "2026-11-07",
+  "title": "Vampire: Devour and Bite",
+  "changes": [
+    "New Fang skill Devour (Lv 4): tear into a monster; one below 30% life is eaten whole, heals you and leaves you a little stronger for good, more for every one of its kind (blobs: life, elemental blobs: skill damage, bandits: damage, beast-folk: speed, up to 20 of each).",
+    "New Fang skill Bite (Lv 7): drink from a monster; one below 40% life may rise as your thrall for 3 minutes. Up to 2 thralls, 3 from rank 2.",
+    "Skeletons, the other undead and golems have no flesh: nothing to eat or bite. Your meals show on the character sheet."
+  ]
+}

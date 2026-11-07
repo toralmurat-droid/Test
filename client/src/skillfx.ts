@@ -374,6 +374,51 @@ export class SkillFx {
         break;
       }
       case "siphon": this.siphon(ev); break;
+      case "fang": {
+        // Devour / Bite: the jaws snap shut on the victim, two white fangs and a spurt of blood
+        const v = this.ent(ev.t);
+        const x = v?.sprite.x ?? ev.x, y = v?.sprite.y ?? ev.y, z = (v?.top ?? 16) * 0.6;
+        for (const side of [-1, 1]) for (let i = 0; i < 4; i++) {
+          this.p(x + side * (6 - i * 1.5), y, z + side * (5 - i), 0xffffff, { vx: -side * 40, vz: -side * 30, life: 120, size: 1, size1: 1, add: false });
+        }
+        this.burst(x, y, z, "blood", 10, 60, 320);
+        this.glow(x, y, z, 10, 0xb71c1c, 220, 0.6);
+        break;
+      }
+      case "devour": {
+        // Eaten whole: chunks of the victim are torn off and gulped into the vampire, who flushes red
+        const me = this.ent(ev.id);
+        if (!me) break;
+        const col = ({ blob: [0x7cb342, 0x9ccc65, 0x558b2f], gloam: [0x4cc9f0, 0xff9f1c, 0xc77dff], outlaw: [0xc98d63, 0x9b1b1b, 0x6d4526], beast: [0x8d6e63, 0x5d4037, 0x9b1b1b] } as Record<string, number[]>)[ev.fam] ?? PALETTE.blood;
+        const dx = me.sprite.x - ev.x, dy = me.sprite.y - ev.y;
+        for (let i = 0; i < 16; i++) {
+          const T = rnd(0.22, 0.4);
+          this.p(ev.x + rnd(-5, 5), ev.y + rnd(-3, 3), rnd(4, 14), pick(i % 3 ? col : PALETTE.blood.slice(1, 4)),
+            { vx: dx / T, vy: dy / T, vz: (me.top * 0.55 - 8) / T + 60, g: 300, life: T * 1000, size: pick([2, 2, 3]), size1: 1, add: false });
+        }
+        this.burst(ev.x, ev.y, 8, "blood", 18, 80, 420);
+        this.scene.time.delayedCall(320, () => {
+          const m2 = this.ent(ev.id);
+          if (!m2) return;
+          this.glow(m2.sprite.x, m2.sprite.y, m2.top * 0.5, 16, 0xe63946, 380, 0.7);
+          this.ring(m2.sprite.x, m2.sprite.y, 18, "blood", 20, { life: 360, up: 10 });
+          this.flashSprite(m2, 0xe63946);
+        });
+        break;
+      }
+      case "thrall": {
+        // The bitten one gets back up: dark mist rises round it and its eyes catch red
+        this.smoke(ev.x, ev.y, 14, 14);
+        this.rise(ev.x, ev.y, 10, "shadow", 22, 30, 800);
+        this.ring(ev.x, ev.y, 16, "blood", 18, { life: 500, up: 4 });
+        this.scene.time.delayedCall(500, () => {
+          const t = this.ent(ev.t);
+          if (!t) return;
+          this.glow(t.sprite.x, t.sprite.y, t.top * 0.7, 8, 0xff1744, 400, 0.8);
+          this.flashSprite(t, 0x9b1b1b);
+        });
+        break;
+      }
       case "enchanthit": this.burst(ev.x, ev.y, 8, style, 6, 50, 300); break;
       case "thorns": this.burst(ev.x, ev.y, 10, style, 12, 70, 300); break;
       case "drain": {

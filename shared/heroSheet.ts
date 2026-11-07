@@ -4,6 +4,7 @@ import { activeGear, canWear, Equipped, gearBlock, gearDef, gearResist, gearSpee
 import { maxManaFor } from "./mana";
 import { critChance, heroSpeed, magicMult, maxHpFromStats, statsFor, Stats } from "./powers";
 import { Ranks, talentBonus, talentMult, talentReduce } from "./skills";
+import { Feast, feastMult } from "./devour";
 import { attackProfile, weaponAttackMult } from "./weapons";
 
 /**
@@ -11,7 +12,8 @@ import { attackProfile, weaponAttackMult } from "./weapons";
  * same rules as the server (TownRoom.applyStats, damagePlayer, the basic hit and shared/skillInfo.ts). Pure, so the
  * panel can also preview a sheet with another item worn or another skill rank, and the bag can spot useless items.
  */
-export interface SheetHero { cls: ClassKind; level: number; pts: Stats; talents: Ranks }
+/** feast: monsters the hero has eaten with Devour (shared/devour.ts). */
+export interface SheetHero { cls: ClassKind; level: number; pts: Stats; talents: Ranks; feast?: Feast }
 export interface Sheet {
   hp: number; mana: number;
   /** Damage cut by shield block and armour passives, in %. */
@@ -51,19 +53,19 @@ export function heroSheet(h: SheetHero, worn: Equipped, talents: Ranks = h.talen
   st.sta += g.sta; st.str += g.str; st.mag += g.mag; st.dex += g.dex;
   const wp = attackProfile(h.cls, eq);
   const flat = Object.values(weaponElements(eq).flat).reduce((a, v) => a + (v ?? 0), 0);
-  const atk = Math.round(wp.damage * weaponAttackMult(h.cls, st, wp.type) * talentMult(h.cls, talents, "dmg") + flat);
+  const atk = Math.round(wp.damage * weaponAttackMult(h.cls, st, wp.type) * talentMult(h.cls, talents, "dmg") * feastMult(h.feast, "dmg") + flat);
   const crit = critChance(st, talentBonus(h.cls, talents, "crit"));
   const res = Object.fromEntries(ELEMENTS.map((e) => [e, Math.round(gearResist(eq, e) * 100)])) as Record<Element, number>;
   return {
-    hp: Math.round(maxHpFromStats(h.cls, st, h.level) * talentMult(h.cls, talents, "hp")),
+    hp: Math.round(maxHpFromStats(h.cls, st, h.level) * talentMult(h.cls, talents, "hp") * feastMult(h.feast, "hp")),
     mana: maxManaFor(st, h.level),
     def: Math.round((1 - (1 - gearBlock(eq)) * talentReduce(h.cls, talents, "armor")) * 100),
     atk,
     dps: Math.round(atk * (1000 / wp.attackCooldownMs) * (1 + crit)),
     magic: st.mag,
-    spell: Math.round(magicMult(h.cls, st) * talentMult(h.cls, talents, "skill") * 100),
+    spell: Math.round(magicMult(h.cls, st) * talentMult(h.cls, talents, "skill") * feastMult(h.feast, "skill") * 100),
     crit: Math.round(crit * 100),
-    speed: Math.round(heroSpeed(h.cls, false) * gearSpeedMult(eq)),
+    speed: Math.round(heroSpeed(h.cls, false) * gearSpeedMult(eq) * feastMult(h.feast, "speed")),
     res, stats: st,
   };
 }

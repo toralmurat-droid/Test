@@ -36,6 +36,8 @@ export interface HeroSave {
   bounty?: BountyState; bountyDone?: number;
   /** Gear wear 0-100 (shared/upkeep.ts). */
   wear?: number;
+  /** Devour (shared/devour.ts): monsters eaten per family. */
+  feast?: Record<string, number>;
 }
 
 interface Account {

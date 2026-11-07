@@ -12,7 +12,8 @@ import { nextSize, potionAmount, PotionKind, potionName, POTION_SIZES, total, un
 import { GROUND, areaAt, isSafeZone } from "../../shared/map";
 import { heroPoise, meleeReach, mobBody, pvpProtected } from "../../shared/combat";
 import { respecCost, wearMult } from "../../shared/upkeep";
-import { attuneOf, type AttuneElement } from "../../shared/summons";
+import { attuneOf, isSummonKind, type AttuneElement } from "../../shared/summons";
+import { FEAST, FEAST_MAX, type Family } from "../../shared/devour";
 const ATTUNE_NAME: Record<AttuneElement, string> = { fire: "Fire", cold: "Frost", poison: "Venom", shock: "Storm" };
 const ATTUNE_COLOR: Record<AttuneElement, string> = { fire: "#ff9f1c", cold: "#4cc9f0", poison: "#7cfc00", shock: "#b3ecff" };
 import { moveStep } from "../../shared/movement";
@@ -67,7 +68,7 @@ import { activeSkills, skillLearned } from "../../shared/slots";
 import { actionKey, actionOfKey, type KeyAction, keyMode, keyModeName, onKeyMode, setKeyMode, slotCount, slotKey, slotOfKey, wasdWalks } from "./keymode";
 import { iconImg } from "./skillIcons";
 import { TalentMenu } from "./talents";
-import { SidePanel, SideTab } from "./sidepanel";
+import { setMyFeast, SidePanel, SideTab } from "./sidepanel";
 import { lootFilter, onLootFilter } from "./lootfilter";
 import { passesFilter } from "../../shared/heroSheet";
 import { IdeaBoard } from "./ideas";
@@ -743,6 +744,16 @@ export class TownScene extends Phaser.Scene {
     this.room.onMessage("gearno", ({ text }) => {
       const me = this.entities.get(this.me);
       if (me) this.floatText(me.sprite.x, me.sprite.y - me.top - 6, text, "#ff6b6b", PIXEL_FONT);
+      this.feed(text);
+    });
+    // Devour (shared/devour.ts): what my hero has eaten so far, and a note for the monster just eaten
+    this.room.onMessage("feast", ({ feast, fam }) => {
+      setMyFeast(feast);
+      const d = fam ? FEAST[fam as Family] : undefined;
+      if (!d) return;
+      const n = Math.min(FEAST_MAX, feast?.[fam] ?? 0), me = this.entities.get(this.me);
+      const text = `Devoured: ${d.name} ${n}/${FEAST_MAX}, +${Math.round(d.per * n * 10) / 10}% ${d.what}`;
+      if (me) this.floatText(me.sprite.x, me.sprite.y - me.top - 6, text, "#ff8a80", PIXEL_FONT);
       this.feed(text);
     });
     this.room.onMessage("pickup", ({ kind, amount, x, y, gear, name }) => {
@@ -2741,6 +2752,9 @@ export class TownScene extends Phaser.Scene {
           : windFlash ? (Math.floor(now / 70) % 2 ? 0xff6b6b : 0xffffff)
           : p.slowed ? 0x90caf9 : (Math.floor(now / 200) % 2 ? 0xff8a80 : 0xffcdd2));
         e.statusTint = true;
+      } else if (e.mob && p.owner && !isSummonKind(p.kind) && !p.dead) {
+        // A vampire's thrall (Bite, shared/devour.ts): drained pale with a blood-red cast
+        e.sprite.setTint(0xe0a8b4); e.statusTint = true;
       } else if (e.statusTint) { e.sprite.clearTint(); e.statusTint = false; }
       e.gear?.sync(e.sprite, p);
       if (e.gear) this.gearFx.tick(e, dtMs, moving);
@@ -2759,7 +2773,7 @@ export class TownScene extends Phaser.Scene {
         const kindName = named ? (MOBS[p.kind as MobKind]?.name ?? "") : "";
         const lv = `Lv${p.level ?? 1}`;
         const owner = p.owner ? (this.room.state as any).players?.get(p.owner) : undefined;
-        const txt = owner ? `${owner.name}'s ${MOBS[p.kind as MobKind]?.name ?? "Golem"}` : p.title ? `${p.title} ${lv}` : BOSS[p.kind as keyof typeof BOSS] ? `${kindName || "Boss"} ${lv}` : ELITE[p.kind as keyof typeof ELITE] ? `Elite ${kindName ? kindName + " " : ""}${lv}` : kindName ? `${kindName} ${lv}` : lv;
+        const txt = owner ? `${owner.name}'s ${MOBS[p.kind as MobKind]?.name ?? "Golem"}${isSummonKind(p.kind) ? "" : " thrall"}` : p.title ? `${p.title} ${lv}` : BOSS[p.kind as keyof typeof BOSS] ? `${kindName || "Boss"} ${lv}` : ELITE[p.kind as keyof typeof ELITE] ? `Elite ${kindName ? kindName + " " : ""}${lv}` : kindName ? `${kindName} ${lv}` : lv;
         // A monster right next to my hero: my own name steps aside so the two labels never overlap
         const meS = this.entities.get(this.me)?.sprite;
         if (meS && !p.dead && Math.abs(e.sprite.x - meS.x) < 1.5 * TILE && Math.abs(e.sprite.y - meS.y) < 1.5 * TILE) this.mobByMeAt = now;
