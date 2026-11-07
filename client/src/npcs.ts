@@ -64,6 +64,11 @@ export class NpcLayer {
   /** Arrow around the hero pointing to the first tracked objective, with its distance in steps (tiles). */
   private pointer = document.createElement("div");
   private aim?: { dx: number; dy: number; d: number };
+  /** The quest followed with the small button on its card: its objective gets a marker on the ground and the arrow. */
+  private followed = (() => { try { return localStorage.getItem("qtfollow") ?? ""; } catch { return ""; } })();
+  private goal?: { x: number; y: number; r: number };
+  private goalRing?: Phaser.GameObjects.Graphics;
+  private goalBeam?: Phaser.GameObjects.Image;
   /** The local hero's feet on the screen, HUD px (TownScene sets it every frame). */
   heroScreen?: { x: number; y: number };
   private stage: unknown = -1;
@@ -84,11 +89,23 @@ export class NpcLayer {
     hud.append(this.prompt, this.dialog, this.tracker, this.toast, this.pointer);
     this.prompt.onclick = () => this.interact();
     // Click a quest's title to fold it down to that line (remembered); anywhere else opens the quest log
+    // Each quest is a card: its follow button marks the objective on the ground, its header folds / opens it,
+    // anywhere else opens the quest log
     this.tracker.onclick = (ev) => {
-      const t = (ev.target as HTMLElement).closest(".qt-title") as HTMLElement | null;
-      const key = t?.textContent ?? "";
-      if (!t || !key) { this.log.toggle(true); return; }
-      const block = t.closest(".qt-block") as HTMLElement, started = block.dataset.started === "1";
+      const el = ev.target as HTMLElement;
+      const fb = el.closest(".qt-follow") as HTMLElement | null;
+      if (fb) {
+        const k = (fb.closest(".qt-block") as HTMLElement).dataset.key ?? "";
+        this.followed = this.followed === k ? "" : k;
+        try { localStorage.setItem("qtfollow", this.followed); } catch { /* storage off */ }
+        this.trackerHtml = "";
+        return;
+      }
+      const t = el.closest(".qt-head") as HTMLElement | null;
+      const block = t?.closest(".qt-block") as HTMLElement | null;
+      const key = block?.dataset.key ?? "";
+      if (!block || !key) { this.log.toggle(true); return; }
+      const started = block.dataset.started === "1";
       const set = started ? this.folded : this.opened;
       if (set.has(key)) set.delete(key); else set.add(key);
       try { localStorage.setItem("qtfolded", JSON.stringify([...this.folded])); localStorage.setItem("qtopened", JSON.stringify([...this.opened])); } catch { /* storage off */ }
@@ -364,6 +381,7 @@ export class NpcLayer {
     // On-screen tracker: one block per chain with its quest, current objective, progress bar and where to go
     let html = "";
     this.aim = undefined;
+    this.goal = undefined;
     {
       // The guided first quest on top; only the quests the player chose to track
       const blocks = [tracked[TUT_CHAIN], ...tracked.filter((_, c) => c !== TUT_CHAIN)].map((st) => this.trackBlock(me, st)).filter(Boolean);
@@ -376,6 +394,7 @@ export class NpcLayer {
       this.tracker.classList.toggle("open", !!html);
     }
     this.drawPointer();
+    this.drawGoal();
   }
 
   /** The quest pointer: an arrow on a ring around the hero (the middle of the screen) toward the objective, and its distance. */
@@ -394,6 +413,19 @@ export class NpcLayer {
     (this.pointer.firstElementChild as HTMLElement).style.transform = `rotate(${ang}rad)`;
   }
 
+  /** The followed quest's objective, marked on the ground: a pulsing gold ring and a soft beam of light. */
+  private drawGoal() {
+    const g = this.goal;
+    if (!g) { this.goalRing?.setVisible(false); this.goalBeam?.setVisible(false); return; }
+    this.goalRing ??= this.scene.add.graphics();
+    this.goalBeam ??= this.scene.add.image(0, 0, "light").setTint(0xffd27a).setBlendMode(Phaser.BlendModes.ADD).setOrigin(0.5, 0.85);
+    const t = this.scene.time.now / 1000, r = Math.max(10, Math.min(g.r || 12, 60)), k = 1 + Math.sin(t * 3) * 0.08;
+    this.goalRing.clear().setVisible(true).setPosition(g.x, g.y).setDepth(g.y - 1);
+    this.goalRing.lineStyle(2, 0xe3bf6a, 0.9).strokeEllipse(0, 0, r * 2 * k, r * k);
+    this.goalRing.lineStyle(1, 0xffe9a8, 0.5).strokeEllipse(0, 0, r * 1.3 * k, r * 0.65 * k);
+    this.goalBeam.setVisible(true).setPosition(g.x, g.y).setDepth(g.y).setScale(0.6, 2.6).setAlpha(0.45 + Math.sin(t * 3) * 0.12);
+  }
+
   /** Tracker block for one chain ("" when it has nothing to show). */
   private trackBlock(me: Me, q: ReturnType<typeof chainState>): string {
     const def = questDef(q), step = questStep(q), obj = questObjective(q);
@@ -402,35 +434,29 @@ export class NpcLayer {
       const targets = questTargets(q);
       const goal = stepGoal(step), n = stepProgress(step, q.questCount);
       const bar = goal > 1 ? `<div class="qt-bar"><div style="width:${(n / goal) * 100}%"></div></div>` : "";
-      let dir = "";
-      // Point at the nearest target
+      // The followed quest: its nearest target gets the ground marker and the arrow
+      const follow = this.followed === def.title;
       let target = me && targets.length ? targets.reduce((a, b) => (Math.hypot(a.x - me.x, a.y - me.y) <= Math.hypot(b.x - me.x, b.y - me.y) ? a : b)) : undefined;
       // On another floor of the Mawdeep (or above it): point at the rope or stair first
       const via = target && me ? routeVia(target.x, target.y, me.x, me.y) : undefined;
       if (via) target = { x: via.x, y: via.y, kind: "object", label: via.label };
-      if (target && me) {
+      if (follow && target && me) {
         const dx = target.x - me.x, dy = target.y - me.y, d = Math.hypot(dx, dy) - (target.r ?? 0);
-        if (d > TILE * 2 && !this.aim) this.aim = { dx, dy, d };
-        if (d > TILE * 2) {
-          const arrows = ["→", "↘", "↓", "↙", "←", "↖", "↑", "↗"];
-          const names = ["east", "south-east", "south", "south-west", "west", "north-west", "north", "north-east"];
-          const k = (Math.round(Math.atan2(dy, dx) / (Math.PI / 4)) + 8) % 8;
-          dir = `<div class="qt-dir">${arrows[k]} ${Math.round(d / TILE)} tiles ${names[k]}</div>`;
-        } else if (target.kind === "area" && d <= 0) dir = `<div class="qt-dir">You are here</div>`;
-        if (via) dir += `<div class="qt-hint2">${via.label}</div>`;
-      }
-      let hint = step.hint ? `<div class="qt-hint2">${step.hint}</div>` : "";
-      if (step.night) { // the dead's bosses only walk at night (shared/daynight.ts)
-        const wait = msUntilUndeadNight(dayTime(Date.now()));
-        hint += `<div class="qt-hint2 qt-night">${wait ? `Only at night. The dead rise in ${Math.max(1, Math.ceil(wait / 60000))} min.` : "Night: the dead are up."}</div>`;
+        if (d > TILE * 2) this.aim = { dx, dy, d };
+        this.goal = { x: target.x, y: target.y, r: target.r ?? 0 };
       }
       const started = q.questStage > 0;
-      return `<div class="qt-block${this.isFolded(def.title, started) ? " folded" : ""}" data-started="${started ? 1 : 0}"><div class="qt-title">${def.title}</div><div class="qt-obj">${step.type === "talk" ? "➜ " : "• "}${obj}</div>${bar}${dir}${hint}</div>`;
+      // the card: header (title, follow button), then just the objective and its progress bar
+      return `<div class="qt-block${this.isFolded(def.title, started) ? " folded" : ""}${follow ? " following" : ""}" data-key="${def.title}" data-started="${started ? 1 : 0}">` +
+        `<div class="qt-head"><span class="qt-title">${def.title}</span>` +
+        `<button class="qt-follow" title="${follow ? "Stop following" : "Follow: mark it on the ground"}">${follow ? "◉" : "○"}</button></div>` +
+        `<div class="qt-body"><div class="qt-obj">${obj}</div>${bar}</div></div>`;
     }
     // Between quests: point to whoever has the next one (the blob chain's very first quest has its own "!" intro)
     if (q.questStage === 0 && (q.level ?? 1) >= def.minLevel && (q.questId > 0 || (q.chain ?? 0) > 0)) {
       const giver = NPCS.find((n) => n.id === def.giver);
-      return `<div class="qt-block${this.isFolded("New quest available", false) ? " folded" : ""}" data-started="0"><div class="qt-title">New quest available</div><div class="qt-obj">➜ Talk to ${giver?.name ?? ""} <b class="bang">!</b></div></div>`;
+      return `<div class="qt-block${this.isFolded("New quest available", false) ? " folded" : ""}" data-key="New quest available" data-started="0">` +
+        `<div class="qt-head"><span class="qt-title">New quest available</span></div><div class="qt-body"><div class="qt-obj">Talk to ${giver?.name ?? ""} <b class="bang">!</b></div></div></div>`;
     }
     return "";
   }
