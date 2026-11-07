@@ -881,7 +881,10 @@ export class SkillFx {
 
   private tickFields(dt: number) {
     for (const { f, objs, born } of this.fields.values()) {
-      const x = f.x, y = f.y, r = f.r;
+      // A field that moves with its caster (Blizzard, auras) is drawn on the caster's sprite: the synced position lags
+      // behind a walking hero, so the storm trailed off-centre
+      const o = f.follow ? this.ent(f.owner) : undefined;
+      const x = o ? o.sprite.x : f.x, y = o ? o.sprite.y : f.y, r = f.r;
       const area = Math.max(1, (r * r) / 900); // particle rate scales with size
       const chance = (perSec: number) => Math.random() < perSec * dt;
       const n = (perSec: number) => { let c = Math.floor(perSec * dt); if (Math.random() < perSec * dt - c) c++; return c; };

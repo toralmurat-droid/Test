@@ -154,3 +154,5 @@
    The step hints and the "J: quest log" line live in the quest log (J). Night warnings stay. */
 #questtracker .qt-hint, #questtracker .qt-hint2:not(.qt-night) { display: none; }
 #questtracker .qt-block + .qt-block { margin-top: 6px; }
+/* the quest tracker sits on the left, under the zone line (Murat 2026-11-07) */
+#questtracker { right: auto; left: 12px; top: 150px; }
