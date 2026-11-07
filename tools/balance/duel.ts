@@ -11,9 +11,10 @@
  * Colossus slam, Vital Link) and can be hit by the other hero's swings, shots and areas. The bots aim at the hero.
  * Keep the server rules in sync with this file when changing combat code.
  */
-import { basicDrain, CLASSES, ACTIVE_CLASSES, ClassKind, COMBO_WINDOW_MS, DODGE, ENERGY, GUARD_REDUCTION, staminaRegen } from "../../shared/classes";
+import { basicDrain, CLASSES, ACTIVE_CLASSES, ClassKind, COMBO_WINDOW_MS, DODGE, GUARD_REDUCTION } from "../../shared/classes";
 import { attackMult, cooldownMult, critChance, heroSpeed, magicMult, maxHpFromStats, statPoints, statsFor, STATS, Stats } from "../../shared/powers";
 import { activeSkills, canLearn, levelPower, rankPower, scalePower, skillById, SKILLS, SkillDef, talentBonus, talentMult, talentReduce } from "../../shared/skills";
+import { addHeat, coolHeat, isOverheated, OVERLOAD } from "../../shared/overload";
 import { canPay, manaRegen, maxManaFor, skillCost } from "../../shared/mana";
 import {
   afterHit, atkSpeedMult, blocking, buffLifesteal, buffRegen, castSkill, ccImmune, charging, winding, cooldownLeft, counterHit, dealtMult, FieldInst, HitOpts,
@@ -37,7 +38,7 @@ interface Shot { owner: F; x: number; dir: number; speed: number; range: number;
 interface Pending { at: number; fn: () => void }
 
 export class F {
-  x = 0; y = 0; face = 1; hp = 0; maxHp = 0; s: Stats; energy = ENERGY.max; mana = 0; maxMana = 0; dead = false;
+  x = 0; y = 0; face = 1; hp = 0; maxHp = 0; s: Stats; energy = 0; mana = 0; maxMana = 0; dead = false;
   poiseLost = 0; lastPoiseHit = 0; brokenUntil = 0; steadyUntil = 0; broken = false;
   invulnUntil = 0; rollUntil = 0; rollDir = 0; lastDodge = -1e9; lastRanged = -1e9; lastHurt = 0;
   attackReadyAt = 0; lastAttack = 0; combo = 0; stunUntil = 0; slowUntil = 0; dealt = 0; lastMove = 0;
@@ -371,8 +372,8 @@ export class Duel {
 
   dodge(a: F, dir: number) {
     const now = this.now;
-    if (a.dead || now < a.stunUntil || now - a.lastDodge < DODGE.cooldownMs || a.energy < ENERGY.cost.dodge) return false;
-    a.energy -= ENERGY.cost.dodge; a.lastDodge = now; a.rollUntil = now + DODGE.durationMs; a.rollDir = dir;
+    if (a.dead || now < a.stunUntil || now - a.lastDodge < DODGE.cooldownMs || isOverheated(a)) return false;
+    addHeat(a, OVERLOAD.dodge); a.lastDodge = now; a.rollUntil = now + DODGE.durationMs; a.rollDir = dir;
     a.invulnUntil = Math.max(a.invulnUntil, now + DODGE.invulnMs);
     if (dir) a.face = dir;
     return true;
@@ -425,7 +426,7 @@ export class Duel {
     const rm = gearReachMult(a.eq);
     const meleeReach = (12 + def.attackRange) * rm;
     const tReach = t.ranged ? 999 : t.mob ? t.mob.reach + 6 : (12 + CLASSES[t.cls].attackRange) * gearReachMult(t.eq) + 6;
-    const canSpend = (c: number) => a.energy - c >= 20; // keep some for skills
+    const canSpend = (c: number) => !isOverheated(a) && a.energy + c < OVERLOAD.max - 20; // don't overload on a roll: keep room for skills
     const incoming = this.shots.find((s) => s.owner === t && !s.hit && Math.sign(a.x - s.x) === s.dir && Math.abs(a.x - s.x) < 40 && !s.miss);
     if (now < a.stunUntil) return 0;
     // Human reaction: a player doesn't act on every server tick
@@ -433,9 +434,9 @@ export class Duel {
     if (charging(a, now)) return 0;
     this.castSkills(a, d, toward, !!incoming, tReach);
     // Dodge incoming shots sometimes (human reaction), ranged heroes roll away from melee
-    if (incoming && this.rnd() < 0.3 && canSpend(ENERGY.cost.dodge + 10)) this.dodge(a, a.ranged ? -toward : toward);
+    if (incoming && this.rnd() < 0.3 && canSpend(OVERLOAD.dodge)) this.dodge(a, a.ranged ? -toward : toward);
     // Melee heroes roll in on shooters (what players do: the roll is the gap closer everyone has)
-    if (!a.ranged && t.ranged && d > 50 && d < 160 && canSpend(ENERGY.cost.dodge + 10) && this.rnd() < 0.35) this.dodge(a, toward);
+    if (!a.ranged && t.ranged && d > 50 && d < 160 && canSpend(OVERLOAD.dodge) && this.rnd() < 0.35) this.dodge(a, toward);
     if (now < a.rollUntil) return 0;
 
     if (a.ranged) {
@@ -465,7 +466,7 @@ export class Duel {
       tickUnit(this.host, f.id);
       if (f.broken && now >= f.brokenUntil) { f.broken = false; f.poiseLost = 0; f.steadyUntil = now + POISE.steadyMs; }
       else if (!f.broken && f.poiseLost > 0 && now - f.lastPoiseHit >= POISE.regenDelayMs) f.poiseLost = Math.max(0, f.poiseLost - f.poiseMax * POISE.regenPerSec * TICK / 1000);
-      f.energy = Math.min(ENERGY.max, f.energy + staminaRegen(f.cls) * TICK / 1000);
+      coolHeat(f, f.cls, TICK / 1000);
       f.mana = Math.min(f.maxMana, f.mana + manaRegen(f.s, false, talentBonus(f.cls, f.t, "mana")) * TICK / 1000);
     }
     const order = this.rnd() < 0.5 ? this.units() : this.units().reverse();

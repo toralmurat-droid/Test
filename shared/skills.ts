@@ -179,7 +179,7 @@ export interface SkillDef {
     kill?: BuffDef;
   };
   cd?: number; // ms
-  cost?: number; // Stamina (physical skills)
+  cost?: number; // Heat (physical skills, shared/overload.ts)
   mana?: number; // Mana (spells): shared/mana.ts
   /** Blood magic (vampire): also costs this % of max HP. Can't be cast with that little HP left, and never kills. */
   blood?: number;

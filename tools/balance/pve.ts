@@ -20,7 +20,7 @@ import { POTION_COOLDOWN_MS, POTION_SIZES } from "../../shared/potions";
 import { activeSkills, SKILLS } from "../../shared/skills";
 import { canPay, manaRegen, skillCost } from "../../shared/mana";
 import { castSkill, cooldownLeft } from "../../shared/skillEngine";
-import { staminaRegen, ENERGY } from "../../shared/classes";
+import { coolHeat, isOverheated } from "../../shared/overload";
 import { Duel, F, GolemF, make } from "./duel";
 import { SUMMON } from "../../shared/summons";
 
@@ -166,12 +166,12 @@ export class PveDuel extends Duel {
       (h as any)._sawWind = m.windUntil;
       const s = m.windKind, cx = s.at === "self" ? m.x : m.windX;
       const inside = Math.abs(h.x - cx) <= s.radius + 6 && !(s.inner && Math.abs(h.x - cx) <= s.inner);
-      if (inside && Math.random() < 0.5 && now >= h.stunUntil && h.energy >= ENERGY.cost.dodge && now - h.lastDodge >= 1500) {
+      if (inside && Math.random() < 0.5 && now >= h.stunUntil && !isOverheated(h) && now - h.lastDodge >= 1500) {
         const away = s.inner ? Math.sign(cx - h.x) || 1 : Math.sign(h.x - cx) || (Math.random() < 0.5 ? 1 : -1);
         if (this.dodge(h, away)) { this.dodged++; return 0; }
       }
       // roll on cooldown: an untouchable move skill (Shadow Step, Blink, Leap...) does the same job
-      if (inside && Math.random() < 0.5 && h.energy < ENERGY.cost.dodge || now - h.lastDodge < 1500) {
+      if (inside && Math.random() < 0.5 && isOverheated(h) || now - h.lastDodge < 1500) {
         const away = Math.sign(h.x - cx) || 1;
         const mv = activeSkills(h.cls).find((s) => s.move?.invulnMs && (h.t[s.id] ?? 0) > 0 && cooldownLeft(s, h.sk, now, 1) <= 0 && canPay(h, skillCost(s)));
         if (inside && mv) { h.face = s.inner ? -away : away; if (castSkill(this.host, h.id, mv.id)) { this.dodged++; return 0; } }
@@ -281,11 +281,11 @@ function zoneRun(cls: ClassKind, level: number, build: Build, mobLevel: (i: numb
     lost += Math.max(0, hp0 - h.hp);
     if (h.dead || w !== h) return { won: false, kills: kills + ms.filter((m) => m.dead).length, hpLostPerKill: lost / Math.max(1, kills) / h.maxHp, secPerKill: fightMs / 1000 / Math.max(1, kills), heals: pack.healUsed, manas: pack.manaUsed };
     kills += size;
-    // a few seconds walking to the next one: regen ramps up, stamina and mana refill
+    // a few seconds walking to the next one: regen ramps up, Heat cools, mana refills
     const gap = 3000 + Math.random() * 3000;
     const restMs = Math.max(0, gap - REGEN_DELAY_MS);
     h.hp = Math.min(h.maxHp, h.hp + h.s.sta * REGEN_PER_STA * restMs / 1000 * 0.5);
-    h.energy = Math.min(ENERGY.max, h.energy + staminaRegen(h.cls) * gap / 1000);
+    coolHeat(h, h.cls, gap / 1000);
     h.mana = Math.min(h.maxMana, h.mana + manaRegen(h.s, false) * gap / 1000);
     h.poiseLost = 0; h.broken = false;
     t += gap;

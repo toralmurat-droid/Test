@@ -303,6 +303,9 @@ const R: Record<string, Recipe> = {
   crit: (o, t, v) => { thud(o, t, 160, 0.6 * v, 0.2); clank(o, t + 0.01, 0.35 * v, 2100); },
   heroHurt: (o, t, v, pitch = 1) => voice(o, t, { f: 170 * pitch, f2: 120 * pitch, dur: 0.16, vol: 0.28 * v, vowel: [650, 1100], vowel2: [500, 900], att: 0.01 }),
   heroDie: (o, t, v) => { voice(o, t, { f: 180, f2: 70, dur: 0.7, vol: 0.3 * v, vowel: [700, 1150], vowel2: [400, 800] }); thud(o, t + 0.45, 90, 0.5 * v, 0.3); },
+  // Overload gauge (overloadGauge.ts): a hiss of venting steam over an iron clank; a soft tick when it has cooled
+  overload: (o, t, v) => { clank(o, t, 0.3 * v, 900); noise(o, t + 0.02, { type: "highpass", f: 3000, f2: 1400, dur: 0.9, vol: 0.22 * v, att: 0.03 }); tone(o, t, { type: "sawtooth", f: 160, f2: 90, dur: 0.35, vol: 0.08 * v }); },
+  cooled: (o, t, v) => { clank(o, t, 0.12 * v, 2400); tone(o, t + 0.03, { type: "triangle", f: 1320, dur: 0.18, vol: 0.06 * v }); },
   dodge: (o, t, v) => { whoosh(o, t, 600, 2000, 0.2, 0.4 * v); noise(o, t + 0.15, { type: "lowpass", f: 600, dur: 0.08, vol: 0.2 * v }); },
   levelup: (o, t, v) => [0, 4, 7, 12, 16].forEach((s, i) => { tone(o, t + i * 0.08, { type: "square", f: 523 * 2 ** (s / 12), dur: 0.22, vol: 0.06 * v }); tone(o, t + i * 0.08, { type: "triangle", f: 523 * 2 ** (s / 12), dur: 0.4, vol: 0.14 * v }); }),
   heal: (o, t, v) => [0, 4, 7].forEach((s, i) => tone(o, t + i * 0.06, { type: "triangle", f: 880 * 2 ** (s / 12), dur: 0.35, vol: 0.12 * v })),

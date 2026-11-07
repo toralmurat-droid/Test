@@ -1,3 +1,4 @@
+import { addHeat, coolHeat, isOverheated, OVERLOAD } from "../shared/overload";
 import { type AuthContext, Client, Room } from "colyseus";
 import { ArraySchema, MapSchema, Schema, type } from "@colyseus/schema";
 import {
@@ -8,7 +9,7 @@ import {
 } from "../shared/constants";
 import { arrivalAt, LINK_RANGE, linkById, LINKS } from "../shared/dungeon";
 import {
-  ATTACK_VARIANTS, basicDrain, CLASSES, ClassKind, COMBO_WINDOW_MS, DODGE, EMOTES, ENERGY, staminaRegen, DASH_INVULN_MS, GUARD_REDUCTION, isActiveClass, isClassKind, levelFromXp, MAX_XP, capLevel, PVP_KILL_XP, xpForLevel,
+  ATTACK_VARIANTS, basicDrain, CLASSES, ClassKind, COMBO_WINDOW_MS, DODGE, EMOTES, DASH_INVULN_MS, GUARD_REDUCTION, isActiveClass, isClassKind, levelFromXp, MAX_XP, capLevel, PVP_KILL_XP, xpForLevel,
 } from "../shared/classes";
 import { MANA_POTION_DROP, manaRegen, maxManaFor, packMana, pay } from "../shared/mana";
 import { Counts, dropSize, Potions, nextSize, noPotions, packPotions, potionAmount, potionName, PotionKind, potionSlots, POTION_COOLDOWN_MS, POTION_STACK, slotsAfter, SIZES, total } from "../shared/potions";
@@ -114,7 +115,7 @@ export class Player extends Schema {
   lastManaPotion = 0;
   @type("boolean") rolling = false; // dodge roll in progress
   @type("boolean") broken = false; // poise broken: dizzy, can't attack (shared/combat.ts)
-  @type("number") energy = 100; // Stamina (ENERGY in shared/classes.ts); spells spend mana (above)
+  @type("number") energy = 0; // Heat / overload (shared/overload.ts): 0..100, below 0 = overheated; spells spend mana (above)
   // Skills (shared/skillEngine.ts): stacks built by basic hits, speed multiplier from buffs and passives (client
   // prediction), and status words for the effects on screen (burn, mark, active auras and enchantments...)
   @type("number") stacks = 0;
@@ -883,7 +884,8 @@ export class TownRoom extends Room<TownState> {
     if (s.dir === "up" || s.dir === "down" || s.dir === "left" || s.dir === "right") p.dir = s.dir;
     if (fin(s.hp)) p.hp = Math.max(1, Math.min(p.maxHp, Math.round(s.hp)));
     if (fin(s.mana)) { p.mana = Math.max(0, Math.min(p.maxMana, s.mana)); this.syncMana(p); }
-    if (fin(s.energy)) p.energy = Math.max(0, Math.min(ENERGY.max, s.energy));
+    // Heat (s.energy) is not restored: saves from before the overload gauge held full Stamina (100), which would read as
+    // nearly overheated; a hero comes back cool.
   }
 
   /** A returning hero finds the friends they grouped with before the update (whoever comes back second joins them up). */
@@ -2239,11 +2241,11 @@ export class TownRoom extends Room<TownState> {
       const spd = Math.round(speedMult(p, now) * talentMult(p.cls, p.talents, "speed") * feastMult(p.feast, "speed") * 1000) / 1000;
       if (p.spd !== spd) p.spd = spd;
       tickPoise(p, heroPoiseMax(p), dt, now);
-      if (p.dead) { p.moving = false; p.energy = ENERGY.max; p.mana = p.maxMana; this.syncMana(p); return; }
+      if (p.dead) { p.moving = false; p.energy = 0; p.mana = p.maxMana; this.syncMana(p); return; }
       for (let c = 0; c < CHAINS.length; c++) this.checkQuestPlace(pid, p, c);
       this.wakePortals(pid, p);
       this.useLinks(pid, p);
-      if (p.energy < ENERGY.max) p.energy = Math.min(ENERGY.max, p.energy + staminaRegen(p.cls) * dt);
+      if (p.energy !== 0) coolHeat(p, p.cls, dt);
       if (p.mana < p.maxMana) {
         const resting = now - p.lastHurt > REGEN_DELAY_MS;
         p.mana = Math.min(p.maxMana, p.mana + manaRegen(this.stats(p), resting, talentBonus(p.cls, p.talents, "mana")) * dt);
@@ -3522,8 +3524,8 @@ export class TownRoom extends Room<TownState> {
   private dodge(id: string) {
     const p = this.state.players.get(id);
     const now = Date.now();
-    if (!p || p.dead || p.stunned || now - p.lastDodge < DODGE.cooldownMs || p.energy < ENERGY.cost.dodge) return;
-    p.energy -= ENERGY.cost.dodge;
+    if (!p || p.dead || p.stunned || now - p.lastDodge < DODGE.cooldownMs || isOverheated(p)) return;
+    addHeat(p, OVERLOAD.dodge);
     const i = p.input;
     const moving = i.up !== i.down || i.left !== i.right;
     p.rollInput = moving ? { ...i } : pushInput(aimOf(p));
@@ -4438,12 +4440,12 @@ export class TownRoom extends Room<TownState> {
     if (!p || p.dead || Math.hypot(SHRINE.x - p.x, SHRINE.y - p.y) > SHRINE_RANGE * 1.5) return;
     if (now < this.shrineReadyAt) { client.send("shrine", { left: this.shrineReadyAt - now }); return; }
     this.shrineReadyAt = now + SHRINE_COOLDOWN_MS;
-    const boon = rollBoon(p.hp < p.maxHp || p.energy < ENERGY.max || p.mana < p.maxMana);
+    const boon = rollBoon(p.hp < p.maxHp || p.energy !== 0 || p.mana < p.maxMana);
     let amount = 0;
     if (boon === "heal") {
       amount = Math.round(p.maxHp - p.hp);
       p.hp = p.maxHp;
-      p.energy = ENERGY.max;
+      p.energy = 0;
       p.mana = p.maxMana;
       this.syncMana(p);
       if (amount > 0) this.broadcast("heal", { id, amount });
