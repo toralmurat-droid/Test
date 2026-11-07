@@ -1,0 +1,9 @@
+{
+  "date": "2026-11-07",
+  "title": "Summoner combo, staves and swords fixed",
+  "changes": [
+    "The Summoner has its own 3-hit staff combo: two quick bolts, then an elemental burst in your attuned element.",
+    "Fixed: Wizards fought with the Summoner's staff numbers (less damage, slower). Wizard staves hit as before again.",
+    "Fixed: Knights fought with the Vampire's sword numbers. Each class now uses its own weapon numbers."
+  ]
+}

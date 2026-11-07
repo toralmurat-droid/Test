@@ -4607,6 +4607,13 @@ export class TownRoom extends Room<TownState> {
     // Fire, cold, poison and faith: part of the hit changes element, elemental bonuses add to it (shared/elements.ts)
     const split = splitHit(this.equipped(a), dmg, hit.damage * (crit ? 2 : 1));
     dmg = split.phys;
+    // Summoner finisher: part of the burst is in the attuned element (ComboHit.attune)
+    if (hit.attune && a.cls === "summoner") {
+      const amt = dmg * hit.attune, el = attuneOf(a.attune);
+      dmg = Math.max(1, Math.round(dmg - amt));
+      const p = split.parts.find((x) => x.el === el);
+      if (p) p.amt += amt; else split.parts.push({ el, amt });
+    }
     const parts = split.parts.length ? split.parts : undefined;
     a.emote = "";
     let variant = 0;
