@@ -752,6 +752,24 @@ export class SkillFx {
           if (chance(4)) this.glow(x + rnd(-r, r) * 0.4, y + rnd(-r, r) * 0.4, 2, r * 0.6, 0xff7b00, 500, 0.3, true);
           break;
         case "caltrops": if (chance(3)) this.p(x + rnd(-r, r) * 0.7, y + rnd(-r, r) * 0.5, 1, 0xffffff, { life: 200, size: 1 }); break;
+        case "frostwhirl": {
+          // The wizard's Blizzard (Murat 2026-11-07): a storm turning round the hero. Three spiral arms of snow and ice
+          // sweep round (the arms rotate, each flake is thrown along the turn), fast flakes whip round the rim.
+          const spin = this.t / 260;
+          for (let i = 0; i < n(200 * area); i++) {
+            const arm = Math.floor(Math.random() * 3), u = Math.random();
+            const d = r * (0.25 + 0.75 * u), a = spin + arm * (Math.PI * 2 / 3) + u * 2.2 + rnd(-0.18, 0.18);
+            const ca = Math.cos(a), sa = Math.sin(a), sp = 70 + 60 * u; // outer flakes move faster
+            this.p(x + ca * d, y + sa * d, rnd(4, 26), pick([0xffffff, 0xd6f6ff, 0xa2e8ff, 0x4cc9f0]), { vx: -sa * sp, vy: ca * sp, vz: rnd(-10, 10), life: rnd(260, 460), size: pick([1, 2, 2, 3]), size1: 1, add: true });
+          }
+          for (let i = 0; i < n(90 * area); i++) { // the rim: a fast white ring
+            const a = Math.random() * Math.PI * 2, ca = Math.cos(a), sa = Math.sin(a);
+            this.p(x + ca * r, y + sa * r, rnd(2, 18), 0xe8f8ff, { vx: -sa * 150, vy: ca * 150, life: 220, size: 2, size1: 0, add: true });
+          }
+          if (chance(14)) this.glow(x, y, 6, r * 1.05, 0xa2e8ff, 450, 0.35, true);
+          if (chance(4)) this.ice(x + rnd(-r, r) * 0.6, y + rnd(-r, r) * 0.6, r * 0.4);
+          break;
+        }
         case "blizzard":
           for (let i = 0; i < n(50 * area); i++) {
             const a = Math.random() * Math.PI * 2, d = Math.sqrt(Math.random()) * r;

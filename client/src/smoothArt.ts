@@ -29,7 +29,7 @@ function blob(ctx: CanvasRenderingContext2D, x: number, y: number, rx: number, r
 
 function trunk(ctx: CanvasRenderingContext2D, cx: number, top: number, base: number, w: number) {
   const g = ctx.createLinearGradient(cx - w, 0, cx + w, 0);
-  g.addColorStop(0, "#6e5440"); g.addColorStop(0.45, "#4a3424"); g.addColorStop(1, "#22160e");
+  g.addColorStop(0, "#4e4640"); g.addColorStop(0.45, "#2e2620"); g.addColorStop(1, "#110d0a"); // weathered grey-brown bark (gloomy look, Murat 2026-11-07)
   ctx.fillStyle = g;
   ctx.beginPath();
   ctx.moveTo(cx - w * 0.55, top);
@@ -77,7 +77,7 @@ function canopy(ctx: CanvasRenderingContext2D, seed: number, cx: number, cy: num
   ctx.save();
   ctx.globalCompositeOperation = "source-atop";
   const g = ctx.createLinearGradient(cx - rx, cy - ry, cx + rx * 0.3, cy + ry * 0.3);
-  g.addColorStop(0, "rgba(255,230,170,0.12)"); g.addColorStop(0.5, "rgba(255,230,170,0)"); g.addColorStop(1, "rgba(5,10,15,0.4)");
+  g.addColorStop(0, "rgba(170,190,200,0.07)"); g.addColorStop(0.5, "rgba(170,190,200,0)"); g.addColorStop(1, "rgba(4,8,12,0.55)");
   ctx.fillStyle = g; ctx.fillRect(cx - rx * 1.2, cy - ry * 1.2, rx * 2.4, ry * 2.4);
   ctx.restore();
 }
@@ -97,8 +97,8 @@ const OAK_PAD = 2, OAK_W = 24 + 2 * OAK_PAD, OAK_H = 28 + OAK_PAD;
 export function smoothTrees(scene: Phaser.Scene, K: number) {
   // Oaks: 24x28 design units (x K texture px), trunk base bottom centre, 2 sway frames
   for (const [key, seed, pal] of [
-    ["oak_a", 3, [0x1a2e16, 0x2c4620, 0x44592a, 0x66743a]],
-    ["oak_b", 7, [0x22301a, 0x3a4a24, 0x52602c, 0x747840]],
+    ["oak_a", 3, [0x111a14, 0x1d2a1f, 0x2e3a2a, 0x46503a]],
+    ["oak_b", 7, [0x161c14, 0x252e20, 0x384030, 0x525642]],
   ] as const) {
     hiResTexture(scene, key, OAK_W * K, OAK_H * K, 2, S, (ctx, f) => {
       ctx.scale(K, K); ctx.translate(OAK_PAD, OAK_PAD);
@@ -114,15 +114,15 @@ export function smoothTrees(scene: Phaser.Scene, K: number) {
     shadow(ctx, 12, 25.6, 10, 2.6);
     trunk(ctx, 12, 12, 26, 2);
     limb(ctx, 12, 15, 6.5, 9, 0.7); limb(ctx, 12, 14, 17.5, 8.5, 0.7);
-    canopy(ctx, 31, 7.4, 9.6, 6.4, 6, [0x1e2c16, 0x34421f, 0x4c5629, 0x6c6c36], f * 0.4);
-    canopy(ctx, 37, 16.4, 9, 6.6, 6.4, [0x1e2c16, 0x34421f, 0x4c5629, 0x6c6c36], f * 0.5);
-    canopy(ctx, 41, 12, 5.6, 5.4, 4.4, [0x22301a, 0x3c4a24, 0x56602c, 0x7a7642], f * 0.45);
+    canopy(ctx, 31, 7.4, 9.6, 6.4, 6, [0x131a13, 0x222b1e, 0x343c2c, 0x4c5040], f * 0.4);
+    canopy(ctx, 37, 16.4, 9, 6.6, 6.4, [0x131a13, 0x222b1e, 0x343c2c, 0x4c5040], f * 0.5);
+    canopy(ctx, 41, 12, 5.6, 5.4, 4.4, [0x161c14, 0x262e21, 0x3a4132, 0x545744], f * 0.45);
   });
   hiResTexture(scene, "oak_d", OAK_W * K, OAK_H * K, 2, S, (ctx, f) => {
     ctx.scale(K, K); ctx.translate(OAK_PAD, OAK_PAD); // margin so swaying crowns are not cut at the frame edge
     shadow(ctx, 12, 25.6, 8, 2.2);
     trunk(ctx, 12, 9, 26, 1.5);
-    canopy(ctx, 53, 12.5, 11.5, 8.4, 6.8, [0x26301a, 0x40462a, 0x5c5a32, 0x7c7040], f * 0.4);
+    canopy(ctx, 53, 12.5, 11.5, 8.4, 6.8, [0x1a1c14, 0x2c2e22, 0x42412f, 0x5c5842], f * 0.4);
     // dead limbs poking out of the thin crown
     limb(ctx, 11, 11, 3.5, 4.5, 0.75); limb(ctx, 13, 10, 19, 3, 0.65);
   });
@@ -130,51 +130,68 @@ export function smoothTrees(scene: Phaser.Scene, K: number) {
     ctx.scale(K, K); ctx.translate(OAK_PAD, OAK_PAD); // margin so swaying crowns are not cut at the frame edge
     shadow(ctx, 12, 25.6, 6.5, 2);
     trunk(ctx, 12, 14, 26, 1.1);
-    canopy(ctx, 67, 12, 11.5, 6.6, 9.4, [0x182a16, 0x2a4422, 0x40582c, 0x5e7036], f * 0.55);
+    canopy(ctx, 67, 12, 11.5, 6.6, 9.4, [0x101914, 0x1c2a20, 0x2c3b2c, 0x424e3a], f * 0.55);
   });
-  // Pine: 20x30, layered tiers
-  hiResTexture(scene, "pine", 20 * K, 30 * K, 2, S, (ctx, f) => {
+  // Dead tree: a bare, twisted trunk with forked limbs and no leaves (a wood is not all green, Murat 2026-11-07)
+  hiResTexture(scene, "oak_f", OAK_W * K, OAK_H * K, 2, S, (ctx, f) => {
+    ctx.scale(K, K); ctx.translate(OAK_PAD, OAK_PAD);
+    shadow(ctx, 12, 25.6, 6, 1.8);
+    trunk(ctx, 12, 8, 26, 1.4);
+    const sw = f * 0.3;
+    limb(ctx, 12, 14, 5 + sw, 7, 0.9); limb(ctx, 7 + sw * 0.6, 9.5, 3 + sw, 4, 0.45); limb(ctx, 8 + sw * 0.6, 10, 9 + sw, 3, 0.4);
+    limb(ctx, 12.2, 12, 19 + sw, 6, 0.85); limb(ctx, 17 + sw * 0.7, 7.8, 21 + sw, 3.5, 0.4); limb(ctx, 16 + sw * 0.6, 8.6, 14.5 + sw, 2.5, 0.35);
+    limb(ctx, 12, 9, 11.5 + sw, 1.5, 0.6); limb(ctx, 12, 18, 7.5, 15.5, 0.5);
+  });
+  // Pines: tall, dark, ragged conifers with drooping, uneven tiers (no two alike: a full one and a gaunt one)
+  const conifer = (key: string, seed: number, tiers: number, gaunt: boolean) => hiResTexture(scene, key, 20 * K, 30 * K, 2, S, (ctx, f) => {
     ctx.scale(K, K);
-    shadow(ctx, 10, 27.6, 6.8, 2);
-    trunk(ctx, 10, 21, 28, 1.1);
-    const r = rng(17);
-    const tiers: [number, number, number][] = [[14, 25, 8.4], [8, 19, 6.4], [3, 13.5, 4.4], [0, 7.5, 2.4]];
-    for (const [i, [y0, y1, half]] of tiers.entries()) {
-      const sway = f ? (0.25 + i * 0.25) : 0;
-      const cx = 10 + sway;
-      // tier body: a drooping cone with a jagged needle hem
+    shadow(ctx, 10, 27.6, gaunt ? 5 : 6.8, 2);
+    trunk(ctx, 10, gaunt ? 3 : 18, 28, gaunt ? 0.9 : 1.1);
+    const r = rng(seed);
+    for (let i = 0; i < tiers; i++) {
+      const t = i / (tiers - 1); // 0 = bottom tier, 1 = top
+      const y1 = 26 - t * 21 + (r() - 0.5) * 1.2, y0 = y1 - (gaunt ? 4.2 : 6.5) + t * 1.2;
+      const half = (gaunt ? 6 : 8.6) * (1 - t * 0.78) * (0.8 + r() * 0.35);
+      if (gaunt && r() < 0.3 && i > 0 && i < tiers - 1) { // a bare gap: just dead twigs on this tier
+        limb(ctx, 10, y1 - 1, 10 - half, y1 - 0.2, 0.3); limb(ctx, 10, y1 - 1.5, 10 + half * 0.8, y1 - 0.6, 0.3);
+        continue;
+      }
+      const sway = f ? 0.2 + t * 0.6 : 0, cx = 10 + sway, lean = (r() - 0.5) * 1.6;
       const g = ctx.createLinearGradient(cx - half, y0, cx + half, y1);
-      g.addColorStop(0, "#4a6e4c"); g.addColorStop(0.45, "#25452f"); g.addColorStop(1, "#0f2218");
+      g.addColorStop(0, "#34463e"); g.addColorStop(0.45, "#17271f"); g.addColorStop(1, "#060d0a");
       ctx.fillStyle = g;
       ctx.beginPath();
       ctx.moveTo(cx, y0);
-      ctx.quadraticCurveTo(cx - half * 0.45, y0 + (y1 - y0) * 0.55, cx - half, y1);
-      const teeth = 7;
-      for (let t = 0; t < teeth; t++) {
-        const xa = cx - half + ((t + 0.5) / teeth) * half * 2, xb = cx - half + ((t + 1) / teeth) * half * 2;
-        ctx.quadraticCurveTo(xa, y1 - 1.3 - r() * 0.5, xb, y1 + (t % 2 ? 0.3 : -0.1));
+      ctx.quadraticCurveTo(cx - half * 0.4, y0 + (y1 - y0) * 0.5, cx - half + lean, y1 + 0.8); // drooping skirt
+      const teeth = 6 + Math.floor(r() * 4);
+      for (let k = 0; k < teeth; k++) {
+        const xa = cx - half + ((k + 0.5) / teeth) * half * 2 + lean * 0.5, xb = cx - half + ((k + 1) / teeth) * half * 2 + lean * (k === teeth - 1 ? 1 : 0.5);
+        ctx.quadraticCurveTo(xa, y1 - 1.6 - r() * 1.2, xb, y1 + r() * 1.1);
       }
-      ctx.quadraticCurveTo(cx + half * 0.45, y0 + (y1 - y0) * 0.55, cx, y0);
+      ctx.quadraticCurveTo(cx + half * 0.4, y0 + (y1 - y0) * 0.5, cx, y0);
       ctx.fill();
-      // needle strokes
-      ctx.lineWidth = 0.22;
-      for (let k = 0; k < 40; k++) {
-        const t = r(), y = y0 + 1 + t * (y1 - y0 - 1.5), w = half * (y - y0) / (y1 - y0) * 0.95;
+      ctx.lineWidth = 0.2;
+      for (let k = 0; k < 34; k++) {
+        const q = r(), y = y0 + 1 + q * (y1 - y0 - 1.2), w = half * (y - y0) / (y1 - y0) * 0.95;
         const x = cx + (r() * 2 - 1) * w;
-        ctx.strokeStyle = x < cx ? "rgba(130,160,120,0.4)" : "rgba(10,40,25,0.4)";
-        ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + (x < cx ? -0.6 : 0.6), y + 0.9); ctx.stroke();
+        ctx.strokeStyle = x < cx ? "rgba(110,135,125,0.28)" : "rgba(2,10,8,0.5)";
+        ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + (x < cx ? -0.6 : 0.6), y + 1); ctx.stroke();
       }
     }
   });
-  // Bush: 16x16, round, with berries
+  conifer("pine", 17, 6, false);
+  conifer("pine_b", 29, 7, true);
+  // Bush: a dark thorny bramble, twigs poking out (no bright berries)
   hiResTexture(scene, "bush", 18 * K, 16 * K, 2, S, (ctx, f) => {
     ctx.scale(K, K); ctx.translate(1, 0); // 1 unit side margin so the swaying leaves are not cut
     shadow(ctx, 8, 14.6, 7, 1.8);
-    canopy(ctx, 23, 8, 10.2, 6.6, 4.6, [0x1a2e16, 0x2c4620, 0x48612e, 0x748a44], f * 0.4);
-    for (const [x, y] of [[10.5, 10], [5, 12], [11, 12.2], [8, 13], [6.5, 9]]) {
-      const g = ctx.createRadialGradient(x - 0.25, y - 0.25, 0, x, y, 0.75);
-      g.addColorStop(0, "#e09080"); g.addColorStop(0.4, "#a8302a"); g.addColorStop(1, "#5a1210");
-      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x + f * 0.4, y, 0.7, 0, Math.PI * 2); ctx.fill();
+    for (const [x0, y0, x1, y1] of [[8, 13, 1.5, 6.5], [8, 13, 15, 6], [8, 12, 4, 4.5], [8.5, 12, 12.5, 4]]) limb(ctx, x0, y0, x1 + f * 0.3, y1, 0.35);
+    canopy(ctx, 23, 8, 10.2, 6.4, 4.2, [0x0e1810, 0x1a2a19, 0x2a3c24, 0x3e5030], f * 0.4);
+    ctx.strokeStyle = "#1a1410"; ctx.lineWidth = 0.22;
+    const r = rng(5);
+    for (let k = 0; k < 14; k++) { // thorny twigs
+      const a = r() * Math.PI * 2, x = 8 + Math.cos(a) * 6.5, y = 10 + Math.sin(a) * 3.8;
+      ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + Math.cos(a) * 1.6 + f * 0.2, y + Math.sin(a) * 1.2 - 0.5); ctx.stroke();
     }
   });
 }

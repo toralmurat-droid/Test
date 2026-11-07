@@ -88,6 +88,12 @@ export function makeFields(g: GroundData): Fields {
 const out3 = new Float32Array(3);
 /** How much of the material owns this spot (1 deep inside, ~0.3 at a border): old roads crumble near their edges. */
 let OWN = 1;
+/**
+ * Grass is one material (Murat 2026-11-07: the ground looked ugly): the plain, dark, tall and flowery grass tiles are
+ * not painted as separate grounds with borders between them (that drew stepped rings round every clearing), but as
+ * one grass whose darkness, height and flowers follow the mix of those tiles around the pixel, smoothly.
+ */
+let G_DARK = 0, G_TALL = 0, G_FLOW = 0;
 
 /**
  * Colour + "height" of one material at a world point. The height lets materials poke into each other at
@@ -112,15 +118,17 @@ function material(t: number, wx: number, wy: number, sx: number, sy: number, dep
       const m = fbm(wx / 150, wy / 150, 3);
       const p = vn(wx / 22, wy / 22, 5);
       const blade = vn(sx / 1.1, sy / 4.6, 7) * 0.55 + vn(sx / 0.7, sy / 2.8, 8) * 0.45;
-      const dark = t === GRASS_DARK, tall = t === TALL;
-      // dark olive to dusty green; dry straw patches
-      r = dark ? 46 + 16 * m : 66 + 22 * m;
-      g = dark ? 64 + 14 * m : 84 + 18 * m;
-      b = dark ? 38 + 6 * m : 42 + 6 * m;
-      const dry = sstep(0.55, 0.78, fbm(wx / 70, wy / 70, 4)) * (dark ? 0.4 : 0.8);
-      r += (112 - r) * dry * 0.6; g += (100 - g) * dry * 0.5; b += (58 - b) * dry * 0.4;
-      if (tall) { r += 10; g += 6; }
-      const k = (0.8 + 0.34 * p) * ((tall ? 0.7 : 0.76) + (tall ? 0.55 : 0.44) * blade);
+      // how dark / tall the grass is here: the blend of grass tiles around, plus big soft noise so it never steps
+      const dk = clamp01(G_DARK + (fbm(wx / 90, wy / 90, 21) - 0.5) * 0.5), tl = clamp01(G_TALL + (vn(wx / 60, wy / 60, 22) - 0.5) * 0.3);
+      const dark = dk > 0.5, tall = tl > 0.5;
+      // gloomy: dark moss and dead olive, dry brown-grey patches, never bright green
+      r = 52 + 16 * m + (34 + 10 * m - (52 + 16 * m)) * dk;
+      g = 62 + 13 * m + (44 + 9 * m - (62 + 13 * m)) * dk;
+      b = 42 + 6 * m + (34 + 5 * m - (42 + 6 * m)) * dk;
+      const dry = sstep(0.5, 0.78, fbm(wx / 70, wy / 70, 4)) * (0.8 - 0.45 * dk);
+      r += (92 - r) * dry * 0.6; g += (82 - g) * dry * 0.5; b += (60 - b) * dry * 0.45;
+      r += 8 * tl; g += 4 * tl;
+      const k = (0.8 + 0.34 * p) * ((0.76 - 0.06 * tl) + (0.44 + 0.11 * tl) * blade);
       r *= k; g *= k; b *= k;
       // bare earth showing through worn spots
       const bare = sstep(0.72, 0.86, vn(wx / 38, wy / 38, 6) * 0.7 + p * 0.3 + (0.5 - blade) * 0.25) * (dark ? 0.4 : 0.9);
@@ -145,13 +153,15 @@ function material(t: number, wx: number, wy: number, sx: number, sy: number, dep
       }
       const f = hash2(Math.floor(sx * 1.5), Math.floor(sy * 1.5), 9);
       if (f > 0.99) { r += 26; g += 26; b += 8; }
-      if (t === FLOWERS && f < 0.015) { const c = hash2(Math.floor(sx * 1.5), Math.floor(sy * 1.5), 10); r = c < 0.33 ? 170 : c < 0.66 ? 196 : 150; g = c < 0.33 ? 70 : c < 0.66 ? 170 : 110; b = c < 0.33 ? 90 : c < 0.66 ? 80 : 170; }
+      if (G_FLOW > 0.3 && f < 0.012 * G_FLOW) { // a few wilted flowers, muted
+        const c = hash2(Math.floor(sx * 1.5), Math.floor(sy * 1.5), 10); r = c < 0.33 ? 120 : c < 0.66 ? 140 : 104; g = c < 0.33 ? 64 : c < 0.66 ? 122 : 88; b = c < 0.33 ? 72 : c < 0.66 ? 70 : 120;
+      }
       ht = 0.35 + 0.35 * p + 0.25 * blade - bare * 0.2;
       break;
     }
     case DIRT: {
       const m = fbm(wx / 50, wy / 50, 13), p = vn(wx / 8, wy / 8, 14);
-      r = 98 + 22 * m; g = 76 + 16 * m; b = 54 + 10 * m;
+      r = 80 + 18 * m; g = 66 + 14 * m; b = 54 + 10 * m; // grey-brown mud, not orange
       const damp = sstep(0.6, 0.8, fbm(wx / 40, wy / 40, 19));
       const k = (0.84 + 0.26 * p + grain * 0.08) * (1 - damp * 0.25);
       r *= k; g *= k; b *= k;
@@ -305,7 +315,12 @@ function material(t: number, wx: number, wy: number, sx: number, sy: number, dep
       ht = 0.6;
       break;
     }
-    default: r = 70; g = 84; b = 44;
+    default: { // any other ground (e.g. the war-camp FLAGS tiles): dark grass. A flat colour here drew stepped rings.
+      const save = G_DARK; G_DARK = Math.max(G_DARK, 0.6);
+      const h = material(GRASS, wx, wy, sx, sy, depth, now);
+      G_DARK = save;
+      return h;
+    }
   }
   if (t !== WATER && t !== BRIDGE) {
     const k = 0.78 + 0.3 * grime; // weathering: darker, damp patches
@@ -369,6 +384,7 @@ export function paintChunk(g: GroundData, f: Fields, sx0: number, sy0: number, c
   const lands = (g.lands ?? []).filter((l) => l.x < bx1 && l.x + l.w > bx0 && l.y < by1 && l.y + l.h > by0);
   const W = Math.round(cw * res), H = Math.round(ch * res);
   const wt = new Float32Array(NT);
+  const gw = new Float32Array(NT); // weights of the grass kinds (they all paint as GRASS)
   const types: number[] = [];
   const at = (x: number, y: number) => ground[(y < 0 ? 0 : y >= h ? h - 1 : y) * w + (x < 0 ? 0 : x >= w ? w - 1 : x)];
   const field = (arr: Float32Array, fx: number, fy: number) => {
@@ -381,6 +397,7 @@ export function paintChunk(g: GroundData, f: Fields, sx0: number, sy0: number, c
     if (k <= 0) return;
     t %= 45; // display grids carry art-row variants
     if (t === BRIDGE) t = WATER;
+    if (t === GRASS_DARK || t === TALL || t === FLOWERS || t === GRASS) { gw[t] += k; t = GRASS; } // one grass, see G_DARK
     if (wt[t] === 0) types.push(t);
     wt[t] += k;
   };
@@ -407,6 +424,9 @@ export function paintChunk(g: GroundData, f: Fields, sx0: number, sy0: number, c
         }
       }
       for (const t of types) wt[t] /= tot;
+      { const gs = gw[GRASS] + gw[GRASS_DARK] + gw[TALL] + gw[FLOWERS];
+        G_DARK = gs ? gw[GRASS_DARK] / gs : 0; G_TALL = gs ? gw[TALL] / gs : 0; G_FLOW = gs ? gw[FLOWERS] / gs : 0;
+        gw[GRASS] = gw[GRASS_DARK] = gw[TALL] = gw[FLOWERS] = 0; }
       const depth = field(f.depth, wx / tile - 0.5, wy / tile - 0.5);
       let s1 = -9, s2 = -9, t1 = types[0], t2 = -1;
       let ar = 0, ag = 0, ab = 0, al = 0; // weighted mean colour of the land grounds here (dust, sand and earth carry over)

@@ -315,8 +315,8 @@ const S: Record<ClassKind, SkillDef[]> = <Record<ClassKind, SkillDef[]>><unknown
       shots: { kind: "fireball", speed: 280, range: 200, radius: 6, size: 1.3, dmg: 11, burn: [2, 1500], kb: 0.6 } },
     // Frost
     { id: "w_blizzard", name: "Blizzard", type: "Aura", branch: 1, row: 0, style: "frost", cd: 9000, mana: 22,
-      desc: "A blizzard swirls around you for 6s and moves with you: ice rains on every enemy close by, hurting and slowing them.",
-      field: { kind: "blizzard", r: 56, ms: 6000, tickMs: 500, follow: true, dmg: 6, slowMs: 800 } },
+      desc: "A storm of snow and ice turns around you for 6s and moves with you, hurting and slowing every enemy close by.",
+      field: { kind: "frostwhirl", r: 56, ms: 6000, tickMs: 500, follow: true, dmg: 6, slowMs: 800 } },
     // Thunder
     { id: "w_storm", name: "Thunder", type: "Attack", branch: 2, row: 0, style: "lightning", cd: 6000, mana: 20,
       desc: "Call thunder down on a spot: for 2.5s lightning hammers the zone, striking and stunning the enemies inside.",

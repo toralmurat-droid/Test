@@ -353,10 +353,12 @@ export class TownScene extends Phaser.Scene {
     if (SMOOTH && cam.postFX) {
       // Moody grade for the painted world (the HUD is HTML, so it is not affected): muted colours, deeper contrast,
       // a dark vignette around the edges
+      // Gloomy and dark (Murat 2026-11-07: "too cute"): colour drained, darker overall, heavy vignette
       const cm = cam.postFX.addColorMatrix();
-      cm.saturate(-0.22);
-      cm.contrast(0.12, true);
-      cam.postFX.addVignette(0.5, 0.5, 0.92, 0.42);
+      cm.saturate(-0.4);
+      cm.contrast(0.16, true);
+      cm.brightness(0.86, true);
+      cam.postFX.addVignette(0.5, 0.5, 0.82, 0.55);
       addPixelGrid(cam); // one pixel density for everything in the world
     }
     if (ISO) this.iso = new IsoView(this);
@@ -364,8 +366,19 @@ export class TownScene extends Phaser.Scene {
     // Keys without capture so typing in chat still works
     this.keys = this.input.keyboard!.addKeys("W,A,S,D,UP,DOWN,LEFT,RIGHT,SPACE,SHIFT,Q,C,G,T,F,R,E,J", false) as any;
     // Space = right click at the mouse cursor (Murat 2026-11-05; it used to be a plain basic attack)
-    this.input.keyboard!.on("keydown-SPACE", (ev: KeyboardEvent) => { if (!ev.repeat && !this.chatting()) this.pointer?.spaceDown(); });
+    // In the spell keys layout, Space with no spell on the right click is a left click: walk there / attack (Murat 2026-11-07)
+    this.input.keyboard!.on("keydown-SPACE", (ev: KeyboardEvent) => {
+      if (!ev.repeat && !this.chatting()) this.pointer?.spaceDown(keyMode() === "spells" && !this.rightSkill() ? 0 : 2);
+    });
     this.input.keyboard!.on("keyup-SPACE", () => this.pointer?.spaceUp());
+    // Spell keys layout: hold Tab to stand still, so a click (or Space) attacks in place instead of walking
+    window.addEventListener("keydown", (ev) => {
+      if (ev.key !== "Tab" || keyMode() !== "spells" || this.chatting() || !this.pointer) return;
+      ev.preventDefault(); // Tab must not move the browser's focus
+      this.pointer.standHeld = true;
+    });
+    window.addEventListener("keyup", (ev) => { if (ev.key === "Tab" && this.pointer) this.pointer.standHeld = false; });
+    window.addEventListener("blur", () => { if (this.pointer) this.pointer.standHeld = false; });
     // Skill slots and the other game keys come from the keyboard layout picked in the game menu (client/src/keymode.ts):
     // classic (skills on 1-0) or spell keys (W E R T 1-5). With the skill tree open and the mouse over a learned skill,
     // a slot key puts that skill in the slot instead of using it.
@@ -1113,7 +1126,7 @@ export class TownScene extends Phaser.Scene {
         // Don't pop the menu up mid-fight: show a small notice, the player opens it with C
         this.levelFrom = Math.min(this.levelFrom ?? Infinity, from ?? level - 1);
         const note = document.getElementById("lvlnote")!;
-        note.textContent = `⬆ Level ${level}! Press C to assign your stat points`;
+        note.textContent = `⬆ Level ${level}! Press ${actionKey("hero")} to assign your stat points`;
         note.hidden = false;
       }
     });
