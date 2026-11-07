@@ -122,7 +122,6 @@ export class ResourceBars {
   private root: HTMLElement;
   private hp: Bar;
   private mp: Bar;
-  private st: Bar;
   private xpFill: HTMLElement;
   private xpBar: HTMLElement;
   private lvEl: HTMLElement;
@@ -141,7 +140,6 @@ export class ResourceBars {
     const stack = this.root.querySelector(".rb-stack") as HTMLElement;
     this.hp = new Bar(stack, "hp");
     this.mp = new Bar(stack, "mp");
-    this.st = new Bar(stack, "st");
     // XP bar sits above the slot bar (Murat): bronze menu frame, gold fill, progress text inside on hover
     this.xpBar = document.createElement("div");
     this.xpBar.id = "xpbar";
@@ -150,7 +148,7 @@ export class ResourceBars {
     this.xpTxt = this.xpBar.lastElementChild as HTMLElement;
     hud.appendChild(this.xpBar);
     hud.prepend(this.root);
-    this.orbs = new OrbHud(hud); // health and mana live in the orbs at the bottom; the top-left keeps level and stamina
+    this.orbs = new OrbHud(hud); // health and mana live in the orbs at the bottom; the top-left keeps the level shield (stamina bar removed, Murat 2026-11-07)
     this.setNumbers(ResourceBars.numbersOn());
   }
 
@@ -162,10 +160,9 @@ export class ResourceBars {
   }
   toggleNumbers() { this.setNumbers(this.root.classList.contains("rb-nonums")); }
 
-  update(s: { level: number; hp: number; maxHp: number; mp: number; maxMp: number; st: number; maxSt: number; xpFrac: number; xp?: number; xpNeed?: number }) {
+  update(s: { level: number; hp: number; maxHp: number; mp: number; maxMp: number; xpFrac: number; xp?: number; xpNeed?: number }) {
     this.hp.update(Math.ceil(s.hp), Math.round(s.maxHp));
     this.mp.update(Math.floor(s.mp), s.maxMp);
-    this.st.update(Math.floor(s.st), s.maxSt);
     this.orbs.update(s.hp, s.maxHp, s.mp, s.maxMp);
     if (s.level !== this.level) {
       if (this.level >= 0) { this.xpFill.style.transition = "none"; this.xpFill.style.width = "0%"; void this.xpFill.offsetWidth; this.xpFill.style.transition = ""; }
