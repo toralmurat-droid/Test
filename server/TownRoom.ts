@@ -4571,6 +4571,8 @@ export class TownRoom extends Room<TownState> {
     if (t.hp > 0) { afterHit(this.host, opts.from, tid, opts); return false; }
     t.dead = true;
     t.guarding = false;
+    // No magic in Oakvale: dying pays for it, the hero comes back a free citizen (villagers and watch stand down)
+    this.setOutlaw(tid, t, false);
     // Dying wears the gear (shared/upkeep.ts): it gives less until the smith repairs it
     if (t.wear < WEAR.max) {
       t.wear = Math.min(WEAR.max, t.wear + WEAR.perDeath);
