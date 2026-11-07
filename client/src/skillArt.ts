@@ -864,6 +864,105 @@ const ART: Record<string, Draw> = {
     p.outline();
     for (const [x, y] of [[3, 12], [11, 14], [18, 11]]) p.line(x, y, x + 2, y - 2, EARTH[3]);
   },
+  // ===== Summoner (golems and elements) =====
+  // a small golem of the four elements: fire arm, frost arm, a glowing venom heart, storm crown
+  su_golem: (p) => {
+    p.ball(12, 15, 7, EARTH, 6); p.ball(12, 7, 3.5, EARTH);
+    p.ball(5, 15, 2.6, FIRE); p.ball(19, 15, 2.6, ICE);
+    p.ball(12, 15, 2.2, POIS); p.flame(12, 5, 4, 3, LIT);
+    p.outline();
+    p.px(11, 7, "#ffffff"); p.px(13, 7, "#ffffff");
+  },
+  // four little stones turning around a ring: the element wheel
+  su_attune: (p) => {
+    p.ring(12, 12, 8, ARC[2]);
+    p.ball(12, 4, 2.6, FIRE); p.ball(20, 12, 2.6, ICE); p.ball(12, 20, 2.6, POIS); p.ball(4, 12, 2.6, LIT);
+    p.outline();
+    p.line(15, 6, 18, 9, ARC[3]); p.line(18, 15, 15, 18, ARC[3]);
+  },
+  // a heart joined to a golem fist by a living thread
+  su_link: (p) => {
+    p.ball(7, 9, 4, BLOOD); p.ball(17, 16, 4.5, EARTH);
+    for (let i = 0; i < 6; i++) p.disc(9 + i * 1.4, 11 + i, 0.8, i % 2 ? SPIRIT[2] : SPIRIT[3]);
+    p.outline();
+  },
+  su_stonehide: (p) => {
+    p.poly([[5, 5], [19, 5], [19, 13], [12, 21], [5, 13]], EARTH[1]);
+    p.poly([[7, 7], [17, 7], [17, 12], [12, 18], [7, 12]], EARTH[2]);
+    p.line(9, 8, 12, 12, EARTH[0]); p.line(12, 12, 15, 9, EARTH[0]); p.line(12, 12, 12, 16, EARTH[0]);
+    p.outline();
+  },
+  // a breastplate of stone slabs with a violet rune
+  su_armour: (p) => {
+    p.poly([[4, 6], [10, 4], [12, 6], [14, 4], [20, 6], [19, 18], [12, 22], [5, 18]], EARTH[1]);
+    p.poly([[7, 8], [17, 8], [16, 17], [12, 19], [8, 17]], EARTH[2]);
+    p.outline();
+    p.line(10, 10, 12, 15, ARC[2]); p.line(12, 15, 14, 10, ARC[2]); p.px(12, 9, ARC[3]);
+  },
+  // a towering colossus with a burning core, arms raised
+  su_colossus: (p) => {
+    p.ball(12, 14, 8, EARTH, 7); p.ball(12, 5, 3.5, EARTH);
+    p.ball(3, 6, 2.8, EARTH); p.ball(21, 6, 2.8, EARTH);
+    p.line(5, 9, 7, 11, EARTH[1]); p.line(19, 9, 17, 11, EARTH[1]);
+    p.ball(12, 14, 3, FIRE);
+    p.outline();
+    p.px(11, 5, "#fff176"); p.px(13, 5, "#fff176");
+  },
+  // a violet rift with the hero stepping out of it
+  su_step: (p) => {
+    p.disc(8, 12, 5, ARC[0], 9); p.disc(8, 12, 3, ARC[1], 7); p.disc(8, 12, 1.4, ARC[3], 5);
+    p.ball(17, 10, 3, BONE); p.poly([[14, 13], [20, 13], [21, 21], [13, 21]], BONE[2]);
+    p.outline();
+  },
+  su_quick: (p) => {
+    p.ring(12, 12, 8, GOLD[2]); p.ring(12, 12, 6, GOLD[1]);
+    p.line(12, 12, 12, 6, GOLD[3]); p.line(12, 12, 16, 14, GOLD[3]);
+    for (const x of [2, 4]) p.line(x, 9, x, 15, ARC[2]);
+    p.outline();
+  },
+  su_flow: (p) => {
+    p.ball(12, 13, 6, ARC); p.poly([[9, 8], [12, 2], [15, 8]], ARC[1]);
+    p.outline();
+    p.px(10, 11, ARC[3]); p.px(11, 10, "#ffffff");
+  },
+  su_swift: (p) => {
+    for (const [y, l] of [[7, 14], [12, 18], [17, 12]]) { p.line(3, y, 3 + l, y, WIND[2]); p.line(3 + l, y, 1 + l, y - 2, WIND[3]); }
+    p.outline();
+  },
+  // a rift full of the four elements
+  su_rift: (p) => {
+    p.disc(12, 12, 10, ARC[0], 8); p.disc(12, 12, 7, SHAD[1], 5.5);
+    p.flame(8, 16, 7, 3, FIRE); p.poly([[14, 6], [16, 12], [12, 12]], ICE[2]);
+    p.bolt([[17, 7], [15, 11], [18, 12], [16, 17]]);
+    p.outline();
+  },
+  su_mote: (p) => {
+    p.ball(13, 11, 5, LIT); p.bolt([[13, 11], [8, 15], [10, 16], [4, 21]]);
+    p.outline();
+    p.px(12, 9, "#ffffff");
+  },
+  su_ruin: (p) => {
+    p.ball(12, 13, 7, EARTH, 6);
+    p.flame(12, 16, 10, 4, FIRE);
+    p.outline();
+  },
+  // a spectral blade of pure element
+  su_blade: (p) => {
+    p.sword(5, 20, 19, 4, ARC, GOLD);
+    for (const [x, y] of [[16, 10], [12, 14], [18, 5]]) p.px(x, y, ARC[3]);
+  },
+  su_mastery: (p) => {
+    p.ball(7, 8, 3, FIRE); p.ball(17, 8, 3, ICE); p.ball(7, 17, 3, POIS); p.ball(17, 17, 3, LIT);
+    p.ball(12, 12.5, 3.2, ARC);
+    p.outline();
+  },
+  // fire, ice and lightning falling on one spot
+  su_cataclysm: (p) => {
+    p.disc(12, 20, 9, EARTH[1], 2.5);
+    p.flame(6, 18, 10, 3, FIRE); p.poly([[11, 4], [14, 4], [13, 18], [12, 18]], ICE[2]);
+    p.bolt([[19, 3], [16, 10], [20, 11], [17, 19]]);
+    p.outline();
+  },
   // ===== Vampire: Blood =====
   v_bolt: (p) => {
     // a spinning bolt of blood with a dripping tail

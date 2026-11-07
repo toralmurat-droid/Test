@@ -12,6 +12,7 @@ const PAL: Record<ClassKind, [string, string, string]> = {
   archer: ["#203812", "#6aa43a", "#e3f5b0"],
   barbarian: ["#4a1408", "#d0601e", "#ffe08a"],
   vampire: ["#2a0610", "#a8102a", "#ff9aa8"],
+  summoner: ["#2a2236", "#9a7ad6", "#f0e6ff"],
 };
 
 // Crystal shape: o = outline, d = dark facet, b = body, l = light facet, w = glint

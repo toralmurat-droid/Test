@@ -4,7 +4,7 @@ import zlib from "node:zlib";
 
 async function main() {
   const [n, port] = process.argv.slice(2).map(Number);
-  const classes = ["knight", "ninja", "wizard", "archer", "barbarian", "vampire"];
+  const classes = ["knight", "ninja", "wizard", "archer", "barbarian", "vampire", "summoner"];
   const rooms: any[] = [];
   let bytes = 0, raw = 0, packed = 0;
   for (let i = 0; i < n; i++) {

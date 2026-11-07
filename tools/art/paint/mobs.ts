@@ -1,4 +1,5 @@
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { GOLEM_H, GOLEM_W, paintGolemFrame, type GolemDir, type GolemElement } from "./golems";
 import { createCanvas } from "@napi-rs/canvas";
 import { MOB_POSES, posed, setPainted, type Dir } from "../characters";
 import { C2, P, blobPath, css, ellipseP, poly, fillShape, glow, limb, line, metal, mix, rng, sh, vol } from "./brush";
@@ -415,6 +416,11 @@ export function buildMobs(out: string, ONLY?: string[]) {
     blobSheet("mob_motherblob", 24, 22, { G: 0x3a9684, L: 0xb8f2e0, D: 0x1c5448, E: 0x10302a }, { bodyH: 17, extra: "mother1", seed: 9 }),
     blobSheet("mob_motherblob2", 24, 22, { G: 0x2c8796, L: 0xb0eef5, D: 0x184c56, E: 0x0b2a30 }, { bodyH: 17, extra: "mother2", seed: 10 }),
     blobSheet("mob_motherblob3", 24, 22, { G: 0x553b96, L: 0xd3c2ff, D: 0x2f205f, E: 0x140a2a }, { bodyH: 17, extra: "mother3", seed: 11 }),
+    // the Summoner's golems (Murat 2026-11-07: style 2, bodies made of the element), and the Colossus they fuse into
+    ...(["fire", "cold", "poison", "shock"] as GolemElement[]).flatMap((el, i) => [
+      { key: `mob_golem_${el}`, w: GOLEM_W, h: GOLEM_H, draw: (c: C2, f: number) => { const { dir, pose } = frameOf(f); paintGolemFrame(c, "elemental", el, dir as GolemDir, pose, 7 + i, SH ?? undefined); } },
+      { key: `mob_golem_colossus_${el}`, w: GOLEM_W, h: GOLEM_H, draw: (c: C2, f: number) => { const { dir, pose } = frameOf(f); paintGolemFrame(c, "elemental", el, dir as GolemDir, pose, 31 + i, SH ?? undefined); } },
+    ]),
     // humanoids get taller frames than the pixel ones, about hero height (client: PAINTED_LOOK in textures.ts)
     humanoid("mob_skeleton", "skeleton", 20, 30, 27.5 / 30, 0.85),
     humanoid("mob_skeleton_axe", "skeleton_axe", 20, 30, 27.5 / 30, 0.85),
@@ -477,7 +483,10 @@ export function buildMobs(out: string, ONLY?: string[]) {
     writeFileSync(`${out}/${s.key}.webp`, cv.encodeSync("webp", 100));
     meta[s.key] = { w: s.w, h: s.h, scale: TX, frames: NF, ...(s.hands ? { hands: s.hands } : {}) };
   }
-  writeFileSync(`${out}/mobs.json`, JSON.stringify(meta, null, 1));
+  // Only some sheets rebuilt (ONLY): keep the others' entries
+  let all = meta;
+  if (ONLY) { try { all = { ...JSON.parse(readFileSync(`${out}/mobs.json`, "utf8")), ...meta }; } catch { /* first build */ } }
+  writeFileSync(`${out}/mobs.json`, JSON.stringify(all, null, 1));
   setPainted(false, 2);
   console.log("painted monsters", Object.keys(meta).length);
 }

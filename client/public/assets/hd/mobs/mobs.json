@@ -896,5 +896,53 @@
   "h": 40,
   "scale": 1.5,
   "frames": 12
+ },
+ "mob_golem_fire": {
+  "w": 40,
+  "h": 46,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_golem_colossus_fire": {
+  "w": 40,
+  "h": 46,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_golem_cold": {
+  "w": 40,
+  "h": 46,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_golem_colossus_cold": {
+  "w": 40,
+  "h": 46,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_golem_poison": {
+  "w": 40,
+  "h": 46,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_golem_colossus_poison": {
+  "w": 40,
+  "h": 46,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_golem_shock": {
+  "w": 40,
+  "h": 46,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_golem_colossus_shock": {
+  "w": 40,
+  "h": 46,
+  "scale": 1.5,
+  "frames": 12
  }
 }

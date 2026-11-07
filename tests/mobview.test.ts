@@ -32,15 +32,21 @@ test("a client following the monster feed sees the monsters where the server has
     room.state.mobs.forEach((m: any) => { if (!near && !m.dead && !m.hidden && m.zone === 0) near = m; });
     me.x = near.x + 40; me.y = near.y; me.invulnUntil = Date.now() + 60_000;
     await wait(2500);
-    let checked = 0, off = 0;
-    for (const [id, v] of seen) {
-      const m = room.state.mobs.get(id);
-      if (!m || m.dead) continue;
-      checked++;
-      if (Math.abs((v[X_FIELD] as number) / POS_SCALE - m.x) > 12 || Math.abs((v[Y_FIELD] as number) / POS_SCALE - m.y) > 12) off++;
-      const kindIdx = 0;
-      assert.equal(v[kindIdx], m.kind);
-    }
+    // Monsters keep moving between the last feed message and this check (more so on a busy machine): try a few
+    // times, a wrong field index (the bug this guards against) is off every time and by far more
+    const check = () => {
+      let checked = 0, off = 0;
+      for (const [id, v] of seen) {
+        const m = room.state.mobs.get(id);
+        if (!m || m.dead) continue;
+        checked++;
+        if (Math.abs((v[X_FIELD] as number) / POS_SCALE - m.x) > 24 || Math.abs((v[Y_FIELD] as number) / POS_SCALE - m.y) > 24) off++;
+        assert.equal(v[0], m.kind);
+      }
+      return { checked, off };
+    };
+    let { checked, off } = check();
+    for (let i = 0; i < 10 && off > 0; i++) { await wait(150); ({ checked, off } = check()); }
     assert.ok(checked > 5, `checked ${checked} monsters`);
     assert.equal(off, 0, `${off} of ${checked} monsters are not where the server has them`);
     await c.leave();

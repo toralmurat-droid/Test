@@ -627,7 +627,7 @@ interface Ent { sprite: { x: number; y: number }; state: any; mob?: boolean; her
 const UNDEAD = new Set(["skeleton", "skeletonmage", "necromancer", "crawler"]);
 const isBlob = (k: string) => k === "slime" || k === "blobling" || k.endsWith("blob");
 const blobPitch = (st: any) => (st.kind === "motherblob" ? 0.55 : st.kind === "blobling" ? 1.5 : 1) / Math.sqrt(st.merged || 1);
-const HERO_PITCH: Record<string, number> = { ninja: 1.1, wizard: 0.95, knight: 0.85, archer: 1.15, barbarian: 0.75, vampire: 0.9 };
+const HERO_PITCH: Record<string, number> = { ninja: 1.1, wizard: 0.95, knight: 0.85, archer: 1.15, barbarian: 0.75, vampire: 0.9, summoner: 1.0 };
 const hpitch = (st: any) => (HERO_PITCH[st?.cls] ?? 1) * (0.97 + (st?.name?.length ?? 0) % 5 * 0.015);
 
 /** Bandit voices differ a little per bandit (seeded by id). */

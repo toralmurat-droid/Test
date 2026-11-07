@@ -285,7 +285,10 @@ export const MOB_LOOK: Record<string, { top: number; bar: number; oy: number; sc
   crawler: { top: 10, bar: 10, oy: CRAWL_CROP },
 };
 
-const PAINTED_MOBS = ["slime", "blobling", "shooterblob", "warriorblob", "healerblob", "motherblob", "venomblob", "frostblob", "fireblob", "stormblob", "skeleton", "bandit", "skeletonmage", "necromancer", "demon", "crawler", "banditchief", "hollowking", "gnawkin", "tuskborn", "silkwretch", "duskwing", "packlord", "hornbrute", "hidemother", "crowseer", "gnasher", "weaver"];
+const PAINTED_MOBS = ["slime", "blobling", "shooterblob", "warriorblob", "healerblob", "motherblob", "venomblob", "frostblob", "fireblob", "stormblob", "skeleton", "bandit", "skeletonmage", "necromancer", "demon", "crawler", "banditchief", "hollowking", "gnawkin", "tuskborn", "silkwretch", "duskwing", "packlord", "hornbrute", "hidemother", "crowseer", "gnasher", "weaver",
+  "golem_fire", "golem_cold", "golem_poison", "golem_shock", "golem_colossus"];
+/** The Colossus is painted once per element (Mob.weapon holds it, shared/summons.ts). */
+const COLOSSUS_ELEMENTS = ["fire", "cold", "poison", "shock"];
 /** Beast-folk drawn the other way round (Mob.weapon "folk", shared/constants.ts BEAST_FOLK): the beast's hide on a man. */
 const FOLK_MOBS = ["gnawkin", "tuskborn", "silkwretch", "duskwing"];
 /** Painted humanoid monsters have taller frames (feet lower in the frame, label higher). */
@@ -304,6 +307,10 @@ const PAINTED_LOOK: Record<string, { top: number; bar: number; oy: number; scale
   gnasher: { top: 50, bar: 28, oy: 35.5 / 38, scale: 1.4 }, weaver: { top: 52, bar: 30, oy: 37.5 / 40, scale: 1.45 },
   packlord: { top: 48, bar: 28, oy: 34 / 36, scale: 1.4 }, hornbrute: { top: 56, bar: 32, oy: 37.5 / 40, scale: 1.45 },
   hidemother: { top: 66, bar: 38, oy: 44 / 48, scale: 1.6 },
+  // the Summoner's golems (tools/art/paint/golems.ts, 40x46 frames, feet at 43) and the Colossus they fuse into
+  golem_fire: { top: 40, bar: 22, oy: 43 / 46 }, golem_cold: { top: 40, bar: 22, oy: 43 / 46 },
+  golem_poison: { top: 40, bar: 22, oy: 43 / 46 }, golem_shock: { top: 40, bar: 22, oy: 43 / 46 },
+  golem_colossus: { top: 64, bar: 34, oy: 43 / 46, scale: 1.6 },
   // pixel sheets use even frame heights (whole texels at 1.5 per px)
   blobling: { top: 9, bar: 8, oy: 0.91 }, shooterblob: { top: 16, bar: 12, oy: 0.93 }, healerblob: { top: 16, bar: 12, oy: 0.93 },
   venomblob: { top: 17, bar: 12, oy: 0.93 }, frostblob: { top: 20, bar: 14, oy: 0.94 }, fireblob: { top: 19, bar: 14, oy: 0.94 }, stormblob: { top: 18, bar: 12, oy: 0.93 },
@@ -313,7 +320,7 @@ export function preloadPaintedMobs(scene: Phaser.Scene) {
   if (!SMOOTH) return;
   Object.assign(MOB_LOOK, PAINTED_LOOK);
   scene.load.json("hd_mobs", "assets/hd/mobs/mobs.json");
-  for (const k of [...PAINTED_MOBS.map((m) => `mob_${m}`), "mob_motherblob2", "mob_motherblob3", "mob_skeleton_axe", "mob_skeleton_spear", "mob_skeleton_bow", "mob_bandit_brute", "mob_bandit_archer", "mob_demon1", "mob_demon2", "mob_demon3", "mob_demon4", ...FOLK_MOBS.map((m) => `mob_${m}_folk`)]) scene.load.image(`hd_${k}`, `assets/hd/mobs/${k}.webp`);
+  for (const k of [...PAINTED_MOBS.filter((m) => m !== "golem_colossus").map((m) => `mob_${m}`), "mob_motherblob2", "mob_motherblob3", "mob_skeleton_axe", "mob_skeleton_spear", "mob_skeleton_bow", "mob_bandit_brute", "mob_bandit_archer", "mob_demon1", "mob_demon2", "mob_demon3", "mob_demon4", ...FOLK_MOBS.map((m) => `mob_${m}_folk`), ...COLOSSUS_ELEMENTS.map((e) => `mob_golem_colossus_${e}`)]) scene.load.image(`hd_${k}`, `assets/hd/mobs/${k}.webp`);
 }
 
 /** Monster sprite sheets, same 6-frame layout as personas (painted when the smooth look is on). */
@@ -326,6 +333,7 @@ export function mobTexture(scene: Phaser.Scene, kind: string, level = 1, weapon 
     const key = kind === "motherblob" && tier > 1 ? `mob_motherblob${tier}` : kind === "skeleton" && weapon && weapon !== "sword" ? `mob_skeleton_${weapon}`
       : kind === "bandit" && (weapon === "brute" || weapon === "archer" || weapon === "lookout") ? `mob_bandit_${weapon === "lookout" ? "archer" : weapon}`
       : weapon === "folk" && FOLK_MOBS.includes(kind) ? `mob_${kind}_folk`
+      : kind === "golem_colossus" ? `mob_golem_colossus_${COLOSSUS_ELEMENTS.includes(weapon) ? weapon : "fire"}`
       : kind === "demon" && bones > 0 ? `mob_demon${Math.min(4, bones)}` : `mob_${kind}`; // the demon wearing its harvested bones
     if (scene.textures.exists(key)) return key;
     const meta = scene.cache.json.get("hd_mobs")?.[key];

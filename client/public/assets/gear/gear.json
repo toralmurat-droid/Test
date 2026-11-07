@@ -5,7 +5,8 @@
   "knight",
   "archer",
   "barbarian",
-  "vampire"
+  "vampire",
+  "summoner"
  ],
  "items": [
   "w_bronze",
@@ -66,7 +67,11 @@
   "vampire_weapon",
   "vampire_armour",
   "vampire_hat",
-  "vampire_shoes"
+  "vampire_shoes",
+  "summoner_weapon",
+  "summoner_armour",
+  "summoner_hat",
+  "summoner_shoes"
  ],
  "image": "{hero}_{item}.png"
 }

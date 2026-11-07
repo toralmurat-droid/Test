@@ -93,6 +93,10 @@ export interface SkillHost {
   stats?(id: string): Stats | undefined;
   cooldownMult(id: string): number;
   fx(ev: Record<string, unknown>): void;
+  /** Summoner (shared/summons.ts): call a golem of the hero's element; fuse their golems into a Colossus; turn the element. */
+  summon?(id: string, power: number): void;
+  colossus?(id: string, power: number, ms: number): void;
+  attune?(id: string): void;
 }
 
 const live = (h: SkillHost, id: string) => { const u = h.unit(id); return u && !u.dead ? u : undefined; };
@@ -214,6 +218,9 @@ function release(h: SkillHost, id: string, s: SkillDef, rank: number, power: num
     u.sk.counter = { until: h.now() + s.counter.ms * t, s, rank, power };
     h.fx({ ev: "counter", id, s: s.id, ms: s.counter.ms * t });
   }
+  if (s.summon) h.summon?.(id, power);
+  if (s.colossus) h.colossus?.(id, power, s.colossus.ms);
+  if (s.attune) h.attune?.(id);
 }
 
 export function addBuff(h: SkillHost, id: string, skill: string, b: BuffDef, rank: number, stacks = 0) {

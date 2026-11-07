@@ -214,6 +214,8 @@ export const HERO_BODIES: Record<string, Look> = {
   barbarian: bare({ skin: 0xd99a6a, hair: 0xc8631f, hairStyle: "long", beard: 0xc8631f, beardStyle: "full", build: 1.12, weaponKind: "axe", fx: 0xffe0c0 }),
   // pale as ash, black hair swept back, red eyes; slim
   vampire: bare({ skin: 0xd6c3bd, eye: 0xc0182a, hair: 0x15111a, hairStyle: "short", build: 0.97, weaponKind: "sword", fx: 0xff5a6a }),
+  // the elemental occultist (look C, picked 2026-11-07): ash-pale hair, violet eyes
+  summoner: bare({ skin: 0xe8c4a2, eye: 0xb68cff, hair: 0xd8d0c0, hairStyle: "long", weaponKind: "witchstaff", orb: 0xb68cff, fx: 0xd8c4ff }),
 };
 
 /**
@@ -258,6 +260,16 @@ export const KITS: Record<string, Partial<Record<"weapon" | "shield" | "armour" 
     armour: { harness: true, belt: 0x3a2414, buckle: 0xb8b8b8, legs: "fur", legCol: 0x6a4527, bracer: 0x4a3020, back: "pelt", capeCol: 0x8a6a48 },
     shoes: { boots: 0x45301e, bootStyle: "leather" },
     weapon: { weapon: "axe" },
+  },
+  // the elemental occultist: bone-white robe in gold, a gold crown set with a violet stone, a mask, a staff with a little witch-fire
+  summoner: {
+    hat: { head: "crown", headCol: 0xc9a050, headTrim: 0xb68cff, mask: 0x2a2236 },
+    armour: {
+      torso: "robe", torsoCol: 0xe6e0d0, trim: 0xc9a050, sash: 0x5a3a8a, belt: 0x3a2a4a, buckle: 0xc9a050,
+      legs: "robe", legCol: 0xd6cfbf, sleeve: 0xe6e0d0, arms: "cloth", glove: 0x3a2a4a,
+    },
+    shoes: { boots: 0x3a2a4a, bootStyle: "shoe" },
+    weapon: { weapon: "witchstaff", palmFlame: 0x7ad7ff },
   },
   // a noble of the night: dark wine coat with old-gold trim, black cape with a tall blood-red collar, iron circlet, thin blade
   vampire: {

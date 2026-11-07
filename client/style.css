@@ -228,6 +228,10 @@ html, body { margin: 0; height: 100%; background: #1b1b24; color: #eee; font: 18
 #hotbar { position: absolute; left: 50%; bottom: 54px; transform: translateX(-50%); display: flex; gap: 3px; pointer-events: auto; z-index: 9; } /* above the skill tree so skills can be dropped on it */
 #hotbar .slot { position: relative; width: 44px; height: 38px; background: rgba(21,21,31,.88); border: 2px solid #555a7a; overflow: hidden;
   display: flex; flex-direction: column; align-items: center; justify-content: flex-end; font-size: 12px; font-family: var(--tiny-font); color: #eee; cursor: pointer; }
+/* Summoner: the element the next golem is called in (shared/summons.ts ATTUNE_ORDER), above the skill keys */
+#attune { position: absolute; left: 50%; bottom: 122px; transform: translateX(-50%); padding: 2px 8px; font-size: 12px; font-family: var(--tiny-font);
+  background: rgba(21,21,31,.88); border: 2px solid #555a7a; color: #eee; pointer-events: none; z-index: 9; }
+#attune b { font-weight: normal; }
 #hotbar .slot.empty { opacity: .5; cursor: default; border-style: dashed; }
 #hotbar .slot.ult { border-color: #f77f00; }
 #hotbar .slot.wait span { color: #999; }

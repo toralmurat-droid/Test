@@ -751,7 +751,9 @@ const guard = human({
   tabard: { col: 0xb5262f, emblem: 0xf2c14e }, weapon: "spear",
 });
 
-export const HEROES: Hero[] = [ninja, wizard, knight, archer, barbarian, vampire];
+// The Summoner casts like the wizard (staff bolts, the same poses and float); its painted look is look.ts summoner
+const summoner: Hero = { ...wizard, name: "summoner", aura: 0xb68cff, weaponKind: "witchstaff" };
+export const HEROES: Hero[] = [ninja, wizard, knight, archer, barbarian, vampire, summoner];
 
 /**
  * A hero holding a weapon of another family (shared/weapons.ts POSE_FAMILY): same body and look, but the idle stance

@@ -61,7 +61,7 @@ export const WEAPON_USE: Record<WeaponType, string> = {
   sword: "melee", katana: "fast melee", axe: "heavy melee", bow: "shoots arrows", staff: "fireballs", wand: "magic bolts, costs mana", fists: "punches",
 };
 /** The weapon each class is trained with: its class weapon and kit take this shape. */
-export const NATIVE_WEAPON: Record<ClassKind, WeaponType> = { knight: "sword", ninja: "katana", wizard: "staff", archer: "bow", barbarian: "axe", vampire: "sword" };
+export const NATIVE_WEAPON: Record<ClassKind, WeaponType> = { knight: "sword", ninja: "katana", wizard: "staff", archer: "bow", barbarian: "axe", vampire: "sword", summoner: "staff" };
 /** Weapon kind in a hero's hand: none = fists, an old class weapon = the class's own kind. */
 export function weaponType(cls: string, weaponId?: string): WeaponType {
   if (!weaponId) return "fists";
@@ -154,6 +154,10 @@ function starterKits(): GearDef[] {
     k("vampire", "armour", "Nightcoat", 0x2a1520, 0xb08a3a, "trim"),
     k("vampire", "hat", "Night Circlet", 0x4a4650, 0xc0182a, "crown"),
     k("vampire", "shoes", "Riding Boots", 0x1e1418, 0x5a3a2a, "plain"),
+    k("summoner", "weapon", "Binding Rod", 0x6b4a2e, 0xb68cff, "long"),
+    k("summoner", "armour", "Occult Robe", 0xe6e0d0, 0xc9a050, "robe"),
+    k("summoner", "hat", "Four-Stone Crown", 0xc9a050, 0xb68cff, "crown"),
+    k("summoner", "shoes", "Soft Shoes", 0x3a2a4a, 0x6b4423, "plain"),
   ];
 }
 
@@ -177,7 +181,7 @@ export const TIER_NAMES = ["", "Basic", "Fine", "Superior"];
 /** Chance a monster drops a piece of gear, and the odds of tier 1/2/3. */
 export const GEAR_DROP: Record<MobKind, { chance: number; tiers: [number, number, number] }> = {
   golem_fire: { chance: 0, tiers: [1, 0, 0] }, golem_cold: { chance: 0, tiers: [1, 0, 0] },
-  golem_poison: { chance: 0, tiers: [1, 0, 0] }, golem_shock: { chance: 0, tiers: [1, 0, 0] },
+  golem_poison: { chance: 0, tiers: [1, 0, 0] }, golem_shock: { chance: 0, tiers: [1, 0, 0] }, golem_colossus: { chance: 0, tiers: [1, 0, 0] },
   slime: { chance: 0.06, tiers: [0.85, 0.15, 0] },
   skeleton: { chance: 0.15, tiers: [0.5, 0.38, 0.12] },
   crawler: { chance: 0.02, tiers: [1, 0, 0] },

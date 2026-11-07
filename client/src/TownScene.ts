@@ -10,8 +10,11 @@ import { CLASSES, ClassKind, ENERGY, MAX_LEVEL, xpForLevel } from "../../shared/
 import { canPay, MANA, manaRegen, maxManaFor, skillCost, unpackMana } from "../../shared/mana";
 import { nextSize, potionAmount, PotionKind, potionName, POTION_SIZES, total, unpackPotions } from "../../shared/potions";
 import { GROUND, areaAt, isSafeZone } from "../../shared/map";
-import { heroPoise, meleeReach, mobBody } from "../../shared/combat";
+import { heroPoise, meleeReach, mobBody, pvpProtected } from "../../shared/combat";
 import { respecCost, wearMult } from "../../shared/upkeep";
+import { attuneOf, type AttuneElement } from "../../shared/summons";
+const ATTUNE_NAME: Record<AttuneElement, string> = { fire: "Fire", cold: "Frost", poison: "Venom", shock: "Storm" };
+const ATTUNE_COLOR: Record<AttuneElement, string> = { fire: "#ff9f1c", cold: "#4cc9f0", poison: "#7cfc00", shock: "#b3ecff" };
 import { moveStep } from "../../shared/movement";
 import { SPAWN_ZONES, zoneAt } from "../../shared/spawns";
 import { musicCombat, setMusicZone } from "./music";
@@ -1230,6 +1233,18 @@ export class TownScene extends Phaser.Scene {
     }, true);
   }
 
+  /** Summoner: which element the next golem comes in (Attune turns it). */
+  private attuneShown = "";
+  private showAttune(p: any) {
+    const el = p?.cls === "summoner" ? attuneOf(p.attune ?? 0) : "";
+    if (el === this.attuneShown) return;
+    this.attuneShown = el;
+    const box = document.getElementById("attune");
+    if (!box) return;
+    box.hidden = !el;
+    if (el) box.innerHTML = `Next golem: <b style="color:${ATTUNE_COLOR[el]}">${ATTUNE_NAME[el]}</b>`;
+  }
+
   /** Send the held movement directions to the server when they change. */
   private sendInput(next: InputState) {
     const i = this.input_;
@@ -1251,9 +1266,15 @@ export class TownScene extends Phaser.Scene {
     const attackable = (id: string, e: Entity) => {
       if (e.state.dead || id === this.me) return false;
       // A monster tucked into a grave or tree can't be hurt (the server skips it): don't let a click swing at it
+      const m = meEnt();
+      // Summons (shared/summons.ts): never my own or my group's, nor a newcomer's (the server skips them too)
+      if (e.mob && e.state.owner) {
+        const o = (this.room.state as any).players?.get(e.state.owner);
+        return !!m && e.state.owner !== this.me && !(o && m.state.party && o.party === m.state.party) && !(o && pvpProtected(m.state.level, o.level)) && !isSafeZone(e.sprite.x, e.sprite.y);
+      }
       if (e.mob) return !e.state.hidden;
-      const m = meEnt(); // other heroes only where fighting is allowed
-      return !!m && !isSafeZone(e.sprite.x, e.sprite.y) && !isSafeZone(m.sprite.x, m.sprite.y);
+      // other heroes only where fighting is allowed, and not across newcomer protection
+      return !!m && !isSafeZone(e.sprite.x, e.sprite.y) && !isSafeZone(m.sprite.x, m.sprite.y) && !pvpProtected(m.state.level, e.state.level);
     };
     // x/y: where it is drawn (for picking with the mouse); sx/sy: its newest server position (for reach and aim:
     // the drawn one plays ~110 ms behind, so a monster just knocked back still looked in reach)
@@ -2591,12 +2612,14 @@ export class TownScene extends Phaser.Scene {
       if (e.mob && e.label) {
         // Level tag coloured by how tough it is for me: grey easy, white even, orange tougher, red dangerous
         const diff = (p.level ?? 1) - ((this.room.state as any).players?.get(this.me)?.level ?? 1);
-        const col = diff >= 3 ? "#ff5252" : diff >= 1 ? "#ffb74d" : diff >= -2 ? "#ffffff" : "#9e9e9e";
+        const col = p.owner ? (p.owner === this.me || (this.room.state as any).players?.get(p.owner)?.party && (this.room.state as any).players?.get(p.owner)?.party === (this.room.state as any).players?.get(this.me)?.party ? "#7cfc00" : "#ff8a65")
+          : diff >= 3 ? "#ff5252" : diff >= 1 ? "#ffb74d" : diff >= -2 ? "#ffffff" : "#9e9e9e";
         // The monster under the mouse or being attacked also shows its name (just "LvN" otherwise: less clutter)
         const named = id === this.pointer?.hoverId || id === this.pointer?.targetId;
         const kindName = named ? (MOBS[p.kind as MobKind]?.name ?? "") : "";
         const lv = `Lv${p.level ?? 1}`;
-        const txt = p.title ? `${p.title} ${lv}` : BOSS[p.kind as keyof typeof BOSS] ? `${kindName || "Boss"} ${lv}` : ELITE[p.kind as keyof typeof ELITE] ? `Elite ${kindName ? kindName + " " : ""}${lv}` : kindName ? `${kindName} ${lv}` : lv;
+        const owner = p.owner ? (this.room.state as any).players?.get(p.owner) : undefined;
+        const txt = owner ? `${owner.name}'s ${MOBS[p.kind as MobKind]?.name ?? "Golem"}` : p.title ? `${p.title} ${lv}` : BOSS[p.kind as keyof typeof BOSS] ? `${kindName || "Boss"} ${lv}` : ELITE[p.kind as keyof typeof ELITE] ? `Elite ${kindName ? kindName + " " : ""}${lv}` : kindName ? `${kindName} ${lv}` : lv;
         // A monster right next to my hero: my own name steps aside so the two labels never overlap
         const meS = this.entities.get(this.me)?.sprite;
         if (meS && !p.dead && Math.abs(e.sprite.x - meS.x) < 1.5 * TILE && Math.abs(e.sprite.y - meS.y) < 1.5 * TILE) this.mobByMeAt = now;
@@ -2698,6 +2721,7 @@ export class TownScene extends Phaser.Scene {
     this.bounty?.update(meEnt && !meEnt.state.dead ? meEnt.sprite : undefined, !!this.npcs?.isOpen || !!this.chests?.near || !!this.stash?.near);
     if (this.npcs) { this.npcs.hidePrompt = !!this.chests?.near || !!this.shrine?.near || !!this.portals?.near || !!this.stash?.near || !!this.bounty?.near; this.npcs.extraBlock = this.bounty?.trackerBlock() ?? ""; }
     this.npcs?.update(meEnt && !meEnt.state.dead ? meEnt.sprite : undefined, meEnt?.state);
+    this.showAttune(meEnt?.state);
     this.portals?.update(meEnt && !meEnt.state.dead ? meEnt.sprite : undefined, !!this.npcs?.isOpen || !!this.chests?.near || !!this.shrine?.near);
     if (this.minimap && this.npcs) this.minimap.markers = [...this.npcs.markers, ...(this.portals?.markers() ?? []), ...(this.bounty?.markers() ?? [])];
 

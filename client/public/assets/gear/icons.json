@@ -471,12 +471,44 @@
     "w": 32,
     "h": 32
    }
+  },
+  "summoner_weapon": {
+   "frame": {
+    "x": 1888,
+    "y": 0,
+    "w": 32,
+    "h": 32
+   }
+  },
+  "summoner_armour": {
+   "frame": {
+    "x": 1920,
+    "y": 0,
+    "w": 32,
+    "h": 32
+   }
+  },
+  "summoner_hat": {
+   "frame": {
+    "x": 1952,
+    "y": 0,
+    "w": 32,
+    "h": 32
+   }
+  },
+  "summoner_shoes": {
+   "frame": {
+    "x": 1984,
+    "y": 0,
+    "w": 32,
+    "h": 32
+   }
   }
  },
  "meta": {
   "image": "icons.png",
   "size": {
-   "w": 1888,
+   "w": 2016,
    "h": 32
   },
   "scale": 1

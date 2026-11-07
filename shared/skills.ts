@@ -17,7 +17,8 @@ import type { StatKind } from "./powers";
  * damage scaled by Magic (like the old ultimates). Every extra rank adds RANK_POWER to damage and RANK_TIME to durations.
  */
 
-export type TalentEffect = "dmg" | "skill" | "crit" | "lifesteal" | "hp" | "armor" | "speed" | "cdr" | "regen" | "mana";
+export type TalentEffect = "dmg" | "skill" | "crit" | "lifesteal" | "hp" | "armor" | "speed" | "cdr" | "regen" | "mana"
+  | "summonHp" | "summonDmg"; // the Summoner's golems (shared/summons.ts): +% life, +% damage
 
 /** Look of a skill's effects on the client (colours and particle style). */
 export type FxStyle =
@@ -118,7 +119,7 @@ export interface CounterDef {
 export type WeaponNeed = "bow" | "melee" | "shield";
 export const NEED_TEXT: Record<WeaponNeed, string> = { bow: "a bow", melee: "a melee weapon", shield: "a shield" };
 
-export type SkillType = "Attack" | "Aura" | "War cry" | "Enchant" | "Buildup" | "Counter" | "Trap" | "Movement" | "Passive" | "Ultimate";
+export type SkillType = "Attack" | "Aura" | "War cry" | "Enchant" | "Buildup" | "Counter" | "Trap" | "Movement" | "Passive" | "Ultimate" | "Summon";
 
 export interface SkillDef {
   id: string; name: string; type: SkillType; desc: string;
@@ -150,6 +151,12 @@ export interface SkillDef {
   cantrip?: boolean;
   /** Damage multiplier: quick spells that can be cast again and again hit softer per cast (wizard, Diablo 2 style). */
   power?: number;
+  /** Summoner (shared/summons.ts): calls a golem of the hero's current element (Player.attune). */
+  summon?: boolean;
+  /** Summoner ultimate: the hero's golems fuse into one Colossus for `ms`. */
+  colossus?: { ms: number };
+  /** Summoner basic spell: turns the element the next golem (and the Colossus) is called in. */
+  attune?: boolean;
 }
 
 /** Right-click aiming: on the hero itself, at the clicked spot, or toward the click. */
@@ -182,7 +189,7 @@ export function impactMs(look: AreaLook | undefined, r: number): number {
     default: return 0;
   }
 }
-export const STACK_NAME: Record<ClassKind, string> = { knight: "Valor", ninja: "Ki", wizard: "Arcane", archer: "Focus", barbarian: "Fury", vampire: "Blood" };
+export const STACK_NAME: Record<ClassKind, string> = { knight: "Valor", ninja: "Ki", wizard: "Arcane", archer: "Focus", barbarian: "Fury", vampire: "Blood", summoner: "Essence" };
 
 export const BRANCHES: Record<ClassKind, [BranchDef, BranchDef, BranchDef]> = {
   knight: [{ name: "Valor", color: "#e63946" }, { name: "Bulwark", color: "#4cc9f0" }, { name: "Crusade", color: "#ffd166" }],
@@ -191,6 +198,7 @@ export const BRANCHES: Record<ClassKind, [BranchDef, BranchDef, BranchDef]> = {
   archer: [{ name: "Marksman", color: "#e63946" }, { name: "Trapper", color: "#a68a64" }, { name: "Nature", color: "#7cfc00" }],
   barbarian: [{ name: "Fury", color: "#e63946" }, { name: "Warcry", color: "#ffd166" }, { name: "Earth", color: "#a68a64" }],
   vampire: [{ name: "Blood", color: "#c1121f" }, { name: "Night", color: "#9d4edd" }, { name: "Fang", color: "#c0c8d8" }],
+  summoner: [{ name: "Earth", color: "#a68a64" }, { name: "Flux", color: "#4cc9f0" }, { name: "Ruin", color: "#b388ff" }],
 };
 
 const S: Record<ClassKind, SkillDef[]> = <Record<ClassKind, SkillDef[]>><unknown>{
@@ -515,6 +523,59 @@ const S: Record<ClassKind, SkillDef[]> = <Record<ClassKind, SkillDef[]>><unknown
       desc: "Lose yourself to the hunger: four blood-red slashes all around you, then 4.5s of frenzy: faster hits that heal you, and nothing stops you.",
       areas: [{ r: 40, wpn: 0.6, drain: 10, kb: 0.3, waves: 4, everyMs: 140, look: "slash" }], buff: { ms: 4500, atkspd: 20, lifesteal: 6, immune: true } },
   ],
+
+  // ---------------------------------------------------------------- SUMMONER
+  // Murat 2026-11-07: golems (shared/summons.ts) do the fighting; the Summoner calls, guards and arms them.
+  // Rows unlock at levels 1, 3, 5, 8 and 10: Golem (Lv 1), Vital Link (3), Conjured Blade (5), Conjured Armour (8), Colossus (10).
+  summoner: [
+    // Earth: the golems' toughness
+    { id: "su_golem", name: "Elemental Golem", type: "Summon", branch: 0, row: 0, style: "earth", cd: 8000, mana: 25, target: "self",
+      desc: "Call a golem of your current element (Attune to change it). Up to 2 fight for you; a third sends the oldest back. Ranks: tougher, harder-hitting golems.",
+      summon: true },
+    { id: "su_link", name: "Vital Link", type: "Passive", branch: 0, row: 1, style: "earth", passive: { effect: "summonHp", perRank: 12 },
+      desc: "Your life force flows into your golems: more life, and they mend 1% of it per second per rank while close to you." },
+    { id: "su_stonehide", name: "Stone Hide", type: "Passive", branch: 0, row: 2, style: "earth", passive: { effect: "armor", perRank: 3 },
+      desc: "Your skin hardens like your golems': take less damage." },
+    { id: "su_armour", name: "Conjured Armour", type: "Enchant", branch: 0, row: 3, style: "earth", cd: 16000, mana: 25, target: "self",
+      desc: "Conjure armour of living stone around you for 8s: you take 20% less damage and shrug off knockback.",
+      buff: { ms: 8000, armor: 20, immune: true } },
+    { id: "su_colossus", name: "Colossus", type: "Ultimate", branch: 0, row: 4, style: "earth", cd: 45000, mana: 50, chargeMs: 600, target: "self",
+      desc: "Your golems fuse into one Colossus of your current element for 30s: far tougher, slams everything around it. With no golem out, it rises alone.",
+      colossus: { ms: 30_000 } },
+
+    // Flux: speed and cooldowns
+    { id: "su_step", name: "Rift Step", type: "Movement", branch: 1, row: 0, style: "arcane", cd: 5000, cost: 20,
+      desc: "Step through a rift and come out ahead of you, untouchable for a moment.",
+      move: { kind: "blink", dist: 60, invulnMs: 300 } },
+    { id: "su_quick", name: "Quick Binding", type: "Passive", branch: 1, row: 1, style: "arcane", passive: { effect: "cdr", perRank: 4 },
+      desc: "Practised words: every skill comes back sooner." },
+    { id: "su_flow", name: "Essence Flow", type: "Passive", branch: 1, row: 2, style: "arcane", passive: { effect: "mana", perRank: 8 },
+      desc: "Mana wells up faster and runs deeper." },
+    { id: "su_swift", name: "Wind of the Rift", type: "Passive", branch: 1, row: 3, style: "wind", passive: { effect: "speed", perRank: 4 },
+      desc: "You move faster, and your golems keep up." },
+    { id: "su_rift", name: "Elemental Rift", type: "Ultimate", branch: 1, row: 4, style: "arcane", cd: 24000, mana: 40, chargeMs: 400,
+      desc: "Tear open a rift at the spot for 5s: it drags enemies in and storms them with every element.",
+      field: { kind: "storm", r: 60, ms: 5000, tickMs: 500, dmg: 14, pull: 6, slowMs: 500 } },
+
+    // Ruin: elemental damage
+    { id: "su_mote", name: "Elemental Mote", type: "Attack", branch: 2, row: 0, style: "lightning", cd: 2500, mana: 10,
+      desc: "Hurl a mote of raw element: it bursts on the target and arcs to one more enemy close by.",
+      shots: { kind: "lightning", speed: 300, range: 160, radius: 5, dmg: 28, chain: 1, kb: 0.4 } },
+    { id: "su_ruin", name: "Ruin", type: "Passive", branch: 2, row: 1, style: "fire", passive: { effect: "summonDmg", perRank: 10 },
+      desc: "Your golems hit harder." },
+    { id: "su_blade", name: "Conjured Blade", type: "Enchant", branch: 2, row: 2, style: "arcane", cd: 14000, mana: 20, target: "self",
+      desc: "Conjure a blade of pure element for 8s: you deal 15% more damage, and every hit strikes a second time with the spectral edge.",
+      buff: { ms: 8000, dmg: 15, onHit: { wpn: 0.3 } } },
+    { id: "su_mastery", name: "Elemental Mastery", type: "Passive", branch: 2, row: 3, style: "arcane", passive: { effect: "skill", perRank: 6 },
+      desc: "All your skills hit harder." },
+    { id: "su_cataclysm", name: "Cataclysm", type: "Ultimate", branch: 2, row: 4, style: "fire", cd: 26000, mana: 45, chargeMs: 500,
+      desc: "Call down fire, ice and lightning on the spot in turn: three bursts that burn, slow and stun.",
+      areas: [
+        { r: 44, ahead: 50, dmg: 34, burn: [8, 2500], kb: 0.8, look: "meteor" },
+        { r: 44, ahead: 50, dmg: 26, slowMs: 1200, delayMs: 400, look: "pillar" },
+        { r: 44, ahead: 50, dmg: 26, stunMs: 600, delayMs: 800, look: "bolt" },
+      ] },
+  ],
 };
 
 // ---- Tree shape -------------------------------------------------------------------------------------
@@ -525,6 +586,13 @@ const S: Record<ClassKind, SkillDef[]> = <Record<ClassKind, SkillDef[]>><unknown
 type Shape = [req: number, parent?: string, scale?: [StatKind, number]];
 // Attribute scaling was cut to 60% in the balance pass of 2026-11-04: it multiplied with the weapon hit / Magic, so high-level skills grew far too fast
 const TREE: Record<string, Shape> = {
+  // Summoner (Murat 2026-11-07): Golem Lv 1, Vital Link 3, Conjured Blade 5, Conjured Armour 8, Colossus 10.
+  // The golems and the Colossus grow with Magic (their life and damage take the skill's power).
+  su_golem: [1, undefined, ["mag", 2]], su_link: [3, "su_golem"], su_stonehide: [6, "su_link"], su_armour: [8, "su_link"],
+  su_colossus: [10, "su_armour", ["mag", 2.5]],
+  su_step: [1], su_quick: [4, "su_step"], su_flow: [7, "su_quick"], su_swift: [12, "su_quick"], su_rift: [20, "su_flow", ["mag", 2.5]],
+  su_mote: [2, undefined, ["mag", 2]], su_ruin: [4, "su_mote"], su_blade: [5, "su_mote"], su_mastery: [13, "su_blade"],
+  su_cataclysm: [22, "su_mastery", ["mag", 2.5]],
   // Knight · Valor: lunge forks into a dead-end charge and the whirl, which grows on to the Judgement Blade
   k_lunge: [1, undefined, ["str", 2.5]], k_rush: [9, "k_lunge", ["str", 2.5]], k_whirl: [4, "k_lunge", ["str", 2.5]],
   k_mastery: [12, "k_whirl"], k_judgement: [22, "k_whirl", ["str", 3]],
@@ -648,6 +716,12 @@ export const childrenOf = (cls: ClassKind, id: string) => S[cls].filter((x) => x
  */
 export const CANTRIPS: Record<ClassKind, SkillDef[]> = {
   knight: [], ninja: [], archer: [], barbarian: [],
+  // The Summoner turns the element their next golem is called in (Murat 2026-11-07: one key cycles the elements)
+  summoner: [
+    { id: "su_attune", name: "Attune", type: "Summon", branch: 0, row: 0, req: 1, style: "arcane", cd: 250, cantrip: true, target: "self",
+      desc: "Turn to the next element: fire, frost, venom, storm. Your next golem (and the Colossus) is called in it.",
+      attune: true },
+  ],
   // The vampire's one basic spell: a flick of blood up close that drinks a little back (Murat 2026-11-05: warrior caster)
   vampire: [
     { id: "v_leech", name: "Leech", type: "Attack", branch: 0, row: 0, req: 1, style: "blood", cd: 450, mana: 4, cantrip: true,
@@ -732,6 +806,8 @@ export const EFFECT_TEXT: Record<TalentEffect, (v: number) => string> = {
   cdr: (v) => `-${v}% skill cooldowns`,
   regen: (v) => `+${v}% max HP regen per second`,
   mana: (v) => `+${v}% mana regen`,
+  summonHp: (v) => `+${v}% golem life`,
+  summonDmg: (v) => `+${v}% golem damage`,
 };
 
 /** Drop unknown skills (old saves) and anything above what the level allows. */

@@ -2,10 +2,10 @@
  * Hero classes. All gameplay numbers live here so the server and client agree.
  * Art convention: the client picks a sprite by `Player.cls` ("knight" | "ninja" | "wizard").
  */
-export type ClassKind = "knight" | "ninja" | "wizard" | "archer" | "barbarian" | "vampire";
-export const CLASS_KINDS: ClassKind[] = ["knight", "ninja", "wizard", "archer", "barbarian", "vampire"];
+export type ClassKind = "knight" | "ninja" | "wizard" | "archer" | "barbarian" | "vampire" | "summoner";
+export const CLASS_KINDS: ClassKind[] = ["knight", "ninja", "wizard", "archer", "barbarian", "vampire", "summoner"];
 
-export type SpecialKind = "guard" | "dash" | "nova" | "volley" | "rage" | "drain";
+export type SpecialKind = "guard" | "dash" | "nova" | "volley" | "rage" | "drain" | "summon";
 
 /**
  * One hit of the 3-hit attack combo. Pressing attack again within COMBO_WINDOW_MS after the previous hit's
@@ -112,6 +112,19 @@ export const CLASSES: Record<ClassKind, ClassDef> = {
     ],
     blurb: "Blade and blood magic. Every hit drinks back some of the life he spills.",
   },
+  // The Summoner (Murat 2026-11-07): a masked occultist who fights through elemental golems (shared/summons.ts).
+  // Frail and slow, a weak staff bolt of their own: the golems tank and hit, the Summoner keeps them alive and armed.
+  summoner: {
+    name: "Summoner", maxHp: 92, speed: 86, damage: 17, attackCooldownMs: 650, attackRange: 0,
+    projectile: { speed: 230, range: 160, radius: 6, kind: "fireball" },
+    special: { kind: "summon", name: "Elemental Golem", cooldownMs: 8000 },
+    combo: [
+      { damage: 1, knockback: 0.8 },
+      { damage: 1, knockback: 0.8 },
+      { damage: 1.5, knockback: 1.6, shotScale: 1.4, cooldownMs: 900 }, // a bigger bolt
+    ],
+    blurb: "Calls elemental golems that fight for them: cycle the element, then summon fire, frost, venom or storm.",
+  },
 };
 
 /**
@@ -140,7 +153,7 @@ export const ENERGY = { max: 100, regenPerSec: 14, cost: { special: 30, ult: 50,
  * Stamina per second by class: the fighters live on Stamina, the Wizard on Mana (Murat 2026-11-04: "some characters
  * rely more on stamina spend"). Wizard Stamina only pays for the dodge roll and Blink.
  */
-export const STAMINA_REGEN: Record<ClassKind, number> = { knight: 16, ninja: 16, wizard: 8, archer: 15, barbarian: 18, vampire: 13 };
+export const STAMINA_REGEN: Record<ClassKind, number> = { knight: 16, ninja: 16, wizard: 8, archer: 15, barbarian: 18, vampire: 13, summoner: 9 };
 export const staminaRegen = (cls: ClassKind) => STAMINA_REGEN[cls] ?? ENERGY.regenPerSec;
 export const energyName = (_cls?: string) => "Stamina";
 
