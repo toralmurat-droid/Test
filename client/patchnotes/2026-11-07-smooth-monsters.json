@@ -1,5 +1,6 @@
 {
   "date": "2026-11-07",
+  "patch": 133,
   "title": "Smoother monsters",
   "changes": [
     "Fast monsters no longer jump from spot to spot while they charge or chase you.",
