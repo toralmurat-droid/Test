@@ -5,13 +5,14 @@ import { isSafeZone, isSolidAt, VILLAGE } from "../shared/map";
 import { TILE } from "../shared/constants";
 import { startRoom, wait } from "./helpers/room";
 
-test("pvpProtected: either hero at or below the protection level", () => {
-  assert.equal(pvpProtected(30, PVP_PROTECT_LEVEL), true);
-  assert.equal(pvpProtected(PVP_PROTECT_LEVEL, 30), true);
-  assert.equal(pvpProtected(PVP_PROTECT_LEVEL + 1, PVP_PROTECT_LEVEL + 1), false);
+test("pvpProtected: off, heroes of any level can fight", () => {
+  assert.equal(PVP_PROTECT_LEVEL, 0);
+  assert.equal(pvpProtected(30, 1), false);
+  assert.equal(pvpProtected(1, 30), false);
+  assert.equal(pvpProtected(1, 1), false);
 });
 
-test("in the room: a level 30 hero can't hurt a newcomer, but can hurt a level 11 hero", async () => {
+test("in the room: a level 30 hero can hurt a level 1 hero outside the safe zone", async () => {
   const srv = await startRoom();
   try {
     const a = await srv.join(), b = await srv.join();
@@ -27,12 +28,9 @@ test("in the room: a level 30 hero can't hurt a newcomer, but can hurt a level 1
     pa.level = 30;
     pb.level = 1;
     const hp0 = pb.hp;
+    assert.ok(room.targetsAround(x, y, 40, a.sessionId).includes(b.sessionId), "level 1 hero is a target");
     room.hitTarget(a.sessionId, b.sessionId, 50, [0, 0], {});
-    assert.equal(pb.hp, hp0, "newcomer took no damage");
-    assert.ok(!room.targetsAround(x, y, 40, a.sessionId).includes(b.sessionId), "newcomer is not a target");
-    pb.level = PVP_PROTECT_LEVEL + 1;
-    room.hitTarget(a.sessionId, b.sessionId, 50, [0, 0], {});
-    assert.ok(pb.hp < hp0, "level 11 hero is hurt");
+    assert.ok(pb.hp < hp0, "level 1 hero is hurt");
     await a.leave(); await b.leave();
   } finally {
     await srv.stop();
