@@ -7,7 +7,7 @@ import { leaving, noteBuild, reconnectSoon, returnToStart, takeCarried, upgradeA
 import { Client, getStateCallbacks, Room } from "colyseus.js";
 import { BOSS, ELITE, InputState, MERGE, MOBS, type MobKind, MAP_H, MAP_W, regenFromStamina, TICK_RATE, TILE } from "../../shared/constants";
 import { CLASSES, ClassKind, MAX_LEVEL, xpForLevel } from "../../shared/classes";
-import { canPay, MANA, manaRegen, maxManaFor, skillCost, unpackMana } from "../../shared/mana";
+import { canPay, shortOf, MANA, manaRegen, maxManaFor, skillCost, unpackMana } from "../../shared/mana";
 import { nextSize, potionAmount, PotionKind, potionName, POTION_SIZES, total, unpackPotions } from "../../shared/potions";
 import { GROUND, areaAt, isSafeZone } from "../../shared/map";
 import { heroPoise, meleeReach, mobBody, pvpProtected } from "../../shared/combat";
@@ -57,8 +57,8 @@ const LEFT_PICK = -2;
 /** pickSlot value while the slot list is choosing the right-click (and Space) action. */
 const RIGHT_PICK = -3;
 type ClickSide = "left" | "right";
-/** "12 mana · 20 stamina" for a skill list. */
-const costWords = (s: { cost?: number; mana?: number; blood?: number }) => [s.mana ? `${s.mana} mana` : "", s.cost ? `${s.cost} stamina` : "", s.blood ? `${s.blood}% HP` : ""].filter(Boolean).join(" · ") || "free";
+/** "12 mana · 20 heat" for a skill list. */
+const costWords = (s: { cost?: number; mana?: number; blood?: number }) => [s.mana ? `${s.mana} mana` : "", s.cost ? `${s.cost} heat` : "", s.blood ? `${s.blood}% HP` : ""].filter(Boolean).join(" · ") || "free";
 import { GearFx } from "./gearfx";
 import { Element, ELEMENT_COLORS } from "../../shared/elements";
 import { baseId, canWear, gearName, gearDef, reqProblem, gearReachMult, gearSpeedMult, itemRarity, WEAPON_TYPE_NAMES } from "../../shared/gear";
@@ -94,6 +94,7 @@ import { SiegeWork } from "./siegeWork";
 import { PERCH_LIFT } from "../../shared/bandits";
 import { icon, fillIcons } from "./pixelicons";
 import { ResourceBars } from "./resourceBars";
+import { OverloadGauge } from "./overloadGauge";
 import { bindElemFx } from "./elemFx";
 import { bindBeastFx } from "./beastFx";
 import { DungeonView } from "./dungeon";
@@ -340,6 +341,7 @@ export class TownScene extends Phaser.Scene {
   private hotbarHtml = "";
   private buffBar?: BuffBar;
   private resBars?: ResourceBars;
+  private heatGauge?: OverloadGauge;
   private statsShown = "";
   private deathTimer?: number;
   private iso?: IsoView;
@@ -2434,7 +2436,7 @@ export class TownScene extends Phaser.Scene {
   private skillHud(cls: ClassKind, skill: string, cdm: number) {
     const s = skillOf(cls, skill);
     const m = s && withMods(cls, this.entities.get(this.me)?.state?.talents, s); // upgrade nodes change cooldown and cost
-    return { name: s?.name ?? "?", cdMs: (m?.cd ?? 0) * cdm, last: this.lastCast[skill] ?? -Infinity, cost: m ? skillCost(m) : { stamina: 0, mana: 0 }, ult: s?.row === 4 };
+    return { name: s?.name ?? "?", cdMs: (m?.cd ?? 0) * cdm, last: this.lastCast[skill] ?? -Infinity, cost: m ? skillCost(m) : { heat: 0, mana: 0 }, ult: s?.row === 4 };
   }
 
   private chargeSeen = { n: 0, at: 0 }; // our stacks last frame, and when the newest one was built
@@ -2473,7 +2475,7 @@ export class TownScene extends Phaser.Scene {
       const h = this.skillHud(cls, skill, cdm);
       const left = Math.max(0, h.cdMs - (now - h.last));
       const shade = left > 0 ? `<div class="cd" style="height:${(left / h.cdMs) * 100}%"></div>` : "";
-      const wait = left > 0 || !canPay(pools, h.cost) ? " wait" : "";
+      const wait = (left > 0 || !canPay(pools, h.cost) ? " wait" : "") + (shortOf(pools, h.cost) === "heat" ? " hot" : "");
       const power = skill;
       const unarmed = this.unarmedFor(mine, cls, skill);
       return `<div class="slot${h.ult ? " ult" : ""}${wait}${unarmed ? " unarmed" : ""}${picking}" data-slot="${i}" data-skill="${skill}" data-tiphead="${h.name}" data-tip="${tipEsc((unarmed ? `${unarmed}. ` : "") + (skillOf(cls, skill)?.desc ?? ""))}" data-tiphint="Key ${slotKey(i)} · click to change · wheel to scroll · right-click to clear">` +
@@ -2490,7 +2492,7 @@ export class TownScene extends Phaser.Scene {
         const left = Math.max(0, h.cdMs - (now - h.last));
         const shade = left > 0 && h.cdMs >= 1000 ? `<div class="cd" style="height:${(left / h.cdMs) * 100}%"></div>` : "";
         const unarmed = this.unarmedFor(mine, cls, sk);
-        return `<div class="slot lmb ${side}${!canPay(pools, h.cost) ? " wait" : ""}${unarmed ? " unarmed" : ""}${pk}" data-slot="${key}" data-tiphead="${Side}: ${h.name}" data-tip="${tipEsc((unarmed ? `${unarmed}. ` : "") + (skillOf(cls, sk)?.desc ?? ""))}" data-tiphint="Click to change · wheel to scroll · right-click: back to the weapon">` +
+        return `<div class="slot lmb ${side}${!canPay(pools, h.cost) ? " wait" : ""}${shortOf(pools, h.cost) === "heat" ? " hot" : ""}${unarmed ? " unarmed" : ""}${pk}" data-slot="${key}" data-tiphead="${Side}: ${h.name}" data-tip="${tipEsc((unarmed ? `${unarmed}. ` : "") + (skillOf(cls, sk)?.desc ?? ""))}" data-tiphint="Click to change · wheel to scroll · right-click: back to the weapon">` +
           `${iconImg(sk)}${shade}${unarmed ? `<i class="xout"></i>` : ""}<kbd>${label}</kbd></div>`;
       }
       const w = attackProfile(cls, activeOf(mine));
@@ -3000,6 +3002,9 @@ export class TownScene extends Phaser.Scene {
         xpFrac: mine.level >= MAX_LEVEL ? 1 : (mine.xp - cur) / Math.max(1, next - cur),
         xp: mine.xp - cur, xpNeed: mine.level >= MAX_LEVEL ? undefined : next - cur,
       });
+      // Heat / overload gauge on the left (overloadGauge.ts, shared/overload.ts)
+      const flip = (this.heatGauge ??= new OverloadGauge(document.getElementById("hud")!)).update(mine.energy ?? 0);
+      if (flip) playSfx(flip);
       this.renderActions(mine, cls, cdm, now);
       (this.buffBar ??= new BuffBar(document.getElementById("hud")!)).update(mine.timers ?? "");
     }

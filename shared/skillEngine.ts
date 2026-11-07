@@ -179,7 +179,7 @@ export function castSkill(h: SkillHost, id: string, skillId: string): boolean {
   if (s.cantrip && now < (u.attackReadyAt ?? 0)) return false;
   const blood = bloodCost(s, u);
   if (blood > 0 && (u.hp ?? 0) <= blood + 1) return false; // blood magic: not enough life left to pay with
-  if (!pay(u, skillCost(s))) return false; // Stamina and/or Mana (shared/mana.ts)
+  if (!pay(u, skillCost(s))) return false; // Heat and/or Mana (shared/mana.ts, shared/overload.ts)
   if (blood > 0) u.hp = Math.max(1, (u.hp ?? 0) - blood);
   u.sk.last[s.id] = now;
   if (s.cantrip) u.attackReadyAt = now + (s.cd ?? 0);

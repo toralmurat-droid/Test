@@ -1,15 +1,16 @@
 import type { ClassKind } from "./classes";
 import { STATS, type Stats } from "./powers";
+import { addHeat, isOverheated } from "./overload";
 
 /**
- * Mana and Stamina: two pools that pay for skills (Murat 2026-11-04: "skills should be a mix of mana + cooldown").
+ * Mana and Heat: what skills cost besides their cooldown (Murat 2026-11-04: "skills should be a mix of mana + cooldown").
  *
- *   Stamina (Player.energy, ENERGY in shared/classes.ts): every hero, 100 points, refills fast. Pays for the dodge roll
- *     and for physical skills: sword swings, dashes, shouts, traps. Knight, Ninja, Archer and Barbarian lean on it.
+ *   Heat (Player.energy, shared/overload.ts): replaced Stamina on 2026-11-07. Physical skills and the dodge roll build
+ *     it; it cools by itself; past the top the hero overloads and those skills lock for a few seconds.
  *   Mana (this file): a slow pool that grows with Magic. Pays for spells: the whole Wizard book, and the holy, spirit,
  *     jutsu and nature skills of the other classes. Mana potions (V, shared/potions.ts) refill it.
  *
- * A skill (shared/skills.ts SkillDef) costs `cost` Stamina and/or `mana` Mana, on top of its cooldown. Cheap skills
+ * A skill (shared/skills.ts SkillDef) costs `cost` Heat and/or `mana` Mana, on top of its cooldown. Cheap skills
  * have short cooldowns and are limited by the pools; big skills are limited by their cooldown.
  *
  * Player.mp (synced) packs current mana, max mana and mana potions into one number (packMana), because the Player
@@ -39,23 +40,23 @@ export function manaRegen(s: Stats, resting = false, bonusPct = 0): number {
 /** Class base mana at level 1, for the class picker. */
 export const baseMana = (cls: ClassKind) => maxManaFor(STATS[cls].base);
 
-export interface Cost { stamina?: number; mana?: number }
+export interface Cost { heat?: number; mana?: number }
 export interface Payer { energy?: number; mana?: number }
 
-/** What a skill costs: `cost` is Stamina, `mana` is Mana. */
-export const skillCost = (s: { cost?: number; mana?: number }): Required<Cost> => ({ stamina: s.cost ?? 0, mana: s.mana ?? 0 });
+/** What a skill costs: `cost` is Heat (shared/overload.ts), `mana` is Mana. */
+export const skillCost = (s: { cost?: number; mana?: number }): Required<Cost> => ({ heat: s.cost ?? 0, mana: s.mana ?? 0 });
 
-/** Which pool is short ("" = can pay). */
-export function shortOf(u: Payer, c: Cost): "" | "stamina" | "mana" {
-  if ((c.stamina ?? 0) > (u.energy ?? 0)) return "stamina";
+/** What blocks the cost ("" = can pay): overheated for a Heat skill, or too little Mana. */
+export function shortOf(u: Payer, c: Cost): "" | "heat" | "mana" {
+  if ((c.heat ?? 0) > 0 && isOverheated(u)) return "heat";
   if ((c.mana ?? 0) > (u.mana ?? 0)) return "mana";
   return "";
 }
 export const canPay = (u: Payer, c: Cost) => shortOf(u, c) === "";
-/** Spends the cost if both pools have enough. Returns false (and spends nothing) otherwise. */
+/** Pays the cost (adds the Heat, spends the Mana) unless something blocks it. Returns false (and pays nothing) otherwise. */
 export function pay(u: Payer, c: Cost): boolean {
   if (!canPay(u, c)) return false;
-  if (c.stamina) u.energy = (u.energy ?? 0) - c.stamina;
+  if (c.heat) addHeat(u, c.heat);
   if (c.mana) u.mana = (u.mana ?? 0) - c.mana;
   return true;
 }
