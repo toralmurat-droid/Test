@@ -74,6 +74,10 @@ export interface AreaDef extends HitEffects {
 }
 
 export interface ShotDef extends HitEffects {
+  /** Each rank above 1 adds this many projectiles (`n`, the fan widening with them) and/or extra targets passed through. */
+  perRank?: { n?: number; pierce?: number };
+  /** A ragged swarm, not a neat fan (Rat Plague): each shot's speed varies by up to ±`speed` (share) and its angle by ±`deg`. */
+  jitter?: { speed: number; deg: number };
   kind: string; // projectile look (client)
   n?: number; spread?: number; // n shots fanned over `spread` degrees
   lanes?: number; // or n shots side by side, this many px apart
@@ -159,6 +163,8 @@ export interface SkillDef {
   id: string; name: string; type: SkillType; desc: string;
   mod?: SkillMod; // an upgrade node: learned ranks change the spell `mod.of` (see withMods)
   maxRank?: number; // ranks it can take (default MAX_RANK); the wizard's spells go to 6 (Murat 2026-11-07)
+  /** What each rank past the first adds besides RANK_POWER / RANK_TIME, for the tree sheet ("+2 bats"). */
+  rankStep?: string;
   branch: 0 | 1 | 2; row: 0 | 1 | 2 | 3 | 4;
   req: number; // hero level needed (filled from TREE)
   parent?: string; // skill that must be learned first (none = root of its branch)
@@ -204,6 +210,8 @@ export interface SkillDef {
   devour?: FangDef;
   /** Vampire Bite: bite the fleshy foe nearest the aim; a weak monster may fall and rise as a thrall (shared/devour.ts THRALL). */
   bite?: FangDef;
+  /** Vampire Brides: `n` brides (+`perRank` per rank above 1) fight for the hero for `ms`; each heals him `drain`% of what it deals. */
+  brides?: { n: number; perRank: number; ms: number; drain: number };
   /** Vampire Charm: the foe nearest the aim within `range` px: a monster fights for the hero for `ms`; a hero, boss or elite is dazed for `daze` ms instead. */
   charm?: { range: number; ms: number; daze: number };
 }
@@ -535,8 +543,8 @@ const S: Record<ClassKind, SkillDef[]> = <Record<ClassKind, SkillDef[]>><unknown
       desc: "Bind yourself to the foe nearest your aim with a cord of blood for 3s and pump their life into you: it hurts them, slows them and heals you for half of it. Aim at a group ally instead and the cord carries your own blood to them: you give a little of your life each pulse and they heal half as much again. The cord snaps if they get too far away.",
       field: { kind: "bloodlink", r: 0, ms: 3000, tickMs: 300, follow: true, dmg: 7, drain: 50, slowMs: 400, link: { range: 120, breakAt: 170, give: 2 } } },
     { id: "v_lance", name: "Blood Lance", type: "Attack", branch: 0, row: 1, style: "blood", cd: 5000, mana: 14, blood: 3,
-      desc: "Draw a spear of your own blood and hurl it: it runs through up to four foes in a line and leaves each of them bleeding.",
-      shots: { kind: "bloodlance", speed: 330, range: 175, radius: 4, dmg: 26, pierce: 3, burn: [6, 2500], bleed: "drip", drain: 10, kb: 0.5 } },
+      desc: "Draw a spear of your own blood and hurl it: it runs through foes in a line (three at rank 1, one more each rank) and leaves each of them bleeding.",
+      shots: { kind: "bloodlance", speed: 330, range: 175, radius: 4, dmg: 26, pierce: 2, perRank: { pierce: 1 }, burn: [6, 2500], bleed: "drip", drain: 10, kb: 0.5 } },
     { id: "v_boil", name: "Boil Blood", type: "Attack", branch: 0, row: 1, style: "blood", cd: 6000, mana: 16, blood: 4,
       desc: "Make the blood of everyone at the spot boil: they swell with bubbling blood, are hurt and bleed for 3s.",
       areas: [{ r: 30, ahead: 44, dmg: 22, burn: [8, 3000], bleed: "boil", kb: 0.4, look: "burst" }] },
@@ -559,8 +567,8 @@ const S: Record<ClassKind, SkillDef[]> = <Record<ClassKind, SkillDef[]>><unknown
       desc: "Dissolve into mist and a flutter of bats and drift far ahead, over water, fences and walls, untouchable for a moment. The mist you leave behind chills whoever stands in it.",
       move: { kind: "blink", dist: 110, invulnMs: 450 }, areas: [{ r: 24, dmg: 10, slowMs: 900, atStart: true, look: "smoke" }] },
     { id: "v_bats", name: "Bat Swarm", type: "Attack", branch: 1, row: 1, style: "shadow", cd: 4000, mana: 14,
-      desc: "A swarm of bats bursts from your cloak, flutters ahead in a tight cloud and bites whatever it reaches, bringing a little blood back to you. More bats stay behind and whirl round you for 3s as a living shield: they bite anyone close and you take 10% less damage.",
-      shots: { kind: "bat", n: 8, spread: 22, speed: 200, range: 115, radius: 3, dmg: 10, drain: 10, kb: 0.1 },
+      desc: "A swarm of bats pours out of your cloak and spreads ahead, biting whatever it reaches and bringing a little blood back to you: 6 bats, 2 more each rank. More bats stay behind and whirl round you for 3s as a living shield: they bite anyone close and you take 10% less damage.",
+      shots: { kind: "bat", n: 6, perRank: { n: 2 }, spread: 26, speed: 170, range: 120, radius: 3, dmg: 10, drain: 10, kb: 0.1 },
       field: { kind: "batring", r: 26, ms: 3000, tickMs: 500, follow: true, dmg: 7, drain: 20 }, buff: { ms: 3000, armor: 10 } },
     { id: "v_gaze", name: "Charm", type: "Attack", branch: 1, row: 2, style: "shadow", cd: 16000, mana: 18, target: "dir",
       desc: "Catch the eye of the foe nearest your aim. A monster falls under your spell and fights at your side for 5s, then wakes up. Heroes, bosses and elites are too strong-willed: they falter instead, dazed and weakened for 2s.",
@@ -568,8 +576,8 @@ const S: Record<ClassKind, SkillDef[]> = <Record<ClassKind, SkillDef[]>><unknown
     { id: "v_nightborn", name: "Child of the Night", type: "Passive", branch: 1, row: 2, style: "shadow", passive: { effect: "night", perRank: 6 },
       desc: "The dark is yours. At night, and inside a Nightfall, you hit harder, heal from the damage you deal and move faster." },
     { id: "v_rats", name: "Rat Plague", type: "Attack", branch: 1, row: 3, style: "poison", cd: 9000, mana: 20,
-      desc: "A carpet of plague rats pours out of the dark and scurries ahead: they bite through everything in their way, slowing it and leaving it sick for 3s.",
-      shots: { kind: "rat", n: 7, lanes: 7, speed: 130, range: 160, radius: 5, dmg: 10, pierce: 2, burn: [5, 3000], slowMs: 700, kb: 0 } },
+      desc: "A seething wave of plague rats boils out of the dark and swarms slowly ahead, a wide squirming mass: they bite through everything in their way, slowing it and leaving it sick for 3s. 10 rats, 3 more each rank.",
+      shots: { kind: "rat", n: 10, perRank: { n: 3 }, spread: 40, jitter: { speed: 0.3, deg: 6 }, speed: 70, range: 150, radius: 6, dmg: 10, pierce: 3, burn: [5, 3000], slowMs: 900, kb: 0 } },
     { id: "v_soil", name: "Native Soil", type: "Aura", branch: 1, row: 3, style: "shadow", cd: 20000, mana: 22, target: "self",
       desc: "Spill a box of your grave earth at your feet for 8s: while you stand on it you heal quickly, and it clings to the feet of your enemies.",
       field: { kind: "gravesoil", r: 40, ms: 8000, tickMs: 500, heal: 1.5, slowMs: 500 } },
@@ -590,9 +598,9 @@ const S: Record<ClassKind, SkillDef[]> = <Record<ClassKind, SkillDef[]>><unknown
     { id: "v_pounce", name: "Night Pounce", type: "Attack", branch: 2, row: 3, style: "shadow", windMs: 70, cd: 10000, cost: 30,
       desc: "Melt into the shadows and step out right behind the nearest foe, then sink your teeth in: a heavy blow that stuns, and you drink 15% of it.",
       move: { kind: "behind", dist: 80, invulnMs: 250 }, areas: [{ r: 22, ahead: 8, wpn: 2.2, stunMs: 350, drain: 15, kb: 1, look: "slash" }] },
-    { id: "v_brides", name: "The Brides", type: "Ultimate", branch: 2, row: 4, style: "shadow", cd: 22000, mana: 35, chargeMs: 300,
-      desc: "Call your three pale brides out of the night for 8s: they circle you and dart at your enemies, slashing up to three of them every moment and feeding you part of the blood.",
-      field: { kind: "brides", r: 80, ms: 8000, tickMs: 600, follow: true, zap: { n: 3, dmg: 22 }, drain: 15 } },
+    { id: "v_brides", name: "The Brides", type: "Ultimate", branch: 2, row: 4, style: "shadow", cd: 35000, mana: 35, chargeMs: 300, target: "self",
+      desc: "Call your pale brides out of the night: three of them at rank 1, one more each rank. For 25s they stay at your side and throw themselves at every foe near you, clawing in a frenzy and drinking: part of the blood they draw comes back to you.",
+      brides: { n: 3, perRank: 1, ms: 25000, drain: 20 } },
     // Murat 2026-11-07: eat monsters to take on what they are, bite them to make thralls. Both need flesh.
     { id: "v_devour", name: "Devour", type: "Attack", branch: 2, row: 1, style: "blood", cd: 6000, cost: 20, target: "dir",
       desc: "Tear into the foe with flesh nearest your aim. A monster below 30% life is eaten whole: it dies, you heal 8% of your life, the fresh blood makes you 12% stronger for 8s, and you keep a little of what it was, more for every one of its kind you eat (blobs: life, elemental blobs: skill damage, bandits: damage, beast-folk: speed). Skeletons and golems have nothing to eat.",
@@ -747,6 +755,16 @@ const SYNERGY: Record<string, { from: string; pct: number }[]> = {
 };
 // Every wizard skill, spells and upgrades alike, takes 6 ranks (Murat 2026-11-07)
 for (const sk of S.wizard) sk.maxRank = 6;
+/**
+ * Vampire ranks (Murat 2026-11-07: each skill takes as many points as give a clear step). Skills whose ranks add
+ * something you can count go to 5, ultimates and the utility skills stay at 3. Steps besides +power / longer effects.
+ */
+const VAMP_RANKS: Record<string, [number, string?]> = {
+  v_link: [5], v_lance: [5, "pierces one more foe"], v_boil: [3], v_pact: [5], v_ward: [3], v_exsang: [5], v_tide: [3],
+  v_mist: [3], v_bats: [5, "+2 bats"], v_gaze: [3, "charm lasts longer"], v_nightborn: [5], v_rats: [5, "+3 rats"], v_soil: [3], v_nightfall: [3],
+  v_rend: [5], v_thirst: [3], v_hunger: [5], v_pounce: [3], v_devour: [3, "eats foes with 5% more life left"], v_bite: [3, "10% more chance to turn, +1 thrall at rank 2"], v_brides: [3, "+1 bride"],
+};
+for (const sk of S.vampire) { const v = VAMP_RANKS[sk.id]; if (v) { sk.maxRank = v[0]; sk.rankStep = v[1]; } }
 for (const list of Object.values(S)) for (const sk of list) {
   sk.needs = NEEDS[sk.id];
   sk.requires = REQUIRES[sk.id];

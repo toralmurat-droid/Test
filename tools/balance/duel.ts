@@ -68,7 +68,8 @@ export class F {
  */
 export class GolemF extends F {
   windUntil = 0; lastAtk = -1e9; banishAt = 0; sPower = 1;
-  constructor(id: string, public owner: F, public kind: SummonKind, power: number, fused: number, now: number) {
+  drain = 0; // vampire Brides: % of their damage that heals the owner
+  constructor(id: string, public owner: F, public kind: SummonKind | "bride", power: number, fused: number, now: number, lifeMs?: number) {
     super(id, owner.cls, owner.level, {}, {}, { sta: 0, str: 0, mag: 0, dex: 0 });
     const fuse = 1 + SUMMON.colossusPerGolem * fused, def = MOBS[kind];
     this.s = { sta: 0, str: 0, mag: 0, dex: 0 };
@@ -76,7 +77,7 @@ export class GolemF extends F {
     this.sPower = power * fuse * talentMult(owner.cls, owner.t, "summonDmg");
     this.body = mobBody(kind);
     this.mob = { reach: 14, ranged: false };
-    this.banishAt = now + (kind === "golem_colossus" ? 30_000 : SUMMON.lifeMs);
+    this.banishAt = now + (lifeMs ?? (kind === "golem_colossus" ? 30_000 : SUMMON.lifeMs));
     this.stunUntil = now + 500; // rising out of the ground
     this.x = owner.x - owner.face * 12;
   }
@@ -184,6 +185,12 @@ export class Duel {
       cooldownMult: (id) => { const u = f(id)!; return cooldownMult(u.cls, u.s, u.t); },
       fx: () => {},
       summon: (id, power) => { const o = f(id); if (o) this.addGolem(o, GOLEM_OF[attuneOf(o.attune)], power, 0); },
+      brides: (id, power, n, ms, drain) => {
+        const o = f(id);
+        if (!o) return;
+        for (const g of this.golemsOf(o)) if (g.kind === "bride") g.dead = true; // a new call sends the last ones back
+        for (let i = 0; i < n; i++) { const b = new GolemF(`g${++this.summonSeq}`, o, "bride", power, 0, this.now, ms); b.drain = drain; b.stunUntil = this.now + 300; this.summons.push(b); }
+      },
       colossus: (id, power) => {
         const o = f(id);
         if (!o) return;
@@ -339,6 +346,7 @@ export class Duel {
     if (s.shots) return d <= s.shots.range * 0.9;
     if (s.field?.link) return d <= s.field.link.range - 10; // Blood Link: anyone in reach
     if (s.charm) return d <= s.charm.range - 10; // Charm: a hero in reach is dazed
+    if (s.brides) return d < 140; // The Brides: call them once the fight is close
     if (s.field) return s.field.trap ? d < 70 : d <= (s.field.ahead ?? 0) + s.field.r - 4;
     if (s.cry) return d <= s.cry.r - 6;
     if (s.move) return a.ranged ? false : d > 40 && d < s.move.dist + 30;
@@ -391,7 +399,10 @@ export class Duel {
       g.windUntil = 0; g.lastAtk = now;
       const dmg = def.damage * mobScale(summonScaleLevel(g.level), "damage") * g.sPower;
       const hits = g.kind === "golem_colossus" ? this.foes(g).filter((c) => !c.dead && Math.abs(c.x - t!.x) <= SUMMON.colossusSlam + c.body) : Math.abs(t.x - g.x) <= reach + 6 ? [t] : [];
-      for (const c of hits) this.hit(o, c, dmg, Math.sign(c.x - g.x) || toward, { kb: 0.6 });
+      for (const c of hits) {
+        this.hit(o, c, dmg, Math.sign(c.x - g.x) || toward, { kb: 0.6 });
+        if (g.drain && !o.dead) o.hp = Math.min(o.maxHp, o.hp + dmg * g.drain / 100); // a Bride drinks for the vampire
+      }
       return 0;
     }
     if (Math.abs(t.x - g.x) <= reach) {

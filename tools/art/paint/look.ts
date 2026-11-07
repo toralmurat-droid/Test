@@ -187,6 +187,15 @@ export const MOB_LOOKS: Record<string, Look> = {
     sleeve: 0x4a4d55, arms: "plate", glove: 0x2e3036, weapon: "sword", bladeLen: 1.45, fx: 0x9dff6a,
     back: "cape", capeCol: 0x3a1218, build: 1.35,
   },
+  // the vampire's Brides (v_brides): deathly pale, long black hair under a torn white veil, a white wedding dress
+  // stained with blood at the hem and the mouth, red eyes, bare feet and long nails
+  bride: {
+    skin: 0xe9e1e4, hair: 0x15101a, hairStyle: "long", eye: 0xff2d2d, lips: 0x8e1020,
+    head: "hood", headCol: 0xf2eef0, headTrim: 0xc9c0c6,
+    torso: "robe", torsoCol: 0xf0ecee, trim: 0x9b1b1b, corset: 0xd8d0d6, sash: 0x8e1020,
+    legs: "dress", legCol: 0xe8e2e6, boots: 0xe9e1e4, bootStyle: "bare",
+    sleeve: 0xeae6e8, arms: "cloth", weapon: "none", fx: 0xff2d2d,
+  },
   necromancer: {
     skin: 0xd2cbb4, skull: true, bones: true, eyeGlow: 0x7dff6a, head: "horned", headCol: 0x2a1838, headTrim: 0xd8d2bf,
     torso: "robe", torsoCol: 0x24152e, trim: 0x8e1b2e, sash: 0x8e1b2e,

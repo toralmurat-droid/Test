@@ -42,8 +42,10 @@ const RIP: Record<"down" | "up" | "right", { hold: [P, P]; snap: [P, P]; don: [P
 const PK = 5; // painter resolution for these
 /** `lift`: flyers hover this many px above their shadow, bobbing with each wingbeat. */
 function humanoid(key: string, kind: string, w: number, h: number, oy: number, scale: number, rip = false, lift = 0): Sheet {
+  // Frames are painted on first use, so rebuilding a few sheets (buildMobs ONLY) doesn't paint every humanoid
+  let frames: ReturnType<typeof humanoidFrame>[] | undefined;
   const hands: number[][] = [];
-  const frames = [...Array(FRAMES + (rip ? RIP_FRAMES : 0)).keys()].map((f) => {
+  const paint = () => frames ??= [...Array(FRAMES + (rip ? RIP_FRAMES : 0)).keys()].map((f) => {
     const fr = humanoidFrame(kind, f);
     // the hands in sheet px (world px from the frame's top-left): where the client puts the skeleton it holds
     const toSheet = (q: P) => [+(w / 2 + (q[0] - 16) * scale).toFixed(2), +(oy * h + (q[1] - 29) * scale).toFixed(2)];
@@ -51,9 +53,9 @@ function humanoid(key: string, kind: string, w: number, h: number, oy: number, s
     return fr;
   });
   return {
-    key, w, h, frames: frames.length, hands: rip ? hands : undefined,
+    key, w, h, frames: FRAMES + (rip ? RIP_FRAMES : 0), get hands() { if (!rip) return undefined; paint(); return hands; },
     draw: (c, f) => {
-      const fr = frames[f], n = createCanvas(fr.w, fr.h), x = n.getContext("2d"), img = x.createImageData(fr.w, fr.h);
+      const fr = paint()[f], n = createCanvas(fr.w, fr.h), x = n.getContext("2d"), img = x.createImageData(fr.w, fr.h);
       img.data.set(fr.data); x.putImageData(img, 0, 0);
       if (SH) { SH.save(); SH.translate(w / 2, oy * h); SH.scale(1, 0.3); SH.fillStyle = "rgba(0,0,0,0.42)"; SH.beginPath(); SH.arc(0, 0, 6.5 * scale, 0, Math.PI * 2); SH.fill(); SH.restore(); }
       // logical unit (16, 29) = the feet -> (w/2, oy*h) in world px
@@ -432,6 +434,7 @@ export function buildMobs(out: string, ONLY?: string[]) {
     humanoid("mob_banditchief", "banditchief", 28, 34, 32 / 34, 0.95),
     humanoid("mob_skeletonmage", "skeletonmage", 24, 32, 31.2 / 32, 0.93),
     humanoid("mob_necromancer", "necromancer", 24, 32, 31.2 / 32, 0.93),
+    humanoid("mob_bride", "bride", 20, 30, 27.5 / 30, 0.85),
     humanoid("mob_demon", "demon", 28, 34, 33 / 34, 1.0, true),
     humanoid("mob_hollowking", "hollowking", 44, 48, 42 / 48, 1.25),
     // the beast-folk of the Mawdeep Warrens (look.ts gnawkin..hidemother): elites and the boss drawn bigger
@@ -470,7 +473,7 @@ export function buildMobs(out: string, ONLY?: string[]) {
       const c = body.getContext("2d"), sc = shadow.getContext("2d");
       c.scale(HI, HI); sc.scale(HI, HI);
       SH = sc; s.draw(c, f); SH = null;
-      const blob = !/skeleton|bandit|necromancer|demon|crawler|hollowking|gnawkin|tuskborn|silkwretch|duskwing|packlord|hornbrute|hidemother|crowseer|gnasher|weaver/.test(s.key);
+      const blob = !/skeleton|bandit|bride|necromancer|demon|crawler|hollowking|gnawkin|tuskborn|silkwretch|duskwing|packlord|hornbrute|hidemother|crowseer|gnasher|weaver/.test(s.key);
       const b = shrink(body, "mb", tw, th);
       pixelize(b, tw, th, true, blob ? { y0: Math.round(th * 0.7), y1: th, mud: 0.14, sat: 0.9 } : { y0: Math.round(th * 0.72), y1: th, mud: s.key.includes("bandit") ? 0.38 : 0.2 });
       const u = shrink(shadow, "ms", tw, th); pixelAlpha(u);

@@ -111,6 +111,8 @@ export interface SkillHost {
   devour?(id: string, target: string, dmg: number, heal: number): boolean;
   /** Bite: monster `target` falls and rises as the hero's thrall. False when it can't be turned. */
   thrall?(id: string, target: string, dmg: number, power: number, rank: number): boolean;
+  /** Vampire Brides: call `n` brides that fight for the hero for `ms`, each healing him `drain`% of its damage. */
+  brides?(id: string, power: number, n: number, ms: number, drain: number): void;
   /** Group allies of `of` (alive heroes in the same group) within r of (x, y), not `of` itself. Missing = no groups. */
   allies?(x: number, y: number, r: number, of: string): string[];
   /** Can this unit be charmed (a plain monster: not a hero, summon, boss or elite)? */
@@ -343,6 +345,7 @@ function release(h: SkillHost, id: string, s: SkillDef, rank: number, power: num
     h.fx({ ev: "counter", id, s: s.id, ms: s.counter.ms * t });
   }
   if (s.summon) h.summon?.(id, power);
+  if (s.brides) h.brides?.(id, power, s.brides.n + s.brides.perRank * (rank - 1), s.brides.ms * t, s.brides.drain);
   if (s.colossus) h.colossus?.(id, power, s.colossus.ms);
   if (s.attune) h.attune?.(id);
 }
@@ -471,18 +474,22 @@ export function area(h: SkillHost, id: string, s: SkillDef | { id: string }, a: 
 }
 
 function fire(h: SkillHost, id: string, skill: string, d: ShotDef, rank: number, power: number, x: number, y: number, aim: [number, number], imb?: Imbue) {
+  // Ranks that add projectiles widen the fan with them (Bat Swarm, Rat Plague) and/or let them pass through more foes
+  const more = d.perRank ? Math.max(0, rank - 1) : 0;
+  if (more) d = { ...d, n: (d.n ?? 1) + (d.perRank!.n ?? 0) * more, spread: d.spread && d.perRank!.n ? d.spread * (1 + 0.12 * more) : d.spread, pierce: (d.pierce ?? 0) + (d.perRank!.pierce ?? 0) * more };
   const n = d.n ?? 1;
   const base = Math.atan2(aim[1], aim[0]);
   const t = rankTime(rank);
   const dmg = baseDmg(h, id, d) * power;
   for (let i = 0; i < n; i++) {
     const k = n > 1 ? i - (n - 1) / 2 : 0;
-    const ang = base + (d.spread && n > 1 ? (k * d.spread / (n - 1)) * Math.PI / 180 : 0);
+    const ang = base + (d.spread && n > 1 ? (k * d.spread / (n - 1)) * Math.PI / 180 : 0) + (d.jitter ? (Math.random() * 2 - 1) * d.jitter.deg * Math.PI / 180 : 0);
+    const speed = d.jitter ? d.speed * (1 + (Math.random() * 2 - 1) * d.jitter.speed) : d.speed;
     const vx = Math.cos(ang), vy = Math.sin(ang);
     const lane = d.lanes ? k * d.lanes : 0;
     h.shoot({
       owner: id, skill, x: x + vx * 6 - aim[1] * lane, y: y - 4 + vy * 6 + aim[0] * lane, vx, vy,
-      kind: d.kind, speed: d.speed, range: d.range, radius: d.radius, size: d.size ?? 1, dmg,
+      kind: d.kind, speed, range: d.range, radius: d.radius, size: d.size ?? 1, dmg,
       pierce: d.pierce ?? 0, explode: d.explode ?? 0, chain: d.chain ?? 0, field: d.field, rank, power, pulse: d.pulse,
       ...effects(d, t), imb,
     });

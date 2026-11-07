@@ -1,4 +1,5 @@
 import { CLASSES, ClassKind } from "./classes";
+import { MOBS } from "./constants";
 import { attackMult, magicMult, Stats, STATS, STAT_NAMES } from "./powers";
 import { AreaDef, levelPower, rankPower, Ranks, rankTime, scalePower, ShotDef, SkillDef, STACK_POWER, STACK_NAME, synergyPower } from "./skills";
 
@@ -23,7 +24,7 @@ export function skillDamage(cls: ClassKind, s: SkillDef, rank: number, st: Stats
   const effects = (e: { burn?: [number, number] }) => { if (e.burn) burn = Math.max(burn, e.burn[0] * e.burn[1] * t / 1000 * mag); };
   const area = (a: AreaDef, what = "hit") => { add(what, base(a), a.waves ?? 1); effects(a); };
   const shot = (d: ShotDef, what = "shot") => {
-    const n = d.n ?? 1;
+    const n = (d.n ?? 1) + (d.perRank?.n ?? 0) * (r - 1); // Bat Swarm, Rat Plague: more of them each rank
     add(n > 1 ? `${what}s` : what, base(d), n);
     if (d.explode && (d.wpn || d.dmg)) {/* the blast is the same hit */ }
     if (d.field) field(d.field.ms, d.field);
@@ -49,6 +50,8 @@ export function skillDamage(cls: ClassKind, s: SkillDef, rank: number, st: Stats
     if (c.area) area(c.area, "blast");
     if (c.shot) shot(c.shot, "arrow");
   }
+  // The Brides: one claw of each (they claw about twice a second while they stay; they also grow with the hero's level)
+  if (s.brides) add("per claw", MOBS.bride.damage * power, s.brides.n + s.brides.perRank * (r - 1));
   if (s.buff?.onHit?.wpn) add("extra per hit", s.buff.onHit.wpn * wpnHit * power, 1);
   if (s.buff?.onHit) effects(s.buff.onHit);
   if (s.buff?.thorns) add("to attackers", base(s.buff.thorns), 1);

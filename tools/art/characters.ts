@@ -794,7 +794,7 @@ export const MOB_POSES: Record<string, Hero> = {
   skeleton: mobPose("skeleton", "axe"), skeleton_axe: mobPose("skeleton_axe", "axe"),
   skeleton_spear: mobPose("skeleton_spear", "spear"), skeleton_bow: mobPose("skeleton_bow", "bow"), bandit: mobPose("bandit", "dagger"),
   bandit_brute: mobPose("bandit_brute", "axe"), bandit_archer: mobPose("bandit_archer", "bow"), banditchief: mobPose("banditchief", "axe"),
-  skeletonmage: mobPose("skeletonmage", "staff"), necromancer: mobPose("necromancer", "staff"),
+  skeletonmage: mobPose("skeletonmage", "staff"), necromancer: mobPose("necromancer", "staff"), bride: mobPose("bride", "none"),
   demon: mobPose("demon", "axe"), demon1: mobPose("demon1", "axe"), demon2: mobPose("demon2", "axe"), demon3: mobPose("demon3", "axe"), demon4: mobPose("demon4", "axe"),
   hollowking: mobPose("hollowking", "axe"),
   gnawkin: mobPose("gnawkin", "dagger"), tuskborn: mobPose("tuskborn", "hammer"), silkwretch: mobPose("silkwretch", "none"), duskwing: mobPose("duskwing", "dagger"),

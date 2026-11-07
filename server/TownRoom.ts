@@ -205,6 +205,7 @@ export class Mob extends Schema {
   @type("string") parts = ""; // kinds of the blobs swallowed, comma-separated: the client paints their colours, eyes and mouths on it
   summonFor = ""; // quest monster (QuestStep.summon): session id of the player it was spawned for
   summonAt = 0; nextPick = 0; // when it was called (the oldest goes first past SUMMON.max), next target choice
+  drink = 0; // the vampire's Brides (v_brides): % of the damage this one deals that heals its owner
   thrall = false; // Bite (shared/devour.ts): a monster turned into a vampire's thrall (a summon that keeps its own kind)
   charmUntil = 0; // Charm (v_gaze): a zone monster fighting for a vampire (owner set) until then, then it goes back to being itself
   sPower = 1; // a summon's damage multiplier (skill rank, the owner's Ruin talent, the golems fused into a Colossus)
@@ -1561,6 +1562,32 @@ export class TownRoom extends Room<TownState> {
     return this.summon(ownerId, "golem_colossus", undefined, power, fused.length);
   }
 
+  // ---- The Brides (v_brides) ----------------------------------------------------
+
+  /** The vampire's Brides: `n` pale companions rise round him for `ms` (a new call sends the last ones away). */
+  private callBrides(id: string, power: number, n: number, ms: number, drain: number) {
+    const p = this.state.players.get(id);
+    if (!p) return;
+    for (const [sid, m] of [...this.summons]) if (m.owner === id && m.kind === "bride") this.dismiss(sid);
+    const now = Date.now(), def = MOBS.bride, ids: string[] = [];
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2 + Math.random() * 0.5;
+      let x = p.x + Math.cos(a) * 18, y = p.y + Math.sin(a) * 12;
+      if (isSolidAt(x, y)) { x = p.x; y = p.y; }
+      const b = new Mob();
+      b.kind = "bride"; b.zone = -1; b.owner = id; b.summonAt = now + i; b.level = p.level; b.drink = drain;
+      b.hp = b.maxHp = Math.round(def.maxHp * mobScale(summonScaleLevel(p.level), "hp"));
+      b.sPower = power;
+      b.x = b.homeX = x; b.y = b.homeY = y;
+      b.banishAt = now + ms; b.stunUntil = now + 450; // rising out of the dark
+      const sid = `t${++this.summonSeq}`;
+      this.state.mobs.set(sid, b);
+      this.summons.set(sid, b);
+      ids.push(sid);
+    }
+    this.broadcast("sfx", { ev: "brides", id, ids, x: Math.round(p.x), y: Math.round(p.y) });
+  }
+
   // ---- Devour and Bite (shared/devour.ts) ---------------------------------------
 
   /** Can the vampire eat / turn this monster? Not heroes, summons and thralls, elites and bosses, quest monsters, the fleshless. */
@@ -1711,18 +1738,19 @@ export class TownRoom extends Room<TownState> {
   private summonTarget(m: Mob, ownerId: string, o: Player): string {
     let best = "", bs = 0;
     const R = SUMMON.aggroRange;
+    const whim = () => (m.drink ? Math.random() * 0.6 : 0); // a frantic Bride flits from foe to foe
     const near = (x: number, y: number) => Math.hypot(x - m.x, y - m.y) < R && Math.hypot(x - o.x, y - o.y) < SUMMON.leash;
     this.state.mobs.forEach((t, tid) => {
       if (t === m || t.dead || t.hidden || Math.abs(t.x - m.x) > R || Math.abs(t.y - m.y) > R) return;
       if (t.owner ? !this.canHurtSummon(ownerId, t) : isSafeZone(t.x, t.y)) return;
       if (!near(t.x, t.y)) return;
-      const score = 1 - Math.hypot(t.x - m.x, t.y - m.y) / R + (t.target === ownerId || t.foe === ownerId ? 1 : 0) + (tid === m.target ? AGGRO.stick : 0);
+      const score = 1 - Math.hypot(t.x - m.x, t.y - m.y) / R + (t.target === ownerId || t.foe === ownerId ? 1 : 0) + (tid === m.target ? AGGRO.stick : 0) + whim();
       if (score > bs) { bs = score; best = tid; }
     });
     this.state.players.forEach((t, tid) => {
       if (tid === ownerId || t.dead || isSafeZone(t.x, t.y) || (o.party && t.party === o.party) || pvpProtected(o.level, t.level)) return;
       if (!near(t.x, t.y)) return;
-      const score = 1 - Math.hypot(t.x - m.x, t.y - m.y) / R + (tid === m.target ? AGGRO.stick : 0);
+      const score = 1 - Math.hypot(t.x - m.x, t.y - m.y) / R + (tid === m.target ? AGGRO.stick : 0) + whim();
       if (score > bs) { bs = score; best = tid; }
     });
     return best;
@@ -1762,7 +1790,9 @@ export class TownRoom extends Room<TownState> {
         } else if (now - m.lastAttack >= def.attackCooldownMs) { m.windUntil = now + MOB_COMBAT[m.kind].windupMs; m.winding = true; }
       } else input = toward(m.x, m.y, t.x, t.y);
     } else if (toOwner > SUMMON.followRange) input = toward(m.x, m.y, o.x, o.y);
-    const r = moveStep(m.x, m.y, input, dt, def.speed * (m.slowed ? SLOW_MOB : 1));
+    // A Bride rushes at her prey even faster than she walks
+    const rush = m.drink && m.target && t ? 1.35 : 1;
+    const r = moveStep(m.x, m.y, input, dt, def.speed * rush * (m.slowed ? SLOW_MOB : 1));
     if (this.canStep(m, r.x, r.y)) { m.x = r.x; m.y = r.y; m.homeX = m.x; m.homeY = m.y; }
     m.moving = r.moving && input !== STILL;
     if (input !== STILL) m.dir = dirFromInput(input, m.dir);
@@ -1771,7 +1801,7 @@ export class TownRoom extends Room<TownState> {
   /** A summon's blow: dealt in its owner's name (they get the kill), part of it in the golem's element; a monster turns on the golem. */
   private summonStrike(m: Mob, id: string, tid: string, t: { x: number; y: number }, def: MobDef) {
     const dmg = def.damage * mobScale(summonScaleLevel(m.level), "damage") * m.sPower;
-    const el = summonElement(m.kind, m.weapon), share = m.thrall ? 0 : SUMMON.elementShare; // a thrall hits as the monster it was
+    const el = summonElement(m.kind, m.weapon), share = m.thrall || m.drink || m.charmUntil ? 0 : SUMMON.elementShare; // a thrall, bride or charmed monster hits as what it is
     this.broadcast("swing", { id });
     // The Colossus slams the ground: everyone of the owner's foes close to its target is hit
     const targets = m.kind === "golem_colossus" ? this.summonFoesAround(m, t.x, t.y, SUMMON.colossusSlam) : [tid];
@@ -1780,10 +1810,14 @@ export class TownRoom extends Room<TownState> {
       const f = this.state.players.get(fid) ?? this.state.mobs.get(fid);
       if (!f) continue;
       const d = Math.hypot(f.x - m.x, f.y - m.y) || 1, push: [number, number] = [(f.x - m.x) / d, (f.y - m.y) / d];
-      this.hitTarget(m.owner, fid, dmg * (1 - share), push, { kb: 0.6, parts: share ? [{ el, amt: dmg * share }] : undefined });
+      this.hitTarget(m.owner, fid, dmg * (1 - share), push, { kb: m.drink ? 0.2 : 0.6, parts: share ? [{ el, amt: dmg * share }] : undefined });
+      // A Bride drinks: part of the blood comes back to the vampire (red drops fly to him)
+      if (m.drink) { this.host.heal(m.owner, dmg * m.drink / 100); this.broadcast("sfx", { ev: "drain", id: m.owner, t: fid }); }
       const victim = this.state.mobs.get(fid);
       if (victim && !victim.dead && !victim.owner) { this.addHate(victim, id, dmg); victim.foe = id; victim.target = ""; } // the golem tanks
     }
+    // Brides are frantic: after a slash they often throw themselves at another foe close by
+    if (m.drink && Math.random() < 0.45) { m.target = ""; m.nextPick = 0; }
   }
 
   /** The summon owner's foes within r of (x, y): the same rules as summonTarget. */
@@ -4847,6 +4881,7 @@ export class TownRoom extends Room<TownState> {
       if (p) this.summon(id, GOLEM_OF[attuneOf(p.attune)], undefined, power);
     },
     colossus: (id, power, ms) => { this.summonColossus(id, power, ms); },
+    brides: (id, power, n, ms, drain) => this.callBrides(id, power, n, ms, drain),
     flesh: (id) => {
       if (this.state.players.has(id)) return true;
       const m = this.state.mobs.get(id);

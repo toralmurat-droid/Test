@@ -257,13 +257,33 @@ test("Charm: a monster in reach is handed to the host; a boss or hero is dazed i
   assert.ok(w.fx.some((e) => e.ev === "charm" && e.t === "m" && e.ms > 0));
 });
 
-test("The Brides slash up to three foes around the vampire and feed him", () => {
+test("The Brides: 3 companions at rank 1, one more per rank, for 25 s, drinking for the vampire", () => {
   const w = world();
-  w.add("v", 0, 0, { cls: "vampire", talents: ranks(["v_rend", "v_pounce", "v_brides"]), mana: 999, energy: 999 });
-  for (let i = 0; i < 5; i++) w.add("m" + i, 20 + i * 10, 0);
+  const calls: number[][] = [];
+  w.h.brides = (_id, _power, n, ms, drain) => calls.push([n, ms, drain]);
+  w.add("v", 0, 0, { cls: "vampire", talents: { v_rend: 1, v_pounce: 1, v_brides: 1 }, mana: 999, energy: 999 });
   assert.ok(castSkill(w.h, "v", "v_brides"));
-  w.step(400); w.step(10);
-  const slashes = w.hits.filter((x) => x.from === "v");
-  assert.equal(slashes.length, 3);
-  assert.ok(slashes.every((x) => x.o.drain === 15));
+  w.step(400);
+  assert.deepEqual(calls[0], [3, 25000, 20]);
+  w.add("v2", 0, 0, { cls: "vampire", talents: { v_rend: 1, v_pounce: 1, v_brides: 3 }, mana: 999, energy: 999 });
+  assert.ok(castSkill(w.h, "v2", "v_brides"));
+  w.step(400);
+  assert.equal(calls[1][0], 5);
+});
+
+test("ranks: Bat Swarm and Rat Plague add creatures per rank, skills have their own max rank", () => {
+  const w = world();
+  const shots: string[] = [];
+  w.h.shoot = (sp) => shots.push(sp.kind);
+  w.add("m", 50, 0);
+  for (const [r, bats] of [[1, 6], [3, 10], [5, 14]]) {
+    shots.length = 0;
+    w.add("v" + r, 0, 0, { cls: "vampire", talents: { v_mist: 1, v_bats: r }, mana: 999, energy: 999 });
+    assert.ok(castSkill(w.h, "v" + r, "v_bats"));
+    assert.equal(shots.filter((k) => k === "bat").length, bats, `rank ${r}`);
+  }
+  assert.equal(skillOf("vampire", "v_bats")?.maxRank, 5);
+  assert.equal(skillOf("vampire", "v_brides")?.maxRank, 3);
+  assert.equal(skillOf("vampire", "v_rats")?.rankStep, "+3 rats");
+  for (const sk of SKILLS.vampire) assert.ok(sk.maxRank === 3 || sk.maxRank === 5, sk.id);
 });
