@@ -1,5 +1,6 @@
 {
   "date": "2026-11-07",
+  "patch": 150,
   "title": "Tidier skill trees",
   "changes": [
     "Skill tiles on the skill tree never overlap anymore, even where one skill opens three others (Vampire Blood and Fang).",
