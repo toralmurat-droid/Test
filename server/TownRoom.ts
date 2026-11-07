@@ -820,7 +820,6 @@ export class TownRoom extends Room<TownState> {
     this.state.players.set(client.sessionId, p);
     if (back?.group.length) this.regroupOnJoin(client.sessionId, p, back.group);
     this.sendBoard(client); // the Ideas board is ready as soon as it is opened
-    if (p.level <= PVP_PROTECT_LEVEL) this.note(client.sessionId, `Newcomer protection: until level ${PVP_PROTECT_LEVEL + 1}, other heroes can't hurt you (and you can't hurt them).`);
     console.log(`${p.name} the ${CLASSES[p.cls].name} joined (${this.clients.length} online)`);
   }
 
@@ -4436,7 +4435,7 @@ export class TownRoom extends Room<TownState> {
       this.applyStats(p); // new stat points are assigned by the player in the hero panel
       if (!p.dead) p.hp = p.maxHp; // full heal on level up
       this.broadcast("levelup", { id, level: lvl, from });
-      if (from <= PVP_PROTECT_LEVEL && lvl > PVP_PROTECT_LEVEL) this.note(id, `Level ${lvl}: your newcomer protection has ended. Other heroes can fight you outside the Market Square now.`);
+      if (from <= PVP_PROTECT_LEVEL && lvl > PVP_PROTECT_LEVEL) this.note(id, `Level ${lvl}: PvP is open for you outside the Market Square.`);
     }
   }
 

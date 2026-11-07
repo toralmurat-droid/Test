@@ -238,14 +238,16 @@ export function mountFireside(canvas: HTMLCanvasElement, labelHost: HTMLElement,
   }
 
   function placeLabels() {
+    // Narrow (phone portrait): seven names round the fire overlap, so only the picked / hovered hero is named
+    const narrow = squeeze < 0.85, vw = canvas.clientWidth || window.innerWidth;
     for (const h of heroes) {
       const text = labelText[h.k];
-      const show = !!text;
+      const show = !!text && (!narrow || mode !== "pick" || h.k === current || h.k === hover);
       h.label.hidden = !show;
       if (!show) continue;
       if (h.label.textContent !== text) h.label.textContent = text!;
-      const f = feet(h);
-      h.label.style.left = `${(f.x * S) / dpr}px`;
+      const f = feet(h), half = (h.label.offsetWidth || 80) / 2;
+      h.label.style.left = `${Math.max(half + 2, Math.min(vw - half - 2, (f.x * S) / dpr))}px`; // never cut at the screen edge
       h.label.style.top = `${((f.y + 7) * S) / dpr}px`;
       h.label.classList.toggle("sel", mode === "pick" && h.k === current);
       h.label.classList.toggle("hover", mode === "pick" && h.k === hover);

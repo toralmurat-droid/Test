@@ -7,6 +7,8 @@
  * (server/TownRoom.ts: damagePlayer, hitTarget, playerAttack) on a 1D line (no walls). Bots play "sensibly": melee heroes chase, ranged heroes kite and shoot, everyone uses
  * skills, ultimates, dodge rolls and the gear ranged shot when it makes sense. Projectiles can be side-stepped
  * (a miss chance that grows with flight time) since the real game is 2D.
+ * Summoner golems are fighters too (GolemF): they follow the server's summon rules (life, damage in the owner's name,
+ * Colossus slam, Vital Link) and can be hit by the other hero's swings, shots and areas. The bots aim at the hero.
  * Keep the server rules in sync with this file when changing combat code.
  */
 import { basicDrain, CLASSES, CLASS_KINDS, ClassKind, COMBO_WINDOW_MS, DODGE, ENERGY, GUARD_REDUCTION, staminaRegen } from "../../shared/classes";
@@ -19,7 +21,9 @@ import {
 } from "../../shared/skillEngine";
 import { Equipped, GEAR, gearBlock, gearDef, gearReachMult, gearSpeedMult, gearStats, meetsReq, withLevel } from "../../shared/gear";
 import { heroPoise, POISE, poiseLevelMult, poiseSpeed, pvpDamageMult } from "../../shared/combat";
-import { COMBAT_REGEN_PER_STA, HIT_RADIUS, PLAYER_SPEED, REGEN_DELAY_MS, REGEN_PER_STA, REGEN_RAMP_MS } from "../../shared/constants";
+import { COMBAT_REGEN_PER_STA, HIT_RADIUS, MOBS, mobScale, PLAYER_SPEED, REGEN_DELAY_MS, REGEN_PER_STA, REGEN_RAMP_MS } from "../../shared/constants";
+import { MOB_COMBAT, mobBody } from "../../shared/combat";
+import { attuneOf, GOLEM_OF, SUMMON, type SummonKind } from "../../shared/summons";
 
 const TICK = 50; // ms, server runs at 20 Hz
 const MAX_MS = 60000;
@@ -53,6 +57,30 @@ export class F {
   }
   get poiseMax() { return heroPoise(this.cls, this.level); }
   get ranged() { return this.mob ? this.mob.ranged : !!CLASSES[this.cls].projectile; }
+  /** Summoner: element of the next golem (shared/summons.ts ATTUNE_ORDER index). */
+  attune = 0;
+}
+
+/**
+ * A Summoner's golem (shared/summons.ts, server TownRoom.summon / updateSummon): life and damage as on the server
+ * (monster level scaling x skill power x Colossus fusion x the owner's summonHp / summonDmg talents). Its blows are
+ * dealt in the owner's name (Duel.hit with the owner as attacker). It has no talents or gear of its own.
+ */
+export class GolemF extends F {
+  windUntil = 0; lastAtk = -1e9; banishAt = 0; sPower = 1;
+  constructor(id: string, public owner: F, public kind: SummonKind, power: number, fused: number, now: number) {
+    super(id, owner.cls, owner.level, {}, {}, { sta: 0, str: 0, mag: 0, dex: 0 });
+    const fuse = 1 + SUMMON.colossusPerGolem * fused, def = MOBS[kind];
+    this.s = { sta: 0, str: 0, mag: 0, dex: 0 };
+    this.maxHp = this.hp = Math.round(def.maxHp * mobScale(owner.level, "hp") * power * fuse * talentMult(owner.cls, owner.t, "summonHp"));
+    this.sPower = power * fuse * talentMult(owner.cls, owner.t, "summonDmg");
+    this.body = mobBody(kind);
+    this.mob = { reach: 14, ranged: false };
+    this.banishAt = now + (kind === "golem_colossus" ? 30_000 : SUMMON.lifeMs);
+    this.stunUntil = now + 500; // rising out of the ground
+    this.x = owner.x - owner.face * 12;
+  }
+  get poiseMax() { return MOB_COMBAT[this.kind].poise; }
 }
 
 // ---- Typical builds -----------------------------------------------------------------------------------
@@ -108,6 +136,8 @@ export function gearFor(cls: ClassKind, level: number, pts?: Stats): Equipped {
 // ---- Duel -----------------------------------------------------------------------------------------------
 export class Duel {
   now = 0; shots: Shot[] = []; pending: Pending[] = []; fields: FieldInst[] = [];
+  /** Summoner golems on both sides (GolemF), alive or not. */
+  summons: GolemF[] = []; summonSeq = 0;
   host: SkillHost;
   constructor(public a: F, public b: F, public rnd = Math.random, t0 = 0) {
     this.now = t0;
@@ -152,12 +182,34 @@ export class Duel {
       stats: (id) => f(id)?.s,
       cooldownMult: (id) => { const u = f(id)!; return cooldownMult(u.cls, u.s, u.t); },
       fx: () => {},
+      summon: (id, power) => { const o = f(id); if (o) this.addGolem(o, GOLEM_OF[attuneOf(o.attune)], power, 0); },
+      colossus: (id, power) => {
+        const o = f(id);
+        if (!o) return;
+        const mine = this.golemsOf(o);
+        for (const g of mine) g.dead = true;
+        this.addGolem(o, "golem_colossus", power, mine.length);
+      },
+      attune: (id) => { const o = f(id); if (o) o.attune = (o.attune + 1) % 4; },
     };
+  }
+  /** Living golems of this hero. */
+  golemsOf(o: F) { return this.summons.filter((g) => g.owner === o && !g.dead); }
+  /** Call a golem (server TownRoom.summon): past SUMMON.max the oldest goes back. */
+  addGolem(o: F, kind: SummonKind, power: number, fused: number) {
+    const mine = this.golemsOf(o);
+    while (mine.length >= SUMMON.max) mine.shift()!.dead = true;
+    this.summons.push(new GolemF(`g${++this.summonSeq}`, o, kind, power, fused, this.now));
   }
   other(f: F) { return f === this.a ? this.b : this.a; }
   /** Everyone in the fight, and the ones `f` fights (PvE packs override these). */
-  units(): F[] { return [this.a, this.b]; }
-  foes(f: F): F[] { return [this.other(f)]; }
+  units(): F[] { return [this.a, this.b, ...this.summons.filter((g) => !g.dead)]; }
+  /** A hero fights the other hero and their golems; a golem fights its owner's foes. */
+  foes(f: F): F[] {
+    if (f instanceof GolemF) return this.foes(f.owner);
+    const o = this.other(f);
+    return [o, ...this.golemsOf(o)];
+  }
   byId(id: string): F | undefined { return this.units().find((u) => u.id === id); }
   /** undefined = still fighting, null = draw. */
   outcome(): F | null | undefined { return this.a.dead || this.b.dead ? (this.a.dead && this.b.dead ? null : this.a.dead ? this.b : this.a) : undefined; }
@@ -252,6 +304,9 @@ export class Duel {
 
   /** Would skill `s` reach the target from here (facing it)? A rough bot judgement. */
   useful(a: F, s: SkillDef, d: number, incoming: boolean, tReach: number): boolean {
+    if (s.summon) return this.golemsOf(a).length < SUMMON.max;
+    if (s.colossus) return this.golemsOf(a).length >= SUMMON.max || (this.golemsOf(a).length >= 1 && a.hp < a.maxHp * 0.5);
+    if (s.attune) return false; // the element only changes the golem's look and elemental share: not modelled
     if (s.counter) return incoming || d <= tReach + 4;
     if (s.areas?.length) {
       const ar = s.areas[0];
@@ -294,8 +349,38 @@ export class Duel {
   }
 
   /** Hooks for the PvE simulator (tools/balance/pve.ts): monster brains and speeds. */
-  brain(f: F): number { return this.think(f); }
-  speedOf(f: F): number { return heroSpeed(f.cls, this.now < f.slowUntil, speedMult(f, this.now) * talentMult(f.cls, f.t, "speed")) * gearSpeedMult(f.eq); }
+  brain(f: F): number { return f instanceof GolemF ? this.golemBrain(f) : this.think(f); }
+
+  /** A golem's turn (server TownRoom.updateSummon): wind up and slam the nearest foe; the Colossus hits all around it. */
+  golemBrain(g: GolemF): number {
+    const now = this.now, o = g.owner;
+    if (o.dead || now >= g.banishAt) { g.dead = true; return 0; }
+    // Vital Link (su_link): close to its owner it mends
+    const link = o.t["su_link"] ?? 0;
+    if (link && g.hp < g.maxHp && Math.abs(o.x - g.x) < SUMMON.followRange * 2) g.hp = Math.min(g.maxHp, g.hp + g.maxHp * SUMMON.linkRegen * link * TICK / 1000);
+    if (now < g.stunUntil || g.broken) { g.windUntil = 0; return 0; }
+    let t: F | undefined, bd = SUMMON.aggroRange;
+    for (const c of this.foes(g)) if (!c.dead && Math.abs(c.x - g.x) < bd && Math.abs(c.x - o.x) < SUMMON.leash) { bd = Math.abs(c.x - g.x); t = c; }
+    if (!t) return Math.abs(o.x - g.x) > SUMMON.followRange ? Math.sign(o.x - g.x) : 0;
+    const toward = Math.sign(t.x - g.x) || 1, reach = 14 + t.body + 6, def = MOBS[g.kind];
+    g.face = toward;
+    if (g.windUntil) {
+      if (now < g.windUntil) return 0;
+      g.windUntil = 0; g.lastAtk = now;
+      const dmg = def.damage * mobScale(g.level, "damage") * g.sPower;
+      const hits = g.kind === "golem_colossus" ? this.foes(g).filter((c) => !c.dead && Math.abs(c.x - t!.x) <= SUMMON.colossusSlam + c.body) : Math.abs(t.x - g.x) <= reach + 6 ? [t] : [];
+      for (const c of hits) this.hit(o, c, dmg, Math.sign(c.x - g.x) || toward, { kb: 0.6 });
+      return 0;
+    }
+    if (Math.abs(t.x - g.x) <= reach) {
+      if (now - g.lastAtk >= def.attackCooldownMs) g.windUntil = now + MOB_COMBAT[g.kind].windupMs;
+      return 0;
+    }
+    return toward;
+  }
+  speedOf(f: F): number {
+    if (f instanceof GolemF) return MOBS[f.kind].speed * (this.now < f.slowUntil ? 0.5 : 1);
+    return heroSpeed(f.cls, this.now < f.slowUntil, speedMult(f, this.now) * talentMult(f.cls, f.t, "speed")) * gearSpeedMult(f.eq); }
 
   // ---- Bot -----------------------------------------------------------------------------------------------
   /** Returns the move direction (-1, 0, 1) for this tick and fires actions. */
