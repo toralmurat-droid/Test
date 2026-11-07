@@ -1,5 +1,6 @@
 {
   "date": "2026-11-08",
+  "patch": 158,
   "title": "A wider bottom bar",
   "changes": [
     "The bottom bar is much wider with bigger icons that grow with your screen.",
