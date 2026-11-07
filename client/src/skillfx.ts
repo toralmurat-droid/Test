@@ -355,12 +355,7 @@ export class SkillFx {
         break;
       }
       case "zap": {
-        if (ev.sky) {
-          this.bolt(ev.x2 + rnd(-6, 6), ev.y2, 140, ev.x2, ev.y2, 0, PALETTE.lightning, 2, 200);
-          this.glow(ev.x2, ev.y2, 2, 26, 0xb3ecff, 260, 0.9, true);
-          this.burst(ev.x2, ev.y2, 2, "lightning", 14, 80, 300);
-          if (this.nearMe(ev.x2, ev.y2)) quake(this.scene, 70, 0.003);
-        } else {
+        if (ev.sky) this.thunderStrike(ev.x2, ev.y2); else {
           const z1 = e ? e.top * 0.7 : 14;
           this.bolt(ev.x1, ev.y1, z1, ev.x2, ev.y2, 10, PALETTE.lightning, 1);
           this.burst(ev.x2, ev.y2, 10, "lightning", 6, 50, 200);
@@ -841,6 +836,74 @@ export class SkillFx {
     this.p(x, y, 2, pick([0x5d4037, 0x795548, 0x8d6e63, 0x4e342e]), { vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, vz: rnd(60, 120), g: 320, life: rnd(500, 750), size: pick([2, 2, 3]), add: false });
   }
 
+  /**
+   * Thunder (Murat 2026-11-08: "big explosion and earth shaking, a ripping effect crawling from the point of impact"):
+   * a thick bolt from high up with a second one beside it, a white flash, a shock ring of sparks and dust, rocks
+   * thrown up, a ripple running out over the ground, and glowing cracks that tear outwards and cool down.
+   */
+  private thunderStrike(x: number, y: number) {
+    this.bolt(x + rnd(-8, 8), y, 240, x, y, 0, PALETTE.lightning, 3, 260);
+    this.scene.time.delayedCall(45, () => this.bolt(x + rnd(-14, 14), y, 220, x + rnd(-3, 3), y + rnd(-2, 2), 0, PALETTE.lightning, 1, 180));
+    this.glow(x, y, 30, 48, 0xffffff, 140, 1);
+    this.glow(x, y, 2, 48, 0xb3ecff, 520, 1, true);
+    this.glow(x, y, 2, 30, 0xffffff, 240, 1, true);
+    this.burst(x, y, 4, "lightning", 30, 130, 380);
+    this.ring(x, y, 46, "lightning", 34, { life: 360, up: 10 });
+    this.ring(x, y, 34, "earth", 22, { life: 600, up: 30, add: false, size: 2 });
+    for (let i = 0; i < 7; i++) this.rock(x, y, 30);
+    this.smoke(x, y, 14, 3);
+    this.ripple(x, y, 58, 0xb3ecff, 420);
+    this.scene.time.delayedCall(90, () => this.ripple(x, y, 40, 0xffffff, 320));
+    this.crawl(x, y, 54, 0x9be8ff, 0x1b1410);
+    if (this.nearMe(x, y)) { const cam = this.scene.cameras.main; if (!cam.shakeEffect.isRunning) cam.shake(240, 0.0042); }
+  }
+
+  /** A ring running out over the ground from a point (flat, squashed by the iso view). */
+  private ripple(x: number, y: number, r: number, color: number, ms: number) {
+    const g = this.scene.add.graphics().setDepth(1).setBlendMode(Phaser.BlendModes.ADD);
+    this.scene.tweens.addCounter({ from: 0, to: 1, duration: ms, ease: "Cubic.easeOut",
+      onUpdate: (tw) => { const k = tw.getValue() ?? 0; g.clear().lineStyle(3 - 2 * k, color, 0.9 * (1 - k)).strokeCircle(x, y, 4 + r * k); },
+      onComplete: () => g.destroy() });
+  }
+
+  /** Cracks that tear outwards from a point, glowing hot at first, then cooling into dark scars that fade. */
+  private crawl(x: number, y: number, r: number, hot: number, cold: number) {
+    const arms: [number, number][][] = [];
+    const n = 7 + Math.floor(Math.random() * 3);
+    for (let i = 0; i < n; i++) {
+      let a = (i / n) * Math.PI * 2 + rnd(-0.3, 0.3), px = x, py = y;
+      const pts: [number, number][] = [[px, py]], len = r * rnd(0.55, 1);
+      for (let d = 0; d < len; d += 5) { a += rnd(-0.55, 0.55); px += Math.cos(a) * 5; py += Math.sin(a) * 5; pts.push([px, py]); }
+      arms.push(pts);
+      // a side split on the longer arms
+      if (pts.length > 6 && Math.random() < 0.6) {
+        const k = 2 + Math.floor(Math.random() * (pts.length - 4)); let [bx, by] = pts[k]; let b = a + (Math.random() < 0.5 ? 1 : -1) * rnd(0.6, 1.1);
+        const side: [number, number][] = [[bx, by]];
+        for (let d = 0; d < len * 0.4; d += 5) { b += rnd(-0.5, 0.5); bx += Math.cos(b) * 5; by += Math.sin(b) * 5; side.push([bx, by]); }
+        arms.push(side);
+      }
+    }
+    const g = this.scene.add.graphics().setDepth(1);
+    const glowG = this.scene.add.graphics().setDepth(1.1).setBlendMode(Phaser.BlendModes.ADD);
+    const draw = (gr: Phaser.GameObjects.Graphics, w: number, c: number, a: number, k: number) => {
+      gr.lineStyle(w, c, a);
+      for (const pts of arms) {
+        const m = Math.max(1, Math.round((pts.length - 1) * k));
+        gr.beginPath(); gr.moveTo(pts[0][0], pts[0][1]);
+        for (let i = 1; i <= m; i++) gr.lineTo(pts[i][0], pts[i][1]);
+        gr.strokePath();
+      }
+    };
+    this.scene.tweens.addCounter({ from: 0, to: 1, duration: 320, ease: "Quad.easeOut",
+      onUpdate: (tw) => { const k = tw.getValue() ?? 0; g.clear(); draw(g, 2, cold, 0.85, k); glowG.clear(); draw(glowG, 3, hot, 0.55, k); draw(glowG, 1, 0xffffff, 0.9, k); },
+      onComplete: () => {
+        // sparks along the fresh cracks, then the glow cools off and the scars fade
+        for (const pts of arms) { const [ex, ey] = pts[pts.length - 1]; this.burst(ex, ey, 1, "lightning", 2, 40, 260); }
+        this.scene.tweens.add({ targets: glowG, alpha: 0, duration: 500, onComplete: () => glowG.destroy() });
+        this.scene.tweens.add({ targets: g, alpha: 0, delay: 1300, duration: 900, onComplete: () => g.destroy() });
+      } });
+  }
+
   /** Dark cracks drawn flat on the ground (a Graphics at 0,0 is laid onto the ground plane by the iso view). */
   private cracks(x: number, y: number, r: number, color: number) {
     const g = this.scene.add.graphics().setDepth(1);
@@ -1054,18 +1117,28 @@ export class SkillFx {
           // The wizard's Blizzard (Murat 2026-11-07): a storm turning round the hero. Three spiral arms of snow and ice
           // sweep round (the arms rotate, each flake is thrown along the turn), fast flakes whip round the rim.
           const spin = this.t / 260;
-          for (let i = 0; i < n(100 * area); i++) { // (kept moderate: hundreds of live flakes cost frames)
+          for (let i = 0; i < n(210 * area); i++) { // denser (Murat 2026-11-08); still capped by the particle pool
             const arm = Math.floor(Math.random() * 3), u = Math.random();
             const d = r * (0.25 + 0.75 * u), a = spin + arm * (Math.PI * 2 / 3) + u * 2.2 + rnd(-0.18, 0.18);
             const ca = Math.cos(a), sa = Math.sin(a), sp = 70 + 60 * u; // outer flakes move faster
             this.p(x + ca * d, y + sa * d, rnd(4, 26), pick([0xffffff, 0xd6f6ff, 0xa2e8ff, 0x4cc9f0]), { vx: -sa * sp, vy: ca * sp, vz: rnd(-10, 10), life: rnd(260, 460), size: pick([1, 2, 2, 3]), size1: 1, add: true });
           }
-          for (let i = 0; i < n(40 * area); i++) { // the rim: a fast white ring
+          // a white haze of driven snow inside the storm (soft, not additive: it whitens the ground under it)
+          for (let i = 0; i < n(26 * area); i++) {
+            const a = spin + Math.random() * Math.PI * 2, d = r * Math.sqrt(Math.random()) * 0.95, ca = Math.cos(a), sa = Math.sin(a);
+            this.p(x + ca * d, y + sa * d, rnd(2, 20), pick([0xffffff, 0xe8f8ff, 0xcfefff]), { vx: -sa * 60, vy: ca * 60, life: rnd(380, 600), size: pick([3, 4]), size1: 5, alpha: 0.28, add: false });
+          }
+          // ice shards whipped round in the wind
+          for (let i = 0; i < n(18 * area); i++) {
+            const a = Math.random() * Math.PI * 2, d = r * rnd(0.4, 1), ca = Math.cos(a), sa = Math.sin(a);
+            this.p(x + ca * d, y + sa * d, rnd(6, 24), pick([0xa2e8ff, 0x4cc9f0, 0xffffff]), { vx: -sa * 150, vy: ca * 150, vz: rnd(-20, 20), life: rnd(240, 380), size: 2, size1: 1, add: false });
+          }
+          for (let i = 0; i < n(70 * area); i++) { // the rim: a fast white ring
             const a = Math.random() * Math.PI * 2, ca = Math.cos(a), sa = Math.sin(a);
             this.p(x + ca * r, y + sa * r, rnd(2, 18), 0xe8f8ff, { vx: -sa * 150, vy: ca * 150, life: 220, size: 2, size1: 0, add: true });
           }
           if (chance(14)) this.glow(x, y, 6, r * 1.05, 0xa2e8ff, 450, 0.35, true);
-          if (chance(4)) this.ice(x + rnd(-r, r) * 0.6, y + rnd(-r, r) * 0.6, r * 0.4);
+          for (let i = 0; i < n(12); i++) this.ice(x + rnd(-r, r) * 0.6, y + rnd(-r, r) * 0.6, r * 0.4);
           break;
         }
         case "blizzard":
@@ -1345,8 +1418,9 @@ export class SkillFx {
     switch (look) {
       case "fireball": {
         // Hot white core inside orange flame, flickering (see tickShots)
-        d.fillStyle(0xff9f1c).fillCircle(0, 0, 2.6 * size).fillStyle(0xfff176).fillCircle(0, 0, 1.7 * size).fillStyle(0xffffff).fillCircle(-0.4, -0.4, 0.9 * size);
-        return box(light(0xff7b00, 0.42 * size), d);
+        d.fillStyle(0xd62800, 0.85).fillCircle(0, 0, 3.6 * size).fillStyle(0xff9f1c).fillCircle(0, 0, 2.7 * size)
+          .fillStyle(0xfff176).fillCircle(0, 0, 1.8 * size).fillStyle(0xffffff).fillCircle(-0.4, -0.4, 1 * size);
+        return box(light(0xff3d00, 0.75 * size, 0.55), light(0xffb347, 0.4 * size), d);
       }
       case "arrow": case "bolt": {
         // Wooden shaft, steel head, feathers (bolts: shorter, thicker, dark wood)
@@ -1510,7 +1584,12 @@ export class SkillFx {
         case "fireball": {
           const sz = s.size || 1;
           (g as any).setScale(1 + 0.12 * Math.sin(age / 35));
-          for (let i = 0; i < n(120 * sz); i++) this.p(x - ax * rnd(1, 5), y - ay * rnd(1, 5), rnd(-1.5, 1.5), pick(PALETTE.fire), { vx: -ax * 30 + rnd(-8, 8), vy: -ay * 30 + rnd(-8, 8), vz: rnd(4, 14), life: rnd(250, 480), size: pick([1, 2, 2]), size1: 0 });
+          for (let i = 0; i < n(150 * sz); i++) this.p(x - ax * rnd(1, 6), y - ay * rnd(1, 6), rnd(-1.5, 1.5), pick(PALETTE.fire), { vx: -ax * 30 + rnd(-8, 8), vy: -ay * 30 + rnd(-8, 8), vz: rnd(4, 14), life: rnd(250, 520), size: pick([1, 2, 2, 3]), size1: 0 });
+          // two flame ribbons twisting round the trail
+          const tw = age / 45, px = -ay, py = ax;
+          for (let k = 0; k < 2; k++) { const o = Math.sin(tw + k * Math.PI) * 3.2 * sz; this.p(x - ax * 3 + px * o, y - ay * 3 + py * o, Math.cos(tw + k * Math.PI) * 2, k ? 0xfff176 : 0xff6d00, { vx: -ax * 18, vy: -ay * 18, life: 300, size: 2, size1: 0 }); }
+          // embers flicking off
+          if (Math.random() < 14 * dt) this.p(x, y, 1, pick([0xffd166, 0xff9f1c]), { vx: rnd(-30, 30), vy: rnd(-30, 30), vz: rnd(20, 50), g: 90, life: rnd(400, 700), size: 1 });
           if (Math.random() < 6 * dt) this.p(x - ax * 5, y - ay * 5, 2, pick([0x4a4a4a, 0x6d6d6d]), { vz: 12, life: 500, size: 2, size1: 3, alpha: 0.35, add: false, depth: DEPTH - 1 });
           break;
         }
@@ -1583,10 +1662,17 @@ export class SkillFx {
   private basicImpact(x: number, y: number, kind: string, r: number) {
     switch (kind) {
       case "fireball": {
-        const k = r > 0 ? Math.min(2.2, 1 + r / 30) : 1;
-        this.burst(x, y, 3, "fire", Math.round(14 * k), 70 * k, 420);
-        this.glow(x, y, 3, 14 * k, 0xff9f1c, 300);
-        this.smoke(x, y, 4 * k, Math.round(2 * k));
+        const k = r > 0 ? Math.min(2.4, 1 + r / 25) : 1;
+        // a white-hot flash, a fireball that swells, a ring of flame along the ground, embers and smoke going up
+        this.glow(x, y, 4, 10 * k, 0xffffff, 120, 1);
+        this.glow(x, y, 4, 22 * k, 0xff9f1c, 380, 0.95);
+        this.glow(x, y, 0, 26 * k, 0xff3d00, 600, 0.6, true);
+        this.burst(x, y, 3, "fire", Math.round(26 * k), 90 * k, 480);
+        this.ring(x, y, 18 * k, "fire", Math.round(18 * k), { life: 320, up: 8 });
+        for (let i = 0; i < Math.round(10 * k); i++) this.p(x + rnd(-4, 4), y + rnd(-3, 3), 4, pick([0xffd166, 0xff9f1c, 0xffffff]), { vx: rnd(-25, 25), vy: rnd(-25, 25), vz: rnd(50, 110), g: 120, life: rnd(600, 1000), size: 1 });
+        this.smoke(x, y, 5 * k, Math.round(3 * k));
+        this.ripple(x, y, 16 * k, 0xff9f1c, 280);
+        if (r > 0) this.cracks(x, y, 10 * k, 0x2a1408); // a scorch where a blast went off
         break;
       }
       case "arrow": case "bolt": this.burst(x, y, 2, "earth", 6, 45, 300); this.burst(x, y, 2, "steel", 3, 35, 180); break;
