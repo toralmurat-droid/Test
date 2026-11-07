@@ -10,6 +10,8 @@ import { sheet } from "./worldProps";
 import { standingStone, STONE_H, STONE_W } from "./throneArt";
 import { heartShard, LandEl, SHARD_H, SHARD_W } from "./elementArt";
 import { dungeonQuestTextures } from "./dungeonArt";
+import { isoAnchor } from "./iso";
+import { LANTERN_FRAMES, LANTERN_H, LANTERN_LIFT, LANTERN_W, spiritLantern } from "./lanternArt";
 
 /**
  * Quest objects in the world (shared/quests.ts): spirit lanterns in the marsh, rotting shrines in the woods,
@@ -33,29 +35,7 @@ function rowsTexture(scene: Phaser.Scene, key: string, rows: string[], pal: Reco
   return key;
 }
 
-const K = 0x1a1420, WOOD = 0x6e4526, WOOD_L = 0x9c6b3e, IRON = 0x4b5563, IRON_L = 0x8a94a3;
-const LANTERN = [
-  "....KKK....",
-  "...KIIIK...",
-  "..KIIIIIK..",
-  ".KKKKKKKKK.",
-  ".KIGGGGGIK.",
-  ".KGGFFFGGK.",
-  ".KGFFWFFGK.",
-  ".KGFWWWFGK.",
-  ".KGGFFFGGK.",
-  ".KIGGGGGIK.",
-  ".KKKKKKKKK.",
-  "....KWK....",
-  "....KWK....",
-  "....KLK....",
-  "....KWK....",
-  "....KWK....",
-  "....KLK....",
-  "....KWK....",
-  "...KKWKK...",
-  "..KWWWWWK..",
-];
+const K = 0x1a1420, IRON = 0x4b5563, IRON_L = 0x8a94a3;
 const SHRINE = [
   ".....KKKK.....",
   "....KSSSSK....",
@@ -167,10 +147,10 @@ function textures(scene: Phaser.Scene) {
   rowsTexture(scene, "qobj_phylactery_broken", PHYLAC.map((r, i) => (i >= 3 && i <= 9 ? (i % 2 ? r.replace(/[GWY]/g, ".") : r.replace(/[GWY]/g, "B")) : r)),
     { K, B: 0x8f877a, L: 0xb9b1a0, S: 0x6b7178 });
 
-  const lan = { K, I: IRON, W: WOOD, L: WOOD_L };
-  rowsTexture(scene, "qobj_lantern_off", LANTERN, { ...lan, G: 0x2d3a40, F: 0x3e4f57 });
-  rowsTexture(scene, "qobj_lantern_on", LANTERN, { ...lan, I: IRON_L, G: 0x2f8f9e, F: 0x7ff3ff, W: 0xe8ffff });
-  rowsTexture(scene, "qobj_lantern_on_post", LANTERN, { ...lan, G: 0x2f8f9e, F: 0x7ff3ff });
+  // Spirit lanterns: iso pixel art like the village bonfire (lanternArt.ts), dark or burning with a cold spirit flame
+  sheet(scene, "qobj_lantern_off", LANTERN_W, LANTERN_H, 1, (p, f) => spiritLantern(p, f, false), 0.5);
+  sheet(scene, "qobj_lantern_lit", LANTERN_W, LANTERN_H, LANTERN_FRAMES, (p, f) => spiritLantern(p, f, true), 0.5);
+  if (!scene.anims.exists("qobj_lantern_burn")) scene.anims.create({ key: "qobj_lantern_burn", frames: scene.anims.generateFrameNumbers("qobj_lantern_lit", { start: 0, end: LANTERN_FRAMES - 1 }), frameRate: 7, repeat: -1 });
   const st = { K, S: 0x9aa1a8, L: 0xc9cfd4, D: 0x6b7178 };
   rowsTexture(scene, "qobj_shrine_rot", SHRINE, { ...st, R: 0x4a2f6b, O: 0x6fbf3a, S: 0x7d8a6e });
   rowsTexture(scene, "qobj_shrine_clean", SHRINE, { ...st, R: 0xffd166, O: 0x9aa1a8 });
@@ -185,11 +165,11 @@ const START: Record<string, string> = {
   silk: "qobj_silk", totem: "qobj_totem",
 };
 const DONE: Record<string, string> = { engine: "qobj_engine_fire", beacon: "qobj_beacon_out", crypt: "qobj_crypt_sealed", phylactery: "qobj_phylactery_broken", ward: "qobj_ward_broken", silk: "qobj_silk_cut", totem: "qobj_totem_burnt" };
-const SCALE: Record<string, number> = { shard: 1 / 1.5, heart: 2, shrine: 1.5, engine: 2.4, beacon: 1.4, crypt: 1.5, phylactery: 1.3, ward: 1 / 1.5, silk: 1 / 1.5, totem: 1 / 1.5 };
+const SCALE: Record<string, number> = { lantern: 1 / 1.5, shard: 1 / 1.5, heart: 2, shrine: 1.5, engine: 2.4, beacon: 1.4, crypt: 1.5, phylactery: 1.3, ward: 1 / 1.5, silk: 1 / 1.5, totem: 1 / 1.5 };
 /** Coloured light some objects give off until done. */
 const GLOW: Record<string, number> = { beacon: 0x7dff6a, crypt: 0x5fe36a, phylactery: 0x7dff6a, ward: 0x9dff6a, totem: 0xff6a2a };
 
-interface Drawn { o: QuestObject; img: Phaser.GameObjects.Image; glow?: Phaser.GameObjects.Arc; done?: boolean; anim?: Phaser.GameObjects.Sprite }
+interface Drawn { o: QuestObject; img: Phaser.GameObjects.Image; glow?: Phaser.GameObjects.Arc; light?: Phaser.GameObjects.Image; done?: boolean; anim?: Phaser.GameObjects.Sprite }
 
 export class QuestObjects {
   private drawn: Drawn[] = [];
@@ -213,20 +193,32 @@ export class QuestObjects {
       const d: Drawn = { o, img };
       if (o.kind === "engine") { img.setVisible(false).setPosition(o.x, o.y - TILE_PX * 0.6).setDepth(o.y + 40); }
       if (GLOW[o.kind]) {
-        d.glow = scene.add.circle(o.x, o.y - img.displayHeight * 0.6, 14, GLOW[o.kind], 0.22).setDepth(o.y + 1).setBlendMode(Phaser.BlendModes.ADD);
+        d.glow = isoAnchor(scene.add.circle(o.x, o.y - img.displayHeight * 0.6, 14, GLOW[o.kind], 0.22).setDepth(o.y + 1).setBlendMode(Phaser.BlendModes.ADD), o) as Phaser.GameObjects.Arc;
         scene.tweens.add({ targets: d.glow, scale: 1.3, alpha: 0.1, duration: 700, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
       }
       if (o.kind === "shard") { // pulses with the heart-flesh inside it, glowing in its element
         const el = o.id.slice(6) as LandEl, c = ({ poison: 0x9be564, cold: 0x8fd8ff, fire: 0xff8a3c, shock: 0xa8b8ff } as const)[el];
-        d.glow = scene.add.circle(o.x, o.y - 18, 16, c, 0.2).setDepth(o.y + 1).setBlendMode(Phaser.BlendModes.ADD);
+        d.glow = isoAnchor(scene.add.circle(o.x, o.y - 18, 16, c, 0.2).setDepth(o.y + 1).setBlendMode(Phaser.BlendModes.ADD), o) as Phaser.GameObjects.Arc;
         scene.tweens.add({ targets: d.glow, scale: 1.3, alpha: 0.08, duration: 800, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
         if (!scene.anims.exists(`${key}_pulse`)) scene.anims.create({ key: `${key}_pulse`, frames: scene.anims.generateFrameNumbers(key, { start: 0, end: 5 }), frameRate: 6, repeat: -1 });
         d.anim = scene.add.sprite(o.x, o.y, key, 0).setOrigin(0.5, 1).setScale(1 / 1.5).setDepth(o.y).play(`${key}_pulse`);
         img.setVisible(false);
       }
+      if (o.kind === "lantern") {
+        d.anim = scene.add.sprite(o.x, o.y, "qobj_lantern_lit", 0).setOrigin(0.5, 1).setScale(1 / 1.5).setDepth(o.y).setVisible(false);
+        d.anim.anims.play({ key: "qobj_lantern_burn", startFrame: Math.floor(Math.random() * LANTERN_FRAMES) });
+      }
       if (o.kind === "heart") scene.tweens.add({ targets: img, scaleX: 2.12, scaleY: 2.2, duration: 450, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
       this.drawn.push(d);
     }
+  }
+
+  /**
+   * Night light of the lit spirit lanterns (Details.addLight: shines through the dark at night), in the glass.
+   * Hidden on lanterns this player has not lit yet.
+   */
+  setLight(light: (x: number, y: number, lift: number) => Phaser.GameObjects.Image | undefined) {
+    for (const d of this.drawn) if (d.o.kind === "lantern" && !d.light) d.light = light(d.o.x, d.o.y, LANTERN_LIFT)?.setVisible(!!d.done);
   }
 
   /** Burst of sparks when an object is used. */
@@ -236,10 +228,11 @@ export class QuestObjects {
     const d = { o };
     const color = d.o.kind === "shard" ? ({ poison: 0x9be564, cold: 0xd6f6ff, fire: 0xffa848, shock: 0xbcd0ff } as Record<string, number>)[d.o.id.slice(6)] ?? 0xffffff : d.o.kind === "lantern" ? 0x7ff3ff : d.o.kind === "shrine" || d.o.kind === "crypt" ? 0xffd166
       : d.o.kind === "heart" || d.o.kind === "engine" ? 0xff8c42 : d.o.kind === "phylactery" ? 0xe8ffd0 : d.o.kind === "ward" ? 0xc8ff8a : d.o.kind === "silk" ? 0xe8e4d4 : d.o.kind === "totem" ? 0xff7a2a : 0x9be564;
+    const lift = d.o.kind === "lantern" ? LANTERN_LIFT : 10;
     for (let i = 0; i < 14; i++) {
       const a = Math.random() * Math.PI * 2, r = 8 + Math.random() * 14;
-      const sp = this.scene.add.rectangle(d.o.x, d.o.y - 10, 2, 2, color).setDepth(d.o.y + 50);
-      this.scene.tweens.add({ targets: sp, x: d.o.x + Math.cos(a) * r, y: d.o.y - 10 + Math.sin(a) * r, alpha: 0, duration: 500 + Math.random() * 300, onComplete: () => sp.destroy() });
+      const sp = isoAnchor(this.scene.add.rectangle(d.o.x, d.o.y - lift, 2, 2, color).setDepth(d.o.y + 50), { x: d.o.x, y: d.o.y }) as Phaser.GameObjects.Rectangle;
+      this.scene.tweens.add({ targets: sp, x: d.o.x + Math.cos(a) * r, y: d.o.y - lift + Math.sin(a) * r, alpha: 0, duration: 500 + Math.random() * 300, onComplete: () => sp.destroy() });
     }
   }
 
@@ -258,12 +251,15 @@ export class QuestObjects {
       if (done === d.done) continue;
       d.done = done;
       if (d.o.kind === "lantern") {
-        d.img.setTexture(done ? "qobj_lantern_on_post" : "qobj_lantern_off");
+        d.img.setVisible(!done);
+        d.anim?.setVisible(done);
         if (done && !d.glow) {
-          d.glow = this.scene.add.circle(d.o.x, d.o.y - 19, 13, 0x7ff3ff, 0.25).setDepth(d.o.y + 1).setBlendMode(Phaser.BlendModes.ADD);
+          // the glow sits in the glass, held up there in iso (anchored to the lantern's foot)
+          d.glow = isoAnchor(this.scene.add.circle(d.o.x, d.o.y - LANTERN_LIFT, 13, 0x7ff3ff, 0.25).setDepth(d.o.y + 1).setBlendMode(Phaser.BlendModes.ADD), d.o) as Phaser.GameObjects.Arc;
           this.scene.tweens.add({ targets: d.glow, scale: 1.25, alpha: 0.12, duration: 900, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
         }
         d.glow?.setVisible(done);
+        d.light?.setVisible(done);
       } else if (d.o.kind === "shard") {
         d.anim?.setVisible(!done); d.glow?.setVisible(!done);
         d.img.setTexture(`qobj_${d.o.id}_broken`).setVisible(done);
