@@ -36,6 +36,10 @@ export interface HitEffects {
   fearMs?: number; // monsters run away dizzy; heroes are slowed and weakened
   pull?: number; // px pulled toward the centre
   drain?: number; // % of the damage dealt that heals the attacker (vampire blood magic)
+  /** Vampire Leech: for this long, every hit the caster lands on the target also gives them one Blood stack. */
+  leechMs?: number;
+  /** Look of the bleed this hit starts (burn): blood drips or boiling bubbles instead of flames. */
+  bleed?: "drip" | "boil";
 }
 
 export interface AreaDef extends HitEffects {
@@ -48,6 +52,8 @@ export interface AreaDef extends HitEffects {
   scatter?: number; // each wave lands at a random point within this radius of the centre
   look?: AreaLook;
   atStart?: boolean; // lands where the hero stood before moving (Blink)
+  /** Exsanguinate: streams of blood run from everyone it hits into the caster (client "siphon" event). */
+  siphon?: boolean;
 }
 
 export interface ShotDef extends HitEffects {
@@ -86,6 +92,12 @@ export interface FieldDef extends HitEffects {
   burst?: AreaDef;
   zap?: { n: number; dmg: number; stunMs?: number }; // strikes n random enemies inside per tick (lightning)
   turret?: ShotDef; // shoots the nearest enemy inside per tick
+  /**
+   * Blood Link: a tether from the caster to one enemy within `range` px (the one nearest the aim, picked when cast; no
+   * enemy = not cast). Per tick it deals `dmg`/`wpn` to that enemy only (with its drain, slow...). It snaps when the
+   * enemy dies or gets further than `breakAt` px.
+   */
+  link?: { range: number; breakAt: number };
 }
 
 export interface BuffDef {
@@ -128,7 +140,8 @@ export interface SkillDef {
   parent?: string; // skill that must be learned first (none = root of its branch)
   scale?: { stat: StatKind; per: number }; // +per% skill power for every point of `stat` above the class's base
   style: FxStyle;
-  passive?: { effect: TalentEffect; perRank: number };
+  /** `blood`: while learned, every skill (not the basic spell) also costs this % of max HP (Blood Pact). */
+  passive?: { effect: TalentEffect; perRank: number; blood?: number };
   cd?: number; // ms
   cost?: number; // Stamina (physical skills)
   mana?: number; // Mana (spells): shared/mana.ts
@@ -434,17 +447,17 @@ const S: Record<ClassKind, SkillDef[]> = <Record<ClassKind, SkillDef[]>><unknown
   // most of his hits drink part of the damage back (drain): he pays in blood and takes it back from his enemies.
   vampire: [
     // Blood: blood magic (Magic)
-    { id: "v_bolt", name: "Blood Bolt", type: "Attack", branch: 0, row: 0, style: "blood", cd: 2000, mana: 8, blood: 3,
-      desc: "Hurl a bolt of your own blood. It bursts in the target, and you drink back 20% of the damage.",
-      shots: { kind: "bloodbolt", speed: 260, range: 160, radius: 5, dmg: 30, drain: 20, kb: 0.6 } },
+    { id: "v_link", name: "Blood Link", type: "Attack", branch: 0, row: 0, style: "blood", cd: 7000, mana: 12, target: "dir",
+      desc: "Bind yourself to the foe nearest your aim with a cord of blood for 3s and pump their life into you: it hurts them, slows them and heals you for half of it. The cord snaps if they get too far away.",
+      field: { kind: "bloodlink", r: 0, ms: 3000, tickMs: 300, follow: true, dmg: 7, drain: 50, slowMs: 400, link: { range: 120, breakAt: 170 } } },
     { id: "v_boil", name: "Boil Blood", type: "Attack", branch: 0, row: 1, style: "blood", cd: 6000, mana: 16, blood: 4,
-      desc: "Make the blood of everyone at the spot boil: they are hurt and bleed for 3s.",
-      areas: [{ r: 30, ahead: 44, dmg: 22, burn: [8, 3000], kb: 0.4, look: "burst" }] },
-    { id: "v_pact", name: "Blood Pact", type: "Passive", branch: 0, row: 2, style: "blood", passive: { effect: "skill", perRank: 7 },
-      desc: "An old oath sealed in blood: all your skills hit harder." },
+      desc: "Make the blood of everyone at the spot boil: they swell with bubbling blood, are hurt and bleed for 3s.",
+      areas: [{ r: 30, ahead: 44, dmg: 22, burn: [8, 3000], bleed: "boil", kb: 0.4, look: "burst" }] },
+    { id: "v_pact", name: "Blood Pact", type: "Passive", branch: 0, row: 2, style: "blood", passive: { effect: "skill", perRank: 7, blood: 2 },
+      desc: "An old oath sealed in blood: all your skills hit harder, but every skill you cast also costs 2% of your life." },
     { id: "v_exsang", name: "Exsanguinate", type: "Buildup", branch: 0, row: 3, style: "blood", cd: 12000, mana: 20, consume: true,
-      desc: "Spend your Blood: tear the blood out of everyone around you, pull them in and drink a quarter of it. Each Blood stack adds 25%.",
-      areas: [{ r: 50, dmg: 32, drain: 25, pull: 8, kb: 0, look: "nova" }] },
+      desc: "Spend your Blood: tear the blood out of everyone around you in streams that pour into you, pull them in and drink a quarter of it. Each Blood stack adds 25%.",
+      areas: [{ r: 50, dmg: 32, drain: 25, pull: 8, kb: 0, look: "nova", siphon: true }] },
     { id: "v_tide", name: "Crimson Tide", type: "Ultimate", branch: 0, row: 4, style: "blood", cd: 20000, mana: 35, blood: 8, chargeMs: 400,
       desc: "Open your veins: a wave of blood spikes rolls out ahead, slowing everything it hits and feeding you 10% of the damage.",
       areas: [{ r: 24, ahead: 22, dmg: 38, drain: 10, slowMs: 700, kb: 1.2, waves: 6, everyMs: 100, line: 22, look: "spikes" }] },
@@ -590,9 +603,9 @@ const TREE: Record<string, Shape> = {
   // Barbarian · Earth: Leap forks into the Seismic Wave (dead end) and Thick Skin on to the Avalanche
   b_slam: [1, undefined, ["sta", 1]], b_leap: [4, "b_slam", ["str", 2]], b_seismic: [10, "b_leap", ["str", 2]],
   b_thick: [7, "b_leap"], b_avalanche: [20, "b_thick", ["sta", 2]],
-  // Vampire · Blood: the bolt forks into Boil Blood, ending in Exsanguinate (dead end), and the Pact on to the Crimson Tide
-  v_bolt: [1, undefined, ["mag", 2]], v_boil: [4, "v_bolt", ["mag", 2]], v_exsang: [11, "v_boil", ["mag", 2.5]],
-  v_pact: [7, "v_bolt"], v_tide: [22, "v_pact", ["mag", 2.5]],
+  // Vampire · Blood: the Blood Link forks into Boil Blood, ending in Exsanguinate (dead end), and the Pact on to the Crimson Tide
+  v_link: [1, undefined, ["mag", 2]], v_boil: [4, "v_link", ["mag", 2]], v_exsang: [11, "v_boil", ["mag", 2.5]],
+  v_pact: [7, "v_link"], v_tide: [22, "v_pact", ["mag", 2.5]],
   // Vampire · Night: Mesmerize hangs off the mist; the bats grow into the cloak and Nightfall
   v_mist: [1], v_gaze: [6, "v_mist"], v_bats: [4, "v_mist", ["mag", 2]], v_cloak: [10, "v_bats", ["mag", 2]],
   v_nightfall: [21, "v_cloak", ["mag", 2.5]],
@@ -663,8 +676,8 @@ export const CANTRIPS: Record<ClassKind, SkillDef[]> = {
   // The vampire's one basic spell: a flick of blood up close that drinks a little back (Murat 2026-11-05: warrior caster)
   vampire: [
     { id: "v_leech", name: "Leech", type: "Attack", branch: 0, row: 0, req: 1, style: "blood", cd: 450, mana: 4, cantrip: true,
-      desc: "Flick a drop of blood at a foe close by and drink a little of theirs back. Costs little mana: cast it again and again.",
-      shots: { kind: "bloodbolt", speed: 300, range: 95, radius: 4, size: 0.6, dmg: 12, drain: 15, kb: 0.2 } },
+      desc: "Flick a drop of blood at a foe close by: they bleed for 4s, and every hit you land on them while they bleed gives you a Blood stack. Costs little mana: cast it again and again.",
+      shots: { kind: "bloodbolt", speed: 300, range: 95, radius: 4, size: 0.6, dmg: 8, burn: [6, 4000], bleed: "drip", leechMs: 4000, drain: 10, kb: 0.2 } },
   ],
   wizard: [], // the wizard has no basic spells: its three schools are in the tree (Murat 2026-11-07)
 };
@@ -720,6 +733,12 @@ export function talentBonus(cls: ClassKind, r: Ranks, effect: TalentEffect): num
   for (const s of S[cls]) if (s.passive?.effect === effect) v += s.passive.perRank * Math.min(MAX_RANK, rankOf(r, s.id));
   return v;
 }
+/** % of max HP that every skill costs on top of its own price (learned passives with passive.blood: Blood Pact). */
+export function passiveBlood(cls: ClassKind, r: Ranks | undefined): number {
+  let v = 0;
+  for (const s of S[cls]) if (s.passive?.blood && rankOf(r, s.id) > 0) v += s.passive.blood;
+  return v;
+}
 export const talentMult = (cls: ClassKind, r: Ranks, effect: TalentEffect) => 1 + talentBonus(cls, r, effect) / 100;
 export const talentReduce = (cls: ClassKind, r: Ranks, effect: TalentEffect) => 1 - talentBonus(cls, r, effect) / 100;
 
@@ -739,8 +758,13 @@ export const EFFECT_TEXT: Record<TalentEffect, (v: number) => string> = {
 };
 
 /** Drop unknown skills (old saves) and anything above what the level allows. */
+/** Skills that were replaced: old id -> new id. Saved ranks (and slots) move over, so the skills above them stay learned. */
+export const REPLACED_SKILLS: Record<string, string> = { v_bolt: "v_link" }; // Murat 2026-11-07: Blood Bolt -> Blood Link
+
 export function cleanRanks(cls: ClassKind, level: number, saved: Record<string, number>): Record<string, number> {
   const out: Record<string, number> = {};
+  saved = { ...saved };
+  for (const [from, to] of Object.entries(REPLACED_SKILLS)) if (saved[from] && !saved[to]) saved[to] = saved[from];
   for (const s of S[cls]) {
     const v = saved[s.id];
     if (typeof v === "number" && v > 0) out[s.id] = Math.min(MAX_RANK, Math.floor(v));

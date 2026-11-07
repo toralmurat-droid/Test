@@ -373,6 +373,7 @@ export class SkillFx {
         if (f) this.burst(ev.x, ev.y, 18, "nature", 4, 30, 200);
         break;
       }
+      case "siphon": this.siphon(ev); break;
       case "enchanthit": this.burst(ev.x, ev.y, 8, style, 6, 50, 300); break;
       case "thorns": this.burst(ev.x, ev.y, 10, style, 12, 70, 300); break;
       case "drain": {
@@ -392,6 +393,62 @@ export class SkillFx {
       }
     }
   }
+
+  /**
+   * Exsanguinate: the blood is torn out of every victim in arcing streams that pour into the vampire for ~0.7 s; each
+   * victim spurts as the stream starts, and the vampire is wrapped in a red vortex that flares when the last drops land.
+   */
+  private siphon(ev: any) {
+    const pts: [number, number][] = ev.pts ?? [];
+    const me0 = this.ent(ev.id);
+    if (!me0 || !pts.length) return;
+    const STREAM = 900, FLY = 420, G = 300;
+    for (const [vx, vy] of pts) {
+      this.burst(vx, vy, 10, "blood", 16, 70, 420);
+      this.glow(vx, vy, 8, 12, 0xb71c1c, 300, 0.7);
+    }
+    this.emit(STREAM, 24, () => {
+      const me = this.ent(ev.id);
+      if (!me) return;
+      const hx = me.sprite.x, hy = me.sprite.y, hz = me.top * 0.55;
+      for (const [vx, vy] of pts) {
+        for (let k = 0; k < 4; k++) {
+          const T = FLY * rnd(0.85, 1.15) / 1000;
+          const x0 = vx + rnd(-3, 3), y0 = vy + rnd(-2, 2), z0 = rnd(6, 14);
+          const vz = (hz - z0 + (G * T * T) / 2) / T; // an arc that lands on the vampire's chest after T
+          this.p(x0, y0, z0, pick(PALETTE.blood.slice(1, 5)), { vx: (hx - x0) / T, vy: (hy - y0) / T, vz, g: G, life: T * 1000, size: pick([2, 2, 3, 3]), size1: 1.5, add: false });
+        }
+      }
+      // the vortex round the vampire
+      const a = this.t / 70;
+      for (let i = 0; i < 3; i++) {
+        const b = a + (i * Math.PI * 2) / 3, rr = rnd(9, 15);
+        this.p(hx + Math.cos(b) * rr, hy + Math.sin(b) * rr * 0.6, rnd(2, me.top), pick(PALETTE.blood), { vx: -Math.sin(b) * 90, vy: Math.cos(b) * 50, vz: rnd(10, 30), life: 220, size: pick([1, 2]), size1: 0 });
+      }
+    });
+    this.scene.time.delayedCall(STREAM + FLY * 0.8, () => {
+      const me = this.ent(ev.id);
+      if (!me) return;
+      this.glow(me.sprite.x, me.sprite.y, me.top * 0.5, 18 + 3 * pts.length, 0xe63946, 450, 0.8);
+      this.ring(me.sprite.x, me.sprite.y, 34, "blood", 44, { life: 420, up: 16, size: 2 });
+      this.rise(me.sprite.x, me.sprite.y, 10, "blood", 26, me.top + 16, 650);
+      this.pillar(me.sprite.x, me.sprite.y, "blood", 70, 7, 450);
+      this.flashSprite(me, 0xe63946);
+    });
+  }
+
+  /** Boil Blood took hold: the victim's blood erupts out of it once (then bubbles while it boils, see status()). */
+  private boilErupt(e: FxEntity) {
+    const x = e.sprite.x, y = e.sprite.y, top = e.top;
+    this.glow(x, y, top * 0.5, 14, 0xff1744, 380, 0.8);
+    for (let i = 0; i < 18; i++) {
+      const a = Math.random() * Math.PI * 2, sp = rnd(15, 45);
+      this.p(x + rnd(-4, 4), y + rnd(-2, 2), rnd(top * 0.3, top * 0.8), pick(PALETTE.blood.slice(1, 5)), { vx: Math.cos(a) * sp, vy: Math.sin(a) * sp * 0.6, vz: rnd(40, 90), g: 220, life: rnd(450, 700), size: pick([1, 2, 2, 3]), size1: 1, add: false });
+    }
+    for (let i = 0; i < 6; i++) this.p(x + rnd(-5, 5), y, rnd(top * 0.5, top), pick([0xd7ccc8, 0xbcaaa4, 0xefebe9]), { vz: rnd(14, 26), vx: rnd(-5, 5), life: rnd(600, 900), size: 2, size1: 5, alpha: 0.35, add: false });
+    this.flashSprite(e, 0xff1744);
+  }
+  private boiling = new WeakSet<object>();
 
   private nearMe(x?: number, y?: number) {
     const me = this.ent(this.meId());
@@ -477,6 +534,14 @@ export class SkillFx {
       this.ring(x, y, r * 0.8, imb, Math.round(14 * tier), { life: 360, up: 12 });
       this.burst(x, y, 4, imb, Math.round(8 * tier), 60, 380);
       if (imb === "fire") this.smoke(x, y, r * 0.4, 2);
+    }
+    // Exsanguinate: a ring of blood mist all round collapses into the vampire (the streams from victims come with "siphon")
+    if (s?.id === "v_exsang") {
+      for (let i = 0; i < 48; i++) {
+        const a = (i / 48) * Math.PI * 2, T = rnd(0.35, 0.5);
+        this.p(x + Math.cos(a) * r, y + Math.sin(a) * r, rnd(2, 10), pick(PALETTE.blood.slice(1, 5)), { vx: -Math.cos(a) * r / T, vy: -Math.sin(a) * r / T, vz: rnd(10, 30), life: T * 1000, size: pick([2, 2, 3]), size1: 1, add: false });
+      }
+      this.glow(x, y, 2, r, 0x6d0000, 500, 0.5, true);
     }
     switch (look) {
       case "slash": {
@@ -676,7 +741,11 @@ export class SkillFx {
   addField(id: string, f: any) {
     const objs: Phaser.GameObjects.GameObject[] = [];
     const k = f.kind as string;
-    if (k === "beartrap" || k === "firetrap" || k === "sentry" || k === "caltrops") {
+    if (k === "bloodlink") {
+      // Blood Link: the cord is redrawn every frame between the vampire and his victim (tickFields)
+      objs.push(this.scene.add.graphics().setDepth(DEPTH - 2));
+      this.ring(f.x, f.y, 14, "blood", 14, { life: 300, up: 10 });
+    } else if (k === "beartrap" || k === "firetrap" || k === "sentry" || k === "caltrops") {
       const g = this.scene.add.graphics().setPosition(f.x + 0.01, f.y + 0.01).setDepth(f.y - 1);
       if (k === "beartrap") {
         // Iron jaws, open
@@ -716,6 +785,11 @@ export class SkillFx {
     const v = this.fields.get(id);
     if (!v) return;
     const f = v.f;
+    if (f.kind === "bloodlink") {
+      // The cord snaps: a spray of blood where it was
+      const o = this.ent(f.owner), t = this.ent(f.target);
+      if (o && t) this.burst((o.sprite.x + t.sprite.x) / 2, (o.sprite.y + t.sprite.y) / 2, 14, "blood", 14, 60, 360);
+    }
     if (f.kind === "beartrap") {
       // Snap!
       this.burst(f.x, f.y, 2, "steel", 14, 60, 300);
@@ -816,6 +890,35 @@ export class SkillFx {
             this.p(x + Math.cos(b) * rr, y + Math.sin(b) * rr, rnd(2, 18), pick(i % 2 ? PALETTE.blood : PALETTE.steel), { vx: -Math.sin(b) * 120, vy: Math.cos(b) * 120, life: 140, size: pick([1, 2]), size1: 0 });
           }
           if (chance(10)) this.ring(x, y, r * 0.7, "earth", 3, { life: 300, add: false });
+          break;
+        }
+        case "bloodlink": {
+          const g = objs[0] as Phaser.GameObjects.Graphics | undefined;
+          const o = this.ent(f.owner), tg = f.target ? this.ent(f.target) : undefined;
+          if (!g) break;
+          g.clear();
+          if (!o || !tg) break;
+          // From the victim's chest to the vampire's, sagging a little; a darker sheath with a pulsing bright core
+          const [ol, om] = lift(o.top * 0.55), [tl, tm] = lift(tg.top * 0.5);
+          const x0 = tg.sprite.x + tl, y0 = tg.sprite.y + tm, x1 = o.sprite.x + ol, y1 = o.sprite.y + om;
+          const len = Math.hypot(x1 - x0, y1 - y0), sag = Math.min(14, len * 0.12);
+          const at = (u: number): [number, number] => [x0 + (x1 - x0) * u + Math.sin(u * 9 + this.t / 90) * 0.8, y0 + (y1 - y0) * u + Math.sin(u * Math.PI) * sag];
+          const SEG = Math.max(6, Math.round(len / 5));
+          const beat = 0.5 + 0.5 * Math.sin(this.t / 110);
+          g.lineStyle(3, 0x4a0000, 0.85);
+          g.beginPath(); g.moveTo(x0, y0); for (let i = 1; i <= SEG; i++) { const [px, py] = at(i / SEG); g.lineTo(px, py); } g.strokePath();
+          g.lineStyle(1, 0xe63946, 0.7 + 0.3 * beat);
+          g.beginPath(); g.moveTo(x0, y0); for (let i = 1; i <= SEG; i++) { const [px, py] = at(i / SEG); g.lineTo(px, py); } g.strokePath();
+          // Gulps of blood travel along it toward the vampire
+          const phase = (this.t / 420) % 1;
+          for (let j = 0; j < 3; j++) {
+            const u = (phase + j / 3) % 1, [px, py] = at(u);
+            g.fillStyle(0xff5252, 1).fillRect(Math.round(px) - 1, Math.round(py) - 1, 3, 3);
+            g.fillStyle(0xffcdd2, 1).fillRect(Math.round(px), Math.round(py) - 1, 1, 1);
+          }
+          if (chance(10)) { const [px, py] = at(Math.random()); this.p(px, py, 0, pick(PALETTE.blood.slice(2, 5)), { vy: 18, g: 0, life: 300, size: 1, size1: 0, add: false }); }
+          if (chance(8)) this.burst(tg.sprite.x, tg.sprite.y, tg.top * 0.5, "blood", 2, 30, 250);
+          if (chance(4)) this.glow(o.sprite.x, o.sprite.y, o.top * 0.5, 8, 0xe63946, 200, 0.35);
           break;
         }
         case "nightcloak": {
@@ -1207,8 +1310,25 @@ export class SkillFx {
     const x = e.sprite.x, y = e.sprite.y, top = e.top;
     const xs = Math.round(x), ys = Math.round(y);
     const chance = (perSec: number) => Math.random() < perSec * dt;
-    for (const w of fx.split(",")) {
-      if (w === "burn") {
+    const words = fx.split(",");
+    // Boil Blood: erupts once when it takes hold
+    if (words.includes("boil")) { if (!this.boiling.has(e.state)) { this.boiling.add(e.state); this.boilErupt(e); } }
+    else this.boiling.delete(e.state);
+    for (const w of words) {
+      if (w === "bleed") {
+        // Bleeding (vampire Leech, Crimson Slash, Thirst): drops of blood run off the body and fall
+        if (chance(9)) this.p(x + rnd(-4, 4), y + rnd(-1, 2), rnd(top * 0.3, top * 0.75), pick(PALETTE.blood.slice(2, 5)), { vx: rnd(-6, 6), vz: rnd(-4, 8), g: 160, life: rnd(400, 650), size: pick([1, 1, 2]), size1: 1, add: false });
+        if (chance(1.5)) this.p(x + rnd(-5, 5), y + rnd(0, 2), 0, 0x6d0000, { life: 900, size: 2, size1: 2, alpha: 0.6, add: false, depth: GROUND_DEPTH });
+      } else if (w === "boil") {
+        // Boiling blood: red bubbles swell on the body and pop, a little steam rises, the victim glows from within
+        if (chance(14)) {
+          const bx = x + rnd(-5, 5), bz = rnd(top * 0.2, top * 0.85), life = rnd(250, 420);
+          this.p(bx, y + rnd(-1, 1), bz, pick([0xff1744, 0xe63946, 0xff5252]), { vz: rnd(4, 12), life, size: 1, size1: pick([3, 4]), add: false });
+          this.scene.time.delayedCall(life, () => { for (let i = 0; i < 4; i++) this.p(bx, y, bz + 4, pick(PALETTE.blood.slice(1, 4)), { vx: rnd(-25, 25), vy: rnd(-10, 10), vz: rnd(10, 35), g: 180, life: 260, size: 1, size1: 0, add: false }); });
+        }
+        if (chance(4)) this.p(x + rnd(-4, 4), y, top * rnd(0.6, 1), pick([0xd7ccc8, 0xefebe9]), { vz: rnd(14, 24), vx: rnd(-4, 4), life: 700, size: 2, size1: 4, alpha: 0.25, add: false });
+        if (chance(3)) this.glow(x, y, top * 0.5, 9, 0xff1744, 260, 0.35);
+      } else if (w === "burn") {
         if (chance(22)) this.p(x + rnd(-4, 4), y + rnd(-2, 2), rnd(2, top), pick(PALETTE.fire), { vz: rnd(15, 35), life: rnd(250, 450), size: pick([1, 2]), size1: 0 });
       } else if (w === "mark") {
         // A red sigil turning over the head

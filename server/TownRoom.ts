@@ -19,7 +19,7 @@ import { AttackProfile, attackProfile, weaponAttackMult, weaponOk } from "../sha
 import { Element, ElemPart, ELEMENT_FX, mobAffinity, MOB_MELEE_ELEMENT, MOB_SHOT_ELEMENT } from "../shared/elements";
 import { gearResist, splitHit } from "../shared/gear";
 import { cleanFilter, LootFilter, passesFilter } from "../shared/heroSheet";
-import { activeSkills, canLearn, classSkills, cleanRanks, levelPower, MAX_RANK, NEED_TEXT, rankOf, rankPower, scalePower, skillById, skillLearned, skillOf, talentBonus, talentMult, talentReduce } from "../shared/skills";
+import { activeSkills, canLearn, classSkills, cleanRanks, levelPower, REPLACED_SKILLS, MAX_RANK, NEED_TEXT, rankOf, rankPower, scalePower, skillById, skillLearned, skillOf, talentBonus, talentMult, talentReduce } from "../shared/skills";
 import {
   afterHit, atkSpeedMult, blocking, bloodCost, buffLifesteal, buffRegen, castSkill, ccImmune, charging, winding, counterHit, dealtMult, FieldInst, newRuntime,
   imbueOf, shotEnd, shotHit, shotPulse, ShotSpec, SkillHost, speedMult, statusOf, takenMult, tickField, tickUnit, Unit,
@@ -335,6 +335,7 @@ export class Field extends Schema {
   @type("number") r = 0;
   @type("number") ms = 0; // total length
   @type("boolean") follow = false;
+  @type("string") target = ""; // Blood Link: the enemy on the other end of the cord
   inst!: FieldInst;
 }
 
@@ -937,6 +938,7 @@ export class TownRoom extends Room<TownState> {
     // Old saves (before the skill tree rework) had other skill ids: those points come back to spend again
     for (const [k, v] of Object.entries(cleanRanks(p.cls, p.level, s.talents ?? {}))) p.talents.set(k, v);
     if (Array.isArray(s.slots)) s.slots.slice(0, SLOT_COUNT).forEach((v, i) => {
+      if (typeof v === "string" && REPLACED_SKILLS[v]) v = REPLACED_SKILLS[v]; // a replaced skill keeps its key
       p.slots[i] = typeof v === "string" && skillLearned(p.cls, p.talents, v) && skillOf(p.cls, v)?.passive === undefined ? v : "";
     });
     for (const id of cleanPortals(s.portals)) p.portals.add(id);
@@ -3487,7 +3489,7 @@ export class TownRoom extends Room<TownState> {
       }
       return;
     }
-    if (def?.blood && skillLearned(p.cls, p.talents, skill) && p.hp <= bloodCost(def, p) + 1) {
+    if (def && skillLearned(p.cls, p.talents, skill) && bloodCost(def, p) > 0 && p.hp <= bloodCost(def, p) + 1) {
       // Blood magic with too little life left to pay for it
       const now = Date.now();
       if (now - p.lastWeaponNo > 1000) { p.lastWeaponNo = now; this.clients.find((c) => c.sessionId === id)?.send("gearno", { text: `Too little blood left for ${def.name}` }); }
@@ -4796,7 +4798,7 @@ export class TownRoom extends Room<TownState> {
     addField: (inst) => {
       const f = new Field();
       f.kind = inst.def.kind; f.skill = inst.skill; f.owner = inst.owner; f.x = inst.x; f.y = inst.y; f.r = inst.def.r;
-      f.ms = inst.until - Date.now(); f.follow = !!inst.def.follow; f.inst = inst;
+      f.ms = inst.until - Date.now(); f.follow = !!inst.def.follow; f.inst = inst; f.target = inst.target ?? "";
       // Only one of each ground effect per hero (recasting a trap moves it)
       this.state.fields.forEach((o, oid) => { if (o.owner === inst.owner && o.skill === inst.skill && inst.def.trap) this.state.fields.delete(oid); });
       this.state.fields.set(`f${++this.fieldSeq}`, f);
