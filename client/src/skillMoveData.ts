@@ -13,6 +13,13 @@
  */
 import { LEAP_MS } from "../../shared/skills"; // a leap's hop through the air (skillfx.showMove), the slam lands with it
 
+/** Mist Form timing (skillfx.mistForm): he comes apart, the mist gathers ahead, he is rebuilt, the old cloud thins away. */
+export const MIST_DISSOLVE_MS = 420;
+export const MIST_REFORM_AT_MS = 420;
+export const MIST_REFORM_MS = 300;
+export const MIST_REVEAL_MS = MIST_REFORM_AT_MS + MIST_REFORM_MS;
+export const MIST_LINGER_MS = 2200;
+
 export const MOVE_SHEET = ["lunge", "whirl", "slam", "leap", "cleave", "raise"] as const;
 export type MoveAnim = (typeof MOVE_SHEET)[number];
 export const MOVE_DIRS = ["down", "up", "right", "downright", "upright"] as const;
@@ -121,8 +128,8 @@ export const MOVES: Record<string, Seq> = {
     act: [S("cleave", [2], 30), S("cleave", [3], 40, { ghost: 14 }), S("cleave", [4, 5], 130)],
     rec: [S("cleave", [6, 7], 140)],
   },
-  v_mist: { // sink into the mist, gone, and step out of it ahead
-    act: [S("lunge", [1], 50), S("lunge", [2], 110, { hide: true }), S("lunge", [6, 7], 140)],
+  v_mist: { // gone into the mist (skillfx.mistForm draws him coming apart and being rebuilt), then he stands again ahead
+    act: [S("lunge", [7], MIST_REVEAL_MS, { hide: true }), S("lunge", [7], 160)],
   },
   v_pounce: { // crouch low, spring at the prey, the blade driven in, hold it there to drink
     wind: [S("leap", [0], 70, { fill: true })],
