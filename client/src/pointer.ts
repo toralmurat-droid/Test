@@ -215,8 +215,12 @@ export class PointerControls {
   }
 
   /** Space bar (Murat): exactly a right click at the mouse cursor; holding Space is holding the right button. */
-  spaceDown() { this.down(this.scene.input.activePointer, 2); }
-  spaceUp() { if (this.held === 2) this.held = -1; }
+  /** `button` 0: Space as a left click instead (spell keys mode with no spell on the right click). */
+  spaceDown(button: 0 | 2 = 2) { this.spaceBtn = button; this.down(this.scene.input.activePointer, button); }
+  spaceUp() { if (this.held === this.spaceBtn) this.held = -1; }
+  private spaceBtn: 0 | 2 = 2;
+  /** Stand-still key held (Tab in the spell keys layout): a left click attacks in place, like Shift + click. */
+  standHeld = false;
 
   /** Where a skill key aims (Murat 2026-11-05): the enemy under the mouse (led like a click on it), else the mouse spot. */
   cursorAim(): Pt | undefined {
@@ -235,7 +239,7 @@ export class PointerControls {
     this.firedAt = 0;
     const { enemy, spot } = this.pick(p);
     const target = button === 2 ? this.host.target() : "dir";
-    if (button === 0 && forced === undefined && (p.event as MouseEvent | undefined)?.shiftKey) {
+    if (button === 0 && (this.standHeld || (forced === undefined && (p.event as MouseEvent | undefined)?.shiftKey))) {
       // Shift + left click (Murat): the left-click attack right where you stand, toward the mouse, no walking.
       // Hold the button to keep attacking.
       this.goal = { kind: "stand" };

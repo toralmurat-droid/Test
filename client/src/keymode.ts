@@ -2,8 +2,10 @@
  * Keyboard layouts (Murat 2026-11-07), picked in the game menu (Esc) and remembered in the browser.
  *
  *   classic: WASD walk, skills on 1-0, Q / V potions, C character, G bag, T skills, E use, F dodge, R ranged weapon.
- *   spells:  Diablo style. The mouse walks (WASD do not), spells on W E R T 1 2 3 4 5, C bag, D / F potions,
- *            H character, K skills, G use, X dodge, Q ranged weapon. Arrow keys still walk.
+ *   spells:  Diablo style. The mouse walks (WASD do not), spells on Q W E R T 1 2 3 4 5, C bag, D / F potions,
+ *            H character, K skills, G use, X dodge, V ranged weapon. Arrow keys still walk. Space without a spell on it
+ *            is a second left click (walk there, attack what is under the mouse). Hold Tab to stand still: clicks
+ *            attack in place.
  *
  * Keys are matched by the letter typed (so they follow the keyboard's own layout) and, for digits, by the key's
  * place on the keyboard (on AZERTY the top row types &é"... without Shift).
@@ -20,9 +22,9 @@ const LAYOUTS: Record<KeyMode, Layout> = {
     actions: { potion: "Q", mana: "V", ranged: "R", dodge: "F", hero: "C", interact: "E", bag: "G", tree: "T" },
   },
   spells: {
-    name: "Spell keys (W E R T 1-5, mouse walks)",
-    slots: ["W", "E", "R", "T", "1", "2", "3", "4", "5"],
-    actions: { potion: "D", mana: "F", ranged: "Q", dodge: "X", hero: "H", interact: "G", bag: "C", tree: "K" },
+    name: "Spell keys (Q W E R T 1-5, mouse walks)",
+    slots: ["Q", "W", "E", "R", "T", "1", "2", "3", "4", "5"],
+    actions: { potion: "D", mana: "F", ranged: "V", dodge: "X", hero: "H", interact: "G", bag: "C", tree: "K" },
   },
 };
 
@@ -46,7 +48,7 @@ export const wasdWalks = () => mode === "classic";
 
 /** Label of skill slot n's key ("" when the layout has no key for it). */
 export const slotKey = (n: number) => LAYOUTS[mode].slots[n] ?? "";
-/** How many skill slots have a key in this layout (10 classic, 9 spell keys). */
+/** How many skill slots have a key in this layout (10 in both). */
 export const slotCount = () => LAYOUTS[mode].slots.length;
 /** Label of an action's key. */
 export const actionKey = (a: KeyAction) => LAYOUTS[mode].actions[a];
