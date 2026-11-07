@@ -304,10 +304,11 @@ export class GearMenu {
         cell.style.borderColor = kind === "mpotion" ? "#3d5a9a" : "#7a4a4a";
         cell.onmouseenter = () => {
           if (info) info.innerHTML = `<b style="color:${kind === "mpotion" ? "#8ab4ff" : "#ff8a8a"}">${potionName(kind, size)}</b> ×${n}<br>` +
-            `${kind === "mpotion" ? `+${potionAmount(kind, size)} mana` : `Heals ${potionAmount(kind, size)} HP`}<br><small>Click or ${actionKey(kind === "mpotion" ? "mana" : "potion")}: drink (the smallest size goes first) · ${POTION_STACK} per slot</small>`;
+            `${kind === "mpotion" ? `+${potionAmount(kind, size)} mana` : `Heals ${potionAmount(kind, size)} HP`}<br><small>Click or ${actionKey(kind === "mpotion" ? "mana" : "potion")}: drink (the smallest size goes first) · Right-click: drop ${n} · ${POTION_STACK} per slot</small>`;
         };
         cell.onmouseleave = () => { if (info) info.textContent = ""; };
         cell.onclick = () => this.send(kind === "mpotion" ? "manapotion" : "potion", {});
+        cell.oncontextmenu = (ev) => { ev.preventDefault(); this.send("droppotion", { kind, size, n }); };
       } else if (id) {
         const d = gearDef(id)!;
         cell.appendChild(iconCanvas(this.scene, id));
