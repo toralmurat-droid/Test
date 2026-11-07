@@ -964,14 +964,16 @@ const ART: Record<string, Draw> = {
     p.outline();
   },
   // ===== Vampire: Blood =====
-  v_bolt: (p) => {
-    // a spinning bolt of blood with a dripping tail
-    for (let i = 0; i < 9; i++) { const t = i / 8; p.disc(4 + t * 11, 20 - t * 11, 0.6 + t * 1.6, i % 2 ? BLOOD[1] : BLOOD[0]); }
-    p.ball(16, 8, 4.5, BLOOD);
-    p.poly([[13, 5], [19, 3], [17, 9]], BLOOD[2]);
+  v_link: (p) => {
+    // a heart bound by a cord of blood that runs up to a pair of fangs, gulps of blood travelling along it
+    p.disc(5, 16, 3.2, BLOOD[1]); p.disc(10, 16, 3.2, BLOOD[1]); p.poly([[2, 17], [13, 17], [7.5, 23]], BLOOD[1]);
+    p.disc(5, 15, 2, BLOOD[0]); p.disc(10, 15, 2, BLOOD[0]);
+    for (let i = 0; i <= 14; i++) { const t = i / 14; const x = 9 + t * 10, y = 14 - t * 9 + Math.sin(t * Math.PI) * 3; p.disc(x, y, 0.9, BLOOD[2]); }
+    for (const t of [0.3, 0.65]) { const x = 9 + t * 10, y = 14 - t * 9 + Math.sin(t * Math.PI) * 3; p.disc(x, y, 1.7, BLOOD[0]); }
+    p.poly([[15, 2], [22, 2], [21, 4], [16, 4]], "#e6dcd6");
+    p.poly([[16, 4], [17.5, 4], [16.8, 8]], "#f5efe9"); p.poly([[20, 4], [21.5, 4], [20.8, 8]], "#f5efe9");
     p.outline();
-    p.px(14, 6, "#ffffff"); p.px(15, 6, BLOOD[3]);
-    for (const [x, y] of [[6, 22], [9, 21], [11, 18]]) p.line(x, y, x, y + 1, BLOOD[2]);
+    p.px(4, 14, "#ffffff"); p.px(16, 8, BLOOD[2]); p.px(20, 9, BLOOD[2]);
   },
   v_boil: (p) => {
     // a bubbling pool of blood, steaming
