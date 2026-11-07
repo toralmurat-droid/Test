@@ -1,4 +1,4 @@
-import { gearDef, itemLevel, itemRarity, withLevel } from "./gear";
+import { AffixKey, affixMax, gearDef, itemLevel, itemRarity, withAffixes, withLevel } from "./gear";
 import { POTION_SIZES } from "./potions";
 
 /**
@@ -30,10 +30,28 @@ export const SELL_RATE = 0.4;
 export const PRICE_PER_LEVEL = 0.12;
 /** Item level of shop stock, by tier (Common, Rare, Epic). */
 export const SHOP_LEVEL = [0, 1, 6, 12];
-/** Masterwork stock (Murat 2026-11-08: better items up to the max level): the best piece of every slot at these levels. */
-export const MASTER_LEVELS = [18, 24, 30];
-/** The best base item of each kind, sold as masterwork. */
-export const MASTER_BASES = ["w_dragon", "w_sky", "ww_star", "r_crossbow", "sh_dragon", "a_royal", "h_crown", "s_winged"];
+/**
+ * Masterwork stock (Murat 2026-11-08: "really good but very expensive", up to level 30): the best piece of every slot,
+ * Legendary, with four bonuses rolled to their maximum, every 3 levels from 15 to 30.
+ */
+export const MASTER_LEVELS = [15, 18, 21, 24, 27, 30];
+/** The best base item of each kind, sold as masterwork, and the four bonuses Brann forges into it. */
+export const MASTER_BASES: Record<string, AffixKey[]> = {
+  w_dragon: ["atk", "str", "fdm", "sta"],
+  w_sky: ["atk", "str", "hdm", "dex"],
+  ww_star: ["atk", "mag", "sdm", "cdm"],
+  r_crossbow: ["atk", "dex", "str", "sta"],
+  sh_dragon: ["sta", "str", "fre", "cre"],
+  a_royal: ["sta", "str", "fre", "pre"],
+  h_crown: ["mag", "sta", "hre", "sre"],
+  s_winged: ["spd", "dex", "sta", "mag"],
+};
+/** Masterwork price: 10 000 gold at level 15, x10 by level 30 (rounded to 500). Sold back like any Legendary. */
+export const masterPrice = (level: number) => Math.round((10000 * 10 ** ((level - 15) / 15)) / 500) * 500;
+/** A masterwork item id: Legendary, its bonuses at their highest for the level. */
+export function masterItem(base: string, level: number): string {
+  return withAffixes(withLevel(base, level), 3, MASTER_BASES[base].map((key) => ({ key, value: affixMax(key, level, 3) })));
+}
 /** Magic, Rare and Legendary items sell for more (Plain, Magic, Rare, Legendary). */
 export const RARITY_PRICE = [1, 1.5, 2.5, 4];
 
@@ -51,10 +69,7 @@ const weapons = (ids: string[]): ShopEntry[] => ids.map((base) => {
   return { item, price: gearPrice(item) };
 });
 
-const atLevel = (ids: string[], level: number): ShopEntry[] => ids.map((base) => {
-  const item = withLevel(base, level);
-  return { item, price: gearPrice(item) };
-});
+const masterwork = (level: number): ShopEntry[] => Object.keys(MASTER_BASES).map((base) => ({ item: masterItem(base, level), price: masterPrice(level) }));
 
 export const SHOPS: Record<string, Shop> = {
   weaponsmith: {
@@ -64,7 +79,7 @@ export const SHOPS: Record<string, Shop> = {
       // armour, shields, hats and boots at their tier's level
       ...weapons(["sh_wood", "sh_iron", "sh_dragon", "a_leather", "a_chain", "a_royal", "h_cap", "h_helm", "h_crown", "s_leather", "s_swift", "s_winged"]),
       // masterwork: the best of each slot at higher levels, up to the max level
-      ...MASTER_LEVELS.flatMap((lv) => atLevel(MASTER_BASES, lv)),
+      ...MASTER_LEVELS.flatMap(masterwork),
     ],
     buys: ["weapon", "ranged", "shield", "armour", "hat", "shoes"],
     repairs: true,

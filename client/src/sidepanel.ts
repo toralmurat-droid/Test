@@ -18,7 +18,7 @@ export const setMyFeast = (f: Feast) => { myFeast = f ?? {}; };
 export type SideTab = "hero" | "gear" | "tree";
 export const SIDE_TABS: SideTab[] = ["hero", "gear", "tree"];
 
-export interface SheetPreview { label: string; eq?: Equipped; talents?: Record<string, number>; pts?: SheetHero["pts"] }
+export interface SheetPreview { label: string; eq?: Equipped; talents?: Record<string, number>; pts?: SheetHero["pts"]; /** show the gear's stats even if the hero can't wear it yet */ ignoreReq?: boolean }
 
 /** Hero state -> the input of shared/heroSheet.ts. */
 export function sheetHero(state: any): SheetHero {
@@ -83,7 +83,7 @@ export class SidePanel {
     const h = sheetHero(state), worn = wornOf(state);
     const now = heroSheet(h, worn);
     const p = this.preview;
-    const next = p ? heroSheet(p.pts ? { ...h, pts: p.pts } : h, p.eq ?? worn, p.talents ?? h.talents) : undefined;
+    const next = p ? heroSheet(p.pts ? { ...h, pts: p.pts } : h, p.eq ?? worn, p.talents ?? h.talents, p.ignoreReq) : undefined;
     const sig = JSON.stringify([now, next, p?.label]);
     if (sig === this.sig) return;
     this.sig = sig;

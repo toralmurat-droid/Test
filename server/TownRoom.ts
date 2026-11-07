@@ -3582,7 +3582,7 @@ export class TownRoom extends Room<TownState> {
     p.ptSta = each + (left > 0 ? 1 : 0); p.ptStr = each + (left > 1 ? 1 : 0); p.ptMag = each + (left > 2 ? 1 : 0); p.ptDex = each;
     p.pots = { potion: [0, 0, 10], mpotion: [0, 0, 10] };
     this.syncPotions(p);
-    p.gold = Math.max(p.gold, 100000);
+    p.gold = Math.max(p.gold, 1000000); // enough to try the masterwork gear (up to 100 000 a piece)
     this.applyStats(p);
     if (!p.dead) p.hp = p.maxHp;
     if (p.level > from) this.broadcast("levelup", { id: client.sessionId, level: p.level, from });

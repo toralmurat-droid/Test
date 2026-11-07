@@ -51,7 +51,7 @@ import { speechBubble } from "./weathered";
 import { ART_K, CHAR_GROW, CHAR_SCALE, CHARACTERS, CHAR_ORIGIN, CharacterName, createArtAnims, ensureCharSheet, HD_CHARS, playCharAnim, preloadArt } from "./artAssets";
 import { Ambient } from "./ambient";
 import { Details } from "./details";
-import { activeOf, GearLayer, GearMenu, iconCanvas, itemColor, preloadGear, RARITY_HEX } from "./gear";
+import { activeOf, GearLayer, reqInfoOf, GearMenu, iconCanvas, itemColor, preloadGear, RARITY_HEX } from "./gear";
 /** pickSlot value while the slot list is choosing the left-click action. */
 const LEFT_PICK = -2;
 /** pickSlot value while the slot list is choosing the right-click (and Space) action. */
@@ -61,7 +61,7 @@ type ClickSide = "left" | "right";
 const costWords = (s: { cost?: number; mana?: number; blood?: number }) => [s.mana ? `${s.mana} mana` : "", s.cost ? `${s.cost} stamina` : "", s.blood ? `${s.blood}% HP` : ""].filter(Boolean).join(" · ") || "free";
 import { GearFx } from "./gearfx";
 import { Element, ELEMENT_COLORS } from "../../shared/elements";
-import { baseId, canWear, gearName, gearDef, gearReachMult, gearSpeedMult, itemRarity, WEAPON_TYPE_NAMES } from "../../shared/gear";
+import { baseId, canWear, gearName, gearDef, reqProblem, gearReachMult, gearSpeedMult, itemRarity, WEAPON_TYPE_NAMES } from "../../shared/gear";
 import { attackProfile, ATTACK_WORDS, isWeaponType, poseSheet, profileOf, weaponAttackMult, weaponOk } from "../../shared/weapons";
 import { talentMult, talentPoints, spentPoints } from "../../shared/talents";
 import { activeSkills, skillLearned } from "../../shared/slots";
@@ -595,7 +595,8 @@ export class TownScene extends Phaser.Scene {
       const st = this.entities.get(this.me)?.state;
       if (!id || !st) return this.side?.setPreview();
       const cls = st.cls as string;
-      this.side?.setPreview(canWear(cls, id) ? { label: `wear ${gearName(id, cls)}`, eq: wearing(wornOf(st), id) } : undefined);
+      const why = reqProblem(id, reqInfoOf(st));
+      this.side?.setPreview(canWear(cls, id) ? { label: `wear ${gearName(id, cls)}${why ? ` (${why})` : ""}`, eq: wearing(wornOf(st), id), ignoreReq: true } : undefined);
     };
     this.npcs.objects.setLight((x, y, lift) => this.details?.addLight(x, y, 0x7ff3ff, 1.5, 0.55, 0.06, lift)); // lit spirit lanterns shine at night
     // Morwen's camp and Brann's forge after dusk: coal glow under her brew, lantern light in the tent doorway
@@ -2671,7 +2672,8 @@ export class TownScene extends Phaser.Scene {
           // camera px: zoom around the camera's middle (scroll is in iso space; worldView is not, at this point)
           const px = (wx - cam.scrollX - cam.width / 2) * cam.zoom + cam.width / 2, py = (wy - cam.scrollY - cam.height / 2) * cam.zoom + cam.height / 2;
           const sx = (cam.x + px) * (cr.width / cv.width), sy = (cam.y + py) * (cr.height / cv.height);
-          this.npcs.heroScreen = { x: (cr.left + sx - hr.left) / k, y: (cr.top + sy - hr.top) / k };
+          const lift = (meSprite.displayHeight * 0.45 * cam.zoom * (cr.height / cv.height)) / k; // half the body, in HUD px
+          this.npcs.heroScreen = { x: (cr.left + sx - hr.left) / k, y: (cr.top + sy - hr.top) / k, lift };
         } else this.npcs.heroScreen = undefined;
       }
     }
