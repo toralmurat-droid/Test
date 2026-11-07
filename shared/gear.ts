@@ -182,6 +182,7 @@ export const TIER_NAMES = ["", "Basic", "Fine", "Superior"];
 export const GEAR_DROP: Record<MobKind, { chance: number; tiers: [number, number, number] }> = {
   golem_fire: { chance: 0, tiers: [1, 0, 0] }, golem_cold: { chance: 0, tiers: [1, 0, 0] },
   golem_poison: { chance: 0, tiers: [1, 0, 0] }, golem_shock: { chance: 0, tiers: [1, 0, 0] }, golem_colossus: { chance: 0, tiers: [1, 0, 0] },
+  bride: { chance: 0, tiers: [1, 0, 0] },
   slime: { chance: 0.06, tiers: [0.85, 0.15, 0] },
   skeleton: { chance: 0.15, tiers: [0.5, 0.38, 0.12] },
   crawler: { chance: 0.02, tiers: [1, 0, 0] },

@@ -2838,7 +2838,7 @@ export class TownScene extends Phaser.Scene {
         const kindName = named ? (MOBS[p.kind as MobKind]?.name ?? "") : "";
         const lv = `Lv${p.level ?? 1}`;
         const owner = p.owner ? (this.room.state as any).players?.get(p.owner) : undefined;
-        const txt = owner ? `${owner.name}'s ${MOBS[p.kind as MobKind]?.name ?? "Golem"}${isSummonKind(p.kind) ? "" : " thrall"}` : p.title ? `${p.title} ${lv}` : BOSS[p.kind as keyof typeof BOSS] ? `${kindName || "Boss"} ${lv}` : ELITE[p.kind as keyof typeof ELITE] ? `Elite ${kindName ? kindName + " " : ""}${lv}` : kindName ? `${kindName} ${lv}` : lv;
+        const txt = owner ? `${owner.name}'s ${MOBS[p.kind as MobKind]?.name ?? "Golem"}${isSummonKind(p.kind) || p.kind === "bride" ? "" : " thrall"}` : p.title ? `${p.title} ${lv}` : BOSS[p.kind as keyof typeof BOSS] ? `${kindName || "Boss"} ${lv}` : ELITE[p.kind as keyof typeof ELITE] ? `Elite ${kindName ? kindName + " " : ""}${lv}` : kindName ? `${kindName} ${lv}` : lv;
         // A monster right next to my hero: my own name steps aside so the two labels never overlap
         const meS = this.entities.get(this.me)?.sprite;
         if (meS && !p.dead && Math.abs(e.sprite.x - meS.x) < 1.5 * TILE && Math.abs(e.sprite.y - meS.y) < 1.5 * TILE) this.mobByMeAt = now;

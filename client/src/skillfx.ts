@@ -355,17 +355,6 @@ export class SkillFx {
         break;
       }
       case "zap": {
-        if (ev.s === "v_brides") {
-          // A pale bride darts from the circle at the victim: a ghostly streak, then a white slash and a spurt of blood
-          const a = Math.atan2(ev.y2 - ev.y1, ev.x2 - ev.x1);
-          for (let i = 0; i < 6; i++) {
-            const u = i / 5;
-            this.p(ev.x1 + (ev.x2 - ev.x1) * u, ev.y1 + (ev.y2 - ev.y1) * u, 12, pick([0xf3e5f5, 0xe1bee7, 0xffffff]), { life: 160 + i * 30, size: 2, size1: 0, alpha: 0.7 });
-          }
-          this.slash(ev.x2, ev.y2, 12, "shadow", a, 2.2);
-          this.burst(ev.x2, ev.y2, 10, "blood", 6, 50, 260);
-          break;
-        }
         if (ev.sky) {
           this.bolt(ev.x2 + rnd(-6, 6), ev.y2, 140, ev.x2, ev.y2, 0, PALETTE.lightning, 2, 200);
           this.glow(ev.x2, ev.y2, 2, 26, 0xb3ecff, 260, 0.9, true);
@@ -403,6 +392,21 @@ export class SkillFx {
         this.rise(x, y, 10, "shadow", 14, top, 700);
         this.glow(x, y, top * 0.8, 9, 0xff2d6f, 500, 0.8);
         if (v) this.flashSprite(v, 0x9575cd);
+        break;
+      }
+      case "brides": {
+        // The Brides rise: a column of pale mist and a ring of blood at each one's feet, their red eyes lighting up
+        const ids: string[] = ev.ids ?? [];
+        ids.forEach((bid, i) => this.scene.time.delayedCall(i * 90, () => {
+          const b = this.ent(bid);
+          const x = b?.sprite.x ?? ev.x, y = b?.sprite.y ?? ev.y, top = b?.top ?? 22;
+          this.rise(x, y, 8, "shadow", 16, top, 650);
+          for (let k = 0; k < 14; k++) this.p(x + rnd(-6, 6), y + rnd(-3, 3), rnd(0, 6), pick([0xf3e5f5, 0xe1bee7, 0xffffff]), { vz: rnd(20, 45), vx: rnd(-8, 8), life: rnd(500, 800), size: pick([2, 3]), size1: 0, alpha: 0.6, add: false });
+          this.ring(x, y, 10, "blood", 12, { life: 420, up: 2, add: false });
+          this.glow(x, y, top * 0.85, 7, 0xff2d2d, 420, 0.8);
+          if (b) this.flashSprite(b, 0xffffff);
+        }));
+        if (e) this.glow(e.sprite.x, e.sprite.y, e.top * 0.5, 18, 0x9575cd, 380, 0.5);
         break;
       }
       case "uncharm": {
@@ -1172,19 +1176,6 @@ export class SkillFx {
           if (me && Math.hypot(me.sprite.x - x, me.sprite.y - y) <= r && chance(8)) this.p(me.sprite.x + rnd(-6, 6), me.sprite.y + rnd(-2, 2), 0, pick(PALETTE.blood.slice(1, 4)), { vz: rnd(20, 40), life: 400, size: 1, size1: 0 });
           break;
         }
-        case "brides": {
-          // The Brides: three pale, veiled women circling the vampire, trailing white mist and long dark hair
-          const a = this.t / 520;
-          for (let i = 0; i < 3; i++) {
-            const b = a + (i * Math.PI * 2) / 3, rr = r * 0.45, bx = x + Math.cos(b) * rr, by = y + Math.sin(b) * rr * 0.6, z = 6 + 2 * Math.sin(this.t / 200 + i);
-            for (let k = 0; k < 4; k++) this.p(bx, by, z + k * 4, k === 3 ? 0xffffff : pick([0xf3e5f5, 0xe1bee7, 0xd1c4e9]), { life: 60, size: k === 3 ? 3 : 3, size1: 3, alpha: 0.6 - k * 0.05, add: false });
-            this.p(bx + 1, by, z + 15, 0x1a1033, { life: 60, size: 2, size1: 2, alpha: 0.8, add: false }); // hair
-            this.p(bx - 1, by + 1, z + 13, 0xff2d2d, { life: 60, size: 1, size1: 1, add: false }); // eye
-            if (chance(12)) this.p(bx, by, z, 0xe1bee7, { vx: -Math.sin(b) * 20, vy: Math.cos(b) * 12, vz: -4, life: 360, size: 2, size1: 0, alpha: 0.35, add: false });
-          }
-          if (this.t - born < 400) this.ring(x, y, r * 0.45, "shadow", 18, { life: 500, up: 8 });
-          break;
-        }
         case "nightfall": {
           // A starless dark settles on the ground; motes of blood rise from it toward the caster
           for (let i = 0; i < n(40 * area); i++) {
@@ -1486,26 +1477,31 @@ export class SkillFx {
           for (let i = 0; i < n(70); i++) this.p(x - ax * rnd(4, 9), y - ay * rnd(4, 9), rnd(-1, 1), pick(PALETTE.blood.slice(2)), { vx: -ax * 15, vy: -ay * 15, vz: -rnd(4, 12), g: 90, life: rnd(200, 340), size: 1, size1: 0, add: false });
           break;
         case "rat": {
-          // Scampering: each rat hops and wiggles on its own beat, kicking up a little dust and green sickness
+          // A seething wave: each rat wanders on its own (sideways, a little ahead and behind its true spot), hops,
+          // tumbles over the others now and then, kicks up dust; stray rats and green sickness boil round the mass
           const c = g as Phaser.GameObjects.Container, d = c.list[0] as Phaser.GameObjects.Graphics | undefined;
-          const ph = (s.__ph ??= Math.random() * 100);
-          d?.setPosition(-ay * Math.sin(age / 45 + ph) * 2, ax * Math.sin(age / 45 + ph) * 2 - Math.abs(Math.sin(age / 35 + ph)) * 1.5);
-          if (Math.random() < 6 * dt) this.p(x, y, 0, pick([0x6d5b50, 0x8d7b70]), { vz: 6, life: 260, size: 1, size1: 0, add: false, depth: GROUND_DEPTH + 1 });
-          if (Math.random() < 4 * dt) this.p(x, y, 3, pick(PALETTE.poison.slice(1, 4)), { vz: 10, life: 360, size: 1, size1: 0 });
+          const ph = (s.__ph ??= Math.random() * 100), fq = (s.__fq ??= rnd(0.6, 1.5)), sz = (s.__sz ??= rnd(0.8, 1.25));
+          const side = Math.sin(age / (110 * fq) + ph) * 5 + Math.sin(age / (47 * fq) + ph * 3) * 2;
+          const fwd = Math.sin(age / (160 * fq) + ph * 2) * 5;
+          const hop = Math.abs(Math.sin(age / (40 * fq) + ph)) * 2 + (Math.sin(age / 300 + ph) > 0.85 ? 3 : 0);
+          if (d) { d.setPosition(ax * fwd - ay * side, ay * fwd + ax * side - hop); d.setScale((s.vx < 0 ? -1 : 1) * sz, sz); d.setAngle(Math.sin(age / 60 + ph) * 12); }
+          if (Math.random() < 7 * dt) this.p(x + rnd(-4, 4), y + rnd(-2, 2), 0, pick([0x6d5b50, 0x8d7b70, 0x4e4038]), { vz: rnd(4, 10), vx: -ax * 10, vy: -ay * 10, life: 320, size: pick([1, 2]), size1: 0, add: false, depth: GROUND_DEPTH + 1 });
+          if (Math.random() < 3 * dt) this.p(x + rnd(-8, 8), y + rnd(-5, 5), 0, 0x3a2e28, { vx: ax * rnd(30, 60) + rnd(-25, 25), vy: ay * rnd(30, 60) + rnd(-15, 15), life: 260, size: 2, size1: 1, add: false }); // a stray rat darting
+          if (Math.random() < 3 * dt) this.p(x, y, 4, pick(PALETTE.poison.slice(1, 4)), { vz: 12, life: 420, size: 1, size1: 0, alpha: 0.7 });
           break;
         }
         case "bat": {
-          // A swarm, not a line: each bat flutters on its own erratic path round its true spot (side to side and up
-          // and down, different rhythms), wings beating fast, with tiny bats and shadow flitting round the cloud
+          // Bats pouring out of the cloak: each one fades in a moment after the next, starts close to its neighbours and
+          // drifts wider as it flies, on one slow, smooth flutter of its own (no jitter), wings beating fast
           const c = g as Phaser.GameObjects.Container, d = c.list[0] as Phaser.GameObjects.Graphics | undefined;
-          const ph = (s.__ph ??= Math.random() * 100), fq = (s.__fq ??= rnd(0.7, 1.4));
-          const side = Math.sin(age / (70 * fq) + ph) * 4 + Math.sin(age / 37 + ph * 2) * 2;
-          const bob = Math.sin(age / (55 / fq) + ph * 3) * 3 - 3;
+          const ph = (s.__ph ??= Math.random() * 100), fq = (s.__fq ??= rnd(0.8, 1.25)), late = (s.__late ??= rnd(0, 110));
+          const out = Math.min(1, Math.max(0, age - late) / 160); // 0 -> 1 as it leaves the cloak
+          c.setAlpha(out);
+          const side = Math.sin(age / (130 * fq) + ph) * 3.5 * out;
+          const bob = Math.sin(age / (95 * fq) + ph * 1.7) * 2 * out - 2 - 3 * (1 - out);
           if (d) d.setPosition(-ay * side, ax * side + bob);
-          const beat = Math.sin(age / (22 * fq) + ph);
-          d?.setScale(1, 0.45 + 0.55 * Math.abs(beat));
-          if (Math.random() < 5 * dt) this.p(x + rnd(-6, 6), y + rnd(-5, 5), rnd(2, 10), 0x1a1033, { vx: rnd(-30, 30), vy: rnd(-20, 20), life: 180, size: 2, size1: 1, add: false });
-          if (Math.random() < 4 * dt) this.p(x, y, 0, pick(PALETTE.shadow.slice(2)), { life: 260, size: 2, size1: 0, alpha: 0.5, add: false, depth: GROUND_DEPTH });
+          d?.setScale(0.6 + 0.4 * out, (0.45 + 0.55 * Math.abs(Math.sin(age / (24 * fq) + ph))) * (0.6 + 0.4 * out));
+          if (out > 0.5 && Math.random() < 2.5 * dt) this.p(x - ax * 3, y - ay * 3, 4, pick(PALETTE.shadow.slice(2)), { vx: -ax * 12, vy: -ay * 12, life: 260, size: 2, size1: 0, alpha: 0.4, add: false });
           break;
         }
         case "powerarrow": for (let i = 0; i < n(60); i++) this.p(x - ax * 5, y - ay * 5, 0, pick(PALETTE.wind), { life: 250, size: 1, size1: 0 }); break;

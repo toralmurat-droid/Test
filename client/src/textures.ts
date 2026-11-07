@@ -286,7 +286,7 @@ export const MOB_LOOK: Record<string, { top: number; bar: number; oy: number; sc
 };
 
 const PAINTED_MOBS = ["slime", "blobling", "shooterblob", "warriorblob", "healerblob", "motherblob", "venomblob", "frostblob", "fireblob", "stormblob", "skeleton", "bandit", "skeletonmage", "necromancer", "demon", "crawler", "banditchief", "hollowking", "gnawkin", "tuskborn", "silkwretch", "duskwing", "packlord", "hornbrute", "hidemother", "crowseer", "gnasher", "weaver",
-  "golem_fire", "golem_cold", "golem_poison", "golem_shock", "golem_colossus"];
+  "golem_fire", "golem_cold", "golem_poison", "golem_shock", "golem_colossus", "bride"];
 /** The Colossus is painted once per element (Mob.weapon holds it, shared/summons.ts). */
 const COLOSSUS_ELEMENTS = ["fire", "cold", "poison", "shock"];
 /** Beast-folk drawn the other way round (Mob.weapon "folk", shared/constants.ts BEAST_FOLK): the beast's hide on a man. */
@@ -295,7 +295,7 @@ const FOLK_MOBS = ["gnawkin", "tuskborn", "silkwretch", "duskwing"];
 const PAINTED_LOOK: Record<string, { top: number; bar: number; oy: number; scale?: number }> = {
   // about hero height (heroes are 32 world px since the 48px sheets)
   crawler: { top: 13, bar: 12, oy: 20 / 22 }, // own painted sheet: crawling on its arms
-  skeleton: { top: 23, bar: 14, oy: 27.5 / 30 }, bandit: { top: 23, bar: 14, oy: 27.5 / 30 },
+  skeleton: { top: 23, bar: 14, oy: 27.5 / 30 }, bandit: { top: 23, bar: 14, oy: 27.5 / 30 }, bride: { top: 23, bar: 14, oy: 27.5 / 30 },
   skeletonmage: { top: 25, bar: 14, oy: 0.975 }, necromancer: { top: 40, bar: 26, oy: 0.975, scale: 1.45 },
   demon: { top: 50, bar: 28, oy: 33 / 34, scale: 1.45 },
   banditchief: { top: 46, bar: 30, oy: 32 / 34, scale: 1.5 },
@@ -344,7 +344,7 @@ export function mobTexture(scene: Phaser.Scene, kind: string, level = 1, weapon 
       return key;
     }
   }
-  return pixelMobTexture(scene, kind === "demon" || kind === "hollowking" ? "necromancer" : BEAST_KINDS.includes(kind as any) ? "bandit" : kind, level); // no pixel demon sheet: a necromancer stands in
+  return pixelMobTexture(scene, kind === "demon" || kind === "hollowking" ? "necromancer" : BEAST_KINDS.includes(kind as any) || kind === "bride" ? "bandit" : kind, level); // no pixel demon sheet: a necromancer stands in
 }
 
 function pixelMobTexture(scene: Phaser.Scene, kind: string, level = 1): string {

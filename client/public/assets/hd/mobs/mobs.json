@@ -944,5 +944,11 @@
   "h": 46,
   "scale": 1.5,
   "frames": 12
+ },
+ "mob_bride": {
+  "w": 20,
+  "h": 30,
+  "scale": 1.5,
+  "frames": 12
  }
 }

@@ -218,9 +218,9 @@ export class TalentMenu {
         if (now.stacks) rows.push(`<p class="iparts">${now.stacks}</p>`);
         if (r > 0 && r < maxRank(s)) {
           const nx = skillDamage(cls, sm, r + 1, st, ranks);
-          if (nx) rows.push(`<p class="inext">Next rank: ${nx.total} (+${Math.round(RANK_POWER * 100)}% power, longer effects)</p>`);
+          if (nx) rows.push(`<p class="inext">Next rank: ${nx.total} (+${Math.round(RANK_POWER * 100)}% power, ${s.rankStep ? s.rankStep + ", " : ""}longer effects)</p>`);
         }
-      } else if (r > 0 && r < maxRank(s)) rows.push(`<p class="inext">Next rank: longer, stronger effects</p>`);
+      } else if (r > 0 && r < maxRank(s)) rows.push(`<p class="inext">Next rank: ${s.rankStep ? s.rankStep + ", " : ""}longer, stronger effects</p>`);
       const price = [s.cd ? `${s.cd / 1000}s cooldown` : "no cooldown", s.cost ? `<span class="ista">${s.cost} stamina</span>` : "", s.mana ? `<span class="imana">${s.mana} mana</span>` : "", s.blood ? `<span class="iblood">${s.blood}% HP</span>` : ""];
       rows.push(`<p class="icost">${price.filter(Boolean).join(" · ")}${s.chargeMs ? ` · charge ${s.chargeMs / 1000}s` : ""}</p>`);
     }
