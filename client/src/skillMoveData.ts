@@ -129,6 +129,10 @@ export const MOVES: Record<string, Seq> = {
     act: [S("lunge", [2], 50, { ghost: 12, lift: [0, 4] }), S("lunge", [3], 50, { ghost: 12, lift: [4, 0], dust: 8 }), S("lunge", [4, 5], 180)],
     rec: [S("lunge", [6, 7], 150)],
   },
+  v_exsang: { // the blood ritual: blade raised to the sky, rising onto the toes as the blood climbs, cut down as the orb breaks
+    act: [S("raise", [0], 140), S("raise", [1, 2, 3, 4, 5, 6, 7], 580, { lift: [0, 2, 4, 5, 5] }), S("slam", [3], 50, { dust: 14 }), S("slam", [4, 5], 160)],
+    rec: [S("slam", [6, 7], 160)],
+  },
   v_devour: { // lunge at the prey and tear into it, then hunch over the meal
     act: [S("lunge", [2], 50, { ghost: 12 }), S("lunge", [3, 4], 170, { dust: 6 })],
     rec: [S("lunge", [6, 7], 150)],

@@ -1,0 +1,9 @@
+{
+  "date": "2026-11-07",
+  "patch": 147,
+  "title": "Exsanguinate blood ritual",
+  "changes": [
+    "Exsanguinate now opens with a blood ritual: the vampire raises his blade, blood spills out of him onto the ground, lifts into a beating crimson orb over his head, then crashes down as the blood of every foe around is torn into him.",
+    "Its damage lands when the orb breaks, about 0.7 seconds after the cast."
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "date": "2026-11-07",
+  "patch": 148,
+  "title": "Portal stone at the Mawdeep sinkhole",
+  "changes": [
+    "A new portal stone stands at the lip of the Mawdeep sinkhole in the Whispering Woods. Walk up to it once to wake it, then travel there from any woken stone.",
+    "Every portal arch now has eight blocks, one per stone."
+  ]
+}
