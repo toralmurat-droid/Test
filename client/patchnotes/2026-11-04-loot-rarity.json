@@ -1,5 +1,6 @@
 {
   "date": "2026-11-04",
+  "patch": 36,
   "title": "Magic, Rare and Legendary loot",
   "changes": [
     "Found gear can roll as Magic (blue), Rare (gold) or Legendary (orange) with random extra bonuses and its own name.",

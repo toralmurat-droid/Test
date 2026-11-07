@@ -1,5 +1,6 @@
 {
   "date": "2026-11-04",
+  "patch": 60,
   "title": "Skills need the right weapon",
   "changes": [
     "Bow skills (Volley, Power Shot, Fire Arrows...) need a bow in hand, blade skills (Lunging Strike, Cleave, Blade Flurry...) need a sword, katana or axe, and Shield Wall needs a shield.",

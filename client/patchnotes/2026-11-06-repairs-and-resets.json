@@ -1,5 +1,6 @@
 {
   "date": "2026-11-06",
+  "patch": 111,
   "title": "Gear repairs and paid resets",
   "changes": [
     "Each death wears your gear a little: worn gear gives less of its stats (up to half at 0% condition).",

@@ -1,5 +1,6 @@
 {
   "date": "2026-11-04",
+  "patch": 63,
   "title": "Portal ring blocks",
   "changes": [
     "The ring of every portal stone now has one carved block for each portal in the land.",

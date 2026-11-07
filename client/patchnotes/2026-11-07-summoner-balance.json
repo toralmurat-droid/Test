@@ -1,5 +1,6 @@
 {
   "date": "2026-11-07",
+  "patch": 114,
   "title": "Summoner: golems that guard",
   "changes": [
     "Bound golem: outside the safe zone, a Summoner with no golem gets one by itself after 5 seconds, from level 1.",

@@ -1,0 +1,41 @@
+# After a PR merges, stamp a fixed "patch" number into each new patch note
+# (tools/patchnote-numbers.mjs), in merge order. Numbers never change once given.
+# auto-merge.yml starts it (workflow_dispatch) because its merges start no push runs.
+# Pushes made with GITHUB_TOKEN do not start other workflows, so this never loops.
+name: Patch numbers
+
+on:
+  push:
+    branches: [claude/relaxed-wozniak-cjs85z]
+    paths: ["client/patchnotes/*.json"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: patch-numbers
+  cancel-in-progress: false
+
+jobs:
+  number:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: claude/relaxed-wozniak-cjs85z
+          fetch-depth: 0
+      - name: Number new patch notes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898297+github-actions[bot]@users.noreply.github.com"
+          for i in 1 2 3 4 5; do
+            git fetch origin claude/relaxed-wozniak-cjs85z
+            git reset --hard origin/claude/relaxed-wozniak-cjs85z
+            node tools/patchnote-numbers.mjs
+            if git diff --quiet; then echo "Nothing to number."; exit 0; fi
+            git commit -am "Number new patch notes [no patch note]"
+            if git push origin HEAD:claude/relaxed-wozniak-cjs85z; then exit 0; fi
+            sleep $((i * 5))
+          done
+          exit 1

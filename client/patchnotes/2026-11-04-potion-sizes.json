@@ -1,5 +1,6 @@
 {
   "date": "2026-11-04",
+  "patch": 62,
   "title": "Potion sizes and bag stacks",
   "changes": [
     "Healing and mana potions now come in three sizes: Minor (40 HP / 30 mana), Medium (90 / 60) and Greater (180 / 120). Stronger monsters and chests drop bigger ones.",

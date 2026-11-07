@@ -1,5 +1,6 @@
 {
   "date": "2026-11-06",
+  "patch": 105,
   "pr": 276,
   "title": "No more surprise reloads",
   "changes": [

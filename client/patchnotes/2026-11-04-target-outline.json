@@ -1,5 +1,6 @@
 {
   "date": "2026-11-04",
+  "patch": 45,
   "title": "Target outline",
   "changes": [
     "The monster you attack now gets a thin red pixel outline instead of a circle on the ground.",

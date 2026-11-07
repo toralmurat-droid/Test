@@ -1,5 +1,6 @@
 {
   "date": "2026-11-04",
+  "patch": 54,
   "title": "Your weapon decides your attack",
   "changes": [
     "The basic attack now follows the weapon in your hand: a bow shoots, a sword or axe fights up close, a staff throws fireballs, bare hands punch. An archer with a sword is a melee fighter, a wizard with a sword too.",

@@ -1,5 +1,6 @@
 {
   "date": "2026-11-05",
+  "patch": 88,
   "pr": 260,
   "title": "Skill keys cast at the cursor",
   "changes": [

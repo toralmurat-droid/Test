@@ -1,5 +1,6 @@
 {
   "date": "2026-11-04",
+  "patch": 69,
   "title": "Charges by your skill keys",
   "changes": [
     "Your class charges (Valor, Ki, Arcane, Focus, Fury) now show as a crystal left of your skill keys, with the count and a shade that fills as they fade.",
