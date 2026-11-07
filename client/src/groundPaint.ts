@@ -117,7 +117,10 @@ function material(t: number, wx: number, wy: number, sx: number, sy: number, dep
     case GRASS: case GRASS_DARK: case TALL: case FLOWERS: {
       const m = fbm(wx / 150, wy / 150, 3);
       const p = vn(wx / 22, wy / 22, 5);
-      const blade = vn(sx / 1.1, sy / 4.6, 7) * 0.55 + vn(sx / 0.7, sy / 2.8, 8) * 0.45;
+      // blades lean a different way patch to patch (rotated noise), so the grass does not read as one vertical streak
+      const lean = (vn(wx / 40, wy / 40, 31) - 0.5) * 1.4, cl = Math.cos(lean), sl = Math.sin(lean);
+      const bx = sx * cl - sy * sl, by = sx * sl + sy * cl;
+      const blade = vn(bx / 1.1, by / 4.6, 7) * 0.55 + vn(bx / 0.7, by / 2.8, 8) * 0.45;
       // how dark / tall the grass is here: the blend of grass tiles around, plus big soft noise so it never steps
       const dk = clamp01(G_DARK + (fbm(wx / 90, wy / 90, 21) - 0.5) * 0.5), tl = clamp01(G_TALL + (vn(wx / 60, wy / 60, 22) - 0.5) * 0.3);
       const dark = dk > 0.5, tall = tl > 0.5;
@@ -130,6 +133,9 @@ function material(t: number, wx: number, wy: number, sx: number, sy: number, dep
       r += 8 * tl; g += 4 * tl;
       const k = (0.8 + 0.34 * p) * ((0.76 - 0.06 * tl) + (0.44 + 0.11 * tl) * blade);
       r *= k; g *= k; b *= k;
+      // moss cushions: deep, soft green-black patches
+      const moss = sstep(0.62, 0.8, fbm(wx / 26, wy / 26, 33)) * (0.4 + 0.6 * dk);
+      if (moss > 0) { const mk = 0.85 + 0.25 * vn(wx / 2, wy / 2, 34); r += (26 * mk - r) * moss * 0.7; g += (40 * mk - g) * moss * 0.7; b += (24 * mk - b) * moss * 0.7; }
       // bare earth showing through worn spots
       const bare = sstep(0.72, 0.86, vn(wx / 38, wy / 38, 6) * 0.7 + p * 0.3 + (0.5 - blade) * 0.25) * (dark ? 0.4 : 0.9);
       if (bare > 0) {
@@ -138,10 +144,15 @@ function material(t: number, wx: number, wy: number, sx: number, sy: number, dep
       }
       // fallen leaves, twigs and small stones
       const cx = Math.floor(wx / 4), cy = Math.floor(wy / 4), hc = hash2(cx, cy, 13);
-      if (hc < 0.07) {
+      const litter = 0.07 + 0.09 * dk; // more fallen leaves on the darker forest floor
+      if (hc > 0.97) { // a fallen twig: a thin dark line across the cell
+        const an = hash2(cx, cy, 19) * 3.14, ca = Math.cos(an), sa = Math.sin(an);
+        const dx = wx - (cx + 0.5) * 4, dy = wy - (cy + 0.5) * 4, u = dx * ca + dy * sa, v = -dx * sa + dy * ca;
+        if (Math.abs(u) < 1.8 && Math.abs(v) < 0.16) { r = 46; g = 36; b = 26; }
+      } else if (hc < litter) {
         const px = (cx + 0.5) * 4 + (hash2(cx, cy, 14) - 0.5) * 2.4, py = (cy + 0.5) * 4 + (hash2(cx, cy, 15) - 0.5) * 2.4;
         const dx = wx - px, dy = wy - py;
-        if (hc < 0.035) { // leaf: a small rotated ellipse in ochre / rust
+        if (hc < litter * 0.5) { // leaf: a small rotated ellipse in ochre / rust
           const an = hash2(cx, cy, 16) * 3.14, ca = Math.cos(an), sa = Math.sin(an);
           const u = (dx * ca + dy * sa) / 1.1, v = (-dx * sa + dy * ca) / 0.55;
           if (u * u + v * v < 1) { const c = hash2(cx, cy, 17); r = c < 0.5 ? 128 : 104; g = c < 0.5 ? 86 : 60; b = c < 0.5 ? 36 : 32; r *= 0.85 + 0.3 * (1 - u * u); g *= 0.85 + 0.3 * (1 - u * u); }
