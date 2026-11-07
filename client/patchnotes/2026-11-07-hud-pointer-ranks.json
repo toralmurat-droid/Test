@@ -1,5 +1,6 @@
 {
   "date": "2026-11-07",
+  "pr": 318,
   "title": "Quest pointer and a cleaner screen",
   "changes": [
     "An arrow around your hero points to your current quest objective and shows how many steps away it is.",
