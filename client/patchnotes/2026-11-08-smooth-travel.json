@@ -1,0 +1,9 @@
+{
+  "date": "2026-11-08",
+  "title": "Smoother arrivals",
+  "changes": [
+    "Travelling by portal stone, rope or stair, or coming back to life, now cuts straight to the new place instead of sliding across the map.",
+    "The ground is fully drawn before the view opens up, so it no longer pops in over a rough first layer.",
+    "Ground ahead of you is drawn early while you walk and blends in softly."
+  ]
+}
