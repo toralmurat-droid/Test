@@ -432,35 +432,66 @@ export function gearReq(id: string, cls: string): GearReq {
   return { level: l, stat, points: Math.round(l * REQ_PER_LEVEL[d.tier]) };
 }
 
-/** A hero's level and own stat points (class base + points placed, without gear). */
-export interface HeroReqInfo { cls: string; level: number; pts: Partial<Stats> }
+/**
+ * A hero's level, own stat points (class base + points placed) and the items worn. The stat a requirement asks for
+ * counts the hero's own points plus what the OTHER worn pieces give (the number shown in the hero menu), never the
+ * item itself or the piece it replaces, so two items can't hold each other up.
+ */
+export interface HeroReqInfo { cls: string; level: number; pts: Partial<Stats>; worn?: Equipped }
 
 export function ownStats(h: HeroReqInfo): Stats {
   return statsFor(h.cls as ClassKind, h.pts);
 }
 
-/** Why the hero can't wear the item yet ("Needs Lv 12", "Needs 9 Strength"), or "" when they can. */
-export function reqProblem(id: string, h: HeroReqInfo): string {
+/** Own stats plus the stats of the worn pieces in `eq`. */
+function statsWith(h: HeroReqInfo, eq: Equipped): Stats {
+  const s = ownStats(h), g = gearStats(h.cls, eq);
+  return { sta: s.sta + g.sta, str: s.str + g.str, mag: s.mag + g.mag, dex: s.dex + g.dex };
+}
+
+function problemWith(id: string, h: HeroReqInfo, st: Stats): string {
   const r = gearReq(id, h.cls);
   const miss: string[] = [];
   if (h.level < r.level) miss.push(`Lv ${r.level}`);
-  if (r.points && ownStats(h)[r.stat] < r.points) miss.push(`${r.points} ${STAT_LABEL[r.stat]}`);
+  if (r.points && st[r.stat] < r.points) miss.push(`${r.points} ${STAT_LABEL[r.stat]} (you: ${st[r.stat]})`);
   return miss.length ? `Needs ${miss.join(" and ")}` : "";
+}
+
+/** Why the hero can't wear the item yet ("Needs Lv 12", "Needs 9 Strength"), or "" when they can. */
+export function reqProblem(id: string, h: HeroReqInfo): string {
+  const slot = gearDef(id)?.slot;
+  const others: Equipped = { ...(h.worn ?? {}) };
+  if (slot) delete others[slot];
+  return problemWith(id, h, statsWith(h, activeGear(others, h)));
 }
 
 export const meetsReq = (id: string, h: HeroReqInfo) => !reqProblem(id, h);
 
-/** The worn items that count: a piece whose requirements are no longer met (stat points reset) gives nothing. */
+/**
+ * The worn items that count: a piece whose requirements are not met gives nothing. Pieces are switched on one by
+ * one, each with the stats of the pieces already on (own points first), so no piece ever counts its own bonus.
+ */
 export function activeGear(eq: Equipped, h: HeroReqInfo): Equipped {
   const out: Equipped = {};
-  for (const s of GEAR_SLOTS) if (eq[s] && meetsReq(eq[s]!, h)) out[s] = eq[s];
+  for (let grew = true; grew;) {
+    grew = false;
+    const st = statsWith(h, out);
+    for (const s of GEAR_SLOTS) if (eq[s] && !out[s] && !problemWith(eq[s]!, h, st)) { out[s] = eq[s]; grew = true; }
+  }
   return out;
 }
 
-/** "Lv 17 · needs 11 Strength" line for menus. */
-export function reqText(id: string, cls: string): string {
+/** "Item Lv 17 · needs 11 Strength (you: 14)" line for menus; "you" counts own points + the other worn pieces. */
+export function reqText(id: string, cls: string, h?: HeroReqInfo): string {
   const r = gearReq(id, cls);
-  return `Item Lv ${itemLevel(id)}` + (r.points ? ` · needs ${r.points} ${STAT_LABEL[r.stat]}` : "");
+  if (!r.points) return `Item Lv ${itemLevel(id)}`;
+  let you = "";
+  if (h) {
+    const slot = gearDef(id)?.slot, others: Equipped = { ...(h.worn ?? {}) };
+    if (slot) delete others[slot];
+    you = ` (you: ${statsWith(h, activeGear(others, h))[r.stat]})`;
+  }
+  return `Item Lv ${itemLevel(id)} · needs ${r.points} ${STAT_LABEL[r.stat]}${you}`;
 }
 
 const STAT_LABEL: Record<StatKind, string> = { sta: "Stamina", str: "Strength", mag: "Magic", dex: "Dexterity" };

@@ -1,0 +1,8 @@
+{
+  "date": "2026-11-08",
+  "title": "Gear requirements fixed",
+  "changes": [
+    "Items now count the stats your other worn gear gives, the same number you see in your hero menu, so you can equip them as soon as you reach what they ask for.",
+    "Item tooltips show how much of the needed stat you have right now."
+  ]
+}

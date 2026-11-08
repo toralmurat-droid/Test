@@ -57,9 +57,9 @@ function ensureGear(scene: Phaser.Scene, hero: string, id: string, done?: () => 
 /** Overlay texture of an item on a hero (every item level of an item looks the same; gearfx.ts adds the effects). */
 export const gearKey = (hero: string, id: string) => `gear_${hero}_${baseId(id)}`;
 
-/** Level and own stat points of a hero state, for the item requirements. */
+/** Level, own stat points and worn items of a hero state, for the item requirements. */
 export const reqInfoOf = (state: any): HeroReqInfo =>
-  ({ cls: state.cls, level: state.level ?? 1, pts: { sta: state.ptSta ?? 0, str: state.ptStr ?? 0, mag: state.ptMag ?? 0, dex: state.ptDex ?? 0 } });
+  ({ cls: state.cls, level: state.level ?? 1, pts: { sta: state.ptSta ?? 0, str: state.ptStr ?? 0, mag: state.ptMag ?? 0, dex: state.ptDex ?? 0 }, worn: Object.fromEntries(GEAR_SLOTS.map((s) => [s, state[s]])) });
 
 /** The worn items that count for a hero state (requirements met). */
 export const activeOf = (state: any): Equipped => activeGear(Object.fromEntries(GEAR_SLOTS.map((s) => [s, state[s]])), reqInfoOf(state));
@@ -212,7 +212,7 @@ export class GearMenu {
         const d = gearDef(id)!, why = reqProblem(id, hero);
         const aff = affixHtml(id);
         info.innerHTML = `<b style="color:${itemColor(id)}">${gearName(id, cls)}</b> <span class="glvl">Lv ${itemLevel(id)}</span> · ${rarityLabel(id)}${TIER_NAMES[d.tier]} ${SLOT_NAMES[d.slot]}<br>` +
-          `${itemText(id) || "No bonus"}<br>${aff ? `${aff}<br>` : ""}<span class="${why ? "gbad" : "gok"}">${why || reqText(id, cls)}</span>${extra ? `<br><small>${extra}</small>` : ""}`;
+          `${itemText(id) || "No bonus"}<br>${aff ? `${aff}<br>` : ""}<span class="${why ? "gbad" : "gok"}">${why || reqText(id, cls, hero)}</span>${extra ? `<br><small>${extra}</small>` : ""}`;
       };
       el.onmouseleave = () => { this.preview(); if (info) info.textContent = ""; };
     };
