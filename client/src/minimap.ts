@@ -15,6 +15,7 @@ const PF = '"Pixelify Sans", monospace';
 const REVEAL = 9; // tiles around the player that become discovered
 const FADE = 3; // soft edge of the discovered area, in tiles
 const FOG = "#15151d";
+const MAP_SIZE = 0.82; // world map frame: share of the screen's width and height it may take
 const MAX_ZOOM = 32; // world map: most canvas pixels per tile when zoomed in
 const PAN_SPEED = 700; // world map: canvas pixels per second while I/J/K/L are held
 const ZOOM_SPEED = 2.2; // world map: zoom factor per second while + / - are held
@@ -98,7 +99,7 @@ export class Minimap {
     // Big world map overlay
     this.overlay = document.createElement("div");
     this.overlay.id = "worldmap";
-    this.overlay.innerHTML = `<div class="wm-box"><div class="wm-title"></div><canvas class="wm-map"></canvas><div class="wm-hint"><button type="button" class="wm-center" tabindex="-1" title="Centre on your hero (C)">◎ Centre</button><span class="wm-keys">Drag or I J K L to move · Wheel or + / − to zoom · C or double-click to centre · M / Esc to close</span><span class="wm-touch">Drag to move · Pinch to zoom · Double-tap to centre · Tap outside to close</span></div></div>`;
+    this.overlay.innerHTML = `<div class="wm-box"><div class="wm-title"></div><canvas class="wm-map"></canvas><div class="wm-hint"><button type="button" class="wm-center" tabindex="-1" title="Centre on your hero (C)">◎ Centre</button><span class="wm-keys">Drag or I J K L to move · Wheel or + / − to zoom · C or double-click to centre · M / Esc to close</span><span class="wm-touch">Drag · Pinch to zoom · Double-tap to centre</span></div></div>`;
     this.big = this.overlay.querySelector("canvas")!;
     // Ornate frame: iron-bound oak with gem corners, a title plaque on top and clasps on the sides
     const box = this.overlay.querySelector<HTMLDivElement>(".wm-box")!;
@@ -437,7 +438,9 @@ export class Minimap {
     const z = uiScale(), vw = window.innerWidth / z, vh = window.innerHeight / z; // the map overlay is zoomed (worldscale.ts)
     // width: gutter, frame, padding + canvas border, the side clasps; height: the hint row can wrap on narrow screens
     const hintH = this.overlay.querySelector<HTMLElement>(".wm-hint")!.offsetHeight || 30;
-    const cw = Math.max(240, Math.min(1100, Math.round(vw - 32 - FRAME * 6 - 28 - 78))), ch = Math.max(180, Math.round(vh - 32 - FRAME * 6 - 60 - hintH));
+    // The framed map takes at most MAP_SIZE of the screen, so the game stays visible around it
+    const aw = Math.min(vw - 32, vw * MAP_SIZE), ah = Math.min(vh - 32, vh * MAP_SIZE);
+    const cw = Math.max(240, Math.min(1100, Math.round(aw - FRAME * 6 - 28 - 78))), ch = Math.max(180, Math.round(ah - FRAME * 6 - 60 - hintH));
     if (this.big.width !== cw || this.big.height !== ch) {
       this.big.width = cw; this.big.height = ch;
       this.big.style.width = `${cw}px`; this.big.style.height = `${ch}px`;
