@@ -1,10 +1,10 @@
-import { MAP_H, MAP_W, TILE, WORLD_H } from "./constants";
+import { MAP_W, TILE, UNDER_END, WORLD_H } from "./constants";
 
 /**
  * The Mawdeep Warrens (Murat 2026-11-05): a dungeon of three floors under the Whispering Woods, dug out by the
  * beast-folk, men and women of the valley sewn into animal hides by the Hide-Mother's rite.
  *
- * The floors live in the underground band of the map (rows WORLD_H..MAP_H, below the Saltwind Sea), each walled in
+ * The floors live in the underground band of the map (rows WORLD_H..UNDER_END, below the Saltwind Sea), each walled in
  * by solid rock, so the server, the collisions and the pathing need nothing special. Heroes go down and up by
  * walking onto a rope or a stair (LINKS): the server moves them to the other end. Tiles in tiles, points in px.
  *
@@ -100,11 +100,11 @@ export const linkById = (id: string) => LINKS.find((l) => l.id === id);
 
 /** Floor at a tile (undefined above ground). */
 export function floorAt(tx: number, ty: number): Floor | undefined {
-  if (ty < WORLD_H) return undefined;
+  if (ty < WORLD_H || ty >= UNDER_END) return undefined;
   return FLOORS.find((f) => tx >= f.x && tx < f.x + f.w && ty >= f.y && ty < f.y + f.h);
 }
 /** True below the surface (pixel coords). */
-export const underground = (py: number) => py >= WORLD_H * TILE;
+export const underground = (py: number) => py >= WORLD_H * TILE && py < UNDER_END * TILE;
 export const floorAtPx = (px: number, py: number) => floorAt(Math.floor(px / TILE), Math.floor(py / TILE));
 
 /**
@@ -130,7 +130,7 @@ export const BRAZIERS: [number, number][] = [
 ];
 
 // sanity: the dungeon must fit the map
-for (const f of FLOORS) if (f.x + f.w > MAP_W || f.y + f.h > MAP_H || f.y < SEA_END) throw new Error(`dungeon floor ${f.name} is outside the map`);
+for (const f of FLOORS) if (f.x + f.w > MAP_W || f.y + f.h > UNDER_END || f.y < SEA_END) throw new Error(`dungeon floor ${f.name} is outside the map`);
 
 /** Floor number at a point in px (0 above ground). */
 export const floorNo = (px: number, py: number) => (underground(py) ? floorAtPx(px, py)?.id ?? 0 : 0);

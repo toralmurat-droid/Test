@@ -1,5 +1,6 @@
-import { MAP_H as FULL_H, MAP_W, PLAYER_RADIUS, TILE, WORLD_H, type MobKind } from "./constants";
+import { MAP_H as FULL_H, MAP_W, PLAYER_RADIUS, TILE, UNDER_END, WORLD_H, type MobKind } from "./constants";
 import { FLOORS, LAIRS, SEA_END, SHORTCUTS, SINKHOLE, type Floor } from "./dungeon";
+import { buildDesert, D, inDesertRow, KEL_MARKET, WAYGATE_OAKVALE } from "./desert";
 
 /** The overworld's rows: the world generator (and everything above ground) works on these; under them lies the Mawdeep (shared/dungeon.ts). */
 const MAP_H = WORLD_H;
@@ -25,8 +26,10 @@ export const T = {
   FLOOR: 39, RUBBLE: 40, BEAM: 41, FLAGS: 42, BONFIRE: 43,
   // a wooden signpost with arrow boards (readable: see SIGNPOSTS)
   SIGNPOST: 44,
+  // Act 2, the desert (shared/desert.ts): sandstone peaks, date palms, mud-brick houses and walls, nomad tents, bleached bones
+  CLIFF: 45, PALM: 46, ADOBE: 47, ADOBE_WALL: 48, TENT: 49, BONES: 50,
 } as const;
-export const TILE_COUNT = 45;
+export const TILE_COUNT = 51;
 export const EMPTY = -1;
 
 /** A named region. `mobs` hints which monsters belong there (empty or missing = none, e.g. inside the village). */
@@ -85,6 +88,8 @@ export const REDFANG_TOWERS: [number, number][] = [[254, 103], [249, 118], [241,
 export const WRECK = { x: 27, y: 195, solid: [25, 194.3, 5.2, 1.1] as [number, number, number, number] };
 
 export const SAFE_ZONE = { x: 74, y: 55, w: 13, h: 11 };
+/** Act 2's safe zone: Kel Ashar's market (shared/desert.ts), in map tiles. */
+export const DESERT_SAFE = { x: KEL_MARKET.x, y: D(KEL_MARKET.y), w: KEL_MARKET.w, h: KEL_MARKET.h };
 
 /** Column of the river's center for a given row (River Ashwell, east of the village). */
 /** Gullrock Cove: a fishers' smokehouse on a little bay east of Saltmere, burned and pillaged by Redfang raiders (Redfang quest chain). */
@@ -789,6 +794,15 @@ function buildWorld() {
   // ---------- 13c. The portal stones (shared/portals.ts): a little clearing round each ----------
   for (const p of PORTAL_SPOTS) disk(p.x + 0.5, p.y + 0.5, 2.6, 2.2, (x, y) => { if (NATURE.has(objects[y][x])) setO(x, y, EMPTY); });
 
+  // ---------- 13c'. The old waygate south of Oakvale (Act 2, shared/act2.ts): a cracked dais of old flagstones, a path to the South Road ----------
+  {
+    const G = WAYGATE_OAKVALE;
+    disk(G.x + 0.5, G.y + 0.5, 4.2, 3.6, (x, y, d) => {
+      setO(x, y, EMPTY);
+      setG(x, y, d < 0.55 ? (hash(x, y, 311) < 0.85 ? T.FLAGS : T.RUBBLE) : d < 0.8 && hash(x, y, 312) < 0.5 ? T.RUBBLE : T.GRASS_DARK);
+    });
+    curve([[G.x - 3, G.y + 1], [G.x - 5, G.y + 2], [87, 83]], 1);
+  }
   // ---------- 13d. The Mawdeep sinkhole (shared/dungeon.ts): a ragged clearing of bare earth and stones, a path from the Redfang trail ----------
   disk(SINKHOLE.x + 0.5, SINKHOLE.y + 0.5, 4.6, 3.8, (x, y, d) => {
     setO(x, y, d > 0.8 && hash(x, y, 301) < 0.22 ? T.ROCK : EMPTY);
@@ -900,10 +914,25 @@ function buildWorld() {
     ground[y][x] = y < SEA_END ? T.WATER : T.DIRT;
     objects[y][x] = y < SEA_END ? EMPTY : T.ROCK;
   }
+  // ---------- 16. Act 2: the desert, in its own band under the rock (shared/desert.ts) ----------
+  const desert = buildDesert(T, ground, objects, EMPTY);
+  for (const k of desert.roads) roads.add(k);
+  for (const p of desert.posts) { // a post beside the trail, on the nearest free tile
+    let best: [number, number] | undefined, bd = Infinity;
+    for (let j = -3; j <= 3; j++) for (let i = -3; i <= 3; i++) {
+      const x = p.x + i, y = p.y + j;
+      if (!inDesertRow(y) || objects[y][x] !== EMPTY || roads.has(y * MAP_W + x) || ground[y][x] === T.WATER) continue;
+      let byRoad = false;
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) if (roads.has((y + dy) * MAP_W + x + dx)) byRoad = true;
+      if (byRoad && Math.hypot(i, j) < bd) { bd = Math.hypot(i, j); best = [x, y]; }
+    }
+    if (best) { objects[best[1]][best[0]] = T.SIGNPOST; posts.push({ x: best[0], y: best[1], to: p.to }); }
+  }
   for (const f of FLOORS) carveFloor(f, ground, objects);
   areas.unshift(...LAIRS.map((l) => ({ ...l, mobs: [] as MobKind[] })),
     ...FLOORS.map((f) => ({ name: f.name, x: f.x, y: f.y, w: f.w, h: f.h, mobs: [] as MobKind[] })),
     { name: "Mawdeep Sinkhole", x: SINKHOLE.x - 5, y: SINKHOLE.y - 5, w: 11, h: 10 });
+  areas.push(...desert.areas);
   return { ground, objects, areas, posts, roads, broken, makeshift };
 }
 
@@ -1080,7 +1109,7 @@ function buildSignpost(p: { x: number; y: number; to: string[] }): Signpost {
   const ring: { k: number; a: number }[] = [];
   for (let j = -5; j <= 5; j++) for (let i = -5; i <= 5; i++) {
     const x = Math.floor(cx) + i, y = Math.floor(cy) + j, k = y * MAP_W + x;
-    if (x < 0 || y < 0 || x >= MAP_W || y >= MAP_H || !roads.has(k)) continue;
+    if (x < 0 || y < 0 || x >= MAP_W || y >= FULL_H || !roads.has(k)) continue;
     const d = dist(k);
     if (d >= 2.5 && d <= 4) ring.push({ k, a: Math.atan2((y + 0.5) - cy, (x + 0.5) - cx) });
   }
@@ -1177,7 +1206,9 @@ export function randomSpawn(): { x: number; y: number } {
 export function isSafeZone(px: number, py: number): boolean {
   const tx = Math.floor(px / TILE), ty = Math.floor(py / TILE);
   const z = SAFE_ZONE;
-  return tx >= z.x && ty >= z.y && tx < z.x + z.w && ty < z.y + z.h;
+  if (tx >= z.x && ty >= z.y && tx < z.x + z.w && ty < z.y + z.h) return true;
+  const k = DESERT_SAFE; // Act 2: Kel Ashar's market
+  return tx >= k.x && ty >= k.y && tx < k.x + k.w && ty < k.y + k.h;
 }
 
 /** Random walkable point outside the village palisade, where monsters live. */
