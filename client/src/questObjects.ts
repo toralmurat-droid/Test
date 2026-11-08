@@ -127,7 +127,32 @@ const PHYLAC = [
   "KKKKKKKKKKKKKKKK",
 ];
 
+// Act 2: the Veiled Circle's sun-glass sigil (a glowing glass spike in a sandstone collar), and Kharsun's sealed cisterns
+const SIGIL = [
+  ".......KK.......",
+  "......KWYK......",
+  "......KWYK......",
+  ".....KGWYGK.....",
+  ".....KGWYGK.....",
+  ".....KGWWGK.....",
+  "....KGGWYGGK....",
+  "....KGGWYGGK....",
+  "....KGGWWGGK....",
+  "...KGGGWYGGGK...",
+  "...KGGGWWGGGK...",
+  "..KKKKKKKKKKKK..",
+  ".KSSSSLSSSSLSSK.",
+  "KSSLSSSSSLSSSSSK",
+  "KDDDDDDDDDDDDDDK",
+  "KKKKKKKKKKKKKKKK",
+];
+
 function textures(scene: Phaser.Scene) {
+  const sand = { K, S: 0xc8a06a, L: 0xe8cc94, D: 0x8a6a42 };
+  rowsTexture(scene, "qobj_sigil", SIGIL, { ...sand, G: 0xd8661e, W: 0xffb040, Y: 0xfff0b0 });
+  rowsTexture(scene, "qobj_sigil_broken", SIGIL.map((r, i) => (i < 6 ? r.replace(/[KGWY]/g, ".") : r.replace(/[WY]/g, "G"))), { ...sand, G: 0x5a4a3e });
+  rowsTexture(scene, "qobj_cistern", CRYPT, { K, S: 0xb8925e, L: 0xdcbc86, D: 0x1a2a34, G: 0x5ac8ff });
+  rowsTexture(scene, "qobj_cistern_read", CRYPT, { K, S: 0xb8925e, L: 0xdcbc86, D: 0x8a7050, G: 0xffd166 });
   // The Hollow Throne's ward-stones: painted like the world props (throneArt.ts), still burning, then broken
   sheet(scene, "qobj_ward", STONE_W, STONE_H, 1, (p, f) => standingStone(p, f, 1), 0);
   for (const el of ["poison", "cold", "fire", "shock"] as LandEl[]) { // the Heart Shards of the elemental wilds (6-frame pulse)
@@ -162,12 +187,12 @@ function textures(scene: Phaser.Scene) {
 const START: Record<string, string> = {
   lantern: "qobj_lantern_off", shrine: "qobj_shrine_rot", heart: "qobj_heart",
   engine: "qobj_engine_fire", beacon: "qobj_beacon", crypt: "qobj_crypt", phylactery: "qobj_phylactery", ward: "qobj_ward",
-  silk: "qobj_silk", totem: "qobj_totem",
+  silk: "qobj_silk", totem: "qobj_totem", sigil: "qobj_sigil", cistern: "qobj_cistern",
 };
-const DONE: Record<string, string> = { engine: "qobj_engine_fire", beacon: "qobj_beacon_out", crypt: "qobj_crypt_sealed", phylactery: "qobj_phylactery_broken", ward: "qobj_ward_broken", silk: "qobj_silk_cut", totem: "qobj_totem_burnt" };
-const SCALE: Record<string, number> = { lantern: 1 / 1.5, shard: 1 / 1.5, heart: 2, shrine: 1.5, engine: 2.4, beacon: 1.4, crypt: 1.5, phylactery: 1.3, ward: 1 / 1.5, silk: 1 / 1.5, totem: 1 / 1.5 };
+const DONE: Record<string, string> = { engine: "qobj_engine_fire", beacon: "qobj_beacon_out", crypt: "qobj_crypt_sealed", phylactery: "qobj_phylactery_broken", ward: "qobj_ward_broken", silk: "qobj_silk_cut", totem: "qobj_totem_burnt", sigil: "qobj_sigil_broken", cistern: "qobj_cistern_read" };
+const SCALE: Record<string, number> = { lantern: 1 / 1.5, shard: 1 / 1.5, heart: 2, shrine: 1.5, engine: 2.4, beacon: 1.4, crypt: 1.5, phylactery: 1.3, ward: 1 / 1.5, silk: 1 / 1.5, totem: 1 / 1.5, sigil: 1.6, cistern: 1.5 };
 /** Coloured light some objects give off until done. */
-const GLOW: Record<string, number> = { beacon: 0x7dff6a, crypt: 0x5fe36a, phylactery: 0x7dff6a, ward: 0x9dff6a, totem: 0xff6a2a };
+const GLOW: Record<string, number> = { beacon: 0x7dff6a, crypt: 0x5fe36a, phylactery: 0x7dff6a, ward: 0x9dff6a, totem: 0xff6a2a, sigil: 0xffa040, cistern: 0x5ac8ff };
 
 interface Drawn { o: QuestObject; img: Phaser.GameObjects.Image; glow?: Phaser.GameObjects.Arc; light?: Phaser.GameObjects.Image; done?: boolean; anim?: Phaser.GameObjects.Sprite }
 
@@ -227,7 +252,7 @@ export class QuestObjects {
     if (!o) return;
     const d = { o };
     const color = d.o.kind === "shard" ? ({ poison: 0x9be564, cold: 0xd6f6ff, fire: 0xffa848, shock: 0xbcd0ff } as Record<string, number>)[d.o.id.slice(6)] ?? 0xffffff : d.o.kind === "lantern" ? 0x7ff3ff : d.o.kind === "shrine" || d.o.kind === "crypt" ? 0xffd166
-      : d.o.kind === "heart" || d.o.kind === "engine" ? 0xff8c42 : d.o.kind === "phylactery" ? 0xe8ffd0 : d.o.kind === "ward" ? 0xc8ff8a : d.o.kind === "silk" ? 0xe8e4d4 : d.o.kind === "totem" ? 0xff7a2a : 0x9be564;
+      : d.o.kind === "heart" || d.o.kind === "engine" ? 0xff8c42 : d.o.kind === "phylactery" ? 0xe8ffd0 : d.o.kind === "ward" ? 0xc8ff8a : d.o.kind === "silk" ? 0xe8e4d4 : d.o.kind === "totem" || d.o.kind === "sigil" ? 0xff7a2a : d.o.kind === "cistern" ? 0x8ad8ff : 0x9be564;
     const lift = d.o.kind === "lantern" ? LANTERN_LIFT : 10;
     for (let i = 0; i < 14; i++) {
       const a = Math.random() * Math.PI * 2, r = 8 + Math.random() * 14;

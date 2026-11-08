@@ -69,6 +69,13 @@ const weapons = (ids: string[]): ShopEntry[] => ids.map((base) => {
   return { item, price: gearPrice(item) };
 });
 
+/** Kel Ashar's bladesmith: the same bases, forged at Act 2's levels (Common 30, Rare 36, Epic 42). */
+export const DESERT_SHOP_LEVEL = [0, 30, 36, 42];
+const desertStock = (ids: string[]): ShopEntry[] => ids.map((base) => {
+  const item = withLevel(base, DESERT_SHOP_LEVEL[gearDef(base)?.tier ?? 1]);
+  return { item, price: gearPrice(item) };
+});
+
 const masterwork = (level: number): ShopEntry[] => Object.keys(MASTER_BASES).map((base) => ({ item: masterItem(base, level), price: masterPrice(level) }));
 
 export const SHOPS: Record<string, Shop> = {
@@ -83,6 +90,23 @@ export const SHOPS: Record<string, Shop> = {
     ],
     buys: ["weapon", "ranged", "shield", "armour", "hat", "shoes"],
     repairs: true,
+  },
+  // Kel Ashar (Act 2): desert-forged stock at Lv 30 / 36 / 42 by tier, and Greater flasks the valley's witch never sells
+  desertsmith: {
+    greeting: "Sun-tempered steel. It holds an edge where valley iron goes soft. Sell me your old pieces, I melt them down.",
+    stock: desertStock(["w_bronze", "w_frost", "w_long", "w_dragon", "w_sky", "ws_arming", "wx_hand", "wb_hunt", "wf_oak", "r_knives", "r_crossbow",
+      "sh_iron", "sh_dragon", "a_leather", "a_chain", "a_royal", "h_cap", "h_helm", "h_crown", "s_leather", "s_swift", "s_winged"]),
+    buys: ["weapon", "ranged", "shield", "armour", "hat", "shoes"],
+    repairs: true,
+  },
+  spicetrader: {
+    greeting: "Cardamom, saffron, and flasks to keep you breathing in the sun. Water is extra. Joking. Mostly.",
+    stock: [
+      ...[1, 2].flatMap((size) => (["potion", "mpotion"] as const).flatMap((item) => [
+        { item, size, qty: 1, price: POTION_SIZES[size].price },
+        { item, size, qty: 5, price: Math.round(POTION_SIZES[size].price * 5 * 0.85) },
+      ])),
+    ],
   },
   witch: {
     greeting: "Fresh from the still, darling. Red for your blood, blue for your magic. Try not to stare.",

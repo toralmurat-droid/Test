@@ -17,6 +17,7 @@ import { QuestObjects } from "./questObjects";
 import { TILE } from "../../shared/constants";
 import { ISO } from "./isoflag";
 import { routeVia } from "../../shared/dungeon";
+import { actAt, WAYGATES } from "../../shared/act2";
 import type { MapMarker } from "./minimap";
 import { QuestLog } from "./questlog";
 import { MASTER_LEVELS, SHOPS, sellPrice } from "../../shared/shops";
@@ -267,7 +268,7 @@ export class NpcLayer {
     const bag = [...(q?.bag ?? [])];
     // masterwork: one level shown at a time (picked with the buttons), by default the best one the hero can wear
     const master = this.masterLv ?? [...MASTER_LEVELS].reverse().find((l) => l <= (q?.level ?? 1)) ?? MASTER_LEVELS[0];
-    const key = JSON.stringify([n.id, master, gold, potions, bag, q?.level, (q as any)?.ptSta, (q as any)?.ptStr, (q as any)?.ptMag, (q as any)?.ptDex, q?.wear, ...GEAR_SLOTS.map((s) => q?.[s]), this.shopMsg, q?.questId, q?.questStage, q?.boneId, q?.boneStage, q?.redId, q?.redStage, q?.tut, q?.crown, q?.beast]);
+    const key = JSON.stringify([n.id, master, gold, potions, bag, q?.level, (q as any)?.ptSta, (q as any)?.ptStr, (q as any)?.ptMag, (q as any)?.ptDex, q?.wear, ...GEAR_SLOTS.map((s) => q?.[s]), this.shopMsg, q?.questId, q?.questStage, q?.boneId, q?.boneStage, q?.red, q?.sun, q?.tut, q?.crown, q?.beast]);
     if (key === this.stage) return;
     this.stage = key;
     const row = (icon: string, name: string, color: string, desc: string, btn: string, cls2: string, i: number, off: boolean) =>
@@ -351,7 +352,7 @@ export class NpcLayer {
     if (n.shop && (this.trading || !page)) return this.renderShop(n, q);
     this.dialog.classList.remove("shop");
     if (this.shopOpen) { this.shopOpen = false; this.onPreview?.(); }
-    const key = JSON.stringify([n.id, q?.questId, q?.questStage, q?.questCount, q?.boneId, q?.boneStage, q?.boneCount, q?.redId, q?.redStage, q?.redCount, q?.tut, q?.crown, q?.beast, q?.level]);
+    const key = JSON.stringify([n.id, q?.questId, q?.questStage, q?.questCount, q?.boneId, q?.boneStage, q?.boneCount, q?.red, q?.sun, q?.tut, q?.crown, q?.beast, q?.level]);
     if (key === this.stage) return;
     this.stage = key;
     const p = page ?? { text: ["Good day to you."], bye: "Farewell", chain: 0 };
@@ -472,6 +473,9 @@ export class NpcLayer {
       // On another floor of the Mawdeep (or above it): point at the rope or stair first
       const via = target && me ? routeVia(target.x, target.y, me.x, me.y) : undefined;
       if (via) target = { x: via.x, y: via.y, kind: "object", label: via.label };
+      // In the other act: point at this side's waygate
+      const gate = target && me && actAt(target.y) !== actAt(me.y) ? WAYGATES.find((g) => actAt(g.y) === actAt(me.y)) : undefined;
+      if (gate) target = { x: gate.x, y: gate.y, kind: "object", label: gate.label };
       if (follow && target && me) {
         const dx = target.x - me.x, dy = target.y - me.y, d = Math.hypot(dx, dy) - (target.r ?? 0);
         if (d > TILE * 2) this.aim = { dx, dy, d };

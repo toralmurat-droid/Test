@@ -147,10 +147,10 @@ export class Player extends Schema {
   @type("number") boneId = 0;
   @type("number") boneStage = 0;
   @type("number") boneCount = 0;
-  // Redfang chain (Old Garrick of Saltmere), CHAINS[2]
-  @type("number") redId = 0;
-  @type("number") redStage = 0;
-  @type("number") redCount = 0;
+  // Redfang chain (Old Garrick of Saltmere), CHAINS[2]: packed (QuestChain.packed) since Act 2 freed two fields for the Second Sun
+  @type("number") red = 0;
+  // The Second Sun (CHAINS[6], Act 2's story in Kel Ashar): packed the same way
+  @type("number") sun = 0;
   // The guided first quest (First Steps), CHAINS[3] (TUT_CHAIN). New heroes start on step 1.
   // ...packed like the Hollow Crown below (QuestChain.packed), which freed two fields for the Hide Rite chain
   @type("number") tut = 0;
@@ -707,7 +707,7 @@ export class TownRoom extends Room<TownState> {
       const tp = process.env.NODE_ENV !== "production" && text.trim().match(/^\/tp\s+(\d+)\s+(\d+)$/i); // dev servers only: jump to a tile
       if (tp) { p.x = (Number(tp[1]) + 0.5) * TILE; p.y = (Number(tp[2]) + 0.5) * TILE; return; }
       if (process.env.NODE_ENV !== "production" && /^\/act2open$/i.test(text.trim())) { // dev servers only: both Act 1 finales done
-        for (const id of ["crown", "beast"]) { const c = CHAINS.findIndex((ch) => ch.id === id); this.qset(p, c, { questId: CHAINS[c].quests.length, questStage: 0, questCount: 0 }); }
+        for (const id of ["tutorial", "crown", "beast"]) { const c = CHAINS.findIndex((ch) => ch.id === id); this.qset(p, c, { questId: CHAINS[c].quests.length, questStage: 0, questCount: 0 }); }
         return;
       }
       const tr = text.trim().match(/^\/trade\s+(.+)$/i);
@@ -933,8 +933,8 @@ export class TownRoom extends Room<TownState> {
       bag: p.bag.toArray(), talents, slots: p.slots.toArray(),
       questId: p.questId, questStage: p.questStage, questCount: p.questCount, questVer: CHAINS[0].version,
       boneId: p.boneId, boneStage: p.boneStage, boneCount: p.boneCount, boneVer: CHAINS[1].version,
-      redId: p.redId, redStage: p.redStage, redCount: p.redCount, redVer: CHAINS[2].version, kit: 1,
-      // packed chains (First Steps, the Hollow Crown, the Hide Rite) are saved under their own three names
+      kit: 1,
+      // packed chains (Redfang, First Steps, the Hollow Crown, the Hide Rite, the Second Sun) are saved under their own three names
       ...Object.fromEntries(CHAINS.flatMap((ch, c) => {
         if (!ch.packed) return [];
         const q = this.qs(p, c), [a, b, n] = ch.keys;

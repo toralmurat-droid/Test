@@ -1,5 +1,6 @@
 import { TILE } from "./constants";
 import { ROADS, WRECK } from "./map";
+import { D } from "./desert";
 
 /** Village NPCs: where they stand (feet, in pixels) and which sprite sheet they use. Server and client share this. */
 export interface Npc {
@@ -25,6 +26,12 @@ export const NPCS: Npc[] = [
   { id: "captain", name: "Captain Hale", title: "Captain of the Watch", sprite: "guard", x: 89.7 * TILE, y: 57.6 * TILE, dir: "down" },
   // Old Garrick, the eldest fisherman of Saltmere, warming himself at the beach fire: gives the Redfang chain (shared/quests.ts RED_QUESTS)
   { id: "oldfisher", name: "Old Garrick", title: "Old fisherman", sprite: "elder", x: 130.7 * TILE, y: 189.6 * TILE, dir: "left" },
+  // ---- Kel Ashar, the oasis town of the Sunscar (Act 2, shared/desert.ts): round its market and spring
+  // Sefa keeps the town's spring and remembers the old stories; Captain Rakhim holds the south gate (shared/quests.ts SUN_QUESTS)
+  { id: "wellkeeper", name: "Sefa", title: "Well-Keeper", sprite: "wellkeeper", x: 145.3 * TILE, y: D(110.5) * TILE, dir: "right" },
+  { id: "sandcaptain", name: "Captain Rakhim", title: "Captain of the Sand Watch", sprite: "sandcaptain", x: 149.6 * TILE, y: D(120.8) * TILE, dir: "down" },
+  { id: "spicetrader", name: "Zahra", title: "Spice and potion trader", sprite: "spicetrader", x: 142.5 * TILE, y: D(106.8) * TILE, dir: "down", shop: "spicetrader" },
+  { id: "desertsmith", name: "Oren", title: "Bladesmith", sprite: "desertsmith", x: 155.5 * TILE, y: D(106.6) * TILE, dir: "down", shop: "desertsmith" },
 ];
 
 /**
