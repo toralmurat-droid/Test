@@ -417,7 +417,10 @@ html, body { margin: 0; height: 100%; background: #1b1b24; color: #eee; font: 18
 .fs-btn small { display: block; font-size: 18px; font-family: var(--pixel-font); color: #a8977a; }
 .fs-main { color: #ffcf52; }
 .fs-danger { color: #ff9d7a; }
-#play { width: 100%; }
+#play, .fs-wide { width: 100%; }
+.fs-status { color: #ff9d7a; min-height: 1.2em; margin: 8px 0 0; font-size: 18px; font-family: var(--pixel-font); }
+.fs-status.ok { color: #9fd98a; }
+#forgot .fs-link, #login .fs-link { margin-top: 6px; }
 #status { color: #ff9d7a; min-height: 1.2em; margin: 8px 0 0; font-size: 18px; font-family: var(--pixel-font); }
 #savebtns { display: grid; gap: 8px; margin: 8px 0; }
 #savebtns .fs-btn { padding: 6px 12px; }
