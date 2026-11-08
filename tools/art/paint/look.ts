@@ -459,6 +459,33 @@ export const LOOKS: Record<string, Look> = {
     legs: "trousers", legCol: 0x6a5238, boots: 0x3a2a1e, bootStyle: "wrap",
     sleeve: 0x8a5a36, arms: "bare", bracer: 0x4a3424, weapon: "hammer", fx: 0xffffff, build: 1.15,
   },
+  // The armourers (shared/npcs.ts), each dressed in what they sell.
+  // Hilda of Oakvale: a broad, red-haired woman in steel mail under an oxblood tabard, a hammer for dents, a kite shield on her arm
+  armourer: {
+    skin: 0xe8b08a, hair: 0xa8401e, hairStyle: "ponytail", eye: 0x3a5a2a,
+    head: "none", torso: "mail", torsoCol: 0x8a939e, tabard: { col: 0x7a2620, trim: 0xd9a93a, emblem: 0xf0c75a }, belt: 0x4a2e1a, buckle: 0xd9a93a,
+    legs: "trousers", legCol: 0x4a3a2a, boots: 0x2a2420, bootStyle: "greave",
+    sleeve: 0x8a939e, arms: "plate", glove: 0x5a3a22, weapon: "hammer", fx: 0xffffff, build: 1.15,
+    shield: { col: 0x7a2620, trim: 0xa5aeb8, emblem: 0xf0c75a, style: "kite" },
+  },
+  // Dorran of Saltmere: a grey-bearded old sailor in a sea-blue knit cap, riveted sea-leather coat, brass at the belt
+  saltarmourer: {
+    skin: 0xc8916a, hair: 0x8a8a86, hairStyle: "short", beard: 0x9a9a94, beardStyle: "full",
+    head: "cap", headCol: 0x285058, headTrim: 0x1a3a42,
+    torso: "leather", torsoCol: 0x4a3628, trim: 0xc89c44, belt: 0x221814, buckle: 0xc89c44,
+    legs: "trousers", legCol: 0x3a4a52, boots: 0x221814, bootStyle: "leather",
+    sleeve: 0x4a3628, arms: "cloth", glove: 0x36261e, bracer: 0x334656, weapon: "none", fx: 0xffffff,
+    shield: { col: 0x285058, trim: 0x708a9a, emblem: 0xd8e4e0, style: "round" },
+  },
+  // Idris of Kel Ashar: a lean man in a white headwrap with an indigo band, brass scale over cream linen, an indigo sash
+  sandarmourer: {
+    skin: 0x8a5a36, hair: 0x1a1410, hairStyle: "short", beard: 0x1a1410, beardStyle: "full",
+    head: "bandana", headCol: 0xece2c8, headTrim: 0x302e72,
+    torso: "mail", torsoCol: 0xc89c44, sash: 0x302e72, belt: 0x4a2e1a, buckle: 0xead07a,
+    legs: "trousers", legCol: 0xe2d6bc, boots: 0x4a2e1a, bootStyle: "wrap",
+    sleeve: 0xece2c8, arms: "cloth", bracer: 0xc89c44, weapon: "none", fx: 0xffffff,
+    shield: { col: 0x9a722c, trim: 0xead07a, emblem: 0xf2ecdc, style: "round" },
+  },
   // Morwen: a young witch in a red dress, black corset bodice, bare arms and a tall black hat with a red band
   witch: {
     skin: 0xf0c8a8, hair: 0x1c1216, hairStyle: "long", eye: 0xd4a017, lips: 0xa01c2a,

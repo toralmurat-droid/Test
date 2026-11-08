@@ -20,17 +20,22 @@ export const NPCS: Npc[] = [
   // Traders around the market square
   { id: "weaponsmith", name: "Brann", title: "Weapons merchant", sprite: "blacksmith", x: 71.6 * TILE, y: 57.5 * TILE, dir: "right", shop: "weaponsmith" },
   { id: "witch", name: "Morwen", title: "Potion witch", sprite: "witch", x: 71.95 * TILE, y: 63.95 * TILE, dir: "right", shop: "witch" },
+  // Hilda the armourer, behind the market stall on the square's east side: armour for the first half of Act 1
+  { id: "armourer", name: "Hilda", title: "Armour merchant", sprite: "armourer", x: 84.9 * TILE, y: 57.5 * TILE, dir: "down", shop: "armourer" },
   // Tobin the fisherman: only home once you free him from the blob cocoon at Sunken Lake (shared/quests.ts npcPresent)
   { id: "fisher", name: "Tobin", title: "Fisherman", sprite: "villager", x: 85.5 * TILE, y: 61.4 * TILE, dir: "left" },
   // Captain Hale of the watch, just inside the east gate: gives the skeleton quest chain (shared/quests.ts BONE_QUESTS)
   { id: "captain", name: "Captain Hale", title: "Captain of the Watch", sprite: "guard", x: 89.7 * TILE, y: 57.6 * TILE, dir: "down" },
   // Old Garrick, the eldest fisherman of Saltmere, warming himself at the beach fire: gives the Redfang chain (shared/quests.ts RED_QUESTS)
   { id: "oldfisher", name: "Old Garrick", title: "Old fisherman", sprite: "elder", x: 130.7 * TILE, y: 189.6 * TILE, dir: "left" },
+  // Dorran, Saltmere's armourer, by the well among the net racks: armour for Lv 17-29
+  { id: "saltarmourer", name: "Dorran", title: "Armour merchant", sprite: "saltarmourer", x: 141.5 * TILE, y: 183.7 * TILE, dir: "down", shop: "saltarmourer" },
   // ---- Kel Ashar, the oasis town of the Sunscar (Act 2, shared/desert.ts): round its market and spring
   // Sefa keeps the town's spring and remembers the old stories; Captain Rakhim holds the south gate (shared/quests.ts SUN_QUESTS)
   { id: "wellkeeper", name: "Sefa", title: "Well-Keeper", sprite: "wellkeeper", x: 145.3 * TILE, y: D(110.5) * TILE, dir: "right" },
   { id: "sandcaptain", name: "Captain Rakhim", title: "Captain of the Sand Watch", sprite: "sandcaptain", x: 149.6 * TILE, y: D(120.8) * TILE, dir: "down" },
   { id: "spicetrader", name: "Zahra", title: "Spice and potion trader", sprite: "spicetrader", x: 142.5 * TILE, y: D(106.8) * TILE, dir: "down", shop: "spicetrader" },
+  { id: "sandarmourer", name: "Idris", title: "Armour merchant", sprite: "sandarmourer", x: 152.4 * TILE, y: D(112.6) * TILE, dir: "down", shop: "sandarmourer" },
   { id: "desertsmith", name: "Oren", title: "Bladesmith", sprite: "desertsmith", x: 155.5 * TILE, y: D(106.6) * TILE, dir: "down", shop: "desertsmith" },
 ];
 
@@ -51,31 +56,43 @@ export const NPC_DECOR: NpcDecor[] = [
   { prop: "sm_quench", x: 72.75, y: 58.35, scale: 1, animated: true, solid: [72.5, 58.15, 0.45, 0.4] },
   { prop: "sm_grind", x: 70.65, y: 58.35, scale: 1, animated: true, solid: [70.35, 58.15, 0.6, 0.35] },
   { prop: "sm_rack", x: 73.4, y: 56.6, scale: 1, animated: true, solid: [72.8, 56.35, 1.2, 0.4] },
+  // The armourers' wares (client/src/armoury.ts): an armour stand in the village's best coat and a rack of shields
+  { prop: "ar_stand_oak", x: 86.5, y: 57.6, scale: 0.82, animated: true, solid: [86.2, 57.4, 0.6, 0.35] },
+  { prop: "ar_rack_oak", x: 83.1, y: 57.3, scale: 0.88, animated: true, solid: [82.45, 57.1, 1.3, 0.35] },
+  { prop: "ar_stand_salt", x: 143.0, y: 183.7, scale: 0.82, animated: true, solid: [142.7, 183.5, 0.6, 0.35] },
+  { prop: "ar_rack_salt", x: 139.8, y: 183.5, scale: 0.88, animated: true, solid: [139.15, 183.3, 1.3, 0.35] },
+  { prop: "ar_stand_sand", x: 150.9, y: D(112.6), scale: 0.82, animated: true, solid: [150.6, D(112.4), 0.6, 0.35] },
+  { prop: "ar_rack_sand", x: 153.9, y: D(111.9), scale: 0.88, animated: true, solid: [153.25, D(111.7), 1.3, 0.35] },
 ];
 
-/** True if (px, py) is inside one of the NPC props that block movement. */
-/** Box (tiles) around every solid trader prop: most collision checks are far from it and stop there. */
-let decorBox: [number, number, number, number] | undefined;
-function decorBounds(): [number, number, number, number] {
-  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+/**
+ * Solid trader props bucketed by 4-tile cell (the villages are far apart: one bounding box over all of them would
+ * cover most of the map), so most collision checks find an empty cell and stop there.
+ */
+const DECOR_CELL = 4;
+let decorCells: Map<number, [number, number, number, number][]> | undefined;
+function decorGrid() {
+  const m = new Map<number, [number, number, number, number][]>();
   for (const d of NPC_DECOR) {
     const r = d.solid;
     if (!r) continue;
-    x0 = Math.min(x0, r[0]); y0 = Math.min(y0, r[1]); x1 = Math.max(x1, r[0] + r[2]); y1 = Math.max(y1, r[1] + r[3]);
+    for (let cy = Math.floor(r[1] / DECOR_CELL); cy <= Math.floor((r[1] + r[3]) / DECOR_CELL); cy++)
+      for (let cx = Math.floor(r[0] / DECOR_CELL); cx <= Math.floor((r[0] + r[2]) / DECOR_CELL); cx++) {
+        const k = cy * 4096 + cx;
+        (m.get(k) ?? m.set(k, []).get(k)!).push(r);
+      }
   }
-  return [x0, y0, x1, y1];
+  return m;
 }
 
+/** True if (px, py) is inside one of the NPC props that block movement. */
 export function isDecorSolidAt(px: number, py: number): boolean {
   const tx = px / TILE, ty = py / TILE;
   const w = WRECK.solid;
   if (tx >= w[0] && ty >= w[1] && tx < w[0] + w[2] && ty < w[1] + w[3]) return true; // the Grey Heron's hull
-  const b = (decorBox ??= decorBounds());
-  if (tx < b[0] || ty < b[1] || tx >= b[2] || ty >= b[3]) return false;
-  for (const d of NPC_DECOR) {
-    const r = d.solid;
-    if (r && tx >= r[0] && ty >= r[1] && tx < r[0] + r[2] && ty < r[1] + r[3]) return true;
-  }
+  const cell = (decorCells ??= decorGrid()).get(Math.floor(ty / DECOR_CELL) * 4096 + Math.floor(tx / DECOR_CELL));
+  if (!cell) return false;
+  for (const r of cell) if (tx >= r[0] && ty >= r[1] && tx < r[0] + r[2] && ty < r[1] + r[3]) return true;
   return false;
 }
 
