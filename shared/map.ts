@@ -127,8 +127,16 @@ export const riverCenter = (y: number) => Math.round(118 + 3 * Math.sin(y / 11) 
 
 /** Objects you can walk through (purely decorative, drawn over the player when they stand behind them). */
 const WALKABLE_OBJECTS = new Set<number>([T.BUSH]);
-/** Solid flag per tile (1 = blocks), filled once the world is built: the hot collision check reads one byte. */
+/** Solid flag per tile (1 = blocks the whole tile, 2 = only a small core in its middle), filled once the world is built: the hot collision check reads one byte. */
 let SOLID: Uint8Array | null = null;
+/**
+ * Cut trees (stumps, dead trunks) only block a small core round the trunk, not their whole tile (Murat 2026-11-08:
+ * hard to get through where there are cut trees). Heroes and monsters walk round them, slip between a stump and a
+ * tree and pass them diagonally; the look stays the same.
+ */
+const SMALL_OBJECTS = new Set<number>([T.STUMP]);
+/** Half-size in px of a small object's solid core (centred in its tile). Bigger than a hero's feet box (5). */
+export const SMALL_CORE = 7;
 const NATURE = new Set<number>([T.TREE, T.PINE, T.BUSH, T.ROCK, T.STUMP]);
 
 function buildWorld() {
@@ -985,7 +993,7 @@ export const OBJECTS = WORLD.objects;
 SOLID = new Uint8Array(MAP_W * FULL_H);
 for (let ty = 0; ty < FULL_H; ty++) for (let tx = 0; tx < MAP_W; tx++) {
   const o = OBJECTS[ty][tx];
-  SOLID[ty * MAP_W + tx] = (o !== EMPTY && !WALKABLE_OBJECTS.has(o)) || GROUND[ty][tx] === T.WATER ? 1 : 0;
+  SOLID[ty * MAP_W + tx] = GROUND[ty][tx] === T.WATER ? 1 : o === EMPTY || WALKABLE_OBJECTS.has(o) ? 0 : SMALL_OBJECTS.has(o) ? 2 : 1;
 }
 export const AREAS = WORLD.areas;
 
@@ -1168,13 +1176,21 @@ export function signpostNear(px: number, py: number, reach = 1.6): Signpost | un
 
 export function isSolidTile(tx: number, ty: number): boolean {
   if (tx < 0 || ty < 0 || tx >= MAP_W || ty >= FULL_H) return true;
-  if (SOLID && (tx | 0) === tx && (ty | 0) === ty) return SOLID[ty * MAP_W + tx] === 1;
+  if (SOLID && (tx | 0) === tx && (ty | 0) === ty) return SOLID[ty * MAP_W + tx] !== 0;
   const o = OBJECTS[ty][tx];
   return (o !== EMPTY && !WALKABLE_OBJECTS.has(o)) || GROUND[ty][tx] === T.WATER;
 }
 
+/** True for a tile that only blocks a small core (a stump): a hero can pass along its sides and past its corners. */
+export function isSmallObstacleTile(tx: number, ty: number): boolean {
+  return !!SOLID && tx >= 0 && ty >= 0 && tx < MAP_W && ty < FULL_H && SOLID[ty * MAP_W + tx] === 2;
+}
+
 export function isSolidAt(px: number, py: number): boolean {
-  return isSolidTile(Math.floor(px / TILE), Math.floor(py / TILE));
+  const tx = Math.floor(px / TILE), ty = Math.floor(py / TILE);
+  if (SOLID && tx >= 0 && ty >= 0 && tx < MAP_W && ty < FULL_H && SOLID[ty * MAP_W + tx] === 2)
+    return Math.abs(px - (tx + 0.5) * TILE) < SMALL_CORE && Math.abs(py - (ty + 0.5) * TILE) < SMALL_CORE;
+  return isSolidTile(tx, ty);
 }
 
 /** Name of the area at a pixel position (first match wins, so specific areas come first). */

@@ -1,0 +1,10 @@
+{
+  "date": "2026-11-08",
+  "pr": 363,
+  "title": "Easier walking among cut trees",
+  "changes": [
+    "Tree stumps and dead trunks now only block their trunk, so heroes and monsters can walk close past them and slip between a stump and a tree.",
+    "Heroes no longer snag on the edge of a stump, tree or rock corner: they slide round it when the way is clear just beside.",
+    "Click-to-walk finds shorter, smoother routes through the Cinder Scar, Stormbreak Crags, Blightmire Fen and other places full of cut trees."
+  ]
+}
