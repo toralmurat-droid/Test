@@ -108,7 +108,7 @@ if (import.meta.env?.DEV) (globalThis as any).__HI = HI; // dev: lets tools read
  */
 /** Painted decor that gets the pixelize pass (see pixelize.ts). Already pixel-made art (bonfire, bridges, stalls) is left out. */
 // Trees and bushes are left painted (Murat 2026-11-07: Path of Exile / Diablo look, not cartoon pixel art)
-const PIXEL_STYLE = /^(up_|rw_|stk_|crop_)/;
+const PIXEL_STYLE = /^(up_|rw_|stk_|crop_|ds_)/;
 
 export function hiResTexture(scene: Phaser.Scene, key: string, w: number, h: number, frames: number, scale: number, draw: (ctx: CanvasRenderingContext2D, f: number) => void) {
   if (scene.textures.exists(key)) return;
@@ -122,7 +122,8 @@ export function hiResTexture(scene: Phaser.Scene, key: string, w: number, h: num
     draw(ctx, f);
     ctx.restore();
     // decor in the bonfire's pixel style: flat dithered tones and a dark outline, one colour per art pixel
-    if (PIXEL_STYLE.test(key)) pixelize(ctx, w * scale, h * scale, Math.max(1, Math.round(scale * 2 / 3)), { ox: f * w * scale, step: 12, outline: 0.55 });
+    // (blocks that join their neighbours, "dsb_": the desert's cliffs, houses and walls, get no outline, or every tile shows its seams)
+    if (PIXEL_STYLE.test(key)) pixelize(ctx, w * scale, h * scale, Math.max(1, Math.round(scale * 2 / 3)), { ox: f * w * scale, step: 12, outline: key.startsWith("dsb_") ? 0 : 0.55 });
   }
   HI.set(key, hi);
   const tex = scene.textures.createCanvas(key, w * frames, h)!;

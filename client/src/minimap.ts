@@ -1,7 +1,7 @@
 import { uiScale } from "./worldscale";
-import { MAP_H, MAP_W, TILE, WORLD_H } from "../../shared/constants";
+import { DESERT_Y0, MAP_H, MAP_W, TILE, WORLD_H } from "../../shared/constants";
 import { floorAt, SEA_END } from "../../shared/dungeon";
-import { AREAS, EMPTY, GROUND, OBJECTS } from "../../shared/map";
+import { AREAS, EMPTY, GROUND, OBJECTS, T } from "../../shared/map";
 import { createTilesetCanvas, tileColors } from "./tileset";
 import { ISO } from "./isoflag";
 import { pixelText } from "./pixeltext";
@@ -43,6 +43,9 @@ export class Minimap {
   private key: string;
   /** Bounding box of everything discovered so far (tiles, inclusive); the maps only frame this. */
   private bx0 = MAP_W; private by0 = MAP_H; private bx1 = -1; private by1 = -1;
+  /** The same for Act 2's desert (shared/desert.ts): the maps frame the act the hero is in. */
+  private dx0 = MAP_W; private dy0 = MAP_H; private dx1 = -1; private dy1 = -1;
+  private inDesert = false;
   private view = MIN_VIEW; // tiles currently shown across the minimap (eases towards the explored size)
   /** Quest and NPC markers, set by the NPC layer every frame. */
   markers: MapMarker[] = [];
@@ -60,7 +63,9 @@ export class Minimap {
     for (let y = 0; y < MAP_H; y++) for (let x = 0; x < MAP_W; x++) {
       const o = OBJECTS[y][x];
       // the Mawdeep: black rock, dim cave floors
-      b.fillStyle = y >= SEA_END ? (o !== EMPTY ? "#0d0b0c" : "#4a3d33") : colors[o !== EMPTY ? o : GROUND[y][x]];
+      const g = GROUND[y][x];
+      b.fillStyle = y >= DESERT_Y0 ? (o === T.CLIFF ? "#7a4a2c" : o !== EMPTY && o !== T.BUSH ? colors[o] : g === T.SAND ? "#c99c60" : g === T.DIRT ? "#a8744a" : g === T.GRASS ? "#5e6e30" : colors[g]) // the desert
+        : y >= SEA_END ? (o !== EMPTY ? "#0d0b0c" : "#4a3d33") : colors[o !== EMPTY ? o : g];
       b.fillRect(x, y, 1, 1);
     }
     this.fogCtx = this.fog.getContext("2d")!;
@@ -127,7 +132,7 @@ export class Minimap {
       if (!s) return;
       const bin = atob(s);
       if (bin.length === this.seen.length) { for (let i = 0; i < bin.length; i++) this.seen[i] = bin.charCodeAt(i); return; }
-      for (const [ow, oh] of [[288, 216], [224, 168], [160, 120]]) { // saved before the map grew: same coordinates, copy row by row
+      for (const [ow, oh] of [[288, 288], [288, 216], [224, 168], [160, 120]]) { // saved before the map grew: same coordinates, copy row by row
         if (bin.length !== ow * oh) continue;
         for (let y = 0; y < oh && y < MAP_H; y++) for (let x = 0; x < ow && x < MAP_W; x++) this.seen[y * MAP_W + x] = bin.charCodeAt(y * ow + x);
       }
@@ -153,14 +158,24 @@ export class Minimap {
   }
 
   private grow(x: number, y: number) {
+    if (y >= DESERT_Y0) {
+      if (x < this.dx0) this.dx0 = x; if (x > this.dx1) this.dx1 = x;
+      if (y < this.dy0) this.dy0 = y; if (y > this.dy1) this.dy1 = y;
+      return;
+    }
     if (y >= WORLD_H) return; // the world map frames the overworld; below ground it frames the floor you are on
     if (x < this.bx0) this.bx0 = x; if (x > this.bx1) this.bx1 = x;
     if (y < this.by0) this.by0 = y; if (y > this.by1) this.by1 = y;
   }
+  /** The explored box of the act the hero is in. */
+  private box() {
+    return this.inDesert ? { x0: this.dx0, y0: this.dy0, x1: this.dx1, y1: this.dy1 } : { x0: this.bx0, y0: this.by0, x1: this.bx1, y1: this.by1 };
+  }
 
   /** Minimap zoom: shows a little more than the explored area, up to VIEW_W tiles across. */
   private targetView() {
-    const ext = Math.max(this.bx1 - this.bx0, this.by1 - this.by0) + 1;
+    const B = this.box();
+    const ext = Math.max(B.x1 - B.x0, B.y1 - B.y0) + 1;
     return Math.max(MIN_VIEW, Math.min(VIEW_W, ext * 0.6 + 8));
   }
 
@@ -174,10 +189,11 @@ export class Minimap {
       const s = Math.max(1, Math.floor(Math.min(cw / f.w, ch / f.h)));
       return { x: f.x + f.w / 2 - cw / s / 2, y: f.y + f.h / 2 - ch / s / 2, s };
     }
-    if (this.bx1 < 0) return { x: 0, y: 0, s: Math.max(1, Math.floor(Math.min(cw / MAP_W, ch / MAP_H))) };
-    const w = Math.max(24, this.bx1 - this.bx0 + 1 + MAP_PAD * 2), hh = Math.max(18, this.by1 - this.by0 + 1 + MAP_PAD * 2);
+    const B = this.box();
+    if (B.x1 < 0) return { x: 0, y: this.inDesert ? DESERT_Y0 : 0, s: Math.max(1, Math.floor(Math.min(cw / MAP_W, ch / WORLD_H))) };
+    const w = Math.max(24, B.x1 - B.x0 + 1 + MAP_PAD * 2), hh = Math.max(18, B.y1 - B.y0 + 1 + MAP_PAD * 2);
     const s = Math.max(1, Math.floor(Math.min(cw / w, ch / hh)));
-    const cx = (this.bx0 + this.bx1 + 1) / 2, cy = (this.by0 + this.by1 + 1) / 2;
+    const cx = (B.x0 + B.x1 + 1) / 2, cy = (B.y0 + B.y1 + 1) / 2;
     return { x: Math.round((cx - cw / s / 2) * s) / s, y: Math.round((cy - ch / s / 2) * s) / s, s };
   }
 
@@ -198,6 +214,7 @@ export class Minimap {
   draw(now: number, me: P | undefined, others: OtherHero[]) {
     if (now - this.last < 100) return;
     this.last = now;
+    if (me) this.inDesert = me.y >= DESERT_Y0 * TILE;
     if (me) this.reveal(Math.floor(me.x / TILE), Math.floor(me.y / TILE));
     if (this.dirty && now - this.lastSave > 3000) { this.save(); this.dirty = false; this.lastSave = now; }
 

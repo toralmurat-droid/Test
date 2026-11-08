@@ -7,7 +7,7 @@ import { leaving, noteBuild, reconnectSoon, returnToStart, takeCarried, upgradeA
 import { Client, getStateCallbacks, Room } from "colyseus.js";
 /** Beast-folk that lurk in the Mawdeep's ambush rooms (their eyes show through the dark). */
 const LURKERS = new Set<string>(["gnawkin", "tuskborn", "silkwretch", "duskwing", "crowseer"]);
-import { BOSS, ELITE, InputState, MERGE, MOBS, type MobKind, URSK, MAP_H, MAP_W, regenFromStamina, TICK_RATE, TILE } from "../../shared/constants";
+import { BOSS, ELITE, InputState, MERGE, MOBS, type MobKind, URSK, DESERT_Y0, MAP_H, MAP_W, regenFromStamina, TICK_RATE, TILE } from "../../shared/constants";
 import { CLASSES, ClassKind, MAX_LEVEL, xpForLevel } from "../../shared/classes";
 import { canPay, shortOf, MANA, manaRegen, maxManaFor, skillCost, unpackMana } from "../../shared/mana";
 import { nextSize, potionAmount, PotionKind, potionName, POTION_SIZES, total, unpackPotions } from "../../shared/potions";
@@ -79,7 +79,8 @@ import { PatchNotesPanel } from "./patchnotes";
 import { PartyUI } from "./party";
 import { StashUI, TradeUI } from "./trade";
 import { STASH, STASH_RANGE } from "../../shared/trade";
-import { afterLoading, hideLoading, loadingActive, loadingFor, setLoading } from "./loading";
+import { afterLoading, hideLoading, loadingActive, loadingFor, setLoading, showLoading } from "./loading";
+import { WaygateLayer } from "./waygate";
 import { ISO, IsoView, isoAnchor, isoInput, isoX, isoY, screenDir, screenDir8 } from "./iso";
 import { SMOOTH } from "./isoflag";
 import { addPixelGrid } from "./pixelgrid";
@@ -309,6 +310,7 @@ export class TownScene extends Phaser.Scene {
   private shrine?: ShrineLayer;
   private bounty?: BountyUI;
   private portals?: PortalLayer;
+  private waygates?: WaygateLayer;
   private chatEl = document.getElementById("chat") as HTMLInputElement;
   private onlineShown = -1; // online hero count last written next to the chat box
   private ideaBoard?: IdeaBoard;
@@ -402,9 +404,8 @@ export class TownScene extends Phaser.Scene {
       // a dark vignette around the edges
       // Gloomy and dark (Murat 2026-11-07: "too cute"): colour drained, darker overall, heavy vignette
       const cm = cam.postFX.addColorMatrix();
-      cm.saturate(-0.4);
-      cm.contrast(0.16, true);
-      cm.brightness(0.86, true);
+      this.grade = cm;
+      this.setGrade(false);
       cam.postFX.addVignette(0.5, 0.5, 0.82, 0.55);
       addPixelGrid(cam); // one pixel density for everything in the world
     }
@@ -667,6 +668,18 @@ export class TownScene extends Phaser.Scene {
       if (!e) return;
       e.sprite.setPosition(x, y); e.tx = x; e.ty = y; e.lastX = x; e.lastY = y; // a jump, not a walk
       if (id === this.me) { this.portals?.close(); this.jumped(); this.arrive(40, 14, 4, 700); } // warm glow, then the new place
+    });
+    // Act 2's waygate (shared/act2.ts): through to the other act; the loading screen stays up while that land is drawn
+    this.waygates = new WaygateLayer(this);
+    this.room.onMessage("waygate", ({ id, to, x, y }) => {
+      const e = this.entities.get(id);
+      if (!e) return;
+      e.sprite.setPosition(x, y); e.tx = x; e.ty = y; e.lastX = x; e.lastY = y;
+      if (id !== this.me) return;
+      this.jumped(); this.snapCamera();
+      showLoading(to === "desert" ? "Crossing into the Sunscar…" : "Crossing home to Oakvale…");
+      this.settled = 0;
+      this.cameras.main.fadeIn(1200, 60, 30, 8);
     });
     // Down a rope or a stair in the Mawdeep (shared/dungeon.ts LINKS): a jump to the other end, a fade through the dark
     this.room.onMessage("descend", ({ id, x, y }) => {
@@ -2731,11 +2744,23 @@ export class TownScene extends Phaser.Scene {
     cam.resetFX();
     cam.fadeIn(c.ms, c.r, c.g, c.b);
   }
+  /** The camera's colour grade (SMOOTH only): Oakvale drained and gloomy; the desert (Act 2) keeps a little more of its warm colour. */
+  private grade?: Phaser.FX.ColorMatrix;
+  private gradeDesert?: boolean;
+  private setGrade(desert: boolean) {
+    if (!this.grade || this.gradeDesert === desert) return;
+    this.gradeDesert = desert;
+    this.grade.reset();
+    this.grade.saturate(desert ? -0.22 : -0.4);
+    this.grade.contrast(desert ? 0.12 : 0.16, true);
+    this.grade.brightness(desert ? 0.92 : 0.86, true);
+  }
 
   update(_t: number, dtMs: number) {
     if (this.camSnap > 0 && --this.camSnap === 0) this.cameras.main.setLerp(CAM_LERP, CAM_LERP);
     this.iso?.update(dtMs);
     this.updateCover();
+    { const me = this.entities?.get(this.me)?.state; if (me) this.setGrade(me.y >= DESERT_Y0 * TILE); }
     if (loadingActive()) this.checkLoaded();
     this.ambient?.update(this.time.now, dtMs);
     if (this.dungeon) { this.dungeon.torch = this.torch && !this.entities?.get(this.me)?.state?.dead; this.dungeon.night = this.details?.darkNow ?? 0; }
@@ -3051,6 +3076,7 @@ export class TownScene extends Phaser.Scene {
     if (this.npcs) { this.npcs.hidePrompt = !!this.chests?.near || !!this.shrine?.near || !!this.portals?.near || !!this.stash?.near || !!this.bounty?.near; this.npcs.extraBlock = this.bounty?.trackerBlock() ?? ""; }
     this.npcs?.update(meEnt && !meEnt.state.dead ? meEnt.sprite : undefined, meEnt?.state);
     this.showAttune(meEnt?.state);
+    this.waygates?.update(meEnt?.state);
     this.portals?.update(meEnt && !meEnt.state.dead ? meEnt.sprite : undefined, !!this.npcs?.isOpen || !!this.chests?.near || !!this.shrine?.near);
     if (this.minimap && this.npcs) this.minimap.markers = [...this.npcs.markers, ...(this.portals?.markers() ?? []), ...(this.bounty?.markers() ?? []), ...(this.dungeon?.markers() ?? [])];
 

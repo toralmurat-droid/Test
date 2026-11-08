@@ -1,7 +1,7 @@
 import Phaser from "phaser";
-import { MAP_H, MAP_W, TILE, WORLD_H } from "../../shared/constants";
+import { DESERT_H, DESERT_Y0, MAP_H, MAP_W, TILE, UNDER_END, WORLD_H } from "../../shared/constants";
 import { SEA_END } from "../../shared/dungeon";
-import { ELEMENT_LANDS, EMPTY, OBJECTS, T } from "../../shared/map";
+import { ELEMENT_LANDS, EMPTY, OBJECTS, T, TILE_COUNT } from "../../shared/map";
 import type { GroundData } from "./groundPaint";
 
 /**
@@ -18,6 +18,7 @@ const FADE_MS = 220; // a chunk that still lands on screen blends in instead of 
 const SOLID = new Set<number>([
   T.TREE, T.PINE, T.BUSH, T.ROCK, T.PALISADE, T.ROOF_THATCH, T.ROOF_RED, T.ROOF_SLATE, T.WALL_TIMBER, T.WALL_STONE,
   T.WINDOW_TIMBER, T.WINDOW_STONE, T.DOOR, T.WELL, T.RUIN, T.BEAM, T.STUMP, T.BARREL, T.CRATE, T.HAY,
+  T.ADOBE, T.ADOBE_WALL, T.TENT, T.PALM,
 ]);
 
 export class SmoothGround {
@@ -28,13 +29,14 @@ export class SmoothGround {
   private near = new Set<string>(); // chunks on screen (plus a small margin): the ones the loading screen waits for
 
   constructor(private scene: Phaser.Scene, ground: number[][], private onImage: (img: Phaser.GameObjects.Image) => void) {
-    const g = new Int16Array(MAP_W * MAP_H), solid = new Uint8Array(MAP_W * MAP_H);
+    const g = new Int16Array(MAP_W * MAP_H), solid = new Uint8Array(MAP_W * MAP_H), cliff = new Uint8Array(MAP_W * MAP_H);
     for (let y = 0; y < MAP_H; y++) for (let x = 0; x < MAP_W; x++) {
       g[y * MAP_W + x] = ground[y][x];
       const o = OBJECTS[y][x];
-      if (o !== EMPTY && SOLID.has(o)) solid[y * MAP_W + x] = 1;
+      if (o === T.CLIFF) cliff[y * MAP_W + x] = 1;
+      else if (o !== EMPTY && SOLID.has(o)) solid[y * MAP_W + x] = 1;
     }
-    const data: GroundData = { w: MAP_W, h: MAP_H, tile: TILE, ground: g, solid, lands: ELEMENT_LANDS.map((l) => ({ x: l.x, y: l.y, w: l.w, h: l.h, el: l.el })), cave: { y0: WORLD_H, rock: SEA_END } };
+    const data: GroundData = { w: MAP_W, h: MAP_H, tile: TILE, tileCount: TILE_COUNT, ground: g, solid, lands: ELEMENT_LANDS.map((l) => ({ x: l.x, y: l.y, w: l.w, h: l.h, el: l.el })), cave: { y0: WORLD_H, rock: SEA_END, end: UNDER_END }, desert: { y0: DESERT_Y0, y1: DESERT_Y0 + DESERT_H }, cliff };
     const n = Math.max(1, Math.min(4, (navigator.hardwareConcurrency || 2) - 1));
     for (let i = 0; i < n; i++) {
       const w = new Worker(new URL("./groundWorker.ts", import.meta.url), { type: "module" });

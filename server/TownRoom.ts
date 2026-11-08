@@ -63,6 +63,7 @@ import { Asker, boardFor, submit, tick as ideaTick, vote as ideaVote } from "../
 import { hashAddr, ideaLog, saveIdeas } from "./ideaStore";
 import { dropLive, LiveState, rememberLive, takeLive } from "./handoff";
 import { MobView } from "./mobView";
+import { act2Missing, act2Open, actAt, desertSpawn, WAYGATE_RANGE, waygateArrival, waygateById, WAYGATES } from "../shared/act2";
 import { repairCost, respecCost, WEAR, wearMult } from "../shared/upkeep";
 import { attuneOf, bondShare, GOLEM_OF, isSummonKind, SUMMON, summonElement, summonScaleLevel, type SummonKind } from "../shared/summons";
 import { cleanFeast, familyOf, type Feast, feastMult, THRALL, thrallMax } from "../shared/devour";
@@ -159,6 +160,7 @@ export class Player extends Schema {
   // The Hide Rite (CHAINS[5], the Mawdeep Warrens' beast-folk): packed the same way
   @type("number") beast = 0;
   @type("number") wear = 0; // gear wear 0-100 (shared/upkeep.ts): each death adds some, the smith repairs it for gold
+  gateNoteAt = 0; // last "the waygate is cold" note (Act 2, shared/act2.ts)
   linkLock = ""; // the Mawdeep rope/stair a hero just came out of (shared/dungeon.ts LINKS): not taken again until they step off it
   nextSummon = 0; // when the server may bring back this player's quest fused blob (QuestStep.summon)
   feast: Feast = {}; // Devour (shared/devour.ts): monsters eaten per family, saved; sent to the owner as "feast"
@@ -698,6 +700,12 @@ export class TownRoom extends Room<TownState> {
       const v = text.trim().match(/^\/(up|down|unvote)\s+#?(\d+)$/i);
       if (v) return this.voteIdea(client, Number(v[2]), v[1].toLowerCase() === "up" ? 1 : v[1].toLowerCase() === "down" ? -1 : 0);
       if (/^\/max$/i.test(text.trim())) return this.maxHero(client);
+      const tp = process.env.NODE_ENV !== "production" && text.trim().match(/^\/tp\s+(\d+)\s+(\d+)$/i); // dev servers only: jump to a tile
+      if (tp) { p.x = (Number(tp[1]) + 0.5) * TILE; p.y = (Number(tp[2]) + 0.5) * TILE; return; }
+      if (process.env.NODE_ENV !== "production" && /^\/act2open$/i.test(text.trim())) { // dev servers only: both Act 1 finales done
+        for (const id of ["crown", "beast"]) { const c = CHAINS.findIndex((ch) => ch.id === id); this.qset(p, c, { questId: CHAINS[c].quests.length, questStage: 0, questCount: 0 }); }
+        return;
+      }
       const tr = text.trim().match(/^\/trade\s+(.+)$/i);
       if (tr) return this.tradeAsk(client.sessionId, { name: tr[1] });
       const inv = text.trim().match(/^\/(?:invite|inv|group)\s+(.+)$/i);
@@ -828,7 +836,7 @@ export class TownRoom extends Room<TownState> {
     this.applyStats(p);
     if (options?.newGame) saveHero(p.name, p.cls, this.snapshot(p));
     p.hp = p.maxHp;
-    const s = randomSpawn();
+    const s = save?.act === 2 && act2Open(p) ? desertSpawn() : randomSpawn(); // left from the desert: back in Kel Ashar
     p.x = s.x; p.y = s.y;
     // Back after an update (or a dropped connection): right where they stood, as hurt as they were, in their group
     if (options?.newGame) dropLive(p.name, p.cls);
@@ -928,7 +936,7 @@ export class TownRoom extends Room<TownState> {
         const q = this.qs(p, c), [a, b, n] = ch.keys;
         return [[a, q.questId], [b, q.questStage], [n, q.questCount], [ch.verKey, ch.version]];
       })),
-      portals: [...p.portals],
+      portals: [...p.portals], act: actAt(p.y),
       bounty: p.bounty, bountyDone: p.bountyDone, wear: p.wear, feast: { ...p.feast },
     };
   }
@@ -3123,6 +3131,7 @@ export class TownRoom extends Room<TownState> {
 
   /** Walking onto a rope or stair takes the hero to its other end (not straight back: they must step off first). */
   private useLinks(pid: string, p: Player) {
+    this.useWaygates(pid, p);
     if (p.linkLock) {
       const l = linkById(p.linkLock);
       if (l && Math.hypot(l.x - p.x, l.y - p.y) <= LINK_RANGE * 1.6) return;
@@ -3137,6 +3146,26 @@ export class TownRoom extends Room<TownState> {
       p.rollUntil = 0; p.rolling = false; p.emote = "";
       p.linkLock = dest.id;
       this.broadcast("descend", { id: pid, from: l.id, to: dest.id, down: l.down, x: Math.round(at.x), y: Math.round(at.y) });
+      return;
+    }
+  }
+
+  /**
+   * Act 2's waygates (shared/act2.ts): walking into one takes the hero to the other act, once they have beaten the
+   * first zone's two last bosses. Before that, the gate is cold: a note says who still stands in the way.
+   */
+  private useWaygates(pid: string, p: Player) {
+    for (const g of WAYGATES) {
+      if (Math.abs(g.x - p.x) > WAYGATE_RANGE || Math.abs(g.y - p.y) > WAYGATE_RANGE) continue;
+      if (!act2Open(p)) {
+        const now = Date.now();
+        if (now - p.gateNoteAt > 8000) { p.gateNoteAt = now; this.note(pid, `The waygate's stones are cold. It will wake when ${act2Missing(p).join(" and ")} ${act2Missing(p).length > 1 ? "are" : "is"} beaten.`); }
+        return;
+      }
+      const dest = waygateById(g.to)!, at = waygateArrival(dest);
+      p.x = at.x; p.y = at.y; p.moving = false;
+      p.rollUntil = 0; p.rolling = false; p.emote = "";
+      this.broadcast("waygate", { id: pid, to: dest.id, x: Math.round(at.x), y: Math.round(at.y) });
       return;
     }
   }
@@ -4857,7 +4886,7 @@ export class TownRoom extends Room<TownState> {
     this.clients.find((c) => c.sessionId === tid)?.send("died", { by: byName, ms: RESPAWN_MS });
     this.clock.setTimeout(() => {
       if (!this.state.players.has(tid)) return;
-      const s = randomSpawn();
+      const s = actAt(t.y) === 2 ? desertSpawn() : randomSpawn(); // back at the act's own town
       t.x = s.x; t.y = s.y; t.hp = t.maxHp; t.dead = false;
     }, RESPAWN_MS);
     return true;

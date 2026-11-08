@@ -10,6 +10,8 @@
 
 export interface GroundData {
   w: number; h: number; tile: number;
+  /** shared/map.ts TILE_COUNT: display grids hold row * TILE_COUNT + id. */
+  tileCount?: number;
   /** Ground tile id per tile (bridges already turned to water). */
   ground: Int16Array;
   /** 1 where a solid thing stands (walls, palisade, rocks): ground around it gets a soft contact shadow. */
@@ -20,12 +22,21 @@ export interface GroundData {
    * The underground band (shared/dungeon.ts): from row y0 the sea fades into the dark, from row rock on, solid tiles
    * are bare black rock and the open ones the dank earth of the Mawdeep's floors.
    */
-  cave?: { y0: number; rock: number };
+  cave?: { y0: number; rock: number; end?: number };
+  /** Act 2's desert band (shared/desert.ts), rows y0..y1: the same ground ids paint as dune sand, baked clay, sandstone. */
+  desert?: { y0: number; y1: number };
+  /** 1 on the desert's cliff tiles: their ground is the mountains' rock top (the outer steps stand up as blocks, iso.ts). */
+  cliff?: Uint8Array;
 }
 
 // Tile ids (shared/map.ts T)
 const GRASS = 0, GRASS_DARK = 1, TALL = 2, FLOWERS = 3, DIRT = 4, COBBLE = 5, SAND = 6, WATER = 7, BRIDGE = 8, FIELD = 9, CROPS = 10;
-const FLOOR = 39, RUBBLE = 40;
+const FLOOR = 39, RUBBLE = 40, FLAGS = 42;
+/** Painting a desert pixel (set per pixel in paintChunk): the grounds take their Act 2 looks. */
+let DESERT = false;
+const SANDP = ["#7e5a30", "#9c7340", "#b88c50", "#cfa262", "#e0b676", "#eccb8e"].map((h) => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)]);
+const CLAYP = ["#6a4028", "#7e5032", "#94623e", "#a8744a", "#ba8658", "#c99868"].map((h) => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)]);
+const SSTONE = ["#4f3a28", "#6d5236", "#8a6c48", "#a6875c", "#bea06f", "#d2b684"].map((h) => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)]);
 const NT = 64;
 /** Kernel radius in tiles: how far grounds reach into each other. */
 const KR = 1.8;
@@ -48,7 +59,7 @@ const clamp01 = (v: number) => (v < 0 ? 0 : v > 1 ? 1 : v);
 const sstep = (a: number, b: number, v: number) => { const t = clamp01((v - a) / (b - a)); return t * t * (3 - 2 * t); };
 
 /** Precomputed fields at tile resolution, interpolated per pixel. */
-export interface Fields { depth: Float32Array; ao: Float32Array; rock?: Float32Array }
+export interface Fields { depth: Float32Array; ao: Float32Array; rock?: Float32Array; cliff?: Float32Array }
 
 export function makeFields(g: GroundData): Fields {
   const { w, h, ground, solid } = g;
@@ -80,9 +91,10 @@ export function makeFields(g: GroundData): Fields {
   let rock: Float32Array | undefined;
   if (g.cave) {
     rock = new Float32Array(w * h);
-    for (let y = g.cave.rock; y < h; y++) for (let x = 0; x < w; x++) rock[y * w + x] = solid[y * w + x];
+    for (let y = g.cave.rock; y < (g.cave.end ?? h); y++) for (let x = 0; x < w; x++) rock[y * w + x] = solid[y * w + x];
   }
-  return { depth, ao, rock };
+  const cliff = g.cliff ? Float32Array.from(g.cliff) : undefined;
+  return { depth, ao, rock, cliff };
 }
 
 const out3 = new Float32Array(3);
@@ -109,6 +121,7 @@ const VOID = [16, 13, 15];
 const COB_LINE = hx("#1b1714"), JOINT = ["#241c15", "#3a2e22", "#4f4030"].map(hx), MOSSG = ["#2a3a1a", "#3e5424", "#566e30"].map(hx);
 
 function material(t: number, wx: number, wy: number, sx: number, sy: number, depth: number, now: number): number {
+  if (DESERT && t !== WATER && t !== BRIDGE) return desertMaterial(t, wx, wy, sx, sy);
   let r = 0, g = 0, b = 0, ht = 0.5;
   // big, slow grime and damp patches shared by every land material (muted, weathered look)
   const grime = fbm(wx / 110, wy / 110, 91);
@@ -334,11 +347,105 @@ function material(t: number, wx: number, wy: number, sx: number, sy: number, dep
     }
   }
   if (t !== WATER && t !== BRIDGE) {
-    const k = 0.78 + 0.3 * grime; // weathering: darker, damp patches
+    const k = 0.78 + 0.3 * grime; // weathering: darker, damp patches (the desert's grounds return before this)
     r *= k; g *= k; b *= k;
   }
   out3[0] = r; out3[1] = g; out3[2] = b;
   return ht;
+}
+
+/** One colour from a palette ramp at level lv (0..len-1), with ordered dithering between steps (the bonfire's pixel look). */
+function ramp(p: number[][], lv: number, sx: number, sy: number) {
+  const d = BAYER4[(Math.floor(sy * 1.5) & 3) * 4 + (Math.floor(sx * 1.5) & 3)];
+  const c = p[Math.max(0, Math.min(p.length - 1, Math.floor(lv + 0.5 + d * 0.9)))];
+  out3[0] = c[0]; out3[1] = c[1]; out3[2] = c[2];
+}
+
+/**
+ * Act 2's grounds (Murat 2026-11-08: all desert themed), in the same dithered pixel style as the rest:
+ * SAND = dunes with wind ripples, lit on the slopes facing the top-left sun; DIRT = baked red clay with polygon cracks
+ * and gravel; GRASS = the oases' dusty green; COBBLE / FLAGS / FLOOR / RUBBLE = sandstone paving, slabs and rubble.
+ */
+function desertMaterial(t: number, wx: number, wy: number, sx: number, sy: number): number {
+  switch (t) {
+    case SAND: {
+      // big dunes: a height field; slopes facing the light (top-left) are bright, the lee sides in shade
+      const hgt = (x: number, y: number) => vn(x / 90, y / 70, 401) * 0.7 + vn(x / 34, y / 28, 402) * 0.3;
+      const e = 2, slope = (hgt(wx - e, wy - e) - hgt(wx + e, wy + e)) * 28;
+      // wind ripples: fine wavy lines across the dune, bent by the dune shape
+      const rip = Math.sin((wx * 0.8 + wy * 0.35) / 1.9 + vn(wx / 16, wy / 16, 403) * 7 + hgt(wx, wy) * 9);
+      const m = fbm(wx / 70, wy / 70, 404);
+      let lv = 3.1 + slope * 1.6 + (m - 0.5) * 1.2 + (rip > 0.72 ? 0.55 : rip < -0.8 ? -0.5 : 0);
+      ramp(SANDP, lv, sx, sy);
+      // a few pebbles and dry grass tufts
+      const cx = Math.floor(wx / 6), cy = Math.floor(wy / 6), hc = hash2(cx, cy, 405);
+      if (hc < 0.05) {
+        const dx = wx - (cx + 0.3 + hash2(cx, cy, 406) * 0.4) * 6, dy = wy - (cy + 0.3 + hash2(cx, cy, 407) * 0.4) * 6;
+        if (dx * dx + dy * dy < 0.45) { lv = dx + dy < 0 ? 5 : 1; ramp(CLAYP, lv, sx, sy); }
+      }
+      return 0.35 + 0.2 * m + slope * 0.1;
+    }
+    case DIRT: { // baked clay: flat, reddish, cracked into plates, gravel strewn
+      const m = fbm(wx / 40, wy / 40, 411), p = vn(wx / 7, wy / 7, 412);
+      let lv = 2.6 + (m - 0.5) * 1.6 + (p - 0.5) * 0.8;
+      const C = 15, gx = Math.floor(wx / C), gy = Math.floor(wy / C);
+      let d1 = 1e9, d2 = 1e9;
+      for (let j = -1; j <= 1; j++) for (let i = -1; i <= 1; i++) {
+        const qx = (gx + i + hash2(gx + i, gy + j, 413)) * C, qy = (gy + j + hash2(gx + i, gy + j, 414)) * C;
+        const d = Math.hypot(wx - qx, wy - qy);
+        if (d < d1) { d2 = d1; d1 = d; } else if (d < d2) d2 = d;
+      }
+      const edge = d2 - d1;
+      if (edge < 0.4 && vn(wx / 10, wy / 10, 418) > 0.45) lv = 1.2; else if (edge < 1) lv -= 0.4; // fine cracks, here and there
+      // drifts of sand blown over the clay
+      const drift = sstep(0.5, 0.7, vn(wx / 26, wy / 26, 415) * 0.8 + vn(wx / 5, wy / 5, 419) * 0.2);
+      if (drift > 0.5) { ramp(SANDP, 3 + (p - 0.5), sx, sy); return 0.4; }
+      ramp(CLAYP, lv, sx, sy);
+      const cx = Math.floor(wx / 4), cy = Math.floor(wy / 4); // gravel
+      if (hash2(cx, cy, 416) < 0.12) {
+        const dx = wx - (cx + 0.5) * 4, dy = wy - (cy + 0.5) * 4, rr = 0.5 + hash2(cx, cy, 417) * 0.6;
+        if (dx * dx + dy * dy < rr * rr) ramp(SSTONE, dx + dy < 0 ? 4.5 : 2.2, sx, sy);
+      }
+      return 0.3 + 0.3 * p;
+    }
+    case GRASS: case GRASS_DARK: case TALL: case FLOWERS: { // the oasis: a dusty olive green, tufts, a little sand through it
+      const m = fbm(wx / 50, wy / 50, 421), blade = vn(sx / 1.1, sy / 4.2, 422) * 0.6 + vn(sx / 0.7, sy / 2.4, 423) * 0.4;
+      const bare = sstep(0.62, 0.8, vn(wx / 18, wy / 18, 424));
+      if (bare > 0.5) { ramp(SANDP, 2.6 + blade, sx, sy); return 0.3; }
+      const lv = 1.4 + m * 1.6 + (blade - 0.5) * 2.2;
+      const G = [[30, 40, 22], [44, 58, 28], [62, 76, 34], [86, 96, 44], [112, 116, 58]];
+      ramp(G, lv, sx, sy);
+      return 0.45 + 0.3 * blade;
+    }
+    case COBBLE: case FLAGS: case FLOOR: { // sandstone slabs in courses, worn and sand-filled
+      const C = t === COBBLE ? 7 : 12, ox = (vn(wx / 20, wy / 20, 431) - 0.5) * 2, oy = (vn(wx / 20, wy / 20, 432) - 0.5) * 2;
+      const qx = wx + ox, qy = wy + oy;
+      const row = Math.floor(qy / C), shift = (row % 2) * 0.5 + hash2(row, 0, 433) * 0.3;
+      const gx = Math.floor(qx / C + shift), lx = qx / C + shift - gx, ly = qy / C - row;
+      const e = Math.min(lx, 1 - lx, ly, 1 - ly) * C;
+      const gone = hash2(gx, row, 434) < 0.08 || vn(wx / 36, wy / 36, 435) > 0.74;
+      if (gone) { ramp(SANDP, 2.8 + (vn(wx / 3, wy / 3, 436) - 0.5), sx, sy); return 0.3; }
+      const tone = hash2(gx, row, 437), m = fbm(wx / 10, wy / 10, 438);
+      let lv = 2.2 + tone * 1.6 + (m - 0.5) * 1.2 + ((0.5 - lx) + (0.5 - ly)) * 0.8;
+      if (hash2(gx, row, 439) < 0.35) { // a crack across the slab
+        const an = hash2(gx, row, 440) * Math.PI, d = Math.abs((lx - 0.5) * Math.sin(an) - (ly - 0.5) * Math.cos(an));
+        if (d < 0.03) lv = 0.3;
+      }
+      if (e < 0.5) { ramp(SANDP, 1.2, sx, sy); return 0.35; } // sand in the joints
+      if (e < 1.1) lv = lx + ly < 1 ? lv + 0.8 : 0.6; // lit and shaded rims
+      ramp(SSTONE, lv, sx, sy);
+      return 0.55;
+    }
+    case RUBBLE: {
+      const cx = Math.floor(wx / 5), cy = Math.floor(wy / 5);
+      const px = (cx + 0.5) * 5 + (hash2(cx, cy, 441) - 0.5) * 2.5, py = (cy + 0.5) * 5 + (hash2(cx, cy, 442) - 0.5) * 2.5;
+      const dx = wx - px, dy = wy - py, rr = 1 + hash2(cx, cy, 443) * 1.4;
+      if (hash2(cx, cy, 444) < 0.6 && dx * dx + dy * dy < rr * rr) { ramp(SSTONE, 2.6 - (dx + dy) / rr * 1.4, sx, sy); return 0.65; }
+      ramp(SANDP, 2.4 + (vn(wx / 4, wy / 4, 445) - 0.5), sx, sy);
+      return 0.4;
+    }
+    default: ramp(SANDP, 3, sx, sy); return 0.4;
+  }
 }
 
 /**
@@ -406,7 +513,7 @@ export function paintChunk(g: GroundData, f: Fields, sx0: number, sy0: number, c
   const c1 = new Float32Array(3), c2 = new Float32Array(3);
   const add = (t: number, k: number) => {
     if (k <= 0) return;
-    t %= 45; // display grids carry art-row variants
+    t %= g.tileCount ?? 51; // display grids carry art-row variants (shared/map.ts TILE_COUNT)
     if (t === BRIDGE) t = WATER;
     if (t === GRASS_DARK || t === TALL || t === FLOWERS || t === GRASS) { gw[t] += k; t = GRASS; } // one grass, see G_DARK
     if (wt[t] === 0) types.push(t);
@@ -417,6 +524,7 @@ export function paintChunk(g: GroundData, f: Fields, sx0: number, sy0: number, c
     for (let i = 0; i < W; i++) {
       const sx = sx0 + (i + 0.5) / res;
       const wx = sy + sx / 2, wy = sy - sx / 2;
+      DESERT = !!g.desert && wy / tile >= g.desert.y0 - 2 && wy / tile < g.desert.y1;
       // wavy borders: warp the lookup point
       const u = wx + (vn(wx / 45, wy / 45, 3) - 0.5) * 18 + (vn(wx / 15, wy / 15, 1) - 0.5) * 10 + (vn(wx / 4, wy / 4, 4) - 0.5) * 4;
       const v = wy + (vn(wx / 45, wy / 45, 5) - 0.5) * 18 + (vn(wx / 15, wy / 15, 2) - 0.5) * 10 + (vn(wx / 4, wy / 4, 6) - 0.5) * 4;
@@ -485,9 +593,10 @@ export function paintChunk(g: GroundData, f: Fields, sx0: number, sy0: number, c
         const ao = field(f.ao, wx / tile - 0.5, wy / tile - 0.5);
         if (ao > 0) { const k = 1 - 0.45 * ao; r *= k; gg *= k; b *= k; }
       }
-      if (g.cave && wy / tile >= g.cave.y0 - 8) {
+      if (g.cave && wy / tile >= g.cave.y0 - 8 && !DESERT) {
         const ty = wy / tile, cv = g.cave;
-        if (ty < cv.rock) { // the open sea runs out into the dark
+        if (cv.end !== undefined && ty >= cv.end) { r = VOID[0]; gg = VOID[1]; b = VOID[2]; } // the rock between the Mawdeep and the desert
+        else if (ty < cv.rock) { // the open sea runs out into the dark
           const k = sstep(cv.y0 - 8, cv.rock, ty + (vn(wx / 30, wy / 30, 350) - 0.5) * 3);
           r += (VOID[0] - r) * k; gg += (VOID[1] - gg) * k; b += (VOID[2] - b) * k;
         } else {
@@ -498,6 +607,14 @@ export function paintChunk(g: GroundData, f: Fields, sx0: number, sy0: number, c
           const rk = field(f.rock!, wx / tile - 0.5, wy / tile - 0.5) + (vn(wx / 6, wy / 6, 352) - 0.5) * 0.3;
           const k = sstep(0.3, 0.62, rk);
           r += (VOID[0] - r) * k; gg += (VOID[1] - gg) * k; b += (VOID[2] - b) * k;
+        }
+      }
+      if (DESERT && f.cliff) { // the mountains' rock top, up on the plateau
+        const ck = field(f.cliff, wx / tile - 0.5, wy / tile - 0.5) + (vn(wx / 5, wy / 5, 460) - 0.5) * 0.35;
+        if (ck > 0.55) {
+          const pit = hash2(Math.floor(wx * 1.3), Math.floor(wy * 1.3), 462);
+          r = 0xb8; gg = 0x86; b = 0x4e; // desertArt.ts TOP: the cliffs' sunlit top
+          if (pit < 0.08) { r = 0xcf; gg = 0x9e; b = 0x62; } else if (pit > 0.93) { r = 0x9a; gg = 0x6a; b = 0x40; }
         }
       }
       if (lands.length) {

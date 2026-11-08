@@ -511,6 +511,16 @@ const DRAW: Record<number, (p: Painter, f: number, v: number) => void> = {
     p.disc(6, 8.2, 2.2, 1.2, 0xb0b0b0);
     p.px(10, 11, 0x5a5a5a); p.px(11, 12, 0x5a5a5a);
   },
+  // Act 2, the desert (the iso view draws these from desertArt.ts; these are the top-down tiles and minimap colours)
+  [T.CLIFF]: (p) => { p.fill(0xa8784a); p.speckle(0x8a5e38, 14); p.speckle(0xc8986a, 10); p.rect(0, 13, 16, 3, 0x7a5232); },
+  [T.PALM]: (p) => {
+    p.disc(8, 14.5, 5, 1.4, SHADOW); p.rect(7, 7, 2, 8, 0x7e5a36);
+    p.disc(8, 6, 6.5, 3.2, 0x4a6a24); p.disc(7, 5.5, 4, 2, 0x5e7a2c); p.px(7, 8, 0x8a3a1a); p.px(9, 8, 0x8a3a1a);
+  },
+  [T.ADOBE]: (p) => { p.fill(0xb98a5c); p.speckle(0xa77a50, 12); p.speckle(0xc99a6a, 8); },
+  [T.ADOBE_WALL]: (p) => { p.rect(2, 4, 12, 10, 0xb98a5c); p.rect(2, 4, 12, 2, 0xd2a272); },
+  [T.TENT]: (p) => { p.disc(8, 14.5, 7, 1.5, SHADOW); p.rect(1, 6, 14, 8, 0x5a3424); p.rect(1, 8, 14, 1, 0xb89060); p.rect(1, 11, 14, 1, 0xb89060); p.rect(7, 4, 2, 2, 0x2a1a10); },
+  [T.BONES]: (p) => { p.rect(4, 10, 8, 1, 0xe8dcc0); for (let x = 4; x < 12; x += 2) p.rect(x, 7, 1, 3, 0xe8dcc0); p.disc(12.5, 10, 1.6, 1.2, 0xe8dcc0); },
   [T.BEAM]: (p, _f, m) => beamWall(p, m),
   [T.PALISADE]: (p, _f, m) => palisade(p, m),
   [T.FENCE]: (p) => {

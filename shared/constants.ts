@@ -4,7 +4,12 @@ export const ART_K = TILE / 16;
 export const MAP_W = 288; // tiles
 /** Rows of the overworld (Oakvale's valley). The map is taller: under it lies the Mawdeep Warrens (shared/dungeon.ts). */
 export const WORLD_H = 216; // tiles
-export const MAP_H = 288; // tiles: the overworld plus the underground band (rows WORLD_H..MAP_H)
+/** End of the underground band (rows WORLD_H..UNDER_END hold the Mawdeep Warrens, shared/dungeon.ts). */
+export const UNDER_END = 288;
+/** Act 2, the desert (shared/desert.ts): its own band of the map, under a strip of solid rock. */
+export const DESERT_Y0 = 300;
+export const DESERT_H = 216;
+export const MAP_H = DESERT_Y0 + DESERT_H; // tiles: overworld, underground band, rock, desert
 export const TICK_RATE = 20; // server updates per second
 export const PLAYER_SPEED = 90; // px per second (default; classes override, see classes.ts)
 export const PLAYER_RADIUS = 5; // collision half-size in px
