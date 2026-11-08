@@ -9,7 +9,7 @@ import {
 } from "../shared/constants";
 import { ambushRoomAt, arrivalAt, CRACK_OPEN_MS, LINK_RANGE, linkById, LINKS, SHORTCUT_OPEN_MS } from "../shared/dungeon";
 import {
-  ATTACK_VARIANTS, basicDrain, CLASSES, ClassKind, COMBO_WINDOW_MS, DODGE, EMOTES, DASH_INVULN_MS, GUARD_REDUCTION, isActiveClass, isClassKind, levelFromXp, MAX_XP, capLevel, PVP_KILL_XP, xpForLevel,
+  ATTACK_VARIANTS, basicDrain, CLASSES, ClassKind, COMBO_WINDOW_MS, DODGE, EMOTES, DASH_INVULN_MS, GUARD_REDUCTION, isActiveClass, isClassKind, levelFromXp, MAX_XP, XP_CURVE_VERSION, convertOldXp, capLevel, PVP_KILL_XP, xpForLevel,
 } from "../shared/classes";
 import { MANA_POTION_DROP, manaRegen, maxManaFor, packMana, pay } from "../shared/mana";
 import { Counts, dropSize, Potions, nextSize, noPotions, packPotions, potionAmount, potionName, PotionKind, potionSlots, POTION_COOLDOWN_MS, POTION_STACK, slotsAfter, SIZES, total } from "../shared/potions";
@@ -951,7 +951,7 @@ export class TownRoom extends Room<TownState> {
     const talents: Record<string, number> = {};
     p.talents.forEach((v, k) => { talents[k] = v; });
     return {
-      color: p.color, xp: p.xp, level: p.level, kills: p.kills, gold: p.gold, potions: total(p.pots.potion), pots: { potion: [...p.pots.potion], mpotion: [...p.pots.mpotion] },
+      color: p.color, xp: p.xp, xpv: XP_CURVE_VERSION, level: p.level, kills: p.kills, gold: p.gold, potions: total(p.pots.potion), pots: { potion: [...p.pots.potion], mpotion: [...p.pots.mpotion] },
       ptSta: p.ptSta, ptStr: p.ptStr, ptMag: p.ptMag, ptDex: p.ptDex,
       weapon: p.weapon, armour: p.armour, shoes: p.shoes, hat: p.hat, shield: p.shield, ranged: p.ranged,
       bag: p.bag.toArray(), talents, slots: p.slots.toArray(),
@@ -973,7 +973,10 @@ export class TownRoom extends Room<TownState> {
     const num = (v: unknown, d = 0) => (typeof v === "number" && Number.isFinite(v) ? v : d);
     const gear = (v: unknown) => (typeof v === "string" && isGearId(v) && canWear(p.cls, v) ? v : "");
     p.color = num(s.color, p.color);
-    p.xp = Math.min(MAX_XP, num(s.xp)); p.level = capLevel(num(s.level, 1)); p.kills = num(s.kills);
+    p.level = capLevel(num(s.level, 1)); p.kills = num(s.kills);
+    // Saves from before the slower XP curve (2026-11-08) keep their level and their share of the way to the next one
+    p.xp = Math.min(MAX_XP, s.xpv === XP_CURVE_VERSION ? num(s.xp) : convertOldXp(num(s.xp), p.level));
+    if (levelFromXp(p.xp) < p.level) p.xp = xpForLevel(p.level); // never a bar below the hero's level
     p.gold = num(s.gold);
     // Potions by size; saves from before potion sizes had plain counts (all Minor), and a few mana potions for heroes older than mana
     const cnt = (v: unknown): Counts => (Array.isArray(v) ? [0, 1, 2].map((i) => Math.min(120, Math.max(0, Math.floor(num(v[i]))))) : [0, 0, 0]) as Counts;

@@ -567,6 +567,7 @@ export function buildMobs(out: string, ONLY?: string[]) {
     humanoid("mob_sanddead", "sanddead", 22, 30, 27.5 / 30, 0.88),
     humanoid("mob_veiled", "veiled", 24, 32, 31.2 / 32, 0.93),
     humanoid("mob_camelfolk", "camelfolk", 34, 36, 33.5 / 36, 1.08),
+    humanoid("mob_sphinx", "sphinx", 40, 40, 36.5 / 40, 1.12), // winged: a wider, taller frame
     humanoid("mob_sunwright", "sunwright", 44, 48, 42 / 48, 1.25), // Act 2's final boss, drawn big like the Hollow King
     { key: "mob_scorpion", w: 36, h: 30, draw: (c: C2, f: number) => scorpionFrame(c, 36, 30, f) },
     // the Night Raiders (raiders.ts): one sheet for each of the Seven
@@ -591,7 +592,7 @@ export function buildMobs(out: string, ONLY?: string[]) {
       const c = body.getContext("2d"), sc = shadow.getContext("2d");
       c.scale(HI, HI); sc.scale(HI, HI);
       SH = sc; s.draw(c, f); SH = null;
-      const blob = !/skeleton|bandit|bride|necromancer|demon|crawler|hollowking|gnawkin|tuskborn|silkwretch|duskwing|packlord|hornbrute|hidemother|crowseer|gnasher|weaver|nomad|scorpion|sanddead|veiled|camelfolk|sunwright|nightraider/.test(s.key);
+      const blob = !/skeleton|bandit|bride|necromancer|demon|crawler|hollowking|gnawkin|tuskborn|silkwretch|duskwing|packlord|hornbrute|hidemother|crowseer|gnasher|weaver|nomad|scorpion|sanddead|veiled|camelfolk|sphinx|sunwright|nightraider/.test(s.key);
       const b = shrink(body, "mb", tw, th);
       pixelize(b, tw, th, true, blob ? { y0: Math.round(th * 0.7), y1: th, mud: 0.14, sat: 0.9 } : { y0: Math.round(th * 0.72), y1: th, mud: s.key.includes("bandit") ? 0.38 : 0.2 });
       const u = shrink(shadow, "ms", tw, th); pixelAlpha(u);

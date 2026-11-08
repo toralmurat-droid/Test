@@ -217,6 +217,7 @@ export const GEAR_DROP: Record<MobKind, { chance: number; tiers: [number, number
   sanddead: { chance: 0.18, tiers: [0.2, 0.45, 0.35] },
   veiled: { chance: 0.2, tiers: [0.2, 0.45, 0.35] },
   camelfolk: { chance: 0.22, tiers: [0.15, 0.45, 0.4] },
+  sphinx: { chance: 0.24, tiers: [0.12, 0.45, 0.43] },
   sunwright: { chance: 1, tiers: [0, 0.2, 0.8] },
   nightraider: { chance: 1, tiers: [0, 0.35, 0.65] },
 };

@@ -41,9 +41,9 @@ export interface Look {
   /** The other half of the beast-folk: a man's face, the animal's head flayed back as a hood (the rest is beast). */
   beastHood?: boolean;
   /** What the rite grew on their backs: a naked tail, spider legs, wings that beat. */
-  tail?: number; spiderLegs?: number; wings?: { col: number; kind: "bat" | "feather" };
+  tail?: number; spiderLegs?: number; wings?: { col: number; kind: "bat" | "feather"; rest?: boolean; tip?: number };
 }
-export type BeastHead = "rat" | "boar" | "spider" | "bat" | "wolf" | "bull" | "bear" | "crow" | "camel";
+export type BeastHead = "rat" | "boar" | "spider" | "bat" | "wolf" | "bull" | "bear" | "crow" | "camel" | "lion";
 
 /** Monsters painted with the same body code (sheets built by paint/mobs.ts). */
 export const MOB_LOOKS: Record<string, Look> = {
@@ -197,6 +197,15 @@ export const MOB_LOOKS: Record<string, Look> = {
     torso: "leather", torsoCol: 0x6a4a2e, trim: 0x3a2a1a, sash: 0x2a5a8a, belt: 0x3a2a1a, buckle: 0xc9a050,
     legs: "fur", legCol: 0xa07a4c, boots: 0x4a3424, bootStyle: "wrap",
     sleeve: 0xc09060, arms: "bare", bracer: 0x2a5a8a, glove: 0x3a2a1a, weapon: "spear", fx: 0xfff0d0, back: "cape", capeCol: 0x2a5a8a, build: 1.3,
+  },
+  sphinx: { // a sphinx warrior, old guardian of Kharsun's tombs: a lion's head under a striped gold-and-lapis royal headcloth,
+    // golden wings half-folded on its back, a bronze-scaled chest, a linen kilt-panel, a gilded khopesh and a lapis shield
+    skin: 0xc8923a, beast: "lion", hairStyle: "none", head: "none", eyeGlow: 0x6ae8ff,
+    torso: "plate", torsoCol: 0x8a6a2e, trim: 0x2a4a9a, tabard: { col: 0xd6c8a6, trim: 0x2a4a9a, emblem: 0xe0b040 },
+    belt: 0x2a4a9a, buckle: 0xf0c850, legs: "fur", legCol: 0xb8843a, boots: 0x7a4e24, bootStyle: "bare",
+    sleeve: 0xc8923a, arms: "bare", bracer: 0xe0b040, weapon: "sword", bladeLen: 1.1, fx: 0xffe8a0,
+    shield: { col: 0x24418a, trim: 0xe0b040, emblem: 0xf0c850, style: "round" },
+    wings: { col: 0xead08a, kind: "feather", rest: true, tip: 0x2a4a9a }, tail: 0xb8843a, build: 1.3,
   },
   // summoned by a skeleton ritual (BONES.ritual): a hulking red brute with horns, a bone harness and a cleaver
   demon: {
