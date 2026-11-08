@@ -11,6 +11,47 @@ import { itemTexture, potionTex } from "./textures";
 import { uselessItem, wearing } from "../../shared/heroSheet";
 import { SheetPreview, sheetHero, wornOf } from "./sidepanel";
 import { bagPref, lootFilter, setBagPref, setLootFilter } from "./lootfilter";
+import { itemRunes, socketsOf, socketProblem } from "../../shared/gear";
+import { parseRune, Rune, RUNE_KIND_NAMES, RUNES, runeName, runeText } from "../../shared/runes";
+import { runeCanvas, runeCss, runeStone } from "./runeArt";
+
+/** Rune lines of an item for tooltips (shared/runes.ts): what each set rune does, and the free sockets. */
+export function runeHtml(id: string): string {
+  const n = socketsOf(id);
+  if (!n) return "";
+  const rs = itemRunes(id);
+  const lines = rs.map((r) => `<span style="color:${runeCss(r)}">${runeName(r)}: ${runeText(r)}</span>`);
+  if (rs.length < n) lines.push(`<span class="glvl">${n - rs.length} empty rune socket${n - rs.length > 1 ? "s" : ""}</span>`);
+  return lines.join("<br>");
+}
+
+/** Hover text of a loose rune. */
+export function looseRuneHtml(r: Rune): string {
+  return `<b style="color:${runeCss(r)}">${runeName(r)}</b> · ${RUNE_KIND_NAMES[RUNES[r.key].kind]}<br>${runeText(r)}`;
+}
+
+/** Small socket marks on an item cell: a rune stone per set rune, a dark hole per free socket. */
+function socketPips(id: string, onPick?: (n: number) => void): HTMLElement | undefined {
+  const n = socketsOf(id);
+  if (!n) return undefined;
+  const rs = itemRunes(id);
+  const box = document.createElement("span");
+  box.className = "gpips";
+  for (let i = 0; i < n; i++) {
+    const r = rs[i];
+    const pip = document.createElement("span");
+    pip.className = "gpip" + (r ? " set" : "");
+    if (r) {
+      const c = document.createElement("canvas");
+      c.width = c.height = 16;
+      c.getContext("2d")!.drawImage(runeStone(r), 0, 0);
+      pip.appendChild(c);
+      if (onPick) pip.onclick = (ev) => { ev.stopPropagation(); onPick(i); };
+    }
+    box.appendChild(pip);
+  }
+  return box;
+}
 
 /**
  * Equipment on the client: overlay sprites that follow each hero frame for frame, and the equipment screen (G).
@@ -157,6 +198,8 @@ export class GearMenu {
   private sorted = bagPref("sort");
   private marks = bagPref("junk");
   private dropAsk = 0; // "Drop useless" asks once: the second click within 3 s drops
+  /** Bag index of the rune picked up to set into an item (shared/runes.ts), or -1. */
+  private pickRune = -1;
 
   constructor(private scene: Phaser.Scene, private send: (type: string, msg: unknown) => void, private preview: (p?: SheetPreview) => void = () => {}) {
     // Buttons never keep keyboard focus, so Space/Enter in a fight can't click a bag item by accident
@@ -193,7 +236,8 @@ export class GearMenu {
   refresh(state: any) {
     if (!this.open || !state) return;
     const bagItems: string[] = Array.from(state.bag ?? []);
-    const sig = [this.sorted, this.marks, this.dropAsk > performance.now(), lootFilter().minRarity, lootFilter().ownClass, JSON.stringify(Array.from(state.talents?.entries?.() ?? [])), state.cls, state.level, state.ptSta, state.ptStr, state.ptMag, state.ptDex, ...GEAR_SLOTS.map((s) => state[s]), ...bagItems, state.potions, state.gold, state.sta, state.str, state.mag, state.dex, state.maxHp].join("|");
+    if (this.pickRune >= 0 && !parseRune(bagItems[this.pickRune])) this.pickRune = -1;
+    const sig = [this.pickRune, this.sorted, this.marks, this.dropAsk > performance.now(), lootFilter().minRarity, lootFilter().ownClass, JSON.stringify(Array.from(state.talents?.entries?.() ?? [])), state.cls, state.level, state.ptSta, state.ptStr, state.ptMag, state.ptDex, ...GEAR_SLOTS.map((s) => state[s]), ...bagItems, state.potions, state.gold, state.sta, state.str, state.mag, state.dex, state.maxHp].join("|");
     if (sig === this.sig) return;
     this.sig = sig;
     this.busyUntil = 0; // the server answered, accept clicks again
@@ -211,8 +255,11 @@ export class GearMenu {
         if (!info) return;
         const d = gearDef(id)!, why = reqProblem(id, hero);
         const aff = affixHtml(id);
+        const runes = runeHtml(id);
+        const pr = this.pickRune >= 0 ? parseRune(bagItems[this.pickRune]) : undefined, sockWhy = pr ? socketProblem(id, pr) : "";
+        const tip = pr ? (sockWhy ? `<span class="gbad">${sockWhy}</span>` : `Click: set the ${runeName(pr)} in this item`) : extra;
         info.innerHTML = `<b style="color:${itemColor(id)}">${gearName(id, cls)}</b> <span class="glvl">Lv ${itemLevel(id)}</span> · ${rarityLabel(id)}${TIER_NAMES[d.tier]} ${SLOT_NAMES[d.slot]}<br>` +
-          `${itemText(id) || "No bonus"}<br>${aff ? `${aff}<br>` : ""}<span class="${why ? "gbad" : "gok"}">${why || reqText(id, cls, hero)}</span>${extra ? `<br><small>${extra}</small>` : ""}`;
+          `${itemText(id) || "No bonus"}<br>${aff ? `${aff}<br>` : ""}${runes ? `${runes}<br>` : ""}<span class="${why ? "gbad" : "gok"}">${why || reqText(id, cls, hero)}</span>${tip ? `<br><small>${tip}</small>` : ""}`;
       };
       el.onmouseleave = () => { this.preview(); if (info) info.textContent = ""; };
     };
@@ -241,7 +288,17 @@ export class GearMenu {
           (why ? `<small class="gbad">Inactive: ${why}</small>` : `<small>${itemText(id)}</small>`)
         : `<b>${SLOT_NAMES[slot]}</b><br><small>empty</small>`;
       row.appendChild(txt);
-      if (id) { row.onclick = () => this.act("unequip", slot); hover(row, id, "Click to take off", slot); }
+      const pips = id ? socketPips(id, (n) => this.act("unsocket", { slot, n })) : undefined;
+      if (pips) row.appendChild(pips);
+      const pr = this.pickRune >= 0 ? parseRune(bagItems[this.pickRune]) : undefined;
+      if (id && pr && !socketProblem(id, pr)) row.classList.add("gfit");
+      if (id) {
+        row.onclick = () => {
+          if (this.pickRune >= 0) { this.act("socket", { rune: this.pickRune, slot }); this.pickRune = -1; this.sig = ""; return; }
+          this.act("unequip", slot);
+        };
+        hover(row, id, itemRunes(id).length ? "Click to take off · Click a rune stone to take the rune out" : "Click to take off", slot);
+      }
       slots.appendChild(row);
     }
 
@@ -270,7 +327,7 @@ export class GearMenu {
     // Display order: as picked up, or sorted by slot, then rarity and level (the server keeps its own order)
     const order = bagItems.map((_, i) => i);
     if (this.sorted) {
-      const key = (id: string) => [GEAR_SLOTS.indexOf(gearDef(id)?.slot ?? "weapon"), -itemRarity(id), -itemLevel(id)];
+      const key = (id: string) => (parseRune(id) ? [GEAR_SLOTS.length, -(parseRune(id)!.rank), 0] : [GEAR_SLOTS.indexOf(gearDef(id)?.slot ?? "weapon"), -itemRarity(id), -itemLevel(id)]);
       order.sort((a, b) => {
         const ka = key(bagItems[a]), kb = key(bagItems[b]);
         return (Number(junk.has(a)) - Number(junk.has(b))) || ka[0] - kb[0] || ka[1] - kb[1] || ka[2] - kb[2] || a - b;
@@ -309,6 +366,19 @@ export class GearMenu {
         cell.onmouseleave = () => { if (info) info.textContent = ""; };
         cell.onclick = () => this.send(kind === "mpotion" ? "manapotion" : "potion", {});
         cell.oncontextmenu = (ev) => { ev.preventDefault(); this.send("droppotion", { kind, size, n }); };
+      } else if (id && parseRune(id)) {
+        // a loose rune: click to pick it up, then click an item to set it in
+        const r = parseRune(id)!;
+        cell.appendChild(runeCanvas(id));
+        cell.style.borderColor = runeCss(r);
+        cell.appendChild(Object.assign(document.createElement("span"), { className: "gcelllvl", textContent: ["", "I", "II", "III"][r.rank] }));
+        if (this.pickRune === i) cell.classList.add("gpicked");
+        cell.onmouseenter = () => {
+          if (info) info.innerHTML = looseRuneHtml(r) + `<br><small>${this.pickRune === i ? "Now click a worn item or a bag item to set it in · Click again: put it back" : "Click: pick it up to set in an item · Right-click: drop"}</small>`;
+        };
+        cell.onmouseleave = () => { if (info) info.textContent = ""; };
+        cell.onclick = () => { this.pickRune = this.pickRune === i ? -1 : i; this.sig = ""; this.refresh(state); };
+        cell.oncontextmenu = (ev) => { ev.preventDefault(); this.pickRune = -1; this.act("dropgear", i); };
       } else if (id) {
         const d = gearDef(id)!;
         cell.appendChild(iconCanvas(this.scene, id));
@@ -316,11 +386,18 @@ export class GearMenu {
         if (itemRarity(id) >= 2) cell.style.boxShadow = `inset 0 0 6px ${itemColor(id)}`;
         const fits = canWear(cls, id), why = fits ? reqProblem(id, hero) : "";
         if (itemLevel(id) > 1) cell.appendChild(Object.assign(document.createElement("span"), { className: "gcelllvl" + (why ? " gbad" : ""), textContent: String(itemLevel(id)) }));
-        hover(cell, id, (junk.has(i) ? "Useless: raises no stat · " : "") + (fits ? (why ? "Too strong for you yet · Right-click: drop" : "Click: equip · Right-click: drop") : `Only a ${d.cls} can wear this · Right-click: drop`));
+        hover(cell, id, (junk.has(i) ? "Useless: raises no stat · " : "") + (itemRunes(id).length ? "Click a rune stone to take the rune out · " : "") + (fits ? (why ? "Too strong for you yet · Right-click: drop" : "Click: equip · Right-click: drop") : `Only a ${d.cls} can wear this · Right-click: drop`));
         if (this.marks && junk.has(i)) cell.classList.add("gjunk");
         if (!fits) cell.style.opacity = "0.5";
         else if (why) cell.classList.add("glocked");
-        cell.onclick = () => this.act("equip", i);
+        const pips = socketPips(id, (n) => this.act("unsocket", { item: i, n }));
+        if (pips) cell.appendChild(pips);
+        const pr = this.pickRune >= 0 ? parseRune(bagItems[this.pickRune]) : undefined;
+        if (pr && !socketProblem(id, pr)) cell.classList.add("gfit");
+        cell.onclick = () => {
+          if (this.pickRune >= 0) { this.act("socket", { rune: this.pickRune, item: i }); this.pickRune = -1; this.sig = ""; return; }
+          this.act("equip", i);
+        };
         cell.oncontextmenu = (ev) => { ev.preventDefault(); this.act("dropgear", i); };
       } else cell.disabled = true;
       bag.appendChild(cell);

@@ -104,6 +104,8 @@ import { bindBeastFx } from "./beastFx";
 import { bindRaiderFx, raiderTrail } from "./raiderFx";
 import { DungeonView } from "./dungeon";
 import { TEXT_FONT, TEXT_PX, WT } from "./pixelfont";
+import { parseRune, RUNES, RuneKey } from "../../shared/runes";
+import { runeCss, runeTexture } from "./runeArt";
 
 /** One painted bit on a merged blob, in body-relative units (-1..1 across the body). */
 interface BlobPart { kind: "patch" | "eye" | "mouth"; u: number; v: number; r: number; col: number }
@@ -769,9 +771,18 @@ export class TownScene extends Phaser.Scene {
     items.onAdd((it: any, id: string) => {
       if (it.kind === "quest" && it.owner !== this.room.sessionId) return; // someone else's quest drop
       const gear = it.kind === "gear" && gearDef(it.gear);
-      const img = gear
+      const rune = it.kind === "gear" ? parseRune(it.gear) : undefined; // a loose rune (shared/runes.ts)
+      const img = rune
+        ? this.add.image(it.x, it.y, runeTexture(this, rune)).setScale(0.6).setDepth(it.y - 8)
+        : gear
         ? this.add.image(it.x, it.y, "gear_icons", baseId(it.gear)).setScale(0.6 / ART_K).setDepth(it.y - 8)
         : this.add.image(it.x, it.y, itemTexture(this, it.kind === "quest" ? `q_${it.gear}` : it.kind === "potion" || it.kind === "mpotion" ? potionTex(it.kind, Number(it.gear) || 0) : it.kind)).setDepth(it.y - 8);
+      if (rune) {
+        // runes glow faintly in their own colour
+        const glow = this.add.circle(it.x, it.y, 5, RUNES[rune.key].color, 0.35).setDepth(it.y - 9).setBlendMode(Phaser.BlendModes.ADD);
+        this.tweens.add({ targets: glow, scale: 1.5, alpha: 0.08, duration: 700, yoyo: true, repeat: -1 });
+        img.once("destroy", () => glow.destroy());
+      }
       if (it.kind === "quest") {
         // Quest drops glow so they stand out from the gold
         const glow = this.add.circle(it.x, it.y, 6, 0xffd166, 0.3).setDepth(it.y - 9).setBlendMode(Phaser.BlendModes.ADD);
@@ -796,6 +807,9 @@ export class TownScene extends Phaser.Scene {
         if (g) img.setAlpha(passesFilter(lootFilter(), this.opts.cls, g) ? 1 : 0.4);
       }
     });
+    // Runes (shared/runes.ts): set in / taken out, and a rune firing in a fight
+    this.room.onMessage("runeset", ({ name, on }) => this.feed(on ? `${name} set in` : `${name} taken out, back in your bag`));
+    this.room.onMessage("rune", (m: { k: RuneKey; x: number; y: number; id?: string }) => this.runeFlash(m));
     // Equipping an item the hero isn't strong enough for yet (item level / stat requirements, shared/gear.ts)
     this.room.onMessage("gearno", ({ text }) => {
       const me = this.entities.get(this.me);
@@ -815,6 +829,11 @@ export class TownScene extends Phaser.Scene {
     this.room.onMessage("pickup", ({ kind, amount, x, y, gear, name }) => {
       if (kind === "quest") {
         this.floatText(x, y - 6, `+1 ${QUEST_ITEMS[gear]?.name ?? ""}`, "#ffd166", PIXEL_FONT);
+        return;
+      }
+      if (kind === "gear" && parseRune(gear)) {
+        this.floatText(x, y - 6, `+${name}`, runeCss(parseRune(gear)!), PIXEL_FONT);
+        this.feed(`Found a ${name}! Open the bag (G), click it, then click an item to set it in`);
         return;
       }
       if (kind === "gear") {
@@ -1647,6 +1666,19 @@ export class TownScene extends Phaser.Scene {
    * Magic, Rare and Legendary drops on the ground (shared/gear.ts rarity): a soft glow in the rarity colour,
    * plus a pixel light beam for Rare and Legendary, and a chime when one drops near you.
    */
+  /** A rune fired (shared/runes.ts): its stone pops up over the spot and a thin ring of its colour spreads. Small on purpose. */
+  private runeFlash(m: { k: RuneKey; x: number; y: number; id?: string }) {
+    const d = RUNES[m.k];
+    if (!d) return;
+    const who = m.id ? this.entities.get(m.id)?.sprite : undefined;
+    const x = who?.x ?? m.x, y = (who?.y ?? m.y) - 14;
+    const stone = this.add.image(x, y, runeTexture(this, { key: m.k, rank: 2 })).setScale(0.5).setDepth(y + 2000).setAlpha(0.95);
+    this.tweens.add({ targets: stone, y: y - 10, scale: 0.75, alpha: 0, duration: 650, ease: "Quad.easeOut", onComplete: () => stone.destroy() });
+    const r = m.k === "ember" ? 40 : 16;
+    const ring = this.add.circle(x, y + 12, 4).setStrokeStyle(1, d.color, 0.9).setDepth(y + 1999).setBlendMode(Phaser.BlendModes.ADD);
+    this.tweens.add({ targets: ring, radius: r, alpha: 0, duration: 320, ease: "Quad.easeOut", onComplete: () => ring.destroy() });
+  }
+
   private lootGlow(img: Phaser.GameObjects.Image, x: number, y: number, rarity: number, depth: number) {
     const col = RARITY_HEX[rarity];
     const parts: Phaser.GameObjects.GameObject[] = [];

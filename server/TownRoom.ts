@@ -52,14 +52,16 @@ import { groupDmgMult, groupHpMult, PARTY, together } from "../shared/party";
 import { heroPoise, MOB_COMBAT, mobBody, POISE, poiseLevelMult, poiseSpeed, PVP_PROTECT_LEVEL, pvpDamageMult, pvpProtected, SWING_AHEAD } from "../shared/combat";
 import {
   BAG_SIZE, Equipped, gearDef, GEAR_SLOTS, activeGear, reqProblem, itemLevel, HeroReqInfo, GearSlot, gearBlock, gearName, gearReachMult, gearSpeedMult, gearStats, isGearId, potionChance, rollGear, canWear, starterKit,
+  isBagItem, socketProblem, itemRunes, withRunes, runeEffects, stripRunes, GEAR_DROP,
 } from "../shared/gear";
+import { parseRune, rollMobRune, rollRune, RUNE_DROP, runeId, runeIdName, RUNES, RuneKey } from "../shared/runes";
 /** "Frost Katana Lv 17" for pickup messages. */
 /** Hit direction for the client's flinch nudge (unit vector, 1 decimal), or undefined when there is no push. */
 const hitDir = (push: [number, number]) => {
   const l = Math.hypot(push[0], push[1]);
   return l > 0 ? { kx: Math.round((push[0] / l) * 10) / 10, ky: Math.round((push[1] / l) * 10) / 10 } : {};
 };
-const lvlName = (id: string, cls: string) => `${gearName(id, cls)}${itemLevel(id) > 1 ? ` Lv ${itemLevel(id)}` : ""}`;
+const lvlName = (id: string, cls: string) => parseRune(id) ? runeIdName(id) : `${gearName(id, cls)}${itemLevel(id) > 1 ? ` Lv ${itemLevel(id)}` : ""}`;
 import { Asker, boardFor, submit, tick as ideaTick, vote as ideaVote } from "../shared/ideas";
 import { hashAddr, ideaLog, saveIdeas } from "./ideaStore";
 import { dropLive, LiveState, rememberLive, takeLive } from "./handoff";
@@ -392,6 +394,7 @@ interface HitOpts {
   el?: Element; // the element the hit shows as (damage number colour)
   mobEl?: Element; // a monster's elemental attack: the hero's resistance cuts it
   drain?: number; // % of the damage dealt that heals the attacker (vampire skills)
+  rune?: boolean; // damage from a rune effect (shared/runes.ts): never fires runes again
 }
 
 const COLORS = [0xe74c3c, 0x3498db, 0x2ecc71, 0xf1c40f, 0x9b59b6, 0xe67e22, 0x1abc9c, 0xecf0f1];
@@ -645,6 +648,8 @@ export class TownRoom extends Room<TownState> {
     this.onMessage("unequip", (client, slot: GearSlot) => this.unequip(client.sessionId, slot));
     this.onMessage("dropgear", (client, i: number) => this.dropGear(client.sessionId, i));
     this.onMessage("dropgears", (client, list: number[]) => this.dropGears(client.sessionId, list));
+    this.onMessage("socket", (client, m: { rune?: number; slot?: GearSlot; item?: number }) => this.socketRune(client, m));
+    this.onMessage("unsocket", (client, m: { slot?: GearSlot; item?: number; n?: number }) => this.unsocketRune(client, m));
     this.onMessage("droppotion", (client, m: { kind?: string; size?: number; n?: number }) => this.dropPotions(client.sessionId, m));
     this.onMessage("lootfilter", (client, f: unknown) => { this.lootFilters.set(client.sessionId, cleanFilter(f)); });
     this.onMessage("ranged", (client) => this.fireRanged(client.sessionId));
@@ -979,7 +984,7 @@ export class TownRoom extends Room<TownState> {
     p.weapon = gear(s.weapon); p.armour = gear(s.armour); p.shoes = gear(s.shoes);
     p.hat = gear(s.hat); p.shield = gear(s.shield); p.ranged = gear(s.ranged);
     // The bag may hold items for other classes (bought, traded or taken from the stash for another hero)
-    if (Array.isArray(s.bag)) setBag(p, s.bag.filter((v): v is string => isGearId(v)).slice(0, BAG_SIZE));
+    if (Array.isArray(s.bag)) setBag(p, s.bag.filter((v): v is string => isBagItem(v)).slice(0, BAG_SIZE));
     // Old saves (before the skill tree rework) had other skill ids: those points come back to spend again
     for (const [k, v] of Object.entries(cleanRanks(p.cls, p.level, s.talents ?? {}))) p.talents.set(k, v);
     if (Array.isArray(s.slots)) s.slots.slice(0, SLOT_COUNT).forEach((v, i) => {
@@ -3915,6 +3920,9 @@ export class TownRoom extends Room<TownState> {
       const gear = rollGear(kind, level);
       if (gear) this.dropItem("gear", x, y, 1, gear);
     }
+    // Runes (shared/runes.ts) lie on the ground like gear
+    const rune = rollMobRune(GEAR_DROP[kind]?.chance ?? 0, level);
+    if (rune) this.dropItem("gear", x, y, 1, rune);
   }
 
   private pickUp(p: Player, pid: string) {
@@ -3932,7 +3940,7 @@ export class TownRoom extends Room<TownState> {
       if (it.kind === "potion" || it.kind === "mpotion") {
         if (this.addPotions(p, it.kind, potSize(it.gear), it.amount) < it.amount) return; // no room in the bag: leave it on the ground
       } else if (it.kind === "gear") {
-        if (this.bagFull(p) || !isGearId(it.gear)) return; // bag full: leave it
+        if (this.bagFull(p) || !isBagItem(it.gear)) return; // bag full: leave it
         const f = this.lootFilters.get(pid);
         if (f && !passesFilter(f, p.cls, it.gear)) return; // the hero's loot filter skips it (side panel, Inventory tab)
         setBag(p, [...bagItems(p), it.gear]);
@@ -4108,6 +4116,7 @@ export class TownRoom extends Room<TownState> {
     }
     if (castSkill(this.host, id, skill)) {
       p.emote = "";
+      this.runesOnCast(id, p);
       this.questDo(id, "cast");
       if (!p.outlaw && inVillage(p.x, p.y)) this.setOutlaw(id, p, true);
     }
@@ -4167,7 +4176,7 @@ export class TownRoom extends Room<TownState> {
 
   /** Fills the empty slots with the class's starting kit (shared/gear.ts starterKit); kit items already carried are not doubled. */
   private wearKit(p: Player) {
-    const have = new Set([...GEAR_SLOTS.map((s) => p[s]), ...bagItems(p)]);
+    const have = new Set([...GEAR_SLOTS.map((s) => p[s]), ...bagItems(p)].map((id) => stripRunes(id ?? "")));
     for (const [slot, id] of Object.entries(starterKit(p.cls)) as [GearSlot, string][]) if (!p[slot] && !have.has(id)) p[slot] = id;
   }
 
@@ -4204,6 +4213,159 @@ export class TownRoom extends Room<TownState> {
     setBag(p, [...bagItems(p), p[slot]]);
     p[slot] = "";
     this.applyStats(p);
+  }
+
+  // ---- Runes (shared/runes.ts) ----
+  /** Set the loose rune at bag index `rune` into a worn item (`slot`) or another bag item (`item`). */
+  private socketRune(client: Client, m: { rune?: number; slot?: GearSlot; item?: number }) {
+    const p = this.state.players.get(client.sessionId);
+    if (!p || p.dead || !m || !Number.isInteger(m.rune)) return;
+    const items = [...bagItems(p)];
+    const ri = m.rune!, r = ri >= 0 && ri < items.length ? parseRune(items[ri]) : undefined;
+    if (!r) return;
+    const worn = typeof m.slot === "string" && GEAR_SLOTS.includes(m.slot) ? m.slot : undefined;
+    const bi = !worn && Number.isInteger(m.item) && m.item! >= 0 && m.item! < items.length && m.item !== ri ? m.item! : -1;
+    const target = worn ? p[worn] : bi >= 0 ? items[bi] : "";
+    if (!target || !gearDef(target)) return;
+    const why = socketProblem(target, r);
+    if (why) { client.send("gearno", { text: why }); return; }
+    const next = withRunes(target, [...itemRunes(target), r]);
+    if (worn) p[worn] = next; else items[bi] = next;
+    items.splice(ri, 1);
+    setBag(p, items);
+    if (worn) this.applyStats(p);
+    client.send("runeset", { name: runeIdName(runeId(r.key, r.rank)), on: true });
+  }
+
+  /** Take rune `n` out of a worn item or bag item: it goes back to the bag whole. */
+  private unsocketRune(client: Client, m: { slot?: GearSlot; item?: number; n?: number }) {
+    const p = this.state.players.get(client.sessionId);
+    if (!p || p.dead || !m || !Number.isInteger(m.n)) return;
+    if (this.bagFull(p)) { client.send("gearno", { text: "No room in your bag for the rune" }); return; }
+    const items = [...bagItems(p)];
+    const worn = typeof m.slot === "string" && GEAR_SLOTS.includes(m.slot) ? m.slot : undefined;
+    const bi = !worn && Number.isInteger(m.item) && m.item! >= 0 && m.item! < items.length ? m.item! : -1;
+    const target = worn ? p[worn] : bi >= 0 ? items[bi] : "";
+    const runes = target ? itemRunes(target) : [];
+    const r = runes[m.n!];
+    if (!r) return;
+    runes.splice(m.n!, 1);
+    const next = withRunes(target, runes);
+    if (worn) p[worn] = next; else items[bi] = next;
+    items.push(runeId(r.key, r.rank));
+    setBag(p, items);
+    if (worn) this.applyStats(p);
+    client.send("runeset", { name: runeIdName(runeId(r.key, r.rank)), on: false });
+  }
+
+  /** Rune effects of a hero's worn items that count (cached per worn set). */
+  private runeCache = new Map<string, { sig: string; fx: ReturnType<typeof runeEffects> }>();
+  private runesOf(id: string, p: Player) {
+    const sig = GEAR_SLOTS.map((s) => p[s]).join("|") + `|${p.level}|${p.ptSta},${p.ptStr},${p.ptMag},${p.ptDex}`;
+    const hit = this.runeCache.get(id);
+    if (hit && hit.sig === sig) return hit.fx;
+    const fx = sig.includes("^") ? runeEffects(this.equipped(p)) : {};
+    this.runeCache.set(id, { sig, fx });
+    return fx;
+  }
+
+  private runeReady = new Map<string, number>();
+  /** Rolls rune `key` for hero `id`: true when it fires (chance, then its own short cooldown). */
+  private runeRoll(id: string, p: Player, key: RuneKey): number {
+    const e = this.runesOf(id, p)[key];
+    if (!e) return 0;
+    const now = Date.now(), k = `${id}:${key}`;
+    if (now < (this.runeReady.get(k) ?? 0) || Math.random() >= e.chance) return 0;
+    this.runeReady.set(k, now + RUNES[key].icdMs);
+    return e.power;
+  }
+
+  private runeFx(k: RuneKey, x: number, y: number, extra: Record<string, unknown> = {}) {
+    this.broadcast("rune", { k, x: Math.round(x), y: Math.round(y), ...extra });
+  }
+
+  /** Weapon runes when a hero's basic attack or skill lands on a foe (`dealt` = the hit's damage). */
+  private runesOnHit(aid: string, a: Player, tid: string, dealt: number) {
+    if (a.dead || dealt <= 0) return;
+    const at = this.state.players.get(tid) ?? this.state.mobs.get(tid);
+    if (!at) return;
+    const tx = at.x, ty = at.y;
+    let v: number;
+    if ((v = this.runeRoll(aid, a, "ember"))) {
+      this.runeFx("ember", tx, ty);
+      const amt = dealt * v;
+      this.host.later(80, () => { for (const o of this.targetsAround(tx, ty, 40, aid)) this.hitTarget(aid, o, amt * (this.state.mobs.has(o) ? mobAffinity(this.state.mobs.get(o)!.kind, "fire") : 1), [0, 0], { kb: 0, el: "fire", rune: true }); });
+    }
+    if ((v = this.runeRoll(aid, a, "rime"))) {
+      this.runeFx("rime", tx, ty);
+      this.host.later(40, () => this.hitTarget(aid, tid, 1, [0, 0], { kb: 0, el: "cold", rune: true, stunMs: v, slowMs: v + 800 }));
+    }
+    if ((v = this.runeRoll(aid, a, "venom"))) {
+      this.runeFx("venom", tx, ty);
+      const m = this.state.mobs.get(tid), each = (dealt * v * (m ? mobAffinity(m.kind, "poison") : 1)) / 4;
+      if (each >= 0.5) for (let i = 1; i <= 4; i++) this.host.later(500 * i, () => this.hitTarget(aid, tid, each, [0, 0], { dot: true, kb: 0, el: "poison", rune: true }));
+    }
+    if ((v = this.runeRoll(aid, a, "storm"))) {
+      // lightning leaps from the target to the nearest foes in turn
+      const n = v >= 0.7 ? 4 : v >= 0.55 ? 3 : 2, hit = new Set([tid]);
+      let fx = tx, fy = ty;
+      this.runeFx("storm", tx, ty);
+      for (let j = 0; j < n; j++) {
+        let best = "", bd = 96;
+        this.state.mobs.forEach((o, oid) => {
+          if (hit.has(oid) || o.dead || o.hidden || (o.owner && !this.canHurtSummon(aid, o)) || Math.abs(o.x - fx) > bd || Math.abs(o.y - fy) > bd) return;
+          const d = Math.hypot(o.x - fx, o.y - fy);
+          if (d < bd) { bd = d; best = oid; }
+        });
+        if (!best) break;
+        const to = this.state.mobs.get(best)!;
+        hit.add(best);
+        this.broadcast("arc", { x0: Math.round(fx), y0: Math.round(fy), x1: Math.round(to.x), y1: Math.round(to.y) });
+        const target = best, amt = dealt * v * mobAffinity(to.kind, "shock");
+        this.host.later(60 * (j + 1), () => this.hitTarget(aid, target, amt, [0, 0], { kb: 0, el: "shock", rune: true }));
+        fx = to.x; fy = to.y;
+      }
+    }
+    if ((v = this.runeRoll(aid, a, "blood"))) {
+      a.hp = Math.min(a.maxHp, a.hp + a.maxHp * v);
+      this.runeFx("blood", a.x, a.y, { id: aid });
+    }
+  }
+
+  /** Weapon runes when a hero casts a skill. */
+  private runesOnCast(id: string, p: Player) {
+    const v = this.runeRoll(id, p, "echo");
+    if (!v) return;
+    p.mana = Math.min(p.maxMana, p.mana + p.maxMana * v);
+    this.syncMana(p);
+    this.runeFx("echo", p.x, p.y, { id });
+  }
+
+  /** Armour runes before a blow lands on a hero: the Ward rune can stop most of it. Returns the damage left. */
+  private runesWard(tid: string, t: Player, dmg: number): number {
+    const v = this.runeRoll(tid, t, "ward");
+    if (!v) return dmg;
+    this.runeFx("ward", t.x, t.y, { id: tid });
+    return Math.max(1, Math.round(dmg * (1 - v)));
+  }
+
+  /** Armour runes after a blow from `from` (a monster or hero) landed on a living hero. */
+  private runesStruck(tid: string, t: Player, from: string, dmg: number) {
+    let v: number;
+    const foe = this.state.mobs.get(from) ?? this.state.players.get(from);
+    if (foe && (v = this.runeRoll(tid, t, "thorn"))) {
+      this.runeFx("thorn", foe.x, foe.y);
+      const amt = dmg * v;
+      this.host.later(60, () => this.hitTarget(tid, from, amt, [0, 0], { kb: 0, rune: true, thorn: true }));
+    }
+    if (foe && (v = this.runeRoll(tid, t, "frost"))) {
+      this.runeFx("frost", foe.x, foe.y);
+      foe.slowUntil = Math.max(foe.slowUntil, Date.now() + v);
+    }
+    if ((v = this.runeRoll(tid, t, "mend"))) {
+      t.hp = Math.min(t.maxHp, t.hp + t.maxHp * v);
+      this.runeFx("mend", t.x, t.y, { id: tid });
+    }
   }
 
   /** Throw a bag item on the ground (anyone can pick it up). */
@@ -4407,6 +4569,7 @@ export class TownRoom extends Room<TownState> {
       if (a) dmg = Math.max(1, Math.round(dmg * pvpDamageMult(a.level, tp.level))); // hero vs hero (shared/combat.ts)
       const killed = this.damagePlayer(targetId, dmg, name, push, kb, { ...opts, atkLevel: a?.level });
       this.bloodthirst(a, attackerId, hpBefore - tp.hp, opts.drain, targetId);
+      if (a && (opts.basic || opts.skill) && !opts.dot && !opts.rune && hpBefore > tp.hp) this.runesOnHit(attackerId, a, targetId, hpBefore - tp.hp);
       if (killed && a) {
         const victim = this.state.players.get(targetId)!;
         a.kills++;
@@ -4428,6 +4591,7 @@ export class TownRoom extends Room<TownState> {
     this.bloodthirst(a, attackerId, Math.min(dmg, m.hp), opts.drain, targetId);
     m.hp = Math.max(0, m.hp - dmg);
     this.addHate(m, attackerId, dmg); // fight back (generated aggro)
+    if (a && (opts.basic || opts.skill) && !opts.dot && !opts.rune) this.runesOnHit(attackerId, a, targetId, dmg); // weapon runes (shared/runes.ts)
     // Guardian (shared/summons.ts): a Summoner's golem close by draws the monster's anger instead of its owner
     const guard = a && !m.owner ? this.guardOf(attackerId, m) : undefined;
     if (guard) { this.addHate(m, guard, dmg); m.foe = guard; m.target = ""; }
@@ -4714,7 +4878,7 @@ export class TownRoom extends Room<TownState> {
     if (!this.nearStash(p) || typeof i !== "number" || !Number.isInteger(i) || i < 0) return;
     const st = loadStash(p.name), bag = bagItems(p);
     if (dir === "put") {
-      if (i >= bag.length || !isGearId(bag[i])) return;
+      if (i >= bag.length || !isBagItem(bag[i])) return;
       if (st.items.length >= STASH_SIZE) return this.stashSend(client, "The stash is full");
       st.items.push(bag.splice(i, 1)[0]);
     } else {
@@ -4898,6 +5062,7 @@ export class TownRoom extends Room<TownState> {
     markChest(p.name, c.id, refill);
     client.send("chestopen", { id: c.id, refill: CHEST_RESPAWN_MS });
     const loot = rollChest(c.level, c.tier);
+    if (Math.random() < RUNE_DROP.chest * (1 + 0.5 * (c.tier - 1))) loot.gear.push(rollRune(c.level)); // a rune (shared/runes.ts)
     let row = 0; // stack the "+loot" texts so they don't overlap
     const got = (kind: ItemKind, amount: number, gear = "") =>
       client.send("pickup", { kind, amount, x: c.x, y: c.y - 8 - 9 * row++, gear, name: kind === "gear" ? lvlName(gear, p.cls) : kind === "potion" || kind === "mpotion" ? potionName(kind, potSize(gear)) : "" });
@@ -5189,6 +5354,9 @@ export class TownRoom extends Room<TownState> {
     if (block) dmg = Math.max(1, Math.round(dmg * (1 - block)));
     // A monster's fire, cold or poison attack: the hero's resistances (armour, shield, hat) cut it
     if (opts.mobEl) dmg = Math.max(1, Math.round(dmg * (1 - gearResist(this.equipped(t), opts.mobEl))));
+    // Armour runes (shared/runes.ts): a Ward rune may stop most of a real blow
+    const struck = !opts.dot && !opts.rune && !opts.wrath && !!opts.from && opts.from !== tid;
+    if (struck) dmg = this.runesWard(tid, t, dmg);
     // Stone Bond (shared/summons.ts): the hero's nearest golem takes part of the blow
     const bond = this.bondOf(tid, t);
     if (bond && dmg > 1) {
@@ -5215,7 +5383,7 @@ export class TownRoom extends Room<TownState> {
       t.x = kb.x; t.y = kb.y;
     }
     this.broadcast("hit", { id: tid, dmg, blocked: guarded, crit: !!opts.crit, dot: !!opts.dot, el: opts.el ?? opts.mobEl, ...(opts.dot ? {} : hitDir(push)) });
-    if (t.hp > 0) { afterHit(this.host, opts.from, tid, opts); return false; }
+    if (t.hp > 0) { afterHit(this.host, opts.from, tid, opts); if (struck) this.runesStruck(tid, t, opts.from!, dmg); return false; }
     if (riseAgain(this.host, tid)) return false; // Blood Pact: a killing blow leaves the vampire standing
     t.dead = true;
     if (opts.from && this.state.players.has(opts.from)) onKill(this.host, opts.from); // Bloodlust

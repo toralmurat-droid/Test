@@ -3,6 +3,7 @@ import { MAX_LEVEL } from "./classes";
 import { STATS, Stats, StatKind, statsFor } from "./powers";
 import type { ClassKind } from "./classes";
 import { Element, ELEMENTS, ELEMENT_EFFECT, ELEMENT_NAMES, MAX_RESIST } from "./elements";
+import { isRuneId, parseRuneCode, Rune, RUNES, runeCode, mergeRunes } from "./runes";
 
 /**
  * Equipment: six slots, each item adds stats and is drawn on the hero.
@@ -222,6 +223,13 @@ export const GEAR_DROP: Record<MobKind, { chance: number; tiers: [number, number
 
 export function isGearId(v: unknown): v is string {
   if (typeof v !== "string") return false;
+  // Runes set in the item (shared/runes.ts): they must fit its sockets, the rest of the id is checked as usual
+  if (v.includes("^")) {
+    const bare = stripRunes(v), runes = itemRunes(v);
+    if (!runes.length || runes.length > socketsOf(bare) || withRunes(bare, runes) !== v) return false;
+    if (runes.some((r) => !runeFits(bare, r))) return false;
+    return isGearId(bare);
+  }
   const base = baseId(v);
   if (!(base in GEAR)) return false;
   const plain = withLevel(base, itemLevel(v));
@@ -368,6 +376,7 @@ export const REQ_STAT: Record<GearSlot, StatKind | "attack"> = { weapon: "attack
 
 /** The id without its random bonuses ("w_frost@17~R:atk3,dex2" -> "w_frost@17"). */
 export function plainId(id: string): string {
+  id = stripRunes(id);
   const k = id.indexOf("~");
   return k < 0 ? id : id.slice(0, k);
 }
@@ -403,6 +412,13 @@ const defCache = new Map<string, GearDef>();
 export function gearDef(id: string): GearDef | undefined {
   const hit = defCache.get(id);
   if (hit) return hit;
+  if (id.includes("^")) { // set runes don't change the bonuses (they fire in combat, shared/runes.ts)
+    const bare = gearDef(stripRunes(id));
+    if (!bare) return undefined;
+    const out = { ...bare, id };
+    defCache.set(id, out);
+    return out;
+  }
   const d = GEAR[baseId(id)];
   if (!d) return undefined;
   const l = itemLevel(id);
@@ -556,6 +572,7 @@ export function affixMax(key: AffixKey, level: number, rarity: Rarity): number {
 }
 
 export function itemRarity(id: string): Rarity {
+  id = stripRunes(id);
   const k = id.indexOf("~");
   if (k < 0) return 0;
   const r = RARITY_CODE.indexOf(id.charAt(k + 1));
@@ -563,6 +580,7 @@ export function itemRarity(id: string): Rarity {
 }
 
 export function itemAffixes(id: string): Affix[] {
+  id = stripRunes(id);
   const k = id.indexOf("~");
   if (k < 0) return [];
   const body = id.slice(k + 3); // after "~R:"
@@ -578,6 +596,7 @@ export function itemAffixes(id: string): Affix[] {
 
 /** Item id with a rarity and bonuses ("w_frost@17" + Rare + [atk 3] -> "w_frost@17~R:atk3"). */
 export function withAffixes(plain: string, rarity: Rarity, affixes: Affix[]): string {
+  plain = stripRunes(plain);
   if (!rarity || !affixes.length) return plainId(plain);
   const sorted = [...affixes].sort((a, b) => AFFIX_KEYS.indexOf(a.key) - AFFIX_KEYS.indexOf(b.key));
   return `${plainId(plain)}~${RARITY_CODE[rarity]}:${sorted.map((a) => `${a.key}${a.value}`).join(",")}`;
@@ -666,3 +685,55 @@ export function splitHit(eq: Equipped, dmg: number, flatMult = 1): { phys: numbe
   }
   return { phys: Math.max(1, Math.round(phys)), parts };
 }
+
+// ---- Runes set in items (shared/runes.ts) ----------------------------------------------------------------
+/** The item id without its set runes ("w_frost@17~R:atk3^ember2" -> "w_frost@17~R:atk3"). */
+export function stripRunes(id: string): string {
+  const k = id.indexOf("^");
+  return k < 0 ? id : id.slice(0, k);
+}
+
+/** The runes set in an item, in socket order. */
+export function itemRunes(id: string): Rune[] {
+  const k = id.indexOf("^");
+  if (k < 0) return [];
+  return id.slice(k + 1).split(".").map(parseRuneCode).filter((r): r is Rune => !!r);
+}
+
+/** Item id with these runes set (none = the bare id). */
+export function withRunes(id: string, runes: Rune[]): string {
+  const bare = stripRunes(id);
+  return runes.length ? `${bare}^${runes.map(runeCode).join(".")}` : bare;
+}
+
+/** Rune sockets of an item: none on ranged weapons, two on Rare and Legendary items, one on the rest. */
+export function socketsOf(id: string): number {
+  const d = GEAR[baseId(id)];
+  if (!d || d.slot === "ranged") return 0;
+  return itemRarity(id) >= 2 ? 2 : 1;
+}
+
+/** Weapon runes go in the main-hand weapon, armour runes in armour, shields, hats and shoes. */
+export function runeFits(id: string, r: Rune): boolean {
+  const d = GEAR[baseId(id)];
+  if (!d || d.slot === "ranged") return false;
+  return RUNES[r.key].kind === (d.slot === "weapon" ? "weapon" : "armour");
+}
+
+/** Why the rune can't go in this item ("No free socket"), or "" when it can. */
+export function socketProblem(id: string, r: Rune): string {
+  const d = GEAR[baseId(id)];
+  if (!d) return "Not an item";
+  if (!socketsOf(id)) return "This item has no rune socket";
+  if (!runeFits(id, r)) return RUNES[r.key].kind === "weapon" ? "Weapon runes go in a weapon" : "Armour runes go in armour, shields, hats or shoes";
+  if (itemRunes(id).length >= socketsOf(id)) return "No free socket: take a rune out first";
+  return "";
+}
+
+/** The rune effects of the worn items that count (pass activeGear), merged by rune. */
+export function runeEffects(eq: Equipped) {
+  return mergeRunes(GEAR_SLOTS.flatMap((s) => (eq[s] ? itemRunes(eq[s]!) : [])));
+}
+
+/** Anything a bag can hold besides potions: a piece of gear or a loose rune. */
+export const isBagItem = (v: unknown): v is string => isGearId(v) || isRuneId(v);

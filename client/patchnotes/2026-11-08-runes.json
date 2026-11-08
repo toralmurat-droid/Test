@@ -1,0 +1,10 @@
+{
+  "date": "2026-11-08",
+  "title": "Runes",
+  "changes": [
+    "Runes now drop from monsters and chests: ten carved stones in three ranks (Lesser, plain, Greater).",
+    "Set a rune into a weapon or a piece of armour: open the bag, click the rune, then click the item. Rare and Legendary items have two sockets.",
+    "Weapon runes may fire when you hit or cast (fire bursts, freezing, poison, chain lightning, life and mana back); armour runes when you are struck (thorns, wards, healing, chilling the attacker).",
+    "Click a rune stone on an item to take it out again: the rune comes back to your bag whole."
+  ]
+}

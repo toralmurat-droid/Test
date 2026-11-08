@@ -1,5 +1,6 @@
 import { ClassKind } from "./classes";
 import { ELEMENTS, Element } from "./elements";
+import { isRuneId } from "./runes";
 import { activeGear, canWear, Equipped, gearBlock, gearDef, gearResist, gearSpeedMult, gearStats, HeroReqInfo, itemRarity, weaponElements } from "./gear";
 import { maxManaFor } from "./mana";
 import { critChance, heroSpeed, magicMult, maxHpFromStats, statsFor, Stats } from "./powers";
@@ -78,6 +79,7 @@ export function wearing(worn: Equipped, id: string): Equipped {
 
 /** True when wearing `id` (requirements assumed met) would raise no number on the sheet: safe to throw away. */
 export function uselessItem(h: SheetHero, worn: Equipped, id: string): boolean {
+  if (isRuneId(id)) return false; // a loose rune (shared/runes.ts) is never junk
   if (!gearDef(id) || !canWear(h.cls, id)) return true;
   const now = heroSheet(h, worn, h.talents, true), next = heroSheet(h, wearing(worn, id), h.talents, true);
   const keys: (keyof Sheet)[] = ["hp", "mana", "def", "atk", "dps", "magic", "spell", "crit", "speed"];
@@ -99,6 +101,7 @@ export function cleanFilter(f: unknown): LootFilter {
   return { minRarity: Number.isFinite(r) ? Math.max(0, Math.min(3, r)) : 0, ownClass: o.ownClass === true };
 }
 export function passesFilter(f: LootFilter, cls: string, id: string): boolean {
+  if (isRuneId(id)) return true; // runes are always picked up
   if (itemRarity(id) < f.minRarity) return false;
   if (f.ownClass && !canWear(cls, id)) return false;
   return true;
