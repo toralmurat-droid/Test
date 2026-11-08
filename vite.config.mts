@@ -1,8 +1,13 @@
 import { defineConfig } from "vite";
 import { fileURLToPath } from "node:url";
+import { readdirSync } from "node:fs";
+
+// The mp3s in client/public/assets/music: songs whose file is not there yet stay out of the music menu (music.ts)
+const musicFiles = readdirSync(fileURLToPath(new URL("./client/public/assets/music", import.meta.url))).filter((f) => f.endsWith(".mp3"));
 
 export default defineConfig({
   root: "client",
+  define: { __MUSIC_FILES__: JSON.stringify(musicFiles) },
   build: {
     outDir: "../dist",
     emptyOutDir: true,

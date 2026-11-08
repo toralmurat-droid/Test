@@ -3129,7 +3129,7 @@ export class TownScene extends Phaser.Scene {
       // Zone under the hero drives the music
       const tx = meEnt.sprite.x / TILE, ty = meEnt.sprite.y / TILE;
       const zdef = zoneAt(Math.floor(tx), Math.floor(ty));
-      setMusicZone(zdef?.name, zdef?.mobs, this.areaName);
+      setMusicZone(zdef?.name, zdef?.mobs, this.areaName, ty >= DESERT_Y0 ? 2 : 1);
       sfxFrame(this.me, this.entities as any);
       const cls = mine.cls as ClassKind;
       const cdm = cooldownMult(cls, { sta: mine.sta, str: mine.str, mag: mine.mag, dex: mine.dex ?? 0 }, mine.talents);
