@@ -26,6 +26,9 @@ import { ISO, SMOOTH } from "./isoflag";
 import { SmoothGround } from "./smoothground";
 import { hiResTexture } from "./smooth";
 import { uprightTexture, UPRIGHT_OY } from "./smoothProps";
+import { ADOBE_H, ADOBE_WALL_H, adobeTexture, adobeWallTexture, bonesTexture, CLIFF_DEPTH, cliffDistance, cliffHeight, cliffTexture, cliffVariant, deadTreeTexture, desertRockTexture, sunStoneTexture, tentTexture } from "./desertArt";
+import { D, FURNACE, SUNSTONE } from "../../shared/desert";
+import { DESERT_H, DESERT_Y0 } from "../../shared/constants";
 
 export const isoX = (x: number, y: number) => x - y;
 export const isoY = (x: number, y: number) => (x + y) / 2;
@@ -633,10 +636,13 @@ export function isoStanding(scene: Phaser.Scene, objects: number[][]): number[][
   const src = (scene.textures.get("tiles") as Phaser.Textures.CanvasTexture).getSourceImage() as HTMLCanvasElement;
   const tileSrc = (i: number): Src => ({ img: src, sx: (i % TILE_COUNT) * TILE, sy: Math.floor(i / TILE_COUNT) * TILE });
   const at = (x: number, y: number) => (x < 0 || y < 0 || x >= MAP_W || y >= MAP_H ? -1 : objects[y][x]);
+  const cdist = cliffDistance(objects.map((r) => r.map(id)), T.CLIFF, MAP_W, DESERT_Y0, DESERT_Y0 + DESERT_H, CLIFF_DEPTH + 1);
+  const cd = (x: number, y: number) => (x < 0 || x >= MAP_W || y < DESERT_Y0 || y >= DESERT_Y0 + DESERT_H ? 9 : cdist[(y - DESERT_Y0) * MAP_W + x]);
   for (let ty = 0; ty < MAP_H; ty++) for (let tx = 0; tx < MAP_W; tx++) {
     const index = objects[ty][tx], t = id(index);
     if (t < 0) continue;
-    if (ty >= WORLD_H) { out[ty][tx] = -1; continue; } // the Mawdeep's rock: cave walls (dungeon.ts), not rocks
+    if (ty >= WORLD_H && ty < DESERT_Y0) { out[ty][tx] = -1; continue; } // the Mawdeep's rock: cave walls (dungeon.ts), not rocks; then solid rock to the desert
+    if (ty >= DESERT_Y0 && isoDesert(scene, t, tx, ty, at, cd)) { out[ty][tx] = -1; continue; }
     const cx = (tx + 0.5) * TILE, cy = (ty + 0.5) * TILE;
     if (houses.has(ty * MAP_W + tx)) { out[ty][tx] = -1; continue; }
     if (t === T.CAMPFIRE) { out[ty][tx] = -1; continue; } // an upright fire sprite (ambient.ts)
@@ -680,6 +686,56 @@ export function isoStanding(scene: Phaser.Scene, objects: number[][]): number[][
     }
   }
   return out;
+}
+
+// ---------- Act 2: the desert (shared/desert.ts, art in desertArt.ts) ----------
+
+const DESERT_UPRIGHT_OY = 44 / 58;
+/**
+ * Desert objects that stand up: sandstone cliffs as terraced blocks (only the outer four steps of a mountain are
+ * blocks; deeper in, the ground painter paints the rock top), mud-brick houses and walls, tents, bones, boulders,
+ * dead trees. Returns false for anything drawn the usual way.
+ */
+function isoDesert(scene: Phaser.Scene, t: number, tx: number, ty: number, at: (x: number, y: number) => number, cd: (x: number, y: number) => number): boolean {
+  const cx = (tx + 0.5) * TILE, cy = (ty + 0.5) * TILE;
+  const v = Math.floor(hashXY(tx, ty) * 4);
+  if (t === T.CLIFF) {
+    const d = cd(tx, ty);
+    if (d > CLIFF_DEPTH) return true; // deep inside the massif: painted as rock top by the ground
+    const H = (x: number, y: number) => (id(at(x, y)) !== T.CLIFF ? 0 : cliffHeight(Math.min(cd(x, y), CLIFF_DEPTH + 1), x, y));
+    const h = H(tx, ty);
+    // both faces, unless they would stand on the undrawn plateau (front neighbours cover what should be hidden)
+    const deep = (x: number, y: number) => id(at(x, y)) === T.CLIFF && cd(x, y) > CLIFF_DEPTH;
+    const faces = (deep(tx, ty + 1) ? 0 : 1) | (deep(tx + 1, ty) ? 0 : 2);
+    const key = cliffTexture(scene, h, faces, cliffVariant(tx, ty));
+    scene.add.image(cx, cy, key).setOrigin(0.5, (IH / 2 + h) / (IH + h)).setDepth(cy + d * 0.5);
+    return true;
+  }
+  const isHouse = (x: number, y: number) => { const n = id(at(x, y)); return n === T.ADOBE || (n === T.DOOR && y >= DESERT_Y0); };
+  if (t === T.ADOBE || t === T.DOOR) {
+    const faces = (isHouse(tx, ty + 1) ? 0 : 1) | (isHouse(tx + 1, ty) ? 0 : 2);
+    const edges = (isHouse(tx, ty - 1) ? 0 : 1) | (isHouse(tx + 1, ty) ? 0 : 2) | (isHouse(tx, ty + 1) ? 0 : 4) | (isHouse(tx - 1, ty) ? 0 : 8);
+    const key = adobeTexture(scene, faces, edges, t === T.DOOR && !isHouse(tx, ty + 1), v);
+    const h = ADOBE_H + 4;
+    scene.add.image(cx, cy, key).setOrigin(0.5, (IH / 2 + h) / (IH + h)).setDepth(cy);
+    return true;
+  }
+  if (t === T.ADOBE_WALL) {
+    const same = (x: number, y: number) => id(at(x, y)) === T.ADOBE_WALL;
+    const mask = (same(tx, ty - 1) ? 1 : 0) | (same(tx + 1, ty) ? 2 : 0) | (same(tx, ty + 1) ? 4 : 0) | (same(tx - 1, ty) ? 8 : 0);
+    const h = ADOBE_WALL_H + 4;
+    scene.add.image(cx, cy, adobeWallTexture(scene, mask, v % 2)).setOrigin(0.5, (IH / 2 + h) / (IH + h)).setDepth(cy);
+    return true;
+  }
+  if (t === T.TENT) { scene.add.image(cx, cy, tentTexture(scene, v)).setOrigin(0.5, 56 / 70).setDepth(cy); return true; }
+  if (t === T.BONES) { scene.add.image(cx, cy, bonesTexture(scene, v)).setOrigin(0.5, 30 / 40).setDepth(cy).setFlipX(v >= 2); return true; }
+  if (t === T.ROCK && (Math.hypot(tx - SUNSTONE.x, ty - D(SUNSTONE.y)) < 10 || Math.hypot(tx - FURNACE.x, ty - D(FURNACE.y)) < FURNACE.r + 1)) {
+    scene.add.image(cx, cy, sunStoneTexture(scene, v)).setOrigin(0.5, 78 / 90).setDepth(cy);
+    return true;
+  }
+  if (t === T.ROCK) { scene.add.image(cx, cy, desertRockTexture(scene, v)).setOrigin(0.5, DESERT_UPRIGHT_OY).setDepth(cy).setFlipX(v >= 2); return true; }
+  if (t === T.STUMP) { scene.add.image(cx, cy, deadTreeTexture(scene, v)).setOrigin(0.5, 46 / 58).setDepth(cy).setFlipX(v >= 2); return true; }
+  return false;
 }
 
 // ---------- crops ----------

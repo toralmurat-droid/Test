@@ -158,24 +158,20 @@ export const GUARD_REDUCTION = 0.5; // knight shield blocks this fraction of dam
 export const DASH_INVULN_MS = 250; // ninja is untouchable right after a dash
 
 /**
- * Stamina: every hero has 100 points that refill fast. The dodge roll and physical skills spend it; basic attacks are
- * free. Spells spend Mana instead (shared/mana.ts). Shown as the yellow bar under the HP bar.
- */
-export const ENERGY = { max: 100, regenPerSec: 14, cost: { special: 30, ult: 50, dodge: 20 } };
-/**
- * Stamina per second by class: the fighters live on Stamina, the Wizard on Mana (Murat 2026-11-04: "some characters
- * rely more on stamina spend"). Wizard Stamina only pays for the dodge roll and Blink.
+ * Heat cooling per second by class (shared/overload.ts): the fighters shed Heat fast, the casters slowly (they live on
+ * Mana). Was the Stamina refill rate before the overload gauge replaced Stamina (Murat 2026-11-07).
  */
 export const STAMINA_REGEN: Record<ClassKind, number> = { knight: 16, ninja: 16, wizard: 8, archer: 15, barbarian: 18, vampire: 13, summoner: 9 };
-export const staminaRegen = (cls: ClassKind) => STAMINA_REGEN[cls] ?? ENERGY.regenPerSec;
-export const energyName = (_cls?: string) => "Stamina";
 
 /** Dodge roll (F) for every hero: a quick roll in the move direction (or facing), untouchable while rolling. */
 export const DODGE = { distance: 48, durationMs: 250, invulnMs: 300, cooldownMs: 1500 };
 
 // ---- Levels -------------------------------------------------------------
-/** Heroes and monsters both stop at Lv 30 for now (Murat 2026-11-04; was 99). */
-export const MAX_LEVEL = 30;
+/**
+ * Heroes and monsters stop at Lv 50 (Murat 2026-11-08): the first zone (Oakvale) covers Lv 1-30, the desert of Act 2
+ * Lv 30-50 (REGION_LEVEL / ACT2_LEVEL in constants.ts). Was 30 (2026-11-04), 99 before that.
+ */
+export const MAX_LEVEL = 50;
 export const PVP_KILL_XP = 20;
 
 /** Total XP needed to reach `level` (level 1 = 0 XP). */

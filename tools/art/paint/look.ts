@@ -43,7 +43,7 @@ export interface Look {
   /** What the rite grew on their backs: a naked tail, spider legs, wings that beat. */
   tail?: number; spiderLegs?: number; wings?: { col: number; kind: "bat" | "feather" };
 }
-export type BeastHead = "rat" | "boar" | "spider" | "bat" | "wolf" | "bull" | "bear" | "crow";
+export type BeastHead = "rat" | "boar" | "spider" | "bat" | "wolf" | "bull" | "bear" | "crow" | "camel";
 
 /** Monsters painted with the same body code (sheets built by paint/mobs.ts). */
 export const MOB_LOOKS: Record<string, Look> = {
@@ -165,6 +165,39 @@ export const MOB_LOOKS: Record<string, Look> = {
     torso: "robe", torsoCol: 0x5a4030, trim: 0x8a6a48, sash: 0x6a1a12, legs: "robe", legCol: 0x4a3426, boots: 0x2a1e16, bootStyle: "wrap",
     sleeve: 0x5a4030, arms: "cloth", glove: 0x3a2a1e, weapon: "staff", orb: 0xff4a2a, fx: 0xff8a50, back: "pelt", capeCol: 0x4a3626, build: 1.45,
   },
+  // ---- Act 2, the Sunscar (Murat 2026-11-08): desert raiders, the buried dead, the Veiled Circle and the camel-folk
+  nomad: { // a Dustrider raider: sand-coloured wraps and hood, an indigo veil over the face, a curved blade
+    skin: 0xb07a50, hair: 0x1e1814, hairStyle: "short", mask: 0x2a3a6a, eye: 0x1a1008,
+    head: "hood", headCol: 0xc8aa7a, headTrim: 0x8a6a48,
+    torso: "wrap", torsoCol: 0xb89a70, trim: 0x7a5a3a, sash: 0x8a2a1a, belt: 0x3a2a1a, buckle: 0xc9a050,
+    legs: "trousers", legCol: 0x8a7050, boots: 0x5a4430, bootStyle: "wrap",
+    sleeve: 0xa88a62, arms: "cloth", bracer: 0x5a4030, glove: 0x3a2a1a, weapon: "sword", fx: 0xfff0d0, back: "cape", capeCol: 0xa07850,
+  },
+  nomad_folk: { // a Dustrider archer: darker wraps, a short horn bow and a quiver
+    skin: 0xa8704a, hair: 0x1e1814, hairStyle: "short", mask: 0x6a1a14, eye: 0x1a1008,
+    head: "hood", headCol: 0x8a6a48, headTrim: 0x5a4430,
+    torso: "wrap", torsoCol: 0x9a7a54, trim: 0x5a4030, sash: 0x2a3a6a, belt: 0x3a2a1a, buckle: 0xc9a050,
+    legs: "trousers", legCol: 0x6a5440, boots: 0x4a3828, bootStyle: "wrap",
+    sleeve: 0x8a6a48, arms: "cloth", bracer: 0x5a4030, glove: 0x3a2a1a, weapon: "bow", back: "quiver", capeCol: 0x5a3a22, fx: 0xfff0d0,
+  },
+  sanddead: { // the dead of Kharsun: sand-scoured bones in linen grave-wraps and a bronze helm, a khopesh, amber eyes
+    skin: 0xd8c49a, skull: true, bones: true, eyeGlow: 0xffb030, head: "helm", headCol: 0x8a6a2e, headTrim: 0xc9a050, rags: 0xc8b088,
+    torso: "bare", torsoCol: 0xd8c49a, legs: "trousers", legCol: 0xd8c49a, boots: 0x6a5434, bootStyle: "wrap",
+    sleeve: 0xd8c49a, arms: "bare", bracer: 0x8a6a2e, weapon: "sword", fx: 0xffe0a0, belt: 0x8a6a2e, buckle: 0xc9a050,
+  },
+  veiled: { // an adept of the Veiled Circle: indigo robes trimmed in gold, a veil, a staff crowned with a little sun
+    skin: 0xa8784e, hair: 0x1a1414, hairStyle: "none", mask: 0x1e1838, eye: 0xffc040,
+    head: "hood", headCol: 0x2a2350, headTrim: 0xd8a040,
+    torso: "robe", torsoCol: 0x3a2e6a, trim: 0xe0b040, sash: 0xd87a20,
+    legs: "robe", legCol: 0x30285a, boots: 0x6a5030, bootStyle: "shoe",
+    sleeve: 0x3a2e6a, arms: "cloth", glove: 0x2a2040, weapon: "staff", orb: 0xffb040, fx: 0xffd080,
+  },
+  camelfolk: { // a camel-man of the mesas: a camel's long head on a broad, sun-dark body, desert-blue cloth, a long spear
+    skin: 0xc09060, beast: "camel", hairStyle: "none", head: "none", eyeGlow: 0xffe0a0,
+    torso: "leather", torsoCol: 0x6a4a2e, trim: 0x3a2a1a, sash: 0x2a5a8a, belt: 0x3a2a1a, buckle: 0xc9a050,
+    legs: "fur", legCol: 0xa07a4c, boots: 0x4a3424, bootStyle: "wrap",
+    sleeve: 0xc09060, arms: "bare", bracer: 0x2a5a8a, glove: 0x3a2a1a, weapon: "spear", fx: 0xfff0d0, back: "cape", capeCol: 0x2a5a8a, build: 1.3,
+  },
   // summoned by a skeleton ritual (BONES.ritual): a hulking red brute with horns, a bone harness and a cleaver
   demon: {
     skin: 0xa8241c, hairStyle: "none", eyeGlow: 0xffd23c, skull: true, head: "horned", headCol: 0x3a1410, headTrim: 0xe8dcc0,
@@ -186,6 +219,16 @@ export const MOB_LOOKS: Record<string, Look> = {
     legs: "mail", legCol: 0x3e4048, boots: 0x3a3c44, bootStyle: "greave",
     sleeve: 0x4a4d55, arms: "plate", glove: 0x2e3036, weapon: "sword", bladeLen: 1.45, fx: 0x9dff6a,
     back: "cape", capeCol: 0x3a1218, build: 1.35,
+  },
+  // Ishael, the Sunwright (Act 2's final boss): the High Veil of the Veiled Circle. A golden sun-crown, a gold veil over
+  // her face, white and gold robes over the Circle's indigo, a saffron mantle and a tall staff crowned with a burning sun
+  sunwright: {
+    skin: 0xb07a50, hair: 0x1a1414, hairStyle: "long", mask: 0xc89a3a, eye: 0xfff0a0, eyeGlow: 0xffd060,
+    head: "crown", headCol: 0xe0b040, headTrim: 0xfff0a0,
+    torso: "robe", torsoCol: 0xf0e6d0, trim: 0xe0b040, sash: 0x3a2e6a, belt: 0x3a2e6a, buckle: 0xffd060,
+    legs: "robe", legCol: 0xe8dcc0, boots: 0x8a6a30, bootStyle: "shoe",
+    sleeve: 0x3a2e6a, arms: "cloth", glove: 0xe0b040, bracer: 0xe0b040,
+    weapon: "staff", orb: 0xffb040, fx: 0xffd080, back: "cape", capeCol: 0xd88a20, build: 1.15,
   },
   // the vampire's Brides (v_brides): deathly pale, long black hair under a torn white veil, a white wedding dress
   // stained with blood at the hem and the mouth, red eyes, bare feet and long nails
@@ -381,6 +424,67 @@ export const LOOKS: Record<string, Look> = {
     legs: "robe", legCol: 0x4a6430, boots: 0x4a3420, bootStyle: "shoe",
     sleeve: 0x4a6430, arms: "cloth",
     weapon: "druidstaff", orb: 0x9be564, fx: 0x9be564, back: "cape", capeCol: 0x3c5226,
+  },
+  // Kel Ashar, the desert village of Act 2 (shared/npcs.ts)
+  // Sefa the Well-Keeper: an old woman in a pale headwrap and a well-blue robe, a brass ladle at her sash
+  wellkeeper: {
+    skin: 0xa8744c, hair: 0xd8d2c4, hairStyle: "long",
+    head: "hood", headCol: 0xe2d6bc, headTrim: 0x3a6a8a,
+    torso: "robe", torsoCol: 0x2e5a7a, trim: 0xd8c08a, sash: 0xc89a40,
+    legs: "robe", legCol: 0x284e6a, boots: 0x6a4a2e, bootStyle: "shoe",
+    sleeve: 0x2e5a7a, arms: "cloth", weapon: "none", fx: 0x9ad8ff, back: "cape", capeCol: 0xc8b896,
+  },
+  // Captain Rakhim of the Sand Watch: a white turban over a brass-capped helm, scale coat, a saffron sash and a long spear
+  sandcaptain: {
+    skin: 0x9a663e, hair: 0x1a1410, hairStyle: "short", beard: 0x1a1410, beardStyle: "full",
+    head: "helm", headCol: 0xc8a050, headTrim: 0xece2c8,
+    torso: "mail", torsoCol: 0xa88a52, tabard: { col: 0xd88a20, trim: 0xece2c8, emblem: 0xffd060 }, belt: 0x4a2e1a, buckle: 0xd8a840,
+    legs: "trousers", legCol: 0xe2d6bc, boots: 0x5a3a22, bootStyle: "wrap",
+    sleeve: 0xece2c8, arms: "cloth", glove: 0x4a2e1a, bracer: 0xa88a52,
+    weapon: "spear", fx: 0xfff0d0, back: "cape", capeCol: 0xd88a20, build: 1.1,
+    shield: { col: 0x8a5a2a, trim: 0xd8a840, emblem: 0xffd060, style: "round" },
+  },
+  // Zahra the spice trader: a saffron headscarf, a crimson vest over a cream blouse, a dark skirt and a bright sash
+  spicetrader: {
+    skin: 0xb07a50, hair: 0x1a1210, hairStyle: "long", eye: 0x3a2410, lips: 0x8a2a2a,
+    head: "bandana", headCol: 0xe0a020, headTrim: 0xa8301e,
+    torso: "shirt", torsoCol: 0xf0e2c4, vest: 0xa8301e, sash: 0xe0a020, belt: 0x5a3018,
+    legs: "dress", legCol: 0x5a2a3a, trim: 0xe0a020, boots: 0x6a4028, bootStyle: "shoe",
+    sleeve: 0xf0e2c4, arms: "cloth", bracer: 0xd8a840, weapon: "none", fx: 0xffd060,
+  },
+  // Oren the bladesmith: a bald, soot-darkened smith with a leather apron and a curved blade on his hip
+  desertsmith: {
+    skin: 0x8a5a36, hairStyle: "bald", hair: 0x1a1410, beard: 0x2a201a, beardStyle: "full",
+    head: "none", torso: "shirt", torsoCol: 0xc8b48a, vest: 0x5a3a22, apron: 0x6a4428, belt: 0x2e2014, buckle: 0xd8a840,
+    legs: "trousers", legCol: 0x6a5238, boots: 0x3a2a1e, bootStyle: "wrap",
+    sleeve: 0x8a5a36, arms: "bare", bracer: 0x4a3424, weapon: "hammer", fx: 0xffffff, build: 1.15,
+  },
+  // The armourers (shared/npcs.ts), each dressed in what they sell.
+  // Hilda of Oakvale: a broad, red-haired woman in steel mail under an oxblood tabard, a hammer for dents, a kite shield on her arm
+  armourer: {
+    skin: 0xe8b08a, hair: 0xa8401e, hairStyle: "ponytail", eye: 0x3a5a2a,
+    head: "none", torso: "mail", torsoCol: 0x8a939e, tabard: { col: 0x7a2620, trim: 0xd9a93a, emblem: 0xf0c75a }, belt: 0x4a2e1a, buckle: 0xd9a93a,
+    legs: "trousers", legCol: 0x4a3a2a, boots: 0x2a2420, bootStyle: "greave",
+    sleeve: 0x8a939e, arms: "plate", glove: 0x5a3a22, weapon: "hammer", fx: 0xffffff, build: 1.15,
+    shield: { col: 0x7a2620, trim: 0xa5aeb8, emblem: 0xf0c75a, style: "kite" },
+  },
+  // Dorran of Saltmere: a grey-bearded old sailor in a sea-blue knit cap, riveted sea-leather coat, brass at the belt
+  saltarmourer: {
+    skin: 0xc8916a, hair: 0x8a8a86, hairStyle: "short", beard: 0x9a9a94, beardStyle: "full",
+    head: "cap", headCol: 0x285058, headTrim: 0x1a3a42,
+    torso: "leather", torsoCol: 0x4a3628, trim: 0xc89c44, belt: 0x221814, buckle: 0xc89c44,
+    legs: "trousers", legCol: 0x3a4a52, boots: 0x221814, bootStyle: "leather",
+    sleeve: 0x4a3628, arms: "cloth", glove: 0x36261e, bracer: 0x334656, weapon: "none", fx: 0xffffff,
+    shield: { col: 0x285058, trim: 0x708a9a, emblem: 0xd8e4e0, style: "round" },
+  },
+  // Idris of Kel Ashar: a lean man in a white headwrap with an indigo band, brass scale over cream linen, an indigo sash
+  sandarmourer: {
+    skin: 0x8a5a36, hair: 0x1a1410, hairStyle: "short", beard: 0x1a1410, beardStyle: "full",
+    head: "bandana", headCol: 0xece2c8, headTrim: 0x302e72,
+    torso: "mail", torsoCol: 0xc89c44, sash: 0x302e72, belt: 0x4a2e1a, buckle: 0xead07a,
+    legs: "trousers", legCol: 0xe2d6bc, boots: 0x4a2e1a, bootStyle: "wrap",
+    sleeve: 0xece2c8, arms: "cloth", bracer: 0xc89c44, weapon: "none", fx: 0xffffff,
+    shield: { col: 0x9a722c, trim: 0xead07a, emblem: 0xf2ecdc, style: "round" },
   },
   // Morwen: a young witch in a red dress, black corset bodice, bare arms and a tall black hat with a red band
   witch: {

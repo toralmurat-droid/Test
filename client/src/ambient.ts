@@ -1,7 +1,8 @@
 import Phaser from "phaser";
-import { ART_K as K, MAP_H, MAP_W, TILE } from "../../shared/constants";
+import { ART_K as K, DESERT_Y0, MAP_H, MAP_W, TILE } from "../../shared/constants";
 import { AREAS, elementLandAt, EMPTY, GROUND, OBJECTS, T } from "../../shared/map";
 import { LAND_TREE_TINT } from "./elementArt";
+import { DESERT_BUSH_TINT, palmTexture } from "./desertArt";
 import { ANIMATED_TILES, animatedRows, drawTileFrame } from "./tileset";
 import { refreshRegions } from "./texupload";
 import { ISO, isoAnchor } from "./iso";
@@ -23,7 +24,7 @@ const SOLID_BUILDING = new Set<number>([
   T.ROOF_THATCH, T.ROOF_RED, T.ROOF_SLATE, T.WALL_TIMBER, T.WALL_STONE, T.WINDOW_TIMBER, T.WINDOW_STONE, T.DOOR,
 ]);
 const ROOFS = new Set<number>([T.ROOF_THATCH, T.ROOF_RED, T.ROOF_SLATE]);
-const TREES = new Set<number>([T.TREE, T.PINE, T.BUSH]);
+const TREES = new Set<number>([T.TREE, T.PINE, T.BUSH, T.PALM]);
 
 const hex = (c: number) => "#" + c.toString(16).padStart(6, "0");
 const obj = (x: number, y: number) => (x < 0 || y < 0 || x >= MAP_W || y >= MAP_H ? EMPTY : OBJECTS[y][x]);
@@ -242,11 +243,14 @@ export class Ambient {
       if (!TREES.has(t)) continue;
       const oaks = SMOOTH ? ["oak_a", "oak_b", "oak_c", "oak_d", "oak_e", "oak_a", "oak_b", "oak_f"] : ["oak_a", "oak_b"];
       const pines = SMOOTH ? ["pine", "pine", "pine_b"] : ["pine"];
-      const key = t === T.PINE ? pines[Math.floor(r() * pines.length)] : t === T.BUSH ? "bush" : oaks[Math.floor(r() * oaks.length)];
+      const desert = y >= DESERT_Y0;
+      const key = t === T.PALM ? palmTexture(this.scene, Math.floor(r() * 3)) : t === T.PINE ? pines[Math.floor(r() * pines.length)] : t === T.BUSH ? "bush" : oaks[Math.floor(r() * oaks.length)];
       const s = this.scene.add.sprite((x + 0.5) * TILE + (t === T.BUSH ? 0 : Math.round((r() * 2 - 1) * K)), (y + 1) * TILE, key, 0)
         .setOrigin(0.5, 1).setDepth((y + 1) * TILE - 2).setTint(tints[Math.floor(r() * tints.length)]);
       const land = elementLandAt(x + 0.5, y + 0.5, 3); // the elemental wilds: frosted, blighted, charred or storm-grey trees
       if (land && ((x * 7919 + y * 104729) % 97) / 97 < 0.35 + land.k * 0.65) s.setTint(LAND_TREE_TINT[land.land.el]);
+      if (desert && t === T.BUSH) s.setTint(DESERT_BUSH_TINT); // thorn scrub, sun-bleached
+      if (t === T.PALM) s.setTint(0xffffff);
       if (r() < (SMOOTH ? 0.5 : t === T.BUSH ? 0 : 0.25)) s.setFlipX(true);
       if (SMOOTH) s.setScale(t === T.BUSH ? 0.85 + r() * 0.3 : 0.82 + r() * 0.36); // no two trees the same size
       s.setData("ph", r() * 0.6);

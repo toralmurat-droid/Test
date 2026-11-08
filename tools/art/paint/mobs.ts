@@ -4,6 +4,8 @@ import { createCanvas } from "@napi-rs/canvas";
 import { MOB_POSES, posed, setPainted, type Dir } from "../characters";
 import { C2, P, blobPath, css, ellipseP, poly, fillShape, glow, limb, line, metal, mix, rng, sh, vol } from "./brush";
 import { lastRig, pixelAlpha, pixelize, shrink } from "./body";
+import { paintRaider, RAIDER_H, RAIDER_W } from "./raiders";
+import { RAIDERS } from "../../../shared/raiders";
 
 /**
  * Monster sheets for the iso look. Same textures as client/src/textures.ts mobTexture (6 frames:
@@ -397,6 +399,112 @@ function crawlerFrame(c: C2, w: number, h: number, f: number) {
   }
 }
 
+// ---------------------------------------------------------------- the Sunscar's dune scorpion (Act 2)
+/**
+ * A giant desert scorpion, about as long as a man is tall: amber-brown plates, two heavy pincers, eight legs, and the
+ * segmented tail curled over its back with a black sting and a drop of green venom. Wind-up: claws open, tail cocked
+ * back; strike: the sting stabs forward over its head. Drawn in world px on a w x h frame, feet on the line g.
+ */
+function scorpionFrame(c: C2, w: number, h: number, f: number) {
+  const { dir, pose } = frameOf(f);
+  const SHELL = 0x8a4220, DARK = 0x3a2412, PALE = 0xe0a070, STING = 0x24160c, VENOM = 0x9dff6a, EYE = 0xffb030;
+  const step = pose === "step", wind = pose === "wind", strike = pose === "strike";
+  const g = h - 3, sc = SH ?? c;
+  const shadow = (x: number, y: number, rx: number, ry: number) => { sc.save(); sc.translate(x, y); sc.scale(1, ry / rx); sc.fillStyle = "rgba(0,0,0,0.42)"; sc.beginPath(); sc.arc(0, 0, rx, 0, Math.PI * 2); sc.fill(); sc.restore(); };
+  /** One chitin plate: dark rim, lit body, a pale glint along the top. */
+  const plate = (x: number, y: number, rx: number, ry: number, col = SHELL, rot = 0) => {
+    fillShape(c, ellipseP(x, y, rx + 0.35, ry + 0.35, rot), css(sh(col, 0.32)));
+    vol(c, ellipseP(x, y, rx, ry, rot), col, [x - rx, y - ry, rx * 2, ry * 2], { ao: 0.3, spec: 0.35 });
+    line(c, [[x - rx * 0.5, y - ry * 0.55], [x + rx * 0.3, y - ry * 0.7]], PALE, 0.22, 0.55);
+  };
+  /** A jointed leg from the body to the sand: up to a knee, down to a pointed foot. */
+  const leg = (bx: number, by: number, kx: number, ky: number, fx: number, fy: number, far: boolean) => {
+    const col = far ? sh(SHELL, 0.6) : SHELL;
+    limb(c, [bx, by], [kx, ky], 0.75, 0.6, col);
+    limb(c, [kx, ky], [fx, fy], 0.6, 0.25, col);
+    fillShape(c, ellipseP(kx, ky, 0.38, 0.38), css(sh(col, 0.5)));
+  };
+  /** A pincer: arm to the wrist, then a fat claw with two fingers (open on the wind-up). */
+  const pincer = (sx: number, sy: number, ex: number, ey: number, cx: number, cy: number, ang: number, far: boolean) => {
+    const col = far ? sh(SHELL, 0.7) : SHELL, open = wind ? 0.75 : strike ? 0.1 : 0.3;
+    limb(c, [sx, sy], [ex, ey], 1.1, 0.9, col);
+    limb(c, [ex, ey], [cx, cy], 0.9, 1.2, col);
+    const ux = Math.cos(ang), uy = Math.sin(ang);
+    plate(cx + ux * 1.2, cy + uy * 1.2, 1.9, 1.25, col, ang);
+    for (const k of [-1, 1]) {
+      const a = ang + k * open, tx = cx + ux * 2.6 + Math.cos(a) * 2.4, ty = cy + uy * 2.6 + Math.sin(a) * 2.4;
+      limb(c, [cx + ux * 2.4 + -uy * k * 0.5, cy + uy * 2.4 + ux * k * 0.5], [tx, ty], 0.75, 0.2, k < 0 ? sh(col, 1.1) : sh(col, 0.85));
+    }
+  };
+  /** The tail: a chain of shrinking segments along a curve, then the bulb and the hooked sting. */
+  const tail = (pts: P[], sx: number, sy: number, ang: number) => {
+    const L = Math.hypot(pts[1][0] - pts[0][0], pts[1][1] - pts[0][1]) + Math.hypot(pts[2][0] - pts[1][0], pts[2][1] - pts[1][1]);
+    const n = Math.max(6, Math.ceil(L / 1.7));
+    for (let i = 0; i < n; i++) {
+      const t = i / (n - 1), u = 1 - t;
+      const x = u * u * pts[0][0] + 2 * u * t * pts[1][0] + t * t * pts[2][0], y = u * u * pts[0][1] + 2 * u * t * pts[1][1] + t * t * pts[2][1];
+      plate(x, y, 1.35 - t * 0.35, 1.15 - t * 0.3);
+    }
+    plate(sx, sy, 1.3, 1.1, sh(SHELL, 1.1)); // the venom bulb
+    const tx = sx + Math.cos(ang) * 2.4, ty = sy + Math.sin(ang) * 2.4;
+    limb(c, [sx, sy], [tx, ty], 0.8, 0.15, STING);
+    glow(c, tx, ty, 1.4, VENOM, strike ? 0.9 : 0.5);
+    fillShape(c, ellipseP(tx, ty + 0.4, 0.28, 0.38), css(VENOM, 0.9));
+  };
+  const eyes = (pts: P[]) => { for (const [x, y] of pts) { glow(c, x, y, 1.1, EYE, 0.6); fillShape(c, ellipseP(x, y, 0.28, 0.28), css(mix(EYE, 0xffffff, 0.3))); } };
+  const sw = step ? 1 : -1; // legs alternate on the step frame
+
+  if (dir === "right") {
+    const bx = w * 0.56 + (strike ? 0.8 : 0), by = g - 4.2;
+    shadow(bx - 2, g + 0.2, 13, 2.4);
+    // far legs, then the far pincer
+    for (let i = 0; i < 4; i++) { const x = bx - 3.6 + i * 2.2, o = (i % 2 ? 1 : -1) * sw * 0.7; leg(x, by - 0.4, x + 1.4 + o * 0.3, by - 2.4, x + 3.0 + o, g - 1.0, true); }
+    pincer(bx + 4.2, by - 0.6, bx + 7.4, by - 1.6, bx + 9.6 + (strike ? 1.4 : 0), by - 0.9, -0.1, true);
+    // abdomen plates back from the head, then the tail up over the back
+    for (let i = 0; i < 5; i++) plate(bx - 1.6 - i * 2.2, by - 0.2 + i * 0.15, 2.5 - i * 0.18, 2.1 - i * 0.12);
+    const rx = bx - 11.6, ry = by - 0.4;
+    if (strike) tail([[rx, ry], [rx - 3, by - 16], [bx + 4, by - 12]], bx + 5.4, by - 10.6, 0.55);
+    else if (wind) tail([[rx, ry], [rx - 5, by - 14], [rx + 2, by - 17]], rx + 3.6, by - 16.4, 0.9);
+    else tail([[rx, ry], [rx - 4, by - 13], [rx + 4, by - 16]], rx + 5.6 + (step ? 0.3 : 0), by - 15.2, 1.2);
+    // head plate, eyes, near legs and the near pincer in front
+    plate(bx + 2.4, by - 0.6, 3.6, 2.6);
+    eyes([[bx + 3.6, by - 2.6], [bx + 4.6, by - 2.2]]);
+    for (let i = 0; i < 4; i++) { const x = bx - 4.4 + i * 2.2, o = (i % 2 ? -1 : 1) * sw * 0.7; leg(x, by + 0.6, x + 1.0 + o * 0.3, by - 1.0, x + 2.0 + o, g + 0.4, false); }
+    pincer(bx + 3.8, by + 0.6, bx + 6.6, by + 1.4, bx + 9.0 + (strike ? 1.6 : 0), by + 0.6, 0.05, false);
+  } else if (dir === "down") {
+    const cx = w / 2, hy = g - 4.6 + (strike ? 0.6 : 0); // head nearest us
+    shadow(cx, g - 4, 11, 4);
+    // legs splay out on both sides
+    for (const sd of [-1, 1]) for (let i = 0; i < 4; i++) {
+      const y = hy - 2.6 - i * 1.6, o = (i % 2 ? 1 : -1) * sw * sd * 0.6;
+      leg(cx + sd * 2.4, y, cx + sd * (5.2 + i * 0.4), y - 1.6, cx + sd * (7.4 + i * 0.6), y + 2.2 + o, true);
+    }
+    // abdomen up the screen, then the tail rising behind it and curling forward over the head
+    for (let i = 3; i >= 0; i--) plate(cx, hy - 3.6 - i * 2.0, 2.7 - i * 0.2, 1.8 - i * 0.1);
+    const ty0 = hy - 10.6;
+    if (strike) tail([[cx, ty0], [cx, ty0 - 8], [cx + 0.3, ty0 - 2]], cx + 0.4, hy - 6.4, Math.PI / 2);
+    else if (wind) tail([[cx, ty0], [cx + 0.4, ty0 - 7], [cx + 0.4, ty0 - 10.5]], cx + 0.4, ty0 - 11.6, -Math.PI / 2 + 0.6);
+    else tail([[cx, ty0], [cx + 0.3, ty0 - 8], [cx + 0.3, ty0 - 9]], cx + 0.3, ty0 - 7.6 + (step ? 0.4 : 0), Math.PI / 2);
+    plate(cx, hy, 3.4, 2.4);
+    eyes([[cx - 1.0, hy - 0.7], [cx + 1.0, hy - 0.7]]);
+    for (const sd of [-1, 1]) pincer(cx + sd * 2.6, hy + 0.4, cx + sd * 5.4, hy + 1.2, cx + sd * 5.0, hy + 3.4 + (strike ? 0.8 : 0), Math.PI / 2 - sd * 0.25, false);
+  } else { // up: walking away, the tail nearest us
+    const cx = w / 2, hy = g - 12.2;
+    shadow(cx, g - 5, 11, 4);
+    for (const sd of [-1, 1]) pincer(cx + sd * 2.4, hy - 0.4, cx + sd * 5.2, hy - 1.4, cx + sd * 4.8, hy - 3.6 - (strike ? 0.8 : 0), -Math.PI / 2 + sd * 0.25, true);
+    for (const sd of [-1, 1]) for (let i = 0; i < 4; i++) {
+      const y = hy + 1.6 + i * 1.6, o = (i % 2 ? 1 : -1) * sw * sd * 0.6;
+      leg(cx + sd * 2.4, y, cx + sd * (5.2 + i * 0.4), y - 1.6, cx + sd * (7.4 + i * 0.6), y + 2.2 + o, false);
+    }
+    plate(cx, hy, 3.4, 2.4);
+    for (let i = 0; i < 4; i++) plate(cx, hy + 2.6 + i * 2.0, 2.7 - i * 0.2, 1.8 - i * 0.1);
+    const ty0 = hy + 10.8;
+    if (strike) tail([[cx, ty0], [cx, ty0 - 14], [cx, hy - 6]], cx, hy - 7.0, -Math.PI / 2);
+    else if (wind) tail([[cx, ty0], [cx + 0.3, ty0 - 8], [cx + 0.3, ty0 - 14]], cx + 0.3, ty0 - 15.5, -Math.PI / 2 - 0.4);
+    else tail([[cx, ty0], [cx + 0.3, ty0 - 9], [cx + 0.3, ty0 - 15]], cx + 0.3, ty0 - 16.0 + (step ? 0.4 : 0), -Math.PI / 2 + 0.5);
+  }
+}
+
 function blobSheet(key: string, w: number, h: number, pal: BlobPal, o: BlobOpts): Sheet {
   return { key, w, h, draw: (c, f) => blobFrame(c, w, h, pal, o, f) };
 }
@@ -453,6 +561,16 @@ export function buildMobs(out: string, ONLY?: string[]) {
     humanoid("mob_packlord", "packlord", 30, 36, 34 / 36, 1.08),
     humanoid("mob_hornbrute", "hornbrute", 40, 40, 37.5 / 40, 1.2),
     humanoid("mob_hidemother", "hidemother", 44, 48, 44 / 48, 1.32),
+    // Act 2, the Sunscar (look.ts nomad..camelfolk) and its giant scorpion (scorpionFrame)
+    humanoid("mob_nomad", "nomad", 22, 30, 27.5 / 30, 0.86),
+    humanoid("mob_nomad_folk", "nomad_folk", 22, 30, 27.5 / 30, 0.86),
+    humanoid("mob_sanddead", "sanddead", 22, 30, 27.5 / 30, 0.88),
+    humanoid("mob_veiled", "veiled", 24, 32, 31.2 / 32, 0.93),
+    humanoid("mob_camelfolk", "camelfolk", 34, 36, 33.5 / 36, 1.08),
+    humanoid("mob_sunwright", "sunwright", 44, 48, 42 / 48, 1.25), // Act 2's final boss, drawn big like the Hollow King
+    { key: "mob_scorpion", w: 36, h: 30, draw: (c: C2, f: number) => scorpionFrame(c, 36, 30, f) },
+    // the Night Raiders (raiders.ts): one sheet for each of the Seven
+    ...RAIDERS.map((R) => ({ key: `mob_nightraider_${R.key}`, w: RAIDER_W, h: RAIDER_H, draw: (c: C2, f: number) => { const { dir, pose } = frameOf(f); paintRaider(c, SH, R, dir as "down" | "up" | "right", pose, f); } })),
     // wearing 1-4 harvested skeletons (look.ts demon1..4)
     ...[1, 2, 3, 4].map((n) => humanoid(`mob_demon${n}`, `demon${n}`, 28, 34, 33 / 34, 1.0, true)),
     // drawn on a 24x16 layout, 1.35x up into a 32x22 frame (about as long as a skeleton is tall)
@@ -473,7 +591,7 @@ export function buildMobs(out: string, ONLY?: string[]) {
       const c = body.getContext("2d"), sc = shadow.getContext("2d");
       c.scale(HI, HI); sc.scale(HI, HI);
       SH = sc; s.draw(c, f); SH = null;
-      const blob = !/skeleton|bandit|bride|necromancer|demon|crawler|hollowking|gnawkin|tuskborn|silkwretch|duskwing|packlord|hornbrute|hidemother|crowseer|gnasher|weaver/.test(s.key);
+      const blob = !/skeleton|bandit|bride|necromancer|demon|crawler|hollowking|gnawkin|tuskborn|silkwretch|duskwing|packlord|hornbrute|hidemother|crowseer|gnasher|weaver|nomad|scorpion|sanddead|veiled|camelfolk|sunwright|nightraider/.test(s.key);
       const b = shrink(body, "mb", tw, th);
       pixelize(b, tw, th, true, blob ? { y0: Math.round(th * 0.7), y1: th, mud: 0.14, sat: 0.9 } : { y0: Math.round(th * 0.72), y1: th, mud: s.key.includes("bandit") ? 0.38 : 0.2 });
       const u = shrink(shadow, "ms", tw, th); pixelAlpha(u);

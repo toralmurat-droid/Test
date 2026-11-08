@@ -4,10 +4,10 @@ import { icon as pxIcon } from "./pixelicons";
 import { slotKey } from "./keymode";
 import { Stats } from "../../shared/powers";
 import { iconImg } from "./skillIcons";
-import { Node, treeLayout } from "./treeLayout";
+import { Node, slabWidth, treeLayout } from "./treeLayout";
 import { SheetPreview, talentsOf } from "./sidepanel";
 import {
-  BRANCHES, childrenOf, EFFECT_TEXT, levelPower, lockReason, maxRank, RANK_POWER, rankOf, SkillDef, SKILLS, spentPoints, STACK_NAME,
+  BRANCHES, childrenOf, EFFECT_TEXT, levelPower, lockReason, maxRank, nextRankLevel, RANK_POWER, rankOf, SkillDef, SKILLS, spentPoints, STACK_NAME,
   synergyPower, talentPoints, withMods, type SkillMod,
   NEED_TEXT,
 } from "../../shared/skills";
@@ -20,7 +20,7 @@ import { damageText, scaleText, skillDamage } from "../../shared/skillInfo";
  * Hover a skill to read it (damage for your current stats, attribute scaling, cost), click it to spend a point.
  * Learned actives go on keys 1-0: hover the skill and press a number key, or click a key slot at the bottom.
  */
-const W = 620, H = 520; // the stone slab with the three schools side by side, CSS px
+const H = 520; // the stone slab with the three schools side by side, CSS px (620 wide, or as wide as the class needs: slabWidth)
 
 export class TalentMenu {
   private el = document.getElementById("tree")!;
@@ -96,19 +96,20 @@ export class TalentMenu {
       `<span class="treehint">Follow the stone paths: a node needs the one before it. Upgrades change the spell at the start of their path. ` +
       `Basic hits build ${STACK_NAME[cls]} (up to 5) for some skills.</span>`;
 
+    const W = slabWidth(cls);
     const { nodes: layout, cols } = treeLayout(cls, W, H);
     const colors = BRANCHES[cls].map((b) => b.color);
     let html = `<canvas class="treeart" width="${W}" height="${H}"></canvas><div class="treebox">`;
     for (const n of layout) {
       const s = n.s, r = rankOf(ranks, s.id);
       const why = lockReason(cls, state.level, ranks, s.id);
-      const stt = why === "max" ? "max" : why === "" ? "can" : why === "points" ? (r > 0 ? "has" : "off") : "locked";
+      const stt = why === "max" ? "max" : why === "" ? "can" : why === "points" || (why === "level" && r > 0) ? (r > 0 ? "has" : "off") : "locked";
       const slot = !s.passive ? slots.indexOf(s.id) : -1;
       const key = slot >= 0 ? `<kbd>${slotKey(slot)}</kbd>` : "";
       const pips = Array.from({ length: maxRank(s) }, (_, i) => `<i class="${i < r ? "on" : ""}"></i>`).join("");
       const leaf = childrenOf(cls, s.id).length === 0;
       const act = !s.passive && r > 0 ? ` data-active="${s.id}"` : "";
-      const lvl = why === "level" ? `<span class="nlv">Lv ${s.req}</span>` : "";
+      const lvl = why === "level" && r === 0 ? `<span class="nlv">Lv ${s.req}</span>` : "";
       html += `<button class="tnode ${stt}${s.passive ? " passive" : ""}${s.row === 4 ? " ult" : ""}${leaf ? " leaf" : ""}" data-talent="${s.id}"${act} ` +
         `style="left:${n.x}px;top:${n.y}px;--c:${colors[s.branch]}">${iconImg(s.id, "nicon")}${key}${lvl}<span class="pips">${pips}</span><span class="trank">${r || ""}</span></button>`;
     }
@@ -221,7 +222,7 @@ export class TalentMenu {
           if (nx) rows.push(`<p class="inext">Next rank: ${nx.total} (+${Math.round(RANK_POWER * 100)}% power, ${s.rankStep ? s.rankStep + ", " : ""}longer effects)</p>`);
         }
       } else if (r > 0 && r < maxRank(s)) rows.push(`<p class="inext">Next rank: ${s.rankStep ? s.rankStep + ", " : ""}longer, stronger effects</p>`);
-      const price = [s.cd ? `${s.cd / 1000}s cooldown` : "no cooldown", s.cost ? `<span class="ista">${s.cost} stamina</span>` : "", s.mana ? `<span class="imana">${s.mana} mana</span>` : "", s.blood ? `<span class="iblood">${s.blood}% HP</span>` : ""];
+      const price = [s.cd ? `${s.cd / 1000}s cooldown` : "no cooldown", s.cost ? `<span class="ista">${s.cost} heat</span>` : "", s.mana ? `<span class="imana">${s.mana} mana</span>` : "", s.blood ? `<span class="iblood">${s.blood}% HP</span>` : ""];
       rows.push(`<p class="icost">${price.filter(Boolean).join(" · ")}${s.chargeMs ? ` · charge ${s.chargeMs / 1000}s` : ""}</p>`);
     }
     const lp = Math.round((levelPower(s) - 1) * 100);
@@ -240,7 +241,7 @@ export class TalentMenu {
     rows.push(`<p class="ipath">${parent ? `Grows from ${parent.name}${also.length ? `, and needs ${also.join(" and ")}` : ""}. ` : "Root of the branch. "}${kids.length ? `Leads to ${kids.map((k) => k.name).join(" and ")}.` : "Dead end: nothing grows higher."}</p>`);
     const slots: string[] = [...(state.slots ?? [])];
     const slot = slots.indexOf(s.id);
-    const status = why === "max" ? "Fully learned" : why === "" ? "Click to learn" : why === "level" ? `${pxIcon("lock")}Needs level ${s.req}` :
+    const status = why === "max" ? "Fully learned" : why === "" ? "Click to learn" : why === "level" ? `${pxIcon("lock")}${r > 0 ? `Rank ${r + 1} needs level ${nextRankLevel(s, r)}` : `Needs level ${s.req}`}` :
       why === "above" ? `${pxIcon("lock")}Learn ${parent ? parent.name : "the skill below"} first` :
       why === "requires" ? `${pxIcon("lock")}Learn ${missing.join(" and ")} first` : r > 0 ? "Learned · no points left" : "No points left";
     const keyNote = !s.passive && r > 0 ? (slot >= 0 ? ` · on key ${slotKey(slot)}` : ` · hover it and press ${slotKey(0)}-${slotKey(8)} to put it on a key`) : "";

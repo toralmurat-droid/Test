@@ -3,6 +3,7 @@ import { MobKind, MOBS, TILE, WORLD_H } from "./constants";
 import { baseLevelAt, SPAWN_ZONES, zoneLevels } from "./spawns";
 import { GEAR, LOOT_IDS, LOOT_LEVEL, rollAffixes, withLevel } from "./gear";
 import { CHAINS, objectDone, QuestObject, Quester } from "./quests";
+import { AMBUSH_CHEST, FLOORS } from "./dungeon";
 
 /**
  * Loot chests only stand where there is a reason for them (Murat 2026-11-03):
@@ -109,6 +110,23 @@ function placeChests(): Chest[] {
     const level = (SPAWN_ZONES.find((z) => z.name === a.name)?.levels ?? zoneLevels(a))[1] + 1; // guarded hoards are a bit richer than the zone
     out.push({ id: `lair_${i + 1}`, ...pos(s.tx, s.ty), level, tier: chestTier(level), area: a.name, guards: l.guards });
   });
+  // The Mawdeep (Murat 2026-11-08: "best in class principles"): on each floor a hoard in its ambush room, kept by the
+  // beast-folk lurking round it, and a richer chest in the secret room behind the cracked wall
+  const KEEPERS: Record<number, Partial<Record<MobKind, number>>> = { 1: { gnawkin: 2, tuskborn: 1 }, 2: { silkwretch: 2, gnawkin: 1 }, 3: { tuskborn: 2, silkwretch: 1 } };
+  for (const f of FLOORS) {
+    const zl = SPAWN_ZONES.find((z) => z.name === f.name)?.levels ?? [20, 22];
+    const inRoom = (ci: number) => (tx: number, ty: number) => Math.hypot((tx + 0.5 - f.x - f.chambers[ci].x) / f.chambers[ci].rx, (ty + 0.5 - f.y - f.chambers[ci].y) / f.chambers[ci].ry) < 0.8;
+    const hc = AMBUSH_CHEST[f.id];
+    if (hc !== undefined) {
+      const c = f.chambers[hc], sp = nearestSpot(f.x + c.x, f.y + c.y, inRoom(hc), 6);
+      if (sp) out.push({ id: `maw_hoard_${f.id}`, ...pos(sp.tx, sp.ty), level: zl[1] + 1, tier: 3, area: f.name, guards: KEEPERS[f.id] });
+    }
+    f.chambers.forEach((c, ci) => {
+      if (!c.secret) return;
+      const sp = nearestSpot(f.x + c.x, f.y + c.y, inRoom(ci), 3);
+      if (sp) out.push({ id: `maw_secret_${f.id}`, ...pos(sp.tx, sp.ty), level: zl[1] + 3, tier: 3, area: `${f.name}: a hidden room` });
+    });
+  }
   // Story rewards: beside the last object of each "use" step (unless the step says no chest), for every quest chain
   CHAINS.forEach((ch, c) => ch.quests.forEach((q, qi) => q.steps.forEach((st, si) => {
     if (st.type !== "use" || !st.objects?.length || st.chest === false) return;

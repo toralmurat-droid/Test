@@ -950,5 +950,89 @@
   "h": 30,
   "scale": 1.5,
   "frames": 12
+ },
+ "mob_nomad": {
+  "w": 22,
+  "h": 30,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_nomad_folk": {
+  "w": 22,
+  "h": 30,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_sanddead": {
+  "w": 22,
+  "h": 30,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_veiled": {
+  "w": 24,
+  "h": 32,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_camelfolk": {
+  "w": 34,
+  "h": 36,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_scorpion": {
+  "w": 36,
+  "h": 30,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_sunwright": {
+  "w": 44,
+  "h": 48,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_nightraider_vharn": {
+  "w": 64,
+  "h": 62,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_nightraider_moragh": {
+  "w": 64,
+  "h": 62,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_nightraider_skarde": {
+  "w": 64,
+  "h": 62,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_nightraider_ilsevar": {
+  "w": 64,
+  "h": 62,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_nightraider_corvane": {
+  "w": 64,
+  "h": 62,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_nightraider_hesk": {
+  "w": 64,
+  "h": 62,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_nightraider_sabel": {
+  "w": 64,
+  "h": 62,
+  "scale": 1.5,
+  "frames": 12
  }
 }

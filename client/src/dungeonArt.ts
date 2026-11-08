@@ -1,5 +1,6 @@
 import Phaser from "phaser";
 import { BONE, IRON, OLDWOOD, OUTLINE, Pen, pen, ROPE, sheet, WOOD } from "./worldProps";
+import { iso, timberBeam, timberPost } from "./isoBox";
 
 /**
  * Pixel art of the Mawdeep Warrens (shared/dungeon.ts), painted in code at 1.5 texels per world px like every
@@ -54,58 +55,71 @@ function plain(scene: Phaser.Scene, key: string, w: number, h: number, frames: n
 export const WALL_TALL = 46, WALL_LOW = 9; // world px
 export const BLOCK_W = 96, BLOCK_TOP = 48;
 
+/** Open floor around a wall tile: bit 1 north, 2 west, 4 south, 8 east. */
+export const OPEN_N = 1, OPEN_W = 2, OPEN_S = 4, OPEN_E = 8;
+const VOIDC = 0x100d0f; // the rock mass beyond the walls (groundPaint's VOID)
+const PERIOD = 4, FC = 8; // face pattern repeats every 4 tiles (192 texels = 24 chunk cells), so faces run on seamlessly
+
 /**
- * A block of raw cave rock: a near-black top (the rock mass goes on into the dark) and two hewn faces of
- * jointed rock chunks, cracks between them, strata, roots hanging from the top and a damp foot.
+ * A cave wall tile (Murat 2026-11-07: only the inside should look like a wall, no blocky border): a rock face only on
+ * the sides that look onto open floor (south and east faces, which the iso view shows), its pattern carried on from
+ * tile to tile so a run of wall reads as one rough face; the top is the dark rock mass itself, with only a crumbly
+ * lit lip along the edges that meet the room. Walls with no floor in front are just that dark mass at ground level.
+ * `px`/`py` are the tile's position (mod 4) for the seamless faces.
  */
-export function wallTexture(scene: Phaser.Scene, hW: number, v: number): string {
-  const key = `dg_wall_${hW}_${v}`;
+export function wallTexture(scene: Phaser.Scene, hW: number, open: number, px: number, py: number): string {
+  const faces = open & (OPEN_S | OPEN_E);
+  if (!faces) { px = 0; py = 0; } // a bare top: where it is doesn't matter
+  const key = `dg_wall_${hW}_${open}_${px}_${py}`;
   if (scene.textures.exists(key)) return key;
   const HT = Math.round(hW * TX), W = BLOCK_W, H = BLOCK_TOP + HT;
   const tex = scene.textures.createCanvas(key, W, H)!;
   const ctx = tex.getContext();
   const img = ctx.createImageData(W, H), d = img.data;
-  const set = (x: number, y: number, c: number[]) => { const o = (y * W + x) * 4; d[o] = c[0]; d[o + 1] = c[1]; d[o + 2] = c[2]; d[o + 3] = 255; };
-  const C = 8.5;
+  const set = (x: number, y: number, c: number) => { const o = (y * W + x) * 4; d[o] = (c >> 16) & 255; d[o + 1] = (c >> 8) & 255; d[o + 2] = c & 255; d[o + 3] = 255; };
+  const P = PERIOD * 48, cells = P / FC;
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
-    const inTop = Math.abs(x + 0.5 - 48) / 48 + Math.abs(y + 0.5 - 24) / 24 <= 1;
-    if (inTop) {
-      // the top: the rock mass going on into the dark, near black, only a crumbly lip at the very front edge
-      const ex = Math.abs(x + 0.5 - 48) / 48 + Math.abs(y + 0.5 - 24) / 24;
-      const n = vn(x / 5 + v * 9, y / 3, 11) + dth(x, y) * 0.5;
-      let lv = n > 0.85 ? 1 : 0;
-      if (y + 0.5 > 24 && ex > 0.94 && hash(x, v, 12) < 0.7) lv = 2;
-      set(x, y, rgb(ROCK[lv]));
+    const ex = Math.abs(x + 0.5 - 48) / 48 + Math.abs(y + 0.5 - 24) / 24;
+    if (ex <= 1) {
+      // the top: the dark rock mass; a ragged lit lip only along the edges that meet open floor
+      let c = vn(x / 7 + px * 13, y / 4 + py * 7, 11) + dth(x, y) * 0.4 > 0.9 ? 0x16120f : VOIDC;
+      const north = x >= 48 && y < 24, west = x < 48 && y < 24, south = x < 48 && y >= 24, east = x >= 48 && y >= 24;
+      const edgeOpen = (north && open & OPEN_N) || (west && open & OPEN_W) || (south && open & OPEN_S) || (east && open & OPEN_E);
+      if (edgeOpen && ex > 0.9 - hash(x, y, 12) * 0.06) c = ex > 0.96 ? ROCK[3] : ROCK[2];
+      set(x, y, c);
       continue;
     }
     let face = 0, u = 0, w = 0;
     if (x < 48) { const t = 24 + (x + 0.5) / 2; if (y >= t && y < t + HT) { face = 1; u = x; w = y - t; } }
     else { const t = 24 + (W - x - 0.5) / 2; if (y >= t && y < t + HT) { face = 2; u = x - 48; w = y - t; } }
-    if (!face) continue;
-    // rock chunks: a Voronoi of stretched cells on the face
-    const fu = u + face * 97 + v * 53, fv = w * 1.25;
-    const gx = Math.floor(fu / C), gy = Math.floor(fv / C);
+    if (!face || !(face === 1 ? open & OPEN_S : open & OPEN_E)) continue;
+    // world position along the face, so the next tile's face carries on from this one
+    const uw = (face === 1 ? px * 48 + u : (((PERIOD - py) % PERIOD) * 48) + u) % P;
+    // a ragged top: the face's upper edge dips in and out along the run, so the wall line isn't ruler straight
+    const ph = uw / P * Math.PI * 2, notch = Math.round(1.5 + 2.2 * Math.sin(ph * 3 + face) + 1.2 * Math.sin(ph * 11 + face * 2) + 0.8 * Math.sin(ph * 29));
+    if (w < notch) { set(x, y, w === notch - 1 ? ROCK[2] : VOIDC); continue; }
+    const fu = uw, fv = w * 1.25 + face * 3;
+    const gx = Math.floor(fu / FC), gy = Math.floor(fv / FC);
     let d1 = 1e9, d2 = 1e9, cid = 0, bx = 0, by = 0;
     for (let j = -1; j <= 1; j++) for (let i = -1; i <= 1; i++) {
-      const cx = gx + i, cy = gy + j;
-      const px = (cx + 0.15 + hash(cx, cy, 21) * 0.7) * C, py = (cy + 0.15 + hash(cx, cy, 22) * 0.7) * C;
-      const dx = fu - px, dy = fv - py, dd = Math.sqrt(dx * dx + dy * dy);
-      if (dd < d1) { d2 = d1; d1 = dd; cid = cx * 7919 + cy; bx = dx; by = dy; } else if (dd < d2) d2 = dd;
+      const cxw = ((gx + i) % cells + cells) % cells, cy = gy + j;
+      const ppx = (gx + i + 0.15 + hash(cxw, cy, 21 + face) * 0.7) * FC, ppy = (cy + 0.15 + hash(cxw, cy, 22 + face) * 0.7) * FC;
+      const dx = fu - ppx, dy = fv - ppy, dd = Math.sqrt(dx * dx + dy * dy);
+      if (dd < d1) { d2 = d1; d1 = dd; cid = cxw * 7919 + cy; bx = dx; by = dy; } else if (dd < d2) d2 = dd;
     }
-    const tone = hash(cid, 3, 23), lit = -(bx * (face === 1 ? 0.8 : 0.3) + by) / C;
-    let lv = (face === 1 ? 3.1 : 2.0) + (tone - 0.5) * 1.4 + lit * 1.3 - (d1 / C) * (d1 / C) * 0.9 + dth(x, y) * 0.9;
-    lv += Math.sin(w * 0.55 + vn(u / 9, w / 9, 31 + v) * 5) * 0.25; // strata
-    if (w < 2) lv += 1.2; // the lit lip
+    const tone = hash(cid, 3, 23 + face), lit = -(bx * (face === 1 ? 0.8 : 0.3) + by) / FC;
+    let lv = (face === 1 ? 3.1 : 2.0) + (tone - 0.5) * 1.4 + lit * 1.3 - (d1 / FC) * (d1 / FC) * 0.9 + dth(x, y) * 0.9;
+    lv += Math.sin(w * 0.55 + Math.sin(uw / P * Math.PI * 4) * 2.2) * 0.25; // strata
+    if (w < Math.max(2, notch + 2)) lv += 1.2; // the lit lip
     lv -= Math.max(0, w - (HT - 7)) / 7 * 1.6; // damp, dark foot
     if (d2 - d1 < 0.9) lv = w < 2 ? 2 : 0.4; // cracks between chunks
     let c = ROCK[Math.max(0, Math.min(ROCK.length - 1, Math.floor(lv)))];
     // roots and pale threads of fungus hanging from the top of the face
-    const col = u + face * 61 + v * 13;
+    const col = uw + face * 61;
     if (hash(col, 0, 41) < 0.05 && w < 4 + hash(col, 1, 42) * HT * 0.5) c = (w & 3) === 0 ? 0x2c2016 : 0x46321f;
     if (hash(col, 2, 43) < 0.012 && w < 10) c = 0x8a8a76;
-    // a wet seep catching the light
-    if (face === 1 && vn(u / 6 + v, w / 14, 44) > 0.8 && (x + y) % 3 === 0) c = 0x6f6a62;
-    set(x, y, rgb(c));
+    if (face === 1 && vn(uw / 6, w / 14, 44) > 0.8 && (x + y) % 3 === 0) c = 0x6f6a62; // a wet seep
+    set(x, y, c);
   }
   ctx.putImageData(img, 0, 0);
   tex.refresh();
@@ -116,126 +130,201 @@ export function wallTexture(scene: Phaser.Scene, hW: number, v: number): string 
 // ---------------------------------------------------------------------------------------------------------
 // Gates: a timber barricade block per gate tile (same iso block as the walls), and the posts it hangs from
 // ---------------------------------------------------------------------------------------------------------
-export const GATE_H = 30; // world px
-/** Old dark timber, darkest to lightest. */
-const TIMBER = [0x150f0b, 0x22180f, 0x302215, 0x40301d, 0x523e26, 0x664e31, 0x7c623e];
+
+/** A gate's opening, in world px: how high the portcullis is, and the frame round it. */
+export const GATE_OPEN_H = 34, GATE_FRAME_H = 40, GATE_FRAMES = 8;
+export interface GateShape { sx: number; sy: number; len: number; w: number; h: number; ox: number; oy: number }
+/**
+ * The geometry of a gate seen in iso: `sx, sy` the screen step per world px along the gate's line, `len` its length in
+ * world px; texture size `w, h` (texels) and its foot centre `ox, oy` (texels).
+ */
+export function gateShape(sx: number, sy: number, len: number): GateShape {
+  const w = Math.ceil((Math.abs(sx) * len + 20) * TX), h = Math.ceil((GATE_FRAME_H + 16 + Math.abs(sy) * len) * TX);
+  return { sx, sy, len, w, h, ox: w / 2, oy: h - Math.ceil((Math.abs(sy) * len / 2 + 4) * TX) };
+}
+
+/** Dressed stone for the Mawdeep's built walls, darkest to lightest (a little warmer than the raw rock). */
+const STONE = [0x16110e, 0x241c17, 0x342920, 0x46382c, 0x5a4a3a, 0x6e5c48, 0x847058];
 
 /**
- * A block of lashed timber: a top of sawn stake ends (end grain, a few split), faces of upright planks with dark
- * gaps, two rusted iron bands with rivets, rope lashing, claw gouges and a damp, rotten foot.
+ * A wall across a tunnel with a gate in it (Murat 2026-11-08: "part should be like a prison wall and only part a
+ * gate"), drawn along the wall's line in iso; the gate takes [g0, g1] of the wall's length.
+ *  - "bars": a prison wall of iron bars on a stone sill under a timber beam; the gate is a barred leaf with a brace
+ *    that winds up into the beam (frame f lifts it f/(GATE_FRAMES-1) of the way).
+ *  - "door": a wall of dressed stone; the gate is an iron-bound plank door under a stone lintel that swings in on its
+ *    hinge (frame f turns it f/(GATE_FRAMES-1) of the way open, showing the dark behind).
  */
-export function gateTexture(scene: Phaser.Scene, v: number): string {
-  const key = `dg_gate_${v}`;
-  if (scene.textures.exists(key)) return key;
-  const HT = Math.round(GATE_H * TX), W = BLOCK_W, H = BLOCK_TOP + HT;
-  const tex = scene.textures.createCanvas(key, W, H)!;
-  const ctx = tex.getContext();
-  const img = ctx.createImageData(W, H), d = img.data;
-  const set = (x: number, y: number, c: number) => { const o = (y * W + x) * 4; d[o] = (c >> 16) & 255; d[o + 1] = (c >> 8) & 255; d[o + 2] = c & 255; d[o + 3] = 255; };
-  const P = 7; // plank width (texels along a face)
-  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
-    const ex = Math.abs(x + 0.5 - 48) / 48 + Math.abs(y + 0.5 - 24) / 24;
-    if (ex <= 1) {
-      // the top: round stake ends in rows, end-grain rings, dark between them
-      const a = (x - 48) / 2 + (y - 24), b = -(x - 48) / 2 + (y - 24); // iso axes
-      const ca = Math.round(a / 7) * 7, cb = Math.round(b / 7) * 7, r = Math.hypot(a - ca, b - cb);
-      let lv = r < 3.2 ? 4 + (r < 1.2 ? -1 : 0) + Math.round(Math.sin(r * 2.6) * 0.6 + dth(x, y)) : 1;
-      if (r < 3.2 && hash(ca, cb, 51 + v) < 0.2 && Math.abs(a - ca) < 0.6) lv = 1; // a split stake
-      if (ex > 0.95) lv = Math.max(lv, 3);
-      set(x, y, TIMBER[Math.max(0, Math.min(6, lv))]);
-      continue;
-    }
-    let face = 0, u = 0, w = 0;
-    if (x < 48) { const t = 24 + (x + 0.5) / 2; if (y >= t && y < t + HT) { face = 1; u = x; w = y - t; } }
-    else { const t = 24 + (W - x - 0.5) / 2; if (y >= t && y < t + HT) { face = 2; u = x - 48; w = y - t; } }
-    if (!face) continue;
-    const pk = Math.floor((u + (face === 2 ? 3 : 0)) / P), pu = (u + (face === 2 ? 3 : 0)) % P;
-    const tone = hash(pk, face, 52 + v);
-    let lv = (face === 1 ? 4.2 : 2.9) + (tone - 0.5) * 1.2 + dth(x, y) * 0.8;
-    lv += (vn(pk * 3 + 0.5, w / 5, 53 + v) - 0.5) * 1.1; // grain
-    if (pu === 0) lv = 0.5; // gap between planks
-    else if (pu === 1) lv += 0.6; // lit edge
-    else if (pu === P - 1) lv -= 0.8;
-    if (w < 2) lv += 0.9;
-    lv -= Math.max(0, w - (HT - 8)) / 8 * 1.8; // damp foot
-    let c = TIMBER[Math.max(0, Math.min(6, Math.floor(lv)))];
-    // iron bands with rivets
-    for (const bw of [Math.round(HT * 0.24), Math.round(HT * 0.68)]) {
-      if (w >= bw && w < bw + 3) {
-        c = w === bw ? (face === 1 ? IRON.mid : IRON.lo) : w === bw + 2 ? 0x1c1a18 : face === 1 ? 0x5c5148 : 0x3e3630;
-        if (hash(u, bw, 54) < 0.25) c = 0x6a3e22; // rust
-        if (pu === 3 && w === bw + 1) c = face === 1 ? IRON.hi : IRON.mid;
+export function gateSheet(scene: Phaser.Scene, key: string, g: GateShape, kind: "bars" | "door" | "crack", g0: number, g1: number) {
+  if (scene.textures.exists(key)) return;
+  const L = g.len * TX, sx = g.sx, sy = g.sy, HO = GATE_OPEN_H * TX, HF = GATE_FRAME_H * TX;
+  const base = (t: number) => [g.ox + sx * (t - 0.5) * L, g.oy + sy * (t - 0.5) * L]; // t 0..1 along the wall's foot
+  const along = Math.max(1, Math.round(Math.hypot(sx, sy) * L)); // screen length in texels
+  const col = (t: number, y0: number, y1: number, c: (j: number) => number) => {
+    const [bx, by] = base(t);
+    for (let y = Math.ceil(by - y1); y <= by - y0; y++) { const v = c(Math.round(by - y)); if (v >= 0) p0.px(bx, y, v); }
+  };
+  let p0!: Pen;
+  sheet(scene, key, g.w, g.h, GATE_FRAMES, (p, f) => {
+    p0 = p;
+    const open = f / (GATE_FRAMES - 1);
+    const inGate = (t: number) => t >= g0 && t <= g1;
+    if (kind === "crack") {
+      // rough rock walling the way, a jagged crack down it with a draught of dust; it caves in to a low heap of rubble
+      const HT = WALL_TALL * TX;
+      const crackAt = (j: number) => 0.5 + Math.sin(j * 0.21) * 0.05 + Math.sin(j * 0.67 + 1) * 0.025 + (hash(Math.floor(j / 3), 0, 96) - 0.5) * 0.03;
+      for (let k = 0; k <= along; k++) {
+        const t = k / along, edge = Math.min(t, 1 - t) * along; // texels from the wall's ends (they meet the cave wall)
+        const top = HT * Math.pow(1 - open, 1.4) * (0.75 + 0.25 * vn(k / 5, 0, 97)) * Math.min(1, 0.6 + edge / 8);
+        const heap = open * 9 * Math.max(0, 1 - Math.abs(t - 0.5) * 1.6) * (0.7 + 0.3 * vn(k / 3, 1, 98));
+        col(t, 0, Math.max(top, heap), (j) => {
+          if (j > top) { // the rubble heap: chunky stones, lit tops
+            const st = hash(Math.floor(k / 4), Math.floor(j / 3), 99);
+            return ROCK[Math.max(1, Math.min(6, Math.round(2.6 + st * 2 + (j % 3 === 2 ? 1 : 0) + dth(k, j) * 0.6)))];
+          }
+          let lv = 2.1 + (vn(k / 6, j / 5, 100) - 0.5) * 2.2 + (vn(k / 2, j / 2, 101) - 0.5) * 0.9 + dth(k, j) * 0.8;
+          if (top - j < 2) lv += 1.3; // the lit lip
+          if (j < 6) lv -= (6 - j) / 6 * 1.4; // damp foot
+          const cd = Math.abs(t - crackAt(Math.round(j))) * along;
+          const bj = j - top * 0.55, bd = bj > 0 && bj < top * 0.3 ? Math.abs(t - crackAt(Math.round(top * 0.55)) - bj * 0.012) * along : 99; // a branch
+          if (open < 0.2) {
+            if (cd < 1.4 || bd < 0.8) return j > 8 && j < top - 8 && cd < 0.6 && hash(k, j >> 2, 104) < 0.5 ? 0x26303a : 0x050404; // the crack, a cold draught behind it
+            if (cd < 2.6 || bd < 1.6) lv += t < crackAt(Math.round(j)) ? 1.6 : -0.8; // its lit and shaded lips
+            if (hash(k, j, 102) < 0.006) return 0x8a8070; // dust in the draught
+          }
+          if (Math.abs(vn(k / 4, j / 4, 103) - 0.5) < 0.03) lv -= 1.4; // seams between the fallen blocks
+          return ROCK[Math.max(0, Math.min(6, Math.round(lv)))];
+        });
       }
+      return;
     }
-    // rope lashing near the top of each plank
-    if (w >= 3 && w < 6 && pu > 0 && (pu + w) % 2 === 0 && hash(pk, 1, 55 + v) < 0.7) c = face === 1 ? ROPE : 0x6e5e3e;
-    // claw gouges: three pale strokes on some planks
-    if (hash(pk, 2, 56 + v) < 0.12 && w > HT * 0.35 && w < HT * 0.6 && (pu === 2 || pu === 4) && (w + pu) % 3 !== 0) c = face === 1 ? 0x8c7450 : 0x5e4a32;
-    set(x, y, c);
-  }
-  ctx.putImageData(img, 0, 0);
-  tex.refresh();
-  tex.setFilter(Phaser.Textures.FilterMode.NEAREST);
-  return key;
+    if (kind === "door") {
+      // the stone wall: courses of blocks, staggered, a lit coping on top, darker at the foot
+      for (let k = 0; k <= along; k++) {
+        const t = k / along;
+        if (inGate(t)) continue;
+        col(t, 0, HF + 3, (j) => {
+          if (j > HF) return j > HF + 2 ? STONE[2] : STONE[5]; // coping
+          const row = Math.floor(j / 6), u = k + (row % 2) * 6, joint = j % 6 === 0 || u % 12 === 0;
+          let lv = 3.4 + (hash(Math.floor(u / 12), row, 91) - 0.5) * 1.6 - (j < 8 ? (8 - j) / 8 * 1.5 : 0) + dth(k, j) * 0.6;
+          if (joint) lv -= 1.6; else if (j % 6 === 5) lv += 0.7; // the lit top edge of each block
+          if (hash(k, j, 92) < 0.02) lv -= 1; // pits
+          return STONE[Math.max(0, Math.min(6, Math.round(lv)))];
+        });
+      }
+      // the doorway: dark behind, a stone lintel over it
+      const dw = (g1 - g0) * along;
+      for (let k = Math.round(g0 * along); k <= g1 * along; k++) {
+        const t = k / along, ft = (t - g0) / (g1 - g0);
+        col(t, 0, HF + 3, (j) => j > HO + 6 ? (j > HF ? STONE[5] : j > HO + 9 ? STONE[2 + ((k + j) % 7 === 0 ? 0 : 1)] : STONE[4]) : 0x060404);
+        // the door leaf, turning on its hinge at g0: its far edge comes round towards the hinge
+        const leaf = 1 - open * 0.85;
+        if (ft <= leaf) {
+          const lt = ft / leaf; // 0 at the hinge .. 1 at the leaf's edge
+          const shade = open * 2.2;
+          col(t, 1, HO + 5, (j) => {
+            const plank = Math.floor(lt * dw / 7), pe = (lt * dw) % 7;
+            let c = pe < 1 ? 0x1a120c : [0x5a4028, 0x4a3420, 0x664a2e][plank % 3];
+            if (j % 11 === 0) c = 0x2a1e14;
+            if (Math.abs(j - HO * 0.25) < 1.6 || Math.abs(j - HO * 0.75) < 1.6) c = IRON.lo; // straps
+            if ((Math.abs(j - HO * 0.25) < 0.6 || Math.abs(j - HO * 0.75) < 0.6) && pe > 2 && pe < 4) c = IRON.hi; // nails
+            if (lt > 0.78 && lt < 0.86 && Math.abs(j - HO * 0.5) < 2.5) c = j > HO * 0.5 ? IRON.mid : IRON.hi; // the ring
+            if (shade) { const r = (c >> 16) & 255, gg = (c >> 8) & 255, b = c & 255, m = 1 / (1 + shade * 0.6); c = (Math.round(r * m) << 16) | (Math.round(gg * m) << 8) | Math.round(b * m); }
+            return c;
+          });
+        }
+      }
+      // jambs of big stones each side
+      for (const t of [g0, g1]) for (let d = -3; d <= 3; d++) col(t + d / along, 0, HO + 9, (j) => (d === -3 || d === 3 || j % 9 === 0) ? STONE[1] : STONE[d < 0 ? 5 : 3]);
+      const [mx, my] = base((g0 + g1) / 2);
+      skull(p, Math.round(mx), Math.round(my - HO - 15), false);
+      return;
+    }
+    // "bars": a stone sill, iron bars set in it, a timber beam over them
+    for (let k = 0; k <= along; k++) {
+      const t = k / along;
+      col(t, 0, 5, (j) => (j === 5 ? STONE[5] : (k + j * 3) % 12 === 0 ? STONE[1] : STONE[3]));
+      if (inGate(t)) continue;
+      if (k % 6 === 0) col(t, 5, HF, (j) => (hash(k, j >> 2, 93) < 0.18 ? 0x5a3420 : j % 9 === 0 ? 0x5e5c58 : 0x46443f)); // bars, rusty in patches
+      else if (k % 6 === 1) col(t, 5, HF, (j) => (hash(k, j >> 2, 94) < 0.15 ? 0x3a2216 : 0x26241f));
+      for (const rj of [Math.round(HF * 0.45)]) col(t, rj, rj + 2, (j) => (j === rj + 2 ? IRON.hi : IRON.lo)); // the cross bar
+    }
+    // the gate leaf: bars, two rails and a brace, lifted by `open`, hidden as it goes up into the beam
+    const rise = HO * open, g0k = Math.round(g0 * along), g1k = Math.round(g1 * along);
+    for (let k = g0k + 2; k <= g1k - 2; k++) {
+      const t = k / along, lt = (k - g0k) / Math.max(1, g1k - g0k);
+      const bar = (k - g0k) % 5 === 2, edge = (k - g0k) % 5 === 3;
+      col(t, 6 + rise, HF - 1, (j) => {
+        const lj = j - rise; // height within the leaf
+        if (lj > HO + 3) return -1;
+        const rail = Math.abs(lj - 8) < 1.5 || Math.abs(lj - HO + 2) < 1.5;
+        const brace = Math.abs(lj - (8 + lt * (HO - 10))) < 1.3;
+        if (rail || brace) return rail && Math.abs(lj - 8) < 0.6 ? IRON.hi : OLDWOOD[rail ? 1 : 2];
+        if (bar) return hash(k, lj >> 2, 95) < 0.15 ? 0x5a3420 : 0x4a4843;
+        if (edge) return 0x26241f;
+        return -1;
+      });
+      if (bar && rise < HO - 2) { const [bx, by] = base(t); p.px(bx, by - 6 - rise + 1, IRON.hi); } // the spikes at its foot
+    }
+    // posts at the gate's sides and the beam over the whole wall
+    for (const t of [g0, g1]) { const [bx, by] = base(t), x = Math.round(bx) - 4; p.shaft(x, by - HF - 2, x, by, 8, OLDWOOD); for (const yy of [by - HF + 8, by - 10]) { p.rect(x, yy, 8, 2, IRON.lo); p.px(x + 2, yy, IRON.hi); } }
+    for (let k = -2; k <= along + 2; k++) {
+      const [bx, by] = base(k / along), y = by - HF;
+      for (let j = -2; j < 7; j++) p.px(bx, y + j, j < 0 ? OLDWOOD[0] : j > 4 ? 0x241a12 : (k * 7 + j * 3) % 13 === 0 ? OLDWOOD[2] : OLDWOOD[1]);
+    }
+    const [mx, my] = base((g0 + g1) / 2);
+    skull(p, Math.round(mx), Math.round(my - HF - 6), true);
+  }, 0);
 }
 
-export const GATEPOST = { w: 26, h: 76 };
-/** A gate's heavy post: a squared trunk with iron bands, a horned skull nailed on top and the hinge chains. */
-function gatePost(p: Pen, v: number) {
-  const { w, h } = GATEPOST, cx = Math.round(w / 2);
-  p.shaft(cx, 16, cx, h - 2, 5, OLDWOOD);
-  for (const y of [28, h - 18]) { p.shaft(cx - 3, y, cx + 3, y, 2, [IRON.mid, IRON.lo, 0x1c1a18]); p.px(cx - 1, y, IRON.hi); }
-  for (let k = 0; k < 6; k++) { const y = 34 + k * 3; p.px(cx + 4, y, IRON.lo); p.px(cx + 5, y + 1, IRON.mid); p.px(cx + 4, y + 2, IRON.lo); } // the hinge chain
-  skull(p, cx, 11, v !== 1);
-  // rags tied under the skull
-  for (let j = 0; j < 10; j++) for (let i = 0; i < 3; i++) if (hash(i, j, v + 61) < 0.8 - j * 0.05) p.px(cx - 5 - i - Math.round(j * 0.2), 19 + j, j % 3 === 0 ? 0x3a2418 : 0x5a1c14);
-}
 
 // ---------------------------------------------------------------------------------------------------------
 // Props
 // ---------------------------------------------------------------------------------------------------------
-export const BRAZIER = { w: 26, h: 44, frames: 6 };
+export const BRAZIER = { w: 32, h: 50, frames: 6 };
 export const ROPE_ART = { w: 16, h: 210, frames: 4 };
-export const PIT = { w: 132, h: 72 };
-export const STAIR_UP = { w: 84, h: 96 };
+export const PIT = { w: 132, h: 64 };
+export const STAIR_UP = { w: 96, h: 108, OX: 36, OY: 82 };
 export const SINK = { w: 168, h: 92 };
 
 const FLAME = [0xfff2b0, 0xffd36a, 0xffa040, 0xe0641e, 0xa83a14, 0x5e1e0c];
 
+/** A fire brazier, in iso: a squat plinth of dressed stone, a deep riveted iron bowl on it, coals and live flame. */
 function brazier(p: Pen, f: number) {
-  const cx = 13;
-  // three splayed iron legs and a ring
-  p.line(cx - 2, 26, cx - 9, 43, IRON.mid); p.line(cx - 3, 26, cx - 10, 43, IRON.lo);
-  p.line(cx + 2, 26, cx + 9, 43, IRON.lo); p.line(cx + 3, 26, cx + 10, 43, IRON.lo);
-  p.line(cx, 27, cx, 43, 0x2e3136);
-  p.rect(cx - 6, 34, 13, 1, IRON.lo);
-  // the bowl: a riveted iron dish
-  for (let y = 18; y <= 26; y++) {
-    const hw = Math.round(9 - Math.max(0, y - 21) * 1.3);
-    for (let x = -hw; x <= hw; x++) {
-      const l = x < -hw + 2 ? IRON.hi : x > hw - 3 ? IRON.lo : y === 18 ? IRON.hi : IRON.mid;
-      p.px(cx + x, y, (x + y) % 5 === 0 && y === 22 ? 0x2e3136 : l);
+  const { w, h } = BRAZIER, I = iso(p, w / 2, h - 8), cx = w / 2;
+  // the plinth: two courses of stone, the top one stepped in
+  I.box(-6, 6, -6, 6, 0, 6, STONE[4], (u, z) => STONE[Math.round(3.3 + (z > 5 ? 1 : 0) - (Math.floor(u) % 6 === 0 || z < 0.6 ? 1.4 : 0) + dth(u * 2, z * 2) * 0.6)], (t, z) => STONE[Math.round(2 + (z > 5 ? 0.8 : 0) - (Math.floor(t) % 6 === 3 ? 1.2 : 0) + dth(t * 2, z * 2) * 0.5)]);
+  I.box(-4.5, 4.5, -4.5, 4.5, 6, 10, STONE[5], (u, z) => STONE[Math.round(3.6 + (z > 3.4 ? 1 : 0) + dth(u * 2, z * 2) * 0.6)], (t, z) => STONE[Math.round(2.2 + (z > 3.4 ? 0.8 : 0) + dth(t * 2, z * 2) * 0.5)]);
+  // the bowl: rings widening upward, lit on the left, rivets and a band
+  for (let z = 10; z <= 18; z += 0.5) {
+    const r = 3.5 + (z - 10) * 0.75;
+    for (let k = 0; k < 64; k++) {
+      const an = k / 64 * Math.PI * 2, ca = Math.cos(an), sa = Math.sin(an);
+      if (ca + sa < -0.2) continue; // the far half is hidden
+      const lit = (sa - ca) * 0.5; // toward screen left = lit
+      let lv = 2.2 + lit * 1.6 + dth(k, z * 2) * 0.6;
+      if (Math.abs(z - 14) < 0.6) lv -= 1.1; // the band
+      if (Math.abs(z - 14) < 0.6 && k % 8 === 0) lv = 5; // rivets
+      I.put(ca * r, sa * r, z, vn(k / 6, z / 3, 8) > 0.75 ? 0x5a3420 : [0x121214, 0x1e1e21, 0x2e2d2c, 0x45423d, 0x5e5a52, 0x8a857a][Math.max(0, Math.min(5, Math.round(lv)))]);
     }
   }
-  p.rect(cx - 9, 18, 19, 1, 0x9aa0a8);
-  // glowing coals
-  for (let x = -8; x <= 8; x++) p.px(cx + x, 17, hash(x, f, 5) < 0.4 ? 0xffb04a : 0xc4461a);
-  for (let x = -6; x <= 6; x++) p.px(cx + x, 16, hash(x, f, 6) < 0.5 ? 0xff7a2a : 0x8a2a10);
+  // the lip, then the coal bed inside it
+  for (let k = 0; k < 80; k++) { const an = k / 80 * Math.PI * 2; I.put(Math.cos(an) * 9.6, Math.sin(an) * 9.6, 18.5, Math.sin(an) - Math.cos(an) > 0 ? 0x7a756a : 0x3a3936); }
+  for (let r = 0; r < 9; r += 0.5) for (let k = 0; k < 48; k++) {
+    const an = k / 48 * Math.PI * 2, hot = hash(Math.round(r * 2), k + f * 7, 5);
+    I.put(Math.cos(an) * r, Math.sin(an) * r, 17.5, r > 8 ? 0x2a120a : hot < 0.25 ? 0xffb04a : hot < 0.6 ? 0xc4461a : 0x6e2010);
+  }
   // flames: tongues that rise and lick sideways frame by frame
+  const fy = Math.floor(I.Y(0, 0, 18));
   for (let x = -7; x <= 7; x++) {
     const base = 1 - Math.abs(x) / 8;
-    const h = Math.round(4 + base * 13 * (0.7 + 0.3 * Math.sin(f * 1.7 + x * 1.3)) + hash(x, f, 7) * 3);
+    const fh = Math.round(4 + base * 15 * (0.7 + 0.3 * Math.sin(f * 1.7 + x * 1.3)) + hash(x, f, 7) * 3);
     const lean = Math.round(Math.sin(f * 1.05 + 0.5) * 1.5);
-    for (let k = 0; k < h; k++) {
-      const t = k / h, ci = Math.min(FLAME.length - 1, Math.floor(t * 4.2 + Math.abs(x) * 0.22));
-      p.px(cx + x + (k > h * 0.55 ? lean : 0), 16 - k, FLAME[ci]);
+    for (let k = 0; k < fh; k++) {
+      const t = k / fh, ci = Math.min(FLAME.length - 1, Math.floor(t * 4.2 + Math.abs(x) * 0.22));
+      p.px(cx + x + (k > fh * 0.55 ? lean : 0), fy - k, FLAME[ci]);
     }
   }
-  // sparks
-  for (let i = 0; i < 3; i++) {
-    const sx = cx + Math.round((hash(i, f, 8) - 0.5) * 12), sy = 2 + Math.round(hash(i, f, 9) * 8);
-    p.px(sx, sy, i ? 0xffb04a : 0xffe08a);
-  }
+  for (let i = 0; i < 3; i++) p.px(cx + Math.round((hash(i, f, 8) - 0.5) * 12), 1 + Math.round(hash(i, f, 9) * 6), i ? 0xffb04a : 0xffe08a); // sparks
 }
 
 function rope(p: Pen, f: number) {
@@ -255,62 +344,175 @@ function rope(p: Pen, f: number) {
   }
 }
 
-/** A stairwell cut down into the rock: rough treads going down into black, a rim of fitted stones. */
+/**
+ * The stair down: a stone-lined well in the floor (an iso diamond) with steps going down away from the viewer into
+ * the dark. The far walls show their courses of blocks, each tread has a lit lip and the shadow of the one above,
+ * the treads dim with depth, and a faint warm glow comes up from far below (the next floor's torches), so it reads
+ * as a way on, not a pit. A timber frame and big rim stones round the mouth.
+ */
 function pit(p: Pen) {
-  const { w, h } = PIT, cx = w / 2, cy = h / 2, hw = w / 2 - 12, hh = h / 2 - 6;
+  const { w, h } = PIT, cx = w / 2, cy = 30, hw = w / 2 - 12, hh = 26, STEPS = 6, SH = 5, DEEP = STEPS * SH;
+  // world square a,b in [-1,1] (a east, b south) seen in iso; z is depth below the floor (texels)
+  const scr = (a: number, b: number, z: number) => [cx + (a - b) * hw / 2, cy + (a + b) * hh / 2 + z];
+  const inHole = (x: number, y: number) => Math.abs(x + 0.5 - cx) / hw + Math.abs(y + 0.5 - cy) / hh <= 1;
+  const stepOf = (b: number) => Math.min(STEPS - 1, Math.floor((1 - b) / 2 * STEPS)); // 0 nearest .. far = deepest
+  const zOf = (b: number) => (stepOf(b) + 1) * SH;
+  const put = (a: number, b: number, z: number, c: number) => {
+    const [x, y] = scr(a, b, z), X = Math.floor(x), Y = Math.floor(y);
+    if (inHole(X, Y)) p.px(X, Y, c);
+  };
+  const N = 220;
+  // 1. the west wall (a = -1), its foot following the steps down: in shadow, courses of blocks
+  for (let i = 0; i <= N; i++) {
+    const b = -1 + 2 * i / N, zf = zOf(b);
+    for (let z = 0; z <= zf; z += 0.5) {
+      const row = Math.floor(z / 4), u = (b + 1) * 30 + (row % 2) * 4, joint = z % 4 < 0.7 || u % 8 < 0.8;
+      let lv = 2.2 - z / DEEP * 1.6 + (hash(Math.floor(u / 8), row, 83) - 0.5) * 0.8 + (joint ? -1.1 : 0);
+      if (z < 1.2) lv += 1;
+      put(-1, b, z, ROCK[Math.max(0, Math.min(6, Math.round(lv)))]);
+    }
+  }
+  // 2. the north wall (a over -1..1 at b = -1), lit from the west, with the dark arch the stair goes on into
+  for (let i = 0; i <= N; i++) {
+    const a = -1 + 2 * i / N;
+    for (let z = 0; z <= DEEP; z += 0.5) {
+      const row = Math.floor(z / 4), u = (a + 1) * 30 + (row % 2) * 4, joint = z % 4 < 0.7 || u % 8 < 0.8;
+      let lv = 3.1 - z / DEEP * 1.8 + (hash(Math.floor(u / 8), row, 84) - 0.5) * 0.8 + (joint ? -1.1 : 0);
+      if (z < 1.2) lv += 1;
+      let c = ROCK[Math.max(0, Math.min(6, Math.round(lv)))];
+      const ah = DEEP - z, archH = 17 - Math.max(0, (Math.abs(a) - 0.18) / 0.27) ** 2 * 7;
+      if (Math.abs(a) < 0.45 && ah < archH) { // the opening, black, a warm glow from far below at its foot
+        c = ah < 3 ? 0x4a220e : ah < 6 ? 0x2a140a : 0x080606;
+        if (Math.abs(ah - archH) < 1.2) c = ROCK[4]; // the arch's stones
+      }
+      put(a, -1, z, c);
+    }
+  }
+  // 3. the treads, far to near: each a little lower than the one before it, lit lip at its far edge
+  for (let i = 0; i <= N; i++) {
+    const b = -1 + 2 * i / N, k = stepOf(b), z = zOf(b), fr = ((1 - b) / 2 * STEPS) % 1; // fr 0 near edge .. 1 far edge
+    for (let jj = 0; jj <= N; jj++) {
+      const a = -1 + 2 * jj / N;
+      const [x, y] = scr(a, b, z);
+      let lv = 5.6 - k * 0.75 + dth(Math.floor(x), Math.floor(y)) * 0.7;
+      if (fr > 0.82) lv += 1.2; // the worn lip where it drops to the next step
+      if (fr < 0.14) lv -= 1.4; // under the lip of the step above
+      if (a < -0.8) lv -= 1.2; // shade of the west wall
+      if (hash(Math.floor(a * 30), k, 85) < 0.06) lv -= 1; // chips
+      let c = ROCK[Math.max(0, Math.min(6, Math.round(lv)))];
+      if (k === STEPS - 1 && Math.abs(a) < 0.45) c = fr > 0.6 ? 0x3a1a0c : 0x2a1810; // the glow on the last step
+      put(a, b, z, c);
+    }
+  }
+  // 4. rim stones, and a timber frame along the two near edges
   for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
     const e = Math.abs(x + 0.5 - cx) / hw + Math.abs(y + 0.5 - cy) / hh;
-    if (e <= 1) {
-      // steps: bands across the hole, lit treads and dark risers, deeper is darker, then black
-      const t = (y + 0.5 - (cy - hh)) / (hh * 2) + (x - cx) / (hw * 6);
-      const k = Math.floor(t * 9), ph = t * 9 - k;
-      const deep = Math.min(1, t * 1.25);
-      const base = ph < 0.35 ? 5 : 2;
-      let lv = Math.round((base - deep * 5.5) + dth(x, y) * 0.8);
-      if (e > 0.9) lv -= 1;
-      p.px(x, y, ROCK[Math.max(0, Math.min(6, lv))]);
-    } else if (e <= 1.22) {
-      // rim stones
-      const a = Math.atan2((y - cy) / hh, (x - cx) / hw), cell = Math.floor((a + Math.PI) * 4.5);
-      const ring = (e - 1) / 0.22, edge = Math.abs(((a + Math.PI) * 4.5) % 1 - 0.5) > 0.42 || ring > 0.85;
-      const lit = y < cy ? 1 : 0;
-      p.px(x, y, edge ? OUTLINE : ROCK[Math.min(6, 3 + lit + (hash(cell, 0, 5) < 0.4 ? 1 : 0) - (ring > 0.6 ? 1 : 0))]);
+    if (e <= 1 || e > 1.24) continue;
+    const a = Math.atan2((y - cy) / hh, (x - cx) / hw), cell = Math.floor((a + Math.PI) * 4.5);
+    const ring = (e - 1) / 0.24, near = y > cy + 1;
+    if (near && ring < 0.55) {
+      const grain = (Math.round(x * 0.5 + (x < cx ? -y : y)) % 5 === 0);
+      p.px(x, y, ring < 0.12 ? OLDWOOD[0] : ring > 0.42 ? OUTLINE : grain ? OLDWOOD[2] : OLDWOOD[1]);
+      continue;
     }
+    const edge = Math.abs(((a + Math.PI) * 4.5) % 1 - 0.5) > 0.42 || ring > 0.85;
+    p.px(x, y, edge ? OUTLINE : ROCK[Math.min(6, 3 + (y < cy ? 1 : 0) + (hash(cell, 0, 5) < 0.4 ? 1 : 0) - (ring > 0.6 ? 1 : 0))]);
   }
+  for (const [px, py] of [[cx - hw - 4, cy + 1], [cx + hw + 3, cy + 1], [cx, cy + hh + 4]]) { p.px(px, py, IRON.hi); p.px(px + 1, py, IRON.lo); p.px(px, py + 1, IRON.mid); }
 }
 
-/** Steps hewn up into the rock toward a black opening, with a wooden lintel and a skull nailed over it. */
-function stairUp(p: Pen) {
-  const { w, h } = STAIR_UP, cx = w / 2;
-  // the rock outcrop
-  for (let y = 8; y < h - 2; y++) for (let x = 0; x < w; x++) {
-    const nx = (x + 0.5 - cx) / (w / 2 - 2), ny = (y - h + 2) / (h - 10);
-    const r = nx * nx + ny * ny * 0.9 + (vn(x / 6, y / 6, 3) - 0.5) * 0.25;
-    if (r > 1) continue;
-    const lit = -(nx * 0.7 + ny * 0.3);
-    p.px(x, y, ROCK[Math.max(1, Math.min(5, Math.round(2.6 + lit * 1.6 + (vn(x / 3, y / 3, 4) - 0.5) * 1.4 + dth(x, y))))]);
+export const TORCH = { w: 18, h: 58, frames: 6 };
+/** A torch on a stake: a squared post, an iron cup, a pitch-soaked rag burning in it. */
+function torchPost(p: Pen, f: number) {
+  const { h } = TORCH, cx = 9;
+  timberPost(p, cx, 22, cx, h - 2, 4, 1);
+  for (const y of [30, h - 10]) { p.px(cx - 1, y, ROPE); p.px(cx, y, ROPE); p.px(cx + 1, y, 0x6e5e3e); }
+  // the cup
+  for (let y = 16; y <= 22; y++) {
+    const hw = Math.round(4 - Math.max(0, y - 19) * 0.8);
+    for (let x = -hw; x <= hw; x++) p.px(cx + x, y, x < -hw + 1 ? 0x5e5a52 : x > hw - 1 ? 0x1e1e21 : y === 16 ? 0x6e6a60 : (x + y) % 4 === 0 ? 0x46291a : 0x3a3936);
   }
-  // the dark opening (an arch)
-  const ax = cx, aw = 15, top = 26, bot = 66;
-  for (let y = top; y < bot; y++) for (let x = ax - aw; x <= ax + aw; x++) {
-    const ar = y < top + aw ? Math.hypot(x - ax, (y - top - aw) * 1.1) <= aw : true;
-    if (ar) p.px(x, y, y > bot - 6 ? 0x0b0808 : 0x050404);
-  }
-  // treads going up into it: each narrower and darker
-  for (let k = 0; k < 6; k++) {
-    const y0 = h - 6 - k * 6, half = 24 - k * 2;
-    for (let x = -half; x <= half; x++) {
-      p.px(cx + x, y0, k < 4 ? ROCK[5 - Math.floor(k / 2)] : ROCK[2]);
-      p.px(cx + x, y0 + 1, ROCK[4 - Math.floor(k / 2)]);
-      for (let j = 2; j < 6; j++) p.px(cx + x, y0 + j, ROCK[Math.max(0, 2 - Math.floor(k / 2))]);
+  for (let x = -3; x <= 3; x++) p.px(cx + x, 15, hash(x, f, 5) < 0.5 ? 0xffb04a : 0xc4461a);
+  // the flame
+  for (let x = -4; x <= 4; x++) {
+    const base = 1 - Math.abs(x) / 5;
+    const fh = Math.round(3 + base * 10 * (0.7 + 0.3 * Math.sin(f * 1.7 + x * 1.3)) + hash(x, f, 7) * 2);
+    const lean = Math.round(Math.sin(f * 1.05 + 0.5) * 1.2);
+    for (let k = 0; k < fh; k++) {
+      const t = k / fh, ci = Math.min(FLAME.length - 1, Math.floor(t * 4.2 + Math.abs(x) * 0.3));
+      p.px(cx + x + (k > fh * 0.5 ? lean : 0), 14 - k, FLAME[ci]);
     }
-    if (k % 2 === 0) p.px(cx - half + 3 + k * 2, y0, 0x8a7c66);
   }
-  // wooden lintel, rope lashings and a horned skull
-  p.shaft(ax - aw - 3, top + 1, ax + aw + 3, top + 1, 3, OLDWOOD);
-  p.shaft(ax - aw - 2, top + 2, ax - aw - 2, bot - 2, 3, OLDWOOD);
-  p.shaft(ax + aw - 1, top + 2, ax + aw - 1, bot - 2, 3, OLDWOOD);
-  skull(p, ax, top - 4, true);
+  if (f % 2 === 0) p.px(cx + ((f * 3) % 5) - 2, 1 + (f % 3), 0xffd36a); // a spark
+}
+
+/**
+ * The stair up (Murat 2026-11-08: the old one was ugly): a flight of dressed-stone steps climbing north into the rock,
+ * drawn as real iso blocks (lit treads, risers with joints, step ends in shade), a rough rock cheek alongside to the
+ * west, and at the top a dark arch cut into the rock face with a cold grey light falling from above, so it reads as
+ * the way back up. Painted far to near in iso texels: X = a - b, Y = (a + b) / 2 - z.
+ */
+function stairUp(p: Pen) {
+  const { OX, OY } = STAIR_UP, STEPS = 6, RUN = 6, RISE = 5, A1 = 26, B0 = -18, B1 = 18, TOP = STEPS * RISE;
+  const put = (a: number, b: number, z: number, c: number) => p.px(Math.floor(OX + a - b), Math.floor(OY + (a + b) / 2 - z), c);
+  const lvl = (pal: number[], lv: number) => pal[Math.max(0, Math.min(pal.length - 1, Math.round(lv)))];
+  const rock = (u: number, v: number, s: number, base: number) => {
+    const n = vn(u / 5, v / 4, s), n2 = vn(u / 2, v / 2, s + 1);
+    let lv = base + (n - 0.5) * 2 + (n2 - 0.5) * 0.8;
+    if (Math.abs(n - 0.5) < 0.04) lv -= 1.6; // cracks
+    return lv;
+  };
+  // 1. the rock face behind the top of the stair, its top ragged; a dark arch with light from above
+  const BH = (a: number) => TOP + 22 + Math.round((vn(a / 6, 0, 61) - 0.5) * 8);
+  for (let b = -30; b <= B0; b += 0.5) for (let a = -14; a <= A1 + 4; a += 0.5) put(a, b, BH(a), lvl(ROCK, rock(a, b, 62, 2.4) + (b > B0 - 2 ? 1 : 0)));
+  for (let a = -14; a <= A1 + 4; a += 0.5) for (let z = 0; z <= BH(a); z += 0.5) {
+    let lv = rock(a, z, 63, 3) - (z < TOP ? 1 : 0) + dth(Math.floor(a), Math.floor(z)) * 0.6;
+    if (BH(a) - z < 1.5) lv += 1.2;
+    let c = lvl(ROCK, lv);
+    const ax = (a - A1 / 2) / (A1 / 2 - 2), ah = z - TOP, archH = 17 + Math.sqrt(Math.max(0, 1 - ax * ax)) * 7;
+    if (Math.abs(ax) < 1 && ah >= 0 && ah < archH) {
+      // the opening: black, with a cold grey light spilling down from above onto the last steps
+      const fall = Math.max(0, 1 - ah / archH) * (1 - Math.abs(ax)) ;
+      c = ah > archH - 2 ? 0x241c17 : fall > 0.45 ? 0x1a1a1e : fall > 0.25 ? 0x101013 : 0x070606;
+    } else if (Math.abs(ax) < 1.25 && ah >= -1 && ah < archH + 3) c = lvl(STONE, 4.4 + ((Math.floor(z / 4) + Math.floor(a / 3)) % 2) * 0.8 - (z % 4 < 0.6 ? 1.5 : 0)); // the dressed voussoirs round it
+    put(a, B0, z, c);
+  }
+  // 2. the rock cheek to the west, its top sloping down toward the foot of the stair
+  const CH = (b: number) => Math.round(TOP + 10 - (b - B0) / (B1 - B0) * (TOP - 4) + (vn(b / 4, 3, 64) - 0.5) * 5);
+  for (let b = B0; b <= B1; b += 0.5) {
+    const h = CH(b);
+    for (let a = -14; a <= 0; a += 0.5) put(a, b, h, lvl(ROCK, rock(a, b, 65, 2.6) + (a > -2 ? 1.3 : 0)));
+    for (let z = 0; z <= h; z += 0.5) put(0, b, z, lvl(ROCK, rock(b, z, 66, 2.1) - (z < 3 ? 0.8 : 0) + (h - z < 1.5 ? 1 : 0) + dth(Math.floor(b), Math.floor(z)) * 0.6));
+  }
+  for (let a = -14; a <= 0; a += 0.5) for (let z = 0; z <= CH(B1); z += 0.5) put(a, B1, z, lvl(ROCK, rock(a, z, 67, 3.2) + (CH(B1) - z < 1.5 ? 1 : 0) + dth(Math.floor(a), Math.floor(z)) * 0.6));
+  // 3. the steps, back to front: solid blocks of dressed stone
+  for (let k = STEPS - 1; k >= 0; k--) {
+    const b1 = B1 - k * RUN, b0 = b1 - RUN, zt = (k + 1) * RISE, dim = k * 0.28;
+    for (let b = b0; b <= b1; b += 0.5) for (let a = 0; a <= A1; a += 0.5) {
+      let lv = 4.9 - dim + dth(Math.floor(a), Math.floor(b)) * 0.7;
+      if (b > b1 - 1.2) lv += 1; // the worn front lip
+      if (b < b0 + 1.5) lv -= 1.2; // in the shade of the step above
+      if (a < 2.5) lv -= 1; // shade of the cheek
+      if (Math.floor(a + k * 5) % 13 === 0) lv -= 1.4; // joints between slabs
+      if (vn(a / 3, b / 2 + k * 7, 68) > 0.74) lv -= 0.8; // wear and grime
+      put(a, b, zt, lvl(STONE, lv));
+    }
+    for (let a = 0; a <= A1; a += 0.5) for (let z = 0; z <= zt; z += 0.5) { // the riser (south face)
+      const row = Math.floor(z / RISE), joint = z % RISE < 0.6 || Math.floor(a + row * 6) % 13 === 0;
+      let lv = 3.7 - dim * 0.6 + (hash(Math.floor((a + row * 6) / 13), row, 69) - 0.5) * 0.9 + dth(Math.floor(a), Math.floor(z)) * 0.6;
+      if (joint) lv -= 1.4; else if (z > zt - 1) lv += 0.8;
+      if (z < 2) lv -= 0.7;
+      put(a, b1, z, lvl(STONE, lv));
+    }
+    for (let b = b0; b <= b1; b += 0.5) for (let z = 0; z <= zt; z += 0.5) { // the step ends (east face), in shade
+      const row = Math.floor(z / RISE), joint = z % RISE < 0.6 || Math.floor(b + 40 + row * 3) % 6 === 0;
+      put(A1, b, z, lvl(STONE, 2.2 - dim * 0.4 + (joint ? -1.1 : 0) + (z > zt - 1 ? 0.8 : 0) + dth(Math.floor(b), Math.floor(z)) * 0.6));
+    }
+  }
+  // 4. rubble at the foot, moss in the joints, a horned skull over the arch
+  for (let i = 0; i < 9; i++) { const a = A1 + 2 + hash(i, 1, 70) * 6, b = B0 + 4 + hash(i, 2, 70) * 30; put(a, b, 0.5, ROCK[3 + (i % 3)]); put(a + 1, b, 0.5, ROCK[2]); }
+  for (let i = 0; i < 14; i++) { const a = hash(i, 3, 71) * A1, k = Math.floor(hash(i, 4, 71) * STEPS); put(a, B1 - k * RUN - RUN + 0.6, (k + 1) * RISE, 0x2e3a22); }
+  skull(p, Math.floor(OX + A1 / 2 - B0), Math.floor(OY + (A1 / 2 + B0) / 2 - TOP - 28), true);
 }
 
 /** A beast skull (a boar's or a bull's): snout down, eye holes, curved horns. */
@@ -370,14 +572,14 @@ function ropeStake(p: Pen) {
   for (let k = 0; k < 18; k++) p.px(9 + k, 15 + k * 1.1, k % 3 ? ROPE : 0x6e5c3a);
 }
 
-export const RACK = { w: 50, h: 54 }, POLE = { w: 30, h: 58 }, BONES = { w: 40, h: 20 }, WEB = { w: 84, h: 46 }, BED = { w: 190, h: 100 }, SPIKE = { w: 22, h: 44 };
+export const RACK = { w: 50, h: 54 }, POLE = { w: 30, h: 58 }, BONES = { w: 44, h: 24 }, WEB = { w: 84, h: 46 }, BED = { w: 190, h: 100 }, SPIKE = { w: 22, h: 44 };
 const HIDE = [[0x6e4a2e, 0x55381f, 0x3c2614], [0x5e5850, 0x46413b, 0x2e2a26], [0x7a5a3a, 0x5e4228, 0x3e2a18]];
 
 /** A drying rack: two posts, a crossbar, a stretched hide laced to the frame. */
 function rack(p: Pen, v: number) {
   const { w, h } = RACK, [hl, hm, hd] = HIDE[v % HIDE.length];
-  p.shaft(6, 6, 4, h - 2, 3, OLDWOOD); p.shaft(w - 9, 6, w - 7, h - 2, 3, OLDWOOD);
-  p.shaft(2, 8, w - 3, 8, 3, OLDWOOD);
+  timberPost(p, 8, 6, 6, h - 2, 4, v); timberPost(p, w - 7, 6, w - 5, h - 2, 4, v + 1);
+  timberBeam(p, 2, 7, w - 3, 7, 4, v);
   // the hide: a ragged rounded shape, lighter flesh side with dark patches
   const x0 = 9, x1 = w - 11, y0 = 11, y1 = h - 12;
   for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
@@ -398,7 +600,7 @@ function rack(p: Pen, v: number) {
 /** A stake topped with a horned skull, rags and a string of teeth. */
 function skullPole(p: Pen, v: number) {
   const { w, h } = POLE, cx = Math.round(w / 2);
-  p.shaft(cx - 1, 14, cx - 1 + (v % 2), h - 2, 3, OLDWOOD);
+  timberPost(p, cx, 14, cx + (v % 2), h - 2, 4, v);
   skull(p, cx, 10, v % 3 !== 2);
   // rags
   for (let j = 0; j < 14; j++) for (let i = 0; i < 4; i++) if (hash(i, j, v) < 0.8 - j * 0.03) p.px(cx + 2 + i + Math.round(j * 0.15), 18 + j, j % 4 === 0 ? 0x3a2418 : 0x5a3424);
@@ -406,15 +608,21 @@ function skullPole(p: Pen, v: number) {
   for (let k = 0; k < 7; k++) { const x = cx - 6 + k * 2, y = 20 + Math.round(Math.sin(k / 6 * Math.PI) * 3); p.px(x, y, 0x5a4a38); p.px(x, y + 1, BONE.hi); }
 }
 
+/** A scatter of gnawed bones on the floor (decal): long bones with knuckled ends, lit along their top edge, a jaw, a skull. */
 function bones(p: Pen, v: number) {
   const { w, h } = BONES;
-  for (let k = 0; k < 6; k++) {
-    const x = 4 + hash(k, v, 1) * (w - 10), y = 4 + hash(k, v, 2) * (h - 8), a = hash(k, v, 3) * Math.PI, L = 4 + hash(k, v, 4) * 5;
-    const dx = Math.cos(a), dy = Math.sin(a) * 0.5;
-    for (let s = -L; s <= L; s++) p.px(x + dx * s, y + dy * s, s < 0 ? BONE.hi : BONE.mid);
-    p.px(x + dx * L + 1, y + dy * L, BONE.hi); p.px(x - dx * L - 1, y - dy * L, BONE.mid);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { // a grimy stain under them
+    const r = ((x - w / 2) / (w / 2 - 2)) ** 2 + ((y - h / 2) / (h / 2 - 2)) ** 2 + (vn(x / 3, y / 3, v + 3) - 0.5) * 0.6;
+    if (r < 1) p.px(x, y, 0x140e0a, 0.35 * (1 - r));
+  }
+  for (let k = 0; k < 5; k++) {
+    const x = 6 + hash(k, v, 1) * (w - 12), y = 5 + hash(k, v, 2) * (h - 10), an = hash(k, v, 3) * Math.PI, L = 4 + hash(k, v, 4) * 5;
+    const dx = Math.cos(an), dy = Math.sin(an) * 0.5;
+    for (let s = -L; s <= L; s += 0.5) { p.px(x + dx * s, y + dy * s - 0.6, s < 0 ? BONE.hi : BONE.mid); p.px(x + dx * s, y + dy * s + 0.6, BONE.lo); p.px(x + dx * s, y + dy * s + 1.4, 0x1a120c, 0.5); }
+    for (const e of [-1, 1]) { const ex = x + dx * L * e, ey = y + dy * L * e; p.px(ex - dy, ey - 1, BONE.hi); p.px(ex + dy, ey + 1, BONE.lo); p.px(ex + dx * e, ey, BONE.mid); } // knuckled ends
   }
   if (v % 2 === 0) skull(p, w / 2, h / 2 - 1, false);
+  else for (let s = 0; s < 7; s++) p.px(w / 2 - 3 + s, h / 2 + 2 + Math.abs(s - 3) * -0.5 + 1.5, s % 2 ? BONE.mid : BONE.hi); // a jaw
 }
 
 /** A sheet of old web strung across the floor: spokes and sagging rings. */
@@ -466,17 +674,22 @@ function hideBed(p: Pen) {
   skull(p, cx - 50, cy + 18, true); skull(p, cx + 56, cy + 10, false); skull(p, cx + 18, cy - 30, true);
 }
 
-/** A stalagmite: a drip-built spike of pale rock. */
+/** A stalagmite: a drip-built cone of pale rock with a lumpy, banded skin, wet on its lit side, rubble at its foot. */
 function spike(p: Pen, v: number) {
-  const { w, h } = SPIKE, cx = w / 2 + (v % 2 ? 1 : -1);
-  for (let y = 2 + v * 3; y < h - 1; y++) {
-    const t = (y - 2 - v * 3) / (h - 3 - v * 3), hw = Math.max(0.6, t * (w / 2 - 2) + Math.sin(y * 0.7 + v) * 0.6);
-    for (let x = Math.floor(cx - hw); x <= cx + hw; x++) {
-      const nx = (x - cx) / hw;
-      const lv = Math.round(3.6 - nx * 1.6 + (y % 7 === 0 ? -0.8 : 0) + dth(x, y) * 0.8);
-      p.px(x, y, ROCK[Math.max(1, Math.min(6, lv))]);
+  const { w, h } = SPIKE, cx = w / 2 + (v % 2 ? 1 : -1), top = 2 + v * 4, bot = h - 3;
+  for (let y = top; y < bot; y++) {
+    const t = (y - top) / (bot - top), hw = Math.max(0.6, Math.pow(t, 0.8) * (w / 2 - 3) + (vn(y / 3, v, 71) - 0.5) * 2.2 * t);
+    const lean = (1 - t) * (v - 1) * 1.5;
+    for (let x = Math.floor(cx + lean - hw); x <= cx + lean + hw; x++) {
+      const nx = (x - cx - lean) / hw;
+      let lv = 3.4 - nx * 1.7 + (vn(x / 2, y / 5, 72 + v) - 0.5) * 1.2 + dth(x, y) * 0.7;
+      if (Math.sin(y * 0.9 + nx * 1.5 + v) > 0.82) lv -= 0.9; // the drip bands
+      if (nx < -0.3 && vn(x / 1.5, y / 3, 73) > 0.7) lv += 1.2; // wet glints
+      if (t > 0.9) lv -= (t - 0.9) * 12; // the damp foot
+      p.px(x, y, ROCK[Math.max(1, Math.min(6, Math.round(lv)))]);
     }
   }
+  for (let k = 0; k < 5; k++) { const x = cx - w / 2 + 3 + hash(k, v, 74) * (w - 6), y = bot - 1 + hash(k, v, 75) * 2; p.rect(x, y, 2, 1, ROCK[4]); p.px(x, y + 1, ROCK[2]); }
 }
 
 // ---------------------------------------------------------------------------------------------------------
@@ -548,6 +761,8 @@ export function dungeonTextures(scene: Phaser.Scene) {
   sheet(scene, "dg_rope", ROPE_ART.w, ROPE_ART.h, ROPE_ART.frames, rope, 0);
   if (!scene.anims.exists("dg_rope_sway")) scene.anims.create({ key: "dg_rope_sway", frames: scene.anims.generateFrameNumbers("dg_rope", { start: 0, end: ROPE_ART.frames - 1 }), frameRate: 3, repeat: -1, yoyo: true });
   plain(scene, "dg_pit", PIT.w, PIT.h, 1, pit);
+  sheet(scene, "dg_torch", TORCH.w, TORCH.h, TORCH.frames, torchPost, 0.5);
+  if (!scene.anims.exists("dg_torch_burn")) scene.anims.create({ key: "dg_torch_burn", frames: scene.anims.generateFrameNumbers("dg_torch", { start: 0, end: TORCH.frames - 1 }), frameRate: 10, repeat: -1 });
   sheet(scene, "dg_stair_up", STAIR_UP.w, STAIR_UP.h, 1, stairUp, 0.5);
   plain(scene, "dg_sinkhole", SINK.w, SINK.h, 1, sinkhole);
   sheet(scene, "dg_stake", 32, 36, 1, ropeStake, 0.4);
@@ -557,7 +772,6 @@ export function dungeonTextures(scene: Phaser.Scene) {
   plain(scene, "dg_web", WEB.w, WEB.h, 3, web);
   plain(scene, "dg_bed", BED.w, BED.h, 1, hideBed);
   sheet(scene, "dg_spike", SPIKE.w, SPIKE.h, 3, spike, 0.5);
-  sheet(scene, "dg_gatepost", GATEPOST.w, GATEPOST.h, 2, gatePost, 0.5);
   // a pale shaft of daylight falling down the sinkhole
   if (!scene.textures.exists("dg_beam")) {
     const t = scene.textures.createCanvas("dg_beam", 32, 128)!, c = t.getContext();

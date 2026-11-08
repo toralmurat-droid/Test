@@ -1,7 +1,7 @@
 import Phaser from "phaser";
-import { MAP_H, MAP_W, TILE, WORLD_H } from "../../shared/constants";
+import { DESERT_H, DESERT_Y0, MAP_H, MAP_W, TILE, UNDER_END, WORLD_H } from "../../shared/constants";
 import { SEA_END } from "../../shared/dungeon";
-import { ELEMENT_LANDS, EMPTY, OBJECTS, T } from "../../shared/map";
+import { ELEMENT_LANDS, EMPTY, OBJECTS, T, TILE_COUNT } from "../../shared/map";
 import type { GroundData } from "./groundPaint";
 
 /**
@@ -12,10 +12,13 @@ import type { GroundData } from "./groundPaint";
 const CW = 512, CH = 256; // chunk size in iso screen px
 const RES = 2; // texture pixels per screen px (camera zoom is 3, so the ground stays sharp)
 const DEPTH = -1.9;
+const PREFETCH = 384; // iso px painted beyond the screen margin, so new ground is ready before it scrolls into view
+const FADE_MS = 220; // a chunk that still lands on screen blends in instead of popping over the plain tiles
 
 const SOLID = new Set<number>([
   T.TREE, T.PINE, T.BUSH, T.ROCK, T.PALISADE, T.ROOF_THATCH, T.ROOF_RED, T.ROOF_SLATE, T.WALL_TIMBER, T.WALL_STONE,
   T.WINDOW_TIMBER, T.WINDOW_STONE, T.DOOR, T.WELL, T.RUIN, T.BEAM, T.STUMP, T.BARREL, T.CRATE, T.HAY,
+  T.ADOBE, T.ADOBE_WALL, T.TENT, T.PALM,
 ]);
 
 export class SmoothGround {
@@ -23,15 +26,17 @@ export class SmoothGround {
   private busy: boolean[] = [];
   private live = new Map<string, Phaser.GameObjects.Image | null>(); // null = being painted
   private queue: { key: string; cx: number; cy: number; d?: number }[] = [];
+  private near = new Set<string>(); // chunks on screen (plus a small margin): the ones the loading screen waits for
 
   constructor(private scene: Phaser.Scene, ground: number[][], private onImage: (img: Phaser.GameObjects.Image) => void) {
-    const g = new Int16Array(MAP_W * MAP_H), solid = new Uint8Array(MAP_W * MAP_H);
+    const g = new Int16Array(MAP_W * MAP_H), solid = new Uint8Array(MAP_W * MAP_H), cliff = new Uint8Array(MAP_W * MAP_H);
     for (let y = 0; y < MAP_H; y++) for (let x = 0; x < MAP_W; x++) {
       g[y * MAP_W + x] = ground[y][x];
       const o = OBJECTS[y][x];
-      if (o !== EMPTY && SOLID.has(o)) solid[y * MAP_W + x] = 1;
+      if (o === T.CLIFF) cliff[y * MAP_W + x] = 1;
+      else if (o !== EMPTY && SOLID.has(o)) solid[y * MAP_W + x] = 1;
     }
-    const data: GroundData = { w: MAP_W, h: MAP_H, tile: TILE, ground: g, solid, lands: ELEMENT_LANDS.map((l) => ({ x: l.x, y: l.y, w: l.w, h: l.h, el: l.el })), cave: { y0: WORLD_H, rock: SEA_END } };
+    const data: GroundData = { w: MAP_W, h: MAP_H, tile: TILE, tileCount: TILE_COUNT, ground: g, solid, lands: ELEMENT_LANDS.map((l) => ({ x: l.x, y: l.y, w: l.w, h: l.h, el: l.el })), cave: { y0: WORLD_H, rock: SEA_END, end: UNDER_END }, desert: { y0: DESERT_Y0, y1: DESERT_Y0 + DESERT_H }, cliff };
     const n = Math.max(1, Math.min(4, (navigator.hardwareConcurrency || 2) - 1));
     for (let i = 0; i < n; i++) {
       const w = new Worker(new URL("./groundWorker.ts", import.meta.url), { type: "module" });
@@ -42,10 +47,11 @@ export class SmoothGround {
     scene.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.workers.forEach((w) => w.terminate()));
   }
 
-  /** Chunks still waiting to be painted or being painted (0 once everything around the camera is drawn). */
+  /** Chunks on screen still waiting to be painted or being painted (0 once everything the camera sees is drawn). */
   get pending() {
-    let n = this.queue.length;
-    for (const img of this.live.values()) if (img === null) n++;
+    let n = 0;
+    for (const q of this.queue) if (this.near.has(q.key)) n++;
+    for (const [key, img] of this.live) if (img === null && this.near.has(key)) n++;
     return n;
   }
   /** Chunks on screen already painted. */
@@ -57,7 +63,12 @@ export class SmoothGround {
 
   /** Call every frame with the camera's centre and size in iso screen px. */
   update(midX: number, midY: number, viewW: number, viewH: number) {
-    const m = 160;
+    // Chunks are painted well ahead of the screen edge (PREFETCH), nearest first, so walking never shows the plain
+    // tiles underneath being covered; only the ones near the screen count as pending.
+    const m = 160 + PREFETCH;
+    const n0x = Math.floor((midX - viewW / 2 - 160) / CW), n1x = Math.floor((midX + viewW / 2 + 160) / CW);
+    const n0y = Math.floor((midY - viewH / 2 - 160) / CH), n1y = Math.floor((midY + viewH / 2 + 160) / CH);
+    this.near.clear();
     const cx0 = Math.floor((midX - viewW / 2 - m) / CW), cx1 = Math.floor((midX + viewW / 2 + m) / CW);
     const cy0 = Math.floor((midY - viewH / 2 - m) / CH), cy1 = Math.floor((midY + viewH / 2 + m) / CH);
     const want = new Set<string>();
@@ -68,6 +79,7 @@ export class SmoothGround {
       if (sy0 + CH < 0 || sy0 > (MAP_W + MAP_H) * TILE / 2 || sx0 + CW < -MAP_H * TILE || sx0 > MAP_W * TILE) continue;
       const key = `sg_${cx}_${cy}`;
       want.add(key);
+      if (cx >= n0x && cx <= n1x && cy >= n0y && cy <= n1y) this.near.add(key);
       if (!this.live.has(key)) add.push({ key, cx, cy, d: Math.hypot(sx0 + CW / 2 - midX, (sy0 + CH / 2 - midY) * 2) });
     }
     // keep one extra ring before dropping chunks, so walking back and forth doesn't repaint
@@ -106,6 +118,7 @@ export class SmoothGround {
       tex.refresh();
       const img = this.scene.add.image(cx * CW - 1, cy * CH - 1, m.key).setOrigin(0, 0).setScale(1 / RES).setDepth(DEPTH);
       this.onImage(img);
+      if (this.near.has(m.key)) { img.setAlpha(0); this.scene.tweens.add({ targets: img, alpha: 1, duration: FADE_MS }); }
       this.live.set(m.key, img);
     }
     this.pump();

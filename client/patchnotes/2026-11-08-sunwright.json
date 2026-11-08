@@ -1,0 +1,12 @@
+{
+  "date": "2026-11-08",
+  "patch": 179,
+  "title": "The Sunwright",
+  "changes": [
+    "Act 2's final quest: at Lv 46, Sefa sends you up the Furnace Stair to stop Ishael, the Sunwright, before she lights a second sun over the desert.",
+    "She talks through the fight. She fires a lance of sunlight along a marked line, bursts into flame when you crowd her, and drops molten sun where you stand.",
+    "Below 65% her Veiled choir comes to sing for her and she calls ZENITH: the whole plateau burns except her own shadow, hotter for every adept still singing. Kill the choir, then stand close to her.",
+    "Below 30% she becomes the Second Sun: bigger, faster, and the sun falls twice as often.",
+    "Monsters no longer wander onto the Furnace plateau, and the beast-folk's moves no longer show a stray \"CLEAVE!\" mark."
+  ]
+}

@@ -2,11 +2,13 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { CLASS_KINDS } from "../shared/classes";
 import { childrenOf } from "../shared/skills";
-import { TILE, treeLayout } from "../client/src/treeLayout";
+import { slabWidth, TILE, treeLayout } from "../client/src/treeLayout";
 
 // Skill tree slab (talents.ts): tiles, their rank box (5 px out at the bottom right) and the arrows never overlap
-const W = 620, H = 520;
+const H = 520;
 for (const cls of CLASS_KINDS) test(`skill tree tiles of the ${cls} never overlap`, () => {
+  const W = slabWidth(cls);
+  assert.ok(W <= 700, `${cls}: slab too wide for the screen`);
   const { nodes, cols } = treeLayout(cls, W, H);
   const half = TILE / 2, box = (n: { x: number; y: number }) => ({ l: n.x - half, r: n.x + half + 5, t: n.y - half, b: n.y + half + 5 });
   assert.ok(cols[2].x1 <= W - 10, `${cls}: schools wider than the slab`);

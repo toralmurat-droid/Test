@@ -20,7 +20,14 @@
   "farmwife",
   "labourer",
   "elder",
-  "goodwife"
+  "goodwife",
+  "wellkeeper",
+  "sandcaptain",
+  "spicetrader",
+  "desertsmith",
+  "armourer",
+  "saltarmourer",
+  "sandarmourer"
  ],
  "image": "{name}.webp",
  "frameWidth": 48,

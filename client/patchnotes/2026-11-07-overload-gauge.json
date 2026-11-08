@@ -1,0 +1,11 @@
+{
+  "date": "2026-11-07",
+  "patch": 163,
+  "pr": 333,
+  "title": "Heat and overload",
+  "changes": [
+    "Stamina is gone: physical skills and the dodge roll now build Heat, shown by a glowing gauge on the left side of the screen.",
+    "Heat cools by itself. Fill the gauge to the top and you overload: those skills and the roll are locked for 3.5 seconds while it cools.",
+    "Spells that cost mana still work while you are overloaded."
+  ]
+}

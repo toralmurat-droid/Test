@@ -5,9 +5,11 @@ import { quake } from "./camfx";
 import { chargeIcon } from "./chargeIcon";
 import { leaving, noteBuild, reconnectSoon, returnToStart, takeCarried, upgradeAnnounced } from "./reconnect";
 import { Client, getStateCallbacks, Room } from "colyseus.js";
-import { BOSS, ELITE, InputState, MERGE, MOBS, type MobKind, MAP_H, MAP_W, regenFromStamina, TICK_RATE, TILE } from "../../shared/constants";
+/** Beast-folk that lurk in the Mawdeep's ambush rooms (their eyes show through the dark). */
+const LURKERS = new Set<string>(["gnawkin", "tuskborn", "silkwretch", "duskwing", "crowseer"]);
+import { BOSS, ELITE, InputState, MERGE, MOBS, type MobKind, URSK, SUNWRIGHT, DESERT_Y0, MAP_H, MAP_W, regenFromStamina, TICK_RATE, TILE } from "../../shared/constants";
 import { CLASSES, ClassKind, MAX_LEVEL, xpForLevel } from "../../shared/classes";
-import { canPay, MANA, manaRegen, maxManaFor, skillCost, unpackMana } from "../../shared/mana";
+import { canPay, shortOf, MANA, manaRegen, maxManaFor, skillCost, unpackMana } from "../../shared/mana";
 import { nextSize, potionAmount, PotionKind, potionName, POTION_SIZES, total, unpackPotions } from "../../shared/potions";
 import { GROUND, areaAt, isSafeZone } from "../../shared/map";
 import { heroPoise, meleeReach, mobBody, pvpProtected } from "../../shared/combat";
@@ -23,6 +25,7 @@ import { bindSfx, play as playSfx, sfxFrame } from "./sfx";
 import { attackMult, cooldownMult, critChance, heroSpeed, STATS, magicMult, STAT_KINDS, STAT_NAMES, StatKind, statPoints, HP_PER_STR } from "../../shared/powers";
 import { NEED_TEXT, pointRange, SkillDef, skillOf, skillTarget, MAX_STACKS, STACK_DECAY_MS, STACK_NAME, talentBonus, withMods } from "../../shared/skills";
 import { SkillFx } from "./skillfx";
+import { BeastForms } from "./beastForms";
 import { movesSheet, SkillMoves } from "./skillMoves";
 import { displayGrid } from "./tileset";
 import { CRAWL_CROP, heroTexture, itemTexture, potionTex, makeTileset, MOB_LOOK, mobTexture, preloadPaintedMobs } from "./textures";
@@ -57,8 +60,8 @@ const LEFT_PICK = -2;
 /** pickSlot value while the slot list is choosing the right-click (and Space) action. */
 const RIGHT_PICK = -3;
 type ClickSide = "left" | "right";
-/** "12 mana · 20 stamina" for a skill list. */
-const costWords = (s: { cost?: number; mana?: number; blood?: number }) => [s.mana ? `${s.mana} mana` : "", s.cost ? `${s.cost} stamina` : "", s.blood ? `${s.blood}% HP` : ""].filter(Boolean).join(" · ") || "free";
+/** "12 mana · 20 heat" for a skill list. */
+const costWords = (s: { cost?: number; mana?: number; blood?: number }) => [s.mana ? `${s.mana} mana` : "", s.cost ? `${s.cost} heat` : "", s.blood ? `${s.blood}% HP` : ""].filter(Boolean).join(" · ") || "free";
 import { GearFx } from "./gearfx";
 import { Element, ELEMENT_COLORS } from "../../shared/elements";
 import { baseId, canWear, gearName, gearDef, reqProblem, gearReachMult, gearSpeedMult, itemRarity, WEAPON_TYPE_NAMES } from "../../shared/gear";
@@ -76,7 +79,8 @@ import { PatchNotesPanel } from "./patchnotes";
 import { PartyUI } from "./party";
 import { StashUI, TradeUI } from "./trade";
 import { STASH, STASH_RANGE } from "../../shared/trade";
-import { afterLoading, hideLoading, loadingActive, loadingFor, setLoading } from "./loading";
+import { afterLoading, hideLoading, loadingActive, loadingFor, setLoading, showLoading } from "./loading";
+import { WaygateLayer } from "./waygate";
 import { ISO, IsoView, isoAnchor, isoInput, isoX, isoY, screenDir, screenDir8 } from "./iso";
 import { SMOOTH } from "./isoflag";
 import { addPixelGrid } from "./pixelgrid";
@@ -94,10 +98,14 @@ import { SiegeWork } from "./siegeWork";
 import { PERCH_LIFT } from "../../shared/bandits";
 import { icon, fillIcons } from "./pixelicons";
 import { ResourceBars } from "./resourceBars";
+import { OverloadGauge } from "./overloadGauge";
 import { bindElemFx } from "./elemFx";
 import { bindBeastFx } from "./beastFx";
+import { bindRaiderFx, raiderTrail } from "./raiderFx";
 import { DungeonView } from "./dungeon";
 import { TEXT_FONT, TEXT_PX, WT } from "./pixelfont";
+import { parseRune, RUNES, RuneKey } from "../../shared/runes";
+import { runeCss, runeTexture } from "./runeArt";
 
 /** One painted bit on a merged blob, in body-relative units (-1..1 across the body). */
 interface BlobPart { kind: "patch" | "eye" | "mouth"; u: number; v: number; r: number; col: number }
@@ -212,6 +220,8 @@ function pushSnap(e: { snaps?: Snap[] }, x: number, y: number) {
  * one, or the drawn sprite is very far behind. Played-back entities trail the server by interpDelay, so measuring
  * from the sprite (as before, at 48 px) snapped fast movers on a laggy connection.
  */
+/** Camera follow smoothing (per frame); snapCamera() sets it to 1 for a jump. */
+const CAM_LERP = 0.15;
 function teleported(e: { snaps?: Snap[]; sprite: { x: number; y: number } }, x: number, y: number): boolean {
   const s = e.snaps, n = s?.length ?? 0;
   const prev = n >= 2 ? s![n - 2] : undefined; // the newest snap is the spot just pushed
@@ -285,7 +295,7 @@ export class TownScene extends Phaser.Scene {
   private useKey = () => {}; // E / G: talk, open, use what is right here
   private bagKey = () => {};
   private heldSlot = -1;
-  /** The torch (L): a flame in the hero's hand and a wide pool of light at night and underground. Lit unless put out; remembered. */
+  /** The torch (L): a wide pool of light (no flame drawn on the hero) at night and underground. Lit unless put out; remembered. */
   private torch = (() => { try { return localStorage.getItem("torch") !== "0"; } catch { return true; } })();
   private slotCastAt = 0;
   private pointer?: PointerControls;
@@ -303,6 +313,7 @@ export class TownScene extends Phaser.Scene {
   private shrine?: ShrineLayer;
   private bounty?: BountyUI;
   private portals?: PortalLayer;
+  private waygates?: WaygateLayer;
   private chatEl = document.getElementById("chat") as HTMLInputElement;
   private onlineShown = -1; // online hero count last written next to the chat box
   private ideaBoard?: IdeaBoard;
@@ -323,6 +334,7 @@ export class TownScene extends Phaser.Scene {
   private shots = new Map<string, { g: Phaser.GameObjects.GameObject & { x: number; y: number }; tx: number; ty: number; at: number; dx: number; dy: number; spd: number }>();
   private fx!: SkillFx;
   private moves!: SkillMoves; // melee skill micro sequences (skillMoves.ts)
+  private forms!: BeastForms; // the vampire's Bat Form / Wolf Form (beastForms.ts)
   private gearFx!: GearFx; // item level effects on heroes
   private lastCast: Record<string, number> = {}; // local clock (ms) of my last cast of each skill, for cooldowns
   private mobByMeAt = -1e9; // last time a monster stood right by my hero (my name label hides then)
@@ -340,6 +352,7 @@ export class TownScene extends Phaser.Scene {
   private hotbarHtml = "";
   private buffBar?: BuffBar;
   private resBars?: ResourceBars;
+  private heatGauge?: OverloadGauge;
   private statsShown = "";
   private deathTimer?: number;
   private iso?: IsoView;
@@ -360,6 +373,7 @@ export class TownScene extends Phaser.Scene {
     this.fx = new SkillFx(this, (id) => this.entities.get(id), () => this.me);
     this.gearFx = new GearFx(this.fx);
     this.moves = new SkillMoves(this, this.fx);
+    this.forms = new BeastForms(this, this.fx);
     makeTileset(this);
     createArtAnims(this);
     if (SMOOTH) paintSmoothProps(this); // painted iso forge, anvil, witch hut… in place of the front-view pixel props
@@ -393,9 +407,8 @@ export class TownScene extends Phaser.Scene {
       // a dark vignette around the edges
       // Gloomy and dark (Murat 2026-11-07: "too cute"): colour drained, darker overall, heavy vignette
       const cm = cam.postFX.addColorMatrix();
-      cm.saturate(-0.4);
-      cm.contrast(0.16, true);
-      cm.brightness(0.86, true);
+      this.grade = cm;
+      this.setGrade(false);
       cam.postFX.addVignette(0.5, 0.5, 0.82, 0.55);
       addPixelGrid(cam); // one pixel density for everything in the world
     }
@@ -657,14 +670,26 @@ export class TownScene extends Phaser.Scene {
       const e = this.entities.get(id);
       if (!e) return;
       e.sprite.setPosition(x, y); e.tx = x; e.ty = y; e.lastX = x; e.lastY = y; // a jump, not a walk
-      if (id === this.me) { this.portals?.close(); this.cameras.main.fadeIn(900, 40, 14, 4); } // a warm flash while the new place is drawn
+      if (id === this.me) { this.portals?.close(); this.jumped(); this.arrive(40, 14, 4, 700); } // warm glow, then the new place
+    });
+    // Act 2's waygate (shared/act2.ts): through to the other act; the loading screen stays up while that land is drawn
+    this.waygates = new WaygateLayer(this);
+    this.room.onMessage("waygate", ({ id, to, x, y }) => {
+      const e = this.entities.get(id);
+      if (!e) return;
+      e.sprite.setPosition(x, y); e.tx = x; e.ty = y; e.lastX = x; e.lastY = y;
+      if (id !== this.me) return;
+      this.jumped(); this.snapCamera();
+      showLoading(to === "desert" ? "Crossing into the Sunscar…" : "Crossing home to Oakvale…");
+      this.settled = 0;
+      this.cameras.main.fadeIn(1200, 60, 30, 8);
     });
     // Down a rope or a stair in the Mawdeep (shared/dungeon.ts LINKS): a jump to the other end, a fade through the dark
     this.room.onMessage("descend", ({ id, x, y }) => {
       const e = this.entities.get(id);
       if (!e) return;
       e.sprite.setPosition(x, y); e.tx = x; e.ty = y; e.lastX = x; e.lastY = y;
-      if (id === this.me) this.cameras.main.fadeIn(700, 6, 4, 3);
+      if (id === this.me) { this.jumped(); this.arrive(6, 4, 3, 600); }
     });
     this.room.onMessage("travelno", () => {
       const e = this.entities.get(this.me);
@@ -746,9 +771,18 @@ export class TownScene extends Phaser.Scene {
     items.onAdd((it: any, id: string) => {
       if (it.kind === "quest" && it.owner !== this.room.sessionId) return; // someone else's quest drop
       const gear = it.kind === "gear" && gearDef(it.gear);
-      const img = gear
+      const rune = it.kind === "gear" ? parseRune(it.gear) : undefined; // a loose rune (shared/runes.ts)
+      const img = rune
+        ? this.add.image(it.x, it.y, runeTexture(this, rune)).setScale(0.6).setDepth(it.y - 8)
+        : gear
         ? this.add.image(it.x, it.y, "gear_icons", baseId(it.gear)).setScale(0.6 / ART_K).setDepth(it.y - 8)
         : this.add.image(it.x, it.y, itemTexture(this, it.kind === "quest" ? `q_${it.gear}` : it.kind === "potion" || it.kind === "mpotion" ? potionTex(it.kind, Number(it.gear) || 0) : it.kind)).setDepth(it.y - 8);
+      if (rune) {
+        // runes glow faintly in their own colour
+        const glow = this.add.circle(it.x, it.y, 5, RUNES[rune.key].color, 0.35).setDepth(it.y - 9).setBlendMode(Phaser.BlendModes.ADD);
+        this.tweens.add({ targets: glow, scale: 1.5, alpha: 0.08, duration: 700, yoyo: true, repeat: -1 });
+        img.once("destroy", () => glow.destroy());
+      }
       if (it.kind === "quest") {
         // Quest drops glow so they stand out from the gold
         const glow = this.add.circle(it.x, it.y, 6, 0xffd166, 0.3).setDepth(it.y - 9).setBlendMode(Phaser.BlendModes.ADD);
@@ -773,6 +807,9 @@ export class TownScene extends Phaser.Scene {
         if (g) img.setAlpha(passesFilter(lootFilter(), this.opts.cls, g) ? 1 : 0.4);
       }
     });
+    // Runes (shared/runes.ts): set in / taken out, and a rune firing in a fight
+    this.room.onMessage("runeset", ({ name, on }) => this.feed(on ? `${name} set in` : `${name} taken out, back in your bag`));
+    this.room.onMessage("rune", (m: { k: RuneKey; x: number; y: number; id?: string }) => this.runeFlash(m));
     // Equipping an item the hero isn't strong enough for yet (item level / stat requirements, shared/gear.ts)
     this.room.onMessage("gearno", ({ text }) => {
       const me = this.entities.get(this.me);
@@ -792,6 +829,11 @@ export class TownScene extends Phaser.Scene {
     this.room.onMessage("pickup", ({ kind, amount, x, y, gear, name }) => {
       if (kind === "quest") {
         this.floatText(x, y - 6, `+1 ${QUEST_ITEMS[gear]?.name ?? ""}`, "#ffd166", PIXEL_FONT);
+        return;
+      }
+      if (kind === "gear" && parseRune(gear)) {
+        this.floatText(x, y - 6, `+${name}`, runeCss(parseRune(gear)!), PIXEL_FONT);
+        this.feed(`Found a ${name}! Open the bag (G), click it, then click an item to set it in`);
         return;
       }
       if (kind === "gear") {
@@ -843,6 +885,61 @@ export class TownScene extends Phaser.Scene {
       say: (x, y, text, color) => this.floatText(x, y, text, color, PIXEL_FONT),
       squash: (id, kx, ky, ms) => { const e = this.entities.get(id); if (e) this.squash(e, kx, ky, ms / 2); },
     });
+    // The Night Raiders (client/src/raiderFx.ts): smoke, dust and their coming and going
+    bindRaiderFx(this.room, {
+      scene: this, fx: this.fx, ent: (id) => this.entities.get(id) as any, feed: (t) => this.feed(t),
+      me: () => this.entities.get(this.me)?.state,
+    });
+    // A boss speaks (Grandam Ursk talks through her fight): a speech bubble over her, above the Mawdeep's dark, and a chat line
+    this.room.onMessage("bosssay", ({ id, text }) => {
+      const e = this.entities.get(id);
+      if (!e) return;
+      const log = document.getElementById("chatlog");
+      if (log) {
+        const el = document.createElement("div");
+        el.className = "bosssay";
+        el.textContent = `${(e.state?.title || MOBS[e.state?.kind as MobKind]?.name || "?").split(",")[0]}: ${text}`;
+        log.appendChild(el);
+        while (log.children.length > 8) log.firstChild!.remove();
+      }
+      e.bubble?.destroy();
+      const b = speechBubble(this, e.sprite.x, e.sprite.y - e.top - 12, text).setDepth(27700);
+      e.bubble = b;
+      isoAnchor(b, e.sprite);
+      this.time.delayedCall(3800, () => { if (e.bubble === b) { b.destroy(); e.bubble = undefined; } });
+    });
+    // Ishael the Sunwright changes: the Choir (her adepts sing, Zenith begins), then the Second Sun (she burns and grows)
+    this.room.onMessage("sunwright", ({ id, phase }) => {
+      const e = this.entities.get(id);
+      if (!e) return;
+      if (phase === 3) {
+        const b = this.bodyScale(e) * SUNWRIGHT.sunScale;
+        e.base = b; e.top *= SUNWRIGHT.sunScale;
+        this.tweens.killTweensOf(e.sprite);
+        this.tweens.add({ targets: e.sprite, scaleX: b, scaleY: b, duration: 700, ease: "Back.Out" });
+        e.sprite.setTint(0xffe0a0);
+        this.burst(e.sprite.x, e.sprite.y - 24, 16, 0xffb040, 620);
+        this.floatText(e.sprite.x, e.sprite.y - e.top - 18, "THE SECOND SUN!", "#ffd060", PIXEL_FONT);
+      } else {
+        this.floatText(e.sprite.x, e.sprite.y - e.top - 18, "THE CHOIR!", "#c8b8ff", PIXEL_FONT);
+      }
+    });
+    // Grandam Ursk changes: the Rite (her brood and needle), then the Bear (she tears off the last of the woman and grows)
+    this.room.onMessage("ursk", ({ id, phase }) => {
+      const e = this.entities.get(id);
+      if (!e) return;
+      if (phase === 3) {
+        const b = this.bodyScale(e) * URSK.bearScale;
+        e.base = b; e.top *= URSK.bearScale;
+        this.tweens.killTweensOf(e.sprite);
+        this.tweens.add({ targets: e.sprite, scaleX: b, scaleY: b, duration: 700, ease: "Back.Out" });
+        e.sprite.setTint(0xffd0c0);
+        this.burst(e.sprite.x, e.sprite.y - 20, 14, 0x6e2a22, 520);
+        this.floatText(e.sprite.x, e.sprite.y - e.top - 18, "THE BEAR!", "#ff6a5a", PIXEL_FONT);
+      } else {
+        this.floatText(e.sprite.x, e.sprite.y - e.top - 18, "THE RITE!", "#e8c890", PIXEL_FONT);
+      }
+    });
     this.room.onMessage("mbwind", ({ id, kind, ms }) => {
       const e = this.entities.get(id);
       if (!e) return;
@@ -855,7 +952,7 @@ export class TownScene extends Phaser.Scene {
       const ring = this.add.circle(x, y, 4).setStrokeStyle(kind === "slam" ? 3 : 2, kind === "slam" ? 0xff5252 : 0xffb74d, 0.9).setDepth(20000);
       this.tweens.add({ targets: ring, radius: r, alpha: 0, duration: kind === "slam" ? 420 : 300, onComplete: () => ring.destroy() });
       const me = this.entities.get(this.me);
-      if (me && Math.hypot(me.sprite.x - x, me.sprite.y - y) < r * 2.5) quake(this, kind === "slam" ? 260 : 120, kind === "slam" ? 0.008 : 0.004);
+      if (me && Math.hypot(me.sprite.x - x, me.sprite.y - y) < r * 2.5 && kind === "slam") quake(this, 260, 0.008, "major-boss"); // Mother Blob slam
     });
     // Necromancer: arms up while casting. Death Circle marks the ground first (a flat painting, so it lies on the iso ground too)
     this.room.onMessage("necrowind", ({ id, kind, ms, x, y, r }) => {
@@ -884,8 +981,7 @@ export class TownScene extends Phaser.Scene {
         const a = (i / 10) * Math.PI * 2, d = Math.random() * r;
         this.burst(x + Math.cos(a) * d, y + Math.sin(a) * d * 0.9, 3, 0x7c4dff, 380);
       }
-      const me = this.entities.get(this.me);
-      if (me && Math.hypot(me.sprite.x - x, me.sprite.y - y) < r * 2.5) quake(this, 220, 0.007);
+      // no screen shake: only major bosses shake the screen (Murat 2026-11-07)
     });
     // Skeletons climb out of the ground: green flash and dust where each one appears
     // Bone ritual: the skeletons fly apart, their bones arc through the air, land and slide into a pentagram that glows
@@ -909,7 +1005,7 @@ export class TownScene extends Phaser.Scene {
       if (e) { const b = this.bodyScale(e); this.tweens.add({ targets: e.sprite, scaleX: b, scaleY: { from: b * 0.2, to: b }, duration: 650, ease: "Back.Out" }); }
       this.floatText(x, y - 56, "BONE DEMON!", "#ff5233", PIXEL_FONT);
       const me = this.entities.get(this.me);
-      if (me && Math.hypot(me.sprite.x - x, me.sprite.y - y) < 400) quake(this, 380, 0.01);
+      if (me && Math.hypot(me.sprite.x - x, me.sprite.y - y) < 400) quake(this, 380, 0.01, "major-boss"); // Bone Demon rises
     });
     this.room.onMessage("demonwind", ({ id, ms }) => {
       const e = this.entities.get(id);
@@ -927,7 +1023,7 @@ export class TownScene extends Phaser.Scene {
         this.burst(x + Math.cos(a) * d, y + Math.sin(a) * d, 3 + Math.random() * 3, i % 2 ? 0xff7043 : 0xffca28, 420);
       }
       const me = this.entities.get(this.me);
-      if (me && Math.hypot(me.sprite.x - x, me.sprite.y - y) < r * 3) quake(this, 260, 0.009);
+      if (me && Math.hypot(me.sprite.x - x, me.sprite.y - y) < r * 3) quake(this, 260, 0.009, "major-boss"); // Bone Demon hellfire
     });
     // Bone Demon grabs a skeleton, lifts it, snaps it in two between its fists and straps the piece on
     this.room.onMessage("demonrip", (msg) => this.demonRip(msg));
@@ -1005,6 +1101,7 @@ export class TownScene extends Phaser.Scene {
     });
     // Brute Cleave / Chief Sweep / Chief Leap: the ground is marked red until the blow lands
     this.room.onMessage("bwind", ({ id, kind, ms, x, y, r }) => {
+      if (kind !== "cleave" && kind !== "leap" && kind !== "sweep") return; // the beast-folk's and the Sunwright's moves are marked in beastFx.ts
       const e = this.entities.get(id);
       if (e) {
         const name = kind === "leap" ? "LEAP!" : kind === "sweep" ? "SWEEP!" : "CLEAVE!";
@@ -1033,7 +1130,7 @@ export class TownScene extends Phaser.Scene {
         this.burst(x + Math.cos(a) * r * 0.7, y + Math.sin(a) * r * 0.7, 2.5, 0x8d6e63, 340);
       }
       const me = this.entities.get(this.me);
-      if (me && Math.hypot(me.sprite.x - x, me.sprite.y - y) < r * 2.5) quake(this, kind === "leap" ? 260 : 140, kind === "leap" ? 0.009 : 0.005);
+      if (me && Math.hypot(me.sprite.x - x, me.sprite.y - y) < r * 2.5 && kind === "leap") quake(this, 260, 0.009, "major-boss"); // Redfang Chief leap
     });
     // The Hollow King (the first zone's final boss): every move is painted flat on the ground first, then lands.
     // No screen shake or flash (Murat 2026-11-04): the ground marks and dust carry it.
@@ -1161,7 +1258,6 @@ export class TownScene extends Phaser.Scene {
       this.floatText(x, y - e.top - 4, "!", "#ff5252");
       const b = this.bodyScale(e);
       this.tweens.add({ targets: e.sprite, scaleX: { from: b * 0.4, to: b }, scaleY: { from: b * 1.6, to: b }, duration: 220, ease: "Back.Out" });
-      if (victim === this.me) quake(this, 80, 0.002);
     });
     // Blob merging: the one in danger calls ("MERGE!"), the others rush in and melt into it
     this.room.onMessage("blobcall", ({ id }) => {
@@ -1243,7 +1339,6 @@ export class TownScene extends Phaser.Scene {
       const busy = e.sprite.anims.isPlaying && /_(swing|attack|cast)/.test(cur);
       if (e.hero && !e.state.dead && !busy && !this.moves.active(id)) playCharAnim(e.sprite, e.hero, "hit", this.dirOf(e));
       if (e.mob) this.gooSplat(e, dmg);
-      if (id === this.me) quake(this, 100, 0.004);
     });
     // Initiative broken (shared/combat.ts): the target is dizzy and can't attack for a moment
     this.room.onMessage("broken", ({ id }) => {
@@ -1259,7 +1354,7 @@ export class TownScene extends Phaser.Scene {
       if (on && e) this.villagers?.shoutNear(e.sprite.x, e.sprite.y, shout);
       if (id === this.me) {
         (this.wrathBanner ??= new WrathBanner()).show(on, shout);
-        if (on) quake(this, 300, 0.008);
+        if (on) quake(this, 300, 0.008, "village-guards");
       } else if (e) this.floatText(e.sprite.x, e.sprite.y - 22, on ? "Outlaw!" : "Pardoned", on ? "#ff5252" : "#d8f0c0", PIXEL_FONT);
     });
     // Our hero died: "You died - killed by <monster or player>" with a respawn countdown
@@ -1367,7 +1462,10 @@ export class TownScene extends Phaser.Scene {
     const dx = p.x - e.sprite.x, dy = p.y - e.sprite.y;
     // Respawn, portal, teleport: far beyond what lag explains
     if (Math.hypot(dx, dy) > 160 || p.dead) {
-      e.sprite.setPosition(p.x, p.y); this.predHist = []; this.corrX = this.corrY = 0; return;
+      const far = Math.hypot(dx, dy) > 640; // respawn at the bonfire, not a lag correction: the new spot is off screen
+      e.sprite.setPosition(p.x, p.y); this.predHist = []; this.corrX = this.corrY = 0;
+      if (far) this.arrive(6, 4, 3, 500); else this.snapCamera();
+      return;
     }
     const then = interpolate(this.predHist, now - this.rtt);
     if (!then) return;
@@ -1568,6 +1666,19 @@ export class TownScene extends Phaser.Scene {
    * Magic, Rare and Legendary drops on the ground (shared/gear.ts rarity): a soft glow in the rarity colour,
    * plus a pixel light beam for Rare and Legendary, and a chime when one drops near you.
    */
+  /** A rune fired (shared/runes.ts): its stone pops up over the spot and a thin ring of its colour spreads. Small on purpose. */
+  private runeFlash(m: { k: RuneKey; x: number; y: number; id?: string }) {
+    const d = RUNES[m.k];
+    if (!d) return;
+    const who = m.id ? this.entities.get(m.id)?.sprite : undefined;
+    const x = who?.x ?? m.x, y = (who?.y ?? m.y) - 14;
+    const stone = this.add.image(x, y, runeTexture(this, { key: m.k, rank: 2 })).setScale(0.5).setDepth(y + 2000).setAlpha(0.95);
+    this.tweens.add({ targets: stone, y: y - 10, scale: 0.75, alpha: 0, duration: 650, ease: "Quad.easeOut", onComplete: () => stone.destroy() });
+    const r = m.k === "ember" ? 40 : 16;
+    const ring = this.add.circle(x, y + 12, 4).setStrokeStyle(1, d.color, 0.9).setDepth(y + 1999).setBlendMode(Phaser.BlendModes.ADD);
+    this.tweens.add({ targets: ring, radius: r, alpha: 0, duration: 320, ease: "Quad.easeOut", onComplete: () => ring.destroy() });
+  }
+
   private lootGlow(img: Phaser.GameObjects.Image, x: number, y: number, rarity: number, depth: number) {
     const col = RARITY_HEX[rarity];
     const parts: Phaser.GameObjects.GameObject[] = [];
@@ -1700,7 +1811,8 @@ export class TownScene extends Phaser.Scene {
       // ?look=tx,ty (map viewing aid, like ?time=): park the camera on a tile instead of following the hero
       const look = new URLSearchParams(location.search).get("look")?.split(",").map(Number);
       const target = look?.length === 2 && look.every(Number.isFinite) ? this.add.zone((look[0] + 0.5) * TILE, (look[1] + 0.5) * TILE, 1, 1) : sprite;
-      this.cameras.main.startFollow(target, true, 0.15, 0.15);
+      this.cameras.main.startFollow(target, true, CAM_LERP, CAM_LERP);
+      this.snapCamera(); // start on the hero, not panning over from the map corner
     }
   }
 
@@ -1708,6 +1820,7 @@ export class TownScene extends Phaser.Scene {
     const e = this.entities.get(id);
     if (!e) return;
     this.siege?.clear(id);
+    this.forms?.drop(id);
     e.sprite.destroy(); e.label?.destroy(); e.bar.destroy(); e.parts?.destroy(); e.bubble?.destroy(); e.shield?.destroy(); e.gear?.destroy();
     this.entities.delete(id);
   }
@@ -1738,6 +1851,8 @@ export class TownScene extends Phaser.Scene {
     const dir = e.state.dir as string;
     if (typeof ax === "number" && typeof ay === "number") e.vdir = (e.hero ? screenDir8 : screenDir)(ax, ay, e.vdir ?? dir);
     if (e.hero) { this.moves.stop(id, e); playCharAnim(e.sprite, e.hero, this.attackAnim(e.hero, step, variant), this.dirOf(e)); }
+    const beast = !!e.hero && this.forms.active(id);
+    if (beast) this.forms.attack(id); // Bat / Wolf Form: a bite, no weapon swing
     if (e.mob) e.strikeUntil = this.time.now + 240;
     // Aim can be diagonal (the server sends it); mobs and old messages fall back to the facing direction
     const off = typeof ax === "number" && typeof ay === "number" ? [ax, ay]
@@ -1754,10 +1869,9 @@ export class TownScene extends Phaser.Scene {
         e.sprite.setPosition(r.x, r.y);
       }
     }
-    if (cls) this.gearFx.swing(e, step, off[0], off[1], !!cls.projectile, id === this.me); // item level effects
+    if (cls && !beast) this.gearFx.swing(e, step, off[0], off[1], !!cls.projectile, id === this.me); // item level effects
     if (cls?.projectile) return; // the fireball itself is the visual
-    // No hit-area shapes (Murat): the attack animation is the visual; the finisher still shakes the camera
-    if (step === 2 && id === this.me) quake(this, 80, 0.003);
+    // No hit-area shapes (Murat): the attack animation is the visual. No screen shake from hero attacks or skills.
   }
 
   /** A struck blob loses some goo: blobs of slime fly off in little arcs and splat on the ground, then soak away. */
@@ -1989,8 +2103,6 @@ export class TownScene extends Phaser.Scene {
           this.floatText(cx, cy - 10, "CRACK!", "#e8e2d0", PIXEL_FONT);
           // chips fly from the break (height above its feet) and fall around it
           for (let i = 0; i < 9; i++) debris.push({ x: mid[0], y: (Math.random() - 0.5) * 4, vx: (Math.random() - 0.5) * 70, vy: (Math.random() - 0.5) * 24, h: -mid[1], vh: 20 + Math.random() * 45, a: Math.random() * 3, va: (Math.random() - 0.5) * 18, len: 2 + Math.random() * 2.5 });
-          const me = this.entities.get(this.me);
-          if (me && Math.hypot(me.sprite.x - ex, me.sprite.y - ey) < 260) quake(this, 160, 0.006);
         }
         // the halves in each fist, torn outward; then pressed onto the body until they are worn
         const fl = e.sprite.flipX ? -1 : 1;
@@ -2434,7 +2546,7 @@ export class TownScene extends Phaser.Scene {
   private skillHud(cls: ClassKind, skill: string, cdm: number) {
     const s = skillOf(cls, skill);
     const m = s && withMods(cls, this.entities.get(this.me)?.state?.talents, s); // upgrade nodes change cooldown and cost
-    return { name: s?.name ?? "?", cdMs: (m?.cd ?? 0) * cdm, last: this.lastCast[skill] ?? -Infinity, cost: m ? skillCost(m) : { stamina: 0, mana: 0 }, ult: s?.row === 4 };
+    return { name: s?.name ?? "?", cdMs: (m?.cd ?? 0) * cdm, last: this.lastCast[skill] ?? -Infinity, cost: m ? skillCost(m) : { heat: 0, mana: 0 }, ult: s?.row === 4 };
   }
 
   private chargeSeen = { n: 0, at: 0 }; // our stacks last frame, and when the newest one was built
@@ -2473,7 +2585,7 @@ export class TownScene extends Phaser.Scene {
       const h = this.skillHud(cls, skill, cdm);
       const left = Math.max(0, h.cdMs - (now - h.last));
       const shade = left > 0 ? `<div class="cd" style="height:${(left / h.cdMs) * 100}%"></div>` : "";
-      const wait = left > 0 || !canPay(pools, h.cost) ? " wait" : "";
+      const wait = (left > 0 || !canPay(pools, h.cost) ? " wait" : "") + (shortOf(pools, h.cost) === "heat" ? " hot" : "");
       const power = skill;
       const unarmed = this.unarmedFor(mine, cls, skill);
       return `<div class="slot${h.ult ? " ult" : ""}${wait}${unarmed ? " unarmed" : ""}${picking}" data-slot="${i}" data-skill="${skill}" data-tiphead="${h.name}" data-tip="${tipEsc((unarmed ? `${unarmed}. ` : "") + (skillOf(cls, skill)?.desc ?? ""))}" data-tiphint="Key ${slotKey(i)} · click to change · wheel to scroll · right-click to clear">` +
@@ -2490,7 +2602,7 @@ export class TownScene extends Phaser.Scene {
         const left = Math.max(0, h.cdMs - (now - h.last));
         const shade = left > 0 && h.cdMs >= 1000 ? `<div class="cd" style="height:${(left / h.cdMs) * 100}%"></div>` : "";
         const unarmed = this.unarmedFor(mine, cls, sk);
-        return `<div class="slot lmb ${side}${!canPay(pools, h.cost) ? " wait" : ""}${unarmed ? " unarmed" : ""}${pk}" data-slot="${key}" data-tiphead="${Side}: ${h.name}" data-tip="${tipEsc((unarmed ? `${unarmed}. ` : "") + (skillOf(cls, sk)?.desc ?? ""))}" data-tiphint="Click to change · wheel to scroll · right-click: back to the weapon">` +
+        return `<div class="slot lmb ${side}${!canPay(pools, h.cost) ? " wait" : ""}${shortOf(pools, h.cost) === "heat" ? " hot" : ""}${unarmed ? " unarmed" : ""}${pk}" data-slot="${key}" data-tiphead="${Side}: ${h.name}" data-tip="${tipEsc((unarmed ? `${unarmed}. ` : "") + (skillOf(cls, sk)?.desc ?? ""))}" data-tiphint="Click to change · wheel to scroll · right-click: back to the weapon">` +
           `${iconImg(sk)}${shade}${unarmed ? `<i class="xout"></i>` : ""}<kbd>${label}</kbd></div>`;
       }
       const w = attackProfile(cls, activeOf(mine));
@@ -2530,7 +2642,8 @@ export class TownScene extends Phaser.Scene {
       if (ev.id === this.me) this.lastCast[ev.s] = this.time.now;
       if (ev.id === this.me && ev.s === this.leftSkill()) this.pointer?.swung(); // a left-click spell went off: that click is done
       // Big melee skills play their own wind-up / action / recovery sequence; everything else the cast animation
-      if (e?.hero && !this.moves.start(ev.id, e, ev, this.dirOf(e))) playCharAnim(e.sprite, e.hero, "skill", this.dirOf(e));
+      if (e?.hero && this.forms.keeps(ev.id, ev.s)) this.forms.attack(ev.id); // a beast casting its own school's skill bites instead (Bat / Wolf Form)
+      else if (e?.hero && !this.moves.start(ev.id, e, ev, this.dirOf(e))) playCharAnim(e.sprite, e.hero, "skill", this.dirOf(e));
     }
     if (ev.ev === "move" || ev.ev === "countered") {
       const e = this.entities.get(ev.id);
@@ -2600,7 +2713,7 @@ export class TownScene extends Phaser.Scene {
     // The hero flashes gold for a moment
     sprite.setTintFill(0xffd166);
     this.time.delayedCall(120, () => sprite.clearTint());
-    if (mine) quake(this, 260, 0.006);
+    if (mine) quake(this, 260, 0.006, "level-up");
   }
 
   /** Big on-screen "zone cleared" banner for the player who killed the zone's last monster. */
@@ -2651,8 +2764,58 @@ export class TownScene extends Phaser.Scene {
     if (this.settled >= 4 || loadingFor() > 20_000) hideLoading();
   }
 
+  /**
+   * Teleports (portal stones, ropes and stairs, respawn): the camera jumps with the hero instead of gliding across the
+   * map. The follow lerp is set to 1 for a few frames (the iso projection moves the target at render time).
+   */
+  private camSnap = 0;
+  /**
+   * Our hero was moved by the server (portal, rope, stair): forget the walking history. Kept, it made the next update
+   * look like a huge prediction error, and the hero and camera slid back across the map toward the old spot.
+   */
+  private jumped() { this.predHist = []; this.corrX = this.corrY = 0; }
+  private snapCamera() { this.camSnap = 3; this.cameras.main.setLerp(1, 1); }
+  /**
+   * Arriving somewhere new: snap the camera, hold the screen in a soft colour while the ground there is painted
+   * (smoothground.ts paints in workers), then fade in. Without this the plain tiles showed first and the painted
+   * ground appeared on top of them a moment later. Capped so a slow computer never waits long.
+   */
+  private cover?: { r: number; g: number; b: number; ms: number; since: number; calm: number };
+  private arrive(r: number, g: number, b: number, ms: number) {
+    this.snapCamera();
+    const cam = this.cameras.main;
+    cam.resetFX();
+    cam.fadeOut(1, r, g, b);
+    this.cover = { r, g, b, ms, since: performance.now(), calm: 0 };
+  }
+  private updateCover() {
+    const c = this.cover;
+    if (!c) return;
+    const pending = IsoView.ground?.pending ?? 0;
+    c.calm = pending === 0 && this.camSnap === 0 ? c.calm + 1 : 0;
+    if (c.calm < 3 && performance.now() - c.since < 2500) return;
+    this.cover = undefined;
+    const cam = this.cameras.main;
+    cam.resetFX();
+    cam.fadeIn(c.ms, c.r, c.g, c.b);
+  }
+  /** The camera's colour grade (SMOOTH only): Oakvale drained and gloomy; the desert (Act 2) keeps a little more of its warm colour. */
+  private grade?: Phaser.FX.ColorMatrix;
+  private gradeDesert?: boolean;
+  private setGrade(desert: boolean) {
+    if (!this.grade || this.gradeDesert === desert) return;
+    this.gradeDesert = desert;
+    this.grade.reset();
+    this.grade.saturate(desert ? -0.22 : -0.4);
+    this.grade.contrast(desert ? 0.12 : 0.16, true);
+    this.grade.brightness(desert ? 0.92 : 0.86, true);
+  }
+
   update(_t: number, dtMs: number) {
+    if (this.camSnap > 0 && --this.camSnap === 0) this.cameras.main.setLerp(CAM_LERP, CAM_LERP);
     this.iso?.update(dtMs);
+    this.updateCover();
+    { const me = this.entities?.get(this.me)?.state; if (me) this.setGrade(me.y >= DESERT_Y0 * TILE); }
     if (loadingActive()) this.checkLoaded();
     this.ambient?.update(this.time.now, dtMs);
     if (this.dungeon) { this.dungeon.torch = this.torch && !this.entities?.get(this.me)?.state?.dead; this.dungeon.night = this.details?.darkNow ?? 0; }
@@ -2812,6 +2975,7 @@ export class TownScene extends Phaser.Scene {
           }
         }
         e.sprite.setAlpha(p.dead ? 0.6 : 1);
+        if (this.forms.tick(id, e, moving, this.dirOf(e), now)) e.sprite.setAlpha(0); // a beast in the hero's place
       } else {
         const step = moving ? Math.floor(now / 150) % 2 : 0;
         // Monsters gather themselves before a blow (wind-up frame) and lunge when it lands (strike frame)
@@ -2828,6 +2992,7 @@ export class TownScene extends Phaser.Scene {
         else e.sprite.setAlpha(p.dead ? 0.35 : 1).setAngle(p.dead ? 90 : 0);
       }
       e.sprite.setDepth(e.sprite.y);
+      if (e.mob && p.kind === "nightraider" && !p.dead && e.sprite.visible) raiderTrail(this.fx, e as any, moving, now);
       // Status effects: yellow flicker for stunned, blue for slowed, red pulse for raging. A monster winding up shows
       // it in its pose; only sheets without attack frames (?pixel=1) still flash red.
       const windFlash = p.winding && e.sprite.texture.frameTotal <= 12;
@@ -2896,12 +3061,18 @@ export class TownScene extends Phaser.Scene {
       if (e.mob && !p.dead && p.hidden && p.weapon === "ambusher") {
         // up in a tree: nothing shows at all (that's the point of an ambush)
       } else if (e.mob && !p.dead && p.hidden) {
-        // Hiding in a grave or tree: only a pair of eyes peeks out (and blinks now and then)
-        e.bar.setDepth(20000);
+        // Hiding in a grave or tree: only a pair of eyes peeks out (and blinks now and then). Beast-folk lurking in a
+        // Mawdeep ambush room: eyes at head height, glowing through the dark
+        const lurk = LURKERS.has(p.kind);
+        e.bar.setDepth(lurk ? 27600 : 20000);
         const blink = (now + x * 53 + y * 31) % 3200 < 160;
-        if (!blink) {
-          const col = p.kind === "skeleton" ? 0xff5252 : p.kind === "skeletonmage" ? 0x7fe7ff : 0xfff176;
-          const ey = y - (p.kind === "skeleton" || p.kind === "skeletonmage" ? 2 : 5);
+        if (lurk && !blink) {
+          const ey = y - 24 + Math.round(Math.sin(now / 900 + x) * 1), col = p.kind === "tuskborn" ? 0xff4a2a : 0xffb020;
+          e.bar.fillStyle(col, 0.25).fillRect(x - 4, ey - 1, 9, 3);
+          e.bar.fillStyle(col).fillRect(x - 2, ey, 1, 1).fillRect(x + 2, ey, 1, 1);
+        } else if (!blink) {
+          const col = p.kind === "skeleton" ? 0xff5252 : p.kind === "skeletonmage" ? 0x7fe7ff : p.kind === "sanddead" ? 0xffb030 : p.kind === "scorpion" ? 0x9dff6a : 0xfff176;
+          const ey = y - (p.kind === "skeleton" || p.kind === "skeletonmage" || p.kind === "sanddead" || p.kind === "scorpion" ? 2 : 5);
           e.bar.fillStyle(0x000000, 0.6).fillRect(x - 3, ey - 1, 7, 3);
           e.bar.fillStyle(col).fillRect(x - 2, ey, 1, 1).fillRect(x + 2, ey, 1, 1);
         }
@@ -2961,8 +3132,9 @@ export class TownScene extends Phaser.Scene {
     if (this.npcs) { this.npcs.hidePrompt = !!this.chests?.near || !!this.shrine?.near || !!this.portals?.near || !!this.stash?.near || !!this.bounty?.near; this.npcs.extraBlock = this.bounty?.trackerBlock() ?? ""; }
     this.npcs?.update(meEnt && !meEnt.state.dead ? meEnt.sprite : undefined, meEnt?.state);
     this.showAttune(meEnt?.state);
+    this.waygates?.update(meEnt?.state);
     this.portals?.update(meEnt && !meEnt.state.dead ? meEnt.sprite : undefined, !!this.npcs?.isOpen || !!this.chests?.near || !!this.shrine?.near);
-    if (this.minimap && this.npcs) this.minimap.markers = [...this.npcs.markers, ...(this.portals?.markers() ?? []), ...(this.bounty?.markers() ?? [])];
+    if (this.minimap && this.npcs) this.minimap.markers = [...this.npcs.markers, ...(this.portals?.markers() ?? []), ...(this.bounty?.markers() ?? []), ...(this.dungeon?.markers() ?? [])];
 
     const mine = meEnt?.state;
     if (mine) {
@@ -2989,7 +3161,7 @@ export class TownScene extends Phaser.Scene {
       // Zone under the hero drives the music
       const tx = meEnt.sprite.x / TILE, ty = meEnt.sprite.y / TILE;
       const zdef = zoneAt(Math.floor(tx), Math.floor(ty));
-      setMusicZone(zdef?.name, zdef?.mobs, this.areaName);
+      setMusicZone(zdef?.name, zdef?.mobs, this.areaName, ty >= DESERT_Y0 ? 2 : 1);
       sfxFrame(this.me, this.entities as any);
       const cls = mine.cls as ClassKind;
       const cdm = cooldownMult(cls, { sta: mine.sta, str: mine.str, mag: mine.mag, dex: mine.dex ?? 0 }, mine.talents);
@@ -3000,6 +3172,9 @@ export class TownScene extends Phaser.Scene {
         xpFrac: mine.level >= MAX_LEVEL ? 1 : (mine.xp - cur) / Math.max(1, next - cur),
         xp: mine.xp - cur, xpNeed: mine.level >= MAX_LEVEL ? undefined : next - cur,
       });
+      // Heat / overload gauge on the left (overloadGauge.ts, shared/overload.ts)
+      const flip = (this.heatGauge ??= new OverloadGauge(document.getElementById("hud")!)).update(mine.energy ?? 0);
+      if (flip) playSfx(flip);
       this.renderActions(mine, cls, cdm, now);
       (this.buffBar ??= new BuffBar(document.getElementById("hud")!)).update(mine.timers ?? "");
     }

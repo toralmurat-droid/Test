@@ -1,0 +1,11 @@
+{
+  "date": "2026-11-08",
+  "patch": 174,
+  "title": "Vampire: Bat Form and Wolf Form",
+  "changes": [
+    "New Night skill Bat Form (Lv 12, after Bat Swarm): become a great black bat for 6s, much faster, harder to hit and never slowed. You can still use Night skills.",
+    "New Fang skill Wolf Form (Lv 14, after Night Pounce): howl and become a huge black wolf for 10s that bites harder and faster and makes foes bleed. You can still use Fang skills.",
+    "Any skill from another school, or the form again, gives you your own shape back. The change plays as a smooth shift of the body.",
+    "The vampire skill tree is a little wider to fit the two new skills."
+  ]
+}

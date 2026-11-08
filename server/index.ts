@@ -8,7 +8,7 @@ import { Server } from "colyseus";
 import { WebSocketTransport } from "@colyseus/ws-transport";
 import { TownRoom, announceUpgrade } from "./TownRoom";
 import { ideaLog, publicLog } from "./ideaStore";
-import { allAccounts, flushFinal, initAccounts, peek } from "./accounts";
+import { allAccounts, flushFinal, initAccounts, peek, requestReset, resetPassword, setEmail } from "./accounts";
 import { writeHandoff } from "./handoff";
 import { clientIp } from "./ratelimit";
 
@@ -98,6 +98,19 @@ app.use("/account", (req, res, next) => {
 app.post("/account", express.json({ limit: "2kb" }), async (req, res) => {
   try { res.json(await peek(req.body?.name, req.body?.password, clientIp(req))); }
   catch (e: any) { res.status(401).json({ error: String(e?.message ?? e) }); }
+});
+// Optional email on the account (needs the password), and password reset by an emailed code
+app.post("/account/email", express.json({ limit: "2kb" }), async (req, res) => {
+  try { res.json({ email: await setEmail(req.body?.name, req.body?.password, req.body?.email, clientIp(req)) }); }
+  catch (e: any) { res.status(400).json({ error: String(e?.message ?? e) }); }
+});
+app.post("/account/forgot", express.json({ limit: "2kb" }), async (req, res) => {
+  try { res.json(await requestReset(req.body?.who, clientIp(req))); }
+  catch (e: any) { res.status(400).json({ error: String(e?.message ?? e) }); }
+});
+app.post("/account/reset", express.json({ limit: "2kb" }), async (req, res) => {
+  try { res.json({ name: await resetPassword(req.body?.name, req.body?.code, req.body?.password, clientIp(req)) }); }
+  catch (e: any) { res.status(400).json({ error: String(e?.message ?? e) }); }
 });
 
 const httpServer = http.createServer(app);

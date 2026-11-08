@@ -1,5 +1,6 @@
-import { MAP_H as FULL_H, MAP_W, PLAYER_RADIUS, TILE, WORLD_H, type MobKind } from "./constants";
-import { FLOORS, LAIRS, SEA_END, SINKHOLE, type Floor } from "./dungeon";
+import { MAP_H as FULL_H, MAP_W, PLAYER_RADIUS, TILE, UNDER_END, WORLD_H, type MobKind } from "./constants";
+import { FLOORS, LAIRS, SEA_END, SHORTCUTS, SINKHOLE, type Floor } from "./dungeon";
+import { buildDesert, D, inDesertRow, KEL_MARKET, WAYGATE_OAKVALE } from "./desert";
 
 /** The overworld's rows: the world generator (and everything above ground) works on these; under them lies the Mawdeep (shared/dungeon.ts). */
 const MAP_H = WORLD_H;
@@ -25,8 +26,10 @@ export const T = {
   FLOOR: 39, RUBBLE: 40, BEAM: 41, FLAGS: 42, BONFIRE: 43,
   // a wooden signpost with arrow boards (readable: see SIGNPOSTS)
   SIGNPOST: 44,
+  // Act 2, the desert (shared/desert.ts): sandstone peaks, date palms, mud-brick houses and walls, nomad tents, bleached bones
+  CLIFF: 45, PALM: 46, ADOBE: 47, ADOBE_WALL: 48, TENT: 49, BONES: 50,
 } as const;
-export const TILE_COUNT = 45;
+export const TILE_COUNT = 51;
 export const EMPTY = -1;
 
 /** A named region. `mobs` hints which monsters belong there (empty or missing = none, e.g. inside the village). */
@@ -85,6 +88,8 @@ export const REDFANG_TOWERS: [number, number][] = [[254, 103], [249, 118], [241,
 export const WRECK = { x: 27, y: 195, solid: [25, 194.3, 5.2, 1.1] as [number, number, number, number] };
 
 export const SAFE_ZONE = { x: 74, y: 55, w: 13, h: 11 };
+/** Act 2's safe zone: Kel Ashar's market (shared/desert.ts), in map tiles. */
+export const DESERT_SAFE = { x: KEL_MARKET.x, y: D(KEL_MARKET.y), w: KEL_MARKET.w, h: KEL_MARKET.h };
 
 /** Column of the river's center for a given row (River Ashwell, east of the village). */
 /** Gullrock Cove: a fishers' smokehouse on a little bay east of Saltmere, burned and pillaged by Redfang raiders (Redfang quest chain). */
@@ -789,6 +794,15 @@ function buildWorld() {
   // ---------- 13c. The portal stones (shared/portals.ts): a little clearing round each ----------
   for (const p of PORTAL_SPOTS) disk(p.x + 0.5, p.y + 0.5, 2.6, 2.2, (x, y) => { if (NATURE.has(objects[y][x])) setO(x, y, EMPTY); });
 
+  // ---------- 13c'. The old waygate south of Oakvale (Act 2, shared/act2.ts): a cracked dais of old flagstones, a path to the South Road ----------
+  {
+    const G = WAYGATE_OAKVALE;
+    disk(G.x + 0.5, G.y + 0.5, 4.2, 3.6, (x, y, d) => {
+      setO(x, y, EMPTY);
+      setG(x, y, d < 0.55 ? (hash(x, y, 311) < 0.85 ? T.FLAGS : T.RUBBLE) : d < 0.8 && hash(x, y, 312) < 0.5 ? T.RUBBLE : T.GRASS_DARK);
+    });
+    curve([[G.x - 3, G.y + 1], [G.x - 5, G.y + 2], [87, 83]], 1);
+  }
   // ---------- 13d. The Mawdeep sinkhole (shared/dungeon.ts): a ragged clearing of bare earth and stones, a path from the Redfang trail ----------
   disk(SINKHOLE.x + 0.5, SINKHOLE.y + 0.5, 4.6, 3.8, (x, y, d) => {
     setO(x, y, d > 0.8 && hash(x, y, 301) < 0.22 ? T.ROCK : EMPTY);
@@ -900,10 +914,25 @@ function buildWorld() {
     ground[y][x] = y < SEA_END ? T.WATER : T.DIRT;
     objects[y][x] = y < SEA_END ? EMPTY : T.ROCK;
   }
+  // ---------- 16. Act 2: the desert, in its own band under the rock (shared/desert.ts) ----------
+  const desert = buildDesert(T, ground, objects, EMPTY);
+  for (const k of desert.roads) roads.add(k);
+  for (const p of desert.posts) { // a post beside the trail, on the nearest free tile
+    let best: [number, number] | undefined, bd = Infinity;
+    for (let j = -3; j <= 3; j++) for (let i = -3; i <= 3; i++) {
+      const x = p.x + i, y = p.y + j;
+      if (!inDesertRow(y) || objects[y][x] !== EMPTY || roads.has(y * MAP_W + x) || ground[y][x] === T.WATER) continue;
+      let byRoad = false;
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) if (roads.has((y + dy) * MAP_W + x + dx)) byRoad = true;
+      if (byRoad && Math.hypot(i, j) < bd) { bd = Math.hypot(i, j); best = [x, y]; }
+    }
+    if (best) { objects[best[1]][best[0]] = T.SIGNPOST; posts.push({ x: best[0], y: best[1], to: p.to }); }
+  }
   for (const f of FLOORS) carveFloor(f, ground, objects);
   areas.unshift(...LAIRS.map((l) => ({ ...l, mobs: [] as MobKind[] })),
     ...FLOORS.map((f) => ({ name: f.name, x: f.x, y: f.y, w: f.w, h: f.h, mobs: [] as MobKind[] })),
     { name: "Mawdeep Sinkhole", x: SINKHOLE.x - 5, y: SINKHOLE.y - 5, w: 11, h: 10 });
+  areas.push(...desert.areas);
   return { ground, objects, areas, posts, roads, broken, makeshift };
 }
 
@@ -935,7 +964,7 @@ function carveFloor(f: Floor, ground: number[][], objects: number[][]) {
     for (let k = 0; k <= n; k++) {
       const t = k / n, u = 1 - t;
       const px = u * u * ax + 2 * u * t * mx + t * t * bx, py = u * u * ay + 2 * u * t * my + t * t * by;
-      const r = 1.35 + 0.55 * noise(px, py, 4, S + 5);
+      const r = 1.15 + 0.4 * noise(px, py, 4, S + 5); // a passage two or three wide, no more
       for (let y = Math.floor(py - r - 1); y <= py + r + 1; y++) for (let x = Math.floor(px - r - 1); x <= px + r + 1; x++) {
         if (Math.hypot(x + 0.5 - px, y + 0.5 - py) <= r) open(x, y);
       }
@@ -961,56 +990,97 @@ for (let ty = 0; ty < FULL_H; ty++) for (let tx = 0; tx < MAP_W; tx++) {
 export const AREAS = WORLD.areas;
 
 /**
- * Mawdeep gates (Murat 2026-11-05: "doors to open"): a timber barricade across every tunnel that leads into an elite
- * lair or the Hide-Mother's den. They start shut (solid); a hero opens one (server "door" message) and it swings
- * shut again a while after nobody stands in it. Deterministic like the map: server and clients compute the same tiles.
+ * Mawdeep gates (Murat 2026-11-05: "doors to open"; 2026-11-08: "part should be like a prison wall and only part a
+ * gate, there could also be doors"): every tunnel into a lair or the Hide-Mother's den is walled across; only a gate
+ * in the middle of the wall opens. Elite lairs and the den are shut by iron bars ("bars", a barred gate in a prison
+ * wall); the mini-bosses' warrens by a stone wall with an iron-bound door ("door"). A hero opens one (server "door"
+ * message) and it shuts again a while after nobody stands in it. Deterministic: server and clients compute the same tiles.
  */
-export interface Door { id: string; x: number; y: number; tiles: number[]; floor: number }
+export interface Door {
+  id: string; x: number; y: number; floor: number;
+  /** "bars": prison bars with a barred gate; "door": a stone wall with a wooden door; "crack": a cracked rock wall hiding a secret room (all of it breaks) */
+  kind: "bars" | "door" | "crack";
+  /** every tile of the wall across the tunnel (solid, except the gate's while it is open) */
+  tiles: number[];
+  /** the gate's tiles, in the middle of the wall */
+  gate: number[];
+  /** the wall's line across the tunnel (unit vector, world) */
+  ax: number; ay: number;
+  /** a shortcut: only worked from this side (the centre, in tiles, of the chamber it opens from) */
+  from?: { x: number; y: number };
+}
 export const DOOR_RANGE = 1.8; // tiles from the nearest gate tile to work it
 const DOOR_ROOMS: Record<number, number[]> = { 1: [7], 2: [1, 5], 3: [3, 4] };
+const BARRED = new Set(["2_5", "3_3", "3_4"]); // the elites' lairs and the den: iron bars; the rest stout doors
 function placeDoors(): Door[] {
   const out: Door[] = [];
-  for (const f of FLOORS) for (const ci of DOOR_ROOMS[f.id] ?? []) {
+  /** Wall the tunnel a-b across just outside chamber ci's rim. */
+  const place = (f: Floor, ci: number, a: number, b: number, bend: number, kind: Door["kind"], id: string, oneWay: boolean) => {
+    if (out.some((d) => d.id === id)) return;
     const C = f.chambers[ci], cx = f.x + C.x, cy = f.y + C.y;
     const ell = (x: number, y: number) => Math.hypot((x - cx) / C.rx, (y - cy) / C.ry);
-    f.tunnels.forEach(([a, b, bend]) => {
-      if (a !== ci && b !== ci) return;
-      if (out.some((d) => d.floor === f.id && (d.id === `gate_${f.id}_${a}_${b}` || d.id === `gate_${f.id}_${b}_${a}`))) return; // one gate per tunnel
-      const A = f.chambers[a], B = f.chambers[b];
-      const ax = f.x + A.x, ay = f.y + A.y, bx = f.x + B.x, by = f.y + B.y;
-      const mx = (ax + bx) / 2 - (by - ay) * bend * 0.12, my = (ay + by) / 2 + (bx - ax) * bend * 0.12;
-      const at = (t: number) => { const u = 1 - t; return [u * u * ax + 2 * u * t * mx + t * t * bx, u * u * ay + 2 * u * t * my + t * t * by]; };
-      // walk out of the lair along the tunnel until clear of its ragged rim
-      let t = a === ci ? 0 : 1; const dt = a === ci ? 0.005 : -0.005;
-      while (t >= 0 && t <= 1 && ell(at(t)[0], at(t)[1]) < 1.5) t += dt;
-      const [px, py] = at(t), [qx, qy] = at(t + dt);
-      const len = Math.hypot(qx - px, qy - py) || 1, ux = (qx - px) / len, uy = (qy - py) / len;
-      const tiles: number[] = [];
-      for (let y = Math.floor(py - 4); y <= py + 4; y++) for (let x = Math.floor(px - 4); x <= px + 4; x++) {
-        const dx = x + 0.5 - px, dy = y + 0.5 - py;
-        if (Math.abs(dx * ux + dy * uy) > 0.85 || Math.abs(-dx * uy + dy * ux) > 3.2) continue;
-        if (SOLID![y * MAP_W + x] || ell(x + 0.5, y + 0.5) < 1.25) continue;
-        tiles.push(y * MAP_W + x);
-      }
-      if (!tiles.length || out.some((d) => d.tiles.some((k) => tiles.includes(k)))) return;
-      out.push({ id: `gate_${f.id}_${ci}_${a === ci ? b : a}`, x: px, y: py, tiles, floor: f.id });
+    const A = f.chambers[a], B = f.chambers[b];
+    const ax = f.x + A.x, ay = f.y + A.y, bx = f.x + B.x, by = f.y + B.y;
+    const mx = (ax + bx) / 2 - (by - ay) * bend * 0.12, my = (ay + by) / 2 + (bx - ax) * bend * 0.12;
+    const at = (t: number) => { const u = 1 - t; return [u * u * ax + 2 * u * t * mx + t * t * bx, u * u * ay + 2 * u * t * my + t * t * by]; };
+    // walk out of the chamber along the tunnel until clear of its ragged rim
+    let t = a === ci ? 0 : 1; const dt = a === ci ? 0.005 : -0.005;
+    while (t >= 0 && t <= 1 && ell(at(t)[0], at(t)[1]) < (C.secret ? 1.35 : 1.5)) t += dt;
+    const [px, py] = at(t), [qx, qy] = at(t + dt);
+    const len = Math.hypot(qx - px, qy - py) || 1, ux = (qx - px) / len, uy = (qy - py) / len;
+    const tiles: number[] = [];
+    for (let y = Math.floor(py - 4); y <= py + 4; y++) for (let x = Math.floor(px - 4); x <= px + 4; x++) {
+      const dx = x + 0.5 - px, dy = y + 0.5 - py;
+      if (Math.abs(dx * ux + dy * uy) > 0.85 || Math.abs(-dx * uy + dy * ux) > 3.2) continue;
+      if (SOLID![y * MAP_W + x] || ell(x + 0.5, y + 0.5) < (C.secret ? 1.05 : 1.25)) continue;
+      tiles.push(y * MAP_W + x);
+    }
+    if (!tiles.length || out.some((d) => d.tiles.some((k) => tiles.includes(k)))) return;
+    const gx = -uy, gy = ux; // across the tunnel
+    const gate = kind === "crack" ? tiles : tiles.filter((k) => Math.abs(((k % MAP_W) + 0.5 - px) * gx + (((k / MAP_W) | 0) + 0.5 - py) * gy) <= 0.8);
+    out.push({ id, x: px, y: py, tiles, gate, floor: f.id, ax: gx, ay: gy, kind, ...(oneWay ? { from: { x: cx, y: cy } } : {}) });
+  };
+  for (const f of FLOORS) {
+    for (const ci of DOOR_ROOMS[f.id] ?? []) for (const [a, b, bend] of f.tunnels) {
+      if (a !== ci && b !== ci) continue;
+      const other = a === ci ? b : a;
+      if (out.some((d) => d.id === `gate_${f.id}_${other}_${ci}`)) continue; // one gate per tunnel
+      place(f, ci, a, b, bend, BARRED.has(`${f.id}_${ci}`) ? "bars" : "door", `gate_${f.id}_${ci}_${other}`, false);
+    }
+    // the secret rooms: the short tunnel in is walled up with cracked rock at the secret end
+    f.chambers.forEach((c, ci) => {
+      if (!c.secret) return;
+      const tun = f.tunnels.find(([a, b]) => a === ci || b === ci);
+      if (tun) place(f, ci, tun[0], tun[1], tun[2], "crack", `crack_${f.id}_${ci}`, false);
     });
+    // shortcuts: a barred gate at the deep end, worked only from there
+    for (const [fl, from, to] of SHORTCUTS) {
+      if (fl !== f.id) continue;
+      const tun = f.tunnels.find(([a, b]) => (a === from && b === to) || (a === to && b === from));
+      if (tun) place(f, from, tun[0], tun[1], tun[2], "bars", `short_${f.id}_${from}_${to}`, true);
+    }
   }
   return out;
+}
+/** True when a hero at (px, py) may work door d (a shortcut only from its own side). */
+export function doorWorkable(d: Door, px: number, py: number): boolean {
+  if (!d.from) return true;
+  const tx = px / TILE, ty = py / TILE;
+  return Math.hypot(tx - d.from.x, ty - d.from.y) < Math.hypot(d.x - d.from.x, d.y - d.from.y);
 }
 export const DOORS: Door[] = placeDoors();
 for (const d of DOORS) for (const k of d.tiles) SOLID[k] = 1;
 /** Open or shut a gate (server and client keep the same SOLID). */
 export function setDoorOpen(id: string, open: boolean) {
   const d = DOORS.find((g) => g.id === id);
-  if (d) for (const k of d.tiles) SOLID![k] = open ? 0 : 1;
+  if (d) for (const k of d.gate) SOLID![k] = open ? 0 : 1;
 }
 export const doorById = (id: unknown) => DOORS.find((d) => d.id === id);
-/** Distance in tiles from (px,py) in px to the nearest tile of gate d. */
+/** Distance in tiles from (px,py) in px to the nearest tile of door d's gate. */
 export function doorDist(d: Door, px: number, py: number): number {
   const tx = px / TILE, ty = py / TILE;
   let best = Infinity;
-  for (const k of d.tiles) best = Math.min(best, Math.hypot((k % MAP_W) + 0.5 - tx, ((k / MAP_W) | 0) + 0.5 - ty));
+  for (const k of d.gate) best = Math.min(best, Math.hypot((k % MAP_W) + 0.5 - tx, ((k / MAP_W) | 0) + 0.5 - ty));
   return best;
 }
 /** Water tiles where a bridge span has collapsed (the broken bridges to the Old Ruins and the Old Watchtower). */
@@ -1039,7 +1109,7 @@ function buildSignpost(p: { x: number; y: number; to: string[] }): Signpost {
   const ring: { k: number; a: number }[] = [];
   for (let j = -5; j <= 5; j++) for (let i = -5; i <= 5; i++) {
     const x = Math.floor(cx) + i, y = Math.floor(cy) + j, k = y * MAP_W + x;
-    if (x < 0 || y < 0 || x >= MAP_W || y >= MAP_H || !roads.has(k)) continue;
+    if (x < 0 || y < 0 || x >= MAP_W || y >= FULL_H || !roads.has(k)) continue;
     const d = dist(k);
     if (d >= 2.5 && d <= 4) ring.push({ k, a: Math.atan2((y + 0.5) - cy, (x + 0.5) - cx) });
   }
@@ -1136,7 +1206,9 @@ export function randomSpawn(): { x: number; y: number } {
 export function isSafeZone(px: number, py: number): boolean {
   const tx = Math.floor(px / TILE), ty = Math.floor(py / TILE);
   const z = SAFE_ZONE;
-  return tx >= z.x && ty >= z.y && tx < z.x + z.w && ty < z.y + z.h;
+  if (tx >= z.x && ty >= z.y && tx < z.x + z.w && ty < z.y + z.h) return true;
+  const k = DESERT_SAFE; // Act 2: Kel Ashar's market
+  return tx >= k.x && ty >= k.y && tx < k.x + k.w && ty < k.y + k.h;
 }
 
 /** Random walkable point outside the village palisade, where monsters live. */

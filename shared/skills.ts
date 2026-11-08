@@ -140,7 +140,15 @@ export interface BuffDef {
   perStack?: number; // +% damage per stack spent (with SkillDef.consume)
   /** Bloodline (Thirst): group allies within this many px get the same buff with half its lifesteal. */
   group?: number;
+  /**
+   * Vampire shapeshift (Bat Form, Wolf Form): the hero takes this beast's shape while the buff lasts (the client draws
+   * the beast instead of the hero). Skills of the form's own school keep the shape; any other skill turns them back
+   * first, and pressing the form again ends it.
+   */
+  form?: BeastForm;
 }
+
+export type BeastForm = "bat" | "wolf";
 
 export interface CounterDef {
   ms: number; // stance length
@@ -165,6 +173,8 @@ export interface SkillDef {
   maxRank?: number; // ranks it can take (default MAX_RANK); the wizard's spells go to 6 (Murat 2026-11-07)
   /** What each rank past the first adds besides RANK_POWER / RANK_TIME, for the tree sheet ("+2 bats"). */
   rankStep?: string;
+  /** Hero level needed for each rank past the third (index 0 = rank 4), e.g. [30, 40]: Act 2 mastery ranks. */
+  rankLevels?: number[];
   branch: 0 | 1 | 2; row: 0 | 1 | 2 | 3 | 4;
   req: number; // hero level needed (filled from TREE)
   parent?: string; // skill that must be learned first (none = root of its branch)
@@ -179,7 +189,7 @@ export interface SkillDef {
     kill?: BuffDef;
   };
   cd?: number; // ms
-  cost?: number; // Stamina (physical skills)
+  cost?: number; // Heat (physical skills, shared/overload.ts)
   mana?: number; // Mana (spells): shared/mana.ts
   /** Blood magic (vampire): also costs this % of max HP. Can't be cast with that little HP left, and never kills. */
   blood?: number;
@@ -541,13 +551,13 @@ const S: Record<ClassKind, SkillDef[]> = <Record<ClassKind, SkillDef[]>><unknown
     // Blood: blood magic (Magic). Rebuilt from Murat's picks (2026-11-07): Lance, Ward, Transfusion, Rise Again, Hemorrhage, Blood Rain
     { id: "v_link", name: "Blood Link", type: "Attack", branch: 0, row: 0, style: "blood", cd: 7000, mana: 12, target: "dir",
       desc: "Bind yourself to the foe nearest your aim with a cord of blood for 3s and pump their life into you: it hurts them, slows them and heals you for half of it. Aim at a group ally instead and the cord carries your own blood to them: you give a little of your life each pulse and they heal half as much again. The cord snaps if they get too far away.",
-      field: { kind: "bloodlink", r: 0, ms: 3000, tickMs: 300, follow: true, dmg: 7, drain: 50, slowMs: 400, link: { range: 120, breakAt: 170, give: 2 } } },
+      field: { kind: "bloodlink", r: 0, ms: 3000, tickMs: 300, follow: true, dmg: 6, drain: 50, slowMs: 400, link: { range: 120, breakAt: 170, give: 2 } } },
     { id: "v_lance", name: "Blood Lance", type: "Attack", branch: 0, row: 1, style: "blood", cd: 5000, mana: 14, blood: 3,
       desc: "Draw a spear of your own blood and hurl it: it runs through foes in a line (three at rank 1, one more each rank) and leaves each of them bleeding.",
-      shots: { kind: "bloodlance", speed: 330, range: 175, radius: 4, dmg: 26, pierce: 2, perRank: { pierce: 1 }, burn: [6, 2500], bleed: "drip", drain: 10, kb: 0.5 } },
+      shots: { kind: "bloodlance", speed: 330, range: 175, radius: 4, dmg: 18, pierce: 2, perRank: { pierce: 1 }, burn: [6, 2500], bleed: "drip", drain: 10, kb: 0.5 } },
     { id: "v_boil", name: "Boil Blood", type: "Attack", branch: 0, row: 1, style: "blood", cd: 6000, mana: 16, blood: 4,
       desc: "Make the blood of everyone at the spot boil: they swell with bubbling blood, are hurt and bleed for 3s.",
-      areas: [{ r: 30, ahead: 44, dmg: 22, burn: [8, 3000], bleed: "boil", kb: 0.4, look: "burst" }] },
+      areas: [{ r: 30, ahead: 44, dmg: 16, burn: [8, 3000], bleed: "boil", kb: 0.4, look: "burst" }] },
     { id: "v_pact", name: "Blood Pact", type: "Passive", branch: 0, row: 2, style: "blood",
       passive: { effect: "skill", perRank: 7, blood: 2, rise: { hp: 30, cdMs: 180000 } },
       desc: "An old oath sealed in blood: all your skills hit harder, but every skill you cast also costs 2% of your life. Once every 3 minutes, a killing blow leaves you standing in a pool of blood at 30% life instead." },
@@ -556,20 +566,19 @@ const S: Record<ClassKind, SkillDef[]> = <Record<ClassKind, SkillDef[]>><unknown
       field: { kind: "bloodward", r: 16, ms: 4000, tickMs: 1000, follow: true }, buff: { ms: 4000, armor: 40, immune: true } },
     { id: "v_exsang", name: "Exsanguinate", type: "Buildup", branch: 0, row: 3, style: "blood", cd: 12000, mana: 20, consume: true,
       desc: "Spend your Blood: tear the blood out of everyone in a wide circle around you in streams that pour into you, pull them in and drink a quarter of it. Every bleed on them bursts at once (Hemorrhage). Each Blood stack adds 25%.",
-      areas: [{ r: 110, dmg: 32, drain: 25, pull: 16, kb: 0, look: "bloodrite", siphon: true, rupture: 1 }] },
+      areas: [{ r: 110, dmg: 22, drain: 25, pull: 16, kb: 0, look: "bloodrite", siphon: true, rupture: 1 }] },
     { id: "v_tide", name: "Crimson Tide", type: "Ultimate", branch: 0, row: 4, style: "blood", cd: 20000, mana: 35, blood: 8, chargeMs: 400,
-      desc: "Open your veins: a wave of blood spikes rolls out ahead, slowing everything it hits and feeding you 10% of the damage, then a red rain falls around you and every drop that lands feeds you too.",
-      areas: [{ r: 24, ahead: 22, dmg: 38, drain: 10, slowMs: 700, kb: 1.2, waves: 6, everyMs: 100, line: 22, look: "spikes" },
-        { r: 20, dmg: 12, drain: 15, kb: 0, waves: 10, everyMs: 120, delayMs: 500, scatter: 80, look: "rain" }] },
+      desc: "Open your veins: a wave of blood spikes rolls out ahead, slowing everything it hits and feeding you 15% of the damage.",
+      areas: [{ r: 24, ahead: 22, dmg: 30, drain: 15, slowMs: 700, kb: 1.2, waves: 6, everyMs: 100, line: 22, look: "spikes" }] },
 
     // Night: mist, bats, rats and the dark (Mana)
     { id: "v_mist", name: "Mist Form", type: "Movement", branch: 1, row: 0, style: "shadow", cd: 3500, cost: 20,
       desc: "Dissolve into mist and a flutter of bats and drift far ahead, over water, fences and walls, untouchable for a moment. The mist you leave behind chills whoever stands in it.",
       move: { kind: "blink", dist: 110, invulnMs: 450 }, areas: [{ r: 24, dmg: 10, slowMs: 900, atStart: true, look: "smoke" }] },
     { id: "v_bats", name: "Bat Swarm", type: "Attack", branch: 1, row: 1, style: "shadow", cd: 4000, mana: 14,
-      desc: "A swarm of bats pours out of your cloak and spreads ahead, biting whatever it reaches and bringing a little blood back to you: 6 bats, 2 more each rank. More bats stay behind and whirl round you for 3s as a living shield: they bite anyone close and you take 10% less damage.",
-      shots: { kind: "bat", n: 6, perRank: { n: 2 }, spread: 26, jitter: { speed: 0.35, deg: 9, range: 0.25 }, speed: 170, range: 120, radius: 3, dmg: 10, drain: 10, kb: 0.1 },
-      field: { kind: "batring", r: 26, ms: 3000, tickMs: 500, follow: true, dmg: 7, drain: 20 }, buff: { ms: 3000, armor: 10 } },
+      desc: "A swarm of bats pours out of your cloak and spreads ahead, biting whatever it reaches and bringing a little blood back to you: 6 bats, 2 more each rank. More bats stay behind and whirl round you for 3s as a living shield: they bite anyone close and you take 15% less damage.",
+      shots: { kind: "bat", n: 6, perRank: { n: 2 }, spread: 26, jitter: { speed: 0.35, deg: 9, range: 0.25 }, speed: 170, range: 120, radius: 3, dmg: 12, drain: 15, kb: 0.1 },
+      field: { kind: "batring", r: 26, ms: 3000, tickMs: 500, follow: true, dmg: 9, drain: 30 }, buff: { ms: 3000, armor: 15 } },
     { id: "v_gaze", name: "Charm", type: "Attack", branch: 1, row: 2, style: "shadow", cd: 16000, mana: 18, target: "dir",
       desc: "Catch the eye of the foe nearest your aim. A monster falls under your spell and fights at your side for 5s, then wakes up. Heroes, bosses and elites are too strong-willed: they falter instead, dazed and weakened for 2s.",
       charm: { range: 100, ms: 5000, daze: 2000 } },
@@ -577,18 +586,22 @@ const S: Record<ClassKind, SkillDef[]> = <Record<ClassKind, SkillDef[]>><unknown
       desc: "The dark is yours. At night, and inside a Nightfall, you hit harder, heal from the damage you deal and move faster." },
     { id: "v_rats", name: "Rat Plague", type: "Attack", branch: 1, row: 3, style: "poison", cd: 9000, mana: 20,
       desc: "A seething wave of plague rats boils out of the dark and swarms slowly ahead, a wide squirming mass: they bite through everything in their way, slowing it and leaving it sick for 3s. 10 rats, 3 more each rank.",
-      shots: { kind: "rat", n: 10, perRank: { n: 3 }, spread: 40, jitter: { speed: 0.3, deg: 6 }, speed: 70, range: 150, radius: 6, dmg: 10, pierce: 3, burn: [5, 3000], slowMs: 900, kb: 0 } },
+      shots: { kind: "rat", n: 10, perRank: { n: 3 }, spread: 40, jitter: { speed: 0.3, deg: 6 }, speed: 70, range: 150, radius: 6, dmg: 13, pierce: 3, burn: [5, 3000], slowMs: 900, kb: 0 } },
     { id: "v_soil", name: "Native Soil", type: "Aura", branch: 1, row: 3, style: "shadow", cd: 20000, mana: 22, target: "self",
       desc: "Spill a box of your grave earth at your feet for 8s: while you stand on it you heal quickly, and it clings to the feet of your enemies.",
-      field: { kind: "gravesoil", r: 40, ms: 8000, tickMs: 500, heal: 1.5, slowMs: 500 } },
+      field: { kind: "gravesoil", r: 40, ms: 8000, tickMs: 500, heal: 2, slowMs: 500 } },
+    // Murat 2026-11-08: the vampire can take the shape of a bat or a wolf
+    { id: "v_batform", name: "Bat Form", type: "Movement", branch: 1, row: 3, style: "shadow", cd: 14000, mana: 20, target: "self",
+      desc: "Shrink into a great black bat for 6s: you flit about 60% faster, are hard to hit (25% less damage taken), nothing slows or knocks you about, and your bites drink 6% of the damage. You can still call bats, rats and mist (Night skills); any other skill, or this one again, gives you your own shape back.",
+      buff: { ms: 6000, form: "bat", speed: 60, armor: 25, immune: true, lifesteal: 6 } },
     { id: "v_nightfall", name: "Nightfall", type: "Ultimate", branch: 1, row: 4, style: "shadow", cd: 24000, mana: 40, chargeMs: 500,
       desc: "Call down a starless night and a cold fog on the land around you for 10s: it is night there (Child of the Night wakes), the fog slows every enemy inside, weakens them and feeds you, and for 5s you hunt faster, healing on every hit.",
-      field: { kind: "nightfall", r: 96, ms: 10000, tickMs: 500, dmg: 8, drain: 15, weakMs: 1200, slowMs: 1000, night: true }, buff: { ms: 5000, lifesteal: 8, speed: 15 } },
+      field: { kind: "nightfall", r: 96, ms: 10000, tickMs: 500, dmg: 14, drain: 25, weakMs: 1200, slowMs: 1000, night: true }, buff: { ms: 5000, lifesteal: 12, speed: 15 } },
 
     // Fang: the blade and the hunt (Strength, Stamina)
     { id: "v_rend", name: "Crimson Slash", type: "Attack", branch: 2, row: 0, style: "blood", windMs: 60, cost: 30,
       desc: "A quick, cruel slash: the wound bleeds, and you drink 10% of the damage.",
-      areas: [{ r: 26, ahead: 12, wpn: 1.5, burn: [5, 2000], drain: 10, kb: 1.2, look: "slash" }] },
+      areas: [{ r: 26, ahead: 12, wpn: 1.2, burn: [5, 2000], drain: 10, kb: 1.2, look: "slash" }] },
     { id: "v_thirst", name: "Thirst", type: "Enchant", branch: 2, row: 1, style: "blood", cd: 11000, cost: 15, mana: 10,
       desc: "Your blade thirsts for 7s: every hit, your skills too, makes them bleed, and you heal 8% of the damage you deal. Your bloodline shares it: group allies near you heal 4% of theirs.",
       buff: { ms: 7000, lifesteal: 8, onHit: { burn: [3, 2000] }, group: 140 } },
@@ -597,7 +610,10 @@ const S: Record<ClassKind, SkillDef[]> = <Record<ClassKind, SkillDef[]>><unknown
       desc: "The hunger never sleeps: heal part of all the damage you deal. Every kill sends a rush of bloodlust through you: faster steps and faster blows for 3s." },
     { id: "v_pounce", name: "Night Pounce", type: "Attack", branch: 2, row: 3, style: "shadow", windMs: 70, cd: 10000, cost: 30,
       desc: "Melt into the shadows and step out right behind the nearest foe, then sink your teeth in: a heavy blow that stuns, and you drink 15% of it.",
-      move: { kind: "behind", dist: 80, invulnMs: 250 }, areas: [{ r: 22, ahead: 8, wpn: 2.2, stunMs: 350, drain: 15, kb: 1, look: "slash" }] },
+      move: { kind: "behind", dist: 80, invulnMs: 250 }, areas: [{ r: 22, ahead: 8, wpn: 2, stunMs: 350, drain: 15, kb: 1, look: "slash" }] },
+    { id: "v_wolfform", name: "Wolf Form", type: "Buildup", branch: 2, row: 3, style: "blood", cd: 22000, cost: 25, mana: 10, chargeMs: 250, target: "self",
+      desc: "Throw back your head and howl as you become a huge black wolf for 10s: you hit 20% harder and 20% faster, run 20% faster, shrug off 10% of all damage, and every bite makes them bleed and heals you 8% of it. You can still rend, pounce, devour and bite (Fang skills); any other skill, or this one again, gives you your own shape back.",
+      buff: { ms: 10000, form: "wolf", dmg: 20, atkspd: 20, speed: 20, armor: 10, lifesteal: 8, onHit: { burn: [4, 2000], bleed: "drip" } } },
     { id: "v_brides", name: "The Brides", type: "Ultimate", branch: 2, row: 4, style: "shadow", cd: 35000, mana: 35, chargeMs: 300, target: "self",
       desc: "Call your pale brides out of the night: three of them at rank 1, one more each rank. For 25s they stay at your side and throw themselves at every foe near you, clawing in a frenzy and drinking: part of the blood they draw comes back to you.",
       brides: { n: 3, perRank: 1, ms: 25000, drain: 20 } },
@@ -728,12 +744,12 @@ const TREE: Record<string, Shape> = {
   // which leads on to the Ward (dead end) and the Crimson Tide
   v_link: [1, undefined, ["mag", 2]], v_lance: [3, "v_link", ["mag", 2]], v_boil: [4, "v_link", ["mag", 2]], v_exsang: [11, "v_boil", ["mag", 2.5]],
   v_pact: [7, "v_link"], v_ward: [12, "v_pact", ["sta", 2]], v_tide: [22, "v_pact", ["mag", 2.5]],
-  // Vampire · Night: Charm hangs off the mist and leads to the passive and the soil (dead end); the bats grow into the rats and Nightfall
+  // Vampire · Night: Charm hangs off the mist and leads to the passive and the soil (dead end); the bats grow into the rats and Nightfall, and into Bat Form (dead end)
   v_mist: [1], v_gaze: [6, "v_mist"], v_nightborn: [8, "v_gaze"], v_soil: [13, "v_nightborn"], v_bats: [4, "v_mist", ["mag", 2]],
-  v_rats: [10, "v_bats", ["mag", 2]], v_nightfall: [21, "v_rats", ["mag", 2.5]],
-  // Vampire · Fang: Thirst leads to the Hunger (dead end); the slash grows into the Pounce and the Brides; Devour, then Bite
+  v_rats: [10, "v_bats", ["mag", 2]], v_nightfall: [21, "v_rats", ["mag", 2.5]], v_batform: [12, "v_bats"],
+  // Vampire · Fang: Thirst leads to the Hunger (dead end); the slash grows into the Pounce, which leads to the Brides and Wolf Form (dead end); Devour, then Bite
   v_rend: [1, undefined, ["str", 2]], v_thirst: [3, "v_rend"], v_hunger: [8, "v_thirst"], v_pounce: [9, "v_rend", ["str", 2]],
-  v_brides: [20, "v_pounce", ["mag", 2.5]],
+  v_brides: [20, "v_pounce", ["mag", 2.5]], v_wolfform: [14, "v_pounce"],
   v_devour: [4, "v_rend", ["str", 2]], v_bite: [7, "v_devour", ["mag", 2]],
 };
 /**
@@ -757,14 +773,17 @@ const SYNERGY: Record<string, { from: string; pct: number }[]> = {
 for (const sk of S.wizard) sk.maxRank = 6;
 /**
  * Vampire ranks (Murat 2026-11-07: each skill takes as many points as give a clear step). Skills whose ranks add
- * something you can count go to 5, ultimates and the utility skills stay at 3. Steps besides +power / longer effects.
+ * something you can count go to 5, the utility skills stay at 3. Steps besides +power / longer effects.
+ * Level 50 review (Murat 2026-11-08): ranks 4 and 5 are mastery ranks earned in Act 2 (VAMP_MASTERY: Lv 30 and 40),
+ * so the tree keeps growing past Act 1; the Blood and Night ultimates go to 5 as well.
  */
+export const VAMP_MASTERY = [30, 40];
 const VAMP_RANKS: Record<string, [number, string?]> = {
-  v_link: [5], v_lance: [5, "pierces one more foe"], v_boil: [3], v_pact: [5], v_ward: [3], v_exsang: [5], v_tide: [3],
-  v_mist: [3], v_bats: [5, "+2 bats"], v_gaze: [3, "charm lasts longer"], v_nightborn: [5], v_rats: [5, "+3 rats"], v_soil: [3], v_nightfall: [3],
-  v_rend: [5], v_thirst: [3], v_hunger: [5], v_pounce: [3], v_devour: [3, "eats foes with 5% more life left"], v_bite: [3, "10% more chance to turn, +1 thrall at rank 2"], v_brides: [3, "+1 bride"],
+  v_link: [5], v_lance: [5, "pierces one more foe"], v_boil: [3], v_pact: [5], v_ward: [3], v_exsang: [5], v_tide: [5],
+  v_mist: [3], v_bats: [5, "+2 bats"], v_gaze: [3, "charm lasts longer"], v_nightborn: [5], v_rats: [5, "+3 rats"], v_soil: [3], v_nightfall: [5], v_batform: [3],
+  v_rend: [5], v_thirst: [3], v_hunger: [5], v_pounce: [3], v_devour: [3, "eats foes with 5% more life left"], v_bite: [3, "10% more chance to turn, +1 thrall at rank 2"], v_brides: [3, "+1 bride"], v_wolfform: [3],
 };
-for (const sk of S.vampire) { const v = VAMP_RANKS[sk.id]; if (v) { sk.maxRank = v[0]; sk.rankStep = v[1]; } }
+for (const sk of S.vampire) { const v = VAMP_RANKS[sk.id]; if (v) { sk.maxRank = v[0]; sk.rankStep = v[1]; if (v[0] > 3) sk.rankLevels = VAMP_MASTERY; } }
 for (const list of Object.values(S)) for (const sk of list) {
   sk.needs = NEEDS[sk.id];
   sk.requires = REQUIRES[sk.id];
@@ -897,11 +916,21 @@ export type LockReason = "" | "max" | "level" | "above" | "requires" | "points";
 export function lockReason(cls: ClassKind, level: number, r: Ranks, id: string): LockReason {
   const n = skillOf(cls, id);
   if (!n || n.cantrip || rankOf(r, id) >= maxRank(n)) return "max";
-  if (level < n.req) return "level";
+  if (level < n.req || level < nextRankLevel(n, rankOf(r, id))) return "level";
   if (n.parent && rankOf(r, n.parent) < 1) return "above";
   if (n.requires?.some((q) => rankOf(r, q) < 1)) return "requires";
   if (spentPoints(cls, r) >= talentPoints(level)) return "points";
   return "";
+}
+/** Hero level the next rank of `s` needs, when it has `rank` ranks now (its unlock level for rank 1). */
+export function nextRankLevel(s: SkillDef, rank: number): number {
+  return rank < 3 ? s.req : Math.max(s.req, s.rankLevels?.[rank - 3] ?? 0);
+}
+/** Ranks of `s` a hero of `level` may hold (the mastery ranks wait for their level). */
+export function rankCap(s: SkillDef, level: number): number {
+  let r = 0;
+  while (r < maxRank(s) && level >= nextRankLevel(s, r)) r++;
+  return r;
 }
 export const canLearn = (cls: ClassKind, level: number, r: Ranks, id: string) => lockReason(cls, level, r, id) === "";
 
@@ -951,7 +980,7 @@ export function cleanRanks(cls: ClassKind, level: number, saved: Record<string, 
   for (const [from, to] of Object.entries(REPLACED_SKILLS)) if (saved[from] && !saved[to]) saved[to] = saved[from];
   for (const s of S[cls]) {
     const v = saved[s.id];
-    if (typeof v === "number" && v > 0) out[s.id] = Math.min(maxRank(s), Math.floor(v));
+    if (typeof v === "number" && v > 0) out[s.id] = Math.min(rankCap(s, level) || 1, Math.floor(v));
   }
   // Learn order must still be valid: drop skills whose parent is missing or that need a higher level (S is in tree order)
   for (const s of S[cls]) if (out[s.id] && (level < s.req || (s.parent && !out[s.parent]) || s.requires?.some((q) => !out[q]))) delete out[s.id];

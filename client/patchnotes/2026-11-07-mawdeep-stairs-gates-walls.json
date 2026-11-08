@@ -1,0 +1,12 @@
+{
+  "date": "2026-11-07",
+  "patch": 167,
+  "title": "Mawdeep: stairs, gates and a way out",
+  "changes": [
+    "The ways down are now stairwells you can't miss: steps going down into a dark arch with a glow from below, and two lit torches at the top of each.",
+    "Stairs and ropes show on the minimap and the world map, with where they lead.",
+    "The lair gates are now real portcullis gates between heavy posts. They wind up into the lintel when opened and drop back down when shut.",
+    "Cave walls now only show their rock face on the side facing you. Beyond the walls is just the dark rock, with no blocky border.",
+    "A rope hangs down into the Hide-Mother's den: climb it to get straight back to the woods."
+  ]
+}

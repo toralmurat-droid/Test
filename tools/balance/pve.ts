@@ -1,6 +1,6 @@
 /**
  * PvE balance simulator: bot heroes play the first zone (Lv 1-30) against its monsters and bosses.
- * Run: npx tsx tools/balance/pve.ts [runsPerCase] [--bosses] [--zones]
+ * Run: npx tsx tools/balance/pve.ts [runsPerCase] [--bosses] [--zones] [--act2] [--class=vampire] [--build=0|1|2] [--boss=king]
  *
  * It reuses the PvP simulator (tools/balance/duel.ts): the same hero bot, skill engine, builds (rushing one branch),
  * stat points and gear by level. The other side is a monster with its real numbers (shared/constants.ts MOBS, level
@@ -12,15 +12,16 @@
  * Monsters raised or called mid-fight (Necromancer skeletons, Chief reinforcements, the King's servants) are left out,
  * so boss win rates read a bit high.
  */
+import { NIGHT_RAID } from "../../shared/raiders";
 import { ACTIVE_CLASSES, ClassKind } from "../../shared/classes";
 import { BANDIT_AI, BANDIT_ROLES, CHIEF } from "../../shared/bandits";
-import { BLOB_AI, DEMON, HOLLOW_KING, MOB_ATTACK_RANGE, MOB_LEVEL, MOBS, MobKind, mobScale, MOTHER, SKELETON_AI, SKELETON_BOW, SKELETON_WEAPONS, SkeletonWeapon, REGEN_DELAY_MS, REGEN_PER_STA } from "../../shared/constants";
+import { BEAST, BLOB_AI, DEMON, HOLLOW_KING, MOB_ATTACK_RANGE, MOB_LEVEL, MOBS, MobKind, mobScale, MOTHER, SKELETON_AI, SKELETON_BOW, SKELETON_WEAPONS, SkeletonWeapon, SUNWRIGHT, REGEN_DELAY_MS, REGEN_PER_STA } from "../../shared/constants";
 import { MOB_COMBAT, mobBody, POISE, poiseSpeed } from "../../shared/combat";
 import { POTION_COOLDOWN_MS, POTION_SIZES } from "../../shared/potions";
 import { activeSkills, SKILLS } from "../../shared/skills";
 import { canPay, manaRegen, skillCost } from "../../shared/mana";
 import { castSkill, cooldownLeft } from "../../shared/skillEngine";
-import { staminaRegen, ENERGY } from "../../shared/classes";
+import { coolHeat, isOverheated } from "../../shared/overload";
 import { Duel, F, GolemF, make } from "./duel";
 import { SUMMON } from "../../shared/summons";
 
@@ -38,6 +39,7 @@ interface MobSpec {
   lunge?: { min: number; max: number; every: number; mult: number }; // warrior blob charge / cutthroat dash: a hard blow on arrival
   specials: Special[];
   enrage?: { hpBelow: number; speed: number; cd: number };
+  ccImmune?: boolean; // never stunned or slowed (the Night Raiders)
 }
 
 export function mobSpec(kind: MobKind, level: number, opt: { weapon?: string; hpMult?: number } = {}): MobSpec {
@@ -59,11 +61,17 @@ export function mobSpec(kind: MobKind, level: number, opt: { weapon?: string; hp
   if (kind === "skeletonmage") ranged(SKELETON_AI.mage.range, SKELETON_AI.mage.keepAway, SKELETON_AI.mage.shotSpeed, 3);
   if (kind === "skeleton" && opt.weapon === "bow") { ranged(SKELETON_WEAPONS.bow.range, SKELETON_BOW.keepAway, SKELETON_BOW.shotSpeed, 3); }
   if (kind === "bandit" && opt.weapon === "archer") ranged(BANDIT_AI.bow.range, BANDIT_AI.bow.keepAway, BANDIT_AI.bow.shotSpeed, 3);
+  // Act 2 (server/TownRoom.ts RANGED / NOMAD_BOW, BEAST gore + stomp)
+  if (kind === "veiled") ranged(140, 72, 160, 3, 1.1);
+  if (kind === "nomad" && opt.weapon === "folk") ranged(125, 60, 175, 3, 0.85);
+  if (kind === "scorpion") spec.lunge = { min: BEAST.gore.min, max: BEAST.gore.max, every: BEAST.gore.cooldownMs, mult: BEAST.gore.dmgMult };
+  if (kind === "camelfolk") { const S = BEAST.stomp; spec.specials.push({ name: "Stomp", every: S.cooldownMs, windup: S.windupMs, min: 0, max: S.range, radius: S.radius, mult: S.dmgMult, at: "self", kb: S.knockback, stunMs: S.stunMs }); }
   if (kind === "necromancer") {
     const N = SKELETON_AI.necro;
     ranged(N.range, N.keepAway, N.shotSpeed, N.shotRadius, N.boltMult);
     spec.specials.push({ name: "Death Circle", every: N.circle.cooldownMs, windup: N.circle.windupMs, min: 0, max: N.circle.range, radius: N.circle.radius, mult: N.circle.dmgMult, at: "target" });
   }
+  if (kind === "nightraider") { const C = NIGHT_RAID.charge; spec.lunge = { min: C.min, max: C.max, every: C.cooldownMs, mult: C.mult }; spec.ccImmune = true; } // the ride-down; no stun or slow holds them
   if (kind === "warriorblob") spec.lunge = { min: BLOB_AI.warrior.chargeMin, max: BLOB_AI.warrior.chargeMax, every: BLOB_AI.warrior.cooldownMs, mult: 1 };
   if (kind === "bandit" && (opt.weapon ?? "cutthroat") === "cutthroat") spec.lunge = { min: BANDIT_AI.dash.min, max: BANDIT_AI.dash.max, every: BANDIT_AI.dash.cooldownMs, mult: BANDIT_AI.dash.dmgMult };
   if (kind === "bandit" && opt.weapon === "brute") {
@@ -91,6 +99,15 @@ export function mobSpec(kind: MobKind, level: number, opt: { weapon?: string; hp
     spec.specials.push({ name: "Gloam Pools", every: K.pools.cooldownMs, windup: K.pools.windupMs, min: 0, max: K.pools.range, radius: K.pools.radius, mult: K.pools.dmgMult, at: "target", slowMs: K.pools.slowMs });
     spec.specials.push({ name: "Crown's Wrath", every: K.wrath.cooldownMs, windup: K.wrath.windupMs, min: 0, max: K.wrath.radius, radius: K.wrath.radius, inner: K.wrath.inner, mult: K.wrath.dmgMult, at: "self", hpBelow: K.wrath.hpFrac, first: 0 });
     spec.enrage = { hpBelow: K.wrath.hpFrac, speed: K.wrath.speed, cd: K.wrath.cooldown };
+  }
+  if (kind === "sunwright") {
+    // Act 2's final boss (BEAST beam/flare/sunfall/zenith, SUNWRIGHT): Zenith counted with one adept of her choir alive
+    const L = BEAST.beam, Fl = BEAST.flare, S = BEAST.sunfall, Z = BEAST.zenith, W = SUNWRIGHT;
+    spec.specials.push({ name: "Sunlance", every: L.cooldownMs, windup: L.windupMs, min: L.min, max: L.max, radius: L.width / 2 + 6, mult: L.dmgMult, at: "target" });
+    spec.specials.push({ name: "Flare", every: Fl.cooldownMs, windup: Fl.windupMs, min: 0, max: Fl.range, radius: Fl.radius, mult: Fl.dmgMult, at: "self", kb: Fl.knockback });
+    spec.specials.push({ name: "Sunfall", every: S.cooldownMs, windup: S.windupMs, min: 0, max: S.range, radius: S.radius, mult: S.dmgMult, at: "target" });
+    spec.specials.push({ name: "Zenith", every: Z.everyMs, windup: Z.windupMs, min: 0, max: Z.radius, radius: Z.radius, inner: Z.inner, mult: Z.dmgMult * (1 + Z.perAdept), at: "self", hpBelow: Z.hpFrac, first: 0 });
+    spec.enrage = { hpBelow: W.phase[1], speed: W.sun.speed, cd: W.sun.cooldown };
   }
   return spec;
 }
@@ -142,7 +159,7 @@ export class PveDuel extends Duel {
   speedOf(f: F): number {
     if (!(f instanceof MobF)) return super.speedOf(f);
     if (f.broken) return f.spec.speed * POISE.fleeSpeed;
-    return f.spec.speed * (f.enraged ? f.spec.enrage!.speed : 1) * (this.now < f.slowUntil ? 0.5 : 1) * (this.now < f.lungeUntil ? 3 : 1);
+    return f.spec.speed * (f.enraged ? f.spec.enrage!.speed : 1) * (this.now < f.slowUntil && !f.spec.ccImmune ? 0.5 : 1) * (this.now < f.lungeUntil ? 3 : 1);
   }
 
   brain(f: F): number {
@@ -166,12 +183,12 @@ export class PveDuel extends Duel {
       (h as any)._sawWind = m.windUntil;
       const s = m.windKind, cx = s.at === "self" ? m.x : m.windX;
       const inside = Math.abs(h.x - cx) <= s.radius + 6 && !(s.inner && Math.abs(h.x - cx) <= s.inner);
-      if (inside && Math.random() < 0.5 && now >= h.stunUntil && h.energy >= ENERGY.cost.dodge && now - h.lastDodge >= 1500) {
+      if (inside && Math.random() < 0.5 && now >= h.stunUntil && !isOverheated(h) && now - h.lastDodge >= 1500) {
         const away = s.inner ? Math.sign(cx - h.x) || 1 : Math.sign(h.x - cx) || (Math.random() < 0.5 ? 1 : -1);
         if (this.dodge(h, away)) { this.dodged++; return 0; }
       }
       // roll on cooldown: an untouchable move skill (Shadow Step, Blink, Leap...) does the same job
-      if (inside && Math.random() < 0.5 && h.energy < ENERGY.cost.dodge || now - h.lastDodge < 1500) {
+      if (inside && Math.random() < 0.5 && isOverheated(h) || now - h.lastDodge < 1500) {
         const away = Math.sign(h.x - cx) || 1;
         const mv = activeSkills(h.cls).find((s) => s.move?.invulnMs && (h.t[s.id] ?? 0) > 0 && cooldownLeft(s, h.sk, now, 1) <= 0 && canPay(h, skillCost(s)));
         if (inside && mv) { h.face = s.inner ? -away : away; if (castSkill(this.host, h.id, mv.id)) { this.dodged++; return 0; } }
@@ -189,7 +206,7 @@ export class PveDuel extends Duel {
   mobBrain(m: MobF): number {
     const now = this.now, h = this.mobTarget(m), S = m.spec;
     const d = Math.abs(h.x - m.x), toward = Math.sign(h.x - m.x) || 1;
-    if (now < m.stunUntil) { m.windUntil = 0; m.windKind = undefined; return 0; }
+    if (now < m.stunUntil && !m.spec.ccImmune) { m.windUntil = 0; m.windKind = undefined; return 0; }
     if (m.broken) { m.windUntil = 0; m.windKind = undefined; return -toward; }
     // Wind-up: a solid hit (15% of poise) interrupts a basic blow; specials go through
     if (m.windUntil) {
@@ -260,6 +277,18 @@ function zoneMob(level: number): MobSpec {
   return mobSpec(k, L, { weapon: w });
 }
 
+/** Act 2 (the Sunscar, shared/spawns.ts): its monsters at Lv 30-47. */
+function desertMob(level: number): MobSpec {
+  const L = Math.min(47, Math.max(30, level));
+  const pool: [MobKind, string?][] = [["nomad"], ["nomad", "folk"], ["scorpion"], ["scorpion"]];
+  if (L >= 36) pool.push(["sanddead"], ["sanddead"]);
+  if (L >= 38) pool.push(["camelfolk"], ["camelfolk"]);
+  if (L >= 41) pool.push(["veiled"], ["veiled"]);
+  const [k, w] = pick(pool);
+  return mobSpec(k, L, { weapon: w });
+}
+let ACT2 = false;
+
 const CHAIN = 6; // encounters per zone run: 1 monster (55%), 2 (35%) or 3 (10%)
 const potionSize = (level: number) => (level >= 20 ? 2 : level >= 10 ? 1 : 0);
 
@@ -272,7 +301,7 @@ function zoneRun(cls: ClassKind, level: number, build: Build, mobLevel: (i: numb
   let t = 0, kills = 0, lost = 0, fightMs = 0;
   for (let i = 0; i < CHAIN; i++) {
     const r = Math.random(), size = r < 0.55 ? 1 : r < 0.9 ? 2 : 3;
-    const ms = Array.from({ length: size }, (_, k) => new MobF(zoneMob(mobLevel(i)), "m" + k));
+    const ms = Array.from({ length: size }, (_, k) => new MobF((ACT2 ? desertMob : zoneMob)(mobLevel(i)), "m" + k));
     const d = new PveDuel(h, ms, pack, t);
     const hp0 = h.hp, t0 = d.now;
     let w: F | null | undefined;
@@ -281,11 +310,11 @@ function zoneRun(cls: ClassKind, level: number, build: Build, mobLevel: (i: numb
     lost += Math.max(0, hp0 - h.hp);
     if (h.dead || w !== h) return { won: false, kills: kills + ms.filter((m) => m.dead).length, hpLostPerKill: lost / Math.max(1, kills) / h.maxHp, secPerKill: fightMs / 1000 / Math.max(1, kills), heals: pack.healUsed, manas: pack.manaUsed };
     kills += size;
-    // a few seconds walking to the next one: regen ramps up, stamina and mana refill
+    // a few seconds walking to the next one: regen ramps up, Heat cools, mana refills
     const gap = 3000 + Math.random() * 3000;
     const restMs = Math.max(0, gap - REGEN_DELAY_MS);
     h.hp = Math.min(h.maxHp, h.hp + h.s.sta * REGEN_PER_STA * restMs / 1000 * 0.5);
-    h.energy = Math.min(ENERGY.max, h.energy + staminaRegen(h.cls) * gap / 1000);
+    coolHeat(h, h.cls, gap / 1000);
     h.mana = Math.min(h.maxMana, h.mana + manaRegen(h.s, false) * gap / 1000);
     h.poiseLost = 0; h.broken = false;
     t += gap;
@@ -303,6 +332,10 @@ export const BOSSES: BossDef[] = [
   { name: "Rask the Reaver Lv21", kind: "bandit", level: 21, hero: 20, hpMult: 3.5, weapon: "brute" },
   { name: "Pale Marshal Lv24", kind: "necromancer", level: 24, hero: 23, hpMult: 2.5 },
   { name: "Hollow King Lv30", kind: "hollowking", level: 30, hero: 30, hpMult: 2 },
+  { name: "Sunwright Lv50", kind: "sunwright", level: 50, hero: 49, hpMult: 2 },
+  // the Night Raiders (shared/raiders.ts): always Lv 50, close to unbeatable for one hero alone (Murat 2026-11-08)
+  { name: "Night Raider vs Lv30", kind: "nightraider", level: 50, hero: 30 },
+  { name: "Night Raider vs Lv50", kind: "nightraider", level: 50, hero: 50 },
 ];
 
 function bossRun(cls: ClassKind, b: BossDef, build: Build, potions = 5): RunResult & { bossLeft: number } {
@@ -325,21 +358,29 @@ for (const a of process.argv) {
   if (k) for (const list of Object.values(SKILLS)) for (const sk of list) if (sk.scale) sk.scale.per *= Number(k[1]);
 }
 
+/** --class=vampire: only that class. --build=1: every bot rushes that branch (0-2) instead of cycling the three. */
+const argOf = (k: string) => process.argv.find((a) => a.startsWith(`--${k}=`))?.split("=")[1];
+const ONLY = argOf("class") as ClassKind | undefined;
+const BUILD = argOf("build") !== undefined ? (Number(argOf("build")) as Build) : undefined;
+const CLASSES = ONLY ? [ONLY] : ACTIVE_CLASSES;
+const buildOf = (i: number) => BUILD ?? ((i % 3) as Build);
+
 if (process.argv[1]?.includes("pve")) {
   const n = Number(process.argv[2]) || 30;
   const doBosses = !process.argv.includes("--zones"), doZones = !process.argv.includes("--bosses");
   if (doZones) {
-    const levels = [2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30];
+    ACT2 = process.argv.includes("--act2"); // the desert's monsters, heroes Lv 30-48
+    const levels = ACT2 ? [30, 33, 36, 39, 42, 45, 48] : [2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30];
     console.log(`Zone runs: ${CHAIN} encounters (1-3 monsters) in a row vs monsters of the hero's level to +2 (capped 25), 3 heal + 3 mana potions.`);
     console.log("Cell = cleared% / HP lost per kill / seconds per kill / potions drunk per run");
-    console.log("Lv".padEnd(5) + ACTIVE_CLASSES.map((c) => c.padEnd(22)).join(""));
+    console.log("Lv".padEnd(5) + CLASSES.map((c) => c.padEnd(22)).join(""));
     const tot: Record<string, { w: number; n: number }> = {};
     for (const L of levels) {
       let line = String(L).padEnd(5);
-      for (const c of ACTIVE_CLASSES) {
+      for (const c of CLASSES) {
         let won = 0, hp = 0, sec = 0, pots = 0;
         for (let i = 0; i < n; i++) {
-          const r = zoneRun(c, L, (i % 3) as Build, () => L + Math.floor(Math.random() * 3));
+          const r = zoneRun(c, L, buildOf(i), () => L + Math.floor(Math.random() * 3));
           won += r.won ? 1 : 0; hp += r.hpLostPerKill; sec += r.secPerKill; pots += r.heals + r.manas;
         }
         (tot[c] ??= { w: 0, n: 0 }).w += won; tot[c].n += n;
@@ -347,17 +388,18 @@ if (process.argv[1]?.includes("pve")) {
       }
       console.log(line);
     }
-    console.log("all".padEnd(5) + ACTIVE_CLASSES.map((c) => pct(tot[c].w / tot[c].n).padEnd(22)).join(""));
+    console.log("all".padEnd(5) + CLASSES.map((c) => pct(tot[c].w / tot[c].n).padEnd(22)).join(""));
   }
   if (doBosses) {
     console.log("\nBosses (solo, hero 1 level below unless capped, 5 heal + 5 mana potions). Cell = win% / avg fight s / boss HP left when lost");
-    console.log("".padEnd(24) + ACTIVE_CLASSES.map((c) => c.padEnd(18)).join(""));
-    for (const b of BOSSES) {
+    console.log("".padEnd(24) + CLASSES.map((c) => c.padEnd(18)).join(""));
+    const only = argOf("boss")?.toLowerCase(); // --boss=king: only the bosses whose name has that word
+    for (const b of BOSSES.filter((x) => !only || x.name.toLowerCase().includes(only))) {
       let line = b.name.padEnd(24);
-      for (const c of ACTIVE_CLASSES) {
+      for (const c of CLASSES) {
         let won = 0, sec = 0, left = 0, lostN = 0;
         for (let i = 0; i < n; i++) {
-          const r = bossRun(c, b, (i % 3) as Build);
+          const r = bossRun(c, b, buildOf(i));
           won += r.won ? 1 : 0; sec += r.secPerKill; if (!r.won) { left += r.bossLeft; lostN++; }
         }
         line += `${pct(won / n)}/${(sec / n).toFixed(0)}s/${lostN ? pct(left / lostN) : "-"}`.padEnd(18);

@@ -93,3 +93,16 @@ npm ci
 npm run build
 npm start        # then open http://localhost:2567
 ```
+
+## Password reset emails
+
+Players can add an optional email (start screen, under Resume) and reset a forgotten password with a 6-digit
+code sent by email. Mail goes out through [Resend](https://resend.com) over HTTPS (Railway blocks SMTP on
+Trial/Hobby plans).
+
+1. Resend → **Domains** → add `fmtpa.ch`, then add the DNS records it shows at Infomaniak until it says Verified.
+2. Resend → **API Keys** → create a key.
+3. Railway → game service → **Variables** → `RESEND_API_KEY` = the key. Optional: `MAIL_FROM`
+   (default `Pixel Town Brawl <noreply@fmtpa.ch>`).
+
+Without `RESEND_API_KEY` the "Forgot password?" screen says reset is not ready yet (saving an email still works).

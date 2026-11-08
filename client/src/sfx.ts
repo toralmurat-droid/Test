@@ -303,6 +303,9 @@ const R: Record<string, Recipe> = {
   crit: (o, t, v) => { thud(o, t, 160, 0.6 * v, 0.2); clank(o, t + 0.01, 0.35 * v, 2100); },
   heroHurt: (o, t, v, pitch = 1) => voice(o, t, { f: 170 * pitch, f2: 120 * pitch, dur: 0.16, vol: 0.28 * v, vowel: [650, 1100], vowel2: [500, 900], att: 0.01 }),
   heroDie: (o, t, v) => { voice(o, t, { f: 180, f2: 70, dur: 0.7, vol: 0.3 * v, vowel: [700, 1150], vowel2: [400, 800] }); thud(o, t + 0.45, 90, 0.5 * v, 0.3); },
+  // Overload gauge (overloadGauge.ts): a hiss of venting steam over an iron clank; a soft tick when it has cooled
+  overload: (o, t, v) => { clank(o, t, 0.3 * v, 900); noise(o, t + 0.02, { type: "highpass", f: 3000, f2: 1400, dur: 0.9, vol: 0.22 * v, att: 0.03 }); tone(o, t, { type: "sawtooth", f: 160, f2: 90, dur: 0.35, vol: 0.08 * v }); },
+  cooled: (o, t, v) => { clank(o, t, 0.12 * v, 2400); tone(o, t + 0.03, { type: "triangle", f: 1320, dur: 0.18, vol: 0.06 * v }); },
   dodge: (o, t, v) => { whoosh(o, t, 600, 2000, 0.2, 0.4 * v); noise(o, t + 0.15, { type: "lowpass", f: 600, dur: 0.08, vol: 0.2 * v }); },
   levelup: (o, t, v) => [0, 4, 7, 12, 16].forEach((s, i) => { tone(o, t + i * 0.08, { type: "square", f: 523 * 2 ** (s / 12), dur: 0.22, vol: 0.06 * v }); tone(o, t + i * 0.08, { type: "triangle", f: 523 * 2 ** (s / 12), dur: 0.4, vol: 0.14 * v }); }),
   heal: (o, t, v) => [0, 4, 7].forEach((s, i) => tone(o, t + i * 0.06, { type: "triangle", f: 880 * 2 ** (s / 12), dur: 0.35, vol: 0.12 * v })),
@@ -312,6 +315,8 @@ const R: Record<string, Recipe> = {
   gear: (o, t, v) => { clank(o, t, 0.2 * v, 1500); [0, 7, 12].forEach((s, i) => tone(o, t + 0.05 + i * 0.05, { type: "triangle", f: 1046 * 2 ** (s / 12), dur: 0.3, vol: 0.08 * v })); },
   lootRare: (o, t, v) => [0, 7, 12].forEach((s, i) => bell(o, t + i * 0.07, 784 * 2 ** (s / 12), 1.1, 0.09 * v)),
   lootLegendary: (o, t, v) => { thud(o, t, 70, 0.4 * v, 0.3); [0, 4, 7, 12, 16, 19].forEach((s, i) => bell(o, t + 0.05 + i * 0.07, 523 * 2 ** (s / 12), 1.8, 0.1 * v)); },
+  // a Mawdeep portcullis winding up (chain clatter) or dropping (clatter, then a heavy thud)
+  gate: (o, t, v, down) => { for (let i = 0; i < 7; i++) noise(o, t + i * 0.07, { type: "bandpass", f: 1800 + (i % 3) * 400, q: 6, dur: 0.05, vol: 0.09 * v, att: 0.003 }); tone(o, t, { type: "sawtooth", f: 70, f2: 55, dur: 0.5, vol: 0.05 * v, att: 0.05 }); if (down) thud(o, t + 0.55, 110, 0.4 * v, 0.16); },
   chest: (o, t, v) => { tone(o, t, { type: "sawtooth", f: 95, f2: 140, dur: 0.45, vol: 0.12 * v, vib: 12, vibHz: 18, att: 0.05 }); noise(o, t, { type: "bandpass", f: 700, q: 4, dur: 0.4, vol: 0.12 * v, att: 0.1 }); thud(o, t + 0.45, 140, 0.3 * v, 0.12); },
   shrine: (o, t, v) => { [0, 7, 12, 19].forEach((s, i) => bell(o, t + i * 0.12, 392 * 2 ** (s / 12), 2.2, 0.12 * v)); },
   portalTravel: (o, t, v) => { tone(o, t, { f: 120, f2: 900, dur: 0.9, vol: 0.2 * v, att: 0.3, vib: 20, vibHz: 9 }); whoosh(o, t, 200, 3000, 0.9, 0.4 * v); bell(o, t + 0.8, 784, 1.2, 0.12 * v); },
@@ -630,7 +635,7 @@ R.owl = (o, t, v) => {
 
 interface Ent { sprite: { x: number; y: number }; state: any; mob?: boolean; hero?: string; top?: number }
 
-const UNDEAD = new Set(["skeleton", "skeletonmage", "necromancer", "crawler"]);
+const UNDEAD = new Set(["skeleton", "skeletonmage", "necromancer", "crawler", "sanddead"]);
 const isBlob = (k: string) => k === "slime" || k === "blobling" || k.endsWith("blob");
 const blobPitch = (st: any) => (st.kind === "motherblob" ? 0.55 : st.kind === "blobling" ? 1.5 : 1) / Math.sqrt(st.merged || 1);
 const HERO_PITCH: Record<string, number> = { ninja: 1.1, wizard: 0.95, knight: 0.85, archer: 1.15, barbarian: 0.75, vampire: 0.9, summoner: 1.0 };
@@ -667,6 +672,7 @@ export function bindSfx(room: any, me: () => string, ents: Map<string, Ent>) {
       else if (UNDEAD.has(k)) P(k === "skeletonmage" || k === "necromancer" ? "shotMagic" : "skelSwing", id, 0.8);
       else if (k === "bandit") { P("swing", id, 0.8, e.state.weapon === "brute"); if (Math.random() < 0.3) P("grunt", id, 0.7, idPitch(id)); }
       else if (k === "demon") P("demonGrowl", id, 0.7);
+      else if (k === "veiled") P("shotMagic", id, 0.7);
       else P("swing", id, 0.7);
       return;
     }
@@ -702,7 +708,7 @@ export function bindSfx(room: any, me: () => string, ents: Map<string, Ent>) {
   on("travel", ({ id }) => P("portalTravel", id));
   on("portals", ({ woke }) => { if (woke) play("portalWake"); });
   on("boom", ({ x, y, kind }) => {
-    const name = kind === "fireball" ? "boomFire" : kind === "arrow" || kind === "knife" || kind === "bolt" || kind === "stone" ? "boomThunk"
+    const name = kind === "fireball" || kind === "sunbolt" ? "boomFire" : kind === "arrow" || kind === "knife" || kind === "bolt" || kind === "stone" ? "boomThunk"
       : kind === "magicbolt" ? "boomMagic" : kind === "shadowbolt" ? "boomShadow" : kind === "slimeball" ? "boomSlime" : kind === "skelthrow" ? "boneBreak" : "boomThunk";
     play(name, x, y, 0.8, undefined, { key: "boom" + name, minGap: 40 });
   });
@@ -781,7 +787,7 @@ export function bindSfx(room: any, me: () => string, ents: Map<string, Ent>) {
     const mob = !!s.mobName;
     if (!mob && k !== "skelthrow") return; // our heroes' shots already sound on "rangedshot" / skill casts
     const name = k === "slimeball" ? "shotSlime" : k === "magicbolt" ? "shotMagic" : k === "shadowbolt" ? "shotShadow" : k === "arrow" || k === "bolt" ? "shotBow"
-      : k === "knife" ? "shotThrow" : k === "stone" ? "shotStone" : k === "skelthrow" ? "shotBone" : k === "fireball" ? "shotFire" : "shotThrow";
+      : k === "knife" ? "shotThrow" : k === "stone" ? "shotStone" : k === "skelthrow" ? "shotBone" : k === "fireball" || k === "sunbolt" ? "shotFire" : "shotThrow";
     play(name, s.x, s.y, 0.7, undefined, { key: "shot" + name, minGap: 60 });
   });
 }

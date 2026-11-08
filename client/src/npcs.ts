@@ -1,3 +1,4 @@
+import { armouryTextures, armouryOrigin, AR_TX } from "./armoury";
 import "@fontsource/pixelify-sans/400.css";
 import { actionKey } from "./keymode";
 import { icon as pxIcon } from "./pixelicons";
@@ -17,6 +18,7 @@ import { QuestObjects } from "./questObjects";
 import { TILE } from "../../shared/constants";
 import { ISO } from "./isoflag";
 import { routeVia } from "../../shared/dungeon";
+import { actAt, WAYGATES } from "../../shared/act2";
 import type { MapMarker } from "./minimap";
 import { QuestLog } from "./questlog";
 import { MASTER_LEVELS, SHOPS, sellPrice } from "../../shared/shops";
@@ -136,6 +138,7 @@ export class NpcLayer {
     worldPropTextures(scene);
     witchCampTextures(scene);
     smithyTextures(scene);
+    armouryTextures(scene);
     for (const d of NPC_DECOR) {
       const x = d.x * TILE, y = d.y * TILE;
       if (d.prop.startsWith("wc_")) { // pixel-art camp props, 1.5 texels per world px
@@ -146,6 +149,11 @@ export class NpcLayer {
         const [ox, oy] = SMITHY_ORIGIN[d.prop];
         scene.add.sprite(x, y, d.prop, 0).setOrigin(ox, oy).setScale(1 / SMITHY_TX).setDepth(y).setFlipX(!!d.flip).play({ key: `${d.prop}_idle`, startFrame: Math.floor(d.x * 7) % 12 });
         if (d.prop === "sm_forge") this.chimneySmoke(scene, x, y);
+        continue;
+      }
+      if (d.prop.startsWith("ar_")) { // the armourers' stands and racks (armoury.ts), same pixel grid
+        const [ox, oy] = armouryOrigin(d.prop);
+        scene.add.sprite(x, y, d.prop, 0).setOrigin(ox, oy).setScale(d.scale / AR_TX).setDepth(y).setFlipX(!!d.flip).play({ key: `${d.prop}_idle`, startFrame: Math.floor(d.x * 5) % 12 });
         continue;
       }
       if (d.prop === "weapon_rack") { // pixel-art rack shared with the camps (worldProps.ts)
@@ -267,13 +275,13 @@ export class NpcLayer {
     const bag = [...(q?.bag ?? [])];
     // masterwork: one level shown at a time (picked with the buttons), by default the best one the hero can wear
     const master = this.masterLv ?? [...MASTER_LEVELS].reverse().find((l) => l <= (q?.level ?? 1)) ?? MASTER_LEVELS[0];
-    const key = JSON.stringify([n.id, master, gold, potions, bag, q?.level, (q as any)?.ptSta, (q as any)?.ptStr, (q as any)?.ptMag, (q as any)?.ptDex, q?.wear, ...GEAR_SLOTS.map((s) => q?.[s]), this.shopMsg, q?.questId, q?.questStage, q?.boneId, q?.boneStage, q?.redId, q?.redStage, q?.tut, q?.crown, q?.beast]);
+    const key = JSON.stringify([n.id, master, gold, potions, bag, q?.level, (q as any)?.ptSta, (q as any)?.ptStr, (q as any)?.ptMag, (q as any)?.ptDex, q?.wear, ...GEAR_SLOTS.map((s) => q?.[s]), this.shopMsg, q?.questId, q?.questStage, q?.boneId, q?.boneStage, q?.red, q?.sun, q?.tut, q?.crown, q?.beast]);
     if (key === this.stage) return;
     this.stage = key;
     const row = (icon: string, name: string, color: string, desc: string, btn: string, cls2: string, i: number, off: boolean) =>
       `<div class="sh-row"><span class="sh-icon" data-icon="${icon}"></span><span class="sh-info"><b style="color:${color}">${name}</b><small>${desc}</small></span>` +
       `<button class="${cls2}" data-i="${i}"${off ? " disabled" : ""}>${btn}</button></div>`;
-    let masterHead = false;
+    let masterHead = false, lastLv = 0;
     const buy = shop.stock.map((e, i) => {
       if (e.item === "potion" || e.item === "mpotion") {
         const qty = e.qty ?? 1, size = e.size ?? 0, mana = e.item === "mpotion";
@@ -285,6 +293,7 @@ export class NpcLayer {
       const d = gearDef(e.item)!, lv = itemLevel(e.item), isMaster = itemRarity(e.item) === 3;
       if (isMaster && lv !== master) return "";
       let head = "";
+      if (shop.levelHeads && !isMaster && lv !== lastLv) { lastLv = lv; head = `<h5 class="sh-lv">Lv ${lv}</h5>`; } // armourers: one heading per level step
       if (isMaster && !masterHead) {
         masterHead = true;
         head = `<h5 class="sh-lv">Masterwork · Legendary, forged by Brann</h5><div class="sh-lvpick">` +
@@ -351,7 +360,7 @@ export class NpcLayer {
     if (n.shop && (this.trading || !page)) return this.renderShop(n, q);
     this.dialog.classList.remove("shop");
     if (this.shopOpen) { this.shopOpen = false; this.onPreview?.(); }
-    const key = JSON.stringify([n.id, q?.questId, q?.questStage, q?.questCount, q?.boneId, q?.boneStage, q?.boneCount, q?.redId, q?.redStage, q?.redCount, q?.tut, q?.crown, q?.beast, q?.level]);
+    const key = JSON.stringify([n.id, q?.questId, q?.questStage, q?.questCount, q?.boneId, q?.boneStage, q?.boneCount, q?.red, q?.sun, q?.tut, q?.crown, q?.beast, q?.level]);
     if (key === this.stage) return;
     this.stage = key;
     const p = page ?? { text: ["Good day to you."], bye: "Farewell", chain: 0 };
@@ -472,6 +481,9 @@ export class NpcLayer {
       // On another floor of the Mawdeep (or above it): point at the rope or stair first
       const via = target && me ? routeVia(target.x, target.y, me.x, me.y) : undefined;
       if (via) target = { x: via.x, y: via.y, kind: "object", label: via.label };
+      // In the other act: point at this side's waygate
+      const gate = target && me && actAt(target.y) !== actAt(me.y) ? WAYGATES.find((g) => actAt(g.y) === actAt(me.y)) : undefined;
+      if (gate) target = { x: gate.x, y: gate.y, kind: "object", label: gate.label };
       if (follow && target && me) {
         const dx = target.x - me.x, dy = target.y - me.y, d = Math.hypot(dx, dy) - (target.r ?? 0);
         if (d > TILE * 2) this.aim = { dx, dy, d };

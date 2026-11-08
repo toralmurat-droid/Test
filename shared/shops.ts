@@ -21,6 +21,8 @@ export interface Shop {
   buys?: string[];
   /** This shop mends worn gear (shared/upkeep.ts) */
   repairs?: boolean;
+  /** Stock is listed under one heading per item level (the armourers) */
+  levelHeads?: boolean;
 }
 
 export const GEAR_PRICE = [0, 60, 180, 450];
@@ -69,6 +71,35 @@ const weapons = (ids: string[]): ShopEntry[] => ids.map((base) => {
   return { item, price: gearPrice(item) };
 });
 
+/** Kel Ashar's bladesmith: the same bases, forged at Act 2's levels (Common 30, Rare 36, Epic 42). */
+export const DESERT_SHOP_LEVEL = [0, 30, 36, 42];
+const desertStock = (ids: string[]): ShopEntry[] => ids.map((base) => {
+  const item = withLevel(base, DESERT_SHOP_LEVEL[gearDef(base)?.tier ?? 1]);
+  return { item, price: gearPrice(item) };
+});
+
+/**
+ * Armourers (Murat 2026-11-08: "a merchant selling armor in the villages"): shields, body armour, helms and boots only,
+ * in steps across the levels of their part of the world. Each step is [tier, item level]; every step sells the four
+ * armour slots of that tier. Oakvale covers the first half of Act 1, Saltmere (reached at Lv 16) the second half,
+ * Kel Ashar Act 2 (Lv 30-50).
+ */
+export const ARMOUR_BASES: Record<number, string[]> = {
+  1: ["sh_wood", "a_leather", "h_cap", "s_leather"],
+  2: ["sh_iron", "a_chain", "h_helm", "s_swift"],
+  3: ["sh_dragon", "a_royal", "h_crown", "s_winged"],
+};
+export const ARMOUR_STEPS: Record<string, [number, number][]> = {
+  armourer: [[1, 3], [1, 6], [2, 9], [2, 12], [3, 15]],
+  saltarmourer: [[2, 17], [2, 20], [3, 23], [3, 26], [3, 29]],
+  sandarmourer: [[2, 32], [3, 36], [3, 40], [3, 44], [3, 48]],
+};
+const armourStock = (shop: string): ShopEntry[] => ARMOUR_STEPS[shop].flatMap(([tier, level]) => ARMOUR_BASES[tier].map((base) => {
+  const item = withLevel(base, level);
+  return { item, price: gearPrice(item) };
+}));
+const ARMOUR_SLOTS = ["shield", "armour", "hat", "shoes"];
+
 const masterwork = (level: number): ShopEntry[] => Object.keys(MASTER_BASES).map((base) => ({ item: masterItem(base, level), price: masterPrice(level) }));
 
 export const SHOPS: Record<string, Shop> = {
@@ -83,6 +114,45 @@ export const SHOPS: Record<string, Shop> = {
     ],
     buys: ["weapon", "ranged", "shield", "armour", "hat", "shoes"],
     repairs: true,
+  },
+  // Kel Ashar (Act 2): desert-forged stock at Lv 30 / 36 / 42 by tier, and Greater flasks the valley's witch never sells
+  desertsmith: {
+    greeting: "Sun-tempered steel. It holds an edge where valley iron goes soft. Sell me your old pieces, I melt them down.",
+    stock: desertStock(["w_bronze", "w_frost", "w_long", "w_dragon", "w_sky", "ws_arming", "wx_hand", "wb_hunt", "wf_oak", "r_knives", "r_crossbow",
+      "sh_iron", "sh_dragon", "a_leather", "a_chain", "a_royal", "h_cap", "h_helm", "h_crown", "s_leather", "s_swift", "s_winged"]),
+    buys: ["weapon", "ranged", "shield", "armour", "hat", "shoes"],
+    repairs: true,
+  },
+  // the armourers: one in each village, armour slots only, mends worn gear like the smiths
+  armourer: {
+    greeting: "Mail, plate, good boots. Steel keeps the blood on the inside, love. Try something on.",
+    stock: armourStock("armourer"),
+    buys: ARMOUR_SLOTS,
+    repairs: true,
+    levelHeads: true,
+  },
+  saltarmourer: {
+    greeting: "Salt eats iron, so I oil every ring twice. Armour for the hard roads east, if you've the coin.",
+    stock: armourStock("saltarmourer"),
+    buys: ARMOUR_SLOTS,
+    repairs: true,
+    levelHeads: true,
+  },
+  sandarmourer: {
+    greeting: "Brass scale and doubled linen. Valley plate cooks a man alive out here. Mine lets him breathe.",
+    stock: armourStock("sandarmourer"),
+    buys: ARMOUR_SLOTS,
+    repairs: true,
+    levelHeads: true,
+  },
+  spicetrader: {
+    greeting: "Cardamom, saffron, and flasks to keep you breathing in the sun. Water is extra. Joking. Mostly.",
+    stock: [
+      ...[1, 2].flatMap((size) => (["potion", "mpotion"] as const).flatMap((item) => [
+        { item, size, qty: 1, price: POTION_SIZES[size].price },
+        { item, size, qty: 5, price: Math.round(POTION_SIZES[size].price * 5 * 0.85) },
+      ])),
+    ],
   },
   witch: {
     greeting: "Fresh from the still, darling. Red for your blood, blue for your magic. Try not to stare.",

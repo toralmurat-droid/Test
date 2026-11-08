@@ -787,7 +787,45 @@ const watchman = human({
 });
 export const FOLK = ["peasant", "farmwife", "labourer", "elder", "goodwife"] as const;
 
-export const NPCS: Hero[] = [blacksmith, merchant, villager, guard, druid, witch, watchman, ...FOLK.map((n) => folk(n))];
+// Kel Ashar, the desert village of Act 2
+const wellkeeper = human({
+  name: "wellkeeper", skin: 0xb07a50, hair: 0xd8d2c4, hairStyle: "long",
+  hat: { kind: "hood", col: 0xe2d6bc, trim: 0x3a6a8a }, shirt: 0x2e5a7a, pants: 0x284e6a, boots: 0x6a4a2e, belt: 0xc89a40, weapon: "none", gait: "stroll",
+});
+const sandcaptain = human({
+  name: "sandcaptain", skin: 0x9a663e, hair: 0x1a1410, hairStyle: "short", beard: 0x1a1410,
+  hat: { kind: "helm", col: 0xc8a050, trim: 0xece2c8 }, shirt: 0xa88a52, pants: 0xe2d6bc, boots: 0x5a3a22, belt: 0x4a2e1a,
+  tabard: { col: 0xd88a20, emblem: 0xffd060 }, weapon: "spear", gait: "march",
+});
+const spicetrader = human({
+  name: "spicetrader", skin: 0xb07a50, hair: 0x1a1210, hairStyle: "long",
+  hat: { kind: "bandana", col: 0xe0a020, trim: 0xa8301e }, shirt: 0xf0e2c4, vest: 0xa8301e, pants: 0x5a2a3a, boots: 0x6a4028, belt: 0xe0a020, weapon: "none", gait: "swagger",
+});
+const desertsmith = human({
+  name: "desertsmith", skin: 0x8a5a36, hair: 0x1a1410, hairStyle: "bald", beard: 0x2a201a,
+  shirt: 0xc8b48a, vest: 0x5a3a22, apron: 0x6a4428, pants: 0x6a5238, boots: 0x3a2a1e, belt: 0x2e2014, weapon: "hammer",
+});
+export const DESERT_NPCS = ["wellkeeper", "sandcaptain", "spicetrader", "desertsmith"] as const;
+
+// The armourers, one per village (shared/npcs.ts): Hilda of Oakvale, Dorran of Saltmere, Idris of Kel Ashar
+const armourer = human({
+  name: "armourer", skin: 0xe8b08a, hair: 0xa8401e, hairStyle: "long",
+  shirt: 0x8a939e, vest: 0x5a1a18, pants: 0x4a3a2a, boots: 0x2a2420, belt: 0x4a2e1a,
+  tabard: { col: 0x7a2620, emblem: 0xe0b440 }, weapon: "hammer", gait: "march",
+});
+const saltarmourer = human({
+  name: "saltarmourer", skin: 0xc8916a, hair: 0x8a8a86, hairStyle: "short", beard: 0x9a9a94,
+  hat: { kind: "cap", col: 0x285058, trim: 0x1a3a42 }, shirt: 0x4a3628, vest: 0x36261e, pants: 0x3a4a52, boots: 0x221814, belt: 0xc89c44,
+  weapon: "none", gait: "stroll",
+});
+const sandarmourer = human({
+  name: "sandarmourer", skin: 0x8a5a36, hair: 0x1a1410, hairStyle: "short", beard: 0x1a1410,
+  hat: { kind: "bandana", col: 0xece2c8, trim: 0x302e72 }, shirt: 0xc89c44, vest: 0x302e72, pants: 0xe2d6bc, boots: 0x4a2e1a, belt: 0x302e72,
+  weapon: "none", gait: "march",
+});
+export const ARMOURERS = ["armourer", "saltarmourer", "sandarmourer"] as const;
+
+export const NPCS: Hero[] = [blacksmith, merchant, villager, guard, druid, witch, watchman, ...FOLK.map((n) => folk(n)), wellkeeper, sandcaptain, spicetrader, desertsmith, armourer, saltarmourer, sandarmourer];
 /** Pose data for monsters painted with the character painter (paint/mobs.ts); never drawn as pixel art. */
 const mobPose = (name: string, weapon: HumanOpts["weapon"]) => human({ name, skin: 0, hair: 0, hairStyle: "bald", shirt: 0, pants: 0, boots: 0, weapon });
 export const MOB_POSES: Record<string, Hero> = {
@@ -801,6 +839,8 @@ export const MOB_POSES: Record<string, Hero> = {
   gnawkin_folk: mobPose("gnawkin_folk", "none"), tuskborn_folk: mobPose("tuskborn_folk", "axe"), silkwretch_folk: mobPose("silkwretch_folk", "none"),
   duskwing_folk: mobPose("duskwing_folk", "dagger"), crowseer: mobPose("crowseer", "staff"), gnasher: mobPose("gnasher", "axe"), weaver: mobPose("weaver", "staff"),
   packlord: mobPose("packlord", "axe"), hornbrute: mobPose("hornbrute", "hammer"), hidemother: mobPose("hidemother", "staff"),
+  nomad: mobPose("nomad", "axe"), nomad_folk: mobPose("nomad_folk", "bow"), sanddead: mobPose("sanddead", "axe"),
+  veiled: mobPose("veiled", "staff"), camelfolk: mobPose("camelfolk", "spear"), sunwright: mobPose("sunwright", "staff"),
 };
 export const posed = (hero: Hero, p: Partial<Pose> & { dir: Dir }, shadow = true) => renderFrame(hero, { t: 0, bob: 0, stride: 0, lean: 0, crouch: 0, attack: -1, expr: "n", ...p }, shadow);
 

@@ -170,6 +170,9 @@ export function castSkill(h: SkillHost, id: string, skillId: string): boolean {
   const rank = s?.cantrip ? 1 : Math.min(maxRank(s), rankOf(u.talents, skillId));
   const now = h.now();
   if (!s || s.passive || rank <= 0 || now < u.sk.chargeUntil || now < (u.sk.windUntil ?? 0)) return false;
+  // Bat / Wolf Form: pressing the form again takes the hero's own shape back (free, no cooldown)
+  const form = formBuff(u, now);
+  if (form && form.id === s.id) { endForm(h, id); return true; }
   if (cooldownLeft(s, u.sk, now, h.cooldownMult(id)) > 0) return false;
   if (s.field?.link && !linkPick(h, id, s.field.link)) return false; // Blood Link: nobody in reach to bind
   if (s.charm && !charmTarget(h, id, s.charm.range)) return false; // Charm: nobody in reach
@@ -179,9 +182,12 @@ export function castSkill(h: SkillHost, id: string, skillId: string): boolean {
   if (s.cantrip && now < (u.attackReadyAt ?? 0)) return false;
   const blood = bloodCost(s, u);
   if (blood > 0 && (u.hp ?? 0) <= blood + 1) return false; // blood magic: not enough life left to pay with
-  if (!pay(u, skillCost(s))) return false; // Stamina and/or Mana (shared/mana.ts)
+  if (!pay(u, skillCost(s))) return false; // Heat and/or Mana (shared/mana.ts, shared/overload.ts)
   if (blood > 0) u.hp = Math.max(1, (u.hp ?? 0) - blood);
   u.sk.last[s.id] = now;
+  // The beast keeps to its own school: a bat still calls bats, rats and mist, a wolf still rends, pounces and bites;
+  // a skill of any other school turns the vampire back first
+  if (form && skillOf(u.cls, form.id)?.branch !== s.branch) endForm(h, id);
   if (s.cantrip) u.attackReadyAt = now + (s.cd ?? 0);
   // A clicked spot (point skills): how far from the hero it lands, within the skill's reach
   const clicked = h.aimDist?.(id);
@@ -348,6 +354,22 @@ function release(h: SkillHost, id: string, s: SkillDef, rank: number, power: num
   if (s.brides) h.brides?.(id, power, s.brides.n + s.brides.perRank * (rank - 1), s.brides.ms * t, s.brides.drain);
   if (s.colossus) h.colossus?.(id, power, s.colossus.ms);
   if (s.attune) h.attune?.(id);
+}
+
+/** The shapeshift buff (BuffDef.form) the unit is in right now, if any. */
+export function formBuff(u: Unit | undefined, now: number): ActiveBuff | undefined {
+  return u?.sk.buffs.find((b) => b.b.form && b.until > now);
+}
+/** Which beast the unit is right now ("bat", "wolf") or undefined. */
+export const formOf = (u: Unit | undefined, now: number) => formBuff(u, now)?.b.form;
+/** Ends a shapeshift early: the hero takes their own shape back (the client sees the buff id leave Player.fx). */
+export function endForm(h: SkillHost, id: string) {
+  const u = h.unit(id);
+  if (!u) return;
+  const b = formBuff(u, h.now());
+  if (!b) return;
+  u.sk.buffs = u.sk.buffs.filter((x) => x !== b);
+  h.fx({ ev: "unform", id, s: b.id });
 }
 
 export function addBuff(h: SkillHost, id: string, skill: string, b: BuffDef, rank: number, stacks = 0) {

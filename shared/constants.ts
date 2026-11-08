@@ -4,7 +4,12 @@ export const ART_K = TILE / 16;
 export const MAP_W = 288; // tiles
 /** Rows of the overworld (Oakvale's valley). The map is taller: under it lies the Mawdeep Warrens (shared/dungeon.ts). */
 export const WORLD_H = 216; // tiles
-export const MAP_H = 288; // tiles: the overworld plus the underground band (rows WORLD_H..MAP_H)
+/** End of the underground band (rows WORLD_H..UNDER_END hold the Mawdeep Warrens, shared/dungeon.ts). */
+export const UNDER_END = 288;
+/** Act 2, the desert (shared/desert.ts): its own band of the map, under a strip of solid rock. */
+export const DESERT_Y0 = 300;
+export const DESERT_H = 216;
+export const MAP_H = DESERT_Y0 + DESERT_H; // tiles: overworld, underground band, rock, desert
 export const TICK_RATE = 20; // server updates per second
 export const PLAYER_SPEED = 90; // px per second (default; classes override, see classes.ts)
 export const PLAYER_RADIUS = 5; // collision half-size in px
@@ -61,6 +66,12 @@ export type MobKind = "slime" | "skeleton" | "motherblob" | "blobling" | "shoote
   | "venomblob" | "frostblob" | "fireblob" | "stormblob"
   // the beast-folk of the Mawdeep Warrens (shared/dungeon.ts, BEAST below): men and women sewn into animal hides
   | "gnawkin" | "tuskborn" | "silkwretch" | "duskwing" | "packlord" | "hornbrute" | "hidemother" | "crowseer" | "gnasher" | "weaver"
+  // Act 2, the Sunscar desert (shared/desert.ts): raiders, scorpions, the buried dead, the Veiled Circle and the camel-folk
+  | "nomad" | "scorpion" | "sanddead" | "veiled" | "camelfolk"
+  // Act 2's final boss at the Sun Furnace (SUNWRIGHT below)
+  | "sunwright"
+  // the Night Raiders (shared/raiders.ts): seven named riders who roam both acts by night
+  | "nightraider"
   // summoned by heroes (shared/summons.ts): they fight for their owner
   | "golem_fire" | "golem_cold" | "golem_poison" | "golem_shock" | "golem_colossus"
   | "bride"; // the vampire's Brides (v_brides): pale companions that run at his foes and drink
@@ -84,7 +95,7 @@ export const MOBS: Record<MobKind, MobDef> = {
   golem_shock: { name: "Storm Golem", maxHp: 130, speed: 76, damage: 15, attackCooldownMs: 1000, aggroRange: 160, leash: 256, xp: 0 },
   // the Summoner's ultimate: the golems fused into one giant (its element is in Mob.weapon)
   // the vampire's ultimate (v_brides): fast and frantic, quick claws, not much life
-  bride: { name: "Bride", maxHp: 170, speed: 112, damage: 15, attackCooldownMs: 520, aggroRange: 200, leash: 300, xp: 0 },
+  bride: { name: "Bride", maxHp: 170, speed: 112, damage: 9, attackCooldownMs: 520, aggroRange: 200, leash: 300, xp: 0 },
   golem_colossus: { name: "Colossus", maxHp: 420, speed: 64, damage: 30, attackCooldownMs: 1500, aggroRange: 180, leash: 256, xp: 0 },
   slime: { name: "Blob", maxHp: 40, speed: 45, damage: 8, attackCooldownMs: 1000, aggroRange: 80, leash: 140, xp: 10 },
   skeleton: { name: "Skeleton", maxHp: 80, speed: 62, damage: 19, attackCooldownMs: 900, aggroRange: 110, leash: 200, xp: 25 },
@@ -122,13 +133,25 @@ export const MOBS: Record<MobKind, MobDef> = {
   weaver: { name: "The Weaver", maxHp: 520, speed: 54, damage: 22, attackCooldownMs: 1300, aggroRange: 190, leash: 300, xp: 280 },
   packlord: { name: "Gorehowl the Packlord", maxHp: 560, speed: 66, damage: 24, attackCooldownMs: 1100, aggroRange: 170, leash: 330, xp: 320 },
   hornbrute: { name: "The Hornbrute", maxHp: 700, speed: 52, damage: 28, attackCooldownMs: 1400, aggroRange: 160, leash: 330, xp: 360 },
+  // Act 2, the Sunscar (Murat 2026-11-08): Lv 30-47. Base numbers set with tools/balance/pve.ts --act2 so the desert plays
+  // like Act 1's middle zones for a hero of its level (about 2-4% HP lost and 3 s per kill)
+  nomad: { name: "Dustrider", maxHp: 175, speed: 70, damage: 24, attackCooldownMs: 820, aggroRange: 150, leash: 260, xp: 55 },
+  scorpion: { name: "Dune Scorpion", maxHp: 215, speed: 58, damage: 22, attackCooldownMs: 1050, aggroRange: 120, leash: 220, xp: 58 },
+  sanddead: { name: "Sand-Dead", maxHp: 190, speed: 54, damage: 27, attackCooldownMs: 1000, aggroRange: 130, leash: 230, xp: 58 },
+  veiled: { name: "Veiled Adept", maxHp: 140, speed: 56, damage: 27, attackCooldownMs: 1800, aggroRange: 170, leash: 250, xp: 64 },
+  camelfolk: { name: "Camel-Man", maxHp: 300, speed: 60, damage: 32, attackCooldownMs: 1300, aggroRange: 140, leash: 260, xp: 74 },
+  // Act 2's final boss (the Second Sun chain's last quest; moves in BEAST, voice and phases in SUNWRIGHT below)
+  sunwright: { name: "The Sunwright", maxHp: 1100, speed: 50, damage: 30, attackCooldownMs: 1250, aggroRange: 260, leash: 520, xp: 2400 },
+  // The Night Raiders (shared/raiders.ts): mounted, cloaked, a massive weapon; always Lv 50, close to unbeatable alone
+  // (Murat 2026-11-08): pve.ts --boss=raider gives a Lv 50 hero alone 0-33%, a Lv 30 hero none. Faster than a hero on foot
+  nightraider: { name: "Night Raider", maxHp: 20000, speed: 96, damage: 160, attackCooldownMs: 1350, aggroRange: 170, leash: 420, xp: 3000 },
   hidemother: { name: "The Hide-Mother", maxHp: 950, speed: 50, damage: 28, attackCooldownMs: 1300, aggroRange: 240, leash: 480, xp: 1000 },
 };
 
 /** Elite monsters: much tougher than the rest of their zone, with a bigger look and an "Elite" tag. */
-export const ELITE: Partial<Record<MobKind, true>> = { necromancer: true, demon: true, banditchief: true, hollowking: true, packlord: true, hornbrute: true, hidemother: true, gnasher: true, weaver: true };
+export const ELITE: Partial<Record<MobKind, true>> = { necromancer: true, demon: true, banditchief: true, hollowking: true, packlord: true, hornbrute: true, hidemother: true, gnasher: true, weaver: true, sunwright: true };
 /** Bosses: elites that lead a whole camp (tagged "Boss" instead of "Elite"). */
-export const BOSS: Partial<Record<MobKind, true>> = { banditchief: true, hollowking: true, hidemother: true };
+export const BOSS: Partial<Record<MobKind, true>> = { banditchief: true, hollowking: true, hidemother: true, sunwright: true };
 
 /**
  * Skeleton casters. Distances in px.
@@ -233,6 +256,7 @@ export const FACTION: Partial<Record<MobKind, "blob" | "undead" | "outlaw">> = {
   venomblob: "blob", frostblob: "blob", fireblob: "blob", stormblob: "blob",
   skeleton: "undead", skeletonmage: "undead", necromancer: "undead", crawler: "undead", demon: "undead",
   bandit: "outlaw", banditchief: "outlaw",
+  sanddead: "undead",
 };
 
 /**
@@ -291,15 +315,19 @@ export function mobScale(level: number, stat: keyof typeof MOB_LEVEL): number {
 }
 
 /**
- * Level ceilings of the starting region (Oakvale and everything on today's map), Murat 2026-11-04: regular monsters
+ * Level ceilings of the starting region (Oakvale, the first zone: Lv 1-30), Murat 2026-11-04: regular monsters
  * top out at Lv 25 (the quests end around Lv 19-24), while merged blobs, Bone Demons, elites and bosses may reach
- * Lv 30, the global cap (MAX_LEVEL in classes.ts, Lv 30 for now).
+ * Lv 30. The hero cap is higher (MAX_LEVEL in classes.ts, Lv 50): the rest is earned in Act 2 (ACT2_LEVEL).
  */
 export const REGION_LEVEL = { mob: 25, special: 30 };
 /** A regular monster's level, held under the region's ceiling. */
 export const regionMobLevel = (l: number) => Math.min(REGION_LEVEL.mob, Math.max(1, Math.round(l)));
 /** A merged blob, demon, elite or boss: its own, higher ceiling. */
 export const regionSpecialLevel = (l: number) => Math.min(REGION_LEVEL.special, Math.max(1, Math.round(l)));
+/** Act 2, the desert (Murat 2026-11-08): Lv 30-50. Regular monsters Lv 30-47, elites and bosses up to Lv 50. */
+export const ACT2_LEVEL = { min: 30, mob: 47, special: 50 };
+export const act2MobLevel = (l: number) => Math.min(ACT2_LEVEL.mob, Math.max(ACT2_LEVEL.min, Math.round(l)));
+export const act2SpecialLevel = (l: number) => Math.min(ACT2_LEVEL.special, Math.max(ACT2_LEVEL.min, Math.round(l)));
 
 export const MOB_ATTACK_RANGE = 14; // px
 
@@ -331,7 +359,8 @@ export const HOLLOW_KING = {
  * The Hide-Mother (bear, boss): Maul, a wide cleave; Roar, a ring that slows; below 60% she calls her brood; below 35%
  * she rages and brings the roof down (falling stones under the heroes).
  */
-export type BeastMove = "gore" | "web" | "screech" | "swoop" | "pounce" | "howl" | "stampede" | "stomp" | "maul" | "roar" | "brood" | "rockfall";
+export type BeastMove = "gore" | "web" | "screech" | "swoop" | "pounce" | "howl" | "stampede" | "stomp" | "maul" | "roar" | "brood" | "rockfall" | "hook" | "gather"
+  | "beam" | "flare" | "sunfall" | "zenith";
 export const BEAST = {
   gore: { min: 34, max: 130, windupMs: 700, rushMs: 420, reach: 135, width: 14, cooldownMs: 6000, dmgMult: 1.7, knockback: 3 },
   web: { min: 40, max: 135, windupMs: 500, flightMs: 520, radius: 22, cooldownMs: 5200, rootMs: 1300, dmgMult: 0.6 },
@@ -345,6 +374,22 @@ export const BEAST = {
   roar: { range: 160, radius: 120, inner: 0, windupMs: 1100, cooldownMs: 11000, dmgMult: 0.8, slowMs: 3000 },
   brood: { hpFrac: 0.6, everyMs: 20000, castMs: 1000, kinds: ["gnawkin", "tuskborn", "gnawkin", "duskwing"] as MobKind[], max: 4, levelDrop: 4 },
   rockfall: { hpFrac: 0.35, range: 260, count: 4, spread: 50, radius: 26, windupMs: 1300, cooldownMs: 8000, dmgMult: 1.5, speed: 1.2, cooldown: 0.8 },
+  /** The Hide-Mother's needle and gut: a hooked line flung at a hero out of reach that drags them to her (and bleeds them). */
+  hook: { hpFrac: 0.7, min: 70, max: 230, windupMs: 750, flightMs: 300, cooldownMs: 9000, dmgMult: 0.9, stopAt: 34, pullSpeed: 520 },
+  /** "Come home to Mother": she sews her living brood back into her own hide, healing for each one in reach. Kill them first. */
+  gather: { hpFrac: 0.7, everyMs: 15000, castMs: 1800, range: 190, heal: 0.05 },
+  // ---- the Sunwright (SUNWRIGHT): fire, all of it (the heroes' fire resistance cuts it)
+  /** A lance of sunlight from her staff along a marked lane: step out of the lane. */
+  beam: { min: 30, max: 250, windupMs: 900, reach: 270, width: 20, cooldownMs: 6500, dmgMult: 1.7, knockback: 1 },
+  /** A flare bursts off her: a ring around her that throws heroes back. */
+  flare: { range: 56, radius: 74, windupMs: 750, cooldownMs: 6000, dmgMult: 1.3, knockback: 3 },
+  /** Drops of molten sun fall on the heroes (like the Hide-Mother's stones): more of them, and more often, as the Second Sun. */
+  sunfall: { hpFrac: 1, range: 280, count: 3, spread: 54, radius: 28, windupMs: 1300, cooldownMs: 9000, dmgMult: 1.5 },
+  /**
+   * Zenith: she lifts the Furnace's light over the whole plateau. Only her own shadow is safe (stand right next to her),
+   * and every adept of her choir still singing makes it burn hotter. Kill the choir, then hug the Sunwright.
+   */
+  zenith: { hpFrac: 0.65, everyMs: 21000, windupMs: 2400, radius: 230, inner: 44, dmgMult: 1.4, perAdept: 0.5 },
   /** Riders on a plain blow: the Gnawkin's plague and the Packlord's bleeding bite (ticks of damage after the hit). */
   plague: { ticks: 4, tickMs: 600, dmgMult: 0.25 },
   bleed: { ticks: 3, tickMs: 500, dmgMult: 0.35 },
@@ -360,17 +405,73 @@ export const BEAST_MOVES: Partial<Record<MobKind, BeastMove[]>> = {
   gnasher: ["howl", "pounce"],
   weaver: ["brood", "web"],
   hornbrute: ["stomp", "stampede"],
-  hidemother: ["rockfall", "brood", "roar", "maul"],
+  hidemother: ["rockfall", "gather", "brood", "hook", "roar", "maul"],
+  // Act 2: the scorpion skitters at you in a straight rush; the camel-folk rear and stamp the ground
+  scorpion: ["gore"],
+  camelfolk: ["stomp"],
+  // the Sunwright: Zenith (when ready) before everything, then her choir, falling sun, the flare when crowded, the lance
+  sunwright: ["zenith", "brood", "sunfall", "flare", "beam"],
 };
 /** Damage over time after a plain blow (BEAST.plague / bleed / venom). */
-export const BEAST_RIDER: Partial<Record<MobKind, "plague" | "bleed" | "venom">> = { gnawkin: "plague", packlord: "bleed", silkwretch: "venom", hidemother: "bleed", gnasher: "plague", weaver: "venom" };
+/**
+ * Grandam Ursk, the Hide-Mother (Murat 2026-11-08: "a proper final boss with a personality"): the trapper-wife who fed
+ * the valley's starving hunters the Hide Rite in the Long Hunger and still thinks she saved them. She talks through the
+ * fight. Three phases: the Mother (claws and roars), the Rite (below PHASE[0]: she calls her brood, hooks heroes in
+ * with needle and gut and sews her children back into herself to heal), the Bear (below PHASE[1]: she tears off what is
+ * left of the woman, grows, quickens and brings the roof down).
+ */
+export const URSK = {
+  phase: [0.7, 0.35] as const,
+  tauntMs: [11000, 17000] as const,
+  bearScale: 1.18,
+  lines: {
+    wake: ["Who burns my totems?", "Ah. A little one, come all the way down to Mother.", "Lie still, child. You will make a fine hide."],
+    taunt: ["I fed this valley when it ate its dogs.", "Skin is only a coat. I will give you a warmer one.", "My hunters were starving. I made them strong.",
+      "Hush now. It only hurts while you are still you.", "Three hundred winters, and still they send me children."],
+    rite: ["Children! Mother needs you!", "Needle and gut, needle and gut..."],
+    hook: ["Come here.", "Closer, little one.", "Don't wriggle."],
+    gather: ["Come home to Mother.", "Back into the hide with you."],
+    bear: ["ENOUGH! No more woman. Only the bear!"],
+    kill: ["There. Quiet now.", "Another hide for the bed.", "Sleep. Mother will sew you something better."],
+    death: ["The winter... is it over, then...?"],
+  },
+};
+/**
+ * Ishael the Sunwright, High Veil of the Veiled Circle (Murat 2026-11-08: Act 2's storyline and final boss): the scholar
+ * who read Kharsun's water-script and decided the first Furnace failed only for want of water. She means to light a second
+ * sun over the Sunscar so no child ever freezes in a desert night again, and she is kind about it, which is the worst part.
+ * Three phases: the Dawn (lance and flare), the Choir (below PHASE[0]: her adepts sing for her and Zenith begins), the
+ * Second Sun (below PHASE[1]: she burns, grows, quickens, and the sun falls twice as often).
+ */
+export const SUNWRIGHT = {
+  phase: [0.65, 0.3] as const,
+  tauntMs: [11000, 17000] as const,
+  sunScale: 1.15,
+  /** As the Second Sun: faster, quicker blows, molten drops more often and more of them. */
+  sun: { speed: 1.2, cooldown: 0.8, sunfallCd: 0.55, sunfallCount: 5 },
+  lines: {
+    wake: ["You came up the stair. Good. Someone should see this.", "A thousand years we waited for water enough. You brought it to me, in a way.",
+      "Stand there, child of the cold north. It will be warm soon."],
+    taunt: ["Kharsun burned because it was thirsty. I am not thirsty.", "No one will ever shiver in the dark again. Why do you fight that?",
+      "Sefa's spring was a small price. She will thank me, when it is always noon.", "I read the water-script in my mother's lap. I understood it better than she did.",
+      "Your Hollow King wanted a crown. I want a dawn."],
+    choir: ["Sing, my Veiled! Sing it up!", "Choir! Lift the light!"],
+    zenith: ["Look up.", "Noon.", "Let there be no shadow but mine."],
+    sun: ["Then I will be the sun myself!"],
+    kill: ["Rest. It is warm now.", "Another candle for the Furnace.", "Shh. Into the light."],
+    death: ["The night... it is so cold... I only wanted..."],
+  },
+};
+export const BEAST_RIDER: Partial<Record<MobKind, "plague" | "bleed" | "venom">> = { gnawkin: "plague", packlord: "bleed", silkwretch: "venom", hidemother: "bleed", gnasher: "plague", weaver: "venom", scorpion: "venom" };
 /** Who answers a beast's Brood or Howl (default BEAST.brood.kinds / BEAST.howl.summon). */
-export const BEAST_BROOD: Partial<Record<MobKind, MobKind[]>> = { gnasher: ["gnawkin", "gnawkin", "gnawkin"], weaver: ["silkwretch", "silkwretch"] };
+export const BEAST_BROOD: Partial<Record<MobKind, MobKind[]>> = { gnasher: ["gnawkin", "gnawkin", "gnawkin"], weaver: ["silkwretch", "silkwretch"], sunwright: ["veiled", "veiled", "veiled"] };
 /**
  * Half-folk variants (Mob.weapon "folk", Murat 2026-11-05): a man's face under the flayed animal head, the body gone
  * over to the beast. Gnawkin bone-slingers throw stones from range; the rest fight like their kind.
  */
-export const BEAST_FOLK: Partial<Record<MobKind, number>> = { gnawkin: 0.4, tuskborn: 0.35, silkwretch: 0.4, duskwing: 0.4 };
+export const BEAST_FOLK: Partial<Record<MobKind, number>> = { gnawkin: 0.4, tuskborn: 0.35, silkwretch: 0.4, duskwing: 0.4, nomad: 0.35 }; // nomad "folk": a Dustrider archer
+/** Act 2's monsters (the Sunscar): levels from ACT2_LEVEL. */
+export const DESERT_KINDS: MobKind[] = ["nomad", "scorpion", "sanddead", "veiled", "camelfolk", "sunwright"];
 /** Beast-folk that fly (drawn hovering, client textures.ts). */
 export const BEAST_FLYERS: MobKind[] = ["duskwing", "crowseer"];
 export const BEAST_KINDS: MobKind[] = ["gnawkin", "tuskborn", "silkwretch", "duskwing", "packlord", "hornbrute", "hidemother", "crowseer", "gnasher", "weaver"];

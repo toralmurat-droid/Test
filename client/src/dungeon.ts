@@ -1,12 +1,14 @@
 import Phaser from "phaser";
 import { MAP_W, TILE, WORLD_H } from "../../shared/constants";
-import { DOOR_RANGE, DOORS, doorDist, isSolidTile, setDoorOpen, type Door } from "../../shared/map";
+import { DOOR_RANGE, DOORS, doorDist, doorWorkable, isSolidTile, setDoorOpen, type Door } from "../../shared/map";
 import { refreshWalk } from "./pathfind";
+import { play } from "./sfx";
+import type { MapMarker } from "./minimap";
 import { BRAZIERS, COCOONS, DEN, Floor, FLOORS, floorNo, LINKS, SINKHOLE, TOTEMS } from "../../shared/dungeon";
 import { CHESTS } from "../../shared/chests";
 import { GORE, goreTextures } from "./goreArt";
 import { ISO, isoAnchor, isoScreen, isoX, isoY } from "./iso";
-import { BLOCK_TOP, BRAZIER, dungeonTextures, GATE_H, GATEPOST, gateTexture, ROPE_ART, TX, WALL_LOW, WALL_TALL, wallTexture } from "./dungeonArt";
+import { BLOCK_TOP, BRAZIER, PIT, STAIR_UP, TORCH, dungeonTextures, GATE_FRAMES, GATE_FRAME_H, gateShape, gateSheet, ROPE_ART, TX, WALL_LOW, WALL_TALL, wallTexture, OPEN_N, OPEN_W, OPEN_S, OPEN_E } from "./dungeonArt";
 import { TEXT_FONT, TEXT_PX, WT } from "./pixelfont";
 
 /**
@@ -60,7 +62,7 @@ const RECIPES: Record<Role, Recipe[]> = {
   den: [["dg_pike", [0, 1], 6, true], ["dg_blood", [0, 1, 2, 3], 4, false], ["dg_remains", [0, 1, 2], 3, false]],
 };
 const ORIGIN: Record<string, number> = { // feet row of each standing sheet (fraction of its height)
-  dg_hook: 1 - 2 / GORE.hook.h, dg_cage: 1 - 2 / GORE.cage.h, dg_frame: 1 - 3 / GORE.frame.h, dg_pike: 1 - 2 / GORE.pike.h,
+  dg_hook: 1 - 2 / GORE.hook.h, dg_cage: GORE.cage.foot / GORE.cage.h, dg_block: GORE.block.foot / GORE.block.h, dg_slab: GORE.slab.foot / GORE.slab.h, dg_frame: 1 - 3 / GORE.frame.h, dg_pike: 1 - 2 / GORE.pike.h,
 };
 
 interface Light { x: number; y: number; r: number; flicker: number; seed: number }
@@ -82,7 +84,7 @@ export class DungeonView {
   /** Gates seen open (server TownState.doors), and each built gate's barricade blocks. */
   private doorsOpen = new Set<string>();
   private doorsRaw = "";
-  private gates = new Map<string, Phaser.GameObjects.Image[]>();
+  private gates = new Map<string, Phaser.GameObjects.Sprite>();
   /** The gate within reach of the local hero (E works it), if any. */
   nearDoor?: Door;
 
@@ -108,49 +110,72 @@ export class DungeonView {
     this.built.add(f.id);
     const s = this.scene;
     const open = (x: number, y: number) => x > f.x && y > f.y && x < f.x + f.w - 1 && y < f.y + f.h - 1 && (!isSolidTile(x, y) || DOOR_TILES.has(y * MAP_W + x));
-    // Cave walls: every rock tile next to the floor is a block, tall unless the floor lies behind it on screen
-    // (then low, so nothing on the floor is ever hidden).
+    // Cave walls (Murat 2026-11-07: a natural cave, but only the inside looks like a wall): every rock tile next to the
+    // floor; a rock face only where it looks onto the floor (its south or east side), tall unless floor lies behind it on
+    // screen; elsewhere just the dark rock mass at ground level, with a lit lip along the room's edge.
     if (ISO) for (let ty = f.y; ty < f.y + f.h; ty++) for (let tx = f.x; tx < f.x + f.w; tx++) {
       if (open(tx, ty)) continue;
       let near = false;
       for (let j = -1; j <= 1 && !near; j++) for (let i = -1; i <= 1; i++) if (open(tx + i, ty + j)) { near = true; break; }
       if (!near) continue;
-      const tall = !(open(tx - 1, ty) || open(tx, ty - 1) || open(tx - 1, ty - 1)); // low only where it would hide the floor behind it
-      const h = tall ? WALL_TALL : WALL_LOW, key = wallTexture(s, h, Math.floor(hash(tx, ty, 5) * 6));
+      const o = (open(tx, ty - 1) ? OPEN_N : 0) | (open(tx - 1, ty) ? OPEN_W : 0) | (open(tx, ty + 1) ? OPEN_S : 0) | (open(tx + 1, ty) ? OPEN_E : 0);
+      const behind = open(tx - 1, ty) || open(tx, ty - 1) || open(tx - 1, ty - 1); // tall here would hide the floor behind it
+      const h = o & (OPEN_S | OPEN_E) ? (behind ? WALL_LOW : WALL_TALL) : 0;
+      const key = wallTexture(s, h, o, ((tx % 4) + 4) % 4, ((ty % 4) + 4) % 4);
       const cx = (tx + 0.5) * TILE, cy = (ty + 0.5) * TILE;
-      const img = s.add.image(cx, cy, key).setScale(1 / TX).setDepth(cy);
+      const img = s.add.image(cx, cy, key).setScale(1 / TX).setDepth(h ? cy : DECAL + 0.1);
       img.setOrigin(0.5, (BLOCK_TOP / 2 + h * TX) / (BLOCK_TOP + h * TX));
     }
-    // Gates into the lairs: a timber block per tile while shut, and a skull-topped post at each end
+    // Gates into the lairs: a portcullis between two posts across the tunnel, drawn along whichever of the iso lines
+    // (east-west, north-south, or straight across the screen) is closest to the gate's own line
     for (const d of DOORS.filter((g) => g.floor === f.id)) {
-      const blocks = d.tiles.map((k, i) => {
-        const cx = ((k % MAP_W) + 0.5) * TILE, cy = (((k / MAP_W) | 0) + 0.5) * TILE;
-        const img = s.add.image(cx, cy, gateTexture(s, i % 3)).setScale(1 / TX).setDepth(cy);
-        return img.setOrigin(0.5, (BLOCK_TOP / 2 + GATE_H * TX) / (BLOCK_TOP + GATE_H * TX)).setVisible(!this.doorsOpen.has(d.id));
-      });
-      this.gates.set(d.id, blocks);
       let ends: [number, number] = [d.tiles[0], d.tiles[0]], far = -1;
       for (const a of d.tiles) for (const b of d.tiles) {
         const dd = Math.hypot((a % MAP_W) - (b % MAP_W), ((a / MAP_W) | 0) - ((b / MAP_W) | 0));
         if (dd > far) { far = dd; ends = [a, b]; }
       }
-      ends.forEach((k, i) => {
-        const x = ((k % MAP_W) + 0.5) * TILE, y = (((k / MAP_W) | 0) + 0.5) * TILE;
-        s.add.image(x, y + 1, "dg_gatepost", i).setOrigin(0.5, 1 - 2 / GATEPOST.h).setScale(1 / TX).setDepth(y + 1);
-      });
+      const ex = (ends[1] % MAP_W) - (ends[0] % MAP_W), ey = ((ends[1] / MAP_W) | 0) - ((ends[0] / MAP_W) | 0), el = Math.hypot(ex, ey) || 1;
+      const AXES = [{ w: [1, 0], s: [1, 0.5] }, { w: [0, 1], s: [-1, 0.5] }, { w: [Math.SQRT1_2, -Math.SQRT1_2], s: [Math.SQRT2, 0] }];
+      const ax = AXES.reduce((best, A) => (Math.abs(A.w[0] * ex + A.w[1] * ey) / el > Math.abs(best.w[0] * ex + best.w[1] * ey) / el + 1e-6 ? A : best));
+      const pr = (k: number) => ((k % MAP_W) + 0.5) * ax.w[0] + (((k / MAP_W) | 0) + 0.5) * ax.w[1];
+      const proj = d.tiles.map(pr), lo = Math.min(...proj) - 0.65, hi = Math.max(...proj) + 0.65, c0 = d.x * ax.w[0] + d.y * ax.w[1];
+      // centred on the door's point: the wall reaches as far each way as its farthest tile
+      const half = Math.max(c0 - lo, hi - c0), len = half * 2 * TILE;
+      const gp = d.gate.map(pr), g0 = (Math.min(...gp) - 0.5 - (c0 - half)) / (half * 2), g1 = (Math.max(...gp) + 0.5 - (c0 - half)) / (half * 2);
+      const shape = gateShape(ax.s[0], ax.s[1], len), key = `dg_gate_${d.id}`;
+      gateSheet(s, key, shape, d.kind, Math.max(0.05, g0), Math.min(0.95, g1));
+      const x = d.x * TILE, y = d.y * TILE, opened = this.doorsOpen.has(d.id);
+      const spr = s.add.sprite(x, y, key, opened ? GATE_FRAMES - 1 : 0).setOrigin(shape.ox / shape.w, shape.oy / shape.h).setScale(1 / TX).setDepth(y);
+      if (!s.anims.exists(`${key}_open`)) s.anims.create({ key: `${key}_open`, frames: s.anims.generateFrameNumbers(key, { start: 0, end: GATE_FRAMES - 1 }), frameRate: 11 });
+      this.gates.set(d.id, spr);
     }
     // Ropes and stairs
     for (const l of LINKS.filter((k) => k.floor === f.id)) {
-      if (l.id === "f1up") {
+      if (l.id === "f1up" || l.id === "f3out") {
         s.add.sprite(l.x, l.y, "dg_rope", 0).setOrigin(0.5, 1 - 6 / ROPE_ART.h).setScale(1 / TX).setDepth(l.y).play("dg_rope_sway");
         // daylight falling from the sinkhole far above
         const beam = s.add.image(l.x, l.y + 4, "dg_beam").setOrigin(0.5, 1).setScale(2.2, 1.6).setTint(0xcfd8c8).setAlpha(0.22).setBlendMode(Phaser.BlendModes.ADD).setDepth(GLOW_DEPTH);
         isoAnchor(beam, { x: l.x, y: l.y });
         this.lights.push({ x: l.x, y: l.y, r: 3.2 * TILE, flicker: 0, seed: 1 });
       } else if (l.down) {
-        s.add.image(l.x, l.y, "dg_pit").setScale(1 / TX).setDepth(DECAL);
+        s.add.image(l.x, l.y, "dg_pit").setOrigin(0.5, 30 / PIT.h).setScale(1 / TX).setDepth(DECAL);
       } else {
-        s.add.image(l.x - 0.4 * TILE, l.y - 0.4 * TILE, "dg_stair_up").setOrigin(0.5, 0.94).setScale(1 / TX).setDepth(l.y - 0.4 * TILE);
+        s.add.image(l.x - 0.4 * TILE, l.y - 0.4 * TILE, "dg_stair_up").setOrigin((STAIR_UP.OX + 13 - 18) / STAIR_UP.w, (STAIR_UP.OY + 15.5) / STAIR_UP.h).setScale(1 / TX).setDepth(l.y - 0.4 * TILE);
+      }
+      // Torches at the head of each stair (Murat 2026-11-07), two flanking the way down, one by the way up
+      if (l.id !== "f1up" && l.id !== "f3out") {
+        const spots = l.down ? [[-1.6, -1.3], [1.3, -1.6], [-1.6, 1.3], [1.3, 1.6], [1.8, 0.2], [0.2, 1.8]] : [[0.9, -1.5], [-1.5, 0.9], [1.4, 0.6], [0.6, 1.4]];
+        let n = 0;
+        for (const [ox, oy] of spots) {
+          if (n >= (l.down ? 2 : 1)) break;
+          const x = l.x + ox * TILE, y = l.y + oy * TILE;
+          if (!open(Math.floor(x / TILE), Math.floor(y / TILE))) continue;
+          n++;
+          s.add.sprite(x, y, "dg_torch", 0).setOrigin(0.5, 1 - 2 / TORCH.h).setScale(1 / TX).setDepth(y).play({ key: "dg_torch_burn", startFrame: n * 2 });
+          const glow = s.add.image(x, y - 26, "light").setTint(0xff8a3a).setScale(2.2).setAlpha(0.4).setBlendMode(Phaser.BlendModes.ADD).setDepth(GLOW_DEPTH);
+          isoAnchor(glow, { x, y });
+          this.lights.push({ x, y, r: 3.4 * TILE, flicker: 0.14, seed: Math.round(x + y) });
+        }
       }
     }
     // Braziers
@@ -258,6 +283,11 @@ export class DungeonView {
     }
   }
 
+  /** Minimap markers for the ways down and up (Murat 2026-11-07: show the stairs on the map). */
+  markers(): MapMarker[] {
+    return LINKS.map((l) => ({ x: l.x, y: l.y, glyph: "", color: l.down ? "#ffb347" : "#c8d8e8", label: l.label, stair: l.down ? "down" as const : "up" as const, fogged: l.floor === 0 }));
+  }
+
   /** The server's open gates changed: open/shut them here too (collisions, click-to-walk paths, the barricades). */
   setDoors(raw: string) {
     if (raw === this.doorsRaw) return;
@@ -267,12 +297,12 @@ export class DungeonView {
       const open = now.has(d.id);
       if (open === this.doorsOpen.has(d.id)) continue;
       setDoorOpen(d.id, open);
-      refreshWalk(d.tiles);
-      for (const img of this.gates.get(d.id) ?? []) {
-        this.scene.tweens.killTweensOf(img);
-        if (open) this.scene.tweens.add({ targets: img, alpha: 0, duration: 260, onComplete: () => img.setVisible(false) });
-        else { img.setVisible(true).setAlpha(0); this.scene.tweens.add({ targets: img, alpha: 1, duration: 260 }); }
+      refreshWalk(d.gate);
+      const spr = this.gates.get(d.id);
+      if (spr) { // the portcullis winds up into the lintel, or drops back down
+        if (open) spr.play(`dg_gate_${d.id}_open`); else spr.playReverse(`dg_gate_${d.id}_open`);
       }
+      if (this.floor === d.floor) play("gate", d.x * TILE, d.y * TILE, 1, !open);
     }
     this.doorsOpen = now;
   }
@@ -291,16 +321,18 @@ export class DungeonView {
     else this.drawDark(now);
     // the label over a rope or stair within reach
     const l = me && LINKS.find((k) => Math.hypot(k.x - me.x, k.y - me.y) < 3 * TILE);
-    this.nearDoor = fl && me ? DOORS.find((d) => d.floor === fl && doorDist(d, me.x, me.y) <= DOOR_RANGE) : undefined;
-    if (this.nearDoor && this.label) {
-      const d = this.nearDoor, text = this.doorsOpen.has(d.id) ? "E: Shut the gate" : "E: Open the gate";
+    // a gate in reach (a broken wall stays broken; a shortcut's gate only answers from its own side)
+    const near = fl && me ? DOORS.find((d) => d.floor === fl && doorDist(d, me.x, me.y) <= DOOR_RANGE && !(d.kind === "crack" && this.doorsOpen.has(d.id)) && (doorWorkable(d, me.x, me.y) || !this.doorsOpen.has(d.id))) : undefined;
+    this.nearDoor = near && me && doorWorkable(near, me.x, me.y) ? near : undefined;
+    if (near && this.label && me) {
+      const d = near, text = d.kind === "crack" ? "E: Break through the cracked wall" : !doorWorkable(d, me.x, me.y) ? "Barred from the other side" : this.doorsOpen.has(d.id) ? "E: Shut the gate" : "E: Open the gate";
       if (this.label.text !== text) this.label.setText(text);
       const x = d.x * TILE, y = d.y * TILE;
-      this.label.setPosition(x, y - GATE_H - 6).setVisible(true);
+      this.label.setPosition(x, y - GATE_FRAME_H - 12).setVisible(true);
       isoAnchor(this.label, { x, y });
     } else if (l && this.label) {
       if (this.label.text !== l.label) this.label.setText(l.label);
-      this.label.setPosition(l.x, l.y - (l.id === "f1up" ? 40 : l.down ? 10 : 60)).setVisible(true);
+      this.label.setPosition(l.x, l.y - (l.id === "f1up" || l.id === "f3out" ? 40 : l.down ? 10 : 60)).setVisible(true);
       isoAnchor(this.label, { x: l.x, y: l.y });
     } else this.label?.setVisible(false);
   }

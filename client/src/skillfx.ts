@@ -1,5 +1,4 @@
 import Phaser from "phaser";
-import { quake } from "./camfx";
 import { ISO } from "./isoflag";
 import { AreaLook, BLOOD_RITE_MS, FxStyle, impactMs, LEAP_MS, RAIN_FALL_MS, skillById, SkillDef, SWORD_FALL_MS } from "../../shared/skills";
 import { paintSigil, ICON } from "./skillArt";
@@ -12,7 +11,8 @@ import { MIST_DISSOLVE_MS, MIST_LINGER_MS, MIST_REFORM_AT_MS, MIST_REFORM_MS, MI
  * Particles are tiny square sprites with a height (z) above the ground, so they rise and fall correctly in both
  * the top-down and the isometric view (the iso view projects every sprite's world x/y each frame, see iso.ts).
  * The server sends "sfx" events (shared/skillEngine.ts); statuses and ground effects come from the room state.
- * Higher-row skills get more particles, more light and screen shake (TIER).
+ * Higher-row skills get more particles and more light (TIER). Hero skills NEVER shake the screen
+ * (Murat 2026-11-07); tests/no-hero-shake.test.ts fails CI if a shake is added here.
  */
 
 export const PALETTE: Record<FxStyle, number[]> = {
@@ -54,6 +54,11 @@ export interface FxEntity {
 }
 
 const pick = <T>(a: T[]) => a[Math.floor(Math.random() * a.length)];
+const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
+/** One texel of a sprite as an effect sees it: screen offset from the feet, height above them, colour. */
+export type Grain = { dx: number; dy: number; h: number; c: number };
+/** How long a Bat / Wolf Form change takes (client/src/beastForms.ts). */
+export const MORPH_MS = 520;
 const rnd = (a: number, b: number) => a + Math.random() * (b - a);
 
 /** Goo of the shooter blob's spit (not a skill style). */
@@ -320,12 +325,12 @@ export class SkillFx {
         for (let k = 0; k < 3; k++) this.scene.time.delayedCall(k * 90, () => this.ring(ev.x, ev.y, ev.r * (0.6 + k * 0.25), style, Math.round(26 * tier), { life: 380, up: 6 }));
         this.ring(ev.x, ev.y, ev.r * 0.7, "earth", 18, { life: 500, add: false });
         if (e) { this.glow(ev.x, ev.y, e.top * 0.7, 16 * tier, pal[1], 400, 0.8); this.flashSprite(e, pal[1]); }
-        if (near) quake(this.scene, 140, 0.003 * tier);
         break;
       }
       case "buff": {
         if (!e) break;
         const def = s;
+        if (def?.buff?.form) break; // a shapeshift: the beast form change plays instead (beastForms.ts)
         if (def?.type === "Enchant") {
           // Weapon lights up
           const [hx, hy] = this.hand(e);
@@ -349,7 +354,6 @@ export class SkillFx {
         this.burst(ev.fx, ev.fy, e.top * 0.5, "steel", 10, 140, 250);
         if (ev.x !== ev.fx || ev.y !== ev.fy) for (let i = 0; i < 4; i++) this.ghost(e, ev.fx + (ev.x - ev.fx) * i / 4, ev.fy + (ev.y - ev.fy) * i / 4, pal[2], 0.4);
         if (ev.tx !== undefined) this.slash(ev.tx, ev.ty, 18, style, Math.atan2(ev.ty - ev.y, ev.tx - ev.x), 2.8);
-        if (near) quake(this.scene, 90, 0.004);
         break;
       }
       case "chain": {
@@ -426,7 +430,6 @@ export class SkillFx {
         this.rise(x, y, 18, "blood", 40, e.top, 900);
         this.glow(x, y, e.top * 0.5, 22, 0xe63946, 700, 0.8);
         this.scene.time.delayedCall(250, () => { const m = this.ent(ev.id); if (m) this.flashSprite(m, 0xe63946); });
-        if (near) quake(this.scene, 120, 0.004);
         break;
       }
       case "fang": {
@@ -778,7 +781,6 @@ export class SkillFx {
     const look: AreaLook = ev.look;
     const { x, y, r } = ev;
     const pal = PALETTE[style];
-    const shake = (ms: number, k: number) => { if (near) quake(this.scene, ms, k); };
     // Cast while enchanted (Holy Blade + Cleave, Fire Arrows + Arrow Rain...): the blast also flares in the enchantment's colour
     const imb = ev.imb as FxStyle;
     if (PALETTE[imb] && imb !== style) {
@@ -810,7 +812,6 @@ export class SkillFx {
         this.burst(x, y, 2, style, Math.round(14 * tier), 90, 600, 2);
         for (let i = 0; i < 4 * tier; i++) this.rock(x, y, r);
         this.glow(x, y, 2, r, pal[2], 260, 0.4, true);
-        shake(200, 0.004 * tier);
         break;
       }
       case "spikes": {
@@ -819,14 +820,12 @@ export class SkillFx {
           this.spike(x + Math.cos(a) * d, y + Math.sin(a) * d, style, 6 + tier * 2);
         }
         this.ring(x, y, r, "earth", Math.round(10 * tier), { life: 300, add: false });
-        shake(80, 0.002 * tier);
         break;
       }
       case "pillar": {
         this.pillar(x, y, style, 110, 6 + tier, 420);
         this.ring(x, y, r, style, Math.round(18 * tier), { life: 360, up: 18 });
         this.burst(x, y, 2, style, Math.round(10 * tier), 70, 500);
-        shake(90, 0.003);
         break;
       }
       case "sword": {
@@ -836,7 +835,6 @@ export class SkillFx {
           this.ring(x, y, r * 1.2, "earth", 40, { life: 600, add: false, size: 2 });
           this.pillar(x, y, style, 160, 14, 600);
           this.glow(x, y, 4, r * 1.2, pal[1], 600, 0.6, true);
-          if (near) { quake(this.scene, 320, 0.012); }
         });
         break;
       }
@@ -848,7 +846,6 @@ export class SkillFx {
           this.burst(x, y, 2, style === "earth" ? "earth" : "fire", big ? 50 : 14, big ? 140 : 80, 700, 2);
           this.glow(x, y, 4, r * (big ? 1.8 : 1.2), 0xff9f1c, 500, 1, true);
           this.cracks(x, y, r * 0.8, 0x2b1d12);
-          if (near) quake(this.scene, big ? 300 : 120, big ? 0.012 : 0.004);
         }, style === "earth" ? "rock" : "orb");
         break;
       }
@@ -877,7 +874,6 @@ export class SkillFx {
         }
         this.ring(x, y, r, style, Math.round(40 * tier / 2), { life: 450, up: 16 });
         this.cracks(x, y, r * 0.7, pal[4]);
-        shake(160, 0.006);
         break;
       }
       case "flame": {
@@ -898,7 +894,6 @@ export class SkillFx {
         this.ring(x, y, r, style, Math.round(30 * tier), { life: 360, up: 16 });
         this.burst(x, y, 4, style, Math.round(16 * tier), 90, 450);
         this.glow(x, y, 6, r * 1.1, pal[2], 300, 0.8, true);
-        shake(100, 0.003 * tier);
       }
     }
   }
@@ -932,7 +927,6 @@ export class SkillFx {
     this.ripple(x, y, 58, 0xb3ecff, 420);
     this.scene.time.delayedCall(90, () => this.ripple(x, y, 40, 0xffffff, 320));
     this.crawl(x, y, 54, 0x9be8ff, 0x1b1410);
-    if (this.nearMe(x, y)) { const cam = this.scene.cameras.main; if (!cam.shakeEffect.isRunning) cam.shake(240, 0.0042); }
   }
 
   /** A ring running out over the ground from a point (flat, squashed by the iso view). */
@@ -1052,10 +1046,15 @@ export class SkillFx {
    * The hero as it looks right now (body + worn gear overlays), as coloured pixels: screen offsets from the feet,
    * one per texel. For effects that take the hero apart and put it back together (Mist Form).
    */
-  private heroPixels(e: FxEntity): { dx: number; dy: number; h: number; c: number }[] {
+  heroPixels(e: FxEntity): { dx: number; dy: number; h: number; c: number }[] {
     const layers: Phaser.GameObjects.Sprite[] = [e.sprite];
     e.gear?.each((g) => layers.push(g));
-    const s = e.sprite, W = s.frame.cutWidth, H = s.frame.cutHeight;
+    return this.spritePixels(layers);
+  }
+
+  /** Like heroPixels, for any sprite (and same-sized layers on top of it): the beast of a Bat / Wolf Form. */
+  spritePixels(layers: Phaser.GameObjects.Sprite[]): { dx: number; dy: number; h: number; c: number }[] {
+    const s = layers[0], W = s.frame.cutWidth, H = s.frame.cutHeight;
     const grid = new Map<number, number>(); // texel -> colour, the top layer wins
     for (const l of layers) {
       const data = this.frameData(l.texture.key, l.frame.name);
@@ -1071,6 +1070,9 @@ export class SkillFx {
     }
     return out;
   }
+
+  /** What a hero looks like when it isn't itself (a bat in Bat Form): its pixels, for Mist Form. Set by beastForms.ts. */
+  shapeOf?: (id: string) => Grain[] | undefined;
 
   private frames = new Map<string, { w: number; h: number; px: Uint8ClampedArray } | null>();
   /** The RGBA texels of one texture frame (cached). */
@@ -1102,7 +1104,7 @@ export class SkillFx {
   private mistForm(ev: any, e?: FxEntity) {
     const { fx, fy, x, y } = ev;
     const MIST = [0xc9c2d9, 0xa99fc0, 0x8a80a8, 0xe0dbea, 0x6f6690];
-    const shape = e ? this.heroPixels(e) : [];
+    const shape = e ? this.shapeOf?.(ev.id) ?? this.heroPixels(e) : [];
     const H = shape.reduce((m, q) => Math.max(m, q.h), 1);
     const depth = e ? e.sprite.depth : DEPTH - 1;
     const mix = (a: number, b: number, k: number) => {
@@ -1163,7 +1165,7 @@ export class SkillFx {
     if (shape.length) this.scene.time.delayedCall(MIST_REFORM_AT_MS, () => {
       // rebuilt into the pose he shows when he appears (his hidden frame by now), else the one he left in
       const me = e && this.ent(ev.id);
-      const now = me ? this.heroPixels(me) : [];
+      const now = me ? this.shapeOf?.(ev.id) ?? this.heroPixels(me) : [];
       const to = now.length ? now : shape, H2 = to.reduce((m, q) => Math.max(m, q.h), 1);
       const g = this.scene.add.graphics().setDepth(me ? me.sprite.depth + 0.5 : depth).setPosition(x, y);
       const grains = to.map((q) => {
@@ -1195,6 +1197,81 @@ export class SkillFx {
         this.mistPuff(x + Math.cos(a) * d, y + Math.sin(a) * d * 0.7, x, y, rnd(800, 1200), 0.75);
       });
     });
+  }
+
+  /**
+   * Shapeshift (Bat Form, Wolf Form, Murat 2026-11-08): one shape flows into the other. Every texel of the old shape
+   * leaves its place, darkens into shadow as it swirls up and out round the body, and settles into a texel of the new
+   * shape, taking its colour (top texels go to top texels, so the head becomes the head). Dark smoke wells up round
+   * the feet meanwhile; a bat throws off a flutter of small dark wings, a wolf red sparks of blood.
+   * `at` follows the hero while it plays (it may be running).
+   */
+  morph(at: () => { x: number; y: number; depth: number }, from: Grain[], to: Grain[], beast: string, ms = MORPH_MS, back = false, done?: () => void) {
+    let finished = false;
+    const finish = () => { if (!finished) { finished = true; done?.(); } };
+    const SHADOW = beast === "bat" ? 0x1b1020 : 0x16121c;
+    const mix = (a: number, b: number, k: number) => {
+      const ch = (sh: number) => Math.round(((a >> sh) & 255) + (((b >> sh) & 255) - ((a >> sh) & 255)) * k);
+      return (ch(16) << 16) | (ch(8) << 8) | ch(0);
+    };
+    const order = (l: Grain[]) => [...l].sort((p, q) => p.dy - q.dy || p.dx - q.dx);
+    const A = order(from), B = order(to);
+    const n = Math.max(A.length, B.length);
+    if (!n) { finish(); return; }
+    const p0 = at();
+    const g = this.scene.add.graphics().setDepth(p0.depth + 0.5).setPosition(p0.x, p0.y);
+    const H = Math.max(1, ...A.map((q) => q.h), ...B.map((q) => q.h));
+    const grains = Array.from({ length: n }, (_, i) => {
+      const a = A[Math.floor(i * A.length / n)] ?? B[i], b = B[Math.floor(i * B.length / n)] ?? A[i];
+      const side = Math.sign((a.dx + b.dx) || rnd(-1, 1));
+      return { a, b, at: (i / n) * ms * 0.3 + rnd(0, ms * 0.12), life: ms * rnd(0.5, 0.62),
+        out: side * rnd(5, 13), up: rnd(4, 12), sw: rnd(-1, 1) };
+    });
+    const t0 = this.t;
+    this.emit(ms + 40, 16, () => {
+      const t = this.t - t0, p = at();
+      if (t >= ms) { g.clear(); finish(); return; } // every grain has landed: the new shape takes over
+      g.setPosition(p.x, p.y).setDepth(p.depth + 0.5);
+      g.clear();
+      for (const q of grains) {
+        const k = clamp01((t - q.at) / q.life);
+        const e = k * k * (3 - 2 * k), bow = Math.sin(k * Math.PI);
+        const x = q.a.dx + (q.b.dx - q.a.dx) * e + q.out * bow + Math.sin(k * 6 + q.sw * 3) * 1.5 * bow;
+        const y = q.a.dy + (q.b.dy - q.a.dy) * e - q.up * bow;
+        const c = k < 0.5 ? mix(q.a.c, SHADOW, k * 2) : mix(SHADOW, q.b.c, (k - 0.5) * 2);
+        g.fillStyle(c, 1).fillRect(x - 0.5, y - 0.5, 1, 1);
+      }
+    });
+    this.scene.time.delayedCall(ms * 4, () => { g.destroy(); finish(); }); // (a fallback: the grains finish it first)
+    // dark smoke wells up round the feet, thickest in the middle of the change
+    this.emit(ms, 30, () => {
+      const p = at(), k = (this.t - t0) / ms, m = Math.sin(k * Math.PI);
+      for (let i = 0; i < Math.round(1 + m * 3); i++) {
+        const a = Math.random() * Math.PI * 2, d = Math.sqrt(Math.random()) * 14;
+        this.p(p.x + Math.cos(a) * d, p.y + Math.sin(a) * d * 0.6, rnd(0, H * 0.6), pick([0x1c1622, 0x2a2232, 0x3a2f44, 0x241018]), {
+          vx: Math.cos(a) * rnd(6, 16), vy: Math.sin(a) * rnd(3, 8), vz: rnd(6, 16), drag: 1.2, life: rnd(500, 850),
+          size: pick([3, 4, 5]), size1: rnd(7, 10), alpha: rnd(0.35, 0.55), add: false, depth: p.depth - 0.5,
+        });
+      }
+    });
+    this.glow(p0.x, p0.y, H * 0.5, 18, beast === "bat" ? 0x6a45c2 : 0x9b1b1b, ms * 0.8, 0.45);
+    if (beast === "bat") {
+      // a flutter of small dark wings scatters off the body
+      for (let i = 0; i < 9; i++) this.scene.time.delayedCall(rnd(0, ms * 0.6), () => {
+        const p = at(), a = Math.random() * Math.PI * 2;
+        this.p(p.x + rnd(-4, 4), p.y, rnd(H * 0.3, H * 0.8), pick([0x0d0a10, 0x1a1220, 0x24161e]), {
+          vx: Math.cos(a) * rnd(30, 55), vy: Math.sin(a) * rnd(12, 24), vz: rnd(14, 30), drag: 0.6, life: rnd(450, 700), size: 2, size1: 1, alpha: 0.95, add: false, depth: p.depth + 1, spin: rnd(-12, 12),
+        });
+      });
+    } else {
+      // red sparks of blood fly off as the body tears and knits
+      for (let i = 0; i < (back ? 8 : 14); i++) this.scene.time.delayedCall(rnd(ms * 0.15, ms * 0.7), () => {
+        const p = at(), a = Math.random() * Math.PI * 2;
+        this.p(p.x + rnd(-6, 6), p.y + rnd(-2, 2), rnd(H * 0.2, H * 0.7), pick([0x9b1b1b, 0xe63946, 0x6b0f18]), {
+          vx: Math.cos(a) * rnd(20, 40), vy: Math.sin(a) * rnd(8, 16), vz: rnd(10, 26), g: 70, drag: 0.8, life: rnd(350, 600), size: 1, alpha: 1, add: false, depth: p.depth + 1,
+        });
+      });
+    }
   }
 
   private smoke(x: number, y: number, r: number, n: number) {
@@ -1695,6 +1772,10 @@ export class SkillFx {
         d.fillStyle(0xff5a3c).fillRect(-0.5, -4.4, 0.6, 0.6).fillRect(1.2, -4.4, 0.6, 0.6);
         return box(d);
       }
+      case "sunbolt": { // the Veiled Circle's sun-fire: a white-gold core in an orange halo
+        d.fillStyle(0xff8a1c).fillCircle(0, 0, 3).fillStyle(0xffd27a).fillCircle(0, 0, 2).fillStyle(0xfffbe8).fillCircle(0, 0, 1);
+        return box(light(0xffa040, 0.5), d);
+      }
       case "magicbolt": {
         d.fillStyle(0x4cc9f0).fillCircle(0, 0, 2.4).fillStyle(0xd6f6ff).fillCircle(0, 0, 1.5).fillStyle(0xffffff).fillCircle(0, 0, 0.8);
         return box(light(0x4cc9f0, 0.4), d);
@@ -1859,6 +1940,13 @@ export class SkillFx {
           for (let i = 0; i < n(30); i++) this.p(x - ax * 3, y - ay * 3, 0, pick(GOO), { life: 220, size: 1, size1: 0 });
           break;
         }
+        case "sunbolt": {
+          // a ring of little sun-rays turning round it, embers falling behind
+          const a = age / 40;
+          for (let k = 0; k < 3; k++) { const b = a + k * 2.1; this.p(x + Math.cos(b) * 3.5, y + Math.sin(b) * 2, 0, pick([0xffd27a, 0xff9f1c, 0xfff3c0]), { life: 200, size: 1, size1: 0 }); }
+          for (let i = 0; i < n(35); i++) this.p(x - ax * 3, y - ay * 3, rnd(-1, 1), pick([0xff9f1c, 0xff6a1c, 0xffd27a]), { vx: -ax * 12, vy: -ay * 12, vz: -6, g: 60, life: 320, size: 1, size1: 0 });
+          break;
+        }
         case "magicbolt": {
           // Two frost sparks spiral around the bolt, a glittering tail
           const a = age / 35;
@@ -1895,7 +1983,6 @@ export class SkillFx {
       this.glow(x, y, 4, r * 1.3, PALETTE[style][2], 450, 0.9, true);
       if (style === "fire") this.smoke(x, y, r * 0.5, big ? 10 : 4);
       if (kind === "net") this.ring(x, y, r, "earth", 12, { life: 300, add: false });
-      if (big && this.nearMe(x, y)) quake(this.scene, 220, 0.008);
     } else this.burst(x, y, 4, style, 8, 60, 300);
     return true;
   }
@@ -1934,9 +2021,9 @@ export class SkillFx {
           this.p(x, y, 4, pick([0xe8e2d0, 0xd8d0b8, 0x8f887a]), { vx: Math.cos(a) * sp, vy: Math.sin(a) * sp * 0.6, vz: rnd(20, 50), g: 170, drag: 2, life: rnd(500, 800), size: pick([1, 2]), add: false });
         }
         this.burst(x, y, 1, "earth", 8, 45, 380, 1);
-        if (this.nearMe(x, y)) quake(this.scene, 120, 0.004);
         break;
       case "magicbolt": this.burst(x, y, 3, "frost", 12, 60, 380); this.glow(x, y, 3, 12, 0x4cc9f0, 260); break;
+      case "sunbolt": this.burst(x, y, 3, "fire", 14, 60, 400); this.glow(x, y, 3, 16, 0xffa040, 300); break;
       default: // shadowbolt
         this.ring(x, y, 14, "shadow", 14, { life: 380, up: 10, add: false });
         this.burst(x, y, 3, "poison", 12, 55, 420);

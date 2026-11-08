@@ -46,4 +46,11 @@ export const LOOT: Record<MobKind, LootDef> = {
   packlord: { gold: [70, 130], potionChance: 1 },
   hornbrute: { gold: [80, 150], potionChance: 1 },
   hidemother: { gold: [300, 480], potionChance: 1 },
+  nomad: { gold: [14, 30], potionChance: 0.35 },
+  scorpion: { gold: [6, 16], potionChance: 0.3 },
+  sanddead: { gold: [12, 28], potionChance: 0.35 },
+  veiled: { gold: [16, 34], potionChance: 0.4 },
+  camelfolk: { gold: [18, 38], potionChance: 0.4 },
+  sunwright: { gold: [600, 900], potionChance: 1 },
+  nightraider: { gold: [180, 320], potionChance: 1 },
 };

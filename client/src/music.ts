@@ -16,14 +16,24 @@ import { icon as pxIcon } from "./pixelicons";
  *   It starts quiet and swells as the battle intensifies (unless the player turned the swell off),
  *   plays once in full, then the calm tune returns. The same battle song only comes back 5 minutes after
  *   it last played (anywhere on the map).
+ * - Act 2 (the Sunscar desert): the first time the hero comes through the waygate (each time the game opens),
+ *   the Act 2 theme "Song of the Second Sun" plays once. Calm: the Kel Ashar tune with desert sounds under it in
+ *   the town, the Oasis tune at the oases, the Buried City tune in Kharsun and the Veiled Sanctum, the Dune tune
+ *   everywhere else. Battle: "Sand and Steel"; at the Sun Furnace, "Ishael, the Sunwright" (loops while the fight
+ *   lasts). The desert songs are Murat's mp3s, added once made (the prompts are in docs/music/act2-prompts.md):
+ *   until a file is there, its slot falls back to the desert sounds (calm) or the Act 1 battle songs.
  * A manually picked track just loops at the set volume.
  *
  * Starts after the first click / key press (browsers block sound before that); fades on mute / hidden tab.
  * Settings are remembered per player name (localStorage "music:<name>").
  */
 
-/** ambience: the village sounds alone; withSounds: an mp3 with the village sounds softly under it */
-type Track = { id: string; name: string; url?: string; ambience?: boolean; withSounds?: boolean };
+/**
+ * ambience: the village sounds alone; withSounds: an mp3 with the village sounds softly under it;
+ * desert: the desert sounds instead of the village ones; optional: an mp3 that may not be in the game yet
+ * (a missing file is left out of the menu and Auto uses its fallback).
+ */
+type Track = { id: string; name: string; url?: string; ambience?: boolean; withSounds?: boolean; desert?: boolean; optional?: boolean };
 
 const TRACKS: Track[] = [
   { id: "hearth", name: "Hearth of Oakvale", url: "/assets/music/hearth-of-oakvale.mp3" },
@@ -32,9 +42,29 @@ const TRACKS: Track[] = [
   { id: "village", name: "Village tune", url: "/assets/music/village-tune.mp3", withSounds: true },
   { id: "country", name: "Countryside tune", url: "/assets/music/countryside-tune.mp3" },
   { id: "village-sounds", name: "Village sounds", ambience: true },
+  // Act 2, the Sunscar (optional until Murat's mp3s are added; file names in docs/music/act2-prompts.md)
+  { id: "second-sun", name: "Song of the Second Sun", url: "/assets/music/song-of-the-second-sun.mp3", optional: true },
+  { id: "kel-ashar", name: "Kel Ashar tune", url: "/assets/music/kel-ashar-tune.mp3", withSounds: true, desert: true, optional: true },
+  { id: "dunes", name: "Dune tune", url: "/assets/music/dune-tune.mp3", optional: true },
+  { id: "oasis", name: "Oasis tune", url: "/assets/music/oasis-tune.mp3", optional: true },
+  { id: "kharsun", name: "The Buried City", url: "/assets/music/the-buried-city.mp3", optional: true },
+  { id: "sand-steel", name: "Sand and Steel", url: "/assets/music/sand-and-steel.mp3", optional: true },
+  { id: "sunwright", name: "Ishael, the Sunwright", url: "/assets/music/ishael-the-sunwright.mp3", optional: true },
+  { id: "desert-sounds", name: "Desert sounds", ambience: true, desert: true },
 ];
-const UNDEAD = ["skeleton", "skeletonmage", "necromancer"];
-const FIGHT = ["slime", "shooterblob", "warriorblob", "healerblob", "motherblob", "bandit", "venomblob", "frostblob", "fireblob", "stormblob"];
+/** The mp3 files in the game (vite.config.mts lists client/public/assets/music at build time). */
+declare const __MUSIC_FILES__: string[];
+const present = new Set<string>(typeof __MUSIC_FILES__ === "undefined" ? [] : __MUSIC_FILES__);
+const hasTrack = (id: string) => { const t = TRACKS.find((x) => x.id === id); return !!t && (!t.optional || present.has(t.url!.split("/").pop()!)); };
+/** The first of these tracks that is in the game. */
+const firstOf = (...ids: (string | null)[]) => ids.find((id): id is string => !!id && hasTrack(id)) ?? null;
+/** Act 2 calm areas with their own tune (else the Dune tune). */
+const DESERT_TOWNS = ["Kel Ashar", "Kel Ashar Market"];
+const OASES = ["Palmshade Oasis", "Mirage Wells", "Jackal Springs"];
+const BURIED = ["Kharsun, the Buried City", "The Veiled Sanctum"];
+const FURNACE = "The Sun Furnace";
+const UNDEAD = ["skeleton", "skeletonmage", "necromancer", "sanddead"];
+const FIGHT = ["slime", "shooterblob", "warriorblob", "healerblob", "motherblob", "bandit", "venomblob", "frostblob", "fireblob", "stormblob", "nomad", "scorpion", "veiled", "camelfolk", "sunwright", "nightraider"];
 const TOWNS = ["Oakvale", "Market Square", "Chapel of the Dawn", "The Rusty Tankard", "The Smithy", "Saltmere", "Hunter's Camp"];
 
 const FADE_IN = 2.5;
@@ -75,7 +105,10 @@ let zoneName: string | undefined;
 let zoneBattle: string | null = null;
 // Battle state
 let heat = 0;
-let battle: { track: string; zone: string } | null = null;
+let battle: { track: string; zone: string; boss?: boolean } | null = null;
+/** Act 2's theme: still to play (the first time in the desert each time the game opens) / playing now */
+let arrival: "todo" | "playing" | "done" = "todo";
+let act = 1;
 /** Battle song id -> time it may play again (5 min after it last played). */
 const cooldownUntil = new Map<string, number>();
 
@@ -115,11 +148,13 @@ function fadeTo(value: number, seconds: number) {
 }
 
 function wantedTrack(): string {
-  if (settings.pick !== "auto") return settings.pick;
+  if (settings.pick !== "auto") return hasTrack(settings.pick) ? settings.pick : "country";
   // In the world the opening song never starts over (e.g. after a mute): it only carries on
   if (intro && inWorld && playing !== "hearth") intro = false;
   if (intro) return "hearth";
-  return battle?.track ?? calmTrack;
+  if (battle) return battle.track;
+  if (arrival === "playing") return "second-sun";
+  return calmTrack;
 }
 
 /** Share of the set volume for the mp3 now playing: swells with the battle heat in Auto. */
@@ -146,7 +181,9 @@ function playTrack() {
     if (!audioEl.src.endsWith(track.url)) audioEl.src = track.url;
     // Battle songs play once in full, the opening song loops until the hero is in the world;
     // calm tunes and a picked song loop
-    audioEl.loop = settings.pick !== "auto" || (track.id === "hearth" ? !inWorld : battle?.track !== track.id);
+    audioEl.loop = settings.pick !== "auto" || (track.id === "hearth" ? !inWorld
+      : track.id === "second-sun" ? false
+      : battle?.track === track.id ? !!battle.boss : true);
     audioEl.currentTime = 0;
     if (mp3Gain) { mp3Gain.gain.cancelScheduledValues(ctx.currentTime); mp3Gain.gain.value = swellLevel(); }
     audioEl.play().catch(() => {});
@@ -154,7 +191,7 @@ function playTrack() {
   if (track.ambience || track.withSounds) {
     ambience ??= new Ambience(ctx, master);
     ambience.setLevel(track.ambience ? 0.65 : 0.28);
-    ambience.start();
+    ambience.start(!!track.desert);
   }
 }
 
@@ -162,7 +199,7 @@ function playTrack() {
 function resume() {
   const track = TRACKS.find((t) => t.id === playing);
   if (track?.url) audioEl?.play().catch(() => {});
-  if (track?.ambience || track?.withSounds) ambience?.start();
+  if (track?.ambience || track?.withSounds) ambience?.start(!!track.desert);
 }
 
 async function begin() {
@@ -215,6 +252,7 @@ function switchTrack(fadeIn = 1.5, fadeOut = FADE_OUT) {
 /** An mp3 ended (only the opening and battle songs don't loop). */
 function songEnded() {
   if (playing === "hearth" && intro) { intro = false; switchTrack(FADE_IN); return; }
+  if (playing === "second-sun" && arrival === "playing") { arrival = "done"; if (!battle) switchTrack(FADE_IN); return; }
   battleOver();
 }
 
@@ -232,10 +270,14 @@ function tick() {
   if (settings.pick !== "auto" || targetGain() === 0) return;
   // The opening song in the world never loops (it plays once, then the normal rules)
   if (inWorld && playing === "hearth" && audioEl?.loop) audioEl.loop = false;
+  // The boss song loops while the fight lasts, and fades once it has gone quiet
+  if (battle?.boss && heat < 1) { battle = null; switchTrack(FADE_IN, 3); return; }
   if (!battle && !intro && zoneBattle && zoneName && heat >= HEAT_START && Date.now() >= (cooldownUntil.get(zoneBattle) ?? 0)) {
-    battle = { track: zoneBattle, zone: zoneName };
-    // rests from its start too, so a song cut short does not come straight back
-    cooldownUntil.set(zoneBattle, Date.now() + BATTLE_COOLDOWN_MS);
+    const boss = zoneBattle === "sunwright";
+    battle = { track: zoneBattle, zone: zoneName, boss };
+    if (arrival === "playing") arrival = "done";
+    // rests from its start too, so a song cut short does not come straight back (the boss song never rests)
+    if (!boss) cooldownUntil.set(zoneBattle, Date.now() + BATTLE_COOLDOWN_MS);
     switchTrack(1);
     return;
   }
@@ -249,7 +291,7 @@ function tick() {
  * Where the hero stands: the monster zone (name + its `mobs`, or undefined outside any) and the area
  * name. Cheap to call every frame.
  */
-export function setMusicZone(zone: string | undefined, mobs: Partial<Record<string, number>> | undefined, area: string) {
+export function setMusicZone(zone: string | undefined, mobs: Partial<Record<string, number>> | undefined, area: string, actNow: 1 | 2 = 1) {
   if (!inWorld) {
     // In the world now: the opening song plays on to its end instead of looping
     inWorld = true;
@@ -258,9 +300,33 @@ export function setMusicZone(zone: string | undefined, mobs: Partial<Record<stri
     else if (intro) intro = false;
   }
   const has = (kinds: string[]) => !!mobs && kinds.some((k) => (mobs[k] ?? 0) > 0);
-  zoneName = zone;
-  zoneBattle = has(UNDEAD) ? "pale-marshals" : has(FIGHT) ? "blob-slayer" : null;
-  const calm = !zone && TOWNS.includes(area) ? "village" : "country";
+  const actOneBattle = has(UNDEAD) ? "pale-marshals" : has(FIGHT) ? "blob-slayer" : null;
+  let calm: string;
+  if (actNow === 2) {
+    // The Sun Furnace has no monster zone of its own: the boss fight is named by the area
+    zoneName = zone ?? (area === FURNACE ? FURNACE : undefined);
+    zoneBattle = area === FURNACE ? firstOf("sunwright", "sand-steel", "blob-slayer")
+      : actOneBattle && firstOf("sand-steel", actOneBattle);
+    calm = (DESERT_TOWNS.includes(area) ? firstOf("kel-ashar")
+      : OASES.includes(area) ? firstOf("oasis", "dunes")
+      : BURIED.includes(area) ? firstOf("kharsun", "dunes")
+      : firstOf("dunes")) ?? "desert-sounds";
+    // First steps in the desert: the Act 2 theme, once
+    if (act !== 2 && arrival === "todo" && !intro && hasTrack("second-sun") && settings.pick === "auto") {
+      arrival = "playing";
+      act = 2;
+      calmTrack = calm; pendingCalm = calm;
+      if (calmTimer !== null) { clearTimeout(calmTimer); calmTimer = null; }
+      if (!battle) switchTrack(FADE_IN);
+      return;
+    }
+  } else {
+    zoneName = zone;
+    zoneBattle = actOneBattle;
+    calm = !zone && TOWNS.includes(area) ? "village" : "country";
+  }
+  // Back to the valley while the theme plays: it fades with the calm change below
+  if (actNow !== act) { act = actNow; if (arrival === "playing") arrival = "done"; }
   if (calm === pendingCalm) return;
   pendingCalm = calm;
   if (calmTimer !== null) clearTimeout(calmTimer);
@@ -272,7 +338,7 @@ export function setMusicZone(zone: string | undefined, mobs: Partial<Record<stri
     calmTrack = calm;
     // Leaving the village ends the opening song with a long fade
     if (intro && started && calm !== "village") { intro = false; if (settings.pick === "auto") switchTrack(FADE_IN, 4); return; }
-    if (settings.pick === "auto" && !battle && !intro) switchTrack();
+    if (settings.pick === "auto" && !battle && !intro && arrival !== "playing") switchTrack();
   }, started ? ZONE_SETTLE * 1000 : 0);
 }
 
@@ -344,7 +410,7 @@ function buildUi() {
   hud.appendChild(panel);
 
   const list = panel.querySelector("#musictracks") as HTMLElement;
-  const choices = [{ id: "auto", name: "Auto (calm + battle)" }, ...TRACKS];
+  const choices = [{ id: "auto", name: "Auto (calm + battle)" }, ...TRACKS.filter((t) => hasTrack(t.id))];
   const trackBtns = choices.map((t) => {
     const b = document.createElement("button");
     b.className = "mtrack";
@@ -391,6 +457,8 @@ function buildUi() {
 
 // ---------------------------------------------------------------------------
 // Village sounds, made in code: wind, a murmur of voices, birds, now and then the smith's hammer.
+// Desert sounds (Act 2): a dry wind that gusts and hisses with sand, now and then far-off chimes on the wind,
+// a camel bell and a hawk's cry high up.
 
 class Ambience {
   private timer: number | null = null;
@@ -399,6 +467,9 @@ class Ambience {
   private noise: AudioBuffer;
   private nextBird = 0;
   private nextHammer = 0;
+  private nextChime = 0;
+  private nextHawk = 0;
+  private desert = false;
 
   constructor(private ctx: AudioContext, dest: AudioNode) {
     this.out = ctx.createGain();
@@ -415,13 +486,25 @@ class Ambience {
     this.out.gain.value = v;
   }
 
-  start() {
-    if (this.timer !== null) return;
-    this.bed(260, 0.7, 0.08, 0.06);  // wind, a soft breath under the tune
-    this.bed(520, 1.4, 0.05, 0.17);  // distant voices
+  start(desert = false) {
+    if (this.timer !== null && desert === this.desert) return;
+    if (this.timer !== null) this.stop();
+    this.desert = desert;
     const now = this.ctx.currentTime;
-    this.nextBird = now + 1 + Math.random() * 2;
-    this.nextHammer = now + 4 + Math.random() * 6;
+    if (desert) {
+      this.bed(180, 0.6, 0.09, 0.045); // the low dry wind
+      this.bed(2300, 0.8, 0.022, 0.11); // sand hissing over the dunes, in gusts
+      this.bed(640, 1.6, 0.03, 0.08);   // a far-off murmur (the town under the wind)
+      this.nextChime = now + 3 + Math.random() * 4;
+      this.nextHawk = now + 12 + Math.random() * 15;
+      this.nextBird = Infinity; this.nextHammer = Infinity;
+    } else {
+      this.bed(260, 0.7, 0.08, 0.06);  // wind, a soft breath under the tune
+      this.bed(520, 1.4, 0.05, 0.17);  // distant voices
+      this.nextBird = now + 1 + Math.random() * 2;
+      this.nextHammer = now + 4 + Math.random() * 6;
+      this.nextChime = Infinity; this.nextHawk = Infinity;
+    }
     this.timer = window.setInterval(() => this.schedule(), 200);
   }
 
@@ -463,6 +546,68 @@ class Ambience {
       for (let i = 0; i < strikes; i++) this.clink(now + 0.05 + i * (0.42 + Math.random() * 0.06));
       this.nextHammer = now + 9 + Math.random() * 14;
     }
+    if (now >= this.nextChime) {
+      // a few notes of a chime on the wind (a pentatonic handful), or a camel bell's dull clonk
+      if (Math.random() < 0.7) {
+        const scale = [880, 990, 1110, 1320, 1480, 1760];
+        const n = 2 + Math.floor(Math.random() * 4);
+        for (let i = 0; i < n; i++) this.chime(now + 0.05 + i * (0.18 + Math.random() * 0.35), scale[Math.floor(Math.random() * scale.length)]);
+      } else {
+        for (let i = 0; i < 2 + Math.floor(Math.random() * 2); i++) this.camelBell(now + 0.05 + i * (0.55 + Math.random() * 0.2));
+      }
+      this.nextChime = now + 6 + Math.random() * 10;
+    }
+    if (now >= this.nextHawk) {
+      this.hawk(now + 0.05);
+      this.nextHawk = now + 25 + Math.random() * 30;
+    }
+  }
+
+  /** A small metal chime far off: soft attack, long ring. */
+  private chime(t: number, f: number) {
+    for (const [m, v] of [[1, 0.012], [2.76, 0.004]] as const) {
+      const o = this.ctx.createOscillator();
+      const g = this.ctx.createGain();
+      o.type = "sine";
+      o.frequency.value = f * m;
+      g.gain.setValueAtTime(0, t);
+      g.gain.linearRampToValueAtTime(v, t + 0.01);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 2.2);
+      o.connect(g).connect(this.out);
+      o.start(t); o.stop(t + 2.3);
+    }
+  }
+
+  /** A camel's wooden-and-copper bell, dull and low. */
+  private camelBell(t: number) {
+    for (const [f, v] of [[410, 0.022], [655, 0.01], [1030, 0.004]] as const) {
+      const o = this.ctx.createOscillator();
+      const g = this.ctx.createGain();
+      o.type = "triangle";
+      o.frequency.value = f * (0.98 + Math.random() * 0.04);
+      g.gain.setValueAtTime(0, t);
+      g.gain.linearRampToValueAtTime(v, t + 0.008);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.7);
+      o.connect(g).connect(this.out);
+      o.start(t); o.stop(t + 0.75);
+    }
+  }
+
+  /** A hawk high over the sand: one long falling scream. */
+  private hawk(t: number) {
+    const o = this.ctx.createOscillator();
+    const g = this.ctx.createGain();
+    o.type = "sawtooth";
+    const f = this.ctx.createBiquadFilter();
+    f.type = "bandpass"; f.frequency.value = 2400; f.Q.value = 3;
+    o.frequency.setValueAtTime(2900, t);
+    o.frequency.linearRampToValueAtTime(3300, t + 0.12);
+    o.frequency.exponentialRampToValueAtTime(1900, t + 1.1);
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(0.012, t + 0.08);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 1.15);
+    o.connect(f).connect(g).connect(this.out);
+    o.start(t); o.stop(t + 1.2);
   }
 
   private bird(t: number) {
