@@ -693,8 +693,10 @@ function buildWorld() {
       if (ground[y][x] === T.WATER || ground[y][x] === T.SAND) return;
       if (isGrass(ground[y][x])) setG(x, y, noise(x, y, 5, 331) > 0.6 ? T.DIRT : T.GRASS_DARK);
       const o = objects[y][x];
+      // Thinned out (Murat 2026-11-08: hard to get through): fewer pines and boulders, with open heath between them
       if (o === T.TREE || o === T.BUSH) setO(x, y, hash(x, y, 332) < 0.25 ? T.PINE : hash(x, y, 333) < 0.3 ? T.STUMP : EMPTY);
-      else if (o === EMPTY && free(x, y) && (noise(x, y, 3, 334) > 0.72 || hash(x, y, 335) < 0.02)) setO(x, y, T.ROCK);
+      else if (o === T.PINE && hash(x, y, 336) < 0.4) setO(x, y, hash(x, y, 337) < 0.35 ? T.STUMP : EMPTY);
+      else if (o === EMPTY && free(x, y) && (noise(x, y, 3, 334) > 0.8 || hash(x, y, 335) < 0.012)) setO(x, y, T.ROCK);
     }); }
 
   // ---------- 12b. Signposts at the gates and road junctions (directions are worked out in SIGNPOSTS) ----------
