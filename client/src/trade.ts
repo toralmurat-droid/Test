@@ -2,7 +2,9 @@ import Phaser from "phaser";
 import "./trade.css";
 import { BAG_SIZE, canWear, gearDef, gearName, itemLevel, itemRarity, itemText, RARITY_NAMES, reqProblem, SLOT_NAMES, TIER_NAMES } from "../../shared/gear";
 import { STASH, STASH_RANGE, STASH_SIZE, TRADE } from "../../shared/trade";
-import { affixHtml, iconCanvas, itemColor, reqInfoOf } from "./gear";
+import { affixHtml, iconCanvas, itemColor, looseRuneHtml, reqInfoOf, runeHtml } from "./gear";
+import { parseRune } from "../../shared/runes";
+import { runeCanvas, runeCss } from "./runeArt";
 import { chestImage, setChestOpen } from "./chests";
 import { isoAnchor } from "./iso";
 import { TEXT_FONT, TEXT_PX, WT } from "./pixelfont";
@@ -20,6 +22,8 @@ type Send = (type: string, msg?: unknown) => void;
 
 /** Item details in the pixel font (shown in the info line on hover). */
 function itemHtml(id: string, state: any): string {
+  const rune = parseRune(id);
+  if (rune) return looseRuneHtml(rune);
   const d = gearDef(id);
   if (!d) return "";
   const r = itemRarity(id), aff = affixHtml(id);
@@ -27,7 +31,7 @@ function itemHtml(id: string, state: any): string {
   const why = !who && state ? reqProblem(id, reqInfoOf(state)) : "";
   return `<b style="color:${itemColor(id)}">${esc(gearName(id, d.cls ?? state?.cls))}</b> <span class="glvl">Lv ${itemLevel(id)}</span> · `
     + `${r ? `<span style="color:${itemColor(id)}">${RARITY_NAMES[r]}</span> ` : ""}${TIER_NAMES[d.tier]} ${SLOT_NAMES[d.slot]}<br>`
-    + `${itemText(id) || "No bonus"}${aff ? `<br>${aff}` : ""}${who ? `<br>${who}` : why ? `<br><span class="gbad">${why}</span>` : ""}`;
+    + `${itemText(id) || "No bonus"}${aff ? `<br>${aff}` : ""}${runeHtml(id) ? `<br>${runeHtml(id)}` : ""}${who ? `<br>${who}` : why ? `<br><span class="gbad">${why}</span>` : ""}`;
 }
 
 /** One item cell (icon, rarity border, level), or an empty one. */
@@ -35,9 +39,10 @@ function cell(scene: Phaser.Scene, id: string | undefined, info: HTMLElement, st
   const b = document.createElement("button");
   b.className = "gcell tcell" + (picked ? " picked" : "");
   b.tabIndex = -1;
-  if (!id || !gearDef(id)) { b.disabled = true; return b; }
-  b.appendChild(iconCanvas(scene, id));
-  b.style.borderColor = itemColor(id);
+  const rune = id ? parseRune(id) : undefined;
+  if (!id || (!gearDef(id) && !rune)) { b.disabled = true; return b; }
+  b.appendChild(rune ? runeCanvas(id) : iconCanvas(scene, id));
+  b.style.borderColor = rune ? runeCss(rune) : itemColor(id);
   if (itemRarity(id) >= 2) b.style.boxShadow = `inset 0 0 6px ${itemColor(id)}`;
   if (itemLevel(id) > 1) b.appendChild(Object.assign(document.createElement("span"), { className: "gcelllvl", textContent: String(itemLevel(id)) }));
   b.onmouseenter = () => { info.innerHTML = itemHtml(id, state); };

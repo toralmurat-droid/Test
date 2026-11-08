@@ -1,7 +1,7 @@
 import { TILE } from "./constants";
 import { EMPTY, isSolidTile, OBJECTS, SAFE_ZONE } from "./map";
 import { NPCS } from "./npcs";
-import { BAG_SIZE, isGearId } from "./gear";
+import { BAG_SIZE, isBagItem } from "./gear";
 
 /**
  * Player trading and the account stash (Murat 2026-11-04, from the expert review).
@@ -66,7 +66,7 @@ export function offerFrom(bag: string[], gold: number, items: unknown, coins: un
   const seen = new Set<number>(), out: string[] = [];
   for (const v of idx) {
     if (typeof v !== "number" || !Number.isInteger(v) || v < 0 || v >= bag.length || seen.has(v)) continue;
-    if (!isGearId(bag[v])) continue;
+    if (!isBagItem(bag[v])) continue;
     seen.add(v); out.push(bag[v]);
     if (out.length >= TRADE.maxItems) break;
   }
