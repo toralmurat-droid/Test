@@ -65,6 +65,11 @@ export const MOB_COMBAT: Record<MobKind, { poise: number; windupMs: number }> = 
   packlord: { poise: 240, windupMs: 360 },
   hornbrute: { poise: 320, windupMs: 480 },
   hidemother: { poise: 400, windupMs: 460 },
+  nomad: { poise: 50, windupMs: 260 },
+  scorpion: { poise: 90, windupMs: 380 },
+  sanddead: { poise: 70, windupMs: 340 },
+  veiled: { poise: 40, windupMs: 420 },
+  camelfolk: { poise: 140, windupMs: 440 },
 };
 
 /** Attack speed multiplier from the poise fraction (1 above half, down to minSpeed at 0). */

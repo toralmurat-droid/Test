@@ -1,5 +1,5 @@
 import Phaser from "phaser";
-import { BEAST_KINDS, TILE } from "../../shared/constants";
+import { BEAST_KINDS, DESERT_KINDS, TILE } from "../../shared/constants";
 import { TILE_COUNT } from "../../shared/map";
 import { ROWS, drawTileset } from "./tileset";
 import { SMOOTH } from "./isoflag";
@@ -286,11 +286,12 @@ export const MOB_LOOK: Record<string, { top: number; bar: number; oy: number; sc
 };
 
 const PAINTED_MOBS = ["slime", "blobling", "shooterblob", "warriorblob", "healerblob", "motherblob", "venomblob", "frostblob", "fireblob", "stormblob", "skeleton", "bandit", "skeletonmage", "necromancer", "demon", "crawler", "banditchief", "hollowking", "gnawkin", "tuskborn", "silkwretch", "duskwing", "packlord", "hornbrute", "hidemother", "crowseer", "gnasher", "weaver",
+  "nomad", "scorpion", "sanddead", "veiled", "camelfolk",
   "golem_fire", "golem_cold", "golem_poison", "golem_shock", "golem_colossus", "bride"];
 /** The Colossus is painted once per element (Mob.weapon holds it, shared/summons.ts). */
 const COLOSSUS_ELEMENTS = ["fire", "cold", "poison", "shock"];
 /** Beast-folk drawn the other way round (Mob.weapon "folk", shared/constants.ts BEAST_FOLK): the beast's hide on a man. */
-const FOLK_MOBS = ["gnawkin", "tuskborn", "silkwretch", "duskwing"];
+const FOLK_MOBS = ["gnawkin", "tuskborn", "silkwretch", "duskwing", "nomad"]; // nomad "folk" = a Dustrider archer
 /** Painted humanoid monsters have taller frames (feet lower in the frame, label higher). */
 const PAINTED_LOOK: Record<string, { top: number; bar: number; oy: number; scale?: number }> = {
   // about hero height (heroes are 32 world px since the 48px sheets)
@@ -307,6 +308,9 @@ const PAINTED_LOOK: Record<string, { top: number; bar: number; oy: number; scale
   gnasher: { top: 50, bar: 28, oy: 35.5 / 38, scale: 1.4 }, weaver: { top: 52, bar: 30, oy: 37.5 / 40, scale: 1.45 },
   packlord: { top: 48, bar: 28, oy: 34 / 36, scale: 1.4 }, hornbrute: { top: 56, bar: 32, oy: 37.5 / 40, scale: 1.45 },
   hidemother: { top: 66, bar: 38, oy: 44 / 48, scale: 1.6 },
+  // Act 2, the Sunscar
+  nomad: { top: 24, bar: 14, oy: 27.5 / 30 }, sanddead: { top: 24, bar: 14, oy: 27.5 / 30 }, veiled: { top: 26, bar: 14, oy: 31.2 / 32 },
+  camelfolk: { top: 36, bar: 18, oy: 33.5 / 36 }, scorpion: { top: 20, bar: 18, oy: 27 / 30 },
   // the Summoner's golems (tools/art/paint/golems.ts, 40x46 frames, feet at 43) and the Colossus they fuse into
   golem_fire: { top: 40, bar: 22, oy: 43 / 46 }, golem_cold: { top: 40, bar: 22, oy: 43 / 46 },
   golem_poison: { top: 40, bar: 22, oy: 43 / 46 }, golem_shock: { top: 40, bar: 22, oy: 43 / 46 },
@@ -344,7 +348,7 @@ export function mobTexture(scene: Phaser.Scene, kind: string, level = 1, weapon 
       return key;
     }
   }
-  return pixelMobTexture(scene, kind === "demon" || kind === "hollowking" ? "necromancer" : BEAST_KINDS.includes(kind as any) || kind === "bride" ? "bandit" : kind, level); // no pixel demon sheet: a necromancer stands in
+  return pixelMobTexture(scene, kind === "demon" || kind === "hollowking" ? "necromancer" : BEAST_KINDS.includes(kind as any) || DESERT_KINDS.includes(kind as any) || kind === "bride" ? (kind === "sanddead" ? "skeleton" : "bandit") : kind, level); // no pixel demon sheet: a necromancer stands in
 }
 
 function pixelMobTexture(scene: Phaser.Scene, kind: string, level = 1): string {

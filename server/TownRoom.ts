@@ -4,7 +4,7 @@ import { ArraySchema, MapSchema, Schema, type } from "@colyseus/schema";
 import {
   AGGRO, aggroLevelFactor, BLOB_AI, BONES, DEMON, BROOD, Dir, FACTION, FEUD, MERGE, MobDef, MOTHER, SKELETON_AI, HIT_RADIUS, mobScale, regionMobLevel, regionSpecialLevel, InputState, MOB_ATTACK_RANGE, MOBS, MobKind, rollSkeletonWeapon, SKELETON_BOW, SKELETON_WEAPONS, SkeletonWeapon, REGEN_DELAY_MS, REGEN_RAMP_MS, regenFromStamina, SAFE_REGEN_MULT,
   RESPAWN_MS, TICK_RATE, TILE,
-  HOLLOW_KING, ELEM_BLOB, ELEM_MOVE, inputDir, ELITE, BOSS, URSK, BEAST, BEAST_BROOD, BEAST_FOLK, BEAST_KINDS, BEAST_MOVES, BEAST_RIDER, type BeastMove,
+  HOLLOW_KING, ELEM_BLOB, ELEM_MOVE, inputDir, DESERT_Y0, ELITE, BOSS, URSK, BEAST, BEAST_BROOD, BEAST_FOLK, BEAST_KINDS, BEAST_MOVES, BEAST_RIDER, type BeastMove,
   MAP_W, MAP_H,
 } from "../shared/constants";
 import { ambushRoomAt, arrivalAt, CRACK_OPEN_MS, LINK_RANGE, linkById, LINKS, SHORTCUT_OPEN_MS } from "../shared/dungeon";
@@ -512,7 +512,10 @@ const RANGED: Partial<Record<MobKind, RangedCfg>> = {
   venomblob: { keepAway: ELEM_BLOB.splurt.keepAway, far: ELEM_BLOB.splurt.range * 0.85, range: ELEM_BLOB.splurt.range, shot: "", shotSpeed: 0, shotRadius: 0 }, // lobs poison (elemSpecial)
   necromancer: { ...SKELETON_AI.necro, far: SKELETON_AI.necro.range * 0.8, shot: "shadowbolt", mult: SKELETON_AI.necro.boltMult },
   crowseer: { ...SKELETON_AI.mage, range: 135, keepAway: 70, far: 135 * 0.85, shot: "shadowbolt", mult: 1.1 }, // the crow-folk's hexes
+  veiled: { ...SKELETON_AI.mage, range: 140, keepAway: 72, far: 140 * 0.85, shot: "sunbolt", shotSpeed: 160, mult: 1.1 }, // the Veiled Circle's sun-fire
 };
+/** Dustrider archers (the nomads' other half, BEAST_FOLK "folk"): short desert bows. */
+const NOMAD_BOW: RangedCfg = { range: 125, keepAway: 60, far: 125 * 0.85, shot: "arrow", shotSpeed: 175, shotRadius: 3, mult: 0.85 };
 /** Gnawkin bone-slingers (the half-folk variant, BEAST_FOLK): stones from a sling. */
 const BONE_SLING: RangedCfg = { range: 115, keepAway: 55, far: 115 * 0.85, shot: "stone", shotSpeed: 150, shotRadius: 3, mult: 0.9 };
 
@@ -523,6 +526,7 @@ const rangedOf = (m: Mob): RangedCfg | undefined =>
   m.kind === "skeleton" && m.weapon === "bow" ? BOW_SKELETON
   : m.kind === "bandit" ? (m.weapon === "archer" ? BANDIT_BOW : m.weapon === "lookout" ? LOOKOUT_BOW : undefined)
   : m.kind === "gnawkin" && m.weapon === "folk" ? BONE_SLING
+  : m.kind === "nomad" ? (m.weapon === "folk" ? NOMAD_BOW : undefined)
   : RANGED[m.kind];
 /** A monster's stats: its kind's numbers, a bandit's role on top, and the camp's horn alert (they come from far). */
 function mobDef(m: Mob, now = Date.now()): MobDef {
@@ -4612,7 +4616,7 @@ export class TownRoom extends Room<TownState> {
     const p = this.state.players.get(client.sessionId);
     if (!p) return;
     const board = nearestBoard(p.x, p.y);
-    const offers = board ? bountyOffers(p.level, p.bountyDone) : [];
+    const offers = board ? bountyOffers(p.level, p.bountyDone, board.y >= DESERT_Y0 * TILE) : [];
     if (msg.drop) p.bounty = undefined;
     else if (typeof msg.take === "number" && board && !p.bounty && offers[msg.take]) p.bounty = { ...offers[msg.take], n: 0 };
     client.send("bounty", { board: board?.id ?? "", offers, active: p.bounty ?? null });

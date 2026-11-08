@@ -1,4 +1,5 @@
-import { ELITE, MobKind, regionMobLevel, regionSpecialLevel, TILE } from "./constants";
+import { act2MobLevel, act2SpecialLevel, DESERT_Y0, ELITE, MobKind, regionMobLevel, regionSpecialLevel, TILE } from "./constants";
+import { D, SUNSTONE } from "./desert";
 import { AREAS, isSafeZone, isSolidAt, OBJECTS, T, VILLAGE } from "./map";
 import { CAMP_POSTS } from "./bandits";
 import { AMBUSH_ROOMS, chamberAtPx, FLOORS, LAIRS, LANDING, pointInChamber } from "./dungeon";
@@ -25,7 +26,7 @@ export function rollLevel(z: SpawnZone): number {
 }
 
 /** Peaceful places inside monster zones (with a margin in tiles): nothing spawns or walks in there. */
-export const NO_MOB_AREAS = ["Saltmere"];
+export const NO_MOB_AREAS = ["Saltmere", "Kel Ashar", "The Sunstone Circle"]; // Act 2: the oasis town and the waygate's circle
 const NO_MOB_RECTS = NO_MOB_AREAS.flatMap((n) => AREAS.filter((a) => a.name === n)).map((a) => ({ x0: a.x - 2, y0: a.y - 2, x1: a.x + a.w + 2, y1: a.y + a.h + 2 }));
 /** True where monsters may not go (pixel coords). */
 export function noMobsAt(px: number, py: number): boolean {
@@ -98,6 +99,22 @@ const ZONE_MOBS: { name: string; mobs: Partial<Record<MobKind, number>>; respawn
   { name: "Whispering Woods", mobs: { slime: 10, shooterblob: 4, warriorblob: 4, healerblob: 3, motherblob: 2 }, respawnMs: 5250, wild: true }, // broad areas last: zone lookups take the first match
   // Everything west of the river that no named area covers: fields, roads and woods around Oakvale
   { name: "Oakvale Countryside", mobs: { slime: 10, shooterblob: 3, warriorblob: 3, healerblob: 2, motherblob: 2 }, respawnMs: 5250, wild: true },
+  // ---- Act 2, the Sunscar (shared/desert.ts): Lv 30-47, climbing away from the Sunstone Circle toward the Thornspire.
+  // Dustrider raiders and scorpions on the open sand, the Sand-Dead in buried Kharsun, the camel-folk in the mesas and the
+  // eastern dunes, the Veiled Circle's adepts up in the Thornspire round their sanctum.
+  { name: "The Glasswind Flats", mobs: { scorpion: 6, nomad: 4 }, respawnMs: 5000, levels: [30, 32] },
+  { name: "Palmshade Oasis", mobs: { scorpion: 6, nomad: 3 }, respawnMs: 5500, levels: [31, 33] },
+  { name: "Jackal Springs", mobs: { nomad: 6, scorpion: 3 }, respawnMs: 5500, levels: [33, 35] },
+  { name: "Dustrider Camp", mobs: { nomad: 14 }, respawnMs: 6000, levels: [34, 37] },
+  { name: "Kharsun, the Buried City", mobs: { sanddead: 14 }, respawnMs: 6500, levels: [36, 39] },
+  { name: "The Humpback Mesas", mobs: { camelfolk: 10, scorpion: 3 }, respawnMs: 6500, levels: [38, 41] },
+  { name: "The Saffron Dunes", mobs: { scorpion: 12, camelfolk: 3 }, respawnMs: 6000, levels: [40, 43] },
+  { name: "Mirage Wells", mobs: { camelfolk: 5, scorpion: 4, veiled: 3 }, respawnMs: 6500, levels: [41, 44] },
+  { name: "The Veiled Sanctum", mobs: { veiled: 12 }, respawnMs: 8000, fixed: true, levels: [45, 47] },
+  { name: "The Sun Furnace", mobs: {}, respawnMs: 150000, fixed: true, levels: [47, 47] }, // the final fight (no zone spawns)
+  { name: "The Thornspire Heights", mobs: { veiled: 8, camelfolk: 4, sanddead: 3 }, respawnMs: 7000, levels: [43, 46] },
+  { name: "The Red Wastes", mobs: { nomad: 6, scorpion: 8 }, respawnMs: 6000, wild: true },
+  { name: "The Sunscar", mobs: { scorpion: 10, nomad: 6, camelfolk: 2 }, respawnMs: 6000, wild: true }, // the open desert, last
 ];
 /** Wild zones that are not map areas (no banner, no map label): their rect in tiles. */
 const WILD_RECTS: Record<string, { x: number; y: number; w: number; h: number }> = {
@@ -108,7 +125,7 @@ const WILD_RECTS: Record<string, { x: number; y: number; w: number; h: number }>
  * Density (Murat wants monsters everywhere): every zone keeps at least one monster per this many walkable tiles.
  * Wild zones are a bit thinner than the named hunting grounds. Elites (necromancers) keep their hand-set count.
  */
-export const DENSITY = { tilesPerMob: 9, wildTilesPerMob: 12 };
+export const DENSITY = { tilesPerMob: 9, wildTilesPerMob: 12, desertTilesPerMob: 18, desertWildTilesPerMob: 28 }; // the desert is wide open: thinner
 /** Blob variants only appear from these levels (Murat: shooter + warrior above Lv 3, healer above Lv 5). */
 export const KIND_MIN_LEVEL: Partial<Record<MobKind, number>> = { shooterblob: 4, warriorblob: 4, healerblob: 6, venomblob: 12, frostblob: 14, fireblob: 16, stormblob: 18 };
 
@@ -122,14 +139,21 @@ export function zoneLevels(a: { x: number; y: number; w: number; h: number }): [
 }
 /** Lowest monster level at a tile, from its distance to the village centre (a spot spans this level to +2). */
 export function baseLevelAt(tx: number, ty: number): number {
+  // Act 2: from Lv 30 at the Sunstone Circle, a level every 12 tiles further out
+  if (ty >= DESERT_Y0) return 30 + Math.floor(Math.max(0, Math.hypot(tx - SUNSTONE.x, ty - D(SUNSTONE.y)) - 12) / 12);
   const cx = (VILLAGE.x0 + VILLAGE.x1) / 2, cy = (VILLAGE.y0 + VILLAGE.y1) / 2;
   return 1 + Math.floor(Math.max(0, Math.hypot(tx - cx, ty - cy) - 40) / 8);
 }
 
+/** The level ceilings for a zone or a tile: Oakvale's (regionMobLevel, Lv 25/30) or the desert's (ACT2_LEVEL, Lv 30-47/50). */
+const levelFns = (ty: number) => ty >= DESERT_Y0 ? { mob: act2MobLevel, special: act2SpecialLevel } : { mob: regionMobLevel, special: regionSpecialLevel };
+
 const inRect = (r: { x: number; y: number; w: number; h: number }, tx: number, ty: number) => tx >= r.x && tx < r.x + r.w && ty >= r.y && ty < r.y + r.h;
+/** Areas so broad they never keep a wild zone's monsters out (they hold other zones). */
+const BROAD_AREAS = ["Whispering Woods", "River Ashwell", "The Sunscar"];
 /** Named areas (and Oakvale's surroundings) a wild zone leaves alone: its monsters stay in their own biome. */
 function claimedByArea(name: string, tx: number, ty: number): boolean {
-  return AREAS.some((a) => a.name !== name && a.name !== "Whispering Woods" && a.name !== "River Ashwell" && inRect(a, tx, ty));
+  return AREAS.some((a) => a.name !== name && !BROAD_AREAS.includes(a.name) && inRect(a, tx, ty));
 }
 /** Tiles where this zone may spawn a monster. */
 function spawnable(z: { name: string; wild?: boolean }, tx: number, ty: number): boolean {
@@ -153,13 +177,14 @@ export const SPAWN_ZONES: SpawnZone[] = ZONE_MOBS.flatMap((z) => {
     tiles++;
     if (z.wild) { const l = baseLevelAt(tx, ty); lo = Math.min(lo, l); hi = Math.max(hi, l + 2); }
   }
-  const base = Object.values(z.mobs).reduce((n, c) => n + (c ?? 0), 0);
-  const want = Math.round(tiles / (z.wild ? DENSITY.wildTilesPerMob : DENSITY.tilesPerMob));
+  const base = Math.max(1, Object.values(z.mobs).reduce((n, c) => n + (c ?? 0), 0));
+  const desert = r.y >= DESERT_Y0;
+  const want = Math.round(tiles / (desert ? (z.wild ? DENSITY.desertWildTilesPerMob : DENSITY.desertTilesPerMob) : z.wild ? DENSITY.wildTilesPerMob : DENSITY.tilesPerMob));
   const f = z.fixed ? 1 : Math.max(1, want / base); // fixed: hand-set count
   const mobs: Partial<Record<MobKind, number>> = {};
   for (const [k, n] of Object.entries(z.mobs) as [MobKind, number][]) mobs[k] = k === "necromancer" ? n : k === "motherblob" ? Math.max(n, Math.round(n * f / 4)) : Math.round(n * f); // big ones grow slower
   const raw: [number, number] = z.levels ?? (z.wild && hi > 0 ? [lo, hi] : zoneLevels(r));
-  const lvl = (Object.keys(z.mobs) as MobKind[]).every((k) => ELITE[k]) ? regionSpecialLevel : regionMobLevel; // an elite's lair: the special ceiling
+  const L = levelFns(r.y), lvl = (Object.keys(z.mobs) as MobKind[]).every((k) => ELITE[k]) ? L.special : L.mob; // an elite's lair: the special ceiling
   const levels: [number, number] = [lvl(raw[0]), lvl(raw[1])];
   return [{ ...z, ...r, mobs, levels, respawnMs: Math.max(800, Math.round(z.respawnMs / f)) }];
 });
@@ -192,8 +217,8 @@ export function randomPointInZone(z: SpawnZone, kind?: MobKind): { x: number; y:
 
 /** Where and at what level a monster of this kind appears. In wild zones the level follows the spot. */
 export function spawnPoint(z: SpawnZone, kind: MobKind): { x: number; y: number; level: number } {
-  const min = KIND_MIN_LEVEL[kind] ?? 1;
-  if (!z.wild) return { ...randomPointInZone(z, kind), level: (ELITE[kind] ? regionSpecialLevel : regionMobLevel)(Math.max(min, rollLevel(z))) };
+  const min = KIND_MIN_LEVEL[kind] ?? 1, L = levelFns(z.y);
+  if (!z.wild) return { ...randomPointInZone(z, kind), level: (ELITE[kind] ? L.special : L.mob)(Math.max(min, rollLevel(z))) };
   let best = randomPointInZone(z, kind), lvl = 0;
   for (let i = 0; i < 25; i++) {
     const p = i ? randomPointInZone(z, kind) : best;
@@ -201,7 +226,7 @@ export function spawnPoint(z: SpawnZone, kind: MobKind): { x: number; y: number;
     if (l > lvl) { best = p; lvl = l; }
     if (l >= min) break; // variants only out where the levels are high enough
   }
-  return { ...best, level: regionMobLevel(Math.max(min, lvl)) };
+  return { ...best, level: L.mob(Math.max(min, lvl)) };
 }
 
 /** The monster zone a tile belongs to (wild zones leave out the named areas inside them). */
@@ -212,8 +237,8 @@ export function zoneAt(tx: number, ty: number): SpawnZone | undefined {
 /** Level range shown for a zone at a tile: wild zones show the local range. */
 export function levelsAt(z: SpawnZone, tx: number, ty: number): [number, number] {
   if (!z.wild) return z.levels;
-  const l = baseLevelAt(tx, ty);
-  return [regionMobLevel(l), regionMobLevel(l + 2)];
+  const l = baseLevelAt(tx, ty), L = levelFns(ty);
+  return [L.mob(l), L.mob(l + 2)];
 }
 
 /**
@@ -221,7 +246,8 @@ export function levelsAt(z: SpawnZone, tx: number, ty: number): [number, number]
  * (only its eyes peek out) and jumps out when a player walks close. Dizzy (broken) monsters run for cover too.
  */
 export const HIDE = {
-  spots: { skeleton: [T.GRAVE], skeletonmage: [T.GRAVE], slime: [T.TREE, T.PINE], blobling: [T.TREE, T.PINE], shooterblob: [T.TREE, T.PINE], healerblob: [T.TREE, T.PINE], frostblob: [T.PINE] } as Partial<Record<MobKind, number[]>>,
+  spots: { skeleton: [T.GRAVE], skeletonmage: [T.GRAVE], slime: [T.TREE, T.PINE], blobling: [T.TREE, T.PINE], shooterblob: [T.TREE, T.PINE], healerblob: [T.TREE, T.PINE], frostblob: [T.PINE],
+    sanddead: [T.BONES, T.GRAVE], scorpion: [T.ROCK] } as Partial<Record<MobKind, number[]>>, // Act 2: the dead sink into the sand by their bones, scorpions creep under rocks
   idleChance: 0.06, // per wander decision, chance an idle monster goes to hide
   idleRadius: 7, // tiles from home to look for a spot
   fleeRadius: 6, // tiles from the monster when it's dizzy

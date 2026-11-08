@@ -12,6 +12,7 @@ export const FAMILY: Partial<Record<MobKind, Family>> = {
   bandit: "outlaw", banditchief: "outlaw",
   gnawkin: "beast", tuskborn: "beast", silkwretch: "beast", duskwing: "beast", crowseer: "beast",
   gnasher: "beast", weaver: "beast", packlord: "beast", hornbrute: "beast", hidemother: "beast",
+  nomad: "outlaw", veiled: "outlaw", scorpion: "beast", camelfolk: "beast",
 };
 export const familyOf = (kind: string): Family | undefined => FAMILY[kind as MobKind];
 

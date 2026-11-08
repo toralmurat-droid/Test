@@ -211,6 +211,11 @@ export const GEAR_DROP: Record<MobKind, { chance: number; tiers: [number, number
   packlord: { chance: 0.9, tiers: [0, 0.45, 0.55] },
   hornbrute: { chance: 0.9, tiers: [0, 0.4, 0.6] },
   hidemother: { chance: 1, tiers: [0, 0.25, 0.75] },
+  nomad: { chance: 0.18, tiers: [0.25, 0.45, 0.3] },
+  scorpion: { chance: 0.16, tiers: [0.25, 0.45, 0.3] },
+  sanddead: { chance: 0.18, tiers: [0.2, 0.45, 0.35] },
+  veiled: { chance: 0.2, tiers: [0.2, 0.45, 0.35] },
+  camelfolk: { chance: 0.22, tiers: [0.15, 0.45, 0.4] },
 };
 
 export function isGearId(v: unknown): v is string {

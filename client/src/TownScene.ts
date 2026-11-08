@@ -3015,8 +3015,8 @@ export class TownScene extends Phaser.Scene {
           e.bar.fillStyle(col, 0.25).fillRect(x - 4, ey - 1, 9, 3);
           e.bar.fillStyle(col).fillRect(x - 2, ey, 1, 1).fillRect(x + 2, ey, 1, 1);
         } else if (!blink) {
-          const col = p.kind === "skeleton" ? 0xff5252 : p.kind === "skeletonmage" ? 0x7fe7ff : 0xfff176;
-          const ey = y - (p.kind === "skeleton" || p.kind === "skeletonmage" ? 2 : 5);
+          const col = p.kind === "skeleton" ? 0xff5252 : p.kind === "skeletonmage" ? 0x7fe7ff : p.kind === "sanddead" ? 0xffb030 : p.kind === "scorpion" ? 0x9dff6a : 0xfff176;
+          const ey = y - (p.kind === "skeleton" || p.kind === "skeletonmage" || p.kind === "sanddead" || p.kind === "scorpion" ? 2 : 5);
           e.bar.fillStyle(0x000000, 0.6).fillRect(x - 3, ey - 1, 7, 3);
           e.bar.fillStyle(col).fillRect(x - 2, ey, 1, 1).fillRect(x + 2, ey, 1, 1);
         }

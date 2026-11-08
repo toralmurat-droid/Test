@@ -1772,6 +1772,10 @@ export class SkillFx {
         d.fillStyle(0xff5a3c).fillRect(-0.5, -4.4, 0.6, 0.6).fillRect(1.2, -4.4, 0.6, 0.6);
         return box(d);
       }
+      case "sunbolt": { // the Veiled Circle's sun-fire: a white-gold core in an orange halo
+        d.fillStyle(0xff8a1c).fillCircle(0, 0, 3).fillStyle(0xffd27a).fillCircle(0, 0, 2).fillStyle(0xfffbe8).fillCircle(0, 0, 1);
+        return box(light(0xffa040, 0.5), d);
+      }
       case "magicbolt": {
         d.fillStyle(0x4cc9f0).fillCircle(0, 0, 2.4).fillStyle(0xd6f6ff).fillCircle(0, 0, 1.5).fillStyle(0xffffff).fillCircle(0, 0, 0.8);
         return box(light(0x4cc9f0, 0.4), d);
@@ -1936,6 +1940,13 @@ export class SkillFx {
           for (let i = 0; i < n(30); i++) this.p(x - ax * 3, y - ay * 3, 0, pick(GOO), { life: 220, size: 1, size1: 0 });
           break;
         }
+        case "sunbolt": {
+          // a ring of little sun-rays turning round it, embers falling behind
+          const a = age / 40;
+          for (let k = 0; k < 3; k++) { const b = a + k * 2.1; this.p(x + Math.cos(b) * 3.5, y + Math.sin(b) * 2, 0, pick([0xffd27a, 0xff9f1c, 0xfff3c0]), { life: 200, size: 1, size1: 0 }); }
+          for (let i = 0; i < n(35); i++) this.p(x - ax * 3, y - ay * 3, rnd(-1, 1), pick([0xff9f1c, 0xff6a1c, 0xffd27a]), { vx: -ax * 12, vy: -ay * 12, vz: -6, g: 60, life: 320, size: 1, size1: 0 });
+          break;
+        }
         case "magicbolt": {
           // Two frost sparks spiral around the bolt, a glittering tail
           const a = age / 35;
@@ -2012,6 +2023,7 @@ export class SkillFx {
         this.burst(x, y, 1, "earth", 8, 45, 380, 1);
         break;
       case "magicbolt": this.burst(x, y, 3, "frost", 12, 60, 380); this.glow(x, y, 3, 12, 0x4cc9f0, 260); break;
+      case "sunbolt": this.burst(x, y, 3, "fire", 14, 60, 400); this.glow(x, y, 3, 16, 0xffa040, 300); break;
       default: // shadowbolt
         this.ring(x, y, 14, "shadow", 14, { life: 380, up: 10, add: false });
         this.burst(x, y, 3, "poison", 12, 55, 420);

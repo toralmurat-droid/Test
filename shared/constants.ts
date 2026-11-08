@@ -66,6 +66,8 @@ export type MobKind = "slime" | "skeleton" | "motherblob" | "blobling" | "shoote
   | "venomblob" | "frostblob" | "fireblob" | "stormblob"
   // the beast-folk of the Mawdeep Warrens (shared/dungeon.ts, BEAST below): men and women sewn into animal hides
   | "gnawkin" | "tuskborn" | "silkwretch" | "duskwing" | "packlord" | "hornbrute" | "hidemother" | "crowseer" | "gnasher" | "weaver"
+  // Act 2, the Sunscar desert (shared/desert.ts): raiders, scorpions, the buried dead, the Veiled Circle and the camel-folk
+  | "nomad" | "scorpion" | "sanddead" | "veiled" | "camelfolk"
   // summoned by heroes (shared/summons.ts): they fight for their owner
   | "golem_fire" | "golem_cold" | "golem_poison" | "golem_shock" | "golem_colossus"
   | "bride"; // the vampire's Brides (v_brides): pale companions that run at his foes and drink
@@ -127,6 +129,13 @@ export const MOBS: Record<MobKind, MobDef> = {
   weaver: { name: "The Weaver", maxHp: 520, speed: 54, damage: 22, attackCooldownMs: 1300, aggroRange: 190, leash: 300, xp: 280 },
   packlord: { name: "Gorehowl the Packlord", maxHp: 560, speed: 66, damage: 24, attackCooldownMs: 1100, aggroRange: 170, leash: 330, xp: 320 },
   hornbrute: { name: "The Hornbrute", maxHp: 700, speed: 52, damage: 28, attackCooldownMs: 1400, aggroRange: 160, leash: 330, xp: 360 },
+  // Act 2, the Sunscar (Murat 2026-11-08): Lv 30-47. Base numbers set with tools/balance/pve.ts --act2 so the desert plays
+  // like Act 1's middle zones for a hero of its level (about 2-4% HP lost and 3 s per kill)
+  nomad: { name: "Dustrider", maxHp: 175, speed: 70, damage: 24, attackCooldownMs: 820, aggroRange: 150, leash: 260, xp: 55 },
+  scorpion: { name: "Dune Scorpion", maxHp: 215, speed: 58, damage: 22, attackCooldownMs: 1050, aggroRange: 120, leash: 220, xp: 58 },
+  sanddead: { name: "Sand-Dead", maxHp: 190, speed: 54, damage: 27, attackCooldownMs: 1000, aggroRange: 130, leash: 230, xp: 58 },
+  veiled: { name: "Veiled Adept", maxHp: 140, speed: 56, damage: 27, attackCooldownMs: 1800, aggroRange: 170, leash: 250, xp: 64 },
+  camelfolk: { name: "Camel-Man", maxHp: 300, speed: 60, damage: 32, attackCooldownMs: 1300, aggroRange: 140, leash: 260, xp: 74 },
   hidemother: { name: "The Hide-Mother", maxHp: 950, speed: 50, damage: 28, attackCooldownMs: 1300, aggroRange: 240, leash: 480, xp: 1000 },
 };
 
@@ -238,6 +247,7 @@ export const FACTION: Partial<Record<MobKind, "blob" | "undead" | "outlaw">> = {
   venomblob: "blob", frostblob: "blob", fireblob: "blob", stormblob: "blob",
   skeleton: "undead", skeletonmage: "undead", necromancer: "undead", crawler: "undead", demon: "undead",
   bandit: "outlaw", banditchief: "outlaw",
+  sanddead: "undead",
 };
 
 /**
@@ -374,6 +384,9 @@ export const BEAST_MOVES: Partial<Record<MobKind, BeastMove[]>> = {
   weaver: ["brood", "web"],
   hornbrute: ["stomp", "stampede"],
   hidemother: ["rockfall", "gather", "brood", "hook", "roar", "maul"],
+  // Act 2: the scorpion skitters at you in a straight rush; the camel-folk rear and stamp the ground
+  scorpion: ["gore"],
+  camelfolk: ["stomp"],
 };
 /** Damage over time after a plain blow (BEAST.plague / bleed / venom). */
 /**
@@ -399,14 +412,16 @@ export const URSK = {
     death: ["The winter... is it over, then...?"],
   },
 };
-export const BEAST_RIDER: Partial<Record<MobKind, "plague" | "bleed" | "venom">> = { gnawkin: "plague", packlord: "bleed", silkwretch: "venom", hidemother: "bleed", gnasher: "plague", weaver: "venom" };
+export const BEAST_RIDER: Partial<Record<MobKind, "plague" | "bleed" | "venom">> = { gnawkin: "plague", packlord: "bleed", silkwretch: "venom", hidemother: "bleed", gnasher: "plague", weaver: "venom", scorpion: "venom" };
 /** Who answers a beast's Brood or Howl (default BEAST.brood.kinds / BEAST.howl.summon). */
 export const BEAST_BROOD: Partial<Record<MobKind, MobKind[]>> = { gnasher: ["gnawkin", "gnawkin", "gnawkin"], weaver: ["silkwretch", "silkwretch"] };
 /**
  * Half-folk variants (Mob.weapon "folk", Murat 2026-11-05): a man's face under the flayed animal head, the body gone
  * over to the beast. Gnawkin bone-slingers throw stones from range; the rest fight like their kind.
  */
-export const BEAST_FOLK: Partial<Record<MobKind, number>> = { gnawkin: 0.4, tuskborn: 0.35, silkwretch: 0.4, duskwing: 0.4 };
+export const BEAST_FOLK: Partial<Record<MobKind, number>> = { gnawkin: 0.4, tuskborn: 0.35, silkwretch: 0.4, duskwing: 0.4, nomad: 0.35 }; // nomad "folk": a Dustrider archer
+/** Act 2's monsters (the Sunscar): levels from ACT2_LEVEL. */
+export const DESERT_KINDS: MobKind[] = ["nomad", "scorpion", "sanddead", "veiled", "camelfolk"];
 /** Beast-folk that fly (drawn hovering, client textures.ts). */
 export const BEAST_FLYERS: MobKind[] = ["duskwing", "crowseer"];
 export const BEAST_KINDS: MobKind[] = ["gnawkin", "tuskborn", "silkwretch", "duskwing", "packlord", "hornbrute", "hidemother", "crowseer", "gnasher", "weaver"];

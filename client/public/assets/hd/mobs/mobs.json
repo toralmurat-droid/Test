@@ -950,5 +950,41 @@
   "h": 30,
   "scale": 1.5,
   "frames": 12
+ },
+ "mob_nomad": {
+  "w": 22,
+  "h": 30,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_nomad_folk": {
+  "w": 22,
+  "h": 30,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_sanddead": {
+  "w": 22,
+  "h": 30,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_veiled": {
+  "w": 24,
+  "h": 32,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_camelfolk": {
+  "w": 34,
+  "h": 36,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_scorpion": {
+  "w": 36,
+  "h": 30,
+  "scale": 1.5,
+  "frames": 12
  }
 }

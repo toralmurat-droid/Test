@@ -33,9 +33,9 @@ const TRACKS: Track[] = [
   { id: "country", name: "Countryside tune", url: "/assets/music/countryside-tune.mp3" },
   { id: "village-sounds", name: "Village sounds", ambience: true },
 ];
-const UNDEAD = ["skeleton", "skeletonmage", "necromancer"];
-const FIGHT = ["slime", "shooterblob", "warriorblob", "healerblob", "motherblob", "bandit", "venomblob", "frostblob", "fireblob", "stormblob"];
-const TOWNS = ["Oakvale", "Market Square", "Chapel of the Dawn", "The Rusty Tankard", "The Smithy", "Saltmere", "Hunter's Camp"];
+const UNDEAD = ["skeleton", "skeletonmage", "necromancer", "sanddead"];
+const FIGHT = ["slime", "shooterblob", "warriorblob", "healerblob", "motherblob", "bandit", "venomblob", "frostblob", "fireblob", "stormblob", "nomad", "scorpion", "veiled", "camelfolk"];
+const TOWNS = ["Oakvale", "Market Square", "Chapel of the Dawn", "The Rusty Tankard", "The Smithy", "Saltmere", "Hunter's Camp", "Kel Ashar", "Kel Ashar Market"];
 
 const FADE_IN = 2.5;
 const FADE_OUT = 0.8;

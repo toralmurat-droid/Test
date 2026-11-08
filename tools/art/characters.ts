@@ -801,6 +801,8 @@ export const MOB_POSES: Record<string, Hero> = {
   gnawkin_folk: mobPose("gnawkin_folk", "none"), tuskborn_folk: mobPose("tuskborn_folk", "axe"), silkwretch_folk: mobPose("silkwretch_folk", "none"),
   duskwing_folk: mobPose("duskwing_folk", "dagger"), crowseer: mobPose("crowseer", "staff"), gnasher: mobPose("gnasher", "axe"), weaver: mobPose("weaver", "staff"),
   packlord: mobPose("packlord", "axe"), hornbrute: mobPose("hornbrute", "hammer"), hidemother: mobPose("hidemother", "staff"),
+  nomad: mobPose("nomad", "axe"), nomad_folk: mobPose("nomad_folk", "bow"), sanddead: mobPose("sanddead", "axe"),
+  veiled: mobPose("veiled", "staff"), camelfolk: mobPose("camelfolk", "spear"),
 };
 export const posed = (hero: Hero, p: Partial<Pose> & { dir: Dir }, shadow = true) => renderFrame(hero, { t: 0, bob: 0, stride: 0, lean: 0, crouch: 0, attack: -1, expr: "n", ...p }, shadow);
 
