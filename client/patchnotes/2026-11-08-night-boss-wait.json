@@ -1,5 +1,6 @@
 {
   "date": "2026-11-08",
+  "patch": 191,
   "title": "Night bosses tell you to wait",
   "changes": [
     "Quests whose boss only rises at night (the Hollow King, the Pale Marshal and his necromancers, the bone demons) show again how many minutes until nightfall.",
