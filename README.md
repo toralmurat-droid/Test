@@ -84,6 +84,9 @@ Each area in `AREAS` can list the monsters that belong there (`mobs`), and `rand
 spot inside an area, for per-zone spawns.
 
 In game, a round minimap sits top-right inside a day/night dial (the sun and moon turn around it with the 30-minute day), and a bold pixel-font banner shows the area name as you walk between regions.
+Click it (or press **M**) for the world map: drag it (mouse or finger) or use **I J K L** to look around, zoom with the wheel,
+a pinch or **+ / −**, and press **C**, double-click / double-tap or **◎ Centre** to centre on your hero and follow them.
+While it is open the arrows and WASD still walk; click the dark backdrop, **M** or **Esc** to close it.
 
 The world is alive (`client/src/ambient.ts`, cosmetic only): trees and bushes are tall sprites that sway in a travelling
 wind and hide you when you walk behind them; water ripples and has shoreline foam, the mill wheel turns, grass and
