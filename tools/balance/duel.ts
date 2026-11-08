@@ -19,13 +19,14 @@ import { canPay, manaRegen, maxManaFor, skillCost } from "../../shared/mana";
 import {
   afterHit, atkSpeedMult, blocking, buffLifesteal, buffRegen, castSkill, ccImmune, charging, winding, cooldownLeft, counterHit, dealtMult, FieldInst, HitOpts,
   newRuntime, shotEnd, shotHit, shotPulse, ShotSpec, SkillHost, speedMult, takenMult, tickField, tickUnit,
-  formOf,
+  formOf, gainEssence, toVoid, voidSlip, buffCdr,
 } from "../../shared/skillEngine";
+import { golemDeath, golemStrike, golemTick, newMind, type GolemMind } from "../../shared/golemAI";
 import { Equipped, GEAR, gearBlock, gearDef, gearReachMult, gearSpeedMult, gearStats, meetsReq, withLevel } from "../../shared/gear";
 import { heroPoise, POISE, poiseLevelMult, poiseSpeed, pvpDamageMult } from "../../shared/combat";
 import { COMBAT_REGEN_PER_STA, HIT_RADIUS, MOBS, mobScale, PLAYER_SPEED, REGEN_DELAY_MS, REGEN_PER_STA, REGEN_RAMP_MS } from "../../shared/constants";
 import { MOB_COMBAT, mobBody } from "../../shared/combat";
-import { attuneOf, bondShare, GOLEM_OF, SUMMON, summonScaleLevel, type SummonKind } from "../../shared/summons";
+import { bondShare, ESSENCE, GOLEM, GOLEM_OF, golemSlots, parseGrimoire, SUMMON, summonElement, summonScaleLevel, type AttuneElement, type SummonKind } from "../../shared/summons";
 
 const TICK = 50; // ms, server runs at 20 Hz
 const MAX_MS = 60000;
@@ -59,8 +60,10 @@ export class F {
   }
   get poiseMax() { return heroPoise(this.cls, this.level); }
   get ranged() { return this.mob ? this.mob.ranged : !!CLASSES[this.cls].projectile; }
-  /** Summoner: element of the next golem (shared/summons.ts ATTUNE_ORDER index). */
-  attune = 0;
+  /** Summoner: the grimoire (golem elements, "el,el"), when each golem slot rises again, last Stone Bond Essence. */
+  grimoire = "fire,fire";
+  golemAt = [0, 0];
+  bondEssenceAt = -1e9;
 }
 
 /**
@@ -71,6 +74,7 @@ export class F {
 export class GolemF extends F {
   windUntil = 0; lastAtk = -1e9; banishAt = 0; sPower = 1;
   drain = 0; // vampire Brides: % of their damage that heals the owner
+  slot = -1; mind?: GolemMind; // Summoner: permanent golem slot and its powers (shared/golemAI.ts)
   constructor(id: string, public owner: F, public kind: SummonKind | "bride", power: number, fused: number, now: number, lifeMs?: number) {
     super(id, owner.cls, owner.level, {}, {}, { sta: 0, str: 0, mag: 0, dex: 0 });
     const fuse = 1 + SUMMON.colossusPerGolem * fused, def = MOBS[kind];
@@ -79,7 +83,7 @@ export class GolemF extends F {
     this.sPower = power * fuse * talentMult(owner.cls, owner.t, "summonDmg");
     this.body = mobBody(kind);
     this.mob = { reach: 14, ranged: false };
-    this.banishAt = now + (lifeMs ?? (kind === "golem_colossus" ? 30_000 : SUMMON.lifeMs));
+    this.banishAt = now + (lifeMs ?? (kind === "golem_colossus" ? 30_000 : 1e12)); // golems are permanent
     this.stunUntil = now + 500; // rising out of the ground
     this.x = owner.x - owner.face * 12;
   }
@@ -162,6 +166,8 @@ export class Duel {
       },
       heal: (id, amount) => { const u = f(id); if (u && !u.dead) u.hp = Math.min(u.maxHp, u.hp + amount); },
       aim: (id) => [f(id)?.face ?? 1, 0],
+      // the Summoner throws its Black Hole on the foe (a player clicks on them); other classes keep their default reach
+      aimDist: (id) => { const u = f(id); return u && u.cls === "summoner" && !(u instanceof GolemF) && !u.mob ? Math.abs(this.other(u).x - u.x) : undefined; },
       face: (id, dx) => { const u = f(id); if (u && dx) u.face = Math.sign(dx); },
       move: (id, dx, _dy, dist, each) => {
         const u = f(id);
@@ -186,7 +192,23 @@ export class Duel {
       stats: (id) => f(id)?.s,
       cooldownMult: (id) => { const u = f(id)!; return cooldownMult(u.cls, u.s, u.t); },
       fx: () => {},
-      summon: (id, power) => { const o = f(id); if (o) this.addGolem(o, GOLEM_OF[attuneOf(o.attune)], power, 0); },
+      summon: (id, power) => {
+        const o = f(id);
+        if (!o) return;
+        const col = this.golemsOf(o).find((g) => g.kind === "golem_colossus");
+        if (col) { col.hp = col.maxHp; return; }
+        const book = parseGrimoire(o.grimoire);
+        for (let i = 0; i < golemSlots(o.level, o.t["su_twin"] ?? 0); i++) { o.golemAt[i] = 0; this.addGolem(o, GOLEM_OF[book[i]], power, 0, i); }
+      },
+      golemEls: (id) => { const o = f(id); return o ? this.golemsOf(o).flatMap((g) => g.mind?.els ?? []) : []; },
+      voidHop: (_owner, tid, swallowed, x) => {
+        const u = f(tid);
+        if (!u || u.dead || (u instanceof GolemF)) return false;
+        const d = (swallowed ? 64 + this.rnd() * 64 : 96 + this.rnd() * 32) * (this.rnd() < 0.5 ? -1 : 1) * 0.7; // 2D: ~70% of it along the line
+        u.x = clamp(x + d);
+        if (swallowed) u.stunUntil = Math.max(u.stunUntil, this.now + 400);
+        return true;
+      },
       brides: (id, power, n, ms, drain) => {
         const o = f(id);
         if (!o) return;
@@ -196,33 +218,58 @@ export class Duel {
       colossus: (id, power) => {
         const o = f(id);
         if (!o) return;
-        const mine = this.golemsOf(o);
+        const mine = this.golemsOf(o).filter((g) => g.slot >= 0 || g.kind === "golem_colossus");
         for (const g of mine) g.dead = true;
-        this.addGolem(o, "golem_colossus", power, mine.length);
+        o.golemAt = [0, 0];
+        const c = this.addGolem(o, "golem_colossus", power, Math.max(1, mine.length));
+        c.mind = newMind(parseGrimoire(o.grimoire).slice(0, golemSlots(o.level, o.t["su_twin"] ?? 0)), 1.25);
       },
-      attune: (id) => { const o = f(id); if (o) o.attune = (o.attune + 1) % 4; },
     };
   }
   /** Living golems of this hero. */
   golemsOf(o: F) { return this.summons.filter((g) => g.owner === o && !g.dead); }
-  /** Bound golem (server TownRoom.autoGolems): a Summoner with no golem gets one after SUMMON.autoMs (the fight starts with one out). */
-  autoAt = new Map<F, number>();
+  /**
+   * Permanent golems (server TownRoom.autoGolems): each grimoire slot holds a golem; the fight starts with them out, and
+   * one that dies rises again GOLEM.respawnMs later. Nothing rises while a Colossus is out.
+   */
   autoGolems() {
     for (const o of this.units()) {
       if (o.cls !== "summoner" || o.dead || o instanceof GolemF || o.mob) continue;
-      if (this.golemsOf(o).length) { this.autoAt.delete(o); continue; }
-      const at = this.autoAt.get(o);
-      if (at === undefined) { this.autoAt.set(o, this.now + (this.now <= this.t0 ? 0 : SUMMON.autoMs)); continue; }
-      if (this.now < at) continue;
-      this.autoAt.delete(o);
-      this.addGolem(o, GOLEM_OF[attuneOf(o.attune)], golemPower(o), 0);
+      const mine = this.golemsOf(o);
+      // the Colossus's time is up: it splits back into the golems
+      const col = this.summons.find((g) => g.owner === o && g.kind === "golem_colossus" && !g.dead && this.now >= g.banishAt);
+      if (col) { col.dead = true; o.golemAt = [this.now, this.now]; }
+      if (mine.some((g) => g.kind === "golem_colossus" && !g.dead)) continue;
+      const book = parseGrimoire(o.grimoire);
+      for (let i = 0; i < golemSlots(o.level, o.t["su_twin"] ?? 0); i++) {
+        if (mine.some((g) => g.slot === i)) { o.golemAt[i] = 0; continue; }
+        if (this.now <= this.t0) o.golemAt[i] = this.now;
+        if (!o.golemAt[i] || this.now < o.golemAt[i]) continue;
+        o.golemAt[i] = 0;
+        const g = this.addGolem(o, GOLEM_OF[book[i]], golemPower(o), 0, i);
+        if (this.now <= this.t0) g.stunUntil = this.now;
+      }
     }
   }
-  /** Call a golem (server TownRoom.summon): past SUMMON.max the oldest goes back. */
-  addGolem(o: F, kind: SummonKind, power: number, fused: number) {
+  /** Call a summon (server TownRoom.summon): a golem takes its grimoire slot, others follow SUMMON.max. */
+  addGolem(o: F, kind: SummonKind, power: number, fused: number, slot = -1) {
     const mine = this.golemsOf(o);
-    while (mine.length >= SUMMON.max) mine.shift()!.dead = true;
-    this.summons.push(new GolemF(`g${++this.summonSeq}`, o, kind, power, fused, this.now));
+    if (slot >= 0) for (const g of mine) { if (g.slot === slot) g.dead = true; }
+    else { const others = mine.filter((g) => g.slot < 0); while (others.length >= SUMMON.max) others.shift()!.dead = true; }
+    const g = new GolemF(`g${++this.summonSeq}`, o, kind, power, fused, this.now);
+    g.slot = slot;
+    if (kind.startsWith("golem_") && kind !== "golem_colossus") g.mind = newMind([summonElement(kind, "")]);
+    this.summons.push(g);
+    return g;
+  }
+  /** A summon died (not sent back): a golem's element bursts out, Essence, its slot waits GOLEM.respawnMs. */
+  summonDied(g: GolemF) {
+    const o = g.owner;
+    if (!g.mind || o.dead) return;
+    golemDeath(this.host, o.id, g.mind.els, g.x, g.y, golemPower(o) * g.mind.boost);
+    toVoid(this.host, o.id);
+    if (g.slot >= 0) o.golemAt[g.slot] = this.now + GOLEM.respawnMs;
+    if (g.kind === "golem_colossus") o.golemAt = [this.now + GOLEM.respawnMs, this.now + GOLEM.respawnMs];
   }
   other(f: F) { return f === this.a ? this.b : this.a; }
   /** Everyone in the fight, and the ones `f` fights (PvE packs override these). */
@@ -248,7 +295,12 @@ export class Duel {
     if (!(t instanceof GolemF) && dmg > 1) {
       let g: GolemF | undefined, bd: number = SUMMON.bondRange;
       for (const c of this.golemsOf(t)) if (Math.abs(c.x - t.x) < bd) { bd = Math.abs(c.x - t.x); g = c; }
-      if (g) { const part = Math.round(dmg * bondShare(t.level)); dmg -= part; g.hp -= part; if (g.hp <= 0) g.dead = true; }
+      if (g) {
+        const part = Math.round(dmg * Math.min(0.6, bondShare(t.level) + talentBonus(t.cls, t.t, "bond") / 100));
+        dmg -= part; g.hp -= part;
+        if (t.cls === "summoner" && part > 0 && now - t.bondEssenceAt >= ESSENCE.bondEveryMs) { t.bondEssenceAt = now; gainEssence(this.host, t.id); }
+        if (g.hp <= 0) { g.dead = true; this.summonDied(g); }
+      }
     }
     const block = gearBlock(t.eq);
     if (block) dmg = Math.max(1, Math.round(dmg * (1 - block)));
@@ -273,8 +325,9 @@ export class Duel {
       const share = talentBonus(by.cls, by.t, "lifesteal") / 100 + buffLifesteal(by, now) + (o.drain ?? 0) / 100;
       if (share > 0 && !by.dead && dealt > 0) by.hp = Math.min(by.maxHp, by.hp + dealt * share);
     }
-    if (t.hp <= 0) { t.dead = true; return true; }
+    if (t.hp <= 0) { t.dead = true; if (t instanceof GolemF) this.summonDied(t); return true; }
     afterHit(this.host, by?.id, t.id, o);
+    if (!(t instanceof GolemF)) voidSlip(this.host, t.id);
     return false;
   }
 
@@ -282,6 +335,9 @@ export class Duel {
     if (a && o.basic && basicDrain(a.cls)) o = { ...o, drain: (o.drain ?? 0) + basicDrain(a.cls) }; // vampire trait, like server hitTarget
     if (a) dmg = dmg * talentMult(a.cls, a.t, "dmg") * (o.skill && !o.dot ? talentMult(a.cls, a.t, "skill") : 1) * dealtMult(a, this.now);
     if (a && !a.mob && !t.mob) dmg *= pvpDamageMult(a.level, t.level); // hero vs hero, like server hitTarget
+    // A Summoner's creatures on a hero, and a hero's blow on a creature (server hitTarget, SUMMON.pvp)
+    if (a && !a.mob && o.pet && !(t instanceof GolemF) && !t.mob) { dmg *= SUMMON.pvp.dmg; if (o.stunMs) o = { ...o, stunMs: o.stunMs * SUMMON.pvp.cc }; }
+    if (a && !a.mob && t instanceof GolemF && !(a instanceof GolemF)) dmg /= SUMMON.pvp.hp;
     this.damage(t, Math.max(1, Math.round(dmg)), a, push, o.kb ?? 1, o);
   }
 
@@ -333,9 +389,13 @@ export class Duel {
 
   /** Would skill `s` reach the target from here (facing it)? A rough bot judgement. */
   useful(a: F, s: SkillDef, d: number, incoming: boolean, tReach: number): boolean {
-    if (s.summon) return this.golemsOf(a).length < SUMMON.max;
-    if (s.colossus) return this.golemsOf(a).length >= SUMMON.max || (this.golemsOf(a).length >= 1 && a.hp < a.maxHp * 0.5);
-    if (s.attune) return false; // the element only changes the golem's look and elemental share: not modelled
+    if (s.summon) { const g = this.golemsOf(a).filter((x) => x.slot >= 0 || x.kind === "golem_colossus"); return g.length < golemSlots(a.level, a.t["su_twin"] ?? 0) && !g.some((x) => x.kind === "golem_colossus") || g.some((x) => x.hp < x.maxHp * 0.3); }
+    if (s.colossus) return this.golemsOf(a).filter((x) => x.slot >= 0).length >= 1 && (d < 120 || a.hp < a.maxHp * 0.5);
+    if (s.field?.hole) return d <= 140; // Black Hole / Event Horizon: thrown at the foe (aimDist)
+    if (s.field?.blades) return d < 70;
+    if (s.wisps) return d < 160;
+    if (s.arsenal) return d < 120;
+    if (s.move?.kind === "blink" && a.cls === "summoner") return !this.other(a).ranged && d < 40; // Rift Step out of melee
     if (s.counter) return incoming || d <= tReach + 4;
     if (s.areas?.length) {
       const ar = s.areas[0];
@@ -360,17 +420,17 @@ export class Duel {
   /** Bot: cast the best ready skill (highest level first). */
   castSkills(a: F, d: number, toward: number, incoming: boolean, tReach: number) {
     if (charging(a, this.now)) return;
-    const ready = activeSkills(a.cls).filter((s) => (s.cantrip || (a.t[s.id] ?? 0) > 0) && cooldownLeft(s, a.sk, this.now, cooldownMult(a.cls, a.s, a.t)) <= 0 && canPay(a, skillCost(s)))
+    const ready = activeSkills(a.cls).filter((s) => (s.cantrip || (a.t[s.id] ?? 0) > 0) && cooldownLeft(s, a.sk, this.now, cooldownMult(a.cls, a.s, a.t) * buffCdr(a, this.now)) <= 0 && canPay(a, skillCost(s)))
       .sort((x, y) => y.req - x.req);
     const form = formOf(a, this.now) ? a.sk.buffs.find((b) => b.b.form) : undefined;
     for (const s of ready) {
       // Bat / Wolf Form: the bot stays a beast, casting only skills of the form's own school (anything else would end it)
       if (form && (s.id === form.id || skillById(form.id)?.branch !== s.branch)) continue;
-      if (s.consume && a.sk.stacks < 3 && !s.buff) continue; // wait for some stacks
+      if (s.consume && a.sk.stacks < 3 && !s.buff && a.cls !== "summoner") continue; // wait for some stacks (the Summoner's Essence comes slowly: no waiting)
       // A melee hero in reach swings its weapon instead of casting a weaker basic spell (vampire Leech)
       if (s.cantrip && !a.ranged && d <= (12 + CLASSES[a.cls].attackRange) * gearReachMult(a.eq)) continue;
       if (!this.useful(a, s, d, incoming, tReach)) continue;
-      a.face = toward;
+      a.face = s.move?.kind === "blink" && a.cls === "summoner" ? -toward : toward; // the Summoner steps away
       if (castSkill(this.host, a.id, s.id)) return;
     }
   }
@@ -392,21 +452,23 @@ export class Duel {
     const now = this.now, o = g.owner;
     if (o.dead || now >= g.banishAt) { g.dead = true; return 0; }
     // Vital Link (su_link): close to its owner it mends
-    const link = o.t["su_link"] ?? 0;
-    if (link && g.hp < g.maxHp && Math.abs(o.x - g.x) < SUMMON.followRange * 2) g.hp = Math.min(g.maxHp, g.hp + g.maxHp * SUMMON.linkRegen * link * TICK / 1000);
+    const link = talentBonus(o.cls, o.t, "golemRegen") / 100;
+    if (link && g.hp < g.maxHp && Math.abs(o.x - g.x) < SUMMON.followRange * 2) g.hp = Math.min(g.maxHp, g.hp + g.maxHp * link * TICK / 1000);
     if (now < g.stunUntil || g.broken) { g.windUntil = 0; return 0; }
     let t: F | undefined, bd = SUMMON.aggroRange;
     for (const c of this.foes(g)) if (!c.dead && Math.abs(c.x - g.x) < bd && Math.abs(c.x - o.x) < SUMMON.leash) { bd = Math.abs(c.x - g.x); t = c; }
     if (!t) return Math.abs(o.x - g.x) > SUMMON.followRange ? Math.sign(o.x - g.x) : 0;
     const toward = Math.sign(t.x - g.x) || 1, reach = 14 + t.body + 6, def = MOBS[g.kind];
     g.face = toward;
+    const blow = def.damage * mobScale(summonScaleLevel(g.level), "damage") * g.sPower;
+    if (g.mind) golemTick(this.host, o.id, g, g.mind, t.id, blow, golemPower(o)); // flames, venom pools, chain lightning
     if (g.windUntil) {
       if (now < g.windUntil) return 0;
       g.windUntil = 0; g.lastAtk = now;
-      const dmg = def.damage * mobScale(summonScaleLevel(g.level), "damage") * g.sPower;
+      const dmg = blow, extra = g.mind ? golemStrike(g.mind) : {};
       const hits = g.kind === "golem_colossus" ? this.foes(g).filter((c) => !c.dead && Math.abs(c.x - t!.x) <= SUMMON.colossusSlam + c.body) : Math.abs(t.x - g.x) <= reach + 6 ? [t] : [];
       for (const c of hits) {
-        this.hit(o, c, dmg, Math.sign(c.x - g.x) || toward, { kb: 0.6 });
+        this.hit(o, c, dmg, Math.sign(c.x - g.x) || toward, { kb: 0.6, pet: true, ...extra });
         if (g.drain && !o.dead) o.hp = Math.min(o.maxHp, o.hp + dmg * g.drain / 100); // a Bride drinks for the vampire
       }
       return 0;
@@ -502,6 +564,8 @@ export class Duel {
       for (let i = 0; i < n && !s.hit; i++) {
         s.x += s.dir * total / n; s.traveled += total / n;
         if (s.traveled >= s.range) { s.hit = true; if (s.spec) shotEnd(this.host, s.spec, s.x, 0); break; }
+        // a Black Hole of someone this shot's owner fights swallows it (server TownRoom.holeEats)
+        if (this.fields.some((fi) => fi.def.hole && fi.owner !== s.owner.id && this.foes(s.owner).some((u) => u.id === fi.owner) && Math.abs(s.x - fi.x) <= fi.def.r)) { s.hit = true; break; }
         if (s.spec?.pulse && s.traveled - (s.pulsed ?? 0) >= s.spec.pulse.every) { s.pulsed = s.traveled; shotPulse(this.host, s.spec, s.x, 0); }
         const t = this.foes(s.owner).find((t) => !t.dead && Math.abs(t.x - s.x) <= s.radius + HIT_RADIUS + t.body && now >= t.invulnUntil);
         if (t && !s.miss && !s.pierced) {
@@ -572,7 +636,7 @@ export function overallAt(level: number, n: number, build?: Build): Record<Class
 if (process.argv[1]?.includes("duel")) {
   const n = Number(process.argv[2]) || 400;
   const brief = process.argv.includes("--brief");
-  const levels = [1, 5, 10, 15, 20, 25, 30];
+  const levels = [1, 5, 10, 15, 20, 25, 30, 40, 50];
   const summary: Record<string, string[]> = Object.fromEntries(ACTIVE_CLASSES.map((c) => [c, []]));
   for (const level of levels) {
     if (!brief) {

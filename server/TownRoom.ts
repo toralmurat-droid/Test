@@ -24,7 +24,9 @@ import { activeSkills, canLearn, classSkills, cleanRanks, levelPower, REPLACED_S
 import {
   afterHit, atkSpeedMult, blocking, bloodCost, buffLifesteal, buffRegen, castSkill, ccImmune, fangTarget, onKill, riseAgain, charging, winding, counterHit, dealtMult, FieldInst, newRuntime,
   imbueOf, shotEnd, shotHit, shotPulse, ShotSpec, SkillHost, speedMult, statusOf, takenMult, tickField, tickUnit, Unit,
+  gainEssence, toVoid, voidSlip, inVoid,
 } from "../shared/skillEngine";
+import { golemDeath, golemStrike, golemTick, newMind, type GolemMind } from "../shared/golemAI";
 import {
   ITEM_LIFETIME_MS, ItemKind, LOOT, GOLD_PICKUP_RADIUS, PICKUP_RADIUS, PVP_GOLD_DROP,
 } from "../shared/items";
@@ -68,7 +70,7 @@ import { dropLive, LiveState, rememberLive, takeLive } from "./handoff";
 import { MobView } from "./mobView";
 import { act2Missing, act2Open, actAt, desertSpawn, WAYGATE_RANGE, waygateArrival, waygateById, WAYGATES } from "../shared/act2";
 import { repairCost, respecCost, WEAR, wearMult } from "../shared/upkeep";
-import { attuneOf, bondShare, GOLEM_OF, isSummonKind, SUMMON, summonElement, summonScaleLevel, type SummonKind } from "../shared/summons";
+import { ATTUNE_ORDER, attuneOf, bondShare, DEFAULT_GRIMOIRE, SUMMONER_TREE, ESSENCE, GOLEM, GOLEM_OF, golemSlots, isElement, isSummonKind, parseGrimoire, SUMMON, summonElement, summonScaleLevel, type AttuneElement, type SummonKind } from "../shared/summons";
 import { cleanFeast, familyOf, type Feast, feastMult, THRALL, thrallMax } from "../shared/devour";
 import { ASK_BURST, ASK_PER_SEC, Bucket, CHAT_BURST, CHAT_PER_SEC, clientIp, isLocalIp, MSG_BURST, MSG_KICK_AFTER, MSG_KICK_WINDOW_MS, MSG_PER_SEC } from "./ratelimit";
 
@@ -130,7 +132,12 @@ export class Player extends Schema {
   timerSig = "";
   timerSeq = 0;
   @type("string") party = ""; // player group id ("" = solo); shared/party.ts
-  @type("number") attune = 0; // Summoner: element of the next golem, index into shared/summons.ts ATTUNE_ORDER
+  // Summoner grimoire (shared/summons.ts): the elements of golem 1 and golem 2, packed as el1 + 4 x el2 (indexes into
+  // ATTUNE_ORDER; attuneOf(attune) is golem 1's). One number because the schema is at its 64-field limit.
+  @type("number") attune = 0;
+  golemAt = [0, 0]; // Summoner: when each golem slot rises again (0 = not waiting); server only
+  grimoireAt = 0; // last grimoire change (throttle)
+  bondEssenceAt = 0; // last Essence charge from Stone Bond
   // Equipment (shared/gear.ts): equipped item ids ("" = empty) and the unequipped items carried.
   // Each slot must stay a synced @type field, or the client never sees it (the sword vanished from the menu).
   @type("string") weapon = "";
@@ -213,6 +220,9 @@ export class Mob extends Schema {
   summonAt = 0; nextPick = 0; // when it was called (the oldest goes first past SUMMON.max), next target choice
   drink = 0; // the vampire's Brides (v_brides): % of the damage this one deals that heals its owner
   thrall = false; // Bite (shared/devour.ts): a monster turned into a vampire's thrall (a summon that keeps its own kind)
+  slot = -1; // a Summoner's permanent golem: its grimoire slot (0, 1); -1 for other summons
+  mind?: GolemMind; // a golem's own powers (shared/golemAI.ts): elements, timers
+  fusedSlots = 0; // a Colossus: how many golems fused into it (they come back out when it ends)
   charmUntil = 0; // Charm (v_gaze): a zone monster fighting for a vampire (owner set) until then, then it goes back to being itself
   sPower = 1; // a summon's damage multiplier (skill rank, the owner's Ruin talent, the golems fused into a Colossus)
   summonChain = 0; // ...and the quest chain of that step
@@ -395,6 +405,7 @@ interface HitOpts {
   mobEl?: Element; // a monster's elemental attack: the hero's resistance cuts it
   drain?: number; // % of the damage dealt that heals the attacker (vampire skills)
   rune?: boolean; // damage from a rune effect (shared/runes.ts): never fires runes again
+  pet?: boolean; // dealt by a hero's creature (golem, wisp) in their name: SUMMON.pvp applies on heroes
 }
 
 const COLORS = [0xe74c3c, 0x3498db, 0x2ecc71, 0xf1c40f, 0x9b59b6, 0xe67e22, 0x1abc9c, 0xecf0f1];
@@ -657,6 +668,7 @@ export class TownRoom extends Room<TownState> {
     this.onMessage("assign", (client, msg: { slot: number; skill: string }) => this.assignSlot(client.sessionId, msg));
     this.onMessage("learn", (client, tid: string) => this.learnTalent(client.sessionId, tid));
     this.onMessage("respec", (client) => this.respec(client.sessionId));
+    this.onMessage("grimoire", (client, msg: { slot?: unknown; el?: unknown }) => this.chooseGrimoire(client.sessionId, msg));
     this.onMessage("stat", (client, k: string) => this.assignStat(client.sessionId, k));
     this.onMessage("resetstats", (client) => this.resetStats(client.sessionId));
 
@@ -966,6 +978,7 @@ export class TownRoom extends Room<TownState> {
       })),
       portals: [...p.portals], act: actAt(p.y),
       bounty: p.bounty, bountyDone: p.bountyDone, wear: p.wear, feast: { ...p.feast },
+      ...(p.cls === "summoner" ? { grimoire: this.grimoireOf(p), suTree: SUMMONER_TREE } : {}),
     };
   }
 
@@ -989,7 +1002,10 @@ export class TownRoom extends Room<TownState> {
     // The bag may hold items for other classes (bought, traded or taken from the stash for another hero)
     if (Array.isArray(s.bag)) setBag(p, s.bag.filter((v): v is string => isBagItem(v)).slice(0, BAG_SIZE));
     // Old saves (before the skill tree rework) had other skill ids: those points come back to spend again
-    for (const [k, v] of Object.entries(cleanRanks(p.cls, p.level, s.talents ?? {}))) p.talents.set(k, v);
+    // The Summoner's tree was rebuilt (Void Lord, 2026-11-08): a save from the old tree gets every skill point back
+    const oldTree = p.cls === "summoner" && s.suTree !== SUMMONER_TREE;
+    if (!oldTree) for (const [k, v] of Object.entries(cleanRanks(p.cls, p.level, s.talents ?? {}))) p.talents.set(k, v);
+    if (p.cls === "summoner") this.setGrimoire(p, oldTree ? DEFAULT_GRIMOIRE : String(s.grimoire ?? DEFAULT_GRIMOIRE));
     if (Array.isArray(s.slots)) s.slots.slice(0, SLOT_COUNT).forEach((v, i) => {
       if (typeof v === "string" && REPLACED_SKILLS[v]) v = REPLACED_SKILLS[v]; // a replaced skill keeps its key
       p.slots[i] = typeof v === "string" && skillLearned(p.cls, p.talents, v) && skillOf(p.cls, v)?.passive === undefined ? v : "";
@@ -1504,9 +1520,9 @@ export class TownRoom extends Room<TownState> {
   private pickTarget(m: Mob, def: MobDef) {
     let best = 0, target = "", foe = "";
     m.threat = 0;
-    const alerted = Date.now() < m.alertUntil;
+    const now0 = Date.now(), alerted = now0 < m.alertUntil;
     this.state.players.forEach((p, pid) => {
-      if (p.dead || isSafeZone(p.x, p.y) || Math.hypot(p.x - m.homeX, p.y - m.homeY) >= def.leash) return;
+      if (p.dead || isSafeZone(p.x, p.y) || Math.hypot(p.x - m.homeX, p.y - m.homeY) >= def.leash || inVoid(p, now0)) return;
       const d = Math.hypot(p.x - m.x, p.y - m.y);
       // a hero the horn (or a shout) called the camp against counts as hated
       const hated = (pid === m.hateId ? m.hate : 0) + (alerted && pid === m.alertHero ? 0.5 : 0);
@@ -1576,8 +1592,57 @@ export class TownRoom extends Room<TownState> {
     if (o.hp <= 0) { this.mobDied(o, oid, id, MOBS[m.kind].name); m.foe = ""; }
   }
 
+  /** Void Slip: every monster after this hero loses them and turns on their nearest golem, if one is close. */
+  private loseHero(id: string) {
+    this.state.mobs.forEach((m) => {
+      if (m.dead || m.owner || (m.target !== id && m.hateId !== id)) return;
+      if (m.target === id) m.target = "";
+      if (m.hateId === id) { m.hateId = ""; m.hate = 0; }
+      m.windUntil = 0; m.winding = false;
+      const g = this.guardOf(id, m) ?? this.bondOf(id, m)?.[0];
+      if (g) { m.foe = g; this.addHate(m, g, 10); }
+    });
+  }
+
+  /**
+   * Black Hole (shared/skillEngine.ts voidHop): a swallowed monster is spat out at a random walkable spot 2-4 tiles
+   * from the hole, dazed a moment; a hero is thrown 3-4 tiles out of it, never into the safe zone.
+   */
+  private voidHop(owner: string, tid: string, swallowed: boolean, x: number, y: number): boolean {
+    const p = this.state.players.get(tid), m = p ? undefined : this.state.mobs.get(tid);
+    const u = p ?? m;
+    if (!u || u.dead || (m && (m.owner || BOSS[m.kind]))) return false; // bosses are too big to swallow
+    const [min, max] = p ? [3 * TILE, 4 * TILE] : [2 * TILE, 4 * TILE];
+    for (let i = 0; i < 16; i++) {
+      const a = Math.random() * Math.PI * 2, d = min + Math.random() * (max - min);
+      const nx = x + Math.cos(a) * d, ny = y + Math.sin(a) * d;
+      if (isSolidAt(nx, ny) || isSafeZone(nx, ny) || (m && noMobsAt(nx, ny))) continue;
+      const fx = Math.round(u.x), fy = Math.round(u.y);
+      u.x = nx; u.y = ny;
+      if (m) { m.homeX = Math.abs(m.homeX - nx) < 400 ? m.homeX : nx; m.stunUntil = Math.max(m.stunUntil, Date.now() + 400); m.windUntil = 0; m.winding = false; }
+      this.broadcast("sfx", { ev: "voidhop", id: owner, t: tid, swallowed, fx, fy, x: Math.round(nx), y: Math.round(ny) });
+      return true;
+    }
+    return false;
+  }
+
+  /** Black Holes eat enemy projectiles: is (x, y) inside a hole of someone this shot's owner fights? */
+  private holeEats(s: Projectile): boolean {
+    let eat = false;
+    this.state.fields.forEach((f) => {
+      if (eat || !f.inst.def.hole || f.owner === s.owner || Math.hypot(s.x - f.x, s.y - f.y) > f.r) return;
+      const om = this.state.mobs.get(s.owner);
+      if (om) { eat = om.owner !== f.owner; return; } // a monster's shot (not the hole owner's own creatures)
+      const op = this.state.players.get(s.owner), hp = this.state.players.get(f.owner);
+      eat = !!op && !!hp && !(op.party && op.party === hp.party) && !pvpProtected(op.level, hp.level);
+    });
+    return eat;
+  }
+
   // ---- Summons (shared/summons.ts) --------------------------------------------
 
+  /** Black holes open this tick (only then do projectiles look for one). */
+  private holes = 0;
   /** Living summons by id, so monsters and heroes find them without scanning every monster. */
   private summons = new Map<string, Mob>();
   private summonSeq = 0;
@@ -1591,12 +1656,19 @@ export class TownRoom extends Room<TownState> {
     return !pvpProtected(a.level, o.level) && !isSafeZone(m.x, m.y);
   }
 
-  /** A hero calls up a summon next to them. Past SUMMON.max, their oldest summon goes back. Returns its id. */
-  summon(ownerId: string, kind: SummonKind, level?: number, power = 1, fused = 0): string | undefined {
+  /**
+   * A hero calls up a summon next to them. A Summoner's permanent golem takes grimoire slot `slot` (the golem already in
+   * it goes back); any other summon follows SUMMON.max (past it, their oldest goes back). Returns its id.
+   */
+  summon(ownerId: string, kind: SummonKind, level?: number, power = 1, fused = 0, slot = -1): string | undefined {
     const p = this.state.players.get(ownerId);
     if (!p || p.dead || !isSummonKind(kind)) return undefined;
-    const mine = [...this.summons].filter(([, m]) => m.owner === ownerId).sort((x, y) => x[1].summonAt - y[1].summonAt);
-    while (mine.length >= SUMMON.max) { const [oid] = mine.shift()!; this.dismiss(oid); }
+    if (slot >= 0) {
+      for (const [oid, o] of [...this.summons]) if (o.owner === ownerId && o.slot === slot) this.dismiss(oid, false);
+    } else {
+      const mine = [...this.summons].filter(([, m]) => m.owner === ownerId && m.slot < 0).sort((x, y) => x[1].summonAt - y[1].summonAt);
+      while (mine.length >= SUMMON.max) { const [oid] = mine.shift()!; this.dismiss(oid); }
+    }
     const m = new Mob(), now = Date.now();
     m.kind = kind; m.zone = -1; m.owner = ownerId; m.summonAt = now;
     m.level = capLevel(level ?? p.level);
@@ -1605,13 +1677,20 @@ export class TownRoom extends Room<TownState> {
     m.hp = m.maxHp = Math.round(MOBS[kind].maxHp * mobScale(summonScaleLevel(m.level), "hp") * fuse * talentMult(p.cls, p.talents, "summonHp"));
     m.sPower = power * fuse * talentMult(p.cls, p.talents, "summonDmg");
     m.weapon = kind === "golem_colossus" ? attuneOf(p.attune) : "";
+    m.slot = slot;
+    m.fusedSlots = kind === "golem_colossus" ? fused : 0;
+    // its powers: the golem's element; a Colossus has those of every golem in the grimoire, stronger
+    const book = parseGrimoire(this.grimoireOf(p)).slice(0, golemSlots(p.level, rankOf(p.talents, "su_twin")));
+    if (kind === "golem_colossus") m.mind = newMind(book, 1.25);
+    else if (summonElement(kind, "") && kind.startsWith("golem_")) m.mind = newMind([summonElement(kind, "")]);
     // a free spot beside the hero (behind them if blocked)
     let x = p.x, y = p.y;
     for (const [dx, dy] of [[-18, 6], [18, 6], [0, 16], [0, -16], [0, 0]]) {
       if (!isSolidAt(p.x + dx, p.y + dy)) { x = p.x + dx; y = p.y + dy; break; }
     }
     m.x = m.homeX = x; m.y = m.homeY = y;
-    m.banishAt = now + (kind === "golem_colossus" ? this.colossusMs : SUMMON.lifeMs); m.stunUntil = now + 500; // rising out of the ground
+    // permanent golems never crumble; the Colossus lasts its time; other summons SUMMON.lifeMs
+    m.banishAt = slot >= 0 ? Number.MAX_SAFE_INTEGER : now + (kind === "golem_colossus" ? this.colossusMs : SUMMON.lifeMs); m.stunUntil = now + 500; // rising out of the ground
     const id = `s${++this.summonSeq}`;
     this.state.mobs.set(id, m);
     this.summons.set(id, m);
@@ -1620,12 +1699,52 @@ export class TownRoom extends Room<TownState> {
   }
 
   private colossusMs = 30_000;
-  /** Summoner ultimate: every golem of the hero fuses into one Colossus of their element (alone if none is out). */
+  /**
+   * Summoner ultimate: the hero's golems fuse into one Colossus (alone if none is out) with every grimoire element's
+   * aura and power. When its time is up it splits back into the golems; if it dies they climb back out as usual.
+   */
   private summonColossus(ownerId: string, power: number, ms: number) {
-    const fused = [...this.summons].filter(([, m]) => m.owner === ownerId && !m.dead);
+    const p = this.state.players.get(ownerId);
+    if (!p || isSafeZone(p.x, p.y)) return undefined;
+    const fused = [...this.summons].filter(([, m]) => m.owner === ownerId && !m.dead && (m.slot >= 0 || m.kind === "golem_colossus"));
     for (const [id] of fused) this.dismiss(id, false);
     this.colossusMs = ms;
-    return this.summon(ownerId, "golem_colossus", undefined, power, fused.length);
+    p.golemAt = [0, 0];
+    return this.summon(ownerId, "golem_colossus", undefined, power, Math.max(1, fused.length));
+  }
+
+  /** The Summoner's grimoire as "el,el" (Player.attune packs it). */
+  private grimoireOf(p: Player): string {
+    const a = Math.max(0, Math.floor(p.attune));
+    return `${attuneOf(a % 4)},${attuneOf(Math.floor(a / 4) % 4)}`;
+  }
+  private setGrimoire(p: Player, book: string) {
+    const [a, b] = parseGrimoire(book);
+    p.attune = ATTUNE_ORDER.indexOf(a) + 4 * ATTUNE_ORDER.indexOf(b);
+  }
+
+  /**
+   * The grimoire: a Summoner picks the element of golem `slot`. Saved with the hero. A golem out in that slot in another
+   * element goes back and rises again in the new one (GOLEM.enterMs later, no Essence).
+   */
+  private chooseGrimoire(id: string, msg: { slot?: unknown; el?: unknown }) {
+    const p = this.state.players.get(id), now = Date.now();
+    const slot = Number(msg?.slot);
+    if (!p || p.cls !== "summoner" || (slot !== 0 && slot !== 1) || !isElement(msg?.el) || now - p.grimoireAt < GOLEM.grimoireMs) return;
+    p.grimoireAt = now;
+    const book = parseGrimoire(this.grimoireOf(p));
+    if (book[slot] === msg.el) return;
+    book[slot] = msg.el;
+    this.setGrimoire(p, book.join(","));
+    for (const [gid, g] of [...this.summons]) if (g.owner === id && g.slot === slot && !g.dead) { this.dismiss(gid); p.golemAt[slot] = now + GOLEM.enterMs; }
+    this.broadcast("sfx", { ev: "grimoire", id, slot, el: msg.el });
+  }
+
+  /** The elements of a Summoner's living golems (a Colossus counts for each of its powers): their auras. */
+  private golemEls(id: string): AttuneElement[] {
+    const out: AttuneElement[] = [];
+    for (const g of this.summons.values()) if (g.owner === id && !g.dead && g.mind && (g.slot >= 0 || g.kind === "golem_colossus")) out.push(...g.mind.els);
+    return out;
   }
 
   // ---- The Brides (v_brides) ----------------------------------------------------
@@ -1746,6 +1865,8 @@ export class TownRoom extends Room<TownState> {
     if (m?.charmUntil && !m.dead) return this.uncharm(id, m); // a charmed monster isn't sent away, it wakes up
     this.summons.delete(id);
     if (!m || m.dead) return;
+    // The Colossus's time is up: it splits back into the golems (the owner is still out of town)
+    if (m.kind === "golem_colossus" && Date.now() >= m.banishAt) this.splitColossus(m);
     m.dead = true; m.hp = 0;
     if (show) this.broadcast("banish", { id, x: Math.round(m.x), y: Math.round(m.y) });
     this.clock.setTimeout(() => this.state.mobs.delete(id), 500);
@@ -1773,19 +1894,66 @@ export class TownRoom extends Room<TownState> {
     return best;
   }
 
-  /** Bound golem: a Summoner outside the safe zone with no summon out gets one after SUMMON.autoMs. */
-  private nextAuto = new Map<string, number>();
+  /**
+   * Permanent golems (Void Lord rework): out of the safe zone, each grimoire slot of a Summoner (one, two with Twin
+   * Bond from Lv 18) holds a golem. An empty slot rises GOLEM.enterMs after the hero leaves the safe zone, or
+   * GOLEM.respawnMs after its golem died. In the safe zone the golems go back. Nothing rises while a Colossus is out.
+   */
   private autoAt = 0;
   private autoGolems(now: number) {
     this.state.players.forEach((p, pid) => {
-      if (p.cls !== "summoner" || p.dead || isSafeZone(p.x, p.y)) { this.nextAuto.delete(pid); return; }
-      for (const g of this.summons.values()) if (g.owner === pid && !g.dead) { this.nextAuto.delete(pid); return; }
-      const at = this.nextAuto.get(pid);
-      if (at === undefined) { this.nextAuto.set(pid, now + SUMMON.autoMs); return; }
-      if (now < at) return;
-      this.nextAuto.delete(pid);
-      this.summon(pid, GOLEM_OF[attuneOf(p.attune)], undefined, this.golemPower(p));
+      if (p.cls !== "summoner") return;
+      const mine = [...this.summons].filter(([, g]) => g.owner === pid && !g.dead && (g.slot >= 0 || g.kind === "golem_colossus"));
+      if (p.dead || isSafeZone(p.x, p.y)) {
+        for (const [gid] of mine) this.dismiss(gid, !p.dead);
+        p.golemAt = [0, 0];
+        return;
+      }
+      if (mine.some(([, g]) => g.kind === "golem_colossus")) return;
+      const slots = golemSlots(p.level, rankOf(p.talents, "su_twin")), book = parseGrimoire(this.grimoireOf(p));
+      for (const [gid, g] of mine) if (g.slot >= slots) this.dismiss(gid);
+      for (let i = 0; i < slots; i++) {
+        if (mine.some(([, g]) => g.slot === i)) { p.golemAt[i] = 0; continue; }
+        if (!p.golemAt[i]) { p.golemAt[i] = now + GOLEM.enterMs; continue; }
+        if (now < p.golemAt[i]) continue;
+        p.golemAt[i] = 0;
+        this.summon(pid, GOLEM_OF[book[i]], undefined, this.golemPower(p), 0, i);
+      }
     });
+  }
+
+  /** Elemental Golem (su_golem): the hero's golems come back out of the Void at once, whole (a Colossus is mended). */
+  private recallGolems(id: string, power: number) {
+    const p = this.state.players.get(id);
+    if (!p || p.dead || isSafeZone(p.x, p.y)) return;
+    const col = [...this.summons.values()].find((g) => g.owner === id && !g.dead && g.kind === "golem_colossus");
+    if (col) { col.hp = col.maxHp; return; }
+    const book = parseGrimoire(this.grimoireOf(p));
+    for (let i = 0; i < golemSlots(p.level, rankOf(p.talents, "su_twin")); i++) { p.golemAt[i] = 0; this.summon(id, GOLEM_OF[book[i]], undefined, power, 0, i); }
+  }
+
+  /** The Colossus's time is up: it splits back into the hero's golems where it stood. */
+  private splitColossus(c: Mob) {
+    const p = this.state.players.get(c.owner);
+    if (!p || p.dead || isSafeZone(p.x, p.y)) return;
+    const book = parseGrimoire(this.grimoireOf(p));
+    for (let i = 0; i < golemSlots(p.level, rankOf(p.talents, "su_twin")); i++) {
+      const gid = this.summon(c.owner, GOLEM_OF[book[i]], undefined, this.golemPower(p), 0, i);
+      const g = gid && this.state.mobs.get(gid);
+      if (g && !isSolidAt(c.x + (i ? 12 : -12), c.y)) { g.x = g.homeX = c.x + (i ? 12 : -12); g.y = g.homeY = c.y; }
+    }
+    this.broadcast("sfx", { ev: "colossussplit", id: c.owner, x: Math.round(c.x), y: Math.round(c.y) });
+  }
+
+  /** A Summoner's golem or Colossus died: its elements burst out, a charge of Essence, its slot rises again later. */
+  private golemFell(m: Mob) {
+    const p = this.state.players.get(m.owner);
+    if (!p || !m.mind) return;
+    golemDeath(this.host, m.owner, m.mind.els, m.x, m.y, this.golemPower(p) * m.mind.boost);
+    toVoid(this.host, m.owner);
+    const now = Date.now();
+    if (m.slot >= 0) p.golemAt[m.slot] = now + GOLEM.respawnMs;
+    if (m.kind === "golem_colossus") p.golemAt = [now + GOLEM.respawnMs, now + GOLEM.respawnMs];
   }
 
   /** What the Elemental Golem skill would give this hero (castSkill's power: rank, skill level, Magic). */
@@ -1832,13 +2000,15 @@ export class TownRoom extends Room<TownState> {
     if (m.stunned) { m.moving = false; return; }
     const def = mobDef(m, now);
     // Vital Link (su_link): close to its owner, a golem mends a little every second
-    const link = rankOf(o.talents, "su_link");
-    if (link && m.hp < m.maxHp && Math.hypot(o.x - m.x, o.y - m.y) < SUMMON.followRange * 2) m.hp = Math.min(m.maxHp, m.hp + m.maxHp * SUMMON.linkRegen * link * dt);
+    const link = talentBonus(o.cls, o.talents, "golemRegen") / 100;
+    if (link && m.hp < m.maxHp && Math.hypot(o.x - m.x, o.y - m.y) < SUMMON.followRange * 2) m.hp = Math.min(m.maxHp, m.hp + m.maxHp * link * dt);
     if (now >= m.nextPick) { m.nextPick = now + 400; m.target = this.summonTarget(m, m.owner, o); }
     const tp = m.target ? this.state.players.get(m.target) : undefined;
     const tm = !tp && m.target ? this.state.mobs.get(m.target) : undefined;
     const t = tp ?? tm;
     if (t && ((tp && (tp.dead || isSafeZone(tp.x, tp.y))) || (tm && (tm.dead || tm.hidden)))) m.target = "";
+    // A golem's own powers (shared/golemAI.ts): flames, venom pools, chain lightning, on their own timers
+    if (m.mind && m.target && !m.broken) golemTick(this.host, m.owner, m, m.mind, m.target, this.summonBlow(m, def), this.golemPower(o));
     let input: InputState = STILL;
     const toOwner = Math.hypot(o.x - m.x, o.y - m.y);
     if (toOwner > SUMMON.leash * 2.5) {
@@ -1865,8 +2035,12 @@ export class TownRoom extends Room<TownState> {
   }
 
   /** A summon's blow: dealt in its owner's name (they get the kill), part of it in the golem's element; a monster turns on the golem. */
+  /** The damage of one of a summon's blows (before the owner's own bonuses, which hitTarget adds). */
+  private summonBlow(m: Mob, def: MobDef) { return def.damage * mobScale(summonScaleLevel(m.level), "damage") * m.sPower; }
+
   private summonStrike(m: Mob, id: string, tid: string, t: { x: number; y: number }, def: MobDef) {
-    const dmg = def.damage * mobScale(summonScaleLevel(m.level), "damage") * m.sPower;
+    const dmg = this.summonBlow(m, def);
+    const extra = m.mind ? golemStrike(m.mind) : {}; // the frost golem freezes with every third blow
     const el = summonElement(m.kind, m.weapon), share = m.thrall || m.drink || m.charmUntil ? 0 : SUMMON.elementShare; // a thrall, bride or charmed monster hits as what it is
     this.broadcast("swing", { id });
     // The Colossus slams the ground: everyone of the owner's foes close to its target is hit
@@ -1876,7 +2050,7 @@ export class TownRoom extends Room<TownState> {
       const f = this.state.players.get(fid) ?? this.state.mobs.get(fid);
       if (!f) continue;
       const d = Math.hypot(f.x - m.x, f.y - m.y) || 1, push: [number, number] = [(f.x - m.x) / d, (f.y - m.y) / d];
-      this.hitTarget(m.owner, fid, dmg * (1 - share), push, { kb: m.drink ? 0.2 : 0.6, parts: share ? [{ el, amt: dmg * share }] : undefined });
+      this.hitTarget(m.owner, fid, dmg * (1 - share), push, { kb: m.drink ? 0.2 : 0.6, parts: share ? [{ el, amt: dmg * share }] : undefined, pet: true, ...extra });
       // A Bride drinks: part of the blood comes back to the vampire (red drops fly to him)
       if (m.drink) { this.host.heal(m.owner, dmg * m.drink / 100); this.broadcast("sfx", { ev: "drain", id: m.owner, t: fid }); }
       const victim = this.state.mobs.get(fid);
@@ -2380,6 +2554,8 @@ export class TownRoom extends Room<TownState> {
     this.updateZones(now);
     this.updateGuards(now);
     this.updateWatch(dt, now);
+    this.holes = 0;
+    this.state.fields.forEach((f) => { if (f.inst.def.hole) this.holes++; });
     this.state.projectiles.forEach((s, id) => this.updateProjectile(s, id, dt));
     this.updateHazards(now);
     this.state.fields.forEach((f, id) => {
@@ -3865,6 +4041,7 @@ export class TownRoom extends Room<TownState> {
       s.y += (oy * total) / steps;
       s.traveled += total / steps;
       if (isSolidAt(s.x, s.y) || s.traveled >= s.range) return this.explode(s, id);
+      if (this.holes && this.holeEats(s)) { this.state.projectiles.delete(id); this.broadcast("sfx", { ev: "eatshot", x: Math.round(s.x), y: Math.round(s.y) }); return; }
       const pulse = s.spec?.pulse;
       if (pulse && s.traveled - s.pulsed >= pulse.every) { s.pulsed = s.traveled; shotPulse(this.host, s.spec!, s.x, s.y); }
       if (s.mobLevel > 0) {
@@ -4570,6 +4747,8 @@ export class TownRoom extends Room<TownState> {
     if (tp) {
       const hpBefore = tp.hp;
       if (a) dmg = Math.max(1, Math.round(dmg * pvpDamageMult(a.level, tp.level))); // hero vs hero (shared/combat.ts)
+      // A Summoner's creatures on a hero: their PvP settings (shared/summons.ts SUMMON.pvp)
+      if (a && opts.pet) { dmg = Math.max(1, Math.round(dmg * SUMMON.pvp.dmg)); if (opts.stunMs) opts = { ...opts, stunMs: opts.stunMs * SUMMON.pvp.cc }; }
       const killed = this.damagePlayer(targetId, dmg, name, push, kb, { ...opts, atkLevel: a?.level });
       this.bloodthirst(a, attackerId, hpBefore - tp.hp, opts.drain, targetId);
       if (a && (opts.basic || opts.skill) && !opts.dot && !opts.rune && hpBefore > tp.hp) this.runesOnHit(attackerId, a, targetId, hpBefore - tp.hp);
@@ -4585,6 +4764,7 @@ export class TownRoom extends Room<TownState> {
     const m = this.state.mobs.get(targetId);
     if (!m || m.dead) return;
     if (m.owner && a && !this.canHurtSummon(attackerId, m)) return;
+    if (m.owner && a) dmg = Math.max(1, Math.round(dmg / SUMMON.pvp.hp)); // a hero's blow on someone's creature (SUMMON.pvp)
     const def = mobDef(m);
     if (a && (m.camp || m.kind === "banditchief")) this.banditShout(m, targetId, attackerId, Date.now());
     dmg = Math.max(1, Math.round(dmg * takenMult(m, Date.now())));
@@ -4667,6 +4847,7 @@ export class TownRoom extends Room<TownState> {
     if (m.kind === "nightraider") this.raiderGone(m, targetId, true, killerName);
     m.dead = true; m.hp = 0;
     if (m.owner) this.summons.delete(targetId);
+    if (m.owner && m.mind) this.golemFell(m); // a Summoner's golem: its element bursts out, Essence, it rises again later
     if (m.charmUntil) { m.owner = ""; m.charmUntil = 0; m.banishAt = 0; } // a charmed monster dies as the zone monster it is
     m.hidden = false; m.spot = ""; m.fleeing = false; m.foe = "";
     // A skeleton may break in two: its upper body drags itself on at whoever killed it
@@ -5368,9 +5549,11 @@ export class TownRoom extends Room<TownState> {
     // Stone Bond (shared/summons.ts): the hero's nearest golem takes part of the blow
     const bond = this.bondOf(tid, t);
     if (bond && dmg > 1) {
-      const part = Math.round(dmg * bondShare(t.level));
+      const part = Math.round(dmg * Math.min(0.6, bondShare(t.level) + talentBonus(t.cls, t.talents, "bond") / 100));
       dmg -= part;
       bond[1].hp -= part;
+      // the Void pays the Summoner for every blow their golem takes for them (at most a charge per ESSENCE.bondEveryMs)
+      if (t.cls === "summoner" && part > 0 && now - t.bondEssenceAt >= ESSENCE.bondEveryMs) { t.bondEssenceAt = now; gainEssence(this.host, tid); }
       if (bond[1].hp <= 0) this.mobDied(bond[1], bond[0], opts.from ?? "", byName);
     }
     // Unstoppable buffs (Berserk, Whirlwind): ignore stun, slow and knockback
@@ -5391,7 +5574,12 @@ export class TownRoom extends Room<TownState> {
       t.x = kb.x; t.y = kb.y;
     }
     this.broadcast("hit", { id: tid, dmg, blocked: guarded, crit: !!opts.crit, dot: !!opts.dot, el: opts.el ?? opts.mobEl, ...(opts.dot ? {} : hitDir(push)) });
-    if (t.hp > 0) { afterHit(this.host, opts.from, tid, opts); if (struck) this.runesStruck(tid, t, opts.from!, dmg); return false; }
+    if (t.hp > 0) {
+      afterHit(this.host, opts.from, tid, opts);
+      if (struck) this.runesStruck(tid, t, opts.from!, dmg);
+      if (voidSlip(this.host, tid) > 0) this.loseHero(tid); // Void Slip: gone into the Void, monsters lose them
+      return false;
+    }
     if (riseAgain(this.host, tid)) return false; // Blood Pact: a killing blow leaves the vampire standing
     t.dead = true;
     if (opts.from && this.state.players.has(opts.from)) onKill(this.host, opts.from); // Bloodlust
@@ -5551,10 +5739,9 @@ export class TownRoom extends Room<TownState> {
         return !t || (!isSafeZone(t.x, t.y) && now >= t.invulnUntil);
       });
     },
-    summon: (id, power) => {
-      const p = this.state.players.get(id);
-      if (p) this.summon(id, GOLEM_OF[attuneOf(p.attune)], undefined, power);
-    },
+    summon: (id, power) => this.recallGolems(id, power),
+    golemEls: (id) => this.golemEls(id),
+    voidHop: (owner, tid, swallowed, x, y) => this.voidHop(owner, tid, swallowed, x, y),
     colossus: (id, power, ms) => { this.summonColossus(id, power, ms); },
     brides: (id, power, n, ms, drain) => this.callBrides(id, power, n, ms, drain),
     flesh: (id) => {
@@ -5581,12 +5768,6 @@ export class TownRoom extends Room<TownState> {
       let inside = false;
       this.state.fields.forEach((f) => { if (!inside && f.inst.def.night && Math.hypot(u.x - f.x, u.y - f.y) <= f.r) inside = true; });
       return inside;
-    },
-    attune: (id) => {
-      const p = this.state.players.get(id);
-      if (!p) return;
-      p.attune = (p.attune + 1) % 4;
-      this.broadcast("sfx", { ev: "attune", id, el: attuneOf(p.attune) });
     },
     hit: (a, t, dmg, push, o) => {
       // Skills crit too (Dexterity), except damage over time and the counters that already crit

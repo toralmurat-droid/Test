@@ -1239,6 +1239,15 @@ export function paintSigil(id: string): string[] | undefined {
   return p.g.map((c, i) => p.fx[i] || c);
 }
 
+// Void Lord rework (2026-11-08): provisional icons for the new Summoner skills, borrowed from the old tree's paintings
+// until their own are painted (PR 2 of the rework)
+const BORROWED: Record<string, string> = {
+  su_bond: "su_stonehide", su_might: "su_ruin", su_resonance: "su_attune", su_twin: "su_link",
+  su_blackhole: "su_rift", su_velocity: "su_swift", su_gravity: "su_quick", su_slip: "su_flow", su_horizon: "su_rift",
+  su_blades: "su_blade", su_wisps: "su_mote", su_edge: "su_mastery", su_return: "su_flow", su_swarm: "su_mote", su_arsenal: "su_cataclysm",
+};
+for (const [id, from] of Object.entries(BORROWED)) if (!ART[id] && ART[from]) ART[id] = ART[from];
+
 export const ART_IDS = Object.keys(ART);
 
 // ---- Status icons for the HUD buff row (client/src/buffbar.ts): boons and debuffs that are not skills ----------------
