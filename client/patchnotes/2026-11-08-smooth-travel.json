@@ -1,5 +1,6 @@
 {
   "date": "2026-11-08",
+  "patch": 170,
   "title": "Smoother arrivals",
   "changes": [
     "Travelling by portal stone, rope or stair, or coming back to life, now cuts straight to the new place instead of sliding across the map.",
