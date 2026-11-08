@@ -1,5 +1,6 @@
 {
   "date": "2026-11-08",
+  "patch": 171,
   "title": "Heroes can now reach level 50",
   "changes": [
     "The level cap is raised from 30 to 50, ready for the second act in the desert.",
