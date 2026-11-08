@@ -5,7 +5,7 @@ import {
   AGGRO, aggroLevelFactor, BLOB_AI, BONES, DEMON, BROOD, Dir, FACTION, FEUD, MERGE, MobDef, MOTHER, SKELETON_AI, HIT_RADIUS, mobScale, regionMobLevel, regionSpecialLevel, InputState, MOB_ATTACK_RANGE, MOBS, MobKind, rollSkeletonWeapon, SKELETON_BOW, SKELETON_WEAPONS, SkeletonWeapon, REGEN_DELAY_MS, REGEN_RAMP_MS, regenFromStamina, SAFE_REGEN_MULT,
   RESPAWN_MS, TICK_RATE, TILE,
   HOLLOW_KING, ELEM_BLOB, ELEM_MOVE, inputDir, DESERT_Y0, ELITE, BOSS, URSK, SUNWRIGHT, act2MobLevel, act2SpecialLevel, BEAST, BEAST_BROOD, BEAST_FOLK, BEAST_KINDS, BEAST_MOVES, BEAST_RIDER, type BeastMove,
-  MAP_W, MAP_H,
+  MAP_W, MAP_H, WORLD_H,
 } from "../shared/constants";
 import { ambushRoomAt, arrivalAt, CRACK_OPEN_MS, LINK_RANGE, linkById, LINKS, SHORTCUT_OPEN_MS } from "../shared/dungeon";
 import {
@@ -36,7 +36,8 @@ import { inVillage, WRATH } from "../shared/wrath";
 import { sellPrice, SHOPS } from "../shared/shops";
 import { BLOB_KINDS, CHAINS, CROWN_CHAIN, packQuest, chainOpen, chainState, inZone, isBlob, npcPresent, QuestState, questStep, stepGoal, Summon, TUT_CHAIN, TUT_QUESTS, USE_RANGE } from "../shared/quests";
 import { findHideSpot, HIDE, MOTHER_KEEP_OUT, noMobsAt, spawnPoint, SPAWN_ZONES, villageDist, zoneCap } from "../shared/spawns";
-import { moveStep } from "../shared/movement";
+import { blocked, moveStep } from "../shared/movement";
+import { NIGHT_RAID, raiderByKey, raiderIgnores, RAIDERS } from "../shared/raiders";
 import { SLOTS_BY_ZONE, WORK_SLOTS } from "../shared/siege";
 import { DAY_CYCLE_MS, dayFrac, isUndeadNight, NIGHT_BOSSES, UNDEAD_NIGHT } from "../shared/daynight";
 import { AMBUSH, BANDIT_AI, BANDIT_ROLES, CAMP_POSTS, CHIEF, clearWalk, findPath, postPos, roleOf } from "../shared/bandits";
@@ -248,6 +249,8 @@ export class Mob extends Schema {
   nextSweep = 0; nextLeap = 0; nextCry = 0;
   // Ambushers (AMBUSH): up in a tree; a call from their group to drop on a hero; the jump out in flight
   ambusher = false; ambushAt = 0; ambushHero = ""; flyUntil = 0; flyMs = 0; flyX0 = 0; flyY0 = 0; flyX = 0; flyY = 0;
+  // The Night Raiders (shared/raiders.ts): the act it rides in, when it fades, its next stop on the road, where a chase began
+  raidAct = 0; raidEnd = 0; rideX = NaN; rideY = 0; rideStuck = 0; chaseX = 0; chaseY = 0; nextSay = 0;
   uPhase = 0; nextTaunt = 0; hookHero = ""; // Grandam Ursk (URSK): her phase (0 not her), next taunt, the hero her hook is flying at
   lurk = ""; // a Mawdeep ambush room it lurks in (shared/dungeon.ts AMBUSH_ROOMS), until a hero walks in
   path: [number, number][] = []; pathAt = 0; pathTX = 0; pathTY = 0; // the way round walls (gates), see seek
@@ -710,6 +713,14 @@ export class TownRoom extends Room<TownState> {
       if (tp) { p.x = (Number(tp[1]) + 0.5) * TILE; p.y = (Number(tp[2]) + 0.5) * TILE; return; }
       if (process.env.NODE_ENV !== "production" && /^\/act2open$/i.test(text.trim())) { // dev servers only: both Act 1 finales done
         for (const id of ["tutorial", "crown", "beast"]) { const c = CHAINS.findIndex((ch) => ch.id === id); this.qset(p, c, { questId: CHAINS[c].quests.length, questStage: 0, questCount: 0 }); }
+        return;
+      }
+      const nr = process.env.NODE_ENV !== "production" && text.trim().match(/^\/raider(?:\s+(\w+))?$/i); // dev servers only: a Night Raider rides up close
+      if (nr) {
+        const act = TownRoom.raidActAt(p.x, p.y);
+        const id = act ? this.raidArrive(act, Date.now(), nr[1]?.toLowerCase(), p) : undefined;
+        const m = id ? this.state.mobs.get(id) : undefined;
+        if (m) for (let i = 0; i < 16; i++) { const a = i / 16 * Math.PI * 2, x = p.x + Math.cos(a) * 5 * TILE, y = p.y + Math.sin(a) * 3 * TILE; if (this.rideOk(x, y, act as 1 | 2)) { m.x = x; m.y = y; break; } }
         return;
       }
       if (process.env.NODE_ENV !== "production" && /^\/god$/i.test(text.trim())) { p.invulnUntil = Date.now() + 10 * 60_000; return; } // dev servers only: 10 min unhurt, to watch a fight
@@ -1521,6 +1532,12 @@ export class TownRoom extends Room<TownState> {
       const score = Math.max(0, 1 - d / def.aggroRange) + SUMMON.taunt + hated + (sid === m.foe ? AGGRO.stick : 0);
       if (score > best) { best = score; target = ""; foe = sid; }
     }
+    // A Night Rider that cut into it: the living fight back (the dead are never touched by them)
+    const rider = m.hateId && m.hate > 0 && !m.perch && !m.mergeInto && !m.summonFor ? this.state.mobs.get(m.hateId) : undefined;
+    if (rider?.kind === "nightraider" && !rider.dead && Math.hypot(rider.x - m.x, rider.y - m.y) < FEUD.range * 2 && Math.hypot(rider.x - m.homeX, rider.y - m.homeY) < def.leash) {
+      const score = m.hate + (m.hateId === m.foe ? AGGRO.stick : 0);
+      if (score > best) { best = score; target = ""; foe = m.hateId; }
+    }
     m.target = target; m.foe = foe;
   }
 
@@ -2251,6 +2268,7 @@ export class TownRoom extends Room<TownState> {
    * not burning, stunned, walking to a rite, being banished or merging. Mirrors the early returns of updateMob.
    */
   private dozing(m: Mob, heroes: Player[], now: number): boolean {
+    if (m.kind === "nightraider") return false; // a rider never sleeps (there are at most two)
     if (m.dead || m.target || m.foe || m.banishAt || m.ritual || m.mergeInto || m.spot || m.specialAt || m.windUntil) return false;
     if (now < m.stunUntil || now < m.sk.burnUntil || m.broken || m.moving) return false;
     return !this.heroNear(m, heroes);
@@ -2321,6 +2339,7 @@ export class TownRoom extends Room<TownState> {
     if (tick % 2 === 0) this.buildFeudGrid(); // monsters move a few px per tick, a grid cell is 128 px
     this.assignFlanks();
     this.updateUndeadNight(now);
+    this.updateRaids(now);
     this.checkRituals(now);
     this.state.mobs.forEach((m, id) => {
       // Frozen: dozing where no hero is anywhere near. Nothing to do; it wakes when a hero's warm squares reach it
@@ -2651,6 +2670,7 @@ export class TownRoom extends Room<TownState> {
     if (m.stunned || m.broken) { m.winding = false; m.windUntil = 0; }
     m.slowed = now < m.slowUntil;
     if (m.stunned) { m.moving = false; return; }
+    if (m.kind === "nightraider") return this.raiderStep(m, id, dt, now);
     // Nobody around: the monster dozes (no wandering, no budding), which keeps big monster counts cheap
     if (!m.target && !this.playerNear(m.x, m.y, SLEEP_RANGE)) {
       if (m.moving) m.moving = false;
@@ -2680,7 +2700,8 @@ export class TownRoom extends Room<TownState> {
     if (t && (t.dead || isSafeZone(t.x, t.y) || Math.hypot(m.x - m.homeX, m.y - m.homeY) > def.leash)) {
       m.target = ""; t = undefined;
     }
-    let foe: Mob | undefined = (FACTION[m.kind] || this.state.mobs.get(m.foe)?.owner) && !t ? this.foeOf(m, def) : undefined;
+    const foeKind = m.foe ? this.state.mobs.get(m.foe) : undefined;
+    let foe: Mob | undefined = (FACTION[m.kind] || foeKind?.owner || foeKind?.kind === "nightraider") && !t ? this.foeOf(m, def) : undefined;
     // Aggro: pick whoever it hates most, hero or rival monster
     if (m.hate > 0) m.hate = Math.max(0, m.hate - AGGRO.decayPerSec * dt);
     if (now >= m.nextAggro) {
@@ -2871,6 +2892,221 @@ export class TownRoom extends Room<TownState> {
     if (this.canStep(m, r.x, r.y)) { m.x = r.x; m.y = r.y; }
     m.moving = r.moving;
     m.dir = dirFromInput(input, m.dir);
+  }
+
+  // ---- The Night Raiders (shared/raiders.ts) ----------------------------------
+
+  /** Riders out now, by mob id. */
+  private raiders = new Map<string, Mob>();
+  private nextRaidCheck = 0;
+  private nextRaidRoll = 0;
+  /** No new rider in an act before this (after one fades or falls). */
+  private raidRest: Record<1 | 2, number> = { 1: 0, 2: 0 };
+
+  /** Which act's open land a point is in (not the Mawdeep under Act 1). */
+  private static raidActAt(x: number, y: number): 0 | 1 | 2 {
+    if (actAt(y) === 2) return 2;
+    return y < WORLD_H * TILE ? 1 : 0;
+  }
+
+  /** Once a second: riders fade at dawn or when their ride is over; by night a free slot may fill (NIGHT_RAID). */
+  private updateRaids(now: number) {
+    if (now < this.nextRaidCheck) return;
+    this.nextRaidCheck = now + 1000;
+    const night = isUndeadNight(worldDayFrac(now));
+    for (const [id, m] of this.raiders) {
+      if (m.dead || !this.state.mobs.has(id)) { this.raiders.delete(id); continue; }
+      // it rides off into the dark: at dawn, or its time is up and nobody is fighting it
+      if (!night || (now >= m.raidEnd && !m.target && !m.foe && !m.windUntil)) this.raiderGone(m, id, false);
+    }
+    if (!night) { this.nextRaidRoll = 0; return; }
+    if (!this.nextRaidRoll) { this.nextRaidRoll = now + NIGHT_RAID.rollMs * (0.3 + Math.random() * 0.7); return; }
+    if (now < this.nextRaidRoll) return;
+    this.nextRaidRoll = now + NIGHT_RAID.rollMs;
+    for (const act of [1, 2] as const) {
+      const A = NIGHT_RAID.acts[act];
+      if (now < this.raidRest[act]) continue;
+      const out = [...this.raiders.values()].filter((m) => m.raidAct === act).length;
+      for (let slot = out; slot < A.max; slot++) if (Math.random() < A.chance) this.raidArrive(act, now);
+    }
+  }
+
+  /** A rider comes out of the dark off screen near a hero in that act. Returns its id (none when nobody is there). */
+  raidArrive(act: 1 | 2, now = Date.now(), key?: string, near?: { x: number; y: number }): string | undefined {
+    const heroes = [...this.state.players.values()].filter((p) => !p.dead && TownRoom.raidActAt(p.x, p.y) === act);
+    const hero = near ?? heroes[Math.floor(Math.random() * heroes.length)];
+    if (!hero) return undefined;
+    const busy = new Set([...this.raiders.values()].map((m) => m.weapon));
+    const free = RAIDERS.filter((r) => !busy.has(r.key));
+    const R = key ? raiderByKey(key) : free[Math.floor(Math.random() * free.length)];
+    if (!R || busy.has(R.key)) return undefined;
+    const [a0, a1] = NIGHT_RAID.arrive;
+    let at: { x: number; y: number } | undefined;
+    for (let i = 0; i < 40 && !at; i++) {
+      const a = Math.random() * Math.PI * 2, d = (a0 + Math.random() * (a1 - a0)) * TILE;
+      const x = hero.x + Math.cos(a) * d, y = hero.y + Math.sin(a) * d;
+      if (this.rideOk(x, y, act)) at = { x, y };
+    }
+    if (!at) return undefined;
+    const A = NIGHT_RAID.acts[act];
+    const id = `nr${++this.mobSeq}`;
+    this.spawnMob("nightraider", -1, id, { ...at, level: capLevel(A.level) });
+    const m = this.state.mobs.get(id)!;
+    m.weapon = R.key; m.title = R.title;
+    m.raidAct = act; m.raidEnd = now + NIGHT_RAID.rideMs[0] + Math.random() * (NIGHT_RAID.rideMs[1] - NIGHT_RAID.rideMs[0]);
+    m.rideX = NaN; m.rideStuck = 0; m.nextSay = now + 2500 + Math.random() * 4000; m.nextCharge = now + 2000;
+    this.raiders.set(id, m);
+    this.broadcast("raider", { id, act, title: R.title, x: Math.round(m.x), y: Math.round(m.y) });
+    return id;
+  }
+
+  /** Open ground a rider may stand on in that act: not a wall, a town or the safe square. */
+  private rideOk(x: number, y: number, act: 1 | 2): boolean {
+    if (x < TILE || y < TILE || x > (MAP_W - 1) * TILE || y > (MAP_H - 1) * TILE) return false;
+    if (TownRoom.raidActAt(x, y) !== act) return false;
+    return !blocked(x, y) && !isSafeZone(x, y) && !noMobsAt(x, y) && villageDist(x, y) > 4;
+  }
+
+  /** It falls (killed) or rides off (killer ""): gone in a cloud of dust, and the act rests a while. */
+  private raiderGone(m: Mob, id: string, killed: boolean, killerName = "") {
+    if (!this.raiders.has(id)) return;
+    this.raiders.delete(id);
+    const R = raiderByKey(m.weapon), act = (m.raidAct === 2 ? 2 : 1) as 1 | 2;
+    this.raidRest[act] = Math.max(this.raidRest[act], Date.now() + NIGHT_RAID.acts[act].restMs);
+    if (killed && R) this.bossSay(id, [R.death]);
+    this.broadcast("raiderdust", { id, x: Math.round(m.x), y: Math.round(m.y), title: m.title, killed, by: killerName });
+    if (killed) return; // mobDied does the rest
+    m.dead = true; m.hp = 0; m.target = ""; m.foe = ""; m.moving = false; m.winding = false; m.windUntil = 0;
+    this.clock.setTimeout(() => this.state.mobs.delete(id), 500);
+  }
+
+  /** Living things a rider may cut down: every hero, every monster except the dead and the golems. */
+  private raiderPrey(m: Mob, id: string, now: number): void {
+    const S = NIGHT_RAID.sight;
+    let best = 0, target = "", foe = "";
+    this.state.players.forEach((p, pid) => {
+      if (p.dead || isSafeZone(p.x, p.y)) return;
+      const d = Math.hypot(p.x - m.x, p.y - m.y), hated = pid === m.hateId ? m.hate : 0;
+      if (d >= (hated > 0 ? S * 2 : S)) return;
+      const score = 0.3 + Math.max(0, 1 - d / S) + hated + (pid === m.target ? AGGRO.stick : 0);
+      if (score > best) { best = score; target = pid; foe = ""; }
+    });
+    this.state.mobs.forEach((o, oid) => {
+      if (o === m || o.dead || o.hidden || raiderIgnores(o.kind) || o.kind === "bride" || Math.abs(o.x - m.x) > S || Math.abs(o.y - m.y) > S) return;
+      const d = Math.hypot(o.x - m.x, o.y - m.y);
+      if (d >= S) return;
+      const score = Math.max(0, 1 - d / S) + (oid === m.hateId ? m.hate : 0) + (oid === m.foe ? AGGRO.stick : 0);
+      if (score > best) { best = score; target = ""; foe = oid; }
+    });
+    const had = m.target || m.foe;
+    if ((target || foe) && !had) { m.chaseX = m.x; m.chaseY = m.y; }
+    // a hero in its way hears it first
+    if (target && target !== m.target && now >= m.nextTaunt) {
+      m.nextTaunt = now + 12_000;
+      const R = raiderByKey(m.weapon);
+      if (R) this.bossSay(id, R.fight);
+    }
+    m.target = target; m.foe = foe;
+  }
+
+  /** One rider's tick: hunt what lives near, else ride on to the next stop, talking about what it is looking for. */
+  private raiderStep(m: Mob, id: string, dt: number, now: number) {
+    const def = mobDef(m, now), R = NIGHT_RAID, act = (m.raidAct === 2 ? 2 : 1) as 1 | 2;
+    m.homeX = m.x; m.homeY = m.y; // no home: it never walks back anywhere
+    if (m.broken) { m.moving = false; m.chargeUntil = 0; return; }
+    if (m.hate > 0) m.hate = Math.max(0, m.hate - AGGRO.decayPerSec * dt);
+    if (now >= m.nextAggro) { m.nextAggro = now + AGGRO.everyMs; this.raiderPrey(m, id, now); }
+    const hero = m.target ? this.state.players.get(m.target) : undefined;
+    const mob = !hero && m.foe ? this.state.mobs.get(m.foe) : undefined;
+    let t: { x: number; y: number } | undefined = hero ?? mob;
+    // lost it: dead, hidden in town, or chased too far
+    if ((hero && (hero.dead || isSafeZone(hero.x, hero.y))) || (mob && (mob.dead || mob.hidden)) || (t && Math.hypot(m.x - m.chaseX, m.y - m.chaseY) > R.chase)) {
+      m.target = ""; m.foe = ""; t = undefined; m.chargeUntil = 0; m.windUntil = 0; m.winding = false;
+    }
+    let input: InputState = STILL, speed = def.speed * 0.72;
+    if (t) {
+      const dist = Math.hypot(t.x - m.x, t.y - m.y), reach = 22 + (mob ? mobBody(mob.kind) : 4);
+      const C = R.charge;
+      const charging = now < m.chargeUntil;
+      if (!charging && !m.windUntil && now >= m.nextCharge && dist >= C.min && dist <= C.max) {
+        m.chargeUntil = now + C.ms; m.nextCharge = now + C.cooldownMs;
+        this.broadcast("raidercharge", { id });
+      }
+      if (now < m.chargeUntil) {
+        // spurring the horse: straight at it, the blow lands the moment it gets there
+        if (dist <= reach + 4) {
+          m.chargeUntil = 0; m.lastAttack = now;
+          this.broadcast("swing", { id });
+          this.raiderBlow(m, id, t, C.mult);
+        } else { input = toward(m.x, m.y, t.x, t.y); speed = def.speed * C.speed; }
+      } else if (dist <= reach || m.windUntil) {
+        m.dir = Math.abs(t.x - m.x) > Math.abs(t.y - m.y) ? (t.x > m.x ? "right" : "left") : (t.y > m.y ? "down" : "up");
+        if (m.windUntil) {
+          if (now >= m.windUntil) {
+            m.windUntil = 0; m.winding = false; m.lastAttack = now;
+            if (dist <= reach + 8) { this.broadcast("swing", { id }); this.raiderBlow(m, id, t, 1); }
+          }
+        } else if (now - m.lastAttack >= def.attackCooldownMs / poiseSpeed(poiseFrac(m, mobPoiseMax(m)))) {
+          m.windUntil = now + MOB_COMBAT.nightraider.windupMs; m.winding = true;
+        }
+        m.moving = false;
+        return;
+      } else { input = toward(m.x, m.y, t.x, t.y); speed = def.speed; }
+    } else {
+      // riding the land: on to the next stop, a new one when it gets there or is stuck on something
+      if (Number.isNaN(m.rideX) || Math.hypot(m.rideX - m.x, m.rideY - m.y) < 14 || m.rideStuck > 1.2) this.nextStop(m, act);
+      input = toward(m.x, m.y, m.rideX, m.rideY);
+      if (now >= m.nextSay && this.playerNear(m.x, m.y, 14 * TILE)) {
+        m.nextSay = now + R.sayMs[0] + Math.random() * (R.sayMs[1] - R.sayMs[0]);
+        const lines = raiderByKey(m.weapon)?.seek;
+        if (lines) this.bossSay(id, lines);
+      }
+    }
+    if (m.slowed) speed *= SLOW_MOB;
+    const r = moveStep(m.x, m.y, input, dt, speed);
+    const ok = this.canStep(m, r.x, r.y) && TownRoom.raidActAt(r.x, r.y) === act;
+    const moved = ok ? Math.hypot(r.x - m.x, r.y - m.y) : 0;
+    if (ok) { m.x = r.x; m.y = r.y; }
+    m.rideStuck = input !== STILL && moved < speed * dt * 0.25 ? m.rideStuck + dt : 0;
+    if (t && m.rideStuck > 1.5) { m.target = ""; m.foe = ""; m.rideStuck = 0; } // can't reach it: rides on
+    m.moving = ok && r.moving;
+    m.dir = dirFromInput(input, m.dir);
+  }
+
+  /** Picks the rider's next stop on its endless search: somewhere ahead-ish on open ground of its act. */
+  private nextStop(m: Mob, act: 1 | 2) {
+    const [w0, w1] = NIGHT_RAID.wander;
+    const heading = Number.isNaN(m.rideX) ? Math.random() * Math.PI * 2 : Math.atan2(m.rideY - m.y, m.rideX - m.x);
+    m.rideStuck = 0;
+    for (let i = 0; i < 24; i++) {
+      // mostly keeps its heading (it is crossing the land), sometimes turns sharply (it heard something)
+      const a = i < 12 && Math.random() < 0.7 ? heading + (Math.random() - 0.5) * 1.6 : Math.random() * Math.PI * 2;
+      const d = (w0 + Math.random() * (w1 - w0)) * TILE, x = m.x + Math.cos(a) * d, y = m.y + Math.sin(a) * d;
+      if (this.rideOk(x, y, act)) { m.rideX = x; m.rideY = y; return; }
+    }
+    m.rideX = m.x + (Math.random() - 0.5) * 6 * TILE; m.rideY = m.y + (Math.random() - 0.5) * 6 * TILE;
+  }
+
+  /** The massive weapon comes down on its prey and sweeps everyone living next to it. */
+  private raiderBlow(m: Mob, id: string, t: { x: number; y: number }, mult: number) {
+    const def = mobDef(m), base = def.damage * mobScale(m.level, "damage") * mult, C = NIGHT_RAID.cleave;
+    const d = Math.hypot(t.x - m.x, t.y - m.y) || 1, push: [number, number] = [(t.x - m.x) / d, (t.y - m.y) / d];
+    const hitHero = (pid: string, k: number) => this.damagePlayer(pid, Math.round(base * k), m.title.split(",")[0] || def.name, push, 1.6, { atkLevel: m.level, from: id });
+    const hitMob = (oid: string, o: Mob, k: number) => { if (!o.dead) this.mobHitsMob(m, id, o, oid, Math.round(base * k * FEUD.dmgMult)); };
+    const main = m.target || m.foe;
+    let killed = false;
+    if (m.target) killed = hitHero(m.target, 1);
+    else if (m.foe) { const o = this.state.mobs.get(m.foe); if (o) hitMob(m.foe, o, 1); }
+    // the sweep: everyone else within reach of the blow
+    this.state.players.forEach((p, pid) => {
+      if (pid === main || p.dead || Math.hypot(p.x - t.x, p.y - t.y) > C.r) return;
+      if (hitHero(pid, C.mult)) killed = true;
+    });
+    this.state.mobs.forEach((o, oid) => {
+      if (oid === main || oid === id || o.dead || o.hidden || raiderIgnores(o.kind) || o.kind === "bride" || Math.abs(o.x - t.x) > C.r || Math.abs(o.y - t.y) > C.r) return;
+      if (Math.hypot(o.x - t.x, o.y - t.y) <= C.r) hitMob(oid, o, C.mult);
+    });
+    if (killed && Math.random() < 0.6) { const R = raiderByKey(m.weapon); if (R) this.bossSay(id, R.kill); }
   }
 
   /** May a walking monster step to (x,y)? Never into the safe zone or a peaceful place; a Mother Blob never closer to Oakvale than MOTHER_KEEP_OUT (she may still step back out). */
@@ -4260,6 +4496,7 @@ export class TownRoom extends Room<TownState> {
   private mobDied(m: Mob, targetId: string, attackerId: string, killerName: string) {
     if (m.kind === "hidemother" && m.uPhase) this.bossSay(targetId, URSK.lines.death); // her last words
     if (m.kind === "sunwright" && m.uPhase) this.bossSay(targetId, SUNWRIGHT.lines.death);
+    if (m.kind === "nightraider") this.raiderGone(m, targetId, true, killerName);
     m.dead = true; m.hp = 0;
     if (m.owner) this.summons.delete(targetId);
     if (m.charmUntil) { m.owner = ""; m.charmUntil = 0; m.banishAt = 0; } // a charmed monster dies as the zone monster it is

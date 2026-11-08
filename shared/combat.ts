@@ -71,6 +71,7 @@ export const MOB_COMBAT: Record<MobKind, { poise: number; windupMs: number }> = 
   veiled: { poise: 40, windupMs: 420 },
   camelfolk: { poise: 140, windupMs: 440 },
   sunwright: { poise: 460, windupMs: 480 },
+  nightraider: { poise: 300, windupMs: 460 },
 };
 
 /** Attack speed multiplier from the poise fraction (1 above half, down to minSpeed at 0). */
@@ -120,7 +121,7 @@ export function poiseLevelMult(attackerLevel: number, targetLevel: number): numb
 export const SWING_AHEAD = 12;
 const MOB_BODY: Partial<Record<MobKind, number>> = {
   golem_fire: 9, golem_cold: 9, golem_poison: 9, golem_shock: 9, golem_colossus: 14,
-  motherblob: 14, demon: 12, hollowking: 13, banditchief: 10, necromancer: 8, warriorblob: 7, blobling: 3, crawler: 4,
+  motherblob: 14, demon: 12, hollowking: 13, banditchief: 10, nightraider: 12, necromancer: 8, warriorblob: 7, blobling: 3, crawler: 4,
 };
 export const mobBody = (kind: MobKind) => MOB_BODY[kind] ?? 6;
 /** Farthest a target's feet can be from the hero's feet and still be hit, straight ahead. */

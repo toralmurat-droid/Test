@@ -1,5 +1,6 @@
 import Phaser from "phaser";
 import { BEAST_KINDS, DESERT_KINDS, TILE } from "../../shared/constants";
+import { RAIDERS } from "../../shared/raiders";
 import { TILE_COUNT } from "../../shared/map";
 import { ROWS, drawTileset } from "./tileset";
 import { SMOOTH } from "./isoflag";
@@ -292,10 +293,11 @@ export const MOB_LOOK: Record<string, { top: number; bar: number; oy: number; sc
   healerblob: { top: 15, bar: 12, oy: 0.92 },
   venomblob: { top: 15, bar: 12, oy: 0.92 }, frostblob: { top: 17, bar: 14, oy: 0.92 }, fireblob: { top: 17, bar: 14, oy: 0.92 }, stormblob: { top: 16, bar: 12, oy: 0.92 },
   crawler: { top: 10, bar: 10, oy: CRAWL_CROP },
+  nightraider: { top: 30, bar: 22, oy: 0.95, scale: 1.5 }, // pixel look: a big bandit stands in for the rider
 };
 
 const PAINTED_MOBS = ["slime", "blobling", "shooterblob", "warriorblob", "healerblob", "motherblob", "venomblob", "frostblob", "fireblob", "stormblob", "skeleton", "bandit", "skeletonmage", "necromancer", "demon", "crawler", "banditchief", "hollowking", "gnawkin", "tuskborn", "silkwretch", "duskwing", "packlord", "hornbrute", "hidemother", "crowseer", "gnasher", "weaver",
-  "nomad", "scorpion", "sanddead", "veiled", "camelfolk", "sunwright",
+  "nomad", "scorpion", "sanddead", "veiled", "camelfolk", "sunwright", "nightraider",
   "golem_fire", "golem_cold", "golem_poison", "golem_shock", "golem_colossus", "bride"];
 /** The Colossus is painted once per element (Mob.weapon holds it, shared/summons.ts). */
 const COLOSSUS_ELEMENTS = ["fire", "cold", "poison", "shock"];
@@ -321,6 +323,8 @@ const PAINTED_LOOK: Record<string, { top: number; bar: number; oy: number; scale
   nomad: { top: 24, bar: 14, oy: 27.5 / 30 }, sanddead: { top: 24, bar: 14, oy: 27.5 / 30 }, veiled: { top: 26, bar: 14, oy: 31.2 / 32 },
   camelfolk: { top: 36, bar: 18, oy: 33.5 / 36 }, scorpion: { top: 20, bar: 18, oy: 27 / 30 },
   sunwright: { top: 62, bar: 38, oy: 42 / 48, scale: 1.6 }, // Act 2's final boss, as tall as the Hollow King
+  // the Night Raiders (tools/art/paint/raiders.ts): a rider on a big horse, a head taller than the heroes
+  nightraider: { top: 60, bar: 30, oy: 55 / 62, scale: 1.35 }, // drawn big: horse and rider tower over the heroes
   // the Summoner's golems (tools/art/paint/golems.ts, 40x46 frames, feet at 43) and the Colossus they fuse into
   golem_fire: { top: 40, bar: 22, oy: 43 / 46 }, golem_cold: { top: 40, bar: 22, oy: 43 / 46 },
   golem_poison: { top: 40, bar: 22, oy: 43 / 46 }, golem_shock: { top: 40, bar: 22, oy: 43 / 46 },
@@ -334,7 +338,7 @@ export function preloadPaintedMobs(scene: Phaser.Scene) {
   if (!SMOOTH) return;
   Object.assign(MOB_LOOK, PAINTED_LOOK);
   scene.load.json("hd_mobs", "assets/hd/mobs/mobs.json");
-  for (const k of [...PAINTED_MOBS.filter((m) => m !== "golem_colossus").map((m) => `mob_${m}`), "mob_motherblob2", "mob_motherblob3", "mob_skeleton_axe", "mob_skeleton_spear", "mob_skeleton_bow", "mob_bandit_brute", "mob_bandit_archer", "mob_demon1", "mob_demon2", "mob_demon3", "mob_demon4", ...FOLK_MOBS.map((m) => `mob_${m}_folk`), ...COLOSSUS_ELEMENTS.map((e) => `mob_golem_colossus_${e}`)]) scene.load.image(`hd_${k}`, `assets/hd/mobs/${k}.webp`);
+  for (const k of [...PAINTED_MOBS.filter((m) => m !== "golem_colossus" && m !== "nightraider").map((m) => `mob_${m}`), "mob_motherblob2", "mob_motherblob3", "mob_skeleton_axe", "mob_skeleton_spear", "mob_skeleton_bow", "mob_bandit_brute", "mob_bandit_archer", "mob_demon1", "mob_demon2", "mob_demon3", "mob_demon4", ...FOLK_MOBS.map((m) => `mob_${m}_folk`), ...COLOSSUS_ELEMENTS.map((e) => `mob_golem_colossus_${e}`), ...RAIDERS.map((r) => `mob_nightraider_${r.key}`)]) scene.load.image(`hd_${k}`, `assets/hd/mobs/${k}.webp`);
 }
 
 /** Monster sprite sheets, same 6-frame layout as personas (painted when the smooth look is on). */
@@ -347,6 +351,7 @@ export function mobTexture(scene: Phaser.Scene, kind: string, level = 1, weapon 
     const key = kind === "motherblob" && tier > 1 ? `mob_motherblob${tier}` : kind === "skeleton" && weapon && weapon !== "sword" ? `mob_skeleton_${weapon}`
       : kind === "bandit" && (weapon === "brute" || weapon === "archer" || weapon === "lookout") ? `mob_bandit_${weapon === "lookout" ? "archer" : weapon}`
       : weapon === "folk" && FOLK_MOBS.includes(kind) ? `mob_${kind}_folk`
+      : kind === "nightraider" ? `mob_nightraider_${RAIDERS.some((r) => r.key === weapon) ? weapon : RAIDERS[0].key}` // each of the Seven has its own sheet
       : kind === "golem_colossus" ? `mob_golem_colossus_${COLOSSUS_ELEMENTS.includes(weapon) ? weapon : "fire"}`
       : kind === "demon" && bones > 0 ? `mob_demon${Math.min(4, bones)}` : `mob_${kind}`; // the demon wearing its harvested bones
     if (scene.textures.exists(key)) return key;
@@ -358,7 +363,7 @@ export function mobTexture(scene: Phaser.Scene, kind: string, level = 1, weapon 
       return key;
     }
   }
-  return pixelMobTexture(scene, kind === "demon" || kind === "hollowking" || kind === "sunwright" ? "necromancer" : BEAST_KINDS.includes(kind as any) || DESERT_KINDS.includes(kind as any) || kind === "bride" ? (kind === "sanddead" ? "skeleton" : "bandit") : kind, level); // no pixel demon sheet: a necromancer stands in
+  return pixelMobTexture(scene, kind === "demon" || kind === "hollowking" || kind === "sunwright" ? "necromancer" : BEAST_KINDS.includes(kind as any) || DESERT_KINDS.includes(kind as any) || kind === "bride" || kind === "nightraider" ? (kind === "sanddead" ? "skeleton" : "bandit") : kind, level); // no pixel demon sheet: a necromancer stands in
 }
 
 function pixelMobTexture(scene: Phaser.Scene, kind: string, level = 1): string {
