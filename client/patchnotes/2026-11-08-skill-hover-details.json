@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-08",
+  "title": "Skill details on hover",
+  "changes": [
+    "Skill tree: hover a skill to see a card beside it with everything about it: what it does, damage now and at the next rank, cost, cooldown, level needed and what it leads to"
+  ]
+}

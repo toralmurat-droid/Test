@@ -12,6 +12,7 @@ import {
   NEED_TEXT,
 } from "../../shared/skills";
 import { damageText, scaleText, skillDamage } from "../../shared/skillInfo";
+import { uiScale } from "./worldscale";
 
 /**
  * Skill tree screen (T), drawn as a real pixel-art tree (shared/skills.ts TREE): a trunk splits into the class's
@@ -29,6 +30,9 @@ export class TalentMenu {
   private shown = "";
   private cls?: ClassKind;
   private state: any;
+  /** Hover card beside the tile under the mouse (Murat 2026-11-08): the skill's full details. */
+  private tip?: HTMLDivElement;
+  private tipTimer = 0;
 
   constructor(private send: (type: string, msg?: unknown) => void, private preview: (p?: SheetPreview) => void = () => {}) {
     this.el.addEventListener("mouseover", (ev) => {
@@ -45,12 +49,13 @@ export class TalentMenu {
         } else this.preview();
       }
       if (this.hover && this.hover !== this.shown) this.details(this.hover);
+      if (this.hover) { if (this.hover !== was || this.tip?.style.display !== "block") this.showTip(); } else this.hideTip();
     });
-    this.el.addEventListener("mouseleave", () => { this.hover = ""; this.preview(); });
+    this.el.addEventListener("mouseleave", () => { this.hover = ""; this.preview(); this.hideTip(); });
     this.el.addEventListener("click", (ev) => {
       const t = (ev.target as HTMLElement).closest("[data-talent]") as HTMLElement | null;
       if (t && t.classList.contains("can")) this.send("learn", t.dataset.talent);
-      if (t) this.details(t.dataset.talent!);
+      if (t) { this.details(t.dataset.talent!); this.showTip(); }
       if ((ev.target as HTMLElement).id === "treereset") this.send("respec");
     });
     // Buttons never keep keyboard focus, so Space in a fight can't click a node by accident
@@ -122,6 +127,41 @@ export class TalentMenu {
     this.shown = "";
     const pick = this.hover || nodes.find((n) => lockReason(cls, state.level, ranks, n.id) === "")?.id || nodes[0].id;
     this.details(pick);
+    if (this.hover) this.showTip(); // the tiles were rebuilt: follow the new one and show fresh numbers
+  }
+
+  /** Bronze card with everything about the hovered skill, beside its tile (right of it, or left when no room). */
+  private showTip() {
+    const id = this.hover;
+    const tile = id ? this.el.querySelector(`[data-talent="${id}"]`) as HTMLElement | null : null;
+    const html = id ? this.detailHtml(id) : "";
+    if (!tile || !html || !this.open) { this.hideTip(); return; }
+    if (!this.tip) {
+      this.tip = document.createElement("div");
+      this.tip.id = "skilltip";
+      document.body.appendChild(this.tip);
+    }
+    const tip = this.tip;
+    tip.innerHTML = html;
+    tip.style.display = "block";
+    const z = uiScale(), r = tile.getBoundingClientRect();
+    const w = tip.offsetWidth * z, h = tip.offsetHeight * z;
+    let x = r.right + 10;
+    if (x + w > innerWidth - 4) x = r.left - 10 - w;
+    x = Math.min(Math.max(4, x), innerWidth - w - 4);
+    const y = Math.min(Math.max(4, r.top + r.height / 2 - h / 2), innerHeight - h - 4);
+    tip.style.left = `${Math.round(x / z)}px`;
+    tip.style.top = `${Math.round(y / z)}px`;
+    // drop the card when the tree closes or the tile goes away under a still mouse
+    if (!this.tipTimer) this.tipTimer = window.setInterval(() => {
+      const t = this.hover && this.el.querySelector(`[data-talent="${this.hover}"]`) as HTMLElement | null;
+      if (!this.open || !t || !t.offsetParent) this.hideTip();
+    }, 200);
+  }
+
+  private hideTip() {
+    if (this.tip) this.tip.style.display = "none";
+    if (this.tipTimer) { clearInterval(this.tipTimer); this.tipTimer = 0; }
   }
 
   /**
@@ -190,14 +230,21 @@ export class TalentMenu {
     void cls;
   }
 
-  /** Side panel: everything about one skill. */
+  /** Bar under the tree: the skill last hovered or clicked. */
   private details(id: string) {
     const info = document.getElementById("treeinfo");
-    const cls = this.cls, state = this.state;
-    if (!info || !cls || !state) return;
-    const s = SKILLS[cls].find((x) => x.id === id);
-    if (!s) return;
+    const html = this.detailHtml(id);
+    if (!info || !html) return;
     this.shown = id;
+    info.innerHTML = html;
+  }
+
+  /** Everything about one skill: what it does, damage now and next rank, cost, cooldown, level, path, status. */
+  private detailHtml(id: string): string {
+    const cls = this.cls, state = this.state;
+    if (!cls || !state) return "";
+    const s = SKILLS[cls].find((x) => x.id === id);
+    if (!s) return "";
     const ranks = state.talents, r = rankOf(ranks, s.id);
     const why = lockReason(cls, state.level, ranks, s.id);
     const st = this.stats();
@@ -246,7 +293,7 @@ export class TalentMenu {
       why === "requires" ? `${pxIcon("lock")}Learn ${missing.join(" and ")} first` : r > 0 ? "Learned · no points left" : "No points left";
     const keyNote = !s.passive && r > 0 ? (slot >= 0 ? ` · on key ${slotKey(slot)}` : ` · hover it and press ${slotKey(0)}-${slotKey(8)} to put it on a key`) : "";
     const pips = Array.from({ length: maxRank(s) }, (_, i) => `<i class="${i < r ? "on" : ""}"></i>`).join("");
-    info.innerHTML = `<div class="ihead" style="--c:${color}">${iconImg(s.id, "iicon")}<div><b>${s.name}</b>` +
+    return `<div class="ihead" style="--c:${color}">${iconImg(s.id, "iicon")}<div><b>${s.name}</b>` +
       `<span class="ttype${s.passive ? " pas" : ""}">${s.type} · Lv ${s.req}</span><span class="pips">${pips}</span></div></div>` +
       `<p class="idesc"><b class="iname" style="color:${color}">${s.name}</b> <span class="ttype">· ${s.type}${maxRank(s) > 1 ? ` · rank ${r} of ${maxRank(s)}` : ""}</span> ${s.desc}</p>${s.needs ? `<p class="idesc ineed">Needs ${NEED_TEXT[s.needs]} in hand.</p>` : ""}${rows.join("")}<p class="istat ${why === "" ? "can" : ""}">${status}${keyNote}</p>`;
   }

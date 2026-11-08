@@ -3,7 +3,7 @@ html, body { margin: 0; height: 100%; background: #1b1b24; color: #eee; font: 18
 #game { position: fixed; inset: 0; }
 #game canvas { image-rendering: pixelated; transform: scale(var(--worldscale, 1)); transform-origin: 0 0; } /* world size (worldscale.ts) */
 /* Screen size (worldscale.ts): menus, bars and overlays zoom with the world */
-#hud, #tip, #worldmap, #wrath { zoom: var(--uiscale, 1); }
+#hud, #tip, #skilltip, #worldmap, #wrath { zoom: var(--uiscale, 1); }
 /* Hero picker: equal cards, each with the hero animated on a patch of grass */
 #classinfo { min-height: 2.8em; margin: 4px 0; }
 #ultfill { position: absolute; inset: 0 auto 0 0; width: 100%; background: #f77f00; }
@@ -146,27 +146,27 @@ html, body { margin: 0; height: 100%; background: #1b1b24; color: #eee; font: 18
 .tnode kbd { position: absolute; top: -8px; right: -8px; font: inherit; font-size: 12px; font-family: var(--tiny-font); color: #000; background: #ffd166; padding: 0 3px; }
 .tnode .nlv { position: absolute; top: -10px; left: 50%; transform: translateX(-50%); font-size: 12px; font-family: var(--tiny-font); color: #ccc; background: #15151f; padding: 0 3px; white-space: nowrap; }
 #treeinfo { flex: 1; min-width: 220px; font-size: 18px; font-family: var(--pixel-font); color: #ccc; background: #15151f; border: 2px solid #3a3d55; padding: 10px; }
-#treeinfo .ihead { display: flex; gap: 8px; align-items: center; border-bottom: 2px solid var(--c); padding-bottom: 6px; }
-#treeinfo .iicon { width: 48px; height: 48px; image-rendering: pixelated; flex: none; }
-#treeinfo .ihead b { display: block; font-size: 18px; font-family: var(--pixel-font); color: #fff; }
-#treeinfo .ttype { display: block; font-size: 12px; font-family: var(--tiny-font); color: var(--c); text-transform: uppercase; letter-spacing: .5px; }
-#treeinfo .ttype.pas { color: #aaa; }
-#treeinfo .pips { display: flex; gap: 3px; margin-top: 3px; }
-#treeinfo .pips i { width: 8px; height: 8px; border-radius: 50%; border: 1px solid #666; }
-#treeinfo .pips i.on { background: var(--c); border-color: var(--c); }
-#treeinfo p { margin: 6px 0 0; }
-#treeinfo .idmg { display: flex; justify-content: space-between; align-items: baseline; margin-top: 8px; color: #ffb4a8; }
-#treeinfo .idmg b { font-size: 22px; font-family: var(--title-font); color: #ff6b5b; }
-#treeinfo .iparts { color: #e8b0a8; font-size: 18px; font-family: var(--pixel-font); margin-top: 2px; }
-#treeinfo .inext { color: #9ad1ff; font-size: 18px; font-family: var(--pixel-font); }
-#treeinfo .icost { color: #8fa3c8; font-size: 18px; font-family: var(--pixel-font); }
-#treeinfo .icost .ista { color: #e9c46a; }
-#treeinfo .icost .imana { color: #8ab4ff; }
-#treeinfo .icost .iblood { color: #ff6b7a; }
-#treeinfo .iscale { color: #ffd166; font-size: 18px; font-family: var(--pixel-font); }
-#treeinfo .ipath { color: #a68a64; font-size: 18px; font-family: var(--pixel-font); }
-#treeinfo .istat { color: #888; margin-top: 10px; }
-#treeinfo .istat.can { color: #7cfc00; }
+#treeinfo .ihead, #skilltip .ihead { display: flex; gap: 8px; align-items: center; border-bottom: 2px solid var(--c); padding-bottom: 6px; }
+#treeinfo .iicon, #skilltip .iicon { width: 48px; height: 48px; image-rendering: pixelated; flex: none; }
+#treeinfo .ihead b, #skilltip .ihead b { display: block; font-size: 18px; font-family: var(--pixel-font); color: #fff; }
+#treeinfo .ttype, #skilltip .ttype { display: block; font-size: 12px; font-family: var(--tiny-font); color: var(--c); text-transform: uppercase; letter-spacing: .5px; }
+#treeinfo .ttype.pas, #skilltip .ttype.pas { color: #aaa; }
+#treeinfo .pips, #skilltip .pips { display: flex; gap: 3px; margin-top: 3px; }
+#treeinfo .pips i, #skilltip .pips i { width: 8px; height: 8px; border-radius: 50%; border: 1px solid #666; }
+#treeinfo .pips i.on, #skilltip .pips i.on { background: var(--c); border-color: var(--c); }
+#treeinfo p, #skilltip p { margin: 6px 0 0; }
+#treeinfo .idmg, #skilltip .idmg { display: flex; justify-content: space-between; align-items: baseline; margin-top: 8px; color: #ffb4a8; }
+#treeinfo .idmg b, #skilltip .idmg b { font-size: 22px; font-family: var(--title-font); color: #ff6b5b; }
+#treeinfo .iparts, #skilltip .iparts { color: #e8b0a8; font-size: 18px; font-family: var(--pixel-font); margin-top: 2px; }
+#treeinfo .inext, #skilltip .inext { color: #9ad1ff; font-size: 18px; font-family: var(--pixel-font); }
+#treeinfo .icost, #skilltip .icost { color: #8fa3c8; font-size: 18px; font-family: var(--pixel-font); }
+#treeinfo .icost .ista, #skilltip .icost .ista { color: #e9c46a; }
+#treeinfo .icost .imana, #skilltip .icost .imana { color: #8ab4ff; }
+#treeinfo .icost .iblood, #skilltip .icost .iblood { color: #ff6b7a; }
+#treeinfo .iscale, #skilltip .iscale { color: #ffd166; font-size: 18px; font-family: var(--pixel-font); }
+#treeinfo .ipath, #skilltip .ipath { color: #a68a64; font-size: 18px; font-family: var(--pixel-font); }
+#treeinfo .istat, #skilltip .istat { color: #888; margin-top: 10px; }
+#treeinfo .istat.can, #skilltip .istat.can { color: #7cfc00; }
 .talent .pips { position: absolute; top: 7px; right: 8px; display: flex; gap: 3px; }
 .talent .pips i { width: 7px; height: 7px; border-radius: 50%; border: 1px solid #666; }
 .talent .pips i.on { background: var(--c); border-color: var(--c); }
