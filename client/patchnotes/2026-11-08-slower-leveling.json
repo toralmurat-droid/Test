@@ -1,5 +1,6 @@
 {
   "date": "2026-11-08",
+  "patch": 189,
   "title": "Leveling slows down as you grow",
   "changes": [
     "Each level now needs more XP than the last, so the early levels go fast and the climb gets harder the higher you are.",
