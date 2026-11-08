@@ -7,7 +7,7 @@ import {
   HOLLOW_KING, ELEM_BLOB, ELEM_MOVE, inputDir, ELITE, BOSS, BEAST, BEAST_BROOD, BEAST_FOLK, BEAST_KINDS, BEAST_MOVES, BEAST_RIDER, type BeastMove,
   MAP_W, MAP_H,
 } from "../shared/constants";
-import { arrivalAt, LINK_RANGE, linkById, LINKS } from "../shared/dungeon";
+import { ambushRoomAt, arrivalAt, CRACK_OPEN_MS, LINK_RANGE, linkById, LINKS, SHORTCUT_OPEN_MS } from "../shared/dungeon";
 import {
   ATTACK_VARIANTS, basicDrain, CLASSES, ClassKind, COMBO_WINDOW_MS, DODGE, EMOTES, DASH_INVULN_MS, GUARD_REDUCTION, isActiveClass, isClassKind, levelFromXp, MAX_XP, capLevel, PVP_KILL_XP, xpForLevel,
 } from "../shared/classes";
@@ -29,7 +29,7 @@ import {
   ITEM_LIFETIME_MS, ItemKind, LOOT, GOLD_PICKUP_RADIUS, PICKUP_RADIUS, PVP_GOLD_DROP,
 } from "../shared/items";
 import { bountyCounts, bountyOffers, cleanBounty, nearestBoard, type BountyState } from "../shared/bounty";
-import { DOORS, DOOR_RANGE, doorById, doorDist, isSafeZone, isSolidAt, randomSpawn, setDoorOpen, VILLAGE, type Door } from "../shared/map";
+import { DOORS, DOOR_RANGE, doorById, doorDist, doorWorkable, isSafeZone, isSolidAt, randomSpawn, setDoorOpen, VILLAGE, type Door } from "../shared/map";
 import { isDecorSolidAt, npcById, npcNear, TALK_RANGE } from "../shared/npcs";
 import { beyondWall, WATCH, WATCH_POSTS, WatchPost } from "../shared/watch";
 import { inVillage, WRATH } from "../shared/wrath";
@@ -246,6 +246,7 @@ export class Mob extends Schema {
   nextSweep = 0; nextLeap = 0; nextCry = 0;
   // Ambushers (AMBUSH): up in a tree; a call from their group to drop on a hero; the jump out in flight
   ambusher = false; ambushAt = 0; ambushHero = ""; flyUntil = 0; flyMs = 0; flyX0 = 0; flyY0 = 0; flyX = 0; flyY = 0;
+  lurk = ""; // a Mawdeep ambush room it lurks in (shared/dungeon.ts AMBUSH_ROOMS), until a hero walks in
   path: [number, number][] = []; pathAt = 0; pathTX = 0; pathTY = 0; // the way round walls (gates), see seek
   @type("float32") x = 0;
   @type("float32") y = 0;
@@ -464,6 +465,7 @@ function toward(x: number, y: number, tx: number, ty: number): InputState {
 
 const FEUD_CELL = 128; // px, >= FEUD.range
 const BOOT = Date.now();
+const LURK_RANGE = 3.2 * TILE; // a hero this close to a beast lurking in an ambush room springs the whole room
 const DOOR_OPEN_MS = 60_000; // an opened Mawdeep gate swings shut a minute later, once nobody stands in it
 /** Time of day on the server (the wall clock, like every client); DAY_TIME=day|night|0..1 forces it for local tests. */
 function worldDayFrac(now: number): number {
@@ -1025,6 +1027,21 @@ export class TownRoom extends Room<TownState> {
     if (!this.state.mobs.has(id)) this.state.mobs.set(id, m);
     // An ambusher is already up in its tree when it comes (nobody is near: spawns keep NO_SPAWN_RANGE from heroes)
     if (m.ambusher && this.treeFor(m, Date.now())) this.hide(m, id, Date.now());
+    m.lurk = "";
+    if (zi >= 0) this.lurkIfAmbush(m, id);
+  }
+
+    /** Beast-folk in a Mawdeep ambush room wait in the dark (only their eyes show) for a hero to walk in. */
+  private lurkIfAmbush(m: Mob, id: string) {
+    const room = !ELITE[m.kind] && !BOSS[m.kind] ? ambushRoomAt(m.x, m.y) : undefined;
+    if (!room) return;
+    m.lurk = room; m.spot = "lurk"; m.spotX = m.outX = m.x; m.spotY = m.outY = m.y;
+    this.hide(m, id, Date.now());
+    m.hideUntil = Infinity;
+  }
+  /** A hero walked into an ambush room: everything lurking there rushes them at once. */
+  private springAmbush(room: string, victim: string) {
+    this.state.mobs.forEach((o, oid) => { if (o.lurk === room && o.hidden && !o.dead) { o.lurk = ""; this.popOut(o, oid, victim); } });
   }
 
   // ---- Siege works (shared/siege.ts) ------------------------------------------
@@ -1152,7 +1169,7 @@ export class TownRoom extends Room<TownState> {
       m.ambushAt = 0;
       if (p && !p.dead && !isSafeZone(p.x, p.y) && Math.hypot(p.x - m.x, p.y - m.y) < AMBUSH.callRange * 1.5) return this.leapOut(m, id, m.ambushHero, now);
     }
-    let victim = "", best = m.ambusher ? AMBUSH.range : HIDE.ambushRange;
+    let victim = "", best = m.ambusher ? AMBUSH.range : m.lurk ? LURK_RANGE : HIDE.ambushRange;
     this.state.players.forEach((p, pid) => {
       if (p.dead || isSafeZone(p.x, p.y)) return;
       if (m.ambusher && aggroLevelFactor(m.level, p.level) <= 0) return; // a hero far above them is left to pass (same as aggro)
@@ -1161,6 +1178,7 @@ export class TownRoom extends Room<TownState> {
     });
     if (m.broken) return;
     if (m.ambusher) { if (victim) this.leapOut(m, id, victim, now); return; } // they wait up there as long as it takes
+    if (m.lurk) { if (victim) this.springAmbush(m.lurk, victim); return; } // and these in the dark
     if (victim) this.popOut(m, id, victim);
     else if (now > m.hideUntil) this.popOut(m, id, "");
   }
@@ -2471,6 +2489,7 @@ export class TownRoom extends Room<TownState> {
     m.level = kind === "banditchief" || ELITE[kind] ? regionSpecialLevel(c.level - 1) : regionMobLevel(c.level - 1);
     m.hp = m.maxHp = Math.round(MOBS[kind].maxHp * mobScale(m.level, "hp"));
     if (kind === "banditchief") { m.camp = true; m.post = -1; } // leads the camp: hears the horn, rallies his men
+    this.lurkIfAmbush(m, id); // an ambush room's hoard: its keepers wait in the dark round it
   }
 
   /** Living guardians of a chest (near it: one lured far away still counts until it dies). */
@@ -4382,24 +4401,31 @@ export class TownRoom extends Room<TownState> {
     for (const m of this.state.mobs.values()) if (!m.dead && inIt(m.x, m.y)) return true;
     return false;
   }
+  /** Someone stands right in the gate's tiles (stuck there). */
+  private inGate(d: Door): boolean {
+    const inIt = (x: number, y: number) => d.gate.includes(Math.floor(y / TILE) * MAP_W + Math.floor(x / TILE));
+    for (const p of this.state.players.values()) if (!p.dead && inIt(p.x, p.y)) return true;
+    for (const m of this.state.mobs.values()) if (!m.dead && inIt(m.x, m.y)) return true;
+    return false;
+  }
   private setDoor(d: Door, open: boolean) {
     setDoorOpen(d.id, open);
-    if (open) this.openDoors.set(d.id, Date.now() + DOOR_OPEN_MS); else this.openDoors.delete(d.id);
+    if (open) this.openDoors.set(d.id, Date.now() + (d.kind === "crack" ? CRACK_OPEN_MS : d.from ? SHORTCUT_OPEN_MS : DOOR_OPEN_MS)); else this.openDoors.delete(d.id);
     this.state.doors = [...this.openDoors.keys()].join(",");
   }
   /** E at a gate: open it, or pull it shut again if nobody stands in it. */
   private workDoor(client: Client, id: unknown) {
     const p = this.state.players.get(client.sessionId), d = doorById(id);
-    if (!p || p.dead || !d || doorDist(d, p.x, p.y) > DOOR_RANGE + 0.6) return;
+    if (!p || p.dead || !d || doorDist(d, p.x, p.y) > DOOR_RANGE + 0.6 || !doorWorkable(d, p.x, p.y)) return;
     if (!this.openDoors.has(d.id)) this.setDoor(d, true);
-    else if (!this.doorBusy(d)) this.setDoor(d, false);
+    else if (d.kind !== "crack" && !this.doorBusy(d)) this.setDoor(d, false); // a broken wall can't be put back
   }
   private tickDoors() {
     const now = Date.now();
     for (const d of DOORS) {
       const open = this.openDoors.get(d.id);
-      if (open === undefined) { if (this.doorBusy(d)) this.setDoor(d, true); continue; } // never shut anyone inside a gate (e.g. after a deploy)
-      if (now >= open && !this.doorBusy(d)) this.setDoor(d, false);
+      if (open === undefined) { if (this.inGate(d)) this.setDoor(d, true); continue; } // never shut anyone inside a gate (e.g. after a deploy)
+      if (now >= open && !this.doorBusy(d) && !(d.kind === "crack" && this.playerNear(d.x * TILE, d.y * TILE, 8 * TILE))) this.setDoor(d, false); // never wall anyone into a secret room
     }
   }
 

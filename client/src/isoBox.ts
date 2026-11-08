@@ -38,3 +38,47 @@ export function iso(p: Pen, ox: number, oy: number): Iso {
   };
   return { put, box, post, rod, X, Y };
 }
+
+const h3 = (x: number, y: number, s: number) => {
+  let h = (Math.imul(x | 0, 374761393) + Math.imul(y | 0, 668265263) + Math.imul(s | 0, 982451653)) | 0;
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+};
+/** Weathered timber, darkest to lightest. */
+export const TIMBER = [0x140e0a, 0x22180f, 0x312317, 0x43301f, 0x58402a, 0x6e5236, 0x866844];
+/**
+ * A squared timber post seen in iso, from (x, y0) down to (x, y1) on screen (it may lean): a lit west face and a
+ * shaded east face split down the arris, long grain with checks and knots, a sawn top showing its end grain.
+ * `w` is its screen width in texels (even).
+ */
+export function timberPost(p: Pen, x0: number, y0: number, x1: number, y1: number, w = 4, seed = 0) {
+  const n = Math.max(1, Math.abs(y1 - y0), Math.abs(x1 - x0)), half = w / 2;
+  for (let i = 0; i <= n; i++) {
+    const t = i / n, x = Math.round(x0 + (x1 - x0) * t), y = Math.round(y0 + (y1 - y0) * t);
+    for (let k = 0; k < w; k++) {
+      const lit = k < half;
+      let lv = lit ? (k === 0 ? 5 : 4.2) : (k === w - 1 ? 1.6 : 2.6);
+      if (h3(k + seed * 7, Math.floor(i / 5), 91) < 0.18) lv -= 0.8; // long grain streaks
+      if (h3(k + seed * 3, i, 92) < 0.03) lv -= 1.6; // checks
+      if (y1 - y > n * 0 && i > n - 4) lv -= (i - (n - 4)) * 0.4; // damp foot
+      p.px(x + k - half, y, TIMBER[Math.max(0, Math.min(6, Math.round(lv)))]);
+    }
+    if (h3(seed, Math.floor(i / 9), 93) < 0.12 && i % 9 === 4) { p.px(x - 1, y, TIMBER[1]); p.px(x - 1, y + 1, TIMBER[2]); } // a knot
+  }
+  // the sawn top: a tiny lit diamond of end grain
+  for (let k = 0; k < w; k++) p.px(Math.round(x0) + k - half, Math.round(y0) - 1, k < half ? TIMBER[6] : TIMBER[5]);
+  for (let k = 1; k < w - 1; k++) p.px(Math.round(x0) + k - half, Math.round(y0) - 2, TIMBER[5]);
+}
+/** A horizontal beam across posts in iso screen space: lit top, shaded under side. */
+export function timberBeam(p: Pen, x0: number, y0: number, x1: number, y1: number, th = 3, seed = 0) {
+  const n = Math.max(1, Math.abs(x1 - x0));
+  for (let i = 0; i <= n; i++) {
+    const t = i / n, x = Math.round(x0 + (x1 - x0) * t), y = Math.round(y0 + (y1 - y0) * t);
+    for (let k = 0; k < th; k++) {
+      let lv = k === 0 ? 5.4 : k === th - 1 ? 1.6 : 3.4;
+      if (h3(Math.floor(i / 6), k + seed, 94) < 0.2) lv -= 0.8;
+      if (h3(i, k + seed, 95) < 0.03) lv -= 1.5;
+      p.px(x, y + k, TIMBER[Math.max(0, Math.min(6, Math.round(lv)))]);
+    }
+  }
+}

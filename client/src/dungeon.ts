@@ -1,6 +1,6 @@
 import Phaser from "phaser";
 import { MAP_W, TILE, WORLD_H } from "../../shared/constants";
-import { DOOR_RANGE, DOORS, doorDist, isSolidTile, setDoorOpen, type Door } from "../../shared/map";
+import { DOOR_RANGE, DOORS, doorDist, doorWorkable, isSolidTile, setDoorOpen, type Door } from "../../shared/map";
 import { refreshWalk } from "./pathfind";
 import { play } from "./sfx";
 import type { MapMarker } from "./minimap";
@@ -321,9 +321,11 @@ export class DungeonView {
     else this.drawDark(now);
     // the label over a rope or stair within reach
     const l = me && LINKS.find((k) => Math.hypot(k.x - me.x, k.y - me.y) < 3 * TILE);
-    this.nearDoor = fl && me ? DOORS.find((d) => d.floor === fl && doorDist(d, me.x, me.y) <= DOOR_RANGE) : undefined;
-    if (this.nearDoor && this.label) {
-      const d = this.nearDoor, text = this.doorsOpen.has(d.id) ? "E: Shut the gate" : "E: Open the gate";
+    // a gate in reach (a broken wall stays broken; a shortcut's gate only answers from its own side)
+    const near = fl && me ? DOORS.find((d) => d.floor === fl && doorDist(d, me.x, me.y) <= DOOR_RANGE && !(d.kind === "crack" && this.doorsOpen.has(d.id)) && (doorWorkable(d, me.x, me.y) || !this.doorsOpen.has(d.id))) : undefined;
+    this.nearDoor = near && me && doorWorkable(near, me.x, me.y) ? near : undefined;
+    if (near && this.label && me) {
+      const d = near, text = d.kind === "crack" ? "E: Break through the cracked wall" : !doorWorkable(d, me.x, me.y) ? "Barred from the other side" : this.doorsOpen.has(d.id) ? "E: Shut the gate" : "E: Open the gate";
       if (this.label.text !== text) this.label.setText(text);
       const x = d.x * TILE, y = d.y * TILE;
       this.label.setPosition(x, y - GATE_FRAME_H - 12).setVisible(true);

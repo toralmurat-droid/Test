@@ -1,6 +1,6 @@
 import Phaser from "phaser";
 import { BONE, IRON, OLDWOOD, OUTLINE, Pen, pen, ROPE, sheet, WOOD } from "./worldProps";
-import { iso } from "./isoBox";
+import { iso, timberBeam, timberPost } from "./isoBox";
 
 /**
  * Pixel art of the Mawdeep Warrens (shared/dungeon.ts), painted in code at 1.5 texels per world px like every
@@ -154,7 +154,7 @@ const STONE = [0x16110e, 0x241c17, 0x342920, 0x46382c, 0x5a4a3a, 0x6e5c48, 0x847
  *  - "door": a wall of dressed stone; the gate is an iron-bound plank door under a stone lintel that swings in on its
  *    hinge (frame f turns it f/(GATE_FRAMES-1) of the way open, showing the dark behind).
  */
-export function gateSheet(scene: Phaser.Scene, key: string, g: GateShape, kind: "bars" | "door", g0: number, g1: number) {
+export function gateSheet(scene: Phaser.Scene, key: string, g: GateShape, kind: "bars" | "door" | "crack", g0: number, g1: number) {
   if (scene.textures.exists(key)) return;
   const L = g.len * TX, sx = g.sx, sy = g.sy, HO = GATE_OPEN_H * TX, HF = GATE_FRAME_H * TX;
   const base = (t: number) => [g.ox + sx * (t - 0.5) * L, g.oy + sy * (t - 0.5) * L]; // t 0..1 along the wall's foot
@@ -168,6 +168,35 @@ export function gateSheet(scene: Phaser.Scene, key: string, g: GateShape, kind: 
     p0 = p;
     const open = f / (GATE_FRAMES - 1);
     const inGate = (t: number) => t >= g0 && t <= g1;
+    if (kind === "crack") {
+      // rough rock walling the way, a jagged crack down it with a draught of dust; it caves in to a low heap of rubble
+      const HT = WALL_TALL * TX;
+      const crackAt = (j: number) => 0.5 + Math.sin(j * 0.21) * 0.05 + Math.sin(j * 0.67 + 1) * 0.025 + (hash(Math.floor(j / 3), 0, 96) - 0.5) * 0.03;
+      for (let k = 0; k <= along; k++) {
+        const t = k / along, edge = Math.min(t, 1 - t) * along; // texels from the wall's ends (they meet the cave wall)
+        const top = HT * Math.pow(1 - open, 1.4) * (0.75 + 0.25 * vn(k / 5, 0, 97)) * Math.min(1, 0.6 + edge / 8);
+        const heap = open * 9 * Math.max(0, 1 - Math.abs(t - 0.5) * 1.6) * (0.7 + 0.3 * vn(k / 3, 1, 98));
+        col(t, 0, Math.max(top, heap), (j) => {
+          if (j > top) { // the rubble heap: chunky stones, lit tops
+            const st = hash(Math.floor(k / 4), Math.floor(j / 3), 99);
+            return ROCK[Math.max(1, Math.min(6, Math.round(2.6 + st * 2 + (j % 3 === 2 ? 1 : 0) + dth(k, j) * 0.6)))];
+          }
+          let lv = 2.1 + (vn(k / 6, j / 5, 100) - 0.5) * 2.2 + (vn(k / 2, j / 2, 101) - 0.5) * 0.9 + dth(k, j) * 0.8;
+          if (top - j < 2) lv += 1.3; // the lit lip
+          if (j < 6) lv -= (6 - j) / 6 * 1.4; // damp foot
+          const cd = Math.abs(t - crackAt(Math.round(j))) * along;
+          const bj = j - top * 0.55, bd = bj > 0 && bj < top * 0.3 ? Math.abs(t - crackAt(Math.round(top * 0.55)) - bj * 0.012) * along : 99; // a branch
+          if (open < 0.2) {
+            if (cd < 1.4 || bd < 0.8) return j > 8 && j < top - 8 && cd < 0.6 && hash(k, j >> 2, 104) < 0.5 ? 0x26303a : 0x050404; // the crack, a cold draught behind it
+            if (cd < 2.6 || bd < 1.6) lv += t < crackAt(Math.round(j)) ? 1.6 : -0.8; // its lit and shaded lips
+            if (hash(k, j, 102) < 0.006) return 0x8a8070; // dust in the draught
+          }
+          if (Math.abs(vn(k / 4, j / 4, 103) - 0.5) < 0.03) lv -= 1.4; // seams between the fallen blocks
+          return ROCK[Math.max(0, Math.min(6, Math.round(lv)))];
+        });
+      }
+      return;
+    }
     if (kind === "door") {
       // the stone wall: courses of blocks, staggered, a lit coping on top, darker at the foot
       for (let k = 0; k <= along; k++) {
@@ -396,12 +425,12 @@ export const TORCH = { w: 18, h: 58, frames: 6 };
 /** A torch on a stake: a squared post, an iron cup, a pitch-soaked rag burning in it. */
 function torchPost(p: Pen, f: number) {
   const { h } = TORCH, cx = 9;
-  p.shaft(cx - 1, 22, cx - 1, h - 2, 3, OLDWOOD);
+  timberPost(p, cx, 22, cx, h - 2, 4, 1);
   for (const y of [30, h - 10]) { p.px(cx - 1, y, ROPE); p.px(cx, y, ROPE); p.px(cx + 1, y, 0x6e5e3e); }
   // the cup
   for (let y = 16; y <= 22; y++) {
     const hw = Math.round(4 - Math.max(0, y - 19) * 0.8);
-    for (let x = -hw; x <= hw; x++) p.px(cx + x, y, x < -hw + 1 ? IRON.hi : x > hw - 1 ? IRON.lo : y === 16 ? IRON.hi : IRON.mid);
+    for (let x = -hw; x <= hw; x++) p.px(cx + x, y, x < -hw + 1 ? 0x5e5a52 : x > hw - 1 ? 0x1e1e21 : y === 16 ? 0x6e6a60 : (x + y) % 4 === 0 ? 0x46291a : 0x3a3936);
   }
   for (let x = -3; x <= 3; x++) p.px(cx + x, 15, hash(x, f, 5) < 0.5 ? 0xffb04a : 0xc4461a);
   // the flame
@@ -549,8 +578,8 @@ const HIDE = [[0x6e4a2e, 0x55381f, 0x3c2614], [0x5e5850, 0x46413b, 0x2e2a26], [0
 /** A drying rack: two posts, a crossbar, a stretched hide laced to the frame. */
 function rack(p: Pen, v: number) {
   const { w, h } = RACK, [hl, hm, hd] = HIDE[v % HIDE.length];
-  p.shaft(6, 6, 4, h - 2, 3, OLDWOOD); p.shaft(w - 9, 6, w - 7, h - 2, 3, OLDWOOD);
-  p.shaft(2, 8, w - 3, 8, 3, OLDWOOD);
+  timberPost(p, 8, 6, 6, h - 2, 4, v); timberPost(p, w - 7, 6, w - 5, h - 2, 4, v + 1);
+  timberBeam(p, 2, 7, w - 3, 7, 4, v);
   // the hide: a ragged rounded shape, lighter flesh side with dark patches
   const x0 = 9, x1 = w - 11, y0 = 11, y1 = h - 12;
   for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
@@ -571,7 +600,7 @@ function rack(p: Pen, v: number) {
 /** A stake topped with a horned skull, rags and a string of teeth. */
 function skullPole(p: Pen, v: number) {
   const { w, h } = POLE, cx = Math.round(w / 2);
-  p.shaft(cx - 1, 14, cx - 1 + (v % 2), h - 2, 3, OLDWOOD);
+  timberPost(p, cx, 14, cx + (v % 2), h - 2, 4, v);
   skull(p, cx, 10, v % 3 !== 2);
   // rags
   for (let j = 0; j < 14; j++) for (let i = 0; i < 4; i++) if (hash(i, j, v) < 0.8 - j * 0.03) p.px(cx + 2 + i + Math.round(j * 0.15), 18 + j, j % 4 === 0 ? 0x3a2418 : 0x5a3424);

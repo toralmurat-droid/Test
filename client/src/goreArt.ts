@@ -1,6 +1,6 @@
 import Phaser from "phaser";
 import { BONE, IRON, OLDWOOD, Pen, pen, ROPE, sheet } from "./worldProps";
-import { iso } from "./isoBox";
+import { iso, timberBeam, timberPost } from "./isoBox";
 
 /**
  * The grim side of the Mawdeep (Murat 2026-11-05: "the inside of the dungeon should make sense"): what the beast-folk
@@ -179,8 +179,8 @@ function remains(p: Pen, v: number) {
 /** Meat hooks on a gibbet: 0 a body sewn in sackcloth, 1 a leg and a side of something, 2 a flayed carcass. */
 function hook(p: Pen, v: number) {
   const { w, h } = GORE.hook;
-  p.shaft(4, 6, 4, h - 2, 4, OLDWOOD);
-  p.shaft(4, 6, w - 3, 6, 3, OLDWOOD);
+  timberPost(p, 6, 6, 6, h - 2, 4, v);
+  timberBeam(p, 4, 5, w - 3, 5, 4, v);
   p.line(7, 14, 13, 8, OLDWOOD[1]); p.line(8, 14, 14, 8, OLDWOOD[2]); // brace
   const hx = w - 10;
   for (let y = 9; y < 20; y++) p.px(hx + (y % 2), y, y % 2 ? IRON.lo : IRON.mid); // the chain
@@ -273,8 +273,8 @@ function frame(p: Pen, v: number) {
   const { w, h } = GORE.frame;
   stain(p, w / 2, h - 6, 16, 4, 80 + v);
   if (v === 0) {
-    p.shaft(5, 6, 5, h - 3, 3, OLDWOOD); p.shaft(w - 8, 6, w - 8, h - 3, 3, OLDWOOD);
-    p.shaft(3, 8, w - 4, 8, 3, OLDWOOD); p.shaft(5, h - 14, w - 6, h - 14, 2, OLDWOOD);
+    timberPost(p, 7, 6, 7, h - 3, 4, 1); timberPost(p, w - 6, 6, w - 6, h - 3, 4, 2);
+    timberBeam(p, 3, 7, w - 4, 7, 4, 1); timberBeam(p, 5, h - 14, w - 6, h - 14, 3, 2);
     // the skin, a pale man-shape spread wide, face sagging, laced at wrists and ankles
     const cx = w / 2 - 1;
     const body = (x: number, y: number) => {
@@ -298,7 +298,7 @@ function frame(p: Pen, v: number) {
     for (let y = 22; y < 34; y += 2) p.px(cx, y, RAW[0]); // the cut it was peeled from
     for (let k = 0; k < 5; k++) p.px(cx - 4 + k * 2, h - 15 + (k % 2), BLOOD[1]); // drips
   } else {
-    p.shaft(6, 6, w - 9, h - 4, 3, OLDWOOD); p.shaft(w - 9, 6, 6, h - 4, 3, OLDWOOD);
+    timberPost(p, 8, 6, w - 7, h - 4, 4, 1); timberPost(p, w - 7, 6, 8, h - 4, 4, 2);
     const cx = w / 2 - 1, cy = h / 2 - 2;
     // the body: grey, ribs showing, arms up along the X
     limb(p, cx - 2, cy - 8, cx - 12, cy - 20); limb(p, cx + 2, cy - 8, cx + 12, cy - 20);
@@ -393,7 +393,7 @@ function slab(p: Pen) {
 /** A stake with a villager's head on it: 0 a man with a beard, 1 a woman with long hair. */
 function pike(p: Pen, v: number) {
   const { w, h } = GORE.pike, cx = Math.round(w / 2);
-  p.shaft(cx - 1, 10, cx - 1, h - 2, 3, OLDWOOD);
+  timberPost(p, cx, 10, cx, h - 2, 4, v);
   for (let y = 16; y < 34; y++) if (hash(y, v, 3) < 0.6) p.px(cx - 1 + (y % 2), y, BLOOD[y < 24 ? 1 : 2]); // run down the stake
   const hy = 11;
   if (v === 1) for (let j = 0; j < 14; j++) for (let i = -5; i <= 5; i++) if (Math.abs(i) > 2 && hash(i, j, 4) < 0.85 - j * 0.04) p.px(cx + i, hy - 4 + j, HAIR[1]); // long hair hanging

@@ -5,6 +5,8 @@ import { quake } from "./camfx";
 import { chargeIcon } from "./chargeIcon";
 import { leaving, noteBuild, reconnectSoon, returnToStart, takeCarried, upgradeAnnounced } from "./reconnect";
 import { Client, getStateCallbacks, Room } from "colyseus.js";
+/** Beast-folk that lurk in the Mawdeep's ambush rooms (their eyes show through the dark). */
+const LURKERS = new Set<string>(["gnawkin", "tuskborn", "silkwretch", "duskwing", "crowseer"]);
 import { BOSS, ELITE, InputState, MERGE, MOBS, type MobKind, MAP_H, MAP_W, regenFromStamina, TICK_RATE, TILE } from "../../shared/constants";
 import { CLASSES, ClassKind, MAX_LEVEL, xpForLevel } from "../../shared/classes";
 import { canPay, shortOf, MANA, manaRegen, maxManaFor, skillCost, unpackMana } from "../../shared/mana";
@@ -2936,10 +2938,16 @@ export class TownScene extends Phaser.Scene {
       if (e.mob && !p.dead && p.hidden && p.weapon === "ambusher") {
         // up in a tree: nothing shows at all (that's the point of an ambush)
       } else if (e.mob && !p.dead && p.hidden) {
-        // Hiding in a grave or tree: only a pair of eyes peeks out (and blinks now and then)
-        e.bar.setDepth(20000);
+        // Hiding in a grave or tree: only a pair of eyes peeks out (and blinks now and then). Beast-folk lurking in a
+        // Mawdeep ambush room: eyes at head height, glowing through the dark
+        const lurk = LURKERS.has(p.kind);
+        e.bar.setDepth(lurk ? 27600 : 20000);
         const blink = (now + x * 53 + y * 31) % 3200 < 160;
-        if (!blink) {
+        if (lurk && !blink) {
+          const ey = y - 24 + Math.round(Math.sin(now / 900 + x) * 1), col = p.kind === "tuskborn" ? 0xff4a2a : 0xffb020;
+          e.bar.fillStyle(col, 0.25).fillRect(x - 4, ey - 1, 9, 3);
+          e.bar.fillStyle(col).fillRect(x - 2, ey, 1, 1).fillRect(x + 2, ey, 1, 1);
+        } else if (!blink) {
           const col = p.kind === "skeleton" ? 0xff5252 : p.kind === "skeletonmage" ? 0x7fe7ff : 0xfff176;
           const ey = y - (p.kind === "skeleton" || p.kind === "skeletonmage" ? 2 : 5);
           e.bar.fillStyle(0x000000, 0.6).fillRect(x - 3, ey - 1, 7, 3);

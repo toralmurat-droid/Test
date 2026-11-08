@@ -1,5 +1,5 @@
 import { MAP_H as FULL_H, MAP_W, PLAYER_RADIUS, TILE, WORLD_H, type MobKind } from "./constants";
-import { FLOORS, LAIRS, SEA_END, SINKHOLE, type Floor } from "./dungeon";
+import { FLOORS, LAIRS, SEA_END, SHORTCUTS, SINKHOLE, type Floor } from "./dungeon";
 
 /** The overworld's rows: the world generator (and everything above ground) works on these; under them lies the Mawdeep (shared/dungeon.ts). */
 const MAP_H = WORLD_H;
@@ -968,48 +968,76 @@ export const AREAS = WORLD.areas;
  * message) and it shuts again a while after nobody stands in it. Deterministic: server and clients compute the same tiles.
  */
 export interface Door {
-  id: string; x: number; y: number; floor: number; kind: "bars" | "door";
+  id: string; x: number; y: number; floor: number;
+  /** "bars": prison bars with a barred gate; "door": a stone wall with a wooden door; "crack": a cracked rock wall hiding a secret room (all of it breaks) */
+  kind: "bars" | "door" | "crack";
   /** every tile of the wall across the tunnel (solid, except the gate's while it is open) */
   tiles: number[];
   /** the gate's tiles, in the middle of the wall */
   gate: number[];
   /** the wall's line across the tunnel (unit vector, world) */
   ax: number; ay: number;
+  /** a shortcut: only worked from this side (the centre, in tiles, of the chamber it opens from) */
+  from?: { x: number; y: number };
 }
 export const DOOR_RANGE = 1.8; // tiles from the nearest gate tile to work it
 const DOOR_ROOMS: Record<number, number[]> = { 1: [7], 2: [1, 5], 3: [3, 4] };
 const BARRED = new Set(["2_5", "3_3", "3_4"]); // the elites' lairs and the den: iron bars; the rest stout doors
 function placeDoors(): Door[] {
   const out: Door[] = [];
-  for (const f of FLOORS) for (const ci of DOOR_ROOMS[f.id] ?? []) {
+  /** Wall the tunnel a-b across just outside chamber ci's rim. */
+  const place = (f: Floor, ci: number, a: number, b: number, bend: number, kind: Door["kind"], id: string, oneWay: boolean) => {
+    if (out.some((d) => d.id === id)) return;
     const C = f.chambers[ci], cx = f.x + C.x, cy = f.y + C.y;
     const ell = (x: number, y: number) => Math.hypot((x - cx) / C.rx, (y - cy) / C.ry);
-    f.tunnels.forEach(([a, b, bend]) => {
-      if (a !== ci && b !== ci) return;
-      if (out.some((d) => d.floor === f.id && (d.id === `gate_${f.id}_${a}_${b}` || d.id === `gate_${f.id}_${b}_${a}`))) return; // one gate per tunnel
-      const A = f.chambers[a], B = f.chambers[b];
-      const ax = f.x + A.x, ay = f.y + A.y, bx = f.x + B.x, by = f.y + B.y;
-      const mx = (ax + bx) / 2 - (by - ay) * bend * 0.12, my = (ay + by) / 2 + (bx - ax) * bend * 0.12;
-      const at = (t: number) => { const u = 1 - t; return [u * u * ax + 2 * u * t * mx + t * t * bx, u * u * ay + 2 * u * t * my + t * t * by]; };
-      // walk out of the lair along the tunnel until clear of its ragged rim
-      let t = a === ci ? 0 : 1; const dt = a === ci ? 0.005 : -0.005;
-      while (t >= 0 && t <= 1 && ell(at(t)[0], at(t)[1]) < 1.5) t += dt;
-      const [px, py] = at(t), [qx, qy] = at(t + dt);
-      const len = Math.hypot(qx - px, qy - py) || 1, ux = (qx - px) / len, uy = (qy - py) / len;
-      const tiles: number[] = [];
-      for (let y = Math.floor(py - 4); y <= py + 4; y++) for (let x = Math.floor(px - 4); x <= px + 4; x++) {
-        const dx = x + 0.5 - px, dy = y + 0.5 - py;
-        if (Math.abs(dx * ux + dy * uy) > 0.85 || Math.abs(-dx * uy + dy * ux) > 3.2) continue;
-        if (SOLID![y * MAP_W + x] || ell(x + 0.5, y + 0.5) < 1.25) continue;
-        tiles.push(y * MAP_W + x);
-      }
-      if (!tiles.length || out.some((d) => d.tiles.some((k) => tiles.includes(k)))) return;
-      const gx = -uy, gy = ux; // across the tunnel
-      const gate = tiles.filter((k) => Math.abs(((k % MAP_W) + 0.5 - px) * gx + (((k / MAP_W) | 0) + 0.5 - py) * gy) <= 0.8);
-      out.push({ id: `gate_${f.id}_${ci}_${a === ci ? b : a}`, x: px, y: py, tiles, gate, floor: f.id, ax: gx, ay: gy, kind: BARRED.has(`${f.id}_${ci}`) ? "bars" : "door" });
+    const A = f.chambers[a], B = f.chambers[b];
+    const ax = f.x + A.x, ay = f.y + A.y, bx = f.x + B.x, by = f.y + B.y;
+    const mx = (ax + bx) / 2 - (by - ay) * bend * 0.12, my = (ay + by) / 2 + (bx - ax) * bend * 0.12;
+    const at = (t: number) => { const u = 1 - t; return [u * u * ax + 2 * u * t * mx + t * t * bx, u * u * ay + 2 * u * t * my + t * t * by]; };
+    // walk out of the chamber along the tunnel until clear of its ragged rim
+    let t = a === ci ? 0 : 1; const dt = a === ci ? 0.005 : -0.005;
+    while (t >= 0 && t <= 1 && ell(at(t)[0], at(t)[1]) < (C.secret ? 1.35 : 1.5)) t += dt;
+    const [px, py] = at(t), [qx, qy] = at(t + dt);
+    const len = Math.hypot(qx - px, qy - py) || 1, ux = (qx - px) / len, uy = (qy - py) / len;
+    const tiles: number[] = [];
+    for (let y = Math.floor(py - 4); y <= py + 4; y++) for (let x = Math.floor(px - 4); x <= px + 4; x++) {
+      const dx = x + 0.5 - px, dy = y + 0.5 - py;
+      if (Math.abs(dx * ux + dy * uy) > 0.85 || Math.abs(-dx * uy + dy * ux) > 3.2) continue;
+      if (SOLID![y * MAP_W + x] || ell(x + 0.5, y + 0.5) < (C.secret ? 1.05 : 1.25)) continue;
+      tiles.push(y * MAP_W + x);
+    }
+    if (!tiles.length || out.some((d) => d.tiles.some((k) => tiles.includes(k)))) return;
+    const gx = -uy, gy = ux; // across the tunnel
+    const gate = kind === "crack" ? tiles : tiles.filter((k) => Math.abs(((k % MAP_W) + 0.5 - px) * gx + (((k / MAP_W) | 0) + 0.5 - py) * gy) <= 0.8);
+    out.push({ id, x: px, y: py, tiles, gate, floor: f.id, ax: gx, ay: gy, kind, ...(oneWay ? { from: { x: cx, y: cy } } : {}) });
+  };
+  for (const f of FLOORS) {
+    for (const ci of DOOR_ROOMS[f.id] ?? []) for (const [a, b, bend] of f.tunnels) {
+      if (a !== ci && b !== ci) continue;
+      const other = a === ci ? b : a;
+      if (out.some((d) => d.id === `gate_${f.id}_${other}_${ci}`)) continue; // one gate per tunnel
+      place(f, ci, a, b, bend, BARRED.has(`${f.id}_${ci}`) ? "bars" : "door", `gate_${f.id}_${ci}_${other}`, false);
+    }
+    // the secret rooms: the short tunnel in is walled up with cracked rock at the secret end
+    f.chambers.forEach((c, ci) => {
+      if (!c.secret) return;
+      const tun = f.tunnels.find(([a, b]) => a === ci || b === ci);
+      if (tun) place(f, ci, tun[0], tun[1], tun[2], "crack", `crack_${f.id}_${ci}`, false);
     });
+    // shortcuts: a barred gate at the deep end, worked only from there
+    for (const [fl, from, to] of SHORTCUTS) {
+      if (fl !== f.id) continue;
+      const tun = f.tunnels.find(([a, b]) => (a === from && b === to) || (a === to && b === from));
+      if (tun) place(f, from, tun[0], tun[1], tun[2], "bars", `short_${f.id}_${from}_${to}`, true);
+    }
   }
   return out;
+}
+/** True when a hero at (px, py) may work door d (a shortcut only from its own side). */
+export function doorWorkable(d: Door, px: number, py: number): boolean {
+  if (!d.from) return true;
+  const tx = px / TILE, ty = py / TILE;
+  return Math.hypot(tx - d.from.x, ty - d.from.y) < Math.hypot(d.x - d.from.x, d.y - d.from.y);
 }
 export const DOORS: Door[] = placeDoors();
 for (const d of DOORS) for (const k of d.tiles) SOLID[k] = 1;
