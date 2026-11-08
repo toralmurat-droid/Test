@@ -64,7 +64,7 @@ type ClickSide = "left" | "right";
 const costWords = (s: { cost?: number; mana?: number; blood?: number }) => [s.mana ? `${s.mana} mana` : "", s.cost ? `${s.cost} heat` : "", s.blood ? `${s.blood}% HP` : ""].filter(Boolean).join(" · ") || "free";
 import { GearFx } from "./gearfx";
 import { Element, ELEMENT_COLORS } from "../../shared/elements";
-import { baseId, canWear, gearName, gearDef, reqProblem, gearReachMult, gearSpeedMult, itemRarity, WEAPON_TYPE_NAMES } from "../../shared/gear";
+import { baseId, canWear, gearName, gearDef, reqProblem, gearReachMult, gearSpeedMult, gearStats, itemRarity, WEAPON_TYPE_NAMES } from "../../shared/gear";
 import { attackProfile, ATTACK_WORDS, isWeaponType, poseSheet, profileOf, weaponAttackMult, weaponOk } from "../../shared/weapons";
 import { talentMult, talentPoints, spentPoints } from "../../shared/talents";
 import { activeSkills, skillLearned } from "../../shared/slots";
@@ -2264,7 +2264,7 @@ export class TownScene extends Phaser.Scene {
     const st = { sta: mine.sta, str: mine.str, mag: mine.mag, dex: mine.dex ?? 0 }; // includes gear bonuses
     const free = statPoints(lvl) - (mine.ptSta + mine.ptStr + mine.ptMag + (mine.ptDex ?? 0));
     // Rebuild only when something shown changed (called every frame while open)
-    const sig = [lvl, mine.xp, Math.ceil(mine.hp), mine.maxHp, st.sta, st.str, st.mag, st.dex, free, mine.kills, mine.gold, mine.wear, from].join("|");
+    const sig = [lvl, mine.xp, Math.ceil(mine.hp), mine.maxHp, mine.mp, st.sta, st.str, st.mag, st.dex, free, mine.kills, mine.gold, mine.wear, from].join("|");
     const el = document.getElementById("hero")!;
     if (!el.hidden && sig === this.heroSig) return;
     this.heroSig = sig;
@@ -2272,7 +2272,7 @@ export class TownScene extends Phaser.Scene {
     document.getElementById("herobanner")!.textContent = free > 0
       ? `${levelUp}${free} stat point${free > 1 ? "s" : ""} to assign: click + below.`
       : levelUp;
-    document.getElementById("herotitle")!.textContent = `${mine.name} · Lv ${lvl} ${CLASSES[cls].name}`;
+    document.getElementById("herotitle")!.innerHTML = `<span class="hname">${mine.name}</span><span class="hlvl"><small>LEVEL</small>${lvl}</span><span class="hcls">${CLASSES[cls].name}</span>`;
     const notes: Record<StatKind, string> = {
       sta: `${mine.maxHp} max HP, regen ${regenFromStamina(st.sta)[1].toFixed(1)} HP/s`,
       str: STATS[cls].attackStat === "str" ? `attack ×${attackMult(cls, st).toFixed(2)}, +${HP_PER_STR} HP each` : `+${HP_PER_STR} HP per point`,
@@ -2281,10 +2281,15 @@ export class TownScene extends Phaser.Scene {
       dex: `${Math.round(critChance(st, talentBonus(cls, mine.talents, "crit")) * 100)}% critical hits (double damage), skills too`,
     };
     const pts: Record<StatKind, number> = { sta: mine.ptSta, str: mine.ptStr, mag: mine.ptMag, dex: mine.ptDex ?? 0 };
-    document.getElementById("herostats")!.innerHTML = STAT_KINDS.map((k) => {
-      const plus = free > 0 ? `<button class="statplus" data-stat="${k}" title="Add a point to ${STAT_NAMES[k]}">+</button>` : "<span></span>";
-      const mine_ = pts[k] ? ` <span class="gain">(+${pts[k]})</span>` : "";
-      return `${plus}<span>${STAT_NAMES[k]}</span><b>${st[k]}${mine_}</b><span class="note">${notes[k]}</span>`;
+    // attribute cards (Murat 2026-11-08 redesign): badge, name and total, where it comes from, what it does, a big +
+    const fromGear = gearStats(cls, activeOf(mine));
+    const BADGE: Record<StatKind, string> = { str: "STR", sta: "STA", mag: "MAG", dex: "DEX" };
+    const main = STATS[cls].attackStat;
+    document.getElementById("herostats")!.innerHTML = (["str", "sta", "mag", "dex"] as StatKind[]).map((k) => {
+      const plus = `<button class="statplus" data-stat="${k}" aria-label="Add a point to ${STAT_NAMES[k]}"${free > 0 ? "" : " disabled"}>+</button>`;
+      const src = [pts[k] ? `<span class="gain">+${pts[k]} placed</span>` : "", fromGear[k] ? `+${fromGear[k]} from gear` : ""].filter(Boolean).join(" · ");
+      return `<div class="attr attr-${k}${k === main ? " main" : ""}"><span class="abadge">${BADGE[k]}</span>` +
+        `<div class="ainfo"><div class="aname">${STAT_NAMES[k]}<b>${st[k]}</b></div>${src ? `<small class="asrc">${src}</small>` : ""}<small class="anote">${notes[k]}</small></div>${plus}</div>`;
     }).join("");
     const wp = attackProfile(cls, activeOf(mine));
     const next = xpForLevel(lvl + 1), cur = xpForLevel(lvl);
@@ -2303,7 +2308,16 @@ export class TownScene extends Phaser.Scene {
       ["Kills · Gold", `${mine.kills} · ${mine.gold}`],
       ["Gear condition", `${100 - (mine.wear ?? 0)}%${mine.wear ? ` · gear stats −${Math.round((1 - wearMult(mine.wear)) * 100)}% · repair at Brann's smithy` : ""}`],
     ];
-    document.getElementById("herochar")!.innerHTML = rows.map(([k, v]) => `<span>${k}</span><b>${v}</b>`).join("");
+    // health, mana and experience as bars over the detail list
+    const mp = unpackMana(mine.mp);
+    const xpFrac = lvl >= MAX_LEVEL ? 1 : Math.max(0, Math.min(1, (mine.xp - cur) / Math.max(1, next - cur)));
+    const bar = (cls2: string, label: string, val: string, f: number) =>
+      `<div class="hbar ${cls2}"><div class="hbar-l"><span>${label}</span><b>${val}</b></div><div class="hbar-t"><i style="width:${Math.round(f * 100)}%"></i></div></div>`;
+    document.getElementById("herochar")!.innerHTML =
+      `<div class="hbars">${bar("hp", "Health", `${Math.ceil(mine.hp)} / ${mine.maxHp}`, mine.hp / Math.max(1, mine.maxHp))}` +
+      bar("mp", "Mana", `${mp.mana} / ${mp.maxMana}`, mp.mana / Math.max(1, mp.maxMana)) +
+      bar("xp", "Experience", lvl >= MAX_LEVEL ? "Max level" : `${mine.xp - cur} / ${next - cur}`, xpFrac) + `</div>` +
+      `<div class="hrows">${rows.filter(([k]) => k !== "Level" && k !== "Health").map(([k, v]) => `<span>${k}</span><b>${v}</b>`).join("")}</div>`;
     const rc = respecCost(lvl), rcEl = document.getElementById("statresetcost");
     if (rcEl) rcEl.textContent = rc ? `${rc} gold` : "free (up to level 5)";
     el.hidden = false;
