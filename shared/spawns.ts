@@ -100,19 +100,19 @@ const ZONE_MOBS: { name: string; mobs: Partial<Record<MobKind, number>>; respawn
   // Everything west of the river that no named area covers: fields, roads and woods around Oakvale
   { name: "Oakvale Countryside", mobs: { slime: 10, shooterblob: 3, warriorblob: 3, healerblob: 2, motherblob: 2 }, respawnMs: 5250, wild: true },
   // ---- Act 2, the Sunscar (shared/desert.ts): Lv 30-47, climbing away from the Sunstone Circle toward the Thornspire.
-  // Dustrider raiders and scorpions on the open sand, the Sand-Dead in buried Kharsun, the camel-folk in the mesas and the
+  // Dustrider raiders and scorpions on the open sand, the Sand-Dead and their winged sphinx guardians in buried Kharsun, the camel-folk in the mesas and the
   // eastern dunes, the Veiled Circle's adepts up in the Thornspire round their sanctum.
   { name: "The Glasswind Flats", mobs: { scorpion: 6, nomad: 4 }, respawnMs: 5000, levels: [30, 32] },
   { name: "Palmshade Oasis", mobs: { scorpion: 6, nomad: 3 }, respawnMs: 5500, levels: [31, 33] },
   { name: "Jackal Springs", mobs: { nomad: 6, scorpion: 3 }, respawnMs: 5500, levels: [33, 35] },
   { name: "Dustrider Camp", mobs: { nomad: 14 }, respawnMs: 6000, levels: [34, 37] },
-  { name: "Kharsun, the Buried City", mobs: { sanddead: 14 }, respawnMs: 6500, levels: [36, 39] },
+  { name: "Kharsun, the Buried City", mobs: { sanddead: 12, sphinx: 4 }, respawnMs: 6500, levels: [36, 39] },
   { name: "The Humpback Mesas", mobs: { camelfolk: 10, scorpion: 3 }, respawnMs: 6500, levels: [38, 41] },
   { name: "The Saffron Dunes", mobs: { scorpion: 12, camelfolk: 3 }, respawnMs: 6000, levels: [40, 43] },
-  { name: "Mirage Wells", mobs: { camelfolk: 5, scorpion: 4, veiled: 3 }, respawnMs: 6500, levels: [41, 44] },
+  { name: "Mirage Wells", mobs: { camelfolk: 5, scorpion: 4, veiled: 3, sphinx: 2 }, respawnMs: 6500, levels: [41, 44] },
   { name: "The Veiled Sanctum", mobs: { veiled: 12 }, respawnMs: 8000, fixed: true, levels: [45, 47] },
   { name: "The Sun Furnace", mobs: {}, respawnMs: 150000, fixed: true, levels: [47, 47] }, // the final fight (no zone spawns)
-  { name: "The Thornspire Heights", mobs: { veiled: 8, camelfolk: 4, sanddead: 3 }, respawnMs: 7000, levels: [43, 46] },
+  { name: "The Thornspire Heights", mobs: { veiled: 8, camelfolk: 4, sanddead: 3, sphinx: 4 }, respawnMs: 7000, levels: [43, 46] },
   { name: "The Red Wastes", mobs: { nomad: 6, scorpion: 8 }, respawnMs: 6000, wild: true },
   { name: "The Sunscar", mobs: { scorpion: 10, nomad: 6, camelfolk: 2 }, respawnMs: 6000, wild: true }, // the open desert, last
 ];

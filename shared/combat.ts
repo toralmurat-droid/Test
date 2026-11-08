@@ -70,6 +70,7 @@ export const MOB_COMBAT: Record<MobKind, { poise: number; windupMs: number }> = 
   sanddead: { poise: 70, windupMs: 340 },
   veiled: { poise: 40, windupMs: 420 },
   camelfolk: { poise: 140, windupMs: 440 },
+  sphinx: { poise: 160, windupMs: 420 },
   sunwright: { poise: 460, windupMs: 480 },
   nightraider: { poise: 3000, windupMs: 460 }, // barely flinches: a hero alone can hardly break it
 };

@@ -297,7 +297,7 @@ export const MOB_LOOK: Record<string, { top: number; bar: number; oy: number; sc
 };
 
 const PAINTED_MOBS = ["slime", "blobling", "shooterblob", "warriorblob", "healerblob", "motherblob", "venomblob", "frostblob", "fireblob", "stormblob", "skeleton", "bandit", "skeletonmage", "necromancer", "demon", "crawler", "banditchief", "hollowking", "gnawkin", "tuskborn", "silkwretch", "duskwing", "packlord", "hornbrute", "hidemother", "crowseer", "gnasher", "weaver",
-  "nomad", "scorpion", "sanddead", "veiled", "camelfolk", "sunwright", "nightraider",
+  "nomad", "scorpion", "sanddead", "veiled", "camelfolk", "sphinx", "sunwright", "nightraider",
   "golem_fire", "golem_cold", "golem_poison", "golem_shock", "golem_colossus", "bride"];
 /** The Colossus is painted once per element (Mob.weapon holds it, shared/summons.ts). */
 const COLOSSUS_ELEMENTS = ["fire", "cold", "poison", "shock"];
@@ -321,7 +321,7 @@ const PAINTED_LOOK: Record<string, { top: number; bar: number; oy: number; scale
   hidemother: { top: 66, bar: 38, oy: 44 / 48, scale: 1.6 },
   // Act 2, the Sunscar
   nomad: { top: 24, bar: 14, oy: 27.5 / 30 }, sanddead: { top: 24, bar: 14, oy: 27.5 / 30 }, veiled: { top: 26, bar: 14, oy: 31.2 / 32 },
-  camelfolk: { top: 36, bar: 18, oy: 33.5 / 36 }, scorpion: { top: 20, bar: 18, oy: 27 / 30 },
+  camelfolk: { top: 36, bar: 18, oy: 33.5 / 36 }, sphinx: { top: 38, bar: 18, oy: 36.5 / 40 }, scorpion: { top: 20, bar: 18, oy: 27 / 30 },
   sunwright: { top: 62, bar: 38, oy: 42 / 48, scale: 1.6 }, // Act 2's final boss, as tall as the Hollow King
   // the Night Raiders (tools/art/paint/raiders.ts): a rider on a big horse, a head taller than the heroes
   nightraider: { top: 60, bar: 30, oy: 55 / 62, scale: 1.35 }, // drawn big: horse and rider tower over the heroes

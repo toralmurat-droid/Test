@@ -595,7 +595,10 @@ function beastParts(c: C2, r: Rig) {
     const col = C(L.tail), sw = Math.sin(t * 1.3) * 0.8;
     const pts: P[] = R ? [[cx - 1.2, hipY], [cx - 4.5, hipY + 3.5], [cx - 7.5 + sw, 28.6]] : [[cx + 0.6, hipY + 0.4], [cx + 3.2 + sw, hipY + 4.5], [cx + 5.5 + sw, 28.8]];
     limb(c, pts[0], pts[1], 0.75, 0.5, col); limb(c, pts[1], pts[2], 0.5, 0.22, sh(col, 0.85));
-    for (let k = 1; k < 5; k++) { const q = lerpP(pts[0], pts[1], k / 5); line(c, [[q[0] - 0.3, q[1] - 0.3], [q[0] + 0.3, q[1] + 0.3]], sh(col, 0.6), 0.08, 0.6); }
+    if (L.beast === "lion") { // a lion's tail: smooth fur, a dark tuft at the tip
+      const q = pts[2];
+      vol(c, ellipseP(q[0], q[1] - 0.3, 0.75, 1.0, R ? 0.6 : -0.4), C(0x5a3418), [q[0] - 0.8, q[1] - 1.3, 1.6, 2], { ao: 0.3 });
+    } else for (let k = 1; k < 5; k++) { const q = lerpP(pts[0], pts[1], k / 5); line(c, [[q[0] - 0.3, q[1] - 0.3], [q[0] + 0.3, q[1] + 0.3]], sh(col, 0.6), 0.08, 0.6); }
   }
   if (L.spiderLegs !== undefined) {
     const col = C(L.spiderLegs), wig = Math.sin(t * 1.9) * 0.6;
@@ -609,11 +612,12 @@ function beastParts(c: C2, r: Rig) {
     }
   }
   if (L.wings) {
-    const col = C(L.wings.col), bat = L.wings.kind === "bat", flap = Math.sin(t * 1.7);
+    // resting wings (the sphinx) stay half-folded up its back and only stir; the others beat
+    const rest = !!L.wings.rest, col = C(L.wings.col), bat = L.wings.kind === "bat", flap = Math.sin(t * 1.7) * (rest ? 0.25 : 1);
     const sides = R ? [-1] : [-1, 1];
     for (const sg of sides) {
       const root: P = [cx + sg * (R ? 0.2 : 1.2), sy + 0.6];
-      const span = (R ? 8.5 : 10.5), lift = 4.5 + flap * 3.2;
+      const span = rest ? (R ? 6.5 : 7.5) : (R ? 8.5 : 10.5), lift = (rest ? 7.5 : 4.5) + flap * 3.2;
       const elbow: P = [root[0] + sg * span * 0.42 + (R ? -2 : 0), root[1] - lift];
       const tip: P = [root[0] + sg * span + (R ? -4 : 0), root[1] - lift * 0.35 + 1.5];
       // trailing edge: scalloped between the finger bones (bat) or ragged primaries (crow)
@@ -626,6 +630,10 @@ function beastParts(c: C2, r: Rig) {
       vol(c, s, bat ? col : sh(col, 0.9), [Math.min(root[0], tip[0]) - 1, root[1] - lift - 1, span + 2, lift + 6], { ao: 0.35 });
       if (bat) for (const q of low) line(c, [elbow, q], sh(col, 0.5), 0.14, 0.8); // finger bones
       else for (let k = 0; k < 6; k++) { const a = lerpP(elbow, tip, k / 6), b: P = [a[0] - sg * 0.3, a[1] + 3.2 - k * 0.3]; line(c, [a, b], sh(col, 0.55), 0.16, 0.8); } // primaries
+      if (!bat && L.wings.tip !== undefined) { // painted feathers: a band of lapis along the trailing edge, coverts in rows
+        for (let k = 0; k < 7; k++) { const a = lerpP(root, tip, 0.25 + k * 0.11), b: P = [a[0] - sg * 0.2, a[1] + 2.2]; line(c, [lerpP(a, b, 0.55), b], C(L.wings.tip), 0.32, 0.9); }
+        for (let k = 0; k < 4; k++) { const a = lerpP(root, elbow, 0.3 + k * 0.17); line(c, [a, [a[0] + sg * 0.9, a[1] + 1.0]], mix(col, 0xffffff, 0.35), 0.14, 0.7); }
+      }
       limb(c, root, elbow, 0.55, 0.4, sh(col, 0.7)); limb(c, elbow, tip, 0.4, 0.15, sh(col, 0.7));
     }
   }
@@ -763,12 +771,13 @@ const BEAST: Record<NonNullable<Look["beast"]>, { fur: number; muz: number; nose
   bear: { fur: 0x4a3626, muz: 0x8a6a4a, nose: 0x1a1210, rx: 2.75, ry: 2.5 },
   crow: { fur: 0x1e1a24, muz: 0x4a4650, nose: 0x2a2830, rx: 2.15, ry: 2.15 },
   camel: { fur: 0xb88a58, muz: 0xd0aa78, nose: 0x5a3a24, rx: 1.9, ry: 2.0 },
+  lion: { fur: 0xc8923a, muz: 0xe2c690, nose: 0x3a2018, rx: 2.15, ry: 2.15 },
 };
 function beastHead(c: C2, r: Rig, hood = false) {
   const L = r.L, kind = L.beast!, B = BEAST[kind], [hx, hy] = r.head, dir = r.dir, R = r.R, fo = r.fo, qx = hx + fo;
   const fur = C(B.fur), muz = C(B.muz), dk = sh(fur, 0.45), eyeC = hood ? 0x3a2a22 : L.eyeGlow ?? 0xff3a2a; // a flayed hood's eyes are dead
   const ivory = 0xe2d8bc, horn = 0xcfc2a2;
-  if (!hood && kind !== "camel") {
+  if (!hood && kind !== "camel" && kind !== "lion") {
     // neck in hide, a stitched seam round it
     limb(c, [r.cx + (R ? 0.2 : 0), r.sy - 0.9], [hx, hy + 1.6], 1.7, 1.6, sh(fur, 0.8));
     const seamY = r.sy - 0.7;
@@ -805,10 +814,51 @@ function beastHead(c: C2, r: Rig, hood = false) {
       for (let k = 0; k < 3; k++) { const p0 = pts[0], p1 = pts[1], t = 0.3 + k * 0.25; const x = p0[0] + (p1[0] - p0[0]) * t, y = p0[1] + (p1[1] - p0[1]) * t; line(c, [[x - 0.2, y - 0.4], [x + 0.2, y + 0.4]], sh(horn, 0.6), 0.1, 0.7); }
     }
   }
+  // the sphinx: a lion's mane round the face, under the royal headcloth (nemes) whose striped lappets fall to the chest
+  const GOLD = 0xd8a838, LAPIS = 0x24418a, mane = 0x8a5222;
+  const stripes = (s: Shape, box: [number, number, number, number], slope: number) => clipTo(c, s, () => {
+    for (let y = box[1] - 2; y < box[1] + box[3] + 2; y += 0.62) line(c, [[box[0] - 1, y], [box[0] + box[2] + 1, y + slope]], LAPIS, 0.3, 0.95);
+  });
+  if (kind === "lion") {
+    const mx = R ? hx - 0.9 : hx, mS = ellipseP(mx, hy + 0.5, R ? 2.9 : 3.3, 3.0);
+    vol(c, mS, C(mane), [mx - 3.3, hy - 2.5, 6.6, 6], { ao: 0.4 });
+    grain(c, mS, [mx - 3.3, hy - 2.5, 6.6, 6], C(mane), r.seed + 77, 60, 0.5, 1.1, 1.4);
+    // the lappets (front, side) or the cloth's back with its bound tail (up)
+    const lap = (x0: number, x1: number, y0: number, w: number) => {
+      const s = poly([[x0 - w, y0], [x0 + w, y0], [x1 + w * 0.85, r.sy + 2.6], [x1 - w * 0.85, r.sy + 2.6]]);
+      vol(c, s, C(GOLD), [Math.min(x0, x1) - w, y0, Math.abs(x1 - x0) + w * 2, r.sy + 2.6 - y0], { ao: 0.25, spec: 0.3 });
+      stripes(s, [Math.min(x0, x1) - w, y0, Math.abs(x1 - x0) + w * 2, r.sy + 2.6 - y0], 0);
+      line(c, [[x1 - w * 0.85, r.sy + 2.6], [x1 + w * 0.85, r.sy + 2.6]], C(GOLD), 0.28, 1);
+    };
+    if (dir === "up") {
+      const back = poly([[hx - 2.7, hy - 1.2], [hx + 2.7, hy - 1.2], [hx + 3.2, hy + 2.2], [hx + 1.6, r.sy + 1.4], [hx - 1.6, r.sy + 1.4], [hx - 3.2, hy + 2.2]]);
+      vol(c, back, C(GOLD), [hx - 3.2, hy - 1.2, 6.4, r.sy - hy + 2.6], { ao: 0.3 });
+      stripes(back, [hx - 3.2, hy - 1.2, 6.4, r.sy - hy + 2.6], 0);
+      limb(c, [hx, r.sy - 0.4], [hx, r.sy + 3.6], 0.9, 0.6, C(GOLD)); // the cloth gathered into a tail down the back
+      for (let k = 0; k < 4; k++) line(c, [[hx - 0.7, r.sy + 0.2 + k * 0.9], [hx + 0.7, r.sy + 0.2 + k * 0.9]], C(LAPIS), 0.28, 0.95);
+    } else if (R) lap(hx - 1.6, hx - 0.8, hy - 0.4, 1.0);
+    else for (const sg of [-1, 1]) lap(qx + sg * 2.5, qx + sg * 2.2, hy - 0.5, 0.95);
+  }
   // the head
   const cran = ellipseP(fx, hy - 0.3, B.rx, B.ry);
   vol(c, cran, fur, [fx - B.rx, hy - 0.3 - B.ry, B.rx * 2, B.ry * 2], { ao: 0.35, spec: kind === "spider" ? 0.55 : 0.15 });
   if (kind !== "spider") grain(c, cran, [fx - B.rx, hy - 0.3 - B.ry, B.rx * 2, B.ry * 2], fur, r.seed + 51, 50, 0.45, 0.8, dir === "up" ? 1.4 : -0.6);
+  if (kind === "lion") {
+    // the headcloth's cap over the crown: flaring wings of cloth at the temples, a gold brow band, the rearing cobra
+    const cap = dir === "up" ? ellipseP(fx, hy - 0.5, B.rx + 0.5, B.ry + 0.3)
+      : R ? blobPath([[hx + 1.5, hy - 1.0], [hx + 0.6, hy - 2.5], [hx - 1.0, hy - 2.85], [hx - 2.6, hy - 1.9], [hx - 3.0, hy - 0.2], [hx - 1.6, hy - 0.6]])
+      : blobPath([[qx - 3.3, hy - 0.1], [qx - 2.5, hy - 2.2], [qx, hy - 2.95], [qx + 2.5, hy - 2.2], [qx + 3.3, hy - 0.1], [qx + 1.6, hy - 1.5], [qx, hy - 1.25], [qx - 1.6, hy - 1.5]]);
+    const box: [number, number, number, number] = [hx - 3.4, hy - 3, 6.8, 3.2];
+    vol(c, cap, C(GOLD), box, { ao: 0.3, spec: 0.35 });
+    stripes(cap, box, R ? -0.6 : 0);
+    if (dir !== "up") {
+      line(c, R ? [[hx + 1.5, hy - 1.05], [hx - 1.4, hy - 0.75]] : [[qx - 2.3, hy - 1.15], [qx + 2.3, hy - 1.15]], C(0xf0c850), 0.38, 1); // brow band
+      const ux = R ? hx + 1.1 : qx, uy = hy - 1.15;
+      limb(c, [ux, uy], [ux + (R ? 0.25 : 0), uy - 1.3], 0.42, 0.3, C(0xf0c850)); // the uraeus, the cobra over the brow
+      fillShape(c, ellipseP(ux + (R ? 0.3 : 0), uy - 1.45, 0.42, 0.36), css(C(0xf0c850)));
+      fillShape(c, ellipseP(ux + (R ? 0.35 : 0), uy - 1.45, 0.14, 0.14), css(C(0xd03020)));
+    }
+  }
   if (kind === "crow") { // ragged feathers sticking up off the crown and the nape
     for (let k = -2; k <= 2; k++) { const x = hx + k * 0.6 + (R ? -1 : 0), y = hy - B.ry + 0.2; line(c, [[x, y + 0.6], [x + (R ? -0.9 : k * 0.25), y - 0.9 - (k % 2 ? 0.3 : 0)]], sh(fur, 0.7), 0.3, 0.95); }
   }
@@ -816,7 +866,7 @@ function beastHead(c: C2, r: Rig, hood = false) {
     for (let k = -3; k <= 3; k++) { const x = hx + k * 0.45 + (R ? -0.8 : 0), y = hy - B.ry - 0.1 + Math.abs(k) * 0.12; line(c, [[x, y + 0.6], [x + (R ? -0.4 : k * 0.08), y - 0.5]], sh(fur, 0.6), 0.22, 0.9); }
   }
   // stitched patches: the hide is sewn together from pieces
-  if (dir !== "up" && kind !== "spider" && kind !== "camel") {
+  if (dir !== "up" && kind !== "spider" && kind !== "camel" && kind !== "lion") {
     const sx0 = R ? hx - 1.2 : qx - 1.4, sy0 = hy - 1.6;
     line(c, [[sx0, sy0], [sx0 + 1.0, sy0 + 1.1]], 0x2a1a12, 0.12, 0.7);
     for (let k = 0; k < 3; k++) { const x = sx0 + k * 0.35, y = sy0 + k * 0.38; line(c, [[x - 0.18, y + 0.15], [x + 0.18, y - 0.15]], 0xb8a888, 0.08, 0.8); }
@@ -909,6 +959,22 @@ function beastHead(c: C2, r: Rig, hood = false) {
     line(c, R ? [[hx - 0.1, hy - 0.95], [hx + 0.9, hy - 0.85]] : [[qx - 1.4, hy - 0.85], [qx - 0.5, hy - 0.85]], sh(fur, 0.55), 0.3, 0.9); // drooping lids
     if (!R) line(c, [[qx + 0.5, hy - 0.85], [qx + 1.4, hy - 0.85]], sh(fur, 0.55), 0.3, 0.9);
     for (let k = -2; k <= 2; k++) { const x = (R ? hx - 0.6 : hx) + k * 0.4, y = hy - B.ry + 0.2; line(c, [[x, y + 0.5], [x + k * 0.15 - (R ? 0.3 : 0), y - 0.6]], sh(fur, 0.7), 0.26, 0.9); }
+  } else if (kind === "lion") {
+    // a broad, short muzzle, a dark T of nose, fangs, golden eyes ringed in kohl drawn out to the temples
+    muzzle(1.3, 1.25, 1.05, 0.5);
+    const t = tip(1.3, 0.5);
+    if (R) { fillShape(c, poly([[t[0] - 0.45, t[1] - 0.6], [t[0] + 0.15, t[1] - 0.5], [t[0], t[1] - 0.05]]), css(C(B.nose))); line(c, [[hx + 1.1, t[1] + 0.65], [t[0] - 0.1, t[1] + 0.55]], 0x2a1410, 0.18); fillShape(c, poly([[t[0] - 0.6, t[1] + 0.55], [t[0] - 0.3, t[1] + 0.55], [t[0] - 0.45, t[1] + 1.15]]), css(C(0xf0e8d8))); }
+    else {
+      fillShape(c, poly([[qx - 0.6, hy + 1.1], [qx + 0.6, hy + 1.1], [qx, hy + 1.75]]), css(C(B.nose)));
+      line(c, [[qx, hy + 1.7], [qx, hy + 2.1]], 0x2a1410, 0.14); curve(c, [qx - 0.85, hy + 2.05], [qx, hy + 2.45], [qx + 0.85, hy + 2.05], 0x2a1410, 0.16);
+      for (const sg of [-1, 1]) {
+        fillShape(c, poly([[qx + sg * 0.5 - 0.13, hy + 2.15], [qx + sg * 0.5 + 0.13, hy + 2.15], [qx + sg * 0.5, hy + 2.75]]), css(C(0xf0e8d8)));
+        for (let k = 0; k < 3; k++) fillShape(c, ellipseP(qx + sg * (0.55 + k * 0.32), hy + 1.65 + (k % 2) * 0.22, 0.07, 0.07), css(C(0x6a4220)));
+      }
+    }
+    const kohl = (x: number, y: number, sg: number) => line(c, [[x - sg * 0.45, y - 0.3], [x + sg * 0.8, y - 0.3], [x + sg * 1.2, y + 0.15]], 0x1a1210, 0.2, 0.95);
+    if (R) { eye(hx + 0.7, hy - 0.3, 0.36); kohl(hx + 0.7, hy - 0.3, -1); }
+    else for (const sg of [-1, 1]) { eye(qx + sg * 1.0, hy - 0.2, 0.36); kohl(qx + sg * 1.0, hy - 0.2, sg); }
   } else if (kind === "bear") {
     muzzle(1.7, 1.4, 1.15, 0.45);
     const t = tip(1.7, 0.45);
@@ -937,7 +1003,7 @@ function head(c: C2, r: Rig) {
   const covered = hg === "greathelm" || hg === "ninjahood";
   if (L.skull) { skull(c, r); if (worn !== "none") hat(c, r, worn); if ((L.boneArmour ?? 0) >= 4) boneCrown(c, r); return; }
   if (L.beast && !L.beastHood) { // the animal head reads bigger than a man's: it is what you see of them
-    const k = L.beast === "bull" || L.beast === "bear" ? 1.38 : 1.3;
+    const k = L.beast === "bull" || L.beast === "bear" || L.beast === "lion" ? 1.4 : 1.3;
     c.save(); c.translate(r.head[0], r.head[1] + 1.4); c.scale(k, k); c.translate(-r.head[0], -r.head[1] - 1.4);
     beastHead(c, r); c.restore(); return;
   }
