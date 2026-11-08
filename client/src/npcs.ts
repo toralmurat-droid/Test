@@ -12,7 +12,7 @@ import { ANVIL_TOP, FORGE_FLUE, SMITHY_ORIGIN, TX as SMITHY_TX, smithyTextures }
 import { smokeTexture } from "./bonfireArt";
 import { NPCS, NPC_DECOR, Npc, npcNear, TALK_RANGE } from "../../shared/npcs";
 import {
-  CHAINS, chainOpen, chainState, TUT_CHAIN, npcPresent, npcQuestMark, questDef, questDialog, questObjective, questStep, Quester, questTargets, stepGoal, stepProgress,
+  CHAINS, chainOpen, chainState, TUT_CHAIN, npcPresent, npcQuestMark, questDef, questDialog, questObjective, questStep, Quester, QuestTarget, questTargets, stepGoal, stepProgress,
 } from "../../shared/quests";
 import { QuestObjects } from "./questObjects";
 import { TILE } from "../../shared/constants";
@@ -42,6 +42,12 @@ type QuestState = (Quester & { gold?: number; potions?: number; cls?: string; ba
  * Village NPCs (shared/npcs.ts): sprites by the bonfire, "!"/"?" quest markers, an "E Talk" prompt when close,
  * a dialog panel and the quest tracker. The server checks distance and owns quest progress.
  */
+/** Where the way to the other act starts, for the tracker (shared/desert.ts WAYGATE_OAKVALE / WAYGATE_DESERT). */
+const GATE_HINT: Record<1 | 2, string> = {
+  1: "Step through the waygate, just outside Oakvale's south gate",
+  2: "Step through the waygate in the Sunstone Circle, south-west of Kel Ashar",
+};
+
 export class NpcLayer {
   private sprites = new Map<string, { sprite: Phaser.GameObjects.Sprite; label: Phaser.GameObjects.Text; mark: Phaser.GameObjects.Text }>();
   private prompt = document.createElement("div");
@@ -480,39 +486,60 @@ export class NpcLayer {
     return ms > 0 ? `<div class="qt-hint2 qt-night">Only at night. The dead rise in ${Math.max(1, Math.ceil(ms / 60000))} min.</div>` : "";
   }
 
+  /** Point the arrow / ground marker at the nearest of these targets, by way of a rope, stair or waygate if it is elsewhere. */
+  private aimAt(me: Me, targets: QuestTarget[], follow: boolean): boolean {
+    let target = me && targets.length ? targets.reduce((a, b) => (Math.hypot(a.x - me.x, a.y - me.y) <= Math.hypot(b.x - me.x, b.y - me.y) ? a : b)) : undefined;
+    // On another floor of the Mawdeep (or above it): point at the rope or stair first
+    const via = target && me ? routeVia(target.x, target.y, me.x, me.y) : undefined;
+    if (via) target = { x: via.x, y: via.y, kind: "object", label: via.label };
+    // In the other act: point at this side's waygate
+    const gate = target && me && actAt(target.y) !== actAt(me.y) ? WAYGATES.find((g) => actAt(g.y) === actAt(me.y)) : undefined;
+    if (gate) target = { x: gate.x, y: gate.y, kind: "object", label: gate.label };
+    if (follow && target && me) {
+      const dx = target.x - me.x, dy = target.y - me.y, d = Math.hypot(dx, dy) - (target.r ?? 0);
+      if (d > TILE * 2) this.aim = { dx, dy, d };
+      this.goal = { x: target.x, y: target.y, r: target.r ?? 0 };
+    }
+    return !!gate;
+  }
+
+  private followBtn(follow: boolean) {
+    return `<button class="qt-follow" title="${follow ? "Stop following" : "Follow: mark it on the ground"}">${follow ? "◉" : "○"}</button>`;
+  }
+
   private trackBlock(me: Me, q: ReturnType<typeof chainState>): string {
     const def = questDef(q), step = questStep(q), obj = questObjective(q);
     if (!def || !q) return "";
     if (step && obj) {
-      const targets = questTargets(q);
       const goal = stepGoal(step), n = stepProgress(step, q.questCount);
       const bar = goal > 1 ? `<div class="qt-bar"><div style="width:${(n / goal) * 100}%"></div></div>` : "";
       // The followed quest: its nearest target gets the ground marker and the arrow
       const follow = this.followed === def.title;
-      let target = me && targets.length ? targets.reduce((a, b) => (Math.hypot(a.x - me.x, a.y - me.y) <= Math.hypot(b.x - me.x, b.y - me.y) ? a : b)) : undefined;
-      // On another floor of the Mawdeep (or above it): point at the rope or stair first
-      const via = target && me ? routeVia(target.x, target.y, me.x, me.y) : undefined;
-      if (via) target = { x: via.x, y: via.y, kind: "object", label: via.label };
-      // In the other act: point at this side's waygate
-      const gate = target && me && actAt(target.y) !== actAt(me.y) ? WAYGATES.find((g) => actAt(g.y) === actAt(me.y)) : undefined;
-      if (gate) target = { x: gate.x, y: gate.y, kind: "object", label: gate.label };
-      if (follow && target && me) {
-        const dx = target.x - me.x, dy = target.y - me.y, d = Math.hypot(dx, dy) - (target.r ?? 0);
-        if (d > TILE * 2) this.aim = { dx, dy, d };
-        this.goal = { x: target.x, y: target.y, r: target.r ?? 0 };
-      }
+      const viaGate = this.aimAt(me, questTargets(q), follow);
       const started = q.questStage > 0;
+      const gateLine = viaGate ? `<div class="qt-where">${GATE_HINT[actAt(me!.y)]}</div>` : "";
       // the card: header (title, follow button), then just the objective and its progress bar
       return `<div class="qt-block${this.isFolded(def.title, started) ? " folded" : ""}${follow ? " following" : ""}" data-key="${def.title}" data-started="${started ? 1 : 0}">` +
-        `<div class="qt-head"><span class="qt-title">${def.title}</span>` +
-        `<button class="qt-follow" title="${follow ? "Stop following" : "Follow: mark it on the ground"}">${follow ? "◉" : "○"}</button></div>` +
-        `<div class="qt-body"><div class="qt-obj">${obj}</div>${bar}${this.nightLine(step)}</div></div>`;
+        `<div class="qt-head"><span class="qt-title">${def.title}</span>${this.followBtn(follow)}</div>` +
+        `<div class="qt-body"><div class="qt-obj">${obj}</div>${bar}${gateLine}${this.nightLine(step)}</div></div>`;
     }
-    // Between quests: point to whoever has the next one (the blob chain's very first quest has its own "!" intro)
+    // Between quests: point to whoever has the next one and say where they stand (Murat 2026-11-08: "where is Rakhim?"),
+    // with a follow button that leads there, through the waygate if they are in the other act
+    // (the blob chain's very first quest has its own "!" intro)
     if (q.questStage === 0 && (q.level ?? 1) >= def.minLevel && (q.questId > 0 || (q.chain ?? 0) > 0)) {
       const giver = NPCS.find((n) => n.id === def.giver);
-      return `<div class="qt-block${this.isFolded("New quest available", false) ? " folded" : ""}" data-key="New quest available" data-started="0">` +
-        `<div class="qt-head"><span class="qt-title">New quest available</span></div><div class="qt-body"><div class="qt-obj">Talk to ${giver?.name ?? ""} <b class="bang">!</b></div></div></div>`;
+      const key = `new:${def.title}`, follow = this.followed === key;
+      const viaGate = this.aimAt(me, questTargets(q), follow);
+      const where = giver?.where ? `<div class="qt-where">${giver.where}</div>` : "";
+      // In the other act (the step into Act 2): the waygate comes first, then the giver beyond it
+      const talk = `${giver?.name ?? ""} <b class="bang">!</b>`;
+      const body = viaGate
+        ? `<div class="qt-obj">${GATE_HINT[actAt(me!.y)]}</div><div class="qt-where">Then talk to ${talk}, ${giver?.where ?? ""}</div>`
+        : `<div class="qt-obj">Talk to ${talk}</div>${where}`;
+      const title = viaGate && actAt(me!.y) === 1 ? "The waygate is awake" : "New quest available";
+      return `<div class="qt-block${this.isFolded(key, false) ? " folded" : ""}${follow ? " following" : ""}" data-key="${key}" data-started="0">` +
+        `<div class="qt-head"><span class="qt-title">${title}</span>${this.followBtn(follow)}</div>` +
+        `<div class="qt-body">${body}</div></div>`;
     }
     return "";
   }

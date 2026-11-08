@@ -1,0 +1,9 @@
+{
+  "date": "2026-11-08",
+  "title": "Find your quest givers",
+  "changes": [
+    "When a new quest is waiting, the tracker now says where its giver stands and its follow button leads you there.",
+    "The waygate to Act 2 is now on the map, just outside Oakvale's south gate. Once it wakes, the tracker sends you through it to Captain Rakhim in Kel Ashar.",
+    "The quest log tells you where each quest giver is, and which bosses you still need to beat to open the desert."
+  ]
+}

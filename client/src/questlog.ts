@@ -1,6 +1,7 @@
 import { npcById } from "../../shared/npcs";
+import { act2Missing } from "../../shared/act2";
 import { icon as pxIcon } from "./pixelicons";
-import { CHAINS, chainOpen, chainState, QuestDef, questObjective, Quester, QuestState as QState, stepGoal, stepProgress } from "../../shared/quests";
+import { CHAINS, chainOpen, chainState, SUN_CHAIN, tutorialDone, QuestDef, questObjective, Quester, QuestState as QState, stepGoal, stepProgress } from "../../shared/quests";
 
 type QuestState = Quester | undefined;
 
@@ -68,7 +69,12 @@ export class QuestLog {
       for (let i = qid - 1; i >= 0; i--) finished.push({ key: `${c}:${i}`, d: ch.quests[i], q, done: true });
       const next = ch.quests[qid];
       if (next && q.questStage === 0 && chainOpen(p, c) && (qid > 0 || c > 0 || (q.level ?? 1) >= next.minLevel)) {
-        hints.push((q.level ?? 1) >= next.minLevel ? `<b class="bang">!</b> ${npcById(next.giver)?.name} has a new quest for you.` : `${ch.name}: next quest at level ${next.minLevel}.`);
+        const g = npcById(next.giver), where = g?.where ? ` (${g.where})` : "";
+        hints.push((q.level ?? 1) >= next.minLevel ? `<b class="bang">!</b> ${g?.name} has a new quest for you${where}.` : `${ch.name}: next quest at level ${next.minLevel}${where ? `, from ${g?.name}${where}` : ""}.`);
+      } else if (c === SUN_CHAIN && qid === 0 && q.questStage === 0 && !chainOpen(p, c) && tutorialDone(p)) {
+        // The desert story is still locked: say how to get there (Murat 2026-11-08: "where is Rakhim?")
+        const g = npcById(next!.giver);
+        hints.push(`${ch.name} (Act 2): defeat ${act2Missing(p).join(" and ")} to wake the waygate south of Oakvale. ${g?.name} waits on the other side (${g?.where}).`);
       }
     });
     let body: string;

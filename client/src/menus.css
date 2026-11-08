@@ -167,7 +167,7 @@ body #questtracker { background: rgba(15, 10, 6, .82); border-left: 3px solid #a
   text-shadow: 2px 2px #050302; color: #eadfc8; }
 body #questtracker .qt-title { color: #e3bf6a; font-weight: normal; }
 body #questtracker .qt-obj { color: #eadfc8; }
-body #questtracker .qt-dir, body #questtracker .qt-hint { color: #a8977a; }
+body #questtracker .qt-dir, body #questtracker .qt-hint, body #questtracker .qt-where { color: #a8977a; }
 body #questtracker .qt-hint2 { color: #d8ccb4; border-top-color: #45331e; }
 body #questtracker .qt-block + .qt-block { border-top-color: #45331e; }
 body #questtracker .qt-bar { background: #0f0a06; border-radius: 0; box-shadow: 0 0 0 1px #45331e; }

@@ -4,6 +4,7 @@ import type { Quester } from "../../shared/quests";
 import { hiResTexture } from "./smooth";
 import { col, Iso, rng, type Pt } from "./smoothProps";
 import { isoAnchor } from "./iso";
+import type { MapMarker } from "./minimap";
 
 /**
  * Act 2's waygates (shared/act2.ts): an old sandstone arch south of Oakvale and its twin in the desert's Sunstone
@@ -84,6 +85,12 @@ export class WaygateLayer {
       isoAnchor(glow, { x: g.x, y: g.y });
       this.gates.push({ g, img, glow });
     }
+  }
+
+  /** Map markers for the gates (Murat 2026-11-08: "where is the portal to Act 2?"): gold once awake, grey while asleep. */
+  markers(): MapMarker[] {
+    return WAYGATES.map((g) => ({ x: g.x, y: g.y, glyph: "◆", color: this.awake ? "#ffb347" : "#8a7a66",
+      label: g.id === "oakvale" ? (this.awake ? "Waygate to the Sunscar (Act 2)" : "Old waygate (asleep)") : "Waygate home to Oakvale" }));
   }
 
   /** Call every frame with the local hero's quest fields: wakes the gates once Act 2 is open for them. */

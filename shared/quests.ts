@@ -906,7 +906,7 @@ export const CROWN_QUESTS: QuestDef[] = [
       ], "Claim reward"),
     ],
     reward: { xp: 6000, gold: 1500, potions: 6 },
-    after: "The valley is free, thanks to you. Whatever lies beyond it, there is always a seat for you at this fire.",
+    after: "The valley is free, thanks to you. And the old stone arch outside our south gate has started to hum. Once the Hide-Mother of the Mawdeep is gone too, they say it will open. There is always a seat for you at this fire.",
   },
 ];
 
@@ -1015,7 +1015,7 @@ export const BEAST_QUESTS: QuestDef[] = [
       ], "Claim reward"),
     ],
     reward: { xp: 4200, gold: 900, potions: 5 },
-    after: "The trappers have taken to wearing bells. Can't say I blame them.",
+    after: "The trappers have taken to wearing bells. And the old stone arch outside Oakvale's south gate hums at night now. Once the Hollow King is gone too, they say it will open.",
   },
 ];
 

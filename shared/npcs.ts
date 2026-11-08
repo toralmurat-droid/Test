@@ -12,28 +12,30 @@ export interface Npc {
   dir: "down" | "up" | "left" | "right";
   /** Shop id in shared/shops.ts, if this NPC trades */
   shop?: string;
+  /** Where to find them, in words, for the quest tracker and log (quest givers) */
+  where?: string;
 }
 
 export const NPCS: Npc[] = [
   // Elder Rowan tends the bonfire in the middle of the market square
-  { id: "druid", name: "Elder Rowan", title: "Druid", sprite: "druid", x: (ROADS.RX + 3) * TILE, y: (ROADS.RY + 1.7) * TILE, dir: "left" },
+  { id: "druid", name: "Elder Rowan", title: "Druid", sprite: "druid", x: (ROADS.RX + 3) * TILE, y: (ROADS.RY + 1.7) * TILE, dir: "left", where: "Oakvale, at the bonfire on the square" },
   // Traders around the market square
-  { id: "weaponsmith", name: "Brann", title: "Weapons merchant", sprite: "blacksmith", x: 71.6 * TILE, y: 57.5 * TILE, dir: "right", shop: "weaponsmith" },
-  { id: "witch", name: "Morwen", title: "Potion witch", sprite: "witch", x: 71.95 * TILE, y: 63.95 * TILE, dir: "right", shop: "witch" },
+  { id: "weaponsmith", name: "Brann", title: "Weapons merchant", sprite: "blacksmith", x: 71.6 * TILE, y: 57.5 * TILE, dir: "right", where: "Oakvale, at the smithy on the square", shop: "weaponsmith" },
+  { id: "witch", name: "Morwen", title: "Potion witch", sprite: "witch", x: 71.95 * TILE, y: 63.95 * TILE, dir: "right", where: "Oakvale, at her tent by the square", shop: "witch" },
   // Hilda the armourer, behind the market stall on the square's east side: armour for the first half of Act 1
   { id: "armourer", name: "Hilda", title: "Armour merchant", sprite: "armourer", x: 84.9 * TILE, y: 57.5 * TILE, dir: "down", shop: "armourer" },
   // Tobin the fisherman: only home once you free him from the blob cocoon at Sunken Lake (shared/quests.ts npcPresent)
   { id: "fisher", name: "Tobin", title: "Fisherman", sprite: "villager", x: 85.5 * TILE, y: 61.4 * TILE, dir: "left" },
   // Captain Hale of the watch, just inside the east gate: gives the skeleton quest chain (shared/quests.ts BONE_QUESTS)
-  { id: "captain", name: "Captain Hale", title: "Captain of the Watch", sprite: "guard", x: 89.7 * TILE, y: 57.6 * TILE, dir: "down" },
+  { id: "captain", name: "Captain Hale", title: "Captain of the Watch", sprite: "guard", x: 89.7 * TILE, y: 57.6 * TILE, dir: "down", where: "Oakvale, inside the east gate" },
   // Old Garrick, the eldest fisherman of Saltmere, warming himself at the beach fire: gives the Redfang chain (shared/quests.ts RED_QUESTS)
-  { id: "oldfisher", name: "Old Garrick", title: "Old fisherman", sprite: "elder", x: 130.7 * TILE, y: 189.6 * TILE, dir: "left" },
+  { id: "oldfisher", name: "Old Garrick", title: "Old fisherman", sprite: "elder", x: 130.7 * TILE, y: 189.6 * TILE, dir: "left", where: "Saltmere, at the beach fire" },
   // Dorran, Saltmere's armourer, by the well among the net racks: armour for Lv 17-29
   { id: "saltarmourer", name: "Dorran", title: "Armour merchant", sprite: "saltarmourer", x: 141.5 * TILE, y: 183.7 * TILE, dir: "down", shop: "saltarmourer" },
   // ---- Kel Ashar, the oasis town of the Sunscar (Act 2, shared/desert.ts): round its market and spring
   // Sefa keeps the town's spring and remembers the old stories; Captain Rakhim holds the south gate (shared/quests.ts SUN_QUESTS)
-  { id: "wellkeeper", name: "Sefa", title: "Well-Keeper", sprite: "wellkeeper", x: 145.3 * TILE, y: D(110.5) * TILE, dir: "right" },
-  { id: "sandcaptain", name: "Captain Rakhim", title: "Captain of the Sand Watch", sprite: "sandcaptain", x: 149.6 * TILE, y: D(120.8) * TILE, dir: "down" },
+  { id: "wellkeeper", name: "Sefa", title: "Well-Keeper", sprite: "wellkeeper", x: 145.3 * TILE, y: D(110.5) * TILE, dir: "right", where: "Kel Ashar (Act 2 desert), at the spring in the market" },
+  { id: "sandcaptain", name: "Captain Rakhim", title: "Captain of the Sand Watch", sprite: "sandcaptain", x: 149.6 * TILE, y: D(120.8) * TILE, dir: "down", where: "Kel Ashar (Act 2 desert), inside the south gate" },
   { id: "spicetrader", name: "Zahra", title: "Spice and potion trader", sprite: "spicetrader", x: 142.5 * TILE, y: D(106.8) * TILE, dir: "down", shop: "spicetrader" },
   { id: "sandarmourer", name: "Idris", title: "Armour merchant", sprite: "sandarmourer", x: 152.4 * TILE, y: D(112.6) * TILE, dir: "down", shop: "sandarmourer" },
   { id: "desertsmith", name: "Oren", title: "Bladesmith", sprite: "desertsmith", x: 155.5 * TILE, y: D(106.6) * TILE, dir: "down", shop: "desertsmith" },
