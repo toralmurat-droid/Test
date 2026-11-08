@@ -89,8 +89,8 @@ export class WaygateLayer {
 
   /** Map markers for the gates (Murat 2026-11-08: "where is the portal to Act 2?"): gold once awake, grey while asleep. */
   markers(): MapMarker[] {
-    return WAYGATES.map((g) => ({ x: g.x, y: g.y, glyph: "◆", color: this.awake ? "#ffb347" : "#8a7a66",
-      label: g.id === "oakvale" ? (this.awake ? "Waygate to the Sunscar (Act 2)" : "Old waygate (asleep)") : "Waygate home to Oakvale" }));
+    return WAYGATES.map((g) => ({ x: g.x, y: g.y, glyph: "", gate: this.awake ? "awake" as const : "asleep" as const, color: this.awake ? "#ffb347" : "#9a8a74",
+      label: g.id === "oakvale" ? (this.awake ? "Waygate to Act 2" : "Waygate (asleep)") : "Waygate to Oakvale" }));
   }
 
   /** Call every frame with the local hero's quest fields: wakes the gates once Act 2 is open for them. */

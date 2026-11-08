@@ -543,7 +543,7 @@ export class NpcLayer {
       // In the other act (the step into Act 2): the waygate comes first, then the giver beyond it
       const talk = `${giver?.name ?? ""} <b class="bang">!</b>`;
       const body = viaGate
-        ? `<div class="qt-obj">${GATE_HINT[actAt(me!.y)]}</div><div class="qt-where">Then talk to ${talk}, ${giver?.where ?? ""}</div>`
+        ? `<div class="qt-obj">${GATE_HINT[actAt(me!.y)]}</div><div class="qt-where">Then talk to ${giver?.name ?? ""}: ${giver?.where ?? ""}</div>`
         : `<div class="qt-obj">Talk to ${talk}</div>${where}`;
       const title = viaGate && actAt(me!.y) === 1 ? "The waygate is awake" : "New quest available";
       return `<div class="qt-block${this.isFolded(key, false) ? " folded" : ""}${follow ? " following" : ""}" data-key="${key}" data-started="0">` +
