@@ -1069,7 +1069,7 @@ export const SUN_QUESTS: QuestDef[] = [
         "It sinks a finger a day. And it started the night your gate woke.",
       ], "Claim reward"),
     ],
-    reward: { xp: 2000, gold: 400, potions: 3 },
+    reward: { xp: 8000, gold: 400, potions: 3 },
     after: "Drink while you can, stranger. Nobody knows how long the spring will last.",
   },
   {
@@ -1094,7 +1094,7 @@ export const SUN_QUESTS: QuestDef[] = [
         "Every child in Kel Ashar knows the rhyme. 'The veiled ones lit a second sun, and Kharsun drank it, every one.' We sing it skipping rope. I never thought it was true.",
       ], "Claim reward"),
     ],
-    reward: { xp: 2400, gold: 450, potions: 3 },
+    reward: { xp: 9600, gold: 450, potions: 3 },
     after: "The water at Palmshade has stopped sinking. Ours hasn't. There must be more of those sigils.",
   },
   {
@@ -1117,7 +1117,7 @@ export const SUN_QUESTS: QuestDef[] = [
         "The Sunwright. All right, stranger. I believe in rhymes now. I don't like it.",
       ], "Claim reward"),
     ],
-    reward: { xp: 2700, gold: 500, potions: 3 },
+    reward: { xp: 10800, gold: 500, potions: 3 },
     after: "The Sunwright. Whoever that is, they write a fine hand for a demon.",
   },
   {
@@ -1141,7 +1141,7 @@ export const SUN_QUESTS: QuestDef[] = [
         "They are doing it again. Our oases are the river this time.",
       ], "Claim reward"),
     ],
-    reward: { xp: 3000, gold: 560, potions: 4 },
+    reward: { xp: 12000, gold: 560, potions: 4 },
     after: "I've stopped singing the rhyme. The children haven't. I can't bear to tell them.",
   },
   {
@@ -1164,7 +1164,7 @@ export const SUN_QUESTS: QuestDef[] = [
         "East. Everything goes east. The Wells, and then the Thornspire.",
       ], "Claim reward"),
     ],
-    reward: { xp: 3300, gold: 620, potions: 4 },
+    reward: { xp: 13200, gold: 620, potions: 4 },
     after: "The clan elders came at dawn. They sat by the spring with Sefa all morning and didn't say a word. Then they left east, armed.",
   },
   {
@@ -1189,7 +1189,7 @@ export const SUN_QUESTS: QuestDef[] = [
         "Go to Rakhim. He's been staring at that mountain since dawn.",
       ], "Claim reward"),
     ],
-    reward: { xp: 3600, gold: 700, potions: 4 },
+    reward: { xp: 14400, gold: 700, potions: 4 },
     after: "Listen. The spring is singing again. It does that, when it's full.",
   },
   {
@@ -1214,7 +1214,7 @@ export const SUN_QUESTS: QuestDef[] = [
         "The Sunwright is up there, stranger, at the Furnace. When you're ready, and only then, go and end this.",
       ], "Claim reward"),
     ],
-    reward: { xp: 4200, gold: 900, potions: 5 },
+    reward: { xp: 16800, gold: 900, potions: 5 },
     after: "Rest first. Whatever waits at the Furnace has waited a thousand years. It can wait for you to eat.",
   },
   {
@@ -1242,7 +1242,7 @@ export const SUN_QUESTS: QuestDef[] = [
         "Ishael... no. Let me say it to her myself, at the water, where she learned to read. Thank you, stranger. Kel Ashar is yours, as long as it stands.",
       ], "Claim reward"),
     ],
-    reward: { xp: 9000, gold: 2000, potions: 8 },
+    reward: { xp: 36000, gold: 2000, potions: 8 },
     after: "Come and drink whenever you like. The spring remembers who saved it.",
   },
 ];

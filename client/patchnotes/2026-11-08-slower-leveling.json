@@ -1,0 +1,9 @@
+{
+  "date": "2026-11-08",
+  "title": "Leveling slows down as you grow",
+  "changes": [
+    "Each level now needs more XP than the last, so the early levels go fast and the climb gets harder the higher you are.",
+    "In the desert (Lv 30-50) levels take longer still, and the Sunscar quests give four times more XP to match.",
+    "Your heroes keep their level and how far they were towards the next one."
+  ]
+}

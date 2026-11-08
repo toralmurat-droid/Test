@@ -174,9 +174,35 @@ export const DODGE = { distance: 48, durationMs: 250, invulnMs: 300, cooldownMs:
 export const MAX_LEVEL = 50;
 export const PVP_KILL_XP = 20;
 
+/**
+ * XP from `level` to the next (Murat 2026-11-08: leveling slows down as you go). Each level costs ~4.5% more than a straight
+ * line, so on-level kills per level climb from ~3 at Lv 2 to ~26 at Lv 29; Act 2 (Lv 30+, where monsters give about twice
+ * the XP) costs another x1.35, climbing from ~19 kills at Lv 30 to ~46 at Lv 49. Was a flat 80 x level.
+ */
+export function xpStep(level: number): number {
+  return Math.round((80 * level * Math.pow(1.045, level - 1) * (level >= 30 ? 1.35 : 1)) / 10) * 10;
+}
+
+const XP_TABLE: number[] = [0, 0];
+for (let l = 2; l <= MAX_LEVEL; l++) XP_TABLE[l] = XP_TABLE[l - 1] + xpStep(l - 1);
+
 /** Total XP needed to reach `level` (level 1 = 0 XP). */
 export function xpForLevel(level: number): number {
-  return 40 * (level - 1) * level;
+  const l = Math.max(1, Math.min(MAX_LEVEL, Math.floor(level)));
+  return XP_TABLE[l] + (level > MAX_LEVEL ? xpStep(MAX_LEVEL) * (Math.floor(level) - MAX_LEVEL) : 0);
+}
+
+/** The XP curve before 2026-11-08 (80 x level per level): saves without `xpv` are converted from it. */
+export const XP_CURVE_VERSION = 2;
+export const oldXpForLevel = (level: number) => 40 * (level - 1) * level;
+
+/** Carry a hero's XP from the old curve to this one: same level, same share of the way to the next. */
+export function convertOldXp(xp: number, level: number): number {
+  const L = capLevel(level);
+  if (L >= MAX_LEVEL) return xpForLevel(MAX_LEVEL);
+  const lo = oldXpForLevel(L), hi = oldXpForLevel(L + 1);
+  const frac = Math.min(0.99, Math.max(0, (xp - lo) / (hi - lo)));
+  return xpForLevel(L) + Math.floor(frac * (xpForLevel(L + 1) - xpForLevel(L)));
 }
 
 /** XP stops growing at max level. */
