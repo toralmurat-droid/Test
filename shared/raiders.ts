@@ -2,6 +2,7 @@
 // weapon. They come out of the night, ride across the land looking for what they lost, cut down every living thing in
 // their way (never the dead: they are half dead themselves), and are gone again in a cloud of dust.
 import type { MobKind } from "./constants";
+import { MAX_LEVEL } from "./classes";
 
 export type RaiderWeapon = "greatsword" | "scythe" | "greataxe" | "flail" | "lance" | "maul" | "glaive";
 
@@ -83,13 +84,13 @@ export const raiderIgnores = (kind: MobKind) => RAIDER_SPARES.includes(kind) || 
 
 /**
  * When and how they ride. They only ride at night (shared/daynight.ts isUndeadNight), near a hero in the act's
- * overworld. Act 1: rare, one at a time. Act 2: more often, up to two at once. Each one is always the act's top
- * level (Act 1 caps at 30, Act 2 at 50). Every `rollMs` of the night each free slot gets `chance` to fill.
+ * overworld. Act 1: rare, one at a time. Act 2: more often, up to two at once. Always the game's top level
+ * (MAX_LEVEL) in both acts (Murat 2026-11-08), and close to unbeatable for one hero alone: a group is needed. Every `rollMs` of the night each free slot gets `chance` to fill.
  */
 export const NIGHT_RAID = {
   acts: {
-    1: { level: 30, max: 1, chance: 0.07, restMs: 9 * 60_000 },
-    2: { level: 50, max: 2, chance: 0.16, restMs: 4 * 60_000 },
+    1: { level: MAX_LEVEL, max: 1, chance: 0.07, restMs: 9 * 60_000 },
+    2: { level: MAX_LEVEL, max: 2, chance: 0.16, restMs: 4 * 60_000 },
   } as Record<1 | 2, { level: number; max: number; chance: number; restMs: number }>,
   rollMs: 60_000,
   /** How long one rides before it fades away (it also goes at dawn) */
@@ -103,7 +104,7 @@ export const NIGHT_RAID = {
   /** Sees prey this far (px) and gives up a chase this far from where it began */
   sight: 170, chase: 420,
   /** Ride-down: from this far it spurs the horse and charges, hitting hard on arrival */
-  charge: { min: 50, max: 140, ms: 700, speed: 2.1, mult: 1.6, cooldownMs: 6000 },
+  charge: { min: 50, max: 160, ms: 800, speed: 2.1, mult: 1.6, cooldownMs: 3500 },
   /** Its massive weapon sweeps: everyone this close to the one it hits takes `mult` of the blow */
   cleave: { r: 30, mult: 0.6 },
 };

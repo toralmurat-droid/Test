@@ -2666,6 +2666,7 @@ export class TownRoom extends Room<TownState> {
       return;
     }
     if (m.flyUntil) return this.ambushFlight(m, id, now);
+    if (m.kind === "nightraider") { m.stunUntil = 0; m.slowUntil = 0; } // no stun, root or slow holds a Night Raider (NIGHT_RAID)
     m.stunned = now < m.stunUntil;
     if (m.stunned || m.broken) { m.winding = false; m.windUntil = 0; }
     m.slowed = now < m.slowUntil;
