@@ -1,5 +1,6 @@
 {
   "date": "2026-11-08",
+  "patch": 180,
   "title": "Vampire tuned for level 50",
   "changes": [
     "Vampire skills that take 5 ranks now open ranks 4 and 5 at level 30 and level 40, so the tree keeps growing in the desert. Crimson Tide and Nightfall now go to rank 5.",
