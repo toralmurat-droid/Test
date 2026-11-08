@@ -7,7 +7,7 @@ import { leaving, noteBuild, reconnectSoon, returnToStart, takeCarried, upgradeA
 import { Client, getStateCallbacks, Room } from "colyseus.js";
 /** Beast-folk that lurk in the Mawdeep's ambush rooms (their eyes show through the dark). */
 const LURKERS = new Set<string>(["gnawkin", "tuskborn", "silkwretch", "duskwing", "crowseer"]);
-import { BOSS, ELITE, InputState, MERGE, MOBS, type MobKind, MAP_H, MAP_W, regenFromStamina, TICK_RATE, TILE } from "../../shared/constants";
+import { BOSS, ELITE, InputState, MERGE, MOBS, type MobKind, URSK, MAP_H, MAP_W, regenFromStamina, TICK_RATE, TILE } from "../../shared/constants";
 import { CLASSES, ClassKind, MAX_LEVEL, xpForLevel } from "../../shared/classes";
 import { canPay, shortOf, MANA, manaRegen, maxManaFor, skillCost, unpackMana } from "../../shared/mana";
 import { nextSize, potionAmount, PotionKind, potionName, POTION_SIZES, total, unpackPotions } from "../../shared/potions";
@@ -851,6 +851,40 @@ export class TownScene extends Phaser.Scene {
       scene: this, fx: this.fx, ent: (id) => this.entities.get(id),
       say: (x, y, text, color) => this.floatText(x, y, text, color, PIXEL_FONT),
       squash: (id, kx, ky, ms) => { const e = this.entities.get(id); if (e) this.squash(e, kx, ky, ms / 2); },
+    });
+    // A boss speaks (Grandam Ursk talks through her fight): a speech bubble over her, above the Mawdeep's dark, and a chat line
+    this.room.onMessage("bosssay", ({ id, text }) => {
+      const e = this.entities.get(id);
+      if (!e) return;
+      const log = document.getElementById("chatlog");
+      if (log) {
+        const el = document.createElement("div");
+        el.className = "bosssay";
+        el.textContent = `${(e.state?.title || MOBS[e.state?.kind as MobKind]?.name || "?").split(",")[0]}: ${text}`;
+        log.appendChild(el);
+        while (log.children.length > 8) log.firstChild!.remove();
+      }
+      e.bubble?.destroy();
+      const b = speechBubble(this, e.sprite.x, e.sprite.y - e.top - 12, text).setDepth(27700);
+      e.bubble = b;
+      isoAnchor(b, e.sprite);
+      this.time.delayedCall(3800, () => { if (e.bubble === b) { b.destroy(); e.bubble = undefined; } });
+    });
+    // Grandam Ursk changes: the Rite (her brood and needle), then the Bear (she tears off the last of the woman and grows)
+    this.room.onMessage("ursk", ({ id, phase }) => {
+      const e = this.entities.get(id);
+      if (!e) return;
+      if (phase === 3) {
+        const b = this.bodyScale(e) * URSK.bearScale;
+        e.base = b; e.top *= URSK.bearScale;
+        this.tweens.killTweensOf(e.sprite);
+        this.tweens.add({ targets: e.sprite, scaleX: b, scaleY: b, duration: 700, ease: "Back.Out" });
+        e.sprite.setTint(0xffd0c0);
+        this.burst(e.sprite.x, e.sprite.y - 20, 14, 0x6e2a22, 520);
+        this.floatText(e.sprite.x, e.sprite.y - e.top - 18, "THE BEAR!", "#ff6a5a", PIXEL_FONT);
+      } else {
+        this.floatText(e.sprite.x, e.sprite.y - e.top - 18, "THE RITE!", "#e8c890", PIXEL_FONT);
+      }
     });
     this.room.onMessage("mbwind", ({ id, kind, ms }) => {
       const e = this.entities.get(id);

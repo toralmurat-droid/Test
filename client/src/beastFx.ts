@@ -29,6 +29,7 @@ const CALL: Record<string, [string, string]> = {
   gore: ["GORE!", "#ffb07a"], stampede: ["STAMPEDE!", "#ff8a5c"], web: ["", ""], screech: ["SCREECH!", "#d8b8ff"], swoop: ["", ""],
   pounce: ["POUNCE!", "#ffc27a"], howl: ["AWOOOO!", "#e8d8b0"], stomp: ["STOMP!", "#ffb07a"], maul: ["MAUL!", "#ff7a6a"],
   roar: ["ROAR!", "#ffcf8a"], brood: ["COME, MY CHILDREN!", "#e8c890"], rockfall: ["THE ROOF! IT FALLS!", "#ffd27a"],
+  hook: ["NEEDLE AND GUT!", "#e8c890"], gather: ["", ""],
 };
 
 /** A flat ground painting that redraws itself every 30 ms for `ms` (f = 0..1 progress), then goes. */
@@ -60,7 +61,7 @@ export function bindBeastFx(room: Room, h: BeastFxHost) {
   };
 
   // Wind-ups: the beast gathers itself, the ground shows where the move lands
-  room.onMessage("bwind", ({ id, kind, ms, x, y, x2, y2, w, tx, ty, r, ax, ay, reach, half, pts }) => {
+  room.onMessage("bwind", ({ id, kind, ms, x, y, x2, y2, w, tx, ty, r, ax, ay, reach, half, pts, hero }) => {
     const e = h.ent(id), [label, col] = CALL[kind] ?? ["", ""];
     if (e && label) h.say(e.sprite.x, e.sprite.y - e.top - 6, label, col);
     const cx = () => e?.sprite.x ?? x, cy = () => e?.sprite.y ?? y;
@@ -108,6 +109,19 @@ export function bindBeastFx(room: Room, h: BeastFxHost) {
         // grit trickling down from the roof before the stones come
         for (let i = 0; i < 6; i++) scene.time.delayedCall(i * ms / 6, () => fx.p(px + rnd(-r * 0.6, r * 0.6), py + rnd(-r * 0.4, r * 0.4), rnd(70, 110), pick(DUST), { vz: -rnd(60, 90), g: 200, life: 500, size: 1, size1: 1, add: false }));
       }
+    } else if (kind === "hook") {
+      // she whirls the hooked gut line: a taut thread to the hero it will bite, and a mark under them
+      if (e) h.squash(id, 1.1, 0.92, ms);
+      const tgt = () => { const he = hero ? h.ent(hero) : undefined; return he ? [he.sprite.x, he.sprite.y] : [tx, ty]; };
+      mark(scene, ms, (g, f) => {
+        const [hx, hy] = tgt();
+        g.lineStyle(1, 0xc8b890, 0.25 + 0.5 * f).lineBetween(cx(), cy() - 22, hx, hy - 10);
+        g.fillStyle(0x3a100c, 0.2 + 0.2 * f).fillEllipse(hx, hy, 22, 12).lineStyle(1.5, 0xe8c890, 0.8).strokeEllipse(hx, hy, 22 * (1.4 - 0.4 * f), 12 * (1.4 - 0.4 * f));
+      });
+    } else if (kind === "gather") {
+      // she spreads her arms: a ring of reach, and the brood in it start to shudder toward her
+      if (e) h.squash(id, 1.14, 1.06, ms);
+      mark(scene, ms, (g, f) => { g.lineStyle(1.5, 0xe8a890, 0.35 + 0.4 * f).strokeEllipse(cx(), cy(), r * 2, r * 1.4); g.fillStyle(0x3a100c, 0.12 * f).fillEllipse(cx(), cy(), r * 2, r * 1.4); });
     } else if (kind === "brood") {
       if (e) h.squash(id, 1.08, 1.14, ms);
       for (let i = 0; i < 5; i++) scene.time.delayedCall(i * ms / 5, () => { const a = Math.random() * Math.PI * 2; dust(cx() + Math.cos(a) * 50, cy() + Math.sin(a) * 36, 4, 18, 14); });
@@ -149,8 +163,29 @@ export function bindBeastFx(room: Room, h: BeastFxHost) {
   });
 
   // Landings
-  room.onMessage("bhit", ({ id, kind, x, y, r, ax, ay, reach, half, pts, heal }) => {
+  room.onMessage("bhit", ({ id, kind, x, y, r, ax, ay, reach, half, pts, heal, tx, ty }) => {
     const e = h.ent(id);
+    if (kind === "hook") {
+      // the line snaps taut, the hook bites (blood), then it reels back in
+      const g = scene.add.graphics().setDepth(9500), t0 = scene.time.now;
+      const ev = scene.time.addEvent({ delay: 16, loop: true, callback: () => {
+        const f = Math.min(1, (scene.time.now - t0) / 380), bx = e?.sprite.x ?? x, by = (e?.sprite.y ?? y) - 22;
+        const ex = tx + (bx - tx) * f, ey = ty - 10 + (by - ty + 10) * f;
+        g.clear().lineStyle(1.5, 0xc8b890, 1 - f * 0.5).lineBetween(bx, by, ex, ey).fillStyle(0xd8d0c0).fillRect(ex - 1, ey - 1, 3, 3);
+      } });
+      scene.time.delayedCall(400, () => { ev.remove(); g.destroy(); });
+      for (let i = 0; i < 10; i++) fx.p(tx + rnd(-4, 4), ty - 10 + rnd(-4, 4), 8, pick(PALETTE.blood), { vx: rnd(-30, 30), vy: rnd(-12, 12), vz: rnd(10, 30), g: 120, life: 420, size: 1, size1: 0, add: false });
+      return;
+    }
+    if (kind === "gather") {
+      // each child is drawn back into her: a red thread, blood motes flowing home, and she mends
+      for (const [px, py] of (pts ?? []) as [number, number][]) {
+        dust(px, py, 8, 20, 16);
+        for (let i = 0; i < 10; i++) scene.time.delayedCall(i * 40, () => fx.p(px + (x - px) * i / 10, py + (y - py) * i / 10, 14, pick(PALETTE.blood), { vz: rnd(4, 14), life: 420, size: 2, size1: 0 }));
+      }
+      if (e && heal) h.say(e.sprite.x, e.sprite.y - e.top - 4, `+${heal}`, "#ff6a6a");
+      return;
+    }
     if (kind === "gore" || kind === "stampede") { dust(x, y, kind === "stampede" ? 16 : 10, 40, 24); return; }
     if (kind === "pounce" || kind === "stomp") {
       fx.ring(x, y, r, "earth", 20, { up: 8, life: 420, size: 2 });

@@ -999,7 +999,7 @@ export const BEAST_QUESTS: QuestDef[] = [
       { type: "use", zone: DENF.name, objects: HIDE_TOTEMS, chest: false, text: "Burn the three hide totems", banner: ["The Hide-Mother's Bed", "Burn the three hide totems"],
         obj: "Hide totems burned: {n} / {goal}", nag: "{n} of {goal}. They stand round her bed." },
       { type: "kill", kinds: ["hidemother"], zone: DENF.name, goal: 1, own: true,
-        summon: { parts: ["hidemother"], level: 28, title: "Grandam Ursk, the Hide-Mother", hpMult: 1.6, x: (DEN.x + 0.5) * TILE, y: (DEN.y - 1.5) * TILE },
+        summon: { parts: ["hidemother"], level: 30, title: "Grandam Ursk, the Hide-Mother", hpMult: 2, x: (DEN.x + 0.5) * TILE, y: (DEN.y - 1.5) * TILE },
         text: "Defeat the Hide-Mother", banner: ["THE HIDE-MOTHER WAKES", "Defeat Grandam Ursk"], obj: "The Hide-Mother defeated: {n} / {goal}",
         nag: "She is awake. End her!" },
       back("captain", "Captain Hale", "east gate", [
