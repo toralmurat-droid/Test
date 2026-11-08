@@ -1,4 +1,4 @@
-import { dith as dith1, hash, OUT, stoneCol, vnoise, type Px } from "./shrineArt";
+import { dith as dith1, hash, OUT, stoneCol as greyStone, vnoise, type Px } from "./shrineArt";
 
 /**
  * Hand-built pixel art for Oakvale's waygate (Murat 2026-11-08: "dark stone like the portals, vines grown all over it
@@ -10,7 +10,7 @@ import { dith as dith1, hash, OUT, stoneCol, vnoise, type Px } from "./shrineArt
  * hot desert light fills the arch and grains of sand float out of it.
  */
 const dith = (x: number, y: number) => dith1(x >> 1, y >> 1);
-export const WG_W = 120, WG_H = 132, WG_OX = 60, WG_OY = 108; // texture size and the gate's foot, in game px
+export const WG_W = 172, WG_H = 156, WG_OX = 86, WG_OY = 114; // texture size and the gate's foot, in game px
 const W = WG_W * 2, H = WG_H * 2, CX = WG_OX * 2, BY = WG_OY * 2; // cells
 
 /** Screen cell of a world point (a along world x, b along world y, z up), relative to the feet. */
@@ -24,6 +24,24 @@ const GAP = PA - PR; // half width of the opening
 const LEAF = ["#1c2a12", "#2c4219", "#3d5822", "#5c7a30", "#7c9a3e"];
 const SAND = ["#6e5232", "#8e6c40", "#b08a52", "#cfa96a", "#e6c88e", "#f4e0b0"];
 const HOT = ["#4a2a12", "#7a4a1e", "#b0702a", "#e09a3e", "#ffc35e", "#ffe49a", "#fff6d8"];
+
+/** Which side is being painted: Oakvale's (dark ivy-grown stone, desert sand spilling out) or the Sunscar's twin in the
+ * Sunstone Circle (sun-bleached sandstone half buried in dunes, the green valley's grass and petals spilling out). */
+let DESERT = false;
+/** Sun-bleached sandstone, three tones lit from the top left like the grey stone. */
+const SANDSTONE = (lit: number, tone: number) => {
+  const c = (r: number, g: number, b: number) => `rgb(${(r * tone) | 0},${(g * tone) | 0},${(b * tone) | 0})`;
+  return lit > 0.5 ? c(236, 206, 150) : lit > 0.05 ? c(206, 170, 112) : lit > -0.45 ? c(168, 128, 80) : c(118, 84, 52);
+};
+const stoneCol = (lit: number, tone: number) => (DESERT ? SANDSTONE(lit, Math.min(1, tone + 0.14)) : greyStone(lit, tone));
+const GROOVE = (): string => (DESERT ? "#5e3e22" : "#1f1c19");
+/** The valley seen from the desert: sky, green hills, oaks, and the cool light of it. */
+const SKY = ["#2f78c0", "#4f98d8", "#86bfe8", "#c4e4f6"];
+const VALE = ["#1e3a1c", "#2e5a26", "#4a8236", "#78b04a", "#b2dc78", "#e8f8c0"];
+const BLOOM = ["#f4f0e0", "#f6d84a", "#e88aa8", "#b4a0e8"];
+/** The gate's light ramp, dark to bright: hot desert gold on Oakvale's side, cool green-white valley light on the Sunscar's. */
+const COOL = ["#16302a", "#245044", "#3e8068", "#6cb894", "#a8e6c0", "#dcffe8", "#ffffff"];
+const LIGHT = (): string[] => (DESERT ? COOL : HOT);
 
 type Face = "top" | "left" | "right";
 type Col = (face: Face, s: number, t: number, x: number, y: number, lit: number) => string | undefined;
@@ -71,8 +89,9 @@ function box(px: Px, ca: number, cb: number, z0: number, A: number, B: number, h
 
 /** Ivy over a stone face: dense where `amount` is high, leaves lit by the face's light. */
 function ivy(x: number, y: number, lit: number, amount: number, seed: number): string | undefined {
+  if (DESERT) return sandOn(x, y, lit + 0.25, amount - 0.2, seed); // no ivy out here: sand caught in every ledge instead
   const n = vnoise(x * 0.16, y * 0.13, 999, seed) * 0.7 + vnoise(x * 0.5, y * 0.5, 999, seed + 1) * 0.3;
-  if (n + amount < 0.95) return undefined;
+  if (n + amount < 0.85) return undefined;
   const leaf = vnoise(x * 0.7, y * 0.7, 999, seed + 2);
   if (leaf < 0.28) return LEAF[0]; // dark gaps between the leaves
   const l = lit + (leaf - 0.5) * 0.9 + (dith(x, y) - 0.5) * 0.4;
@@ -87,10 +106,12 @@ function sandOn(x: number, y: number, lit: number, amount: number, seed: number)
   return SAND[Math.max(1, Math.min(5, Math.round(2.6 + l * 2.2)))];
 }
 
-function paint(f: number, N: number, awake: boolean): HTMLCanvasElement {
+function paint(f: number, N: number, awake: boolean, desert: boolean): HTMLCanvasElement {
+  DESERT = desert;
   // two layers: the ground (shadow, sand fan, tufts) gets no outline; the stone and the ivy do
   const layer = () => { const c = document.createElement("canvas"); c.width = W; c.height = H; return c.getContext("2d")!; };
-  const go = layer(), o = layer();
+  const go = layer(), o = layer(), fo = layer(); // fo: dune heaps in front of the stone, no outline either
+  const fpx: Px = (x, y, c) => { fo.fillStyle = c; fo.fillRect(x, y, 1, 1); };
   const gpx: Px = (x, y, c) => { go.fillStyle = c; go.fillRect(x, y, 1, 1); };
   const px: Px = (x, y, c) => { o.fillStyle = c; o.fillRect(x, y, 1, 1); };
   const ph = (f / N) * Math.PI * 2, pulse = 0.5 + 0.5 * Math.sin(ph);
@@ -107,27 +128,53 @@ function paint(f: number, N: number, awake: boolean): HTMLCanvasElement {
     if (d < 1 && dith(x, y) < (1 - d) * 0.55) gpx(x, y, "rgba(10,8,6,0.45)");
   }
 
+  if (!DESERT) {
   // sand that has blown through the arch and spilled onto the grass, fanning out in front (world +y) in ripples
-  for (let y = BY - 50; y < H; y++) for (let x = 0; x < W; x++) {
+    for (let y = BY - 90; y < H; y++) for (let x = 0; x < W; x++) {
+      const qx = x + 0.5 - CX, qy = y + 0.5 - BY;
+      const a = (qx + 2 * qy) / 2, b = (2 * qy - qx) / 2; // ground point
+      const ea = (a - 4) / 120, eb = (b - 4) / 66, d = ea * ea + eb * eb;
+      const edge = 1 - d + (vnoise(x * 0.08, y * 0.12, 999, 401) - 0.5) * 0.9;
+      if (edge < 0) continue;
+      if (edge < 0.18 && dith(x, y) > edge * 4.5) continue; // the thin edge scatters into the grass
+      const ripple = Math.sin((b * 0.55 + a * 0.12) + vnoise(a * 0.05, b * 0.05, 999, 402) * 5);
+      let l = (ripple > 0.55 ? 0.45 : ripple < -0.7 ? -0.5 : 0) + (dith(x, y) - 0.5) * 0.5 + (edge > 0.5 ? 0.2 : 0);
+      if (hash(x, y, 403) < 0.02) l -= 0.8; // a dark grain, a pebble
+      let c = SAND[Math.max(0, Math.min(5, Math.round(2.4 + l * 2)))];
+      const gl = glowAt(x, y);
+      if (gl > 0 && dith(x, y) < gl * (0.5 + 0.25 * pulse)) c = l > 0 ? HOT[5] : HOT[4];
+      gpx(x, y, c);
+    }
+    // tufts of grass poking through the thin sand
+    for (let k = 0; k < 30; k++) {
+      const a = (hash(k, 1, 404) - 0.5) * 220, b = -20 + hash(k, 2, 404) * 90;
+      const p = scr(a, b, 0);
+      for (let i = 0; i < 4; i++) { const h = 2 + ((k + i) % 3); for (let j = 0; j < h; j++) gpx(Math.round(p.x + i - 2 + (j > 1 ? (i - 2) * 0.5 : 0)), Math.round(p.y - j), j === h - 1 ? LEAF[3] : LEAF[2]); }
+    }
+  } else {
+  // the desert side: the gate stands in a drift of dune sand, and the valley's grass has crept out through it onto the
+  // sand in front (world +y), with a few wildflowers, greenest right at the threshold
+  for (let y = BY - 60; y < H; y++) for (let x = 0; x < W; x++) {
     const qx = x + 0.5 - CX, qy = y + 0.5 - BY;
-    const a = (qx + 2 * qy) / 2, b = (2 * qy - qx) / 2; // ground point
-    const ea = (a - 6) / 80, eb = (b - 12) / 42, d = ea * ea + eb * eb;
-    const edge = 1 - d + (vnoise(x * 0.08, y * 0.12, 999, 401) - 0.5) * 0.9;
+    const a = (qx + 2 * qy) / 2, b = (2 * qy - qx) / 2;
+    const ea = a / 92, eb = b / 52, d = ea * ea + eb * eb;
+    const edge = 1 - d + (vnoise(x * 0.07, y * 0.1, 999, 411) - 0.5) * 0.8;
     if (edge < 0) continue;
-    if (edge < 0.18 && dith(x, y) > edge * 4.5) continue; // the thin edge scatters into the grass
-    const ripple = Math.sin((b * 0.55 + a * 0.12) + vnoise(a * 0.05, b * 0.05, 999, 402) * 5);
-    let l = (ripple > 0.55 ? 0.45 : ripple < -0.7 ? -0.5 : 0) + (dith(x, y) - 0.5) * 0.5 + (edge > 0.5 ? 0.2 : 0);
-    if (hash(x, y, 403) < 0.02) l -= 0.8; // a dark grain, a pebble
-    let c = SAND[Math.max(0, Math.min(5, Math.round(2.4 + l * 2)))];
-    const gl = glowAt(x, y);
-    if (gl > 0 && dith(x, y) < gl * (0.5 + 0.25 * pulse)) c = l > 0 ? HOT[5] : HOT[4];
+    if (edge < 0.15 && dith(x, y) > edge * 5) continue;
+    const ripple = Math.sin(a * 0.35 - b * 0.2 + vnoise(a * 0.05, b * 0.05, 999, 412) * 4);
+    let l = (ripple > 0.6 ? 0.45 : ripple < -0.65 ? -0.45 : 0.05) + (dith(x, y) - 0.5) * 0.45;
+    let c = SAND[Math.max(1, Math.min(5, Math.round(3 + l * 2)))];
+    const ga = a / 46, gb = (b - 14) / 30, gd = ga * ga + gb * gb; // the green patch at the threshold
+    const green = 1 - gd + (vnoise(x * 0.18, y * 0.2, 999, 413) - 0.5) * 0.9;
+    if (awake && (green > 0.25 || (green > 0 && dith(x, y) < green * 4))) {
+      const gl = vnoise(x * 0.5, y * 0.5, 999, 414) - 0.5 + (dith(x, y) - 0.5) * 0.5;
+      c = VALE[gl > 0.3 ? 4 : gl > 0 ? 3 : gl > -0.3 ? 2 : 1];
+      if (green > 0.4 && hash(x, y, 415) < 0.03) c = BLOOM[Math.floor(hash(x, y, 416) * 4)];
+    }
+    const gw = glowAt(x, y);
+    if (gw > 0 && dith(x, y) < gw * (0.45 + 0.2 * pulse)) c = l > 0 ? VALE[5] : VALE[4];
     gpx(x, y, c);
   }
-  // tufts of grass poking through the thin sand
-  for (let k = 0; k < 18; k++) {
-    const a = (hash(k, 1, 404) - 0.5) * 140, b = 10 + hash(k, 2, 404) * 46;
-    const p = scr(a, b, 0);
-    for (let i = 0; i < 4; i++) { const h = 2 + ((k + i) % 3); for (let j = 0; j < h; j++) gpx(Math.round(p.x + i - 2 + (j > 1 ? (i - 2) * 0.5 : 0)), Math.round(p.y - j), j === h - 1 ? LEAF[3] : LEAF[2]); }
   }
 
   // the stepped plinth, sand drifted against and over it, ivy creeping up from the grass
@@ -135,11 +182,11 @@ function paint(f: number, N: number, awake: boolean): HTMLCanvasElement {
     if (fc === "top") {
       const u = s * A / 10 + (Math.floor(t * B / 10) % 2) * 0.5, iu = Math.floor(u), fu = u - iu;
       const sand = sandOn(x, y, l, 0.15 + Math.max(0, t - 0.4) * 0.9 - Math.abs(s - 0.5) * 0.5, seed + 1);
-      if (sand) { const gl = glowAt(x, y); return gl > 0 && dith(x, y) < gl * 0.6 ? HOT[4] : sand; }
+      if (sand) { const gl = glowAt(x, y); return gl > 0 && dith(x, y) < gl * 0.6 ? LIGHT()[4] : sand; }
       if (fu < 0.08) return "#1a1714";
-      if (hash(iu, 1, seed) < 0.2 && vnoise(x * 0.3, y * 0.3, 999, seed + 2) > 0.5) return dith(x, y) < 0.5 ? LEAF[2] : LEAF[1];
+      if (!DESERT && hash(iu, 1, seed) < 0.2 && vnoise(x * 0.3, y * 0.3, 999, seed + 2) > 0.5) return dith(x, y) < 0.5 ? LEAF[2] : LEAF[1];
       const gl = glowAt(x, y);
-      if (gl > 0 && dith(x, y) < gl * (0.5 + 0.2 * pulse)) return l > 0.6 ? "#c88a52" : "#9a5a30";
+      if (gl > 0 && dith(x, y) < gl * (0.5 + 0.2 * pulse)) return DESERT ? (l > 0.6 ? COOL[5] : COOL[4]) : l > 0.6 ? "#c88a52" : "#9a5a30";
       return stoneCol(l + (hash(iu, 2, seed) - 0.5) * 0.4, 0.74 + hash(iu, 3, seed) * 0.12);
     }
     const span = fc === "left" ? A : B, k = s * span / 7, fk = k - Math.floor(k);
@@ -164,10 +211,10 @@ function paint(f: number, N: number, awake: boolean): HTMLCanvasElement {
       if ((z - ZS2 - 9) % 17 < 1.2) return "#1a1714"; // joints between the drums
       if (Math.abs(z - 104) < 4) { // a carved band of sun rays
         const k = s * 6, fk = k - Math.floor(k);
-        if (Math.abs(z - 104) > 2.6 || (fk > 0.35 && fk < 0.65)) return awake && dith(x, y) < 0.3 + 0.3 * pulse ? HOT[3] : "#1f1c19";
+        if (Math.abs(z - 104) > 2.6 || (fk > 0.35 && fk < 0.65)) return awake && dith(x, y) < 0.3 + 0.3 * pulse ? LIGHT()[3] : GROOVE();
       }
       if (fc === "left" && Math.abs(s - 0.3 - Math.sin(z * 0.2) * 0.04) < 0.035 && z > 70 && z < 128) return OUT; // a crack
-      if (hash(x, y, seed + 4) < 0.025) return "#9a9878"; // lichen
+      if (hash(x, y, seed + 4) < 0.025) return DESERT ? "#7a5634" : "#9a9878"; // lichen / wind-pitting
       if (hash(Math.floor(x / 2), 0, seed + 5) < 0.25 && vnoise(x * 0.6, y * 0.05, 999, seed + 6) > 0.55) return stoneCol(l - 0.45, 0.76); // rain streaks
       return undefined;
     });
@@ -207,8 +254,32 @@ function paint(f: number, N: number, awake: boolean): HTMLCanvasElement {
   };
 
 
+  // the desert side's veil: a cool window home onto the green valley, oaks on rolling hills under a pale sky
+  const vale = () => {
+    for (let a = -GAP; a <= GAP; a += 0.5) for (let z = ZS2; z <= ZPT; z += 0.5) {
+      const p = scr(a, 0, z), x = Math.round(p.x), y = Math.round(p.y);
+      const u = a / GAP, w = (z - ZS2) / (ZPT - ZS2);
+      const sh = Math.sin(w * 14 - ph * 2) * 0.025 + (vnoise(u * 3, w * 6 - f / N * 2, 999, 613) - 0.5) * 0.03;
+      const uu = u + sh;
+      const h1 = 0.36 + Math.sin(uu * 2.6 + 0.8) * 0.07 + Math.sin(uu * 6.3) * 0.02; // far hills
+      const h2 = 0.2 + Math.sin(uu * 1.8 - 1.1) * 0.08; // near meadow
+      const tree = (tu: number, tw: number, r: number) => Math.hypot((uu - tu) * 1.1, (w - tw) * 1.5) < r;
+      let c: string;
+      if (w < h2) { const g = Math.sin(uu * 26 + w * 40) * 0.25 + (dith(x, y) - 0.5) * 0.45 + (h2 - w) * 2; c = VALE[g > 0.35 ? 4 : g > -0.05 ? 3 : 2]; if (hash(x, y, 614) < 0.03) c = BLOOM[Math.floor(hash(x, y, 615) * 4)]; }
+      else if (tree(-0.45, h2 + 0.12, 0.13) || tree(0.55, h2 + 0.1, 0.1) || tree(0.15, h1 + 0.04, 0.06)) c = (vnoise(uu * 12, w * 12, 999, 616) > 0.5 ? VALE[2] : VALE[1]);
+      else if (w < h1) c = dith(x, y) < 0.55 ? VALE[2] : VALE[3];
+      else { const v = 3.2 - (w - h1) * 4 + (dith(x, y) - 0.5) * 0.5 + (vnoise(uu * 2 + f / N, w * 4, 999, 617) > 0.62 ? 0.8 : 0); c = SKY[Math.max(0, Math.min(3, Math.round(v)))]; } // sky, a few soft clouds
+      const edge = Math.min(GAP - Math.abs(a), z - ZS2, ZPT - z);
+      const streak = Math.sin(u * 4 + w * 22 - ph * 3 + vnoise(u * 2, w * 2, 999, 618) * 4);
+      if (edge < 2.2 + pulse * 1.2) c = COOL[5];
+      else if (edge < 5 && dith(x, y) < 0.5) c = COOL[4];
+      else if (streak > 0.96 && dith(x, y) < 0.3) c = COOL[5];
+      px(x, y, c);
+    }
+  };
+
   pillar(-PA, 530);
-  if (awake) veil();
+  if (awake) (DESERT ? vale : veil)();
   pillar(PA, 540);
 
   // the lintel, its sun disc dark (or burning once the gate wakes), its left end broken off and ivy over it all
@@ -217,67 +288,90 @@ function paint(f: number, N: number, awake: boolean): HTMLCanvasElement {
     const v = ivy(x, y, l, (fc === "top" ? 0.38 : 0.22) + Math.max(0, 0.35 - s) * 0.9 + Math.max(0, s - 0.8) * 0.8, 551);
     if (fc === "left") {
       const dx = (x - disc.x) / 1, dy = (y - disc.y) * 1.25, r = Math.hypot(dx, dy);
-      if (r < 8) return awake ? (r < 4.5 ? HOT[6] : dith(x, y) < 0.5 + 0.3 * pulse ? HOT[5] : HOT[4]) : r < 4.5 ? "#1f1c19" : r > 6.6 ? OUT : "#a8a494";
+      if (r < 8) return awake ? (r < 4.5 ? LIGHT()[6] : dith(x, y) < 0.5 + 0.3 * pulse ? LIGHT()[5] : LIGHT()[4]) : r < 4.5 ? GROOVE() : r > 6.6 ? OUT : DESERT ? "#f2dcaa" : "#a8a494";
       const ang = Math.atan2(dy, dx), ray = Math.abs(((ang / (Math.PI * 2)) * 12 + 12.5) % 1 - 0.5);
-      if (r < 13 && ray < 0.12) return awake ? HOT[4] : "#1f1c19";
+      if (r < 13 && ray < 0.12) return awake ? LIGHT()[4] : GROOVE();
       if (v) return v;
-      if (Math.abs(t - 0.5) < 0.06 && (s < 0.38 || s > 0.62)) return "#1f1c19"; // a carved line along its face
+      if (Math.abs(t - 0.5) < 0.06 && (s < 0.38 || s > 0.62)) return GROOVE(); // a carved line along its face
     }
     if (v) return v;
     if (hash(x, y, 552) < 0.025) return "#9a9878";
     return undefined;
   });
 
+  if (!DESERT) {
   // leafy clumps bulging over the lintel's edges and the capitals, so the ivy breaks the stone's outline
-  const clump = (cx: number, cy: number, r: number, seed: number) => {
-    for (let y = Math.floor(cy - r - 2); y <= cy + r + 1; y++) for (let x = Math.floor(cx - r - 2); x <= cx + r + 2; x++) {
-      const dx = (x - cx) / (r + 1), dy = (y - cy) / r, d = Math.hypot(dx, dy) + (vnoise(x * 0.6, y * 0.6, 999, seed) - 0.5) * 0.7;
-      if (d > 1) continue;
-      const leaf = vnoise(x * 0.8, y * 0.8, 999, seed + 1), l = -dx * 0.5 - dy * 0.8 + (leaf - 0.5) * 1.1 + (dith(x, y) - 0.5) * 0.35;
-      px(x, y, leaf < 0.22 ? LEAF[0] : l > 0.55 ? LEAF[4] : l > 0.1 ? LEAF[3] : l > -0.35 ? LEAF[2] : LEAF[1]);
+    const clump = (cx: number, cy: number, r: number, seed: number) => {
+      for (let y = Math.floor(cy - r - 2); y <= cy + r + 1; y++) for (let x = Math.floor(cx - r - 2); x <= cx + r + 2; x++) {
+        const dx = (x - cx) / (r + 1), dy = (y - cy) / r, d = Math.hypot(dx, dy) + (vnoise(x * 0.6, y * 0.6, 999, seed) - 0.5) * 0.7;
+        if (d > 1) continue;
+        const leaf = vnoise(x * 0.8, y * 0.8, 999, seed + 1), l = -dx * 0.5 - dy * 0.8 + (leaf - 0.5) * 1.1 + (dith(x, y) - 0.5) * 0.35;
+        px(x, y, leaf < 0.22 ? LEAF[0] : l > 0.55 ? LEAF[4] : l > 0.1 ? LEAF[3] : l > -0.35 ? LEAF[2] : LEAF[1]);
+      }
+    };
+    for (let k = 0; k < 24; k++) {
+      const a = -60 + hash(k, 1, 570) * 120, onTop = hash(k, 2, 570) < 0.5;
+      if (!onTop && Math.abs(a + 6) < 20) continue; // keep the sun disc in the middle of the face clear
+      const p = scr(a, onTop ? hash(k, 3, 570) * 20 - 10 : 12.5, onTop ? ZL : ZPT + 2 + hash(k, 3, 570) * 8);
+      clump(p.x, p.y, 3 + hash(k, 5, 570) * 3.5, 571 + k);
     }
-  };
-  for (let k = 0; k < 11; k++) {
-    const a = -60 + hash(k, 1, 570) * 120, onTop = hash(k, 2, 570) < 0.5;
-    if (!onTop && Math.abs(a + 6) < 20) continue; // keep the sun disc in the middle of the face clear
-    const p = scr(a, onTop ? hash(k, 3, 570) * 20 - 10 : 12.5, onTop ? ZL : ZPT + 2 + hash(k, 3, 570) * 8);
-    clump(p.x, p.y, 3 + hash(k, 5, 570) * 3.5, 571 + k);
-  }
-  for (const ca of [-PA, PA]) { const p = scr(ca, PR + 3, ZPT); clump(p.x - 3, p.y + 1, 4, 590 + ca); }
-  for (const ca of [-PA, PA]) { const p = scr(ca + (ca < 0 ? -PR : PR), PR + 3, ZS2 + 6); clump(p.x, p.y, 5, 595 + ca); } // at the foot
+    for (const ca of [-PA, PA]) { const p = scr(ca, PR + 3, ZPT); clump(p.x - 3, p.y + 1, 4, 590 + ca); }
+    for (const ca of [-PA, PA]) { const p = scr(ca + (ca < 0 ? -PR : PR), PR + 3, ZS2 + 6); clump(p.x, p.y, 5, 595 + ca); } // at the foot
 
-  // ivy strands hanging from the lintel's front edge, some long enough to dangle into the opening
-  const hang = [[-56, 30], [-47, 52], [-38, 22], [-27, 40], [-18, 14], [-9, 26], [3, 18], [14, 34], [25, 12], [34, 24], [49, 46], [57, 20]];
-  for (const [a0, len] of hang) {
-    const sw = Math.sin(ph + a0) * (awake ? 1.2 : 0.4); // a breath of wind (the desert air pours through once it's awake)
-    let lastX = 0;
-    for (let i = 0; i <= len; i++) {
-      const p = scr(a0, 12.5, ZPT - i), wob = Math.sin(i * 0.3 + a0) * 1.2 + sw * (i / len) * 2;
-      const x = Math.round(p.x + wob), y = Math.round(p.y);
-      px(x, y, LEAF[1]); px(x + 1, y, LEAF[0]);
-      if (i > 0 && Math.abs(x - lastX) > 1) px(x - Math.sign(x - lastX), y, LEAF[1]);
-      lastX = x;
-      if (i % 3 === 1 && i < len - 1) { // a leaf, alternating sides: a little heart of 2-4 cells with a lit edge
-        const side = (i / 3) % 2 < 1 ? 1 : -1, big = i < len * 0.7;
-        const lx = x + side * 2;
-        px(x + side, y, LEAF[2]); px(lx, y, LEAF[3]); px(lx, y - 1, LEAF[4]); px(lx + side, y, LEAF[2]);
-        if (big) { px(lx, y + 1, LEAF[2]); px(lx + side, y - 1, LEAF[3]); px(lx + side, y + 1, LEAF[1]); }
+    // ivy strands hanging from the lintel's front edge, some long enough to dangle into the opening
+    const hang = [[-58, 44], [-54, 30], [-50, 62], [-46, 52], [-42, 36], [-38, 22], [-33, 70], [-27, 40], [-22, 56], [-18, 14], [-13, 30], [-9, 26], [-2, 46], [3, 18], [9, 28], [14, 34], [20, 58], [25, 12], [30, 38], [34, 24], [39, 64], [44, 30], [49, 46], [53, 74], [57, 20]];
+    for (const [a0, len] of hang) {
+      const sw = Math.sin(ph + a0) * (awake ? 1.2 : 0.4); // a breath of wind (the desert air pours through once it's awake)
+      let lastX = 0;
+      for (let i = 0; i <= len; i++) {
+        const p = scr(a0, 12.5, ZPT - i), wob = Math.sin(i * 0.3 + a0) * 1.2 + sw * (i / len) * 2;
+        const x = Math.round(p.x + wob), y = Math.round(p.y);
+        px(x, y, LEAF[1]); px(x + 1, y, LEAF[0]);
+        if (i > 0 && Math.abs(x - lastX) > 1) px(x - Math.sign(x - lastX), y, LEAF[1]);
+        lastX = x;
+        if (i % 3 === 1 && i < len - 1) { // a leaf, alternating sides: a little heart of 2-4 cells with a lit edge
+          const side = (i / 3) % 2 < 1 ? 1 : -1, big = i < len * 0.7;
+          const lx = x + side * 2;
+          px(x + side, y, LEAF[2]); px(lx, y, LEAF[3]); px(lx, y - 1, LEAF[4]); px(lx + side, y, LEAF[2]);
+          if (big) { px(lx, y + 1, LEAF[2]); px(lx + side, y - 1, LEAF[3]); px(lx + side, y + 1, LEAF[1]); }
+        }
       }
     }
-  }
-  // a few runners climbing the pillars' fronts from the ground
-  for (const [ca, s0] of [[-PA, -3], [-PA, 6], [PA, -5], [PA, 4]]) {
-    for (let z = ZS2 + 4; z < ZS2 + 60 + hash(ca, s0, 560) * 50; z++) {
-      const p = scr(ca + s0 + Math.sin(z * 0.15 + s0) * 2.5, PR + 0.5, z);
-      const x = Math.round(p.x), y = Math.round(p.y);
-      px(x, y, LEAF[1]);
-      if (z % 5 === 0) { const sd = (z / 5) % 2 ? 1 : -1; px(x + sd, y, LEAF[3]); px(x + sd * 2, y - 1, LEAF[4]); px(x + sd, y - 1, LEAF[2]); }
+    // a few runners climbing the pillars' fronts from the ground
+    for (const [ca, s0] of [[-PA, -6], [-PA, -1], [-PA, 4], [-PA, 8], [PA, -7], [PA, -2], [PA, 3], [PA, 7]]) {
+      for (let z = ZS2 + 4; z < ZS2 + 70 + hash(ca, s0, 560) * 60; z++) {
+        const p = scr(ca + s0 + Math.sin(z * 0.15 + s0) * 2.5, PR + 0.5, z);
+        const x = Math.round(p.x), y = Math.round(p.y);
+        px(x, y, LEAF[1]);
+        if (z % 5 === 0) { const sd = (z / 5) % 2 ? 1 : -1; px(x + sd, y, LEAF[3]); px(x + sd * 2, y - 1, LEAF[4]); px(x + sd, y - 1, LEAF[2]); }
+      }
     }
+  } else {
+  // dune sand heaped against the pillars and burying a corner of the steps: the desert is swallowing it
+  const heap = (cx: number, cy: number, rx: number, ry: number, seed: number) => {
+    for (let y = Math.floor(cy - ry - 2); y <= cy + 2; y++) for (let x = Math.floor(cx - rx - 2); x <= cx + rx + 2; x++) {
+      const dx = (x - cx) / rx, dy = (y - cy) / ry, d = dx * dx + dy * dy + (vnoise(x * 0.2, y * 0.2, 999, seed) - 0.5) * 0.4;
+      if (d > 1 || y > cy) continue;
+      const l = -dx * 0.55 - dy * 0.35 + (Math.sin(dx * 6 + dy * 9) > 0.7 ? 0.35 : 0) + (dith(x, y) - 0.5) * 0.45;
+      fpx(x, y, SAND[Math.max(1, Math.min(5, Math.round(3 + l * 2.2)))]);
+    }
+  };
+  { const p = scr(-PA - 6, PR + 8, 0); heap(p.x, p.y, 30, 26, 581); }
+  { const p = scr(-62, 10, 0); heap(p.x, p.y, 22, 16, 582); }
+  { const p = scr(PA + 4, PR + 8, 0); heap(p.x, p.y, 18, 12, 583); }
+  { const p = scr(PA + 14, -4, 0); heap(p.x, p.y, 16, 14, 584); }
+  if (awake) { // the valley's grass already rooting in the sand on the threshold
+    for (let k = 0; k < 14; k++) {
+      const p = scr((hash(k, 1, 585) - 0.5) * 2 * (GAP - 4), 6 + hash(k, 2, 585) * 8, ZS2);
+      for (let i = 0; i < 3; i++) for (let j = 0; j < 2 + ((k + i) % 3); j++) px(Math.round(p.x + i - 1 + (j > 1 ? i - 1 : 0)), Math.round(p.y - j), j > 1 ? VALE[4] : VALE[3]);
+    }
+  }
   }
   const out = chunky(go, false);
   const oc = out.getContext("2d")!;
   oc.drawImage(chunky(o, true), 0, 0);
-  if (awake) sandMotes(oc, f, N);
+  if (DESERT) oc.drawImage(chunky(fo, false), 0, 0);
+  if (awake) (DESERT ? leafMotes : sandMotes)(oc, f, N);
   return out;
 }
 
@@ -310,7 +404,7 @@ function chunky(o: CanvasRenderingContext2D, outline: boolean): HTMLCanvasElemen
     if (best < 0 || opaque < 2) continue;
     let r = best >>> 24, g = (best >>> 16) & 255, b = (best >>> 8) & 255;
     const a = best & 255, q = (cy * CW + cx) * 4;
-    const hot = r > g + 30 && r > 170;
+    const hot = (r > g + 30 && r > 170) || Math.max(r, g, b) - Math.min(r, g, b) > 110; // the gate's light and the sky keep their colour
     if (!hot) { const m = (r + g + b) / 3; r = (r * 0.72 + m * 0.28) * 0.88 + 5; g = (g * 0.72 + m * 0.28) * 0.86 + 4; b = (b * 0.72 + m * 0.28) * 0.82; }
     d[q] = r; d[q + 1] = g; d[q + 2] = b; d[q + 3] = a;
     solid[cy * CW + cx] = a > 200 ? 1 : 2;
@@ -346,9 +440,25 @@ function sandMotes(rc: CanvasRenderingContext2D, f: number, N: number) {
   }
 }
 
+/** Leaves and petals blowing out of the valley into the desert, fluttering and slowly falling (drawn after chunky()). */
+function leafMotes(rc: CanvasRenderingContext2D, f: number, N: number) {
+  for (let k = 0; k < 30; k++) {
+    const life = ((f / N) + hash(k, 1, 711)) % 1;
+    const a0 = (hash(k, 2, 711) - 0.5) * 2 * (GAP - 4), z0 = ZS2 + 20 + hash(k, 3, 711) * (ZPT - ZS2 - 40);
+    const b = life * (30 + hash(k, 4, 711) * 34);
+    const z = z0 - life * 30 + Math.sin(life * 9 + k) * 4; // a slow, swaying fall
+    if (z < 2) continue;
+    const p = scr(a0 + Math.sin(life * 5 + k) * 6, b, z);
+    const x = Math.round(p.x / 2), y = Math.round(p.y / 2);
+    const c = k % 4 === 0 ? BLOOM[(k >> 2) % 4] : VALE[3 + (k % 3 === 0 ? 1 : 0)];
+    rc.fillStyle = c; rc.fillRect(x, y, 1, 1);
+    if (Math.sin(life * 18 + k) > 0) { rc.fillStyle = k % 4 === 0 ? BLOOM[0] : VALE[2]; rc.fillRect(x + 1, y, 1, 1); } // turning over in the air
+  }
+}
+
 /** Paints frame `f` of `N` of the Oakvale waygate into a 2D context at game-pixel scale (WG_W x WG_H). */
-export function paintWaygate(g: CanvasRenderingContext2D, f: number, N: number, awake: boolean) {
-  const out = paint(f, N, awake);
+export function paintWaygate(g: CanvasRenderingContext2D, f: number, N: number, awake: boolean, desert = false) {
+  const out = paint(f, N, awake, desert);
   g.imageSmoothingEnabled = false;
   g.drawImage(out, 0, 0, WG_W, WG_H);
 }
