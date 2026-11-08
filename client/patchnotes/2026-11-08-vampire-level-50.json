@@ -1,0 +1,10 @@
+{
+  "date": "2026-11-08",
+  "title": "Vampire tuned for level 50",
+  "changes": [
+    "Vampire skills that take 5 ranks now open ranks 4 and 5 at level 30 and level 40, so the tree keeps growing in the desert. Crimson Tide and Nightfall now go to rank 5.",
+    "Blood skills hit softer (Crimson Tide, Exsanguinate, Blood Lance, Boil Blood, Blood Link), and so do Crimson Slash, Night Pounce and the Brides.",
+    "Night is stronger: Bat Swarm, Rat Plague and Nightfall hit harder and heal more, the bat shield blocks 15%, and Native Soil heals faster.",
+    "Heroes holding ranks 4 or 5 below the new levels get those skill points back."
+  ]
+}

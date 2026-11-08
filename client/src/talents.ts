@@ -7,7 +7,7 @@ import { iconImg } from "./skillIcons";
 import { Node, slabWidth, treeLayout } from "./treeLayout";
 import { SheetPreview, talentsOf } from "./sidepanel";
 import {
-  BRANCHES, childrenOf, EFFECT_TEXT, levelPower, lockReason, maxRank, RANK_POWER, rankOf, SkillDef, SKILLS, spentPoints, STACK_NAME,
+  BRANCHES, childrenOf, EFFECT_TEXT, levelPower, lockReason, maxRank, nextRankLevel, RANK_POWER, rankOf, SkillDef, SKILLS, spentPoints, STACK_NAME,
   synergyPower, talentPoints, withMods, type SkillMod,
   NEED_TEXT,
 } from "../../shared/skills";
@@ -103,13 +103,13 @@ export class TalentMenu {
     for (const n of layout) {
       const s = n.s, r = rankOf(ranks, s.id);
       const why = lockReason(cls, state.level, ranks, s.id);
-      const stt = why === "max" ? "max" : why === "" ? "can" : why === "points" ? (r > 0 ? "has" : "off") : "locked";
+      const stt = why === "max" ? "max" : why === "" ? "can" : why === "points" || (why === "level" && r > 0) ? (r > 0 ? "has" : "off") : "locked";
       const slot = !s.passive ? slots.indexOf(s.id) : -1;
       const key = slot >= 0 ? `<kbd>${slotKey(slot)}</kbd>` : "";
       const pips = Array.from({ length: maxRank(s) }, (_, i) => `<i class="${i < r ? "on" : ""}"></i>`).join("");
       const leaf = childrenOf(cls, s.id).length === 0;
       const act = !s.passive && r > 0 ? ` data-active="${s.id}"` : "";
-      const lvl = why === "level" ? `<span class="nlv">Lv ${s.req}</span>` : "";
+      const lvl = why === "level" && r === 0 ? `<span class="nlv">Lv ${s.req}</span>` : "";
       html += `<button class="tnode ${stt}${s.passive ? " passive" : ""}${s.row === 4 ? " ult" : ""}${leaf ? " leaf" : ""}" data-talent="${s.id}"${act} ` +
         `style="left:${n.x}px;top:${n.y}px;--c:${colors[s.branch]}">${iconImg(s.id, "nicon")}${key}${lvl}<span class="pips">${pips}</span><span class="trank">${r || ""}</span></button>`;
     }
@@ -241,7 +241,7 @@ export class TalentMenu {
     rows.push(`<p class="ipath">${parent ? `Grows from ${parent.name}${also.length ? `, and needs ${also.join(" and ")}` : ""}. ` : "Root of the branch. "}${kids.length ? `Leads to ${kids.map((k) => k.name).join(" and ")}.` : "Dead end: nothing grows higher."}</p>`);
     const slots: string[] = [...(state.slots ?? [])];
     const slot = slots.indexOf(s.id);
-    const status = why === "max" ? "Fully learned" : why === "" ? "Click to learn" : why === "level" ? `${pxIcon("lock")}Needs level ${s.req}` :
+    const status = why === "max" ? "Fully learned" : why === "" ? "Click to learn" : why === "level" ? `${pxIcon("lock")}${r > 0 ? `Rank ${r + 1} needs level ${nextRankLevel(s, r)}` : `Needs level ${s.req}`}` :
       why === "above" ? `${pxIcon("lock")}Learn ${parent ? parent.name : "the skill below"} first` :
       why === "requires" ? `${pxIcon("lock")}Learn ${missing.join(" and ")} first` : r > 0 ? "Learned · no points left" : "No points left";
     const keyNote = !s.passive && r > 0 ? (slot >= 0 ? ` · on key ${slotKey(slot)}` : ` · hover it and press ${slotKey(0)}-${slotKey(8)} to put it on a key`) : "";
