@@ -10,6 +10,7 @@ import { FailDelay, isLocalIp, KeyedLimiter, LOGIN_BURST, LOGIN_PER_SEC, SIGNUP_
 export interface HeroSave {
   color: number;
   xp: number; level: number; kills: number;
+  xpv?: number; // XP curve version (shared/classes.ts XP_CURVE_VERSION); missing = the old 80 x level curve
   gold: number; potions: number;
   mpotions?: number; // mana potions before potion sizes (old saves)
   pots?: { potion: number[]; mpotion: number[] }; // potions by size (shared/potions.ts)
