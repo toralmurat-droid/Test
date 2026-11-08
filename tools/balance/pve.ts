@@ -330,6 +330,9 @@ export const BOSSES: BossDef[] = [
   { name: "Pale Marshal Lv24", kind: "necromancer", level: 24, hero: 23, hpMult: 2.5 },
   { name: "Hollow King Lv30", kind: "hollowking", level: 30, hero: 30, hpMult: 2 },
   { name: "Sunwright Lv50", kind: "sunwright", level: 50, hero: 49, hpMult: 2 },
+  // the Night Raiders (shared/raiders.ts): met by chance, a hero at the act cap should win most fights
+  { name: "Night Raider Lv30", kind: "nightraider", level: 30, hero: 30 },
+  { name: "Night Raider Lv50", kind: "nightraider", level: 50, hero: 50 },
 ];
 
 function bossRun(cls: ClassKind, b: BossDef, build: Build, potions = 5): RunResult & { bossLeft: number } {

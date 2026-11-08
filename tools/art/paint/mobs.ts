@@ -4,6 +4,8 @@ import { createCanvas } from "@napi-rs/canvas";
 import { MOB_POSES, posed, setPainted, type Dir } from "../characters";
 import { C2, P, blobPath, css, ellipseP, poly, fillShape, glow, limb, line, metal, mix, rng, sh, vol } from "./brush";
 import { lastRig, pixelAlpha, pixelize, shrink } from "./body";
+import { paintRaider, RAIDER_H, RAIDER_W } from "./raiders";
+import { RAIDERS } from "../../../shared/raiders";
 
 /**
  * Monster sheets for the iso look. Same textures as client/src/textures.ts mobTexture (6 frames:
@@ -567,6 +569,8 @@ export function buildMobs(out: string, ONLY?: string[]) {
     humanoid("mob_camelfolk", "camelfolk", 34, 36, 33.5 / 36, 1.08),
     humanoid("mob_sunwright", "sunwright", 44, 48, 42 / 48, 1.25), // Act 2's final boss, drawn big like the Hollow King
     { key: "mob_scorpion", w: 36, h: 30, draw: (c: C2, f: number) => scorpionFrame(c, 36, 30, f) },
+    // the Night Raiders (raiders.ts): one sheet for each of the Seven
+    ...RAIDERS.map((R) => ({ key: `mob_nightraider_${R.key}`, w: RAIDER_W, h: RAIDER_H, draw: (c: C2, f: number) => { const { dir, pose } = frameOf(f); paintRaider(c, SH, R, dir as "down" | "up" | "right", pose, f); } })),
     // wearing 1-4 harvested skeletons (look.ts demon1..4)
     ...[1, 2, 3, 4].map((n) => humanoid(`mob_demon${n}`, `demon${n}`, 28, 34, 33 / 34, 1.0, true)),
     // drawn on a 24x16 layout, 1.35x up into a 32x22 frame (about as long as a skeleton is tall)
@@ -587,7 +591,7 @@ export function buildMobs(out: string, ONLY?: string[]) {
       const c = body.getContext("2d"), sc = shadow.getContext("2d");
       c.scale(HI, HI); sc.scale(HI, HI);
       SH = sc; s.draw(c, f); SH = null;
-      const blob = !/skeleton|bandit|bride|necromancer|demon|crawler|hollowking|gnawkin|tuskborn|silkwretch|duskwing|packlord|hornbrute|hidemother|crowseer|gnasher|weaver|nomad|scorpion|sanddead|veiled|camelfolk|sunwright/.test(s.key);
+      const blob = !/skeleton|bandit|bride|necromancer|demon|crawler|hollowking|gnawkin|tuskborn|silkwretch|duskwing|packlord|hornbrute|hidemother|crowseer|gnasher|weaver|nomad|scorpion|sanddead|veiled|camelfolk|sunwright|nightraider/.test(s.key);
       const b = shrink(body, "mb", tw, th);
       pixelize(b, tw, th, true, blob ? { y0: Math.round(th * 0.7), y1: th, mud: 0.14, sat: 0.9 } : { y0: Math.round(th * 0.72), y1: th, mud: s.key.includes("bandit") ? 0.38 : 0.2 });
       const u = shrink(shadow, "ms", tw, th); pixelAlpha(u);

@@ -101,6 +101,7 @@ import { ResourceBars } from "./resourceBars";
 import { OverloadGauge } from "./overloadGauge";
 import { bindElemFx } from "./elemFx";
 import { bindBeastFx } from "./beastFx";
+import { bindRaiderFx, raiderTrail } from "./raiderFx";
 import { DungeonView } from "./dungeon";
 import { TEXT_FONT, TEXT_PX, WT } from "./pixelfont";
 
@@ -864,6 +865,11 @@ export class TownScene extends Phaser.Scene {
       scene: this, fx: this.fx, ent: (id) => this.entities.get(id),
       say: (x, y, text, color) => this.floatText(x, y, text, color, PIXEL_FONT),
       squash: (id, kx, ky, ms) => { const e = this.entities.get(id); if (e) this.squash(e, kx, ky, ms / 2); },
+    });
+    // The Night Raiders (client/src/raiderFx.ts): smoke, dust and their coming and going
+    bindRaiderFx(this.room, {
+      scene: this, fx: this.fx, ent: (id) => this.entities.get(id) as any, feed: (t) => this.feed(t),
+      me: () => this.entities.get(this.me)?.state,
     });
     // A boss speaks (Grandam Ursk talks through her fight): a speech bubble over her, above the Mawdeep's dark, and a chat line
     this.room.onMessage("bosssay", ({ id, text }) => {
@@ -2954,6 +2960,7 @@ export class TownScene extends Phaser.Scene {
         else e.sprite.setAlpha(p.dead ? 0.35 : 1).setAngle(p.dead ? 90 : 0);
       }
       e.sprite.setDepth(e.sprite.y);
+      if (e.mob && p.kind === "nightraider" && !p.dead && e.sprite.visible) raiderTrail(this.fx, e as any, moving, now);
       // Status effects: yellow flicker for stunned, blue for slowed, red pulse for raging. A monster winding up shows
       // it in its pose; only sheets without attack frames (?pixel=1) still flash red.
       const windFlash = p.winding && e.sprite.texture.frameTotal <= 12;

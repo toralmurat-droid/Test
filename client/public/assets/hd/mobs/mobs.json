@@ -992,5 +992,47 @@
   "h": 48,
   "scale": 1.5,
   "frames": 12
+ },
+ "mob_nightraider_vharn": {
+  "w": 64,
+  "h": 62,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_nightraider_moragh": {
+  "w": 64,
+  "h": 62,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_nightraider_skarde": {
+  "w": 64,
+  "h": 62,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_nightraider_ilsevar": {
+  "w": 64,
+  "h": 62,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_nightraider_corvane": {
+  "w": 64,
+  "h": 62,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_nightraider_hesk": {
+  "w": 64,
+  "h": 62,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_nightraider_sabel": {
+  "w": 64,
+  "h": 62,
+  "scale": 1.5,
+  "frames": 12
  }
 }

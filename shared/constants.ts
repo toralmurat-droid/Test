@@ -70,6 +70,8 @@ export type MobKind = "slime" | "skeleton" | "motherblob" | "blobling" | "shoote
   | "nomad" | "scorpion" | "sanddead" | "veiled" | "camelfolk"
   // Act 2's final boss at the Sun Furnace (SUNWRIGHT below)
   | "sunwright"
+  // the Night Raiders (shared/raiders.ts): seven named riders who roam both acts by night
+  | "nightraider"
   // summoned by heroes (shared/summons.ts): they fight for their owner
   | "golem_fire" | "golem_cold" | "golem_poison" | "golem_shock" | "golem_colossus"
   | "bride"; // the vampire's Brides (v_brides): pale companions that run at his foes and drink
@@ -140,6 +142,8 @@ export const MOBS: Record<MobKind, MobDef> = {
   camelfolk: { name: "Camel-Man", maxHp: 300, speed: 60, damage: 32, attackCooldownMs: 1300, aggroRange: 140, leash: 260, xp: 74 },
   // Act 2's final boss (the Second Sun chain's last quest; moves in BEAST, voice and phases in SUNWRIGHT below)
   sunwright: { name: "The Sunwright", maxHp: 1100, speed: 50, damage: 30, attackCooldownMs: 1250, aggroRange: 260, leash: 520, xp: 2400 },
+  // The Night Raiders (shared/raiders.ts): mounted, cloaked, a massive weapon; always the act's top level
+  nightraider: { name: "Night Raider", maxHp: 1500, speed: 82, damage: 38, attackCooldownMs: 1350, aggroRange: 170, leash: 420, xp: 900 },
   hidemother: { name: "The Hide-Mother", maxHp: 950, speed: 50, damage: 28, attackCooldownMs: 1300, aggroRange: 240, leash: 480, xp: 1000 },
 };
 
