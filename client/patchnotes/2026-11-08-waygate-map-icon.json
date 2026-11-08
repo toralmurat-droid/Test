@@ -1,5 +1,6 @@
 {
   "date": "2026-11-08",
+  "patch": 198,
   "title": "Waygate on the map",
   "changes": [
     "The waygate now has its own stone-arch icon and name on the map, dark while asleep and glowing once awake."
