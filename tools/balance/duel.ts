@@ -19,6 +19,7 @@ import { canPay, manaRegen, maxManaFor, skillCost } from "../../shared/mana";
 import {
   afterHit, atkSpeedMult, blocking, buffLifesteal, buffRegen, castSkill, ccImmune, charging, winding, cooldownLeft, counterHit, dealtMult, FieldInst, HitOpts,
   newRuntime, shotEnd, shotHit, shotPulse, ShotSpec, SkillHost, speedMult, takenMult, tickField, tickUnit,
+  formOf,
 } from "../../shared/skillEngine";
 import { Equipped, GEAR, gearBlock, gearDef, gearReachMult, gearSpeedMult, gearStats, meetsReq, withLevel } from "../../shared/gear";
 import { heroPoise, POISE, poiseLevelMult, poiseSpeed, pvpDamageMult } from "../../shared/combat";
@@ -351,6 +352,7 @@ export class Duel {
     if (s.field) return s.field.trap ? d < 70 : d <= (s.field.ahead ?? 0) + s.field.r - 4;
     if (s.cry) return d <= s.cry.r - 6;
     if (s.move) return a.ranged ? false : d > 40 && d < s.move.dist + 30;
+    if (s.buff?.form === "bat") return a.hp < a.maxHp * 0.4; // Bat Form: a way out (fast, hard to hit) when the fight goes badly
     if (s.buff) return d < 80;
     return false;
   }
@@ -360,7 +362,10 @@ export class Duel {
     if (charging(a, this.now)) return;
     const ready = activeSkills(a.cls).filter((s) => (s.cantrip || (a.t[s.id] ?? 0) > 0) && cooldownLeft(s, a.sk, this.now, cooldownMult(a.cls, a.s, a.t)) <= 0 && canPay(a, skillCost(s)))
       .sort((x, y) => y.req - x.req);
+    const form = formOf(a, this.now) ? a.sk.buffs.find((b) => b.b.form) : undefined;
     for (const s of ready) {
+      // Bat / Wolf Form: the bot stays a beast, casting only skills of the form's own school (anything else would end it)
+      if (form && (s.id === form.id || skillById(form.id)?.branch !== s.branch)) continue;
       if (s.consume && a.sk.stacks < 3 && !s.buff) continue; // wait for some stacks
       // A melee hero in reach swings its weapon instead of casting a weaker basic spell (vampire Leech)
       if (s.cantrip && !a.ranged && d <= (12 + CLASSES[a.cls].attackRange) * gearReachMult(a.eq)) continue;

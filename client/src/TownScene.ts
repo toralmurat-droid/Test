@@ -25,6 +25,7 @@ import { bindSfx, play as playSfx, sfxFrame } from "./sfx";
 import { attackMult, cooldownMult, critChance, heroSpeed, STATS, magicMult, STAT_KINDS, STAT_NAMES, StatKind, statPoints, HP_PER_STR } from "../../shared/powers";
 import { NEED_TEXT, pointRange, SkillDef, skillOf, skillTarget, MAX_STACKS, STACK_DECAY_MS, STACK_NAME, talentBonus, withMods } from "../../shared/skills";
 import { SkillFx } from "./skillfx";
+import { BeastForms } from "./beastForms";
 import { movesSheet, SkillMoves } from "./skillMoves";
 import { displayGrid } from "./tileset";
 import { CRAWL_CROP, heroTexture, itemTexture, potionTex, makeTileset, MOB_LOOK, mobTexture, preloadPaintedMobs } from "./textures";
@@ -328,6 +329,7 @@ export class TownScene extends Phaser.Scene {
   private shots = new Map<string, { g: Phaser.GameObjects.GameObject & { x: number; y: number }; tx: number; ty: number; at: number; dx: number; dy: number; spd: number }>();
   private fx!: SkillFx;
   private moves!: SkillMoves; // melee skill micro sequences (skillMoves.ts)
+  private forms!: BeastForms; // the vampire's Bat Form / Wolf Form (beastForms.ts)
   private gearFx!: GearFx; // item level effects on heroes
   private lastCast: Record<string, number> = {}; // local clock (ms) of my last cast of each skill, for cooldowns
   private mobByMeAt = -1e9; // last time a monster stood right by my hero (my name label hides then)
@@ -366,6 +368,7 @@ export class TownScene extends Phaser.Scene {
     this.fx = new SkillFx(this, (id) => this.entities.get(id), () => this.me);
     this.gearFx = new GearFx(this.fx);
     this.moves = new SkillMoves(this, this.fx);
+    this.forms = new BeastForms(this, this.fx);
     makeTileset(this);
     createArtAnims(this);
     if (SMOOTH) paintSmoothProps(this); // painted iso forge, anvil, witch hut… in place of the front-view pixel props
@@ -1715,6 +1718,7 @@ export class TownScene extends Phaser.Scene {
     const e = this.entities.get(id);
     if (!e) return;
     this.siege?.clear(id);
+    this.forms?.drop(id);
     e.sprite.destroy(); e.label?.destroy(); e.bar.destroy(); e.parts?.destroy(); e.bubble?.destroy(); e.shield?.destroy(); e.gear?.destroy();
     this.entities.delete(id);
   }
@@ -1745,6 +1749,8 @@ export class TownScene extends Phaser.Scene {
     const dir = e.state.dir as string;
     if (typeof ax === "number" && typeof ay === "number") e.vdir = (e.hero ? screenDir8 : screenDir)(ax, ay, e.vdir ?? dir);
     if (e.hero) { this.moves.stop(id, e); playCharAnim(e.sprite, e.hero, this.attackAnim(e.hero, step, variant), this.dirOf(e)); }
+    const beast = !!e.hero && this.forms.active(id);
+    if (beast) this.forms.attack(id); // Bat / Wolf Form: a bite, no weapon swing
     if (e.mob) e.strikeUntil = this.time.now + 240;
     // Aim can be diagonal (the server sends it); mobs and old messages fall back to the facing direction
     const off = typeof ax === "number" && typeof ay === "number" ? [ax, ay]
@@ -1761,7 +1767,7 @@ export class TownScene extends Phaser.Scene {
         e.sprite.setPosition(r.x, r.y);
       }
     }
-    if (cls) this.gearFx.swing(e, step, off[0], off[1], !!cls.projectile, id === this.me); // item level effects
+    if (cls && !beast) this.gearFx.swing(e, step, off[0], off[1], !!cls.projectile, id === this.me); // item level effects
     if (cls?.projectile) return; // the fireball itself is the visual
     // No hit-area shapes (Murat): the attack animation is the visual. No screen shake from hero attacks or skills.
   }
@@ -2534,7 +2540,8 @@ export class TownScene extends Phaser.Scene {
       if (ev.id === this.me) this.lastCast[ev.s] = this.time.now;
       if (ev.id === this.me && ev.s === this.leftSkill()) this.pointer?.swung(); // a left-click spell went off: that click is done
       // Big melee skills play their own wind-up / action / recovery sequence; everything else the cast animation
-      if (e?.hero && !this.moves.start(ev.id, e, ev, this.dirOf(e))) playCharAnim(e.sprite, e.hero, "skill", this.dirOf(e));
+      if (e?.hero && this.forms.keeps(ev.id, ev.s)) this.forms.attack(ev.id); // a beast casting its own school's skill bites instead (Bat / Wolf Form)
+      else if (e?.hero && !this.moves.start(ev.id, e, ev, this.dirOf(e))) playCharAnim(e.sprite, e.hero, "skill", this.dirOf(e));
     }
     if (ev.ev === "move" || ev.ev === "countered") {
       const e = this.entities.get(ev.id);
@@ -2854,6 +2861,7 @@ export class TownScene extends Phaser.Scene {
           }
         }
         e.sprite.setAlpha(p.dead ? 0.6 : 1);
+        if (this.forms.tick(id, e, moving, this.dirOf(e), now)) e.sprite.setAlpha(0); // a beast in the hero's place
       } else {
         const step = moving ? Math.floor(now / 150) % 2 : 0;
         // Monsters gather themselves before a blow (wind-up frame) and lunge when it lands (strike frame)

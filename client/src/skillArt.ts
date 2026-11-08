@@ -1053,6 +1053,36 @@ const ART: Record<string, Draw> = {
     p.outline();
     p.px(11, 8, "#ff2d2d"); p.px(13, 8, "#ff2d2d"); p.px(5, 17, "#ff2d2d"); p.px(18, 18, "#ff2d2d");
   },
+  v_batform: (p) => {
+    // the vampire's cape spreads into the wings of a great bat; his pale face is the bat's, red-eyed under tall ears
+    const W: Ramp = ["#1e0a10", "#4b161e", "#6e2232", "#a33a48"];
+    for (const sx of [-1, 1]) {
+      const x = (v: number) => 12 + sx * v;
+      p.poly([[x(2), 9], [x(7), 5], [x(11), 4], [x(11), 9], [x(10), 14], [x(8), 12], [x(6), 16], [x(4), 13], [x(2), 16]], sx < 0 ? W[2] : W[1]);
+      p.line(x(2), 9, x(11), 4, W[3]); p.line(x(7), 5, x(8), 12, W[0]); p.line(x(9), 5, x(10), 14, W[0]); p.line(x(5), 6, x(6), 16, W[0]);
+      p.poly([[x(1), 7], [x(3), 2], [x(3.5), 7]], "#2a1d3a"); // ear
+    }
+    p.poly([[10, 9], [14, 9], [15, 18], [12, 20], [9, 18]], "#1c1424");
+    p.ball(12, 9, 2.4, ["#5e5560", "#bdb0b8", "#e6dcd6", "#ffffff"]);
+    p.outline();
+    p.px(11, 9, "#ff2d2d"); p.px(13, 9, "#ff2d2d"); p.px(11, 11, "#ffffff"); p.px(13, 11, "#ffffff");
+    for (const [x, y, c] of [[4, 19, 1], [6, 21, 2], [18, 20, 1], [20, 19, 2], [12, 22, 1]] as [number, number, number][]) p.px(x, y, SHAD[c]);
+  },
+  v_wolfform: (p) => {
+    // a great black wolf's head, snarling, red-eyed, under a blood moon
+    const F: Ramp = ["#1d1922", "#4a4453", "#736c7c", "#a8a1b4"];
+    p.disc(18, 6, 4, "#6b0f18"); p.disc(17, 5, 3, "#9b1b1b"); p.px(16, 4, "#e63946");
+    p.poly([[4, 23], [3, 14], [5, 9], [4, 3], [8, 7], [11, 6], [13, 2], [14, 8], [17, 12], [21, 15], [21, 18], [16, 19], [12, 23]], F[1]);
+    p.poly([[5, 9], [4, 3], [8, 7]], F[2]); p.poly([[11, 6], [13, 2], [14, 8]], F[2]);
+    p.poly([[13, 12], [21, 15], [21, 18], [14, 16]], F[2]); // muzzle
+    p.line(5, 10, 11, 9, F[3]); p.line(13, 12, 20, 15, F[3]);
+    p.poly([[14, 17], [21, 18], [16, 21]], "#3d070d"); // open jaws
+    p.px(16, 18, "#ece6d6"); p.px(19, 18, "#ece6d6"); p.px(17, 20, "#ece6d6");
+    p.poly([[4, 23], [3, 16], [7, 18], [9, 23]], F[0]);
+    p.outline();
+    p.px(21, 15, "#050405"); p.px(12, 11, "#ff2d2d"); p.px(13, 11, "#ff8a80");
+    p.px(18, 22, BLOOD[2]); p.px(18, 23, BLOOD[1]);
+  },
   v_gaze: (p) => {
     // two burning red eyes in the dark
     p.disc(12, 12, 10, SHAD[0], 6);

@@ -54,6 +54,20 @@ export function treeLayout(cls: ClassKind, W: number, H: number): TreeLayout {
   return out;
 }
 
+/**
+ * How wide the slab must be for this class: at least `min`, wider when its three schools need more room (the
+ * vampire, Murat 2026-11-08: Bat Form and Wolf Form give the Night and Fang schools three lanes each).
+ */
+export function slabWidth(cls: ClassKind, min = 620): number {
+  let need = 20;
+  for (let br = 0; br < 3; br++) {
+    const list = SKILLS[cls].filter((s) => s.branch === br);
+    const lanes = list.length ? placeBranch(cls, list).lanes : 1;
+    need += (lanes - 1) * LANE + TILE + PAD * 2;
+  }
+  return Math.max(min, need);
+}
+
 /** Best grid for one school: fewest lanes first, then the lowest cost. */
 function placeBranch(cls: ClassKind, list: SkillDef[]): Grid {
   const order: SkillDef[] = [];
