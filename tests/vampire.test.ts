@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { BLOOD_RITE_MS, CANTRIPS, cleanRanks, MAX_RANK, SKILLS, skillOf } from "../shared/skills";
+import { BLOOD_RITE_MS, CANTRIPS, canLearn, cleanRanks, MAX_RANK, SKILLS, skillOf } from "../shared/skills";
 import { afterHit, bloodCost, castSkill, FieldInst, HitOpts, newRuntime, shotHit, ShotSpec, SkillHost, statusOf, tickField, tickUnit, Unit } from "../shared/skillEngine";
 import { ART_IDS } from "../client/src/skillArt";
 
@@ -318,4 +318,17 @@ test("Bat Form and Wolf Form: the vampire takes a beast's shape; its own school 
   assert.ok(castSkill(w.h, "v", "v_batform"));
   w.step(6000 * 1.3);
   assert.equal(formOf(v, w.h.now()), undefined);
+});
+
+test("vampire mastery ranks 4 and 5 open at Lv 30 and 40 (level 50 review)", () => {
+  const r = { v_link: 3 };
+  assert.equal(canLearn("vampire", 29, r, "v_link"), false);
+  assert.equal(canLearn("vampire", 30, r, "v_link"), true);
+  assert.equal(canLearn("vampire", 35, { v_link: 4 }, "v_link"), false);
+  assert.equal(canLearn("vampire", 40, { v_link: 4 }, "v_link"), true);
+  // an old save with rank 5 at Lv 25 keeps the skill at rank 3 and gets the points back
+  assert.equal(cleanRanks("vampire", 25, { v_link: 5 }).v_link, 3);
+  // 3-rank skills and the wizard's 6 ranks are untouched
+  assert.equal(canLearn("vampire", 12, { v_mist: 2 }, "v_mist"), true);
+  assert.equal(canLearn("wizard", 10, { [SKILLS.wizard[0].id]: 4 }, SKILLS.wizard[0].id), true);
 });

@@ -1,6 +1,6 @@
 /**
  * PvE balance simulator: bot heroes play the first zone (Lv 1-30) against its monsters and bosses.
- * Run: npx tsx tools/balance/pve.ts [runsPerCase] [--bosses] [--zones] [--act2]
+ * Run: npx tsx tools/balance/pve.ts [runsPerCase] [--bosses] [--zones] [--act2] [--class=vampire] [--build=0|1|2] [--boss=king]
  *
  * It reuses the PvP simulator (tools/balance/duel.ts): the same hero bot, skill engine, builds (rushing one branch),
  * stat points and gear by level. The other side is a monster with its real numbers (shared/constants.ts MOBS, level
@@ -352,6 +352,13 @@ for (const a of process.argv) {
   if (k) for (const list of Object.values(SKILLS)) for (const sk of list) if (sk.scale) sk.scale.per *= Number(k[1]);
 }
 
+/** --class=vampire: only that class. --build=1: every bot rushes that branch (0-2) instead of cycling the three. */
+const argOf = (k: string) => process.argv.find((a) => a.startsWith(`--${k}=`))?.split("=")[1];
+const ONLY = argOf("class") as ClassKind | undefined;
+const BUILD = argOf("build") !== undefined ? (Number(argOf("build")) as Build) : undefined;
+const CLASSES = ONLY ? [ONLY] : ACTIVE_CLASSES;
+const buildOf = (i: number) => BUILD ?? ((i % 3) as Build);
+
 if (process.argv[1]?.includes("pve")) {
   const n = Number(process.argv[2]) || 30;
   const doBosses = !process.argv.includes("--zones"), doZones = !process.argv.includes("--bosses");
@@ -360,14 +367,14 @@ if (process.argv[1]?.includes("pve")) {
     const levels = ACT2 ? [30, 33, 36, 39, 42, 45, 48] : [2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30];
     console.log(`Zone runs: ${CHAIN} encounters (1-3 monsters) in a row vs monsters of the hero's level to +2 (capped 25), 3 heal + 3 mana potions.`);
     console.log("Cell = cleared% / HP lost per kill / seconds per kill / potions drunk per run");
-    console.log("Lv".padEnd(5) + ACTIVE_CLASSES.map((c) => c.padEnd(22)).join(""));
+    console.log("Lv".padEnd(5) + CLASSES.map((c) => c.padEnd(22)).join(""));
     const tot: Record<string, { w: number; n: number }> = {};
     for (const L of levels) {
       let line = String(L).padEnd(5);
-      for (const c of ACTIVE_CLASSES) {
+      for (const c of CLASSES) {
         let won = 0, hp = 0, sec = 0, pots = 0;
         for (let i = 0; i < n; i++) {
-          const r = zoneRun(c, L, (i % 3) as Build, () => L + Math.floor(Math.random() * 3));
+          const r = zoneRun(c, L, buildOf(i), () => L + Math.floor(Math.random() * 3));
           won += r.won ? 1 : 0; hp += r.hpLostPerKill; sec += r.secPerKill; pots += r.heals + r.manas;
         }
         (tot[c] ??= { w: 0, n: 0 }).w += won; tot[c].n += n;
@@ -375,17 +382,18 @@ if (process.argv[1]?.includes("pve")) {
       }
       console.log(line);
     }
-    console.log("all".padEnd(5) + ACTIVE_CLASSES.map((c) => pct(tot[c].w / tot[c].n).padEnd(22)).join(""));
+    console.log("all".padEnd(5) + CLASSES.map((c) => pct(tot[c].w / tot[c].n).padEnd(22)).join(""));
   }
   if (doBosses) {
     console.log("\nBosses (solo, hero 1 level below unless capped, 5 heal + 5 mana potions). Cell = win% / avg fight s / boss HP left when lost");
-    console.log("".padEnd(24) + ACTIVE_CLASSES.map((c) => c.padEnd(18)).join(""));
-    for (const b of BOSSES) {
+    console.log("".padEnd(24) + CLASSES.map((c) => c.padEnd(18)).join(""));
+    const only = argOf("boss")?.toLowerCase(); // --boss=king: only the bosses whose name has that word
+    for (const b of BOSSES.filter((x) => !only || x.name.toLowerCase().includes(only))) {
       let line = b.name.padEnd(24);
-      for (const c of ACTIVE_CLASSES) {
+      for (const c of CLASSES) {
         let won = 0, sec = 0, left = 0, lostN = 0;
         for (let i = 0; i < n; i++) {
-          const r = bossRun(c, b, (i % 3) as Build);
+          const r = bossRun(c, b, buildOf(i));
           won += r.won ? 1 : 0; sec += r.secPerKill; if (!r.won) { left += r.bossLeft; lostN++; }
         }
         line += `${pct(won / n)}/${(sec / n).toFixed(0)}s/${lostN ? pct(left / lostN) : "-"}`.padEnd(18);

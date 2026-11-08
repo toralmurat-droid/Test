@@ -93,7 +93,7 @@ export const MOBS: Record<MobKind, MobDef> = {
   golem_shock: { name: "Storm Golem", maxHp: 130, speed: 76, damage: 15, attackCooldownMs: 1000, aggroRange: 160, leash: 256, xp: 0 },
   // the Summoner's ultimate: the golems fused into one giant (its element is in Mob.weapon)
   // the vampire's ultimate (v_brides): fast and frantic, quick claws, not much life
-  bride: { name: "Bride", maxHp: 170, speed: 112, damage: 15, attackCooldownMs: 520, aggroRange: 200, leash: 300, xp: 0 },
+  bride: { name: "Bride", maxHp: 170, speed: 112, damage: 9, attackCooldownMs: 520, aggroRange: 200, leash: 300, xp: 0 },
   golem_colossus: { name: "Colossus", maxHp: 420, speed: 64, damage: 30, attackCooldownMs: 1500, aggroRange: 180, leash: 256, xp: 0 },
   slime: { name: "Blob", maxHp: 40, speed: 45, damage: 8, attackCooldownMs: 1000, aggroRange: 80, leash: 140, xp: 10 },
   skeleton: { name: "Skeleton", maxHp: 80, speed: 62, damage: 19, attackCooldownMs: 900, aggroRange: 110, leash: 200, xp: 25 },
