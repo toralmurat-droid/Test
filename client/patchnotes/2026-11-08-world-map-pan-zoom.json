@@ -1,0 +1,10 @@
+{
+  "date": "2026-11-08",
+  "title": "Explore the world map",
+  "changes": [
+    "The world map (M) can be dragged with the mouse or a finger, or moved with I J K L.",
+    "Zoom in and out with the mouse wheel, a pinch or the + and − keys.",
+    "Press C, double-tap or the Centre button to centre the map on your hero: it then follows you.",
+    "Your hero keeps walking with the arrows or WASD while the map is open."
+  ]
+}
