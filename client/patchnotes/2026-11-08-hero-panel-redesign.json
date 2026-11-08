@@ -1,5 +1,6 @@
 {
   "date": "2026-11-08",
+  "patch": 190,
   "title": "New look for Character, Inventory and Skills",
   "changes": [
     "One dark gothic frame for the three tabs, with big engraved tab names",
