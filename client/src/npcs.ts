@@ -238,7 +238,12 @@ export class NpcLayer {
     const quests = CHAINS[msg.chain ?? 0]?.quests ?? CHAINS[0].quests;
     let m: [string, string] | undefined;
     if (msg.done) m = ["Quest complete", quests[msg.qid - 1]?.title ?? ""];
-    else m = quests[msg.qid]?.steps[msg.stage - 1]?.banner;
+    else {
+      const step = quests[msg.qid]?.steps[msg.stage - 1];
+      m = step?.banner;
+      // A night step reached by day (the Hollow King, the Marshal...): nothing rises yet, so the banner says to wait
+      if (m && step?.night && msUntilUndeadNight(dayTime(Date.now())) > 0) m = ["Wait for nightfall", m[1]];
+    }
     if (m && m[0] === "New quest") m = ["New quest", quests[msg.qid].title];
     this.tracker.classList.remove("flash"); void this.tracker.offsetWidth; this.tracker.classList.add("flash");
     if (m) {
@@ -468,6 +473,13 @@ export class NpcLayer {
   }
 
   /** Tracker block for one chain ("" when it has nothing to show). */
+  /** A step that only happens at night (the dead's bosses and rituals): by day the tracker says when night falls. */
+  private nightLine(step: ReturnType<typeof questStep>): string {
+    if (!step?.night) return "";
+    const ms = msUntilUndeadNight(dayTime(Date.now()));
+    return ms > 0 ? `<div class="qt-hint2 qt-night">Only at night. The dead rise in ${Math.max(1, Math.ceil(ms / 60000))} min.</div>` : "";
+  }
+
   private trackBlock(me: Me, q: ReturnType<typeof chainState>): string {
     const def = questDef(q), step = questStep(q), obj = questObjective(q);
     if (!def || !q) return "";
@@ -494,7 +506,7 @@ export class NpcLayer {
       return `<div class="qt-block${this.isFolded(def.title, started) ? " folded" : ""}${follow ? " following" : ""}" data-key="${def.title}" data-started="${started ? 1 : 0}">` +
         `<div class="qt-head"><span class="qt-title">${def.title}</span>` +
         `<button class="qt-follow" title="${follow ? "Stop following" : "Follow: mark it on the ground"}">${follow ? "◉" : "○"}</button></div>` +
-        `<div class="qt-body"><div class="qt-obj">${obj}</div>${bar}</div></div>`;
+        `<div class="qt-body"><div class="qt-obj">${obj}</div>${bar}${this.nightLine(step)}</div></div>`;
     }
     // Between quests: point to whoever has the next one (the blob chain's very first quest has its own "!" intro)
     if (q.questStage === 0 && (q.level ?? 1) >= def.minLevel && (q.questId > 0 || (q.chain ?? 0) > 0)) {
