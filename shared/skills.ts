@@ -140,7 +140,15 @@ export interface BuffDef {
   perStack?: number; // +% damage per stack spent (with SkillDef.consume)
   /** Bloodline (Thirst): group allies within this many px get the same buff with half its lifesteal. */
   group?: number;
+  /**
+   * Vampire shapeshift (Bat Form, Wolf Form): the hero takes this beast's shape while the buff lasts (the client draws
+   * the beast instead of the hero). Skills of the form's own school keep the shape; any other skill turns them back
+   * first, and pressing the form again ends it.
+   */
+  form?: BeastForm;
 }
+
+export type BeastForm = "bat" | "wolf";
 
 export interface CounterDef {
   ms: number; // stance length
@@ -580,6 +588,10 @@ const S: Record<ClassKind, SkillDef[]> = <Record<ClassKind, SkillDef[]>><unknown
     { id: "v_soil", name: "Native Soil", type: "Aura", branch: 1, row: 3, style: "shadow", cd: 20000, mana: 22, target: "self",
       desc: "Spill a box of your grave earth at your feet for 8s: while you stand on it you heal quickly, and it clings to the feet of your enemies.",
       field: { kind: "gravesoil", r: 40, ms: 8000, tickMs: 500, heal: 1.5, slowMs: 500 } },
+    // Murat 2026-11-08: the vampire can take the shape of a bat or a wolf
+    { id: "v_batform", name: "Bat Form", type: "Movement", branch: 1, row: 3, style: "shadow", cd: 14000, mana: 20, target: "self",
+      desc: "Shrink into a great black bat for 6s: you flit about 60% faster, are hard to hit (25% less damage taken), nothing slows or knocks you about, and your bites drink 6% of the damage. You can still call bats, rats and mist (Night skills); any other skill, or this one again, gives you your own shape back.",
+      buff: { ms: 6000, form: "bat", speed: 60, armor: 25, immune: true, lifesteal: 6 } },
     { id: "v_nightfall", name: "Nightfall", type: "Ultimate", branch: 1, row: 4, style: "shadow", cd: 24000, mana: 40, chargeMs: 500,
       desc: "Call down a starless night and a cold fog on the land around you for 10s: it is night there (Child of the Night wakes), the fog slows every enemy inside, weakens them and feeds you, and for 5s you hunt faster, healing on every hit.",
       field: { kind: "nightfall", r: 96, ms: 10000, tickMs: 500, dmg: 8, drain: 15, weakMs: 1200, slowMs: 1000, night: true }, buff: { ms: 5000, lifesteal: 8, speed: 15 } },
@@ -597,6 +609,9 @@ const S: Record<ClassKind, SkillDef[]> = <Record<ClassKind, SkillDef[]>><unknown
     { id: "v_pounce", name: "Night Pounce", type: "Attack", branch: 2, row: 3, style: "shadow", windMs: 70, cd: 10000, cost: 30,
       desc: "Melt into the shadows and step out right behind the nearest foe, then sink your teeth in: a heavy blow that stuns, and you drink 15% of it.",
       move: { kind: "behind", dist: 80, invulnMs: 250 }, areas: [{ r: 22, ahead: 8, wpn: 2.2, stunMs: 350, drain: 15, kb: 1, look: "slash" }] },
+    { id: "v_wolfform", name: "Wolf Form", type: "Buildup", branch: 2, row: 3, style: "blood", cd: 22000, cost: 25, mana: 10, chargeMs: 250, target: "self",
+      desc: "Throw back your head and howl as you become a huge black wolf for 10s: you hit 20% harder and 20% faster, run 20% faster, shrug off 10% of all damage, and every bite makes them bleed and heals you 8% of it. You can still rend, pounce, devour and bite (Fang skills); any other skill, or this one again, gives you your own shape back.",
+      buff: { ms: 10000, form: "wolf", dmg: 20, atkspd: 20, speed: 20, armor: 10, lifesteal: 8, onHit: { burn: [4, 2000], bleed: "drip" } } },
     { id: "v_brides", name: "The Brides", type: "Ultimate", branch: 2, row: 4, style: "shadow", cd: 35000, mana: 35, chargeMs: 300, target: "self",
       desc: "Call your pale brides out of the night: three of them at rank 1, one more each rank. For 25s they stay at your side and throw themselves at every foe near you, clawing in a frenzy and drinking: part of the blood they draw comes back to you.",
       brides: { n: 3, perRank: 1, ms: 25000, drain: 20 } },
@@ -727,12 +742,12 @@ const TREE: Record<string, Shape> = {
   // which leads on to the Ward (dead end) and the Crimson Tide
   v_link: [1, undefined, ["mag", 2]], v_lance: [3, "v_link", ["mag", 2]], v_boil: [4, "v_link", ["mag", 2]], v_exsang: [11, "v_boil", ["mag", 2.5]],
   v_pact: [7, "v_link"], v_ward: [12, "v_pact", ["sta", 2]], v_tide: [22, "v_pact", ["mag", 2.5]],
-  // Vampire · Night: Charm hangs off the mist and leads to the passive and the soil (dead end); the bats grow into the rats and Nightfall
+  // Vampire · Night: Charm hangs off the mist and leads to the passive and the soil (dead end); the bats grow into the rats and Nightfall, and into Bat Form (dead end)
   v_mist: [1], v_gaze: [6, "v_mist"], v_nightborn: [8, "v_gaze"], v_soil: [13, "v_nightborn"], v_bats: [4, "v_mist", ["mag", 2]],
-  v_rats: [10, "v_bats", ["mag", 2]], v_nightfall: [21, "v_rats", ["mag", 2.5]],
-  // Vampire · Fang: Thirst leads to the Hunger (dead end); the slash grows into the Pounce and the Brides; Devour, then Bite
+  v_rats: [10, "v_bats", ["mag", 2]], v_nightfall: [21, "v_rats", ["mag", 2.5]], v_batform: [12, "v_bats"],
+  // Vampire · Fang: Thirst leads to the Hunger (dead end); the slash grows into the Pounce, which leads to the Brides and Wolf Form (dead end); Devour, then Bite
   v_rend: [1, undefined, ["str", 2]], v_thirst: [3, "v_rend"], v_hunger: [8, "v_thirst"], v_pounce: [9, "v_rend", ["str", 2]],
-  v_brides: [20, "v_pounce", ["mag", 2.5]],
+  v_brides: [20, "v_pounce", ["mag", 2.5]], v_wolfform: [14, "v_pounce"],
   v_devour: [4, "v_rend", ["str", 2]], v_bite: [7, "v_devour", ["mag", 2]],
 };
 /**
@@ -760,8 +775,8 @@ for (const sk of S.wizard) sk.maxRank = 6;
  */
 const VAMP_RANKS: Record<string, [number, string?]> = {
   v_link: [5], v_lance: [5, "pierces one more foe"], v_boil: [3], v_pact: [5], v_ward: [3], v_exsang: [5], v_tide: [3],
-  v_mist: [3], v_bats: [5, "+2 bats"], v_gaze: [3, "charm lasts longer"], v_nightborn: [5], v_rats: [5, "+3 rats"], v_soil: [3], v_nightfall: [3],
-  v_rend: [5], v_thirst: [3], v_hunger: [5], v_pounce: [3], v_devour: [3, "eats foes with 5% more life left"], v_bite: [3, "10% more chance to turn, +1 thrall at rank 2"], v_brides: [3, "+1 bride"],
+  v_mist: [3], v_bats: [5, "+2 bats"], v_gaze: [3, "charm lasts longer"], v_nightborn: [5], v_rats: [5, "+3 rats"], v_soil: [3], v_nightfall: [3], v_batform: [3],
+  v_rend: [5], v_thirst: [3], v_hunger: [5], v_pounce: [3], v_devour: [3, "eats foes with 5% more life left"], v_bite: [3, "10% more chance to turn, +1 thrall at rank 2"], v_brides: [3, "+1 bride"], v_wolfform: [3],
 };
 for (const sk of S.vampire) { const v = VAMP_RANKS[sk.id]; if (v) { sk.maxRank = v[0]; sk.rankStep = v[1]; } }
 for (const list of Object.values(S)) for (const sk of list) {

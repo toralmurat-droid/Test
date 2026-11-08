@@ -54,6 +54,11 @@ export interface FxEntity {
 }
 
 const pick = <T>(a: T[]) => a[Math.floor(Math.random() * a.length)];
+const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
+/** One texel of a sprite as an effect sees it: screen offset from the feet, height above them, colour. */
+export type Grain = { dx: number; dy: number; h: number; c: number };
+/** How long a Bat / Wolf Form change takes (client/src/beastForms.ts). */
+export const MORPH_MS = 520;
 const rnd = (a: number, b: number) => a + Math.random() * (b - a);
 
 /** Goo of the shooter blob's spit (not a skill style). */
@@ -325,6 +330,7 @@ export class SkillFx {
       case "buff": {
         if (!e) break;
         const def = s;
+        if (def?.buff?.form) break; // a shapeshift: the beast form change plays instead (beastForms.ts)
         if (def?.type === "Enchant") {
           // Weapon lights up
           const [hx, hy] = this.hand(e);
@@ -1040,10 +1046,15 @@ export class SkillFx {
    * The hero as it looks right now (body + worn gear overlays), as coloured pixels: screen offsets from the feet,
    * one per texel. For effects that take the hero apart and put it back together (Mist Form).
    */
-  private heroPixels(e: FxEntity): { dx: number; dy: number; h: number; c: number }[] {
+  heroPixels(e: FxEntity): { dx: number; dy: number; h: number; c: number }[] {
     const layers: Phaser.GameObjects.Sprite[] = [e.sprite];
     e.gear?.each((g) => layers.push(g));
-    const s = e.sprite, W = s.frame.cutWidth, H = s.frame.cutHeight;
+    return this.spritePixels(layers);
+  }
+
+  /** Like heroPixels, for any sprite (and same-sized layers on top of it): the beast of a Bat / Wolf Form. */
+  spritePixels(layers: Phaser.GameObjects.Sprite[]): { dx: number; dy: number; h: number; c: number }[] {
+    const s = layers[0], W = s.frame.cutWidth, H = s.frame.cutHeight;
     const grid = new Map<number, number>(); // texel -> colour, the top layer wins
     for (const l of layers) {
       const data = this.frameData(l.texture.key, l.frame.name);
@@ -1059,6 +1070,9 @@ export class SkillFx {
     }
     return out;
   }
+
+  /** What a hero looks like when it isn't itself (a bat in Bat Form): its pixels, for Mist Form. Set by beastForms.ts. */
+  shapeOf?: (id: string) => Grain[] | undefined;
 
   private frames = new Map<string, { w: number; h: number; px: Uint8ClampedArray } | null>();
   /** The RGBA texels of one texture frame (cached). */
@@ -1090,7 +1104,7 @@ export class SkillFx {
   private mistForm(ev: any, e?: FxEntity) {
     const { fx, fy, x, y } = ev;
     const MIST = [0xc9c2d9, 0xa99fc0, 0x8a80a8, 0xe0dbea, 0x6f6690];
-    const shape = e ? this.heroPixels(e) : [];
+    const shape = e ? this.shapeOf?.(ev.id) ?? this.heroPixels(e) : [];
     const H = shape.reduce((m, q) => Math.max(m, q.h), 1);
     const depth = e ? e.sprite.depth : DEPTH - 1;
     const mix = (a: number, b: number, k: number) => {
@@ -1151,7 +1165,7 @@ export class SkillFx {
     if (shape.length) this.scene.time.delayedCall(MIST_REFORM_AT_MS, () => {
       // rebuilt into the pose he shows when he appears (his hidden frame by now), else the one he left in
       const me = e && this.ent(ev.id);
-      const now = me ? this.heroPixels(me) : [];
+      const now = me ? this.shapeOf?.(ev.id) ?? this.heroPixels(me) : [];
       const to = now.length ? now : shape, H2 = to.reduce((m, q) => Math.max(m, q.h), 1);
       const g = this.scene.add.graphics().setDepth(me ? me.sprite.depth + 0.5 : depth).setPosition(x, y);
       const grains = to.map((q) => {
@@ -1183,6 +1197,81 @@ export class SkillFx {
         this.mistPuff(x + Math.cos(a) * d, y + Math.sin(a) * d * 0.7, x, y, rnd(800, 1200), 0.75);
       });
     });
+  }
+
+  /**
+   * Shapeshift (Bat Form, Wolf Form, Murat 2026-11-08): one shape flows into the other. Every texel of the old shape
+   * leaves its place, darkens into shadow as it swirls up and out round the body, and settles into a texel of the new
+   * shape, taking its colour (top texels go to top texels, so the head becomes the head). Dark smoke wells up round
+   * the feet meanwhile; a bat throws off a flutter of small dark wings, a wolf red sparks of blood.
+   * `at` follows the hero while it plays (it may be running).
+   */
+  morph(at: () => { x: number; y: number; depth: number }, from: Grain[], to: Grain[], beast: string, ms = MORPH_MS, back = false, done?: () => void) {
+    let finished = false;
+    const finish = () => { if (!finished) { finished = true; done?.(); } };
+    const SHADOW = beast === "bat" ? 0x1b1020 : 0x16121c;
+    const mix = (a: number, b: number, k: number) => {
+      const ch = (sh: number) => Math.round(((a >> sh) & 255) + (((b >> sh) & 255) - ((a >> sh) & 255)) * k);
+      return (ch(16) << 16) | (ch(8) << 8) | ch(0);
+    };
+    const order = (l: Grain[]) => [...l].sort((p, q) => p.dy - q.dy || p.dx - q.dx);
+    const A = order(from), B = order(to);
+    const n = Math.max(A.length, B.length);
+    if (!n) { finish(); return; }
+    const p0 = at();
+    const g = this.scene.add.graphics().setDepth(p0.depth + 0.5).setPosition(p0.x, p0.y);
+    const H = Math.max(1, ...A.map((q) => q.h), ...B.map((q) => q.h));
+    const grains = Array.from({ length: n }, (_, i) => {
+      const a = A[Math.floor(i * A.length / n)] ?? B[i], b = B[Math.floor(i * B.length / n)] ?? A[i];
+      const side = Math.sign((a.dx + b.dx) || rnd(-1, 1));
+      return { a, b, at: (i / n) * ms * 0.3 + rnd(0, ms * 0.12), life: ms * rnd(0.5, 0.62),
+        out: side * rnd(5, 13), up: rnd(4, 12), sw: rnd(-1, 1) };
+    });
+    const t0 = this.t;
+    this.emit(ms + 40, 16, () => {
+      const t = this.t - t0, p = at();
+      if (t >= ms) { g.clear(); finish(); return; } // every grain has landed: the new shape takes over
+      g.setPosition(p.x, p.y).setDepth(p.depth + 0.5);
+      g.clear();
+      for (const q of grains) {
+        const k = clamp01((t - q.at) / q.life);
+        const e = k * k * (3 - 2 * k), bow = Math.sin(k * Math.PI);
+        const x = q.a.dx + (q.b.dx - q.a.dx) * e + q.out * bow + Math.sin(k * 6 + q.sw * 3) * 1.5 * bow;
+        const y = q.a.dy + (q.b.dy - q.a.dy) * e - q.up * bow;
+        const c = k < 0.5 ? mix(q.a.c, SHADOW, k * 2) : mix(SHADOW, q.b.c, (k - 0.5) * 2);
+        g.fillStyle(c, 1).fillRect(x - 0.5, y - 0.5, 1, 1);
+      }
+    });
+    this.scene.time.delayedCall(ms * 4, () => { g.destroy(); finish(); }); // (a fallback: the grains finish it first)
+    // dark smoke wells up round the feet, thickest in the middle of the change
+    this.emit(ms, 30, () => {
+      const p = at(), k = (this.t - t0) / ms, m = Math.sin(k * Math.PI);
+      for (let i = 0; i < Math.round(1 + m * 3); i++) {
+        const a = Math.random() * Math.PI * 2, d = Math.sqrt(Math.random()) * 14;
+        this.p(p.x + Math.cos(a) * d, p.y + Math.sin(a) * d * 0.6, rnd(0, H * 0.6), pick([0x1c1622, 0x2a2232, 0x3a2f44, 0x241018]), {
+          vx: Math.cos(a) * rnd(6, 16), vy: Math.sin(a) * rnd(3, 8), vz: rnd(6, 16), drag: 1.2, life: rnd(500, 850),
+          size: pick([3, 4, 5]), size1: rnd(7, 10), alpha: rnd(0.35, 0.55), add: false, depth: p.depth - 0.5,
+        });
+      }
+    });
+    this.glow(p0.x, p0.y, H * 0.5, 18, beast === "bat" ? 0x6a45c2 : 0x9b1b1b, ms * 0.8, 0.45);
+    if (beast === "bat") {
+      // a flutter of small dark wings scatters off the body
+      for (let i = 0; i < 9; i++) this.scene.time.delayedCall(rnd(0, ms * 0.6), () => {
+        const p = at(), a = Math.random() * Math.PI * 2;
+        this.p(p.x + rnd(-4, 4), p.y, rnd(H * 0.3, H * 0.8), pick([0x0d0a10, 0x1a1220, 0x24161e]), {
+          vx: Math.cos(a) * rnd(30, 55), vy: Math.sin(a) * rnd(12, 24), vz: rnd(14, 30), drag: 0.6, life: rnd(450, 700), size: 2, size1: 1, alpha: 0.95, add: false, depth: p.depth + 1, spin: rnd(-12, 12),
+        });
+      });
+    } else {
+      // red sparks of blood fly off as the body tears and knits
+      for (let i = 0; i < (back ? 8 : 14); i++) this.scene.time.delayedCall(rnd(ms * 0.15, ms * 0.7), () => {
+        const p = at(), a = Math.random() * Math.PI * 2;
+        this.p(p.x + rnd(-6, 6), p.y + rnd(-2, 2), rnd(H * 0.2, H * 0.7), pick([0x9b1b1b, 0xe63946, 0x6b0f18]), {
+          vx: Math.cos(a) * rnd(20, 40), vy: Math.sin(a) * rnd(8, 16), vz: rnd(10, 26), g: 70, drag: 0.8, life: rnd(350, 600), size: 1, alpha: 1, add: false, depth: p.depth + 1,
+        });
+      });
+    }
   }
 
   private smoke(x: number, y: number, r: number, n: number) {

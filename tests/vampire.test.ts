@@ -153,9 +153,9 @@ test("Nightfall marks its ground as night", () => {
 
 // ---- Tree rebuild (Murat 2026-11-07): 7 skills per tree, new mechanics ----
 
-test("each vampire tree has 7 skills, 22 with Leech; old Cloak and Frenzy saves move to Rat Plague and The Brides", () => {
-  for (const b of [0, 1, 2]) assert.equal(SKILLS.vampire.filter((s) => s.branch === b).length, 7, `branch ${b}`);
-  assert.equal(SKILLS.vampire.length + CANTRIPS.vampire.length, 22);
+test("vampire trees: Blood 7 skills, Night and Fang 8 with Bat / Wolf Form, 24 with Leech; old Cloak and Frenzy saves move to Rat Plague and The Brides", () => {
+  assert.deepEqual([0, 1, 2].map((b) => SKILLS.vampire.filter((s) => s.branch === b).length), [7, 8, 8]);
+  assert.equal(SKILLS.vampire.length + CANTRIPS.vampire.length, 24);
   const out = cleanRanks("vampire", 30, { v_mist: 1, v_bats: 1, v_cloak: 2, v_nightfall: 1, v_rend: 1, v_pounce: 1, v_frenzy: 3 });
   assert.deepEqual(out, { v_mist: 1, v_bats: 1, v_rats: 2, v_nightfall: 1, v_rend: 1, v_pounce: 1, v_brides: 3 });
 });
@@ -286,4 +286,36 @@ test("ranks: Bat Swarm and Rat Plague add creatures per rank, skills have their 
   assert.equal(skillOf("vampire", "v_brides")?.maxRank, 3);
   assert.equal(skillOf("vampire", "v_rats")?.rankStep, "+3 rats");
   for (const sk of SKILLS.vampire) assert.ok(sk.maxRank === 3 || sk.maxRank === 5, sk.id);
+});
+
+test("Bat Form and Wolf Form: the vampire takes a beast's shape; its own school keeps it, any other skill or the form again turns him back", async () => {
+  const { formOf, dealtMult: damageDealtMult, takenMult: damageTakenMult } = await import("../shared/skillEngine");
+  const w = world();
+  const v = w.add("v", 0, 0, { cls: "vampire", talents: ranks(["v_mist", "v_bats", "v_batform", "v_rend", "v_pounce", "v_wolfform"]), mana: 999, energy: 0 });
+  // Bat Form: faster, harder to hit, shown to the client as a status word
+  assert.ok(castSkill(w.h, "v", "v_batform"));
+  assert.equal(formOf(v, w.h.now()), "bat");
+  assert.ok(statusOf(v, w.h.now()).split(",").includes("v_batform"));
+  assert.ok(damageTakenMult(v, w.h.now()) < 0.8);
+  // a Night skill keeps the bat; a skill of another school turns the bat back into the vampire first
+  assert.ok(castSkill(w.h, "v", "v_bats"));
+  assert.equal(formOf(v, w.h.now()), "bat");
+  assert.ok(castSkill(w.h, "v", "v_rend"));
+  assert.equal(formOf(v, w.h.now()), undefined);
+  assert.ok(w.fx.some((e) => e.ev === "unform" && e.s === "v_batform"));
+  // Wolf Form howls first (a short buildup), then the wolf hits harder
+  w.step(3000); v.energy = 0;
+  assert.ok(castSkill(w.h, "v", "v_wolfform"));
+  assert.equal(formOf(v, w.h.now()), undefined);
+  w.step(300);
+  assert.equal(formOf(v, w.h.now()), "wolf");
+  assert.ok(damageDealtMult(v, w.h.now()) >= 1.2);
+  // pressing it again ends it for free, and the shape runs out by itself too
+  assert.ok(castSkill(w.h, "v", "v_wolfform"));
+  assert.equal(formOf(v, w.h.now()), undefined);
+  assert.ok(castSkill(w.h, "v", "v_batform") === false, "Bat Form is still cooling down");
+  w.step(20000); v.energy = 0;
+  assert.ok(castSkill(w.h, "v", "v_batform"));
+  w.step(6000 * 1.3);
+  assert.equal(formOf(v, w.h.now()), undefined);
 });

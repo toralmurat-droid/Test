@@ -4,7 +4,7 @@ import { icon as pxIcon } from "./pixelicons";
 import { slotKey } from "./keymode";
 import { Stats } from "../../shared/powers";
 import { iconImg } from "./skillIcons";
-import { Node, treeLayout } from "./treeLayout";
+import { Node, slabWidth, treeLayout } from "./treeLayout";
 import { SheetPreview, talentsOf } from "./sidepanel";
 import {
   BRANCHES, childrenOf, EFFECT_TEXT, levelPower, lockReason, maxRank, RANK_POWER, rankOf, SkillDef, SKILLS, spentPoints, STACK_NAME,
@@ -20,7 +20,7 @@ import { damageText, scaleText, skillDamage } from "../../shared/skillInfo";
  * Hover a skill to read it (damage for your current stats, attribute scaling, cost), click it to spend a point.
  * Learned actives go on keys 1-0: hover the skill and press a number key, or click a key slot at the bottom.
  */
-const W = 620, H = 520; // the stone slab with the three schools side by side, CSS px
+const H = 520; // the stone slab with the three schools side by side, CSS px (620 wide, or as wide as the class needs: slabWidth)
 
 export class TalentMenu {
   private el = document.getElementById("tree")!;
@@ -96,6 +96,7 @@ export class TalentMenu {
       `<span class="treehint">Follow the stone paths: a node needs the one before it. Upgrades change the spell at the start of their path. ` +
       `Basic hits build ${STACK_NAME[cls]} (up to 5) for some skills.</span>`;
 
+    const W = slabWidth(cls);
     const { nodes: layout, cols } = treeLayout(cls, W, H);
     const colors = BRANCHES[cls].map((b) => b.color);
     let html = `<canvas class="treeart" width="${W}" height="${H}"></canvas><div class="treebox">`;
