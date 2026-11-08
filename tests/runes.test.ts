@@ -122,3 +122,37 @@ test("in the game: set a rune, it fires in a fight, take it out whole", async ()
     await srv.stop();
   }
 });
+
+test("in the game: selling a rune to Morwen pays its price", async () => {
+  const { startRoom, wait } = await import("./helpers/room");
+  const { NPCS } = await import("../shared/npcs");
+  const { RUNE_PRICE } = await import("../shared/shops");
+  const srv = await startRoom();
+  try {
+    const c = await srv.join({ cls: "knight" });
+    await wait(200);
+    const room = srv.room, id = c.sessionId, p = room.state.players.get(id), cl = room.clients.find((x: any) => x.sessionId === id);
+    const w = NPCS.find((n: any) => n.id === "witch")!;
+    p.x = w.x + 10; p.y = w.y;
+    p.bag.clear(); p.bag.push("w_frost"); p.bag.push(runeId("storm", 3));
+    const gold = p.gold;
+    room.shopSell(cl, 0); // she doesn't buy swords
+    assert.equal(p.bag.length, 2);
+    room.shopSell(cl, 1);
+    assert.deepEqual(p.bag.toArray(), ["w_frost"]);
+    assert.equal(p.gold, gold + RUNE_PRICE[3]);
+  } finally {
+    await srv.stop();
+  }
+});
+
+test("Morwen buys loose runes by rank; the smiths do not, and they still buy gear with runes in it", async () => {
+  const { SHOPS, shopBuys, sellPrice, RUNE_PRICE } = await import("../shared/shops");
+  const r1 = runeId("ember", 1);
+  assert.equal(shopBuys(SHOPS.witch, r1), true);
+  assert.equal(shopBuys(SHOPS.witch, "w_frost"), false);
+  assert.equal(shopBuys(SHOPS.weaponsmith, r1), false);
+  assert.equal(shopBuys(SHOPS.weaponsmith, withRunes("w_frost", [ember])), true);
+  assert.equal(sellPrice(r1), RUNE_PRICE[1]);
+  assert.ok(sellPrice(runeId("ward", 3)) > sellPrice(runeId("ward", 2)) && sellPrice(runeId("ward", 2)) > sellPrice(r1));
+});

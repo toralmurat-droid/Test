@@ -33,7 +33,7 @@ import { DOORS, DOOR_RANGE, doorById, doorDist, doorWorkable, isSafeZone, isSoli
 import { isDecorSolidAt, npcById, npcNear, TALK_RANGE } from "../shared/npcs";
 import { beyondWall, WATCH, WATCH_POSTS, WatchPost } from "../shared/watch";
 import { inVillage, WRATH } from "../shared/wrath";
-import { sellPrice, SHOPS } from "../shared/shops";
+import { sellPrice, shopBuys, SHOPS } from "../shared/shops";
 import { BLOB_KINDS, CHAINS, CROWN_CHAIN, packQuest, chainOpen, chainState, inZone, isBlob, npcPresent, QuestState, questStep, stepGoal, Summon, TUT_CHAIN, TUT_QUESTS, USE_RANGE } from "../shared/quests";
 import { findHideSpot, HIDE, MOTHER_KEEP_OUT, noMobsAt, spawnPoint, SPAWN_ZONES, villageDist, zoneCap } from "../shared/spawns";
 import { blocked, moveStep } from "../shared/movement";
@@ -4740,12 +4740,17 @@ export class TownRoom extends Room<TownState> {
     const p = this.state.players.get(client.sessionId);
     const shop = p && !p.dead ? this.shopNear(p) : undefined;
     if (!p || !shop?.buys || typeof i !== "number" || i < 0 || i >= p.bag.length) return;
-    const gid = p.bag.at(i), def = gid ? gearDef(gid) : undefined;
-    if (!gid || !def || !shop.buys.includes(def.slot)) return;
+    const gid = p.bag.at(i);
+    if (!gid || !shopBuys(shop, gid)) return; // a gear slot it lists, or loose runes (Morwen)
     const items = [...bagItems(p)];
     items.splice(i, 1);
+    // runes set in a sold item come back to the bag; with no room the shop pays for them
+    let price = sellPrice(gid);
+    for (const r of itemRunes(gid)) {
+      const rid = runeId(r.key, r.rank);
+      if (items.length + potionSlots(p.pots) < BAG_SIZE) items.push(rid); else price += sellPrice(rid);
+    }
     setBag(p, items);
-    const price = sellPrice(gid);
     p.gold += price;
     client.send("shop", { ok: true, text: `+${price} gold` });
   }

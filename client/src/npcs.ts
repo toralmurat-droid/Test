@@ -21,11 +21,13 @@ import { routeVia } from "../../shared/dungeon";
 import { actAt, WAYGATES } from "../../shared/act2";
 import type { MapMarker } from "./minimap";
 import { QuestLog } from "./questlog";
-import { MASTER_LEVELS, SHOPS, sellPrice } from "../../shared/shops";
+import { MASTER_LEVELS, SHOPS, sellPrice, shopBuys } from "../../shared/shops";
 import { GEAR_SLOTS, GearSlot, gearDef, gearName, itemLevel, itemRarity, itemText, reqProblem, TIER_NAMES } from "../../shared/gear";
 import { repairCost, WEAR, wearMult } from "../../shared/upkeep";
 import { CHAR_GROW, CHAR_SCALE, CHAR_ORIGIN, CharacterName, playCharAnim } from "./artAssets";
 import { iconCanvas, itemColor, rarityLabel, reqInfoOf } from "./gear";
+import { parseRune, RUNE_KIND_NAMES, RUNES, runeName, runeText } from "../../shared/runes";
+import { runeCanvas, runeCss } from "./runeArt";
 import { itemTexture, potionTex } from "./textures";
 import { potionAmount, potionName, slotsAfter, total, unpackPotions } from "../../shared/potions";
 import { BAG_SIZE } from "../../shared/gear";
@@ -308,11 +310,18 @@ export class NpcLayer {
       return head + row(e.item, gearName(e.item, cls), itemColor(e.item), `${rarityLabel(e.item)}${TIER_NAMES[d.tier]} · Lv ${itemLevel(e.item)} · ${itemText(e.item)}${why ? ` · <span class="sh-need">${why}</span>` : ""}`,
         `${e.price.toLocaleString("en-US")}${pxIcon("coin")}`, "sh-buy", i, gold < e.price);
     }).join("");
-    const sellable = shop.buys ? bag.map((id, i) => [id, i] as const).filter(([id]) => gearDef(id) && shop.buys!.includes(gearDef(id)!.slot)) : [];
+    const sellable = shop.buys ? bag.map((id, i) => [id, i] as const).filter(([id]) => shopBuys(shop, id)) : [];
+    const sellRow = (id: string, i: number) => {
+      const r = parseRune(id); // a loose rune (shared/runes.ts): Morwen buys them
+      return r
+        ? row(id, runeName(r), runeCss(r), `${RUNE_KIND_NAMES[RUNES[r.key].kind]} · ${runeText(r)}`, `Sell ${sellPrice(id)}${pxIcon("coin")}`, "sh-sell", i, false)
+        : row(id, gearName(id, cls), itemColor(id), `${rarityLabel(id)}${TIER_NAMES[gearDef(id)!.tier]} · Lv ${itemLevel(id)} · ${itemText(id)}`, `Sell ${sellPrice(id)}${pxIcon("coin")}`, "sh-sell", i, false);
+    };
+    const onlyRunes = shop.buys?.length === 1 && shop.buys[0] === "rune";
     const sell = shop.buys
-      ? `<h4>Sell from your bag</h4>` + (sellable.length
-        ? sellable.map(([id, i]) => row(id, gearName(id, cls), itemColor(id), `${rarityLabel(id)}${TIER_NAMES[gearDef(id)!.tier]} · Lv ${itemLevel(id)} · ${itemText(id)}`, `Sell ${sellPrice(id)}${pxIcon("coin")}`, "sh-sell", i, false)).join("")
-        : `<p class="sh-empty">Nothing to sell in your bag. Take a piece off in the Bag to sell it.</p>`)
+      ? `<h4>${onlyRunes ? "Sell runes from your bag" : "Sell from your bag"}</h4>` + (sellable.length
+        ? sellable.map(([id, i]) => sellRow(id, i)).join("")
+        : `<p class="sh-empty">${onlyRunes ? "No loose runes in your bag. Take one out of an item in the Bag to sell it." : "Nothing to sell in your bag. Take a piece off in the Bag to sell it."}</p>`)
       : "";
     const wear = q?.wear ?? 0, fix = shop.repairs ? repairCost(GEAR_SLOTS.map((s) => q?.[s]), wear) : 0;
     const repair = shop.repairs
@@ -339,7 +348,7 @@ export class NpcLayer {
     if (!this.shopOpen) { this.shopOpen = true; this.onShopOpen?.(true); }
     for (const el of this.dialog.querySelectorAll<HTMLElement>(".sh-icon")) {
       const id = el.dataset.icon!;
-      el.appendChild(id.startsWith("potion:") || id.startsWith("mpotion:") ? this.potionIcon(potionTex(id.split(":")[0], Number(id.split(":")[1]))) : iconCanvas(this.scene, id, 32));
+      el.appendChild(id.startsWith("potion:") || id.startsWith("mpotion:") ? this.potionIcon(potionTex(id.split(":")[0], Number(id.split(":")[1]))) : parseRune(id) ? runeCanvas(id, 32) : iconCanvas(this.scene, id, 32));
     }
     for (const b of this.dialog.querySelectorAll<HTMLButtonElement>(".sh-buy, .sh-sell")) {
       b.onclick = () => { this.send(b.classList.contains("sh-buy") ? "buy" : "sell", { i: Number(b.dataset.i) }); b.disabled = true; };
