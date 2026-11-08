@@ -1,3 +1,4 @@
+import { armouryTextures, armouryOrigin, AR_TX } from "./armoury";
 import "@fontsource/pixelify-sans/400.css";
 import { actionKey } from "./keymode";
 import { icon as pxIcon } from "./pixelicons";
@@ -137,6 +138,7 @@ export class NpcLayer {
     worldPropTextures(scene);
     witchCampTextures(scene);
     smithyTextures(scene);
+    armouryTextures(scene);
     for (const d of NPC_DECOR) {
       const x = d.x * TILE, y = d.y * TILE;
       if (d.prop.startsWith("wc_")) { // pixel-art camp props, 1.5 texels per world px
@@ -147,6 +149,11 @@ export class NpcLayer {
         const [ox, oy] = SMITHY_ORIGIN[d.prop];
         scene.add.sprite(x, y, d.prop, 0).setOrigin(ox, oy).setScale(1 / SMITHY_TX).setDepth(y).setFlipX(!!d.flip).play({ key: `${d.prop}_idle`, startFrame: Math.floor(d.x * 7) % 12 });
         if (d.prop === "sm_forge") this.chimneySmoke(scene, x, y);
+        continue;
+      }
+      if (d.prop.startsWith("ar_")) { // the armourers' stands and racks (armoury.ts), same pixel grid
+        const [ox, oy] = armouryOrigin(d.prop);
+        scene.add.sprite(x, y, d.prop, 0).setOrigin(ox, oy).setScale(d.scale / AR_TX).setDepth(y).setFlipX(!!d.flip).play({ key: `${d.prop}_idle`, startFrame: Math.floor(d.x * 5) % 12 });
         continue;
       }
       if (d.prop === "weapon_rack") { // pixel-art rack shared with the camps (worldProps.ts)
@@ -274,7 +281,7 @@ export class NpcLayer {
     const row = (icon: string, name: string, color: string, desc: string, btn: string, cls2: string, i: number, off: boolean) =>
       `<div class="sh-row"><span class="sh-icon" data-icon="${icon}"></span><span class="sh-info"><b style="color:${color}">${name}</b><small>${desc}</small></span>` +
       `<button class="${cls2}" data-i="${i}"${off ? " disabled" : ""}>${btn}</button></div>`;
-    let masterHead = false;
+    let masterHead = false, lastLv = 0;
     const buy = shop.stock.map((e, i) => {
       if (e.item === "potion" || e.item === "mpotion") {
         const qty = e.qty ?? 1, size = e.size ?? 0, mana = e.item === "mpotion";
@@ -286,6 +293,7 @@ export class NpcLayer {
       const d = gearDef(e.item)!, lv = itemLevel(e.item), isMaster = itemRarity(e.item) === 3;
       if (isMaster && lv !== master) return "";
       let head = "";
+      if (shop.levelHeads && !isMaster && lv !== lastLv) { lastLv = lv; head = `<h5 class="sh-lv">Lv ${lv}</h5>`; } // armourers: one heading per level step
       if (isMaster && !masterHead) {
         masterHead = true;
         head = `<h5 class="sh-lv">Masterwork · Legendary, forged by Brann</h5><div class="sh-lvpick">` +

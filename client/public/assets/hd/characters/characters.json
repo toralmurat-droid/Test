@@ -24,7 +24,10 @@
   "wellkeeper",
   "sandcaptain",
   "spicetrader",
-  "desertsmith"
+  "desertsmith",
+  "armourer",
+  "saltarmourer",
+  "sandarmourer"
  ],
  "image": "{name}.webp",
  "frameWidth": 48,
