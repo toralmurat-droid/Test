@@ -71,7 +71,7 @@ export const MOB_COMBAT: Record<MobKind, { poise: number; windupMs: number }> = 
   veiled: { poise: 40, windupMs: 420 },
   camelfolk: { poise: 140, windupMs: 440 },
   sunwright: { poise: 460, windupMs: 480 },
-  nightraider: { poise: 300, windupMs: 460 },
+  nightraider: { poise: 3000, windupMs: 460 }, // barely flinches: a hero alone can hardly break it
 };
 
 /** Attack speed multiplier from the poise fraction (1 above half, down to minSpeed at 0). */

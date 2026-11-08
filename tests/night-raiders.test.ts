@@ -35,12 +35,12 @@ test("Night Raiders: ride by night at the act's top level, hunt the living, spar
     const o = openAt(40, 120);
     p.x = o.x; p.y = o.y;
 
-    // Act 1: one rider, Lv 30, comes out of the dark off screen
+    // Act 1: one rider, Lv 50, comes out of the dark off screen
     const id = room.raidArrive(1, Date.now(), "vharn", p);
     assert.ok(id, "a rider arrives");
     const m = room.state.mobs.get(id);
     assert.equal(m.kind, "nightraider");
-    assert.equal(m.level, 30, "Act 1 riders are Lv 30");
+    assert.equal(m.level, 50, "riders are always Lv 50, Act 1 too");
     assert.equal(m.title, "Vharn, the Ashbrand");
     assert.ok(Math.hypot(m.x - p.x, m.y - p.y) >= 15 * TILE, "arrives off screen");
     await wait(100);
@@ -51,6 +51,9 @@ test("Night Raiders: ride by night at the act's top level, hunt the living, spar
     const hp0 = p.hp;
     for (let i = 0; i < 40 && p.hp === hp0; i++) await wait(100);
     assert.ok(p.hp < hp0, "the rider attacks the hero");
+    m.stunUntil = m.slowUntil = Date.now() + 5000;
+    await wait(200);
+    assert.ok(!m.stunned && !m.slowed, "no stun or slow holds a rider");
 
     // the dead are spared, the living cut down
     p.x = (SAFE_ZONE.x + SAFE_ZONE.w / 2) * TILE; p.y = (SAFE_ZONE.y + SAFE_ZONE.h / 2) * TILE; // out of reach in the square

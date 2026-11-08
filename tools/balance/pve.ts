@@ -12,6 +12,7 @@
  * Monsters raised or called mid-fight (Necromancer skeletons, Chief reinforcements, the King's servants) are left out,
  * so boss win rates read a bit high.
  */
+import { NIGHT_RAID } from "../../shared/raiders";
 import { ACTIVE_CLASSES, ClassKind } from "../../shared/classes";
 import { BANDIT_AI, BANDIT_ROLES, CHIEF } from "../../shared/bandits";
 import { BEAST, BLOB_AI, DEMON, HOLLOW_KING, MOB_ATTACK_RANGE, MOB_LEVEL, MOBS, MobKind, mobScale, MOTHER, SKELETON_AI, SKELETON_BOW, SKELETON_WEAPONS, SkeletonWeapon, SUNWRIGHT, REGEN_DELAY_MS, REGEN_PER_STA } from "../../shared/constants";
@@ -38,6 +39,7 @@ interface MobSpec {
   lunge?: { min: number; max: number; every: number; mult: number }; // warrior blob charge / cutthroat dash: a hard blow on arrival
   specials: Special[];
   enrage?: { hpBelow: number; speed: number; cd: number };
+  ccImmune?: boolean; // never stunned or slowed (the Night Raiders)
 }
 
 export function mobSpec(kind: MobKind, level: number, opt: { weapon?: string; hpMult?: number } = {}): MobSpec {
@@ -69,6 +71,7 @@ export function mobSpec(kind: MobKind, level: number, opt: { weapon?: string; hp
     ranged(N.range, N.keepAway, N.shotSpeed, N.shotRadius, N.boltMult);
     spec.specials.push({ name: "Death Circle", every: N.circle.cooldownMs, windup: N.circle.windupMs, min: 0, max: N.circle.range, radius: N.circle.radius, mult: N.circle.dmgMult, at: "target" });
   }
+  if (kind === "nightraider") { const C = NIGHT_RAID.charge; spec.lunge = { min: C.min, max: C.max, every: C.cooldownMs, mult: C.mult }; spec.ccImmune = true; } // the ride-down; no stun or slow holds them
   if (kind === "warriorblob") spec.lunge = { min: BLOB_AI.warrior.chargeMin, max: BLOB_AI.warrior.chargeMax, every: BLOB_AI.warrior.cooldownMs, mult: 1 };
   if (kind === "bandit" && (opt.weapon ?? "cutthroat") === "cutthroat") spec.lunge = { min: BANDIT_AI.dash.min, max: BANDIT_AI.dash.max, every: BANDIT_AI.dash.cooldownMs, mult: BANDIT_AI.dash.dmgMult };
   if (kind === "bandit" && opt.weapon === "brute") {
@@ -156,7 +159,7 @@ export class PveDuel extends Duel {
   speedOf(f: F): number {
     if (!(f instanceof MobF)) return super.speedOf(f);
     if (f.broken) return f.spec.speed * POISE.fleeSpeed;
-    return f.spec.speed * (f.enraged ? f.spec.enrage!.speed : 1) * (this.now < f.slowUntil ? 0.5 : 1) * (this.now < f.lungeUntil ? 3 : 1);
+    return f.spec.speed * (f.enraged ? f.spec.enrage!.speed : 1) * (this.now < f.slowUntil && !f.spec.ccImmune ? 0.5 : 1) * (this.now < f.lungeUntil ? 3 : 1);
   }
 
   brain(f: F): number {
@@ -203,7 +206,7 @@ export class PveDuel extends Duel {
   mobBrain(m: MobF): number {
     const now = this.now, h = this.mobTarget(m), S = m.spec;
     const d = Math.abs(h.x - m.x), toward = Math.sign(h.x - m.x) || 1;
-    if (now < m.stunUntil) { m.windUntil = 0; m.windKind = undefined; return 0; }
+    if (now < m.stunUntil && !m.spec.ccImmune) { m.windUntil = 0; m.windKind = undefined; return 0; }
     if (m.broken) { m.windUntil = 0; m.windKind = undefined; return -toward; }
     // Wind-up: a solid hit (15% of poise) interrupts a basic blow; specials go through
     if (m.windUntil) {
@@ -330,9 +333,9 @@ export const BOSSES: BossDef[] = [
   { name: "Pale Marshal Lv24", kind: "necromancer", level: 24, hero: 23, hpMult: 2.5 },
   { name: "Hollow King Lv30", kind: "hollowking", level: 30, hero: 30, hpMult: 2 },
   { name: "Sunwright Lv50", kind: "sunwright", level: 50, hero: 49, hpMult: 2 },
-  // the Night Raiders (shared/raiders.ts): met by chance, a hero at the act cap should win most fights
-  { name: "Night Raider Lv30", kind: "nightraider", level: 30, hero: 30 },
-  { name: "Night Raider Lv50", kind: "nightraider", level: 50, hero: 50 },
+  // the Night Raiders (shared/raiders.ts): always Lv 50, close to unbeatable for one hero alone (Murat 2026-11-08)
+  { name: "Night Raider vs Lv30", kind: "nightraider", level: 50, hero: 30 },
+  { name: "Night Raider vs Lv50", kind: "nightraider", level: 50, hero: 50 },
 ];
 
 function bossRun(cls: ClassKind, b: BossDef, build: Build, potions = 5): RunResult & { bossLeft: number } {

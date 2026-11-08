@@ -142,8 +142,9 @@ export const MOBS: Record<MobKind, MobDef> = {
   camelfolk: { name: "Camel-Man", maxHp: 300, speed: 60, damage: 32, attackCooldownMs: 1300, aggroRange: 140, leash: 260, xp: 74 },
   // Act 2's final boss (the Second Sun chain's last quest; moves in BEAST, voice and phases in SUNWRIGHT below)
   sunwright: { name: "The Sunwright", maxHp: 1100, speed: 50, damage: 30, attackCooldownMs: 1250, aggroRange: 260, leash: 520, xp: 2400 },
-  // The Night Raiders (shared/raiders.ts): mounted, cloaked, a massive weapon; always the act's top level
-  nightraider: { name: "Night Raider", maxHp: 1500, speed: 82, damage: 38, attackCooldownMs: 1350, aggroRange: 170, leash: 420, xp: 900 },
+  // The Night Raiders (shared/raiders.ts): mounted, cloaked, a massive weapon; always Lv 50, close to unbeatable alone
+  // (Murat 2026-11-08): pve.ts --boss=raider gives a Lv 50 hero alone 0-33%, a Lv 30 hero none. Faster than a hero on foot
+  nightraider: { name: "Night Raider", maxHp: 20000, speed: 96, damage: 160, attackCooldownMs: 1350, aggroRange: 170, leash: 420, xp: 3000 },
   hidemother: { name: "The Hide-Mother", maxHp: 950, speed: 50, damage: 28, attackCooldownMs: 1300, aggroRange: 240, leash: 480, xp: 1000 },
 };
 
