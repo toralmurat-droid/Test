@@ -1,7 +1,7 @@
 import { ELITE, MobKind, regionMobLevel, regionSpecialLevel, TILE } from "./constants";
 import { AREAS, isSafeZone, isSolidAt, OBJECTS, T, VILLAGE } from "./map";
 import { CAMP_POSTS } from "./bandits";
-import { LAIRS } from "./dungeon";
+import { AMBUSH_ROOMS, chamberAtPx, FLOORS, LAIRS, LANDING, pointInChamber } from "./dungeon";
 
 /**
  * Monster spawn zones. Each zone keeps up to `mobs[kind]` monsters alive. Every `respawnMs` its timer fires
@@ -170,10 +170,21 @@ export function zoneCap(z: SpawnZone): number {
 
 /** Random walkable point inside a zone (never in the village or the safe zone; wild zones skip named areas). */
 export function randomPointInZone(z: SpawnZone, kind?: MobKind): { x: number; y: number } {
+  // A Mawdeep floor: nothing on its landing; about a third of its beast-folk wait in its ambush rooms
+  const floor = FLOORS.find((f) => f.name === z.name);
+  if (floor) {
+    const rooms = AMBUSH_ROOMS[floor.id] ?? [];
+    if (rooms.length && Math.random() < 0.32) for (let i = 0; i < 40; i++) {
+      const p = pointInChamber(floor, rooms[Math.floor(Math.random() * rooms.length)]);
+      if (spawnable(z, Math.floor(p.x / TILE), Math.floor(p.y / TILE))) return { x: (Math.floor(p.x / TILE) + 0.5) * TILE, y: (Math.floor(p.y / TILE) + 0.5) * TILE };
+    }
+  }
   for (let i = 0; i < 300; i++) {
     const tx = z.x + Math.floor(Math.random() * z.w);
     const ty = z.y + Math.floor(Math.random() * z.h);
     if (kind && tooNearVillage(kind, (tx + 0.5) * TILE, (ty + 0.5) * TILE)) continue;
+    const ch = floor && chamberAtPx((tx + 0.5) * TILE, (ty + 0.5) * TILE);
+    if (ch && (ch.index === LANDING || ch.floor.chambers[ch.index].secret)) continue; // the landing is safe; the secret rooms are sealed
     if (spawnable(z, tx, ty)) return { x: (tx + 0.5) * TILE, y: (ty + 0.5) * TILE };
   }
   return { x: (z.x + z.w / 2) * TILE, y: (z.y + z.h / 2) * TILE };

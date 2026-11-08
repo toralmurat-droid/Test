@@ -10,7 +10,9 @@ import { MAP_H, MAP_W, TILE, WORLD_H } from "./constants";
  *
  * Each floor is a set of chambers (ellipses, local tile coords) joined by winding tunnels. map.ts carves them.
  */
-export interface Chamber { x: number; y: number; rx: number; ry: number; flags?: boolean }
+export interface Chamber { x: number; y: number; rx: number; ry: number; flags?: boolean;
+  /** a hidden treasure room behind a cracked wall (map.ts walls its tunnel with a "crack" door) */
+  secret?: boolean }
 export interface Floor {
   id: number; name: string;
   x: number; y: number; w: number; h: number;
@@ -33,8 +35,10 @@ const F1: Floor = {
     { x: 52, y: 36, rx: 6, ry: 5 },      // 5 the boar wallow
     { x: 59, y: 47, rx: 4.5, ry: 4 },    // 6 the stair down
     { x: 18, y: 45, rx: 5.5, ry: 4.5 },  // 7 Old Gnasher's warren
+    { x: 62, y: 9, rx: 2.5, ry: 2, secret: true }, // 8 behind the larder's cracked wall
   ],
-  tunnels: [[0, 1, 1.5], [0, 2, -2], [1, 3, 2], [2, 3, -1.5], [1, 4, -2], [4, 5, 2.5], [3, 5, -2], [5, 6, 1], [2, 7, 2], [7, 3, -2]],
+  tunnels: [[0, 1, 1.5], [0, 2, -2], [1, 3, 2], [2, 3, -1.5], [1, 4, -2], [4, 5, 2.5], [3, 5, -2], [5, 6, 1], [2, 7, 2], [7, 3, -2], [4, 8, 0],
+    [6, 7, 0]], // the old drain from the stair back to the warren (a shortcut, barred from the stair's side)
 };
 const F2: Floor = {
   id: 2, name: "The Silk Pens", x: 98, y: 228, w: 68, h: 54,
@@ -47,8 +51,10 @@ const F2: Floor = {
     { x: 53, y: 30, rx: 7, ry: 6 },      // 5 Gorehowl's lair, in front of the way down
     { x: 59, y: 47, rx: 4.5, ry: 4 },    // 6 stair down
     { x: 28, y: 48, rx: 5, ry: 4 },      // 7 pens (cocoons)
+    { x: 4, y: 43, rx: 2.5, ry: 2, secret: true }, // 8 behind the pens' cracked wall
   ],
-  tunnels: [[0, 1, 1.5], [0, 2, 2], [1, 2, -2], [1, 4, -1.5], [2, 3, 2], [3, 5, -1.5], [4, 5, 2], [5, 6, 1.5], [3, 7, 1.5]], // 0-2: past the loom without facing the Weaver
+  tunnels: [[0, 1, 1.5], [0, 2, 2], [1, 2, -2], [1, 4, -1.5], [2, 3, 2], [3, 5, -1.5], [4, 5, 2], [5, 6, 1.5], [3, 7, 1.5], [2, 8, 0], // 0-2: past the loom without facing the Weaver
+    [6, 7, 0]], // shortcut from the stair round Gorehowl's lair, barred from the stair's side
 };
 const F3: Floor = {
   id: 3, name: "The Hide-Mother's Den", x: 186, y: 228, w: 72, h: 56,
@@ -58,8 +64,9 @@ const F3: Floor = {
     { x: 10, y: 36, rx: 5.5, ry: 5 },    // 2 the cages
     { x: 40, y: 11, rx: 6.5, ry: 5.5 },  // 3 the Hornbrute's byre
     { x: 46, y: 36, rx: 11, ry: 9.5, flags: true }, // 4 the Hide-Mother's den
+    { x: 8, y: 48, rx: 2.5, ry: 2, secret: true }, // 5 behind the cages' cracked wall
   ],
-  tunnels: [[0, 1, 1.5], [1, 2, -2], [1, 3, 2], [2, 4, 2.5], [3, 4, -2.5]],
+  tunnels: [[0, 1, 1.5], [1, 2, -2], [1, 3, 2], [2, 4, 2.5], [3, 4, -2.5], [2, 5, 0]], // the den's own way back is the rope (f3out)
 };
 export const FLOORS: Floor[] = [F1, F2, F3];
 
@@ -118,7 +125,7 @@ export const COCOONS: [number, number][] = [chamberAt(F2, 2), chamberAt(F2, 4), 
  * One per chamber, a little off its centre, plus the den's ring.
  */
 export const BRAZIERS: [number, number][] = [
-  ...FLOORS.flatMap((f) => f.chambers.map((c, i): [number, number] => [f.x + Math.round(c.x + (i % 2 ? 2 : -2)), f.y + Math.round(c.y - c.ry * 0.5)])),
+  ...FLOORS.flatMap((f) => f.chambers.flatMap((c, i): [number, number][] => (c.secret ? [] : [[f.x + Math.round(c.x + (i % 2 ? 2 : -2)), f.y + Math.round(c.y - c.ry * 0.5)]]))),
   [DEN.x - 5, DEN.y + 6], [DEN.x + 5, DEN.y + 6],
 ];
 
@@ -135,4 +142,41 @@ export function routeVia(tx: number, ty: number, hx: number, hy: number): Link |
   const hf = floorNo(hx, hy), tf = floorNo(tx, ty);
   if (hf === tf) return undefined;
   return LINKS.find((l) => l.floor === hf && l.down === tf > hf);
+}
+
+/**
+ * The floor's rhythm (Murat 2026-11-08: "redesign by using best in class principles of the genre"): each floor opens
+ * on a lit landing where nothing spawns, builds through rooms of packs and ambushes to its mini-boss or elite, then the
+ * way down. Ambush rooms: the beast-folk there lurk in the dark (only their eyes show) and rush out together when a
+ * hero walks in; one per floor keeps a chest. Shortcuts: a barred gate on a back tunnel, opened only from the deep end,
+ * that then stays open a long while. Secrets: a cracked wall on each floor hides a small treasure room.
+ */
+export const LANDING = 0;
+export const AMBUSH_ROOMS: Record<number, number[]> = { 1: [1, 4], 2: [3, 7], 3: [2] };
+/** The ambush room on each floor that keeps a chest (its lurkers guard it). */
+export const AMBUSH_CHEST: Record<number, number> = { 1: 4, 2: 7, 3: 2 };
+/** Shortcut tunnels: [floor, the deep chamber the gate opens from, the chamber it leads back to]. */
+export const SHORTCUTS: [number, number, number][] = [[1, 6, 7], [2, 6, 7]];
+/** How long a shortcut or a broken wall stays open once worked (ms). */
+export const SHORTCUT_OPEN_MS = 20 * 60_000, CRACK_OPEN_MS = 10 * 60_000;
+
+/** The chamber a point (px) is in, if any (a little past its rim). */
+export function chamberAtPx(px: number, py: number): { floor: Floor; index: number } | undefined {
+  const f = floorAtPx(px, py);
+  if (!f) return undefined;
+  const tx = px / TILE, ty = py / TILE;
+  const index = f.chambers.findIndex((c) => Math.hypot((tx - f.x - c.x) / c.rx, (ty - f.y - c.y) / c.ry) <= 1.05);
+  return index < 0 ? undefined : { floor: f, index };
+}
+/** True on a floor's landing (nothing spawns there). */
+export const inLanding = (px: number, py: number) => chamberAtPx(px, py)?.index === LANDING;
+/** The ambush room key ("floor_chamber") a point is in, if any. */
+export function ambushRoomAt(px: number, py: number): string | undefined {
+  const c = chamberAtPx(px, py);
+  return c && AMBUSH_ROOMS[c.floor.id]?.includes(c.index) ? `${c.floor.id}_${c.index}` : undefined;
+}
+/** A random point (px) well inside chamber i of floor f (may be solid: callers check). */
+export function pointInChamber(f: Floor, i: number, rnd = Math.random): { x: number; y: number } {
+  const c = f.chambers[i], a = rnd() * Math.PI * 2, r = 0.75 * Math.sqrt(rnd());
+  return { x: (f.x + c.x + Math.cos(a) * c.rx * r) * TILE, y: (f.y + c.y + Math.sin(a) * c.ry * r) * TILE };
 }
