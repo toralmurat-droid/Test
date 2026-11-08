@@ -4,6 +4,7 @@ import type { BountyState } from "../shared/bounty";
 import path from "node:path";
 import crypto from "node:crypto";
 import { jsonStore, postgresStore, readJsonFile, Store } from "./store";
+import { sendMail, mailReady } from "./mailer";
 import { FailDelay, isLocalIp, KeyedLimiter, LOGIN_BURST, LOGIN_PER_SEC, SIGNUP_BURST, SIGNUP_PER_SEC } from "./ratelimit";
 
 export interface HeroSave {
@@ -54,6 +55,10 @@ interface Account {
   chests?: Record<string, number>;
   /** The stash chest in Oakvale (shared/trade.ts): items and gold shared by all heroes of the account. */
   stash?: Stash;
+  /** Optional email for password resets (lower case). */
+  email?: string;
+  /** Pending password reset: sha256 of the emailed code, expiry (ms) and wrong tries so far. */
+  reset?: { hash: string; until: number; tries: number };
 }
 
 export interface Stash { items: string[]; gold: number }
@@ -131,7 +136,7 @@ export async function login(nameIn: unknown, pwIn: unknown, ip = ""): Promise<st
 }
 
 /** Check a name + password without creating anything. Lists the saved heroes (class -> level). */
-export async function peek(nameIn: unknown, pwIn: unknown, ip = ""): Promise<{ exists: boolean; heroes: Record<string, number> }> {
+export async function peek(nameIn: unknown, pwIn: unknown, ip = ""): Promise<{ exists: boolean; heroes: Record<string, number>; email?: string }> {
   const name = String(nameIn ?? "").trim();
   const pw = String(pwIn ?? "").slice(0, 64);
   const k = key(name);
@@ -141,7 +146,101 @@ export async function peek(nameIn: unknown, pwIn: unknown, ip = ""): Promise<{ e
   await check(acc, k, pw);
   const heroes: Record<string, number> = {};
   for (const [cls, h] of Object.entries(acc.heroes)) if (h) heroes[cls] = h.level || 1;
-  return { exists: true, heroes };
+  return { exists: true, heroes, email: acc.email ?? "" };
+}
+
+// ---- Email + password reset ----
+export const EMAIL_RE = /^[^\s@]{1,64}@[^\s@]{1,100}\.[^\s@]{2,24}$/;
+export const RESET_MINUTES = 30;
+const RESET_TRIES = 5;
+// Reset mails: per address 5 an hour, per account 1 a minute (and 6 a day)
+const resetAsks = new KeyedLimiter(5 / 3600, 5, 2 * 60 * 60_000);
+const resetPerAcc = new KeyedLimiter(6 / 86400, 6, 25 * 60 * 60_000);
+const resetLast = new Map<string, number>();
+const codeHash = (code: string) => crypto.createHash("sha256").update(code).digest("hex");
+
+/** Add, change or remove (empty) the account's email. Needs the password. */
+export async function setEmail(nameIn: unknown, pwIn: unknown, emailIn: unknown, ip = ""): Promise<string> {
+  const name = String(nameIn ?? "").trim();
+  const pw = String(pwIn ?? "").slice(0, 64);
+  const email = String(emailIn ?? "").trim().toLowerCase();
+  if (email && (email.length > 190 || !EMAIL_RE.test(email))) throw new Error("That does not look like an email address");
+  const k = key(name);
+  throttle(ip, k);
+  const acc = accounts[k];
+  if (!acc) throw new Error("No account with this name");
+  await check(acc, k, pw);
+  if (email) acc.email = email; else delete acc.email;
+  markDirty(k);
+  return acc.email ?? "";
+}
+
+/** Hide most of an email: "murat@gmail.com" -> "mu***@gmail.com". */
+export function maskEmail(e: string) {
+  const [u, d] = e.split("@");
+  return `${u.slice(0, Math.min(2, u.length - 1))}***@${d}`;
+}
+
+/**
+ * Send a reset code to the email of the account(s) matching a name or an email. The answer never says
+ * whether an account or email exists (only the masked email, when asked by name and one is set).
+ */
+export async function requestReset(whoIn: unknown, ip = "", now = Date.now()): Promise<{ sent: boolean; to?: string }> {
+  const who = String(whoIn ?? "").trim().toLowerCase().slice(0, 190);
+  if (!who) throw new Error("Type your name or your email");
+  if (!mailReady()) throw new Error("Password reset by email is not ready yet. Try again soon.");
+  if (!isLocalIp(ip) && !resetAsks.take(ip, now)) throw new Error("Too many reset requests. Try again later.");
+  const byEmail = who.includes("@");
+  const found = byEmail
+    ? Object.entries(accounts).filter(([, a]) => a.email === who).slice(0, 5)
+    : accounts[key(who)]?.email ? [[key(who), accounts[key(who)]] as [string, Account]] : [];
+  const lines: string[] = [];
+  let to = "";
+  for (const [k, acc] of found) {
+    if (now - (resetLast.get(k) ?? 0) < 60_000 || !resetPerAcc.take(k, now)) continue;
+    resetLast.set(k, now);
+    const code = String(crypto.randomInt(0, 1_000_000)).padStart(6, "0");
+    acc.reset = { hash: codeHash(code), until: now + RESET_MINUTES * 60_000, tries: 0 };
+    markDirty(k);
+    lines.push(`Name: ${acc.name}\nCode: ${code}`);
+    to = acc.email!;
+  }
+  if (!lines.length) return { sent: false };
+  await sendMail({
+    to,
+    subject: "Your Pixel Town Brawl password reset code",
+    text: `Someone asked to reset the password of your Pixel Town Brawl account.\n\n${lines.join("\n\n")}\n\n`
+      + `Type the code on the login screen (Forgot password?) to choose a new password. It works for ${RESET_MINUTES} minutes.\n`
+      + `If this was not you, ignore this email: your password stays the same.\n\nhttps://play.fmtpa.ch/`,
+  });
+  return byEmail ? { sent: true } : { sent: true, to: maskEmail(to) };
+}
+
+/** Set a new password with an emailed code. */
+export async function resetPassword(nameIn: unknown, codeIn: unknown, pwIn: unknown, ip = "", now = Date.now()): Promise<string> {
+  const name = String(nameIn ?? "").trim();
+  const code = String(codeIn ?? "").replace(/\s/g, "");
+  const pw = String(pwIn ?? "");
+  if (pw.length < MIN_NEW_PASSWORD || pw.length > 64) throw new Error(`New password: at least ${MIN_NEW_PASSWORD} characters`);
+  const k = key(name);
+  if (!isLocalIp(ip) && !loginTries.take(ip)) throw new Error("Too many tries. Wait a moment and try again.");
+  const acc = accounts[k];
+  const r = acc?.reset;
+  const bad = "This code is wrong or too old. Ask for a new one.";
+  if (!acc || !r || r.until < now || r.tries >= RESET_TRIES) throw new Error(bad);
+  const ok = /^\d{6}$/.test(code) && crypto.timingSafeEqual(Buffer.from(codeHash(code), "hex"), Buffer.from(r.hash, "hex"));
+  if (!ok) {
+    r.tries++;
+    if (r.tries >= RESET_TRIES) delete acc.reset;
+    markDirty(k);
+    throw new Error(bad);
+  }
+  acc.salt = crypto.randomBytes(16).toString("hex");
+  acc.hash = await hashPw(pw, acc.salt);
+  delete acc.reset;
+  fails.ok(k);
+  markDirty(k);
+  return acc.name;
 }
 
 export function loadHero(name: string, cls: string): HeroSave | undefined {

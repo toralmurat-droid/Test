@@ -23,11 +23,38 @@
       <p class="fs-help">New name? A password of 8+ makes your hero. Log in with the same name on any device.</p>
       <button id="play" class="fs-btn fs-main">Log in</button>
       <p id="status"></p>
+      <button id="forgotlink" class="fs-link">Forgot password?</button>
+    </div>
+    <div id="forgot" class="fs-panel" hidden>
+      <h2>Forgot password</h2>
+      <div id="fgask">
+        <p class="fs-help">Type your name or your email. If your account has an email, we send you a code.</p>
+        <input id="fgwho" maxlength="190" placeholder="Name or email" autocomplete="username" />
+        <button id="fgsend" class="fs-btn fs-main fs-wide">Send code</button>
+      </div>
+      <div id="fgset" hidden>
+        <p id="fgsent" class="fs-help"></p>
+        <input id="fgname" maxlength="16" placeholder="Your name" autocomplete="username" />
+        <input id="fgcode" maxlength="8" inputmode="numeric" placeholder="Code from the email" autocomplete="one-time-code" />
+        <input id="fgpw" type="password" maxlength="64" placeholder="New password (8+)" autocomplete="new-password" />
+        <button id="fgdone" class="fs-btn fs-main fs-wide">Set new password</button>
+        <button id="fgagain" class="fs-link">Send a new code</button>
+      </div>
+      <p id="fgstatus" class="fs-status"></p>
+      <button id="fgback" class="fs-link">Back to log in</button>
+    </div>
+    <div id="emailpanel" class="fs-panel" hidden>
+      <h2>Your email</h2>
+      <p class="fs-help">Optional. Only used to send you a code if you forget your password. Leave it empty to remove it.</p>
+      <input id="emailin" type="email" maxlength="190" placeholder="you@example.com" autocomplete="email" />
+      <div class="fs-row"><button id="emailback" class="fs-btn">Back</button><button id="emailsave" class="fs-btn fs-main">Save</button></div>
+      <p id="emailstatus" class="fs-status"></p>
     </div>
     <div id="savepick" class="fs-panel" hidden>
       <h2 id="savetitle"></h2>
       <p id="savetext" class="fs-help"></p>
       <div id="savebtns"></div>
+      <p id="saveemail" class="fs-hint"></p>
       <button id="saveback" class="fs-link">Log out</button>
     </div>
     <div id="pickhero" class="fs-panel" hidden>
@@ -36,6 +63,7 @@
       <div id="colors"></div>
       <div class="fs-row"><button id="pkback" class="fs-btn">Back</button><button id="pkgo" class="fs-btn fs-main"></button></div>
       <p class="fs-hint">Click a hero by the fire, or use the arrow keys.</p>
+      <p id="pkemail" class="fs-hint"></p>
     </div>
   </div>
 
