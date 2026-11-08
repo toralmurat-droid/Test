@@ -26,7 +26,7 @@ export function rollLevel(z: SpawnZone): number {
 }
 
 /** Peaceful places inside monster zones (with a margin in tiles): nothing spawns or walks in there. */
-export const NO_MOB_AREAS = ["Saltmere", "Kel Ashar", "The Sunstone Circle"]; // Act 2: the oasis town and the waygate's circle
+export const NO_MOB_AREAS = ["Saltmere", "Kel Ashar", "The Sunstone Circle", "The Sun Furnace"]; // Act 2: the oasis town, the waygate's circle and the final fight's plateau
 const NO_MOB_RECTS = NO_MOB_AREAS.flatMap((n) => AREAS.filter((a) => a.name === n)).map((a) => ({ x0: a.x - 2, y0: a.y - 2, x1: a.x + a.w + 2, y1: a.y + a.h + 2 }));
 /** True where monsters may not go (pixel coords). */
 export function noMobsAt(px: number, py: number): boolean {

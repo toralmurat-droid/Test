@@ -986,5 +986,11 @@
   "h": 30,
   "scale": 1.5,
   "frames": 12
+ },
+ "mob_sunwright": {
+  "w": 44,
+  "h": 48,
+  "scale": 1.5,
+  "frames": 12
  }
 }

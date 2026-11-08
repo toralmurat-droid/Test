@@ -51,4 +51,5 @@ export const LOOT: Record<MobKind, LootDef> = {
   sanddead: { gold: [12, 28], potionChance: 0.35 },
   veiled: { gold: [16, 34], potionChance: 0.4 },
   camelfolk: { gold: [18, 38], potionChance: 0.4 },
+  sunwright: { gold: [600, 900], potionChance: 1 },
 };

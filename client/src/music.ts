@@ -34,7 +34,7 @@ const TRACKS: Track[] = [
   { id: "village-sounds", name: "Village sounds", ambience: true },
 ];
 const UNDEAD = ["skeleton", "skeletonmage", "necromancer", "sanddead"];
-const FIGHT = ["slime", "shooterblob", "warriorblob", "healerblob", "motherblob", "bandit", "venomblob", "frostblob", "fireblob", "stormblob", "nomad", "scorpion", "veiled", "camelfolk"];
+const FIGHT = ["slime", "shooterblob", "warriorblob", "healerblob", "motherblob", "bandit", "venomblob", "frostblob", "fireblob", "stormblob", "nomad", "scorpion", "veiled", "camelfolk", "sunwright"];
 const TOWNS = ["Oakvale", "Market Square", "Chapel of the Dawn", "The Rusty Tankard", "The Smithy", "Saltmere", "Hunter's Camp", "Kel Ashar", "Kel Ashar Market"];
 
 const FADE_IN = 2.5;

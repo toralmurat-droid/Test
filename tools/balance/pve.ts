@@ -14,7 +14,7 @@
  */
 import { ACTIVE_CLASSES, ClassKind } from "../../shared/classes";
 import { BANDIT_AI, BANDIT_ROLES, CHIEF } from "../../shared/bandits";
-import { BEAST, BLOB_AI, DEMON, HOLLOW_KING, MOB_ATTACK_RANGE, MOB_LEVEL, MOBS, MobKind, mobScale, MOTHER, SKELETON_AI, SKELETON_BOW, SKELETON_WEAPONS, SkeletonWeapon, REGEN_DELAY_MS, REGEN_PER_STA } from "../../shared/constants";
+import { BEAST, BLOB_AI, DEMON, HOLLOW_KING, MOB_ATTACK_RANGE, MOB_LEVEL, MOBS, MobKind, mobScale, MOTHER, SKELETON_AI, SKELETON_BOW, SKELETON_WEAPONS, SkeletonWeapon, SUNWRIGHT, REGEN_DELAY_MS, REGEN_PER_STA } from "../../shared/constants";
 import { MOB_COMBAT, mobBody, POISE, poiseSpeed } from "../../shared/combat";
 import { POTION_COOLDOWN_MS, POTION_SIZES } from "../../shared/potions";
 import { activeSkills, SKILLS } from "../../shared/skills";
@@ -96,6 +96,15 @@ export function mobSpec(kind: MobKind, level: number, opt: { weapon?: string; hp
     spec.specials.push({ name: "Gloam Pools", every: K.pools.cooldownMs, windup: K.pools.windupMs, min: 0, max: K.pools.range, radius: K.pools.radius, mult: K.pools.dmgMult, at: "target", slowMs: K.pools.slowMs });
     spec.specials.push({ name: "Crown's Wrath", every: K.wrath.cooldownMs, windup: K.wrath.windupMs, min: 0, max: K.wrath.radius, radius: K.wrath.radius, inner: K.wrath.inner, mult: K.wrath.dmgMult, at: "self", hpBelow: K.wrath.hpFrac, first: 0 });
     spec.enrage = { hpBelow: K.wrath.hpFrac, speed: K.wrath.speed, cd: K.wrath.cooldown };
+  }
+  if (kind === "sunwright") {
+    // Act 2's final boss (BEAST beam/flare/sunfall/zenith, SUNWRIGHT): Zenith counted with one adept of her choir alive
+    const L = BEAST.beam, Fl = BEAST.flare, S = BEAST.sunfall, Z = BEAST.zenith, W = SUNWRIGHT;
+    spec.specials.push({ name: "Sunlance", every: L.cooldownMs, windup: L.windupMs, min: L.min, max: L.max, radius: L.width / 2 + 6, mult: L.dmgMult, at: "target" });
+    spec.specials.push({ name: "Flare", every: Fl.cooldownMs, windup: Fl.windupMs, min: 0, max: Fl.range, radius: Fl.radius, mult: Fl.dmgMult, at: "self", kb: Fl.knockback });
+    spec.specials.push({ name: "Sunfall", every: S.cooldownMs, windup: S.windupMs, min: 0, max: S.range, radius: S.radius, mult: S.dmgMult, at: "target" });
+    spec.specials.push({ name: "Zenith", every: Z.everyMs, windup: Z.windupMs, min: 0, max: Z.radius, radius: Z.radius, inner: Z.inner, mult: Z.dmgMult * (1 + Z.perAdept), at: "self", hpBelow: Z.hpFrac, first: 0 });
+    spec.enrage = { hpBelow: W.phase[1], speed: W.sun.speed, cd: W.sun.cooldown };
   }
   return spec;
 }
@@ -320,6 +329,7 @@ export const BOSSES: BossDef[] = [
   { name: "Rask the Reaver Lv21", kind: "bandit", level: 21, hero: 20, hpMult: 3.5, weapon: "brute" },
   { name: "Pale Marshal Lv24", kind: "necromancer", level: 24, hero: 23, hpMult: 2.5 },
   { name: "Hollow King Lv30", kind: "hollowking", level: 30, hero: 30, hpMult: 2 },
+  { name: "Sunwright Lv50", kind: "sunwright", level: 50, hero: 49, hpMult: 2 },
 ];
 
 function bossRun(cls: ClassKind, b: BossDef, build: Build, potions = 5): RunResult & { bossLeft: number } {
