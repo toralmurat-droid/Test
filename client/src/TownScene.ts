@@ -213,6 +213,8 @@ function pushSnap(e: { snaps?: Snap[] }, x: number, y: number) {
  * one, or the drawn sprite is very far behind. Played-back entities trail the server by interpDelay, so measuring
  * from the sprite (as before, at 48 px) snapped fast movers on a laggy connection.
  */
+/** Camera follow smoothing (per frame); snapCamera() sets it to 1 for a jump. */
+const CAM_LERP = 0.15;
 function teleported(e: { snaps?: Snap[]; sprite: { x: number; y: number } }, x: number, y: number): boolean {
   const s = e.snaps, n = s?.length ?? 0;
   const prev = n >= 2 ? s![n - 2] : undefined; // the newest snap is the spot just pushed
@@ -659,14 +661,14 @@ export class TownScene extends Phaser.Scene {
       const e = this.entities.get(id);
       if (!e) return;
       e.sprite.setPosition(x, y); e.tx = x; e.ty = y; e.lastX = x; e.lastY = y; // a jump, not a walk
-      if (id === this.me) { this.portals?.close(); this.cameras.main.fadeIn(900, 40, 14, 4); } // a warm flash while the new place is drawn
+      if (id === this.me) { this.portals?.close(); this.jumped(); this.arrive(40, 14, 4, 700); } // warm glow, then the new place
     });
     // Down a rope or a stair in the Mawdeep (shared/dungeon.ts LINKS): a jump to the other end, a fade through the dark
     this.room.onMessage("descend", ({ id, x, y }) => {
       const e = this.entities.get(id);
       if (!e) return;
       e.sprite.setPosition(x, y); e.tx = x; e.ty = y; e.lastX = x; e.lastY = y;
-      if (id === this.me) this.cameras.main.fadeIn(700, 6, 4, 3);
+      if (id === this.me) { this.jumped(); this.arrive(6, 4, 3, 600); }
     });
     this.room.onMessage("travelno", () => {
       const e = this.entities.get(this.me);
@@ -1366,7 +1368,10 @@ export class TownScene extends Phaser.Scene {
     const dx = p.x - e.sprite.x, dy = p.y - e.sprite.y;
     // Respawn, portal, teleport: far beyond what lag explains
     if (Math.hypot(dx, dy) > 160 || p.dead) {
-      e.sprite.setPosition(p.x, p.y); this.predHist = []; this.corrX = this.corrY = 0; return;
+      const far = Math.hypot(dx, dy) > 640; // respawn at the bonfire, not a lag correction: the new spot is off screen
+      e.sprite.setPosition(p.x, p.y); this.predHist = []; this.corrX = this.corrY = 0;
+      if (far) this.arrive(6, 4, 3, 500); else this.snapCamera();
+      return;
     }
     const then = interpolate(this.predHist, now - this.rtt);
     if (!then) return;
@@ -1699,7 +1704,8 @@ export class TownScene extends Phaser.Scene {
       // ?look=tx,ty (map viewing aid, like ?time=): park the camera on a tile instead of following the hero
       const look = new URLSearchParams(location.search).get("look")?.split(",").map(Number);
       const target = look?.length === 2 && look.every(Number.isFinite) ? this.add.zone((look[0] + 0.5) * TILE, (look[1] + 0.5) * TILE, 1, 1) : sprite;
-      this.cameras.main.startFollow(target, true, 0.15, 0.15);
+      this.cameras.main.startFollow(target, true, CAM_LERP, CAM_LERP);
+      this.snapCamera(); // start on the hero, not panning over from the map corner
     }
   }
 
@@ -2647,8 +2653,46 @@ export class TownScene extends Phaser.Scene {
     if (this.settled >= 4 || loadingFor() > 20_000) hideLoading();
   }
 
+  /**
+   * Teleports (portal stones, ropes and stairs, respawn): the camera jumps with the hero instead of gliding across the
+   * map. The follow lerp is set to 1 for a few frames (the iso projection moves the target at render time).
+   */
+  private camSnap = 0;
+  /**
+   * Our hero was moved by the server (portal, rope, stair): forget the walking history. Kept, it made the next update
+   * look like a huge prediction error, and the hero and camera slid back across the map toward the old spot.
+   */
+  private jumped() { this.predHist = []; this.corrX = this.corrY = 0; }
+  private snapCamera() { this.camSnap = 3; this.cameras.main.setLerp(1, 1); }
+  /**
+   * Arriving somewhere new: snap the camera, hold the screen in a soft colour while the ground there is painted
+   * (smoothground.ts paints in workers), then fade in. Without this the plain tiles showed first and the painted
+   * ground appeared on top of them a moment later. Capped so a slow computer never waits long.
+   */
+  private cover?: { r: number; g: number; b: number; ms: number; since: number; calm: number };
+  private arrive(r: number, g: number, b: number, ms: number) {
+    this.snapCamera();
+    const cam = this.cameras.main;
+    cam.resetFX();
+    cam.fadeOut(1, r, g, b);
+    this.cover = { r, g, b, ms, since: performance.now(), calm: 0 };
+  }
+  private updateCover() {
+    const c = this.cover;
+    if (!c) return;
+    const pending = IsoView.ground?.pending ?? 0;
+    c.calm = pending === 0 && this.camSnap === 0 ? c.calm + 1 : 0;
+    if (c.calm < 3 && performance.now() - c.since < 2500) return;
+    this.cover = undefined;
+    const cam = this.cameras.main;
+    cam.resetFX();
+    cam.fadeIn(c.ms, c.r, c.g, c.b);
+  }
+
   update(_t: number, dtMs: number) {
+    if (this.camSnap > 0 && --this.camSnap === 0) this.cameras.main.setLerp(CAM_LERP, CAM_LERP);
     this.iso?.update(dtMs);
+    this.updateCover();
     if (loadingActive()) this.checkLoaded();
     this.ambient?.update(this.time.now, dtMs);
     if (this.dungeon) { this.dungeon.torch = this.torch && !this.entities?.get(this.me)?.state?.dead; this.dungeon.night = this.details?.darkNow ?? 0; }

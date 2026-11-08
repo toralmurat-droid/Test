@@ -3704,7 +3704,7 @@ export class TownRoom extends Room<TownState> {
   }
 
   private reqInfo(p: Player): HeroReqInfo {
-    return { cls: p.cls, level: p.level, pts: { sta: p.ptSta, str: p.ptStr, mag: p.ptMag, dex: p.ptDex } };
+    return { cls: p.cls, level: p.level, pts: { sta: p.ptSta, str: p.ptStr, mag: p.ptMag, dex: p.ptDex }, worn: Object.fromEntries(GEAR_SLOTS.map((s) => [s, p[s]])) };
   }
 
   /** Wear the bag item at index `i`; whatever was in that slot goes back to the bag. */
