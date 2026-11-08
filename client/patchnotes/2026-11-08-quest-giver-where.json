@@ -1,5 +1,6 @@
 {
   "date": "2026-11-08",
+  "patch": 195,
   "title": "Find your quest givers",
   "changes": [
     "When a new quest is waiting, the tracker now says where its giver stands and its follow button leads you there.",
