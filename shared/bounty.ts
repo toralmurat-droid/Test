@@ -1,5 +1,5 @@
 import { MAX_LEVEL, xpForLevel } from "./classes";
-import { MOBS, TILE, type MobKind } from "./constants";
+import { DESERT_Y0, MOBS, TILE, type MobKind } from "./constants";
 import { isSolidAt, PORTAL_SPOTS } from "./map";
 import { SPAWN_ZONES, type SpawnZone } from "./spawns";
 
@@ -73,10 +73,13 @@ function rng(seed: number) {
   return () => { s = (s + 0x6d2b79f5) >>> 0; let t = Math.imul(s ^ (s >>> 15), 1 | s); t ^= t + Math.imul(t ^ (t >>> 7), 61 | t); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
 }
 
-/** The board's offers for a hero of this level (`done` = bounties finished so far, so each one brings new offers). */
-export function bountyOffers(level: number, done: number): Bounty[] {
+/**
+ * The board's offers for a hero of this level (`done` = bounties finished so far, so each one brings new offers).
+ * A board only offers hunts in its own act (`desert`: Act 2, the Sunscar), so Oakvale never sends anyone to a land they can't reach.
+ */
+export function bountyOffers(level: number, done: number, desert = false): Bounty[] {
   const L = Math.min(level, MAX_LEVEL);
-  const zones = SPAWN_ZONES.filter((z) => !z.wild && signature(z) && z.levels[0] <= L + 2 && z.levels[1] >= L - 2);
+  const zones = SPAWN_ZONES.filter((z) => !z.wild && signature(z) && (z.y >= DESERT_Y0) === desert && z.levels[0] <= L + 2 && z.levels[1] >= L - 2);
   const r = rng(L * 1000 + done);
   // closest to the hero's level first, ties shuffled by the seed
   const scored = zones.map((z) => ({ z, s: Math.abs((z.levels[0] + z.levels[1]) / 2 - L) + r() * 1.5 })).sort((a, b) => a.s - b.s);

@@ -762,12 +762,13 @@ const BEAST: Record<NonNullable<Look["beast"]>, { fur: number; muz: number; nose
   bull: { fur: 0x3a2a24, muz: 0x8a7a6a, nose: 0x5a4a44, rx: 2.6, ry: 2.4 },
   bear: { fur: 0x4a3626, muz: 0x8a6a4a, nose: 0x1a1210, rx: 2.75, ry: 2.5 },
   crow: { fur: 0x1e1a24, muz: 0x4a4650, nose: 0x2a2830, rx: 2.15, ry: 2.15 },
+  camel: { fur: 0xb88a58, muz: 0xd0aa78, nose: 0x5a3a24, rx: 1.9, ry: 2.0 },
 };
 function beastHead(c: C2, r: Rig, hood = false) {
   const L = r.L, kind = L.beast!, B = BEAST[kind], [hx, hy] = r.head, dir = r.dir, R = r.R, fo = r.fo, qx = hx + fo;
   const fur = C(B.fur), muz = C(B.muz), dk = sh(fur, 0.45), eyeC = hood ? 0x3a2a22 : L.eyeGlow ?? 0xff3a2a; // a flayed hood's eyes are dead
   const ivory = 0xe2d8bc, horn = 0xcfc2a2;
-  if (!hood) {
+  if (!hood && kind !== "camel") {
     // neck in hide, a stitched seam round it
     limb(c, [r.cx + (R ? 0.2 : 0), r.sy - 0.9], [hx, hy + 1.6], 1.7, 1.6, sh(fur, 0.8));
     const seamY = r.sy - 0.7;
@@ -788,6 +789,11 @@ function beastHead(c: C2, r: Rig, hood = false) {
   if (kind === "bat") for (const sx of sides) ear(earAt(sx, 1.5, 0), hy - 2.6, 0.9, 2.1, sx * 0.25, false, 0x7a4a4a);
   if (kind === "wolf") for (const sx of sides) ear(earAt(sx, 1.4, 0), hy - 2.4, 0.8, 1.6, sx * 0.15, false, 0x5a4a44);
   if (kind === "bear") for (const sx of sides) ear(earAt(sx, 2.0, 0), hy - 2.0, 0.85, 0.8, 0, true, 0x2e2018);
+  if (kind === "camel") {
+    // a long neck rising out of the shoulders, then little round ears
+    if (!hood) limb(c, [r.cx + (R ? -0.4 : 0), r.sy - 0.6], [hx - (R ? 0.6 : 0), hy + 1.2], 2.0, 1.5, sh(fur, 0.85));
+    for (const sx of sides) ear(earAt(sx, 1.5, 0), hy - 1.9, 0.5, 0.7, sx * 0.4, true, 0x7a5434);
+  }
   if (kind === "bull") {
     // horns: thick roots, curving out and up, darkening to the tips
     const hornPath = (sx: number): P[] => R
@@ -810,7 +816,7 @@ function beastHead(c: C2, r: Rig, hood = false) {
     for (let k = -3; k <= 3; k++) { const x = hx + k * 0.45 + (R ? -0.8 : 0), y = hy - B.ry - 0.1 + Math.abs(k) * 0.12; line(c, [[x, y + 0.6], [x + (R ? -0.4 : k * 0.08), y - 0.5]], sh(fur, 0.6), 0.22, 0.9); }
   }
   // stitched patches: the hide is sewn together from pieces
-  if (dir !== "up" && kind !== "spider") {
+  if (dir !== "up" && kind !== "spider" && kind !== "camel") {
     const sx0 = R ? hx - 1.2 : qx - 1.4, sy0 = hy - 1.6;
     line(c, [[sx0, sy0], [sx0 + 1.0, sy0 + 1.1]], 0x2a1a12, 0.12, 0.7);
     for (let k = 0; k < 3; k++) { const x = sx0 + k * 0.35, y = sy0 + k * 0.38; line(c, [[x - 0.18, y + 0.15], [x + 0.18, y - 0.15]], 0xb8a888, 0.08, 0.8); }
@@ -890,6 +896,19 @@ function beastHead(c: C2, r: Rig, hood = false) {
     vol(c, beak, C(B.muz), R ? [hx + 0.9, hy - 0.6, 3.6, 1.8] : [qx - 0.9, hy, 1.8, 3.4], { ao: 0.25, spec: 0.4 });
     line(c, R ? [[hx + 1.0, hy - 0.4], [hx + 4.2, hy + 0.55]] : [[qx, hy + 0.2], [qx, hy + 3.2]], 0x8a8690, 0.12, 0.8);
     if (R) eye(hx + 0.5, hy - 0.5, 0.3); else { eye(qx - 1.0, hy - 0.4, 0.3); eye(qx + 1.0, hy - 0.4, 0.3); }
+  } else if (kind === "camel") {
+    // a long, soft muzzle with a split, drooping upper lip; slit nostrils; heavy-lidded eyes; a shaggy tuft on the crown
+    muzzle(3.0, 1.15, 1.35, 0.9);
+    const t = tip(3.0, 0.9);
+    if (R) { line(c, [[t[0] - 0.4, t[1] - 0.6], [t[0], t[1] - 0.2]], 0x3a2214, 0.18); curve(c, [hx + 2.0, t[1] + 0.9], [t[0] - 0.2, t[1] + 1.4], [t[0] + 0.1, t[1] + 0.6], 0x5a3a24, 0.2); }
+    else {
+      for (const sg of [-1, 1]) line(c, [[qx + sg * 0.35, hy + 2.6], [qx + sg * 0.6, hy + 2.2]], 0x3a2214, 0.16);
+      line(c, [[qx, hy + 2.8], [qx, hy + 3.3]], 0x5a3a24, 0.14); curve(c, [qx - 0.8, hy + 3.3], [qx, hy + 3.6], [qx + 0.8, hy + 3.3], 0x5a3a24, 0.18);
+    }
+    if (R) eye(hx + 0.4, hy - 0.6, 0.24); else { eye(qx - 0.95, hy - 0.5, 0.24); eye(qx + 0.95, hy - 0.5, 0.24); }
+    line(c, R ? [[hx - 0.1, hy - 0.95], [hx + 0.9, hy - 0.85]] : [[qx - 1.4, hy - 0.85], [qx - 0.5, hy - 0.85]], sh(fur, 0.55), 0.3, 0.9); // drooping lids
+    if (!R) line(c, [[qx + 0.5, hy - 0.85], [qx + 1.4, hy - 0.85]], sh(fur, 0.55), 0.3, 0.9);
+    for (let k = -2; k <= 2; k++) { const x = (R ? hx - 0.6 : hx) + k * 0.4, y = hy - B.ry + 0.2; line(c, [[x, y + 0.5], [x + k * 0.15 - (R ? 0.3 : 0), y - 0.6]], sh(fur, 0.7), 0.26, 0.9); }
   } else if (kind === "bear") {
     muzzle(1.7, 1.4, 1.15, 0.45);
     const t = tip(1.7, 0.45);

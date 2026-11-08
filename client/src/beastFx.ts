@@ -63,7 +63,7 @@ export function bindBeastFx(room: Room, h: BeastFxHost) {
   // Wind-ups: the beast gathers itself, the ground shows where the move lands
   room.onMessage("bwind", ({ id, kind, ms, x, y, x2, y2, w, tx, ty, r, ax, ay, reach, half, pts, hero }) => {
     const e = h.ent(id), [label, col] = CALL[kind] ?? ["", ""];
-    if (e && label) h.say(e.sprite.x, e.sprite.y - e.top - 6, label, col);
+    if (e && label && !(kind === "gore" && (e as any).state?.kind === "scorpion")) h.say(e.sprite.x, e.sprite.y - e.top - 6, label, col);
     const cx = () => e?.sprite.x ?? x, cy = () => e?.sprite.y ?? y;
     if (kind === "gore" || kind === "stampede") {
       if (e) h.squash(id, 1.12, 0.9, ms); // head down, pawing the ground

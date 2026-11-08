@@ -43,7 +43,7 @@ export interface Look {
   /** What the rite grew on their backs: a naked tail, spider legs, wings that beat. */
   tail?: number; spiderLegs?: number; wings?: { col: number; kind: "bat" | "feather" };
 }
-export type BeastHead = "rat" | "boar" | "spider" | "bat" | "wolf" | "bull" | "bear" | "crow";
+export type BeastHead = "rat" | "boar" | "spider" | "bat" | "wolf" | "bull" | "bear" | "crow" | "camel";
 
 /** Monsters painted with the same body code (sheets built by paint/mobs.ts). */
 export const MOB_LOOKS: Record<string, Look> = {
@@ -164,6 +164,39 @@ export const MOB_LOOKS: Record<string, Look> = {
     skin: 0x9a7a60, beast: "bear", hairStyle: "none", head: "none", eyeGlow: 0xff8a2a,
     torso: "robe", torsoCol: 0x5a4030, trim: 0x8a6a48, sash: 0x6a1a12, legs: "robe", legCol: 0x4a3426, boots: 0x2a1e16, bootStyle: "wrap",
     sleeve: 0x5a4030, arms: "cloth", glove: 0x3a2a1e, weapon: "staff", orb: 0xff4a2a, fx: 0xff8a50, back: "pelt", capeCol: 0x4a3626, build: 1.45,
+  },
+  // ---- Act 2, the Sunscar (Murat 2026-11-08): desert raiders, the buried dead, the Veiled Circle and the camel-folk
+  nomad: { // a Dustrider raider: sand-coloured wraps and hood, an indigo veil over the face, a curved blade
+    skin: 0xb07a50, hair: 0x1e1814, hairStyle: "short", mask: 0x2a3a6a, eye: 0x1a1008,
+    head: "hood", headCol: 0xc8aa7a, headTrim: 0x8a6a48,
+    torso: "wrap", torsoCol: 0xb89a70, trim: 0x7a5a3a, sash: 0x8a2a1a, belt: 0x3a2a1a, buckle: 0xc9a050,
+    legs: "trousers", legCol: 0x8a7050, boots: 0x5a4430, bootStyle: "wrap",
+    sleeve: 0xa88a62, arms: "cloth", bracer: 0x5a4030, glove: 0x3a2a1a, weapon: "sword", fx: 0xfff0d0, back: "cape", capeCol: 0xa07850,
+  },
+  nomad_folk: { // a Dustrider archer: darker wraps, a short horn bow and a quiver
+    skin: 0xa8704a, hair: 0x1e1814, hairStyle: "short", mask: 0x6a1a14, eye: 0x1a1008,
+    head: "hood", headCol: 0x8a6a48, headTrim: 0x5a4430,
+    torso: "wrap", torsoCol: 0x9a7a54, trim: 0x5a4030, sash: 0x2a3a6a, belt: 0x3a2a1a, buckle: 0xc9a050,
+    legs: "trousers", legCol: 0x6a5440, boots: 0x4a3828, bootStyle: "wrap",
+    sleeve: 0x8a6a48, arms: "cloth", bracer: 0x5a4030, glove: 0x3a2a1a, weapon: "bow", back: "quiver", capeCol: 0x5a3a22, fx: 0xfff0d0,
+  },
+  sanddead: { // the dead of Kharsun: sand-scoured bones in linen grave-wraps and a bronze helm, a khopesh, amber eyes
+    skin: 0xd8c49a, skull: true, bones: true, eyeGlow: 0xffb030, head: "helm", headCol: 0x8a6a2e, headTrim: 0xc9a050, rags: 0xc8b088,
+    torso: "bare", torsoCol: 0xd8c49a, legs: "trousers", legCol: 0xd8c49a, boots: 0x6a5434, bootStyle: "wrap",
+    sleeve: 0xd8c49a, arms: "bare", bracer: 0x8a6a2e, weapon: "sword", fx: 0xffe0a0, belt: 0x8a6a2e, buckle: 0xc9a050,
+  },
+  veiled: { // an adept of the Veiled Circle: indigo robes trimmed in gold, a veil, a staff crowned with a little sun
+    skin: 0xa8784e, hair: 0x1a1414, hairStyle: "none", mask: 0x1e1838, eye: 0xffc040,
+    head: "hood", headCol: 0x2a2350, headTrim: 0xd8a040,
+    torso: "robe", torsoCol: 0x3a2e6a, trim: 0xe0b040, sash: 0xd87a20,
+    legs: "robe", legCol: 0x30285a, boots: 0x6a5030, bootStyle: "shoe",
+    sleeve: 0x3a2e6a, arms: "cloth", glove: 0x2a2040, weapon: "staff", orb: 0xffb040, fx: 0xffd080,
+  },
+  camelfolk: { // a camel-man of the mesas: a camel's long head on a broad, sun-dark body, desert-blue cloth, a long spear
+    skin: 0xc09060, beast: "camel", hairStyle: "none", head: "none", eyeGlow: 0xffe0a0,
+    torso: "leather", torsoCol: 0x6a4a2e, trim: 0x3a2a1a, sash: 0x2a5a8a, belt: 0x3a2a1a, buckle: 0xc9a050,
+    legs: "fur", legCol: 0xa07a4c, boots: 0x4a3424, bootStyle: "wrap",
+    sleeve: 0xc09060, arms: "bare", bracer: 0x2a5a8a, glove: 0x3a2a1a, weapon: "spear", fx: 0xfff0d0, back: "cape", capeCol: 0x2a5a8a, build: 1.3,
   },
   // summoned by a skeleton ritual (BONES.ritual): a hulking red brute with horns, a bone harness and a cleaver
   demon: {

@@ -1,6 +1,6 @@
 /**
  * PvE balance simulator: bot heroes play the first zone (Lv 1-30) against its monsters and bosses.
- * Run: npx tsx tools/balance/pve.ts [runsPerCase] [--bosses] [--zones]
+ * Run: npx tsx tools/balance/pve.ts [runsPerCase] [--bosses] [--zones] [--act2]
  *
  * It reuses the PvP simulator (tools/balance/duel.ts): the same hero bot, skill engine, builds (rushing one branch),
  * stat points and gear by level. The other side is a monster with its real numbers (shared/constants.ts MOBS, level
@@ -14,7 +14,7 @@
  */
 import { ACTIVE_CLASSES, ClassKind } from "../../shared/classes";
 import { BANDIT_AI, BANDIT_ROLES, CHIEF } from "../../shared/bandits";
-import { BLOB_AI, DEMON, HOLLOW_KING, MOB_ATTACK_RANGE, MOB_LEVEL, MOBS, MobKind, mobScale, MOTHER, SKELETON_AI, SKELETON_BOW, SKELETON_WEAPONS, SkeletonWeapon, REGEN_DELAY_MS, REGEN_PER_STA } from "../../shared/constants";
+import { BEAST, BLOB_AI, DEMON, HOLLOW_KING, MOB_ATTACK_RANGE, MOB_LEVEL, MOBS, MobKind, mobScale, MOTHER, SKELETON_AI, SKELETON_BOW, SKELETON_WEAPONS, SkeletonWeapon, REGEN_DELAY_MS, REGEN_PER_STA } from "../../shared/constants";
 import { MOB_COMBAT, mobBody, POISE, poiseSpeed } from "../../shared/combat";
 import { POTION_COOLDOWN_MS, POTION_SIZES } from "../../shared/potions";
 import { activeSkills, SKILLS } from "../../shared/skills";
@@ -59,6 +59,11 @@ export function mobSpec(kind: MobKind, level: number, opt: { weapon?: string; hp
   if (kind === "skeletonmage") ranged(SKELETON_AI.mage.range, SKELETON_AI.mage.keepAway, SKELETON_AI.mage.shotSpeed, 3);
   if (kind === "skeleton" && opt.weapon === "bow") { ranged(SKELETON_WEAPONS.bow.range, SKELETON_BOW.keepAway, SKELETON_BOW.shotSpeed, 3); }
   if (kind === "bandit" && opt.weapon === "archer") ranged(BANDIT_AI.bow.range, BANDIT_AI.bow.keepAway, BANDIT_AI.bow.shotSpeed, 3);
+  // Act 2 (server/TownRoom.ts RANGED / NOMAD_BOW, BEAST gore + stomp)
+  if (kind === "veiled") ranged(140, 72, 160, 3, 1.1);
+  if (kind === "nomad" && opt.weapon === "folk") ranged(125, 60, 175, 3, 0.85);
+  if (kind === "scorpion") spec.lunge = { min: BEAST.gore.min, max: BEAST.gore.max, every: BEAST.gore.cooldownMs, mult: BEAST.gore.dmgMult };
+  if (kind === "camelfolk") { const S = BEAST.stomp; spec.specials.push({ name: "Stomp", every: S.cooldownMs, windup: S.windupMs, min: 0, max: S.range, radius: S.radius, mult: S.dmgMult, at: "self", kb: S.knockback, stunMs: S.stunMs }); }
   if (kind === "necromancer") {
     const N = SKELETON_AI.necro;
     ranged(N.range, N.keepAway, N.shotSpeed, N.shotRadius, N.boltMult);
@@ -260,6 +265,18 @@ function zoneMob(level: number): MobSpec {
   return mobSpec(k, L, { weapon: w });
 }
 
+/** Act 2 (the Sunscar, shared/spawns.ts): its monsters at Lv 30-47. */
+function desertMob(level: number): MobSpec {
+  const L = Math.min(47, Math.max(30, level));
+  const pool: [MobKind, string?][] = [["nomad"], ["nomad", "folk"], ["scorpion"], ["scorpion"]];
+  if (L >= 36) pool.push(["sanddead"], ["sanddead"]);
+  if (L >= 38) pool.push(["camelfolk"], ["camelfolk"]);
+  if (L >= 41) pool.push(["veiled"], ["veiled"]);
+  const [k, w] = pick(pool);
+  return mobSpec(k, L, { weapon: w });
+}
+let ACT2 = false;
+
 const CHAIN = 6; // encounters per zone run: 1 monster (55%), 2 (35%) or 3 (10%)
 const potionSize = (level: number) => (level >= 20 ? 2 : level >= 10 ? 1 : 0);
 
@@ -272,7 +289,7 @@ function zoneRun(cls: ClassKind, level: number, build: Build, mobLevel: (i: numb
   let t = 0, kills = 0, lost = 0, fightMs = 0;
   for (let i = 0; i < CHAIN; i++) {
     const r = Math.random(), size = r < 0.55 ? 1 : r < 0.9 ? 2 : 3;
-    const ms = Array.from({ length: size }, (_, k) => new MobF(zoneMob(mobLevel(i)), "m" + k));
+    const ms = Array.from({ length: size }, (_, k) => new MobF((ACT2 ? desertMob : zoneMob)(mobLevel(i)), "m" + k));
     const d = new PveDuel(h, ms, pack, t);
     const hp0 = h.hp, t0 = d.now;
     let w: F | null | undefined;
@@ -329,7 +346,8 @@ if (process.argv[1]?.includes("pve")) {
   const n = Number(process.argv[2]) || 30;
   const doBosses = !process.argv.includes("--zones"), doZones = !process.argv.includes("--bosses");
   if (doZones) {
-    const levels = [2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30];
+    ACT2 = process.argv.includes("--act2"); // the desert's monsters, heroes Lv 30-48
+    const levels = ACT2 ? [30, 33, 36, 39, 42, 45, 48] : [2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30];
     console.log(`Zone runs: ${CHAIN} encounters (1-3 monsters) in a row vs monsters of the hero's level to +2 (capped 25), 3 heal + 3 mana potions.`);
     console.log("Cell = cleared% / HP lost per kill / seconds per kill / potions drunk per run");
     console.log("Lv".padEnd(5) + ACTIVE_CLASSES.map((c) => c.padEnd(22)).join(""));

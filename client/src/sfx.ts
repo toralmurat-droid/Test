@@ -635,7 +635,7 @@ R.owl = (o, t, v) => {
 
 interface Ent { sprite: { x: number; y: number }; state: any; mob?: boolean; hero?: string; top?: number }
 
-const UNDEAD = new Set(["skeleton", "skeletonmage", "necromancer", "crawler"]);
+const UNDEAD = new Set(["skeleton", "skeletonmage", "necromancer", "crawler", "sanddead"]);
 const isBlob = (k: string) => k === "slime" || k === "blobling" || k.endsWith("blob");
 const blobPitch = (st: any) => (st.kind === "motherblob" ? 0.55 : st.kind === "blobling" ? 1.5 : 1) / Math.sqrt(st.merged || 1);
 const HERO_PITCH: Record<string, number> = { ninja: 1.1, wizard: 0.95, knight: 0.85, archer: 1.15, barbarian: 0.75, vampire: 0.9, summoner: 1.0 };
@@ -672,6 +672,7 @@ export function bindSfx(room: any, me: () => string, ents: Map<string, Ent>) {
       else if (UNDEAD.has(k)) P(k === "skeletonmage" || k === "necromancer" ? "shotMagic" : "skelSwing", id, 0.8);
       else if (k === "bandit") { P("swing", id, 0.8, e.state.weapon === "brute"); if (Math.random() < 0.3) P("grunt", id, 0.7, idPitch(id)); }
       else if (k === "demon") P("demonGrowl", id, 0.7);
+      else if (k === "veiled") P("shotMagic", id, 0.7);
       else P("swing", id, 0.7);
       return;
     }
@@ -707,7 +708,7 @@ export function bindSfx(room: any, me: () => string, ents: Map<string, Ent>) {
   on("travel", ({ id }) => P("portalTravel", id));
   on("portals", ({ woke }) => { if (woke) play("portalWake"); });
   on("boom", ({ x, y, kind }) => {
-    const name = kind === "fireball" ? "boomFire" : kind === "arrow" || kind === "knife" || kind === "bolt" || kind === "stone" ? "boomThunk"
+    const name = kind === "fireball" || kind === "sunbolt" ? "boomFire" : kind === "arrow" || kind === "knife" || kind === "bolt" || kind === "stone" ? "boomThunk"
       : kind === "magicbolt" ? "boomMagic" : kind === "shadowbolt" ? "boomShadow" : kind === "slimeball" ? "boomSlime" : kind === "skelthrow" ? "boneBreak" : "boomThunk";
     play(name, x, y, 0.8, undefined, { key: "boom" + name, minGap: 40 });
   });
@@ -786,7 +787,7 @@ export function bindSfx(room: any, me: () => string, ents: Map<string, Ent>) {
     const mob = !!s.mobName;
     if (!mob && k !== "skelthrow") return; // our heroes' shots already sound on "rangedshot" / skill casts
     const name = k === "slimeball" ? "shotSlime" : k === "magicbolt" ? "shotMagic" : k === "shadowbolt" ? "shotShadow" : k === "arrow" || k === "bolt" ? "shotBow"
-      : k === "knife" ? "shotThrow" : k === "stone" ? "shotStone" : k === "skelthrow" ? "shotBone" : k === "fireball" ? "shotFire" : "shotThrow";
+      : k === "knife" ? "shotThrow" : k === "stone" ? "shotStone" : k === "skelthrow" ? "shotBone" : k === "fireball" || k === "sunbolt" ? "shotFire" : "shotThrow";
     play(name, s.x, s.y, 0.7, undefined, { key: "shot" + name, minGap: 60 });
   });
 }
