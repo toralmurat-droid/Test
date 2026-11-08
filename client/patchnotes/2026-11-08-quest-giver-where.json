@@ -1,0 +1,8 @@
+{
+  "date": "2026-11-08",
+  "title": "Find your quest givers",
+  "changes": [
+    "When a new quest is waiting, the tracker now says where its giver stands and its follow button leads you there, through the waygate if needed.",
+    "The quest log tells you where each quest giver is, and how to open the desert story and reach Captain Rakhim in Kel Ashar."
+  ]
+}

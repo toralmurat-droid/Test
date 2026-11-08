@@ -28,6 +28,7 @@
 #questtracker.open { display: block; }
 #questtracker .qt-title { color: #ffd166;  margin-bottom: 2px; }
 #questtracker .qt-obj { color: #fff; }
+#questtracker .qt-where { font-size: 15px; color: #c8bfa8; }
 #questtoast { position: absolute; top: 24%; left: 16px; right: 16px; text-align: center; opacity: 0; transition: opacity .5s; pointer-events: none; text-shadow: 2px 2px #000, 0 0 10px #000; }
 #questtoast.show { opacity: 1; animation: cleared-pop .5s ease-out; }
 #questtoast .big { font-size: 22px; font-family: var(--title-font);  color: #b9f27c; }
