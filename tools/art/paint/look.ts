@@ -220,6 +220,16 @@ export const MOB_LOOKS: Record<string, Look> = {
     sleeve: 0x4a4d55, arms: "plate", glove: 0x2e3036, weapon: "sword", bladeLen: 1.45, fx: 0x9dff6a,
     back: "cape", capeCol: 0x3a1218, build: 1.35,
   },
+  // Ishael, the Sunwright (Act 2's final boss): the High Veil of the Veiled Circle. A golden sun-crown, a gold veil over
+  // her face, white and gold robes over the Circle's indigo, a saffron mantle and a tall staff crowned with a burning sun
+  sunwright: {
+    skin: 0xb07a50, hair: 0x1a1414, hairStyle: "long", mask: 0xc89a3a, eye: 0xfff0a0, eyeGlow: 0xffd060,
+    head: "crown", headCol: 0xe0b040, headTrim: 0xfff0a0,
+    torso: "robe", torsoCol: 0xf0e6d0, trim: 0xe0b040, sash: 0x3a2e6a, belt: 0x3a2e6a, buckle: 0xffd060,
+    legs: "robe", legCol: 0xe8dcc0, boots: 0x8a6a30, bootStyle: "shoe",
+    sleeve: 0x3a2e6a, arms: "cloth", glove: 0xe0b040, bracer: 0xe0b040,
+    weapon: "staff", orb: 0xffb040, fx: 0xffd080, back: "cape", capeCol: 0xd88a20, build: 1.15,
+  },
   // the vampire's Brides (v_brides): deathly pale, long black hair under a torn white veil, a white wedding dress
   // stained with blood at the hem and the mouth, red eyes, bare feet and long nails
   bride: {

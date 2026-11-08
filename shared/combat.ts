@@ -70,6 +70,7 @@ export const MOB_COMBAT: Record<MobKind, { poise: number; windupMs: number }> = 
   sanddead: { poise: 70, windupMs: 340 },
   veiled: { poise: 40, windupMs: 420 },
   camelfolk: { poise: 140, windupMs: 440 },
+  sunwright: { poise: 460, windupMs: 480 },
 };
 
 /** Attack speed multiplier from the poise fraction (1 above half, down to minSpeed at 0). */

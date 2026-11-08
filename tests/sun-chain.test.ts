@@ -18,7 +18,8 @@ test("the Second Sun: givers and talkers live in Kel Ashar, kill steps use deser
     assert.ok(d.minLevel >= 30 && d.minLevel <= 50, `${d.title}: Act 2 level`);
     for (const s of d.steps) {
       if (s.type === "talk") assert.ok(NPCS.some((n) => n.id === s.npc), `${d.title}: talks to ${s.npc}`);
-      if (s.type === "kill") for (const k of s.kinds ?? []) assert.ok(desertKinds.has(k as string), `${d.title}: ${k} lives in the desert`);
+      if (s.summon) assert.equal(areaAt(s.summon.x, s.summon.y), s.zone, `${d.title}: the boss stands in ${s.zone}`);
+      if (s.type === "kill" && !s.summon) for (const k of s.kinds ?? []) assert.ok(desertKinds.has(k as string), `${d.title}: ${k} lives in the desert`);
       if (s.type === "collect") assert.ok(QUEST_ITEMS[s.item as keyof typeof QUEST_ITEMS], `${d.title}: item ${s.item}`);
       if (s.type === "use") for (const o of s.objects!) assert.equal(areaAt(o.x, o.y), s.zone, `${d.title}: ${o.id} stands in ${s.zone}`);
     }

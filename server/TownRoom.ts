@@ -4,7 +4,7 @@ import { ArraySchema, MapSchema, Schema, type } from "@colyseus/schema";
 import {
   AGGRO, aggroLevelFactor, BLOB_AI, BONES, DEMON, BROOD, Dir, FACTION, FEUD, MERGE, MobDef, MOTHER, SKELETON_AI, HIT_RADIUS, mobScale, regionMobLevel, regionSpecialLevel, InputState, MOB_ATTACK_RANGE, MOBS, MobKind, rollSkeletonWeapon, SKELETON_BOW, SKELETON_WEAPONS, SkeletonWeapon, REGEN_DELAY_MS, REGEN_RAMP_MS, regenFromStamina, SAFE_REGEN_MULT,
   RESPAWN_MS, TICK_RATE, TILE,
-  HOLLOW_KING, ELEM_BLOB, ELEM_MOVE, inputDir, DESERT_Y0, ELITE, BOSS, URSK, BEAST, BEAST_BROOD, BEAST_FOLK, BEAST_KINDS, BEAST_MOVES, BEAST_RIDER, type BeastMove,
+  HOLLOW_KING, ELEM_BLOB, ELEM_MOVE, inputDir, DESERT_Y0, ELITE, BOSS, URSK, SUNWRIGHT, act2MobLevel, act2SpecialLevel, BEAST, BEAST_BROOD, BEAST_FOLK, BEAST_KINDS, BEAST_MOVES, BEAST_RIDER, type BeastMove,
   MAP_W, MAP_H,
 } from "../shared/constants";
 import { ambushRoomAt, arrivalAt, CRACK_OPEN_MS, LINK_RANGE, linkById, LINKS, SHORTCUT_OPEN_MS } from "../shared/dungeon";
@@ -535,6 +535,8 @@ function mobDef(m: Mob, now = Date.now()): MobDef {
   if (m.kind === "hollowking") return m.hp < m.maxHp * HOLLOW_KING.wrath.hpFrac
     ? { ...base, speed: base.speed * HOLLOW_KING.wrath.speed, attackCooldownMs: base.attackCooldownMs * HOLLOW_KING.wrath.cooldown } : base;
   // The Hide-Mother rages when badly hurt; the Packlord's Howl drives his kin wild (BEAST)
+  // The Sunwright as the Second Sun (SUNWRIGHT.sun)
+  if (m.kind === "sunwright" && m.uPhase >= 3) return { ...base, speed: base.speed * SUNWRIGHT.sun.speed, attackCooldownMs: base.attackCooldownMs * SUNWRIGHT.sun.cooldown };
   if (m.kind === "hidemother" && m.hp < m.maxHp * BEAST.rockfall.hpFrac) return { ...base, speed: base.speed * BEAST.rockfall.speed, attackCooldownMs: base.attackCooldownMs * BEAST.rockfall.cooldown };
   if (BEAST_KINDS.includes(m.kind)) return now < m.rallyUntil ? { ...base, speed: base.speed * BEAST.howl.rallySpeed, damage: base.damage * BEAST.howl.rallyDmg } : base;
   if (m.kind !== "bandit" && m.kind !== "banditchief") return base;
@@ -708,6 +710,12 @@ export class TownRoom extends Room<TownState> {
       if (tp) { p.x = (Number(tp[1]) + 0.5) * TILE; p.y = (Number(tp[2]) + 0.5) * TILE; return; }
       if (process.env.NODE_ENV !== "production" && /^\/act2open$/i.test(text.trim())) { // dev servers only: both Act 1 finales done
         for (const id of ["tutorial", "crown", "beast"]) { const c = CHAINS.findIndex((ch) => ch.id === id); this.qset(p, c, { questId: CHAINS[c].quests.length, questStage: 0, questCount: 0 }); }
+        return;
+      }
+      if (process.env.NODE_ENV !== "production" && /^\/god$/i.test(text.trim())) { p.invulnUntil = Date.now() + 10 * 60_000; return; } // dev servers only: 10 min unhurt, to watch a fight
+      if (process.env.NODE_ENV !== "production" && /^\/sunfinale$/i.test(text.trim())) { // dev servers only: on the Second Sun's last quest
+        const c = CHAINS.findIndex((ch) => ch.id === "sun");
+        this.qset(p, c, { questId: CHAINS[c].quests.length - 1, questStage: 1, questCount: 0 });
         return;
       }
       const tr = text.trim().match(/^\/trade\s+(.+)$/i);
@@ -2867,7 +2875,9 @@ export class TownRoom extends Room<TownState> {
 
   /** May a walking monster step to (x,y)? Never into the safe zone or a peaceful place; a Mother Blob never closer to Oakvale than MOTHER_KEEP_OUT (she may still step back out). */
   private canStep(m: Mob, x: number, y: number): boolean {
-    if (isSafeZone(x, y) || noMobsAt(x, y)) return false;
+    if (isSafeZone(x, y)) return false;
+    // monster-free ground (the towns, the Sun Furnace's plateau): only a quest boss and what it calls walk there
+    if (noMobsAt(x, y) && !m.summonFor && !(m.mother && this.state.mobs.get(m.mother)?.summonFor)) return false;
     if (m.kind === "motherblob") { const d = villageDist(x, y); if (d < MOTHER_KEEP_OUT && d < villageDist(m.x, m.y)) return false; }
     return true;
   }
@@ -3211,6 +3221,28 @@ export class TownRoom extends Room<TownState> {
     }
   }
 
+  /** The Sunwright's fight (SUNWRIGHT): the Dawn, the Choir, the Second Sun, and her voice. */
+  private sunPhases(m: Mob, id: string, t: Player | undefined, now: number) {
+    if (m.dead || !m.uPhase) return;
+    const frac = m.hp / Math.max(1, m.maxHp);
+    if (m.uPhase < 2 && frac < SUNWRIGHT.phase[0]) {
+      m.uPhase = 2; // the Choir: her adepts come up the stair singing, and Zenith begins
+      this.bossSay(id, SUNWRIGHT.lines.choir);
+      m.bcd.brood = now + 400; m.bcd.zenith = now + 6000;
+      this.broadcast("sunwright", { id, phase: 2 });
+    }
+    if (m.uPhase < 3 && frac < SUNWRIGHT.phase[1]) {
+      m.uPhase = 3; // the Second Sun: she takes the Furnace's fire into herself
+      this.bossSay(id, SUNWRIGHT.lines.sun);
+      m.bcd.flare = now + 900; m.bcd.sunfall = now + 2500;
+      this.broadcast("sunwright", { id, phase: 3 });
+    }
+    if (t && now >= m.nextTaunt) {
+      if (m.nextTaunt) this.bossSay(id, SUNWRIGHT.lines.taunt);
+      m.nextTaunt = now + SUNWRIGHT.tauntMs[0] + Math.random() * (SUNWRIGHT.tauntMs[1] - SUNWRIGHT.tauntMs[0]);
+    }
+  }
+
   private raiseKin(b: Mob, bid: string, kind: MobKind, levelDrop: number): Mob | undefined {
     for (let i = 0; i < 12; i++) {
       const a = Math.random() * Math.PI * 2, r = 40 + Math.random() * 50;
@@ -3219,7 +3251,7 @@ export class TownRoom extends Room<TownState> {
       const c = new Mob();
       c.kind = kind; c.zone = -1; c.mother = bid; c.servant = true;
       c.x = c.homeX = x; c.y = c.homeY = y;
-      c.level = regionMobLevel(b.level - levelDrop);
+      c.level = b.y >= DESERT_Y0 * TILE ? act2MobLevel(b.level - levelDrop) : regionMobLevel(b.level - levelDrop);
       c.hp = c.maxHp = Math.round(MOBS[kind].maxHp * mobScale(c.level, "hp"));
       c.target = b.target;
       if (c.target) this.addHate(c, c.target, 0);
@@ -3249,6 +3281,7 @@ export class TownRoom extends Room<TownState> {
       });
     const away = (dx: number, dy: number, d: number): [number, number] => (d > 0.1 ? [dx / d, dy / d] : [m.aimX, m.aimY]);
     if (m.kind === "hidemother") this.urskPhases(m, id, t, now);
+    if (m.kind === "sunwright") this.sunPhases(m, id, t, now);
 
     // ---- a rush in progress
     if (m.rushUntil) {
@@ -3349,6 +3382,39 @@ export class TownRoom extends Room<TownState> {
             else this.damagePlayer(pid, dmgOf(R.dmgMult), `${name}'s Roar`, away(dx, dy, d), 1.2, { atkLevel: m.level, from: id, slowMs: B.roar.slowMs });
           });
           this.broadcast("bhit", { id, kind, x, y, r: R.radius });
+          break;
+        }
+        case "beam": {
+          // a lance of sunlight down the marked lane
+          const L = B.beam, w = L.width / 2 + 6;
+          heroes((dx, dy) => { const along = dx * m.aimX + dy * m.aimY, side = Math.abs(dx * -m.aimY + dy * m.aimX); return along >= -6 && along <= L.reach && side <= w; },
+            (pid) => this.damagePlayer(pid, dmgOf(L.dmgMult), `${name}'s Sunlance`, [m.aimX, m.aimY], L.knockback, { atkLevel: m.level, from: id, mobEl: "fire" }));
+          this.broadcast("bhit", { id, kind, x, y, x2: Math.round(m.x + m.aimX * L.reach), y2: Math.round(m.y + m.aimY * L.reach), w: L.width });
+          break;
+        }
+        case "flare": {
+          const F = B.flare;
+          heroes((_dx, _dy, d) => d <= F.radius, (pid, _p, dx, dy, d) => this.damagePlayer(pid, dmgOf(F.dmgMult), `${name}'s Flare`, away(dx, dy, d), F.knockback, { atkLevel: m.level, from: id, mobEl: "fire" }));
+          this.broadcast("bhit", { id, kind, x, y, r: F.radius });
+          break;
+        }
+        case "sunfall": {
+          const R = B.sunfall, dmg = dmgOf(R.dmgMult);
+          for (const [px, py] of m.pools) heroes((dx, dy) => Math.hypot(dx + m.x - px, dy + m.y - py) <= R.radius, (pid) =>
+            this.damagePlayer(pid, dmg, `${name}'s Sunfall`, [0, 0], 0, { atkLevel: m.level, from: id, mobEl: "fire" }));
+          this.broadcast("bhit", { id, kind, pts: m.pools.map(([a, b]) => [Math.round(a), Math.round(b)]), r: R.radius });
+          m.pools = [];
+          break;
+        }
+        case "zenith": {
+          // noon over the whole plateau: only her shadow is safe, and each adept still singing makes it hotter
+          const Z = B.zenith;
+          let choir = 0;
+          this.state.mobs.forEach((c) => { if (c.mother === id && !c.dead) choir++; });
+          const dmg = dmgOf(Z.dmgMult * (1 + Z.perAdept * choir));
+          heroes((_dx, _dy, d) => d > Z.inner && d <= Z.radius, (pid, _p, dx, dy, d) =>
+            this.damagePlayer(pid, dmg, `${name}'s Zenith`, away(dx, dy, d), 1.5, { atkLevel: m.level, from: id, mobEl: "fire" }));
+          this.broadcast("bhit", { id, kind, x, y, r: Z.radius, inner: Z.inner, choir });
           break;
         }
         case "rockfall": {
@@ -3464,7 +3530,7 @@ export class TownRoom extends Room<TownState> {
           break;
         }
         case "brood": {
-          if (frac >= (m.kind === "hidemother" ? URSK.phase[0] : B.brood.hpFrac) || kin() >= B.brood.max) { ok = false; break; }
+          if (frac >= (m.kind === "hidemother" ? URSK.phase[0] : m.kind === "sunwright" ? SUNWRIGHT.phase[0] : B.brood.hpFrac) || kin() >= B.brood.max) { ok = false; break; }
           wind(kind, B.brood.castMs, {});
           break;
         }
@@ -3492,6 +3558,37 @@ export class TownRoom extends Room<TownState> {
           this.bossSay(id, URSK.lines.gather);
           break;
         }
+        case "beam": {
+          const L = B.beam;
+          if (dist < L.min || dist > L.max) { ok = false; break; }
+          aimAt(t.x, t.y);
+          wind(kind, L.windupMs, { x2: Math.round(m.x + m.aimX * L.reach), y2: Math.round(m.y + m.aimY * L.reach), w: L.width });
+          break;
+        }
+        case "flare": {
+          // only when someone is crowding her
+          if (dist > B.flare.range) { ok = false; break; }
+          wind(kind, B.flare.windupMs, { r: B.flare.radius });
+          break;
+        }
+        case "zenith": {
+          if (frac >= B.zenith.hpFrac) { ok = false; break; }
+          wind(kind, B.zenith.windupMs, { r: B.zenith.radius, inner: B.zenith.inner });
+          this.bossSay(id, SUNWRIGHT.lines.zenith);
+          break;
+        }
+        case "sunfall": {
+          const R = B.sunfall, count = m.uPhase >= 3 ? SUNWRIGHT.sun.sunfallCount : R.count;
+          if (dist > R.range) { ok = false; break; }
+          m.pools = [[t.x, t.y]];
+          this.state.players.forEach((p) => { if (p !== t && !p.dead && m.pools.length < count && Math.hypot(p.x - m.x, p.y - m.y) <= R.range) m.pools.push([p.x, p.y]); });
+          while (m.pools.length < count) {
+            const a = Math.random() * Math.PI * 2, r = R.spread * (0.6 + Math.random() * 0.8);
+            m.pools.push([t.x + Math.cos(a) * r, t.y + Math.sin(a) * r * 0.8]);
+          }
+          wind(kind, R.windupMs, { pts: m.pools.map(([a, b]) => [Math.round(a), Math.round(b)]), r: R.radius });
+          break;
+        }
         case "rockfall": {
           const R = B.rockfall;
           if (frac >= R.hpFrac || dist > R.range) { ok = false; break; }
@@ -3507,7 +3604,7 @@ export class TownRoom extends Room<TownState> {
         }
       }
       if (!ok) continue;
-      m.bcd[kind] = now + cd;
+      m.bcd[kind] = now + (kind === "sunfall" && m.uPhase >= 3 ? cd * SUNWRIGHT.sun.sunfallCd : cd);
       return true;
     }
     return false;
@@ -3577,7 +3674,7 @@ export class TownRoom extends Room<TownState> {
     if (Math.random() < potionChance(def.potionChance, level)) this.dropItem("potion", x, y, 1, String(dropSize(level)));
     if (Math.random() < potionChance(def.potionChance, level) * MANA_POTION_DROP) this.dropItem("mpotion", x, y, 1, String(dropSize(level)));
     // the Hollow King, the first zone's final boss, leaves a little hoard
-    for (let i = kind === "hollowking" ? 3 : 1; i > 0; i--) {
+    for (let i = kind === "hollowking" || kind === "sunwright" ? 3 : 1; i > 0; i--) {
       const gear = rollGear(kind, level);
       if (gear) this.dropItem("gear", x, y, 1, gear);
     }
@@ -4162,6 +4259,7 @@ export class TownRoom extends Room<TownState> {
   /** A monster is down: its raised dead crumble, it leaves its zone (which brings a fresh one back later). */
   private mobDied(m: Mob, targetId: string, attackerId: string, killerName: string) {
     if (m.kind === "hidemother" && m.uPhase) this.bossSay(targetId, URSK.lines.death); // her last words
+    if (m.kind === "sunwright" && m.uPhase) this.bossSay(targetId, SUNWRIGHT.lines.death);
     m.dead = true; m.hp = 0;
     if (m.owner) this.summons.delete(targetId);
     if (m.charmUntil) { m.owner = ""; m.charmUntil = 0; m.banishAt = 0; } // a charmed monster dies as the zone monster it is
@@ -4171,7 +4269,7 @@ export class TownRoom extends Room<TownState> {
       const x = m.x, y = m.y, level = m.level, weapon = m.weapon === "bow" ? "sword" : m.weapon, mother = m.mother;
       this.clock.setTimeout(() => this.spawnCrawler(x, y, level, weapon, mother, attackerId), BONES.crawlDelayMs);
     }
-    if (m.kind === "necromancer" || m.kind === "hollowking" || m.kind === "packlord" || m.kind === "hidemother") {
+    if (m.kind === "necromancer" || m.kind === "hollowking" || m.kind === "packlord" || m.kind === "hidemother" || m.kind === "sunwright") {
       // Its raised skeletons (the Packlord's and the Hide-Mother's called kin) (the Hollow King's servants) fall apart with it
       this.state.mobs.forEach((c, cid) => {
         if (c.mother !== targetId || c.dead) return;
@@ -4689,7 +4787,7 @@ export class TownRoom extends Room<TownState> {
     const m = new Mob();
     m.kind = host; m.zone = -1; m.summonFor = pid; m.summonChain = c;
     m.x = m.homeX = sm.x; m.y = m.homeY = sm.y;
-    m.level = regionSpecialLevel(sm.level);
+    m.level = sm.y >= DESERT_Y0 * TILE ? act2SpecialLevel(sm.level) : regionSpecialLevel(sm.level);
     m.title = sm.title ?? "";
     const id = `q${++this.mobSeq}`;
     if (!isBlob(host)) {
@@ -4703,6 +4801,14 @@ export class TownRoom extends Room<TownState> {
         m.bcd = { maul: t0 + 4600, roar: t0 + 7000 };
         m.uPhase = 1; m.nextTaunt = t0 + 14000; m.hookHero = "";
         this.broadcast("beastrise", { id, x: Math.round(m.x), y: Math.round(m.y) });
+        W.forEach((line, i) => this.clock.setTimeout(() => { if (!m.dead) this.broadcast("bosssay", { id, text: line }); }, 300 + i * 1250));
+      }
+      if (host === "sunwright") {
+        const t0 = Date.now(), W = SUNWRIGHT.lines.wake;
+        m.stunUntil = t0 + 3800; // turning from the Furnace to greet you, and having her say
+        m.bcd = { beam: t0 + 4600, flare: t0 + 6000, sunfall: t0 + 8000 };
+        m.uPhase = 1; m.nextTaunt = t0 + 14000;
+        this.broadcast("sunrise", { id, x: Math.round(m.x), y: Math.round(m.y) });
         W.forEach((line, i) => this.clock.setTimeout(() => { if (!m.dead) this.broadcast("bosssay", { id, text: line }); }, 300 + i * 1250));
       }
       if (host === "hollowking") {
@@ -4877,6 +4983,7 @@ export class TownRoom extends Room<TownState> {
     if (opts.from && this.state.players.has(opts.from)) onKill(this.host, opts.from); // Bloodlust
     const killer = opts.from ? this.state.mobs.get(opts.from) : undefined;
     if (killer?.kind === "hidemother" && !killer.dead) this.bossSay(opts.from!, URSK.lines.kill);
+    if (killer?.kind === "sunwright" && !killer.dead) this.bossSay(opts.from!, SUNWRIGHT.lines.kill);
     t.guarding = false;
     // No magic in Oakvale: dying pays for it, the hero comes back a free citizen (villagers and watch stand down)
     this.setOutlaw(tid, t, false);

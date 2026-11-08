@@ -7,7 +7,7 @@ import { leaving, noteBuild, reconnectSoon, returnToStart, takeCarried, upgradeA
 import { Client, getStateCallbacks, Room } from "colyseus.js";
 /** Beast-folk that lurk in the Mawdeep's ambush rooms (their eyes show through the dark). */
 const LURKERS = new Set<string>(["gnawkin", "tuskborn", "silkwretch", "duskwing", "crowseer"]);
-import { BOSS, ELITE, InputState, MERGE, MOBS, type MobKind, URSK, DESERT_Y0, MAP_H, MAP_W, regenFromStamina, TICK_RATE, TILE } from "../../shared/constants";
+import { BOSS, ELITE, InputState, MERGE, MOBS, type MobKind, URSK, SUNWRIGHT, DESERT_Y0, MAP_H, MAP_W, regenFromStamina, TICK_RATE, TILE } from "../../shared/constants";
 import { CLASSES, ClassKind, MAX_LEVEL, xpForLevel } from "../../shared/classes";
 import { canPay, shortOf, MANA, manaRegen, maxManaFor, skillCost, unpackMana } from "../../shared/mana";
 import { nextSize, potionAmount, PotionKind, potionName, POTION_SIZES, total, unpackPotions } from "../../shared/potions";
@@ -883,6 +883,22 @@ export class TownScene extends Phaser.Scene {
       isoAnchor(b, e.sprite);
       this.time.delayedCall(3800, () => { if (e.bubble === b) { b.destroy(); e.bubble = undefined; } });
     });
+    // Ishael the Sunwright changes: the Choir (her adepts sing, Zenith begins), then the Second Sun (she burns and grows)
+    this.room.onMessage("sunwright", ({ id, phase }) => {
+      const e = this.entities.get(id);
+      if (!e) return;
+      if (phase === 3) {
+        const b = this.bodyScale(e) * SUNWRIGHT.sunScale;
+        e.base = b; e.top *= SUNWRIGHT.sunScale;
+        this.tweens.killTweensOf(e.sprite);
+        this.tweens.add({ targets: e.sprite, scaleX: b, scaleY: b, duration: 700, ease: "Back.Out" });
+        e.sprite.setTint(0xffe0a0);
+        this.burst(e.sprite.x, e.sprite.y - 24, 16, 0xffb040, 620);
+        this.floatText(e.sprite.x, e.sprite.y - e.top - 18, "THE SECOND SUN!", "#ffd060", PIXEL_FONT);
+      } else {
+        this.floatText(e.sprite.x, e.sprite.y - e.top - 18, "THE CHOIR!", "#c8b8ff", PIXEL_FONT);
+      }
+    });
     // Grandam Ursk changes: the Rite (her brood and needle), then the Bear (she tears off the last of the woman and grows)
     this.room.onMessage("ursk", ({ id, phase }) => {
       const e = this.entities.get(id);
@@ -1060,6 +1076,7 @@ export class TownScene extends Phaser.Scene {
     });
     // Brute Cleave / Chief Sweep / Chief Leap: the ground is marked red until the blow lands
     this.room.onMessage("bwind", ({ id, kind, ms, x, y, r }) => {
+      if (kind !== "cleave" && kind !== "leap" && kind !== "sweep") return; // the beast-folk's and the Sunwright's moves are marked in beastFx.ts
       const e = this.entities.get(id);
       if (e) {
         const name = kind === "leap" ? "LEAP!" : kind === "sweep" ? "SWEEP!" : "CLEAVE!";

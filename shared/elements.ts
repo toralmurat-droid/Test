@@ -47,7 +47,7 @@ export const MOB_AFFINITY: Partial<Record<MobKind, Partial<Record<Element, numbe
   stormblob: { shock: 0.2, poison: 0.6, cold: 1.4, fire: 1.1 },
   bandit: { poison: 1.15 }, banditchief: { poison: 1.15 },
   // Act 2: the Sand-Dead are the Kharsun dead (undead); scorpions shrug off venom; the Veiled Circle burns with the sun
-  sanddead: UNDEAD, scorpion: { poison: 0.4, cold: 1.25 }, veiled: { fire: 0.5, cold: 1.25 }, nomad: { fire: 0.85 },
+  sanddead: UNDEAD, scorpion: { poison: 0.4, cold: 1.25 }, veiled: { fire: 0.5, cold: 1.25 }, sunwright: { fire: 0.4, cold: 1.3 }, nomad: { fire: 0.85 },
 };
 export const mobAffinity = (kind: string, el: Element) => MOB_AFFINITY[kind as MobKind]?.[el] ?? 1;
 

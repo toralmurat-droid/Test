@@ -3,7 +3,7 @@ import { AREAS, ELEMENT_LANDS, GULLROCK, HOLLOW, HOLLOW_WARDS, isSafeZone, isSol
 import { SPAWN_ZONES, SpawnZone } from "./spawns";
 import { npcById } from "./npcs";
 import { chamberAt, COCOONS, DEN, FLOORS, SINKHOLE, TOTEMS } from "./dungeon";
-import { D, KEL_ASHAR } from "./desert";
+import { D, FURNACE, KEL_ASHAR } from "./desert";
 
 /**
  * The blob quest chain. Quests are done one after the other, each in a blob zone a little further from
@@ -1048,7 +1048,7 @@ const RAKHIM = ["sandcaptain", "Captain Rakhim", "Kel Ashar's south gate"] as co
  * Kharsun's cisterns for the old water-script, brand the camel-folk to serve them, and carry it all up to the Furnace.
  * Sefa the Well-Keeper knows the old stories; Captain Rakhim of the Sand Watch trusts no one who comes out of the gate.
  * The chain opens once the first zone's last bosses are down (the same as the waygate, shared/act2.ts) and climbs
- * from Lv 30 by the Sunstone to the Veiled Sanctum at Lv 44; its finale, the Sun Furnace, comes with its boss.
+ * from Lv 30 by the Sunstone to the Veiled Sanctum at Lv 44, and its finale at the Sun Furnace (Lv 46): Ishael, the Sunwright.
  */
 export const SUN_QUESTS: QuestDef[] = [
   {
@@ -1216,6 +1216,34 @@ export const SUN_QUESTS: QuestDef[] = [
     ],
     reward: { xp: 4200, gold: 900, potions: 5 },
     after: "Rest first. Whatever waits at the Furnace has waited a thousand years. It can wait for you to eat.",
+  },
+  {
+    // the finale: Act 2's final boss (SUNWRIGHT in shared/constants.ts)
+    id: "secondsun", title: "The Second Sun", giver: "wellkeeper", zone: "The Sun Furnace", minLevel: 46,
+    description: `The Sunwright waits at the Sun Furnace on top of the Thornspire, ${kdir("The Sun Furnace")} of Kel Ashar. Climb the Furnace Stair from the Veiled Sanctum and put out the second sun before it is lit.`,
+    offer: [
+      "Rakhim showed me the key. Sun-glass. My grandmother had a bead of it. She said it was a tear the sun cried over Kharsun.",
+      "I know the Sunwright's name now. Ishael. She was a well-keeper's daughter, from Kel Ashar. She learned her letters at this spring. From me.",
+      "She was the cleverest child I ever taught, and the kindest. She cried every winter, for the children in the tents who were cold at night.",
+      "She thinks a second sun will save them. It burned Kharsun to glass the first time. Go up, stranger. Stop her. And if you can... tell her the spring forgives her.",
+    ],
+    acceptText: "I'll climb to the Furnace",
+    steps: [
+      { type: "reach", at: { x: (FURNACE.x + 0.5) * TILE, y: (D(FURNACE.y) + FURNACE.r * 0.8) * TILE, r: 4 * TILE, label: "The Sun Furnace" }, zone: "The Sun Furnace",
+        text: "Climb the Furnace Stair to the Sun Furnace", banner: ["New quest", "The Second Sun"],
+        obj: `Climb to the Sun Furnace (${kdir("The Sun Furnace")} of Kel Ashar, above the Veiled Sanctum)`, nag: "The Furnace Stair starts behind the Veiled Sanctum." },
+      { type: "kill", zone: "The Sun Furnace", kinds: ["sunwright"], goal: 1,
+        summon: { parts: ["sunwright"], level: 50, title: "Ishael, the Sunwright", hpMult: 2, x: (FURNACE.x + 0.5) * TILE, y: (D(FURNACE.y) - 1) * TILE },
+        text: "Defeat Ishael, the Sunwright", banner: ["THE SUNWRIGHT TURNS", "Defeat Ishael"], obj: "The Sunwright defeated: {n} / {goal}",
+        nag: "Kill her choir before she calls noon, then stand in her shadow." },
+      back(SEFA[0], SEFA[1], SEFA[2], [
+        "I felt it go out. The whole desert sighed, like a sleeper turning over. And the nights are cold again. Good. Cold is honest.",
+        "The spring is full to the brim. The children were splashing in it at dawn. The ordinary dawn, with one sun.",
+        "Ishael... no. Let me say it to her myself, at the water, where she learned to read. Thank you, stranger. Kel Ashar is yours, as long as it stands.",
+      ], "Claim reward"),
+    ],
+    reward: { xp: 9000, gold: 2000, potions: 8 },
+    after: "Come and drink whenever you like. The spring remembers who saved it.",
   },
 ];
 
