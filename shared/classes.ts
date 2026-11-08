@@ -167,8 +167,11 @@ export const STAMINA_REGEN: Record<ClassKind, number> = { knight: 16, ninja: 16,
 export const DODGE = { distance: 48, durationMs: 250, invulnMs: 300, cooldownMs: 1500 };
 
 // ---- Levels -------------------------------------------------------------
-/** Heroes and monsters both stop at Lv 30 for now (Murat 2026-11-04; was 99). */
-export const MAX_LEVEL = 30;
+/**
+ * Heroes and monsters stop at Lv 50 (Murat 2026-11-08): the first zone (Oakvale) covers Lv 1-30, the desert of Act 2
+ * Lv 30-50 (REGION_LEVEL / ACT2_LEVEL in constants.ts). Was 30 (2026-11-04), 99 before that.
+ */
+export const MAX_LEVEL = 50;
 export const PVP_KILL_XP = 20;
 
 /** Total XP needed to reach `level` (level 1 = 0 XP). */
