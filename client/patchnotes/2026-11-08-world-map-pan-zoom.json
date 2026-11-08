@@ -1,5 +1,6 @@
 {
   "date": "2026-11-08",
+  "patch": 201,
   "title": "Explore the world map",
   "changes": [
     "The world map (M) can be dragged with the mouse or a finger, or moved with I J K L.",
