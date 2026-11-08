@@ -22,6 +22,8 @@ export interface HeroSave {
   boneId?: number; boneStage?: number; boneCount?: number; boneVer?: number;
   /** Redfang quest chain (CHAINS[2]) */
   redId?: number; redStage?: number; redCount?: number; redVer?: number;
+  /** The Second Sun (CHAINS[6]), Act 2's story. */
+  sunId?: number; sunStage?: number; sunCount?: number; sunVer?: number;
   /** 1 once the hero has been given its class starting kit (older saves get it on their next login). */
   kit?: number;
   /** The guided first quest (CHAINS[3], First Steps); missing on older saves = already done. */

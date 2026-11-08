@@ -415,6 +415,40 @@ export const LOOKS: Record<string, Look> = {
     sleeve: 0x4a6430, arms: "cloth",
     weapon: "druidstaff", orb: 0x9be564, fx: 0x9be564, back: "cape", capeCol: 0x3c5226,
   },
+  // Kel Ashar, the desert village of Act 2 (shared/npcs.ts)
+  // Sefa the Well-Keeper: an old woman in a pale headwrap and a well-blue robe, a brass ladle at her sash
+  wellkeeper: {
+    skin: 0xa8744c, hair: 0xd8d2c4, hairStyle: "long",
+    head: "hood", headCol: 0xe2d6bc, headTrim: 0x3a6a8a,
+    torso: "robe", torsoCol: 0x2e5a7a, trim: 0xd8c08a, sash: 0xc89a40,
+    legs: "robe", legCol: 0x284e6a, boots: 0x6a4a2e, bootStyle: "shoe",
+    sleeve: 0x2e5a7a, arms: "cloth", weapon: "none", fx: 0x9ad8ff, back: "cape", capeCol: 0xc8b896,
+  },
+  // Captain Rakhim of the Sand Watch: a white turban over a brass-capped helm, scale coat, a saffron sash and a long spear
+  sandcaptain: {
+    skin: 0x9a663e, hair: 0x1a1410, hairStyle: "short", beard: 0x1a1410, beardStyle: "full",
+    head: "helm", headCol: 0xc8a050, headTrim: 0xece2c8,
+    torso: "mail", torsoCol: 0xa88a52, tabard: { col: 0xd88a20, trim: 0xece2c8, emblem: 0xffd060 }, belt: 0x4a2e1a, buckle: 0xd8a840,
+    legs: "trousers", legCol: 0xe2d6bc, boots: 0x5a3a22, bootStyle: "wrap",
+    sleeve: 0xece2c8, arms: "cloth", glove: 0x4a2e1a, bracer: 0xa88a52,
+    weapon: "spear", fx: 0xfff0d0, back: "cape", capeCol: 0xd88a20, build: 1.1,
+    shield: { col: 0x8a5a2a, trim: 0xd8a840, emblem: 0xffd060, style: "round" },
+  },
+  // Zahra the spice trader: a saffron headscarf, a crimson vest over a cream blouse, a dark skirt and a bright sash
+  spicetrader: {
+    skin: 0xb07a50, hair: 0x1a1210, hairStyle: "long", eye: 0x3a2410, lips: 0x8a2a2a,
+    head: "bandana", headCol: 0xe0a020, headTrim: 0xa8301e,
+    torso: "shirt", torsoCol: 0xf0e2c4, vest: 0xa8301e, sash: 0xe0a020, belt: 0x5a3018,
+    legs: "dress", legCol: 0x5a2a3a, trim: 0xe0a020, boots: 0x6a4028, bootStyle: "shoe",
+    sleeve: 0xf0e2c4, arms: "cloth", bracer: 0xd8a840, weapon: "none", fx: 0xffd060,
+  },
+  // Oren the bladesmith: a bald, soot-darkened smith with a leather apron and a curved blade on his hip
+  desertsmith: {
+    skin: 0x8a5a36, hairStyle: "bald", hair: 0x1a1410, beard: 0x2a201a, beardStyle: "full",
+    head: "none", torso: "shirt", torsoCol: 0xc8b48a, vest: 0x5a3a22, apron: 0x6a4428, belt: 0x2e2014, buckle: 0xd8a840,
+    legs: "trousers", legCol: 0x6a5238, boots: 0x3a2a1e, bootStyle: "wrap",
+    sleeve: 0x8a5a36, arms: "bare", bracer: 0x4a3424, weapon: "hammer", fx: 0xffffff, build: 1.15,
+  },
   // Morwen: a young witch in a red dress, black corset bodice, bare arms and a tall black hat with a red band
   witch: {
     skin: 0xf0c8a8, hair: 0x1c1216, hairStyle: "long", eye: 0xd4a017, lips: 0xa01c2a,

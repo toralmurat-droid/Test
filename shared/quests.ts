@@ -3,6 +3,7 @@ import { AREAS, ELEMENT_LANDS, GULLROCK, HOLLOW, HOLLOW_WARDS, isSafeZone, isSol
 import { SPAWN_ZONES, SpawnZone } from "./spawns";
 import { npcById } from "./npcs";
 import { chamberAt, COCOONS, DEN, FLOORS, SINKHOLE, TOTEMS } from "./dungeon";
+import { D, KEL_ASHAR } from "./desert";
 
 /**
  * The blob quest chain. Quests are done one after the other, each in a blob zone a little further from
@@ -96,11 +97,16 @@ export const QUEST_ITEMS: Record<string, QuestItemDef> = {
   cinder: { name: "Cinder Heart", plural: "Cinder Hearts" },
   stormglass: { name: "Storm Glass", plural: "Storm Glass" },
   charm: { name: "Hide Charm", plural: "Hide Charms" },
+  // Act 2, the Second Sun (SUN_QUESTS)
+  veil: { name: "Veil Token", plural: "Veil Tokens" },
+  letter: { name: "Sealed Letter", plural: "Sealed Letters" },
+  brand: { name: "Sun Brand", plural: "Sun Brands" },
+  key: { name: "Furnace Key", plural: "Furnace Keys" },
 };
 
 // ---- Map objects you use with E ----
 
-export type QuestObjectKind = "lantern" | "shrine" | "cocoon" | "heart" | "engine" | "beacon" | "crypt" | "phylactery" | "ward" | "shard" | "silk" | "totem";
+export type QuestObjectKind = "lantern" | "shrine" | "cocoon" | "heart" | "engine" | "beacon" | "crypt" | "phylactery" | "ward" | "shard" | "silk" | "totem" | "sigil" | "cistern";
 export interface QuestObject { id: string; kind: QuestObjectKind; x: number; y: number; name: string; verb: string }
 
 const obj = (id: string, kind: QuestObjectKind, name: string, verb: string, area: string, fx: number, fy: number): QuestObject =>
@@ -1013,6 +1019,206 @@ export const BEAST_QUESTS: QuestDef[] = [
   },
 ];
 
+// ---- The Second Sun: Act 2, the Sunscar (shared/desert.ts), told from Kel Ashar ----
+
+/** Where things are, said from Kel Ashar (the Sunscar's own compass: Oakvale is a world away). */
+function dirFromKel(tx: number, ty: number): string {
+  const kx = (KEL_ASHAR.x0 + KEL_ASHAR.x1) / 2, ky = D((KEL_ASHAR.y0 + KEL_ASHAR.y1) / 2);
+  const k = (Math.round(Math.atan2(ty - ky, tx - kx) / (Math.PI / 4)) + 8) % 8;
+  return ["east", "south-east", "south", "south-west", "west", "north-west", "north", "north-east"][k];
+}
+const kdir = (name: string) => { const z = zoneByName(name); return dirFromKel(z.x + z.w / 2, z.y + z.h / 2); };
+const areaPx = (name: string, r: number, label = name) => { const z = zoneByName(name); return { x: (z.x + z.w / 2) * TILE, y: (z.y + z.h / 2) * TILE, r: r * TILE, label }; };
+/** Sun-glass sigils the Veiled Circle drove into the oases: they drink the water and send it east to the Furnace. */
+export const PALM_SIGILS: QuestObject[] = [[0.2, 0.5], [0.55, 0.14], [0.82, 0.72]].map(([fx, fy], i) => obj(`sigil${i + 1}`, "sigil", "Sun-glass sigil", "Shatter", "Palmshade Oasis", fx, fy));
+export const MIRAGE_SIGILS: QuestObject[] = [[0.15, 0.3], [0.5, 0.85], [0.86, 0.35]].map(([fx, fy], i) => obj(`sigil${i + 4}`, "sigil", "Sun-glass sigil", "Shatter", "Mirage Wells", fx, fy));
+/** Kharsun's sealed cisterns: their carvings tell how the old city died. */
+export const CISTERNS: QuestObject[] = [[0.22, 0.3], [0.5, 0.62], [0.8, 0.4]].map(([fx, fy], i) => obj(`cistern${i + 1}`, "cistern", "Sealed cistern", "Read the carvings", "Kharsun, the Buried City", fx, fy));
+const SEFA = ["wellkeeper", "Sefa", "the spring in the market"] as const;
+const RAKHIM = ["sandcaptain", "Captain Rakhim", "Kel Ashar's south gate"] as const;
+
+/**
+ * The story (Murat 2026-11-08: a desert storyline with a final boss). A thousand years ago Kharsun was the jewel of the
+ * Sunscar, ruled by the Veiled Circle, sun-priests who swore the desert could have a second sun and they would be its
+ * gods. They built the Sun Furnace on the Thornspire and fed it Kharsun's river. The Furnace caught for one night; by
+ * morning the river was steam and the city was burning, and the sand buried what was left. The Circle was driven out
+ * and the waygate between the Sunscar and the green valley went to sleep.
+ * Now the gate has woken (the hero walked through it), Kel Ashar's spring is sinking a finger a day, and the oases are
+ * drying. The Circle is back: they pay the Dustrider raiders, drive sun-glass sigils into the oases to drink them, dig
+ * Kharsun's cisterns for the old water-script, brand the camel-folk to serve them, and carry it all up to the Furnace.
+ * Sefa the Well-Keeper knows the old stories; Captain Rakhim of the Sand Watch trusts no one who comes out of the gate.
+ * The chain opens once the first zone's last bosses are down (the same as the waygate, shared/act2.ts) and climbs
+ * from Lv 30 by the Sunstone to the Veiled Sanctum at Lv 44; its finale, the Sun Furnace, comes with its boss.
+ */
+export const SUN_QUESTS: QuestDef[] = [
+  {
+    id: "stranger", title: "Out of the Old Gate", giver: "sandcaptain", zone: "The Glasswind Flats", minLevel: 30,
+    description: "Captain Rakhim of the Sand Watch doesn't trust anyone who walks out of the waygate. Clear the scorpions off the caravan road from the Sunstone Circle and he might.",
+    offer: [
+      "Hold there. You came out of the old gate. Nobody has come out of that gate in a thousand years, and the last time it woke, Kharsun burned.",
+      "So forgive me if I don't hand you the keys to the town.",
+      "The flats between the Sunstone and our walls are crawling with scorpions. More than I've seen in twenty years, as if something drove them out of the deep sand. Thin them out and we'll talk.",
+    ],
+    acceptText: "I'll clear the road",
+    steps: [
+      { type: "kill", kinds: ["scorpion"], zone: "The Glasswind Flats", goal: 8, text: "Kill 8 Dune Scorpions on the Glasswind Flats", banner: ["New quest", "Out of the Old Gate"],
+        obj: "Dune Scorpions slain: {n} / {goal}", nag: "{n} of {goal}. They hunt the flats round the Sunstone. Mind the sting." },
+      back(SEFA[0], SEFA[1], SEFA[2], [
+        "So you're the one who came through the gate. Rakhim sent you to me, which means he's decided you're not a demon. That's high praise, from Rakhim.",
+        "I'm Sefa. I keep the spring. My mother kept it, and hers. Look at the stones round the water: see the dark line, a hand above the surface? That was the water at the new moon.",
+        "It sinks a finger a day. And it started the night your gate woke.",
+      ], "Claim reward"),
+    ],
+    reward: { xp: 2000, gold: 400, potions: 3 },
+    after: "Drink while you can, stranger. Nobody knows how long the spring will last.",
+  },
+  {
+    id: "thirst", title: "The Thirsting Spring", giver: "wellkeeper", zone: "Palmshade Oasis", minLevel: 31,
+    description: `Kel Ashar's spring is sinking, and Palmshade Oasis ${kdir("Palmshade Oasis")} of town is drying too. Caravaners saw glass pillars humming by its water at night.`,
+    offer: [
+      "It isn't only our spring. Palmshade, the big oasis west of town, has lost a man's height of water since the gate woke. The palms are going brown at the crown.",
+      "A caravan came in last night. They said there are pillars of glass standing in the shallows at Palmshade, humming, hot to the touch. And Dustriders camped round them like dogs round a bone.",
+      "Pillars of glass by water... my grandmother had a word for that. Sun-glass. Go and look. Break them if you can.",
+    ],
+    acceptText: "I'll go to Palmshade",
+    steps: [
+      { type: "reach", at: areaPx("Palmshade Oasis", 9), zone: "Palmshade Oasis", text: "Go to Palmshade Oasis", banner: ["New quest", "The Thirsting Spring"],
+        obj: `Go to Palmshade Oasis (${kdir("Palmshade Oasis")} of Kel Ashar)`, nag: "Palmshade is out past the west gate. Follow the palms." },
+      { type: "use", zone: "Palmshade Oasis", objects: PALM_SIGILS, chest: false, text: "Shatter the sun-glass sigils", banner: ["Sun-glass", "Shatter the sigils"],
+        obj: "Sigils shattered: {n} / {goal}", nag: "{n} of {goal}. They stand by the water, humming." },
+      { type: "collect", item: "veil", kinds: ["nomad"], chance: { nomad: 0.4 }, zone: "Palmshade Oasis", goal: 4, text: "Take 4 Veil Tokens from the Dustriders",
+        banner: ["Hired blades", "Take 4 Veil Tokens"], obj: "Veil Tokens: {n} / {goal}", nag: "{n} of {goal}. The Dustriders who guarded the sigils carry them." },
+      back(SEFA[0], SEFA[1], SEFA[2], [
+        "Show me. ...Indigo cloth, a gold sun stitched on it, and the sun has a veil over its face.",
+        "Stranger, I was hoping you would bring me anything but this. This is the mark of the Veiled Circle.",
+        "Every child in Kel Ashar knows the rhyme. 'The veiled ones lit a second sun, and Kharsun drank it, every one.' We sing it skipping rope. I never thought it was true.",
+      ], "Claim reward"),
+    ],
+    reward: { xp: 2400, gold: 450, potions: 3 },
+    after: "The water at Palmshade has stopped sinking. Ours hasn't. There must be more of those sigils.",
+  },
+  {
+    id: "silver", title: "Dustrider Silver", giver: "sandcaptain", zone: "Dustrider Camp", minLevel: 33,
+    description: `The Dustriders are paid to guard the Circle's sigils. Raid their camp ${kdir("Dustrider Camp")} of Kel Ashar and find out who pays them.`,
+    offer: [
+      "Sefa told me about the tokens. The Veiled Circle. Children's rhymes. I don't believe in rhymes, stranger. I believe in silver.",
+      "Dustriders don't guard anything for free. Somebody is paying them, and paying well: they've stopped raiding our caravans, and a Dustrider who stops raiding is a Dustrider who's being paid more not to.",
+      "Their camp is in the Red Wastes, north-west, past Jackal Springs. Hit it hard. Their chief keeps his letters close: bring me one.",
+    ],
+    acceptText: "I'll raid the camp",
+    steps: [
+      { type: "kill", kinds: ["nomad"], zone: "Dustrider Camp", goal: 12, text: "Raid the Dustrider Camp: kill 12 Dustriders", banner: ["New quest", "Dustrider Silver"],
+        obj: "Dustriders slain: {n} / {goal}", nag: `{n} of {goal}. Their tents are ${kdir("Dustrider Camp")} of town, in the Red Wastes.` },
+      { type: "collect", item: "letter", kinds: ["nomad"], chance: { nomad: 0.15 }, zone: "Dustrider Camp", goal: 1, text: "Find a sealed letter on the Dustriders",
+        banner: ["Who pays them?", "Find a sealed letter"], obj: "Sealed letters: {n} / {goal}", nag: "Their riders carry the paymaster's letters. Keep looking." },
+      back(RAKHIM[0], RAKHIM[1], RAKHIM[2], [
+        "Indigo wax. A sun with a veil over its face. Sefa's rhyme again.",
+        "'To the riders of the Red Wastes: guard the glass at Palmshade and the Wells. Let no one near the water. Silver on the new moon, as before. By the hand of the Sunwright.'",
+        "The Sunwright. All right, stranger. I believe in rhymes now. I don't like it.",
+      ], "Claim reward"),
+    ],
+    reward: { xp: 2700, gold: 500, potions: 3 },
+    after: "The Sunwright. Whoever that is, they write a fine hand for a demon.",
+  },
+  {
+    id: "kharsun", title: "What Kharsun Remembers", giver: "wellkeeper", zone: "Kharsun, the Buried City", minLevel: 36,
+    description: `Sefa says the Circle ruled Kharsun, ${kdir("Kharsun, the Buried City")} of Kel Ashar, before it burned. Its sealed cisterns hold carvings of how the city died. The Sand-Dead guard them.`,
+    offer: [
+      "I asked the old women. All of them, even the ones who don't like me. And they told me what their grandmothers told them.",
+      "Kharsun was the Circle's city. The veiled priests swore the desert could have a second sun, and they would be its gods. They built a furnace on the Thornspire and fed it the whole river of Kharsun.",
+      "It burned for one night. By morning the river was steam and the city was ash, and the sand came down and buried it. The dead never left. They walk at night.",
+      "The cisterns of Kharsun were sealed with carvings, the water-script, to tell the water where to go. If the Circle is back, they've been reading them. Read them first.",
+    ],
+    acceptText: "I'll read the carvings",
+    steps: [
+      { type: "kill", kinds: ["sanddead"], zone: "Kharsun, the Buried City", goal: 12, text: "Put down 12 of the Sand-Dead", banner: ["New quest", "What Kharsun Remembers"],
+        obj: "Sand-Dead put down: {n} / {goal}", nag: "{n} of {goal}. They rise thickest at night.", hint: "The Sand-Dead rise mostly at night" },
+      { type: "use", zone: "Kharsun, the Buried City", objects: CISTERNS, chest: true, text: "Read the carvings on 3 sealed cisterns", banner: ["Kharsun", "Read the water-script"],
+        obj: "Cisterns read: {n} / {goal}", nag: "{n} of {goal}. They're sunk among the ruins, rimmed with carvings." },
+      back(SEFA[0], SEFA[1], SEFA[2], [
+        "Three carvings. The first is the river, running. The second is the river running UP, onto the mountain, into a mouth. The third is a second sun over a burning city.",
+        "And look here, at the edge: new scratches. Someone copied the water-script, and not long ago. The chisel marks are still sharp.",
+        "They are doing it again. Our oases are the river this time.",
+      ], "Claim reward"),
+    ],
+    reward: { xp: 3000, gold: 560, potions: 4 },
+    after: "I've stopped singing the rhyme. The children haven't. I can't bear to tell them.",
+  },
+  {
+    id: "brands", title: "Brands of the Sun", giver: "sandcaptain", zone: "The Humpback Mesas", minLevel: 38,
+    description: `The camel-folk of the Humpback Mesas, ${kdir("The Humpback Mesas")} of Kel Ashar, traded with the town for a hundred years. Now they attack every caravan, and they bear burns shaped like a veiled sun.`,
+    offer: [
+      "The camel-folk of the mesas are an old people. Proud, slow to anger, and they never forget a debt. We've traded salt for their wool since before my grandfather.",
+      "Three caravans in a month, all hit by camel-folk. The drivers who lived say their eyes were wrong, glassy, and every one of them had a burn on the neck. A sun with a veil.",
+      "The Circle has branded them like cattle. Put the branded ones down, it's a mercy. And bring me the brands, so I can show the clans' elders what was done to their people.",
+    ],
+    acceptText: "I'll go to the mesas",
+    steps: [
+      { type: "kill", kinds: ["camelfolk"], zone: "The Humpback Mesas", goal: 10, text: "Kill 10 branded Camel-Men", banner: ["New quest", "Brands of the Sun"],
+        obj: "Branded Camel-Men slain: {n} / {goal}", nag: `{n} of {goal}. The mesas are ${kdir("The Humpback Mesas")} of town, beyond the north gate. Mind their stamp.` },
+      { type: "collect", item: "brand", kinds: ["camelfolk"], chance: { camelfolk: 0.4 }, zone: "The Humpback Mesas", goal: 4, text: "Take 4 Sun Brands",
+        banner: ["Branded", "Take 4 Sun Brands"], obj: "Sun Brands: {n} / {goal}", nag: "{n} of {goal}. The brand-plates are sewn into their harness." },
+      back(RAKHIM[0], RAKHIM[1], RAKHIM[2], [
+        "Brass plates, still warm. They hum, like Sefa's sigils. Whatever the Circle burned into the camel-folk, it pulls at them. Toward the east.",
+        "I sent word to the clan elders. They'll come. They'll be angry, and not at us, thanks to you.",
+        "East. Everything goes east. The Wells, and then the Thornspire.",
+      ], "Claim reward"),
+    ],
+    reward: { xp: 3300, gold: 620, potions: 4 },
+    after: "The clan elders came at dawn. They sat by the spring with Sefa all morning and didn't say a word. Then they left east, armed.",
+  },
+  {
+    id: "wells", title: "Mirage Wells", giver: "wellkeeper", zone: "Mirage Wells", minLevel: 41,
+    description: `Mirage Wells, the last oasis before the Thornspire, ${kdir("Mirage Wells")} of Kel Ashar, has sun-glass in it too, and the Veiled Circle's adepts tend it themselves.`,
+    offer: [
+      "Our spring dropped two fingers last night. Two. The sigils at Palmshade are broken, so it must be the Wells, out east past the Saffron Dunes.",
+      "A water-finder came in from there with burns on his hands. He says men in indigo robes stand round the glass and sing to it, and the water rises off it like steam and blows east.",
+      "Those are no hired blades, stranger. Those are the Circle. Break their glass, and break them.",
+    ],
+    acceptText: "I'll go to the Wells",
+    steps: [
+      { type: "reach", at: areaPx("Mirage Wells", 8), zone: "Mirage Wells", text: "Go to Mirage Wells", banner: ["New quest", "Mirage Wells"],
+        obj: `Go to Mirage Wells (${kdir("Mirage Wells")} of Kel Ashar)`, nag: "Out the east gate, past the Saffron Dunes. Look for the shimmer." },
+      { type: "use", zone: "Mirage Wells", objects: MIRAGE_SIGILS, chest: true, text: "Shatter the sun-glass sigils at the Wells", banner: ["Sun-glass", "Shatter the sigils"],
+        obj: "Sigils shattered: {n} / {goal}", nag: "{n} of {goal}. They stand round the water." },
+      { type: "kill", kinds: ["veiled"], zone: "Mirage Wells", goal: 6, text: "Kill 6 Veiled Adepts", banner: ["The Veiled Circle", "Kill 6 Veiled Adepts"],
+        obj: "Veiled Adepts slain: {n} / {goal}", nag: "{n} of {goal}. They throw sun-fire. Close in fast." },
+      back(SEFA[0], SEFA[1], SEFA[2], [
+        "The spring rose a finger this morning. A finger! The children ran round the market shrieking.",
+        "But the Circle doesn't need our oases any more, does it. They've had a month of them. Whatever they were filling up there on the Thornspire, it might be full already.",
+        "Go to Rakhim. He's been staring at that mountain since dawn.",
+      ], "Claim reward"),
+    ],
+    reward: { xp: 3600, gold: 700, potions: 4 },
+    after: "Listen. The spring is singing again. It does that, when it's full.",
+  },
+  {
+    id: "sanctum", title: "The Veiled Sanctum", giver: "sandcaptain", zone: "The Veiled Sanctum", minLevel: 44,
+    description: `The Veiled Circle's sanctum is hidden high in the Thornspire Heights, ${kdir("The Veiled Sanctum")} of Kel Ashar, below the Sun Furnace. Break it, and take the key to the Furnace.`,
+    offer: [
+      "The camel-clans found it. A sanctum cut into the Thornspire, just below the peak, guarded by more adepts than they could count. They lost good people finding it.",
+      "Above it is the Furnace. The clans say it's warm. A mountain-top, at night, warm.",
+      "Go up. Break the sanctum. Their adepts carry the keys to the Furnace stair: take one. And stranger: whatever the Sunwright is, don't let it finish.",
+    ],
+    acceptText: "I'll climb the Thornspire",
+    steps: [
+      { type: "reach", at: areaPx("The Veiled Sanctum", 9), zone: "The Veiled Sanctum", text: "Find the Veiled Sanctum in the Thornspire Heights", banner: ["New quest", "The Veiled Sanctum"],
+        obj: `Find the Veiled Sanctum (${kdir("The Veiled Sanctum")} of Kel Ashar, high in the Thornspire)`, nag: "Take the trail up into the Thornspire past Mirage Wells." },
+      { type: "kill", kinds: ["veiled"], zone: "The Veiled Sanctum", goal: 12, text: "Break the sanctum: kill 12 Veiled Adepts", banner: ["The Veiled Sanctum", "Kill 12 Veiled Adepts"],
+        obj: "Veiled Adepts slain: {n} / {goal}", nag: "{n} of {goal}. Fight them in the doorways, where they can't all see you." },
+      { type: "collect", item: "key", kinds: ["veiled"], chance: { veiled: 0.2 }, zone: "The Veiled Sanctum", goal: 1, text: "Take a Furnace Key from an adept",
+        banner: ["The stair above", "Take a Furnace Key"], obj: "Furnace Key: {n} / {goal}", nag: "The adepts carry them. One of them must." },
+      back(RAKHIM[0], RAKHIM[1], RAKHIM[2], [
+        "A key of sun-glass. It's warm in my hand. Warm and getting warmer.",
+        "The clans say there was a voice in the sanctum. Calm, kind, like a teacher's. 'Not long now, children. Not long and the sky will have two eyes.'",
+        "The Sunwright is up there, stranger, at the Furnace. When you're ready, and only then, go and end this.",
+      ], "Claim reward"),
+    ],
+    reward: { xp: 4200, gold: 900, potions: 5 },
+    after: "Rest first. Whatever waits at the Furnace has waited a thousand years. It can wait for you to eat.",
+  },
+];
+
 // ---- First Steps: the guided first quest, one control per step (replaces the old wall-of-text intro) ----
 
 const ROWAN = npcById("druid")!;
@@ -1067,7 +1273,10 @@ export const TUT_CHAIN = 3;
 export const tutorialDone = (p: Quester | undefined) => p?.tut === undefined || unpackQuest(p.tut).questId >= TUT_QUESTS.length;
 /** Can this chain offer new quests yet? Every story waits for the guided first quest. */
 export const chainOpen = (p: Quester | undefined, c: number) =>
-  c === TUT_CHAIN || (tutorialDone(p) && (c !== CROWN_CHAIN || STORY_CHAINS.every((s) => storyDone(p, s))));
+  c === TUT_CHAIN || (tutorialDone(p) && (c !== CROWN_CHAIN || STORY_CHAINS.every((s) => storyDone(p, s)))
+    && (c !== SUN_CHAIN || (chainDone(p, CROWN_CHAIN) && chainDone(p, BEAST_CHAIN)))); // the Second Sun: once the waygate is awake (shared/act2.ts)
+export const BEAST_CHAIN = 5;
+export const SUN_CHAIN = 6;
 /** The Hollow Crown waits for the three stories it ties together. */
 export const CROWN_CHAIN = 4;
 const STORY_CHAINS = [0, 1, 2];
@@ -1099,16 +1308,18 @@ export const unpackQuest = (n: number) => ({ questId: Math.floor(n / 10000), que
 export const CHAINS: QuestChain[] = [
   { id: "gloam", name: "The Gloam", quests: QUESTS, keys: ["questId", "questStage", "questCount"], version: QUEST_VERSION, verKey: "questVer" },
   { id: "bones", name: "The Pale Marshal", quests: BONE_QUESTS, keys: ["boneId", "boneStage", "boneCount"], version: 1, verKey: "boneVer" },
-  { id: "redfang", name: "The Redfang Debt", quests: RED_QUESTS, keys: ["redId", "redStage", "redCount"], version: 2, verKey: "redVer" },
+  // packed since Act 2 (the Second Sun needed a synced field): saves keep the same three names
+  { id: "redfang", name: "The Redfang Debt", quests: RED_QUESTS, keys: ["redId", "redStage", "redCount"], version: 2, verKey: "redVer", packed: "red" },
   { id: "tutorial", name: "First Steps", quests: TUT_QUESTS, keys: ["tutId", "tutStage", "tutCount"], version: 1, verKey: "tutVer", packed: "tut" },
   { id: "crown", name: "The Hollow Crown", quests: CROWN_QUESTS, keys: ["crownId", "crownStage", "crownCount"], version: 1, verKey: "crownVer", packed: "crown" },
   { id: "beast", name: "The Hide Rite", quests: BEAST_QUESTS, keys: ["beastId", "beastStage", "beastCount"], version: 1, verKey: "beastVer", packed: "beast" },
+  { id: "sun", name: "The Second Sun", quests: SUN_QUESTS, keys: ["sunId", "sunStage", "sunCount"], version: 1, verKey: "sunVer", packed: "sun" },
 ];
 
 /** Progress on one chain (chain undefined = the blob chain, so a Player passed as is reads as chain 0). */
 export interface QuestState { questId: number; questStage: number; questCount: number; level?: number; chain?: number }
 /** A player's progress on every chain: the Player schema fields (CHAINS[].keys). */
-export type Quester = { level?: number; questId?: number; questStage?: number; questCount?: number; boneId?: number; boneStage?: number; boneCount?: number; redId?: number; redStage?: number; redCount?: number; tut?: number; crown?: number; beast?: number };
+export type Quester = { level?: number; questId?: number; questStage?: number; questCount?: number; boneId?: number; boneStage?: number; boneCount?: number; redId?: number; redStage?: number; redCount?: number; tut?: number; crown?: number; beast?: number; red?: number; sun?: number };
 
 /** One chain's progress, read from the player's fields. */
 export function chainState(p: Quester | undefined, c: number): QuestState | undefined {
@@ -1281,7 +1492,7 @@ export function usableObjects(p: Quester | undefined): { o: QuestObject; i: numb
 
 /** Every quest object in the world, with whether it is done for this player (lit lanterns stay lit…). */
 export function allObjects(): QuestObject[] {
-  return [...LANTERNS, COCOON, ...SHRINES, BROOD_HEART, ...SHARDS, ...ENGINES, BEACON, ...CRYPTS, PHYLACTERY, ...WARDS, ...SILK, ...HIDE_TOTEMS];
+  return [...LANTERNS, COCOON, ...SHRINES, BROOD_HEART, ...SHARDS, ...ENGINES, BEACON, ...CRYPTS, PHYLACTERY, ...WARDS, ...SILK, ...HIDE_TOTEMS, ...PALM_SIGILS, ...MIRAGE_SIGILS, ...CISTERNS];
 }
 export function objectDone(o: QuestObject, p: Quester | undefined): boolean {
   const c = CHAINS.findIndex((ch) => ch.quests.some((d) => d.steps.some((s) => s.objects?.includes(o))));

@@ -118,7 +118,15 @@ const ITEM_ART: Record<string, { rows: string[]; pal: Record<string, number> }> 
   q_cinder: { rows: ["...KK...", "..KRYK..", ".KRYWYK.", "KRRYYRRK", "KDRRRRDK", ".KDRRDK.", "..KDDK..", "...KK..."],
     pal: { K: 0x1a0e0a, R: 0xe0521e, Y: 0xffb347, W: 0xfff2b0, D: 0x7a2412 } },
   q_stormglass: { rows: ["....K...", "...KLK..", "..KLBVK.", ".KLBBVK.", ".KBWBVVK", "..KBBVK.", "..KVVK..", "...KK..."],
-    pal: { K: 0x14122a, L: 0xe8f4ff, B: 0x8fb8ff, W: 0xffffff, V: 0x6a4fd8 } },
+    pal: { K: 0x14122a, L: 0xe8f4ff, B: 0x8fb8ff, W: 0xffffff, V: 0x6a4fd8 } },  // Act 2 (the Second Sun)
+  q_veil: { rows: ["..KKKK..", ".KIIIIK.", "KIIYYIIK", "KIYWWYIK", "KIIYYIIK", ".KIIIIK.", "..KIIK..", "...KK..."],
+    pal: { K: 0x14102a, I: 0x3a2e6a, Y: 0xd8a040, W: 0xfff0b0 } },
+  q_letter: { rows: ["........", "KKKKKKKK", "KPPPPPPK", "KPKPPKPK", "KPPKKPPK", "KPPRRPPK", "KKKRRKKK", "........"],
+    pal: { K: 0x4a3a28, P: 0xf0e2c4, R: 0xb0201e } },
+  q_brand: { rows: ["...K....", "..KYK...", ".KYWYK..", "KYWOWYK.", ".KYWYK..", "..KYKK..", "....KBK.", ".....KBK"],
+    pal: { K: 0x3a2410, Y: 0xd8a040, W: 0xfff0b0, O: 0xff6a1e, B: 0x6a4a2a } },
+  q_key: { rows: ["..KKK...", ".KYOYK..", ".KOWOK..", ".KYOYK..", "..KYK...", "..KYKK..", "..KYYK..", "..KYKK.."],
+    pal: { K: 0x3a2410, Y: 0xd8a040, O: 0xff8a2a, W: 0xfff0b0 } },
 };
 
 /** Texture kind of a potion flask by size: "potion", "potion1", "potion2" (and "mpotion"...). */
