@@ -1,5 +1,6 @@
 import Phaser from "phaser";
 import { BONE, IRON, OLDWOOD, Pen, pen, ROPE, sheet } from "./worldProps";
+import { iso } from "./isoBox";
 
 /**
  * The grim side of the Mawdeep (Murat 2026-11-05: "the inside of the dungeon should make sense"): what the beast-folk
@@ -33,8 +34,8 @@ const HAIR = [0x3a2414, 0x6a4a22, 0x8a7a5a, 0x241a14];
 
 export const GORE = {
   blood: { w: 60, h: 32, n: 4 }, drag: { w: 44, h: 30, n: 4 }, remains: { w: 46, h: 28, n: 4 },
-  hook: { w: 36, h: 74, n: 3 }, cage: { w: 38, h: 56, n: 2 }, frame: { w: 46, h: 66, n: 2 },
-  block: { w: 50, h: 36, n: 2 }, slab: { w: 56, h: 38, n: 1 }, pike: { w: 22, h: 64, n: 2 },
+  hook: { w: 36, h: 74, n: 3 }, cage: { w: 50, h: 70, n: 2, foot: 57 }, frame: { w: 46, h: 66, n: 2 },
+  block: { w: 56, h: 46, n: 2, foot: 34 }, slab: { w: 72, h: 56, n: 1, foot: 40 }, pike: { w: 22, h: 64, n: 2 },
 };
 
 /** A flat canvas sheet painted texel by texel (no outline): the decals. */
@@ -218,34 +219,53 @@ function hook(p: Pen, v: number) {
   stain(p, hx, h - 5, 7, 2.5, 60 + v);
 }
 
-/** An iron cage, the bars rusted, someone slumped dead inside it (0 bones in rags, 1 still with flesh, gripping the bars). */
+/** Old iron, darkest to lightest, and its rust. */
+const OLDIRON = [0x121214, 0x1e1e21, 0x2e2d2c, 0x45423d, 0x5e5a52, 0x7c776c];
+const RUST = [0x2e1c12, 0x46291a, 0x5e3a22];
+const ironAt = (u: number, v: number, lv: number, s: number) => (vn(u / 1.5, v / 2, s) > 0.8 ? RUST[Math.max(0, Math.min(2, Math.round(lv - 2.5)))] : OLDIRON[Math.max(0, Math.min(5, Math.round(lv)))]);
+
+/**
+ * An iron cage on the floor, seen in iso: a riveted base plate, bars on all four sides (the far ones in shade, drawn
+ * behind the prisoner), rails top and middle, a hipped lid with a ring and chain, a padlocked door at the front;
+ * someone dead inside (0 bones in rags, 1 still with flesh, an arm through the bars).
+ */
 function cage(p: Pen, v: number) {
-  const { w, h } = GORE.cage, x0 = 5, x1 = w - 6, y0 = 10, y1 = h - 5;
-  // inside first (behind the front bars): floor, body
-  stain(p, w / 2, y1 - 3, 11, 3, 40 + v, 0.9);
-  const cl = CLOTH[(v + 1) % CLOTH.length];
+  const { w } = GORE.cage, I = iso(p, w / 2, GORE.cage.foot), R = 11, H = 34, cl = CLOTH[(v + 1) % CLOTH.length];
+  const bar = (a: number, b: number, far: boolean) => { for (let z = 2; z <= H; z += 0.5) { I.put(a, b, z, ironAt(a + b, z, far ? 1.6 : 4.2, 13)); I.put(a + (far ? 0 : 0.6), b + (far ? 0.6 : 0), z, ironAt(a + b, z, far ? 1 : 2.4, 13)); } };
+  // the base plate, rivets along its edges, filth and blood on it
+  I.box(-R - 1, R + 1, -R - 1, R + 1, 0, 2, (u, t) => ((u % 6 < 0.6 || t % 6 < 0.6) && (u < 1 || t < 1 || u > 2 * R + 1 || t > 2 * R + 1) ? OLDIRON[5] : vn(u / 3, t / 3, 14 + v) > 0.68 ? BLOOD[2] : OLDIRON[2]), (u) => (u % 6 < 0.6 ? OLDIRON[4] : OLDIRON[2]), OLDIRON[1]);
+  // far sides (north and west), in shade
+  for (let k = -R; k <= R; k += 3.5) { bar(k, -R, true); bar(-R, k, true); }
+  for (const z of [H, H * 0.5]) for (let k = -R; k <= R; k += 0.5) { I.put(k, -R, z, OLDIRON[2]); I.put(-R, k, z, OLDIRON[2]); }
+  // the prisoner, at the middle of the plate
+  const cx = I.X(0, 0), fy = I.Y(0, 0, 2);
+  stain(p, cx + 2, fy, 10, 3.5, 40 + v, 0.9);
   if (v === 0) {
-    skullAt(p, w / 2 - 4, y1 - 14);
-    ribs(p, w / 2 - 2, y1 - 7, false);
-    for (let k = 0; k < 9; k++) p.px(w / 2 - 6 + k, y1 - 3 + (k % 2), cl[k % 3]);
-    p.line(w / 2 + 3, y1 - 3, w / 2 + 9, y1 - 2, BONE.mid);
+    skullAt(p, cx - 6, fy - 9);
+    ribs(p, cx - 1, fy - 3, false);
+    for (let k = 0; k < 11; k++) p.px(cx - 6 + k, fy + (k % 2), cl[k % 3]);
+    p.line(cx + 3, fy + 1, cx + 10, fy + 2, BONE.mid); p.px(cx + 11, fy + 2, BONE.hi);
   } else {
-    for (let y = y1 - 16; y < y1 - 2; y++) for (let x = w / 2 - 6; x <= w / 2 + 3; x++) {
-      if (Math.abs(x - (w / 2 - 1.5)) > 4.5 - (y - y1 + 16) * 0.05) continue;
-      p.px(x, y, x < w / 2 - 3 ? cl[0] : cl[1]);
+    for (let y = fy - 15; y < fy; y++) for (let x = cx - 6; x <= cx + 3; x++) {
+      if (Math.abs(x - (cx - 1.5)) > 4.5 - (y - fy + 15) * 0.05) continue;
+      p.px(x, y, x < cx - 3 ? cl[0] : vn(x / 2, y / 2, 9) > 0.7 ? BLOOD[2] : cl[1]);
     }
-    for (let j = -3; j <= 2; j++) for (let i = -3; i <= 3; i++) if (i * i + j * j < 10) p.px(w / 2 - 2 + i, y1 - 19 + j, i < 0 ? FLESH[0] : FLESH[1]);
-    for (let i = -3; i <= 3; i++) p.px(w / 2 - 2 + i, y1 - 22, HAIR[2]);
-    p.px(w / 2 - 3, y1 - 19, 0x241810); p.px(w / 2 - 1, y1 - 19, 0x241810);
-    limb(p, w / 2 + 3, y1 - 12, x1 - 1, y1 - 20); // an arm reaching to the bars
+    for (let j = -3; j <= 2; j++) for (let i = -3; i <= 3; i++) if (i * i + j * j < 10) p.px(cx - 2 + i, fy - 18 + j, i < 0 ? FLESH[0] : FLESH[1]);
+    for (let i = -3; i <= 3; i++) { p.px(cx - 2 + i, fy - 21, HAIR[2]); if (Math.abs(i) > 1) p.px(cx - 2 + i, fy - 20, HAIR[2]); }
+    p.px(cx - 3, fy - 18, 0x241810); p.px(cx - 1, fy - 18, 0x241810);
+    limb(p, cx + 3, fy - 11, cx + 15, fy - 9); // an arm out through the front bars
+    for (let f = 0; f < 3; f++) p.px(cx + 16, fy - 10 + f, FLESH[f === 1 ? 0 : 1]);
   }
-  // the cage: top hoop, bars, bottom frame, the chain it hangs from
-  for (let y = 0; y < y0; y++) p.px(w / 2 + (y % 2), y, y % 2 ? IRON.lo : IRON.mid);
-  for (let x = x0; x <= x1; x++) { const dome = Math.round(Math.abs(x - w / 2) / ((x1 - x0) / 2) * 3); p.px(x, y0 + dome, IRON.mid); p.px(x, y0 + dome + 1, IRON.lo); p.px(x, y1, IRON.lo); p.px(x, y1 - 1, IRON.mid); }
-  for (let x = x0; x <= x1; x += 4) {
-    const dome = Math.round(Math.abs(x - w / 2) / ((x1 - x0) / 2) * 3);
-    for (let y = y0 + dome; y < y1; y++) p.px(x, y, hash(x, y, 13) < 0.15 ? 0x6a3e22 : x < w / 2 ? IRON.mid : IRON.lo);
-  }
+  // near sides (south and east), the door in the south side with its padlock
+  for (let k = -R; k <= R; k += 3.5) { bar(k, R, false); bar(R, k, false); }
+  for (const z of [H, H * 0.5, 2.5]) for (let k = -R; k <= R; k += 0.5) { I.put(k, R, z, ironAt(k, z, 4.4, 15)); I.put(k, R, z - 0.7, OLDIRON[1]); I.put(R, k, z, ironAt(k, z, 3, 15)); I.put(R, k, z - 0.7, OLDIRON[1]); }
+  for (let z = 4; z <= H - 2; z += 0.5) { I.put(-4, R, z, OLDIRON[4]); I.put(4, R, z, OLDIRON[4]); } // the door's stiles
+  for (const z of [10, 26]) for (let a = -6; a <= -4; a += 0.5) I.put(a, R, z, OLDIRON[5]); // hinges
+  for (let j = 0; j < 5; j++) for (let i = 0; i < 4; i++) p.px(Math.floor(I.X(4, R)) + i - 1, Math.floor(I.Y(4, R, 17)) + j, j === 0 ? OLDIRON[4] : i === 0 ? OLDIRON[5] : j === 4 ? OLDIRON[1] : OLDIRON[3]); // padlock
+  // the hipped lid: four ribs up to a ring, and the chain
+  for (const [a, b] of [[-R, -R], [R, -R], [-R, R], [R, R]]) I.rod(a, b, H, 0, 0, H + 7, OLDIRON[a + b > 0 ? 4 : 2]);
+  for (let k = 0; k < 10; k++) { const an = k / 10 * Math.PI * 2; I.put(Math.cos(an) * 1.5, Math.sin(an) * 1.5, H + 8, OLDIRON[5]); }
+  for (let z = H + 9; z < H + 18; z++) I.put((z % 2) * 0.5, 0, z, z % 2 ? OLDIRON[2] : OLDIRON[4]);
 }
 
 /** A flaying frame: 0 a villager's skin stretched and laced on it, 1 a body chained to an X of timbers. */
@@ -295,58 +315,79 @@ function frame(p: Pen, v: number) {
   }
 }
 
-/** A butcher's block: 0 a cleaver bitten into it and a severed leg, 1 tools laid out and a hand, a bucket of blood beside. */
+/**
+ * A butcher's block, in iso: a thick slab of end-grain wood on four stout legs, its top dished and black with old blood,
+ * a pail beside it. 0: a cleaver bitten into the top and a severed leg; 1: a roll of flensing tools and a hand.
+ */
 function block(p: Pen, v: number) {
-  const { w, h } = GORE.block, x0 = 4, x1 = w - 12, top = 12, bot = h - 4;
-  for (let y = top; y <= bot; y++) for (let x = x0; x <= x1; x++) {
-    let c = y < top + 4 ? (x < x0 + 8 ? 0x6a5640 : 0x56442f) : x < x0 + 3 ? 0x4a3a28 : 0x382a1c;
-    if (y >= top + 4 && (x - x0) % 9 === 0) c = 0x241a12;
-    if (y < top + 4 && vn(x / 3, y, 41 + v) > 0.62) c = BLOOD[2];
-    p.px(x, y, c);
-  }
-  for (let x = x0; x <= x1; x++) p.px(x, top, 0x7a6448);
+  const { w } = GORE.block, I = iso(p, w / 2 - 4, GORE.block.foot), A = 13, B = 8, Z = 15;
+  const wood = (lv: number) => [0x1e140c, 0x2e2014, 0x3e2c1a, 0x523c24, 0x684e30, 0x7e6240][Math.max(0, Math.min(5, Math.round(lv)))];
+  stain(p, I.X(0, 0) + 3, I.Y(0, 0, 0) + 2, 14, 4, 45 + v, 0.6);
+  for (const [a, b] of [[-A + 2, -B + 2], [A - 2, -B + 2], [-A + 2, B - 2], [A - 2, B - 2]]) I.box(a - 1.5, a + 1.5, b - 1.5, b + 1.5, 0, Z - 6, wood(3.4), (u, z) => wood(3 + dth(u * 2, z * 2) * 0.6), wood(1.6));
+  I.box(-A, A, -B, B, Z - 6, Z,
+    (u, t) => { // the top: end grain rings, chop marks, blood soaked in toward the middle
+      const da = u - A, db = t - B, r = Math.hypot(da / A, db / B);
+      let lv = 4.2 + Math.sin(Math.hypot(da, db * 1.6) * 1.3) * 0.5 + dth(u * 2, t * 2) * 0.7;
+      if (hash(Math.floor(u * 2), Math.floor(t), 41 + v) < 0.04) lv -= 1.5;
+      if (vn(u / 4, t / 3, 42 + v) + (1 - r) * 0.5 > 0.95) return BLOOD[r < 0.5 ? 2 : 3];
+      return wood(lv - (u < 1 || t < 1 ? -0.8 : 0));
+    },
+    (u, z) => (Math.floor(u) % 7 === 0 ? wood(1.5) : vn(u / 2, z / 3, 43) > 0.86 ? BLOOD[3] : wood(3.3 + (z > 5 ? 0.7 : 0) + dth(u * 2, z * 2) * 0.5)),
+    (t, z) => (Math.floor(t) % 7 === 0 ? wood(0.8) : wood(2 + (z > 5 ? 0.5 : 0) + dth(t * 2, z * 2) * 0.5)));
+  for (let k = 0; k < 3; k++) { const a = -A + 3 + hash(k, v, 44) * (2 * A - 6); for (let z = Z - 5; z > Z - 9 - hash(k, 2, 44) * 6; z--) I.put(a, B, z, BLOOD[z > Z - 7 ? 1 : 2]); } // runs down the front
   if (v === 0) {
-    limb(p, x0 + 4, top + 1, x0 + 18, top + 2, FLESH, CLOTH[1]);
-    p.rect(x0 + 24, top - 6, 7, 5, IRON.mid); p.line(x0 + 24, top - 6, x0 + 30, top - 6, IRON.hi); p.rect(x0 + 24, top - 2, 7, 1, BLOOD[1]); // cleaver blade
-    p.shaft(x0 + 30, top - 5, x0 + 35, top - 8, 2, OLDWOOD);
+    // a leg in its hose across the top, a cleaver bitten deep, handle up
+    for (let a = -10; a <= 1; a += 0.5) for (let d = -1; d <= 1; d++) I.put(a, -2 + d + a * 0.15, Z + 1, a < -5 ? CLOTH[3][d + 1] : FLESH[d + 1]);
+    I.put(1.5, -1.8, Z + 1, RAW[0]); I.put(1.5, -0.8, Z + 1, BONE.hi);
+    for (let a = 4; a <= 10; a += 0.5) for (let z = Z; z <= Z + 5; z += 0.5) I.put(a, 2, z, z > Z + 4.4 ? IRON.hi : a > 9.4 ? OLDIRON[2] : z < Z + 0.8 ? BLOOD[1] : OLDIRON[4]);
+    I.rod(10, 2, Z + 3, 15, 2, Z + 8, OLDWOOD[1], OLDWOOD[2]);
   } else {
-    p.line(x0 + 3, top + 1, x0 + 10, top + 1, IRON.hi); p.line(x0 + 3, top + 2, x0 + 10, top + 2, IRON.lo); // a flensing knife
-    p.line(x0 + 13, top + 2, x0 + 18, top + 0, IRON.mid); p.px(x0 + 12, top + 2, OLDWOOD[1]); // hooks and needles
-    for (let f = 0; f < 4; f++) p.line(x0 + 23 + f, top, x0 + 23 + f, top - 3 + (f === 0 ? 2 : 0), f % 2 ? FLESH[1] : FLESH[0]);
-    p.rect(x0 + 22, top, 5, 2, FLESH[1]); p.px(x0 + 27, top + 1, RAW[0]);
+    // a leather roll of tools, a hand, a hook
+    I.box(-10, -2, -5, -1, Z, Z + 1, 0x5a3e24, 0x3e2a18, 0x2e1e12);
+    for (let k = 0; k < 4; k++) I.rod(-9 + k * 2, -5, Z + 1.5, -9 + k * 2, -1, Z + 1.5, k % 2 ? IRON.hi : OLDIRON[4]);
+    for (let f = 0; f < 4; f++) I.rod(3 + f * 1.2, 1, Z + 1, 3 + f * 1.4, -3, Z + 1, f ? FLESH[1] : FLESH[0]);
+    I.box(2.5, 7.5, 1, 4, Z, Z + 1.5, FLESH[0], FLESH[1], FLESH[2]); I.put(8, 3, Z + 1, RAW[0]);
   }
-  // the bucket
-  const bx = w - 9, by = h - 13;
-  for (let y = by; y < by + 10; y++) for (let x = bx; x < bx + 8; x++) p.px(x, y, (y - by) % 4 === 1 ? IRON.lo : x < bx + 2 ? 0x5a4630 : 0x3e2e1e);
-  for (let x = bx; x < bx + 8; x++) p.px(x, by, BLOOD[1]);
-  p.px(bx + 2, by, BLOOD[0]);
-  stain(p, w / 2, h - 2, 18, 3, 45 + v, 0.8);
+  // the pail of blood beside it
+  const px = A + 5, pb = 1;
+  for (let z = 0; z <= 9; z += 0.5) for (let k = 0; k < 24; k++) { const an = k / 24 * Math.PI * 2, ca = Math.cos(an), sa = Math.sin(an); if (ca + sa < -0.3) continue; I.put(px + ca * 4, pb + sa * 4, z, z % 4.5 < 0.6 ? OLDIRON[3] : ca - sa > 0.6 ? wood(1.6) : wood(3.2)); }
+  for (let k = 0; k < 40; k++) { const an = k / 40 * Math.PI * 2; I.put(px + Math.cos(an) * 4, pb + Math.sin(an) * 4, 9.5, OLDIRON[4]); }
+  for (let r = 0; r < 3.6; r += 0.5) for (let k = 0; k < 30; k++) { const an = k / 30 * Math.PI * 2; I.put(px + Math.cos(an) * r, pb + Math.sin(an) * r, 8.5, r < 1 && k < 6 ? BLOOD[1] : BLOOD[3]); }
 }
 
-/** The stitching slab: a villager on a stone slab, a beast hide half sewn onto them, needle and gut thread, a candle stub. */
+/**
+ * The stitching slab, in iso: a long table of dressed stone on two plinths with a gutter cut round its top, a villager
+ * laid along it with a beast's hide half sewn over their legs and belly, gut thread and a needle, a tallow stub burning
+ * at the corner, blood run off the gutter down the side.
+ */
 function slab(p: Pen) {
-  const { w, h } = GORE.slab, x0 = 3, x1 = w - 4, top = 14, bot = h - 4;
-  for (let y = top; y <= bot; y++) for (let x = x0; x <= x1; x++) {
-    let c = y < top + 5 ? 0x5e574e : x < x0 + 2 ? 0x4a443c : 0x36312c;
-    if (vn(x / 4, y / 2, 51) > 0.7) c = y < top + 5 ? 0x6e675c : 0x2a2622;
-    p.px(x, y, c);
+  const { w } = GORE.slab, I = iso(p, w / 2 - 6, GORE.slab.foot), A = 20, B = 8, Z = 14;
+  const stone = (lv: number) => [0x1a1714, 0x26221e, 0x35302a, 0x464038, 0x5a5248, 0x6e665a, 0x847a6c][Math.max(0, Math.min(6, Math.round(lv)))];
+  stain(p, I.X(0, 0) + 6, I.Y(0, 0, 0) + 3, 22, 5, 55, 0.9);
+  for (const a of [-A + 4, A - 4]) I.box(a - 3, a + 3, -B + 2, B - 2, 0, Z - 4, stone(4), (u, z) => stone(3.2 + (z > Z - 6 ? 0.5 : 0) + dth(u * 2, z * 2) * 0.7 - (Math.floor(z) % 5 === 0 ? 1 : 0)), (t, z) => stone(1.8 + dth(t * 2, z * 2) * 0.6));
+  I.box(-A, A, -B, B, Z - 4, Z,
+    (u, t) => {
+      const gut = u < 1.5 || t < 1.5 || u > 2 * A - 1.5 || t > 2 * B - 1.5, gutter = !gut && (u < 2.5 || t < 2.5 || u > 2 * A - 2.5 || t > 2 * B - 2.5);
+      if (gutter) return vn(u / 3, t, 52) > 0.45 ? BLOOD[2] : stone(1.4);
+      return stone((gut ? 5.4 : 4.4) + (vn(u / 4, t / 3, 51) - 0.5) * 1.4 + dth(u * 2, t * 2) * 0.7);
+    },
+    (u, z) => (vn(u / 2, z, 53) > 0.78 && z > 1 ? BLOOD[2] : stone(3.4 + (z > 3.2 ? 1 : 0) + dth(u * 2, z * 2) * 0.7 - (Math.floor(u) % 9 === 0 ? 1.2 : 0))),
+    (t, z) => stone(2 + (z > 3.2 ? 0.8 : 0) + dth(t * 2, z * 2) * 0.6));
+  // the body along the slab (head west), the hide sewn over it from the hips down
+  for (let a = -14; a <= 13; a += 0.5) for (let d = -3; d <= 3; d += 0.5) {
+    const torso = a < -1, hw = a < -11 ? 2.4 : torso ? 3.2 - (a < -9 ? 0.6 : 0) : 3, z = Z + 1 + (Math.abs(d) < hw - 1 ? 1 : 0);
+    if (Math.abs(d) > hw || (a > 2 && Math.abs(d) < 0.6)) continue;
+    const furred = a > -3;
+    I.put(a, d, z, furred ? (vn(a / 1.2, d / 2, 54) > 0.55 ? 0x2a1c12 : d < 0 ? 0x56402a : 0x46301c) : a < -11 ? (d < 0 ? FLESH[0] : FLESH[1]) : (d < -1 ? FLESH[0] : d > 1.5 ? FLESH[2] : FLESH[1]));
   }
-  const cy = top + 1;
-  for (let x = x0 + 6; x < x1 - 8; x++) for (let j = -3; j <= 0; j++) { // the body lying along the slab, the hide (dark fur) sewn over its legs and middle
-    const furred = x > x0 + 20;
-    p.px(x, cy + j, furred ? ((x + j) % 3 === 0 ? 0x2a1c12 : 0x46301c) : j < -1 ? FLESH[0] : FLESH[1]);
-    if (x === x0 + 21 && j > -4) p.px(x, cy + j, 0x8a7a5a); // the seam
-  }
-  for (let x = x0 + 21; x < x1 - 8; x += 2) p.px(x, cy - 4, 0x5a3a22); // fur tufts
-  for (let k = 0; k < 6; k++) p.px(x0 + 21, cy - 3 + k * 0.6, k % 2 ? BLOOD[0] : 0xc8b890); // stitches
-  for (let j = -3; j <= 2; j++) for (let i = -3; i <= 3; i++) if (i * i + j * j < 10) p.px(x0 + 4 + i, cy - 2 + j, i < 0 ? FLESH[0] : FLESH[1]); // head
-  for (let j = -2; j <= 2; j++) p.px(x0 + 1, cy - 2 + j, HAIR[3]);
-  p.px(x0 + 4, cy - 3, 0x241810);
-  // needle and thread trailing off the edge, a candle stub
-  p.line(x1 - 6, cy - 6, x1 - 2, cy - 9, IRON.hi); p.line(x1 - 6, cy - 6, x1 - 10, cy, 0xc8b890);
-  p.rect(x0 + 13, top - 5, 2, 4, 0xd8ccb0); p.px(x0 + 13, top - 6, 0xffcc66); p.px(x0 + 14, top - 7, 0xffe8a0);
-  for (let x = x0 + 8; x < x1 - 6; x++) if (hash(x, 1, 52) < 0.3) p.px(x, top + 5 + (hash(x, 2, 52) * 3 | 0), BLOOD[2]); // runs down the side
-  stain(p, w / 2 + 4, h - 2, 20, 3, 55, 0.9);
+  for (let d = -3; d <= 3; d += 0.5) I.put(-3, d, Z + 2, Math.round(d * 2) % 2 ? 0xc8b890 : BLOOD[0]); // the seam, gut stitches
+  for (let d = -2.5; d <= 2.5; d += 0.5) I.put(-15, d, Z + 1.5, HAIR[3]); // hair over the end
+  I.put(-12, -0.6, Z + 2.5, 0x241810); I.put(-12, 0.8, Z + 2.5, 0x241810);
+  I.rod(-1, 5, Z + 1, 5, 6.5, Z + 1, IRON.hi); I.rod(5, 6.5, Z + 1, 10, 9, Z - 3, 0xc8b890); // needle, thread off the edge
+  // a tallow stub on the far corner
+  I.box(A - 4, A - 2.5, -B + 1.5, -B + 3, Z, Z + 4, 0xe0d4b4, 0xc8bc98, 0x9a8e70);
+  I.put(A - 3.2, -B + 2.2, Z + 5, 0xffcc66); I.put(A - 3.2, -B + 2.2, Z + 6, 0xffe8a0);
+  for (let k = 0; k < 7; k++) { const a = -A + 4 + hash(k, 1, 56) * (2 * A - 8); for (let z = Z - 4; z > Z - 7 - hash(k, 2, 56) * 7; z--) I.put(a, B, z, BLOOD[z > Z - 6 ? 1 : 2]); }
 }
 
 /** A stake with a villager's head on it: 0 a man with a beard, 1 a woman with long hair. */

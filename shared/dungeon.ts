@@ -25,39 +25,39 @@ export const SEA_END = WORLD_H + 10;
 const F1: Floor = {
   id: 1, name: "The Gnawing Halls", x: 10, y: 228, w: 68, h: 54,
   chambers: [
-    { x: 9, y: 8, rx: 5, ry: 4.5 },      // 0 under the sinkhole: the rope
-    { x: 27, y: 9, rx: 6.5, ry: 5 },     // 1 the midden
-    { x: 13, y: 27, rx: 7, ry: 6 },      // 2 rat nest
-    { x: 34, y: 28, rx: 9, ry: 7.5, flags: true }, // 3 the old gnawed hall
-    { x: 53, y: 12, rx: 6.5, ry: 5.5 },  // 4
-    { x: 52, y: 36, rx: 7.5, ry: 6.5 },  // 5 the boar wallow
+    { x: 9, y: 8, rx: 4.5, ry: 4 },      // 0 under the sinkhole: the rope
+    { x: 27, y: 9, rx: 5.5, ry: 4.5 },   // 1 the midden (what is left is thrown here)
+    { x: 13, y: 27, rx: 5.5, ry: 4.5 },  // 2 the cages (the villagers brought down are kept here)
+    { x: 34, y: 28, rx: 7, ry: 5.5, flags: true }, // 3 the butchery, in the old flagged hall
+    { x: 53, y: 12, rx: 5, ry: 4.5 },    // 4 the larder
+    { x: 52, y: 36, rx: 6, ry: 5 },      // 5 the boar wallow
     { x: 59, y: 47, rx: 4.5, ry: 4 },    // 6 the stair down
-    { x: 18, y: 45, rx: 5.5, ry: 4.5 },  // 7 side burrow
+    { x: 18, y: 45, rx: 5.5, ry: 4.5 },  // 7 Old Gnasher's warren
   ],
   tunnels: [[0, 1, 1.5], [0, 2, -2], [1, 3, 2], [2, 3, -1.5], [1, 4, -2], [4, 5, 2.5], [3, 5, -2], [5, 6, 1], [2, 7, 2], [7, 3, -2]],
 };
 const F2: Floor = {
   id: 2, name: "The Silk Pens", x: 98, y: 228, w: 68, h: 54,
   chambers: [
-    { x: 9, y: 8, rx: 5, ry: 4.5 },      // 0 stair up
-    { x: 25, y: 14, rx: 7.5, ry: 6 },    // 1 the web hall
-    { x: 12, y: 32, rx: 6.5, ry: 6 },    // 2 pens (cocoons)
-    { x: 34, y: 34, rx: 8.5, ry: 7, flags: true }, // 3 the skinning floor
-    { x: 50, y: 10, rx: 6.5, ry: 5.5 },  // 4 pens (cocoons)
-    { x: 53, y: 30, rx: 8, ry: 7 },      // 5 Gorehowl's lair
+    { x: 9, y: 8, rx: 4.5, ry: 4 },      // 0 stair up
+    { x: 25, y: 14, rx: 6.5, ry: 5.5 },  // 1 the Weaver's loom
+    { x: 12, y: 32, rx: 5.5, ry: 5 },    // 2 pens (cocoons)
+    { x: 34, y: 34, rx: 7, ry: 5.5, flags: true }, // 3 the skinning floor
+    { x: 50, y: 10, rx: 5.5, ry: 4.5 },  // 4 pens (cocoons)
+    { x: 53, y: 30, rx: 7, ry: 6 },      // 5 Gorehowl's lair, in front of the way down
     { x: 59, y: 47, rx: 4.5, ry: 4 },    // 6 stair down
-    { x: 28, y: 48, rx: 5.5, ry: 4 },    // 7 pens (cocoons)
+    { x: 28, y: 48, rx: 5, ry: 4 },      // 7 pens (cocoons)
   ],
-  tunnels: [[0, 1, 1.5], [1, 2, -2], [1, 4, -1.5], [2, 3, 2], [3, 5, -1.5], [4, 5, 2], [5, 6, 1.5], [3, 7, 1.5]],
+  tunnels: [[0, 1, 1.5], [0, 2, 2], [1, 2, -2], [1, 4, -1.5], [2, 3, 2], [3, 5, -1.5], [4, 5, 2], [5, 6, 1.5], [3, 7, 1.5]], // 0-2: past the loom without facing the Weaver
 };
 const F3: Floor = {
   id: 3, name: "The Hide-Mother's Den", x: 186, y: 228, w: 72, h: 56,
   chambers: [
-    { x: 9, y: 8, rx: 5, ry: 4.5 },      // 0 stair up
-    { x: 23, y: 18, rx: 7, ry: 6 },      // 1
-    { x: 10, y: 36, rx: 6, ry: 6 },      // 2
-    { x: 40, y: 11, rx: 8, ry: 6.5 },    // 3 the Hornbrute's byre
-    { x: 46, y: 36, rx: 14, ry: 12, flags: true }, // 4 the Hide-Mother's den
+    { x: 9, y: 8, rx: 4.5, ry: 4 },      // 0 stair up
+    { x: 23, y: 18, rx: 6, ry: 5 },      // 1 the stitching room
+    { x: 10, y: 36, rx: 5.5, ry: 5 },    // 2 the cages
+    { x: 40, y: 11, rx: 6.5, ry: 5.5 },  // 3 the Hornbrute's byre
+    { x: 46, y: 36, rx: 11, ry: 9.5, flags: true }, // 4 the Hide-Mother's den
   ],
   tunnels: [[0, 1, 1.5], [1, 2, -2], [1, 3, 2], [2, 4, 2.5], [3, 4, -2.5]],
 };
@@ -81,7 +81,7 @@ export const LINKS: Link[] = [
   { id: "f2down", label: "Go down to the Hide-Mother's Den", ...at(f2down[0] + 1, f2down[1] + 1), to: "f3up", down: true, floor: 2 },
   { id: "f3up", label: "Go up to the Silk Pens", ...at(f3in[0] - 2, f3in[1] - 2), to: "f2down", down: false, floor: 3 },
   // The way out from the bottom (Murat 2026-11-07): an old rope hanging down a crack in the den's roof, up to the woods
-  { id: "f3out", label: "Climb the rope back to the woods", ...at(F3.x + F3.chambers[4].x + 8, F3.y + F3.chambers[4].y + 3), to: "sink", down: false, floor: 3 },
+  { id: "f3out", label: "Climb the rope back to the woods", ...at(F3.x + F3.chambers[4].x + 6, F3.y + F3.chambers[4].y + 3), to: "sink", down: false, floor: 3 },
 ];
 export const LINK_RANGE = 0.75 * TILE;
 /** Where a hero arriving through link `l` stands: two steps out of it, toward the chamber. */
@@ -109,7 +109,7 @@ export const LAIRS = [lair(F2, 5, "Gorehowl's Lair"), lair(F3, 3, "The Hornbrute
 /** The boss den's centre (tile): the Hide-Mother rises from her bed of hides here. */
 export const DEN = { x: F3.x + F3.chambers[4].x, y: F3.y + F3.chambers[4].y };
 /** The three hide totems round her bed (quest objects, tiles). */
-export const TOTEMS: [number, number][] = [[DEN.x - 9, DEN.y - 4], [DEN.x + 9, DEN.y - 4], [DEN.x, DEN.y + 8]];
+export const TOTEMS: [number, number][] = [[DEN.x - 7, DEN.y - 3], [DEN.x + 7, DEN.y - 3], [DEN.x, DEN.y + 6]];
 /** Trappers wrapped in silk in the pens (quest objects, tiles): one in each pen chamber of floor 2. */
 export const COCOONS: [number, number][] = [chamberAt(F2, 2), chamberAt(F2, 4), chamberAt(F2, 7)].map(([x, y]) => [x + 2, y - 1]);
 
