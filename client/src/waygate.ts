@@ -5,6 +5,7 @@ import { hiResTexture } from "./smooth";
 import { col, Iso, rng, type Pt } from "./smoothProps";
 import { isoAnchor } from "./iso";
 import type { MapMarker } from "./minimap";
+import { paintWaygate, WG_H, WG_OX, WG_OY, WG_W } from "./waygateArt";
 
 /**
  * Act 2's waygates (shared/act2.ts): an old sandstone arch south of Oakvale and its twin in the desert's Sunstone
@@ -73,14 +74,25 @@ function gateTexture(scene: Phaser.Scene, awake: boolean): string {
   return key;
 }
 
+/** Oakvale's side (Murat 2026-11-08): dark ivy-grown stone with desert sand spilling round it (waygateArt.ts). */
+function oakTexture(scene: Phaser.Scene, awake: boolean): string {
+  const key = `wg_oak_${awake ? 1 : 0}`;
+  hiResTexture(scene, key, WG_W, WG_H, awake ? FRAMES : 1, 4, (c, f) => paintWaygate(c, f, FRAMES, awake));
+  return key;
+}
+/** The art for gate `g`, asleep or awake, and where its feet sit in the texture. */
+function texFor(scene: Phaser.Scene, g: Waygate, awake: boolean) {
+  return g.id === "oakvale" ? { key: oakTexture(scene, awake), ox: WG_OX / WG_W, oy: WG_OY / WG_H } : { key: gateTexture(scene, awake), ox: OX / W, oy: OY / H };
+}
+
 export class WaygateLayer {
   private gates: { g: Waygate; img: Phaser.GameObjects.Sprite; glow: Phaser.GameObjects.Image }[] = [];
   private awake?: boolean;
 
   constructor(private scene: Phaser.Scene) {
-    gateTexture(scene, false);
     for (const g of WAYGATES) {
-      const img = scene.add.sprite(g.x, g.y, gateTexture(scene, false)).setOrigin(OX / W, OY / H).setDepth(g.y);
+      const t = texFor(scene, g, false);
+      const img = scene.add.sprite(g.x, g.y, t.key).setOrigin(t.ox, t.oy).setDepth(g.y);
       const glow = scene.add.image(g.x, g.y - 30, "glow").setTint(0xffa040).setScale(7).setAlpha(0).setBlendMode(Phaser.BlendModes.ADD).setDepth(-0.8);
       isoAnchor(glow, { x: g.x, y: g.y });
       this.gates.push({ g, img, glow });
@@ -98,14 +110,15 @@ export class WaygateLayer {
     const awake = act2Open(me);
     if (awake === this.awake) return;
     this.awake = awake;
-    if (awake) {
-      const key = gateTexture(this.scene, true);
-      if (!this.scene.anims.exists(key)) this.scene.anims.create({ key, frames: this.scene.anims.generateFrameNumbers(key, { start: 0, end: FRAMES - 1 }), frameRate: 8, repeat: -1 });
-      for (const { img, glow } of this.gates) {
+    for (const { g, img, glow } of this.gates) {
+      const { key, ox, oy } = texFor(this.scene, g, awake);
+      img.setOrigin(ox, oy);
+      if (awake) {
+        if (!this.scene.anims.exists(key)) this.scene.anims.create({ key, frames: this.scene.anims.generateFrameNumbers(key, { start: 0, end: FRAMES - 1 }), frameRate: 8, repeat: -1 });
         img.setTexture(key, 0).play(key);
         glow.setAlpha(0.3);
         this.scene.tweens.add({ targets: glow, alpha: 0.45, duration: 1400, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
-      }
-    } else for (const { img, glow } of this.gates) { img.stop(); img.setTexture(gateTexture(this.scene, false)); glow.setAlpha(0); }
+      } else { img.stop(); img.setTexture(key); glow.setAlpha(0); }
+    }
   }
 }
