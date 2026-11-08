@@ -1,5 +1,6 @@
 {
   "date": "2026-11-08",
+  "pr": 356,
   "title": "Runes",
   "changes": [
     "Runes now drop from monsters and chests: ten carved stones in three ranks (Lesser, plain, Greater).",
