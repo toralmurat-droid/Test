@@ -1,5 +1,6 @@
 {
   "date": "2026-11-08",
+  "patch": 172,
   "title": "Mawdeep: tighter rooms, prison walls and new props",
   "changes": [
     "Rooms in the Mawdeep are smaller and each one has a clear use: cages, pens, butchery, larder, stitching room, lairs. Passages between them are narrower.",

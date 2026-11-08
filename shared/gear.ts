@@ -350,9 +350,9 @@ export function itemText(id: string): string {
  * (class base + points placed, gear does not count). Higher levels also look stronger on the hero (client/src/gearfx.ts).
  */
 export const ITEM_MAX_LEVEL = MAX_LEVEL;
-/** Whole-number bonuses (stats, attack, shot damage) grow this much per item level above 1 (Lv 30 = x2.3). */
+/** Whole-number bonuses (stats, attack, shot damage) grow this much per item level above 1 (Lv 30 = x2.3, Lv 50 = x3.2). */
 export const ILVL_GROWTH = 0.045;
-/** Fraction bonuses (speed, reach, block) grow more gently (Lv 30 = x1.44). */
+/** Fraction bonuses (speed, reach, block) grow more gently (Lv 30 = x1.44, Lv 50 = x1.74). */
 export const ILVL_GROWTH_FRAC = 0.015;
 /** Stat points needed per item level, by tier (Common, Rare, Epic). */
 export const REQ_PER_LEVEL = [0, 0.35, 0.5, 0.65];
