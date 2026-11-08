@@ -4,7 +4,7 @@ import { ArraySchema, MapSchema, Schema, type } from "@colyseus/schema";
 import {
   AGGRO, aggroLevelFactor, BLOB_AI, BONES, DEMON, BROOD, Dir, FACTION, FEUD, MERGE, MobDef, MOTHER, SKELETON_AI, HIT_RADIUS, mobScale, regionMobLevel, regionSpecialLevel, InputState, MOB_ATTACK_RANGE, MOBS, MobKind, rollSkeletonWeapon, SKELETON_BOW, SKELETON_WEAPONS, SkeletonWeapon, REGEN_DELAY_MS, REGEN_RAMP_MS, regenFromStamina, SAFE_REGEN_MULT,
   RESPAWN_MS, TICK_RATE, TILE,
-  HOLLOW_KING, ELEM_BLOB, ELEM_MOVE, inputDir, ELITE, BOSS, BEAST, BEAST_BROOD, BEAST_FOLK, BEAST_KINDS, BEAST_MOVES, BEAST_RIDER, type BeastMove,
+  HOLLOW_KING, ELEM_BLOB, ELEM_MOVE, inputDir, ELITE, BOSS, URSK, BEAST, BEAST_BROOD, BEAST_FOLK, BEAST_KINDS, BEAST_MOVES, BEAST_RIDER, type BeastMove,
   MAP_W, MAP_H,
 } from "../shared/constants";
 import { ambushRoomAt, arrivalAt, CRACK_OPEN_MS, LINK_RANGE, linkById, LINKS, SHORTCUT_OPEN_MS } from "../shared/dungeon";
@@ -246,6 +246,7 @@ export class Mob extends Schema {
   nextSweep = 0; nextLeap = 0; nextCry = 0;
   // Ambushers (AMBUSH): up in a tree; a call from their group to drop on a hero; the jump out in flight
   ambusher = false; ambushAt = 0; ambushHero = ""; flyUntil = 0; flyMs = 0; flyX0 = 0; flyY0 = 0; flyX = 0; flyY = 0;
+  uPhase = 0; nextTaunt = 0; hookHero = ""; // Grandam Ursk (URSK): her phase (0 not her), next taunt, the hero her hook is flying at
   lurk = ""; // a Mawdeep ambush room it lurks in (shared/dungeon.ts AMBUSH_ROOMS), until a hero walks in
   path: [number, number][] = []; pathAt = 0; pathTX = 0; pathTY = 0; // the way round walls (gates), see seek
   @type("float32") x = 0;
@@ -3149,6 +3150,34 @@ export class TownRoom extends Room<TownState> {
   }
 
   /** A beast's called kin (the Packlord's Howl, the Hide-Mother's brood): out of the dark beside it, fights for it, gone when it falls. */
+  /** A boss speaks (a speech bubble over it, for everyone near): one line picked from `lines`. */
+  private bossSay(id: string, lines: readonly string[]) {
+    const m = this.state.mobs.get(id);
+    if (!m || !lines.length) return;
+    this.broadcast("bosssay", { id, text: lines[Math.floor(Math.random() * lines.length)] });
+  }
+  /** Grandam Ursk's fight (URSK): her phases, and her voice while she fights. */
+  private urskPhases(m: Mob, id: string, t: Player | undefined, now: number) {
+    if (m.dead || !m.uPhase) return;
+    const frac = m.hp / Math.max(1, m.maxHp);
+    if (m.uPhase < 2 && frac < URSK.phase[0]) {
+      m.uPhase = 2; // the Rite: her brood, her hook, her needle
+      this.bossSay(id, URSK.lines.rite);
+      m.bcd.brood = now + 400; m.bcd.hook = now + 3500; m.bcd.gather = now + 10000;
+      this.broadcast("ursk", { id, phase: 2 });
+    }
+    if (m.uPhase < 3 && frac < URSK.phase[1]) {
+      m.uPhase = 3; // the Bear: she tears off what is left of the woman
+      this.bossSay(id, URSK.lines.bear);
+      m.bcd.roar = now + 900; m.bcd.rockfall = now + 3000;
+      this.broadcast("ursk", { id, phase: 3 });
+    }
+    if (t && now >= m.nextTaunt) {
+      if (m.nextTaunt) this.bossSay(id, URSK.lines.taunt);
+      m.nextTaunt = now + URSK.tauntMs[0] + Math.random() * (URSK.tauntMs[1] - URSK.tauntMs[0]);
+    }
+  }
+
   private raiseKin(b: Mob, bid: string, kind: MobKind, levelDrop: number): Mob | undefined {
     for (let i = 0; i < 12; i++) {
       const a = Math.random() * Math.PI * 2, r = 40 + Math.random() * 50;
@@ -3186,6 +3215,7 @@ export class TownRoom extends Room<TownState> {
         if (f(dx, dy, d, p)) hit(pid, p, dx, dy, d);
       });
     const away = (dx: number, dy: number, d: number): [number, number] => (d > 0.1 ? [dx / d, dy / d] : [m.aimX, m.aimY]);
+    if (m.kind === "hidemother") this.urskPhases(m, id, t, now);
 
     // ---- a rush in progress
     if (m.rushUntil) {
@@ -3296,6 +3326,39 @@ export class TownRoom extends Room<TownState> {
           m.pools = [];
           break;
         }
+        case "hook": {
+          // the hooked gut line bites into the hero, and she hauls them in to her claws
+          const H = B.hook, p = this.state.players.get(m.hookHero);
+          if (!p || p.dead || isSafeZone(p.x, p.y)) break;
+          const d0 = Math.hypot(p.x - m.x, p.y - m.y);
+          if (d0 > H.max * 1.3) break; // slipped out of reach
+          this.broadcast("bhit", { id, kind, x, y, tx: Math.round(p.x), ty: Math.round(p.y), hero: m.hookHero });
+          this.damagePlayer(m.hookHero, dmgOf(H.dmgMult), `${name}'s Hook`, [0, 0], 0, { atkLevel: m.level, from: id });
+          if (p.dead) break;
+          const steps = Math.ceil(Math.max(0, d0 - H.stopAt) / H.pullSpeed / 0.03);
+          for (let i = 0; i < steps; i++) {
+            const dx = m.x - p.x, dy = m.y - p.y, d = Math.hypot(dx, dy);
+            if (d <= H.stopAt) break;
+            const k = moveStep(p.x, p.y, pushInput([dx / d, dy / d]), 0.03, H.pullSpeed);
+            if (k.x === p.x && k.y === p.y) break; // caught on a wall
+            p.x = k.x; p.y = k.y;
+          }
+          break;
+        }
+        case "gather": {
+          // every child of hers in reach is pulled back into her hide: it dies, she mends
+          const G = B.gather, pts: [number, number][] = [];
+          this.state.mobs.forEach((c, cid) => {
+            if (c.mother !== id || c.dead || Math.hypot(c.x - m.x, c.y - m.y) > G.range) return;
+            pts.push([Math.round(c.x), Math.round(c.y)]);
+            c.dead = true; c.hp = 0;
+            this.clock.setTimeout(() => this.state.mobs.delete(cid), 500);
+          });
+          const heal = Math.round(m.maxHp * G.heal * pts.length);
+          m.hp = Math.min(m.maxHp, m.hp + heal);
+          this.broadcast("bhit", { id, kind, x, y, pts, heal });
+          break;
+        }
         case "howl": case "brood": {
           const H = kind === "howl" ? B.howl : B.brood, pts: [number, number][] = [];
           let mine = 0;
@@ -3368,8 +3431,32 @@ export class TownRoom extends Room<TownState> {
           break;
         }
         case "brood": {
-          if (frac >= B.brood.hpFrac || kin() >= B.brood.max) { ok = false; break; }
+          if (frac >= (m.kind === "hidemother" ? URSK.phase[0] : B.brood.hpFrac) || kin() >= B.brood.max) { ok = false; break; }
           wind(kind, B.brood.castMs, {});
+          break;
+        }
+        case "hook": {
+          // the hero farthest from her (but in range) gets the hook
+          if (frac >= B.hook.hpFrac) { ok = false; break; }
+          let far = "", fd = 0, fx = 0, fy = 0;
+          this.state.players.forEach((p, pid) => {
+            if (p.dead || isSafeZone(p.x, p.y)) return;
+            const d = Math.hypot(p.x - m.x, p.y - m.y);
+            if (d >= B.hook.min && d <= B.hook.max && d > fd) { far = pid; fd = d; fx = p.x; fy = p.y; }
+          });
+          if (!far) { ok = false; break; }
+          m.hookHero = far; aimAt(fx, fy);
+          wind(kind, B.hook.windupMs, { tx: Math.round(fx), ty: Math.round(fy), hero: far });
+          if (Math.random() < 0.6) this.bossSay(id, URSK.lines.hook);
+          break;
+        }
+        case "gather": {
+          if (frac >= B.gather.hpFrac) { ok = false; break; }
+          let near = 0;
+          this.state.mobs.forEach((c) => { if (c.mother === id && !c.dead && Math.hypot(c.x - m.x, c.y - m.y) <= B.gather.range) near++; });
+          if (!near) { ok = false; break; }
+          wind(kind, B.gather.castMs, { r: B.gather.range });
+          this.bossSay(id, URSK.lines.gather);
           break;
         }
         case "rockfall": {
@@ -4041,6 +4128,7 @@ export class TownRoom extends Room<TownState> {
 
   /** A monster is down: its raised dead crumble, it leaves its zone (which brings a fresh one back later). */
   private mobDied(m: Mob, targetId: string, attackerId: string, killerName: string) {
+    if (m.kind === "hidemother" && m.uPhase) this.bossSay(targetId, URSK.lines.death); // her last words
     m.dead = true; m.hp = 0;
     if (m.owner) this.summons.delete(targetId);
     if (m.charmUntil) { m.owner = ""; m.charmUntil = 0; m.banishAt = 0; } // a charmed monster dies as the zone monster it is
@@ -4577,9 +4665,12 @@ export class TownRoom extends Room<TownState> {
       this.state.mobs.set(id, m);
       if (host === "demon") this.broadcast("demonrise", { id, x: Math.round(m.x), y: Math.round(m.y) });
       if (host === "hidemother") {
-        m.stunUntil = Date.now() + 1400; // heaving herself up off her bed of hides
-        m.bcd = { maul: Date.now() + 2500, roar: Date.now() + 5000 };
+        const t0 = Date.now(), W = URSK.lines.wake;
+        m.stunUntil = t0 + 3800; // heaving herself up off her bed of hides, and having her say
+        m.bcd = { maul: t0 + 4600, roar: t0 + 7000 };
+        m.uPhase = 1; m.nextTaunt = t0 + 14000; m.hookHero = "";
         this.broadcast("beastrise", { id, x: Math.round(m.x), y: Math.round(m.y) });
+        W.forEach((line, i) => this.clock.setTimeout(() => { if (!m.dead) this.broadcast("bosssay", { id, text: line }); }, 300 + i * 1250));
       }
       if (host === "hollowking") {
         m.stunUntil = Date.now() + 1200; // rising from his throne
@@ -4751,6 +4842,8 @@ export class TownRoom extends Room<TownState> {
     if (riseAgain(this.host, tid)) return false; // Blood Pact: a killing blow leaves the vampire standing
     t.dead = true;
     if (opts.from && this.state.players.has(opts.from)) onKill(this.host, opts.from); // Bloodlust
+    const killer = opts.from ? this.state.mobs.get(opts.from) : undefined;
+    if (killer?.kind === "hidemother" && !killer.dead) this.bossSay(opts.from!, URSK.lines.kill);
     t.guarding = false;
     // No magic in Oakvale: dying pays for it, the hero comes back a free citizen (villagers and watch stand down)
     this.setOutlaw(tid, t, false);

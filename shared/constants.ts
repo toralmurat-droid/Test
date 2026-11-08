@@ -335,7 +335,7 @@ export const HOLLOW_KING = {
  * The Hide-Mother (bear, boss): Maul, a wide cleave; Roar, a ring that slows; below 60% she calls her brood; below 35%
  * she rages and brings the roof down (falling stones under the heroes).
  */
-export type BeastMove = "gore" | "web" | "screech" | "swoop" | "pounce" | "howl" | "stampede" | "stomp" | "maul" | "roar" | "brood" | "rockfall";
+export type BeastMove = "gore" | "web" | "screech" | "swoop" | "pounce" | "howl" | "stampede" | "stomp" | "maul" | "roar" | "brood" | "rockfall" | "hook" | "gather";
 export const BEAST = {
   gore: { min: 34, max: 130, windupMs: 700, rushMs: 420, reach: 135, width: 14, cooldownMs: 6000, dmgMult: 1.7, knockback: 3 },
   web: { min: 40, max: 135, windupMs: 500, flightMs: 520, radius: 22, cooldownMs: 5200, rootMs: 1300, dmgMult: 0.6 },
@@ -349,6 +349,10 @@ export const BEAST = {
   roar: { range: 160, radius: 120, inner: 0, windupMs: 1100, cooldownMs: 11000, dmgMult: 0.8, slowMs: 3000 },
   brood: { hpFrac: 0.6, everyMs: 20000, castMs: 1000, kinds: ["gnawkin", "tuskborn", "gnawkin", "duskwing"] as MobKind[], max: 4, levelDrop: 4 },
   rockfall: { hpFrac: 0.35, range: 260, count: 4, spread: 50, radius: 26, windupMs: 1300, cooldownMs: 8000, dmgMult: 1.5, speed: 1.2, cooldown: 0.8 },
+  /** The Hide-Mother's needle and gut: a hooked line flung at a hero out of reach that drags them to her (and bleeds them). */
+  hook: { hpFrac: 0.7, min: 70, max: 230, windupMs: 750, flightMs: 300, cooldownMs: 9000, dmgMult: 0.9, stopAt: 34, pullSpeed: 520 },
+  /** "Come home to Mother": she sews her living brood back into her own hide, healing for each one in reach. Kill them first. */
+  gather: { hpFrac: 0.7, everyMs: 15000, castMs: 1800, range: 190, heal: 0.05 },
   /** Riders on a plain blow: the Gnawkin's plague and the Packlord's bleeding bite (ticks of damage after the hit). */
   plague: { ticks: 4, tickMs: 600, dmgMult: 0.25 },
   bleed: { ticks: 3, tickMs: 500, dmgMult: 0.35 },
@@ -364,9 +368,32 @@ export const BEAST_MOVES: Partial<Record<MobKind, BeastMove[]>> = {
   gnasher: ["howl", "pounce"],
   weaver: ["brood", "web"],
   hornbrute: ["stomp", "stampede"],
-  hidemother: ["rockfall", "brood", "roar", "maul"],
+  hidemother: ["rockfall", "gather", "brood", "hook", "roar", "maul"],
 };
 /** Damage over time after a plain blow (BEAST.plague / bleed / venom). */
+/**
+ * Grandam Ursk, the Hide-Mother (Murat 2026-11-08: "a proper final boss with a personality"): the trapper-wife who fed
+ * the valley's starving hunters the Hide Rite in the Long Hunger and still thinks she saved them. She talks through the
+ * fight. Three phases: the Mother (claws and roars), the Rite (below PHASE[0]: she calls her brood, hooks heroes in
+ * with needle and gut and sews her children back into herself to heal), the Bear (below PHASE[1]: she tears off what is
+ * left of the woman, grows, quickens and brings the roof down).
+ */
+export const URSK = {
+  phase: [0.7, 0.35] as const,
+  tauntMs: [11000, 17000] as const,
+  bearScale: 1.18,
+  lines: {
+    wake: ["Who burns my totems?", "Ah. A little one, come all the way down to Mother.", "Lie still, child. You will make a fine hide."],
+    taunt: ["I fed this valley when it ate its dogs.", "Skin is only a coat. I will give you a warmer one.", "My hunters were starving. I made them strong.",
+      "Hush now. It only hurts while you are still you.", "Three hundred winters, and still they send me children."],
+    rite: ["Children! Mother needs you!", "Needle and gut, needle and gut..."],
+    hook: ["Come here.", "Closer, little one.", "Don't wriggle."],
+    gather: ["Come home to Mother.", "Back into the hide with you."],
+    bear: ["ENOUGH! No more woman. Only the bear!"],
+    kill: ["There. Quiet now.", "Another hide for the bed.", "Sleep. Mother will sew you something better."],
+    death: ["The winter... is it over, then...?"],
+  },
+};
 export const BEAST_RIDER: Partial<Record<MobKind, "plague" | "bleed" | "venom">> = { gnawkin: "plague", packlord: "bleed", silkwretch: "venom", hidemother: "bleed", gnasher: "plague", weaver: "venom" };
 /** Who answers a beast's Brood or Howl (default BEAST.brood.kinds / BEAST.howl.summon). */
 export const BEAST_BROOD: Partial<Record<MobKind, MobKind[]>> = { gnasher: ["gnawkin", "gnawkin", "gnawkin"], weaver: ["silkwretch", "silkwretch"] };
