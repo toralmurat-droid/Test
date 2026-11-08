@@ -13,6 +13,7 @@ installCursors();
 installWeatheredFrames();
 installTooltips();
 import { TownScene } from "./TownScene";
+import "./heropanel.css"; // the hero panel redesign, after every other stylesheet
 import { ACTIVE_CLASSES, ARCHIVED_CLASSES, CLASSES, ClassKind, isActiveClass } from "../../shared/classes";
 import { mountFireside } from "./fireside";
 import { pixelText } from "./pixeltext";

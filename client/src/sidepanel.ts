@@ -97,15 +97,24 @@ export class SidePanel {
     const get = (k: keyof Sheet) => [now[k] as number, next ? (next[k] as number) : (now[k] as number)] as const;
     const sheetRow = (k: keyof Sheet, label: string, pct = false) => { const [v, n] = get(k); return row(label, v, n, pct); };
     const st = (k: keyof Sheet["stats"], label: string) => row(label, now.stats[k] ?? 0, (next ?? now).stats[k] ?? 0);
-    const rs = (e: Element) => row(ELEMENT_NAMES[e], now.res[e] ?? 0, (next ?? now).res[e] ?? 0, true);
+    // resistances as five coloured chips (Murat 2026-11-08 redesign), the change under the number when hovering
+    const rs = (e: Element) => {
+      const v = now.res[e] ?? 0, n = (next ?? now).res[e] ?? 0, d = n - v;
+      return `<div title="${ELEMENT_NAMES[e]} resist" class="spres res-${e}${v || n ? "" : " zero"}"><b>${n}</b><small>${({ fire: "Fire", cold: "Cold", poison: "Pois", faith: "Faith", shock: "Shock" } as Record<string, string>)[e] ?? ELEMENT_NAMES[e]}</small>${d ? `<em class="${d > 0 ? "up" : "down"}">${d > 0 ? "+" : ""}${d}</em>` : ""}</div>`;
+    };
+    // offense as four tiles: label, big number, the change beside it
+    const tile = (k: keyof Sheet, label: string, pct = false) => {
+      const [v, n] = get(k), d = n - v;
+      return `<div class="sptile${d ? (d > 0 ? " up" : " down") : ""}"><small>${label}</small><b>${n}${pct ? "%" : ""}</b>${d ? `<em class="${d > 0 ? "up" : "down"}">${d > 0 ? "+" : ""}${d}${pct ? "%" : ""}</em>` : ""}</div>`;
+    };
     const sec = (title: string, body: string) => `<div class="spsec"><h4>${title}</h4>${body}</div>`;
     void SHEET_ROWS;
     const fed = feastLines(myFeast); // Devour: what the hero has eaten
     this.sheetEl.innerHTML =
-      sec("Offense", sheetRow("atk", "Attack") + sheetRow("dps", "Damage / s") + sheetRow("spell", "Spell damage", true) + sheetRow("crit", "Critical chance", true)) +
+      sec("Offense", `<div class="sptiles">${tile("spell", "Spell dmg", true)}${tile("dps", "Damage / s")}${tile("atk", "Attack")}${tile("crit", "Critical", true)}</div>`) +
       sec("Defense", sheetRow("hp", "Health") + sheetRow("mana", "Mana") + sheetRow("def", "Damage blocked", true) + sheetRow("speed", "Move speed")) +
       sec("Attributes", st("str", "Strength") + st("sta", "Stamina") + st("mag", "Magic") + st("dex", "Dexterity")) +
-      sec("Resistances", ELEMENTS.map(rs).join("")) +
+      sec("Resistances", `<div class="spreses">${ELEMENTS.map(rs).join("")}</div>`) +
       (fed.length ? sec("Devoured", fed.map((l) => `<div class="sprow"><span>${l}</span></div>`).join("")) : "") +
       `<div class="spnote">${p ? `If you ${p.label}` : "Hover an item or a skill to see what it changes"}</div>`;
   }

@@ -279,6 +279,7 @@ export class GearMenu {
       const id: string = state[slot];
       const row = document.createElement("button");
       row.className = `gslot slot-${slot}` + (id ? "" : " empty"); // slot-*: its place around the hero (paper doll, menus.css)
+      if (id && itemRarity(id) > 0) { row.style.setProperty("--rc", itemColor(id)); row.classList.add(`rar-${itemRarity(id)}`); } // frame and glow in the rarity colour
       const icon = id ? iconCanvas(this.scene, id) : Object.assign(document.createElement("span"), { className: "gicon" });
       row.appendChild(icon);
       const txt = document.createElement("span");

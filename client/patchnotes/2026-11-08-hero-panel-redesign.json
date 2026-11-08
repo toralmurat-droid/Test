@@ -1,0 +1,11 @@
+{
+  "date": "2026-11-08",
+  "title": "New look for Character, Inventory and Skills",
+  "changes": [
+    "One dark gothic frame for the three tabs, with big engraved tab names",
+    "Stats column: offense as four tiles (spell damage first), resistances as five coloured chips; hovering an item or skill still shows what changes",
+    "Character: your name with a level medal, attribute cards with a big + button and where each point comes from, and health, mana and experience bars",
+    "Inventory: gear sits around your hero by body part, full item names, frames glow in the item's rarity colour, and the item you point at shows in a card under the bag",
+    "Skills: the skill info stays in a bar under the tree"
+  ]
+}
