@@ -248,7 +248,7 @@ export class TalentMenu {
     const pips = Array.from({ length: maxRank(s) }, (_, i) => `<i class="${i < r ? "on" : ""}"></i>`).join("");
     info.innerHTML = `<div class="ihead" style="--c:${color}">${iconImg(s.id, "iicon")}<div><b>${s.name}</b>` +
       `<span class="ttype${s.passive ? " pas" : ""}">${s.type} · Lv ${s.req}</span><span class="pips">${pips}</span></div></div>` +
-      `<p class="idesc">${s.desc}</p>${s.needs ? `<p class="idesc ineed">Needs ${NEED_TEXT[s.needs]} in hand.</p>` : ""}${rows.join("")}<p class="istat ${why === "" ? "can" : ""}">${status}${keyNote}</p>`;
+      `<p class="idesc"><b class="iname" style="color:${color}">${s.name}</b> <span class="ttype">· ${s.type}${maxRank(s) > 1 ? ` · rank ${r} of ${maxRank(s)}` : ""}</span> ${s.desc}</p>${s.needs ? `<p class="idesc ineed">Needs ${NEED_TEXT[s.needs]} in hand.</p>` : ""}${rows.join("")}<p class="istat ${why === "" ? "can" : ""}">${status}${keyNote}</p>`;
   }
 }
 

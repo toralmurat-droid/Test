@@ -1,0 +1,8 @@
+{
+  "date": "2026-11-08",
+  "title": "Skill tree: no more popup",
+  "changes": [
+    "Pointing at a skill no longer opens a big popup beside the panel: its name, rank and what it does show in a short bar under the tree"
+  ],
+  "pr": 358
+}

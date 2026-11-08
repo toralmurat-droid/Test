@@ -280,13 +280,14 @@ body .gcell.gjunk::after { content: ""; position: absolute; inset: 6px; pointer-
   background: linear-gradient(45deg, transparent calc(50% - 2px), #c0402c calc(50% - 2px), #c0402c calc(50% + 2px), transparent calc(50% + 2px)),
               linear-gradient(-45deg, transparent calc(50% - 2px), #c0402c calc(50% - 2px), #c0402c calc(50% + 2px), transparent calc(50% + 2px)); opacity: .8; }
 
-/* Skills tab: the skill details open as a flyout to the left of the side panel, so the tree and what a skill does
-   are both on screen without scrolling. Narrow screens keep them under the tree. */
-@media (min-width: 1060px) {
-  body #spbody #treeinfo { position: fixed; top: 130px; right: calc(12px + min(680px, 100% - 24px) + 6px); width: 340px; min-width: 0;
-    max-height: calc(100% - 270px); overflow: auto; z-index: 8; padding: 4px 8px 8px;
-    border: 18px solid transparent; border-image: var(--wf-bronze) 9 fill / 18px / 0 repeat; background: none; box-shadow: none; image-rendering: pixelated; }
-}
+/* Skills tab: what a skill does sits in a short bar under the tree (Murat 2026-11-08: the flyout popup was in the way) */
+body #spbody #treeinfo { position: static; width: 100%; max-height: none; margin-top: 6px; padding: 6px 10px; box-sizing: border-box;
+  display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: 12px; align-items: start; font-size: 15px; }
+body #spbody #treeinfo:empty { display: none; }
+body #spbody #treeinfo .ihead { grid-row: span 6; }
+body #spbody #treeinfo .ihead > div, body #spbody #treeinfo .pips { display: none; }
+body #spbody #treeinfo p, body #spbody #treeinfo .idmg { margin: 0 0 2px; grid-column: 2; }
+body #spbody #treeinfo .ipath, body #spbody #treeinfo .iscale, body #spbody #treeinfo .iparts { display: none; }
 
 /* Skill tree, Diablo 2 style (talents.ts): school tabs, a grey stone slab, square bronze-framed tiles with a rank box,
    carved arrows painted on the slab, "N skill choices remaining" along the bottom */
