@@ -8,7 +8,7 @@ import { BRAZIERS, COCOONS, DEN, Floor, FLOORS, floorNo, LINKS, SINKHOLE, TOTEMS
 import { CHESTS } from "../../shared/chests";
 import { GORE, goreTextures } from "./goreArt";
 import { ISO, isoAnchor, isoScreen, isoX, isoY } from "./iso";
-import { BLOCK_TOP, BRAZIER, PIT, TORCH, dungeonTextures, GATE_FRAMES, GATE_FRAME_H, gateShape, gateSheet, ROPE_ART, TX, WALL_LOW, WALL_TALL, wallTexture, OPEN_N, OPEN_W, OPEN_S, OPEN_E } from "./dungeonArt";
+import { BLOCK_TOP, BRAZIER, PIT, STAIR_UP, TORCH, dungeonTextures, GATE_FRAMES, GATE_FRAME_H, gateShape, gateSheet, ROPE_ART, TX, WALL_LOW, WALL_TALL, wallTexture, OPEN_N, OPEN_W, OPEN_S, OPEN_E } from "./dungeonArt";
 import { TEXT_FONT, TEXT_PX, WT } from "./pixelfont";
 
 /**
@@ -62,7 +62,7 @@ const RECIPES: Record<Role, Recipe[]> = {
   den: [["dg_pike", [0, 1], 6, true], ["dg_blood", [0, 1, 2, 3], 4, false], ["dg_remains", [0, 1, 2], 3, false]],
 };
 const ORIGIN: Record<string, number> = { // feet row of each standing sheet (fraction of its height)
-  dg_hook: 1 - 2 / GORE.hook.h, dg_cage: 1 - 2 / GORE.cage.h, dg_frame: 1 - 3 / GORE.frame.h, dg_pike: 1 - 2 / GORE.pike.h,
+  dg_hook: 1 - 2 / GORE.hook.h, dg_cage: GORE.cage.foot / GORE.cage.h, dg_block: GORE.block.foot / GORE.block.h, dg_slab: GORE.slab.foot / GORE.slab.h, dg_frame: 1 - 3 / GORE.frame.h, dg_pike: 1 - 2 / GORE.pike.h,
 };
 
 interface Light { x: number; y: number; r: number; flicker: number; seed: number }
@@ -137,10 +137,13 @@ export class DungeonView {
       const ex = (ends[1] % MAP_W) - (ends[0] % MAP_W), ey = ((ends[1] / MAP_W) | 0) - ((ends[0] / MAP_W) | 0), el = Math.hypot(ex, ey) || 1;
       const AXES = [{ w: [1, 0], s: [1, 0.5] }, { w: [0, 1], s: [-1, 0.5] }, { w: [Math.SQRT1_2, -Math.SQRT1_2], s: [Math.SQRT2, 0] }];
       const ax = AXES.reduce((best, A) => (Math.abs(A.w[0] * ex + A.w[1] * ey) / el > Math.abs(best.w[0] * ex + best.w[1] * ey) / el + 1e-6 ? A : best));
-      const proj = d.tiles.map((k) => ((k % MAP_W) + 0.5) * ax.w[0] + (((k / MAP_W) | 0) + 0.5) * ax.w[1]);
-      const len = (Math.max(...proj) - Math.min(...proj) + 1.3) * TILE;
+      const pr = (k: number) => ((k % MAP_W) + 0.5) * ax.w[0] + (((k / MAP_W) | 0) + 0.5) * ax.w[1];
+      const proj = d.tiles.map(pr), lo = Math.min(...proj) - 0.65, hi = Math.max(...proj) + 0.65, c0 = d.x * ax.w[0] + d.y * ax.w[1];
+      // centred on the door's point: the wall reaches as far each way as its farthest tile
+      const half = Math.max(c0 - lo, hi - c0), len = half * 2 * TILE;
+      const gp = d.gate.map(pr), g0 = (Math.min(...gp) - 0.5 - (c0 - half)) / (half * 2), g1 = (Math.max(...gp) + 0.5 - (c0 - half)) / (half * 2);
       const shape = gateShape(ax.s[0], ax.s[1], len), key = `dg_gate_${d.id}`;
-      gateSheet(s, key, shape);
+      gateSheet(s, key, shape, d.kind, Math.max(0.05, g0), Math.min(0.95, g1));
       const x = d.x * TILE, y = d.y * TILE, opened = this.doorsOpen.has(d.id);
       const spr = s.add.sprite(x, y, key, opened ? GATE_FRAMES - 1 : 0).setOrigin(shape.ox / shape.w, shape.oy / shape.h).setScale(1 / TX).setDepth(y);
       if (!s.anims.exists(`${key}_open`)) s.anims.create({ key: `${key}_open`, frames: s.anims.generateFrameNumbers(key, { start: 0, end: GATE_FRAMES - 1 }), frameRate: 11 });
@@ -157,7 +160,7 @@ export class DungeonView {
       } else if (l.down) {
         s.add.image(l.x, l.y, "dg_pit").setOrigin(0.5, 30 / PIT.h).setScale(1 / TX).setDepth(DECAL);
       } else {
-        s.add.image(l.x - 0.4 * TILE, l.y - 0.4 * TILE, "dg_stair_up").setOrigin(0.5, 0.94).setScale(1 / TX).setDepth(l.y - 0.4 * TILE);
+        s.add.image(l.x - 0.4 * TILE, l.y - 0.4 * TILE, "dg_stair_up").setOrigin((STAIR_UP.OX + 13 - 18) / STAIR_UP.w, (STAIR_UP.OY + 15.5) / STAIR_UP.h).setScale(1 / TX).setDepth(l.y - 0.4 * TILE);
       }
       // Torches at the head of each stair (Murat 2026-11-07), two flanking the way down, one by the way up
       if (l.id !== "f1up" && l.id !== "f3out") {
@@ -294,7 +297,7 @@ export class DungeonView {
       const open = now.has(d.id);
       if (open === this.doorsOpen.has(d.id)) continue;
       setDoorOpen(d.id, open);
-      refreshWalk(d.tiles);
+      refreshWalk(d.gate);
       const spr = this.gates.get(d.id);
       if (spr) { // the portcullis winds up into the lintel, or drops back down
         if (open) spr.play(`dg_gate_${d.id}_open`); else spr.playReverse(`dg_gate_${d.id}_open`);

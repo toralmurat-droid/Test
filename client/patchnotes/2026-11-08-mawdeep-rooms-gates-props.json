@@ -1,0 +1,12 @@
+{
+  "date": "2026-11-08",
+  "title": "Mawdeep: tighter rooms, prison walls and new props",
+  "changes": [
+    "Rooms in the Mawdeep are smaller and each one has a clear use: cages, pens, butchery, larder, stitching room, lairs. Passages between them are narrower.",
+    "Lair gates are now a wall across the passage with only a small gate in it: iron prison bars with a barred gate that winds up, or a stone wall with an iron-bound wooden door that swings open.",
+    "New stairs up: real stone steps climbing into a dark arch in the rock.",
+    "Redrawn props: braziers on stone plinths, iron cages, butcher's blocks, the stitching slab, stalagmites and bones.",
+    "Cave walls have a ragged top edge instead of a straight line.",
+    "A second way round the Weaver's loom on the second floor."
+  ]
+}

@@ -935,7 +935,7 @@ function carveFloor(f: Floor, ground: number[][], objects: number[][]) {
     for (let k = 0; k <= n; k++) {
       const t = k / n, u = 1 - t;
       const px = u * u * ax + 2 * u * t * mx + t * t * bx, py = u * u * ay + 2 * u * t * my + t * t * by;
-      const r = 1.35 + 0.55 * noise(px, py, 4, S + 5);
+      const r = 1.15 + 0.4 * noise(px, py, 4, S + 5); // a passage two or three wide, no more
       for (let y = Math.floor(py - r - 1); y <= py + r + 1; y++) for (let x = Math.floor(px - r - 1); x <= px + r + 1; x++) {
         if (Math.hypot(x + 0.5 - px, y + 0.5 - py) <= r) open(x, y);
       }
@@ -961,13 +961,24 @@ for (let ty = 0; ty < FULL_H; ty++) for (let tx = 0; tx < MAP_W; tx++) {
 export const AREAS = WORLD.areas;
 
 /**
- * Mawdeep gates (Murat 2026-11-05: "doors to open"): a timber barricade across every tunnel that leads into an elite
- * lair or the Hide-Mother's den. They start shut (solid); a hero opens one (server "door" message) and it swings
- * shut again a while after nobody stands in it. Deterministic like the map: server and clients compute the same tiles.
+ * Mawdeep gates (Murat 2026-11-05: "doors to open"; 2026-11-08: "part should be like a prison wall and only part a
+ * gate, there could also be doors"): every tunnel into a lair or the Hide-Mother's den is walled across; only a gate
+ * in the middle of the wall opens. Elite lairs and the den are shut by iron bars ("bars", a barred gate in a prison
+ * wall); the mini-bosses' warrens by a stone wall with an iron-bound door ("door"). A hero opens one (server "door"
+ * message) and it shuts again a while after nobody stands in it. Deterministic: server and clients compute the same tiles.
  */
-export interface Door { id: string; x: number; y: number; tiles: number[]; floor: number }
+export interface Door {
+  id: string; x: number; y: number; floor: number; kind: "bars" | "door";
+  /** every tile of the wall across the tunnel (solid, except the gate's while it is open) */
+  tiles: number[];
+  /** the gate's tiles, in the middle of the wall */
+  gate: number[];
+  /** the wall's line across the tunnel (unit vector, world) */
+  ax: number; ay: number;
+}
 export const DOOR_RANGE = 1.8; // tiles from the nearest gate tile to work it
 const DOOR_ROOMS: Record<number, number[]> = { 1: [7], 2: [1, 5], 3: [3, 4] };
+const BARRED = new Set(["2_5", "3_3", "3_4"]); // the elites' lairs and the den: iron bars; the rest stout doors
 function placeDoors(): Door[] {
   const out: Door[] = [];
   for (const f of FLOORS) for (const ci of DOOR_ROOMS[f.id] ?? []) {
@@ -993,7 +1004,9 @@ function placeDoors(): Door[] {
         tiles.push(y * MAP_W + x);
       }
       if (!tiles.length || out.some((d) => d.tiles.some((k) => tiles.includes(k)))) return;
-      out.push({ id: `gate_${f.id}_${ci}_${a === ci ? b : a}`, x: px, y: py, tiles, floor: f.id });
+      const gx = -uy, gy = ux; // across the tunnel
+      const gate = tiles.filter((k) => Math.abs(((k % MAP_W) + 0.5 - px) * gx + (((k / MAP_W) | 0) + 0.5 - py) * gy) <= 0.8);
+      out.push({ id: `gate_${f.id}_${ci}_${a === ci ? b : a}`, x: px, y: py, tiles, gate, floor: f.id, ax: gx, ay: gy, kind: BARRED.has(`${f.id}_${ci}`) ? "bars" : "door" });
     });
   }
   return out;
@@ -1003,14 +1016,14 @@ for (const d of DOORS) for (const k of d.tiles) SOLID[k] = 1;
 /** Open or shut a gate (server and client keep the same SOLID). */
 export function setDoorOpen(id: string, open: boolean) {
   const d = DOORS.find((g) => g.id === id);
-  if (d) for (const k of d.tiles) SOLID![k] = open ? 0 : 1;
+  if (d) for (const k of d.gate) SOLID![k] = open ? 0 : 1;
 }
 export const doorById = (id: unknown) => DOORS.find((d) => d.id === id);
-/** Distance in tiles from (px,py) in px to the nearest tile of gate d. */
+/** Distance in tiles from (px,py) in px to the nearest tile of door d's gate. */
 export function doorDist(d: Door, px: number, py: number): number {
   const tx = px / TILE, ty = py / TILE;
   let best = Infinity;
-  for (const k of d.tiles) best = Math.min(best, Math.hypot((k % MAP_W) + 0.5 - tx, ((k / MAP_W) | 0) + 0.5 - ty));
+  for (const k of d.gate) best = Math.min(best, Math.hypot((k % MAP_W) + 0.5 - tx, ((k / MAP_W) | 0) + 0.5 - ty));
   return best;
 }
 /** Water tiles where a bridge span has collapsed (the broken bridges to the Old Ruins and the Old Watchtower). */
