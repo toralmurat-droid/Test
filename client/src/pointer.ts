@@ -455,7 +455,8 @@ export class PointerControls {
 
   /** Nothing that blocks walking on the straight line between two points? */
   private clearLine(a: Pt, b: Pt): boolean {
-    const d = Math.hypot(b.x - a.x, b.y - a.y), n = Math.ceil(d / 4);
+    // 1 px steps: a stump only blocks a small core, a coarser check could graze one and the hero would snag on it
+    const d = Math.hypot(b.x - a.x, b.y - a.y), n = Math.ceil(d);
     for (let i = 1; i < n; i++) if (blocked(a.x + (b.x - a.x) * i / n, a.y + (b.y - a.y) * i / n)) return false;
     return true;
   }
