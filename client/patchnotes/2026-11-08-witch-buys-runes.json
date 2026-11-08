@@ -1,0 +1,9 @@
+{
+  "date": "2026-11-08",
+  "pr": 366,
+  "title": "Morwen buys runes",
+  "changes": [
+    "Morwen the witch now buys loose runes: 40 gold for a Lesser rune, 120 for a rune, 300 for a Greater one.",
+    "Selling gear with runes set in it gives you the runes back in your bag (or their price if your bag is full)."
+  ]
+}

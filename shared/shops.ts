@@ -1,5 +1,6 @@
 import { AffixKey, affixMax, gearDef, itemLevel, itemRarity, withAffixes, withLevel } from "./gear";
 import { POTION_SIZES } from "./potions";
+import { parseRune } from "./runes";
 
 /**
  * Village shops. A shop is attached to an NPC (shared/npcs.ts) by id. The server checks distance, gold and bag space.
@@ -17,7 +18,7 @@ export interface ShopEntry {
 export interface Shop {
   greeting: string;
   stock: ShopEntry[];
-  /** Gear slots this shop buys from the player's bag (none = buys nothing) */
+  /** Gear slots this shop buys from the player's bag, "rune" = loose runes (none = buys nothing) */
   buys?: string[];
   /** This shop mends worn gear (shared/upkeep.ts) */
   repairs?: boolean;
@@ -62,7 +63,20 @@ export function gearPrice(id: string): number {
   return d ? Math.round((GEAR_PRICE[d.tier] ?? 0) * (1 + PRICE_PER_LEVEL * (itemLevel(id) - 1)) * RARITY_PRICE[itemRarity(id)]) : 0;
 }
 
+/** What a shop pays for a loose rune (shared/runes.ts), by rank: Lesser, plain, Greater. Only shops with "rune" in `buys`. */
+export const RUNE_PRICE = [0, 40, 120, 300];
+
+/** True when this shop buys this bag item (a gear slot it lists, or "rune" for loose runes). */
+export function shopBuys(shop: Shop, id: string): boolean {
+  if (!shop.buys) return false;
+  if (parseRune(id)) return shop.buys.includes("rune");
+  const d = gearDef(id);
+  return !!d && shop.buys.includes(d.slot);
+}
+
 export function sellPrice(id: string): number {
+  const r = parseRune(id);
+  if (r) return RUNE_PRICE[r.rank];
   return Math.max(1, Math.floor(gearPrice(id) * SELL_RATE));
 }
 
@@ -155,7 +169,7 @@ export const SHOPS: Record<string, Shop> = {
     ],
   },
   witch: {
-    greeting: "Fresh from the still, darling. Red for your blood, blue for your magic. Try not to stare.",
+    greeting: "Fresh from the still, darling. Red for your blood, blue for your magic. Try not to stare. Found a carved stone out there? I pay well for runes.",
     stock: [
       // Minor and Medium flasks; Greater ones are only found out in the world
       ...[0, 1].flatMap((size) => (["potion", "mpotion"] as const).flatMap((item) => [
@@ -163,6 +177,8 @@ export const SHOPS: Record<string, Shop> = {
         { item, size, qty: 5, price: Math.round(POTION_SIZES[size].price * 5 * 0.85) },
       ])),
     ],
+    // Morwen buys loose runes for her rune-stone alchemy (Murat 2026-11-08)
+    buys: ["rune"],
   },
 };
 
