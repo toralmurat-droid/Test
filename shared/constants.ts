@@ -67,7 +67,7 @@ export type MobKind = "slime" | "skeleton" | "motherblob" | "blobling" | "shoote
   // the beast-folk of the Mawdeep Warrens (shared/dungeon.ts, BEAST below): men and women sewn into animal hides
   | "gnawkin" | "tuskborn" | "silkwretch" | "duskwing" | "packlord" | "hornbrute" | "hidemother" | "crowseer" | "gnasher" | "weaver"
   // Act 2, the Sunscar desert (shared/desert.ts): raiders, scorpions, the buried dead, the Veiled Circle and the camel-folk
-  | "nomad" | "scorpion" | "sanddead" | "veiled" | "camelfolk"
+  | "nomad" | "scorpion" | "sanddead" | "veiled" | "camelfolk" | "sphinx"
   // Act 2's final boss at the Sun Furnace (SUNWRIGHT below)
   | "sunwright"
   // the Night Raiders (shared/raiders.ts): seven named riders who roam both acts by night
@@ -140,6 +140,8 @@ export const MOBS: Record<MobKind, MobDef> = {
   sanddead: { name: "Sand-Dead", maxHp: 190, speed: 54, damage: 27, attackCooldownMs: 1000, aggroRange: 130, leash: 230, xp: 58 },
   veiled: { name: "Veiled Adept", maxHp: 140, speed: 56, damage: 27, attackCooldownMs: 1800, aggroRange: 170, leash: 250, xp: 64 },
   camelfolk: { name: "Camel-Man", maxHp: 300, speed: 60, damage: 32, attackCooldownMs: 1300, aggroRange: 140, leash: 260, xp: 74 },
+  // the winged lion-headed guardians of Kharsun's tombs: a khopesh and a shield, and a leap onto you on golden wings
+  sphinx: { name: "Sphinx Warrior", maxHp: 320, speed: 62, damage: 33, attackCooldownMs: 1200, aggroRange: 150, leash: 270, xp: 80 },
   // Act 2's final boss (the Second Sun chain's last quest; moves in BEAST, voice and phases in SUNWRIGHT below)
   sunwright: { name: "The Sunwright", maxHp: 1100, speed: 50, damage: 30, attackCooldownMs: 1250, aggroRange: 260, leash: 520, xp: 2400 },
   // The Night Raiders (shared/raiders.ts): mounted, cloaked, a massive weapon; always Lv 50, close to unbeatable alone
@@ -409,6 +411,7 @@ export const BEAST_MOVES: Partial<Record<MobKind, BeastMove[]>> = {
   // Act 2: the scorpion skitters at you in a straight rush; the camel-folk rear and stamp the ground
   scorpion: ["gore"],
   camelfolk: ["stomp"],
+  sphinx: ["pounce"], // spreads its wings and drops onto you
   // the Sunwright: Zenith (when ready) before everything, then her choir, falling sun, the flare when crowded, the lance
   sunwright: ["zenith", "brood", "sunfall", "flare", "beam"],
 };
@@ -471,7 +474,7 @@ export const BEAST_BROOD: Partial<Record<MobKind, MobKind[]>> = { gnasher: ["gna
  */
 export const BEAST_FOLK: Partial<Record<MobKind, number>> = { gnawkin: 0.4, tuskborn: 0.35, silkwretch: 0.4, duskwing: 0.4, nomad: 0.35 }; // nomad "folk": a Dustrider archer
 /** Act 2's monsters (the Sunscar): levels from ACT2_LEVEL. */
-export const DESERT_KINDS: MobKind[] = ["nomad", "scorpion", "sanddead", "veiled", "camelfolk", "sunwright"];
+export const DESERT_KINDS: MobKind[] = ["nomad", "scorpion", "sanddead", "veiled", "camelfolk", "sphinx", "sunwright"];
 /** Beast-folk that fly (drawn hovering, client textures.ts). */
 export const BEAST_FLYERS: MobKind[] = ["duskwing", "crowseer"];
 export const BEAST_KINDS: MobKind[] = ["gnawkin", "tuskborn", "silkwretch", "duskwing", "packlord", "hornbrute", "hidemother", "crowseer", "gnasher", "weaver"];

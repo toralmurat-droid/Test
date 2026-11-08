@@ -65,6 +65,7 @@ export function mobSpec(kind: MobKind, level: number, opt: { weapon?: string; hp
   if (kind === "veiled") ranged(140, 72, 160, 3, 1.1);
   if (kind === "nomad" && opt.weapon === "folk") ranged(125, 60, 175, 3, 0.85);
   if (kind === "scorpion") spec.lunge = { min: BEAST.gore.min, max: BEAST.gore.max, every: BEAST.gore.cooldownMs, mult: BEAST.gore.dmgMult };
+  if (kind === "sphinx") { const P = BEAST.pounce; spec.lunge = { min: P.min, max: P.max, every: P.cooldownMs, mult: P.dmgMult }; }
   if (kind === "camelfolk") { const S = BEAST.stomp; spec.specials.push({ name: "Stomp", every: S.cooldownMs, windup: S.windupMs, min: 0, max: S.range, radius: S.radius, mult: S.dmgMult, at: "self", kb: S.knockback, stunMs: S.stunMs }); }
   if (kind === "necromancer") {
     const N = SKELETON_AI.necro;
@@ -282,6 +283,7 @@ function desertMob(level: number): MobSpec {
   const L = Math.min(47, Math.max(30, level));
   const pool: [MobKind, string?][] = [["nomad"], ["nomad", "folk"], ["scorpion"], ["scorpion"]];
   if (L >= 36) pool.push(["sanddead"], ["sanddead"]);
+  if (L >= 37) pool.push(["sphinx"]);
   if (L >= 38) pool.push(["camelfolk"], ["camelfolk"]);
   if (L >= 41) pool.push(["veiled"], ["veiled"]);
   const [k, w] = pick(pool);
