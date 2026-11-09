@@ -18,7 +18,8 @@ little life"). Session D done in the same session as B; C done 2026-11-09 in its
   (`tools/e2e-summoner.cjs`, `tools/e2e-two-players.cjs`), `npm run bench`, patch note, **open PR 1**.
 - **C (done)**: art (hero repaint: tailcoat + scarf, starter kit, wisp sheets, skill icons, skillfx), sounds.
 - **D (done)**: UI (grimoire panel, HUD: auras, golem respawn, Essence), mobile check.
-- **E**: balance (≥150 fights/pair, Lv 1-50), PvE not trivial. **PR 3**.
+- **E (tried, then reverted 2026-11-09)**: Murat: "don't balance yet" and ship the PR without it. The changes below were
+  measured, pushed (9124389) and reverted; the tools and the numbers stay here for the next pass.
 
 ## Done in session A
 - `shared/summons.ts`: `GOLEM` (respawn 12 s, enter 1.5 s, twin Lv 18), grimoire (`parseGrimoire`, default fire,fire),
@@ -167,7 +168,11 @@ Session C limits (to revisit):
 - The old pixel look (?pixel=1) still shows the old class sheet (as for every hero there).
 - Golems have no footstep sounds (four permanent golems stomping would be noise).
 
-## Session E (balance), in progress
+## Session E (balance): tried, reverted
+Murat (2026-11-09, after the results below): don't balance yet, ship the PR. Commit 9124389 reverted: the game numbers are
+the session B ones again (staff 220 px, Stone Bond 30 %, `SUMMON.pvp.hp` 1, golem growth 0.4, Golem Mastery 8 %, Arsenal
+as before, no `guardHold`). Kept: `tools/balance/summoner-levers.ts` and the sim knobs (`SIM.kitePets` on).
+
 Murat (2026-11-09): target overall 45-55 % at every level and no matchup above 65 %; Summoner numbers only; the PR stays
 a draft until Murat marks it ready himself.
 
@@ -190,6 +195,30 @@ Sim changes made while probing (`tools/balance/duel.ts` SIM): `kitePets` (on: a 
 creature closing in, it used to stand in the golems' blows; overall numbers barely moved), `golemBlock` and
 `aimHero` (off by default, levers only: a golem stops every shot in its path on a line / bots aim point skills at the
 hero; neither moved the Wizard matchup).
+
+Murat's call after this (2026-11-09): balance against the Vampire, and leave the Wizard matchup if nothing fixes it.
+Changes that were tried (each measured with the lever runs, 300-400 fights for the final checks), now reverted:
+- Staff reach 220 -> 175 px (`shared/classes.ts`): the Wizard (170 px) can shoot back; Vampire matchup unchanged.
+- Stone Bond `SUMMON.guardShare` 0.3 -> 0.4 (Lv 1-20; still 22 % from Lv 25): Lv 5-15 against the Vampire +8-10 points.
+- `SUMMON.pvp.hp` 1 -> 1.3: golems last longer against heroes (Lv 5-15 again).
+- `SUMMON_SCALE.rate` 0.4 -> 0 and Golem Mastery 8 -> 5 % per rank: the Lv 40-50 lead shrinks.
+- Void Arsenal damage x0.7 (blade 5, lance 10, axe 11): Lv 40-50 again.
+- PvE: `SUMMON.guardHold` 1 (new, `server/TownRoom.ts` guardOf and the summon aggro check, counted once per tick;
+  `tools/balance/pve.ts` mobTarget): a golem keeps one monster busy (the Colossus two), the others go for the Summoner.
+Results (`npx tsx tools/balance/duel.ts 300`), Summoner vs Vampire / vs Wizard:
+Lv1 1/85, Lv5 58/96, Lv10 43/90, Lv15 36/98, Lv20 42/94, Lv25 39/90, Lv30 44/90, Lv40 70/88 (two 400-fight runs: 62
+and 65), Lv50 63/89 (400: 66, 63); overall 43 77 67 67 68 64 67 79 76 %. Lv1 against the Vampire stays ~0 % (the
+Vampire wins 98 % of Lv1 duels against every class). The Wizard matchup stays 85-98 %: nothing in the Summoner's kit
+moves it without breaking the Vampire one. Overall stays above 55 % because of the Wizard.
+PvE (`tools/balance/pve.ts`): HP lost per kill rounds to 0 % at every level, before and after (per-mille measure: 0.0-0.8 %
+with guardHold 1, 0.3-1.6 % with no guardian at all, Wizard 0.4-5 %); every boss 100 %, Night Raider as before. The
+sim's ranged heroes hardly get hit in zones; the brief's "loses a little life" is not reached in the sim.
+Checks: `npm test` 100 pass (the portal test target moved to 150 px, inside the new reach), build, smoke, desktop e2e
+OK. Mobile e2e: 4 runs, each with 1-3 of 5 devices failing; the base commit (before E) fails the same way (the hero
+stalls walking out of town, golems then "resting"). One run logged Colyseus `refId not found` on 2 devices (the
+session B issue, still unexplained). Bench `SPREAD=1`: 13.0 / 18.1 ms; `SPREAD=1 CAST=1`: 16.0 / 23.8 ms.
+Out of scope, worth a task: the Wizard is the weakest class (6-55 % overall) and the Vampire swings from 98 % (Lv1) to
+21 % (Lv50).
 
 ## Pitfalls
 - Player schema is at the 64-field limit: pack new synced data into existing fields.
