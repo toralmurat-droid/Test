@@ -30,6 +30,14 @@ import { MOB_COMBAT, mobBody } from "../../shared/combat";
 import { ARSENAL, bondShare, ESSENCE, GOLEM, GOLEM_OF, golemSlots, parseGrimoire, PORTAL, SUMMON, summonElement, summonScaleLevel, WISP, wispEls, type AttuneElement, type SummonKind } from "../../shared/summons";
 
 const TICK = 50; // ms, server runs at 20 Hz
+/**
+ * Sim assumptions that stand in for the 2D game. `golemBlock`: chance a golem standing in a shot's path stops it. On a
+ * line every golem between the heroes would eat every shot; in the game a golem stands beside its owner and shots
+ * aimed at the hero mostly fly past it (one roll per shot and golem). `kitePets`: a ranged hero backs away from a
+ * melee creature closing in, as from a melee hero (session E: the bot used to stand and shoot the Summoner while their
+ * golems beat it, 90-100 % Summoner wins against the Wizard that even a halved golem did not move).
+ */
+export const SIM = { golemBlock: 1, kitePets: true, aimHero: false };
 const MAX_MS = 60000;
 const ARENA = 480; // px: fights happen between walls / obstacles, so kiting can't go on forever // a duel longer than this is decided on HP %
 const REACT = 0.55; // chance per tick that a bot acts (about 40ms average reaction delay)
@@ -37,7 +45,7 @@ const KB_PX = PLAYER_SPEED * 0.12; // knockback distance per kb unit (moveStep(.
 
 type Ranks = Record<string, number>;
 type Build = 0 | 1 | 2; // the branch the build rushes up first
-interface Shot { owner: F; x: number; dir: number; speed: number; range: number; traveled: number; pulsed?: number; radius: number; dmg: number; kb: number; miss: boolean; hit: boolean; basic: boolean; spec?: ShotSpec; pierced: boolean }
+interface Shot { owner: F; x: number; dir: number; speed: number; range: number; traveled: number; pulsed?: number; radius: number; dmg: number; kb: number; miss: boolean; hit: boolean; basic: boolean; spec?: ShotSpec; pierced: boolean; past?: F[] }
 interface Pending { at: number; fn: () => void }
 
 export class F {
@@ -169,7 +177,7 @@ export class Duel {
       heal: (id, amount) => { const u = f(id); if (u && !u.dead) u.hp = Math.min(u.maxHp, u.hp + amount); },
       aim: (id) => [f(id)?.face ?? 1, 0],
       // the Summoner throws its Black Hole on the foe (a player clicks on them); other classes keep their default reach
-      aimDist: (id) => { const u = f(id); return u && u.cls === "summoner" && !(u instanceof GolemF) && !u.mob ? Math.abs(this.other(u).x - u.x) : undefined; },
+      aimDist: (id) => { const u = f(id); return u && (u.cls === "summoner" || SIM.aimHero) && !(u instanceof GolemF) && !u.mob ? Math.abs(this.other(u).x - u.x) : undefined; },
       face: (id, dx) => { const u = f(id); if (u && dx) u.face = Math.sign(dx); },
       move: (id, dx, _dy, dist, each) => {
         const u = f(id);
@@ -540,12 +548,16 @@ export class Duel {
 
     if (a.ranged) {
       const range = def.projectile!.range * rm;
-      const kite = !t.ranged && d < tReach + 30;
+      // a creature closing in (golem, bride: melee) is kited like a melee hero would be (players don't stand in its blows)
+      const pet = this.golemsOf(t).filter((g) => !g.wisp && !g.dead).sort((p, q) => Math.abs(p.x - a.x) - Math.abs(q.x - a.x))[0];
+      const petNear = !!pet && SIM.kitePets && Math.abs(pet.x - a.x) < 36;
+      const kite = (!t.ranged && d < tReach + 30) || petNear;
       // Cornered against a wall: roll through the melee hero to get out
       const cornered = (a.x < 12 && toward < 0) || (a.x > ARENA - 12 && toward > 0) || (a.x < 12 && -toward < 0) || (a.x > ARENA - 12 && -toward > 0);
       if (kite && cornered && d < tReach + 10 && this.dodge(a, toward)) return 0;
       if (now >= a.attackReadyAt && !a.broken && d <= range * 0.95 && !(kite && d < tReach)) { a.face = toward; this.attack(a); return 0; }
       if (d <= range && this.fireRanged((a.face = toward, a))) return 0;
+      if (petNear) return -(Math.sign(pet!.x - a.x) || toward);
       if (kite || d < (t.ranged ? range * 0.7 : 60)) return -toward;
       if (d > range * 0.9) return toward;
       return 0;
@@ -599,7 +611,8 @@ export class Duel {
         // a Black Hole of someone this shot's owner fights swallows it (server TownRoom.holeEats)
         if (this.fields.some((fi) => fi.def.hole && fi.owner !== s.owner.id && this.foes(s.owner).some((u) => u.id === fi.owner) && Math.abs(s.x - fi.x) <= fi.def.r)) { s.hit = true; break; }
         if (s.spec?.pulse && s.traveled - (s.pulsed ?? 0) >= s.spec.pulse.every) { s.pulsed = s.traveled; shotPulse(this.host, s.spec, s.x, 0); }
-        const t = this.foes(s.owner).find((t) => !t.dead && Math.abs(t.x - s.x) <= s.radius + HIT_RADIUS + t.body && now >= t.invulnUntil);
+        const t = this.foes(s.owner).find((t) => !t.dead && Math.abs(t.x - s.x) <= s.radius + HIT_RADIUS + t.body && now >= t.invulnUntil && !s.past?.includes(t)
+          && (!(t instanceof GolemF) || SIM.golemBlock >= 1 || this.rnd() < SIM.golemBlock || !(s.past ??= []).push(t)));
         if (t && !s.miss && !s.pierced) {
           if (s.spec) {
             shotHit(this.host, s.spec, t.id);

@@ -167,6 +167,30 @@ Session C limits (to revisit):
 - The old pixel look (?pixel=1) still shows the old class sheet (as for every hero there).
 - Golems have no footstep sounds (four permanent golems stomping would be noise).
 
+## Session E (balance), in progress
+Murat (2026-11-09): target overall 45-55 % at every level and no matchup above 65 %; Summoner numbers only; the PR stays
+a draft until Murat marks it ready himself.
+
+Baseline (`npx tsx tools/balance/duel.ts 150`), Summoner vs Wizard / vs Vampire:
+Lv1 100/0, Lv5 100/32, Lv10 99/25, Lv15 99/13, Lv20 94/41, Lv25 95/37, Lv30 96/49, Lv40 93/67, Lv50 89/79;
+overall 50 66 62 56 67 66 72 80 84 %. The other classes are off too: Vampire 98 % at Lv1, 17-25 % at Lv40-50; Wizard
+1-2 % at Lv1, 28-41 % from Lv5 to 25.
+
+Levers (`tools/balance/summoner-levers.ts`, one part off at a time, 150 fights, Lv 5/20/40, vs Wizard and vs Vampire):
+- Nothing about the kit's numbers moves the Wizard matchup below ~85 %: staff range 175 or 160, no portal, portal exit
+  45-60 px, staff damage 14-15, no wisps / Arsenal / Blades / Black Hole / Colossus / auras / Stone Bond, golems halved
+  (`SUMMON.pvp` dmg 0.425, hp 0.5): all 82-100 % against the Wizard.
+- With no golems at all the Summoner still wins 64-71 % against the Wizard (range 220), 41-59 % with range 175.
+- Golems at a quarter in PvP (dmg/hp 0.25, cc 0.1) and range 175: Wizard 67 / 89 / 82 %, but Vampire 7 / 1 / 41 %.
+- Against the Vampire the golems carry everything (no golems: 1 %).
+So the two matchups pull opposite ways: what would bring the Wizard down to 65 % breaks the Vampire matchup.
+Why the Wizard loses (damage probe, Lv 20): the 220 px staff out-ranges its 170 px (it fires ~3 basic bolts a
+fight); its skills land on the golems and wisps around the Summoner; the portal bolt is almost never dodged.
+Sim changes made while probing (`tools/balance/duel.ts` SIM): `kitePets` (on: a ranged bot backs away from a melee
+creature closing in, it used to stand in the golems' blows; overall numbers barely moved), `golemBlock` and
+`aimHero` (off by default, levers only: a golem stops every shot in its path on a line / bots aim point skills at the
+hero; neither moved the Wizard matchup).
+
 ## Pitfalls
 - Player schema is at the 64-field limit: pack new synced data into existing fields.
 - `cleanRanks` drops a skill whose parent is missing: tests must set parents too.
