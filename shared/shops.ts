@@ -74,6 +74,9 @@ export function shopBuys(shop: Shop, id: string): boolean {
   return !!d && shop.buys.includes(d.slot);
 }
 
+/** Rune fusion (shared/runes.ts fuseRunes) is offered by every trader who buys loose runes. */
+export const shopFuses = (shop: Shop | undefined): boolean => !!shop?.buys?.includes("rune");
+
 export function sellPrice(id: string): number {
   const r = parseRune(id);
   if (r) return RUNE_PRICE[r.rank];
@@ -160,16 +163,18 @@ export const SHOPS: Record<string, Shop> = {
     levelHeads: true,
   },
   spicetrader: {
-    greeting: "Cardamom, saffron, and flasks to keep you breathing in the sun. Water is extra. Joking. Mostly.",
+    greeting: "Cardamom, saffron, and flasks to keep you breathing in the sun. Water is extra. Joking. Mostly. Carved stones? I buy those too, or fuse four into one.",
     stock: [
       ...[1, 2].flatMap((size) => (["potion", "mpotion"] as const).flatMap((item) => [
         { item, size, qty: 1, price: POTION_SIZES[size].price },
         { item, size, qty: 5, price: Math.round(POTION_SIZES[size].price * 5 * 0.85) },
       ])),
     ],
+    // Act 2's rune buyer (and so rune fuser, Lot C), like Morwen in Oakvale
+    buys: ["rune"],
   },
   witch: {
-    greeting: "Fresh from the still, darling. Red for your blood, blue for your magic. Try not to stare. Found a carved stone out there? I pay well for runes.",
+    greeting: "Fresh from the still, darling. Red for your blood, blue for your magic. Try not to stare. Found a carved stone out there? I pay well for runes, or fuse four alike into a stronger one.",
     stock: [
       // Minor and Medium flasks; Greater ones are only found out in the world
       ...[0, 1].flatMap((size) => (["potion", "mpotion"] as const).flatMap((item) => [
