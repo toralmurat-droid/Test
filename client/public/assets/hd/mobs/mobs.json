@@ -1040,5 +1040,29 @@
   "h": 40,
   "scale": 1.5,
   "frames": 12
+ },
+ "mob_wisp_fire": {
+  "w": 16,
+  "h": 22,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_wisp_cold": {
+  "w": 16,
+  "h": 22,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_wisp_poison": {
+  "w": 16,
+  "h": 22,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_wisp_shock": {
+  "w": 16,
+  "h": 22,
+  "scale": 1.5,
+  "frames": 12
  }
 }

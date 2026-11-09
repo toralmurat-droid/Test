@@ -1,9 +1,9 @@
-// Summoner balance pass (2026-11-07): the bound golem, Stone Bond, and monsters that fight the golems.
+// Summoner balance pass (2026-11-07): the permanent golem (Void Lord rework 2026-11-08), Stone Bond, and monsters that fight the golems.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { isSafeZone, isSolidAt, VILLAGE } from "../shared/map";
 import { TILE } from "../shared/constants";
-import { SUMMON } from "../shared/summons";
+import { GOLEM, SUMMON } from "../shared/summons";
 import { startRoom, wait } from "./helpers/room";
 
 function openSpot(): [number, number] {
@@ -24,20 +24,20 @@ test("bound golem, Stone Bond, monsters turn on the golem", async () => {
 
     // In the safe zone (where heroes start): no golem comes, however long
     assert.ok(isSafeZone(p.x, p.y));
-    room.autoGolems(Date.now()); room.autoGolems(Date.now() + SUMMON.autoMs + 100);
+    room.autoGolems(Date.now()); room.autoGolems(Date.now() + GOLEM.enterMs + 100);
     assert.equal(live().length, 0, "no bound golem in the safe zone");
 
-    // Outside: one comes by itself after SUMMON.autoMs, at level 1 with no skill learned, in the attuned element
+    // Outside: one comes by itself after GOLEM.enterMs, at level 1 with no skill learned, in the grimoire's element
     room.state.mobs.forEach((_m: any, mid: string) => room.state.mobs.delete(mid));
     const [x, y] = openSpot();
-    p.x = x; p.y = y; p.attune = 2;
+    p.x = x; p.y = y; room.setGrimoire(p, "poison,fire");
     const t0 = Date.now();
     room.autoGolems(t0);
     assert.equal(live().length, 0, "not at once");
-    room.autoGolems(t0 + SUMMON.autoMs + 10);
+    room.autoGolems(t0 + GOLEM.enterMs + 10);
     assert.deepEqual(live().map((m: any) => m.kind), ["golem_poison"]);
-    room.autoGolems(t0 + 3 * SUMMON.autoMs);
-    assert.equal(live().length, 1, "only while none is out");
+    room.autoGolems(t0 + 3 * GOLEM.enterMs);
+    assert.equal(live().length, 1, "one golem below Lv 18");
 
     // Stone Bond: the golem takes SUMMON.guardShare of a blow on its owner
     const g = live()[0];

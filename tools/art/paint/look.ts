@@ -1,6 +1,6 @@
 /** How each painted character looks: materials, colours and kit. Poses and animation timing come from characters.ts. */
 export type HeadGear = "crown" | "greathelm" | "ninjahood" | "wizardhat" | "hood" | "horned" | "cap" | "helm" | "bandana" | "wide" | "witch" | "none";
-export type TorsoKind = "plate" | "wrap" | "robe" | "jerkin" | "bare" | "shirt" | "mail" | "leather";
+export type TorsoKind = "plate" | "wrap" | "robe" | "jerkin" | "bare" | "shirt" | "mail" | "leather" | "tailcoat";
 export type LegKind = "trousers" | "mail" | "wrapped" | "robe" | "fur" | "dress" | "bare";
 export type WeaponKind = "katana" | "sword" | "staff" | "wand" | "bow" | "axe" | "hammer" | "spear" | "dagger" | "druidstaff" | "witchstaff" | "boneblade" | "none";
 
@@ -31,6 +31,9 @@ export interface Look {
   rags?: number;    // tattered cloth hanging off a skeleton
   harness?: boolean; // leather strap across a bare chest (barbarian kit)
   collar?: number; // tall stand-up collar on the cape, this colour inside (vampire kit)
+  /** Tailcoat (torso "tailcoat", the Summoner): lapels and piping in `trim`, the waistcoat under it in `vest`, buttons in `buckle`. */
+  /** A long scarf wound round the neck, its two ends floating (stirring at rest, streaming at a walk and a run). */
+  scarf?: { col: number; band?: number };
   weaponKind?: WeaponKind; // what found weapons look like in this hero's hands (heroes start with weapon "none")
   /** Bone Demon (DEMON.harvest): skeleton pieces it wears, painted onto the body: 1 pauldrons, 2 rib cuirass, 3 bone blade, 4 skull crown. */
   boneArmour?: number;
@@ -275,7 +278,7 @@ export const HERO_BODIES: Record<string, Look> = {
   barbarian: bare({ skin: 0xd99a6a, hair: 0xc8631f, hairStyle: "long", beard: 0xc8631f, beardStyle: "full", build: 1.12, weaponKind: "axe", fx: 0xffe0c0 }),
   // pale as ash, black hair swept back, red eyes; slim
   vampire: bare({ skin: 0xd6c3bd, eye: 0xc0182a, hair: 0x15111a, hairStyle: "short", build: 0.97, weaponKind: "sword", fx: 0xff5a6a }),
-  // the elemental occultist (look C, picked 2026-11-07): ash-pale hair, violet eyes
+  // ash-pale hair, violet eyes (the body of look C, 2026-11-07; the Void Lord kit dresses it as a warlock)
   summoner: bare({ skin: 0xe8c4a2, eye: 0xb68cff, hair: 0xd8d0c0, hairStyle: "long", weaponKind: "witchstaff", orb: 0xb68cff, fx: 0xd8c4ff }),
 };
 
@@ -322,15 +325,16 @@ export const KITS: Record<string, Partial<Record<"weapon" | "shield" | "armour" 
     shoes: { boots: 0x45301e, bootStyle: "leather" },
     weapon: { weapon: "axe" },
   },
-  // the elemental occultist: bone-white robe in gold, a gold crown set with a violet stone, a mask, a staff with a little witch-fire
+  // the Void Lord (Murat 2026-11-09, look A "anthracite et prune"): a bare-headed warlock in a charcoal tailcoat to
+  // mid-thigh over a plum waistcoat, violet piping, a long violet scarf whose two ends float, a staff with a Void flame
   summoner: {
-    hat: { head: "crown", headCol: 0xc9a050, headTrim: 0xb68cff, mask: 0x2a2236 },
+    hat: { scarf: { col: 0x5b2f8f, band: 0xc8a8ff } },
     armour: {
-      torso: "robe", torsoCol: 0xe6e0d0, trim: 0xc9a050, sash: 0x5a3a8a, belt: 0x3a2a4a, buckle: 0xc9a050,
-      legs: "robe", legCol: 0xd6cfbf, sleeve: 0xe6e0d0, arms: "cloth", glove: 0x3a2a4a,
+      torso: "tailcoat", torsoCol: 0x38323f, trim: 0x9a6cff, vest: 0x3c2c44, buckle: 0xb8b0c8,
+      legs: "trousers", legCol: 0x16131b, sleeve: 0x38323f, arms: "cloth", glove: 0x1a1620,
     },
-    shoes: { boots: 0x3a2a4a, bootStyle: "shoe" },
-    weapon: { weapon: "witchstaff", palmFlame: 0x7ad7ff },
+    shoes: { boots: 0x110f15, bootStyle: "leather" },
+    weapon: { weapon: "witchstaff", palmFlame: 0xb68cff },
   },
   // a noble of the night: dark wine coat with old-gold trim, black cape with a tall blood-red collar, iron circlet, thin blade
   vampire: {

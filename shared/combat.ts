@@ -37,6 +37,7 @@ export const MOB_COMBAT: Record<MobKind, { poise: number; windupMs: number }> = 
   golem_fire: { poise: 140, windupMs: 420 }, golem_cold: { poise: 160, windupMs: 420 },
   golem_poison: { poise: 140, windupMs: 420 }, golem_shock: { poise: 120, windupMs: 380 }, golem_colossus: { poise: 400, windupMs: 560 },
   bride: { poise: 60, windupMs: 140 },
+  wisp: { poise: 30, windupMs: 0 },
   slime: { poise: 30, windupMs: 350 },
   skeleton: { poise: 55, windupMs: 300 },
   crawler: { poise: 20, windupMs: 320 },

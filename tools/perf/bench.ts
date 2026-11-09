@@ -1,6 +1,7 @@
 // Server load bench: runs the game server, connects N bot heroes (tools/perf/bots.ts, in a child process),
 // then prints the time per server tick, CPU, memory and the bytes each player receives per second.
 //   npm run bench -- [bots=5] [seconds=15]        SPREAD=1 scatters the bots over the whole map (worst case)
+//   CAST=1 SPREAD=1: the Summoner bots cast wisps, blades, black holes and the Void Arsenal non-stop (tools/perf/bots.ts)
 import os from "node:os";
 import path from "node:path";
 import http from "node:http";

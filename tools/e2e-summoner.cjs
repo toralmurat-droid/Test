@@ -1,5 +1,6 @@
-// Browser check of the Summoner: picks the class, /max, walks out of Oakvale (no magic inside it), calls a golem,
-// then the Colossus, and prints what the client draws. Start the production build first, then:
+// Browser check of the Summoner (Void Lord rework): picks the class, /max, walks out of Oakvale (no magic inside it),
+// sets the grimoire through its HUD panel, checks the permanent golems rise, casts the wisps (four: /max learns Swarm), the Void Blades, a Black Hole, the Void Arsenal
+// and the Colossus, and prints what the client draws. Start the production build first, then:
 //   node tools/e2e-summoner.cjs 2620 <folder for screenshots>
 const { chromium } = require("playwright");
 const PORT = process.argv[2], OUT = process.argv[3];
@@ -28,24 +29,42 @@ const PORT = process.argv[2], OUT = process.argv[3];
   await page.waitForTimeout(800);
   // walk out of the safe square first (golems can't stand in it): a few seconds east
   // walk out of the east gate with the click-to-walk router (world point past the gate on the east road)
-  await page.evaluate(() => { const s = window.__game.scene.scenes.find((x) => x.entities); s.pointer.goal = { kind: "walk", x: 101 * 32, y: 59.5 * 32 }; s.pointer.route({ x: 101 * 32, y: 59.5 * 32 }); });
+  const walk = () => page.evaluate(() => { const s = window.__game.scene.scenes.find((x) => x.entities); s.pointer.goal = { kind: "walk", x: 101 * 32, y: 59.5 * 32 }; s.pointer.route({ x: 101 * 32, y: 59.5 * 32 }); });
+  await walk();
   let where = "";
-  for (let i = 0; i < 30; i++) { await page.waitForTimeout(500); where = (await page.textContent("#location"))?.trim() ?? ""; const me = await page.evaluate(() => { const s = window.__game.scene.scenes.find((x) => x.entities); const p = s.entities.get(s.me).state; return p.x; }); if (me > 96 * 32) break; }
+  // up to 60 s; the route is asked again every 5 s (a villager or the crowd can stop the walk)
+  for (let i = 0; i < 120; i++) { await page.waitForTimeout(500); where = (await page.textContent("#location"))?.trim() ?? ""; const me = await page.evaluate(() => { const s = window.__game.scene.scenes.find((x) => x.entities); const p = s.entities.get(s.me).state; return p.x; }); if (me > 96 * 32) break; if (i % 10 === 9) await walk(); }
   await page.waitForTimeout(1500);
   errors.push("area: " + where);
-  await send("cast", "su_golem"); await page.waitForTimeout(700);
-  await send("cast", "su_attune"); await page.waitForTimeout(300);
-  await send("cast", "su_golem"); await page.waitForTimeout(1500);
-  const badge = await page.textContent("#attune");
+  const mine = () => page.evaluate(() => { const s = window.__game.scene.scenes.find((x) => x.entities); const out = []; s.entities.forEach((e) => { if (e.state.owner === s.me && !e.state.dead) out.push({ kind: e.state.kind, el: e.state.weapon, tex: e.sprite.texture.key, label: e.label?.text }); }); return out; });
+  // the grimoire on the HUD (client/src/grimoire.ts), clicked like a player: frost on page 1, storm on page 2 (Twin Bond at /max)
+  await page.waitForTimeout(2000);
+  await page.click('#grimoire [data-slot="0"]'); await page.click('#grimoire [data-el="cold"]'); await page.waitForTimeout(900);
+  await page.click('#grimoire [data-slot="1"]'); await page.click('#grimoire [data-el="shock"]'); await page.waitForTimeout(2600); // they rise GOLEM.enterMs later
+  const badge = (await page.textContent("#grimoire"))?.replace(/\s+/g, " ").trim();
   await page.screenshot({ path: OUT + "/golems.png" });
-  const info = await page.evaluate(() => { const s = window.__game.scene.scenes.find((x) => x.entities); const out = []; s.entities.forEach((e) => { if (e.state.owner) out.push({ kind: e.state.kind, tex: e.sprite.texture.key, label: e.label?.text }); }); return out; });
-  await page.waitForTimeout(8500); // the Colossus cooldown is not the issue: skills were just cast, wait for mana
+  const info = await mine();
+  await send("cast", "su_wisps"); await page.waitForTimeout(900);
+  await send("cast", "su_blades"); await page.waitForTimeout(600);
+  await page.evaluate(() => { const s = window.__game.scene.scenes.find((x) => x.entities); s.room.send("face", { x: 1, y: 0 }); });
+  await send("cast", "su_blackhole"); await page.waitForTimeout(900);
+  await page.screenshot({ path: OUT + "/wisps.png" });
+  const wisps = (await mine()).filter((e) => e.kind === "wisp");
+  await page.waitForTimeout(4000); // mana
+  await send("cast", "su_arsenal"); await page.waitForTimeout(1500);
+  await page.screenshot({ path: OUT + "/arsenal.png" });
+  const arsenal = (await mine()).filter((e) => e.kind === "wisp");
+  await page.waitForTimeout(5000); // mana
   await send("cast", "su_colossus"); await page.waitForTimeout(2000);
   await page.screenshot({ path: OUT + "/colossus.png" });
   const info2 = await page.evaluate(() => { const s = window.__game.scene.scenes.find((x) => x.entities); const out = []; s.entities.forEach((e) => { if (e.state.owner && !e.state.dead) out.push({ kind: e.state.kind, tex: e.sprite.texture.key, label: e.label?.text }); }); return out; });
-  console.log(JSON.stringify({ label, badge, golems: info, colossus: info2, errors: errors.slice(0, 8) }, null, 1));
+  console.log(JSON.stringify({ label, badge, golems: info, wisps, arsenal, colossus: info2, errors: errors.slice(0, 8) }, null, 1));
   await browser.close();
-  const ok = info.some((g) => g.tex === `mob_${g.kind}`) && info2.some((g) => g.kind === "golem_colossus" && g.tex.startsWith("mob_golem_colossus_"))
+  const kinds = info.map((g) => g.kind).sort().join();
+  const ok = kinds === "golem_cold,golem_shock" && info.every((g) => g.tex === `mob_${g.kind}`)
+    && wisps.length === 4 && wisps.every((w) => w.tex.startsWith("mob_"))
+    && arsenal.map((w) => w.el).sort().join() === "cold,fire,poison,shock"
+    && info2.some((g) => g.kind === "golem_colossus" && g.tex.startsWith("mob_golem_colossus_"))
     && !errors.some((e) => !e.startsWith("area:"));
   if (!ok) { console.error("E2E FAILED"); process.exit(1); }
   console.log("E2E OK");

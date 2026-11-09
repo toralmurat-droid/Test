@@ -99,7 +99,7 @@ export class TalentMenu {
       ? `<b class="free">${free} skill point${free > 1 ? "s" : ""} to spend</b>`
       : state.level < 2 ? "You start with a basic attack only. Reach level 2 for your first skill point." : "No points left. You get 1 point per level.") +
       `<span class="treehint">Follow the stone paths: a node needs the one before it. Upgrades change the spell at the start of their path. ` +
-      `Basic hits build ${STACK_NAME[cls]} (up to 5) for some skills.</span>`;
+      (cls === "summoner" ? `Your creatures going back to the Void build Essence (up to 5) for the ultimates.</span>` : `Basic hits build ${STACK_NAME[cls]} (up to 5) for some skills.</span>`);
 
     const W = slabWidth(cls);
     const { nodes: layout, cols } = treeLayout(cls, W, H);

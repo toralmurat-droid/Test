@@ -235,10 +235,27 @@ html, body { margin: 0; height: 100%; background: #1b1b24; color: #eee; font: 18
 #hotbar { position: absolute; left: 50%; bottom: 54px; transform: translateX(-50%); display: flex; gap: 3px; pointer-events: auto; z-index: 9; } /* above the skill tree so skills can be dropped on it */
 #hotbar .slot { position: relative; width: 44px; height: 38px; background: rgba(21,21,31,.88); border: 2px solid #555a7a; overflow: hidden;
   display: flex; flex-direction: column; align-items: center; justify-content: flex-end; font-size: 12px; font-family: var(--tiny-font); color: #eee; cursor: pointer; }
-/* Summoner: the element the next golem is called in (shared/summons.ts ATTUNE_ORDER), above the skill keys */
-#attune { position: absolute; left: 50%; bottom: 122px; transform: translateX(-50%); padding: 2px 8px; font-size: 12px; font-family: var(--tiny-font);
-  background: rgba(21,21,31,.88); border: 2px solid #555a7a; color: #eee; pointer-events: none; z-index: 9; }
-#attune b { font-weight: normal; }
+/* Summoner: the grimoire (client/src/grimoire.ts), one page per golem slot, bottom right above the mana orb */
+#grimoire { position: absolute; right: 12px; bottom: 150px; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; pointer-events: auto; z-index: 9;
+  font-family: var(--tiny-font); font-size: 12px; color: #eee; }
+#grimoire .gpages { display: flex; gap: 4px; }
+#grimoire button { font: inherit; color: inherit; cursor: pointer; background: rgba(21,21,31,.9); border: 2px solid #555a7a; padding: 2px 6px 2px 2px;
+  display: grid; grid-template-columns: 28px auto; grid-template-rows: auto auto; column-gap: 5px; align-items: center; text-align: left; min-height: 34px; }
+#grimoire button img, #grimoire .glock { grid-row: 1 / span 2; width: 28px; height: 28px; image-rendering: pixelated; }
+#grimoire .gpage { border-color: #6b4fb8; } /* Void violet */
+#grimoire .gpage.open { border-color: #c77dff; box-shadow: 0 0 6px #7b2cbf; }
+#grimoire .gpage.shut { opacity: .6; cursor: default; border-style: dashed; border-color: #555a7a; }
+#grimoire .gpage.st-wait .gstate, #grimoire .gpage.st-town .gstate { color: #aab; }
+#grimoire .gpage.st-up .gstate { color: #9be59b; }
+#grimoire .gname { font-family: var(--pixel-font); font-size: 14px; line-height: 14px; }
+#grimoire .gstate { font-size: 11px; line-height: 12px; }
+#grimoire .glock { display: block; background: #15151f; border: 1px dashed #555a7a; box-sizing: border-box; }
+#grimoire .gpick { display: grid; grid-template-columns: repeat(2, auto); gap: 4px; justify-content: end; }
+@media (max-width: 600px) { #grimoire { bottom: 250px; } } /* phones in portrait: above the wide level-up note */
+#grimoire .gpick button { grid-template-rows: auto; min-height: 32px; }
+#grimoire .gpick button img { grid-row: auto; }
+#grimoire .gpick button.cur { border-color: #c77dff; }
+#buffs .buff.lasting img { border-color: #8e6cf0; } /* a golem aura: lasts while its golem lives */
 #hotbar .slot.empty { opacity: .5; cursor: default; border-style: dashed; }
 #hotbar .slot.ult { border-color: #f77f00; }
 #hotbar .slot.wait span { color: #999; }

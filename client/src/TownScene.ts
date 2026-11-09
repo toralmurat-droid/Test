@@ -14,10 +14,8 @@ import { nextSize, potionAmount, PotionKind, potionName, POTION_SIZES, total, un
 import { GROUND, areaAt, isSafeZone } from "../../shared/map";
 import { heroPoise, meleeReach, mobBody, pvpProtected } from "../../shared/combat";
 import { respecCost, wearMult } from "../../shared/upkeep";
-import { attuneOf, isSummonKind, type AttuneElement } from "../../shared/summons";
+import { ESSENCE, isSummonKind } from "../../shared/summons";
 import { FEAST, FEAST_MAX, type Family } from "../../shared/devour";
-const ATTUNE_NAME: Record<AttuneElement, string> = { fire: "Fire", cold: "Frost", poison: "Venom", shock: "Storm" };
-const ATTUNE_COLOR: Record<AttuneElement, string> = { fire: "#ff9f1c", cold: "#4cc9f0", poison: "#7cfc00", shock: "#b3ecff" };
 import { moveStep } from "../../shared/movement";
 import { SPAWN_ZONES, zoneAt } from "../../shared/spawns";
 import { musicCombat, setMusicZone } from "./music";
@@ -92,6 +90,7 @@ import { BOARDS, BOARD_RANGE } from "../../shared/bounty";
 import { PortalLayer } from "./portal";
 import { BOON_NAMES, WIND_BLESSING } from "../../shared/shrine";
 import { BuffBar } from "./buffbar";
+import { GrimoirePanel } from "./grimoire";
 import { addWorldProps } from "./worldProps";
 import { addSiegeWorks } from "./siegeArt";
 import { SiegeWork } from "./siegeWork";
@@ -351,6 +350,7 @@ export class TownScene extends Phaser.Scene {
   private side?: SidePanel;
   private hotbarHtml = "";
   private buffBar?: BuffBar;
+  private grimoire?: GrimoirePanel;
   private resBars?: ResourceBars;
   private heatGauge?: OverloadGauge;
   private statsShown = "";
@@ -1282,6 +1282,10 @@ export class TownScene extends Phaser.Scene {
       this.showSwing(id, step ?? 0, variant ?? 0, ax, ay, w);
     });
     this.room.onMessage("sfx", (ev) => this.onSkillFx(ev));
+    // The Summoner's grimoire on the HUD (client/src/grimoire.ts): its news, asked again now that we listen
+    this.grimoire = new GrimoirePanel(document.getElementById("hud")!, (slot, el) => this.room.send("grimoire", { slot, el }));
+    this.room.onMessage("golems", (m) => this.grimoire?.news(m));
+    this.room.send("golems");
     bindSfx(this.room, () => this.me, this.entities as any); // sound effects (client/src/sfx.ts)
     this.room.onMessage("boom", ({ x, y, r, kind, imb }) => this.fx.impact(x, y, kind, r, imb) ||
       (kind === "arrow" || kind === "stone" || kind === "knife" || kind === "bolt" ? this.burst(x, y, 3, 0xd7ccc8, 150)
@@ -1431,18 +1435,6 @@ export class TownScene extends Phaser.Scene {
       const t = (ev.target as HTMLElement).closest("button");
       if (t && ev.detail === 0) { ev.preventDefault(); ev.stopImmediatePropagation(); }
     }, true);
-  }
-
-  /** Summoner: which element the next golem comes in (Attune turns it). */
-  private attuneShown = "";
-  private showAttune(p: any) {
-    const el = p?.cls === "summoner" ? attuneOf(p.attune ?? 0) : "";
-    if (el === this.attuneShown) return;
-    this.attuneShown = el;
-    const box = document.getElementById("attune");
-    if (!box) return;
-    box.hidden = !el;
-    if (el) box.innerHTML = `Next golem: <b style="color:${ATTUNE_COLOR[el]}">${ATTUNE_NAME[el]}</b>`;
   }
 
   /**
@@ -2578,10 +2570,14 @@ export class TownScene extends Phaser.Scene {
       .map((id) => skillOf(cls, id)).filter((sd) => sd?.consume && skillLearned(cls, mine.talents, sd.id));
     if (!users.length) return "";
     const name = STACK_NAME[cls];
-    const left = n > 0 ? Math.max(0, STACK_DECAY_MS - (now - this.chargeSeen.at)) : 0;
-    const shade = n > 0 ? `<div class="cd" style="height:${Math.round((1 - left / STACK_DECAY_MS) * 50) * 2}%"></div>` : "";
+    // The Summoner's Void Essence comes from the Void, not from basic hits, and lasts longer (shared/summons.ts ESSENCE)
+    const decay = cls === "summoner" ? ESSENCE.decayMs : STACK_DECAY_MS;
+    const left = n > 0 ? Math.max(0, decay - (now - this.chargeSeen.at)) : 0;
+    const shade = n > 0 ? `<div class="cd" style="height:${Math.round((1 - left / decay) * 50) * 2}%"></div>` : "";
     const pips = Array.from({ length: MAX_STACKS }, (_, i) => `<i class="${i < n ? "on" : ""}"></i>`).join("");
-    const tip = `Built by your basic hits, up to ${MAX_STACKS}. They fade ${STACK_DECAY_MS / 1000} s after your last hit. ` +
+    const tip = (cls === "summoner"
+      ? `Void Essence, up to ${MAX_STACKS}: one each time one of your creatures goes back to the Void (dies or fades), each foe your Black Hole swallows, and now and then while a golem takes blows for you. It fades ${decay / 1000} s after the last one. `
+      : `Built by your basic hits, up to ${MAX_STACKS}. They fade ${STACK_DECAY_MS / 1000} s after your last hit. `) +
       `Spent by ${users.map((u) => u!.name).join(", ")}: each one makes it stronger.`;
     return `<div class="slot charge${n ? "" : " wait"}" data-tiphead="${name} ${n}/${MAX_STACKS}" data-tip="${tipEsc(tip)}">` +
       `<img class="sicon" src="${chargeIcon(cls)}" alt="" draggable="false">${shade}${n ? `<b>${n}</b>` : ""}<span class="pips">${pips}</span></div>`;
@@ -3016,7 +3012,7 @@ export class TownScene extends Phaser.Scene {
           : windFlash ? (Math.floor(now / 70) % 2 ? 0xff6b6b : 0xffffff)
           : p.slowed ? 0x90caf9 : (Math.floor(now / 200) % 2 ? 0xff8a80 : 0xffcdd2));
         e.statusTint = true;
-      } else if (e.mob && p.owner && !isSummonKind(p.kind) && !p.dead) {
+      } else if (e.mob && p.owner && !isSummonKind(p.kind) && p.kind !== "wisp" && !p.dead) {
         // A vampire's thrall (Bite, shared/devour.ts): drained pale with a blood-red cast
         e.sprite.setTint(0xe0a8b4); e.statusTint = true;
       } else if (e.statusTint) { e.sprite.clearTint(); e.statusTint = false; }
@@ -3037,11 +3033,13 @@ export class TownScene extends Phaser.Scene {
         const kindName = named ? (MOBS[p.kind as MobKind]?.name ?? "") : "";
         const lv = `Lv${p.level ?? 1}`;
         const owner = p.owner ? (this.room.state as any).players?.get(p.owner) : undefined;
-        const txt = owner ? `${owner.name}'s ${MOBS[p.kind as MobKind]?.name ?? "Golem"}${isSummonKind(p.kind) || p.kind === "bride" ? "" : " thrall"}` : p.title ? `${p.title} ${lv}` : BOSS[p.kind as keyof typeof BOSS] ? `${kindName || "Boss"} ${lv}` : ELITE[p.kind as keyof typeof ELITE] ? `Elite ${kindName ? kindName + " " : ""}${lv}` : kindName ? `${kindName} ${lv}` : lv;
+        const txt = owner ? `${owner.name}'s ${MOBS[p.kind as MobKind]?.name ?? "Golem"}${isSummonKind(p.kind) || p.kind === "bride" || p.kind === "wisp" ? "" : " thrall"}` : p.title ? `${p.title} ${lv}` : BOSS[p.kind as keyof typeof BOSS] ? `${kindName || "Boss"} ${lv}` : ELITE[p.kind as keyof typeof ELITE] ? `Elite ${kindName ? kindName + " " : ""}${lv}` : kindName ? `${kindName} ${lv}` : lv;
         // A monster right next to my hero: my own name steps aside so the two labels never overlap
         const meS = this.entities.get(this.me)?.sprite;
         if (meS && !p.dead && Math.abs(e.sprite.x - meS.x) < 1.5 * TILE && Math.abs(e.sprite.y - meS.y) < 1.5 * TILE) this.mobByMeAt = now;
-        if (e.label.text !== txt) e.label.setText(txt);
+        // A Summoner's wisps come four at a time and stick to their owner: their name only under the mouse
+        const shown = p.kind === "wisp" && !named ? "" : txt;
+        if (e.label.text !== shown) e.label.setText(shown);
         if (e.lvlColor !== col) { e.label.setColor(col); e.lvlColor = col; }
         e.label.setVisible(!p.dead && !p.hidden);
       } else if (e.label && id === this.me) {
@@ -3145,7 +3143,7 @@ export class TownScene extends Phaser.Scene {
     this.bounty?.update(meEnt && !meEnt.state.dead ? meEnt.sprite : undefined, !!this.npcs?.isOpen || !!this.chests?.near || !!this.stash?.near);
     if (this.npcs) { this.npcs.hidePrompt = !!this.chests?.near || !!this.shrine?.near || !!this.portals?.near || !!this.stash?.near || !!this.bounty?.near; this.npcs.extraBlock = this.bounty?.trackerBlock() ?? ""; }
     this.npcs?.update(meEnt && !meEnt.state.dead ? meEnt.sprite : undefined, meEnt?.state);
-    this.showAttune(meEnt?.state);
+    this.grimoire?.update(meEnt?.state?.cls);
     this.waygates?.update(meEnt?.state);
     this.portals?.update(meEnt && !meEnt.state.dead ? meEnt.sprite : undefined, !!this.npcs?.isOpen || !!this.chests?.near || !!this.shrine?.near);
     if (this.minimap && this.npcs) this.minimap.markers = [...this.npcs.markers, ...(this.portals?.markers() ?? []), ...(this.bounty?.markers() ?? []), ...(this.dungeon?.markers() ?? []), ...(this.waygates?.markers() ?? [])];

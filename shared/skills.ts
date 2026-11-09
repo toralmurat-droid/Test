@@ -20,6 +20,10 @@ import type { StatKind } from "./powers";
 export type TalentEffect = "dmg" | "skill" | "crit" | "lifesteal" | "hp" | "armor" | "speed" | "cdr" | "regen" | "mana"
   | "night" // vampire Child of the Night: stronger at night (nightBuff)
   | "summonHp" | "summonDmg" // the Summoner's golems (shared/summons.ts): +% life, +% damage
+  | "summon" // both of those (Golem Mastery)
+  // Summoner, Void Lord rework (shared/summons.ts): golem regen near the owner (%/s), Stone Bond share (+%), aura
+  // strength (+%), second golem, black hole size (+%), after-blink rush, Void Slip, blade damage (+%), wisps, Return to the Void
+  | "golemRegen" | "bond" | "resonance" | "twin" | "gravity" | "velocity" | "slip" | "edge" | "swarm" | "return"
   | "upgrade"; // an upgrade node (SkillDef.mod): changes one spell instead of giving a bonus
 
 /**
@@ -49,7 +53,7 @@ export interface HitEffects {
   markMs?: number; // takes MARK_TAKEN more damage
   weakMs?: number; // deals WEAK_DEALT less damage
   fearMs?: number; // monsters run away dizzy; heroes are slowed and weakened
-  pull?: number; // px pulled toward the centre
+  pull?: number; // px pulled toward the centre (areas: once; fields: every tick)
   drain?: number; // % of the damage dealt that heals the attacker (vampire blood magic)
   /** Vampire Leech: for this long, every hit the caster lands on the target also gives them one Blood stack. */
   leechMs?: number;
@@ -122,6 +126,14 @@ export interface FieldDef extends HitEffects {
   link?: { range: number; breakAt: number; give?: number };
   /** Nightfall: it is night inside (night passives such as Child of the Night count it as night). */
   night?: boolean;
+  /**
+   * Black Hole (Summoner): `pull` drags foes in every tick (heroes by SUMMON.pvp.cc of it), enemy projectiles that
+   * enter vanish, monsters below `below` of their life are swallowed and spat out further away, and when it closes
+   * every monster still inside is swallowed and every hero thrown out a few steps (SkillHost.voidHop).
+   */
+  hole?: { below: number };
+  /** Void Blades: this many blades circle the hero (the look; Void Edge adds more and they take the golem's element). */
+  blades?: number;
 }
 
 export interface BuffDef {
@@ -138,6 +150,7 @@ export interface BuffDef {
   onHit?: HitEffects & { wpn?: number; chain?: number }; // enchantment: added to basic attacks (and arrows)
   thorns?: HitEffects & { wpn?: number; dmg?: number }; // hits whoever strikes you in melee range
   perStack?: number; // +% damage per stack spent (with SkillDef.consume)
+  cdr?: number; // -% skill cooldowns while it lasts (Void Velocity)
   /** Bloodline (Thirst): group allies within this many px get the same buff with half its lifesteal. */
   group?: number;
   /**
@@ -187,6 +200,13 @@ export interface SkillDef {
     rise?: { hp: number; cdMs: number };
     /** Bloodlust (Undying Hunger): every kill gives this buff. */
     kill?: BuffDef;
+    /** Void Velocity: a blink (Rift Step) gives a buff of `ms` with +perRank x rank % speed and -% cooldowns. */
+    blink?: { ms: number };
+    /**
+     * Void Slip: a blow that drops the hero below `below` of their life sends them into the Void for `ms` (+`perRank`
+     * per rank above 1): untouchable and unseen, monsters drop them. Once every `cdMs`; they come out with +speed%.
+     */
+    slip?: { below: number; ms: number; perRank: number; cdMs: number; speed: number; speedMs: number };
   };
   cd?: number; // ms
   cost?: number; // Heat (physical skills, shared/overload.ts)
@@ -210,12 +230,14 @@ export interface SkillDef {
   cantrip?: boolean;
   /** Damage multiplier: quick spells that can be cast again and again hit softer per cast (wizard, Diablo 2 style). */
   power?: number;
-  /** Summoner (shared/summons.ts): calls a golem of the hero's current element (Player.attune). */
+  /** Summoner (shared/summons.ts): pulls the hero's golems back out of the Void at once, whole. */
   summon?: boolean;
   /** Summoner ultimate: the hero's golems fuse into one Colossus for `ms`. */
   colossus?: { ms: number };
-  /** Summoner basic spell: turns the element the next golem (and the Colossus) is called in. */
-  attune?: boolean;
+  /** Summoner: calls `n` elemental wisps (+1 with Swarm, at most 4) that shoot the hero's foes for `ms` (SkillHost.wisps). */
+  wisps?: { n: number; ms: number };
+  /** Summoner ultimate: the Void's armoury for `ms` (blade, lance, axe and the four wisps; SkillHost.arsenal). */
+  arsenal?: { ms: number };
   /** Vampire Devour: bite the fleshy foe nearest the aim; a weak monster is eaten whole (shared/devour.ts feast). */
   devour?: FangDef;
   /** Vampire Bite: bite the fleshy foe nearest the aim; a weak monster may fall and rise as a thrall (shared/devour.ts THRALL). */
@@ -277,7 +299,7 @@ export const BRANCHES: Record<ClassKind, [BranchDef, BranchDef, BranchDef]> = {
   archer: [{ name: "Marksman", color: "#e63946" }, { name: "Trapper", color: "#a68a64" }, { name: "Nature", color: "#7cfc00" }],
   barbarian: [{ name: "Fury", color: "#e63946" }, { name: "Warcry", color: "#ffd166" }, { name: "Earth", color: "#a68a64" }],
   vampire: [{ name: "Blood", color: "#c1121f" }, { name: "Night", color: "#9d4edd" }, { name: "Fang", color: "#c0c8d8" }],
-  summoner: [{ name: "Earth", color: "#a68a64" }, { name: "Flux", color: "#4cc9f0" }, { name: "Ruin", color: "#b388ff" }],
+  summoner: [{ name: "Golems", color: "#a68a64" }, { name: "Void", color: "#9d4edd" }, { name: "Conjuration", color: "#b388ff" }],
 };
 
 const S: Record<ClassKind, SkillDef[]> = <Record<ClassKind, SkillDef[]>><unknown>{
@@ -627,56 +649,61 @@ const S: Record<ClassKind, SkillDef[]> = <Record<ClassKind, SkillDef[]>><unknown
   ],
 
   // ---------------------------------------------------------------- SUMMONER
-  // Murat 2026-11-07: golems (shared/summons.ts) do the fighting; the Summoner calls, guards and arms them.
-  // Rows unlock at levels 1, 3, 5, 8 and 10: Golem (Lv 1), Vital Link (3), Conjured Blade (5), Conjured Armour (8), Colossus (10).
+  // Void Lord rework (Murat 2026-11-08): the Summoner rules the Void. Golems are permanent (shared/summons.ts GOLEM),
+  // the grimoire picks their elements, every creature acts on its own (no commands), and the Essence they leave when
+  // they go back to the Void feeds the ultimates.
   summoner: [
-    // Earth: the golems' toughness
-    { id: "su_golem", name: "Elemental Golem", type: "Summon", branch: 0, row: 0, style: "earth", cd: 8000, mana: 25, target: "self",
-      desc: "Call a golem of your current element (Attune to change it). Up to 2 fight for you; a third sends the oldest back. Ranks: tougher, harder-hitting golems.",
+    // Golems: the permanent golems, their auras and the Colossus
+    { id: "su_golem", name: "Elemental Golem", type: "Summon", branch: 0, row: 0, style: "earth", cd: 10000, mana: 25, target: "self",
+      desc: "Your golems answer from the Void by themselves (12s after one falls). Cast this to pull them back at once, whole again. Choose their elements in your grimoire. Ranks: tougher, harder-hitting golems.",
       summon: true },
-    { id: "su_link", name: "Vital Link", type: "Passive", branch: 0, row: 1, style: "earth", passive: { effect: "summonHp", perRank: 12 },
-      desc: "Your life force flows into your golems: more life, and they mend 1% of it per second per rank while close to you." },
-    { id: "su_stonehide", name: "Stone Hide", type: "Passive", branch: 0, row: 2, style: "earth", passive: { effect: "armor", perRank: 3 },
-      desc: "Your skin hardens like your golems': take less damage." },
-    { id: "su_armour", name: "Conjured Armour", type: "Enchant", branch: 0, row: 3, style: "earth", cd: 14000, mana: 20, target: "self",
-      desc: "Conjure armour of living stone around you for 10s: you take 40% less damage, mend 2% of your life a second and shrug off stuns and knockback.",
-      buff: { ms: 10000, armor: 40, regen: 2, immune: true } },
-    { id: "su_colossus", name: "Colossus", type: "Ultimate", branch: 0, row: 4, style: "earth", cd: 45000, mana: 50, chargeMs: 600, target: "self",
-      desc: "Your golems fuse into one Colossus of your current element for 30s: far tougher, slams everything around it. With no golem out, it rises alone.",
+    { id: "su_bond", name: "Stone Bond", type: "Passive", branch: 0, row: 1, style: "earth", passive: { effect: "bond", perRank: 2 },
+      desc: "Your nearest golem always takes part of every blow you take (30%, 22% from Lv 25). Each rank adds more. While it takes blows for you, the Void gives you Essence." },
+    { id: "su_might", name: "Golem Mastery", type: "Passive", branch: 0, row: 1, style: "earth", passive: { effect: "summon", perRank: 8 },
+      desc: "Your golems grow from the Void's own stone: more life and harder blows." },
+    { id: "su_link", name: "Vital Link", type: "Passive", branch: 0, row: 2, style: "earth", passive: { effect: "golemRegen", perRank: 1 },
+      desc: "Your life force flows into your golems: close to you, they mend part of their life every second." },
+    { id: "su_resonance", name: "Resonance", type: "Passive", branch: 0, row: 2, style: "arcane", passive: { effect: "resonance", perRank: 10 },
+      desc: "Each golem wraps you in the aura of its element (fire: harder, burning blows; frost: less damage, attackers chilled; venom: drink life, poisoned blows; storm: faster). Two of one element resonate (x1.5). Each rank makes every aura stronger." },
+    { id: "su_twin", name: "Twin Bond", type: "Passive", branch: 0, row: 3, style: "earth", passive: { effect: "twin", perRank: 1 },
+      desc: "A second golem answers your call. Its element is the second page of your grimoire." },
+    { id: "su_colossus", name: "Colossus", type: "Ultimate", branch: 0, row: 4, style: "earth", cd: 45000, mana: 50, chargeMs: 600, target: "self", consume: true,
+      desc: "Your golems fuse into one Colossus for 30s: far tougher, it slams everything around it and carries both their auras and powers. When its time is up it splits back into your golems. Spends your Essence: +25% per charge.",
       colossus: { ms: 30_000 } },
 
-    // Flux: speed and cooldowns
+    // Void: control and escape
     { id: "su_step", name: "Rift Step", type: "Movement", branch: 1, row: 0, style: "arcane", cd: 5000, cost: 20,
       desc: "Step through a rift and come out ahead of you, untouchable for a moment.",
       move: { kind: "blink", dist: 60, invulnMs: 300 } },
-    { id: "su_quick", name: "Quick Binding", type: "Passive", branch: 1, row: 1, style: "arcane", passive: { effect: "cdr", perRank: 4 },
-      desc: "Practised words: every skill comes back sooner." },
-    { id: "su_flow", name: "Essence Flow", type: "Passive", branch: 1, row: 2, style: "arcane", passive: { effect: "mana", perRank: 8 },
-      desc: "Mana wells up faster and runs deeper." },
-    { id: "su_swift", name: "Wind of the Rift", type: "Passive", branch: 1, row: 3, style: "wind", passive: { effect: "speed", perRank: 4 },
-      desc: "You move faster, and your golems keep up." },
-    { id: "su_rift", name: "Elemental Rift", type: "Ultimate", branch: 1, row: 4, style: "arcane", cd: 24000, mana: 40, chargeMs: 400,
-      desc: "Tear open a rift at the spot for 5s: it drags enemies in and storms them with every element.",
-      field: { kind: "storm", r: 60, ms: 5000, tickMs: 500, dmg: 14, pull: 6, slowMs: 500 } },
+    { id: "su_blackhole", name: "Black Hole", type: "Attack", branch: 1, row: 1, style: "arcane", cd: 14000, mana: 30, target: "point",
+      desc: "Open a black hole at the spot for 3s: it drags foes in, tears at them and swallows every enemy projectile. Monsters at the end, or worn down below 15% of their life, are swallowed and spat out further away (each gives Essence). Heroes are never swallowed: they are thrown out a few steps.",
+      field: { kind: "blackhole", r: 64, ms: 3000, tickMs: 500, dmg: 9, pull: 7, hole: { below: 0.15 } } },
+    { id: "su_velocity", name: "Void Velocity", type: "Passive", branch: 1, row: 1, style: "wind", passive: { effect: "velocity", perRank: 8, blink: { ms: 3000 } },
+      desc: "Coming out of a Rift Step, you move faster and your skills come back sooner for 3s." },
+    { id: "su_gravity", name: "Gravity", type: "Passive", branch: 1, row: 2, style: "arcane", passive: { effect: "gravity", perRank: 10 },
+      desc: "Your black holes grow wider and pull harder." },
+    { id: "su_slip", name: "Void Slip", type: "Passive", branch: 1, row: 3, style: "shadow", passive: { effect: "slip", perRank: 1, slip: { below: 0.25, ms: 1500, perRank: 200, cdMs: 60_000, speed: 30, speedMs: 2000 } },
+      desc: "When a blow drops you below 25% life, you slip into the Void: unseen and untouchable for a moment, monsters lose you and turn on your golems, and you come out running. Once a minute. Ranks: longer." },
+    { id: "su_horizon", name: "Event Horizon", type: "Ultimate", branch: 1, row: 4, style: "arcane", cd: 45000, mana: 50, chargeMs: 400, target: "point", consume: true,
+      desc: "Tear open a giant black hole for 5s: it drags in everything around, swallows every projectile and spits out what it eats. Spends your Essence: +25% per charge.",
+      field: { kind: "blackhole", r: 110, ms: 5000, tickMs: 500, dmg: 12, pull: 10, hole: { below: 0.15 } } },
 
-    // Ruin: elemental damage
-    { id: "su_mote", name: "Elemental Mote", type: "Attack", branch: 2, row: 0, style: "lightning", cd: 2500, mana: 10,
-      desc: "Hurl a mote of raw element: it bursts on the target and arcs to one more enemy close by.",
-      shots: { kind: "lightning", speed: 300, range: 160, radius: 5, dmg: 28, chain: 1, kb: 0.4 } },
-    { id: "su_ruin", name: "Ruin", type: "Passive", branch: 2, row: 1, style: "fire", passive: { effect: "summonDmg", perRank: 10 },
-      desc: "Your golems hit harder." },
-    { id: "su_blade", name: "Conjured Blade", type: "Enchant", branch: 2, row: 2, style: "arcane", cd: 14000, mana: 20, target: "self",
-      desc: "Conjure a blade of pure element for 10s: you deal 20% more damage, every hit strikes a second time with the spectral edge, and you heal 12% of all the damage you deal.",
-      buff: { ms: 10000, dmg: 20, lifesteal: 12, onHit: { wpn: 0.3 } } },
-    { id: "su_mastery", name: "Elemental Mastery", type: "Passive", branch: 2, row: 3, style: "arcane", passive: { effect: "skill", perRank: 6 },
-      desc: "All your skills hit harder." },
-    { id: "su_cataclysm", name: "Cataclysm", type: "Ultimate", branch: 2, row: 4, style: "fire", cd: 26000, mana: 45, chargeMs: 500,
-      desc: "Call down fire, ice and lightning on the spot in turn: three bursts that burn, slow and stun.",
-      areas: [
-        { r: 44, ahead: 50, dmg: 34, burn: [8, 2500], kb: 0.8, look: "meteor" },
-        { r: 44, ahead: 50, dmg: 26, slowMs: 1200, delayMs: 400, look: "pillar" },
-        { r: 44, ahead: 50, dmg: 26, stunMs: 600, delayMs: 800, look: "bolt" },
-      ] },
+    // Conjuration: weapons and wisps out of the Void
+    { id: "su_blades", name: "Void Blades", type: "Enchant", branch: 2, row: 0, style: "arcane", cd: 12000, mana: 20, target: "self",
+      desc: "Three blades of the Void circle you for 8s, cutting every foe they pass. They take your golem's element.",
+      field: { kind: "voidblades", r: 30, ms: 8000, tickMs: 450, follow: true, dmg: 6, blades: 3 } },
+    { id: "su_wisps", name: "Elemental Wisps", type: "Summon", branch: 2, row: 1, style: "lightning", cd: 16000, mana: 30, target: "self",
+      desc: "Call three wisps out of the Void for 15s, one of each of your golems' elements: they float near you and shoot at your foes on their own. When they fade they burst in their element.",
+      wisps: { n: 3, ms: 15_000 } },
+    { id: "su_edge", name: "Void Edge", type: "Passive", branch: 2, row: 1, style: "arcane", passive: { effect: "edge", perRank: 10 },
+      desc: "Your Void Blades cut deeper, and more of them circle you (+1 at ranks 3 and 5)." },
+    { id: "su_return", name: "Return to the Void", type: "Passive", branch: 2, row: 2, style: "spirit", passive: { effect: "return", perRank: 2 },
+      desc: "Each of your creatures that goes back to the Void gives you back some life and mana (at most once a second)." },
+    { id: "su_swarm", name: "Swarm", type: "Passive", branch: 2, row: 3, style: "lightning", passive: { effect: "swarm", perRank: 15 },
+      desc: "One more wisp answers your call (up to four), and your wisps last longer." },
+    { id: "su_arsenal", name: "Void Arsenal", type: "Ultimate", branch: 2, row: 4, style: "arcane", cd: 40000, mana: 50, chargeMs: 400, target: "self", consume: true,
+      desc: "Open the Void's armoury for 8s: a blade circles you, a lance flies at your foes and runs them through, an axe sweeps a wide arc, and all four elemental wisps fight at your side. Spends your Essence: +25% per charge.",
+      arsenal: { ms: 8000 } },
   ],
 };
 
@@ -688,13 +715,14 @@ const S: Record<ClassKind, SkillDef[]> = <Record<ClassKind, SkillDef[]>><unknown
 type Shape = [req: number, parent?: string, scale?: [StatKind, number]];
 // Attribute scaling was cut to 60% in the balance pass of 2026-11-04: it multiplied with the weapon hit / Magic, so high-level skills grew far too fast
 const TREE: Record<string, Shape> = {
-  // Summoner (Murat 2026-11-07): Golem Lv 1, Vital Link 3, Conjured Blade 5, Conjured Armour 8, Colossus 10.
-  // The golems and the Colossus grow with Magic (their life and damage take the skill's power).
-  su_golem: [1, undefined, ["mag", 2]], su_link: [3, "su_golem"], su_stonehide: [6, "su_link"], su_armour: [8, "su_link"],
-  su_colossus: [10, "su_armour", ["mag", 2.5]],
-  su_step: [1], su_quick: [4, "su_step"], su_flow: [7, "su_quick"], su_swift: [12, "su_quick"], su_rift: [20, "su_flow", ["mag", 2.5]],
-  su_mote: [2, undefined, ["mag", 2]], su_ruin: [4, "su_mote"], su_blade: [5, "su_mote"], su_mastery: [13, "su_blade"],
-  su_cataclysm: [22, "su_mastery", ["mag", 2.5]],
+  // Summoner, Void Lord rework (Murat 2026-11-08): Lv 1 roots, Twin Bond 18, Colossus 20, Event Horizon 21, Void Arsenal 22.
+  // The golems, wisps, blades and black holes grow with Magic.
+  su_golem: [1, undefined, ["mag", 2]], su_bond: [2, "su_golem"], su_might: [3, "su_golem"], su_link: [5, "su_might"],
+  su_resonance: [9, "su_bond"], su_twin: [18, "su_might"], su_colossus: [20, "su_twin", ["mag", 2.5]],
+  su_step: [1], su_blackhole: [4, "su_step", ["mag", 2]], su_velocity: [6, "su_step"], su_gravity: [8, "su_blackhole"],
+  su_slip: [12, "su_velocity"], su_horizon: [21, "su_gravity", ["mag", 2.5]],
+  su_blades: [1, undefined, ["mag", 2]], su_wisps: [3, "su_blades", ["mag", 2]], su_edge: [6, "su_blades"], su_return: [8, "su_wisps"],
+  su_swarm: [11, "su_wisps"], su_arsenal: [22, "su_edge", ["mag", 2.5]],
   // Knight · Valor: lunge forks into a dead-end charge and the whirl, which grows on to the Judgement Blade
   k_lunge: [1, undefined, ["str", 2.5]], k_rush: [9, "k_lunge", ["str", 2.5]], k_whirl: [4, "k_lunge", ["str", 2.5]],
   k_mastery: [12, "k_whirl"], k_judgement: [22, "k_whirl", ["str", 3]],
@@ -784,6 +812,13 @@ const VAMP_RANKS: Record<string, [number, string?]> = {
   v_rend: [5], v_thirst: [3], v_hunger: [5], v_pounce: [3], v_devour: [3, "eats foes with 5% more life left"], v_bite: [3, "10% more chance to turn, +1 thrall at rank 2"], v_brides: [3, "+1 bride"], v_wolfform: [3],
 };
 for (const sk of S.vampire) { const v = VAMP_RANKS[sk.id]; if (v) { sk.maxRank = v[0]; sk.rankStep = v[1]; if (v[0] > 3) sk.rankLevels = VAMP_MASTERY; } }
+/** Summoner ranks (Void Lord rework 2026-11-08), on the vampire's model: ranks 4-5 are mastery ranks (Lv 30 and 40). */
+const SUMMONER_RANKS: Record<string, [number, string?]> = {
+  su_golem: [5], su_bond: [5, "+2% of each blow"], su_might: [5], su_link: [3], su_resonance: [3], su_twin: [1], su_colossus: [5],
+  su_step: [3], su_blackhole: [5], su_velocity: [3], su_gravity: [3], su_slip: [3, "+0.2s in the Void"], su_horizon: [5],
+  su_blades: [5], su_wisps: [5], su_edge: [5, "+1 blade at ranks 3 and 5"], su_return: [3], su_swarm: [3, "wisps last longer"], su_arsenal: [5],
+};
+for (const sk of S.summoner) { const v = SUMMONER_RANKS[sk.id]; if (v) { sk.maxRank = v[0]; sk.rankStep = v[1]; if (v[0] > 3) sk.rankLevels = VAMP_MASTERY; } }
 for (const list of Object.values(S)) for (const sk of list) {
   sk.needs = NEEDS[sk.id];
   sk.requires = REQUIRES[sk.id];
@@ -862,12 +897,7 @@ export const childrenOf = (cls: ClassKind, id: string) => S[cls].filter((x) => x
  */
 export const CANTRIPS: Record<ClassKind, SkillDef[]> = {
   knight: [], ninja: [], archer: [], barbarian: [],
-  // The Summoner turns the element their next golem is called in (Murat 2026-11-07: one key cycles the elements)
-  summoner: [
-    { id: "su_attune", name: "Attune", type: "Summon", branch: 0, row: 0, req: 1, style: "arcane", cd: 250, cantrip: true, target: "self",
-      desc: "Turn to the next element: fire, frost, venom, storm. Your next golem (and the Colossus) is called in it.",
-      attune: true },
-  ],
+  summoner: [], // Attune is gone: the grimoire picks the golems' elements (Void Lord rework 2026-11-08)
   // The vampire's one basic spell: a flick of blood up close that drinks a little back (Murat 2026-11-05: warrior caster)
   vampire: [
     { id: "v_leech", name: "Leech", type: "Attack", branch: 0, row: 0, req: 1, style: "blood", cd: 450, mana: 4, cantrip: true,
@@ -937,7 +967,8 @@ export const canLearn = (cls: ClassKind, level: number, r: Ranks, id: string) =>
 /** Total passive bonus for an effect, in percent (e.g. 12 = +12%). */
 export function talentBonus(cls: ClassKind, r: Ranks, effect: TalentEffect): number {
   let v = 0;
-  for (const s of S[cls]) if (s.passive?.effect === effect) v += s.passive.perRank * Math.min(maxRank(s), rankOf(r, s.id));
+  const both = effect === "summonHp" || effect === "summonDmg"; // Golem Mastery ("summon") counts for both
+  for (const s of S[cls]) if (s.passive?.effect === effect || (both && s.passive?.effect === "summon")) v += s.passive!.perRank * Math.min(maxRank(s), rankOf(r, s.id));
   return v;
 }
 /** The buff Child of the Night gives at night, from its total passive value `v` (perRank x rank). */
@@ -966,6 +997,17 @@ export const EFFECT_TEXT: Record<TalentEffect, (v: number) => string> = {
   night: (v) => { const b = nightBuff(v); return `At night: +${b.dmg}% damage, heal ${b.lifesteal}% of damage dealt, +${b.speed}% move speed`; },
   summonHp: (v) => `+${v}% golem life`,
   summonDmg: (v) => `+${v}% golem damage`,
+  summon: (v) => `+${v}% golem life and damage`,
+  golemRegen: (v) => `Golems near you mend ${v}% of their life per second`,
+  bond: (v) => `Stone Bond: your golem takes ${v}% more of each blow`,
+  resonance: (v) => `+${v}% aura strength`,
+  twin: () => `A second golem`,
+  gravity: (v) => `+${v}% black hole size and pull`,
+  velocity: (v) => `After a Rift Step: +${v}% move speed, -${v}% cooldowns for 3s`,
+  slip: (v) => `Slip into the Void below 25% life (${(1.3 + 0.2 * v).toFixed(1)}s, once a minute)`,
+  edge: (v) => `+${v}% Void Blade damage`,
+  swarm: (v) => `+1 wisp, wisps last ${v}% longer`,
+  return: (v) => `Each creature back in the Void heals ${v}% life and mana`,
   upgrade: () => "",
 };
 
