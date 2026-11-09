@@ -1064,5 +1064,71 @@
   "h": 22,
   "scale": 1.5,
   "frames": 12
+ },
+ "mob_champ_split": {
+  "w": 20,
+  "h": 20,
+  "scale": 1.5,
+  "frames": 2
+ },
+ "mob_champ_taint": {
+  "w": 20,
+  "h": 20,
+  "scale": 1.5,
+  "frames": 2
+ },
+ "mob_champ_siege": {
+  "w": 20,
+  "h": 20,
+  "scale": 1.5,
+  "frames": 2
+ },
+ "mob_champ_risen": {
+  "w": 20,
+  "h": 20,
+  "scale": 1.5,
+  "frames": 2
+ },
+ "mob_champ_stitched": {
+  "w": 20,
+  "h": 20,
+  "scale": 1.5,
+  "frames": 2
+ },
+ "mob_champ_gang": {
+  "w": 20,
+  "h": 20,
+  "scale": 1.5,
+  "frames": 2
+ },
+ "mob_champ_sunborn": {
+  "w": 20,
+  "h": 20,
+  "scale": 1.5,
+  "frames": 2
+ },
+ "mob_champ_buried": {
+  "w": 20,
+  "h": 20,
+  "scale": 1.5,
+  "frames": 2
+ },
+ "mob_champ_deepvenom": {
+  "w": 20,
+  "h": 20,
+  "scale": 1.5,
+  "frames": 2
+ },
+ "mob_champ_veil": {
+  "w": 20,
+  "h": 20,
+  "scale": 1.5,
+  "frames": 2
+ },
+ "mob_champ_brand": {
+  "w": 20,
+  "h": 20,
+  "scale": 1.5,
+  "frames": 2
  }
 }

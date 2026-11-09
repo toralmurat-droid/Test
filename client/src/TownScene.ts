@@ -99,6 +99,7 @@ import { icon, fillIcons } from "./pixelicons";
 import { ResourceBars } from "./resourceBars";
 import { OverloadGauge } from "./overloadGauge";
 import { bindElemFx } from "./elemFx";
+import { ChampionFx } from "./championFx";
 import { bindBeastFx } from "./beastFx";
 import { bindRaiderFx, raiderTrail } from "./raiderFx";
 import { DungeonView } from "./dungeon";
@@ -328,6 +329,7 @@ export class TownScene extends Phaser.Scene {
   private ambient?: Ambient;
   private details?: Details;
   private siege!: SiegeWork;
+  private champFx?: ChampionFx; // champions (shared/champions.ts): tint, glow, icons, painted details, their moments
   private areaName = "";
   private areaTimer?: number;
   private shots = new Map<string, { g: Phaser.GameObjects.GameObject & { x: number; y: number }; tx: number; ty: number; at: number; dx: number; dy: number; spd: number }>();
@@ -735,7 +737,7 @@ export class TownScene extends Phaser.Scene {
         e.tx = m.x; e.ty = m.y;
         pushSnap(e, m.x, m.y);
         // A respawned Mother Blob can come back at another level, a skeleton with another weapon
-        if (m.kind === "motherblob" || m.kind === "skeleton" || m.kind === "bandit" || m.kind === "demon") {
+        if (m.kind === "motherblob" || m.kind === "skeleton" || m.kind === "bandit" || m.kind === "demon" || m.champion) { // a Hide-Stitched champion changes skin
           const key = mobTexture(this, m.kind, m.level, m.weapon, m.bones);
           if (e.sprite.texture.key !== key) { e.sprite.setTexture(key, 0); this.perch(e, m); }
         }
@@ -876,6 +878,11 @@ export class TownScene extends Phaser.Scene {
     });
     // Mother Blob special: she swells up (wind-up), then a shockwave ring; the slam also shakes the screen
     // The elemental blobs' moves: venom splurt, frost nova, fire breath, storm sparks (client/src/elemFx.ts)
+    this.champFx = new ChampionFx({
+      scene: this, fx: this.fx, ent: (id) => this.entities.get(id),
+      say: (x, y, text, color) => this.floatText(x, y, text, color, PIXEL_FONT),
+      squash: (id, kx, ky, ms) => { const e = this.entities.get(id); if (e) this.squash(e, kx, ky, ms / 2); },
+    }, this.room);
     bindElemFx(this.room, {
       scene: this, fx: this.fx, ent: (id) => this.entities.get(id),
       say: (x, y, text, color) => this.floatText(x, y, text, color, PIXEL_FONT),
@@ -1820,6 +1827,7 @@ export class TownScene extends Phaser.Scene {
     const e = this.entities.get(id);
     if (!e) return;
     this.siege?.clear(id);
+    this.champFx?.drop(id);
     this.forms?.drop(id);
     e.sprite.destroy(); e.label?.destroy(); e.bar.destroy(); e.parts?.destroy(); e.bubble?.destroy(); e.shield?.destroy(); e.gear?.destroy();
     this.entities.delete(id);
@@ -2940,7 +2948,7 @@ export class TownScene extends Phaser.Scene {
         if (off) {
           if (!e.culled) {
             e.culled = true; e.sprite.setVisible(false); e.bar.clear().setVisible(false); e.parts?.clear(); e.bubble?.setVisible(false);
-            e.label?.destroy(); e.label = undefined; e.lvlColor = undefined; this.siege.clear(id);
+            e.label?.destroy(); e.label = undefined; e.lvlColor = undefined; this.siege.clear(id); this.champFx?.drop(id);
           }
           continue;
         }
@@ -3029,7 +3037,7 @@ export class TownScene extends Phaser.Scene {
 
       const x = Math.round(e.sprite.x), y = Math.round(e.sprite.y);
       // Monsters: HP bar over the head, level tag just above it
-      const mobBarY = y - e.top - 4;
+      const mobBarY = y - e.top - 4 - (e.mob ? ChampionFx.barLift(p) : 0); // a champion's bar sits clear of its head details
       e.label?.setPosition(x, e.mob ? mobBarY - 1 : y - e.top - (p.hat ? 4 : 2)).setDepth(e.sprite.y + 1);
       if (e.mob && e.label) {
         // Level tag coloured by how tough it is for me: grey easy, white even, orange tougher, red dangerous
@@ -3060,6 +3068,7 @@ export class TownScene extends Phaser.Scene {
       }
       e.bubble?.setPosition(x, y - e.top - 12); // above the name label
       e.bar.clear().setDepth(e.sprite.y + 1);
+      if (e.mob) this.champFx?.sync(id, e, p, x, y, mobBarY, now);
       this.fx.status(e, e.bar, dtMs / 1000);
       // (Stacks built by basic hits are shown by the skill keys, see chargeCell: no pips under the hero, Murat 2026-11-04)
       const maxHp = p.maxHp;

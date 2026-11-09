@@ -175,3 +175,15 @@ export function unpackAffixes(n: number): AffixKey[] {
   return out;
 }
 export const hasAffix = (n: number, k: AffixKey) => !!(n & (1 << AFFIX_KEYS.indexOf(k)));
+
+/**
+ * Where a painted affix detail sits on a monster whose head is `top` px above its feet (client and preview sheet):
+ * y offset from the feet, the frame's origin y (0..1) and its scale.
+ */
+export function overlayPlace(k: AffixKey, top: number): { dy: number; oy: number; scale: number } {
+  const scale = Math.max(0.75, Math.min(1.6, top / 24));
+  const a = AFFIXES[k].overlay;
+  return a === "head" ? { dy: -top + 5 * scale, oy: 15 / 20, scale } : a === "body" ? { dy: -top * 0.52, oy: 0.5, scale: scale * 0.75 } : { dy: 1, oy: 18 / 20, scale };
+}
+/** A champion's HP bar and name sit this much higher, clear of the painted details on its head. */
+export const CHAMP_BAR_LIFT = 7;
