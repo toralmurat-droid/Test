@@ -2,7 +2,8 @@
 
 Spec: the brief « Refonte de la classe Invocateur : Maître du Néant » (Murat 2026-11-08).
 Work branch: `claude/pensive-mccarthy-2razu7`. PR 1 opened at the end of session B, **as a draft** (drafts are never
-auto-merged): the duel sim shows the Summoner far too strong against the Wizard (see below). Murat decides when it ships.
+auto-merged): the duel sim shows the Summoner far too strong against the Wizard (see below). Murat (2026-11-09):
+PR 1 stays a draft until the balance work (PR 3) is done; sessions C-E keep pushing to this branch.
 
 ## Plan (5 sessions, 3 PRs)
 - **A (done)**: baseline sims, shared data, permanent golems, grimoire, auras, golem powers, death bursts, Essence,
