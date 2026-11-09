@@ -124,9 +124,8 @@ Not spread, 10 bots: 8.5 / 12.4 ms (base 9.0 / 12.8).
 
 ## Done in session C (art and sounds)
 Murat's answers (2026-11-09): bare-headed with the scarf, tailcoat OK, also a pass on the sounds, the extra effects
-too, but sober. Two looks proposed (`docs/art/summoner-proposals.png`: A charcoal and plum, B Void black); **A is in
-place by default, Murat's pick still pending** (B = swap the colours in `look.ts` KITS.summoner from
-`tools/art/proposals/summoner.ts`, then re-run the generation below).
+too, but sober. Two looks proposed (`docs/art/summoner-proposals.png`: A charcoal and plum, B Void black); **Murat
+picked A (2026-11-09)**, the one in place.
 - Body painter (`tools/art/paint/body.ts`): torso kind `tailcoat` (open front over a waistcoat `vest`, lapels and piping
   in `trim`, buttons in `buckle`, no belt) with two tails to mid-thigh (`coatTails`: behind the legs from the front and
   side, over them from behind; they swing with the gait and fly back at a run). `Look.scarf {col, band}`: wound round
