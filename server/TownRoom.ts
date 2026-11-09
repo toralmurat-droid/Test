@@ -1,4 +1,5 @@
 import { addHeat, coolHeat, isOverheated, OVERLOAD } from "../shared/overload";
+import { MobGrid, trackSchemaMoves } from "./mobGrid";
 import { type AuthContext, Client, Room } from "colyseus";
 import { ArraySchema, MapSchema, Schema, type } from "@colyseus/schema";
 import {
@@ -199,6 +200,7 @@ export class Player extends Schema {
 }
 
 export class Mob extends Schema {
+  _gm: MobGrid<Mob> | null = null; _gid = ""; _gk = NaN; _gs = 0; // MobGrid bookkeeping (server/mobGrid.ts): it hears every move, see below
   @type("string") kind: MobKind = "slime";
   @type("number") level = 1;
   @type("string") weapon = ""; // skeletons: sword, axe, spear or bow (SKELETON_WEAPONS)
@@ -290,6 +292,8 @@ export class Mob extends Schema {
   lastAttack = 0;
 }
 
+trackSchemaMoves(Mob); // TownState.mobs (a MobGrid) keeps its squares right as monsters move
+
 export class Projectile extends Schema {
   @type("float32") x = 0;
   @type("float32") y = 0;
@@ -375,7 +379,7 @@ export class Watchman extends Schema {
 export class TownState extends Schema {
   @type({ map: Player }) players = new MapSchema<Player>();
   /** Not synced: each hero gets only the monsters near them, see server/mobView.ts. */
-  mobs = new Map<string, Mob>();
+  mobs = new MobGrid<Mob>(); // a Map that also knows who is in each 128 px square (server/mobGrid.ts)
   @type({ map: Projectile }) projectiles = new MapSchema<Projectile>();
   @type({ map: Item }) items = new MapSchema<Item>();
   @type({ map: Zone }) zones = new MapSchema<Zone>();
@@ -1806,13 +1810,13 @@ export class TownRoom extends Room<TownState> {
     const R = SUMMON.aggroRange;
     const whim = () => (m.drink ? Math.random() * 0.6 : 0); // a frantic Bride flits from foe to foe
     const near = (x: number, y: number) => Math.hypot(x - m.x, y - m.y) < R && Math.hypot(x - o.x, y - o.y) < SUMMON.leash;
-    this.state.mobs.forEach((t, tid) => {
-      if (t === m || t.dead || t.hidden || Math.abs(t.x - m.x) > R || Math.abs(t.y - m.y) > R) return;
-      if (t.owner ? !this.canHurtSummon(ownerId, t) : isSafeZone(t.x, t.y)) return;
-      if (!near(t.x, t.y)) return;
+    for (const [tid, t] of this.state.mobs.inBox(m.x, m.y, R)) {
+      if (t === m || t.dead || t.hidden) continue;
+      if (t.owner ? !this.canHurtSummon(ownerId, t) : isSafeZone(t.x, t.y)) continue;
+      if (!near(t.x, t.y)) continue;
       const score = 1 - Math.hypot(t.x - m.x, t.y - m.y) / R + (t.target === ownerId || t.foe === ownerId ? 1 : 0) + (tid === m.target ? AGGRO.stick : 0) + whim();
       if (score > bs) { bs = score; best = tid; }
-    });
+    }
     this.state.players.forEach((t, tid) => {
       if (tid === ownerId || t.dead || isSafeZone(t.x, t.y) || (o.party && t.party === o.party) || pvpProtected(o.level, t.level)) return;
       if (!near(t.x, t.y)) return;
@@ -1890,10 +1894,10 @@ export class TownRoom extends Room<TownState> {
   private summonFoesAround(m: Mob, x: number, y: number, r: number): string[] {
     const o = this.state.players.get(m.owner), out: string[] = [];
     if (!o) return out;
-    this.state.mobs.forEach((t, tid) => {
-      if (t === m || t.dead || t.hidden || Math.abs(t.x - x) > r || Math.abs(t.y - y) > r || Math.hypot(t.x - x, t.y - y) > r) return;
+    for (const [tid, t] of this.state.mobs.inBox(x, y, r)) {
+      if (t === m || t.dead || t.hidden || Math.hypot(t.x - x, t.y - y) > r) continue;
       if (t.owner ? this.canHurtSummon(m.owner, t) : !isSafeZone(t.x, t.y)) out.push(tid);
-    });
+    }
     this.state.players.forEach((t, tid) => {
       if (tid === m.owner || t.dead || isSafeZone(t.x, t.y) || (o.party && t.party === o.party) || pvpProtected(o.level, t.level)) return;
       if (Math.hypot(t.x - x, t.y - y) <= r) out.push(tid);
@@ -4494,14 +4498,11 @@ export class TownRoom extends Room<TownState> {
       if (me && pvpProtected(me.level, t.level)) return; // newcomer protection (shared/combat.ts): shots pass through
       if (tid !== exclude && !t.dead && Math.hypot(t.x - x, t.y - y) <= r) out.push(tid);
     });
-    this.state.mobs.forEach((m, mid) => {
-      const dx = m.x - x, R = mobPad ? r + 64 : r; // cheap box test first (thousands of monsters, most far away; bodies < 64 px)
-      if (dx > R || dx < -R) return;
-      const dy = m.y - y;
-      if (dy > R || dy < -R) return;
-      if (m.owner && me && !this.canHurtSummon(exclude, m)) return; // own / group / protected heroes' summons
-      if (!m.dead && !m.hidden && Math.hypot(dx, dy) <= r + (mobPad ? mobPad(m) : 0)) out.push(mid);
-    });
+    // Only the monsters in the squares around (bodies < 64 px), not the thousands on the map
+    for (const [mid, m] of this.state.mobs.inBox(x, y, mobPad ? r + 64 : r)) {
+      if (m.owner && me && !this.canHurtSummon(exclude, m)) continue; // own / group / protected heroes' summons
+      if (!m.dead && !m.hidden && Math.hypot(m.x - x, m.y - y) <= r + (mobPad ? mobPad(m) : 0)) out.push(mid);
+    }
     return out;
   }
 
