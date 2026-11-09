@@ -1,5 +1,6 @@
 {
   "date": "2026-11-09",
+  "pr": 376,
   "title": "Executions",
   "changes": [
     "Break a monster's guard (the dizzy stars) and a red arrow shows over it: your next blow is an execution that deals double damage (x1.5 on elites and bosses).",
