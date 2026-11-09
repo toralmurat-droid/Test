@@ -37,7 +37,7 @@ import { DOORS, DOOR_RANGE, doorById, doorDist, doorWorkable, isSafeZone, isSoli
 import { isDecorSolidAt, npcById, npcNear, TALK_RANGE } from "../shared/npcs";
 import { beyondWall, WATCH, WATCH_POSTS, WatchPost } from "../shared/watch";
 import { inVillage, WRATH } from "../shared/wrath";
-import { sellPrice, shopBuys, SHOPS } from "../shared/shops";
+import { sellPrice, shopBuys, shopFuses, SHOPS } from "../shared/shops";
 import { BLOB_KINDS, CHAINS, CROWN_CHAIN, packQuest, chainOpen, chainState, inZone, isBlob, npcPresent, QuestState, questStep, stepGoal, Summon, TUT_CHAIN, TUT_QUESTS, USE_RANGE } from "../shared/quests";
 import { findHideSpot, HIDE, MOTHER_KEEP_OUT, noMobsAt, spawnPoint, SPAWN_ZONES, villageDist, zoneCap } from "../shared/spawns";
 import { blocked, moveStep } from "../shared/movement";
@@ -58,7 +58,7 @@ import {
   BAG_SIZE, Equipped, gearDef, GEAR_SLOTS, activeGear, reqProblem, itemLevel, HeroReqInfo, GearSlot, gearBlock, gearName, gearReachMult, gearSpeedMult, gearStats, isGearId, potionChance, rollGear, canWear, starterKit,
   isBagItem, socketProblem, itemRunes, withRunes, runeEffects, stripRunes, GEAR_DROP,
 } from "../shared/gear";
-import { parseRune, rollMobRune, rollRune, RUNE_DROP, runeId, runeIdName, RUNES, RuneKey } from "../shared/runes";
+import { fuseRunes, parseRune, rollMobRune, rollRune, RUNE_DROP, runeId, runeIdName, RUNES, RuneKey } from "../shared/runes";
 /** "Frost Katana Lv 17" for pickup messages. */
 /** Hit direction for the client's flinch nudge (unit vector, 1 decimal), or undefined when there is no push. */
 const hitDir = (push: [number, number]) => {
@@ -701,6 +701,7 @@ export class TownRoom extends Room<TownState> {
     this.onMessage("buy", (client, msg: { i: number }) => this.shopBuy(client, msg?.i));
     this.onMessage("sell", (client, msg: { i: number }) => this.shopSell(client, msg?.i));
     this.onMessage("repair", (client) => this.repairGear(client));
+    this.onMessage("fuse", (client, msg: { id?: unknown }) => this.fuseRunesMsg(client, msg?.id));
     // Trading between players and the account stash (shared/trade.ts)
     this.onMessage("trade", (client, msg: { id?: string; name?: string }) => { if (this.allow("ask", client)) this.tradeAsk(client.sessionId, msg); });
     this.onMessage("tradeyes", (client, msg: { from?: string }) => this.tradeAnswer(client.sessionId, msg?.from, true));
@@ -5048,6 +5049,23 @@ export class TownRoom extends Room<TownState> {
     setBag(p, items);
     p.gold += price;
     client.send("shop", { ok: true, text: `+${price} gold` });
+  }
+
+  /**
+   * Rune fusion (shared/runes.ts fuseRunes): four identical loose runes + gold -> one rank higher, next to a trader who
+   * buys runes. Bag and gold are checked and swapped in the same synchronous step, so nothing is duplicated or lost.
+   * Rate-limited by the per-client message bucket like every other message.
+   */
+  private fuseRunesMsg(client: Client, id: unknown) {
+    const p = this.state.players.get(client.sessionId);
+    if (!p || p.dead) return;
+    const no = (text: string) => client.send("shop", { ok: false, text });
+    if (!shopFuses(this.shopNear(p))) return no("Stand next to a rune trader to fuse runes");
+    const res = fuseRunes(id, { bag: bagItems(p), gold: p.gold, reserved: potionSlots(p.pots), bagSize: BAG_SIZE });
+    if (typeof res === "string") return no(res);
+    setBag(p, res.bag);
+    p.gold = res.gold;
+    client.send("shop", { ok: true, text: `-${res.cost} gold: ${runeIdName(res.made)}` });
   }
 
   // ---- Trading and the stash (shared/trade.ts) --------------------------------

@@ -50,6 +50,7 @@
 #npcdialog .sh-row button { white-space: nowrap; padding: 4px 10px; }
 #npcdialog .sh-buy { background: #8b5e34; color: #fff; border-color: #5a3a1e; }
 #npcdialog .sh-sell { background: #f5ecd2; }
+#npcdialog .sh-fuse { background: #4a3a6e; color: #fff; border-color: #2c2244; }
 #npcdialog .sh-empty { font: 18px var(--pixel-font); color: #7a6a44; }
 
 /* Quest log (J) */
