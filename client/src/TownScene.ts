@@ -878,6 +878,8 @@ export class TownScene extends Phaser.Scene {
       scene: this, fx: this.fx, ent: (id) => this.entities.get(id),
       say: (x, y, text, color) => this.floatText(x, y, text, color, PIXEL_FONT),
       squash: (id, kx, ky, ms) => { const e = this.entities.get(id); if (e) this.squash(e, kx, ky, ms / 2); },
+      shout: (x, y, text, color) => this.floatText(x, y, text, color, PIXEL_FONT, 2),
+      sound: (name, x, y, arg) => playSfx(name, x, y, 1, arg),
     });
     // The beast-folk's moves in the Mawdeep Warrens (client/src/beastFx.ts)
     bindBeastFx(this.room, {

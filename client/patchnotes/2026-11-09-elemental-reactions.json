@@ -1,0 +1,10 @@
+{
+  "date": "2026-11-09",
+  "title": "Elemental reactions",
+  "changes": [
+    "An elemental hit now marks a monster for 4 seconds; a hit of another element on the mark sets off a reaction.",
+    "Cold + Electric: Fracture. Fire + Poison: Toxic Blast. Fire + Cold: Steam. Electric + Poison: Corrosion. Faith + Fire: Purification.",
+    "Reactions work in full on a mark another hero left, at 30% on your own (your creatures count as you). Monsters only, never against heroes.",
+    "The Group panel (P) lists the reactions."
+  ]
+}
