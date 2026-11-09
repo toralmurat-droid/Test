@@ -2151,6 +2151,16 @@ export class SkillFx {
   }
 
   /** Impact of a skill projectile ("boom" message). */
+  /** Execution of a broken monster (shared/combat.ts EXECUTE): one red cross-cut, a short flash and a few sparks. Sober on purpose. */
+  execute(e: FxEntity) {
+    const x = e.sprite.x, y = e.sprite.y, z = e.top * 0.55;
+    this.glow(x, y - z, 0, 16, 0xff4d3d, 220, 0.75);
+    for (const ang of [-0.8, 0.8]) for (let i = -5; i <= 5; i++) {
+      this.p(x + Math.cos(ang) * i * 1.6, y + 0.5, z + Math.sin(ang) * i * 1.6, i % 2 ? 0xff4d3d : 0xffe0d0, { life: 260, size: 2, size1: 0 });
+    }
+    for (let i = 0; i < 8; i++) this.p(x, y, z, pick([0xff4d3d, 0xffd166, 0xffffff]), { vx: rnd(-55, 55), vy: rnd(-20, 20), vz: rnd(10, 50), g: 120, life: rnd(250, 420), size: 1, size1: 0 });
+  }
+
   impact(x: number, y: number, kind: string, r: number, imb?: string) {
     const ip = PALETTE[imb as FxStyle];
     if (ip) { this.burst(x, y, 4, imb as FxStyle, r > 0 ? 18 : 8, 60, 320); if (r > 0) this.ring(x, y, r, imb as FxStyle, 20, { life: 380, up: 10 }); }
