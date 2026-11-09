@@ -308,6 +308,17 @@ const ICONS: Record<string, string[]> = {
     ".......DLHHLLLL.", "........HHDLLL..", ".......HH..DL...", "......HH........", ".....HH.........", "....HH..........",
     "...HH...........", "..HH............", ".PP.............", "PP..............",
   ],
+  // the Summoner's kit (Void Lord): a long scarf with banded ends, a tailcoat
+  scarf: [
+    "................", "....MMMMMMMM....", "...MLLLLLLLLM...", "..MLLMMMMMMLLM..", "..MLM......MLM..", "..MLLMMMMMMLLM..",
+    "...MLLLLLLLLM...", "....MLLMLLM.....", "....MLLMMLLM....", "....MLLM.MLLM...", "....MLLM..MLLM..", "....MAAM..MLLM..",
+    "....MLLM..MAAM..", "....MLLM..MLLM..", "....DDDD..DDDD..", "................",
+  ],
+  tailcoat: [
+    "................", "...MM......MM...", "..MLLM.AA.MLLM..", ".MLLLLMAAMLLLLM.", ".MLLLLMAAMLLLLM.", ".MLMLLMAAMLLMLM.",
+    ".ML.MLMAAMLM.LM.", "....MLMAAMLM....", "....MLLDDLLM....", "....MLLMMLLM....", "....MLLMMLLM....", "...MLLM..MLLM...",
+    "...MLLM..MLLM...", "..MLLM....MLLM..", "..DDD......DDD..", "................",
+  ],
   robe: [
     "................", "....MM....MM....", "...MLLMAAMLLM...", "..MLLLLAALLLLM..", ".MLLLLLAALLLLLM.", ".MLMLLLAALLLMLM.",
     ".ML.MLLAALLM.LM.", "....MLLAALLM....", "....DDDDDDDD....", "...MLLLAALLLM...", "...MLLLAALLLM...", "..MLLLLAALLLLM..",
@@ -327,7 +338,8 @@ function icon(item: GearDef): Canvas {
       return c;
     }
   }
-  const rows = item.slot === "hat" ? ICONS[item.style === "crown" ? "crown" : item.style === "helm" ? "helm" : item.style === "hood" ? "hood" : item.style === "horned" ? "horned" : "hat"]
+  const rows = item.slot === "hat" ? ICONS[item.style === "crown" ? "crown" : item.style === "helm" ? "helm" : item.style === "hood" ? "hood" : item.style === "horned" ? "horned" : item.style === "scarf" ? "scarf" : "hat"]
+    : item.slot === "armour" && item.style === "tailcoat" ? ICONS.tailcoat
     : item.slot === "weapon" && (item.style === "bow" || item.style === "axe" || item.style === "wand") ? ICONS[item.style]
     : item.slot === "armour" && item.style === "robe" ? ICONS.robe
     : item.slot === "shield" ? ICONS[item.style]

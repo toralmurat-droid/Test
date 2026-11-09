@@ -5,6 +5,7 @@ import { impactMs, nightBuff, passiveBlood, talentBonus, LEAP_MS, pointRange, sk
 } from "./skills";
 import { Stats, STATS } from "./powers";
 import { pay, skillCost } from "./mana";
+import { auraBuffs, isAuraId, BLADE_EL, BLADES_BASE, ESSENCE, SUMMON, WISP, type AttuneElement } from "./summons";
 
 /**
  * Runs the skills of shared/skills.ts. It knows nothing about the room: the server (server/TownRoom.ts) and the
@@ -42,7 +43,7 @@ export const newRuntime = (): SkillRuntime => ({
   burnUntil: 0, burnDps: 0, burnBy: "", burnNext: 0, markUntil: 0, weakUntil: 0, bleed: "", leechUntil: 0, leechBy: "",
 });
 
-export interface Unit { x: number; y: number; dead: boolean; level: number; sk: SkillRuntime; cls?: ClassKind; talents?: Ranks; energy?: number; mana?: number; hp?: number; maxHp?: number;
+export interface Unit { x: number; y: number; dead: boolean; level: number; sk: SkillRuntime; cls?: ClassKind; talents?: Ranks; energy?: number; mana?: number; maxMana?: number; hp?: number; maxHp?: number;
   /** Heroes: when the next basic attack may go off. Cantrips share this timer (they are a basic attack you cast). */
   attackReadyAt?: number }
 
@@ -52,7 +53,11 @@ export interface Unit { x: number; y: number; dead: boolean; level: number; sk: 
  */
 export interface Imbue { id: string; style: string; fx: HitEffects }
 
-export interface HitOpts extends HitEffects { skill?: boolean; basic?: boolean; dot?: boolean; thorn?: boolean; crit?: boolean; imb?: Imbue }
+export interface HitOpts extends HitEffects { skill?: boolean; basic?: boolean; dot?: boolean; thorn?: boolean; crit?: boolean; imb?: Imbue;
+  /** Dealt by a hero's creature in their name (golem, wisp): SUMMON.pvp applies when it lands on a hero. */
+  pet?: boolean;
+  /** The element the hit shows as (damage number colour). */
+  el?: "fire" | "cold" | "poison" | "faith" | "shock" }
 
 export interface ShotSpec extends HitEffects {
   owner: string; skill: string; x: number; y: number; vx: number; vy: number;
@@ -60,6 +65,7 @@ export interface ShotSpec extends HitEffects {
   pierce: number; explode: number; chain: number; field?: FieldDef; rank: number; power: number;
   pulse?: ShotDef["pulse"]; pulses?: number; // pulses so far (turns the shard ring)
   imb?: Imbue; // enchantment active when it was shot
+  pet?: boolean; // shot by a hero's creature (a wisp) in their name: SUMMON.pvp applies on heroes
 }
 
 export interface FieldInst {
@@ -99,10 +105,19 @@ export interface SkillHost {
   stats?(id: string): Stats | undefined;
   cooldownMult(id: string): number;
   fx(ev: Record<string, unknown>): void;
-  /** Summoner (shared/summons.ts): call a golem of the hero's element; fuse their golems into a Colossus; turn the element. */
+  /** Summoner (shared/summons.ts): pull the golems back out of the Void; fuse them into a Colossus. */
   summon?(id: string, power: number): void;
   colossus?(id: string, power: number, ms: number): void;
-  attune?(id: string): void;
+  /** Summoner: the elements of the hero's living golems (a Colossus counts for each golem fused into it); their auras. */
+  golemEls?(id: string): AttuneElement[];
+  /** Summoner: call `n` elemental wisps for `ms`; open the Void Arsenal for `ms`. */
+  wisps?(id: string, power: number, n: number, ms: number): void;
+  arsenal?(id: string, power: number, ms: number): void;
+  /**
+   * Black Hole: `target` is swallowed (a monster: spat out at a random spot a little further away) or thrown out of it
+   * (a hero: 3-4 tiles away, on a walkable spot out of the safe zone). Returns false when it couldn't be moved.
+   */
+  voidHop?(owner: string, target: string, swallowed: boolean, x: number, y: number): boolean;
   /** Is it night where this unit stands (the world clock, or inside a Nightfall)? Night passives need it. */
   isNight?(id: string): boolean;
   /** Has this unit flesh to eat or bite (not skeletons, the undead or golems)? Missing = everyone has. */
@@ -173,7 +188,7 @@ export function castSkill(h: SkillHost, id: string, skillId: string): boolean {
   // Bat / Wolf Form: pressing the form again takes the hero's own shape back (free, no cooldown)
   const form = formBuff(u, now);
   if (form && form.id === s.id) { endForm(h, id); return true; }
-  if (cooldownLeft(s, u.sk, now, h.cooldownMult(id)) > 0) return false;
+  if (cooldownLeft(s, u.sk, now, h.cooldownMult(id) * buffCdr(u, now)) > 0) return false;
   if (s.field?.link && !linkPick(h, id, s.field.link)) return false; // Blood Link: nobody in reach to bind
   if (s.charm && !charmTarget(h, id, s.charm.range)) return false; // Charm: nobody in reach
   const fang = s.devour ?? s.bite;
@@ -335,7 +350,9 @@ function release(h: SkillHost, id: string, s: SkillDef, rank: number, power: num
     const [ax, ay] = h.aim(id), d = at ?? s.field.ahead ?? 0;
     const pick = s.field.link ? linkPick(h, id, s.field.link) : undefined;
     if (pick) { const tu = h.unit(pick.t)!; h.face(id, tu.x - u.x, tu.y - u.y); }
-    if (!s.field.link || pick) h.addField({ owner: id, skill: s.id, def: s.field, rank, power, x: u.x + ax * d, y: u.y + ay * d, until: h.now() + s.field.ms * t, nextTick: h.now(), imb, target: pick?.t, ally: pick?.ally || undefined });
+    const def = fieldFor(u, s.field);
+    const pw = s.field.blades && u.cls ? power * (1 + talentBonus(u.cls, u.talents ?? {}, "edge") / 100) : power;
+    if (!s.field.link || pick) h.addField({ owner: id, skill: s.id, def, rank, power: pw, x: u.x + ax * d, y: u.y + ay * d, until: h.now() + s.field.ms * t, nextTick: h.now(), imb, target: pick?.t, ally: pick?.ally || undefined });
   }
   if (s.buff) {
     addBuff(h, id, s.id, s.buff, rank, stacks);
@@ -353,8 +370,91 @@ function release(h: SkillHost, id: string, s: SkillDef, rank: number, power: num
   if (s.summon) h.summon?.(id, power);
   if (s.brides) h.brides?.(id, power, s.brides.n + s.brides.perRank * (rank - 1), s.brides.ms * t, s.brides.drain);
   if (s.colossus) h.colossus?.(id, power, s.colossus.ms);
-  if (s.attune) h.attune?.(id);
+  if (s.wisps && u.cls) {
+    const swarm = talentBonus(u.cls, u.talents ?? {}, "swarm");
+    h.wisps?.(id, power, Math.min(4, s.wisps.n + (swarm > 0 ? 1 : 0)), s.wisps.ms * t * (1 + swarm / 100));
+  }
+  if (s.arsenal) h.arsenal?.(id, power, s.arsenal.ms * t);
+  // Void Velocity: coming out of a blink, a rush of speed and quicker skills
+  if (s.move?.kind === "blink" && u.cls) for (const p of SKILLS[u.cls]) {
+    const r = rankOf(u.talents, p.id);
+    if (r > 0 && p.passive?.blink) { const v = p.passive.perRank * Math.min(maxRank(p), r); addBuff(h, id, p.id, { ms: p.passive.blink.ms, speed: v, cdr: v }, 1); }
+  }
 }
+
+/**
+ * A ground effect as this hero casts it: Gravity widens black holes and makes them pull harder; Void Edge adds blades
+ * (one at ranks 3 and 5).
+ */
+function fieldFor(u: Unit, d: FieldDef): FieldDef {
+  if (!u.cls) return d;
+  if (d.hole) {
+    const g = 1 + talentBonus(u.cls, u.talents ?? {}, "gravity") / 100;
+    return g > 1 ? { ...d, r: Math.round(d.r * g), pull: (d.pull ?? 0) * g } : d;
+  }
+  if (d.blades) {
+    const edge = rankOf(u.talents, "su_edge");
+    return edge >= 3 ? { ...d, blades: d.blades + (edge >= 5 ? 2 : 1) } : d;
+  }
+  return d;
+}
+
+// ---- Void Essence and the Void (Summoner, shared/summons.ts) ----------------------------------------------------
+
+/** The Summoner `id` gains `n` charges of Void Essence (their stacks, at most MAX_STACKS). */
+export function gainEssence(h: SkillHost, id: string, n = 1) {
+  const u = live(h, id);
+  if (!u || u.cls !== "summoner") return;
+  u.sk.stacks = Math.min(MAX_STACKS, u.sk.stacks + n);
+  u.sk.stackAt = h.now();
+}
+
+/**
+ * One of the Summoner's creatures went back to the Void (it died or its time ran out): a charge of Essence, and Return
+ * to the Void gives back a little life and mana (at most once a second).
+ */
+export function toVoid(h: SkillHost, owner: string) {
+  const u = live(h, owner);
+  if (!u || u.cls !== "summoner") return;
+  gainEssence(h, owner);
+  const v = talentBonus(u.cls, u.talents ?? {}, "return");
+  const now = h.now();
+  if (v <= 0 || now - (u.sk.last["return"] ?? -Infinity) < 1000) return;
+  u.sk.last["return"] = now;
+  if (u.maxHp) h.heal(owner, u.maxHp * v / 100);
+  if (u.mana !== undefined) u.mana = Math.min(u.maxMana ?? Infinity, u.mana + (u.maxMana ?? 100) * v / 100);
+  h.fx({ ev: "voidreturn", id: owner });
+}
+
+/**
+ * Void Slip (passive.slip): hero `id` was just hit and stands below the passive's threshold of their life. Once per
+ * cooldown, they slip into the Void: untouchable for its time (the host makes monsters drop them), then they come out
+ * running. Returns how long they are gone (ms), 0 if it didn't happen.
+ */
+export function voidSlip(h: SkillHost, id: string): number {
+  const u = live(h, id);
+  if (!u?.cls || !u.maxHp || (u.hp ?? 0) <= 0) return 0;
+  const now = h.now();
+  for (const s of SKILLS[u.cls]) {
+    const sl = s.passive?.slip, r = rankOf(u.talents, s.id);
+    if (!sl || r <= 0 || (u.hp ?? 0) > u.maxHp * sl.below) continue;
+    const key = "slip:" + s.id;
+    if (now - (u.sk.last[key] ?? -Infinity) < sl.cdMs) continue;
+    u.sk.last[key] = now;
+    const ms = sl.ms + sl.perRank * (Math.min(maxRank(s), r) - 1);
+    h.invuln(id, now + ms);
+    u.sk.last["slipUntil"] = now + ms;
+    u.sk.buffs = u.sk.buffs.filter((x) => x.id !== s.id);
+    u.sk.buffs.push({ id: s.id, until: now + ms + sl.speedMs, b: { ms: ms + sl.speedMs, speed: sl.speed }, rank: 1, stacks: 0 });
+    h.fx({ ev: "voidslip", id, s: s.id, ms, x: Math.round(u.x), y: Math.round(u.y) });
+    h.fx({ ev: "buff", id, s: s.id, ms: ms + sl.speedMs });
+    return ms;
+  }
+  return 0;
+}
+
+/** Is this unit hidden in the Void right now (Void Slip: monsters can't see them)? */
+export const inVoid = (u: Unit | undefined, now: number) => !!u && now < (u.sk.last["slipUntil"] ?? 0);
 
 /** The shapeshift buff (BuffDef.form) the unit is in right now, if any. */
 export function formBuff(u: Unit | undefined, now: number): ActiveBuff | undefined {
@@ -525,7 +625,7 @@ function fire(h: SkillHost, id: string, skill: string, d: ShotDef, rank: number,
 export function shotHit(h: SkillHost, s: ShotSpec, tid: string) {
   const exploding = s.explode > 0 && s.pierce <= 0;
   h.hit(s.owner, tid, s.dmg, [s.vx, s.vy], { stunMs: s.stunMs, slowMs: exploding ? undefined : s.slowMs, burn: s.burn, markMs: s.markMs, weakMs: s.weakMs, drain: s.drain,
-    leechMs: s.leechMs, bleed: s.bleed, kb: s.kb ?? 1, skill: true, imb: s.imb });
+    leechMs: s.leechMs, bleed: s.bleed, kb: s.kb ?? 1, skill: true, imb: s.imb, pet: s.pet });
   if (s.chain > 0) chain(h, s.owner, tid, s.chain, s.dmg, s);
 }
 
@@ -543,7 +643,7 @@ function chain(h: SkillHost, owner: string, from: string, hops: number, dmg: num
     dmg *= 0.8;
     const n = h.unit(next)!;
     pts.push([n.x, n.y]);
-    h.hit(owner, next, dmg, pushFrom(h, cur.x, cur.y, next), { stunMs: e.stunMs, slowMs: e.slowMs, kb: 0.3, skill: true, imb: (e as ShotSpec).imb });
+    h.hit(owner, next, dmg, pushFrom(h, cur.x, cur.y, next), { stunMs: e.stunMs, slowMs: e.slowMs, kb: 0.3, skill: true, imb: (e as ShotSpec).imb, pet: (e as ShotSpec).pet });
     cur = n;
   }
   if (pts.length > 1) h.fx({ ev: "chain", id: owner, pts });
@@ -579,7 +679,7 @@ export function shotEnd(h: SkillHost, s: ShotSpec, x: number, y: number) {
 export function tickField(h: SkillHost, f: FieldInst): boolean {
   const now = h.now();
   const o = h.unit(f.owner);
-  if (now >= f.until) return false;
+  if (now >= f.until) { if (f.def.hole) holeClose(h, f); return false; }
   if (f.def.follow) {
     if (!o || o.dead) return false;
     f.x = o.x; f.y = o.y;
@@ -604,6 +704,15 @@ export function tickField(h: SkillHost, f: FieldInst): boolean {
     return true;
   }
   const inside = h.enemies(f.x, f.y, d.r, f.owner);
+  // Fields that drag foes in (Black Hole): every tick, heroes held for less (SUMMON.pvp.cc)
+  if (d.pull) for (const e of inside) {
+    const tu = h.unit(e);
+    if (!tu) continue;
+    const dist = Math.hypot(f.x - tu.x, f.y - tu.y);
+    if (dist < 3) continue;
+    const [px, py] = norm(f.x - tu.x, f.y - tu.y);
+    h.move(e, px, py, Math.min(dist, d.pull * (tu.cls ? SUMMON.pvp.cc : 1)));
+  }
   if (d.trap) {
     if (!inside.length) return true;
     if (d.burst) area(h, f.owner, { id: f.skill }, d.burst, f.power, t, [f.x, f.y], false, f.imb);
@@ -633,11 +742,44 @@ export function tickField(h: SkillHost, f: FieldInst): boolean {
     }
   }
   if (d.wpn || d.dmg || d.slowMs || d.weakMs) {
-    const dmg = baseDmg(h, f.owner, d) * f.power;
-    for (const e of inside) h.hit(f.owner, e, dmg, pushFrom(h, f.x, f.y, e), { ...effects(d, t), kb: d.kb ?? 0, skill: true, dot: !d.kb, imb: f.imb });
+    let dmg = baseDmg(h, f.owner, d) * f.power, fx: HitEffects & { el?: AttuneElement } = effects(d, t);
+    if (d.blades) {
+      // Void Blades: more blades cut harder; they take the golem's element (two different golems: they alternate)
+      dmg *= Math.max(1, d.blades / BLADES_BASE);
+      const els = [...new Set(h.golemEls?.(f.owner) ?? [])];
+      if (els.length) {
+        const el = els[Math.floor(now / d.tickMs) % els.length];
+        dmg *= WISP.resonance;
+        fx = { ...fx, ...BLADE_EL[el], el };
+      }
+    }
+    for (const e of inside) h.hit(f.owner, e, dmg, pushFrom(h, f.x, f.y, e), { ...fx, kb: d.kb ?? 0, skill: true, dot: !d.kb, imb: f.imb });
   }
   if (d.heal && o && !o.dead && o.maxHp && Math.hypot(o.x - f.x, o.y - f.y) <= d.r) h.heal(f.owner, o.maxHp * d.heal / 100 * f.power);
+  // Black Hole: monsters worn down past its threshold are swallowed at once
+  if (d.hole) for (const e of inside) {
+    const tu = h.unit(e);
+    if (tu && !tu.dead && !tu.cls && tu.maxHp && (tu.hp ?? 0) <= tu.maxHp * d.hole.below) swallow(h, f, e);
+  }
   return true;
+}
+
+/** A Black Hole swallows monster `e`: spat out a little further away, the Summoner gains a charge of Essence. */
+function swallow(h: SkillHost, f: FieldInst, e: string) {
+  if (!h.voidHop?.(f.owner, e, true, f.x, f.y)) return;
+  gainEssence(h, f.owner);
+  h.fx({ ev: "swallow", id: f.owner, t: e, x: Math.round(f.x), y: Math.round(f.y) });
+}
+
+/** A Black Hole closes: every monster still inside is swallowed, every hero thrown out of it. */
+function holeClose(h: SkillHost, f: FieldInst) {
+  for (const e of h.enemies(f.x, f.y, f.def.r, f.owner)) {
+    const tu = h.unit(e);
+    if (!tu || tu.dead) continue;
+    if (tu.cls) h.voidHop?.(f.owner, e, false, f.x, f.y);
+    else swallow(h, f, e);
+  }
+  h.fx({ ev: "holeclose", id: f.owner, s: f.skill, x: Math.round(f.x), y: Math.round(f.y), r: f.def.r });
 }
 
 // ---- Hooks for the host's damage code ----------------------------------------------------------------
@@ -665,6 +807,8 @@ export const speedMult = (u: Unit | undefined, now: number) => 1 + sum(u, now, "
 export const atkSpeedMult = (u: Unit | undefined, now: number) => 1 + sum(u, now, "atkspd") / 100;
 export const buffLifesteal = (u: Unit | undefined, now: number) => sum(u, now, "lifesteal") / 100;
 export const buffRegen = (u: Unit | undefined, now: number) => sum(u, now, "regen") / 100;
+/** Cooldown multiplier from buffs (Void Velocity's -% cooldowns). */
+export function buffCdr(u: Unit | undefined, now: number): number { let m = 1; for (const b of buffsOf(u, now)) if (b.b.cdr) m *= 1 - b.b.cdr / 100; return m; }
 export const blocking = (u: Unit | undefined, now: number) => buffsOf(u, now).some((b) => b.b.block);
 export const ccImmune = (u: Unit | undefined, now: number) => buffsOf(u, now).some((b) => b.b.immune);
 export const charging = (u: Unit | undefined, now: number) => !!u && now < u.sk.chargeUntil;
@@ -715,9 +859,8 @@ export function afterHit(h: SkillHost, from: string | undefined, tid: string, o:
   const a = from ? h.unit(from) : undefined;
   const e: HitEffects[] = [o];
   if (a && o.basic) {
-    // Basic hits build stacks and carry enchantments
-    a.sk.stacks = Math.min(MAX_STACKS, a.sk.stacks + 1);
-    a.sk.stackAt = now;
+    // Basic hits build stacks and carry enchantments (not the Summoner's Essence: it comes from the Void)
+    if (a.cls !== "summoner") { a.sk.stacks = Math.min(MAX_STACKS, a.sk.stacks + 1); a.sk.stackAt = now; }
     for (const b of buffsOf(a, now)) if (b.b.onHit) {
       e.push(effects(b.b.onHit, rankTime(b.rank)));
       if (b.b.onHit.burn) h.fx({ ev: "enchanthit", id: from, s: b.id, x: t.x, y: t.y });
@@ -800,7 +943,18 @@ export function tickUnit(h: SkillHost, id: string) {
   if (u.dead) { sk.burnUntil = 0; sk.buffs = []; sk.counter = undefined; sk.stacks = 0; sk.chargeUntil = 0; sk.windUntil = 0; return; }
   if (sk.buffs.length && sk.buffs.some((b) => b.until <= now)) sk.buffs = sk.buffs.filter((b) => b.until > now);
   if (sk.counter && now >= sk.counter.until) sk.counter = undefined;
-  if (sk.stacks > 0 && now - sk.stackAt > STACK_DECAY_MS) sk.stacks = 0;
+  if (sk.stacks > 0 && now - sk.stackAt > (u.cls === "summoner" ? ESSENCE.decayMs : STACK_DECAY_MS)) sk.stacks = 0;
+  // Summoner: each living golem keeps the aura of its element topped up (shared/summons.ts AURA, RESONANCE)
+  if (u.cls === "summoner" && h.golemEls) {
+    const want = auraBuffs(h.golemEls(id), 1 + talentBonus(u.cls, u.talents ?? {}, "resonance") / 100);
+    for (const b of sk.buffs) if (isAuraId(b.id) && !want.some((w) => w.id === b.id)) b.until = 0;
+    for (const w of want) {
+      const b = sk.buffs.find((x) => x.id === w.id && x.until > now);
+      if (b) { b.b = w.b; if (b.until - now < 600) b.until = now + w.b.ms; }
+      else { sk.buffs.push({ id: w.id, until: now + w.b.ms, b: w.b, rank: 1, stacks: 0 }); h.fx({ ev: "buff", id, s: w.id, ms: w.b.ms }); }
+    }
+    if (sk.buffs.some((b) => b.until <= now)) sk.buffs = sk.buffs.filter((b) => b.until > now);
+  }
   // Child of the Night: at night the passive keeps a short buff topped up (it runs out a second or two after dawn)
   const night = u.cls && u.talents ? talentBonus(u.cls, u.talents, "night") : 0;
   if (night > 0 && h.isNight?.(id)) {

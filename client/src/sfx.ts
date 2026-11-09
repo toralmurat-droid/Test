@@ -373,6 +373,27 @@ const R: Record<string, Recipe> = {
   enchanthit: (o, t, v) => fireRoar(o, t, 0.18, 0.25 * v),
   thorns: (o, t, v) => rattle(o, t, 3, 0.06, 0.2 * v, 3500),
 
+  // ---- the Summoner's Void (Void Lord rework): kept low and short, they come often
+  voidPortal: (o, t, v) => { tone(o, t, { f: 170, f2: 340, dur: 0.12, vol: 0.12 * v }); noise(o, t, { type: "bandpass", f: 900, f2: 1600, q: 2, dur: 0.1, vol: 0.12 * v }); },
+  voidOpen: (o, t, v, big = 1) => {
+    tone(o, t, { type: "sawtooth", f: 55, f2: 38, dur: 0.9 * big, vol: 0.1 * v, att: 0.25, detune: 12 });
+    tone(o, t, { f: 110, f2: 70, dur: 0.8 * big, vol: 0.14 * v, att: 0.2, vib: 4, vibHz: 3 });
+    noise(o, t, { type: "lowpass", f: 900, f2: 200, dur: 0.8 * big, vol: 0.25 * v, att: 0.15 });
+  },
+  voidClose: (o, t, v) => { tone(o, t, { type: "sawtooth", f: 220, f2: 45, dur: 0.3, vol: 0.12 * v }); thud(o, t + 0.24, 55, 0.45 * v, 0.25); },
+  voidGulp: (o, t, v) => { tone(o, t, { f: 320, f2: 80, dur: 0.16, vol: 0.2 * v }); noise(o, t, { type: "lowpass", f: 500, dur: 0.12, vol: 0.18 * v }); },
+  voidEat: (o, t, v) => tone(o, t, { f: 1300, f2: 280, dur: 0.07, vol: 0.08 * v }),
+  voidSpit: (o, t, v) => { tone(o, t, { f: 120, f2: 260, dur: 0.09, vol: 0.18 * v }); noise(o, t, { type: "bandpass", f: 700, q: 1.5, dur: 0.08, vol: 0.15 * v }); },
+  voidSlip: (o, t, v) => { whoosh(o, t, 1400, 200, 0.4, 0.35 * v); [0, 3, 7].forEach((s, i) => tone(o, t + i * 0.04, { type: "triangle", f: 880 * 2 ** (s / 12), f2: 440 * 2 ** (s / 12), dur: 0.3, vol: 0.06 * v })); },
+  voidArsenal: (o, t, v) => { clank(o, t, 0.25 * v, 2200); clank(o, t + 0.09, 0.2 * v, 1700); styleChime(o, t + 0.05, "arcane", 0.3 * v, 1.2); },
+  voidLance: (o, t, v) => { whoosh(o, t, 2400, 900, 0.16, 0.3 * v); tone(o, t, { type: "triangle", f: 1600, f2: 1100, dur: 0.12, vol: 0.05 * v }); },
+  wispCall: (o, t, v) => [0, 4, 7].forEach((s, i) => bell(o, t + i * 0.06, 1046 * 2 ** (s / 12), 0.35, 0.06 * v)),
+  wispEnd: (o, t, v, style = "arcane") => { tone(o, t, { f: 900, f2: 300, dur: 0.12, vol: 0.08 * v }); styleChime(o, t + 0.02, style, 0.22 * v, 0.6); },
+  golemNova: (o, t, v) => { fireRoar(o, t, 0.3, 0.3 * v); thud(o, t, 80, 0.25 * v, 0.2); },
+  golemCrumble: (o, t, v) => { thud(o, t, 65, 0.5 * v, 0.3); rattle(o, t + 0.05, 9, 0.35, 0.35 * v, 900); },
+  voidReturn: (o, t, v) => tone(o, t, { f: 520, f2: 940, dur: 0.16, vol: 0.06 * v }),
+  pageTurn: (o, t, v, style = "arcane") => { noise(o, t, { type: "bandpass", f: 2600, q: 1.2, dur: 0.06, vol: 0.15 * v }); noise(o, t + 0.07, { type: "bandpass", f: 2000, q: 1.2, dur: 0.05, vol: 0.1 * v }); styleChime(o, t + 0.1, style, 0.15 * v, 0.5); },
+
   // ---- blobs
   blobHurt: (o, t, v, pitch = 1) => squelch(o, t, pitch * rnd(0.85, 1.15), 0.45 * v),
   blobDie: (o, t, v, pitch = 1) => { squelch(o, t, pitch * 0.8, 0.6 * v, 0.3); for (let i = 0; i < 3; i++) tone(o, t + 0.1 + i * 0.06, { f: rnd(300, 700) * pitch, f2: 120, dur: 0.07, vol: 0.15 * v }); },
@@ -719,7 +740,7 @@ export function bindSfx(room: any, me: () => string, ents: Map<string, Ent>) {
     const pos = (name: string, vol = 1, arg?: any, o?: Parameters<typeof play>[5]) =>
       ev.id === me() ? play(name, undefined, undefined, vol, arg, o) : x !== undefined ? play(name, x, y, vol, arg, o) : P(name, ev.id, vol, arg, o);
     switch (ev.ev) {
-      case "cast": pos("cast", 1, style); break;
+      case "cast": pos("cast", 1, style); if (ev.s === "su_blackhole" || ev.s === "su_horizon") pos("voidOpen", 1, ev.s === "su_horizon" ? 1.5 : 1); break;
       case "fizzle": pos("fizzle"); break;
       case "move": pos(ev.kind === "blink" ? "zap" : "dodge", 0.7, undefined, { key: "mv" + ev.id, minGap: 80 }); break;
       case "area": {
@@ -739,6 +760,20 @@ export function bindSfx(room: any, me: () => string, ents: Map<string, Ent>) {
       case "turret": pos("turret"); break;
       case "enchanthit": pos("enchanthit", 0.8, undefined, { key: "eh", minGap: 80 }); break;
       case "thorns": pos("thorns", 0.8, undefined, { key: "th", minGap: 80 }); break;
+      // the Summoner's Void (client/src/skillfx.ts draws them)
+      case "portal": pos("voidPortal", 0.8, undefined, { key: "vp" + ev.id, minGap: 120 }); break;
+      case "holeclose": pos("voidClose"); break;
+      case "swallow": pos("voidGulp", 0.8, undefined, { key: "vg", minGap: 90 }); break;
+      case "eatshot": pos("voidEat", 0.7, undefined, { key: "ve", minGap: 70 }); break;
+      case "voidhop": play("voidSpit", ev.x, ev.y, 0.7, undefined, { key: "vh", minGap: 90 }); break;
+      case "voidslip": pos("voidSlip"); break;
+      case "arsenal": pos("voidArsenal"); break;
+      case "wisps": pos("wispCall", 0.8); break;
+      case "wispend": pos("wispEnd", 0.7, ({ fire: "fire", cold: "frost", poison: "poison", shock: "lightning" } as Record<string, string>)[ev.el] ?? "arcane", { key: "we", minGap: 80 }); break;
+      case "golemfire": pos("golemNova", 0.8, undefined, { key: "gn" + ev.id, minGap: 200 }); break;
+      case "golemdeath": case "colossussplit": pos("golemCrumble"); break;
+      case "voidreturn": if (ev.id === me()) pos("voidReturn", 0.8, undefined, { key: "vr", minGap: 400 }); break;
+      case "grimoire": if (ev.id === me()) pos("pageTurn", 1, ({ fire: "fire", cold: "frost", poison: "poison", shock: "lightning" } as Record<string, string>)[ev.el] ?? "arcane"); break;
     }
   });
 
@@ -785,6 +820,7 @@ export function bindSfx(room: any, me: () => string, ents: Map<string, Ent>) {
   shots?.onAdd?.((s: any) => {
     const k = s.kind as string;
     const mob = !!s.mobName;
+    if (k === "voidlance") { play("voidLance", s.x, s.y, 0.7, undefined, { key: "vl", minGap: 80 }); return; } // the Arsenal's lance flies off on its own
     if (!mob && k !== "skelthrow") return; // our heroes' shots already sound on "rangedshot" / skill casts
     const name = k === "slimeball" ? "shotSlime" : k === "magicbolt" ? "shotMagic" : k === "shadowbolt" ? "shotShadow" : k === "arrow" || k === "bolt" ? "shotBow"
       : k === "knife" ? "shotThrow" : k === "stone" ? "shotStone" : k === "skelthrow" ? "shotBone" : k === "fireball" || k === "sunbolt" ? "shotFire" : "shotThrow";

@@ -1,5 +1,6 @@
 // Bot heroes for tools/perf/bench.ts (runs in its own process): join, roam at random, swing now and then.
 //   CAST=v_bats,su_mote: each bot goes "/max" and casts those skills non-stop (those of its class; the others are ignored)
+//   CAST=1: the Summoner's heaviest load (wisps, Void Arsenal, Void Blades, Black Hole); with SPREAD=1 they stand out of the safe zone
 import { Client } from "colyseus.js";
 import zlib from "node:zlib";
 
@@ -7,7 +8,7 @@ async function main() {
   const [n, port] = process.argv.slice(2).map(Number);
   const classes = ["vampire", "summoner"]; // only active classes can join (shared/classes.ts ACTIVE_CLASSES)
   const rooms: any[] = [];
-  const cast = (process.env.CAST ?? "").split(",").filter(Boolean);
+  const cast = process.env.CAST === "1" ? ["su_wisps", "su_arsenal", "su_blades", "su_blackhole"] : (process.env.CAST ?? "").split(",").filter(Boolean);
   let bytes = 0, raw = 0, packed = 0;
   for (let i = 0; i < n; i++) {
     const room = await new Client(`ws://localhost:${port}`).joinOrCreate("town", { name: `bot${i}p${process.pid % 10000}`, password: "benchpass1", cls: classes[i % classes.length], newGame: true });

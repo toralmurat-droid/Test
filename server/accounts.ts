@@ -44,6 +44,10 @@ export interface HeroSave {
   wear?: number;
   /** Devour (shared/devour.ts): monsters eaten per family. */
   feast?: Record<string, number>;
+  /** Summoner grimoire: the elements of golem 1 and 2, "fire,cold" (shared/summons.ts parseGrimoire). */
+  grimoire?: string;
+  /** Summoner skill tree version (shared/summons.ts SUMMONER_TREE): an older save gets its skill points back. */
+  suTree?: number;
 }
 
 interface Account {

@@ -413,26 +413,27 @@ function torso(c: C2, r: Rig) {
       clipTo(c, s, () => { c.beginPath(); s(c); c.strokeStyle = css(st, 0.6); c.lineWidth = 0.14; c.save(); c.stroke(); c.restore(); });
       c.setLineDash([]);
       if (tk.kind === "leather") clipTo(c, s, () => { for (let k = 0; k < 2; k++) line(c, [[cx - 4, sy + 2.5 + k * 2.4], [cx + 4, sy + 2.1 + k * 2.4]], sh(col, 0.5), 0.3, 0.6); });
-    } else if (tk.kind === "shirt") {
+    } else if (tk.kind === "tailcoat") tailcoatFront(c, r, s, col, tk.trim);
+    else if (tk.kind === "shirt") {
       if (down) { curve(c, [cx - 1.2, sy - 1.1], [cx, sy + 0.4], [cx + 1.2, sy - 1.1], sh(col, 0.55), 0.3, 0.8); line(c, [[cx, sy - 0.2], [cx, sy + 1.6]], sh(col, 0.6), 0.18, 0.6); }
       for (let k = -1; k <= 1; k += 2) curve(c, [cx + k * 1.5, sy + 1], [cx + k * 2.2, sy + 3.5], [cx + k * 1.4, hipY - 0.5], fold, 0.2, 0.45);
     }
   }
   if ((L.boneArmour ?? 0) >= 2) boneCuirass(c, r, s);
   if (!gear || gear.slot !== "armour") {
-    if (L.vest) vest(c, r, s);
+    if (L.vest && tk.kind !== "tailcoat") vest(c, r, s);
     if (L.apron) apron(c, r);
     if (L.tabard) tabard(c, r);
     if (L.corset !== undefined) corset(c, r, s);
   }
   // belt / sash
   const by = hipY - 1.1;
-  const beltCol = L.sash ?? L.belt;
+  const beltCol = tk.kind === "tailcoat" ? undefined : L.sash ?? L.belt;
   if (beltCol !== undefined) clipTo(c, s, () => {
     const bs = poly([[cx - 5, by - 0.55], [cx + 5, by - 0.55], [cx + 5, by + 0.55], [cx - 5, by + 0.55]]);
     vol(c, bs, C(beltCol), [cx - 4, by - 0.6, 8, 1.2], { ao: 0.2 });
   });
-  if (L.buckle !== undefined && !r.p.dir.startsWith("u")) {
+  if (L.buckle !== undefined && tk.kind !== "tailcoat" && !r.p.dir.startsWith("u")) {
     const bx = r.R ? cx + 1.6 : cx;
     metal(c, (cc) => cc.rect(bx - 0.6, by - 0.55, 1.2, 1.1), C(L.buckle), [bx - 0.6, by - 0.6], [bx + 0.6, by + 0.6], 0.5);
   }
@@ -537,6 +538,8 @@ function tabard(c: C2, r: Rig) {
 function backItem(c: C2, r: Rig, front: boolean) {
   const L = r.L, { cx, sy, hipY } = r;
   if ((r.dir === "up") === front) beastParts(c, r);
+  coatTails(c, r, front);
+  if (L.scarf) scarfEnds(c, r, front);
   if (L.back === "cape") {
     const col = C(L.capeCol!), flut = Math.sin(r.p.t * 1.1) * 0.5 + (r.p.run ? 1.2 : 0) + Math.abs(r.p.stride) * 0.4;
     if (r.dir === "up" && front) {
@@ -681,6 +684,163 @@ function arm(c: C2, r: Rig, which: "near" | "far") {
     if (armoured || L.trim) clipTo(c, ps, () => { c.beginPath(); ps(c); c.strokeStyle = css(C(armoured ? gear!.accent : L.trim!), 0.9); c.lineWidth = 0.4; c.stroke(); });
   }
   if ((L.boneArmour ?? 0) >= 1) bonePauldron(c, r, s, isNear);
+}
+
+// ---------------------------------------------------------------- warlock tailcoat and scarf (the Summoner)
+/** 0 at rest, 0.5 walking, 1 running: how hard cloth streams behind. */
+const motion = (r: Rig) => (r.p.run ? 1 : r.p.phase !== undefined || r.p.stride !== 0 ? 0.5 : 0);
+/** Phase of the cloth wave: the gait cycle when moving (loops with it), the frame index at rest (8-frame loop). */
+const wavePh = (r: Rig) => (r.p.phase !== undefined ? r.p.phase * (r.p.run ? 2 : 1) : r.p.t * Math.PI / 4);
+
+/** Tailcoat body: an open front over the waistcoat, lapels and piping in the trim colour, two buttons. */
+function tailcoatFront(c: C2, r: Rig, s: Shape, col: number, trim?: number) {
+  const L = r.L, { cx, sy, hipY } = r, tc = C(trim ?? sh(L.torsoCol, 1.6)), wc = C(L.vest ?? sh(L.torsoCol, 0.7));
+  const btn = C(L.buckle ?? 0xb0b4c0), dk = sh(col, 0.5);
+  if (r.dir === "down") {
+    const o = r.fo * 0.6;
+    clipTo(c, s, () => {
+      // the waistcoat in the opening, cut square at the waist where the coat front stops
+      const w = blobPath([[cx - 1.2 + o, sy - 1.2], [cx + 1.2 + o, sy - 1.2], [cx + 1.5 + o, hipY - 0.2], [cx + o, hipY + 0.4], [cx - 1.5 + o, hipY - 0.2]]);
+      vol(c, w, wc, [cx - 1.6, sy - 1.2, 3.2, hipY - sy + 1.4], { ao: 0.35 });
+      line(c, [[cx + o, sy + 1.2], [cx + o, hipY]], sh(wc, 0.55), 0.15, 0.7);
+      for (const k of [0, 1, 2]) fillShape(c, ellipseP(cx + o, sy + 1.9 + k * 1.3, 0.22, 0.22), css(sh(btn, 0.85)));
+      // lapels: dark silk with a violet edge, rolling down to the first button
+      for (const sg of [-1, 1]) {
+        const lap = poly([[cx + o + sg * 1.25, sy - 1.25], [cx + o + sg * 2.6, sy - 0.3], [cx + o + sg * 1.7, sy + 1.5], [cx + o + sg * 0.55, sy + 2.9]]);
+        vol(c, lap, sh(col, 0.72), [cx - 3, sy - 1.3, 6, 4.4], { ao: 0.2, hi: 1.35 });
+        line(c, [[cx + o + sg * 1.25, sy - 1.2], [cx + o + sg * 0.55, sy + 2.9], [cx + o + sg * 1.45, hipY - 0.4], [cx + o + sg * 2.7, hipY + 0.8]], tc, 0.32, 0.95);
+      }
+      // the coat's two front buttons on the near panel
+      for (const k of [0, 1]) metal(c, ellipseP(cx + o - 1.7, sy + 3.6 + k * 1.4, 0.32, 0.32), btn, [cx + o - 2, sy + 3.3 + k * 1.4], [cx + o - 1.4, sy + 3.9 + k * 1.4], 0.5);
+    });
+    for (const sg of [-1, 1]) curve(c, [cx + o + sg * 2.4, sy + 1.4], [cx + o + sg * 2.9, sy + 4], [cx + o + sg * 2.5, hipY], dk, 0.2, 0.5);
+  } else if (r.R) {
+    clipTo(c, s, () => {
+      const w = poly([[cx + 1.0, sy - 1.2], [cx + 2.6, sy + 0.6], [cx + 2.4, hipY + 0.5], [cx + 1.4, hipY + 0.5]]);
+      vol(c, w, wc, [cx + 1, sy - 1.2, 2, hipY - sy + 2], { ao: 0.3 });
+      const lap = poly([[cx + 0.6, sy - 1.2], [cx + 1.6, sy - 0.8], [cx + 2.1, sy + 2.6], [cx + 1.2, sy + 1.2]]);
+      vol(c, lap, sh(col, 0.72), [cx, sy - 1.2, 2.4, 4], { ao: 0.2, hi: 1.35 });
+      line(c, [[cx + 1.0, sy - 1.1], [cx + 2.1, sy + 2.6], [cx + 1.5, hipY - 0.2], [cx - 0.4, hipY + 0.9]], tc, 0.32, 0.95);
+      metal(c, ellipseP(cx + 1.9, sy + 3.8, 0.3, 0.3), btn, [cx + 1.6, sy + 3.5], [cx + 2.2, sy + 4.1], 0.5);
+    });
+    curve(c, [cx - 0.6, sy + 1], [cx - 1.4, sy + 3.6], [cx - 1.1, hipY], dk, 0.22, 0.55);
+  } else {
+    // from behind: a centre seam down to the waist, where the tails split (coatTails)
+    line(c, [[cx, sy - 0.6], [cx, hipY]], dk, 0.25, 0.7);
+    for (const sg of [-1, 1]) curve(c, [cx + sg * 2.0, sy + 1.2], [cx + sg * 2.5, sy + 3.8], [cx + sg * 1.9, hipY - 0.4], dk, 0.2, 0.5);
+    for (const sg of [-1, 1]) metal(c, ellipseP(cx + sg * 1.0, hipY - 1.0, 0.3, 0.3), btn, [cx + sg - 0.3, hipY - 1.3], [cx + sg + 0.3, hipY - 0.7], 0.5);
+  }
+}
+
+/** The tailcoat's two tails to mid-thigh: behind the legs from the front and the side, over them from behind. They swing with the gait and stream back at a run. */
+function coatTails(c: C2, r: Rig, front: boolean) {
+  const L = r.L;
+  if (L.torso !== "tailcoat" || torsoKind(r).kind !== "tailcoat" || (r.dir === "up") !== front) return;
+  const col = C(L.torsoCol), tc = C(L.trim ?? sh(L.torsoCol, 1.6)), mv = motion(r), ph = wavePh(r), { cx, hipY } = r;
+  const y0 = hipY - 1.4, hem = hipY + 3.3;
+  const tail = (pts: P[], shade: number) => {
+    const s = blobPath(pts), cc = sh(col, shade * 1.12);
+    vol(c, s, cc, [cx - 5, y0, 10, hem - y0 + 2], { ao: 0.3, hi: 1.35 });
+    grain(c, s, [cx - 5, y0, 10, hem - y0 + 2], cc, r.seed + 51, 18, 0.16, 1.0, 1.5);
+    clipTo(c, s, () => { c.beginPath(); s(c); c.strokeStyle = css(tc, 0.9); c.lineWidth = 0.4; c.stroke(); });
+  };
+  if (r.R) {
+    // side view: both tails hang behind the seat; walking they swing, running they fly back
+    for (const i of [0, 1]) {
+      const sw = Math.sin(ph + i * Math.PI) * (0.3 + mv * 0.6), back = 0.4 + mv * 2.4 + sw, lift = mv * 1.6 + Math.max(0, sw) * 0.4;
+      const x0 = cx - 1.9 + i * 0.5;
+      tail([[x0 + 1.6, y0], [x0 - 0.2, y0 + 0.2], [x0 - 0.9 - back * 0.6, hem - 1.4 - lift * 0.5], [x0 - 1.2 - back, hem - lift], [x0 - back * 0.6, hem + 0.3 - lift * 0.8], [x0 + 1.0, hipY + 1.2]], i ? 1 : 0.8);
+    }
+  } else if (r.dir === "down") {
+    // seen from the front only the tails' edges show past the hips; they flare as the legs move
+    for (const sg of [-1, 1]) {
+      const sw = Math.sin(ph + (sg > 0 ? Math.PI : 0)) * mv * 0.5, fl = mv * 0.9 + sw;
+      const x = cx - r.sil * 0.5 + r.fo * 0.3;
+      tail([[x + sg * 1.4, y0], [x + sg * 3.1, y0 + 0.2], [x + sg * (3.6 + fl), hem - 0.6], [x + sg * (3.2 + fl), hem + 0.2], [x + sg * 1.4, hem - 0.3]], 0.75);
+    }
+  } else {
+    // from behind: the two tails over the legs, split up the middle, swinging in turn
+    for (const sg of [-1, 1]) {
+      const sw = Math.sin(ph + (sg > 0 ? Math.PI : 0)) * (0.25 + mv * 0.55), fl = mv * 0.6;
+      const x = cx;
+      tail([[x + sg * 0.15, y0], [x + sg * 3.2, y0 - 0.1], [x + sg * (3.5 + fl) + sw, hem - 1], [x + sg * (2.9 + fl) + sw, hem + 0.2 - mv * 0.4], [x + sg * 0.5 + sw * 0.6, hem - 0.4 - mv * 0.3], [x + sg * 0.2, hipY + 0.4]], 1);
+    }
+  }
+}
+
+/** One floating scarf end: a cloth ribbon from `root`, bending along a travelling wave, a coloured band near the fringed tip. */
+function ribbon(c: C2, r: Rig, root: P, ang: number, len: number, amp: number, ph: number, w: number, shade: number) {
+  const sc = r.L.scarf!, col = C(sh(sc.col, shade)), n = 7, pts: P[] = [root];
+  let p = root;
+  for (let i = 1; i <= n; i++) {
+    const k = i / n, a = ang + amp * Math.sin(ph - i * 0.85) * k;
+    p = [p[0] + Math.cos(a) * len / n, p[1] + Math.sin(a) * len / n];
+    pts.push(p);
+  }
+  const side = (sg: number) => pts.map((q, i) => {
+    const a = i === 0 ? ang : Math.atan2(q[1] - pts[i - 1][1], q[0] - pts[i - 1][0]), ww = w * (1 - 0.2 * i / n) / 2;
+    return [q[0] - Math.sin(a) * ww * sg, q[1] + Math.cos(a) * ww * sg] as P;
+  });
+  const a = side(1), b = side(-1).reverse();
+  const s = blobPath([...a, ...b]);
+  const xs = pts.map((q) => q[0]), ys = pts.map((q) => q[1]);
+  const box: [number, number, number, number] = [Math.min(...xs) - w, Math.min(...ys) - w, Math.max(...xs) - Math.min(...xs) + 2 * w, Math.max(...ys) - Math.min(...ys) + 2 * w];
+  vol(c, s, col, box, { ao: 0.25 });
+  // a fold along the ribbon, then the violet band and the fringe at the tip
+  line(c, pts.slice(1, -1), sh(col, 0.6), 0.16, 0.6);
+  if (sc.band !== undefined) {
+    const q0 = pts[n - 2], q1 = pts[n - 1], a1 = Math.atan2(q1[1] - q0[1], q1[0] - q0[0]);
+    const ww = w * 0.42, m: P = [(q0[0] + q1[0]) / 2, (q0[1] + q1[1]) / 2];
+    line(c, [[m[0] - Math.sin(a1) * ww, m[1] + Math.cos(a1) * ww], [m[0] + Math.sin(a1) * ww, m[1] - Math.cos(a1) * ww]], C(sc.band), 0.42, 0.95);
+  }
+  const e = pts[n], ea = Math.atan2(e[1] - pts[n - 1][1], e[0] - pts[n - 1][0]);
+  for (const k of [-1, 0, 1]) {
+    const o: P = [e[0] - Math.sin(ea) * k * w * 0.3, e[1] + Math.cos(ea) * k * w * 0.3];
+    line(c, [o, [o[0] + Math.cos(ea + k * 0.2) * 0.7, o[1] + Math.sin(ea + k * 0.2) * 0.7]], sh(col, 0.8), 0.14, 0.85);
+  }
+}
+
+/**
+ * The scarf's two long ends. At rest they stir; walking they swing; running they stream back. Facing us they hang
+ * down the chest (front pass) and fly up past the shoulders at a run (back pass); from the side they trail behind
+ * the neck; from behind they hang down the back (front pass).
+ */
+function scarfEnds(c: C2, r: Rig, front: boolean) {
+  const mv = motion(r), ph = wavePh(r), { cx, sy } = r, D = Math.PI / 180;
+  if (r.R) {
+    if (front) return;
+    const base = (100 + mv * 66) * D, amp = 0.12 + mv * 0.34;
+    ribbon(c, r, [cx - 0.9, sy - 0.9], base + 8 * D, 7.6, amp, ph + 1.3, 1.25, 0.72);
+    ribbon(c, r, [cx - 1.2, sy - 0.6], base, 9.2, amp, ph, 1.35, 0.95);
+  } else if (r.dir === "down") {
+    const tilt = r.diag * 14 * D, o = r.fo * 0.7;
+    if (r.p.run) {
+      if (front) return;
+      for (const sg of [-1, 1]) ribbon(c, r, [cx + o + sg * 1.3, sy - 0.8], (sg > 0 ? -35 : -145) * D + tilt * 1.5, 6.4, 0.42, ph + (sg > 0 ? 1.4 : 0), 1.25, sg > 0 ? 0.75 : 0.9);
+      return;
+    }
+    if (!front) return;
+    // the two ends fall either side of the coat's opening, the waistcoat showing between them
+    const amp = 0.1 + mv * 0.42;
+    ribbon(c, r, [cx + o + 1.55, sy - 0.4], 84 * D + tilt, 6.6, amp, ph + 1.6, 1.0, 0.82);
+    ribbon(c, r, [cx + o - 1.6, sy - 0.4], 95 * D + tilt, 7.8, amp, ph, 1.05, 1);
+  } else {
+    if (!front) return;
+    const tilt = r.diag ? -12 * D : 0, k = r.p.run ? 0.7 : 1, spread = (4 + mv * 18) * D, amp = 0.12 + mv * 0.36;
+    ribbon(c, r, [cx - 0.6, sy - 0.5], 90 * D + spread + tilt, 8.6 * k, amp, ph, 1.35, 0.95);
+    ribbon(c, r, [cx + 0.6, sy - 0.5], 90 * D - spread + tilt, 7.4 * k, amp, ph + 1.4, 1.25, 0.82);
+  }
+}
+
+/** The scarf wound twice round the neck, over the collar (drawn after the head). */
+function scarfWrap(c: C2, r: Rig) {
+  const sc = r.L.scarf!, col = C(sc.col), { sy } = r, x = r.R ? r.cx + 0.2 : r.cx + r.fo * 0.7;
+  const w = r.R ? 1.8 : 2.4, y0 = sy - 1.55, y1 = sy + 0.45;
+  const s = blobPath([[x - w, y0 + 0.5], [x - w * 0.5, y0], [x + w * 0.5, y0], [x + w, y0 + 0.5], [x + w + 0.2, y1 - 0.4], [x + w * 0.4, y1 + 0.2], [x - w * 0.4, y1 + 0.2], [x - w - 0.2, y1 - 0.4]]);
+  vol(c, s, col, [x - w, y0, 2 * w, y1 - y0 + 0.4], { ao: 0.3, hi: 1.3 });
+  // the two turns of cloth
+  curve(c, [x - w + 0.2, y0 + 1.1], [x, y0 + 1.6], [x + w - 0.2, y0 + 1.1], sh(col, 0.5), 0.22, 0.8);
+  if (sc.band !== undefined) curve(c, [x - w + 0.3, y1 - 0.5], [x, y1 - 0.1], [x + w - 0.3, y1 - 0.5], C(sc.band), 0.18, 0.55);
 }
 
 /**
@@ -1720,6 +1880,7 @@ export function paintFrame(name: string, p: PoseLike, info: FrameInfo, withShado
   };
   const farArm = () => { far(() => arm(c, r, "far")); };
   const shieldNow = () => { shield(c, r); };
+  const headNow = () => { head(c, r); if (L.scarf) scarfWrap(c, r); };
   const weaponNow = () => { if (!p.noWeapon) weapon(c, r); };
   const bowHidesFar = L.weapon === "bow" && p.attack >= 0 && !p.farHand;
 
@@ -1732,13 +1893,13 @@ export function paintFrame(name: string, p: PoseLike, info: FrameInfo, withShado
     backItem(c, r, true);
     if (p.farHand) farArm(); shieldNow();
     arm(c, r, "near");
-    head(c, r);
+    headNow();
     if (!behind) weaponNow();
   } else if (dir === "down" && r.diag) {
     // facing down-right: the far (left) arm goes behind the torso, the shield stays in front
     backItem(c, r, false);
     if (!bowHidesFar && !p.farHand) farArm();
-    legs(); torso(c, r); backItem(c, r, true); rangedGear(c, r); head(c, r);
+    legs(); torso(c, r); backItem(c, r, true); rangedGear(c, r); headNow();
     if (p.farHand) farArm(); shieldNow();
     weaponNow(); arm(c, r, "near");
   } else if (dir === "up") {
@@ -1748,11 +1909,11 @@ export function paintFrame(name: string, p: PoseLike, info: FrameInfo, withShado
     backItem(c, r, true);
     if (!bowHidesFar) farArm(); shieldNow();
     arm(c, r, "near");
-    head(c, r);
+    headNow();
     if (!behind) weaponNow();
   } else if (dir === "down") {
     backItem(c, r, false);
-    legs(); torso(c, r); backItem(c, r, true); rangedGear(c, r); head(c, r);
+    legs(); torso(c, r); backItem(c, r, true); rangedGear(c, r); headNow();
     if (!bowHidesFar) farArm(); shieldNow();
     weaponNow(); arm(c, r, "near");
   } else {
@@ -1760,7 +1921,7 @@ export function paintFrame(name: string, p: PoseLike, info: FrameInfo, withShado
     if (!p.farHand && !bowHidesFar) farArm();
     legs(); torso(c, r); backItem(c, r, true); rangedGear(c, r);
     if (!p.farHand) shieldNow();
-    head(c, r);
+    headNow();
     if (p.farHand) farArm();
     weaponNow(); arm(c, r, "near");
   }
@@ -1792,14 +1953,15 @@ export function paintFrame(name: string, p: PoseLike, info: FrameInfo, withShado
   return hc;
 }
 
-/** A small witch-fire dancing a little above the open near hand: red-orange tongue, yellow heart. */
+/** A small witch-fire dancing a little above the open near hand: red-orange tongue, yellow heart (a Void flame for the Summoner: violet, pale heart). */
 function palmFlame(c: C2, r: Rig, col: number) {
   const [x, y0] = r.nearH, t = r.p.t, sw = Math.sin(t * 1.9) * 0.45, y = y0 - 1.1 - Math.abs(Math.sin(t * 1.3)) * 0.3;
   const tall = 3.4 + Math.sin(t * 2.3) * 0.5;
   const outer = blobPath([[x - 1.25, y], [x - 1.0, y - 1.3], [x - 0.3 + sw * 0.5, y - tall * 0.7], [x + sw, y - tall], [x + 0.6 + sw * 0.4, y - tall * 0.55], [x + 1.25, y - 0.9], [x + 1.0, y + 0.45], [x, y + 0.75]]);
   fillShape(c, outer, css(sh(col, 0.85)));
-  fillShape(c, blobPath([[x - 0.75, y], [x - 0.2 + sw * 0.4, y - tall * 0.55], [x + 0.5 + sw * 0.3, y - tall * 0.35], [x + 0.75, y - 0.2], [x, y + 0.45]]), css(C(0xffa040)));
-  fillShape(c, ellipseP(x + sw * 0.15, y - 0.35, 0.42, 0.55), css(C(0xffe08a)));
+  const warm = ((col >> 16) & 255) > (col & 255); // a fire flame (red over blue) keeps its orange and yellow heart
+  fillShape(c, blobPath([[x - 0.75, y], [x - 0.2 + sw * 0.4, y - tall * 0.55], [x + 0.5 + sw * 0.3, y - tall * 0.35], [x + 0.75, y - 0.2], [x, y + 0.45]]), css(C(warm ? 0xffa040 : mix(col, 0xffffff, 0.35))));
+  fillShape(c, ellipseP(x + sw * 0.15, y - 0.35, 0.42, 0.55), css(C(warm ? 0xffe08a : mix(col, 0xffffff, 0.8))));
 }
 
 // ---------------------------------------------------------------- pixel-art output

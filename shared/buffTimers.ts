@@ -31,8 +31,11 @@ export function timersOf(u: TimerUnit, now: number): Timer[] {
   return out;
 }
 
-/** Changes only when an effect starts, ends or is refreshed (not every tick). */
-export const timerSig = (list: Timer[]) => list.map((t) => `${t.id}@${Math.round(t.until)}`).join(",");
+/** Lasting effects kept topped up while their source lives (the Summoner's golem auras): shown without a countdown. */
+export const isLasting = (id: string) => id.startsWith("aura_");
+
+/** Changes only when an effect starts, ends or is refreshed (not every tick); topping up a lasting one changes nothing. */
+export const timerSig = (list: Timer[]) => list.map((t) => (isLasting(t.id) ? t.id : `${t.id}@${Math.round(t.until)}`)).join(",");
 
 export const encodeTimers = (seq: number, list: Timer[], now: number) =>
   `${seq}|` + list.map((t) => `${t.id}:${Math.max(0, Math.round(t.until - now))}`).join(",");

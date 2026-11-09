@@ -74,7 +74,8 @@ export type MobKind = "slime" | "skeleton" | "motherblob" | "blobling" | "shoote
   | "nightraider"
   // summoned by heroes (shared/summons.ts): they fight for their owner
   | "golem_fire" | "golem_cold" | "golem_poison" | "golem_shock" | "golem_colossus"
-  | "bride"; // the vampire's Brides (v_brides): pale companions that run at his foes and drink
+  | "bride" // the vampire's Brides (v_brides): pale companions that run at his foes and drink
+  | "wisp"; // the Summoner's elemental wisps (su_wisps, shared/summons.ts WISP): Void lights that shoot (element in Mob.weapon)
 
 export interface MobDef {
   name: string;
@@ -96,6 +97,8 @@ export const MOBS: Record<MobKind, MobDef> = {
   // the Summoner's ultimate: the golems fused into one giant (its element is in Mob.weapon)
   // the vampire's ultimate (v_brides): fast and frantic, quick claws, not much life
   bride: { name: "Bride", maxHp: 170, speed: 112, damage: 9, attackCooldownMs: 520, aggroRange: 200, leash: 300, xp: 0 },
+  // the Summoner's wisps: they float (fast), shoot from afar (shared/voidConjure.ts) and break easily
+  wisp: { name: "Wisp", maxHp: 45, speed: 150, damage: 0, attackCooldownMs: 1200, aggroRange: 150, leash: 256, xp: 0 },
   golem_colossus: { name: "Colossus", maxHp: 420, speed: 64, damage: 30, attackCooldownMs: 1500, aggroRange: 180, leash: 256, xp: 0 },
   slime: { name: "Blob", maxHp: 40, speed: 45, damage: 8, attackCooldownMs: 1000, aggroRange: 80, leash: 140, xp: 10 },
   skeleton: { name: "Skeleton", maxHp: 80, speed: 62, damage: 19, attackCooldownMs: 900, aggroRange: 110, leash: 200, xp: 25 },

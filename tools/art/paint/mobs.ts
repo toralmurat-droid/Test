@@ -5,6 +5,7 @@ import { MOB_POSES, posed, setPainted, type Dir } from "../characters";
 import { C2, P, blobPath, css, ellipseP, poly, fillShape, glow, limb, line, metal, mix, rng, sh, vol } from "./brush";
 import { lastRig, pixelAlpha, pixelize, shrink } from "./body";
 import { paintRaider, RAIDER_H, RAIDER_W } from "./raiders";
+import { paintWisp, WISP_H, WISP_W, type WispElement } from "./wisps";
 import { RAIDERS } from "../../../shared/raiders";
 
 /**
@@ -531,6 +532,11 @@ export function buildMobs(out: string, ONLY?: string[]) {
       { key: `mob_golem_${el}`, w: GOLEM_W, h: GOLEM_H, draw: (c: C2, f: number) => { const { dir, pose } = frameOf(f); paintGolemFrame(c, "elemental", el, dir as GolemDir, pose, 7 + i, SH ?? undefined); } },
       { key: `mob_golem_colossus_${el}`, w: GOLEM_W, h: GOLEM_H, draw: (c: C2, f: number) => { const { dir, pose } = frameOf(f); paintGolemFrame(c, "elemental", el, dir as GolemDir, pose, 31 + i, SH ?? undefined); } },
     ]),
+    // the Summoner's elemental wisps (wisps.ts): small orbs floating above their shadow
+    ...(["fire", "cold", "poison", "shock"] as WispElement[]).map((el) => ({
+      key: `mob_wisp_${el}`, w: WISP_W, h: WISP_H,
+      draw: (c: C2, f: number) => { const { dir, pose } = frameOf(f); paintWisp(c, SH, el, dir as "down" | "up" | "right", pose, f); },
+    })),
     // humanoids get taller frames than the pixel ones, about hero height (client: PAINTED_LOOK in textures.ts)
     humanoid("mob_skeleton", "skeleton", 20, 30, 27.5 / 30, 0.85),
     humanoid("mob_skeleton_axe", "skeleton_axe", 20, 30, 27.5 / 30, 0.85),
@@ -592,7 +598,7 @@ export function buildMobs(out: string, ONLY?: string[]) {
       const c = body.getContext("2d"), sc = shadow.getContext("2d");
       c.scale(HI, HI); sc.scale(HI, HI);
       SH = sc; s.draw(c, f); SH = null;
-      const blob = !/skeleton|bandit|bride|necromancer|demon|crawler|hollowking|gnawkin|tuskborn|silkwretch|duskwing|packlord|hornbrute|hidemother|crowseer|gnasher|weaver|nomad|scorpion|sanddead|veiled|camelfolk|sphinx|sunwright|nightraider/.test(s.key);
+      const blob = !/wisp|skeleton|bandit|bride|necromancer|demon|crawler|hollowking|gnawkin|tuskborn|silkwretch|duskwing|packlord|hornbrute|hidemother|crowseer|gnasher|weaver|nomad|scorpion|sanddead|veiled|camelfolk|sphinx|sunwright|nightraider/.test(s.key);
       const b = shrink(body, "mb", tw, th);
       pixelize(b, tw, th, true, blob ? { y0: Math.round(th * 0.7), y1: th, mud: 0.14, sat: 0.9 } : { y0: Math.round(th * 0.72), y1: th, mud: s.key.includes("bandit") ? 0.38 : 0.2 });
       const u = shrink(shadow, "ms", tw, th); pixelAlpha(u);
