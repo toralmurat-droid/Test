@@ -1,5 +1,5 @@
 import { uiScale } from "./worldscale";
-import { DESERT_Y0, MAP_H, MAP_W, TILE, WORLD_H } from "../../shared/constants";
+import { DESERT_Y0, MAP_H, MAP_W, TILE, UNDER_END, WORLD_H } from "../../shared/constants";
 import { floorAt, SEA_END } from "../../shared/dungeon";
 import { AREAS, EMPTY, GROUND, OBJECTS, T } from "../../shared/map";
 import { createTilesetCanvas, tileColors } from "./tileset";
@@ -15,6 +15,13 @@ const PF = '"Pixelify Sans", monospace';
 const REVEAL = 9; // tiles around the player that become discovered
 const FADE = 3; // soft edge of the discovered area, in tiles
 const FOG = "#15151d";
+const MAP_SIZE = 0.82; // world map frame: share of the screen's width and height it may take
+const MAX_ZOOM = 32; // world map: most canvas pixels per tile when zoomed in
+const PAN_SPEED = 700; // world map: canvas pixels per second while I/J/K/L are held
+const ZOOM_SPEED = 2.2; // world map: zoom factor per second while + / - are held
+const ISO_K = 0.78, C45 = Math.SQRT1_2; // the iso world map is turned 45 degrees and shrunk to fit
+/** Keys that steer the open world map (matched by the letter typed). The game never sees them while it is open. */
+const PAN_KEYS: Record<string, [number, number]> = { I: [0, -1], K: [0, 1], J: [-1, 0], L: [1, 0] };
 
 type P = { x: number; y: number };
 /** Another online hero: shown on both maps in its own colour, named on the world map. */
@@ -49,6 +56,21 @@ export class Minimap {
   private view = MIN_VIEW; // tiles currently shown across the minimap (eases towards the explored size)
   /** Quest and NPC markers, set by the NPC layer every frame. */
   markers: MapMarker[] = [];
+  /** Last positions given to draw(): the world map redraws every frame while open. */
+  private me?: P;
+  private others: OtherHero[] = [];
+  /**
+   * World map camera: tile at the canvas centre and canvas pixels per tile. Undefined = the default framing
+   * (explored area); the first pan or zoom starts from that framing. `follow` keeps the hero in the middle.
+   */
+  private cam?: { cx: number; cy: number; s: number };
+  private follow = false;
+  private held = new Set<string>(); // map keys held down
+  private lastBig = 0;
+  private ptrs = new Map<number, { x: number; y: number }>(); // pointers down on the world map (canvas px)
+  private dragged = false; // the current press moved the map (not a tap)
+  private downAt?: { x: number; y: number };
+  private lastTap?: { t: number; x: number; y: number };
 
   constructor(private el: HTMLCanvasElement, name = "") {
     el.width = VIEW_W * PX;
@@ -77,7 +99,7 @@ export class Minimap {
     // Big world map overlay
     this.overlay = document.createElement("div");
     this.overlay.id = "worldmap";
-    this.overlay.innerHTML = `<div class="wm-box"><div class="wm-title"></div><canvas class="wm-map"></canvas><div class="wm-hint">Click or press M / Esc to close</div></div>`;
+    this.overlay.innerHTML = `<div class="wm-box"><div class="wm-title"></div><canvas class="wm-map"></canvas><div class="wm-hint"><button type="button" class="wm-center" tabindex="-1" title="Centre on your hero (C)">◎ Centre</button><span class="wm-keys">Drag or I J K L to move · Wheel or + / − to zoom · C or double-click to centre · M / Esc to close</span><span class="wm-touch">Drag · Pinch to zoom · Double-tap to centre</span></div></div>`;
     this.big = this.overlay.querySelector("canvas")!;
     // Ornate frame: iron-bound oak with gem corners, a title plaque on top and clasps on the sides
     const box = this.overlay.querySelector<HTMLDivElement>(".wm-box")!;
@@ -91,7 +113,12 @@ export class Minimap {
     l.classList.add("wm-l"); r.classList.add("wm-r"); bt.classList.add("wm-b");
     box.append(l, r, bt);
     document.body.appendChild(this.overlay);
-    this.overlay.addEventListener("click", () => this.toggle(false));
+    // Only a click on the dark backdrop closes the map: the map itself is dragged and zoomed
+    this.overlay.addEventListener("click", (ev) => { if (ev.target === this.overlay) this.toggle(false); });
+    const centre = this.overlay.querySelector<HTMLButtonElement>(".wm-center")!;
+    centre.addEventListener("mousedown", (ev) => ev.preventDefault());
+    centre.addEventListener("click", () => { centre.blur(); this.recentre(); });
+    this.bindMapInput();
     el.addEventListener("click", () => this.toggle(true));
     el.title = "Open map (M)";
     // Small globe button on the minimap's corner. Mouse/touch only: it never takes keyboard focus,
@@ -114,6 +141,146 @@ export class Minimap {
       if (ev.key === "m" || ev.key === "M") this.toggle();
       else if (ev.key === "Escape" && this.isOpen) this.toggle(false);
     });
+    // Map keys while the map is open: caught before the game (capture phase) so I/J/K/L/C/+/- don't open menus
+    // or cast; the arrows and WASD still reach the game, so the hero keeps walking. Key-ups always go through.
+    window.addEventListener("keydown", (ev) => {
+      if (!this.isOpen || ev.ctrlKey || ev.metaKey || ev.altKey) return;
+      if (document.activeElement instanceof HTMLInputElement || document.activeElement instanceof HTMLTextAreaElement) return;
+      const k = this.mapKey(ev);
+      if (!k) return;
+      ev.preventDefault(); ev.stopImmediatePropagation();
+      if (k === "C") { if (!ev.repeat) this.recentre(); return; }
+      this.held.add(k);
+    }, true);
+    window.addEventListener("keyup", (ev) => { const k = this.mapKey(ev); if (k) this.held.delete(k); }, true);
+    window.addEventListener("blur", () => this.held.clear());
+  }
+
+  /** The world-map key an event stands for: I/J/K/L (pan), C (centre), + / - (zoom). */
+  private mapKey(ev: KeyboardEvent): string | undefined {
+    const k = ev.key.length === 1 ? ev.key.toUpperCase() : "";
+    if (k in PAN_KEYS || k === "C") return k;
+    if (k === "+" || k === "=" || ev.code === "NumpadAdd") return "+";
+    if (k === "-" || k === "_" || ev.code === "NumpadSubtract") return "-";
+    return undefined;
+  }
+
+  /** Mouse, pen and touch on the world map: drag to move, wheel / pinch to zoom, double-click / double-tap to centre. */
+  private bindMapInput() {
+    const c = this.big;
+    c.style.touchAction = "none";
+    c.style.cursor = "grab";
+    const at = (ev: { clientX: number; clientY: number }) => {
+      const r = c.getBoundingClientRect(); // the overlay is CSS-zoomed: go back to canvas pixels
+      return { x: (ev.clientX - r.left) * c.width / r.width, y: (ev.clientY - r.top) * c.height / r.height };
+    };
+    c.addEventListener("pointerdown", (ev) => {
+      if (ev.button !== 0 && ev.pointerType === "mouse") return;
+      c.setPointerCapture(ev.pointerId);
+      const p = at(ev);
+      this.ptrs.set(ev.pointerId, p);
+      if (this.ptrs.size === 1) { this.dragged = false; this.downAt = p; }
+      else this.dragged = true; // a second finger: pinch, never a tap
+      c.style.cursor = "grabbing";
+    });
+    c.addEventListener("pointermove", (ev) => {
+      const prev = this.ptrs.get(ev.pointerId);
+      if (!prev) return;
+      const p = at(ev);
+      if (this.ptrs.size === 1) {
+        if (!this.dragged && this.downAt && Math.hypot(p.x - this.downAt.x, p.y - this.downAt.y) < 5) return;
+        this.dragged = true;
+        this.pan(prev.x - p.x, prev.y - p.y);
+        this.ptrs.set(ev.pointerId, p);
+        return;
+      }
+      // Pinch: the two fingers' midpoint pans, their spread zooms around it
+      const other = [...this.ptrs.entries()].find(([id]) => id !== ev.pointerId)![1];
+      const m0 = { x: (other.x + prev.x) / 2, y: (other.y + prev.y) / 2 }, m1 = { x: (other.x + p.x) / 2, y: (other.y + p.y) / 2 };
+      const d0 = Math.hypot(other.x - prev.x, other.y - prev.y), d1 = Math.hypot(other.x - p.x, other.y - p.y);
+      this.pan(m0.x - m1.x, m0.y - m1.y);
+      if (d0 > 10) this.zoomAt(d1 / d0, m1.x, m1.y);
+      this.ptrs.set(ev.pointerId, p);
+    });
+    const up = (ev: PointerEvent) => {
+      if (!this.ptrs.delete(ev.pointerId)) return;
+      if (this.ptrs.size) { const [q] = this.ptrs.values(); this.downAt = q; return; } // pinch to one finger: keep dragging
+      c.style.cursor = "grab";
+      if (this.dragged || ev.type === "pointercancel") return;
+      // A tap: two in a row (300 ms, close together) centre on the hero
+      const p = at(ev), t = performance.now(), l = this.lastTap;
+      if (l && t - l.t < 300 && Math.hypot(p.x - l.x, p.y - l.y) < 30) { this.lastTap = undefined; this.recentre(); }
+      else this.lastTap = { t, x: p.x, y: p.y };
+    };
+    c.addEventListener("pointerup", up);
+    c.addEventListener("pointercancel", up);
+    c.addEventListener("wheel", (ev) => {
+      ev.preventDefault();
+      const p = at(ev);
+      const dy = ev.deltaMode === 1 ? ev.deltaY * 33 : ev.deltaMode === 2 ? ev.deltaY * 400 : ev.deltaY;
+      this.zoomAt(Math.pow(1.0015, -Math.max(-300, Math.min(300, dy))), p.x, p.y);
+    }, { passive: false });
+  }
+
+  /** Canvas offset from the centre -> the same offset on the (possibly turned) map, in canvas pixels. */
+  private unturn(dx: number, dy: number): [number, number] {
+    if (!ISO) return [dx, dy];
+    return [(dx * C45 + dy * C45) / ISO_K, (-dx * C45 + dy * C45) / ISO_K];
+  }
+
+  /** Bounds the world map camera may roam: the act (or dungeon floor) the hero is in, fog and all. */
+  private bounds() {
+    const me = this.me;
+    const f = me && floorAt(Math.floor(me.x / TILE), Math.floor(me.y / TILE));
+    if (f) return { x0: f.x, y0: f.y, x1: f.x + f.w, y1: f.y + f.h };
+    if (me && me.y >= WORLD_H * TILE && me.y < UNDER_END * TILE) return { x0: 0, y0: WORLD_H, x1: MAP_W, y1: UNDER_END };
+    return this.inDesert ? { x0: 0, y0: DESERT_Y0, x1: MAP_W, y1: MAP_H } : { x0: 0, y0: 0, x1: MAP_W, y1: WORLD_H };
+  }
+
+  /** The camera, made from the default framing the first time the map is moved. */
+  private camera() {
+    if (!this.cam) {
+      const cw = this.big.width, ch = this.big.height, R = this.region(cw, ch, this.me);
+      this.cam = { cx: R.x + cw / R.s / 2, cy: R.y + ch / R.s / 2, s: R.s };
+    }
+    return this.cam;
+  }
+
+  /** Keeps the camera's zoom and centre inside the bounds (zoomed out, the whole act fits). */
+  private clampCam() {
+    const c = this.cam;
+    if (!c) return;
+    const B = this.bounds(), cw = this.big.width, ch = this.big.height;
+    const fit = Math.min(cw / (B.x1 - B.x0), ch / (B.y1 - B.y0)) / (ISO ? 1.2 : 1);
+    c.s = Math.max(Math.min(fit, this.region(cw, ch, this.me).s), Math.min(MAX_ZOOM, c.s));
+    c.cx = Math.max(B.x0, Math.min(B.x1, c.cx));
+    c.cy = Math.max(B.y0, Math.min(B.y1, c.cy));
+  }
+
+  /** Moves the world map by a canvas-pixel offset (screen directions, even on the turned iso map). */
+  private pan(dx: number, dy: number) {
+    const c = this.camera(), [mx, my] = this.unturn(dx, dy);
+    c.cx += mx / c.s; c.cy += my / c.s;
+    this.follow = false;
+    this.clampCam();
+  }
+
+  /** Zooms the world map by `f`, keeping the spot under canvas point (px, py) in place. */
+  private zoomAt(f: number, px: number, py: number) {
+    const c = this.camera(), [ox, oy] = this.unturn(px - this.big.width / 2, py - this.big.height / 2);
+    const tx = c.cx + ox / c.s, ty = c.cy + oy / c.s; // tile under the point
+    c.s *= f;
+    this.clampCam();
+    if (!this.follow) { c.cx = tx - ox / c.s; c.cy = ty - oy / c.s; this.clampCam(); }
+  }
+
+  /** Centres the world map on the hero and keeps following them. */
+  private recentre() {
+    if (!this.me) return;
+    const c = this.camera();
+    c.cx = this.me.x / TILE; c.cy = this.me.y / TILE;
+    this.follow = true;
+    this.clampCam();
   }
 
   get isOpen() { return this.overlay.classList.contains("open"); }
@@ -122,7 +289,9 @@ export class Minimap {
   private turned = false;
 
   toggle(open = !this.isOpen) {
+    if (open && !this.isOpen) { this.cam = undefined; this.follow = false; } // opens on the explored area, as before
     this.overlay.classList.toggle("open", open);
+    if (!open) { this.held.clear(); this.ptrs.clear(); }
     this.last = 0;
   }
 
@@ -212,8 +381,18 @@ export class Minimap {
   }
 
   draw(now: number, me: P | undefined, others: OtherHero[]) {
-    if (now - this.last < 100) return;
-    this.last = now;
+    this.me = me; this.others = others;
+    if (now - this.last >= 100) { this.last = now; this.drawMini(now, me, others); }
+    // World map (only while open): every frame, so dragging, zooming and following are smooth
+    if (this.isOpen) this.drawBig(now, me, others);
+  }
+
+  private dot(g: CanvasRenderingContext2D, p: P, s: number, ox: number, oy: number, color: string, r: number) {
+    g.fillStyle = color;
+    g.fillRect(Math.round((p.x / TILE - ox) * s) - r, Math.round((p.y / TILE - oy) * s) - r, r * 2, r * 2);
+  }
+
+  private drawMini(now: number, me: P | undefined, others: OtherHero[]) {
     if (me) this.inDesert = me.y >= DESERT_Y0 * TILE;
     if (me) this.reveal(Math.floor(me.x / TILE), Math.floor(me.y / TILE));
     if (this.dirty && now - this.lastSave > 3000) { this.save(); this.dirty = false; this.lastSave = now; }
@@ -235,10 +414,7 @@ export class Minimap {
     c.fillRect(0, 0, this.el.width, this.el.height);
     c.drawImage(this.colors, -sx * mpx, -sy * mpx, MAP_W * mpx, MAP_H * mpx);
     c.drawImage(this.fog, -sx * mpx, -sy * mpx, MAP_W * mpx, MAP_H * mpx);
-    const dot = (g: CanvasRenderingContext2D, p: P, s: number, ox: number, oy: number, color: string, r: number) => {
-      g.fillStyle = color;
-      g.fillRect(Math.round((p.x / TILE - ox) * s) - r, Math.round((p.y / TILE - oy) * s) - r, r * 2, r * 2);
-    };
+    const dot = this.dot.bind(this);
     // Other online heroes: blue dots with a dark outline, shown even in unexplored parts
     for (const o of others) { dot(c, o, mpx, sx, sy, "#000", 3); dot(c, o, mpx, sx, sy, ALLY, 2); }
     this.drawMarkers(c, mpx, sx, sy, true);
@@ -250,25 +426,43 @@ export class Minimap {
       o.imageSmoothingEnabled = false; o.drawImage(this.flat!, 0, 0); o.restore();
     }
 
-    // World map (only while open)
-    if (!this.isOpen) return;
+  }
+
+  private drawBig(now: number, me: P | undefined, others: OtherHero[]) {
+    const dt = Math.min(0.1, (now - (this.lastBig || now)) / 1000);
+    this.lastBig = now;
+    const dot = this.dot.bind(this);
     // Only the explored part (plus a fog margin) is framed, so the map grows as the world is discovered.
     // The frame keeps a fixed size; the explored part (plus a fog margin) is zoomed to fill it, so the map
     // zooms out as the world is discovered and never shows how big the world is.
     const z = uiScale(), vw = window.innerWidth / z, vh = window.innerHeight / z; // the map overlay is zoomed (worldscale.ts)
-    const cw = Math.max(240, Math.min(1100, Math.round(vw - 32 - FRAME * 6 - 24))), ch = Math.max(180, Math.round(vh - 32 - FRAME * 6 - 90));
+    // width: gutter, frame, padding + canvas border, the side clasps; height: the hint row can wrap on narrow screens
+    const hintH = this.overlay.querySelector<HTMLElement>(".wm-hint")!.offsetHeight || 30;
+    // The framed map takes at most MAP_SIZE of the screen, so the game stays visible around it
+    const aw = Math.min(vw - 32, vw * MAP_SIZE), ah = Math.min(vh - 32, vh * MAP_SIZE);
+    const cw = Math.max(240, Math.min(1100, Math.round(aw - FRAME * 6 - 28 - 78))), ch = Math.max(180, Math.round(ah - FRAME * 6 - 60 - hintH));
     if (this.big.width !== cw || this.big.height !== ch) {
       this.big.width = cw; this.big.height = ch;
       this.big.style.width = `${cw}px`; this.big.style.height = `${ch}px`;
     }
-    const R = this.region(cw, ch, me), BIG = R.s;
+    // Held keys: I/J/K/L pan (screen directions), + / - zoom around the centre
+    if (this.held.size) {
+      let px = 0, py = 0;
+      for (const k of this.held) { const d = PAN_KEYS[k]; if (d) { px += d[0]; py += d[1]; } }
+      if (px || py) { const n = Math.hypot(px, py); this.pan((px / n) * PAN_SPEED * dt, (py / n) * PAN_SPEED * dt); }
+      const zf = (this.held.has("+") ? 1 : 0) - (this.held.has("-") ? 1 : 0);
+      if (zf) this.zoomAt(Math.pow(ZOOM_SPEED, zf * dt), cw / 2, ch / 2);
+    }
+    if (this.follow && me && this.cam) { this.cam.cx = me.x / TILE; this.cam.cy = me.y / TILE; }
+    this.clampCam();
+    const R = this.cam ? { x: this.cam.cx - cw / this.cam.s / 2, y: this.cam.cy - ch / this.cam.s / 2, s: this.cam.s } : this.region(cw, ch, me), BIG = R.s;
     const g = this.big.getContext("2d")!;
     g.imageSmoothingEnabled = false;
     g.fillStyle = FOG;
     g.fillRect(0, 0, this.big.width, this.big.height);
     // Iso view (Murat 2026-11-07): the world map turns 45 degrees like the minimap, so up on the map is up on the
     // screen; the map is drawn turned, the labels are placed at the turned spots but stay upright
-    const K = 0.78, C45 = Math.SQRT1_2;
+    const K = ISO_K;
     const T = (x: number, y: number): [number, number] => {
       if (!ISO) return [x, y];
       const dx = x - cw / 2, dy = y - ch / 2;

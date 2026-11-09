@@ -10,7 +10,7 @@ import { dith as dith1, hash, OUT, stoneCol as greyStone, vnoise, type Px } from
  * hot desert light fills the arch and grains of sand float out of it.
  */
 const dith = (x: number, y: number) => dith1(x >> 1, y >> 1);
-export const WG_W = 172, WG_H = 156, WG_OX = 86, WG_OY = 114; // texture size and the gate's foot, in game px
+export const WG_W = 236, WG_H = 188, WG_OX = 118, WG_OY = 122; // texture size and the gate's foot, in game px
 const W = WG_W * 2, H = WG_H * 2, CX = WG_OX * 2, BY = WG_OY * 2; // cells
 
 /** Screen cell of a world point (a along world x, b along world y, z up), relative to the feet. */
@@ -26,7 +26,7 @@ const SAND = ["#6e5232", "#8e6c40", "#b08a52", "#cfa96a", "#e6c88e", "#f4e0b0"];
 const HOT = ["#4a2a12", "#7a4a1e", "#b0702a", "#e09a3e", "#ffc35e", "#ffe49a", "#fff6d8"];
 
 /** Which side is being painted: Oakvale's (dark ivy-grown stone, desert sand spilling out) or the Sunscar's twin in the
- * Sunstone Circle (sun-bleached sandstone half buried in dunes, the green valley's grass and petals spilling out). */
+ * Sunstone Circle (sun-bleached sandstone half buried in dunes, leaves and petals from the valley drifting out). */
 let DESERT = false;
 /** Sun-bleached sandstone, three tones lit from the top left like the grey stone. */
 const SANDSTONE = (lit: number, tone: number) => {
@@ -130,11 +130,15 @@ function paint(f: number, N: number, awake: boolean, desert: boolean): HTMLCanva
 
   if (!DESERT) {
   // sand that has blown through the arch and spilled onto the grass, fanning out in front (world +y) in ripples
-    for (let y = BY - 90; y < H; y++) for (let x = 0; x < W; x++) {
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
       const qx = x + 0.5 - CX, qy = y + 0.5 - BY;
       const a = (qx + 2 * qy) / 2, b = (2 * qy - qx) / 2; // ground point
-      const ea = (a - 4) / 120, eb = (b - 4) / 66, d = ea * ea + eb * eb;
-      const edge = 1 - d + (vnoise(x * 0.08, y * 0.12, 999, 401) - 0.5) * 0.9;
+      // an uneven blot (Murat: bigger, not an oval): its radius swells and shrinks with the angle round the gate, in
+      // lobes and tongues of blown sand, and is ragged at the rim
+      const ang = Math.atan2(b - 6, a), rr = Math.hypot(a / 1.25, (b - 6) / 0.85);
+      const lobes = 0.62 + vnoise(ang * 1.6 + 10, 0, 999, 405) * 0.55 + Math.max(0, Math.sin(ang * 3 + 1.3)) * 0.28 + Math.max(0, Math.sin(ang - 1.2)) * 0.22;
+      const d = rr / (118 * lobes);
+      const edge = 1 - d + (vnoise(x * 0.06, y * 0.09, 999, 401) - 0.5) * 0.5 + (vnoise(x * 0.2, y * 0.25, 999, 406) - 0.5) * 0.25;
       if (edge < 0) continue;
       if (edge < 0.18 && dith(x, y) > edge * 4.5) continue; // the thin edge scatters into the grass
       const ripple = Math.sin((b * 0.55 + a * 0.12) + vnoise(a * 0.05, b * 0.05, 999, 402) * 5);
@@ -152,8 +156,7 @@ function paint(f: number, N: number, awake: boolean, desert: boolean): HTMLCanva
       for (let i = 0; i < 4; i++) { const h = 2 + ((k + i) % 3); for (let j = 0; j < h; j++) gpx(Math.round(p.x + i - 2 + (j > 1 ? (i - 2) * 0.5 : 0)), Math.round(p.y - j), j === h - 1 ? LEAF[3] : LEAF[2]); }
     }
   } else {
-  // the desert side: the gate stands in a drift of dune sand, and the valley's grass has crept out through it onto the
-  // sand in front (world +y), with a few wildflowers, greenest right at the threshold
+  // the desert side: the gate stands in a drift of dune sand (Murat 2026-11-08: no green patch on this side)
   for (let y = BY - 60; y < H; y++) for (let x = 0; x < W; x++) {
     const qx = x + 0.5 - CX, qy = y + 0.5 - BY;
     const a = (qx + 2 * qy) / 2, b = (2 * qy - qx) / 2;
@@ -164,15 +167,8 @@ function paint(f: number, N: number, awake: boolean, desert: boolean): HTMLCanva
     const ripple = Math.sin(a * 0.35 - b * 0.2 + vnoise(a * 0.05, b * 0.05, 999, 412) * 4);
     let l = (ripple > 0.6 ? 0.45 : ripple < -0.65 ? -0.45 : 0.05) + (dith(x, y) - 0.5) * 0.45;
     let c = SAND[Math.max(1, Math.min(5, Math.round(3 + l * 2)))];
-    const ga = a / 46, gb = (b - 14) / 30, gd = ga * ga + gb * gb; // the green patch at the threshold
-    const green = 1 - gd + (vnoise(x * 0.18, y * 0.2, 999, 413) - 0.5) * 0.9;
-    if (awake && (green > 0.25 || (green > 0 && dith(x, y) < green * 4))) {
-      const gl = vnoise(x * 0.5, y * 0.5, 999, 414) - 0.5 + (dith(x, y) - 0.5) * 0.5;
-      c = VALE[gl > 0.3 ? 4 : gl > 0 ? 3 : gl > -0.3 ? 2 : 1];
-      if (green > 0.4 && hash(x, y, 415) < 0.03) c = BLOOM[Math.floor(hash(x, y, 416) * 4)];
-    }
     const gw = glowAt(x, y);
-    if (gw > 0 && dith(x, y) < gw * (0.45 + 0.2 * pulse)) c = l > 0 ? VALE[5] : VALE[4];
+    if (gw > 0 && dith(x, y) < gw * (0.45 + 0.2 * pulse)) c = l > 0 ? "#fffbe8" : SAND[5];
     gpx(x, y, c);
   }
   }
@@ -360,12 +356,6 @@ function paint(f: number, N: number, awake: boolean, desert: boolean): HTMLCanva
   { const p = scr(-62, 10, 0); heap(p.x, p.y, 22, 16, 582); }
   { const p = scr(PA + 4, PR + 8, 0); heap(p.x, p.y, 18, 12, 583); }
   { const p = scr(PA + 14, -4, 0); heap(p.x, p.y, 16, 14, 584); }
-  if (awake) { // the valley's grass already rooting in the sand on the threshold
-    for (let k = 0; k < 14; k++) {
-      const p = scr((hash(k, 1, 585) - 0.5) * 2 * (GAP - 4), 6 + hash(k, 2, 585) * 8, ZS2);
-      for (let i = 0; i < 3; i++) for (let j = 0; j < 2 + ((k + i) % 3); j++) px(Math.round(p.x + i - 1 + (j > 1 ? i - 1 : 0)), Math.round(p.y - j), j > 1 ? VALE[4] : VALE[3]);
-    }
-  }
   }
   const out = chunky(go, false);
   const oc = out.getContext("2d")!;

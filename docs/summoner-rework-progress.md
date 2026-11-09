@@ -117,6 +117,9 @@ weighs more than in the game. Levers for session E: staff range/damage, wisp dam
 Bench (`npm run bench -- 10 20`, SPREAD=1): tick avg 13.2 ms / p95 20.4 ms; with CAST=1 (5 Summoners at /max spamming
 wisps, blades, holes, Arsenal) 21.4 / 34.3 ms; CAST=su_wisps 22.4 / 39.0 ms. Budget 50 ms. The cost is projectiles:
 `targetsAround` scans every monster (~5,700) per projectile sub-step (no spatial grid; suggested as a separate task).
+After merging the spatial grid (base PR #374, server/mobGrid.ts) on 2026-11-09: SPREAD=1 15.7 / 24.3 ms,
+CAST=su_wisps 19.8 / 28.9 ms. The base's CAST now casts every listed skill every 100 ms and every bot takes /max, so
+CAST=1 (24.4 / 36.0 ms, 734 active monsters) is not comparable with the numbers above.
 Not spread, 10 bots: 8.5 / 12.4 ms (base 9.0 / 12.8).
 
 ## Pitfalls
