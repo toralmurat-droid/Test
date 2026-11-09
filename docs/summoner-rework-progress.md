@@ -8,7 +8,7 @@ PR 1 stays a draft until the balance work (PR 3) is done; sessions C-E keep push
 ## Plan (5 sessions, one PR)
 Murat 2026-11-09: everything goes on this branch and into PR 1 (still a draft); new order **D (UI) -> C (art) ->
 E (balance)**, the balance pass once everything is in place. No PvE threshold: keep the brief's wording ("loses a
-little life"). Session D done in the same session as B; C and E each in a new session.
+little life"). Session D done in the same session as B; C done 2026-11-09 in its own session; E (balance) is next.
 
 - **A (done)**: baseline sims, shared data, permanent golems, grimoire, auras, golem powers, death bursts, Essence,
   Stone Bond passive, PvP settings, Black Hole (incl. projectile eating), Void Velocity, Void Slip, Colossus split,
@@ -16,7 +16,7 @@ little life"). Session D done in the same session as B; C and E each in a new se
 - **B (done)**: wisps (Mob kinds + client placeholder sprite), Void Arsenal (blade, lance, axe, 4 wisps), golem-element Void
   Blades, staff portal attack (~220 px), Essence/wisp expiry (toVoid on time-out), sim (wisps, arsenal, portal), e2e
   (`tools/e2e-summoner.cjs`, `tools/e2e-two-players.cjs`), `npm run bench`, patch note, **open PR 1**.
-- **C**: art (hero repaint: tailcoat + scarf, starter kit, wisp sheets, skill icons, skillfx).
+- **C (done)**: art (hero repaint: tailcoat + scarf, starter kit, wisp sheets, skill icons, skillfx), sounds.
 - **D (done)**: UI (grimoire panel, HUD: auras, golem respawn, Essence), mobile check.
 - **E**: balance (≥150 fights/pair, Lv 1-50), PvE not trivial. **PR 3**.
 
@@ -121,6 +121,52 @@ After merging the spatial grid (base PR #374, server/mobGrid.ts) on 2026-11-09: 
 CAST=su_wisps 19.8 / 28.9 ms. The base's CAST now casts every listed skill every 100 ms and every bot takes /max, so
 CAST=1 (24.4 / 36.0 ms, 734 active monsters) is not comparable with the numbers above.
 Not spread, 10 bots: 8.5 / 12.4 ms (base 9.0 / 12.8).
+
+## Done in session C (art and sounds)
+Murat's answers (2026-11-09): bare-headed with the scarf, tailcoat OK, also a pass on the sounds, the extra effects
+too, but sober. Two looks proposed (`docs/art/summoner-proposals.png`: A charcoal and plum, B Void black); **A is in
+place by default, Murat's pick still pending** (B = swap the colours in `look.ts` KITS.summoner from
+`tools/art/proposals/summoner.ts`, then re-run the generation below).
+- Body painter (`tools/art/paint/body.ts`): torso kind `tailcoat` (open front over a waistcoat `vest`, lapels and piping
+  in `trim`, buttons in `buckle`, no belt) with two tails to mid-thigh (`coatTails`: behind the legs from the front and
+  side, over them from behind; they swing with the gait and fly back at a run). `Look.scarf {col, band}`: wound round
+  the neck after the head (`scarfWrap`), two ends as ribbons on a travelling wave (`scarfEnds`): stirring at rest,
+  swinging walking, streaming back running (from the front they hang either side of the coat's opening and fly up past
+  the shoulders at a run). Motion comes from the pose (`phase`, `run`), so walk/run loops stay seamless. `palmFlame`
+  takes a cold colour now (violet Void flame); warm flames keep their orange heart.
+- Kit (`look.ts` KITS.summoner, `shared/gear.ts`): Binding Rod (Void flame), Warlock's Tailcoat (armour, style
+  `tailcoat`), Void Scarf (hat slot, style `scarf`), Warlock's Boots. Item ids unchanged (saves fine). New 16px icons
+  `scarf` and `tailcoat` in `tools/art/gear.ts`. The bare body (summoner.webp) is unchanged.
+- Wisps (`tools/art/paint/wisps.ts`, sheets `mob_wisp_<element>` 16x22, 12 frames): an orb of the element with a dark
+  Void eye and a violet rim, floating above its shadow (fire flame tongue, frost shards, venom drip, storm spikes);
+  wind / strike frames gather and flare. Client: `textures.ts` loads them (smooth look), the blobs stay for ?pixel=1.
+- Icons (`client/src/skillArt.ts`): 15 new paintings (Stone Bond, Golem Mastery, Resonance, Twin Bond, Rift Step
+  repainted, Black Hole, Void Velocity, Gravity, Void Slip, Event Horizon, Void Blades, Elemental Wisps, Void Edge,
+  Return to the Void, Swarm, Void Arsenal); `BORROWED` and the 12 old-tree icons are gone. Sheet:
+  `npx tsx tools/art/preview/summoner-icons.ts out.png`.
+- Effects (`client/src/skillfx.ts`, "the Summoner's Void" section): staff portals (two small upright rifts), Black Hole
+  and Event Horizon ground disc with a turning rim and motes spiralling in, swallow / eatshot / holeclose / voidhop,
+  Void Blades (3, or 1 for the Arsenal) wheeling round the hero edged in the first grimoire page's element, the
+  lance projectile (`voidlance`) with a trail, the axe sweep (`axeSweep`), Arsenal opening, Void Slip (shards, then a
+  rift where the hero comes back), wisps out of rifts and their elemental burst, golem nova / death / Colossus split,
+  Return to the Void motes, grimoire page puff.
+- Sounds (`client/src/sfx.ts`): voidPortal, voidOpen (Black Hole / Event Horizon cast), voidClose, voidGulp, voidEat,
+  voidSpit, voidSlip, voidArsenal, voidLance (lance launch), wispCall, wispEnd (by element), golemNova, golemCrumble,
+  voidReturn and pageTurn (only for the Summoner themself). Low volumes, rate-limited (`minGap`).
+- Generation (only the Summoner, ~5 min): `npx tsx tools/art/paint/new-hero.ts summoner`, then
+  `npx tsx -e "import { buildMobs } from './tools/art/paint/mobs'; buildMobs('client/public/assets/hd/mobs', ['mob_wisp_fire','mob_wisp_cold','mob_wisp_poison','mob_wisp_shock'])"`.
+  Only the Summoner kit overlays, the gear icon atlas, the wisp sheets and mobs.json change (checked with git status).
+- Previews in `docs/art/`: kit-preview (idle and run), wisps, icons, the two proposals.
+- Checks: `npm test` OK (one unexplained failure on the first of 4 runs, the 3 others clean), `npm run build` OK,
+  smoke OK, `tools/e2e-summoner.cjs` and `tools/e2e-summoner-mobile.cjs` OK (production server, fresh save each);
+  the wisps use their painted sheets in the browser.
+
+Session C limits (to revisit):
+- The client can't know Void Edge ranks or Twin Bond: Void Blades always show 3 blades and take the first page's element.
+- The scarf is a hat-slot overlay drawn over the armour overlay: where the scarf trails behind the body it can paint a
+  few pixels over the coat's edge. A found hat replaces the scarf.
+- The old pixel look (?pixel=1) still shows the old class sheet (as for every hero there).
+- Golems have no footstep sounds (four permanent golems stomping would be noise).
 
 ## Pitfalls
 - Player schema is at the 64-field limit: pack new synced data into existing fields.

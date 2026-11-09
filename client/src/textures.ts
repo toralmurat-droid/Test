@@ -294,9 +294,9 @@ export const MOB_LOOK: Record<string, { top: number; bar: number; oy: number; sc
   venomblob: { top: 15, bar: 12, oy: 0.92 }, frostblob: { top: 17, bar: 14, oy: 0.92 }, fireblob: { top: 17, bar: 14, oy: 0.92 }, stormblob: { top: 16, bar: 12, oy: 0.92 },
   crawler: { top: 10, bar: 10, oy: CRAWL_CROP },
   nightraider: { top: 30, bar: 22, oy: 0.95, scale: 1.5 }, // pixel look: a big bandit stands in for the rider
-  wisp: { top: 12, bar: 10, oy: 1.4, scale: 0.55 }, // placeholder until its own sheets: a small elemental blob floating
+  wisp: { top: 12, bar: 10, oy: 1.4, scale: 0.55 }, // pixel look: a small elemental blob floating (no pixel wisp sheet)
 };
-/** The Summoner's wisps have no sheets yet (session C): the elemental blob of their element stands in (Mob.weapon). */
+/** Pixel look: the Summoner's wisps borrow the elemental blob of their element (Mob.weapon). Painted: mob_wisp_<element>. */
 const WISP_STANDIN: Record<string, string> = { fire: "fireblob", cold: "frostblob", poison: "venomblob", shock: "stormblob" };
 
 const PAINTED_MOBS = ["slime", "blobling", "shooterblob", "warriorblob", "healerblob", "motherblob", "venomblob", "frostblob", "fireblob", "stormblob", "skeleton", "bandit", "skeletonmage", "necromancer", "demon", "crawler", "banditchief", "hollowking", "gnawkin", "tuskborn", "silkwretch", "duskwing", "packlord", "hornbrute", "hidemother", "crowseer", "gnasher", "weaver",
@@ -304,6 +304,8 @@ const PAINTED_MOBS = ["slime", "blobling", "shooterblob", "warriorblob", "healer
   "golem_fire", "golem_cold", "golem_poison", "golem_shock", "golem_colossus", "bride"];
 /** The Colossus is painted once per element (Mob.weapon holds it, shared/summons.ts). */
 const COLOSSUS_ELEMENTS = ["fire", "cold", "poison", "shock"];
+/** The wisps' painted sheets (tools/art/paint/wisps.ts), one per element. */
+const WISP_ELEMENTS = COLOSSUS_ELEMENTS;
 /** Beast-folk drawn the other way round (Mob.weapon "folk", shared/constants.ts BEAST_FOLK): the beast's hide on a man. */
 const FOLK_MOBS = ["gnawkin", "tuskborn", "silkwretch", "duskwing", "nomad"]; // nomad "folk" = a Dustrider archer
 /** Painted humanoid monsters have taller frames (feet lower in the frame, label higher). */
@@ -332,6 +334,7 @@ const PAINTED_LOOK: Record<string, { top: number; bar: number; oy: number; scale
   golem_fire: { top: 40, bar: 22, oy: 43 / 46 }, golem_cold: { top: 40, bar: 22, oy: 43 / 46 },
   golem_poison: { top: 40, bar: 22, oy: 43 / 46 }, golem_shock: { top: 40, bar: 22, oy: 43 / 46 },
   golem_colossus: { top: 64, bar: 34, oy: 43 / 46, scale: 1.6 },
+  wisp: { top: 18, bar: 10, oy: 20 / 22 }, // 16x22 frames: the orb floats above its own shadow (foot at 20)
   // pixel sheets use even frame heights (whole texels at 1.5 per px)
   blobling: { top: 9, bar: 8, oy: 0.91 }, shooterblob: { top: 16, bar: 12, oy: 0.93 }, healerblob: { top: 16, bar: 12, oy: 0.93 },
   venomblob: { top: 17, bar: 12, oy: 0.93 }, frostblob: { top: 20, bar: 14, oy: 0.94 }, fireblob: { top: 19, bar: 14, oy: 0.94 }, stormblob: { top: 18, bar: 12, oy: 0.93 },
@@ -341,12 +344,15 @@ export function preloadPaintedMobs(scene: Phaser.Scene) {
   if (!SMOOTH) return;
   Object.assign(MOB_LOOK, PAINTED_LOOK);
   scene.load.json("hd_mobs", "assets/hd/mobs/mobs.json");
-  for (const k of [...PAINTED_MOBS.filter((m) => m !== "golem_colossus" && m !== "nightraider").map((m) => `mob_${m}`), "mob_motherblob2", "mob_motherblob3", "mob_skeleton_axe", "mob_skeleton_spear", "mob_skeleton_bow", "mob_bandit_brute", "mob_bandit_archer", "mob_demon1", "mob_demon2", "mob_demon3", "mob_demon4", ...FOLK_MOBS.map((m) => `mob_${m}_folk`), ...COLOSSUS_ELEMENTS.map((e) => `mob_golem_colossus_${e}`), ...RAIDERS.map((r) => `mob_nightraider_${r.key}`)]) scene.load.image(`hd_${k}`, `assets/hd/mobs/${k}.webp`);
+  for (const k of [...PAINTED_MOBS.filter((m) => m !== "golem_colossus" && m !== "nightraider").map((m) => `mob_${m}`), "mob_motherblob2", "mob_motherblob3", "mob_skeleton_axe", "mob_skeleton_spear", "mob_skeleton_bow", "mob_bandit_brute", "mob_bandit_archer", "mob_demon1", "mob_demon2", "mob_demon3", "mob_demon4", ...FOLK_MOBS.map((m) => `mob_${m}_folk`), ...COLOSSUS_ELEMENTS.map((e) => `mob_golem_colossus_${e}`), ...WISP_ELEMENTS.map((e) => `mob_wisp_${e}`), ...RAIDERS.map((r) => `mob_nightraider_${r.key}`)]) scene.load.image(`hd_${k}`, `assets/hd/mobs/${k}.webp`);
 }
 
 /** Monster sprite sheets, same 6-frame layout as personas (painted when the smooth look is on). */
 export function mobTexture(scene: Phaser.Scene, kind: string, level = 1, weapon = "", bones = 0): string {
-  if (kind === "wisp") return mobTexture(scene, WISP_STANDIN[weapon] ?? "fireblob", level);
+  if (kind === "wisp") {
+    if (SMOOTH && scene.textures.exists(`hd_mob_wisp_${WISP_ELEMENTS.includes(weapon) ? weapon : "fire"}`)) return paintedSheet(scene, `mob_wisp_${WISP_ELEMENTS.includes(weapon) ? weapon : "fire"}`) ?? mobTexture(scene, WISP_STANDIN[weapon] ?? "fireblob", level);
+    return mobTexture(scene, WISP_STANDIN[weapon] ?? "fireblob", level);
+  }
   if (kind === "crawler" && !(SMOOTH && scene.textures.exists("hd_mob_crawler"))) return mobTexture(scene, "skeleton", level, weapon); // pixel look: a skeleton's upper half (cropped in TownScene)
   if (SMOOTH && PAINTED_MOBS.includes(kind)) {
     const tier = level >= 10 ? 3 : level >= 5 ? 2 : 1;
@@ -358,16 +364,21 @@ export function mobTexture(scene: Phaser.Scene, kind: string, level = 1, weapon 
       : kind === "nightraider" ? `mob_nightraider_${RAIDERS.some((r) => r.key === weapon) ? weapon : RAIDERS[0].key}` // each of the Seven has its own sheet
       : kind === "golem_colossus" ? `mob_golem_colossus_${COLOSSUS_ELEMENTS.includes(weapon) ? weapon : "fire"}`
       : kind === "demon" && bones > 0 ? `mob_demon${Math.min(4, bones)}` : `mob_${kind}`; // the demon wearing its harvested bones
-    if (scene.textures.exists(key)) return key;
-    const meta = scene.cache.json.get("hd_mobs")?.[key];
-    const src = scene.textures.exists(`hd_${key}`) ? scene.textures.get(`hd_${key}`).getSourceImage() as HTMLImageElement : null;
-    if (meta && src) {
-      hiResTexture(scene, key, meta.w, meta.h, meta.frames ?? 6, meta.scale, (ctx, f) => ctx.drawImage(src, f * meta.w * meta.scale, 0, meta.w * meta.scale, meta.h * meta.scale, 0, 0, meta.w, meta.h));
-      scene.textures.get(key).setFilter(Phaser.Textures.FilterMode.NEAREST); // pixel art sheet
-      return key;
-    }
+    const done = paintedSheet(scene, key);
+    if (done) return done;
   }
   return pixelMobTexture(scene, kind === "demon" || kind === "hollowking" || kind === "sunwright" ? "necromancer" : BEAST_KINDS.includes(kind as any) || DESERT_KINDS.includes(kind as any) || kind === "bride" || kind === "nightraider" ? (kind === "sanddead" ? "skeleton" : "bandit") : kind, level); // no pixel demon sheet: a necromancer stands in
+}
+
+/** A painted monster sheet (assets/hd/mobs) turned into a frame texture once; null while it is not loaded. */
+function paintedSheet(scene: Phaser.Scene, key: string): string | null {
+  if (scene.textures.exists(key)) return key;
+  const meta = scene.cache.json.get("hd_mobs")?.[key];
+  const src = scene.textures.exists(`hd_${key}`) ? scene.textures.get(`hd_${key}`).getSourceImage() as HTMLImageElement : null;
+  if (!meta || !src) return null;
+  hiResTexture(scene, key, meta.w, meta.h, meta.frames ?? 6, meta.scale, (ctx, f) => ctx.drawImage(src, f * meta.w * meta.scale, 0, meta.w * meta.scale, meta.h * meta.scale, 0, 0, meta.w, meta.h));
+  scene.textures.get(key).setFilter(Phaser.Textures.FilterMode.NEAREST); // pixel art sheet
+  return key;
 }
 
 function pixelMobTexture(scene: Phaser.Scene, kind: string, level = 1): string {

@@ -156,9 +156,9 @@ function starterKits(): GearDef[] {
     k("vampire", "hat", "Night Circlet", 0x4a4650, 0xc0182a, "crown"),
     k("vampire", "shoes", "Riding Boots", 0x1e1418, 0x5a3a2a, "plain"),
     k("summoner", "weapon", "Binding Rod", 0x6b4a2e, 0xb68cff, "long"),
-    k("summoner", "armour", "Occult Robe", 0xe6e0d0, 0xc9a050, "robe"),
-    k("summoner", "hat", "Four-Stone Crown", 0xc9a050, 0xb68cff, "crown"),
-    k("summoner", "shoes", "Soft Shoes", 0x3a2a4a, 0x6b4423, "plain"),
+    k("summoner", "armour", "Warlock's Tailcoat", 0x38323f, 0x9a6cff, "tailcoat"),
+    k("summoner", "hat", "Void Scarf", 0x5b2f8f, 0xc8a8ff, "scarf"),
+    k("summoner", "shoes", "Warlock's Boots", 0x1e1a24, 0x5a3a6a, "plain"),
   ];
 }
 

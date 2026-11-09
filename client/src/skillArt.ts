@@ -22,6 +22,10 @@ const ICE: Ramp = ["#1d3f8a", "#2a6fdb", "#4cc9f0", "#d6f6ff"];
 const ARC: Ramp = ["#3a0f66", "#7b2cbf", "#c77dff", "#f3d9ff"];
 const LIT: Ramp = ["#3949ab", "#80d8ff", "#b3ecff", "#ffffff"];
 const SHAD: Ramp = ["#140b2b", "#35208a", "#6a45c2", "#a993e0"];
+/** The Summoner's Void: near-black to a pale violet. */
+const VOID: Ramp = ["#0c0614", "#2a1446", "#7a4ad0", "#d8c4ff"];
+/** Void-forged steel (the Arsenal's and the blades' edges). */
+const VSTEEL: Ramp = ["#2a1446", "#7a4ad0", "#b48cff", "#f0e4ff"];
 const POIS: Ramp = ["#1b5e20", "#43a047", "#7cfc00", "#e6ffb3"];
 const EARTH: Ramp = ["#3b2a20", "#5d4037", "#8d6e63", "#bcaaa4"];
 const BLOOD: Ramp = ["#4a0000", "#9b1b1b", "#e63946", "#ff8a80"];
@@ -873,33 +877,12 @@ const ART: Record<string, Draw> = {
     p.outline();
     p.px(11, 7, "#ffffff"); p.px(13, 7, "#ffffff");
   },
-  // four little stones turning around a ring: the element wheel
-  su_attune: (p) => {
-    p.ring(12, 12, 8, ARC[2]);
-    p.ball(12, 4, 2.6, FIRE); p.ball(20, 12, 2.6, ICE); p.ball(12, 20, 2.6, POIS); p.ball(4, 12, 2.6, LIT);
-    p.outline();
-    p.line(15, 6, 18, 9, ARC[3]); p.line(18, 15, 15, 18, ARC[3]);
-  },
   // a heart joined to a golem fist by a living thread
   su_link: (p) => {
     p.ball(7, 9, 4, BLOOD); p.ball(17, 16, 4.5, EARTH);
     for (let i = 0; i < 6; i++) p.disc(9 + i * 1.4, 11 + i, 0.8, i % 2 ? SPIRIT[2] : SPIRIT[3]);
     p.outline();
-  },
-  su_stonehide: (p) => {
-    p.poly([[5, 5], [19, 5], [19, 13], [12, 21], [5, 13]], EARTH[1]);
-    p.poly([[7, 7], [17, 7], [17, 12], [12, 18], [7, 12]], EARTH[2]);
-    p.line(9, 8, 12, 12, EARTH[0]); p.line(12, 12, 15, 9, EARTH[0]); p.line(12, 12, 12, 16, EARTH[0]);
-    p.outline();
-  },
-  // a breastplate of stone slabs with a violet rune
-  su_armour: (p) => {
-    p.poly([[4, 6], [10, 4], [12, 6], [14, 4], [20, 6], [19, 18], [12, 22], [5, 18]], EARTH[1]);
-    p.poly([[7, 8], [17, 8], [16, 17], [12, 19], [8, 17]], EARTH[2]);
-    p.outline();
-    p.line(10, 10, 12, 15, ARC[2]); p.line(12, 15, 14, 10, ARC[2]); p.px(12, 9, ARC[3]);
-  },
-  // a towering colossus with a burning core, arms raised
+  },  // a towering colossus with a burning core, arms raised
   su_colossus: (p) => {
     p.ball(12, 14, 8, EARTH, 7); p.ball(12, 5, 3.5, EARTH);
     p.ball(3, 6, 2.8, EARTH); p.ball(21, 6, 2.8, EARTH);
@@ -907,61 +890,131 @@ const ART: Record<string, Draw> = {
     p.ball(12, 14, 3, FIRE);
     p.outline();
     p.px(11, 5, "#fff176"); p.px(13, 5, "#fff176");
+  },  // Stone Bond: a golem's stone slab takes the blow meant for the hero behind it, a Void thread between them
+  su_bond: (p) => {
+    p.figure(7, 21, SHAD, 12);
+    p.poly([[11, 6], [19, 4], [21, 18], [13, 21]], EARTH[1]); p.poly([[13, 8], [18, 7], [19, 16], [14, 18]], EARTH[2]);
+    p.line(15, 9, 17, 13, EARTH[0]); p.line(17, 13, 16, 17, EARTH[0]);
+    p.outline();
+    for (let i = 0; i < 4; i++) p.px(8 + i, 12 + (i % 2), VOID[2]);
+    p.spark(21, 7, 2, "#ffffff", GOLD[3]);
   },
-  // a violet rift with the hero stepping out of it
+  // Golem Mastery: a stone fist split by glowing Void cracks
+  su_might: (p) => {
+    p.poly([[5, 10], [9, 6], [17, 6], [20, 10], [20, 17], [16, 21], [8, 21], [5, 17]], EARTH[1]);
+    for (const x of [8, 12, 16]) p.poly([[x - 2, 7], [x + 2, 7], [x + 2, 11], [x - 2, 11]], EARTH[2]);
+    p.poly([[5, 13], [10, 12], [11, 15], [6, 17]], EARTH[2]);
+    p.outline();
+    p.line(12, 12, 13, 16, VOID[2]); p.line(13, 16, 11, 19, VOID[2]); p.line(13, 16, 16, 18, VOID[3]); p.px(8, 8, EARTH[3]);
+  },
+  // Resonance: two golem cores ringing together, their auras spreading in rings
+  su_resonance: (p) => {
+    p.ring(12, 12, 10, VOID[1]); p.ring(12, 12, 7.5, VOID[2]);
+    p.ball(8, 12, 3, FIRE); p.ball(16, 12, 3, FIRE);
+    p.outline();
+    p.line(11, 12, 13, 12, FIRE[3]); p.px(12, 2, VOID[3]); p.px(12, 22, VOID[3]);
+  },
+  // Twin Bond: two golems shoulder to shoulder, a fire core and a frost core
+  su_twin: (p) => {
+    for (const [x, k] of [[7, FIRE], [17, ICE]] as [number, Ramp][]) {
+      p.ball(x, 15, 4.5, EARTH, 5); p.ball(x, 7, 2.6, EARTH); p.ball(x, 15, 1.8, k);
+    }
+    p.outline();
+    for (const x of [6, 8, 16, 18]) p.px(x, 7, "#fff176");
+  },
+  // Rift Step: a Void slit and the hero stepping out of it
   su_step: (p) => {
-    p.disc(8, 12, 5, ARC[0], 9); p.disc(8, 12, 3, ARC[1], 7); p.disc(8, 12, 1.4, ARC[3], 5);
-    p.ball(17, 10, 3, BONE); p.poly([[14, 13], [20, 13], [21, 21], [13, 21]], BONE[2]);
+    p.disc(8, 12, 4, VOID[0], 9); p.disc(8, 12, 2.4, VOID[1], 7); p.disc(8, 12, 1, VOID[3], 5);
+    p.figure(17, 21, BONE, 12);
+    p.outline();
+    p.line(11, 9, 13, 9, VOID[2]); p.line(11, 15, 13, 15, VOID[2]);
+  },
+  // Black Hole: a dark eye ringed by a violet disc of matter, streaks spiralling in
+  su_blackhole: (p) => {
+    p.disc(12, 12, 9, VOID[1], 4); p.disc(12, 12, 7, VOID[2], 2.6);
+    p.disc(12, 12, 4.6, "#05030a");
+    p.outline();
+    p.ring(12, 12, 5.4, VOID[3], Math.PI * 1.1, Math.PI * 1.9);
+    for (const [x, y] of [[3, 6], [20, 18], [19, 4]]) p.line(x, y, x + Math.sign(12 - x) * 2, y + Math.sign(12 - y), VOID[3]);
+  },
+  // Void Velocity: out of a rift, three streaks racing ahead
+  su_velocity: (p) => {
+    p.disc(5, 12, 2.4, VOID[0], 8); p.disc(5, 12, 1, VOID[2], 6);
+    for (const [y, l] of [[7, 12], [12, 16], [17, 11]]) { p.thick(8, y, 8 + l, y, 2, WIND[1]); p.line(8, y, 8 + l, y, WIND[3]); }
+    p.outline();
+    p.px(5, 12, VOID[3]);
+  },
+  // Gravity: four arrows bending into a small black hole
+  su_gravity: (p) => {
+    p.disc(12, 12, 4, VOID[2], 3); p.disc(12, 12, 2.4, "#05030a");
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const x0 = 12 + dx * 10, y0 = 12 + dy * 10, x1 = 12 + dx * 6, y1 = 12 + dy * 6;
+      p.line(x0, y0, x1, y1, VOID[3]); p.line(x1, y1, x1 - dx * 2 + dy * 2, y1 - dy * 2 + dx * 2, VOID[3]); p.line(x1, y1, x1 - dx * 2 - dy * 2, y1 - dy * 2 - dx * 2, VOID[3]);
+    }
     p.outline();
   },
-  su_quick: (p) => {
-    p.ring(12, 12, 8, GOLD[2]); p.ring(12, 12, 6, GOLD[1]);
-    p.line(12, 12, 12, 6, GOLD[3]); p.line(12, 12, 16, 14, GOLD[3]);
-    for (const x of [2, 4]) p.line(x, 9, x, 15, ARC[2]);
+  // Void Slip: the hero's silhouette coming apart into violet shards
+  su_slip: (p) => {
+    p.figure(10, 21, SHAD, 14);
     p.outline();
+    for (const [x, y, c] of [[15, 8, 2], [17, 11, 3], [19, 7, 2], [16, 15, 3], [20, 13, 2], [18, 18, 3], [21, 10, 3]]) p.rect(x, y, c === 3 ? 1 : 2, 1, VOID[c]);
   },
-  su_flow: (p) => {
-    p.ball(12, 13, 6, ARC); p.poly([[9, 8], [12, 2], [15, 8]], ARC[1]);
+  // Event Horizon: a vast black hole tearing at the frame, rocks drawn into its bright rim
+  su_horizon: (p) => {
+    p.disc(12, 12, 11, VOID[1], 6); p.disc(12, 12, 9, VOID[2], 4); p.disc(12, 12, 6.4, "#05030a");
+    p.ball(3, 4, 1.4, EARTH); p.ball(21, 20, 1.6, EARTH); p.ball(20, 5, 1.1, EARTH);
     p.outline();
-    p.px(10, 11, ARC[3]); p.px(11, 10, "#ffffff");
+    p.ring(12, 12, 7, VOID[3], Math.PI * 1.05, Math.PI * 1.95); p.ring(12, 12, 7, VOID[2], Math.PI * 0.1, Math.PI * 0.9);
   },
-  su_swift: (p) => {
-    for (const [y, l] of [[7, 14], [12, 18], [17, 12]]) { p.line(3, y, 3 + l, y, WIND[2]); p.line(3 + l, y, 1 + l, y - 2, WIND[3]); }
+  // Void Blades: three blades of the Void wheeling round a centre
+  su_blades: (p) => {
+    // a pinwheel of three blades, swept as they turn
+    for (let k = 0; k < 3; k++) {
+      const a = k * Math.PI * 2 / 3 - Math.PI / 2, b = a + 0.5;
+      const x0 = 12 + Math.cos(a) * 3, y0 = 12 + Math.sin(a) * 3, x1 = 12 + Math.cos(b) * 10.5, y1 = 12 + Math.sin(b) * 10.5;
+      const nx = -(y1 - y0) / 7.5 * 1.6, ny = (x1 - x0) / 7.5 * 1.6, mx = (x0 + x1) / 2, my = (y0 + y1) / 2;
+      p.poly([[x0, y0], [mx + nx, my + ny], [x1, y1], [mx - nx * 0.4, my - ny * 0.4]], VSTEEL[1]);
+      p.line(x0, y0, x1, y1, VSTEEL[2]); p.line(mx + nx * 0.6, my + ny * 0.6, x1, y1, VSTEEL[3]);
+    }
+    p.disc(12, 12, 2, VOID[2]);
     p.outline();
+    for (let k = 0; k < 3; k++) { const a = k * Math.PI * 2 / 3 - Math.PI / 2; p.ring(12, 12, 10, VOID[2], a - 0.9, a - 0.1); }
+    p.px(12, 12, VOID[3]);
   },
-  // a rift full of the four elements
-  su_rift: (p) => {
-    p.disc(12, 12, 10, ARC[0], 8); p.disc(12, 12, 7, SHAD[1], 5.5);
-    p.flame(8, 16, 7, 3, FIRE); p.poly([[14, 6], [16, 12], [12, 12]], ICE[2]);
-    p.bolt([[17, 7], [15, 11], [18, 12], [16, 17]]);
+  // Elemental Wisps: three little orbs (fire, frost, venom), each with a dark Void eye
+  su_wisps: (p) => {
+    for (const [x, y, k] of [[6, 15, FIRE], [12, 7, ICE], [18, 15, POIS]] as [number, number, Ramp][]) { p.ball(x, y, 3.4, k); p.disc(x + 0.4, y + 0.4, 1, "#140c1e"); }
     p.outline();
+    p.flame(6, 12, 3, 2, FIRE); p.px(12, 3, ICE[3]); p.px(18, 19, POIS[2]);
   },
-  su_mote: (p) => {
-    p.ball(13, 11, 5, LIT); p.bolt([[13, 11], [8, 15], [10, 16], [4, 21]]);
+  // Void Edge: one Void blade, its edge burning brighter, a spark at the tip
+  su_edge: (p) => {
+    p.sword(5, 20, 19, 4, VSTEEL, IRON);
+    p.line(9, 14, 18, 5, VOID[3]);
+    p.spark(19, 4, 2, VOID[3]);
+  },
+  // Return to the Void: a wisp sinking into a rift, a drop of life coming back out
+  su_return: (p) => {
+    p.disc(12, 17, 9, VOID[1], 3.4); p.disc(12, 17, 6, "#05030a", 2);
+    p.ball(9, 9, 2.6, FIRE); p.disc(9.4, 9.4, 0.8, "#140c1e");
+    p.disc(17, 7, 2.2, BLOOD[2]); p.poly([[15, 7], [17, 2], [19, 7]], BLOOD[2]);
     p.outline();
-    p.px(12, 9, "#ffffff");
+    p.line(10, 12, 11, 15, VOID[3]); p.px(16, 6, "#ffffff");
   },
-  su_ruin: (p) => {
-    p.ball(12, 13, 7, EARTH, 6);
-    p.flame(12, 16, 10, 4, FIRE);
+  // Swarm: four wisps of the four elements in a ring
+  su_swarm: (p) => {
+    for (const [x, y, k] of [[12, 5, FIRE], [19, 12, ICE], [12, 19, POIS], [5, 12, LIT]] as [number, number, Ramp][]) { p.ball(x, y, 2.8, k); p.px(x, y, "#140c1e"); }
     p.outline();
+    p.ring(12, 12, 4, VOID[2]);
   },
-  // a spectral blade of pure element
-  su_blade: (p) => {
-    p.sword(5, 20, 19, 4, ARC, GOLD);
-    for (const [x, y] of [[16, 10], [12, 14], [18, 5]]) p.px(x, y, ARC[3]);
-  },
-  su_mastery: (p) => {
-    p.ball(7, 8, 3, FIRE); p.ball(17, 8, 3, ICE); p.ball(7, 17, 3, POIS); p.ball(17, 17, 3, LIT);
-    p.ball(12, 12.5, 3.2, ARC);
+  // Void Arsenal: a blade, a lance and an axe rising out of a Void rift
+  su_arsenal: (p) => {
+    p.disc(12, 20, 10, VOID[1], 3); p.disc(12, 20, 7, "#05030a", 1.8);
+    p.sword(6, 19, 4, 5, VSTEEL, IRON, { grip: 3 });
+    p.thick(11, 19, 11, 5, 2, WOOD[1]); p.poly([[9, 7], [11, 1], [13, 7]], VSTEEL[2]);
+    p.axe(15, 19, 15, 5, 1, VSTEEL);
     p.outline();
-  },
-  // fire, ice and lightning falling on one spot
-  su_cataclysm: (p) => {
-    p.disc(12, 20, 9, EARTH[1], 2.5);
-    p.flame(6, 18, 10, 3, FIRE); p.poly([[11, 4], [14, 4], [13, 18], [12, 18]], ICE[2]);
-    p.bolt([[19, 3], [16, 10], [20, 11], [17, 19]]);
-    p.outline();
+    p.px(11, 2, VOID[3]);
   },
   // ===== Vampire: Blood =====
   v_link: (p) => {
@@ -1238,15 +1291,6 @@ export function paintSigil(id: string): string[] | undefined {
   draw(p);
   return p.g.map((c, i) => p.fx[i] || c);
 }
-
-// Void Lord rework (2026-11-08): provisional icons for the new Summoner skills, borrowed from the old tree's paintings
-// until their own are painted (PR 2 of the rework)
-const BORROWED: Record<string, string> = {
-  su_bond: "su_stonehide", su_might: "su_ruin", su_resonance: "su_attune", su_twin: "su_link",
-  su_blackhole: "su_rift", su_velocity: "su_swift", su_gravity: "su_quick", su_slip: "su_flow", su_horizon: "su_rift",
-  su_blades: "su_blade", su_wisps: "su_mote", su_edge: "su_mastery", su_return: "su_flow", su_swarm: "su_mote", su_arsenal: "su_cataclysm",
-};
-for (const [id, from] of Object.entries(BORROWED)) if (!ART[id] && ART[from]) ART[id] = ART[from];
 
 export const ART_IDS = Object.keys(ART);
 

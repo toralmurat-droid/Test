@@ -62,6 +62,10 @@ export const MORPH_MS = 520;
 const rnd = (a: number, b: number) => a + Math.random() * (b - a);
 
 /** Goo of the shooter blob's spit (not a skill style). */
+/** The Summoner's Void: pale violet to near black. */
+const VOIDC = [0xd8c4ff, 0xb48cff, 0x7a4ad0, 0x3a1d6e];
+/** A golem element (shared/summons.ts) as an effect style. */
+const EL_STYLE = { fire: "fire", cold: "frost", poison: "poison", shock: "lightning" } as const satisfies Record<string, FxStyle>;
 const GOO = [0xf3e5ff, 0xd1a6ff, 0xb57cff, 0x8e4fd6, 0x5b2c91];
 /** Basic and monster projectiles drawn here too (not only skill shots): their trails and impacts. */
 const BASIC_SHOTS = new Set(["fireball", "arrow", "bolt", "knife", "stone", "slimeball", "magicbolt", "shadowbolt", "skelthrow"]);
@@ -305,6 +309,7 @@ export class SkillFx {
     const pal = PALETTE[style];
     const e = ev.id ? this.ent(ev.id) : undefined;
     const near = this.nearMe(ev.x ?? e?.sprite.x, ev.y ?? e?.sprite.y);
+    if (this.voidEvent(ev)) return;
     switch (ev.ev) {
       case "cast": {
         if (!e) break;
@@ -792,6 +797,7 @@ export class SkillFx {
       case "bloodrite": this.bloodRite(ev, r); break;
       case "slash": {
         const e = this.ent(ev.id);
+        if (s?.id === "su_arsenal") { this.axeSweep(ev, e); break; }
         const ang = e ? Math.atan2(e.state.ay ?? 1, e.state.ax ?? 0) + (ev.i % 2 ? Math.PI : 0) : Math.random() * 6;
         this.slash(x, y, Math.min(r, 34), style, ang + rnd(-0.4, 0.4), r > 30 ? 4.4 : 2.6);
         this.burst(x, y, 8, style, Math.round(8 * tier), 80, 300);
@@ -1302,7 +1308,9 @@ export class SkillFx {
         }
         this.scene.time.delayedCall(T * 1000, () => { const v = this.ent(f.target); if (v) { this.burst(v.sprite.x, v.sprite.y, v.top * 0.5, "blood", 18, 70, 380); this.glow(v.sprite.x, v.sprite.y, v.top * 0.5, 12, 0xe63946, 260, 0.7); } });
       }
-    } else if (k === "gravesoil") {
+    } else if (k === "blackhole") this.addHole(f, objs);
+    else if (k === "voidblades") this.addBlades(f, objs);
+    else if (k === "gravesoil") {
       // Native Soil: a patch of dark grave earth spilled on the ground, clods and a few bone chips
       const g = this.scene.add.graphics().setPosition(f.x + 0.01, f.y + 0.01).setDepth(GROUND_DEPTH);
       const sq = ISO ? 0.5 : 0.7;
@@ -1382,6 +1390,8 @@ export class SkillFx {
       const n = (perSec: number) => { let c = Math.floor(perSec * dt); if (Math.random() < perSec * dt - c) c++; return c; };
       const s = skillById(f.skill), tier = TIER[s?.row ?? 0];
       switch (f.kind) {
+        case "blackhole": this.tickHole(f, objs[0] as Phaser.GameObjects.Graphics, born, dt); break;
+        case "voidblades": this.tickBlades(f, objs, x, y, dt); break;
         case "consecrate": case "sacred":
           this.rise(x, y, r, "holy", n(18 * area * tier), 24, 900);
           if (chance(3)) this.glow(x + rnd(-r, r) * 0.5, y + rnd(-r, r) * 0.5, 0, r * 0.5, 0xffd166, 700, 0.25, true);
@@ -1609,6 +1619,167 @@ export class SkillFx {
     return k;
   }
 
+  // ---- the Summoner's Void (Void Lord rework): portals, black holes, blades, lance, axe, slip, wisps -----------
+
+  /** The golem element (shared/summons.ts ATTUNE_ORDER) the owner's first grimoire page holds, as an effect style. */
+  private ownerEl(id: string): FxStyle {
+    const a = this.ent(id)?.state?.attune ?? 0;
+    return EL_STYLE[(["fire", "cold", "poison", "shock"] as const)[((a | 0) % 4 + 4) % 4]];
+  }
+
+  /** A small upright rift (the staff's portals): opens, holds, closes. Dark heart, violet rim. */
+  private rift(x: number, y: number, z: number, h: number, holdMs = 200) {
+    const [lx, ly] = lift(z), sc = this.scene;
+    const g = sc.add.graphics().setPosition(x + lx, y + ly).setDepth(y + 1);
+    g.fillStyle(0x2a1446, 0.85).fillEllipse(0, 0, h * 0.5, h).fillStyle(0x05030a, 0.95).fillEllipse(0, 0, h * 0.28, h * 0.78);
+    g.lineStyle(1, 0xb48cff, 0.9).strokeEllipse(0, 0, h * 0.5, h);
+    const light = sc.add.image(x + lx, y + ly, "fx_glow").setTint(0x9d4edd).setBlendMode(Phaser.BlendModes.ADD).setScale(h / 28).setAlpha(0.5).setDepth(y + 1);
+    g.setScale(1, 0.1);
+    sc.tweens.add({ targets: g, scaleY: 1, duration: 90, ease: "Back.Out" });
+    sc.tweens.add({ targets: [g, light], scaleY: 0, alpha: 0, delay: 90 + holdMs, duration: 150, onComplete: () => { g.destroy(); light.destroy(); } });
+    for (let i = 0; i < 4; i++) this.p(x + rnd(-2, 2), y + rnd(-2, 2), z + rnd(-h / 3, h / 3), pick(VOIDC), { vx: rnd(-10, 10), vy: rnd(-10, 10), vz: rnd(-4, 8), life: rnd(220, 380), size: 1, size1: 0 });
+  }
+
+  /** Motes pulled from a ring of radius r into (x, y) over `ms`. */
+  private implode(x: number, y: number, z: number, r: number, n: number, ms = 260, pal = VOIDC) {
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * Math.PI * 2, d = r * rnd(0.7, 1.1), T = ms / 1000;
+      this.p(x + Math.cos(a) * d, y + Math.sin(a) * d, z + rnd(-2, 4), pick(pal), { vx: -Math.cos(a) * d / T, vy: -Math.sin(a) * d / T, life: ms, size: pick([1, 2]), size1: 0 });
+    }
+  }
+
+  private voidEvent(ev: any): boolean {
+    const e = ev.id ? this.ent(ev.id) : undefined;
+    switch (ev.ev) {
+      case "portal": // the staff bolt goes through the Void: a rift at the staff, another short of the foe
+        this.rift(ev.x1, ev.y1, 10, 12, 140);
+        this.scene.time.delayedCall(60, () => this.rift(ev.x2, ev.y2, 10, 14, 220));
+        return true;
+      case "swallow": { // a monster drawn into the hole: its colour streams into the heart
+        const v = this.ent(ev.t);
+        if (v) for (let i = 0; i < 10; i++) {
+          const T = rnd(0.18, 0.3);
+          this.p(v.sprite.x + rnd(-4, 4), v.sprite.y + rnd(-3, 3), v.top * rnd(0.2, 0.7), pick(VOIDC), { vx: (ev.x - v.sprite.x) / T, vy: (ev.y - v.sprite.y) / T, vz: -v.top * 0.4 / T, life: T * 1000, size: 2, size1: 0 });
+        }
+        this.glow(ev.x, ev.y, 4, 12, 0x7a4ad0, 260, 0.6, true);
+        return true;
+      }
+      case "eatshot": this.implode(ev.x, ev.y, 6, 7, 6, 180); return true;
+      case "holeclose": // the hole falls in on itself, then a dull flash
+        this.implode(ev.x, ev.y, 2, ev.r ?? 60, 26, 240);
+        this.scene.time.delayedCall(230, () => { this.glow(ev.x, ev.y, 4, (ev.r ?? 60) * 0.5, 0xd8c4ff, 300, 0.8, true); this.ring(ev.x, ev.y, (ev.r ?? 60) * 0.4, "arcane", 14, { life: 300, up: 6 }); });
+        return true;
+      case "voidhop": // spat out of the Void (or thrown out of the hole): a small dark puff where it lands
+        this.ring(ev.x, ev.y, 14, "shadow", 10, { life: 280, up: 8 });
+        this.burst(ev.x, ev.y, 3, "earth", 5, 40, 300);
+        this.glow(ev.x, ev.y, 4, 10, 0x5a189a, 240, 0.6, true);
+        return true;
+      case "voidslip": { // the hero breaks into violet shards and is gone; they come back out of a rift
+        this.burst(ev.x, ev.y, 12, "shadow", 22, 60, 520);
+        this.glow(ev.x, ev.y, 12, 16, 0x5a189a, 360, 0.8);
+        this.scene.time.delayedCall(ev.ms ?? 1500, () => { const h = this.ent(ev.id); if (h) { this.rift(h.sprite.x, h.sprite.y, 12, 20, 120); this.ring(h.sprite.x, h.sprite.y, 12, "shadow", 10, { life: 260 }); } });
+        return true;
+      }
+      case "arsenal": // the armoury opens round the hero
+        if (e) { this.ring(e.sprite.x, e.sprite.y, 26, "arcane", 18, { life: 420, up: 4 }); this.glow(e.sprite.x, e.sprite.y, 4, 22, 0x7a4ad0, 500, 0.7, true); this.rise(e.sprite.x, e.sprite.y, 14, "shadow", 12, 34, 700); }
+        return true;
+      case "wisps": // each wisp drops out of a little rift
+        for (const wid of ev.ids ?? []) this.scene.time.delayedCall(30, () => { const w = this.ent(wid); if (w) { this.rift(w.sprite.x, w.sprite.y, 10, 10, 80); } });
+        return true;
+      case "wispend": { // a wisp bursts in its element, its Void heart sinks away
+        const st = EL_STYLE[ev.el as keyof typeof EL_STYLE] ?? "arcane";
+        this.burst(ev.x, ev.y, 10, st, 12, 60, 360);
+        this.glow(ev.x, ev.y, 10, 12, PALETTE[st][2], 260, 0.7);
+        this.implode(ev.x, ev.y, 10, 6, 5, 220);
+        return true;
+      }
+      case "golemfire": this.ring(ev.x, ev.y, ev.r ?? 50, "fire", 22, { life: 360, up: 10 }); this.glow(ev.x, ev.y, 6, 20, 0xff7a2a, 300, 0.6, true); return true;
+      case "golemdeath": { // the golem breaks: stones fall, its element flares
+        const st = EL_STYLE[ev.el as keyof typeof EL_STYLE] ?? "earth";
+        this.burst(ev.x, ev.y, 14, "earth", 14, 70, 520, 2);
+        this.ring(ev.x, ev.y, 30, st, 16, { life: 360, up: 8 });
+        this.glow(ev.x, ev.y, 10, 18, PALETTE[st][2], 320, 0.6);
+        return true;
+      }
+      case "colossussplit": this.burst(ev.x, ev.y, 18, "earth", 16, 80, 520, 2); this.implode(ev.x, ev.y, 18, 26, 12, 300); return true;
+      case "voidreturn": // a creature went back to the Void: a little life and mana flow back
+        if (e) { this.rise(e.sprite.x, e.sprite.y, 8, "arcane", 4, 26, 600); this.rise(e.sprite.x, e.sprite.y, 8, "spirit", 3, 22, 600); }
+        return true;
+      case "grimoire": // a page turns: a puff of the chosen element over the hero
+        if (e) this.burst(e.sprite.x, e.sprite.y, e.top + 4, EL_STYLE[ev.el as keyof typeof EL_STYLE] ?? "arcane", 8, 30, 360);
+        return true;
+    }
+    return false;
+  }
+
+  /** The Arsenal's axe: a Void-steel head sweeping a wide arc in front of the hero, a violet crescent behind it. */
+  private axeSweep(ev: any, e: FxEntity | undefined) {
+    // drawn round the hero in screen space (the object's own position is projected in the iso view, its contents are not)
+    const ox = e?.sprite.x ?? ev.x, oy = e?.sprite.y ?? ev.y, a0 = Math.atan2(ev.y - oy, ev.x - ox), R = Math.max(18, Math.hypot(ev.x - ox, ev.y - oy) + 10);
+    const g = this.scene.add.graphics().setPosition(ox + 0.01, oy).setDepth(DEPTH), start = this.t, MS = 220, z = 8;
+    const at = (b: number): [number, number] => { const [sx, sy] = screenDelta(Math.cos(b) * R, Math.sin(b) * R); return [sx, sy - z]; };
+    this.emit(MS + 120, 16, () => {
+      const k = clamp01((this.t - start) / MS), a = a0 - 1.2 + 2.4 * (1 - (1 - k) * (1 - k)), fade = clamp01(1 - (this.t - start - MS) / 120);
+      g.clear();
+      for (let i = 0; i < 9; i++) { // the crescent: points along the swept arc, fading behind the head
+        const [px, py] = at(a - i * 0.13);
+        g.fillStyle(i < 2 ? 0xd8c4ff : 0x7a4ad0, (1 - i / 9) * 0.8 * fade).fillRect(px - 1.5, py - 1, 3, 2);
+      }
+      const [hx, hy] = at(a);
+      g.fillStyle(0xb48cff, fade).fillCircle(hx, hy, 3).fillStyle(0xf0e4ff, fade).fillCircle(hx - 0.8, hy - 0.8, 1.2);
+    });
+    this.scene.time.delayedCall(MS + 140, () => g.destroy());
+    this.burst(ev.x, ev.y, 6, "arcane", 10, 70, 300);
+  }
+
+  /** Black Hole / Event Horizon: a dark disc on the ground, a turning rim of light, motes spiralling in. */
+  private addHole(f: any, objs: Phaser.GameObjects.GameObject[]) {
+    objs.push(this.scene.add.graphics().setPosition(f.x + 0.01, f.y + 0.01).setDepth(GROUND_DEPTH + 1));
+    this.glow(f.x, f.y, 4, f.r * 0.6, 0x9d4edd, 420, 0.7, true);
+  }
+
+  private tickHole(f: any, g: Phaser.GameObjects.Graphics, born: number, dt: number) {
+    const age = this.t - born, open = clamp01(age / 260), R = f.r * (0.4 + 0.6 * open) * 0.62, sq = ISO ? 0.5 : 0.7;
+    g.clear();
+    g.fillStyle(0x1a0b2e, 0.3).fillEllipse(0, 0, R * 2.6, R * 2.6 * sq);
+    g.fillStyle(0x2a1446, 0.55).fillEllipse(0, 0, R * 1.7, R * 1.7 * sq);
+    g.fillStyle(0x05030a, 0.92).fillEllipse(0, 0, R * 1.05, R * 1.05 * sq);
+    g.lineStyle(1, 0x7a4ad0, 0.8).strokeEllipse(0, 0, R * 1.2, R * 1.2 * sq);
+    for (let i = 0; i < 12; i++) { // the rim turning: bright dashes running round
+      const a = this.t / 380 + i * (Math.PI * 2 / 12), al = 0.35 + 0.65 * ((i % 3) / 2);
+      g.fillStyle(i % 3 ? 0xb48cff : 0xd8c4ff, al).fillRect(Math.round(Math.cos(a) * R * 0.62), Math.round(Math.sin(a) * R * 0.62 * sq), 2, 1);
+    }
+    const n = Math.floor(28 * dt * Math.max(1, f.r / 60)) + (Math.random() < (28 * dt * Math.max(1, f.r / 60)) % 1 ? 1 : 0);
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * Math.PI * 2, d = f.r * rnd(0.55, 1), T = rnd(0.45, 0.7), vin = d / T, vt = vin * 0.8;
+      this.p(f.x + Math.cos(a) * d, f.y + Math.sin(a) * d, rnd(0, 5), pick(VOIDC), { vx: -Math.cos(a) * vin - Math.sin(a) * vt, vy: -Math.sin(a) * vin + Math.cos(a) * vt, vz: -2, life: T * 900, size: pick([1, 1, 2]), size1: 0 });
+    }
+  }
+
+  /** Void Blades (and the Arsenal's blade): Void-steel blades wheeling round the hero, edged in the golem's element. */
+  private addBlades(f: any, objs: Phaser.GameObjects.GameObject[]) {
+    const n = f.skill === "su_arsenal" ? 1 : 3, edge = PALETTE[this.ownerEl(f.owner)][2];
+    for (let i = 0; i < n; i++) {
+      const g = this.scene.add.graphics();
+      const L = f.skill === "su_arsenal" ? 9 : 7;
+      g.fillStyle(0x2a1446).fillTriangle(-L * 0.45, 0, L * 0.1, -1.8, L * 0.1, 1.8).fillTriangle(L * 0.1, -1.8, L, 0, L * 0.1, 1.8);
+      g.fillStyle(0xb48cff).fillTriangle(-L * 0.3, 0, L * 0.1, -1.1, L * 0.9, 0);
+      g.fillStyle(edge).fillTriangle(L * 0.1, -1.8, L, 0, L * 0.3, -1.2);
+      objs.push(g);
+    }
+    if (this.ent(f.owner)) { const o = this.ent(f.owner)!; this.ring(o.sprite.x, o.sprite.y, f.r * 0.7, "arcane", 10, { life: 300, z: 8 }); }
+  }
+
+  private tickBlades(f: any, objs: Phaser.GameObjects.GameObject[], x: number, y: number, dt: number) {
+    const n = objs.length, R = f.r * 0.8, spin = f.skill === "su_arsenal" ? 0.006 : 0.0075, edge = PALETTE[this.ownerEl(f.owner)];
+    objs.forEach((o, i) => {
+      const g = o as Phaser.GameObjects.Graphics, a = this.t * spin + i * Math.PI * 2 / n, z = 9;
+      const px = x + Math.cos(a) * R, py = y + Math.sin(a) * R, [lx, ly] = lift(z);
+      g.setPosition(px + lx, py + ly).setDepth(py).setAngle(this.screenDeg(-Math.sin(a), Math.cos(a)));
+      if (Math.random() < 30 * dt) this.p(px, py, z, Math.random() < 0.5 ? pick(VOIDC) : edge[2], { life: 160, size: 1, size1: 0, depth: py - 1 });
+    });
+  }
+
   // ---- projectiles --------------------------------------------------------------------------------------
 
   /** Visual for a skill projectile, or undefined to let the scene draw a basic one. */
@@ -1635,6 +1806,16 @@ export class SkillFx {
       }
       case "powerarrow": case "frostarrow": {
         g = this.scene.add.rectangle(s.x, s.y, 10 * size, 1.5 * size, look === "frostarrow" ? 0xd6f6ff : 0xfffbe0).setAngle(deg).setDepth(DEPTH);
+        break;
+      }
+      case "voidlance": {
+        // the Arsenal's lance: a long shaft of Void steel, a pale point, a violet glow round the head
+        const d = this.scene.add.graphics();
+        d.fillStyle(0x2a1446).fillRect(-9, -0.8, 12, 1.6);
+        d.fillStyle(0x7a4ad0).fillRect(-9, -0.4, 12, 0.6);
+        d.fillStyle(0xb48cff).fillTriangle(3, -2, 9, 0, 3, 2);
+        d.fillStyle(0xf0e4ff).fillTriangle(4, -0.7, 9, 0, 4, 0.7);
+        g = this.scene.add.container(s.x, s.y, [glow(0x9d4edd, 0.35).setPosition(5, 0), d]).setDepth(DEPTH).setAngle(this.screenDeg(s.vx ?? 1, s.vy ?? 0));
         break;
       }
       case "lightning": g = glow(0xb3ecff, 0.45); break;
@@ -1804,6 +1985,7 @@ export class SkillFx {
       switch (look) {
         case "shuriken": (g as any).angle += 1400 * dt; if (Math.random() < 0.4) this.p(x, y, 0, 0xffffff, { life: 120, depth: DEPTH - 1 }); break;
         case "net": (g as any).angle += 400 * dt; break;
+        case "voidlance": for (let i = 0; i < n(50); i++) this.p(x - ax * rnd(4, 9), y - ay * rnd(4, 9), z + rnd(-1, 1), pick(VOIDC), { vx: -ax * 20 + rnd(-4, 4), vy: -ay * 20 + rnd(-4, 4), life: rnd(140, 260), size: 1, size1: 0 }); break;
         case "frozenorb": {
           (g as any).angle += 240 * dt;
           // ice splinters spin off the orb in every direction, and a frosty mist trails behind it
