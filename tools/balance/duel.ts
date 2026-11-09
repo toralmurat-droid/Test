@@ -24,7 +24,7 @@ import {
 import { golemDeath, golemStrike, golemTick, newMind, type GolemMind } from "../../shared/golemAI";
 import { newWisp, openArsenal, wispEnd, wispTick, type WispMind } from "../../shared/voidConjure";
 import { Equipped, GEAR, gearBlock, gearDef, gearReachMult, gearSpeedMult, gearStats, meetsReq, withLevel } from "../../shared/gear";
-import { heroPoise, POISE, poiseLevelMult, poiseSpeed, pvpDamageMult } from "../../shared/combat";
+import { canExecute, executeDamage, executeRefund, heroPoise, POISE, poiseLevelMult, poiseSpeed, pvpDamageMult } from "../../shared/combat";
 import { COMBAT_REGEN_PER_STA, HIT_RADIUS, MOBS, mobScale, PLAYER_SPEED, REGEN_DELAY_MS, REGEN_PER_STA, REGEN_RAMP_MS } from "../../shared/constants";
 import { MOB_COMBAT, mobBody } from "../../shared/combat";
 import { ARSENAL, bondShare, ESSENCE, GOLEM, GOLEM_OF, golemSlots, parseGrimoire, PORTAL, SUMMON, summonElement, summonScaleLevel, WISP, wispEls, type AttuneElement, type SummonKind } from "../../shared/summons";
@@ -37,7 +37,7 @@ const TICK = 50; // ms, server runs at 20 Hz
  * melee creature closing in, as from a melee hero (session E: the bot used to stand and shoot the Summoner while their
  * golems beat it, 90-100 % Summoner wins against the Wizard that even a halved golem did not move).
  */
-export const SIM = { golemBlock: 1, kitePets: true, aimHero: false };
+export const SIM = { golemBlock: 1, kitePets: true, aimHero: false, execute: true }; // execute: false = without EXECUTE (pve.ts --no-execute)
 const MAX_MS = 60000;
 const ARENA = 480; // px: fights happen between walls / obstacles, so kiting can't go on forever // a duel longer than this is decided on HP %
 const REACT = 0.55; // chance per tick that a bot acts (about 40ms average reaction delay)
@@ -51,12 +51,13 @@ interface Pending { at: number; fn: () => void }
 export class F {
   x = 0; y = 0; face = 1; hp = 0; maxHp = 0; s: Stats; energy = 0; mana = 0; maxMana = 0; dead = false;
   poiseLost = 0; lastPoiseHit = 0; brokenUntil = 0; steadyUntil = 0; broken = false;
+  execSpent = false; execs = 0; // EXECUTE (shared/combat.ts): this break was executed; executions this hero landed
   invulnUntil = 0; rollUntil = 0; rollDir = 0; lastDodge = -1e9; lastRanged = -1e9; lastHurt = 0;
   attackReadyAt = 0; lastAttack = 0; combo = 0; stunUntil = 0; slowUntil = 0; dealt = 0; lastMove = 0;
   sk = newRuntime();
   /** Monster fighters (tools/balance/pve.ts): body size (melee hits reach its edge) and its stats. */
   body = 0;
-  mob?: { reach: number; ranged: boolean };
+  mob?: { reach: number; ranged: boolean; boss?: boolean }; // boss: elite, quest boss, Night Raider (EXECUTE.bossMult)
   get talents() { return this.t; }
   constructor(public id: string, public cls: ClassKind, public level: number, public t: Ranks, public eq: Equipped, pts: Stats) {
     const st = statsFor(cls, pts);
@@ -348,7 +349,7 @@ export class Duel {
       const pd = dmg * (o.skill ? POISE.skillMult : 1) * (guarded ? POISE.guardMult : 1) * poiseLevelMult(by?.level ?? t.level, t.level);
       if (pd > 0 && !t.broken && now >= t.steadyUntil) {
         t.poiseLost += pd; t.lastPoiseHit = now;
-        if (t.poiseLost >= t.poiseMax) { t.poiseLost = t.poiseMax; t.broken = true; t.brokenUntil = now + POISE.heroBrokenMs; }
+        if (t.poiseLost >= t.poiseMax) { t.poiseLost = t.poiseMax; t.broken = true; t.brokenUntil = now + POISE.heroBrokenMs; t.execSpent = false; }
       }
       if (!guarded) t.attackReadyAt = Math.max(t.attackReadyAt, now + POISE.heroFlinchMs);
     }
@@ -372,6 +373,12 @@ export class Duel {
     // A Summoner's creatures on a hero, and a hero's blow on a creature (server hitTarget, SUMMON.pvp)
     if (a && !a.mob && o.pet && !(t instanceof GolemF) && !t.mob) { dmg *= SUMMON.pvp.dmg; if (o.stunMs) o = { ...o, stunMs: o.stunMs * SUMMON.pvp.cc }; }
     if (a && !a.mob && t instanceof GolemF && !(a instanceof GolemF)) dmg /= SUMMON.pvp.hp;
+    // Execution (server TownRoom.execute): a hero's own first blow on a broken monster (never a hero or a creature)
+    if (SIM.execute && a && !a.mob && t.mob && !(t instanceof GolemF) && canExecute(o, t)) {
+      t.execSpent = true; a.execs++;
+      dmg = executeDamage(dmg, !!o.crit, !!t.mob.boss);
+      executeRefund(a, a.cls, OVERLOAD.max);
+    }
     this.damage(t, Math.max(1, Math.round(dmg)), a, push, o.kb ?? 1, o);
   }
 
