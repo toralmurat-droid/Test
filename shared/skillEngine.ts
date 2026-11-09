@@ -5,7 +5,7 @@ import { impactMs, nightBuff, passiveBlood, talentBonus, LEAP_MS, pointRange, sk
 } from "./skills";
 import { Stats, STATS } from "./powers";
 import { pay, skillCost } from "./mana";
-import { auraBuffs, isAuraId, ESSENCE, SUMMON, type AttuneElement } from "./summons";
+import { auraBuffs, isAuraId, BLADE_EL, BLADES_BASE, ESSENCE, SUMMON, WISP, type AttuneElement } from "./summons";
 
 /**
  * Runs the skills of shared/skills.ts. It knows nothing about the room: the server (server/TownRoom.ts) and the
@@ -65,6 +65,7 @@ export interface ShotSpec extends HitEffects {
   pierce: number; explode: number; chain: number; field?: FieldDef; rank: number; power: number;
   pulse?: ShotDef["pulse"]; pulses?: number; // pulses so far (turns the shard ring)
   imb?: Imbue; // enchantment active when it was shot
+  pet?: boolean; // shot by a hero's creature (a wisp) in their name: SUMMON.pvp applies on heroes
 }
 
 export interface FieldInst {
@@ -624,7 +625,7 @@ function fire(h: SkillHost, id: string, skill: string, d: ShotDef, rank: number,
 export function shotHit(h: SkillHost, s: ShotSpec, tid: string) {
   const exploding = s.explode > 0 && s.pierce <= 0;
   h.hit(s.owner, tid, s.dmg, [s.vx, s.vy], { stunMs: s.stunMs, slowMs: exploding ? undefined : s.slowMs, burn: s.burn, markMs: s.markMs, weakMs: s.weakMs, drain: s.drain,
-    leechMs: s.leechMs, bleed: s.bleed, kb: s.kb ?? 1, skill: true, imb: s.imb });
+    leechMs: s.leechMs, bleed: s.bleed, kb: s.kb ?? 1, skill: true, imb: s.imb, pet: s.pet });
   if (s.chain > 0) chain(h, s.owner, tid, s.chain, s.dmg, s);
 }
 
@@ -642,7 +643,7 @@ function chain(h: SkillHost, owner: string, from: string, hops: number, dmg: num
     dmg *= 0.8;
     const n = h.unit(next)!;
     pts.push([n.x, n.y]);
-    h.hit(owner, next, dmg, pushFrom(h, cur.x, cur.y, next), { stunMs: e.stunMs, slowMs: e.slowMs, kb: 0.3, skill: true, imb: (e as ShotSpec).imb });
+    h.hit(owner, next, dmg, pushFrom(h, cur.x, cur.y, next), { stunMs: e.stunMs, slowMs: e.slowMs, kb: 0.3, skill: true, imb: (e as ShotSpec).imb, pet: (e as ShotSpec).pet });
     cur = n;
   }
   if (pts.length > 1) h.fx({ ev: "chain", id: owner, pts });
@@ -741,8 +742,18 @@ export function tickField(h: SkillHost, f: FieldInst): boolean {
     }
   }
   if (d.wpn || d.dmg || d.slowMs || d.weakMs) {
-    const dmg = baseDmg(h, f.owner, d) * f.power;
-    for (const e of inside) h.hit(f.owner, e, dmg, pushFrom(h, f.x, f.y, e), { ...effects(d, t), kb: d.kb ?? 0, skill: true, dot: !d.kb, imb: f.imb });
+    let dmg = baseDmg(h, f.owner, d) * f.power, fx: HitEffects & { el?: AttuneElement } = effects(d, t);
+    if (d.blades) {
+      // Void Blades: more blades cut harder; they take the golem's element (two different golems: they alternate)
+      dmg *= Math.max(1, d.blades / BLADES_BASE);
+      const els = [...new Set(h.golemEls?.(f.owner) ?? [])];
+      if (els.length) {
+        const el = els[Math.floor(now / d.tickMs) % els.length];
+        dmg *= WISP.resonance;
+        fx = { ...fx, ...BLADE_EL[el], el };
+      }
+    }
+    for (const e of inside) h.hit(f.owner, e, dmg, pushFrom(h, f.x, f.y, e), { ...fx, kb: d.kb ?? 0, skill: true, dot: !d.kb, imb: f.imb });
   }
   if (d.heal && o && !o.dead && o.maxHp && Math.hypot(o.x - f.x, o.y - f.y) <= d.r) h.heal(f.owner, o.maxHp * d.heal / 100 * f.power);
   // Black Hole: monsters worn down past its threshold are swallowed at once

@@ -1,13 +1,14 @@
 # Summoner « Void Lord » rework: progress
 
 Spec: the brief « Refonte de la classe Invocateur : Maître du Néant » (Murat 2026-11-08).
-Work branch: `claude/pensive-mccarthy-2razu7`. No PR until the mechanics are complete (end of session B).
+Work branch: `claude/pensive-mccarthy-2razu7`. PR 1 opened at the end of session B, **as a draft** (drafts are never
+auto-merged): the duel sim shows the Summoner far too strong against the Wizard (see below). Murat decides when it ships.
 
 ## Plan (5 sessions, 3 PRs)
 - **A (done)**: baseline sims, shared data, permanent golems, grimoire, auras, golem powers, death bursts, Essence,
   Stone Bond passive, PvP settings, Black Hole (incl. projectile eating), Void Velocity, Void Slip, Colossus split,
   save reset, duel sim updated, tests.
-- **B**: wisps (Mob kinds + client placeholder sprite), Void Arsenal (blade, lance, axe, 4 wisps), golem-element Void
+- **B (done)**: wisps (Mob kinds + client placeholder sprite), Void Arsenal (blade, lance, axe, 4 wisps), golem-element Void
   Blades, staff portal attack (~220 px), Essence/wisp expiry (toVoid on time-out), sim (wisps, arsenal, portal), e2e
   (`tools/e2e-summoner.cjs`, `tools/e2e-two-players.cjs`), `npm run bench`, patch note, **open PR 1**.
 - **C**: art (hero repaint: tailcoat + scarf, starter kit, wisp sheets, skill icons, skillfx).
@@ -35,6 +36,27 @@ Work branch: `claude/pensive-mccarthy-2razu7`. No PR until the mechanics are com
   voidhop, eatshot, swallow, holeclose, voidslip, grimoire, colossussplit, voidreturn) are ignored for now.
 - Tests: `tests/voidlord.test.ts` (6 tests), `summoner*.test.ts` updated. `npm test`, `npm run build`, smoke: OK.
 
+## Done in session B
+- `shared/summons.ts`: `WISP` (cap 4, shot per element, last burst per element, Resonance x1.15), `wispEls`, `BLADE_EL`
+  + `BLADES_BASE`, `ARSENAL` (blade field, lance, axe, the four wisps), `PORTAL`.
+- `shared/voidConjure.ts` (new): `wispTick`, `wispEnd` (toVoid: Essence + Return to the Void, then the burst),
+  `openArsenal` (blade field, lance and axe timed with `h.later`, each only with a foe in reach). Server and sim share it.
+- `shared/skillEngine.ts`: `ShotSpec.pet` (wisp shots get SUMMON.pvp on heroes, chains too); Void Blades take the
+  golems' element (alternating per tick with two), x1.15, and cut `blades/3` harder (Void Edge 5 = x5/3).
+- `shared/constants.ts` etc.: Mob kind `wisp` (element in `Mob.weapon`, no new synced field), LOOT / MOB_COMBAT / GEAR_DROP.
+- `shared/classes.ts`: Summoner staff `range 220`, `portal: true`; finisher `burst: 30` (`ComboHit.burst`).
+- `server/TownRoom.ts`: `spawnWisps` (replaces the old ones, no Essence), `updateWisp` (floats on a ring, no walls),
+  expiry and death -> `wispEnd`, `voidArsenal`, `portalShot` (nearest foe within 0.82 of the aim, wall check, sfx
+  `portal`), finisher burst in `explode`. `summon()` only counts golem kinds toward SUMMON.max (the Colossus used to
+  send wisps back). Stone Bond and the guardian rule skip wisps.
+- Client: wisps drawn with the elemental blob of their element, shrunk and floating (`WISP_STANDIN` in textures.ts),
+  label "X's Wisp", no thrall tint. Unknown sfx (wisps, wispend, arsenal, portal) ignored for now; the lance flies as
+  the default fireball look (kind `voidlance`).
+- Sim (`tools/balance/duel.ts`): wisps (`addWisps`, `wispBrain`), Arsenal, portal (bolt only flies its last stretch).
+- Tests: `tests/voidconjure.test.ts` (4 tests: wisps, Arsenal, blades element, portal + finisher).
+  `tools/e2e-summoner.cjs` rewritten (grimoire, golems, wisps, blades, Black Hole, Arsenal, Colossus).
+- Bench: `CAST=1|skill,skill` option in `tools/perf/bots.ts`.
+
 ## Decisions taken (to confirm or revisit)
 - Stone Bond: the base share (30% → 22% from Lv 20-25) stays without the passive; the passive adds +2%/rank (cap 60%).
   Otherwise the Summoner would lose its bond at Lv 1 (0 skill points).
@@ -57,8 +79,28 @@ PvE before: the Summoner loses 0% HP per kill at every level (Act 1 and Act 2): 
 After session A (60 fights/pair, no wisps / Arsenal yet, so low levels are weak):
 summoner 16 / 28 / 23 / 35 / 51 / 43 / 50 / 45 / 53 %. Not tuned on purpose (session E).
 
+Session B decisions:
+- Wisps are hittable (45 HP base, monster scaling): a destroyed wisp also goes back to the Void (Essence + burst).
+- Wisps take the golems' elements in turn (fire if no golem); the Arsenal always brings all four.
+- Recasting wisps sends the old ones back without Essence (else spamming them would farm Essence).
+- PR 1 as a draft (see the sim numbers): to ship, mark it ready for review.
+
+After session B (60 fights/pair, `npx tsx tools/balance/duel.ts 60`), overall:
+summoner 51 / 70 / 61 / 62 / 67 / 63 / 71 / 79 / 80 % (Lv 1..50). Against the Wizard 90-100 % at every level
+(session A: 35 % Lv 5, ~70 % Lv 20 and 40). Isolation at Lv 5 vs Wizard: all 100 %, old staff (160 px, no portal) 73 %,
+no wisps / Arsenal 93 %. Both the 220 px reach and the wisps push it; the sim is 1D, so out-ranging the Wizard
+weighs more than in the game. Levers for session E: staff range/damage, wisp damage or fire rate, blades x1.15.
+
+Bench (`npm run bench -- 10 20`, SPREAD=1): tick avg 13.2 ms / p95 20.4 ms; with CAST=1 (5 Summoners at /max spamming
+wisps, blades, holes, Arsenal) 21.4 / 34.3 ms; CAST=su_wisps 22.4 / 39.0 ms. Budget 50 ms. The cost is projectiles:
+`targetsAround` scans every monster (~5,700) per projectile sub-step (no spatial grid; suggested as a separate task).
+Not spread, 10 bots: 8.5 / 12.4 ms (base 9.0 / 12.8).
+
 ## Pitfalls
 - Player schema is at the 64-field limit: pack new synced data into existing fields.
 - `cleanRanks` drops a skill whose parent is missing: tests must set parents too.
 - The skill tree slab fits 4 rows: keep each branch at depth ≤ 3 (tests/treeLayout.test.ts).
-- `MOB_FIELDS` order: new synced Mob fields go at the end (none added in session A).
+- `MOB_FIELDS` order: new synced Mob fields go at the end (none added in sessions A and B).
+- e2e scripts need a fresh save file per run (an existing account skips the class picker); walking out of town can
+  stall, the script re-routes every 5 s. One run out of 5 logged Colyseus decode errors (`refId not found`,
+  `utf8Read invalid byte`); not reproduced in 4 more runs, not seen on the base branch in 1 run. Unexplained.

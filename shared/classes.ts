@@ -28,8 +28,10 @@ export interface ComboHit {
   knockback: number; // multiplier on normal knockback
   lunge?: number; // px the hero steps forward with the hit
   shotScale?: number; // wizard: projectile size multiplier
-  /** Summoner: this share of the hit is in the hero's attuned element (shared/summons.ts ATTUNE_ORDER). */
+  /** Summoner: this share of the hit is in the element of the hero's first golem (grimoire page 1, shared/summons.ts). */
   attune?: number;
+  /** The bolt bursts where it lands: other foes within this many px take half its damage (the Summoner's finisher). */
+  burst?: number;
   cooldownMs?: number; // override of attackCooldownMs before the next input counts
 }
 
@@ -44,7 +46,8 @@ export interface ClassDef {
   /** Melee: hit everything within `attackRange` of a point 12px in front. */
   attackRange: number;
   /** Ranged: primary attack fires a projectile instead of a melee swing. */
-  projectile?: { speed: number; range: number; radius: number; kind: "fireball" | "arrow" };
+  /** `portal`: the bolt comes out of a Void portal next to the foe (the Summoner, shared/summons.ts PORTAL). */
+  projectile?: { speed: number; range: number; radius: number; kind: "fireball" | "arrow"; portal?: boolean };
   special: {
     kind: SpecialKind;
     name: string;
@@ -128,15 +131,16 @@ export const CLASSES: Record<ClassKind, ClassDef> = {
   // Frail and slow, a weak staff bolt of their own: the golems tank and hit, the Summoner keeps them alive and armed.
   summoner: {
     name: "Summoner", maxHp: 100, speed: 86, damage: 17, attackCooldownMs: 650, attackRange: 0,
-    projectile: { speed: 230, range: 160, radius: 6, kind: "fireball" },
+    // Void Lord rework (Murat 2026-11-08): the staff bolt goes through a Void portal, longer reach (220 px, was 160)
+    projectile: { speed: 230, range: 220, radius: 6, kind: "fireball", portal: true },
     special: { kind: "summon", name: "Elemental Golem", cooldownMs: 8000 },
-    // Its own staff combo (Murat 2026-11-07): two quick bolts, then an elemental burst in the attuned element
+    // Its own staff combo (Murat 2026-11-07): two quick bolts, then a burst half in the element of the first golem (grimoire)
     combo: [
       { damage: 1, knockback: 0.6 },
       { damage: 1.05, knockback: 0.6, cooldownMs: 560 },
-      { damage: 1.8, knockback: 2, shotScale: 1.6, attune: 0.5, cooldownMs: 950 }, // elemental burst
+      { damage: 1.8, knockback: 2, shotScale: 1.6, attune: 0.5, burst: 30, cooldownMs: 950 }, // elemental burst
     ],
-    blurb: "Calls elemental golems that fight for them: cycle the element, then summon fire, frost, venom or storm.",
+    blurb: "Lord of the Void: permanent elemental golems, wisps and Void weapons fight for them; black holes swallow foes and projectiles.",
   },
 };
 

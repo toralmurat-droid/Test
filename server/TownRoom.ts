@@ -27,6 +27,7 @@ import {
   gainEssence, toVoid, voidSlip, inVoid,
 } from "../shared/skillEngine";
 import { golemDeath, golemStrike, golemTick, newMind, type GolemMind } from "../shared/golemAI";
+import { newWisp, openArsenal, wispEnd, wispTick, type WispMind } from "../shared/voidConjure";
 import {
   ITEM_LIFETIME_MS, ItemKind, LOOT, GOLD_PICKUP_RADIUS, PICKUP_RADIUS, PVP_GOLD_DROP,
 } from "../shared/items";
@@ -70,7 +71,7 @@ import { dropLive, LiveState, rememberLive, takeLive } from "./handoff";
 import { MobView } from "./mobView";
 import { act2Missing, act2Open, actAt, desertSpawn, WAYGATE_RANGE, waygateArrival, waygateById, WAYGATES } from "../shared/act2";
 import { repairCost, respecCost, WEAR, wearMult } from "../shared/upkeep";
-import { ATTUNE_ORDER, attuneOf, bondShare, DEFAULT_GRIMOIRE, SUMMONER_TREE, ESSENCE, GOLEM, GOLEM_OF, golemSlots, isElement, isSummonKind, parseGrimoire, SUMMON, summonElement, summonScaleLevel, type AttuneElement, type SummonKind } from "../shared/summons";
+import { ARSENAL, ATTUNE_ORDER, attuneOf, bondShare, DEFAULT_GRIMOIRE, SUMMONER_TREE, ESSENCE, GOLEM, GOLEM_OF, golemSlots, isElement, isSummonKind, parseGrimoire, PORTAL, SUMMON, summonElement, summonScaleLevel, WISP, wispEls, type AttuneElement, type SummonKind } from "../shared/summons";
 import { cleanFeast, familyOf, type Feast, feastMult, THRALL, thrallMax } from "../shared/devour";
 import { ASK_BURST, ASK_PER_SEC, Bucket, CHAT_BURST, CHAT_PER_SEC, clientIp, isLocalIp, MSG_BURST, MSG_KICK_AFTER, MSG_KICK_WINDOW_MS, MSG_PER_SEC } from "./ratelimit";
 
@@ -222,6 +223,7 @@ export class Mob extends Schema {
   thrall = false; // Bite (shared/devour.ts): a monster turned into a vampire's thrall (a summon that keeps its own kind)
   slot = -1; // a Summoner's permanent golem: its grimoire slot (0, 1); -1 for other summons
   mind?: GolemMind; // a golem's own powers (shared/golemAI.ts): elements, timers
+  wisp?: WispMind; // a Summoner's wisp (shared/voidConjure.ts): its element, power and next shot
   fusedSlots = 0; // a Colossus: how many golems fused into it (they come back out when it ends)
   charmUntil = 0; // Charm (v_gaze): a zone monster fighting for a vampire (owner set) until then, then it goes back to being itself
   sPower = 1; // a summon's damage multiplier (skill rank, the owner's Ruin talent, the golems fused into a Colossus)
@@ -319,6 +321,7 @@ export class Projectile extends Schema {
   mobName = "";
   mobEl?: Element; // a monster's magic shot element (MOB_SHOT_ELEMENT)
   parts?: ElemPart[]; // a hero's elemental share (basic attacks)
+  burst = 0; // a basic bolt that bursts where it lands (ComboHit.burst): foes this close take half its damage
   hitIds = new Set<string>();
   traveled = 0;
   pulsed = 0; // distance at the last pulse (ShotSpec.pulse)
@@ -1666,7 +1669,7 @@ export class TownRoom extends Room<TownState> {
     if (slot >= 0) {
       for (const [oid, o] of [...this.summons]) if (o.owner === ownerId && o.slot === slot) this.dismiss(oid, false);
     } else {
-      const mine = [...this.summons].filter(([, m]) => m.owner === ownerId && m.slot < 0).sort((x, y) => x[1].summonAt - y[1].summonAt);
+      const mine = [...this.summons].filter(([, m]) => m.owner === ownerId && m.slot < 0 && isSummonKind(m.kind)).sort((x, y) => x[1].summonAt - y[1].summonAt);
       while (mine.length >= SUMMON.max) { const [oid] = mine.shift()!; this.dismiss(oid); }
     }
     const m = new Mob(), now = Date.now();
@@ -1745,6 +1748,61 @@ export class TownRoom extends Room<TownState> {
     const out: AttuneElement[] = [];
     for (const g of this.summons.values()) if (g.owner === id && !g.dead && g.mind && (g.slot >= 0 || g.kind === "golem_colossus")) out.push(...g.mind.els);
     return out;
+  }
+
+  // ---- Wisps and the Void Arsenal (shared/voidConjure.ts) ----------------------------
+
+  /**
+   * The Summoner calls wisps of these elements for `ms` (su_wisps, Void Arsenal). Their wisps already out go back
+   * first (no Essence: they were replaced), so there are never more than WISP.max. Not in the safe zone.
+   */
+  private spawnWisps(id: string, power: number, els: AttuneElement[], ms: number) {
+    const p = this.state.players.get(id);
+    if (!p || p.dead || isSafeZone(p.x, p.y)) return;
+    for (const [sid, m] of [...this.summons]) if (m.owner === id && m.kind === "wisp") this.dismiss(sid);
+    const now = Date.now(), def = MOBS.wisp, ids: string[] = [];
+    els.slice(0, WISP.max).forEach((el, i, all) => {
+      const a = (i / all.length) * Math.PI * 2;
+      const w = new Mob();
+      w.kind = "wisp"; w.weapon = el; w.zone = -1; w.owner = id; w.summonAt = now + i; w.level = p.level;
+      w.hp = w.maxHp = Math.round(def.maxHp * mobScale(summonScaleLevel(p.level), "hp") * talentMult(p.cls, p.talents, "summonHp"));
+      w.x = w.homeX = p.x + Math.cos(a) * WISP.float; w.y = w.homeY = p.y + Math.sin(a) * WISP.float * 0.6 - 6;
+      w.banishAt = now + ms;
+      w.wisp = newWisp(el, power, now, i);
+      const sid = `w${++this.summonSeq}`;
+      this.state.mobs.set(sid, w);
+      this.summons.set(sid, w);
+      ids.push(sid);
+    });
+    this.broadcast("sfx", { ev: "wisps", id, ids, x: Math.round(p.x), y: Math.round(p.y) });
+  }
+
+  /** A wisp's turn: it floats round its owner (no walls: it flies) and shoots the nearest of their foes in reach. */
+  private updateWisp(m: Mob, o: Player, dt: number, now: number) {
+    const w = m.wisp!;
+    const toOwner = Math.hypot(o.x - m.x, o.y - m.y);
+    if (toOwner > SUMMON.leash * 2.5) { m.x = o.x; m.y = o.y - 6; m.target = ""; }
+    // each wisp has its own place on a slowly turning ring round the owner
+    const a = (m.summonAt % 4) / 4 * Math.PI * 2 + now / 1600;
+    const tx = o.x + Math.cos(a) * WISP.float, ty = o.y + Math.sin(a) * WISP.float * 0.6 - 6;
+    const k = Math.min(1, dt * 5);
+    m.moving = Math.hypot(tx - m.x, ty - m.y) > 2;
+    m.x += (tx - m.x) * k; m.y += (ty - m.y) * k; m.homeX = m.x; m.homeY = m.y;
+    m.slowed = now < m.slowUntil;
+    if (now < m.stunUntil) return;
+    if (now >= m.nextPick) { m.nextPick = now + 400; m.target = this.summonTarget(m, m.owner, o); }
+    const t = m.target ? this.state.players.get(m.target) ?? this.state.mobs.get(m.target) : undefined;
+    if (!t || t.dead) { m.target = ""; return; }
+    m.dir = Math.abs(t.x - m.x) > Math.abs(t.y - m.y) ? (t.x > m.x ? "right" : "left") : (t.y > m.y ? "down" : "up");
+    wispTick(this.host, m.owner, m, w, m.target);
+  }
+
+  /** The Void Arsenal (su_arsenal): its blade, lance and axe (shared/voidConjure.ts), and all four wisps for its time. */
+  private voidArsenal(id: string, power: number, ms: number) {
+    const p = this.state.players.get(id);
+    if (!p || p.dead || isSafeZone(p.x, p.y)) return;
+    openArsenal(this.host, id, power, ms);
+    this.spawnWisps(id, power, ARSENAL.wisps, ms);
   }
 
   // ---- The Brides (v_brides) ----------------------------------------------------
@@ -1876,7 +1934,7 @@ export class TownRoom extends Room<TownState> {
   private bondOf(heroId: string, p: { x: number; y: number }): [string, Mob] | undefined {
     let best: [string, Mob] | undefined, bd: number = SUMMON.bondRange;
     for (const [sid, g] of this.summons) {
-      if (g.owner !== heroId || g.dead) continue;
+      if (g.owner !== heroId || g.dead || g.wisp) continue; // wisps are too frail to take blows for their owner
       const d = Math.hypot(g.x - p.x, g.y - p.y);
       if (d < bd) { bd = d; best = [sid, g]; }
     }
@@ -1887,7 +1945,7 @@ export class TownRoom extends Room<TownState> {
   private guardOf(ownerId: string, m: Mob): string | undefined {
     let best: string | undefined, bd = SUMMON.guardRange;
     for (const [sid, g] of this.summons) {
-      if (g.owner !== ownerId || g.dead) continue;
+      if (g.owner !== ownerId || g.dead || g.wisp) continue; // monsters turn on the golems, not on the wisps
       const d = Math.hypot(g.x - m.x, g.y - m.y);
       if (d < bd) { bd = d; best = sid; }
     }
@@ -1993,7 +2051,9 @@ export class TownRoom extends Room<TownState> {
   /** A summon's turn: follow the owner, fight their enemies, crumble when its time is up. */
   private updateSummon(m: Mob, id: string, dt: number, now: number) {
     const o = this.state.players.get(m.owner);
+    if (o && !o.dead && m.wisp && now >= m.banishAt) { wispEnd(this.host, m.owner, m.wisp, m.x, m.y); return this.dismiss(id); } // its time is up: back to the Void
     if (!o || o.dead || now >= m.banishAt) return this.dismiss(id);
+    if (m.wisp) return this.updateWisp(m, o, dt, now);
     m.stunned = now < m.stunUntil;
     m.slowed = now < m.slowUntil;
     if (m.stunned || m.broken) { m.winding = false; m.windUntil = 0; }
@@ -4071,8 +4131,16 @@ export class TownRoom extends Room<TownState> {
   }
 
   private explode(s: Projectile, id: string, _directHit = "") {
-    this.broadcast("boom", { x: s.x, y: s.y, r: s.spec?.explode ?? 0, kind: s.kind, imb: s.imb || undefined });
+    this.broadcast("boom", { x: s.x, y: s.y, r: s.spec?.explode ?? s.burst, kind: s.kind, imb: s.imb || undefined });
     this.state.projectiles.delete(id);
+    // The Summoner's finisher bursts: the other foes close by take half of it, in the same elements
+    if (s.burst > 0 && !s.mobLevel) for (const e of this.host.enemies(s.x, s.y, s.burst, s.owner)) {
+      if (e === _directHit) continue;
+      const t = this.state.players.get(e) ?? this.state.mobs.get(e);
+      if (!t) continue;
+      const d = Math.hypot(t.x - s.x, t.y - s.y) || 1;
+      this.hitTarget(s.owner, e, s.damage * 0.5, [(t.x - s.x) / d, (t.y - s.y) / d], { kb: s.knockback * 0.5, basic: true, parts: s.parts?.map((p) => ({ ...p, amt: p.amt * 0.5 })) });
+    }
     if (s.spec) shotEnd(this.host, s.spec, s.x, s.y);
   }
 
@@ -4848,6 +4916,7 @@ export class TownRoom extends Room<TownState> {
     m.dead = true; m.hp = 0;
     if (m.owner) this.summons.delete(targetId);
     if (m.owner && m.mind) this.golemFell(m); // a Summoner's golem: its element bursts out, Essence, it rises again later
+    if (m.owner && m.wisp) wispEnd(this.host, m.owner, m.wisp, m.x, m.y); // a wisp destroyed: back to the Void all the same
     if (m.charmUntil) { m.owner = ""; m.charmUntil = 0; m.banishAt = 0; } // a charmed monster dies as the zone monster it is
     m.hidden = false; m.spot = ""; m.fleeing = false; m.foe = "";
     // A skeleton may break in two: its upper body drags itself on at whoever killed it
@@ -5661,7 +5730,9 @@ export class TownRoom extends Room<TownState> {
     }
 
     if (def.projectile) {
-      this.shoot(a, id, dmg, hit.knockback, hit.shotScale ?? 1, 0, def.projectile, parts);
+      const sid = this.shoot(a, id, dmg, hit.knockback, hit.shotScale ?? 1, 0, def.projectile, parts);
+      const s = this.state.projectiles.get(sid);
+      if (s && hit.burst) s.burst = hit.burst;
       return;
     }
 
@@ -5695,7 +5766,36 @@ export class TownRoom extends Room<TownState> {
     s.range = def.range * gearReachMult(this.equipped(a));
     s.damage = dmg; s.knockback = knockback; s.basic = true; s.parts = parts;
     s.imb = imbueOf(a as unknown as Unit, Date.now())?.style ?? ""; // enchanted arrows look the part
-    this.state.projectiles.set(`s${++this.shotSeq}`, s);
+    if ("portal" in def && def.portal) this.portalShot(a, id, s);
+    const sid = `s${++this.shotSeq}`;
+    this.state.projectiles.set(sid, s);
+    return sid;
+  }
+
+  /**
+   * The Summoner's staff bolt goes through the Void (shared/summons.ts PORTAL): when a foe is within the staff's reach
+   * near the aim, a second portal opens PORTAL.exitGap px short of it and the bolt comes out there with only
+   * PORTAL.exitRange px left to fly. A wall between the hero and that spot keeps the bolt on its normal way.
+   */
+  private portalShot(a: Player, id: string, s: Projectile) {
+    const off = aimOf(a);
+    let best: { x: number; y: number } | undefined, bd = Infinity;
+    for (const e of this.host.enemies(a.x, a.y, s.range, id)) {
+      const t = this.state.players.get(e) ?? this.state.mobs.get(e);
+      if (!t) continue;
+      const dx = t.x - a.x, dy = t.y - a.y, d = Math.hypot(dx, dy) || 1;
+      if ((dx * off[0] + dy * off[1]) / d < PORTAL.cone || d >= bd) continue;
+      bd = d; best = t;
+    }
+    if (!best || bd < PORTAL.minDist) return;
+    const vx = (best.x - a.x) / bd, vy = (best.y - a.y) / bd;
+    const ex = best.x - vx * PORTAL.exitGap, ey = best.y - 4 - vy * PORTAL.exitGap;
+    for (let d = 8; d < bd - PORTAL.exitGap; d += 8) if (isSolidAt(a.x + vx * d, a.y - 4 + vy * d)) return;
+    if (isSolidAt(ex, ey)) return;
+    this.broadcast("sfx", { ev: "portal", id, x1: Math.round(s.x), y1: Math.round(s.y), x2: Math.round(ex), y2: Math.round(ey) });
+    s.x = ex; s.y = ey; s.vx = vx; s.vy = vy;
+    s.dir = Math.abs(vx) > Math.abs(vy) ? (vx > 0 ? "right" : "left") : vy > 0 ? "down" : "up";
+    s.range = PORTAL.exitRange;
   }
 
   /** Secondary ranged weapon (sling, knives, crossbow) on R: its own cooldown, scales with the attack stat. */
@@ -5741,6 +5841,8 @@ export class TownRoom extends Room<TownState> {
     },
     summon: (id, power) => this.recallGolems(id, power),
     golemEls: (id) => this.golemEls(id),
+    wisps: (id, power, n, ms) => this.spawnWisps(id, power, wispEls(this.golemEls(id), n), ms),
+    arsenal: (id, power, ms) => this.voidArsenal(id, power, ms),
     voidHop: (owner, tid, swallowed, x, y) => this.voidHop(owner, tid, swallowed, x, y),
     colossus: (id, power, ms) => { this.summonColossus(id, power, ms); },
     brides: (id, power, n, ms, drain) => this.callBrides(id, power, n, ms, drain),

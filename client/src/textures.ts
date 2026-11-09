@@ -294,7 +294,10 @@ export const MOB_LOOK: Record<string, { top: number; bar: number; oy: number; sc
   venomblob: { top: 15, bar: 12, oy: 0.92 }, frostblob: { top: 17, bar: 14, oy: 0.92 }, fireblob: { top: 17, bar: 14, oy: 0.92 }, stormblob: { top: 16, bar: 12, oy: 0.92 },
   crawler: { top: 10, bar: 10, oy: CRAWL_CROP },
   nightraider: { top: 30, bar: 22, oy: 0.95, scale: 1.5 }, // pixel look: a big bandit stands in for the rider
+  wisp: { top: 12, bar: 10, oy: 1.4, scale: 0.55 }, // placeholder until its own sheets: a small elemental blob floating
 };
+/** The Summoner's wisps have no sheets yet (session C): the elemental blob of their element stands in (Mob.weapon). */
+const WISP_STANDIN: Record<string, string> = { fire: "fireblob", cold: "frostblob", poison: "venomblob", shock: "stormblob" };
 
 const PAINTED_MOBS = ["slime", "blobling", "shooterblob", "warriorblob", "healerblob", "motherblob", "venomblob", "frostblob", "fireblob", "stormblob", "skeleton", "bandit", "skeletonmage", "necromancer", "demon", "crawler", "banditchief", "hollowking", "gnawkin", "tuskborn", "silkwretch", "duskwing", "packlord", "hornbrute", "hidemother", "crowseer", "gnasher", "weaver",
   "nomad", "scorpion", "sanddead", "veiled", "camelfolk", "sphinx", "sunwright", "nightraider",
@@ -343,6 +346,7 @@ export function preloadPaintedMobs(scene: Phaser.Scene) {
 
 /** Monster sprite sheets, same 6-frame layout as personas (painted when the smooth look is on). */
 export function mobTexture(scene: Phaser.Scene, kind: string, level = 1, weapon = "", bones = 0): string {
+  if (kind === "wisp") return mobTexture(scene, WISP_STANDIN[weapon] ?? "fireblob", level);
   if (kind === "crawler" && !(SMOOTH && scene.textures.exists("hd_mob_crawler"))) return mobTexture(scene, "skeleton", level, weapon); // pixel look: a skeleton's upper half (cropped in TownScene)
   if (SMOOTH && PAINTED_MOBS.includes(kind)) {
     const tier = level >= 10 ? 3 : level >= 5 ? 2 : 1;

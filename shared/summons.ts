@@ -146,6 +146,64 @@ export const GOLEM_DEATH: Record<AttuneElement, { area?: AreaDef; field?: FieldD
  */
 export const ESSENCE = { decayMs: 30_000, bondEveryMs: 3000 } as const;
 
+/**
+ * Elemental wisps (su_wisps, Void Arsenal): small Void lights (Mob kind "wisp", element in Mob.weapon) that float round
+ * their owner and shoot the nearest foe in reach, on their own. At most `max` per hero (a new call sends the old ones
+ * back). When their time is up (or they are destroyed) they go back to the Void: a charge of Essence and a last burst
+ * of their element. Shot and burst damage is `dmg` x the owner's Magic x the skill's power; a wisp that shares the
+ * element of one of the hero's golems hits `resonance` times harder.
+ */
+export const WISP = {
+  max: 4, everyMs: 1200, range: 150, float: 22, resonance: 1.15,
+  shot: {
+    fire: { kind: "fireball", dmg: 6, speed: 240, burn: [3, 2000] as [number, number] }, // a fireball that burns
+    cold: { kind: "frostarrow", dmg: 5, speed: 280, slowMs: 900 }, // a shard that slows
+    poison: { kind: "slimeball", dmg: 4, speed: 220, burn: [4, 3000] as [number, number], weakMs: 900 }, // venom spit
+    shock: { kind: "lightning", dmg: 5, speed: 340, chain: 1 }, // an arc that jumps to one more foe
+  },
+  end: {
+    fire: { area: { r: 32, dmg: 6, burn: [3, 1500], kb: 0.6, look: "burst" } as AreaDef }, // a small explosion
+    cold: { area: { r: 40, dmg: 2, slowMs: 1400, look: "nova" } as AreaDef }, // a frost wave
+    poison: { heal: 3 }, // heals the Summoner a little (% of their life)
+    shock: { buff: { ms: 2000, speed: 25 } as BuffDef }, // the Summoner runs faster for 2 s
+  },
+} as const;
+/** The elements of `n` wisps called by a hero whose golems are `golemEls`: the golems' elements in turn (fire if none). */
+export function wispEls(golemEls: readonly AttuneElement[], n: number): AttuneElement[] {
+  const src = golemEls.length ? [...new Set(golemEls)] : (["fire"] as AttuneElement[]);
+  return Array.from({ length: n }, (_, i) => src[i % src.length]);
+}
+
+/**
+ * Void Blades take the element of the hero's golem (two different golems: the blades alternate, tick by tick). Each
+ * element adds a light rider, and sharing a golem's element is Resonance (WISP.resonance). With no golem out they cut
+ * as plain Void. Damage grows with the number of blades (base 3).
+ */
+export const BLADE_EL: Record<AttuneElement, { burn?: [number, number]; slowMs?: number; stunMs?: number; weakMs?: number }> = {
+  fire: { burn: [2, 1500] }, cold: { slowMs: 600 }, poison: { burn: [2, 2500], weakMs: 600 }, shock: { stunMs: 120 },
+};
+export const BLADES_BASE = 3;
+
+/**
+ * Void Arsenal (su_arsenal): for its time, one blade circles the hero, a lance flies at the nearest foe in reach and
+ * runs through up to `pierce` of them, an axe sweeps a wide arc when a foe is close, and all four wisps fight beside
+ * the hero. None of the weapons is a monster (no AI): a ground effect that follows the hero and timed attacks.
+ */
+export const ARSENAL = {
+  blade: { kind: "voidblades", r: 34, ms: 0, tickMs: 400, follow: true, dmg: 7, blades: 1 } as FieldDef,
+  lance: { everyMs: 1500, range: 220, speed: 380, dmg: 14, pierce: 3, radius: 5, kind: "voidlance" },
+  axe: { everyMs: 2000, reach: 70, ahead: 20, area: { r: 46, dmg: 16, kb: 1.4, look: "slash" } as AreaDef },
+  wisps: ["fire", "cold", "poison", "shock"] as AttuneElement[],
+} as const;
+
+/**
+ * The Summoner's staff attack goes through the Void (Murat 2026-11-08): a portal opens in front of them, another one
+ * `exitGap` px short of the foe nearest their aim (within `cone` of it and the staff's range), and the bolt comes out
+ * of the second one, so it has only `exitRange` px left to fly: hard to step out of. With no foe in reach, or a wall in
+ * the way, it flies the whole range from the staff.
+ */
+export const PORTAL = { exitGap: 28, exitRange: 60, minDist: 48, cone: 0.82 } as const;
+
 /** How many golems a Summoner has: one, two with Twin Bond (su_twin) from GOLEM.twinLevel. */
 export function golemSlots(level: number, twin: number): 1 | 2 {
   return level >= GOLEM.twinLevel && twin > 0 ? 2 : 1;

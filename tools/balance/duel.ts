@@ -22,11 +22,12 @@ import {
   formOf, gainEssence, toVoid, voidSlip, buffCdr,
 } from "../../shared/skillEngine";
 import { golemDeath, golemStrike, golemTick, newMind, type GolemMind } from "../../shared/golemAI";
+import { newWisp, openArsenal, wispEnd, wispTick, type WispMind } from "../../shared/voidConjure";
 import { Equipped, GEAR, gearBlock, gearDef, gearReachMult, gearSpeedMult, gearStats, meetsReq, withLevel } from "../../shared/gear";
 import { heroPoise, POISE, poiseLevelMult, poiseSpeed, pvpDamageMult } from "../../shared/combat";
 import { COMBAT_REGEN_PER_STA, HIT_RADIUS, MOBS, mobScale, PLAYER_SPEED, REGEN_DELAY_MS, REGEN_PER_STA, REGEN_RAMP_MS } from "../../shared/constants";
 import { MOB_COMBAT, mobBody } from "../../shared/combat";
-import { bondShare, ESSENCE, GOLEM, GOLEM_OF, golemSlots, parseGrimoire, SUMMON, summonElement, summonScaleLevel, type AttuneElement, type SummonKind } from "../../shared/summons";
+import { ARSENAL, bondShare, ESSENCE, GOLEM, GOLEM_OF, golemSlots, parseGrimoire, PORTAL, SUMMON, summonElement, summonScaleLevel, WISP, wispEls, type AttuneElement, type SummonKind } from "../../shared/summons";
 
 const TICK = 50; // ms, server runs at 20 Hz
 const MAX_MS = 60000;
@@ -75,7 +76,8 @@ export class GolemF extends F {
   windUntil = 0; lastAtk = -1e9; banishAt = 0; sPower = 1;
   drain = 0; // vampire Brides: % of their damage that heals the owner
   slot = -1; mind?: GolemMind; // Summoner: permanent golem slot and its powers (shared/golemAI.ts)
-  constructor(id: string, public owner: F, public kind: SummonKind | "bride", power: number, fused: number, now: number, lifeMs?: number) {
+  wisp?: WispMind; // Summoner: an elemental wisp (shared/voidConjure.ts)
+  constructor(id: string, public owner: F, public kind: SummonKind | "bride" | "wisp", power: number, fused: number, now: number, lifeMs?: number) {
     super(id, owner.cls, owner.level, {}, {}, { sta: 0, str: 0, mag: 0, dex: 0 });
     const fuse = 1 + SUMMON.colossusPerGolem * fused, def = MOBS[kind];
     this.s = { sta: 0, str: 0, mag: 0, dex: 0 };
@@ -209,6 +211,8 @@ export class Duel {
         if (swallowed) u.stunUntil = Math.max(u.stunUntil, this.now + 400);
         return true;
       },
+      wisps: (id, power, n, ms) => { const o = f(id); if (o) this.addWisps(o, power, wispEls(this.host.golemEls!(id), n), ms); },
+      arsenal: (id, power, ms) => { const o = f(id); if (o) { openArsenal(this.host, id, power, ms); this.addWisps(o, power, ARSENAL.wisps, ms); } },
       brides: (id, power, n, ms, drain) => {
         const o = f(id);
         if (!o) return;
@@ -262,9 +266,31 @@ export class Duel {
     this.summons.push(g);
     return g;
   }
-  /** A summon died (not sent back): a golem's element bursts out, Essence, its slot waits GOLEM.respawnMs. */
+  /** Elemental wisps (server TownRoom.spawnWisps): the hero's last ones go back (no Essence), at most WISP.max. */
+  addWisps(o: F, power: number, els: AttuneElement[], ms: number) {
+    for (const g of this.golemsOf(o)) if (g.kind === "wisp") g.dead = true;
+    els.slice(0, WISP.max).forEach((el, i) => {
+      const w = new GolemF(`g${++this.summonSeq}`, o, "wisp", power, 0, this.now, ms);
+      w.wisp = newWisp(el, power, this.now, i); w.stunUntil = this.now;
+      w.x = o.x - o.face * 8;
+      this.summons.push(w);
+    });
+  }
+  /** A wisp's turn (server TownRoom.updateWisp): it floats at its owner's back and shoots the nearest foe in reach. */
+  wispBrain(w: GolemF): number {
+    const o = w.owner;
+    if (o.dead) { w.dead = true; return 0; }
+    if (this.now >= w.banishAt) { w.dead = true; wispEnd(this.host, o.id, w.wisp!, w.x, w.y); return 0; } // back to the Void
+    w.x = o.x - o.face * 8; // it flies: no walking
+    let t: F | undefined, bd: number = WISP.range;
+    for (const c of this.foes(w)) if (!c.dead && Math.abs(c.x - w.x) < bd) { bd = Math.abs(c.x - w.x); t = c; }
+    if (t) { w.face = Math.sign(t.x - w.x) || 1; wispTick(this.host, o.id, w, w.wisp!, t.id); }
+    return 0;
+  }
+  /** A summon died (not sent back): a golem's element bursts out, Essence, its slot waits GOLEM.respawnMs; a wisp bursts. */
   summonDied(g: GolemF) {
     const o = g.owner;
+    if (g.wisp && !o.dead) { wispEnd(this.host, o.id, g.wisp, g.x, g.y); return; }
     if (!g.mind || o.dead) return;
     golemDeath(this.host, o.id, g.mind.els, g.x, g.y, golemPower(o) * g.mind.boost);
     toVoid(this.host, o.id);
@@ -294,7 +320,7 @@ export class Duel {
     // Stone Bond (server damagePlayer): the hero's nearest golem within SUMMON.bondRange takes part of the blow
     if (!(t instanceof GolemF) && dmg > 1) {
       let g: GolemF | undefined, bd: number = SUMMON.bondRange;
-      for (const c of this.golemsOf(t)) if (Math.abs(c.x - t.x) < bd) { bd = Math.abs(c.x - t.x); g = c; }
+      for (const c of this.golemsOf(t)) if (!c.wisp && Math.abs(c.x - t.x) < bd) { bd = Math.abs(c.x - t.x); g = c; }
       if (g) {
         const part = Math.round(dmg * Math.min(0.6, bondShare(t.level) + talentBonus(t.cls, t.t, "bond") / 100));
         dmg -= part; g.hp -= part;
@@ -372,7 +398,13 @@ export class Duel {
     const def = CLASSES[a.cls].projectile!;
     const t = this.other(a);
     const range = def.range * gearReachMult(a.eq);
-    const miss = this.rnd() < this.missChance(Math.abs(t.x - a.x), def.speed);
+    // the Summoner's portal (server TownRoom.portalShot): with the foe in reach, the bolt only flies its last stretch
+    const portal = def.portal && Math.abs(t.x - a.x) >= PORTAL.minDist && Math.abs(t.x - a.x) <= range;
+    const miss = this.rnd() < this.missChance(portal ? PORTAL.exitGap : Math.abs(t.x - a.x), def.speed);
+    if (portal) {
+      this.shots.push({ owner: a, x: t.x - a.face * PORTAL.exitGap, dir: a.face, speed: def.speed, range: PORTAL.exitRange, traveled: 0, radius: def.radius * scale, dmg, kb, miss, hit: false, basic: true, pierced: false });
+      return;
+    }
     this.shots.push({ owner: a, x: a.x + a.face * 6, dir: a.face, speed: def.speed, range, traveled: 0, radius: def.radius * scale, dmg, kb, miss, hit: false, basic: true, pierced: false });
   }
 
@@ -445,7 +477,7 @@ export class Duel {
   }
 
   /** Hooks for the PvE simulator (tools/balance/pve.ts): monster brains and speeds. */
-  brain(f: F): number { return f instanceof GolemF ? this.golemBrain(f) : this.think(f); }
+  brain(f: F): number { return f instanceof GolemF ? (f.wisp ? this.wispBrain(f) : this.golemBrain(f)) : this.think(f); }
 
   /** A golem's turn (server TownRoom.updateSummon): wind up and slam the nearest foe; the Colossus hits all around it. */
   golemBrain(g: GolemF): number {
