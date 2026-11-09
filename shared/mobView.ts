@@ -11,7 +11,7 @@
 // Same order as the synced fields of Mob (server/TownRoom.ts); tests/mobview.test.ts checks it.
 export const MOB_FIELDS = [
   "kind", "level", "weapon", "hidden", "bones", "merged", "guard", "work", "job", "parts", "title",
-  "x", "y", "dir", "moving", "hp", "maxHp", "dead", "stunned", "slowed", "broken", "winding", "fx", "owner",
+  "x", "y", "dir", "moving", "hp", "maxHp", "dead", "stunned", "slowed", "broken", "winding", "fx", "owner", "champion",
 ] as const;
 export type MobField = (typeof MOB_FIELDS)[number];
 export const POS_SCALE = 4;
