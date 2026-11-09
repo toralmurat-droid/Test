@@ -132,3 +132,68 @@ export function rollMobRune(gearChance: number, level: number, rnd = Math.random
   const chance = gearChance >= 0.75 ? RUNE_DROP.boss : RUNE_DROP.base * (1 + RUNE_DROP.perLevel * Math.max(0, level - 1));
   return rnd() < chance ? rollRune(level, rnd) : undefined;
 }
+
+// ---- Fusion (Lot C, game design review 2026-11) ----
+/**
+ * Four identical loose runes (same key, same rank) + gold -> one rune of the same key, one rank higher, at a trader who
+ * buys runes (shared/shops.ts shopFuses). Never across keys; rank 3 is the top. Only loose runes in the bag count:
+ * a rune set in an item ("w_frost^ember2") is part of that item's id and is never taken.
+ */
+export const RUNE_FUSE_COUNT = 4;
+export const RUNE_MAX_RANK = 3;
+/** Gold per fusion, by the rank of the four runes put in: Lesser -> plain 100, plain -> Greater 400. */
+export const RUNE_FUSE_COST = [0, 100, 400];
+
+/** Gold to fuse four runes of this rank, or undefined when that rank can't be fused (rank 3, junk). */
+export function fuseCost(rank: number): number | undefined {
+  return Number.isInteger(rank) && rank >= 1 && rank < RUNE_MAX_RANK ? RUNE_FUSE_COST[rank] : undefined;
+}
+
+/** Loose runes in a bag, counted by id ("rune:ember:1" -> 5). Anything else (gear, runes set in gear) is skipped. */
+export function looseRuneCounts(bag: Iterable<string>): Map<string, number> {
+  const out = new Map<string, number>();
+  for (const id of bag) if (parseRune(id)) out.set(id, (out.get(id) ?? 0) + 1);
+  return out;
+}
+
+export interface FuseInput {
+  bag: string[];
+  gold: number;
+  /** Bag slots taken by other things than `bag` items (potion stacks). */
+  reserved: number;
+  bagSize: number;
+}
+
+/** Why these four runes can't be fused right now ("" = they can). `id` is the loose rune id to fuse. */
+export function fuseProblem(id: unknown, s: FuseInput): string {
+  const r = parseRune(id);
+  if (!r) return "That is not a rune";
+  const cost = fuseCost(r.rank);
+  if (cost === undefined) return "Greater runes can't be fused any higher";
+  const have = s.bag.filter((g) => g === id).length;
+  if (have < RUNE_FUSE_COUNT) return `You need ${RUNE_FUSE_COUNT} of this rune (you have ${have})`;
+  if (!(s.gold >= cost)) return `Fusing costs ${cost} gold`;
+  // four go out, one comes in: only an over-full bag (should never happen) can refuse it
+  if (s.bag.length - RUNE_FUSE_COUNT + 1 + s.reserved > s.bagSize) return "No room in your bag";
+  return "";
+}
+
+/**
+ * The fusion, checked against what the hero holds right now: the bag without four of the rune and with the new one
+ * (where the first of the four was), and the gold left. Returns the reason when it can't happen. Pure: the caller
+ * swaps bag and gold in one go, so nothing can be duplicated or lost halfway.
+ */
+export function fuseRunes(id: unknown, s: FuseInput): { bag: string[]; gold: number; made: string; cost: number } | string {
+  const why = fuseProblem(id, s);
+  if (why) return why;
+  const r = parseRune(id)!;
+  const made = runeId(r.key, r.rank + 1), cost = fuseCost(r.rank)!;
+  const bag: string[] = [];
+  let taken = 0, at = -1;
+  for (const g of s.bag) {
+    if (g === id && taken < RUNE_FUSE_COUNT) { if (at < 0) at = bag.length; taken++; continue; }
+    bag.push(g);
+  }
+  bag.splice(at, 0, made);
+  return { bag, gold: s.gold - cost, made, cost };
+}
