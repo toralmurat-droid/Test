@@ -1,11 +1,12 @@
 /**
  * Summoner balance levers (Void Lord rework, session E): switches off one part of the kit at a time and prints the
  * Summoner's duel win rate against each class, to see what carries it. The changes only live in this process.
- * Run: npx tsx tools/balance/summoner-levers.ts [fightsPerPair] [lever,lever...] [--levels=5,20,40]
+ * Run: npx tsx tools/balance/summoner-levers.ts [fightsPerPair] [lever or a+b] [--levels=5,20,40] [--foes=vampire]
  */
 import { ACTIVE_CLASSES, CLASSES } from "../../shared/classes";
-import { skillById } from "../../shared/skills";
-import { ARSENAL, AURA, BOND, PORTAL, SUMMON, WISP } from "../../shared/summons";
+import { MOBS } from "../../shared/constants";
+import { skillById, SKILLS } from "../../shared/skills";
+import { ARSENAL, AURA, BOND, PORTAL, SUMMON, SUMMON_SCALE, WISP } from "../../shared/summons";
 import { SIM, winRate } from "./duel";
 
 const W = (o: unknown) => o as any;
@@ -37,6 +38,21 @@ export const LEVERS: Record<string, () => void> = {
   pvpLow: () => { Object.assign(W(SUMMON.pvp), { dmg: 0.5, hp: 0.5, cc: 0.3 }); },
   pvpMin: () => { Object.assign(W(SUMMON.pvp), { dmg: 0.25, hp: 0.25, cc: 0.1 }); },
   cc0: () => { W(SUMMON.pvp).cc = 0.01; },
+  bond40: () => { W(SUMMON).guardShare = 0.4; },
+  bond35: () => { W(SUMMON).guardShare = 0.35; },
+  bondLow15: () => { W(BOND).low = 0.15; },
+  bondLow18: () => { W(BOND).low = 0.18; },
+  bondLow10: () => { W(BOND).low = 0.1; },
+  scale02: () => { W(SUMMON_SCALE).rate = 0.2; },
+  scale0: () => { W(SUMMON_SCALE).rate = 0; },
+  wispHp20: () => { W(MOBS.wisp).maxHp = 20; },
+  wispHp10: () => { W(MOBS.wisp).maxHp = 10; },
+  mastery3: () => { for (const sk of SKILLS.summoner) if ((sk.maxRank ?? 3) > 3) W(sk).maxRank = 3; },
+  passives3: () => { for (const id of ["su_might", "su_bond"]) W(skillById(id)!).maxRank = 3; },
+  might5: () => { W(skillById("su_might")!.passive!).perRank = 5; },
+  gHp13: () => { W(SUMMON.pvp).hp = 1.3; },
+  gHp16: () => { W(SUMMON.pvp).hp = 1.6; },
+  arsenal07: () => { W(ARSENAL.lance).dmg *= 0.7; W(ARSENAL.axe.area).dmg *= 0.7; W(ARSENAL.blade).dmg *= 0.7; },
   block40: () => { SIM.golemBlock = 0.4; },
   arsenalHalf: () => { W(ARSENAL.lance).dmg *= 0.5; W(ARSENAL.axe.area).dmg *= 0.5; W(ARSENAL.blade).dmg *= 0.5; },
 };
@@ -45,7 +61,8 @@ if (process.argv[1]?.includes("summoner-levers")) {
   const n = Number(process.argv[2]) || 150;
   const pick = process.argv[3] && !process.argv[3].startsWith("--") ? process.argv[3].split(",") : Object.keys(LEVERS);
   const levels = (process.argv.find((a) => a.startsWith("--levels="))?.split("=")[1] ?? "5,20,40").split(",").map(Number);
-  const foes = ACTIVE_CLASSES.filter((c) => c !== "summoner");
+  const only = process.argv.find((a) => a.startsWith("--foes="))?.split("=")[1].split(",");
+  const foes = ACTIVE_CLASSES.filter((c) => c !== "summoner" && (!only || only.includes(c)));
   console.log("lever".padEnd(13) + levels.flatMap((l) => foes.map((f) => `L${l} ${f.slice(0, 3)}`.padStart(9))).join(""));
   for (const name of pick) {
     // each lever in a fresh process state: re-import is costly, so levers are applied one at a time by separate runs

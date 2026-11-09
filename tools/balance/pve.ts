@@ -115,6 +115,8 @@ export function mobSpec(kind: MobKind, level: number, opt: { weapon?: string; hp
 
 /** A monster in the arena: a fighter with no skills, stats from its MobSpec. */
 export class MobF extends F {
+  /** The golem keeping this monster busy (SUMMON.guardHold per golem), if any. */
+  held?: F;
   windUntil = 0; windKind?: Special; windX = 0; windPoise = 0; lastAtk = -1e9; next: Record<string, number> = {}; nextLunge = 0; lungeUntil = 0;
   constructor(public spec: MobSpec, id = "m") {
     super(id, "knight", spec.level, {}, {}, { sta: 0, str: 0, mag: 0, dex: 0 });
@@ -144,8 +146,14 @@ export class PveDuel extends Duel {
    * and monsters favour them, SUMMON.taunt), else the hero.
    */
   mobTarget(m: MobF): F {
+    if (m.held && !m.held.dead && Math.abs(m.held.x - m.x) < SUMMON.guardRange * 2) return m.held;
+    m.held = undefined;
     let best: F = this.hero, bd = SUMMON.guardRange;
-    for (const g of this.golemsOf(this.hero)) { const d = Math.abs(g.x - m.x); if (d < bd) { bd = d; best = g; } }
+    for (const g of this.golemsOf(this.hero)) {
+      const d = Math.abs(g.x - m.x);
+      if (d < bd && this.mobs.filter((o) => o !== m && !o.dead && o.held === g).length < SUMMON.guardHold) { bd = d; best = g; }
+    }
+    if (best !== this.hero) m.held = best;
     return best;
   }
   other(f: F): F {
@@ -297,7 +305,7 @@ const potionSize = (level: number) => (level >= 20 ? 2 : level >= 10 ? 1 : 0);
 export interface RunResult { won: boolean; kills: number; hpLostPerKill: number; secPerKill: number; heals: number; manas: number }
 
 /** One hero walks a zone: CHAIN fights in a row. */
-function zoneRun(cls: ClassKind, level: number, build: Build, mobLevel: (i: number) => number, potions = 3): RunResult {
+export function zoneRun(cls: ClassKind, level: number, build: Build, mobLevel: (i: number) => number, potions = 3): RunResult {
   const h = make("h", cls, level, build);
   const pack: Pack = { heal: potions, mana: potions, healUsed: 0, manaUsed: 0, size: potionSize(level), lastDrink: -1e9 };
   let t = 0, kills = 0, lost = 0, fightMs = 0;

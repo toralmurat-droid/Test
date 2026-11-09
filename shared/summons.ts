@@ -49,19 +49,25 @@ export const SUMMON = {
   guardRange: 3 * 32,
   /** Monsters pick a summon over a hero by this much more (it stands in front of its owner). */
   taunt: 0.3,
+  /**
+   * How many monsters one golem keeps busy (Void Lord balance pass 2026-11-09): the guardian rule and the taunt stop
+   * there, the others go for the Summoner. With no cap the Summoner lost no life at all in a zone (tools/balance/pve.ts).
+   */
+  guardHold: 1,
   /** Stone Bond reaches golems this close to their owner (px). */
   bondRange: 6 * 32,
   /**
    * Stone Bond (balance pass 2026-11-07, tools/balance/duel.ts): the owner's nearest golem within guardRange takes this
    * share of every blow the owner takes. The Summoner was dying in ~5 s to any melee hero before the golems mattered.
+   * 0.4 since the Void Lord balance pass (2026-11-09): up to Lv 20 the Vampire won 75-87 % of duels.
    */
-  guardShare: 0.3,
+  guardShare: 0.4,
   /**
    * PvP settings in one place (Void Lord rework 2026-11-08): what the Summoner's creatures do to heroes. `dmg`: their
    * blows and abilities on a hero; `hp`: their life against a hero's hits (2 = heroes need twice the damage); `cc`:
    * how long the Summoner's crowd control (Black Hole pull, golem freeze) holds a hero.
    */
-  pvp: { dmg: 0.85, hp: 1, cc: 0.6 },
+  pvp: { dmg: 0.85, hp: 1.3, cc: 0.6 }, // hp 1.3 (balance pass 2026-11-09): the Vampire tore through the golems early
 } as const;
 
 // ---- Void Lord rework (Murat 2026-11-08) ------------------------------------------------------------------------
@@ -190,9 +196,10 @@ export const BLADES_BASE = 3;
  * the hero. None of the weapons is a monster (no AI): a ground effect that follows the hero and timed attacks.
  */
 export const ARSENAL = {
-  blade: { kind: "voidblades", r: 34, ms: 0, tickMs: 400, follow: true, dmg: 7, blades: 1 } as FieldDef,
-  lance: { everyMs: 1500, range: 220, speed: 380, dmg: 14, pierce: 3, radius: 5, kind: "voidlance" },
-  axe: { everyMs: 2000, reach: 70, ahead: 20, area: { r: 46, dmg: 16, kb: 1.4, look: "slash" } as AreaDef },
+  // damage x0.7 in the balance pass (2026-11-09): at Lv 40-50 the Summoner won 70-80 % of duels against the Vampire
+  blade: { kind: "voidblades", r: 34, ms: 0, tickMs: 400, follow: true, dmg: 5, blades: 1 } as FieldDef,
+  lance: { everyMs: 1500, range: 220, speed: 380, dmg: 10, pierce: 3, radius: 5, kind: "voidlance" },
+  axe: { everyMs: 2000, reach: 70, ahead: 20, area: { r: 46, dmg: 11, kb: 1.4, look: "slash" } as AreaDef },
   wisps: ["fire", "cold", "poison", "shock"] as AttuneElement[],
 } as const;
 
@@ -211,10 +218,11 @@ export function golemSlots(level: number, twin: number): 1 | 2 {
 
 /**
  * Level used for a summon's life and damage scaling (monster scaling, shared/constants.ts mobScale). Past `soft`, only
- * `rate` of each level counts (balance pass 2026-11-07: the Summoner topped every class at Lv 25-30). The level shown
+ * `rate` of each level counts (balance pass 2026-11-07: the Summoner topped every class at Lv 25-30; rate 0 since the
+ * Void Lord pass, 2026-11-09: ranks, Golem Mastery and the Act 2 mastery ranks carry them after Lv 20). The level shown
  * on the golem stays the owner's.
  */
-export const SUMMON_SCALE = { soft: 20, rate: 0.4 } as const;
+export const SUMMON_SCALE = { soft: 20, rate: 0 } as const;
 export const summonScaleLevel = (level: number) => (level <= SUMMON_SCALE.soft ? level : SUMMON_SCALE.soft + (level - SUMMON_SCALE.soft) * SUMMON_SCALE.rate);
 
 /**
