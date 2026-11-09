@@ -131,9 +131,8 @@ export const CLASSES: Record<ClassKind, ClassDef> = {
   // Frail and slow, a weak staff bolt of their own: the golems tank and hit, the Summoner keeps them alive and armed.
   summoner: {
     name: "Summoner", maxHp: 100, speed: 86, damage: 17, attackCooldownMs: 650, attackRange: 0,
-    // Void Lord rework (Murat 2026-11-08): the staff bolt goes through a Void portal. Reach 175 px (balance pass
-    // 2026-11-09: 220 kept the Wizard, 170 px, out of reach in every duel)
-    projectile: { speed: 230, range: 175, radius: 6, kind: "fireball", portal: true },
+    // Void Lord rework (Murat 2026-11-08): the staff bolt goes through a Void portal, longer reach (220 px, was 160)
+    projectile: { speed: 230, range: 220, radius: 6, kind: "fireball", portal: true },
     special: { kind: "summon", name: "Elemental Golem", cooldownMs: 8000 },
     // Its own staff combo (Murat 2026-11-07): two quick bolts, then a burst half in the element of the first golem (grimoire)
     combo: [

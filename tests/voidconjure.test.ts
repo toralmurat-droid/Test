@@ -175,7 +175,7 @@ test("staff bolt through the Void: longer reach, comes out of a portal next to t
   const { srv, room, cs, ps, x, y, tough } = await setup();
   try {
     const id = cs[0].sessionId, p = ps[0];
-    assert.equal(CLASSES.summoner.projectile!.range, 175, "reach 175 px (was 160; 220 before the balance pass)");
+    assert.equal(CLASSES.summoner.projectile!.range, 220, "reach 220 px (was 160)");
     p.ax = 1; p.ay = 0; p.dir = "right";
     const shots = () => [...room.state.projectiles.values()].filter((s: any) => s.owner === id);
     // No foe in reach: a plain bolt from the staff over the whole range
@@ -183,10 +183,10 @@ test("staff bolt through the Void: longer reach, comes out of a portal next to t
     p.attackReadyAt = 0; p.lastAttack = 0;
     room.playerAttack(id);
     let s: any = shots()[0];
-    assert.ok(s && Math.abs(s.x - p.x) < 10 && s.range >= 175, "no foe: the bolt flies from the staff");
-    // A foe 150 px away (room left for the knockback of the combo below): the bolt comes out of a portal just short of it
+    assert.ok(s && Math.abs(s.x - p.x) < 10 && s.range >= 220, "no foe: the bolt flies from the staff");
+    // A foe 180 px away (beyond the old reach): the bolt comes out of a portal just short of it
     room.state.projectiles.clear();
-    const sk = tough("portal", x + 150, y);
+    const sk = tough("portal", x + 180, y);
     p.attackReadyAt = 0; p.lastAttack = 0;
     room.playerAttack(id);
     s = shots()[0];

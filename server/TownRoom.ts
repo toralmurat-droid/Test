@@ -1560,7 +1560,6 @@ export class TownRoom extends Room<TownState> {
     // Heroes' summons are fair game for every monster (they are hit like a rival monster)
     if (!m.mergeInto && !m.summonFor && !m.perch) for (const [sid, o] of this.summons) {
       if (o.dead || Math.abs(o.x - m.x) > def.aggroRange || Math.abs(o.y - m.y) > def.aggroRange) continue;
-      if (sid !== m.foe && isSummonKind(o.kind) && this.held(sid) >= SUMMON.guardHold * (o.kind === "golem_colossus" ? 2 : 1)) continue; // a golem keeps only so many busy
       const d = Math.hypot(o.x - m.x, o.y - m.y), hated = sid === m.hateId ? m.hate : 0;
       if (d >= (hated > 0 ? def.aggroRange * 2 : def.aggroRange) || Math.hypot(o.x - m.homeX, o.y - m.homeY) >= def.leash) continue;
       const score = Math.max(0, 1 - d / def.aggroRange) + SUMMON.taunt + hated + (sid === m.foe ? AGGRO.stick : 0);
@@ -1948,24 +1947,11 @@ export class TownRoom extends Room<TownState> {
     return best;
   }
 
-  /** How many living monsters have each summon as their foe, counted once per tick (SUMMON.guardHold). */
-  private holdAt = 0;
-  private holdN = new Map<string, number>();
-  private held(sid: string): number {
-    const now = Date.now();
-    if (now - this.holdAt >= 50) {
-      this.holdAt = now; this.holdN.clear();
-      if (this.summons.size) this.state.mobs.forEach((m) => { if (m.foe && !m.dead && this.summons.has(m.foe)) this.holdN.set(m.foe, (this.holdN.get(m.foe) ?? 0) + 1); });
-    }
-    return this.holdN.get(sid) ?? 0;
-  }
-
-  /** The owner's living summon closest to monster m, within SUMMON.guardRange (the one that takes its anger), if it has room for one more (SUMMON.guardHold). */
+  /** The owner's living summon closest to monster m, within SUMMON.guardRange (the one that takes its anger). */
   private guardOf(ownerId: string, m: Mob): string | undefined {
     let best: string | undefined, bd = SUMMON.guardRange;
     for (const [sid, g] of this.summons) {
       if (g.owner !== ownerId || g.dead || g.wisp) continue; // monsters turn on the golems, not on the wisps
-      if (m.foe !== sid && isSummonKind(g.kind) && this.held(sid) >= SUMMON.guardHold * (g.kind === "golem_colossus" ? 2 : 1)) continue; // busy enough
       const d = Math.hypot(g.x - m.x, g.y - m.y);
       if (d < bd) { bd = d; best = sid; }
     }
