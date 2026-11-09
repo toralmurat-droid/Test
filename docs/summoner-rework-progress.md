@@ -5,7 +5,11 @@ Work branch: `claude/pensive-mccarthy-2razu7`. PR 1 opened at the end of session
 auto-merged): the duel sim shows the Summoner far too strong against the Wizard (see below). Murat (2026-11-09):
 PR 1 stays a draft until the balance work (PR 3) is done; sessions C-E keep pushing to this branch.
 
-## Plan (5 sessions, 3 PRs)
+## Plan (5 sessions, one PR)
+Murat 2026-11-09: everything goes on this branch and into PR 1 (still a draft); new order **D (UI) -> C (art) ->
+E (balance)**, the balance pass once everything is in place. No PvE threshold: keep the brief's wording ("loses a
+little life"). Session D done in the same session as B; C and E each in a new session.
+
 - **A (done)**: baseline sims, shared data, permanent golems, grimoire, auras, golem powers, death bursts, Essence,
   Stone Bond passive, PvP settings, Black Hole (incl. projectile eating), Void Velocity, Void Slip, Colossus split,
   save reset, duel sim updated, tests.
@@ -13,7 +17,7 @@ PR 1 stays a draft until the balance work (PR 3) is done; sessions C-E keep push
   Blades, staff portal attack (~220 px), Essence/wisp expiry (toVoid on time-out), sim (wisps, arsenal, portal), e2e
   (`tools/e2e-summoner.cjs`, `tools/e2e-two-players.cjs`), `npm run bench`, patch note, **open PR 1**.
 - **C**: art (hero repaint: tailcoat + scarf, starter kit, wisp sheets, skill icons, skillfx).
-- **D**: UI (grimoire panel, HUD: auras, golem respawn, Essence), mobile check. **PR 2**.
+- **D (done)**: UI (grimoire panel, HUD: auras, golem respawn, Essence), mobile check.
 - **E**: balance (≥150 fights/pair, Lv 1-50), PvE not trivial. **PR 3**.
 
 ## Done in session A
@@ -79,6 +83,24 @@ PvE before: the Summoner loses 0% HP per kill at every level (Act 1 and Act 2): 
 
 After session A (60 fights/pair, no wisps / Arsenal yet, so low levels are weak):
 summoner 16 / 28 / 23 / 35 / 51 / 43 / 50 / 45 / 53 %. Not tuned on purpose (session E).
+
+## Done in session D (UI)
+- `client/src/grimoire.ts` (new, replaces the "Next golem" badge `#attune`): bottom right above the mana orb (phones in
+  portrait: higher, above the level-up note). One page per golem slot: element (aura icon), state (fighting, back in
+  N s, resting, fused, or why page 2 is shut: level 18 / Twin Bond). Click or tap a page: the four elements, the
+  choice is sent as the `grimoire` message. Rebuilt only when the pages change (a rebuild under the pointer swallowed
+  taps), countdowns only rewrite their text.
+- Server `golemNews` (every 500 ms with autoGolems): private `golems` message {book, slots:[{st, ms?}]}, sent only
+  when it changes (`Player.golemSig`, not synced); the client asks again with `golems` once it listens.
+- Buff row: golem auras have names, painted icons (`aura_*`, `wisp_shock` in skillArt STATUS_ART), a violet frame
+  and no countdown (`isLasting` in shared/buffTimers.ts); topping an aura up no longer resends Player.timers.
+- Essence cell: its own tooltip (how it is gained) and its 30 s fade; skill tree hint says the same.
+- Wisps: no name label unless under the mouse (four labels cluttered the screen).
+- Tests: grimoire news test in `tests/voidconjure.test.ts`. `tools/e2e-summoner.cjs` picks elements by clicking the
+  panel. `tools/e2e-summoner-mobile.cjs` (new): desktop, iPhone 13 and Pixel 7, portrait and landscape: panel shown,
+  a real tap changes the golem, no overlap with other HUD boxes, no client error. All 5 OK.
+- Seen, not fixed (existing HUD, not this work): on phones in portrait the skill bar is wider than the screen (first
+  and last buttons cut).
 
 Session B decisions:
 - Wisps are hittable (45 HP base, monster scaling): a destroyed wisp also goes back to the Void (Essence + burst).

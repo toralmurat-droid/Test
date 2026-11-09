@@ -1291,6 +1291,29 @@ const STATUS_ART: Record<string, [FxStyle, number, boolean, Draw]> = {
     p.outline();
     p.px(12, 12, "#ffffff"); p.px(13, 12, BLOOD[3]);
   }],
+  // Summoner golem auras (shared/summons.ts AURA): the element's sign inside a ring of its colour (lasting, no countdown)
+  aura_fire: ["fire", 1, false, (p) => { p.ring(12, 12, 10, FIRE[1]); p.flame(12, 19, 12, 9, FIRE); p.outline(); p.ring(12, 12, 9, FIRE[2]); }],
+  aura_cold: ["frost", 1, false, (p) => {
+    p.ring(12, 12, 10, ICE[1]);
+    for (const [dx, dy] of [[0, 7], [6, 3.5], [6, -3.5]]) p.thick(12 - dx, 12 - dy, 12 + dx, 12 + dy, 2, ICE[2]);
+    p.outline(); p.px(12, 12, ICE[3]); p.ring(12, 12, 9, ICE[2]);
+  }],
+  aura_poison: ["poison", 1, false, (p) => {
+    p.ring(12, 12, 10, POIS[1]);
+    p.poly([[12, 4], [17, 13], [12, 19], [7, 13]], POIS[1]); p.ball(12, 14, 4.5, POIS);
+    p.outline(); p.px(10, 12, POIS[3]); p.ring(12, 12, 9, POIS[2]);
+  }],
+  aura_shock: ["lightning", 1, false, (p) => {
+    p.ring(12, 12, 10, LIT[0]);
+    p.bolt([[14, 3], [8, 13], [13, 13], [9, 21]], LIT);
+    p.outline(); p.ring(12, 12, 9, LIT[1]);
+  }],
+  // A storm wisp's last spark: a rush of speed
+  wisp_shock: ["lightning", 2, false, (p) => {
+    p.bolt([[15, 3], [9, 12], [14, 12], [10, 21]], LIT);
+    p.line(2, 9, 7, 9, LIT[1]); p.line(3, 14, 8, 14, LIT[1]); p.line(2, 19, 6, 19, LIT[1]);
+    p.outline();
+  }],
   // Weakened: a sword snapped in two (deals less damage)
   weak: ["shadow", 0, true, (p) => {
     p.sword(4, 20, 11, 13, IRON, IRON);

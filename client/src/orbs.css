@@ -22,7 +22,8 @@ body.orbhud-on #hotbar { bottom: 16px; }
 body.orbhud-on #xpbar { bottom: calc(var(--slot) * 0.9 + 24px); z-index: 8; }
 body.orbhud-on #rbars .rb-hp, body.orbhud-on #rbars .rb-mp { display: none; }
 body.orbhud-on #lvlnote { bottom: 176px; }
-body.orbhud-on #attune { bottom: 150px; }
+body.orbhud-on #grimoire { bottom: 150px; }
+@media (max-width: 600px) { body.orbhud-on #grimoire { bottom: 250px; } }
 /* chat in the bottom-left corner, between the left edge and the demon statue */
 body.orbhud-on #chat { bottom: 8px; left: 8px; width: max(150px, calc(50% - var(--barw) / 2 - 204px)); box-sizing: border-box; }
 body.orbhud-on #chatlog { bottom: 46px; left: 8px; width: max(150px, calc(50% - var(--barw) / 2 - 204px)); font-size: 14px; }

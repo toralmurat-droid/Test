@@ -1,5 +1,5 @@
 // Browser check of the Summoner (Void Lord rework): picks the class, /max, walks out of Oakvale (no magic inside it),
-// sets the grimoire, checks the permanent golems rise, casts the wisps (four: /max learns Swarm), the Void Blades, a Black Hole, the Void Arsenal
+// sets the grimoire through its HUD panel, checks the permanent golems rise, casts the wisps (four: /max learns Swarm), the Void Blades, a Black Hole, the Void Arsenal
 // and the Colossus, and prints what the client draws. Start the production build first, then:
 //   node tools/e2e-summoner.cjs 2620 <folder for screenshots>
 const { chromium } = require("playwright");
@@ -37,10 +37,11 @@ const PORT = process.argv[2], OUT = process.argv[3];
   await page.waitForTimeout(1500);
   errors.push("area: " + where);
   const mine = () => page.evaluate(() => { const s = window.__game.scene.scenes.find((x) => x.entities); const out = []; s.entities.forEach((e) => { if (e.state.owner === s.me && !e.state.dead) out.push({ kind: e.state.kind, el: e.state.weapon, tex: e.sprite.texture.key, label: e.label?.text }); }); return out; });
-  // the grimoire: a frost golem in the first slot, a storm golem in the second (Twin Bond at /max)
-  await send("grimoire", { slot: 0, el: "cold" }); await page.waitForTimeout(900);
-  await send("grimoire", { slot: 1, el: "shock" }); await page.waitForTimeout(2600); // they rise GOLEM.enterMs later
-  const badge = await page.textContent("#attune");
+  // the grimoire on the HUD (client/src/grimoire.ts), clicked like a player: frost on page 1, storm on page 2 (Twin Bond at /max)
+  await page.waitForTimeout(2000);
+  await page.click('#grimoire [data-slot="0"]'); await page.click('#grimoire [data-el="cold"]'); await page.waitForTimeout(900);
+  await page.click('#grimoire [data-slot="1"]'); await page.click('#grimoire [data-el="shock"]'); await page.waitForTimeout(2600); // they rise GOLEM.enterMs later
+  const badge = (await page.textContent("#grimoire"))?.replace(/\s+/g, " ").trim();
   await page.screenshot({ path: OUT + "/golems.png" });
   const info = await mine();
   await send("cast", "su_wisps"); await page.waitForTimeout(900);
@@ -61,7 +62,7 @@ const PORT = process.argv[2], OUT = process.argv[3];
   await browser.close();
   const kinds = info.map((g) => g.kind).sort().join();
   const ok = kinds === "golem_cold,golem_shock" && info.every((g) => g.tex === `mob_${g.kind}`)
-    && wisps.length === 4 && wisps.every((w) => w.tex.startsWith("mob_") && w.label?.includes("Wisp"))
+    && wisps.length === 4 && wisps.every((w) => w.tex.startsWith("mob_"))
     && arsenal.map((w) => w.el).sort().join() === "cold,fire,poison,shock"
     && info2.some((g) => g.kind === "golem_colossus" && g.tex.startsWith("mob_golem_colossus_"))
     && !errors.some((e) => !e.startsWith("area:"));

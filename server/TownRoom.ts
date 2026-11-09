@@ -137,6 +137,7 @@ export class Player extends Schema {
   // ATTUNE_ORDER; attuneOf(attune) is golem 1's). One number because the schema is at its 64-field limit.
   @type("number") attune = 0;
   golemAt = [0, 0]; // Summoner: when each golem slot rises again (0 = not waiting); server only
+  golemSig = ""; // Summoner: the grimoire HUD last sent to them ("golems" message), to send it only when it changes
   grimoireAt = 0; // last grimoire change (throttle)
   bondEssenceAt = 0; // last Essence charge from Stone Bond
   // Equipment (shared/gear.ts): equipped item ids ("" = empty) and the unequipped items carried.
@@ -671,6 +672,7 @@ export class TownRoom extends Room<TownState> {
     this.onMessage("assign", (client, msg: { slot: number; skill: string }) => this.assignSlot(client.sessionId, msg));
     this.onMessage("learn", (client, tid: string) => this.learnTalent(client.sessionId, tid));
     this.onMessage("respec", (client) => this.respec(client.sessionId));
+    this.onMessage("golems", (client) => { const p = this.state.players.get(client.sessionId); if (p) p.golemSig = ""; }); // the grimoire HUD asks to be sent again
     this.onMessage("grimoire", (client, msg: { slot?: unknown; el?: unknown }) => this.chooseGrimoire(client.sessionId, msg));
     this.onMessage("stat", (client, k: string) => this.assignStat(client.sessionId, k));
     this.onMessage("resetstats", (client) => this.resetStats(client.sessionId));
@@ -1980,6 +1982,32 @@ export class TownRoom extends Room<TownState> {
     });
   }
 
+  /**
+   * The grimoire HUD (client/src/grimoire.ts): each Summoner is told, only when it changes, the element of each golem
+   * slot and what it is doing: "up" (out and fighting), "wait" (back in `ms`), "town" (resting, safe zone or dead),
+   * "colossus" (fused), or why slot 2 is shut ("lv" before GOLEM.twinLevel, "twin" without Twin Bond).
+   * A private message: the Player schema is at its field limit.
+   */
+  private golemNews(now: number) {
+    this.state.players.forEach((p, pid) => {
+      if (p.cls !== "summoner") return;
+      const book = parseGrimoire(this.grimoireOf(p)), slots = golemSlots(p.level, rankOf(p.talents, "su_twin"));
+      const mine = [...this.summons.values()].filter((g) => g.owner === pid && !g.dead && (g.slot >= 0 || g.kind === "golem_colossus"));
+      const town = p.dead || isSafeZone(p.x, p.y), col = mine.some((g) => g.kind === "golem_colossus");
+      const st = [0, 1].map((i) => {
+        if (i >= slots) return { st: p.level < GOLEM.twinLevel ? "lv" : "twin" };
+        if (town) return { st: "town" };
+        if (col) return { st: "colossus" };
+        if (mine.some((g) => g.slot === i)) return { st: "up" };
+        return p.golemAt[i] > now ? { st: "wait", until: p.golemAt[i] } : { st: "wait", until: now + GOLEM.enterMs };
+      });
+      const sig = book.join() + "|" + st.map((s) => s.st + ("until" in s ? Math.round(s.until! / 250) : "")).join();
+      if (sig === p.golemSig) return;
+      p.golemSig = sig;
+      this.clients.find((c) => c.sessionId === pid)?.send("golems", { book, slots: st.map((s) => ("until" in s ? { st: s.st, ms: Math.max(0, Math.round(s.until! - now)) } : s)) });
+    });
+  }
+
   /** Elemental Golem (su_golem): the hero's golems come back out of the Void at once, whole (a Colossus is mended). */
   private recallGolems(id: string, power: number) {
     const p = this.state.players.get(id);
@@ -2526,7 +2554,7 @@ export class TownRoom extends Room<TownState> {
     let dt = dtMs / 1000;
     const now = Date.now();
     this.tradeTick();
-    if (now >= this.autoAt) { this.autoAt = now + 500; this.autoGolems(now); }
+    if (now >= this.autoAt) { this.autoAt = now + 500; this.autoGolems(now); this.golemNews(now); }
     this.state.players.forEach((p, pid) => {
       tickUnit(this.host, pid);
       p.stunned = now < p.stunUntil;

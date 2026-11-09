@@ -209,3 +209,48 @@ test("staff bolt through the Void: longer reach, comes out of a portal next to t
     await srv.stop();
   }
 });
+
+test("grimoire HUD news: each slot's element and state, sent only when it changes, again on request", async () => {
+  const { srv, room, cs, ps, x, y } = await setup();
+  try {
+    const c = cs[0], id = c.sessionId, p = ps[0];
+    const got: any[] = [];
+    c.onMessage("golems", (m: any) => got.push(m));
+    c.send("golems"); // ask again (the client does it once it listens)
+    await wait(150);
+    p.x = x; p.y = y;
+    room.autoGolems(Date.now()); room.golemNews(Date.now());
+    await wait(150);
+    const first = got.at(-1);
+    assert.deepEqual(first.book, ["fire", "fire"]);
+    assert.equal(first.slots[0].st, "wait", "rising out of the Void");
+    assert.ok(first.slots[0].ms > 0 && first.slots[0].ms <= GOLEM.enterMs);
+    assert.equal(first.slots[1].st, "lv", "the second page opens at Lv 18");
+    // nothing new: nothing sent
+    const n = got.length;
+    room.golemNews(Date.now());
+    await wait(100);
+    assert.equal(got.length, n);
+    // the golem rises; at Lv 18 without Twin Bond page 2 asks for it; with it, both pages
+    room.autoGolems(Date.now() + GOLEM.enterMs + 10); room.golemNews(Date.now());
+    p.level = 18; room.golemNews(Date.now());
+    await wait(150);
+    assert.equal(got.at(-1).slots[0].st, "up");
+    assert.equal(got.at(-1).slots[1].st, "twin");
+    p.talents.set("su_might", 1); p.talents.set("su_twin", 1);
+    room.setGrimoire(p, "fire,shock");
+    room.golemNews(Date.now());
+    await wait(150);
+    assert.deepEqual(got.at(-1).book, ["fire", "shock"]);
+    assert.equal(got.at(-1).slots[1].st, "wait");
+    // in town: both pages rest
+    p.x = (VILLAGE.x0 + VILLAGE.x1) / 2 * TILE; p.y = (VILLAGE.y0 + VILLAGE.y1) / 2 * TILE;
+    room.golemNews(Date.now());
+    await wait(150);
+    assert.deepEqual(got.at(-1).slots.map((s: any) => s.st), ["town", "town"]);
+    void id;
+    await c.leave();
+  } finally {
+    await srv.stop();
+  }
+});
