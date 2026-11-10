@@ -1,6 +1,6 @@
 import Phaser from "phaser";
 import type { Room } from "colyseus.js";
-import { AFFIXES, CHAMP_BAR_LIFT, FAMILIES, FAMILY_OF, overlayPlace, unpackAffixes, type AffixKey } from "../../shared/champions";
+import { AFFIXES, FAMILIES, FAMILY_OF, overlayPlace, unpackAffixes, type AffixKey } from "../../shared/champions";
 import type { MobKind } from "../../shared/constants";
 import { isoAnchor } from "./iso";
 import { PALETTE, SkillFx } from "./skillfx";
@@ -9,7 +9,8 @@ import { champOverlayTexture } from "./textures";
 /**
  * Champions on screen (shared/champions.ts, server/champions.ts). (a) the family tint, a glowing outline (WebGL glow,
  * else a stronger ring), a ring of the family's colour under the feet and one small icon per affix over the HP bar;
- * (b) the painted detail of each affix (tools/art/paint/mobs.ts champOverlay) laid over the monster. Plus the
+ * (b) a humanoid carries its champion weapon (its own sheet, textures.ts mobTexture); blobs and scorpions get the
+ * painted detail of their affix (tools/art/paint/mobs.ts champOverlay) laid over them. Plus the
  * affixes' moments: puddles, the ballista, getting back up, splitting, sinking into the sand, the brand flaring.
  */
 interface Ent { sprite: Phaser.GameObjects.Sprite; top: number; bar: Phaser.GameObjects.Graphics; statusTint?: boolean }
@@ -68,14 +69,11 @@ export class ChampionFx {
     return true;
   }
 
-  /** The bar and name sit higher over a champion (clear of its head details). */
-  static barLift(p: any) { return p?.champion ? CHAMP_BAR_LIFT : 0; }
-
   private build(id: string, e: Ent, n: number, kind: MobKind): Look {
     const { scene } = this.h, affixes = unpackAffixes(n), fam = FAMILIES[FAMILY_OF[kind] ?? "gloam"];
     const ring = isoAnchor(scene.add.graphics(), e.sprite) as Phaser.GameObjects.Graphics;
     // only the affixes whose painted sheet is loaded get a detail (the pixel look has none): icons and tint still show
-    const okeys = affixes.filter((k) => !!champOverlayTexture(scene, k));
+    const okeys = affixes.filter((k) => AFFIXES[k].overlay && !!champOverlayTexture(scene, k));
     const overlays = okeys.map((k) => isoAnchor(scene.add.sprite(e.sprite.x, e.sprite.y, champOverlayTexture(scene, k)!, 0), e.sprite) as Phaser.GameObjects.Sprite);
     const fx = (e.sprite as any).preFX as Phaser.GameObjects.Components.FX | null | undefined;
     const glow = fx ? fx.addGlow(fam.aura, 3, 0, false, 0.1, 8) : undefined;

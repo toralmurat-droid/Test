@@ -9,6 +9,8 @@ import { blocked } from "../shared/movement";
 import { isSafeZone } from "../shared/map";
 import { noMobsAt } from "../shared/spawns";
 import { startRoom, wait } from "./helpers/room";
+import { CHAMP_WEAPONS } from "../tools/art/paint/look";
+import { CHAMP_WEAPON_SHEETS } from "../shared/champions";
 
 process.env.DAY_TIME = "day"; // no Night Raiders riding into the tests
 
@@ -65,6 +67,14 @@ test("affixes: each belongs to its family, packs into bits and back, and names a
   assert.equal(championName("skeleton", ["risen"], () => 0), "Morgrul");
   assert.equal(championFullName("Morgrul", packAffixes(["risen"])), "Morgrul the Risen");
   for (const f of Object.values(FAMILIES)) for (const n of f.names) assert.ok(n.length <= CHAMP_NAME_MAX, `"${n}" is too long for the label`);
+});
+
+test("humanoid champions carry another weapon (no hats or crowns); only blobs and scorpions get a painted detail", () => {
+  assert.deepEqual(Object.keys(CHAMP_WEAPONS).sort(), [...CHAMP_WEAPON_SHEETS].sort(), "the client loads every painted champion sheet");
+  for (const k of AFFIX_KEYS) {
+    const fam = AFFIXES[k].family;
+    assert.equal(!!AFFIXES[k].overlay, fam === "gloam" || fam === "scorpion", `${k}: painted detail only for blobs and scorpions`);
+  }
 });
 
 // ---- On the server ----

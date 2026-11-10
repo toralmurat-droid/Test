@@ -739,7 +739,7 @@ export class TownScene extends Phaser.Scene {
         pushSnap(e, m.x, m.y);
         // A respawned Mother Blob can come back at another level, a skeleton with another weapon
         if (m.kind === "motherblob" || m.kind === "skeleton" || m.kind === "bandit" || m.kind === "demon" || m.champion) { // a Hide-Stitched champion changes skin
-          const key = mobTexture(this, m.kind, m.level, m.weapon, m.bones);
+          const key = mobTexture(this, m.kind, m.level, m.weapon, m.bones, !!m.champion);
           if (e.sprite.texture.key !== key) { e.sprite.setTexture(key, 0); this.perch(e, m); }
         }
         if (teleported(e, m.x, m.y) && !(this.time.now < (e.leapUntil ?? 0))) { e.sprite.setPosition(m.x, m.y); e.snaps = [{ t: patchTime(), x: m.x, y: m.y }]; }
@@ -1795,7 +1795,7 @@ export class TownScene extends Phaser.Scene {
 
   private addEntity(id: string, p: any, mob = false) {
     if (mob) {
-      const sprite = this.add.sprite(p.x, p.y, mobTexture(this, p.kind, p.level, p.weapon, p.bones), 0).setOrigin(0.5, MOB_LOOK[p.kind]?.oy ?? 0.85)
+      const sprite = this.add.sprite(p.x, p.y, mobTexture(this, p.kind, p.level, p.weapon, p.bones, !!p.champion), 0).setOrigin(0.5, MOB_LOOK[p.kind]?.oy ?? 0.85)
         .setScale(MOB_LOOK[p.kind]?.scale ?? 1);
       if (p.kind === "crawler" && sprite.texture.key.startsWith("mob_skeleton")) sprite.setCrop(0, 0, sprite.frame.width, sprite.frame.height * CRAWL_CROP); // legs gone
       // The level tag is made when the monster comes on screen (see update): thousands of text canvases would cost a lot
@@ -3040,7 +3040,7 @@ export class TownScene extends Phaser.Scene {
 
       const x = Math.round(e.sprite.x), y = Math.round(e.sprite.y);
       // Monsters: HP bar over the head, level tag just above it
-      const mobBarY = y - e.top - 4 - (e.mob ? ChampionFx.barLift(p) : 0); // a champion's bar sits clear of its head details
+      const mobBarY = y - e.top - 4;
       e.label?.setPosition(x, e.mob ? mobBarY - 1 : y - e.top - (p.hat ? 4 : 2)).setDepth(e.sprite.y + 1);
       if (e.mob && e.label) {
         // Level tag coloured by how tough it is for me: grey easy, white even, orange tougher, red dangerous

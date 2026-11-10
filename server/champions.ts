@@ -67,6 +67,7 @@ export class Champions {
     m.champion = packAffixes(affixes);
     m.title = championName(m.kind, affixes, rnd);
     m.hp = m.maxHp = championHp(m.maxHp);
+    if (m.kind === "skeleton") m.weapon = "sword"; // its champion sheet holds a bone blade: it fights with sword reach
     m.champ = {
       affixes, split: false, rose: false, shifted: false, called: false,
       nextPool: 0, nextBallista: 0, castUntil: 0,

@@ -87,7 +87,7 @@ export interface AffixDef {
   text: string; // what it does, for players
   color: number; // icon colour
   icon: number[]; // 5x5 glyph drawn over the monster (bit 4 = left column)
-  overlay: "head" | "body" | "feet"; // where the painted detail sits (mob_champ_<key>)
+  overlay?: "body" | "feet"; // blobs and scorpions: where the painted detail sits (mob_champ_<key>); humanoids carry a champion weapon instead
 }
 
 /** The affixes. Effect numbers live in AFFIX_FX below (tunable). */
@@ -96,26 +96,29 @@ export const AFFIXES: Record<AffixKey, AffixDef> = {
     text: "Splits in two at half health, like the Mother Blobs that bud.", icon: [0b01010, 0b11111, 0b01010, 0b00000, 0b01010] },
   taint: { name: "Tainted", epithet: "the Tainted", family: "gloam", color: 0x6ad040, overlay: "feet",
     text: "Leaves puddles of its element wherever it crawls.", icon: [0b00100, 0b01110, 0b11111, 0b11111, 0b01110] },
-  siege: { name: "Siegewright", epithet: "the Siegewright", family: "necro", color: 0xc8a070, overlay: "head",
+  siege: { name: "Siegewright", epithet: "the Siegewright", family: "necro", color: 0xc8a070,
     text: "Sets up a ballista from the necromancer's war works, and it shoots.", icon: [0b10001, 0b01010, 0b00100, 0b01010, 0b10001] },
-  risen: { name: "Risen", epithet: "the Risen", family: "necro", color: 0xb890ff, overlay: "head",
+  risen: { name: "Risen", epithet: "the Risen", family: "necro", color: 0xb890ff,
     text: "Gets back up once when struck down, with 30% of its health.", icon: [0b10101, 0b11111, 0b01110, 0b01010, 0b01110] },
-  stitched: { name: "Hide-Stitched", epithet: "the Hide-Stitched", family: "beast", color: 0xff8050, overlay: "body",
+  stitched: { name: "Hide-Stitched", epithet: "the Hide-Stitched", family: "beast", color: 0xff8050,
     text: "Tears into its other skin at half health: faster, and quicker to strike.", icon: [0b10101, 0b01010, 0b10101, 0b01010, 0b10101] },
-  gang: { name: "Ringleader", epithet: "the Ringleader", family: "redfang", color: 0xff4040, overlay: "head",
+  gang: { name: "Ringleader", epithet: "the Ringleader", family: "redfang", color: 0xff4040,
     text: "Whistles up two cutthroats when it spots you.", icon: [0b11111, 0b10101, 0b11111, 0b01110, 0b00100] },
-  sunborn: { name: "Sunborn", epithet: "the Sunborn", family: "veiled", color: 0xffd040, overlay: "head",
+  sunborn: { name: "Sunborn", epithet: "the Sunborn", family: "veiled", color: 0xffd040,
     text: "Burns with the second sun: heroes close by burn and their Heat climbs.", icon: [0b10101, 0b01110, 0b11111, 0b01110, 0b10101] },
-  buried: { name: "Sand-Buried", epithet: "the Sand-Buried", family: "kharsun", color: 0xe8c070, overlay: "feet",
+  buried: { name: "Sand-Buried", epithet: "the Sand-Buried", family: "kharsun", color: 0xe8c070,
     text: "Sinks into the sand and bursts out beside a hero.", icon: [0b00100, 0b00100, 0b10101, 0b01110, 0b11111] },
   deepvenom: { name: "Deep-Venomed", epithet: "of the Deep Sand", family: "scorpion", color: 0x9dff6a, overlay: "body",
     text: "Driven up from the deep sand: leaves a trail of venom behind it.", icon: [0b00110, 0b00001, 0b00110, 0b01000, 0b11100] },
-  veil: { name: "Veil-Bearer", epithet: "the Veil-Bearer", family: "nomad", color: 0xb4a4ff, overlay: "head",
+  veil: { name: "Veil-Bearer", epithet: "the Veil-Bearer", family: "nomad", color: 0xb4a4ff,
     text: "Wraps itself in a Veil Token and steps out behind you.", icon: [0b01110, 0b11111, 0b10101, 0b11111, 0b10101] },
-  brand: { name: "Sun-Branded", epithet: "the Sun-Branded", family: "camel", color: 0xff9830, overlay: "body",
+  brand: { name: "Sun-Branded", epithet: "the Sun-Branded", family: "camel", color: 0xff9830,
     text: "Each blow stamps the Circle's brand on you; the third flares up.", icon: [0b01110, 0b10101, 0b11111, 0b10101, 0b01110] },
 };
 /** Fixed order of the affix bits in Mob.champion (never reorder: append only). */
+/** Humanoid sheets that have a champion version carrying another weapon (tools/art/paint/look.ts CHAMP_WEAPONS). */
+export const CHAMP_WEAPON_SHEETS = ["skeleton", "skeletonmage", "bandit", "bandit_brute", "gnawkin", "tuskborn", "tuskborn_folk", "silkwretch", "silkwretch_folk",
+  "duskwing", "duskwing_folk", "crowseer", "nomad", "sanddead", "veiled", "camelfolk", "sphinx"];
 export const AFFIX_KEYS: AffixKey[] = ["split", "taint", "siege", "risen", "stitched", "gang", "sunborn", "buried", "deepvenom", "veil", "brand"];
 
 /** Effect numbers. Distances in px, times in ms, damage as a multiple of the champion's own (levelled) damage. */
@@ -194,8 +197,5 @@ export const hasAffix = (n: number, k: AffixKey) => !!(n & (1 << AFFIX_KEYS.inde
  */
 export function overlayPlace(k: AffixKey, top: number): { dy: number; oy: number; scale: number } {
   const scale = Math.max(0.75, Math.min(1.6, top / 24));
-  const a = AFFIXES[k].overlay;
-  return a === "head" ? { dy: -top + 5 * scale, oy: 15 / 20, scale } : a === "body" ? { dy: -top * 0.52, oy: 0.5, scale: scale * 0.75 } : { dy: 1, oy: 18 / 20, scale };
+  return AFFIXES[k].overlay === "body" ? { dy: -top * 0.52, oy: 0.5, scale: scale * 0.75 } : { dy: 1, oy: 18 / 20, scale };
 }
-/** A champion's HP bar and name sit this much higher, clear of the painted details on its head. */
-export const CHAMP_BAR_LIFT = 7;

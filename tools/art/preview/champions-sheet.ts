@@ -4,7 +4,7 @@
 import { createCanvas, GlobalFonts, loadImage, type Image } from "@napi-rs/canvas";
 import { readFileSync, writeFileSync } from "node:fs";
 import type { MobKind } from "../../../shared/constants";
-import { AFFIXES, CHAMP_BAR_LIFT, FAMILIES, FAMILY_OF, championName, overlayPlace, type AffixKey } from "../../../shared/champions";
+import { AFFIXES, FAMILIES, FAMILY_OF, championName, overlayPlace, type AffixKey } from "../../../shared/champions";
 
 const out = process.argv[2] ?? "docs/art/champions-preview.png", Z = Number(process.argv[3] ?? 4);
 const DIR = "client/public/assets/hd/mobs", meta = JSON.parse(readFileSync(`${DIR}/mobs.json`, "utf8"));
@@ -34,8 +34,8 @@ const rgb = (c: number) => [(c >> 16) & 255, (c >> 8) & 255, c & 255];
   const cv = createCanvas(COLS * CW * Z, (rows * CH + 18) * Z), c = cv.getContext("2d");
   c.imageSmoothingEnabled = false;
   c.fillStyle = "#3b3a2c"; c.fillRect(0, 0, cv.width, cv.height);
-  c.fillStyle = "#f0e6c8"; c.font = `${7 * Z}px Pixel, sans-serif`; c.textAlign = "left";
-  c.fillText("Champions (Lot F): plain monster | champion — tint, glow, affix icons, painted detail, name", 4 * Z, 11 * Z);
+  c.fillStyle = "#f0e6c8"; c.font = `${6 * Z}px Pixel, sans-serif`; c.textAlign = "left";
+  c.fillText("Champions: plain | champion (aura, icons; humanoids: another weapon; blobs, scorpion: a detail)", 4 * Z, 11 * Z);
 
   /** One frame of a sheet onto an offscreen canvas at world size x Z, tinted and outlined when asked. */
   const sprite = async (key: string, frame: number, tint?: number, aura?: number) => {
@@ -66,20 +66,20 @@ const rgb = (c: number) => [(c >> 16) & 255, (c >> 8) & 255, c & 255];
     const feetY = y0 + 66;
     for (const champ of [false, true]) {
       const fx = x0 + (champ ? 70 : 26);
-      const s = await sprite(key, 0, champ ? fam.tint : undefined, champ ? fam.aura : undefined);
+      const s = await sprite(champ && meta[`${key}_champ`] ? `${key}_champ` : key, 6, champ ? fam.tint : undefined, champ ? fam.aura : undefined);
       const w = s.fw / s.scale, h = s.fh / s.scale;
       if (champ) { // the ring under its feet
         c.fillStyle = `rgba(${rgb(fam.aura).join(",")},0.28)`; c.beginPath(); c.ellipse(fx * Z, feetY * Z, 11 * Z, 4 * Z, 0, 0, Math.PI * 2); c.fill();
       }
       c.drawImage(s.o, (fx - w / 2 - s.pad / s.scale) * Z, (feetY - h * L.oy - s.pad / s.scale) * Z, (w + 2 * s.pad / s.scale) * Z, (h + 2 * s.pad / s.scale) * Z);
       if (!champ) continue;
-      for (const a of affixes) { // painted details
+      for (const a of affixes.filter((k) => AFFIXES[k].overlay)) { // painted details (blobs, scorpions)
         const ov = await load(`mob_champ_${a}`), om = meta[`mob_champ_${a}`], P = overlayPlace(a, L.top);
         const ow = om.w * P.scale, oh = om.h * P.scale;
         c.drawImage(ov, 0, 0, om.w * om.scale, om.h * om.scale, (fx - ow / 2) * Z, (feetY + P.dy - oh * P.oy) * Z, ow * Z, oh * Z);
       }
       // affix icons over the HP bar
-      const iy = feetY - L.top - 13 - CHAMP_BAR_LIFT, by = feetY - L.top - CHAMP_BAR_LIFT;
+      const iy = feetY - L.top - 13, by = feetY - L.top;
       affixes.forEach((a, i) => {
         const ix = fx - affixes.length * 3.5 + i * 7 + 1, A = AFFIXES[a];
         c.fillStyle = "rgba(0,0,0,0.65)"; c.fillRect((ix - 1) * Z, (iy - 1) * Z, 7 * Z, 7 * Z);

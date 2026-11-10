@@ -1077,58 +1077,112 @@
   "scale": 1.5,
   "frames": 2
  },
- "mob_champ_siege": {
-  "w": 20,
-  "h": 20,
-  "scale": 1.5,
-  "frames": 2
- },
- "mob_champ_risen": {
-  "w": 20,
-  "h": 20,
-  "scale": 1.5,
-  "frames": 2
- },
- "mob_champ_stitched": {
-  "w": 20,
-  "h": 20,
-  "scale": 1.5,
-  "frames": 2
- },
- "mob_champ_gang": {
-  "w": 20,
-  "h": 20,
-  "scale": 1.5,
-  "frames": 2
- },
- "mob_champ_sunborn": {
-  "w": 20,
-  "h": 20,
-  "scale": 1.5,
-  "frames": 2
- },
- "mob_champ_buried": {
-  "w": 20,
-  "h": 20,
-  "scale": 1.5,
-  "frames": 2
- },
  "mob_champ_deepvenom": {
   "w": 20,
   "h": 20,
   "scale": 1.5,
   "frames": 2
  },
- "mob_champ_veil": {
+ "mob_skeleton_champ": {
   "w": 20,
-  "h": 20,
+  "h": 30,
   "scale": 1.5,
-  "frames": 2
+  "frames": 12
  },
- "mob_champ_brand": {
-  "w": 20,
-  "h": 20,
+ "mob_skeletonmage_champ": {
+  "w": 24,
+  "h": 32,
   "scale": 1.5,
-  "frames": 2
+  "frames": 12
+ },
+ "mob_bandit_champ": {
+  "w": 20,
+  "h": 30,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_bandit_brute_champ": {
+  "w": 24,
+  "h": 30,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_gnawkin_champ": {
+  "w": 20,
+  "h": 30,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_tuskborn_champ": {
+  "w": 26,
+  "h": 32,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_tuskborn_folk_champ": {
+  "w": 26,
+  "h": 32,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_silkwretch_champ": {
+  "w": 20,
+  "h": 30,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_silkwretch_folk_champ": {
+  "w": 30,
+  "h": 30,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_duskwing_champ": {
+  "w": 32,
+  "h": 38,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_duskwing_folk_champ": {
+  "w": 32,
+  "h": 38,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_crowseer_champ": {
+  "w": 32,
+  "h": 40,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_nomad_champ": {
+  "w": 22,
+  "h": 30,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_sanddead_champ": {
+  "w": 22,
+  "h": 30,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_veiled_champ": {
+  "w": 24,
+  "h": 32,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_camelfolk_champ": {
+  "w": 34,
+  "h": 36,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_sphinx_champ": {
+  "w": 40,
+  "h": 40,
+  "scale": 1.5,
+  "frames": 12
  }
 }

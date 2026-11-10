@@ -1,7 +1,7 @@
 import Phaser from "phaser";
 import { BEAST_KINDS, DESERT_KINDS, TILE } from "../../shared/constants";
 import { RAIDERS } from "../../shared/raiders";
-import { AFFIX_KEYS } from "../../shared/champions";
+import { AFFIX_KEYS, AFFIXES, CHAMP_WEAPON_SHEETS as CHAMP_SHEETS } from "../../shared/champions";
 import { TILE_COUNT } from "../../shared/map";
 import { ROWS, drawTileset } from "./tileset";
 import { SMOOTH } from "./isoflag";
@@ -345,11 +345,11 @@ export function preloadPaintedMobs(scene: Phaser.Scene) {
   if (!SMOOTH) return;
   Object.assign(MOB_LOOK, PAINTED_LOOK);
   scene.load.json("hd_mobs", "assets/hd/mobs/mobs.json");
-  for (const k of [...PAINTED_MOBS.filter((m) => m !== "golem_colossus" && m !== "nightraider").map((m) => `mob_${m}`), "mob_motherblob2", "mob_motherblob3", "mob_skeleton_axe", "mob_skeleton_spear", "mob_skeleton_bow", "mob_bandit_brute", "mob_bandit_archer", "mob_demon1", "mob_demon2", "mob_demon3", "mob_demon4", ...FOLK_MOBS.map((m) => `mob_${m}_folk`), ...COLOSSUS_ELEMENTS.map((e) => `mob_golem_colossus_${e}`), ...WISP_ELEMENTS.map((e) => `mob_wisp_${e}`), ...RAIDERS.map((r) => `mob_nightraider_${r.key}`), ...AFFIX_KEYS.map((k) => `mob_champ_${k}`)]) scene.load.image(`hd_${k}`, `assets/hd/mobs/${k}.webp`);
+  for (const k of [...PAINTED_MOBS.filter((m) => m !== "golem_colossus" && m !== "nightraider").map((m) => `mob_${m}`), "mob_motherblob2", "mob_motherblob3", "mob_skeleton_axe", "mob_skeleton_spear", "mob_skeleton_bow", "mob_bandit_brute", "mob_bandit_archer", "mob_demon1", "mob_demon2", "mob_demon3", "mob_demon4", ...FOLK_MOBS.map((m) => `mob_${m}_folk`), ...COLOSSUS_ELEMENTS.map((e) => `mob_golem_colossus_${e}`), ...WISP_ELEMENTS.map((e) => `mob_wisp_${e}`), ...RAIDERS.map((r) => `mob_nightraider_${r.key}`), ...AFFIX_KEYS.filter((k) => AFFIXES[k].overlay).map((k) => `mob_champ_${k}`), ...CHAMP_SHEETS.map((k) => `mob_${k}_champ`)]) scene.load.image(`hd_${k}`, `assets/hd/mobs/${k}.webp`);
 }
 
 /** Monster sprite sheets, same 6-frame layout as personas (painted when the smooth look is on). */
-export function mobTexture(scene: Phaser.Scene, kind: string, level = 1, weapon = "", bones = 0): string {
+export function mobTexture(scene: Phaser.Scene, kind: string, level = 1, weapon = "", bones = 0, champion = false): string {
   if (kind === "wisp") {
     if (SMOOTH && scene.textures.exists(`hd_mob_wisp_${WISP_ELEMENTS.includes(weapon) ? weapon : "fire"}`)) return paintedSheet(scene, `mob_wisp_${WISP_ELEMENTS.includes(weapon) ? weapon : "fire"}`) ?? mobTexture(scene, WISP_STANDIN[weapon] ?? "fireblob", level);
     return mobTexture(scene, WISP_STANDIN[weapon] ?? "fireblob", level);
@@ -365,7 +365,8 @@ export function mobTexture(scene: Phaser.Scene, kind: string, level = 1, weapon 
       : kind === "nightraider" ? `mob_nightraider_${RAIDERS.some((r) => r.key === weapon) ? weapon : RAIDERS[0].key}` // each of the Seven has its own sheet
       : kind === "golem_colossus" ? `mob_golem_colossus_${COLOSSUS_ELEMENTS.includes(weapon) ? weapon : "fire"}`
       : kind === "demon" && bones > 0 ? `mob_demon${Math.min(4, bones)}` : `mob_${kind}`; // the demon wearing its harvested bones
-    const done = paintedSheet(scene, key);
+    // a humanoid champion carries its champion weapon (tools/art/paint/look.ts CHAMP_WEAPONS), when it has one
+    const done = (champion && paintedSheet(scene, `${key}_champ`)) || paintedSheet(scene, key);
     if (done) return done;
   }
   return pixelMobTexture(scene, kind === "demon" || kind === "hollowking" || kind === "sunwright" ? "necromancer" : BEAST_KINDS.includes(kind as any) || DESERT_KINDS.includes(kind as any) || kind === "bride" || kind === "nightraider" ? (kind === "sanddead" ? "skeleton" : "bandit") : kind, level); // no pixel demon sheet: a necromancer stands in

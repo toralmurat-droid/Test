@@ -1,13 +1,14 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { GOLEM_H, GOLEM_W, paintGolemFrame, type GolemDir, type GolemElement } from "./golems";
 import { createCanvas } from "@napi-rs/canvas";
-import { MOB_POSES, posed, setPainted, type Dir } from "../characters";
+import { addChampPose, MOB_POSES, posed, setPainted, type Dir } from "../characters";
 import { C2, P, blobPath, css, ellipseP, poly, fillShape, glow, limb, line, metal, mix, rng, sh, vol } from "./brush";
 import { lastRig, pixelAlpha, pixelize, shrink } from "./body";
 import { paintRaider, RAIDER_H, RAIDER_W } from "./raiders";
 import { paintWisp, WISP_H, WISP_W, type WispElement } from "./wisps";
 import { RAIDERS } from "../../../shared/raiders";
-import { AFFIX_KEYS, type AffixKey } from "../../../shared/champions";
+import { AFFIX_KEYS, AFFIXES, type AffixKey } from "../../../shared/champions";
+import { CHAMP_WEAPONS } from "./look";
 
 /**
  * Monster sheets for the iso look. Same textures as client/src/textures.ts mobTexture (6 frames:
@@ -45,7 +46,9 @@ const RIP: Record<"down" | "up" | "right", { hold: [P, P]; snap: [P, P]; don: [P
 // ---------------------------------------------------------------- humanoid monsters (character painter)
 const PK = 5; // painter resolution for these
 /** `lift`: flyers hover this many px above their shadow, bobbing with each wingbeat. */
+const HUMANOIDS = new Map<string, [number, number, number, number, boolean, number]>(); // sheet key -> its frame and scale (champion sheets copy them)
 function humanoid(key: string, kind: string, w: number, h: number, oy: number, scale: number, rip = false, lift = 0): Sheet {
+  HUMANOIDS.set(key, [w, h, oy, scale, rip, lift]);
   // Frames are painted on first use, so rebuilding a few sheets (buildMobs ONLY) doesn't paint every humanoid
   let frames: ReturnType<typeof humanoidFrame>[] | undefined;
   const hands: number[][] = [];
@@ -513,66 +516,14 @@ function blobSheet(key: string, w: number, h: number, pal: BlobPal, o: BlobOpts)
 
 
 /**
- * Champions (shared/champions.ts): one painted detail per affix, drawn by the client over any monster of the family
- * (client/src/championFx.ts), 20x20 world px, 2 frames (a flicker, a drip). "head" details sit on top of the head
- * (their foot at y 15), "body" ones on the chest (centred), "feet" ones on the ground (their foot at y 18).
+ * Champions (shared/champions.ts): one painted detail per affix of the blobs and the scorpions, drawn by the client
+ * over the monster (client/src/championFx.ts), 20x20 world px, 2 frames (a drip, a glow). "body" ones on the body
+ * (centred), "feet" ones on the ground (their foot at y 18). Humanoid champions carry another weapon instead (look.ts CHAMP_WEAPONS).
  */
 export const CHAMP_W = 20, CHAMP_H = 20;
 function champOverlay(c: C2, k: AffixKey, f: number) {
   const cx = 10, t = f % 2;
-  const bone = 0xe8e0c8, boneD = 0x8a7c60, iron = 0x6a6e78, wood = 0x8a5a2a, gold = 0xffc830, sand = 0xe0b868;
   switch (k) {
-    case "risen": { // a crown of bones, its eye-sockets lit with the necromancer's purple
-      glow(c, cx, 12, 6, 0xa070ff, 0.5 + t * 0.2);
-      fillShape(c, ellipseP(cx, 14, 5.6, 1.6), css(boneD));
-      vol(c, ellipseP(cx, 13.6, 5.2, 1.3), bone, [cx - 5, 12.3, 10.4, 2.6], { ao: 0.25 });
-      for (const [dx, hgt] of [[-4.2, 3.2], [-2.1, 4.6], [0, 6], [2.1, 4.6], [4.2, 3.2]] as P[]) {
-        limb(c, [cx + dx, 13.4], [cx + dx * 1.08, 13.4 - hgt], 0.85, 0.3, bone);
-        fillShape(c, ellipseP(cx + dx * 1.08, 13.4 - hgt, 0.55, 0.55), css(bone));
-      }
-      fillShape(c, ellipseP(cx, 10.2, 1.1, 1.2), css(0xf4f0e0)); // a small skull at the front
-      for (const ex of [-0.45, 0.45]) fillShape(c, ellipseP(cx + ex, 10.1, 0.28, 0.32), css(mix(0xa070ff, 0xffffff, t * 0.4)));
-      break;
-    }
-    case "siege": { // a hammer and a ballista bolt crossed on its back, a dented iron cap
-      limb(c, [cx - 6, 15], [cx + 5, 4], 0.7, 0.6, wood);
-      fillShape(c, poly([[cx + 5.6, 2.6], [cx + 7.2, 4.2], [cx + 4.6, 4.8]]), css(iron));
-      limb(c, [cx + 6, 15], [cx - 4, 5], 0.6, 0.6, wood);
-      vol(c, poly([[cx - 6.4, 3.4], [cx - 2.4, 3.4], [cx - 2.4, 6.2], [cx - 6.4, 6.2]]), iron, [cx - 6.4, 3.4, 4, 2.8], { spec: 0.5 });
-      vol(c, ellipseP(cx, 13.5, 4.6, 2.6), iron, [cx - 4.6, 11, 9.2, 5], { spec: 0.4, ao: 0.3 });
-      line(c, [[cx - 4.4, 14.6], [cx + 4.4, 14.6]], sh(iron, 0.6), 0.6);
-      fillShape(c, ellipseP(cx + 1.6, 12.6, 0.7, 0.5), css(sh(iron, 0.5))); // the dent
-      break;
-    }
-    case "gang": { // the Redfang ringleader's red plume on a band of red cloth
-      fillShape(c, ellipseP(cx, 14, 5.2, 1.5), css(0xb01818));
-      line(c, [[cx + 4.6, 14], [cx + 7, 16.2 + t * 0.4]], 0xb01818, 0.9);
-      line(c, [[cx + 4.6, 14.4], [cx + 6.2, 17.4 - t * 0.3]], 0x901010, 0.8);
-      for (let i = 0; i < 6; i++) {
-        const a = -1.9 + i * 0.12 + t * 0.05, L = 5.5 - i * 0.4;
-        limb(c, [cx - 1, 13.4], [cx - 1 + Math.cos(a) * L * 0.5, 13.4 + Math.sin(a) * L], 1.1 - i * 0.12, 0.2, i % 2 ? 0xff3030 : 0xd82020);
-      }
-      fillShape(c, ellipseP(cx - 1, 13.6, 0.9, 0.9), css(gold));
-      break;
-    }
-    case "sunborn": { // the second sun's brand: a small burning disc floating over its head, rays flickering
-      glow(c, cx, 5.5, 5.5, gold, 0.6);
-      for (let i = 0; i < 10; i++) {
-        const a = (i / 10) * Math.PI * 2 + t * 0.16, r0 = 2.8, r1 = i % 2 ? 4.6 : 5.6 + t * 0.5;
-        limb(c, [cx + Math.cos(a) * r0, 5.5 + Math.sin(a) * r0], [cx + Math.cos(a) * r1, 5.5 + Math.sin(a) * r1], 0.7, 0.12, i % 2 ? 0xff9a20 : gold);
-      }
-      vol(c, ellipseP(cx, 5.5, 2.6, 2.6), 0xffd860, [cx - 2.6, 2.9, 5.2, 5.2], { spec: 0.6 });
-      fillShape(c, ellipseP(cx, 5.5, 1.3, 1.3), css(0xfff6c8));
-      break;
-    }
-    case "veil": { // a Veil Token on a cord, and the veil it unfolds
-      fillShape(c, poly([[cx - 6, 15], [cx - 3, 6], [cx + 3, 6], [cx + 6, 15], [cx + 2, 13.6 + t * 0.6], [cx - 2, 14.2 - t * 0.6]]), css(0x7060c0, 0.6));
-      line(c, [[cx - 3, 6.4], [cx + 3, 6.4]], 0xb4a4ff, 0.5);
-      glow(c, cx, 4.4, 3.4, 0xb4a4ff, 0.5 + t * 0.25);
-      vol(c, ellipseP(cx, 4.4, 2.1, 2.1), 0xd8c070, [cx - 2.1, 2.3, 4.2, 4.2], { spec: 0.6 });
-      fillShape(c, poly([[cx - 1.3, 4.6], [cx, 3.2], [cx + 1.3, 4.6], [cx, 5.3]]), css(0x4a3a90)); // the veiled sun on it
-      break;
-    }
     case "split": { // a glowing seam down the middle where it is about to part, bubbles along it
       glow(c, cx, 10, 6, 0x8dff5a, 0.45);
       line(c, [[cx, 3], [cx - 1.2, 6.5], [cx + 1, 10], [cx - 0.8, 13.5], [cx, 17]], 0x2a6a1a, 1.4);
@@ -580,18 +531,6 @@ function champOverlay(c: C2, k: AffixKey, f: number) {
       for (const [dx, y, r] of [[1.8, 5.5 + t, 0.9], [-2, 9.5 - t, 1.1], [1.6, 13 + t * 0.6, 0.8]] as [number, number, number][]) {
         vol(c, ellipseP(cx + dx, y, r, r), 0xa8ff80, [cx + dx - r, y - r, r * 2, r * 2], { spec: 0.8 });
       }
-      break;
-    }
-    case "stitched": { // hide sewn on with coarse black thread: a seam across it and a raw red edge
-      const seam: P[] = [[cx - 5.5, 7], [cx - 2.5, 9.2], [cx + 0.5, 8.4], [cx + 3.5, 10.6], [cx + 5.5, 9.6]];
-      line(c, seam, 0x2a1a10, 0.5);
-      line(c, seam.map(([x, y]) => [x, y + 0.6] as P), 0xc03a20, 0.35, 0.7 + t * 0.2); // raw skin under the seam
-      for (let i = 0; i < seam.length - 1; i++) for (let j = 0; j <= 1; j++) {
-        const [ax, ay] = seam[i], [bx, by] = seam[i + 1], u = 0.25 + j * 0.5, x = ax + (bx - ax) * u, y = ay + (by - ay) * u;
-        line(c, [[x - 0.8, y - 1.1], [x + 0.8, y + 1.1]], 0xf0e0c0, 0.35); line(c, [[x - 0.8, y + 1.1], [x + 0.8, y - 1.1]], 0xf0e0c0, 0.35);
-      }
-      line(c, [[cx + 1, 12.5], [cx + 3.4, 15]], 0x2a1a10, 0.45); // a second, shorter seam
-      for (const u of [0.3, 0.75]) { const x = cx + 1 + 2.4 * u, y = 12.5 + 2.5 * u; line(c, [[x - 0.8, y + 0.7], [x + 0.8, y - 0.7]], 0xf0e0c0, 0.35); }
       break;
     }
     case "deepvenom": { // old venom runes glowing on its shell, a drop forming
@@ -602,28 +541,12 @@ function champOverlay(c: C2, k: AffixKey, f: number) {
       fillShape(c, blobPath([[cx + 3.6, 12.4], [cx + 4.4, 14 + t * 1.4], [cx + 3.6, 15 + t * 1.6], [cx + 2.8, 14 + t * 1.4]]), css(0xb8ff80, 0.95));
       break;
     }
-    case "brand": { // the Circle's veiled sun burned into it, still hot
-      glow(c, cx, 10, 3.6, 0xff9830, 0.5 + t * 0.25);
-      line(c, [[cx - 2, 10.6], [cx - 1.2, 8.8], [cx + 1.2, 8.8], [cx + 2, 10.6]], mix(0xffb040, 0xffffff, t * 0.3), 0.55); // the veil
-      for (let i = 0; i < 8; i++) { const a = (i / 8) * Math.PI * 2; line(c, [[cx + Math.cos(a) * 2.4, 10 + Math.sin(a) * 2.4], [cx + Math.cos(a) * 3.3, 10 + Math.sin(a) * 3.3]], 0xff9830, 0.5); }
-      line(c, [[cx - 1.4, 11.4], [cx + 1.4, 11.4]], 0xffd080, 0.5);
-      break;
-    }
     case "taint": { // it oozes: a puddle at its feet and drips falling into it
       fillShape(c, ellipseP(cx, 17, 8.5, 2.4), css(0x4aa02a, 0.85));
       fillShape(c, ellipseP(cx - 1.5, 16.6, 4.5, 1.1), css(0xa8ff80, 0.7));
       for (const [dx, y] of [[-4, 9 + t * 3], [3, 11 + (1 - t) * 3], [0.5, 6 + t * 4]] as P[]) {
         fillShape(c, blobPath([[cx + dx, y - 1.2], [cx + dx + 0.7, y + 0.4], [cx + dx, y + 1], [cx + dx - 0.7, y + 0.4]]), css(0x8dff5a, 0.95));
       }
-      break;
-    }
-    case "buried": { // sand pouring off it into a little dune round its feet
-      for (const [dx, w] of [[-4.5, 0.6], [4.2, 0.55]] as P[]) {
-        line(c, [[cx + dx, 10 + t], [cx + dx + 0.3, 13.5 + t], [cx + dx - 0.2, 16.5]], sand, w, 0.85);
-        for (let y = 10.5 + t * 1.5; y < 16; y += 2.5) fillShape(c, ellipseP(cx + dx + 0.5, y, 0.3, 0.3), css(0xfff0c0));
-      }
-      vol(c, blobPath([[cx - 9, 18.6], [cx - 5, 16.8], [cx, 16.2], [cx + 5, 16.8], [cx + 9, 18.6]]), sand, [cx - 9, 16.2, 18, 2.4], { ao: 0.3 });
-      fillShape(c, ellipseP(cx - 3, 17.4, 2.4, 0.4), css(0xfff0c8, 0.6));
       break;
     }
   }
@@ -698,7 +621,7 @@ export function buildMobs(out: string, ONLY?: string[]) {
     // the Night Raiders (raiders.ts): one sheet for each of the Seven
     ...RAIDERS.map((R) => ({ key: `mob_nightraider_${R.key}`, w: RAIDER_W, h: RAIDER_H, draw: (c: C2, f: number) => { const { dir, pose } = frameOf(f); paintRaider(c, SH, R, dir as "down" | "up" | "right", pose, f); } })),
     // champion details (shared/champions.ts): one small painted sheet per affix, laid over the monster by the client
-    ...AFFIX_KEYS.map((k) => ({ key: `mob_champ_${k}`, w: CHAMP_W, h: CHAMP_H, frames: 2, draw: (c: C2, f: number) => champOverlay(c, k, f) })),
+    ...AFFIX_KEYS.filter((k) => AFFIXES[k].overlay).map((k) => ({ key: `mob_champ_${k}`, w: CHAMP_W, h: CHAMP_H, frames: 2, draw: (c: C2, f: number) => champOverlay(c, k, f) })),
     // wearing 1-4 harvested skeletons (look.ts demon1..4)
     ...[1, 2, 3, 4].map((n) => humanoid(`mob_demon${n}`, `demon${n}`, 28, 34, 33 / 34, 1.0, true)),
     // drawn on a 24x16 layout, 1.35x up into a 32x22 frame (about as long as a skeleton is tall)
@@ -707,9 +630,17 @@ export function buildMobs(out: string, ONLY?: string[]) {
       crawlerFrame(c, 24, 16, f);
       c.restore(); SH?.restore();
     } },
-  ].filter((s) => !ONLY || ONLY.includes(s.key));
+  ];
+  // humanoid champions: the same sheet with their champion weapon (look.ts CHAMP_WEAPONS)
+  for (const k of Object.keys(CHAMP_WEAPONS)) {
+    const a = HUMANOIDS.get(`mob_${k}`);
+    if (!a) continue;
+    addChampPose(`${k}_champ`, CHAMP_WEAPONS[k].weapon ?? "axe");
+    sheets.push(humanoid(`mob_${k}_champ`, `${k}_champ`, ...a));
+  }
+  const todo = sheets.filter((s) => !ONLY || ONLY.includes(s.key));
   const meta: Record<string, { w: number; h: number; scale: number; frames: number; hands?: number[][] }> = {};
-  for (const s of sheets) {
+  for (const s of todo) {
     const tw = s.w * TX, th = s.h * TX;
     const NF = s.frames ?? FRAMES;
     const cv = createCanvas(tw * NF, th), oc = cv.getContext("2d");
