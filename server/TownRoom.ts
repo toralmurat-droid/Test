@@ -75,6 +75,10 @@ import { act2Missing, act2Open, actAt, desertSpawn, WAYGATE_RANGE, waygateArriva
 import { repairCost, respecCost, WEAR, wearMult } from "../shared/upkeep";
 import { ARSENAL, ATTUNE_ORDER, attuneOf, bondShare, DEFAULT_GRIMOIRE, SUMMONER_TREE, ESSENCE, GOLEM, GOLEM_OF, golemSlots, isElement, isSummonKind, parseGrimoire, PORTAL, SUMMON, summonElement, summonScaleLevel, WISP, wispEls, type AttuneElement, type SummonKind } from "../shared/summons";
 import { cleanFeast, familyOf, type Feast, feastMult, THRALL, thrallMax } from "../shared/devour";
+import { Champions, type ChampState } from "./champions";
+import { AFFIX_FX, CHAMPION } from "../shared/champions";
+/** A champion's helpers (its Splitting twin, a Ringleader's cutthroats) leave this long after they came. */
+const CHAMP_HELPER_MS = 90_000;
 import { ASK_BURST, ASK_PER_SEC, Bucket, CHAT_BURST, CHAT_PER_SEC, clientIp, isLocalIp, MSG_BURST, MSG_KICK_AFTER, MSG_KICK_WINDOW_MS, MSG_PER_SEC } from "./ratelimit";
 
 export class Player extends Schema {
@@ -287,6 +291,8 @@ export class Mob extends Schema {
   @type("string") fx = ""; // skill effects on it (burn, mark, weak), see Player.fx
   // Keep the synced fields in the order of shared/mobView.ts MOB_FIELDS (server/mobView.ts sends them by index)
   @type("string") owner = ""; // a hero's summon (shared/summons.ts): session id of the hero it fights for
+  @type("number") champion = 0; // a champion's affixes, packed (shared/champions.ts packAffixes); 0 = a plain monster
+  champ?: ChampState; // a champion's own state (server/champions.ts)
   sk = newRuntime();
 
   stunUntil = 0;
@@ -559,6 +565,14 @@ const rangedOf = (m: Mob): RangedCfg | undefined =>
   : RANGED[m.kind];
 /** A monster's stats: its kind's numbers, a bandit's role on top, and the camp's horn alert (they come from far). */
 function mobDef(m: Mob, now = Date.now()): MobDef {
+  const d = mobDefOf(m, now);
+  if (!m.champion) return d;
+  // a champion hits harder and is worth more (shared/champions.ts CHAMPION); Hide-Stitched in its other skin is faster
+  const sh = m.champ?.shifted;
+  return { ...d, damage: d.damage * CHAMPION.dmgMult, xp: d.xp * CHAMPION.xpMult,
+    speed: sh ? d.speed * AFFIX_FX.stitched.speed : d.speed, attackCooldownMs: sh ? d.attackCooldownMs * AFFIX_FX.stitched.cooldown : d.attackCooldownMs };
+}
+function mobDefOf(m: Mob, now: number): MobDef {
   const base = MOBS[m.kind];
   // The Hollow King grows faster once badly hurt (HOLLOW_KING.wrath)
   if (m.kind === "hollowking") return m.hp < m.maxHp * HOLLOW_KING.wrath.hpFrac
@@ -611,6 +625,33 @@ export class TownRoom extends Room<TownState> {
   private mobSeq = 0;
   private shotSeq = 0;
   private mobView = new MobView();
+  /** Champions (shared/champions.ts, server/champions.ts): the room lends them a few of its powers. */
+  private champs = new Champions({
+    mob: (id) => this.state.mobs.get(id),
+    heroes: () => this.state.players.entries(),
+    hero: (id) => this.state.players.get(id),
+    broadcast: (type, msg) => this.broadcast(type, msg),
+    spawnHelper: (kind, x, y, level, weapon) => {
+      const id = `c${++this.mobSeq}`;
+      this.spawnMob(kind, -1, id, { x, y, level });
+      const h = this.state.mobs.get(id);
+      if (h && weapon) h.weapon = weapon;
+      if (h) { h.hp = h.maxHp = Math.round(mobDef(h).maxHp * mobScale(h.level, "hp")); h.homeX = x; h.homeY = y; h.banishAt = Date.now() + CHAMP_HELPER_MS; } // gone again if nobody kills it
+      return id;
+    },
+    dmg: (m, mult) => Math.max(1, Math.round(mobDef(m as Mob).damage * mobScale(m.level, "damage") * mult)),
+    hurtHero: (pid, dmg, fromId, o) => { const m = this.state.mobs.get(fromId); this.damagePlayer(pid, dmg, m?.title || (m ? mobDef(m).name : "?"), [0, 0], 0, { atkLevel: m?.level, el: o.el, mobEl: o.el, dot: o.dot }); },
+    hazard: (m, id, x, y, r, ms, tickMs, dmg, el, now) => this.addHazard(m as Mob, id, x, y, r, ms, tickMs, dmg, el, now),
+    shoot: (fromId, m, x, y, tx, ty, speed, range, radius, dmg) => {
+      const s = new Projectile();
+      const dx = tx - x, dy = ty - y, d = Math.hypot(dx, dy) || 1;
+      s.x = x; s.y = y; s.vx = dx / d; s.vy = dy / d;
+      s.owner = fromId; s.kind = "arrow"; s.mobLevel = m.level || 1; s.mobName = m.title || mobDef(m as Mob).name;
+      s.speed = speed; s.range = range; s.radius = radius; s.damage = dmg;
+      this.state.projectiles.set(`s${++this.shotSeq}`, s);
+    },
+    canStand: (x, y) => !isSolidAt(x, y) && !isSafeZone(x, y) && !noMobsAt(x, y),
+  });
   private itemSeq = 0;
 
   onCreate() {
@@ -631,7 +672,7 @@ export class TownRoom extends Room<TownState> {
       zone.name = z.name; zone.cap = zoneCap(z);
       this.state.zones.set(z.name, zone);
       for (const [kind, n] of Object.entries(z.mobs) as [MobKind, number][]) {
-        for (let i = 0; i < n; i++) this.spawnMob(kind, zi);
+        for (let i = 0; i < n; i++) { const id = `m${++this.mobSeq}`; this.spawnMob(kind, zi, id); this.champs.roll(this.state.mobs.get(id)!, id); }
       }
       zone.alive = zone.cap;
     });
@@ -1060,6 +1101,7 @@ export class TownRoom extends Room<TownState> {
     const m = this.state.mobs.get(id) ?? new Mob();
     let home = at ?? spawnPoint(SPAWN_ZONES[zi], kind);
     m.kind = kind;
+    m.title = ""; this.champs.clear(m); // a respawn reusing this Mob starts plain (zone spawns may roll a champion after)
     m.weapon = kind === "skeleton" ? rollSkeletonWeapon() : Math.random() < (BEAST_FOLK[kind] ?? 0) ? "folk" : ""; // beast-folk: half get the other half-folk look
     m.camp = false; m.post = -1; m.perch = false; m.pLeg = 0; m.pDir = 1; m.stuckSince = 0; m.detourUntil = 0;
     m.alertUntil = 0; m.alertHero = ""; m.nextHorn = 0; m.nextVolley = 0; m.rallyUntil = 0; m.chargeMult = 1; m.dashHit = false; m.reinforced = false;
@@ -1363,7 +1405,7 @@ export class TownRoom extends Room<TownState> {
       if (now < m.specialAt) return true;
       const move = m.specialKind === "slam" ? MOTHER.slam : MOTHER.bounce;
       m.specialAt = 0; m.winding = false; m.lastAttack = now;
-      const dmg = Math.round(MOBS.motherblob.damage * mobScale(m.level, "damage") * move.dmgMult);
+      const dmg = Math.round(MOBS.motherblob.damage * mobScale(m.level, "damage") * move.dmgMult * (m.champion ? CHAMPION.dmgMult : 1));
       this.state.players.forEach((p, pid) => {
         if (p.dead) return;
         const dx = p.x - m.x, dy = p.y - m.y, d = Math.hypot(dx, dy);
@@ -1407,7 +1449,7 @@ export class TownRoom extends Room<TownState> {
     return out;
   }
   /** The blob's own damage at its level, times `mult`. */
-  private elemDmg(m: Mob, mult: number) { return Math.max(1, Math.round(MOBS[m.kind].damage * mobScale(m.level, "damage") * mult)); }
+  private elemDmg(m: Mob, mult: number) { return Math.max(1, Math.round(MOBS[m.kind].damage * mobScale(m.level, "damage") * mult * (m.champion ? CHAMPION.dmgMult : 1))); }
   /** A ground hazard; `ms` long, hurting every `tickMs`. */
   private addHazard(m: Mob, id: string, x: number, y: number, r: number, ms: number, tickMs: number, dmg: number, el: Element, now: number) {
     this.hazards.push({ x, y, r, until: now + ms, next: now + 150, tickMs, dmg, el, by: id, level: m.level, name: mobDef(m).name });
@@ -2176,7 +2218,7 @@ export class TownRoom extends Room<TownState> {
   // ---- Blob merging -----------------------------------------------------------
 
   /** Blobs that can call for help and fuse (Mother Blobs too, Murat 2026-11-03). */
-  private static canMerge(m: Mob) { return BLOB_KINDS.includes(m.kind) && !m.servant; } // the Hollow King's servants stay his
+  private static canMerge(m: Mob) { return BLOB_KINDS.includes(m.kind) && !m.servant && !m.champion; } // a champion stays itself // the Hollow King's servants stay his
 
   /** Blobs below MERGE.minLevel don't merge, unless a hero close by is on the "watch a blob call for help" quest step. */
   private mergeLevelOk(m: Mob) {
@@ -2380,7 +2422,7 @@ export class TownRoom extends Room<TownState> {
       const gx0 = Math.floor(p.x / FEUD_CELL), gy0 = Math.floor(p.y / FEUD_CELL);
       for (let gy = gy0 - cells; gy <= gy0 + cells; gy++) for (let gx = gx0 - cells; gx <= gx0 + cells; gx++) {
         for (const [id, m] of this.feudGrid.get(gx * 4096 + gy) ?? []) {
-          if (m.dead || m.hidden || m.ritual || m.servant || !TownRoom.RITUAL_KINDS.includes(m.kind) || Math.hypot(m.x - p.x, m.y - p.y) > R.near) continue;
+          if (m.dead || m.hidden || m.ritual || m.servant || m.champion || !TownRoom.RITUAL_KINDS.includes(m.kind) || Math.hypot(m.x - p.x, m.y - p.y) > R.near) continue;
           near.push([id, m]);
         }
       }
@@ -2656,6 +2698,7 @@ export class TownRoom extends Room<TownState> {
     this.state.fields.forEach((f) => { if (f.inst.def.hole) this.holes++; });
     this.state.projectiles.forEach((s, id) => this.updateProjectile(s, id, dt));
     this.updateHazards(now);
+    this.champs.update(now); // Siegewrights' ballistae
     this.state.fields.forEach((f, id) => {
       if (!tickField(this.host, f.inst)) { this.state.fields.delete(id); return; }
       if (f.follow) { f.x = f.inst.x; f.y = f.inst.y; }
@@ -2902,6 +2945,7 @@ export class TownRoom extends Room<TownState> {
           const at = this.freeSpawnPoint(zi, m.kind);
           if (!at) { blocked = true; return; }
           this.spawnMob(m.kind, zi, id, at);
+          this.champs.roll(m, id); // about one in twenty comes back a champion (shared/champions.ts)
           if (undead) this.broadcast("necroraise", { pts: [[Math.round(m.x), Math.round(m.y)]], rise: 1 }); // climbing out of the ground
           revived = true;
         });
@@ -2962,6 +3006,7 @@ export class TownRoom extends Room<TownState> {
       return;
     }
     if (m.kind === "motherblob" && now >= m.nextBrood) this.brood(m, id, now);
+    if (m.champ && this.champs.tick(m, id, now)) return; // a champion's affixes (server/champions.ts): busy under the sand, veiled, building
     if (m.hidden) return this.updateHidden(m, id, dt, now);
     // Answering a merge call: rush to the caller and fuse on contact
     if (m.mergeInto) {
@@ -3706,7 +3751,7 @@ export class TownRoom extends Room<TownState> {
   /** The sickness, bleeding or venom a beast's plain bite leaves (BEAST.plague / bleed / venom). */
   private beastRider(m: Mob, id: string, pid: string) {
     const kind = BEAST_RIDER[m.kind]!, R = BEAST[kind], name = `${mobDef(m).name}'s ${kind === "plague" ? "plague" : kind === "bleed" ? "rending bite" : "venom"}`;
-    const tick = Math.max(1, Math.round(MOBS[m.kind].damage * mobScale(m.level, "damage") * R.dmgMult));
+    const tick = Math.max(1, Math.round(MOBS[m.kind].damage * mobScale(m.level, "damage") * R.dmgMult * (m.champion ? CHAMPION.dmgMult : 1)));
     const el = kind === "bleed" ? undefined : "poison";
     for (let i = 1; i <= R.ticks; i++) this.host.later(R.tickMs * i, () => this.damagePlayer(pid, tick, name, [0, 0], 0, { dot: true, mobEl: el, el, atkLevel: m.level }));
   }
@@ -4210,6 +4255,14 @@ export class TownRoom extends Room<TownState> {
     // Runes (shared/runes.ts) lie on the ground like gear
     const rune = rollMobRune(GEAR_DROP[kind]?.chance ?? 0, level);
     if (rune) this.dropItem("gear", x, y, 1, rune);
+  }
+
+  /** What a champion leaves on top of its normal loot (shared/champions.ts CHAMPION): gear rolls, potions, a rune. */
+  private champLoot(m: Mob) {
+    for (let i = 0; i < CHAMPION.gearRolls; i++) { const g = rollGear(m.kind, m.level); if (g) this.dropItem("gear", m.x, m.y, 1, g); }
+    for (let i = 0; i < CHAMPION.potions; i++) this.dropItem("potion", m.x, m.y, 1, String(dropSize(m.level)));
+    const rune = this.champs.loot(m);
+    if (rune) this.dropItem("gear", m.x, m.y, 1, rune);
   }
 
   private pickUp(p: Player, pid: string) {
@@ -4885,6 +4938,7 @@ export class TownRoom extends Room<TownState> {
     if (m.bones) dmg = Math.max(1, Math.round(dmg * (1 - DEMON.harvest.armorPer * m.bones))); // Bone Demon's bone armour
     this.bloodthirst(a, attackerId, Math.min(dmg, m.hp), opts.drain, targetId);
     m.hp = Math.max(0, m.hp - dmg);
+    if (m.champ) this.champs.hurt(m, targetId, Date.now()); // Risen, Splitting, Hide-Stitched (server/champions.ts)
     this.addHate(m, attackerId, dmg); // fight back (generated aggro)
     if (a && (opts.basic || opts.skill) && !opts.dot && !opts.rune) this.runesOnHit(attackerId, a, targetId, dmg); // weapon runes (shared/runes.ts)
     // Guardian (shared/summons.ts): a Summoner's golem close by draws the monster's anger instead of its owner
@@ -4918,7 +4972,8 @@ export class TownRoom extends Room<TownState> {
     // Kill XP: every group member in the same zone gets it (the killer alone when solo)
     const xp = Math.round(def.xp * mobScale(m.level, "xp"));
     for (const pid of a?.party ? this.groupNear(attackerId, m.x, m.y) : [attackerId]) this.grantXp(pid, xp, m);
-    this.dropLoot(m.kind, m.x, m.y, mobScale(m.level, "gold") * (m.kind === "bandit" ? BANDIT_ROLES[roleOf(m.weapon)].loot : 1), m.level);
+    this.dropLoot(m.kind, m.x, m.y, mobScale(m.level, "gold") * (m.kind === "bandit" ? BANDIT_ROLES[roleOf(m.weapon)].loot : 1) * (m.champion ? CHAMPION.goldMult : 1), m.level);
+    if (m.champion) this.champLoot(m); // a champion: more gold, gear rolls, a potion and a rune
     this.mobDied(m, targetId, attackerId, a?.name ?? "");
   }
 
@@ -5020,6 +5075,7 @@ export class TownRoom extends Room<TownState> {
     if (m.kind === "hidemother" && m.uPhase) this.bossSay(targetId, URSK.lines.death); // her last words
     if (m.kind === "sunwright" && m.uPhase) this.bossSay(targetId, SUNWRIGHT.lines.death);
     if (m.kind === "nightraider") this.raiderGone(m, targetId, true, killerName);
+    if (m.champ) this.champs.died(m, targetId); // its ballista falls with it
     m.dead = true; m.hp = 0;
     if (m.owner) this.summons.delete(targetId);
     if (m.owner && m.mind) this.golemFell(m); // a Summoner's golem: its element bursts out, Essence, it rises again later
@@ -5772,6 +5828,8 @@ export class TownRoom extends Room<TownState> {
     if (t.hp > 0) {
       afterHit(this.host, opts.from, tid, opts);
       if (struck) this.runesStruck(tid, t, opts.from!, dmg);
+      if (struck && fromMob?.champ) this.champs.struck(fromMob, opts.from!, tid, now); // Sun-Branded
+
       if (voidSlip(this.host, tid) > 0) this.loseHero(tid); // Void Slip: gone into the Void, monsters lose them
       return false;
     }

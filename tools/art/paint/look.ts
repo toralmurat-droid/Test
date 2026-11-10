@@ -259,6 +259,32 @@ export const MOB_LOOKS: Record<string, Look> = {
   },
 };
 
+/**
+ * Champions (shared/champions.ts): a humanoid champion carries another weapon than its kin (Murat 2026-11-10: a
+ * different weapon rather than a painted detail; the family's glowing aura stays). Sheets "mob_<kind>_champ".
+ * Ranged kin (bow skeletons, archers, slingers) have none: their champions keep the plain sheet with the aura.
+ */
+export const CHAMP_WEAPONS: Record<string, Partial<Look>> = {
+  skeleton: { weapon: "boneblade", eyeGlow: 0xb890ff }, // the necromancer's dead: a blade of fused bone (champion skeletons fight with it)
+  skeletonmage: { weapon: "witchstaff", orb: 0xa070ff },
+  bandit: { weapon: "sword" }, // a Redfang ringleader's sabre
+  bandit_brute: { weapon: "hammer" },
+  gnawkin: { weapon: "axe" },
+  tuskborn: { weapon: "axe" },
+  tuskborn_folk: { weapon: "hammer" },
+  silkwretch: { weapon: "spear" },
+  silkwretch_folk: { weapon: "spear" },
+  duskwing: { weapon: "sword" },
+  duskwing_folk: { weapon: "sword" },
+  crowseer: { weapon: "witchstaff", orb: 0xff4a2a },
+  nomad: { weapon: "katana" }, // a Dustrider's long curved blade
+  sanddead: { weapon: "axe" }, // a bronze axe from Kharsun's tombs
+  veiled: { weapon: "witchstaff", orb: 0xfff6c8 }, // the second sun's white fire
+  camelfolk: { weapon: "hammer" }, // the brass maul they brand with
+  sphinx: { weapon: "spear" }, // a tomb guardian's long spear
+};
+for (const [k, o] of Object.entries(CHAMP_WEAPONS)) Object.defineProperty(MOB_LOOKS, `${k}_champ`, { get: () => ({ ...MOB_LOOKS[k], ...o }), enumerable: false });
+
 /** Undyed linen braies: what every hero wears under the class kit. */
 export const LINEN = 0xe2dccb;
 

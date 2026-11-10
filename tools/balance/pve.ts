@@ -1,6 +1,7 @@
 /**
  * PvE balance simulator: bot heroes play the first zone (Lv 1-30) against its monsters and bosses.
- * Run: npx tsx tools/balance/pve.ts [runsPerCase] [--bosses] [--zones] [--act2] [--class=vampire] [--build=0|1|2] [--boss=king] [--no-execute]
+ * Run: npx tsx tools/balance/pve.ts [runsPerCase] [--bosses] [--zones] [--act2] [--champions] [--class=vampire] [--build=0|1|2] [--boss=king] [--no-execute]
+ * --champions: one fight against each champion (shared/champions.ts, a 1D version of its affixes) beside the same plain monster.
  *
  * It reuses the PvP simulator (tools/balance/duel.ts): the same hero bot, skill engine, builds (rushing one branch),
  * stat points and gear by level. The other side is a monster with its real numbers (shared/constants.ts MOBS, level
@@ -20,10 +21,12 @@ import { MOB_COMBAT, mobBody, POISE, poiseSpeed } from "../../shared/combat";
 import { POTION_COOLDOWN_MS, POTION_SIZES } from "../../shared/potions";
 import { activeSkills, SKILLS } from "../../shared/skills";
 import { canPay, manaRegen, skillCost } from "../../shared/mana";
-import { castSkill, cooldownLeft } from "../../shared/skillEngine";
+import { castSkill, cooldownLeft, type HitOpts } from "../../shared/skillEngine";
 import { coolHeat, isOverheated } from "../../shared/overload";
 import { Duel, F, GolemF, make, SIM } from "./duel";
 import { SUMMON } from "../../shared/summons";
+import { AFFIX_FX as CF, CHAMPION, type AffixKey } from "../../shared/champions";
+import { addHeat } from "../../shared/overload";
 
 type Build = 0 | 1 | 2;
 
@@ -264,6 +267,108 @@ export class PveDuel extends Duel {
   }
 }
 
+
+// ---- Champions (--champions) ----------------------------------------------------------------------------
+/** A champion in the arena: 2.5x HP and its affixes (server/champions.ts), the 1D way. */
+export class ChampF extends MobF {
+  rose = false; split = false; shifted = false; pools: [number, number][] = []; nextPool = 0; nextAura = 0;
+  nextBallista = 0; ballistaUntil = 0; ballistaX = 0; nextBolt = 0; nextBlink = 0; goneUntil = 0; brands = 0; brandUntil = 0;
+  constructor(spec: MobSpec, public affixes: AffixKey[], id = "c") {
+    super({ ...spec, hp: spec.hp * CHAMPION.hpMult, dmg: spec.dmg * CHAMPION.dmgMult, poise: spec.poise }, id);
+    this.nextBlink = affixes.includes("veil") ? CF.veil.firstMs : CF.buried.firstMs;
+  }
+  has(k: AffixKey) { return this.affixes.includes(k); }
+}
+export class ChampDuel extends PveDuel {
+  damage(t: F, dmg: number, by: F | undefined, push: number, kbMul: number, o: HitOpts): boolean {
+    if (t instanceof ChampF && this.now < t.goneUntil) return false; // under the sand / behind its veil
+    const killed = super.damage(t, dmg, by, push, kbMul, o);
+    const now = this.now;
+    if (t instanceof ChampF) {
+      if (t.dead && t.has("risen") && !t.rose) { t.rose = true; t.dead = false; t.hp = Math.round(t.maxHp * CF.risen.hpFrac); t.stunUntil = now + CF.risen.stunMs; return false; }
+      if (!t.dead && t.has("split") && !t.split && t.hp <= t.maxHp * CF.split.hpFrac) {
+        t.split = true;
+        const twin = new MobF({ ...t.spec, hp: t.maxHp / 2 }, `${t.id}t`);
+        twin.hp = Math.min(twin.maxHp, t.hp); twin.x = t.x + 12;
+        this.mobs.push(twin);
+      }
+      if (!t.dead && t.has("stitched") && !t.shifted && t.hp <= t.maxHp * CF.stitched.hpFrac) {
+        t.shifted = true; t.spec = { ...t.spec, speed: t.spec.speed * CF.stitched.speed, cd: t.spec.cd * CF.stitched.cooldown };
+      }
+    }
+    if (by instanceof ChampF && by.has("brand") && t === this.hero && !o.dot && !killed) {
+      by.brands = now < by.brandUntil ? by.brands + 1 : 1; by.brandUntil = now + CF.brand.ms;
+      if (by.brands >= CF.brand.stacks) { by.brands = 0; this.damage(t, Math.round(by.spec.dmg * CF.brand.dmgMult), by, 0, 0, { dot: true }); addHeat(t, CF.brand.heat); }
+    }
+    return killed;
+  }
+  brain(f: F): number {
+    if (f instanceof ChampF && !f.dead) { const r = this.champTick(f); if (r !== undefined) return r; }
+    return super.brain(f);
+  }
+  /** The affixes each tick; a number = the move this tick (busy), undefined = its usual brain. */
+  champTick(m: ChampF): number | undefined {
+    const now = this.now, h = this.hero, d = Math.abs(h.x - m.x);
+    // puddles: every tick a puddle under the hero hurts (one tick per CF.tickMs)
+    const P = m.has("taint") ? CF.taint : m.has("deepvenom") ? CF.deepvenom : undefined;
+    if (P) {
+      if (now >= m.nextPool) { m.nextPool = now + P.everyMs; m.pools.push([m.x, now + P.ms]); }
+      m.pools = m.pools.filter(([, until]) => until > now);
+      if (Math.floor(now / P.tickMs) !== Math.floor((now - 50) / P.tickMs) && m.pools.some(([x]) => Math.abs(h.x - x) <= P.radius)) this.damage(h, Math.round(m.spec.dmg * P.dmgMult), m, 0, 0, { dot: true });
+    }
+    if (m.has("sunborn") && now >= m.nextAura) {
+      m.nextAura = now + CF.sunborn.everyMs;
+      if (d <= CF.sunborn.radius) { this.damage(h, Math.round(m.spec.dmg * CF.sunborn.dmgMult), m, 0, 0, { dot: true }); addHeat(h, CF.sunborn.heat); }
+    }
+    if (m.has("siege")) {
+      if (now < m.ballistaUntil && now >= m.nextBolt && Math.abs(h.x - m.ballistaX) <= CF.siege.shotRange) {
+        m.nextBolt = now + CF.siege.shotEveryMs;
+        const miss = Math.random() < this.missChance(Math.abs(h.x - m.ballistaX), CF.siege.shotSpeed);
+        this.shots.push({ owner: m, x: m.ballistaX, dir: Math.sign(h.x - m.ballistaX) || 1, speed: CF.siege.shotSpeed, range: 280, traveled: 0, radius: CF.siege.shotRadius, dmg: Math.round(m.spec.dmg * CF.siege.dmgMult), kb: 0.4, miss, hit: false, basic: false, pierced: false });
+      }
+      if (now >= m.nextBallista && d <= CF.siege.range) {
+        m.nextBallista = now + CF.siege.cooldownMs; m.ballistaUntil = now + CF.siege.castMs + CF.siege.lifeMs; m.ballistaX = m.x; m.nextBolt = now + CF.siege.castMs + 600;
+        m.stunUntil = Math.max(m.stunUntil, now + CF.siege.castMs); // busy building (counted as standing still)
+      }
+    }
+    if (m.has("gang") && !(m as any)._called) {
+      (m as any)._called = true;
+      for (let i = 0; i < CF.gang.count; i++) { const c = new MobF(mobSpec("bandit", Math.max(1, m.level - CF.gang.levelDrop), { weapon: "cutthroat" }), `${m.id}g${i}`); c.x = m.x + (i ? 20 : -20); this.mobs.push(c); }
+    }
+    const blink = m.has("buried") ? CF.buried : m.has("veil") ? CF.veil : undefined;
+    if (blink) {
+      if (m.goneUntil) {
+        if (now < m.goneUntil) return 0;
+        m.goneUntil = 0;
+        m.x = Math.max(0, Math.min(480, h.x + (m.has("veil") ? Math.sign(h.x - m.x) || 1 : Math.random() < 0.5 ? -1 : 1) * (m.has("veil") ? CF.veil.behind : CF.buried.surfaceDist)));
+      } else if (now >= m.nextBlink && (m.has("veil") || d >= CF.buried.minDist)) {
+        m.nextBlink = now + blink.everyMs; m.goneUntil = now + (m.has("buried") ? CF.buried.underMs : CF.veil.goneMs); m.windUntil = 0; m.windKind = undefined;
+        return 0;
+      }
+    }
+    return undefined;
+  }
+}
+
+/** The champions measured: one of each affix (and each pair) at a level its family lives at. */
+export const CHAMP_CASES: { kind: MobKind; affixes: AffixKey[]; level: number; weapon?: string }[] = [
+  { kind: "warriorblob", affixes: ["split"], level: 12 }, { kind: "fireblob", affixes: ["taint"], level: 21 }, { kind: "frostblob", affixes: ["split", "taint"], level: 18 },
+  { kind: "skeleton", affixes: ["siege"], level: 14, weapon: "sword" }, { kind: "skeleton", affixes: ["risen"], level: 14, weapon: "axe" }, { kind: "skeleton", affixes: ["siege", "risen"], level: 20, weapon: "sword" },
+  { kind: "tuskborn", affixes: ["stitched"], level: 24 }, { kind: "bandit", affixes: ["gang"], level: 20, weapon: "brute" },
+  { kind: "veiled", affixes: ["sunborn"], level: 45 }, { kind: "sanddead", affixes: ["buried"], level: 38 }, { kind: "sphinx", affixes: ["buried"], level: 42 },
+  { kind: "scorpion", affixes: ["deepvenom"], level: 41 }, { kind: "nomad", affixes: ["veil"], level: 35 }, { kind: "camelfolk", affixes: ["brand"], level: 40 },
+];
+function champRun(cls: ClassKind, c: (typeof CHAMP_CASES)[number], champ: boolean, build: Build, potions = 3): RunResult {
+  const h = make("h", cls, c.level, build);
+  const pack: Pack = { heal: potions, mana: potions, healUsed: 0, manaUsed: 0, size: potionSize(c.level), lastDrink: -1e9 };
+  const spec = mobSpec(c.kind, c.level, { weapon: c.weapon });
+  const m = champ ? new ChampF(spec, c.affixes) : new MobF(spec);
+  const d = new ChampDuel(h, [m], pack, 0);
+  let w: F | null | undefined;
+  while (d.now < 180000 && (w = d.step()) === undefined) { /* fight */ }
+  return { won: w === h, kills: d.mobs.filter((x) => x.dead).length, hpLostPerKill: 1 - Math.max(0, h.hp) / h.maxHp, secPerKill: d.now / 1000, heals: pack.healUsed, manas: pack.manaUsed };
+}
+
 // ---- Scenarios ------------------------------------------------------------------------------------------
 const pick = <T,>(a: T[]) => a[Math.floor(Math.random() * a.length)];
 const skelWeapon = () => pick(["sword", "sword", "sword", "axe", "axe", "spear", "spear", "bow", "bow"]);
@@ -374,7 +479,24 @@ const buildOf = (i: number) => BUILD ?? ((i % 3) as Build);
 
 if (process.argv[1]?.includes("pve")) {
   const n = Number(process.argv[2]) || 30;
-  const doBosses = !process.argv.includes("--zones"), doZones = !process.argv.includes("--bosses");
+  const CHAMPS = process.argv.includes("--champions");
+  const doBosses = !CHAMPS && !process.argv.includes("--zones"), doZones = !CHAMPS && !process.argv.includes("--bosses");
+  if (CHAMPS) {
+    console.log("Champions: the hero alone at the monster's level, 3 heal + 3 mana potions. Cell = win% / HP lost / fight s (plain -> champion)");
+    console.log("".padEnd(34) + CLASSES.map((c) => c.padEnd(32)).join(""));
+    for (const cs of CHAMP_CASES) {
+      let line = `${cs.kind} Lv${cs.level} ${cs.affixes.join("+")}`.padEnd(34);
+      for (const c of CLASSES) {
+        const cell = (champ: boolean) => {
+          let won = 0, hp = 0, sec = 0;
+          for (let i = 0; i < n; i++) { const r = champRun(c, cs, champ, buildOf(i)); won += r.won ? 1 : 0; hp += r.hpLostPerKill; sec += r.secPerKill; }
+          return `${pct(won / n)}/${pct(hp / n)}/${(sec / n).toFixed(0)}s`;
+        };
+        line += `${cell(false)} -> ${cell(true)}`.padEnd(32);
+      }
+      console.log(line);
+    }
+  }
   if (doZones) {
     ACT2 = process.argv.includes("--act2"); // the desert's monsters, heroes Lv 30-48
     const levels = ACT2 ? [30, 33, 36, 39, 42, 45, 48] : [2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30];

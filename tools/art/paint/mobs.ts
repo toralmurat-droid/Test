@@ -1,12 +1,14 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { GOLEM_H, GOLEM_W, paintGolemFrame, type GolemDir, type GolemElement } from "./golems";
 import { createCanvas } from "@napi-rs/canvas";
-import { MOB_POSES, posed, setPainted, type Dir } from "../characters";
+import { addChampPose, MOB_POSES, posed, setPainted, type Dir } from "../characters";
 import { C2, P, blobPath, css, ellipseP, poly, fillShape, glow, limb, line, metal, mix, rng, sh, vol } from "./brush";
 import { lastRig, pixelAlpha, pixelize, shrink } from "./body";
 import { paintRaider, RAIDER_H, RAIDER_W } from "./raiders";
 import { paintWisp, WISP_H, WISP_W, type WispElement } from "./wisps";
 import { RAIDERS } from "../../../shared/raiders";
+import { AFFIX_KEYS, AFFIXES, type AffixKey } from "../../../shared/champions";
+import { CHAMP_WEAPONS } from "./look";
 
 /**
  * Monster sheets for the iso look. Same textures as client/src/textures.ts mobTexture (6 frames:
@@ -44,7 +46,9 @@ const RIP: Record<"down" | "up" | "right", { hold: [P, P]; snap: [P, P]; don: [P
 // ---------------------------------------------------------------- humanoid monsters (character painter)
 const PK = 5; // painter resolution for these
 /** `lift`: flyers hover this many px above their shadow, bobbing with each wingbeat. */
+const HUMANOIDS = new Map<string, [number, number, number, number, boolean, number]>(); // sheet key -> its frame and scale (champion sheets copy them)
 function humanoid(key: string, kind: string, w: number, h: number, oy: number, scale: number, rip = false, lift = 0): Sheet {
+  HUMANOIDS.set(key, [w, h, oy, scale, rip, lift]);
   // Frames are painted on first use, so rebuilding a few sheets (buildMobs ONLY) doesn't paint every humanoid
   let frames: ReturnType<typeof humanoidFrame>[] | undefined;
   const hands: number[][] = [];
@@ -510,6 +514,44 @@ function blobSheet(key: string, w: number, h: number, pal: BlobPal, o: BlobOpts)
   return { key, w, h, draw: (c, f) => blobFrame(c, w, h, pal, o, f) };
 }
 
+
+/**
+ * Champions (shared/champions.ts): one painted detail per affix of the blobs and the scorpions, drawn by the client
+ * over the monster (client/src/championFx.ts), 20x20 world px, 2 frames (a drip, a glow). "body" ones on the body
+ * (centred), "feet" ones on the ground (their foot at y 18). Humanoid champions carry another weapon instead (look.ts CHAMP_WEAPONS).
+ */
+export const CHAMP_W = 20, CHAMP_H = 20;
+function champOverlay(c: C2, k: AffixKey, f: number) {
+  const cx = 10, t = f % 2;
+  switch (k) {
+    case "split": { // a glowing seam down the middle where it is about to part, bubbles along it
+      glow(c, cx, 10, 6, 0x8dff5a, 0.45);
+      line(c, [[cx, 3], [cx - 1.2, 6.5], [cx + 1, 10], [cx - 0.8, 13.5], [cx, 17]], 0x2a6a1a, 1.4);
+      line(c, [[cx, 3], [cx - 1.2, 6.5], [cx + 1, 10], [cx - 0.8, 13.5], [cx, 17]], 0xd6ffb0, 0.6);
+      for (const [dx, y, r] of [[1.8, 5.5 + t, 0.9], [-2, 9.5 - t, 1.1], [1.6, 13 + t * 0.6, 0.8]] as [number, number, number][]) {
+        vol(c, ellipseP(cx + dx, y, r, r), 0xa8ff80, [cx + dx - r, y - r, r * 2, r * 2], { spec: 0.8 });
+      }
+      break;
+    }
+    case "deepvenom": { // old venom runes glowing on its shell, a drop forming
+      glow(c, cx, 10, 6, 0x9dff6a, 0.35 + t * 0.15);
+      line(c, [[cx - 4, 8], [cx - 2, 6], [cx, 8], [cx + 2, 6], [cx + 4, 8]], 0x9dff6a, 0.6);
+      line(c, [[cx - 3, 11], [cx + 3, 11]], 0x9dff6a, 0.6);
+      line(c, [[cx, 9.4], [cx, 13]], 0x9dff6a, 0.6);
+      fillShape(c, blobPath([[cx + 3.6, 12.4], [cx + 4.4, 14 + t * 1.4], [cx + 3.6, 15 + t * 1.6], [cx + 2.8, 14 + t * 1.4]]), css(0xb8ff80, 0.95));
+      break;
+    }
+    case "taint": { // it oozes: a puddle at its feet and drips falling into it
+      fillShape(c, ellipseP(cx, 17, 8.5, 2.4), css(0x4aa02a, 0.85));
+      fillShape(c, ellipseP(cx - 1.5, 16.6, 4.5, 1.1), css(0xa8ff80, 0.7));
+      for (const [dx, y] of [[-4, 9 + t * 3], [3, 11 + (1 - t) * 3], [0.5, 6 + t * 4]] as P[]) {
+        fillShape(c, blobPath([[cx + dx, y - 1.2], [cx + dx + 0.7, y + 0.4], [cx + dx, y + 1], [cx + dx - 0.7, y + 0.4]]), css(0x8dff5a, 0.95));
+      }
+      break;
+    }
+  }
+}
+
 export function buildMobs(out: string, ONLY?: string[]) {
   mkdirSync(out, { recursive: true });
   setPainted(true, PK);
@@ -578,6 +620,8 @@ export function buildMobs(out: string, ONLY?: string[]) {
     { key: "mob_scorpion", w: 36, h: 30, draw: (c: C2, f: number) => scorpionFrame(c, 36, 30, f) },
     // the Night Raiders (raiders.ts): one sheet for each of the Seven
     ...RAIDERS.map((R) => ({ key: `mob_nightraider_${R.key}`, w: RAIDER_W, h: RAIDER_H, draw: (c: C2, f: number) => { const { dir, pose } = frameOf(f); paintRaider(c, SH, R, dir as "down" | "up" | "right", pose, f); } })),
+    // champion details (shared/champions.ts): one small painted sheet per affix, laid over the monster by the client
+    ...AFFIX_KEYS.filter((k) => AFFIXES[k].overlay).map((k) => ({ key: `mob_champ_${k}`, w: CHAMP_W, h: CHAMP_H, frames: 2, draw: (c: C2, f: number) => champOverlay(c, k, f) })),
     // wearing 1-4 harvested skeletons (look.ts demon1..4)
     ...[1, 2, 3, 4].map((n) => humanoid(`mob_demon${n}`, `demon${n}`, 28, 34, 33 / 34, 1.0, true)),
     // drawn on a 24x16 layout, 1.35x up into a 32x22 frame (about as long as a skeleton is tall)
@@ -586,9 +630,17 @@ export function buildMobs(out: string, ONLY?: string[]) {
       crawlerFrame(c, 24, 16, f);
       c.restore(); SH?.restore();
     } },
-  ].filter((s) => !ONLY || ONLY.includes(s.key));
+  ];
+  // humanoid champions: the same sheet with their champion weapon (look.ts CHAMP_WEAPONS)
+  for (const k of Object.keys(CHAMP_WEAPONS)) {
+    const a = HUMANOIDS.get(`mob_${k}`);
+    if (!a) continue;
+    addChampPose(`${k}_champ`, CHAMP_WEAPONS[k].weapon ?? "axe");
+    sheets.push(humanoid(`mob_${k}_champ`, `${k}_champ`, ...a));
+  }
+  const todo = sheets.filter((s) => !ONLY || ONLY.includes(s.key));
   const meta: Record<string, { w: number; h: number; scale: number; frames: number; hands?: number[][] }> = {};
-  for (const s of sheets) {
+  for (const s of todo) {
     const tw = s.w * TX, th = s.h * TX;
     const NF = s.frames ?? FRAMES;
     const cv = createCanvas(tw * NF, th), oc = cv.getContext("2d");
@@ -600,7 +652,8 @@ export function buildMobs(out: string, ONLY?: string[]) {
       SH = sc; s.draw(c, f); SH = null;
       const blob = !/wisp|skeleton|bandit|bride|necromancer|demon|crawler|hollowking|gnawkin|tuskborn|silkwretch|duskwing|packlord|hornbrute|hidemother|crowseer|gnasher|weaver|nomad|scorpion|sanddead|veiled|camelfolk|sphinx|sunwright|nightraider/.test(s.key);
       const b = shrink(body, "mb", tw, th);
-      pixelize(b, tw, th, true, blob ? { y0: Math.round(th * 0.7), y1: th, mud: 0.14, sat: 0.9 } : { y0: Math.round(th * 0.72), y1: th, mud: s.key.includes("bandit") ? 0.38 : 0.2 });
+      if (s.key.startsWith("mob_champ_")) pixelize(b, tw, th, true); // a detail, not a body: no ground grime
+      else pixelize(b, tw, th, true, blob ? { y0: Math.round(th * 0.7), y1: th, mud: 0.14, sat: 0.9 } : { y0: Math.round(th * 0.72), y1: th, mud: s.key.includes("bandit") ? 0.38 : 0.2 });
       const u = shrink(shadow, "ms", tw, th); pixelAlpha(u);
       for (let y = 0; y < th; y++) for (let x = 0; x < tw; x++) {
         const i = (y * tw + x) * 4, o = (y * tw * NF + f * tw + x) * 4, src = b[i + 3] ? b : u;

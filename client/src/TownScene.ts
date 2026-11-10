@@ -99,6 +99,8 @@ import { icon, fillIcons } from "./pixelicons";
 import { ResourceBars } from "./resourceBars";
 import { OverloadGauge } from "./overloadGauge";
 import { bindElemFx } from "./elemFx";
+import { ChampionFx } from "./championFx";
+import { championFullName } from "../../shared/champions";
 import { bindBeastFx } from "./beastFx";
 import { bindRaiderFx, raiderTrail } from "./raiderFx";
 import { DungeonView } from "./dungeon";
@@ -328,6 +330,7 @@ export class TownScene extends Phaser.Scene {
   private ambient?: Ambient;
   private details?: Details;
   private siege!: SiegeWork;
+  private champFx?: ChampionFx; // champions (shared/champions.ts): tint, glow, icons, painted details, their moments
   private areaName = "";
   private areaTimer?: number;
   private shots = new Map<string, { g: Phaser.GameObjects.GameObject & { x: number; y: number }; tx: number; ty: number; at: number; dx: number; dy: number; spd: number }>();
@@ -735,8 +738,8 @@ export class TownScene extends Phaser.Scene {
         e.tx = m.x; e.ty = m.y;
         pushSnap(e, m.x, m.y);
         // A respawned Mother Blob can come back at another level, a skeleton with another weapon
-        if (m.kind === "motherblob" || m.kind === "skeleton" || m.kind === "bandit" || m.kind === "demon") {
-          const key = mobTexture(this, m.kind, m.level, m.weapon, m.bones);
+        if (m.kind === "motherblob" || m.kind === "skeleton" || m.kind === "bandit" || m.kind === "demon" || m.champion) { // a Hide-Stitched champion changes skin
+          const key = mobTexture(this, m.kind, m.level, m.weapon, m.bones, !!m.champion);
           if (e.sprite.texture.key !== key) { e.sprite.setTexture(key, 0); this.perch(e, m); }
         }
         if (teleported(e, m.x, m.y) && !(this.time.now < (e.leapUntil ?? 0))) { e.sprite.setPosition(m.x, m.y); e.snaps = [{ t: patchTime(), x: m.x, y: m.y }]; }
@@ -876,6 +879,11 @@ export class TownScene extends Phaser.Scene {
     });
     // Mother Blob special: she swells up (wind-up), then a shockwave ring; the slam also shakes the screen
     // The elemental blobs' moves: venom splurt, frost nova, fire breath, storm sparks (client/src/elemFx.ts)
+    this.champFx = new ChampionFx({
+      scene: this, fx: this.fx, ent: (id) => this.entities.get(id),
+      say: (x, y, text, color) => this.floatText(x, y, text, color, PIXEL_FONT),
+      squash: (id, kx, ky, ms) => { const e = this.entities.get(id); if (e) this.squash(e, kx, ky, ms / 2); },
+    }, this.room);
     bindElemFx(this.room, {
       scene: this, fx: this.fx, ent: (id) => this.entities.get(id),
       say: (x, y, text, color) => this.floatText(x, y, text, color, PIXEL_FONT),
@@ -1787,7 +1795,7 @@ export class TownScene extends Phaser.Scene {
 
   private addEntity(id: string, p: any, mob = false) {
     if (mob) {
-      const sprite = this.add.sprite(p.x, p.y, mobTexture(this, p.kind, p.level, p.weapon, p.bones), 0).setOrigin(0.5, MOB_LOOK[p.kind]?.oy ?? 0.85)
+      const sprite = this.add.sprite(p.x, p.y, mobTexture(this, p.kind, p.level, p.weapon, p.bones, !!p.champion), 0).setOrigin(0.5, MOB_LOOK[p.kind]?.oy ?? 0.85)
         .setScale(MOB_LOOK[p.kind]?.scale ?? 1);
       if (p.kind === "crawler" && sprite.texture.key.startsWith("mob_skeleton")) sprite.setCrop(0, 0, sprite.frame.width, sprite.frame.height * CRAWL_CROP); // legs gone
       // The level tag is made when the monster comes on screen (see update): thousands of text canvases would cost a lot
@@ -1822,6 +1830,7 @@ export class TownScene extends Phaser.Scene {
     const e = this.entities.get(id);
     if (!e) return;
     this.siege?.clear(id);
+    this.champFx?.drop(id);
     this.forms?.drop(id);
     e.sprite.destroy(); e.label?.destroy(); e.bar.destroy(); e.parts?.destroy(); e.bubble?.destroy(); e.shield?.destroy(); e.gear?.destroy();
     this.entities.delete(id);
@@ -2942,7 +2951,7 @@ export class TownScene extends Phaser.Scene {
         if (off) {
           if (!e.culled) {
             e.culled = true; e.sprite.setVisible(false); e.bar.clear().setVisible(false); e.parts?.clear(); e.bubble?.setVisible(false);
-            e.label?.destroy(); e.label = undefined; e.lvlColor = undefined; this.siege.clear(id);
+            e.label?.destroy(); e.label = undefined; e.lvlColor = undefined; this.siege.clear(id); this.champFx?.drop(id);
           }
           continue;
         }
@@ -3043,7 +3052,8 @@ export class TownScene extends Phaser.Scene {
         const kindName = named ? (MOBS[p.kind as MobKind]?.name ?? "") : "";
         const lv = `Lv${p.level ?? 1}`;
         const owner = p.owner ? (this.room.state as any).players?.get(p.owner) : undefined;
-        const txt = owner ? `${owner.name}'s ${MOBS[p.kind as MobKind]?.name ?? "Golem"}${isSummonKind(p.kind) || p.kind === "bride" || p.kind === "wisp" ? "" : " thrall"}` : p.title ? `${p.title} ${lv}` : BOSS[p.kind as keyof typeof BOSS] ? `${kindName || "Boss"} ${lv}` : ELITE[p.kind as keyof typeof ELITE] ? `Elite ${kindName ? kindName + " " : ""}${lv}` : kindName ? `${kindName} ${lv}` : lv;
+        const txt = owner ? `${owner.name}'s ${MOBS[p.kind as MobKind]?.name ?? "Golem"}${isSummonKind(p.kind) || p.kind === "bride" || p.kind === "wisp" ? "" : " thrall"}` : p.champion ? `${named ? championFullName(p.title, p.champion) : p.title} ${lv}` // a champion: its short name, the epithet only under the mouse
+          : p.title ? `${p.title} ${lv}` : BOSS[p.kind as keyof typeof BOSS] ? `${kindName || "Boss"} ${lv}` : ELITE[p.kind as keyof typeof ELITE] ? `Elite ${kindName ? kindName + " " : ""}${lv}` : kindName ? `${kindName} ${lv}` : lv;
         // A monster right next to my hero: my own name steps aside so the two labels never overlap
         const meS = this.entities.get(this.me)?.sprite;
         if (meS && !p.dead && Math.abs(e.sprite.x - meS.x) < 1.5 * TILE && Math.abs(e.sprite.y - meS.y) < 1.5 * TILE) this.mobByMeAt = now;
@@ -3062,6 +3072,7 @@ export class TownScene extends Phaser.Scene {
       }
       e.bubble?.setPosition(x, y - e.top - 12); // above the name label
       e.bar.clear().setDepth(e.sprite.y + 1);
+      if (e.mob) this.champFx?.sync(id, e, p, x, y, mobBarY, now);
       this.fx.status(e, e.bar, dtMs / 1000);
       // (Stacks built by basic hits are shown by the skill keys, see chargeCell: no pips under the hero, Murat 2026-11-04)
       const maxHp = p.maxHp;
