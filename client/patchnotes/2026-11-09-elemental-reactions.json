@@ -1,5 +1,6 @@
 {
   "date": "2026-11-09",
+  "patch": 206,
   "title": "Elemental reactions",
   "changes": [
     "An elemental hit now marks a monster for 4 seconds; a hit of another element on the mark sets off a reaction.",
