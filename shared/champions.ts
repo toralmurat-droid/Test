@@ -16,6 +16,12 @@ export const CHAMPION = {
   chance: 0.05, // share of zone spawns that come as champions
   hpMult: 2.5,
   twoAffixChance: 0.5, // a family with two affixes: chance a champion has both
+  // Murat 2026-11-10: champions must add difficulty and be worth it
+  dmgMult: 1.8, // all its damage: blows, shots, specials and affixes (pve.ts --champions: some fights now go wrong, x2.2 was too harsh)
+  xpMult: 3,
+  goldMult: 3,
+  gearRolls: 2, // extra gear rolls on top of its normal loot (each may or may not drop, like any monster's)
+  potions: 1, // healing potions it always leaves
 };
 
 export type ChampionFamily = "gloam" | "necro" | "beast" | "redfang" | "veiled" | "kharsun" | "scorpion" | "nomad" | "camel";

@@ -121,15 +121,47 @@ test("champions on the server: zone spawns, 2.5x HP, the rune, and every affix a
     };
     const until = async (f: () => boolean, ms = 4000) => { for (let t = 0; t < ms && !f(); t += 50) await wait(50); return f(); };
 
-    // A sure rune in the loot
+    // A sure rune and a potion in the loot, three times the gold and the XP
     {
-      const { id, m } = champ("slime", ["taint"]);
-      const before = new Set<string>(); room.state.items.forEach((_: any, k: string) => before.add(k));
-      room.hitTarget(pid, id, m.maxHp * 10, [0, 0]);
-      assert.ok(m.dead);
-      const runes: string[] = [];
-      room.state.items.forEach((it: any, k: string) => { if (!before.has(k) && isRuneId(it.gear)) runes.push(it.gear); });
-      assert.ok(runes.length >= 1, "a rune drops");
+      const kill = (champion: boolean) => {
+        const id = `loot${++seq}`;
+        room.spawnMob("slime", -1, id, { x: p.x + 30, y: p.y, level: 30 });
+        const m = room.state.mobs.get(id);
+        if (champion) room.champs.make(m, id, ["taint"]);
+        const before = new Set<string>(); room.state.items.forEach((_: any, k: string) => before.add(k));
+        const xp0 = p.xp, lv0 = p.level;
+        room.hitTarget(pid, id, m.maxHp * 10, [0, 0]);
+        assert.ok(m.dead);
+        p.level = lv0; // a level up would change the XP curve
+        const fresh: any[] = []; room.state.items.forEach((it: any, k: string) => { if (!before.has(k)) fresh.push(it); });
+        for (const it of fresh) room.state.items.delete([...room.state.items.entries()].find(([, v]: any) => v === it)![0]);
+        return { xp: p.xp - xp0, gold: fresh.filter((i) => i.kind === "gold").reduce((n, i) => n + i.amount, 0), runes: fresh.filter((i) => isRuneId(i.gear)).length, potions: fresh.filter((i) => i.kind === "potion").length };
+      };
+      let plainGold = 0, champGold = 0;
+      for (let i = 0; i < 20; i++) { plainGold += kill(false).gold; }
+      const plain = kill(false);
+      for (let i = 0; i < 19; i++) { const c = kill(true); champGold += c.gold; assert.ok(c.runes >= 1, "a rune drops"); assert.ok(c.potions >= CHAMPION.potions, "a potion drops"); }
+      const champ1 = kill(true);
+      champGold += champ1.gold;
+      assert.ok(plain.xp > 0);
+      assert.ok(Math.abs(champ1.xp / plain.xp - CHAMPION.xpMult) < 0.2, `XP x${champ1.xp / plain.xp}`);
+      assert.ok(champGold > plainGold * 2, `gold ${champGold} vs ${plainGold}`);
+    }
+    // Harder blows: a champion's shot carries CHAMPION.dmgMult more damage
+    {
+      const shot = (champion: boolean) => {
+        const id = `mage${++seq}`;
+        room.spawnMob("skeletonmage", -1, id, { x: p.x + 200, y: p.y, level: 30 });
+        const m = room.state.mobs.get(id);
+        if (champion) room.champs.make(m, id, ["risen"]);
+        const ids = new Set<string>(); room.state.projectiles.forEach((_: any, k: string) => ids.add(k));
+        room.mobShot(m, id, p.x, p.y);
+        let dmg = 0; room.state.projectiles.forEach((s: any, k: string) => { if (!ids.has(k)) dmg = s.damage; });
+        m.dead = true;
+        return dmg;
+      };
+      const a = shot(false), b = shot(true);
+      assert.ok(a > 0 && Math.abs(b / a - CHAMPION.dmgMult) < 0.05, `damage x${b / a}`);
     }
     // Risen: back up once at 30%, down for good the second time
     {

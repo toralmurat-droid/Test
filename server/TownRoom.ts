@@ -75,7 +75,7 @@ import { repairCost, respecCost, WEAR, wearMult } from "../shared/upkeep";
 import { ARSENAL, ATTUNE_ORDER, attuneOf, bondShare, DEFAULT_GRIMOIRE, SUMMONER_TREE, ESSENCE, GOLEM, GOLEM_OF, golemSlots, isElement, isSummonKind, parseGrimoire, PORTAL, SUMMON, summonElement, summonScaleLevel, WISP, wispEls, type AttuneElement, type SummonKind } from "../shared/summons";
 import { cleanFeast, familyOf, type Feast, feastMult, THRALL, thrallMax } from "../shared/devour";
 import { Champions, type ChampState } from "./champions";
-import { AFFIX_FX } from "../shared/champions";
+import { AFFIX_FX, CHAMPION } from "../shared/champions";
 /** A champion's helpers (its Splitting twin, a Ringleader's cutthroats) leave this long after they came. */
 const CHAMP_HELPER_MS = 90_000;
 import { ASK_BURST, ASK_PER_SEC, Bucket, CHAT_BURST, CHAT_PER_SEC, clientIp, isLocalIp, MSG_BURST, MSG_KICK_AFTER, MSG_KICK_WINDOW_MS, MSG_PER_SEC } from "./ratelimit";
@@ -563,8 +563,11 @@ const rangedOf = (m: Mob): RangedCfg | undefined =>
 /** A monster's stats: its kind's numbers, a bandit's role on top, and the camp's horn alert (they come from far). */
 function mobDef(m: Mob, now = Date.now()): MobDef {
   const d = mobDefOf(m, now);
-  // a Hide-Stitched champion in its other skin (shared/champions.ts AFFIX_FX.stitched)
-  return m.champ?.shifted ? { ...d, speed: d.speed * AFFIX_FX.stitched.speed, attackCooldownMs: d.attackCooldownMs * AFFIX_FX.stitched.cooldown } : d;
+  if (!m.champion) return d;
+  // a champion hits harder and is worth more (shared/champions.ts CHAMPION); Hide-Stitched in its other skin is faster
+  const sh = m.champ?.shifted;
+  return { ...d, damage: d.damage * CHAMPION.dmgMult, xp: d.xp * CHAMPION.xpMult,
+    speed: sh ? d.speed * AFFIX_FX.stitched.speed : d.speed, attackCooldownMs: sh ? d.attackCooldownMs * AFFIX_FX.stitched.cooldown : d.attackCooldownMs };
 }
 function mobDefOf(m: Mob, now: number): MobDef {
   const base = MOBS[m.kind];
@@ -1398,7 +1401,7 @@ export class TownRoom extends Room<TownState> {
       if (now < m.specialAt) return true;
       const move = m.specialKind === "slam" ? MOTHER.slam : MOTHER.bounce;
       m.specialAt = 0; m.winding = false; m.lastAttack = now;
-      const dmg = Math.round(MOBS.motherblob.damage * mobScale(m.level, "damage") * move.dmgMult);
+      const dmg = Math.round(MOBS.motherblob.damage * mobScale(m.level, "damage") * move.dmgMult * (m.champion ? CHAMPION.dmgMult : 1));
       this.state.players.forEach((p, pid) => {
         if (p.dead) return;
         const dx = p.x - m.x, dy = p.y - m.y, d = Math.hypot(dx, dy);
@@ -1442,7 +1445,7 @@ export class TownRoom extends Room<TownState> {
     return out;
   }
   /** The blob's own damage at its level, times `mult`. */
-  private elemDmg(m: Mob, mult: number) { return Math.max(1, Math.round(MOBS[m.kind].damage * mobScale(m.level, "damage") * mult)); }
+  private elemDmg(m: Mob, mult: number) { return Math.max(1, Math.round(MOBS[m.kind].damage * mobScale(m.level, "damage") * mult * (m.champion ? CHAMPION.dmgMult : 1))); }
   /** A ground hazard; `ms` long, hurting every `tickMs`. */
   private addHazard(m: Mob, id: string, x: number, y: number, r: number, ms: number, tickMs: number, dmg: number, el: Element, now: number) {
     this.hazards.push({ x, y, r, until: now + ms, next: now + 150, tickMs, dmg, el, by: id, level: m.level, name: mobDef(m).name });
@@ -3744,7 +3747,7 @@ export class TownRoom extends Room<TownState> {
   /** The sickness, bleeding or venom a beast's plain bite leaves (BEAST.plague / bleed / venom). */
   private beastRider(m: Mob, id: string, pid: string) {
     const kind = BEAST_RIDER[m.kind]!, R = BEAST[kind], name = `${mobDef(m).name}'s ${kind === "plague" ? "plague" : kind === "bleed" ? "rending bite" : "venom"}`;
-    const tick = Math.max(1, Math.round(MOBS[m.kind].damage * mobScale(m.level, "damage") * R.dmgMult));
+    const tick = Math.max(1, Math.round(MOBS[m.kind].damage * mobScale(m.level, "damage") * R.dmgMult * (m.champion ? CHAMPION.dmgMult : 1)));
     const el = kind === "bleed" ? undefined : "poison";
     for (let i = 1; i <= R.ticks; i++) this.host.later(R.tickMs * i, () => this.damagePlayer(pid, tick, name, [0, 0], 0, { dot: true, mobEl: el, el, atkLevel: m.level }));
   }
@@ -4247,6 +4250,14 @@ export class TownRoom extends Room<TownState> {
     // Runes (shared/runes.ts) lie on the ground like gear
     const rune = rollMobRune(GEAR_DROP[kind]?.chance ?? 0, level);
     if (rune) this.dropItem("gear", x, y, 1, rune);
+  }
+
+  /** What a champion leaves on top of its normal loot (shared/champions.ts CHAMPION): gear rolls, potions, a rune. */
+  private champLoot(m: Mob) {
+    for (let i = 0; i < CHAMPION.gearRolls; i++) { const g = rollGear(m.kind, m.level); if (g) this.dropItem("gear", m.x, m.y, 1, g); }
+    for (let i = 0; i < CHAMPION.potions; i++) this.dropItem("potion", m.x, m.y, 1, String(dropSize(m.level)));
+    const rune = this.champs.loot(m);
+    if (rune) this.dropItem("gear", m.x, m.y, 1, rune);
   }
 
   private pickUp(p: Player, pid: string) {
@@ -4950,9 +4961,8 @@ export class TownRoom extends Room<TownState> {
     // Kill XP: every group member in the same zone gets it (the killer alone when solo)
     const xp = Math.round(def.xp * mobScale(m.level, "xp"));
     for (const pid of a?.party ? this.groupNear(attackerId, m.x, m.y) : [attackerId]) this.grantXp(pid, xp, m);
-    this.dropLoot(m.kind, m.x, m.y, mobScale(m.level, "gold") * (m.kind === "bandit" ? BANDIT_ROLES[roleOf(m.weapon)].loot : 1), m.level);
-    const champRune = this.champs.loot(m); // a champion always leaves a rune
-    if (champRune) this.dropItem("gear", m.x, m.y, 1, champRune);
+    this.dropLoot(m.kind, m.x, m.y, mobScale(m.level, "gold") * (m.kind === "bandit" ? BANDIT_ROLES[roleOf(m.weapon)].loot : 1) * (m.champion ? CHAMPION.goldMult : 1), m.level);
+    if (m.champion) this.champLoot(m); // a champion: more gold, gear rolls, a potion and a rune
     this.mobDied(m, targetId, attackerId, a?.name ?? "");
   }
 

@@ -274,7 +274,7 @@ export class ChampF extends MobF {
   rose = false; split = false; shifted = false; pools: [number, number][] = []; nextPool = 0; nextAura = 0;
   nextBallista = 0; ballistaUntil = 0; ballistaX = 0; nextBolt = 0; nextBlink = 0; goneUntil = 0; brands = 0; brandUntil = 0;
   constructor(spec: MobSpec, public affixes: AffixKey[], id = "c") {
-    super({ ...spec, hp: spec.hp * CHAMPION.hpMult, poise: spec.poise }, id);
+    super({ ...spec, hp: spec.hp * CHAMPION.hpMult, dmg: spec.dmg * CHAMPION.dmgMult, poise: spec.poise }, id);
     this.nextBlink = affixes.includes("veil") ? CF.veil.firstMs : CF.buried.firstMs;
   }
   has(k: AffixKey) { return this.affixes.includes(k); }
