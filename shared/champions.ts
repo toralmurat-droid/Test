@@ -33,31 +33,31 @@ export interface FamilyDef {
 export const FAMILIES: Record<ChampionFamily, FamilyDef> = {
   // the Gloam (shared/quests.ts): one vast ooze broken into pieces that remember enough to bud and fuse
   gloam: { name: "The Gloam", tint: 0xd6ffc4, aura: 0x8dff5a, affixes: ["split", "taint"],
-    names: ["Mucklet", "Ooznar", "Slurrow", "Gloopa", "Quagmar", "Squelda", "Brimble", "Old Drip"] },
+    names: ["Mucklet", "Ooznar", "Slurrow", "Gloopa", "Quagmar", "Squelda", "Brimble", "Drip"] },
   // the Pale Marshal's dead, raised by the necromancer to build his siege works (shared/siege.ts)
   necro: { name: "The Necromancer's dead", tint: 0xdcd0ff, aura: 0xa070ff, affixes: ["siege", "risen"],
-    names: ["Morgrul", "Ossian", "Vexbone", "Grimhal", "Marrowin", "Rattigan", "Sallow Tam", "Cobb Dustgrave"] },
+    names: ["Morgrul", "Ossian", "Vexbone", "Grimhal", "Marrow", "Rattig", "Sallow", "Cobb"] },
   // the beast-folk of the Mawdeep (shared/dungeon.ts): sewn into animal hides by the Hide-Mother's rite
   beast: { name: "The beast-folk", tint: 0xffd6bc, aura: 0xff6a3a, affixes: ["stitched"],
-    names: ["Rhask", "Gorrak", "Skarn", "Nettle", "Vessa", "Ulda", "Brakk", "Old Mother Teeth"] },
+    names: ["Rhask", "Gorrak", "Skarn", "Nettle", "Vessa", "Ulda", "Brakk", "Teeth"] },
   // the Redfang outlaws (shared/bandits.ts): their Chief holds the camp together and calls up more men
   redfang: { name: "The Redfang", tint: 0xffc8c0, aura: 0xff3030, affixes: ["gang"],
-    names: ["Red Jory", "Black Dunne", "Mags", "Harl", "Vinny Knives", "Sela", "One-Ear Coll", "Brisk"] },
+    names: ["Red Jory", "Dunne", "Mags", "Harl", "Vinny", "Sela", "Coll", "Brisk"] },
   // the Veiled Circle (shared/quests.ts SUN_QUESTS): sun-priests feeding a second sun on the Thornspire
   veiled: { name: "The Veiled Circle", tint: 0xfff0b8, aura: 0xffc830, affixes: ["sunborn"],
-    names: ["Ishra", "Somal", "Kaveh", "Neriah", "Zuhal", "Talmar", "Adept Oren", "Hazarin"] },
+    names: ["Ishra", "Somal", "Kaveh", "Neriah", "Zuhal", "Talmar", "Oren", "Hazarin"] },
   // Kharsun's dead and the guardians of its tombs: the city that drank the second sun and lies under the sand
   kharsun: { name: "The dead of Kharsun", tint: 0xf4e0b0, aura: 0xe8b450, affixes: ["buried"],
-    names: ["Akhet", "Nebsun", "Tahmose", "Seret", "Khaba", "Meritsand", "Iunu", "Sobekh"] },
+    names: ["Akhet", "Nebsun", "Tahmose", "Seret", "Khaba", "Merit", "Iunu", "Sobekh"] },
   // the Dune Scorpions, driven out of the deep sand "as if something drove them" (Out of the Old Gate)
   scorpion: { name: "The Dune Scorpions", tint: 0xdcffc0, aura: 0x9be04a, affixes: ["deepvenom"],
-    names: ["Old Sting", "Sabbak", "Qarra", "Duneclaw", "Hesh", "Grandmother Barb"] },
+    names: ["Sting", "Sabbak", "Qarra", "Duneclaw", "Hesh", "Barb"] },
   // the Dustriders, paid by the Circle and carrying its Veil Tokens (Dustrider Silver)
   nomad: { name: "The Dustriders", tint: 0xe4dcff, aura: 0xb4a4ff, affixes: ["veil"],
-    names: ["Rasul", "Jaddar", "Faisa", "Zarik", "Oman Quickhand", "Taziri"] },
+    names: ["Rasul", "Jaddar", "Faisa", "Zarik", "Oman", "Taziri"] },
   // the camel-folk of the Humpback Mesas, branded with the Circle's veiled sun (Brands of the Sun)
   camel: { name: "The camel-folk", tint: 0xffdcae, aura: 0xff9830, affixes: ["brand"],
-    names: ["Humbar", "Old Ghazi", "Tamrit", "Bashar", "Hessa Woolmother", "Qadir"] },
+    names: ["Humbar", "Ghazi", "Tamrit", "Bashar", "Hessa", "Qadir"] },
 };
 
 /** Which family each kind belongs to. Kinds missing here are never champions (elites, bosses, summons, bloblings...). */
@@ -155,10 +155,16 @@ export function pickAffixes(kind: MobKind, rnd: () => number = Math.random): Aff
   return [pool[Math.floor(rnd() * pool.length) % pool.length]];
 }
 
-/** "Morgrul the Risen": a name from the family's list and the first affix's epithet. */
-export function championName(kind: MobKind, affixes: AffixKey[], rnd: () => number = Math.random): string {
+/** The short name shown over a champion ("Morgrul"): at most CHAMP_NAME_MAX letters, so it never covers the screen. */
+export const CHAMP_NAME_MAX = 8;
+export function championName(kind: MobKind, _affixes: AffixKey[], rnd: () => number = Math.random): string {
   const names = FAMILIES[FAMILY_OF[kind]!].names;
-  return `${names[Math.floor(rnd() * names.length) % names.length]} ${AFFIXES[affixes[0]].epithet}`;
+  return names[Math.floor(rnd() * names.length) % names.length];
+}
+/** Its full name, shown only under the mouse or as the target: "Morgrul the Risen". */
+export function championFullName(name: string, champion: number): string {
+  const first = unpackAffixes(champion)[0];
+  return first ? `${name} ${AFFIXES[first].epithet}` : name;
 }
 
 export const championHp = (maxHp: number) => Math.round(maxHp * CHAMPION.hpMult);

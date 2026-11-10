@@ -2,7 +2,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { BOSS, ELITE, MOBS, TILE, type MobKind } from "../shared/constants";
-import { AFFIX_FX, AFFIX_KEYS, AFFIXES, CHAMPION, canBeChampion, championName, FAMILIES, FAMILY_OF, hasAffix, packAffixes, pickAffixes, rollChampion, unpackAffixes, type AffixKey } from "../shared/champions";
+import { AFFIX_FX, AFFIX_KEYS, AFFIXES, CHAMPION, canBeChampion, championName, championFullName, CHAMP_NAME_MAX, FAMILIES, FAMILY_OF, hasAffix, packAffixes, pickAffixes, rollChampion, unpackAffixes, type AffixKey } from "../shared/champions";
 import { SPAWN_ZONES } from "../shared/spawns";
 import { isRuneId } from "../shared/runes";
 import { blocked } from "../shared/movement";
@@ -62,7 +62,9 @@ test("affixes: each belongs to its family, packs into bits and back, and names a
   assert.deepEqual(unpackAffixes(packAffixes(a)), a);
   assert.ok(hasAffix(packAffixes(a), "risen") && !hasAffix(packAffixes(a), "split"));
   assert.equal(unpackAffixes(0).length, 0);
-  assert.match(championName("skeleton", ["risen"], () => 0), /^Morgrul the Risen$/);
+  assert.equal(championName("skeleton", ["risen"], () => 0), "Morgrul");
+  assert.equal(championFullName("Morgrul", packAffixes(["risen"])), "Morgrul the Risen");
+  for (const f of Object.values(FAMILIES)) for (const n of f.names) assert.ok(n.length <= CHAMP_NAME_MAX, `"${n}" is too long for the label`);
 });
 
 // ---- On the server ----

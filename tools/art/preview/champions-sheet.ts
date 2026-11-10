@@ -90,7 +90,7 @@ const rgb = (c: number) => [(c >> 16) & 255, (c >> 8) & 255, c & 255];
     }
     let seed = n * 7 + 3; const rnd = () => (seed = (seed * 9301 + 49297) % 233280) / 233280;
     c.textAlign = "center"; c.font = `${5.5 * Z}px Pixel, sans-serif`;
-    c.fillStyle = "#ffd166"; c.fillText(championName(kind, affixes, rnd), (x0 + CW / 2) * Z, (feetY + 11) * Z);
+    c.fillStyle = "#ffd166"; c.fillText(`${championName(kind, affixes, rnd)} Lv30`, (x0 + CW / 2) * Z, (feetY + 11) * Z);
     c.fillStyle = "#c8c0a8"; c.font = `${4.5 * Z}px Pixel, sans-serif`;
     c.fillText(`${kind} · ${affixes.map((a) => AFFIXES[a].name).join(" + ")}`, (x0 + CW / 2) * Z, (feetY + 19) * Z);
   }
