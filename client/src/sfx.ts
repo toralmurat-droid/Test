@@ -347,6 +347,15 @@ const R: Record<string, Recipe> = {
   boomShadow: (o, t, v) => { tone(o, t, { type: "sawtooth", f: 140, f2: 50, dur: 0.35, vol: 0.18 * v }); noise(o, t, { type: "lowpass", f: 700, dur: 0.3, vol: 0.3 * v }); },
   boomSlime: (o, t, v) => squelch(o, t, 1.3, 0.4 * v, 0.14),
 
+  // ---- elemental reactions (client/src/elemFx.ts): one short, quiet chord per reaction, its colour in the timbre
+  react: (o, t, v, id) => {
+    if (id === "fracture") { clank(o, t, 0.22 * v, 2600); zap(o, t + 0.02, 0.18 * v, 0.12); }
+    else if (id === "toxic") { squelch(o, t, 0.9, 0.3 * v, 0.16); noise(o, t + 0.03, { type: "lowpass", f: 900, dur: 0.25, vol: 0.18 * v }); }
+    else if (id === "steam") noise(o, t, { type: "highpass", f: 2500, f2: 1200, dur: 0.45, vol: 0.14 * v, att: 0.02 });
+    else if (id === "corrode") { noise(o, t, { type: "bandpass", f: 1800, q: 5, dur: 0.3, vol: 0.12 * v }); tone(o, t, { type: "triangle", f: 420, f2: 260, dur: 0.25, vol: 0.06 * v }); }
+    else [0, 7].forEach((s, i) => bell(o, t + i * 0.07, 660 * 2 ** (s / 12), 0.9, 0.08 * v)); // purify
+  },
+
   // ---- skills (server "sfx" events)
   cast: (o, t, v, style) => styleChime(o, t, style, 0.45 * v, 0.8),
   fizzle: (o, t, v) => tone(o, t, { type: "square", f: 300, f2: 90, dur: 0.25, vol: 0.06 * v }),
