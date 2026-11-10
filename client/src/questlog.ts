@@ -68,7 +68,9 @@ export class QuestLog {
       if (ch.quests[qid] && q.questStage > 0) active.push({ key: `${c}:${qid}`, d: ch.quests[qid], q, done: false });
       for (let i = qid - 1; i >= 0; i--) finished.push({ key: `${c}:${i}`, d: ch.quests[i], q, done: true });
       const next = ch.quests[qid];
-      if (next && q.questStage === 0 && chainOpen(p, c) && (qid > 0 || c > 0 || (q.level ?? 1) >= next.minLevel)) {
+      // a zone arc not begun is only hinted while it fits the hero's level (from its first quest's level to 6 past it)
+      const arcHidden = ch.local && qid === 0 && ((q.level ?? 1) < next?.minLevel || (q.level ?? 1) > (next?.minLevel ?? 0) + 6);
+      if (next && q.questStage === 0 && chainOpen(p, c) && !arcHidden && (qid > 0 || c > 0 || (q.level ?? 1) >= next.minLevel)) {
         const g = npcById(next.giver), where = g?.where ? ` (${g.where})` : "";
         hints.push((q.level ?? 1) >= next.minLevel ? `<b class="bang">!</b> ${g?.name} has a new quest for you${where}.` : `${ch.name}: next quest at level ${next.minLevel}${where ? `, from ${g?.name}${where}` : ""}.`);
       } else if (c === SUN_CHAIN && qid === 0 && q.questStage === 0 && !chainOpen(p, c) && tutorialDone(p)) {

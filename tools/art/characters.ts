@@ -825,7 +825,55 @@ const sandarmourer = human({
 });
 export const ARMOURERS = ["armourer", "saltarmourer", "sandarmourer"] as const;
 
-export const NPCS: Hero[] = [blacksmith, merchant, villager, guard, druid, witch, watchman, ...FOLK.map((n) => folk(n)), wellkeeper, sandcaptain, spicetrader, desertsmith, armourer, saltarmourer, sandarmourer];
+// The zone quest givers (Murat 2026-11-10): people who live out in the zones and give the local quest arcs (shared/npcs.ts)
+const huntsman = human({
+  name: "huntsman", skin: 0xd8a27a, hair: 0x6a4424, hairStyle: "short", beard: 0x6a4424,
+  hat: { kind: "hood", col: 0x3e5a2c, trim: 0x2a3e1e }, shirt: 0x5a4630, vest: 0x3e5a2c, pants: 0x4a3a28, boots: 0x3a2a1a, belt: 0x2a1c10,
+  weapon: "bow", quiver: true, gait: "march",
+});
+const miller = human({
+  name: "miller", skin: 0xe8b890, hair: 0xb8b0a0, hairStyle: "short", beard: 0xc8c0b0,
+  hat: { kind: "cap", col: 0xd8ccb0, trim: 0xb8aa88 }, shirt: 0xe0d6c0, apron: 0xc8bc9c, pants: 0x6a5a44, boots: 0x3a2a1e, belt: 0x5a4028,
+  weapon: "none", gait: "stroll", hipHand: true,
+});
+const forester = human({
+  name: "forester", skin: 0xe0ae86, hair: 0xa8642e, hairStyle: "ponytail",
+  shirt: 0x5a6e3a, vest: 0x4a3420, pants: 0x3e4a2a, boots: 0x3a2818, belt: 0x6a4a28, weapon: "axe", gait: "march",
+});
+const beachcomber = human({
+  name: "beachcomber", skin: 0xc8916a, hair: 0x2a2a2e, hairStyle: "long",
+  hat: { kind: "bandana", col: 0x2e5a6a, trim: 0x1e3e4a }, shirt: 0xd8ccb0, vest: 0x3e4e58, pants: 0x5a6a72, boots: 0x4a3a2e, belt: 0x6a4a2a,
+  weapon: "spear", gait: "stroll",
+});
+const prospector = human({
+  name: "prospector", skin: 0xd8a27a, hair: 0x8a3a1a, hairStyle: "short", beard: 0x8a3a1a,
+  hat: { kind: "helm", col: 0x6a6258, trim: 0x8a8070 }, shirt: 0x7a5a3a, apron: 0x5a4028, pants: 0x4a4038, boots: 0x2a2018, belt: 0x2e2014,
+  weapon: "hammer", gait: "march",
+});
+const caravaneer = human({
+  name: "caravaneer", skin: 0x9a663e, hair: 0x1a1410, hairStyle: "short", beard: 0x2a201a,
+  hat: { kind: "wide", col: 0xc8a060, trim: 0x8a5a2a }, shirt: 0xe8dcc0, vest: 0x8a3a2a, pants: 0x5a4a3a, boots: 0x5a3a22, belt: 0xd8a840,
+  weapon: "none", gait: "swagger", hipHand: true,
+});
+const hermit = human({
+  name: "hermit", skin: 0x8a5a36, hair: 0xe0dcd0, hairStyle: "long", beard: 0xece8de,
+  hat: { kind: "hood", col: 0x8a6a48, trim: 0x5a4430 }, shirt: 0x7a5e40, pants: 0x6a5238, boots: 0x4a3420, belt: 0x3a2818,
+  weapon: "staff", gait: "stroll",
+});
+const dunescout = human({
+  name: "dunescout", skin: 0xa8744c, hair: 0x1a1210, hairStyle: "ponytail",
+  hat: { kind: "bandana", col: 0xd89a30, trim: 0x8a4a1a }, shirt: 0xe2d2a8, vest: 0x8a6a3a, pants: 0xc8a870, boots: 0x6a4a2a, belt: 0x5a3018,
+  weapon: "bow", quiver: true, gait: "march",
+});
+const defector = human({
+  name: "defector", skin: 0xb07a50, hair: 0x1a1410, hairStyle: "long",
+  hat: { kind: "hood", col: 0x2e2a5e, trim: 0xd8a840 }, shirt: 0x2e2a5e, sleeve: 0x26224e, vest: 0x1e1a40, pants: 0x26224e, boots: 0x3a2a1e, belt: 0xd8a840,
+  weapon: "staff", fxCol: 0xffb040, gait: "stroll",
+});
+export const ZONE_NPCS = ["huntsman", "miller", "forester", "beachcomber", "prospector", "caravaneer", "hermit", "dunescout", "defector"] as const;
+
+export const NPCS: Hero[] = [blacksmith, merchant, villager, guard, druid, witch, watchman, ...FOLK.map((n) => folk(n)), wellkeeper, sandcaptain, spicetrader, desertsmith, armourer, saltarmourer, sandarmourer,
+  huntsman, miller, forester, beachcomber, prospector, caravaneer, hermit, dunescout, defector];
 /** Pose data for monsters painted with the character painter (paint/mobs.ts); never drawn as pixel art. */
 const mobPose = (name: string, weapon: HumanOpts["weapon"]) => human({ name, skin: 0, hair: 0, hairStyle: "bald", shirt: 0, pants: 0, boots: 0, weapon });
 export const MOB_POSES: Record<string, Hero> = {

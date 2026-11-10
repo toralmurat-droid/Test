@@ -491,6 +491,83 @@ export const LOOKS: Record<string, Look> = {
     legs: "dress", legCol: 0x5a2a3a, trim: 0xe0a020, boots: 0x6a4028, bootStyle: "shoe",
     sleeve: 0xf0e2c4, arms: "cloth", bracer: 0xd8a840, weapon: "none", fx: 0xffd060,
   },
+  // ---- The zone quest givers (Murat 2026-11-10, shared/npcs.ts): folk who live out in the zones ----
+  // Huntmaster Bryn of the Hunter's Camp: a moss-green hood, a stained leather jerkin, a bow and a full quiver
+  huntsman: {
+    skin: 0xd8a27a, hair: 0x6a4424, hairStyle: "short", beard: 0x6a4424, beardStyle: "full",
+    head: "hood", headCol: 0x3e5a2c, headTrim: 0x2a3e1e,
+    torso: "leather", torsoCol: 0x5a4630, trim: 0x3a2c1e, belt: 0x2a1c10, buckle: 0x8a7a5a,
+    legs: "trousers", legCol: 0x4a3a28, boots: 0x3a2a1a, bootStyle: "leather",
+    sleeve: 0x4a3a28, arms: "cloth", glove: 0x2a1c10, bracer: 0x5a4630,
+    weapon: "bow", fx: 0xffffff, back: "quiver", capeCol: 0x3e5a2c,
+  },
+  // Odo the miller of Millbrook: flour-white cap and apron, rolled sleeves, a big belly and a grey beard
+  miller: {
+    skin: 0xe8b890, hair: 0xb8b0a0, hairStyle: "short", beard: 0xc8c0b0, beardStyle: "full",
+    head: "cap", headCol: 0xd8ccb0, headTrim: 0xb8aa88,
+    torso: "shirt", torsoCol: 0xe0d6c0, apron: 0xc8bc9c, belt: 0x5a4028,
+    legs: "trousers", legCol: 0x6a5a44, boots: 0x3a2a1e, bootStyle: "leather",
+    sleeve: 0xe8b890, arms: "bare", weapon: "none", fx: 0xffffff, build: 1.15,
+  },
+  // Ylva the forester of Thornwood: red braid, green shirt under a leather vest, a woodsman's axe
+  forester: {
+    skin: 0xe0ae86, hair: 0xa8642e, hairStyle: "ponytail",
+    head: "none",
+    torso: "shirt", torsoCol: 0x5a6e3a, vest: 0x4a3420, belt: 0x6a4a28, buckle: 0x9a8a5a,
+    legs: "trousers", legCol: 0x3e4a2a, boots: 0x3a2818, bootStyle: "wrap",
+    sleeve: 0x5a6e3a, arms: "cloth", bracer: 0x4a3420,
+    weapon: "axe", fx: 0xffffff, back: "cape", capeCol: 0x3a4a26,
+  },
+  // Nell the beachcomber of the Saltwind Coast: sea-blue headscarf, salt-stained shirt, a fishing spear
+  beachcomber: {
+    skin: 0xc8916a, hair: 0x2a2a2e, hairStyle: "long",
+    head: "bandana", headCol: 0x2e5a6a, headTrim: 0x1e3e4a,
+    torso: "shirt", torsoCol: 0xd8ccb0, vest: 0x3e4e58, belt: 0x6a4a2a,
+    legs: "trousers", legCol: 0x5a6a72, boots: 0x4a3a2e, bootStyle: "wrap",
+    sleeve: 0xd8ccb0, arms: "cloth", weapon: "spear", fx: 0xffffff,
+  },
+  // Dagna the prospector of the Stormbreak Crags: a dented iron helm, red beard, leather apron and a rock hammer
+  prospector: {
+    skin: 0xd8a27a, hair: 0x8a3a1a, hairStyle: "short", beard: 0x8a3a1a, beardStyle: "long",
+    head: "helm", headCol: 0x6a6258, headTrim: 0x8a8070,
+    torso: "shirt", torsoCol: 0x7a5a3a, apron: 0x5a4028, belt: 0x2e2014, buckle: 0x8a8070,
+    legs: "trousers", legCol: 0x4a4038, boots: 0x2a2018, bootStyle: "leather",
+    sleeve: 0x7a5a3a, arms: "cloth", glove: 0x3a2818, bracer: 0x4a3424,
+    weapon: "hammer", fx: 0xffffff, build: 1.1,
+  },
+  // Hamid the caravan master: a wide sun hat, a crimson vest over a cream shirt, a gold sash and rings
+  caravaneer: {
+    skin: 0x9a663e, hair: 0x1a1410, hairStyle: "short", beard: 0x2a201a, beardStyle: "full",
+    head: "wide", headCol: 0xc8a060, headTrim: 0x8a5a2a,
+    torso: "shirt", torsoCol: 0xe8dcc0, vest: 0x8a3a2a, sash: 0xd8a840, belt: 0x5a3018,
+    legs: "trousers", legCol: 0x5a4a3a, boots: 0x5a3a22, bootStyle: "wrap",
+    sleeve: 0xe8dcc0, arms: "cloth", bracer: 0xd8a840, weapon: "none", fx: 0xffffff, build: 1.1,
+  },
+  // Old Tamsin, the hermit of the Red Wastes: a sun-faded hooded robe, a white beard to the belt and a walking staff
+  hermit: {
+    skin: 0x8a5a36, hair: 0xe0dcd0, hairStyle: "long", beard: 0xece8de, beardStyle: "long",
+    head: "hood", headCol: 0x8a6a48, headTrim: 0x5a4430,
+    torso: "robe", torsoCol: 0x7a5e40, trim: 0x5a4430, sash: 0x3a2818,
+    legs: "robe", legCol: 0x6a5238, boots: 0x4a3420, bootStyle: "wrap",
+    sleeve: 0x7a5e40, arms: "cloth", weapon: "staff", fx: 0xffffff, back: "cape", capeCol: 0x6a5238,
+  },
+  // Leyla, scout of the camel-clans: saffron headscarf, sand-coloured leathers, a short bow
+  dunescout: {
+    skin: 0xa8744c, hair: 0x1a1210, hairStyle: "ponytail",
+    head: "bandana", headCol: 0xd89a30, headTrim: 0x8a4a1a,
+    torso: "leather", torsoCol: 0xc8a870, trim: 0x8a6a3a, belt: 0x5a3018, buckle: 0xd8a840,
+    legs: "trousers", legCol: 0xc8a870, boots: 0x6a4a2a, bootStyle: "wrap",
+    sleeve: 0xe2d2a8, arms: "cloth", bracer: 0x8a6a3a,
+    weapon: "bow", fx: 0xffffff, back: "quiver", capeCol: 0x8a6a3a,
+  },
+  // Nasrin, who walked out of the Veiled Circle: its indigo robe with the gold trim, but her veil torn off
+  defector: {
+    skin: 0xb07a50, hair: 0x1a1410, hairStyle: "long",
+    head: "hood", headCol: 0x2e2a5e, headTrim: 0xd8a840,
+    torso: "robe", torsoCol: 0x2e2a5e, trim: 0xd8a840, sash: 0xd8a840,
+    legs: "robe", legCol: 0x26224e, boots: 0x3a2a1e, bootStyle: "shoe",
+    sleeve: 0x26224e, arms: "cloth", weapon: "staff", orb: 0xffb040, fx: 0xffb040, back: "cape", capeCol: 0x1e1a40,
+  },
   // Oren the bladesmith: a bald, soot-darkened smith with a leather apron and a curved blade on his hip
   desertsmith: {
     skin: 0x8a5a36, hairStyle: "bald", hair: 0x1a1410, beard: 0x2a201a, beardStyle: "full",

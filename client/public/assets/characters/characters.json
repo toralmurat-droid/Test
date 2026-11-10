@@ -27,7 +27,16 @@
   "desertsmith",
   "armourer",
   "saltarmourer",
-  "sandarmourer"
+  "sandarmourer",
+  "huntsman",
+  "miller",
+  "forester",
+  "beachcomber",
+  "prospector",
+  "caravaneer",
+  "hermit",
+  "dunescout",
+  "defector"
  ],
  "image": "{name}.png",
  "frameWidth": 64,

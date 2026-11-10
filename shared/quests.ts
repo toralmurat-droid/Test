@@ -1,9 +1,10 @@
 import { MobKind, TILE } from "./constants";
-import { AREAS, ELEMENT_LANDS, GULLROCK, HOLLOW, HOLLOW_WARDS, isSafeZone, isSolidAt, REDFANG, VILLAGE, WRECK } from "./map";
+import { AREAS, ELEMENT_LANDS, GULLROCK, HOLLOW, HOLLOW_WARDS, isSafeZone, isSolidAt, REDFANG, SHRINE_SPOT, VILLAGE, WRECK } from "./map";
 import { SPAWN_ZONES, SpawnZone } from "./spawns";
 import { npcById } from "./npcs";
 import { chamberAt, COCOONS, DEN, FLOORS, SINKHOLE, TOTEMS } from "./dungeon";
 import { D, FURNACE, KEL_ASHAR } from "./desert";
+import { xpStep } from "./classes";
 
 /**
  * The blob quest chain. Quests are done one after the other, each in a blob zone a little further from
@@ -83,6 +84,24 @@ function spotIn(area: string, fx: number, fy: number): { x: number; y: number } 
   return { x: (cx + 0.5) * TILE, y: (cy + 0.7) * TILE };
 }
 
+/** A walkable spot (px, feet) near tile (tx, ty), searched outwards like spotIn. */
+export function spotNear(tx: number, ty: number): { x: number; y: number } {
+  const free = (x: number, y: number) => {
+    const px = (x + 0.5) * TILE, py = (y + 0.5) * TILE;
+    if (isSafeZone(px, py)) return false;
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if (isSolidAt(px + dx * TILE * 0.6, py + dy * TILE * 0.6)) return false;
+    return true;
+  };
+  const cx = Math.floor(tx), cy = Math.floor(ty);
+  for (let r = 0; r < 14; r++) {
+    for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
+      if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
+      if (free(cx + dx, cy + dy)) return { x: (cx + dx + 0.5) * TILE, y: (cy + dy + 0.7) * TILE };
+    }
+  }
+  return { x: (cx + 0.5) * TILE, y: (cy + 0.7) * TILE };
+}
+
 // ---- Quest items (dropped by blobs, only visible to and picked up by the player on that step) ----
 
 export interface QuestItemDef { name: string; plural: string }
@@ -102,11 +121,20 @@ export const QUEST_ITEMS: Record<string, QuestItemDef> = {
   letter: { name: "Sealed Letter", plural: "Sealed Letters" },
   brand: { name: "Sun Brand", plural: "Sun Brands" },
   key: { name: "Furnace Key", plural: "Furnace Keys" },
+  // the zone arcs (ZONE_ARCS)
+  arrow: { name: "Ewan's Arrow", plural: "Ewan's Arrows" },
+  thornseed: { name: "Thorn Seed", plural: "Thorn Seeds" },
+  salvage: { name: "Ship's Salvage", plural: "Ship's Salvage" },
+  skyiron: { name: "Sky-Iron", plural: "Sky-Iron" },
+  caravanseal: { name: "Caravan Seal", plural: "Caravan Seals" },
+  pearl: { name: "Dune-Pearl", plural: "Dune-Pearls" },
 };
 
 // ---- Map objects you use with E ----
 
-export type QuestObjectKind = "lantern" | "shrine" | "cocoon" | "heart" | "engine" | "beacon" | "crypt" | "phylactery" | "ward" | "shard" | "silk" | "totem" | "sigil" | "cistern";
+export type QuestObjectKind = "lantern" | "shrine" | "cocoon" | "heart" | "engine" | "beacon" | "crypt" | "phylactery" | "ward" | "shard" | "silk" | "totem" | "sigil" | "cistern"
+  // the zone quests (Murat 2026-11-10): something dropped to search, a nest to burn, a marked stone to read
+  | "clue" | "nest" | "cairn";
 export interface QuestObject { id: string; kind: QuestObjectKind; x: number; y: number; name: string; verb: string }
 
 const obj = (id: string, kind: QuestObjectKind, name: string, verb: string, area: string, fx: number, fy: number): QuestObject =>
@@ -120,7 +148,7 @@ export const USE_RANGE = 1.3 * TILE;
 export type StepType = "see" | "reach" | "talk" | "kill" | "collect" | "use" | "merge" | "ritual" | "equip" | "learn" | "cast";
 
 /** Bump when steps change: saves from an older version restart their current quest at the offer. */
-export const QUEST_VERSION = 3;
+export const QUEST_VERSION = 4;
 
 /**
  * A monster the server puts in the world for a player on this step (one at a time, back if lost): a fused blob
@@ -188,6 +216,14 @@ export interface QuestDef {
   reward: Reward;
   /** What the giver says once it's done (until the next quest is offered) */
   after: string;
+  /**
+   * Starts by itself the moment the quest before it is done, wherever the hero stands (Murat 2026-11-10: fewer trips
+   * back to town, real exploration arcs). The offer is shown as word from the giver; the giver still offers it if the
+   * hero was below its level then.
+   */
+  auto?: boolean;
+  /** Lines shown where the quest ends when it ends out in the field (no hand-in): what the hero finds or learns. */
+  outro?: string[];
 }
 
 const FZ = QUEST_ZONE.name;
@@ -247,12 +283,8 @@ export const QUESTS: QuestDef[] = [
     acceptText: "I'll look into it",
     steps: [
       { type: "see", zone: FZ, kinds: BLOB_KINDS, text: `Investigate ${FZN}`, banner: ["New quest", "Trouble Near Oakvale"],
-        obj: `Investigate ${FZN}, ${FZD} of the village`, nag: `${FZ} lies ${FZD} of the village. Look carefully, and come back when you have seen it.` },
-      { type: "talk", npc: "druid", text: "Tell Elder Rowan what you saw", banner: [`Blobs in ${FZN}!`, "Go back and tell Elder Rowan"],
-        obj: "Tell Elder Rowan what you saw (village bonfire)",
-        say: [`Blobs? In ${FZN}? So that is what the trees are afraid of.`, "Blobs are simple things. They wander, they wobble, they keep to themselves. Or they used to.", "Slay 10 of them. And watch them closely while you fight. Tell me what they do when they are hurt."],
-        accept: "I'll kill 10 blobs" },
-      { type: "kill", kinds: BLOB_KINDS, goal: 10, text: "Kill 10 blobs", banner: ["Quest updated", "Kill 10 blobs"], obj: "Kill blobs: {n} / {goal}",
+        obj: `Investigate ${FZN}, ${FZD} of the village`, nag: `${FZ} lies ${FZD} of the village. Look carefully.` },
+      { type: "kill", kinds: BLOB_KINDS, goal: 10, text: "Kill 10 blobs", banner: [`Blobs in ${FZN}!`, "Kill 10 and watch what they do"], obj: "Kill blobs: {n} / {goal}",
         nag: "You have slain {n} of {goal}. And watch what the wounded ones do." },
       { type: "merge", kinds: BLOB_KINDS, zone: FZ, text: "Watch a wounded blob call for help", banner: ["Something is strange...", "Wound a blob and watch it"],
         obj: "Wound a blob and watch what it does", nag: "Hurt one, but do not finish it. See what it does." },
@@ -268,19 +300,16 @@ export const QUESTS: QuestDef[] = [
       "Rowan sent you? Of course he did. He never comes himself. Blobs that melt into each other, I heard. Nasty.",
       "Jelly is jelly, darling. It should not want anything. Bring me some and we shall see what it wants.",
       `Six lumps of blob jelly, then. ${Z.farms.name} is full of them. Squash them and pick up what they leave behind.`,
+      "And if the lumps start creeping toward each other in your pouch, darling, don't run back to me. Find a blob that has already fused and squash that too.",
     ],
     acceptText: "I'll fetch the jelly",
     steps: [
       { type: "collect", zone: Z.farms.name, kinds: ["slime", "motherblob", "blobling"], item: "jelly", goal: 6, chance: { slime: 0.5, motherblob: 1, blobling: 0.25 },
         text: "Collect 6 Blob Jelly", banner: ["New quest", "Jelly That Crawls"], obj: "Blob Jelly: {n} / {goal}",
         nag: `{n} of {goal}. Any blob will do, but ${Z.farms.name} has plenty.` },
-      { type: "talk", npc: "witch", text: "Bring the jelly to Morwen", banner: ["The jelly is moving!", "Bring it to Morwen"],
-        obj: "Bring the jelly to Morwen (her tent)",
-        say: ["Into the flask with it... oh. Oh, look at that, darling. The lumps are crawling toward each other.", "They want to be one thing. Not two blobs, not six. One.", `I need jelly from a blob that has already fused. Find a big one in ${Z.farms.name} and squash it.`],
-        accept: "I'll find a fused blob" },
       { type: "kill", zone: Z.farms.name, kinds: BLOB_KINDS, fused: 2, goal: 1,
         summon: { parts: ["slime", "slime"], level: 4, ...spotIn(Z.farms.name, 0.55, 0.5) },
-        text: "Squash a fused blob", banner: ["Quest updated", "Squash a fused blob"], obj: "Fused blob squashed: {n} / {goal}",
+        text: "Squash a fused blob", banner: ["The jelly crawls in your pouch!", "The lumps creep together. Squash a fused blob"], obj: "Fused blob squashed: {n} / {goal}",
         nag: `A big one, two blobs or more in one skin. There is one lurking in ${Z.farms.name}.` },
       back("witch", "Morwen", "her tent", ["This jelly hums, darling. Hums! Like it remembers a song.", "Here, potions from my last batch, and some coin. You earned them. Then go and tell Rowan it hums. He will know what that means."], "Claim reward"),
     ],
@@ -350,16 +379,16 @@ export const QUESTS: QuestDef[] = [
         nag: "Healer blobs keep the cocoon alive. Kill them, then cut him free." },
       { type: "use", zone: Z.lake.name, objects: [COCOON], text: "Free Tobin from the cocoon", banner: ["The cocoon weakens!", "Free Tobin"],
         obj: "Free Tobin from the cocoon", nag: "Hurry, cut him free!" },
-      { type: "talk", npc: "fisher", text: "Check on Tobin back in Oakvale", banner: ["Tobin is free!", "He ran home to Oakvale"],
-        obj: "Check on Tobin in Oakvale (east of the bonfire)",
-        say: ["You came for me! They kept melting into each other around me, bigger and bigger.", "And they hummed. One word, over and over. Gloam. Gloam. Gloam.", "Here, it's all my savings. Thank you, friend. I am never fishing there again."],
-        accept: "Claim reward", nag: "" },
+    ],
+    outro: [
+      "Tobin tumbles out of the jelly, gasping. \"You came for me! They kept melting into each other around me, bigger and bigger.\"",
+      "\"And they hummed. One word, over and over. Gloam. Gloam. Gloam.\" He presses his purse into your hand and runs for home.",
     ],
     reward: { xp: 650, gold: 200, potions: 3 },
     after: "Tobin heard them say its name. The Gloam is waking. And the pieces drift west, toward the old wreck on the coast. Talk to me when you are ready.",
   },
   {
-    id: "woods", title: "The Rotting Shrines", giver: "druid", zone: Z.brine.name, minLevel: 10,
+    id: "woods", title: "The Rotting Shrines", giver: "druid", zone: Z.brine.name, minLevel: 10, auto: true,
     description: `The shrines of ${Z.brine.name}, behind the beach where the Grey Heron was wrecked, are the last binding stones of the Gloam, and they are rotting under blob slime. Elder Rowan asked you to cleanse them, gather the rot seeds, and destroy the great fused blob that guards them.`,
     offer: [
       "Tobin's cocoon was full of tiny black seeds. Rot seeds. Bits of the Gloam's memory, carried by the healers.",
@@ -378,13 +407,13 @@ export const QUESTS: QuestDef[] = [
         summon: { parts: ["warriorblob", "healerblob", "shooterblob", "slime"], level: 14, ...spotIn(Z.brine.name, 0.5, 0.5) },
         text: "Slay a blob of 4 or more fused together", banner: ["The seeds stir...", "Slay the Brinewood Amalgam"], obj: "Brinewood Amalgam slain: {n} / {goal}",
         nag: `Four blobs in one skin, and it heals itself. It guards the heart of ${Z.brine.name}.` },
-      back("druid", "Elder Rowan", "village bonfire", ["These seeds all point the same way. Down to the strand, to the wreck of the Grey Heron.", "Her hold never let go of the Brood Heart. It is the Gloam's own heart, pulling every piece back home. Rest, and take this."], "Claim reward"),
     ],
+    outro: ["The rot seeds stir in your pouch. All of them roll the same way: down to the strand, to the wreck of the Grey Heron.", "Whatever is still in her hold is pulling every piece of the Gloam back home."],
     reward: { xp: 900, gold: 260, potions: 3 },
     after: "The Gloam's heart still beats in the wreck of the Grey Heron. Come to me when you are strong enough to face it.",
   },
   {
-    id: "thorn", title: "The Gloam Awakens", giver: "druid", zone: Z.strand.name, minLevel: 12,
+    id: "thorn", title: "The Gloam Awakens", giver: "druid", zone: Z.strand.name, minLevel: 12, auto: true,
     description: `The Brood Heart lies in the broken hold of the Grey Heron, wrecked on ${Z.strand.name}, where the Gloam first came ashore. Two Mother Blobs guard it. Burn it, and every piece near it will fuse into the Gloam itself.`,
     offer: [
       `It is time. The Brood Heart lies in the wreck of the Grey Heron on ${Z.strand.name}, ${zdir(Z.strand)} of here.`,
@@ -430,13 +459,13 @@ export const QUESTS: QuestDef[] = [
         summon: { parts: ["venomblob", "venomblob", "healerblob"], level: 18, title: "Blightmaw", ...spotIn(LANDS.poison, 0.5, 0.45) },
         text: "Slay Blightmaw", banner: ["The shard bursts!", "Its keeper rises from the bog: slay Blightmaw"], obj: "Blightmaw slain: {n} / {goal}",
         nag: "Three blobs in one, spitting venom and mending itself. Keep moving, never stand in the puddles." },
-      back("witch", "Morwen", "her tent", ["Venom sacs, still twitching. Lovely. I'll brew you something against this muck.", "And the shard? Gone. One piece fewer that remembers. Rowan will want to hear about the other three."], "Claim reward"),
     ],
+    outro: ["The Venom Shard bursts into green smoke and the fen goes quiet. One piece fewer that remembers.", "Three more shards fled east. Morwen will want those sacs, but the trail goes on: north-east, where the frost came down."],
     reward: { xp: 2000, gold: 550, potions: 4 },
     after: "Rowan has news of the second piece, darling. Something cold.",
   },
   {
-    id: "tarn", title: "The Frozen Tarn", giver: "druid", zone: LANDS.cold, minLevel: 17,
+    id: "tarn", title: "The Frozen Tarn", giver: "druid", zone: LANDS.cold, minLevel: 17, auto: true,
     description: `The second piece of the Gloam crept north-east into ${LANDS.cold}, where a black tarn never thaws. Its blobs have turned to ice and blast frost at anyone who comes near. Elder Rowan asked you to find the tarn and shatter the Rime Shard.`,
     offer: [
       "Morwen told me. Four pieces, four shards of the heart. I should have seen it.",
@@ -457,18 +486,18 @@ export const QUESTS: QuestDef[] = [
         summon: { parts: ["frostblob", "frostblob", "warriorblob"], level: 21, title: "Rimeheart", ...spotIn(LANDS.cold, 0.5, 0.75) },
         text: "Slay Rimeheart", banner: ["The ice cracks!", "Rimeheart climbs out of the tarn"], obj: "Rimeheart slain: {n} / {goal}",
         nag: "It lunges and freezes. Fight it at range, or strike and step back before the nova." },
-      back("druid", "Elder Rowan", "village bonfire", ["The frost is lifting off the north-east. I can feel the birds coming back.", "Two shards remain. Brann says the woods past the Keep are burning and nothing puts the fire out."], "Claim reward"),
     ],
+    outro: ["The Rime Shard cracks like river ice in spring, and the frost lifts off the hollow. Birds come back into the pines.", "Two shards remain. Smoke rises in the east, past the Keep, where the woods burn and nothing puts the fire out."],
     reward: { xp: 2500, gold: 650, potions: 4 },
     after: "Brann wants you at the forge. Something about fire that burns without wood.",
   },
   {
-    id: "scar", title: "Fire in the Scar", giver: "weaponsmith", zone: LANDS.fire, minLevel: 20,
+    id: "scar", title: "Fire in the Scar", giver: "weaponsmith", zone: LANDS.fire, minLevel: 20, auto: true,
     description: `The third piece of the Gloam burned a scar through the woods east of Greywatch Keep: ${LANDS.fire}. Its blobs breathe fire like little dragons. Brann wants their cinder hearts for his forge, and the Cinder Shard broken.`,
     offer: [
       `There's a fire burning out past the Keep that needs no wood. ${LANDS.fire}, the hunters call it now. Ash and cracked earth for a mile.`,
       "The blobs there breathe fire. Like dragons, I swear it! They rear back, and then the whole ground in front of them goes up.",
-      "Their hearts don't go out when they die. Cinder hearts, hot as my forge on its best day. Bring me four, and I'll make you something worth the burns.",
+      "Their hearts don't go out when they die. Cinder hearts, hot as my forge on its best day. Gather four and keep them: they're worth the burns.",
       "And break that shard. Don't stand in front of them when they rear back.",
     ],
     acceptText: "I'll bring the cinders",
@@ -484,13 +513,13 @@ export const QUESTS: QuestDef[] = [
         summon: { parts: ["fireblob", "fireblob", "warriorblob", "shooterblob"], level: 24, title: "Cindermaw", ...spotIn(LANDS.fire, 0.45, 0.5) },
         text: "Slay Cindermaw", banner: ["The scar roars!", "Cindermaw rises from the ash"], obj: "Cindermaw slain: {n} / {goal}",
         nag: "Four blobs in one, breathing fire, charging and spitting. Frost hurts it most." },
-      back("weaponsmith", "Brann", "his forge", ["Four cinder hearts! Feel that heat. I'll be quenching blades in this for a year.", "Here, your pay, and my thanks. Rowan says the last piece fled south-east, where the storms break."], "Claim reward"),
     ],
+    outro: ["The Cinder Shard gutters out. The cinder hearts in your pack still glow, hot enough for Brann to quench blades in for a year.", "The last piece fled south-east, where the storms break over the crags."],
     reward: { xp: 3000, gold: 800, potions: 5 },
     after: "Rowan's waiting for you. The last piece is the worst of them, he says.",
   },
   {
-    id: "storm", title: "Heart of the Storm", giver: "druid", zone: LANDS.shock, minLevel: 23,
+    id: "storm", title: "Heart of the Storm", giver: "druid", zone: LANDS.shock, minLevel: 23, auto: true,
     description: `The last piece of the Gloam fled to ${LANDS.shock}, south-east of Redfang Hollow, where every storm in the valley breaks. Its blobs crackle with lightning and throw sparks when struck. The Storm Shard is the last sliver of the heart: shatter it before it calls the others back.`,
     offer: [
       "Three shards broken. One left, and it is the one I fear.",
@@ -571,20 +600,16 @@ export const BONE_QUESTS: QuestDef[] = [
       { type: "collect", zone: BZ.quarry.name, kinds: SKELETONS, item: "shot", goal: 4, chance: { skeleton: 0.4, crawler: 0.3, skeletonmage: 0.5 },
         text: "Take 4 of the stones they carry", banner: ["They carry round stones...", "Bring back 4 of them"], obj: "Sigil Stones: {n} / {goal}",
         nag: "{n} of {goal} stones. The skeletons haul them, take them off the bodies." },
-      back("captain", "Captain Hale", "east gate", [
-        "Round stones, every one the same size, and carved with a sigil. These aren't for building walls.",
-        "This is catapult shot. Somebody is building an army out there, and arming it for a siege.",
-        "Here, your pay. Then go and show Brann. He served on the siege lines in his youth.",
-      ], "Claim reward"),
     ],
+    outro: ["Round stones, every one the same size, each carved with the same sigil. These are not for building walls.", "This is catapult shot. Somebody is arming the dead for a siege, and the engines must be close."],
     reward: { xp: 600, gold: 150, potions: 2 },
     after: "Show those stones to Brann at the forge. If anyone knows siege work, he does.",
   },
   {
-    id: "engines", title: "Engines of the Dead", giver: "weaponsmith", zone: BZ.quarry.name, minLevel: 8,
+    id: "engines", title: "Engines of the Dead", giver: "weaponsmith", zone: BZ.quarry.name, minLevel: 8, auto: true,
     description: `The dead are building siege engines in ${BZ.quarry.name}, and their bone-wrights, the skeleton mages of ${BZ.ruins.name}, bind them with dark magic. Brann wants the engines burned and the bone-wrights put down.`,
     offer: [
-      "Hale sent you? Let me see those stones. Hmph. Sigil shot. The old marshals of Greywatch used this mark.",
+      "Hale sent a runner with one of your stones. Hmph. Sigil shot. The old marshals of Greywatch used this mark.",
       `Stone shot means catapults. And the dead aren't only cutting stone in ${BZ.quarry.name}, they're building the engines right there. I've seen the timber from the road.`,
       `Burn every engine before it's finished. Then go to ${BZ.ruins.name}: the mages there bind the beams with bone-magic. Bone-wrights, we called them. Kill four.`,
     ],
@@ -596,17 +621,13 @@ export const BONE_QUESTS: QuestDef[] = [
       { type: "kill", zone: BZ.ruins.name, kinds: ["skeletonmage"], goal: 4, text: `Slay 4 skeleton mages, the bone-wrights of ${BZ.ruins.name}`,
         banner: ["The engines burn!", "Now slay 4 bone-wrights"], obj: "Skeleton mages: {n} / {goal}",
         nag: `{n} of {goal} bone-wrights. They hide in the graves around ${BZ.ruins.name}, so watch your step.` },
-      back("weaponsmith", "Brann", "his forge", [
-        "I could see the smoke from the forge. Good work. And no more bone-wrights to rebuild them.",
-        "But listen: an engine needs a target, and an army needs a commander. Somebody gives these bones their orders.",
-        "Hale says the Old Watchtower has been burning green at night. Go and see him. Here, for your trouble.",
-      ], "Claim reward"),
     ],
+    outro: ["The last engine goes up in smoke and the bone-wrights lie in pieces. No one will rebuild them now.", "But an engine needs a target and an army needs a commander. Far to the north, a green fire is burning on the Old Watchtower."],
     reward: { xp: 800, gold: 200, potions: 2 },
     after: "Captain Hale wants you. Something about green fire on the Old Watchtower.",
   },
   {
-    id: "signal", title: "Green Fire on the Tower", giver: "captain", zone: BZ.tower.name, minLevel: 10,
+    id: "signal", title: "Green Fire on the Tower", giver: "captain", zone: BZ.tower.name, minLevel: 10, auto: true,
     description: `A green signal fire burns on ${BZ.tower.name} every night, calling the dead to muster. Captain Hale wants it put out and wants to know who lit it.`,
     offer: [
       `Every night a green fire burns on ${BZ.tower.name}, ${zdir(BZ.tower)} of here. Every night, more of them on the roads.`,
@@ -625,12 +646,8 @@ export const BONE_QUESTS: QuestDef[] = [
         summon: { parts: ["demon"], level: 14, title: "Bone Demon", ...spotIn(BZ.tower.name, 0.5, 0.75) },
         text: "Slay a Bone Demon", banner: ["They gave their bones to a demon!", "Slay the Bone Demon"], obj: "Bone Demon slain: {n} / {goal}",
         nag: "A demon made of their own bones, and it only walks at night. Stay out of its stomp, and bring it down.", night: true },
-      back("captain", "Captain Hale", "east gate", [
-        "A demon, built from the bones of the fallen. Gods.",
-        "And this was nailed to the beacon: marching orders, signed with the same sigil as the stones. Vaeloth, Marshal of Greywatch.",
-        "Vaeloth died three hundred years ago. Take this. Then ask Elder Rowan who he was. I don't like the answer I'm thinking of.",
-      ], "Claim reward"),
     ],
+    outro: ["Nailed to the beacon post are marching orders, signed with the same sigil as the catapult shot: Vaeloth, Marshal of Greywatch.", "Vaeloth died three hundred years ago. Elder Rowan knows every old tale in this valley. Ask him who Vaeloth was."],
     reward: { xp: 1000, gold: 250, potions: 3 },
     after: "Ask Elder Rowan about Vaeloth. The old man knows every tale in this valley.",
   },
@@ -653,17 +670,13 @@ export const BONE_QUESTS: QuestDef[] = [
         summon: { parts: ["necromancer"], level: 16, title: "Raiser of the Barrows", ...spotIn(BZ.barrow.name, 0.49, 0.6) },
         text: "Slay the necromancer raising the barrow kings", banner: ["Dust gathered!", "Slay the Raiser of the Barrows"], obj: "Necromancer slain: {n} / {goal}",
         nag: "After dark he stands before the old mausoleum. Kill him and his raised dead crumble with him.", night: true },
-      back("druid", "Elder Rowan", "village bonfire", [
-        "With this dust I can make a ward that holds a crypt shut. One handful per crypt.",
-        "The raiser carried a map. Look: Gravemoor Cemetery, deep in the south-eastern woods. The great graveyard of the old valley. A thousand graves.",
-        "That is where he raises his army. Take the ward to Captain Hale, he is mustering the watch.",
-      ], "Claim reward"),
     ],
+    outro: ["The raiser carried a map: Gravemoor Cemetery, deep in the south-eastern woods. The great graveyard of the old valley. A thousand graves.", "That is where the Marshal raises his army. The dust in your pouch is enough for a ward on every crypt."],
     reward: { xp: 1300, gold: 300, potions: 3 },
     after: "Captain Hale has the ward now. Gravemoor Cemetery lies deep in the south-eastern woods.",
   },
   {
-    id: "gravemoor", title: "The Recruiting Ground", giver: "captain", zone: BZ.grave.name, minLevel: 15,
+    id: "gravemoor", title: "The Recruiting Ground", giver: "captain", zone: BZ.grave.name, minLevel: 15, auto: true,
     description: `Gravemoor Cemetery is where the Pale Marshal raises his recruits. Captain Hale sends you with Rowan's ward to thin the ranks, seal its four crypts and destroy what guards them.`,
     offer: [
       "Rowan's ward. Four handfuls, four crypts. It will have to do.",
@@ -681,17 +694,13 @@ export const BONE_QUESTS: QuestDef[] = [
         summon: { parts: ["demon"], level: 19, title: "Gravemoor Horror", hpMult: 1.6, ...spotIn(BZ.grave.name, 0.51, 0.53) },
         text: "Destroy the Gravemoor Horror", banner: ["THE GROUND SHAKES", "The Gravemoor Horror rises"], obj: "Gravemoor Horror slain: {n} / {goal}",
         nag: "At nightfall it rises before the mausoleum. Every bone the crypts held, in one body. Destroy it!", night: true },
-      back("captain", "Captain Hale", "east gate", [
-        "Sealed. All four. No more recruits for the Marshal.",
-        "But my scouts say the dead are falling back east, all of them. To Greywatch Keep.",
-        "He's pulling his army home to his throne. That's where we finish this. Rest first, you've earned it.",
-      ], "Claim reward"),
     ],
+    outro: ["Four crypts sealed. No more recruits for the Marshal.", "From the cemetery hill you see them: every skeleton on the roads turning east, marching home to Greywatch Keep."],
     reward: { xp: 1700, gold: 400, potions: 4 },
     after: "The dead are gathering at Greywatch Keep. Come to me when you're ready for the last fight.",
   },
   {
-    id: "marshal", title: "The Pale Marshal", giver: "captain", zone: BZ.keep.name, minLevel: 18,
+    id: "marshal", title: "The Pale Marshal", giver: "captain", zone: BZ.keep.name, minLevel: 18, auto: true,
     description: `Vaeloth, the Pale Marshal, waits in ${BZ.keep.name} with what is left of his army. Kill his lieutenants, shatter the phylactery that holds his soul, and end him. He and his necromancers only walk at night.`,
     offer: [
       `It's time. Vaeloth sits in the great hall of ${BZ.keep.name}, ${zdir(BZ.keep)} of here, with his best around him.`,
@@ -768,7 +777,7 @@ export const RED_QUESTS: QuestDef[] = [
       "Three nights ago they came down the Smugglers' Path. Red rags on their arms, axes on their backs. The Redfang.",
       `They didn't go home. They burned our smokehouse at ${COVE}, a little way east along the shore, and they've camped in the ashes, eating our winter stores.`,
       "Every barrel of salted cod we put by is in that cove. Without it, half this town won't see spring.",
-      "Drive them off and bring back what you can. Their leader is a big brute with a red-dyed beard. Rask, they call him.",
+      "Drive them off and take back what you can. Their leader is a big brute with a red-dyed beard. Rask, they call him.",
     ],
     acceptText: "I'll drive them off",
     steps: [
@@ -781,23 +790,19 @@ export const RED_QUESTS: QuestDef[] = [
         summon: { parts: ["bandit"], level: 21, title: "Rask the Reaver", hpMult: 3.5, x: (GULLROCK.x + 15) * TILE, y: (GULLROCK.y + 7.7) * TILE }, own: true,
         text: "Slay Rask, the raid leader", banner: ["Rask comes for you!", "Slay Rask the Reaver"], obj: "Rask the Reaver slain: {n} / {goal}",
         nag: "Rask won't leave his share of the cod. He's by the raiders' fire." },
-      { type: "talk", npc: "oldfisher", text: "Bring the cod to Old Garrick", banner: ["The raiders are beaten", "Bring the cod to Old Garrick"],
-        obj: "Bring the cod to Old Garrick (Saltmere beach)",
-        say: [
-          "Our cod! That's Saltmere salt on it, I'd know it anywhere. And Rask dead in the ashes? Bless you.",
-          "There's something else, and I've not had the heart to say it. My grandson Pell went up the Smugglers' Path to take his boat back from their camp, Redfang Hollow. Alone. Three weeks ago.",
-          "He never came down. Here, take this. And when you're ready, come back to me. Please.",
-        ],
-        accept: "Claim reward" },
+    ],
+    outro: [
+      "Rask falls into the ashes of the smokehouse. Under the stolen cod in his pack is a boy's knife, the handle carved: PELL.",
+      "Old Garrick's grandson went up the Smugglers' Path to Redfang Hollow three weeks ago, to take back his boat. He never came down.",
     ],
     reward: { xp: 1500, gold: 300, potions: 3 },
     after: "Pell... come back to me when you're ready. I can't ask anyone else.",
   },
   {
-    id: "chief", title: "The Redfang Chief", giver: "oldfisher", zone: RED_AREA, minLevel: 19,
+    id: "chief", title: "The Redfang Chief", giver: "oldfisher", zone: RED_AREA, minLevel: 19, auto: true,
     description: `Old Garrick's grandson Pell went up to ${RED_AREA} to take back his boat and never came down. Find him, and put an end to the Redfang Chief who holds the camp together.`,
     offer: [
-      "A smuggler passed through last night. He says the Redfang keep a boy chained by their chief's tent. A boy with a fisherman's hands.",
+      "Pell's knife... A smuggler passed through last night. He says the Redfang keep a boy chained by their chief's tent. A boy with a fisherman's hands.",
       "It's Pell. It has to be.",
       "The chief is a brute of a man, they say, with an axe as long as an oar. While he lives, the camp holds together. Kill him, and the rest will scatter like gulls.",
       "Bring my boy home.",
@@ -830,6 +835,8 @@ const THRONE = "The Hollow Throne";
 const CROWN_DIR = dirFromVillage(HOLLOW.cx, HOLLOW.cy);
 /** The three ward-stones round the Hollow Throne (shared/map.ts HOLLOW_WARDS). */
 export const WARDS: QuestObject[] = HOLLOW_WARDS.map(([tx, ty], i) => objAt(`ward${i + 1}`, "ward", "Crown ward-stone", "Break", tx, ty));
+/** The old kings' waystones beside the King's Way (shared/map.ts), from the forest shrine up toward the throne. */
+export const KING_STONES: QuestObject[] = ([[234, 67], [247, 54], [259, 45]] as const).map(([tx, ty], i) => ({ id: `kingstone${i + 1}`, kind: "cairn" as const, name: "Crowned waystone", verb: "Read", ...spotNear(tx, ty) }));
 
 /**
  * The story: a thousand years before Oakvale, Ostrevar was the first king of this valley. He would not give up his
@@ -843,46 +850,35 @@ export const WARDS: QuestObject[] = HOLLOW_WARDS.map(([tx, ty], i) => objAt(`war
  */
 export const CROWN_QUESTS: QuestDef[] = [
   {
-    id: "seal", title: "The Crowned Seal", giver: "druid", zone: "Oakvale", minLevel: 24,
-    description: "Elder Rowan found the same crowned seal on the Gloam's cask, the Marshal's phylactery and the Redfang's gold. One hand moved all three. Ask Captain Hale and Old Garrick what they know.",
+    id: "seal", title: "The Crowned Seal", giver: "druid", zone: "Whispering Woods", minLevel: 24,
+    description: `Elder Rowan found the same crowned seal on the Gloam's cask, the Marshal's phylactery and the Redfang's gold. One hand moved all three. Pell heard the Redfang's paymaster speak of an old road, the King's Way, that starts at the forest shrine ${dirFromVillage(SHRINE_SPOT.x, SHRINE_SPOT.y)} of Oakvale. Follow it and read what is carved along it.`,
     offer: [
       "Sit, friend. The Gloam is scattered, the Pale Marshal is dust, the Redfang have fled. Oakvale should sleep easy. I don't.",
-      "One thing has gnawed at me. The cask the Gloam came ashore in bore a seal: a crown, burned into the wood.",
-      "Hale's men found the same crown carved inside the Marshal's phylactery. And Old Garrick swears the Redfang paid their debts in old gold, stamped with a crown.",
-      "Three shadows, one hand. Ask Hale and Garrick what they know. I fear I already know the name.",
+      "One thing has gnawed at me. The cask the Gloam came ashore in bore a seal: a crown, burned into the wood. Hale's men found the same crown carved inside the Marshal's phylactery. And the Redfang paid their debts in old gold, stamped with a crown.",
+      "Three shadows, one hand. Pell heard the Redfang's paymaster: a tall figure in rusted iron who came by night, down an old road past the forest shrine. The King's Way, it called it.",
+      "Follow that road. The old kings set waystones along it, and stones remember what men forget.",
     ],
-    acceptText: "I'll find out who",
+    acceptText: "I'll follow the King's Way",
     steps: [
-      { type: "talk", npc: "captain", text: "Ask Captain Hale about the crowned seal", banner: ["New quest", "The Crowned Seal"],
-        obj: "Ask Captain Hale about the seal (east gate)",
-        say: [
-          "The crown? Aye, my sentries found it carved inside that cursed phylactery. I had a scholar look at it.",
-          "It's the crown of Ostrevar, the first king of this valley, from before Oakvale had a single roof. Old songs say he was buried far in the north-east woods, on a hill they called the Hollow Throne.",
-          "There's worse. Vaeloth's last orders were scratched on the wall of his hall. Three words: WAKE THE KING.",
-        ],
-        accept: "Garrick next", nag: "" },
-      { type: "talk", npc: "oldfisher", text: "Ask Old Garrick about the Redfang's gold", banner: ["The seal has a name", "Ask Old Garrick about the gold"],
-        obj: "Ask Old Garrick about the gold (Saltmere beach)",
-        say: [
-          "The crowned gold? Pell saw where it came from, poor lad. He heard everything, chained by that tent.",
-          "A tall figure in old rusted iron came to the chief by night, never once showing a face. It paid in grave-gold and wanted only one thing: blood and fear in the valley, as much as he could make.",
-          "It came down from the north-east, Pell said, by an old road past the forest shrine. The King's Way, it called it.",
-        ],
-        accept: "Back to Rowan", nag: "" },
-      back("druid", "Elder Rowan", "village bonfire", [
-        "Ostrevar. The Hollow King. So the old tale is true.",
-        "When he would not give up his crown to death, the first druids sealed him alive in his barrow and set three ward-stones round it. A thousand years he has lain there, reaching out through the Gloam, the dead and greedy men, to bleed the valley dry until he could rise.",
-        "You broke his servants. Now he must come out himself. Rest, and grow strong. When you are ready, I will tell you how to face him.",
-      ], "Claim reward"),
+      { type: "reach", at: { x: (SHRINE_SPOT.x + 0.5) * TILE, y: (SHRINE_SPOT.y + 0.5) * TILE, r: 5 * TILE, label: "The forest shrine" }, zone: "Whispering Woods",
+        text: "Go to the forest shrine on the Bandit Trail", banner: ["New quest", "The Crowned Seal"],
+        obj: `Go to the forest shrine on the Bandit Trail (${dirFromVillage(SHRINE_SPOT.x, SHRINE_SPOT.y)})`, nag: "Take the Bandit Trail east into the woods. The shrine stands beside it." },
+      { type: "use", zone: "Whispering Woods", objects: KING_STONES, chest: false, text: "Read the crowned waystones along the King's Way", banner: ["The King's Way", "Read the crowned waystones"],
+        obj: "Waystones read: {n} / {goal}", nag: "{n} of {goal}. They stand beside the old road from the shrine, climbing north-east." },
+    ],
+    outro: [
+      "The last waystone is older than Oakvale. Under the moss a crown is cut deep, and a name: OSTREVAR, FIRST KING OF THE VALE.",
+      "Below it, fresh, scratched with a blade: WAKE THE KING. The road climbs on, into the dark woods, to a hill the old songs call the Hollow Throne.",
     ],
     reward: { xp: 2200, gold: 400, potions: 4 },
     after: "Rest and grow strong, friend. When you are ready, the Hollow King is waiting.",
   },
   {
-    id: "king", title: "The Hollow King", giver: "druid", zone: THRONE, minLevel: 25,
+    id: "king", title: "The Hollow King", giver: "druid", zone: THRONE, minLevel: 25, auto: true,
     description: `Ostrevar, the Hollow King, is rising from his barrow under ${THRONE}, far ${CROWN_DIR} of Oakvale up the King's Way from the forest shrine. Break the three ward-stones that feed him, and end him when he rises after dark.`,
     offer: [
-      `Follow the King's Way from the forest shrine on the Bandit Trail, ${CROWN_DIR} to ${THRONE}. Three ward-stones stand round his dais.`,
+      "Ostrevar. The Hollow King. So the old tale is true. When he would not give up his crown to death, the first druids sealed him alive in his barrow and set three ward-stones round it.",
+      `Follow the King's Way on, ${CROWN_DIR} to ${THRONE}. The three ward-stones stand round his dais.`,
       "The wards were made to hold him, but he has turned them into his strength. Break all three and he will come out weaker. But he will come.",
       "Break the stones whenever you like. But he is of the dead now, and the dead keep the night: he will only rise from his throne after dark.",
       "He fights with a crown-forged blade, the Gloam's ooze and his dead servants. Watch the ground: when it darkens, move. When the ash rises round him, get in close.",
@@ -951,24 +947,19 @@ export const BEAST_QUESTS: QuestDef[] = [
       { type: "collect", item: "charm", kinds: BEAST_FOLK, chance: { gnawkin: 0.3, tuskborn: 0.45, silkwretch: 0.4, duskwing: 0.4 }, zone: HALLS.name, goal: 4,
         text: "Take 4 Hide Charms from the beast-folk", banner: ["Bone and hide", "Take 4 Hide Charms"], obj: "Hide Charms: {n} / {goal}",
         nag: "{n} of {goal}. They wear them sewn into their skin." },
-      back("witch", "Morwen", "her tent by the square", [
-        "Give those here. Don't touch them more than you must.",
-        "These are Hide Charms. Bone needle, gut thread, a tuft of the beast. I've only ever seen them drawn, in my grandmother's book, on the page she tore half out.",
-        "The Hide Rite. In the Long Hunger an old trapper-wife called Ursk took the starving hunters down into the Mawdeep and sewed beasts into them. Rat, boar, wolf. They came back strong and they never came back up.",
-        "If the charms are fresh, the rite is being done again. Down there. On the trappers.",
-      ], "Claim reward"),
     ],
+    outro: ["The charms are bone needle, gut thread and a tuft of beast, sewn right into the skin. Some are fresh: the stitches still wet.", "Someone is doing the old Hide Rite again, down here, on the missing trappers. If they took them last week, some may still be breathing, deeper down."],
     reward: { xp: 1800, gold: 300, potions: 3 },
     after: "Burn your clothes when you're done down there. Hide smell never comes out.",
   },
   {
-    id: "pens", title: "The Silk Pens", giver: "witch", zone: PENS.name, minLevel: 23,
+    id: "pens", title: "The Silk Pens", giver: "witch", zone: PENS.name, minLevel: 23, auto: true,
     description: `The beast-folk keep their captives wrapped in silk on the Mawdeep's second floor, the Silk Pens. Cut the trappers free and kill Gorehowl the Packlord, who keeps the pens.`,
     offer: [
       "The rite takes days. A hide must be cured, a man must be starved first so the beast takes. If they took the trappers last week, some may still be breathing.",
       "My grandmother's book says they kept their catch below the first halls, wound in spider silk like flies in a larder. The Silk Pens.",
       "And a wolf-man guarded them. Gorehowl, the first of Ursk's hunters, the Packlord. If he still lives he'll hear you coming. He howls, and the little rat-things come running.",
-      "Cut the trappers loose. Kill the wolf. Then tell Hale his men are coming home.",
+      "Cut the trappers loose. Kill the wolf. They will find their own way up the rope.",
     ],
     acceptText: "I'll cut them free",
     steps: [
@@ -979,17 +970,13 @@ export const BEAST_QUESTS: QuestDef[] = [
         obj: "Trappers cut free: {n} / {goal}", nag: "{n} of {goal}. They hang in the pens off the side tunnels." },
       { type: "kill", kinds: ["packlord"], zone: "Gorehowl's Lair", goal: 1, text: "Kill Gorehowl the Packlord", banner: ["A howl in the dark", "Kill Gorehowl the Packlord"],
         obj: "Gorehowl the Packlord slain: {n} / {goal}", nag: "His lair is the big chamber on the east side of the pens. Mind his pounce." },
-      back("captain", "Captain Hale", "east gate", [
-        "Three of them stumbled in at the gate this morning, white as milk, covered in that sticky muck. The fourth didn't make it out of the silk.",
-        "Wenn, the eldest, keeps saying one word. 'Mother'. She says they were waiting for 'the Mother' to wake and choose which beast each of them would be.",
-        "You did good work down there. Rest. I'll get what I can out of her.",
-      ], "Claim reward"),
     ],
+    outro: ["Gorehowl falls, and the freed trappers stumble for the rope and the daylight. Wenn, the eldest, grips your arm before she goes.", "\"The Mother,\" she whispers. \"They were waiting for the Mother to wake and choose which beast each of us would be. She sleeps at the bottom.\""],
     reward: { xp: 2400, gold: 380, potions: 4 },
     after: "Wenn is sleeping now. Mostly. She still screams when the dogs bark.",
   },
   {
-    id: "mother", title: "The Hide-Mother", giver: "captain", zone: DENF.name, minLevel: 25,
+    id: "mother", title: "The Hide-Mother", giver: "captain", zone: DENF.name, minLevel: 25, auto: true,
     description: `At the bottom of the Mawdeep the Hide-Mother sleeps on a bed of skins, ringed by three hide totems that keep the rite alive. Burn the totems, and end her when she wakes.`,
     offer: [
       "Wenn told me the rest. At the very bottom, past a byre where a bull-man stamps, there's a den. A great bed of hides, and on it something that was a woman once and is mostly bear now.",
@@ -1088,20 +1075,16 @@ export const SUN_QUESTS: QuestDef[] = [
         obj: "Sigils shattered: {n} / {goal}", nag: "{n} of {goal}. They stand by the water, humming." },
       { type: "collect", item: "veil", kinds: ["nomad"], chance: { nomad: 0.4 }, zone: "Palmshade Oasis", goal: 4, text: "Take 4 Veil Tokens from the Dustriders",
         banner: ["Hired blades", "Take 4 Veil Tokens"], obj: "Veil Tokens: {n} / {goal}", nag: "{n} of {goal}. The Dustriders who guarded the sigils carry them." },
-      back(SEFA[0], SEFA[1], SEFA[2], [
-        "Show me. ...Indigo cloth, a gold sun stitched on it, and the sun has a veil over its face.",
-        "Stranger, I was hoping you would bring me anything but this. This is the mark of the Veiled Circle.",
-        "Every child in Kel Ashar knows the rhyme. 'The veiled ones lit a second sun, and Kharsun drank it, every one.' We sing it skipping rope. I never thought it was true.",
-      ], "Claim reward"),
     ],
+    outro: ["Indigo cloth, a gold sun stitched on it, and the sun has a veil over its face. The mark of the Veiled Circle.", "Every child in Kel Ashar knows the rhyme: \"The veiled ones lit a second sun, and Kharsun drank it, every one.\" It seems it was no rhyme."],
     reward: { xp: 9600, gold: 450, potions: 3 },
     after: "The water at Palmshade has stopped sinking. Ours hasn't. There must be more of those sigils.",
   },
   {
-    id: "silver", title: "Dustrider Silver", giver: "sandcaptain", zone: "Dustrider Camp", minLevel: 33,
+    id: "silver", title: "Dustrider Silver", giver: "sandcaptain", zone: "Dustrider Camp", minLevel: 33, auto: true,
     description: `The Dustriders are paid to guard the Circle's sigils. Raid their camp ${kdir("Dustrider Camp")} of Kel Ashar and find out who pays them.`,
     offer: [
-      "Sefa told me about the tokens. The Veiled Circle. Children's rhymes. I don't believe in rhymes, stranger. I believe in silver.",
+      "Word reached me about those tokens. The Veiled Circle. Children's rhymes. I don't believe in rhymes, stranger. I believe in silver.",
       "Dustriders don't guard anything for free. Somebody is paying them, and paying well: they've stopped raiding our caravans, and a Dustrider who stops raiding is a Dustrider who's being paid more not to.",
       "Their camp is in the Red Wastes, north-west, past Jackal Springs. Hit it hard. Their chief keeps his letters close: bring me one.",
     ],
@@ -1135,22 +1118,18 @@ export const SUN_QUESTS: QuestDef[] = [
         obj: "Sand-Dead put down: {n} / {goal}", nag: "{n} of {goal}. They rise thickest at night.", hint: "The Sand-Dead rise mostly at night" },
       { type: "use", zone: "Kharsun, the Buried City", objects: CISTERNS, chest: true, text: "Read the carvings on 3 sealed cisterns", banner: ["Kharsun", "Read the water-script"],
         obj: "Cisterns read: {n} / {goal}", nag: "{n} of {goal}. They're sunk among the ruins, rimmed with carvings." },
-      back(SEFA[0], SEFA[1], SEFA[2], [
-        "Three carvings. The first is the river, running. The second is the river running UP, onto the mountain, into a mouth. The third is a second sun over a burning city.",
-        "And look here, at the edge: new scratches. Someone copied the water-script, and not long ago. The chisel marks are still sharp.",
-        "They are doing it again. Our oases are the river this time.",
-      ], "Claim reward"),
     ],
+    outro: ["Three carvings. The river, running. The river running UP, onto the mountain, into a mouth. A second sun over a burning city.", "And at the edge, fresh chisel marks. Someone copied the water-script, not long ago. The Circle is doing it again, and the oases are the river this time."],
     reward: { xp: 12000, gold: 560, potions: 4 },
     after: "I've stopped singing the rhyme. The children haven't. I can't bear to tell them.",
   },
   {
-    id: "brands", title: "Brands of the Sun", giver: "sandcaptain", zone: "The Humpback Mesas", minLevel: 38,
+    id: "brands", title: "Brands of the Sun", giver: "sandcaptain", zone: "The Humpback Mesas", minLevel: 38, auto: true,
     description: `The camel-folk of the Humpback Mesas, ${kdir("The Humpback Mesas")} of Kel Ashar, traded with the town for a hundred years. Now they attack every caravan, and they bear burns shaped like a veiled sun.`,
     offer: [
       "The camel-folk of the mesas are an old people. Proud, slow to anger, and they never forget a debt. We've traded salt for their wool since before my grandfather.",
       "Three caravans in a month, all hit by camel-folk. The drivers who lived say their eyes were wrong, glassy, and every one of them had a burn on the neck. A sun with a veil.",
-      "The Circle has branded them like cattle. Put the branded ones down, it's a mercy. And bring me the brands, so I can show the clans' elders what was done to their people.",
+      "The Circle has branded them like cattle. Put the branded ones down, it's a mercy. And take their brands, so the clans' elders can see what was done to their people.",
     ],
     acceptText: "I'll go to the mesas",
     steps: [
@@ -1158,17 +1137,13 @@ export const SUN_QUESTS: QuestDef[] = [
         obj: "Branded Camel-Men slain: {n} / {goal}", nag: `{n} of {goal}. The mesas are ${kdir("The Humpback Mesas")} of town, beyond the north gate. Mind their stamp.` },
       { type: "collect", item: "brand", kinds: ["camelfolk"], chance: { camelfolk: 0.4 }, zone: "The Humpback Mesas", goal: 4, text: "Take 4 Sun Brands",
         banner: ["Branded", "Take 4 Sun Brands"], obj: "Sun Brands: {n} / {goal}", nag: "{n} of {goal}. The brand-plates are sewn into their harness." },
-      back(RAKHIM[0], RAKHIM[1], RAKHIM[2], [
-        "Brass plates, still warm. They hum, like Sefa's sigils. Whatever the Circle burned into the camel-folk, it pulls at them. Toward the east.",
-        "I sent word to the clan elders. They'll come. They'll be angry, and not at us, thanks to you.",
-        "East. Everything goes east. The Wells, and then the Thornspire.",
-      ], "Claim reward"),
     ],
+    outro: ["The brass brand-plates are still warm, and they hum like the sigils. Whatever the Circle burned into the camel-folk pulls at them toward the east.", "East. Everything goes east: Mirage Wells, and then the Thornspire."],
     reward: { xp: 13200, gold: 620, potions: 4 },
     after: "The clan elders came at dawn. They sat by the spring with Sefa all morning and didn't say a word. Then they left east, armed.",
   },
   {
-    id: "wells", title: "Mirage Wells", giver: "wellkeeper", zone: "Mirage Wells", minLevel: 41,
+    id: "wells", title: "Mirage Wells", giver: "wellkeeper", zone: "Mirage Wells", minLevel: 41, auto: true,
     description: `Mirage Wells, the last oasis before the Thornspire, ${kdir("Mirage Wells")} of Kel Ashar, has sun-glass in it too, and the Veiled Circle's adepts tend it themselves.`,
     offer: [
       "Our spring dropped two fingers last night. Two. The sigils at Palmshade are broken, so it must be the Wells, out east past the Saffron Dunes.",
@@ -1183,17 +1158,13 @@ export const SUN_QUESTS: QuestDef[] = [
         obj: "Sigils shattered: {n} / {goal}", nag: "{n} of {goal}. They stand round the water." },
       { type: "kill", kinds: ["veiled"], zone: "Mirage Wells", goal: 6, text: "Kill 6 Veiled Adepts", banner: ["The Veiled Circle", "Kill 6 Veiled Adepts"],
         obj: "Veiled Adepts slain: {n} / {goal}", nag: "{n} of {goal}. They throw sun-fire. Close in fast." },
-      back(SEFA[0], SEFA[1], SEFA[2], [
-        "The spring rose a finger this morning. A finger! The children ran round the market shrieking.",
-        "But the Circle doesn't need our oases any more, does it. They've had a month of them. Whatever they were filling up there on the Thornspire, it might be full already.",
-        "Go to Rakhim. He's been staring at that mountain since dawn.",
-      ], "Claim reward"),
     ],
+    outro: ["The last sigil shatters and the water at the Wells stops steaming. Far behind you, Kel Ashar's spring will rise tonight.", "But the Circle has had a month of the oases. Whatever they were filling on the Thornspire might be full already."],
     reward: { xp: 14400, gold: 700, potions: 4 },
     after: "Listen. The spring is singing again. It does that, when it's full.",
   },
   {
-    id: "sanctum", title: "The Veiled Sanctum", giver: "sandcaptain", zone: "The Veiled Sanctum", minLevel: 44,
+    id: "sanctum", title: "The Veiled Sanctum", giver: "sandcaptain", zone: "The Veiled Sanctum", minLevel: 44, auto: true,
     description: `The Veiled Circle's sanctum is hidden high in the Thornspire Heights, ${kdir("The Veiled Sanctum")} of Kel Ashar, below the Sun Furnace. Break it, and take the key to the Furnace.`,
     offer: [
       "The camel-clans found it. A sanctum cut into the Thornspire, just below the peak, guarded by more adepts than they could count. They lost good people finding it.",
@@ -1208,21 +1179,17 @@ export const SUN_QUESTS: QuestDef[] = [
         obj: "Veiled Adepts slain: {n} / {goal}", nag: "{n} of {goal}. Fight them in the doorways, where they can't all see you." },
       { type: "collect", item: "key", kinds: ["veiled"], chance: { veiled: 0.2 }, zone: "The Veiled Sanctum", goal: 1, text: "Take a Furnace Key from an adept",
         banner: ["The stair above", "Take a Furnace Key"], obj: "Furnace Key: {n} / {goal}", nag: "The adepts carry them. One of them must." },
-      back(RAKHIM[0], RAKHIM[1], RAKHIM[2], [
-        "A key of sun-glass. It's warm in my hand. Warm and getting warmer.",
-        "The clans say there was a voice in the sanctum. Calm, kind, like a teacher's. 'Not long now, children. Not long and the sky will have two eyes.'",
-        "The Sunwright is up there, stranger, at the Furnace. When you're ready, and only then, go and end this.",
-      ], "Claim reward"),
     ],
+    outro: ["The key is sun-glass, warm in your hand and getting warmer.", "In the empty sanctum a voice lingers in the stone, calm and kind, like a teacher's: \"Not long now, children. Not long and the sky will have two eyes.\""],
     reward: { xp: 16800, gold: 900, potions: 5 },
     after: "Rest first. Whatever waits at the Furnace has waited a thousand years. It can wait for you to eat.",
   },
   {
     // the finale: Act 2's final boss (SUNWRIGHT in shared/constants.ts)
-    id: "secondsun", title: "The Second Sun", giver: "wellkeeper", zone: "The Sun Furnace", minLevel: 46,
+    id: "secondsun", title: "The Second Sun", giver: "wellkeeper", zone: "The Sun Furnace", minLevel: 46, auto: true,
     description: `The Sunwright waits at the Sun Furnace on top of the Thornspire, ${kdir("The Sun Furnace")} of Kel Ashar. Climb the Furnace Stair from the Veiled Sanctum and put out the second sun before it is lit.`,
     offer: [
-      "Rakhim showed me the key. Sun-glass. My grandmother had a bead of it. She said it was a tear the sun cried over Kharsun.",
+      "A key of sun-glass, the clans say. My grandmother had a bead of it. She said it was a tear the sun cried over Kharsun.",
       "I know the Sunwright's name now. Ishael. She was a well-keeper's daughter, from Kel Ashar. She learned her letters at this spring. From me.",
       "She was the cleverest child I ever taught, and the kindest. She cried every winter, for the children in the tents who were cold at night.",
       "She thinks a second sun will save them. It burned Kharsun to glass the first time. Go up, stranger. Stop her. And if you can... tell her the spring forgives her.",
@@ -1246,6 +1213,487 @@ export const SUN_QUESTS: QuestDef[] = [
     after: "Come and drink whenever you like. The spring remembers who saved it.",
   },
 ];
+
+// ---- Zone quests (Murat 2026-11-10, a playtester's feedback: "denser acts, more zone quests, fewer courier and
+// back-and-forth quests, real exploration arcs") ----
+//
+// Each arc is given by someone who lives out in the zone (shared/npcs.ts), not in a village. Its quests follow one
+// trail on through the zone and the ones beside it, each starting by itself where the last one ended (QuestDef.auto),
+// and the last one ends out in the field with a named monster: no walk back to hand anything in. Rewards are a little
+// under a story quest's (Murat 2026-11-08 wants levelling to stay slow).
+
+/** A zone quest's reward: about a third of a level's XP (half for an arc's last fight). */
+const arcReward = (level: number, boss = false): Reward => ({
+  xp: Math.round((xpStep(level) * (boss ? 0.5 : 0.35)) / 10) * 10,
+  gold: Math.round((level * (level >= 30 ? 14 : 12) * (boss ? 1.5 : 1)) / 5) * 5,
+  potions: boss ? 3 : 2,
+});
+const at = (tx: number, ty: number, r: number, label: string) => { const p = spotNear(tx, ty); return { x: p.x, y: p.y, r: r * TILE, label }; };
+const near = (id: string, kind: QuestObjectKind, name: string, verb: string, tx: number, ty: number): QuestObject => ({ id, kind, name, verb, ...spotNear(tx, ty) });
+const sumAt = (tx: number, ty: number) => spotNear(tx, ty);
+
+// -- Act 1: the Hunter's Camp → Goldenreach Farms → Mirror Pond (Lv 3-5) --
+const HUNT_CLUES = [near("hunt_quiver", "clue", "Dropped quiver", "Search", 25, 26), near("hunt_snare", "clue", "Torn snare line", "Search", 21, 30), near("hunt_cloak", "clue", "Slimed hunting cloak", "Search", 17, 35)];
+const KIT_COCOON = near("hunt_kit", "nest", "Kit, stuck fast in a heap of jelly", "Pull free", 36, 66);
+const EWAN_HIDE = at(24, 86, 4, "Ewan's hide");
+const HUNT_QUESTS: QuestDef[] = [
+  {
+    id: "coldashes", title: "Cold Ashes", giver: "huntsman", zone: "Hunter's Camp", minLevel: 3,
+    description: "Huntmaster Bryn's two trackers, Ewan and Kit, went after a blob that swallowed a whole deer. Their fire is three nights cold. Follow their trail south from the Hunter's Camp.",
+    offer: [
+      "Keep your voice down, the deer spook. Not that there are many left.",
+      "A blob the size of a cart swallowed a full-grown hart by the farms. Ewan and Kit went after it. That was three nights ago, and their fire's cold.",
+      "Their trail runs south toward the farms. Read it for me: what they dropped, where they ran. And kill whatever slimed it.",
+    ],
+    acceptText: "I'll follow the trail",
+    steps: [
+      { type: "use", zone: "Oakvale Countryside", objects: HUNT_CLUES, chest: false, text: "Follow the trackers' trail south and search what they dropped", banner: ["New quest", "Cold Ashes"],
+        obj: "Trail signs searched: {n} / {goal}", nag: "{n} of {goal}. The trail runs south from the camp toward the farms." },
+      { type: "kill", zone: "Goldenreach Farms", kinds: BLOB_KINDS, goal: 6, text: "Kill 6 blobs on the slimed trail", banner: ["Slime on everything", "Kill 6 blobs along the trail"],
+        obj: "Blobs slain: {n} / {goal}", nag: "{n} of {goal}." },
+    ],
+    outro: ["Past the farm fence the trail turns to a wide, glistening drag mark, as if something heavy was pulled through the barley.", "There is a boot print in the slime. Small. Kit's."],
+    reward: arcReward(3),
+    after: "Follow the drag mark. Bring my lads home if you can.",
+  },
+  {
+    id: "dragmark", title: "The Drag Mark", giver: "huntsman", zone: "Goldenreach Farms", minLevel: 4, auto: true,
+    description: "The drag mark leads through Goldenreach Farms to something huge and full. Kit may be inside it.",
+    offer: ["The drag mark runs on through the barley toward the old pond road.", "At the end of it something huge is sleeping off a big meal. Something with a boot sticking out of it."],
+    acceptText: "On my way",
+    steps: [
+      { type: "kill", zone: "Goldenreach Farms", kinds: BLOB_KINDS, goal: 1, own: true,
+        summon: { parts: ["motherblob", "slime", "slime"], level: 5, title: "The Gorged One", ...sumAt(34, 64) },
+        text: "Slay the Gorged One at the end of the drag mark", banner: ["New quest", "The Drag Mark"], obj: "The Gorged One slain: {n} / {goal}",
+        nag: "It lies at the south end of the farms." },
+      { type: "use", zone: "Goldenreach Farms", objects: [KIT_COCOON], chest: false, text: "Pull Kit out of the jelly", banner: ["It burst!", "Pull Kit out of the jelly"],
+        obj: "Pull Kit free", nag: "Kit is stuck in what is left of it." },
+    ],
+    outro: ["Kit coughs up half a pond. \"Ewan... Ewan went on after the others. Up to Mirror Pond. He said the big ones go there to spit.\"", "He limps off north toward the camp. The pond is just south of here."],
+    reward: arcReward(4),
+    after: "Kit's home. Find Ewan.",
+  },
+  {
+    id: "lastarrow", title: "Ewan's Last Arrow", giver: "huntsman", zone: "Mirror Pond", minLevel: 5, auto: true,
+    description: "Ewan followed the blobs to Mirror Pond. The shooter blobs there spit his own arrows back.",
+    offer: ["Mirror Pond, Kit said. Ewan went there alone with a bow and twelve arrows.", "If he's still alive, he's in his hide in the reeds. If the shooter blobs have his arrows, they'll be spitting them."],
+    acceptText: "On my way",
+    steps: [
+      { type: "reach", at: EWAN_HIDE, zone: "Mirror Pond", text: "Find Ewan's hide at Mirror Pond", banner: ["New quest", "Ewan's Last Arrow"], obj: "Find Ewan's hide in the reeds of Mirror Pond", nag: "" },
+      { type: "collect", zone: "Mirror Pond", kinds: ["shooterblob"], item: "arrow", goal: 4, chance: { shooterblob: 0.6 }, text: "Take back 4 of Ewan's arrows from the shooter blobs",
+        banner: ["The hide is empty", "The shooters spat his arrows"], obj: "Ewan's arrows: {n} / {goal}", nag: "{n} of {goal}." },
+      { type: "kill", zone: "Mirror Pond", kinds: BLOB_KINDS, goal: 1, own: true, fused: 3,
+        summon: { parts: ["shooterblob", "warriorblob", "shooterblob"], level: 7, title: "Old Spitjaw", ...sumAt(22, 92) },
+        text: "Slay Old Spitjaw", banner: ["Something big surfaces", "Slay Old Spitjaw"], obj: "Old Spitjaw slain: {n} / {goal}", nag: "It rose out of the pond." },
+    ],
+    outro: ["Inside what is left of Old Spitjaw: a hunting horn. You blow it, and from deep in the reeds a weak horn answers.", "Ewan, leg broken, dragging himself out of the mud. \"Took your time,\" he grins. He'll make it home to Bryn on your arm and his pride."],
+    reward: arcReward(5, true),
+    after: "Both my lads home, and the pond quiet. The camp owes you a haunch whenever you pass.",
+  },
+];
+
+// -- Act 1: Millbrook Mill → the North Meadow spring (Lv 2-3) --
+const MILL_CLOTS = [near("mill_clot1", "nest", "Jelly clot in the sluice", "Clear", 112, 42), near("mill_clot2", "nest", "Jelly clot in the millrace", "Clear", 113, 33), near("mill_clot3", "nest", "Jelly clot in the millrace", "Clear", 112, 25)];
+const MILL_QUESTS: QuestDef[] = [
+  {
+    id: "millrace", title: "Something in the Millrace", giver: "miller", zone: "Millbrook Mill", minLevel: 2,
+    description: "The wheel at Millbrook has stopped. Odo the miller says the millrace is full of jelly, and it came down from upstream.",
+    offer: [
+      "Listen. Hear that? Nothing. That's my wheel not turning.",
+      "The race is choked with jelly, great clots of it, stuck in the sluice and all along the water up north. Blobs, rotting in my water.",
+      "Clear the clots for me, would you? Follow the race upstream. And squash whatever keeps dropping them in.",
+    ],
+    acceptText: "I'll clear the race",
+    steps: [
+      { type: "use", zone: "River Ashwell", objects: MILL_CLOTS, chest: false, text: "Clear the jelly clots along the millrace, upstream", banner: ["New quest", "Something in the Millrace"],
+        obj: "Clots cleared: {n} / {goal}", nag: "{n} of {goal}. Start at the sluice and walk upstream." },
+      { type: "kill", zone: "North Meadow", kinds: BLOB_KINDS, goal: 6, text: "Kill 6 blobs in the North Meadow upstream", banner: ["The water runs clear", "Kill 6 blobs upstream"],
+        obj: "Blobs slain: {n} / {goal}", nag: "{n} of {goal}." },
+    ],
+    outro: ["The wheel groans and starts to turn behind you. But the water still tastes of jelly.", "The stream rises from a spring in the middle of the North Meadow, and something big is wallowing in it."],
+    reward: arcReward(2),
+    after: "Hear that? She turns!",
+  },
+  {
+    id: "meadowspring", title: "The Spring Under the Meadow", giver: "miller", zone: "North Meadow", minLevel: 3, auto: true,
+    description: "A Mother Blob is wallowing in the spring that feeds Millbrook's race, budding new blobs into the water.",
+    offer: ["Follow the stream to the spring in the middle of the meadow.", "Whatever sits in it is budding little blobs straight into Odo's water."],
+    acceptText: "On my way",
+    steps: [
+      { type: "kill", zone: "North Meadow", kinds: ["motherblob"], goal: 1, own: true,
+        summon: { parts: ["motherblob"], level: 4, title: "Mother Murk", hpMult: 1.5, ...sumAt(100, 18) },
+        text: "Slay Mother Murk in the meadow spring", banner: ["New quest", "The Spring Under the Meadow"], obj: "Mother Murk slain: {n} / {goal}", nag: "She sits in the spring in the middle of the meadow." },
+    ],
+    outro: ["The spring runs clear and cold again. Downstream, faintly, you hear the mill wheel find its rhythm."],
+    reward: arcReward(3, true),
+    after: "Best flour in a month. Here, take a loaf for the road.",
+  },
+];
+
+// -- Act 1: Thornwood (Lv 10-12) --
+const THORN_MARKS = [near("thorn_mark1", "cairn", "Forester's blazed pine", "Read the marks", 175, 10), near("thorn_mark2", "cairn", "Forester's blazed pine", "Read the marks", 186, 32), near("thorn_mark3", "cairn", "Forester's blazed pine", "Read the marks", 210, 8), near("thorn_mark4", "cairn", "Forester's blazed pine", "Read the marks", 214, 33)];
+const THORN_NESTS = [near("thorn_nest1", "nest", "Seed nest in the roots", "Burn", 170, 22), near("thorn_nest2", "nest", "Seed nest in the roots", "Burn", 192, 6), near("thorn_nest3", "nest", "Seed nest in the roots", "Burn", 218, 20)];
+const THORN_QUESTS: QuestDef[] = [
+  {
+    id: "blazed", title: "The Blazed Trees", giver: "forester", zone: "Thornwood", minLevel: 10,
+    description: "Ylva the forester marks Thornwood's pines with blazes to read the forest's health. Her last round never finished: the blobs came. Read her marks and see what the forest says.",
+    offer: [
+      "Careful where you step, there's pitch on everything.",
+      "I blaze the pines on my rounds: a cut, a sign, so the next one who passes knows how the tree was. My last round I didn't finish. Something chased me off.",
+      "Four blazes still to read, all across the wood. Read them for me. The trees always tell you what's wrong, if you ask.",
+    ],
+    acceptText: "I'll read them",
+    steps: [
+      { type: "use", zone: "Thornwood", objects: THORN_MARKS, chest: false, text: "Read Ylva's four blazed pines across Thornwood", banner: ["New quest", "The Blazed Trees"],
+        obj: "Blazes read: {n} / {goal}", nag: "{n} of {goal}. They're spread right across the wood." },
+      { type: "kill", zone: "Thornwood", kinds: BLOB_KINDS, goal: 10, text: "Kill 10 blobs in Thornwood", banner: ["The roots are sick", "Kill 10 blobs"], obj: "Blobs slain: {n} / {goal}", nag: "{n} of {goal}." },
+    ],
+    outro: ["Every blaze says the same thing: roots rotting from below, needles falling green. And on each trunk a ring of black seeds, like ticks.", "The healer blobs carry the seeds, and plant them in nests under the roots."],
+    reward: arcReward(10),
+    after: "So the roots are rotting. I knew it in my gut.",
+  },
+  {
+    id: "seednests", title: "Seeds in the Needles", giver: "forester", zone: "Thornwood", minLevel: 11, auto: true,
+    description: "The blobs of Thornwood plant black seeds under the pines. Gather some, and burn the nests they grow in.",
+    offer: ["The seeds come from the healer and shooter blobs. Gather a handful.", "And the nests: three of them, deep under the biggest roots. Burn them out."],
+    acceptText: "On my way",
+    steps: [
+      { type: "collect", zone: "Thornwood", kinds: ["healerblob", "shooterblob"], item: "thornseed", goal: 5, chance: { healerblob: 0.55, shooterblob: 0.3 },
+        text: "Gather 5 Thorn Seeds from the blobs", banner: ["New quest", "Seeds in the Needles"], obj: "Thorn Seeds: {n} / {goal}", nag: "{n} of {goal}." },
+      { type: "use", zone: "Thornwood", objects: THORN_NESTS, chest: false, text: "Burn the 3 seed nests under the roots", banner: ["The seeds pull east", "Burn the seed nests"],
+        obj: "Nests burned: {n} / {goal}", nag: "{n} of {goal}." },
+    ],
+    outro: ["The last nest burns blue. Out of the smoke comes a deep crunch of branches: something big is coming through the wood toward the fire.", "Whatever has been planting the seeds is not happy."],
+    reward: arcReward(11),
+    after: "That smoke smelled wrong. Mind yourself.",
+  },
+  {
+    id: "bramblemaw", title: "Bramblemaw", giver: "forester", zone: "Thornwood", minLevel: 12, auto: true,
+    description: "The thing that planted the seed nests has come for you: a great fused blob grown through with thorns.",
+    offer: ["It crashes through the pines: four blobs fused into one, grown through with brambles and pine needles.", "Ylva's people have a name for it in the old songs. Bramblemaw."],
+    acceptText: "Fight",
+    steps: [
+      { type: "kill", zone: "Thornwood", kinds: BLOB_KINDS, goal: 1, own: true, fused: 4,
+        summon: { parts: ["warriorblob", "healerblob", "shooterblob", "slime"], level: 13, title: "Bramblemaw", hpMult: 1.3, ...sumAt(214, 22) },
+        text: "Slay Bramblemaw", banner: ["New quest", "BRAMBLEMAW"], obj: "Bramblemaw slain: {n} / {goal}", nag: "It came out of the east wood." },
+    ],
+    outro: ["Bramblemaw comes apart into thorns and jelly. The pines around you creak, and for the first time the wood smells only of pitch."],
+    reward: arcReward(12, true),
+    after: "The wood breathes easier. Come back in spring, it'll be green again.",
+  },
+];
+
+// -- Act 1: the Saltwind Coast → Gullrock (Lv 17-19) --
+const FALSE_LIGHTS = [near("coast_light1", "beacon", "Wreckers' false light", "Douse", 96, 196), near("coast_light2", "beacon", "Wreckers' false light", "Douse", 160, 196), near("coast_light3", "beacon", "Wreckers' false light", "Douse", 214, 196)];
+const COAST_QUESTS: QuestDef[] = [
+  {
+    id: "falselights", title: "Wreckers' Lights", giver: "beachcomber", zone: "Saltwind Coast", minLevel: 17,
+    description: "Somebody is lighting fires on the Saltwind Coast at night, where no harbour is, to lure ships onto the rocks. Nell the beachcomber wants them put out.",
+    offer: [
+      "See that? Planks. Barrel staves. A whole ship's worth came in on the tide last week.",
+      "She didn't hit the rocks by bad luck. Somebody lit fires along the shore, where there's no harbour, to look like one. Wreckers.",
+      "Put their lights out, all along the coast. And the blobs come to the fires like moths: kill the ones you find there.",
+    ],
+    acceptText: "I'll douse them",
+    steps: [
+      { type: "use", zone: "Saltwind Coast", objects: FALSE_LIGHTS, chest: false, text: "Douse the wreckers' false lights along the coast", banner: ["New quest", "Wreckers' Lights"],
+        obj: "False lights doused: {n} / {goal}", nag: "{n} of {goal}. They burn all along the shore." },
+      { type: "kill", zone: "Saltwind Coast", kinds: BLOB_KINDS, goal: 8, text: "Kill 8 blobs drawn to the fires", banner: ["The coast goes dark", "Kill 8 blobs at the fires"], obj: "Blobs slain: {n} / {goal}", nag: "{n} of {goal}." },
+    ],
+    outro: ["By the last fire, a cask of lamp oil with a red rag tied round it. The Redfang mark.", "The Redfang have been wrecking ships off the coast, and the blobs have been eating the salvage."],
+    reward: arcReward(17),
+    after: "No more lights on my shore. Good.",
+  },
+  {
+    id: "salvage", title: "Salvage Rights", giver: "beachcomber", zone: "Saltwind Coast", minLevel: 18, auto: true,
+    description: "The blobs of the coast have swallowed the wrecked ship's salvage, and the Redfang wreckers are camped at Gullrock to collect it.",
+    offer: ["The blobs swallowed whatever came ashore from the wreck: you can see it glinting inside them.", "Cut it out of them. Then go east to Gullrock and let the wreckers know their luck has run out."],
+    acceptText: "On my way",
+    steps: [
+      { type: "collect", zone: "Saltwind Coast", kinds: ["warriorblob", "shooterblob", "healerblob"], item: "salvage", goal: 5, chance: { warriorblob: 0.45, shooterblob: 0.45, healerblob: 0.45 },
+        text: "Cut 5 pieces of salvage out of the coast blobs", banner: ["New quest", "Salvage Rights"], obj: "Salvage: {n} / {goal}", nag: "{n} of {goal}." },
+      { type: "kill", zone: COVE, kinds: ["bandit"], goal: 5, text: "Kill 5 Redfang wreckers at Gullrock Cove", banner: ["The salvage bears a name", "Kill 5 wreckers at Gullrock"], obj: "Wreckers slain: {n} / {goal}", nag: "{n} of {goal}." },
+    ],
+    outro: ["One of the wreckers had a fresh tally in his belt: five ships, five marks. And a name scratched under them: Ollo.", "The wreckers' boss is coming down the shore to see what the noise is."],
+    reward: arcReward(18),
+    after: "Five ships. Five crews. Bastards.",
+  },
+  {
+    id: "ollo", title: "Ollo the Wrecker", giver: "beachcomber", zone: COVE, minLevel: 19, auto: true,
+    description: "Ollo, the Redfang's wrecker captain, has come down the shore to Gullrock Cove.",
+    offer: ["Down the shore he comes, a big man in a drowned captain's coat, a boat-hook for a weapon.", "Ollo the Wrecker. Five ships on his belt."],
+    acceptText: "Fight",
+    steps: [
+      { type: "kill", zone: COVE, kinds: ["bandit"], goal: 1, own: true,
+        summon: { parts: ["bandit"], level: 21, title: "Ollo the Wrecker", hpMult: 3.5, x: (GULLROCK.x + 6) * TILE, y: (GULLROCK.y + 6.7) * TILE },
+        text: "Slay Ollo the Wrecker", banner: ["New quest", "Ollo the Wrecker"], obj: "Ollo the Wrecker slain: {n} / {goal}", nag: "He's at the west end of Gullrock Cove." },
+    ],
+    outro: ["Ollo goes down in the surf. In his coat: the logbook of the last ship he wrecked, and her captain's ring. Nell will want them both, for the families."],
+    reward: arcReward(19, true),
+    after: "I'll send the ring to the captain's widow. Thank you.",
+  },
+];
+
+// -- Act 1: the Stormbreak Crags (Lv 22-24) --
+const CRAG_CAIRNS = [near("crag_cairn1", "cairn", "Storm-struck cairn", "Ground it", 246, 146), near("crag_cairn2", "cairn", "Storm-struck cairn", "Ground it", 264, 158), near("crag_cairn3", "cairn", "Storm-struck cairn", "Ground it", 278, 142)];
+const CRAG_QUESTS: QuestDef[] = [
+  {
+    id: "thunderrock", title: "Thunder in the Rock", giver: "prospector", zone: "Stormbreak Crags", minLevel: 22,
+    description: "Dagna the prospector came to the Stormbreak Crags for sky-iron. The lightning that strikes there every night has woken something in her old cairns.",
+    offer: [
+      "Don't touch the cairns. I mean it. I touched one this morning and my beard's still standing up.",
+      "I came up here for sky-iron: the ore lightning leaves in the rock. I built cairns over the best veins. Now the storm strikes them every night, and the blobs come to drink it.",
+      "Ground them for me: bury the iron rod at each foot. And thin out the storm blobs, they're getting bold.",
+    ],
+    acceptText: "I'll ground them",
+    steps: [
+      { type: "use", zone: "Stormbreak Crags", objects: CRAG_CAIRNS, chest: false, text: "Ground Dagna's three storm-struck cairns", banner: ["New quest", "Thunder in the Rock"],
+        obj: "Cairns grounded: {n} / {goal}", nag: "{n} of {goal}. Across the crags, on the highest rocks." },
+      { type: "kill", zone: "Stormbreak Crags", kinds: ["stormblob"], goal: 8, text: "Kill 8 storm blobs", banner: ["The cairns go quiet", "Kill 8 storm blobs"], obj: "Storm blobs slain: {n} / {goal}", nag: "{n} of {goal}." },
+    ],
+    outro: ["With the cairns grounded, the storm blobs have nothing left to drink but the sky-iron itself.", "They swallow the ore whole. You can see it glowing blue inside them."],
+    reward: arcReward(22),
+    after: "My beard's lying down again. Mostly.",
+  },
+  {
+    id: "skyiron", title: "Sky-Iron", giver: "prospector", zone: "Stormbreak Crags", minLevel: 23, auto: true,
+    description: "The storm blobs have swallowed Dagna's sky-iron. Cut it out of them.",
+    offer: ["The blobs are eating the sky-iron, every vein she found.", "Cut it out of them before they grow too big to fight."],
+    acceptText: "On my way",
+    steps: [
+      { type: "collect", zone: "Stormbreak Crags", kinds: ["stormblob", "warriorblob"], item: "skyiron", goal: 5, chance: { stormblob: 0.4, warriorblob: 0.3 },
+        text: "Cut 5 lumps of sky-iron out of the blobs", banner: ["New quest", "Sky-Iron"], obj: "Sky-iron: {n} / {goal}", nag: "{n} of {goal}." },
+    ],
+    outro: ["The sky-iron hums in your pack, and the hum gets louder when you face the high crags.", "Something up there has eaten more of it than all the others together, and it is calling the rest home."],
+    reward: arcReward(23),
+    after: "That's good iron. Real good iron.",
+  },
+  {
+    id: "rollingstorm", title: "The Rolling Storm", giver: "prospector", zone: "Stormbreak Crags", minLevel: 24, auto: true,
+    description: "The biggest storm blob of the crags is full of sky-iron and lightning. It rolls over the high rocks like a thundercloud.",
+    offer: ["On the high crags a thundercloud is rolling over the rock. It is not a cloud.", "Five blobs fused round a heart of sky-iron, crackling. The Rolling Storm."],
+    acceptText: "Fight",
+    steps: [
+      { type: "kill", zone: "Stormbreak Crags", kinds: BLOB_KINDS, goal: 1, own: true, fused: 5,
+        summon: { parts: ["stormblob", "stormblob", "warriorblob", "stormblob", "shooterblob"], level: 25, title: "The Rolling Storm", hpMult: 1.3, ...sumAt(268, 166) },
+        text: "Slay the Rolling Storm", banner: ["New quest", "THE ROLLING STORM"], obj: "The Rolling Storm slain: {n} / {goal}", nag: "On the high crags in the south." },
+    ],
+    outro: ["The Rolling Storm bursts with a crack you feel in your teeth. Where it died lies a lump of sky-iron the size of a loaf.", "Dagna will be prospecting here for the rest of her life."],
+    reward: arcReward(24, true),
+    after: "Ha! Look at the size of it! I'm naming the vein after you.",
+  },
+];
+
+// -- Act 2: Jackal Springs (Lv 32-34) --
+const JACKAL_BALES = [near("jackal_bale1", "clue", "Looted bale", "Search", 86, 360), near("jackal_bale2", "clue", "Looted bale", "Search", 97, 357), near("jackal_bale3", "clue", "Looted bale", "Search", 95, 366)];
+const JACKAL_QUESTS: QuestDef[] = [
+  {
+    id: "stalled", title: "The Stalled Caravan", giver: "caravaneer", zone: "Jackal Springs", minLevel: 32,
+    description: "Hamid's salt caravan was hit at Jackal Springs. His camels ran, his drivers ran, and his bales lie split open by the water.",
+    offer: [
+      "Thirty camels, stranger. Thirty! And not one of them came back. They ran when the Dustriders came, and my drivers ran with them.",
+      "The bales lie by the water, cut open. Look through them, see what they took and what they left. Raiders are fussy, it tells you who sent them.",
+      "And if Dustriders are still drinking at my springs, put them off it.",
+    ],
+    acceptText: "I'll look",
+    steps: [
+      { type: "use", zone: "Jackal Springs", objects: JACKAL_BALES, chest: false, text: "Search Hamid's looted bales", banner: ["New quest", "The Stalled Caravan"], obj: "Bales searched: {n} / {goal}", nag: "{n} of {goal}." },
+      { type: "kill", zone: "Jackal Springs", kinds: ["nomad"], goal: 8, text: "Drive off 8 Dustriders", banner: ["Only the seals are gone", "Drive off 8 Dustriders"], obj: "Dustriders slain: {n} / {goal}", nag: "{n} of {goal}." },
+    ],
+    outro: ["They left the salt and the silk. They took only the caravan seals: brass stamps that open every gate on the trade road.", "With those, a Dustrider can ride right into Kel Ashar as a merchant."],
+    reward: arcReward(32),
+    after: "Salt and silk left lying, seals gone. That's not a raid. That's a plan.",
+  },
+  {
+    id: "seals", title: "Jackal's Teeth", giver: "caravaneer", zone: "Jackal Springs", minLevel: 33, auto: true,
+    description: "The Dustriders who robbed Hamid carry the stolen caravan seals. Take them back before they reach Kel Ashar's gate.",
+    offer: ["The riders who took the seals are still about the springs, splitting the take.", "Take the seals back, all of them."],
+    acceptText: "On my way",
+    steps: [
+      { type: "collect", zone: "Jackal Springs", kinds: ["nomad"], item: "caravanseal", goal: 4, chance: { nomad: 0.4 }, text: "Take back 4 caravan seals from the Dustriders",
+        banner: ["New quest", "Jackal's Teeth"], obj: "Caravan seals: {n} / {goal}", nag: "{n} of {goal}." },
+    ],
+    outro: ["Four seals back. A wounded rider spits at your feet: \"Sufyan will skin you. He sees in the dark like a jackal.\"", "Sufyan Jackal-Eye. The riders' leader is coming to the springs himself."],
+    reward: arcReward(33),
+    after: "My seals! Every gate on the road just shut to them.",
+  },
+  {
+    id: "jackaleye", title: "Sufyan Jackal-Eye", giver: "caravaneer", zone: "Jackal Springs", minLevel: 34, auto: true,
+    description: "Sufyan Jackal-Eye, the Dustrider who planned the raid, has come to Jackal Springs for his seals.",
+    offer: ["Out of the dusk rides a man with one eye gone milky and one that shines like a jackal's.", "Sufyan Jackal-Eye. He wants his seals."],
+    acceptText: "Fight",
+    steps: [
+      { type: "kill", zone: "Jackal Springs", kinds: ["nomad"], goal: 1, own: true,
+        summon: { parts: ["nomad"], level: 36, title: "Sufyan Jackal-Eye", hpMult: 3.5, ...sumAt(90, 358) },
+        text: "Slay Sufyan Jackal-Eye", banner: ["New quest", "Sufyan Jackal-Eye"], obj: "Sufyan slain: {n} / {goal}", nag: "At the springs." },
+    ],
+    outro: ["Sufyan falls. Sewn into his coat is a strip of indigo cloth, and a gold sun with a veil over its face.", "Even the raiders of the Red Wastes answer to the Veiled Circle."],
+    reward: arcReward(34, true),
+    after: "My drivers are coming back. Some camels too. The springs are open again.",
+  },
+];
+
+// -- Act 2: the Red Wastes by the Sunstone (Lv 31-33) --
+const WASTE_STONES = [near("waste_stone1", "cairn", "Half-buried waystone", "Read", 70, 398), near("waste_stone2", "cairn", "Half-buried waystone", "Read", 60, 392), near("waste_stone3", "cairn", "Half-buried waystone", "Read", 52, 404)];
+const WASTE_NESTS = [near("waste_nest1", "nest", "Scorpion nest", "Burn", 48, 414), near("waste_nest2", "nest", "Scorpion nest", "Burn", 40, 400), near("waste_nest3", "nest", "Scorpion nest", "Burn", 56, 420)];
+const WASTE_QUESTS: QuestDef[] = [
+  {
+    id: "boneroad", title: "The Bone Road", giver: "hermit", zone: "The Red Wastes", minLevel: 31,
+    description: "Old Tamsin the hermit says the old waystones of the Bone Road, west of the Sunstone, have been dug up. Read them before the sand takes them again.",
+    offer: [
+      "Sit, sit. Sand in the tea is good for the teeth. Old Tamsin says so, and Old Tamsin has all of hers.",
+      "West of here runs the Bone Road, the old way to Kharsun. Its waystones have lain under the sand since before my grandmother. This month the wind dug them up. Or something did.",
+      "Go and read them. And mind the scorpions. They've been bold since the stones came up.",
+    ],
+    acceptText: "I'll read the stones",
+    steps: [
+      { type: "use", zone: "The Red Wastes", objects: WASTE_STONES, chest: false, text: "Read the 3 waystones of the Bone Road", banner: ["New quest", "The Bone Road"], obj: "Waystones read: {n} / {goal}", nag: "{n} of {goal}. West of my fire." },
+      { type: "kill", zone: "The Red Wastes", kinds: ["scorpion"], goal: 8, text: "Kill 8 scorpions on the Bone Road", banner: ["Something dug them up", "Kill 8 scorpions"], obj: "Scorpions slain: {n} / {goal}", nag: "{n} of {goal}." },
+    ],
+    outro: ["The waystones were not dug up by the wind. Something burrowed under each of them, and the tunnels all run south-west.", "The scorpions come out of those tunnels. Nests, then, under the road."],
+    reward: arcReward(31),
+    after: "Tunnels? Under the Bone Road? Hm. Old Tamsin does not like that.",
+  },
+  {
+    id: "stingingdark", title: "The Stinging Dark", giver: "hermit", zone: "The Red Wastes", minLevel: 32, auto: true,
+    description: "Scorpion nests under the Bone Road. Burn them.",
+    offer: ["The tunnels open into nests south-west of the waystones, three of them, each a heap of husks and eggs.", "Burn them before they hatch."],
+    acceptText: "On my way",
+    steps: [
+      { type: "use", zone: "The Red Wastes", objects: WASTE_NESTS, chest: false, text: "Burn the 3 scorpion nests", banner: ["New quest", "The Stinging Dark"], obj: "Nests burned: {n} / {goal}", nag: "{n} of {goal}." },
+    ],
+    outro: ["The last nest burns. The ground under you shivers, and the sand starts to slide down into a widening hole.", "Something very big lives under the nests, and you just burned her children."],
+    reward: arcReward(32),
+    after: "Burned? Good. Now run.",
+  },
+  {
+    id: "stings", title: "Mother of Stings", giver: "hermit", zone: "The Red Wastes", minLevel: 33, auto: true,
+    description: "The mother of the Bone Road's scorpions has come up out of the sand.",
+    offer: ["She heaves up out of the sand: a scorpion as long as a cart, her shell scarred with old spear-points.", "The Mother of Stings."],
+    acceptText: "Fight",
+    steps: [
+      { type: "kill", zone: "The Red Wastes", kinds: ["scorpion"], goal: 1, own: true,
+        summon: { parts: ["scorpion"], level: 35, title: "The Mother of Stings", hpMult: 4, ...sumAt(48, 410) },
+        text: "Slay the Mother of Stings", banner: ["New quest", "THE MOTHER OF STINGS"], obj: "The Mother of Stings slain: {n} / {goal}", nag: "By the burned nests." },
+    ],
+    outro: ["The Mother of Stings rolls over in the sand. Among the spear-points in her shell is a waystone fragment with the Bone Road's last mile on it: \"KHARSUN. DRINK, AND REMEMBER.\""],
+    reward: arcReward(33, true),
+    after: "The Bone Road is quiet. Old Tamsin will walk it again, before she dies.",
+  },
+];
+
+// -- Act 2: the Saffron Dunes (Lv 40-42) --
+const DUNE_TOTEMS = [near("dune_totem1", "totem", "Brand-totem of the Circle", "Burn", 214, 450), near("dune_totem2", "totem", "Brand-totem of the Circle", "Burn", 232, 462), near("dune_totem3", "totem", "Brand-totem of the Circle", "Burn", 248, 446)];
+const DUNE_QUESTS: QuestDef[] = [
+  {
+    id: "backwards", title: "Tracks That Walk Backward", giver: "dunescout", zone: "The Saffron Dunes", minLevel: 40,
+    description: "Leyla, a scout of the camel-clans, follows a herd of branded camel-folk into the Saffron Dunes. Their tracks walk backward, so no one can follow.",
+    offer: [
+      "Quiet. Look at the sand. What do you see? Tracks going west, yes? Wrong. They walk backward, heel first. An old trick.",
+      "Branded ones. My own clan, some of them. The Circle's brand makes them do it, so nobody follows them home.",
+      "I follow anyway. Thin them out with me. Then we find where they go.",
+    ],
+    acceptText: "I'll come",
+    steps: [
+      { type: "kill", zone: "The Saffron Dunes", kinds: ["camelfolk"], goal: 10, text: "Kill 10 branded camel-folk in the dunes", banner: ["New quest", "Tracks That Walk Backward"], obj: "Camel-folk slain: {n} / {goal}", nag: "{n} of {goal}." },
+    ],
+    outro: ["The backward tracks lead deeper into the dunes, to tall posts of black wood hung with brass plates: brand-totems.", "The branded ones walk round them in circles, like moths round a lamp."],
+    reward: arcReward(40),
+    after: "Brand-totems. I didn't know they had those out here.",
+  },
+  {
+    id: "brandtotems", title: "The Brand-Totems", giver: "dunescout", zone: "The Saffron Dunes", minLevel: 41, auto: true,
+    description: "Brand-totems of the Veiled Circle hold the branded camel-folk in the Saffron Dunes. Burn them, and take the dune-pearls the scorpions gather round them.",
+    offer: ["Three totems across the dunes. Burn them and the brand loses its pull.", "The scorpions nest at their feet and swallow the dune-pearls the Circle buries there: gather those too, Leyla says the clan elders can read them."],
+    acceptText: "On my way",
+    steps: [
+      { type: "use", zone: "The Saffron Dunes", objects: DUNE_TOTEMS, chest: false, text: "Burn the 3 brand-totems", banner: ["New quest", "The Brand-Totems"], obj: "Brand-totems burned: {n} / {goal}", nag: "{n} of {goal}." },
+      { type: "collect", zone: "The Saffron Dunes", kinds: ["scorpion"], item: "pearl", goal: 4, chance: { scorpion: 0.35 }, text: "Take 4 dune-pearls from the scorpions",
+        banner: ["The totems burn", "Take 4 dune-pearls"], obj: "Dune-pearls: {n} / {goal}", nag: "{n} of {goal}." },
+    ],
+    outro: ["As the last totem falls a great bellow rolls over the dunes. The branded ones stop circling and turn, all at once, toward it.", "Their khan is coming. The Circle branded him first."],
+    reward: arcReward(41),
+    after: "The dune-pearls are clan memory. The Circle stole our memory and buried it. I won't forget this.",
+  },
+  {
+    id: "khan", title: "The Branded Khan", giver: "dunescout", zone: "The Saffron Dunes", minLevel: 42, auto: true,
+    description: "Khan Ghazi, the camel-clans' lost chief, was the first the Circle branded. He comes for whoever burned his totems.",
+    offer: ["Over the dune crest comes the biggest of them all, a gold ring in his nose and the Circle's brand burned deep in his neck.", "Khan Ghazi. Leyla's khan, once."],
+    acceptText: "Fight",
+    steps: [
+      { type: "kill", zone: "The Saffron Dunes", kinds: ["camelfolk"], goal: 1, own: true,
+        summon: { parts: ["camelfolk"], level: 44, title: "Khan Ghazi, the Branded", hpMult: 3.5, ...sumAt(232, 452) },
+        text: "Free Khan Ghazi from the brand", banner: ["New quest", "THE BRANDED KHAN"], obj: "Khan Ghazi freed: {n} / {goal}", nag: "In the middle of the dunes." },
+    ],
+    outro: ["As Khan Ghazi falls, the brand on his neck cracks and goes dark. His eyes clear for a moment. \"Tell the clans,\" he breathes, \"the sun has a veil. Tear it off.\""],
+    reward: arcReward(42, true),
+    after: "He knew me at the end. He knew me.",
+  },
+];
+
+// -- Act 2: the foot of the Thornspire (Lv 43-45) --
+const SPIRE_MIRRORS = [near("spire_mirror1", "sigil", "Sun-mirror", "Turn aside", 214, 384), near("spire_mirror2", "sigil", "Sun-mirror", "Turn aside", 228, 376), near("spire_mirror3", "sigil", "Sun-mirror", "Turn aside", 240, 388)];
+const SPIRE_RIDDLES = [near("spire_riddle1", "cairn", "Riddle stone", "Read", 208, 364), near("spire_riddle2", "cairn", "Riddle stone", "Read", 222, 356), near("spire_riddle3", "cairn", "Riddle stone", "Read", 236, 366)];
+const SPIRE_QUESTS: QuestDef[] = [
+  {
+    id: "mirrorpath", title: "The Mirror Path", giver: "defector", zone: "The Thornspire Heights", minLevel: 43,
+    description: "Nasrin walked out of the Veiled Circle. She knows the mirrors on the lower Thornspire: they burn whoever climbs the path by day.",
+    offer: [
+      "Don't look up. The mirrors. Look up and they find your eyes.",
+      "I wore this robe for nine years. I polished those mirrors. Every one is set to throw the noon sun onto the path, so no one climbs by day.",
+      "Turn them aside. I'll show you how. And the sphinxes that guard them, they don't sleep. Kill them before they ask you anything.",
+    ],
+    acceptText: "I'll turn the mirrors",
+    steps: [
+      { type: "use", zone: "The Thornspire Heights", objects: SPIRE_MIRRORS, chest: false, text: "Turn the 3 sun-mirrors aside", banner: ["New quest", "The Mirror Path"], obj: "Mirrors turned: {n} / {goal}", nag: "{n} of {goal}." },
+      { type: "kill", zone: "The Thornspire Heights", kinds: ["sphinx"], goal: 5, text: "Kill 5 sphinx warriors on the path", banner: ["The path is shaded", "Kill 5 sphinx warriors"], obj: "Sphinx warriors slain: {n} / {goal}", nag: "{n} of {goal}." },
+    ],
+    outro: ["Above the mirrors the path splits round three carved stones, each cut with a riddle in the Circle's script.", "Nasrin says the right answers open the old riddle-door, and the wrong ones wake its keeper."],
+    reward: arcReward(43),
+    after: "Shade on the path. I never thought I'd see it.",
+  },
+  {
+    id: "riddles", title: "Riddles in Stone", giver: "defector", zone: "The Thornspire Heights", minLevel: 44, auto: true,
+    description: "Three riddle stones guard the old door to the sphinxes' roost. Read them, and put down the adepts who come to stop you.",
+    offer: ["Three riddle stones, higher up the path. Nasrin knows the answers. She taught them to children, once.", "The adepts will feel you reading them. They'll come."],
+    acceptText: "On my way",
+    steps: [
+      { type: "use", zone: "The Thornspire Heights", objects: SPIRE_RIDDLES, chest: false, text: "Read the 3 riddle stones", banner: ["New quest", "Riddles in Stone"], obj: "Riddles read: {n} / {goal}", nag: "{n} of {goal}." },
+      { type: "kill", zone: "The Thornspire Heights", kinds: ["veiled"], goal: 8, text: "Kill 8 Veiled Adepts", banner: ["The adepts come", "Kill 8 Veiled Adepts"], obj: "Veiled Adepts slain: {n} / {goal}", nag: "{n} of {goal}." },
+    ],
+    outro: ["The last answer is \"a well\". The stone grinds open, and from the roost above comes a voice like a lioness purring.", "\"A riddle for a riddle, little thief. Come up and answer mine.\""],
+    reward: arcReward(44),
+    after: "Neferu. She was the Circle's first sphinx. She's very, very old.",
+  },
+  {
+    id: "riddlemother", title: "The Riddle-Mother", giver: "defector", zone: "The Thornspire Heights", minLevel: 45, auto: true,
+    description: "Neferu, the first sphinx the Veiled Circle made, keeps the roost above the riddle stones.",
+    offer: ["Neferu is waiting on her roost, tail lashing, the Circle's gold on her brow.", "Her riddle has no answer. Only a blade."],
+    acceptText: "Fight",
+    steps: [
+      { type: "kill", zone: "The Thornspire Heights", kinds: ["sphinx"], goal: 1, own: true,
+        summon: { parts: ["sphinx"], level: 47, title: "Neferu, the Riddle-Mother", hpMult: 3.5, ...sumAt(222, 350) },
+        text: "Slay Neferu, the Riddle-Mother", banner: ["New quest", "THE RIDDLE-MOTHER"], obj: "Neferu slain: {n} / {goal}", nag: "On her roost above the riddle stones." },
+    ],
+    outro: ["Neferu lies still. On her roost, under bones and gold, is a map of the Thornspire, with the Veiled Sanctum marked and a stair above it."],
+    reward: arcReward(45, true),
+    after: "She asked me a riddle every morning for nine years. I never once knew the answer. Thank you.",
+  },
+];
+
+/** The zone arcs, each its own chain (QuestChain.local): Act 1 then Act 2. */
+export const ZONE_ARCS: { id: string; name: string; quests: QuestDef[] }[] = [
+  { id: "mill", name: "Millbrook's Bad Water", quests: MILL_QUESTS },
+  { id: "hunt", name: "The Lost Hunt", quests: HUNT_QUESTS },
+  { id: "thornwood", name: "Thornwood Whispers", quests: THORN_QUESTS },
+  { id: "coast", name: "The Wreckers of Saltwind", quests: COAST_QUESTS },
+  { id: "crags", name: "Sky-Iron", quests: CRAG_QUESTS },
+  { id: "wastes", name: "The Bone Road", quests: WASTE_QUESTS },
+  { id: "jackal", name: "Jackal Springs", quests: JACKAL_QUESTS },
+  { id: "dunes", name: "The Branded Clans", quests: DUNE_QUESTS },
+  { id: "spire", name: "The Mirror Path", quests: SPIRE_QUESTS },
+];
+const ARC_OBJECTS: QuestObject[] = ZONE_ARCS.flatMap((a) => a.quests.flatMap((d) => d.steps.flatMap((s) => s.objects ?? [])));
 
 // ---- First Steps: the guided first quest, one control per step (replaces the old wall-of-text intro) ----
 
@@ -1329,30 +1777,49 @@ export interface QuestChain {
    * Player schema ran out of fields (Colyseus allows 64). `keys` are then only the save file's names.
    */
   packed?: string;
+  /**
+   * A zone quest arc (Murat 2026-11-10): a few quests given out in one zone by someone who lives there, each leading on
+   * to the next. Its packed progress lives in the Player.arcs map under `packed` (one synced field for every arc).
+   */
+  local?: boolean;
 }
 /** Pack / unpack a chain's progress into one number (QuestChain.packed). */
 export const packQuest = (id: number, stage: number, count: number) => id * 10000 + Math.min(99, stage) * 100 + Math.min(99, count);
 export const unpackQuest = (n: number) => ({ questId: Math.floor(n / 10000), questStage: Math.floor(n / 100) % 100, questCount: n % 100 });
 export const CHAINS: QuestChain[] = [
   { id: "gloam", name: "The Gloam", quests: QUESTS, keys: ["questId", "questStage", "questCount"], version: QUEST_VERSION, verKey: "questVer" },
-  { id: "bones", name: "The Pale Marshal", quests: BONE_QUESTS, keys: ["boneId", "boneStage", "boneCount"], version: 1, verKey: "boneVer" },
+  { id: "bones", name: "The Pale Marshal", quests: BONE_QUESTS, keys: ["boneId", "boneStage", "boneCount"], version: 2, verKey: "boneVer", packed: "bone" },
   // packed since Act 2 (the Second Sun needed a synced field): saves keep the same three names
-  { id: "redfang", name: "The Redfang Debt", quests: RED_QUESTS, keys: ["redId", "redStage", "redCount"], version: 2, verKey: "redVer", packed: "red" },
+  { id: "redfang", name: "The Redfang Debt", quests: RED_QUESTS, keys: ["redId", "redStage", "redCount"], version: 3, verKey: "redVer", packed: "red" },
   { id: "tutorial", name: "First Steps", quests: TUT_QUESTS, keys: ["tutId", "tutStage", "tutCount"], version: 1, verKey: "tutVer", packed: "tut" },
-  { id: "crown", name: "The Hollow Crown", quests: CROWN_QUESTS, keys: ["crownId", "crownStage", "crownCount"], version: 1, verKey: "crownVer", packed: "crown" },
-  { id: "beast", name: "The Hide Rite", quests: BEAST_QUESTS, keys: ["beastId", "beastStage", "beastCount"], version: 1, verKey: "beastVer", packed: "beast" },
-  { id: "sun", name: "The Second Sun", quests: SUN_QUESTS, keys: ["sunId", "sunStage", "sunCount"], version: 1, verKey: "sunVer", packed: "sun" },
+  { id: "crown", name: "The Hollow Crown", quests: CROWN_QUESTS, keys: ["crownId", "crownStage", "crownCount"], version: 2, verKey: "crownVer", packed: "crown" },
+  { id: "beast", name: "The Hide Rite", quests: BEAST_QUESTS, keys: ["beastId", "beastStage", "beastCount"], version: 2, verKey: "beastVer", packed: "beast" },
+  { id: "sun", name: "The Second Sun", quests: SUN_QUESTS, keys: ["sunId", "sunStage", "sunCount"], version: 2, verKey: "sunVer", packed: "sun" },
+  // the zone arcs (ZONE_ARCS), CHAINS[7..]: progress in the Player.arcs map, saved together under "arcs"
+  ...ZONE_ARCS.map((a): QuestChain => ({ id: a.id, name: a.name, quests: a.quests, keys: [`${a.id}Id`, `${a.id}Stage`, `${a.id}Count`], version: 1, verKey: `${a.id}Ver`, packed: a.id, local: true })),
 ];
 
 /** Progress on one chain (chain undefined = the blob chain, so a Player passed as is reads as chain 0). */
 export interface QuestState { questId: number; questStage: number; questCount: number; level?: number; chain?: number }
 /** A player's progress on every chain: the Player schema fields (CHAINS[].keys). */
-export type Quester = { level?: number; questId?: number; questStage?: number; questCount?: number; boneId?: number; boneStage?: number; boneCount?: number; redId?: number; redStage?: number; redCount?: number; tut?: number; crown?: number; beast?: number; red?: number; sun?: number };
+/** The zone arcs' packed progress by arc id: the Player's synced MapSchema, or a plain object in saves and tests. */
+export type ArcMap = { get(k: string): number | undefined } | Record<string, number>;
+export type Quester = { level?: number; questId?: number; questStage?: number; questCount?: number; bone?: number; redId?: number; redStage?: number; redCount?: number; tut?: number; crown?: number; beast?: number; red?: number; sun?: number; arcs?: ArcMap };
+/** One arc's packed number out of the arcs map. */
+export const arcValue = (m: ArcMap | undefined, k: string): number => {
+  if (!m) return 0;
+  const v = typeof (m as { get?: unknown }).get === "function" ? (m as { get(k: string): number | undefined }).get(k) : (m as Record<string, number>)[k];
+  return typeof v === "number" ? v : 0;
+};
+
+/** Every chain's progress in one string: redraw keys for the dialog and the shop. */
+export const questSig = (p: Quester | undefined) => CHAINS.map((_, c) => { const q = chainState(p, c); return q ? `${q.questId}.${q.questStage}.${q.questCount}` : ""; }).join(",");
 
 /** One chain's progress, read from the player's fields. */
 export function chainState(p: Quester | undefined, c: number): QuestState | undefined {
   if (!p) return undefined;
   const [a, b, n] = CHAINS[c].keys, r = p as Record<string, number | undefined>, pk = CHAINS[c].packed;
+  if (pk && CHAINS[c].local) return { chain: c, ...unpackQuest(arcValue(p.arcs, pk)), level: p.level };
   if (pk) return { chain: c, ...unpackQuest(r[pk] ?? 0), level: p.level };
   return { chain: c, questId: r[a] ?? 0, questStage: r[b] ?? 0, questCount: r[n] ?? 0, level: p.level };
 }
@@ -1395,14 +1862,13 @@ export function npcPresent(id: string, p: Quester | undefined): boolean {
   if (id !== "fisher") return true;
   const q = chainState(p, 0);
   const lake = QUESTS.findIndex((d) => d.id === "lake");
-  const qid = q?.questId ?? 0;
-  return qid > lake || (qid === lake && (q?.questStage ?? 0) >= QUESTS[lake].steps.length);
+  return (q?.questId ?? 0) > lake; // freeing him ends the quest: he runs home
 }
 /** Is the blob cocoon (with Tobin inside) still there for this player? */
 export function cocoonPresent(p: Quester | undefined): boolean {
   const q = chainState(p, 0);
   const lake = QUESTS.findIndex((d) => d.id === "lake");
-  return (q?.questId ?? 0) < lake || ((q?.questId ?? 0) === lake && (q?.questStage ?? 0) < QUESTS[lake].steps.length);
+  return (q?.questId ?? 0) <= lake;
 }
 
 /** One chain's "!" (new quest) / "?" (come and talk) for an NPC. */
@@ -1520,7 +1986,7 @@ export function usableObjects(p: Quester | undefined): { o: QuestObject; i: numb
 
 /** Every quest object in the world, with whether it is done for this player (lit lanterns stay lit…). */
 export function allObjects(): QuestObject[] {
-  return [...LANTERNS, COCOON, ...SHRINES, BROOD_HEART, ...SHARDS, ...ENGINES, BEACON, ...CRYPTS, PHYLACTERY, ...WARDS, ...SILK, ...HIDE_TOTEMS, ...PALM_SIGILS, ...MIRAGE_SIGILS, ...CISTERNS];
+  return [...LANTERNS, COCOON, ...SHRINES, BROOD_HEART, ...SHARDS, ...ENGINES, BEACON, ...CRYPTS, PHYLACTERY, ...WARDS, ...KING_STONES, ...SILK, ...HIDE_TOTEMS, ...PALM_SIGILS, ...MIRAGE_SIGILS, ...CISTERNS, ...ARC_OBJECTS];
 }
 export function objectDone(o: QuestObject, p: Quester | undefined): boolean {
   const c = CHAINS.findIndex((ch) => ch.quests.some((d) => d.steps.some((s) => s.objects?.includes(o))));
