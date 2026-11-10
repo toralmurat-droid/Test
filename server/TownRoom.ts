@@ -19,6 +19,7 @@ const potSize = (g: string) => Math.max(0, Math.min(SIZES - 1, Math.floor(Number
 import { attackMult, cooldownMult, critChance, heroSpeed, magicMult, maxHpFromStats, SLOW_MOB, STATS, statsFor, statPoints } from "../shared/powers";
 import { AttackProfile, attackProfile, weaponAttackMult, weaponOk } from "../shared/weapons";
 import { Element, ElemPart, ELEMENT_FX, mobAffinity, MOB_MELEE_ELEMENT, MOB_SHOT_ELEMENT } from "../shared/elements";
+import { applyElementHit, corrodeBonus, lingerReaction, newReactState, purifies, REACTIONS, reactionWords, steamMiss, type ReactionHit, type ReactState } from "../shared/elements";
 import { gearResist, splitHit } from "../shared/gear";
 import { cleanFilter, LootFilter, passesFilter } from "../shared/heroSheet";
 import { activeSkills, canLearn, classSkills, cleanRanks, levelPower, REPLACED_SKILLS, maxRank, topRank, NEED_TEXT, rankOf, rankPower, scalePower, skillById, skillLearned, skillOf, talentBonus, talentMult, talentReduce } from "../shared/skills";
@@ -227,6 +228,7 @@ export class Mob extends Schema {
   slot = -1; // a Summoner's permanent golem: its grimoire slot (0, 1); -1 for other summons
   mind?: GolemMind; // a golem's own powers (shared/golemAI.ts): elements, timers
   wisp?: WispMind; // a Summoner's wisp (shared/voidConjure.ts): its element, power and next shot
+  react?: ReactState; // elemental reactions (shared/elements.ts REACTIONS): its mark, cooldown, Steam and Corrosion; shown through fx
   fusedSlots = 0; // a Colossus: how many golems fused into it (they come back out when it ends)
   charmUntil = 0; // Charm (v_gaze): a zone monster fighting for a vampire (owner set) until then, then it goes back to being itself
   sPower = 1; // a summon's damage multiplier (skill rank, the owner's Ruin talent, the golems fused into a Colossus)
@@ -415,6 +417,7 @@ interface HitOpts {
   drain?: number; // % of the damage dealt that heals the attacker (vampire skills)
   rune?: boolean; // damage from a rune effect (shared/runes.ts): never fires runes again
   pet?: boolean; // dealt by a hero's creature (golem, wisp) in their name: SUMMON.pvp applies on heroes
+  poiseAdd?: number; // extra poise damage, as a share of the monster's whole poise bar (Fracture)
 }
 
 const COLORS = [0xe74c3c, 0x3498db, 0x2ecc71, 0xf1c40f, 0x9b59b6, 0xe67e22, 0x1abc9c, 0xecf0f1];
@@ -1086,6 +1089,7 @@ export class TownRoom extends Room<TownState> {
     m.specialKind = ""; m.specialAt = 0; m.nextBounce = 0; m.nextSlam = 0; m.nextRaise = 0; m.nextCircle = 0;
     m.ritual = false; m.riteX = NaN; m.banishAt = 0; m.nextStomp = 0; m.nextHarvest = 0; m.nextToss = 0; m.bones = 0;
     m.foe = ""; m.hateId = ""; m.hate = 0; m.nextAggro = 0; m.threat = 0;
+    m.react = undefined; // no elemental mark left from its last life
     m.work = ""; m.job = -1; m.leg = 1; m.restUntil = 0;
     if (kind === "skeleton" && zi >= 0) this.takeJob(m, id, SPAWN_ZONES[zi].name);
     m.merged = 1; m.parts = ""; m.summonFor = ""; m.mergeInto = ""; m.mergeCap = 0; m.nextCall = 0; m.nextShot = 0;
@@ -2632,7 +2636,7 @@ export class TownRoom extends Room<TownState> {
       } else dt = dtMs / 1000;
       m.lastTick = now;
       tickUnit(this.host, id);
-      const fx = statusOf(m, now);
+      const fx = TownRoom.mobFx(m, now);
       if (m.fx !== fx) m.fx = fx;
       this.updateMob(m, id, dt, now);
       if (m.perch) { m.x = m.homeX; m.y = m.homeY; m.moving = false; } // lookouts never leave their tower
@@ -4147,6 +4151,7 @@ export class TownRoom extends Room<TownState> {
           if (!pid && !p.dead && !isSafeZone(p.x, p.y) && now >= p.invulnUntil && Math.hypot(p.x - s.x, p.y - s.y) <= s.radius + HIT_RADIUS) pid = k;
         });
         if (pid) {
+          if (this.steamMissed(s.owner, pid)) return this.explode(s, id); // Steam: the shot goes wide
           this.damagePlayer(pid, s.damage, s.mobName, [s.vx, s.vy], 0.5, { atkLevel: s.mobLevel, mobEl: s.mobEl });
           return this.explode(s, id, pid);
         }
@@ -4824,9 +4829,10 @@ export class TownRoom extends Room<TownState> {
     const riders: ElemPart[] = [];
     if (opts.parts?.length) {
       const tp0 = this.state.players.get(targetId), tm0 = tp0 ? undefined : this.state.mobs.get(targetId);
+      const corrode = tm0 ? corrodeBonus(tm0.react, Date.now()) : 0; // Corrosion (REACTIONS.corrode)
       let top = 0;
       for (const p of opts.parts) {
-        const amt = p.amt * (tp0 ? 1 - gearResist(this.equipped(tp0), p.el) : tm0 ? mobAffinity(tm0.kind, p.el) : 1);
+        const amt = p.amt * (tp0 ? 1 - gearResist(this.equipped(tp0), p.el) : tm0 ? mobAffinity(tm0.kind, p.el) + corrode : 1);
         if (amt <= 0) continue;
         if (p.el !== "poison") dmg += amt;
         riders.push({ el: p.el, amt });
@@ -4836,6 +4842,11 @@ export class TownRoom extends Room<TownState> {
       if (cold) opts = { ...opts, slowMs: Math.max(opts.slowMs ?? 0, tp0 ? ELEMENT_FX.cold.heroSlowMs : ELEMENT_FX.cold.mobSlowMs) };
       opts = { ...opts, parts: undefined };
       if (riders.length) this.elementRiders(attackerId, targetId, riders);
+      // Elemental reactions (shared/elements.ts REACTIONS): a hero's hit on a wild monster, never on heroes or creatures
+      if (tm0 && a && !tm0.owner && !tm0.dead && riders.length) {
+        const r = this.elementReaction(attackerId, targetId, tm0, riders, dmg);
+        if (r) { dmg *= r.mult; if (r.poise) opts = { ...opts, poiseAdd: r.poise }; }
+      }
     }
     if (a) dmg = dmg * talentMult(a.cls, a.talents, "dmg") * feastMult(a.feast, "dmg") * (opts.skill && !opts.dot ? talentMult(a.cls, a.talents, "skill") * feastMult(a.feast, "skill") : 1) * dealtMult(a, Date.now());
     dmg = Math.max(1, Math.round(dmg));
@@ -4886,7 +4897,7 @@ export class TownRoom extends Room<TownState> {
     // Initiative: drain poise; a solid hit interrupts the wind-up and delays the next attack
     const pmax = mobPoiseMax(m);
     // Higher-level monsters are harder to make dizzy
-    const pdmg = dmg * (opts.skill ? POISE.skillMult : 1) * poiseLevelMult(a?.level ?? 1, m.level);
+    const pdmg = dmg * (opts.skill ? POISE.skillMult : 1) * poiseLevelMult(a?.level ?? 1, m.level) + (opts.poiseAdd ?? 0) * pmax;
     if (drainPoise(m, pmax, pdmg, now, POISE.mobBrokenMs)) this.broadcast("broken", { id: targetId, ms: POISE.mobBrokenMs });
     if (pdmg >= pmax * 0.15) {
       m.windUntil = 0; m.winding = false;
@@ -4909,6 +4920,56 @@ export class TownRoom extends Room<TownState> {
     for (const pid of a?.party ? this.groupNear(attackerId, m.x, m.y) : [attackerId]) this.grantXp(pid, xp, m);
     this.dropLoot(m.kind, m.x, m.y, mobScale(m.level, "gold") * (m.kind === "bandit" ? BANDIT_ROLES[roleOf(m.weapon)].loot : 1), m.level);
     this.mobDied(m, targetId, attackerId, a?.name ?? "");
+  }
+
+  /** A monster's status words: its skill effects (statusOf) and its elemental mark, Steam and Corrosion (reactionWords). */
+  private static mobFx(m: Mob, now: number): string {
+    const fx = statusOf(m, now), rw = m.react ? reactionWords(m.react, now) : "";
+    return rw ? (fx ? fx + "," + rw : rw) : fx;
+  }
+
+  /**
+   * A hero's elemental hit on a wild monster (shared/elements.ts REACTIONS): leaves its mark, or sets off the reaction of
+   * the mark and the hit. `attackerId` is always the hero: their creatures hit in their name, so they count as them.
+   * Returns what the hit itself gains (a damage multiplier, extra poise damage); the rest happens here.
+   */
+  private elementReaction(attackerId: string, targetId: string, m: Mob, riders: ElemPart[], dmg: number): { mult: number; poise: number } | undefined {
+    const now = Date.now();
+    const els = riders.slice().sort((x, y) => y.amt - x.amt).map((r) => r.el);
+    const r: ReactionHit | undefined = applyElementHit((m.react ??= newReactState()), els, attackerId, now);
+    if (!r) return undefined;
+    const f = r.factor, x = Math.round(m.x), y = Math.round(m.y);
+    this.broadcast("react", { id: targetId, r: r.id, f, x, y });
+    lingerReaction(m.react, r.id, f, now); // Steam, Corrosion
+    if (r.id === "fracture") return { mult: 1 + REACTIONS.fracture.dmg * f, poise: REACTIONS.fracture.poise * f };
+    if (r.id === "toxic") {
+      // the blast lands just after the hit, on every wild monster round the target (the target too)
+      const T = REACTIONS.toxic, amt = dmg * T.dmg * f;
+      this.host.later(60, () => {
+        for (const [oid, o] of this.state.mobs.inBox(x, y, T.radius)) {
+          if (o.dead || o.hidden || o.owner || Math.hypot(o.x - x, o.y - y) > T.radius) continue;
+          this.hitTarget(attackerId, oid, amt * mobAffinity(o.kind, "poison"), [0, 0], { kb: 0, el: "poison", rune: true });
+        }
+      });
+    }
+    if (r.id === "purify") {
+      // a small heal to the hero, the one who left the mark and the hero's group close by
+      const P = REACTIONS.purify, who = new Set([attackerId, r.markBy, ...this.groupNear(attackerId, x, y)]);
+      for (const pid of who) {
+        const p = this.state.players.get(pid);
+        if (p && !p.dead && (pid === attackerId || Math.hypot(p.x - x, p.y - y) <= P.radius)) this.host.heal(pid, p.maxHp * P.heal * f);
+      }
+      if (purifies(m.kind)) return { mult: 1 + (P.mult - 1) * f, poise: 0 };
+    }
+    return undefined;
+  }
+
+  /** Steam (REACTIONS.steam): a monster's attack may miss. True when it does (the hero sees "Miss"). */
+  private steamMissed(mobId: string, heroId: string): boolean {
+    const m = this.state.mobs.get(mobId), chance = m?.react ? steamMiss(m.react, Date.now()) : 0;
+    if (!chance || Math.random() >= chance) return false;
+    this.broadcast("rmiss", { id: heroId });
+    return true;
   }
 
   /**
@@ -5661,6 +5722,8 @@ export class TownRoom extends Room<TownState> {
     const t = this.state.players.get(tid);
     const now = Date.now();
     if (!t || t.dead || (isSafeZone(t.x, t.y) && !opts.wrath) || now < t.invulnUntil) return false;
+    // Steam (shared/elements.ts REACTIONS): a scalded monster misses some of its blows
+    if (opts.from && !opts.dot && this.steamMissed(opts.from, tid)) return false;
     // A counter stance (Riposte, Mirror Ice...) eats the hit and strikes back
     if (counterHit(this.host, tid, opts.from, dmg, opts)) return false;
     // Weakened monsters hit softer

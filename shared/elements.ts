@@ -80,3 +80,105 @@ export const VISUAL_TIERS = [
   { tier: 3, name: "Tier III", zone: "planned: third zone (Lv 50-70)", elements: 2, maxShare: 0.85 },
   { tier: 4, name: "Tier IV", zone: "planned: endgame", elements: 3, maxShare: 1 },
 ];
+
+/**
+ * Elemental reactions (Lot E, game design review 2026-11): two elements meeting on the same monster react, so heroes
+ * of different classes fighting together get more out of their elements. Monsters only, never PvP.
+ *   - A hit with an elemental part leaves a MARK on the monster for REACTION_MARK_MS: its element and the hero who left it.
+ *   - A hit of ANOTHER element on a marked monster sets off the reaction of the pair and uses the mark up.
+ *   - Mark left by another hero: the reaction works in full. Left by the same hero: at REACTION_SELF_FACTOR (30%).
+ *     A hero's creatures (golems, wisps, Void Blades, the Void Lord's Arsenal, a vampire's thralls) hit in their
+ *     owner's name, so they always count as that same hero, never as "another hero".
+ *   - The pairs are symmetric: mark Cold + Shock hit = mark Shock + Cold hit.
+ *   - After a reaction a monster cannot react again for REACTION_COOLDOWN_MS. 1 s: long enough that two heroes
+ *     trading hits can't chain a reaction on every swing (a basic attack lands every ~0.5-0.8 s), short enough that a
+ *     group still sees one every second or two. Hits during the cooldown still leave their mark, ready for the next one.
+ * Values below are at 100% (another hero's mark); the factor scales each effect.
+ */
+export type ReactionId = "fracture" | "toxic" | "steam" | "corrode" | "purify";
+export interface ReactionDef { name: string; els: [Element, Element]; color: number; text: string }
+export const REACTIONS = {
+  // +40% damage on this hit, and a big poise blow (a share of the monster's whole poise bar)
+  fracture: { name: "Fracture", els: ["cold", "shock"], color: 0xbfe6ff, text: "+40% damage on the hit, breaks poise", dmg: 0.4, poise: 0.35 },
+  // a burst of poison round the target: the others close by take a share of the hit
+  toxic: { name: "Toxic Blast", els: ["fire", "poison"], color: 0x9bdc4a, text: "a poison blast hurts the foes around", radius: 56, dmg: 0.5 },
+  // scalding steam: the monster misses some of its attacks for a moment
+  steam: { name: "Steam", els: ["fire", "cold"], color: 0xe8f4ff, text: "the foe misses 30% of its attacks for 3s", miss: 0.3, ms: 3000 },
+  // its elemental resistances drop by 25 points for 5 s (affinity + 0.25: a 50% resist becomes 25%)
+  corrode: { name: "Corrosion", els: ["shock", "poison"], color: 0xc8e06a, text: "-25% elemental resistances for 5s", resist: 0.25, ms: 5000 },
+  // x2 on this hit against the undead and demons, and a small heal to the hero and their group close by
+  purify: { name: "Purification", els: ["faith", "fire"], color: 0xfff1b0, text: "x2 on the undead and demons, heals heroes close by", mult: 2, heal: 0.03, radius: 96 },
+} satisfies Record<ReactionId, ReactionDef & Record<string, unknown>>;
+export const REACTION_IDS = Object.keys(REACTIONS) as ReactionId[];
+/** How long a mark stays on a monster. */
+export const REACTION_MARK_MS = 4000;
+/** How long a monster cannot react again after a reaction. */
+export const REACTION_COOLDOWN_MS = 1000;
+/** A reaction on a mark the same hero (or their creatures) left. */
+export const REACTION_SELF_FACTOR = 0.3;
+
+/** The reaction of two elements, either way round (undefined: none, or the same element). */
+export function reactionOf(a: Element, b: Element): ReactionId | undefined {
+  if (a === b) return undefined;
+  for (const id of REACTION_IDS) { const [x, y] = REACTIONS[id].els; if ((a === x && b === y) || (a === y && b === x)) return id; }
+  return undefined;
+}
+
+/** What a monster carries for reactions (server only, not synced as such). */
+export interface ReactState {
+  el?: Element; by?: string; until: number; // the mark: element, who left it (a hero id, the owner for creatures), when it fades
+  cdUntil: number; // no reaction before this
+  steamUntil: number; steamMiss: number; // Steam: miss chance until then
+  corrodeUntil: number; corrode: number; // Corrosion: affinity bonus until then
+}
+export const newReactState = (): ReactState => ({ until: 0, cdUntil: 0, steamUntil: 0, steamMiss: 0, corrodeUntil: 0, corrode: 0 });
+
+/** Who a hit counts as for reactions: a creature's owner when it has one, otherwise the hero who hit. */
+export const reactionActor = (attacker: string, ownerOf?: (id: string) => string | undefined) => ownerOf?.(attacker) || attacker;
+
+export interface ReactionHit { id: ReactionId; factor: number; markBy: string }
+
+/**
+ * One elemental hit on a monster (`els`: the elements of the hit, strongest first; `by`: the hero, see reactionActor).
+ * Sets off a reaction when the monster is marked with another element that pairs with one of the hit's (the mark is
+ * then used up), otherwise leaves (or renews) the mark with the hit's strongest element. `pvp`: the target is a hero or a
+ * hero's creature: nothing at all. Mutates `s`; returns the reaction set off, if any.
+ */
+export function applyElementHit(s: ReactState, els: Element[], by: string, now: number, pvp = false): ReactionHit | undefined {
+  if (pvp || !els.length) return undefined;
+  if (s.el && now < s.until && now >= s.cdUntil) {
+    for (const e of els) {
+      const id = reactionOf(s.el, e);
+      if (!id) continue;
+      const markBy = s.by ?? "";
+      s.el = undefined; s.by = undefined; s.until = 0; s.cdUntil = now + REACTION_COOLDOWN_MS;
+      return { id, factor: markBy === by ? REACTION_SELF_FACTOR : 1, markBy };
+    }
+  }
+  s.el = els[0]; s.by = by; s.until = now + REACTION_MARK_MS;
+  return undefined;
+}
+
+/** The live mark on a monster, if any. */
+export const liveMark = (s: ReactState | undefined, now: number): Element | undefined => (s?.el && now < s.until ? s.el : undefined);
+/** Extra share of an element a monster takes while corroded (added to its affinity). */
+export const corrodeBonus = (s: ReactState | undefined, now: number) => (s && now < s.corrodeUntil ? s.corrode : 0);
+/** Chance a monster's attack misses while in Steam. */
+export const steamMiss = (s: ReactState | undefined, now: number) => (s && now < s.steamUntil ? s.steamMiss : 0);
+/** Applies a reaction's lasting effects (Steam, Corrosion) to a monster's state at `factor`. */
+export function lingerReaction(s: ReactState, id: ReactionId, factor: number, now: number) {
+  if (id === "steam") { s.steamUntil = now + REACTIONS.steam.ms; s.steamMiss = Math.max(steamMiss(s, now), REACTIONS.steam.miss * factor); }
+  if (id === "corrode") { s.corrodeUntil = now + REACTIONS.corrode.ms; s.corrode = Math.max(corrodeBonus(s, now), REACTIONS.corrode.resist * factor); }
+}
+/** The undead and demons (Purification doubles on them): the monsters Faith smites. */
+export const purifies = (kind: string) => mobAffinity(kind, "faith") >= 1.5;
+/** Status words for the client (added to Mob.fx): "em_<element>" for a mark, "steam", "corrode". */
+export function reactionWords(s: ReactState | undefined, now: number): string {
+  if (!s) return "";
+  const w: string[] = [];
+  const m = liveMark(s, now);
+  if (m) w.push("em_" + m);
+  if (steamMiss(s, now)) w.push("steam");
+  if (corrodeBonus(s, now)) w.push("corrode");
+  return w.join(",");
+}

@@ -2,6 +2,7 @@ import Phaser from "phaser";
 import { ISO } from "./isoflag";
 import { AreaLook, BLOOD_RITE_MS, FxStyle, impactMs, LEAP_MS, RAIN_FALL_MS, skillById, SkillDef, SWORD_FALL_MS } from "../../shared/skills";
 import { paintSigil, ICON } from "./skillArt";
+import { ELEMENT_COLORS, type Element } from "../../shared/elements";
 import { MIST_DISSOLVE_MS, MIST_LINGER_MS, MIST_REFORM_AT_MS, MIST_REFORM_MS, MIST_REVEAL_MS } from "./skillMoveData";
 
 /**
@@ -2266,6 +2267,18 @@ export class SkillFx {
           const a = this.t / 160 + Math.random() * 6;
           this.p(x + Math.cos(a) * 7, y + Math.sin(a) * 3, rnd(0, 5), pick([0x9cf3dc, 0x52dcc2, 0xe2fff4]), { vz: rnd(4, 14), vx: -Math.sin(a) * 18, vy: Math.cos(a) * 8, life: rnd(300, 520), size: 1, size1: 0 });
         }
+      } else if (w.startsWith("em_")) {
+        // Elemental mark (shared/elements.ts REACTIONS): a small diamond of its element's colour over the head
+        const c = ELEMENT_COLORS[w.slice(3) as Element] ?? 0xffffff, sy = ys - top - 5 + Math.round(Math.sin(this.t / 300));
+        g.fillStyle(0x000000, 0.55).fillRect(xs - 2, sy - 2, 5, 5);
+        g.fillStyle(c, 0.95).fillRect(xs - 1, sy - 2, 3, 5).fillRect(xs - 2, sy - 1, 5, 3);
+        g.fillStyle(0xffffff, 0.8).fillRect(xs - 1, sy - 1, 1, 1);
+      } else if (w === "steam") {
+        // Steam: pale wisps rising off the body
+        if (chance(6)) this.p(x + rnd(-5, 5), y + rnd(-1, 1), rnd(top * 0.3, top * 0.8), pick([0xe8f4ff, 0xffffff, 0xcfd8dc]), { vz: rnd(10, 20), vx: rnd(-4, 4), life: 600, size: 2, size1: 3, alpha: 0.35, add: false });
+      } else if (w === "corrode") {
+        // Corrosion: sickly green-yellow drips
+        if (chance(4)) this.p(x + rnd(-4, 4), y + rnd(-1, 1), rnd(top * 0.3, top * 0.7), pick([0xc8e06a, 0x9bdc4a, 0x6b8e23]), { vz: -6, g: 120, life: 450, size: 1, add: false });
       } else if (w === "charge") {
         // handled by the gather effect
       } else if (w.startsWith("counter:")) {

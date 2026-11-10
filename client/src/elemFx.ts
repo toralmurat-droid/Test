@@ -1,6 +1,7 @@
 import Phaser from "phaser";
 import type { Room } from "colyseus.js";
 import { PALETTE, SkillFx } from "./skillfx";
+import { ELEMENT_COLORS, REACTIONS, type ReactionId } from "../../shared/elements";
 
 /**
  * The elemental blobs' moves on screen (server: TownRoom.elemSpecial / stormSparks, numbers in shared/constants.ts
@@ -14,6 +15,9 @@ export interface ElemFxHost {
   ent: (id: string) => Ent | undefined;
   say: (x: number, y: number, text: string, color: string) => void;
   squash: (id: string, kx: number, ky: number, ms: number) => void;
+  /** Big text (a reaction's name). */
+  shout?: (x: number, y: number, text: string, color: string) => void;
+  sound?: (name: string, x: number, y: number, arg?: unknown) => void;
 }
 
 const rnd = (a: number, b: number) => a + Math.random() * (b - a);
@@ -141,4 +145,34 @@ export function bindElemFx(room: Room, h: ElemFxHost) {
 
   // Electric: a hero's shock leaps from one monster to the next
   room.onMessage("arc", ({ x0, y0, x1, y1 }) => fx.bolt(x0, y0, 10, x1, y1, 10, PALETTE.lightning, 1, 180));
+
+  // Elemental reactions (shared/elements.ts REACTIONS): the name in big letters, a sober burst in the pair's colours
+  room.onMessage("react", ({ id, r, f, x, y }: { id: string; r: ReactionId; f: number; x: number; y: number }) => {
+    const def = REACTIONS[r];
+    if (!def) return;
+    const e = h.ent(id), ex = e?.sprite.x ?? x, ey = e?.sprite.y ?? y, top = e?.top ?? 16;
+    const css = "#" + def.color.toString(16).padStart(6, "0");
+    (h.shout ?? h.say)(ex, ey - top - 10, def.name.toUpperCase() + (f < 1 ? "" : "!"), css);
+    h.sound?.("react", ex, ey, r);
+    const [c1, c2] = def.els.map((el) => ELEMENT_COLORS[el]);
+    const n = f < 1 ? 6 : 12;
+    fx.glow(ex, ey, top * 0.5, f < 1 ? 8 : 12, def.color, 260, 0.5);
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2;
+      fx.p(ex, ey, top * 0.5, i % 2 ? c1 : c2, { vx: Math.cos(a) * 40, vy: Math.sin(a) * 20, vz: rnd(5, 20), drag: 3, life: 380, size: 2, size1: 0 });
+    }
+    if (r === "toxic") {
+      const R = REACTIONS.toxic.radius;
+      mark(scene, 420, (g, k) => { g.fillStyle(0x5d8a1c, 0.25 * (1 - k)).fillCircle(x, y, R * (0.4 + 0.6 * k)).lineStyle(1, 0xb2ff59, 0.7 * (1 - k)).strokeCircle(x, y, R * (0.4 + 0.6 * k)); });
+    } else if (r === "fracture") {
+      for (let i = 0; i < 3; i++) { const a = Math.random() * Math.PI * 2; fx.bolt(ex, ey - top * 0.5, 0, ex + Math.cos(a) * 12, ey - top * 0.5 + Math.sin(a) * 8, 0, PALETTE.frost, 1, 160); }
+    } else if (r === "purify") {
+      for (let i = 0; i < 8; i++) fx.p(ex + rnd(-6, 6), ey, rnd(0, top), pick(PALETTE.holy), { vz: rnd(20, 40), life: 600, size: 1, size1: 0 });
+    }
+  });
+  // Steam: a scalded monster's blow goes wide
+  room.onMessage("rmiss", ({ id }: { id: string }) => {
+    const e = h.ent(id);
+    if (e) h.say(e.sprite.x, e.sprite.y - e.top - 4, "Miss", "#cfd8dc");
+  });
 }
