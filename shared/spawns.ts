@@ -1,4 +1,4 @@
-import { act2MobLevel, act2SpecialLevel, DESERT_Y0, ELITE, MobKind, regionMobLevel, regionSpecialLevel, TILE } from "./constants";
+import { actOfTile, inDeepRow, act2MobLevel, act2SpecialLevel, DESERT_Y0, ELITE, MobKind, regionMobLevel, regionSpecialLevel, TILE } from "./constants";
 import { D, SUNSTONE } from "./desert";
 import { AREAS, isSafeZone, isSolidAt, OBJECTS, T, VILLAGE } from "./map";
 import { CAMP_POSTS } from "./bandits";
@@ -95,6 +95,16 @@ const ZONE_MOBS: { name: string; mobs: Partial<Record<MobKind, number>>; respawn
   { name: "The Gnawing Halls", mobs: { gnawkin: 24, tuskborn: 10, crowseer: 3 }, respawnMs: 7000, fixed: true, levels: [21, 23] },
   { name: "The Silk Pens", mobs: { silkwretch: 13, duskwing: 10, gnawkin: 9, crowseer: 5 }, respawnMs: 7000, fixed: true, levels: [23, 25] },
   { name: "The Hide-Mother's Den", mobs: { tuskborn: 9, duskwing: 8, silkwretch: 7, gnawkin: 7, crowseer: 5 }, respawnMs: 8000, fixed: true, levels: [24, 25] },
+  // The Lantern Crypt under Barrow Downs (shared/dungeon.ts, Act 1): the monks' dead, woken when their lamps went out.
+  // Underground, so the day never sends them back to their graves (server UNDEAD_ZONES leaves dungeon floors out).
+  { name: "The High Choir", mobs: {}, respawnMs: 150000, fixed: true, levels: [17, 17] }, // the Hollow Abbot's hall: his alone
+  { name: "The Lamplit Catacombs", mobs: { skeleton: 22, skeletonmage: 7 }, respawnMs: 7000, fixed: true, levels: [13, 15] },
+  { name: "The Bone Choir", mobs: { skeleton: 18, skeletonmage: 9, necromancer: 2 }, respawnMs: 7500, fixed: true, levels: [15, 17] },
+  // The Undercity below Kharsun (Act 2): the Sand-Dead keep the bazaar and the vault, scorpions nest in the cisterns,
+  // the Veiled Circle's grave-robbers dig for the Water-Kings' gold
+  { name: "The Water-King's Throne", mobs: {}, respawnMs: 150000, fixed: true, levels: [44, 44] },
+  { name: "The Sunken Bazaar", mobs: { sanddead: 16, scorpion: 8, veiled: 4 }, respawnMs: 7000, fixed: true, levels: [40, 42] },
+  { name: "The Vault of the Water-Kings", mobs: { sanddead: 14, sphinx: 5, veiled: 6 }, respawnMs: 7500, fixed: true, levels: [42, 44] },
   { name: "Saltwind Coast", mobs: { slime: 14, shooterblob: 5, warriorblob: 5, healerblob: 4, motherblob: 2 }, respawnMs: 4500 },
   { name: "Whispering Woods", mobs: { slime: 10, shooterblob: 4, warriorblob: 4, healerblob: 3, motherblob: 2 }, respawnMs: 5250, wild: true }, // broad areas last: zone lookups take the first match
   // Everything west of the river that no named area covers: fields, roads and woods around Oakvale
@@ -140,13 +150,13 @@ export function zoneLevels(a: { x: number; y: number; w: number; h: number }): [
 /** Lowest monster level at a tile, from its distance to the village centre (a spot spans this level to +2). */
 export function baseLevelAt(tx: number, ty: number): number {
   // Act 2: from Lv 30 at the Sunstone Circle, a level every 12 tiles further out
-  if (ty >= DESERT_Y0) return 30 + Math.floor(Math.max(0, Math.hypot(tx - SUNSTONE.x, ty - D(SUNSTONE.y)) - 12) / 12);
+  if (actOfTile(tx, ty) === 2) return 30 + Math.floor(Math.max(0, Math.hypot(tx - SUNSTONE.x, ty - D(SUNSTONE.y)) - 12) / 12);
   const cx = (VILLAGE.x0 + VILLAGE.x1) / 2, cy = (VILLAGE.y0 + VILLAGE.y1) / 2;
   return 1 + Math.floor(Math.max(0, Math.hypot(tx - cx, ty - cy) - 40) / 8);
 }
 
 /** The level ceilings for a zone or a tile: Oakvale's (regionMobLevel, Lv 25/30) or the desert's (ACT2_LEVEL, Lv 30-47/50). */
-const levelFns = (ty: number) => ty >= DESERT_Y0 ? { mob: act2MobLevel, special: act2SpecialLevel } : { mob: regionMobLevel, special: regionSpecialLevel };
+const levelFns = (tx: number, ty: number) => actOfTile(tx, ty) === 2 ? { mob: act2MobLevel, special: act2SpecialLevel } : { mob: regionMobLevel, special: regionSpecialLevel };
 
 const inRect = (r: { x: number; y: number; w: number; h: number }, tx: number, ty: number) => tx >= r.x && tx < r.x + r.w && ty >= r.y && ty < r.y + r.h;
 /** Areas so broad they never keep a wild zone's monsters out (they hold other zones). */
@@ -178,13 +188,13 @@ export const SPAWN_ZONES: SpawnZone[] = ZONE_MOBS.flatMap((z) => {
     if (z.wild) { const l = baseLevelAt(tx, ty); lo = Math.min(lo, l); hi = Math.max(hi, l + 2); }
   }
   const base = Math.max(1, Object.values(z.mobs).reduce((n, c) => n + (c ?? 0), 0));
-  const desert = r.y >= DESERT_Y0;
+  const desert = r.y >= DESERT_Y0 && !inDeepRow(r.y);
   const want = Math.round(tiles / (desert ? (z.wild ? DENSITY.desertWildTilesPerMob : DENSITY.desertTilesPerMob) : z.wild ? DENSITY.wildTilesPerMob : DENSITY.tilesPerMob));
   const f = z.fixed ? 1 : Math.max(1, want / base); // fixed: hand-set count
   const mobs: Partial<Record<MobKind, number>> = {};
   for (const [k, n] of Object.entries(z.mobs) as [MobKind, number][]) mobs[k] = k === "necromancer" ? n : k === "motherblob" ? Math.max(n, Math.round(n * f / 4)) : Math.round(n * f); // big ones grow slower
   const raw: [number, number] = z.levels ?? (z.wild && hi > 0 ? [lo, hi] : zoneLevels(r));
-  const L = levelFns(r.y), lvl = (Object.keys(z.mobs) as MobKind[]).every((k) => ELITE[k]) ? L.special : L.mob; // an elite's lair: the special ceiling
+  const L = levelFns(r.x, r.y), lvl = (Object.keys(z.mobs) as MobKind[]).every((k) => ELITE[k]) ? L.special : L.mob; // an elite's lair: the special ceiling
   const levels: [number, number] = [lvl(raw[0]), lvl(raw[1])];
   return [{ ...z, ...r, mobs, levels, respawnMs: Math.max(800, Math.round(z.respawnMs / f)) }];
 });
@@ -217,7 +227,7 @@ export function randomPointInZone(z: SpawnZone, kind?: MobKind): { x: number; y:
 
 /** Where and at what level a monster of this kind appears. In wild zones the level follows the spot. */
 export function spawnPoint(z: SpawnZone, kind: MobKind): { x: number; y: number; level: number } {
-  const min = KIND_MIN_LEVEL[kind] ?? 1, L = levelFns(z.y);
+  const min = KIND_MIN_LEVEL[kind] ?? 1, L = levelFns(z.x, z.y);
   if (!z.wild) return { ...randomPointInZone(z, kind), level: (ELITE[kind] ? L.special : L.mob)(Math.max(min, rollLevel(z))) };
   let best = randomPointInZone(z, kind), lvl = 0;
   for (let i = 0; i < 25; i++) {
@@ -237,7 +247,7 @@ export function zoneAt(tx: number, ty: number): SpawnZone | undefined {
 /** Level range shown for a zone at a tile: wild zones show the local range. */
 export function levelsAt(z: SpawnZone, tx: number, ty: number): [number, number] {
   if (!z.wild) return z.levels;
-  const l = baseLevelAt(tx, ty), L = levelFns(ty);
+  const l = baseLevelAt(tx, ty), L = levelFns(tx, ty);
   return [L.mob(l), L.mob(l + 2)];
 }
 

@@ -1,10 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { ACT2_LEVEL, DESERT_KINDS, DESERT_Y0, MobKind, TILE } from "../shared/constants";
+import { ACT2_LEVEL, actOfTile, DESERT_KINDS, DESERT_Y0, MobKind, TILE } from "../shared/constants";
 import { levelsAt, noMobsAt, SPAWN_ZONES, spawnPoint } from "../shared/spawns";
 import { isSafeZone } from "../shared/map";
 
-const desert = SPAWN_ZONES.filter((z) => z.y >= DESERT_Y0);
+const desert = SPAWN_ZONES.filter((z) => actOfTile(z.x, z.y) === 2); // the desert and the Undercity under it (the Lantern Crypt down there is Act 1's)
 
 test("Act 2: the Sunscar's zones hold only desert monsters, at Lv 30-47", () => {
   assert.ok(desert.length >= 10);

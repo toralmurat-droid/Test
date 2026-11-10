@@ -4,7 +4,8 @@ import { DOOR_RANGE, DOORS, doorDist, doorWorkable, isSolidTile, setDoorOpen, ty
 import { refreshWalk } from "./pathfind";
 import { play } from "./sfx";
 import type { MapMarker } from "./minimap";
-import { BRAZIERS, COCOONS, DEN, Floor, FLOORS, floorNo, LINKS, SINKHOLE, TOTEMS } from "../../shared/dungeon";
+import { BRAZIERS, COCOONS, CRYPT_DOOR, DEN, Floor, FLOORS, floorById, floorNo, LINKS, SINKHOLE, TOTEMS, UNDER_SHAFT } from "../../shared/dungeon";
+import { deepTextures, WALL_TINT } from "./deepArt";
 import { CHESTS } from "../../shared/chests";
 import { GORE, goreTextures } from "./goreArt";
 import { ISO, isoAnchor, isoScreen, isoX, isoY } from "./iso";
@@ -91,6 +92,7 @@ export class DungeonView {
   constructor(private scene: Phaser.Scene, private host: DungeonHost, private font: string) {
     dungeonTextures(scene);
     goreTextures(scene);
+    deepTextures(scene);
     this.surface();
     this.label = scene.add.text(0, 0, "", { fontFamily: TEXT_FONT, fontSize: `${TEXT_PX}px`, color: "#e8d7a8", stroke: "#000", strokeThickness: 2 })
       .setOrigin(0.5, 1).setScale(WT).setResolution(1).setDepth(30000).setVisible(false);
@@ -102,6 +104,14 @@ export class DungeonView {
     s.add.image(x, y, "dg_sinkhole").setScale(1 / TX).setDepth(DECAL);
     const stake = { x: x - 1.3 * TILE, y: y - 0.6 * TILE };
     s.add.image(stake.x, stake.y, "dg_stake").setOrigin(0.3, 1).setScale(1 / TX).setDepth(stake.y);
+    // the Lantern Crypt's stair going down in the mausoleum on Barrow Downs, between two votive candles
+    const cx = (CRYPT_DOOR.x + 0.5) * TILE, cy = (CRYPT_DOOR.y + 0.5) * TILE;
+    s.add.image(cx, cy, "dg_pit").setOrigin(0.5, 30 / PIT.h).setScale(0.75 / TX).setDepth(DECAL);
+    for (const ox of [-1.1, 1.1]) s.add.sprite(cx + ox * TILE, cy - 0.6 * TILE, "dp_candles", 0).setOrigin(0.5, 0.9).setScale(1 / TX).setDepth(cy - 0.6 * TILE).play({ key: "dp_candles_burn", startFrame: ox > 0 ? 2 : 0 });
+    // the old well in Kharsun: a black shaft in the paving, a rope staked at its lip
+    const wx = (UNDER_SHAFT.x + 0.5) * TILE, wy = (UNDER_SHAFT.y + 0.5) * TILE;
+    s.add.image(wx, wy, "dg_sinkhole").setScale(0.6 / TX).setDepth(DECAL);
+    s.add.image(wx - 0.9 * TILE, wy - 0.4 * TILE, "dg_stake").setOrigin(0.3, 1).setScale(1 / TX).setDepth(wy - 0.4 * TILE);
   }
 
   /** Walls, links and props of one floor. */
@@ -123,7 +133,7 @@ export class DungeonView {
       const h = o & (OPEN_S | OPEN_E) ? (behind ? WALL_LOW : WALL_TALL) : 0;
       const key = wallTexture(s, h, o, ((tx % 4) + 4) % 4, ((ty % 4) + 4) % 4);
       const cx = (tx + 0.5) * TILE, cy = (ty + 0.5) * TILE;
-      const img = s.add.image(cx, cy, key).setScale(1 / TX).setDepth(h ? cy : DECAL + 0.1);
+      const img = s.add.image(cx, cy, key).setScale(1 / TX).setDepth(h ? cy : DECAL + 0.1).setTint(WALL_TINT[f.dungeon]);
       img.setOrigin(0.5, (BLOCK_TOP / 2 + h * TX) / (BLOCK_TOP + h * TX));
     }
     // Gates into the lairs: a portcullis between two posts across the tunnel, drawn along whichever of the iso lines
@@ -151,7 +161,7 @@ export class DungeonView {
     }
     // Ropes and stairs
     for (const l of LINKS.filter((k) => k.floor === f.id)) {
-      if (l.id === "f1up" || l.id === "f3out") {
+      if (l.rope) {
         s.add.sprite(l.x, l.y, "dg_rope", 0).setOrigin(0.5, 1 - 6 / ROPE_ART.h).setScale(1 / TX).setDepth(l.y).play("dg_rope_sway");
         // daylight falling from the sinkhole far above
         const beam = s.add.image(l.x, l.y + 4, "dg_beam").setOrigin(0.5, 1).setScale(2.2, 1.6).setTint(0xcfd8c8).setAlpha(0.22).setBlendMode(Phaser.BlendModes.ADD).setDepth(GLOW_DEPTH);
@@ -163,7 +173,7 @@ export class DungeonView {
         s.add.image(l.x - 0.4 * TILE, l.y - 0.4 * TILE, "dg_stair_up").setOrigin((STAIR_UP.OX + 13 - 18) / STAIR_UP.w, (STAIR_UP.OY + 15.5) / STAIR_UP.h).setScale(1 / TX).setDepth(l.y - 0.4 * TILE);
       }
       // Torches at the head of each stair (Murat 2026-11-07), two flanking the way down, one by the way up
-      if (l.id !== "f1up" && l.id !== "f3out") {
+      if (!l.rope) {
         const spots = l.down ? [[-1.6, -1.3], [1.3, -1.6], [-1.6, 1.3], [1.3, 1.6], [1.8, 0.2], [0.2, 1.8]] : [[0.9, -1.5], [-1.5, 0.9], [1.4, 0.6], [0.6, 1.4]];
         let n = 0;
         for (const [ox, oy] of spots) {
@@ -191,6 +201,7 @@ export class DungeonView {
     // The Hide-Mother's bed of hides
     if (f.id === 3) s.add.image((DEN.x + 0.5) * TILE, (DEN.y + 0.5) * TILE, "dg_bed").setScale(1 / TX).setDepth(DECAL);
     this.story(f, open);
+    if (f.dungeon !== "maw") { this.deepProps(f, open); return; }
     // Beast-folk clutter: racks, skull poles and bones; webs in the Silk Pens; stalagmites everywhere
     const avoid = [...LINKS.filter((k) => k.floor === f.id).map((k) => [k.x, k.y]), ...BRAZIERS.map(([x, y]) => [(x + 0.5) * TILE, (y + 0.5) * TILE]), [(DEN.x + 0.5) * TILE, (DEN.y + 0.5) * TILE]];
     const placed: number[][] = [];
@@ -222,6 +233,59 @@ export class DungeonView {
       const x = (tx + 0.5) * TILE, y = (ty + 0.5) * TILE;
       if (avoid.some(([ax, ay]) => Math.hypot(ax - x, ay - y) < 2 * TILE)) continue;
       s.add.image(x, y, "dg_spike", k % 3).setOrigin(0.5, 1).setScale(1 / TX).setDepth(y);
+    }
+  }
+
+  /**
+   * The deep dungeons' furnishing: in the Lantern Crypt sarcophagi along the walls, skull stacks, candles left burning
+   * by the monks (each a small light) and bones; in the Undercity broken pillars, water jars and drifts of sand blown
+   * down the shafts. Then stalagmites in the tunnels like the Mawdeep.
+   */
+  private deepProps(f: Floor, open: (x: number, y: number) => boolean) {
+    const s = this.scene, crypt = f.dungeon === "crypt";
+    const avoid = [...LINKS.filter((k) => k.floor === f.id).map((k) => [k.x, k.y, 2.6]), ...BRAZIERS.map(([x, y]) => [(x + 0.5) * TILE, (y + 0.5) * TILE, 1.6]),
+      ...CHESTS.map((c) => [c.x, c.y, 2]), ...DOORS.filter((d) => d.floor === f.id).map((d) => [d.x * TILE, d.y * TILE, 3.2])];
+    const placed: number[][] = [];
+    f.chambers.forEach((c, ci) => {
+      const boss = c.rx >= 9; // the boss halls: clutter round the rim only
+      const n = Math.round(4 + c.rx * c.ry / 7);
+      for (let k = 0; k < n * 3 && placed.length < 999; k++) {
+        const a = hash(f.id * 31 + ci, k, 41) * Math.PI * 2, r = (boss ? 0.7 : 0.3) + (boss ? 0.25 : 0.6) * Math.sqrt(hash(f.id * 31 + ci, k, 42));
+        const tx = Math.floor(f.x + c.x + Math.cos(a) * c.rx * r), ty = Math.floor(f.y + c.y + Math.sin(a) * c.ry * r);
+        if (!open(tx, ty)) continue;
+        const x = (tx + 0.5) * TILE, y = (ty + 0.5) * TILE;
+        if (placed.some(([ax, ay]) => Math.hypot(ax - x, ay - y) < 1.9 * TILE)) continue;
+        if (avoid.some(([ax, ay, ar]) => Math.hypot(ax - x, ay - y) < ar * TILE)) continue;
+        let byWall = false;
+        for (const [i, j] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) if (!open(tx + i, ty + j)) byWall = true;
+        const standOk = open(tx + 1, ty + 1) && open(tx + 1, ty) && open(tx, ty + 1);
+        const roll = hash(f.id * 31 + ci, k, 43), v = Math.floor(hash(tx, ty, 44) * 2), flip = hash(tx, ty, 45) < 0.5;
+        placed.push([x, y]);
+        if (crypt) {
+          if (byWall && standOk && roll < 0.3) s.add.image(x, y, "dp_sarc", v).setOrigin(0.5, 0.72).setScale(1 / TX).setDepth(y).setFlipX(flip);
+          else if (byWall && roll < 0.45) s.add.image(x, y, "dp_skulls").setOrigin(0.5, 0.92).setScale(1 / TX).setDepth(y);
+          else if (roll < 0.62) {
+            s.add.sprite(x, y, "dp_candles", 0).setOrigin(0.5, 0.85).setScale(1 / TX).setDepth(y).play({ key: "dp_candles_burn", startFrame: k % 4 });
+            const glow = s.add.image(x, y - 12, "light").setTint(0xffb860).setScale(1.4).setAlpha(0.32).setBlendMode(Phaser.BlendModes.ADD).setDepth(GLOW_DEPTH);
+            isoAnchor(glow, { x, y });
+            this.lights.push({ x, y, r: 2.2 * TILE, flicker: 0.1, seed: tx * 13 + ty });
+          } else if (roll < 0.85) s.add.image(x, y, "dg_bones", Math.floor(hash(tx, ty, 46) * 3)).setScale(1 / TX).setDepth(DECAL);
+          else placed.pop();
+        } else {
+          if (byWall && standOk && roll < 0.3) s.add.image(x, y, "dp_pillar", v).setOrigin(0.5, 0.88).setScale(1 / TX).setDepth(y).setFlipX(flip);
+          else if (roll < 0.5) s.add.image(x, y, "dp_jar", v).setOrigin(0.5, 0.9).setScale(1 / TX).setDepth(y).setFlipX(flip);
+          else if (roll < 0.72) s.add.image(x, y, "dp_drift").setScale(1 / TX).setDepth(DECAL).setFlipX(flip);
+          else if (roll < 0.86) s.add.image(x, y, "dg_bones", Math.floor(hash(tx, ty, 46) * 3)).setScale(1 / TX).setDepth(DECAL);
+          else placed.pop();
+        }
+      }
+    });
+    for (let k = 0; k < f.w * f.h / 70; k++) { // stalagmites along the tunnels
+      const tx = f.x + Math.floor(hash(f.id, k, 21) * f.w), ty = f.y + Math.floor(hash(f.id, k, 22) * f.h);
+      if (!open(tx, ty) || open(tx + 1, ty) && open(tx - 1, ty) && open(tx, ty + 1) && open(tx, ty - 1)) continue;
+      const x = (tx + 0.5) * TILE, y = (ty + 0.5) * TILE;
+      if (avoid.some(([ax, ay]) => Math.hypot(ax - x, ay - y) < 2 * TILE)) continue;
+      s.add.image(x, y, "dg_spike", k % 3).setOrigin(0.5, 1).setScale(1 / TX).setDepth(y).setTint(WALL_TINT[f.dungeon]);
     }
   }
 
@@ -313,7 +377,7 @@ export class DungeonView {
     const fl = me ? floorNo(me.x, me.y) : 0;
     this.floor = fl;
     this.underground = fl > 0;
-    if (fl) this.build(FLOORS[fl - 1]);
+    if (fl) this.build(floorById(fl)!);
     // fade the dark in / out over a few frames (a cut through the fade-in after a descent)
     const want = fl ? 1 : this.torch ? this.night * 0.6 : 0;
     this.amount += (want - this.amount) * (fl ? 0.25 : 0.08);
@@ -332,7 +396,7 @@ export class DungeonView {
       isoAnchor(this.label, { x, y });
     } else if (l && this.label) {
       if (this.label.text !== l.label) this.label.setText(l.label);
-      this.label.setPosition(l.x, l.y - (l.id === "f1up" || l.id === "f3out" ? 40 : l.down ? 10 : 60)).setVisible(true);
+      this.label.setPosition(l.x, l.y - (l.rope ? 40 : l.down ? 10 : 60)).setVisible(true);
       isoAnchor(this.label, { x: l.x, y: l.y });
     } else this.label?.setVisible(false);
   }

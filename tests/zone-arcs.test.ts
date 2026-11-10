@@ -4,11 +4,11 @@ import { CHAINS, chainState, inZone, QUEST_ITEMS, ZONE_ARCS, packQuest } from ".
 import { NPCS } from "../shared/npcs";
 import { SPAWN_ZONES } from "../shared/spawns";
 import { AREAS, isSolidAt } from "../shared/map";
-import { DESERT_Y0, TILE } from "../shared/constants";
+import { actOfTile, DESERT_Y0, TILE } from "../shared/constants";
 import { startRoom, wait } from "./helpers/room";
 
 const named = new Set([...SPAWN_ZONES.map((z) => z.name), ...AREAS.map((a) => a.name)]);
-const kindsIn = (desert: boolean) => new Set(SPAWN_ZONES.filter((z) => (z.y >= DESERT_Y0) === desert).flatMap((z) => Object.keys(z.mobs)));
+const kindsIn = (desert: boolean) => new Set(SPAWN_ZONES.filter((z) => (actOfTile(z.x, z.y) === 2) === desert).flatMap((z) => Object.keys(z.mobs)));
 
 test("zone arcs: givers out in their zone, steps in real zones, objects and bosses on open ground in them", () => {
   for (const arc of ZONE_ARCS) {

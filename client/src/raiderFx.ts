@@ -42,11 +42,11 @@ export function bindRaiderFx(room: Room, h: RaiderFxHost) {
     }
   };
   const near = (x: number, y: number, r: number) => { const m = h.me(); return !!m && Math.hypot(m.x - x, m.y - y) < r; };
-  const sameAct = (y: number) => { const m = h.me(); return !!m && actAt(m.y) === actAt(y); };
+  const sameAct = (x: number, y: number) => { const m = h.me(); return !!m && actAt(m.y, m.x) === actAt(y, x); };
 
   // One comes out of the dark (off screen): hoofbeats for everyone riding that act
   room.onMessage("raider", ({ x, y, title }) => {
-    if (sameAct(y)) h.feed(`Hoofbeats in the dark... ${nameOf(title)} rides tonight.`);
+    if (sameAct(x, y)) h.feed(`Hoofbeats in the dark... ${nameOf(title)} rides tonight.`);
     rags(x, y, 10);
     dust(x, y, 12, 18, 14);
   });

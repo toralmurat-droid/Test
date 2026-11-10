@@ -870,10 +870,21 @@ const defector = human({
   hat: { kind: "hood", col: 0x2e2a5e, trim: 0xd8a840 }, shirt: 0x2e2a5e, sleeve: 0x26224e, vest: 0x1e1a40, pants: 0x26224e, boots: 0x3a2a1e, belt: 0xd8a840,
   weapon: "staff", fxCol: 0xffb040, gait: "stroll",
 });
-export const ZONE_NPCS = ["huntsman", "miller", "forester", "beachcomber", "prospector", "caravaneer", "hermit", "dunescout", "defector"] as const;
+// The two deep dungeons' quest givers (shared/dungeon.ts): the last lamplighter monk, and a tomb-robber at the Kharsun well
+const monk = human({
+  name: "monk", skin: 0xe0b08a, hair: 0x9a9690, hairStyle: "bald",
+  hat: { kind: "hood", col: 0x4a4038, trim: 0x2e2822 }, shirt: 0x4a4038, pants: 0x3e362e, boots: 0x2a221c, belt: 0x8a6a3a,
+  weapon: "staff", fxCol: 0xffd070, gait: "stroll",
+});
+const tombrobber = human({
+  name: "tombrobber", skin: 0xa06a40, hair: 0x1a1410, hairStyle: "short", beard: 0x1a1410,
+  hat: { kind: "bandana", col: 0x5a3a2a, trim: 0x2e1e14 }, shirt: 0x8a7656, vest: 0x3a2e24, pants: 0x5a4a38, boots: 0x3a2a1a, belt: 0x2a1c12,
+  weapon: "dagger", gait: "swagger",
+});
+export const ZONE_NPCS = ["huntsman", "miller", "forester", "beachcomber", "prospector", "caravaneer", "hermit", "dunescout", "defector", "monk", "tombrobber"] as const;
 
 export const NPCS: Hero[] = [blacksmith, merchant, villager, guard, druid, witch, watchman, ...FOLK.map((n) => folk(n)), wellkeeper, sandcaptain, spicetrader, desertsmith, armourer, saltarmourer, sandarmourer,
-  huntsman, miller, forester, beachcomber, prospector, caravaneer, hermit, dunescout, defector];
+  huntsman, miller, forester, beachcomber, prospector, caravaneer, hermit, dunescout, defector, monk, tombrobber];
 /** Pose data for monsters painted with the character painter (paint/mobs.ts); never drawn as pixel art. */
 const mobPose = (name: string, weapon: HumanOpts["weapon"]) => human({ name, skin: 0, hair: 0, hairStyle: "bald", shirt: 0, pants: 0, boots: 0, weapon });
 export const MOB_POSES: Record<string, Hero> = {

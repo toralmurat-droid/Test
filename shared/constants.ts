@@ -9,7 +9,18 @@ export const UNDER_END = 288;
 /** Act 2, the desert (shared/desert.ts): its own band of the map, under a strip of solid rock. */
 export const DESERT_Y0 = 300;
 export const DESERT_H = 216;
-export const MAP_H = DESERT_Y0 + DESERT_H; // tiles: overworld, underground band, rock, desert
+/**
+ * The deep band under the desert (shared/dungeon.ts, Murat's friend 2026-11-10: "make 2 dungeons, with quests inside"):
+ * west of DEEP_SPLIT the Lantern Crypt under Barrow Downs (Act 1), east of it the Undercity below Kharsun (Act 2).
+ */
+export const DEEP_Y0 = DESERT_Y0 + DESERT_H + 8;
+export const DEEP_END = DEEP_Y0 + 64;
+export const DEEP_SPLIT = 144;
+export const MAP_H = DEEP_END + 4; // tiles: overworld, underground band, rock, desert, rock, deep band
+/** True in the deep band (tiles). */
+export const inDeepRow = (ty: number) => ty >= DEEP_Y0 && ty < DEEP_END;
+/** Which act a tile belongs to: the desert and the Undercity are Act 2, the rest (the Lantern Crypt too) Act 1. */
+export const actOfTile = (tx: number, ty: number): 1 | 2 => (ty >= DESERT_Y0 && !(ty >= DEEP_Y0 - 4 && tx < DEEP_SPLIT) ? 2 : 1);
 export const TICK_RATE = 20; // server updates per second
 export const PLAYER_SPEED = 90; // px per second (default; classes override, see classes.ts)
 export const PLAYER_RADIUS = 5; // collision half-size in px

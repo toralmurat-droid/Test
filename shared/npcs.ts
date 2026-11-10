@@ -66,6 +66,9 @@ export const NPCS: Npc[] = [
   { id: "hermit", name: "Old Tamsin", title: "Hermit", sprite: "hermit", ...standNear(80, 404), dir: "right", where: "the Red Wastes (Act 2), west of the Sunstone" },
   { id: "dunescout", name: "Leyla", title: "Scout of the camel-clans", sprite: "dunescout", ...standNear(200, 438), dir: "left", where: "the edge of the Saffron Dunes (Act 2), east of Kel Ashar" },
   { id: "defector", name: "Nasrin", title: "Runaway adept", sprite: "defector", ...standNear(224, 398), dir: "down", where: "the foot of the Thornspire Heights (Act 2), by Mirage Wells" },
+  // the deep dungeons' quest givers, at their doors (shared/dungeon.ts)
+  { id: "monk", name: "Brother Aldric", title: "Last of the Lamplighters", sprite: "monk", ...standNear(47, 145), dir: "left", where: "the ruined mausoleum on Barrow Downs, at the crypt stair" },
+  { id: "tombrobber", name: "Zahir", title: "Tomb-robber", sprite: "tombrobber", ...standNear(61, 483), dir: "left", where: "the old well in Kharsun, the Buried City (Act 2)" },
 ];
 
 /**

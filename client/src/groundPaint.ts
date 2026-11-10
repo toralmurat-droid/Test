@@ -22,7 +22,7 @@ export interface GroundData {
    * The underground band (shared/dungeon.ts): from row y0 the sea fades into the dark, from row rock on, solid tiles
    * are bare black rock and the open ones the dank earth of the Mawdeep's floors.
    */
-  cave?: { y0: number; rock: number; end?: number };
+  cave?: { y0: number; rock: number; end?: number; deep?: [number, number] };
   /** Act 2's desert band (shared/desert.ts), rows y0..y1: the same ground ids paint as dune sand, baked clay, sandstone. */
   desert?: { y0: number; y1: number };
   /** 1 on the desert's cliff tiles: their ground is the mountains' rock top (the outer steps stand up as blocks, iso.ts). */
@@ -92,6 +92,7 @@ export function makeFields(g: GroundData): Fields {
   if (g.cave) {
     rock = new Float32Array(w * h);
     for (let y = g.cave.rock; y < (g.cave.end ?? h); y++) for (let x = 0; x < w; x++) rock[y * w + x] = solid[y * w + x];
+    if (g.cave.deep) for (let y = g.cave.deep[0]; y < g.cave.deep[1]; y++) for (let x = 0; x < w; x++) rock[y * w + x] = solid[y * w + x]; // the deep band under the desert
   }
   const cliff = g.cliff ? Float32Array.from(g.cliff) : undefined;
   return { depth, ao, rock, cliff };
@@ -595,8 +596,9 @@ export function paintChunk(g: GroundData, f: Fields, sx0: number, sy0: number, c
       }
       if (g.cave && wy / tile >= g.cave.y0 - 8 && !DESERT) {
         const ty = wy / tile, cv = g.cave;
-        if (cv.end !== undefined && ty >= cv.end) { r = VOID[0]; gg = VOID[1]; b = VOID[2]; } // the rock between the Mawdeep and the desert
-        else if (ty < cv.rock) { // the open sea runs out into the dark
+        const deep = !!cv.deep && ty >= cv.deep[0] - 0.5 && ty < cv.deep[1] + 0.5;
+        if (cv.end !== undefined && ty >= cv.end && !deep) { r = VOID[0]; gg = VOID[1]; b = VOID[2]; } // the rock between the Mawdeep and the desert
+        else if (ty < cv.rock && !deep) { // the open sea runs out into the dark
           const k = sstep(cv.y0 - 8, cv.rock, ty + (vn(wx / 30, wy / 30, 350) - 0.5) * 3);
           r += (VOID[0] - r) * k; gg += (VOID[1] - gg) * k; b += (VOID[2] - b) * k;
         } else {
