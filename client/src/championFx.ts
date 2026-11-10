@@ -51,7 +51,7 @@ export class ChampionFx {
       const w = Math.max(16, e.top * 0.9), pulse = 0.2 + 0.08 * Math.sin(now / 260);
       L.ring.fillStyle(L.aura, L.glow ? pulse : pulse + 0.12).fillEllipse(x, y, w, w * 0.38);
       if (!L.glow) L.ring.lineStyle(1, L.aura, 0.8).strokeEllipse(x, y, w, w * 0.38);
-      const iy = mobBarY - 10;
+      const iy = mobBarY - 18; // above the name label (which ends just over the bar)
       L.affixes.forEach((k, i) => {
         const A = AFFIXES[k], ix = Math.round(x - L!.affixes.length * 3.5 + i * 7 + 1);
         e.bar.fillStyle(0x000000, 0.65).fillRect(ix - 1, iy - 1, 7, 7);

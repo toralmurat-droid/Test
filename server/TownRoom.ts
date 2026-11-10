@@ -76,6 +76,8 @@ import { ARSENAL, ATTUNE_ORDER, attuneOf, bondShare, DEFAULT_GRIMOIRE, SUMMONER_
 import { cleanFeast, familyOf, type Feast, feastMult, THRALL, thrallMax } from "../shared/devour";
 import { Champions, type ChampState } from "./champions";
 import { AFFIX_FX } from "../shared/champions";
+/** A champion's helpers (its Splitting twin, a Ringleader's cutthroats) leave this long after they came. */
+const CHAMP_HELPER_MS = 90_000;
 import { ASK_BURST, ASK_PER_SEC, Bucket, CHAT_BURST, CHAT_PER_SEC, clientIp, isLocalIp, MSG_BURST, MSG_KICK_AFTER, MSG_KICK_WINDOW_MS, MSG_PER_SEC } from "./ratelimit";
 
 export class Player extends Schema {
@@ -628,7 +630,7 @@ export class TownRoom extends Room<TownState> {
       this.spawnMob(kind, -1, id, { x, y, level });
       const h = this.state.mobs.get(id);
       if (h && weapon) h.weapon = weapon;
-      if (h) { h.hp = h.maxHp = Math.round(mobDef(h).maxHp * mobScale(h.level, "hp")); h.homeX = x; h.homeY = y; }
+      if (h) { h.hp = h.maxHp = Math.round(mobDef(h).maxHp * mobScale(h.level, "hp")); h.homeX = x; h.homeY = y; h.banishAt = Date.now() + CHAMP_HELPER_MS; } // gone again if nobody kills it
       return id;
     },
     dmg: (m, mult) => Math.max(1, Math.round(mobDef(m as Mob).damage * mobScale(m.level, "damage") * mult)),
