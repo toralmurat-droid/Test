@@ -53,7 +53,7 @@ import { chestById, chestLock, CHEST_RANGE, CHEST_RESPAWN_MS, CHESTS, GUARD_RESP
 import { encodeTimers, timerSig, timersOf } from "../shared/buffTimers";
 import { SLOT_COUNT } from "../shared/slots";
 import { groupDmgMult, groupHpMult, PARTY, together } from "../shared/party";
-import { heroPoise, MOB_COMBAT, mobBody, POISE, poiseLevelMult, poiseSpeed, PVP_PROTECT_LEVEL, pvpDamageMult, pvpProtected, SWING_AHEAD } from "../shared/combat";
+import { canExecute, executeDamage, executeRefund, heroPoise, MOB_COMBAT, mobBody, POISE, poiseLevelMult, poiseSpeed, PVP_PROTECT_LEVEL, pvpDamageMult, pvpProtected, SWING_AHEAD } from "../shared/combat";
 import {
   BAG_SIZE, Equipped, gearDef, GEAR_SLOTS, activeGear, reqProblem, itemLevel, HeroReqInfo, GearSlot, gearBlock, gearName, gearReachMult, gearSpeedMult, gearStats, isGearId, potionChance, rollGear, canWear, starterKit,
   isBagItem, socketProblem, itemRunes, withRunes, runeEffects, stripRunes, GEAR_DROP,
@@ -292,6 +292,7 @@ export class Mob extends Schema {
   poiseLost = 0;
   lastPoiseHit = 0;
   brokenUntil = 0;
+  execSpent = false; // this break was already executed (shared/combat.ts EXECUTE)
   steadyUntil = 0;
   windUntil = 0;
   zone = 0; // index into SPAWN_ZONES (-1 for bloblings, which belong to their mother, not a zone)
@@ -438,7 +439,7 @@ function aimOf(p: Player): [number, number] {
   return [p.ax, p.ay];
 }
 
-type Poised = { poiseLost: number; lastPoiseHit: number; brokenUntil: number; steadyUntil: number; broken: boolean; dead: boolean };
+type Poised = { poiseLost: number; lastPoiseHit: number; brokenUntil: number; steadyUntil: number; broken: boolean; dead: boolean; execSpent?: boolean };
 
 const mobPoiseMax = (m: Mob) => MOB_COMBAT[m.kind].poise * mobScale(m.level, "hp") * (m.kind === "bandit" ? BANDIT_ROLES[roleOf(m.weapon)].poise : 1);
 const heroPoiseMax = (p: Player) => heroPoise(p.cls, p.level);
@@ -461,7 +462,7 @@ function drainPoise(t: Poised, max: number, amount: number, now: number, brokenM
   t.poiseLost += amount;
   t.lastPoiseHit = now;
   if (t.poiseLost < max) return false;
-  t.poiseLost = max; t.broken = true; t.brokenUntil = now + brokenMs;
+  t.poiseLost = max; t.broken = true; t.brokenUntil = now + brokenMs; t.execSpent = false; // a fresh break: one execution (EXECUTE)
   return true;
 }
 
@@ -4866,6 +4867,8 @@ export class TownRoom extends Room<TownState> {
     const def = mobDef(m);
     if (a && (m.camp || m.kind === "banditchief")) this.banditShout(m, targetId, attackerId, Date.now());
     dmg = Math.max(1, Math.round(dmg * takenMult(m, Date.now())));
+    const exec = a && !m.owner ? this.execute(a, m, dmg, opts) : 0; // a broken monster's first blow (shared/combat.ts EXECUTE)
+    if (exec) dmg = exec;
     // A group fighting together faces a tougher monster (shared/party.ts): it soaks more per hit
     if (a?.party) dmg = Math.max(1, Math.round(dmg / groupHpMult(this.groupNear(attackerId, m.x, m.y).length)));
     if (m.bones) dmg = Math.max(1, Math.round(dmg * (1 - DEMON.harvest.armorPer * m.bones))); // Bone Demon's bone armour
@@ -4895,7 +4898,7 @@ export class TownRoom extends Room<TownState> {
       const k = moveStep(m.x, m.y, pushInput(push), 0.1 * kb);
       if (!isSafeZone(k.x, k.y) && !noMobsAt(k.x, k.y)) { m.x = k.x; m.y = k.y; }
     }
-    this.broadcast("hit", { id: targetId, dmg, crit: !!opts.crit, dot: !!opts.dot, el: opts.el, ...(opts.dot ? {} : hitDir(push)) });
+    this.broadcast("hit", { id: targetId, dmg, crit: !!opts.crit && !exec, dot: !!opts.dot, el: opts.el, ...(exec ? { ex: 1 } : {}), ...(opts.dot ? {} : hitDir(push)) });
     if (m.hp > 0) { afterHit(this.host, attackerId, targetId, opts); return; }
     if (a) onKill(this.host, attackerId); // Bloodlust
     if (m.owner && !m.charmUntil) { this.mobDied(m, targetId, attackerId, a?.name ?? ""); return; } // a summon: no XP, no loot, no quest credit
@@ -4906,6 +4909,19 @@ export class TownRoom extends Room<TownState> {
     for (const pid of a?.party ? this.groupNear(attackerId, m.x, m.y) : [attackerId]) this.grantXp(pid, xp, m);
     this.dropLoot(m.kind, m.x, m.y, mobScale(m.level, "gold") * (m.kind === "bandit" ? BANDIT_ROLES[roleOf(m.weapon)].loot : 1), m.level);
     this.mobDied(m, targetId, attackerId, a?.name ?? "");
+  }
+
+  /**
+   * Execution (shared/combat.ts EXECUTE): the hero's first own blow on a broken monster. Returns the new damage (0 = no
+   * execution), spends the break's execution and gives the hero Heat or Mana back.
+   */
+  private execute(a: Player, m: Mob, dmg: number, opts: HitOpts): number {
+    if (!canExecute(opts, m)) return 0;
+    m.execSpent = true;
+    const boss = !!(ELITE[m.kind] || BOSS[m.kind] || m.kind === "nightraider" || m.title);
+    executeRefund(a, a.cls, OVERLOAD.max);
+    this.syncMana(a);
+    return Math.max(1, Math.round(executeDamage(dmg, !!opts.crit, boss)));
   }
 
   /** Burns and poison of a hero's elemental hit: damage ticks over the next seconds (shared/elements.ts ELEMENT_FX). */
@@ -5994,6 +6010,7 @@ export class TownRoom extends Room<TownState> {
       const m = this.state.mobs.get(id);
       if (m) {
         // Terrified monsters act like dizzy ones: they run for cover
+        if (!m.broken) m.execSpent = false; // a fresh break: one execution (EXECUTE); a longer one keeps its state
         m.poiseLost = mobPoiseMax(m); m.broken = true; m.brokenUntil = Math.max(m.brokenUntil, now + ms);
         this.broadcast("broken", { id, ms });
         return;

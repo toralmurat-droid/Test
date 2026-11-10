@@ -301,6 +301,8 @@ const R: Record<string, Recipe> = {
   hitFlesh: (o, t, v) => { thud(o, t, rnd(120, 170), 0.55 * v, 0.14); noise(o, t, { type: "bandpass", f: 1800, q: 2, dur: 0.05, vol: 0.3 * v }); },
   hitBlocked: (o, t, v) => clank(o, t, 0.4 * v, rnd(1100, 1500)),
   crit: (o, t, v) => { thud(o, t, 160, 0.6 * v, 0.2); clank(o, t + 0.01, 0.35 * v, 2100); },
+  // Execution of a broken monster (shared/combat.ts EXECUTE): a deep, heavy blow, a short ring of steel after it
+  execute: (o, t, v) => { thud(o, t, 75, 0.8 * v, 0.32); clank(o, t + 0.02, 0.3 * v, 1600); tone(o, t + 0.05, { type: "triangle", f: 880, f2: 660, dur: 0.35, vol: 0.07 * v }); },
   heroHurt: (o, t, v, pitch = 1) => voice(o, t, { f: 170 * pitch, f2: 120 * pitch, dur: 0.16, vol: 0.28 * v, vowel: [650, 1100], vowel2: [500, 900], att: 0.01 }),
   heroDie: (o, t, v) => { voice(o, t, { f: 180, f2: 70, dur: 0.7, vol: 0.3 * v, vowel: [700, 1150], vowel2: [400, 800] }); thud(o, t + 0.45, 90, 0.5 * v, 0.3); },
   // Overload gauge (overloadGauge.ts): a hiss of venting steam over an iron clank; a soft tick when it has cooled
@@ -706,12 +708,13 @@ export function bindSfx(room: any, me: () => string, ents: Map<string, Ent>) {
     if (!e) return;
     P(e.state.cls === "wizard" ? "shotFire" : e.state.cls === "ninja" ? "shotThrow" : "shotBow", id, 0.8);
   });
-  on("hit", ({ id, blocked, crit }) => {
+  on("hit", ({ id, blocked, crit, ex }) => {
     const e = at(id);
     if (!e) return;
     const k = e.state.kind;
     const key = { key: "hit" + id, minGap: 70 };
-    P(blocked ? "hitBlocked" : crit ? "crit" : "hitFlesh", id, e.mob ? 0.6 : 0.8, undefined, key);
+    if (ex) P("execute", id, 0.9); // its own sound, never swallowed by the per-target gap
+    else P(blocked ? "hitBlocked" : crit ? "crit" : "hitFlesh", id, e.mob ? 0.6 : 0.8, undefined, key);
     if (e.mob) {
       if (isBlob(k)) P("blobHurt", id, 0.9, blobPitch(e.state), { key: "bh" + id, minGap: 120 });
       else if (k === "demon") P("demonHurt", id, 1, undefined, { key: "dh" + id, minGap: 300 });

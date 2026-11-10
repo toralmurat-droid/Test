@@ -1,0 +1,10 @@
+{
+  "date": "2026-11-09",
+  "pr": 376,
+  "title": "Executions",
+  "changes": [
+    "Break a monster's guard (the dizzy stars) and a red arrow shows over it: your next blow is an execution that deals double damage (x1.5 on elites and bosses).",
+    "An execution also cools your Heat by 30%, or gives back 10% of your Mana as a Wizard or Summoner.",
+    "One execution per break, and only your own attacks and skills count, not your creatures."
+  ]
+}

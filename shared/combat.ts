@@ -128,3 +128,49 @@ const MOB_BODY: Partial<Record<MobKind, number>> = {
 export const mobBody = (kind: MobKind) => MOB_BODY[kind] ?? 6;
 /** Farthest a target's feet can be from the hero's feet and still be hit, straight ahead. */
 export const meleeReach = (range: number, reachMult: number, body = 0) => (SWING_AHEAD + range) * reachMult + body;
+
+/**
+ * Execution (Lot D, 2026-11): breaking a monster's poise pays off. While a monster is broken (dizzy, POISE.mobBrokenMs),
+ * the first blow a hero lands on it with their own basic attack or a skill is an execution:
+ *  - damage x`mult` (x`bossMult` on elites, mini-bosses, quest bosses and the Night Raiders). A critical execution is not
+ *    doubled again: the crit is taken back out first (crits deal x`critMult`, shared/powers.ts), so it stays x`mult`;
+ *  - it gives the hero some breath back: Heat drops by `heatBack` (a share of OVERLOAD.max, shared/overload.ts; an
+ *    overheated hero's vent gets that much shorter). Classes that pay mostly in Mana (`manaClasses`: Wizard, Summoner)
+ *    get `manaBack` of their max Mana instead. One rule per class, no mix, so it reads plainly.
+ *  - One execution per break: the monster must be broken again for the next one.
+ * Never on heroes (nor on a hero's creatures), and never from a hero's creatures (golems, wisps), runes, thorns or
+ * damage over time: only the hero's own blow.
+ */
+export const EXECUTE = {
+  mult: 2,
+  bossMult: 1.5,
+  critMult: 2,
+  heatBack: 0.3, // share of OVERLOAD.max
+  manaBack: 0.1, // share of max Mana
+  manaClasses: { wizard: true, summoner: true } as Partial<Record<ClassKind, true>>,
+};
+
+/** What an execution needs to know about the blow (server HitOpts / skillEngine HitOpts fit). */
+export interface ExecBlow { basic?: boolean; skill?: boolean; dot?: boolean; rune?: boolean; thorn?: boolean; pet?: boolean }
+/** What it needs to know about the target: broken, and whether this break was already executed. */
+export interface ExecTarget { broken: boolean; execSpent?: boolean }
+
+/** The hero's own blow (basic attack or skill), not a creature's, a rune's, a thorn's or a damage-over-time tick. */
+export const executingBlow = (o: ExecBlow) => !!(o.basic || o.skill) && !o.dot && !o.rune && !o.thorn && !o.pet;
+/** Does this blow execute this monster? (The caller checks it is a monster hit by a hero.) */
+export const canExecute = (o: ExecBlow, t: ExecTarget) => t.broken && !t.execSpent && executingBlow(o);
+/** Damage of an execution: the blow without its crit, times the execution multiplier. */
+export const executeDamage = (dmg: number, crit: boolean, boss: boolean) =>
+  (dmg / (crit ? EXECUTE.critMult : 1)) * (boss ? EXECUTE.bossMult : EXECUTE.mult);
+
+/** Gives the executing hero their breath back (see EXECUTE). `heatMax` = OVERLOAD.max. Returns what came back. */
+export function executeRefund(u: { energy?: number; mana?: number; maxMana?: number }, cls: ClassKind, heatMax: number): { heat: number; mana: number } {
+  if (EXECUTE.manaClasses[cls]) {
+    const max = u.maxMana ?? 0, before = u.mana ?? 0;
+    u.mana = Math.min(max, before + max * EXECUTE.manaBack);
+    return { heat: 0, mana: u.mana - before };
+  }
+  const e = u.energy ?? 0, back = heatMax * EXECUTE.heatBack;
+  u.energy = e < 0 ? Math.min(0, e + back) : Math.max(0, e - back); // Heat goes down; a vent gets shorter
+  return { heat: Math.abs(e) - Math.abs(u.energy), mana: 0 };
+}
