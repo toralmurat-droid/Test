@@ -12,7 +12,7 @@ import { CLASSES, ClassKind, MAX_LEVEL, xpForLevel } from "../../shared/classes"
 import { canPay, shortOf, MANA, manaRegen, maxManaFor, skillCost, unpackMana } from "../../shared/mana";
 import { nextSize, potionAmount, PotionKind, potionName, POTION_SIZES, total, unpackPotions } from "../../shared/potions";
 import { GROUND, areaAt, isSafeZone } from "../../shared/map";
-import { heroPoise, meleeReach, mobBody, pvpProtected } from "../../shared/combat";
+import { heroPoise, meleeReach, mobBody, POISE, pvpProtected } from "../../shared/combat";
 import { respecCost, wearMult } from "../../shared/upkeep";
 import { ESSENCE, isSummonKind } from "../../shared/summons";
 import { FEAST, FEAST_MAX, type Family } from "../../shared/devour";
@@ -332,6 +332,8 @@ export class TownScene extends Phaser.Scene {
   private areaTimer?: number;
   private shots = new Map<string, { g: Phaser.GameObjects.GameObject & { x: number; y: number }; tx: number; ty: number; at: number; dx: number; dy: number; spd: number }>();
   private fx!: SkillFx;
+  /** Broken monsters a hero can still execute (shared/combat.ts EXECUTE), with when they broke (client clock). */
+  private execReady = new Map<string, number>();
   private moves!: SkillMoves; // melee skill micro sequences (skillMoves.ts)
   private forms!: BeastForms; // the vampire's Bat Form / Wolf Form (beastForms.ts)
   private gearFx!: GearFx; // item level effects on heroes
@@ -1322,15 +1324,20 @@ export class TownScene extends Phaser.Scene {
         note.hidden = false;
       }
     });
-    this.room.onMessage("hit", ({ id, dmg, blocked, crit, dot, kx, ky, el }) => {
+    this.room.onMessage("hit", ({ id, dmg, blocked, crit, dot, kx, ky, el, ex }) => {
       const e = this.entities.get(id);
       if (!e) return;
+      if (ex) { // an execution (shared/combat.ts EXECUTE): its own number and flash instead of the usual ones
+        this.execReady.delete(id);
+        this.floatText(e.sprite.x, e.sprite.y - 16, `EXECUTE -${dmg}`, "#ff4d3d", PIXEL_FONT, 2, true);
+        this.fx.execute(e);
+      }
       if (id === this.me) this.portals?.hurt();
       // Battle music heat: hits on the hero count most, fights close by count too
       const meE = this.entities.get(this.me);
       if (id === this.me) musicCombat(3);
       else if (e.mob && meE && Math.hypot(e.sprite.x - meE.sprite.x, e.sprite.y - meE.sprite.y) < 10 * TILE) musicCombat(1);
-      this.floatText(e.sprite.x, e.sprite.y - 14, crit ? `CRIT -${dmg}` : `-${dmg}`,
+      if (!ex) this.floatText(e.sprite.x, e.sprite.y - 14, crit ? `CRIT -${dmg}` : `-${dmg}`,
         blocked ? "#9ad1ff" : crit ? "#ffd60a" : id === this.me ? "#ff5d5d" : el && ELEMENT_COLORS[el as Element] ? `#${ELEMENT_COLORS[el as Element].toString(16).padStart(6, "0")}` : "#ffffff",
         PIXEL_FONT, crit ? 1.8 : dot ? 0.9 : 1.3, true);
       // damage type (shared/elements.ts): embers, frost shards, venom splash or a holy glint on the target
@@ -1350,6 +1357,7 @@ export class TownScene extends Phaser.Scene {
     this.room.onMessage("broken", ({ id }) => {
       const e = this.entities.get(id);
       if (!e) return;
+      if (e.mob && !e.state.owner) this.execReady.set(id, Date.now()); // a hero's next blow executes it (marker drawn with the dizzy stars)
       this.floatText(e.sprite.x, e.sprite.y - 22, id === this.me ? "Dizzy!" : "Broken!", "#ffd166");
     });
     this.room.onMessage("kill", ({ killer, victim }) => this.feed(`${killer} slew ${victim}`));
@@ -3070,7 +3078,13 @@ export class TownScene extends Phaser.Scene {
           const a = now / 180 + (i * Math.PI * 2) / 3;
           e.bar.fillStyle(0xffd166).fillRect(x + Math.cos(a) * 6 - 1, sy + Math.sin(a) * 2 - 1, 2, 2);
         }
-      }
+        // Execution ready (shared/combat.ts EXECUTE): a small red arrow bobbing above the stars, gone once it is spent
+        if (this.execReady.has(id) && now - this.execReady.get(id)! < POISE.mobBrokenMs + 600) {
+          const ay = Math.round(sy - 7 + Math.sin(now / 120));
+          e.bar.fillStyle(0x3a0000, 0.8).fillRect(x - 4, ay - 1, 9, 2).fillRect(x - 3, ay + 1, 7, 2).fillRect(x - 2, ay + 3, 5, 2).fillRect(x - 1, ay + 5, 3, 1);
+          e.bar.fillStyle(0xff4d3d).fillRect(x - 3, ay, 7, 1).fillRect(x - 2, ay + 1, 5, 2).fillRect(x - 1, ay + 3, 3, 2).fillRect(x, ay + 5, 1, 1);
+        }
+      } else if (this.execReady.size && Date.now() - (this.execReady.get(id) ?? 0) > 500) this.execReady.delete(id); // (the "broken" message can beat the state)
       e.parts?.clear();
       if (e.mob && !p.dead && p.hidden && p.weapon === "ambusher") {
         // up in a tree: nothing shows at all (that's the point of an ambush)

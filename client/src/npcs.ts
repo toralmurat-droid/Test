@@ -21,15 +21,15 @@ import { routeVia } from "../../shared/dungeon";
 import { actAt, WAYGATES } from "../../shared/act2";
 import type { MapMarker } from "./minimap";
 import { QuestLog } from "./questlog";
-import { MASTER_LEVELS, SHOPS, sellPrice, shopBuys } from "../../shared/shops";
+import { MASTER_LEVELS, SHOPS, sellPrice, shopBuys, shopFuses } from "../../shared/shops";
 import { GEAR_SLOTS, GearSlot, gearDef, gearName, itemLevel, itemRarity, itemText, reqProblem, TIER_NAMES } from "../../shared/gear";
 import { repairCost, WEAR, wearMult } from "../../shared/upkeep";
 import { CHAR_GROW, CHAR_SCALE, CHAR_ORIGIN, CharacterName, playCharAnim } from "./artAssets";
 import { iconCanvas, itemColor, rarityLabel, reqInfoOf } from "./gear";
-import { parseRune, RUNE_KIND_NAMES, RUNES, runeName, runeText } from "../../shared/runes";
+import { fuseCost, fuseProblem, looseRuneCounts, parseRune, RUNE_FUSE_COUNT, RUNE_KIND_NAMES, RUNES, runeName, runeText } from "../../shared/runes";
 import { runeCanvas, runeCss } from "./runeArt";
 import { itemTexture, potionTex } from "./textures";
-import { potionAmount, potionName, slotsAfter, total, unpackPotions } from "../../shared/potions";
+import { potionAmount, potionName, potionSlots, slotsAfter, total, unpackPotions } from "../../shared/potions";
 import { BAG_SIZE } from "../../shared/gear";
 import { isoAnchor } from "./iso";
 import { msUntilUndeadNight } from "../../shared/daynight";
@@ -329,6 +329,19 @@ export class NpcLayer {
         ? sellable.map(([id, i]) => sellRow(id, i)).join("")
         : `<p class="sh-empty">${onlyRunes ? "No loose runes in your bag. Take one out of an item in the Bag to sell it." : "Nothing to sell in your bag. Take a piece off in the Bag to sell it."}</p>`)
       : "";
+    // rune fusion (shared/runes.ts): one row per key and rank the hero carries loose, the button says why it's off
+    const fuseRows = shopFuses(shop) ? [...looseRuneCounts(bag)].sort(([a], [b]) => a.localeCompare(b)).map(([id, have]) => {
+      const r = parseRune(id)!, cost = fuseCost(r.rank);
+      const why = fuseProblem(id, { bag, gold, reserved: potionSlots(pots), bagSize: BAG_SIZE });
+      const into = cost === undefined ? "already the highest rank" : `${RUNE_FUSE_COUNT} → 1 ${runeName({ key: r.key, rank: r.rank + 1 })}`;
+      return `<div class="sh-row"><span class="sh-icon" data-icon="${id}"></span><span class="sh-info"><b style="color:${runeCss(r)}">${runeName(r)} × ${have}</b>` +
+        `<small>${into}${why ? ` · <span class="sh-need">${why}</span>` : ""}</small></span>` +
+        `<button class="sh-fuse" data-id="${id}"${why ? ` disabled title="${why}"` : ""}>${cost === undefined ? "Max rank" : `Fuse ${cost}${pxIcon("coin")}`}</button></div>`;
+    }).join("") : "";
+    const fuse = shopFuses(shop)
+      ? `<h4>Rune fusion</h4><p class="sh-empty">${RUNE_FUSE_COUNT} identical loose runes and gold make one rune of the next rank. Runes set in items don't count.</p>` +
+        (fuseRows || `<p class="sh-empty">No loose runes in your bag.</p>`)
+      : "";
     const wear = q?.wear ?? 0, fix = shop.repairs ? repairCost(GEAR_SLOTS.map((s) => q?.[s]), wear) : 0;
     const repair = shop.repairs
       ? `<h4>Repairs</h4><div class="sh-row"><span class="sh-info"><b>Your gear: ${100 - wear}% condition</b>` +
@@ -338,7 +351,7 @@ export class NpcLayer {
     const quest = questDialog(n.id, q);
     this.dialog.innerHTML = this.head(n) + `<p>${shop.greeting}</p>` +
       `<div class="sh-gold">Your gold: <b>${gold}${pxIcon("coin")}</b> ${this.shopMsg}</div>` +
-      `<h4>For sale</h4><div class="sh-list">${buy}</div>${sell}${repair}` +
+      `<h4>For sale</h4><div class="sh-list">${buy}</div>${sell}${fuse}${repair}` +
       `<div class="nd-btns">${quest ? `<button class="nd-talk">Talk</button>` : ""}<button class="nd-bye">Goodbye <kbd>E</kbd></button></div>`;
     this.dialog.classList.add("shop");
     const talk = this.dialog.querySelector<HTMLButtonElement>(".nd-talk");
@@ -358,6 +371,9 @@ export class NpcLayer {
     }
     for (const b of this.dialog.querySelectorAll<HTMLButtonElement>(".sh-buy, .sh-sell")) {
       b.onclick = () => { this.send(b.classList.contains("sh-buy") ? "buy" : "sell", { i: Number(b.dataset.i) }); b.disabled = true; };
+    }
+    for (const b of this.dialog.querySelectorAll<HTMLButtonElement>(".sh-fuse")) {
+      b.onclick = () => { this.send("fuse", { id: b.dataset.id }); b.disabled = true; };
     }
     const fixBtn = this.dialog.querySelector<HTMLButtonElement>(".sh-repair");
     if (fixBtn) fixBtn.onclick = () => { this.send("repair", {}); fixBtn.disabled = true; };

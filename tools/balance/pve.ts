@@ -1,6 +1,6 @@
 /**
  * PvE balance simulator: bot heroes play the first zone (Lv 1-30) against its monsters and bosses.
- * Run: npx tsx tools/balance/pve.ts [runsPerCase] [--bosses] [--zones] [--act2] [--class=vampire] [--build=0|1|2] [--boss=king]
+ * Run: npx tsx tools/balance/pve.ts [runsPerCase] [--bosses] [--zones] [--act2] [--class=vampire] [--build=0|1|2] [--boss=king] [--no-execute]
  *
  * It reuses the PvP simulator (tools/balance/duel.ts): the same hero bot, skill engine, builds (rushing one branch),
  * stat points and gear by level. The other side is a monster with its real numbers (shared/constants.ts MOBS, level
@@ -15,14 +15,14 @@
 import { NIGHT_RAID } from "../../shared/raiders";
 import { ACTIVE_CLASSES, ClassKind } from "../../shared/classes";
 import { BANDIT_AI, BANDIT_ROLES, CHIEF } from "../../shared/bandits";
-import { BEAST, BLOB_AI, DEMON, HOLLOW_KING, MOB_ATTACK_RANGE, MOB_LEVEL, MOBS, MobKind, mobScale, MOTHER, SKELETON_AI, SKELETON_BOW, SKELETON_WEAPONS, SkeletonWeapon, SUNWRIGHT, REGEN_DELAY_MS, REGEN_PER_STA } from "../../shared/constants";
+import { BEAST, BLOB_AI, DEMON, ELITE, HOLLOW_KING, MOB_ATTACK_RANGE, MOB_LEVEL, MOBS, MobKind, mobScale, MOTHER, SKELETON_AI, SKELETON_BOW, SKELETON_WEAPONS, SkeletonWeapon, SUNWRIGHT, REGEN_DELAY_MS, REGEN_PER_STA } from "../../shared/constants";
 import { MOB_COMBAT, mobBody, POISE, poiseSpeed } from "../../shared/combat";
 import { POTION_COOLDOWN_MS, POTION_SIZES } from "../../shared/potions";
 import { activeSkills, SKILLS } from "../../shared/skills";
 import { canPay, manaRegen, skillCost } from "../../shared/mana";
 import { castSkill, cooldownLeft } from "../../shared/skillEngine";
 import { coolHeat, isOverheated } from "../../shared/overload";
-import { Duel, F, GolemF, make } from "./duel";
+import { Duel, F, GolemF, make, SIM } from "./duel";
 import { SUMMON } from "../../shared/summons";
 
 type Build = 0 | 1 | 2;
@@ -40,9 +40,10 @@ interface MobSpec {
   specials: Special[];
   enrage?: { hpBelow: number; speed: number; cd: number };
   ccImmune?: boolean; // never stunned or slowed (the Night Raiders)
+  boss?: boolean; // elite, mini-boss, quest boss or Night Raider: executions deal EXECUTE.bossMult (shared/combat.ts)
 }
 
-export function mobSpec(kind: MobKind, level: number, opt: { weapon?: string; hpMult?: number } = {}): MobSpec {
+export function mobSpec(kind: MobKind, level: number, opt: { weapon?: string; hpMult?: number; boss?: boolean } = {}): MobSpec {
   const d = MOBS[kind], hpS = mobScale(level, "hp"), dmS = mobScale(level, "damage");
   const role = kind === "bandit" ? BANDIT_ROLES[(opt.weapon ?? "cutthroat") as keyof typeof BANDIT_ROLES] : undefined;
   const sw = kind === "skeleton" ? SKELETON_WEAPONS[(opt.weapon ?? "sword") as SkeletonWeapon] : undefined;
@@ -55,6 +56,7 @@ export function mobSpec(kind: MobKind, level: number, opt: { weapon?: string; hp
     speed: d.speed * (role?.speed ?? 1),
     reach: (sw?.range ?? MOB_ATTACK_RANGE) + body, windup: sw?.windupMs ?? MOB_COMBAT[kind].windupMs,
     poise: MOB_COMBAT[kind].poise * hpS * (role?.poise ?? 1), body, specials: [],
+    boss: !!(ELITE[kind] || kind === "nightraider" || opt.boss),
   };
   const ranged = (range: number, keepAway: number, speed: number, radius: number, mult = 1) => { spec.ranged = { range, keepAway, speed, radius, mult }; };
   if (kind === "shooterblob") ranged(BLOB_AI.shooter.range, BLOB_AI.shooter.keepAway, BLOB_AI.shooter.shotSpeed, 3);
@@ -121,7 +123,7 @@ export class MobF extends F {
     this.maxHp = this.hp = Math.round(spec.hp);
     this.s = { sta: 0, str: 0, mag: 0, dex: 0 };
     this.body = spec.body;
-    this.mob = { reach: spec.reach, ranged: !!spec.ranged };
+    this.mob = { reach: spec.reach, ranged: !!spec.ranged, boss: !!spec.boss };
     for (const s of spec.specials) this.next[s.name] = s.first ?? 1500 + Math.random() * 2000;
   }
   get poiseMax() { return this.spec.poise; }
@@ -324,9 +326,9 @@ function zoneRun(cls: ClassKind, level: number, build: Build, mobLevel: (i: numb
   return { won: true, kills, hpLostPerKill: lost / kills / h.maxHp, secPerKill: fightMs / 1000 / kills, heals: pack.healUsed, manas: pack.manaUsed };
 }
 
-export interface BossDef { name: string; kind: MobKind; level: number; hero: number; hpMult?: number; weapon?: string }
+export interface BossDef { name: string; kind: MobKind; level: number; hero: number; hpMult?: number; weapon?: string; plain?: boolean } // plain: an ordinary monster on the server (no quest title): full executions
 export const BOSSES: BossDef[] = [
-  { name: "Mother Blob Lv8", kind: "motherblob", level: 8, hero: 7 },
+  { name: "Mother Blob Lv8", kind: "motherblob", level: 8, hero: 7, plain: true },
   { name: "Bone Demon Lv14", kind: "demon", level: 14, hero: 13 },
   { name: "Raiser (Necro) Lv16", kind: "necromancer", level: 16, hero: 15 },
   { name: "Gravemoor Horror Lv19", kind: "demon", level: 19, hero: 18, hpMult: 1.6 },
@@ -343,7 +345,7 @@ export const BOSSES: BossDef[] = [
 function bossRun(cls: ClassKind, b: BossDef, build: Build, potions = 5): RunResult & { bossLeft: number } {
   const h = make("h", cls, b.hero, build);
   const pack: Pack = { heal: potions, mana: potions, healUsed: 0, manaUsed: 0, size: potionSize(b.hero), lastDrink: -1e9 };
-  const m = new MobF(mobSpec(b.kind, b.level, { hpMult: b.hpMult, weapon: b.weapon }));
+  const m = new MobF(mobSpec(b.kind, b.level, { hpMult: b.hpMult, weapon: b.weapon, boss: !b.plain })); // quest bosses carry a title (Mob.title)
   const d = new PveDuel(h, [m], pack, 0);
   let w: F | null | undefined;
   while (d.now < 240000 && (w = d.step()) === undefined) { /* fight */ }
@@ -359,6 +361,9 @@ for (const a of process.argv) {
   const k = /^--scale=([\d.]+)$/.exec(a); // skill attribute scaling x this
   if (k) for (const list of Object.values(SKILLS)) for (const sk of list) if (sk.scale) sk.scale.per *= Number(k[1]);
 }
+
+/** --no-execute: fights without executions after a poise break (shared/combat.ts EXECUTE), to compare. */
+if (process.argv.includes("--no-execute")) SIM.execute = false;
 
 /** --class=vampire: only that class. --build=1: every bot rushes that branch (0-2) instead of cycling the three. */
 const argOf = (k: string) => process.argv.find((a) => a.startsWith(`--${k}=`))?.split("=")[1];

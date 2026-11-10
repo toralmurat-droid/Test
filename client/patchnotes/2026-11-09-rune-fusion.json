@@ -1,0 +1,11 @@
+{
+  "date": "2026-11-09",
+  "patch": 204,
+  "title": "Rune fusion",
+  "changes": [
+    "Morwen in Oakvale and Zahra in Kel Ashar now fuse runes: bring 4 identical loose runes and get one rune of the next rank.",
+    "Fusing costs 100 gold for a Lesser rune and 400 gold for a plain one. Greater runes are the top rank.",
+    "Zahra now buys loose runes too.",
+    "Runes set in your gear never count: take them out first."
+  ]
+}
