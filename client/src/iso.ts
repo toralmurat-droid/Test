@@ -641,7 +641,7 @@ export function isoStanding(scene: Phaser.Scene, objects: number[][]): number[][
   for (let ty = 0; ty < MAP_H; ty++) for (let tx = 0; tx < MAP_W; tx++) {
     const index = objects[ty][tx], t = id(index);
     if (t < 0) continue;
-    if (ty >= WORLD_H && ty < DESERT_Y0) { out[ty][tx] = -1; continue; } // the Mawdeep's rock: cave walls (dungeon.ts), not rocks; then solid rock to the desert
+    if ((ty >= WORLD_H && ty < DESERT_Y0) || ty >= DESERT_Y0 + DESERT_H) { out[ty][tx] = -1; continue; } // the Mawdeep's rock: cave walls (dungeon.ts), not rocks; then solid rock to the desert
     if (ty >= DESERT_Y0 && isoDesert(scene, t, tx, ty, at, cd)) { out[ty][tx] = -1; continue; }
     const cx = (tx + 0.5) * TILE, cy = (ty + 0.5) * TILE;
     if (houses.has(ty * MAP_W + tx)) { out[ty][tx] = -1; continue; }

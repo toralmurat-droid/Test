@@ -112,7 +112,8 @@ function placeChests(): Chest[] {
   });
   // The Mawdeep (Murat 2026-11-08: "best in class principles"): on each floor a hoard in its ambush room, kept by the
   // beast-folk lurking round it, and a richer chest in the secret room behind the cracked wall
-  const KEEPERS: Record<number, Partial<Record<MobKind, number>>> = { 1: { gnawkin: 2, tuskborn: 1 }, 2: { silkwretch: 2, gnawkin: 1 }, 3: { tuskborn: 2, silkwretch: 1 } };
+  const KEEPERS: Record<number, Partial<Record<MobKind, number>>> = { 1: { gnawkin: 2, tuskborn: 1 }, 2: { silkwretch: 2, gnawkin: 1 }, 3: { tuskborn: 2, silkwretch: 1 },
+    4: { skeleton: 3 }, 5: { skeleton: 2, skeletonmage: 1 }, 6: { sanddead: 2, scorpion: 1 }, 7: { sanddead: 2, veiled: 1 } };
   for (const f of FLOORS) {
     const zl = SPAWN_ZONES.find((z) => z.name === f.name)?.levels ?? [20, 22];
     const inRoom = (ci: number) => (tx: number, ty: number) => Math.hypot((tx + 0.5 - f.x - f.chambers[ci].x) / f.chambers[ci].rx, (ty + 0.5 - f.y - f.chambers[ci].y) / f.chambers[ci].ry) < 0.8;

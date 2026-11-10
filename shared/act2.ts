@@ -1,4 +1,4 @@
-import { DESERT_Y0, TILE } from "./constants";
+import { actOfTile, DESERT_Y0, TILE } from "./constants";
 import { CHAINS, chainDone, type Quester } from "./quests";
 import { KEL_MARKET, D, WAYGATE_DESERT, WAYGATE_OAKVALE } from "./desert";
 
@@ -31,8 +31,8 @@ export function act2Missing(p: Quester | undefined): string[] {
   return ACT2_KEYS.filter((k) => { const c = chainIx(k); return c < 0 || !chainDone(p, c); }).map((k) => (k === "crown" ? "Ostrevar the Hollow King" : "the Hide-Mother of the Mawdeep"));
 }
 
-/** Which act a point (px) is in. */
-export const actAt = (py: number): 1 | 2 => (py >= DESERT_Y0 * TILE ? 2 : 1);
+/** Which act a point (px) is in (the Lantern Crypt, deep under the desert's west, is Act 1's). */
+export const actAt = (py: number, px: number): 1 | 2 => actOfTile(Math.floor(px / TILE), Math.floor(py / TILE));
 /** Kel Ashar's market: where heroes in the desert come back after dying, and where they log in if they left from Act 2. */
 export function desertSpawn(): { x: number; y: number } {
   const M = KEL_MARKET;

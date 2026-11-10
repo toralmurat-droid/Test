@@ -1,5 +1,5 @@
 import { uiScale } from "./worldscale";
-import { DESERT_Y0, MAP_H, MAP_W, TILE, UNDER_END, WORLD_H } from "../../shared/constants";
+import { DESERT_H, DESERT_Y0, inDeepRow, MAP_H, MAP_W, TILE, UNDER_END, WORLD_H } from "../../shared/constants";
 import { floorAt, SEA_END } from "../../shared/dungeon";
 import { AREAS, EMPTY, GROUND, OBJECTS, T } from "../../shared/map";
 import { createTilesetCanvas, tileColors } from "./tileset";
@@ -86,7 +86,7 @@ export class Minimap {
       const o = OBJECTS[y][x];
       // the Mawdeep: black rock, dim cave floors
       const g = GROUND[y][x];
-      b.fillStyle = y >= DESERT_Y0 ? (o === T.CLIFF ? "#7a4a2c" : o !== EMPTY && o !== T.BUSH ? colors[o] : g === T.SAND ? "#c99c60" : g === T.DIRT ? "#a8744a" : g === T.GRASS ? "#5e6e30" : colors[g]) // the desert
+      b.fillStyle = y >= DESERT_Y0 && y < DESERT_Y0 + DESERT_H ? (o === T.CLIFF ? "#7a4a2c" : o !== EMPTY && o !== T.BUSH ? colors[o] : g === T.SAND ? "#c99c60" : g === T.DIRT ? "#a8744a" : g === T.GRASS ? "#5e6e30" : colors[g]) // the desert
         : y >= SEA_END ? (o !== EMPTY ? "#0d0b0c" : "#4a3d33") : colors[o !== EMPTY ? o : g];
       b.fillRect(x, y, 1, 1);
     }
@@ -234,7 +234,7 @@ export class Minimap {
     const f = me && floorAt(Math.floor(me.x / TILE), Math.floor(me.y / TILE));
     if (f) return { x0: f.x, y0: f.y, x1: f.x + f.w, y1: f.y + f.h };
     if (me && me.y >= WORLD_H * TILE && me.y < UNDER_END * TILE) return { x0: 0, y0: WORLD_H, x1: MAP_W, y1: UNDER_END };
-    return this.inDesert ? { x0: 0, y0: DESERT_Y0, x1: MAP_W, y1: MAP_H } : { x0: 0, y0: 0, x1: MAP_W, y1: WORLD_H };
+    return this.inDesert ? { x0: 0, y0: DESERT_Y0, x1: MAP_W, y1: DESERT_Y0 + DESERT_H } : { x0: 0, y0: 0, x1: MAP_W, y1: WORLD_H };
   }
 
   /** The camera, made from the default framing the first time the map is moved. */
@@ -327,6 +327,7 @@ export class Minimap {
   }
 
   private grow(x: number, y: number) {
+    if (inDeepRow(y)) return; // the deep dungeons frame their floor
     if (y >= DESERT_Y0) {
       if (x < this.dx0) this.dx0 = x; if (x > this.dx1) this.dx1 = x;
       if (y < this.dy0) this.dy0 = y; if (y > this.dy1) this.dy1 = y;
@@ -393,7 +394,7 @@ export class Minimap {
   }
 
   private drawMini(now: number, me: P | undefined, others: OtherHero[]) {
-    if (me) this.inDesert = me.y >= DESERT_Y0 * TILE;
+    if (me) this.inDesert = me.y >= DESERT_Y0 * TILE && !inDeepRow(Math.floor(me.y / TILE));
     if (me) this.reveal(Math.floor(me.x / TILE), Math.floor(me.y / TILE));
     if (this.dirty && now - this.lastSave > 3000) { this.save(); this.dirty = false; this.lastSave = now; }
 

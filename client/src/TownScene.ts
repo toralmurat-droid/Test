@@ -7,7 +7,7 @@ import { leaving, noteBuild, reconnectSoon, returnToStart, takeCarried, upgradeA
 import { Client, getStateCallbacks, Room } from "colyseus.js";
 /** Beast-folk that lurk in the Mawdeep's ambush rooms (their eyes show through the dark). */
 const LURKERS = new Set<string>(["gnawkin", "tuskborn", "silkwretch", "duskwing", "crowseer"]);
-import { BOSS, ELITE, InputState, MERGE, MOBS, type MobKind, URSK, SUNWRIGHT, DESERT_Y0, MAP_H, MAP_W, regenFromStamina, TICK_RATE, TILE } from "../../shared/constants";
+import { BOSS, ELITE, InputState, MERGE, MOBS, type MobKind, URSK, SUNWRIGHT, DESERT_Y0, DESERT_H, actOfTile, MAP_H, MAP_W, regenFromStamina, TICK_RATE, TILE } from "../../shared/constants";
 import { CLASSES, ClassKind, MAX_LEVEL, xpForLevel } from "../../shared/classes";
 import { canPay, shortOf, MANA, manaRegen, maxManaFor, skillCost, unpackMana } from "../../shared/mana";
 import { nextSize, potionAmount, PotionKind, potionName, POTION_SIZES, total, unpackPotions } from "../../shared/potions";
@@ -2844,7 +2844,7 @@ export class TownScene extends Phaser.Scene {
     if (this.camSnap > 0 && --this.camSnap === 0) this.cameras.main.setLerp(CAM_LERP, CAM_LERP);
     this.iso?.update(dtMs);
     this.updateCover();
-    { const me = this.entities?.get(this.me)?.state; if (me) this.setGrade(me.y >= DESERT_Y0 * TILE); }
+    { const me = this.entities?.get(this.me)?.state; if (me) this.setGrade(me.y >= DESERT_Y0 * TILE && me.y < (DESERT_Y0 + DESERT_H) * TILE); }
     if (loadingActive()) this.checkLoaded();
     this.ambient?.update(this.time.now, dtMs);
     if (this.dungeon) { this.dungeon.torch = this.torch && !this.entities?.get(this.me)?.state?.dead; this.dungeon.night = this.details?.darkNow ?? 0; }
@@ -3200,7 +3200,7 @@ export class TownScene extends Phaser.Scene {
       // Zone under the hero drives the music
       const tx = meEnt.sprite.x / TILE, ty = meEnt.sprite.y / TILE;
       const zdef = zoneAt(Math.floor(tx), Math.floor(ty));
-      setMusicZone(zdef?.name, zdef?.mobs, this.areaName, ty >= DESERT_Y0 ? 2 : 1);
+      setMusicZone(zdef?.name, zdef?.mobs, this.areaName, actOfTile(tx, ty));
       sfxFrame(this.me, this.entities as any);
       const cls = mine.cls as ClassKind;
       const cdm = cooldownMult(cls, { sta: mine.sta, str: mine.str, mag: mine.mag, dex: mine.dex ?? 0 }, mine.talents);

@@ -2,7 +2,7 @@ import { MobKind, TILE } from "./constants";
 import { AREAS, ELEMENT_LANDS, GULLROCK, HOLLOW, HOLLOW_WARDS, isSafeZone, isSolidAt, REDFANG, SHRINE_SPOT, VILLAGE, WRECK } from "./map";
 import { SPAWN_ZONES, SpawnZone } from "./spawns";
 import { npcById } from "./npcs";
-import { chamberAt, COCOONS, DEN, FLOORS, SINKHOLE, TOTEMS } from "./dungeon";
+import { chamberAt, COCOONS, CRYPT_FLOORS, DEN, FLOORS, HIGH_CHOIR, SINKHOLE, TOTEMS, UNDER_FLOORS, WATER_THRONE } from "./dungeon";
 import { D, FURNACE, KEL_ASHAR } from "./desert";
 import { xpStep } from "./classes";
 
@@ -132,7 +132,7 @@ export const QUEST_ITEMS: Record<string, QuestItemDef> = {
 
 // ---- Map objects you use with E ----
 
-export type QuestObjectKind = "lantern" | "shrine" | "cocoon" | "heart" | "engine" | "beacon" | "crypt" | "phylactery" | "ward" | "shard" | "silk" | "totem" | "sigil" | "cistern"
+export type QuestObjectKind = "bell" | "urn" | "lantern" | "shrine" | "cocoon" | "heart" | "engine" | "beacon" | "crypt" | "phylactery" | "ward" | "shard" | "silk" | "totem" | "sigil" | "cistern"
   // the zone quests (Murat 2026-11-10): something dropped to search, a nest to burn, a marked stone to read
   | "clue" | "nest" | "cairn";
 export interface QuestObject { id: string; kind: QuestObjectKind; x: number; y: number; name: string; verb: string }
@@ -154,7 +154,9 @@ export const QUEST_VERSION = 4;
  * A monster the server puts in the world for a player on this step (one at a time, back if lost): a fused blob
  * when `parts` are blobs, else one monster of kind parts[0] (a Bone Demon, the Pale Marshal...), with a name tag.
  */
-export interface Summon { parts: MobKind[]; level: number; x: number; y: number; title?: string; hpMult?: number }
+/** A named boss's voice (speech bubbles): lines as it rises, now and then in the fight, once at half health, and its last words. */
+export interface BossVoice { wake: string[]; taunt: string[]; half?: string[]; death: string[] }
+export interface Summon { parts: MobKind[]; level: number; x: number; y: number; title?: string; hpMult?: number; voice?: BossVoice }
 export interface QuestStep {
   type: StepType;
   /** Quest log line */
@@ -1681,6 +1683,176 @@ const SPIRE_QUESTS: QuestDef[] = [
   },
 ];
 
+
+// -- The two deep dungeons (Murat's friend 2026-11-10: "make 2 dungeons, more fun, with quests inside"; shared/dungeon.ts) --
+/** A spot in chamber i of a floor, offset by (dx, dy) tiles from its centre. */
+const inRoom = (f: { x: number; y: number; chambers: { x: number; y: number }[] }, i: number, dx = 0, dy = 0): [number, number] => [f.x + f.chambers[i].x + dx, f.y + f.chambers[i].y + dy];
+const [CAT, CHOIR] = CRYPT_FLOORS, [BAZAAR, VAULT] = UNDER_FLOORS;
+const CRYPT_UNDEAD: MobKind[] = ["skeleton", "skeletonmage", "necromancer", "crawler"];
+const UNDER_KINDS: MobKind[] = ["sanddead", "scorpion", "veiled", "sphinx"];
+
+// Act 1: the Lantern Crypt under Barrow Downs (Lv 13-17)
+const CRYPT_LAMPS = [near("crypt_lamp1", "lantern", "Lamplighter's lamp", "Relight", ...inRoom(CAT, 2, -3, -1)), near("crypt_lamp2", "lantern", "Lamplighter's lamp", "Relight", ...inRoom(CAT, 2, 3, 2)),
+  near("crypt_lamp3", "lantern", "Lamplighter's lamp", "Relight", ...inRoom(CAT, 1, 2, 1)), near("crypt_lamp4", "lantern", "Lamplighter's lamp", "Relight", ...inRoom(CAT, 3, -4, 0))];
+const SEXTON_LEDGER = near("crypt_ledger", "clue", "The sexton's ledger", "Read", ...inRoom(CAT, 5, 2, -1));
+const CHOIR_BELLS = [near("crypt_bell1", "bell", "Bone bell", "Silence", ...inRoom(CHOIR, 3, -3, -2)), near("crypt_bell2", "bell", "Bone bell", "Silence", ...inRoom(CHOIR, 3, 3, 2)),
+  near("crypt_bell3", "bell", "Bone bell", "Silence", ...inRoom(CHOIR, 1, 2, 1))];
+const CRYPT_QUESTS: QuestDef[] = [
+  {
+    id: "lampsout", title: "The Lamps Went Out", giver: "monk", zone: "Barrow Downs", minLevel: 13,
+    description: "Brother Aldric's order kept lamps burning in the catacombs under Barrow Downs, so the old dead would sleep. The lamps have gone out, and the dead are walking up the stair.",
+    offer: [
+      "Mind the stair, child. It is only steep the first nine hundred years.",
+      "My brothers kept the lamps lit down there since before Oakvale had a name. While the lamps burn, the dead below sleep. Last week the lamps went out. All of them, in one night.",
+      "I am too old for the stair. Go down into the Catacombs and relight what you can. Four lamps will do to start. And put back to bed whatever is up and walking.",
+    ],
+    acceptText: "I'll relight them",
+    steps: [
+      { type: "use", zone: CAT.name, objects: CRYPT_LAMPS, chest: false, text: "Go down the crypt stair and relight 4 of the monks' lamps", banner: ["New quest", "The Lamps Went Out"],
+        obj: "Lamps relit: {n} / {goal}", nag: "{n} of {goal}. The lamps stand in the lamp hall, the ossuary and the long gallery." },
+      { type: "kill", zone: CAT.name, kinds: CRYPT_UNDEAD, goal: 12, text: "Put 12 of the walking dead back to rest", banner: ["They saw the light", "Put 12 of the dead back to rest"],
+        obj: "Dead put to rest: {n} / {goal}", nag: "{n} of {goal}." },
+    ],
+    outro: ["In the light of the relit lamps you can see it plainly: someone snuffed them, one by one. Wax is pinched flat between finger bones.", "And a fresh trail of spade-marks leads deeper, toward the old sexton's dig."],
+    reward: arcReward(13),
+    after: "Light again, below. Thank you. Now, who would put a lamp out down there?",
+  },
+  {
+    id: "sexton", title: "The Sexton's Spade", giver: "monk", zone: CAT.name, minLevel: 14, auto: true,
+    description: "The spade-marks lead to the dig of Sexton Hobb, who buried the order's dead for sixty years. He has not stopped digging. Only now he digs them up.",
+    offer: ["Spade-marks... Hobb. Old Hobb was our sexton. We buried him with his spade, as he asked.", "If he is digging again, he is not digging graves. Find his dig past the long gallery, lay him down, and read his ledger. He wrote down everything."],
+    acceptText: "On my way",
+    steps: [
+      { type: "kill", zone: CAT.name, kinds: ["skeleton"], goal: 1, own: true,
+        summon: { parts: ["skeleton"], level: 15, title: "Sexton Hobb", hpMult: 5, ...sumAt(...inRoom(CAT, 5, -1, 1)),
+          voice: { wake: ["Another one for the hole. Hold still."], taunt: ["Six foot down. Always six foot.", "The Abbot wants them up. So up they come.", "Sixty years I dug. I know where everyone is."], death: ["Put me... back... with my spade..."] } },
+        text: "Lay Sexton Hobb to rest in his dig", banner: ["New quest", "The Sexton's Spade"], obj: "Sexton Hobb laid to rest: {n} / {goal}", nag: "His dig is in the south-east of the Catacombs, behind a door." },
+      { type: "use", zone: CAT.name, objects: [SEXTON_LEDGER], chest: false, text: "Read the sexton's ledger", banner: ["He lies still", "Read the sexton's ledger"],
+        obj: "Read the ledger", nag: "It lies in his dig." },
+    ],
+    outro: ["The last pages are in a new hand, all bone-dust and candle grease: 'By order of the Abbot. Snuff the lamps. Raise the Choir. Every brother to his stall.'", "Abbot Morrow. Dead two hundred years. The stair down to the Bone Choir is past Hobb's dig."],
+    reward: arcReward(14),
+    after: "The Abbot. Saints keep us. He was the best of us, once.",
+  },
+  {
+    id: "bonechoir", title: "The Bone Choir", giver: "monk", zone: CHOIR.name, minLevel: 15, auto: true,
+    description: "Under the Catacombs the Abbot's dead brothers sing in their stalls, and their bone bells keep time. While the bells ring, the dead above keep rising.",
+    offer: ["Do you hear it? Through the floor. The Choir is singing again.", "There are bells down there, made from the bones of the brothers who served longest. Silence them, and thin the Choir before you face him."],
+    acceptText: "On my way",
+    steps: [
+      { type: "use", zone: CHOIR.name, objects: CHOIR_BELLS, chest: false, text: "Go down to the Bone Choir and silence 3 bone bells", banner: ["New quest", "The Bone Choir"],
+        obj: "Bells silenced: {n} / {goal}", nag: "{n} of {goal}. The bells hang in the choir stalls and the cloister." },
+      { type: "kill", zone: CHOIR.name, kinds: CRYPT_UNDEAD, goal: 14, text: "Break the Choir: slay 14 of the dead", banner: ["The singing falters", "Break the Choir: slay 14 of the dead"],
+        obj: "Choir dead slain: {n} / {goal}", nag: "{n} of {goal}." },
+    ],
+    outro: ["The last bell cracks and the singing stops mid-note. In the silence, one voice goes on alone, from the High Choir to the south-east.", "It is calling you by name. It has been reading Hobb's ledger too."],
+    reward: arcReward(15),
+    after: "Silence. I had forgotten what it sounded like.",
+  },
+  {
+    id: "hollowabbot", title: "The Hollow Abbot", giver: "monk", zone: "The High Choir", minLevel: 16, auto: true,
+    description: "Abbot Morrow kept the lamps for forty years, then learned what the dead below whispered. Now he leads their choir from the High Choir, at the bottom of the crypt.",
+    offer: ["He was kind to me when I was a novice. He taught me to trim a wick.", "Whatever is in the High Choir now is not him. Go through the bars, and give him the rest he gave so many others."],
+    acceptText: "Into the High Choir",
+    steps: [
+      { type: "kill", zone: "The High Choir", kinds: ["necromancer"], goal: 1, own: true,
+        summon: { parts: ["necromancer"], level: 17, title: "Abbot Morrow, the Hollow Abbot", hpMult: 6, x: (HIGH_CHOIR.x + 0.5) * TILE, y: (HIGH_CHOIR.y - 1.5) * TILE,
+          voice: {
+            wake: ["Ah. The one who silenced my bells.", "Forty years I kept the lamps, child. Do you know what the dead do in the dark? They sing.", "Come. Sing with us."],
+            taunt: ["Every lamp goes out in the end. I only hurried mine.", "Aldric still trims his wicks? Dear boy. He always did miss the point.", "Below the Downs there are ten thousand of us. Above, how many of you?", "Hush. Listen to the stone. It remembers every hymn."],
+            half: ["Brothers! To your stalls! Sing me up!"],
+            death: ["The lamps... how bright they were... Aldric, I am sorry..."],
+          } },
+        text: "Lay Abbot Morrow to rest in the High Choir", banner: ["New quest", "The Hollow Abbot"], obj: "The Hollow Abbot laid to rest: {n} / {goal}",
+        nag: "The High Choir is at the bottom of the crypt, behind iron bars. A stair there leads back up to the Downs." },
+    ],
+    outro: ["The Abbot folds down into a heap of grey robes. Under them, an old lamp, still warm. It lights by itself in your hand.", "The abbot's stair at the back of the hall leads straight up to the Downs. Brother Aldric will want to know."],
+    reward: arcReward(17, true),
+    after: "You brought his lamp back. I will keep it lit for him. For all of them.",
+  },
+];
+
+// Act 2: the Undercity below Kharsun (Lv 40-44)
+const LOST_PACKS = [near("under_pack1", "clue", "A rope-man's pack", "Search", ...inRoom(BAZAAR, 1, -2, 1)), near("under_pack2", "clue", "A rope-man's pack", "Search", ...inRoom(BAZAAR, 2, 2, -1)),
+  near("under_pack3", "clue", "A rope-man's pack", "Search", ...inRoom(BAZAAR, 3, 3, 1))];
+const BROOD_EGGS = [near("under_eggs1", "nest", "Scorpion egg clutch", "Burn", ...inRoom(BAZAAR, 5, -3, -1)), near("under_eggs2", "nest", "Scorpion egg clutch", "Burn", ...inRoom(BAZAAR, 5, 3, 1)),
+  near("under_eggs3", "nest", "Scorpion egg clutch", "Burn", ...inRoom(BAZAAR, 5, 0, 3))];
+const CANOPIC = [near("under_urn1", "urn", "Canopic urn of a Water-King", "Break the seal", ...inRoom(VAULT, 2, -2, -1)), near("under_urn2", "urn", "Canopic urn of a Water-King", "Break the seal", ...inRoom(VAULT, 2, 2, 2)),
+  near("under_urn3", "urn", "Canopic urn of a Water-King", "Break the seal", ...inRoom(VAULT, 3, -3, 1)), near("under_urn4", "urn", "Canopic urn of a Water-King", "Break the seal", ...inRoom(VAULT, 4, 1, 1))];
+const UNDER_QUESTS: QuestDef[] = [
+  {
+    id: "downthewell", title: "Down the Well", giver: "tombrobber", zone: "Kharsun, the Buried City", minLevel: 40,
+    description: "Zahir sent three of his rope-men down the old well in Kharsun to find the Water-Kings' bazaar. The ropes came back up cut.",
+    offer: [
+      "Shh. Not so loud near the well. Things listen down there.",
+      "Under Kharsun there is a whole city the sand swallowed: a bazaar, a vault, the tombs of the Water-Kings. I sent three rope-men down. The ropes came back cut clean.",
+      "Go down. Find their packs, find what cut the ropes. I'll pay in gold, and you can keep whatever the dead don't want.",
+    ],
+    acceptText: "I'll go down the well",
+    steps: [
+      { type: "use", zone: BAZAAR.name, objects: LOST_PACKS, chest: false, text: "Climb down the well and find the rope-men's 3 packs", banner: ["New quest", "Down the Well"],
+        obj: "Packs found: {n} / {goal}", nag: "{n} of {goal}. They are somewhere in the Sunken Bazaar." },
+      { type: "kill", zone: BAZAAR.name, kinds: UNDER_KINDS, goal: 12, text: "Clear the bazaar: slay 12 of its dwellers", banner: ["Not empty", "Clear the bazaar: slay 12 of its dwellers"],
+        obj: "Slain: {n} / {goal}", nag: "{n} of {goal}." },
+    ],
+    outro: ["The last pack is stuck through with a sting as long as your arm. The scratches in the floor all lead one way: down, to the old cistern pit.", "Something there lays eggs in what it catches."],
+    reward: arcReward(40),
+    after: "Gone, all three. Well. They knew the price of a rope.",
+  },
+  {
+    id: "broodqueen", title: "The Brood-Queen", giver: "tombrobber", zone: BAZAAR.name, minLevel: 41, auto: true,
+    description: "In the dry cistern pit under the bazaar, a scorpion the size of a cart nests on the rope-men's bones.",
+    offer: ["A sting that size... that is no common scorpion. That is a queen, and a queen means a nest.", "Kill her, and burn the eggs. If they hatch, nobody goes down that well again."],
+    acceptText: "On my way",
+    steps: [
+      { type: "kill", zone: BAZAAR.name, kinds: ["scorpion"], goal: 1, own: true,
+        summon: { parts: ["scorpion"], level: 42, title: "The Brood-Queen", hpMult: 5, ...sumAt(...inRoom(BAZAAR, 5)) },
+        text: "Slay the Brood-Queen in the scorpion pit", banner: ["New quest", "The Brood-Queen"], obj: "The Brood-Queen slain: {n} / {goal}", nag: "Her pit is in the south-east of the bazaar, behind a door." },
+      { type: "use", zone: BAZAAR.name, objects: BROOD_EGGS, chest: false, text: "Burn her 3 egg clutches", banner: ["She is dead", "Burn her 3 egg clutches"],
+        obj: "Clutches burnt: {n} / {goal}", nag: "{n} of {goal}. In her pit." },
+    ],
+    outro: ["Behind the egg clutches, a door of green copper stands open, its seal broken from the inside.", "The stair beyond goes down to the Vault of the Water-Kings, and the air from it smells of myrrh and old water."],
+    reward: arcReward(41),
+    after: "No more eggs. Good. Now, about that vault...",
+  },
+  {
+    id: "canopic", title: "The Canopic Seals", giver: "tombrobber", zone: VAULT.name, minLevel: 42, auto: true,
+    description: "In the Vault, the Water-Kings' hearts lie sealed in canopic urns. The Veiled Circle's grave-robbers are trying to open them to wake the last king.",
+    offer: ["Veiled ones? Down here? Then they want what I want, only worse. Not gold. Him.", "The kings' hearts are kept in sealed urns. Break the seals before the Veiled do it their way, and they cannot wake him whole. And thin out those robed thieves while you are at it."],
+    acceptText: "On my way",
+    steps: [
+      { type: "use", zone: VAULT.name, objects: CANOPIC, chest: false, text: "Break the seals of 4 canopic urns in the Vault", banner: ["New quest", "The Canopic Seals"],
+        obj: "Seals broken: {n} / {goal}", nag: "{n} of {goal}. In the embalmers' room, the dry canal and the treasury." },
+      { type: "kill", zone: VAULT.name, kinds: ["veiled"], goal: 8, text: "Slay 8 of the Veiled grave-robbers", banner: ["They saw you", "Slay 8 of the Veiled grave-robbers"],
+        obj: "Veiled slain: {n} / {goal}", nag: "{n} of {goal}." },
+    ],
+    outro: ["As the last seal cracks, water runs out of the urn. Real water, clear and cold, after a thousand years in the dark.", "And from the throne room at the bottom of the vault, something very old takes a long, dry breath."],
+    reward: arcReward(42),
+    after: "Water, from a dead man's heart. I have robbed a hundred tombs and never seen that.",
+  },
+  {
+    id: "waterking", title: "The Last Water-King", giver: "tombrobber", zone: "The Water-King's Throne", minLevel: 43, auto: true,
+    description: "Ammun-Sa, last of the Water-Kings who ruled Kharsun when it had rivers, is awake on his throne. Half woken, half whole, and very thirsty.",
+    offer: ["He is awake. I can feel it from up here. The well water has gone salt.", "Whatever is left of him, end it. Then the vault is ours, and Kharsun keeps what little water it has."],
+    acceptText: "To the throne",
+    steps: [
+      { type: "kill", zone: "The Water-King's Throne", kinds: ["sanddead"], goal: 1, own: true,
+        summon: { parts: ["sanddead"], level: 44, title: "Ammun-Sa, the Last Water-King", hpMult: 7, x: (WATER_THRONE.x + 0.5) * TILE, y: (WATER_THRONE.y - 1.5) * TILE,
+          voice: {
+            wake: ["Who breaks the seals of my fathers?", "I ruled when this sand was a sea of barley. Kneel, and I may let you drink.", "No? Then you will be my water."],
+            taunt: ["Kharsun had nine rivers. I drank them all.", "Thirst. A thousand years of thirst. You cannot imagine.", "Your Sunwright burns. I only dry.", "My hearts are broken, thief. I still have yours."],
+            half: ["Rise, my people! Your king is thirsty!"],
+            death: ["Water... at last... it is so cold..."],
+          } },
+        text: "Slay Ammun-Sa on his throne", banner: ["New quest", "The Last Water-King"], obj: "The Last Water-King slain: {n} / {goal}",
+        nag: "His throne is at the bottom of the Vault, behind iron bars. An old rope there leads back up to Kharsun." },
+    ],
+    outro: ["Ammun-Sa crumbles into dry sand, and the sand into dust. Under his throne, a spring you can hear but not see begins to run again.", "An old rope hangs at the back of the hall, straight up the well-shaft to Kharsun. Zahir will be waiting."],
+    reward: arcReward(44, true),
+    after: "The well water is sweet again. You have done more for this city than all its kings. Take your share.",
+  },
+];
+
 /** The zone arcs, each its own chain (QuestChain.local): Act 1 then Act 2. */
 export const ZONE_ARCS: { id: string; name: string; quests: QuestDef[] }[] = [
   { id: "mill", name: "Millbrook's Bad Water", quests: MILL_QUESTS },
@@ -1692,6 +1864,8 @@ export const ZONE_ARCS: { id: string; name: string; quests: QuestDef[] }[] = [
   { id: "jackal", name: "Jackal Springs", quests: JACKAL_QUESTS },
   { id: "dunes", name: "The Branded Clans", quests: DUNE_QUESTS },
   { id: "spire", name: "The Mirror Path", quests: SPIRE_QUESTS },
+  { id: "crypt", name: "The Lantern Crypt", quests: CRYPT_QUESTS },
+  { id: "under", name: "The Undercity of Kharsun", quests: UNDER_QUESTS },
 ];
 const ARC_OBJECTS: QuestObject[] = ZONE_ARCS.flatMap((a) => a.quests.flatMap((d) => d.steps.flatMap((s) => s.objects ?? [])));
 

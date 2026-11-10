@@ -36,7 +36,9 @@
   "caravaneer",
   "hermit",
   "dunescout",
-  "defector"
+  "defector",
+  "monk",
+  "tombrobber"
  ],
  "image": "{name}.webp",
  "frameWidth": 48,

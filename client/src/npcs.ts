@@ -552,7 +552,7 @@ export class NpcLayer {
     const via = target && me ? routeVia(target.x, target.y, me.x, me.y) : undefined;
     if (via) target = { x: via.x, y: via.y, kind: "object", label: via.label };
     // In the other act: point at this side's waygate
-    const gate = target && me && actAt(target.y) !== actAt(me.y) ? WAYGATES.find((g) => actAt(g.y) === actAt(me.y)) : undefined;
+    const gate = target && me && actAt(target.y, target.x) !== actAt(me.y, me.x) ? WAYGATES.find((g) => actAt(g.y, g.x) === actAt(me.y, me.x)) : undefined;
     if (gate) target = { x: gate.x, y: gate.y, kind: "object", label: gate.label };
     if (follow && target && me) {
       const dx = target.x - me.x, dy = target.y - me.y, d = Math.hypot(dx, dy) - (target.r ?? 0);
@@ -576,7 +576,7 @@ export class NpcLayer {
       const follow = this.followed === def.title;
       const viaGate = this.aimAt(me, questTargets(q), follow);
       const started = q.questStage > 0;
-      const gateLine = viaGate ? `<div class="qt-where">${GATE_HINT[actAt(me!.y)]}</div>` : "";
+      const gateLine = viaGate ? `<div class="qt-where">${GATE_HINT[actAt(me!.y, me!.x)]}</div>` : "";
       // the card: header (title, follow button), then just the objective and its progress bar
       return `<div class="qt-block${this.isFolded(def.title, started) ? " folded" : ""}${follow ? " following" : ""}" data-key="${def.title}" data-started="${started ? 1 : 0}">` +
         `<div class="qt-head"><span class="qt-title">${def.title}</span>${this.followBtn(follow)}</div>` +
@@ -594,9 +594,9 @@ export class NpcLayer {
       // In the other act (the step into Act 2): the waygate comes first, then the giver beyond it
       const talk = `${giver?.name ?? ""} <b class="bang">!</b>`;
       const body = viaGate
-        ? `<div class="qt-obj">${GATE_HINT[actAt(me!.y)]}</div><div class="qt-where">Then talk to ${giver?.name ?? ""}: ${giver?.where ?? ""}</div>`
+        ? `<div class="qt-obj">${GATE_HINT[actAt(me!.y, me!.x)]}</div><div class="qt-where">Then talk to ${giver?.name ?? ""}: ${giver?.where ?? ""}</div>`
         : `<div class="qt-obj">Talk to ${talk}</div>${where}`;
-      const title = viaGate && actAt(me!.y) === 1 ? "The waygate is awake" : "New quest available";
+      const title = viaGate && actAt(me!.y, me!.x) === 1 ? "The waygate is awake" : "New quest available";
       return `<div class="qt-block${this.isFolded(key, false) ? " folded" : ""}${follow ? " following" : ""}" data-key="${key}" data-started="0">` +
         `<div class="qt-head"><span class="qt-title">${title}</span>${this.followBtn(follow)}</div>` +
         `<div class="qt-body">${body}</div></div>`;

@@ -568,6 +568,22 @@ export const LOOKS: Record<string, Look> = {
     legs: "robe", legCol: 0x26224e, boots: 0x3a2a1e, bootStyle: "shoe",
     sleeve: 0x26224e, arms: "cloth", weapon: "staff", orb: 0xffb040, fx: 0xffb040, back: "cape", capeCol: 0x1e1a40,
   },
+  // Brother Aldric, the last lamplighter monk of the Lantern Crypt: a grey habit and hood, a rope belt, a lamp on his staff
+  monk: {
+    skin: 0xe0b08a, hair: 0x9a9690, hairStyle: "bald", beard: 0xb8b4ac, beardStyle: "full",
+    head: "hood", headCol: 0x4a4038, headTrim: 0x2e2822,
+    torso: "robe", torsoCol: 0x4a4038, trim: 0x2e2822, sash: 0x8a6a3a,
+    legs: "robe", legCol: 0x3e362e, boots: 0x2a221c, bootStyle: "shoe",
+    sleeve: 0x4a4038, arms: "cloth", weapon: "staff", orb: 0xffd070, fx: 0xffd070,
+  },
+  // Zahir the tomb-robber of Kharsun: a dust-brown headscarf, a patched vest, ropes and a long knife
+  tombrobber: {
+    skin: 0xa06a40, hair: 0x1a1410, hairStyle: "short", beard: 0x1a1410, beardStyle: "stubble",
+    head: "bandana", headCol: 0x5a3a2a, headTrim: 0x2e1e14,
+    torso: "shirt", torsoCol: 0x8a7656, vest: 0x3a2e24, belt: 0x2a1c12, buckle: 0xb08a4a, sash: 0x6a2a1e,
+    legs: "trousers", legCol: 0x5a4a38, boots: 0x3a2a1a, bootStyle: "wrap",
+    sleeve: 0x8a7656, arms: "cloth", glove: 0x3a2a1a, weapon: "dagger", fx: 0xffffff,
+  },
   // Oren the bladesmith: a bald, soot-darkened smith with a leather apron and a curved blade on his hip
   desertsmith: {
     skin: 0x8a5a36, hairStyle: "bald", hair: 0x1a1410, beard: 0x2a201a, beardStyle: "full",

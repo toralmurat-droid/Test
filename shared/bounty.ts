@@ -1,5 +1,5 @@
 import { MAX_LEVEL, xpForLevel } from "./classes";
-import { DESERT_Y0, MOBS, TILE, type MobKind } from "./constants";
+import { actOfTile, DESERT_Y0, MOBS, TILE, type MobKind } from "./constants";
 import { isSolidAt, PORTAL_SPOTS } from "./map";
 import { SPAWN_ZONES, type SpawnZone } from "./spawns";
 
@@ -79,7 +79,7 @@ function rng(seed: number) {
  */
 export function bountyOffers(level: number, done: number, desert = false): Bounty[] {
   const L = Math.min(level, MAX_LEVEL);
-  const zones = SPAWN_ZONES.filter((z) => !z.wild && signature(z) && (z.y >= DESERT_Y0) === desert && z.levels[0] <= L + 2 && z.levels[1] >= L - 2);
+  const zones = SPAWN_ZONES.filter((z) => !z.wild && signature(z) && (actOfTile(z.x, z.y) === 2) === desert && z.levels[0] <= L + 2 && z.levels[1] >= L - 2);
   const r = rng(L * 1000 + done);
   // closest to the hero's level first, ties shuffled by the seed
   const scored = zones.map((z) => ({ z, s: Math.abs((z.levels[0] + z.levels[1]) / 2 - L) + r() * 1.5 })).sort((a, b) => a.s - b.s);

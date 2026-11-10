@@ -36,7 +36,9 @@
   "caravaneer",
   "hermit",
   "dunescout",
-  "defector"
+  "defector",
+  "monk",
+  "tombrobber"
  ],
  "image": "{name}.png",
  "frameWidth": 64,

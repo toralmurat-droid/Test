@@ -1,5 +1,5 @@
 import { MAP_H as FULL_H, MAP_W, PLAYER_RADIUS, TILE, UNDER_END, WORLD_H, type MobKind } from "./constants";
-import { FLOORS, LAIRS, SEA_END, SHORTCUTS, SINKHOLE, type Floor } from "./dungeon";
+import { CRYPT_DOOR, FLOORS, LAIRS, SEA_END, SHORTCUTS, SINKHOLE, UNDER_SHAFT, type Floor } from "./dungeon";
 import { buildDesert, D, inDesertRow, KEL_MARKET, WAYGATE_OAKVALE } from "./desert";
 
 /** The overworld's rows: the world generator (and everything above ground) works on these; under them lies the Mawdeep (shared/dungeon.ts). */
@@ -938,10 +938,20 @@ function buildWorld() {
     }
     if (best) { objects[best[1]][best[0]] = T.SIGNPOST; posts.push({ x: best[0], y: best[1], to: p.to }); }
   }
+  // the Undercity's well-shaft in Kharsun: a ring of old paving round the black hole (shared/dungeon.ts UNDER_SHAFT)
+  for (let y = UNDER_SHAFT.y - 3; y <= UNDER_SHAFT.y + 3; y++) for (let x = UNDER_SHAFT.x - 3; x <= UNDER_SHAFT.x + 3; x++) {
+    const d = Math.hypot(x - UNDER_SHAFT.x, (y - UNDER_SHAFT.y) * 1.15);
+    if (d > 3.2) continue;
+    objects[y][x] = EMPTY;
+    ground[y][x] = d < 2.2 ? (hash(x, y, 631) < 0.85 ? T.FLAGS : T.RUBBLE) : T.SAND;
+  }
+  // the Lantern Crypt's stair, in front of the old king's tomb in the mausoleum (shared/dungeon.ts CRYPT_DOOR)
+  objects[CRYPT_DOOR.y][CRYPT_DOOR.x] = EMPTY; ground[CRYPT_DOOR.y][CRYPT_DOOR.x] = T.FLAGS;
   for (const f of FLOORS) carveFloor(f, ground, objects);
   areas.unshift(...LAIRS.map((l) => ({ ...l, mobs: [] as MobKind[] })),
     ...FLOORS.map((f) => ({ name: f.name, x: f.x, y: f.y, w: f.w, h: f.h, mobs: [] as MobKind[] })),
-    { name: "Mawdeep Sinkhole", x: SINKHOLE.x - 5, y: SINKHOLE.y - 5, w: 11, h: 10 });
+    { name: "Mawdeep Sinkhole", x: SINKHOLE.x - 5, y: SINKHOLE.y - 5, w: 11, h: 10 },
+    { name: "The Kharsun Well", x: UNDER_SHAFT.x - 3, y: UNDER_SHAFT.y - 3, w: 7, h: 7 });
   areas.push(...desert.areas);
   return { ground, objects, areas, posts, roads, broken, makeshift };
 }
@@ -1020,8 +1030,8 @@ export interface Door {
   from?: { x: number; y: number };
 }
 export const DOOR_RANGE = 1.8; // tiles from the nearest gate tile to work it
-const DOOR_ROOMS: Record<number, number[]> = { 1: [7], 2: [1, 5], 3: [3, 4] };
-const BARRED = new Set(["2_5", "3_3", "3_4"]); // the elites' lairs and the den: iron bars; the rest stout doors
+const DOOR_ROOMS: Record<number, number[]> = { 1: [7], 2: [1, 5], 3: [3, 4], 4: [5], 5: [5], 6: [5], 7: [5] };
+const BARRED = new Set(["2_5", "3_3", "3_4", "5_5", "7_5"]); // the elites' lairs and the den: iron bars; the rest stout doors
 function placeDoors(): Door[] {
   const out: Door[] = [];
   /** Wall the tunnel a-b across just outside chamber ci's rim. */

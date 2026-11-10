@@ -6,9 +6,9 @@ import {
   AGGRO, aggroLevelFactor, BLOB_AI, BONES, DEMON, BROOD, Dir, FACTION, FEUD, MERGE, MobDef, MOTHER, SKELETON_AI, HIT_RADIUS, mobScale, regionMobLevel, regionSpecialLevel, InputState, MOB_ATTACK_RANGE, MOBS, MobKind, rollSkeletonWeapon, SKELETON_BOW, SKELETON_WEAPONS, SkeletonWeapon, REGEN_DELAY_MS, REGEN_RAMP_MS, regenFromStamina, SAFE_REGEN_MULT,
   RESPAWN_MS, TICK_RATE, TILE,
   HOLLOW_KING, ELEM_BLOB, ELEM_MOVE, inputDir, DESERT_Y0, ELITE, BOSS, URSK, SUNWRIGHT, act2MobLevel, act2SpecialLevel, BEAST, BEAST_BROOD, BEAST_FOLK, BEAST_KINDS, BEAST_MOVES, BEAST_RIDER, type BeastMove,
-  MAP_W, MAP_H, WORLD_H,
+  MAP_W, MAP_H, WORLD_H, inDeepRow, actOfTile,
 } from "../shared/constants";
-import { ambushRoomAt, arrivalAt, CRACK_OPEN_MS, LINK_RANGE, linkById, LINKS, SHORTCUT_OPEN_MS } from "../shared/dungeon";
+import { ambushRoomAt, arrivalAt, CRACK_OPEN_MS, LINK_RANGE, linkById, LINKS, SHORTCUT_OPEN_MS, underground } from "../shared/dungeon";
 import {
   ATTACK_VARIANTS, basicDrain, CLASSES, ClassKind, COMBO_WINDOW_MS, DODGE, EMOTES, DASH_INVULN_MS, GUARD_REDUCTION, isActiveClass, isClassKind, levelFromXp, MAX_XP, XP_CURVE_VERSION, convertOldXp, capLevel, PVP_KILL_XP, xpForLevel,
 } from "../shared/classes";
@@ -39,7 +39,7 @@ import { isDecorSolidAt, npcById, npcNear, TALK_RANGE } from "../shared/npcs";
 import { beyondWall, WATCH, WATCH_POSTS, WatchPost } from "../shared/watch";
 import { inVillage, WRATH } from "../shared/wrath";
 import { sellPrice, shopBuys, shopFuses, SHOPS } from "../shared/shops";
-import { BLOB_KINDS, CHAINS, CROWN_CHAIN, packQuest, chainOpen, chainState, inZone, isBlob, npcPresent, QuestState, questStep, stepGoal, Summon, TUT_CHAIN, TUT_QUESTS, USE_RANGE } from "../shared/quests";
+import { BLOB_KINDS, CHAINS, CROWN_CHAIN, packQuest, chainOpen, chainState, inZone, isBlob, npcPresent, QuestState, questStep, stepGoal, Summon, type BossVoice, TUT_CHAIN, TUT_QUESTS, USE_RANGE } from "../shared/quests";
 import { findHideSpot, HIDE, MOTHER_KEEP_OUT, noMobsAt, spawnPoint, SPAWN_ZONES, villageDist, zoneCap } from "../shared/spawns";
 import { blocked, moveStep } from "../shared/movement";
 import { NIGHT_RAID, raiderByKey, raiderIgnores, RAIDERS } from "../shared/raiders";
@@ -274,6 +274,7 @@ export class Mob extends Schema {
   ambusher = false; ambushAt = 0; ambushHero = ""; flyUntil = 0; flyMs = 0; flyX0 = 0; flyY0 = 0; flyX = 0; flyY = 0;
   // The Night Raiders (shared/raiders.ts): the act it rides in, when it fades, its next stop on the road, where a chase began
   raidAct = 0; raidEnd = 0; rideX = NaN; rideY = 0; rideStuck = 0; chaseX = 0; chaseY = 0; nextSay = 0;
+  voice?: BossVoice; halfSaid = false; // a quest boss with a voice (Summon.voice): its lines, and whether it has had its say at half health
   uPhase = 0; nextTaunt = 0; hookHero = ""; // Grandam Ursk (URSK): her phase (0 not her), next taunt, the hero her hook is flying at
   lurk = ""; // a Mawdeep ambush room it lurks in (shared/dungeon.ts AMBUSH_ROOMS), until a hero walks in
   path: [number, number][] = []; pathAt = 0; pathTX = 0; pathTY = 0; // the way round walls (gates), see seek
@@ -514,7 +515,7 @@ function worldDayFrac(now: number): number {
   return dayFrac(now);
 }
 /** Spawn zones of the dead (every kind in them is undead): they keep the night (shared/daynight.ts). */
-const UNDEAD_ZONES = new Set(SPAWN_ZONES.flatMap((z, zi) => (Object.keys(z.mobs) as MobKind[]).every((k) => FACTION[k] === "undead") ? [zi] : []));
+const UNDEAD_ZONES = new Set(SPAWN_ZONES.flatMap((z, zi) => (Object.keys(z.mobs) as MobKind[]).every((k) => FACTION[k] === "undead") && !underground(z.y * TILE) ? [zi] : [])); // below ground there is no day
 
 /** Monsters with no player within this many px (square) doze until someone comes by. */
 const SLEEP_RANGE = 28 * TILE; // the screen shows about 12 tiles each way, so they are always awake well before they come into view
@@ -1036,7 +1037,7 @@ export class TownRoom extends Room<TownState> {
         const q = this.qs(p, c), [a, b, n] = ch.keys;
         return [[a, q.questId], [b, q.questStage], [n, q.questCount], [ch.verKey, ch.version]];
       })),
-      portals: [...p.portals], act: actAt(p.y),
+      portals: [...p.portals], act: actAt(p.y, p.x),
       bounty: p.bounty, bountyDone: p.bountyDone, wear: p.wear, feast: { ...p.feast },
       ...(p.cls === "summoner" ? { grimoire: this.grimoireOf(p), suTree: SUMMONER_TREE } : {}),
     };
@@ -2667,6 +2668,7 @@ export class TownRoom extends Room<TownState> {
     this.assignFlanks();
     this.updateUndeadNight(now);
     this.updateRaids(now);
+    if (tick % 10 === 0) this.bossVoices(now);
     this.checkRituals(now);
     this.state.mobs.forEach((m, id) => {
       // Frozen: dozing where no hero is anywhere near. Nothing to do; it wakes when a hero's warm squares reach it
@@ -3238,7 +3240,8 @@ export class TownRoom extends Room<TownState> {
 
   /** Which act's open land a point is in (not the Mawdeep under Act 1). */
   private static raidActAt(x: number, y: number): 0 | 1 | 2 {
-    if (actAt(y) === 2) return 2;
+    if (inDeepRow(Math.floor(y / TILE))) return 0; // the deep dungeons
+    if (actAt(y, x) === 2) return 2;
     return y < WORLD_H * TILE ? 1 : 0;
   }
 
@@ -3768,6 +3771,14 @@ export class TownRoom extends Room<TownState> {
     if (!m || !lines.length) return;
     this.broadcast("bosssay", { id, text: lines[Math.floor(Math.random() * lines.length)] });
   }
+  /** Quest bosses with a voice (Summon.voice): a taunt now and then while they fight, a line at half health. */
+  private bossVoices(now: number) {
+    this.state.mobs.forEach((m, id) => {
+      if (!m.voice || m.dead) return;
+      if (!m.halfSaid && m.voice.half && m.hp < m.maxHp * 0.5) { m.halfSaid = true; this.bossSay(id, m.voice.half); m.nextTaunt = now + 9000; return; }
+      if (m.target && now >= m.nextTaunt) { this.bossSay(id, m.voice.taunt); m.nextTaunt = now + 11000 + Math.random() * 7000; }
+    });
+  }
   /** Grandam Ursk's fight (URSK): her phases, and her voice while she fights. */
   private urskPhases(m: Mob, id: string, t: Player | undefined, now: number) {
     if (m.dead || !m.uPhase) return;
@@ -3820,7 +3831,7 @@ export class TownRoom extends Room<TownState> {
       const c = new Mob();
       c.kind = kind; c.zone = -1; c.mother = bid; c.servant = true;
       c.x = c.homeX = x; c.y = c.homeY = y;
-      c.level = b.y >= DESERT_Y0 * TILE ? act2MobLevel(b.level - levelDrop) : regionMobLevel(b.level - levelDrop);
+      c.level = actOfTile(Math.floor(b.x / TILE), Math.floor(b.y / TILE)) === 2 ? act2MobLevel(b.level - levelDrop) : regionMobLevel(b.level - levelDrop);
       c.hp = c.maxHp = Math.round(MOBS[kind].maxHp * mobScale(c.level, "hp"));
       c.target = b.target;
       if (c.target) this.addHate(c, c.target, 0);
@@ -5079,6 +5090,7 @@ export class TownRoom extends Room<TownState> {
   private mobDied(m: Mob, targetId: string, attackerId: string, killerName: string) {
     if (m.kind === "hidemother" && m.uPhase) this.bossSay(targetId, URSK.lines.death); // her last words
     if (m.kind === "sunwright" && m.uPhase) this.bossSay(targetId, SUNWRIGHT.lines.death);
+    if (m.voice) this.bossSay(targetId, m.voice.death);
     if (m.kind === "nightraider") this.raiderGone(m, targetId, true, killerName);
     if (m.champ) this.champs.died(m, targetId); // its ballista falls with it
     m.dead = true; m.hp = 0;
@@ -5652,9 +5664,14 @@ export class TownRoom extends Room<TownState> {
     const m = new Mob();
     m.kind = host; m.zone = -1; m.summonFor = pid; m.summonChain = c;
     m.x = m.homeX = sm.x; m.y = m.homeY = sm.y;
-    m.level = sm.y >= DESERT_Y0 * TILE ? act2SpecialLevel(sm.level) : regionSpecialLevel(sm.level);
+    m.level = actOfTile(Math.floor(sm.x / TILE), Math.floor(sm.y / TILE)) === 2 ? act2SpecialLevel(sm.level) : regionSpecialLevel(sm.level);
     m.title = sm.title ?? "";
     const id = `q${++this.mobSeq}`;
+    if (sm.voice) { // a boss with something to say: it has its say as it rises, then speaks now and then (bossVoices)
+      const t0 = Date.now(), V = sm.voice;
+      m.voice = V; m.nextTaunt = t0 + 12000; m.stunUntil = t0 + 900 + V.wake.length * 1250;
+      V.wake.forEach((line, i) => this.clock.setTimeout(() => { if (!m.dead) this.broadcast("bosssay", { id, text: line }); }, 300 + i * 1250));
+    }
     if (!isBlob(host)) {
       m.hp = m.maxHp = Math.round(MOBS[host].maxHp * mobScale(m.level, "hp") * (sm.hpMult ?? 1));
       if (host === "demon") { m.nextStomp = Date.now() + 2500; m.stunUntil = Date.now() + 700; } // climbing out
@@ -5710,7 +5727,7 @@ export class TownRoom extends Room<TownState> {
     const s = questStep(this.qs(p, c));
     if (s?.summon && s.zone && inZone(s.zone, p.x, p.y)) {
       const now = Date.now();
-      if (now >= p.nextSummon && (this.undeadUp || !NIGHT_BOSSES.includes(s.summon.parts[0]))) { // the dead's bosses only rise at night
+      if (now >= p.nextSummon && (this.undeadUp || !NIGHT_BOSSES.includes(s.summon.parts[0]) || underground(p.y))) { // the dead's bosses only rise at night (no night down there: always)
         p.nextSummon = now + 15000;
         let mine = false;
         this.state.mobs.forEach((m) => { if (m.summonFor === id && m.summonChain === c && !m.dead) mine = true; });
@@ -5881,7 +5898,7 @@ export class TownRoom extends Room<TownState> {
     this.clients.find((c) => c.sessionId === tid)?.send("died", { by: byName, ms: RESPAWN_MS });
     this.clock.setTimeout(() => {
       if (!this.state.players.has(tid)) return;
-      const s = actAt(t.y) === 2 ? desertSpawn() : randomSpawn(); // back at the act's own town
+      const s = actAt(t.y, t.x) === 2 ? desertSpawn() : randomSpawn(); // back at the act's own town
       t.x = s.x; t.y = s.y; t.hp = t.maxHp; t.dead = false;
     }, RESPAWN_MS);
     return true;
