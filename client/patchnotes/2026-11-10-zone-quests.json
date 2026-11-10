@@ -1,0 +1,10 @@
+{
+  "date": "2026-11-10",
+  "title": "Zone quest arcs",
+  "changes": [
+    "Nine new local quest givers across Oakvale and the desert, each with a chain of field quests that explores their zone.",
+    "Main story quests no longer send you back to report: they finish where you stand and the next one starts on its own.",
+    "New investigation steps: search for clues, burn nests and read old waystones.",
+    "Quest progress was reset to the start of the current quest for some story chains."
+  ]
+}

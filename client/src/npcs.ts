@@ -10,9 +10,9 @@ import { CAMP_PIVOT, TX as CAMP_TX, witchCampTextures } from "./witchCamp";
 import { worldPropTextures } from "./worldProps";
 import { ANVIL_TOP, FORGE_FLUE, SMITHY_ORIGIN, TX as SMITHY_TX, smithyTextures } from "./smithy";
 import { smokeTexture } from "./bonfireArt";
-import { NPCS, NPC_DECOR, Npc, npcNear, TALK_RANGE } from "../../shared/npcs";
+import { NPCS, NPC_DECOR, Npc, npcById, npcNear, TALK_RANGE } from "../../shared/npcs";
 import {
-  CHAINS, chainOpen, chainState, TUT_CHAIN, npcPresent, npcQuestMark, questDef, questDialog, questObjective, questStep, Quester, QuestTarget, questTargets, stepGoal, stepProgress,
+  CHAINS, chainOpen, chainState, questSig, TUT_CHAIN, npcPresent, ZONE_ARCS, npcQuestMark, questDef, questDialog, questObjective, questStep, Quester, QuestTarget, questTargets, stepGoal, stepProgress,
 } from "../../shared/quests";
 import { QuestObjects } from "./questObjects";
 import { TILE } from "../../shared/constants";
@@ -49,6 +49,11 @@ const GATE_HINT: Record<1 | 2, string> = {
   1: "Step through the waygate, just outside Oakvale's south gate",
   2: "Step through the waygate in the Sunstone Circle, south-west of Kel Ashar",
 };
+
+/** Who gives a zone arc (shared/quests.ts ZONE_ARCS), and the first quest's level of their arc. */
+const ZONE_GIVERS = new Map(ZONE_ARCS.map((a) => [a.quests[0].giver, a.quests[0].minLevel]));
+/** A zone arc fits a hero from its first quest's level to a few levels past it (beyond that it is only a "!" on the map). */
+export const arcFits = (giver: string, level: number) => { const l = ZONE_GIVERS.get(giver); return l !== undefined && level >= l && level <= l + 6; };
 
 export class NpcLayer {
   private sprites = new Map<string, { sprite: Phaser.GameObjects.Sprite; label: Phaser.GameObjects.Text; mark: Phaser.GameObjects.Text }>();
@@ -223,7 +228,8 @@ export class NpcLayer {
 
   /** E key: use the quest object you stand next to, talk to the NPC next to you, or close the dialog. */
   interact() {
-    if (this.talking) this.close();
+    if (this.story) this.closeStory();
+    else if (this.talking) this.close();
     else if (this.nearObj) this.send("use", { id: this.nearObj.id });
     else if (this.near) this.open(this.near);
   }
@@ -241,9 +247,36 @@ export class NpcLayer {
     this.dialog.classList.remove("open");
   }
 
+  /**
+   * The story card (Murat 2026-11-10: quests end and carry on out in the field): what the hero finds when a quest ends
+   * away from any giver (QuestDef.outro), then the next quest when it starts by itself (QuestDef.auto). Same look as a
+   * talk with an NPC; E or the button closes it.
+   */
+  private story?: { parts: string[] };
+  private showStory(head: string, sub: string, lines: string[], add = false) {
+    if (this.talking) this.close();
+    const part = `<div class="nd-head"><span class="nd-name">${head}</span><span class="nd-title">${sub}</span></div>` + lines.map((t) => `<p>${t}</p>`).join("");
+    this.story = { parts: add && this.story ? [...this.story.parts, part] : [part] };
+    this.dialog.classList.remove("shop");
+    this.dialog.innerHTML = this.story.parts.join("") + `<div class="nd-btns"><button class="nd-bye">On my way <kbd>E</kbd></button></div>`;
+    this.dialog.querySelector<HTMLButtonElement>(".nd-bye")!.onclick = () => this.closeStory();
+    this.dialog.classList.add("open");
+  }
+  private closeStory() {
+    this.story = undefined;
+    this.dialog.classList.remove("open");
+  }
+
   /** Server says the quest moved on: banner in the pixel font. */
-  onQuest(msg: { qid: number; stage: number; done?: boolean; chain?: number }) {
-    const quests = CHAINS[msg.chain ?? 0]?.quests ?? CHAINS[0].quests;
+  onQuest(msg: { qid: number; stage: number; done?: boolean; chain?: number; auto?: boolean }) {
+    const ch = CHAINS[msg.chain ?? 0] ?? CHAINS[0], quests = ch.quests;
+    const ended = msg.done ? quests[msg.qid - 1] : undefined;
+    if (ended?.outro) this.showStory(ended.title, "Quest complete", ended.outro);
+    if (msg.auto && quests[msg.qid]) {
+      // carried on by itself: a zone arc's trail goes on; a story quest comes as word from its giver
+      const d = quests[msg.qid], who = npcById(d.giver)?.name ?? "";
+      this.showStory(d.title, ch.local ? "The trail goes on" : `Word from ${who}`, d.offer, !!this.story);
+    }
     let m: [string, string] | undefined;
     if (msg.done) m = ["Quest complete", quests[msg.qid - 1]?.title ?? ""];
     else {
@@ -288,7 +321,7 @@ export class NpcLayer {
     const bag = [...(q?.bag ?? [])];
     // masterwork: one level shown at a time (picked with the buttons), by default the best one the hero can wear
     const master = this.masterLv ?? [...MASTER_LEVELS].reverse().find((l) => l <= (q?.level ?? 1)) ?? MASTER_LEVELS[0];
-    const key = JSON.stringify([n.id, master, gold, potions, bag, q?.level, (q as any)?.ptSta, (q as any)?.ptStr, (q as any)?.ptMag, (q as any)?.ptDex, q?.wear, ...GEAR_SLOTS.map((s) => q?.[s]), this.shopMsg, q?.questId, q?.questStage, q?.boneId, q?.boneStage, q?.red, q?.sun, q?.tut, q?.crown, q?.beast]);
+    const key = JSON.stringify([n.id, master, gold, potions, bag, q?.level, (q as any)?.ptSta, (q as any)?.ptStr, (q as any)?.ptMag, (q as any)?.ptDex, q?.wear, ...GEAR_SLOTS.map((s) => q?.[s]), this.shopMsg, questSig(q)]);
     if (key === this.stage) return;
     this.stage = key;
     const row = (icon: string, name: string, color: string, desc: string, btn: string, cls2: string, i: number, off: boolean) =>
@@ -396,7 +429,7 @@ export class NpcLayer {
     if (n.shop && (this.trading || !page)) return this.renderShop(n, q);
     this.dialog.classList.remove("shop");
     if (this.shopOpen) { this.shopOpen = false; this.onPreview?.(); }
-    const key = JSON.stringify([n.id, q?.questId, q?.questStage, q?.questCount, q?.boneId, q?.boneStage, q?.boneCount, q?.red, q?.sun, q?.tut, q?.crown, q?.beast, q?.level]);
+    const key = JSON.stringify([n.id, questSig(q), q?.level]);
     if (key === this.stage) return;
     this.stage = key;
     const p = page ?? { text: ["Good day to you."], bye: "Farewell", chain: 0 };
@@ -443,7 +476,8 @@ export class NpcLayer {
     const targets = tracked.flatMap((st) => questTargets(st));
     this.markers = NPCS.filter(present).map((n): MapMarker => {
       const g = npcQuestMark(n.id, q);
-      if (g) return { x: n.x, y: n.y, glyph: g, color: "#ffd166", label: n.name, track: this.log.anyTracked };
+      // a zone quest giver's "!" gets a rim arrow on the minimap only while their arc fits the hero's level
+      if (g) return { x: n.x, y: n.y, glyph: g, color: "#ffd166", label: n.name, track: this.log.anyTracked && (g === "?" || !ZONE_GIVERS.has(n.id) || arcFits(n.id, q?.level ?? 1)) };
       if (n.shop) return { x: n.x, y: n.y, glyph: "$", color: "#f2c14e", label: n.title };
       return { x: n.x, y: n.y, glyph: "•", color: "#b9f27c", label: n.name };
     });
@@ -551,7 +585,8 @@ export class NpcLayer {
     // Between quests: point to whoever has the next one and say where they stand (Murat 2026-11-08: "where is Rakhim?"),
     // with a follow button that leads there, through the waygate if they are in the other act
     // (the blob chain's very first quest has its own "!" intro)
-    if (q.questStage === 0 && (q.level ?? 1) >= def.minLevel && (q.questId > 0 || (q.chain ?? 0) > 0)) {
+    // (a zone arc not begun shows only its giver's "!" on the map: the tracker is for quests under way)
+    if (q.questStage === 0 && (q.level ?? 1) >= def.minLevel && (q.questId > 0 || ((q.chain ?? 0) > 0 && !CHAINS[q.chain ?? 0]?.local))) {
       const giver = NPCS.find((n) => n.id === def.giver);
       const key = `new:${def.title}`, follow = this.followed === key;
       const viaGate = this.aimAt(me, questTargets(q), follow);

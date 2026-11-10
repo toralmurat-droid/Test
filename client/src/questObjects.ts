@@ -147,7 +147,61 @@ const SIGIL = [
   "KKKKKKKKKKKKKKKK",
 ];
 
+// The zone quests (Murat 2026-11-10): something dropped on a trail, a nest of eggs and slime, a marked stone to read
+const CLUE = [
+  "......KKKKK.........",
+  ".....KBBBBBK........",
+  "....KBLLBBBBK.......",
+  "...KBLBBBBBBBK..K...",
+  "...KBBBSSSBBBK.KWK..",
+  "..KBBBBSYSBBBBKKWK..",
+  "..KBBBBSSSBBBBK.KK..",
+  "..KDBBBBBBBBBDK.....",
+  "...KDDBBBBBDDK..KK..",
+  "....KKDDDDDKK..KRRK.",
+  ".KK...KKKKK.....KK..",
+  "KWWK......KWWWWK....",
+  ".KK........KKKK.....",
+];
+const NEST = [
+  "......KKKKKK......",
+  "....KKEEEEEEKK....",
+  "...KEELEEEELEEK...",
+  "..KEELLEEEELLEEK..",
+  ".KSEEEEEEEEEEEESK.",
+  ".KSSEELEEEELEESSK.",
+  "KTSSSEEEEEEEESSSTK",
+  "KTTSSSSSSSSSSSSTTK",
+  "KTTTTSSSSSSSSTTTTK",
+  ".KTTTTTTTTTTTTTTK.",
+  "..KKKTTTTTTTTKKK..",
+  ".....KKKKKKKK.....",
+];
+const CAIRN = [
+  ".....KKKKK......",
+  "....KSLLSSK.....",
+  "....KSSSSSK.....",
+  "...KKKKKKKKK....",
+  "..KSSLSSSSSSK...",
+  "..KSSGGGGSSSK...",
+  "..KSSGSSGSSDK...",
+  "..KKKKKKKKKKK...",
+  ".KSLSSSSSSSSSK..",
+  ".KSSSSGGGSSSDK..",
+  ".KSSSSSGSSSSDK..",
+  "KKKKKKKKKKKKKKK.",
+  "KSSLSSSSSSSSSDDK",
+  "KDDSSSSSSSSSDDDK",
+  ".KKKKKKKKKKKKKK.",
+];
+
 function textures(scene: Phaser.Scene) {
+  rowsTexture(scene, "qobj_clue", CLUE, { K, B: 0x7a5a36, L: 0xa8845a, D: 0x4a3420, S: 0xb08a3a, Y: 0xe8c86a, W: 0xd8d0b8, R: 0x8a2a22 });
+  rowsTexture(scene, "qobj_clue_searched", CLUE.map((r, i) => (i < 9 ? r.replace(/[SY]/g, "B") : r)), { K, B: 0x5a4430, L: 0x7a6448, D: 0x3a2a1a, W: 0xa8a08a, R: 0x5a2a22 });
+  rowsTexture(scene, "qobj_nest", NEST, { K, E: 0x8ac860, L: 0xd8f8a8, S: 0x5a7a3a, T: 0x4a3a24 });
+  rowsTexture(scene, "qobj_nest_burnt", NEST, { K, E: 0x2a2624, L: 0xff8c42, S: 0x3a3230, T: 0x2a2018 });
+  rowsTexture(scene, "qobj_cairn", CAIRN, { K, S: 0x8a8f96, L: 0xb9bec4, D: 0x5a5f66, G: 0x7ae0ff });
+  rowsTexture(scene, "qobj_cairn_read", CAIRN, { K, S: 0x8a8f96, L: 0xb9bec4, D: 0x5a5f66, G: 0xffd166 });
   const sand = { K, S: 0xc8a06a, L: 0xe8cc94, D: 0x8a6a42 };
   rowsTexture(scene, "qobj_sigil", SIGIL, { ...sand, G: 0xd8661e, W: 0xffb040, Y: 0xfff0b0 });
   rowsTexture(scene, "qobj_sigil_broken", SIGIL.map((r, i) => (i < 6 ? r.replace(/[KGWY]/g, ".") : r.replace(/[WY]/g, "G"))), { ...sand, G: 0x5a4a3e });
@@ -188,11 +242,12 @@ const START: Record<string, string> = {
   lantern: "qobj_lantern_off", shrine: "qobj_shrine_rot", heart: "qobj_heart",
   engine: "qobj_engine_fire", beacon: "qobj_beacon", crypt: "qobj_crypt", phylactery: "qobj_phylactery", ward: "qobj_ward",
   silk: "qobj_silk", totem: "qobj_totem", sigil: "qobj_sigil", cistern: "qobj_cistern",
+  clue: "qobj_clue", nest: "qobj_nest", cairn: "qobj_cairn",
 };
-const DONE: Record<string, string> = { engine: "qobj_engine_fire", beacon: "qobj_beacon_out", crypt: "qobj_crypt_sealed", phylactery: "qobj_phylactery_broken", ward: "qobj_ward_broken", silk: "qobj_silk_cut", totem: "qobj_totem_burnt", sigil: "qobj_sigil_broken", cistern: "qobj_cistern_read" };
-const SCALE: Record<string, number> = { lantern: 1 / 1.5, shard: 1 / 1.5, heart: 2, shrine: 1.5, engine: 2.4, beacon: 1.4, crypt: 1.5, phylactery: 1.3, ward: 1 / 1.5, silk: 1 / 1.5, totem: 1 / 1.5, sigil: 1.6, cistern: 1.5 };
+const DONE: Record<string, string> = { engine: "qobj_engine_fire", beacon: "qobj_beacon_out", crypt: "qobj_crypt_sealed", phylactery: "qobj_phylactery_broken", ward: "qobj_ward_broken", silk: "qobj_silk_cut", totem: "qobj_totem_burnt", sigil: "qobj_sigil_broken", cistern: "qobj_cistern_read", clue: "qobj_clue_searched", nest: "qobj_nest_burnt", cairn: "qobj_cairn_read" };
+const SCALE: Record<string, number> = { lantern: 1 / 1.5, shard: 1 / 1.5, heart: 2, shrine: 1.5, engine: 2.4, beacon: 1.4, crypt: 1.5, phylactery: 1.3, ward: 1 / 1.5, silk: 1 / 1.5, totem: 1 / 1.5, sigil: 1.6, cistern: 1.5, clue: 1.4, nest: 1.5, cairn: 1.5 };
 /** Coloured light some objects give off until done. */
-const GLOW: Record<string, number> = { beacon: 0x7dff6a, crypt: 0x5fe36a, phylactery: 0x7dff6a, ward: 0x9dff6a, totem: 0xff6a2a, sigil: 0xffa040, cistern: 0x5ac8ff };
+const GLOW: Record<string, number> = { beacon: 0x7dff6a, crypt: 0x5fe36a, phylactery: 0x7dff6a, ward: 0x9dff6a, totem: 0xff6a2a, sigil: 0xffa040, cistern: 0x5ac8ff, cairn: 0x7ae0ff };
 
 interface Drawn { o: QuestObject; img: Phaser.GameObjects.Image; glow?: Phaser.GameObjects.Arc; light?: Phaser.GameObjects.Image; done?: boolean; anim?: Phaser.GameObjects.Sprite }
 

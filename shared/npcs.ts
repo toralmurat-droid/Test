@@ -1,5 +1,5 @@
 import { TILE } from "./constants";
-import { ROADS, WRECK } from "./map";
+import { isSafeZone, isSolidAt, ROADS, WRECK } from "./map";
 import { D } from "./desert";
 
 /** Village NPCs: where they stand (feet, in pixels) and which sprite sheet they use. Server and client share this. */
@@ -14,6 +14,22 @@ export interface Npc {
   shop?: string;
   /** Where to find them, in words, for the quest tracker and log (quest givers) */
   where?: string;
+}
+
+/**
+ * Feet (px) of a free spot near tile (tx, ty): the zone quest givers stand out in the wilds, so they are put on the
+ * nearest walkable tile with room round it, whatever the map generator grew there.
+ */
+function standNear(tx: number, ty: number): { x: number; y: number } {
+  const free = (x: number, y: number) => {
+    if (isSafeZone((x + 0.5) * TILE, (y + 0.5) * TILE)) return false;
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if (isSolidAt((x + 0.5 + dx * 0.7) * TILE, (y + 0.5 + dy * 0.7) * TILE)) return false;
+    return true;
+  };
+  for (let r = 0; r < 12; r++) for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
+    if (Math.max(Math.abs(dx), Math.abs(dy)) === r && free(tx + dx, ty + dy)) return { x: (tx + dx + 0.5) * TILE, y: (ty + dy + 0.6) * TILE };
+  }
+  return { x: (tx + 0.5) * TILE, y: (ty + 0.6) * TILE };
 }
 
 export const NPCS: Npc[] = [
@@ -39,6 +55,17 @@ export const NPCS: Npc[] = [
   { id: "spicetrader", name: "Zahra", title: "Spice and potion trader", sprite: "spicetrader", x: 142.5 * TILE, y: D(106.8) * TILE, dir: "down", shop: "spicetrader" },
   { id: "sandarmourer", name: "Idris", title: "Armour merchant", sprite: "sandarmourer", x: 152.4 * TILE, y: D(112.6) * TILE, dir: "down", shop: "sandarmourer" },
   { id: "desertsmith", name: "Oren", title: "Bladesmith", sprite: "desertsmith", x: 155.5 * TILE, y: D(106.6) * TILE, dir: "down", shop: "desertsmith" },
+  // ---- Zone quest givers (Murat 2026-11-10: "more zone quests, real exploration arcs"): each lives out in their zone and
+  // starts a short arc there that moves on through it and ends out in the field (shared/quests.ts ZONE_ARCS)
+  { id: "huntsman", name: "Huntmaster Bryn", title: "Hunter", sprite: "huntsman", ...standNear(28, 18), dir: "left", where: "the Hunter's Camp, north-west of Oakvale" },
+  { id: "miller", name: "Odo", title: "Miller", sprite: "miller", ...standNear(106, 48), dir: "down", where: "Millbrook Mill, north-east of Oakvale by the river" },
+  { id: "forester", name: "Ylva", title: "Forester", sprite: "forester", ...standNear(198, 22), dir: "left", where: "the glade in the middle of Thornwood" },
+  { id: "beachcomber", name: "Nell", title: "Beachcomber", sprite: "beachcomber", ...standNear(112, 192), dir: "down", where: "the Saltwind Coast, west of Saltmere" },
+  { id: "prospector", name: "Dagna", title: "Prospector", sprite: "prospector", ...standNear(250, 137), dir: "left", where: "the north edge of the Stormbreak Crags" },
+  { id: "caravaneer", name: "Hamid", title: "Caravan master", sprite: "caravaneer", ...standNear(91, 368), dir: "down", where: "Jackal Springs (Act 2), north-west of Kel Ashar" },
+  { id: "hermit", name: "Old Tamsin", title: "Hermit", sprite: "hermit", ...standNear(80, 404), dir: "right", where: "the Red Wastes (Act 2), west of the Sunstone" },
+  { id: "dunescout", name: "Leyla", title: "Scout of the camel-clans", sprite: "dunescout", ...standNear(200, 438), dir: "left", where: "the edge of the Saffron Dunes (Act 2), east of Kel Ashar" },
+  { id: "defector", name: "Nasrin", title: "Runaway adept", sprite: "defector", ...standNear(224, 398), dir: "down", where: "the foot of the Thornspire Heights (Act 2), by Mirage Wells" },
 ];
 
 /**

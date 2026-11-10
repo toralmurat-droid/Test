@@ -161,10 +161,10 @@ export class Player extends Schema {
   @type("number") questId = 0;
   @type("number") questStage = 0;
   @type("number") questCount = 0;
-  // Skeleton quest chain (the Pale Marshal), run beside the blob chain: same meaning, CHAINS[1]
-  @type("number") boneId = 0;
-  @type("number") boneStage = 0;
-  @type("number") boneCount = 0;
+  // Skeleton quest chain (the Pale Marshal), CHAINS[1]: packed (QuestChain.packed) since the zone arcs needed a field
+  @type("number") bone = 0;
+  // The zone quest arcs (shared/quests.ts ZONE_ARCS, QuestChain.local): each arc's packed progress under its id, all in one field
+  @type({ map: "number" }) arcs = new MapSchema<number>();
   // Redfang chain (Old Garrick of Saltmere), CHAINS[2]: packed (QuestChain.packed) since Act 2 freed two fields for the Second Sun
   @type("number") red = 0;
   // The Second Sun (CHAINS[6], Act 2's story in Kel Ashar): packed the same way
@@ -937,6 +937,12 @@ export class TownRoom extends Room<TownState> {
     if (options?.newGame) dropLive(p.name, p.cls);
     const back = options?.newGame ? undefined : takeLive(p.name, p.cls);
     if (back) this.resume(p, back);
+    // A quest that carries on by itself (QuestDef.auto) but did not start (they left right after the last one, or its
+    // steps changed in an update): it is simply under way when they come back
+    for (let c = 0; c < CHAINS.length; c++) {
+      const q = this.qs(p, c), d = CHAINS[c].quests[q.questId];
+      if (d?.auto && q.questId > 0 && q.questStage === 0 && p.level >= d.minLevel && chainOpen(p, c)) this.qset(p, c, { questStage: 1, questCount: 0 });
+    }
     this.state.players.set(client.sessionId, p);
     if (back?.group.length) this.regroupOnJoin(client.sessionId, p, back.group);
     this.sendBoard(client); // the Ideas board is ready as soon as it is opened
@@ -1023,9 +1029,8 @@ export class TownRoom extends Room<TownState> {
       weapon: p.weapon, armour: p.armour, shoes: p.shoes, hat: p.hat, shield: p.shield, ranged: p.ranged,
       bag: p.bag.toArray(), talents, slots: p.slots.toArray(),
       questId: p.questId, questStage: p.questStage, questCount: p.questCount, questVer: CHAINS[0].version,
-      boneId: p.boneId, boneStage: p.boneStage, boneCount: p.boneCount, boneVer: CHAINS[1].version,
       kit: 1,
-      // packed chains (Redfang, First Steps, the Hollow Crown, the Hide Rite, the Second Sun) are saved under their own three names
+      // packed chains (the Pale Marshal, Redfang, First Steps, the Hollow Crown, the Hide Rite, the Second Sun, the zone arcs) are saved under their own three names
       ...Object.fromEntries(CHAINS.flatMap((ch, c) => {
         if (!ch.packed) return [];
         const q = this.qs(p, c), [a, b, n] = ch.keys;
@@ -5349,15 +5354,20 @@ export class TownRoom extends Room<TownState> {
   private qs(p: Player, c: number): QuestState { return chainState(p, c)!; }
   private qset(p: Player, c: number, v: Partial<QuestState>) {
     const [a, b, n] = CHAINS[c].keys, r = p as unknown as Record<string, number>, pk = CHAINS[c].packed;
-    if (pk) { const q = { ...this.qs(p, c), ...v }; r[pk] = packQuest(q.questId, q.questStage, q.questCount); return; }
+    if (pk) {
+      const q = { ...this.qs(p, c), ...v }, n = packQuest(q.questId, q.questStage, q.questCount);
+      if (!CHAINS[c].local) r[pk] = n;
+      else if (n) p.arcs.set(pk, n); else p.arcs.delete(pk); // a zone arc not begun takes no room in the map
+      return;
+    }
     if (v.questId !== undefined) r[a] = v.questId;
     if (v.questStage !== undefined) r[b] = v.questStage;
     if (v.questCount !== undefined) r[n] = v.questCount;
   }
 
-  private sendQuest(id: string, p: Player, c: number, done = false) {
+  private sendQuest(id: string, p: Player, c: number, done = false, auto = false) {
     const q = this.qs(p, c);
-    this.clients.find((cl) => cl.sessionId === id)?.send("quest", { chain: c, qid: q.questId, stage: q.questStage, done });
+    this.clients.find((cl) => cl.sessionId === id)?.send("quest", { chain: c, qid: q.questId, stage: q.questStage, done, ...(auto ? { auto } : {}) });
   }
 
   /** Move to the next step (or claim the reward and move on to the next quest). */
@@ -5386,6 +5396,20 @@ export class TownRoom extends Room<TownState> {
     this.qset(p, c, { questId: q.questId + 1, questStage: 0 });
     this.sendQuest(id, p, c, true);
     this.grantXp(id, d.reward.xp, p);
+    // The next quest of the chain carries on from here by itself (QuestDef.auto: no walk back to its giver), a breath
+    // after the "Quest complete" banner; below its level it waits for its giver as usual
+    const next = CHAINS[c].quests[q.questId + 1];
+    if (next?.auto) this.clock.setTimeout(() => this.autoStart(id, c, q.questId + 1), 2600);
+  }
+
+  /** Start quest `qid` of chain c where the hero stands, if they are still on its offer and up to its level. */
+  private autoStart(id: string, c: number, qid: number) {
+    const p = this.state.players.get(id), d = CHAINS[c].quests[qid];
+    if (!p || !d) return;
+    const q = this.qs(p, c);
+    if (q.questId !== qid || q.questStage !== 0 || p.level < d.minLevel || !chainOpen(p, c)) return;
+    this.qset(p, c, { questStage: 1, questCount: 0 });
+    this.sendQuest(id, p, c, false, true);
   }
 
   /** Progress on a kill / collect / use step; finishes the step at its goal. */
@@ -5742,6 +5766,11 @@ export class TownRoom extends Room<TownState> {
       if (!p.dead) p.hp = p.maxHp; // full heal on level up
       this.broadcast("levelup", { id, level: lvl, from });
       if (from <= PVP_PROTECT_LEVEL && lvl > PVP_PROTECT_LEVEL) this.note(id, `Level ${lvl}: PvP is open for you outside the Market Square.`);
+      // A quest that carries on by itself (QuestDef.auto) and was waiting for this level starts now
+      for (let c = 0; c < CHAINS.length; c++) {
+        const q = this.qs(p, c), d = CHAINS[c].quests[q.questId];
+        if (d?.auto && q.questId > 0 && q.questStage === 0 && from < d.minLevel && lvl >= d.minLevel) this.clock.setTimeout(() => this.autoStart(id, c, q.questId), 1800);
+      }
     }
   }
 
