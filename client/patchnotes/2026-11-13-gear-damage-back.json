@@ -1,0 +1,8 @@
+{
+  "date": "2026-11-13",
+  "pr": 385,
+  "title": "Gear damage is back",
+  "changes": [
+    "Undo of the previous patch: weapons and gear give their attack and elemental damage bonuses again, old items included."
+  ]
+}
