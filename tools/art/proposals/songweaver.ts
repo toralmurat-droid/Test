@@ -44,7 +44,6 @@ if (mode === "sheets") {
     kit(s);
     const d = diff(plain, buildSheet(SONGWEAVER));
     saveWebp(d, `${OUT}/gear/songweaver_songweaver_${s}.webp`, 88); // what the game loads (hero_itemId)
-    saveWebp(d, `${OUT}/gear/songweaver_${s}.webp`, 88);            // what the published viewer reads
   }
   kit(null);
   console.log("songweaver sheets written", plain.w, "x", plain.h);
