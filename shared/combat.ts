@@ -48,7 +48,7 @@ export const MOB_COMBAT: Record<MobKind, { poise: number; windupMs: number; soun
   golem_poison: { poise: 140, windupMs: 420, sound: { tier: "normal", pitch: "L" } }, golem_shock: { poise: 120, windupMs: 380, sound: { tier: "keen", pitch: "H" } }, golem_colossus: { poise: 400, windupMs: 560, sound: { tier: "dull", pitch: "L" } },
   bride: { poise: 60, windupMs: 140, sound: { tier: "keen", pitch: "H" } },
   wisp: { poise: 30, windupMs: 0, sound: { tier: "fragile", pitch: "H" } },
-  slime: { poise: 30, windupMs: 350, sound: { tier: "deaf", pitch: "L" } },
+  slime: { poise: 30, windupMs: 350, sound: { tier: "dull", pitch: "L" } },
   skeleton: { poise: 55, windupMs: 300, sound: { tier: "fragile", pitch: "H", mode: "major" } },
   crawler: { poise: 20, windupMs: 320, sound: { tier: "keen", pitch: "H" } },
   demon: { poise: 260, windupMs: 520, sound: { tier: "dull", pitch: "L", mode: "major" } },
@@ -91,13 +91,13 @@ export const MOB_COMBAT: Record<MobKind, { poise: number; windupMs: number; soun
  * ones take the most and shatter when their resonance bursts (shared/songs.ts RESONANCE.shatterMult).
  */
 export const SOUND_TIER: Record<SoundTier, { dmg: number; res: number; cc: number }> = {
-  deaf: { dmg: 0.5, res: 0, cc: 0.5 },
-  dull: { dmg: 0.75, res: 0.5, cc: 0.75 },
+  deaf: { dmg: 0.75, res: 0, cc: 0.75 },
+  dull: { dmg: 0.9, res: 0.5, cc: 0.9 },
   normal: { dmg: 1, res: 1, cc: 1 },
-  keen: { dmg: 1.15, res: 1.3, cc: 1.15 },
-  fragile: { dmg: 1.25, res: 2, cc: 1.25 },
+  keen: { dmg: 1.2, res: 1.3, cc: 1.2 },
+  fragile: { dmg: 1.35, res: 2, cc: 1.35 },
 };
-export const SOUND_MATCH = { dmg: 1.2, res: 1.5, affinity: 1.3, boss: 0.5, ear: 0.5 };
+export const SOUND_MATCH = { dmg: 1.2, res: 1.5, affinity: 1.3, boss: 0.75, ear: 0.5 };
 /** Who a sound hit lands on: a monster's MobSound (+ boss), or a hero (normal; the Songweaver has Trained Ear). */
 export interface SoundProfile extends MobSound { boss?: boolean; ear?: boolean }
 /** What a sound hit carries (HitEffects.sound). */
