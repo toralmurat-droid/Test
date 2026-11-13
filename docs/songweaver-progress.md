@@ -48,7 +48,7 @@ Heals and buffs only reach the caster today. Effects must be able to reach allie
 - Whether songs from several Songweavers can affect the same player at once.
 - How strong solo damage should be compared with the Wizard (already the weakest class).
 
-## Plan v2 (planner, 2026-11-13). Music-first; not approved yet
+## Plan v2 (planner, 2026-11-13). Music-first; APPROVED by the owner 2026-11-13
 This replaces the v1 tree. The v1 engine ally design (`party`, `shareBuff`, shields, poise) still stands.
 
 **Concept:** progression is music.
@@ -127,7 +127,7 @@ caster: water slows longer, a well widens the radius, stone boosts low notes. A 
 - The Vampire, not the Wizard, is the weakest at Lv 40–50 (17–20%).
 - PvE seconds per kill: Wizard 2–4s, Vampire 1.5–2.6s, Summoner 2.7–4.3s.
 
-## Open questions to the owner (planner's recommendation)
+## Owner decisions on the open questions (2026-11-13): all 15 recommendations accepted as written
 1. Chord trigger: automatic (vs. a Finale key).
 2. Stacking: different songs stack, the same song doesn't; resonance on a monster is shared.
 3. Key: one tonic, A, with open fifths when modes clash (vs. a party conductor).
@@ -167,3 +167,10 @@ session: what was done, decisions with name and date, numbers, pitfalls.
     `BASIC_SHOTS`.
   - Known issues: the overlay barely shows in the lying poses, the cape is full-length, the lute hangs low.
   - The pluck hasn't been listened to.
+- 2026-11-13: engine work merged: `party()`, `shareBuff()`, `partyBuff()`, `absorbDamage()`, `BuffDef.party` and
+  `shield`, `FieldDef.party`, `heal(from)`.
+  - Checks: `npm test` 137/138 pass (1 skipped, Postgres); build OK; smoke OK. Duel and PvE unchanged within noise.
+  - Open points:
+    - an extension doesn't resend the `buff` event, so the HUD timer doesn't update;
+    - fully absorbed hits send `dmg: 0`;
+    - a shield inside a party aura refills every tick (decide before using shield in a field).
