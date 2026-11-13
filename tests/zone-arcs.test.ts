@@ -48,7 +48,7 @@ test("zone arcs: accepted from the giver, the next quest starts by itself where 
     await wait(200);
     const room = srv.room, p = room.state.players.get(c.sessionId);
     const ci = CHAINS.findIndex((x) => x.id === "mill");
-    p.tut = packQuest(CHAINS.find((x) => x.id === "tutorial")!.quests.length, 0, 0);
+    p.quests.set("tut", packQuest(CHAINS.find((x) => x.id === "tutorial")!.quests.length, 0, 0));
     p.level = 3;
     const odo = NPCS.find((n) => n.id === "miller")!;
     p.x = odo.x + 10; p.y = odo.y + 10;
@@ -56,7 +56,7 @@ test("zone arcs: accepted from the giver, the next quest starts by itself where 
     c.send("quest", { chain: ci });
     await wait(300);
     assert.equal(chainState(p, ci)!.questStage, 1, "accepted from Odo");
-    assert.equal(p.arcs.get("mill"), packQuest(0, 1, 0), "kept in the arcs map");
+    assert.equal(p.quests.get("mill"), packQuest(0, 1, 0), "kept in the quests map");
     // clear the clots (step 1) and kill the blobs (step 2) by hand
     room.questProgress(c.sessionId, p, ci, 0b111);
     room.questProgress(c.sessionId, p, ci, 6);

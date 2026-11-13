@@ -29,8 +29,10 @@ Pixel Town Brawl: an online multiplayer pixel-art action RPG in the browser.
    `this.allow(...)` in `TownRoom.ts` (built on `server/ratelimit.ts`) when a player could spam it.
 
 ## Hard limits (break these and things fail quietly)
-- **`Player` schema is at the 64-field cap** (`@colyseus/schema`). Don't add synced fields: pack new data into an
-  existing one (see `Player.attune`) or send it as a message.
+- **`Player` schema: 64 synced fields max** (`@colyseus/schema` packs the field index into 6 bits, so indexes 0–63).
+  Count the `@type` fields before adding one. Never put a collection or child schema at index 63 (it collides with
+  an encoder control byte). Quest chains share one `quests` map: a new chain costs no field. When space runs low,
+  prefer a map or child schema over packing several values into one number.
 - **Synced `Mob` fields:** new ones go at the end of the class and of `MOB_FIELDS` in `shared/mobView.ts`, in the same
   order (`tests/mobview.test.ts` checks it).
 - **Skill tree layout:** each branch is at most 3 deep, the slab fits 4 rows (`tests/treeLayout.test.ts`).

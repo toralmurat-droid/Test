@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { CHAINS, SUN_CHAIN, chainOpen, chainState, packQuest, QUEST_ITEMS } from "../shared/quests";
+import { CHAINS, SUN_CHAIN, TUT_CHAIN, chainOpen, chainState, packQuest, QUEST_ITEMS } from "../shared/quests";
 import { NPCS } from "../shared/npcs";
 import { SPAWN_ZONES } from "../shared/spawns";
 import { areaAt } from "../shared/map";
@@ -29,9 +29,10 @@ test("the Second Sun: givers and talkers live in Kel Ashar, kill steps use deser
 test("the Second Sun opens only after the Hollow Crown and the Hide Rite", () => {
   const crown = CHAINS.findIndex((c) => c.id === "crown"), beast = CHAINS.findIndex((c) => c.id === "beast");
   const done = (c: number) => packQuest(CHAINS[c].quests.length, 0, 0);
-  assert.equal(chainOpen({ level: 30 }, SUN_CHAIN), false);
-  assert.equal(chainOpen({ level: 30, crown: done(crown) }, SUN_CHAIN), false);
-  assert.equal(chainOpen({ level: 30, crown: done(crown), beast: done(beast) }, SUN_CHAIN), true);
+  const tut = done(TUT_CHAIN); // a hero with a quests map has the guided quest done only if its key says so
+  assert.equal(chainOpen({ level: 30, quests: { tut } }, SUN_CHAIN), false);
+  assert.equal(chainOpen({ level: 30, quests: { tut, crown: done(crown) } }, SUN_CHAIN), false);
+  assert.equal(chainOpen({ level: 30, quests: { tut, crown: done(crown), beast: done(beast) } }, SUN_CHAIN), true);
 });
 
 test("Redfang and the Second Sun are packed, accepted from Rakhim and kept across a save", async () => {
@@ -41,10 +42,10 @@ test("Redfang and the Second Sun are packed, accepted from Rakhim and kept acros
     await wait(200);
     const room = srv.room, p = room.state.players.get(c.sessionId);
     const crown = CHAINS.findIndex((x) => x.id === "crown"), beast = CHAINS.findIndex((x) => x.id === "beast");
-    p.crown = packQuest(CHAINS[crown].quests.length, 0, 0);
-    p.beast = packQuest(CHAINS[beast].quests.length, 0, 0);
-    p.red = packQuest(2, 1, 3);
-    p.tut = packQuest(CHAINS.find((x) => x.id === "tutorial")!.quests.length, 0, 0);
+    p.quests.set("crown", packQuest(CHAINS[crown].quests.length, 0, 0));
+    p.quests.set("beast", packQuest(CHAINS[beast].quests.length, 0, 0));
+    p.quests.set("red", packQuest(2, 1, 3));
+    p.quests.set("tut", packQuest(CHAINS.find((x) => x.id === "tutorial")!.quests.length, 0, 0));
     p.level = 30;
     const rakhim = NPCS.find((n) => n.id === sun.quests[0].giver)!;
     p.x = rakhim.x + 10; p.y = rakhim.y + 10;
