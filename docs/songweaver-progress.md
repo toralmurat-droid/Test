@@ -198,3 +198,12 @@ Agents build against this in parallel. Changing it needs the orchestrator.
 - **Status words** in the existing `fx` string: `mode:<id>`, `res1` / `res2` / `res3`; buff ids as today.
 - **Owner-only message:** `"chord"` with `{ notes: Degree[], mode, lockMs }`, sent when it changes.
 - **Projectile kind:** `"wave"` (basic attack and Shrill Note), drawn with `client/src/soundWaveArt.ts`.
+
+## Log (continued)
+- 2026-11-13: the owner accepted all 15 recommendations. Viewer pages are private artifacts (animation viewer, lute
+  player). Build batch 2 started in parallel worktrees, all against the interface contract:
+  - gameplay-engineer: everything in `shared/` and `server/`, sims, tests.
+  - art-audio: icons and the mode/degree music engine.
+  - client-engineer: skillfx, chord HUD, resonance and sound-hit cues.
+  - content-writer: text in `docs/songweaver-content.md`, plus the patch note.
+- Next: integrate, tester, balance-analyst, reviewer, then `ACTIVE_CLASSES`.
