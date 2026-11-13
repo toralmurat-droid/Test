@@ -442,6 +442,9 @@ export const BOSSES: BossDef[] = [
   { name: "Pale Marshal Lv24", kind: "necromancer", level: 24, hero: 23, hpMult: 2.5 },
   { name: "Hollow King Lv30", kind: "hollowking", level: 30, hero: 30, hpMult: 2 },
   { name: "Sunwright Lv50", kind: "sunwright", level: 50, hero: 49, hpMult: 2 },
+  // quest summons from the quest concepts (shared/quests.ts): the wrong-grave ambush and the Crown in the Sand finale
+  { name: "Disturbed Dead Lv17", kind: "skeleton", level: 17, hero: 15, hpMult: 3 },
+  { name: "Ostrevar's Envoy Lv39", kind: "sanddead", level: 39, hero: 38, hpMult: 7 },
   // the Night Raiders (shared/raiders.ts): always Lv 50, close to unbeatable for one hero alone (Murat 2026-11-08)
   { name: "Night Raider vs Lv30", kind: "nightraider", level: 50, hero: 30 },
   { name: "Night Raider vs Lv50", kind: "nightraider", level: 50, hero: 50 },
