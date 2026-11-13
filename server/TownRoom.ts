@@ -2900,7 +2900,7 @@ export class TownRoom extends Room<TownState> {
     this.state.mobs.forEach((m, id) => {
       if (m.dead) return;
       if (m.zone < 0) {
-        if (NIGHT_BOSSES.includes(m.kind) && !m.target && m.specialAt === 0) this.sinkMob(m, id); // no fight on: back to the grave
+        if (NIGHT_BOSSES.includes(m.kind) && !underground(m.y) && !m.target && m.specialAt === 0) this.sinkMob(m, id); // no fight on: back to the grave (no day underground)
         return;
       }
       if (!UNDEAD_ZONES.has(m.zone) || !idle(m)) return;

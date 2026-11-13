@@ -28,6 +28,7 @@ import { movesSheet, SkillMoves } from "./skillMoves";
 import { displayGrid } from "./tileset";
 import { CRAWL_CROP, heroTexture, itemTexture, potionTex, makeTileset, MOB_LOOK, mobTexture, preloadPaintedMobs } from "./textures";
 import { Minimap } from "./minimap";
+import { fullscreenSupported, isFullscreen, onFullscreen, toggleFullscreen } from "./fullscreen";
 import { SCREEN_SIZES, isSharp, onWorldScale, pct, setWorldScale, uiScale, worldScale, worldScaleName, worldScaleSetting } from "./worldscale";
 import { GameMenu } from "./gamemenu";
 import { showMusicPanel, musicPanelOpen } from "./music";
@@ -564,6 +565,7 @@ export class TownScene extends Phaser.Scene {
         ],
         note: "Bright sizes keep pixels sharp",
         onChoose: (v) => setWorldScale(v === "auto" ? "auto" : Number(v)) },
+      { id: "fullscreen", label: "", onClick: () => toggleFullscreen() },
       { id: "quit", label: `${icon("fire")}Save and return to start screen`, onClick: () => void this.saveAndQuit() },
     ]);
     // Keyboard layout setting (client/src/keymode.ts): its entry says which one is on; clicking switches
@@ -574,6 +576,12 @@ export class TownScene extends Phaser.Scene {
     const sizeLabel = () => this.gameMenu?.setLabel("worldsize", `${icon("star")}Screen size: ${worldScaleName()} <small>choose</small>`);
     sizeLabel();
     onWorldScale(sizeLabel);
+    // Full screen (client/src/fullscreen.ts): its entry says on / off
+    const fsLabel = () => this.gameMenu?.setLabel("fullscreen", fullscreenSupported()
+      ? `${icon("star")}Full screen: ${isFullscreen() ? "on" : "off"} <small>[Alt+Enter]</small>`
+      : `${icon("star")}Full screen: not on this browser`);
+    fsLabel();
+    onFullscreen(fsLabel);
     this.patchNotes = new PatchNotesPanel(toggleNews);
     this.input.keyboard!.on("keydown-N", () => { if (!this.chatting()) toggleNews(); });
     this.setupChat();

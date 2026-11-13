@@ -1,0 +1,10 @@
+{
+  "date": "2026-11-13",
+  "pr": 381,
+  "title": "Full screen mode",
+  "changes": [
+    "Play in full screen: choose Full screen in the game menu (Esc), or press Alt+Enter. Press it again or Esc to leave.",
+    "The screen size adapts on its own when you switch.",
+    "Fix: the Hollow Abbot and other dungeon bosses no longer vanish by day while you are underground."
+  ]
+}
