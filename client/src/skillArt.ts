@@ -1383,8 +1383,8 @@ export function paintStatus(id: string): string[] | undefined {
 }
 
 // ---- Songweaver icons (ids from docs/songweaver-progress.md "Interface contract") ------------------------------------
-// Registered by string, not through shared/skills.ts (the Songweaver tree is not there yet), so they compile and draw
-// now. Once SKILLS.songweaver exists, paintSkill can take the frame row from skillById; the art stays as it is.
+// The frame row comes from shared/skills.ts (skillById); the row in each entry is only the fallback for an id the table
+// does not know.
 // Three branch palettes: Hymnal warm gold, Folk rust and green, Discord violet. "song" is the neutral (Modulate, Resolve).
 const RUST: Ramp = ["#4a1f0e", "#9a4a1e", "#d17a36", "#f3c27a"];
 const VIOLET: Ramp = ["#2a0f4a", "#6a2fb0", "#a56be0", "#e6d0ff"];
@@ -1400,9 +1400,9 @@ function sNote(p: Painter, x: number, y: number, k: Ramp, h = 9, flag = true) {
   if (flag) { p.line(x + 2, y - h, x + 5, y - h + 3, k[2]); p.line(x + 2, y - h + 1, x + 5, y - h + 4, k[1]); }
 }
 function sSharp(p: Painter, cx: number, cy: number, k: Ramp, s = 1) {
-  for (const dx of [-3, 2]) p.thick(cx + dx * s, cy - 7 * s, cx + dx * s, cy + 7 * s, 1, k[2]);
-  for (const dy of [-2.5, 2.5]) p.thick(cx - 6 * s, cy + (dy + 1.5) * s, cx + 6 * s, cy + (dy - 1.5) * s, 2, k[1]);
-  for (const dy of [-2.5, 2.5]) p.line(cx - 6 * s, cy + (dy + 0.5) * s, cx + 6 * s, cy + (dy - 2.5) * s, k[3]);
+  // two upright bars, two rising bars across them: reads as a sharp sign at 24 px
+  for (const dx of [-3.6, 3.6]) { p.thick(cx + (dx - 0.4) * s, cy - 9 * s, cx + (dx + 0.4) * s, cy + 9 * s, 1, k[2]); p.line(cx + (dx - 1.2) * s, cy - 8 * s, cx + (dx - 0.4) * s, cy + 8 * s, k[3]); }
+  for (const dy of [-3.4, 3.4]) { p.thick(cx - 8 * s, cy + (dy + 1.8) * s, cx + 8 * s, cy + (dy - 1.8) * s, 2, k[1]); p.line(cx - 8 * s, cy + (dy + 1.2) * s, cx + 8 * s, cy + (dy - 2.4) * s, k[3]); }
 }
 function sFlat(p: Painter, cx: number, cy: number, k: Ramp) {
   p.thick(cx - 3, cy - 9, cx - 3, cy + 8, 2, k[2]);
@@ -1434,8 +1434,8 @@ const SONG_ART: Record<string, [branch: SongBranch, row: number, draw: Draw]> = 
     p.outline(); p.px(8, 5, "#ffffff");
   }],
   sg_lydian: ["hymnal", 2, (p) => {
-    sSharp(p, 12, 14, GOLD, 0.9); p.ring(12, 14, 9, GOLD[2], Math.PI * 1.1, Math.PI * 1.9);
-    p.outline(); p.spark(19, 5, 2, GOLD[3]); p.spark(5, 6, 1, GOLD[3]);
+    sSharp(p, 12, 12, GOLD, 1);
+    p.outline(); p.spark(20, 4, 2, GOLD[3]); p.spark(4, 20, 1, GOLD[3]);
   }],
   sg_legato: ["hymnal", 2, (p) => {
     for (const x of [5, 12, 19]) { p.ball(x, 16, 2.3, GOLD, 1.7); p.thick(x + 2, 8, x + 2, 16, 1, GOLD[2]); }
@@ -1553,7 +1553,7 @@ const SONG_ART: Record<string, [branch: SongBranch, row: number, draw: Draw]> = 
 export function paintSong(id: string): string[] | undefined {
   const a = SONG_ART[id];
   if (!a) return undefined;
-  const [branch, row, draw] = a, p = new Painter();
+  const [branch, row0, draw] = a, row = skillById(id)?.row ?? row0, p = new Painter();
   draw(p);
   const back = backdrop(SONG_BACK[branch], row, false);
   return back.map((b, i) => p.fx[i] || p.g[i] || b);
