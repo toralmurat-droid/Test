@@ -174,3 +174,27 @@ session: what was done, decisions with name and date, numbers, pitfalls.
     - an extension doesn't resend the `buff` event, so the HUD timer doesn't update;
     - fully absorbed hits send `dmg: 0`;
     - a shield inside a party aura refills every tick (decide before using shield in a field).
+
+## Interface contract (orchestrator, 2026-11-13)
+Agents build against this in parallel. Changing it needs the orchestrator.
+- **Class and skill ids:**
+  - Class `songweaver`.
+  - Skills: `sg_ballad sg_mend sg_pedal sg_lydian sg_legato sg_chorale` · `sg_march sg_jig sg_call sg_dorian sg_accel sg_anthem` ·
+    `sg_dirge sg_shrill sg_crack sg_phrygian sg_sympathy sg_twelve`, plus the cantrip `sg_modulate`.
+  - Finishers (hidden skills): `sg_f_amen sg_f_encore sg_f_shatter sg_f_resolve sg_f_sleight`.
+- **Values:**
+  - Modes `major minor lydian dorian phrygian`.
+  - Degrees `I i ii bII IV V vi`.
+  - Pitch `L M H any`.
+  - Sound tiers `deaf dull normal keen fragile`.
+  - Tonic A (MIDI 45 = A2); the client maps degree + mode to pitch.
+- **`broadcast("sfx", …)` events:**
+  - `{ ev: "note", id, s, deg, mode, pitch, x, y }`: every Songweaver skill cast and the basic-attack combo step.
+  - `{ ev: "chord", id, prog, mode, x, y }`: a finisher fired; `prog` is `amen | encore | shatter | resolve | sleight`.
+  - `{ ev: "resonate", id, x, y, shatter }`: a resonance burst.
+  - `{ ev: "bounce", x, y, mat }`: a wave bounces off a wall; `mat` is `stone | wood | metal`.
+  - `{ ev: "soundhit", id, x, y, tier, match }`: a sound hit on a monster, used for the ringing/muffled cue.
+  - `{ ev: "shieldbreak", id, s, x, y }`: already exists.
+- **Status words** in the existing `fx` string: `mode:<id>`, `res1` / `res2` / `res3`; buff ids as today.
+- **Owner-only message:** `"chord"` with `{ notes: Degree[], mode, lockMs }`, sent when it changes.
+- **Projectile kind:** `"wave"` (basic attack and Shrill Note), drawn with `client/src/soundWaveArt.ts`.
