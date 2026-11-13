@@ -1,0 +1,133 @@
+{
+ "sources": "1471092137232342",
+ "clips": {
+  "w_firebolt": {
+   "ms": 2200,
+   "frames": 26
+  },
+  "w_blizzard": {
+   "ms": 3000,
+   "frames": 36
+  },
+  "w_storm": {
+   "ms": 3000,
+   "frames": 36
+  },
+  "v_leech": {
+   "ms": 2200,
+   "frames": 26
+  },
+  "v_link": {
+   "ms": 3000,
+   "frames": 36
+  },
+  "v_lance": {
+   "ms": 2200,
+   "frames": 26
+  },
+  "v_boil": {
+   "ms": 2200,
+   "frames": 26
+  },
+  "v_exsang": {
+   "ms": 2200,
+   "frames": 26
+  },
+  "v_ward": {
+   "ms": 3000,
+   "frames": 36
+  },
+  "v_tide": {
+   "ms": 3000,
+   "frames": 36
+  },
+  "v_mist": {
+   "ms": 2200,
+   "frames": 26
+  },
+  "v_bats": {
+   "ms": 3000,
+   "frames": 36
+  },
+  "v_gaze": {
+   "ms": 2200,
+   "frames": 26
+  },
+  "v_rats": {
+   "ms": 2200,
+   "frames": 26
+  },
+  "v_batform": {
+   "ms": 3000,
+   "frames": 36
+  },
+  "v_soil": {
+   "ms": 3000,
+   "frames": 36
+  },
+  "v_nightfall": {
+   "ms": 3000,
+   "frames": 36
+  },
+  "v_rend": {
+   "ms": 2200,
+   "frames": 26
+  },
+  "v_thirst": {
+   "ms": 3000,
+   "frames": 36
+  },
+  "v_devour": {
+   "ms": 2200,
+   "frames": 26
+  },
+  "v_pounce": {
+   "ms": 2200,
+   "frames": 26
+  },
+  "v_wolfform": {
+   "ms": 3000,
+   "frames": 36
+  },
+  "v_bite": {
+   "ms": 2200,
+   "frames": 26
+  },
+  "v_brides": {
+   "ms": 3000,
+   "frames": 36
+  },
+  "su_golem": {
+   "ms": 3600,
+   "frames": 43
+  },
+  "su_step": {
+   "ms": 2200,
+   "frames": 26
+  },
+  "su_blackhole": {
+   "ms": 3000,
+   "frames": 36
+  },
+  "su_horizon": {
+   "ms": 3000,
+   "frames": 36
+  },
+  "su_blades": {
+   "ms": 3000,
+   "frames": 36
+  },
+  "su_colossus": {
+   "ms": 3600,
+   "frames": 43
+  },
+  "su_wisps": {
+   "ms": 3600,
+   "frames": 43
+  },
+  "su_arsenal": {
+   "ms": 3600,
+   "frames": 43
+  }
+ }
+}

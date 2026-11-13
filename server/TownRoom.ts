@@ -591,6 +591,8 @@ const meleeOf = (m: Mob) => {
 /** A trade between players a and b (server only). `v` goes up with every change of an offer. */
 interface Trade { a: string; b: string; v: number; offer: Record<string, Offer>; ready: Record<string, boolean> }
 
+/** Skill clip capture: an open meadow south-east of Oakvale, outside the village (no magic there). */
+const CAPTURE_SPOT: [number, number] = [101, 72];
 const liveRooms = new Set<TownRoom>();
 let announced = false;
 /** The server is about to restart for an update: tell every player right away (TownScene shows the update notice). */
@@ -608,6 +610,8 @@ export class TownRoom extends Room<TownState> {
   private mobSeq = 0;
   private shotSeq = 0;
   private mobView = new MobView();
+  /** Skill clip capture (stageCapture): blobs that only stand and take the hits. */
+  private dummies = new Set<string>();
   /** Champions (shared/champions.ts, server/champions.ts): the room lends them a few of its powers. */
   private champs = new Champions({
     mob: (id) => this.state.mobs.get(id),
@@ -764,6 +768,9 @@ export class TownRoom extends Room<TownState> {
       const v = text.trim().match(/^\/(up|down|unvote)\s+#?(\d+)$/i);
       if (v) return this.voteIdea(client, Number(v[2]), v[1].toLowerCase() === "up" ? 1 : v[1].toLowerCase() === "down" ? -1 : 0);
       if (/^\/max$/i.test(text.trim())) return this.maxHero(client);
+      // Skill clip capture only (tools/skill-clips, SKILL_CAPTURE=1, never set on the live server): a fresh stage per clip
+      const stage = process.env.SKILL_CAPTURE === "1" && text.trim().match(/^\/stage(\s+weak)?$/i);
+      if (stage) return this.stageCapture(client.sessionId, !!stage[1]);
       const tp = process.env.NODE_ENV !== "production" && text.trim().match(/^\/tp\s+(\d+)\s+(\d+)$/i); // dev servers only: jump to a tile
       if (tp) { p.x = (Number(tp[1]) + 0.5) * TILE; p.y = (Number(tp[2]) + 0.5) * TILE; return; }
       // Secret cheat (Murat 2026-11-13): wakes the waygate to Act 2 for this hero, on the live server too. The code is
@@ -2972,6 +2979,7 @@ export class TownRoom extends Room<TownState> {
     tickPoise(m, mobPoiseMax(m), dt, now);
     if (m.dead) { m.moving = false; m.winding = false; m.windUntil = 0; return; }
     if (m.owner) return this.updateSummon(m, id, dt, now);
+    if (this.dummies.has(id)) { m.moving = false; m.winding = false; return; } // skill clip targets stand still
     if (m.banishAt && now >= m.banishAt && !m.specialAt) {
       // the summoned demon's time is up: it sinks back into the ground
       this.broadcast("banish", { id, x: Math.round(m.x), y: Math.round(m.y) });
@@ -4420,6 +4428,31 @@ export class TownRoom extends Room<TownState> {
     if (!p.dead) p.hp = p.maxHp;
     if (p.level > from) this.broadcast("levelup", { id: client.sessionId, level: p.level, from });
     client.send("chat", { id: "", name: "Test", text: `Level ${p.level}, every skill at max rank, ${pts} stat points spread over all stats.` });
+  }
+
+  /**
+   * Skill clip capture (tools/skill-clips/capture.mjs): the hero stands rested on an open meadow (CAPTURE_SPOT) with
+   * fresh cooldowns, mana and no buffs, every other monster around is cleared and three blobs wait in front of him.
+   * They hold a lot of life so they live through the clip; `weak` leaves them low for Devour and Bite.
+   */
+  private stageCapture(id: string, weak: boolean) {
+    const p = this.state.players.get(id);
+    if (!p) return;
+    const [tx, ty] = CAPTURE_SPOT, x = (tx + 0.5) * TILE, y = (ty + 0.5) * TILE;
+    p.x = x - 1.5 * TILE; p.y = y; p.dead = false; p.hp = p.maxHp; p.mana = p.maxMana; p.energy = 0; this.syncMana(p);
+    p.sk.last = {}; p.sk.buffs = []; p.sk.counter = undefined; p.sk.chargeUntil = 0; p.sk.windUntil = 0;
+    this.state.fields.forEach((f, fid) => { if (f.owner === id) this.state.fields.delete(fid); }); // the last clip's black hole, pools...
+    this.state.mobs.forEach((m, mid) => {
+      if (m.owner || Math.hypot(m.x - x, m.y - y) > 14 * TILE) return;
+      m.dead = true; m.hp = 0; m.target = ""; m.moving = false;
+      this.clock.setTimeout(() => { this.state.mobs.delete(mid); this.dummies.delete(mid); }, 300);
+    });
+    for (const [dx, dy] of [[0.8, 0], [1.6, -1], [1.6, 1]]) {
+      const mid = `m${++this.mobSeq}`;
+      this.spawnMob("slime", -1, mid, { x: x + dx * TILE, y: y + dy * TILE, level: p.level });
+      const m = this.state.mobs.get(mid);
+      if (m) { m.maxHp = 1_000_000; m.hp = weak ? 2000 : m.maxHp; this.dummies.add(mid); }
+    }
   }
 
   private learnTalent(id: string, tid: string) {

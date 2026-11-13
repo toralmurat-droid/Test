@@ -1,0 +1,10 @@
+{
+  "date": "2026-11-13",
+  "pr": 391,
+  "title": "Skills page and wiki",
+  "changes": [
+    "New wiki at play.fmtpa.ch/wiki gathers the game's pages and design plans.",
+    "New page play.fmtpa.ch/skills shows every skill of every hero with a short clip filmed in the game.",
+    "The page follows the game: when a skill changes, its clip is filmed again on its own."
+  ]
+}
