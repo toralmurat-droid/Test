@@ -1,7 +1,10 @@
 # Optimisation plan
 
 Status: plan only, nothing implemented. Written 2026-11-13 from three read-only audits (server tick, network and
-saves, client runtime) plus a measured server baseline. Line numbers are as of commit `a4ebcf1`.
+saves, client runtime) plus measured baselines for server and client. Line numbers are as of commit `a4ebcf1`.
+
+**Leading goal (owner, 2026-11-13): frame rate.** The game slows down noticeably on the owner's PC with one player
+online. The client track therefore goes first; server and network work runs beside it at lower priority.
 
 How to read the evidence column: **measured** = from `npm run bench` or a CPU profile of it; **read** = verified in
 the code but not timed; **guess** = an estimate that needs a measurement before work starts.
@@ -21,7 +24,27 @@ the code but not timed; **guess** = an estimate that needs a measurement before 
   size of the world, not with what is happening.
 - kB per player is uncompressed payload (the bots count bytes after inflate), so real wire bytes are unknown.
 - Client build: `main-*.js` is 2,898 kB (847 kB gzip) in one chunk; `dist/` is 149 MB, of which 147 MB is art and music.
-- Nothing on the client is measured. There is no client perf harness.
+- There is no client perf tool in the repo; the client numbers below come from a one-off probe.
+
+Client, one hero alone, production build in headless Chromium at 1920x1080 (scene counts while standing in town;
+they barely change outside or in a fight):
+
+| What | Value |
+|---|---|
+| Game objects in the scene's display list | 30,227 (13,009 Images, 16,794 Sprites) |
+| Of those flagged visible each frame | about 13,600 |
+| Objects in Phaser's update list (updated every frame) | 16,831 |
+| Draw calls per frame | about 380 |
+| Textures | 902-936, about 540 MB decoded |
+| Animations registered | 5,241 |
+| JS heap | 400-650 MB |
+| Login to playable | 18-21 s in this environment |
+
+Limits of that probe: headless Chromium draws in software and reached only 2-4 frames a second, so its milliseconds
+say nothing about a real PC and GPU cost cannot be judged from it. The counts are exact. In the CPU profile, the
+JavaScript time per frame is led by `IsoView.pre` (`client/src/iso.ts:229`), followed by Phaser's `batchSprite`,
+`willRender`, `sortByDepth`, `getVisibleChildren` and `preUpdate`: all of them scale with the number of objects in
+the scene, not with what is on screen.
 
 CPU profile of the 20-bot runs, share of total CPU (spread / spread+cast):
 
@@ -41,10 +64,11 @@ CPU profile of the 20-bot runs, share of total CPU (spread / spread+cast):
 |---|---|---|---|
 | T1 | Bench reports true wire bytes (`ws._socket.bytesRead`) next to the uncompressed figure | `tools/perf/bots.ts:15`, `bench.ts:39` | tester |
 | T2 | Bench prints time per phase of the tick (mob loop, heroes, projectiles, fields, mob view) so each later PR can show its own line | `tools/perf/bench.ts` | tester |
-| T3 | Client perf script: headless Chromium, desktop and phone viewport, walks a fixed route and records frame time p50/p95, display-list and update-list size, draw calls, texture count and bytes, time to first playable frame | new `tools/perf/client.cjs` (pattern: `tools/e2e-summoner-mobile.cjs`) | tester |
+| T3 | Client perf script: headless Chromium, desktop and phone viewport, walks a fixed route and records display-list and update-list size, draw calls, texture count and bytes, JS time per frame, time to first playable frame | new `tools/perf/client.cjs` (pattern: `tools/e2e-summoner-mobile.cjs`) | tester |
+| T4 | In-game perf readout (`?perf=1`): frames per second, script time for update and for render, object counts, draw calls, texture MB, GPU name, with a copy button. Lets the owner read real numbers on the PC that is slow. | `client/src/` (new small module, cosmetic) | client-engineer |
 
-T3 limit: headless Chromium renders in software, so it is good for CPU-side numbers (frame script time, object counts,
-draw calls, memory) and useless for GPU cost. GPU items (C6, C7) need a real phone.
+T3 limit: headless Chromium renders in software, so it gives counts and relative JS cost, not real frame times, and
+nothing about GPU cost. T4 on the affected PC is what tells CPU-bound from GPU-bound. Do T4 first.
 
 ## Server CPU
 
@@ -90,11 +114,14 @@ Production has per-message deflate on (level 1, frames over 256 bytes).
 
 ## Client runtime
 
-Nothing here is measured. T3 comes first; items marked guess may drop out once it has run.
+Counts are measured (see Baseline); real frame times and GPU cost are not. Two candidate causes for the slowdown
+on the owner's PC, to be told apart with T4:
+- CPU: 30,000 scene objects and 16,800 per-frame updates (C1). Certain to cost time on any machine.
+- GPU: about 540 MB of textures and three full-screen passes (L3, C5, C7). Decisive on integrated graphics.
 
 | # | What | Where | Evidence | Risk |
 |---|---|---|---|---|
-| C1 | Static world out of the per-frame path: keep trees, fences, rocks, house strips and props in a spatial grid and add or remove them from the display list by chunk round the camera. Today every static object on the map is a game object that `IsoView.pre`/`post`, the pixel-grid sync and Phaser's visibility filter (two cameras) walk every frame. Set `cameraFilter` once; call `setDepth` only on change. | `client/src/iso.ts:229-306`, `pixelgrid.ts:59-67`, `ambient.ts:238-259`, `isobuild.ts:466-481`, `worldProps.ts:694-699` | read. Object count: guess (over 10,000) | Tall props need a margin; chimney and flat-layer logic in `pre()` needs care. |
+| C1 | Static world out of the per-frame path: keep trees, fences, rocks, house strips and props in a spatial grid and add or remove them from the display list by chunk round the camera. Today every static object on the map is a game object that `IsoView.pre`/`post`, the pixel-grid sync and Phaser's visibility filter (two cameras) walk every frame. Set `cameraFilter` once; call `setDepth` only on change. | `client/src/iso.ts:229-306`, `pixelgrid.ts:59-67`, `ambient.ts:238-259`, `isobuild.ts:466-481`, `worldProps.ts:694-699` | measured: 30,227 objects, 16,831 in the update list, `IsoView.pre` is the top JS cost | Tall props need a margin; chimney and flat-layer logic in `pre()` needs care. Trees and bushes are Sprites that only ever set a frame: make them Images so they leave the update list. |
 | C2 | Darkness overlay: exclude `dg_dark` from the JS smooth pass and redraw at 20 Hz. Today a per-pixel Scale2x runs on it every frame underground and at night with the torch on. | `client/src/dungeon.ts:404-446`, `smooth.ts:10`, `:173-177` | read | None visible. One-line core fix. |
 | C3 | Hotbar: build the cells once and update only cooldown height and number. Today the HTML is rebuilt every frame and `innerHTML` replaced every frame while any skill cools down, followed by forced layout reads. Same for the NPC prompt. | `TownScene.ts:2614-2655`, `:2869`; `orbs.ts:186-198`; `resourceBars.ts:174`; `npcs.ts:457` | read | None visible. |
 | C4 | Cull off-screen heroes like mobs (skip gear sync, effects, texture loads); drop gear textures no entity uses (each worn item is an 8.85 MB sheet, never unloaded). | `client/src/gear.ts:79-142`, `TownScene.ts:2955-2966` | read | Gear appears a moment after a hero walks into view. |
@@ -107,33 +134,51 @@ Nothing here is measured. T3 comes first; items marked guess may drop out once i
 
 ## Suggested batches
 
-`server/TownRoom.ts` changes go one after another, so the server track is serial. The client and load tracks can run
-beside it in their own worktrees. Each PR carries bench numbers before and after (CLAUDE.md step 6); PRs touching
-shared skill code also carry duel and PvE sim numbers (step 5).
+Frame rate leads, so the client track goes first. `server/TownRoom.ts` changes go one after another, so the server
+track is serial; it runs beside the client track in its own worktree. Each PR carries numbers before and after:
+client PRs from T3 and T4, server PRs from `npm run bench` (CLAUDE.md step 6); PRs touching shared skill code also
+carry duel and PvE sim numbers (step 5).
 
-| PR | Contents | Agents | Track |
+Client and load track (priority):
+
+| PR | Contents | Agents | Note |
 |---|---|---|---|
-| 1 | T1, T2, T3 | tester | first, alone |
-| 2 | S3, S5, S8, N4 (follow-field part only) | gameplay-engineer, tester, reviewer | server |
-| 3 | S4 | gameplay-engineer, tester, balance-analyst, reviewer | server |
-| 4 | S1 | gameplay-engineer, tester, reviewer | server |
-| 5 | S2 spike, then go or no-go | gameplay-engineer | server |
-| 6 | N1, N3 | gameplay-engineer then client-engineer, tester | server, lockstep with client |
-| 7 | N4 (rest), N6 | gameplay-engineer, client-engineer, balance-analyst | server, lockstep with client |
-| 8 | N2 | gameplay-engineer then client-engineer | server, lockstep with client |
-| 9 | L1, L2, L4 | gameplay-engineer (`server/index.ts`), client-engineer | load, parallel |
-| 10 | L3 | art-audio, client-engineer | load, after 9 |
-| 11 | C2, C3, C8 | client-engineer | client, parallel |
-| 12 | C1, C4 | client-engineer, tester | client, after 11 |
-| 13 | C5, C6, C7, C9 | client-engineer, art-audio | client, needs a phone |
+| C-1 | T4, T3 | client-engineer, tester | first; the owner reads T4 on the slow PC and the result orders C-3 to C-5 |
+| C-2 | C1 | client-engineer, tester, reviewer | the one certain win; largest change |
+| C-3 | C2, C3, C8 | client-engineer, reviewer | small, can run beside C-2 (different files except `TownScene.ts`: merge C-2 first) |
+| C-4 | L3, C5 | art-audio, client-engineer | texture memory; move ahead of C-2 if T4 shows the PC is GPU-bound |
+| C-5 | C7, C6 | client-engineer, art-audio | GPU passes and draw calls; C6 needs a phone |
+| C-6 | L1, L2, L4 | gameplay-engineer (`server/index.ts`), client-engineer | load time |
+| C-7 | C4, C9 | client-engineer | |
+
+Server and network track (beside it):
+
+| PR | Contents | Agents | Note |
+|---|---|---|---|
+| S-1 | T1, T2 | tester | |
+| S-2 | S3, S5, S8, N4 (follow-field part only) | gameplay-engineer, tester, reviewer | results unchanged |
+| S-3 | S4 | gameplay-engineer, tester, balance-analyst, reviewer | |
+| S-4 | S1 | gameplay-engineer, tester, reviewer | |
+| S-5 | S2 spike, then go or no-go | gameplay-engineer | |
+| S-6 | N1, N3 | gameplay-engineer then client-engineer, tester | lockstep with client |
+| S-7 | N4 (rest), N6 | gameplay-engineer, client-engineer, balance-analyst | lockstep with client |
+| S-8 | N2 | gameplay-engineer then client-engineer | lockstep with client |
 | later | S6, S7, C10, N5 | | only if numbers still call for them |
 
-## Decisions needed
+## Decisions
 
-1. Which goal leads: server headroom (players per room), bandwidth, phone frame rate, or load time. The batches
-   above assume server headroom first, with load and client quick wins beside it.
+Settled:
+- Leading goal is frame rate.
+- Saves: production keeps accounts in `data/saves.json` on a Railway volume (a disk that survives deploys), not in
+  Postgres. So the save item in L4 applies, at low priority. Separate from performance: `DEPLOY.md` notes the volume
+  is the only copy of player accounts unless volume backups are switched on in Railway.
+
+Open:
+1. What the slow PC is (graphics chip, browser) and what T4 reads on it. Until then C1 goes first because it is
+   certain; texture memory (C-4) moves up if the PC turns out to be GPU-bound.
 2. Target number of players in one room. It decides whether S6, S7 and N2 are worth their risk.
-3. Does production store saves in Postgres or in the JSON file (L4, save item).
-4. Is a real phone available for C6 and C7. Headless Chromium cannot judge GPU cost.
-5. Are two visible changes acceptable: monsters appearing a few tiles past the screen edge instead of 30 tiles out
-   (N1), and idle monsters far off screen moving at a lower update rate (S6).
+3. Is a real phone available for C6. Headless Chromium cannot judge GPU cost.
+4. N1 in plain terms: the screen shows about 12 tiles from the hero to each edge, and the server sends every monster
+   up to 30 tiles away, about two and a half screens in each direction. N1 would send only those up to roughly half
+   a screen past the edge. Nothing on screen changes; the open point is whether a monster can be seen arriving late
+   after a waygate jump or at the smallest screen-size setting, which QA should check when S-6 is built.
