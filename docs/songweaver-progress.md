@@ -11,6 +11,11 @@ Status: **planned, waiting on the owner's answers** (2026-11-13). No code yet.
 - **PvP healing and buffs: uncapped.**
 - Becomes an active class (`ACTIVE_CLASSES` in `shared/classes.ts`).
 
+- (owner, 2026-11-13) **The skill trees are built around musical concepts:** unlocking new keys, musical styles and
+  similar. The general feel matters most to the owner.
+- (owner, 2026-11-13) **Balance is the orchestrator's call** (the targets and gates in open questions 3 and 6).
+  The planner's tree below is being redesigned to fit.
+
 ## Design starting point
 The planner refines this and lists open questions.
 - **Songs are auras:** one song active at a time, affecting the Songweaver and nearby party members.
