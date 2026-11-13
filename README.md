@@ -60,8 +60,8 @@ Only the classes in `ACTIVE_CLASSES` can be played. Archived classes keep their 
 - **Skill trees** (`shared/skills.ts`, `shared/talents.ts`): one point per level, 3 branches per class, each a small
   tree of attacks, upgrades, passives, auras and an ultimate. Skills go on the skill bar (`shared/slots.ts`).
 - **Resets** of stats and skills are free at low level, then cost gold (`shared/upkeep.ts`).
-- **Gear** (`shared/gear.ts`, `shared/weapons.ts`): drops with rarity and bonuses, level requirements, wear on death
-  and repairs at the smith. **Runes** (`shared/runes.ts`) go into gear sockets for passive effects, come out whole,
+- **Gear** (`shared/gear.ts`, `shared/weapons.ts`): drops with rarity and bonuses and level requirements.
+  **Runes** (`shared/runes.ts`) go into gear sockets for passive effects, come out whole,
   and four identical runes fuse into a higher rank.
 - **Shops, trade and parties:** `shared/shops.ts`, `shared/trade.ts`, `shared/party.ts`.
 

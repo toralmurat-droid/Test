@@ -13,7 +13,7 @@ import { canPay, shortOf, MANA, manaRegen, maxManaFor, skillCost, unpackMana } f
 import { nextSize, potionAmount, PotionKind, potionName, POTION_SIZES, total, unpackPotions } from "../../shared/potions";
 import { GROUND, areaAt, isSafeZone } from "../../shared/map";
 import { heroPoise, meleeReach, mobBody, POISE, pvpProtected } from "../../shared/combat";
-import { respecCost, wearMult } from "../../shared/upkeep";
+import { respecCost } from "../../shared/upkeep";
 import { ESSENCE, isSummonKind } from "../../shared/summons";
 import { FEAST, FEAST_MAX, type Family } from "../../shared/devour";
 import { moveStep } from "../../shared/movement";
@@ -2283,7 +2283,7 @@ export class TownScene extends Phaser.Scene {
     const st = { sta: mine.sta, str: mine.str, mag: mine.mag, dex: mine.dex ?? 0 }; // includes gear bonuses
     const free = statPoints(lvl) - (mine.ptSta + mine.ptStr + mine.ptMag + (mine.ptDex ?? 0));
     // Rebuild only when something shown changed (called every frame while open)
-    const sig = [lvl, mine.xp, Math.ceil(mine.hp), mine.maxHp, mine.mp, st.sta, st.str, st.mag, st.dex, free, mine.kills, mine.gold, mine.wear, from].join("|");
+    const sig = [lvl, mine.xp, Math.ceil(mine.hp), mine.maxHp, mine.mp, st.sta, st.str, st.mag, st.dex, free, mine.kills, mine.gold, from].join("|");
     const el = document.getElementById("hero")!;
     if (!el.hidden && sig === this.heroSig) return;
     this.heroSig = sig;
@@ -2325,7 +2325,6 @@ export class TownScene extends Phaser.Scene {
       ["Initiative", `${heroPoise(cls, lvl)} · dizzy at 0`],
       ["Move speed", `${speed}`],
       ["Kills · Gold", `${mine.kills} · ${mine.gold}`],
-      ["Gear condition", `${100 - (mine.wear ?? 0)}%${mine.wear ? ` · gear stats −${Math.round((1 - wearMult(mine.wear)) * 100)}% · repair at Brann's smithy` : ""}`],
     ];
     // health, mana and experience as bars over the detail list
     const mp = unpackMana(mine.mp);
