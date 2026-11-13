@@ -1062,7 +1062,9 @@ export class TownRoom extends Room<TownState> {
     if (sv.tutVer === undefined) sv.tutId = TUT_QUESTS.length;
     CHAINS.forEach((ch, c) => {
       const [a, b, n] = ch.keys;
-      const st = { questId: Math.min(ch.quests.length, num(sv[a])), questStage: num(sv[b]), questCount: num(sv[n]) };
+      // whole numbers in packQuest's range, so a corrupt save can't spill one value into another
+      const whole = (v: unknown, max: number) => Math.max(0, Math.min(max, Math.floor(num(v))));
+      const st = { questId: whole(sv[a], ch.quests.length), questStage: whole(sv[b], 99), questCount: whole(sv[n], 99) };
       // The steps of a quest changed since this save: start the current quest again from its offer
       if (num(sv[ch.verKey], 1) !== ch.version && st.questStage > 0) { st.questStage = 0; st.questCount = 0; }
       this.qset(p, c, st);
