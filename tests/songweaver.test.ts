@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { ACTIVE_CLASSES, CLASSES } from "../shared/classes";
 import { CANTRIPS, cleanRanks, FINISHERS, SKILLS, skillById, skillOf } from "../shared/skills";
 import { afterHit, castSkill, FieldInst, HitOpts, newRuntime, ShotSpec, SkillHost, statusOf, tickField, tickUnit, Unit } from "../shared/skillEngine";
-import { MODES, NOTES, PROGRESSIONS, SONG, SONGWEAVER_TREE } from "../shared/songs";
+import { knownModes, MODE_IDS, MODES, NOTES, PROGRESSIONS, SONG, SONGWEAVER_TREE } from "../shared/songs";
 import { isSafeZone, isSolidAt, VILLAGE } from "../shared/map";
 import { TILE } from "../shared/constants";
 import { inVillage } from "../shared/wrath";
@@ -376,6 +376,39 @@ test("Accelerando: Tempo quickens a song's beat, never below 500 ms", () => {
   u.sk.stacks = 5; u.sk.stackAt = w.now;
   f.nextTick = 0; tickField(w.h, f);
   assert.equal(f.nextTick - w.now, SONG.tickFloorMs, "floor");
+});
+
+test("Modulate through the room at real gaps: every press advances the mode, the fx word and the chord message follow", async () => {
+  const srv = await server();
+  // every mode, then Major + Minor + Phrygian only (Lydian and Dorian not learned: the cycle skips them, never repeats)
+  const all = allRanks(), some = cleanRanks("songweaver", 30, { ...all, sg_lydian: 0, sg_dorian: 0 });
+  for (const ranks of [all, some]) {
+    const c = await srv.join({ cls: "songweaver" });
+    const chords: { mode: string }[] = [];
+    c.onMessage("chord", (m: { mode: string }) => chords.push(m));
+    await wait(200);
+    const p = srv.room.state.players.get(c.sessionId), [x, y] = openSpot();
+    p.x = x; p.y = y; p.level = 30; p.mana = p.maxMana = 9999; p.hp = p.maxHp = 99999;
+    p.invulnUntil = Date.now() + 60_000; // no stray monster blow (flinch, poise break) holds a press back
+    for (const [k, v] of Object.entries(ranks)) if (v > 0) p.talents.set(k, v);
+    const known = knownModes((id) => Number(ranks[id] ?? 0));
+    assert.deepEqual(known, ranks === all ? MODE_IDS : ["major", "minor", "phrygian"]);
+    await wait(150);
+    const seen: string[] = [];
+    for (let i = 0; i < known.length + 1; i++) { // once round and back to the first
+      c.send("cast", "sg_modulate"); // the real client message, not room.cast
+      await wait(650); // just past the 600 ms cantrip cooldown, plus the network and a tick
+      const want = known[(i + 1) % known.length];
+      assert.equal(p.sk.mode, want, `press ${i + 1}: the mode advanced`);
+      const fx = String(c.state.players.get(c.sessionId).fx).split(",").find((w) => w.startsWith("mode:"));
+      assert.equal(fx, "mode:" + want, `press ${i + 1}: the synced fx word follows`);
+      assert.equal(chords.at(-1)?.mode, want, `press ${i + 1}: the chord message follows`);
+      seen.push(want);
+    }
+    assert.deepEqual([...new Set(seen)].sort(), [...known].sort(), "every known mode came up");
+    await c.leave();
+  }
+  await wait(50);
 });
 
 test("Mending Note heals the singer, then jumps to the nearest group ally", async () => {
