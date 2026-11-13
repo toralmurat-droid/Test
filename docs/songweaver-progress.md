@@ -3,7 +3,7 @@
 New class: the Songweaver, an Oakvale minstrel with a lute. Work follows the orchestrated agent flow in
 [CLAUDE.md](../CLAUDE.md) ("Working with agents"), starting with the planner. QA only on request.
 
-Status: **brief only**. No spec, plan or code yet.
+Status: **planned, waiting on the owner's answers** (2026-11-13). No code yet.
 
 ## Decisions (2026-11-13)
 - Songweaver, an **Oakvale minstrel** who plays a **lute**.
@@ -39,6 +39,76 @@ Heals and buffs only reach the caster today. Effects must be able to reach allie
 - How exactly chords are triggered, and what each one does.
 - Whether songs from several Songweavers can affect the same player at once.
 - How strong solo damage should be compared with the Wizard (already the weakest class).
+
+## Plan (planner, 2026-11-13). Not approved yet
+**Identity.** Mid-range Magic caster with mana. maxHp 95, speed 90, damage 17, attack cooldown 560 ms, poise 60,
+mag-scaled. Skill ids start with `sg_`, the stack is called "Verse". New weapon type `lute` (caster family), starter
+kit only. Hero saves are keyed by class, so no migration is needed. Write `swTree = 1` from day one.
+
+**Basic attack:** plucked sound wave (speed 210, range 140), then a third strum hit with a burst. Chosen because the
+110 px aura keeps the Songweaver inside the party, and because it reuses the caster pose.
+
+**Tree:** 6 skills per branch, 2 lanes × 4 rows, at most 3 deep. Actives go to rank 5, passives to rank 3.
+- Hearthsongs: Hearthsong (song: regen), Mending Note (targeted heal), Hearth Ward (party shield), Tender Strings
+  (+healing), Reprise (heal when a shield breaks), Hymn of the Hearth (ultimate heal field).
+- Warsongs: Marching Song (song: speed, poise), Battle Hymn (song: damage, attack speed), Rallying Strum (burst of
+  speed), Tempo (+song strength), Steadfast Chorus (crowd-control immunity, poise refill), Anthem of Oakvale (ultimate).
+- Discord: Dirge (song: enemy damage, slow, poise drain), Shrill Note (piercing shot: the main damage), Cracked String
+  (AoE stun), Dissonance (+skill damage), Echo (notes repeat at 40%), Cacophony (ultimate rings that consume Verses).
+
+**Songs:** a `follow` field. 30s duration, 2s song-change cooldown, one song per Songweaver
+(`SkillRuntime.song`). Ticks every 1s: buffs the caster and party allies in radius, never non-party players.
+
+**Chords** (order only): every tree-active cast records its branch, keeping the last 3. Hearth→War→Discord =
+Shatterchord (AoE damage, stun, poise drain). Discord→Hearth→War = Rallying Chord (party damage and attack speed).
+War→Discord→Hearth = Hearth Chord (party heal and shield). 12s lockout; reset on death and after 10s idle. The table
+is `CHORDS` in the new file `shared/chords.ts`.
+
+**State packing:** no new `Player` fields. Songs and shields use the existing `fx` status words, buff timers and the
+synced field. Chord progress goes in an owner-only `"chord"` message (fallback: pack it into `Player.attune`).
+
+**Engine (reusable):** in `shared/skillEngine.ts`: `party()` and `shareBuff()` (one buff per skill id, the strongest
+wins); `FieldDef.party`; `BuffDef.party` (radius), `shield`, `poise`; `HitEffects.poise`; `absorbDamage()`,
+`poiseTakenMult()`; TalentEffects `healing`, `song`, `echo`. `SkillHost.heal` gets an optional `from`. Sims stay solo
+(no allies), plus a Songweaver bot policy.
+
+**Order of work:**
+- A. gameplay-engineer: `shared/` (classes, powers, combat, gear, weapons, skills, chords, engine).
+- B. gameplay-engineer: `server/songs.ts`, then `TownRoom.ts` changes one at a time (shield/poise in
+  `damagePlayer`, heal source, town exemption, `swTree`), `accounts.ts`, sims, bench `PARTY=1`.
+- C. in parallel, each in its own worktree: art-audio (hero, lute, 21 icons, `pluck()` lute voice in one key),
+  client-engineer (`skillfx.ts`, new `chordHud.ts`, wiring, phone check), content-writer (descriptions, blurb,
+  patch note).
+- D. add the class to `ACTIVE_CLASSES` last.
+- E. tester → balance-analyst → reviewer.
+
+**Risks:** stacking of uncapped PvP heals with 2 Songweavers; the Oakvale outlaw rule penalising songs; the engine
+change touches every class's damage path; the sims can't measure support value; the bot's song and chord play
+decides whether the sim numbers mean anything.
+
+**Baseline before the change** (n=60 duel / n=20 PvE, noisy):
+- Wizard duel win rate 2/38/35/23/39/42/42/51/53% at Lv 1/5/10/15/20/25/30/40/50.
+- The Vampire, not the Wizard, is the weakest at Lv 40–50 (17–20%).
+- PvE seconds per kill: Wizard 2–4s, Vampire 1.5–2.6s, Summoner 2.7–4.3s.
+
+**Acceptance criteria:** see the planner report summarised in chat on 2026-11-13. Final list to be fixed once the
+open questions are answered.
+
+## Open questions to the owner (planner's recommendation)
+1. Chord trigger: automatic on the 3rd matching note (vs. a "Finale" key).
+2. Several Songweavers: different songs stack, the same song doesn't (strongest wins), shields don't stack.
+3. Solo target per band:
+   - PvE seconds per kill at 100–120% of the Wizard's.
+   - Clear rate ≥95%.
+   - Boss win rate no more than 10 points below the Wizard's.
+   - Duel win rate 35–55% and no more than 8 points below the Wizard.
+4. Oakvale: Hearthsongs and Warsongs exempt from the outlaw rule; Discord is not.
+5. Key: A minor pentatonic, A2–A4.
+6. Ally value: solo sims plus a healing-per-second figure gate v1; `pve.ts --duo` as a follow-up.
+7. Uncapped PvP: confirm the brakes in Risks; heals reach party members only.
+8. Lute: starter only in v1.
+9. Songs: 30s duration plus a 2s change cooldown (vs. a toggle with mana upkeep).
+10. `swTree = 1` from the first release.
 
 ## Delivery
 One branch. A draft PR until the merge rule in CLAUDE.md is met. Keep this file up to date at the end of each
