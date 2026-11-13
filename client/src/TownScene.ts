@@ -20,13 +20,11 @@ import { moveStep } from "../../shared/movement";
 import { SPAWN_ZONES, zoneAt } from "../../shared/spawns";
 import { musicCombat, setMusicZone } from "./music";
 import { bindSfx, play as playSfx, sfxFrame } from "./sfx";
-import * as sfxModule from "./sfx";
+import { songweaverSfx } from "./sfx";
 import { ChordHud } from "./chordHud";
 import { SoundCues } from "./soundCues";
 import { CHORD_NAMES, MODE_COLOR, soundOf } from "./songTables";
 
-/** HOOK(songweaver-sfx): sfx.ts exports songweaverSfx(ev) (art-audio). Looked up by name so this compiles before it lands; once it is there, replace with a plain import. */
-const songweaverSfx = (ev: any) => (sfxModule as Record<string, any>)["songweaverSfx"]?.(ev);
 const SONG_SFX = new Set(["note", "chord", "resonate", "bounce", "soundhit", "shieldbreak"]);
 import { attackMult, cooldownMult, critChance, heroSpeed, STATS, magicMult, STAT_KINDS, STAT_NAMES, StatKind, statPoints, HP_PER_STR } from "../../shared/powers";
 import { NEED_TEXT, pointRange, SkillDef, skillOf, skillTarget, MAX_STACKS, STACK_DECAY_MS, STACK_NAME, talentBonus, withMods } from "../../shared/skills";
@@ -2713,9 +2711,22 @@ export class TownScene extends Phaser.Scene {
     this.fx.onEvent(ev);
   }
 
+  /** True when another Songweaver within earshot plays in a different mode: their notes are then voiced as open fifths. */
+  private modeClash(ev: any): boolean {
+    if (!ev.mode || ev.x === undefined) return false;
+    const players = (this.room?.state as any)?.players;
+    let clash = false;
+    players?.forEach?.((p: any, id: string) => {
+      if (clash || id === ev.id || p.cls !== "songweaver") return;
+      const m = /(?:^|\s|,)mode:(\w+)/.exec(p.fx ?? "")?.[1];
+      if (m && m !== ev.mode && Math.hypot(p.x - ev.x, p.y - ev.y) < 480) clash = true;
+    });
+    return clash;
+  }
+
   /** Songweaver sfx events (contract in docs/songweaver-progress.md): sound, HUD flash, sound-hit cues. The drawing is in skillfx.ts. */
   private songEvent(ev: any) {
-    songweaverSfx(ev);
+    songweaverSfx(ev, this.me, this.modeClash(ev));
     if (ev.ev === "chord") {
       const c = (MODE_COLOR[ev.mode] ?? MODE_COLOR.major).toString(16).padStart(6, "0");
       const e = this.entities.get(ev.id);
