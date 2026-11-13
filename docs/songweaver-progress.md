@@ -212,3 +212,12 @@ Agents build against this in parallel. Changing it needs the orchestrator.
   - Checks: build OK. `npm test` 137/137 on a rerun.
   - Flaky under full-suite load (they passed 3/3 when run alone): `champions.test.ts` "only one split", and a runner
     deserialize error in `party-effects.test.ts`. Watch them. The sounds haven't been listened to.
+- 2026-11-13: client effects merged: wave shot, song rings, chord HUD (`chordHud.ts`), resonance glow, sound-hit
+  cues, shield bubbles, "absorbed".
+  - The orchestrator wired `songweaverSfx` (open-fifths voicing when a nearby Songweaver is in another mode).
+  - Checks: build and smoke OK.
+  - `tests/party-effects.test.ts` fails about 1 run in 2 under the full suite ("Unable to deserialize cloned data",
+    a test-runner IPC error) and passes alone. Needs a tester fix before the PR.
+  - Unverified until the server lands: the `hit`/`soundhit` order, `lockMs` semantics, the ear icon on the
+    nameplate, the hint line. Switch the client placeholders `SONG_BUFFS` / `SHIELD_BUFFS` and `drawEar` to real
+    data.
