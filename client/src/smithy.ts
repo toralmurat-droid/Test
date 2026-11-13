@@ -1,6 +1,8 @@
 import Phaser from "phaser";
 import { sheet, type Pen } from "./worldProps";
 import { hash, vnoise, dith, FIRE } from "./bonfireArt";
+import { IsoPaint, ramp, type V3 } from "./isoPaint";
+import { wood } from "./isoProps";
 
 /**
  * Brann's smithy by the well: a soot-black stone forge with a chimney, a glowing coal bed and leather bellows that pump
@@ -453,82 +455,55 @@ function quench(p0: Pen, f: number) {
 // ---- weapon rack ----------------------------------------------------------------------------------------------
 export const RACK_W = 90, RACK_H = 76, RACK_BY = 68;
 
-function blade(p: Pen, x: number, top: number, len: number, w: number, glintY: number, kind: "sword" | "spear" | "axe" | "mace" | "hammer") {
-  if (kind === "sword") {
-    for (let y = top; y < top + len; y++) {
-      const tip = y - top < 3 ? (y - top) / 3 : 1;
-      for (let i = 0; i < w; i++) {
-        if (tip < 1 && i !== Math.floor(w / 2)) continue;
-        const g = Math.abs(y - glintY) < 2 ? 1.6 : 0;
-        p.px(x + i, y, step(IRON, 5 - i * 1.2 + g - (i === Math.floor(w / 2) ? 0.5 : 0), x + i, y));
-      }
-    }
-    for (let i = -3; i <= w + 2; i++) p.px(x + i, top + len, BRASS[i < 0 ? 3 : 2]); // crossguard
-    for (let y = top + len + 1; y <= top + len + 5; y++) p.px(x + Math.floor(w / 2), y, y % 2 ? LEATHER[3] : LEATHER[1]); // grip
-    p.px(x + Math.floor(w / 2), top + len + 6, BRASS[3]); // pommel
-  } else {
-    // a long haft with a head on top
-    rod(p, x, top + 6, x, top + len, WOOD, 4);
-    if (kind === "spear") {
-      for (let y = top; y < top + 7; y++) { const h = y - top < 4 ? Math.floor((y - top) / 2) : 1; for (let i = -h; i <= h; i++) p.px(x + i, y, step(IRON, 5 - i - (Math.abs(y - glintY) < 2 ? -1.4 : 0), x + i, y)); }
-      p.px(x - 1, top + 7, CLOTH[3]); p.px(x - 1, top + 8, CLOTH[2]); // a red tassel
-    } else if (kind === "axe") {
-      for (let y = top + 2; y < top + 10; y++) { const h = 1 + Math.round(Math.sin(((y - top - 2) / 8) * Math.PI) * 4); for (let i = 1; i <= h; i++) p.px(x + i, y, step(IRON, 4.6 - i * 0.4 + (i === h ? 1 : 0) + (Math.abs(y - glintY) < 2 ? 1 : 0), x + i, y)); }
-      p.px(x - 1, top + 5, IRON[3]); p.px(x - 1, top + 6, IRON[2]);
-    } else if (kind === "mace") {
-      disc(p, x + 0.5, top + 4, 3, 3.5, (px, py, dx, dy) => step(IRON, 4 - dx * 1.6 - dy, px, py));
-      for (const [ex, ey] of [[-4, 4], [5, 4], [0, -0], [1, 8]]) p.px(x + ex, top + ey, IRON[4]);
-    } else {
-      for (let y = top + 3; y < top + 8; y++) for (let i = -3; i <= 4; i++) p.px(x + i, y, step(IRON, 4.2 - i * 0.4 - (y - top - 3) * 0.3, x + i, y));
-      p.px(x + 5, top + 4, IRON[4]); p.px(x + 5, top + 5, IRON[3]);
-    }
-  }
-}
 
+/**
+ * Brann's weapon rack, modelled in 3D (isoPaint.ts; Murat 2026-11-13: it looked flat): two posts along the street with
+ * a top beam and a slotted foot rail, his blades and polearms hanging from pegs, a round shield on the far post, a kite
+ * shield leaning on the near one, and a red cloth tied to the post top.
+ */
 function rack(p: Pen, f: number) {
-  const ph = (f / N) * Math.PI * 2;
-  shadow(p, RACK_W / 2 + 6, RACK_BY - 1, 34, 6);
-  // two posts with a top beam and a slotted lower rail, skewed along the iso diagonal
-  const L = 18, R = 74, sk = 0.5; // rail runs down-right
-  const ry = (x: number) => RACK_BY - 4 + (x - L) * sk * 0.25;
-  const post = (x: number) => { const y0 = ry(x); for (let y = y0 - 52; y <= y0 + 2; y++) { p.px(x - 1, y, WOOD[4]); p.px(x, y, WOOD[3]); p.px(x + 1, y, WOOD[1]); } p.px(x, y0 - 53, WOOD[4]); };
-  // the weapons on the rack, each hung by a peg on the top beam with its foot in the lower rail
-  const items: [number, number, number, number, "sword" | "spear" | "axe" | "mace" | "hammer"][] = [
-    [25, 26, 34, 3, "sword"], [32, 10, 52, 1, "spear"], [39, 20, 40, 1, "axe"], [46, 24, 34, 3, "sword"], [53, 21, 38, 1, "mace"], [60, 16, 44, 1, "hammer"], [66, 28, 30, 2, "sword"],
-  ];
-  post(L);
-  // back beam
-  for (let x = L; x <= R; x++) { const y = ry(x) - 44; p.px(x, y, WOOD[4]); p.px(x, y + 1, WOOD[3]); p.px(x, y + 2, WOOD[1]); if (x % 9 === 3) p.px(x, y + 1, IRON[4]); }
-  items.forEach(([x, top, len, w, kind], i) => {
-    const glint = top + ((f / N + i * 0.37) % 1) * (len + 12) - 6;
-    blade(p, x, Math.round(ry(x) - 56 + top), len, w, Math.round(ry(x) - 56 + glint), kind);
-  });
-  // lower rail in front of the feet
-  for (let x = L; x <= R; x++) { const y = ry(x) - 6; for (let t = 0; t < 4; t++) p.px(x, y + t, t === 0 ? WOOD[5] : step(WOOD, 3.2 - t * 0.6 + (x % 7 === 0 ? -1 : 0), x, y + t)); }
-  post(R);
-  // a round shield on the post, red with an iron boss, and a battered kite shield leaning at the end
-  disc(p, R + 1, ry(R) - 32, 8.5, 9, (x, y, dx, dy) => {
-    const r = Math.hypot(dx, dy);
-    if (r > 0.84) return step(IRON, 3.6 - dx - dy, x, y);
-    if (r < 0.28) return step(IRON, 4.8 - dx * 1.6 - dy * 1.6, x, y);
-    const quarter = (dx > 0) !== (dy > 0);
-    return step(quarter ? CLOTH : WOOD, 3 - dx * 1.2 - dy * 0.8 + (hash(x, y, 6) < 0.08 ? -1.2 : 0), x, y);
-  });
-  // kite shield leaning against the left post: flat top, tapering to a point, blue field with a brass stripe
-  for (let y = 0; y < 22; y++) {
-    const half = y < 8 ? 6.5 - (y === 0 ? 1 : 0) : Math.max(0.5, 6.5 * (1 - (y - 8) / 14) ** 0.8), cx = L - 7 + y * 0.12, yy = ry(L) - 22 + y;
-    for (let x = Math.floor(cx - half); x <= Math.ceil(cx + half); x++) {
-      const d = Math.abs(x - cx), edge = d > half - 1.1 || y === 0;
-      const BLUE = [0x0e121e, 0x18203a, 0x243058, 0x34446e, 0x4a5c86];
-      p.px(x, yy, edge ? step(IRON, 3.6 - (x - cx) * 0.3, x, yy) : d < 1 ? step(BRASS, 3 - y * 0.06, x, yy) : step(BLUE, 3 - (x - cx) * 0.3 - y * 0.05 + (hash(x, yy, 4) < 0.1 ? -1.2 : 0), x, yy));
+  const g = new IsoPaint(p, RACK_W, RACK_H, 46, RACK_BY - 7), ph = (f / N) * Math.PI * 2, A = 24;
+  const m = (pal: number[], b = 0) => (l: number, _s: number, _t: number, x: number, y: number) => ramp(pal, l + b, x, y);
+  const shine = (i: number) => (l: number, _s: number, t: number, x: number, y: number) => ramp(IRON, l + 0.05 + (Math.abs(t - ((f / N + i * 0.37) % 1)) < 0.08 ? 0.3 : 0), x, y);
+  g.shadow(0, 2, 22, 0.35);
+  for (const u of [-A, A]) { g.box(u - 1.6, u + 1.6, -1.6, 1.6, 0, 44, wood(WOOD, 0, 44)); g.box(u - 2.2, u + 2.2, -2.2, 2.2, 44, 45.5, wood(WOOD, 0.05)); g.box(u - 3, u + 3, -3, 3, 0, 1.5, wood(WOOD, -0.08)); }
+  g.box(-A - 2, A + 2, -1.2, 1.2, 38, 40.5, wood(WOOD, 0.04, 50));
+  g.box(-A, A, 1.4, 4.2, 4, 7, (l, u, _t, x, y) => (Math.floor(u * 14) % 2 && l > 0.85 ? ramp(WOOD, l - 0.5, x, y) : ramp(WOOD, l, x, y))); // slotted foot rail
+  // the weapons, each on a peg under the beam with its foot in the rail
+  const items: [number, "sword" | "spear" | "axe" | "mace" | "hammer"][] = [[-18, "sword"], [-12, "spear"], [-6, "axe"], [0, "sword"], [6, "mace"], [12, "hammer"], [18, "sword"]];
+  items.forEach(([u, kind], i) => {
+    const v = 2.6, top = kind === "spear" ? 50 : kind === "sword" ? 36 : 42;
+    g.box(u - 0.4, u + 0.4, 1.2, 2.4, 36.5, 37.3, m(IRON, 0.1)); // peg
+    if (kind === "sword") {
+      g.box(u - 0.3, u + 0.3, v - 0.2, v + 0.2, top - 5, top, m(LEATHER, 0)); // grip
+      g.blob([u, v, top + 0.6], 0.8, 0.8, 0.8, m(BRASS, 0.1));
+      g.box(u - 2.4, u + 2.4, v - 0.5, v + 0.5, top - 6, top - 5, m(BRASS, 0.05));
+      g.box(u - 0.9, u + 0.9, v - 0.25, v + 0.25, 7, top - 6, shine(i));
+    } else {
+      g.rod([u, v, 6], [u, v, top - 4], 0.55, wood(WOOD, 0.05, 40));
+      if (kind === "spear") { g.blob([u, v, top], 1, 1, 3.6, shine(i)); g.rod([u, v, top - 4.4], [u, v, top - 3.6], 0.9, m(CLOTH, 0.05)); }
+      else if (kind === "axe") g.box(u - 0.2, u + 3.4, v - 0.25, v + 0.25, top - 6, top - 1, (l, s2, t, x, y) => ramp(IRON, l + (s2 > 0.8 ? 0.25 : 0.05), x, y));
+      else if (kind === "mace") { g.blob([u, v, top - 2], 1.8, 1.8, 2.2, shine(i)); for (const a of [0, 1.6, 3.2, 4.7]) g.plot(u + Math.cos(a) * 2.3, v + Math.sin(a) * 2.3, top - 2, IRON[5], 1); }
+      else g.box(u - 2, u + 2, v - 0.9, v + 0.9, top - 4, top - 1, shine(i));
     }
-  }
-  // a tattered cloth tied to the post top, lifting in the wind
-  for (let i = 0; i < 12; i++) {
-    const k = i / 12, dy = Math.round(Math.sin(ph + i * 0.6) * (0.4 + k * 1.6));
-    const hgt = Math.max(1, Math.round(5 - k * 3 - (i === 11 ? 1 : 0)));
-    for (let j = 0; j < hgt; j++) p.px(R + 2 + i, ry(R) - 52 + j + dy, j === hgt - 1 ? CLOTH[1] : Math.sin(ph + i * 0.6 + 1) > 0.3 ? CLOTH[4] : CLOTH[2]);
-  }
+  });
+  // round shield on the far post: red quarters and bare planks, iron rim and boss
+  const C: V3 = [A + 0.5, 3.2, 26], R = 7;
+  g.surf((r, a) => [[C[0] + Math.cos(a * 6.283) * r * R, C[1] + 0.4 * (1 - r * r), C[2] + Math.sin(a * 6.283) * r * R], [0, 1, 0.1]], 30, 110, (l, r, a, x, y) => {
+    if (r > 0.86) return ramp(IRON, l + 0.1, x, y);
+    if (r < 0.24) return ramp(IRON, l + 0.25, x, y);
+    return ramp(Math.floor(a * 4) % 2 ? CLOTH : WOOD, l + (hash(x, y, 6) < 0.08 ? -0.2 : 0), x, y);
+  });
+  // kite shield leaning on the near post: blue field, brass stripe, iron rim
+  const BLUE = [0x0e121e, 0x18203a, 0x243058, 0x34446e, 0x4a5c86];
+  g.quad([-A - 7, 3.5, 22], [10, 0, 0], [0.6, 2.6, -21], (l, s2, t, x, y) => {
+    const half = t < 0.36 ? 0.5 : 0.5 * Math.max(0.05, 1 - (t - 0.36) / 0.64) ** 0.8, d = Math.abs(s2 - 0.5);
+    if (d > half) return undefined;
+    if (d > half - 0.09 || t < 0.04) return ramp(IRON, l + 0.1, x, y);
+    return d < 0.06 ? ramp(BRASS, l, x, y) : ramp(BLUE, l + (hash(x, y, 4) < 0.1 ? -0.15 : 0), x, y);
+  }, (s2) => (0.25 - (s2 - 0.5) ** 2) * 3);
+  // a tattered cloth tied to the far post top, lifting in the wind
+  g.quad([A + 1.5, 0, 44], [12, 0, -1.5], [0, 0, -5], (l, s2, t, x, y) => (t > 1 - s2 * 0.5 ? undefined : ramp(CLOTH, l, x, y)), (s2) => Math.sin(ph - s2 * 5) * 1.4 * s2);
 }
 
 // ---- grindstone ---------------------------------------------------------------------------------------------

@@ -1,6 +1,7 @@
 import Phaser from "phaser";
 import { sheet, type Pen } from "./worldProps";
 import { hash, dith } from "./bonfireArt";
+import { IsoPaint, ramp, type V3 } from "./isoPaint";
 
 /**
  * Morwen's camp on the west side of the market square: a patched crimson bell tent with its flap tied open (a
@@ -158,119 +159,60 @@ const RW0 = 80, RH0 = 100, RBY0 = 92;
 export const RIG_W = Math.ceil(RW0 * RS), RIG_H = Math.ceil(RH0 * RS), RIG_BY = Math.round(RBY0 * RS);
 const BX = 30; // brazier / bulb column
 
-function disc(p: Pen, cx: number, cy: number, rx: number, ry: number, fn: (x: number, y: number, dx: number, dy: number) => number | undefined) {
-  for (let y = Math.floor(cy - ry); y <= Math.ceil(cy + ry); y++) for (let x = Math.floor(cx - rx); x <= Math.ceil(cx + rx); x++) {
-    const dx = (x - cx) / rx, dy = (y - cy) / ry;
-    if (dx * dx + dy * dy > 1) continue;
-    const c = fn(x, y, dx, dy);
-    if (c !== undefined) p.px(x, y, c);
-  }
-}
 
-function runeStone(p: Pen, x: number, y: number, k: number, ph: number, near: boolean) {
-  const w = near ? 3 : 2, h = near ? 4 : 3;
-  for (let j = -h; j <= h; j++) for (let i = -w; i <= w; i++) {
-    if (Math.abs(i) === w && Math.abs(j) >= h - 1) continue; // chipped corners
-    if (hash(i + k * 7, j, 11) < 0.12 && (Math.abs(i) === w || Math.abs(j) === h)) continue;
-    p.px(x + i, y + j, step(SLATE, 2.4 - i * 0.45 - j * 0.3 + (near ? 0.4 : 0), x + i, y + j));
-  }
-  // carved glyph, pulsing
-  const g = 1.6 + Math.sin(ph * 2 + k * 2.1) * 1.2 + (near ? 0.4 : 0);
-  const glyphs = [[[0, -2], [0, -1], [0, 0], [0, 1], [-1, -1], [1, 0]], [[-1, -2], [0, -1], [1, 0], [0, 1], [-1, 2], [1, -2]], [[-1, -1], [0, -1], [1, -1], [0, 0], [0, 1], [-1, 2], [1, 2]]];
-  for (const [gx, gy] of glyphs[k % 3]) { if (!near && Math.abs(gy) > 1) continue; p.px(x + gx, y + gy, step(RUNE, g, x + gx, y + gy)); }
-  // a faint ember halo
-  for (let i = 0; i < 6; i++) { const a = i / 6 * Math.PI * 2 + ph; p.px(x + Math.cos(a) * (w + 2), y + Math.sin(a) * (h + 1), RUNE[1], 0.25); }
-}
 
-/** Pen that shrinks the design grid by RS onto the texture (every texture pixel still gets one flat colour). */
-function scaled(p: Pen): Pen {
-  return {
-    px: (x, y, c, a) => p.px(Math.floor(x * RS), Math.floor(y * RS), c, a),
-    line: (x0, y0, x1, y1, c) => p.line(x0 * RS, y0 * RS, x1 * RS, y1 * RS, c),
-    rect: (x, y, w, h, c) => { for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) p.px(Math.floor((x + i) * RS), Math.floor((y + j) * RS), c); },
-    shaft: p.shaft,
-  };
-}
 
+/**
+ * The alchemy rig, modelled in 3D (isoPaint.ts; Murat 2026-11-13: the face-on version looked flat): a brazier bowl on
+ * three legs, an iron tripod holding the glass bulb of brew over it, a copper still running off to a flask on a stump,
+ * and three rune stones circling above.
+ */
 function rig(p0: Pen, f: number) {
-  const p = scaled(p0), RIG_BY = RBY0, RIG_W = RW0;
-  const ph = (f / N) * Math.PI * 2;
-  // ground shadow (on the texture grid itself, so the dither stays even)
-  for (let y = Math.round((RIG_BY - 6) * RS); y <= Math.round((RIG_BY + 7) * RS); y++) for (let x = 0; x < RIG_W * RS; x++) {
-    const dx = (x / RS - BX - 14) / 32, dy = (y / RS - RIG_BY - 1) / 6.5;
-    if (dx * dx + dy * dy <= 1 && dith(x, y) < 0.7) p0.px(x, y, 0x000000, 0.4);
-  }
-
+  const g = new IsoPaint(p0, RIG_W, RIG_H, 21, RIG_BY - 2), ph = (f / N) * Math.PI * 2;
+  const m = (pal: number[], b = 0) => (l: number, _s: number, _t: number, x: number, y: number) => ramp(pal, l + b, x, y);
+  g.shadow(5, 3, 15, 0.4);
   // rune stones on a slow orbit above the bulb: one full turn per loop of the sheet
-  const stones = [0, 1, 2].map((k) => {
-    const a = ph + k * (Math.PI * 2 / 3);
-    return { k, x: BX + Math.cos(a) * 19, y: 19 + Math.sin(a) * 5 + Math.sin(ph * 2 + k * 2) * 1.2, near: Math.sin(a) > 0 };
-  });
-  for (const s of stones) if (!s.near) runeStone(p, Math.round(s.x), Math.round(s.y), s.k, ph, false);
-
+  const stone = (k: number) => {
+    const a = ph + k * (Math.PI * 2 / 3), u = Math.cos(a) * 11, v = Math.sin(a) * 11, z = 48 + Math.sin(ph * 2 + k * 2) * 1.2;
+    const glow = 0.45 + Math.sin(ph * 2 + k * 2.1) * 0.35;
+    g.box(u - 1.3, u + 1.3, v - 1, v + 1, z - 2.4, z + 2.4, (l, s2, t, x, y) => {
+      const gx = Math.round(s2 * 4), gy = Math.round(t * 5);
+      const glyph = [[2, 1], [2, 2], [2, 3], [1, 2], [3, 3], [2, 4]].some(([i, j]) => ((i + k) % 4 || 1) === gx && j === gy);
+      return glyph ? ramp(RUNE, glow + 0.2, x, y) : ramp(SLATE, l + (hash(x, y, 11) < 0.1 ? -0.15 : 0), x, y);
+    });
+  };
+  [0, 1, 2].forEach(stone);
   // brazier: an iron bowl of coals on three short legs
-  for (const [lx, l2] of [[BX - 8, BX - 11], [BX + 8, BX + 11], [BX + 1, BX + 1]] as const) p.line(lx, RIG_BY - 10, l2, RIG_BY - (lx === BX + 1 ? 2 : 0), IRON[1]);
-  disc(p, BX, RIG_BY - 12, 10, 4, (x, y, dx, dy) => (dy < -0.2 ? undefined : step(IRON, 2.6 - dx * 1.2 + dy * 0.4, x, y)));
-  disc(p, BX, RIG_BY - 13, 9, 2.6, (x, y, dx) => {
-    const heat = 2.2 + hash(x, y, f >> 1) * 2.2 - Math.abs(dx) * 1.2;
-    return step(COALS, heat - 0.6, x, y);
+  for (let i = 0; i < 3; i++) { const a = i * 2.1 + 0.4; g.rod([Math.cos(a) * 4, Math.sin(a) * 4, 6], [Math.cos(a) * 6.5, Math.sin(a) * 6.5, 0], 0.5, m(IRON, -0.1)); }
+  g.blob([0, 0, 7], 6.5, 6.5, 3.6, m(IRON, -0.05), 0, 0.5);
+  g.surf((r, a) => [[Math.cos(a * 6.283) * r * 6, Math.sin(a * 6.283) * r * 6, 7 + (1 - r) * 0.6], [0, 0, 1]], 14, 70, (_l, r, _a, x, y) => ramp(COALS, 0.75 - r * 0.35 + (hash(x, y, f >> 1) - 0.5) * 0.4, x, y));
+  // tripod up to the ring the bulb sits in
+  for (let i = 0; i < 3; i++) { const a = i * 2.1 + 1.4; g.rod([Math.cos(a) * 9, Math.sin(a) * 9, 0], [Math.cos(a) * 4.6, Math.sin(a) * 4.6, 27], 0.55, m(IRON)); }
+  for (let i = 0; i < 24; i++) { const a0 = i / 24 * 6.283, a1 = (i + 1) / 24 * 6.283; g.rod([Math.cos(a0) * 4.8, Math.sin(a0) * 4.8, 27], [Math.cos(a1) * 4.8, Math.sin(a1) * 4.8, 27], 0.5, m(IRON, 0.05)); }
+  // the glass bulb: red brew glowing from the coals below the rocking meniscus, clear glass above
+  const BZ = 33, R = 7, level = BZ + 0.6 + Math.sin(ph * 2) * 0.4;
+  g.blob([0, 0, BZ], R, R, R, (l, _s, t, x, y) => {
+    const z = BZ - R + t * 2 * R;
+    if (z < level) return ramp(BREW, 0.5 + l * 0.35 - (z - (BZ - R)) * 0.02 + (z < BZ - R + 3 ? 0.15 : 0), x, y);
+    return l > 0.92 || dith(x, y) < 0.16 ? ramp(GLASS, l - 0.1, x, y) : undefined;
   });
-  // three iron rods up to the ring holding the bulb
-  for (const [x0, x1] of [[BX - 12, BX - 7], [BX + 12, BX + 7]]) p.line(x0, RIG_BY - 1, x1, RIG_BY - 34, IRON[2]);
-  p.line(BX + 1, RIG_BY - 4, BX + 1, RIG_BY - 34, IRON[1]);
-
-  // the glass bulb: red brew glowing from the coals, bubbles rising, the meniscus rocking
-  const bx = BX, by = RIG_BY - 46, R = 10;
-  const level = by - 1 + Math.sin(ph * 2) * 0.6;
-  disc(p, bx, by, R, R, (x, y, dx, dy) => {
-    const rim = dx * dx + dy * dy > 0.78;
-    if (y > level) {
-      const v = 3.4 - dy * 0.4 - dx * 0.8 + (y > by + R - 4 ? 0.8 : 0);
-      return rim ? step(BREW, v - 1.6, x, y) : step(BREW, v, x, y);
-    }
-    if (rim) return step(GLASS, 2.4 - dx * 1.4 - dy, x, y);
-    return dith(x, y) < 0.22 ? GLASS[2] : undefined; // see-through upper glass
-  });
-  // bubbles
-  for (let i = 0; i < 5; i++) {
-    const k = ((f + i * 2.4) % N) / N, x = Math.round(bx - 5 + i * 2.4 + Math.sin(k * 6 + i) * 1), y = Math.round(by + R - 3 - k * (R + 2));
-    if (y > level) p.px(x, y, BREW[5]); else if (y > level - 2) p.px(x, y, BREW[4]); // pops at the surface
+  for (let i = 0; i < 5; i++) { // bubbles rising in the brew
+    const k = ((f + i * 2.4) % N) / N, z = BZ - R + 1 + k * (level - BZ + R - 1);
+    g.plot(Math.cos(i * 2) * 3 + 4, Math.sin(i * 2) * 3 + 4, z, BREW[5], 2);
   }
-  p.px(bx - 5, by - 6, GLASS[4]); p.px(bx - 6, by - 5, GLASS[4]); p.px(bx - 6, by - 4, GLASS[3]); p.px(bx - 4, by - 7, GLASS[3]); // glint
-  // iron ring the bulb sits in
-  for (let i = -9; i <= 9; i++) p.px(bx + i, by + 7 + Math.round(Math.abs(i) * 0.12), step(IRON, 2.8 - i * 0.12, bx + i, by + 7));
-  // neck and the copper still running down to the receiving flask
-  for (let y = by - R - 6; y <= by - R + 1; y++) { p.px(bx - 1, y, GLASS[3]); p.px(bx, y, GLASS[2]); p.px(bx + 1, y, GLASS[1]); }
-  const tube: [number, number][] = [[bx, by - R - 6], [bx + 3, by - R - 10], [bx + 10, by - R - 12], [bx + 20, by - R - 8], [bx + 28, by - 4], [bx + 32, by + 10]];
-  for (let s = 0; s < tube.length - 1; s++) {
-    const [x0, y0] = tube[s], [x1, y1] = tube[s + 1], n = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0));
-    for (let i = 0; i <= n; i++) { const x = x0 + (x1 - x0) * i / n, y = y0 + (y1 - y0) * i / n; p.px(x, y, COPPER[3]); p.px(x, y + 1, COPPER[1]); p.px(x + 0.5, y - 1, COPPER[4]); }
-  }
-  // coil wound round the tube's middle (cooling worm)
-  for (let i = 0; i < 4; i++) { const x = bx + 20 + i * 2, y = by - R - 8 + i * 3.2; p.px(x - 1, y, COPPER[4]); p.px(x, y + 1, COPPER[2]); p.px(x + 1, y + 2, COPPER[1]); }
-
-  // stump with the receiving flask
-  const rx = bx + 34, ry = RIG_BY - 8;
-  for (let y = ry; y <= RIG_BY - 1; y++) for (let x = rx - 7; x <= rx + 7; x++) p.px(x, y, step(WOOD, 2.6 - (x - rx) * 0.25 + (hash(x, y >> 1, 2) - 0.5), x, y));
-  disc(p, rx, ry, 7, 2.5, (x, y, dx) => ((Math.round(Math.hypot((x - rx) / 1, (y - ry) * 2.8)) % 3 === 0) ? WOOD[1] : step(WOOD, 3 - dx, x, y)));
-  disc(p, rx - 1, ry - 7, 5, 5.5, (x, y, dx, dy) => {
-    const rim = dx * dx + dy * dy > 0.7;
-    if (dy > 0.1) return rim ? BREW[1] : step(BREW, 3 - dx - dy * 0.5, x, y);
-    return rim ? step(GLASS, 2.6 - dx * 1.4, x, y) : dith(x, y) < 0.22 ? GLASS[2] : undefined;
-  });
-  p.px(rx - 3, ry - 10, GLASS[4]);
-  for (let y = ry - 15; y <= ry - 12; y++) { p.px(rx - 2, y, GLASS[3]); p.px(rx - 1, y, GLASS[2]); }
-  // drip falling from the still into the flask
-  const dk = (f % 6) / 6, dy = Math.round(by + 11 + dk * 11);
-  p.px(bx + 32, dy, BREW[4]); if (dk > 0.2) p.px(bx + 32, dy - 1, BREW[3]);
-
+  g.rod([0, 0, BZ + R - 1], [0, 0, BZ + R + 4], 1, m(GLASS));
+  // copper still: from the neck, over, through a cooling coil, down into the flask
+  const tube: V3[] = [[0, 0, BZ + R + 4], [3, -1, BZ + R + 6.5], [9, -1, BZ + R + 6], [15, -1, BZ + 3], [18, -1, 15]];
+  for (let i = 0; i < tube.length - 1; i++) g.rod(tube[i], tube[i + 1], 0.6, m(COPPER, 0.05));
+  for (let i = 0; i < 4; i++) { const k = i / 4, q: V3 = [9 + 6 * k, -1, BZ + R + 6 - (BZ + R + 6 - BZ - 3) * k]; g.blob(q, 1.4, 1.4, 0.6, m(COPPER, 0.1)); }
+  // stump with the receiving flask, a drip falling into it
+  g.rod([18, -1, 0], [18, -1, 6], 4, (l, _s, _t, x, y) => ramp(WOOD, l - 0.05 + (hash(x, y >> 1, 2) - 0.5) * 0.2, x, y));
+  g.surf((r, a) => [[18 + Math.cos(a * 6.283) * r * 4, -1 + Math.sin(a * 6.283) * r * 4, 6], [0, 0, 1]], 10, 50, (l, r, _a, x, y) => (Math.round(r * 5) % 2 ? WOOD[1] : ramp(WOOD, l, x, y)));
+  g.blob([18, -1, 9.5], 3.4, 3.4, 3.4, (l, _s, t, x, y) => (t < 0.55 ? ramp(BREW, 0.45 + l * 0.3, x, y) : l > 0.8 || dith(x, y) < 0.25 ? ramp(GLASS, l, x, y) : undefined));
+  g.rod([18, -1, 12.5], [18, -1, 14.6], 0.8, m(GLASS));
+  const dk = (f % 6) / 6; g.plot(18, -1, 14.6 - dk * 2, BREW[4], 3);
   // embers drifting up off the coals
-  for (let i = 0; i < 4; i++) {
-    const k = ((f + i * 3) % N) / N, x = Math.round(BX - 6 + i * 4 + Math.sin(k * 7 + i) * 2), y = Math.round(RIG_BY - 14 - k * 16);
-    if (x < BX - 9 || x > BX + 9 || y > by + 6) p.px(x, y, k < 0.5 ? RUNE[3] : RUNE[1], 1 - k * 0.6); // stay out of the bulb
-  }
-
-  for (const s of stones) if (s.near) runeStone(p, Math.round(s.x), Math.round(s.y), s.k, ph, true);
+  for (let i = 0; i < 4; i++) { const k = ((f + i * 3) % N) / N; g.plot(Math.cos(i * 1.7) * 4, Math.sin(i * 1.7) * 4 + 4, 8 + k * 14, k < 0.5 ? RUNE[3] : RUNE[1], 1); }
 }
 
 /** Paints the camp textures and their idle animations. */
