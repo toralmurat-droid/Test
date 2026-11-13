@@ -15,14 +15,21 @@ How we work on Pixel Town Brawl together. The technical rules (architecture, lim
 
 Because merging is automatic, **anything merged is live within minutes.**
 
-## When to use a draft PR
-Open the PR as a **draft** (drafts never auto-merge) when:
-- it should not reach players yet (unbalanced, half a feature, waiting for art);
-- it changes save data, accounts or the deploy setup;
-- it changes balance for a class or the XP curve;
-- you want someone else to look first.
+## When a PR merges by itself
+A PR is opened ready (and merges by itself) only when it is fully tested:
+- CI passes (tests, build, smoke tests, patch-note check);
+- the automated tests for the change pass;
+- the reviewer agent's verdict is **OK TO MERGE**;
+- balance numbers are in the PR when combat, skills, monsters or XP changed.
 
-Mark it "Ready for review" when it's OK to ship; it then merges by itself.
+Anything else is opened as a **draft** (drafts never auto-merge), with what is missing in the description: half a
+feature, failing checks, open review findings, or anything you want someone to look at first. Mark it
+"Ready for review" when it's OK to ship.
+
+## Agents
+Work in Claude sessions is split across agents defined in `.claude/agents/`; the session you talk to orchestrates
+them. Roles, models and the flow are in the "Working with agents" section of [CLAUDE.md](CLAUDE.md). Hands-on QA
+(the `qa` agent playing the game) is slow and only runs when you ask for it.
 
 ## Big features
 Work that spans several sessions:

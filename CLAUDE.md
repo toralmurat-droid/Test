@@ -79,3 +79,33 @@ All of these must pass (CI runs 1–3 and the Postgres smoke test):
 - e2e scripts need a fresh save file per run; walking out of town can stall (the scripts re-route).
 - Colyseus decode errors (`refId not found`) show up now and then in e2e runs; still unexplained. Note it if you see it.
 - Big features that span several sessions keep a progress log in `docs/` (see `docs/summoner-rework-progress.md`).
+
+## Working with agents
+Agent definitions are in `.claude/agents/` (one file per role, with its model and tools). The session you talk to
+is the orchestrator: it splits the request, briefs agents, checks their reports and owns the branch and the PR.
+
+| Agent | Model | Does |
+|---|---|---|
+| `planner` | Opus | spec, file plan, risks, acceptance criteria (read-only) |
+| `gameplay-engineer` | Opus | `shared/`, `server/`: rules, skills, monsters, saves |
+| `client-engineer` | Sonnet | `client/`: UI, HUD, input, effects, sounds |
+| `art-audio` | Sonnet | generated art, icons, effects, sfx, music slots |
+| `content-writer` | Sonnet | quests, dialogue, monster and zone entries, patch notes |
+| `balance-analyst` | Sonnet | duel / PvE sims and bench, before and after (no code edits) |
+| `tester` | Sonnet | automated tests and checks (edits `tests/` only) |
+| `qa` | Sonnet | plays the game in a headless browser; **only when the user asks** |
+| `reviewer` | Opus | reviews the diff against this file; its verdict gates merging |
+| `scout` | Haiku | quick lookups (read-only) |
+
+Flow for a feature: planner → engineers / art / content → tester → balance-analyst (if combat, skills, monsters
+or XP changed) → reviewer → PR. QA is added only on request.
+- Small changes skip steps: a one-file fix can go straight to build, tests and reviewer. Don't spawn agents a task
+  doesn't need.
+- Brief each agent fully: it sees only the brief. Include the goal, the relevant part of the plan, files, the
+  acceptance criteria and what it must not touch.
+- Agents that edit files in parallel each work in their own worktree. Changes to `server/TownRoom.ts` go one after
+  another.
+- Give the reviewer the diff, not the orchestrator's opinion of it.
+- **Merge rule:** open the PR ready (not draft) only when CI passes, the tester passes, the reviewer says
+  **OK TO MERGE**, and balance numbers are in the PR when combat, skills, monsters or XP changed. It then merges by
+  itself. Otherwise open it as a draft and say what is missing.
