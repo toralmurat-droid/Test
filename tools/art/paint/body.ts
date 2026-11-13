@@ -1517,6 +1517,17 @@ function weapon(c: C2, r: Rig) {
       if (W.glowing) glowAlong(len - 1, len + 1, W.accent);
       break;
     }
+    case "spade": {
+      // The sexton's spade: a long ash shaft with a T-grip and a worn iron blade, earth still on it
+      const len = 12 * W.long;
+      limb(c, at(-3.0), at(len), 0.7, 0.62, C(WOOD));
+      line(c, [at(-3.0, -1.5), at(-3.0, 1.5)], C(WOOD), 0.5, 1);
+      const bl = poly([at(len - 0.3, -1.3), at(len - 0.3, 1.3), at(len + 3.2, 1.7), at(len + 4.4, 0), at(len + 3.2, -1.7)]);
+      metal(c, bl, W.g ? W.blade : C(0x8a9098), at(len, -1.7), at(len + 4.4, 1.7), 0.5);
+      line(c, [at(len + 2.4, -1.3), at(len + 3.6, 0)], C(0x4a3a28), 0.5, 0.9);
+      if (W.glowing) glowAlong(len - 1, len + 3, W.accent);
+      break;
+    }
     case "spear": {
       const len = 14 * W.long;
       limb(c, at(-6.5), at(len), 0.6, 0.55, C(WOOD));

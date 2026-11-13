@@ -883,8 +883,45 @@ const tombrobber = human({
 });
 export const ZONE_NPCS = ["huntsman", "miller", "forester", "beachcomber", "prospector", "caravaneer", "hermit", "dunescout", "defector", "monk", "tombrobber"] as const;
 
+// Quest-concept NPCs (docs/quest-concepts-progress.md): a gravedigger, three mourners, a Redfang girl, the watch quartermaster, a smuggler, an alewife
+const sexton = human({
+  name: "sexton", skin: 0xd0a07c, hair: 0xb4aea0, hairStyle: "short", beard: 0xc4beb0,
+  hat: { kind: "cap", col: 0x3a3028, trim: 0x2a221c }, shirt: 0x4e4234, sleeve: 0x5a4c3c, pants: 0x3a3630, boots: 0x2a2018, belt: 0x2a1c12, weapon: "staff", gait: "stroll",
+});
+const mourner1 = human({
+  name: "mourner1", skin: 0xe8c0a0, hair: 0x2a2024, hairStyle: "long",
+  hat: { kind: "hood", col: 0x1c1a24, trim: 0x34303e }, shirt: 0x24212c, apron: 0x2c2834, pants: 0x1e1c26, boots: 0x14121a, belt: 0x16141c, weapon: "none", gait: "stroll",
+});
+const mourner2 = human({
+  name: "mourner2", skin: 0xdcb08e, hair: 0xd0ccc4, hairStyle: "short", beard: 0xd4d0c8,
+  hat: { kind: "wide", col: 0x1a1a1e, trim: 0x3a3a42 }, shirt: 0x2a2a30, vest: 0x1a1a20, pants: 0x242428, boots: 0x121216, belt: 0x141418, weapon: "none", gait: "stroll", hipHand: true,
+});
+const mourner3 = human({
+  name: "mourner3", skin: 0xecc4a2, hair: 0x6a3a22, hairStyle: "short",
+  shirt: 0x3a3844, sleeve: 0x4a4854, pants: 0x2c2a34, boots: 0x18161c, belt: 0x1c1a22, weapon: "none", gait: "stroll",
+});
+const ilka = human({
+  name: "ilka", skin: 0xe2b490, hair: 0x7a2a18, hairStyle: "ponytail", eye: 0x3a5a2a,
+  hat: { kind: "bandana", col: 0x8e1f1a, trim: 0x5a1410 }, shirt: 0x5a4030, sleeve: 0x4a3a30, pants: 0x3a3a3a, boots: 0x231a14, belt: 0x2b1d14, weapon: "dagger", gait: "light",
+});
+const quartermaster = human({
+  name: "quartermaster", skin: 0xdcaa80, hair: 0x6a6a68, hairStyle: "short", beard: 0x6a6a68,
+  hat: { kind: "cap", col: 0x3e4e66, trim: 0xb08a3a }, shirt: 0x7a8490, pants: 0x3a3a46, boots: 0x2a2624, belt: 0x4a2f1c,
+  tabard: { col: 0x2e4468, emblem: 0xf2c14e }, weapon: "none", gait: "march", hipHand: true,
+});
+const smuggler = human({
+  name: "smuggler", skin: 0xc8a284, hair: 0x2a2a2e, hairStyle: "short", beard: 0x2a2a2e,
+  hat: { kind: "hood", col: 0x3a4a52, trim: 0x24323a }, shirt: 0x3e5058, sleeve: 0x34444c, pants: 0x2e3a40, boots: 0x1e1812, belt: 0x1e1810, weapon: "dagger", gait: "sneak",
+});
+const alewife = human({
+  name: "alewife", skin: 0xeab08a, hair: 0xb8501e, hairStyle: "long",
+  hat: { kind: "bandana", col: 0xe4dcc4, trim: 0xb8aa88 }, shirt: 0xd8c8a8, apron: 0xe8e0cc, vest: 0x7a3a2a, pants: 0x7a3a2a, boots: 0x3a281a, belt: 0x5a3a22, weapon: "none", gait: "stroll", hipHand: true,
+});
+export const QUEST_NPCS = ["sexton", "mourner1", "mourner2", "mourner3", "ilka", "quartermaster", "smuggler", "alewife"] as const;
+
 export const NPCS: Hero[] = [blacksmith, merchant, villager, guard, druid, witch, watchman, ...FOLK.map((n) => folk(n)), wellkeeper, sandcaptain, spicetrader, desertsmith, armourer, saltarmourer, sandarmourer,
-  huntsman, miller, forester, beachcomber, prospector, caravaneer, hermit, dunescout, defector, monk, tombrobber];
+  huntsman, miller, forester, beachcomber, prospector, caravaneer, hermit, dunescout, defector, monk, tombrobber,
+  sexton, mourner1, mourner2, mourner3, ilka, quartermaster, smuggler, alewife];
 /** Pose data for monsters painted with the character painter (paint/mobs.ts); never drawn as pixel art. */
 const mobPose = (name: string, weapon: HumanOpts["weapon"]) => human({ name, skin: 0, hair: 0, hairStyle: "bald", shirt: 0, pants: 0, boots: 0, weapon });
 export const MOB_POSES: Record<string, Hero> = {
