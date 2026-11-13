@@ -1,5 +1,6 @@
 import { respecCost } from "../../shared/upkeep";
 import { ClassKind, CLASSES } from "../../shared/classes";
+import { DEGREE_GLOSS } from "./songTables";
 import { icon as pxIcon } from "./pixelicons";
 import { slotKey } from "./keymode";
 import { Stats } from "../../shared/powers";
@@ -99,7 +100,7 @@ export class TalentMenu {
       ? `<b class="free">${free} skill point${free > 1 ? "s" : ""} to spend</b>`
       : state.level < 2 ? "You start with a basic attack only. Reach level 2 for your first skill point." : "No points left. You get 1 point per level.") +
       `<span class="treehint">Follow the stone paths: a node needs the one before it. Upgrades change the spell at the start of their path. ` +
-      (cls === "summoner" ? `Your creatures going back to the Void build Essence (up to 5) for the ultimates.</span>` : `Basic hits build ${STACK_NAME[cls]} (up to 5) for some skills.</span>`);
+      (cls === "summoner" ? `Your creatures going back to the Void build Essence (up to 5) for the ultimates.</span>` : cls === "songweaver" ? `Every skill is a note on the scale. Three in the right order ring a chord by themselves. Hover a skill to see its step.</span>` : `Basic hits build ${STACK_NAME[cls]} (up to 5) for some skills.</span>`);
 
     const W = slabWidth(cls);
     const { nodes: layout, cols } = treeLayout(cls, W, H);
@@ -281,6 +282,10 @@ export class TalentMenu {
       const now = Math.round((synergyPower(s, ranks) - 1) * 100);
       rows.push(`<p class="iscale">Synergies: ${s.synergy.map((y) => `+${y.pct}% per rank of ${nameOf(y.from)}`).join(", ")}${now > 0 ? ` (now +${now}%)` : ""}</p>`);
     }
+    if (s.degree) { // Songweaver: which step of the scale it plays, and at which note height (content doc: "note", never "pitch")
+      const ht = s.pitch === "L" ? "a low note" : s.pitch === "H" ? "a high note" : s.pitch === "any" ? "every note at once" : "a middle note";
+      rows.push(`<p class="iscale">Plays ${ht}, step ${s.degree}: ${DEGREE_GLOSS[s.degree] ?? ""}.</p>`);
+    }
     const kids = childrenOf(cls, s.id);
     const parent = s.parent && SKILLS[cls].find((x) => x.id === s.parent);
     const missing = (s.requires ?? []).filter((q) => rankOf(ranks, q) < 1).map((q) => SKILLS[cls].find((x) => x.id === q)?.name ?? q);
@@ -332,6 +337,14 @@ const SLAB_THEMES: Record<string, { base: string; blotch: string; grain: string;
       for (let k = 0; k < 12; k++) { x += (rnd() - 0.5) * 40; y += (rnd() - 0.4) * 30; g.lineTo(x, y); }
       g.strokeStyle = `rgba(170,20,35,${0.25 + rnd() * 0.25})`; g.lineWidth = 0.8 + rnd(); g.stroke();
     }
+    g.restore();
+  } },
+  // Songweaver: warm walnut with faint staff lines and notes
+  songweaver: { base: "#33261a", blotch: "rgba(210,160,80,0.10)", grain: "225,190,130", crack: "rgba(20,10,4,0.55)", motif: (g, w, h, rnd) => {
+    g.save(); g.strokeStyle = "rgba(255,210,120,0.10)"; g.lineWidth = 1;
+    for (let b = 0; b < 3; b++) { const y0 = h * (0.2 + b * 0.28); for (let l = 0; l < 5; l++) { g.beginPath(); g.moveTo(0, y0 + l * 5); g.lineTo(w, y0 + l * 5); g.stroke(); } }
+    g.fillStyle = "rgba(255,210,120,0.14)";
+    for (let i = 0; i < 14; i++) { const x = 20 + rnd() * (w - 40), y = h * (0.2 + Math.floor(rnd() * 3) * 0.28) + Math.floor(rnd() * 5) * 2.5; g.beginPath(); g.ellipse(x, y, 3.2, 2.4, -0.3, 0, Math.PI * 2); g.fill(); g.fillRect(x + 2.4, y - 12, 1, 12); }
     g.restore();
   } },
   // Summoner: dark teal stone with faded ritual circles

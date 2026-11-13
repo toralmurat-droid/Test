@@ -2734,7 +2734,7 @@ export class TownScene extends Phaser.Scene {
       if (e) this.floatText(e.sprite.x, e.sprite.y - e.top - 14, CHORD_NAMES[ev.prog] ?? ev.prog, `#${c}`, PIXEL_FONT, 1.3);
     } else if (ev.ev === "soundhit") {
       const e = this.entities.get(ev.id), meE = this.entities.get(this.me);
-      const mineSong = (this.room.state as any).players?.get(this.me)?.cls === "songweaver" || !!(globalThis as any).__devSong;
+      const mineSong = (this.room.state as any).players?.get(this.me)?.cls === "songweaver";
       const near = !!e && !!meE && Math.hypot(e.sprite.x - meE.sprite.x, e.sprite.y - meE.sprite.y) < 12 * TILE;
       const hint = mineSong && near && e?.mob ? { kind: e.state.kind as string, name: MOBS[e.state.kind as MobKind]?.name ?? "It" } : undefined;
       const say = this.soundCues.onSoundHit(ev, this.time.now, (text, col) => { if (e) this.floatText(e.sprite.x, e.sprite.y - 28, text, col, PIXEL_FONT, 1); }, hint);
@@ -2970,6 +2970,7 @@ export class TownScene extends Phaser.Scene {
     stepInterpDelay(step);
     // An easing written for 60 fps (k per frame), adjusted so it pulls just as hard at 30, 120 or 144 fps
     const ease = (k: number) => 1 - Math.pow(1 - k, step / (1000 / 60));
+    this.soundCues.hideIcons();
     for (const [id, e] of this.entities) {
       const p = e.state;
       const rooted = (typeof p.fx === "string" && p.fx.includes("charge")) || (id === this.me && this.time.now < this.rootUntil); // a buildup roots the hero, a dash glides
@@ -3144,8 +3145,8 @@ export class TownScene extends Phaser.Scene {
       this.fx.status(e, e.bar, dtMs / 1000);
       // Songweaver: how this monster hears (ear tier + pitch arrow) beside its name while hovered / targeted
       if (e.mob && e.label && !p.dead && !p.hidden && (id === this.pointer?.hoverId || id === this.pointer?.targetId)
-        && ((this.room.state as any).players?.get(this.me)?.cls === "songweaver" || (globalThis as any).__devSong) && soundOf(p.kind)) {
-        this.soundCues.drawEar(e.bar, Math.round(x + e.label.displayWidth / 2 + 3), Math.round(mobBarY - 10), p.kind);
+        && (this.room.state as any).players?.get(this.me)?.cls === "songweaver" && soundOf(p.kind)) {
+        this.soundCues.drawIcons(this, Math.round(x + e.label.displayWidth / 2 + 3), Math.round(mobBarY - 10), p.kind, e.sprite.y + 3, id === this.pointer?.hoverId, PIXEL_FONT);
       }
       // (Stacks built by basic hits are shown by the skill keys, see chargeCell: no pips under the hero, Murat 2026-11-04)
       const maxHp = p.maxHp;
