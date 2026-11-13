@@ -33,7 +33,7 @@ export function perfHud(): void {
   // ---- panel
   const box = document.createElement("div");
   box.style.cssText = "position:fixed;left:6px;top:6px;z-index:99999;background:rgba(0,0,0,.82);color:#e8ffe8;" +
-    `font:${innerWidth < 600 ? 11 : 14}px/1.25 'Pixelify Sans',monospace;padding:6px 8px;border:2px solid #6c6;max-width:92vw;` +
+    `font:${innerWidth < 600 ? 11 : 14}px/1.25 ui-monospace,Menlo,Consolas,monospace;padding:6px 8px;border:2px solid #6c6;max-width:92vw;` +
     "pointer-events:auto;white-space:pre-wrap;overflow-wrap:anywhere;box-sizing:border-box;overflow:hidden";
   const pre = document.createElement("div");
   const btn = document.createElement("button");
