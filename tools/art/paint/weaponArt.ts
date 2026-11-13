@@ -27,6 +27,7 @@ const F: Record<string, Form & { by?: Partial<Record<string, Form>> }> = {
   wizard_weapon: { top: "orb" },
   archer_weapon: { bow: "self" },
   barbarian_weapon: { head: "broad", grip: 0x5a3a22 },
+  songweaver_weapon: {}, // the lute has one shape (see lute() below)
   vampire_weapon: { edge: "straight", len: 1.06, wid: 0.72, guard: "ringcross", pommel: "gem", gem: 0xc0182a, grip: 0x1a1014, fuller: true, trim: 0x9e1b2c },
   // old class weapons (shape follows the class)
   w_bronze: { edge: "leaf", guard: "disc", pommel: "ball", len: 0.92, head: "beard", top: "gnarl", bow: "self" },
@@ -70,6 +71,7 @@ export interface WCtx {
   c: C2; h: P; u: P; n: P; kind: string; f: Form;
   blade: number; accent: number; long: number; attack: number; move?: string;
   C: (c: number) => number; // weathering dim of the body painter
+  icon?: boolean;           // drawn for an item icon: no carrying pose
 }
 
 const DECO_COL: Record<Deco, number> = { frost: 0xd6f6ff, flame: 0xff9f1c, holy: 0xffd166, drip: 0x9bdc4a, none: 0 };
@@ -82,6 +84,7 @@ export function drawFormWeapon(w: WCtx): boolean {
     case "bow": bow(w); return true;
     case "staff": staff(w); return true;
     case "wand": wand(w); return true;
+    case "lute": lute(w); return true;
     default: return false;
   }
 }
@@ -377,6 +380,30 @@ function top(w: WCtx, t: number, wood: number, stone: number, small: boolean) {
       break;
     }
   }
+}
+
+/**
+ * The Songweaver's lute, held by the neck: the pear-shaped belly hangs behind the hand, the bent-back peg head points
+ * along the aim. At rest (attack < 0) it is carried higher and a little shorter, belly at the waist, so it does not
+ * dangle at the knee; the swing poses and the icon use the full length.
+ */
+function lute(w: WCtx) {
+  const { c } = w, rest = w.attack < 0 && !w.icon, lift = rest ? 6.2 : 0, sc = rest ? 0.8 : 1;
+  const T = (t: number, o = 0) => at(w, t * sc + lift, o);
+  const ang = Math.atan2(w.u[1], w.u[0]), body = 0xb8742e, dark = 0x4a2812;
+  const bc = T(-3.9), neckEnd = T(6.4), head = T(7.6, 0.55);
+  limb(c, T(-1.2), neckEnd, 1.05, 0.9, w.C(0x7a4a24));                       // neck
+  limb(c, neckEnd, head, 0.95, 1.05, w.C(0x5a3418));                          // bent-back peg head
+  for (let k = 0; k < 3; k++) for (const sgn of [-1, 1]) { const q = T(6.9 + k * 0.4, 0.55 + sgn * 0.55); fillShape(c, ellipseP(q[0], q[1], 0.2, 0.2), css(w.C(0xe8d9a8))); }
+  // belly: round bowl with a darker rim, rosette sound-hole, bridge
+  fillShape(c, ellipseP(bc[0], bc[1], 3.35, 2.55, ang), css(sh(w.C(body), 0.55)));
+  vol(c, ellipseP(bc[0], bc[1], 3.1, 2.3, ang), w.C(body), [bc[0] - 3, bc[1] - 2.6, 6, 5.2], { ao: 0.3, hi: 1.35, spec: 0.35 });
+  const rose = T(-3.0);
+  fillShape(c, ellipseP(rose[0], rose[1], 0.95, 0.95), css(w.C(dark)));
+  line(c, [T(-2.4, 0.4), T(-3.6, 0.4)], w.C(0xe8d9a8), 0.12, 0.7);
+  line(c, [T(-5.1, -1.0), T(-5.1, 1.0)], w.C(0x2a1608), 0.3);                // bridge
+  for (const o of [-0.22, 0, 0.22]) line(c, [T(-5.0, o), T(6.6, 0.55 + o * 0.6)], w.C(0xf4ecd4), 0.07, w.attack >= 1 ? 0.95 : 0.75); // strings
+  curve(c, T(-5.6, 0.2), T(-8, 2.2), T(-9.5, 0.4), w.C(0x5a3a22), 0.3, 0.9); // a leather strap looping to the shoulder
 }
 
 function staff(w: WCtx) {

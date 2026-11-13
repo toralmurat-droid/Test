@@ -10,8 +10,8 @@ const MODE_BADGE: Record<string, { rim: string; fill: string; hi: string; glyph:
   major: { rim: "#7a5a0a", fill: "#ffd166", hi: "#fff3b0", glyph: "#6b4a12", art: ["...c..c...", "..........", "c..cccc..c", "..cccccc..", "..cccccc..", "..cccccc..", "c..cccc..c", "..........", "...c..c...", ".........."] },
   // minor: a crescent moon
   minor: { rim: "#16305c", fill: "#4a90e2", hi: "#a6cdfa", glyph: "#ffffff", art: [".........", "..ccccc..", ".cc......", ".cc......", ".cc......", ".cc......", ".cc......", "..ccccc..", ".........", "........."] },
-  // lydian: a raised arrow (the sharp fourth)
-  lydian: { rim: "#5b4a99", fill: "#d9c8ff", hi: "#f6efff", glyph: "#3d2f80", art: ["....cc....", "...cccc...", "..cccccc..", ".cc.cc.cc.", "....cc....", "....cc....", "....cc....", "....cc....", "..........", ".........."] },
+  // lydian: a sharp sign (the raised fourth)
+  lydian: { rim: "#5b4a99", fill: "#d9c8ff", hi: "#f6efff", glyph: "#3d2f80", art: ["...c..c...", "...c..c...", ".cccccccc.", "...c..c...", "...c..c...", ".cccccccc.", "...c..c...", "...c..c...", "..........", ".........."] },
   // dorian: a leaf
   dorian: { rim: "#1f4d16", fill: "#6fbf4a", hi: "#c4f0a8", glyph: "#1f4d16", art: ["........cc", "......cccc", "....cccccc", "...ccccc.c", "..cccc.c..", ".cccc.c...", ".ccc.c....", "cc.c......", "c.........", ".........."] },
   // phrygian: a flat sign
@@ -48,8 +48,8 @@ const EAR_ICONS: Record<string, Icon> = {
   sgear_normal: { pal: EAR_PAL, px: EAR },
   // keen: the open ear with sound lines
   sgear_keen: { pal: EAR_PAL, px: overlay(EAR, ["..........l.", "........l...", ".........l.l", "...........l", ".........l.l", "........l...", "..........l.", "............", "............", "............", "............", "............"]) },
-  // fragile: a crystal ear with a crack
-  sgear_fragile: { pal: { ...EAR_PAL, e: "#bfeaff", o: "#2a6fa0" }, px: overlay(EAR, ["............", "............", "...k........", "....k.......", "...k........", "....k.......", ".....k......", "....k.......", "............", "............", "............", "............"]) },
+  // fragile: a crystal ear, faceted, with a dark crack splitting it and a falling shard
+  sgear_fragile: { pal: { ...EAR_PAL, e: "#bfeaff", o: "#2a6fa0", i: "#f2fbff", j: "#6fb6d9" }, px: overlay(EAR, ["............", "...ii.......", "..i.........", "....k.......", "...kk.i.....", "....k.jj....", ".....kk.....", "....kk......", "....k.j.....", "...j........", "............", "........j..."]) },
 };
 
 const PITCH_ICONS: Record<string, Icon> = {
