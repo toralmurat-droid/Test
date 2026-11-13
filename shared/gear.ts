@@ -17,7 +17,7 @@ export const SLOT_NAMES: Record<GearSlot, string> = { weapon: "Weapon", ranged: 
 export const RANGED_KEY = "R";
 
 export interface GearBonus {
-  atk?: number; // added to the hero's attack stat (Strength or Magic, by class)
+  atk?: number; // unused since gear adds no damage (2026-11-13); old saves may still carry it, gearDef drops it
   sta?: number;
   str?: number;
   mag?: number;
@@ -25,7 +25,7 @@ export interface GearBonus {
   speed?: number; // fraction, 0.1 = +10% move speed
   reach?: number; // fraction, 0.4 = melee reach and projectile range +40%
   block?: number; // fraction of incoming damage the shield stops
-  // Elemental damage added to every basic hit (weapons), and resistances in percent (armour, shields, hats). shared/elements.ts
+  // Elemental damage per hit (unused since 2026-11-13, see liveAffixes), and resistances in percent (armour, shields, hats). shared/elements.ts
   fireDmg?: number; coldDmg?: number; poisonDmg?: number; faithDmg?: number; shockDmg?: number;
   fireRes?: number; coldRes?: number; poisonRes?: number; faithRes?: number; shockRes?: number;
 }
@@ -75,13 +75,13 @@ export const weaponStat = (t: WeaponType): "mag" | "str" => (t === "staff" || t 
 
 const G = (d: GearDef) => d;
 export const GEAR: Record<string, GearDef> = Object.fromEntries([
-  G({ id: "w_bronze", slot: "weapon", tier: 1, name: "Bronze", bonus: { atk: 2 }, color: 0xcd7f32, accent: 0xffd08a, style: "plain" }),
-  G({ id: "w_frost", slot: "weapon", tier: 2, name: "Frost", bonus: { atk: 4, mag: 1 }, elem: { el: "cold", share: 0.4 }, color: 0x7fd8ff, accent: 0xe8fbff, style: "plain" }),
-  G({ id: "w_dragon", slot: "weapon", tier: 3, name: "Dragonfire", bonus: { atk: 7, str: 1 }, elem: { el: "fire", share: 0.5 }, color: 0xff5a1f, accent: 0xffc247, style: "glow" }),
+  G({ id: "w_bronze", slot: "weapon", tier: 1, name: "Bronze", bonus: {}, color: 0xcd7f32, accent: 0xffd08a, style: "plain" }),
+  G({ id: "w_frost", slot: "weapon", tier: 2, name: "Frost", bonus: { mag: 1 }, elem: { el: "cold", share: 0.4 }, color: 0x7fd8ff, accent: 0xe8fbff, style: "plain" }),
+  G({ id: "w_dragon", slot: "weapon", tier: 3, name: "Dragonfire", bonus: { str: 1 }, elem: { el: "fire", share: 0.5 }, color: 0xff5a1f, accent: 0xffc247, style: "glow" }),
   // Long weapons: more reach (bigger melee arc, longer shots) for a bit less attack
-  G({ id: "w_ash", slot: "weapon", tier: 1, name: "Ashwood Long", bonus: { atk: 1, reach: 0.25 }, color: 0xa87444, accent: 0xe0b98a, style: "long" }),
-  G({ id: "w_long", slot: "weapon", tier: 2, name: "Longreach", bonus: { atk: 3, reach: 0.4 }, color: 0xc8d6e0, accent: 0x4cc9f0, style: "long" }),
-  G({ id: "w_sky", slot: "weapon", tier: 3, name: "Skyreach", bonus: { atk: 5, reach: 0.6 }, elem: { el: "faith", share: 0.4 }, color: 0xffd166, accent: 0xfff3b0, style: "longglow" }),
+  G({ id: "w_ash", slot: "weapon", tier: 1, name: "Ashwood Long", bonus: { reach: 0.25 }, color: 0xa87444, accent: 0xe0b98a, style: "long" }),
+  G({ id: "w_long", slot: "weapon", tier: 2, name: "Longreach", bonus: { reach: 0.4 }, color: 0xc8d6e0, accent: 0x4cc9f0, style: "long" }),
+  G({ id: "w_sky", slot: "weapon", tier: 3, name: "Skyreach", bonus: { reach: 0.6 }, elem: { el: "faith", share: 0.4 }, color: 0xffd166, accent: 0xfff3b0, style: "longglow" }),
   G({ id: "sh_wood", slot: "shield", tier: 1, name: "Wooden Shield", bonus: { sta: 1, block: 0.05 }, color: 0x9a6634, accent: 0x6f7883, style: "round" }),
   G({ id: "sh_iron", slot: "shield", tier: 2, name: "Iron Shield", bonus: { sta: 2, block: 0.1, coldRes: 10 }, color: 0xa3acb6, accent: 0x5a626c, style: "kite" }),
   G({ id: "sh_dragon", slot: "shield", tier: 3, name: "Dragon Shield", bonus: { sta: 4, block: 0.15, fireRes: 20 }, color: 0xb3262e, accent: 0xf2c14e, style: "kite" }),
@@ -101,20 +101,20 @@ export const GEAR: Record<string, GearDef> = Object.fromEntries([
   G({ id: "h_helm", slot: "hat", tier: 2, name: "Iron Helm", bonus: { sta: 3, str: 1 }, color: 0x9aa3ad, accent: 0x5a626c, style: "helm" }),
   G({ id: "h_crown", slot: "hat", tier: 3, name: "Golden Crown", bonus: { sta: 2, str: 2, mag: 3, faithRes: 15 }, color: 0xf2c14e, accent: 0xe63946, style: "crown" }),
   // Typed weapons: they change how any hero attacks (an archer with a sword fights in melee, a knight with a bow shoots)
-  G({ id: "wb_hunt", slot: "weapon", tier: 1, wtype: "bow", name: "Hunting Bow", bonus: { atk: 2 }, color: 0x8a5a32, accent: 0xe9e2d0, style: "bow" }),
-  G({ id: "wb_recurve", slot: "weapon", tier: 2, wtype: "bow", name: "Recurve Bow", bonus: { atk: 4, dex: 1 }, color: 0x4a2e1c, accent: 0xd9a93a, style: "bow" }),
-  G({ id: "ws_arming", slot: "weapon", tier: 1, wtype: "sword", name: "Arming Sword", bonus: { atk: 2 }, color: 0xb9c2cc, accent: 0x8a5a32, style: "plain" }),
-  G({ id: "ws_bastard", slot: "weapon", tier: 2, wtype: "sword", name: "Bastard Sword", bonus: { atk: 4, sta: 1 }, color: 0xd6dde4, accent: 0xd9a93a, style: "plain" }),
-  G({ id: "wx_hand", slot: "weapon", tier: 1, wtype: "axe", name: "Hand Axe", bonus: { atk: 2 }, color: 0x8a939b, accent: 0x6b4226, style: "axe" }),
-  G({ id: "wk_tanto", slot: "weapon", tier: 2, wtype: "katana", name: "Wanderer's Katana", bonus: { atk: 3, dex: 1 }, color: 0xc9cdd6, accent: 0x8a2230, style: "plain" }),
-  G({ id: "wf_oak", slot: "weapon", tier: 1, wtype: "staff", name: "Oak Staff", bonus: { atk: 2 }, color: 0x7a4f2a, accent: 0x9be8ff, style: "long" }),
-  G({ id: "ww_ash", slot: "weapon", tier: 1, wtype: "wand", name: "Ash Wand", bonus: { atk: 2 }, elem: { el: "cold", share: 0.25 }, color: 0xb08a5a, accent: 0x9be8ff, style: "wand" }),
-  G({ id: "ww_bone", slot: "weapon", tier: 2, wtype: "wand", name: "Bone Wand", bonus: { atk: 4, mag: 1 }, elem: { el: "poison", share: 0.4 }, color: 0xe6dcc0, accent: 0x9bdc4a, style: "wand" }),
-  G({ id: "ww_star", slot: "weapon", tier: 3, wtype: "wand", name: "Starfire Wand", bonus: { atk: 7, mag: 1 }, elem: { el: "faith", share: 0.4 }, color: 0x3a2a4a, accent: 0xffc247, style: "wand" }),
+  G({ id: "wb_hunt", slot: "weapon", tier: 1, wtype: "bow", name: "Hunting Bow", bonus: {}, color: 0x8a5a32, accent: 0xe9e2d0, style: "bow" }),
+  G({ id: "wb_recurve", slot: "weapon", tier: 2, wtype: "bow", name: "Recurve Bow", bonus: { dex: 1 }, color: 0x4a2e1c, accent: 0xd9a93a, style: "bow" }),
+  G({ id: "ws_arming", slot: "weapon", tier: 1, wtype: "sword", name: "Arming Sword", bonus: {}, color: 0xb9c2cc, accent: 0x8a5a32, style: "plain" }),
+  G({ id: "ws_bastard", slot: "weapon", tier: 2, wtype: "sword", name: "Bastard Sword", bonus: { sta: 1 }, color: 0xd6dde4, accent: 0xd9a93a, style: "plain" }),
+  G({ id: "wx_hand", slot: "weapon", tier: 1, wtype: "axe", name: "Hand Axe", bonus: {}, color: 0x8a939b, accent: 0x6b4226, style: "axe" }),
+  G({ id: "wk_tanto", slot: "weapon", tier: 2, wtype: "katana", name: "Wanderer's Katana", bonus: { dex: 1 }, color: 0xc9cdd6, accent: 0x8a2230, style: "plain" }),
+  G({ id: "wf_oak", slot: "weapon", tier: 1, wtype: "staff", name: "Oak Staff", bonus: {}, color: 0x7a4f2a, accent: 0x9be8ff, style: "long" }),
+  G({ id: "ww_ash", slot: "weapon", tier: 1, wtype: "wand", name: "Ash Wand", bonus: {}, elem: { el: "cold", share: 0.25 }, color: 0xb08a5a, accent: 0x9be8ff, style: "wand" }),
+  G({ id: "ww_bone", slot: "weapon", tier: 2, wtype: "wand", name: "Bone Wand", bonus: { mag: 1 }, elem: { el: "poison", share: 0.4 }, color: 0xe6dcc0, accent: 0x9bdc4a, style: "wand" }),
+  G({ id: "ww_star", slot: "weapon", tier: 3, wtype: "wand", name: "Starfire Wand", bonus: { mag: 1 }, elem: { el: "faith", share: 0.4 }, color: 0x3a2a4a, accent: 0xffc247, style: "wand" }),
   // Elemental weapons of the first zone (Tier I: one element, at most half the hit)
-  G({ id: "ws_pilgrim", slot: "weapon", tier: 1, wtype: "sword", name: "Pilgrim's Sword", bonus: { atk: 2 }, elem: { el: "faith", share: 0.3 }, color: 0xd8d2c0, accent: 0xf2d27a, style: "plain" }),
-  G({ id: "wx_ember", slot: "weapon", tier: 2, wtype: "axe", name: "Ember Axe", bonus: { atk: 4 }, elem: { el: "fire", share: 0.35 }, color: 0x8a7064, accent: 0xff8a3c, style: "axe" }),
-  G({ id: "wb_thorn", slot: "weapon", tier: 2, wtype: "bow", name: "Thornbow", bonus: { atk: 4 }, elem: { el: "poison", share: 0.4 }, color: 0x3e4a26, accent: 0x9bdc4a, style: "bow" }),
+  G({ id: "ws_pilgrim", slot: "weapon", tier: 1, wtype: "sword", name: "Pilgrim's Sword", bonus: {}, elem: { el: "faith", share: 0.3 }, color: 0xd8d2c0, accent: 0xf2d27a, style: "plain" }),
+  G({ id: "wx_ember", slot: "weapon", tier: 2, wtype: "axe", name: "Ember Axe", bonus: {}, elem: { el: "fire", share: 0.35 }, color: 0x8a7064, accent: 0xff8a3c, style: "axe" }),
+  G({ id: "wb_thorn", slot: "weapon", tier: 2, wtype: "bow", name: "Thornbow", bonus: {}, elem: { el: "poison", share: 0.4 }, color: 0x3e4a26, accent: 0x9bdc4a, style: "bow" }),
   ...starterKits(),
 ].map((d) => [d.id, d]));
 export const GEAR_IDS = Object.keys(GEAR);
@@ -285,17 +285,13 @@ export const BOSS_LUCK: Partial<Record<MobKind, number>> = { demon: 3, necromanc
 
 export type Equipped = Partial<Record<GearSlot, string>>;
 
-/** Stat points added by the equipped items. Weapon `atk` goes to the class's attack stat. */
+/** Stat points added by the equipped items. */
 export function gearStats(cls: string, eq: Equipped): Stats {
   const out: Stats = { sta: 0, str: 0, mag: 0, dex: 0 };
-  const clsStat = (STATS as Record<string, { attackStat: keyof Stats }>)[cls]?.attackStat ?? "str";
   for (const s of GEAR_SLOTS) {
     const b = eq[s] ? gearDef(eq[s]!)?.bonus : undefined;
     if (!b) continue;
     out.sta += b.sta ?? 0; out.str += b.str ?? 0; out.mag += b.mag ?? 0; out.dex += b.dex ?? 0;
-    // a weapon's attack goes to the stat it hits with (a wand: Magic, a sword: Strength), anything else to the class's
-    const atkStat = s === "weapon" ? weaponStat(weaponType(cls, eq.weapon)) : clsStat;
-    out[atkStat] += b.atk ?? 0;
   }
   return out;
 }
@@ -323,7 +319,7 @@ export function gearName(id: string, cls?: string): string {
   const d = gearDef(id);
   if (!d) return id;
   const name = d.slot === "weapon" && !d.wtype ? `${d.name} ${cls ? WEAPON_TYPE_NAMES[weaponType(cls, id)] : "Weapon"}` : d.name;
-  const aff = itemAffixes(id);
+  const aff = liveAffixes(id);
   if (!aff.length) return name;
   // Strongest bonus gives the first word, the next one the "of ..." ending
   const top = [...aff].sort((a, b) => b.value / affixMax(b.key, itemLevel(id), 3) - a.value / affixMax(a.key, itemLevel(id), 3));
@@ -409,6 +405,14 @@ const growFrac = (v: number | undefined, l: number) => (v ? Math.round(v * (1 + 
 
 const growPct = (v: number | undefined, l: number) => (v ? Math.round(v * (1 + ILVL_GROWTH_FRAC * (l - 1))) : v);
 
+/**
+ * Gear adds no damage (Murat 2026-11-13): no attack bonus, no flat elemental damage. Hero damage comes from the class,
+ * stat points, talents and skills. Old item ids keep these bonuses in their text so they still round-trip; gearDef drops them.
+ */
+const DAMAGE_AFFIXES = new Set<AffixKey>(["atk", "fdm", "cdm", "pdm", "hdm", "sdm"]);
+/** Random bonuses that still do something (old damage rolls are dropped). */
+export const liveAffixes = (id: string) => itemAffixes(id).filter((a) => !DAMAGE_AFFIXES.has(a.key));
+
 const defCache = new Map<string, GearDef>();
 /** Item definition with its bonuses scaled to the item level. `id` is the full id; art and icons use baseId(id). */
 export function gearDef(id: string): GearDef | undefined {
@@ -424,13 +428,12 @@ export function gearDef(id: string): GearDef | undefined {
   const d = GEAR[baseId(id)];
   if (!d) return undefined;
   const l = itemLevel(id);
-  const affixes = itemAffixes(id);
+  const affixes = liveAffixes(id);
   if (l <= 1 && !affixes.length) return d;
   const b = d.bonus;
   const bonus: GearBonus = Object.fromEntries(Object.entries({
-    atk: growInt(b.atk, l), sta: growInt(b.sta, l), str: growInt(b.str, l), mag: growInt(b.mag, l), dex: growInt(b.dex, l),
+    sta: growInt(b.sta, l), str: growInt(b.str, l), mag: growInt(b.mag, l), dex: growInt(b.dex, l),
     speed: growFrac(b.speed, l), reach: growFrac(b.reach, l), block: growFrac(b.block, l),
-    fireDmg: growInt(b.fireDmg, l), coldDmg: growInt(b.coldDmg, l), poisonDmg: growInt(b.poisonDmg, l), faithDmg: growInt(b.faithDmg, l), shockDmg: growInt(b.shockDmg, l),
     // resistances grow gently, like the other percent bonuses
     fireRes: growPct(b.fireRes, l), coldRes: growPct(b.coldRes, l), poisonRes: growPct(b.poisonRes, l), faithRes: growPct(b.faithRes, l), shockRes: growPct(b.shockRes, l),
   }).filter(([, v]) => v !== undefined));
@@ -625,7 +628,7 @@ export function rollAffixes(plain: string, luck = 1, rnd = Math.random): string 
   if (!rarity) return plainId(plain);
   const [lo, hi] = RARITY_AFFIXES[rarity];
   const count = lo + Math.floor(rnd() * (hi - lo + 1));
-  const pool = AFFIX_KEYS.filter((k) => affixFits(k, d.slot));
+  const pool = AFFIX_KEYS.filter((k) => affixFits(k, d.slot) && !DAMAGE_AFFIXES.has(k));
   const out: Affix[] = [];
   while (out.length < count && pool.length) {
     const key = pool.splice(Math.floor(rnd() * pool.length), 1)[0];
@@ -638,7 +641,7 @@ export function rollAffixes(plain: string, luck = 1, rnd = Math.random): string 
 
 /** One line per random bonus, for menus ("+3 attack", "+5% speed"). */
 export function affixLines(id: string): string[] {
-  return itemAffixes(id).map((a) => a.key === "spd" ? `+${a.value}% speed` : bonusText({ [AFFIXES[a.key].bonus]: a.value }));
+  return liveAffixes(id).map((a) => a.key === "spd" ? `+${a.value}% speed` : bonusText({ [AFFIXES[a.key].bonus]: a.value }));
 }
 
 // ---- Damage types (shared/elements.ts) -------------------------------------------------------------------
