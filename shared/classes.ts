@@ -147,7 +147,7 @@ export const CLASSES: Record<ClassKind, ClassDef> = {
   // bounces off walls and builds resonance in monsters that hear it (shared/combat.ts SOUND_TIER).
   songweaver: {
     name: "Songweaver", maxHp: 105, speed: 90, damage: 20, attackCooldownMs: 520, attackRange: 0,
-    projectile: { speed: 225, range: 160, radius: 8, kind: "wave" },
+    projectile: { speed: 225, range: 145, radius: 8, kind: "wave" },
     special: { kind: "song", name: "Song", cooldownMs: 2000 },
     // two plucked notes, then a strum: a wider wave that bursts and pushes back
     combo: [
