@@ -290,3 +290,13 @@ Agents build against this in parallel. Changing it needs the orchestrator.
     - zones clear 100%; seconds per kill 2.1–3.5 vs 1.7–4.4 (Lv 2 is 147%, Lv 4 113%, otherwise ≤124%);
     - Act 2 clears 100%, 3.7–4.2 s vs 2.7–3.9 s (105–144%, about the Summoner's speed);
     - bosses 100% on all but Night Raider (0%, waived); Hollow King 40 s vs 29 s, Sunwright 52 s vs 28 s.
+- 2026-11-13: client wiring merged.
+  - Typed tables; nameplate ear and note icons; chord legend.
+  - Real e2e: `tools/e2e-songweaver-fx.cjs` (fires Amen, Modulate cycles, `soundhit` deaf and fragile, resonate,
+    hint line).
+  - Colyseus `refId not found` seen in the browser in about half of the e2e runs; none in the last full run, none in
+    the server log.
+- 2026-11-13: **songweaver added to `ACTIVE_CLASSES`** (CLAUDE.md updated).
+  - Checks: `npm test` 166/166 on 2 reruns (one run hit the known `voidconjure` timing flake); build OK; smoke OK.
+  - Next: Modulate sometimes appears stuck (gameplay check), busking speech bubble (client), fireside seat check,
+    reviewer.
