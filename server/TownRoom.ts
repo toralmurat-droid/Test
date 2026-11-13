@@ -120,8 +120,8 @@ export class Player extends Schema {
   @type("number") ptDex = 0;
   @type("boolean") stunned = false;
   @type("boolean") slowed = false;
-  // Mana (shared/mana.ts): current, max and mana potions packed in one synced number (packMana), because the schema is at
-  // the 64-field limit. Took the old `raging` flag's place (the client reads Rage from `fx`). Server-side values below.
+  // Mana (shared/mana.ts): current, max and mana potions packed in one synced number (packMana), to keep the schema
+  // small (Colyseus caps it at 64). Took the old `raging` flag's place (the client reads Rage from `fx`). Server-side values below.
   @type("number") mp = 0;
   mana = 0;
   maxMana = 0;
@@ -140,7 +140,7 @@ export class Player extends Schema {
   timerSeq = 0;
   @type("string") party = ""; // player group id ("" = solo); shared/party.ts
   // Summoner grimoire (shared/summons.ts): the elements of golem 1 and golem 2, packed as el1 + 4 x el2 (indexes into
-  // ATTUNE_ORDER; attuneOf(attune) is golem 1's). One number because the schema is at its 64-field limit.
+  // ATTUNE_ORDER; attuneOf(attune) is golem 1's). One number to keep the schema small (Colyseus caps it at 64).
   @type("number") attune = 0;
   golemAt = [0, 0]; // Summoner: when each golem slot rises again (0 = not waiting); server only
   golemSig = ""; // Summoner: the grimoire HUD last sent to them ("golems" message), to send it only when it changes
@@ -157,26 +157,9 @@ export class Player extends Schema {
   @type(["string"]) bag = new ArraySchema<string>();
   // Skill tree (shared/talents.ts): ranks per talent id
   @type({ map: "number" }) talents = new MapSchema<number>();
-  // Blob quest chain (shared/quests.ts): quest index, step (0 = not accepted) and progress on the step
-  @type("number") questId = 0;
-  @type("number") questStage = 0;
-  @type("number") questCount = 0;
-  // Skeleton quest chain (the Pale Marshal), CHAINS[1]: packed (QuestChain.packed) since the zone arcs needed a field
-  @type("number") bone = 0;
-  // The zone quest arcs (shared/quests.ts ZONE_ARCS, QuestChain.local): each arc's packed progress under its id, all in one field
-  @type({ map: "number" }) arcs = new MapSchema<number>();
-  // Redfang chain (Old Garrick of Saltmere), CHAINS[2]: packed (QuestChain.packed) since Act 2 freed two fields for the Second Sun
-  @type("number") red = 0;
-  // The Second Sun (CHAINS[6], Act 2's story in Kel Ashar): packed the same way
-  @type("number") sun = 0;
-  // The guided first quest (First Steps), CHAINS[3] (TUT_CHAIN). New heroes start on step 1.
-  // ...packed like the Hollow Crown below (QuestChain.packed), which freed two fields for the Hide Rite chain
-  @type("number") tut = 0;
-  // The Hollow Crown (CHAINS[4], the first zone's last story): id, stage and count packed in one number (QuestChain.packed),
-  // because the Player schema is at Colyseus's 64-field limit. This is the 64th: a new synced field needs one packed too.
-  @type("number") crown = 0;
-  // The Hide Rite (CHAINS[5], the Mawdeep Warrens' beast-folk): packed the same way
-  @type("number") beast = 0;
+  // Every quest chain's progress (shared/quests.ts CHAINS, read with chainState): packed quest, step and count under the
+  // chain's QuestChain.packed key, one synced field for all of them. A chain not begun has no key (qset drops zeros).
+  @type({ map: "number" }) quests = new MapSchema<number>();
   @type("number") wear = 0; // gear wear 0-100 (shared/upkeep.ts): each death adds some, the smith repairs it for gold
   gateNoteAt = 0; // last "the waygate is cold" note (Act 2, shared/act2.ts)
   linkLock = ""; // the Mawdeep rope/stair a hero just came out of (shared/dungeon.ts LINKS): not taken again until they step off it
@@ -1029,14 +1012,12 @@ export class TownRoom extends Room<TownState> {
       ptSta: p.ptSta, ptStr: p.ptStr, ptMag: p.ptMag, ptDex: p.ptDex,
       weapon: p.weapon, armour: p.armour, shoes: p.shoes, hat: p.hat, shield: p.shield, ranged: p.ranged,
       bag: p.bag.toArray(), talents, slots: p.slots.toArray(),
-      questId: p.questId, questStage: p.questStage, questCount: p.questCount, questVer: CHAINS[0].version,
       kit: 1,
-      // packed chains (the Pale Marshal, Redfang, First Steps, the Hollow Crown, the Hide Rite, the Second Sun, the zone arcs) are saved under their own three names
+      // every chain is saved under its own three names (CHAINS[].keys: questId/questStage/questCount for the Gloam) and its verKey
       ...Object.fromEntries(CHAINS.flatMap((ch, c) => {
-        if (!ch.packed) return [];
         const q = this.qs(p, c), [a, b, n] = ch.keys;
         return [[a, q.questId], [b, q.questStage], [n, q.questCount], [ch.verKey, ch.version]];
-      })),
+      })) as Record<string, number> & Pick<HeroSave, "questStage" | "questCount">, // CHAINS[0] always writes these two
       portals: [...p.portals], act: actAt(p.y, p.x),
       bounty: p.bounty, bountyDone: p.bountyDone, wear: p.wear, feast: { ...p.feast },
       ...(p.cls === "summoner" ? { grimoire: this.grimoireOf(p), suTree: SUMMONER_TREE } : {}),
@@ -5365,16 +5346,8 @@ export class TownRoom extends Room<TownState> {
   /** One chain's progress on this player. */
   private qs(p: Player, c: number): QuestState { return chainState(p, c)!; }
   private qset(p: Player, c: number, v: Partial<QuestState>) {
-    const [a, b, n] = CHAINS[c].keys, r = p as unknown as Record<string, number>, pk = CHAINS[c].packed;
-    if (pk) {
-      const q = { ...this.qs(p, c), ...v }, n = packQuest(q.questId, q.questStage, q.questCount);
-      if (!CHAINS[c].local) r[pk] = n;
-      else if (n) p.arcs.set(pk, n); else p.arcs.delete(pk); // a zone arc not begun takes no room in the map
-      return;
-    }
-    if (v.questId !== undefined) r[a] = v.questId;
-    if (v.questStage !== undefined) r[b] = v.questStage;
-    if (v.questCount !== undefined) r[n] = v.questCount;
+    const q = { ...this.qs(p, c), ...v }, n = packQuest(q.questId, q.questStage, q.questCount), k = CHAINS[c].packed;
+    if (n) p.quests.set(k, n); else p.quests.delete(k); // a chain not begun takes no room in the map
   }
 
   private sendQuest(id: string, p: Player, c: number, done = false, auto = false) {
