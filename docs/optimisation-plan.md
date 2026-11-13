@@ -182,3 +182,25 @@ Open:
    up to 30 tiles away, about two and a half screens in each direction. N1 would send only those up to roughly half
    a screen past the edge. Nothing on screen changes; the open point is whether a monster can be seen arriving late
    after a waygate jump or at the smallest screen-size setting, which QA should check when S-6 is built.
+
+## Progress log
+
+2026-11-13
+- Merged on the work branch: S-1 (bench: wire bytes, `PHASES=1`), S-2 (grid scans, repeated searches, leak; the
+  raider sweep and the full walk in `assignFlanks` were left as they are, see the commit), C-1 (`?perf=1` readout,
+  `tools/perf/client.cjs`). S-2 still needs a bench before/after and a full test run on a quiet machine;
+  `tests/champions.test.ts` failed in the full run before and after S-2 and passes alone.
+- In work: C-2 (static world), C-3 (per-frame fixes), S-4 (active monsters), and an investigation of decode errors.
+- Found on the way:
+  - Canvas size. At a 1280x720 window with Screen size on Auto the game renders a 2560x1440 canvas (auto picks 50%,
+    and the canvas is window size divided by that factor). Small windows and scaled displays therefore render the
+    most pixels, through three full-screen passes. Candidate cause for slowdown on integrated graphics; the readout
+    shows canvas size and GPU name. Belongs with C7.
+  - Phones: about 8,140 draw calls per frame in the Pixel 7 preset against about 390 on desktop (two counters
+    agree). Raises the priority of C6.
+  - Decode errors (`"refId" not found`, invalid UTF-8) appear with per-message deflate on, in the bench bots and in
+    headless Chromium against the production build, on a loaded machine. Never seen with deflate off. Suspected
+    cause: state patches are handed to the socket as a view of the encoder's shared buffer while compression runs
+    asynchronously. Under investigation; not yet confirmed for real players.
+  - `PHASES=1` showed `updateWatch` (about 4 ms) and `updateUndeadNight` (about 1.5 ms) per tick on a loaded
+    machine; S-4 looks at why.
