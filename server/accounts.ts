@@ -48,6 +48,10 @@ export interface HeroSave {
   grimoire?: string;
   /** Summoner skill tree version (shared/summons.ts SUMMONER_TREE): an older save gets its skill points back. */
   suTree?: number;
+  /** Choices made in quests, 2 bits each (shared/questSteps.ts CHOICES), kept in Player.arcs "$f"; missing = none made. */
+  flags?: number;
+  /** Cosmetics: title and look traits (shared/cosmetics.ts), kept in Player.arcs "$c"; missing = none. */
+  cosm?: number;
 }
 
 interface Account {

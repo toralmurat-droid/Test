@@ -250,3 +250,6 @@ at Lv 10, `duel.ts` only if Hidebound goes on. Bench: WP2 and WP5 (`TIDE=1`, `SP
 
 ## Log
 - 2026-11-13: plan written; baseline bench taken; WP1 started.
+- 2026-11-13: WP1 gameplay landed in the tree (gameplay-engineer): `shared/questSteps.ts`, `server/questSteps.ts`, `shared/cosmetics.ts`,
+  `choose`/`pick`/`npcs`/`onlyIf`/`sayBy`/`afterBy`, `QuestChain.needs`, `SIDE_ARCS` "letters", `ZONE_ARCS` "grave" + "sandcrown", NPCs,
+  shops `watch` / `smuggler`, hooks 1 3 4 5 10 (leave) 11 13. Siege sites, engines and chests unchanged; map-metrics unchanged.

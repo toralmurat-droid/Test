@@ -5,6 +5,7 @@ import { npcById } from "./npcs";
 import { chamberAt, COCOONS, CRYPT_FLOORS, DEN, FLOORS, HIGH_CHOIR, SINKHOLE, TOTEMS, UNDER_FLOORS, WATER_THRONE } from "./dungeon";
 import { D, FURNACE, KEL_ASHAR } from "./desert";
 import { xpStep } from "./classes";
+import { type CarrySpec, type ChoiceId, type ChoiceSpec, choiceOf, type HoldSpec, nextStage, type PickSpec, sayFor, stepObjects, type SyncSpec, type UnseenSpec } from "./questSteps";
 
 /**
  * The blob quest chain. Quests are done one after the other, each in a blob zone a little further from
@@ -134,7 +135,9 @@ export const QUEST_ITEMS: Record<string, QuestItemDef> = {
 
 export type QuestObjectKind = "bell" | "urn" | "lantern" | "shrine" | "cocoon" | "heart" | "engine" | "beacon" | "crypt" | "phylactery" | "ward" | "shard" | "silk" | "totem" | "sigil" | "cistern"
   // the zone quests (Murat 2026-11-10): something dropped to search, a nest to burn, a marked stone to read
-  | "clue" | "nest" | "cairn";
+  | "clue" | "nest" | "cairn"
+  // the quest concepts (docs/quest-concepts-progress.md): graves to read or open, seals, ward-lamps, a hidden door
+  | "grave" | "seal" | "wardlamp" | "postern" | "lastlantern";
 export interface QuestObject { id: string; kind: QuestObjectKind; x: number; y: number; name: string; verb: string }
 
 const obj = (id: string, kind: QuestObjectKind, name: string, verb: string, area: string, fx: number, fy: number): QuestObject =>
@@ -145,7 +148,9 @@ export const USE_RANGE = 1.3 * TILE;
 
 // ---- Quest definitions ----
 
-export type StepType = "see" | "reach" | "talk" | "kill" | "collect" | "use" | "merge" | "ritual" | "equip" | "learn" | "cast";
+export type StepType = "see" | "reach" | "talk" | "kill" | "collect" | "use" | "merge" | "ritual" | "equip" | "learn" | "cast"
+  // shared/questSteps.ts: carry a light, hold a spot, pick the right one, go unseen, turn two things at once, make a choice
+  | "carry" | "hold" | "pick" | "unseen" | "sync" | "choose";
 
 /** Bump when steps change: saves from an older version restart their current quest at the offer. */
 export const QUEST_VERSION = 4;
@@ -201,6 +206,15 @@ export interface QuestStep {
   night?: boolean;
   /** Finishing this step brings the hero up to at least this level (so the first quest can teach the skill tree) */
   levelTo?: number;
+  /** The new step kinds' specs (shared/questSteps.ts); `choose` also takes `npc` and `say` (the choice is made in their dialog) */
+  carry?: CarrySpec; hold?: HoldSpec; pick?: PickSpec; unseen?: UnseenSpec; sync?: SyncSpec; choose?: ChoiceSpec;
+  /** talk: these NPCs, in any order (a bit each in the step count); `says` = each one's lines, else `say` */
+  npcs?: string[];
+  says?: Record<string, string[]>;
+  /** Only for heroes whose choice is one of `v` (a branch); other heroes skip the step (questSteps.ts nextStage) */
+  onlyIf?: { flag: ChoiceId; v: number[] };
+  /** Lines instead of `say` by the hero's choice (questSteps.ts sayFor): the same step, other words */
+  sayBy?: { flag: ChoiceId; lines: Record<number, string[]> };
 }
 
 export interface Reward { xp: number; gold: number; potions: number }
@@ -226,6 +240,8 @@ export interface QuestDef {
   auto?: boolean;
   /** Lines shown where the quest ends when it ends out in the field (no hand-in): what the hero finds or learns. */
   outro?: string[];
+  /** `after` by the hero's choice (a giver who remembers what you did) */
+  afterBy?: { flag: ChoiceId; lines: Record<number, string> };
 }
 
 const FZ = QUEST_ZONE.name;
@@ -828,6 +844,11 @@ export const RED_QUESTS: QuestDef[] = [
     ],
     reward: { xp: 2400, gold: 600, potions: 5 },
     after: "Pell's mending his boat again. Saltmere sleeps easy now. Sit by the fire whenever you pass, friend.",
+    // once the Two Letters (SIDE_ARCS) are delivered, Garrick remembers which way it went
+    afterBy: { flag: "letters", lines: {
+      1: "Hale's men came for Ilka at dawn. It was the law, and the law was right. I still can't look her mother in the eye. Sit by the fire, friend.",
+      2: "Not a word about Ilka, mind. The tide took her, as far as Saltmere knows. Sit by the fire, friend. Somebody left us a cask of the good stuff.",
+    } },
   },
 ];
 
@@ -850,6 +871,11 @@ export const KING_STONES: QuestObject[] = ([[234, 67], [247, 54], [259, 45]] as 
  * Opens once the Gloam, the Pale Marshal and the Redfang Debt are all done (chainOpen). Lv 24 talk quest, then the
  * Lv 30 final boss of the first zone (Murat 2026-11-04: a final boss, not an endgame: it is beaten once, like the others).
  */
+const KING_END = [
+  "I felt it. The whole wood breathed out at once, like a sleeper waking from a long, bad dream.",
+  "The Hollow King is gone, and his crown with him. No more seals, no more grave-gold, no more whispers in the dark.",
+  "You came to Oakvale a stranger and you saved this whole valley. Whatever lies beyond it, the road is yours now. Take this, with all our thanks.",
+];
 export const CROWN_QUESTS: QuestDef[] = [
   {
     id: "seal", title: "The Crowned Seal", giver: "druid", zone: "Whispering Woods", minLevel: 24,
@@ -897,11 +923,12 @@ export const CROWN_QUESTS: QuestDef[] = [
         summon: { parts: ["hollowking"], level: 30, title: "Ostrevar, the Hollow King", hpMult: 2, x: (HOLLOW.cx + 0.5) * TILE, y: (HOLLOW.cy - 3.3) * TILE },
         text: "Defeat Ostrevar, the Hollow King", banner: ["THE HOLLOW KING RISES", "Defeat Ostrevar"], obj: "The Hollow King defeated: {n} / {goal}",
         nag: "When night falls he wakes on his throne. End him!", night: true },
-      back("druid", "Elder Rowan", "village bonfire", [
-        "I felt it. The whole wood breathed out at once, like a sleeper waking from a long, bad dream.",
-        "The Hollow King is gone, and his crown with him. No more seals, no more grave-gold, no more whispers in the dark.",
-        "You came to Oakvale a stranger and you saved this whole valley. Whatever lies beyond it, the road is yours now. Take this, with all our thanks.",
-      ], "Claim reward"),
+      // Rowan remembers what became of the Redfang's informer (Two Letters, SIDE_ARCS): other words, same step
+      { ...back("druid", "Elder Rowan", "village bonfire", KING_END, "Claim reward"),
+        sayBy: { flag: "letters", lines: {
+          1: [KING_END[0], KING_END[1], "Hale says the girl who sold Saltmere to the Redfang was paid in that same grave-gold. The law has her now. Justice is cold comfort, but it is comfort.", KING_END[2]],
+          2: [KING_END[0], KING_END[1], "A basket of smoked fish was at my door this morning, and no name on it. The crown's gold bought a Saltmere girl once. I think you bought her back.", KING_END[2]],
+        } } },
     ],
     reward: { xp: 6000, gold: 1500, potions: 6 },
     after: "The valley is free, thanks to you. And the old stone arch outside our south gate has started to hum. Once the Hide-Mother of the Mawdeep is gone too, they say it will open. There is always a seat for you at this fire.",
@@ -1853,8 +1880,104 @@ const UNDER_QUESTS: QuestDef[] = [
   },
 ];
 
+// -- Act 1: Gravemoor Cemetery, the Empty Grave (Lv 15; docs/quest-concepts-progress.md #3) --
+const GRAVE = "Gravemoor Cemetery";
+const GRAVE_STONES = [near("grave_stone1", "grave", "Toppled gravestone", "Set it upright", 186, 136), near("grave_stone2", "grave", "Toppled gravestone", "Set it upright", 212, 136),
+  near("grave_stone3", "grave", "Toppled gravestone", "Set it upright", 199, 151)];
+/** The four fresh graves; only one is empty (GRAVE_QUESTS pick.answer, checked on the server). */
+const FRESH_GRAVES = [near("grave_tam", "grave", "Fresh grave: Tam Ashby, smith", "Dig", 184, 145), near("grave_nan", "grave", "Fresh grave: Nan Hesketh", "Dig", 194, 131),
+  near("grave_corin", "grave", "Fresh grave: Corin Vell, boatwright", "Dig", 205, 131), near("grave_jory", "grave", "Fresh grave: Jory Pike, drover", "Dig", 214, 146)];
+const GRAVE_QUESTS: QuestDef[] = [
+  {
+    id: "emptygrave", title: "The Empty Grave", giver: "sexton", zone: GRAVE, minLevel: 15,
+    description: "Amos, the sexton of Gravemoor, buried four this month. One of the four graves won't sink the way a grave should. Find out which one is empty, without waking the ones that aren't.",
+    offer: [
+      "Mind your feet. The dead don't lie still in Gravemoor these days, and the living are worse.",
+      "Four buried this month. Three graves have sunk the way earth does over a coffin. One hasn't. Thirty years with a spade, and I know an empty grave when I walk on it.",
+      "Somebody's been out at night, too, kicking over the old stones round them. Set the stones right, ask the mourners at the wall, then dig the one that's empty.",
+      "Dig the wrong one and you'll wake what's in it. Don't say I didn't tell you.",
+    ],
+    acceptText: "I'll find the empty grave",
+    steps: [
+      { type: "use", zone: GRAVE, objects: GRAVE_STONES, chest: false, text: "Set the 3 toppled gravestones upright", banner: ["New quest", "The Empty Grave"],
+        obj: "Gravestones set right: {n} / {goal}", nag: "{n} of {goal}. Kicked over in the night, all round the fresh graves." },
+      { type: "talk", zone: GRAVE, npcs: ["mourner1", "mourner2", "mourner3"], text: "Hear out the three mourners at the cemetery wall", banner: ["The stones stand again", "Hear out the mourners"],
+        obj: "Mourners heard: {n} / {goal}", nag: "{n} of {goal}. They keep to the north wall, by the gate. They won't come in among the dead.",
+        says: {
+          mourner1: ["Tam sat in our parlour three days before they nailed the lid. Cold as his forge in winter, my Tam.", "He's in that ground. I'd know if he weren't."],
+          mourner2: ["Gran went in her sleep, ninety winters old. Half the lane sat up with her.", "Jory Pike? Drowned at the ford. I helped pull him out myself. Blue as a mussel, poor lad."],
+          mourner3: ["Corin Vell. Best boatwright on the coast. Drowned off Saltmere, they told me.", "Nobody saw his body. The coffin came up the Coast Road nailed shut, and it rattled when they lifted it.", "Rattled. Like stones."],
+        },
+        accept: "Thank you" },
+      { type: "pick", zone: GRAVE, text: "Dig up the empty grave", banner: ["Three mourners, three stories", "Dig up the empty grave"],
+        obj: "Dig up the one empty grave", nag: "Only one of the four fresh graves is empty. Dig the wrong one and you wake what lies in it.",
+        pick: { objects: FRESH_GRAVES, answer: 2, back: 1, sets: { flag: "grave", v: 1 },
+          wrong: { parts: ["skeleton"], level: 17, title: "The Disturbed Dead", hpMult: 3, ...sumAt(199, 140) } } },
+    ],
+    outro: [
+      "The spade hits wood, then stone. Corin Vell's coffin is full of beach rocks.",
+      "Under them, a note in a boatwright's hand: \"Tell Hollis I'm sorry. The Redfang wanted my debts or my neck. I'm alive, at the end of the world.\" Corin Vell is alive.",
+    ],
+    reward: arcReward(15),
+    after: "An empty grave. I'll fill it with something that'll stay put. Thank you.",
+  },
+];
+
+// -- Act 2: Kharsun, the Crown in the Sand (Lv 38-39; docs/quest-concepts-progress.md #11) --
+const KHARSUN_Z = "Kharsun, the Buried City";
+const SAND_SEAL = near("sand_seal1", "cistern", "Cistern stamped with a crown", "Break the seal", 51, D(189));
+const CROWN_TOMB = at(74, D(178), 4, "The crowned tomb");
+const OSTREVAR_SEALS = [near("sand_crown1", "seal", "Ostrevar's seal", "Break", 72, D(176)), near("sand_crown2", "seal", "Ostrevar's seal", "Break", 77, D(177))];
+const SANDCROWN_QUESTS: QuestDef[] = [
+  {
+    id: "crownsand", title: "The Crown in the Sand", giver: "tombrobber", zone: KHARSUN_Z, minLevel: 38,
+    description: "Zahir found a cistern in Kharsun stamped with a crown he has seen before: on the grave-gold valley folk pay with. A crown from a kingdom a thousand miles north.",
+    offer: [
+      "You're from the valley, yes? Then look at this. I scraped it off a cistern lid in the old west quarter.",
+      "A crown. Not a sun, not a veil. A crown with five points, like on the old gold the valley traders bring.",
+      "What is a northern king's seal doing on a Kharsun cistern? Break it, follow where it leads. I'll keep the rope tied, in case.",
+    ],
+    acceptText: "I'll follow the crown",
+    steps: [
+      { type: "use", zone: KHARSUN_Z, objects: [SAND_SEAL], chest: false, text: "Break the crowned seal on the cistern", banner: ["New quest", "The Crown in the Sand"],
+        obj: "Break the crowned seal", nag: "The cistern is in the west quarter, inside the broken walls." },
+      { type: "reach", zone: KHARSUN_Z, at: CROWN_TOMB, text: "Find the tomb the cistern leads to", banner: ["The water runs out of it", "Follow it to the tomb"],
+        obj: "Find the crowned tomb in Kharsun", nag: "The channel under the seal ran east. Follow it." },
+      { type: "use", zone: KHARSUN_Z, objects: OSTREVAR_SEALS, chest: false, text: "Break Ostrevar's 2 seals in the tomb", banner: ["A tomb with a crown", "Break Ostrevar's seals"],
+        obj: "Ostrevar's seals broken: {n} / {goal}", nag: "{n} of {goal}. Inside the tomb walls." },
+    ],
+    outro: ["Behind the second seal: no body. A throne-shaped hollow in the stone, and a name cut over it in valley letters. OSTREVAR.", "Something in the sand outside starts to stand up."],
+    reward: arcReward(38),
+    after: "Ostrevar? The Hollow King your valley killed? Then why does Kharsun have his seal?",
+  },
+  {
+    id: "envoy", title: "Ostrevar's Envoy", giver: "tombrobber", zone: KHARSUN_Z, minLevel: 39, auto: true,
+    description: "Breaking Ostrevar's seals woke something left to guard them: an envoy of the Hollow King, in Kharsun of all places.",
+    offer: ["The sand outside the tomb is moving. Something wearing a crown on its breastplate.", "Whatever the Hollow King left here, it was left to wait for you."],
+    acceptText: "On my way",
+    steps: [
+      { type: "kill", zone: KHARSUN_Z, kinds: ["sanddead"], goal: 1, own: true,
+        summon: { parts: ["sanddead"], level: 39, title: "Ostrevar's Envoy", hpMult: 3, ...sumAt(74, D(183)),
+          voice: {
+            wake: ["You broke the crowned seals. He felt it, far away.", "You burned his crown in the valley, thief. A crown is not a king."],
+            taunt: ["Kharsun paid him in water. Your valley paid him in blood.", "There are lands past the sand you have never seen. He is owed there too.", "I waited a thousand years. I can wait for you to tire."],
+            half: ["My king! Lend me your cold!"],
+            death: ["He... keeps... other crowns..."],
+          } },
+        text: "Slay Ostrevar's Envoy", banner: ["New quest", "Ostrevar's Envoy"], obj: "Ostrevar's Envoy slain: {n} / {goal}",
+        nag: "It rose from the sand outside the crowned tomb." },
+    ],
+    outro: [
+      "The Envoy falls apart into sand and rusted iron. In its chest is a token of black iron, cold as deep water, stamped with the crown.",
+      "On its back, a map scratched into the metal: no desert, no valley. Mountains under snow, far past any road you know, and a crown drawn over them.",
+    ],
+    reward: arcReward(39, true),
+    after: "Snow, on a map from a tomb in the desert. I sell maps. I've never sold that one.",
+  },
+];
+
 /** The zone arcs, each its own chain (QuestChain.local): Act 1 then Act 2. */
-export const ZONE_ARCS: { id: string; name: string; quests: QuestDef[] }[] = [
+export const ZONE_ARCS: { id: string; name: string; quests: QuestDef[]; needs?: (p: Quester | undefined) => boolean }[] = [
   { id: "mill", name: "Millbrook's Bad Water", quests: MILL_QUESTS },
   { id: "hunt", name: "The Lost Hunt", quests: HUNT_QUESTS },
   { id: "thornwood", name: "Thornwood Whispers", quests: THORN_QUESTS },
@@ -1866,8 +1989,56 @@ export const ZONE_ARCS: { id: string; name: string; quests: QuestDef[] }[] = [
   { id: "spire", name: "The Mirror Path", quests: SPIRE_QUESTS },
   { id: "crypt", name: "The Lantern Crypt", quests: CRYPT_QUESTS },
   { id: "under", name: "The Undercity of Kharsun", quests: UNDER_QUESTS },
+  // the quest concepts (docs/quest-concepts-progress.md): appended, chain indices are sent by the client
+  { id: "grave", name: "The Empty Grave", quests: GRAVE_QUESTS },
+  { id: "sandcrown", name: "The Crown in the Sand", quests: SANDCROWN_QUESTS, needs: (p) => (chainState(p, SUN_CHAIN)?.questId ?? 0) > SUN_QUESTS.findIndex((d) => d.id === "kharsun") },
 ];
-const ARC_OBJECTS: QuestObject[] = ZONE_ARCS.flatMap((a) => a.quests.flatMap((d) => d.steps.flatMap((s) => s.objects ?? [])));
+
+// ---- Side arcs: short local chains that may end on a hand-in (unlike ZONE_ARCS), packed in Player.arcs the same way ----
+
+// Two Letters (Lv 19, after the Redfang Debt; docs/quest-concepts-progress.md #5): law or mercy for Saltmere's informer
+const LETTER_QUESTS: QuestDef[] = [
+  {
+    id: "twoletters", title: "Two Letters", giver: "oldfisher", zone: SALT.name, minLevel: 19,
+    description: "Pell brought two letters down from the Redfang chief's tent. One names the Saltmere girl who sold the town to the bandits. The other is her own, never sent. Old Garrick can't choose which to send. You can.",
+    offer: [
+      "Pell brought something down from the chief's tent besides his own skin. Two letters. Sit, and read them with me.",
+      "The first is a list in a clerk's hand: every boat, every sailing, every night the watch-fire was out. Signed with a mark I know. Ilka, the net-mender's girl. She sold us to the Redfang.",
+      "The second is hers too, never sent. They had her little brother up in that camp. Every list bought him another week.",
+      "Hale should have the first one. Or Ilka should have the second back, and a head start. I'm too old to choose.",
+    ],
+    acceptText: "Show me the letters",
+    steps: [
+      { type: "choose", npc: "oldfisher", zone: SALT.name, text: "Choose which letter to carry", banner: ["New quest", "Two Letters"], obj: "Choose a letter (Old Garrick, Saltmere beach)",
+        say: ["The list for Captain Hale, or the letter back to Ilka. Whichever you take, the other goes in my fire."],
+        choose: { flag: "letters", options: [{ label: "Take the list to Captain Hale", v: 1 }, { label: "Give Ilka her letter and warn her", v: 2 }] }, nag: "" },
+      { type: "talk", npc: "captain", onlyIf: { flag: "letters", v: [1] }, text: "Take the list to Captain Hale", banner: ["The law, then", "Take the list to Captain Hale"],
+        obj: "Take the list to Captain Hale (Oakvale, inside the east gate)",
+        say: [
+          "A list of sailings, signed with a mark. So the Redfang had an ear in Saltmere all along.",
+          "I'll send two men down the Coast Road tonight. It's the law, and the law is what keeps the next village from being sold.",
+          "You did right, even if it doesn't feel it. The watch pays its debts: my quartermaster will see you right from now on.",
+        ],
+        accept: "Hand over the list", nag: "Hale will want that list." },
+      { type: "talk", npc: "ilka", onlyIf: { flag: "letters", v: [2] }, text: "Give Ilka her letter", banner: ["Mercy, then", "Find Ilka by the Redfang fence"],
+        obj: "Give Ilka her letter (outside the Redfang fence)",
+        say: [
+          "That's my hand. Where did you... the chief's tent. Of course.",
+          "My brother got out when the camp broke. I've waited by this fence for him to come back for me. He won't.",
+          "If Garrick had the other letter, Hale will hear of me soon enough. I'll go down to the beach tonight. There are boats there that don't ask names.",
+          "Thank you. I won't forget it. The people on those boats won't either.",
+        ],
+        accept: "Go, before the watch comes", nag: "She waits outside the Redfang fence, by the west gate." },
+    ],
+    reward: { xp: 0, gold: 250, potions: 3 },
+    after: "Done is done. One letter in the fire, one out in the world. Sit a while.",
+  },
+];
+/** Side arcs (QuestChain.local, after ZONE_ARCS in CHAINS): `needs` gates the first offer. */
+export const SIDE_ARCS: { id: string; name: string; quests: QuestDef[]; needs?: (p: Quester | undefined) => boolean }[] = [
+  { id: "letters", name: "Two Letters", quests: LETTER_QUESTS, needs: (p) => chainDone(p, RED_CHAIN) },
+];
+const ARC_OBJECTS: QuestObject[] = [...ZONE_ARCS, ...SIDE_ARCS].flatMap((a) => a.quests.flatMap((d) => d.steps.flatMap(stepObjects)));
 
 // ---- First Steps: the guided first quest, one control per step (replaces the old wall-of-text intro) ----
 
@@ -1924,8 +2095,11 @@ export const tutorialDone = (p: Quester | undefined) => p?.tut === undefined || 
 /** Can this chain offer new quests yet? Every story waits for the guided first quest. */
 export const chainOpen = (p: Quester | undefined, c: number) =>
   c === TUT_CHAIN || (tutorialDone(p) && (c !== CROWN_CHAIN || STORY_CHAINS.every((s) => storyDone(p, s)))
-    && (c !== SUN_CHAIN || (chainDone(p, CROWN_CHAIN) && chainDone(p, BEAST_CHAIN)))); // the Second Sun: once the waygate is awake (shared/act2.ts)
+    && (c !== SUN_CHAIN || (chainDone(p, CROWN_CHAIN) && chainDone(p, BEAST_CHAIN))) // the Second Sun: once the waygate is awake (shared/act2.ts)
+    && (!CHAINS[c]?.needs || CHAINS[c].needs!(p))); // an arc that follows another story (QuestChain.needs)
 export const BEAST_CHAIN = 5;
+/** The Redfang Debt (Two Letters follows it). */
+export const RED_CHAIN = 2;
 export const SUN_CHAIN = 6;
 /** The Hollow Crown waits for the three stories it ties together. */
 export const CROWN_CHAIN = 4;
@@ -1956,6 +2130,8 @@ export interface QuestChain {
    * to the next. Its packed progress lives in the Player.arcs map under `packed` (one synced field for every arc).
    */
   local?: boolean;
+  /** An arc's first offer waits for this (ZONE_ARCS / SIDE_ARCS `needs`): another story far enough along */
+  needs?: (p: Quester | undefined) => boolean;
 }
 /** Pack / unpack a chain's progress into one number (QuestChain.packed). */
 export const packQuest = (id: number, stage: number, count: number) => id * 10000 + Math.min(99, stage) * 100 + Math.min(99, count);
@@ -1970,8 +2146,13 @@ export const CHAINS: QuestChain[] = [
   { id: "beast", name: "The Hide Rite", quests: BEAST_QUESTS, keys: ["beastId", "beastStage", "beastCount"], version: 2, verKey: "beastVer", packed: "beast" },
   { id: "sun", name: "The Second Sun", quests: SUN_QUESTS, keys: ["sunId", "sunStage", "sunCount"], version: 2, verKey: "sunVer", packed: "sun" },
   // the zone arcs (ZONE_ARCS), CHAINS[7..]: progress in the Player.arcs map, saved together under "arcs"
-  ...ZONE_ARCS.map((a): QuestChain => ({ id: a.id, name: a.name, quests: a.quests, keys: [`${a.id}Id`, `${a.id}Stage`, `${a.id}Count`], version: 1, verKey: `${a.id}Ver`, packed: a.id, local: true })),
+  ...ZONE_ARCS.map((a): QuestChain => ({ id: a.id, name: a.name, quests: a.quests, keys: [`${a.id}Id`, `${a.id}Stage`, `${a.id}Count`], version: 1, verKey: `${a.id}Ver`, packed: a.id, local: true, needs: a.needs })),
+  // the side arcs (SIDE_ARCS) after them, kept the same way
+  ...SIDE_ARCS.map((a): QuestChain => ({ id: a.id, name: a.name, quests: a.quests, keys: [`${a.id}Id`, `${a.id}Stage`, `${a.id}Count`], version: 1, verKey: `${a.id}Ver`, packed: a.id, local: true, needs: a.needs })),
 ];
+
+// Player.arcs keeps reserved numbers under "$" keys (shared/questSteps.ts META): no chain may take one
+for (const ch of CHAINS) if (ch.id.startsWith("$") || ch.packed?.startsWith("$")) throw new Error(`quest chain id ${ch.id}: "$" keys are reserved`);
 
 /** Progress on one chain (chain undefined = the blob chain, so a Player passed as is reads as chain 0). */
 export interface QuestState { questId: number; questStage: number; questCount: number; level?: number; chain?: number }
@@ -2007,12 +2188,17 @@ export function questStep(q: QuestState | undefined): QuestStep | undefined {
 }
 
 export const popcount = (n: number) => { let c = 0; for (let v = n >>> 0; v; v &= v - 1) c++; return c; };
+/** Steps whose count is a bitmask (one bit per object used / NPC talked to) rather than a number. */
+const bitStep = (s: QuestStep) => s.type === "use" || (s.type === "talk" && !!s.npcs);
 export function stepGoal(s: QuestStep): number {
-  return s.type === "use" ? s.objects!.length : s.goal ?? 1;
+  if (s.type === "use") return s.objects!.length;
+  if (s.type === "talk" && s.npcs) return s.npcs.length;
+  if (s.type === "pick" || s.type === "choose") return 1;
+  return s.goal ?? 1;
 }
-/** Progress on a step (objects used count bits). */
+/** Progress on a step (objects used and NPCs heard count bits). */
 export function stepProgress(s: QuestStep, count: number): number {
-  return Math.min(stepGoal(s), s.type === "use" ? popcount(count) : count);
+  return Math.min(stepGoal(s), bitStep(s) ? popcount(count) : count);
 }
 const fill = (t: string, n: number, goal: number) => t.replace("{n}", String(n)).replace("{goal}", String(goal));
 
@@ -2026,17 +2212,31 @@ export interface DialogPage {
   text: string[];
   /** Button that moves the quest on (sends "quest" {chain} to the server); none = just talk */
   accept?: string;
+  /**
+   * A choice (QuestStep.choose): one button per option, each sends "quest" {chain, opt: v}. A page has either
+   * `accept` or `options`, never both.
+   */
+  options?: { label: string; v: number }[];
   bye: string;
   /** Which chain the page belongs to */
   chain: number;
 }
 
-/** Is this NPC standing in the village for this player? (Tobin only comes home once freed.) */
+const chainIx = (id: string) => CHAINS.findIndex((ch) => ch.id === id);
+/**
+ * Who stands where only for some heroes (missing = always there). Tobin only comes home once freed; the Two Letters
+ * people come and go with the choice made (shared/questSteps.ts CHOICES.letters: 1 law, 2 mercy).
+ */
+const PRESENCE: Record<string, (p: Quester | undefined) => boolean> = {
+  fisher: (p) => (chainState(p, 0)?.questId ?? 0) > QUESTS.findIndex((d) => d.id === "lake"), // freeing him ends the quest: he runs home
+  ilka: (p) => chainDone(p, RED_CHAIN) && !chainDone(p, chainIx("letters")), // gone once her letter is delivered either way
+  quartermaster: (p) => chainDone(p, chainIx("letters")) && choiceOf(p, "letters") === 1,
+  smuggler: (p) => chainDone(p, chainIx("letters")) && choiceOf(p, "letters") === 2,
+};
+/** Is this NPC standing there for this player? */
 export function npcPresent(id: string, p: Quester | undefined): boolean {
-  if (id !== "fisher") return true;
-  const q = chainState(p, 0);
-  const lake = QUESTS.findIndex((d) => d.id === "lake");
-  return (q?.questId ?? 0) > lake; // freeing him ends the quest: he runs home
+  const f = PRESENCE[id];
+  return !f || f(p);
 }
 /** Is the blob cocoon (with Tobin inside) still there for this player? */
 export function cocoonPresent(p: Quester | undefined): boolean {
@@ -2045,14 +2245,18 @@ export function cocoonPresent(p: Quester | undefined): boolean {
   return (q?.questId ?? 0) <= lake;
 }
 
+/** Does this step want a word with this NPC (a talk, a choice, one of several NPCs not yet heard)? */
+function stepWants(s: QuestStep | undefined, id: string, count: number): boolean {
+  if (s?.type === "talk" && s.npcs) { const i = s.npcs.indexOf(id); return i >= 0 && !(count & (1 << i)); }
+  return (s?.type === "talk" || s?.type === "choose") && s.npc === id;
+}
 /** One chain's "!" (new quest) / "?" (come and talk) for an NPC. */
 function chainMark(id: string, q: QuestState | undefined): "!" | "?" | "" {
   const d = questDef(q);
   if (!d) return "";
   const stage = q?.questStage ?? 0;
   if (stage === 0) return d.giver === id && (q?.level ?? 1) >= d.minLevel ? "!" : "";
-  const s = questStep(q);
-  return s?.type === "talk" && s.npc === id ? "?" : "";
+  return stepWants(questStep(q), id, q?.questCount ?? 0) ? "?" : "";
 }
 /** Does this NPC have something to say about any quest right now? "?" wins over "!". */
 export function npcQuestMark(id: string, p: Quester | undefined): "!" | "?" | "" {
@@ -2063,23 +2267,30 @@ export function npcQuestMark(id: string, p: Quester | undefined): "!" | "?" | ""
   return marks.includes("?") ? "?" : marks.includes("!") ? "!" : "";
 }
 
-/** Rewards line for buttons and the log. */
-export const rewardText = (r: Reward) => `${r.xp} XP, ${r.gold} gold, ${r.potions} potions`;
+/** Rewards line for buttons and the log (no XP part when a quest gives none: the side arcs). */
+export const rewardText = (r: Reward) => `${r.xp ? `${r.xp} XP, ` : ""}${r.gold} gold, ${r.potions} potions`;
 
 /** Idle lines of quest givers with nothing to say on a chain. */
 const IDLE: Record<string, string> = {
   druid: "The old oaks are restless. Keep your blade sharp, friend.",
   captain: "Quiet on the walls today. I don't trust quiet.",
   oldfisher: "Tide's turning. Mind the wet sand, it'll have your boots off.",
+  sexton: "Thirty years with a spade. The ground tells you things, if you listen.",
+  mourner1: "Forty years married. You'd think I'd be cried out by now.",
+  mourner2: "Gran would've hated all this fuss. She'd have wanted the kettle on.",
+  mourner3: "I build boats. Corin built better ones. I keep thinking he'll walk up the lane and say so.",
+  ilka: "Don't look at me like that. Keep walking.",
 };
+/** A finished quest's `after` line for this hero (QuestDef.afterBy). */
+const afterFor = (d: QuestDef, p: Quester | undefined) => (d.afterBy && d.afterBy.lines[choiceOf(p, d.afterBy.flag)]) || d.after;
 
 /** What an NPC says about one chain, or undefined if nothing. */
-function chainDialog(id: string, q: QuestState): DialogPage | undefined {
+function chainDialog(id: string, q: QuestState, p: Quester | undefined): DialogPage | undefined {
   const c = q.chain ?? 0, quests = CHAINS[c].quests;
   const qid = q.questId, stage = q.questStage, count = q.questCount;
   const d = quests[qid];
   const last = quests[quests.length - 1];
-  if (!d) return last.giver === id ? { text: [last.after], bye: "Farewell", chain: c } : undefined;
+  if (!d) return last.giver === id ? { text: [afterFor(last, p)], bye: "Farewell", chain: c } : undefined;
   if (stage === 0) {
     if (d.giver === id) {
       if ((q.level ?? 1) < d.minLevel) return { text: [`There is more to do, but it is dangerous out there. Come back when you are level ${d.minLevel}.`], bye: "I'll train", chain: c };
@@ -2087,14 +2298,17 @@ function chainDialog(id: string, q: QuestState): DialogPage | undefined {
     }
     // The previous giver points you to the next one
     const prev = quests[qid - 1];
-    if (prev && prev.giver === id) return { text: [prev.after], bye: "Thanks", chain: c };
+    if (prev && prev.giver === id) return { text: [afterFor(prev, p)], bye: "Thanks", chain: c };
     return undefined;
   }
   const s = d.steps[stage - 1];
   if (!s) return undefined;
-  if (s.type === "talk" && s.npc === id) {
-    const end = stage === d.steps.length;
-    return { text: s.say!, accept: end ? `${s.accept} (${rewardText(d.reward)})` : s.accept, bye: "Later", chain: c };
+  if (stepWants(s, id, count)) {
+    // the last thing this hero does on the quest (later steps may be another branch's): the button names the reward
+    const lastOne = !s.npcs || popcount(count) === s.npcs.length - 1;
+    const end = lastOne && nextStage(d, stage, p) > d.steps.length;
+    if (s.type === "choose") return { text: sayFor(s, p), options: s.choose!.options.map((o) => ({ label: o.label, v: o.v })), bye: "Later", chain: c };
+    return { text: s.npcs ? s.says?.[id] ?? sayFor(s, p) : sayFor(s, p), accept: end ? `${s.accept} (${rewardText(d.reward)})` : s.accept, bye: "Later", chain: c };
   }
   if (d.giver === id && s.nag) return { text: [fill(s.nag, stepProgress(s, count), stepGoal(s))], bye: "On my way", chain: c };
   return undefined;
@@ -2102,7 +2316,7 @@ function chainDialog(id: string, q: QuestState): DialogPage | undefined {
 
 /**
  * What an NPC says about the quests, or undefined if they have nothing to say (traders then just trade).
- * With both chains wanting a word, a page that moves a quest on (a talk step, an offer) comes first.
+ * With both chains wanting a word, a page that moves a quest on (a talk step, a choice, an offer) comes first.
  */
 export function questDialog(id: string, p: Quester | undefined): DialogPage | undefined {
   // The guided first quest talks first; the stories wait for it (chainOpen)
@@ -2112,9 +2326,9 @@ export function questDialog(id: string, p: Quester | undefined): DialogPage | un
     if (q.questStage === 0 && !chainOpen(p, c)) return undefined;
     // The finished first quest only chats when nothing else has a word
     if (c === TUT_CHAIN && q.questId >= TUT_QUESTS.length) return undefined;
-    return chainDialog(id, q);
+    return chainDialog(id, q, p);
   }).filter((x): x is DialogPage => !!x);
-  const best = pages.find((x) => x.accept) ?? pages[0];
+  const best = pages.find((x) => x.accept || x.options) ?? pages[0];
   if (best) return best;
   return IDLE[id] ? { text: [IDLE[id]], bye: "Farewell", chain: 0 } : undefined;
 }
@@ -2126,6 +2340,9 @@ export interface QuestTarget {
   label: string;
 }
 
+const npcTarget = (id: string): QuestTarget[] => { const n = npcById(id); return n ? [{ x: n.x, y: n.y, kind: "npc", label: n.name }] : []; };
+const objTargets = (os: QuestObject[]): QuestTarget[] => os.map((o) => ({ x: o.x, y: o.y, kind: "object" as const, label: o.name }));
+
 /** Where one chain's current step points to, for the map, minimap and tracker (several for "use" steps). */
 export function questTargets(q: QuestState | undefined): QuestTarget[] {
   const d = questDef(q), stage = q?.questStage ?? 0;
@@ -2136,23 +2353,21 @@ export function questTargets(q: QuestState | undefined): QuestTarget[] {
   }
   const s = d.steps[stage - 1];
   if (!s) return [];
-  if (s.type === "talk") {
-    const n = npcById(s.npc!);
-    return n ? [{ x: n.x, y: n.y, kind: "npc", label: n.name }] : [];
-  }
+  if (s.type === "talk" && s.npcs) return s.npcs.filter((_, i) => !(q!.questCount & (1 << i))).flatMap(npcTarget);
+  if (s.type === "talk" || (s.type === "choose" && s.npc)) return npcTarget(s.npc!);
   if (s.type === "equip" || s.type === "learn") return []; // done in a menu, anywhere
   if (s.type === "reach") return [{ x: s.at!.x, y: s.at!.y, kind: "area", r: s.at!.r, label: s.at!.label }];
-  if (s.type === "use") {
-    return s.objects!.filter((o, i) => !(q!.questCount & (1 << i))).map((o) => ({ x: o.x, y: o.y, kind: "object" as const, label: o.name }));
-  }
+  if (s.type === "use") return objTargets(s.objects!.filter((o, i) => !(q!.questCount & (1 << i))));
+  if (s.type === "pick") return objTargets(s.pick!.objects);
   const z = zoneByName(s.zone ?? d.zone);
   return [{ x: (z.x + z.w / 2) * TILE, y: (z.y + z.h / 2) * TILE, kind: "area", r: (Math.min(z.w, z.h) / 2) * TILE, label: z.name }];
 }
 
-/** Quest objects this player can use right now on any chain, with their index (bit) in the step. */
+/** Quest objects this player can use right now on any chain, with their index (bit) in the step (pick: every candidate). */
 export function usableObjects(p: Quester | undefined): { o: QuestObject; i: number; chain: number }[] {
   return CHAINS.flatMap((_, c) => {
     const q = chainState(p, c), s = questStep(q);
+    if (s?.type === "pick") return s.pick!.objects.map((o, i) => ({ o, i, chain: c }));
     if (s?.type !== "use") return [];
     return s.objects!.map((o, i) => ({ o, i, chain: c })).filter(({ i }) => !(q!.questCount & (1 << i)));
   });
@@ -2162,17 +2377,20 @@ export function usableObjects(p: Quester | undefined): { o: QuestObject; i: numb
 export function allObjects(): QuestObject[] {
   return [...LANTERNS, COCOON, ...SHRINES, BROOD_HEART, ...SHARDS, ...ENGINES, BEACON, ...CRYPTS, PHYLACTERY, ...WARDS, ...KING_STONES, ...SILK, ...HIDE_TOTEMS, ...PALM_SIGILS, ...MIRAGE_SIGILS, ...CISTERNS, ...ARC_OBJECTS];
 }
+/** Done = its step is behind the hero (or, on a use step, its bit is set). Pick candidates and the like are never done mid-step. */
 export function objectDone(o: QuestObject, p: Quester | undefined): boolean {
-  const c = CHAINS.findIndex((ch) => ch.quests.some((d) => d.steps.some((s) => s.objects?.includes(o))));
+  const has = (s: QuestStep) => stepObjects(s).includes(o);
+  const c = CHAINS.findIndex((ch) => ch.quests.some((d) => d.steps.some(has)));
   if (c < 0) return false;
   const quests = CHAINS[c].quests, q = chainState(p, c);
   const qid = q?.questId ?? 0;
-  const owner = quests.findIndex((d) => d.steps.some((s) => s.objects?.includes(o)));
+  const owner = quests.findIndex((d) => d.steps.some(has));
   if (qid > owner) return true;
   if (qid < owner) return false;
-  const si = quests[owner].steps.findIndex((s) => s.objects?.includes(o));
+  const si = quests[owner].steps.findIndex(has);
   const stage = q?.questStage ?? 0;
   if (stage - 1 > si) return true;
   if (stage - 1 < si) return false;
-  return !!(q!.questCount & (1 << quests[owner].steps[si].objects!.indexOf(o)));
+  const st = quests[owner].steps[si];
+  return st.type === "use" && !!(q!.questCount & (1 << st.objects!.indexOf(o)));
 }
