@@ -217,3 +217,44 @@ Open:
     Repro scripts were in the session scratchpad and are not in the repo.
   - `PHASES=1` showed `updateWatch` (about 4 ms) and `updateUndeadNight` (about 1.5 ms) per tick on a loaded
     machine; S-4 looks at why.
+
+2026-11-13, later: first wave merged on the work branch
+- Merged: S-1, S-2, S-4 (S1: active monsters), C-1, C-2 (C1: static world), C-3 (C2, C3, C8), and the fix for
+  corrupted patches under deflate (`server/patchCopy.ts`).
+- Checks on the merged branch: build and `tools/smoke.mjs` pass; `npm test` 146 pass, 0 fail, 1 skipped.
+  `tests/voidconjure.test.ts` "the lance reached the far skeleton" is timing-dependent and fails now and then: 3 of
+  15 runs on the untouched base, 2 of 15 on the branch.
+- Server bench, quiet machine, before to after:
+
+  | Scenario | Tick avg | Patch avg | Ticks/s |
+  |---|---|---|---|
+  | 5 bots, clustered | 9.2 to 5.2 ms | 5.9 to 2.0 ms | 19.6 to 19.8 |
+  | 20 bots, `SPREAD=1` | 17.3 to 19.7 ms | 8.5 to 7.9 ms | 19.6 to 19.7 |
+  | 20 bots, `SPREAD=1 CAST=1` | 43.2 to 40.4 ms | 11.3 to 11.7 ms | 16.0 to 17.4 |
+
+  The 20-bot runs vary with random bot placement (384 active monsters after, 273 before). The fixed cost of a quiet
+  server is roughly halved; a busy server is not faster yet: `updateMob` dominates there (S4 next).
+  With `DEFLATE=1`, 20 spread bots: 12.7 kB per player per second on the wire (26.6 uncompressed), no decode errors.
+  kB per player varies 18-25 between identical runs, old code and new.
+- Client probe (`tools/perf/client.cjs`), standing in town, before to after:
+
+  | | Desktop 1920x1080 | Pixel 7 preset |
+  |---|---|---|
+  | Display list | 30,227 to 1,508 | not recorded to 1,315 |
+  | Update list | 16,831 to 281 | not recorded to 281 |
+  | Draw calls per frame | about 380 to 111 | about 8,140 to 406 |
+  | Textures | about 540 MB, unchanged | about 500 MB |
+
+  Console errors in both probe runs: none (every run before the patch fix had `"refId" not found`).
+  Script time per frame in the same software-rendered browser fell from about 15 + 63 ms (update + render) to
+  about 5 + 11 ms in town; these figures do not transfer to a real machine.
+- Not done from this wave: darkness overlay still redraws every frame (lights would slide at 20 Hz); minimap
+  markers still rebuilt per frame; the raider sweep and `assignFlanks` keep their loops; the top-down view
+  (`?iso=0`) is not chunked.
+- Not verified in a browser: dungeons, waygate jumps and respawn with the chunked world; Blizzard's particle
+  order; party frame and quest tracker timing; the hotbar on a phone (its first slot sat off screen in one run;
+  unknown whether that is older than this work).
+- Found, not fixed: `OVERLAY_DEPTH = 5000` in `client/src/iso.ts` is compared against world-y depth, so everything
+  south of about tile 156 is treated as an overlay (never culled, sorted by world y).
+- Next: S4 (awake-monster fast paths), L3 and C5 (texture memory, still about 520 MB), C7 with the canvas-size
+  finding, L1, L2. Order of the GPU items depends on the `?perf=1` reading from the owner's PC.
