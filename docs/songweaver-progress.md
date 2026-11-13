@@ -284,3 +284,9 @@ Agents build against this in parallel. Changing it needs the orchestrator.
   - Wizard overall 21/54/45/38/37/42/40/41/46%.
   - Known issues for a post-launch tuning pass: 68–72% vs the Wizard and 84–85% vs the Vampire at Lv 30–50 (the
     Vampire is already weak late, 16–24% before this); the Summoner matchup.
+- 2026-11-13: Option A merged (wave range 145).
+  - Checks: `npm test` 166 pass / 1 skipped; build OK; smoke OK.
+  - PvE (n=20), Songweaver vs Wizard:
+    - zones clear 100%; seconds per kill 2.1–3.5 vs 1.7–4.4 (Lv 2 is 147%, Lv 4 113%, otherwise ≤124%);
+    - Act 2 clears 100%, 3.7–4.2 s vs 2.7–3.9 s (105–144%, about the Summoner's speed);
+    - bosses 100% on all but Night Raider (0%, waived); Hollow King 40 s vs 29 s, Sunwright 52 s vs 28 s.
