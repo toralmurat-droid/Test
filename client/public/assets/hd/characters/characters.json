@@ -38,7 +38,15 @@
   "dunescout",
   "defector",
   "monk",
-  "tombrobber"
+  "tombrobber",
+  "sexton",
+  "mourner1",
+  "mourner2",
+  "mourner3",
+  "ilka",
+  "quartermaster",
+  "smuggler",
+  "alewife"
  ],
  "image": "{name}.webp",
  "frameWidth": 48,

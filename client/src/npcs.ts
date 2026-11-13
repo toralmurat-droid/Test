@@ -15,6 +15,7 @@ import {
   CHAINS, chainOpen, chainState, questSig, TUT_CHAIN, npcPresent, ZONE_ARCS, npcQuestMark, questDef, questDialog, questObjective, questStep, Quester, QuestTarget, questTargets, stepGoal, stepProgress,
 } from "../../shared/quests";
 import { QuestObjects } from "./questObjects";
+import { conceptTextures } from "./questConceptArt";
 import { TILE } from "../../shared/constants";
 import { ISO } from "./isoflag";
 import { routeVia } from "../../shared/dungeon";
@@ -167,6 +168,11 @@ export class NpcLayer {
       if (d.prop.startsWith("ar_")) { // the armourers' stands and racks (armoury.ts), same pixel grid
         const [ox, oy] = armouryOrigin(d.prop);
         scene.add.sprite(x, y, d.prop, 0).setOrigin(ox, oy).setScale(d.scale / AR_TX).setDepth(y).setFlipX(!!d.flip).play({ key: `${d.prop}_idle`, startFrame: Math.floor(d.x * 5) % 12 });
+        continue;
+      }
+      if (d.prop === "ale_cart") { // Mags' barrels on a cart (questConceptData.ts)
+        conceptTextures(scene);
+        scene.add.image(x, y, "ale_cart").setOrigin(0.5, 1).setScale(d.scale * 1.5).setDepth(y).setFlipX(!!d.flip);
         continue;
       }
       if (d.prop === "weapon_rack") { // pixel-art rack shared with the camps (worldProps.ts)
