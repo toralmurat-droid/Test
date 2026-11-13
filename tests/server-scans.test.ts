@@ -52,12 +52,14 @@ test("a pack of skeletons on one hero gets flank sides, and loses them when the 
   const a = mob("skeleton", p.x + 60, p.y), b = mob("skeleton", p.x - 60, p.y + 10);
   a.target = b.target = pid;
   room.state.mobs.set("flankA", a); room.state.mobs.set("flankB", b);
+  // assignFlanks reads the tick's pass (TownRoom.markWarm opens it at the start of each tick)
+  const flanks = () => { room.markWarm([...room.state.players.values()].filter((h: any) => !h.dead)); room.assignFlanks(); };
   try {
-    room.assignFlanks();
+    flanks();
     assert.ok(!Number.isNaN(a.flankA) && !Number.isNaN(b.flankA), "both have a side");
     assert.notEqual(a.flankA, b.flankA);
     b.target = ""; // b lost its target: no stale side on it, and a is alone again
-    room.assignFlanks();
+    flanks();
     assert.ok(Number.isNaN(a.flankA) && Number.isNaN(b.flankA));
   } finally { room.state.mobs.delete("flankA"); room.state.mobs.delete("flankB"); }
 });

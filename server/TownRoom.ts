@@ -1,5 +1,5 @@
 import { addHeat, coolHeat, isOverheated, OVERLOAD } from "../shared/overload";
-import { MobGrid, trackSchemaMoves } from "./mobGrid";
+import { MOB_CELL, MobGrid, trackSchemaMoves } from "./mobGrid";
 import { type AuthContext, Client, Room } from "colyseus";
 import { ArraySchema, MapSchema, Schema, type } from "@colyseus/schema";
 import {
@@ -215,7 +215,7 @@ export class Player extends Schema {
 }
 
 export class Mob extends Schema {
-  _gm: MobGrid<Mob> | null = null; _gid = ""; _gk = NaN; _gs = 0; // MobGrid bookkeeping (server/mobGrid.ts): it hears every move, see below
+  _gm: MobGrid<Mob> | null = null; _gid = ""; _gk = NaN; _gs = 0; _gb = false; _gv = 0; // MobGrid bookkeeping (server/mobGrid.ts): it hears every move, see below
   @type("string") kind: MobKind = "slime";
   @type("number") level = 1;
   @type("string") weapon = ""; // skeletons: sword, axe, spear or bow (SKELETON_WEAPONS)
@@ -312,7 +312,10 @@ export class Mob extends Schema {
   nextBrood = 0; // Mother Blob: when she next tries to bud a blobling
   homeX = 0;
   homeY = 0;
-  target = ""; // player session id being chased
+  /** Player session id being chased. A monster with a target is never frozen: setting one wakes it (MobGrid.wake). */
+  get target() { return this._tg; }
+  set target(v: string) { this._tg = v; if (v) this._gm?.wake(this); }
+  private _tg = "";
   wander: InputState = { up: false, down: false, left: false, right: false };
   nextWander = 0;
   lastAttack = 0;
@@ -1671,7 +1674,7 @@ export class TownRoom extends Room<TownState> {
   private feudGrid = new Map<number, [string, Mob][]>();
   private buildFeudGrid() {
     this.feudGrid.clear();
-    this.state.mobs.forEach((o, oid) => {
+    this.state.mobs.eachPass((o, oid) => { // (this tick's pass holds every monster that is not frozen: see markWarm)
       if (o.dead || o.summonFor || !FACTION[o.kind] || (o.dozy && this.cold(o.x, o.y))) return; // frozen ones fight no one
       const k = Math.floor(o.x / FEUD_CELL) * 4096 + Math.floor(o.y / FEUD_CELL);
       const cell = this.feudGrid.get(k);
@@ -2424,7 +2427,8 @@ export class TownRoom extends Room<TownState> {
   private flankKeys = new Map<string, string>(); // hero -> ids of the pack whose sides are handed out
   private assignFlanks() {
     const packs = new Map<string, [string, Mob][]>();
-    this.state.mobs.forEach((m, id) => {
+    // This tick's pass (markWarm): every monster with a target, or with a side still to clear, is in its busy set
+    this.state.mobs.eachPass((m, id) => {
       // target first: a plain field (the rest are schema getters) and empty for nearly every monster; write only a change
       if (!m.target || m.dead || m.hidden || (m.kind !== "skeleton" && m.kind !== "crawler") || m.weapon === "bow") { if (!Number.isNaN(m.flankA)) m.flankA = NaN; return; }
       const list = packs.get(m.target);
@@ -2618,16 +2622,30 @@ export class TownRoom extends Room<TownState> {
   /** 1 = a hero is within reach of this WARM_CELL square (see WARM_CELL). */
   private warm = new Uint8Array(WARM_COLS * WARM_ROWS);
 
+  /**
+   * Marks the warm squares and opens this tick's pass over the monsters (MobGrid.beginPass): the busy ones plus
+   * everyone in a warm square, which is every monster that is not frozen. Only those are visited.
+   */
   private markWarm(heroes: Player[]) {
-    const w = this.warm;
+    const w = this.warm, mobs = this.state.mobs, k = WARM_CELL / MOB_CELL;
     w.fill(0);
+    mobs.beginPass();
     const r = SLEEP_RANGE + WARM_PAD;
     for (const p of heroes) {
       const x0 = Math.max(0, Math.floor((p.x - r) / WARM_CELL)), x1 = Math.min(WARM_COLS - 1, Math.floor((p.x + r) / WARM_CELL));
       const y0 = Math.max(0, Math.floor((p.y - r) / WARM_CELL)), y1 = Math.min(WARM_ROWS - 1, Math.floor((p.y + r) / WARM_CELL));
-      for (let y = y0; y <= y1; y++) w.fill(1, y * WARM_COLS + x0, y * WARM_COLS + x1 + 1);
+      for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
+        const i = y * WARM_COLS + x;
+        if (w[i]) continue;
+        w[i] = 1;
+        mobs.passCells(x * k, y * k, x * k + k - 1, y * k + k - 1);
+      }
     }
+    mobs.sortPass();
   }
+
+  /** The old first line of the monster loop: dozing, no target, no hero anywhere near. Nothing to do this tick. */
+  private frozen(m: Mob): boolean { return m.dozy && !m.target && this.cold(m.x, m.y); }
 
   /** True when no living hero is anywhere near: a dozing monster here is frozen (see WARM_CELL). */
   private cold(x: number, y: number): boolean {
@@ -2715,9 +2733,11 @@ export class TownRoom extends Room<TownState> {
     this.updateRaids(now);
     if (tick % 10 === 0) this.bossVoices(now);
     this.checkRituals(now);
-    this.state.mobs.forEach((m, id) => {
-      // Frozen: dozing where no hero is anywhere near. Nothing to do; it wakes when a hero's warm squares reach it
-      if (m.dozy && !m.target && this.cold(m.x, m.y)) return;
+    const mobs = this.state.mobs;
+    mobs.runPass((m, id) => { // (the monsters that may not be frozen, in map order: see markWarm)
+      // Frozen: dozing where no hero is anywhere near. Nothing to do; it wakes when a hero's warm squares reach it.
+      // It leaves the busy set, unless assignFlanks still has to clear its side
+      if (this.frozen(m)) { if (Number.isNaN(m.flankA)) mobs.rest(m); return; }
       // A dozing monster far from every hero (nothing it could do this tick) only gets its upkeep every DOZE_EVERY ticks
       if (m.dozeSlot < 0) m.dozeSlot = this.dozeSeq++ % DOZE_EVERY;
       const slot = (tick + m.dozeSlot) % DOZE_EVERY === 0;
@@ -2727,7 +2747,7 @@ export class TownRoom extends Room<TownState> {
       if (m.dozy) {
         if (!slot) return;
         dt = Math.min(600, (now - (m.lastTick || now - dtMs)) / 1000); // poise recovers for the whole time it dozed (or lay frozen); a dozing monster does nothing else with dt
-      } else dt = dtMs / 1000;
+      } else { dt = dtMs / 1000; mobs.wake(m); } // awake: it must be visited wherever it goes, warm square or not
       m.lastTick = now;
       tickUnit(this.host, id);
       const fx = TownRoom.mobFx(m, now);
@@ -2772,8 +2792,9 @@ export class TownRoom extends Room<TownState> {
     if (now >= this.watchLookAt) {
       this.watchLookAt = now + 400;
       const m = (WATCH.leashTiles + 2) * TILE, x0 = VILLAGE.x0 * TILE - m, x1 = (VILLAGE.x1 + 1) * TILE + m, y0 = VILLAGE.y0 * TILE - m, y1 = (VILLAGE.y1 + 1) * TILE + m;
-      this.watchSeen = [];
-      this.state.mobs.forEach((o, oid) => { if (!o.dead && !o.hidden && o.x > x0 && o.x < x1 && o.y > y0 && o.y < y1) this.watchSeen.push([oid, o]); });
+      // (the squares round the stockade only, in map order: the same monsters and order as a full scan)
+      this.watchSeen = this.state.mobs.inBox((x0 + x1) / 2, (y0 + y1) / 2, Math.max(x1 - x0, y1 - y0) / 2)
+        .filter(([, o]) => !o.dead && !o.hidden && o.x > x0 && o.x < x1 && o.y > y0 && o.y < y1);
     }
     this.outlaws = [];
     this.state.players.forEach((p, pid) => { if (p.outlaw && !p.dead) this.outlaws.push([pid, p]); });
@@ -2943,7 +2964,8 @@ export class TownRoom extends Room<TownState> {
     }
     if (up) return;
     // Who could go to ground this second: per undead zone, plus the bosses out of their zone (quest and ritual summons)
-    const idle = (m: Mob) => !m.dead && !m.target && !m.ritual && !m.guard && !m.mergeInto && m.specialAt === 0 && !this.playerNear(m.x, m.y, UNDEAD_NIGHT.sinkClear);
+    // (no hero near is checked last, below, and only until four are found: it was a hero scan for every idle undead)
+    const idle = (m: Mob) => !m.dead && !m.target && !m.ritual && !m.guard && !m.mergeInto && m.specialAt === 0;
     const byZone = new Map<number, [string, Mob][]>();
     this.state.mobs.forEach((m, id) => {
       if (m.dead) return;
@@ -2959,8 +2981,11 @@ export class TownRoom extends Room<TownState> {
       if (!zone) return;
       // bosses first, then the idle, the siege workers last (they are the busy few who stay up)
       list.sort(([, a], [, b]) => Number(NIGHT_BOSSES.includes(b.kind)) - Number(NIGHT_BOSSES.includes(a.kind)) || Number(!!a.work) - Number(!!b.work));
-      let over = zone.alive - this.dayCap(zi, zone.cap);
-      for (const [id, m] of list.slice(0, 4)) {
+      let over = zone.alive - this.dayCap(zi, zone.cap), took = 0;
+      for (const [id, m] of list) {
+        if (took >= 4) break;
+        if (this.playerNear(m.x, m.y, UNDEAD_NIGHT.sinkClear)) continue; // (the first four with no hero near, in sorted order)
+        took++;
         if (NIGHT_BOSSES.includes(m.kind)) { this.sinkMob(m, id); continue; }
         if (over-- <= 0) break;
         this.sinkMob(m, id);
