@@ -2,6 +2,7 @@
 // then prints the time per server tick, CPU, memory and the bytes each player receives per second.
 //   npm run bench -- [bots=5] [seconds=15]        SPREAD=1 scatters the bots over the whole map (worst case)
 //   CAST=1 SPREAD=1: the Summoner bots cast wisps, blades, black holes and the Void Arsenal non-stop (tools/perf/bots.ts)
+//   SONGWEAVER=1 (PARTY=1): Songweaver bots too, the server allows the class (ALLOW_ARCHIVED_CLASSES); PARTY=1 groups them
 import os from "node:os";
 import path from "node:path";
 import http from "node:http";
@@ -12,6 +13,7 @@ async function main() {
   const BOTS = Number(process.argv[2] ?? 5), SECS = Number(process.argv[3] ?? 15), PORT = 2599;
   process.env.SAVE_FILE = path.join(os.tmpdir(), `bench-saves-${process.pid}.json`);
   process.env.IDEAS_FILE = path.join(os.tmpdir(), `bench-ideas-${process.pid}.json`);
+  if (process.env.SONGWEAVER) process.env.ALLOW_ARCHIVED_CLASSES = "1"; // the Songweaver is not an active class yet
   const colyseus: any = await import("colyseus");
   const { Server } = colyseus.Server ? colyseus : colyseus.default;
   const { WebSocketTransport } = await import("@colyseus/ws-transport");

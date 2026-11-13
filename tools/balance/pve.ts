@@ -1,6 +1,6 @@
 /**
  * PvE balance simulator: bot heroes play the first zone (Lv 1-30) against its monsters and bosses.
- * Run: npx tsx tools/balance/pve.ts [runsPerCase] [--bosses] [--zones] [--act2] [--champions] [--class=vampire] [--build=0|1|2] [--boss=king] [--no-execute]
+ * Run: npx tsx tools/balance/pve.ts [runsPerCase] [--bosses] [--zones] [--act2] [--champions] [--class=vampire] [--build=0|1|2] [--boss=king] [--no-execute] [--songweaver]
  * --champions: one fight against each champion (shared/champions.ts, a 1D version of its affixes) beside the same plain monster.
  *
  * It reuses the PvP simulator (tools/balance/duel.ts): the same hero bot, skill engine, builds (rushing one branch),
@@ -27,6 +27,7 @@ import { Duel, F, GolemF, make, SIM } from "./duel";
 import { SUMMON } from "../../shared/summons";
 import { AFFIX_FX as CF, CHAMPION, type AffixKey } from "../../shared/champions";
 import { addHeat } from "../../shared/overload";
+import { mobSound } from "../../server/songs";
 
 type Build = 0 | 1 | 2;
 
@@ -127,6 +128,7 @@ export class MobF extends F {
     this.s = { sta: 0, str: 0, mag: 0, dex: 0 };
     this.body = spec.body;
     this.mob = { reach: spec.reach, ranged: !!spec.ranged, boss: !!spec.boss };
+    this.sound = mobSound(spec.kind, !!spec.boss); // how it hears the Songweaver (shared/combat.ts MOB_COMBAT sound)
     for (const s of spec.specials) this.next[s.name] = s.first ?? 1500 + Math.random() * 2000;
   }
   get poiseMax() { return this.spec.poise; }
@@ -474,7 +476,7 @@ if (process.argv.includes("--no-execute")) SIM.execute = false;
 const argOf = (k: string) => process.argv.find((a) => a.startsWith(`--${k}=`))?.split("=")[1];
 const ONLY = argOf("class") as ClassKind | undefined;
 const BUILD = argOf("build") !== undefined ? (Number(argOf("build")) as Build) : undefined;
-const CLASSES = ONLY ? [ONLY] : ACTIVE_CLASSES;
+const CLASSES: ClassKind[] = ONLY ? [ONLY] : process.argv.includes("--songweaver") ? [...ACTIVE_CLASSES, "songweaver"] : ACTIVE_CLASSES;
 const buildOf = (i: number) => BUILD ?? ((i % 3) as Build);
 
 if (process.argv[1]?.includes("pve")) {
