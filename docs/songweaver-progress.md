@@ -121,3 +121,11 @@ open questions are answered.
 ## Delivery
 One branch. A draft PR until the merge rule in CLAUDE.md is met. Keep this file up to date at the end of each
 session: what was done, decisions with name and date, numbers, pitfalls.
+
+## Log
+- 2026-11-13: the owner asked for maximum parallel work. Started the work that doesn't depend on the tree, each
+  agent in its own worktree:
+  - art-audio: hero sheet, lute overlay, `pluck()` lute voice (any MIDI note, key not decided), wave projectile art.
+  - gameplay-engineer: generic ally-reaching buffs and shields in `shared/skillEngine.ts`, `heal(from)`, the
+    `damagePlayer` hook, sim hooks and tests.
+  - Waiting on the redesign: skill icons, skillfx, chords, the class tables.
