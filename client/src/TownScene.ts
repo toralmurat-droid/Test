@@ -80,7 +80,7 @@ import { StashUI, TradeUI } from "./trade";
 import { STASH, STASH_RANGE } from "../../shared/trade";
 import { afterLoading, hideLoading, loadingActive, loadingFor, setLoading, showLoading } from "./loading";
 import { WaygateLayer } from "./waygate";
-import { ISO, IsoView, isoAnchor, isoInput, isoX, isoY, screenDir, screenDir8 } from "./iso";
+import { ISO, IsoView, isoAnchor, isoInput, isoX, isoY, screenDir, screenDir8, setBaseDepth } from "./iso";
 import { SMOOTH } from "./isoflag";
 import { addPixelGrid } from "./pixelgrid";
 import { paintSmoothProps } from "./smoothProps";
@@ -3059,7 +3059,7 @@ export class TownScene extends Phaser.Scene {
         if (e.mob) e.sprite.setVisible(!p.dead && !p.hidden);
         else e.sprite.setAlpha(p.dead ? 0.35 : 1).setAngle(p.dead ? 90 : 0);
       }
-      e.sprite.setDepth(e.sprite.y);
+      setBaseDepth(e.sprite, e.sprite.y);
       if (e.mob && p.kind === "nightraider" && !p.dead && e.sprite.visible) raiderTrail(this.fx, e as any, moving, now);
       // Status effects: yellow flicker for stunned, blue for slowed, red pulse for raging. A monster winding up shows
       // it in its pose; only sheets without attack frames (?pixel=1) still flash red.
@@ -3080,7 +3080,7 @@ export class TownScene extends Phaser.Scene {
       const x = Math.round(e.sprite.x), y = Math.round(e.sprite.y);
       // Monsters: HP bar over the head, level tag just above it
       const mobBarY = y - e.top - 4;
-      e.label?.setPosition(x, e.mob ? mobBarY - 1 : y - e.top - (p.hat ? 4 : 2)).setDepth(e.sprite.y + 1);
+      if (e.label) setBaseDepth(e.label.setPosition(x, e.mob ? mobBarY - 1 : y - e.top - (p.hat ? 4 : 2)), e.sprite.y + 1);
       if (e.mob && e.label) {
         // Level tag coloured by how tough it is for me: grey easy, white even, orange tougher, red dangerous
         const diff = (p.level ?? 1) - ((this.room.state as any).players?.get(this.me)?.level ?? 1);
@@ -3110,7 +3110,7 @@ export class TownScene extends Phaser.Scene {
         if (e.lvlColor !== col) { e.label.setColor(col); e.lvlColor = col; }
       }
       e.bubble?.setPosition(x, y - e.top - 12); // above the name label
-      e.bar.clear().setDepth(e.sprite.y + 1);
+      setBaseDepth(e.bar.clear(), e.sprite.y + 1);
       if (e.mob) this.champFx?.sync(id, e, p, x, y, mobBarY, now);
       this.fx.status(e, e.bar, dtMs / 1000);
       // (Stacks built by basic hits are shown by the skill keys, see chargeCell: no pips under the hero, Murat 2026-11-04)
@@ -3118,7 +3118,7 @@ export class TownScene extends Phaser.Scene {
       if (!e.mob) {
         if (p.guarding && !p.dead) {
           e.shield ??= isoAnchor(this.add.graphics(), e.sprite) as Phaser.GameObjects.Graphics;
-          e.shield.clear().lineStyle(1, 0x9ad1ff, 0.9).strokeCircle(x, y - e.top / 2, e.top / 2 + 3).setDepth(e.sprite.y + 2);
+          setBaseDepth(e.shield.clear().lineStyle(1, 0x9ad1ff, 0.9).strokeCircle(x, y - e.top / 2, e.top / 2 + 3), e.sprite.y + 2);
         } else if (e.shield) { e.shield.destroy(); e.shield = undefined; }
       }
       if (p.broken && !p.dead) {

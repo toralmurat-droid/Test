@@ -5,7 +5,8 @@ import { LAND_TREE_TINT } from "./elementArt";
 import { DESERT_BUSH_TINT, palmTexture } from "./desertArt";
 import { ANIMATED_TILES, animatedRows, drawTileFrame } from "./tileset";
 import { refreshRegions } from "./texupload";
-import { ISO, isoAnchor } from "./iso";
+import { ISO, isoAnchor, isoX, isoY } from "./iso";
+import { StaticChunks, staticObj } from "./staticChunks";
 import { SMOOTH } from "./isoflag";
 import { smoothTrees } from "./smoothArt";
 import { hiResTexture } from "./smooth";
@@ -34,6 +35,12 @@ const ground = (x: number, y: number) => (x < 0 || y < 0 || x >= MAP_W || y >= M
 function rng(seed: number) {
   return () => ((seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0) / 4294967296);
 }
+
+/** Screen box (iso px) a smoke or spark column can fill, for an emitter at world (x, y) anchored at (ax, ay). */
+const plumeBox = (x: number, y: number, ax = x, ay = y): [number, number, number, number] => {
+  const sx = x - ax + isoX(ax, ay), sy = y - ay + isoY(ax, ay);
+  return [sx - 64, sy - 200, sx + 192, sy + 48];
+};
 
 // ---------- generated textures ----------
 
@@ -171,13 +178,15 @@ function makeTextures(scene: Phaser.Scene) {
 
 // ---------- the ambient layer ----------
 
-interface Flier { s: Phaser.GameObjects.Sprite; ax: number; ay: number; ph: number; sp: number; r: number }
+interface Flier { s: Phaser.GameObjects.Image; ax: number; ay: number; ph: number; sp: number; r: number }
 
 export class Ambient {
   private frame = 0;
   private tileTimer = 0;
   private swayTimer = 0;
-  private trees: Phaser.GameObjects.Sprite[] = [];
+  private trees: Phaser.GameObjects.Image[] = [];
+  /** Trees in the display list (iso: only those near the view, staticChunks.ts); the sway only touches these. */
+  private liveTrees = new Set<Phaser.GameObjects.Image>();
   private butterflies: Flier[] = [];
   private fireflies: Flier[] = [];
   private clouds: Phaser.GameObjects.Image[] = [];
@@ -189,12 +198,12 @@ export class Ambient {
   /** 0 by day, 1 at night (fireflies glow brighter in the dark). */
   setDarkness(d: number) { this.dark = d; for (const o of this.fireLit) o.setAlpha(d * 0.6); }
   /** Additive copies of the fires above the night tint, so flames keep their colour in the dark. */
-  private fireLit: Phaser.GameObjects.Sprite[] = [];
+  private fireLit: Phaser.GameObjects.Image[] = [];
   private litCopy(s: Phaser.GameObjects.Sprite) {
     if (!SMOOTH) return s;
-    const o = this.scene.add.sprite(s.x, s.y, "bonfire_lit", 0).setOrigin(s.originX, s.originY).setScale(s.scaleX).setBlendMode(Phaser.BlendModes.ADD).setDepth(27600).setAlpha(this.dark * 0.6);
+    const o = this.scene.add.image(s.x, s.y, "bonfire_lit", 0).setOrigin(s.originX, s.originY).setScale(s.scaleX).setBlendMode(Phaser.BlendModes.ADD).setDepth(27600).setAlpha(this.dark * 0.6);
     s.on(Phaser.Animations.Events.ANIMATION_UPDATE, () => o.setFrame(s.frame.name));
-    this.fireLit.push(o);
+    this.fireLit.push(staticObj(this.scene, o));
     return s;
   }
 
@@ -245,7 +254,7 @@ export class Ambient {
       const pines = SMOOTH ? ["pine", "pine", "pine_b"] : ["pine"];
       const desert = y >= DESERT_Y0;
       const key = t === T.PALM ? palmTexture(this.scene, Math.floor(r() * 3)) : t === T.PINE ? pines[Math.floor(r() * pines.length)] : t === T.BUSH ? "bush" : oaks[Math.floor(r() * oaks.length)];
-      const s = this.scene.add.sprite((x + 0.5) * TILE + (t === T.BUSH ? 0 : Math.round((r() * 2 - 1) * K)), (y + 1) * TILE, key, 0)
+      const s = this.scene.add.image((x + 0.5) * TILE + (t === T.BUSH ? 0 : Math.round((r() * 2 - 1) * K)), (y + 1) * TILE, key, 0)
         .setOrigin(0.5, 1).setDepth((y + 1) * TILE - 2).setTint(tints[Math.floor(r() * tints.length)]);
       const land = elementLandAt(x + 0.5, y + 0.5, 3); // the elemental wilds: frosted, blighted, charred or storm-grey trees
       if (land && ((x * 7919 + y * 104729) % 97) / 97 < 0.35 + land.k * 0.65) s.setTint(LAND_TREE_TINT[land.land.el]);
@@ -254,7 +263,7 @@ export class Ambient {
       if (r() < (SMOOTH ? 0.5 : t === T.BUSH ? 0 : 0.25)) s.setFlipX(true);
       if (SMOOTH) s.setScale(t === T.BUSH ? 0.85 + r() * 0.3 : 0.82 + r() * 0.36); // no two trees the same size
       s.setData("ph", r() * 0.6);
-      this.trees.push(s);
+      this.trees.push(staticObj(this.scene, s, { onLive: (on) => { if (on) this.liveTrees.add(s); else this.liveTrees.delete(s); } }));
     }
   }
 
@@ -276,8 +285,8 @@ export class Ambient {
       }
       if (maxX - minX < 2) continue;
       const cx = (r() < 0.5 ? maxX - 1 : minX + 1) * TILE + 6 * K, cy = minY * TILE + 9 * K;
-      this.scene.add.image(cx, cy, "chimney").setOrigin(0.5, 1).setDepth(-0.9);
-      if (r() < 0.8) this.smoke(cx, cy - 8 * K, 0.9);
+      staticObj(this.scene, this.scene.add.image(cx, cy, "chimney").setOrigin(0.5, 1).setDepth(-0.9));
+      if (r() < 0.8) staticObj(this.scene, this.smoke(cx, cy - 8 * K, 0.9), { box: plumeBox(cx, cy - 8 * K), warm: SMOOTH ? 6500 : 3800 });
     }
   }
 
@@ -315,8 +324,8 @@ export class Ambient {
         // Iso: a small upright fire (stone ring, crossed logs, flames) instead of the flat tile; sparks and smoke rise from its flames
         const fy = (y + 0.5) * TILE;
         this.bonfireTexture();
-        this.litCopy(this.scene.add.sprite(cx, fy, "bonfire", 0).setOrigin(0.5, 46 / 56).setScale(0.42).setDepth(fy)).play({ key: "bonfire_burn", startFrame: (x + y) % 6 });
-        const glow = this.scene.add.image(cx, fy, "glow").setTint(0xffa040).setScale(6 * K).setAlpha(0.25).setBlendMode(Phaser.BlendModes.ADD).setDepth(-0.8);
+        staticObj(this.scene, this.litCopy(this.scene.add.sprite(cx, fy, "bonfire", 0).setOrigin(0.5, 46 / 56).setScale(0.42).setDepth(fy)).play({ key: "bonfire_burn", startFrame: (x + y) % 6 }));
+        const glow = staticObj(this.scene, this.scene.add.image(cx, fy, "glow").setTint(0xffa040).setScale(6 * K).setAlpha(0.25).setBlendMode(Phaser.BlendModes.ADD).setDepth(-0.8));
         this.scene.tweens.add({ targets: glow, alpha: 0.4, scale: 6.6 * K, duration: 180, yoyo: true, repeat: -1, ease: "Sine.easeInOut", repeatDelay: 60 });
         const sparks = this.scene.add.particles(cx, fy - 9 * K, "spark", {
           ...(SMOOTH
@@ -325,7 +334,8 @@ export class Ambient {
           alpha: { start: 1, end: 0 }, blendMode: "ADD",
         }).setDepth(25000);
         isoAnchor(sparks, { x: cx, y: fy });
-        isoAnchor(this.smoke(cx, fy - 14 * K, 0.7), { x: cx, y: fy });
+        staticObj(this.scene, sparks, { box: plumeBox(cx, fy - 9 * K, cx, fy), warm: 2800 });
+        staticObj(this.scene, isoAnchor(this.smoke(cx, fy - 14 * K, 0.7), { x: cx, y: fy }), { box: plumeBox(cx, fy - 14 * K, cx, fy), warm: SMOOTH ? 6500 : 3800 });
         continue;
       }
       const glow = this.scene.add.image(cx, cy, "glow").setTint(0xffa040).setScale(6 * K).setAlpha(0.25).setBlendMode(Phaser.BlendModes.ADD).setDepth(-0.8);
@@ -405,16 +415,17 @@ export class Ambient {
       if (OBJECTS[y][x] !== T.BONFIRE || OBJECTS[y - 1]?.[x] === T.BONFIRE || OBJECTS[y][x - 1] === T.BONFIRE) continue;
       this.bonfireTexture();
       const cx = (x + 1) * TILE, cy = (y + 1) * TILE + 6 * K;
-      this.litCopy(this.scene.add.sprite(cx, cy - 4 * K, "bonfire", 0).setOrigin(0.5, 46 / 56).setScale(0.68).setDepth(cy)).play("bonfire_burn"); // in scale with the heroes
-      const glow = this.scene.add.image(cx, cy - 10 * K, "glow").setTint(0xffa040).setScale(10 * K).setAlpha(0.3).setBlendMode(Phaser.BlendModes.ADD).setDepth(-0.8);
+      staticObj(this.scene, this.litCopy(this.scene.add.sprite(cx, cy - 4 * K, "bonfire", 0).setOrigin(0.5, 46 / 56).setScale(0.68).setDepth(cy)).play("bonfire_burn")); // in scale with the heroes
+      const glow = staticObj(this.scene, this.scene.add.image(cx, cy - 10 * K, "glow").setTint(0xffa040).setScale(10 * K).setAlpha(0.3).setBlendMode(Phaser.BlendModes.ADD).setDepth(-0.8));
       this.scene.tweens.add({ targets: glow, alpha: 0.45, scale: 11 * K, duration: 220, yoyo: true, repeat: -1, ease: "Sine.easeInOut", repeatDelay: 40 });
-      this.scene.add.particles(cx, cy - 14 * K, "spark", {
+      const sparks = this.scene.add.particles(cx, cy - 14 * K, "spark", {
         ...(SMOOTH
           ? { lifespan: { min: 1600, max: 2800 }, speedY: { min: -16 * K, max: -7 * K }, speedX: { min: -3 * K, max: 3 * K }, accelerationX: WIND_X * 0.4 * K, scale: { start: 0.9, end: 0.2 }, frequency: 170 }
           : { lifespan: { min: 700, max: 1600 }, speedY: { min: -45 * K, max: -18 * K }, speedX: { min: -14 * K, max: 14 * K }, scale: { start: 2, end: 0.3 }, frequency: 60 }),
         alpha: { start: 1, end: 0 }, blendMode: "ADD",
       }).setDepth(25000);
-      this.smoke(cx, cy - 24 * K, 1.1);
+      staticObj(this.scene, sparks, { box: plumeBox(cx, cy - 14 * K), warm: 2800 });
+      staticObj(this.scene, this.smoke(cx, cy - 24 * K, 1.1), { box: plumeBox(cx, cy - 24 * K), warm: SMOOTH ? 6500 : 3800 });
     }
   }
 
@@ -425,7 +436,7 @@ export class Ambient {
     const cols = [0xffffff, 0xfff176, 0xffb3d9, 0x9ad1ff, 0xffa64d];
     for (let i = 0; i < Math.min(60, spots.length); i++) {
       const [x, y] = spots[Math.floor(r() * spots.length)];
-      const s = this.scene.add.sprite((x + 0.5) * TILE, (y + 0.5) * TILE, "butterfly", 0).setTint(cols[i % cols.length]).setDepth(21000);
+      const s = this.scene.add.image((x + 0.5) * TILE, (y + 0.5) * TILE, "butterfly", 0).setTint(cols[i % cols.length]).setDepth(21000);
       this.butterflies.push({ s, ax: s.x, ay: s.y, ph: r() * 100, sp: 0.6 + r() * 0.6, r: 10 + r() * 18 });
     }
   }
@@ -436,7 +447,7 @@ export class Ambient {
     const r = rng(5);
     for (let i = 0; i < 80; i++) {
       const x = (woods.x + r() * woods.w) * TILE, y = (woods.y + r() * woods.h) * TILE;
-      const s = this.scene.add.sprite(x, y, "glow").setBlendMode(Phaser.BlendModes.ADD).setDepth(21000).setScale(0.7);
+      const s = this.scene.add.image(x, y, "glow").setBlendMode(Phaser.BlendModes.ADD).setDepth(21000).setScale(0.7);
       this.fireflies.push({ s, ax: x, ay: y, ph: r() * 100, sp: 0.3 + r() * 0.4, r: 8 + r() * 14 });
     }
   }
@@ -516,7 +527,7 @@ export class Ambient {
     this.swayTimer += dtMs;
     if (this.swayTimer > 110) {
       this.swayTimer = 0;
-      for (const s of this.trees) {
+      for (const s of StaticChunks.get(scene) ? this.liveTrees : this.trees) {
         const on = !(s.x < cam.x - 24 * K || s.x > cam.right + 24 * K || s.y < cam.y || s.y > cam.bottom + 40 * K);
         if (s.visible !== on) s.setVisible(on); // off-screen trees are skipped entirely by the renderer
         if (!on) continue;
