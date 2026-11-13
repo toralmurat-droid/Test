@@ -16,13 +16,13 @@ test("tiers scale damage, resonance and crowd control; deaf never resonates", ()
     const m = soundMult({ tier: t }, {});
     assert.equal(m.dmg, SOUND_TIER[t].dmg); assert.equal(m.res, SOUND_TIER[t].res); assert.equal(m.cc, SOUND_TIER[t].cc);
   }
-  assert.deepEqual(SOUND_TIER.deaf, { dmg: 0.5, res: 0, cc: 0.5 });
+  assert.deepEqual(SOUND_TIER.deaf, { dmg: 0.75, res: 0, cc: 0.75 });
   assert.equal(SOUND_TIER.fragile.res, 2);
   assert.equal(soundMult({ tier: "deaf", pitch: "L" }, { pitch: "L", mode: "major" }).res, 0, "deaf: no resonance even matched");
   assert.equal(soundMult(HERO_SOUND, {}).dmg, 1, "heroes hear normally");
 });
 
-test("pitch match x1.2 damage / x1.5 resonance ('any' matches every pitch); mode affinity x1.3; bosses and Trained Ear x0.5", () => {
+test("pitch match x1.2 damage / x1.5 resonance ('any' matches every pitch); mode affinity x1.3; bosses x0.75 and Trained Ear x0.5", () => {
   const keenH: SoundProfile = { tier: "keen", pitch: "H" };
   const m = soundMult(keenH, { pitch: "H" }), off = soundMult(keenH, { pitch: "L" }), any = soundMult(keenH, { pitch: "any" });
   assert.ok(m.match && !off.match && any.match);
@@ -32,10 +32,12 @@ test("pitch match x1.2 damage / x1.5 resonance ('any' matches every pitch); mode
   const undead: SoundProfile = { tier: "normal", mode: "major" };
   assert.ok(near(soundMult(undead, { mode: "lydian" }).res, 1.3), "Lydian is in the major family");
   assert.ok(near(soundMult(undead, { mode: "phrygian" }).res, 1));
-  assert.ok(near(soundMult({ tier: "normal", boss: true }, {}).res, 0.5));
+  assert.ok(near(soundMult({ tier: "normal", boss: true }, {}).res, 0.75));
   assert.ok(near(soundMult({ tier: "normal", ear: true }, {}).res, 0.5));
   // the planner's assignment
-  assert.equal(MOB_COMBAT.slime.sound.tier, "deaf");
+  assert.equal(MOB_COMBAT.slime.sound.tier, "dull");
+  assert.equal(MOB_COMBAT.motherblob.sound.tier, "deaf");
+  assert.equal(MOB_COMBAT.blobling.sound.tier, "deaf");
   assert.deepEqual(MOB_COMBAT.skeleton.sound, { tier: "fragile", pitch: "H", mode: "major" });
   assert.deepEqual(MOB_COMBAT.nightraider.sound, { tier: "deaf" });
 });
@@ -121,7 +123,7 @@ test("Sympathetic Strings: a burst spreads to foes close by without setting them
   assert.equal(w.fx.filter((e) => e.ev === "resonate").length, 1, "b did not burst from the spread");
 });
 
-test("the room scales sound hits by how the target hears (deaf slime, fragile skeleton); other hits unchanged", async () => {
+test("the room scales sound hits by how the target hears (deaf blobling, dull slime, fragile skeleton); other hits unchanged", async () => {
   const srv = await startRoom();
   try {
     const c = await srv.join({ cls: "songweaver" });
@@ -140,11 +142,12 @@ test("the room scales sound hits by how the target hears (deaf slime, fragile sk
       room.state.mobs.delete("t_" + kind);
       return d;
     };
-    const plain = lost("slime", {});
+    const plain = lost("blobling", {});
     assert.equal(plain, 100);
-    assert.equal(lost("slime", { sound: { pitch: "M" } }), 50, "deaf: half");
-    assert.equal(lost("slime", { sound: { pitch: "L" } }), 60, "deaf, but the right pitch");
-    assert.equal(lost("skeleton", { sound: { pitch: "H" } }), Math.round(100 * 1.25 * 1.2), "fragile + match");
+    assert.equal(lost("blobling", { sound: { pitch: "M" } }), 75, "deaf: three quarters");
+    assert.equal(lost("blobling", { sound: { pitch: "L" } }), 90, "deaf, but the right pitch");
+    assert.equal(lost("slime", { sound: { pitch: "M" } }), 90, "dull");
+    assert.equal(lost("skeleton", { sound: { pitch: "H" } }), Math.round(100 * 1.35 * 1.2), "fragile + match");
     assert.equal(lost("skeleton", {}), 100, "not a sound hit: unchanged");
     await c.leave();
   } finally { await srv.stop(); }

@@ -146,8 +146,8 @@ export const CLASSES: Record<ClassKind, ClassDef> = {
   // are party auras (shared/songs.ts), skills are notes whose progressions fire chords, and its waves are sound that
   // bounces off walls and builds resonance in monsters that hear it (shared/combat.ts SOUND_TIER).
   songweaver: {
-    name: "Songweaver", maxHp: 95, speed: 90, damage: 17, attackCooldownMs: 560, attackRange: 0,
-    projectile: { speed: 210, range: 140, radius: 8, kind: "wave" },
+    name: "Songweaver", maxHp: 105, speed: 90, damage: 20, attackCooldownMs: 520, attackRange: 0,
+    projectile: { speed: 225, range: 160, radius: 8, kind: "wave" },
     special: { kind: "song", name: "Song", cooldownMs: 2000 },
     // two plucked notes, then a strum: a wider wave that bursts and pushes back
     combo: [
