@@ -1,5 +1,6 @@
 {
   "date": "2026-11-13",
+  "patch": 211,
   "pr": 383,
   "title": "Gear no longer adds damage",
   "changes": [
