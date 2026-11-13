@@ -1,5 +1,6 @@
 {
   "date": "2026-11-13",
+  "pr": 386,
   "title": "Waygate tuning",
   "changes": [
     "Small behind-the-scenes change to how the waygate south of Oakvale wakes."
