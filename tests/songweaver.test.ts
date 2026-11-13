@@ -66,8 +66,8 @@ const play = (w: ReturnType<typeof world>, id: string, skill: string) => {
 };
 const chords = (w: ReturnType<typeof world>) => w.fx.filter((e) => e.ev === "chord").map((e) => e.prog);
 
-test("Songweaver data: 18 tree skills, Modulate cantrip, 5 hidden finishers, not an active class yet", () => {
-  assert.equal(ACTIVE_CLASSES.includes("songweaver"), false);
+test("Songweaver data: 18 tree skills, Modulate cantrip, 5 hidden finishers, playable", () => {
+  assert.equal(ACTIVE_CLASSES.includes("songweaver"), true);
   assert.equal(CLASSES.songweaver.projectile?.kind, "wave");
   const ids = SKILLS.songweaver.map((s) => s.id).sort();
   assert.deepEqual(ids, ["sg_accel", "sg_anthem", "sg_ballad", "sg_call", "sg_chorale", "sg_crack", "sg_dirge", "sg_dorian", "sg_jig", "sg_legato",
