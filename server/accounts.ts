@@ -48,6 +48,10 @@ export interface HeroSave {
   grimoire?: string;
   /** Summoner skill tree version (shared/summons.ts SUMMONER_TREE): an older save gets its skill points back. */
   suTree?: number;
+  /** Songweaver skill tree version (shared/songs.ts SONGWEAVER_TREE): an older save gets its skill points back. */
+  swTree?: number;
+  /** Songweaver mode (shared/songs.ts MODE_IDS); missing or no longer known = Major. */
+  swMode?: string;
 }
 
 interface Account {

@@ -72,6 +72,7 @@ export function weaponAttackMult(cls: ClassKind, s: Stats, type: WeaponType): nu
 export const ATTACK_WORDS: Record<WeaponType, string> = {
   sword: "melee swings", katana: "fast melee cuts", axe: "heavy melee chops", bow: "shoots arrows",
   staff: "throws fireballs", wand: `fires magic bolts (${WAND_COST} mana each)`, fists: "punches",
+  lute: "plays sound waves",
 };
 
 /**
@@ -81,7 +82,7 @@ export const ATTACK_WORDS: Record<WeaponType, string> = {
  */
 export type PoseFamily = "melee" | "bow" | "caster";
 export const POSE_FAMILIES: PoseFamily[] = ["melee", "bow", "caster"];
-export const weaponFamily = (t: WeaponType): PoseFamily => (t === "bow" ? "bow" : t === "staff" || t === "wand" ? "caster" : "melee");
+export const weaponFamily = (t: WeaponType): PoseFamily => (t === "bow" ? "bow" : t === "staff" || t === "wand" || t === "lute" ? "caster" : "melee");
 export const nativeFamily = (cls: ClassKind): PoseFamily => weaponFamily(NATIVE_WEAPON[cls]);
 /** Sheet name for a hero holding this weapon: the class itself, or "archer-melee" style for another family. */
 export function poseSheet(cls: ClassKind, eq: Equipped): string {
