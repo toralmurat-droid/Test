@@ -250,3 +250,7 @@ Agents build against this in parallel. Changing it needs the orchestrator.
     - PvE seconds per kill ≤120% of the Wizard's;
     - zone clear rate ≥95%;
     - boss win rate no more than 10 points below the Wizard's.
+- 2026-11-13: skill text merged (descs, blurb, `BUSKING_LINES` in `shared/npcs.ts`, not yet read by anything).
+  - Finisher names are now Amen, Turnaround, Shatterchord, Perfect Cadence, Deceptive Cadence.
+  - `docs/songweaver-content.md` now carries the real `MOB_COMBAT` sound table.
+  - To do (gameplay): play a busking line when a major-key song plays near an Oakvale NPC.
