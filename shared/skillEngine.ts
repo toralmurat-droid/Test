@@ -6,6 +6,11 @@ import { impactMs, nightBuff, passiveBlood, talentBonus, LEAP_MS, pointRange, sk
 import { Stats, STATS } from "./powers";
 import { pay, skillCost } from "./mana";
 import { auraBuffs, isAuraId, BLADE_EL, BLADES_BASE, ESSENCE, SUMMON, WISP, type AttuneElement } from "./summons";
+import { addResonance, knownModes, LYDIAN_SHIELD, DORIAN_RADIUS, MODES, modeColour, modulate, noteCast, NOTES, PHRYGIAN, PROGRESSIONS, RESONANCE, resonanceOf, resWord, SONG,
+  type Degree, type ModeId, type Pitch, type Progression } from "./songs";
+import { HERO_SOUND, SOUND_TIER, soundMult, type SoundProfile } from "./combat";
+import { acousticsAt } from "./acoustics";
+import { skillById, type SoundFx } from "./skills";
 
 /**
  * Runs the skills of shared/skills.ts. It knows nothing about the room: the server (server/TownRoom.ts) and the
@@ -41,10 +46,20 @@ export interface SkillRuntime {
   bleed: "" | "drip" | "boil";
   /** Vampire Leech: until then, hits by `leechBy` on this unit also give them a Blood stack. */
   leechUntil: number; leechBy: string;
+  // ---- Songweaver (shared/songs.ts) ----
+  /** The hero's mode (saved as swMode); unset = Major. Only the Songweaver has one. */
+  mode?: ModeId;
+  /** The song this Songweaver is playing (SkillDef.song): its skill, when it started, its ground effect. */
+  song?: { id: string; at: number; f: FieldInst };
+  /** The last notes played (degrees), when the last one was, and until when chords are locked. */
+  notes: Degree[]; noteAt: number; chordLock: number;
+  /** Resonance on this unit (0..100, any Songweaver's sound hits), when it last grew, its last burst, its last note. */
+  res: number; resAt: number; resBurstAt: number; resDeg?: Degree; resPitch?: Pitch;
 }
 export const newRuntime = (): SkillRuntime => ({
   last: {}, buffs: [], chargeUntil: 0, windUntil: 0, stacks: 0, stackAt: 0,
   burnUntil: 0, burnDps: 0, burnBy: "", burnNext: 0, markUntil: 0, weakUntil: 0, bleed: "", leechUntil: 0, leechBy: "",
+  notes: [], noteAt: 0, chordLock: 0, res: 0, resAt: 0, resBurstAt: -Infinity,
 });
 
 export interface Unit { x: number; y: number; dead: boolean; level: number; sk: SkillRuntime; cls?: ClassKind; talents?: Ranks; energy?: number; mana?: number; maxMana?: number; hp?: number; maxHp?: number;
@@ -60,6 +75,8 @@ export interface Imbue { id: string; style: string; fx: HitEffects }
 export interface HitOpts extends HitEffects { skill?: boolean; basic?: boolean; dot?: boolean; thorn?: boolean; crit?: boolean; imb?: Imbue;
   /** Dealt by a hero's creature in their name (golem, wisp): SUMMON.pvp applies when it lands on a hero. */
   pet?: boolean;
+  /** x poise drained (a Phrygian sound hit, worked out by the host's damage code). */
+  poiseMul?: number;
   /** The element the hit shows as (damage number colour). */
   el?: "fire" | "cold" | "poison" | "faith" | "shock" }
 
@@ -67,6 +84,7 @@ export interface ShotSpec extends HitEffects {
   owner: string; skill: string; x: number; y: number; vx: number; vy: number;
   kind: string; speed: number; range: number; radius: number; size: number; dmg: number;
   pierce: number; explode: number; chain: number; field?: FieldDef; rank: number; power: number;
+  bounce?: number; // walls it may still bounce off (ShotDef.bounce, server updateProjectile)
   pulse?: ShotDef["pulse"]; pulses?: number; // pulses so far (turns the shard ring)
   imb?: Imbue; // enchantment active when it was shot
   pet?: boolean; // shot by a hero's creature (a wisp) in their name: SUMMON.pvp applies on heroes
@@ -78,6 +96,12 @@ export interface FieldInst {
   imb?: Imbue; // enchantment active when it was cast (traps, sentries)
   target?: string; // Blood Link: the enemy on the other end of the cord
   ally?: boolean; // Blood Link bound to a group ally (Transfusion): blood flows to them instead
+  /** Songweaver: the power of its heals and buffs (a mode splits a cast in two, shared/songs.ts MODES); unset = `power`. */
+  allyPower?: number;
+  /** Songweaver: the cast's power before its mode, its def before its mode and acoustics, the mode and pitch it plays in. */
+  tune?: { base: number; def: FieldDef; mode: ModeId; pitch?: Pitch; crescendo?: number };
+  song?: boolean; // a song (SkillDef.song): Tempo quickens it (Accelerando), tiles around colour it (shared/acoustics.ts)
+  ticks?: number; // ticks so far (Anthem's crescendo)
 }
 
 export interface SkillHost {
@@ -139,6 +163,8 @@ export interface SkillHost {
   charmable?(id: string): boolean;
   /** Charm: monster `target` fights for the hero for `ms`. False when it can't be charmed. */
   charm?(id: string, target: string, ms: number): boolean;
+  /** How this unit hears a sound hit (shared/combat.ts): a monster's MOB_COMBAT sound, a hero normal. Missing = normal. */
+  soundOf?(id: string): SoundProfile | undefined;
 }
 
 const live = (h: SkillHost, id: string) => { const u = h.unit(id); return u && !u.dead ? u : undefined; };
@@ -150,7 +176,7 @@ const pushFrom = (h: SkillHost, x: number, y: number, tid: string): [number, num
 const effects = (e: HitEffects, t: number): HitEffects => ({
   stunMs: e.stunMs && e.stunMs * t, slowMs: e.slowMs && e.slowMs * t, kb: e.kb,
   burn: e.burn && [e.burn[0], e.burn[1] * t], markMs: e.markMs && e.markMs * t, weakMs: e.weakMs && e.weakMs * t, fearMs: e.fearMs && e.fearMs * t,
-  drain: e.drain, leechMs: e.leechMs && e.leechMs * t, bleed: e.bleed,
+  drain: e.drain, leechMs: e.leechMs && e.leechMs * t, bleed: e.bleed, sound: e.sound,
 });
 
 /**
@@ -196,6 +222,10 @@ export function castSkill(h: SkillHost, id: string, skillId: string): boolean {
   if (cooldownLeft(s, u.sk, now, h.cooldownMult(id) * buffCdr(u, now)) > 0) return false;
   if (s.field?.link && !linkPick(h, id, s.field.link)) return false; // Blood Link: nobody in reach to bind
   if (s.charm && !charmTarget(h, id, s.charm.range)) return false; // Charm: nobody in reach
+  if (s.modulate && knownModesOf(u).length < 2) return false; // Modulate needs a second mode
+  // One song per Songweaver: changing to another waits SONG.changeMs after the last one started
+  const sg = u.sk.song;
+  if (s.song && sg && sg.id !== s.id && sg.f.until > now && now - sg.at < SONG.changeMs) return false;
   const fang = s.devour ?? s.bite;
   if (fang && !fangTarget(h, id, fang.range)) return false; // Devour / Bite: nothing with flesh in reach
   // Cantrips take the place of a basic attack (balance pass 2026-11-04): they wait for it and hold the next one back
@@ -230,7 +260,170 @@ export function castSkill(h: SkillHost, id: string, skillId: string): boolean {
       release(h, id, s, rank, power, stacks, at);
     });
   } else release(h, id, s, rank, power, stacks, at);
+  if (s.degree && u.cls === "songweaver") playNote(h, id, u, s, now);
   return true;
+}
+
+// ---- The Songweaver: modes, notes and chords (shared/songs.ts) ---------------------------------------------------
+
+/** The Songweaver's mode (undefined for every other class: their casts keep a single power). */
+export const modeOf = (u: Unit | undefined): ModeId | undefined => (u?.cls === "songweaver" ? u.sk.mode ?? "major" : undefined);
+const ranksOf = (u: Unit) => (id: string) => rankOf(u.talents, id);
+/** The modes this hero knows (Major, Minor with Dirge, the three mode nodes). */
+export const knownModesOf = (u: Unit) => knownModes(ranksOf(u));
+
+/**
+ * A Songweaver skill went off: its note sounds for everyone ("note"), and unless it is Modulate it is logged. Three
+ * notes in a progression fire that chord's finisher at once ("chord"), coloured by the mode.
+ */
+function playNote(h: SkillHost, id: string, u: Unit, s: SkillDef, now: number) {
+  const mode = modeOf(u)!;
+  h.fx({ ev: "note", id, s: s.id, deg: s.degree, mode, pitch: s.pitch ?? "M", x: Math.round(u.x), y: Math.round(u.y) });
+  if (s.modulate) return;
+  const p = noteCast(u.sk, s.degree!, now);
+  if (p) fireChord(h, id, p);
+}
+
+/** A progression fired: its finisher goes off (power from its level and Magic, like a skill). */
+export function fireChord(h: SkillHost, id: string, p: Progression) {
+  const u = live(h, id), fin = skillById(p.skill);
+  if (!u?.cls || !fin) return;
+  h.fx({ ev: "chord", id, prog: p.id, mode: modeOf(u), x: Math.round(u.x), y: Math.round(u.y) });
+  release(h, id, fin, 1, levelPower(fin) * scalePower(fin, h.stats?.(id), STATS[u.cls].base), 0);
+}
+export { PROGRESSIONS };
+
+/** Every hit of a Songweaver skill is sound: its pitch, its degree and the caster's mode ride on each one. */
+function withSound(s: SkillDef, snd: SoundFx): SkillDef {
+  const put = <T extends { sound?: SoundFx }>(d: T): T => ({ ...d, sound: { ...d.sound, ...snd } });
+  return { ...s, areas: s.areas?.map(put), shots: s.shots && put(s.shots), field: s.field && put(s.field), cry: s.cry && put(s.cry) };
+}
+
+/** A buff's percentages times `k` (a mode's ally colour, a crescendo). Heals and shields scale with the cast's power instead. */
+export function scaleBuff(b: BuffDef, k: number, radius = 1): BuffDef {
+  if (k === 1 && radius === 1) return b;
+  const x = (v?: number) => (v ? v * k : v);
+  return { ...b, dmg: x(b.dmg), speed: x(b.speed), armor: x(b.armor), atkspd: x(b.atkspd), lifesteal: x(b.lifesteal), regen: x(b.regen), poise: x(b.poise),
+    party: b.party && b.party * radius };
+}
+
+/** Dorian songs reach further: x this radius. */
+const dorianReach = (u: Unit | undefined, mode: ModeId | undefined) => (mode === "dorian" && u ? 1 + DORIAN_RADIUS * modeColour("dorian", ranksOf(u)) : 1);
+
+/** A Songweaver field in its mode: radius (Dorian) and the mode its hits carry. */
+function tuneDef(d: FieldDef, mode: ModeId, u: Unit | undefined): FieldDef {
+  const k = dorianReach(u, mode);
+  return { ...d, r: d.r * k, sound: d.sound && { ...d.sound, mode } };
+}
+
+/** Puts a Songweaver field in `mode`: its damage, heal and buff powers and its radius follow (Modulate recolours songs). */
+function applyTune(f: FieldInst, u: Unit | undefined) {
+  if (!f.tune) return;
+  const md = MODES[f.tune.mode];
+  f.power = f.tune.base * md.foe; f.allyPower = f.tune.base * md.ally;
+  f.def = tuneDef(f.tune.def, f.tune.mode, u);
+}
+
+/** Modulate went off: the next known mode, and the song being played takes it. */
+function doModulate(h: SkillHost, u: Unit) {
+  const m = modulate(u.sk, knownModesOf(u));
+  const sg = u.sk.song;
+  if (m && sg?.f.tune && sg.f.until > h.now()) { sg.f.tune.mode = m; applyTune(sg.f, u); }
+}
+
+/**
+ * Heals `tid` for `amount` from `from`. A Songweaver in Lydian turns what goes past full life into a shield
+ * (LYDIAN_SHIELD); everyone else just heals.
+ */
+export function allyHeal(h: SkillHost, from: string, tid: string, amount: number) {
+  const t = live(h, tid);
+  if (!t || amount <= 0) return;
+  const c = h.unit(from), lyd = modeOf(c) === "lydian" && !!t.maxHp;
+  const room = lyd ? Math.max(0, t.maxHp! - (t.hp ?? 0)) : 0;
+  h.heal(tid, amount, from);
+  if (lyd && amount > room) overShield(h, from, tid, (amount - room) * LYDIAN_SHIELD.share * modeColour("lydian", ranksOf(c!)));
+}
+
+/** Lydian: overheal tops up one shield per hero (buff "sg_lydian"), at most LYDIAN_SHIELD.maxPct of their life. */
+function overShield(h: SkillHost, from: string, tid: string, add: number) {
+  const t = live(h, tid);
+  if (!t?.maxHp || add <= 0) return;
+  const now = h.now(), cap = t.maxHp * LYDIAN_SHIELD.maxPct / 100;
+  const cur = t.sk.buffs.find((b) => b.id === "sg_lydian" && b.until > now);
+  if (cur) { cur.shield = Math.min(cap, (cur.shield ?? 0) + add); cur.until = now + LYDIAN_SHIELD.ms; return; }
+  t.sk.buffs = t.sk.buffs.filter((b) => b.id !== "sg_lydian");
+  t.sk.buffs.push({ id: "sg_lydian", until: now + LYDIAN_SHIELD.ms, b: { ms: LYDIAN_SHIELD.ms }, rank: 1, stacks: 0, from, shield: Math.min(cap, add) });
+  h.fx({ ev: "buff", id: tid, s: "sg_lydian", ms: LYDIAN_SHIELD.ms });
+}
+
+/** Mending Note: heal the caster, then hop to the nearest group ally not healed yet (x0.8 each hop). */
+function mendChain(h: SkillHost, id: string, s: SkillDef, rank: number, power: number) {
+  const m = s.mend!, u = live(h, id);
+  if (!u?.maxHp) return;
+  const hops = m.hops + (rank >= 3 ? 1 : 0) + (rank >= 5 ? 1 : 0);
+  allyHeal(h, id, id, u.maxHp * m.heal / 100 * power);
+  const done = new Set([id]);
+  let cur: Unit = u, k = 1;
+  for (let i = 0; i < hops && h.allies; i++) {
+    let best: string | undefined, bd = Infinity;
+    for (const a of h.allies(cur.x, cur.y, m.range, id)) {
+      if (done.has(a)) continue;
+      const au = h.unit(a)!, d = Math.hypot(au.x - cur.x, au.y - cur.y);
+      if (d < bd) { bd = d; best = a; }
+    }
+    if (!best) break;
+    done.add(best); k *= 0.8;
+    const bu = h.unit(best)!;
+    if (bu.maxHp) allyHeal(h, id, best, bu.maxHp * m.heal / 100 * k * power);
+    cur = bu;
+  }
+}
+
+/** Chorale: the caster and every group ally inside heal, more for each voice that joins in. */
+function choraleHeal(h: SkillHost, id: string, s: SkillDef, power: number) {
+  const c = s.chorale!, u = live(h, id);
+  if (!u) return;
+  const who = party(h, id, u.x, u.y, c.r), k = 1 + c.perAlly * (who.length - 1);
+  for (const t of who) { const tu = live(h, t); if (tu?.maxHp) allyHeal(h, id, t, tu.maxHp * c.heal / 100 * k * power); }
+}
+
+/** Legato: song gifts linger this much longer (ms) after stepping out. */
+const legatoMs = (o: Unit | undefined) => (o?.cls ? talentBonus(o.cls, o.talents ?? {}, "legato") * 1000 : 0);
+
+/** A song's beat (ms): Accelerando quickens it with each Tempo stack, never below SONG.tickFloorMs. */
+function songTick(f: FieldInst, o: Unit | undefined): number {
+  const base = f.def.tickMs;
+  if (!f.song || !o?.cls || !o.sk.stacks) return base;
+  const v = talentBonus(o.cls, o.talents ?? {}, "accel");
+  return v > 0 ? Math.max(SONG.tickFloorMs, base * (1 - v * o.sk.stacks / 100)) : base;
+}
+
+/**
+ * A sound hit landed on `tid` (afterHit): the "soundhit" cue on monsters, then resonance by the target's hearing. At
+ * 100 it bursts (and a fragile target shatters); Sympathetic Strings spread part of a burst to foes close by.
+ */
+function resonate(h: SkillHost, from: string, tid: string, o: HitOpts) {
+  const t = h.unit(tid), a = h.unit(from), snd = o.sound!;
+  if (!t || !a) return;
+  const prof = h.soundOf ? h.soundOf(tid) : HERO_SOUND, m = soundMult(prof, snd), now = h.now();
+  if (!t.cls && !o.dot) h.fx({ ev: "soundhit", id: tid, x: Math.round(t.x), y: Math.round(t.y), tier: prof?.tier ?? "normal", match: m.match });
+  if (m.res <= 0) return; // deaf: it never rings
+  const sym = a.cls ? talentBonus(a.cls, a.talents ?? {}, "sympathy") : 0;
+  const phry = snd.mode === "phrygian" ? 1 + PHRYGIAN.res * modeColour("phrygian", ranksOf(a)) : 1;
+  const base = snd.basic ? RESONANCE.basic : o.dot ? RESONANCE.tick : RESONANCE.perHit;
+  const amt = (base * phry * (1 + sym / 100) + (snd.res ?? 0)) * m.res;
+  if (!addResonance(t.sk, amt, now, { deg: snd.deg, pitch: snd.pitch })) return;
+  const shatter = prof?.tier === "fragile";
+  h.fx({ ev: "resonate", id: tid, by: from, x: Math.round(t.x), y: Math.round(t.y), shatter });
+  const dmg = RESONANCE.burstDmg * h.magic(from) * SOUND_TIER[prof?.tier ?? "normal"].dmg * (shatter ? RESONANCE.shatterMult : 1);
+  h.hit(from, tid, dmg, [0, 0], { skill: true, thorn: true, kb: 0, stunMs: shatter ? RESONANCE.shatterStunMs : undefined });
+  if (sym <= 0) return;
+  const spread = RESONANCE.spread * (1 + sym / 100);
+  for (const e of h.enemies(t.x, t.y, RESONANCE.spreadR, from)) {
+    const eu = h.unit(e);
+    if (e === tid || !eu) continue;
+    addResonance(eu.sk, spread * soundMult(h.soundOf?.(e), snd).res, now, { spread: true });
+  }
 }
 
 /**
@@ -322,6 +515,12 @@ function fangStrike(h: SkillHost, id: string, s: SkillDef, rank: number, power: 
 function release(h: SkillHost, id: string, s: SkillDef, rank: number, power: number, stacks: number, at?: number) {
   const u = live(h, id);
   if (!u) return;
+  // A Songweaver's mode splits the cast: `ally` for heals, shields and buffs, `foe` for damage (every other class: both = power)
+  const mode = modeOf(u), md = mode ? MODES[mode] : undefined;
+  const ally = md ? power * md.ally : power, foe = md ? power * md.foe : power;
+  if (mode && (s.pitch || s.finisher)) s = withSound(s, { pitch: s.pitch, deg: s.degree, mode });
+  if (s.modulate) doModulate(h, u);
+  if (s.untouchable) h.invuln(id, h.now() + s.untouchable);
   const t = rankTime(rank);
   const x0 = u.x, y0 = u.y;
   const [ax0, ay0] = h.aim(id);
@@ -337,9 +536,14 @@ function release(h: SkillHost, id: string, s: SkillDef, rank: number, power: num
     // After a leap the blast lands with the hero, not at take-off
     const leapt = s.move?.kind === "leap" && !a.atStart ? { ...a, delayMs: Math.max(a.delayMs ?? 0, LEAP_MS) } : a;
     const def = s.windMs ? { ...leapt, r: leapt.r + WIND_REACH } : leapt;
-    area(h, id, s, def, power, t, spot, false, imb);
+    area(h, id, s, def, foe, t, spot, false, imb);
   }
-  if (s.shots) fire(h, id, s.id, s.shots, rank, power, u.x, u.y, h.aim(id), imb);
+  // Cracked String's canon: from its rank, the blast rings again a moment later, softer
+  const canon = s.canon;
+  if (canon && rank >= canon.rank) h.later(canon.delayMs, () => { for (const a of s.areas ?? []) area(h, id, s, a, foe * canon.mult, t, undefined, false, imb); });
+  if (s.shots) fire(h, id, s.id, s.shots, rank, foe, u.x, u.y, h.aim(id), imb);
+  if (s.mend) mendChain(h, id, s, rank, ally);
+  if (s.chorale) choraleHeal(h, id, s, ally);
   if (s.devour || s.bite) fangStrike(h, id, s, rank, power, imb);
   if (s.charm) {
     const tid = charmTarget(h, id, s.charm.range), tu = tid && h.unit(tid);
@@ -357,18 +561,31 @@ function release(h: SkillHost, id: string, s: SkillDef, rank: number, power: num
     if (pick) { const tu = h.unit(pick.t)!; h.face(id, tu.x - u.x, tu.y - u.y); }
     const def = fieldFor(u, s.field);
     const pw = s.field.blades && u.cls ? power * (1 + talentBonus(u.cls, u.talents ?? {}, "edge") / 100) : power;
-    if (!s.field.link || pick) h.addField({ owner: id, skill: s.id, def, rank, power: pw, x: u.x + ax * d, y: u.y + ay * d, until: h.now() + s.field.ms * t, nextTick: h.now(), imb, target: pick?.t, ally: pick?.ally || undefined });
+    const inst: FieldInst = { owner: id, skill: s.id, def, rank, power: pw, x: u.x + ax * d, y: u.y + ay * d, until: h.now() + s.field.ms * t, nextTick: h.now(), imb, target: pick?.t, ally: pick?.ally || undefined };
+    if (mode) { // a Songweaver field keeps its mode: Modulate can recolour it while it plays
+      inst.tune = { base: pw, def, mode, pitch: s.pitch, crescendo: s.crescendo };
+      inst.song = !!s.song;
+      applyTune(inst, u);
+    }
+    if (!s.field.link || pick) {
+      h.addField(inst);
+      if (s.song) { // one song per Songweaver: the new one ends the last
+        const prev = u.sk.song;
+        if (prev && prev.f !== inst) prev.f.until = 0;
+        u.sk.song = { id: s.id, at: h.now(), f: inst };
+      }
+    }
   }
   if (s.buff) {
     // Party buffs and shields go through shareBuff (one per skill id, strongest wins); every other buff as before
-    if (s.buff.party || s.buff.shield) partyBuff(h, id, s.id, s.buff, rank, power);
+    if (s.buff.party || s.buff.shield) partyBuff(h, id, s.id, md ? scaleBuff(s.buff, md.ally, dorianReach(u, mode)) : s.buff, rank, ally);
     else addBuff(h, id, s.id, s.buff, rank, stacks);
     // Bloodline: group allies close by share the buff, at half its lifesteal
     if (s.buff.group && h.allies) for (const a of h.allies(u.x, u.y, s.buff.group, id)) addBuff(h, a, s.id, { ms: s.buff.ms, lifesteal: (s.buff.lifesteal ?? 0) / 2 }, rank);
   }
   if (s.cry) {
     h.fx({ ev: "cry", id, s: s.id, x: u.x, y: u.y, r: s.cry.r });
-    area(h, id, s, s.cry, power, t, undefined, true, imb);
+    area(h, id, s, s.cry, foe, t, undefined, true, imb);
   }
   if (s.counter) {
     u.sk.counter = { until: h.now() + s.counter.ms * t, s, rank, power };
@@ -516,7 +733,12 @@ export function shareBuff(h: SkillHost, from: string, targetId: string, skillId:
   const pool = b.shield && caster?.maxHp ? caster.maxHp * b.shield / 100 * power : 0;
   const cur = u.sk.buffs.find((x) => x.id === skillId && x.until > now);
   let out: ActiveBuff;
-  if (cur && cur.rank * (cur.power ?? 1) >= rank * power) {
+  if (cur && from && cur.from === from) {
+    // the same caster again (an aura tick, a recolour, a recast): it takes the new strength in place, no new event
+    cur.b = b; cur.rank = rank; cur.power = power; cur.until = Math.max(cur.until, until);
+    if (pool > (cur.shield ?? 0)) cur.shield = pool;
+    out = cur;
+  } else if (cur && cur.rank * (cur.power ?? 1) >= rank * power) {
     cur.until = Math.max(cur.until, until);
     if (pool > (cur.shield ?? 0)) cur.shield = pool;
     out = cur;
@@ -527,7 +749,7 @@ export function shareBuff(h: SkillHost, from: string, targetId: string, skillId:
     u.sk.buffs.push(out);
     h.fx({ ev: "buff", id: targetId, s: skillId, ms: until - now });
   }
-  if (b.heal && u.maxHp) h.heal(targetId, u.maxHp * b.heal / 100 * power, from);
+  if (b.heal && u.maxHp) allyHeal(h, from, targetId, u.maxHp * b.heal / 100 * power);
   return out;
 }
 
@@ -676,7 +898,8 @@ export function area(h: SkillHost, id: string, s: SkillDef | { id: string }, a: 
 function fire(h: SkillHost, id: string, skill: string, d: ShotDef, rank: number, power: number, x: number, y: number, aim: [number, number], imb?: Imbue) {
   // Ranks that add projectiles widen the fan with them (Bat Swarm, Rat Plague) and/or let them pass through more foes
   const more = d.perRank ? Math.max(0, rank - 1) : 0;
-  if (more) d = { ...d, n: (d.n ?? 1) + (d.perRank!.n ?? 0) * more, spread: d.spread && d.perRank!.n ? d.spread * (1 + 0.12 * more) : d.spread, pierce: (d.pierce ?? 0) + (d.perRank!.pierce ?? 0) * more };
+  if (more) d = { ...d, n: (d.n ?? 1) + (d.perRank!.n ?? 0) * more, spread: d.spread && d.perRank!.n ? d.spread * (1 + 0.12 * more) : d.spread, pierce: (d.pierce ?? 0) + (d.perRank!.pierce ?? 0) * more,
+    bounce: d.bounce !== undefined || d.perRank!.bounce ? (d.bounce ?? 0) + (d.perRank!.bounce ?? 0) * more : undefined };
   const n = d.n ?? 1;
   const base = Math.atan2(aim[1], aim[0]);
   const t = rankTime(rank);
@@ -691,7 +914,7 @@ function fire(h: SkillHost, id: string, skill: string, d: ShotDef, rank: number,
     h.shoot({
       owner: id, skill, x: x + vx * 6 - aim[1] * lane, y: y - 4 + vy * 6 + aim[0] * lane, vx, vy,
       kind: d.kind, speed, range, radius: d.radius, size: d.size ?? 1, dmg,
-      pierce: d.pierce ?? 0, explode: d.explode ?? 0, chain: d.chain ?? 0, field: d.field, rank, power, pulse: d.pulse,
+      pierce: d.pierce ?? 0, explode: d.explode ?? 0, chain: d.chain ?? 0, field: d.field, rank, power, pulse: d.pulse, bounce: d.bounce,
       ...effects(d, t), imb,
     });
   }
@@ -703,7 +926,7 @@ function fire(h: SkillHost, id: string, skill: string, d: ShotDef, rank: number,
 export function shotHit(h: SkillHost, s: ShotSpec, tid: string) {
   const exploding = s.explode > 0 && s.pierce <= 0;
   h.hit(s.owner, tid, s.dmg, [s.vx, s.vy], { stunMs: s.stunMs, slowMs: exploding ? undefined : s.slowMs, burn: s.burn, markMs: s.markMs, weakMs: s.weakMs, drain: s.drain,
-    leechMs: s.leechMs, bleed: s.bleed, kb: s.kb ?? 1, skill: true, imb: s.imb, pet: s.pet });
+    leechMs: s.leechMs, bleed: s.bleed, kb: s.kb ?? 1, skill: true, imb: s.imb, pet: s.pet, sound: s.sound });
   if (s.chain > 0) chain(h, s.owner, tid, s.chain, s.dmg, s);
 }
 
@@ -721,7 +944,7 @@ function chain(h: SkillHost, owner: string, from: string, hops: number, dmg: num
     dmg *= 0.8;
     const n = h.unit(next)!;
     pts.push([n.x, n.y]);
-    h.hit(owner, next, dmg, pushFrom(h, cur.x, cur.y, next), { stunMs: e.stunMs, slowMs: e.slowMs, kb: 0.3, skill: true, imb: (e as ShotSpec).imb, pet: (e as ShotSpec).pet });
+    h.hit(owner, next, dmg, pushFrom(h, cur.x, cur.y, next), { stunMs: e.stunMs, slowMs: e.slowMs, kb: 0.3, skill: true, imb: (e as ShotSpec).imb, pet: (e as ShotSpec).pet, sound: e.sound });
     cur = n;
   }
   if (pts.length > 1) h.fx({ ev: "chain", id: owner, pts });
@@ -746,7 +969,7 @@ export function shotEnd(h: SkillHost, s: ShotSpec, x: number, y: number) {
   if (s.explode > 0) {
     area(h, s.owner, { id: s.skill }, { r: s.explode, dmg: 0, slowMs: s.slowMs, burn: s.burn, kb: s.kb, look: "burst" }, 1, 1, [x, y], false, s.imb);
     // the explosion's damage is the projectile's own
-    if (s.dmg > 0) for (const e of h.enemies(x, y, s.explode, s.owner)) h.hit(s.owner, e, s.dmg * 0.6, pushFrom(h, x, y, e), { kb: s.kb ?? 1, skill: true, imb: s.imb });
+    if (s.dmg > 0) for (const e of h.enemies(x, y, s.explode, s.owner)) h.hit(s.owner, e, s.dmg * 0.6, pushFrom(h, x, y, e), { kb: s.kb ?? 1, skill: true, imb: s.imb, sound: s.sound });
   }
   if (s.field) h.addField({ owner: s.owner, skill: s.skill, def: s.field, rank: s.rank, power: s.power, x, y, until: h.now() + s.field.ms * rankTime(s.rank), nextTick: h.now(), imb: s.imb });
 }
@@ -766,8 +989,16 @@ export function tickField(h: SkillHost, f: FieldInst): boolean {
   const tu = f.def.link ? (f.target ? live(h, f.target) : undefined) : undefined;
   if (f.def.link && (!tu || !o || o.dead || Math.hypot(tu.x - o.x, tu.y - o.y) > f.def.link.breakAt)) return false;
   if (now < f.nextTick) return true;
-  f.nextTick = now + f.def.tickMs;
-  const d = f.def, t = rankTime(f.rank);
+  f.nextTick = now + songTick(f, o);
+  f.ticks = (f.ticks ?? 0) + 1;
+  let d = f.def;
+  const t = rankTime(f.rank);
+  if (f.song) {
+    // a song takes colour from the tiles around: water slows longer, a well carries it further, stone rings its low notes
+    const ac = acousticsAt(f.x, f.y);
+    if (ac.radius !== 1 || ac.slow !== 1 || (ac.low !== 1 && f.tune?.pitch === "L"))
+      d = { ...d, r: d.r * ac.radius, slowMs: d.slowMs && d.slowMs * ac.slow, dmg: d.dmg && (f.tune?.pitch === "L" ? d.dmg * ac.low : d.dmg) };
+  }
   if (d.link && f.ally) {
     // Transfusion: the vampire's blood runs down the cord into the ally (never below 1 HP of his own)
     const give = Math.round((o!.maxHp ?? 0) * (d.link.give ?? 0) / 100);
@@ -782,9 +1013,15 @@ export function tickField(h: SkillHost, f: FieldInst): boolean {
     return true;
   }
   // Party aura: the owner and group allies inside get its buff, lasting just past the next tick
-  if (d.party) for (const t of party(h, f.owner, f.x, f.y, d.r)) {
-    const tu = live(h, t);
-    if (tu && Math.hypot(tu.x - f.x, tu.y - f.y) <= d.r) shareBuff(h, f.owner, t, f.skill, d.party, f.rank, f.power, d.tickMs + FIELD_PARTY_LINGER_MS);
+  if (d.party) {
+    // a Songweaver's aura: its mode's ally colour, the crescendo so far (Anthem), and Legato's linger
+    const tune = f.tune, cres = tune?.crescendo ? 1 + tune.crescendo * Math.max(0, (f.ticks ?? 1) - 1) : 1;
+    const pb = tune ? scaleBuff(d.party, MODES[tune.mode].ally * cres) : d.party;
+    const ms = d.tickMs + FIELD_PARTY_LINGER_MS + (tune ? legatoMs(o) : 0);
+    for (const t of party(h, f.owner, f.x, f.y, d.r)) {
+      const tu = live(h, t);
+      if (tu && Math.hypot(tu.x - f.x, tu.y - f.y) <= d.r) shareBuff(h, f.owner, t, f.skill, pb, f.rank, (f.allyPower ?? f.power) * cres, ms);
+    }
   }
   const inside = h.enemies(f.x, f.y, d.r, f.owner);
   // Fields that drag foes in (Black Hole): every tick, heroes held for less (SUMMON.pvp.cc)
@@ -838,7 +1075,7 @@ export function tickField(h: SkillHost, f: FieldInst): boolean {
     }
     for (const e of inside) h.hit(f.owner, e, dmg, pushFrom(h, f.x, f.y, e), { ...fx, kb: d.kb ?? 0, skill: true, dot: !d.kb, imb: f.imb });
   }
-  if (d.heal && o && !o.dead && o.maxHp && Math.hypot(o.x - f.x, o.y - f.y) <= d.r) h.heal(f.owner, o.maxHp * d.heal / 100 * f.power);
+  if (d.heal && o && !o.dead && o.maxHp && Math.hypot(o.x - f.x, o.y - f.y) <= d.r) h.heal(f.owner, o.maxHp * d.heal / 100 * (f.allyPower ?? f.power));
   // Black Hole: monsters worn down past its threshold are swallowed at once
   if (d.hole) for (const e of inside) {
     const tu = h.unit(e);
@@ -885,7 +1122,9 @@ export function takenMult(u: Unit | undefined, now: number): number {
   if (now < u.sk.markUntil) m *= 1 + MARK_TAKEN;
   return m;
 }
-const sum = (u: Unit | undefined, now: number, k: "speed" | "atkspd" | "lifesteal" | "regen") => buffsOf(u, now).reduce((s, b) => s + (b.b[k] ?? 0), 0);
+const sum = (u: Unit | undefined, now: number, k: "speed" | "atkspd" | "lifesteal" | "regen" | "poise") => buffsOf(u, now).reduce((s, b) => s + (b.b[k] ?? 0), 0);
+/** Share of poise drain that buffs hold off (Marching Tune), at most 80%. */
+export const buffPoise = (u: Unit | undefined, now: number) => Math.min(80, sum(u, now, "poise")) / 100;
 export const speedMult = (u: Unit | undefined, now: number) => 1 + sum(u, now, "speed") / 100;
 export const atkSpeedMult = (u: Unit | undefined, now: number) => 1 + sum(u, now, "atkspd") / 100;
 export const buffLifesteal = (u: Unit | undefined, now: number) => sum(u, now, "lifesteal") / 100;
@@ -973,6 +1212,7 @@ export function afterHit(h: SkillHost, from: string | undefined, tid: string, o:
     if (x.weakMs) t.sk.weakUntil = Math.max(t.sk.weakUntil, now + x.weakMs);
     if (x.fearMs && !immune) h.fear(tid, x.fearMs);
   }
+  if (o.sound && from && !o.thorn) resonate(h, from, tid, o); // a Songweaver's sound rings in whoever hears it
   // Thorns (Frost Armor): whoever hits you up close pays
   if (a && from && !o.dot && !o.thorn && Math.hypot(a.x - t.x, a.y - t.y) < 48) {
     for (const b of buffsOf(t, now)) if (b.b.thorns) {
@@ -1023,7 +1263,8 @@ export function tickUnit(h: SkillHost, id: string) {
   if (!u) return;
   const now = h.now();
   const sk = u.sk;
-  if (u.dead) { sk.burnUntil = 0; sk.buffs = []; sk.counter = undefined; sk.stacks = 0; sk.chargeUntil = 0; sk.windUntil = 0; return; }
+  if (u.dead) { sk.burnUntil = 0; sk.buffs = []; sk.counter = undefined; sk.stacks = 0; sk.chargeUntil = 0; sk.windUntil = 0; if (sk.notes?.length) sk.notes = []; sk.res = 0; sk.song = undefined; return; }
+  if (sk.notes?.length && now - sk.noteAt > NOTES.idleMs) sk.notes = []; // forgotten after a long pause
   if (sk.buffs.length && sk.buffs.some((b) => b.until <= now)) sk.buffs = sk.buffs.filter((b) => b.until > now);
   if (sk.counter && now >= sk.counter.until) sk.counter = undefined;
   if (sk.stacks > 0 && now - sk.stackAt > (u.cls === "summoner" ? ESSENCE.decayMs : STACK_DECAY_MS)) sk.stacks = 0;
@@ -1060,5 +1301,8 @@ export function statusOf(u: Unit, now: number): string {
   if (sk.counter && now < sk.counter.until) out.push("counter:" + sk.counter.s.id);
   if (now < sk.chargeUntil) out.push("charge");
   for (const b of sk.buffs) if (b.until > now) out.push(b.id);
+  if (u.cls === "songweaver") out.push("mode:" + (sk.mode ?? "major"));
+  const rw = sk.res > 0 ? resWord(resonanceOf(sk, now)) : "";
+  if (rw) out.push(rw);
   return out.join(",");
 }

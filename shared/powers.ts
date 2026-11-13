@@ -27,6 +27,7 @@ export const STATS: Record<ClassKind, StatDef> = {
   barbarian: { base: { sta: 9, str: 10, mag: 1, dex: 4 }, attackStat: "str" },
   vampire: { base: { sta: 7, str: 8, mag: 8, dex: 5 }, attackStat: "str" },
   summoner: { base: { sta: 8, str: 2, mag: 11, dex: 2 }, attackStat: "mag" },
+  songweaver: { base: { sta: 8, str: 2, mag: 10, dex: 4 }, attackStat: "mag" },
 };
 
 export const HP_PER_STA = 12;
