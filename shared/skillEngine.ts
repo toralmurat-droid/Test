@@ -22,7 +22,11 @@ import { auraBuffs, isAuraId, BLADE_EL, BLADES_BASE, ESSENCE, SUMMON, WISP, type
  * and gets visual events through host.fx() (broadcast as "sfx" to the clients, see client/src/skillfx.ts).
  */
 
-export interface ActiveBuff { id: string; until: number; b: BuffDef; rank: number; stacks: number }
+export interface ActiveBuff { id: string; until: number; b: BuffDef; rank: number; stacks: number;
+  /** shareBuff: the cast's power (strength = rank x power decides which of two casts stays) and who gave it. */
+  power?: number; from?: string;
+  /** BuffDef.shield: damage the pool can still soak up (absorbDamage). Server-side only: the client sees the buff id. */
+  shield?: number }
 
 export interface SkillRuntime {
   last: Record<string, number>; // skill id -> last cast time
@@ -85,7 +89,8 @@ export interface SkillHost {
   /** Live, hittable enemies of `id` within r of (x, y). */
   enemies(x: number, y: number, r: number, of: string): string[];
   hit(attacker: string, target: string, dmg: number, push: [number, number], o: HitOpts): void;
-  heal(id: string, amount: number): void;
+  /** `from`: who heals (a party buff or aura cast by someone else); missing = the unit itself or nobody in particular. */
+  heal(id: string, amount: number, from?: string): void;
   aim(id: string): [number, number];
   /** Distance to the spot the hero clicked for this cast (point skills), read once; undefined = no click. */
   aimDist?(id: string): number | undefined;
@@ -355,7 +360,9 @@ function release(h: SkillHost, id: string, s: SkillDef, rank: number, power: num
     if (!s.field.link || pick) h.addField({ owner: id, skill: s.id, def, rank, power: pw, x: u.x + ax * d, y: u.y + ay * d, until: h.now() + s.field.ms * t, nextTick: h.now(), imb, target: pick?.t, ally: pick?.ally || undefined });
   }
   if (s.buff) {
-    addBuff(h, id, s.id, s.buff, rank, stacks);
+    // Party buffs and shields go through shareBuff (one per skill id, strongest wins); every other buff as before
+    if (s.buff.party || s.buff.shield) partyBuff(h, id, s.id, s.buff, rank, power);
+    else addBuff(h, id, s.id, s.buff, rank, stacks);
     // Bloodline: group allies close by share the buff, at half its lifesteal
     if (s.buff.group && h.allies) for (const a of h.allies(u.x, u.y, s.buff.group, id)) addBuff(h, a, s.id, { ms: s.buff.ms, lifesteal: (s.buff.lifesteal ?? 0) / 2 }, rank);
   }
@@ -480,6 +487,77 @@ export function addBuff(h: SkillHost, id: string, skill: string, b: BuffDef, ran
   u.sk.buffs.push({ id: skill, until, b, rank, stacks });
   if (b.heal && u.maxHp) h.heal(id, u.maxHp * b.heal / 100 * rankPower(rank));
   h.fx({ ev: "buff", id, s: skill, ms: until - h.now() });
+}
+
+// ---- Effects that reach the group (party buffs, auras, shields) -------------------------------------------------
+
+/** A party aura's buff (FieldDef.party) lasts this much longer than one field tick: it ends this soon after stepping out. */
+export const FIELD_PARTY_LINGER_MS = 600;
+
+/**
+ * The caster and their group allies within r of (x, y), for heals and buffs that reach the party. Only group members
+ * (SkillHost.allies), never other heroes; hosts without groups (the balance sims) give just the caster.
+ */
+export function party(h: SkillHost, id: string, x: number, y: number, r: number): string[] {
+  return [id, ...(r > 0 && h.allies ? h.allies(x, y, r, id) : [])];
+}
+
+/**
+ * Gives `targetId` the buff of skill `skillId` cast by `from` (a party buff, an aura tick). One per skill id per hero,
+ * so two casters of the same skill don't stack: if the running one is at least as strong (rank x power), it only runs
+ * longer (no "buff" event, like the Child of the Night top-up); otherwise the new one replaces it. Shields keep the
+ * bigger pool. A heal (BuffDef.heal) lands on every call, credited to `from`. `ms` overrides the buff's time.
+ */
+export function shareBuff(h: SkillHost, from: string, targetId: string, skillId: string, b: BuffDef, rank: number, power: number, ms?: number): ActiveBuff | undefined {
+  const u = live(h, targetId);
+  if (!u) return undefined;
+  const now = h.now(), until = now + (ms ?? b.ms * rankTime(rank));
+  const caster = h.unit(from);
+  const pool = b.shield && caster?.maxHp ? caster.maxHp * b.shield / 100 * power : 0;
+  const cur = u.sk.buffs.find((x) => x.id === skillId && x.until > now);
+  let out: ActiveBuff;
+  if (cur && cur.rank * (cur.power ?? 1) >= rank * power) {
+    cur.until = Math.max(cur.until, until);
+    if (pool > (cur.shield ?? 0)) cur.shield = pool;
+    out = cur;
+  } else {
+    const keep = Math.max(pool, cur?.shield ?? 0);
+    u.sk.buffs = u.sk.buffs.filter((x) => x.id !== skillId);
+    out = { id: skillId, until, b, rank, stacks: 0, power, from, shield: b.shield ? keep : undefined };
+    u.sk.buffs.push(out);
+    h.fx({ ev: "buff", id: targetId, s: skillId, ms: until - now });
+  }
+  if (b.heal && u.maxHp) h.heal(targetId, u.maxHp * b.heal / 100 * power, from);
+  return out;
+}
+
+/** A buff skill with BuffDef.party / shield goes off: the caster and every group ally within `party` px get it. */
+export function partyBuff(h: SkillHost, id: string, skillId: string, b: BuffDef, rank: number, power: number) {
+  const u = live(h, id);
+  if (!u) return;
+  for (const t of party(h, id, u.x, u.y, b.party ?? 0)) shareBuff(h, id, t, skillId, b, rank, power);
+}
+
+/**
+ * Before damage takes life: the unit's shields (BuffDef.shield) soak it up, the newest pool first. Returns the damage
+ * left over. A pool that runs dry ends its buff with a "shieldbreak" event.
+ */
+export function absorbDamage(h: SkillHost, id: string, dmg: number): number {
+  const u = h.unit(id);
+  if (!u || dmg <= 0 || !u.sk.buffs.some((b) => b.shield)) return dmg;
+  const now = h.now();
+  for (let i = u.sk.buffs.length - 1; i >= 0 && dmg > 0; i--) { // addBuff/shareBuff push, so the last is the newest
+    const b = u.sk.buffs[i];
+    if (!b.shield || b.until <= now) continue;
+    const take = Math.min(b.shield, dmg);
+    b.shield -= take; dmg -= take;
+    if (b.shield <= 0) {
+      b.until = 0;
+      h.fx({ ev: "shieldbreak", id, s: b.id, x: Math.round(u.x), y: Math.round(u.y) });
+    }
+  }
+  if (u.sk.buffs.some((b) => b.until <= now)) u.sk.buffs = u.sk.buffs.filter((b) => b.until > now);
+  return dmg;
 }
 
 function doMove(h: SkillHost, id: string, s: SkillDef, m: MoveDef, power: number, t: number, at?: number, imb?: Imbue) {
@@ -702,6 +780,11 @@ export function tickField(h: SkillHost, f: FieldInst): boolean {
   if (d.link) {
     h.hit(f.owner, f.target!, baseDmg(h, f.owner, d) * f.power, [0, 0], { ...effects(d, t), kb: 0, skill: true, dot: true, imb: f.imb });
     return true;
+  }
+  // Party aura: the owner and group allies inside get its buff, lasting just past the next tick
+  if (d.party) for (const t of party(h, f.owner, f.x, f.y, d.r)) {
+    const tu = live(h, t);
+    if (tu && Math.hypot(tu.x - f.x, tu.y - f.y) <= d.r) shareBuff(h, f.owner, t, f.skill, d.party, f.rank, f.power, d.tickMs + FIELD_PARTY_LINGER_MS);
   }
   const inside = h.enemies(f.x, f.y, d.r, f.owner);
   // Fields that drag foes in (Black Hole): every tick, heroes held for less (SUMMON.pvp.cc)
