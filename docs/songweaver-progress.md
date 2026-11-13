@@ -207,3 +207,8 @@ Agents build against this in parallel. Changing it needs the orchestrator.
   - client-engineer: skillfx, chord HUD, resonance and sound-hit cues.
   - content-writer: text in `docs/songweaver-content.md`, plus the patch note.
 - Next: integrate, tester, balance-analyst, reviewer, then `ACTIVE_CLASSES`.
+- 2026-11-13: icons (24 skills plus mode, ear and pitch badges) and the music engine (`playNote`, `playChord`,
+  `songweaverSfx`) are merged.
+  - Checks: build OK. `npm test` 137/137 on a rerun.
+  - Flaky under full-suite load (they passed 3/3 when run alone): `champions.test.ts` "only one split", and a runner
+    deserialize error in `party-effects.test.ts`. Watch them. The sounds haven't been listened to.
