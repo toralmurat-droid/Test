@@ -5,7 +5,7 @@
  */
 import { MOB_COMBAT, type MobSound, type SoundTier } from "../../shared/combat";
 import type { MobKind } from "../../shared/constants";
-import { CANTRIPS, FINISHERS, SKILLS, type SkillDef } from "../../shared/skills";
+import { CANTRIPS, FINISHERS, SKILLS, skillById, type SkillDef } from "../../shared/skills";
 
 /** Every Songweaver skill, hidden finishers and the cantrip included. */
 const SONG_SKILLS: SkillDef[] = [...SKILLS.songweaver, ...CANTRIPS.songweaver, ...FINISHERS];
@@ -25,8 +25,9 @@ export const SONG_BUFFS: ReadonlySet<string> = new Set(SONG_SKILLS.filter((s) =>
 /** Buff ids that are a shield bubble: any Songweaver skill whose buff has `shield` (Pedal Point, Amen, ...). */
 export const SHIELD_BUFFS: ReadonlySet<string> = new Set(SONG_SKILLS.filter((s) => s.buff?.shield || s.field?.party?.shield).map((s) => s.id));
 
-/** Finisher names by the `prog` of a chord event (docs/songweaver-content.md section 4). */
-export const CHORD_NAMES: Record<string, string> = { amen: "Amen", encore: "Turnaround", shatter: "Shatterchord", resolve: "Perfect Cadence", sleight: "Deceptive Cadence" };
+/** Finisher names by the `prog` of a chord event: read from the skill table (skillById) so they never drift. */
+const PROG_SKILL: Record<string, string> = { amen: "sg_f_amen", encore: "sg_f_encore", shatter: "sg_f_shatter", resolve: "sg_f_resolve", sleight: "sg_f_sleight" };
+export const CHORD_NAMES: Record<string, string> = Object.fromEntries(Object.entries(PROG_SKILL).map(([k, id]) => [k, skillById(id)?.name ?? k]));
 /** The progression behind each finisher: its name, the notes in order and what the finisher does (section 4). */
 export const PROGRESSIONS_TEXT: { prog: string; name: string; notes: string; line: string; does: string }[] = [
   { prog: "amen", name: "Amen", notes: "vi IV I", line: "A hymn's ending.", does: "Heals and shields." },
@@ -58,20 +59,33 @@ export const HINTS: Record<SoundTier, string> = {
 };
 /** Added to the tier line when the monster has a favourite note. "Note" wording, never "pitch", in player text. */
 export const NOTE_HINTS: Record<"L" | "M" | "H", string> = { L: "It hums back at low notes.", M: "It answers to middle notes.", H: "It rings at high notes." };
-/** One-time lines for kinds whose tier and note in the proposal match the real MOB_COMBAT table (section 5). */
+/** One-time lines per kind (docs/songweaver-content.md section 5, true to MOB_COMBAT[*].sound). */
 export const KIND_HINTS: Partial<Record<MobKind, string>> = {
-  slime: "Soft and wet. It swallows the sound.",
+  wisp: "Glassy. It rings at high notes, and a hard one could shatter it.",
+  slime: "Soft and wet. It swallows the sound.", motherblob: "Soft and wet. It swallows the sound.", blobling: "Soft and wet. It swallows the sound.",
+  skeleton: "Dry, brittle bones. A high note in a bright key could shatter them.",
+  skeletonmage: "Brittle, and humming with its own spell. A high note cracks it.",
+  bride: "Sharp-eared and pale. High notes cut her.",
   crowseer: "It cocks its head at every note.",
   duskwing: "Its ears are larger than its head.",
-  sanddead: "Dry and hollow. Low notes rattle in them.",
-  golem_fire: "Heavy as stone. Only low notes trouble it.",
+  gnawkin: "Small, quick, and all ears. Every high note stings it.",
+  tuskborn: "It feels low notes in its chest, and hears them like anyone.",
+  silkwretch: "Its web shivers with every note, and so does it.",
+  scorpion: "A hard shell. Only the highest notes get through.",
+  sanddead: "Dry and hollow. Low notes rattle in them, and they like the major key.",
+  golem_colossus: "Stone barely listens. Only low notes trouble it.",
+  golem_fire: "Heavy as stone. Low notes work best.", golem_poison: "Heavy as stone. Low notes work best.",
+  golem_cold: "Ice rings like a bell. A high note could shatter it.",
+  golem_shock: "Crackling and restless. It flinches at high notes.",
+  sphinx: "It listens closely, and the minor key reaches it best.",
+  hollowking: "A crown of bone, and ears of stone. A deep note in the major key rings in him, but slowly.",
   nightraider: "It cannot be moved by song, only by steel.",
 };
 /** The hint for a monster kind: its own line when it has one, else the tier line plus the note flavour. */
 export function hintFor(kind: string): string {
   const s = soundOf(kind);
   if (!s) return "";
-  return KIND_HINTS[kind as MobKind] ?? [HINTS[s.tier], s.pitch ? NOTE_HINTS[s.pitch] : ""].filter(Boolean).join(" ");
+  return KIND_HINTS[kind as MobKind] ?? [HINTS[s.tier], s.pitch ? NOTE_HINTS[s.pitch] : "", s.mode ? `It likes the ${s.mode} key.` : ""].filter(Boolean).join(" ");
 }
 
 /** Nameplate tooltips (section 6): the ear icon by tier, the note icon, and the key affinity. */
@@ -84,7 +98,7 @@ export const EAR_TIPS: Record<SoundTier, string> = {
 };
 export const NOTE_TIPS: Record<"L" | "M" | "H" | "none", string> = { L: "Answers to low notes.", M: "Answers to middle notes.", H: "Answers to high notes.", none: "No favourite note." };
 export const KEY_TIPS: Record<string, string> = { major: "Likes the major key.", minor: "Likes the minor key." };
-export const RES_TIP = "Resonance: the right notes make a foe ring. Fill it and it bursts. Fifths and octaves ring fastest. It fades if you stop.";
+export const RES_TIP = "Resonance: the right notes make a foe ring. Fill it and it bursts. A fifth or an octave after the last note rings fastest. It fades if you stop.";
 export const RES_STAGES = ["Humming", "Ringing", "About to burst"];
 
 /** The nameplate tooltip for a monster kind: ear tier, favourite note and key, as one line. */

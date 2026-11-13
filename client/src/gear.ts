@@ -1,4 +1,5 @@
 import { icon } from "./pixelicons";
+import { drawSongGearIcon } from "./songGearIcons";
 import { actionKey } from "./keymode";
 import Phaser from "phaser";
 import { gearDef, itemText, LOOT_IDS, canWear, GEAR_SLOTS, gearName, gearStats, gearSpeedMult, GearSlot, BAG_SIZE, SLOT_NAMES, TIER_NAMES, baseId, itemRarity, RARITY_NAMES, affixLines, itemLevel, reqProblem, reqText, activeGear, HeroReqInfo, Equipped, weaponElements, gearResist, weaponType } from "../../shared/gear";
@@ -185,7 +186,7 @@ export function iconCanvas(scene: Phaser.Scene, id: string, size = 32): HTMLCanv
   c.width = c.height = size;
   const ctx = c.getContext("2d")!;
   ctx.imageSmoothingEnabled = false;
-  drawFrame(scene, ctx, "gear_icons", baseId(id), 0, 0, size / (16 * ART_K));
+  if (!drawSongGearIcon(ctx, baseId(id), size)) drawFrame(scene, ctx, "gear_icons", baseId(id), 0, 0, size / (16 * ART_K)); // the atlas has no Songweaver frames yet
   return c;
 }
 
