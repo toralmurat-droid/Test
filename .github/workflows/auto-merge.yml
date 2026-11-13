@@ -46,18 +46,22 @@ jobs:
           SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           for i in $(seq 1 60); do
-            runs=$(gh api "repos/$GITHUB_REPOSITORY/commits/$SHA/check-runs" --paginate \
-              --jq '.check_runs[] | select(.name != "merge") | "\(.status) \(.conclusion)"')
-            if echo "$runs" | grep -Eq ' (failure|cancelled|timed_out|action_required)$'; then
-              echo "A check failed; not merging."; exit 1
+            # Only the latest run of each check counts (highest id per name). A run that a
+            # newer run of the same check replaced (cancel-in-progress, e.g. when "ready for
+            # review" restarts CI on the same commit) must not block the merge.
+            latest=$(gh api "repos/$GITHUB_REPOSITORY/commits/$SHA/check-runs?per_page=100" \
+              --jq '[.check_runs[] | select(.name != "merge")] | group_by(.name) | map(max_by(.id))[] | "\(.name) \(.status) \(.conclusion)"')
+            if echo "$latest" | grep -Eq ' (failure|timed_out|action_required)$'; then
+              echo "A check failed; not merging."; echo "$latest"; exit 1
             fi
             # The patch-note and CI checks start on the same event; wait until both exist
-            names=$(gh api "repos/$GITHUB_REPOSITORY/commits/$SHA/check-runs" --paginate --jq '.check_runs[].name')
-            if ! echo "$names" | grep -qx 'patch-note' || ! echo "$names" | grep -qx 'check'; then
+            if ! echo "$latest" | grep -q '^patch-note ' || ! echo "$latest" | grep -q '^check '; then
               sleep 10; continue
             fi
-            if ! echo "$runs" | grep -Eq '^(queued|in_progress|waiting|pending|requested)'; then
-              echo "All other checks done."; exit 0
+            # A latest run still going, or cancelled (its replacement may not be listed yet): wait.
+            # One that stays cancelled ends in the timeout below.
+            if ! echo "$latest" | grep -Eq ' (queued|in_progress|waiting|pending|requested) | cancelled$'; then
+              echo "All other checks done."; echo "$latest"; exit 0
             fi
             sleep 20
           done
