@@ -2,7 +2,7 @@ import { MOB_COMBAT, type SoundProfile } from "../shared/combat";
 import type { MobKind } from "../shared/constants";
 import { isMode, MODES, SONGWEAVER_TREE, type ModeId } from "../shared/songs";
 import { knownModesOf, type ShotSpec, type SkillRuntime, type Unit } from "../shared/skillEngine";
-import type { AreaDef, FieldDef, HitEffects, SkillDef } from "../shared/skills";
+import { skillById, type AreaDef, type FieldDef, type HitEffects, type SkillDef } from "../shared/skills";
 import { BOUNCE, BOUNCE_RULES, reflectAxis, wallAt } from "../shared/acoustics";
 import { BUSKING, BUSKING_LINES, npcById, type Npc } from "../shared/npcs";
 
@@ -24,10 +24,13 @@ export function foeEffect(s: SkillDef): boolean {
 /**
  * A Songweaver may play in Oakvale without turning outlaw: a Hymnal or Folk skill that touches no enemy, in a bright
  * mode (Major or Lydian). Modulate is always allowed, into any mode: changing key touches nobody (orchestrator,
- * 2026-11-13). Songs in a minor mode and Discord still break the "no magic" rule.
+ * 2026-11-13). Songs in a minor mode and Discord still break the "no magic" rule, and so does a finisher with an enemy
+ * part that the cast set off (`chord`, from castSkill's CastOut), even when every note before it was lawful.
  */
-export function busking(cls: string, mode: ModeId | undefined, s: SkillDef): boolean {
+export function busking(cls: string, mode: ModeId | undefined, s: SkillDef, chord?: string): boolean {
   if (cls !== "songweaver") return false;
+  const fin = chord ? skillById(chord) : undefined;
+  if (fin && foeEffect(fin)) return false;
   if (s.modulate) return true;
   return MODES[mode ?? "major"].family === "major" && s.branch !== 2 && !s.finisher && !foeEffect(s);
 }
@@ -39,9 +42,9 @@ export function busking(cls: string, mode: ModeId | undefined, s: SkillDef): boo
  */
 export class BuskingLines {
   private next = new Map<string, number>();
-  /** After a cast went through; `say` gets the villager and its line. */
-  heard(cls: string, mode: ModeId | undefined, s: SkillDef, x: number, y: number, now: number, say: (n: Npc, text: string) => void) {
-    if (s.modulate || !busking(cls, mode, s)) return;
+  /** After a cast went through (`chord`: the finisher it set off); `say` gets the villager and its line. */
+  heard(cls: string, mode: ModeId | undefined, s: SkillDef, x: number, y: number, now: number, say: (n: Npc, text: string) => void, chord?: string) {
+    if (s.modulate || !busking(cls, mode, s, chord)) return;
     let best: Npc | undefined, bd = BUSKING.range;
     for (const id of Object.keys(BUSKING_LINES)) {
       const n = npcById(id), d = n ? Math.hypot(n.x - x, n.y - y) : Infinity;

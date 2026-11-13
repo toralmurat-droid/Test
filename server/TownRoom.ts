@@ -24,7 +24,7 @@ import { gearResist, splitHit } from "../shared/gear";
 import { cleanFilter, LootFilter, passesFilter } from "../shared/heroSheet";
 import { activeSkills, canLearn, classSkills, cleanRanks, levelPower, REPLACED_SKILLS, maxRank, topRank, NEED_TEXT, rankOf, rankPower, scalePower, skillById, skillLearned, skillOf, talentBonus, talentMult, talentReduce } from "../shared/skills";
 import {
-  afterHit, atkSpeedMult, blocking, bloodCost, buffLifesteal, buffRegen, castSkill, ccImmune, fangTarget, onKill, riseAgain, charging, winding, counterHit, dealtMult, FieldInst, newRuntime,
+  afterHit, atkSpeedMult, blocking, bloodCost, buffLifesteal, buffRegen, castSkill, CastOut, ccImmune, fangTarget, onKill, riseAgain, charging, winding, counterHit, dealtMult, FieldInst, newRuntime,
   imbueOf, buffPoise, shotEnd, shotHit, shotPulse, ShotSpec, SkillHost, speedMult, statusOf, takenMult, tickField, tickUnit, Unit,
   gainEssence, toVoid, voidSlip, inVoid, absorbDamage,
 } from "../shared/skillEngine";
@@ -4489,14 +4489,15 @@ export class TownRoom extends Room<TownState> {
       if (now - p.lastWeaponNo > 1000) { p.lastWeaponNo = now; this.clients.find((c) => c.sessionId === id)?.send("gearno", { text: def!.devour ? "Nothing to eat here" : "Nothing to bite here" }); }
       return;
     }
-    if (castSkill(this.host, id, skill)) {
+    const out: CastOut = {}; // a finisher the cast set off counts too
+    if (castSkill(this.host, id, skill, out)) {
       p.emote = "";
       this.runesOnCast(id, p);
       this.questDo(id, "cast");
       // No magic in Oakvale, but a Songweaver may busk (server/songs.ts busking)
-      if (!p.outlaw && inVillage(p.x, p.y) && !busking(p.cls, p.sk.mode, def!)) this.setOutlaw(id, p, true);
+      if (!p.outlaw && inVillage(p.x, p.y) && !busking(p.cls, p.sk.mode, def!, out.chord)) this.setOutlaw(id, p, true);
       // ...and the villagers close by answer a bright tune (a chat line from the NPC, id "npc:<id>")
-      this.buskers.heard(p.cls, p.sk.mode, def!, p.x, p.y, Date.now(), (n, text) => this.broadcast("chat", { id: `npc:${n.id}`, name: n.name, text }));
+      this.buskers.heard(p.cls, p.sk.mode, def!, p.x, p.y, Date.now(), (n, text) => this.broadcast("chat", { id: `npc:${n.id}`, name: n.name, text }), out.chord);
     }
   }
 

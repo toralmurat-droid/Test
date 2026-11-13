@@ -206,8 +206,11 @@ export function cooldownLeft(s: SkillDef, sk: SkillRuntime, now: number, cdm: nu
  */
 export const WIND_REACH = 6;
 
-/** A hero presses a skill. Returns true if it was cast. */
-export function castSkill(h: SkillHost, id: string, skillId: string): boolean {
+/** What a cast set off besides itself: `chord` = the Songweaver finisher it completed (the room's Oakvale rule reads it). */
+export interface CastOut { chord?: string }
+
+/** A hero presses a skill. Returns true if it was cast; `out` learns what else it set off. */
+export function castSkill(h: SkillHost, id: string, skillId: string, out?: CastOut): boolean {
   const u = live(h, id);
   if (!u || !u.cls || !h.canAct(id)) return false;
   const base = skillOf(u.cls, skillId);
@@ -259,7 +262,7 @@ export function castSkill(h: SkillHost, id: string, skillId: string): boolean {
       release(h, id, s, rank, power, stacks, at);
     });
   } else release(h, id, s, rank, power, stacks, at);
-  if (s.degree && u.cls === "songweaver") playNote(h, id, u, s, now);
+  if (s.degree && u.cls === "songweaver") { const fin = playNote(h, id, u, s, now); if (out && fin) out.chord = fin; }
   return true;
 }
 
@@ -273,22 +276,23 @@ export const knownModesOf = (u: Unit) => knownModes(ranksOf(u));
 
 /**
  * A Songweaver skill went off: its note sounds for everyone ("note"), and unless it is Modulate it is logged. Three
- * notes in a progression fire that chord's finisher at once ("chord"), coloured by the mode.
+ * notes in a progression fire that chord's finisher at once ("chord"), coloured by the mode. Returns the finisher's id.
  */
-function playNote(h: SkillHost, id: string, u: Unit, s: SkillDef, now: number) {
+function playNote(h: SkillHost, id: string, u: Unit, s: SkillDef, now: number): string | undefined {
   const mode = modeOf(u)!;
   h.fx({ ev: "note", id, s: s.id, deg: s.degree, mode, pitch: s.pitch ?? "M", x: Math.round(u.x), y: Math.round(u.y) });
-  if (s.modulate) return;
+  if (s.modulate) return undefined;
   const p = noteCast(u.sk, s.degree!, now);
-  if (p) fireChord(h, id, p);
+  return p ? fireChord(h, id, p) : undefined;
 }
 
-/** A progression fired: its finisher goes off (power from its level and Magic, like a skill). */
-export function fireChord(h: SkillHost, id: string, p: Progression) {
+/** A progression fired: its finisher goes off (power from its level and Magic, like a skill). Returns its id if it did. */
+export function fireChord(h: SkillHost, id: string, p: Progression): string | undefined {
   const u = live(h, id), fin = skillById(p.skill);
-  if (!u?.cls || !fin) return;
+  if (!u?.cls || !fin) return undefined;
   h.fx({ ev: "chord", id, prog: p.id, mode: modeOf(u), x: Math.round(u.x), y: Math.round(u.y) });
   release(h, id, fin, 1, levelPower(fin) * scalePower(fin, h.stats?.(id), STATS[u.cls].base), 0);
+  return fin.id;
 }
 
 /** Every hit of a Songweaver skill is sound: its pitch, its degree and the caster's mode ride on each one. */
