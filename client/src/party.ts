@@ -67,8 +67,12 @@ export class PartyUI {
     this.toastTimer = window.setTimeout(() => this.toast.classList.remove("show"), 3500);
   }
 
-  /** Called every frame: keeps the frame, the panel and the invite card up to date (DOM only touched on change). */
+  private at = 0;
+  /** Called every frame (runs about 8 times a second): keeps the frame, the panel and the invite card up to date (DOM only touched on change). */
   update() {
+    const t = performance.now();
+    if (t - this.at < 120) return; // about 8 times a second is plenty for a frame, a panel and a countdown
+    this.at = t;
     const all = this.players(), myId = this.me();
     const mine = all?.get(myId);
     if (!mine) return;

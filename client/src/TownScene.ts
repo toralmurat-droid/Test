@@ -104,6 +104,7 @@ import { ChampionFx } from "./championFx";
 import { championFullName } from "../../shared/champions";
 import { bindBeastFx } from "./beastFx";
 import { bindRaiderFx, raiderTrail } from "./raiderFx";
+import { hudRects, invalidateHud } from "./hudcache";
 import { DungeonView } from "./dungeon";
 import { TEXT_FONT, TEXT_PX, WT } from "./pixelfont";
 import { parseRune, RUNES, RuneKey } from "../../shared/runes";
@@ -399,7 +400,7 @@ export class TownScene extends Phaser.Scene {
     // The Mawdeep Warrens below the woods: cave walls, braziers, ropes and stairs, and the dark down there
     this.dungeon = new DungeonView(this, {
       me: () => { const e = this.entities.get(this.me); return e ? { x: e.sprite.x, y: e.sprite.y } : undefined; },
-      heroes: () => [...this.entities.values()].filter((e) => !e.mob && e.sprite.visible).map((e) => ({ x: e.sprite.x, y: e.sprite.y })),
+      eachHero: (fn) => { for (const e of this.entities.values()) if (!e.mob && e.sprite.visible) fn(e.sprite.x, e.sprite.y); },
     }, PIXEL_FONT);
 
     const cam = this.cameras.main;
@@ -1353,6 +1354,7 @@ export class TownScene extends Phaser.Scene {
       const meE = this.entities.get(this.me);
       if (id === this.me) musicCombat(3);
       else if (e.mob && meE && Math.hypot(e.sprite.x - meE.sprite.x, e.sprite.y - meE.sprite.y) < 10 * TILE) musicCombat(1);
+      if (e.culled) return; // off screen: no number, flash or flinch to draw (sounds come from sfx.ts, unchanged)
       if (!ex) this.floatText(e.sprite.x, e.sprite.y - 14, crit ? `CRIT -${dmg}` : `-${dmg}`,
         blocked ? "#9ad1ff" : crit ? "#ffd60a" : id === this.me ? "#ff5d5d" : el && ELEMENT_COLORS[el as Element] ? `#${ELEMENT_COLORS[el as Element].toString(16).padStart(6, "0")}` : "#ffffff",
         PIXEL_FONT, crit ? 1.8 : dot ? 0.9 : 1.3, true);
@@ -1740,9 +1742,14 @@ export class TownScene extends Phaser.Scene {
   private floatText(x: number, y: number, text: string, color: string, font = PIXEL_FONT, size = 1, jitter = false) {
     // Damage numbers spread a little sideways so fast hits don't print on top of each other
     if (jitter) x += (Math.random() - 0.5) * 10;
-    const t = this.add.text(x, y, text, {
+    // Pooled: a Text owns a canvas and a GL texture, and every hit prints one
+    let t = this.floatPool.pop();
+    if (t) t.setPosition(x, y).setText(text).setColor(color).setFontFamily(font).setAlpha(1).setVisible(true).setActive(true);
+    else t = this.add.text(x, y, text, {
       fontFamily: font, fontSize: `${TEXT_PX}px`, color, stroke: "#000", strokeThickness: 2,
-    }).setOrigin(0.5, 1).setScale(WT * Math.max(1, Math.round(size))).setResolution(1).setDepth(30000);
+    }).setOrigin(0.5, 1).setResolution(1).setDepth(30000);
+    t.setScale(WT * Math.max(1, Math.round(size)));
+    const txt = t;
     // iso view: callers lift the text above a hero's feet; rise straight up from there on screen
     isoAnchor(t, { x, y: y + 14 });
     if (size > 1.5) {
@@ -1751,8 +1758,12 @@ export class TownScene extends Phaser.Scene {
       t.setScale(WT * Math.round(size) * 1.5);
       this.tweens.add({ targets: t, scale: WT * Math.round(size), duration: 120, ease: "Back.easeOut" });
     }
-    this.tweens.add({ targets: t, y: y - 10, alpha: 0, duration: size > 1.5 ? 1000 : 800, delay: size > 1.5 ? 150 : 0, onComplete: () => t.destroy() });
+    this.tweens.add({ targets: t, y: y - 10, alpha: 0, duration: size > 1.5 ? 1000 : 800, delay: size > 1.5 ? 150 : 0, onComplete: () => {
+      txt.setVisible(false).setActive(false);
+      if (this.floatPool.length < 48) this.floatPool.push(txt); else txt.destroy();
+    } });
   }
+  private floatPool: Phaser.GameObjects.Text[] = [];
 
   /** Merged blob: paint the swallowed blobs' colours, eyes and mouths over its body (follows squash tweens). */
   private drawBlobParts(e: Entity, id: string, p: any, x: number, y: number) {
@@ -2614,6 +2625,7 @@ export class TownScene extends Phaser.Scene {
   private renderActions(mine: any, cls: ClassKind, cdm: number, now: number) {
     const pools = { energy: mine.energy, mana: unpackMana(mine.mp).mana };
     const slots: string[] = [...(mine.slots ?? [])];
+    this.cdTrack.length = 0;
     // Slot bar at the bottom: 10 cells, cooldown shading, click to choose a skill
     const cells = Array.from({ length: slotCount() }, (_, i) => {
       const skill = slots[i] ?? "";
@@ -2621,12 +2633,14 @@ export class TownScene extends Phaser.Scene {
       if (!skill) return `<div class="slot empty${picking}" data-slot="${i}" title="Click to put a skill on key ${slotKey(i)}"><kbd>${slotKey(i)}</kbd><i>+</i></div>`;
       const h = this.skillHud(cls, skill, cdm);
       const left = Math.max(0, h.cdMs - (now - h.last));
-      const shade = left > 0 ? `<div class="cd" style="height:${(left / h.cdMs) * 100}%"></div>` : "";
+      // the shade height and the seconds are filled in per frame (below), so the markup only changes when a cooldown starts or ends
+      const shade = left > 0 ? `<div class="cd" data-cdk="s${i}"></div>` : "";
       const wait = (left > 0 || !canPay(pools, h.cost) ? " wait" : "") + (shortOf(pools, h.cost) === "heat" ? " hot" : "");
       const power = skill;
       const unarmed = this.unarmedFor(mine, cls, skill);
+      if (left > 0) this.cdTrack.push({ k: `s${i}`, left, cd: h.cdMs });
       return `<div class="slot${h.ult ? " ult" : ""}${wait}${unarmed ? " unarmed" : ""}${picking}" data-slot="${i}" data-skill="${skill}" data-tiphead="${h.name}" data-tip="${tipEsc((unarmed ? `${unarmed}. ` : "") + (skillOf(cls, skill)?.desc ?? ""))}" data-tiphint="Key ${slotKey(i)} · click to change · wheel to scroll · right-click to clear">` +
-        `${iconImg(power)}${shade}${unarmed ? `<i class="xout"></i>` : ""}<kbd>${slotKey(i)}</kbd>${left > 0 && !unarmed ? `<b>${Math.ceil(left / 1000)}</b>` : ""}</div>`;
+        `${iconImg(power)}${shade}${unarmed ? `<i class="xout"></i>` : ""}<kbd>${slotKey(i)}</kbd>${left > 0 && !unarmed ? `<b data-cnk="s${i}"></b>` : ""}</div>`;
     }).join("");
     // Left- and right-click cells first: the weapon, or the spell / skill picked for that click
     const clickCell = (side: ClickSide) => {
@@ -2637,8 +2651,9 @@ export class TownScene extends Phaser.Scene {
       if (sk) {
         const h = this.skillHud(cls, sk, cdm);
         const left = Math.max(0, h.cdMs - (now - h.last));
-        const shade = left > 0 && h.cdMs >= 1000 ? `<div class="cd" style="height:${(left / h.cdMs) * 100}%"></div>` : "";
+        const shade = left > 0 && h.cdMs >= 1000 ? `<div class="cd" data-cdk="${key}"></div>` : "";
         const unarmed = this.unarmedFor(mine, cls, sk);
+        if (shade) this.cdTrack.push({ k: key, left, cd: h.cdMs });
         return `<div class="slot lmb ${side}${!canPay(pools, h.cost) ? " wait" : ""}${shortOf(pools, h.cost) === "heat" ? " hot" : ""}${unarmed ? " unarmed" : ""}${pk}" data-slot="${key}" data-tiphead="${Side}: ${h.name}" data-tip="${tipEsc((unarmed ? `${unarmed}. ` : "") + (skillOf(cls, sk)?.desc ?? ""))}" data-tiphint="Click to change · wheel to scroll · right-click: back to the weapon">` +
           `${iconImg(sk)}${shade}${unarmed ? `<i class="xout"></i>` : ""}<kbd>${label}</kbd></div>`;
       }
@@ -2651,8 +2666,24 @@ export class TownScene extends Phaser.Scene {
     const bar = document.getElementById("hotbar")!;
     // vertical separators between the click attacks, the skill keys and the potions (Murat 2026-11-07)
     const all = this.chargeCell(mine, cls, [ls, rs], slots, now) + lcell + `<i class="hsep"></i>` + cells + `<i class="hsep"></i>` + this.potionCells(mine); // potions right of the skill keys (Murat 2026-11-04)
-    if (this.hotbarHtml !== all) { bar.innerHTML = all; this.hotbarHtml = all; }
+    if (this.hotbarHtml !== all) {
+      bar.innerHTML = all; this.hotbarHtml = all;
+      this.cdEls = this.cdTrack.map((t) => ({ shade: bar.querySelector<HTMLElement>(`[data-cdk="${t.k}"]`), num: bar.querySelector<HTMLElement>(`[data-cnk="${t.k}"]`), pct: -1, sec: -1 }));
+      invalidateHud(); // the bar width may have changed
+    }
+    // Per frame only the cooldown shade height and seconds, and only when the rounded value changes
+    for (let i = 0; i < this.cdTrack.length; i++) {
+      const t = this.cdTrack[i], el = this.cdEls[i];
+      if (!el) continue;
+      const pct = Math.round((t.left / t.cd) * 100);
+      if (el.shade && pct !== el.pct) { el.shade.style.height = `${pct}%`; el.pct = pct; }
+      const sec = Math.ceil(t.left / 1000);
+      if (el.num && sec !== el.sec) { el.num.textContent = String(sec); el.sec = sec; }
+    }
   }
+  /** Cooldown cells of the last renderActions call (values) and their elements (cached while the markup stays the same). */
+  private cdTrack: { k: string; left: number; cd: number }[] = [];
+  private cdEls: { shade: HTMLElement | null; num: HTMLElement | null; pct: number; sec: number }[] = [];
 
   private showDodge(msg: { id: string; dir: string }) {
     const e = this.entities.get(msg.id);
@@ -2866,8 +2897,8 @@ export class TownScene extends Phaser.Scene {
       // where the hero stands on the screen, in HUD px (the quest pointer circles it)
       if (this.npcs) {
         if (meSprite && !me?.dead) {
-          const cam = this.cameras.main, cv = this.game.canvas, cr = cv.getBoundingClientRect();
-          const hud = document.getElementById("hud")!, hr = hud.getBoundingClientRect(), k = hr.width / (hud.offsetWidth || hr.width) || 1;
+          const cam = this.cameras.main, cv = this.game.canvas, { cr, hr, hudW } = hudRects(cv);
+          const k = hr.width / (hudW || hr.width) || 1;
           const wx = ISO ? isoX(meSprite.x, meSprite.y) : meSprite.x, wy = ISO ? isoY(meSprite.x, meSprite.y) : meSprite.y;
           // camera px: zoom around the camera's middle (scroll is in iso space; worldView is not, at this point)
           const px = (wx - cam.scrollX - cam.width / 2) * cam.zoom + cam.width / 2, py = (wy - cam.scrollY - cam.height / 2) * cam.zoom + cam.height / 2;

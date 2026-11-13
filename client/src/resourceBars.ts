@@ -1,3 +1,4 @@
+import { hotbarWidth } from "./hudcache";
 // Top-left resource HUD (Murat's design handoff "3b: grow, then cap"): a gold-rimmed level shield next to
 // pixel-capsule HP / Mana / Stamina bars and a thin XP bar. Bars get longer as the hero's max values grow,
 // up to a cap; past the cap faint tick marks show the extra. Hits leave a pale "damage ghost" that lingers
@@ -171,8 +172,7 @@ export class ResourceBars {
       this.lvEl.textContent = String(s.level);
     }
     // Same width as the slot bar under it
-    const hb = document.getElementById("hudbar") ?? document.getElementById("hotbar");
-    const w = hb ? hb.offsetWidth : 0;
+    const w = hotbarWidth();
     if (w > 0 && w !== this.xpW) { this.xpBar.style.width = `${w}px`; this.xpW = w; }
     const p = `${Math.max(0, Math.min(1, s.xpFrac)) * 100}%`;
     if (p !== this.xpPct) { this.xpFill.style.width = p; this.xpPct = p; }
