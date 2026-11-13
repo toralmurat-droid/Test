@@ -327,6 +327,40 @@ test("Oakvale: major Hymnal / Folk songs with no enemy effect are busking; minor
   } finally { await t.done(); }
 });
 
+test("Oakvale: a finisher with an enemy part outlaws even when the note that fires it is lawful; Amen in Major doesn't", async () => {
+  const t = await setup(1);
+  try {
+    const [a] = t.ids, p = t.ps[0];
+    let town: [number, number] | undefined;
+    for (let tx = VILLAGE.x0 + 2; tx < VILLAGE.x1 - 1 && !town; tx++) for (let ty = VILLAGE.y0 + 2; ty < VILLAGE.y1 - 1 && !town; ty++) {
+      const x = (tx + 0.5) * TILE, y = (ty + 0.5) * TILE;
+      if (!isSolidAt(x, y) && inVillage(x, y)) town = [x, y];
+    }
+    const fired: string[] = [];
+    const bc = t.room.broadcast;
+    t.room.broadcast = function (type: string, msg: any, ...rest: unknown[]) {
+      if (type === "sfx" && msg?.ev === "chord") fired.push(msg.prog);
+      return bc.call(this, type, msg, ...rest);
+    };
+    const again = () => { p.sk.last = {}; p.attackReadyAt = 0; if (p.sk.song) p.sk.song.at -= SONG.changeMs; };
+    const fresh = () => { p.sk.notes = []; p.sk.chordLock = 0; p.outlaw = false; p.sk.mode = "major"; };
+    try {
+      // Perfect Cadence (IV V I: heals, and hurts foes): IV and V played outside the stockade, the lawful I inside
+      fresh(); [p.x, p.y] = [t.x, t.y];
+      again(); t.room.cast(a, "sg_mend"); again(); t.room.cast(a, "sg_call");
+      assert.equal(p.outlaw, false, "nothing is forbidden outside");
+      [p.x, p.y] = town!;
+      again(); t.room.cast(a, "sg_ballad");
+      assert.equal(fired.at(-1), "resolve", "Perfect Cadence fired in town");
+      assert.equal(p.outlaw, true, "a finisher with an enemy part outlaws");
+      // Amen (vi IV I: heal and shield, no enemy part), every note in town, in Major: busking
+      fresh(); again(); t.room.cast(a, "sg_pedal"); again(); t.room.cast(a, "sg_mend"); again(); t.room.cast(a, "sg_ballad");
+      assert.equal(fired.at(-1), "amen", "Amen fired in town");
+      assert.equal(p.outlaw, false, "Amen in Major stays lawful");
+    } finally { t.room.broadcast = bc; }
+  } finally { await t.done(); }
+});
+
 test("swTree / swMode: saved, loaded, an old tree refunds, an unknown mode falls back to Major", async () => {
   const t = await setup(1);
   try {
