@@ -19,9 +19,10 @@ function wallWithRoom(kinds: number[]): [number, number] {
   throw new Error("no such wall");
 }
 
+/** A wave spec; it pierces, so a monster wandering into its path never stops it before the wall. */
 const spec = (owner: string, x: number, y: number, bounce = 3): ShotSpec => ({
   owner, skill: "sg_shrill", x, y, vx: 1, vy: 0, kind: "wave", speed: 260, range: 400, radius: 6, size: 1, dmg: 100,
-  pierce: 0, explode: 0, chain: 0, rank: 1, power: 1, bounce, sound: { pitch: "H", deg: "V", mode: "major" },
+  pierce: 99, explode: 0, chain: 0, rank: 1, power: 1, bounce, sound: { pitch: "H", deg: "V", mode: "major" },
 });
 
 /** Waits (up to 3 s, the room may run slow under a full test run) until `ok` holds. */

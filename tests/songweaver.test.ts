@@ -1,6 +1,6 @@
 // The Songweaver (Plan v2): songs as party auras, one song each, modes, chords, Modulate, the Oakvale busking rule and
 // the swTree / swMode save fields. Room tests run the real TownRoom (tests/helpers/room.ts allows archived classes).
-import { test } from "node:test";
+import { after, test } from "node:test";
 import assert from "node:assert/strict";
 import { ACTIVE_CLASSES, CLASSES } from "../shared/classes";
 import { CANTRIPS, cleanRanks, FINISHERS, SKILLS, skillById, skillOf } from "../shared/skills";
@@ -208,8 +208,13 @@ function openSpot(): [number, number] {
   throw new Error("no open spot");
 }
 
+/** One game server for every room test in this file (fewer start-ups and shutdowns under the parallel test runner). */
+let shared: ReturnType<typeof startRoom> | undefined;
+const server = () => (shared ??= startRoom());
+after(async () => { if (shared) await (await shared).stop(); });
+
 async function setup(n: number) {
-  const srv = await startRoom();
+  const srv = await server();
   const cs = [];
   for (let i = 0; i < n; i++) cs.push(await srv.join({ cls: "songweaver" }));
   await wait(200);
@@ -222,7 +227,7 @@ async function setup(n: number) {
   }
   const buff = (i: number, s: string) => ps[i].sk.buffs.find((b: { id: string; until: number }) => b.id === s && b.until > Date.now());
   const songFields = (id: string) => { const out: any[] = []; room.state.fields.forEach((f: any) => { if (f.owner === id && f.inst.song) out.push(f); }); return out; };
-  const done = async () => { for (const c of cs) await c.leave(); await srv.stop(); };
+  const done = async () => { for (const c of cs) await c.leave(); await wait(50); };
   return { srv, room, cs, ids, ps, x, y, buff, songFields, done };
 }
 
@@ -338,7 +343,7 @@ test("swTree / swMode: saved, loaded, an old tree refunds, an unknown mode falls
 });
 
 test("the owner-only chord message: notes, mode and lockout, sent when they change", async () => {
-  const srv = await startRoom();
+  const srv = await server();
   try {
     const c = await srv.join({ cls: "songweaver" });
     const got: any[] = [];
@@ -356,7 +361,7 @@ test("the owner-only chord message: notes, mode and lockout, sent when they chan
     await wait(300);
     assert.equal(got.length, n0 + 1, "nothing new while nothing changed");
     await c.leave();
-  } finally { await srv.stop(); }
+  } finally { await wait(50); }
 });
 
 test("Accelerando: Tempo quickens a song's beat, never below 500 ms", () => {
