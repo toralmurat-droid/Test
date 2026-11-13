@@ -1,0 +1,583 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>The Riven Marches</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Alegreya+Sans:ital,wght@0,400;0,500;0,700;1,400&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+@font-face { font-family: "Oakvale Title"; src: url(data:font/woff2;base64,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) format("woff2"); font-display: block; }
+@font-face { font-family: "Oakvale Text"; src: url(data:font/woff2;base64,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) format("woff2"); font-display: block; }
+/* Layout: one reading column on a war-table ground, wide figures break out of it; single dark look by choice (the game's own world) */
+:root {
+  color-scheme: dark;
+  --bg: #14100c; --panel: #1d1712; --panel2: #241c15; --line: #3a2a1c; --frame: #8a6a3a;
+  --ink: #e8dcc0; --muted: #a39680; --gold: #f0b44a; --ember: #d9822b; --blood: #c0442a; --moss: #8fae5a; --soul: #8fe0a6;
+  --f-display: "Oakvale Title", "Courier New", monospace;
+  --f-pixel: "Oakvale Text", "Courier New", monospace;
+  --f-body: "Alegreya Sans", "Gill Sans", "Trebuchet MS", sans-serif;
+  --f-mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: var(--bg); color: var(--ink); font: 17px/1.6 var(--f-body); }
+.wrap { max-width: 1080px; margin: 0 auto; padding-block: 28px 80px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.col { max-width: 720px; }
+h1, h2, h3 { font-family: var(--f-display); font-weight: 400; color: var(--gold); text-wrap: balance; letter-spacing: .02em; line-height: 1.15; margin: 0; }
+h1 { font-size: clamp(34px, 6vw, 58px); }
+h2 { font-size: clamp(24px, 3.4vw, 32px); margin-top: 8px; }
+h3 { font-size: 20px; color: var(--ink); }
+p { margin: 0; }
+.stack { display: flex; flex-direction: column; gap: 14px; }
+section { display: flex; flex-direction: column; gap: 16px; padding-block: 44px 8px; border-top: 1px solid var(--line); margin-top: 36px; }
+.eyebrow { font-family: var(--f-pixel); font-size: 14px; letter-spacing: .12em; text-transform: uppercase; color: var(--ember); }
+.lede { font-size: 20px; color: var(--ink); max-width: 720px; }
+.muted { color: var(--muted); }
+a { color: var(--gold); }
+img.px { image-rendering: pixelated; display: block; width: 100%; height: auto; border: 2px solid var(--frame); outline: 3px solid #0b0806; }
+figure { margin: 0; display: flex; flex-direction: column; gap: 8px; }
+figcaption { font-size: 14px; color: var(--muted); }
+.meta { display: flex; flex-wrap: wrap; gap: 8px 22px; font-family: var(--f-pixel); font-size: 14px; color: var(--muted); }
+.pillars { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; }
+.pillar { background: var(--panel); border: 1px solid var(--line); padding: 14px 16px; display: flex; flex-direction: column; gap: 6px; }
+.pillar b { font-family: var(--f-pixel); font-weight: 400; color: var(--gold); font-size: 16px; }
+.pillar span { font-size: 15px; color: var(--muted); line-height: 1.45; }
+.tbl { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 15px; min-width: 560px; }
+th { text-align: left; font-family: var(--f-pixel); font-weight: 400; color: var(--ember); font-size: 14px; letter-spacing: .06em; padding: 8px 10px; border-bottom: 2px solid var(--frame); }
+td { padding: 9px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+td code, p code, li code { font-family: var(--f-mono); font-size: 13px; color: var(--soul); background: #0f1210; padding: 1px 5px; }
+ul { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; }
+.factions { display: flex; flex-direction: column; gap: 18px; }
+.fac { display: grid; grid-template-columns: 120px 1fr; gap: 20px; background: var(--panel); border: 1px solid var(--line); padding: 18px; }
+.fac img { width: 104px; image-rendering: pixelated; }
+.fac h3 { font-size: 22px; }
+.fac .who { font-family: var(--f-pixel); font-size: 14px; color: var(--muted); }
+.fac dl { display: grid; grid-template-columns: 120px 1fr; gap: 6px 14px; margin: 8px 0 0; font-size: 15px; }
+.fac dt { font-family: var(--f-pixel); font-size: 13px; color: var(--ember); padding-top: 2px; }
+.fac dd { margin: 0; min-width: 0; }
+.sw { display: flex; gap: 4px; margin-top: 10px; }
+.sw i { width: 22px; height: 22px; border: 2px solid #0b0806; display: block; }
+.cycle { display: grid; grid-template-columns: 1fr; gap: 16px; align-items: center; }
+.formula { font-family: var(--f-mono); font-size: 14px; background: #0f0c09; border: 1px solid var(--line); border-left: 3px solid var(--ember); padding: 14px 16px; overflow-x: auto; white-space: pre; color: var(--ink); line-height: 1.55; }
+.diagram { overflow-x: auto; background: var(--panel); border: 1px solid var(--line); padding: 12px; }
+.diagram svg { display: block; min-width: 640px; width: 100%; height: auto; }
+.svgt { font-family: var(--f-pixel); fill: var(--ink); font-size: 14px; }
+.svgs { font-family: var(--f-body); fill: var(--muted); font-size: 13px; }
+.box { fill: var(--panel2); stroke: var(--frame); stroke-width: 2; }
+.box2 { fill: #13201a; stroke: var(--soul); stroke-width: 2; }
+.box3 { fill: #2a1a0e; stroke: var(--ember); stroke-width: 2; }
+.arrow { stroke: var(--muted); stroke-width: 2; fill: none; marker-end: url(#ah); }
+.tiers { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; }
+.tier { background: var(--panel); border: 1px solid var(--line); padding: 16px; display: flex; flex-direction: column; gap: 8px; }
+.tier .tag { font-family: var(--f-pixel); font-size: 13px; color: var(--bg); background: var(--gold); align-self: flex-start; padding: 1px 8px; }
+.tier.t2 .tag { background: var(--soul); }
+.tier.t3 .tag { background: var(--ember); }
+.tier p { font-size: 15px; color: var(--muted); }
+.two { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 18px; }
+.two > * { min-width: 0; }
+.example { background: #0f0c09; border: 1px solid var(--line); padding: 14px 16px; font-size: 15px; display: flex; flex-direction: column; gap: 8px; }
+.example b { font-family: var(--f-pixel); font-weight: 400; color: var(--gold); }
+.phases { display: flex; flex-direction: column; gap: 0; }
+.phase { display: grid; grid-template-columns: 70px 1fr; gap: 16px; padding: 14px 0; border-bottom: 1px solid var(--line); }
+.phase .n { font-family: var(--f-display); color: var(--ember); font-size: 26px; }
+.phase h3 { font-size: 18px; }
+.phase p { font-size: 15px; color: var(--muted); }
+.ask { background: var(--panel); border: 1px solid var(--frame); padding: 16px 18px; display: flex; flex-direction: column; gap: 6px; }
+.ask b { font-family: var(--f-pixel); font-weight: 400; color: var(--gold); }
+.ask span { font-size: 15px; color: var(--muted); }
+@media (max-width: 560px) {
+  .fac { grid-template-columns: 1fr; }
+  .fac dl { grid-template-columns: 1fr; gap: 2px; }
+  .fac dt { margin-top: 6px; }
+  .phase { grid-template-columns: 44px 1fr; }
+}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+<header class="stack">
+  <div class="eyebrow">Concept design · Clan war open world</div>
+  <h1>The Riven Marches</h1>
+  <p class="lede">A slow, persistent war between five clans for the lands between Oakvale and the Sunscar. AI warlords lead the clans and try to conquer each other's territory. Left alone, they mostly hold each other in check. Players tip the balance by taking war writs, joining battles at the front, or escorting a single caravan.</p>
+  <div class="meta"><span>Version 0.1 · 13 Nov 2026</span><span>Design only, no code changed</span><span>Built on the live game at play.fmtpa.ch</span></div>
+</header>
+
+<figure style="margin-top:28px">
+  <img class="px" src="img/riven-marches-map.png" alt="Pixel war-table map of the Riven Marches: five faction homelands around a neutral crown, with front lines in ember and battle markers on the borders">
+  <figcaption>War table sketch. 49 territories, five capitals, the neutral Crown in the middle. Ember lines are front lines; crossed swords mark open battles.</figcaption>
+</figure>
+
+<section>
+  <div class="eyebrow">At a glance</div>
+  <h2>Five design pillars</h2>
+  <div class="pillars">
+    <div class="pillar"><b>A slow war</b><span>Borders move over hours and days, not minutes. You can log off and come back to a changed map.</span></div>
+    <div class="pillar"><b>AI generals, fixed rules</b><span>Each clan's leader plans, but every order goes through the same game rules. Cleverness wins, cheating can't.</span></div>
+    <div class="pillar"><b>Stalemate by default</b><span>Supply strain, a counter cycle and coalitions mean the AIs cancel out. Players and good plans break the tie.</span></div>
+    <div class="pillar"><b>Join in one click</b><span>Writs, standards and caravans fit a 10-minute visit. Battles show on the map with a route to the front.</span></div>
+    <div class="pillar"><b>Live without breaks</b><span>New weapons and monsters arrive as data with no restart. Code changes arrive as a new "Age" players step into when they choose.</span></div>
+  </div>
+</section>
+
+<section>
+  <div class="eyebrow">Starting point</div>
+  <h2>What the game already has</h2>
+  <p class="col">Most of the war can be built from systems that already run on the live server. This plan reuses them instead of starting parallel ones.</p>
+  <div class="tbl"><table>
+    <tr><th>Existing system</th><th>Where</th><th>Role in the war</th></tr>
+    <tr><td>Necromancer war works: skeletons build catapults, rams and siege towers at work sites</td><td><code>shared/siege.ts</code></td><td>Siege engines become real war assets. A finished ram can break a Hold's gate; players sabotage the work sites.</td></tr>
+    <tr><td>Champions with family affixes and names</td><td><code>shared/champions.ts</code></td><td>War captains, and the affix pool the Forge draws from when an AI designs a new monster.</td></tr>
+    <tr><td>Night Raiders, seven riders who roam both acts</td><td><code>shared/raiders.ts</code></td><td>A neutral wild card that hits whichever clan is strongest, so no one runs away with the map.</td></tr>
+    <tr><td>Bounty boards at portal stones and on the square</td><td><code>shared/bounty.ts</code></td><td>The board format becomes War Writs posted by the clans.</td></tr>
+    <tr><td>Groups, shared zone XP, tougher mobs per member</td><td><code>shared/party.ts</code></td><td>Warbands of up to 4. The same scaling keeps a zerg from flattening a front.</td></tr>
+    <tr><td>Undead keep the night, day/night clock</td><td><code>shared/daynight.ts</code></td><td>The Ossuary Host pushes at night, the Veiled Circle at noon. Timing becomes strategy.</td></tr>
+    <tr><td>Redfang camp lookouts, horn, patrols, tree ambushers</td><td><code>shared/bandits.ts</code></td><td>Redfang raid doctrine: lookouts, ambushes on supply roads.</td></tr>
+    <tr><td>Map bands (Act 1, Mawdeep, desert) in one room, deterministic map</td><td><code>shared/map.ts</code>, <code>shared/desert.ts</code></td><td>The Marches become a fourth band, built from code like the desert.</td></tr>
+    <tr><td>Seamless deploys: heroes come back where they stood</td><td><code>server/handoff.ts</code>, <code>client/src/reconnect.ts</code></td><td>The base for moving a player into a newer Age without a reload they notice.</td></tr>
+    <tr><td>Player /idea board, voting, bot drafting rules</td><td><code>shared/ideas.ts</code></td><td>The approval pipeline and allowlists reused for AI-authored changes.</td></tr>
+    <tr><td>Balance sims (duel, PvE, zones, bosses)</td><td><code>tools/balance/</code></td><td>Gate every AI-forged weapon or monster before it goes live; a new war sim checks the stalemate.</td></tr>
+    <tr><td>Procedural art pipeline</td><td><code>tools/art</code>, <code>weaponArt.ts</code></td><td>Lets forged items and monsters get real pixel art from parameters, in the same style.</td></tr>
+  </table></div>
+</section>
+
+<section>
+  <div class="eyebrow">The world</div>
+  <h2>The Riven Marches</h2>
+  <div class="col stack">
+    <p>The Marches are the old borderlands of a fallen kingdom, east of Oakvale and north of the Sunscar. They are built as a fourth band of the same map (like the desert), so one server room, collisions, pathfinding and portal stones keep working. Waygates lead in from Oakvale and from Kel Ashar.</p>
+    <p><b>Size.</b> About the size of Act 1 (288 × 216 tiles), split into 49 territories of roughly 30 × 30 tiles. A territory is big enough for a fight and small enough to cross in a minute.</p>
+    <p><b>Levels.</b> The edge near Oakvale is level 20–30, the edge near the Sunscar 35–50, and the Crown is 50. Heroes below a territory's band are raised to its floor while they stand in it ("banner-sworn"), keeping their own gear, so a level 22 can help but a level 50 is still stronger.</p>
+  </div>
+  <div class="two">
+    <div class="stack">
+      <h3>Anatomy of a territory</h3>
+      <ul>
+        <li><b>Hold.</b> A keep, camp or warren in the faction's style. Owning the Hold owns the territory.</li>
+        <li><b>Standards.</b> Two or three banner poles. Standing near one shifts Control; this is the main player activity.</li>
+        <li><b>Work sites.</b> Where engines, palisades or rituals get built (from <code>siege.ts</code>).</li>
+        <li><b>Supply road.</b> Caravans carry resources from the capital; cut the road and the front starves.</li>
+        <li><b>A hamlet.</b> Neutral villagers who pay tithe to whoever holds the land and react to how they are treated.</li>
+      </ul>
+    </div>
+    <div class="stack">
+      <h3>Special places</h3>
+      <ul>
+        <li><b>Capitals.</b> One per clan. They can be besieged but never fall, so no clan is ever wiped out.</li>
+        <li><b>The Crown of the Marches.</b> A ruined royal city in the centre. Holding it at the end of an Age decides the Age's title and a world-wide boon.</li>
+        <li><b>Warrens.</b> Hide-Kin tunnels that link territories that aren't next to each other. They can be found and collapsed.</li>
+        <li><b>Wells and oases.</b> Veiled ritual sites that change weather over nearby territories.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="eyebrow">The clans</div>
+  <h2>Five factions, all from existing lore</h2>
+  <p class="col">Every clan grows out of enemies players already know, so the war feels like the world's story moving on. Each has one doctrine mechanic that only it can use. That gives the AI leaders different tools and gives players a reason to pick a side.</p>
+  <figure><img class="px" src="img/faction-banners.png" alt="Five tattered pixel-art war banners with sigils: Wardens flame and oak, Redfang fangs, Ossuary Host skull, Hide-Kin mask on stitched hide, Veiled Circle eye under a sun"><figcaption>Banners at game pixel size ×5. Each clan has its own banner cut: a notched swallowtail, a ragged pennant, a long drape with hanging bones, stitched hide and a fringed silk.</figcaption></figure>
+
+  <div class="factions">
+    <div class="fac">
+      <img src="img/banner-wardens.png" alt="Wardens banner">
+      <div>
+        <h3>The Hearthbound Wardens</h3>
+        <div class="who">Humans of Oakvale, Saltmere and the free holds</div>
+        <dl>
+          <dt>Leader</dt><dd>Warden-Captain Hale: careful and defensive, keeps promises, hates magic (the "no magic in Oakvale" law becomes clan policy).</dd>
+          <dt>Doctrine</dt><dd><b>Palisade &amp; watch.</b> Fortifies faster than anyone; gate watchmen and torches (existing art) spot raiders a territory away.</dd>
+          <dt>Troops</dt><dd>Watchmen, militia townsfolk, archers, new: shieldwall pikemen.</dd>
+          <dt>Weakness</dt><dd>Slow to attack; supply depends on farm territories.</dd>
+        </dl>
+        <div class="sw"><i style="background:#3b4a2c"></i><i style="background:#5b3d22"></i><i style="background:#d9822b"></i><i style="background:#f0b44a"></i><i style="background:#b8ad94"></i></div>
+      </div>
+    </div>
+    <div class="fac">
+      <img src="img/banner-redfang.png" alt="Redfang banner">
+      <div>
+        <h3>The Redfang Compact</h3>
+        <div class="who">Bandits of Redfang Hollow and every outlaw who joined them</div>
+        <dl>
+          <dt>Leader</dt><dd>The new Redfang Chief: greedy and opportunistic, breaks truces when it pays, loves a raid.</dd>
+          <dt>Doctrine</dt><dd><b>Raid the roads.</b> Can hit caravans two territories behind the front; ambushers drop from trees (existing). Stolen supply becomes gold.</dd>
+          <dt>Troops</dt><dd>Bandits, lookouts with horns, tree ambushers, new: mounted outriders.</dd>
+          <dt>Weakness</dt><dd>Weak walls; lowest morale when losing.</dd>
+        </dl>
+        <div class="sw"><i style="background:#7e1d16"></i><i style="background:#1a1414"></i><i style="background:#e3d6b8"></i><i style="background:#7a3b1c"></i><i style="background:#4a4542"></i></div>
+      </div>
+    </div>
+    <div class="fac">
+      <img src="img/banner-host.png" alt="Ossuary Host banner">
+      <div>
+        <h3>The Ossuary Host</h3>
+        <div class="who">The necromancer's skeleton legion, heirs of the Hollow King</div>
+        <dl>
+          <dt>Leader</dt><dd>The Mason of Bones: patient, methodical, thinks in weeks. Speaks in building metaphors.</dd>
+          <dt>Doctrine</dt><dd><b>Siege works.</b> The only clan that builds catapults, rams and towers (<code>siege.ts</code>). Raises the fallen of every battle as fresh troops. Strong at night, sluggish by day.</dd>
+          <dt>Troops</dt><dd>Skeletons, skeleton mages, necromancers, bone demons, new: bone ram crews.</dd>
+          <dt>Weakness</dt><dd>Daylight, and needs bone yards (battlefields) to grow.</dd>
+        </dl>
+        <div class="sw"><i style="background:#1f2422"></i><i style="background:#4f7d6a"></i><i style="background:#d8cfb2"></i><i style="background:#8fe0a6"></i><i style="background:#6a6458"></i></div>
+      </div>
+    </div>
+    <div class="fac">
+      <img src="img/banner-hidekin.png" alt="Hide-Kin banner">
+      <div>
+        <h3>The Hide-Kin of Mawdeep</h3>
+        <div class="who">Beast-folk of the Mawdeep Warrens, men and women sewn into hides</div>
+        <dl>
+          <dt>Leader</dt><dd>The Hide-Mother's heir: territorial, superstitious, reads omens (the crowseer), avenges every insult.</dd>
+          <dt>Doctrine</dt><dd><b>Tunnels.</b> Digs warrens that link far territories and can strike behind a front. Ambush beasts guard the exits.</dd>
+          <dt>Troops</dt><dd>Gnawkin, tuskborn, silkwretches, duskwings, packlords, hornbrutes.</dd>
+          <dt>Weakness</dt><dd>A collapsed tunnel traps its troops; poor at holding open ground.</dd>
+        </dl>
+        <div class="sw"><i style="background:#8a5f2a"></i><i style="background:#4a2e1c"></i><i style="background:#c9a77c"></i><i style="background:#6e1d18"></i><i style="background:#5a5a3a"></i></div>
+      </div>
+    </div>
+    <div class="fac">
+      <img src="img/banner-veiled.png" alt="Veiled Circle banner">
+      <div>
+        <h3>The Veiled Circle</h3>
+        <div class="who">The desert mage cult, scattered after the fall of the Sunwright</div>
+        <dl>
+          <dt>Leader</dt><dd>The Veiled Choir (three voices, one will): scheming, patient, prefers to win without fighting.</dd>
+          <dt>Doctrine</dt><dd><b>Rituals.</b> Turn weather over nearby territories: sandstorms slow caravans, a burning noon weakens undead. Controls wells.</dd>
+          <dt>Troops</dt><dd>Veiled adepts, nomads, camel-folk, sphinx warriors, sand dead bound to the Circle.</dd>
+          <dt>Weakness</dt><dd>Few troops; rituals need Aether and take time to cast.</dd>
+        </dl>
+        <div class="sw"><i style="background:#2a2a5a"></i><i style="background:#e0a030"></i><i style="background:#f6d26b"></i><i style="background:#cdb38a"></i><i style="background:#7a3a5a"></i></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="cycle">
+    <h3>The counter cycle</h3>
+    <div class="diagram">
+      <svg viewBox="0 0 760 300" role="img" aria-label="Counter cycle: Wardens beat Redfang, Redfang beats Veiled Circle, Veiled Circle beats Ossuary Host, Ossuary Host beats Hide-Kin, Hide-Kin beat Wardens">
+        <defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#a39680"/></marker></defs>
+        <g class="svgt" text-anchor="middle">
+          <circle cx="380" cy="40" r="8" fill="#3b4a2c" stroke="#d9822b" stroke-width="2"/><text x="380" y="70">Wardens</text>
+          <circle cx="600" cy="120" r="8" fill="#7e1d16" stroke="#e3d6b8" stroke-width="2"/><text x="600" y="150">Redfang</text>
+          <circle cx="520" cy="250" r="8" fill="#2a2a5a" stroke="#e0a030" stroke-width="2"/><text x="520" y="280">Veiled Circle</text>
+          <circle cx="240" cy="250" r="8" fill="#1f2422" stroke="#4f7d6a" stroke-width="2"/><text x="240" y="280">Ossuary Host</text>
+          <circle cx="160" cy="120" r="8" fill="#8a5f2a" stroke="#6e1d18" stroke-width="2"/><text x="160" y="150">Hide-Kin</text>
+        </g>
+        <path class="arrow" d="M395,46 Q520,60 588,112"/>
+        <path class="arrow" d="M598,134 Q590,210 532,244"/>
+        <path class="arrow" d="M506,252 L254,252"/>
+        <path class="arrow" d="M232,240 Q170,200 162,134"/>
+        <path class="arrow" d="M170,110 Q240,55 366,42"/>
+        <g class="svgs" text-anchor="middle">
+          <text x="530" y="66">watchtowers spot raids</text>
+          <text x="650" y="200">caravans hold Aether</text>
+          <text x="380" y="240">noon burns the dead</text>
+          <text x="120" y="200">sieges flood warrens</text>
+          <text x="240" y="66">tunnels go under walls</text>
+        </g>
+      </svg>
+    </div>
+    <p class="col muted">Each clan beats one neighbour on the cycle and is beaten by another. Whoever pulls ahead is exposed to its counter, so the cycle itself pushes toward balance. The bonus is a +20% pressure modifier, not a hard win.</p>
+  </div>
+  <p class="col"><b>Wild cards, not clans.</b> The Night Raiders ride against whichever clan holds the most land. Hamlet villagers can rise against a harsh owner. Neither can be led by an AI.</p>
+</section>
+
+<section>
+  <div class="eyebrow">Mechanics</div>
+  <h2>How the war moves</h2>
+  <div class="col stack">
+    <p>The server runs a <b>war tick every 10 minutes</b>. On each tick, every border between two clans gets a pressure score and Control shifts a few points toward the stronger side. When a territory's Control falls below 25, a <b>siege window</b> is announced on the map one hour ahead, so players can show up. The siege itself is a 20-minute event at the Hold. If the attacker holds the gate at the end, the territory flips.</p>
+  </div>
+  <div class="formula">pressure(A → B) = troops(A) × supply(A)
+                 × doctrine bonus (night for Host, noon for Veiled …)
+                 × counter bonus (1.2 if A counters B)
+                 + player valor at this border (last hour, capped)
+                 − fortification(B) × defender bonus 1.3
+
+ΔControl(B) = clamp( (pressure(A→B) − pressure(B→A)) / 40 , −4 , +4 ) per tick
+supply(A)   = 1 / (1 + 0.06 × road distance from capital)    ← overextension</div>
+  <div class="two">
+    <div class="stack">
+      <h3>Territory stats</h3>
+      <ul>
+        <li><b>Control</b> 0–100: who really holds it.</li>
+        <li><b>Garrison:</b> troop strength stationed there; these are the mobs players meet.</li>
+        <li><b>Fortification:</b> walls, palisades, warded stones. Built over days.</li>
+        <li><b>Supply:</b> falls with distance from the capital and when roads are cut.</li>
+        <li><b>Mood:</b> how the hamlet feels about its owner; drives tithe and uprisings.</li>
+      </ul>
+    </div>
+    <div class="stack">
+      <h3>Resources</h3>
+      <ul>
+        <li><b>Grain</b> feeds garrisons (farms, hamlets).</li>
+        <li><b>Timber</b> builds walls and engines (woods).</li>
+        <li><b>Iron</b> arms troops and forged weapons (quarries).</li>
+        <li><b>Bone</b> raises the dead; only from battlefields.</li>
+        <li><b>Aether</b> powers rituals and forging (wells, ruins).</li>
+      </ul>
+      <p class="muted">Resources travel by visible caravan along supply roads. Players escort or raid them.</p>
+    </div>
+  </div>
+  <div class="stack col">
+    <h3>Time scales</h3>
+    <ul>
+      <li><b>Tick (10 min):</b> Control shifts, garrisons move, caravans arrive.</li>
+      <li><b>War day (24 h):</b> each AI leader holds a council and sets its plan.</li>
+      <li><b>Age (about 4 weeks):</b> ends with the Crown Reckoning, a big siege of the Crown. The winner names the Age and the whole world gets a small boon for the next one. Borders relax toward the homelands, but the map is not wiped.</li>
+    </ul>
+  </div>
+</section>
+
+<section>
+  <div class="eyebrow">Players</div>
+  <h2>How a player joins the war</h2>
+  <figure><img class="px" src="img/mockup-front-line.png" alt="Mockup over an in-game desert screenshot: front plaque Kharsun Gate with a 62/38 tug bar, a herald proclamation, a captured Host standard with a capture ring, and a War Writs card"><figcaption>Mockup on a real Kharsun screenshot: the front plaque with the tug-of-war bar, a herald's proclamation, a Host standard with its capture ring, and the War Writs card under the minimap.</figcaption></figure>
+  <div class="two">
+    <div class="stack">
+      <h3>Sworn or sellsword</h3>
+      <p>At any war table (one on each village square) a hero can <b>swear to a clan</b> for the rest of the Age. Sworn heroes wear the tabard, are left alone by that clan's troops, and earn Renown ranks with rewards in the clan's style. A hero who doesn't swear is a <b>sellsword</b> who takes writs from anyone and earns gold, not rank. Yes, a hero can swear to the Ossuary Host: the dead accept anyone who brings bones.</p>
+    </div>
+    <div class="stack">
+      <h3>Things to do in one visit</h3>
+      <ul>
+        <li><b>Hold a standard:</b> stand in the ring, fight off defenders.</li>
+        <li><b>War writs:</b> posted by the AI leaders on boards ("burn the ram at Kharsun Gate").</li>
+        <li><b>Escort or raid a caravan.</b></li>
+        <li><b>Sabotage a work site,</b> or help build one.</li>
+        <li><b>Hunt a war captain</b> (a named champion).</li>
+        <li><b>Scout:</b> reveal a fogged territory for your clan's leader.</li>
+        <li><b>Join a siege</b> in its announced window.</li>
+      </ul>
+    </div>
+  </div>
+  <div class="col stack">
+    <h3>Fairness rules</h3>
+    <ul>
+      <li>Player valor counts per border with a cap and falls off for each extra player, so 30 heroes on one front aren't 30 times stronger than one.</li>
+      <li><b>Rally:</b> the clan with the least land gets more valor per action and better writ rewards. Players drift to the underdog by themselves.</li>
+      <li>PvP between rival sworn heroes is on in the Marches, off on the village squares. The existing group scaling stays.</li>
+      <li>Someone just passing through doesn't have to fight: unsworn heroes are only attacked by clans whose writs they took.</li>
+    </ul>
+  </div>
+</section>
+
+<section>
+  <div class="eyebrow">Balance</div>
+  <h2>Why the AIs cancel each other out</h2>
+  <p class="col">Murat's goal is that the AIs mostly hold each other in place unless one finds a clever plan. The rules push that way on purpose:</p>
+  <div class="tiers">
+    <div class="tier"><h3>Overextension</h3><p>Supply drops with every territory away from the capital. A big clan is a thin clan.</p></div>
+    <div class="tier"><h3>Defender's edge</h3><p>Defending costs less than attacking (×1.3), and capitals never fall.</p></div>
+    <div class="tier"><h3>Counter cycle</h3><p>Growing exposes you to the clan that counters you.</p></div>
+    <div class="tier"><h3>Coalitions</h3><p>AI leaders see a threat score; when one clan leads, the others are pushed to truce and turn on it.</p></div>
+    <div class="tier"><h3>Raiders &amp; uprisings</h3><p>Night Raiders and angry hamlets hit the biggest clan.</p></div>
+    <div class="tier"><h3>Rally for the weak</h3><p>Players earn more helping the clan that's losing.</p></div>
+  </div>
+  <p class="col">This gets tested before any AI is plugged in: a headless war sim (<code>tools/balance/war.ts</code>, next to <code>pve.ts</code> and <code>duel.ts</code>) plays 1,000 Ages with simple scripted leaders. Target: without players, no clan holds more than 30% of the map for more than three war days in a row, and a "clever" scripted plan (feint plus night push) can win a few territories but not the Crown.</p>
+</section>
+
+<section>
+  <div class="eyebrow">AI leaders</div>
+  <h2>How an AI leads a clan</h2>
+  <p class="col">Two layers. A fast deterministic layer inside the game server moves troops every tick and needs no AI calls. A slow strategic layer, the <b>War Council</b>, is a language model that thinks once per war day (and when something big happens) and gives orders. The model never touches the game directly: it can only send orders the rules accept.</p>
+  <div class="diagram">
+    <svg viewBox="0 0 900 330" role="img" aria-label="AI leader architecture: war state goes through a fog filter into an intel report, the War Council model reads intel, doctrine and chronicle, sends orders to a validator, which passes them to the tactical executor in the game server">
+      <defs><marker id="ah2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#a39680"/></marker></defs>
+      <rect class="box" x="20" y="30" width="190" height="70"/><text class="svgt" x="36" y="58">War state</text><text class="svgs" x="36" y="80">territories, troops, supply</text>
+      <rect class="box" x="20" y="140" width="190" height="70"/><text class="svgt" x="36" y="168">Fog filter</text><text class="svgs" x="36" y="190">only what scouts saw</text>
+      <rect class="box2" x="260" y="30" width="250" height="180"/><text class="svgt" x="278" y="58">War Council (model)</text>
+      <text class="svgs" x="278" y="84">reads: intel report</text><text class="svgs" x="278" y="104">doctrine card (persona, goals)</text><text class="svgs" x="278" y="124">chronicle (what it did, what worked)</text><text class="svgs" x="278" y="144">treasury, envoys' messages</text>
+      <text class="svgs" x="278" y="176">writes: orders via tools</text><text class="svgs" x="278" y="196">+ herald lines, writs</text>
+      <rect class="box3" x="560" y="30" width="150" height="70"/><text class="svgt" x="576" y="58">Validator</text><text class="svgs" x="576" y="80">budget, legality</text>
+      <rect class="box" x="560" y="140" width="310" height="70"/><text class="svgt" x="576" y="168">Tactical executor (server)</text><text class="svgs" x="576" y="190">every 10 min tick, no model calls</text>
+      <rect class="box" x="740" y="30" width="130" height="70"/><text class="svgt" x="756" y="58">Fallback</text><text class="svgs" x="756" y="80">scripted doctrine</text>
+      <rect class="box" x="260" y="250" width="610" height="56"/><text class="svgt" x="278" y="276">Players see</text><text class="svgs" x="278" y="296">troop moves, sieges, herald proclamations, war writs, a chronicle page of the Age</text>
+      <path d="M115,100 L115,138" stroke="#a39680" stroke-width="2" marker-end="url(#ah2)"/>
+      <path d="M210,175 L258,150" stroke="#a39680" stroke-width="2" marker-end="url(#ah2)"/>
+      <path d="M510,65 L558,65" stroke="#a39680" stroke-width="2" marker-end="url(#ah2)"/>
+      <path d="M635,100 L635,138" stroke="#a39680" stroke-width="2" marker-end="url(#ah2)"/>
+      <path d="M805,100 L805,138" stroke="#a39680" stroke-width="2" stroke-dasharray="5 4" marker-end="url(#ah2)"/>
+      <path d="M715,210 L715,248" stroke="#a39680" stroke-width="2" marker-end="url(#ah2)"/>
+      <path d="M560,175 Q300,240 210,80" stroke="#a39680" stroke-width="2" stroke-dasharray="3 5" fill="none" marker-end="url(#ah2)"/>
+    </svg>
+  </div>
+  <div class="two">
+    <div class="stack">
+      <h3>Orders a council can give</h3>
+      <ul>
+        <li><code>set_stance(border, push | hold | feint)</code></li>
+        <li><code>move_garrison(from, to, share)</code></li>
+        <li><code>build(territory, wall | engine | ritual | tunnel)</code></li>
+        <li><code>route_caravan(resource, road)</code></li>
+        <li><code>post_writ(territory, task, reward)</code></li>
+        <li><code>send_envoy(clan, offer)</code>: truce, pact, tribute</li>
+        <li><code>proclaim(text)</code>: a herald line players see</li>
+        <li><code>commission(forge recipe)</code>: see the Forge below</li>
+      </ul>
+      <p class="muted">Each order costs resources or time. The validator rejects anything over budget or against the rules, and tells the council why.</p>
+    </div>
+    <div class="example">
+      <b>Example council, Ossuary Host, day 41</b>
+      <span>Intel: Veiled Circle holds Kharsun Gate at 62%. A sandstorm ritual is due at noon. Wardens are quiet, palisading in the north.</span>
+      <span>Plan: feint at Wardens' Barrow Ford (cheap, keeps them home). Move 30% of the garrison to Kharsun at dusk. Build a bone ram in the dark; it is ready by the third night tick. Proclaim: "The wells will run red before the second sun." Post a writ for sworn heroes: escort bone carts to Kharsun.</span>
+      <span class="muted">Every step uses existing rules: night bonus, siege works, writs. Nothing is invented.</span>
+    </div>
+  </div>
+  <div class="col stack">
+    <h3>Room for clever plans</h3>
+    <p>The council can't change rules, but it can combine them: feints that pull defenders away, timing pushes with day and night, starving a front by raiding its roads, a truce with one neighbour to free troops for another, posting rich writs to draw players to its front, or a Hide-Kin tunnel that opens behind a line. These are the "ingenious plans" that break a stalemate without breaking the game.</p>
+    <h3>Guardrails</h3>
+    <ul>
+      <li>Councils only see fog-limited intel. They never read player saves, chats or personal data.</li>
+      <li>Proclamations go through a short filter and a word limit; they never name real players.</li>
+      <li>A daily call budget per clan. If the model is down or over budget, the scripted doctrine leads that day.</li>
+      <li>A kill switch per clan, and Murat can veto any order or proclamation from an admin page.</li>
+      <li>Councils run on a mid-size Claude model; herald lines on the smallest; a larger one reviews Forge designs. About 5 clans × 2–4 councils a day, so a small, steady cost.</li>
+    </ul>
+  </div>
+</section>
+
+<section>
+  <div class="eyebrow">The Forge</div>
+  <h2>New weapons and monsters that stay coherent</h2>
+  <p class="col">Clans can invent things, but only inside a <b>Codex</b>: a recipe space built from parts the game already has. A recipe is data, not code, so it can go live without a restart and be removed the same way.</p>
+  <div class="two">
+    <div class="example">
+      <b>Monster recipe</b>
+      <span>base body from an existing rig (skeleton, beast-folk, nomad…) + clan palette + up to 2 affixes from the champion pool + a weapon form + a level → a power budget it must fit.</span>
+      <span>Example: <i>Bone Ram Crew</i>. Skeleton body, "siege" and "risen" affixes, maul, level 34. Pushes engines 30% faster.</span>
+    </div>
+    <div class="example">
+      <b>Weapon recipe</b>
+      <span>weapon form (<code>weaponArt.ts</code>) + damage type (fire, cold, poison, faith) + affixes within its item-level budget + clan look.</span>
+      <span>Example: <i>Sun-glass Scimitar</i> (Veiled). Faith damage, blinds undead briefly. Drops from Veiled war captains and is a sworn reward.</span>
+    </div>
+  </div>
+  <div class="col stack">
+    <h3>From idea to live</h3>
+    <ul>
+      <li><b>Commission.</b> A council spends resources; research takes 2–5 war days and players see "The Host's forges are burning" in the chronicle. Players can raid the forge to slow it.</li>
+      <li><b>Check.</b> Schema and power budget, then the balance sims (<code>pve.ts</code>, <code>duel.ts</code>) and a lore check against a world guide.</li>
+      <li><b>Art.</b> Generated by the existing <code>tools/art</code> pipeline from the parameters, at the same pixel size as everything else.</li>
+      <li><b>Release.</b> Hot-loaded as a content pack. Optional rule: Murat approves the first few, then only flagged ones.</li>
+      <li><b>Limits.</b> One active project per clan, a cap of live forged items per clan, and old forged items retire at the end of the Age.</li>
+    </ul>
+  </div>
+</section>
+
+<section>
+  <div class="eyebrow">Live changes</div>
+  <h2>AI changes, deployed without breaking anyone's game</h2>
+  <p class="col">Changes come in three tiers. The deeper the change, the more checks it goes through and the more gently it reaches players.</p>
+  <div class="tiers">
+    <div class="tier"><span class="tag">Tier 1 · Orders</span><h3>Instant</h3><p>Troop moves, writs, proclamations. Just war state. Applied on the next tick, no deploy.</p></div>
+    <div class="tier t2"><span class="tag">Tier 2 · Content packs</span><h3>Hot-loaded</h3><p>Forged monsters and weapons, banners, dialogue. Data checked against schemas and sims, loaded by the running server and pushed to clients. No restart. Removable.</p></div>
+    <div class="tier t3"><span class="tag">Tier 3 · Code</span><h3>A new Age</h3><p>A new doctrine mechanic or engine type. Opened as a PR in a sandboxed folder, CI, sims and reviewer agent, then Murat approves. Ships as a new Age players step into.</p></div>
+  </div>
+  <div class="col stack">
+    <p><b>Where AI code is allowed.</b> Clan code lives in plug-in folders (<code>shared/war/clans/&lt;clan&gt;/</code>) behind a fixed interface, like the skill engine. The PR bot may only touch its own clan's folder and data tables, under 200 lines, the same allowlist idea as the /idea feature. These PRs use <code>war/*</code> branches that never auto-merge.</p>
+    <p><b>What changes in hosting.</b> Today one Railway service restarts on each merge and the handoff puts heroes back in a few seconds. To run two versions side by side, saves move from <code>saves.json</code> to a database both can share (Postgres on Railway), and the war state moves into a small separate service that both versions read and write through a versioned API.</p>
+  </div>
+  <div class="diagram">
+    <svg viewBox="0 0 900 300" role="img" aria-label="Two game versions side by side: a gateway sends new players to the newest Age, players in the old Age are offered a crossing, both Ages share the account database and the war state service">
+      <defs><marker id="ah3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#a39680"/></marker></defs>
+      <rect class="box" x="20" y="120" width="150" height="60"/><text class="svgt" x="36" y="146">Gateway</text><text class="svgs" x="36" y="166">play.fmtpa.ch</text>
+      <rect class="box" x="250" y="30" width="250" height="90"/><text class="svgt" x="268" y="58">Age 13 (current)</text><text class="svgs" x="268" y="80">players already in it stay</text><text class="svgs" x="268" y="100">closes when empty or after 24 h</text>
+      <rect class="box2" x="250" y="180" width="250" height="90"/><text class="svgt" x="268" y="208">Age 14 (new)</text><text class="svgs" x="268" y="230">all new logins go here</text><text class="svgs" x="268" y="250">players cross when they choose</text>
+      <rect class="box3" x="600" y="30" width="270" height="90"/><text class="svgt" x="618" y="58">Accounts &amp; saves</text><text class="svgs" x="618" y="80">shared database, one owner</text><text class="svgs" x="618" y="100">per hero at a time (lease)</text>
+      <rect class="box3" x="600" y="180" width="270" height="90"/><text class="svgt" x="618" y="208">War state service</text><text class="svgs" x="618" y="230">one war for both Ages</text><text class="svgs" x="618" y="250">versioned API</text>
+      <path d="M170,140 L248,85" stroke="#a39680" stroke-width="2" stroke-dasharray="5 4" marker-end="url(#ah3)"/>
+      <path d="M170,160 L248,215" stroke="#a39680" stroke-width="2" marker-end="url(#ah3)"/>
+      <path d="M375,120 L375,178" stroke="#8fe0a6" stroke-width="3" marker-end="url(#ah3)"/><text class="svgs" x="385" y="155">cross</text>
+      <path d="M500,70 L598,70" stroke="#a39680" stroke-width="2" marker-end="url(#ah3)"/>
+      <path d="M500,225 L598,225" stroke="#a39680" stroke-width="2" marker-end="url(#ah3)"/>
+      <path d="M500,100 L598,205" stroke="#a39680" stroke-width="2" marker-end="url(#ah3)"/>
+      <path d="M500,200 L598,95" stroke="#a39680" stroke-width="2" marker-end="url(#ah3)"/>
+    </svg>
+  </div>
+  <div class="two">
+    <figure><img class="px" src="img/mockup-new-age.png" alt="Mockup on the bonfire loading screen: a panel announcing a new age, the Forge of Bones, with buttons Cross now and After this fight"><figcaption>Mockup: the offer to cross into a new Age, on the existing bonfire loading screen.</figcaption></figure>
+    <div class="stack">
+      <h3>Opt-in crossing, step by step</h3>
+      <ul>
+        <li>The new Age starts beside the old one. First it opens only to volunteers (the "Vanguard"); if nothing breaks, it takes all new logins.</li>
+        <li>Players in the old Age get a quiet notice: what's new, in the clans' words. They choose <b>Cross now</b> or <b>After this fight</b>.</li>
+        <li>On crossing, the existing handoff saves position, health and group, the new client is fetched in the background (<code>prefetchBuild</code> already does this), and the hero appears in the same spot in the new Age.</li>
+        <li>A group crosses together: the leader's choice asks the members.</li>
+        <li>After 24 h, anyone left is moved at a safe moment: a respawn, a loading screen or a village square, never mid-fight.</li>
+        <li>Because the war state is shared, both Ages fight the same war. Trading stays inside one Age.</li>
+      </ul>
+    </div>
+  </div>
+  <div class="col stack">
+    <h3>Rules that make it safe</h3>
+    <ul>
+      <li><b>Saves only grow.</b> New fields are optional and the old version ignores them (the same rule as today's <code>xpv</code> migrations), so a hero can go back if the new Age is rolled back.</li>
+      <li><b>One owner per hero.</b> A lease in the database makes sure only one Age writes a hero's save at a time.</li>
+      <li><b>Rollback.</b> Point new logins back to the old Age and offer the crossing the other way.</li>
+      <li><b>Small fixes</b> (typos, balance numbers) still ship the normal way with today's seamless restart. Ages are for bigger changes.</li>
+    </ul>
+  </div>
+</section>
+
+<section>
+  <div class="eyebrow">Graphical identity</div>
+  <h2>How the war looks</h2>
+  <div class="two">
+    <div class="stack">
+      <h3>World map: the war table</h3>
+      <ul>
+        <li>Same pixel map frame as today's world map (<code>mapframe.ts</code>), with territories tinted lightly in the owner's cloth colour.</li>
+        <li>Front lines in ember stitching, bright where Control moved in the last hour.</li>
+        <li>Each capital shows its banner; Holds are small square markers with the clan's trim.</li>
+        <li>Open battles as crossed swords with a "go" route; siege windows as a burning ring with a countdown.</li>
+        <li>Fog: territories your clan hasn't scouted are drawn as aged parchment.</li>
+      </ul>
+    </div>
+    <div class="stack">
+      <h3>In the world</h3>
+      <ul>
+        <li><b>Standards</b> on poles at capture points, the banners above at 1× game size.</li>
+        <li><b>Tabards</b> over hero gear in clan colours, as a gear layer like the starting kits.</li>
+        <li><b>Holds</b> per clan: Warden palisade keeps, Redfang stake camps, Host bone towers with siege yards, Hide-Kin burrow mouths, Veiled tents around a well.</li>
+        <li><b>Fires</b> follow the village bonfire model, with a clan tint: green soul-fire for the Host, gold for the Veiled.</li>
+        <li><b>Land wears the war:</b> trampled ground, burnt stakes and bone fields stay where battles happened.</li>
+      </ul>
+    </div>
+  </div>
+  <p class="col muted">Everything stays at one pixel resolution (32 px tiles), dark and weathered, in the game's pixel font for all text on screen, as Murat asked.</p>
+</section>
+
+<section>
+  <div class="eyebrow">Roadmap</div>
+  <h2>Building it in steps</h2>
+  <div class="phases">
+    <div class="phase"><div class="n">0</div><div><h3>Foundations</h3><p>Saves to a database, war state as its own small service, a war sim in <code>tools/balance</code>. Nothing visible to players yet.</p></div></div>
+    <div class="phase"><div class="n">1</div><div><h3>The Marches and scripted clans</h3><p>The map band, 49 territories, Holds, standards, ticks and sieges, led by simple scripted doctrine. Prove the stalemate in the sim and live.</p></div></div>
+    <div class="phase"><div class="n">2</div><div><h3>Players at war</h3><p>Swearing, tabards, war writs, caravans, Renown ranks, the war table map, the front plaque.</p></div></div>
+    <div class="phase"><div class="n">3</div><div><h3>AI councils</h3><p>First in shadow mode: councils plan and we compare with the scripted doctrine. Then they lead, with herald lines and the chronicle page.</p></div></div>
+    <div class="phase"><div class="n">4</div><div><h3>The Forge</h3><p>Codex, recipe checks, art from parameters, hot-loaded content packs.</p></div></div>
+    <div class="phase"><div class="n">5</div><div><h3>Ages</h3><p>Two versions side by side, gateway, opt-in crossing, Vanguard canary, rollback.</p></div></div>
+    <div class="phase"><div class="n">6</div><div><h3>AI-authored code</h3><p>Clan plug-in folders, the PR bot for <code>war/*</code> branches, Murat's approval, release as a new Age.</p></div></div>
+  </div>
+</section>
+
+<section>
+  <div class="eyebrow">Your call</div>
+  <h2>Decisions for Murat</h2>
+  <div class="tiers">
+    <div class="ask"><b>Where the war happens</b><span>Recommended: a new Marches band between both acts. Alternative: the war spreads over existing Act 1 and Act 2 zones.</span></div>
+    <div class="ask"><b>Monster clans for players</b><span>Recommended: players may swear to any clan, including the Host and Hide-Kin. Alternative: only to Wardens and Redfang.</span></div>
+    <div class="ask"><b>Age length</b><span>Recommended: 4 weeks, borders relax at the end. Alternative: one endless war.</span></div>
+    <div class="ask"><b>Approval of AI changes</b><span>Recommended: Murat approves all code and the first Forge items; later Forge items go live after the checks.</span></div>
+  </div>
+</section>
+
+</div>
+</body>
+</html>
