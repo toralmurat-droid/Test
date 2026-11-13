@@ -27,6 +27,7 @@ export class SmoothGround {
   private live = new Map<string, Phaser.GameObjects.Image | null>(); // null = being painted
   private queue: { key: string; cx: number; cy: number; d?: number }[] = [];
   private near = new Set<string>(); // chunks on screen (plus a small margin): the ones the loading screen waits for
+  private pins: { x: number; y: number }[] = []; // far spots painted ahead and kept (see pin())
 
   constructor(private scene: Phaser.Scene, ground: number[][], private onImage: (img: Phaser.GameObjects.Image) => void) {
     const g = new Int16Array(MAP_W * MAP_H), solid = new Uint8Array(MAP_W * MAP_H), cliff = new Uint8Array(MAP_W * MAP_H);
@@ -61,6 +62,13 @@ export class SmoothGround {
     return n;
   }
 
+  /**
+   * Paint the ground around far spots (iso screen px) ahead of time and keep it, after everything near the camera.
+   * Used for the other end of an awake waygate: a chunk takes over a second to paint, so crossing used to wait for a
+   * whole screen of them behind the loading screen (Murat 2026-11-13: "the loading time is awful").
+   */
+  pin(spots: { x: number; y: number }[]) { this.pins = spots; }
+
   /** Call every frame with the camera's centre and size in iso screen px. */
   update(midX: number, midY: number, viewW: number, viewH: number) {
     // Chunks are painted well ahead of the screen edge (PREFETCH), nearest first, so walking never shows the plain
@@ -82,10 +90,23 @@ export class SmoothGround {
       if (cx >= n0x && cx <= n1x && cy >= n0y && cy <= n1y) this.near.add(key);
       if (!this.live.has(key)) add.push({ key, cx, cy, d: Math.hypot(sx0 + CW / 2 - midX, (sy0 + CH / 2 - midY) * 2) });
     }
+    // pinned spots: the chunks a camera centred there would wait for, painted last and never dropped while pinned
+    const pinned: typeof add = [];
+    for (const p of this.pins) {
+      const p0x = Math.floor((p.x - viewW / 2 - 160) / CW), p1x = Math.floor((p.x + viewW / 2 + 160) / CW);
+      const p0y = Math.floor((p.y - viewH / 2 - 160) / CH), p1y = Math.floor((p.y + viewH / 2 + 160) / CH);
+      for (let cy = p0y; cy <= p1y; cy++) for (let cx = p0x; cx <= p1x; cx++) {
+        const key = `sg_${cx}_${cy}`;
+        if (want.has(key)) continue;
+        want.add(key);
+        if (!this.live.has(key)) pinned.push({ key, cx, cy, d: 1e9 + Math.hypot(cx * CW + CW / 2 - p.x, (cy * CH + CH / 2 - p.y) * 2) });
+      }
+    }
+    add.push(...pinned);
     // keep one extra ring before dropping chunks, so walking back and forth doesn't repaint
     for (const [key, img] of this.live) {
       const [, x, y] = key.split("_").map(Number);
-      if (x < cx0 - 1 || x > cx1 + 1 || y < cy0 - 1 || y > cy1 + 1) {
+      if (!want.has(key) && (x < cx0 - 1 || x > cx1 + 1 || y < cy0 - 1 || y > cy1 + 1)) {
         if (img) { img.destroy(); this.scene.textures.remove(key); }
         this.live.delete(key);
       }

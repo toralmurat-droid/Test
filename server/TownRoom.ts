@@ -734,6 +734,7 @@ export class TownRoom extends Room<TownState> {
     this.onMessage("pray", (client) => this.pray(client));
     this.onMessage("portals", (client) => this.sendPortals(client));
     this.onMessage("travel", (client, msg: { to?: string }) => this.travel(client, msg?.to));
+    this.onMessage("waygate", (client) => this.useWaygate(client));
     this.onMessage("bounty", (client, msg: { take?: number; drop?: boolean }) => this.bountyMsg(client, msg ?? {}));
     this.onMessage("shrine", (client) => client.send("shrine", { left: Math.max(0, this.shrineReadyAt - Date.now()) }));
     // The client is ready (loading screen gone): a hero on the first step of First Steps gets its banner
@@ -3725,7 +3726,6 @@ export class TownRoom extends Room<TownState> {
 
   /** Walking onto a rope or stair takes the hero to its other end (not straight back: they must step off first). */
   private useLinks(pid: string, p: Player) {
-    this.useWaygates(pid, p);
     if (p.linkLock) {
       const l = linkById(p.linkLock);
       if (l && Math.hypot(l.x - p.x, l.y - p.y) <= LINK_RANGE * 1.6) return;
@@ -3745,23 +3745,26 @@ export class TownRoom extends Room<TownState> {
   }
 
   /**
-   * Act 2's waygates (shared/act2.ts): walking into one takes the hero to the other act, once they have beaten the
-   * first zone's two last bosses. Before that, the gate is cold: a note says who still stands in the way.
+   * Act 2's waygates (shared/act2.ts): used like a portal stone, by clicking it or pressing E next to it (Murat
+   * 2026-11-13), which takes the hero to the other act once they have beaten the first zone's two last bosses.
+   * Walking into it used to cross, and a hero still walking north came out next to the other gate and went straight
+   * back. Before Act 2 is open, the gate is cold: a note says who still stands in the way.
    */
-  private useWaygates(pid: string, p: Player) {
-    for (const g of WAYGATES) {
-      if (Math.abs(g.x - p.x) > WAYGATE_RANGE || Math.abs(g.y - p.y) > WAYGATE_RANGE) continue;
-      if (!act2Open(p)) {
-        const now = Date.now();
-        if (now - p.gateNoteAt > 8000) { p.gateNoteAt = now; this.note(pid, `The waygate's stones are cold. It will wake when ${act2Missing(p).join(" and ")} ${act2Missing(p).length > 1 ? "are" : "is"} beaten.`); }
-        return;
-      }
-      const dest = waygateById(g.to)!, at = waygateArrival(dest);
-      p.x = at.x; p.y = at.y; p.moving = false;
-      p.rollUntil = 0; p.rolling = false; p.emote = "";
-      this.broadcast("waygate", { id: pid, to: dest.id, x: Math.round(at.x), y: Math.round(at.y) });
+  private useWaygate(client: Client) {
+    const pid = client.sessionId, p = this.state.players.get(pid);
+    if (!p || p.dead) return;
+    const g = WAYGATES.find((o) => Math.hypot(o.x - p.x, o.y - p.y) <= WAYGATE_RANGE * 1.5);
+    if (!g) return;
+    if (!act2Open(p)) {
+      const now = Date.now();
+      if (now - p.gateNoteAt > 3000) { p.gateNoteAt = now; this.note(pid, `The waygate's stones are cold. It will wake when ${act2Missing(p).join(" and ")} ${act2Missing(p).length > 1 ? "are" : "is"} beaten.`); }
       return;
     }
+    if (Date.now() - p.lastHurt < PORTAL_COMBAT_MS) { client.send("travelno", { why: "fight" }); return; }
+    const dest = waygateById(g.to)!, at = waygateArrival(dest);
+    p.x = at.x; p.y = at.y; p.moving = false;
+    p.rollUntil = 0; p.rolling = false; p.emote = "";
+    this.broadcast("waygate", { id: pid, to: dest.id, x: Math.round(at.x), y: Math.round(at.y) });
   }
 
   /** The sickness, bleeding or venom a beast's plain bite leaves (BEAST.plague / bleed / venom). */
