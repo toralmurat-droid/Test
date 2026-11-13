@@ -503,12 +503,44 @@
     "w": 32,
     "h": 32
    }
+  },
+  "songweaver_weapon": {
+   "frame": {
+    "x": 2016,
+    "y": 0,
+    "w": 32,
+    "h": 32
+   }
+  },
+  "songweaver_armour": {
+   "frame": {
+    "x": 2048,
+    "y": 0,
+    "w": 32,
+    "h": 32
+   }
+  },
+  "songweaver_hat": {
+   "frame": {
+    "x": 2080,
+    "y": 0,
+    "w": 32,
+    "h": 32
+   }
+  },
+  "songweaver_shoes": {
+   "frame": {
+    "x": 2112,
+    "y": 0,
+    "w": 32,
+    "h": 32
+   }
   }
  },
  "meta": {
   "image": "icons.png",
   "size": {
-   "w": 2016,
+   "w": 2144,
    "h": 32
   },
   "scale": 1

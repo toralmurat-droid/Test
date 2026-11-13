@@ -6,7 +6,8 @@
   "archer",
   "barbarian",
   "vampire",
-  "summoner"
+  "summoner",
+  "songweaver"
  ],
  "items": [
   "w_bronze",
@@ -71,7 +72,11 @@
   "summoner_weapon",
   "summoner_armour",
   "summoner_hat",
-  "summoner_shoes"
+  "summoner_shoes",
+  "songweaver_weapon",
+  "songweaver_armour",
+  "songweaver_hat",
+  "songweaver_shoes"
  ],
  "image": "{hero}_{item}.png"
 }
