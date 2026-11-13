@@ -79,6 +79,8 @@ jobs:
               echo "Merged."
               # Merges made with GITHUB_TOKEN start no push workflows, so start patch numbering here.
               gh workflow run patch-numbers.yml --repo "$GITHUB_REPOSITORY" --ref claude/relaxed-wozniak-cjs85z || true
+              # and refilm the skills page clips if the skills changed (skill-clips.yml)
+              gh workflow run skill-clips.yml --repo "$GITHUB_REPOSITORY" --ref claude/relaxed-wozniak-cjs85z || true
               exit 0
             fi
             sleep 10
