@@ -40,7 +40,7 @@ import { beyondWall, WATCH, WATCH_POSTS, WatchPost } from "../shared/watch";
 import { inVillage, WRATH } from "../shared/wrath";
 import { sellPrice, shopBuys, shopFuses, SHOPS } from "../shared/shops";
 import { BLOB_KINDS, CHAINS, CROWN_CHAIN, packQuest, chainOpen, chainState, inZone, isBlob, npcPresent, QuestState, questStep, stepGoal, Summon, type BossVoice, TUT_CHAIN, TUT_QUESTS, USE_RANGE } from "../shared/quests";
-import { findHideSpot, HIDE, MOTHER_KEEP_OUT, noMobsAt, spawnPoint, SPAWN_ZONES, villageDist, zoneCap } from "../shared/spawns";
+import { findHideSpot, HIDE, type HideSpot, MOTHER_KEEP_OUT, noMobsAt, spawnPoint, SPAWN_ZONES, villageDist, zoneCap } from "../shared/spawns";
 import { blocked, moveStep } from "../shared/movement";
 import { NIGHT_RAID, raiderByKey, raiderIgnores, RAIDERS } from "../shared/raiders";
 import { SLOTS_BY_ZONE, WORK_SLOTS } from "../shared/siege";
@@ -50,7 +50,7 @@ import { flush, flushFinal, HeroSave, loadHero, loadStash, login, markChest, ope
 import { offerFrom, Offer, settle, STASH, STASH_GOLD_MAX, STASH_RANGE, STASH_SIZE, TRADE } from "../shared/trade";
 import { arrivalOf, cleanPortals, PORTAL_COMBAT_MS, PORTAL_RANGE, PORTAL_WAKE_RANGE, portalById, PORTALS } from "../shared/portals";
 import { rollBoon, shrineXp, SHRINE, SHRINE_COOLDOWN_MS, SHRINE_RANGE, WIND_BLESSING, WIND_BLESSING_ID } from "../shared/shrine";
-import { chestById, chestLock, CHEST_RANGE, CHEST_RESPAWN_MS, CHESTS, GUARD_RESPAWN_MS, rollChest } from "../shared/chests";
+import { chestById, chestLock, CHEST_RANGE, CHEST_RESPAWN_MS, CHESTS, GUARD_CHECK_MS, GUARD_RESPAWN_MS, rollChest } from "../shared/chests";
 import { encodeTimers, timerSig, timersOf } from "../shared/buffTimers";
 import { SLOT_COUNT } from "../shared/slots";
 import { groupDmgMult, groupHpMult, PARTY, together } from "../shared/party";
@@ -59,7 +59,7 @@ import {
   BAG_SIZE, Equipped, gearDef, GEAR_SLOTS, activeGear, reqProblem, itemLevel, HeroReqInfo, GearSlot, gearBlock, gearName, gearReachMult, gearSpeedMult, gearStats, isGearId, potionChance, rollGear, canWear, starterKit,
   isBagItem, socketProblem, itemRunes, withRunes, runeEffects, stripRunes, GEAR_DROP,
 } from "../shared/gear";
-import { fuseRunes, parseRune, rollMobRune, rollRune, RUNE_DROP, runeId, runeIdName, RUNES, RuneKey } from "../shared/runes";
+import { fuseRunes, parseRune, rollMobRune, rollRune, RUNE_DROP, runeId, runeIdName, RUNE_KEYS, RUNES, RuneKey } from "../shared/runes";
 /** "Frost Katana Lv 17" for pickup messages. */
 /** Hit direction for the client's flinch nudge (unit vector, 1 decimal), or undefined when there is no push. */
 const hitDir = (push: [number, number]) => {
@@ -252,6 +252,7 @@ export class Mob extends Schema {
   hateId = ""; hate = 0; nextAggro = 0; threat = 0; // AGGRO: who hit it last and how much it hates them; level gap of the scariest hero near
 
   spot = ""; // hiding spot (tile "x,y") it is heading to or sitting in
+  spotRetry = 0; // no new search for a spot before this (the last one found none free, HIDE.retryMs)
   spotX = 0; spotY = 0; outX = 0; outY = 0; // spot centre, and the walkable tile it steps in/out from
   seekUntil = 0; // give up reaching the spot after this
   hideUntil = 0; // leaves the spot on its own after this
@@ -278,6 +279,7 @@ export class Mob extends Schema {
   uPhase = 0; nextTaunt = 0; hookHero = ""; // Grandam Ursk (URSK): her phase (0 not her), next taunt, the hero her hook is flying at
   lurk = ""; // a Mawdeep ambush room it lurks in (shared/dungeon.ts AMBUSH_ROOMS), until a hero walks in
   path: [number, number][] = []; pathAt = 0; pathTX = 0; pathTY = 0; // the way round walls (gates), see seek
+  pathFail = false; // the last findPath found no way: wait for the goal to move or the normal re-path time (see go)
   @type("float32") x = 0;
   @type("float32") y = 0;
   @type("string") dir: Dir = "down";
@@ -506,6 +508,17 @@ const FEUD_CELL = 128; // px, >= FEUD.range
 const BOOT = Date.now();
 const LURK_RANGE = 3.2 * TILE; // a hero this close to a beast lurking in an ambush room springs the whole room
 const DOOR_OPEN_MS = 60_000; // an opened Mawdeep gate swings shut a minute later, once nobody stands in it
+/** A square (centre px, half side px) that holds every tile of a door's gate, kept per door (doors never move). */
+const gateBoxes = new Map<string, [number, number, number]>();
+function gateBox(d: Door): [number, number, number] {
+  let b = gateBoxes.get(d.id);
+  if (!b) {
+    const tx = d.gate.map((k) => k % MAP_W), ty = d.gate.map((k) => Math.floor(k / MAP_W));
+    const x0 = Math.min(...tx) * TILE, x1 = (Math.max(...tx) + 1) * TILE, y0 = Math.min(...ty) * TILE, y1 = (Math.max(...ty) + 1) * TILE;
+    gateBoxes.set(d.id, (b = [(x0 + x1) / 2, (y0 + y1) / 2, Math.max(x1 - x0, y1 - y0) / 2 + 1]));
+  }
+  return b;
+}
 /** Time of day on the server (the wall clock, like every client); DAY_TIME=day|night|0..1 forces it for local tests. */
 function worldDayFrac(now: number): number {
   const f = process.env.DAY_TIME;
@@ -958,6 +971,9 @@ export class TownRoom extends Room<TownState> {
     if (p && !announced) this.rememberHero(client.sessionId, p); // during an update everyone was remembered together (groups intact)
     this.partyLeave(client.sessionId);
     this.lastDrainFx.delete(client.sessionId);
+    this.runeCache.delete(client.sessionId); // per-session caches: a returning hero gets a new session id
+    for (const k of RUNE_KEYS) this.runeReady.delete(`${client.sessionId}:${k}`);
+    this.ritualCd.delete(client.sessionId);
     this.invites.delete(client.sessionId);
     this.lootFilters.delete(client.sessionId);
     this.tradeStop(client.sessionId, "The other hero left: trade cancelled.");
@@ -1244,13 +1260,12 @@ export class TownRoom extends Room<TownState> {
   private blobHeal(m: Mob, id: string, now: number) {
     m.nextHeal = now + BLOB_AI.healer.everyMs;
     let best: Mob | undefined, bestId = "", worst = 0.999;
-    this.state.mobs.forEach((o, oid) => {
-      const R = BLOB_AI.healer.range;
-      if (Math.abs(o.x - m.x) > R || Math.abs(o.y - m.y) > R) return; // cheap box test first
-      if (o.dead || o.hidden || !BLOB_KINDS.includes(o.kind as MobKind) || Math.hypot(o.x - m.x, o.y - m.y) > R) return;
+    const R = BLOB_AI.healer.range;
+    for (const [oid, o] of this.state.mobs.inBox(m.x, m.y, R)) { // the grid gives what the old box test kept, same order
+      if (o.dead || o.hidden || !BLOB_KINDS.includes(o.kind as MobKind) || Math.hypot(o.x - m.x, o.y - m.y) > R) continue;
       const f = o.hp / o.maxHp;
       if (f < worst) { worst = f; best = o; bestId = oid; }
-    });
+    }
     if (!best) return;
     const amount = Math.max(1, Math.round(best.maxHp * BLOB_AI.healer.frac));
     best.hp = Math.min(best.maxHp, best.hp + amount);
@@ -1262,12 +1277,35 @@ export class TownRoom extends Room<TownState> {
   /** Pick the nearest free hiding spot and start walking to it. */
   private claimSpot(m: Mob, x: number, y: number, radius: number, now: number, fleeing: boolean) {
     if (m.merged > 1 || m.mergeInto) return; // a big merged blob doesn't fit in a tree
-    const taken = new Set<string>();
-    this.state.mobs.forEach((o) => { if (o !== m && o.spot && !o.dead) taken.add(o.spot); });
-    const s = findHideSpot(m.kind, x, y, radius, taken);
-    if (!s) return;
-    m.spot = s.key; m.spotX = s.x; m.spotY = s.y; m.outX = s.outX; m.outY = s.outY;
+    if (now < m.spotRetry) return; // it looked a moment ago and found nothing free
+    const s = findHideSpot(m.kind, x, y, radius, this.takenSpots(m));
+    if (!s) { m.spotRetry = now + HIDE.retryMs; return; }
+    this.takeSpot(m, s);
     m.seekUntil = now + HIDE.seekMs; m.fleeing = fleeing;
+  }
+
+  /**
+   * Spots held by living monsters other than m. Built at most once per tick (a broken monster with no cover in reach
+   * asks every tick) and kept up to date with new claims; a spot freed during the tick stays taken until the next one.
+   */
+  private takenSpots(m: Mob): Set<string> {
+    if (m.spot) { // (callers have none) its own spot does not count: the old full scan, exactly
+      const own = new Set<string>();
+      this.state.mobs.forEach((o) => { if (o !== m && o.spot && !o.dead) own.add(o.spot); });
+      return own;
+    }
+    if (this.takenTick !== this.tickNo) {
+      this.takenTick = this.tickNo;
+      this.taken.clear();
+      this.state.mobs.forEach((o) => { if (o.spot && !o.dead) this.taken.add(o.spot); });
+    }
+    return this.taken;
+  }
+  private taken = new Set<string>();
+  private takenTick = -1;
+  private takeSpot(m: Mob, s: HideSpot) {
+    m.spot = s.key; m.spotX = s.x; m.spotY = s.y; m.outX = s.outX; m.outY = s.outY;
+    if (this.takenTick === this.tickNo) this.taken.add(s.key);
   }
 
   private hide(m: Mob, id: string, now: number) {
@@ -1304,11 +1342,10 @@ export class TownRoom extends Room<TownState> {
 
   /** An ambusher picks a free tree near its post to climb (walks to it, hides on arrival). False if none is free. */
   private treeFor(m: Mob, now: number): boolean {
-    const taken = new Set<string>();
-    this.state.mobs.forEach((o) => { if (o !== m && o.spot && !o.dead) taken.add(o.spot); });
-    const s = findHideSpot(m.kind, m.homeX, m.homeY, AMBUSH.treeRadius, taken, HIDE.spots.slime);
-    if (!s) return false;
-    m.spot = s.key; m.spotX = s.x; m.spotY = s.y; m.outX = s.outX; m.outY = s.outY;
+    if (now < m.spotRetry) return false; // it looked a moment ago and found no free tree
+    const s = findHideSpot(m.kind, m.homeX, m.homeY, AMBUSH.treeRadius, this.takenSpots(m), HIDE.spots.slime);
+    if (!s) { m.spotRetry = now + HIDE.retryMs; return false; }
+    this.takeSpot(m, s);
     m.seekUntil = now + AMBUSH.seekMs; m.fleeing = false;
     return true;
   }
@@ -1332,11 +1369,11 @@ export class TownRoom extends Room<TownState> {
     this.broadcast("bambush", { id, x0: Math.round(m.x), y0: Math.round(m.y), x: Math.round(lx), y: Math.round(ly), ms: AMBUSH.flightMs, victim: heroId });
     // the rest of its group drops too, one after another
     let k = 0;
-    this.state.mobs.forEach((o) => {
-      if (o === m || !o.ambusher || !o.hidden || o.dead || o.ambushAt || Math.hypot(o.x - m.x, o.y - m.y) > AMBUSH.callRange) return;
+    for (const [, o] of this.state.mobs.inBox(m.x, m.y, AMBUSH.callRange)) { // the circle lies inside this box
+      if (o === m || !o.ambusher || !o.hidden || o.dead || o.ambushAt || Math.hypot(o.x - m.x, o.y - m.y) > AMBUSH.callRange) continue;
       const [a, b] = AMBUSH.staggerMs;
       o.ambushAt = now + a + k++ * (b - a) / 2 + Math.random() * 120; o.ambushHero = heroId;
-    });
+    }
   }
 
   /** The jump out of the tree: glides to the landing spot, then stabs everyone it lands next to. */
@@ -2249,12 +2286,12 @@ export class TownRoom extends Room<TownState> {
     if (room <= 0) return;
     const near: [number, string, Mob][] = [];
     const lowOk = m.level < MERGE.minLevel; // a quest-witness call: low blobs may answer it too
-    this.state.mobs.forEach((o, oid) => {
-      if (o === m || o.dead || o.hidden || o.mergeInto || !TownRoom.canMerge(o)) return;
-      if (o.level < MERGE.minLevel && !lowOk) return;
+    for (const [oid, o] of this.state.mobs.inBox(m.x, m.y, MERGE.callRange)) { // map order, so the sort breaks ties as before
+      if (o === m || o.dead || o.hidden || o.mergeInto || !TownRoom.canMerge(o)) continue;
+      if (o.level < MERGE.minLevel && !lowOk) continue;
       const d = Math.hypot(o.x - m.x, o.y - m.y);
       if (d <= MERGE.callRange) near.push([d, oid, o]);
-    });
+    }
     near.sort((a, b) => a[0] - b[0]);
     let called = 0;
     for (const [, , o] of near) {
@@ -2322,9 +2359,7 @@ export class TownRoom extends Room<TownState> {
       return true;
     }
     if (m.broken) return false;
-    let mine = 0;
-    this.state.mobs.forEach((c) => { if (c.mother === id && !c.dead) mine++; });
-    if (now >= m.nextRaise && mine < N.raise.max) {
+    if (now >= m.nextRaise && this.kidsOf(id) < N.raise.max) { // counted only when a raise is due
       m.specialKind = "raise"; m.specialAt = now + N.raise.castMs; m.nextRaise = now + N.raise.everyMs;
       this.broadcast("necrowind", { id, kind: "raise", ms: N.raise.castMs });
     } else if (now >= m.nextCircle && dist <= N.circle.range) {
@@ -2335,6 +2370,13 @@ export class TownRoom extends Room<TownState> {
     } else return false;
     m.winding = true; m.windUntil = 0;
     return true;
+  }
+
+  /** Living monsters whose mother is `id` (a necromancer's raised dead, the Hollow King's servants). */
+  private kidsOf(id: string): number {
+    let n = 0;
+    this.state.mobs.forEach((c) => { if (c.mother === id && !c.dead) n++; });
+    return n;
   }
 
   /** One skeleton climbs out of the ground next to the necromancer (same level, belongs to it, never respawns). */
@@ -2381,7 +2423,8 @@ export class TownRoom extends Room<TownState> {
   private assignFlanks() {
     const packs = new Map<string, [string, Mob][]>();
     this.state.mobs.forEach((m, id) => {
-      if (m.dead || m.hidden || !m.target || (m.kind !== "skeleton" && m.kind !== "crawler") || m.weapon === "bow") { m.flankA = NaN; return; }
+      // target first: a plain field (the rest are schema getters) and empty for nearly every monster; write only a change
+      if (!m.target || m.dead || m.hidden || (m.kind !== "skeleton" && m.kind !== "crawler") || m.weapon === "bow") { if (!Number.isNaN(m.flankA)) m.flankA = NaN; return; }
       const list = packs.get(m.target);
       if (list) list.push([id, m]); else packs.set(m.target, [[id, m]]);
     });
@@ -2827,6 +2870,8 @@ export class TownRoom extends Room<TownState> {
 
   /** Lair chests (shared/chests.ts) keep their guardians: a missing one returns GUARD_RESPAWN_MS after it fell. */
   private updateGuards(now: number) {
+    if (now < this.guardsAt) return; // its timers run in minutes: once a second is plenty (every tick until the first spawn)
+    this.guardsAt = this.guardsSpawned ? now + GUARD_CHECK_MS : 0;
     const alive = new Map<string, number>(); // "chestId|kind" -> living guardians
     this.state.mobs.forEach((m) => { if (m.guard && !m.dead) alive.set(`${m.guard}|${m.kind}`, (alive.get(`${m.guard}|${m.kind}`) ?? 0) + 1); });
     for (const c of CHESTS) {
@@ -2843,6 +2888,7 @@ export class TownRoom extends Room<TownState> {
     this.guardsSpawned = true;
   }
   private guardsSpawned = false;
+  private guardsAt = 0;
 
   private spawnGuard(kind: MobKind, c: (typeof CHESTS)[number]) {
     const id = `g${++this.mobSeq}`;
@@ -3327,13 +3373,13 @@ export class TownRoom extends Room<TownState> {
       const score = 0.3 + Math.max(0, 1 - d / S) + hated + (pid === m.target ? AGGRO.stick : 0);
       if (score > best) { best = score; target = pid; foe = ""; }
     });
-    this.state.mobs.forEach((o, oid) => {
-      if (o === m || o.dead || o.hidden || raiderIgnores(o.kind) || o.kind === "bride" || Math.abs(o.x - m.x) > S || Math.abs(o.y - m.y) > S) return;
+    for (const [oid, o] of this.state.mobs.inBox(m.x, m.y, S)) {
+      if (o === m || o.dead || o.hidden || raiderIgnores(o.kind) || o.kind === "bride") continue;
       const d = Math.hypot(o.x - m.x, o.y - m.y);
-      if (d >= S) return;
+      if (d >= S) continue;
       const score = Math.max(0, 1 - d / S) + (oid === m.hateId ? m.hate : 0) + (oid === m.foe ? AGGRO.stick : 0);
       if (score > best) { best = score; target = ""; foe = oid; }
-    });
+    }
     const had = m.target || m.foe;
     if ((target || foe) && !had) { m.chaseX = m.x; m.chaseY = m.y; }
     // a hero in its way hears it first
@@ -3475,10 +3521,11 @@ export class TownRoom extends Room<TownState> {
 
   /** Walk toward (x,y): camp bandits find their way round walls through the gates, others go straight. */
   private go(m: Mob, x: number, y: number, now: number): InputState {
-    if (!m.camp || clearWalk(m.x, m.y, x, y)) { m.path = []; return toward(m.x, m.y, x, y); }
+    if (!m.camp || clearWalk(m.x, m.y, x, y)) { m.path = []; m.pathFail = false; return toward(m.x, m.y, x, y); }
     const moved = Math.hypot(x - m.pathTX, y - m.pathTY) > TILE;
-    if (!m.path.length || moved || now > m.pathAt + 1500) {
-      m.path = findPath(m.x, m.y, x, y); m.pathAt = now; m.pathTX = x; m.pathTY = y;
+    // (no way found last time: the BFS would only fail again until the goal moves or the usual re-path time comes)
+    if ((!m.path.length && !m.pathFail) || moved || now > m.pathAt + 1500) {
+      m.path = findPath(m.x, m.y, x, y); m.pathAt = now; m.pathTX = x; m.pathTY = y; m.pathFail = !m.path.length;
     }
     // skip the points already reached, and any we can see past
     while (m.path.length > 1 && (Math.hypot(m.path[0][0] - m.x, m.path[0][1] - m.y) < 8 || clearWalk(m.x, m.y, m.path[1][0], m.path[1][1]))) m.path.shift();
@@ -3499,13 +3546,13 @@ export class TownRoom extends Room<TownState> {
   private alertCamp(x: number, y: number, r: number, heroId: string, now: number) {
     if (!this.state.players.has(heroId)) return;
     const ids: string[] = [];
-    this.state.mobs.forEach((o, oid) => {
-      if (o.dead || o.hidden || !(o.camp || o.kind === "banditchief") || Math.hypot(o.x - x, o.y - y) > r) return; // ambushers stay up in their trees
+    for (const [oid, o] of this.state.mobs.inBox(x, y, r)) {
+      if (o.dead || o.hidden || !(o.camp || o.kind === "banditchief") || Math.hypot(o.x - x, o.y - y) > r) continue; // ambushers stay up in their trees
       o.alertUntil = now + BANDIT_AI.horn.alertMs; o.alertHero = heroId;
-      if (o.perch) return; // lookouts keep shooting from their towers
+      if (o.perch) continue; // lookouts keep shooting from their towers
       if (!o.target) { o.target = heroId; o.foe = ""; o.nextAggro = now + AGGRO.everyMs; ids.push(oid); }
       if (o.hateId !== heroId || o.hate < AGGRO.hitBase) this.addHate(o, heroId, 0);
-    });
+    }
     if (ids.length) this.broadcast("alert", { ids });
   }
 
@@ -3536,10 +3583,10 @@ export class TownRoom extends Room<TownState> {
       m.nextCry = now + W.cooldownMs;
       const ids: string[] = [id];
       m.rallyUntil = now + W.buffMs;
-      this.state.mobs.forEach((o, oid) => {
-        if (oid === id || o.dead || !o.camp || Math.hypot(o.x - m.x, o.y - m.y) > W.range) return;
+      for (const [oid, o] of this.state.mobs.inBox(m.x, m.y, W.range)) {
+        if (oid === id || o.dead || !o.camp || Math.hypot(o.x - m.x, o.y - m.y) > W.range) continue;
         o.rallyUntil = now + W.buffMs; ids.push(oid);
-      });
+      }
       this.broadcast("warcry", { id, ids, ms: W.buffMs });
       this.alertCamp(m.x, m.y, W.range, m.target, now);
     }
@@ -3660,8 +3707,6 @@ export class TownRoom extends Room<TownState> {
       return true;
     }
     if (!t || m.broken || m.windUntil || m.stunned) return false;
-    let mine = 0;
-    if (frac < K.servants.hpFrac) this.state.mobs.forEach((c) => { if (c.mother === id && !c.dead) mine++; });
     const wind = (kind: string, ms: number, extra: Record<string, unknown> = {}) => {
       m.specialKind = kind; m.specialAt = now + ms; m.winding = true;
       this.broadcast("hkwind", { id, kind, ms, x: Math.round(m.x), y: Math.round(m.y), ...extra });
@@ -3669,7 +3714,7 @@ export class TownRoom extends Room<TownState> {
     if (frac < K.wrath.hpFrac && now >= m.nextLeap && dist <= K.wrath.radius) {
       m.nextLeap = now + K.wrath.cooldownMs;
       wind("wrath", K.wrath.windupMs, { r: K.wrath.radius, inner: K.wrath.inner });
-    } else if (frac < K.servants.hpFrac && now >= m.nextRaise && mine < K.servants.max) {
+    } else if (frac < K.servants.hpFrac && now >= m.nextRaise && this.kidsOf(id) < K.servants.max) { // counted only when due
       m.nextRaise = now + K.servants.everyMs;
       wind("servants", K.servants.castMs);
     } else if (now >= m.nextCircle && dist <= K.pools.range && dist > K.cleave.range) {
@@ -4050,7 +4095,7 @@ export class TownRoom extends Room<TownState> {
           if (kind === "howl") {
             // every beast in earshot is driven wild for a while (faster, harder blows)
             const until = now + B.howl.rallyMs;
-            this.state.mobs.forEach((c) => { if (!c.dead && BEAST_KINDS.includes(c.kind) && Math.hypot(c.x - m.x, c.y - m.y) <= B.howl.range) c.rallyUntil = until; });
+            for (const [, c] of this.state.mobs.inBox(m.x, m.y, B.howl.range)) if (!c.dead && BEAST_KINDS.includes(c.kind) && Math.hypot(c.x - m.x, c.y - m.y) <= B.howl.range) c.rallyUntil = until;
           }
           this.broadcast("bhit", { id, kind, x, y, pts, r: kind === "howl" ? B.howl.range : 0 });
           break;
@@ -4668,11 +4713,11 @@ export class TownRoom extends Room<TownState> {
       this.runeFx("storm", tx, ty);
       for (let j = 0; j < n; j++) {
         let best = "", bd = 96;
-        this.state.mobs.forEach((o, oid) => {
-          if (hit.has(oid) || o.dead || o.hidden || (o.owner && !this.canHurtSummon(aid, o)) || Math.abs(o.x - fx) > bd || Math.abs(o.y - fy) > bd) return;
+        for (const [oid, o] of this.state.mobs.inBox(fx, fy, bd)) { // the starting box; it shrinks as nearer foes turn up
+          if (hit.has(oid) || o.dead || o.hidden || (o.owner && !this.canHurtSummon(aid, o)) || Math.abs(o.x - fx) > bd || Math.abs(o.y - fy) > bd) continue;
           const d = Math.hypot(o.x - fx, o.y - fy);
           if (d < bd) { bd = d; best = oid; }
-        });
+        }
         if (!best) break;
         const to = this.state.mobs.get(best)!;
         hit.add(best);
@@ -5075,11 +5120,11 @@ export class TownRoom extends Room<TownState> {
     const from = this.state.mobs.get(targetId), F = ELEMENT_FX.shock;
     if (!from || amt * F.arc < 0.5) return;
     let best = "", bd = F.range;
-    this.state.mobs.forEach((o, oid) => {
-      if (oid === targetId || o.dead || o.hidden || Math.abs(o.x - from.x) > bd || Math.abs(o.y - from.y) > bd) return;
+    for (const [oid, o] of this.state.mobs.inBox(from.x, from.y, bd)) { // the starting box; it shrinks as nearer ones turn up
+      if (oid === targetId || o.dead || o.hidden || Math.abs(o.x - from.x) > bd || Math.abs(o.y - from.y) > bd) continue;
       const d = Math.hypot(o.x - from.x, o.y - from.y);
       if (d < bd) { bd = d; best = oid; }
-    });
+    }
     if (!best) return;
     const to = this.state.mobs.get(best)!;
     this.broadcast("arc", { x0: Math.round(from.x), y0: Math.round(from.y), x1: Math.round(to.x), y1: Math.round(to.y) });
@@ -5493,14 +5538,16 @@ export class TownRoom extends Room<TownState> {
   private doorBusy(d: Door): boolean {
     const inIt = (x: number, y: number) => Math.abs(x - d.x * TILE) < 6 * TILE && Math.abs(y - d.y * TILE) < 6 * TILE && doorDist(d, x, y) < 1.1;
     for (const p of this.state.players.values()) if (inIt(p.x, p.y)) return true;
-    for (const m of this.state.mobs.values()) if (!m.dead && inIt(m.x, m.y)) return true;
+    for (const [, m] of this.state.mobs.inBox(d.x * TILE, d.y * TILE, 6 * TILE)) if (!m.dead && inIt(m.x, m.y)) return true;
     return false;
   }
   /** Someone stands right in the gate's tiles (stuck there). */
   private inGate(d: Door): boolean {
     const inIt = (x: number, y: number) => d.gate.includes(Math.floor(y / TILE) * MAP_W + Math.floor(x / TILE));
     for (const p of this.state.players.values()) if (!p.dead && inIt(p.x, p.y)) return true;
-    for (const m of this.state.mobs.values()) if (!m.dead && inIt(m.x, m.y)) return true;
+    // only monsters in a box round the gate's tiles can stand on one (the grid instead of every monster on the map)
+    const [cx, cy, r] = gateBox(d);
+    for (const [, m] of this.state.mobs.inBox(cx, cy, r)) if (!m.dead && inIt(m.x, m.y)) return true;
     return false;
   }
   private setDoor(d: Door, open: boolean) {
@@ -5741,7 +5788,7 @@ export class TownRoom extends Room<TownState> {
     }
     if (s?.type !== "see" || !inZone(s.zone!, p.x, p.y)) return;
     const r2 = (9 * TILE) ** 2;
-    for (const m of this.state.mobs.values()) {
+    for (const [, m] of this.state.mobs.inBox(p.x, p.y, 9 * TILE)) { // the circle lies inside this box
       if (m.dead || m.hidden || !s.kinds!.includes(m.kind)) continue;
       const dx = m.x - p.x, dy = m.y - p.y;
       if (dx * dx + dy * dy <= r2) { this.nextStep(id, p, c); return; }
@@ -5973,15 +6020,15 @@ export class TownRoom extends Room<TownState> {
     const ids = this.targetsAround(hx, hy, reach, id, (m) => mobBody(m.kind));
     // ...and monsters that were in reach a moment ago, where the hero's screen still showed them (REWIND_MS)
     const since = now - REWIND_MS, R = reach + 16;
-    this.state.mobs.forEach((m, mid) => {
-      if (m.dead || m.hidden || Math.abs(m.x - hx) > R + 24 || Math.abs(m.y - hy) > R + 24 || ids.includes(mid)) return;
+    for (const [mid, m] of this.state.mobs.inBox(hx, hy, R + 24)) {
+      if (m.dead || m.hidden || ids.includes(mid)) continue;
       const h = m.hist, r = reach + mobBody(m.kind);
       // newest first; the first sample older than the window still counts (it stood there into the window)
       for (let i = h.length - 3; i >= 0; i -= 3) {
         if (Math.hypot(h[i + 1] - hx, h[i + 2] - hy) <= r) { ids.push(mid); break; }
         if (h[i] < since) break;
       }
-    });
+    }
     for (const tid of ids) this.hitTarget(id, tid, dmg, off, { kb: hit.knockback, crit, basic: true, parts });
   }
 
