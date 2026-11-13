@@ -4,6 +4,7 @@ import { isMode, MODES, SONGWEAVER_TREE, type ModeId } from "../shared/songs";
 import { knownModesOf, type ShotSpec, type SkillRuntime, type Unit } from "../shared/skillEngine";
 import type { AreaDef, FieldDef, HitEffects, SkillDef } from "../shared/skills";
 import { BOUNCE, BOUNCE_RULES, reflectAxis, wallAt } from "../shared/acoustics";
+import { BUSKING, BUSKING_LINES, npcById, type Npc } from "../shared/npcs";
 
 /**
  * The Songweaver's room-side rules (shared/songs.ts holds the music itself): the Oakvale busking exemption, the
@@ -27,6 +28,27 @@ export function foeEffect(s: SkillDef): boolean {
 export function busking(cls: string, mode: ModeId | undefined, s: SkillDef): boolean {
   if (cls !== "songweaver" || MODES[mode ?? "major"].family !== "major") return false;
   return !!s.modulate || (s.branch !== 2 && !s.finisher && !foeEffect(s));
+}
+
+/**
+ * Oakvale's villagers answer a busking tune (shared/npcs.ts BUSKING_LINES): a Hymnal or Folk song that busking() allows
+ * (Modulate is not a song) makes the nearest villager within BUSKING.range who has a line say it, each villager at most
+ * once per BUSKING.cooldownMs, so a Songweaver standing on the square can't make them chatter.
+ */
+export class BuskingLines {
+  private next = new Map<string, number>();
+  /** After a cast went through; `say` gets the villager and its line. */
+  heard(cls: string, mode: ModeId | undefined, s: SkillDef, x: number, y: number, now: number, say: (n: Npc, text: string) => void) {
+    if (s.modulate || !busking(cls, mode, s)) return;
+    let best: Npc | undefined, bd = BUSKING.range;
+    for (const id of Object.keys(BUSKING_LINES)) {
+      const n = npcById(id), d = n ? Math.hypot(n.x - x, n.y - y) : Infinity;
+      if (n && d <= bd && (this.next.get(id) ?? 0) <= now) { best = n; bd = d; }
+    }
+    if (!best) return;
+    this.next.set(best.id, now + BUSKING.cooldownMs);
+    say(best, BUSKING_LINES[best.id]);
+  }
 }
 
 // ---- The owner-only "chord" message: { notes, mode, lockMs }, sent when it changes -------------------------------

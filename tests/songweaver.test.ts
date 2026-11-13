@@ -9,6 +9,7 @@ import { MODES, NOTES, PROGRESSIONS, SONG, SONGWEAVER_TREE } from "../shared/son
 import { isSafeZone, isSolidAt, VILLAGE } from "../shared/map";
 import { TILE } from "../shared/constants";
 import { inVillage } from "../shared/wrath";
+import { BUSKING, BUSKING_LINES, npcById } from "../shared/npcs";
 import { startRoom, wait } from "./helpers/room";
 
 // ---- A tiny world for the skill engine (no room) --------------------------------------------------------------------
@@ -390,4 +391,39 @@ test("Mending Note heals the singer, then jumps to the nearest group ally", asyn
     assert.ok(t.ps[1].hp - 10 < t.ps[0].hp - 10, "x0.8 on the hop");
     assert.equal(t.ps[2].hp, 10, "not a stranger");
   } finally { await t.done(); }
+});
+
+test("Oakvale: a busking tune near a villager gets its BUSKING_LINES line, once per cooldown", async () => {
+  const t = await setup(1);
+  const lines: { id: string; name: string; text: string }[] = [];
+  const bc = t.room.broadcast;
+  t.room.broadcast = function (type: string, msg: any, ...rest: unknown[]) {
+    if (type === "chat" && String(msg?.id).startsWith("npc:")) lines.push(msg);
+    return bc.call(this, type, msg, ...rest);
+  };
+  try {
+    const [a] = t.ids, p = t.ps[0], druid = npcById("druid")!;
+    const again = () => { p.sk.last = {}; p.attackReadyAt = 0; if (p.sk.song) p.sk.song.at -= SONG.changeMs; p.outlaw = false; };
+    [p.x, p.y] = [druid.x + TILE, druid.y];
+    p.sk.mode = "major";
+    t.room.cast(a, "sg_ballad");
+    assert.deepEqual(lines, [{ id: "npc:druid", name: druid.name, text: BUSKING_LINES.druid }], "the nearest villager answers");
+    // the next tune: the druid waits out its cooldown, so another villager in range (Tobin, 2.6 tiles) may answer
+    again(); t.room.cast(a, "sg_jig");
+    assert.ok(lines.length <= 2 && lines.slice(1).every((l) => l.id !== "npc:druid"), "the druid not again within the cooldown");
+    for (let i = 0; i < 6; i++) { again(); t.room.cast(a, i % 2 ? "sg_jig" : "sg_ballad"); }
+    assert.equal(new Set(lines.map((l) => l.id)).size, lines.length, "every villager speaks at most once per cooldown");
+    for (const id of Object.keys(BUSKING_LINES)) t.room.buskers.next.set(id, Date.now() - 1); // every cooldown runs out
+    lines.length = 0;
+    again(); p.sk.mode = "minor"; t.room.cast(a, "sg_march");
+    assert.equal(lines.length, 0, "a minor key gets no line");
+    again(); p.sk.mode = "major"; t.room.cast(a, "sg_dirge");
+    assert.equal(lines.length, 0, "Discord gets no line");
+    again(); [p.x, p.y] = [20 * TILE, 20 * TILE];
+    assert.ok(Object.keys(BUSKING_LINES).every((id) => Math.hypot(npcById(id)!.x - p.x, npcById(id)!.y - p.y) > BUSKING.range));
+    t.room.cast(a, "sg_ballad");
+    assert.equal(lines.length, 0, "too far from every villager");
+    again(); [p.x, p.y] = [druid.x, druid.y + TILE]; p.sk.mode = "lydian"; t.room.cast(a, "sg_march");
+    assert.deepEqual(lines.map((l) => l.id), ["npc:druid"], "Lydian is bright too; after the cooldown the druid speaks again");
+  } finally { t.room.broadcast = bc; await t.done(); }
 });

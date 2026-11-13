@@ -38,7 +38,7 @@ import { DOORS, DOOR_RANGE, doorById, doorDist, doorWorkable, isSafeZone, isSoli
 import { isDecorSolidAt, npcById, npcNear, TALK_RANGE } from "../shared/npcs";
 import { beyondWall, WATCH, WATCH_POSTS, WatchPost } from "../shared/watch";
 import { inVillage, WRATH } from "../shared/wrath";
-import { bounceWave, busking, ChordSync, heroSound, mobSound, oldSongTree, restoreMode, songSave } from "./songs";
+import { bounceWave, busking, BuskingLines, ChordSync, heroSound, mobSound, oldSongTree, restoreMode, songSave } from "./songs";
 import { modeColour, PHRYGIAN, RESONANCE } from "../shared/songs";
 import { soundMult } from "../shared/combat";
 import type { SoundFx } from "../shared/skills";
@@ -4495,6 +4495,8 @@ export class TownRoom extends Room<TownState> {
       this.questDo(id, "cast");
       // No magic in Oakvale, but a Songweaver may busk (server/songs.ts busking)
       if (!p.outlaw && inVillage(p.x, p.y) && !busking(p.cls, p.sk.mode, def!)) this.setOutlaw(id, p, true);
+      // ...and the villagers close by answer a bright tune (a chat line from the NPC, id "npc:<id>")
+      this.buskers.heard(p.cls, p.sk.mode, def!, p.x, p.y, Date.now(), (n, text) => this.broadcast("chat", { id: `npc:${n.id}`, name: n.name, text }));
     }
   }
 
@@ -6086,6 +6088,7 @@ export class TownRoom extends Room<TownState> {
 
   private pending: { at: number; fn: () => void }[] = [];
   private fieldSeq = 0;
+  private buskers = new BuskingLines(); // Oakvale villagers answer a busking tune (server/songs.ts)
   private chords = new ChordSync(); // the Songweaver's owner-only "chord" message (server/songs.ts)
 
   /** What the skill engine needs from the room. */
