@@ -134,6 +134,11 @@ export interface FieldDef extends HitEffects {
   hole?: { below: number };
   /** Void Blades: this many blades circle the hero (the look; Void Edge adds more and they take the golem's element). */
   blades?: number;
+  /**
+   * Party aura: every tick, the owner and their group allies inside `r` get this buff (shareBuff: one per skill id, the
+   * strongest wins). It lasts tickMs + FIELD_PARTY_LINGER_MS, so it ends shortly after someone steps out.
+   */
+  party?: BuffDef;
 }
 
 export interface BuffDef {
@@ -153,6 +158,16 @@ export interface BuffDef {
   cdr?: number; // -% skill cooldowns while it lasts (Void Velocity)
   /** Bloodline (Thirst): group allies within this many px get the same buff with half its lifesteal. */
   group?: number;
+  /**
+   * Party buff: group allies within this many px get the same buff when it is cast (shareBuff: one per skill id per
+   * hero, the stronger cast wins, a weaker one only extends it). Unlike `group`, nothing is halved.
+   */
+  party?: number;
+  /**
+   * Shield: a pool of `shield`% of the caster's max HP x the cast's power that soaks up damage before life
+   * (absorbDamage, newest pool first). When the pool is used up the buff ends; the same skill's shields don't stack.
+   */
+  shield?: number;
   /**
    * Vampire shapeshift (Bat Form, Wolf Form): the hero takes this beast's shape while the buff lasts (the client draws
    * the beast instead of the hero). Skills of the form's own school keep the shape; any other skill turns them back

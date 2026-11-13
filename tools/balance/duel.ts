@@ -17,7 +17,7 @@ import { activeSkills, canLearn, levelPower, rankPower, scalePower, skillById, S
 import { addHeat, coolHeat, isOverheated, OVERLOAD } from "../../shared/overload";
 import { canPay, manaRegen, maxManaFor, skillCost } from "../../shared/mana";
 import {
-  afterHit, atkSpeedMult, blocking, buffLifesteal, buffRegen, castSkill, ccImmune, charging, winding, cooldownLeft, counterHit, dealtMult, FieldInst, HitOpts,
+  absorbDamage, afterHit, atkSpeedMult, blocking, buffLifesteal, buffRegen, castSkill, ccImmune, charging, winding, cooldownLeft, counterHit, dealtMult, FieldInst, HitOpts,
   newRuntime, shotEnd, shotHit, shotPulse, ShotSpec, SkillHost, speedMult, takenMult, tickField, tickUnit,
   formOf, gainEssence, toVoid, voidSlip, buffCdr,
 } from "../../shared/skillEngine";
@@ -175,7 +175,8 @@ export class Duel {
         if (A && o?.skill && !o.dot && !o.crit && this.rnd() < critChance(A.s, talentBonus(A.cls, A.t, "crit"))) { dmg *= 2; o = { ...o, crit: true }; }
         if (T) this.hit(A, T, dmg, Math.sign(push[0]) || 0, o);
       },
-      heal: (id, amount) => { const u = f(id); if (u && !u.dead) u.hp = Math.min(u.maxHp, u.hp + amount); },
+      // no allies in a duel: `from` (who heals) only matters on the server
+      heal: (id, amount, _from) => { const u = f(id); if (u && !u.dead) u.hp = Math.min(u.maxHp, u.hp + amount); },
       aim: (id) => [f(id)?.face ?? 1, 0],
       // the Summoner throws its Black Hole on the foe (a player clicks on them); other classes keep their default reach
       aimDist: (id) => { const u = f(id); return u && (u.cls === "summoner" || SIM.aimHero) && !(u instanceof GolemF) && !u.mob ? Math.abs(this.other(u).x - u.x) : undefined; },
@@ -339,6 +340,7 @@ export class Duel {
     }
     const block = gearBlock(t.eq);
     if (block) dmg = Math.max(1, Math.round(dmg * (1 - block)));
+    dmg = absorbDamage(this.host, t.id, dmg); // shields (server damagePlayer)
     const unstoppable = ccImmune(t, now);
     if (o.stunMs && !guarded && !unstoppable) t.stunUntil = Math.max(t.stunUntil, now + o.stunMs);
     if (o.slowMs && !unstoppable) t.slowUntil = Math.max(t.slowUntil, now + o.slowMs);

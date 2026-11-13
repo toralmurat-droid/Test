@@ -26,7 +26,7 @@ import { activeSkills, canLearn, classSkills, cleanRanks, levelPower, REPLACED_S
 import {
   afterHit, atkSpeedMult, blocking, bloodCost, buffLifesteal, buffRegen, castSkill, ccImmune, fangTarget, onKill, riseAgain, charging, winding, counterHit, dealtMult, FieldInst, newRuntime,
   imbueOf, shotEnd, shotHit, shotPulse, ShotSpec, SkillHost, speedMult, statusOf, takenMult, tickField, tickUnit, Unit,
-  gainEssence, toVoid, voidSlip, inVoid,
+  gainEssence, toVoid, voidSlip, inVoid, absorbDamage,
 } from "../shared/skillEngine";
 import { golemDeath, golemStrike, golemTick, newMind, type GolemMind } from "../shared/golemAI";
 import { newWisp, openArsenal, wispEnd, wispTick, type WispMind } from "../shared/voidConjure";
@@ -5853,6 +5853,7 @@ export class TownRoom extends Room<TownState> {
       if (t.cls === "summoner" && part > 0 && now - t.bondEssenceAt >= ESSENCE.bondEveryMs) { t.bondEssenceAt = now; gainEssence(this.host, tid); }
       if (bond[1].hp <= 0) this.mobDied(bond[1], bond[0], opts.from ?? "", byName);
     }
+    dmg = absorbDamage(this.host, tid, dmg); // shields (BuffDef.shield) soak up what is left first
     // Unstoppable buffs (Berserk, Whirlwind): ignore stun, slow and knockback
     const unstoppable = ccImmune(t, now);
     if (opts.stunMs && !guarded && !unstoppable) t.stunUntil = Math.max(t.stunUntil, now + opts.stunMs);
@@ -6107,12 +6108,12 @@ export class TownRoom extends Room<TownState> {
       if (p && Math.random() < critChance(this.stats(p), talentBonus(p.cls, p.talents, "crit"))) { dmg *= 2; o = { ...o, crit: true }; }
       this.hitTarget(a, t, dmg, push, o);
     },
-    heal: (id, amount) => {
+    heal: (id, amount, from) => {
       const p = this.state.players.get(id);
       if (!p || p.dead || amount <= 0) return;
       const before = p.hp;
       p.hp = Math.min(p.maxHp, p.hp + amount);
-      if (p.hp - before >= 3) this.broadcast("heal", { id, amount: Math.round(p.hp - before) });
+      if (p.hp - before >= 3) this.broadcast("heal", { id, amount: Math.round(p.hp - before), ...(from && from !== id ? { by: from } : {}) });
     },
     aim: (id) => {
       const p = this.state.players.get(id);
