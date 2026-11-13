@@ -16,6 +16,9 @@ Status: **planned, waiting on the owner's answers** (2026-11-13). No code yet.
 - (owner, 2026-11-13) **Balance is the orchestrator's call** (the targets and gates in open questions 3 and 6).
   The planner's tree below is being redesigned to fit.
 
+- (owner, 2026-11-13) **Monsters differ in sensitivity to sound.** Music can **bounce** and **resonate**: both
+  become real mechanics.
+
 ## Design starting point
 The planner refines this and lists open questions.
 - **Songs are auras:** one song active at a time, affecting the Songweaver and nearby party members.
