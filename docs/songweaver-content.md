@@ -72,7 +72,17 @@ need a short rest (12s).
 ## 5. Sound-sensitivity hint lines
 
 Real values are `MOB_COMBAT[*].sound` in `shared/combat.ts` (tier, note L/M/H, and a key family: undead major, beasts
-and fey minor). Bosses ring half as fast. Hint lines must stay true to that table.
+and fey minor). Bosses ring at three quarters (`SOUND_MATCH.boss` 0.75). Hint lines must stay true to that table.
+
+Tier multipliers on a sound hit (`SOUND_TIER`; a matched note adds x1.2 damage and x1.5 resonance):
+
+| Tier | Damage | Resonance | Crowd control |
+|---|---|---|---|
+| deaf | x0.75 | x0 | x0.75 |
+| dull | x0.9 | x0.5 | x0.9 |
+| normal | x1 | x1 | x1 |
+| keen | x1.2 | x1.3 | x1.2 |
+| fragile | x1.35 | x2 | x1.35 |
 
 ### Ear tiers (one-time hint, first time a monster of this tier is struck by a song)
 - deaf: "It does not hear you. Sound barely troubles it."
@@ -95,7 +105,8 @@ flavour). Table of every kind: tier / note / key.
 | Kind | Tier | Note | Key |
 |---|---|---|---|
 | wisp | fragile | high | |
-| slime, motherblob, blobling | deaf | low | |
+| slime | dull | low | |
+| motherblob, blobling | deaf | low | |
 | skeleton, skeletonmage | fragile | high | major |
 | crawler | keen | high | |
 | bride | keen | high | |
