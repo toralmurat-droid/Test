@@ -3,9 +3,11 @@
 //   npm run bench -- [bots=5] [seconds=15]        SPREAD=1 scatters the bots over the whole map (worst case)
 //   kbPerPlayerPerSec = payload after inflate (what the game decodes); wireKbPerPlayerPerSec = bytes read from the socket (frame headers, after deflate)
 //   DEFLATE=1: per-message deflate with the production settings (server/index.ts: threshold 256, level 1); off by default so numbers stay comparable.
-//     Known: with DEFLATE=1 the bots hit Colyseus "refId not found" decode errors and fall behind, so the byte figures are unreliable
+//     The server copies each state patch before deflate (server/patchCopy.ts) and the bots copy each send (tools/perf/bots.ts);
+//     without those copies `ws` compressed reused buffers late, giving "refId not found" decode errors and garbled bot inputs.
 //   PHASES=1: also prints a second JSON line with the time per phase of the tick (wraps TownRoom methods). The wrappers add overhead, so the
 //     totals in this mode are INFLATED (more for the hot, tiny ones); use it to see shares, not absolute ms. PHASES=fine adds the hot per-mob helpers.
+//   BENCH_PORT=2656: listen on another port (default 2599), e.g. when two benches run on one machine
 //   CAST=1 SPREAD=1: the Summoner bots cast wisps, blades, black holes and the Void Arsenal non-stop (tools/perf/bots.ts)
 import os from "node:os";
 import path from "node:path";
@@ -14,7 +16,7 @@ import { fork } from "node:child_process";
 import { performance } from "node:perf_hooks";
 
 async function main() {
-  const BOTS = Number(process.argv[2] ?? 5), SECS = Number(process.argv[3] ?? 15), PORT = 2599;
+  const BOTS = Number(process.argv[2] ?? 5), SECS = Number(process.argv[3] ?? 15), PORT = Number(process.env.BENCH_PORT ?? 2599);
   process.env.SAVE_FILE = path.join(os.tmpdir(), `bench-saves-${process.pid}.json`);
   process.env.IDEAS_FILE = path.join(os.tmpdir(), `bench-ideas-${process.pid}.json`);
   const colyseus: any = await import("colyseus");

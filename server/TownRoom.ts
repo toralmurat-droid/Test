@@ -71,6 +71,7 @@ import { Asker, boardFor, submit, tick as ideaTick, vote as ideaVote } from "../
 import { hashAddr, ideaLog, saveIdeas } from "./ideaStore";
 import { dropLive, LiveState, rememberLive, takeLive } from "./handoff";
 import { MobView } from "./mobView";
+import { copyPatches } from "./patchCopy";
 import { act2Missing, act2Open, actAt, desertSpawn, WAYGATE_RANGE, waygateArrival, waygateById, WAYGATES } from "../shared/act2";
 import { repairCost, respecCost, WEAR, wearMult } from "../shared/upkeep";
 import { ARSENAL, ATTUNE_ORDER, attuneOf, bondShare, DEFAULT_GRIMOIRE, SUMMONER_TREE, ESSENCE, GOLEM, GOLEM_OF, golemSlots, isElement, isSummonKind, parseGrimoire, PORTAL, SUMMON, summonElement, summonScaleLevel, WISP, wispEls, type AttuneElement, type SummonKind } from "../shared/summons";
@@ -672,6 +673,7 @@ export class TownRoom extends Room<TownState> {
     liveRooms.add(this);
     this.limitMessages();
     this.setState(new TownState());
+    copyPatches(this); // each socket gets its own copy of a patch (deflate compresses later; server/patchCopy.ts)
     // Monsters near each hero go out just before every state patch, so both halves of an update arrive together
     this.onMessage("mvready", (c) => this.mobView.ready(c));
     this.onBeforePatch = () => this.mobView.send(this.clients, this.state.mobs, (sid) => this.state.players.get(sid));

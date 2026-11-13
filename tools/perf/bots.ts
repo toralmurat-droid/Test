@@ -2,11 +2,17 @@
 //   CAST=v_bats,su_mote: each bot goes "/max" and casts those skills non-stop (those of its class; the others are ignored)
 //   CAST=1: the Summoner's heaviest load (wisps, Void Arsenal, Void Blades, Black Hole); with SPREAD=1 they stand out of the safe zone
 import zlib from "node:zlib";
+import WebSocket from "ws";
 
 async function main() {
   // colyseus.js prefers Node's built-in (undici) WebSocket, which hides the TCP socket. Hide it so the `ws` package is used:
   // it offers permessage-deflate by default and exposes _socket.bytesRead (true bytes on the wire). It picks the class when it loads.
   delete (globalThis as any).WebSocket;
+  // colyseus.js packs every send (the join acknowledgement too) into one reused buffer per room, and `ws` deflates it
+  // later without copying, so with DEFLATE=1 a later send overwrote an earlier one before it went out. Copy first
+  // (browsers copy on send; bench only). Same `ws` module as colyseus.js uses (one copy in node_modules).
+  const send = WebSocket.prototype.send;
+  (WebSocket.prototype as any).send = function (this: WebSocket, data: unknown, ...a: unknown[]) { return (send as Function).call(this, ArrayBuffer.isView(data) ? Buffer.from(new Uint8Array(data.buffer, data.byteOffset, data.byteLength)) : data, ...a); };
   const { Client } = await import("colyseus.js");
   const [n, port] = process.argv.slice(2).map(Number);
   const classes = ["vampire", "summoner"]; // only active classes can join (shared/classes.ts ACTIVE_CLASSES)
