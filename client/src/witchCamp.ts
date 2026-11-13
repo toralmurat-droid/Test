@@ -154,13 +154,9 @@ function tent(p: Pen, f: number) {
 }
 
 // ---- alchemy rig --------------------------------------------------------------------------------------------
-const RS = 0.72; // the rig is drawn on an 80x100 design grid and placed at this scale, one texel per pixel
+const RS = 0.72; // texture size: the old 80x100 rig grid at this scale, so its placement and light offset still fit
 const RW0 = 80, RH0 = 100, RBY0 = 92;
 export const RIG_W = Math.ceil(RW0 * RS), RIG_H = Math.ceil(RH0 * RS), RIG_BY = Math.round(RBY0 * RS);
-const BX = 30; // brazier / bulb column
-
-
-
 
 /**
  * The alchemy rig, modelled in 3D (isoPaint.ts; Murat 2026-11-13: the face-on version looked flat): a brazier bowl on

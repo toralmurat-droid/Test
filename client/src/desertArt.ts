@@ -327,11 +327,12 @@ export function palmTexture(scene: Phaser.Scene, v: number): string {
   hiResTexture(scene, key, PALM_W, PALM_H, 2, 5, (c, f) => {
     const R = rng(v * 131 + 17), K = cellsPer(5);
     const bx = PALM_W / 2, by = PALM_H - 4;
-    c.fillStyle = "rgba(10,6,2,0.4)"; c.beginPath(); c.ellipse(bx + 2, by, 9, 3.5, 0, 0, Math.PI * 2); c.fill();
+    c.fillStyle = "rgba(10,6,2,0.4)"; c.beginPath(); c.ellipse(bx, by, 9, 3.5, 0, 0, Math.PI * 2); c.fill();
     const q = new IsoPaint(canvasPen(c, K), Math.ceil(PALM_W * K), Math.ceil(PALM_H * K), bx * K, by * K);
     const P = (u: number, vv: number, z: number): V3 => [u * K, vv * K, z * K];
     // trunk: leans and curves; the ring at each old frond base is a darker, rougher band
-    const H = 56 + R() * 12, la = R() * Math.PI * 2, lean = 7 + R() * 6, lu = Math.cos(la) * lean, lv = Math.sin(la) * lean * 0.6;
+    // lean mostly toward or away from the viewer (u + v), little sideways (u - v), so the crown stays inside the texture
+    const H = 56 + R() * 12, side = (R() - 0.5) * 5, depth = (R() - 0.5) * 14, lu = (depth + side) / 2, lv = (depth - side) / 2;
     const at = (t: number): V3 => [lu * t * t, lv * t * t, H * t];
     const trunk: Mat = (l, s, _t, x, y) => {
       const ring = (s * 26) % 1;
@@ -373,7 +374,7 @@ export function palmTexture(scene: Phaser.Scene, v: number): string {
     const n = 9;
     for (let k = 0; k < n; k++) {
       const a = k / n * Math.PI * 2 + R() * 0.4, up = k % 3 === 0;
-      frond(a, 18 + R() * 6, up ? 7 : 3 + R() * 3, up ? 12 : 17 + R() * 6, LEAF, -0.05 + R() * 0.12);
+      frond(a, 16 + R() * 4, up ? 7 : 3 + R() * 3, up ? 12 : 17 + R() * 6, LEAF, -0.05 + R() * 0.12);
     }
   });
   return key;
