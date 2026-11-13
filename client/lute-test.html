@@ -1,0 +1,31 @@
+<!doctype html>
+<!-- Dev-only page to hear the Songweaver's lute (client/src/sfx.ts pluck/strum). Not part of the build.
+     npm run dev, then open http://localhost:5173/lute-test.html and click. -->
+<html lang="en"><head><meta charset="utf-8"><title>Lute test</title>
+<style>body{font:16px sans-serif;background:#2a2e22;color:#f2e6c8;padding:24px}button{font:inherit;margin:4px;padding:8px 14px}</style></head>
+<body><h3>Songweaver lute</h3><p>Any key: the voice takes plain MIDI notes.</p>
+<div>
+  <button data-a="note">Single note (C4)</button>
+  <button data-a="low">Low note (C2)</button>
+  <button data-a="high">High note (C6)</button>
+  <button data-a="cmaj">Strum C major</button>
+  <button data-a="amin">Strum A minor, up</button>
+  <button data-a="d">Strum D major (another key)</button>
+  <button data-a="run">Scale run (E minor pentatonic)</button>
+  <button data-a="soft">Soft finger vs bright pick</button>
+</div>
+<div id="musicpanel"></div>
+<script type="module">
+  import { initSfx, pluck, strum, scale } from "/src/sfx.ts";
+  let on = false;
+  const go = (f) => { if (!on) { initSfx("lutetest"); on = true; setTimeout(f, 300); } else f(); };
+  const acts = {
+    note: () => pluck(60), low: () => pluck(36), high: () => pluck(84),
+    cmaj: () => strum([48, 55, 60, 64, 67]), amin: () => strum([45, 52, 57, 60, 64], { dir: "up" }),
+    d: () => strum([50, 57, 62, 66, 69]),
+    run: () => { for (let i = 0; i < 8; i++) pluck(scale(52, [0, 3, 5, 7, 10], i), { delay: i * 0.16 }); },
+    soft: () => { pluck(64, { bright: 0.1 }); pluck(64, { bright: 1, delay: 1.2 }); },
+  };
+  document.querySelectorAll("button").forEach((b) => b.addEventListener("click", () => go(acts[b.dataset.a])));
+  window.lute = { pluck, strum, scale };
+</script></body></html>

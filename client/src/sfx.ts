@@ -36,7 +36,7 @@ let voices = 0;
 const MAX_VOICES = 28;
 const lastPlay = new Map<string, number>();
 /** Sounds that ring for seconds (kept connected longer). */
-const LONG = new Set(["lootRare", "lootLegendary", "horn", "ritual", "ritualCall", "demonRise", "demonRoar", "shrine", "portalTravel", "portalWake", "necroWind", "heroDie", "levelup", "owl", "chime", "warcry", "motherInflate", "demonFire", "skelDie"]);
+const LONG = new Set(["lootRare", "lootLegendary", "horn", "ritual", "ritualCall", "demonRise", "demonRoar", "shrine", "portalTravel", "portalWake", "necroWind", "heroDie", "levelup", "owl", "chime", "warcry", "motherInflate", "demonFire", "skelDie", "lutePluck"]);
 const AMBIENT = new Set(["crackle", "bird", "cricket", "chime", "owl", "step", "skelIdle", "blobGurgle", "crawl"]);
 
 const TOWNS = ["Oakvale", "Market Square", "Chapel of the Dawn", "The Rusty Tankard", "The Smithy", "Saltmere", "Hunter's Camp"];
@@ -295,7 +295,39 @@ function styleChime(out: Out, t: number, style: string, vol: number, big = 1) {
 
 type Recipe = (o: Out, t: number, v: number, arg?: any) => void;
 
+/** Karplus-Strong string, computed into a buffer (a DelayNode loop cannot go below one 128-frame render quantum, ~344 Hz). */
+function ksBuffer(freq: number, dur: number, bright: number, decay: number): AudioBuffer {
+  const c = ctx!, sr = c.sampleRate, n = Math.floor(sr * dur), len = Math.max(2, Math.round(sr / freq));
+  const buf = c.createBuffer(1, n, sr), d = buf.getChannelData(0), ring = new Float32Array(len);
+  // the pluck: a short burst of noise, smoothed more for a soft finger (low `bright`), left sharp for a pick
+  let prev = 0;
+  for (let i = 0; i < len; i++) { const w = Math.random() * 2 - 1; prev = prev + (w - prev) * (0.35 + 0.65 * bright); ring[i] = prev; }
+  let p = 0;
+  for (let i = 0; i < n; i++) {
+    const nx = (p + 1) % len, v = ring[p];
+    d[i] = v;
+    ring[p] = (v + ring[nx]) * 0.5 * decay; // the averaging is the loop's low-pass: highs die first, like a real string
+    p = nx;
+  }
+  // soft fade at the very end, so a long note never clicks off
+  for (let i = 0; i < Math.min(n, 400); i++) d[n - 1 - i] *= i / 400;
+  return buf;
+}
+
 const R: Record<string, Recipe> = {
+  // ---- the Songweaver's lute: arg = { note (MIDI), dur?, bright? 0..1, decay? }
+  lutePluck: (o, t, v, a) => {
+    const c = ctx!, note = a?.note ?? 60, f = 440 * 2 ** ((note - 69) / 12), dur = a?.dur ?? 1.5, bright = a?.bright ?? 0.6;
+    const src = c.createBufferSource();
+    // the lower the string, the longer it rings; a touch more decay than 1 - 1/(f*dur) keeps the tail from running on
+    src.buffer = ksBuffer(f, dur, bright, a?.decay ?? Math.min(0.9995, 0.996 + f / 400000));
+    const body = c.createBiquadFilter(); // the lute's wooden belly: a warm resonance low in the range
+    body.type = "peaking"; body.frequency.value = 220; body.Q.value = 1.2; body.gain.value = 5;
+    const g = c.createGain(); g.gain.value = 0.55 * v * (a?.vol ?? 1);
+    src.connect(body).connect(g).connect(o);
+    src.start(t);
+    noise(o, t, { type: "bandpass", f: 1800, q: 2, dur: 0.02, vol: 0.05 * (a?.vol ?? 1) }); // the fingernail
+  },
   // ---- heroes and plain combat
   swing: (o, t, v, heavy) => whoosh(o, t, heavy ? 350 : 700, heavy ? 1100 : 2600, heavy ? 0.26 : 0.16, 0.5 * v),
   hitFlesh: (o, t, v) => { thud(o, t, rnd(120, 170), 0.55 * v, 0.14); noise(o, t, { type: "bandpass", f: 1800, q: 2, dur: 0.05, vol: 0.3 * v }); },
@@ -526,6 +558,36 @@ export function play(name: string, x?: number, y?: number, vol = 1, arg?: any, o
   voices++;
   try { recipe(g, t, 1, arg); } catch { /* a bad param must never break the game */ }
   window.setTimeout(() => { voices--; g.disconnect(); }, (LONG.has(name) ? 4500 : 1300) + (o.delay ?? 0) * 1000);
+}
+
+// ---------------------------------------------------------------------------------------------------------
+// The Songweaver's lute. No key is built in: callers pass MIDI notes (60 = middle C).
+
+export interface PluckOpts { x?: number; y?: number; vol?: number; delay?: number; dur?: number; bright?: number; decay?: number }
+
+/** MIDI note -> note of a scale: `scale(60, [0,2,4,5,7,9,11], 9)` is the major scale's 10th degree from C4. Any root, any steps. */
+export function scale(root: number, steps: readonly number[], degree: number): number {
+  const n = steps.length, oct = Math.floor(degree / n);
+  return root + oct * 12 + steps[((degree % n) + n) % n];
+}
+
+let pluckSeq = 0;
+/** One lute note (Karplus-Strong string). Placed in the world when x/y are given, else on our hero; `delay` in seconds. */
+export function pluck(midiNote: number, o: PluckOpts = {}) {
+  if (!Number.isFinite(midiNote)) return;
+  const note = Math.max(24, Math.min(108, midiNote));
+  // own key per note so a chord or a fast run is not thinned out by the one-per-45ms gate
+  play("lutePluck", o.x, o.y, o.vol ?? 1, { note, dur: o.dur, bright: o.bright, decay: o.decay }, { key: `lute${pluckSeq++ & 15}`, minGap: 0, delay: o.delay, reach: 1.1 });
+}
+
+/**
+ * Several notes one after another, 15-30 ms apart (a strummed chord). `dir` "down" plays them low to high as given,
+ * "up" reverses them; `gap` is seconds between notes (clamped to 0.015-0.03).
+ */
+export function strum(notes: readonly number[], o: PluckOpts & { dir?: "down" | "up"; gap?: number } = {}) {
+  const gap = Math.max(0.015, Math.min(0.03, o.gap ?? 0.022));
+  const list = o.dir === "up" ? [...notes].reverse() : notes;
+  list.forEach((n, i) => pluck(n, { ...o, vol: (o.vol ?? 1) * (1 - i * 0.04), delay: (o.delay ?? 0) + i * gap }));
 }
 
 // ---------------------------------------------------------------------------------------------------------
