@@ -300,3 +300,9 @@ Agents build against this in parallel. Changing it needs the orchestrator.
   - Checks: `npm test` 166/166 on 2 reruns (one run hit the known `voidconjure` timing flake); build OK; smoke OK.
   - Next: Modulate sometimes appears stuck (gameplay check), busking speech bubble (client), fireside seat check,
     reviewer.
+- 2026-11-13: Oakvale rule refined (orchestrator):
+  - Modulate never outlaws.
+  - A finisher with an enemy part outlaws even when the note that completes it is lawful.
+  - Amen and Turnaround (ally-only finishers) stay lawful in a bright mode.
+  - The "stuck Modulate" in the e2e was the outlaw stun and poise-break from villagers, not a bug.
+  - A room test now checks the mode cycle at real gaps.
