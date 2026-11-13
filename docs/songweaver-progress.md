@@ -157,3 +157,13 @@ session: what was done, decisions with name and date, numbers, pitfalls.
   - gameplay-engineer: generic ally-reaching buffs and shields in `shared/skillEngine.ts`, `heal(from)`, the
     `damagePlayer` hook, sim hooks and tests.
   - Waiting on the redesign: skill icons, skillfx, chords, the class tables.
+- 2026-11-13: art-audio work merged into the branch:
+  - Hero sheet: a minstrel in the caster poses, all 24 animations × 5 facings.
+  - Lute overlay and starter kit sheets (`songweaver_{armour,hat,shoes,weapon}`).
+  - `pluck()` / `strum()` / `scale()` in `client/src/sfx.ts`: Karplus-Strong computed into a buffer, because a
+    `DelayNode` feedback loop can't go below ~344 Hz.
+  - Sound-wave sheet (`client/src/soundWaveArt.ts`), and the test page `client/lute-test.html` (dev only).
+  - Not wired yet: `SONGWEAVER` isn't in `HEROES` until the class exists, plus `HERO_PITCH`, the weapon icon atlas,
+    `BASIC_SHOTS`.
+  - Known issues: the overlay barely shows in the lying poses, the cape is full-length, the lute hangs low.
+  - The pluck hasn't been listened to.
