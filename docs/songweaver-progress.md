@@ -227,3 +227,30 @@ Agents build against this in parallel. Changing it needs the orchestrator.
   - `npm test` passed 6/6 runs.
   - Still timing-sensitive under heavy parallel stress (not in plain runs): `champions.test.ts:216`,
     `voidconjure.test.ts:128`.
+- 2026-11-13: Songweaver rules merged (`shared/`, `server/`, sims, bench, tests). Not in `ACTIVE_CLASSES` yet.
+  - Checks on the combined branch: `npm test` 165 pass / 1 skipped; build OK; smoke OK.
+  - Existing classes unchanged within noise. Bench: tick average 7.9–8.8 ms vs base 8.6–9.2 ms; 8 Songweaver party
+    bots 9.9–10.7 ms.
+  - Deviations from the brief:
+    - `resonate` has `id` = target and `by` = Songweaver.
+    - the basic-attack `note` is `s: "basic"` (I/V/I, pitch M); `soundhit` is only sent for direct hits on monsters.
+    - Twelve-Tone uses degree bII with pitch `any`.
+    - `shareBuff`: the same caster now updates its buff in place.
+    - `BuffDef.poise` was added; water swallows waves.
+    - Modulate has a 600 ms cooldown.
+    - The sim starts in the saved mode; `SIM.bounceHit = 0.3`.
+  - Songweaver numbers, first pass (duel n=400, PvE n=20):
+    - Duel overall by level 1/5/10/15/20/25/30/40/50: 4/6/18/14/17/14/26/34/33%.
+    - Duel vs Summoner: 0% at every level.
+    - PvE: zones clear 99–100%, 2.3–6.1 s per kill (Summoner ~4.0 s).
+    - Bosses 85–100%, but Hollow King takes 52 s and Sunwright 70 s; Night Raider 0%.
+  - Balance targets (orchestrator, per the owner's hand-off), per band:
+    - duel overall 35–55%, and no more than 8 points below the Wizard from Lv 5;
+    - every matchup ≥20% from Lv 10;
+    - PvE seconds per kill ≤120% of the Wizard's;
+    - zone clear rate ≥95%;
+    - boss win rate no more than 10 points below the Wizard's.
+- 2026-11-13: skill text merged (descs, blurb, `BUSKING_LINES` in `shared/npcs.ts`, not yet read by anything).
+  - Finisher names are now Amen, Turnaround, Shatterchord, Perfect Cadence, Deceptive Cadence.
+  - `docs/songweaver-content.md` now carries the real `MOB_COMBAT` sound table.
+  - To do (gameplay): play a busking line when a major-key song plays near an Oakvale NPC.

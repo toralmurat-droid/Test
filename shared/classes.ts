@@ -155,7 +155,7 @@ export const CLASSES: Record<ClassKind, ClassDef> = {
       { damage: 1.05, knockback: 0.5 },
       { damage: 1.5, knockback: 2, shotScale: 1.5, burst: 30, cooldownMs: 850 },
     ],
-    blurb: "Lute and song: auras for the group, notes that chain into chords, and sound waves that ring through monsters.",
+    blurb: "Oakvale minstrel with a lute. Songs help your friends, discord hurts your foes, and a good tune carries you alone.",
   },
 };
 
