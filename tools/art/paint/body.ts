@@ -541,20 +541,21 @@ function backItem(c: C2, r: Rig, front: boolean) {
   coatTails(c, r, front);
   if (L.scarf) scarfEnds(c, r, front);
   if (L.back === "cape") {
+    const hp = hipY + (L.capeShort ? -4.2 : 0); // a short shoulder cape ends at the waist
     const col = C(L.capeCol!), flut = Math.sin(r.p.t * 1.1) * 0.5 + (r.p.run ? 1.2 : 0) + Math.abs(r.p.stride) * 0.4;
     if (r.dir === "up" && front) {
-      const s = blobPath([[cx - 3.4 * r.b, sy - 0.8], [cx + 3.4 * r.b, sy - 0.8], [cx + 3.9 * r.b + flut * 0.3, sy + 6], [cx + 3.6, hipY + 5.6], [cx, hipY + 6.4 + flut * 0.3], [cx - 3.6, hipY + 5.6], [cx - 3.9 * r.b - flut * 0.3, sy + 6]]);
-      vol(c, s, col, [cx - 4, sy - 1, 8, hipY - sy + 7], { ao: 0.35 });
-      grain(c, s, [cx - 4, sy - 1, 8, hipY - sy + 7], col, r.seed + 21, 30, 0.18, 1.4, 1.5);
-      for (let k = -1; k <= 1; k++) curve(c, [cx + k * 1.6, sy + 1], [cx + k * 2.0, sy + 6], [cx + k * 2.3, hipY + 5.4], sh(col, 0.55), 0.3, 0.55);
+      const s = blobPath([[cx - 3.4 * r.b, sy - 0.8], [cx + 3.4 * r.b, sy - 0.8], [cx + 3.9 * r.b + flut * 0.3, sy + 6], [cx + 3.6, hp + 5.6], [cx, hp + 6.4 + flut * 0.3], [cx - 3.6, hp + 5.6], [cx - 3.9 * r.b - flut * 0.3, sy + 6]]);
+      vol(c, s, col, [cx - 4, sy - 1, 8, hp - sy + 7], { ao: 0.35 });
+      grain(c, s, [cx - 4, sy - 1, 8, hp - sy + 7], col, r.seed + 21, 30, 0.18, 1.4, 1.5);
+      for (let k = -1; k <= 1; k++) curve(c, [cx + k * 1.6, sy + 1], [cx + k * 2.0, sy + 6], [cx + k * 2.3, hp + 5.4], sh(col, 0.55), 0.3, 0.55);
     } else if (r.dir === "right" && !front) {
-      const s = blobPath([[cx - 1.4, sy - 0.9], [cx + 0.6, sy - 0.6], [cx - 1.5, hipY + 4.8], [cx - 3.3 - flut, hipY + 5.4], [cx - 3.9 - flut * 1.3, hipY + 1.5], [cx - 2.4 - flut * 0.5, sy + 2]]);
-      vol(c, s, col, [cx - 4.5, sy - 1, 5, hipY - sy + 7], { ao: 0.35 });
-      curve(c, [cx - 1.6, sy + 1], [cx - 2.4 - flut * 0.5, sy + 5], [cx - 2.8 - flut, hipY + 4.8], sh(col, 0.55), 0.3, 0.55);
+      const s = blobPath([[cx - 1.4, sy - 0.9], [cx + 0.6, sy - 0.6], [cx - 1.5, hp + 4.8], [cx - 3.3 - flut, hp + 5.4], [cx - 3.9 - flut * 1.3, hp + 1.5], [cx - 2.4 - flut * 0.5, sy + 2]]);
+      vol(c, s, col, [cx - 4.5, sy - 1, 5, hp - sy + 7], { ao: 0.35 });
+      curve(c, [cx - 1.6, sy + 1], [cx - 2.4 - flut * 0.5, sy + 5], [cx - 2.8 - flut, hp + 4.8], sh(col, 0.55), 0.3, 0.55);
     } else if (r.dir === "down" && !front) {
       // only the edges show beside the legs
-      const s = blobPath([[cx - 3.6 * r.b, sy - 0.4], [cx + 3.6 * r.b, sy - 0.4], [cx + 4.1 + flut * 0.2, hipY + 5.3], [cx, hipY + 5.8], [cx - 4.1 - flut * 0.2, hipY + 5.3]]);
-      vol(c, s, sh(col, 0.75), [cx - 4, sy, 8, hipY - sy + 6], { ao: 0.3 });
+      const s = blobPath([[cx - 3.6 * r.b, sy - 0.4], [cx + 3.6 * r.b, sy - 0.4], [cx + 4.1 + flut * 0.2, hp + 5.3], [cx, hp + 5.8], [cx - 4.1 - flut * 0.2, hp + 5.3]]);
+      vol(c, s, sh(col, 0.75), [cx - 4, sy, 8, hp - sy + 6], { ao: 0.3 });
     }
     if (L.collar !== undefined) capeCollar(c, r, front);
   } else if (L.back === "quiver") {
@@ -1476,26 +1477,7 @@ function weapon(c: C2, r: Rig) {
       if (W.glowing) glowAlong(-4, len, W.accent);
       break;
     }
-    case "lute": {
-      // held by the neck like a staff: neck and bent-back peg head out along u, the pear-shaped belly hangs behind the hand
-      const ang = Math.atan2(u[1], u[0]), body = sh(0xb8742e, 1), dark = 0x4a2812, ph = r.p.attack;
-      const bc = at(-3.9), neckEnd = at(6.4), head = at(7.6, 0.55);
-      limb(c, at(-1.2), neckEnd, 1.05, 0.9, C(0x7a4a24));                       // neck
-      limb(c, neckEnd, head, 0.95, 1.05, C(0x5a3418));                             // bent-back peg head
-      for (let k = 0; k < 3; k++) for (const sgn of [-1, 1]) { const q = at(6.9 + k * 0.4, 0.55 + sgn * 0.55); fillShape(c, ellipseP(q[0], q[1], 0.2, 0.2), css(C(0xe8d9a8))); }
-      // belly: round bowl with a darker rim, rosette sound-hole, bridge
-      fillShape(c, ellipseP(bc[0], bc[1], 3.35, 2.55, ang), css(sh(C(body), 0.55)));
-      vol(c, ellipseP(bc[0], bc[1], 3.1, 2.3, ang), C(body), [bc[0] - 3, bc[1] - 2.6, 6, 5.2], { ao: 0.3, hi: 1.35, spec: 0.35 });
-      const rose = at(-3.0);
-      fillShape(c, ellipseP(rose[0], rose[1], 0.95, 0.95), css(C(dark)));
-      line(c, [at(-2.4, 0.4), at(-3.6, 0.4)], C(0xe8d9a8), 0.12, 0.7);
-      line(c, [at(-5.1, -1.0), at(-5.1, 1.0)], C(0x2a1608), 0.3);                // bridge
-      for (const o of [-0.22, 0, 0.22]) line(c, [at(-5.0, o), at(6.6, 0.55 + o * 0.6)], C(0xf4ecd4), 0.07, ph >= 1 ? 0.95 : 0.75); // strings
-      // a leather strap looping to the shoulder
-      curve(c, at(-5.6, 0.2), at(-8, 2.2), at(-9.5, 0.4), C(0x5a3a22), 0.3, 0.9);
-      if (W.glowing) glowAlong(-5, 6, W.accent);
-      break;
-    }
+    case "lute": drawFormWeapon({ c, h, u, n, kind: "lute", f: {}, blade: 0, accent: 0, long: 1, attack: r.p.attack, C }); break; // art: paint/weaponArt.ts
     case "bow": {
       const ph = r.p.attack, ch = r.p.move === "a3", pull = ph === 0 ? (ch ? 4 : 2) : ph === 1 ? (ch ? 5 : 4) : 0;
       const half = 7.6 * W.long, wood = W.g ? W.blade : C(0x6b4423);
@@ -1749,7 +1731,7 @@ function heroFx(c: C2, r: Rig) {
     }
     case "lute": {
       // plucked sound: a few notes drift off the strings at rest, then gold arcs ring out along the aim
-      const b: P = [hx + u[0] * -3.9, hy + u[1] * -3.9], gold = L.fx;
+      const bt = ph < 0 ? 3.1 : -3.9, b: P = [hx + u[0] * bt, hy + u[1] * bt], gold = L.fx; // at rest the belly is carried at the waist (weaponArt lute)
       const arcs = (d0: number, k: number, al: number) => { for (let i = 0; i < k; i++) {
         const d = d0 + i * 2.4, rr = 2.2 + i * 0.9;
         c.beginPath(); c.arc(hx + u[0] * d, hy + u[1] * d, rr, rad(a - 52), rad(a + 52));
@@ -2102,7 +2084,7 @@ export function paintWeaponIcon(d: GearDef, kind: string, px: number): Uint8Clam
   c.scale(S, S);
   const u: P = [Math.SQRT1_2, -Math.SQRT1_2], n: P = [Math.SQRT1_2, Math.SQRT1_2];
   const long = d.style.startsWith("long") ? 1 + (d.bonus.reach ?? 0) * 0.9 : 1;
-  const ok = drawFormWeapon({ c, h: [17, 31], u, n, kind, f, blade: d.color, accent: d.accent, long, attack: -1, C: (x) => x });
+  const ok = drawFormWeapon({ c, h: [17, 31], u, n, kind, f, blade: d.color, accent: d.accent, long, attack: -1, C: (x) => x, icon: true });
   if (!ok) return null;
   // fit the painted weapon into the icon, keeping its aspect
   const img = c.getImageData(0, 0, N, N).data;

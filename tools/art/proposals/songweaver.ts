@@ -1,15 +1,14 @@
 /**
- * The Songweaver (Oakvale minstrel with a lute), built standalone because the class does not exist in shared/ yet.
- * The hero is SONGWEAVER in characters.ts (caster pose family), its look and starter kit are in paint/look.ts.
+ * Songweaver art tools. The hero is in HEROES (characters.ts), so `npm run art` builds the sheets, the kit overlays
+ * (gear/songweaver_songweaver_{armour,hat,shoes,weapon}.webp, the ids the game loads), the other weapon stances and the
+ * icon atlas. This script is for previews and the viewer's copies:
  *
- *   npx tsx tools/art/proposals/songweaver.ts sheets          -> assets/hd/characters/songweaver.webp (bare body)
- *                                                                + assets/hd/gear/songweaver_{armour,hat,shoes,weapon}.webp
- *   npx tsx tools/art/proposals/songweaver.ts preview <out>   -> every animation x direction next to the Wizard
+ *   npx tsx tools/art/proposals/songweaver.ts sheets          -> re-renders just the Songweaver sheets and also writes
+ *                                                                gear/songweaver_{slot}.webp (the names the published viewer reads)
+ *   npx tsx tools/art/proposals/songweaver.ts preview <all> <dirs>  -> every animation x direction next to the Wizard
  *   npx tsx tools/art/proposals/songweaver.ts lute <out>      -> the lute alone, big, in each stance
+ *   npx tsx tools/art/proposals/songweaver.ts lying <out> [hero]  -> bare / overlay / dressed in the lying poses
  *   npx tsx tools/art/proposals/songweaver.ts wave <out>      -> the sound-wave shot (projectile + impact) frames
- *
- * Wiring once ClassKind has "songweaver": move SONGWEAVER into HEROES (characters.ts) so `npm run art` builds it,
- * and the starterKit ids `songweaver_{armour,hat,shoes,weapon}` in shared/gear.ts will find these overlay sheets.
  */
 import { mkdirSync, writeFileSync } from "node:fs";
 import { createCanvas } from "@napi-rs/canvas";
@@ -41,7 +40,12 @@ if (mode === "sheets") {
   kit(null);
   const plain = buildSheet(SONGWEAVER);
   saveWebp(plain, `${OUT}/characters/songweaver.webp`);
-  for (const s of SLOTS) { kit(s); saveWebp(diff(plain, buildSheet(SONGWEAVER)), `${OUT}/gear/songweaver_${s}.webp`, 88); }
+  for (const s of SLOTS) {
+    kit(s);
+    const d = diff(plain, buildSheet(SONGWEAVER));
+    saveWebp(d, `${OUT}/gear/songweaver_songweaver_${s}.webp`, 88); // what the game loads (hero_itemId)
+    saveWebp(d, `${OUT}/gear/songweaver_${s}.webp`, 88);            // what the published viewer reads
+  }
   kit(null);
   console.log("songweaver sheets written", plain.w, "x", plain.h);
 }
@@ -112,5 +116,27 @@ if (mode === "wave") {
   o.fillStyle = "#3d4530"; o.fillRect(0, 0, cv.width, cv.height); o.imageSmoothingEnabled = false;
   o.drawImage(sheet, 0, 0, cv.width, cv.height);
   writeFileSync(process.argv[3] ?? "songweaver-wave.png", cv.encodeSync("png"));
+}
+if (mode === "lying") {
+  // bare body vs kit overlay vs dressed, for the lying poses (ko, ko2, sleep) of the Songweaver and another hero (argv[4])
+  const other = HEROES.find((h) => h.name === (process.argv[4] ?? "wizard"))!;
+  const Z = 4, F = 48 * Z, rows: [typeof SONGWEAVER, string, number][] = [[SONGWEAVER, "ko", 2], [SONGWEAVER, "ko2", 2], [SONGWEAVER, "sleep", 0], [other, "ko", 2], [other, "ko2", 2], [other, "sleep", 0]];
+  const cv = createCanvas(F * 3, F * rows.length), o = cv.getContext("2d");
+  o.fillStyle = "#3d4530"; o.fillRect(0, 0, cv.width, cv.height); o.imageSmoothingEnabled = false;
+  rows.forEach(([h, a, fi], r) => {
+    const k = (KITS as any)[h.name];
+    const wear = (slot: string | null) => { setPaintGear(null); setPaintForm(null); setPaintKit(slot ? k[slot] : null); };
+    wear(null);
+    const bare = sheetFrames(h, a, "right")[fi];
+    o.drawImage(toNative(bare), 0, r * F, F, F);
+    const lay = createCanvas(48, 48), lx = lay.getContext("2d");
+    for (const sl of SLOTS) { wear(sl); lx.drawImage(toNative(diff(bare, sheetFrames(h, a, "right")[fi])), 0, 0); }
+    wear(null);
+    o.drawImage(lay, F, r * F, F, F);
+    const both = createCanvas(48, 48), bx = both.getContext("2d");
+    bx.drawImage(toNative(bare), 0, 0); bx.drawImage(lay, 0, 0);
+    o.drawImage(both, 2 * F, r * F, F, F);
+  });
+  writeFileSync(process.argv[3] ?? "songweaver-lying.png", cv.encodeSync("png"));
 }
 void ANIMS; void PAINT_COLS;

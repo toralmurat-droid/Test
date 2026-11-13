@@ -17,7 +17,7 @@ export interface Look {
   sleeve: number; arms: "plate" | "cloth" | "bare" | "wrap"; glove?: number; bracer?: number;
   weapon: WeaponKind;
   shield?: { col: number; trim: number; emblem: number; style: "kite" | "round" };
-  back?: "cape" | "quiver" | "pelt"; capeCol?: number;
+  back?: "cape" | "quiver" | "pelt"; capeCol?: number; capeShort?: boolean;
   orb?: number;   // glowing staff stone
   lips?: number;    // painted lips (front view)
   corset?: number;   // laced waist cincher over the bodice
@@ -307,7 +307,7 @@ export const HERO_BODIES: Record<string, Look> = {
   // ash-pale hair, violet eyes (the body of look C, 2026-11-07; the Void Lord kit dresses it as a warlock)
   summoner: bare({ skin: 0xe8c4a2, eye: 0xb68cff, hair: 0xd8d0c0, hairStyle: "long", weaponKind: "witchstaff", orb: 0xb68cff, fx: 0xd8c4ff }),
   // the Songweaver (Oakvale minstrel): sun-freckled, curly chestnut hair, green eyes; the lute's sound is warm gold
-  songweaver: bare({ skin: 0xeabf98, eye: 0x2a7a56, hair: 0x5a3018, hairStyle: "short", weaponKind: "lute", fx: 0xffd27a }),
+  songweaver: bare({ skin: 0xeabf98, lips: 0xc4705e, eye: 0x2a7a56, hair: 0x5a3018, hairStyle: "short", weaponKind: "lute", fx: 0xffd27a }),
 };
 
 /**
@@ -371,7 +371,7 @@ export const KITS: Record<string, Partial<Record<"weapon" | "shield" | "armour" 
     armour: {
       torso: "jerkin", torsoCol: 0xd09a34, trim: 0x8a5a1c, vest: 0x2e7d74, belt: 0x5a3a22, buckle: 0xe8d070,
       legs: "trousers", legCol: 0x7a3b22, sleeve: 0xe8dcc0, arms: "cloth", glove: 0x8a5a2c, bracer: 0x8a5a2c,
-      back: "cape", capeCol: 0xa8402a,
+      back: "cape", capeCol: 0xa8402a, capeShort: true,
     },
     shoes: { boots: 0x4e3220, bootStyle: "leather" },
     weapon: { weapon: "lute" },
