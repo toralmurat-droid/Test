@@ -221,3 +221,9 @@ Agents build against this in parallel. Changing it needs the orchestrator.
   - Unverified until the server lands: the `hit`/`soundhit` order, `lockMs` semantics, the ear icon on the
     nameplate, the hint line. Switch the client placeholders `SONG_BUFFS` / `SHIELD_BUFFS` and `drawEar` to real
     data.
+- 2026-11-13: test flakes fixed (tester).
+  - Cause: `TownRoom` `console.log` corrupted the node:test IPC. Fix: `tests/helpers/room.ts` routes log/info to stderr.
+  - `champions.test.ts` now asserts a single `split` event instead of the herd size.
+  - `npm test` passed 6/6 runs.
+  - Still timing-sensitive under heavy parallel stress (not in plain runs): `champions.test.ts:216`,
+    `voidconjure.test.ts:128`.
