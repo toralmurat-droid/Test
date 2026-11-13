@@ -753,6 +753,12 @@ const guard = human({
 
 // The Summoner casts like the wizard (staff bolts, the same poses and float); its painted look is look.ts summoner
 const summoner: Hero = { ...wizard, name: "summoner", aura: 0xb68cff, weaponKind: "witchstaff" };
+/**
+ * The Songweaver (minstrel, caster pose family: a plucked wave from mid range, then a strum). Deliberately NOT in
+ * HEROES yet: that list is walked with `h.name as ClassKind` by the gear and pose tools, which need the class to exist
+ * in shared/. Built by tools/art/proposals/songweaver.ts until then.
+ */
+export const SONGWEAVER: Hero = { ...wizard, name: "songweaver", aura: 0xffd27a, weaponKind: "lute" };
 export const HEROES: Hero[] = [ninja, wizard, knight, archer, barbarian, vampire, summoner];
 
 /**

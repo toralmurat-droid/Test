@@ -1476,6 +1476,26 @@ function weapon(c: C2, r: Rig) {
       if (W.glowing) glowAlong(-4, len, W.accent);
       break;
     }
+    case "lute": {
+      // held by the neck like a staff: neck and bent-back peg head out along u, the pear-shaped belly hangs behind the hand
+      const ang = Math.atan2(u[1], u[0]), body = sh(0xb8742e, 1), dark = 0x4a2812, ph = r.p.attack;
+      const bc = at(-3.9), neckEnd = at(6.4), head = at(7.6, 0.55);
+      limb(c, at(-1.2), neckEnd, 1.05, 0.9, C(0x7a4a24));                       // neck
+      limb(c, neckEnd, head, 0.95, 1.05, C(0x5a3418));                             // bent-back peg head
+      for (let k = 0; k < 3; k++) for (const sgn of [-1, 1]) { const q = at(6.9 + k * 0.4, 0.55 + sgn * 0.55); fillShape(c, ellipseP(q[0], q[1], 0.2, 0.2), css(C(0xe8d9a8))); }
+      // belly: round bowl with a darker rim, rosette sound-hole, bridge
+      fillShape(c, ellipseP(bc[0], bc[1], 3.35, 2.55, ang), css(sh(C(body), 0.55)));
+      vol(c, ellipseP(bc[0], bc[1], 3.1, 2.3, ang), C(body), [bc[0] - 3, bc[1] - 2.6, 6, 5.2], { ao: 0.3, hi: 1.35, spec: 0.35 });
+      const rose = at(-3.0);
+      fillShape(c, ellipseP(rose[0], rose[1], 0.95, 0.95), css(C(dark)));
+      line(c, [at(-2.4, 0.4), at(-3.6, 0.4)], C(0xe8d9a8), 0.12, 0.7);
+      line(c, [at(-5.1, -1.0), at(-5.1, 1.0)], C(0x2a1608), 0.3);                // bridge
+      for (const o of [-0.22, 0, 0.22]) line(c, [at(-5.0, o), at(6.6, 0.55 + o * 0.6)], C(0xf4ecd4), 0.07, ph >= 1 ? 0.95 : 0.75); // strings
+      // a leather strap looping to the shoulder
+      curve(c, at(-5.6, 0.2), at(-8, 2.2), at(-9.5, 0.4), C(0x5a3a22), 0.3, 0.9);
+      if (W.glowing) glowAlong(-5, 6, W.accent);
+      break;
+    }
     case "bow": {
       const ph = r.p.attack, ch = r.p.move === "a3", pull = ph === 0 ? (ch ? 4 : 2) : ph === 1 ? (ch ? 5 : 4) : 0;
       const half = 7.6 * W.long, wood = W.g ? W.blade : C(0x6b4423);
@@ -1725,6 +1745,21 @@ function heroFx(c: C2, r: Rig) {
       if (ph === 1) { glow(c, o[0], o[1], 4.2, orb, 0.75); glow(c, o[0] - 2.5, o[1] - 2.2, 0.8, 0xc8fbff, 0.9); glow(c, o[0] + 2.6, o[1] - 1.5, 0.8, 0xc8fbff, 0.9); }
       if (ph === 2) { const b: P = [o[0] + u[0] * 5, o[1] + u[1] * 5]; glow(c, b[0], b[1], 5.5, 0x9a6bff, 0.6); glow(c, b[0], b[1], 3, orb, 0.9); glow(c, b[0], b[1], 1.3, 0xffffff, 1); }
       if (ph === 3) { const b: P = [o[0] + u[0] * 7, o[1] + u[1] * 7]; for (let k = 0; k < 8; k++) { const t = k * Math.PI / 4; glow(c, b[0] + Math.cos(t) * 3.4, b[1] + Math.sin(t) * 3.4, 0.8, 0xc8fbff, 0.8); } }
+      return;
+    }
+    case "lute": {
+      // plucked sound: a few notes drift off the strings at rest, then gold arcs ring out along the aim
+      const b: P = [hx + u[0] * -3.9, hy + u[1] * -3.9], gold = L.fx;
+      const arcs = (d0: number, k: number, al: number) => { for (let i = 0; i < k; i++) {
+        const d = d0 + i * 2.4, rr = 2.2 + i * 0.9;
+        c.beginPath(); c.arc(hx + u[0] * d, hy + u[1] * d, rr, rad(a - 52), rad(a + 52));
+        c.strokeStyle = css(i ? gold : 0xffffff, al * (1 - i * 0.25)); c.lineWidth = 0.55 - i * 0.08; c.lineCap = "round"; c.stroke();
+      } };
+      if (ph < 0) { if (p.t % 4 === 0) glow(c, b[0] + 2.2, b[1] - 2.8, 0.8, gold, 0.8); return; }
+      if (ph === 0) glow(c, b[0], b[1], 3.0, gold, 0.4);
+      if (ph === 1) { glow(c, b[0], b[1], 4.0, gold, 0.55); arcs(-1, 1, 0.5); }
+      if (ph === 2) { glow(c, b[0], b[1], 4.5, gold, 0.5); arcs(8, 3, 0.95); }
+      if (ph === 3) arcs(14, 2, 0.6);
       return;
     }
     case "bow":
