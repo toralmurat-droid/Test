@@ -268,3 +268,12 @@ Agents build against this in parallel. Changing it needs the orchestrator.
       - Night Raider: documented as near-unbeatable alone (owner 2026-11-08); the Vampire is also 0%;
       - Lv 1 duel: the Vampire wins 96% at Lv 1 and the Wizard is at 18%.
     - Known sim bug, not fixed here: `duel.ts` hits a piercing shot only once.
+- 2026-11-13: balance pass 1 merged (class damage 20, range 160, the analyst package) and busking lines (server
+  sends `chat` from `npc:<id>`; the client has no speech bubble yet).
+  - Duel at damage 20: Songweaver overall 17/20/36/38/46/43/53/59/57%.
+  - Duel vs Wizard 48/29/55/72/81/80/89/86/80%. The Wizard drops to 25–42% from Lv 10.
+  - Damage 18–21 barely matters; range 160 drives the overshoot.
+  - Orchestrator: one more sweep. Wave range 145–155 against Folk damage buffs. Ranked targets:
+    1. Songweaver vs Wizard ≤65% at every band;
+    2. Songweaver overall ≥30% from Lv 10;
+    3. the Wizard's overall within ~10 points of before.
