@@ -277,3 +277,10 @@ Agents build against this in parallel. Changing it needs the orchestrator.
     1. Songweaver vs Wizard ≤65% at every band;
     2. Songweaver overall ≥30% from Lv 10;
     3. the Wizard's overall within ~10 points of before.
+- 2026-11-13: balance sweep 2 (wave range 145/150/155 × Folk buffs): no config holds the Songweaver vs the Wizard
+  ≤65% at every band.
+  - Orchestrator chose Option A: range 145, Folk buffs as merged, damage 20.
+  - Duel overall 13/16/31/32/37/36/45/53/51%; vs Wizard 36/13/37/53/62/57/68/72/68%.
+  - Wizard overall 21/54/45/38/37/42/40/41/46%.
+  - Known issues for a post-launch tuning pass: 68–72% vs the Wizard and 84–85% vs the Vampire at Lv 30–50 (the
+    Vampire is already weak late, 16–24% before this); the Summoner matchup.
