@@ -14,7 +14,7 @@ installWeatheredFrames();
 installTooltips();
 import { TownScene } from "./TownScene";
 import "./heropanel.css"; // the hero panel redesign, after every other stylesheet
-import { ACTIVE_CLASSES, ARCHIVED_CLASSES, CLASSES, ClassKind, isActiveClass } from "../../shared/classes";
+import { ACTIVE_CLASSES, ARCHIVED_CLASSES, CLASS_KINDS, CLASSES, ClassKind, isActiveClass } from "../../shared/classes";
 import { mountFireside } from "./fireside";
 import { pixelText } from "./pixeltext";
 import { SMOOTH } from "./isoflag";
@@ -44,7 +44,9 @@ for (const c of COLORS) {
 // Start screens, all by the fire: log in -> resume a saved hero or start a new game -> pick a hero round the fire -> loading
 let saved: string | null = null;
 try { saved = localStorage.getItem("cls"); } catch { /* ignore */ }
-let cls: ClassKind = isActiveClass(saved) ? saved : ACTIVE_CLASSES[0];
+// `?archived=1` keeps a saved archived class selected, to test one against a server run with ALLOW_ARCHIVED_CLASSES=1
+const archivedOk = new URLSearchParams(location.search).has("archived");
+let cls: ClassKind = isActiveClass(saved) || (archivedOk && CLASS_KINDS.includes(saved as ClassKind)) ? saved as ClassKind : ACTIVE_CLASSES[0];
 
 document.getElementById("fstitle")!.appendChild(pixelText("Pixel Town Brawl", "#ffcf52", 12, 2));
 const fireside = mountFireside(document.getElementById("fireside") as HTMLCanvasElement, document.getElementById("fslabels")!, (k) => pickHero(k));

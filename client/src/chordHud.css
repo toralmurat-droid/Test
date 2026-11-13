@@ -20,3 +20,14 @@
 /* short landscape phones: the NPC dialog fills the bottom middle, so the tracker moves to the left above the chat box */
 @media (max-height: 520px) { #chordhud { left: 8px; transform: none; bottom: 84px; } }
 @media (max-width: 600px) { #chordhud { bottom: 200px; min-width: 110px; font-size: 12px; } #chordhud .ch-notes b { font-size: 13px; line-height: 17px; height: 17px; } }
+#chordhud .ch-help { pointer-events: auto; cursor: pointer; font: inherit; font-size: 11px; line-height: 13px; width: 15px; height: 15px; padding: 0; margin-left: 4px; color: #e3bf6a; background: rgba(0, 0, 0, .5); border: 1px solid #6a5232; }
+#chordhud.named .ch-help { display: none; }
+#chordhud .ch-hint { font-size: 11px; color: #c9b27a; min-height: 0; white-space: normal; line-height: 12px; }
+#chordhud .ch-hint:empty { display: none; }
+#chordhud .ch-hint, #chordhud .ch-legend { margin-top: 3px; }
+#chordhud .ch-legend { position: absolute; left: 50%; bottom: 100%; transform: translate(-50%, -4px); width: 230px; max-width: 86vw; box-sizing: border-box; padding: 5px 7px; pointer-events: auto;
+  background: rgba(15, 10, 6, .95); border: 2px solid #6a5232; font-size: 11px; line-height: 13px; color: #d9c79a; white-space: normal; }
+#chordhud .ch-legend[hidden] { display: none; }
+#chordhud .ch-legend p { margin: 2px 0 3px; color: #fff; }
+#chordhud .ch-legend b { display: inline-block; min-width: 38px; font-weight: normal; color: var(--mc); }
+#chordhud .ch-legend .ch-x { color: #8a7a5a; text-align: right; margin: 3px 0 0; }

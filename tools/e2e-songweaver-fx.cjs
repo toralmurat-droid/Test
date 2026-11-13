@@ -1,8 +1,11 @@
-// Dev harness for the Songweaver client effects (client/src/skillfx.ts, chordHud.ts, soundCues.ts): logs a hero in, then
-// fires FAKE contract events, status words and messages (docs/songweaver-progress.md "Interface contract") through the
-// scene, and takes screenshots at desktop and phone sizes. Nothing here touches the server's rules.
-// Start the production build on a fresh save file first, then:
-//   node tools/e2e-songweaver-fx.cjs 2631 docs/art
+// Real end-to-end check of the Songweaver client effects against a real server, at desktop and phone sizes:
+// songs (ring), the Amen progression (chord HUD, legend), Modulate, waves in flight, a deaf slime and a fragile
+// skeleton (ringing / muffled numbers, ear icon, hint line), and `refId not found` errors.
+// Needs a DEV server (the /tp chat command is off in production) on a fresh save file, with the class playable, and
+// the client (vite dev) in front of it:
+//   ALLOW_ARCHIVED_CLASSES=1 SAVE_FILE=/tmp/saves.json npx tsx server/index.ts      (port 2567)
+//   npx vite --port 5180
+//   node tools/e2e-songweaver-fx.cjs 5180 docs/art
 // (needs playwright; set PLAYWRIGHT_CHROME=/path/to/chrome if its own browser is not installed)
 const { chromium, devices } = require("playwright");
 const PORT = process.argv[2], OUT = process.argv[3];
@@ -13,89 +16,117 @@ const SETUPS = [
 ];
 (async () => {
   const browser = await chromium.launch(process.env.PLAYWRIGHT_CHROME ? { executablePath: process.env.PLAYWRIGHT_CHROME } : {});
+  const report = {};
   for (const [name, opts] of SETUPS) {
+    if (process.argv[4] && process.argv[4] !== name) continue; // optional: run one setup only
     const ctx = await browser.newContext(opts);
     const page = await ctx.newPage();
     const errors = [];
     page.on("pageerror", (e) => errors.push(e.message));
-    await page.addInitScript(() => { try { localStorage.setItem("cls", "summoner"); } catch {} });
-    await page.goto(`http://localhost:${PORT}/`);
+    page.on("console", (m) => { if (m.type() === "error" || /refId|decode/i.test(m.text())) errors.push(m.text()); });
+    await page.addInitScript(() => { try { localStorage.setItem("cls", "songweaver"); } catch {} });
+    await page.goto(`http://localhost:${PORT}/?archived=1`);
     await page.waitForTimeout(1500);
-    await page.fill("#name", "Fx" + name.replace(/[^a-z]/g, "").slice(0, 10));
+    await page.fill("#name", "Sw" + name.replace(/[^a-z]/g, "").slice(0, 10));
     await page.fill("#password", "songpass1");
     await page.click("#play");
     await page.waitForSelector("#pkgo", { state: "visible", timeout: 20000 });
+    await page.screenshot({ path: `${OUT}/songweaver-e2e-${name}-0-picker.png` });
     await page.click("#pkgo");
     await page.waitForSelector("#hud:not([hidden])", { timeout: 60000 });
     await page.waitForTimeout(2500);
-    // Everything below runs in the page: `S` is the town scene, `me` my hero entity.
     await page.evaluate(() => {
       const S = window.__game.scene.scenes.find((s) => s.entities);
-      window.S = S; window.me = S.entities.get(S.me);
-      globalThis.__devSong = true;
-      globalThis.__devMobSound = { slime: { tier: "fragile", pitch: "H" }, rat: { tier: "deaf", pitch: "L" }, wolf: { tier: "keen", pitch: "M" } };
-      const emit = (t, m) => S.room.onMessageHandlers.emit(t, m);
-      window.emit = emit;
-      const sfx = (ev) => S.onSkillFx(ev);
-      window.sfx = sfx;
-      // a stand-in monster next to the hero: clone of a villager-less scene, so make one from a plain sprite entity
-      window.MOBS = [];
-      S.entities.forEach((e) => { if (e.mob && !e.state.dead) window.MOBS.push(e); });
+      window.S = S;
+      window.log = [];
+      // the mouse is not over any monster in a headless run: pin the hovered monster (its nameplate shows the ear icons)
+      Object.defineProperty(S.pointer, "hoverId", { get: () => window.__hover });
+      // record the sfx events and chat hints the client handled
+      const so = S.songEvent.bind(S);
+      S.songEvent = (ev) => { window.log.push(ev); return so(ev); };
+      const cn = S.chatNote.bind(S);
+      S.chatNote = (t, c) => { window.log.push({ ev: "hint", text: t }); return cn(t, c); };
     });
-    const info = await page.evaluate(() => ({ mobs: window.MOBS.length, kinds: window.MOBS.map((m) => m.state.kind).slice(0, 5) }));
-    console.log(name, info);
-    // 1. rings + notes + chord HUD + wave
-    await page.evaluate(() => {
-      const { me, S, emit, sfx } = window, x = me.sprite.x, y = me.sprite.y;
-      me.state.fx = "sg_ballad,mode:minor,res2";
-      emit("chord", { notes: ["vi", "IV"], mode: "minor", lockMs: 0 });
-      sfx({ ev: "note", id: S.me, s: "sg_ballad", deg: "vi", mode: "minor", pitch: "M", x, y });
-      setTimeout(() => sfx({ ev: "note", id: S.me, s: "sg_ballad", deg: "IV", mode: "minor", pitch: "M", x, y }), 250);
-      // wave shot flying right
-      const g = S.fx.addShot("dev1", { kind: "wave", x: x + 20, y: y - 8, vx: 1, vy: 0, size: 1 });
-      window.__wave = setInterval(() => { g.x += 2; }, 16);
-      setTimeout(() => { clearInterval(window.__wave); S.fx.removeShot("dev1"); g.destroy(); S.fx.impact(g.x, g.y, "wave", 0); }, 1500);
-      sfx({ ev: "bounce", x: x + 60, y: y - 20, mat: "stone" });
-      sfx({ ev: "bounce", x: x + 80, y: y + 10, mat: "wood" });
-      sfx({ ev: "bounce", x: x + 100, y: y - 10, mat: "metal" });
-    });
-    await page.waitForTimeout(600);
-    await page.screenshot({ path: `${OUT}/songweaver-${name}-1-ring-notes.png` });
-    // 2. shield + resonance 3 + chord fired
-    await page.evaluate(() => {
-      const { me, S, emit, sfx } = window, x = me.sprite.x, y = me.sprite.y;
-      me.state.fx = "sg_march,sg_pedal,mode:dorian,res3";
-      emit("chord", { notes: [], mode: "dorian", lockMs: 12000 });
-      sfx({ ev: "chord", id: S.me, prog: "resolve", mode: "dorian", x, y });
-      sfx({ ev: "resonate", id: S.me, x: x - 40, y: y - 10, shatter: true });
-      sfx({ ev: "shieldbreak", id: S.me, s: "sg_pedal", x: x + 40, y: y - 10 });
-      emit("hit", { id: S.me, dmg: 0 });
-    });
-    await page.waitForTimeout(450);
-    await page.screenshot({ path: `${OUT}/songweaver-${name}-2-shield-chord.png` });
-    // 3. every mode ring in a row (the hero's fx only: one mode at a time, quick succession)
-    for (const m of ["major", "lydian", "phrygian"]) {
-      await page.evaluate((m) => { window.me.state.fx = `sg_jig,mode:${m}`; }, m);
-      await page.waitForTimeout(250);
-      await page.screenshot({ path: `${OUT}/songweaver-${name}-3-ring-${m}.png`, clip: undefined });
+    const send = (t, m) => page.evaluate(([t, m]) => window.S.room.send(t, m), [t, m]);
+    const chat = (t) => send("chat", t);
+    const shot = (n) => page.screenshot({ path: `${OUT}/songweaver-e2e-${name}-${n}.png` });
+    const me = () => page.evaluate(() => { const p = window.S.room.state.players.get(window.S.me); return { cls: p.cls, level: p.level, fx: p.fx, x: p.x, y: p.y, mana: p.mp ?? p.mana }; });
+    const result = { cls: (await me()).cls };
+    await chat("/max");
+    await page.waitForTimeout(1200);
+    // ---- songs: Hearth Ballad ring (major, so Oakvale allows it) ----
+    await send("cast", "sg_ballad");
+    await page.waitForTimeout(900);
+    result.ballad = (await me()).fx;
+    await shot("1-song-ring");
+    // ---- Amen = vi (Pedal Point), IV (Mending Note), I (Hearth Ballad again once the song cooldown is ready) ----
+    await send("cast", "sg_pedal");
+    await page.waitForTimeout(300);
+    await send("cast", "sg_mend");
+    await page.waitForTimeout(2300);
+    await send("cast", "sg_ballad");
+    await page.waitForTimeout(1200);
+    result.chord = await page.evaluate(() => window.log.filter((e) => e.ev === "chord").map((e) => e.prog));
+    await shot("2-chord-fired");
+    await page.waitForTimeout(2500);
+    // legend: open through the real "?" button
+    await page.click("#chordhud .ch-help");
+    await page.waitForTimeout(300);
+    result.hudText = await page.evaluate(() => document.getElementById("chordhud")?.innerText.slice(0, 80));
+    await shot("3-chord-hud-legend");
+    await page.click("#chordhud .ch-help");
+    // ---- Modulate through every known key ----
+    const modes = [];
+    for (let i = 0; i < 5; i++) {
+      await send("cast", "sg_modulate");
+      await page.waitForTimeout(1000);
+      modes.push(((await me()).fx || "").split(",").find((w) => w.startsWith("mode:")));
     }
-    // 4. a monster: ear icon + ringing / muffled numbers + hint (if one is in view; walk out otherwise)
-    if (info.mobs) {
-      await page.evaluate(() => {
-        const { S, emit, sfx } = window, m = window.MOBS[0];
-        S.pointer.hovered = [...S.entities.entries()].find(([, e]) => e === m)[0];
-        const id = S.pointer.hovered;
-        m.state.fx = "res2";
-        emit("hit", { id, dmg: 42 });
-        sfx({ ev: "soundhit", id, x: m.sprite.x, y: m.sprite.y, tier: "keen", match: true });
-        emit("hit", { id, dmg: 17 });
-        sfx({ ev: "soundhit", id, x: m.sprite.x, y: m.sprite.y, tier: "dull", match: false });
-      });
-      await page.waitForTimeout(300);
-      await page.screenshot({ path: `${OUT}/songweaver-${name}-4-mob.png` });
-    }
-    console.log(name, "errors:", errors.slice(0, 5));
+    result.modes = modes;
+    // ---- the deaf slime in the North Meadow ----
+    const fightAt = async (tx, ty, kind, tag, skills) => {
+      await chat(`/tp ${tx} ${ty}`);
+      await page.waitForTimeout(2500);
+      const found = await page.evaluate((kind) => {
+        const S = window.S, m = S.entities.get(S.me); let best, bd = 1e9;
+        S.entities.forEach((e, id) => { if (e.mob && !e.state.dead && e.state.kind === kind) { const d = Math.hypot(e.sprite.x - m.sprite.x, e.sprite.y - m.sprite.y); if (d < bd) { bd = d; best = { id, x: e.state.x, y: e.state.y }; } } });
+        return best;
+      }, kind);
+      if (!found) return { found: false };
+      await chat(`/tp ${Math.floor(found.x / 32) - 3} ${Math.floor(found.y / 32)}`);
+      await page.waitForTimeout(800);
+      // hover a second monster of the kind (not hit yet): its nameplate shows the ear and note icons with the tooltip
+      await page.evaluate(([kind, id]) => { const S = window.S, m = S.entities.get(S.me); let bd = 1e9; window.__hover = id; S.entities.forEach((e, k) => { if (!e.mob || e.culled || e.state.dead || e.state.kind !== kind || k === id) return; const d = Math.hypot(e.sprite.x - m.sprite.x, e.sprite.y - m.sprite.y); if (d < bd) { bd = d; window.__hover = k; } }); }, [kind, found.id]);
+      await page.waitForTimeout(1500); // the headless frame rate is 2-3 fps
+      result[tag + "-ear"] = await page.evaluate(() => { const c = window.S.soundCues, e = window.S.entities.get(window.__hover); return c.ear && { vis: c.ear.visible, x: Math.round(c.ear.x), y: Math.round(c.ear.y), sc: c.ear.scaleX, lab: e?.label && [Math.round(e.label.x), Math.round(e.label.y)], tex: c.ear.texture.key, note: c.note?.visible }; });
+      await shot(`${tag}-ear`);
+      for (let i = 0; i < 14; i++) {
+        const t = await page.evaluate((id) => { const e = window.S.entities.get(id); return e && !e.state.dead ? { x: e.state.x, y: e.state.y } : null; }, found.id);
+        if (!t) break;
+        await page.evaluate((id) => { window.__hover = id; }, found.id);
+        await send("face", t);
+        await send("attack");
+        if (i % 4 === 1) for (const s of skills) await send("cast", s);
+        await page.waitForTimeout(280);
+        if (i === 1) await shot(`${tag}-wave`);
+        if (i === 2) await shot(`${tag}-numbers`);
+      }
+      return { found: true };
+    };
+    await chat("/max");
+    result.slime = await fightAt(100, 20, "slime", "4-slime", ["sg_shrill"]);
+    result.skeleton = await fightAt(94, 100, "skeleton", "5-skeleton", ["sg_shrill", "sg_crack"]);
+    result.events = await page.evaluate(() => {
+      const c = {}; for (const e of window.log) c[e.ev === "soundhit" ? `soundhit:${e.tier}${e.match ? "+match" : ""}` : e.ev] = (c[e.ev === "soundhit" ? `soundhit:${e.tier}${e.match ? "+match" : ""}` : e.ev] ?? 0) + 1;
+      return { counts: c, hints: window.log.filter((e) => e.ev === "hint").map((e) => e.text), resonate: window.log.filter((e) => e.ev === "resonate").slice(0, 2), note: window.log.filter((e) => e.ev === "note").slice(0, 3).map((e) => e.s + ":" + e.deg) };
+    });
+    result.errors = errors.slice(0, 8); // Colyseus `refId not found` / decode errors show up now and then (known, see CLAUDE.md gotchas)
+    report[name] = result;
     await ctx.close();
   }
+  console.log(JSON.stringify(report, null, 1));
   await browser.close();
-})();
+  const bad = Object.entries(report).filter(([, r]) => r.cls !== "songweaver" || !r.chord.includes("amen") || !r.slime.found || !r.skeleton.found || r.errors.some((e) => !/refId|decode|addCallback/i.test(e)));
+  if (bad.length) { console.error("E2E FAILED:", bad.map(([k]) => k).join(", ")); process.exit(1); }
+  console.log("E2E OK");
+})().catch((e) => { console.error("FAILED", e); process.exit(1); });

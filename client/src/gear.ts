@@ -1,4 +1,5 @@
 import { icon } from "./pixelicons";
+import { drawSongGearIcon } from "./songGearIcons";
 import { actionKey } from "./keymode";
 import Phaser from "phaser";
 import { gearDef, itemText, LOOT_IDS, canWear, GEAR_SLOTS, gearName, gearStats, gearSpeedMult, GearSlot, BAG_SIZE, SLOT_NAMES, TIER_NAMES, baseId, itemRarity, RARITY_NAMES, affixLines, itemLevel, reqProblem, reqText, activeGear, HeroReqInfo, Equipped, weaponElements, gearResist, weaponType } from "../../shared/gear";
@@ -185,7 +186,9 @@ export function iconCanvas(scene: Phaser.Scene, id: string, size = 32): HTMLCanv
   c.width = c.height = size;
   const ctx = c.getContext("2d")!;
   ctx.imageSmoothingEnabled = false;
-  drawFrame(scene, ctx, "gear_icons", baseId(id), 0, 0, size / (16 * ART_K));
+  const inAtlas = scene.textures.exists("gear_icons") && scene.textures.get("gear_icons").has(baseId(id));
+  if (inAtlas) drawFrame(scene, ctx, "gear_icons", baseId(id), 0, 0, size / (16 * ART_K));
+  else drawSongGearIcon(ctx, baseId(id), size); // fallback for a Songweaver id the atlas lacks (songGearIcons.ts)
   return c;
 }
 
