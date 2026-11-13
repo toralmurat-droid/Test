@@ -23,11 +23,13 @@ export function foeEffect(s: SkillDef): boolean {
 
 /**
  * A Songweaver may play in Oakvale without turning outlaw: a Hymnal or Folk skill that touches no enemy, in a bright
- * mode (Major or Lydian), and Modulate into one. Minor modes and Discord still break the "no magic" rule.
+ * mode (Major or Lydian). Modulate is always allowed, into any mode: changing key touches nobody (orchestrator,
+ * 2026-11-13). Songs in a minor mode and Discord still break the "no magic" rule.
  */
 export function busking(cls: string, mode: ModeId | undefined, s: SkillDef): boolean {
-  if (cls !== "songweaver" || MODES[mode ?? "major"].family !== "major") return false;
-  return !!s.modulate || (s.branch !== 2 && !s.finisher && !foeEffect(s));
+  if (cls !== "songweaver") return false;
+  if (s.modulate) return true;
+  return MODES[mode ?? "major"].family === "major" && s.branch !== 2 && !s.finisher && !foeEffect(s);
 }
 
 /**

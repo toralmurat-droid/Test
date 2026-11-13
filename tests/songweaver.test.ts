@@ -311,6 +311,19 @@ test("Oakvale: major Hymnal / Folk songs with no enemy effect are busking; minor
     assert.equal(p.outlaw, true, "Discord breaks the rule");
     again(); t.room.cast(a, "sg_call");
     assert.equal(p.outlaw, true, "a Folk skill that hits foes breaks the rule");
+    // Modulate never breaks it, whatever key it lands in: changing key touches nobody
+    again(); p.sk.mode = "major"; t.room.cast(a, "sg_modulate");
+    assert.equal(p.sk.mode, "minor", "Modulated into Minor");
+    assert.equal(p.outlaw, false, "Modulate into Minor stays lawful");
+    again(); p.sk.mode = "dorian"; t.room.cast(a, "sg_modulate");
+    assert.equal(p.sk.mode, "phrygian", "Modulated from one dark mode into another");
+    assert.equal(p.outlaw, false, "Modulate from a dark mode stays lawful");
+    // ...but a song played in the dark key it left is still forbidden magic
+    again(); p.sk.mode = "major"; t.room.cast(a, "sg_modulate");
+    assert.equal(p.outlaw, false);
+    again(); t.room.cast(a, "sg_ballad");
+    assert.equal(p.sk.song?.id, "sg_ballad", "the Ballad went off in Minor");
+    assert.equal(p.outlaw, true, "a Hearth Ballad in Minor in town still outlaws");
   } finally { await t.done(); }
 });
 
