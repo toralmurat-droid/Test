@@ -202,5 +202,18 @@ Open:
     headless Chromium against the production build, on a loaded machine. Never seen with deflate off. Suspected
     cause: state patches are handed to the socket as a view of the encoder's shared buffer while compression runs
     asynchronously. Under investigation; not yet confirmed for real players.
+    **Confirmed by reproduction** (minimal room, 40 clients, starved thread pool: 475-626 mismatches and
+    3,000-4,000 bad items per 15 s with deflate, 0 with a copy before sending, 0 without deflate; with the
+    default pool and login-like background work: 96 bad items, 0 with the copy). Mechanism:
+    `@colyseus/schema` `Encoder.encode` returns a view of `sharedBuffer`, `SchemaSerializer.applyPatches` hands
+    that view to every socket, and `ws` compresses later without copying (one process-wide limiter, 10 jobs at a
+    time), so a socket still waiting when the next patch is encoded sends corrupted bytes. The full state sent
+    on join has the same exposure (code reading only). Ordinary messages ("mv", "sfx") are copied and safe;
+    browser to server is safe. The client does not detect a corrupted patch: values stay wrong until they change
+    again. Fix, not applied: copy the patch once before sending (wrap the serializer's `encode` and
+    `getFullState` from `TownRoom.onCreate`, in a small `server/` module), with a test that patch N's bytes are
+    unchanged after patch N+1. Not reproduced with the real room. The bench bots have a second bug of the same
+    kind in the other direction (`ws` client, bot only), which is why `DEFLATE=1` bench figures are unusable.
+    Repro scripts were in the session scratchpad and are not in the repo.
   - `PHASES=1` showed `updateWatch` (about 4 ms) and `updateUndeadNight` (about 1.5 ms) per tick on a loaded
     machine; S-4 looks at why.
