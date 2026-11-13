@@ -258,3 +258,9 @@ Open:
   south of about tile 156 is treated as an overlay (never culled, sorted by world y).
 - Next: S4 (awake-monster fast paths), L3 and C5 (texture memory, still about 520 MB), C7 with the canvas-size
   finding, L1, L2. Order of the GPU items depends on the `?perf=1` reading from the owner's PC.
+- Review of the first wave: OK TO MERGE, nothing blocking. Follow-ups taken: destroyed objects now leave the static
+  grid's cells; a warning on `Mob.dozy`. Follow-ups open: the PR text must also list the taken-spots cache (a spot
+  freed within a tick stays taken until the next), the darkness overlay skipping the smooth pass, and the HUD parts
+  now updated about 8 times a second; a live old-versus-new check of `assignFlanks` in `tests/mobactive.test.ts`;
+  `ws` is imported by `tools/perf/bots.ts` but not declared in `package.json`; the "refId not found" gotcha in
+  `CLAUDE.md` is now explained and should be reworded by the owner.

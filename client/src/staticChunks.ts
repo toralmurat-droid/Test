@@ -86,15 +86,20 @@ export class StaticChunks {
     if (this.entries.has(o) || o.parentContainer || (o as any).input) return obj;
     const [l, t, r, b] = opts.box ?? boundsOf(o);
     const e: Entry = { o, seq: o.__seq ?? 0, n: 0, in: !!o.displayList, touched: false, dead: false, warm: opts.warm ?? 0, onLive: opts.onLive };
+    const ks: number[] = [];
     for (let cy = Math.floor(t / CELL); cy <= Math.floor(b / CELL); cy++) for (let cx = Math.floor(l / CELL); cx <= Math.floor(r / CELL); cx++) {
       const k = key(cx, cy);
+      ks.push(k);
       let list = this.cells.get(k);
       if (!list) this.cells.set(k, (list = []));
       list.push(e);
       if (this.live.has(k)) e.n++;
     }
     this.entries.set(o, e);
-    o.once(Phaser.GameObjects.Events.DESTROY, () => { e.dead = true; this.entries.delete(o); });
+    o.once(Phaser.GameObjects.Events.DESTROY, () => {
+      e.dead = true; this.entries.delete(o);
+      for (const k of ks) { const list = this.cells.get(k), i = list ? list.indexOf(e) : -1; if (i >= 0) list!.splice(i, 1); } // or the cells would hold it for good
+    });
     this.touch(e);
     return obj;
   }

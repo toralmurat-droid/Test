@@ -248,7 +248,7 @@ export class Mob extends Schema {
   ritual = false; banishAt = 0; nextStomp = 0; nextHarvest = 0; nextToss = 0; // BONES.ritual: given to a demon summoning; demon: when it goes back, next Hellfire Stomp
   leg = 0; restUntil = 0; // carriers: 0 = taking a plank to the engine, 1 = going back to the yard; pause at each end
   hist: number[] = []; // not synced: recent [time, x, y] samples, so a hero's swing can be judged where the monster was on their screen (REWIND_MS)
-  dozeSlot = -1; lastTick = 0; dozy = false; // server tick bookkeeping for dozing monsters (TownRoom.dozing)
+  dozeSlot = -1; lastTick = 0; dozy = false; // server tick bookkeeping for dozing monsters (TownRoom.dozing). Only the tick loop may clear dozy: it then calls mobs.wake(m). Clearing it anywhere else without wake() leaves the monster unvisited
   flankA = NaN; // BONES: side of the hero this skeleton closes in from (NaN = straight at him)
   hateId = ""; hate = 0; nextAggro = 0; threat = 0; // AGGRO: who hit it last and how much it hates them; level gap of the scariest hero near
 
