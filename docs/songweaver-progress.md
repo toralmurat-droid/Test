@@ -254,3 +254,17 @@ Agents build against this in parallel. Changing it needs the orchestrator.
   - Finisher names are now Amen, Turnaround, Shatterchord, Perfect Cadence, Deceptive Cadence.
   - `docs/songweaver-content.md` now carries the real `MOB_COMBAT` sound table.
   - To do (gameplay): play a busking line when a major-key song plays near an Oakvale NPC.
+- 2026-11-13: balance analysis done (balance-analyst).
+  - Main levers: wave range 140→160, class damage and HP, and softer `SOUND_TIER`. The bot plays acceptably.
+  - The full proposed package overshoots: Songweaver duel 39–58% from Lv 10, but it beats the Wizard 78–88% at
+    Lv 15–25 and pushes the Wizard to 27–41%.
+  - Orchestrator decisions (balance owner):
+    - Take the package but **trim class damage 22→~19**, tuned so the Wizard's overall stays at or near its before
+      numbers and the Songweaver vs the Wizard sits at 45–60% from Lv 10.
+    - Keep range 160, the `SOUND_TIER` / boss changes, slime dull, and the Hymnal and Folk buffs.
+    - **Waived targets:**
+      - the Summoner matchup floor: structural; the Wizard is also 0–13% against it; a Summoner rework is a
+        separate task;
+      - Night Raider: documented as near-unbeatable alone (owner 2026-11-08); the Vampire is also 0%;
+      - Lv 1 duel: the Vampire wins 96% at Lv 1 and the Wizard is at 18%.
+    - Known sim bug, not fixed here: `duel.ts` hits a piercing shot only once.
