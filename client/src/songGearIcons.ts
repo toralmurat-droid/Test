@@ -1,7 +1,7 @@
 /**
  * Bag icons for the Songweaver's starter kit (songweaver_weapon / _armour / _hat / _shoes). The generated atlas
- * (public/assets/gear/icons.png, built by tools/art) has no frames for them yet, so they are painted here in code at
- * 16x16 with the gear's own colours (shared/gear.ts) and scaled up crisp. Once the atlas has them, gear.ts uses those.
+ * (public/assets/gear/icons.png, built by tools/art) had no frames for them when this was written, so they are a code-painted fallback here at
+ * 16x16 with the gear's own colours (shared/gear.ts) and scaled up crisp. gear.ts prefers the atlas frame (the atlas has them now).
  */
 const P: Record<string, string> = { o: "#1b120a", w: "#8a5a2c", d: "#5a3a1a", l: "#b88048", g: "#e8d070", s: "#e8e0c8", b: "#d09a34", r: "#a8402a", t: "#2e7d74", f: "#d9482f", k: "#4e3220" };
 const ART: Record<string, string[]> = {

@@ -186,7 +186,9 @@ export function iconCanvas(scene: Phaser.Scene, id: string, size = 32): HTMLCanv
   c.width = c.height = size;
   const ctx = c.getContext("2d")!;
   ctx.imageSmoothingEnabled = false;
-  if (!drawSongGearIcon(ctx, baseId(id), size)) drawFrame(scene, ctx, "gear_icons", baseId(id), 0, 0, size / (16 * ART_K)); // the atlas has no Songweaver frames yet
+  const inAtlas = scene.textures.exists("gear_icons") && scene.textures.get("gear_icons").has(baseId(id));
+  if (inAtlas) drawFrame(scene, ctx, "gear_icons", baseId(id), 0, 0, size / (16 * ART_K));
+  else drawSongGearIcon(ctx, baseId(id), size); // fallback for a Songweaver id the atlas lacks (songGearIcons.ts)
   return c;
 }
 
