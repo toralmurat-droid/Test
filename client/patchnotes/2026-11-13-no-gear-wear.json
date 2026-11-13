@@ -1,0 +1,9 @@
+{
+  "date": "2026-11-13",
+  "pr": 384,
+  "title": "No more gear wear",
+  "changes": [
+    "Gear no longer wears out when you die, and always gives its full stats.",
+    "Repairs are gone from the smiths and armourers."
+  ]
+}

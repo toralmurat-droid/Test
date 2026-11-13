@@ -72,7 +72,7 @@ import { hashAddr, ideaLog, saveIdeas } from "./ideaStore";
 import { dropLive, LiveState, rememberLive, takeLive } from "./handoff";
 import { MobView } from "./mobView";
 import { act2Missing, act2Open, actAt, desertSpawn, WAYGATE_RANGE, waygateArrival, waygateById, WAYGATES } from "../shared/act2";
-import { repairCost, respecCost, WEAR, wearMult } from "../shared/upkeep";
+import { respecCost } from "../shared/upkeep";
 import { ARSENAL, ATTUNE_ORDER, attuneOf, bondShare, DEFAULT_GRIMOIRE, SUMMONER_TREE, ESSENCE, GOLEM, GOLEM_OF, golemSlots, isElement, isSummonKind, parseGrimoire, PORTAL, SUMMON, summonElement, summonScaleLevel, WISP, wispEls, type AttuneElement, type SummonKind } from "../shared/summons";
 import { cleanFeast, familyOf, type Feast, feastMult, THRALL, thrallMax } from "../shared/devour";
 import { Champions, type ChampState } from "./champions";
@@ -177,7 +177,6 @@ export class Player extends Schema {
   @type("number") crown = 0;
   // The Hide Rite (CHAINS[5], the Mawdeep Warrens' beast-folk): packed the same way
   @type("number") beast = 0;
-  @type("number") wear = 0; // gear wear 0-100 (shared/upkeep.ts): each death adds some, the smith repairs it for gold
   gateNoteAt = 0; // last "the waygate is cold" note (Act 2, shared/act2.ts)
   linkLock = ""; // the Mawdeep rope/stair a hero just came out of (shared/dungeon.ts LINKS): not taken again until they step off it
   nextSummon = 0; // when the server may bring back this player's quest fused blob (QuestStep.summon)
@@ -745,7 +744,6 @@ export class TownRoom extends Room<TownState> {
     });
     this.onMessage("buy", (client, msg: { i: number }) => this.shopBuy(client, msg?.i));
     this.onMessage("sell", (client, msg: { i: number }) => this.shopSell(client, msg?.i));
-    this.onMessage("repair", (client) => this.repairGear(client));
     this.onMessage("fuse", (client, msg: { id?: unknown }) => this.fuseRunesMsg(client, msg?.id));
     // Trading between players and the account stash (shared/trade.ts)
     this.onMessage("trade", (client, msg: { id?: string; name?: string }) => { if (this.allow("ask", client)) this.tradeAsk(client.sessionId, msg); });
@@ -1038,7 +1036,7 @@ export class TownRoom extends Room<TownState> {
         return [[a, q.questId], [b, q.questStage], [n, q.questCount], [ch.verKey, ch.version]];
       })),
       portals: [...p.portals], act: actAt(p.y, p.x),
-      bounty: p.bounty, bountyDone: p.bountyDone, wear: p.wear, feast: { ...p.feast },
+      bounty: p.bounty, bountyDone: p.bountyDone, feast: { ...p.feast },
       ...(p.cls === "summoner" ? { grimoire: this.grimoireOf(p), suTree: SUMMONER_TREE } : {}),
     };
   }
@@ -1073,7 +1071,6 @@ export class TownRoom extends Room<TownState> {
     });
     for (const id of cleanPortals(s.portals)) p.portals.add(id);
     p.bountyDone = Math.max(0, Math.floor(num(s.bountyDone)));
-    p.wear = Math.min(WEAR.max, Math.max(0, Math.round(num(s.wear))));
     p.bounty = cleanBounty(s.bounty);
     p.feast = cleanFeast(s.feast);
     const sv = s as unknown as Record<string, unknown>;
@@ -5132,20 +5129,6 @@ export class TownRoom extends Room<TownState> {
     return n?.shop ? SHOPS[n.shop] : undefined;
   }
 
-  /** The smith mends all worn gear for gold (shared/upkeep.ts repairCost). */
-  private repairGear(client: Client) {
-    const p = this.state.players.get(client.sessionId);
-    const shop = p && !p.dead ? this.shopNear(p) : undefined;
-    if (!p || !shop?.repairs) return;
-    const cost = repairCost(GEAR_SLOTS.map((s) => p[s]), p.wear);
-    if (!cost) return client.send("shop", { ok: false, text: "Your gear is in good shape" });
-    if (p.gold < cost) return client.send("shop", { ok: false, text: `Repairs cost ${cost} gold` });
-    p.gold -= cost;
-    p.wear = 0;
-    this.applyStats(p);
-    client.send("shop", { ok: true, text: `Repaired for ${cost} gold` });
-  }
-
   private shopBuy(client: Client, i: unknown) {
     const p = this.state.players.get(client.sessionId);
     const shop = p && !p.dead ? this.shopNear(p) : undefined;
@@ -5799,8 +5782,8 @@ export class TownRoom extends Room<TownState> {
   /** Recompute stats and max HP from class + level + equipped gear. */
   private applyStats(p: Player) {
     const st = statsFor(p.cls, { sta: p.ptSta, str: p.ptStr, mag: p.ptMag, dex: p.ptDex });
-    const g = gearStats(p.cls, this.equipped(p)), wm = wearMult(p.wear); // worn gear gives less (shared/upkeep.ts)
-    st.sta += Math.round(g.sta * wm); st.str += Math.round(g.str * wm); st.mag += Math.round(g.mag * wm); st.dex += Math.round(g.dex * wm);
+    const g = gearStats(p.cls, this.equipped(p));
+    st.sta += g.sta; st.str += g.str; st.mag += g.mag; st.dex += g.dex;
     p.sta = st.sta; p.str = st.str; p.mag = st.mag; p.dex = st.dex;
     const newMax = Math.round(maxHpFromStats(p.cls, st, p.level) * talentMult(p.cls, p.talents, "hp") * feastMult(p.feast, "hp"));
     p.hp = Math.min(newMax, p.hp + Math.max(0, newMax - p.maxHp));
@@ -5888,11 +5871,6 @@ export class TownRoom extends Room<TownState> {
     t.guarding = false;
     // No magic in Oakvale: dying pays for it, the hero comes back a free citizen (villagers and watch stand down)
     this.setOutlaw(tid, t, false);
-    // Dying wears the gear (shared/upkeep.ts): it gives less until the smith repairs it
-    if (t.wear < WEAR.max) {
-      t.wear = Math.min(WEAR.max, t.wear + WEAR.perDeath);
-      this.applyStats(t);
-    }
     this.broadcast("kill", { killer: byName, victim: t.name });
     // The victim gets a "You died - killed by ..." screen until they respawn
     this.clients.find((c) => c.sessionId === tid)?.send("died", { by: byName, ms: RESPAWN_MS });
