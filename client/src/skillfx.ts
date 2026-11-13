@@ -3,6 +3,8 @@ import { ISO } from "./isoflag";
 import { AreaLook, BLOOD_RITE_MS, FxStyle, impactMs, LEAP_MS, RAIN_FALL_MS, skillById, SkillDef, SWORD_FALL_MS } from "../../shared/skills";
 import { paintSigil, ICON } from "./skillArt";
 import { ELEMENT_COLORS, type Element } from "../../shared/elements";
+import { drawSoundWaveSheet, SOUND_WAVE_FLIGHT, SOUND_WAVE_FRAMES, SOUND_WAVE_H, SOUND_WAVE_IMPACT, SOUND_WAVE_W } from "./soundWaveArt";
+import { modeColor, SHIELD_BUFFS, SONG_BUFFS } from "./songTables";
 import { MIST_DISSOLVE_MS, MIST_LINGER_MS, MIST_REFORM_AT_MS, MIST_REFORM_MS, MIST_REVEAL_MS } from "./skillMoveData";
 
 /**
@@ -69,7 +71,7 @@ const VOIDC = [0xd8c4ff, 0xb48cff, 0x7a4ad0, 0x3a1d6e];
 const EL_STYLE = { fire: "fire", cold: "frost", poison: "poison", shock: "lightning" } as const satisfies Record<string, FxStyle>;
 const GOO = [0xf3e5ff, 0xd1a6ff, 0xb57cff, 0x8e4fd6, 0x5b2c91];
 /** Basic and monster projectiles drawn here too (not only skill shots): their trails and impacts. */
-const BASIC_SHOTS = new Set(["fireball", "arrow", "bolt", "knife", "stone", "slimeball", "magicbolt", "shadowbolt", "skelthrow"]);
+const BASIC_SHOTS = new Set(["fireball", "arrow", "bolt", "knife", "stone", "slimeball", "magicbolt", "shadowbolt", "skelthrow", "wave"]);
 
 /** World offset that shows as `h` px straight up on screen. */
 const lift = (h: number): [number, number] => (ISO ? [-h, -h] : [0, -h]);
@@ -94,6 +96,11 @@ export class SkillFx {
       tex.refresh();
     };
     make("fx_px", 1, 1, (c) => { c.fillStyle = "#fff"; c.fillRect(0, 0, 1, 1); });
+    // A tiny eighth note for the Songweaver's drifting notes (white, tinted per mode)
+    make("fx_note", 6, 9, (c) => {
+      c.fillStyle = "#fff";
+      c.fillRect(0, 6, 3, 2); c.fillRect(1, 5, 2, 4); c.fillRect(3, 1, 1, 7); c.fillRect(4, 1, 1, 2); c.fillRect(5, 2, 1, 2);
+    });
     // Soft round light, stepped in 4 rings so it still reads as pixel art
     make("fx_glow", 32, 32, (c) => {
       for (let i = 4; i >= 1; i--) {
@@ -311,6 +318,7 @@ export class SkillFx {
     const e = ev.id ? this.ent(ev.id) : undefined;
     const near = this.nearMe(ev.x ?? e?.sprite.x, ev.y ?? e?.sprite.y);
     if (this.voidEvent(ev)) return;
+    if (this.songEvent(ev, e)) return;
     switch (ev.ev) {
       case "cast": {
         if (!e) break;
@@ -1912,6 +1920,11 @@ export class SkillFx {
     const box = (...objs: Phaser.GameObjects.GameObject[]) => sc.add.container(s.x, s.y, objs).setDepth(DEPTH);
     const d = sc.add.graphics();
     switch (look) {
+      case "wave": {
+        // The Songweaver's plucked sound wave (soundWaveArt.ts), turned to the shot's angle; tickShots flips its frames
+        const img = sc.add.image(0, 0, this.waveSheet(), "w0").setScale(size / 1.5);
+        return box(light(0xffc54d, 0.5 * size, 0.35), img).setAngle(deg);
+      }
       case "fireball": {
         // Hot white core inside orange flame, flickering (see tickShots)
         d.fillStyle(0xd62800, 0.85).fillCircle(0, 0, 3.6 * size).fillStyle(0xff9f1c).fillCircle(0, 0, 2.7 * size)
@@ -1984,6 +1997,7 @@ export class SkillFx {
         if (imb === "fire" && Math.random() < 4 * dt) this.p(x - ax * 5, y - ay * 5, 2, pick([0x4a4a4a, 0x6d6d6d]), { vz: 10, life: 420, size: 2, size1: 3, alpha: 0.3, add: false, depth: DEPTH - 1 });
       }
       switch (look) {
+        case "wave": ((g as any).last as Phaser.GameObjects.Image).setFrame(`w${Math.floor(age / 70) % SOUND_WAVE_FLIGHT}`); break;
         case "shuriken": (g as any).angle += 1400 * dt; if (Math.random() < 0.4) this.p(x, y, 0, 0xffffff, { life: 120, depth: DEPTH - 1 }); break;
         case "net": (g as any).angle += 400 * dt; break;
         case "voidlance": for (let i = 0; i < n(50); i++) this.p(x - ax * rnd(4, 9), y - ay * rnd(4, 9), z + rnd(-1, 1), pick(VOIDC), { vx: -ax * 20 + rnd(-4, 4), vy: -ay * 20 + rnd(-4, 4), life: rnd(140, 260), size: 1, size1: 0 }); break;
@@ -2183,6 +2197,7 @@ export class SkillFx {
   /** Impacts of basic and monster shots: sparks, splinters, goo and light; the fireball's splash puffs up bigger. */
   private basicImpact(x: number, y: number, kind: string, r: number) {
     switch (kind) {
+      case "wave": this.waveBurst(x, y); break;
       case "fireball": {
         const k = r > 0 ? Math.min(2.4, 1 + r / 25) : 1;
         // a white-hot flash, a fireball that swells, a ring of flame along the ground, embers and smoke going up
@@ -2224,6 +2239,169 @@ export class SkillFx {
     }
   }
 
+  // ---- Songweaver (docs/songweaver-progress.md, "Interface contract"): cosmetic, from sfx events and status words ----
+
+  /** Casters seen this frame and last frame (`mode:<id>` status words): allies' song rings take the nearest one's colour. */
+  private srcs = [{ x: new Float32Array(8), y: new Float32Array(8), c: new Uint32Array(8), n: 0 }, { x: new Float32Array(8), y: new Float32Array(8), c: new Uint32Array(8), n: 0 }];
+  private srcCur = 0;
+
+  /** The sound-wave sheet as a texture with frames "w0".."w10" (0-5 flight loop, 6-10 impact). */
+  private waveSheet() {
+    const key = "fx_soundwave", tx = this.scene.textures;
+    if (!tx.exists(key)) {
+      const t = tx.createCanvas(key, SOUND_WAVE_W * SOUND_WAVE_FRAMES, SOUND_WAVE_H)!;
+      drawSoundWaveSheet(t.getContext());
+      for (let i = 0; i < SOUND_WAVE_FRAMES; i++) t.add(`w${i}`, 0, i * SOUND_WAVE_W, 0, SOUND_WAVE_W, SOUND_WAVE_H);
+      t.refresh();
+    }
+    return key;
+  }
+
+  /** The wave bursts open where it lands (impact frames), with a few gold sparks. */
+  private waveBurst(x: number, y: number) {
+    const [lx, ly] = lift(5);
+    const img = this.scene.add.image(x + lx, y + ly, this.waveSheet(), `w${SOUND_WAVE_FLIGHT}`).setScale(1 / 1.5).setDepth(DEPTH + 1);
+    this.scene.tweens.addCounter({ from: 0, to: SOUND_WAVE_IMPACT - 0.01, duration: 280, onUpdate: (tw) => img.setFrame(`w${SOUND_WAVE_FLIGHT + Math.floor(tw.getValue() ?? 0)}`), onComplete: () => img.destroy() });
+    this.burst(x, y, 4, "holy", 5, 40, 260);
+  }
+
+  /** A ring of coloured sparks along the ground (ring() takes a palette; this one a single colour). */
+  private tintRing(x: number, y: number, r: number, color: number, n: number, life = 420, z = 2) {
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2 + rnd(-0.1, 0.1), sp = (r / (life / 1000)) * rnd(0.7, 1.1);
+      this.p(x, y, z, color, { vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, vz: rnd(0, 12), g: 40, drag: 2.2, life: life * rnd(0.8, 1.2), size: pick([1, 1, 2]), size1: 0 });
+    }
+  }
+
+  /** Falling shards (broken shield, shattered monster). */
+  private shards(x: number, y: number, z: number, colors: number[], n: number, speed = 60) {
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * Math.PI * 2, s = speed * rnd(0.4, 1);
+      this.p(x, y, z, pick(colors), { vx: Math.cos(a) * s, vy: Math.sin(a) * s * 0.6, vz: rnd(15, speed), g: 170, drag: 1.2, life: rnd(420, 760), size: pick([1, 2, 2]), size1: 1, add: false });
+    }
+  }
+
+  /** Eighth notes drifting up from (x, y), tinted by the mode. */
+  private notesUp(x: number, y: number, color: number, n: number, h0 = 12) {
+    for (let i = 0; i < n; i++) {
+      const [lx, ly] = lift(h0), [ux, uy] = lift(rnd(22, 34)), dx = rnd(-7, 7);
+      const im = this.scene.add.image(x + rnd(-4, 4) + lx, y + ly, "fx_note").setTint(color).setDepth(DEPTH + 4).setAlpha(0.95);
+      this.scene.tweens.add({ targets: im, x: im.x + dx + ux - lx, y: im.y + uy - ly, alpha: 0, duration: rnd(800, 1100), delay: i * 90, ease: "Sine.easeOut", onComplete: () => im.destroy() });
+    }
+  }
+
+  /** Colour of the nearest caster seen last frame (for allies who carry a song but not the caster's `mode:` word). */
+  private nearMode(x: number, y: number): number {
+    const s = this.srcs[1 - this.srcCur];
+    let best = 480 * 480, c = modeColor(undefined);
+    for (let i = 0; i < s.n; i++) { const d = (s.x[i] - x) ** 2 + (s.y[i] - y) ** 2; if (d < best) { best = d; c = s.c[i]; } }
+    return c;
+  }
+
+  /** A fully absorbed hit (dmg 0): a small blue flash on the shield. */
+  absorbed(e: FxEntity) {
+    this.glow(e.sprite.x, e.sprite.y, e.top * 0.5, 12, 0x9ad1ff, 220, 0.8);
+    this.shards(e.sprite.x, e.sprite.y, e.top * 0.5, [0xd6f0ff, 0x9ad1ff], 3, 30);
+  }
+
+  /** Sfx events of the Songweaver contract. True when handled here. */
+  private songEvent(ev: any, e: FxEntity | undefined): boolean {
+    const x = ev.x ?? e?.sprite.x, y = ev.y ?? e?.sprite.y;
+    switch (ev.ev) {
+      case "note": {
+        if (x === undefined || y === undefined) return true;
+        const [hx, hy] = e ? this.hand(e) : [x, y], c = modeColor(ev.mode);
+        this.notesUp(hx, hy, c, 1);
+        this.glow(hx, hy, 8, 7, c, 200, 0.5);
+        return true;
+      }
+      case "chord": {
+        if (x === undefined || y === undefined) return true;
+        const c = modeColor(ev.mode);
+        this.tintRing(x, y, 46, c, 34, 520, 3);
+        this.glow(x, y, 4, 30, c, 480, 0.8, true);
+        this.glow(x, y, 10, 14, 0xffffff, 200, 0.8);
+        this.notesUp(x, y, c, 3, 14);
+        return true;
+      }
+      case "resonate": {
+        if (x === undefined || y === undefined) return true;
+        const z = e ? e.top * 0.5 : 6, c = ev.shatter ? 0xffffff : 0xbff3ff;
+        this.tintRing(x, y, ev.shatter ? 40 : 30, c, ev.shatter ? 36 : 24, 420, z);
+        this.tintRing(x, y, ev.shatter ? 26 : 18, 0xffd24d, 16, 360, z);
+        this.glow(x, y, z, ev.shatter ? 28 : 20, c, 380, 0.9);
+        if (ev.shatter) this.shards(x, y, z, [0xffffff, 0xbff3ff, 0x9ad1ff, 0xffd24d], 18, 90);
+        return true;
+      }
+      case "bounce": {
+        if (x === undefined || y === undefined) return true;
+        const cols = ev.mat === "wood" ? [0xc89a5a, 0x8d6a3a, 0xffe0a8] : ev.mat === "metal" ? [0xffffff, 0xbfe6ff, 0x9ad1ff] : [0xffffff, 0xd0d0d0, 0x9a9a9a];
+        this.glow(x, y, 4, 9, cols[0], 160, 0.9);
+        for (let i = 0; i < 7; i++) this.p(x, y, 4, pick(cols), { vx: rnd(-50, 50), vy: rnd(-30, 30), vz: rnd(10, 40), g: 140, life: rnd(180, 320), size: pick([1, 2]), size1: 0 });
+        this.tintRing(x, y, 12, 0xffc54d, 8, 240, 4);
+        return true;
+      }
+      case "soundhit": {
+        if (x === undefined || y === undefined) return true;
+        const z = e ? e.top * 0.55 : 6, t = ev.tier;
+        if (ev.match) { this.tintRing(x, y, 16, 0xffd24d, 12, 300, z); this.glow(x, y, z, 12, 0xffd24d, 260, 0.8); }
+        else if (t === "keen" || t === "fragile") for (let i = 0; i < 4; i++) this.p(x, y, z, pick([0xffd24d, 0xfff3b0]), { vx: rnd(-30, 30), vy: rnd(-15, 15), vz: rnd(15, 40), g: 80, life: rnd(260, 420), size: pick([1, 2]), size1: 0 });
+        else if (t === "deaf" || t === "dull") for (let i = 0; i < 3; i++) this.p(x, y, z, pick([0x8a8a8a, 0x6a6a6a]), { vx: rnd(-10, 10), vz: rnd(6, 14), life: 450, size: 2, size1: 3, alpha: 0.4, add: false });
+        return true;
+      }
+      case "shieldbreak": {
+        if (x === undefined || y === undefined) return true;
+        const z = e ? e.top * 0.5 : 8;
+        this.tintRing(x, y, 24, 0x9ad1ff, 22, 380, z);
+        this.glow(x, y, z, 22, 0xd6f0ff, 300, 0.9);
+        this.shards(x, y, z, [0xffffff, 0xd6f0ff, 0x9ad1ff, 0x4cc9f0], 14, 80);
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /** Song rings, resonance glow and shield bubbles from the status words (`words` is the entity's fx split on ","). */
+  private songStatus(e: FxEntity, g: Phaser.GameObjects.Graphics, words: string[], dt: number) {
+    const x = e.sprite.x, y = e.sprite.y, top = e.top, xs = Math.round(x), ys = Math.round(y);
+    let mode = "", res = 0, ring = false, shield = false;
+    for (let i = 0; i < words.length; i++) {
+      const w = words[i];
+      if (w.length > 5 && w.startsWith("mode:")) mode = w.slice(5);
+      else if (w.length === 4 && w.startsWith("res")) res = w.charCodeAt(3) - 48;
+      else if (SONG_BUFFS.has(w)) ring = true;
+      else if (SHIELD_BUFFS.has(w) || (w.startsWith("sg_") && skillById(w)?.buff?.shield)) shield = true;
+    }
+    const chance = (perSec: number) => Math.random() < perSec * dt;
+    const pulse = 0.5 + 0.5 * Math.sin(this.t / 260), flat = ISO ? 0.5 : 0.6;
+    if (mode) {
+      const s = this.srcs[this.srcCur];
+      if (s.n < 8) { s.x[s.n] = x; s.y[s.n] = y; s.c[s.n] = modeColor(mode); s.n++; }
+    }
+    if (ring) {
+      const c = mode ? modeColor(mode) : this.nearMode(x, y), r = 17 + pulse * 2;
+      g.fillStyle(c, 0.07).fillEllipse(xs, ys, r * 2, r * 2 * flat);
+      g.lineStyle(1, c, 0.35 + 0.25 * pulse).strokeEllipse(xs, ys, r * 2, r * 2 * flat);
+      const r2 = 8 + ((this.t / 40) % 14); // a second, fainter ring spreading outwards
+      g.lineStyle(1, c, 0.3 * (1 - (r2 - 8) / 14)).strokeEllipse(xs, ys, r2 * 2, r2 * 2 * flat);
+      if (chance(1.4)) this.p(x + rnd(-10, 10), y + rnd(-3, 3), 2, c, { vz: rnd(10, 22), life: rnd(500, 800), size: 1, size1: 0 });
+    }
+    if (res > 0) {
+      // Resonance (res1..res3): the body hums in a pale ring that trembles and brightens, gold at the top step
+      const c = res >= 3 ? 0xffd24d : res === 2 ? 0xdff8ff : 0x9fe8ff, w = top * 0.7 + res * 2 + Math.sin(this.t / (90 - res * 15)) * res;
+      g.lineStyle(1, c, 0.3 + 0.2 * res).strokeEllipse(xs, ys - Math.round(top * 0.5), w, top + res * 2);
+      if (res >= 2) g.lineStyle(1, c, 0.25 * res).strokeEllipse(xs, ys - Math.round(top * 0.5), w + 4 + pulse * 3, top + 4 + res * 2 + pulse * 3);
+      if (chance(2 + res * 5)) this.p(x + rnd(-6, 6), y + rnd(-1, 1), rnd(2, top), c, { vx: rnd(-8, 8), vz: rnd(4, 14), life: 320, size: 1, size1: 0 });
+      if (res >= 3 && chance(3)) this.glow(x, y, top * 0.5, 12, c, 260, 0.45);
+    }
+    if (shield) {
+      const rad = top / 2 + 4, cy = ys - Math.round(top / 2);
+      g.fillStyle(0x9ad1ff, 0.1 + 0.04 * pulse).fillCircle(xs, cy, rad);
+      g.lineStyle(1, 0xcfeaff, 0.75).strokeCircle(xs, cy, rad);
+      g.fillStyle(0xffffff, 0.7).fillRect(xs - rad * 0.55, cy - rad * 0.55, 2, 1).fillRect(xs - rad * 0.55, cy - rad * 0.55 + 1, 1, 2);
+    }
+  }
+
   // ---- statuses on heroes and monsters -------------------------------------------------------------------
 
   /** Effects on an entity this frame from its status words (Player.fx / Mob.fx). Draws marks into `g` (the entity's HUD graphics). */
@@ -2234,6 +2412,7 @@ export class SkillFx {
     const xs = Math.round(x), ys = Math.round(y);
     const chance = (perSec: number) => Math.random() < perSec * dt;
     const words = fx.split(",");
+    this.songStatus(e, g, words, dt);
     // Boil Blood: erupts once when it takes hold
     if (words.includes("boil")) { if (!this.boiling.has(e.state)) { this.boiling.add(e.state); this.boilErupt(e); } }
     else this.boiling.delete(e.state);
@@ -2314,6 +2493,7 @@ export class SkillFx {
   update(dtMs: number) {
     const dt = Math.min(0.05, dtMs / 1000);
     this.t += dtMs;
+    this.srcCur = 1 - this.srcCur; this.srcs[this.srcCur].n = 0; // song colours: last frame's casters become the lookup
     for (const em of this.emitters) if (this.t >= em.next) { em.next = this.t + em.every; em.fn(); }
     this.emitters = this.emitters.filter((em) => this.t < em.until);
     this.tickFields(dt);
