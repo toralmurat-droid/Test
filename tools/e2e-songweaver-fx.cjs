@@ -18,6 +18,7 @@ const SETUPS = [
   const browser = await chromium.launch(process.env.PLAYWRIGHT_CHROME ? { executablePath: process.env.PLAYWRIGHT_CHROME } : {});
   const report = {};
   for (const [name, opts] of SETUPS) {
+    if (process.argv[4] && process.argv[4] !== name) continue; // optional: run one setup only
     const ctx = await browser.newContext(opts);
     const page = await ctx.newPage();
     const errors = [];
@@ -94,6 +95,11 @@ const SETUPS = [
       if (!found) return { found: false };
       await chat(`/tp ${Math.floor(found.x / 32) - 3} ${Math.floor(found.y / 32)}`);
       await page.waitForTimeout(800);
+      // hover a second monster of the kind (not hit yet): its nameplate shows the ear and note icons with the tooltip
+      await page.evaluate(([kind, id]) => { const S = window.S, m = S.entities.get(S.me); let bd = 1e9; window.__hover = id; S.entities.forEach((e, k) => { if (!e.mob || e.culled || e.state.dead || e.state.kind !== kind || k === id) return; const d = Math.hypot(e.sprite.x - m.sprite.x, e.sprite.y - m.sprite.y); if (d < bd) { bd = d; window.__hover = k; } }); }, [kind, found.id]);
+      await page.waitForTimeout(1500); // the headless frame rate is 2-3 fps
+      result[tag + "-ear"] = await page.evaluate(() => { const c = window.S.soundCues, e = window.S.entities.get(window.__hover); return c.ear && { vis: c.ear.visible, x: Math.round(c.ear.x), y: Math.round(c.ear.y), sc: c.ear.scaleX, lab: e?.label && [Math.round(e.label.x), Math.round(e.label.y)], tex: c.ear.texture.key, note: c.note?.visible }; });
+      await shot(`${tag}-ear`);
       for (let i = 0; i < 14; i++) {
         const t = await page.evaluate((id) => { const e = window.S.entities.get(id); return e && !e.state.dead ? { x: e.state.x, y: e.state.y } : null; }, found.id);
         if (!t) break;
@@ -103,12 +109,7 @@ const SETUPS = [
         if (i % 4 === 1) for (const s of skills) await send("cast", s);
         await page.waitForTimeout(280);
         if (i === 1) await shot(`${tag}-wave`);
-        if (i === 2) {
-          // hover a second monster of the kind (one that has not been hit): its nameplate shows the ear and note icons
-          await page.evaluate(([kind, id]) => { const S = window.S; S.entities.forEach((e, k) => { if (e.mob && !e.state.dead && e.state.kind === kind && k !== id) window.__hover = k; }); }, [kind, found.id]);
-          await page.waitForTimeout(250);
-          await shot(`${tag}-numbers-ear`);
-        }
+        if (i === 2) await shot(`${tag}-numbers`);
       }
       return { found: true };
     };

@@ -3146,7 +3146,7 @@ export class TownScene extends Phaser.Scene {
       // Songweaver: how this monster hears (ear tier + pitch arrow) beside its name while hovered / targeted
       if (e.mob && e.label && !p.dead && !p.hidden && (id === this.pointer?.hoverId || id === this.pointer?.targetId)
         && (this.room.state as any).players?.get(this.me)?.cls === "songweaver" && soundOf(p.kind)) {
-        this.soundCues.drawIcons(this, Math.round(x + e.label.displayWidth / 2 + 3), Math.round(mobBarY - 10), p.kind, e.sprite.y + 3, id === this.pointer?.hoverId, PIXEL_FONT);
+        this.soundCues.drawIcons(this, e.label, p.kind, e.sprite.y + 3, id === this.pointer?.hoverId, PIXEL_FONT, e.sprite);
       }
       // (Stacks built by basic hits are shown by the skill keys, see chargeCell: no pips under the hero, Murat 2026-11-04)
       const maxHp = p.maxHp;
