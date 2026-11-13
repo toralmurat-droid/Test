@@ -39,7 +39,7 @@ import { isDecorSolidAt, npcById, npcNear, TALK_RANGE } from "../shared/npcs";
 import { beyondWall, WATCH, WATCH_POSTS, WatchPost } from "../shared/watch";
 import { inVillage, WRATH } from "../shared/wrath";
 import { sellPrice, shopBuys, shopFuses, SHOPS } from "../shared/shops";
-import { BLOB_KINDS, CHAINS, CROWN_CHAIN, packQuest, chainOpen, chainState, inZone, isBlob, npcPresent, QuestState, questStep, stepGoal, Summon, type BossVoice, TUT_CHAIN, TUT_QUESTS, USE_RANGE } from "../shared/quests";
+import { BLOB_KINDS, CHAINS, CROWN_CHAIN, packQuest, chainDone, chainOpen, chainState, inZone, isBlob, npcPresent, QuestState, questStep, stepGoal, Summon, type BossVoice, TUT_CHAIN, TUT_QUESTS, USE_RANGE } from "../shared/quests";
 import { findHideSpot, HIDE, MOTHER_KEEP_OUT, noMobsAt, spawnPoint, SPAWN_ZONES, villageDist, zoneCap } from "../shared/spawns";
 import { blocked, moveStep } from "../shared/movement";
 import { NIGHT_RAID, raiderByKey, raiderIgnores, RAIDERS } from "../shared/raiders";
@@ -72,7 +72,7 @@ import { hashAddr, ideaLog, saveIdeas } from "./ideaStore";
 import { dropLive, LiveState, rememberLive, takeLive } from "./handoff";
 import { MobView } from "./mobView";
 import { act2Missing, act2Open, actAt, desertSpawn, WAYGATE_RANGE, waygateArrival, waygateById, WAYGATES } from "../shared/act2";
-import { repairCost, respecCost, WEAR, wearMult } from "../shared/upkeep";
+import { respecCost } from "../shared/upkeep";
 import { ARSENAL, ATTUNE_ORDER, attuneOf, bondShare, DEFAULT_GRIMOIRE, SUMMONER_TREE, ESSENCE, GOLEM, GOLEM_OF, golemSlots, isElement, isSummonKind, parseGrimoire, PORTAL, SUMMON, summonElement, summonScaleLevel, WISP, wispEls, type AttuneElement, type SummonKind } from "../shared/summons";
 import { cleanFeast, familyOf, type Feast, feastMult, THRALL, thrallMax } from "../shared/devour";
 import { Champions, type ChampState } from "./champions";
@@ -160,7 +160,6 @@ export class Player extends Schema {
   // Every quest chain's progress (shared/quests.ts CHAINS, read with chainState): packed quest, step and count under the
   // chain's QuestChain.packed key, one synced field for all of them. A chain not begun has no key (qset drops zeros).
   @type({ map: "number" }) quests = new MapSchema<number>();
-  @type("number") wear = 0; // gear wear 0-100 (shared/upkeep.ts): each death adds some, the smith repairs it for gold
   gateNoteAt = 0; // last "the waygate is cold" note (Act 2, shared/act2.ts)
   linkLock = ""; // the Mawdeep rope/stair a hero just came out of (shared/dungeon.ts LINKS): not taken again until they step off it
   nextSummon = 0; // when the server may bring back this player's quest fused blob (QuestStep.summon)
@@ -718,6 +717,7 @@ export class TownRoom extends Room<TownState> {
     this.onMessage("pray", (client) => this.pray(client));
     this.onMessage("portals", (client) => this.sendPortals(client));
     this.onMessage("travel", (client, msg: { to?: string }) => this.travel(client, msg?.to));
+    this.onMessage("waygate", (client) => this.useWaygate(client));
     this.onMessage("bounty", (client, msg: { take?: number; drop?: boolean }) => this.bountyMsg(client, msg ?? {}));
     this.onMessage("shrine", (client) => client.send("shrine", { left: Math.max(0, this.shrineReadyAt - Date.now()) }));
     // The client is ready (loading screen gone): a hero on the first step of First Steps gets its banner
@@ -728,7 +728,6 @@ export class TownRoom extends Room<TownState> {
     });
     this.onMessage("buy", (client, msg: { i: number }) => this.shopBuy(client, msg?.i));
     this.onMessage("sell", (client, msg: { i: number }) => this.shopSell(client, msg?.i));
-    this.onMessage("repair", (client) => this.repairGear(client));
     this.onMessage("fuse", (client, msg: { id?: unknown }) => this.fuseRunesMsg(client, msg?.id));
     // Trading between players and the account stash (shared/trade.ts)
     this.onMessage("trade", (client, msg: { id?: string; name?: string }) => { if (this.allow("ask", client)) this.tradeAsk(client.sessionId, msg); });
@@ -767,6 +766,17 @@ export class TownRoom extends Room<TownState> {
       if (/^\/max$/i.test(text.trim())) return this.maxHero(client);
       const tp = process.env.NODE_ENV !== "production" && text.trim().match(/^\/tp\s+(\d+)\s+(\d+)$/i); // dev servers only: jump to a tile
       if (tp) { p.x = (Number(tp[1]) + 0.5) * TILE; p.y = (Number(tp[2]) + 0.5) * TILE; return; }
+      // Secret cheat (Murat 2026-11-13): wakes the waygate to Act 2 for this hero, on the live server too. The code is
+      // private (never shown in chat or patch notes); ACT2_CODE on the server overrides it. A wrong code says nothing.
+      const gate = text.trim().match(/^\/waygate\s+(\S+)$/i);
+      if (gate) {
+        if (gate[1] === (process.env.ACT2_CODE || "sunscar-ember-7731")) {
+          for (const id of ["tutorial", "crown", "beast"]) { const c = CHAINS.findIndex((ch) => ch.id === id); if (!chainDone(p, c)) this.qset(p, c, { questId: CHAINS[c].quests.length, questStage: 0, questCount: 0 }); }
+          saveHero(p.name, p.cls, this.snapshot(p));
+          client.send("chat", { id: "", name: "Waygate", text: "The waygate south of Oakvale is awake for this hero." });
+        }
+        return;
+      }
       if (process.env.NODE_ENV !== "production" && /^\/act2open$/i.test(text.trim())) { // dev servers only: both Act 1 finales done
         for (const id of ["tutorial", "crown", "beast"]) { const c = CHAINS.findIndex((ch) => ch.id === id); this.qset(p, c, { questId: CHAINS[c].quests.length, questStage: 0, questCount: 0 }); }
         return;
@@ -1019,7 +1029,7 @@ export class TownRoom extends Room<TownState> {
         return [[a, q.questId], [b, q.questStage], [n, q.questCount], [ch.verKey, ch.version]];
       })) as Record<string, number> & Pick<HeroSave, "questStage" | "questCount">, // CHAINS[0] always writes these two
       portals: [...p.portals], act: actAt(p.y, p.x),
-      bounty: p.bounty, bountyDone: p.bountyDone, wear: p.wear, feast: { ...p.feast },
+      bounty: p.bounty, bountyDone: p.bountyDone, feast: { ...p.feast },
       ...(p.cls === "summoner" ? { grimoire: this.grimoireOf(p), suTree: SUMMONER_TREE } : {}),
     };
   }
@@ -1054,7 +1064,6 @@ export class TownRoom extends Room<TownState> {
     });
     for (const id of cleanPortals(s.portals)) p.portals.add(id);
     p.bountyDone = Math.max(0, Math.floor(num(s.bountyDone)));
-    p.wear = Math.min(WEAR.max, Math.max(0, Math.round(num(s.wear))));
     p.bounty = cleanBounty(s.bounty);
     p.feast = cleanFeast(s.feast);
     const sv = s as unknown as Record<string, unknown>;
@@ -3700,7 +3709,6 @@ export class TownRoom extends Room<TownState> {
 
   /** Walking onto a rope or stair takes the hero to its other end (not straight back: they must step off first). */
   private useLinks(pid: string, p: Player) {
-    this.useWaygates(pid, p);
     if (p.linkLock) {
       const l = linkById(p.linkLock);
       if (l && Math.hypot(l.x - p.x, l.y - p.y) <= LINK_RANGE * 1.6) return;
@@ -3720,23 +3728,26 @@ export class TownRoom extends Room<TownState> {
   }
 
   /**
-   * Act 2's waygates (shared/act2.ts): walking into one takes the hero to the other act, once they have beaten the
-   * first zone's two last bosses. Before that, the gate is cold: a note says who still stands in the way.
+   * Act 2's waygates (shared/act2.ts): used like a portal stone, by clicking it or pressing E next to it (Murat
+   * 2026-11-13), which takes the hero to the other act once they have beaten the first zone's two last bosses.
+   * Walking into it used to cross, and a hero still walking north came out next to the other gate and went straight
+   * back. Before Act 2 is open, the gate is cold: a note says who still stands in the way.
    */
-  private useWaygates(pid: string, p: Player) {
-    for (const g of WAYGATES) {
-      if (Math.abs(g.x - p.x) > WAYGATE_RANGE || Math.abs(g.y - p.y) > WAYGATE_RANGE) continue;
-      if (!act2Open(p)) {
-        const now = Date.now();
-        if (now - p.gateNoteAt > 8000) { p.gateNoteAt = now; this.note(pid, `The waygate's stones are cold. It will wake when ${act2Missing(p).join(" and ")} ${act2Missing(p).length > 1 ? "are" : "is"} beaten.`); }
-        return;
-      }
-      const dest = waygateById(g.to)!, at = waygateArrival(dest);
-      p.x = at.x; p.y = at.y; p.moving = false;
-      p.rollUntil = 0; p.rolling = false; p.emote = "";
-      this.broadcast("waygate", { id: pid, to: dest.id, x: Math.round(at.x), y: Math.round(at.y) });
+  private useWaygate(client: Client) {
+    const pid = client.sessionId, p = this.state.players.get(pid);
+    if (!p || p.dead) return;
+    const g = WAYGATES.find((o) => Math.hypot(o.x - p.x, o.y - p.y) <= WAYGATE_RANGE * 1.5);
+    if (!g) return;
+    if (!act2Open(p)) {
+      const now = Date.now();
+      if (now - p.gateNoteAt > 3000) { p.gateNoteAt = now; this.note(pid, `The waygate's stones are cold. It will wake when ${act2Missing(p).join(" and ")} ${act2Missing(p).length > 1 ? "are" : "is"} beaten.`); }
       return;
     }
+    if (Date.now() - p.lastHurt < PORTAL_COMBAT_MS) { client.send("travelno", { why: "fight" }); return; }
+    const dest = waygateById(g.to)!, at = waygateArrival(dest);
+    p.x = at.x; p.y = at.y; p.moving = false;
+    p.rollUntil = 0; p.rolling = false; p.emote = "";
+    this.broadcast("waygate", { id: pid, to: dest.id, x: Math.round(at.x), y: Math.round(at.y) });
   }
 
   /** The sickness, bleeding or venom a beast's plain bite leaves (BEAST.plague / bleed / venom). */
@@ -5115,20 +5126,6 @@ export class TownRoom extends Room<TownState> {
     return n?.shop ? SHOPS[n.shop] : undefined;
   }
 
-  /** The smith mends all worn gear for gold (shared/upkeep.ts repairCost). */
-  private repairGear(client: Client) {
-    const p = this.state.players.get(client.sessionId);
-    const shop = p && !p.dead ? this.shopNear(p) : undefined;
-    if (!p || !shop?.repairs) return;
-    const cost = repairCost(GEAR_SLOTS.map((s) => p[s]), p.wear);
-    if (!cost) return client.send("shop", { ok: false, text: "Your gear is in good shape" });
-    if (p.gold < cost) return client.send("shop", { ok: false, text: `Repairs cost ${cost} gold` });
-    p.gold -= cost;
-    p.wear = 0;
-    this.applyStats(p);
-    client.send("shop", { ok: true, text: `Repaired for ${cost} gold` });
-  }
-
   private shopBuy(client: Client, i: unknown) {
     const p = this.state.players.get(client.sessionId);
     const shop = p && !p.dead ? this.shopNear(p) : undefined;
@@ -5774,8 +5771,8 @@ export class TownRoom extends Room<TownState> {
   /** Recompute stats and max HP from class + level + equipped gear. */
   private applyStats(p: Player) {
     const st = statsFor(p.cls, { sta: p.ptSta, str: p.ptStr, mag: p.ptMag, dex: p.ptDex });
-    const g = gearStats(p.cls, this.equipped(p)), wm = wearMult(p.wear); // worn gear gives less (shared/upkeep.ts)
-    st.sta += Math.round(g.sta * wm); st.str += Math.round(g.str * wm); st.mag += Math.round(g.mag * wm); st.dex += Math.round(g.dex * wm);
+    const g = gearStats(p.cls, this.equipped(p));
+    st.sta += g.sta; st.str += g.str; st.mag += g.mag; st.dex += g.dex;
     p.sta = st.sta; p.str = st.str; p.mag = st.mag; p.dex = st.dex;
     const newMax = Math.round(maxHpFromStats(p.cls, st, p.level) * talentMult(p.cls, p.talents, "hp") * feastMult(p.feast, "hp"));
     p.hp = Math.min(newMax, p.hp + Math.max(0, newMax - p.maxHp));
@@ -5863,11 +5860,6 @@ export class TownRoom extends Room<TownState> {
     t.guarding = false;
     // No magic in Oakvale: dying pays for it, the hero comes back a free citizen (villagers and watch stand down)
     this.setOutlaw(tid, t, false);
-    // Dying wears the gear (shared/upkeep.ts): it gives less until the smith repairs it
-    if (t.wear < WEAR.max) {
-      t.wear = Math.min(WEAR.max, t.wear + WEAR.perDeath);
-      this.applyStats(t);
-    }
     this.broadcast("kill", { killer: byName, victim: t.name });
     // The victim gets a "You died - killed by ..." screen until they respawn
     this.clients.find((c) => c.sessionId === tid)?.send("died", { by: byName, ms: RESPAWN_MS });
