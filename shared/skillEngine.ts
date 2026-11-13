@@ -1,16 +1,15 @@
 import { ClassKind } from "./classes";
 import { impactMs, nightBuff, passiveBlood, talentBonus, LEAP_MS, pointRange, skillTarget,
   AreaDef, BuffDef, FieldDef, HitEffects, levelPower, MARK_TAKEN, MAX_STACKS, MoveDef, rankOf, rankPower, rankTime, Ranks, scalePower, synergyPower, withMods, maxRank,
-  ShotDef, SkillDef, skillOf, SKILLS, STACK_DECAY_MS, STACK_POWER, WEAK_DEALT, FANG_BELOW_PER_RANK, FANG_CHANCE_PER_RANK,
+  ShotDef, SkillDef, skillById, skillOf, SKILLS, STACK_DECAY_MS, STACK_POWER, WEAK_DEALT, FANG_BELOW_PER_RANK, FANG_CHANCE_PER_RANK, type SoundFx,
 } from "./skills";
 import { Stats, STATS } from "./powers";
 import { pay, skillCost } from "./mana";
 import { auraBuffs, isAuraId, BLADE_EL, BLADES_BASE, ESSENCE, SUMMON, WISP, type AttuneElement } from "./summons";
-import { addResonance, knownModes, LYDIAN_SHIELD, DORIAN_RADIUS, MODES, modeColour, modulate, noteCast, NOTES, PHRYGIAN, PROGRESSIONS, RESONANCE, resonanceOf, resWord, SONG,
+import { addResonance, knownModes, LYDIAN_SHIELD, DORIAN_RADIUS, MODES, modeColour, modulate, noteCast, NOTES, PHRYGIAN, RESONANCE, resonanceOf, resWord, SONG,
   type Degree, type ModeId, type Pitch, type Progression } from "./songs";
 import { HERO_SOUND, SOUND_TIER, soundMult, type SoundProfile } from "./combat";
 import { acousticsAt } from "./acoustics";
-import { skillById, type SoundFx } from "./skills";
 
 /**
  * Runs the skills of shared/skills.ts. It knows nothing about the room: the server (server/TownRoom.ts) and the
@@ -291,7 +290,6 @@ export function fireChord(h: SkillHost, id: string, p: Progression) {
   h.fx({ ev: "chord", id, prog: p.id, mode: modeOf(u), x: Math.round(u.x), y: Math.round(u.y) });
   release(h, id, fin, 1, levelPower(fin) * scalePower(fin, h.stats?.(id), STATS[u.cls].base), 0);
 }
-export { PROGRESSIONS };
 
 /** Every hit of a Songweaver skill is sound: its pitch, its degree and the caster's mode ride on each one. */
 function withSound(s: SkillDef, snd: SoundFx): SkillDef {

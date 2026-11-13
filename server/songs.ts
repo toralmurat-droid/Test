@@ -1,8 +1,9 @@
 import { MOB_COMBAT, type SoundProfile } from "../shared/combat";
 import type { MobKind } from "../shared/constants";
 import { isMode, MODES, SONGWEAVER_TREE, type ModeId } from "../shared/songs";
-import { knownModesOf, type SkillRuntime, type Unit } from "../shared/skillEngine";
+import { knownModesOf, type ShotSpec, type SkillRuntime, type Unit } from "../shared/skillEngine";
 import type { AreaDef, FieldDef, HitEffects, SkillDef } from "../shared/skills";
+import { BOUNCE, BOUNCE_RULES, reflectAxis, wallAt } from "../shared/acoustics";
 
 /**
  * The Songweaver's room-side rules (shared/songs.ts holds the music itself): the Oakvale busking exemption, the
@@ -49,6 +50,34 @@ export class ChordSync {
     send(chordMsg(u.sk, now));
   }
   drop(id: string) { this.last.delete(id); }
+}
+
+// ---- Waves bounce off walls (Plan v2) ----------------------------------------------------------------------------
+
+/** The projectile fields a bounce reads and turns (server TownRoom Projectile). */
+export interface BounceShot { x: number; y: number; vx: number; vy: number; dir: string; traveled: number; bounced: number; bouncedAt: number; damage: number; spec?: ShotSpec }
+
+/**
+ * A wave that may still bounce (ShotSpec.bounce) ran into a wall between (px, py) and where it is: off stone, wood and
+ * metal it turns back along the blocked axis (shared/acoustics.ts, two isSolidAt lookups), weaker by the material, and
+ * a "bounce" event goes out; foliage and water swallow it. Needs BOUNCE_RULES.minFlight px since the last bounce, at
+ * most BOUNCE_RULES.max. True when it bounced.
+ */
+export function bounceWave(s: BounceShot, px: number, py: number, emit: (ev: Record<string, unknown>) => void): boolean {
+  const spec = s.spec;
+  if (!spec?.bounce || s.bounced >= Math.min(BOUNCE_RULES.max, spec.bounce) || (s.bounced && s.traveled - s.bouncedAt < BOUNCE_RULES.minFlight)) return false;
+  const mat = wallAt(s.x, s.y), fall = BOUNCE[mat];
+  if (!fall) return false;
+  const { fx, fy } = reflectAxis(px, py, s.x, s.y);
+  s.x = px; s.y = py;
+  if (fx) s.vx = -s.vx;
+  if (fy) s.vy = -s.vy;
+  s.dir = Math.abs(s.vx) > Math.abs(s.vy) ? (s.vx > 0 ? "right" : "left") : s.vy > 0 ? "down" : "up";
+  s.bounced++; s.bouncedAt = s.traveled;
+  spec.vx = s.vx; spec.vy = s.vy; spec.dmg *= fall.dmg; s.damage *= fall.dmg;
+  if (fall.res && spec.sound) spec.sound = { ...spec.sound, res: (spec.sound.res ?? 0) + fall.res };
+  emit({ ev: "bounce", x: Math.round(px), y: Math.round(py), mat });
+  return true;
 }
 
 // ---- Hearing ---------------------------------------------------------------------------------------------------

@@ -38,9 +38,8 @@ import { DOORS, DOOR_RANGE, doorById, doorDist, doorWorkable, isSafeZone, isSoli
 import { isDecorSolidAt, npcById, npcNear, TALK_RANGE } from "../shared/npcs";
 import { beyondWall, WATCH, WATCH_POSTS, WatchPost } from "../shared/watch";
 import { inVillage, WRATH } from "../shared/wrath";
-import { busking, ChordSync, heroSound, mobSound, oldSongTree, restoreMode, songSave } from "./songs";
-import { BOUNCE, BOUNCE_RULES, reflectAxis, wallAt } from "../shared/acoustics";
-import { MODES, modeColour, PHRYGIAN, RESONANCE } from "../shared/songs";
+import { bounceWave, busking, ChordSync, heroSound, mobSound, oldSongTree, restoreMode, songSave } from "./songs";
+import { modeColour, PHRYGIAN, RESONANCE } from "../shared/songs";
 import { soundMult } from "../shared/combat";
 import type { SoundFx } from "../shared/skills";
 import { sellPrice, shopBuys, shopFuses, SHOPS } from "../shared/shops";
@@ -4245,26 +4244,9 @@ export class TownRoom extends Room<TownState> {
     }
   }
 
-  /**
-   * A wave that may still bounce (ShotSpec.bounce) ran into a wall between (px, py) and where it is: off stone, wood and
-   * metal it turns back along the blocked axis (shared/acoustics.ts), weaker by the material; foliage and water swallow it.
-   * Needs BOUNCE_RULES.minFlight px since the last bounce, at most BOUNCE_RULES.max. True when it bounced.
-   */
+  /** A wave ran into a wall: it may bounce off it (server/songs.ts bounceWave). */
   private bounce(s: Projectile, px: number, py: number): boolean {
-    const spec = s.spec;
-    if (!spec?.bounce || s.bounced >= Math.min(BOUNCE_RULES.max, spec.bounce) || (s.bounced && s.traveled - s.bouncedAt < BOUNCE_RULES.minFlight)) return false;
-    const mat = wallAt(s.x, s.y), fall = BOUNCE[mat];
-    if (!fall) return false;
-    const { fx, fy } = reflectAxis(px, py, s.x, s.y);
-    s.x = px; s.y = py;
-    if (fx) s.vx = -s.vx;
-    if (fy) s.vy = -s.vy;
-    s.dir = Math.abs(s.vx) > Math.abs(s.vy) ? (s.vx > 0 ? "right" : "left") : s.vy > 0 ? "down" : "up";
-    s.bounced++; s.bouncedAt = s.traveled;
-    spec.vx = s.vx; spec.vy = s.vy; spec.dmg *= fall.dmg; s.damage *= fall.dmg;
-    if (fall.res && spec.sound) spec.sound = { ...spec.sound, res: (spec.sound.res ?? 0) + fall.res };
-    this.broadcast("sfx", { ev: "bounce", x: Math.round(px), y: Math.round(py), mat });
-    return true;
+    return bounceWave(s, px, py, (ev) => this.broadcast("sfx", ev));
   }
 
   private explode(s: Projectile, id: string, _directHit = "") {
