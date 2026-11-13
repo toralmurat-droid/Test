@@ -1,9 +1,18 @@
 <!doctype html>
-<!-- Dev-only page to hear the Songweaver's lute (client/src/sfx.ts pluck/strum). Not part of the build.
+<!-- Dev-only page to hear the Songweaver's lute and music engine (client/src/sfx.ts). Not part of the build.
      npm run dev, then open http://localhost:5173/lute-test.html and click. -->
 <html lang="en"><head><meta charset="utf-8"><title>Lute test</title>
-<style>body{font:16px sans-serif;background:#2a2e22;color:#f2e6c8;padding:24px}button{font:inherit;margin:4px;padding:8px 14px}</style></head>
-<body><h3>Songweaver lute</h3><p>Any key: the voice takes plain MIDI notes.</p>
+<style>
+  body{font:16px sans-serif;background:#2a2e22;color:#f2e6c8;padding:24px;max-width:960px}
+  button{font:inherit;margin:3px;padding:6px 12px;cursor:pointer}
+  button.on{background:#ffd166;color:#222}
+  h4{margin:18px 0 4px}
+  label{margin-right:14px}
+</style></head>
+<body><h3>Songweaver lute and music engine</h3>
+<p>Tonic A (MIDI 45 = A2). Pick a mode and a register, then click a degree: a plain click plucks the root, "strum" plays the triad.</p>
+
+<h4>Raw lute (any MIDI note)</h4>
 <div>
   <button data-a="note">Single note (C4)</button>
   <button data-a="low">Low note (C2)</button>
@@ -14,9 +23,21 @@
   <button data-a="run">Scale run (E minor pentatonic)</button>
   <button data-a="soft">Soft finger vs bright pick</button>
 </div>
-<div id="musicpanel"></div>
+
+<h4>Mode</h4><div id="modes"></div>
+<h4>Register</h4><div id="pitches"></div>
+<label><input type="checkbox" id="open"> open fifths (another Songweaver nearby in a different mode)</label>
+<h4>Degrees: pluck the root</h4><div id="degPluck"></div>
+<h4>Degrees: strum the triad</h4><div id="degStrum"></div>
+<button id="scaleRun">Play the mode's scale</button>
+
+<h4>Progressions (3 chords, the last rings)</h4><div id="progs"></div>
+<h4>Twelve-Tone Storm</h4><div><button id="twelve">Chromatic sweep</button></div>
+
+<h4>Events (contract payloads, through songweaverSfx)</h4>
+<div id="events"></div>
 <script type="module">
-  import { initSfx, pluck, strum, scale } from "/src/sfx.ts";
+  import { initSfx, pluck, strum, scale, playNote, playChord, playTwelveTone, songweaverSfx, openFifths, swTriad, SW_MODES, SW_PROGS, SW_TONIC } from "/src/sfx.ts";
   let on = false;
   const go = (f) => { if (!on) { initSfx("lutetest"); on = true; setTimeout(f, 300); } else f(); };
   const acts = {
@@ -26,6 +47,38 @@
     run: () => { for (let i = 0; i < 8; i++) pluck(scale(52, [0, 3, 5, 7, 10], i), { delay: i * 0.16 }); },
     soft: () => { pluck(64, { bright: 0.1 }); pluck(64, { bright: 1, delay: 1.2 }); },
   };
-  document.querySelectorAll("button").forEach((b) => b.addEventListener("click", () => go(acts[b.dataset.a])));
-  window.lute = { pluck, strum, scale };
+  document.querySelectorAll("button[data-a]").forEach((b) => b.addEventListener("click", () => go(acts[b.dataset.a])));
+
+  let mode = "major", pitch = "M";
+  const open = () => document.getElementById("open").checked;
+  const mk = (host, items, fn, cls) => {
+    const el = document.getElementById(host);
+    items.forEach((it) => { const b = document.createElement("button"); b.textContent = it; b.addEventListener("click", () => { if (cls) { el.querySelectorAll("button").forEach((x) => x.classList.remove("on")); b.classList.add("on"); } fn(it); }); el.appendChild(b); });
+    if (cls) el.firstChild.classList.add("on");
+  };
+  mk("modes", Object.keys(SW_MODES), (m) => { mode = m; go(() => playNote("I", mode, pitch, undefined, undefined, { chord: true, open: open() })); }, true);
+  mk("pitches", ["L", "M", "H"], (p) => { pitch = p; go(() => playNote("I", mode, pitch, undefined, undefined, { chord: true, open: open() })); }, true);
+  const DEGS = ["I", "i", "ii", "bII", "IV", "V", "vi"];
+  mk("degPluck", DEGS, (d) => go(() => playNote(d, mode, pitch, undefined, undefined, { open: open() })));
+  mk("degStrum", DEGS, (d) => go(() => playNote(d, mode, pitch, undefined, undefined, { chord: true, open: open() })));
+  document.getElementById("scaleRun").onclick = () => go(() => { for (let i = 0; i < 8; i++) pluck(scale(SW_TONIC + 12, SW_MODES[mode], i), { delay: i * 0.16 }); });
+  mk("progs", Object.keys(SW_PROGS).map((p) => p), (p) => go(() => playChord(p, mode, undefined, undefined, { open: open() })));
+  document.getElementById("twelve").onclick = () => go(() => playTwelveTone());
+
+  const EV = {
+    "note: ballad (I, M)": { ev: "note", id: "x", s: "sg_ballad", deg: "I", mode: "major", pitch: "M" },
+    "note: basic attack (V, M)": { ev: "note", id: "x", s: "sg_basic", deg: "V", mode: "minor", pitch: "M" },
+    "note: dirge (i, L)": { ev: "note", id: "x", s: "sg_dirge", deg: "i", mode: "minor", pitch: "L" },
+    "note: shrill (V, H)": { ev: "note", id: "x", s: "sg_shrill", deg: "V", mode: "phrygian", pitch: "H" },
+    "note: twelve-tone": { ev: "note", id: "x", s: "sg_twelve", deg: "I", mode: "minor", pitch: "M" },
+    "resonate": { ev: "resonate", id: "x", shatter: false },
+    "resonate (shatter)": { ev: "resonate", id: "x", shatter: true },
+    "bounce: stone": { ev: "bounce", mat: "stone" }, "bounce: wood": { ev: "bounce", mat: "wood" }, "bounce: metal": { ev: "bounce", mat: "metal" },
+    "soundhit: deaf": { ev: "soundhit", id: "x", tier: "deaf", match: false }, "soundhit: dull": { ev: "soundhit", id: "x", tier: "dull", match: false },
+    "soundhit: normal": { ev: "soundhit", id: "x", tier: "normal", match: false }, "soundhit: keen": { ev: "soundhit", id: "x", tier: "keen", match: false },
+    "soundhit: fragile": { ev: "soundhit", id: "x", tier: "fragile", match: false }, "soundhit: match": { ev: "soundhit", id: "x", tier: "normal", match: true },
+    "shieldbreak (string snap)": { ev: "shieldbreak", id: "x", s: "sg_pedal" },
+  };
+  mk("events", Object.keys(EV), (k) => go(() => songweaverSfx(EV[k], "me", open())));
+  window.lute = { pluck, strum, scale, playNote, playChord, playTwelveTone, songweaverSfx, openFifths, swTriad };
 </script></body></html>
