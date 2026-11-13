@@ -23,6 +23,7 @@ import "@fontsource/pixelify-sans/400.css";
 import "./pixelfont.css";
 import { fontsReady } from "./pixelfont";
 import { attachWorldScale, initWorldScale, worldCanvasSize } from "./worldscale";
+import { perfHud } from "./perfHud";
 
 const COLORS = [0xe74c3c, 0x3498db, 0x2ecc71, 0xf1c40f, 0x9b59b6, 0xe67e22, 0x1abc9c, 0xecf0f1];
 let color = COLORS[Math.floor(Math.random() * COLORS.length)];
@@ -343,6 +344,7 @@ function launch(name: string, password: string, newGame: boolean, back = false) 
     scale: { mode: Phaser.Scale.RESIZE, ...worldCanvasSize() },
     scene: [new TownScene({ name, password, color, cls, newGame })],
   })));
+  void fontsReady.then(() => perfHud()); // `?perf=1` perf readout; does nothing without the flag
 }
 
 document.getElementById("play")!.onclick = start;
