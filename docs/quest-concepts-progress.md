@@ -290,3 +290,12 @@ at Lv 10, `duel.ts` only if Hidebound goes on. Bench: WP2 and WP5 (`TIDE=1`, `SP
   hide), both read through `metaOf` / written through `setMeta`, never deleted or undefined. Save format unchanged (`flags`, `cosm`,
   `${id}Id/Stage/Count/Ver`). Player: 47 synced fields (cosm is index 46). A Songweaver with the beast trait wears the wizard's
   mantle (her sheet is the wizard's body); her own overlay is open.
+- 2026-11-14: merged the default branch again (35 commits: PR #400 owner-only scalars in `me`, #407 tall houses and the mill
+  wheel, #406 clan war foundations, #390 iso props, #403 perf second wave). `flags` stays in `me` (now after #400's nine
+  numbers, same getter/setter pattern), `cosm` stays public on Player: Player 38 synced fields (cosm is index 37), PlayerPrivate 12.
+  The perf wave's in-loop `pickTarget` skips heroes past twice the aggro range: that box now scales per hero by `aggroMul` and
+  (blobs) `lureMul`, or a hated lantern carrier at 2-2.5x would be missed (`tests/mobtick.test.ts` guards it). The mill moved
+  down a tile: the Millrace Glutton's spot (`sumAt(108, 41)`) now resolves to (107.5, 40.7), open and reachable; Odo's hold area and
+  rim are unchanged (117 of 148 tiles open, the new wheel deck tiles are solid and outside the rim). Map-metrics identical to the
+  default branch; chests and siege sites as before (only our two new chests differ from the default). Clan war is not wired into
+  the server yet (no travel paths): when it is, any new teleport must call `lanternHeld`.

@@ -1,5 +1,5 @@
 import Phaser from "phaser";
-import { CHAR_SCALE, CHAR_ORIGIN, playCharAnim } from "./artAssets";
+import { CHAR_SCALE, CHAR_ORIGIN, ensureCharSheet, playCharAnim, SHEET_RANGE } from "./artAssets";
 import { allObjects, cocoonPresent, objectDone, QuestObject, Quester, usableObjects, USE_RANGE } from "../../shared/quests";
 
 import "../../shared/siege"; // puts the quest's siege engines (ENGINES) on the skeletons' work sites
@@ -302,6 +302,8 @@ interface Drawn { o: QuestObject; img: Phaser.GameObjects.Image; glow?: Phaser.G
 export class QuestObjects {
   private drawn: Drawn[] = [];
   private tobin?: Phaser.GameObjects.Sprite;
+  private tobinAt?: { x: number; y: number };
+  private tobinState: "far" | "asked" | "ready" = "far";
   private goo?: Phaser.GameObjects.Ellipse;
 
   constructor(private scene: Phaser.Scene) {
@@ -310,8 +312,9 @@ export class QuestObjects {
     for (const o of allObjects()) {
       if (o.kind === "cocoon") {
         // Tobin, stuck in a wobbling bubble of green goo
-        this.tobin = scene.add.sprite(o.x, o.y, "villager", 0).setOrigin(CHAR_ORIGIN.x, CHAR_ORIGIN.y).setScale(CHAR_SCALE).setDepth(o.y);
-        playCharAnim(this.tobin, "villager", "idle", "down");
+        // hidden until the "villager" sheet has loaded (it comes when the hero is near: update)
+        this.tobin = scene.add.sprite(o.x, o.y, "__DEFAULT").setOrigin(CHAR_ORIGIN.x, CHAR_ORIGIN.y).setScale(CHAR_SCALE).setDepth(o.y).setVisible(false);
+        this.tobinAt = { x: o.x, y: o.y };
         this.goo = scene.add.ellipse(o.x, o.y - 10, 22, 26, 0x6fd36b, 0.55).setStrokeStyle(1, 0x2f8f2a, 0.9).setDepth(o.y + 1);
         scene.tweens.add({ targets: this.goo, scaleX: 1.08, scaleY: 0.94, duration: 700, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
         continue;
@@ -401,9 +404,14 @@ export class QuestObjects {
     for (const d of this.drawn) if (d.o.id === id) d.img.setVisible(!hidden);
   }
 
-  update(q: QuestState | undefined) {
+  update(q: QuestState | undefined, me?: { x: number; y: number }) {
     const there = cocoonPresent(q);
-    this.tobin?.setVisible(there);
+    if (this.tobin && this.tobinAt && this.tobinState === "far" && me && Math.hypot(this.tobinAt.x - me.x, this.tobinAt.y - me.y) < SHEET_RANGE) {
+      this.tobinState = "asked";
+      const show = () => { this.tobinState = "ready"; this.tobin?.setTexture("villager", 0); if (this.tobin) playCharAnim(this.tobin, "villager", "idle", "down"); };
+      if (ensureCharSheet(this.scene, "villager", show, 500)) show();
+    }
+    this.tobin?.setVisible(there && this.tobinState === "ready");
     this.goo?.setVisible(there);
     for (const d of this.drawn) {
       const done = objectDone(d.o, q);

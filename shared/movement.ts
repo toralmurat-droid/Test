@@ -33,6 +33,8 @@ function sidestep(clearAt: (o: number) => boolean, canMove: (o: number) => boole
 export function moveStep(x: number, y: number, input: InputState, dtSec: number, speed = PLAYER_SPEED) {
   let dx = (input.right ? 1 : 0) - (input.left ? 1 : 0);
   let dy = (input.down ? 1 : 0) - (input.up ? 1 : 0);
+  // Standing still (most monsters most of the time): the steps below would give exactly this, through 2 wall tests
+  if (!dx && !dy && Number.isFinite(speed * dtSec)) return { x, y, moving: false };
   if (dx && dy) { dx *= Math.SQRT1_2; dy *= Math.SQRT1_2; }
   // Point-and-click walks at its exact angle (only while a key direction says it is walking at all)
   const v = (dx || dy) ? inputDir(input) : undefined;

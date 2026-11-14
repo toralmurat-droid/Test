@@ -56,35 +56,60 @@ export function roofGroups(): Box[] {
   return out;
 }
 
+/** Smooth mode paints the upright grass at this many texels per screen px (see IsoUprightLayer). */
+const UPRIGHT_RES = SMOOTH ? 2 : 1;
+
 const CHUNK = 16; // tiles per side of a baked chunk
+
+/**
+ * The chunks of a layer in the camera's range that are not built yet, nearest to the view first. Callers build at
+ * most one per frame across all layers (`mayBuild`): each is thousands of fillRects, so several at once make a hitch.
+ * A due chunk waits a frame or two; the layers show nothing there until then, as they did before.
+ */
+function dueChunks(view: Phaser.Geom.Rectangle, live: Map<number, unknown>, want: Set<number>): number[] {
+  const S = CHUNK * TILE, m = TILE * 4;
+  const cx0 = Math.max(0, Math.floor((view.x - m) / S)), cy0 = Math.max(0, Math.floor((view.y - m) / S));
+  const cx1 = Math.min(Math.ceil(MAP_W / CHUNK) - 1, Math.floor((view.right + m) / S)), cy1 = Math.min(Math.ceil(MAP_H / CHUNK) - 1, Math.floor((view.bottom + m) / S));
+  const due: [number, number][] = [];
+  for (let cy = cy0; cy <= cy1; cy++) for (let cx = cx0; cx <= cx1; cx++) {
+    const k = cy * 1000 + cx;
+    want.add(k);
+    if (!live.has(k)) due.push([Math.hypot((cx + 0.5) * S - view.centerX, (cy + 0.5) * S - view.centerY), k]);
+  }
+  due.sort((a, b) => a[0] - b[0]);
+  return due.map((d) => d[1]);
+}
+let builtOn = -1;
+const mayBuild = (scene: Phaser.Scene) => builtOn !== scene.game.getFrame();
+const built = (scene: Phaser.Scene) => { builtOn = scene.game.getFrame(); };
 
 /**
  * A static detail layer baked into render textures, chunk by chunk, only around the camera:
  * a full-map texture at 32px tiles would take hundreds of MB of video memory.
+ * A chunk with nothing to draw gets no texture (`null` in `live`).
  */
 class ChunkLayer {
-  private live = new Map<number, Phaser.GameObjects.RenderTexture>();
+  private live = new Map<number, Phaser.GameObjects.RenderTexture | null>();
   constructor(private scene: Phaser.Scene, private depth: number, private draw: (g: Phaser.GameObjects.Graphics, tx0: number, ty0: number, tx1: number, ty1: number) => void, private tint?: number, private res = 1) {}
   update(view: Phaser.Geom.Rectangle) {
-    const S = CHUNK * TILE, m = TILE * 4;
-    const cx0 = Math.max(0, Math.floor((view.x - m) / S)), cy0 = Math.max(0, Math.floor((view.y - m) / S));
-    const cx1 = Math.min(Math.ceil(MAP_W / CHUNK) - 1, Math.floor((view.right + m) / S)), cy1 = Math.min(Math.ceil(MAP_H / CHUNK) - 1, Math.floor((view.bottom + m) / S));
+    const S = CHUNK * TILE;
     const want = new Set<number>();
-    for (let cy = cy0; cy <= cy1; cy++) for (let cx = cx0; cx <= cx1; cx++) {
-      const k = cy * 1000 + cx;
-      want.add(k);
-      if (this.live.has(k)) continue;
+    for (const k of dueChunks(view, this.live, want)) {
+      if (!mayBuild(this.scene)) break;
+      const cx = k % 1000, cy = Math.floor(k / 1000);
       const g = this.scene.make.graphics({}, false);
       const tx0 = cx * CHUNK, ty0 = cy * CHUNK, R = this.res;
       g.setPosition(-tx0 * TILE * R, -ty0 * TILE * R).setScale(R);
       this.draw(g, tx0, ty0, Math.min(MAP_W, tx0 + CHUNK), Math.min(MAP_H, ty0 + CHUNK));
+      if (!g.commandBuffer.length) { g.destroy(); this.live.set(k, null); continue; } // nothing here: no texture
       const rt = this.scene.add.renderTexture(tx0 * TILE, ty0 * TILE, S * R, S * R).setOrigin(0, 0).setDepth(this.depth).setScale(1 / R);
       rt.draw(g);
       if (this.tint !== undefined) rt.setTint(this.tint);
       g.destroy();
       this.live.set(k, rt);
+      built(this.scene);
     }
-    for (const [k, rt] of this.live) if (!want.has(k)) { rt.destroy(); this.live.delete(k); }
+    for (const [k, rt] of this.live) if (!want.has(k)) { rt?.destroy(); this.live.delete(k); }
   }
 }
 
@@ -93,14 +118,11 @@ class PixelChunkLayer {
   private live = new Map<number, { img: Phaser.GameObjects.Image; key: string }>();
   constructor(private scene: Phaser.Scene, private depth: number, private paint: (d: Uint8ClampedArray, S: number, tx0: number, ty0: number, tx1: number, ty1: number) => void) {}
   update(view: Phaser.Geom.Rectangle) {
-    const S = CHUNK * TILE, m = TILE * 4;
-    const cx0 = Math.max(0, Math.floor((view.x - m) / S)), cy0 = Math.max(0, Math.floor((view.y - m) / S));
-    const cx1 = Math.min(Math.ceil(MAP_W / CHUNK) - 1, Math.floor((view.right + m) / S)), cy1 = Math.min(Math.ceil(MAP_H / CHUNK) - 1, Math.floor((view.bottom + m) / S));
+    const S = CHUNK * TILE;
     const want = new Set<number>();
-    for (let cy = cy0; cy <= cy1; cy++) for (let cx = cx0; cx <= cx1; cx++) {
-      const k = cy * 1000 + cx;
-      want.add(k);
-      if (this.live.has(k)) continue;
+    for (const k of dueChunks(view, this.live, want)) {
+      if (!mayBuild(this.scene)) break;
+      const cx = k % 1000, cy = Math.floor(k / 1000);
       const key = `blend_${this.depth}_${k}`;
       if (this.scene.textures.exists(key)) this.scene.textures.remove(key);
       const tex = this.scene.textures.createCanvas(key, S, S)!;
@@ -110,6 +132,7 @@ class PixelChunkLayer {
       ctx.putImageData(img, 0, 0);
       tex.refresh();
       this.live.set(k, { img: this.scene.add.image(tx0 * TILE, ty0 * TILE, key).setOrigin(0, 0).setDepth(this.depth), key });
+      built(this.scene);
     }
     for (const [k, l] of this.live) if (!want.has(k)) { l.img.destroy(); this.scene.textures.remove(l.key); this.live.delete(k); }
   }
@@ -120,32 +143,31 @@ class PixelChunkLayer {
  * so they stand up instead of lying skewed on the ground. Drawn just above the ground, under everything else.
  */
 class IsoUprightLayer {
-  private live = new Map<number, Phaser.GameObjects.RenderTexture>();
+  private live = new Map<number, Phaser.GameObjects.RenderTexture | null>(); // null: nothing to draw in this chunk
   constructor(private scene: Phaser.Scene, private depth: number) {}
   update(view: Phaser.Geom.Rectangle) {
-    const S = CHUNK * TILE, m = TILE * 4, UP = 24;
-    const cx0 = Math.max(0, Math.floor((view.x - m) / S)), cy0 = Math.max(0, Math.floor((view.y - m) / S));
-    const cx1 = Math.min(Math.ceil(MAP_W / CHUNK) - 1, Math.floor((view.right + m) / S)), cy1 = Math.min(Math.ceil(MAP_H / CHUNK) - 1, Math.floor((view.bottom + m) / S));
+    const UP = 24;
     const want = new Set<number>();
-    for (let cy = cy0; cy <= cy1; cy++) for (let cx = cx0; cx <= cx1; cx++) {
-      const k = cy * 1000 + cx;
-      want.add(k);
-      if (this.live.has(k)) continue;
+    for (const k of dueChunks(view, this.live, want)) {
+      if (!mayBuild(this.scene)) break;
+      const cx = k % 1000, cy = Math.floor(k / 1000);
       const tx0 = cx * CHUNK, ty0 = cy * CHUNK, tx1 = Math.min(MAP_W, tx0 + CHUNK), ty1 = Math.min(MAP_H, ty0 + CHUNK);
       // screen box of the chunk's diamond, plus room above for things standing up
       const left = (tx0 - ty1) * TILE, top = ((tx0 + ty0) * TILE) / 2 - UP;
       const w = (tx1 - tx0 + ty1 - ty0) * TILE, h = ((tx1 - tx0 + ty1 - ty0) * TILE) / 2 + UP;
       const g = this.scene.make.graphics({}, false);
-      const R = SMOOTH ? 3 : 1; // smooth mode: painted at 3x so thin blades and round caps stay crisp at camera zoom
+      const R = UPRIGHT_RES;
       g.setPosition(-left * R, -top * R).setScale(R);
       (SMOOTH ? drawUprightSmooth : drawUpright)(g, tx0, ty0, tx1, ty1);
-      const rt = this.scene.add.renderTexture(left, top, w * R, h * R).setOrigin(0, 0).setDepth(this.depth).setScale(1 / R);
+      if (!g.commandBuffer.length) { g.destroy(); this.live.set(k, null); continue; } // water, roads, desert: no texture
+      const rt = this.scene.add.renderTexture(left, top, Math.ceil(w * R), Math.ceil(h * R)).setOrigin(0, 0).setDepth(this.depth).setScale(1 / R);
       rt.draw(g);
       g.destroy();
       isoScreen(rt);
       this.live.set(k, rt);
+      built(this.scene);
     }
-    for (const [k, rt] of this.live) if (!want.has(k)) { rt.destroy(); this.live.delete(k); }
+    for (const [k, rt] of this.live) if (!want.has(k)) { rt?.destroy(); this.live.delete(k); }
   }
 }
 

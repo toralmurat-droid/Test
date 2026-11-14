@@ -25,13 +25,14 @@ async function main() {
   const rooms: any[] = [];
   const base = process.env.CAST === "1" ? ["su_wisps", "su_arsenal", "su_blades", "su_blackhole"] : (process.env.CAST ?? "").split(",").filter(Boolean);
   const cast = process.env.CAST === "1" && process.env.SONGWEAVER ? [...base, ...SONG_CASTS] : base;
-  let bytes = 0, wire = 0, raw = 0, packed = 0;
+  let bytes = 0, wire = 0, raw = 0, packed = 0, dropped = 0, stopping = false;
   const socks: [any, number][] = []; // each bot's TCP socket and the bytesRead already counted (true bytes on the wire: frame headers, after deflate)
   for (let i = 0; i < n; i++) {
     const room = await new Client(`ws://localhost:${port}`).joinOrCreate("town", { name: `bot${i}p${process.pid % 10000}`, password: "benchpass1", cls: classes[i % classes.length], newGame: true });
     (room.connection as any).transport.ws.addEventListener("message", (e: any) => { const b = Buffer.from(e.data); bytes += b.length; if (process.env.DEFLATE_EST) { raw += b.length; packed += b.length > 256 ? zlib.deflateRawSync(b, { level: 1 }).length : b.length; } });
     const sock = (room.connection as any).transport.ws._socket; if (sock) socks.push([sock, sock.bytesRead]);
     room.onMessage("*", () => {});
+    room.onLeave((code: number) => { if (!stopping) { dropped++; console.error(`bot${i} lost its connection (close code ${code})`); } });
     room.send("mvready"); // be fed the monsters near it, like the game client
     if (cast.length) room.send("chat", "/max"); // learn every skill, so the CAST ones can be used
     rooms.push(room);
@@ -53,7 +54,7 @@ async function main() {
       for (const sk of cast) r.send("cast", sk); // the server drops it while on cooldown
     }
   }, 100);
-  setInterval(() => { wire = 0; for (const t of socks) { wire += t[0].bytesRead - t[1]; t[1] = t[0].bytesRead; } process.send!({ bytes, wire }); bytes = 0; }, 500);
-  process.on("message", (m: any) => { if (m === "stop") { if (raw) console.error(`deflate level 1 would send ${(100 * packed / raw).toFixed(0)}% of the bytes`); for (const r of rooms) r.leave(); setTimeout(() => process.exit(0), 200); } });
+  setInterval(() => { wire = 0; for (const t of socks) { wire += t[0].bytesRead - t[1]; t[1] = t[0].bytesRead; } process.send!({ bytes, wire, dropped }); bytes = 0; }, 500);
+  process.on("message", (m: any) => { if (m === "stop") { stopping = true; if (raw) console.error(`deflate level 1 would send ${(100 * packed / raw).toFixed(0)}% of the bytes`); for (const r of rooms) r.leave(); setTimeout(() => process.exit(0), 200); } });
 }
 main();

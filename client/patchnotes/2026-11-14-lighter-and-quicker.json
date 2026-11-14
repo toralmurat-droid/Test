@@ -1,0 +1,11 @@
+{
+  "date": "2026-11-14",
+  "patch": 223,
+  "title": "Lighter and quicker",
+  "changes": [
+    "The game needs far less graphics memory: characters are loaded when they come near instead of all at once, so someone far off can appear a moment after you arrive.",
+    "Less to download before you can play: only your own hero is fetched at login.",
+    "The ground and grass take less memory too. Grass tufts can look very slightly softer.",
+    "The server spends less time on every monster that is awake, so busy fights stay responsive for longer."
+  ]
+}

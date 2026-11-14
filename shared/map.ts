@@ -378,8 +378,9 @@ function buildWorld() {
   fenceBox(12, 65, 16, 11, sideGaps(12, 65, 16, 11));
 
   // ---------- 8. Millbrook watermill ----------
-  const millDoor = building(mill.x, mill.y, 6, 6, T.ROOF_THATCH, T.WALL_TIMBER, T.WINDOW_TIMBER);
+  const millDoor = building(mill.x, mill.y + 1, 6, 5, T.ROOF_THATCH, T.WALL_TIMBER, T.WINDOW_TIMBER);
   setO(riverCenter(44) - 2, 44, T.WHEEL);
+  for (let y = 43; y <= 45; y++) for (let x = mx + 6; x <= mx + 7; x++) if (objects[y][x] === EMPTY) setO(x, y, T.WHEEL); // under the wheel's deck on pilings (client/src/millArt.ts)
   doorPath(millDoor);
   setO(mx - 1, 45, T.CRATE); setO(mx - 1, 46, T.BARREL);
 
@@ -530,7 +531,7 @@ function buildWorld() {
   each(salt.x, salt.y, salt.w, coastY(salt.x + 17) - salt.y - 3, (x, y) => { if (isGrass(ground[y][x]) && hash(x, y, 185) < 0.3) setG(x, y, T.GRASS); });
   const saltHouses: { x: number; y: number }[] = [];
   for (const [hx, hy, roof] of [[128, 178, T.ROOF_SLATE], [135, 177, T.ROOF_THATCH], [143, 178, T.ROOF_SLATE], [150, 177, T.ROOF_THATCH]] as const)
-    saltHouses.push(house(hx, hy, 5, 4, roof));
+    saltHouses.push(house(hx, hy + 1, 4, 3, roof)); // narrow two-storey fishers' houses (client/src/houseLife.ts)
   const lane = 186; // the lane along the beach
   curve([[salt.x - 1, lane], [salt.x + 12, lane + 1], [salt.x + 24, lane], [salt.x + salt.w, lane + 1]], 1);
   for (const d of saltHouses) doorPath(d);
@@ -557,7 +558,7 @@ function buildWorld() {
       if (edge && !gap(i, j) && (corner || hash(i, j, 77) > 0.08)) setO(i, j, T.PALISADE);
     });
   }
-  const bandHuts = [house(band.x + 2, band.y + 2, 4, 4, T.ROOF_THATCH), house(band.x + 9, band.y + 2, 5, 4, T.ROOF_RED), house(band.x + 17, band.y + 2, 4, 4, T.ROOF_THATCH)];
+  const bandHuts = [house(band.x + 2, band.y + 3, 4, 3, T.ROOF_THATCH), house(band.x + 9, band.y + 3, 5, 3, T.ROOF_RED), house(band.x + 17, band.y + 3, 4, 3, T.ROOF_THATCH)]; // tall barracks
   rectG(band.x + 1, band.y + 7, band.w - 2, 1, T.DIRT);
   for (const d of bandHuts) setG(d.x, d.y + 1, T.DIRT);
   setO(band.x + 12, band.y + 11, T.CAMPFIRE);
