@@ -1,33 +1,9 @@
-/* Songweaver chord tracker (client/src/chordHud.ts): above the skill bar, compact for phones */
-#chordhud { --mc: #ffd24d; position: absolute; left: 50%; bottom: 124px; transform: translateX(-50%); width: 132px; box-sizing: border-box;
-  padding: 3px 6px 4px; background: rgba(15, 10, 6, .86); border: 2px solid #6a5232; box-shadow: 0 0 0 1px #080504; pointer-events: none; z-index: 8;
-  font: normal 13px var(--pixel-font); color: #e3bf6a; text-shadow: 1px 1px 0 #000; }
-#chordhud[hidden] { display: none; }
-#chordhud .ch-top { display: flex; justify-content: space-between; align-items: baseline; gap: 6px; min-height: 15px; white-space: nowrap; }
-#chordhud .ch-mode { color: var(--mc); letter-spacing: 1px; }
-#chordhud .ch-name { display: none; color: #fff; overflow: hidden; }
-#chordhud.named .ch-name { display: inline; }
-#chordhud.named .ch-mode { display: none; }
-#chordhud .ch-notes { display: flex; gap: 4px; margin: 2px 0 3px; }
-#chordhud .ch-notes b { flex: 1; text-align: center; font-weight: normal; font-size: 15px; line-height: 20px; height: 20px; color: #5a4a30; background: rgba(0, 0, 0, .45); border: 1px solid #3a2c18; }
-#chordhud .ch-notes b.on { color: #fff; border-color: var(--mc); background: rgba(0, 0, 0, .6); text-shadow: 0 0 4px var(--mc), 1px 1px 0 #000; }
-#chordhud .ch-lock { height: 4px; background: #1a120b; border: 1px solid #3a2c18; }
-#chordhud .ch-lock i { display: block; height: 100%; width: 0; background: var(--mc); }
-#chordhud.locked .ch-lock i { background: #8a8a8a; }
-#chordhud.flash { border-color: var(--mc); animation: ch-flash .22s steps(2) 3; }
-@keyframes ch-flash { 50% { box-shadow: 0 0 10px 3px var(--mc), 0 0 0 1px #080504; background: rgba(60, 44, 18, .95); } }
-#chordhud { width: auto; min-width: 116px; max-width: 220px; }
-/* short landscape phones: the NPC dialog fills the bottom middle, so the tracker moves to the left above the chat box */
-@media (max-height: 520px) { #chordhud { left: 8px; transform: none; bottom: 84px; } }
-@media (max-width: 600px) { #chordhud { bottom: 200px; min-width: 110px; font-size: 12px; } #chordhud .ch-notes b { font-size: 13px; line-height: 17px; height: 17px; } }
-#chordhud .ch-help { pointer-events: auto; cursor: pointer; font: inherit; font-size: 11px; line-height: 13px; width: 15px; height: 15px; padding: 0; margin-left: 4px; color: #e3bf6a; background: rgba(0, 0, 0, .5); border: 1px solid #6a5232; }
-#chordhud.named .ch-help { display: none; }
-#chordhud .ch-hint { font-size: 11px; color: #c9b27a; min-height: 0; white-space: normal; line-height: 12px; }
-#chordhud .ch-hint:empty { display: none; }
-#chordhud .ch-hint, #chordhud .ch-legend { margin-top: 3px; }
-#chordhud .ch-legend { position: absolute; left: 50%; bottom: 100%; transform: translate(-50%, -4px); width: 230px; max-width: 86vw; box-sizing: border-box; padding: 5px 7px; pointer-events: auto;
-  background: rgba(15, 10, 6, .95); border: 2px solid #6a5232; font-size: 11px; line-height: 13px; color: #d9c79a; white-space: normal; }
-#chordhud .ch-legend[hidden] { display: none; }
-#chordhud .ch-legend p { margin: 2px 0 3px; color: #fff; }
-#chordhud .ch-legend b { display: inline-block; min-width: 38px; font-weight: normal; color: var(--mc); }
-#chordhud .ch-legend .ch-x { color: #8a7a5a; text-align: right; margin: 3px 0 0; }
+/* Songweaver chord legend (client/src/chordHud.ts): opened from the "?" on the skills page */
+#chordlegend { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 260px; max-width: 88vw; max-height: 80vh; overflow-y: auto; box-sizing: border-box;
+  padding: 6px 8px; z-index: 60; background: rgba(15, 10, 6, .96); border: 2px solid #6a5232; box-shadow: 0 0 0 1px #080504;
+  font: normal 13px var(--pixel-font); line-height: 15px; color: #d9c79a; text-shadow: 1px 1px 0 #000; }
+#chordlegend[hidden] { display: none; }
+#chordlegend p { margin: 3px 0 4px; color: #fff; }
+#chordlegend b { display: inline-block; min-width: 42px; font-weight: normal; color: #ffd24d; }
+#chordlegend .ch-x { color: #8a7a5a; text-align: right; margin: 4px 0 0; }
+.chhelp { font: inherit; font-size: 13px; width: 20px; height: 20px; padding: 0; margin-left: 6px; cursor: pointer; color: #e3bf6a; background: rgba(0, 0, 0, .5); border: 1px solid #6a5232; vertical-align: middle; }
