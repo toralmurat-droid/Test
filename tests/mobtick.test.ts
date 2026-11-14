@@ -7,6 +7,7 @@ import { isSafeZone, isSolidAt } from "../shared/map";
 import { aggroLevelFactor, AGGRO, inputDir, MAP_H, MAP_W, PLAYER_SPEED, TILE, type InputState } from "../shared/constants";
 import { inVoid, newRuntime, quietUnit, statusOf, tickUnit, type SkillHost, type Unit } from "../shared/skillEngine";
 import { SUMMON } from "../shared/summons";
+import { DEGREES, MODE_IDS, NOTES, RESONANCE, resonanceOf, resWord } from "../shared/songs";
 import { fastFields } from "../server/schemaFast";
 import { dropOldSamples, Mob, Player } from "../server/TownRoom";
 import { startRoom, wait } from "./helpers/room";
@@ -110,6 +111,7 @@ test("moveStep: a monster standing still keeps exactly its spot and moving flag,
 
 // ---- status words, quiet units (shared/skillEngine.ts) ----
 
+/** statusOf as on the default branch before the early return (with the Songweaver's mode and resonance words). */
 function oldStatusOf(u: Unit, now: number): string {
   const sk = u.sk, out: string[] = [];
   if (now < sk.burnUntil) out.push(sk.bleed === "boil" ? "boil" : sk.bleed === "drip" ? "bleed" : "burn");
@@ -118,6 +120,9 @@ function oldStatusOf(u: Unit, now: number): string {
   if (sk.counter && now < sk.counter.until) out.push("counter:" + sk.counter.s.id);
   if (now < sk.chargeUntil) out.push("charge");
   for (const b of sk.buffs) if (b.until > now) out.push(b.id);
+  if (u.cls === "songweaver") out.push("mode:" + (sk.mode ?? "major"));
+  const rw = sk.res > 0 ? resWord(resonanceOf(sk, now)) : "";
+  if (rw) out.push(rw);
   return out.join(",");
 }
 
@@ -129,19 +134,28 @@ function randomUnit(r: () => number, now: number): Unit {
   sk.stacks = r() < 0.7 ? 0 : Math.floor(r() * 4) - 1; sk.stackAt = t();
   if (r() < 0.2) sk.counter = { until: t(), s: { id: "k_counter" } as any, rank: 1, power: 1 };
   if (r() < 0.3) sk.buffs = [{ id: "b1", until: t(), b: { ms: 1000 } as any, rank: 1, stacks: 0 }];
-  return { x: 100, y: 100, dead: r() < 0.1, level: 3, sk, cls: r() < 0.15 ? "vampire" : undefined, talents: {} };
+  // Songweaver state: notes played (some to be forgotten by now), resonance (some faded, some too small for a word), a mode
+  if (r() < 0.25) { sk.notes = DEGREES.slice(0, 1 + Math.floor(r() * 3)); sk.noteAt = now - r() * 2 * NOTES.idleMs; }
+  if (r() < 0.3) { sk.res = r() < 0.2 ? r() : r() * RESONANCE.max; sk.resAt = now - r() * 20_000; }
+  if (r() < 0.3) sk.mode = MODE_IDS[Math.floor(r() * MODE_IDS.length)];
+  const c = r(), cls = c < 0.1 ? "vampire" as const : c < 0.2 ? "songweaver" as const : undefined;
+  return { x: 100, y: 100, dead: r() < 0.1, level: 3, sk, cls, talents: {} };
 }
 
 test("statusOf: the early return gives the same words as building the list", () => {
   const r = rng(11), now = 1_000_000;
-  let empty = 0;
+  let empty = 0, mode = 0, res = 0, onlySong = 0;
   for (let i = 0; i < 20000; i++) {
     const u = randomUnit(r, now);
     const s = statusOf(u, now);
     assert.equal(s, oldStatusOf(u, now));
     if (!s) empty++;
+    if (s.includes("mode:")) mode++;
+    if (/res\d/.test(s)) res++;
+    if (s && s.split(",").every((w) => w.startsWith("mode:") || /^res\d$/.test(w))) onlySong++; // what the first early return hid
   }
   assert.ok(empty > 1000 && empty < 19000, `both cases met (${empty} empty)`);
+  assert.ok(mode > 500 && res > 500 && onlySong > 100, `Songweaver words met (${mode} mode, ${res} resonance, ${onlySong} only those)`);
 });
 
 test("quietUnit: when it says so, tickUnit (now or later) leaves the unit untouched and asks the host nothing", () => {
@@ -160,6 +174,9 @@ test("quietUnit: when it says so, tickUnit (now or later) leaves the unit untouc
     assert.deepEqual(asked, []);
   }
   assert.ok(quiet > 500, `quiet units met (${quiet})`);
+  // a monster still holding notes that tickUnit forgets after a pause is not quiet
+  const u: Unit = { x: 0, y: 0, dead: false, level: 1, sk: { ...newRuntime(), notes: ["I"], noteAt: now - NOTES.idleMs - 1 } };
+  assert.equal(quietUnit(u, now), false, "notes still to forget");
 });
 
 // ---- position history ----
