@@ -12,6 +12,7 @@ import { allAccounts, flushFinal, initAccounts, peek, requestReset, resetPasswor
 import { writeHandoff } from "./handoff";
 import { clientIp } from "./ratelimit";
 import { fileHashes, versionedCacheControl } from "./assetVersions";
+import { PER_MESSAGE_DEFLATE } from "./sendBacklog";
 
 const PORT = Number(process.env.PORT ?? 2567);
 const app = express();
@@ -134,8 +135,8 @@ app.post("/account/reset", express.json({ limit: "2kb" }), async (req, res) => {
 
 const httpServer = http.createServer(app);
 // perMessageDeflate: the browser and server squeeze every update (~35% fewer bytes, all browsers support it).
-// Level 1 is the fastest setting; tiny messages (inputs, chat) are sent as they are. WS_DEFLATE=0 turns it off.
-const deflate = process.env.WS_DEFLATE !== "0" && { threshold: 256, zlibDeflateOptions: { level: 1 } };
+// Settings and why: server/sendBacklog.ts. WS_DEFLATE=0 turns it off.
+const deflate = process.env.WS_DEFLATE !== "0" && PER_MESSAGE_DEFLATE;
 const gameServer = new Server({ transport: new WebSocketTransport({ server: httpServer, perMessageDeflate: deflate }) });
 gameServer.define("town", TownRoom);
 // A deploy stops this server with SIGTERM. Colyseus then saves everyone and closes each connection with code 4000.
