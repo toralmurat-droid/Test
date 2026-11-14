@@ -6,6 +6,7 @@ import { blocked, moveStep } from "../shared/movement";
 import { isSafeZone, isSolidAt } from "../shared/map";
 import { aggroLevelFactor, AGGRO, inputDir, MAP_H, MAP_W, PLAYER_SPEED, TILE, type InputState } from "../shared/constants";
 import { inVoid, newRuntime, quietUnit, statusOf, tickUnit, type SkillHost, type Unit } from "../shared/skillEngine";
+import { isBlob } from "../shared/quests";
 import { SUMMON } from "../shared/summons";
 import { DEGREES, MODE_IDS, NOTES, RESONANCE, resonanceOf, resWord } from "../shared/songs";
 import { fastFields } from "../server/schemaFast";
@@ -203,16 +204,18 @@ after(async () => { for (const c of cs) await c.leave(); await srv.stop(); });
 /** The aggro pick for heroes and summons as it was (no rival monsters around), on the room's own data. */
 function oldPick(room: any, m: Mob, def: { aggroRange: number; leash: number }) {
   let best = 0, target = "", foe = "", threat = 0;
-  const now0 = Date.now(), alerted = now0 < m.alertUntil;
+  const now0 = Date.now(), alerted = now0 < m.alertUntil, blob = isBlob(m.kind);
   room.state.players.forEach((p: Player, pid: string) => {
     if (p.dead || isSafeZone(p.x, p.y) || Math.hypot(p.x - m.homeX, p.y - m.homeY) >= def.leash || inVoid(p, now0)) return;
     const d = Math.hypot(p.x - m.x, p.y - m.y);
     const hated = (pid === m.hateId ? m.hate : 0) + (alerted && pid === m.alertHero ? 0.5 : 0);
-    const range = hated > 0 ? def.aggroRange * 2 : def.aggroRange;
+    // a carried lantern (lureMul, blobs only) and an unseen step (aggroMul) scale the hero's aggro reach (quest concepts)
+    const reach = def.aggroRange * p.aggroMul * (blob ? p.lureMul : 1);
+    const range = hated > 0 ? reach * 2 : reach;
     if (d >= range) return;
     if (d < def.aggroRange) threat = Math.max(threat, p.level - m.level);
     const lf = m.merged > 1 || m.kind === "demon" ? Math.max(1, aggroLevelFactor(m.level, p.level)) : aggroLevelFactor(m.level, p.level);
-    const score = Math.max(0, 1 - d / def.aggroRange) * lf + hated + (pid === m.target ? AGGRO.stick : 0);
+    const score = Math.max(0, 1 - d / reach) * lf + hated + (pid === m.target ? AGGRO.stick : 0);
     if (score > best) { best = score; target = pid; }
   });
   for (const [sid, o] of room.summons as Map<string, Mob>) {
@@ -278,6 +281,50 @@ test("pickTarget in the monster loop (living heroes, box test first) picks what 
     }
   } finally { room.loopHeroes = undefined; room.state.mobs.delete("aggrotest"); room.summons.clear(); }
   assert.ok(picked > 200 && bySummon > 100 && none > 200, `all outcomes met (${picked} heroes, ${bySummon} summons, ${none} none)`);
+});
+
+test("pickTarget in the monster loop: a carried lantern or an unseen step (aggro reach scaled per hero) changes nothing either", () => {
+  const room = srv.room, r = rng(33);
+  room.state.mobs.forEach((_m: any, mid: string) => room.state.mobs.delete(mid));
+  room.summons.clear();
+  const feud = room.feudGrid;
+  room.feudGrid = new Map(); // (blobs have a side: no rival monsters to weigh, as in the reference)
+  const heroes: [string, Player][] = [...room.state.players.entries()];
+  const m = new Mob(); m.level = 5; m.hp = m.maxHp = 50;
+  room.state.mobs.set("aggrotest", m);
+  let picked = 0, far = 0;
+  try {
+    for (let round = 0; round < 3000; round++) {
+      const [mx, my] = openSpot(r);
+      m.kind = r() < 0.6 ? "slime" : "gnawkin";
+      m.x = mx; m.y = my; m.homeX = mx; m.homeY = my; m.merged = 1; m.target = ""; m.foe = "";
+      m.alertUntil = 0;
+      const def = { aggroRange: 60 + r() * 250, leash: 4000 };
+      for (const [, p] of heroes) {
+        // up to 3x the aggro range out: past the 2x box of a hero without a lantern
+        p.x = mx + (r() - 0.5) * 6 * def.aggroRange; p.y = my + (r() - 0.5) * 6 * def.aggroRange;
+        p.dead = r() < 0.1; p.level = 1 + Math.floor(r() * 30); p.sk.last["slipUntil"] = 0;
+        p.lureMul = r() < 0.5 ? 1 : 1 + r() * 1.5; p.aggroMul = r() < 0.5 ? 1 : 0.2 + r() * 0.8;
+      }
+      m.hateId = r() < 0.6 ? heroes[Math.floor(r() * 4)][0] : ""; m.hate = m.hateId ? 0.1 + r() * 2 : 0;
+      const ref = oldPick(room, m, def);
+      const alive = heroes.filter(([, p]) => !p.dead);
+      room.loopHeroes = alive.map(([, p]) => p); room.loopIds = alive.map(([id]) => id);
+      m.target = ""; m.foe = "";
+      room.pickTarget(m, def);
+      assert.deepEqual({ target: m.target, foe: m.foe, threat: m.threat }, ref, `round ${round}`);
+      room.loopHeroes = undefined;
+      if (ref.target) {
+        picked++;
+        const p = room.state.players.get(ref.target);
+        if (Math.max(Math.abs(p.x - mx), Math.abs(p.y - my)) >= def.aggroRange * 2) far++;
+      }
+    }
+  } finally {
+    room.loopHeroes = undefined; room.feudGrid = feud; room.state.mobs.delete("aggrotest");
+    for (const [, p] of heroes) { p.lureMul = 1; p.aggroMul = 1; p.dead = false; }
+  }
+  assert.ok(picked > 300 && far > 5, `heroes picked ${picked}, ${far} of them past twice the aggro range`);
 });
 
 test("the sleep check in updateMob (the hero dozing found, else the living heroes) answers like playerNear", () => {

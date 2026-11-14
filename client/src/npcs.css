@@ -21,11 +21,16 @@
 #npcdialog .nd-btns { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; margin-top: 10px; }
 #npcdialog button { font: 18px var(--pixel-font); padding: 6px 12px; border-radius: 4px; cursor: pointer; border: 2px solid #4f6b32; background: #f5ecd2; color: #2a1f10; }
 #npcdialog button.nd-accept { background: #4f6b32; color: #fff; }
+#npcdialog .nd-opts { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+#npcdialog button.nd-opt { text-align: left; width: 100%; min-height: 40px; background: #4f6b32; color: #fff; line-height: 1.15; }
 #npcdialog button:hover { filter: brightness(1.1); }
 #npcdialog button:disabled { opacity: .5; cursor: default; }
 #questtracker { display: none; width: 240px; box-sizing: border-box; padding: 6px 9px; background: rgba(0,0,0,.55);
   border-left: 3px solid #ffd166; border-radius: 3px; font: 18px var(--pixel-font); text-shadow: 2px 2px #000; }
 #questtracker.open { display: block; }
+/* Never grows behind the orbs and hotbar: capped above the bottom HUD (~150px), the rest scrolls (the advanced quest is scrolled into view) */
+#questtracker { max-height: max(90px, calc(100vh - 330px - 150px)); overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: #8a6a32 transparent; box-sizing: border-box; }
+#questtracker::-webkit-scrollbar { width: 4px; } #questtracker::-webkit-scrollbar-thumb { background: #8a6a32; }
 #questtracker .qt-title { color: #ffd166;  margin-bottom: 2px; }
 #questtracker .qt-obj { color: #fff; }
 #questtracker .qt-where { font-size: 15px; color: #c8bfa8; }
@@ -189,6 +194,22 @@ body.shopping #npcdialog.shop { left: 12px; top: 12px; bottom: auto; transform: 
 #npcdialog .sh-lvpick button.on { background: #8b5e34; color: #ffe9a8; border-color: #5a3a1e; }
 #npcdialog .sh-need { color: #b3262e; }
 
+/* Tavern Rumours (client/src/rumours.ts): Mags' three offers as option cards, the errand under way */
+#npcdialog button.rm-offer { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; padding: 6px 10px; }
+#npcdialog button.rm-offer .rm-t { font-size: 18px; color: #fff; }
+#npcdialog button.rm-offer .rm-x { font-size: 15px; color: #e3ecd0; opacity: .9; white-space: normal; }
+#npcdialog button.rm-offer .rm-m { font-size: 15px; color: #ffd98a; }
+#npcdialog button.rm-offer kbd { position: absolute; left: 8px; top: 6px; }
+#npcdialog button.rm-offer { position: relative; padding-left: 34px; }
+#npcdialog button.rm-offer:disabled { background: #7a8466; }
+#npcdialog .rm-done { font-style: normal; color: #ffe8a3; text-transform: uppercase; font-size: 14px; letter-spacing: 1px; margin-left: 6px; }
+#npcdialog .rm-now { margin: 8px 0; padding: 6px 8px; background: rgba(120, 90, 40, .15); border-left: 3px solid #8b5e34; }
+#questtracker .qt-block[data-key^="Rumour:"] { border-left-color: #e8a45a; }
+#npcdialog .nd-mentor { margin-top: 12px; padding-top: 8px; border-top: 1px solid #6b4c22; }
+#npcdialog .nd-mentor h5 { margin: 0 0 4px; color: #e3bf6a; font-weight: normal; }
+#npcdialog .nd-mstat { margin: 6px 0; color: #a8977a; }
+#npcdialog .nd-mstat b.on { color: #b9f27c; }
+#npcdialog button.nd-mbtn { background: #4f6b32; color: #fff; }
 /* Lute-maker panel (client/src/lutemaker.ts): tabs, materials strip, trait rows. Fits 360x640. */
 #npcdialog .lm-tabs { display: flex; gap: 4px; margin-bottom: 6px; }
 #npcdialog .lm-tab { flex: 1; padding: 3px 6px; font: 16px var(--pixel-font); background: #f5ecd2; }

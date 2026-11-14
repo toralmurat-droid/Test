@@ -47,7 +47,7 @@ import { GAUGE, modeColour, PHRYGIAN, RESONANCE } from "../shared/songs";
 import { soundMult } from "../shared/combat";
 import type { SoundFx } from "../shared/skills";
 import { sellPrice, shopBuys, shopFuses, SHOPS } from "../shared/shops";
-import { BLOB_KINDS, CHAINS, CROWN_CHAIN, packQuest, chainDone, chainOpen, chainState, inZone, isBlob, npcPresent, QuestState, questFinished, questStep, stepFor, stepGoal, Summon, type BossVoice, TUT_CHAIN, TUT_QUESTS, USE_RANGE } from "../shared/quests";
+import { BLOB_KINDS, CHAINS, CROWN_CHAIN, packQuest, chainDone, chainOpen, chainState, cleanMentor, inZone, isBlob, type MentorState, npcPresent, QuestState, questFinished, questStep, stepFor, stepGoal, Summon, type BossVoice, TUT_CHAIN, TUT_QUESTS, USE_RANGE } from "../shared/quests";
 import { findHideSpot, HIDE, type HideSpot, MOTHER_KEEP_OUT, noMobsAt, spawnPoint, SPAWN_ZONES, villageDist, zoneCap } from "../shared/spawns";
 import { blocked, moveStep } from "../shared/movement";
 import { NIGHT_RAID, raiderByKey, raiderIgnores, RAIDERS } from "../shared/raiders";
@@ -85,6 +85,17 @@ import { respecCost } from "../shared/upkeep";
 import { ARSENAL, ATTUNE_ORDER, attuneOf, bondShare, DEFAULT_GRIMOIRE, SUMMONER_TREE, ESSENCE, GOLEM, GOLEM_OF, golemSlots, isElement, isSummonKind, parseGrimoire, PORTAL, SUMMON, summonElement, summonScaleLevel, WISP, wispEls, type AttuneElement, type SummonKind } from "../shared/summons";
 import { cleanFeast, familyOf, type Feast, feastMult, THRALL, thrallMax } from "../shared/devour";
 import { Champions, type ChampState } from "./champions";
+import { QuestSteps, setMeta } from "./questSteps";
+import { Tide } from "./tide";
+import { Rumours } from "./rumours";
+import { Apprentice } from "./apprentice";
+import { titleMsg } from "./titles";
+import { cleanOwned } from "../shared/cosmetics";
+import { cleanRumour, rumourDay, RUMOURS, type RumourState } from "../shared/rumours";
+import { TIDE } from "../shared/tide";
+import { world, worldChanged } from "./worldStore";
+import { META, metaOf, nextStage, withChoice } from "../shared/questSteps";
+import { traitTakenMult } from "../shared/talents";
 import { AFFIX_FX, CHAMPION } from "../shared/champions";
 /** A champion's helpers (its Splitting twin, a Ringleader's cutthroats) leave this long after they came. */
 const CHAMP_HELPER_MS = 90_000;
@@ -121,6 +132,8 @@ export class Mob extends Schema {
   charmUntil = 0; // Charm (v_gaze): a zone monster fighting for a vampire (owner set) until then, then it goes back to being itself
   sPower = 1; // a summon's damage multiplier (skill rank, the owner's Ruin talent, the golems fused into a Colossus)
   summonChain = 0; // ...and the quest chain of that step
+  qwave = false; // a hold step's wave monster (server/questSteps.ts): counts for nothing else (the Tide)
+  tide = false; // a Gloam Tide marcher (server/tide.ts): never merges or dozes, walks round walls, fills no meter
   @type("string") title = ""; // quest boss name shown over it instead of "Elite" (QuestStep.summon.title)
   mergeInto = ""; // answering a call: id of the blob it is rushing to fuse with
   mergeCap = 0; // most blobs this one may hold (set at its first call)
@@ -585,6 +598,14 @@ export class TownRoom extends Room<TownState> {
     canStand: (x, y) => !isSolidAt(x, y) && !isSafeZone(x, y) && !noMobsAt(x, y),
   });
   private itemSeq = 0;
+  /** The quest steps that need more than a count (server/questSteps.ts): choices, NPCs in any order, picks. */
+  private qsteps!: QuestSteps;
+  /** The Gloam Tide (server/tide.ts): the world meter from blob kills, and the march on the west gate. */
+  private tide!: Tide;
+  /** Tavern Rumours (server/rumours.ts): Mags' three daily side quests. */
+  private rumours!: Rumours;
+  /** The Apprentice (server/apprentice.ts): veterans standing by recruits at their first boss. */
+  private apprentice!: Apprentice;
 
   private offWar?: () => void;
   private warPresence = new Presence();
@@ -593,6 +614,62 @@ export class TownRoom extends Room<TownState> {
     liveRooms.add(this);
     this.offWar = attachWar(this); // the clan war (server/war.ts) runs on its own; the room only passes on the news
     this.limitMessages();
+    this.qsteps = new QuestSteps({
+      player: (pid) => this.state.players.get(pid),
+      qs: (p, c) => this.qs(p as unknown as Player, c),
+      nextStep: (pid, c) => { const p = this.state.players.get(pid); if (p) this.nextStep(pid, p, c); },
+      setStage: (pid, c, stage, count = 0) => { const p = this.state.players.get(pid); if (!p) return; this.qset(p, c, { questStage: stage, questCount: count }); this.sendQuest(pid, p, c); this.qsteps.changed(pid, c); },
+      summon: (pid, sm, tag, home, lifeMs, wave) => {
+        const id = this.summonFused(pid, sm, tag), m = this.state.mobs.get(id);
+        if (m && home) { m.homeX = home.x; m.homeY = home.y; }
+        if (m && lifeMs) m.banishAt = Date.now() + lifeMs; // sinks back if nobody kills it (updateMob)
+        if (m && wave) { m.qwave = true; m.hp = m.maxHp = Math.round(mobDef(m).maxHp * mobScale(m.level, "hp")); } // a plain monster of its kind, not a fused one
+        return id;
+      },
+      removeMob: (id) => { const m = this.state.mobs.get(id); if (!m || m.dead) return; m.dead = true; m.hp = 0; this.clock.setTimeout(() => this.state.mobs.delete(id), 500); },
+      send: (pid, type, msg) => this.clients.find((cl) => cl.sessionId === pid)?.send(type, msg),
+      broadcast: (type, msg) => this.broadcast(type, msg),
+      forEachHero: (fn) => this.state.players.forEach((p, pid) => fn(pid, p)),
+      mob: (id) => this.state.mobs.get(id),
+      group: (pid) => { const p = this.state.players.get(pid); return p?.party ? this.members(p.party) : [pid]; },
+      together: (a, b) => { const p = this.state.players.get(a), o = this.state.players.get(b); return !!p && !!o && !o.dead && together(p.x, p.y, o.x, o.y); },
+      dayFrac: (now) => worldDayFrac(now),
+      mobsNear: (x, y, r) => this.state.mobs.inBox(x, y, r),
+      forget: (mid, pid) => { const m = this.state.mobs.get(mid); if (m && !m.dead && !m.owner) this.forgetHero(m, pid); },
+      warp: (pid, x, y) => this.warp(pid, x, y),
+      summonsOf: (pid) => { const out: { x: number; y: number }[] = []; for (const m of this.summons.values()) if (m.owner === pid && !m.dead) out.push({ x: m.x, y: m.y }); return out; },
+    });
+    this.tide = new Tide({
+      heroes: () => this.state.players.entries(), hero: (pid) => this.state.players.get(pid), mob: (id) => this.state.mobs.get(id),
+      spawn: (kind, level, at, home) => { const id = `t${++this.mobSeq}`; this.spawnMob(kind, -1, id, { ...at, level }); const m = this.state.mobs.get(id)!; m.tide = true; m.title = TIDE.title; m.homeX = home.x; m.homeY = home.y; return id; },
+      removeMob: (id) => { const m = this.state.mobs.get(id); if (!m || m.dead) return; m.dead = true; m.hp = 0; this.clock.setTimeout(() => this.state.mobs.delete(id), 500); },
+      send: (pid, type, msg) => this.clients.find((cl) => cl.sessionId === pid)?.send(type, msg),
+      act1: (p) => actAt(p.y, p.x) === 1, dayFrac: (now) => worldDayFrac(now), world, changed: worldChanged,
+      pay: (pid, gold, rune) => this.payHero(pid, gold, rune),
+    });
+    this.rumours = new Rumours({
+      heroes: () => this.state.players.entries(), hero: (pid) => this.state.players.get(pid), mob: (id) => this.state.mobs.get(id),
+      summon: (pid, sm, lifeMs) => { const id = this.summonFused(pid, sm, RUMOURS.tag), m = this.state.mobs.get(id); if (m) m.banishAt = Date.now() + lifeMs; return id; },
+      removeMob: (id) => { const m = this.state.mobs.get(id); if (!m || m.dead) return; m.dead = true; m.hp = 0; this.clock.setTimeout(() => this.state.mobs.delete(id), 500); },
+      send: (pid, type, msg) => this.clients.find((cl) => cl.sessionId === pid)?.send(type, msg),
+      pay: (pid, gold, rune) => this.payHero(pid, gold, rune), dayFrac: (now) => worldDayFrac(now),
+      save: (pid) => { const p = this.state.players.get(pid); if (p) saveHero(p.name, p.cls, this.snapshot(p)); },
+    });
+    this.apprentice = new Apprentice({
+      hero: (pid) => this.state.players.get(pid),
+      group: (pid) => { const p = this.state.players.get(pid); return p?.party ? this.members(p.party) : [pid]; },
+      together: (a, b) => { const p = this.state.players.get(a), o = this.state.players.get(b); return !!p && !!o && !o.dead && together(p.x, p.y, o.x, o.y); },
+      send: (pid, type, msg) => this.clients.find((cl) => cl.sessionId === pid)?.send(type, msg),
+      note: (pid, text) => this.note(pid, text),
+      reward: (pid, gold, potions) => {
+        const p = this.state.players.get(pid);
+        if (!p) return;
+        p.gold += gold;
+        const rs = dropSize(p.level, () => 0.5), left = potions - this.addPotions(p, "potion", rs, potions); // sized like quest reward potions
+        if (left > 0) this.dropItem("potion", p.x, p.y + 8, left, String(rs));
+      },
+      save: (pid) => { const p = this.state.players.get(pid); if (p) saveHero(p.name, p.cls, this.snapshot(p)); },
+    });
     // Clan war heroes (server/warHeroes.ts): oaths, and minutes at the standards reported as valor
     this.clock.setInterval(() => {
       for (const [id, rank] of this.warPresence.tick(this.state.players.entries())) {
@@ -677,8 +754,11 @@ export class TownRoom extends Room<TownState> {
     this.onMessage("stat", (client, k: string) => this.assignStat(client.sessionId, k));
     this.onMessage("resetstats", (client) => this.resetStats(client.sessionId));
 
-    this.onMessage("quest", (client, msg: { chain?: number }) => this.advanceQuest(client.sessionId, CHAINS[Number(msg?.chain)] ? Number(msg.chain) : 0));
-    this.onMessage("use", (client, msg: { id: string }) => this.useQuestObject(client.sessionId, msg?.id));
+    // opt: a choice step's answer (shared/questSteps.ts ChoiceSpec), an integer the step's options are checked against
+    this.onMessage("quest", (client, msg: { chain?: number; opt?: unknown }) => this.advanceQuest(client.sessionId, CHAINS[Number(msg?.chain)] ? Number(msg.chain) : 0, Number.isInteger(msg?.opt) ? (msg.opt as number) : undefined));
+    this.onMessage("use", (client, msg: { id?: unknown }) => { if (typeof msg?.id === "string" && msg.id.length <= 40) this.useQuestObject(client.sessionId, msg.id); });
+    // put down what a carry step has you holding (no payload; only its holder can, server/questSteps.ts)
+    this.onMessage("qdrop", (client) => { if (this.allow("ask", client)) this.qsteps.drop(client.sessionId); });
     this.onMessage("chest", (client, msg: { id: string }) => this.openChest(client, msg?.id));
     this.onMessage("chests", (client) => this.sendChests(client));
     this.onMessage("door", (client, msg: { id: string }) => this.workDoor(client, msg?.id));
@@ -687,6 +767,12 @@ export class TownRoom extends Room<TownState> {
     this.onMessage("travel", (client, msg: { to?: string }) => this.travel(client, msg?.to));
     this.onMessage("waygate", (client) => this.useWaygate(client));
     this.onMessage("bounty", (client, msg: { take?: number; drop?: boolean }) => this.bountyMsg(client, msg ?? {}));
+    // Tavern Rumours: {take: 0..2} by Mags, {drop: true}, {} = resend (checked in server/rumours.ts)
+    this.onMessage("rumour", (client, msg: unknown) => { if (this.allow("ask", client)) this.rumours.msg(client.sessionId, msg); });
+    // The Apprentice: {on: boolean} by Captain Hale, {} = resend (checked in server/apprentice.ts)
+    this.onMessage("mentor", (client, msg: unknown) => { if (this.allow("ask", client)) this.apprentice.msg(client.sessionId, msg); });
+    // Titles: {i} shows an earned title (0 = none), {} = resend; the reply is "title" {i, owned} (server/titles.ts)
+    this.onMessage("title", (client, msg: unknown) => { const p = this.state.players.get(client.sessionId); if (p && this.allow("ask", client)) client.send("title", titleMsg(p, msg)); });
     this.onMessage("shrine", (client) => client.send("shrine", { left: Math.max(0, this.shrineReadyAt - Date.now()) }));
     // The client is ready (loading screen gone): a hero on the first step of First Steps gets its banner
     this.onMessage("tutorial", (client) => {
@@ -763,6 +849,7 @@ export class TownRoom extends Room<TownState> {
         if (m) for (let i = 0; i < 16; i++) { const a = i / 16 * Math.PI * 2, x = p.x + Math.cos(a) * 5 * TILE, y = p.y + Math.sin(a) * 3 * TILE; if (this.rideOk(x, y, act as 1 | 2)) { m.x = x; m.y = y; break; } }
         return;
       }
+      if (process.env.NODE_ENV !== "production" && this.tide.dev(text.trim())) return; // dev servers only: /tide N, /tidemarch, /tideend
       if (process.env.NODE_ENV !== "production" && /^\/god$/i.test(text.trim())) { p.invulnUntil = Date.now() + 10 * 60_000; return; } // dev servers only: 10 min unhurt, to watch a fight
       if (process.env.NODE_ENV !== "production" && /^\/sunfinale$/i.test(text.trim())) { // dev servers only: on the Second Sun's last quest
         const c = CHAINS.findIndex((ch) => ch.id === "sun");
@@ -912,7 +999,7 @@ export class TownRoom extends Room<TownState> {
     // steps changed in an update): it is simply under way when they come back
     for (let c = 0; c < CHAINS.length; c++) {
       const q = this.qs(p, c), d = CHAINS[c].quests[q.questId];
-      if (d?.auto && q.questId > 0 && q.questStage === 0 && p.level >= d.minLevel && chainOpen(p, c)) this.qset(p, c, { questStage: 1, questCount: 0 });
+      if (d?.auto && q.questId > 0 && q.questStage === 0 && p.level >= d.minLevel && chainOpen(p, c)) this.qset(p, c, { questStage: nextStage(d, 0, p), questCount: 0 });
     }
     this.state.players.set(client.sessionId, p);
     // This client alone sees its hero's owner-only fields (Player.me). After players.set: StateView#add throws on an
@@ -921,6 +1008,9 @@ export class TownRoom extends Room<TownState> {
     client.view.add(p);
     if (back?.group.length) this.regroupOnJoin(client.sessionId, p, back.group);
     this.sendBoard(client); // the Ideas board is ready as soon as it is opened
+    this.tide.join(client.sessionId); // the Gloam Tide's meter (server/tide.ts)
+    this.rumours.join(client.sessionId); // today's rumours (server/rumours.ts)
+    this.apprentice.join(client.sessionId); // mentoring state (server/apprentice.ts)
     if (Object.keys(p.feast).length) client.send("feast", { feast: p.feast }); // Devour: what this hero has eaten
     if (p.cls === "songweaver") client.send("songbook", this.songs.msg(p)); // her songs and materials (owner only)
     const war = warNow(); if (war) client.send("war", war); // the clan war front plaque (client/src/warPlaque.ts)
@@ -934,6 +1024,9 @@ export class TownRoom extends Room<TownState> {
     if (p) saveHero(p.name, p.cls, this.snapshot(p));
     if (p && !announced) this.rememberHero(client.sessionId, p); // during an update everyone was remembered together (groups intact)
     this.partyLeave(client.sessionId);
+    this.qsteps.leave(client.sessionId);
+    this.rumours.leave(client.sessionId);
+    this.apprentice.leave(client.sessionId);
     this.lastDrainFx.delete(client.sessionId);
     this.runeCache.delete(client.sessionId); // per-session caches: a returning hero gets a new session id
     for (const k of RUNE_KEYS) this.runeReady.delete(`${client.sessionId}:${k}`);
@@ -955,6 +1048,7 @@ export class TownRoom extends Room<TownState> {
 
   onDispose() {
     liveRooms.delete(this);
+    this.tide?.release(); // another room may own the Gloam Tide now (server/tide.ts)
     this.offWar?.();
     this.state.players.forEach((p) => saveHero(p.name, p.cls, this.snapshot(p)));
     return flushFinal();
@@ -1019,7 +1113,10 @@ export class TownRoom extends Room<TownState> {
         return [[a, q.questId], [b, q.questStage], [n, q.questCount], [ch.verKey, ch.version]];
       })) as Record<string, number> & Pick<HeroSave, "questStage" | "questCount">, // CHAINS[0] always writes these two
       portals: [...p.portals], act: actAt(p.y, p.x),
-      bounty: p.bounty, bountyDone: p.bountyDone, feast: { ...p.feast },
+      bounty: p.bounty, bountyDone: p.bountyDone, feast: { ...p.feast }, rumour: p.rumour && { ...p.rumour },
+      // choices made (owner-only me.flags) and cosmetics (public Player.cosm), shared/questSteps.ts META; missing = 0
+      flags: metaOf(p, META.flags) || undefined, cosm: metaOf(p, META.cosm) || undefined,
+      titles: p.titles || undefined, mentor: p.mentor && { ...p.mentor, names: [...p.mentor.names] },
       ...(p.clan ? { clan: p.clan, clanAt: p.clanAt } : {}), ...(p.renown > 0 ? { renown: p.renown } : {}),
       ...(p.cls === "summoner" ? { grimoire: this.grimoireOf(p), suTree: SUMMONER_TREE } : {}),
       ...songSave(p.cls, p.sk),
@@ -1084,8 +1181,12 @@ export class TownRoom extends Room<TownState> {
     for (const id of cleanPortals(s.portals)) p.portals.add(id);
     p.bountyDone = Math.max(0, Math.floor(num(s.bountyDone)));
     p.bounty = cleanBounty(s.bounty);
+    p.rumour = cleanRumour(s.rumour, rumourDay(Date.now()), p.level); // another day's rumours start over
     { const o = cleanOath(s.clan, s.clanAt); p.clan = o.clan; p.clanAt = o.clanAt; p.renown = cleanRenown(s.renown); } // clan war oath (server/warHeroes.ts)
     p.feast = cleanFeast(s.feast);
+    setMeta(p, META.flags, num(s.flags)); setMeta(p, META.cosm, num(s.cosm)); // choices (me.flags) and cosmetics (cosm), kept apart from the chains' progress
+    p.titles = cleanOwned(s.titles, num(s.cosm)); // titles earned; saves from before the list own the one they show
+    p.mentor = cleanMentor(s.mentor);
     const sv = s as unknown as Record<string, unknown>;
     // Saves from before the guided first quest count it as done
     if (sv.tutVer === undefined) sv.tutId = TUT_QUESTS.length;
@@ -1622,26 +1723,29 @@ export class TownRoom extends Room<TownState> {
   private pickTarget(m: Mob, def: MobDef) {
     let best = 0, target = "", foe = "";
     m.threat = 0;
-    const now0 = Date.now(), alerted = now0 < m.alertUntil;
+    const now0 = Date.now(), alerted = now0 < m.alertUntil, blob = isBlob(m.kind);
     const hero = (p: Player, pid: string) => {
       if (p.dead || isSafeZone(p.x, p.y) || Math.hypot(p.x - m.homeX, p.y - m.homeY) >= def.leash || inVoid(p, now0)) return;
       const d = Math.hypot(p.x - m.x, p.y - m.y);
       // a hero the horn (or a shout) called the camp against counts as hated
       const hated = (pid === m.hateId ? m.hate : 0) + (alerted && pid === m.alertHero ? 0.5 : 0);
-      const range = hated > 0 ? def.aggroRange * 2 : def.aggroRange;
+      // a carried lantern draws the blobs from further (Player.lureMul); a hero going unseen is seen from less far (Player.aggroMul)
+      const reach = def.aggroRange * p.aggroMul * (blob ? p.lureMul : 1);
+      const range = hated > 0 ? reach * 2 : reach;
       if (d >= range) return;
       if (d < def.aggroRange) m.threat = Math.max(m.threat, p.level - m.level);
       const lf = m.merged > 1 || m.kind === "demon" ? Math.max(1, aggroLevelFactor(m.level, p.level)) : aggroLevelFactor(m.level, p.level); // a merged blob regrouped to fight, a demon was called against him: no hero scares them
-      const score = Math.max(0, 1 - d / def.aggroRange) * lf + hated + (pid === m.target ? AGGRO.stick : 0);
+      const score = Math.max(0, 1 - d / reach) * lf + hated + (pid === m.target ? AGGRO.stick : 0);
       if (score > best) { best = score; target = pid; }
     };
     // In the monster loop: the living heroes in state order (those dead at its start would leave on the first test),
-    // and one at least twice the aggro range away in x or y is out of every range here (the tests above have no effects)
+    // and one at least twice their own aggro reach away in x or y (a carried lantern or an unseen step scales it, as
+    // in hero above) is out of every range here (the tests above have no effects)
     const hs = this.loopHeroes;
     if (hs) {
-      const reach = def.aggroRange * 2, mx = m.x, my = m.y, ids = this.loopIds;
+      const reach2 = def.aggroRange * 2, mx = m.x, my = m.y, ids = this.loopIds;
       for (let i = 0; i < hs.length; i++) {
-        const p = hs[i];
+        const p = hs[i], reach = reach2 * p.aggroMul * (blob ? p.lureMul : 1);
         if (Math.abs(p.x - mx) >= reach || Math.abs(p.y - my) >= reach) continue;
         hero(p, ids[i]);
       }
@@ -1708,14 +1812,15 @@ export class TownRoom extends Room<TownState> {
 
   /** Void Slip: every monster after this hero loses them and turns on their nearest golem, if one is close. */
   private loseHero(id: string) {
-    this.state.mobs.forEach((m) => {
-      if (m.dead || m.owner || (m.target !== id && m.hateId !== id)) return;
-      if (m.target === id) m.target = "";
-      if (m.hateId === id) { m.hateId = ""; m.hate = 0; }
-      m.windUntil = 0; m.winding = false;
-      const g = this.guardOf(id, m) ?? this.bondOf(id, m)?.[0];
-      if (g) { m.foe = g; this.addHate(m, g, 10); }
-    });
+    this.state.mobs.forEach((m) => { if (!m.dead && !m.owner && (m.target === id || m.hateId === id)) this.forgetHero(m, id); });
+  }
+  /** One monster stops fighting a hero and forgets its hate (loseHero; an unseen hero who was seen, server/questSteps.ts). */
+  private forgetHero(m: Mob, id: string) {
+    if (m.target === id) m.target = "";
+    if (m.hateId === id) { m.hateId = ""; m.hate = 0; }
+    m.windUntil = 0; m.winding = false;
+    const g = this.guardOf(id, m) ?? this.bondOf(id, m)?.[0];
+    if (g) { m.foe = g; this.addHate(m, g, 10); }
   }
 
   /**
@@ -2276,7 +2381,7 @@ export class TownRoom extends Room<TownState> {
   // ---- Blob merging -----------------------------------------------------------
 
   /** Blobs that can call for help and fuse (Mother Blobs too, Murat 2026-11-03). */
-  private static canMerge(m: Mob) { return BLOB_KINDS.includes(m.kind) && !m.servant && !m.champion; } // a champion stays itself // the Hollow King's servants stay his
+  private static canMerge(m: Mob) { return BLOB_KINDS.includes(m.kind) && !m.servant && !m.champion && !m.tide; } // a champion stays itself // the Hollow King's servants stay his
 
   /** Blobs below MERGE.minLevel don't merge, unless a hero close by is on the "watch a blob call for help" quest step. */
   private mergeLevelOk(m: Mob) {
@@ -2669,7 +2774,7 @@ export class TownRoom extends Room<TownState> {
    * not burning, stunned, walking to a rite, being banished or merging. Mirrors the early returns of updateMob.
    */
   private dozing(m: Mob, heroes: Player[], now: number): boolean {
-    if (m.kind === "nightraider") return false; // a rider never sleeps (there are at most two)
+    if (m.kind === "nightraider" || m.tide) return false; // a rider never sleeps (there are at most two), nor a Gloam Tide marcher (at most TIDE.maxAlive)
     if (m.dead || m.target || m.foe || m.banishAt || m.ritual || m.mergeInto || m.spot || m.specialAt || m.windUntil) return false;
     if (now < m.stunUntil || now < m.sk.burnUntil || m.broken || m.moving) return false;
     return !this.heroNear(m, heroes);
@@ -2748,6 +2853,10 @@ export class TownRoom extends Room<TownState> {
       this.pickUp(p, pid);
       this.updateWrath(pid, p, now);
     });
+    this.qsteps.tick(now, dtMs); // carried lanterns, hold runs (server/questSteps.ts)
+    this.tide.tick(now); // the Gloam Tide's march (server/tide.ts)
+    this.rumours.tick(now); // rumours: reach steps, ambushers, walking up to Mags (server/rumours.ts)
+    this.apprentice.tick(now); // mentoring state for heroes who just joined (server/apprentice.ts)
     this.state.items.forEach((it, id) => { if (now > it.expires) this.state.items.delete(id); });
     const tick = ++this.tickNo;
     // Live heroes, gathered once so each monster's "anyone near?" check is a plain array scan
@@ -3130,7 +3239,7 @@ export class TownRoom extends Room<TownState> {
     if (m.stunned) { m.moving = false; return; }
     if (m.kind === "nightraider") return this.raiderStep(m, id, dt, now);
     // Nobody around: the monster dozes (no wandering, no budding), which keeps big monster counts cheap
-    if (!m.target && !this.sleepNear(m)) {
+    if (!m.target && !m.tide && !this.sleepNear(m)) {
       if (m.moving) m.moving = false;
       // an ambusher left standing about with nobody (not even a fallen hero) to see: it is back up its tree
       if (m.ambusher && !m.hidden && !m.broken && !this.anyPlayerNear(m.x, m.y, SLEEP_RANGE) && (m.spot || this.treeFor(m, now))) this.hide(m, id, now);
@@ -3385,7 +3494,7 @@ export class TownRoom extends Room<TownState> {
     this.nextRaidRoll = now + NIGHT_RAID.rollMs;
     for (const act of [1, 2] as const) {
       const A = NIGHT_RAID.acts[act];
-      if (now < this.raidRest[act]) continue;
+      if (now < this.raidRest[act] || (act === 1 && this.tide.marching)) continue; // no riders while the Gloam Tide marches
       const out = [...this.raiders.values()].filter((m) => m.raidAct === act).length;
       for (let slot = out; slot < A.max; slot++) if (Math.random() < A.chance) this.raidArrive(act, now);
     }
@@ -3597,9 +3706,9 @@ export class TownRoom extends Room<TownState> {
     return this.go(m, x, y, now);
   }
 
-  /** Walk toward (x,y): camp bandits find their way round walls through the gates, others go straight. */
+  /** Walk toward (x,y): camp bandits (and Gloam Tide marchers) find their way round walls, others go straight. */
   private go(m: Mob, x: number, y: number, now: number): InputState {
-    if (!m.camp || clearWalk(m.x, m.y, x, y)) { m.path = []; m.pathFail = false; return toward(m.x, m.y, x, y); }
+    if (!(m.camp || m.tide) || clearWalk(m.x, m.y, x, y)) { m.path = []; m.pathFail = false; return toward(m.x, m.y, x, y); }
     const moved = Math.hypot(x - m.pathTX, y - m.pathTY) > TILE;
     // (no way found last time: the BFS would only fail again until the goal moves or the usual re-path time comes)
     if ((!m.path.length && !m.pathFail) || moved || now > m.pathAt + 1500) {
@@ -3848,7 +3957,7 @@ export class TownRoom extends Room<TownState> {
     for (const l of LINKS) {
       if (Math.abs(l.x - p.x) > LINK_RANGE || Math.abs(l.y - p.y) > LINK_RANGE || Math.hypot(l.x - p.x, l.y - p.y) > LINK_RANGE) continue;
       const dest = linkById(l.to);
-      if (!dest) return;
+      if (!dest || this.lanternHeld(pid, p)) return;
       const at = arrivalAt(dest);
       p.x = at.x; p.y = at.y; p.moving = false;
       p.rollUntil = 0; p.rolling = false; p.emote = "";
@@ -3856,6 +3965,17 @@ export class TownRoom extends Room<TownState> {
       this.broadcast("descend", { id: pid, from: l.id, to: dest.id, down: l.down, x: Math.round(at.x), y: Math.round(at.y) });
       return;
     }
+  }
+
+  /**
+   * A hero carrying a quest lantern (Player.qlock, server/questSteps.ts) walks it: no portal stone, waygate, rope or stair
+   * takes them (skills are locked already). True = blocked; they hear why, at most every 3 s. The lantern stays in hand.
+   */
+  private lanternHeld(pid: string, p: Player): boolean {
+    if (!p.qlock) return false;
+    const now = Date.now();
+    if (now - p.qlockNoteAt > 3000) { p.qlockNoteAt = now; this.note(pid, "The lantern won't survive the portal. Walk it."); }
+    return true;
   }
 
   /**
@@ -3874,6 +3994,7 @@ export class TownRoom extends Room<TownState> {
       if (now - p.gateNoteAt > 3000) { p.gateNoteAt = now; this.note(pid, `The waygate's stones are cold. It will wake when ${act2Missing(p).join(" and ")} ${act2Missing(p).length > 1 ? "are" : "is"} beaten.`); }
       return;
     }
+    if (this.lanternHeld(pid, p)) return;
     if (Date.now() - p.lastHurt < PORTAL_COMBAT_MS) { client.send("travelno", { why: "fight" }); return; }
     const dest = waygateById(g.to)!, at = waygateArrival(dest);
     p.x = at.x; p.y = at.y; p.moving = false;
@@ -4615,7 +4736,7 @@ export class TownRoom extends Room<TownState> {
 
   private cast(id: string, skill: string) {
     const p = this.state.players.get(id);
-    if (!p || typeof skill !== "string" || p.rolling) return;
+    if (!p || typeof skill !== "string" || p.rolling || p.qlock) return; // qlock: hands full with a quest lantern (server/questSteps.ts)
     const def = skillOf(p.cls, skill);
     if (def && skillLearned(p.cls, p.talents, skill) && !weaponOk(def, p.cls, this.equipped(p))) {
       // Wrong weapon in hand (a Volley needs a bow): say so, at most once a second while the key is held
@@ -4679,7 +4800,7 @@ export class TownRoom extends Room<TownState> {
   /** Press a slot key: use whatever skill is in that slot. */
   private useSlot(id: string, n: number) {
     const p = this.state.players.get(id);
-    if (!p || typeof n !== "number" || n < 0 || n >= SLOT_COUNT) return;
+    if (!p || typeof n !== "number" || n < 0 || n >= SLOT_COUNT || p.qlock) return;
     const s = p.slots.at(n);
     if (s) this.cast(id, s);
   }
@@ -5150,6 +5271,7 @@ export class TownRoom extends Room<TownState> {
     if (a?.party) dmg = Math.max(1, Math.round(dmg / groupHpMult(this.groupNear(attackerId, m.x, m.y).length)));
     if (m.bones) dmg = Math.max(1, Math.round(dmg * (1 - DEMON.harvest.armorPer * m.bones))); // Bone Demon's bone armour
     this.bloodthirst(a, attackerId, Math.min(dmg, m.hp), opts.drain, targetId);
+    if (a && m.tide) this.tide.hit(attackerId, m, Math.min(dmg, m.hp)); // damage to a marcher near the gate (server/tide.ts)
     m.hp = Math.max(0, m.hp - dmg);
     if (m.champ) this.champs.hurt(m, targetId, Date.now()); // Risen, Splitting, Hide-Stitched (server/champions.ts)
     this.addHate(m, attackerId, dmg); // fight back (generated aggro)
@@ -5180,10 +5302,13 @@ export class TownRoom extends Room<TownState> {
     if (m.hp > 0) { afterHit(this.host, attackerId, targetId, opts); return; }
     if (a) onKill(this.host, attackerId); // Bloodlust
     if (m.owner && !m.charmUntil) { this.mobDied(m, targetId, attackerId, a?.name ?? ""); return; } // a summon: no XP, no loot, no quest credit
-    if (a) for (let c = 0; c < CHAINS.length; c++) this.questKill(attackerId, a, m, c);
-    if (a) this.bountyKill(attackerId, a, m);
+    if (a && !m.tide) for (let c = 0; c < CHAINS.length; c++) this.questKill(attackerId, a, m, c); // marchers fill no quest or bounty
+    if (a && !m.tide) this.ownerCredit(attackerId, a, m); // someone's own quest monster, felled by their group (decision 9)
+    if (a && !m.tide) this.bountyKill(attackerId, a, m);
+    if (a) this.tide.kill(attackerId, m); // a blob fills the Gloam Tide's meter (server/tide.ts)
+    if (a) this.rumours.kill(attackerId, targetId); // a rumour's ambusher (server/rumours.ts)
     // Kill XP: every group member in the same zone gets it (the killer alone when solo)
-    const xp = Math.round(def.xp * mobScale(m.level, "xp"));
+    const xp = Math.round(def.xp * mobScale(m.level, "xp") * (m.tide ? TIDE.xpMult : 1));
     for (const pid of a?.party ? this.groupNear(attackerId, m.x, m.y) : [attackerId]) this.grantXp(pid, xp, m);
     this.dropLoot(m.kind, m.x, m.y, mobScale(m.level, "gold") * (m.kind === "bandit" ? BANDIT_ROLES[roleOf(m.weapon)].loot : 1) * (m.champion ? CHAMPION.goldMult : 1), m.level);
     if (m.champion) this.champLoot(m); // a champion: more gold, gear rolls, a potion and a rune
@@ -5247,7 +5372,7 @@ export class TownRoom extends Room<TownState> {
   private execute(a: Player, m: Mob, dmg: number, opts: HitOpts): number {
     if (!canExecute(opts, m)) return 0;
     m.execSpent = true;
-    const boss = !!(ELITE[m.kind] || BOSS[m.kind] || m.kind === "nightraider" || m.title);
+    const boss = !!(ELITE[m.kind] || BOSS[m.kind] || m.kind === "nightraider" || (m.title && !m.tide)); // a Gloam Tide marcher is a plain blob
     executeRefund(a, a.cls, OVERLOAD.max);
     this.syncMana(a);
     return Math.max(1, Math.round(executeDamage(dmg, !!opts.crit, boss)));
@@ -5351,7 +5476,7 @@ export class TownRoom extends Room<TownState> {
 
   /** The shop of the trader the player stands next to. */
   private shopNear(p: Player) {
-    const n = npcNear(p.x, p.y, TALK_RANGE * 1.5);
+    const n = npcNear(p.x, p.y, TALK_RANGE * 1.5, (o) => npcPresent(o.id, p)); // a trader who isn't there for this hero doesn't trade
     return n?.shop ? SHOPS[n.shop] : undefined;
   }
 
@@ -5598,15 +5723,18 @@ export class TownRoom extends Room<TownState> {
     this.unsummon(id, c);
     const done = d.steps[q.questStage - 1];
     if (done?.levelTo && p.level < done.levelTo) this.grantXp(id, xpForLevel(done.levelTo) - p.xp, p);
-    if (q.questStage < d.steps.length) {
-      this.qset(p, c, { questStage: q.questStage + 1 });
+    const ns = nextStage(d, q.questStage, p); // steps for another choice are skipped (QuestStep.onlyIf)
+    if (ns <= d.steps.length) {
+      this.qset(p, c, { questStage: ns });
       this.sendQuest(id, p, c);
+      this.qsteps.changed(id, c);
       // Already did what the new step teaches (learned an active skill before getting here): straight on
-      const s = d.steps[q.questStage];
+      const s = d.steps[ns - 1];
       if (s.type === "learn" && activeSkills(p.cls).some((k) => skillLearned(p.cls, p.talents, k.id))) this.nextStep(id, p, c);
       return;
     }
     p.gold += d.reward.gold;
+    if (d.sets) setMeta(p, META.flags, withChoice(metaOf(p, META.flags), d.sets.flag, d.sets.v)); // QuestDef.sets: e.g. Penance done
     if (d.reward.song) this.learnSong(id, p, d.reward.song); // a Songweaver learns the quest's song (shared/songbook.ts)
     // Reward potions fit the hero's level; what the bag can't hold is put down at their feet
     const rs = dropSize(p.level, () => 0.5);
@@ -5616,7 +5744,8 @@ export class TownRoom extends Room<TownState> {
     }
     this.qset(p, c, { questId: q.questId + 1, questStage: 0 });
     this.sendQuest(id, p, c, true);
-    this.grantXp(id, d.reward.xp, p);
+    this.qsteps.changed(id, c);
+    if (d.reward.xp) this.grantXp(id, d.reward.xp, p); // the side arcs give none
     // The next quest of the chain carries on from here by itself (QuestDef.auto: no walk back to its giver), a breath
     // after the "Quest complete" banner; below its level it waits for its giver as usual
     const next = CHAINS[c].quests[q.questId + 1];
@@ -5629,8 +5758,9 @@ export class TownRoom extends Room<TownState> {
     if (!p || !d) return;
     const q = this.qs(p, c);
     if (q.questId !== qid || q.questStage !== 0 || p.level < d.minLevel || !chainOpen(p, c)) return;
-    this.qset(p, c, { questStage: 1, questCount: 0 });
+    this.qset(p, c, { questStage: nextStage(d, 0, p), questCount: 0 });
     this.sendQuest(id, p, c, false, true);
+    this.qsteps.changed(id, c);
   }
 
   /** Progress on a kill / collect / use step; finishes the step at its goal. */
@@ -5655,7 +5785,7 @@ export class TownRoom extends Room<TownState> {
   }
 
   /** Accept a quest at its giver, or finish a "talk" step next to that NPC. */
-  private advanceQuest(id: string, c: number) {
+  private advanceQuest(id: string, c: number, opt?: number) {
     const p = this.state.players.get(id);
     if (!p || p.dead) return;
     const q = this.qs(p, c), d = CHAINS[c].quests[q.questId];
@@ -5664,6 +5794,7 @@ export class TownRoom extends Room<TownState> {
       if (p.level >= d.minLevel && chainOpen(p, c) && this.nearNpc(p, d.giver)) this.nextStep(id, p, c);
       return;
     }
+    if (this.qsteps.talk(id, c, opt)) return; // a choice, or several NPCs to hear (server/questSteps.ts)
     const s = questStep(q);
     if (s?.type === "talk" && this.nearNpc(p, s.npc!)) this.nextStep(id, p, c);
   }
@@ -5672,6 +5803,8 @@ export class TownRoom extends Room<TownState> {
   private useQuestObject(id: string, oid: string) {
     const p = this.state.players.get(id);
     if (!p || p.dead) return;
+    if (this.qsteps.use(id, oid)) return; // pick and the like (server/questSteps.ts)
+    if (this.rumours.use(id, oid)) return; // a rumour's objects (server/rumours.ts)
     for (let c = 0; c < CHAINS.length; c++) {
       const q = this.qs(p, c), s = questStep(q);
       if (s?.type !== "use") continue;
@@ -5808,6 +5941,14 @@ export class TownRoom extends Room<TownState> {
     client.send("bounty", { board: board?.id ?? "", offers, active: p.bounty ?? null });
   }
 
+  /** Pay a hero (the Tide, rumours): gold, and a rune into the bag, or at their feet if it is full. */
+  private payHero(pid: string, gold: number, rune?: string) {
+    const p = this.state.players.get(pid);
+    if (!p) return;
+    p.gold += gold;
+    if (rune) { if (this.bagFull(p)) this.dropItem("gear", p.x, p.y, 1, rune, pid); else setBag(p, [...bagItems(p), rune]); }
+  }
+
   /** A monster died to this hero: does it count for their bounty? The last kill pays out on the spot. */
   private bountyKill(id: string, p: Player, m: Mob) {
     const b = p.bounty;
@@ -5847,12 +5988,28 @@ export class TownRoom extends Room<TownState> {
     if (!p || p.dead || !dest || !p.portals.has(dest.id)) return;
     const from = PORTALS.find((o) => p.portals.has(o.id) && Math.hypot(o.x - p.x, o.y - p.y) <= PORTAL_RANGE * 1.5);
     if (!from || from.id === dest.id) return;
+    if (this.lanternHeld(id, p)) return;
     if (now - p.lastHurt < PORTAL_COMBAT_MS) { client.send("travelno", { why: "fight" }); return; }
     const at = arrivalOf(dest);
     p.x = at.x; p.y = at.y; p.moving = false;
     p.rollUntil = 0; p.rolling = false;
     p.emote = "";
     this.broadcast("travel", { id, from: from.id, to: dest.id, x: at.x, y: at.y });
+  }
+
+  /**
+   * A quest moves the hero (an unseen hero who was seen goes back to their last hiding place, server/questSteps.ts):
+   * the same "travel" message as a portal, so the client snaps instead of walking (from / to "" = no portal stones,
+   * why = what moved them). A lantern carrier is never moved (lanternHeld), as on every other jump across the map.
+   */
+  private warp(pid: string, x: number, y: number): boolean {
+    const p = this.state.players.get(pid);
+    if (!p || p.dead || this.lanternHeld(pid, p)) return false;
+    p.x = x; p.y = y; p.moving = false;
+    p.rollUntil = 0; p.rolling = false;
+    p.emote = "";
+    this.broadcast("travel", { id: pid, from: "", to: "", x: Math.round(x), y: Math.round(y), why: "quest" });
+    return true;
   }
 
   /** A blob called for help / fused ("merge"), or skeletons began a bone ritual ("ritual"), near (x, y): players on that step close by have seen it. */
@@ -5870,7 +6027,7 @@ export class TownRoom extends Room<TownState> {
    * Put a quest monster in the world for this player: several blobs already melted into one (like absorb()),
    * or a single monster (a Bone Demon, a necromancer...) with a name tag and extra HP.
    */
-  private summonFused(pid: string, sm: Summon, c: number) {
+  private summonFused(pid: string, sm: Summon, c: number): string {
     const [host, ...rest] = sm.parts;
     const m = new Mob();
     m.kind = host; m.zone = -1; m.summonFor = pid; m.summonChain = c;
@@ -5909,7 +6066,7 @@ export class TownRoom extends Room<TownState> {
         const t0 = Date.now(); m.nextSweep = t0 + 2500; m.nextCircle = t0 + 4500; // a breath before his first moves
         this.broadcast("kingrise", { id, x: Math.round(m.x), y: Math.round(m.y) });
       }
-      return;
+      return id;
     }
     m.merged = sm.parts.length; m.parts = rest.join(","); m.mergeCap = m.merged;
     // HP of all the parts together, a little under the sum so the fight stays fair at the quest's level
@@ -5917,6 +6074,7 @@ export class TownRoom extends Room<TownState> {
     m.canShoot = sm.parts.includes("shooterblob"); m.canCharge = sm.parts.includes("warriorblob"); m.canHeal = sm.parts.includes("healerblob");
     this.state.mobs.set(id, m);
     this.broadcast("blobmerge", { into: id, from: "", x: Math.round(m.x), y: Math.round(m.y), level: m.level, merged: m.merged });
+    return id;
   }
 
   /** Remove the quest monster spawned for this player (step done on that chain, or they left: every chain). */
@@ -5942,7 +6100,7 @@ export class TownRoom extends Room<TownState> {
         p.nextSummon = now + 15000;
         let mine = false;
         this.state.mobs.forEach((m) => { if (m.summonFor === id && m.summonChain === c && !m.dead) mine = true; });
-        if (!mine) this.summonFused(id, s.summon, c);
+        if (!mine) this.qsteps.rose(id, c, this.summonFused(id, s.summon, c)); // a boss with a bargain makes its offer (server/questSteps.ts)
       }
       return;
     }
@@ -5959,17 +6117,33 @@ export class TownRoom extends Room<TownState> {
     }
   }
 
-  /** A monster died to this player: count it, or maybe drop a quest item only they can see. */
-  private questKill(id: string, p: Player, m: Mob, c: number) {
+  /**
+   * A monster died to this player: count it, or maybe drop a quest item only they can see. `ownOnly`: the kill was a
+   * group member's (ownerCredit), so only this hero's own-boss step may take it.
+   */
+  private questKill(id: string, p: Player, m: Mob, c: number, ownOnly = false) {
     const q = this.qs(p, c), s = questStep(q);
     // Kills and drops count anywhere on the map: only the monster's type matters (Murat's rule)
     if (!s || !s.kinds?.includes(m.kind)) return;
+    if (ownOnly && !(s.type === "kill" && s.own)) return;
     if (s.type === "kill" && (m.merged ?? 1) < (s.fused ?? 1)) return;
-    if (s.type === "kill" && s.own && m.summonFor !== id) return; // a named leader: only the one summoned for this player
+    if (s.type === "kill" && s.own && (m.summonFor !== id || m.summonChain !== c)) return; // a named leader: only the one summoned for this player on this chain (not a rumour's or a wrong grave's)
+    if (s.type === "kill" && s.own && q.questCount + 1 >= stepGoal(s)) this.apprentice.bossDown(id); // a mentor standing by pays out (server/apprentice.ts), while it still is their first
     const gift = stepFor(s, p.cls).gift; // the Songweaver's first gift is a book (shared/quests.ts byCls)
     if (s.type === "kill" && gift && q.questCount + 1 >= stepGoal(s)) this.giveGift(id, p, gift, m);
     if (s.type === "kill") this.questProgress(id, p, c, q.questCount + 1);
     else if (s.type === "collect" && Math.random() < (s.chance?.[m.kind] ?? 0)) this.dropItem("quest", m.x, m.y, 1, s.item!, id);
+  }
+
+  /**
+   * Decision 9: a hero's own quest monster felled by a member of their group who stands with them (shared/party.ts
+   * together) counts for that hero, on its own chain only. Rumour and wrong-grave ambushers (summonChain < 0) and hold
+   * waves never count; questKill still checks summonFor and summonChain.
+   */
+  private ownerCredit(id: string, a: Player, m: Mob) {
+    const oid = m.summonFor, o = oid && oid !== id ? this.state.players.get(oid) : undefined;
+    if (!o || o.dead || !a.party || o.party !== a.party || m.qwave || !CHAINS[m.summonChain] || !together(a.x, a.y, o.x, o.y)) return;
+    this.questKill(oid, o, m, m.summonChain, true);
   }
 
   /** A quest step's gift: straight into the bag with a "+item" pop at the monster (on the ground if the bag is full). */
@@ -6088,6 +6262,8 @@ export class TownRoom extends Room<TownState> {
     // Weakened monsters hit softer
     const fromMob = opts.from ? this.state.mobs.get(opts.from) : undefined;
     if (fromMob) dmg *= dealtMult(fromMob, now);
+    // A quest trait's talent (shared/talents.ts TRAIT_TALENTS, Hidebound): x1 while it is off
+    if (fromMob) dmg *= traitTakenMult(fromMob.kind, metaOf(t, META.cosm));
     // ...and hit a group harder
     if (fromMob && t.party) dmg *= groupDmgMult(this.groupNear(tid, fromMob.x, fromMob.y).length);
     const guarded = blocking(t, now);
@@ -6130,6 +6306,7 @@ export class TownRoom extends Room<TownState> {
     }
     this.broadcast("hit", { id: tid, dmg, blocked: guarded, crit: !!opts.crit, dot: !!opts.dot, el: opts.el ?? opts.mobEl, ...(opts.dot ? {} : hitDir(push)), ...byPart(hitBy(this.state.players, this.state.mobs, opts.from)) });
     if (t.hp > 0) {
+      this.qsteps.hurt(tid); // unseen steps (server/questSteps.ts)
       afterHit(this.host, opts.from, tid, opts);
       if (struck) this.runesStruck(tid, t, opts.from!, dmg);
       if (struck && fromMob?.champ) this.champs.struck(fromMob, opts.from!, tid, now); // Sun-Branded
@@ -6139,6 +6316,7 @@ export class TownRoom extends Room<TownState> {
     }
     if (riseAgain(this.host, tid)) return false; // Blood Pact: a killing blow leaves the vampire standing
     t.dead = true;
+    this.qsteps.died(tid); // a carried lantern falls here, a hold run may fail (server/questSteps.ts)
     if (opts.from && this.state.players.has(opts.from)) onKill(this.host, opts.from); // Bloodlust
     const killer = opts.from ? this.state.mobs.get(opts.from) : undefined;
     if (killer?.kind === "hidemother" && !killer.dead) this.bossSay(opts.from!, URSK.lines.kill);
@@ -6296,7 +6474,7 @@ export class TownRoom extends Room<TownState> {
     const now = Date.now();
     const ranged = a ? this.equipped(a).ranged : undefined;
     const shot = ranged ? gearDef(ranged)?.shot : undefined;
-    if (!a || !shot || a.dead || a.stunned || a.broken || a.rolling || now - a.lastRanged < shot.cooldownMs) return;
+    if (!a || !shot || a.dead || a.stunned || a.broken || a.rolling || a.qlock || now - a.lastRanged < shot.cooldownMs) return;
     a.lastRanged = now;
     a.emote = "";
     const off = aimOf(a);

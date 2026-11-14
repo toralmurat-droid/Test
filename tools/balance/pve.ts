@@ -436,6 +436,8 @@ function zoneRun(cls: ClassKind, level: number, build: Build, mobLevel: (i: numb
 export interface BossDef { name: string; kind: MobKind; level: number; hero: number; hpMult?: number; weapon?: string; plain?: boolean } // plain: an ordinary monster on the server (no quest title): full executions
 export const BOSSES: BossDef[] = [
   { name: "Mother Blob Lv8", kind: "motherblob", level: 8, hero: 7, plain: true },
+  // fused quest blob (Hold the Wheel): hpMult = sum(parts' maxHp) × 0.7 / host maxHp, as summonFused builds it
+  { name: "Millrace Glutton Lv5", kind: "motherblob", level: 5, hero: 4, hpMult: 1.12 },
   { name: "Bone Demon Lv14", kind: "demon", level: 14, hero: 13 },
   { name: "Raiser (Necro) Lv16", kind: "necromancer", level: 16, hero: 15 },
   { name: "Gravemoor Horror Lv19", kind: "demon", level: 19, hero: 18, hpMult: 1.6 },
@@ -444,6 +446,10 @@ export const BOSSES: BossDef[] = [
   { name: "Pale Marshal Lv24", kind: "necromancer", level: 24, hero: 23, hpMult: 2.5 },
   { name: "Hollow King Lv30", kind: "hollowking", level: 30, hero: 30, hpMult: 2 },
   { name: "Sunwright Lv50", kind: "sunwright", level: 50, hero: 49, hpMult: 2 },
+  // quest summons from the quest concepts (shared/quests.ts): the wrong-grave ambush and the Crown in the Sand finale
+  { name: "Disturbed Dead Lv17", kind: "skeleton", level: 17, hero: 15, hpMult: 3 },
+  { name: "Ostrevar's Envoy Lv39", kind: "sanddead", level: 39, hero: 38, hpMult: 7 },
+  { name: "Keeper of the Twin Seals Lv43", kind: "sanddead", level: 43, hero: 42, hpMult: 7 },
   // the Night Raiders (shared/raiders.ts): always Lv 50, close to unbeatable for one hero alone (Murat 2026-11-08)
   { name: "Night Raider vs Lv30", kind: "nightraider", level: 50, hero: 30 },
   { name: "Night Raider vs Lv50", kind: "nightraider", level: 50, hero: 50 },

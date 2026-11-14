@@ -71,6 +71,20 @@ export const NPCS: Npc[] = [
   // the deep dungeons' quest givers, at their doors (shared/dungeon.ts)
   { id: "monk", name: "Brother Aldric", title: "Last of the Lamplighters", sprite: "monk", ...standNear(47, 145), dir: "left", where: "the ruined mausoleum on Barrow Downs, at the crypt stair" },
   { id: "tombrobber", name: "Zahir", title: "Tomb-robber", sprite: "tombrobber", ...standNear(61, 483), dir: "left", where: "the old well in Kharsun, the Buried City (Act 2)" },
+  // ---- The quest concepts (docs/quest-concepts-progress.md); some only stand there for some heroes (shared/quests.ts npcPresent)
+  // the Empty Grave: the sexton at Gravemoor's north gate, three mourners along the wall who won't go in among the dead
+  { id: "sexton", name: "Amos", title: "Sexton of Gravemoor", sprite: "sexton", ...standNear(199, 123), dir: "down", where: "Gravemoor Cemetery, at the north gate" },
+  { id: "mourner1", name: "Maud", title: "Smith's widow", sprite: "mourner1", ...standNear(190, 123), dir: "down", where: "Gravemoor Cemetery, by the north wall" },
+  { id: "mourner2", name: "Edda", title: "Nan Hesketh's granddaughter", sprite: "mourner2", ...standNear(194, 122), dir: "down", where: "Gravemoor Cemetery, by the north wall" },
+  { id: "mourner3", name: "Hollis", title: "Boatwright, Corin's partner", sprite: "mourner3", ...standNear(207, 123), dir: "down", where: "Gravemoor Cemetery, by the north wall" },
+  // Two Letters: Ilka waits outside the Redfang stockade's west gate; the watch's quartermaster (law) stands beside
+  // Captain Hale, the smuggler (mercy) on Saltmere beach
+  { id: "ilka", name: "Ilka", title: "Net-mender", sprite: "ilka", ...standNear(234, 113), dir: "right", where: "outside the Redfang fence, by the west gate" },
+  { id: "quartermaster", name: "Wynn", title: "Quartermaster of the Watch", sprite: "quartermaster", x: 91.1 * TILE, y: 59.4 * TILE, dir: "left", shop: "watch", where: "Oakvale, beside Captain Hale" },
+  { id: "smuggler", name: "Marin", title: "Smuggler", sprite: "smuggler", x: 156.5 * TILE, y: 191.6 * TILE, dir: "left", shop: "smuggler", where: "Saltmere, on the beach east of the piers" },
+  // Tavern Rumours: Mags sells ale off her cart at the square's south-west corner, by the crates and barrels, and hears
+  // everything (shared/rumours.ts, server/rumours.ts)
+  { id: "alewife", name: "Mags", title: "Alewife", sprite: "alewife", x: 77.4 * TILE, y: 64.75 * TILE, dir: "down", where: "Oakvale, at her ale-cart on the square" },
 ];
 
 /**
@@ -100,6 +114,8 @@ export const NPC_DECOR: NpcDecor[] = [
   { prop: "ar_rack_salt", x: 139.8, y: 183.5, scale: 0.88, animated: true, solid: [139.15, 183.3, 1.3, 0.35] },
   { prop: "ar_stand_sand", x: 150.9, y: D(112.6), scale: 0.82, animated: true, solid: [150.6, D(112.4), 0.6, 0.35] },
   { prop: "ar_rack_sand", x: 153.9, y: D(111.9), scale: 0.88, animated: true, solid: [153.25, D(111.7), 1.3, 0.35] },
+  // Mags' ale-cart beside her (client/src/questConceptData.ts): south of the square's hero spawn rows, clear of the South Road
+  { prop: "ale_cart", x: 78.75, y: 65.8, scale: 1, solid: [78.2, 65.4, 1.1, 0.38] },
 ];
 
 /**

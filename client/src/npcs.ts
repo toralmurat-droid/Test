@@ -7,15 +7,19 @@ import "@fontsource/pixelify-sans/700.css";
 import "./npcs.css";
 import { pixelText } from "./pixeltext";
 import Phaser from "phaser";
+import { META, metaOf } from "../../shared/questSteps";
 import { CAMP_PIVOT, TX as CAMP_TX, witchCampTextures } from "./witchCamp";
 import { worldPropTextures } from "./worldProps";
 import { ANVIL_TOP, FORGE_FLUE, SMITHY_ORIGIN, TX as SMITHY_TX, smithyTextures } from "./smithy";
 import { smokeTexture } from "./bonfireArt";
 import { NPCS, NPC_DECOR, Npc, npcById, npcNear, TALK_RANGE } from "../../shared/npcs";
 import {
-  CHAINS, chainOpen, chainState, questSig, TUT_CHAIN, npcPresent, ZONE_ARCS, npcQuestMark, questDef, questDialog, questObjective, questStep, stepFor, DialogPage, Quester, QuestTarget, questTargets, stepGoal, stepProgress,
+  mentorOffer, CHAINS, chainOpen, chainState, questSig, tutorialDone, USE_RANGE, TUT_CHAIN, npcPresent, ZONE_ARCS, npcQuestMark, questDef, questDialog, questObjective, questStep, stepFor, DialogPage, Quester, QuestTarget, questTargets, stepGoal, stepProgress,
 } from "../../shared/quests";
 import { QuestObjects } from "./questObjects";
+import { TITLES } from "../../shared/cosmetics";
+import { MAGS, RumourBook, type RumourEnd } from "./rumours";
+import { conceptTextures } from "./questConceptArt";
 import { TILE } from "../../shared/constants";
 import { ISO } from "./isoflag";
 import { routeVia } from "../../shared/dungeon";
@@ -76,10 +80,11 @@ const GATE_HINT: Record<1 | 2, string> = {
   2: "Step through the waygate in the Sunstone Circle, south-west of Kel Ashar",
 };
 
-/** Who gives a zone arc (shared/quests.ts ZONE_ARCS), and the first quest's level of their arc. */
-const ZONE_GIVERS = new Map(ZONE_ARCS.map((a) => [a.quests[0].giver, a.quests[0].minLevel]));
+/** Who gives a zone arc (shared/quests.ts ZONE_ARCS), and the first quest's level of each of their arcs (some give two). */
+const ZONE_GIVERS = new Map<string, number[]>();
+for (const a of ZONE_ARCS) ZONE_GIVERS.set(a.quests[0].giver, [...(ZONE_GIVERS.get(a.quests[0].giver) ?? []), a.quests[0].minLevel]);
 /** A zone arc fits a hero from its first quest's level to a few levels past it (beyond that it is only a "!" on the map). */
-export const arcFits = (giver: string, level: number) => { const l = ZONE_GIVERS.get(giver); return l !== undefined && level >= l && level <= l + 6; };
+export const arcFits = (giver: string, level: number) => (ZONE_GIVERS.get(giver) ?? []).some((l) => level >= l && level <= l + 6);
 
 export class NpcLayer {
   private bubbles = new Map<string, Phaser.GameObjects.Image>();
@@ -99,10 +104,15 @@ export class NpcLayer {
   private trading = false;
   private q: QuestState;
   readonly objects: QuestObjects;
+  /** Tavern Rumours: Mags' offers and the active errand (client/src/rumours.ts) */
+  readonly rumours = new RumourBook();
+  private rumourRev = -1;
   private nearObj?: ReturnType<QuestObjects["near"]>;
   /** A quest NPC or quest object is in reach (other E prompts step aside). */
   get busy() { return !!this.near || !!this.nearObj; }
   private trackerHtml = "";
+  /** Title of the quest just advanced: scrolled to the top of the tracker once its block is drawn. */
+  private reveal = "";
   private promptHtml = "";
   private trackQ: QuestState | undefined;
   private trackAt = 0;
@@ -142,6 +152,17 @@ export class NpcLayer {
     hudSlot("promptstack").append(this.prompt);
     hudSlot("topright").append(this.tracker); // under the location line (flex order, hudSlots.css)
     this.prompt.onclick = () => this.interact();
+    // 1-3 press the option buttons of an open dialog; the capture listener runs before the skill hotbar sees the key
+    window.addEventListener("keydown", (ev) => {
+      if (!this.optKeys.length || ev.repeat || ev.ctrlKey || ev.metaKey || ev.altKey || !this.isOpen) return;
+      const a = document.activeElement;
+      if (a instanceof HTMLInputElement || a instanceof HTMLTextAreaElement) return;
+      const i = /^(?:Digit|Numpad)([1-3])$/.exec(ev.code)?.[1];
+      const v = i ? this.optKeys[Number(i) - 1] : undefined;
+      if (v === undefined) return;
+      ev.preventDefault(); ev.stopImmediatePropagation();
+      this.answer(v);
+    }, true);
     // Click a quest's title to fold it down to that line (remembered); anywhere else opens the quest log
     // Each quest is a card: its follow button marks the objective on the ground, its header folds / opens it,
     // anywhere else opens the quest log
@@ -182,6 +203,48 @@ export class NpcLayer {
     }
     this.addSurroundings(scene);
     this.objects = new QuestObjects(scene);
+    this.rumours.onEnd = (e) => this.onRumourEnd(e);
+    this.log.rumours = { html: () => this.rumours.logHtml(), active: () => !!this.rumours.current() };
+  }
+
+  /** A rumour ended (server "rumour" end): banner in the pixel lettering, and the outro as a story card when it was solved. */
+  private onRumourEnd(e: RumourEnd) {
+    const [big, small, color] = RumourBook.endLines(e);
+    this.banner(big, small, color);
+    if (e.why === "done" && e.outro) this.showStory(e.name, "Rumour solved", [e.outro]);
+  }
+
+  /** Veteran's mentoring as the server last sent it ("mentor": on, recruits so far, the next title). */
+  private mentor?: { on: boolean; n: number; next?: { at: number; title: number | string } };
+
+  /** Server "mentor": the state for Hale's page; on a payout a banner (the recruit's name, the new title if any). */
+  onMentor(m: { on?: boolean; n?: number; next?: { at: number; title: number | string }; recruit?: string; title?: number | string }) {
+    if (!m || typeof m.n !== "number") return;
+    this.mentor = { on: !!m.on, n: m.n, next: m.next };
+    this.stage = -1; // redraw Hale's page
+    if (m.recruit) {
+      const t = m.title !== undefined ? this.titleName(m.title) : "";
+      this.banner(`${m.recruit} beat their first boss`, `Recruits: ${m.n}${t ? ` · New title: ${t}` : ""}`, "#b9f27c");
+    }
+  }
+  /** TITLES index (or an already spelled name) to the name. */
+  private titleName(t: number | string) { return typeof t === "number" ? TITLES[t] ?? "" : String(t); }
+
+  /** Hale's mentoring block: what he asks, where the hero stands, and the one button. Empty below Lv 11. */
+  private mentorHtml(q: QuestState) {
+    const o = mentorOffer(q?.level ?? 1, !!this.mentor?.on);
+    if (!o) return "";
+    const m = this.mentor;
+    const next = m?.next ? ` Next title: <b>${this.titleName(m.next.title)}</b> at ${m.next.at} recruit${m.next.at === 1 ? "" : "s"}.` : m ? " All mentor titles earned." : "";
+    const status = m ? `<div class="nd-mstat">Mentoring: <b class="${m.on ? "on" : "off"}">${m.on ? "on" : "off"}</b> · Recruits: <b>${m.n}</b>.${next}</div>` : "";
+    return `<div class="nd-mentor"><h5>Mentoring</h5>${o.text.map((t) => `<p>${t}</p>`).join("")}${status}<button class="nd-mbtn" data-on="${o.send ? 1 : 0}">${o.button}</button></div>`;
+  }
+
+  private banner(big: string, small: string, color = "#b9f27c") {
+    this.toast.replaceChildren(pixelText(big, color, 13, 3), pixelText(small, "#ffffff", 11, 2));
+    this.toast.classList.remove("show"); void this.toast.offsetWidth; this.toast.classList.add("show");
+    clearTimeout((this.toast as any)._t);
+    (this.toast as any)._t = setTimeout(() => this.toast.classList.remove("show"), 3500);
   }
 
   /** Morwen's tent and alchemy rig, Brann's forge… around the traders, plus Brann hammering at his anvil. */
@@ -206,6 +269,11 @@ export class NpcLayer {
       if (d.prop.startsWith("ar_")) { // the armourers' stands and racks (armoury.ts), same pixel grid
         const [ox, oy] = armouryOrigin(d.prop);
         scene.add.sprite(x, y, d.prop, 0).setOrigin(ox, oy).setScale(d.scale / AR_TX).setDepth(y).setFlipX(!!d.flip).play({ key: `${d.prop}_idle`, startFrame: Math.floor(d.x * 5) % 12 });
+        continue;
+      }
+      if (d.prop === "ale_cart") { // Mags' barrels on a cart (questConceptData.ts)
+        conceptTextures(scene);
+        scene.add.image(x, y, "ale_cart").setOrigin(0.5, 1).setScale(d.scale * 1.5).setDepth(y).setFlipX(!!d.flip);
         continue;
       }
       if (d.prop.startsWith("lu_")) { // Wren's bench and lute rack (lutierArt.ts)
@@ -267,7 +335,7 @@ export class NpcLayer {
     }
   }
 
-  get isOpen() { return !!this.talking; }
+  get isOpen() { return !!this.talking || !!this.choice; }
   /** Another prompt (a loot chest) has the spot this frame. */
   hidePrompt = false;
 
@@ -286,6 +354,7 @@ export class NpcLayer {
   }
 
   interact() {
+    if (this.choice) return; // a field choice is answered with its buttons (or 1-3), not dismissed by E
     if (this.story) this.closeStory();
     else if (this.talking) this.close();
     else if (this.nearObj) this.send("use", { id: this.nearObj.id });
@@ -302,7 +371,62 @@ export class NpcLayer {
   close() {
     if (this.shopOpen) { this.shopOpen = false; this.onPreview?.(); this.onShopOpen?.(false); }
     this.talking = undefined;
+    this.choice = undefined;
+    this.optKeys = [];
     this.dialog.classList.remove("open");
+  }
+
+  /** Values of the option buttons on screen, in order: keys 1-3 press them (see the capture listener in the constructor). */
+  private optKeys: number[] = [];
+  private optChain = 0;
+  /** The open page is Mags' rumour list: option buttons send "rumour" instead of "quest" */
+  private rumourPage = false;
+  /** A choice that belongs to no NPC (server "choice" message: the Hide-Mother's bargain in the field). */
+  private choice?: { chain: number; title: string; text: string[]; options: { label: string; v: number }[] };
+
+  /** Option buttons of a choice: one per row (they hold whole sentences), each answers with the intent {chain, opt}. */
+  private optionsHtml(options: { label: string; v: number }[]) {
+    return `<div class="nd-opts">${options.map((o, i) => `<button class="nd-opt" data-v="${o.v}">${i < 3 ? `<kbd>${i + 1}</kbd>` : ""}${o.label}</button>`).join("")}</div>`;
+  }
+  private bindOptions(chain: number, options: { label: string; v: number }[]) {
+    this.optChain = chain;
+    this.optKeys = options.slice(0, 3).map((o) => o.v);
+    for (const b of this.dialog.querySelectorAll<HTMLButtonElement>(".nd-opt")) b.onclick = () => this.answer(Number(b.dataset.v));
+  }
+  /** Send the pick as an intent; the server moves the quest on. A field choice closes by itself, a talk page redraws. */
+  private answer(v: number) {
+    if (!this.dialog.classList.contains("open") || !Number.isFinite(v)) return;
+    if (this.talking?.id === MAGS && this.rumourPage) this.send("rumour", v < 0 ? { drop: true } : { take: v });
+    else this.send("quest", { chain: this.optChain, opt: v });
+    for (const b of this.dialog.querySelectorAll<HTMLButtonElement>(".nd-opt")) b.disabled = true;
+    this.optKeys = [];
+    if (this.rumourPage) setTimeout(() => { this.stage = -1; }, 1500); // a pick the server ignored (too far, not allowed) sends no new state: draw the page again
+    if (this.choice) { this.answeredAt.set(this.choice.chain, performance.now()); this.choice = undefined; this.dialog.classList.remove("open"); }
+  }
+  /** When each chain's field choice was last answered: a resend already in flight must not bring the modal back. */
+  private answeredAt = new Map<number, number>();
+
+  /** Server "choice" message: a modal with the same look as a talk, answered with {chain, opt}. */
+  onChoice(msg: { chain?: number; title?: string; text?: string[]; options?: { label: string; v: number }[]; close?: boolean }) {
+    // The offer ended without a deal (refused, Ursk hit, too far, timeout, death): close that chain's modal
+    if (msg?.close) {
+      if (this.choice && (!Number.isInteger(msg.chain) || this.choice.chain === msg.chain)) { this.choice = undefined; this.optKeys = []; this.dialog.classList.remove("open"); }
+      return;
+    }
+    const options = (Array.isArray(msg?.options) ? msg.options : []).filter((o) => o && typeof o.label === "string" && Number.isInteger(o.v)).slice(0, 6);
+    if (!options.length) return;
+    const chain = Number.isInteger(msg.chain) ? msg.chain! : 0, title = String(msg.title ?? "");
+    if (performance.now() - (this.answeredAt.get(chain) ?? -1e9) < 2500) return; // just answered: this is a resend that crossed the answer
+    // Server resend (every 6 s while the offer is open): the same prompt while its modal is up changes nothing
+    const text = (msg.text ?? []).map(String);
+    if (this.choice && this.choice.chain === chain && this.dialog.classList.contains("open") && JSON.stringify([this.choice.title, this.choice.text, this.choice.options]) === JSON.stringify([title, text, options])) return;
+    if (this.talking) this.close();
+    this.story = undefined;
+    this.choice = { chain, title, text, options };
+    this.dialog.classList.remove("shop");
+    this.dialog.innerHTML = `<div class="nd-head"><span class="nd-name">${title}</span></div>` + this.choice.text.map((t) => `<p>${t}</p>`).join("") + this.optionsHtml(options);
+    this.bindOptions(chain, options);
+    this.dialog.classList.add("open");
   }
 
   /**
@@ -344,6 +468,8 @@ export class NpcLayer {
       if (m && step?.night && msUntilUndeadNight(dayTime(Date.now())) > 0) m = ["Wait for nightfall", m[1]];
     }
     if (m && m[0] === "New quest") m = ["New quest", quests[msg.qid].title];
+    const adv = quests[msg.done ? msg.qid - 1 : msg.qid]?.title;
+    if (adv) this.reveal = adv;
     this.tracker.classList.remove("flash"); void this.tracker.offsetWidth; this.tracker.classList.add("flash");
     if (m) {
       // Same pixel lettering as the zone banners
@@ -515,16 +641,35 @@ export class NpcLayer {
     if (n.shop && (this.trading || !page)) return this.renderShop(n, q);
     this.dialog.classList.remove("shop", "lm");
     if (this.shopOpen) { this.shopOpen = false; this.onPreview?.(); }
-    const key = JSON.stringify([n.id, questSig(q), q?.level]);
+    const rumourBody = n.id === MAGS && !(page?.accept || page?.options) ? this.rumours.dialogHtml(tutorialDone(q)) : "";
+    this.rumourPage = !!rumourBody;
+    const key = JSON.stringify([n.id, questSig(q), q?.level, metaOf(q, META.flags), rumourBody ? this.rumours.rev : 0, n.id === "captain" ? this.mentor : 0]);
     if (key === this.stage) return;
     this.stage = key;
+    if (rumourBody) { // Mags: today's three rumours as option buttons, or the one under way with "Drop it"
+      this.dialog.innerHTML = this.head(n) + rumourBody +
+        `<div class="nd-btns"><button class="nd-bye">Farewell <kbd>E</kbd></button></div>`;
+      this.optChain = 0;
+      this.optKeys = this.rumours.current() ? [-1] : this.rumours.st!.offers.slice(0, 3).map((o) => (o.done ? NaN : o.i)); // NaN: a done offer, its key does nothing
+      for (const b of this.dialog.querySelectorAll<HTMLButtonElement>("button[data-take], button[data-drop]")) {
+        b.onclick = () => this.answer(b.dataset.drop ? -1 : Number(b.dataset.take));
+      }
+      this.dialog.querySelector<HTMLButtonElement>(".nd-bye")!.onclick = () => this.close();
+      return;
+    }
     const p = page ?? { text: ["Good day to you."], bye: "Farewell", chain: 0 };
     this.dialog.innerHTML = this.head(n) +
       p.text.map((t) => `<p>${t}</p>`).join("") +
+      (p.options?.length ? this.optionsHtml(p.options) : "") +
+      (n.id === "captain" ? this.mentorHtml(q) : "") +
       `<div class="nd-btns">${p.accept ? `<button class="nd-accept">${p.accept}</button>` : ""}` +
       `${n.shop ? `<button class="nd-trade">Trade</button>` : ""}<button class="nd-bye">${p.bye} <kbd>E</kbd></button></div>`;
     const acc = this.dialog.querySelector<HTMLButtonElement>(".nd-accept");
     if (acc) acc.onclick = () => { this.send("quest", { chain: p.chain }); acc.disabled = true; };
+    const mb = this.dialog.querySelector<HTMLButtonElement>(".nd-mbtn");
+    if (mb) mb.onclick = () => { this.send("mentor", { on: mb.dataset.on === "1" }); mb.disabled = true; setTimeout(() => { this.stage = -1; }, 1500); };
+    this.optKeys = [];
+    if (p.options?.length) this.bindOptions(p.chain, p.options);
     const trade = this.dialog.querySelector<HTMLButtonElement>(".nd-trade");
     if (trade) trade.onclick = () => { this.trading = true; this.stage = -1; };
     this.dialog.querySelector<HTMLButtonElement>(".nd-bye")!.onclick = () => this.close();
@@ -561,7 +706,9 @@ export class NpcLayer {
     this.q = q;
     const present = (n: Npc) => npcPresent(n.id, q);
     this.objects.update(q, me);
-    this.nearObj = this.talking ? undefined : this.objects.near(me, q);
+    if (this.rumourRev !== this.rumours.rev) { this.rumourRev = this.rumours.rev; this.objects.setRumour(this.rumours.objects()); }
+    const ro = this.rumours.usable();
+    this.nearObj = this.talking ? undefined : this.objects.near(me, q) ?? (me && ro && Math.hypot(ro.x - me.x, ro.y - me.y) <= USE_RANGE ? ro : undefined);
     this.loadSheets(me, present);
     // an NPC whose sheet is still on its way is not drawn, so it gets no "Talk" prompt either
     const drawn = (n: Npc) => present(n) && this.ready.has(n.id);
@@ -609,6 +756,10 @@ export class NpcLayer {
       if (g.kind === "area") this.markers.push({ x: g.x, y: g.y, r: g.r, glyph: "", color: "#ffd166", label: g.label, track: true });
       else if (g.kind === "object") this.markers.push({ x: g.x, y: g.y, glyph: "◆", color: "#7ff3ff", label: g.label, track: true });
     }
+    for (const t of this.rumours.targets()) {
+      if (t.kind === "area") this.markers.push({ x: t.x, y: t.y, r: t.r, glyph: "", color: "#e8a45a", label: t.label, track: true });
+      else this.markers.push({ x: t.x, y: t.y, glyph: "◆", color: "#e8a45a", label: t.label, track: true });
+    }
     this.log.render(q);
 
     // On-screen tracker: one block per chain with its quest, current objective, progress bar and where to go
@@ -618,6 +769,8 @@ export class NpcLayer {
     {
       // The guided first quest on top; only the quests the player chose to track
       const blocks = [tracked[TUT_CHAIN], ...tracked.filter((_, c) => c !== TUT_CHAIN)].map((st) => this.trackBlock(me, st)).filter(Boolean);
+      const rb = this.rumourBlock(me);
+      if (rb) blocks.push(rb);
       if (this.extraBlock) blocks.push(this.extraBlock);
       if (blocks.length) html = blocks.join("") + `<div class="qt-hint">J: quest log</div>`;
     }
@@ -625,6 +778,11 @@ export class NpcLayer {
       this.trackerHtml = html;
       this.tracker.innerHTML = html;
       this.tracker.classList.toggle("open", !!html);
+    }
+    // The quest the player last advanced stays in view inside the capped, scrolling tracker
+    if (this.reveal && html) {
+      const b = [...this.tracker.querySelectorAll<HTMLElement>(".qt-block")].find((el) => el.dataset.key === this.reveal);
+      if (b) { this.tracker.scrollTop = Math.max(0, Math.min(b.offsetTop - 6, this.tracker.scrollHeight)); this.reveal = ""; }
     }
     this.drawPointer();
     this.drawGoal();
@@ -688,6 +846,23 @@ export class NpcLayer {
 
   private followBtn(follow: boolean) {
     return `<button class="qt-follow" title="${follow ? "Stop following" : "Follow: mark it on the ground"}">${follow ? "◉" : "○"}</button>`;
+  }
+
+  /** Tracker card for the active tavern rumour: step, objective, progress, and "only at night" for a night reach step. */
+  private rumourBlock(me: Me): string {
+    const c = this.rumours.current();
+    if (!c) return "";
+    const key = "Rumour: " + c.r.title, follow = this.followed === key;
+    this.aimAt(me, this.rumours.targets(), follow);
+    const bar = c.a.goal > 1 ? `<div class="qt-bar"><div style="width:${Math.min(1, c.a.count / c.a.goal) * 100}%"></div></div>` : "";
+    let night = "";
+    if (c.a.night) {
+      const ms = msUntilUndeadNight(dayTime(Date.now()));
+      night = `<div class="qt-hint2 qt-night">Only at night.${ms > 0 ? ` The dead rise in ${Math.max(1, Math.ceil(ms / 60000))} min.` : ""}</div>`;
+    }
+    return `<div class="qt-block${this.isFolded(key, true) ? " folded" : ""}${follow ? " following" : ""}" data-key="${key}" data-started="1">` +
+      `<div class="qt-head"><span class="qt-title">${key}</span>${this.followBtn(follow)}</div>` +
+      `<div class="qt-body"><div class="qt-obj">${c.a.obj}</div><div class="qt-where">Step ${c.a.stage} of ${c.a.steps} · ${c.r.zone}</div>${bar}${night}</div></div>`;
   }
 
   private trackBlock(me: Me, q: ReturnType<typeof chainState>): string {

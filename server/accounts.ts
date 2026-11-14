@@ -1,4 +1,6 @@
 import type { BountyState } from "../shared/bounty";
+import type { RumourState } from "../shared/rumours";
+import type { MentorState } from "../shared/quests";
 // Player accounts: name + password, with one saved hero per class.
 // Saves live in a JSON file on the server (SAVE_FILE, default data/saves.json).
 import path from "node:path";
@@ -52,6 +54,16 @@ export interface HeroSave {
   grimoire?: string;
   /** Summoner skill tree version (shared/summons.ts SUMMONER_TREE): an older save gets its skill points back. */
   suTree?: number;
+  /** Choices made in quests, 2 bits each (shared/questSteps.ts CHOICES), kept in the owner-only Player.me.flags; missing = none made. */
+  flags?: number;
+  /** Cosmetics: title and look traits (shared/cosmetics.ts), kept in the public Player.cosm; missing = none. */
+  cosm?: number;
+  /** Tavern Rumours (shared/rumours.ts): the day, its offers' level, done bits, the one under way, all finished; another day's loads fresh. */
+  rumour?: RumourState;
+  /** Titles earned, bit i = shared/cosmetics.ts TITLES[i] (the shown one is in `cosm`); missing = only the shown title. */
+  titles?: number;
+  /** The Apprentice (shared/quests.ts MENTOR): mentoring switched on, recruits counted, their account names (<= 50); missing = off, none. */
+  mentor?: MentorState;
   /** Songweaver skill tree version (shared/songs.ts SONGWEAVER_TREE): an older save gets its skill points back. */
   swTree?: number;
   /** Songweaver mode (shared/songs.ts MODE_IDS); missing or no longer known = Major. */

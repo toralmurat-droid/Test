@@ -593,6 +593,31 @@ const R: Record<string, Recipe> = {
       noise(o, t + s, { type: "bandpass", f: 500, q: 2, dur: d, vol: 0.08 * v, att: 0.1 });
     });
   },
+  // ---- quest concepts (docs/quest-concepts-progress.md): server "sfx" events lanterndim ... tideend
+  // Last Lantern: the flame sinks, goes out, and is handed on
+  lanterndim: (o, t, v) => { tone(o, t, { type: "triangle", f: 760, f2: 430, dur: 0.55, vol: 0.07 * v, vib: 18, vibHz: 14 }); noise(o, t, { type: "highpass", f: 3200, f2: 1800, dur: 0.3, vol: 0.05 * v }); },
+  lanternout: (o, t, v) => { noise(o, t, { type: "lowpass", f: 1100, f2: 180, dur: 0.4, vol: 0.2 * v }); tone(o, t, { type: "triangle", f: 330, f2: 110, dur: 0.6, vol: 0.12 * v }); tone(o, t + 0.12, { f: 311, f2: 233, dur: 0.7, vol: 0.05 * v, att: 0.05 }); },
+  lanternpass: (o, t, v) => { bell(o, t, 880, 0.9, 0.12 * v); bell(o, t + 0.1, 1319, 1.1, 0.1 * v); noise(o, t, { type: "bandpass", f: 2400, q: 2, dur: 0.08, vol: 0.06 * v }); },
+  // The wave horn of a raid wave: two short rising blasts, higher and tighter than the war horn
+  wavehorn: (o, t, v) => [[0, 0.55], [0.7, 0.9]].forEach(([s, d]) => {
+    [1, 2, 3].forEach((m, i) => tone(o, t + s, { type: "sawtooth", f: 147 * m, f2: 165 * m, dur: d, vol: (0.24 / (1 + i)) * v, att: 0.08, vib: 1.2 * m, vibHz: 6 }));
+    noise(o, t + s, { type: "bandpass", f: 700, q: 2, dur: d, vol: 0.07 * v, att: 0.08 });
+  }),
+  odohurt: (o, t, v) => { voice(o, t, { f: 150, f2: 90, dur: 0.28, vol: 0.34 * v, vowel: [560, 900], vowel2: [450, 800], att: 0.01, rough: 0.08 }); thud(o, t + 0.02, 110, 0.35 * v, 0.14); },
+  // Empty Grave: the right answer is a warm bell over soft earth, the wrong one a sour buzz
+  graveright: (o, t, v) => { thud(o, t, 70, 0.3 * v, 0.2); [0, 4, 7].forEach((s, i) => bell(o, t + 0.05 + i * 0.09, 523 * 2 ** (s / 12), 1.0, 0.1 * v)); },
+  gravewrong: (o, t, v) => { thud(o, t, 65, 0.4 * v, 0.25); tone(o, t, { type: "square", f: 131, f2: 124, dur: 0.5, vol: 0.07 * v }); tone(o, t, { type: "square", f: 139, f2: 130, dur: 0.5, vol: 0.07 * v }); },
+  // Unseen: a sharp sting, two falling stabs and a dry clack
+  seen: (o, t, v) => { tone(o, t, { type: "sawtooth", f: 1100, f2: 700, dur: 0.18, vol: 0.12 * v }); tone(o, t + 0.12, { type: "sawtooth", f: 880, f2: 520, dur: 0.24, vol: 0.12 * v }); clank(o, t + 0.02, 0.2 * v, 2200); },
+  // Seals: stone grinding round to a clunk, and two tones that slide together into one shimmer
+  sealturn: (o, t, v) => { noise(o, t, { type: "lowpass", f: 380, f2: 260, dur: 0.9, vol: 0.4 * v, att: 0.06 }); tone(o, t, { type: "sawtooth", f: 55, f2: 48, dur: 0.9, vol: 0.12 * v, att: 0.08 }); rattle(o, t + 0.1, 5, 0.6, 0.12 * v, 900); thud(o, t + 0.9, 70, 0.7 * v, 0.3); },
+  sealsync: (o, t, v) => { tone(o, t, { f: 330, f2: 392, dur: 0.7, vol: 0.1 * v, att: 0.08 }); tone(o, t, { f: 494, f2: 392, dur: 0.7, vol: 0.1 * v, att: 0.08 }); bell(o, t + 0.7, 784, 1.4, 0.14 * v); bell(o, t + 0.72, 1175, 1.4, 0.08 * v); },
+  // The Bargain: a low slow drone with a whisper and a bell played backwards
+  bargain: (o, t, v) => { tone(o, t, { type: "sawtooth", f: 90, f2: 68, dur: 1.4, vol: 0.14 * v, att: 0.25, detune: 14, vib: 3, vibHz: 4 }); noise(o, t, { type: "bandpass", f: 1500, f2: 700, q: 6, dur: 1.2, vol: 0.08 * v, att: 0.4 }); tone(o, t + 0.9, { f: 220, dur: 0.9, vol: 0.1 * v, att: 0.85 }); },
+  // The Tide of the blobs: the goal is met (a swelling wash and a rising chord), they march (drum beats under a low horn), it ends (falling sparkle)
+  tidefull: (o, t, v) => { noise(o, t, { type: "bandpass", f: 300, f2: 1600, q: 1.5, dur: 1.4, vol: 0.18 * v, att: 0.7 }); [0, 4, 7, 12].forEach((s, i) => tone(o, t + i * 0.22, { type: "triangle", f: 262 * 2 ** (s / 12), dur: 0.9, vol: 0.09 * v, att: 0.05 })); },
+  tidemarch: (o, t, v) => { for (let i = 0; i < 6; i++) thud(o, t + i * 0.28, i % 3 === 0 ? 62 : 80, (i % 3 === 0 ? 0.7 : 0.45) * v, 0.22); [1, 2].forEach((m, i) => tone(o, t, { type: "sawtooth", f: 73 * m, f2: 69 * m, dur: 1.6, vol: (0.2 / (1 + i)) * v, att: 0.2, vib: 1.5 * m, vibHz: 5 })); },
+  tideend: (o, t, v) => { [12, 9, 7, 4, 0].forEach((s, i) => bell(o, t + i * 0.13, 523 * 2 ** (s / 12), 0.9, 0.09 * v)); noise(o, t, { type: "lowpass", f: 1200, f2: 200, dur: 1.2, vol: 0.12 * v, att: 0.1 }); },
   warcry: (o, t, v) => { voice(o, t, { f: 130, f2: 100, dur: 0.9, vol: 0.5 * v, vowel: [700, 1150], vowel2: [600, 1000], att: 0.05, rough: 0.12 }); voice(o, t + 0.05, { f: 165, f2: 125, dur: 0.85, vol: 0.3 * v, vowel: [750, 1200], att: 0.05, rough: 0.1 }); },
   volley: (o, t, v) => { for (let i = 0; i < 4; i++) R.shotBow(o, t + i * 0.07 + rnd(0, 0.03), v * 0.7); },
   bashGround: (o, t, v, big) => { thud(o, t, big ? 55 : 80, (big ? 0.8 : 0.55) * v, 0.35); noise(o, t, { type: "lowpass", f: 500, dur: 0.4, vol: 0.3 * v }); },
@@ -1025,7 +1050,7 @@ export function bindSfx(room: any, me: () => string, ents: Map<string, Ent>) {
   on("pickup", ({ kind }) => play(kind === "gold" ? "coins" : kind === "gear" ? "gear" : "pickup"));
   on("chestopen", () => play("chest"));
   on("shrine", ({ boon, by }) => { if (boon) P("shrine", by); });
-  on("travel", ({ id }) => P("portalTravel", id));
+  on("travel", ({ id, why }) => { if (!why) P("portalTravel", id); }); // a quest warp has its own sound ("seen")
   on("portals", ({ woke }) => { if (woke) play("portalWake"); });
   on("boom", ({ x, y, kind }) => {
     const name = kind === "fireball" || kind === "sunbolt" ? "boomFire" : kind === "arrow" || kind === "knife" || kind === "bolt" || kind === "stone" ? "boomThunk"
@@ -1072,6 +1097,10 @@ export function bindSfx(room: any, me: () => string, ents: Map<string, Ent>) {
       case "golemfire": pos("golemNova", 0.8, undefined, { key: "gn" + ev.id, minGap: 200 }); break;
       case "golemdeath": case "colossussplit": pos("golemCrumble"); break;
       case "voidreturn": if (ev.id === me()) pos("voidReturn", 0.8, undefined, { key: "vr", minGap: 400 }); break;
+      // quest concepts: ev name = sound name; they are heard by whoever stands near (id / x, y) or by everyone when sent without a position
+      case "lanterndim": case "lanternout": case "lanternpass": case "wavehorn": case "odohurt": case "graveright": case "gravewrong": case "seen":
+      case "sealturn": case "sealsync": case "bargain": case "tidefull": case "tidemarch": case "tideend":
+        pos(ev.ev, 0.9, undefined, { key: "qc" + ev.ev, minGap: 250, ...(ev.ev === "wavehorn" || ev.ev.startsWith("tide") ? { reach: 2.2 } : {}) }); break;
       case "grimoire": if (ev.id === me()) pos("pageTurn", 1, ({ fire: "fire", cold: "frost", poison: "poison", shock: "lightning" } as Record<string, string>)[ev.el] ?? "arcane"); break;
     }
   });

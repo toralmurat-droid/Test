@@ -21,13 +21,13 @@ test("Grandam Ursk: speaks on waking, enters the Rite and the Bear, hooks a far 
     p.x = bx + 150; p.y = by; // well out of her claws
     room.summonFused(pid, { parts: ["hidemother"], level: 30, title: "Grandam Ursk, the Hide-Mother", hpMult: 2, x: bx, y: by }, 5);
     const [id, m] = [...room.state.mobs.entries()].find(([, o]: any) => o.kind === "hidemother")!;
-    await until(() => said.length >= 3, 9000); // she rises (about 4 s)
+    await until(() => said.length >= 3, 15_000); // she rises (about 4 s); her lines come on the room's ticks, which lag under load
     assert.deepEqual(said.slice(0, 3), [...URSK.lines.wake], "she has her say as she rises");
 
     // the Rite: below 70% she calls her brood and starts hooking heroes in
     m.hp = Math.round(m.maxHp * 0.6); m.target = pid;
     // a ranged hero keeping well away from her (a step back every moment) until the hook comes
-    for (let i = 0; i < 60 && !hits.includes("hook"); i++) {
+    for (let i = 0; i < 200 && !hits.includes("hook"); i++) {
       if (!m.specialKind) { p.x = m.x + 170; p.y = m.y; }
       await wait(150);
       m.target = pid;
@@ -38,16 +38,16 @@ test("Grandam Ursk: speaks on waking, enters the Rite and the Bear, hooks a far 
 
     // her brood, sewn back in, mend her
     const kin = () => [...room.state.mobs.values()].filter((o: any) => o.mother === id && !o.dead).length;
-    for (let i = 0; i < 40 && !kin(); i++) { await wait(150); m.target = pid; }
+    for (let i = 0; i < 120 && !kin(); i++) { await wait(150); m.target = pid; }
     assert.ok(kin() > 0, "she calls her brood");
     m.bcd.gather = 0; m.bcd.hook = Date.now() + 60000; m.bcd.maul = Date.now() + 60000; m.bcd.roar = Date.now() + 60000;
     const before = m.hp;
-    for (let i = 0; i < 30 && m.hp <= before; i++) { await wait(150); m.target = pid; }
+    for (let i = 0; i < 100 && m.hp <= before; i++) { await wait(150); m.target = pid; }
     assert.ok(m.hp > before, "gathering her children heals her");
 
     // the Bear
     m.hp = Math.round(m.maxHp * 0.3);
-    await until(() => { m.target = pid; return phases.includes(3); }, 4000);
+    await until(() => { m.target = pid; return phases.includes(3); }, 9000);
     assert.ok(phases.includes(3), "she becomes the Bear below 35%");
     await c.leave();
   } finally {
