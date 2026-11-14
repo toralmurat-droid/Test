@@ -15,7 +15,8 @@ import { isSolidAt } from "../../shared/map";
 import { TERRITORIES } from "../../shared/war/territories";
 import { CHAR_ORIGIN, CHAR_SCALE, ensureCharSheet, playCharAnim } from "./artAssets";
 import { ISO, screenDir, setBaseDepth } from "./iso";
-import { MOB_LOOK, mobTexture } from "./textures";
+import { MOB_LOOK, mobTexture, warSoldierTexture } from "./textures";
+import { SMOOTH } from "./isoflag";
 import { faceOf } from "./watch";
 import { pennant } from "./warPlaque";
 
@@ -25,6 +26,11 @@ const SHEET = "watchman"; // the Wardens' soldiers are townsfolk-style character
 const FRAME_BASE: Record<string, number> = { down: 0, up: 2, right: 4, left: 4 };
 const ATTACK_BASE: Record<string, number> = { down: 6, up: 8, right: 10, left: 10 };
 const FLAG_H = 44;
+/** The look without painted art (`?pixel=1`): each art key's older stand-in (watchman and monster sheets). */
+const LEGACY: Record<string, string> = {
+  war_warden: "watchman", war_warden_cap: "watchman", war_redfang: "bandit", war_redfang_chief: "bandit_brute", war_host: "skeleton_spear", war_host_cap: "skeleton",
+  war_hidekin: "gnawkin_folk", war_hidekin_chief: "tuskborn_folk", war_veiled: "veiled", war_veiled_adept: "nomad_folk",
+};
 
 /** Where each land's stops are (Hold and standards): used to find nearby lands without building any patrol. */
 const STOPS = new Map<number, { x: number; y: number }[]>();
@@ -60,6 +66,8 @@ interface Guard { pos: Pt; fx: number; fy: number; h: number }
 interface Soldier {
   spr: Phaser.GameObjects.Sprite;
   char: boolean; kind: string; weapon: string;
+  /** Painted war sheet art key (war_warden...), set while its texture is not applied yet or in use. */
+  art?: string; artOn?: boolean; fallF?: number; flip?: boolean;
   face: string; key: string; frame: number; x: number; y: number; ang: number;
   flag?: Phaser.GameObjects.Image;
   mode: "march" | "guard" | "fight";
@@ -152,8 +160,14 @@ export class WarTroops {
   }
 
   private soldier(clan: ClanKey, i: number, mode: Soldier["mode"], officer = false): Soldier {
-    const name = officer ? TROOP_LOOK[clan].officer : TROOP_LOOK[clan].kinds[i % TROOP_LOOK[clan].kinds.length];
+    const art = officer ? TROOP_LOOK[clan].officer : TROOP_LOOK[clan].kinds[i % TROOP_LOOK[clan].kinds.length];
+    const name = SMOOTH ? art : LEGACY[art] ?? art;
     const char = name === SHEET, [kind, weapon] = split(name);
+    if (SMOOTH) {
+      const spr = this.scene.add.sprite(0, 0, "__DEFAULT").setVisible(false).setAlpha(0);
+      warSoldierTexture(this.scene, art);
+      return { spr, char: false, kind: art, weapon: "", art, face: "down", key: "", frame: -1, x: 0, y: 0, ang: 0, mode, rank: 0, side: 0 };
+    }
     const spr = char
       ? this.scene.add.sprite(0, 0, "__DEFAULT").setOrigin(CHAR_ORIGIN.x, CHAR_ORIGIN.y).setScale(CHAR_SCALE)
       : this.scene.add.sprite(0, 0, mobTexture(this.scene, kind, 1, weapon), 0).setOrigin(0.5, MOB_LOOK[kind]?.oy ?? 0.85).setScale(MOB_LOOK[kind]?.scale ?? 1);
@@ -267,9 +281,15 @@ export class WarTroops {
         m.spr.setVisible(false); m.flag?.setVisible(false);
         continue;
       }
+      if (m.art && !m.artOn) { // painted sheet: fetched on first sight, hidden until it is here
+        const tex = warSoldierTexture(this.scene, m.art);
+        if (!tex) { m.spr.setVisible(false); m.flag?.setVisible(false); continue; }
+        const look = MOB_LOOK[m.art];
+        m.spr.setTexture(tex, 0).setOrigin(0.5, look?.oy ?? 0.9375); m.artOn = true; m.frame = 0;
+      }
       if (m.char && m.frame < 0) { m.spr.setTexture(SHEET, 0); m.frame = 0; }
       let x = m.x, y = m.y, face = m.face, alpha = s.alpha, ang = 0, lift = 0;
-      let anim: "walk" | "idle" | "attack" = "idle", strike = false;
+      let anim: "walk" | "idle" | "attack" = "idle", strike = false, fallF = -1;
       if (m.mode === "march" && lead) {
         const q = patrolPos(s.patrol!, lead.d - m.rank * TROOP.rankGap); // ranks wait behind the stop, then follow the leader
         x = q.x; y = q.y;
@@ -302,7 +322,8 @@ export class WarTroops {
         } else {
           const F = SIEGE_FIGHT, k = Math.min(1, life.t / F.fallMs);
           x = f.pos.x; y = f.pos.y + (life.t > F.fallMs ? 2 : 0);
-          ang = 90 * k * f.tilt; face = this.facing(m, dx, dy);
+          if (m.art) { fallF = life.t < F.fallMs * 0.55 ? 12 : 13; m.flip = f.tilt < 0; } else ang = 90 * k * f.tilt; // painted soldiers have their own fall frames
+          face = this.facing(m, dx, dy);
           lift = 0;
           alpha *= life.t > F.fallMs + F.lieMs ? Math.max(0, 1 - (life.t - F.fallMs - F.lieMs) / F.fadeMs) : 1;
         }
@@ -315,10 +336,10 @@ export class WarTroops {
         if (key !== m.key || !m.spr.anims.isPlaying) { m.key = key; playCharAnim(m.spr, SHEET as any, anim === "attack" ? (strike ? "attack3" : "attack") : anim, face); }
       } else {
         const win = m.spr.texture.frameTotal > 12;
-        const f = anim === "attack" && win ? ATTACK_BASE[face] + (strike ? 1 : 0)
+        const f = fallF >= 0 ? fallF : anim === "attack" && win ? ATTACK_BASE[face] + (strike ? 1 : 0)
           : FRAME_BASE[face] + (anim === "walk" ? Math.floor(wall / 220 + i) % 2 : 0);
         if (f !== m.frame) { m.frame = f; m.spr.setFrame(f); }
-        m.spr.setFlipX(face === "left");
+        m.spr.setFlipX(fallF >= 0 ? !!m.flip : face === "left");
       }
       if (m.flag) {
         const f = m.flag;

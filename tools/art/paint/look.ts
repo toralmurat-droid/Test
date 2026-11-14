@@ -1,8 +1,8 @@
 /** How each painted character looks: materials, colours and kit. Poses and animation timing come from characters.ts. */
-export type HeadGear = "crown" | "greathelm" | "ninjahood" | "wizardhat" | "hood" | "horned" | "cap" | "helm" | "bandana" | "wide" | "witch" | "none";
+export type HeadGear = "crown" | "greathelm" | "ninjahood" | "wizardhat" | "hood" | "horned" | "cap" | "helm" | "kettle" | "bandana" | "wide" | "witch" | "none";
 export type TorsoKind = "plate" | "wrap" | "robe" | "jerkin" | "bare" | "shirt" | "mail" | "leather" | "tailcoat";
 export type LegKind = "trousers" | "mail" | "wrapped" | "robe" | "fur" | "dress" | "bare";
-export type WeaponKind = "katana" | "sword" | "staff" | "wand" | "bow" | "axe" | "hammer" | "spear" | "dagger" | "druidstaff" | "witchstaff" | "boneblade" | "spade" | "lute" | "none";
+export type WeaponKind = "katana" | "sword" | "staff" | "wand" | "bow" | "axe" | "hammer" | "pick" | "spear" | "dagger" | "druidstaff" | "witchstaff" | "boneblade" | "spade" | "lute" | "none";
 
 export interface Look {
   skin: number;
