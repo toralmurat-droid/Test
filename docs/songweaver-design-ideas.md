@@ -24,6 +24,12 @@ The Songweaver carries a small **Songbook** item.
 - It **collects songs**.
 - Owner hint: maybe new songs to collect, i.e. songs found or earned in the world rather than only learned from
   the tree. Not designed yet.
-- Open: what it is in game (a gear slot, a bag item, a HUD button); where songs come from (drops, quests,
+- Owner (2026-11-14): **the Songbook is equipment.** That opens design space for **other books**, each
+  supporting a play style (e.g. a hymnal book for healers, a war-march book for party buffs, a book of
+  dissonance for solo damage).
+  - Constraint: the `Player` schema is at its field cap, so a new gear slot means a new synced field. Prefer an
+    existing slot (e.g. the off-hand `shield` slot as the book slot for the Songweaver, as the lute already
+    takes `weapon`), or make the space first. Check `GEAR_SLOTS` in `shared/gear.ts`.
+- Open: where songs come from (drops, quests,
   NPCs, places); what a collected song does (a new song skill, a new progression or finisher, a mode, a
   cosmetic tune); how it saves (a new optional save field).
