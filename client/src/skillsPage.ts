@@ -33,7 +33,7 @@ function card(s: SkillDef, clips: Clips, color: string): string {
   const clip = clips.clips[s.id];
   const upgrade = s.mod ? skillById(s.mod.of) : undefined;
   let view: string;
-  if (clip) view = `<img class="sk-clip" src="/skills/${s.id}.webp?v=${clips.sources}" alt="${esc(s.name)} in the game" loading="lazy" width="448" height="336">`;
+  if (clip) view = `<img class="sk-clip" src="/skills/${s.id}.webp?v=${clips.sources}" alt="${esc(s.name)} in the game" loading="lazy" width="576" height="432">`;
   else if (s.passive || upgrade) view = `<div class="sk-still"><img src="${icon}" alt=""><span>${upgrade ? `Makes ${esc(upgrade.name)} stronger` : "Always on"}</span></div>`;
   else view = `<div class="sk-still"><img src="${icon}" alt=""><span>Clip being filmed</span></div>`;
   return `<article class="sk-card" style="--branch:${color}">
