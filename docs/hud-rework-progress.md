@@ -23,7 +23,7 @@ Shipped as three PRs, one after another on one branch: A (bugs) → B (layout) �
 - Name labels are isoAnchor'ed to their sprite: test them with `screenOf(cam, label.x, label.y, cr, sprite)`.
 - Not verified: other window sizes, dpr 1.25, several prompts at once (code keeps them exclusive).
 
-## C – monster info (planned)
+## C – monster info (built and reviewed; server `by` on "hit" ships with it, `server/hitBy.ts`)
 Owner rules: monster HP bars only on hover or damage; a top-of-screen bar shows the hovered monster's level, health
 and characteristics; monster specifics (helper text, icons) only in that bar.
 Owner decisions:

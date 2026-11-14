@@ -23,7 +23,10 @@ import { bindSfx, play as playSfx, sfxFrame } from "./sfx";
 import { songweaverSfx } from "./sfx";
 import { ChordHud } from "./chordHud";
 import { SoundCues } from "./soundCues";
-import { CHORD_NAMES, MODE_COLOR, soundOf } from "./songTables";
+import { MonsterBar } from "./monsterBar";
+import { isMineOrGroup, monsterInfo, showWorldBar } from "./monsterInfo";
+import { placeFloat, type FloatBox } from "./floatLanes";
+import { CHORD_NAMES, MODE_COLOR } from "./songTables";
 
 const SONG_SFX = new Set(["note", "chord", "resonate", "bounce", "soundhit", "shieldbreak"]);
 import { attackMult, cooldownMult, critChance, heroSpeed, STATS, magicMult, STAT_KINDS, STAT_NAMES, StatKind, statPoints, HP_PER_STR } from "../../shared/powers";
@@ -113,7 +116,6 @@ import { ResourceBars } from "./resourceBars";
 import { OverloadGauge } from "./overloadGauge";
 import { bindElemFx } from "./elemFx";
 import { ChampionFx } from "./championFx";
-import { championFullName } from "../../shared/champions";
 import { bindBeastFx } from "./beastFx";
 import { bindRaiderFx, raiderTrail } from "./raiderFx";
 import { hudRects, invalidateHud } from "./hudcache";
@@ -367,7 +369,11 @@ export class TownScene extends Phaser.Scene {
   private gearFx!: GearFx; // item level effects on heroes
   private attackHoldUntil = 0; // local clock (ms) the shared attack timer is estimated to run until
   private lastCast: Record<string, number> = {}; // local clock (ms) of my last cast of each skill, for cooldowns
-  private mobByMeAt = -1e9; // last time a monster stood right by my hero (my name label hides then)
+  private monsterBar?: MonsterBar;
+  private barId?: string; // the monster the top bar described last frame
+  /** When I or my group last hurt each monster (ms, scene time): its world HP bar stays for RECENT_HIT_MS (monsterInfo.ts). */
+  private lastMineHit = new Map<string, number>();
+  private floatLive: FloatBox[] = [];
   private items = new Map<string, Phaser.GameObjects.Image>();
   private lastDodge = -Infinity;
   private rootUntil = 0; // local clock: my dash is gliding to the server's spot until then (no prediction)
@@ -575,6 +581,7 @@ export class TownScene extends Phaser.Scene {
     const toggleIdeas = () => { if (!this.ideaBoard!.open) this.closeMenus(); this.ideaBoard!.toggle(); };
     this.input.keyboard!.on("keydown-I", () => { if (!this.chatting()) toggleIdeas(); });
     // Player groups: invite nearby heroes / leave (P or the Group button)
+    this.monsterBar = new MonsterBar(document.getElementById("hud")!);
     this.party = new PartyUI((type, msg) => this.room?.send(type, msg), () => (this.room?.state as any)?.players, () => this.me,
       (id) => { this.party?.close(); this.trade?.askTo(id); });
     const toggleParty = () => { if (!this.party!.open) this.closeMenus(); this.party!.toggle(); };
@@ -1396,9 +1403,11 @@ export class TownScene extends Phaser.Scene {
         note.hidden = false; this.noteAt = performance.now();
       }
     });
-    this.room.onMessage("hit", ({ id, dmg, blocked, crit, dot, kx, ky, el, ex }) => {
+    this.room.onMessage("hit", ({ id, dmg: rawDmg, blocked, crit, dot, kx, ky, el, ex, by }) => {
       const e = this.entities.get(id);
       if (!e) return;
+      const dmg = rawDmg > 0 ? Math.max(1, Math.round(rawDmg)) : 0; // whole numbers on screen (a town guard's hit was -58.7326...)
+      if (e.mob && by && isMineOrGroup(by, this.me, this.groupIds())) this.lastMineHit.set(id, this.time.now);
       if (dmg === 0 && !ex) { // a shield took the whole hit (shared/skillEngine.ts absorbDamage): no wound, no flinch
         this.floatText(e.sprite.x, e.sprite.y - 14, "absorbed", "#9ad1ff", PIXEL_FONT, 1, true);
         this.fx.absorbed(e);
@@ -1682,6 +1691,12 @@ export class TownScene extends Phaser.Scene {
         return out;
       },
       enemy: (id) => { const e = this.entities.get(id); return e && attackable(id, e) ? asEnemy(id, e) : undefined; },
+      // my own and my group's summons: not attackable, but the monster bar can describe them
+      friendlies: () => {
+        const out: ClickEnemy[] = [];
+        for (const [id, e] of this.entities) if (e.mob && e.state.owner && !e.culled && !e.state.hidden && !attackable(id, e)) out.push(asEnemy(id, e));
+        return out;
+      },
       spots: () => {
         const p = meEnt()?.state;
         const out: ClickSpot[] = [];
@@ -1812,6 +1827,9 @@ export class TownScene extends Phaser.Scene {
   private floatText(x: number, y: number, text: string, color: string, font = PIXEL_FONT, size = 1, jitter = false): Phaser.GameObjects.Text {
     // Damage numbers spread a little sideways so fast hits don't print on top of each other
     if (jitter) x += (Math.random() - 0.5) * 10;
+    // A text that would start on top of a live one is lifted clear of it (floatLanes.ts)
+    const lift = placeFloat(this.floatLive, { x, y: y - 5, w: text.length * 6 * Math.max(1, Math.round(size)), h: 10 * Math.max(1, Math.round(size)), t: this.time.now });
+    y -= lift;
     // Pooled: a Text owns a canvas and a GL texture, and every hit prints one
     let t = this.floatPool.pop();
     if (t) t.setPosition(x, y).setText(text).setColor(color).setFontFamily(font).setAlpha(1).setVisible(true).setActive(true);
@@ -1835,6 +1853,27 @@ export class TownScene extends Phaser.Scene {
     return t;
   }
   private floatPool: Phaser.GameObjects.Text[] = [];
+
+  /** Session ids of the players in my group (me not included). */
+  private groupIds(): Set<string> {
+    const out = new Set<string>(), players = (this.room?.state as any)?.players, party = players?.get(this.me)?.party;
+    if (party) players.forEach((q: any, id: string) => { if (id !== this.me && q.party === party) out.add(id); });
+    return out;
+  }
+
+  /** The top bar describes the monster under the mouse (or a friendly summon), else my click target while it lives. */
+  private updateMonsterBar(now: number) {
+    const bar = this.monsterBar, ptr = this.pointer;
+    if (!bar) return;
+    const live = (id?: string) => { const e = id ? this.entities.get(id) : undefined; return e?.mob && !e.state.dead && !e.state.hidden && !e.culled ? e : undefined; };
+    const pid = [ptr?.inspectId, ptr?.targetId].find((id) => live(id)), e = live(pid);
+    if (e) {
+      this.barId = pid;
+      const players = (this.room.state as any).players, me = players?.get(this.me);
+      bar.show(monsterInfo(e.state as any, { myLevel: me?.level ?? 1, myClass: me?.cls, playerName: (id) => players?.get(id)?.name }), now);
+    } else if (this.barId && !live(this.barId)) { this.barId = undefined; bar.hide(); } // it died or left the view: no lingering
+    else bar.show(undefined, now);
+  }
 
   /** Merged blob: paint the swallowed blobs' colours, eyes and mouths over its body (follows squash tweens). */
   private drawBlobParts(e: Entity, id: string, p: any, x: number, y: number) {
@@ -1939,6 +1978,7 @@ export class TownScene extends Phaser.Scene {
     this.siege?.clear(id);
     this.champFx?.drop(id);
     this.forms?.drop(id);
+    this.lastMineHit.delete(id);
     e.sprite.destroy(); e.label?.destroy(); e.bar.destroy(); e.parts?.destroy(); e.bubble?.destroy(); e.shield?.destroy(); e.gear?.destroy();
     this.entities.delete(id);
   }
@@ -3059,7 +3099,7 @@ export class TownScene extends Phaser.Scene {
       : isoInput(k.UP.isDown, k.DOWN.isDown, k.LEFT.isDown, k.RIGHT.isDown); // spell keys: W/E/R/T cast, the mouse (or arrows) walks
     // Point-and-click: the mouse steers until a movement key is pressed
     let want = next;
-    if (next.up || next.down || next.left || next.right) { this.pointer?.cancel(); this.pointer?.drawRing(); }
+    if (next.up || next.down || next.left || next.right) { this.pointer?.cancel(); this.pointer?.drawRing(); this.pointer?.repick(); } // hover follows the scrolling world
     else want = this.pointer?.update(Math.min(dtMs, 100)) ?? next;
     // A skill key held down keeps casting toward the mouse, like holding a spell in Diablo 2 (the server drops
     // the tries that come before the cooldown or without the mana, so asking often just means no wasted time)
@@ -3071,12 +3111,12 @@ export class TownScene extends Phaser.Scene {
 
     const now = this.time.now, wall = performance.now();
     this.countFps(wall);
+    this.updateMonsterBar(now);
     // Long frames (a hiccup, a hidden tab) are capped so prediction never leaps through a wall
     const step = Math.min(dtMs, 100);
     stepInterpDelay(step);
     // An easing written for 60 fps (k per frame), adjusted so it pulls just as hard at 30, 120 or 144 fps
     const ease = (k: number) => 1 - Math.pow(1 - k, step / (1000 / 60));
-    this.soundCues.hideIcons();
     for (const [id, e] of this.entities) {
       const p = e.state;
       const rooted = (typeof p.fx === "string" && p.fx.includes("charge")) || (id === this.me && this.time.now < this.rootUntil); // a buildup roots the hero, a dash glides
@@ -3132,12 +3172,6 @@ export class TownScene extends Phaser.Scene {
           continue;
         }
         if (e.culled) { e.culled = false; e.bubble?.setVisible(true); e.bar.setVisible(true); }
-        if (!e.label) {
-          e.label = this.add.text(e.sprite.x, e.sprite.y, "", {
-            fontFamily: TEXT_FONT, fontSize: `${TEXT_PX}px`, color: "#ffffff", stroke: "#000", strokeThickness: 2,
-          }).setOrigin(0.5, 1).setScale(WT).setResolution(1);
-          isoAnchor(e.label, e.sprite);
-        }
       }
 
       const moving = id === this.me ? (this.input_.up || this.input_.down || this.input_.left || this.input_.right) : p.moving;
@@ -3215,47 +3249,23 @@ export class TownScene extends Phaser.Scene {
       if (e.gear) this.gearFx.tick(e, dtMs, moving);
 
       const x = Math.round(e.sprite.x), y = Math.round(e.sprite.y);
-      // Monsters: HP bar over the head, level tag just above it
+      // Monsters: HP bar over the head (only while it matters, see showWorldBar); their name and level are in the top bar
       const mobBarY = y - e.top - 4;
-      if (e.label) setBaseDepth(e.label.setPosition(x, e.mob ? mobBarY - 1 : y - e.top - (p.hat ? 4 : 2)), e.sprite.y + 1);
-      if (e.mob && e.label) {
-        // Level tag coloured by how tough it is for me: grey easy, white even, orange tougher, red dangerous
-        const diff = (p.level ?? 1) - ((this.room.state as any).players?.get(this.me)?.level ?? 1);
-        const col = p.owner ? (p.owner === this.me || (this.room.state as any).players?.get(p.owner)?.party && (this.room.state as any).players?.get(p.owner)?.party === (this.room.state as any).players?.get(this.me)?.party ? "#7cfc00" : "#ff8a65")
-          : diff >= 3 ? "#ff5252" : diff >= 1 ? "#ffb74d" : diff >= -2 ? "#ffffff" : "#9e9e9e";
-        // The monster under the mouse or being attacked also shows its name (just "LvN" otherwise: less clutter)
-        const named = id === this.pointer?.hoverId || id === this.pointer?.targetId;
-        const kindName = named ? (MOBS[p.kind as MobKind]?.name ?? "") : "";
-        const lv = `Lv${p.level ?? 1}`;
-        const owner = p.owner ? (this.room.state as any).players?.get(p.owner) : undefined;
-        const txt = owner ? `${owner.name}'s ${MOBS[p.kind as MobKind]?.name ?? "Golem"}${isSummonKind(p.kind) || p.kind === "bride" || p.kind === "wisp" ? "" : " thrall"}` : p.champion ? `${named ? championFullName(p.title, p.champion) : p.title} ${lv}` // a champion: its short name, the epithet only under the mouse
-          : p.title ? `${p.title} ${lv}` : BOSS[p.kind as keyof typeof BOSS] ? `${kindName || "Boss"} ${lv}` : ELITE[p.kind as keyof typeof ELITE] ? `Elite ${kindName ? kindName + " " : ""}${lv}` : kindName ? `${kindName} ${lv}` : lv;
-        // A monster right next to my hero: my own name steps aside so the two labels never overlap
-        const meS = this.entities.get(this.me)?.sprite;
-        if (meS && !p.dead && Math.abs(e.sprite.x - meS.x) < 1.5 * TILE && Math.abs(e.sprite.y - meS.y) < 1.5 * TILE) this.mobByMeAt = now;
-        // A Summoner's wisps come four at a time and stick to their owner: their name only under the mouse
-        const shown = p.kind === "wisp" && !named ? "" : txt;
-        if (e.label.text !== shown) e.label.setText(shown);
-        if (e.lvlColor !== col) { e.label.setColor(col); e.lvlColor = col; }
-        e.label.setVisible(!p.dead && !p.hidden);
-      } else if (e.label && id === this.me) {
-        e.label.setVisible(now - this.mobByMeAt > 300 && !this.labelUnderHud(e.label, e.sprite));
-      } else if (e.label && id !== this.me) {
+      if (e.label) {
+        // Heroes: the name over the head, hidden when it would be drawn under the top-right HUD column
+        setBaseDepth(e.label.setPosition(x, y - e.top - (p.hat ? 4 : 2)), e.sprite.y + 1);
         e.label.setVisible(!this.labelUnderHud(e.label, e.sprite));
-        // Group members: green name
-        const myParty = (this.room.state as any).players?.get(this.me)?.party;
-        const col = myParty && p.party === myParty ? "#7cfc00" : "#ffffff";
-        if (e.lvlColor !== col) { e.label.setColor(col); e.lvlColor = col; }
+        if (id !== this.me) {
+          // Group members: green name
+          const myParty = (this.room.state as any).players?.get(this.me)?.party;
+          const col = myParty && p.party === myParty ? "#7cfc00" : "#ffffff";
+          if (e.lvlColor !== col) { e.label.setColor(col); e.lvlColor = col; }
+        }
       }
       e.bubble?.setPosition(x, y - e.top - 12); // above the name label
       setBaseDepth(e.bar.clear(), e.sprite.y + 1);
-      if (e.mob) this.champFx?.sync(id, e, p, x, y, mobBarY, now);
+      if (e.mob) this.champFx?.sync(id, e, p, x, y, now);
       this.fx.status(e, e.bar, dtMs / 1000);
-      // Songweaver: how this monster hears (ear tier + pitch arrow) beside its name while hovered / targeted
-      if (e.mob && e.label && !p.dead && !p.hidden && (id === this.pointer?.hoverId || id === this.pointer?.targetId)
-        && (this.room.state as any).players?.get(this.me)?.cls === "songweaver" && soundOf(p.kind)) {
-        this.soundCues.drawIcons(this, e.label, p.kind, e.sprite.y + 3, id === this.pointer?.hoverId, PIXEL_FONT, e.sprite);
-      }
       // (Stacks built by basic hits are shown by the skill keys, see chargeCell: no pips under the hero, Murat 2026-11-04)
       const maxHp = p.maxHp;
       if (!e.mob) {
@@ -3302,13 +3312,16 @@ export class TownScene extends Phaser.Scene {
         else if (p.kind === "demon" && p.bones && !e.sprite.texture.key.startsWith("mob_demon")) this.drawDemonBones(e, p, x, y); // painted sheets wear them
 
         const bw = Math.min(40, (MOB_LOOK[p.kind]?.bar || 14) * (1 + MERGE.growPerBlob * ((p.merged || 1) - 1)));
-        if (ELITE[p.kind as keyof typeof ELITE]) e.bar.fillStyle(BOSS[p.kind as keyof typeof BOSS] ? 0xc62828 : 0xffc93c).fillRect(x - bw / 2 - 1, mobBarY - 1, bw + 2, 4); // elite: gold frame, boss: red
+        const showBar = showWorldBar({ hovered: id === this.pointer?.hoverId || id === this.pointer?.inspectId, targeted: id === this.pointer?.targetId, lastMineHitAt: this.lastMineHit.get(id), now, dead: !!p.dead, hidden: !!p.hidden, ownSummon: p.owner === this.me });
+        if (showBar && ELITE[p.kind as keyof typeof ELITE]) e.bar.fillStyle(BOSS[p.kind as keyof typeof BOSS] ? 0xc62828 : 0xffc93c).fillRect(x - bw / 2 - 1, mobBarY - 1, bw + 2, 4); // elite: gold frame, boss: red
         if (e.rallyUntil && now < e.rallyUntil) {
           // rallied by the chief's War Cry: a red glow under the feet
           e.bar.fillStyle(0xff3d2e, 0.18 + 0.1 * Math.sin(now / 120)).fillEllipse(x, y, 22, 9);
         }
-        e.bar.fillStyle(0x000000).fillRect(x - bw / 2, mobBarY, bw, 2);
-        e.bar.fillStyle(0xf4a261).fillRect(x - bw / 2, mobBarY, bw * (p.hp / maxHp), 2);
+        if (showBar) {
+          e.bar.fillStyle(0x000000).fillRect(x - bw / 2, mobBarY, bw, 2);
+          e.bar.fillStyle(0xf4a261).fillRect(x - bw / 2, mobBarY, bw * (p.hp / maxHp), 2);
+        }
       } else if (!e.mob && !p.dead && p.hp < maxHp) {
         e.bar.fillStyle(0x000000).fillRect(x - 7, y + 3, 14, 2);
         e.bar.fillStyle(0xe63946).fillRect(x - 7, y + 3, 14 * (p.hp / maxHp), 2);
