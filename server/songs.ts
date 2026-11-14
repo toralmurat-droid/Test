@@ -10,6 +10,7 @@ import { isMaterial, type MaterialId } from "../shared/lute";
 import { BAG_SIZE, gearName, isBagItem, isBook, isLute, luteAtLevel, starterKit } from "../shared/gear";
 import { potionSlots, type Potions } from "../shared/potions";
 import { sellPrice } from "../shared/shops";
+import { STASH_SIZE } from "../shared/trade";
 
 /**
  * The Songweaver's room-side rules (shared/songs.ts holds the music itself): the Oakvale busking exemption, the
@@ -173,6 +174,28 @@ export function stowItem(p: KitHero, bag: string[], item: string, toStash: (item
   p.gold += g;
   return `Your bag and stash were full, so your ${name} was sold for ${g} gold: ${why}`;
 }
+/** The account stash as the kit rules see it: put an item in (false when full), take out the first one that matches. */
+export interface KitStash { put(item: string): boolean; take(match: (item: string) => boolean): string | undefined }
+type StashData = { items: string[]; gold: number };
+/**
+ * A KitStash over the account stash, loaded on first use. `loaded`: the copy to write back with the hero
+ * (accounts.saveStash), undefined when nothing touched it; `peek` reads without loading it for writing.
+ */
+export class LazyStash implements KitStash {
+  loaded?: StashData;
+  constructor(private load: () => StashData) {}
+  private get st() { return (this.loaded ??= this.load()); }
+  put(item: string) {
+    if (this.st.items.length >= STASH_SIZE) return false;
+    this.st.items.push(item);
+    return true;
+  }
+  take(match: (item: string) => boolean) {
+    const i = this.st.items.findIndex(match);
+    return i < 0 ? undefined : this.st.items.splice(i, 1)[0];
+  }
+  peek(): readonly string[] { return (this.loaded ?? this.load()).items; }
+}
 const WHY_BOOK = "a Songweaver carries her Songbook in that hand now.";
 const WHY_LUTE = "a minstrel carries a lute and a book.";
 
@@ -181,9 +204,11 @@ const WHY_LUTE = "a minstrel carries a lute and a book.";
  * itself, so nothing she owned is lost (stowItem: bag, else stash, else sold). Returns chat lines, one per moved item.
  *  - v1: the shield she wore is stowed; the Songbook takes the shield slot.
  *  - v2: a weapon that is not her lute is stowed, and so is a shield that is not a book (the Songbook comes back to the
- *    slot); her lute goes back in her hands (from the bag, else a new one) at her level.
+ *    slot); her lute goes back in her hands (from the bag, else the stash, else a new one) at her level, so no second
+ *    lute is made while one waits in the stash.
  */
-export function migrateSongweaver(p: KitHero, s: KitSave, toStash: (item: string) => boolean): string[] {
+export function migrateSongweaver(p: KitHero, s: KitSave, stash: KitStash): string[] {
+  const toStash = (item: string) => stash.put(item);
   const ver = typeof s.swKit === "number" ? s.swKit : 0;
   if (p.cls !== "songweaver" || ver >= SW_KIT_VERSION) return [];
   const notes: string[] = [], kit = starterKit("songweaver"), book = kit.shield!;
@@ -201,8 +226,9 @@ export function migrateSongweaver(p: KitHero, s: KitSave, toStash: (item: string
     let lute = worn(s.weapon);
     if (lute && !isLute(lute)) { notes.push(stowItem(p, bag, lute, toStash, WHY_LUTE)); lute = ""; }
     if (!lute) { // the lute she put away comes back to her hands; a lost one is made anew
-      const k = bag.findIndex((v) => isLute(v));
-      lute = k >= 0 ? bag.splice(k, 1)[0] : kit.weapon!;
+      const k = bag.findIndex((v) => isLute(v)), st = k < 0 ? stash.take(isLute) : undefined;
+      lute = k >= 0 ? bag.splice(k, 1)[0] : st ?? kit.weapon!;
+      if (st) notes.push(`Your ${gearName(st, p.cls)} came out of your stash into your hands: ${WHY_LUTE}`);
     }
     const loose: string[] = [];
     s.weapon = luteAtLevel(lute, p.level, loose);
@@ -223,6 +249,26 @@ export function relevelLute(p: { cls: string; level: number; weapon: string }, b
   if (isLute(p.weapon)) { const v = luteAtLevel(p.weapon, p.level, loose); if (v !== p.weapon) { p.weapon = v; changed = true; } }
   for (let i = 0; i < bag.length; i++) if (isLute(bag[i])) { const v = luteAtLevel(bag[i], p.level, loose); if (v !== bag[i]) { bag[i] = v; changed = true; } }
   return changed;
+}
+
+/**
+ * The lost-kit fallback, on every load: a Songweaver's hands take only a lute and a book (gear.ts wearProblem), and a
+ * lute whose id no longer checks out (isGearId) is dropped on load, so one with no lute anywhere (worn, bag, `stashed`)
+ * gets the starter lute back at her level, and one with no book anywhere gets the Songbook in her shield slot. Only
+ * fills an empty slot. Returns chat lines.
+ */
+export function refillKit(p: { cls: string; level: number; weapon: string; shield: string }, bag: readonly string[], stashed: readonly string[]): string[] {
+  if (p.cls !== "songweaver") return [];
+  const kit = starterKit("songweaver"), all = [p.weapon, p.shield, ...bag, ...stashed], out: string[] = [];
+  if (!p.weapon && !all.some(isLute)) {
+    p.weapon = luteAtLevel(kit.weapon!, p.level, []);
+    out.push(`Your lute was lost, so a new ${gearName(p.weapon, p.cls)} is in your hands.`);
+  }
+  if (!p.shield && !all.some(isBook)) {
+    p.shield = kit.shield!;
+    out.push(`Your Songbook was lost, so a new one is in your hand.`);
+  }
+  return out;
 }
 
 /** A save from another tree version gets every skill point back (like the Summoner's suTree). */

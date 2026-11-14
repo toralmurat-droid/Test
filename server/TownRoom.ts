@@ -38,7 +38,7 @@ import { DOORS, DOOR_RANGE, doorById, doorDist, doorWorkable, isSafeZone, isSoli
 import { isDecorSolidAt, npcById, npcNear, TALK_RANGE, type Npc } from "../shared/npcs";
 import { beyondWall, WATCH, WATCH_POSTS, WatchPost } from "../shared/watch";
 import { inVillage, WRATH } from "../shared/wrath";
-import { afterRespec, bounceWave, busking, buskingAudience, BuskingLines, ChordSync, heroSound, migrateSongweaver, mobSound, oldSongTree, relevelLute, restoreMode, SONG_POTION_TEXT, SongCollector, songSave, stowItem, stringShot, SW_KIT_VERSION } from "./songs";
+import { afterRespec, bounceWave, busking, buskingAudience, BuskingLines, ChordSync, heroSound, LazyStash, migrateSongweaver, mobSound, refillKit, oldSongTree, relevelLute, restoreMode, SONG_POTION_TEXT, SongCollector, songSave, stowItem, stringShot, SW_KIT_VERSION } from "./songs";
 import { songById } from "../shared/songbook";
 import { matItemId, rollMats } from "../shared/lutemaker";
 import { atLutemaker, breakItem, fitTrait, pickMat } from "./lutemaker";
@@ -53,7 +53,7 @@ import { NIGHT_RAID, raiderByKey, raiderIgnores, RAIDERS } from "../shared/raide
 import { SLOTS_BY_ZONE, WORK_SLOTS } from "../shared/siege";
 import { DAY_CYCLE_MS, dayFrac, isUndeadNight, NIGHT_BOSSES, UNDEAD_NIGHT } from "../shared/daynight";
 import { AMBUSH, BANDIT_AI, BANDIT_ROLES, CAMP_POSTS, CHIEF, clearWalk, findPath, postPos, roleOf } from "../shared/bandits";
-import { flush, flushFinal, HeroSave, loadHero, loadStash, login, markChest, openedChests, resetChests, saveHero, saveStash } from "./accounts";
+import { flush, flushFinal, HeroSave, loadHero, loadStash, login, markChest, openedChests, resetChests, saveHero, saveStash, type Stash } from "./accounts";
 import { offerFrom, Offer, settle, STASH, STASH_GOLD_MAX, STASH_RANGE, STASH_SIZE, TRADE } from "../shared/trade";
 import { arrivalOf, cleanPortals, PORTAL_COMBAT_MS, PORTAL_RANGE, PORTAL_WAKE_RANGE, portalById, PORTALS } from "../shared/portals";
 import { rollBoon, shrineXp, SHRINE, SHRINE_COOLDOWN_MS, SHRINE_RANGE, WIND_BLESSING, WIND_BLESSING_ID } from "../shared/shrine";
@@ -64,7 +64,7 @@ import { groupDmgMult, groupHpMult, PARTY, together } from "../shared/party";
 import { canExecute, executeDamage, executeRefund, heroPoise, MOB_COMBAT, mobBody, POISE, poiseLevelMult, poiseSpeed, PVP_PROTECT_LEVEL, pvpDamageMult, pvpProtected, SWING_AHEAD } from "../shared/combat";
 import {
   BAG_SIZE, baseId, isLute, wearProblem, Equipped, gearDef, GEAR_SLOTS, activeGear, heroStats, reqProblem, itemLevel, HeroReqInfo, GearSlot, gearBlock, gearName, gearReachMult, gearSpeedMult, gearStats, isGearId, potionChance, rollGear, canWear, starterKit,
-  isBagItem, isBound, socketProblem, itemRunes, withRunes, runeEffects, stripRunes, GEAR_DROP,
+  isBagItem, keepsBoundOf, socketProblem, itemRunes, withRunes, runeEffects, stripRunes, GEAR_DROP,
 } from "../shared/gear";
 import { fuseRunes, parseRune, rollMobRune, rollRune, RUNE_DROP, runeId, runeIdName, RUNE_KEYS, RUNES, RuneKey } from "../shared/runes";
 /** "Frost Katana Lv 17" for pickup messages. */
@@ -846,15 +846,14 @@ export class TownRoom extends Room<TownState> {
     // "New game" on the login screen: start this class over (the old save is overwritten right away) and refill all chests
     if (options?.newGame) resetChests(p.name);
     const save = options?.newGame ? undefined : loadHero(p.name, p.cls);
-    const moved = save ? this.restore(p, save) : [];
-    for (const text of moved) client.send("chat", { id: "", name: "Oakvale", text }); // what a save migration moved
+    const loaded = save ? this.restore(p, save) : undefined;
+    for (const text of loaded?.moved ?? []) client.send("chat", { id: "", name: "Oakvale", text }); // what a save migration moved
     this.syncPotions(p);
     // A new hero (or New game) starts the guided first quest right away; heroes from before it existed skip it
     if (!save) this.qset(p, TUT_CHAIN, { questId: 0, questStage: 1, questCount: 0 });
     // New heroes (and saves from before class kits existed) put on the class's starting kit
     if (!save?.kit) this.wearKit(p);
     this.applyStats(p);
-    if (options?.newGame) saveHero(p.name, p.cls, this.snapshot(p));
     p.hp = p.maxHp;
     const s = save?.act === 2 && act2Open(p) ? desertSpawn() : randomSpawn(); // left from the desert: back in Kel Ashar
     p.x = s.x; p.y = s.y;
@@ -862,6 +861,8 @@ export class TownRoom extends Room<TownState> {
     if (options?.newGame) dropLive(p.name, p.cls);
     const back = options?.newGame ? undefined : takeLive(p.name, p.cls);
     if (back) this.resume(p, back);
+    if (options?.newGame) saveHero(p.name, p.cls, this.snapshot(p));
+    else if (loaded) this.writeLoaded(p, loaded);
     // A quest that carries on by itself (QuestDef.auto) but did not start (they left right after the last one, or its
     // steps changed in an update): it is simply under way when they come back
     for (let c = 0; c < CHAINS.length; c++) {
@@ -977,8 +978,20 @@ export class TownRoom extends Room<TownState> {
     };
   }
 
-  /** Loads a save into the hero. Returns chat lines about items a migration moved (the room sends them on join). */
-  private restore(p: Player, s: HeroSave): string[] {
+  /**
+   * After restore, once the hero stands somewhere (the snapshot saves her act): a load that changed the save (a
+   * migration, a moved or sold item) is written back, and a stash it used goes in the same write, so nothing is in both.
+   */
+  private writeLoaded(p: Player, r: { dirty: boolean; stash?: Stash }) {
+    if (r.stash) saveStash(p.name, r.stash, p.cls, this.snapshot(p));
+    else if (r.dirty) saveHero(p.name, p.cls, this.snapshot(p));
+  }
+
+  /**
+   * Loads a save into the hero (onJoin then calls writeLoaded). Returns chat lines about items a migration moved (the room sends them on join), whether
+   * the save changed (`dirty`) and the stash to write with it, if a migration touched it.
+   */
+  private restore(p: Player, s: HeroSave): { moved: string[]; dirty: boolean; stash?: Stash } {
     const num = (v: unknown, d = 0) => (typeof v === "number" && Number.isFinite(v) ? v : d);
     // gear she may not wear (a kit of another class, the Songweaver's musical-only rule) goes to the bag, not away
     const misfit: string[] = [];
@@ -993,15 +1006,9 @@ export class TownRoom extends Room<TownState> {
     const cnt = (v: unknown): Counts => (Array.isArray(v) ? [0, 1, 2].map((i) => Math.min(120, Math.max(0, Math.floor(num(v[i]))))) : [0, 0, 0]) as Counts;
     p.pots = s.pots ? { potion: cnt(s.pots.potion), mpotion: cnt(s.pots.mpotion) } : { potion: [Math.min(50, num(s.potions)), 0, 0], mpotion: [Math.min(50, num(s.mpotions, 2)), 0, 0] };
     // The Songweaver's kit (server/songs.ts): before the gear filter, so a shield she wore moves instead of vanishing
-    let stash: ReturnType<typeof loadStash> | undefined;
-    const toStash = (item: string) => {
-      stash ??= loadStash(p.name);
-      if (stash.items.length >= STASH_SIZE) return false;
-      stash.items.push(item);
-      return true;
-    };
+    const stash = new LazyStash(() => loadStash(p.name)), toStash = (item: string) => stash.put(item);
     const kitWas = typeof s.swKit === "number" ? s.swKit : 0;
-    const moved = migrateSongweaver(p, s, toStash);
+    const moved = migrateSongweaver(p, s, stash);
     p.ptSta = num(s.ptSta); p.ptStr = num(s.ptStr); p.ptMag = num(s.ptMag); p.ptDex = num(s.ptDex);
     // A hero saved above today's level cap spent more points than his level gives: hand them back to place again
     if (p.ptSta + p.ptStr + p.ptMag + p.ptDex > statPoints(p.level)) p.ptSta = p.ptStr = p.ptMag = p.ptDex = 0;
@@ -1013,6 +1020,7 @@ export class TownRoom extends Room<TownState> {
     const loose: string[] = [];
     relevelLute(p, bag, loose); // the Songweaver's lute is at her level (DI-5)
     for (const v of loose) moved.push(stowItem(p, bag, v, toStash, "your lute had fewer sockets."));
+    moved.push(...refillKit(p, bag, stash.peek())); // a lost lute or Songbook comes back
     if (Array.isArray(s.bag) || bag.length) setBag(p, bag);
     // Old saves (before the skill tree rework) had other skill ids: those points come back to spend again
     // The Summoner's tree was rebuilt (Void Lord, 2026-11-08): a save from the old tree gets every skill point back
@@ -1042,9 +1050,10 @@ export class TownRoom extends Room<TownState> {
     });
     // collected songs and materials (server/songs.ts SongCollector); kit v3: songs of quests finished before them
     this.songs.load(p, s, (q) => questFinished(p, q), kitWas < SW_KIT_VERSION);
-    // an item the migration put in the stash: stash and hero are written together, so it can't end up in both
-    if (stash) saveStash(p.name, stash, p.cls, this.snapshot(p));
-    return moved;
+    // onJoin writes the hero back (with the stash, in one go) once she stands somewhere: a migration or a moved item
+    // changed the save (gold from a sold item included), and the snapshot's act needs her position
+    const dirty = moved.length > 0 || !!stash.loaded || (p.cls === "songweaver" && kitWas < SW_KIT_VERSION);
+    return { moved, dirty, stash: stash.loaded };
   }
 
   /** A spawn spot in the zone away from every hero, or null if none turned up (the hero stands in a small zone). */
@@ -4797,11 +4806,14 @@ export class TownRoom extends Room<TownState> {
     }
   }
 
+  /** Which bound items this hero must keep (shared/gear.ts keepsBoundOf: a Songweaver's last lute and Songbook). */
+  private keeps(p: Player) { return keepsBoundOf(p.cls, [p.weapon, p.shield], bagItems(p)); }
+
   /** Throw a bag item on the ground (anyone can pick it up). */
   private dropGear(id: string, i: number) {
     const p = this.state.players.get(id);
     if (!p || typeof i !== "number" || i < 0 || i >= p.bag.length) return;
-    if (isBound(p.bag.at(i))) return this.note(id, "That stays with you: it is bound to you."); // the Songbook
+    if (this.keeps(p)(p.bag.at(i))) return this.note(id, "That stays with you: it is bound to you."); // her lute, the Songbook
     const items = [...bagItems(p)];
     const [gid] = items.splice(i, 1);
     setBag(p, items);
@@ -4814,7 +4826,11 @@ export class TownRoom extends Room<TownState> {
   private dropGears(id: string, list: number[]) {
     const p = this.state.players.get(id);
     if (!p || !Array.isArray(list)) return;
-    const idx = new Set(list.filter((i) => Number.isInteger(i) && i >= 0 && i < p.bag.length && !isBound(p.bag.at(i))));
+    const keep = this.keeps(p), idx = new Set<number>(), gone: string[] = [];
+    for (const i of list) {
+      if (!Number.isInteger(i) || i < 0 || i >= p.bag.length || idx.has(i) || keep(p.bag.at(i), gone)) continue;
+      idx.add(i); gone.push(p.bag.at(i)!);
+    }
     if (!idx.size) return;
     const items = [...bagItems(p)];
     setBag(p, items.filter((_, i) => !idx.has(i)));
@@ -5264,7 +5280,7 @@ export class TownRoom extends Room<TownState> {
     const shop = p && !p.dead ? this.shopNear(p) : undefined;
     if (!p || !shop?.buys || typeof i !== "number" || i < 0 || i >= p.bag.length) return;
     const gid = p.bag.at(i);
-    if (!gid || !shopBuys(shop, gid)) return; // a gear slot it lists, or loose runes (Morwen)
+    if (!gid || !shopBuys(shop, gid, !this.keeps(p)(gid))) return; // a gear slot it lists, or loose runes (Morwen)
     const items = [...bagItems(p)];
     items.splice(i, 1);
     // runes set in a sold item come back to the bag; with no room the shop pays for them
@@ -5358,7 +5374,7 @@ export class TownRoom extends Room<TownState> {
   private tradeOffer(id: string, msg: { items?: unknown; gold?: unknown }) {
     const t = this.trades.get(id), p = this.state.players.get(id);
     if (!t || !p) return;
-    t.offer[id] = offerFrom(bagItems(p), p.gold, msg?.items, msg?.gold);
+    t.offer[id] = offerFrom(bagItems(p), p.gold, msg?.items, msg?.gold, this.keeps(p));
     t.ready = {}; t.v++; // a changed offer must be looked at again by both
     this.tradeView(t);
   }
@@ -5427,7 +5443,7 @@ export class TownRoom extends Room<TownState> {
     const st = loadStash(p.name), bag = bagItems(p);
     if (dir === "put") {
       if (i >= bag.length || !isBagItem(bag[i])) return;
-      if (isBound(bag[i])) return this.stashSend(client, "That stays with you: it is bound to you");
+      if (this.keeps(p)(bag[i])) return this.stashSend(client, "That stays with you: it is bound to you");
       if (st.items.length >= STASH_SIZE) return this.stashSend(client, "The stash is full");
       st.items.push(bag.splice(i, 1)[0]);
     } else {
@@ -5869,7 +5885,7 @@ export class TownRoom extends Room<TownState> {
     if (lvl > p.level) {
       const from = p.level;
       p.level = lvl;
-      this.relevel(p);
+      this.relevel(id, p);
       this.applyStats(p); // new stat points are assigned by the player in the hero panel
       if (!p.dead) p.hp = p.maxHp; // full heal on level up
       this.broadcast("levelup", { id, level: lvl, from });
@@ -5915,12 +5931,17 @@ export class TownRoom extends Room<TownState> {
     this.clients.find((c) => c.sessionId === id)?.send("chat", { id: "", name: "Oakvale", text });
   }
 
-  /** The Songweaver's lute follows her level (server/songs.ts relevelLute); runes it can no longer hold go to the bag. */
-  private relevel(p: Player) {
+  /**
+   * The Songweaver's lute follows her level (server/songs.ts relevelLute); runes it can no longer hold are stowed like
+   * on load (stowItem: bag, else stash, else sold), never thrown away.
+   */
+  private relevel(id: string, p: Player) {
     const bag = [...bagItems(p)], loose: string[] = [];
     if (!relevelLute(p, bag, loose)) return;
-    for (const r of loose) if (bag.length + potionSlots(p.pots) < BAG_SIZE) bag.push(r);
+    const stash = new LazyStash(() => loadStash(p.name));
+    for (const r of loose) this.note(id, stowItem(p, bag, r, (v) => stash.put(v), "your lute had fewer sockets."));
     setBag(p, bag);
+    if (stash.loaded) saveStash(p.name, stash.loaded, p.cls, this.snapshot(p));
   }
 
   /** Recompute stats and max HP from class + level + equipped gear. */

@@ -14,6 +14,8 @@ import { sellPrice } from "../shared/shops";
 import { startRoom, wait } from "./helpers/room";
 
 const pots = { potion: [0, 0, 0], mpotion: [0, 0, 0] } as any;
+/** A stash for the pure migration tests: always room (open) or always full (shut), nothing in it to take. */
+const open = { put: () => true, take: () => undefined }, shut = { put: () => false, take: () => undefined };
 
 test("rule: a Songweaver wears her lute and books only; her ranged slot stays open; others may wear books", () => {
   for (const w of ["w_bronze", "w_frost@12", "wb_hunt", "ww_star", "wf_oak"]) assert.equal(wearProblem("songweaver", w), NOT_LUTE, w);
@@ -74,7 +76,7 @@ test("level: luteAtLevel keeps traits and runes; relevelLute rewrites the worn a
 test("migration v2 (pure): a non-lute weapon and a non-book shield are stowed; the lute comes back at her level", () => {
   // a v1 save: sword in hand, the Songbook worn, lute in the bag
   let s: Record<string, unknown> = { weapon: "w_frost@9", shield: "songweaver_shield", bag: ["a_leather", "songweaver_weapon#gut"], swKit: 1 };
-  let notes = migrateSongweaver({ cls: "songweaver", level: 15, gold: 0, pots }, s, () => true);
+  let notes = migrateSongweaver({ cls: "songweaver", level: 15, gold: 0, pots }, s, open);
   assert.equal(s.weapon, "songweaver_weapon@15#gut", "her own lute, traits kept, at her level");
   assert.deepEqual(s.bag, ["a_leather", "w_frost@9"]);
   assert.equal(s.swKit, SW_KIT_VERSION);
@@ -82,28 +84,28 @@ test("migration v2 (pure): a non-lute weapon and a non-book shield are stowed; t
   assert.match(notes[0], /bag.*lute and a book/);
   // a v1 save that wore a shield again since, and lost the lute: a new one, the Songbook back in hand
   s = { weapon: "", shield: "sh_iron", bag: ["songweaver_shield"], swKit: 1 };
-  notes = migrateSongweaver({ cls: "songweaver", level: 3, gold: 0, pots }, s, () => true);
+  notes = migrateSongweaver({ cls: "songweaver", level: 3, gold: 0, pots }, s, open);
   assert.deepEqual([s.weapon, s.shield, s.bag], ["songweaver_weapon@3", "songweaver_shield", ["sh_iron"]]);
   // a v1 save with a Hymnal worn and the Songbook in the bag: both stay
   s = { weapon: "songweaver_weapon", shield: "bk_hymnal", bag: ["songweaver_shield"], swKit: 1 };
-  assert.deepEqual(migrateSongweaver({ cls: "songweaver", level: 8, gold: 0, pots }, s, () => true), []);
+  assert.deepEqual(migrateSongweaver({ cls: "songweaver", level: 8, gold: 0, pots }, s, open), []);
   assert.deepEqual([s.weapon, s.shield, s.bag], ["songweaver_weapon@8", "bk_hymnal", ["songweaver_shield"]]);
   // a v0 save: shield and weapon both move (v1 then v2)
   s = { weapon: "w_bronze", shield: "sh_wood", bag: [] };
-  notes = migrateSongweaver({ cls: "songweaver", level: 6, gold: 0, pots }, s, () => true);
+  notes = migrateSongweaver({ cls: "songweaver", level: 6, gold: 0, pots }, s, open);
   assert.deepEqual([s.weapon, s.shield, s.bag, notes.length], ["songweaver_weapon@6", "songweaver_shield", ["sh_wood", "w_bronze"], 2]);
   // full bag, no stash room: sold
   const full = Array.from({ length: BAG_SIZE }, () => "a_leather"), hero = { cls: "songweaver", level: 6, gold: 10, pots };
   s = { weapon: "w_dragon", shield: "songweaver_shield", bag: full, swKit: 1 };
-  notes = migrateSongweaver(hero, s, () => false);
+  notes = migrateSongweaver(hero, s, shut);
   assert.equal(hero.gold, 10 + sellPrice("w_dragon"));
   assert.match(notes[0], /sold for/);
   assert.equal(s.weapon, "songweaver_weapon@6");
   // up to date or not hers: untouched
   const done = { weapon: "w_frost", swKit: SW_KIT_VERSION };
-  assert.deepEqual(migrateSongweaver({ cls: "songweaver", level: 6, gold: 0, pots }, done, () => true), []);
+  assert.deepEqual(migrateSongweaver({ cls: "songweaver", level: 6, gold: 0, pots }, done, open), []);
   assert.equal(done.weapon, "w_frost");
-  assert.deepEqual(migrateSongweaver({ cls: "knight", level: 6, gold: 0, pots }, { weapon: "w_frost" }, () => true), []);
+  assert.deepEqual(migrateSongweaver({ cls: "knight", level: 6, gold: 0, pots }, { weapon: "w_frost" }, open), []);
 });
 
 let shared: ReturnType<typeof startRoom> | undefined;
@@ -117,14 +119,14 @@ test("room: a v1 save loads with her lute at her level; the restore filter sends
     await wait(200);
     const room = srv.room, p = room.state.players.get(c.sessionId);
     const base = { ...room.snapshot(p), level: 12, swKit: 1, weapon: "w_frost@9", shield: "songweaver_shield", bag: ["a_leather"] };
-    const moved = room.restore(p, structuredClone(base));
+    const { moved } = room.restore(p, structuredClone(base));
     assert.equal(p.weapon, "songweaver_weapon@12");
     assert.deepEqual([...p.bag], ["a_leather", "w_frost@9"]);
     assert.equal(moved.length, 1);
     assert.equal(room.snapshot(p).swKit, SW_KIT_VERSION);
     // already v2 but a shield in her hand (edited save): the filter puts it in the bag
     room.restore(p, { ...room.snapshot(p), shield: "sh_iron" });
-    assert.equal(p.shield, "");
+    assert.equal(p.shield, "songweaver_shield", "no book left anywhere: the Songbook comes back (refillKit)");
     assert.ok([...p.bag].includes("sh_iron"));
     // equipping the sword is refused with the content line
     let got: any;

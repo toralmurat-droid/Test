@@ -18,11 +18,12 @@ export const LUTEMAKER_RANGE = 1.1 * TILE * 1.5;
 export const BREAK = { perTenLevels: 1, tierBase: 0.8, perTier: 0.6, perRarity: 0.5 };
 /**
  * What breaking this item gives, or undefined when it can't be broken (not a weapon, shield or book; bound; the lute).
+ * `spare`: a bound item (a lute too) she may part with (gear.ts keepsBound) breaks like any weapon or shield.
  * n = (1 + floor(level / 10)) x (0.8 + 0.6 x tier) x (1 + 0.5 x rarity), at least 1.
  */
-export function breakYield(id: string): { mat: MaterialId; n: number } | undefined {
+export function breakYield(id: string, spare = false): { mat: MaterialId; n: number } | undefined {
   const d = gearDef(id);
-  if (!d || isBound(id) || isLute(id) || (d.slot !== "weapon" && d.slot !== "shield")) return undefined;
+  if (!d || (!spare && (isBound(id) || isLute(id))) || (d.slot !== "weapon" && d.slot !== "shield")) return undefined;
   const B = BREAK, n = (1 + B.perTenLevels * Math.floor(itemLevel(id) / 10)) * (B.tierBase + B.perTier * d.tier) * (1 + B.perRarity * itemRarity(id));
   return { mat: d.slot === "weapon" ? "tonewood" : "brass", n: Math.max(1, Math.round(n)) };
 }

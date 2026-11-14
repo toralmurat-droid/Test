@@ -220,8 +220,32 @@ export function wearProblem(cls: string, id: string): string {
 export const NOT_LUTE = "That is not a musical instrument. A minstrel plays a lute.";
 export const NOT_BOOK = "A minstrel carries a book, not a shield.";
 
-/** Bound items (the Songbook): kept by their hero, never dropped, sold, traded or stashed. Runes and affixes don't change it. */
+/** Bound items (her lute, the Songbook): kept by their hero (keepsBound says when a spare may go). Runes and affixes don't change it. */
 export const isBound = (id: string | undefined): boolean => !!id && !!gearDef(id)?.bound;
+/**
+ * Must this bound item stay with this hero? Only a Songweaver's last one of its kind (same base id: her lute, her
+ * Songbook) among what she carries (`carried`: worn gear and bag, the item included). A spare (a second lute from a
+ * save migration, a copy in another class's bag) is a plain item: it can be stashed, sold, traded, dropped and broken,
+ * so a bound duplicate never becomes a dead bag slot.
+ */
+export function keepsBound(cls: string, id: string | undefined, carried: Iterable<string | undefined>): boolean {
+  if (!id || !isBound(id) || cls !== "songweaver") return false;
+  const b = baseId(id);
+  let n = 0;
+  for (const v of carried) if (v && baseId(v) === b) n++;
+  return n <= 1;
+}
+/**
+ * keepsBound for items leaving one after another (a batch drop, a trade offer): `gone` are the bag items already let
+ * go, so two spares can leave but never her last one.
+ */
+export function keepsBoundOf(cls: string, worn: (string | undefined)[], bag: readonly string[]) {
+  return (id: string | undefined, gone: readonly string[] = []): boolean => {
+    const left = [...bag];
+    for (const g of gone) { const k = left.indexOf(g); if (k >= 0) left.splice(k, 1); }
+    return keepsBound(cls, id, [...worn, ...left]);
+  };
+}
 
 export const BAG_SIZE = 24;
 /** Base item grade (Bronze < Frost < Dragonfire). The item's colour comes from its rarity (RARITY_NAMES). */

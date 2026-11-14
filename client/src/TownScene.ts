@@ -9,7 +9,7 @@ import { Client, getStateCallbacks, Room } from "colyseus.js";
 const LURKERS = new Set<string>(["gnawkin", "tuskborn", "silkwretch", "duskwing", "crowseer"]);
 import { BOSS, ELITE, InputState, MERGE, MOBS, type MobKind, URSK, SUNWRIGHT, DESERT_Y0, DESERT_H, actOfTile, MAP_H, MAP_W, regenFromStamina, TICK_RATE, TILE } from "../../shared/constants";
 import { CLASSES, ClassKind, MAX_LEVEL, xpForLevel } from "../../shared/classes";
-import { canPay, shortOf, MANA, manaRegen, maxManaFor, skillCost, unpackMana } from "../../shared/mana";
+import { canPay, shortOf, MANA, manaRegen, maxManaFor, skillCost, unpackMana, usesGauge } from "../../shared/mana";
 import { nextSize, potionAmount, PotionKind, potionName, POTION_SIZES, total, unpackPotions } from "../../shared/potions";
 import { GROUND, areaAt, isSafeZone } from "../../shared/map";
 import { heroPoise, meleeReach, mobBody, POISE, pvpProtected } from "../../shared/combat";
@@ -2373,7 +2373,8 @@ export class TownScene extends Phaser.Scene {
       ["Level", lvl >= MAX_LEVEL ? `${MAX_LEVEL} (max)` : `${lvl} · XP ${mine.xp - cur}/${next - cur}`],
       ["Health", `${Math.ceil(mine.hp)} / ${mine.maxHp}`],
       ["HP regen", `${regenFromStamina(st.sta)[1].toFixed(1)}/s resting · ${regenFromStamina(st.sta)[0].toFixed(1)}/s in a fight`],
-      [cls === "songweaver" ? "Song gauge" : "Mana", `${unpackMana(mine.mp).mana} / ${unpackMana(mine.mp).maxMana} · ${manaRegen(st, false, talentBonus(cls, mine.talents, "mana")).toFixed(1)}/s (×${MANA.restMult} resting)`],
+      usesGauge(cls) ? ["Song gauge", `${unpackMana(mine.mp).mana} / ${unpackMana(mine.mp).maxMana} · no regen`]
+        : ["Mana", `${unpackMana(mine.mp).mana} / ${unpackMana(mine.mp).maxMana} · ${manaRegen(st, false, talentBonus(cls, mine.talents, "mana")).toFixed(1)}/s (×${MANA.restMult} resting)`],
       ["Attack", `${dmg} damage · ${WEAPON_TYPE_NAMES[wp.type]}: ${ATTACK_WORDS[wp.type]}`],
       ["Attack speed", `${(1000 / wp.attackCooldownMs).toFixed(1)} hits/s`],
       ["Critical hits", `${Math.round(critChance(st, talentBonus(cls, mine.talents, "crit")) * 100)}% chance, double damage`],

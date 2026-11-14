@@ -105,16 +105,17 @@ test("Songweaver kit v1: the old shield moves to the bag, else the stash, else i
   const { sellPrice } = await import("../shared/shops");
   const { BAG_SIZE } = await import("../shared/gear");
   const pots = { potion: [0, 0, 0], mpotion: [0, 0, 0] } as any;
+  const open = { put: () => true, take: () => undefined };
   // pure: other classes and up-to-date saves are left alone
   const keep = { shield: "sh_iron", bag: [] as string[] };
-  assert.deepEqual(migrateSongweaver({ cls: "wizard", level: 1, gold: 0, pots }, keep, () => true), []);
+  assert.deepEqual(migrateSongweaver({ cls: "wizard", level: 1, gold: 0, pots }, keep, open), []);
   assert.equal(keep.shield, "sh_iron");
   const done = { shield: "sh_wood", bag: [], swKit: SW_KIT_VERSION };
-  assert.deepEqual(migrateSongweaver({ cls: "songweaver", level: 1, gold: 0, pots }, done, () => true), []);
+  assert.deepEqual(migrateSongweaver({ cls: "songweaver", level: 1, gold: 0, pots }, done, open), []);
   assert.equal(done.shield, "sh_wood", "an already migrated save keeps what she chose since");
   // no shield at all: just the Songbook
   const bare: Record<string, unknown> = { bag: ["a_leather"] };
-  assert.deepEqual(migrateSongweaver({ cls: "songweaver", level: 1, gold: 0, pots }, bare, () => true), []);
+  assert.deepEqual(migrateSongweaver({ cls: "songweaver", level: 1, gold: 0, pots }, bare, open), []);
   assert.deepEqual([bare.shield, bare.bag, bare.swKit], ["songweaver_shield", ["a_leather"], SW_KIT_VERSION]);
 
   const srv = await startRoom();
@@ -125,7 +126,7 @@ test("Songweaver kit v1: the old shield moves to the bag, else the stash, else i
     delete base.swKit;
     await login(p.name, "testpass1", "127.0.0.1"); // test rooms skip onAuth: the stash needs an account
     // 1. room in the bag
-    let moved = room.restore(p, { ...structuredClone(base), shield: "sh_iron", bag: ["a_leather"] });
+    let { moved } = room.restore(p, { ...structuredClone(base), shield: "sh_iron", bag: ["a_leather"] });
     assert.equal(p.shield, "songweaver_shield");
     assert.deepEqual([...p.bag], ["a_leather", "sh_iron"], "in the bag");
     assert.equal(moved.length, 1);
@@ -133,21 +134,22 @@ test("Songweaver kit v1: the old shield moves to the bag, else the stash, else i
     assert.equal(room.snapshot(p).swKit, SW_KIT_VERSION, "written back");
     // 2. a full bag: the stash
     const full = Array.from({ length: BAG_SIZE }, () => "a_leather");
-    moved = room.restore(p, { ...structuredClone(base), shield: "sh_wood", bag: full });
+    let r = room.restore(p, { ...structuredClone(base), shield: "sh_wood", bag: full });
+    room.writeLoaded(p, r); moved = r.moved; // onJoin writes the stash with the hero
     assert.equal(p.shield, "songweaver_shield");
     assert.ok(loadStash(p.name).items.includes("sh_wood"), "in the stash");
     assert.match(moved[0], /stash/);
     // 3. bag and stash full: sold at sellPrice
     saveStash(p.name, { items: Array.from({ length: 24 }, () => "a_leather"), gold: 0 }, p.cls, room.snapshot(p));
     const gold = 123;
-    moved = room.restore(p, { ...structuredClone(base), gold, shield: "sh_dragon", bag: full });
+    ({ moved } = room.restore(p, { ...structuredClone(base), gold, shield: "sh_dragon", bag: full }));
     assert.equal(p.gold, gold + sellPrice("sh_dragon"));
     assert.match(moved[0], /sold for \d+ gold/);
     assert.equal(p.shield, "songweaver_shield");
     // 4. the migrated save loads as is: no second migration; a shield she wears anyway goes to the bag (DI-5 rule)
-    moved = room.restore(p, { ...room.snapshot(p), shield: "sh_wood", bag: [] });
-    assert.equal(moved.length, 1);
-    assert.equal(p.shield, "");
+    ({ moved } = room.restore(p, { ...room.snapshot(p), shield: "sh_wood", bag: [] }));
+    assert.equal(moved.length, 2, "the shield to the bag, the Songbook back (no book anywhere)");
+    assert.equal(p.shield, "songweaver_shield");
     assert.ok([...p.bag].includes("sh_wood"), "not deleted: in the bag");
     await c.leave();
   } finally { await srv.stop(); }
