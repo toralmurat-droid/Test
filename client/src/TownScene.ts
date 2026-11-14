@@ -1400,7 +1400,7 @@ export class TownScene extends Phaser.Scene {
       const e = this.entities.get(id);
       if (!e) return;
       const dmg = rawDmg > 0 ? Math.max(1, Math.round(rawDmg)) : 0; // whole numbers on screen (a town guard's hit was -58.7326...)
-      if (e.mob && isMineOrGroup(by, this.me, this.groupIds())) this.lastMineHit.set(id, this.time.now);
+      if (e.mob && by && isMineOrGroup(by, this.me, this.groupIds())) this.lastMineHit.set(id, this.time.now);
       if (dmg === 0 && !ex) { // a shield took the whole hit (shared/skillEngine.ts absorbDamage): no wound, no flinch
         this.floatText(e.sprite.x, e.sprite.y - 14, "absorbed", "#9ad1ff", PIXEL_FONT, 1, true);
         this.fx.absorbed(e);
@@ -3086,7 +3086,7 @@ export class TownScene extends Phaser.Scene {
       : isoInput(k.UP.isDown, k.DOWN.isDown, k.LEFT.isDown, k.RIGHT.isDown); // spell keys: W/E/R/T cast, the mouse (or arrows) walks
     // Point-and-click: the mouse steers until a movement key is pressed
     let want = next;
-    if (next.up || next.down || next.left || next.right) { this.pointer?.cancel(); this.pointer?.drawRing(); }
+    if (next.up || next.down || next.left || next.right) { this.pointer?.cancel(); this.pointer?.drawRing(); this.pointer?.repick(); } // hover follows the scrolling world
     else want = this.pointer?.update(Math.min(dtMs, 100)) ?? next;
     // A skill key held down keeps casting toward the mouse, like holding a spell in Diablo 2 (the server drops
     // the tries that come before the cooldown or without the mana, so asking often just means no wasted time)

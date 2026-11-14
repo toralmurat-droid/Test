@@ -2,8 +2,8 @@
    absolute offsets any more. Loaded after every other stylesheet, selectors are "body #id" like weathered.css. */
 
 /* ---- Top centre: the monster bar (monsterBar.css) takes the first 10 + ~100 px; --topband is where notices may start. */
-:root { --topband: 112px; }
-body #partytoast { top: var(--topband); }
+:root { --topband: 128px; }
+body #partytoast { top: max(var(--topband), 15%); } /* clear of the tallest bar (champion, two affixes, ear line) */
 
 /* ---- Top right: one column, pill -> minimap + dial -> location -> respawn line -> tracker -> feed.
    The feed follows the tracker whatever its height, so no script measures it. 264 = room for the online pill (261 px measured at its widest; the dial is 234 px, right-aligned, 8 px from the edge). */
