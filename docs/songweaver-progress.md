@@ -350,3 +350,5 @@ Agents build against this in parallel. Changing it needs the orchestrator.
   Delta review: **OK TO MERGE**.
   Nits left as follow-ups: the ring shows the old radius for up to one tick after a Dorian Modulate; no test for
   the well ring.
+- 2026-11-14: PR #392 opened as a draft. CI green on c537f85 (check, patch-note, merge), mergeable clean. Marked
+  ready per the merge rule (reviewer OK TO MERGE, tester passing, balance numbers in the PR); it merges by itself.
