@@ -530,7 +530,7 @@ export class TownScene extends Phaser.Scene {
       const k = ((ev.target as HTMLElement).closest("button") as HTMLElement | null)?.dataset.stat as StatKind | undefined;
       const mine = this.entities.get(this.me)?.state;
       if (!k || !mine) { this.side?.setPreview(); return; }
-      const pts = { sta: mine.ptSta, str: mine.ptStr, mag: mine.ptMag, dex: mine.ptDex ?? 0 };
+      const pts = { sta: own(mine).ptSta, str: own(mine).ptStr, mag: own(mine).ptMag, dex: own(mine).ptDex };
       pts[k]++;
       this.side?.setPreview({ label: `add a point to ${STAT_NAMES[k]}`, pts });
     });
@@ -2368,8 +2368,8 @@ export class TownScene extends Phaser.Scene {
     this.heroFrom = from;
     const cls = mine.cls as ClassKind, lvl = mine.level as number;
     const st = statsOf(mine); // includes gear bonuses
-    const free = statPoints(lvl) - (mine.ptSta + mine.ptStr + mine.ptMag + (mine.ptDex ?? 0));
-    const o = own(mine);
+    const o = own(mine); // owner-only numbers, in `me` (server/player.ts)
+    const free = statPoints(lvl) - (o.ptSta + o.ptStr + o.ptMag + o.ptDex);
     // Rebuild only when something shown changed (called every frame while open)
     const sig = [lvl, o.xp, Math.ceil(mine.hp), mine.maxHp, o.mp, st.sta, st.str, st.mag, st.dex, free, o.kills, o.gold, from].join("|");
     const el = document.getElementById("hero")!;
@@ -2384,10 +2384,10 @@ export class TownScene extends Phaser.Scene {
       sta: `${mine.maxHp} max HP, regen ${regenFromStamina(st.sta)[1].toFixed(1)} HP/s`,
       str: STATS[cls].attackStat === "str" ? `attack ×${attackMult(cls, st).toFixed(2)}, +${HP_PER_STR} HP each` : `+${HP_PER_STR} HP per point`,
       mag: `${STATS[cls].attackStat === "mag" ? `attack ×${attackMult(cls, st).toFixed(2)}, +${HP_PER_STR} HP each, ` : ""}skills ×${magicMult(cls, st).toFixed(2)}, ` +
-        `cooldowns −${Math.round((1 - cooldownMult(cls, st, mine.talents)) * 100)}%, ${maxManaFor(st, lvl)} max mana`,
-      dex: `${Math.round(critChance(st, talentBonus(cls, mine.talents, "crit")) * 100)}% critical hits (double damage), skills too`,
+        `cooldowns −${Math.round((1 - cooldownMult(cls, st, o.talents)) * 100)}%, ${maxManaFor(st, lvl)} max mana`,
+      dex: `${Math.round(critChance(st, talentBonus(cls, o.talents, "crit")) * 100)}% critical hits (double damage), skills too`,
     };
-    const pts: Record<StatKind, number> = { sta: mine.ptSta, str: mine.ptStr, mag: mine.ptMag, dex: mine.ptDex ?? 0 };
+    const pts: Record<StatKind, number> = { sta: o.ptSta, str: o.ptStr, mag: o.ptMag, dex: o.ptDex };
     // attribute cards (Murat 2026-11-08 redesign): badge, name and total, where it comes from, what it does, a big +
     const fromGear = gearStats(cls, activeOf(mine));
     const BADGE: Record<StatKind, string> = { str: "STR", sta: "STA", mag: "MAG", dex: "DEX" };
@@ -2400,16 +2400,16 @@ export class TownScene extends Phaser.Scene {
     }).join("");
     const wp = attackProfile(cls, activeOf(mine));
     const next = xpForLevel(lvl + 1), cur = xpForLevel(lvl);
-    const dmg = Math.round(wp.damage * weaponAttackMult(cls, st, wp.type) * talentMult(cls, mine.talents, "dmg"));
+    const dmg = Math.round(wp.damage * weaponAttackMult(cls, st, wp.type) * talentMult(cls, o.talents, "dmg"));
     const speed = Math.round(heroSpeed(cls, false, o.spd) * gearSpeedMult(activeOf(mine)));
     const rows: [string, string][] = [
       ["Level", lvl >= MAX_LEVEL ? `${MAX_LEVEL} (max)` : `${lvl} · XP ${o.xp - cur}/${next - cur}`],
       ["Health", `${Math.ceil(mine.hp)} / ${mine.maxHp}`],
       ["HP regen", `${regenFromStamina(st.sta)[1].toFixed(1)}/s resting · ${regenFromStamina(st.sta)[0].toFixed(1)}/s in a fight`],
-      ["Mana", `${unpackMana(o.mp).mana} / ${unpackMana(o.mp).maxMana} · ${manaRegen(st, false, talentBonus(cls, mine.talents, "mana")).toFixed(1)}/s (×${MANA.restMult} resting)`],
+      ["Mana", `${unpackMana(o.mp).mana} / ${unpackMana(o.mp).maxMana} · ${manaRegen(st, false, talentBonus(cls, o.talents, "mana")).toFixed(1)}/s (×${MANA.restMult} resting)`],
       ["Attack", `${dmg} damage · ${WEAPON_TYPE_NAMES[wp.type]}: ${ATTACK_WORDS[wp.type]}`],
       ["Attack speed", `${(1000 / wp.attackCooldownMs).toFixed(1)} hits/s`],
-      ["Critical hits", `${Math.round(critChance(st, talentBonus(cls, mine.talents, "crit")) * 100)}% chance, double damage`],
+      ["Critical hits", `${Math.round(critChance(st, talentBonus(cls, o.talents, "crit")) * 100)}% chance, double damage`],
       ["Initiative", `${heroPoise(cls, lvl)} · dizzy at 0`],
       ["Move speed", `${speed}`],
       ["Kills · Gold", `${o.kills} · ${o.gold}`],
@@ -2464,7 +2464,7 @@ export class TownScene extends Phaser.Scene {
       if (!cell || !mine) return;
       ev.preventDefault();
       const cls = mine.cls as ClassKind;
-      const choices = ["", ...activeSkills(cls).filter((a) => skillLearned(cls, mine.talents, a.id)).map((a) => a.id)];
+      const choices = ["", ...activeSkills(cls).filter((a) => skillLearned(cls, own(mine).talents, a.id)).map((a) => a.id)];
       if (choices.length < 2) return;
       if (cell.dataset.slot === "L" || cell.dataset.slot === "R") {
         const side: ClickSide = cell.dataset.slot === "L" ? "left" : "right";
@@ -2473,7 +2473,7 @@ export class TownScene extends Phaser.Scene {
         return;
       }
       const n = Number(cell.dataset.slot);
-      const cur = Math.max(0, choices.indexOf(mine.slots?.at(n) ?? ""));
+      const cur = Math.max(0, choices.indexOf(own(mine).slots.at(n) ?? ""));
       const next = choices[(cur + (ev.deltaY > 0 ? 1 : -1) + choices.length) % choices.length];
       this.room?.send("assign", { slot: n, skill: next });
     }, { passive: false });
@@ -2501,9 +2501,9 @@ export class TownScene extends Phaser.Scene {
     if (!mine) return;
     const cls = mine.cls as ClassKind;
     if (n === LEFT_PICK || n === RIGHT_PICK) { this.openClickPicker(mine, cls, n === LEFT_PICK ? "left" : "right"); return; }
-    const slots: string[] = [...(mine.slots ?? [])];
+    const slots: string[] = [...own(mine).slots];
     const opts = activeSkills(cls).map((a) => {
-      const learned = skillLearned(cls, mine.talents, a.id);
+      const learned = skillLearned(cls, own(mine).talents, a.id);
       const at = slots.indexOf(a.id);
       const where = !learned ? `${icon("lock")}learn it in the tree (${actionKey("tree")}), Lv ${a.req}` : at === n ? "in this slot" : at >= 0 ? `now on key ${slotKey(at)}` : "not on a key yet"
       const need = a.needs ? ` · needs ${NEED_TEXT[a.needs]}` : "";
@@ -2533,7 +2533,7 @@ export class TownScene extends Phaser.Scene {
     const weapon = `<button class="opt${cur ? "" : " cur"}" data-pick="" data-tiphead="${WEAPON_TYPE_NAMES[w.type]}" data-tip="${tipEsc(`Basic attack with what you hold: ${ATTACK_WORDS[w.type]}.`)}">` +
       `${this.weaponIcon(mine, "picon")}<span><b>Weapon attack</b><small>${WEAPON_TYPE_NAMES[w.type]}: ${ATTACK_WORDS[w.type]}</small></span></button>`;
     const opts = activeSkills(cls).map((a) => {
-      const learned = skillLearned(cls, mine.talents, a.id);
+      const learned = skillLearned(cls, own(mine).talents, a.id);
       const where = !learned ? `${icon("lock")}learn it in the tree (${actionKey("tree")}), Lv ${a.req}` : a.cantrip ? `basic spell · ${a.mana ?? 0} mana` : a.id === cur ? `on ${side} click` : costWords(a) + (a.needs ? ` · needs ${NEED_TEXT[a.needs]}` : "");
       return `<button class="opt${learned ? "" : " locked"}${a.id === cur ? " cur" : ""}" data-pick="${a.id}" data-tiphead="${a.name}" data-tip="${tipEsc(a.desc)}">` +
         `${iconImg(a.id, "picon")}<span><b>${a.name}</b><small>${where}</small></span></button>`;
@@ -2564,7 +2564,7 @@ export class TownScene extends Phaser.Scene {
       pick = this.clickPick[side] = { hero, skill: saved };
     }
     const id = pick.skill;
-    return id && skillLearned(mine.cls, mine.talents, id) && !skillOf(mine.cls, id)?.passive ? id : "";
+    return id && skillLearned(mine.cls, own(mine).talents, id) && !skillOf(mine.cls, id)?.passive ? id : "";
   }
   private leftSkill() { return this.clickSkill("left"); }
   private rightSkill() { return this.clickSkill("right"); }
@@ -2609,7 +2609,7 @@ export class TownScene extends Phaser.Scene {
   /** Skill key 1..0: cast that slot's skill now, aimed at the mouse cursor (self skills just go off). */
   private castSlot(n: number) {
     const mine = this.entities.get(this.me)?.state;
-    const id = mine?.slots?.at?.(n);
+    const id = own(mine).slots.at(n);
     const s = id ? skillOf(mine.cls, id) : undefined;
     if (!s || !this.room || loadingActive()) return;
     if (skillTarget(s) !== "self") { const aim = this.pointer?.cursorAim(); if (aim) this.room.send("face", aim); }
@@ -2665,7 +2665,7 @@ export class TownScene extends Phaser.Scene {
   /** Name, cooldown and cost of an active skill for the HUD. */
   private skillHud(cls: ClassKind, skill: string, cdm: number) {
     const s = skillOf(cls, skill);
-    const m = s && withMods(cls, this.entities.get(this.me)?.state?.talents, s); // upgrade nodes change cooldown and cost
+    const m = s && withMods(cls, own(this.entities.get(this.me)?.state).talents, s); // upgrade nodes change cooldown and cost
     return { name: s?.name ?? "?", cdMs: (m?.cd ?? 0) * cdm, last: this.lastCast[skill] ?? -Infinity, cost: m ? skillCost(m) : { heat: 0, mana: 0 }, ult: s?.row === 4 };
   }
 
@@ -2681,7 +2681,7 @@ export class TownScene extends Phaser.Scene {
     if (n > this.chargeSeen.n) this.chargeSeen.at = now; // a hit built one (the server's clock isn't sent)
     this.chargeSeen.n = n;
     const users = [...clicks, ...slots].filter((id, i, a) => id && a.indexOf(id) === i)
-      .map((id) => skillOf(cls, id)).filter((sd) => sd?.consume && skillLearned(cls, mine.talents, sd.id));
+      .map((id) => skillOf(cls, id)).filter((sd) => sd?.consume && skillLearned(cls, own(mine).talents, sd.id));
     if (!users.length) return "";
     const name = STACK_NAME[cls];
     // The Summoner's Void Essence comes from the Void, not from basic hits, and lasts longer (shared/summons.ts ESSENCE)
@@ -2701,7 +2701,7 @@ export class TownScene extends Phaser.Scene {
   private renderActions(mine: any, cls: ClassKind, cdm: number, now: number) {
     const pools = { energy: own(mine).energy, mana: unpackMana(own(mine).mp).mana };
     const blocked = !!(mine.stunned || mine.broken) || performance.now() < this.attackHoldUntil; // the server refuses a press now: dim the keys
-    const slots: string[] = [...(mine.slots ?? [])];
+    const slots: string[] = [...own(mine).slots];
     this.cdTrack.length = 0;
     // Slot bar at the bottom: 10 cells, cooldown shading, click to choose a skill
     const cells = Array.from({ length: slotCount() }, (_, i) => {
@@ -3358,11 +3358,11 @@ export class TownScene extends Phaser.Scene {
       const statsHtml = mine.dead ? "Respawning… " : ""; // (the safe zone line was removed, Murat 2026-11-07)
       void safe;
       if (statsHtml !== this.statsShown) { this.statsShown = statsHtml; document.getElementById("stats")!.innerHTML = statsHtml; }
-      const freePts = talentPoints(mine.level) - spentPoints(cls0, mine.talents);
+      const freePts = talentPoints(mine.level) - spentPoints(cls0, own(mine).talents);
       const badge = document.getElementById("treebadge")!;
       badge.hidden = freePts <= 0;
       badge.textContent = String(freePts);
-      const freeStats = statPoints(mine.level) - (mine.ptSta + mine.ptStr + mine.ptMag + (mine.ptDex ?? 0));
+      const freeStats = statPoints(mine.level) - (own(mine).ptSta + own(mine).ptStr + own(mine).ptMag + own(mine).ptDex);
       const hb = document.getElementById("herobadge")!;
       hb.hidden = freeStats <= 0;
       hb.textContent = String(freeStats);
@@ -3374,7 +3374,7 @@ export class TownScene extends Phaser.Scene {
       setMusicZone(zdef?.name, zdef?.mobs, this.areaName, actOfTile(tx, ty));
       sfxFrame(this.me, this.entities as any);
       const cls = mine.cls as ClassKind;
-      const cdm = cooldownMult(cls, statsOf(mine), mine.talents);
+      const cdm = cooldownMult(cls, statsOf(mine), own(mine).talents);
       // Top-left bars (resourceBars.ts): red HP, blue Mana (spells, shared/mana.ts), green XP
       const ow = own(mine), mn = unpackMana(ow.mp); // owner-only numbers, in `me` (server/player.ts)
       (this.resBars ??= new ResourceBars(document.getElementById("hud")!)).update({

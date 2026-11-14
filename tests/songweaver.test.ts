@@ -436,7 +436,7 @@ test("swTree / swMode: saved, loaded, an old tree refunds, an unknown mode falls
     assert.equal(p.talents.size, 0, "old tree: skill points come back");
     assert.equal(p.sk.mode, "major");
     // other classes never get the fields
-    const w = { ...p, cls: "wizard" };
+    const w = Object.create(p, { cls: { value: "wizard" } }); // keeps the Player accessors (a spread drops them)
     assert.equal(t.room.snapshot(w).swTree, undefined);
   } finally { await t.done(); }
 });

@@ -2,7 +2,7 @@ import { addHeat, coolHeat, isOverheated, OVERLOAD } from "../shared/overload";
 import { MOB_CELL, MobGrid, trackSchemaMoves } from "./mobGrid";
 import { fastFields } from "./schemaFast";
 import { type AuthContext, Client, Room } from "colyseus";
-import { ArraySchema, MapSchema, Schema, StateView, type } from "@colyseus/schema";
+import { MapSchema, Schema, StateView, type } from "@colyseus/schema";
 import {
   AGGRO, aggroLevelFactor, BLOB_AI, BONES, DEMON, BROOD, Dir, FACTION, FEUD, MERGE, MobDef, MOTHER, SKELETON_AI, HIT_RADIUS, mobScale, regionMobLevel, regionSpecialLevel, InputState, MOB_ATTACK_RANGE, MOBS, MobKind, rollSkeletonWeapon, SKELETON_BOW, SKELETON_WEAPONS, SkeletonWeapon, REGEN_DELAY_MS, REGEN_RAMP_MS, regenFromStamina, SAFE_REGEN_MULT,
   RESPAWN_MS, TICK_RATE, TILE,
@@ -380,14 +380,20 @@ function drainPoise(t: Poised, max: number, amount: number, now: number, brokenM
 
 const poiseFrac = (t: Poised, max: number) => (t.broken ? 0 : Math.max(0, 1 - t.poiseLost / max));
 
-/**
- * Replace the whole bag instead of editing it in place: several in-place edits of an ArraySchema in one patch
- * (e.g. a double-click sending two swaps) desync the client copy and showed the same item in several cells.
- */
 const bagItems = (p: Player): string[] => p.bag.toArray().filter((g): g is string => !!g);
 
+/**
+ * Rewrite the whole bag as one clear + push: several piecemeal edits of an ArraySchema in one patch (e.g. a
+ * double-click sending two swaps) desynced the client copy and showed the same item in several cells. It used to
+ * swap in a new ArraySchema, but the bag lives in the owner-only `me` now: a new array is a tree the owner's view never
+ * saw (server/player.ts), so it is edited in place. clear() drops the patch's earlier ops on it and queues a CLEAR,
+ * the pushes ADD 0..n-1 after it, so a patch carries the whole new bag whatever else changed it that tick.
+ */
 function setBag(p: Player, items: string[]) {
-  p.bag = new ArraySchema<string>(...items);
+  const bag = p.bag;
+  if (bag.length === items.length && items.every((g, i) => bag.at(i) === g)) return; // nothing to send
+  bag.clear();
+  bag.push(...items);
 }
 
 function dirFromInput(i: InputState, fallback: Dir): Dir {
