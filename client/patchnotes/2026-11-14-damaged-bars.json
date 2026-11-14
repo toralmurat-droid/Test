@@ -1,0 +1,7 @@
+{
+  "date": "2026-11-14",
+  "title": "Health bars on hurt monsters",
+  "changes": [
+    "Every hurt monster now shows its health bar, whoever hurt it. Monsters at full health still show none until you point at them."
+  ]
+}

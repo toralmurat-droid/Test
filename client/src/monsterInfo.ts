@@ -139,10 +139,11 @@ export function monsterInfo(p: MobLike, ctx: InfoCtx): MonsterInfo {
   return info;
 }
 
-/** Should the in-world HP bar of this monster be drawn now? (Owner rule: hover, target, hit by me or my group in the last RECENT_HIT_MS; own summons always.) */
-export function showWorldBar(o: { hovered: boolean; targeted: boolean; lastMineHitAt?: number; now: number; dead: boolean; hidden: boolean; ownSummon: boolean }): boolean {
+/** Should the in-world HP bar of this monster be drawn now? (Owner rules: any damaged monster, hover, target, a hit by me
+ *  or my group in the last RECENT_HIT_MS even if a shield took it; own summons always. A monster at full health shows none.) */
+export function showWorldBar(o: { hovered: boolean; targeted: boolean; lastMineHitAt?: number; now: number; dead: boolean; hidden: boolean; ownSummon: boolean; damaged: boolean }): boolean {
   if (o.dead || o.hidden) return false;
-  if (o.ownSummon || o.hovered || o.targeted) return true;
+  if (o.damaged || o.ownSummon || o.hovered || o.targeted) return true;
   return o.lastMineHitAt !== undefined && o.now - o.lastMineHitAt < RECENT_HIT_MS;
 }
 
