@@ -50,6 +50,21 @@ const takeUntil = (c: any, p: any, i: number) => until(() => { if (p.rumour.i ==
 /** Send "use" until the condition holds (the room's rate limit may eat one). Re-using a used object does nothing. */
 const useUntil = (c: any, id: string, cond: () => boolean, what: string) => until(() => { if (!cond()) c.send("use", { id }); return cond(); }, what);
 
+/**
+ * Run a room test on a day that has the given rumour kinds on offer (for some level), whatever today is: the clock this
+ * process sees (and so the server's, which reads Date.now()) is shifted to about 12:00 UTC of that day, then keeps
+ * flowing. Independent of the real date and of UTC midnight passing mid-run.
+ */
+async function onDay(kinds: string[], fn: (day: number) => Promise<void>) {
+  const today = rumourDay(Date.now());
+  let day = -1;
+  for (let d = today; d < today + 400 && day < 0; d++) if (kinds.every((k) => find(d, k))) day = d;
+  assert.ok(day >= 0, `no day in the next 400 with ${kinds.join(" + ")} on offer`);
+  const real = Date.now, off = day * 86_400_000 + 43_200_000 - real();
+  Date.now = () => real() + off;
+  try { await fn(day); } finally { Date.now = real; }
+}
+
 // ---------- generation ----------
 
 test("rumoursFor: deterministic, three in three different Act 1 zones, the same errand in a shared zone", () => {
@@ -120,10 +135,8 @@ test("generation (365 days x Lv 1-30): in zone, on open ground, reachable, ids, 
 
 // ---------- the room ----------
 
-test("missing: Mags only, bad input ignored; reach, own ambusher, use; gold and no XP; title at 7", async (t) => {
-  const day = rumourDay(Date.now()), f = find(day, "missing");
-  if (!f) return t.skip("no `missing` rumour today");
-  const { L, r } = f, srv = await startRoom();
+test("missing: Mags only, bad input ignored; reach, own ambusher, use; gold and no XP; title at 7", () => onDay(["missing"], async (day) => {
+  const { L, r } = find(day, "missing")!, srv = await startRoom();
   try {
     const { c, p, msgs, room } = await hero(srv, "wizard");
     await until(() => msgs.length > 0, "rumour on join");
@@ -173,12 +186,10 @@ test("missing: Mags only, bad input ignored; reach, own ambusher, use; gold and 
     assert.ok(msgs.at(-1).end.title);
     assert.equal(msgs.at(-1).offers[r.i].done, true);
   } finally { await srv.stop(); }
-});
+}));
 
-test("no title before the 7th rumour", async (t) => {
-  const day = rumourDay(Date.now()), f = find(day, "lost");
-  if (!f) return t.skip("no `lost` rumour today");
-  const { L, r } = f, srv = await startRoom();
+test("no title before the 7th rumour", () => onDay(["lost"], async (day) => {
+  const { L, r } = find(day, "lost")!, srv = await startRoom();
   try {
     const { c, p, msgs } = await hero(srv, "wizard");
     p.level = L; p.rumour = { day, lv: L, done: 0, n: RUMOURS.titleAt - 2 };
@@ -194,15 +205,14 @@ test("no title before the 7th rumour", async (t) => {
     assert.equal(msgs.at(-1).end.title, undefined);
     assert.notEqual(unpackCosmetics(metaOf(p, META.cosm)).title, RUMOUR_TITLE);
   } finally { await srv.stop(); }
-});
+}));
 
-test("light: stays on its stage by day, advances at night; lost: only its objects, in order", async (t) => {
-  const day = rumourDay(Date.now()), srv = await startRoom();
+test("light: stays on its stage by day, advances at night; lost: only its objects, in order", () => onDay(["light", "lost"], async (day) => {
+  const srv = await startRoom();
   try {
     const { c, p, msgs, room } = await hero(srv, "vampire");
-    const li = find(day, "light");
-    if (li) {
-      const { L, r } = li;
+    {
+      const { L, r } = find(day, "light")!;
       p.level = L; p.rumour = { day, lv: L, done: 0, n: 0 };
       byMags(p);
       await takeUntil(c, p, r.i);
@@ -217,10 +227,9 @@ test("light: stays on its stage by day, advances at night; lost: only its object
       const o = r.steps[1].objects![0];
       at(p, o.x, o.y);
       await useUntil(c, o.id, () => msgs.at(-1)?.end?.why === "done", "light done");
-    } else t.diagnostic("no `light` rumour today");
-    const lo = find(day, "lost");
-    if (lo) {
-      const { L, r } = lo;
+    }
+    {
+      const { L, r } = find(day, "lost")!;
       p.level = L; p.rumour = { day, lv: L, done: 0, n: 1 };
       byMags(p);
       await takeUntil(c, p, r.i);
@@ -236,12 +245,12 @@ test("light: stays on its stage by day, advances at night; lost: only its object
       at(p, b.x, b.y);
       await useUntil(c, b.id, () => msgs.at(-1)?.end?.why === "done", "lost done");
       assert.equal(p.rumour.n, 2);
-    } else t.diagnostic("no `lost` rumour today");
+    }
   } finally { await srv.stop(); }
-});
+}));
 
-test("limits: a finished offer once a day (another is fine), one at a time, a dropped one can be taken again", async () => {
-  const day = rumourDay(Date.now()), L = 5, srv = await startRoom();
+test("limits: a finished offer once a day (another is fine), one at a time, a dropped one can be taken again", () => onDay([], async (day) => {
+  const L = 5, srv = await startRoom();
   try {
     const { c, p, msgs, room } = await hero(srv, "wizard");
     p.level = L;
@@ -260,10 +269,10 @@ test("limits: a finished offer once a day (another is fine), one at a time, a dr
     assert.equal(p.rumour.done, 1, "dropping isn't finishing");
     await takeUntil(c, p, 1); // a dropped one can be taken again
   } finally { await srv.stop(); }
-});
+}));
 
-test("a rumour can't be taken before the first quest is done", async () => {
-  const day = rumourDay(Date.now()), srv = await startRoom();
+test("a rumour can't be taken before the first quest is done", () => onDay([], async (day) => {
+  const srv = await startRoom();
   try {
     const { c, p, room } = await hero(srv, "wizard");
     p.tut = 0; p.rumour = { day, lv: 1, done: 0, n: 0 };
@@ -272,12 +281,11 @@ test("a rumour can't be taken before the first quest is done", async () => {
     await scans(room, 3);
     assert.equal(p.rumour.i, undefined, "tutorial first");
   } finally { await srv.stop(); }
-});
+}));
 
 // ---------- saves and the day's end ----------
 
-test("saves: same day keeps the rumour; a stale day or an old/garbage save loads fresh (total kept)", async () => {
-  const day = rumourDay(Date.now());
+test("saves: same day keeps the rumour; a stale day or an old/garbage save loads fresh (total kept)", () => onDay([], async (day) => {
   assert.deepEqual(cleanRumour(undefined, day, 7), { day, lv: 7, done: 0, n: 0 });
   for (const junk of ["junk", 5, null, [], { day: "x", n: "y" }, { day: NaN, n: Infinity }]) assert.deepEqual(cleanRumour(junk, day, 7), { day, lv: 7, done: 0, n: 0 });
   assert.deepEqual(cleanRumour({ day: day - 1, lv: 3, done: 7, n: 4, i: 1, stage: 2 }, day, 9), { day, lv: 9, done: 0, n: 4 });
@@ -304,13 +312,12 @@ test("saves: same day keeps the rumour; a stale day or an old/garbage save loads
     room.restore(q, bad);
     assert.deepEqual({ ...q.rumour }, { day, lv: q.level, done: 0, n: 0 }, "garbage save: fresh");
   } finally { await srv.stop(); }
-});
+}));
 
-test("rollover mid-session: yesterday's active rumour is cleared and the client told (stale)", async () => {
+test("rollover mid-session: yesterday's active rumour is cleared and the client told (stale)", () => onDay([], async (day) => {
   const srv = await startRoom();
   try {
     const { p, msgs, room } = await hero(srv, "wizard");
-    const day = rumourDay(Date.now());
     p.rumour = { day: day - 1, lv: 4, done: 1, n: 2, i: 1, stage: 1, count: 0 };
     await until(() => msgs.some((m) => m.end?.why === "stale"), "stale note");
     assert.equal(p.rumour.day, day);
@@ -328,11 +335,11 @@ test("rollover mid-session: yesterday's active rumour is cleared and the client 
     await scans(room, 4);
     assert.equal(msgs.length, k + 1, "once per walk-up");
   } finally { await srv.stop(); }
-});
+}));
 
 // ---------- the ambusher guard ----------
 
-test("a rumour ambusher of a chain's own-boss kind does not fill that chain's own-boss step", async () => {
+test("a rumour ambusher of a chain's own-boss kind does not fill that chain's own-boss step", () => onDay([], async () => {
   // any chain step that is an own-boss kill, with a plain monster kind
   let found: { c: number; qi: number; stage: number; kind: string } | undefined;
   CHAINS.forEach((ch, c) => ch.quests.forEach((qd, qi) => qd.steps.forEach((s, si) => {
@@ -362,4 +369,4 @@ test("a rumour ambusher of a chain's own-boss kind does not fill that chain's ow
     r = kill(ch);
     await until(() => JSON.stringify(step()) !== JSON.stringify(r.before), "own summon counts");
   } finally { await srv.stop(); }
-});
+}));
