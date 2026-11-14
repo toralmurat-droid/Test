@@ -36,31 +36,33 @@ export const CHAR_ORIGIN = { x: 0.5, y: 29 / 32 }; // feet
 
 const BASE = "assets";
 
-export function preloadArt(scene: Phaser.Scene) {
-  for (const c of CHARACTERS) scene.load.spritesheet(c, `${CHAR_BASE}/${c}.${CHAR_EXT}`, { frameWidth: CHAR_FRAME, frameHeight: CHAR_FRAME });
+/**
+ * Art loaded before play. Each character sheet is 384 x 5760 px (8.85 MB decoded), so with the iso sheets only the
+ * local hero's class comes up front; every other sheet loads on demand (ensureCharSheet). `?pixel=1` sheets are small
+ * and still all preloaded.
+ */
+export function preloadArt(scene: Phaser.Scene, ownClass?: string) {
+  const first = HD_CHARS ? CHARACTERS.filter((c) => c === ownClass) : CHARACTERS;
+  for (const c of first) scene.load.spritesheet(c, `${CHAR_BASE}/${c}.${CHAR_EXT}`, { frameWidth: CHAR_FRAME, frameHeight: CHAR_FRAME });
   scene.load.json("characters_meta", `${CHAR_BASE}/characters.json`);
   scene.load.atlas("props", `${BASE}/objects/props.png`, `${BASE}/objects/props.json`);
   scene.load.atlas("items", `${BASE}/objects/items.png`, `${BASE}/objects/items.json`);
   scene.load.json("props_meta", `${BASE}/objects/props.json`);
 }
 
-/** Call once in create(), after preloadArt has finished. */
-export function createArtAnims(scene: Phaser.Scene) {
+/** Pixel art on the world's texel grid: NEAREST sampling (the game is antialiased otherwise), and the sheet's animations `${name}_${anim}`. */
+function registerCharSheet(scene: Phaser.Scene, name: string) {
+  if (HD_CHARS) scene.textures.get(name).setFilter(Phaser.Textures.FilterMode.NEAREST);
   const meta = scene.cache.json.get("characters_meta");
-  // The iso sheets are pixel art on the world's texel grid: sample them NEAREST (the game is antialiased otherwise)
-  if (HD_CHARS) for (const c of CHARACTERS) scene.textures.get(c).setFilter(Phaser.Textures.FilterMode.NEAREST);
-  for (const c of CHARACTERS) {
-    for (const [name, a] of Object.entries<any>(meta.animations)) {
-      const key = `${c}_${name}`;
-      if (scene.anims.exists(key)) continue;
-      scene.anims.create({
-        key,
-        frames: scene.anims.generateFrameNumbers(c, { frames: a.frames }),
-        frameRate: a.fps,
-        repeat: a.loop ? -1 : 0,
-      });
-    }
+  for (const [anim, a] of Object.entries<any>(meta.animations)) {
+    const key = `${name}_${anim}`;
+    if (!scene.anims.exists(key)) scene.anims.create({ key, frames: scene.anims.generateFrameNumbers(name, { frames: a.frames }), frameRate: a.fps, repeat: a.loop ? -1 : 0 });
   }
+}
+
+/** Call once in create(), after preloadArt has finished: animations for the sheets that came with it. */
+export function createArtAnims(scene: Phaser.Scene) {
+  for (const c of CHARACTERS) if (scene.textures.exists(c)) registerCharSheet(scene, c);
   const props = scene.cache.json.get("props_meta");
   for (const [name, a] of Object.entries<any>(props.animations ?? {})) {
     if (scene.anims.exists(`props_${name}`)) continue;
@@ -73,29 +75,69 @@ export function createArtAnims(scene: Phaser.Scene) {
   }
 }
 
-const charPending = new Set<string>(), charFailed = new Set<string>(), errHooked = new WeakSet<Phaser.Scene>();
+/** Sheets (prio >= 0) loading at the same time: the loader moves on frame by frame, so one alone is slow on a slow machine. */
+const SHEETS_AT_ONCE = 2;
+interface SheetJob { name: string; prio: number; waiters: (() => void)[]; tries: number; retryAt: number; loading: boolean }
+const sheetJobs = new Map<string, SheetJob>(), errHooked = new WeakSet<Phaser.Scene>();
+/** Debug: how long each on-demand sheet took (load start to usable) and what registering its animations cost on the main thread. */
+export const sheetLog: { name: string; loadMs: number; registerMs: number }[] = [];
+(window as any).__sheetLog = sheetLog;
+
 /**
- * A hero's sheet for another weapon stance ("archer-melee", shared/weapons.ts poseSheet), loaded the first time it is
- * needed, with its animations. True when it can be used now; `done` runs once it has loaded.
+ * A character sheet (a hero class, a weapon stance "archer-melee" (shared/weapons.ts poseSheet) or an NPC), loaded the
+ * first time it is needed, with its animations. True when it can be used now; otherwise `done` runs once it has
+ * loaded. `prio` orders the queue (lower first; NPCs pass their distance): sheets with prio >= 0 load two at a time,
+ * so walking into town decodes a couple of 8.85 MB sheets at a time instead of ten in one frame; prio < 0 starts at once.
+ * A failed download is retried with growing pauses and never throws.
  */
-export function ensureCharSheet(scene: Phaser.Scene, name: string, done?: () => void): boolean {
+export function ensureCharSheet(scene: Phaser.Scene, name: string, done?: () => void, prio = 0): boolean {
   if (scene.anims.exists(`${name}_idle_down`)) return true;
-  if (!HD_CHARS || charPending.has(name) || charFailed.has(name)) return false;
-  if (!errHooked.has(scene)) errHooked.add(scene), scene.load.on("loaderror", (f: any) => { if (charPending.delete(f?.key)) charFailed.add(f.key); });
-  charPending.add(name);
+  if (!HD_CHARS) return false;
+  let job = sheetJobs.get(name);
+  if (!job) sheetJobs.set(name, job = { name, prio, waiters: [], tries: 0, retryAt: 0, loading: false });
+  if (done) job.waiters.push(done);
+  job.prio = Math.min(job.prio, prio);
+  if (!errHooked.has(scene)) {
+    errHooked.add(scene);
+    scene.load.on("loaderror", (f: any) => {
+      const j = sheetJobs.get(f?.key);
+      if (!j || !j.loading) return;
+      j.loading = false;
+      const wait = Math.min(30000, 2000 * 2 ** j.tries++);
+      j.retryAt = performance.now() + wait;
+      window.setTimeout(() => pumpSheets(scene), wait + 20);
+    });
+  }
+  pumpSheets(scene);
+  return false;
+}
+
+function pumpSheets(scene: Phaser.Scene) {
+  if (!scene.sys?.isActive()) return; // the scene is gone
+  const now = performance.now();
+  let running = 0;
+  for (const j of sheetJobs.values()) if (j.loading && j.prio >= 0) running++;
+  const queued = [...sheetJobs.values()].filter((j) => !j.loading && j.retryAt <= now).sort((a, b) => a.prio - b.prio);
+  for (const j of queued) {
+    if (j.prio >= 0) { if (running >= SHEETS_AT_ONCE) continue; running++; }
+    startSheet(scene, j);
+  }
+}
+
+function startSheet(scene: Phaser.Scene, job: SheetJob) {
+  const { name } = job, t0 = performance.now();
+  job.loading = true;
   scene.load.spritesheet(name, `${CHAR_BASE}/${name}.${CHAR_EXT}`, { frameWidth: CHAR_FRAME, frameHeight: CHAR_FRAME });
+  scene.load.off(`filecomplete-spritesheet-${name}`); // a failed earlier try left its listener
   scene.load.once(`filecomplete-spritesheet-${name}`, () => {
-    scene.textures.get(name).setFilter(Phaser.Textures.FilterMode.NEAREST);
-    const meta = scene.cache.json.get("characters_meta");
-    for (const [anim, a] of Object.entries<any>(meta.animations)) {
-      const key = `${name}_${anim}`;
-      if (!scene.anims.exists(key)) scene.anims.create({ key, frames: scene.anims.generateFrameNumbers(name, { frames: a.frames }), frameRate: a.fps, repeat: a.loop ? -1 : 0 });
-    }
-    charPending.delete(name);
-    done?.();
+    const t1 = performance.now();
+    registerCharSheet(scene, name);
+    sheetLog.push({ name, loadMs: Math.round(t1 - t0), registerMs: Math.round((performance.now() - t1) * 10) / 10 });
+    sheetJobs.delete(name);
+    for (const w of job.waiters) { try { w(); } catch (e) { console.error(e); } }
+    pumpSheets(scene);
   });
   if (!scene.load.isLoading()) scene.load.start();
-  return false;
 }
 
 /** Play `${char}_${anim}_${dir}` with left handled by flipping the right-facing frames. */
@@ -104,6 +146,7 @@ export function playCharAnim(sprite: Phaser.GameObjects.Sprite, char: CharacterN
   let d = left ? dir.replace("left", "right") : dir;
   // 3/4 facings only exist in the iso sheets: otherwise face sideways
   if (d.length > 5 && !sprite.scene.anims.exists(`${char}_${anim}_${d}`)) d = "right";
+  if (!sprite.scene.anims.exists(`${char}_${anim}_${d}`)) return; // the sheet has not arrived: callers re-play once it has
   sprite.setFlipX(left);
   sprite.play(`${char}_${anim}_${d}`, true);
 }

@@ -2,7 +2,7 @@ import Phaser from "phaser";
 import { TILE } from "../../shared/constants";
 import { isSolidAt, SAFE_ZONE } from "../../shared/map";
 import { isDecorSolidAt, NPCS } from "../../shared/npcs";
-import { CHAR_ORIGIN, CHAR_SCALE, CharacterName, playCharAnim } from "./artAssets";
+import { CHAR_ORIGIN, CHAR_SCALE, CharacterName, ensureCharSheet, playCharAnim } from "./artAssets";
 import { faceOf } from "./watch";
 import { isoAnchor } from "./iso";
 import { speechBubble } from "./weathered";
@@ -20,10 +20,10 @@ const KEEP_CLEAR = 0.9 * TILE; // stay off the traders' and the druid's spot
 
 type Mode = "idle" | "walk" | "chat" | "sit" | "mob" | "home";
 interface Folk {
-  name: CharacterName; sprite: Phaser.GameObjects.Sprite;
+  name: CharacterName; sprite: Phaser.GameObjects.Sprite; ready: boolean; // hidden and still until the sheet has loaded
   x: number; y: number; tx: number; ty: number; speed: number;
   mode: Mode; until: number; face: string; anim: string; nextFlavour: number; backAt: number;
-  nextBlow?: number; nextShout?: number; bubble?: Phaser.GameObjects.Image; stuck?: number;
+  asked?: boolean; nextBlow?: number; nextShout?: number; bubble?: Phaser.GameObjects.Image; stuck?: number;
 }
 
 const free = (x: number, y: number) => {
@@ -45,10 +45,25 @@ export class Villagers {
     for (const name of FOLK) {
       const p = this.randomSpot();
       if (!p) continue;
-      const sprite = scene.add.sprite(p.x, p.y, name, 0).setOrigin(CHAR_ORIGIN.x, CHAR_ORIGIN.y).setScale(CHAR_SCALE).setDepth(p.y);
-      const f: Folk = { name, sprite, x: p.x, y: p.y, tx: p.x, ty: p.y, speed: rand(17, 25) * (name === "elder" ? 0.7 : 1), mode: "idle", until: scene.time.now + rand(0, 4000), face: faceOf(rand(-1, 1), rand(-1, 1)), anim: "", nextFlavour: 0, backAt: 0 };
+      const sprite = scene.add.sprite(p.x, p.y, "__DEFAULT").setOrigin(CHAR_ORIGIN.x, CHAR_ORIGIN.y).setScale(CHAR_SCALE).setDepth(p.y).setVisible(false);
+      const f: Folk = { name, sprite, ready: false, x: p.x, y: p.y, tx: p.x, ty: p.y, speed: rand(17, 25) * (name === "elder" ? 0.7 : 1), mode: "idle", until: scene.time.now + rand(0, 4000), face: faceOf(rand(-1, 1), rand(-1, 1)), anim: "", nextFlavour: 0, backAt: 0 };
       this.folk.push(f);
-      this.play(f, "idle");
+    }
+  }
+
+  private loadAt = 0;
+  /** Townsfolk sheets load once the hero is near the square (nearest NPCs go first), one at a time; each person appears as theirs arrives. */
+  private loadSheets(me?: { x: number; y: number }) {
+    const t = performance.now();
+    if (!me || t - this.loadAt < 300) return;
+    this.loadAt = t;
+    const cx = (AREA.x0 + AREA.x1) / 2 * TILE, cy = (AREA.y0 + AREA.y1) / 2 * TILE;
+    if (Math.hypot(cx - me.x, cy - me.y) > 700) return;
+    for (const f of this.folk) {
+      if (f.ready || f.asked) continue;
+      f.asked = true;
+      const show = () => { for (const o of this.folk) if (o.name === f.name && !o.ready) { o.ready = true; o.sprite.setTexture(o.name, 0).setVisible(true); this.play(o, "idle", true); } };
+      if (ensureCharSheet(this.scene, f.name, show, 400)) show();
     }
   }
 
@@ -69,7 +84,7 @@ export class Villagers {
 
   /** Pick what to do next: usually a short stroll, sometimes a sit-down or a chat with someone close by. */
   private next(f: Folk, now: number) {
-    const mate = this.folk.find((o) => o !== f && o.mode !== "walk" && o.mode !== "sit" && Math.hypot(o.x - f.x, o.y - f.y) < 1.8 * TILE);
+    const mate = this.folk.find((o) => o !== f && o.ready && o.mode !== "walk" && o.mode !== "sit" && Math.hypot(o.x - f.x, o.y - f.y) < 1.8 * TILE);
     const r = Math.random();
     if (mate && r < 0.5) {
       // turn to each other and talk a while
@@ -116,7 +131,7 @@ export class Villagers {
   /** The villager closest to (x, y) shouts this (a hero just cast a spell in the village). */
   shoutNear(x: number, y: number, text: string) {
     let best: Folk | undefined, bd = Infinity;
-    for (const f of this.folk) { const d = Math.hypot(f.x - x, f.y - y); if (d < bd) { bd = d; best = f; } }
+    for (const f of this.folk) { if (!f.ready) continue; const d = Math.hypot(f.x - x, f.y - y); if (d < bd) { bd = d; best = f; } }
     if (best) { this.shout(best, text); best.nextShout = this.scene.time.now + 2500; }
   }
 
@@ -142,9 +157,11 @@ export class Villagers {
     } else if (now >= (f.backAt ?? 0)) this.play(f, bd <= 22 ? "idle" : "cheer");
   }
 
-  update(dtMs: number, foes: { x: number; y: number }[] = []) {
+  update(dtMs: number, foes: { x: number; y: number }[] = [], me?: { x: number; y: number }) {
     const now = this.scene.time.now, dt = dtMs / 1000;
+    this.loadSheets(me);
     for (const f of this.folk) {
+      if (!f.ready) continue;
       if (foes.length) { this.mob(f, foes, now, dt); continue; }
       if (f.bubble) f.bubble.setPosition(f.x, f.y - 30);
       if (f.mode === "mob") {
