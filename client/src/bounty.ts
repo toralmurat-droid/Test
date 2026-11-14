@@ -4,6 +4,7 @@ import { BOARD_FOOT, boardTexture } from "./bountyArt";
 import { isoAnchor } from "./iso";
 import type { MapMarker } from "./minimap";
 import { TEXT_FONT, TEXT_PX, WT } from "./pixelfont";
+import { hudSlot } from "./hudSlots";
 
 /**
  * Bounty boards (shared/bounty.ts): the board sprites with a gold "!" while you have no hunt, an "E Read the
@@ -38,7 +39,8 @@ export class BountyUI {
     this.el.id = "bountypanel";
     this.el.hidden = true;
     this.el.addEventListener("mousedown", (ev) => ev.preventDefault());
-    document.getElementById("hud")!.append(this.prompt, this.el);
+    hudSlot("promptstack").append(this.prompt);
+    document.getElementById("hud")!.append(this.el);
     send("bounty"); // my hunt in progress, if any
   }
 
