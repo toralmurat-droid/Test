@@ -1,5 +1,7 @@
 import Phaser from "phaser";
 import { hiResTexture } from "./smooth";
+import { canvasPen, IsoPaint, mat, ramp, type Mat, type V3 } from "./isoPaint";
+import { BRASSR, ROPER, WOODR, wood } from "./isoProps";
 import { col, Iso, rng, type Pt } from "./smoothProps";
 
 /**
@@ -216,36 +218,69 @@ export function adobeWallTexture(scene: Phaser.Scene, mask: number, v: number): 
   return key;
 }
 
-/** A nomad tent: dark striped goat-hair cloth over a ridge pole, the front flap tied open, guy ropes and pegs. */
+/** A ramp of `n` tones from deep shade to lit for a base colour (cloth dyes, leaves). */
+const rampOf = (c: number, n = 6, lo = 0.32, hi = 1.3) => Array.from({ length: n }, (_, i) => {
+  const k = lo + (hi - lo) * i / (n - 1), ch = (sh: number) => Math.min(255, Math.round(((c >> sh) & 255) * k));
+  return (ch(16) << 16) | (ch(8) << 8) | ch(0);
+});
+/** pixelize cells per texture unit at a hiResTexture scale (one IsoPaint pixel = one art pixel). */
+const cellsPer = (scale: number) => scale / Math.max(1, Math.round(scale * 2 / 3));
+
+/**
+ * A nomad tent: a long, low roof of striped goat-hair cloth sagging between three poles, walls hung from the eaves,
+ * the front wall rolled up and the end open on a rug and cushions, guy ropes to pegs. Modelled in 3D (IsoPaint) so
+ * it reads as a whole tent from the iso view, not half a prism.
+ */
 export function tentTexture(scene: Phaser.Scene, v: number): string {
   const key = `ds_tent_${v}`;
   hiResTexture(scene, key, 84, 70, 1, 6, (c) => {
-    const I = new Iso(c, 42, 56), R = rng(v * 71 + 9);
+    const I = new Iso(c, 42, 56), K = cellsPer(6);
     I.shadow(-22, -16, 22, 16, 3, 0.55);
-    const cloth = [0x3a2a22, 0x5a3424, 0x6a4a30, 0x4a3a40][v % 4], stripe = [0xb89060, 0x9a3a2a, 0xd0c0a0, 0x7a6a50][v % 4];
-    const ridge = 22, eave = 6;
-    // back slope (left) and front slope (right) of a ridge tent running along u
-    const L: Pt[] = [I.p(-20, 14, 0), I.p(20, 14, 0), I.p(18, 0, ridge), I.p(-18, 0, ridge)];
-    const Rr: Pt[] = [I.p(-20, -14, eave), I.p(-18, 0, ridge), I.p(18, 0, ridge), I.p(20, -14, eave)];
-    I.poly(Rr, col(cloth, 0.75));
-    I.poly(L, col(cloth, 1));
-    // stripes across the front slope
-    c.save(); I.clip(L);
-    for (let k = 0; k < 4; k++) { const t0 = 0.18 + k * 0.22, a = I.p(-20, 14 - 14 * t0, ridge * t0), b = I.p(20, 14 - 14 * t0, ridge * t0); c.strokeStyle = col(stripe, 0.9, 0.85); c.lineWidth = 1.1; c.beginPath(); c.moveTo(...a); c.lineTo(...b); c.stroke(); }
-    // sagging folds between the poles
-    for (const u of [-7, 7]) { c.strokeStyle = "rgba(10,6,4,0.45)"; c.lineWidth = 0.6; c.beginPath(); c.moveTo(...I.p(u, 0, ridge)); c.lineTo(...I.p(u, 14, 0)); c.stroke(); }
-    c.restore();
-    // the open front (the u = 20 end): a dark mouth, the flap tied back
-    I.poly([I.p(20, 14, 0), I.p(20, -14, 0), I.p(20, -14, eave), I.p(18, 0, ridge)], col(0x140c08));
-    I.poly([I.p(20, 14, 0), I.p(23, 8, 1), I.p(20, 2, 14), I.p(18, 0, ridge)], col(cloth, 1.15));
-    // a rug spilling out and a pot
-    I.poly([I.p(21, 6, 0.1), I.p(28, 6, 0.1), I.p(28, -6, 0.1), I.p(21, -6, 0.1)], col(stripe, 0.8));
-    // poles and guy ropes
-    c.strokeStyle = col(0x2a1a10); c.lineWidth = 0.8;
-    for (const u of [-18, 18]) { c.beginPath(); c.moveTo(...I.p(u, 0, ridge + 3)); c.lineTo(...I.p(u, 0, ridge)); c.stroke(); }
-    c.strokeStyle = col(0xc8b080, 1, 0.7); c.lineWidth = 0.35;
-    for (const [u, vv] of [[-18, 22], [18, 22], [-18, -22], [-24, 0]] as const) { c.beginPath(); c.moveTo(...I.p(u > 0 ? 18 : -18, 0, ridge)); c.lineTo(...I.p(u, vv, 0)); c.stroke(); }
-    void R;
+    const q = new IsoPaint(canvasPen(c, K), Math.ceil(84 * K), Math.ceil(70 * K), 42 * K, 56 * K);
+    const P = (u: number, vv: number, z: number): V3 => [u * K, vv * K, z * K];
+    const CLOTH = rampOf([0x4a3428, 0x5a3424, 0x6a4a30, 0x463840][v % 4], 6, 0.3, 1.25);
+    const STRIPE = rampOf([0xb89060, 0x9a3a2a, 0xd0c0a0, 0x8a6a40][v % 4], 5, 0.4, 1.15);
+    const RUG = rampOf([0x8a2a1a, 0x2a4a6a, 0x7a2a3a, 0x8a5a1a][v % 4], 5, 0.35, 1.2), RUG2 = rampOf(0xc8a060, 4, 0.4, 1.1);
+    const RIDGE = 21, EAVE = 8, HALF = 15, WALL = 13;
+    const peak = (u: number) => RIDGE - 3.2 * Math.sin(Math.PI * u / 16) ** 2 - Math.max(0, Math.abs(u) - 16) * 1.4;
+    const roofZ = (u: number, vv: number) => EAVE + (peak(u) - EAVE) * Math.pow(Math.max(0, 1 - Math.abs(vv) / HALF), 0.85);
+    // goat-hair cloth: woven panels running along the tent, a pale band every few hands, darker seams
+    const cloth = (bias: number): Mat => (l, _s, t, x, y) => {
+      const vv = Math.abs(-HALF + 2 * HALF * t), band = (vv / 5.2 + 0.3) % 1;
+      if (band < 0.1) return ramp(STRIPE, l + bias - 0.05, x, y);
+      return ramp(CLOTH, l + bias + (hsh(x >> 1, y, 3 + v) - 0.5) * 0.18 - (band > 0.9 ? 0.18 : 0), x, y);
+    };
+    const wallM = (bias: number, hole?: (s: number, t: number) => boolean): Mat => (l, s, t, x, y) =>
+      hole?.(s, t) ? undefined : ramp(CLOTH, l + bias + (hsh(x, y >> 1, 9 + v) - 0.5) * 0.16 - ((s * 9) % 1 < 0.1 ? 0.15 : 0), x, y);
+    // inside first: rug spilling out of the open end, cushions, a brass pot, all in the tent's shade
+    q.quad(P(-15, -10, 0.15), P(40, 0, 0), P(0, 22, 0), (l, s, t, x, y) => {
+      const e = Math.min(s, 1 - s, t * 0.6, (1 - t) * 0.6);
+      if (e < 0.03) return ramp(RUG2, l - 0.1, x, y);
+      const d = Math.abs(((s * 8) % 2) - 1) + Math.abs(((t * 5) % 2) - 1);
+      return ramp(d < 0.5 ? RUG2 : RUG, l - (s < 0.83 ? 0.35 : 0) + (e < 0.08 ? -0.15 : 0), x, y);
+    });
+    for (const [u, vv, r] of [[-8, -8, 3], [-2, -9, 2.6], [6, -8.5, 3]] as const) q.blob(P(u, vv, 1.6), r * K, 2.4 * K, 1.8 * K, mat(v % 2 ? STRIPE : RUG, -0.3));
+    q.blob(P(10, 6, 2), 1.8 * K, 1.8 * K, 2 * K, mat(BRASSR, -0.15));
+    // back wall and the far end (inner faces show through the openings, kept dark)
+    q.sheet((s, t) => { const u = -19 + 38 * s; return P(u, -WALL, t * (roofZ(u, -WALL) - 0.3)); }, 60, 24, wallM(-0.32));
+    q.sheet((s, t) => { const vv = -WALL + 2 * WALL * s; return P(-19, vv, t * (roofZ(-19, vv) - 0.3)); }, 40, 24, wallM(-0.1));
+    // front wall: hung on the left half, rolled up under the eave on the right
+    q.sheet((s, t) => { const u = -19 + 15 * s; return P(u, WALL, t * (roofZ(u, WALL) - 0.2)); }, 26, 20, wallM(0));
+    q.rod(P(-4, WALL + 0.6, roofZ(0, WALL) - 1.4), P(19, WALL + 0.6, roofZ(19, WALL) - 1.4), 1.1 * K, cloth(-0.05));
+    // the open end: a doorway, the flap pinned back
+    q.sheet((s, t) => { const vv = -WALL + 2 * WALL * s; return P(19, vv, t * (roofZ(19, vv) - 0.3)); }, 40, 24,
+      wallM(-0.05, (s, t) => Math.abs(s - 0.5) < 0.24 && t < 0.92 - Math.abs(s - 0.5) * 0.6));
+    q.sheet((s, t) => P(19 + s * 4, 6 + s * 2.5 - t * 0.5, t * (roofZ(19, 6) - 1) * (1 - s * 0.35)), 12, 20, cloth(0.08));
+    // the roof
+    q.sheet((s, t) => { const u = -21 + 42 * s, vv = -HALF + 2 * HALF * t; return P(u, vv, roofZ(u, vv)); }, 140, 90, cloth(0));
+    // poles poking through, guy ropes and pegs
+    for (const u of [-16, 0, 16]) q.rod(P(u, 0, peak(u) - 1), P(u, 0, peak(u) + 2.4), 0.55 * K, wood(WOODR, -0.05, 6));
+    const ropes: [V3, V3][] = [[[-16, 0, peak(-16)], [-24, 0, 0]], [[16, 0, peak(16)], [24, 0, 0]],
+      [[-10, HALF, EAVE], [-11, 19.5, 0]], [[8, HALF, EAVE], [9, 19.5, 0]], [[-10, -HALF, EAVE], [-11, -19.5, 0]], [[8, -HALF, EAVE], [9, -19.5, 0]]];
+    for (const [a, b] of ropes) {
+      q.rod(P(...a), P(...b), 0.3 * K, mat(ROPER, 0.05));
+      q.rod(P(b[0], b[1], -0.3), P(b[0], b[1], 1.4), 0.4 * K, wood(WOODR, 0.1, 3));
+    }
   });
   return key;
 }
@@ -278,46 +313,69 @@ export function bonesTexture(scene: Phaser.Scene, v: number): string {
 }
 
 /**
- * Date palms (ambient tree sprites, bottom-centre origin): a ringed, curving trunk and a crown of drooping fronds,
- * clusters of dates under them. 2 frames: the fronds stir in the wind.
+ * Date palms (ambient tree sprites, bottom-centre origin): a ringed, leaning trunk of old frond bases, a crown of
+ * long feathered fronds arching out and drooping, a skirt of dead brown fronds, and hanging date clusters. Modelled in
+ * 3D (IsoPaint) so the crown has depth: near fronds over the trunk, far ones behind it. 2 frames: the fronds stir.
  */
 export const PALM_W = 64, PALM_H = 96;
+const LEAF = [0x0e180a, 0x1a2a10, 0x2a4016, 0x3c561c, 0x527024, 0x6c8a2e, 0x8aa640];
+const DEADLEAF = [0x2a1c0e, 0x4a3218, 0x6a4a24, 0x8a6632, 0xa88444];
+const BARK = [0x1e140c, 0x34241a, 0x4e3824, 0x6a4e30, 0x86663e, 0xa2804e];
+const DATES = [0x2a0c06, 0x4e160a, 0x76280e, 0x9a4214, 0xc0661e, 0xd88a30];
 export function palmTexture(scene: Phaser.Scene, v: number): string {
   const key = `ds_palm_${v}`;
   hiResTexture(scene, key, PALM_W, PALM_H, 2, 5, (c, f) => {
-    const R = rng(v * 131 + 17);
-    const bx = PALM_W / 2, by = PALM_H - 4, lean = (v % 2 ? 1 : -1) * (5 + R() * 6), H = 54 + R() * 14;
-    // shadow
-    c.fillStyle = "rgba(10,6,2,0.4)"; c.beginPath(); c.ellipse(bx + 2, by, 9, 3.5, 0, 0, Math.PI * 2); c.fill();
-    // trunk: stacked rings along a curve
-    const at = (t: number): Pt => [bx + lean * t * t, by - H * t];
-    for (let t = 0; t <= 1; t += 0.02) {
-      const [x, y] = at(t), w = 3.4 - t * 1.2;
-      c.fillStyle = col(Math.floor(t * 50) % 2 ? 0x6a4a2c : 0x7e5a36); c.fillRect(x - w, y - 1.2, w * 2, 1.6);
-      c.fillStyle = col(0x3a2616, 1, 0.8); c.fillRect(x + w * 0.4, y - 1.2, w * 0.6, 1.6);
-      c.fillStyle = col(0xa07a4a, 1, 0.7); c.fillRect(x - w, y - 1.2, w * 0.4, 1.6);
-    }
-    const [tx, ty] = at(1);
-    // dates
-    for (let k = 0; k < 2; k++) { c.fillStyle = col(0x8a3a1a); c.beginPath(); c.ellipse(tx + (k ? 3 : -3), ty + 4, 2.4, 3.2, 0, 0, Math.PI * 2); c.fill(); c.fillStyle = col(0xb8601a, 1, 0.8); c.beginPath(); c.ellipse(tx + (k ? 2.4 : -3.6), ty + 3, 1, 1.4, 0, 0, Math.PI * 2); c.fill(); }
-    // fronds: arcs out from the crown, back ones darker
-    const stir = f ? 0.06 : 0;
-    const frond = (a: number, len: number, droop: number, tone: number) => {
-      const ex = tx + Math.cos(a) * len, ey = ty + Math.sin(a) * len * 0.5 + droop;
-      const mx = tx + Math.cos(a) * len * 0.5, my = ty + Math.sin(a) * len * 0.25 - 6;
-      c.strokeStyle = col(0x2a3a14, tone); c.lineWidth = 0.8; c.beginPath(); c.moveTo(tx, ty); c.quadraticCurveTo(mx, my, ex, ey); c.stroke();
-      for (let s = 0.15; s < 1; s += 0.07) { // leaflets
-        const u = 1 - s, px = u * u * tx + 2 * u * s * mx + s * s * ex, py = u * u * ty + 2 * u * s * my + s * s * ey;
-        const l = 5 * (1 - s * 0.6);
-        c.strokeStyle = col(s < 0.5 ? 0x4a6a24 : 0x5e7a2c, tone, 0.95); c.lineWidth = 0.7;
-        c.beginPath(); c.moveTo(px, py); c.lineTo(px + Math.cos(a + 1.4) * l * 0.6, py + l * 0.8); c.stroke();
-        c.beginPath(); c.moveTo(px, py); c.lineTo(px + Math.cos(a - 1.4) * l * 0.6, py + l * 0.8); c.stroke();
+    const R = rng(v * 131 + 17), K = cellsPer(5);
+    const bx = PALM_W / 2, by = PALM_H - 4;
+    c.fillStyle = "rgba(10,6,2,0.4)"; c.beginPath(); c.ellipse(bx, by, 9, 3.5, 0, 0, Math.PI * 2); c.fill();
+    const q = new IsoPaint(canvasPen(c, K), Math.ceil(PALM_W * K), Math.ceil(PALM_H * K), bx * K, by * K);
+    const P = (u: number, vv: number, z: number): V3 => [u * K, vv * K, z * K];
+    // trunk: leans and curves; the ring at each old frond base is a darker, rougher band
+    // lean mostly toward or away from the viewer (u + v), little sideways (u - v), so the crown stays inside the texture
+    const H = 56 + R() * 12, side = (R() - 0.5) * 5, depth = (R() - 0.5) * 14, lu = (depth + side) / 2, lv = (depth - side) / 2;
+    const at = (t: number): V3 => [lu * t * t, lv * t * t, H * t];
+    const trunk: Mat = (l, s, _t, x, y) => {
+      const ring = (s * 26) % 1;
+      return ramp(BARK, l * 1.05 - (ring < 0.22 ? 0.22 : 0) + (hsh(x, y, 5 + v) - 0.5) * 0.18 - (1 - s) * 0.08, x, y);
+    };
+    q.surf((s, a) => {
+      const [x0, y0, z0] = at(s), r = 2.9 - s * 1.1 + ((s * 26) % 1 < 0.22 ? 0.3 : 0) + (s < 0.06 ? (0.06 - s) * 18 : 0);
+      const ang = a * Math.PI * 2, cu = Math.cos(ang), sv = Math.sin(ang);
+      return [P(x0 + cu * r, y0 + sv * r, z0), [cu, sv, 0.15]];
+    }, Math.ceil(H * K * 1.6), 26, trunk);
+    const [cu0, cv0, cz0] = at(1), C: V3 = [cu0, cv0, cz0 + 1];
+    const stir = f ? 1 : 0;
+    // a frond: a stiff spine that rises from the crown, arches and droops, with narrow leaflets hanging off both
+    // sides in a comb (each its own strip, so the light shows between them, as on a real palm)
+    const frond = (a: number, len: number, rise: number, droop: number, pal: number[], bias: number, dead = false) => {
+      const du = Math.cos(a), dv = Math.sin(a), pu = -dv, pv = du;
+      const wob = stir * (0.6 + R() * 0.8) * (R() < 0.5 ? -1 : 1);
+      const spine = (s: number): V3 => [C[0] + du * len * s + pu * wob * s * s, C[1] + dv * len * s + pv * wob * s * s,
+        C[2] + rise * s - (rise + droop) * s * s - (dead ? len * s * 0.9 : 0)];
+      q.rod(P(...spine(0)), P(...spine(0.5)), 0.45 * K, mat(dead ? DEADLEAF : BARK, 0.1));
+      q.rod(P(...spine(0.5)), P(...spine(0.96)), 0.35 * K, mat(pal, bias));
+      const nl = Math.round(len * (dead ? 0.45 : 0.62));
+      for (let i = 1; i < nl; i++) for (const side of [-1, 1]) {
+        const s0 = i / nl, b = spine(s0), w = (dead ? 2.6 : 5) * Math.pow(Math.sin(Math.PI * Math.min(1, s0 * 1.05 + 0.08)), 0.6);
+        const hang = dead ? 0.5 : 0.9 + 0.5 * s0, sw = 0.7, tone = bias + (hsh(i, side + 3, a * 100 + v) - 0.5) * 0.18;
+        // a leaflet: out to the side and down, pointing a little toward the tip
+        q.sheet((s, t) => {
+          const o = (t - 0.5) * sw;
+          return P(b[0] + (pu * side * s * 0.75 + du * s * 0.4) * w + du * o, b[1] + (pv * side * s * 0.75 + dv * s * 0.4) * w + dv * o, b[2] - s * w * hang);
+        }, Math.ceil(w * K * 2.4) + 1, 2, (l, s, _t, x, y) => ramp(pal, l * 0.85 + tone - s * 0.12, x, y));
       }
     };
+    // dead skirt under the crown, then dates, then the living fronds (depth sorts them)
+    for (let k = 0; k < 6; k++) frond(k / 6 * Math.PI * 2 + R(), 9 + R() * 3, 0, 2, DEADLEAF, -0.05, true);
+    for (let k = 0; k < 3; k++) {
+      const a = k / 3 * Math.PI * 2 + 0.5 + R(), d: V3 = [C[0] + Math.cos(a) * 2.6, C[1] + Math.sin(a) * 2.6, C[2] - 4];
+      q.blob(P(...d), 2.1 * K, 2.1 * K, 3 * K, (l, s, t, x, y) => ramp(DATES, l + (hsh(x, y, 7) < 0.3 ? -0.2 : 0.05), x, y));
+    }
     const n = 9;
-    for (let k = 0; k < n; k++) { const a = Math.PI + (k / (n - 1)) * Math.PI + stir * (k % 2 ? 1 : -1); frond(a, 18 + R() * 6, 4, 0.7); }
-    for (let k = 0; k < 7; k++) { const a = (k / 6) * Math.PI * 0.9 + 0.15 + stir; frond(a, 20 + R() * 6, 10 + R() * 4, 1.05); }
-    c.fillStyle = col(0x5a4020); c.beginPath(); c.ellipse(tx, ty, 3, 2, 0, 0, Math.PI * 2); c.fill();
+    for (let k = 0; k < n; k++) {
+      const a = k / n * Math.PI * 2 + R() * 0.4, up = k % 3 === 0;
+      frond(a, 16 + R() * 4, up ? 7 : 3 + R() * 3, up ? 12 : 17 + R() * 6, LEAF, -0.05 + R() * 0.12);
+    }
   });
   return key;
 }
