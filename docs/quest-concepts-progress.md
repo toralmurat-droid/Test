@@ -9,8 +9,8 @@ One branch (`claude/brave-hypatia-dkkcd3`), one draft PR until all work packages
 | WP1 framework + choices + puzzles | #5 Two Letters, #3 Empty Grave, #11 Crown in the Sand | done (server, client, text, tests) |
 | WP2 carry + hold | #1 Last Lantern, #2 Hold the Wheel | done (server, client, text, tests); bench pending |
 | WP3 unseen + sync | #4 Unseen, #8 Two Hands | server, text, tests done; client next |
-| WP4 Bargain + Penance | #6 | server done; client, text, tests next |
-| WP5 Tide | #7 | todo |
+| WP4 Bargain + Penance | #6 | server, text, tests done; client next |
+| WP5 Tide | #7 | server done; client, tests, balance, bench next |
 | WP6 Rumours | #10 | todo |
 | WP7 Apprentice | #9 | todo |
 
@@ -261,3 +261,4 @@ at Lv 10, `duel.ts` only if Hidebound goes on. Bench: WP2 and WP5 (`TIDE=1`, `SP
 - 2026-11-14: Ostrevar's Envoy hpMult 3 -> 7 (was a walkover: 7-12 s, 100% all classes; now 15-25 s, 100%). Lantern holders can't use portals, waygates or Mawdeep ropes/stairs (Claude 2026-11-14). Choice modal can be closed with Esc and has no reopen: WP4 must resend the Bargain prompt while its window is open.
 - 2026-11-14: WP2 balance: Millrace Glutton 100% all classes (7-11 s); Hold-wave XP ~190/min vs ~160-190 grinding (not an exploit). WP3 server landed. Polish list: carried lantern is small (~10 px); quest warps reuse "travel" and play the portal sound (client should skip when `why` is set); check that a hidden hero can't skip a stretch by portal.
 - 2026-11-14: WP4 server landed. Bargain prompt resends every 6 s while open (the client modal can be closed with Esc); `"choice" {chain, close: true}` when it ends. Ursk keeps fighting during the offer (no free stun opener). Hidebound list of beast kinds is written out in `shared/talents.ts` (can drift from `BEAST_FOLK`). Penance needs bargain 1 AND the Hide Rite handed in. Keeper of the Twin Seals hpMult 3 -> 7 like the Envoy. Test flakes fixed: room logs to stderr, champions split count, Void Arsenal lance poll.
+- 2026-11-14: WP5 Tide server landed. Numbers in `shared/tide.ts` `TIDE` (goal 1500, 4 waves 24/30/36/40 Lv 4-12, ≤ 40 alive, 12 min limit, gold 15 + 8 × level capped 350, runes Lv 12 for the top 3). Goal point 10 tiles west of the west gate, 11.2 tiles from the nearest watch post (sight 6). A march is lost if the server restarts mid-march (next dusk is booked). Several rooms would share one meter.

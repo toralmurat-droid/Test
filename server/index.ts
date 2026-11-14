@@ -10,6 +10,7 @@ import { TownRoom, announceUpgrade } from "./TownRoom";
 import { ideaLog, publicLog } from "./ideaStore";
 import { allAccounts, flushFinal, initAccounts, peek, requestReset, resetPassword, setEmail } from "./accounts";
 import { writeHandoff } from "./handoff";
+import { flushWorldFinal, initWorld } from "./worldStore";
 import { clientIp } from "./ratelimit";
 
 const PORT = Number(process.env.PORT ?? 2567);
@@ -126,10 +127,11 @@ gameServer.define("town", TownRoom);
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 gameServer.onBeforeShutdown(async () => { announceUpgrade(); await wait(400); });
 // The rooms are gone by now (everyone saved and remembered where they stood): hand those spots to the next server
-gameServer.onShutdown(async () => { writeHandoff(); await flushFinal(); await wait(800); });
+gameServer.onShutdown(async () => { writeHandoff(); await flushFinal(); await flushWorldFinal(); await wait(800); });
 
-// Accounts first (Postgres when DATABASE_URL is set): players must never join before their saves are loaded
-initAccounts()
+// Accounts first (Postgres when DATABASE_URL is set): players must never join before their saves are loaded.
+// The world state (the Gloam Tide's meter, server/worldStore.ts) loads with them.
+Promise.all([initAccounts(), initWorld()])
   .then(() => gameServer.listen(PORT))
   .then(() => console.log(`Game server on http://localhost:${PORT}`))
   .catch((e) => { console.error("Could not start:", e); process.exit(1); });

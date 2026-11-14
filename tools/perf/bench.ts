@@ -2,6 +2,7 @@
 // then prints the time per server tick, CPU, memory and the bytes each player receives per second.
 //   npm run bench -- [bots=5] [seconds=15]        SPREAD=1 scatters the bots over the whole map (worst case)
 //   CAST=1 SPREAD=1: the Summoner bots cast wisps, blades, black holes and the Void Arsenal non-stop (tools/perf/bots.ts)
+//   TIDE=1: a Gloam Tide march is out the whole time, its last wave all at once (TIDE.maxAlive marchers, server/tide.ts)
 import os from "node:os";
 import path from "node:path";
 import http from "node:http";
@@ -44,6 +45,7 @@ async function main() {
   if (process.env.SPREAD) room.state.players.forEach((p: any) => {
     for (let i = 0; i < 500; i++) { const x = Math.random() * MAP_W * TILE, y = Math.random() * MAP_H * TILE; if (!isSolidAt(x, y)) { p.x = x; p.y = y; break; } }
   });
+  if (process.env.TIDE) room.tide.start(Date.now(), true);
   await new Promise((r) => setTimeout(r, 3000));
   ticks.length = 0; patches.length = 0; bytes = 0;
   const cpu0 = process.cpuUsage(), t0 = performance.now();
@@ -52,11 +54,13 @@ async function main() {
   const s = [...ticks].sort((a, b) => a - b), q = (p: number) => s[Math.floor(s.length * p)]?.toFixed(1);
   const avg = (a: number[]) => (a.reduce((x, y) => x + y, 0) / a.length).toFixed(2);
   let active = 0;
-  room.state.mobs.forEach((m: any) => { if (!m.dead && (m.moving || m.target)) active++; });
+  let marchers = 0;
+  room.state.mobs.forEach((m: any) => { if (!m.dead && (m.moving || m.target)) active++; if (!m.dead && m.tide) marchers++; });
   console.log(JSON.stringify({
     bots: BOTS, spread: !!process.env.SPREAD, ticksPerSec: (ticks.length / (wall / 1000)).toFixed(1), tickAvgMs: avg(ticks), tickP95Ms: q(0.95),
     patchAvgMs: avg(patches), cpuPct: (((cpu.user + cpu.system) / 1000) / wall * 100).toFixed(0), rssMB: (process.memoryUsage().rss / 1e6).toFixed(0),
     kbPerPlayerPerSec: (bytes / BOTS / (wall / 1000) / 1024).toFixed(1), mobs: room.state.mobs.size, activeMobs: active,
+    ...(process.env.TIDE ? { tide: true, tideMarchers: marchers } : {}),
   }));
   child.send("stop");
   setTimeout(() => process.exit(0), 500);

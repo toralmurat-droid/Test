@@ -10,6 +10,9 @@ export function dayFrac(nowMs: number): number {
   return (((nowMs % DAY_CYCLE_MS) + DAY_CYCLE_MS) % DAY_CYCLE_MS) / DAY_CYCLE_MS;
 }
 
+/** Dusk on that clock (minutes 19-21 of the 30): the Gloam Tide (shared/tide.ts) marches at the next one. */
+export const DUSK = { from: 19 / 30, to: 21 / 30 };
+
 /**
  * The dead keep the night (Murat 2026-11-05): by day most skeletons lie in the earth and their bosses do not walk;
  * they climb out from the middle of dusk until late in the dawn (about 8.5 of the 30 minutes).

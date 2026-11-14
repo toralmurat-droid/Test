@@ -77,6 +77,9 @@ import { ARSENAL, ATTUNE_ORDER, attuneOf, bondShare, DEFAULT_GRIMOIRE, SUMMONER_
 import { cleanFeast, familyOf, type Feast, feastMult, THRALL, thrallMax } from "../shared/devour";
 import { Champions, type ChampState } from "./champions";
 import { QuestSteps, setMeta } from "./questSteps";
+import { Tide } from "./tide";
+import { TIDE } from "../shared/tide";
+import { world, worldChanged } from "./worldStore";
 import { META, metaOf, nextStage, withChoice } from "../shared/questSteps";
 import { traitTakenMult } from "../shared/talents";
 import { AFFIX_FX, CHAMPION } from "../shared/champions";
@@ -246,6 +249,7 @@ export class Mob extends Schema {
   sPower = 1; // a summon's damage multiplier (skill rank, the owner's Ruin talent, the golems fused into a Colossus)
   summonChain = 0; // ...and the quest chain of that step
   qwave = false; // a hold step's wave monster (server/questSteps.ts): counts for nothing else (the Tide)
+  tide = false; // a Gloam Tide marcher (server/tide.ts): never merges or dozes, walks round walls, fills no meter
   @type("string") title = ""; // quest boss name shown over it instead of "Elite" (QuestStep.summon.title)
   mergeInto = ""; // answering a call: id of the blob it is rushing to fuse with
   mergeCap = 0; // most blobs this one may hold (set at its first call)
@@ -665,6 +669,8 @@ export class TownRoom extends Room<TownState> {
   private itemSeq = 0;
   /** The quest steps that need more than a count (server/questSteps.ts): choices, NPCs in any order, picks. */
   private qsteps!: QuestSteps;
+  /** The Gloam Tide (server/tide.ts): the world meter from blob kills, and the march on the west gate. */
+  private tide!: Tide;
 
   onCreate() {
     liveRooms.add(this);
@@ -693,6 +699,17 @@ export class TownRoom extends Room<TownState> {
       forget: (mid, pid) => { const m = this.state.mobs.get(mid); if (m && !m.dead && !m.owner) this.forgetHero(m, pid); },
       warp: (pid, x, y) => this.warp(pid, x, y),
       summonsOf: (pid) => { const out: { x: number; y: number }[] = []; for (const m of this.summons.values()) if (m.owner === pid && !m.dead) out.push({ x: m.x, y: m.y }); return out; },
+    });
+    this.tide = new Tide({
+      heroes: () => this.state.players.entries(), hero: (pid) => this.state.players.get(pid), mob: (id) => this.state.mobs.get(id),
+      spawn: (kind, level, at, home) => { const id = `t${++this.mobSeq}`; this.spawnMob(kind, -1, id, { ...at, level }); const m = this.state.mobs.get(id)!; m.tide = true; m.title = TIDE.title; m.homeX = home.x; m.homeY = home.y; return id; },
+      removeMob: (id) => { const m = this.state.mobs.get(id); if (!m || m.dead) return; m.dead = true; m.hp = 0; this.clock.setTimeout(() => this.state.mobs.delete(id), 500); },
+      send: (pid, type, msg) => this.clients.find((cl) => cl.sessionId === pid)?.send(type, msg),
+      act1: (p) => actAt(p.y, p.x) === 1, dayFrac: (now) => worldDayFrac(now), world, changed: worldChanged,
+      pay: (pid, gold, rune) => {
+        const p = this.state.players.get(pid);
+        if (p) { p.gold += gold; if (rune) { if (this.bagFull(p)) this.dropItem("gear", p.x, p.y, 1, rune, pid); else setBag(p, [...bagItems(p), rune]); } }
+      },
     });
     this.setState(new TownState());
     // Monsters near each hero go out just before every state patch, so both halves of an update arrive together
@@ -835,6 +852,7 @@ export class TownRoom extends Room<TownState> {
         if (m) for (let i = 0; i < 16; i++) { const a = i / 16 * Math.PI * 2, x = p.x + Math.cos(a) * 5 * TILE, y = p.y + Math.sin(a) * 3 * TILE; if (this.rideOk(x, y, act as 1 | 2)) { m.x = x; m.y = y; break; } }
         return;
       }
+      if (process.env.NODE_ENV !== "production" && this.tide.dev(text.trim())) return; // dev servers only: /tide N, /tidemarch, /tideend
       if (process.env.NODE_ENV !== "production" && /^\/god$/i.test(text.trim())) { p.invulnUntil = Date.now() + 10 * 60_000; return; } // dev servers only: 10 min unhurt, to watch a fight
       if (process.env.NODE_ENV !== "production" && /^\/sunfinale$/i.test(text.trim())) { // dev servers only: on the Second Sun's last quest
         const c = CHAINS.findIndex((ch) => ch.id === "sun");
@@ -986,6 +1004,7 @@ export class TownRoom extends Room<TownState> {
     this.state.players.set(client.sessionId, p);
     if (back?.group.length) this.regroupOnJoin(client.sessionId, p, back.group);
     this.sendBoard(client); // the Ideas board is ready as soon as it is opened
+    this.tide.join(client.sessionId); // the Gloam Tide's meter (server/tide.ts)
     if (Object.keys(p.feast).length) client.send("feast", { feast: p.feast }); // Devour: what this hero has eaten
     console.log(`${p.name} the ${CLASSES[p.cls].name} joined (${this.clients.length} online)`);
   }
@@ -2270,7 +2289,7 @@ export class TownRoom extends Room<TownState> {
   // ---- Blob merging -----------------------------------------------------------
 
   /** Blobs that can call for help and fuse (Mother Blobs too, Murat 2026-11-03). */
-  private static canMerge(m: Mob) { return BLOB_KINDS.includes(m.kind) && !m.servant && !m.champion; } // a champion stays itself // the Hollow King's servants stay his
+  private static canMerge(m: Mob) { return BLOB_KINDS.includes(m.kind) && !m.servant && !m.champion && !m.tide; } // a champion stays itself // the Hollow King's servants stay his
 
   /** Blobs below MERGE.minLevel don't merge, unless a hero close by is on the "watch a blob call for help" quest step. */
   private mergeLevelOk(m: Mob) {
@@ -2642,7 +2661,7 @@ export class TownRoom extends Room<TownState> {
    * not burning, stunned, walking to a rite, being banished or merging. Mirrors the early returns of updateMob.
    */
   private dozing(m: Mob, heroes: Player[], now: number): boolean {
-    if (m.kind === "nightraider") return false; // a rider never sleeps (there are at most two)
+    if (m.kind === "nightraider" || m.tide) return false; // a rider never sleeps (there are at most two), nor a Gloam Tide marcher (at most TIDE.maxAlive)
     if (m.dead || m.target || m.foe || m.banishAt || m.ritual || m.mergeInto || m.spot || m.specialAt || m.windUntil) return false;
     if (now < m.stunUntil || now < m.sk.burnUntil || m.broken || m.moving) return false;
     return !this.heroNear(m, heroes);
@@ -2705,6 +2724,7 @@ export class TownRoom extends Room<TownState> {
       this.updateWrath(pid, p, now);
     });
     this.qsteps.tick(now, dtMs); // carried lanterns, hold runs (server/questSteps.ts)
+    this.tide.tick(now); // the Gloam Tide's march (server/tide.ts)
     this.state.items.forEach((it, id) => { if (now > it.expires) this.state.items.delete(id); });
     const tick = ++this.tickNo;
     // Live heroes, gathered once so each monster's "anyone near?" check is a plain array scan
@@ -3053,7 +3073,7 @@ export class TownRoom extends Room<TownState> {
     if (m.stunned) { m.moving = false; return; }
     if (m.kind === "nightraider") return this.raiderStep(m, id, dt, now);
     // Nobody around: the monster dozes (no wandering, no budding), which keeps big monster counts cheap
-    if (!m.target && !this.playerNear(m.x, m.y, SLEEP_RANGE)) {
+    if (!m.target && !m.tide && !this.playerNear(m.x, m.y, SLEEP_RANGE)) {
       if (m.moving) m.moving = false;
       // an ambusher left standing about with nobody (not even a fallen hero) to see: it is back up its tree
       if (m.ambusher && !m.hidden && !m.broken && !this.anyPlayerNear(m.x, m.y, SLEEP_RANGE) && (m.spot || this.treeFor(m, now))) this.hide(m, id, now);
@@ -3308,7 +3328,7 @@ export class TownRoom extends Room<TownState> {
     this.nextRaidRoll = now + NIGHT_RAID.rollMs;
     for (const act of [1, 2] as const) {
       const A = NIGHT_RAID.acts[act];
-      if (now < this.raidRest[act]) continue;
+      if (now < this.raidRest[act] || (act === 1 && this.tide.marching)) continue; // no riders while the Gloam Tide marches
       const out = [...this.raiders.values()].filter((m) => m.raidAct === act).length;
       for (let slot = out; slot < A.max; slot++) if (Math.random() < A.chance) this.raidArrive(act, now);
     }
@@ -3520,9 +3540,9 @@ export class TownRoom extends Room<TownState> {
     return this.go(m, x, y, now);
   }
 
-  /** Walk toward (x,y): camp bandits find their way round walls through the gates, others go straight. */
+  /** Walk toward (x,y): camp bandits (and Gloam Tide marchers) find their way round walls, others go straight. */
   private go(m: Mob, x: number, y: number, now: number): InputState {
-    if (!m.camp || clearWalk(m.x, m.y, x, y)) { m.path = []; return toward(m.x, m.y, x, y); }
+    if (!(m.camp || m.tide) || clearWalk(m.x, m.y, x, y)) { m.path = []; return toward(m.x, m.y, x, y); }
     const moved = Math.hypot(x - m.pathTX, y - m.pathTY) > TILE;
     if (!m.path.length || moved || now > m.pathAt + 1500) {
       m.path = findPath(m.x, m.y, x, y); m.pathAt = now; m.pathTX = x; m.pathTY = y;
@@ -5012,6 +5032,7 @@ export class TownRoom extends Room<TownState> {
     if (a?.party) dmg = Math.max(1, Math.round(dmg / groupHpMult(this.groupNear(attackerId, m.x, m.y).length)));
     if (m.bones) dmg = Math.max(1, Math.round(dmg * (1 - DEMON.harvest.armorPer * m.bones))); // Bone Demon's bone armour
     this.bloodthirst(a, attackerId, Math.min(dmg, m.hp), opts.drain, targetId);
+    if (a && m.tide) this.tide.hit(attackerId, m, Math.min(dmg, m.hp)); // damage to a marcher near the gate (server/tide.ts)
     m.hp = Math.max(0, m.hp - dmg);
     if (m.champ) this.champs.hurt(m, targetId, Date.now()); // Risen, Splitting, Hide-Stitched (server/champions.ts)
     this.addHate(m, attackerId, dmg); // fight back (generated aggro)
@@ -5044,6 +5065,7 @@ export class TownRoom extends Room<TownState> {
     if (m.owner && !m.charmUntil) { this.mobDied(m, targetId, attackerId, a?.name ?? ""); return; } // a summon: no XP, no loot, no quest credit
     if (a) for (let c = 0; c < CHAINS.length; c++) this.questKill(attackerId, a, m, c);
     if (a) this.bountyKill(attackerId, a, m);
+    if (a) this.tide.kill(attackerId, m); // a blob fills the Gloam Tide's meter (server/tide.ts)
     // Kill XP: every group member in the same zone gets it (the killer alone when solo)
     const xp = Math.round(def.xp * mobScale(m.level, "xp"));
     for (const pid of a?.party ? this.groupNear(attackerId, m.x, m.y) : [attackerId]) this.grantXp(pid, xp, m);
@@ -5109,7 +5131,7 @@ export class TownRoom extends Room<TownState> {
   private execute(a: Player, m: Mob, dmg: number, opts: HitOpts): number {
     if (!canExecute(opts, m)) return 0;
     m.execSpent = true;
-    const boss = !!(ELITE[m.kind] || BOSS[m.kind] || m.kind === "nightraider" || m.title);
+    const boss = !!(ELITE[m.kind] || BOSS[m.kind] || m.kind === "nightraider" || (m.title && !m.tide)); // a Gloam Tide marcher is a plain blob
     executeRefund(a, a.cls, OVERLOAD.max);
     this.syncMana(a);
     return Math.max(1, Math.round(executeDamage(dmg, !!opts.crit, boss)));

@@ -7,7 +7,7 @@ No. The repo is only the source code. To be playable by anyone, a server also ne
 1. **Install and build**: install the packages (`npm ci`) and build the browser game (`npm run build`).
 2. **Keep the game running** 24/7, and restart it if it crashes.
 3. **Be reachable**: a public web address with HTTPS (the game uses a WebSocket on the same address).
-4. **Keep player saves**: accounts live in `data/saves.json` (and ideas in `data/ideas.json`). This folder must be
+4. **Keep player saves**: accounts live in `data/saves.json` (ideas in `data/ideas.json`, world events like the Tide in `data/world.json`). This folder must be
    on a *persistent disk*, otherwise every update wipes all accounts.
 5. **Update itself** when new code is merged on GitHub.
 
@@ -56,7 +56,8 @@ It is saved like normal progress, per class (do it once on each class).
 
 By default accounts live in `data/saves.json` on the volume. With a `DATABASE_URL` the game keeps them in
 PostgreSQL instead: one row per account, only changed accounts are written, and each write is one transaction
-(a trade is saved on both sides or not at all). Railway backs up its Postgres databases.
+(a trade is saved on both sides or not at all). World events (the Tide meter) get their own `world` table there.
+Railway backs up its Postgres databases.
 
 1. In the Railway project: **+ New** → **Database** → **PostgreSQL**.
 2. Game service → **Variables** → add `DATABASE_URL` = `${{Postgres.DATABASE_URL}}` (Railway offers it in the list).

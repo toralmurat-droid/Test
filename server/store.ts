@@ -50,34 +50,39 @@ export function jsonStore<A>(file: string): Store<A> {
   };
 }
 
-export async function postgresStore<A>(url: string, importFrom?: string): Promise<Store<A>> {
+/**
+ * `table`: the accounts by default; other key -> JSON data (the world state, server/worldStore.ts) get their own table of
+ * the same shape. The name goes into the SQL as it is, so it may only be lower-case letters and underscores.
+ */
+export async function postgresStore<A>(url: string, importFrom?: string, table = "accounts"): Promise<Store<A>> {
+  if (!/^[a-z_]+$/.test(table)) throw new Error(`Bad store table name: ${table}`);
   const pool = new pg.Pool({ connectionString: url, max: 4 });
   pool.on("error", (e) => console.error("Postgres pool error:", e));
-  await pool.query(`CREATE TABLE IF NOT EXISTS accounts (
+  await pool.query(`CREATE TABLE IF NOT EXISTS ${table} (
     key text PRIMARY KEY,
     data jsonb NOT NULL,
     updated_at timestamptz NOT NULL DEFAULT now()
   )`);
-  const { rows } = await pool.query<{ n: string }>("SELECT count(*) AS n FROM accounts");
+  const { rows } = await pool.query<{ n: string }>(`SELECT count(*) AS n FROM ${table}`);
   if (Number(rows[0].n) === 0 && importFrom && fs.existsSync(importFrom)) {
     const old = readJsonFile<A>(importFrom);
-    await upsert(pool, old);
-    console.log(`Postgres: imported ${Object.keys(old).length} account(s) from ${importFrom}`);
+    await upsert(pool, old, table);
+    console.log(`Postgres: imported ${Object.keys(old).length} row(s) into ${table} from ${importFrom}`);
   }
   return {
     kind: "postgres",
     async load() {
-      const r = await pool.query<{ key: string; data: A }>("SELECT key, data FROM accounts");
+      const r = await pool.query<{ key: string; data: A }>(`SELECT key, data FROM ${table}`);
       const out: Record<string, A> = {};
       for (const row of r.rows) out[row.key] = row.data;
       return out;
     },
-    save: (changed) => upsert(pool, changed),
+    save: (changed) => upsert(pool, changed, table),
     close: () => pool.end(),
   };
 }
 
-async function upsert<A>(pool: pg.Pool, changed: Record<string, A>) {
+async function upsert<A>(pool: pg.Pool, changed: Record<string, A>, table: string) {
   const keys = Object.keys(changed);
   if (!keys.length) return;
   const c = await pool.connect();
@@ -87,7 +92,7 @@ async function upsert<A>(pool: pg.Pool, changed: Record<string, A>) {
     for (let i = 0; i < keys.length; i += 500) {
       const ks = keys.slice(i, i + 500);
       await c.query(
-        `INSERT INTO accounts (key, data, updated_at)
+        `INSERT INTO ${table} (key, data, updated_at)
          SELECT k, d::jsonb, now() FROM unnest($1::text[], $2::text[]) AS t(k, d)
          ON CONFLICT (key) DO UPDATE SET data = EXCLUDED.data, updated_at = now()`,
         [ks, ks.map((k) => JSON.stringify(changed[k]))],
