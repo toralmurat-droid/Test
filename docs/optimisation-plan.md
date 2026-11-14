@@ -264,3 +264,10 @@ Open:
   now updated about 8 times a second; a live old-versus-new check of `assignFlanks` in `tests/mobactive.test.ts`;
   `ws` is imported by `tools/perf/bots.ts` but not declared in `package.json`; the "refId not found" gotcha in
   `CLAUDE.md` is now explained and should be reworded by the owner.
+
+2026-11-14
+- Owner: the game is built for computers only. Nothing is done for phones: C6's phone work and every "needs a
+  phone" note above are void, and checks run at desktop window sizes only. `CLAUDE.md` step 7 and its decode-error
+  gotcha are reworded accordingly.
+- QA in a browser runs before the PR for the first wave.
+- Second wave started: S4, L3, C5; then L2, C7, L1, L4.
