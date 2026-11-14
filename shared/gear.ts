@@ -480,6 +480,14 @@ function statsWith(h: HeroReqInfo, eq: Equipped): Stats {
   return { sta: s.sta + g.sta, str: s.str + g.str, mag: s.mag + g.mag, dex: s.dex + g.dex };
 }
 
+/**
+ * A hero's Stamina/Strength/Magic/Dexterity: class base, assigned points and the worn pieces whose requirements are met.
+ * The server and the client both call it, so the four stats need no synced fields (Player.sta... are server-only).
+ */
+export function heroStats(h: HeroReqInfo): Stats {
+  return statsWith(h, activeGear(h.worn ?? {}, h));
+}
+
 function problemWith(id: string, h: HeroReqInfo, st: Stats): string {
   const r = gearReq(id, h.cls);
   const miss: string[] = [];
