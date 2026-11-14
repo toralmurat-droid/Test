@@ -476,7 +476,8 @@ if (process.argv.includes("--no-execute")) SIM.execute = false;
 const argOf = (k: string) => process.argv.find((a) => a.startsWith(`--${k}=`))?.split("=")[1];
 const ONLY = argOf("class") as ClassKind | undefined;
 const BUILD = argOf("build") !== undefined ? (Number(argOf("build")) as Build) : undefined;
-const CLASSES: ClassKind[] = ONLY ? [ONLY] : process.argv.includes("--songweaver") ? [...ACTIVE_CLASSES, "songweaver"] : ACTIVE_CLASSES;
+// --songweaver is still accepted, as a no-op: the Songweaver is in ACTIVE_CLASSES
+const CLASSES: ClassKind[] = ONLY ? [ONLY] : ACTIVE_CLASSES;
 const buildOf = (i: number) => BUILD ?? ((i % 3) as Build);
 
 if (process.argv[1]?.includes("pve")) {
