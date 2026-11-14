@@ -82,3 +82,12 @@ Open points for M1:
 - Each war event: Herald line, leader line, and a `warev` message; `client/src/warNotice.ts` sounds the war horn and
   shows a notice when it happens in the hero's territory or next to it.
 - `WAR.siegeValor` 1.5: valor counts half again at a territory under siege (the hour's warning is for players).
+
+## Tuning: tunnels (2026-11-14)
+
+- Hide-Kin tunnel strikes (two borders away) used to arrive at cut-off supply (0.35), so the doctrine barely
+  mattered. Now they keep `WAR.tunnelSupply` (0.8) of the supply of the own land the tunnel starts from.
+- Sim 200 x 30 before / after: Hide-Kin 17.3% -> 17.8% (best day 19.4% -> 22.6%), domination 0.5% -> 0.0%,
+  flips 7.05 -> 7.33 per day. Wardens 23.5 -> 23.8, Redfang 25.6 -> 24.7, Host 11.8 -> 12.0, Veiled 21.9 -> 21.7.
+- Host: raising `hostRaise` to 0.45 / 0.6 moved it only to 12.4% / 12.7%. Its size comes from where its forward
+  capitals sit; it is left to the Grey Barrow Moors homeland (roadmap "New Lands").

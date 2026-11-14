@@ -39,6 +39,7 @@ export const WAR = {
   raidSteal: 0.02, // Redfang: share of its attack on a territory taken from the defender's army...
   fortGrow: 0.01, fortMax: 1, palisadeFort: 2, // forts grow on quiet land (the Wardens build twice as fast)
   tunnelReach: 2, // the Hide-Kin attack land up to this many borders from their own
+  tunnelSupply: 0.8, // share of the start's supply a tunnel strike keeps
   rally: 0.8, // income bonus of a clan with no land at all, shrinking to 0 at a fair share (1/5 of the land)
   leaderShare: 0.3, // above this share of the land a clan is "the leader": everyone's target, the Raiders' prey
   raidersHit: 0.03, // share of the leader's army the Night Raiders cut down each night tick
@@ -166,7 +167,10 @@ export function warTick(s: WarState, orders: Partial<Record<ClanKey, Orders>>, e
     const shares = o.attack.filter((a) => legal.has(a.t) && a.share > 0), ssum = shares.reduce((a, b) => a + b.share, 0);
     const force = s.army[k] - def;
     for (const a of shares) {
-      const src = Math.max(WAR.cutOff, ...TERRITORIES[a.t].near.filter((n) => s.owner[n] === k).map((n) => supply[n]));
+      let src = Math.max(WAR.cutOff, ...TERRITORIES[a.t].near.filter((n) => s.owner[n] === k).map((n) => supply[n]));
+      // Tunnels: a strike two borders away is fed from the own land the tunnel starts at, not from nothing
+      if (CLANS[k].doctrine === "tunnel" && !TERRITORIES[a.t].near.some((n) => s.owner[n] === k))
+        src = Math.max(src, WAR.tunnelSupply * Math.max(0, ...TERRITORIES[a.t].near.flatMap((n) => TERRITORIES[n].near).filter((m) => s.owner[m] === k).map((m) => supply[m])));
       const vs = s.owner[a.t];
       const mult = timeBonus(k, phase) * (CLANS[k].counters === vs ? WAR.counter : 1);
       attack[a.t][k] = (attack[a.t][k] ?? 0) + ((force * a.share) / Math.max(1, ssum)) * src * mult;

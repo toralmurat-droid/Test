@@ -67,3 +67,12 @@ test("a siege takes a territory when the attack still out-fights the defence", (
   for (let i = 0; i < WAR.ticksPerDay && s.owner[t.id] !== attacker; i++) warTick(s, { [attacker]: { defend: 0, attack: [{ t: t.id, share: 1 }] } });
   assert.equal(s.owner[t.id], attacker, `${attacker} took ${t.name}`);
 });
+
+test("tunnels: a Hide-Kin strike two borders away is fed from where the tunnel starts", async () => {
+  const { targetsOf, newWar, warTick, WAR } = await import("../shared/war/rules");
+  const s = newWar();
+  const far = targetsOf(s, "hidekin").find((t) => !TERRITORIES[t].near.some((n) => s.owner[n] === "hidekin") && !TERRITORIES[t].capitalOf);
+  if (far === undefined) return; // no tunnel target on today's map
+  const out = warTick(newWar(), { hidekin: { defend: 0, attack: [{ t: far, share: 1 }] } }, { phase: 0 });
+  assert.ok(out.pressure[far] > s.army.hidekin * WAR.cutOff, "more than a cut-off strike");
+});
