@@ -3342,7 +3342,7 @@ export class TownScene extends Phaser.Scene {
       const flip = (this.heatGauge ??= new OverloadGauge(document.getElementById("hud")!)).update(mine.energy ?? 0);
       if (flip) playSfx(flip);
       this.renderActions(mine, cls, cdm, now);
-      (this.buffBar ??= new BuffBar(document.getElementById("hud")!)).update(mine.timers ?? "");
+      (this.buffBar ??= new BuffBar(document.getElementById("hud")!)).update(mine.me?.timers ?? ""); // owner-only: in `me` (server/player.ts)
       this.chordHud?.tick();
     }
   }

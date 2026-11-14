@@ -1921,9 +1921,11 @@ export const TUT_QUESTS: QuestDef[] = [
 export const TUT_CHAIN = 3;
 /**
  * Is the guided first quest done? Something with no quest map at all (no hero, or a bare object) counts as done, as an
- * unset `tut` field did; a hero whose map lacks the key has not started it (old `tut === 0`).
+ * unset `tut` field did; a hero whose map lacks the key has not started it (old `tut === 0`). A client-side hero whose
+ * owner-only `me` has not arrived (the field exists, still empty) is not done: no flash of every story opening.
  */
-export const tutorialDone = (p: Quester | undefined) => !p?.quests || chainState(p, TUT_CHAIN)!.questId >= TUT_QUESTS.length;
+export const tutorialDone = (p: Quester | undefined) =>
+  questsOf(p) ? chainState(p, TUT_CHAIN)!.questId >= TUT_QUESTS.length : !p || !("me" in p);
 /** Can this chain offer new quests yet? Every story waits for the guided first quest. */
 export const chainOpen = (p: Quester | undefined, c: number) =>
   c === TUT_CHAIN || (tutorialDone(p) && (c !== CROWN_CHAIN || STORY_CHAINS.every((s) => storyDone(p, s)))
@@ -1983,8 +1985,13 @@ if (new Set(CHAINS.map((ch) => ch.packed)).size !== CHAINS.length) throw new Err
 export interface QuestState { questId: number; questStage: number; questCount: number; level?: number; chain?: number }
 /** Every chain's packed progress by QuestChain.packed key: the Player's synced MapSchema, or a plain object in tests. */
 export type QuestMap = { get(k: string): number | undefined } | Record<string, number>;
-/** A player's progress on every chain, as the shared rules read it (a Player, server or client side). */
-export type Quester = { level?: number; quests?: QuestMap };
+/**
+ * A player's progress on every chain, as the shared rules read it (a Player, server or client side). The server's
+ * Player has `quests`; on the client the map sits in the owner-only `me` (server/player.ts PlayerPrivate).
+ */
+export type Quester = { level?: number; quests?: QuestMap; me?: { quests?: QuestMap } };
+/** The quests map wherever this Quester keeps it (undefined: none, or the client's `me` not here yet). */
+export const questsOf = (p: Quester | undefined): QuestMap | undefined => p?.quests ?? p?.me?.quests;
 /** One chain's packed number out of the quests map (0 = not begun: missing keys are never stored). */
 export const questValue = (m: QuestMap | undefined, k: string): number => {
   if (!m) return 0;
@@ -1998,7 +2005,7 @@ export const questSig = (p: Quester | undefined) => CHAINS.map((_, c) => { const
 /** One chain's progress, read from the player's quests map. */
 export function chainState(p: Quester | undefined, c: number): QuestState | undefined {
   if (!p) return undefined;
-  return { chain: c, ...unpackQuest(questValue(p.quests, CHAINS[c].packed)), level: p.level };
+  return { chain: c, ...unpackQuest(questValue(questsOf(p), CHAINS[c].packed)), level: p.level };
 }
 const chainOf = (q: QuestState | undefined) => CHAINS[q?.chain ?? 0];
 

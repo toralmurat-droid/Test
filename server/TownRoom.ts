@@ -1,7 +1,7 @@
 import { addHeat, coolHeat, isOverheated, OVERLOAD } from "../shared/overload";
 import { MOB_CELL, MobGrid, trackSchemaMoves } from "./mobGrid";
 import { type AuthContext, Client, Room } from "colyseus";
-import { ArraySchema, MapSchema, Schema, type } from "@colyseus/schema";
+import { ArraySchema, MapSchema, Schema, StateView, type } from "@colyseus/schema";
 import {
   AGGRO, aggroLevelFactor, BLOB_AI, BONES, DEMON, BROOD, Dir, FACTION, FEUD, MERGE, MobDef, MOTHER, SKELETON_AI, HIT_RADIUS, mobScale, regionMobLevel, regionSpecialLevel, InputState, MOB_ATTACK_RANGE, MOBS, MobKind, rollSkeletonWeapon, SKELETON_BOW, SKELETON_WEAPONS, SkeletonWeapon, REGEN_DELAY_MS, REGEN_RAMP_MS, regenFromStamina, SAFE_REGEN_MULT,
   RESPAWN_MS, TICK_RATE, TILE,
@@ -13,7 +13,7 @@ import {
   ATTACK_VARIANTS, basicDrain, CLASSES, ClassKind, COMBO_WINDOW_MS, DODGE, EMOTES, DASH_INVULN_MS, GUARD_REDUCTION, isActiveClass, isClassKind, levelFromXp, MAX_XP, XP_CURVE_VERSION, convertOldXp, capLevel, PVP_KILL_XP, xpForLevel,
 } from "../shared/classes";
 import { MANA_POTION_DROP, manaRegen, maxManaFor, packMana, pay } from "../shared/mana";
-import { Counts, dropSize, Potions, nextSize, noPotions, packPotions, potionAmount, potionName, PotionKind, potionSlots, POTION_COOLDOWN_MS, POTION_STACK, slotsAfter, SIZES, total } from "../shared/potions";
+import { Counts, dropSize, Potions, nextSize, packPotions, potionAmount, potionName, PotionKind, potionSlots, POTION_COOLDOWN_MS, POTION_STACK, slotsAfter, SIZES, total } from "../shared/potions";
 /** Potion size from a ground item's `gear` field ("0".."2"). */
 const potSize = (g: string) => Math.max(0, Math.min(SIZES - 1, Math.floor(Number(g) || 0)));
 import { attackMult, cooldownMult, critChance, heroSpeed, magicMult, maxHpFromStats, SLOW_MOB, STATS, statPoints } from "../shared/powers";
@@ -33,7 +33,7 @@ import { newWisp, openArsenal, wispEnd, wispTick, type WispMind } from "../share
 import {
   ITEM_LIFETIME_MS, ItemKind, LOOT, GOLD_PICKUP_RADIUS, PICKUP_RADIUS, PVP_GOLD_DROP,
 } from "../shared/items";
-import { bountyCounts, bountyOffers, cleanBounty, nearestBoard, type BountyState } from "../shared/bounty";
+import { bountyCounts, bountyOffers, cleanBounty, nearestBoard } from "../shared/bounty";
 import { DOORS, DOOR_RANGE, doorById, doorDist, doorWorkable, isSafeZone, isSolidAt, randomSpawn, setDoorOpen, VILLAGE, type Door } from "../shared/map";
 import { isDecorSolidAt, npcById, npcNear, TALK_RANGE } from "../shared/npcs";
 import { beyondWall, WATCH, WATCH_POSTS, WatchPost } from "../shared/watch";
@@ -86,120 +86,8 @@ import { AFFIX_FX, CHAMPION } from "../shared/champions";
 const CHAMP_HELPER_MS = 90_000;
 import { ASK_BURST, ASK_PER_SEC, Bucket, CHAT_BURST, CHAT_PER_SEC, clientIp, isLocalIp, MSG_BURST, MSG_KICK_AFTER, MSG_KICK_WINDOW_MS, MSG_PER_SEC } from "./ratelimit";
 
-export class Player extends Schema {
-  @type("string") name = "";
-  @type("string") cls: ClassKind = "knight";
-  @type("number") color = 0xffffff;
-  @type("float32") x = 0;
-  @type("float32") y = 0;
-  @type("string") dir: Dir = "down";
-  // Aim: unit vector of the last movement direction, diagonals included (attacks and shots go this way)
-  @type("float32") ax = 0;
-  aimDist = -1; // not synced: px to the spot last clicked with "face" (point skills read it once)
-  @type("float32") ay = 1;
-  @type("boolean") moving = false;
-  @type("number") hp = 100;
-  @type("number") maxHp = 100;
-  @type("boolean") dead = false;
-  @type("boolean") guarding = false; // knight shield up
-  @type("number") kills = 0;
-  @type("number") xp = 0;
-  @type("number") level = 1;
-  @type("string") emote = ""; // current emote animation ("" = none)
-  @type("boolean") outlaw = false; // cast a skill inside Oakvale: the village attacks until they leave (shared/wrath.ts)
-  combo = 0; // which hit of the 3-hit combo was thrown last (0..2); server only (the client never reads it)
-  @type("number") gold = 0;
-  // Healing and mana potions by size (shared/potions.ts), packed in one synced number (packPotions); `pots` is the server copy
-  @type("number") potions = 0;
-  pots: Potions = noPotions();
-  @type("number") seq = 0; // last processed input sequence (for client reconciliation)
-  // Stats with gear (shared/gear.ts heroStats), set by applyStats. Server only: the client computes the same numbers
-  // from synced cls, level, ptSta..ptDex and the gear slots
-  sta = 0;
-  str = 0;
-  mag = 0;
-  dex = 0; // Dexterity: critical hit chance
-  // Stat points the player assigned in the hero panel (shared/powers.ts statPoints)
-  @type("number") ptSta = 0;
-  @type("number") ptStr = 0;
-  @type("number") ptMag = 0;
-  @type("number") ptDex = 0;
-  @type("boolean") stunned = false;
-  @type("boolean") slowed = false;
-  // Mana (shared/mana.ts): current, max and mana potions packed in one synced number (packMana), to keep the schema
-  // small (Colyseus caps it at 64). Took the old `raging` flag's place (the client reads Rage from `fx`). Server-side values below.
-  @type("number") mp = 0;
-  mana = 0;
-  maxMana = 0;
-  lastManaPotion = 0;
-  @type("boolean") rolling = false; // dodge roll in progress
-  @type("boolean") broken = false; // poise broken: dizzy, can't attack (shared/combat.ts)
-  @type("number") energy = 0; // Heat / overload (shared/overload.ts): 0..100, below 0 = overheated; spells spend mana (above)
-  // Skills (shared/skillEngine.ts): stacks built by basic hits, speed multiplier from buffs and passives (client
-  // prediction), and status words for the effects on screen (burn, mark, active auras and enchantments...)
-  @type("number") stacks = 0;
-  @type("number") spd = 1;
-  @type("string") fx = "";
-  // Timed buffs/debuffs with ms left for the HUD buff row (shared/buffTimers.ts), rewritten only when they change
-  @type("string") timers = "";
-  timerSig = "";
-  timerSeq = 0;
-  @type("string") party = ""; // player group id ("" = solo); shared/party.ts
-  // Summoner grimoire (shared/summons.ts): the elements of golem 1 and golem 2, packed as el1 + 4 x el2 (indexes into
-  // ATTUNE_ORDER; attuneOf(attune) is golem 1's). One number to keep the schema small (Colyseus caps it at 64).
-  @type("number") attune = 0;
-  golemAt = [0, 0]; // Summoner: when each golem slot rises again (0 = not waiting); server only
-  golemSig = ""; // Summoner: the grimoire HUD last sent to them ("golems" message), to send it only when it changes
-  grimoireAt = 0; // last grimoire change (throttle)
-  bondEssenceAt = 0; // last Essence charge from Stone Bond
-  // Equipment (shared/gear.ts): equipped item ids ("" = empty) and the unequipped items carried.
-  // Each slot must stay a synced @type field, or the client never sees it (the sword vanished from the menu).
-  @type("string") weapon = "";
-  @type("string") armour = "";
-  @type("string") shoes = "";
-  @type("string") hat = "";
-  @type("string") shield = "";
-  @type("string") ranged = ""; // secondary ranged weapon, fired with R
-  @type(["string"]) bag = new ArraySchema<string>();
-  // Skill tree (shared/talents.ts): ranks per talent id
-  @type({ map: "number" }) talents = new MapSchema<number>();
-  // Every quest chain's progress (shared/quests.ts CHAINS, read with chainState): packed quest, step and count under the
-  // chain's QuestChain.packed key, one synced field for all of them. A chain not begun has no key (qset drops zeros).
-  @type({ map: "number" }) quests = new MapSchema<number>();
-  gateNoteAt = 0; // last "the waygate is cold" note (Act 2, shared/act2.ts)
-  linkLock = ""; // the Mawdeep rope/stair a hero just came out of (shared/dungeon.ts LINKS): not taken again until they step off it
-  nextSummon = 0; // when the server may bring back this player's quest fused blob (QuestStep.summon)
-  feast: Feast = {}; // Devour (shared/devour.ts): monsters eaten per family, saved; sent to the owner as "feast"
-  // Skill slots on keys 1..0 (shared/slots.ts): a skill id or "" (empty). Empty until the player assigns them.
-  @type(["string"]) slots = new ArraySchema<string>(...Array(SLOT_COUNT).fill(""));
-
-  input: InputState = { up: false, down: false, left: false, right: false };
-  lastAttack = 0;
-  portals = new Set<string>(); // portal stones this hero has woken (shared/portals.ts; saved, never synced)
-  bounty?: BountyState; // bounty board hunt in progress (shared/bounty.ts; saved, sent by message)
-  bountyDone = 0;
-  lastSpecial = -Infinity;
-  // Hidden initiative / poise (shared/combat.ts)
-  poiseLost = 0;
-  lastPoiseHit = 0;
-  brokenUntil = 0;
-  steadyUntil = 0;
-  guardUntil = 0;
-  invulnUntil = 0;
-  rollUntil = 0;
-  rollInput: InputState = { up: false, down: false, left: false, right: false };
-  lastDodge = -Infinity;
-  lastRanged = -Infinity;
-  lastWeaponNo = 0; // last "needs a bow" message (throttle)
-  lastHurt = 0;
-  wrathNext = 0; // next townsfolk blow on an outlaw
-  attackReadyAt = 0;
-  lastVariant = -1;
-  stunUntil = 0;
-  slowUntil = 0;
-  lastUlt = -Infinity;
-  sk = newRuntime();
-}
+import { Player } from "./player";
+export { Player, PlayerPrivate } from "./player"; // moved out; tests and tools import them from here
 
 export class Mob extends Schema {
   _gm: MobGrid<Mob> | null = null; _gid = ""; _gk = NaN; _gs = 0; _gb = false; _gv = 0; // MobGrid bookkeeping (server/mobGrid.ts): it hears every move, see below
@@ -972,6 +860,10 @@ export class TownRoom extends Room<TownState> {
       if (d?.auto && q.questId > 0 && q.questStage === 0 && p.level >= d.minLevel && chainOpen(p, c)) this.qset(p, c, { questStage: 1, questCount: 0 });
     }
     this.state.players.set(client.sessionId, p);
+    // This client alone sees its hero's owner-only fields (Player.me). After players.set: StateView#add throws on an
+    // instance not in the state yet. Adds `me` and its quests map too; never replace `p.me` or `p.me.quests` later.
+    client.view = new StateView();
+    client.view.add(p);
     if (back?.group.length) this.regroupOnJoin(client.sessionId, p, back.group);
     this.sendBoard(client); // the Ideas board is ready as soon as it is opened
     if (Object.keys(p.feast).length) client.send("feast", { feast: p.feast }); // Devour: what this hero has eaten
