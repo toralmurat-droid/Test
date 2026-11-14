@@ -1,5 +1,5 @@
 // The hero's synced schema (moved out of TownRoom.ts). Owner-only fields sit in the PlayerPrivate child `me`.
-import { ArraySchema, Encoder, MapSchema, Schema, type, view } from "@colyseus/schema";
+import { ArraySchema, MapSchema, Schema, type, view } from "@colyseus/schema";
 import type { BountyState } from "../shared/bounty";
 import type { ClassKind } from "../shared/classes";
 import type { Dir, InputState } from "../shared/constants";
@@ -8,13 +8,8 @@ import { noPotions, type Potions } from "../shared/potions";
 import { newRuntime } from "../shared/skillEngine";
 import { SLOT_COUNT } from "../shared/slots";
 
-// @colyseus/schema 3.0.76 bug: when a per-client view encode (encodeView / encodeAllView, used because Player.me is
-// @view) overflows the shared buffer, the resize re-encodes from the view's offset into a new buffer but the caller keeps
-// slicing the old one, and the view's visibility changes are lost: clients then fail with `"refId" not found`. Without
-// views a resize only costs a re-alloc (every overflowing tick: the library never keeps the bigger buffer). Start big
-// enough that a patch never resizes: the bench at 40 bots peaks around 32 KB, a full state with 50 heavy heroes and
-// ~1500 ground items about 150 KB. A `@colyseus/schema buffer overflow` warning in the logs means this is too small.
-Encoder.BUFFER_SIZE = 256 * 1024;
+// Per-client views need a schema buffer that never resizes (a library bug corrupts resized view patches):
+// Encoder.BUFFER_SIZE is set in server/patchCopy.ts, imported by the room before its state is created.
 
 /**
  * What only the hero's own client needs. Behind `@view()` on Player.me, so other clients never get it (less to

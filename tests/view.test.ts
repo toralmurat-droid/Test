@@ -103,15 +103,16 @@ test("Player schema guard: at most 64 synced fields, no collection or child sche
   if (at63) assert.equal(typeof at63.type, "string", `field ${at63.name} at 63 must be a primitive`);
 });
 
-test("a late joiner decodes a full state far above the old 8 KB buffer (guards the Encoder.BUFFER_SIZE workaround)", async () => {
+test("a late joiner decodes a full state near the worst case (guards the Encoder.BUFFER_SIZE workaround)", async () => {
   const srv = await startRoom();
   try {
     const host = await srv.join({ cls: "wizard" }); // the room exists once someone joined
     await wait(200);
     const room = srv.room;
-    // 60 heavy heroes (full bag, many talents): the join full state is tens of KB. With the library default buffer the
-    // per-view encode resizes and the late joiner's state comes out truncated (server/player.ts, BUFFER_SIZE note).
-    for (let i = 0; i < 60; i++) {
+    // 120 heavy heroes (full bag, many talents): a join full state near the ~150 KB worst case. If the buffer is too
+    // small the per-view encode resizes and the late joiner's state comes out truncated (server/patchCopy.ts). Fails at
+    // 64 KB, passes from 128 KB.
+    for (let i = 0; i < 120; i++) {
       const p = new Player();
       p.name = `Heavy${i}`; p.cls = "wizard"; p.x = 2600 + i; p.y = 1800;
       for (let k = 0; k < 24; k++) p.bag.push(`w_frost`);
@@ -124,7 +125,7 @@ test("a late joiner decodes a full state far above the old 8 KB buffer (guards t
     w.stop();
     assert.deepEqual(w.errs, [], "no decode errors");
     assert.equal(c.state.players.size, room.state.players.size, "every hero decoded");
-    assert.equal(c.state.players.get("heavy59")?.bag.length, 24, "the last heavy hero arrived whole");
+    assert.equal(c.state.players.get("heavy119")?.bag.length, 24, "the last heavy hero arrived whole");
     assert.ok(c.state.players.get(c.sessionId)?.me?.quests, "own me arrived");
     await c.leave(); await host.leave();
   } finally { await srv.stop(); }
