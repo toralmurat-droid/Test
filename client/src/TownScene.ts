@@ -70,6 +70,7 @@ import { baseId, canWear, gearName, gearDef, reqProblem, gearReachMult, gearSpee
 import { attackProfile, ATTACK_WORDS, isWeaponType, poseSheet, profileOf, weaponAttackMult, weaponOk } from "../../shared/weapons";
 import { talentMult, talentPoints, spentPoints } from "../../shared/talents";
 import { activeSkills, skillLearned } from "../../shared/slots";
+import { TideHud } from "./tide";
 import { DROP_KEY, LANTERN_OBJECT, LOCK_TIP, QuestCarry } from "./questCarry";
 import { actionKey, actionOfKey, type KeyAction, keyMode, keyModeName, onKeyMode, setKeyMode, slotCount, slotKey, slotOfKey, wasdWalks } from "./keymode";
 import { iconImg } from "./skillIcons";
@@ -318,6 +319,7 @@ export class TownScene extends Phaser.Scene {
   private chests?: ChestLayer;
   private shrine?: ShrineLayer;
   private bounty?: BountyUI;
+  private tide?: TideHud; // the Gloam Tide meter, banners and gate marker (client/src/tide.ts)
   private qcarry?: QuestCarry; // carried lantern and held mill (client/src/questCarry.ts)
   private portals?: PortalLayer;
   private waygates?: WaygateLayer;
@@ -667,6 +669,8 @@ export class TownScene extends Phaser.Scene {
     this.shrine = new ShrineLayer(this, (type, msg) => this.room.send(type, msg), PIXEL_FONT);
     this.qcarry = new QuestCarry(this, document.getElementById("hud")!, (type, msg) => this.room.send(type, msg));
     this.room.onMessage("qstate", (m) => this.qcarry?.onState(m));
+    this.tide = new TideHud(document.getElementById("hud")!);
+    this.room.onMessage("tide", (m) => this.tide?.onTide(m));
     // Bounty boards on the square and by every portal stone (shared/bounty.ts)
     this.bounty = new BountyUI(this, (type, msg) => this.room.send(type, msg), PIXEL_FONT);
     this.room.onMessage("bounty", (v) => this.bounty?.show(v, (text, color) => {
@@ -2685,6 +2689,7 @@ export class TownScene extends Phaser.Scene {
 
   /** Skill visual event from the server (shared/skillEngine.ts): drawn by SkillFx, plus the hero's cast animation. */
   private onSkillFx(ev: any) {
+    if (typeof ev.ev === "string" && ev.ev.startsWith("tide")) { this.tideFx(ev); return; }
     if (ev.ev === "cast") {
       const e = this.entities.get(ev.id);
       if (ev.id === this.me) this.lastCast[ev.s] = this.time.now;
@@ -2701,6 +2706,15 @@ export class TownScene extends Phaser.Scene {
       if (ev.ev === "move" && ev.kind === "dash" && ev.id === this.me) this.rootUntil = Math.max(this.rootUntil, this.time.now + 140);
     }
     this.fx.onEvent(ev);
+  }
+
+  /** Tide sfx: banners from the HUD, a slow violet ring and a burst at the goal point when a wave sets out (no shake). */
+  private tideFx(ev: any) {
+    const at = this.tide?.onSfx(ev);
+    if (!at) return;
+    this.burst(at.x, at.y, 16, 0x9b7ae0, 700);
+    const ring = this.add.circle(at.x, at.y, 20, 0x9b7ae0, 0.18).setStrokeStyle(3, 0xd8c8ff, 0.8).setDepth(at.y + 50);
+    this.tweens.add({ targets: ring, scale: 6, alpha: 0, duration: 1400, ease: "Sine.easeOut", onComplete: () => ring.destroy() });
   }
 
   private feed(text: string) {
@@ -3179,6 +3193,7 @@ export class TownScene extends Phaser.Scene {
     this.minimap?.draw(now, meEnt?.sprite, others);
     if (online !== this.onlineShown) { this.onlineShown = online; document.getElementById("onlinecount")!.textContent = String(online); }
     this.dial?.draw(now);
+    this.tide?.update(meEnt?.sprite.x, meEnt?.sprite.y);
     if (meEnt) this.showArea(areaAt(meEnt.sprite.x, meEnt.sprite.y));
     this.signPanel.update(meEnt?.sprite);
     if (this.chests) {
@@ -3200,7 +3215,7 @@ export class TownScene extends Phaser.Scene {
     this.grimoire?.update(meEnt?.state?.cls);
     this.waygates?.update(meEnt?.state);
     this.portals?.update(meEnt && !meEnt.state.dead ? meEnt.sprite : undefined, !!this.npcs?.isOpen || !!this.chests?.near || !!this.shrine?.near);
-    if (this.minimap && this.npcs) this.minimap.markers = [...this.npcs.markers, ...(this.portals?.markers() ?? []), ...(this.bounty?.markers() ?? []), ...(this.dungeon?.markers() ?? []), ...(this.waygates?.markers() ?? []), ...(this.qcarry?.markers() ?? [])];
+    if (this.minimap && this.npcs) this.minimap.markers = [...this.npcs.markers, ...(this.portals?.markers() ?? []), ...(this.bounty?.markers() ?? []), ...(this.dungeon?.markers() ?? []), ...(this.waygates?.markers() ?? []), ...(this.qcarry?.markers() ?? []), ...(this.tide?.markers() ?? [])];
 
     const mine = meEnt?.state;
     if (mine) {
