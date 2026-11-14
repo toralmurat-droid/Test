@@ -20,6 +20,12 @@ import { moveStep } from "../../shared/movement";
 import { SPAWN_ZONES, zoneAt } from "../../shared/spawns";
 import { musicCombat, setMusicZone } from "./music";
 import { bindSfx, play as playSfx, sfxFrame } from "./sfx";
+import { songweaverSfx } from "./sfx";
+import { ChordHud } from "./chordHud";
+import { SoundCues } from "./soundCues";
+import { CHORD_NAMES, MODE_COLOR, soundOf } from "./songTables";
+
+const SONG_SFX = new Set(["note", "chord", "resonate", "bounce", "soundhit", "shieldbreak"]);
 import { attackMult, cooldownMult, critChance, heroSpeed, STATS, magicMult, STAT_KINDS, STAT_NAMES, StatKind, statPoints, HP_PER_STR } from "../../shared/powers";
 import { NEED_TEXT, pointRange, SkillDef, skillOf, skillTarget, MAX_STACKS, STACK_DECAY_MS, STACK_NAME, talentBonus, withMods } from "../../shared/skills";
 import { SkillFx } from "./skillfx";
@@ -342,6 +348,7 @@ export class TownScene extends Phaser.Scene {
   private moves!: SkillMoves; // melee skill micro sequences (skillMoves.ts)
   private forms!: BeastForms; // the vampire's Bat Form / Wolf Form (beastForms.ts)
   private gearFx!: GearFx; // item level effects on heroes
+  private attackHoldUntil = 0; // local clock (ms) the shared attack timer is estimated to run until
   private lastCast: Record<string, number> = {}; // local clock (ms) of my last cast of each skill, for cooldowns
   private mobByMeAt = -1e9; // last time a monster stood right by my hero (my name label hides then)
   private items = new Map<string, Phaser.GameObjects.Image>();
@@ -360,6 +367,8 @@ export class TownScene extends Phaser.Scene {
   private grimoire?: GrimoirePanel;
   private resBars?: ResourceBars;
   private heatGauge?: OverloadGauge;
+  private chordHud?: ChordHud;
+  private soundCues = new SoundCues();
   private statsShown = "";
   private deathTimer?: number;
   private iso?: IsoView;
@@ -1300,13 +1309,21 @@ export class TownScene extends Phaser.Scene {
       if (e) this.squash(e, 1.15, 0.85, 120, 1);
     });
     this.room.onMessage("swing", ({ id, step, variant, ax, ay, w }) => {
-      if (id === this.me) this.pointer?.swung(); // the server took the click-attack
+      if (id === this.me) {
+        this.pointer?.swung(); // the server took the click-attack
+        // the swing holds the shared attack timer (the strum 850 ms): skill keys look unavailable until it ends (an estimate, the server decides)
+        const mine = this.room?.state.players.get(this.me), def = mine && attackProfile(mine.cls, activeOf(mine));
+        if (def) this.attackHoldUntil = performance.now() + (def.combo[step ?? 0]?.cooldownMs ?? def.attackCooldownMs);
+      }
       this.showSwing(id, step ?? 0, variant ?? 0, ax, ay, w);
     });
     this.room.onMessage("sfx", (ev) => this.onSkillFx(ev));
     // The Summoner's grimoire on the HUD (client/src/grimoire.ts): its news, asked again now that we listen
     this.grimoire = new GrimoirePanel(document.getElementById("hud")!, (slot, el) => this.room.send("grimoire", { slot, el }));
     this.room.onMessage("golems", (m) => this.grimoire?.news(m));
+    // The Songweaver's chord tracker (owner only, chordHud.ts)
+    this.chordHud = new ChordHud(document.getElementById("hud")!);
+    this.room.onMessage("chord", (m) => this.chordHud?.set(m));
     this.room.send("golems");
     bindSfx(this.room, () => this.me, this.entities as any); // sound effects (client/src/sfx.ts)
     this.room.onMessage("boom", ({ x, y, r, kind, imb }) => this.fx.impact(x, y, kind, r, imb) ||
@@ -1345,6 +1362,11 @@ export class TownScene extends Phaser.Scene {
     this.room.onMessage("hit", ({ id, dmg, blocked, crit, dot, kx, ky, el, ex }) => {
       const e = this.entities.get(id);
       if (!e) return;
+      if (dmg === 0 && !ex) { // a shield took the whole hit (shared/skillEngine.ts absorbDamage): no wound, no flinch
+        this.floatText(e.sprite.x, e.sprite.y - 14, "absorbed", "#9ad1ff", PIXEL_FONT, 1, true);
+        this.fx.absorbed(e);
+        return;
+      }
       if (ex) { // an execution (shared/combat.ts EXECUTE): its own number and flash instead of the usual ones
         this.execReady.delete(id);
         this.floatText(e.sprite.x, e.sprite.y - 16, `EXECUTE -${dmg}`, "#ff4d3d", PIXEL_FONT, 2, true);
@@ -1355,9 +1377,10 @@ export class TownScene extends Phaser.Scene {
       const meE = this.entities.get(this.me);
       if (id === this.me) musicCombat(3);
       else if (e.mob && meE && Math.hypot(e.sprite.x - meE.sprite.x, e.sprite.y - meE.sprite.y) < 10 * TILE) musicCombat(1);
-      if (!ex) this.floatText(e.sprite.x, e.sprite.y - 14, crit ? `CRIT -${dmg}` : `-${dmg}`,
+      const num = ex ? undefined : this.floatText(e.sprite.x, e.sprite.y - 14, crit ? `CRIT -${dmg}` : `-${dmg}`,
         blocked ? "#9ad1ff" : crit ? "#ffd60a" : id === this.me ? "#ff5d5d" : el && ELEMENT_COLORS[el as Element] ? `#${ELEMENT_COLORS[el as Element].toString(16).padStart(6, "0")}` : "#ffffff",
         PIXEL_FONT, crit ? 1.8 : dot ? 0.9 : 1.3, true);
+      if (e.mob) this.soundCues.numberShown(id, num, this.time.now); // Songweaver: ringing / muffled tint from "soundhit"
       // damage type (shared/elements.ts): embers, frost shards, venom splash or a holy glint on the target
       if (el && ELEMENT_COLORS[el as Element] && el !== "physical") this.gearFx.impact(e.sprite.x, e.sprite.y, e.top, el as Element, !!dot);
       // Hit feel without freezes or camera effects (Murat wants fluid combat): a short white flash,
@@ -1740,7 +1763,7 @@ export class TownScene extends Phaser.Scene {
     if (e.mob) this.squash(e, crit ? 1.12 : 1.06, crit ? 0.88 : 0.94, 60);
   }
 
-  private floatText(x: number, y: number, text: string, color: string, font = PIXEL_FONT, size = 1, jitter = false) {
+  private floatText(x: number, y: number, text: string, color: string, font = PIXEL_FONT, size = 1, jitter = false): Phaser.GameObjects.Text {
     // Damage numbers spread a little sideways so fast hits don't print on top of each other
     if (jitter) x += (Math.random() - 0.5) * 10;
     const t = this.add.text(x, y, text, {
@@ -1755,6 +1778,7 @@ export class TownScene extends Phaser.Scene {
       this.tweens.add({ targets: t, scale: WT * Math.round(size), duration: 120, ease: "Back.easeOut" });
     }
     this.tweens.add({ targets: t, y: y - 10, alpha: 0, duration: size > 1.5 ? 1000 : 800, delay: size > 1.5 ? 150 : 0, onComplete: () => t.destroy() });
+    return t;
   }
 
   /** Merged blob: paint the swallowed blobs' colours, eyes and mouths over its body (follows squash tweens). */
@@ -2615,6 +2639,7 @@ export class TownScene extends Phaser.Scene {
   /** Skill bar at the bottom: potions, the left-click cell and the 10 slots (the old text list of actions is gone, Murat 2026-11-04). */
   private renderActions(mine: any, cls: ClassKind, cdm: number, now: number) {
     const pools = { energy: mine.energy, mana: unpackMana(mine.mp).mana };
+    const blocked = !!(mine.stunned || mine.broken) || performance.now() < this.attackHoldUntil; // the server refuses a press now: dim the keys
     const slots: string[] = [...(mine.slots ?? [])];
     // Slot bar at the bottom: 10 cells, cooldown shading, click to choose a skill
     const cells = Array.from({ length: slotCount() }, (_, i) => {
@@ -2624,7 +2649,7 @@ export class TownScene extends Phaser.Scene {
       const h = this.skillHud(cls, skill, cdm);
       const left = Math.max(0, h.cdMs - (now - h.last));
       const shade = left > 0 ? `<div class="cd" style="height:${(left / h.cdMs) * 100}%"></div>` : "";
-      const wait = (left > 0 || !canPay(pools, h.cost) ? " wait" : "") + (shortOf(pools, h.cost) === "heat" ? " hot" : "");
+      const wait = (left > 0 || blocked || !canPay(pools, h.cost) ? " wait" : "") + (shortOf(pools, h.cost) === "heat" ? " hot" : "");
       const power = skill;
       const unarmed = this.unarmedFor(mine, cls, skill);
       return `<div class="slot${h.ult ? " ult" : ""}${wait}${unarmed ? " unarmed" : ""}${picking}" data-slot="${i}" data-skill="${skill}" data-tiphead="${h.name}" data-tip="${tipEsc((unarmed ? `${unarmed}. ` : "") + (skillOf(cls, skill)?.desc ?? ""))}" data-tiphint="Key ${slotKey(i)} · click to change · wheel to scroll · right-click to clear">` +
@@ -2676,6 +2701,7 @@ export class TownScene extends Phaser.Scene {
 
   /** Skill visual event from the server (shared/skillEngine.ts): drawn by SkillFx, plus the hero's cast animation. */
   private onSkillFx(ev: any) {
+    if (SONG_SFX.has(ev.ev)) this.songEvent(ev);
     if (ev.ev === "cast") {
       const e = this.entities.get(ev.id);
       if (ev.id === this.me) this.lastCast[ev.s] = this.time.now;
@@ -2692,6 +2718,47 @@ export class TownScene extends Phaser.Scene {
       if (ev.ev === "move" && ev.kind === "dash" && ev.id === this.me) this.rootUntil = Math.max(this.rootUntil, this.time.now + 140);
     }
     this.fx.onEvent(ev);
+  }
+
+  /** True when another Songweaver within earshot plays in a different mode: their notes are then voiced as open fifths. */
+  private modeClash(ev: any): boolean {
+    if (!ev.mode || ev.x === undefined) return false;
+    const players = (this.room?.state as any)?.players;
+    let clash = false;
+    players?.forEach?.((p: any, id: string) => {
+      if (clash || id === ev.id || p.cls !== "songweaver") return;
+      const m = /(?:^|\s|,)mode:(\w+)/.exec(p.fx ?? "")?.[1];
+      if (m && m !== ev.mode && Math.hypot(p.x - ev.x, p.y - ev.y) < 480) clash = true;
+    });
+    return clash;
+  }
+
+  /** Songweaver sfx events (contract in docs/songweaver-progress.md): sound, HUD flash, sound-hit cues. The drawing is in skillfx.ts. */
+  private songEvent(ev: any) {
+    songweaverSfx(ev, this.me, this.modeClash(ev));
+    if (ev.ev === "chord") {
+      const c = (MODE_COLOR[ev.mode] ?? MODE_COLOR.major).toString(16).padStart(6, "0");
+      const e = this.entities.get(ev.id);
+      if (ev.id === this.me) this.chordHud?.fired(ev.prog);
+      if (e) this.floatText(e.sprite.x, e.sprite.y - e.top - 14, CHORD_NAMES[ev.prog] ?? ev.prog, `#${c}`, PIXEL_FONT, 1.3);
+    } else if (ev.ev === "soundhit") {
+      const e = this.entities.get(ev.id), meE = this.entities.get(this.me);
+      const mineSong = (this.room.state as any).players?.get(this.me)?.cls === "songweaver";
+      const near = !!e && !!meE && Math.hypot(e.sprite.x - meE.sprite.x, e.sprite.y - meE.sprite.y) < 12 * TILE;
+      const hint = mineSong && near && e?.mob ? { kind: e.state.kind as string, name: MOBS[e.state.kind as MobKind]?.name ?? "It" } : undefined;
+      const say = this.soundCues.onSoundHit(ev, this.time.now, (text, col) => { if (e) this.floatText(e.sprite.x, e.sprite.y - 28, text, col, PIXEL_FONT, 1); }, hint);
+      if (say) this.chatNote(say, "#9fd8ff");
+    }
+  }
+
+  /** A line in the chat log that no player wrote (hints). */
+  private chatNote(text: string, color: string) {
+    const log = document.getElementById("chatlog");
+    if (!log) return;
+    const el = document.createElement("div");
+    el.textContent = text; el.style.color = color;
+    log.appendChild(el);
+    while (log.children.length > 8) log.firstChild!.remove();
   }
 
   private feed(text: string) {
@@ -2711,6 +2778,7 @@ export class TownScene extends Phaser.Scene {
     el.textContent = `${name}: ${text}`;
     log.appendChild(el);
     while (log.children.length > 8) log.firstChild!.remove();
+    if (id.startsWith("npc:")) { this.npcs?.say(id.slice(4), text); return; } // a villager answering a busker
     const e = this.entities.get(id);
     if (!e) return;
     e.bubble?.destroy();
@@ -2912,6 +2980,7 @@ export class TownScene extends Phaser.Scene {
     stepInterpDelay(step);
     // An easing written for 60 fps (k per frame), adjusted so it pulls just as hard at 30, 120 or 144 fps
     const ease = (k: number) => 1 - Math.pow(1 - k, step / (1000 / 60));
+    this.soundCues.hideIcons();
     for (const [id, e] of this.entities) {
       const p = e.state;
       const rooted = (typeof p.fx === "string" && p.fx.includes("charge")) || (id === this.me && this.time.now < this.rootUntil); // a buildup roots the hero, a dash glides
@@ -3084,6 +3153,11 @@ export class TownScene extends Phaser.Scene {
       e.bar.clear().setDepth(e.sprite.y + 1);
       if (e.mob) this.champFx?.sync(id, e, p, x, y, mobBarY, now);
       this.fx.status(e, e.bar, dtMs / 1000);
+      // Songweaver: how this monster hears (ear tier + pitch arrow) beside its name while hovered / targeted
+      if (e.mob && e.label && !p.dead && !p.hidden && (id === this.pointer?.hoverId || id === this.pointer?.targetId)
+        && (this.room.state as any).players?.get(this.me)?.cls === "songweaver" && soundOf(p.kind)) {
+        this.soundCues.drawIcons(this, e.label, p.kind, e.sprite.y + 3, id === this.pointer?.hoverId, PIXEL_FONT, e.sprite);
+      }
       // (Stacks built by basic hits are shown by the skill keys, see chargeCell: no pips under the hero, Murat 2026-11-04)
       const maxHp = p.maxHp;
       if (!e.mob) {
@@ -3226,6 +3300,7 @@ export class TownScene extends Phaser.Scene {
       if (flip) playSfx(flip);
       this.renderActions(mine, cls, cdm, now);
       (this.buffBar ??= new BuffBar(document.getElementById("hud")!)).update(mine.timers ?? "");
+      this.chordHud?.tick();
     }
   }
 }

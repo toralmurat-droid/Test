@@ -31,6 +31,7 @@ import { itemTexture, potionTex } from "./textures";
 import { potionAmount, potionName, potionSlots, slotsAfter, total, unpackPotions } from "../../shared/potions";
 import { BAG_SIZE } from "../../shared/gear";
 import { isoAnchor } from "./iso";
+import { speechBubble } from "./weathered";
 import { msUntilUndeadNight } from "../../shared/daynight";
 import { dayTime } from "./details";
 import { TEXT_FONT, TITLE_FONT, TEXT_PX, TITLE_PX, WT } from "./pixelfont";
@@ -55,6 +56,7 @@ const ZONE_GIVERS = new Map(ZONE_ARCS.map((a) => [a.quests[0].giver, a.quests[0]
 export const arcFits = (giver: string, level: number) => { const l = ZONE_GIVERS.get(giver); return l !== undefined && level >= l && level <= l + 6; };
 
 export class NpcLayer {
+  private bubbles = new Map<string, Phaser.GameObjects.Image>();
   private sprites = new Map<string, { sprite: Phaser.GameObjects.Sprite; label: Phaser.GameObjects.Text; mark: Phaser.GameObjects.Text }>();
   private prompt = document.createElement("div");
   private dialog = document.createElement("div");
@@ -226,6 +228,18 @@ export class NpcLayer {
   hidePrompt = false;
 
   /** E key: use the quest object you stand next to, talk to the NPC next to you, or close the dialog. */
+  /** A villager speaks (server `chat` from `npc:<id>`): a speech bubble over its sprite for a few seconds. */
+  say(id: string, text: string): boolean {
+    const s = this.sprites.get(id);
+    if (!s) return false;
+    this.bubbles.get(id)?.destroy();
+    const b = speechBubble(this.scene, s.sprite.x, s.sprite.y - Math.round(21 * CHAR_GROW) - 14, text).setDepth(s.sprite.depth + 5);
+    isoAnchor(b, s.sprite);
+    this.bubbles.set(id, b);
+    this.scene.time.delayedCall(4000, () => { if (this.bubbles.get(id) === b) { b.destroy(); this.bubbles.delete(id); } });
+    return true;
+  }
+
   interact() {
     if (this.story) this.closeStory();
     else if (this.talking) this.close();

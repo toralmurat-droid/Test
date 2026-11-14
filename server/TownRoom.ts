@@ -24,9 +24,9 @@ import { gearResist, splitHit } from "../shared/gear";
 import { cleanFilter, LootFilter, passesFilter } from "../shared/heroSheet";
 import { activeSkills, canLearn, classSkills, cleanRanks, levelPower, REPLACED_SKILLS, maxRank, topRank, NEED_TEXT, rankOf, rankPower, scalePower, skillById, skillLearned, skillOf, talentBonus, talentMult, talentReduce } from "../shared/skills";
 import {
-  afterHit, atkSpeedMult, blocking, bloodCost, buffLifesteal, buffRegen, castSkill, ccImmune, fangTarget, onKill, riseAgain, charging, winding, counterHit, dealtMult, FieldInst, newRuntime,
-  imbueOf, shotEnd, shotHit, shotPulse, ShotSpec, SkillHost, speedMult, statusOf, takenMult, tickField, tickUnit, Unit,
-  gainEssence, toVoid, voidSlip, inVoid,
+  afterHit, atkSpeedMult, blocking, bloodCost, buffLifesteal, buffRegen, castSkill, CastOut, ccImmune, fangTarget, onKill, riseAgain, charging, winding, counterHit, dealtMult, FieldInst, newRuntime,
+  imbueOf, buffPoise, shotEnd, shotHit, shotPulse, ShotSpec, SkillHost, speedMult, statusOf, takenMult, tickField, tickUnit, Unit,
+  gainEssence, toVoid, voidSlip, inVoid, absorbDamage,
 } from "../shared/skillEngine";
 import { golemDeath, golemStrike, golemTick, newMind, type GolemMind } from "../shared/golemAI";
 import { newWisp, openArsenal, wispEnd, wispTick, type WispMind } from "../shared/voidConjure";
@@ -38,6 +38,10 @@ import { DOORS, DOOR_RANGE, doorById, doorDist, doorWorkable, isSafeZone, isSoli
 import { isDecorSolidAt, npcById, npcNear, TALK_RANGE } from "../shared/npcs";
 import { beyondWall, WATCH, WATCH_POSTS, WatchPost } from "../shared/watch";
 import { inVillage, WRATH } from "../shared/wrath";
+import { afterRespec, bounceWave, busking, buskingAudience, BuskingLines, ChordSync, heroSound, mobSound, oldSongTree, restoreMode, songSave } from "./songs";
+import { modeColour, PHRYGIAN, RESONANCE } from "../shared/songs";
+import { soundMult } from "../shared/combat";
+import type { SoundFx } from "../shared/skills";
 import { sellPrice, shopBuys, shopFuses, SHOPS } from "../shared/shops";
 import { BLOB_KINDS, CHAINS, CROWN_CHAIN, packQuest, chainDone, chainOpen, chainState, inZone, isBlob, npcPresent, QuestState, questStep, stepGoal, Summon, type BossVoice, TUT_CHAIN, TUT_QUESTS, USE_RANGE } from "../shared/quests";
 import { findHideSpot, HIDE, MOTHER_KEEP_OUT, noMobsAt, spawnPoint, SPAWN_ZONES, villageDist, zoneCap } from "../shared/spawns";
@@ -322,6 +326,8 @@ export class Projectile extends Schema {
   hitIds = new Set<string>();
   traveled = 0;
   pulsed = 0; // distance at the last pulse (ShotSpec.pulse)
+  sound?: SoundFx; // a Songweaver's basic wave: a sound hit
+  bounced = 0; bouncedAt = 0; // wall bounces so far, distance flown at the last one (ShotSpec.bounce)
   speed = 0;
   range = 0;
   radius = 0;
@@ -407,6 +413,8 @@ interface HitOpts {
   rune?: boolean; // damage from a rune effect (shared/runes.ts): never fires runes again
   pet?: boolean; // dealt by a hero's creature (golem, wisp) in their name: SUMMON.pvp applies on heroes
   poiseAdd?: number; // extra poise damage, as a share of the monster's whole poise bar (Fracture)
+  sound?: SoundFx; // a Songweaver's sound hit: the target's hearing scales it (shared/combat.ts soundMult)
+  poiseMul?: number; // x poise drained (Phrygian sound)
 }
 
 const COLORS = [0xe74c3c, 0x3498db, 0x2ecc71, 0xf1c40f, 0x9b59b6, 0xe67e22, 0x1abc9c, 0xecf0f1];
@@ -958,6 +966,7 @@ export class TownRoom extends Room<TownState> {
     if (p && !announced) this.rememberHero(client.sessionId, p); // during an update everyone was remembered together (groups intact)
     this.partyLeave(client.sessionId);
     this.lastDrainFx.delete(client.sessionId);
+    this.chords.drop(client.sessionId);
     this.invites.delete(client.sessionId);
     this.lootFilters.delete(client.sessionId);
     this.tradeStop(client.sessionId, "The other hero left: trade cancelled.");
@@ -1038,6 +1047,7 @@ export class TownRoom extends Room<TownState> {
       portals: [...p.portals], act: actAt(p.y, p.x),
       bounty: p.bounty, bountyDone: p.bountyDone, feast: { ...p.feast },
       ...(p.cls === "summoner" ? { grimoire: this.grimoireOf(p), suTree: SUMMONER_TREE } : {}),
+      ...songSave(p.cls, p.sk),
     };
   }
 
@@ -1062,8 +1072,9 @@ export class TownRoom extends Room<TownState> {
     if (Array.isArray(s.bag)) setBag(p, s.bag.filter((v): v is string => isBagItem(v)).slice(0, BAG_SIZE));
     // Old saves (before the skill tree rework) had other skill ids: those points come back to spend again
     // The Summoner's tree was rebuilt (Void Lord, 2026-11-08): a save from the old tree gets every skill point back
-    const oldTree = p.cls === "summoner" && s.suTree !== SUMMONER_TREE;
+    const oldTree = (p.cls === "summoner" && s.suTree !== SUMMONER_TREE) || oldSongTree(p.cls, s.swTree);
     if (!oldTree) for (const [k, v] of Object.entries(cleanRanks(p.cls, p.level, s.talents ?? {}))) p.talents.set(k, v);
+    restoreMode(p as unknown as Unit, s.swMode); // the Songweaver's mode, if she still knows it
     if (p.cls === "summoner") this.setGrimoire(p, oldTree ? DEFAULT_GRIMOIRE : String(s.grimoire ?? DEFAULT_GRIMOIRE));
     if (Array.isArray(s.slots)) s.slots.slice(0, SLOT_COUNT).forEach((v, i) => {
       if (typeof v === "string" && REPLACED_SKILLS[v]) v = REPLACED_SKILLS[v]; // a replaced skill keeps its key
@@ -2620,6 +2631,7 @@ export class TownRoom extends Room<TownState> {
       p.stacks = p.sk.stacks;
       const fx = statusOf(p, now);
       if (p.fx !== fx) p.fx = fx;
+      this.chords.tick(pid, p as unknown as Unit, now, (m) => this.clients.find((c) => c.sessionId === pid)?.send("chord", m));
       const timers = timersOf(p, now), sig = timerSig(timers);
       if (sig !== p.timerSig) { p.timerSig = sig; p.timers = encodeTimers(++p.timerSeq, timers, now); }
       const spd = Math.round(speedMult(p, now) * talentMult(p.cls, p.talents, "speed") * feastMult(p.feast, "speed") * 1000) / 1000;
@@ -2708,6 +2720,8 @@ export class TownRoom extends Room<TownState> {
     this.state.fields.forEach((f, id) => {
       if (!tickField(this.host, f.inst)) { this.state.fields.delete(id); return; }
       if (f.follow) { f.x = f.inst.x; f.y = f.inst.y; }
+      const r = f.inst.reach ?? f.inst.def.r; // a Dorian song (Modulate) or one near a well reaches further
+      if (f.r !== r) f.r = r;
     });
     // Timed skill steps (waves, buildups, multi-hits)
     if (this.pending.length) {
@@ -4193,15 +4207,16 @@ export class TownRoom extends Room<TownState> {
   }
 
   private updateProjectile(s: Projectile, id: string, dt: number) {
-    const ox = s.vx, oy = s.vy;
     // Sub-step so fast shots never skip over a target or a thin wall
     const total = s.speed * dt;
     const steps = Math.max(1, Math.ceil(total / 4));
     for (let i = 0; i < steps; i++) {
-      s.x += (ox * total) / steps;
-      s.y += (oy * total) / steps;
+      const px = s.x, py = s.y;
+      s.x += (s.vx * total) / steps;
+      s.y += (s.vy * total) / steps;
       s.traveled += total / steps;
-      if (isSolidAt(s.x, s.y) || s.traveled >= s.range) return this.explode(s, id);
+      if (s.traveled >= s.range) return this.explode(s, id);
+      if (isSolidAt(s.x, s.y)) { if (this.bounce(s, px, py)) continue; return this.explode(s, id); }
       if (this.holes && this.holeEats(s)) { this.state.projectiles.delete(id); this.broadcast("sfx", { ev: "eatshot", x: Math.round(s.x), y: Math.round(s.y) }); return; }
       const pulse = s.spec?.pulse;
       if (pulse && s.traveled - s.pulsed >= pulse.every) { s.pulsed = s.traveled; shotPulse(this.host, s.spec!, s.x, s.y); }
@@ -4224,12 +4239,17 @@ export class TownRoom extends Room<TownState> {
       const hit = this.firstTargetAt(s.x, s.y, s.radius + HIT_RADIUS, s.owner, s.hitIds, (m) => Math.max(0, mobBody(m.kind) - HIT_RADIUS));
       if (hit) {
         if (s.spec) shotHit(this.host, s.spec, hit);
-        else this.hitTarget(s.owner, hit, s.damage, [s.vx, s.vy], { kb: s.knockback, basic: s.basic, parts: s.parts });
+        else this.hitTarget(s.owner, hit, s.damage, [s.vx, s.vy], { kb: s.knockback, basic: s.basic, parts: s.parts, sound: s.sound });
         // Piercing arrows keep flying through a few targets
         if (s.pierce > 0) { s.pierce--; s.hitIds.add(hit); continue; }
         return this.explode(s, id, hit);
       }
     }
+  }
+
+  /** A wave ran into a wall: it may bounce off it (server/songs.ts bounceWave). */
+  private bounce(s: Projectile, px: number, py: number): boolean {
+    return bounceWave(s, px, py, (ev) => this.broadcast("sfx", ev));
   }
 
   private explode(s: Projectile, id: string, _directHit = "") {
@@ -4241,7 +4261,7 @@ export class TownRoom extends Room<TownState> {
       const t = this.state.players.get(e) ?? this.state.mobs.get(e);
       if (!t) continue;
       const d = Math.hypot(t.x - s.x, t.y - s.y) || 1;
-      this.hitTarget(s.owner, e, s.damage * 0.5, [(t.x - s.x) / d, (t.y - s.y) / d], { kb: s.knockback * 0.5, basic: true, parts: s.parts?.map((p) => ({ ...p, amt: p.amt * 0.5 })) });
+      this.hitTarget(s.owner, e, s.damage * 0.5, [(t.x - s.x) / d, (t.y - s.y) / d], { kb: s.knockback * 0.5, basic: true, parts: s.parts?.map((p) => ({ ...p, amt: p.amt * 0.5 })), sound: s.sound });
     }
     if (s.spec) shotEnd(this.host, s.spec, s.x, s.y);
   }
@@ -4497,11 +4517,20 @@ export class TownRoom extends Room<TownState> {
       if (now - p.lastWeaponNo > 1000) { p.lastWeaponNo = now; this.clients.find((c) => c.sessionId === id)?.send("gearno", { text: def!.devour ? "Nothing to eat here" : "Nothing to bite here" }); }
       return;
     }
-    if (castSkill(this.host, id, skill)) {
+    // No magic in Oakvale, but a Songweaver may busk (server/songs.ts busking); a finisher the cast set off counts too,
+    // also one a charged note completes when it goes off
+    const lawful = (chord?: string) => { if (!p.outlaw && inVillage(p.x, p.y) && !busking(p.cls, p.sk.mode, def!, chord)) this.setOutlaw(id, p, true); };
+    const out: CastOut = { onChord: lawful };
+    if (castSkill(this.host, id, skill, out)) {
       p.emote = "";
       this.runesOnCast(id, p);
       this.questDo(id, "cast");
-      if (!p.outlaw && inVillage(p.x, p.y)) this.setOutlaw(id, p, true);
+      lawful(out.chord);
+      // ...and the villagers close by answer a bright tune (a chat line from the NPC, id "npc:<id>", to heroes nearby)
+      this.buskers.heard(p.cls, p.sk.mode, def!, p.x, p.y, Date.now(), (n, text) => {
+        const near = buskingAudience(n, id, this.state.players.entries());
+        for (const c of this.clients) if (near.has(c.sessionId)) c.send("chat", { id: `npc:${n.id}`, name: n.name, text });
+      }, out.chord);
     }
   }
 
@@ -4551,6 +4580,7 @@ export class TownRoom extends Room<TownState> {
     if (!p.talents.size) return;
     if (!this.payReset(id, p, "skill points")) return;
     p.talents.clear();
+    afterRespec(p as unknown as Unit); // the Songweaver's mode and song (server/songs.ts)
     for (let i = 0; i < SLOT_COUNT; i++) p.slots[i] = "";
     this.applyStats(p);
   }
@@ -4945,6 +4975,13 @@ export class TownRoom extends Room<TownState> {
       }
     }
     if (a) dmg = dmg * talentMult(a.cls, a.talents, "dmg") * feastMult(a.feast, "dmg") * (opts.skill && !opts.dot ? talentMult(a.cls, a.talents, "skill") * feastMult(a.feast, "skill") : 1) * dealtMult(a, Date.now());
+    const snd = opts.sound;
+    if (snd) { // a Songweaver's sound: how the target hears scales it (shared/combat.ts soundMult)
+      const m = soundMult(this.host.soundOf!(targetId), snd);
+      dmg *= m.dmg;
+      opts = { ...opts, slowMs: opts.slowMs && opts.slowMs * m.cc };
+      if (a && snd.mode === "phrygian") opts = { ...opts, poiseMul: 1 + PHRYGIAN.poise * modeColour("phrygian", (k) => a.talents.get(k) ?? 0) };
+    }
     dmg = Math.max(1, Math.round(dmg));
     opts = { ...opts, from: attackerId };
     const name = a?.name ?? "???";
@@ -4994,7 +5031,7 @@ export class TownRoom extends Room<TownState> {
     // Initiative: drain poise; a solid hit interrupts the wind-up and delays the next attack
     const pmax = mobPoiseMax(m);
     // Higher-level monsters are harder to make dizzy
-    const pdmg = dmg * (opts.skill ? POISE.skillMult : 1) * poiseLevelMult(a?.level ?? 1, m.level) + (opts.poiseAdd ?? 0) * pmax;
+    const pdmg = dmg * (opts.skill ? POISE.skillMult : 1) * poiseLevelMult(a?.level ?? 1, m.level) * (opts.poiseMul ?? 1) + (opts.poiseAdd ?? 0) * pmax;
     if (drainPoise(m, pmax, pdmg, now, POISE.mobBrokenMs)) this.broadcast("broken", { id: targetId, ms: POISE.mobBrokenMs });
     if (pdmg >= pmax * 0.15) {
       m.windUntil = 0; m.winding = false;
@@ -5858,6 +5895,7 @@ export class TownRoom extends Room<TownState> {
       if (t.cls === "summoner" && part > 0 && now - t.bondEssenceAt >= ESSENCE.bondEveryMs) { t.bondEssenceAt = now; gainEssence(this.host, tid); }
       if (bond[1].hp <= 0) this.mobDied(bond[1], bond[0], opts.from ?? "", byName);
     }
+    dmg = absorbDamage(this.host, tid, dmg); // shields (BuffDef.shield) soak up what is left first
     // Unstoppable buffs (Berserk, Whirlwind): ignore stun, slow and knockback
     const unstoppable = ccImmune(t, now);
     if (opts.stunMs && !guarded && !unstoppable) t.stunUntil = Math.max(t.stunUntil, now + opts.stunMs);
@@ -5866,7 +5904,7 @@ export class TownRoom extends Room<TownState> {
     t.lastHurt = now;
     // Initiative: drain poise (shield blocks most of it, Unstoppable ignores it) and flinch
     if (!unstoppable) {
-      const pdmg = dmg * (opts.skill ? POISE.skillMult : 1) * (guarded ? POISE.guardMult : 1) * poiseLevelMult(opts.atkLevel ?? t.level, t.level);
+      const pdmg = dmg * (opts.skill ? POISE.skillMult : 1) * (guarded ? POISE.guardMult : 1) * poiseLevelMult(opts.atkLevel ?? t.level, t.level) * (opts.poiseMul ?? 1) * (1 - buffPoise(t, now));
       if (drainPoise(t, heroPoiseMax(t), pdmg, now, POISE.heroBrokenMs)) this.broadcast("broken", { id: tid, ms: POISE.heroBrokenMs });
       if (!guarded) t.attackReadyAt = Math.max(t.attackReadyAt, now + POISE.heroFlinchMs);
     }
@@ -5963,6 +6001,12 @@ export class TownRoom extends Room<TownState> {
       const sid = this.shoot(a, id, dmg, hit.knockback, hit.shotScale ?? 1, 0, def.projectile, parts);
       const s = this.state.projectiles.get(sid);
       if (s && hit.burst) s.burst = hit.burst;
+      if (s && def.type === "lute" && a.cls === "songweaver") {
+        // the Songweaver's lute: a sound wave, and the combo step is a note (pluck, pluck, strum)
+        const mode = a.sk.mode ?? "major", deg = step === 1 ? "V" : "I";
+        s.sound = { pitch: "M", deg, mode, basic: true, res: step === 2 ? RESONANCE.basic : 0 };
+        this.broadcast("sfx", { ev: "note", id, s: "basic", deg, mode, pitch: "M", x: Math.round(a.x), y: Math.round(a.y) });
+      }
       return;
     }
 
@@ -6052,6 +6096,8 @@ export class TownRoom extends Room<TownState> {
 
   private pending: { at: number; fn: () => void }[] = [];
   private fieldSeq = 0;
+  private buskers = new BuskingLines(); // Oakvale villagers answer a busking tune (server/songs.ts)
+  private chords = new ChordSync(); // the Songweaver's owner-only "chord" message (server/songs.ts)
 
   /** What the skill engine needs from the room. */
   private host: SkillHost = {
@@ -6091,6 +6137,12 @@ export class TownRoom extends Room<TownState> {
       });
     },
     charmable: (id) => !!this.charmable(id),
+    soundOf: (id) => {
+      const p = this.state.players.get(id);
+      if (p) return heroSound(p.cls);
+      const m = this.state.mobs.get(id);
+      return m ? mobSound(m.kind, !!(ELITE[m.kind] || BOSS[m.kind] || m.kind === "nightraider" || m.title)) : undefined;
+    },
     charm: (id, tid, ms) => this.charm(id, tid, ms),
     thrall: (id, tid, dmg, power, rank) => this.makeThrall(id, tid, dmg, power, rank),
     isNight: (id) => {
@@ -6107,12 +6159,12 @@ export class TownRoom extends Room<TownState> {
       if (p && Math.random() < critChance(this.stats(p), talentBonus(p.cls, p.talents, "crit"))) { dmg *= 2; o = { ...o, crit: true }; }
       this.hitTarget(a, t, dmg, push, o);
     },
-    heal: (id, amount) => {
+    heal: (id, amount, from) => {
       const p = this.state.players.get(id);
       if (!p || p.dead || amount <= 0) return;
       const before = p.hp;
       p.hp = Math.min(p.maxHp, p.hp + amount);
-      if (p.hp - before >= 3) this.broadcast("heal", { id, amount: Math.round(p.hp - before) });
+      if (p.hp - before >= 3) this.broadcast("heal", { id, amount: Math.round(p.hp - before), ...(from && from !== id ? { by: from } : {}) });
     },
     aim: (id) => {
       const p = this.state.players.get(id);

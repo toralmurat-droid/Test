@@ -1,5 +1,6 @@
 import { ClassKind } from "./classes";
 import type { StatKind } from "./powers";
+import type { Degree, ModeId, Pitch } from "./songs";
 
 /**
  * Skill trees (press T). Every hero has 3 branches of 5 skills (the wizard's Frost branch has 6). Each branch is a small, uneven tree (TREE below):
@@ -24,7 +25,10 @@ export type TalentEffect = "dmg" | "skill" | "crit" | "lifesteal" | "hp" | "armo
   // Summoner, Void Lord rework (shared/summons.ts): golem regen near the owner (%/s), Stone Bond share (+%), aura
   // strength (+%), second golem, black hole size (+%), after-blink rush, Void Slip, blade damage (+%), wisps, Return to the Void
   | "golemRegen" | "bond" | "resonance" | "twin" | "gravity" | "velocity" | "slip" | "edge" | "swarm" | "return"
-  | "upgrade"; // an upgrade node (SkillDef.mod): changes one spell instead of giving a bonus
+  | "upgrade" // an upgrade node (SkillDef.mod): changes one spell instead of giving a bonus
+  // Songweaver (shared/songs.ts): a mode node (unlocks Lydian / Dorian / Phrygian, +% to its colour), Legato (song buffs
+  // linger s longer), Accelerando (each Tempo stack quickens song ticks %), Sympathetic Strings (+% resonance, bursts spread)
+  | "mode" | "legato" | "accel" | "sympathy";
 
 /**
  * Upgrade nodes (Murat 2026-11-07): instead of more spells, a school's tree upgrades its one spell. Each value is per
@@ -59,7 +63,16 @@ export interface HitEffects {
   leechMs?: number;
   /** Look of the bleed this hit starts (burn): blood drips or boiling bubbles instead of flames. */
   bleed?: "drip" | "boil";
+  /**
+   * A sound hit (the Songweaver): the target's hearing scales it (shared/combat.ts soundMult) and it builds resonance
+   * (shared/songs.ts). The skill's pitch, degree and the caster's mode are filled in when it is cast; `res` is extra
+   * flat resonance (a finisher, a wave off a well).
+   */
+  sound?: SoundFx;
 }
+
+/** What a sound hit carries (HitEffects.sound). */
+export interface SoundFx { pitch?: Pitch; deg?: Degree; mode?: ModeId; res?: number; basic?: boolean }
 
 export interface AreaDef extends HitEffects {
   r: number; // radius, px
@@ -78,8 +91,8 @@ export interface AreaDef extends HitEffects {
 }
 
 export interface ShotDef extends HitEffects {
-  /** Each rank above 1 adds this many projectiles (`n`, the fan widening with them) and/or extra targets passed through. */
-  perRank?: { n?: number; pierce?: number };
+  /** Each rank above 1 adds this many projectiles (`n`, the fan widening with them) and/or extra targets passed through, and/or wall bounces. */
+  perRank?: { n?: number; pierce?: number; bounce?: number };
   /** A ragged swarm, not a neat fan (Rat Plague): each shot's speed varies by up to ±`speed` (share) and its angle by ±`deg`. */
   jitter?: { speed: number; deg: number; range?: number };
   kind: string; // projectile look (client)
@@ -90,6 +103,8 @@ export interface ShotDef extends HitEffects {
   pierce?: number; // extra targets it passes through
   explode?: number; // radius of the blast where it stops
   chain?: number; // jumps to this many more enemies nearby (lightning)
+  /** Bounces off this many walls (server updateProjectile; shared/acoustics.ts BOUNCE: stone, wood and metal reflect, foliage swallows). */
+  bounce?: number;
   field?: FieldDef; // leaves a ground effect where it stops
   /**
    * Every `every` px it flies: sets off `area` where it is, and/or shoots `shards` out of itself in a ring
@@ -134,6 +149,11 @@ export interface FieldDef extends HitEffects {
   hole?: { below: number };
   /** Void Blades: this many blades circle the hero (the look; Void Edge adds more and they take the golem's element). */
   blades?: number;
+  /**
+   * Party aura: every tick, the owner and their group allies inside `r` get this buff (shareBuff: one per skill id, the
+   * strongest wins). It lasts tickMs + FIELD_PARTY_LINGER_MS, so it ends shortly after someone steps out.
+   */
+  party?: BuffDef;
 }
 
 export interface BuffDef {
@@ -151,8 +171,19 @@ export interface BuffDef {
   thorns?: HitEffects & { wpn?: number; dmg?: number }; // hits whoever strikes you in melee range
   perStack?: number; // +% damage per stack spent (with SkillDef.consume)
   cdr?: number; // -% skill cooldowns while it lasts (Void Velocity)
+  poise?: number; // -% poise drained by blows taken (Marching Tune)
   /** Bloodline (Thirst): group allies within this many px get the same buff with half its lifesteal. */
   group?: number;
+  /**
+   * Party buff: group allies within this many px get the same buff when it is cast (shareBuff: one per skill id per
+   * hero, the stronger cast wins, a weaker one only extends it). Unlike `group`, nothing is halved.
+   */
+  party?: number;
+  /**
+   * Shield: a pool of `shield`% of the caster's max HP x the cast's power that soaks up damage before life
+   * (absorbDamage, newest pool first). When the pool is used up the buff ends; the same skill's shields don't stack.
+   */
+  shield?: number;
   /**
    * Vampire shapeshift (Bat Form, Wolf Form): the hero takes this beast's shape while the buff lasts (the client draws
    * the beast instead of the hero). Skills of the form's own school keep the shape; any other skill turns them back
@@ -246,6 +277,27 @@ export interface SkillDef {
   brides?: { n: number; perRank: number; ms: number; drain: number };
   /** Vampire Charm: the foe nearest the aim within `range` px: a monster fights for the hero for `ms`; a hero, boss or elite is dazed for `daze` ms instead. */
   charm?: { range: number; ms: number; daze: number };
+  // ---- Songweaver (shared/songs.ts) ----
+  /** The note this skill plays: casting it logs the degree, three in a progression fire a chord (PROGRESSIONS). */
+  degree?: Degree;
+  /** Its register: a monster that hears at this pitch takes more and resonates more (shared/combat.ts soundMult). */
+  pitch?: Pitch;
+  /** A song: its `field` is a 30s party aura, one song per Songweaver (SkillRuntime.song), changed at most every SONG.changeMs. */
+  song?: boolean;
+  /** Modulate: switches to the next known mode and recolours the running song. Not a note in a progression. */
+  modulate?: boolean;
+  /** Mending Note: heals the caster `heal`% of max HP, then jumps to the nearest group ally within `range` (x0.8 each hop); `hops` (+1 at ranks 3 and 5). */
+  mend?: { heal: number; hops: number; range: number };
+  /** Chorale: heals the caster and every group ally within `r` `heal`% of max HP, +`perAlly` for each one inside. */
+  chorale?: { heal: number; perAlly: number; r: number };
+  /** Cracked String: from rank `rank`, its blast rings again `delayMs` later at `mult` of its power (a canon). */
+  canon?: { rank: number; delayMs: number; mult: number };
+  /** Crescendo (Anthem): its party aura's buff grows by this share every tick. */
+  crescendo?: number;
+  /** Untouchable for this long (ms) when it goes off (the Deceptive cadence). */
+  untouchable?: number;
+  /** A chord finisher (shared/songs.ts PROGRESSIONS): fired by its progression, never cast, not in the tree. */
+  finisher?: boolean;
 }
 
 /**
@@ -290,7 +342,7 @@ export function impactMs(look: AreaLook | undefined, r: number): number {
     default: return 0;
   }
 }
-export const STACK_NAME: Record<ClassKind, string> = { knight: "Valor", ninja: "Ki", wizard: "Arcane", archer: "Focus", barbarian: "Fury", vampire: "Blood", summoner: "Essence" };
+export const STACK_NAME: Record<ClassKind, string> = { knight: "Valor", ninja: "Ki", wizard: "Arcane", archer: "Focus", barbarian: "Fury", vampire: "Blood", summoner: "Essence", songweaver: "Tempo" };
 
 export const BRANCHES: Record<ClassKind, [BranchDef, BranchDef, BranchDef]> = {
   knight: [{ name: "Valor", color: "#e63946" }, { name: "Bulwark", color: "#4cc9f0" }, { name: "Crusade", color: "#ffd166" }],
@@ -300,6 +352,7 @@ export const BRANCHES: Record<ClassKind, [BranchDef, BranchDef, BranchDef]> = {
   barbarian: [{ name: "Fury", color: "#e63946" }, { name: "Warcry", color: "#ffd166" }, { name: "Earth", color: "#a68a64" }],
   vampire: [{ name: "Blood", color: "#c1121f" }, { name: "Night", color: "#9d4edd" }, { name: "Fang", color: "#c0c8d8" }],
   summoner: [{ name: "Golems", color: "#a68a64" }, { name: "Void", color: "#9d4edd" }, { name: "Conjuration", color: "#b388ff" }],
+  songweaver: [{ name: "Hymnal", color: "#f4d35e" }, { name: "Folk", color: "#e07a5f" }, { name: "Discord", color: "#7b2cbf" }],
 };
 
 const S: Record<ClassKind, SkillDef[]> = <Record<ClassKind, SkillDef[]>><unknown>{
@@ -705,6 +758,64 @@ const S: Record<ClassKind, SkillDef[]> = <Record<ClassKind, SkillDef[]>><unknown
       desc: "Open the Void's armoury for 8s: a blade circles you, a lance flies at your foes and runs them through, an axe sweeps a wide arc, and all four elemental wisps fight at your side. Spends your Essence: +25% per charge.",
       arsenal: { ms: 8000 } },
   ],
+  // ---------------------------------------------------------------- SONGWEAVER
+  // Plan v2 (Murat 2026-11-13): progression is music. Each skill is a note (degree, pitch); songs are 30s party auras,
+  // one at a time; three notes in a progression fire a chord (shared/songs.ts). Texts: docs/songweaver-content.md.
+  songweaver: [
+    // Hymnal: healing and shields for the group
+    { id: "sg_ballad", name: "Hearth Ballad", type: "Aura", branch: 0, row: 0, style: "holy", cd: 2000, mana: 14, target: "self", song: true, degree: "I", pitch: "M",
+      desc: "Play the old village tune. For 30s it mends you and your party close by with every beat, and it follows you. Note I, the home note.",
+      field: { kind: "ballad", r: 90, ms: 30000, tickMs: 1000, follow: true, party: { ms: 0, heal: 1.6 } } },
+    { id: "sg_mend", name: "Mending Note", type: "Aura", branch: 0, row: 1, style: "holy", cd: 6000, mana: 16, target: "self", degree: "IV", pitch: "H",
+      desc: "Pluck a clear high note: it heals you, then leaps to the nearest friend. Ranks 3 and 5 add one more friend. Note IV.",
+      mend: { heal: 18, hops: 1, range: 110 } },
+    { id: "sg_pedal", name: "Pedal Point", type: "Aura", branch: 0, row: 1, style: "holy", cd: 14000, mana: 18, target: "self", degree: "vi", pitch: "L",
+      desc: "A held low note, steady while the tune moves above it. It shields you and your party close by. Note vi.",
+      buff: { ms: 8000, shield: 28, party: 130 } },
+    { id: "sg_lydian", name: "Lydian", type: "Passive", branch: 0, row: 2, style: "holy", passive: { effect: "mode", perRank: 10 },
+      desc: "Unlocks the Lydian key: bright and generous. Healing that would go past full life becomes a shield instead. Each rank makes the shield stronger." },
+    { id: "sg_legato", name: "Legato", type: "Passive", branch: 0, row: 2, style: "holy", passive: { effect: "legato", perRank: 1 },
+      desc: "Played smooth, each note flowing into the next. The gifts of your songs linger on a friend after they step out of the song." },
+    { id: "sg_chorale", name: "Chorale", type: "Ultimate", branch: 0, row: 4, style: "holy", cd: 40000, mana: 45, chargeMs: 400, target: "self", degree: "I", pitch: "M",
+      desc: "Many voices, one hymn. You and your party close by heal, more for every friend standing in it, and keep mending for a few seconds. Note I.",
+      chorale: { heal: 18, perAlly: 0.15, r: 140 }, buff: { ms: 8000, regen: 2, party: 140 } },
+
+    // Folk: speed, attack speed and damage for the group
+    { id: "sg_march", name: "Marching Tune", type: "Aura", branch: 1, row: 0, style: "wind", cd: 2000, mana: 14, target: "self", song: true, degree: "I", pitch: "M",
+      desc: "Song: a steady march for 30s. You and your party inside move faster and are harder to push around. Note I.",
+      field: { kind: "march", r: 90, ms: 30000, tickMs: 1000, follow: true, party: { ms: 0, speed: 12, poise: 20 } } },
+    { id: "sg_jig", name: "Jig", type: "War cry", branch: 1, row: 1, style: "wind", cd: 12000, mana: 14, target: "self", degree: "ii", pitch: "H",
+      desc: "A quick dance tune. You and your party close by strike faster for a few seconds. Note ii.",
+      buff: { ms: 8000, atkspd: 26, party: 130 } },
+    { id: "sg_call", name: "Call", type: "War cry", branch: 1, row: 1, style: "wind", cd: 9000, mana: 12, target: "self", degree: "V", pitch: "H",
+      desc: "Call and response. A ringing shout jolts foes close by, and for a few seconds you and your party answer with harder blows. Note V.",
+      cry: { r: 56, dmg: 18, kb: 0.6 }, buff: { ms: 5000, dmg: 26, party: 130 } },
+    { id: "sg_dorian", name: "Dorian", type: "Passive", branch: 1, row: 2, style: "wind", passive: { effect: "mode", perRank: 10 },
+      desc: "Unlocks the Dorian key: plain and even, fit for the road. Your songs reach farther, and it serves friends and foes alike. Each rank adds reach." },
+    { id: "sg_accel", name: "Accelerando", type: "Passive", branch: 1, row: 2, style: "wind", passive: { effect: "accel", perRank: 5 },
+      desc: "Gradually quickening. The more Tempo you build, the faster your songs beat." },
+    { id: "sg_anthem", name: "Anthem", type: "Ultimate", branch: 1, row: 4, style: "wind", cd: 40000, mana: 45, chargeMs: 300, target: "self", degree: "I", pitch: "L",
+      desc: "A crescendo that grows louder and prouder with every beat. For a while you and your party inside hit harder and move and strike faster. Note I, played low.",
+      crescendo: 0.1, field: { kind: "anthem", r: 120, ms: 10000, tickMs: 1000, follow: true, party: { ms: 0, dmg: 13, speed: 8, atkspd: 11 } } },
+
+    // Discord: slows, poise drain and the solo damage
+    { id: "sg_dirge", name: "Dirge", type: "Aura", branch: 2, row: 0, style: "shadow", cd: 2000, mana: 14, target: "self", song: true, degree: "i", pitch: "L",
+      desc: "Song: a slow, heavy lament for 30s. Foes inside are slowed, worn down and lose their footing. Learning it opens the Minor key. Note i, home in shadow.",
+      field: { kind: "dirge", r: 70, ms: 30000, tickMs: 1000, follow: true, dmg: 8, slowMs: 1100 } },
+    { id: "sg_shrill", name: "Shrill Note", type: "Attack", branch: 2, row: 1, style: "arcane", cd: 5000, mana: 14, degree: "V", pitch: "H",
+      desc: "A piercing note that runs through foes and bounces off walls. Stone gives it back, wood gives back less, and leaves and water swallow it. Each rank adds a bounce. Note V.",
+      shots: { kind: "wave", speed: 260, range: 190, radius: 6, size: 1.2, dmg: 28, pierce: 2, bounce: 1, perRank: { bounce: 1 }, kb: 0.5 } },
+    { id: "sg_crack", name: "Cracked String", type: "Attack", branch: 2, row: 1, style: "arcane", cd: 8000, mana: 16, degree: "bII", pitch: "M",
+      desc: "Snap a string on purpose. A harsh twang hurts and stuns the foes ahead of you. From rank 3 it rings again, softer, like a canon. Note bII, the sour step above home.",
+      areas: [{ r: 28, ahead: 34, dmg: 26, stunMs: 700, kb: 0.8, look: "burst" }], canon: { rank: 3, delayMs: 600, mult: 0.5 } },
+    { id: "sg_phrygian", name: "Phrygian", type: "Passive", branch: 2, row: 2, style: "shadow", passive: { effect: "mode", perRank: 10 },
+      desc: "Unlocks the Phrygian key: dark, with a flinch in it. Your sound drains more poise and makes foes ring faster. Each rank adds more." },
+    { id: "sg_sympathy", name: "Sympathetic Strings", type: "Passive", branch: 2, row: 2, style: "arcane", passive: { effect: "sympathy", perRank: 10 },
+      desc: "Strings that hum along with each other. Foes ring faster, and when the ringing bursts it spreads to foes close by. Each rank adds more." },
+    { id: "sg_twelve", name: "Twelve-Tone Storm", type: "Ultimate", branch: 2, row: 4, style: "arcane", cd: 35000, mana: 45, chargeMs: 400, target: "self", degree: "bII", pitch: "any",
+      desc: "Every note at once, none of them at home. Four waves of sound crash around you, and each foe hears the note it likes best. Note bII.",
+      areas: [{ r: 72, dmg: 16, waves: 4, everyMs: 300, slowMs: 600, kb: 0.4, look: "nova" }] },
+  ],
 };
 
 // ---- Tree shape -------------------------------------------------------------------------------------
@@ -715,6 +826,13 @@ const S: Record<ClassKind, SkillDef[]> = <Record<ClassKind, SkillDef[]>><unknown
 type Shape = [req: number, parent?: string, scale?: [StatKind, number]];
 // Attribute scaling was cut to 60% in the balance pass of 2026-11-04: it multiplied with the weapon hit / Magic, so high-level skills grew far too fast
 const TREE: Record<string, Shape> = {
+  // Songweaver (Plan v2): roots at Lv 1, a mode and a device per branch around Lv 8-12, ultimates at 20-22
+  sg_ballad: [1, undefined, ["mag", 2]], sg_mend: [3, "sg_ballad", ["mag", 2]], sg_pedal: [5, "sg_ballad", ["mag", 2]],
+  sg_lydian: [8, "sg_mend"], sg_legato: [11, "sg_pedal"], sg_chorale: [20, "sg_lydian", ["mag", 2.5]],
+  sg_march: [1], sg_jig: [3, "sg_march"], sg_call: [4, "sg_march", ["mag", 2]],
+  sg_dorian: [9, "sg_jig"], sg_accel: [12, "sg_call"], sg_anthem: [21, "sg_dorian", ["mag", 2.5]],
+  sg_dirge: [1, undefined, ["mag", 2]], sg_shrill: [2, "sg_dirge", ["mag", 2]], sg_crack: [4, "sg_dirge", ["mag", 2]],
+  sg_phrygian: [10, "sg_crack"], sg_sympathy: [12, "sg_shrill"], sg_twelve: [22, "sg_phrygian", ["mag", 2.5]],
   // Summoner, Void Lord rework (Murat 2026-11-08): Lv 1 roots, Twin Bond 18, Colossus 20, Event Horizon 21, Void Arsenal 22.
   // The golems, wisps, blades and black holes grow with Magic.
   su_golem: [1, undefined, ["mag", 2]], su_bond: [2, "su_golem"], su_might: [3, "su_golem"], su_link: [5, "su_might"],
@@ -819,6 +937,13 @@ const SUMMONER_RANKS: Record<string, [number, string?]> = {
   su_blades: [5], su_wisps: [5], su_edge: [5, "+1 blade at ranks 3 and 5"], su_return: [3], su_swarm: [3, "wisps last longer"], su_arsenal: [5],
 };
 for (const sk of S.summoner) { const v = SUMMONER_RANKS[sk.id]; if (v) { sk.maxRank = v[0]; sk.rankStep = v[1]; if (v[0] > 3) sk.rankLevels = VAMP_MASTERY; } }
+/** Songweaver ranks (Plan v2), like the Summoner: actives and ultimates to 5 (mastery ranks at Lv 30 and 40), passives to 3. */
+const SONGWEAVER_RANKS: Record<string, [number, string?]> = {
+  sg_ballad: [5], sg_mend: [5, "+1 ally at ranks 3 and 5"], sg_pedal: [5], sg_lydian: [3], sg_legato: [3], sg_chorale: [5],
+  sg_march: [5], sg_jig: [5], sg_call: [5], sg_dorian: [3], sg_accel: [3], sg_anthem: [5],
+  sg_dirge: [5], sg_shrill: [3, "+1 bounce"], sg_crack: [5, "rings again from rank 3"], sg_phrygian: [3], sg_sympathy: [3], sg_twelve: [5],
+};
+for (const sk of S.songweaver) { const v = SONGWEAVER_RANKS[sk.id]; if (v) { sk.maxRank = v[0]; sk.rankStep = v[1]; if (v[0] > 3) sk.rankLevels = VAMP_MASTERY; } }
 for (const list of Object.values(S)) for (const sk of list) {
   sk.needs = NEEDS[sk.id];
   sk.requires = REQUIRES[sk.id];
@@ -905,11 +1030,40 @@ export const CANTRIPS: Record<ClassKind, SkillDef[]> = {
       shots: { kind: "bloodbolt", speed: 300, range: 95, radius: 4, size: 0.6, dmg: 8, burn: [6, 4000], bleed: "drip", leechMs: 4000, drain: 10, kb: 0.2 } },
   ],
   wizard: [], // the wizard has no basic spells: its three schools are in the tree (Murat 2026-11-07)
+  // The Songweaver's one basic spell: switch mode (shared/songs.ts). Locked until a second mode is known.
+  songweaver: [
+    { id: "sg_modulate", name: "Modulate", type: "Aura", branch: 0, row: 0, req: 1, style: "holy", cd: 600, mana: 4, cantrip: true, modulate: true, target: "self", degree: "I", pitch: "M",
+      desc: "Change key: switch to the next key you know and recolour the song you are playing. Needs two keys. Major favours friends, the dark keys favour damage.",
+    },
+  ],
 };
+
+/**
+ * Chord finishers (shared/songs.ts PROGRESSIONS): hidden skills that a progression fires by itself, coloured by the mode.
+ * Registered by id (skillById) but never castable: not in the tree, not a cantrip.
+ */
+export const FINISHERS: SkillDef[] = [
+  { id: "sg_f_amen", name: "Amen", type: "Ultimate", branch: 0, row: 3, req: 10, style: "holy", finisher: true, target: "self",
+    desc: "Amen, a hymn's closing chord. You and your party close by are healed and shielded.",
+    buff: { ms: 6000, heal: 16, shield: 24, party: 130 } },
+  { id: "sg_f_encore", name: "Turnaround", type: "Ultimate", branch: 1, row: 3, req: 10, style: "wind", finisher: true, target: "self",
+    desc: "The tune circles back and kicks the band into gear. You and your party close by hit harder and faster for a few seconds.",
+    buff: { ms: 8000, dmg: 22, atkspd: 28, party: 130 } },
+  { id: "sg_f_shatter", name: "Shatterchord", type: "Ultimate", branch: 2, row: 3, req: 10, style: "arcane", finisher: true, target: "self",
+    desc: "A cruel chord that rings the whole room. Foes around you are hurt, stunned and left ringing hard.",
+    areas: [{ r: 60, dmg: 26, stunMs: 800, kb: 1, look: "nova", sound: { res: 50 } }] },
+  { id: "sg_f_resolve", name: "Perfect Cadence", type: "Ultimate", branch: 0, row: 3, req: 10, style: "holy", finisher: true, target: "self",
+    desc: "Tension settles into home. Foes around you are hurt and left ringing, and you and your party close by are healed.",
+    areas: [{ r: 60, dmg: 20, kb: 0.6, look: "nova", sound: { res: 30 } }], buff: { ms: 1000, heal: 8, party: 130 } },
+  { id: "sg_f_sleight", name: "Deceptive Cadence", type: "Ultimate", branch: 1, row: 3, req: 10, style: "shadow", finisher: true, target: "self",
+    desc: "You promise home, then step aside. For a moment nothing can touch you, and foes around you flee.",
+    untouchable: 1200, cry: { r: 72, fearMs: 1500 } },
+];
+for (const f of FINISHERS) f.scale = { stat: "mag", per: 2 };
 
 export const SKILLS = S;
 const BY_ID = new Map<string, SkillDef>();
-for (const list of [...Object.values(S), ...Object.values(CANTRIPS)]) for (const s of list) BY_ID.set(s.id, s);
+for (const list of [...Object.values(S), ...Object.values(CANTRIPS), FINISHERS]) for (const s of list) BY_ID.set(s.id, s);
 export const skillById = (id: string) => BY_ID.get(id);
 export const skillOf = (cls: ClassKind, id: string) => { const s = BY_ID.get(id); return s && (S[cls].includes(s) || CANTRIPS[cls]?.includes(s)) ? s : undefined; };
 export const isActive = (s: SkillDef) => !s.passive;
@@ -1009,6 +1163,10 @@ export const EFFECT_TEXT: Record<TalentEffect, (v: number) => string> = {
   swarm: (v) => `+1 wisp, wisps last ${v}% longer`,
   return: (v) => `Each creature back in the Void heals ${v}% life and mana`,
   upgrade: () => "",
+  mode: (v) => (v > 10 ? `Unlocks its mode; +${v - 10}% to its colour` : "Unlocks its mode"),
+  legato: (v) => `Song gifts linger ${v}s longer after leaving the song`,
+  accel: (v) => `Each Tempo stack quickens your song beats by ${v}%`,
+  sympathy: (v) => `+${v}% resonance; a burst spreads to foes close by`,
 };
 
 /** Drop unknown skills (old saves) and anything above what the level allows. */

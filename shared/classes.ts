@@ -2,20 +2,20 @@
  * Hero classes. All gameplay numbers live here so the server and client agree.
  * Art convention: the client picks a sprite by `Player.cls` ("knight" | "ninja" | "wizard").
  */
-export type ClassKind = "knight" | "ninja" | "wizard" | "archer" | "barbarian" | "vampire" | "summoner";
-export const CLASS_KINDS: ClassKind[] = ["knight", "ninja", "wizard", "archer", "barbarian", "vampire", "summoner"];
+export type ClassKind = "knight" | "ninja" | "wizard" | "archer" | "barbarian" | "vampire" | "summoner" | "songweaver";
+export const CLASS_KINDS: ClassKind[] = ["knight", "ninja", "wizard", "archer", "barbarian", "vampire", "summoner", "songweaver"];
 
 /**
  * Playable classes (Murat 2026-11-07): only these can be picked, played and are used by balance sims.
  * The rest are archived: code, art and saves are kept, but heroes of those classes cannot be played.
  */
-export const ACTIVE_CLASSES: ClassKind[] = ["wizard", "vampire", "summoner"];
+export const ACTIVE_CLASSES: ClassKind[] = ["wizard", "vampire", "summoner", "songweaver"];
 export const ARCHIVED_CLASSES: ClassKind[] = CLASS_KINDS.filter((c) => !ACTIVE_CLASSES.includes(c));
 export function isActiveClass(v: unknown): v is ClassKind {
   return typeof v === "string" && (ACTIVE_CLASSES as string[]).includes(v);
 }
 
-export type SpecialKind = "guard" | "dash" | "nova" | "volley" | "rage" | "drain" | "summon";
+export type SpecialKind = "guard" | "dash" | "nova" | "volley" | "rage" | "drain" | "summon" | "song";
 
 /**
  * One hit of the 3-hit attack combo. Pressing attack again within COMBO_WINDOW_MS after the previous hit's
@@ -47,7 +47,7 @@ export interface ClassDef {
   attackRange: number;
   /** Ranged: primary attack fires a projectile instead of a melee swing. */
   /** `portal`: the bolt comes out of a Void portal next to the foe (the Summoner, shared/summons.ts PORTAL). */
-  projectile?: { speed: number; range: number; radius: number; kind: "fireball" | "arrow"; portal?: boolean };
+  projectile?: { speed: number; range: number; radius: number; kind: "fireball" | "arrow" | "wave"; portal?: boolean };
   special: {
     kind: SpecialKind;
     name: string;
@@ -142,6 +142,21 @@ export const CLASSES: Record<ClassKind, ClassDef> = {
     ],
     blurb: "Lord of the Void: permanent elemental golems, wisps and Void weapons fight for them; black holes swallow foes and projectiles.",
   },
+  // The Songweaver (Murat 2026-11-13, Plan v2): an Oakvale minstrel with a lute. Support that holds its own solo: songs
+  // are party auras (shared/songs.ts), skills are notes whose progressions fire chords, and its waves are sound that
+  // bounces off walls and builds resonance in monsters that hear it (shared/combat.ts SOUND_TIER).
+  songweaver: {
+    name: "Songweaver", maxHp: 105, speed: 90, damage: 20, attackCooldownMs: 520, attackRange: 0,
+    projectile: { speed: 225, range: 145, radius: 8, kind: "wave" },
+    special: { kind: "song", name: "Song", cooldownMs: 2000 },
+    // two plucked notes, then a strum: a wider wave that bursts and pushes back
+    combo: [
+      { damage: 1, knockback: 0.5 },
+      { damage: 1.05, knockback: 0.5 },
+      { damage: 1.5, knockback: 2, shotScale: 1.5, burst: 30, cooldownMs: 850 },
+    ],
+    blurb: "Oakvale minstrel with a lute. Songs help your friends, discord hurts your foes, and a good tune carries you alone.",
+  },
 };
 
 /**
@@ -165,7 +180,7 @@ export const DASH_INVULN_MS = 250; // ninja is untouchable right after a dash
  * Heat cooling per second by class (shared/overload.ts): the fighters shed Heat fast, the casters slowly (they live on
  * Mana). Was the Stamina refill rate before the overload gauge replaced Stamina (Murat 2026-11-07).
  */
-export const STAMINA_REGEN: Record<ClassKind, number> = { knight: 16, ninja: 16, wizard: 8, archer: 15, barbarian: 18, vampire: 13, summoner: 9 };
+export const STAMINA_REGEN: Record<ClassKind, number> = { knight: 16, ninja: 16, wizard: 8, archer: 15, barbarian: 18, vampire: 13, summoner: 9, songweaver: 9 };
 
 /** Dodge roll (F) for every hero: a quick roll in the move direction (or facing), untouchable while rolling. */
 export const DODGE = { distance: 48, durationMs: 250, invulnMs: 300, cooldownMs: 1500 };

@@ -204,8 +204,8 @@ const hexMix = (a: string, b: string, t: number) => {
 };
 
 /** Backdrop: dithered radial glow in the element colour, and a frame (iron -> bronze -> gold with gems by row). */
-function backdrop(style: FxStyle, row: number, passive: boolean): string[] {
-  const [deep, glow] = BACK[style];
+function backdrop(style: FxStyle | [string, string], row: number, passive: boolean): string[] {
+  const [deep, glow] = typeof style === "string" ? BACK[style] : style;
   const out: string[] = [];
   const bayer = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
   for (let y = 0; y < ICON; y++) for (let x = 0; x < ICON; x++) {
@@ -1275,6 +1275,7 @@ const ART: Record<string, Draw> = {
 
 /** 24x24 colours ("" = transparent) for a skill, or undefined if the skill has no art. */
 export function paintSkill(id: string): string[] | undefined {
+  if (SONG_ART[id]) return paintSong(id);
   const s = skillById(id), draw = ART[id];
   if (!s || !draw) return undefined;
   const p = new Painter();
@@ -1380,3 +1381,181 @@ export function paintStatus(id: string): string[] | undefined {
   }
   return back.map((b, i) => p.fx[i] || p.g[i] || b);
 }
+
+// ---- Songweaver icons (ids from docs/songweaver-progress.md "Interface contract") ------------------------------------
+// The frame row comes from shared/skills.ts (skillById); the row in each entry is only the fallback for an id the table
+// does not know.
+// Three branch palettes: Hymnal warm gold, Folk rust and green, Discord violet. "song" is the neutral (Modulate, Resolve).
+const RUST: Ramp = ["#4a1f0e", "#9a4a1e", "#d17a36", "#f3c27a"];
+const VIOLET: Ramp = ["#2a0f4a", "#6a2fb0", "#a56be0", "#e6d0ff"];
+type SongBranch = "hymnal" | "folk" | "discord" | "song";
+const SONG_BACK: Record<SongBranch, [string, string]> = {
+  hymnal: ["#2a1d08", "#745a1a"], folk: ["#15180a", "#47491c"], discord: ["#12061f", "#42186e"], song: ["#0f1226", "#35407a"],
+};
+
+/** Eighth note: head at (x, y), stem up `h` px, one flag. */
+function sNote(p: Painter, x: number, y: number, k: Ramp, h = 9, flag = true) {
+  p.ball(x, y, 2.3, k, 1.7);
+  p.thick(x + 2, y - h, x + 2, y, 1, k[2]);
+  if (flag) { p.line(x + 2, y - h, x + 5, y - h + 3, k[2]); p.line(x + 2, y - h + 1, x + 5, y - h + 4, k[1]); }
+}
+function sSharp(p: Painter, cx: number, cy: number, k: Ramp, s = 1) {
+  // two upright bars, two rising bars across them: reads as a sharp sign at 24 px
+  for (const dx of [-3.6, 3.6]) { p.thick(cx + (dx - 0.4) * s, cy - 9 * s, cx + (dx + 0.4) * s, cy + 9 * s, 1, k[2]); p.line(cx + (dx - 1.2) * s, cy - 8 * s, cx + (dx - 0.4) * s, cy + 8 * s, k[3]); }
+  for (const dy of [-3.4, 3.4]) { p.thick(cx - 8 * s, cy + (dy + 1.8) * s, cx + 8 * s, cy + (dy - 1.8) * s, 2, k[1]); p.line(cx - 8 * s, cy + (dy + 1.2) * s, cx + 8 * s, cy + (dy - 2.4) * s, k[3]); }
+}
+function sFlat(p: Painter, cx: number, cy: number, k: Ramp) {
+  p.thick(cx - 3, cy - 9, cx - 3, cy + 8, 2, k[2]);
+  p.thick(cx - 3, cy + 8, cx + 3, cy + 2, 2, k[1]); p.thick(cx + 3, cy + 2, cx + 4, cy - 1, 2, k[1]); p.thick(cx + 4, cy - 1, cx - 3, cy - 1, 2, k[2]);
+  p.line(cx - 3, cy - 9, cx - 3, cy + 6, k[3]);
+}
+function sHeart(p: Painter, cx: number, cy: number, r: number, k: Ramp) {
+  p.disc(cx - r * 0.7, cy - r * 0.3, r * 0.75, k[1]); p.disc(cx + r * 0.7, cy - r * 0.3, r * 0.75, k[1]);
+  p.poly([[cx - r * 1.4, cy], [cx + r * 1.4, cy], [cx, cy + r * 1.6]], k[1]);
+  p.px(cx - r * 0.8, cy - r * 0.8, k[3]);
+}
+function sShield(p: Painter, cx: number, top: number, w: number, h: number, k: Ramp) {
+  p.poly([[cx - w, top], [cx + w, top], [cx + w, top + h * 0.55], [cx, top + h], [cx - w, top + h * 0.55]], k[1]);
+  p.poly([[cx - w + 2, top + 2], [cx + w - 2, top + 2], [cx + w - 2, top + h * 0.5], [cx, top + h - 3], [cx - w + 2, top + h * 0.5]], k[2]);
+  p.line(cx - w + 1, top + 1, cx + w - 1, top + 1, k[3]);
+}
+
+const SONG_ART: Record<string, [branch: SongBranch, row: number, draw: Draw]> = {
+  // ===== Hymnal (gold) =====
+  sg_ballad: ["hymnal", 0, (p) => { p.flame(10, 21, 14, 11, FIRE); sNote(p, 18, 10, GOLD, 8); p.outline(); p.spark(5, 6, 2, GOLD[3]); }],
+  sg_mend: ["hymnal", 1, (p) => {
+    sNote(p, 9, 17, GOLD, 12);
+    p.rect(15, 4, 6, 2, NAT[2]); p.rect(17, 2, 2, 6, NAT[2]); p.px(17, 3, NAT[3]);
+    p.outline(); p.spark(19, 15, 2, GOLD[3]);
+  }],
+  sg_pedal: ["hymnal", 1, (p) => {
+    sShield(p, 12, 3, 8, 18, GOLD);
+    p.ball(10, 14, 2.3, IRON, 1.7); p.thick(12, 5, 12, 14, 1, IRON[1]); p.rect(6, 19, 12, 1, GOLD[0]);
+    p.outline(); p.px(8, 5, "#ffffff");
+  }],
+  sg_lydian: ["hymnal", 2, (p) => {
+    sSharp(p, 12, 12, GOLD, 1);
+    p.outline(); p.spark(20, 4, 2, GOLD[3]); p.spark(4, 20, 1, GOLD[3]);
+  }],
+  sg_legato: ["hymnal", 2, (p) => {
+    for (const x of [5, 12, 19]) { p.ball(x, 16, 2.3, GOLD, 1.7); p.thick(x + 2, 8, x + 2, 16, 1, GOLD[2]); }
+    p.ring(12, 11, 9, GOLD[3], Math.PI * 1.12, Math.PI * 1.88, 4);
+    p.outline(); p.spark(12, 4, 1, "#ffffff");
+  }],
+  sg_chorale: ["hymnal", 4, (p) => {
+    p.ring(12, 12, 10, GOLD[1]); p.ring(12, 12, 8, GOLD[0], Math.PI, Math.PI * 2);
+    p.figure(7, 21, GOLD, 10); p.figure(12, 21, GOLD, 13); p.figure(17, 21, GOLD, 10);
+    p.outline();
+    p.spark(12, 4, 2, GOLD[3]); p.px(5, 8, GOLD[2]); p.px(19, 8, GOLD[2]); p.px(3, 14, GOLD[3]); p.px(21, 14, GOLD[3]);
+  }],
+  // ===== Folk (rust and green) =====
+  sg_march: ["folk", 0, (p) => {
+    p.disc(12, 19, 7, RUST[0], 2.2); p.rect(5, 11, 14, 8, RUST[1]); p.disc(12, 11, 7, RUST[2], 2.4); p.rect(5, 11, 14, 1, RUST[3]);
+    for (let x = 6; x < 19; x += 3) { p.line(x, 12, x + 1, 18, NAT[2]); p.line(x + 1, 12, x + 2, 18, NAT[1]); }
+    p.thick(4, 3, 10, 9, 1, WOOD[3]); p.thick(20, 3, 14, 9, 1, WOOD[3]);
+    p.outline(); p.px(4, 3, "#ffffff"); p.px(20, 3, "#ffffff");
+  }],
+  sg_jig: ["folk", 1, (p) => {
+    p.ball(7, 17, 2.3, NAT, 1.7); p.ball(16, 14, 2.3, NAT, 1.7);
+    p.thick(9, 6, 9, 17, 1, NAT[2]); p.thick(18, 3, 18, 14, 1, NAT[2]); p.thick(9, 6, 18, 3, 2, RUST[2]);
+    p.outline(); p.line(2, 8, 5, 6, RUST[3]); p.line(2, 12, 5, 10, RUST[3]); p.line(20, 19, 23, 17, RUST[3]); p.spark(21, 8, 1, RUST[3]);
+  }],
+  sg_call: ["folk", 1, (p) => {
+    p.poly([[3, 15], [9, 15], [17, 8], [17, 20], [9, 17], [3, 17]], RUST[2]); p.rect(2, 14, 3, 4, RUST[1]);
+    p.line(9, 15, 17, 8, RUST[3]); p.poly([[15, 9], [17, 8], [17, 20], [15, 19]], RUST[1]);
+    p.outline();
+    p.ring(18, 14, 4, NAT[3], -0.9, 0.9); p.ring(18, 14, 7, NAT[2], -0.9, 0.9); p.ring(18, 14, 10, NAT[1], -0.8, 0.8);
+  }],
+  sg_dorian: ["folk", 2, (p) => {
+    p.ring(12, 12, 9, NAT[2]); p.ring(12, 12, 8, NAT[1]);
+    for (let i = 0; i < 7; i++) { const a = i / 7 * Math.PI * 2 - Math.PI / 2; p.px(12 + Math.cos(a) * 9, 12 + Math.sin(a) * 9, i === 1 ? "#ffffff" : NAT[3]); p.px(12 + Math.cos(a) * 6.5, 12 + Math.sin(a) * 6.5, NAT[3]); }
+    sNote(p, 10, 15, NAT, 8); p.outline();
+    p.line(19, 12, 22, 12, RUST[3]); p.line(2, 12, 5, 12, RUST[3]);
+  }],
+  sg_accel: ["folk", 2, (p) => {
+    p.poly([[8, 21], [16, 21], [14, 4], [10, 4]], WOOD[2]); p.poly([[10, 6], [14, 6], [15, 19], [9, 19]], WOOD[1]);
+    p.line(12, 18, 17, 6, NAT[3]); p.disc(15, 9, 1.5, NAT[2]);
+    p.rect(7, 20, 10, 2, WOOD[0]);
+    p.outline();
+    p.line(1, 8, 5, 8, RUST[3]); p.line(2, 12, 6, 12, RUST[2]); p.line(19, 10, 23, 10, RUST[3]); p.line(18, 15, 22, 15, RUST[2]);
+  }],
+  sg_anthem: ["folk", 4, (p) => {
+    p.thick(6, 2, 6, 22, 2, WOOD[2]); p.ball(6, 2, 1.5, GOLD);
+    p.poly([[8, 3], [21, 5], [18, 9], [21, 13], [8, 13]], RUST[2]); p.poly([[8, 3], [21, 5], [20, 6], [8, 6]], RUST[3]); p.poly([[8, 10], [18, 10], [19, 12], [8, 13]], RUST[1]);
+    sNote(p, 13, 11, GOLD, 5, false);
+    p.poly([[9, 17], [21, 15], [21, 21], [9, 19]], NAT[1]); p.line(9, 18, 21, 18, NAT[3]);
+    p.outline(); p.spark(21, 3, 1, "#ffffff");
+  }],
+  // ===== Discord (violet) =====
+  sg_dirge: ["discord", 0, (p) => {
+    p.poly([[7, 17], [8, 10], [12, 5], [16, 10], [17, 17], [20, 19], [4, 19]], VIOLET[2]); p.poly([[9, 17], [9, 11], [12, 7], [12, 17]], VIOLET[3]);
+    p.poly([[13, 9], [15, 11], [15, 17], [13, 17]], VIOLET[1]);
+    p.ball(12, 21, 1.6, VIOLET); p.line(12, 3, 12, 5, VIOLET[3]);
+    p.outline(); p.line(3, 8, 5, 12, SHAD[3]); p.line(21, 8, 19, 12, SHAD[3]);
+  }],
+  sg_shrill: ["discord", 1, (p) => {
+    p.rect(19, 2, 3, 20, IRON[1]); p.rect(19, 2, 1, 20, IRON[3]);
+    p.thick(2, 20, 10, 12, 2, VIOLET[3]); p.thick(10, 12, 15, 17, 2, VIOLET[2]); p.thick(15, 17, 19, 13, 2, VIOLET[3]);
+    p.poly([[18, 11], [18, 16], [22, 13]], VIOLET[3]);
+    p.outline();
+    p.spark(10, 12, 2, "#ffffff", "#ffffff"); p.ring(5, 17, 3, VIOLET[2], -1.6, 0.5);
+  }],
+  sg_crack: ["discord", 1, (p) => {
+    p.thick(12, 2, 12, 10, 1, GOLD[2]); p.thick(12, 14, 12, 22, 1, GOLD[2]);
+    p.line(12, 10, 9, 8, GOLD[3]); p.line(9, 8, 10, 6, GOLD[3]); p.line(12, 14, 15, 16, GOLD[3]); p.line(15, 16, 14, 18, GOLD[3]);
+    p.bolt([[16, 5], [11, 12], [14, 12], [8, 20]], VIOLET);
+    p.outline(); p.spark(5, 12, 2, VIOLET[3]); p.spark(19, 10, 1, VIOLET[3]);
+  }],
+  sg_phrygian: ["discord", 2, (p) => {
+    sFlat(p, 11, 12, BLOOD); p.flame(18, 21, 9, 6, FIRE, 0.4);
+    p.outline(); p.spark(5, 5, 2, BLOOD[3]);
+  }],
+  sg_sympathy: ["discord", 2, (p) => {
+    for (const x of [6, 18]) { p.thick(x - 2, 3, x - 2, 12, 1, VIOLET[3]); p.thick(x + 2, 3, x + 2, 12, 1, VIOLET[3]); p.thick(x - 2, 12, x + 2, 12, 2, VIOLET[2]); p.thick(x, 12, x, 20, 2, VIOLET[2]); }
+    p.outline();
+    p.ring(12, 8, 3, VIOLET[3], -1.2, 1.2); p.ring(12, 8, 3, VIOLET[3], Math.PI - 1.2, Math.PI + 1.2); p.ring(12, 8, 6, VIOLET[2], -0.9, 0.9); p.ring(12, 8, 6, VIOLET[2], Math.PI - 0.9, Math.PI + 0.9);
+  }],
+  sg_twelve: ["discord", 4, (p) => {
+    for (let i = 0; i < 12; i++) { const a = i / 12 * Math.PI * 2 - Math.PI / 2; p.ball(12 + Math.cos(a) * 8.5, 12 + Math.sin(a) * 8.5, 1.4, i % 2 ? VIOLET : GOLD); }
+    p.bolt([[14, 5], [9, 12], [14, 12], [10, 19]], VIOLET);
+    p.outline(); p.spark(12, 12, 1, "#ffffff");
+  }],
+  // ===== Modulate (cantrip, neutral) =====
+  sg_modulate: ["song", 3, (p) => {
+    p.ring(12, 12, 8, ARC[2], Math.PI * 1.1, Math.PI * 2.0); p.ring(12, 12, 8, GOLD[2], Math.PI * 0.1, Math.PI * 1.0);
+    p.poly([[20, 12], [23, 12], [21.5, 16]], ARC[3]); p.poly([[4, 12], [1, 12], [2.5, 8]], GOLD[3]);
+    sNote(p, 11, 15, GOLD, 8, false); p.outline();
+  }],
+  // ===== Finishers (the five chords; hidden skills) =====
+  sg_f_amen: ["hymnal", 4, (p) => { sShield(p, 12, 3, 8, 17, GOLD); sHeart(p, 12, 10, 3.4, BLOOD); p.outline(); p.spark(4, 5, 2, GOLD[3]); p.spark(20, 17, 1, GOLD[3]); }],
+  sg_f_encore: ["folk", 4, (p) => {
+    p.sword(4, 20, 17, 7, STEEL, GOLD); sNote(p, 7, 10, RUST, 7, false); p.poly([[17, 14], [21, 14], [19, 10]], NAT[2]); p.poly([[17, 21], [21, 21], [19, 17]], NAT[3]);
+    p.outline(); p.spark(19, 4, 2, GOLD[3]);
+  }],
+  sg_f_shatter: ["discord", 4, (p) => {
+    p.poly([[12, 2], [18, 9], [15, 22], [9, 22], [6, 9]], ICE[2]); p.poly([[12, 4], [16, 9], [12, 14]], ICE[3]); p.poly([[8, 10], [12, 14], [10, 21]], ICE[1]);
+    p.line(12, 3, 11, 9, VIOLET[0]); p.line(11, 9, 14, 13, VIOLET[0]); p.line(14, 13, 12, 21, VIOLET[0]);
+    p.outline(); p.spark(4, 6, 2, VIOLET[3]); p.spark(20, 7, 2, ICE[3]); p.px(3, 17, ICE[3]); p.px(21, 18, VIOLET[3]);
+  }],
+  sg_f_resolve: ["song", 4, (p) => {
+    sHeart(p, 9, 10, 4, BLOOD); p.sword(10, 21, 20, 5, STEEL, GOLD, { grip: 3 }); sNote(p, 5, 19, GOLD, 6, false);
+    p.outline(); p.spark(20, 14, 2, GOLD[3]);
+  }],
+  sg_f_sleight: ["discord", 4, (p) => {
+    p.poly([[4, 6], [20, 6], [19, 15], [12, 22], [5, 15]], BONE[2]); p.poly([[6, 7], [12, 7], [12, 20], [7, 14]], BONE[3]);
+    p.poly([[6, 9], [10, 11], [10, 13], [6, 12]], VIOLET[0]); p.poly([[18, 9], [14, 11], [14, 13], [18, 12]], VIOLET[0]);
+    p.line(9, 18, 12, 19, VIOLET[1]); p.line(12, 19, 15, 18, VIOLET[1]);
+    p.outline(); p.spark(21, 3, 2, VIOLET[3]); p.spark(3, 3, 1, VIOLET[3]);
+  }],
+};
+
+/** 24x24 colours for a Songweaver skill id (branch-coloured frame by tree row), or undefined. */
+export function paintSong(id: string): string[] | undefined {
+  const a = SONG_ART[id];
+  if (!a) return undefined;
+  const [branch, row0, draw] = a, row = skillById(id)?.row ?? row0, p = new Painter();
+  draw(p);
+  const back = backdrop(SONG_BACK[branch], row, false);
+  return back.map((b, i) => p.fx[i] || p.g[i] || b);
+}
+export const SONG_ART_IDS = Object.keys(SONG_ART);
