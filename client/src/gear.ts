@@ -15,6 +15,7 @@ import { bagPref, lootFilter, setBagPref, setLootFilter } from "./lootfilter";
 import { itemRunes, socketsOf, socketProblem } from "../../shared/gear";
 import { parseRune, Rune, RUNE_KIND_NAMES, RUNES, runeName, runeText } from "../../shared/runes";
 import { runeCanvas, runeCss, runeStone } from "./runeArt";
+import { assetUrl } from "./assetUrl";
 
 /** Rune lines of an item for tooltips (shared/runes.ts): what each set rune does, and the free sockets. */
 export function runeHtml(id: string): string {
@@ -70,11 +71,11 @@ export const rarityLabel = (id: string) => { const r = itemRarity(id); return r 
 export const affixHtml = (id: string) => affixLines(id).map((l) => `<span style="color:${itemColor(id)}">${l}</span>`).join("<br>");
 
 export function preloadGear(scene: Phaser.Scene) {
-  scene.load.atlas("gear_icons", `${BASE}/icons.png`, `${BASE}/icons.json`);
+  scene.load.atlas("gear_icons", assetUrl(`${BASE}/icons.png`), assetUrl(`${BASE}/icons.json`));
   // Painted overlay sheets are big (96px frames), so they load the first time someone wears the item
   if (HD_CHARS) return;
   for (const h of GEAR_HEROES) for (const id of LOOT_IDS) { // the old pixel sheets already show the class kit
-    scene.load.spritesheet(gearKey(h, id), `${BASE}/${h}_${id}.png`, { frameWidth: CHAR_FRAME, frameHeight: CHAR_FRAME });
+    scene.load.spritesheet(gearKey(h, id), assetUrl(`${BASE}/${h}_${id}.png`), { frameWidth: CHAR_FRAME, frameHeight: CHAR_FRAME });
   }
 }
 
@@ -85,7 +86,7 @@ function ensureGear(scene: Phaser.Scene, hero: string, id: string, done?: () => 
   if (scene.textures.exists(key)) return true;
   if (!HD_CHARS || pending.has(key) || !GEAR_HEROES.includes(hero.split("-")[0])) return false; // "archer-melee": a stance sheet
   pending.add(key);
-  scene.load.spritesheet(key, `assets/hd/gear/${hero}_${baseId(id)}.webp`, { frameWidth: CHAR_FRAME, frameHeight: CHAR_FRAME });
+  scene.load.spritesheet(key, assetUrl(`assets/hd/gear/${hero}_${baseId(id)}.webp`), { frameWidth: CHAR_FRAME, frameHeight: CHAR_FRAME });
   scene.load.once(`filecomplete-spritesheet-${key}`, () => {
     pending.delete(key);
     scene.textures.get(key).setFilter(Phaser.Textures.FilterMode.NEAREST); // pixel art: keep texels crisp

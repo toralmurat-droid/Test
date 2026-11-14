@@ -1,6 +1,7 @@
 import Phaser from "phaser";
 import { BeastForm, skillById, SkillDef, SKILLS } from "../../shared/skills";
 import { Grain, MORPH_MS, SkillFx, FxEntity } from "./skillfx";
+import { assetUrl } from "./assetUrl";
 
 /**
  * Vampire Bat Form / Wolf Form (Murat 2026-11-08): while the hero's status words (Player.fx) hold a shapeshift buff
@@ -60,9 +61,9 @@ export class BeastForms {
     }
     if (this.loading) return false;
     this.loading = true;
-    sc.load.json(META, `${BASE}/forms.json`);
+    sc.load.json(META, assetUrl(`${BASE}/forms.json`));
     for (const f of FORMS) {
-      sc.load.spritesheet(`form_${f}`, `${BASE}/${f}.png`, { frameWidth: 64, frameHeight: 64 });
+      sc.load.spritesheet(`form_${f}`, assetUrl(`${BASE}/${f}.png`), { frameWidth: 64, frameHeight: 64 });
       sc.load.once(`filecomplete-spritesheet-form_${f}`, () => sc.textures.get(`form_${f}`).setFilter(Phaser.Textures.FilterMode.NEAREST));
     }
     if (!sc.load.isLoading()) sc.load.start();

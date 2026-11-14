@@ -4,6 +4,7 @@ import { PALETTE, SkillFx } from "./skillfx";
 import { screenDir8 } from "./iso";
 import { CHAR_BASE, CHAR_FRAME, HD_CHARS } from "./artAssets";
 import { MOVE_DIRS, MOVE_HEROES, MOVES, moveFrame, Step } from "./skillMoveData";
+import { assetUrl } from "./assetUrl";
 
 /**
  * Hero skill moves (Murat 2026-11-05): big melee skills play a short micro sequence instead of the generic cast
@@ -49,7 +50,7 @@ export class SkillMoves {
     if (this.scene.textures.exists(key)) return true;
     if (this.pending.has(key)) return false;
     this.pending.add(key);
-    this.scene.load.spritesheet(key, `${CHAR_BASE}/${key}.webp`, { frameWidth: CHAR_FRAME, frameHeight: CHAR_FRAME });
+    this.scene.load.spritesheet(key, assetUrl(`${CHAR_BASE}/${key}.webp`), { frameWidth: CHAR_FRAME, frameHeight: CHAR_FRAME });
     this.scene.load.once(`filecomplete-spritesheet-${key}`, () => this.scene.textures.get(key).setFilter(Phaser.Textures.FilterMode.NEAREST));
     if (!this.scene.load.isLoading()) this.scene.load.start();
     return false;

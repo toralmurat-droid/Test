@@ -6,6 +6,7 @@ import { TILE_COUNT } from "../../shared/map";
 import { COMMON_ROWS, ROWS, drawTileset } from "./tileset";
 import { SMOOTH } from "./isoflag";
 import { hiResTexture } from "./smooth";
+import { assetUrl } from "./assetUrl";
 
 const hex = (c: number) => "#" + c.toString(16).padStart(6, "0");
 
@@ -345,8 +346,8 @@ const PAINTED_LOOK: Record<string, { top: number; bar: number; oy: number; scale
 export function preloadPaintedMobs(scene: Phaser.Scene) {
   if (!SMOOTH) return;
   Object.assign(MOB_LOOK, PAINTED_LOOK);
-  scene.load.json("hd_mobs", "assets/hd/mobs/mobs.json");
-  for (const k of [...PAINTED_MOBS.filter((m) => m !== "golem_colossus" && m !== "nightraider").map((m) => `mob_${m}`), "mob_motherblob2", "mob_motherblob3", "mob_skeleton_axe", "mob_skeleton_spear", "mob_skeleton_bow", "mob_bandit_brute", "mob_bandit_archer", "mob_demon1", "mob_demon2", "mob_demon3", "mob_demon4", ...FOLK_MOBS.map((m) => `mob_${m}_folk`), ...COLOSSUS_ELEMENTS.map((e) => `mob_golem_colossus_${e}`), ...WISP_ELEMENTS.map((e) => `mob_wisp_${e}`), ...RAIDERS.map((r) => `mob_nightraider_${r.key}`), ...AFFIX_KEYS.filter((k) => AFFIXES[k].overlay).map((k) => `mob_champ_${k}`), ...CHAMP_SHEETS.map((k) => `mob_${k}_champ`)]) scene.load.image(`hd_${k}`, `assets/hd/mobs/${k}.webp`);
+  scene.load.json("hd_mobs", assetUrl("assets/hd/mobs/mobs.json"));
+  for (const k of [...PAINTED_MOBS.filter((m) => m !== "golem_colossus" && m !== "nightraider").map((m) => `mob_${m}`), "mob_motherblob2", "mob_motherblob3", "mob_skeleton_axe", "mob_skeleton_spear", "mob_skeleton_bow", "mob_bandit_brute", "mob_bandit_archer", "mob_demon1", "mob_demon2", "mob_demon3", "mob_demon4", ...FOLK_MOBS.map((m) => `mob_${m}_folk`), ...COLOSSUS_ELEMENTS.map((e) => `mob_golem_colossus_${e}`), ...WISP_ELEMENTS.map((e) => `mob_wisp_${e}`), ...RAIDERS.map((r) => `mob_nightraider_${r.key}`), ...AFFIX_KEYS.filter((k) => AFFIXES[k].overlay).map((k) => `mob_champ_${k}`), ...CHAMP_SHEETS.map((k) => `mob_${k}_champ`)]) scene.load.image(`hd_${k}`, assetUrl(`assets/hd/mobs/${k}.webp`));
 }
 
 /** Monster sprite sheets, same 6-frame layout as personas (painted when the smooth look is on). */

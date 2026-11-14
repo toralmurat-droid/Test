@@ -1,4 +1,5 @@
 import { icon as pxIcon } from "./pixelicons";
+import { assetUrl } from "./assetUrl";
 /**
  * Background music.
  *
@@ -178,7 +179,8 @@ function playTrack() {
       ctx.createMediaElementSource(audioEl).connect(mp3Gain).connect(master);
       audioEl.addEventListener("ended", songEnded);
     }
-    if (!audioEl.src.endsWith(track.url)) audioEl.src = track.url;
+    const url = assetUrl(track.url);
+    if (!audioEl.src.endsWith(url)) audioEl.src = url;
     // Battle songs play once in full, the opening song loops until the hero is in the world;
     // calm tunes and a picked song loop
     audioEl.loop = settings.pick !== "auto" || (track.id === "hearth" ? !inWorld

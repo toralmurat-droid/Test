@@ -11,6 +11,7 @@ import { ideaLog, publicLog } from "./ideaStore";
 import { allAccounts, flushFinal, initAccounts, peek, requestReset, resetPassword, setEmail } from "./accounts";
 import { writeHandoff } from "./handoff";
 import { clientIp } from "./ratelimit";
+import { fileHashes, versionedCacheControl } from "./assetVersions";
 
 const PORT = Number(process.env.PORT ?? 2567);
 const app = express();
@@ -42,6 +43,21 @@ if (process.env.NODE_ENV === "production") {
     }
   };
   setImmediate(() => { try { warm(dist); } catch { /* no build yet */ } });
+  // Art, music, fonts and clips are asked for as `file?v=<content hash>` (client/src/assetUrl.ts): when the hash is
+  // that of the file on disk, the browser may keep it for a year without asking again (server/assetVersions.ts).
+  // Without `v`, or with another one, the normal headers below apply.
+  const hashOf = fileHashes();
+  app.use(async (req, res, next) => {
+    const v = req.query.v;
+    if ((req.method !== "GET" && req.method !== "HEAD") || typeof v !== "string") return next();
+    let rel: string;
+    try { rel = decodeURIComponent(req.path); } catch { return next(); }
+    const file = path.join(dist, path.normalize(rel));
+    if (!file.startsWith(dist + path.sep) || /\.html?$/.test(file)) return next();
+    const cc = versionedCacheControl(v, await hashOf(file));
+    if (cc) res.setHeader("Cache-Control", cc); // express.static and the gzip step below keep a header set here
+    next();
+  });
   app.use(async (req, res, next) => {
     if (req.method !== "GET" || !/\bgzip\b/.test(String(req.headers["accept-encoding"] ?? ""))) return next();
     const rel = req.path === "/" ? "/index.html" : req.path;
@@ -53,9 +69,8 @@ if (process.env.NODE_ENV === "production") {
     res.setHeader("Content-Encoding", "gzip");
     res.setHeader("Vary", "Accept-Encoding");
     res.type(path.extname(file));
-    // Vite's hashed files (assets/name-HASH.js) never change: let the browser keep them
-    if (/\/assets\/[^/]+-[A-Za-z0-9_-]{8}\.\w+$/.test(rel)) res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
-    else res.setHeader("Cache-Control", "no-cache");
+    // Vite's hashed files (assets/name-HASH.js) never change: let the browser keep them (versioned files got theirs above)
+    if (!res.getHeader("Cache-Control")) res.setHeader("Cache-Control", /\/assets\/[^/]+-[A-Za-z0-9_-]{8}\.\w+$/.test(rel) ? "public, max-age=31536000, immutable" : "no-cache");
     res.end(body);
   });
   // The game wiki (client/wiki.html) and its skills page (client/skills.html): short addresses, like play.fmtpa.ch/skills

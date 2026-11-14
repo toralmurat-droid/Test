@@ -7,6 +7,7 @@ import { CHAR_BASE, CHAR_EXT, HD_CHARS } from "./artAssets";
 import { GEAR_SLOTS, starterKit } from "../../shared/gear";
 import { bonfireStrip, FRAMES, FW, FH } from "./loading";
 import { hash, vnoise, dith, FIRE } from "./bonfireArt";
+import { assetUrl } from "./assetUrl";
 
 interface AnimDef { frames: number[]; fps: number; loop: boolean }
 interface Meta { columns: number; frameWidth: number; animations: Record<string, AnimDef> }
@@ -143,15 +144,15 @@ export function mountFireside(canvas: HTMLCanvasElement, labelHost: HTMLElement,
     return { k, slot: SLOTS[seats[i % seats.length]], img: null, kit: [], anim: "idle", t0: 0, step: 0, nextFidget: 2000 + Math.random() * 4000, label };
   });
   let meta: Meta | null = null;
-  fetch(`${CHAR_BASE}/characters.json`).then((r) => r.json()).then((m) => { meta = m; }).catch(() => { /* names still show */ });
+  fetch(assetUrl(`${CHAR_BASE}/characters.json`)).then((r) => r.json()).then((m) => { meta = m; }).catch(() => { /* names still show */ });
   for (const h of heroes) {
-    const i = new Image(); i.onload = () => { h.img = i; }; i.src = `${CHAR_BASE}/${h.k}.${CHAR_EXT}`;
+    const i = new Image(); i.onload = () => { h.img = i; }; i.src = assetUrl(`${CHAR_BASE}/${h.k}.${CHAR_EXT}`);
     if (HD_CHARS) { // the painted sheet is the bare hero: put the starting kit on, layer by layer
       const kit = starterKit(h.k);
       for (const slot of KIT_ORDER) {
         const id = kit[slot];
         if (!id || !GEAR_SLOTS.includes(slot)) continue;
-        const gi = new Image(); gi.src = `assets/hd/gear/${h.k}_${id}.webp`;
+        const gi = new Image(); gi.src = assetUrl(`assets/hd/gear/${h.k}_${id}.webp`);
         h.kit.push(gi);
       }
     }

@@ -34,7 +34,7 @@ async function login(browser, name, cls, failFirst = []) {
   const ctx = await browser.newContext({ viewport: { width: W, height: H }, deviceScaleFactor: 1 });
   const page = await ctx.newPage();
   const fails = {};
-  for (const f of failFirst) await page.route(`**/characters/${f}.webp`, (r) => { fails[f] = (fails[f] || 0) + 1; return fails[f] <= 2 ? r.abort() : r.continue(); });
+  for (const f of failFirst) await page.route(`**/characters/${f}.webp*`, (r) => { fails[f] = (fails[f] || 0) + 1; return fails[f] <= 2 ? r.abort() : r.continue(); });
   page.on("pageerror", (e) => errors.push(`${name}: ${e.message}`));
   page.on("console", (m) => { if ((m.type() === "error" && !/Failed to load resource/.test(m.text())) || /refId|definition mismatch/.test(m.text())) errors.push(`${name} console: ${m.text()}`); });
   await page.addInitScript((c) => { try { localStorage.setItem("cls", c); } catch { /* ignore */ } window.__longTasks = []; try { new PerformanceObserver((l) => { for (const e of l.getEntries()) window.__longTasks.push([Math.round(e.startTime), Math.round(e.duration)]); }).observe({ entryTypes: ["longtask"] }); } catch { /* no longtask */ } }, cls);

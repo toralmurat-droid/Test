@@ -9,6 +9,7 @@ import { ACTIVE_CLASSES, CLASSES, type ClassKind } from "../../shared/classes";
 import { BRANCHES, CANTRIPS, SKILLS, skillById, maxRank, type SkillDef } from "../../shared/skills";
 import { skillIcon } from "./skillIcons";
 import { installWeatheredFrames } from "./weathered";
+import { assetUrl } from "./assetUrl";
 
 type Clips = { sources: string; clips: Record<string, { ms: number; frames: number }> };
 
@@ -33,7 +34,7 @@ function card(s: SkillDef, clips: Clips, color: string): string {
   const clip = clips.clips[s.id];
   const upgrade = s.mod ? skillById(s.mod.of) : undefined;
   let view: string;
-  if (clip) view = `<img class="sk-clip" src="/skills/${s.id}.webp?v=${clips.sources}" alt="${esc(s.name)} in the game" loading="lazy" width="576" height="432">`;
+  if (clip) view = `<img class="sk-clip" src="${assetUrl(`/skills/${s.id}.webp`)}" alt="${esc(s.name)} in the game" loading="lazy" width="576" height="432">`;
   else if (s.passive || upgrade) view = `<div class="sk-still"><img src="${icon}" alt=""><span>${upgrade ? `Makes ${esc(upgrade.name)} stronger` : "Always on"}</span></div>`;
   else view = `<div class="sk-still"><img src="${icon}" alt=""><span>Clip being filmed</span></div>`;
   return `<article class="sk-card" style="--branch:${color}">
@@ -64,7 +65,7 @@ function show(cls: ClassKind, clips: Clips) {
 
 (async () => {
   let clips: Clips = { sources: "", clips: {} };
-  try { const r = await fetch("/skills/clips.json", { cache: "no-cache" }); if (r.ok) clips = await r.json(); } catch { /* no clips yet: icons only */ }
+  try { const r = await fetch(assetUrl("/skills/clips.json")); if (r.ok) clips = await r.json(); } catch { /* no clips yet: icons only */ }
   for (const cls of ACTIVE_CLASSES) {
     const b = document.createElement("button");
     b.dataset.cls = cls; b.textContent = CLASSES[cls].name;

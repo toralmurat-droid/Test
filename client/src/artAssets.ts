@@ -1,5 +1,6 @@
 import Phaser from "phaser";
 import { SMOOTH } from "./isoflag";
+import { assetUrl } from "./assetUrl";
 
 /**
  * Generated pixel art (see tools/art, run `npm run art`).
@@ -43,11 +44,11 @@ const BASE = "assets";
  */
 export function preloadArt(scene: Phaser.Scene, ownClass?: string) {
   const first = HD_CHARS ? CHARACTERS.filter((c) => c === ownClass) : CHARACTERS;
-  for (const c of first) scene.load.spritesheet(c, `${CHAR_BASE}/${c}.${CHAR_EXT}`, { frameWidth: CHAR_FRAME, frameHeight: CHAR_FRAME });
-  scene.load.json("characters_meta", `${CHAR_BASE}/characters.json`);
-  scene.load.atlas("props", `${BASE}/objects/props.png`, `${BASE}/objects/props.json`);
-  scene.load.atlas("items", `${BASE}/objects/items.png`, `${BASE}/objects/items.json`);
-  scene.load.json("props_meta", `${BASE}/objects/props.json`);
+  for (const c of first) scene.load.spritesheet(c, assetUrl(`${CHAR_BASE}/${c}.${CHAR_EXT}`), { frameWidth: CHAR_FRAME, frameHeight: CHAR_FRAME });
+  scene.load.json("characters_meta", assetUrl(`${CHAR_BASE}/characters.json`));
+  scene.load.atlas("props", assetUrl(`${BASE}/objects/props.png`), assetUrl(`${BASE}/objects/props.json`));
+  scene.load.atlas("items", assetUrl(`${BASE}/objects/items.png`), assetUrl(`${BASE}/objects/items.json`));
+  scene.load.json("props_meta", assetUrl(`${BASE}/objects/props.json`));
 }
 
 /** Pixel art on the world's texel grid: NEAREST sampling (the game is antialiased otherwise), and the sheet's animations `${name}_${anim}`. */
@@ -133,7 +134,7 @@ function pumpSheets(scene: Phaser.Scene) {
 function startSheet(scene: Phaser.Scene, job: SheetJob) {
   const { name } = job, t0 = performance.now();
   job.loading = true;
-  scene.load.spritesheet(name, `${CHAR_BASE}/${name}.${CHAR_EXT}`, { frameWidth: CHAR_FRAME, frameHeight: CHAR_FRAME });
+  scene.load.spritesheet(name, assetUrl(`${CHAR_BASE}/${name}.${CHAR_EXT}`), { frameWidth: CHAR_FRAME, frameHeight: CHAR_FRAME });
   scene.load.off(`filecomplete-spritesheet-${name}`); // a failed earlier try left its listener
   scene.load.once(`filecomplete-spritesheet-${name}`, () => {
     const t1 = performance.now();
