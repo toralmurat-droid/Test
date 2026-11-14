@@ -21,6 +21,8 @@
 #npcdialog .nd-btns { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; margin-top: 10px; }
 #npcdialog button { font: 18px var(--pixel-font); padding: 6px 12px; border-radius: 4px; cursor: pointer; border: 2px solid #4f6b32; background: #f5ecd2; color: #2a1f10; }
 #npcdialog button.nd-accept { background: #4f6b32; color: #fff; }
+#npcdialog .nd-opts { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+#npcdialog button.nd-opt { text-align: left; width: 100%; min-height: 40px; background: #4f6b32; color: #fff; line-height: 1.15; }
 #npcdialog button:hover { filter: brightness(1.1); }
 #npcdialog button:disabled { opacity: .5; cursor: default; }
 #questtracker { display: none; position: absolute; top: 330px; right: 12px; width: 240px; padding: 6px 9px; background: rgba(0,0,0,.55);

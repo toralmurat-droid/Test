@@ -321,6 +321,20 @@ export class SkillFx {
         if (ev.charge > 0) this.gather(ev.id, style, ev.charge, tier);
         break;
       }
+      // The Empty Grave pick: a right grave breathes out pale dust and a warm light; a wrong one bursts open (m is what rises)
+      case "graveright":
+        this.rise(ev.x, ev.y, 10, "holy", 14, 34, 900);
+        this.burst(ev.x, ev.y, 4, "earth", 10, 40, 500);
+        this.glow(ev.x, ev.y, 10, 16, 0xffe9a8, 500, 0.6);
+        break;
+      case "gravewrong": {
+        const mob = ev.m ? this.ent(ev.m) : undefined, gx = mob?.sprite.x ?? ev.x, gy = mob?.sprite.y ?? ev.y;
+        this.burst(ev.x, ev.y, 2, "earth", 22, 90, 600, 2);
+        this.ring(ev.x, ev.y, 34, "earth", 18, { up: 30, life: 480, size: 2 });
+        this.burst(gx, gy, 6, "shadow", 12, 50, 600);
+        this.glow(ev.x, ev.y, 8, 20, 0x5a2a6b, 450, 0.55);
+        break;
+      }
       case "fizzle":
         if (e) this.burst(e.sprite.x, e.sprite.y, e.top * 0.5, "earth", 8, 30, 300);
         break;
