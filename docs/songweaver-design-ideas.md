@@ -31,3 +31,22 @@ The Songweaver carries a small **Songbook** item.
 - Open: where songs come from (drops, quests,
   NPCs, places); what a collected song does (a new song skill, a new progression or finisher, a mode, a
   cosmetic tune); how it saves (a new optional save field).
+
+### DI-3 (2026-11-14): the mana bubble becomes a song gauge
+For the Songweaver, the mana bubble works as a gauge instead of a pool:
+- It **starts empty** and has **no natural regen**.
+- It **fills with each note played**.
+- When **full**, it **triggers a special effect**, then **empties completely** and the cycle starts again.
+
+Orchestrator notes for when it's picked up:
+- Today Songweaver skills **cost** mana (it's a `manaClasses` class), so mana stops being a cost. Skills then need
+  a different limit, such as cooldowns only, or some other cost.
+- Overlap with what exists: **Tempo** stacks (built by notes, spent by Twelve-Tone Storm) and the chord finishers.
+  Decide whether the gauge replaces Tempo or sits beside it.
+- Open:
+  - what the special effect is (fixed, chosen by branch or mode, or set by the equipped book, see DI-2);
+  - whether basic-attack notes fill it or only skill notes;
+  - whether chords fill it faster;
+  - what mana potions do;
+  - whether it drains when out of combat or on death;
+  - how the sims model it (`tools/balance/duel.ts` and `pve.ts` use the mana model today).
