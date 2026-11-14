@@ -31,7 +31,8 @@ const NO_MOB_RECTS = NO_MOB_AREAS.flatMap((n) => AREAS.filter((a) => a.name === 
 /** True where monsters may not go (pixel coords). */
 export function noMobsAt(px: number, py: number): boolean {
   const tx = px / TILE, ty = py / TILE;
-  return NO_MOB_RECTS.some((r) => tx >= r.x0 && tx < r.x1 && ty >= r.y0 && ty < r.y1);
+  for (const r of NO_MOB_RECTS) if (tx >= r.x0 && tx < r.x1 && ty >= r.y0 && ty < r.y1) return true; // (asked for every monster step: no closure)
+  return false;
 }
 
 /** Mother Blobs keep this many tiles away from Oakvale's stockade (Murat 2026-11-03): no spawning, no wandering in. */
