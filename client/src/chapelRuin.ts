@@ -1,7 +1,7 @@
 import Phaser from "phaser";
 import { CHAPEL_RUIN, TANKARD_RUIN } from "../../shared/map";
 import { canvasPen, hsh, IsoPaint, ramp, type Mat, type V3 } from "./isoPaint";
-import { BLACKR, IRONR, WOODR } from "./isoProps";
+import { BLACKR, IRONR } from "./isoProps";
 import { hiResTexture } from "./smooth";
 
 /**
@@ -43,7 +43,7 @@ export function specialRuinTexture(scene: Phaser.Scene, kind: "chapel" | "tankar
 }
 
 const C = 16;
-/** Wall boxes from the tile centre out along each arm of the mask, each with its own height from `hAt` (world). */
+/** Wall boxes from the tile centre out along each arm of the mask, `each` gets the box and its middle (tile-local). */
 function arms(mask: number, T: number, step: number, each: (u0: number, u1: number, v0: number, v1: number, um: number, vm: number) => void) {
   each(C - T, C + T, C - T, C + T, C, C);
   const dirs: [number, number, number][] = [[1, 0, -1], [2, 1, 0], [4, 0, 1], [8, -1, 0]];
@@ -65,7 +65,7 @@ function holeBox(q: IsoPaint, u0: number, u1: number, v0: number, v1: number, z0
   m: (l: number, x: number, y: number, z: number, px: number, py: number, top: boolean) => number | undefined, solid?: (x: number, y: number, z: number) => boolean) {
   if (z1 <= z0) return;
   const P = (u: number, v: number, z: number): V3 => [u * K, v * K, z * K];
-  const k = 2.4;
+  const k = 1.3; // samples per pixelize cell: enough to leave no gaps, cheap enough for 26 tiles at load
   const face = (f: (s: number, t: number) => [number, number, number], n: V3, ns: number, nt: number, top = false) =>
     q.surf((s, t) => { const [x, y, z] = f(s, t); return [P(x, y, z), n]; }, ns, nt, (l, s, t, px, py) => {
       const [x, y, z] = f(s, t);
@@ -148,6 +148,7 @@ function chapelTile(q: IsoPaint, mask: number, tx: number, ty: number) {
     q.surf((s, t) => [[C * K, (C - 6 + s * 12) * K, (10 + t * 30) * K], [1, 0, 0]], 54, 110, (l, s, t, px, py) => {
       const y = C - 6 + s * 12, z = 10 + t * 30, d = Math.abs(y - C);
       if (z > 30 && d >= 6 - (z - 30) * 0.6) return undefined;
+      if (z > chapelHeight(tx, ty, C, y)) return undefined; // no glass above the broken wall top
       if (d < 0.7 && z < 33) return ramp(LIME, 0.5 + l * 0.4, px, py); // the stone mullion
       const cy = Math.floor((y + 10) / 2.2), cz = Math.floor(z / 2.6) + (cy % 2);
       if (hsh(cy, cz, tx * 7 + ty) < 0.18 + t * 0.3) return undefined; // shattered panes, most gone near the top
@@ -234,5 +235,4 @@ function tankardTile(q: IsoPaint, mask: number, tx: number, ty: number) {
     const u = 6 + R(201) * 20, v = 6 + R(202) * 20;
     if (!(Math.abs(u - C) < 6 && Math.abs(v - C) < 6)) q.surf((s, t) => { const a = s * Math.PI * 2, rr = 4 + t * 0.6; return [P(u + Math.cos(a) * rr, v + Math.sin(a) * rr * 0.8, 0.6 + t * 0.6), [0, 0, 1]]; }, 40, 3, (l, s, t, px, py) => ramp(IRONR, l * 0.6 - 0.1, px, py));
   }
-  void WOODR;
 }
