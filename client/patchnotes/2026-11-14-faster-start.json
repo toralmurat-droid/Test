@@ -4,6 +4,7 @@
   "changes": [
     "The game's art and music now stay in your browser between visits and updates, so coming back loads much faster. Only art that changed in an update is downloaded again.",
     "The start screen appears sooner: the game itself loads in the background while you type your name.",
-    "Fix: in very large fights the server could fall behind on sending updates and then disconnect everyone. It now keeps up."
+    "Fix: in very large fights the server could fall behind on sending updates and then disconnect everyone. It now copes much better.",
+    "Fix: after \"This hero is already playing\" or a failed connection you can try again right away, without reloading the page."
   ]
 }

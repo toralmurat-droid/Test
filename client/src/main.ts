@@ -329,7 +329,7 @@ addEventListener("keydown", (e: KeyboardEvent) => {
 });
 
 let launching = false;
-/** The one way into the game: waits for the game chunk, then starts Phaser. Ignored while a launch is under way or the game runs. */
+/** The one way into the game: waits for the game chunk, then starts Phaser. Ignored while a launch is under way or a game lives. */
 function launch(name: string, password: string, newGame: boolean, back = false) {
   if (launching) return;
   launching = true;
@@ -339,10 +339,12 @@ function launch(name: string, password: string, newGame: boolean, back = false) 
   initMusic(name);
   status.textContent = "Connecting…";
   showLoading(back ? "Back to where you stood…" : undefined); // covers everything until the world is fully drawn (TownScene hides it)
-  // `launching` stays set once the game runs: a second Phaser game on this page is never right (a reload starts over)
-  loadGame().then((g) => g.startGame({ name, password, color, cls, newGame })).catch(() => {
+  // `launching` stays set while that game lives (two Phaser games on one page are never right) and is freed when it is
+  // destroyed: the scene does that when the server turns the hero away, and the player may then try again.
+  loadGame().then((g) => g.startGame({ name, password, color, cls, newGame }, () => { launching = false; })).catch((e) => {
+    console.error("game start failed", e);
     // The game files did not arrive (offline, or a deploy is under way). The browser remembers a failed import() until
-    // the page is reloaded, so the retry is a reload (which also picks up a new build). Same if starting it threw.
+    // the page is reloaded, so the retry is a reload (which also picks up a new build). Same if building the game threw.
     launching = false;
     hideLoading(true);
     nameEl.value = name; pwEl.value = password;

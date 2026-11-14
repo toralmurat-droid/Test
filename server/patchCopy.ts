@@ -3,7 +3,7 @@
 // Why: @colyseus/schema's Encoder.encode returns `buffer.subarray(0, offset)` of one buffer per room (the encoder's
 // `sharedBuffer` for patches, the serializer's `fullEncodeBuffer` for the full state sent on join), and
 // SchemaSerializer passes that view to `client.raw`. With per-message deflate `ws` neither copies it nor compresses
-// it at once (one process-wide limit of 10 jobs on the thread pool), so a socket still waiting when the next patch
+// it at once (the work is queued for the thread pool), so a socket still waiting when the next patch
 // (or the next join) is encoded compresses overwritten bytes. The client cannot tell: wrong values stay until they
 // change again. One copy per encode, shared by all clients, is enough: `ws` only reads it, and the server does not
 // mask frames.

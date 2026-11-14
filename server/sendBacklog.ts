@@ -16,14 +16,21 @@
 //
 // NOT solved here: what clients send. Browsers compress every message they send (no size threshold), the server
 // inflates them one at a time per socket, and a pong is read only after the messages before it. The bench bots
-// compress everything too (tools/perf/bots.ts): 20 non-stop casting bots stay connected, 40 are dropped with pongs
-// ~10 s late. Real players send far fewer messages than those bots, but no real browser has been measured.
+// compress everything too (tools/perf/bots.ts): 20 non-stop casting bots stay connected; 40 (the server is then over
+// its tick budget) are all dropped at their ~45 messages a second, and stay connected at ~9 a second (CAST_EVERY=5)
+// with pongs 5-8 s late, right at the cut-off. No real browser has been measured.
+//
+// Also not covered: a client on a slow link. `pending` falls when a frame is handed to the kernel, so a socket whose
+// kernel buffer is full stays at the limit and gets uncompressed messages (about twice the bytes) while it is behind.
 
 /** Per-message deflate settings, shared by the server (server/index.ts) and the bench (tools/perf/bench.ts). Level 1 is
- * the fastest. No `threshold`: `ws` applies it only to a side without context takeover, so it never applied here.
- * `concurrencyLimit`: zlib jobs (both ways, all sockets) that may run at once. With the default 10 every socket waited
- * its turn behind all the others: 40 casting bots saw 1-3 s per message and pongs 2-5 s late, against 0.1-0.6 s and
- * 0.2-0.3 s with 256 (and no more memory). Each job is microseconds of zlib work; the wait was the queue. */
+ * the fastest. No `threshold`: `ws` applies it only to a side without context takeover, which browsers do not ask the
+ * server for, so it never applied to them.
+ * `concurrencyLimit`: zlib jobs (both ways, all sockets) that may be under way at once. One limiter per process, fixed
+ * by the first socket made in it. With the default 10 every socket waited its turn behind all the others: 40 casting
+ * bots saw 1-3 s per message and pongs 2-5 s late, against 0.1-0.6 s and 0.2-0.3 s with 256. Each job is microseconds
+ * of zlib work; the wait was the queue. The limit does not bound memory (each socket keeps its two zlib streams either
+ * way); the jobs now wait in libuv's thread-pool queue instead, which logins (scrypt) and file reads share. */
 export const PER_MESSAGE_DEFLATE = { zlibDeflateOptions: { level: 1 }, concurrencyLimit: 256 };
 
 /** Compressed messages one socket may have queued or in flight before the next is sent uncompressed. Transport tuning,

@@ -331,7 +331,7 @@ Open:
   - N7 (send backlog). The byte-limit idea in the table above did not work: the cost is per message. What is in:
     `guardSendBacklog` (at most 2 compressed sends unfinished per socket, later ones uncompressed) and
     `concurrencyLimit: 256` for `ws`'s zlib queue (the default 10 made every socket wait behind all the others).
-    Bench bots now compress every message, like browsers. 20 casting bots: dropped in 8 of 9 runs before, 0 of 8
+    The bench bots compress every message they send, as browsers do (they always did; the bench now reports it as `compressedInPct`). 20 casting bots: dropped in 8 of 9 runs before, 0 of 8
     after; send delay p99 about 0.1-0.2 s, wire/payload 0.55 instead of 0.51 when the server keeps up.
     Not solved: the incoming side. The server inflates each client message one at a time per socket and reads a
     pong only after the messages before it. 40 casting bots (server over budget, 13-16 ticks/s): all dropped when
@@ -341,4 +341,11 @@ Open:
     or compression off (about 35% more bytes).
   - Review of the third wave: NOT OK at first. A request path with `%00` made the new `?v=` middleware reject
     unhandled, which shuts the server down. Fixed (`versionedCache` never rejects, tests for hostile paths, checked
-    against a running server). Also fixed: second launch after a successful start, a throw while starting the game.
+    against a running server). Also fixed: a throw while building the game (reload message instead of an endless loading screen).
+  - Second review: NOT OK again, for a regression from the first fix round: `launching` stayed set after a start,
+    so after a refused join ("already playing", server not up yet) Resume did nothing until a manual reload. Now
+    one game may live at a time and Phaser's destroy event frees the launch. Replaying it in a browser (two tabs,
+    same hero) showed the retry had not worked before this wave either: `worldscale.ts` kept the destroyed game and
+    the next start threw on it. The destroyed game now leaves the helper; refused twice, in on the third try once
+    the hero is free, one canvas, no reload. Left: a `reading 'renderer'` page error when the game is destroyed
+    during boot (harmless, not looked into).
