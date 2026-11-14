@@ -1,4 +1,5 @@
 import { test } from "node:test";
+import { readFileSync } from "node:fs";
 import assert from "node:assert/strict";
 import { TILE } from "../shared/constants";
 import { isSolidAt } from "../shared/map";
@@ -92,7 +93,12 @@ test("patrols: building twice gives the same routes", () => {
 });
 
 test("troops: look covers every clan; settings sane", () => {
+  const sheets = JSON.parse(readFileSync("client/public/assets/hd/mobs/mobs.json", "utf8"));
   for (const k of CLAN_KEYS) assert.ok(TROOP_LOOK[k]?.kinds.length, k);
+  for (const k of CLAN_KEYS) for (const n of [...TROOP_LOOK[k].kinds, TROOP_LOOK[k].officer]) {
+    assert.ok(n.startsWith("war_"), `${n} is an art-only key`);
+    assert.ok(sheets[`mob_${n}`]?.frames >= 14, `${n}: painted sheet with fall frames exists`);
+  }
   assert.ok(TROOP.perPatrol >= 1 && TROOP.speed > 0 && TROOP.rankGap > 0 && TROOP.lateral > 0 && TROOP.pauseMs >= 0 && TROOP.viewRange > 0);
 });
 

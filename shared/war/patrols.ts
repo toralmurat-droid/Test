@@ -276,13 +276,17 @@ export function garrisonSpots(t: number, n: number): { x: number; y: number; fx:
   return spots.get(t)!.slice(0, n);
 }
 
-/** Sprite kinds (texture keys from tools/art/characters.ts) each clan's soldiers wear; the client picks per soldier. */
+/**
+ * Art keys of each clan's soldiers: a line soldier (`kinds`, picked per soldier) and the `officer` who leads the column.
+ * Painted sheets `mob_<key>` (tools/art/paint/warLooks.ts); art-only, they are not monster kinds and sit in no gameplay table.
+ * Without the painted look (`?pixel=1`) the client falls back to older monster sheets (client/src/warTroops.ts LEGACY).
+ */
 export const TROOP_LOOK: Record<ClanKey, { kinds: string[]; officer: string }> = {
-  wardens: { kinds: ["watchman"], officer: "watchman" },
-  redfang: { kinds: ["bandit", "bandit_brute"], officer: "bandit_brute" },
-  host: { kinds: ["skeleton_spear", "skeleton"], officer: "skeleton" },
-  hidekin: { kinds: ["gnawkin_folk", "tuskborn_folk"], officer: "tuskborn_folk" },
-  veiled: { kinds: ["veiled", "nomad_folk"], officer: "nomad_folk" },
+  wardens: { kinds: ["war_warden"], officer: "war_warden_cap" },
+  redfang: { kinds: ["war_redfang"], officer: "war_redfang_chief" },
+  host: { kinds: ["war_host"], officer: "war_host_cap" },
+  hidekin: { kinds: ["war_hidekin"], officer: "war_hidekin_chief" },
+  veiled: { kinds: ["war_veiled"], officer: "war_veiled_adept" },
 };
 
 /** The sprite kind soldier number `seed` of clan `clan` wears (the officer has his own): the one rule client and server share. */

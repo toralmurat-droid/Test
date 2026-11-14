@@ -1184,5 +1184,65 @@
   "h": 40,
   "scale": 1.5,
   "frames": 12
+ },
+ "mob_war_warden": {
+  "w": 36,
+  "h": 32,
+  "scale": 1.5,
+  "frames": 14
+ },
+ "mob_war_redfang": {
+  "w": 36,
+  "h": 32,
+  "scale": 1.5,
+  "frames": 14
+ },
+ "mob_war_host": {
+  "w": 36,
+  "h": 32,
+  "scale": 1.5,
+  "frames": 14
+ },
+ "mob_war_hidekin": {
+  "w": 36,
+  "h": 32,
+  "scale": 1.5,
+  "frames": 14
+ },
+ "mob_war_veiled_adept": {
+  "w": 36,
+  "h": 34,
+  "scale": 1.5,
+  "frames": 14
+ },
+ "mob_war_warden_cap": {
+  "w": 36,
+  "h": 34,
+  "scale": 1.5,
+  "frames": 14
+ },
+ "mob_war_redfang_chief": {
+  "w": 36,
+  "h": 34,
+  "scale": 1.5,
+  "frames": 14
+ },
+ "mob_war_host_cap": {
+  "w": 36,
+  "h": 34,
+  "scale": 1.5,
+  "frames": 14
+ },
+ "mob_war_hidekin_chief": {
+  "w": 36,
+  "h": 34,
+  "scale": 1.5,
+  "frames": 14
+ },
+ "mob_war_veiled": {
+  "w": 36,
+  "h": 32,
+  "scale": 1.5,
+  "frames": 14
  }
 }

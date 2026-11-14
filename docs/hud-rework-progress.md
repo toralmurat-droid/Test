@@ -24,6 +24,7 @@ Shipped as three PRs, one after another on one branch: A (bugs) → B (layout) �
 - Not verified: other window sizes, dpr 1.25, several prompts at once (code keeps them exclusive).
 
 ## C – monster info (built and reviewed; server `by` on "hit" ships with it, `server/hitBy.ts`)
+- 2026-11-14 (owner): every hurt monster shows its world HP bar, whoever hurt it (`showWorldBar` `damaged`).
 Owner rules: monster HP bars only on hover or damage; a top-of-screen bar shows the hovered monster's level, health
 and characteristics; monster specifics (helper text, icons) only in that bar.
 Owner decisions:

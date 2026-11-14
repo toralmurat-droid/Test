@@ -1363,6 +1363,24 @@ function hat(c: C2, r: Rig, hg: HeadGear | "crown") {
       if (dir === "down") metal(c, (cc) => cc.rect(qx - 0.3, hy - 0.6, 0.6, 2.0), col, [qx - 0.3, hy], [qx + 0.3, hy + 1]);
       break;
     }
+    case "kettle": { // a kettle hat: round dome, a wide flat brim all round, rivets, an optional plume
+      const brim = ellipseP(hx, hy - 0.45, 3.75, 1.05);
+      metal(c, brim, sh(col, 0.85), [hx - 3.7, hy - 1], [hx + 3.7, hy + 0.3], 0.6);
+      const dome = blobPath([[hx - 2.55, hy - 0.5], [hx - 2.4, hy - 2.7], [hx, hy - 3.75], [hx + 2.4, hy - 2.7], [hx + 2.55, hy - 0.5]]);
+      metal(c, dome, col, [hx - 2.5, hy - 3.2], [hx + 2.5, hy - 0.3], 0.85);
+      line(c, [[hx - 2.5, hy - 0.8], [hx + 2.5, hy - 0.8]], sh(col, 0.5), 0.35, 0.9);
+      if (dir !== "up") line(c, [[hx - 0.3, hy - 3.6], [hx + (r.R ? 1.1 : 0), hy - 1.0]], sh(col, 1.5), 0.25, 0.6);
+      for (let k = -1; k <= 1; k++) fillShape(c, ellipseP(hx + k * 1.5 + (r.R ? 0.3 : 0), hy - 0.45, 0.2, 0.16), css(trim));
+      if (L.plume !== undefined) {
+        const pl = C(L.plume), back = r.R ? -1 : 0, sway = Math.sin(t * 1.2) * 0.3;
+        for (let k = 0; k < 7; k++) {
+          const a: P = [hx + (r.R ? 0.4 - k * 0.3 : 0), hy - 3.6];
+          const end: P = r.R ? [hx - 1.0 - k * 0.6 + sway, hy - 4.9 + k * 0.5] : [hx + (k - 3) * 0.4 + sway, hy - 5.6 + Math.abs(k - 3) * 0.35];
+          curve(c, a, [end[0] + back, end[1] - 0.7], end, k % 2 ? sh(pl, 1.25) : pl, 0.7 - Math.abs(k - 3) * 0.05, 0.95);
+        }
+      }
+      break;
+    }
     case "helm": {
       const dome = blobPath([[hx - 2.75, hy - 0.1], [hx - 2.5, hy - 2.5], [hx, hy - 3.5], [hx + 2.5, hy - 2.5], [hx + 2.75, hy - 0.1]]);
       metal(c, dome, col, [hx - 2.6, hy - 3], [hx + 2.6, hy], 0.8);
@@ -1510,6 +1528,19 @@ function weapon(c: C2, r: Rig) {
       metal(c, head, W.blade, at(b0, 4.5), at(b0 + 3, 0.5), 0.6);
       curve(c, at(b0 - 1.3, 4.3), at(b0 + 1.6, 3.6), at(b0 + 4.3, 4.5), sh(W.blade, 1.6), 0.3, 0.9);
       fillShape(c, poly([at(b0 + 0.4, -0.3), at(b0 + 1.2, -2.2), at(b0 + 2.0, -0.3)]), css(sh(W.blade, 0.7)));
+      break;
+    }
+    case "pick": { // a digger's pick: a long haft and a curved double-spiked iron head across the end (Hide-Kin)
+      const len = 10 * W.long * (L.bladeLen ?? 1);
+      limb(c, at(-2.6), at(len), 0.75, 0.7, C(WOOD));
+      for (const t of [0, 1.2]) line(c, [at(t - 0.2, -0.45), at(t + 0.2, 0.45)], C(0x3a2414), 0.25, 0.9);
+      const iron = W.g ? W.blade : C(0x7a828a);
+      for (const sg of [-1, 1]) {
+        const head = blobPath([at(len - 0.6, sg * 0.4), at(len - 1.2, sg * 2.4), at(len - 2.8, sg * 4.4), at(len - 0.8, sg * 3.3), at(len + 0.4, sg * 2.4), at(len + 0.7, sg * 0.4)]);
+        metal(c, head, sg > 0 ? iron : sh(iron, 0.8), at(len - 1, sg * 4), at(len, 0), 0.6);
+      }
+      limb(c, at(len - 1.2), at(len + 1.4), 0.9, 0.5, sh(iron, 0.7));
+      if (W.glowing) glowAlong(len - 1, len + 1, W.accent);
       break;
     }
     case "hammer": {

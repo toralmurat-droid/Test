@@ -101,8 +101,8 @@ test("the diff key ignores live HP but follows what is on show", () => {
   assert.notEqual(a.key, monsterInfo(mob({ kind: "skeleton", stunned: true }), ctx).key);
 });
 
-const base = { hovered: false, targeted: false, now: 10_000, dead: false, hidden: false, ownSummon: false };
-test("showWorldBar: only while hovered, targeted or recently hit by me / my group", () => {
+const base = { hovered: false, targeted: false, now: 10_000, dead: false, hidden: false, ownSummon: false, damaged: false };
+test("showWorldBar: damaged, hovered, targeted or recently hit by me / my group; none at full health", () => {
   assert.equal(showWorldBar(base), false);
   assert.equal(showWorldBar({ ...base, hovered: true }), true);
   assert.equal(showWorldBar({ ...base, targeted: true }), true);
@@ -111,6 +111,8 @@ test("showWorldBar: only while hovered, targeted or recently hit by me / my grou
   assert.equal(showWorldBar({ ...base, ownSummon: true }), true);
   assert.equal(showWorldBar({ ...base, ownSummon: true, dead: true }), false);
   assert.equal(showWorldBar({ ...base, hovered: true, hidden: true }), false);
+  assert.equal(showWorldBar({ ...base, damaged: true }), true, "any damaged monster, whoever hurt it");
+  assert.equal(showWorldBar({ ...base, damaged: true, dead: true }), false);
 });
 
 test("isMineOrGroup: a missing 'by' is not mine", () => {

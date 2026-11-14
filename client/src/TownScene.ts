@@ -3410,7 +3410,7 @@ export class TownScene extends Phaser.Scene {
         else if (p.kind === "demon" && p.bones && !e.sprite.texture.key.startsWith("mob_demon")) this.drawDemonBones(e, p, x, y); // painted sheets wear them
 
         const bw = Math.min(40, (MOB_LOOK[p.kind]?.bar || 14) * (1 + MERGE.growPerBlob * ((p.merged || 1) - 1)));
-        const showBar = showWorldBar({ hovered: id === this.pointer?.hoverId || id === this.pointer?.inspectId, targeted: id === this.pointer?.targetId, lastMineHitAt: this.lastMineHit.get(id), now, dead: !!p.dead, hidden: !!p.hidden, ownSummon: p.owner === this.me });
+        const showBar = showWorldBar({ hovered: id === this.pointer?.hoverId || id === this.pointer?.inspectId, targeted: id === this.pointer?.targetId, lastMineHitAt: this.lastMineHit.get(id), now, dead: !!p.dead, hidden: !!p.hidden, ownSummon: p.owner === this.me, damaged: maxHp > 0 && p.hp < maxHp });
         if (showBar && ELITE[p.kind as keyof typeof ELITE]) e.bar.fillStyle(BOSS[p.kind as keyof typeof BOSS] ? 0xc62828 : 0xffc93c).fillRect(x - bw / 2 - 1, mobBarY - 1, bw + 2, 4); // elite: gold frame, boss: red
         if (e.rallyUntil && now < e.rallyUntil) {
           // rallied by the chief's War Cry: a red glow under the feet
