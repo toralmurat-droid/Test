@@ -1976,7 +1976,7 @@ const SANDCROWN_QUESTS: QuestDef[] = [
   },
 ];
 
-// -- Act 1: Misty Marsh → Brinewood, the Last Lantern (Lv 10; docs/quest-concepts-progress.md #1). Draft text. --
+// -- Act 1: Misty Marsh → Brinewood, the Last Lantern (Lv 10; docs/quest-concepts-progress.md #1). --
 const LAMP_POST = at(62, 108, 2, "The drowned lamp post");
 const LAST_LANTERN = near("lantern_last", "lastlantern", "The last lamplighter's lantern", "Take up", 60, 110);
 const ELOW_SHRINE = at(34, 171, 2.5, "Saint Elow's shrine");
@@ -1986,57 +1986,57 @@ const LIGHTS_QUEST = QUESTS.findIndex((d) => d.steps.some((s) => s.objects === L
 const LANTERN_QUESTS: QuestDef[] = [
   {
     id: "lastlantern", title: "The Last Lantern", giver: "monk", zone: Z.brine.name, minLevel: 10,
-    description: "Brother Aldric says one lamplighter's lantern still burns, out in the drowned part of Misty Marsh. It has to reach Saint Elow's shrine in Brinewood before it goes out, and the blobs can smell it.",
+    description: "Brother Aldric says one of the lamplighters' spirit lanterns still burns, out in the drowned part of Misty Marsh. It must be carried by hand to Saint Elow's shrine in Brinewood before the light fades, and every blob on the way will be drawn to it.",
     offer: [
-      "You lit the spirit lanterns. Then you've seen what a little light does to them.",
-      "When the lamplighters fell, the last of us left his lantern hanging on a post in the marsh. It's still burning. Forty years, still burning.",
-      "Carry it to Saint Elow's shrine in Brinewood and light the ward-lamps from it. But hear me: the flame won't share your hands with spells, and every blob for a mile will want it.",
-      "Don't put it down in the wet, and don't dawdle after dark. It burns faster for both.",
+      "You lit the spirit lanterns, so you have seen what a little light does to the Gloam's pieces.",
+      "When the lamplighters fell, the last of them left his lantern hanging on a post in the marsh. Forty years it has burned, and it is the last one.",
+      "Carry it to Saint Elow's shrine in Brinewood and light the three ward-lamps from it. Hold it in your hands, mind. It will not share them with spells, and no portal will take it.",
+      "Water and night eat the flame, and so does setting it down. Keep to dry ground and keep walking. Every blob for a mile will smell the light and come. If your arms tire, a friend beside you may take it for a stretch.",
     ],
     acceptText: "I'll carry the light",
     steps: [
       { type: "reach", zone: Z.marsh.name, at: LAMP_POST, text: "Find the drowned lamp post in Misty Marsh", banner: ["New quest", "The Last Lantern"],
-        obj: "Find the drowned lamp post in Misty Marsh", nag: "South in the marsh, where the pools run together." },
+        obj: "Find the drowned lamp post in Misty Marsh", nag: "South in the marsh, where the pools run together. Look for a light low over the water." },
       { type: "carry", zone: Z.brine.name, text: "Carry the last lantern to Saint Elow's shrine in Brinewood", banner: ["It still burns", "Carry it to Brinewood"],
-        obj: "Carry the lantern to Saint Elow's shrine", nag: "No spells while you hold it. Keep it out of the wet, and keep moving.",
-        hint: "Press E to take it up. Your skills are locked while you carry it; plain attacks still work. Drop it to fight.",
+        obj: "Carry the lantern to Saint Elow's shrine", nag: "No spells while you hold it. Keep out of the water, don't set it down, and keep walking.",
+        hint: "Press E to take it up. The light fades faster in water, at night and on the ground, and blobs are drawn to it. Your skills are locked while you carry it, but plain attacks still work. Portals will not take it. A friend beside you can carry it for a stretch.",
         carry: { take: LAST_LANTERN, to: ELOW_SHRINE, light: 100, drain: 0.5, waterMult: 2, darkMult: 1.5, groundMult: 3, lure: 1.5 } },
       { type: "use", zone: Z.brine.name, objects: WARD_LAMPS, chest: true, text: "Light the 3 ward-lamps round the shrine", banner: ["The shrine is reached", "Light the ward-lamps"],
-        obj: "Ward-lamps lit: {n} / {goal}", nag: "{n} of {goal}. Round Saint Elow's shrine." },
+        obj: "Ward-lamps lit: {n} / {goal}", nag: "{n} of {goal}. They stand in a ring round Saint Elow's shrine." },
     ],
     outro: ["The third ward-lamp catches, and the lantern in your hand gutters out at last, as if it had only been waiting.", "For a moment the pines smell of lamp oil and incense, and the blobs in the wood go quiet."],
     reward: arcReward(10),
-    after: "Forty years it burned. Now it's yours that lit them. Mind you keep them lit.",
+    after: "Forty years that lantern burned. Now three lamps burn from it, and you lit them. Mind they stay lit.",
   },
 ];
 
-// -- Act 1: Millbrook Mill, Hold the Wheel (Lv 4, after Millbrook's Bad Water; docs/quest-concepts-progress.md #2). Draft text. --
+// -- Act 1: Millbrook Mill, Hold the Wheel (Lv 4, after Millbrook's Bad Water; docs/quest-concepts-progress.md #2). --
 const ODO = npcById("miller")!;
 const WHEEL_QUESTS: QuestDef[] = [
   {
     id: "holdwheel", title: "Hold the Wheel", giver: "miller", zone: "Millbrook Mill", minLevel: 4,
-    description: "Something upstream keeps sending blobs down the millrace at Odo. He means to clear the sluice himself, if someone keeps them off him while he works.",
+    description: "Blobs keep coming down the millrace at Millbrook Mill. Odo will open and clear the sluice by hand, but only if you stay close and keep the jelly off him while he works.",
     offer: [
-      "They're coming down the race again. Not clots this time: the live ones, a few at a time.",
-      "I've to open the sluice and clear it by hand, and I can't do that with blobs climbing my legs.",
-      "Stand by me a minute and a half. Keep them off me. Then we'll see what's sending them.",
+      "They're coming down the race again. Not clots this time, the live ones, a few at a time.",
+      "Whatever you did up at the spring, it wasn't the end of it. I have to open the sluice and clear it by hand, and I can't do that with blobs climbing my legs.",
+      "Stand by me a minute and a half and keep them off me. Don't wander off. When the sluice is clear, we'll see what's been sending them.",
     ],
     acceptText: "I'll stand with you",
     steps: [
       { type: "talk", npc: "miller", zone: "Millbrook Mill", text: "Tell Odo when you're ready", banner: ["New quest", "Hold the Wheel"], obj: "Tell Odo you're ready (Millbrook Mill)",
-        say: ["Ready? Once I open the sluice there's no closing it till it's clear. They'll come for me, not you."], accept: "Open the sluice" },
-      { type: "hold", zone: "Millbrook Mill", text: "Keep the blobs off Odo while he clears the sluice", banner: ["Here they come", "Keep the blobs off Odo"],
-        obj: "Hold the mill with Odo", nag: "Stay by me! If you leave, I'm closing it again.",
+        say: ["Ready? Once I open the sluice there's no closing it till it's clear. They'll come for me, not for you, so stay close and put yourself between."], accept: "Open the sluice" },
+      { type: "hold", zone: "Millbrook Mill", text: "Stay near Odo and keep the blobs off him while he clears the sluice", banner: ["Here they come", "Keep the blobs off Odo"],
+        obj: "Stay near Odo and protect him", nag: "Stay close and keep them off me! If you wander off, I'm shutting the sluice again.",
         hold: { at: { x: ODO.x, y: ODO.y, r: 7 * TILE, label: "Odo's mill" }, ms: 90_000, npc: "miller", npcHp: 300, npcDmg: 5,
           waves: { kinds: ["slime"], n: [2, 3], everyMs: 15_000, level: [3, 5] }, maxAlive: 6, leaveMs: 5000 } },
       { type: "kill", zone: "Millbrook Mill", kinds: BLOB_KINDS, goal: 1, own: true,
-        summon: { parts: ["motherblob", "slime", "slime", "slime"], level: 5, title: "The Millrace Glutton", ...sumAt(108, 41) },
+        summon: { parts: ["motherblob", "slime", "slime", "slime"], level: 5, title: "The Millrace Glutton", voice: { wake: ["Flour... wet flour... mine."], taunt: ["Hungry. Always hungry.", "Little miller. Little wheel. Gulp."], half: ["Cut me and I only come apart. I come back together."], death: ["Cold... the race... runs on without me..."] }, ...sumAt(108, 41) },
         text: "Slay the Millrace Glutton", banner: ["The sluice is clear", "Something big comes down the race"], obj: "The Millrace Glutton slain: {n} / {goal}",
-        nag: "It came down the race with the last of the water." },
+        nag: "It came down the race with the last of the water. It's in the mill yard." },
     ],
     outro: ["The Glutton bursts across the mill yard. Inside it: half a sack of Odo's flour and a sluice key he lost in the spring.", "Behind you the wheel takes the full race again and turns, steady and loud."],
     reward: arcReward(4, true),
-    after: "Hear her? Never ran so sweet. Anyone asks, you stood by Odo.",
+    after: "Hear her? She never ran so sweet. If anyone asks, you stood by Odo.",
   },
 ];
 
