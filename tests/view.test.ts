@@ -2,7 +2,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { chainState, tutorialDone, TUT_CHAIN } from "../shared/quests";
-import { Player } from "../server/player";
+import { getStateCallbacks } from "colyseus.js";
+import { Player, PlayerPrivate } from "../server/player";
 import { startRoom, wait } from "./helpers/room";
 
 /** Collect client-side decode errors (room.onError and console errors mentioning refId / decode). */
@@ -146,4 +147,77 @@ test("a quest key dropped on the server (progress back to 0) is removed on the o
     assert.equal(own().quests.has("gloam"), false, "delete arrives");
     await c.leave();
   } finally { await srv.stop(); }
+});
+
+const PRIVATE = ["kills", "xp", "gold", "potions", "mp", "energy", "stacks", "seq", "spd"] as const;
+
+test("the nine owner-only numbers reach only the owner, under me, with the server's values", async () => {
+  const srv = await startRoom();
+  try {
+    const a = await srv.join({ cls: "wizard" }), b = await srv.join({ cls: "wizard" });
+    const w = watch([a, b]);
+    await wait(400);
+    const sa = srv.room.state.players.get(a.sessionId);
+    sa.gold = 4321; sa.xp = 777; sa.kills = 12; sa.energy = 33; sa.stacks = 3; sa.potions = 258;
+    await wait(500);
+    const own = a.state.players.get(a.sessionId), seen = b.state.players.get(a.sessionId);
+    assert.equal(seen.me, undefined, "B has no me for A");
+    for (const k of PRIVATE) assert.equal((seen as any)[k], undefined, `B sees no Player.${k} for A`);
+    for (const k of PRIVATE) assert.equal((own as any)[k], undefined, `A's Player has no ${k} either (it lives in me)`);
+    for (const k of PRIVATE) {
+      assert.equal(typeof (own.me as any)[k], "number", `me.${k} arrived`);
+      // mp and energy drift every tick, so the client is always a patch behind: only check it is close
+      if (k === "mp" || k === "energy") assert.ok(Math.abs((own.me as any)[k] - (sa as any)[k]) < 5, `me.${k} tracks the server`);
+      else assert.equal((own.me as any)[k], (sa as any)[k], `me.${k} matches the server`);
+    }
+    assert.equal(own.me.gold, 4321); assert.equal(own.me.xp, 777); assert.equal(own.me.kills, 12);
+    assert.equal(own.me.potions, 258);
+    assert.ok(own.me.mp > 0, "mp arrived (wizard has mana)");
+    assert.ok(own.me.spd > 0, "spd arrived");
+    w.stop();
+    assert.deepEqual(w.errs, []);
+    await a.leave(); await b.leave();
+  } finally { await srv.stop(); }
+});
+
+test("a seq-only change reaches the owner (me.onChange fires) and is invisible to other clients", async () => {
+  const srv = await startRoom();
+  try {
+    const a = await srv.join({ cls: "wizard" }), b = await srv.join({ cls: "wizard" });
+    const w = watch([a, b]);
+    await wait(500);
+    const sa = srv.room.state.players.get(a.sessionId);
+    const own = a.state.players.get(a.sessionId), seen = b.state.players.get(a.sessionId);
+    // settle: a stop input
+    a.send("input", { up: false, down: false, left: false, right: false, seq: 100 });
+    await wait(400);
+    assert.equal(own.me.seq, 100);
+    const pos = { x: sa.x, y: sa.y };
+    let meChanges = 0, playerChanges = 0, bChanges = 0;
+    const $a = getStateCallbacks(a) as any, $b = getStateCallbacks(b) as any;
+    $a(own.me).onChange(() => meChanges++);
+    $a(own).onChange(() => playerChanges++);
+    $b(seen).onChange(() => bChanges++);
+    a.send("input", { up: false, down: false, left: false, right: false, seq: 101 });
+    await wait(400);
+    assert.equal(sa.seq, 101, "server took the seq");
+    assert.equal(sa.x, pos.x); assert.equal(sa.y, pos.y);
+    assert.equal(own.me.seq, 101, "owner's me.seq updated");
+    assert.ok(meChanges >= 1, "me onChange fired");
+    assert.equal(playerChanges, 0, "Player onChange did not fire for a seq-only change (why the client also listens on me)");
+    assert.equal(bChanges, 0, "B saw no change on A");
+    assert.equal(seen.me, undefined);
+    w.stop();
+    assert.deepEqual(w.errs, []);
+    await a.leave(); await b.leave();
+  } finally { await srv.stop(); }
+});
+
+test("schema sizes: Player has 37 synced fields, PlayerPrivate 11 (the owner-only move must not be undone)", () => {
+  const count = (C: any) => Object.keys(C[Symbol.metadata]).filter((k) => /^\d+$/.test(k)).length;
+  assert.equal(count(Player), 37);
+  assert.equal(count(PlayerPrivate), 11);
+  const md = (Player as any)[Symbol.metadata] as Record<string, any>;
+  const names = Object.keys(md).filter((k) => /^\d+$/.test(k)).map((k) => md[k].name);
+  for (const k of PRIVATE) assert.ok(!names.includes(k), `Player must not sync ${k}`);
 });
