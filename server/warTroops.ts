@@ -6,7 +6,7 @@
  * TownRoom calls in at a few points (a tick a second, every trooper's turn, a hero's hit on one, its death, the war
  * news, a hero leaving) through the narrow WarTroopsHost below. Troopers give no XP and no loot (TownRoom.hitTarget).
  */
-import { BOSS, dirInput, ELITE, MOB_ATTACK_RANGE, MOBS, mobScale, TILE, type Dir, type MobKind } from "../shared/constants";
+import { BOSS, dirInput, ELITE, MOB_ATTACK_RANGE, TILE, type Dir, type MobKind } from "../shared/constants";
 import { MOB_COMBAT, mobBody } from "../shared/combat";
 import { underground } from "../shared/dungeon";
 import { isSafeZone } from "../shared/map";
@@ -18,7 +18,7 @@ import { garrisonCount, garrisonSpots, patrolCount, patrolOf, patrolPos, TROOP }
 import { RENOWN_RANKS, rankOf } from "../shared/war/renown";
 import { STANDARD } from "../shared/war/standards";
 import { TERRITORIES } from "../shared/war/territories";
-import { columnLead, parseTroop, TROOP_COMBAT, troopLevel, troopName, troopStance, troopWeapon, WAR_TROOPS, type TroopStance } from "../shared/war/troops";
+import { columnLead, parseTroop, troopLevel, troopStats, troopName, troopStance, troopWeapon, WAR_TROOPS, type TroopStance } from "../shared/war/troops";
 import type { WarView } from "../shared/war/view";
 import { addValor, warNow } from "./war";
 
@@ -47,8 +47,12 @@ export interface WarTroopsHost {
   /** A trooper's blow on a hero / on a monster (summons and other troopers included). */
   strikeHero(mobId: string, heroId: string, dmg: number, byName: string): void;
   strikeMob(mobId: string, targetId: string, dmg: number): void;
+  /** A javelin from the trooper toward (tx, ty): it only hurts heroes clan `clan` fights. */
+  shoot(mobId: string, clan: ClanKey, tx: number, ty: number, dmg: number, byName: string): void;
   /** A Herald line to one hero. */
   note(heroId: string, text: string): void;
+  /** Tell the hero clan `clan`'s troops hunt them for `ms` (their client colours those troops as enemies). */
+  grudge(heroId: string, clan: ClanKey, ms: number): void;
   /** A hero reached a new renown rank (the room tells them, as for the standards). */
   ranked(heroId: string, rank: string): void;
 }
@@ -57,7 +61,7 @@ type Role = "march" | "guard";
 /** One place in a land's force: who fills it (or when its man fell). */
 interface Slot { role: Role; i: number; officer: boolean; id: string; fellAt: number }
 interface Land { t: number; clan?: ClanKey; lastHero: number; slots: Slot[] }
-interface Troop { t: number; clan: ClanKey; slot: Slot; nextPick: number; near: boolean }
+interface Troop { t: number; clan: ClanKey; slot: Slot; nextPick: number; near: boolean; nextRush: number; rushUntil: number; rushHit: boolean; nextThrow: number; throwing: boolean }
 
 const SLEEPING = -Infinity;
 /** A point (px) where a trooper may never stand or chase into: the safe squares, the stockade, monster-free ground. */
@@ -105,6 +109,7 @@ export class WarTroops {
       g[tr.clan] = now + WAR_TROOPS.grudgeMs;
       this.grudges.set(heroId, g);
       if (was <= now) this.h.note(heroId, WAR_TROOPS.lines.grudge(CLANS[tr.clan].name, WAR_TROOPS.grudgeMs / 1000));
+      this.h.grudge(heroId, tr.clan, WAR_TROOPS.grudgeMs);
     }
     if (this.stance(tr.clan, heroId, now) === "enemy") m.target = heroId;
   }
@@ -202,9 +207,9 @@ export class WarTroops {
     const id = `wt${++this.seq}`, level = troopLevel(land.t, s.officer);
     const m = this.h.spawn(id, level, at.x, at.y, troopWeapon(clan, s.officer));
     if (!m) return;
-    m.hp = m.maxHp = Math.max(1, Math.round(m.maxHp * TROOP_COMBAT[clan].hp));
+    m.hp = m.maxHp = troopStats(clan, level, s.officer).hp;
     s.id = id; s.fellAt = SLEEPING;
-    this.troops.set(id, { t: land.t, clan, slot: s, nextPick: 0, near: false });
+    this.troops.set(id, { t: land.t, clan, slot: s, nextPick: 0, near: false, nextRush: 0, rushUntil: 0, rushHit: false, nextThrow: 0, throwing: false });
   }
 
   private drop(s: Slot) {
@@ -266,7 +271,7 @@ export class WarTroops {
     const tr = this.troops.get(id);
     if (!tr) { this.h.remove(id); return; } // left over from a land that is gone (should not happen)
     m.stunned = now < m.stunUntil; m.slowed = now < m.slowUntil;
-    if (m.stunned || m.broken) { m.winding = false; m.windUntil = 0; }
+    if (m.stunned || m.broken) { m.winding = false; m.windUntil = 0; tr.throwing = false; tr.rushHit = false; }
     if (m.stunned) { m.moving = false; return; }
     if (now >= tr.nextPick) {
       tr.nextPick = now + WAR_TROOPS.pickMs;
@@ -284,10 +289,31 @@ export class WarTroops {
     const t = tp ?? tm;
     if (m.target && (!t || (tp && (tp.dead || this.stance(tr.clan, m.target, now) !== "enemy" || this.h.hidden(m.target, now)))
       || (tm && (tm.dead || tm.hidden)) || offLimits(t.x, t.y) || !this.inLand(tr.t, t.x, t.y, WAR_TROOPS.leashTiles))) { m.target = ""; m.windUntil = 0; m.winding = false; }
-    const def = MOBS.trooper, speed = def.speed * (m.slowed ? 0.5 : 1);
+    const st = troopStats(tr.clan, m.level, tr.slot.officer), speed = st.speed * (m.slowed ? 0.5 : 1);
     let gx: number, gy: number, pace: number;
+    if (!m.target) { tr.throwing = false; tr.rushHit = false; }
     if (m.target && t) {
       const dist = Math.hypot(t.x - m.x, t.y - m.y), reach = MOB_ATTACK_RANGE + (tm ? mobBody(tm.kind as MobKind) : 4);
+      const R = WAR_TROOPS.rush, J = WAR_TROOPS.javelin, by = troopName(tr.clan, tr.slot.officer);
+      // the rush lands: a blow on arrival, no wind-up
+      if (tr.rushHit && dist <= reach + 4 && !m.broken) {
+        tr.rushHit = false; tr.rushUntil = 0; m.lastAttack = now;
+        const dmg = Math.round(st.dmg * R.dmgMult);
+        if (tp) this.h.strikeHero(id, m.target, dmg, by); else this.h.strikeMob(id, m.target, dmg);
+        return;
+      }
+      if (tr.rushHit && now > tr.rushUntil + 250) tr.rushHit = false; // missed
+      // a javelin at an enemy hero a few steps away
+      if (tp && !m.broken && !m.windUntil && !tr.rushHit && (tr.throwing || (now >= tr.nextThrow && dist >= J.min && dist <= J.max))) {
+        if (!tr.throwing) { tr.throwing = true; tr.nextThrow = now + J.windupMs; m.winding = true; }
+        m.moving = false;
+        m.dir = Math.abs(t.x - m.x) > Math.abs(t.y - m.y) ? (t.x > m.x ? "right" : "left") : (t.y > m.y ? "down" : "up");
+        if (now < tr.nextThrow) return;
+        tr.throwing = false; m.winding = false; tr.nextThrow = now + J.everyMs; m.lastAttack = now;
+        this.h.shoot(id, tr.clan, t.x, t.y, Math.round(st.dmg * J.dmgMult), by);
+        return;
+      }
+      if (!m.broken && !m.windUntil && now >= tr.nextRush && dist >= R.min && dist <= R.max) { tr.nextRush = now + R.everyMs; tr.rushUntil = now + R.ms; tr.rushHit = true; }
       if ((dist <= reach || m.windUntil) && !m.broken) {
         m.moving = false;
         m.dir = Math.abs(t.x - m.x) > Math.abs(t.y - m.y) ? (t.x > m.x ? "right" : "left") : (t.y > m.y ? "down" : "up");
@@ -295,14 +321,13 @@ export class WarTroops {
           if (now >= m.windUntil) {
             m.windUntil = 0; m.winding = false; m.lastAttack = now;
             if (dist <= reach + 6) {
-              const dmg = Math.max(1, Math.round(def.damage * mobScale(m.level, "damage") * TROOP_COMBAT[tr.clan].dmg));
-              if (tp) this.h.strikeHero(id, m.target, dmg, troopName(tr.clan, tr.slot.officer)); else this.h.strikeMob(id, m.target, dmg);
+              if (tp) this.h.strikeHero(id, m.target, st.dmg, by); else this.h.strikeMob(id, m.target, st.dmg);
             }
           }
-        } else if (now - m.lastAttack >= def.attackCooldownMs) { m.windUntil = now + MOB_COMBAT.trooper.windupMs; m.winding = true; }
+        } else if (now - m.lastAttack >= st.cd) { m.windUntil = now + MOB_COMBAT.trooper.windupMs; m.winding = true; }
         return;
       }
-      gx = t.x; gy = t.y; pace = speed;
+      gx = t.x; gy = t.y; pace = speed * (now < tr.rushUntil ? R.speedMult : 1);
     } else {
       const post = this.postOf(tr.t, tr.slot, now), d = Math.hypot(post.x - m.x, post.y - m.y);
       if (d > WAR_TROOPS.warpPx && !this.seen(m, WAR_TROOPS.warpUnseenPx) && !offLimits(post.x, post.y)) { m.x = post.x; m.y = post.y; m.moving = false; return; }

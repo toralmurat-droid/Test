@@ -106,6 +106,8 @@ import { byPart, hitBy } from "./hitBy";
 import { attachWar, onWar, warNow } from "./war";
 import { clanView, cleanOath, Presence, swear } from "./warHeroes";
 import { WarTroops } from "./warTroops";
+import { WAR_TROOPS } from "../shared/war/troops";
+import type { ClanKey } from "../shared/war/clans";
 import { cleanRenown } from "../shared/war/renown";
 export { Player, PlayerPrivate } from "./player"; // moved out; tests and tools import them from here
 
@@ -239,6 +241,7 @@ export class Projectile extends Schema {
   mobLevel = 0; // > 0: a monster's shot (only hurts players); its level, kept even if the shooter dies mid-flight
   mobName = "";
   mobEl?: Element; // a monster's magic shot element (MOB_SHOT_ELEMENT)
+  troop?: ClanKey; // a clan trooper's javelin: it only hurts heroes that clan fights (server/warTroops.ts)
   parts?: ElemPart[]; // a hero's elemental share (basic attacks)
   burst = 0; // a basic bolt that bursts where it lands (ComboHit.burst): foes this close take half its damage
   hitIds = new Set<string>();
@@ -618,8 +621,16 @@ export class TownRoom extends Room<TownState> {
     heroes: () => this.state.players.entries(), hero: (id) => this.state.players.get(id),
     hidden: (id, now) => inVoid(this.state.players.get(id), now),
     strikeHero: (mid, pid, dmg, by) => { const m = this.state.mobs.get(mid); if (m) { this.broadcast("swing", { id: mid }); this.damagePlayer(pid, dmg, by, DIR_OFFSET[m.dir], 1, { atkLevel: m.level, from: mid }); } },
+    shoot: (mid, clan, tx, ty, dmg, by) => {
+      const m = this.state.mobs.get(mid), J = WAR_TROOPS.javelin;
+      if (!m) return;
+      this.mobShot(m, mid, tx, ty, { keepAway: 0, far: 0, range: J.max, shot: "arrow", shotSpeed: J.speed, shotRadius: J.radius });
+      const s = this.state.projectiles.get(`s${this.shotSeq}`);
+      if (s) { s.damage = dmg; s.mobName = by; s.troop = clan; }
+    },
     strikeMob: (mid, tid, dmg) => { const m = this.state.mobs.get(mid), o = this.state.mobs.get(tid); if (m && o && !o.dead) { this.broadcast("swing", { id: mid }); this.mobHitsMob(m, mid, o, tid, dmg); } },
     note: (pid, text) => this.clients.getById(pid)?.send("chat", { id: "", name: "Herald", text }),
+    grudge: (pid, clan, ms) => this.clients.getById(pid)?.send("grudge", { clan, ms }),
     ranked: (pid, rank) => { const c = this.clients.getById(pid), p = this.state.players.get(pid); if (c && p) { c.send("clan", clanView(p)); c.send("chat", { id: "", name: "Herald", text: `Your renown grows: you are now ${rank}.` }); } },
   });
 
@@ -4479,7 +4490,7 @@ export class TownRoom extends Room<TownState> {
         const now = Date.now();
         let pid = "";
         this.state.players.forEach((p, k) => {
-          if (!pid && !p.dead && !isSafeZone(p.x, p.y) && now >= p.invulnUntil && Math.hypot(p.x - s.x, p.y - s.y) <= s.radius + HIT_RADIUS) pid = k;
+          if (!pid && !p.dead && !isSafeZone(p.x, p.y) && now >= p.invulnUntil && Math.hypot(p.x - s.x, p.y - s.y) <= s.radius + HIT_RADIUS && (!s.troop || this.warTroops.stance(s.troop, k, now) === "enemy")) pid = k;
         });
         if (pid) {
           if (this.steamMissed(s.owner, pid)) return this.explode(s, id); // Steam: the shot goes wide

@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { TILE } from "../shared/constants";
 import { isSafeZone, SAFE_ZONE } from "../shared/map";
+import { blocked } from "../shared/movement";
 import { CLAN_KEYS, type ClanKey } from "../shared/war/clans";
 import { newMinds } from "../shared/war/doctrine";
 import { garrisonCount, garrisonSpots, patrolCount, patrolOf, TROOP, TROOP_LOOK, troopLook } from "../shared/war/patrols";
@@ -62,8 +63,8 @@ function fake() {
     mob: (id) => mobs.get(id), mobsInBox: (x, y, r) => [...mobs].filter(([, m]) => Math.abs(m.x - x) <= r && Math.abs(m.y - y) <= r),
     heroes: () => heroes.entries(), hero: (id) => heroes.get(id), hidden: () => false,
     strikeHero: (mid, pid, dmg) => { hits.push([mid, pid, dmg]); },
-    strikeMob: (mid, tid, dmg) => { hits.push([mid, tid, dmg]); },
-    note: (pid, text) => notes.push([pid, text]), ranked: () => {},
+    strikeMob: (mid, tid, dmg) => { hits.push([mid, tid, dmg]); }, shoot: (mid, _k, _x, _y, dmg) => { hits.push([mid, "javelin", dmg]); },
+    note: (pid, text) => notes.push([pid, text]), ranked: () => {}, grudge: () => {},
   });
   return { wt, mobs, heroes, notes, hits };
 }
@@ -209,4 +210,28 @@ test("WarTroops: own clan can't hurt its troops; an unsworn hero's blow starts a
   wt.hit("new", m, 2000);
   assert.equal(notes.filter(([p]) => p === "new").length, 0, "newcomers earn no grudge (they are never fought)");
   assert.equal(wt.hostile("new", m, 2001), false);
+});
+
+test("WarTroops: a javelin for an enemy hero a few steps off, a rush blow on arrival; nothing for a neutral one", () => {
+  _resetWar({ v: 1, state: newWar(), minds: newMinds(), next: Date.now() + 1e9, log: [] });
+  const { wt, mobs, heroes, hits } = fake(), gate = patrolOf(LAND.id)!.pts[0], owner = warState()!.owner[LAND.id] as ClanKey;
+  const foe = CLAN_KEYS.find((k) => k !== owner)!;
+  heroes.set("n", hero(gate.x, gate.y));
+  wt.tick(1000);
+  const [id, m] = [...mobs].find(([, x]) => parseTroop(x.weapon)?.clan === owner && !parseTroop(x.weapon)!.officer)!;
+  const { x, y } = m;
+  for (const [oid] of mobs) if (oid !== id) mobs.delete(oid); // alone with the heroes
+  // open ground on some side of it (no wall in the way of the rush)
+  const [ux, uy] = ([[1, 0], [-1, 0], [0, 1], [0, -1]] as const).find(([a, b]) => Array.from({ length: 21 }, (_, k) => k * 5).every((d) => !blocked(x + a * d, y + b * d)))!;
+  heroes.get("n")!.x = x + ux * 100; heroes.get("n")!.y = y + uy * 100;
+  for (let i = 0; i < 40; i++) { m.x = x; m.y = y; wt.step(m, id, 0.05, 2000 + i * 50); }
+  assert.equal(hits.length, 0, "a neutral hero is left alone");
+  heroes.set("e", hero(x + ux * 100, y + uy * 100, { clan: foe }));
+  heroes.delete("n");
+  for (let i = 0; i < 20; i++) { m.x = x; m.y = y; wt.step(m, id, 0.05, 5000 + i * 50); }
+  assert.ok(hits.some(([mid, what]) => mid === id && what === "javelin"), "a javelin at the enemy");
+  hits.length = 0;
+  heroes.get("e")!.x = x + ux * 60; heroes.get("e")!.y = y + uy * 60; // in rush range, the javelin still on cooldown
+  for (let i = 0; i < 40 && !hits.length; i++) wt.step(m, id, 0.05, 6100 + i * 50);
+  assert.ok(hits.some(([mid, who]) => mid === id && who === "e"), "it closes in and lands a blow (rush or swing)");
 });

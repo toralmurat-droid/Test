@@ -5,7 +5,8 @@
  * The clan rides in the existing Mob.weapon string ("<clanKey>", "<clanKey>*" for the officer), so the synced Mob
  * schema is unchanged. Pure rules and numbers: the room module and the tests read them.
  */
-import { CLANS, type ClanKey } from "./clans";
+import { MOBS, mobScale } from "../constants";
+import type { ClanKey } from "./clans";
 import { TROOP, type Patrol } from "./patrols";
 import { isClan, STANDARD } from "./standards";
 import { TERRITORIES } from "./territories";
@@ -45,20 +46,42 @@ export const WAR_TROOPS = {
   livePx: 22 * 32,
   /** A trooper this far from its post (px) with no hero within `warpUnseenPx` is put back on it (stuck behind a wall). */
   warpPx: 10 * 32, warpUnseenPx: 18 * 32,
+  /** The soldier's rush: a foe this far off (px) is closed at speedMult for ms, and the blow on arrival hits dmgMult harder. */
+  rush: { min: 36, max: 130, ms: 320, speedMult: 3, everyMs: 4000, dmgMult: 1.3 },
+  /** A javelin thrown at an enemy hero this far off (px): wind-up, then a shot that only hurts heroes the troops fight. */
+  javelin: { min: 56, max: 150, everyMs: 4500, windupMs: 450, dmgMult: 0.9, speed: 240, radius: 4 },
   /** Chat lines (Herald notes to one hero). */
   lines: {
     grudge: (clan: string, secs: number) => `You struck a soldier of ${clan}. Their troops will hunt you in all their lands for ${Math.round(secs / 60)} minutes.`,
   },
 };
 
-/** Per-clan multipliers on the trooper's MOBS numbers (all 1.0 at first: the clans differ in looks only). */
-export const TROOP_COMBAT: Record<ClanKey, { hp: number; dmg: number }> = {
-  wardens: { hp: 1, dmg: 1 },
-  redfang: { hp: 1, dmg: 1 },
-  host: { hp: 1, dmg: 1 },
-  hidekin: { hp: 1, dmg: 1 },
-  veiled: { hp: 1, dmg: 1 },
+/**
+ * Per-clan multipliers on the trooper's MOBS numbers, a modest spread by doctrine: Wardens tankier, Redfang harder
+ * hitting, the Host slow but tough, the Hide-Kin quick, the Veiled few but strong (tools/balance/pve.ts --troops).
+ */
+export const TROOP_COMBAT: Record<ClanKey, { hp: number; dmg: number; speed: number; cd: number }> = {
+  wardens: { hp: 1.15, dmg: 0.9, speed: 1, cd: 1 },
+  redfang: { hp: 0.9, dmg: 1.15, speed: 1.05, cd: 1 },
+  host: { hp: 1.2, dmg: 1, speed: 0.85, cd: 1.1 },
+  hidekin: { hp: 0.9, dmg: 0.95, speed: 1.15, cd: 0.9 },
+  veiled: { hp: 1, dmg: 1.1, speed: 1, cd: 1 },
 };
+/** An officer (the "*" ones: column leader, first guard) on top of his clan's numbers. */
+export const TROOP_OFFICER = { hp: 1.7, dmg: 1.25 };
+/**
+ * Veterans: one MOBS entry serves every land from Lv 5 to 50, but heroes outgrow the plain level curve (zone monsters
+ * get tougher kinds as you go), so troops of higher lands gain this share per level above `from` on top of mobScale.
+ */
+export const TROOP_VETERAN = { from: 8, hp: 0.02, dmg: 0.05 };
+
+/** A trooper's fighting numbers at `level` (server/warTroops.ts and the PvE sim read the same). */
+export function troopStats(k: ClanKey, level: number, officer = false): { hp: number; dmg: number; speed: number; cd: number } {
+  const d = MOBS.trooper, c = TROOP_COMBAT[k], o = officer ? TROOP_OFFICER : { hp: 1, dmg: 1 }, V = TROOP_VETERAN, up = Math.max(0, level - V.from);
+  return { hp: Math.max(1, Math.round(d.maxHp * mobScale(level, "hp") * c.hp * o.hp * (1 + V.hp * up))),
+    dmg: Math.max(1, Math.round(d.damage * mobScale(level, "damage") * c.dmg * o.dmg * (1 + V.dmg * up))),
+    speed: d.speed * c.speed, cd: d.attackCooldownMs * c.cd };
+}
 
 /** The Mob.weapon value of a trooper of clan `k`. */
 export const troopWeapon = (k: ClanKey, officer = false) => (officer ? `${k}*` : k);
@@ -89,11 +112,12 @@ export function troopStance(troop: ClanKey, hero: { clan?: ClanKey; level: numbe
   return grudgeUntil > now ? "enemy" : "neutral";
 }
 
-/** A short name for a trooper (death messages, hit lines): "Redfang soldier", "Redfang officer". */
+/** A short name for a trooper (name label, death messages): "Redfang soldier", "Redfang captain". */
 export function troopName(k: ClanKey, officer = false): string {
-  const short = CLANS[k].name.replace(/^The /, "").split(" ")[0];
-  return `${short} ${officer ? "officer" : "soldier"}`;
+  return `${TROOP_SHORT[k]} ${officer ? "captain" : "soldier"}`;
 }
+/** The word a clan's soldiers go by (name tags): "The Hearthbound Wardens" -> "Warden". */
+const TROOP_SHORT: Record<ClanKey, string> = { wardens: "Warden", redfang: "Redfang", host: "Ossuary", hidekin: "Hide-Kin", veiled: "Veiled" };
 
 const arcCache = new WeakMap<Patrol, { arcs: number[]; cycle: number }>();
 /** Per-stop arc positions (px, ascending) and the virtual loop length with one pause per stop. */

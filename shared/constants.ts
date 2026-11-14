@@ -163,8 +163,9 @@ export const MOBS: Record<MobKind, MobDef> = {
   // The Night Raiders (shared/raiders.ts): mounted, cloaked, a massive weapon; always Lv 50, close to unbeatable alone
   // (Murat 2026-11-08): pve.ts --boss=raider gives a Lv 50 hero alone 0-33%, a Lv 30 hero none. Faster than a hero on foot
   nightraider: { name: "Night Raider", maxHp: 20000, speed: 96, damage: 160, attackCooldownMs: 1350, aggroRange: 170, leash: 420, xp: 3000 },
-  // Clan troops (shared/war/troops.ts, server/warTroops.ts): bandit-like footmen; no XP, no loot (TROOP_COMBAT scales them per clan)
-  trooper: { name: "Soldier", maxHp: 95, speed: 64, damage: 14, attackCooldownMs: 950, aggroRange: 160, leash: 192, xp: 0 },
+  // Clan troops (shared/war/troops.ts, server/warTroops.ts): drilled footmen with a rush and a javelin, a real fight for a
+  // hero of their level (pve.ts --troops); no XP, no loot. troopStats adds the clan, officer and veteran multipliers
+  trooper: { name: "Soldier", maxHp: 230, speed: 64, damage: 21, attackCooldownMs: 950, aggroRange: 160, leash: 192, xp: 0 },
   hidemother: { name: "The Hide-Mother", maxHp: 950, speed: 50, damage: 28, attackCooldownMs: 1300, aggroRange: 240, leash: 480, xp: 1000 },
 };
 

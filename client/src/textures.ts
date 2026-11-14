@@ -3,6 +3,8 @@ import { BEAST_KINDS, DESERT_KINDS, TILE } from "../../shared/constants";
 import { RAIDERS } from "../../shared/raiders";
 import { AFFIX_KEYS, AFFIXES, CHAMP_WEAPON_SHEETS as CHAMP_SHEETS } from "../../shared/champions";
 import { TILE_COUNT } from "../../shared/map";
+import { troopLook } from "../../shared/war/patrols";
+import { parseTroop } from "../../shared/war/troops";
 import { COMMON_ROWS, ROWS, drawTileset } from "./tileset";
 import { SMOOTH } from "./isoflag";
 import { hiResTexture } from "./smooth";
@@ -353,7 +355,26 @@ export function preloadPaintedMobs(scene: Phaser.Scene) {
 }
 
 /** Monster sprite sheets, same 6-frame layout as personas (painted when the smooth look is on). */
+/** The old monster look each clan soldier wears in the pixel view and until its painted sheet is loaded (kind_weapon). */
+export const WAR_LEGACY: Record<string, string> = {
+  war_warden: "watchman", war_warden_cap: "watchman", war_redfang: "bandit", war_redfang_chief: "bandit_brute", war_host: "skeleton_spear", war_host_cap: "skeleton",
+  war_hidekin: "gnawkin_folk", war_hidekin_chief: "tuskborn_folk", war_veiled: "veiled", war_veiled_adept: "nomad_folk",
+};
+/** The art key ("war_redfang_chief"...) a server trooper wears: its clan and rank ride in Mob.weapon (shared/war/troops.ts). */
+export function trooperArt(weapon: string): string {
+  const t = parseTroop(weapon);
+  return t ? troopLook(t.clan, 0, t.officer) : "war_warden";
+}
+/** A monster's look entry (size, label height): a trooper's comes from its clan's soldier sheet. */
+export const mobLook = (kind: string, weapon = "") => MOB_LOOK[kind === "trooper" ? trooperArt(weapon) : kind];
+
 export function mobTexture(scene: Phaser.Scene, kind: string, level = 1, weapon = "", bones = 0, champion = false): string {
+  if (kind === "trooper") { // a clan soldier: its painted sheet once loaded, an old monster look meanwhile (the watchman is a hero sheet: a bandit stands in)
+    const art = trooperArt(weapon), painted = warSoldierTexture(scene, art);
+    if (painted) return painted;
+    const [k, w] = (WAR_LEGACY[art] ?? "bandit").replace("watchman", "bandit").split("_");
+    return mobTexture(scene, k, level, w ?? "");
+  }
   if (kind === "wisp") {
     if (SMOOTH && scene.textures.exists(`hd_mob_wisp_${WISP_ELEMENTS.includes(weapon) ? weapon : "fire"}`)) return paintedSheet(scene, `mob_wisp_${WISP_ELEMENTS.includes(weapon) ? weapon : "fire"}`) ?? mobTexture(scene, WISP_STANDIN[weapon] ?? "fireblob", level);
     return mobTexture(scene, WISP_STANDIN[weapon] ?? "fireblob", level);

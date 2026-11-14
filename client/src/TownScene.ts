@@ -39,7 +39,8 @@ import { SkillFx } from "./skillfx";
 import { BeastForms } from "./beastForms";
 import { movesSheet, SkillMoves } from "./skillMoves";
 import { displayGrid } from "./tileset";
-import { CRAWL_CROP, heroTexture, itemTexture, potionTex, makeTileset, MOB_LOOK, mobTexture, preloadPaintedMobs } from "./textures";
+import { CRAWL_CROP, heroTexture, itemTexture, potionTex, makeTileset, MOB_LOOK, mobLook, mobTexture, preloadPaintedMobs } from "./textures";
+import { parseTroop, troopName, troopStance, type TroopStance } from "../../shared/war/troops";
 import { Minimap } from "./minimap";
 import { fullscreenSupported, isFullscreen, onFullscreen, toggleFullscreen } from "./fullscreen";
 import { SCREEN_SIZES, isSharp, onWorldScale, pct, setWorldScale, uiScale, worldScale, worldScaleName, worldScaleSetting } from "./worldscale";
@@ -177,6 +178,8 @@ interface Entity {
   titleLabel?: Phaser.GameObjects.Text; // heroes: the shown title, small and dim, between the name and the head
   nameLift?: number;
   lvlColor?: string; // monsters: current colour of the "Lv N" label
+  artOn?: boolean; // a clan trooper drawn with its painted sheet (until then an old monster look stands in)
+  deadAt?: number; // a clan trooper: local time it fell (its fall frames)
   mob: boolean;
   hero?: CharacterName; // set when drawn with the animated 32x32 sheets
   waiting?: CharacterName; // a hero whose sheet is still loading: hidden and not animated until it arrives (sheetReady)
@@ -288,6 +291,8 @@ function interpolate(s: Snap[], t: number): { x: number; y: number } | undefined
 const FRAME_BASE: Record<string, number> = { down: 0, up: 2, right: 4, left: 4 };
 /** Iso monster sheets have attack frames after the walk ones: wind-up, then strike, per facing. */
 const ATTACK_BASE: Record<string, number> = { down: 6, up: 8, right: 10, left: 10 };
+/** Name colours of clan troopers by how their clan sees this hero (TownScene.trooperLabel). */
+const TROOP_COLOURS: Record<TroopStance, string> = { ally: "#8fe388", neutral: "#c8c8c8", enemy: "#ff6b5e" };
 /** On-screen hero size: 0.75 of a 32px design frame (frames are ART_K times finer). */
 const HERO_SCALE = CHAR_SCALE;
 const HERO_TOP = 24 * 0.75 * CHAR_GROW; // drawn hero height above the feet (24 of the 32 design px)
@@ -410,6 +415,14 @@ export class TownScene extends Phaser.Scene {
   private warPlaque?: WarPlaque;
   private warStd?: WarStandards;
   private warTroops?: WarTroops;
+  /** Clans whose troops hunt this hero (a "grudge" from the server: they struck one of them), until (local ms). */
+  private grudges = new Map<string, number>();
+  /** How a server clan trooper sees this hero (shared/war/troops.ts troopStance), from the oath the "clan" message brought. */
+  private troopStanceOf(weapon: string): TroopStance {
+    const t = parseTroop(weapon), me = (this.room?.state as any)?.players?.get(this.me);
+    if (!t || !me) return "neutral";
+    return troopStance(t.clan, { clan: this.warStd?.clan || undefined, level: me.level }, this.grudges.get(t.clan) ?? 0, Date.now());
+  }
   private warLast?: WarView;
   private soundCues = new SoundCues();
   private statsShown = "";
@@ -834,7 +847,7 @@ export class TownScene extends Phaser.Scene {
         e.tx = m.x; e.ty = m.y;
         pushSnap(e, m.x, m.y);
         // A respawned Mother Blob can come back at another level, a skeleton with another weapon
-        if (m.kind === "motherblob" || m.kind === "skeleton" || m.kind === "bandit" || m.kind === "demon" || m.champion) { // a Hide-Stitched champion changes skin
+        if (m.kind === "motherblob" || m.kind === "skeleton" || m.kind === "bandit" || m.kind === "demon" || m.kind === "trooper" || m.champion) { // a Hide-Stitched champion changes skin
           const key = mobTexture(this, m.kind, m.level, m.weapon, m.bones, !!m.champion);
           if (e.sprite.texture.key !== key) { e.sprite.setTexture(key, 0); this.perch(e, m); }
         }
@@ -1507,6 +1520,7 @@ export class TownScene extends Phaser.Scene {
     });
     // Our hero died: "You died - killed by <monster or player>" with a respawn countdown
     this.room.onMessage("died", ({ by, ms }) => {
+      this.grudges.clear(); // the troops are done with a fallen hero (server/warTroops.ts forget)
       const el = document.getElementById("death")!;
       el.querySelector(".by")!.textContent = `Killed by ${by}`;
       const back = el.querySelector(".back")!;
@@ -1554,6 +1568,7 @@ export class TownScene extends Phaser.Scene {
     this.warTroops = new WarTroops(this); // cosmetic clan patrols, derived from the war snapshot
     this.room.onMessage("war", (v) => { this.warTroops?.setWar(v); (this.warPlaque ??= new WarPlaque(document.getElementById("hud")!)).set(v); this.warStd?.setWar(v); this.warLast = v; });
     this.room.onMessage("clan", (m) => this.warStd?.setClan(m));
+    this.room.onMessage("grudge", (m: { clan?: string; ms?: number }) => { if (parseTroop(m?.clan) && typeof m.ms === "number") this.grudges.set(m.clan!, Date.now() + Math.min(m.ms, 600_000)); });
     const warNotice = new WarNotice(document.getElementById("hud")!);
     this.room.onMessage("warev", (e) => warNotice.show(e, this.entities.get(this.me)?.sprite));
     this.room.onMessage("mv", alive);
@@ -1682,6 +1697,7 @@ export class TownScene extends Phaser.Scene {
         const o = (this.room.state as any).players?.get(e.state.owner);
         return !!m && e.state.owner !== this.me && !(o && m.state.party && o.party === m.state.party) && !(o && pvpProtected(m.state.level, o.level)) && !isSafeZone(e.sprite.x, e.sprite.y);
       }
+      if (e.mob && e.state.kind === "trooper") return this.troopStanceOf(e.state.weapon) === "enemy" && !isSafeZone(e.sprite.x, e.sprite.y); // allies and neutral troops are no target
       if (e.mob) return !e.state.hidden;
       // other heroes only where fighting is allowed, and not across newcomer protection
       return !!m && !isSafeZone(e.sprite.x, e.sprite.y) && !isSafeZone(m.sprite.x, m.sprite.y) && !pvpProtected(m.state.level, e.state.level);
@@ -1741,7 +1757,7 @@ export class TownScene extends Phaser.Scene {
       // my own and my group's summons: not attackable, but the monster bar can describe them
       friendlies: () => {
         const out: ClickEnemy[] = [];
-        for (const [id, e] of this.entities) if (e.mob && e.state.owner && !e.culled && !e.state.hidden && !attackable(id, e)) out.push(asEnemy(id, e));
+        for (const [id, e] of this.entities) if (e.mob && (e.state.owner || e.state.kind === "trooper") && !e.culled && !e.state.hidden && !attackable(id, e)) out.push(asEnemy(id, e));
         return out;
       },
       spots: () => {
@@ -1963,7 +1979,7 @@ export class TownScene extends Phaser.Scene {
 
   /** Redfang lookouts stand up on their watchtower's platform: drawn lifted, label and HP bar above them. */
   private perch(e: Entity, p: any) {
-    const base = MOB_LOOK[p.kind]?.oy ?? 0.85, top = MOB_LOOK[p.kind]?.top ?? 14;
+    const look = mobLook(p.kind, p.weapon), base = look?.oy ?? 0.85, top = look?.top ?? 14;
     const up = p.kind === "bandit" && p.weapon === "lookout";
     e.sprite.setOrigin(0.5, base + (up ? PERCH_LIFT / e.sprite.frame.height : 0));
     e.top = top + (up ? PERCH_LIFT : 0);
@@ -1971,11 +1987,12 @@ export class TownScene extends Phaser.Scene {
 
   private addEntity(id: string, p: any, mob = false) {
     if (mob) {
-      const sprite = this.add.sprite(p.x, p.y, mobTexture(this, p.kind, p.level, p.weapon, p.bones, !!p.champion), 0).setOrigin(0.5, MOB_LOOK[p.kind]?.oy ?? 0.85)
-        .setScale(MOB_LOOK[p.kind]?.scale ?? 1);
+      const look = mobLook(p.kind, p.weapon);
+      const sprite = this.add.sprite(p.x, p.y, mobTexture(this, p.kind, p.level, p.weapon, p.bones, !!p.champion), 0).setOrigin(0.5, look?.oy ?? 0.85)
+        .setScale(look?.scale ?? 1);
       if (p.kind === "crawler" && sprite.texture.key.startsWith("mob_skeleton")) sprite.setCrop(0, 0, sprite.frame.width, sprite.frame.height * CRAWL_CROP); // legs gone
       // The level tag is made when the monster comes on screen (see update): thousands of text canvases would cost a lot
-      this.entities.set(id, { sprite, bar: isoAnchor(this.add.graphics(), sprite) as Phaser.GameObjects.Graphics, tx: p.x, ty: p.y, snaps: [{ t: patchTime(), x: p.x, y: p.y }], state: p, mob, top: MOB_LOOK[p.kind]?.top ?? 14 });
+      this.entities.set(id, { sprite, bar: isoAnchor(this.add.graphics(), sprite) as Phaser.GameObjects.Graphics, tx: p.x, ty: p.y, snaps: [{ t: patchTime(), x: p.x, y: p.y }], state: p, mob, top: look?.top ?? 14 });
       if ((p.merged || 1) > 1) this.growMob(this.entities.get(id)!, p);
       this.perch(this.entities.get(id)!, p);
       return;
@@ -2030,8 +2047,39 @@ export class TownScene extends Phaser.Scene {
     this.champFx?.drop(id);
     this.forms?.drop(id);
     this.lastMineHit.delete(id);
+    if (e.mob && e.state.kind === "trooper" && e.state.dead && e.artOn && !e.culled) this.trooperCorpse(e);
     e.sprite.destroy(); e.label?.destroy(); e.titleLabel?.destroy(); e.bar.destroy(); e.parts?.destroy(); e.bubble?.destroy(); e.shield?.destroy(); e.gear?.destroy();
     this.entities.delete(id);
+  }
+
+  /** A clan trooper's sheet: the painted one replaces the stand-in once loaded; fallen, it staggers (frame 12) and lies (13). */
+  private trooperFrame(e: Entity, p: any, now: number) {
+    if (!e.artOn) {
+      const key = mobTexture(this, p.kind, p.level, p.weapon);
+      if (key.startsWith("mob_war_")) { e.sprite.setTexture(key, 0); e.artOn = true; this.perch(e, p); }
+    }
+    if (!p.dead || !e.artOn || e.sprite.texture.frameTotal <= 14) return; // (frameTotal counts Phaser's __BASE frame)
+    e.deadAt ??= now;
+    e.sprite.setFrame(now - e.deadAt < 220 ? 12 : 13).setFlipX(false);
+  }
+
+  /** The fallen trooper lies a moment longer than the server keeps it, then fades. */
+  private trooperCorpse(e: Entity) {
+    const c = this.add.sprite(e.sprite.x, e.sprite.y, e.sprite.texture.key, 13).setOrigin(e.sprite.originX, e.sprite.originY).setScale(e.sprite.scaleX);
+    setBaseDepth(c, e.sprite.y);
+    this.tweens.add({ targets: c, alpha: 0, delay: 1400, duration: 700, onComplete: () => c.destroy() });
+  }
+
+  /** "<Clan> soldier" / "<Clan> captain" over a trooper, coloured by how its clan sees this hero: ally, neutral, enemy. */
+  private trooperLabel(e: Entity, p: any, x: number, y: number) {
+    const t = parseTroop(p.weapon);
+    if (!t || p.dead || p.hidden) { e.label?.setVisible(false); return; }
+    if (!e.label) e.label = isoAnchor(this.add.text(x, y, troopName(t.clan, t.officer), {
+      fontFamily: TEXT_FONT, fontSize: `${TEXT_PX}px`, color: "#c8c8c8", stroke: "#000", strokeThickness: 2,
+    }).setOrigin(0.5, 1).setScale(WT * 0.85).setResolution(1), e.sprite) as Phaser.GameObjects.Text;
+    const col = TROOP_COLOURS[this.troopStanceOf(p.weapon)];
+    if (e.lvlColor !== col) { e.label.setColor(col); e.lvlColor = col; }
+    setBaseDepth(e.label.setPosition(x, y - e.top - 2).setVisible(true), e.sprite.y + 1);
   }
 
   /** Facing to draw: the server's direction, or in the iso view the direction on screen. */
@@ -3308,9 +3356,10 @@ export class TownScene extends Phaser.Scene {
         else if (attackFrames && !p.dead && now < (e.strikeUntil ?? 0)) e.sprite.setFrame(ATTACK_BASE[dir] + 1);
         else e.sprite.setFrame(FRAME_BASE[dir] + step);
         if (e.mob && p.job >= 0) { const wf = this.siege.update(id, e, p, now, moving); if (wf !== undefined) e.sprite.setFrame(wf); } // siege works
+        if (e.mob && p.kind === "trooper") this.trooperFrame(e, p, now);
         e.sprite.setFlipX(dir === "left");
         if (p.kind === "crawler" && e.sprite.isCropped) e.sprite.setAngle(dir === "left" ? -16 : dir === "right" ? 16 : 0); // leaning on its arms
-        if (e.mob) e.sprite.setVisible(!p.dead && !p.hidden);
+        if (e.mob) e.sprite.setVisible((!p.dead || (p.kind === "trooper" && !!e.artOn)) && !p.hidden);
         else e.sprite.setAlpha(p.dead ? 0.35 : 1).setAngle(p.dead ? 90 : 0);
       }
       setBaseDepth(e.sprite, e.sprite.y);
@@ -3339,9 +3388,10 @@ export class TownScene extends Phaser.Scene {
       }
 
       const x = Math.round(e.sprite.x), y = Math.round(e.sprite.y);
+      if (e.mob && p.kind === "trooper") this.trooperLabel(e, p, x, y);
       // Monsters: HP bar over the head (only while it matters, see showWorldBar); their name and level are in the top bar
       const mobBarY = y - e.top - 4;
-      if (e.label) {
+      if (e.label && !e.mob) { // (a clan trooper places its own name: trooperLabel)
         // Heroes: the name over the head, hidden when it would be drawn under the top-right HUD column
         setBaseDepth(e.label.setPosition(x, y - e.top - (p.hat ? 4 : 2)), e.sprite.y + 1);
         e.label.setVisible(!this.labelUnderHud(e.label, e.sprite));
