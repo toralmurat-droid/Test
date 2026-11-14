@@ -93,6 +93,30 @@ All of these must pass (CI runs 1–3 and the Postgres smoke test):
   errors are no longer expected noise: if one shows up, report it.
 - Big features that span several sessions keep a progress log in `docs/` (see `docs/summoner-rework-progress.md`).
 
+## Critical areas (parallel work)
+Several sessions work at once. These areas break the game, or players' saves, when two changes collide:
+
+| Label | Area | Files |
+|---|---|---|
+| `area:saves` | saves and accounts | `server/accounts.ts`, `server/store.ts`, `server/handoff.ts`, changed save lines in `TownRoom.ts` (`snapshot`, `loadHero`, `saveHero`, `xpv`) |
+| `area:schema` | synced Player / Mob schema | `server/player.ts`, `shared/mobView.ts`, `@type` fields in `TownRoom.ts` |
+| `area:skill-engine` | shared skill engine | `shared/skillEngine.ts` |
+| `area:map` | deterministic world map | `shared/map.ts`, `shared/desert.ts` |
+| `area:deploy` | CI, build, deploy | `.github/`, `Dockerfile`, `railway.json`, `package*.json`, `server/index.ts`, configs |
+
+- **Claim early:** when work will touch one of these, push the branch and open a **draft** PR at the start, not at
+  the end. An open PR is the claim; other sessions can see it.
+- **Check first:** before starting in an area, look for open PRs with its label
+  (`gh api "repos/toralmurat-droid/Test/issues?state=open&labels=area:saves"`; `gh pr list` doesn't work from
+  Claude sessions). If there is one, read its changes and build on them or wait for it to land.
+- The `Critical areas` workflow labels every PR and posts one warning comment listing other open PRs in the same
+  area. It never blocks. Only the PR that runs it gets the comment, so the earlier PR in an area hears of a later one
+  on its next push. The list lives in `tools/ci/critical-areas.mjs` (tested in `tests/critical-areas.test.ts`); keep
+  it and this table in step.
+- The merge job tests each PR again on top of the latest default branch before merging, so two PRs that pass alone
+  but break together don't both land. If it fails, it comments on the PR: merge the default branch into your branch,
+  fix, and push. A PR overtaken by another merge gets `auto-merge:waiting` and is retried automatically.
+
 ## Working with agents
 Agent definitions are in `.claude/agents/` (one file per role, with its model and tools). The session you talk to
 is the orchestrator: it splits the request, briefs agents, checks their reports and owns the branch and the PR.

@@ -16,6 +16,8 @@ Given a request, read the code it touches and return:
    that touch the same file (especially `server/TownRoom.ts`) and must run one after another.
 4. **Risks**: anything near the hard limits in `CLAUDE.md` (Player schema cap, `MOB_FIELDS` order, save
    compatibility, skill-tree depth, active classes), performance per tick, and balance impact.
+   List the critical areas it touches (CLAUDE.md "Critical areas") and any open PR already in them
+   (`gh api "repos/toralmurat-droid/Test/issues?state=open&labels=area:<name>"`); if it touches one, the first step is a draft PR to claim it.
 5. **Acceptance criteria**: checkable statements a player could verify ("buying X costs 40 gold and X appears in
    the bag"). QA and the tester work from these.
 6. **Checks**: which tests to add, whether balance sims or `npm run bench` are needed.
