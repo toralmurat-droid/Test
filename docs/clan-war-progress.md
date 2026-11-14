@@ -73,3 +73,12 @@ Open points for M1:
 - Client: `client/src/warStandards.ts` (poles in the holder's colours, rings, E prompt, oath panel; other E
   prompts nearby come first), the plaque tells the hero whether they defend, attack or cannot reach the land.
 - Open: rewards for valor (Renown, M2), tabards so other players see the oath (M2), Holds.
+
+## M1 step 3: horns and leaders (2026-11-14)
+
+- `shared/war/heralds.ts`: a leader per clan (Captain Hale, the Redfang Chief, the Pale Marshal, the Hide-Mother,
+  the Veiled Oracle) with lines per moment; the defender speaks when besieged or holding, the winner when a land
+  falls. Picked by tick, so replays say the same.
+- Each war event: Herald line, leader line, and a `warev` message; `client/src/warNotice.ts` sounds the war horn and
+  shows a notice when it happens in the hero's territory or next to it.
+- `WAR.siegeValor` 1.5: valor counts half again at a territory under siege (the hour's warning is for players).
