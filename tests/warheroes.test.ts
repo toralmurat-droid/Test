@@ -58,3 +58,13 @@ test("presence: ten active minutes in an enemy ring attack it; idle, dead or wan
   assert.ok(heroValor(50, std.t) < heroValor(1, std.t), "far over-levelled heroes bring less");
   assert.ok(WAR.valorPerAdd >= STANDARD.valorPerMin);
 });
+
+test("holds: one per territory, on free ground inside it", async () => {
+  const { HOLDS } = await import("../shared/war/standards");
+  assert.equal(HOLDS.length, TERRITORIES.length);
+  for (const h of HOLDS) {
+    const t = TERRITORIES[h.t];
+    assert.ok(h.x / 32 >= t.x && h.x / 32 < t.x + t.w && h.y / 32 >= t.y && h.y / 32 < t.y + t.h, t.name);
+    assert.ok(!isSolidAt(h.x, h.y), `${t.name} hold walkable`);
+  }
+});

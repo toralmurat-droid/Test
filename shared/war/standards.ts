@@ -67,6 +67,23 @@ function build(): Standard[] {
 
 export const STANDARDS: Standard[] = build();
 
+/** Where each territory's Hold stands (px, foot of the sprite): near the middle, clear of its standards' rings. */
+export interface Hold { t: number; x: number; y: number }
+function buildHolds(): Hold[] {
+  const out: Hold[] = [];
+  for (const t of TERRITORIES) {
+    const mine = STANDARDS.filter((s) => s.t === t.id);
+    const clear = (p: { x: number; y: number }) => mine.every((s) => Math.hypot(s.x - p.x, s.y - p.y) > STANDARD.range + 4 * TILE);
+    // try the middle, then points around it, until one is free and away from the rings
+    const spots = [[0.5, 0.5], [0.5, 0.3], [0.5, 0.7], [0.3, 0.5], [0.7, 0.5], [0.3, 0.3], [0.7, 0.7], [0.3, 0.7], [0.7, 0.3], [0.15, 0.5], [0.85, 0.5], [0.5, 0.15], [0.5, 0.85]]
+      .map(([fx, fy]) => freeSpot(t, Math.floor(t.x + t.w * fx), Math.floor(t.y + t.h * fy)));
+    const at = spots.find((p) => p && clear(p)) ?? spots.find((p) => p); // a small land: the hold may stand by a ring
+    if (at) out.push({ t: t.id, ...at });
+  }
+  return out;
+}
+export const HOLDS: Hold[] = buildHolds();
+
 /** The standard whose ring holds this point (px), if any. */
 export function standardAt(px: number, py: number): Standard | undefined {
   for (const s of STANDARDS) if (Math.hypot(s.x - px, s.y - py) <= STANDARD.range) return s;

@@ -82,3 +82,11 @@ Open points for M1:
 - Each war event: Herald line, leader line, and a `warev` message; `client/src/warNotice.ts` sounds the war horn and
   shows a notice when it happens in the hero's territory or next to it.
 - `WAR.siegeValor` 1.5: valor counts half again at a territory under siege (the hour's warning is for players).
+
+## M1 step 4: Holds (2026-11-14)
+
+- `client/src/holdArt.ts`: five Hold sprites in the clan styles (Warden watchtower, Redfang war camp, Ossuary tower,
+  Hide-Kin burrow, Veiled shrine), generated pixel art in the bonfire style. Preview:
+  /mnt/project-files/clan-war/holds-preview.png.
+- `shared/war/standards.ts` `HOLDS`: one spot per territory near the middle, clear of its standards' rings. The
+  sprite follows the owner. Look only: no collision, no siege mechanics at the Hold yet (M2: siege works, gates).
