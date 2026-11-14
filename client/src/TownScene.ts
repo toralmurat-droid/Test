@@ -62,6 +62,7 @@ import { pixelText } from "./pixeltext";
 import { speechBubble } from "./weathered";
 import { WarPlaque } from "./warPlaque";
 import { WarStandards } from "./warStandards";
+import { WarNotice } from "./warNotice";
 import { ART_K, CHAR_GROW, CHAR_SCALE, CHARACTERS, CHAR_ORIGIN, CharacterName, createArtAnims, ensureCharSheet, HD_CHARS, playCharAnim, preloadArt } from "./artAssets";
 import { Ambient } from "./ambient";
 import { Details } from "./details";
@@ -1506,6 +1507,8 @@ export class TownScene extends Phaser.Scene {
     this.warStd = new WarStandards(this, (type, msg) => this.room.send(type, msg)); // clan war standards and oaths
     this.room.onMessage("war", (v) => { (this.warPlaque ??= new WarPlaque(document.getElementById("hud")!)).set(v); this.warStd?.setWar(v); });
     this.room.onMessage("clan", (m) => this.warStd?.setClan(m));
+    const warNotice = new WarNotice(document.getElementById("hud")!);
+    this.room.onMessage("warev", (e) => warNotice.show(e, this.entities.get(this.me)?.sprite));
     this.room.onMessage("mv", alive);
     this.startPing();
     window.setInterval(() => { if (!this.quitting && Date.now() - lastPatch > 15_000) reconnectSoon(login); }, 3000);

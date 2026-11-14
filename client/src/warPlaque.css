@@ -24,3 +24,9 @@ body #warpanel { width: min(600px, calc(100% - 32px)); max-height: calc(100vh - 
 #warpanel .wr-row button { flex: none; }
 #warplaque .wp-me { color: #9fe07a; }
 #warplaque .wp-me.no { color: #a8977a; }
+/* War news notice under the plaque (warNotice.ts) */
+body #warnotice { position: absolute; top: 182px; left: 50%; transform: translateX(-50%); max-width: min(640px, 90vw); text-align: center;
+  border: 18px solid transparent; border-image: var(--wf-gold) 9 fill / 18px / 0 repeat; image-rendering: pixelated; padding: 0 8px;
+  color: #ffd98a; text-shadow: 2px 2px #050302; font: 18px var(--pixel-font); -webkit-font-smoothing: none; pointer-events: none; }
+body #warnotice.siege { border-image-source: var(--wf-blood); color: #ffb08a; }
+body #warnotice[hidden] { display: none; }

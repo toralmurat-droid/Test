@@ -44,8 +44,9 @@ export const WAR = {
   raidersHit: 0.03, // share of the leader's army the Night Raiders cut down each night tick
   // Players (server/war.ts): valor is hero-minutes at a standard; a few heroes tip a front, a crowd cannot swamp it
   valorScale: 20, // valor at which players bring ~63% of valorCap
+  siegeValor: 1.5, // players count more at a territory under siege (the hour's notice is for them)
   valorPerAdd: 10, // most valor one hero can bring in one report (ten minutes at a standard)
-  valorCap: 60, // troops players can add to one territory per clan per tick (a clan's army is ~150-600)
+  valorCap: 60, // troops players can add to one territory per clan per tick (x siegeValor during a siege) (a clan's army is ~150-600)
 };
 
 export interface Siege { by: ClanKey; at: number }
@@ -176,7 +177,7 @@ export function warTick(s: WarState, orders: Partial<Record<ClanKey, Orders>>, e
     if (!vs || id >= TERRITORIES.length) return;
     const legal = (k: ClanKey) => targetsOf(s, k).includes(id);
     for (const [k, v] of Object.entries(vs) as [ClanKey, number][]) {
-      const f = valorForce(v ?? 0);
+      const f = valorForce(v ?? 0) * (s.siege[id] ? WAR.siegeValor : 1); // a siege window calls the heroes
       if (!f || !CLANS[k]) continue;
       if (s.owner[id] === k) defence[id] += f;
       else if (legal(k)) attack[id][k] = (attack[id][k] ?? 0) + f;
