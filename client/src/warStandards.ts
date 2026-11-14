@@ -57,7 +57,8 @@ export class WarStandards {
 
   constructor(private scene: Phaser.Scene, private send: (type: string, msg?: unknown) => void) {
     for (const s of STANDARDS) {
-      const ring = scene.add.ellipse(s.x, s.y, STANDARD.range * 2, STANDARD.range * 2 * (ISO ? 0.5 : 0.7)).setDepth(-1.5).setVisible(false);
+      // a world circle of radius R: an ellipse 2√2R x √2R once projected to iso, a plain circle top-down
+      const ring = scene.add.ellipse(s.x, s.y, STANDARD.range * 2 * (ISO ? Math.SQRT2 : 1), STANDARD.range * 2 * (ISO ? Math.SQRT1_2 : 1)).setDepth(-1.5).setVisible(false);
       isoAnchor(ring, { x: s.x, y: s.y });
       this.rings.set(s.id, ring);
     }

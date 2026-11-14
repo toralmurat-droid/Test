@@ -4,7 +4,7 @@
  * land it attacks. Standards sit on free ground inside each territory, the same on server and client (from the map).
  */
 import { TILE } from "../constants";
-import { isSolidAt } from "../map";
+import { isSolidAt, PORTAL_SPOTS } from "../map";
 import { CLANS, type ClanKey } from "./clans";
 import { TERRITORIES } from "./territories";
 
@@ -17,14 +17,28 @@ export const STANDARD = {
   minLevel: 5,
   /** Changing clan after the first oath waits this long. */
   swearCooldownMs: 24 * 60 * 60_000,
+  /** A hero who has not moved, attacked or cast for this long adds nothing (no parking a hero in a ring). */
+  idleMs: 3 * 60_000,
+  /** Heroes this many levels above a territory's monsters bring only `overLevelShare` of their valor there. */
+  overLevel: 5, overLevelShare: 0.25,
 };
 
+/** Valor a hero of `level` brings per minute in territory `t`. */
+export function heroValor(level: number, t: number): number {
+  const top = TERRITORIES[t]?.levels[1] ?? 0;
+  return STANDARD.valorPerMin * (level > top + STANDARD.overLevel ? STANDARD.overLevelShare : 1);
+}
+
 export interface Standard { id: number; t: number; x: number; y: number }
+
+/** Tiles a standard keeps from a portal stone (the ring and the stone's prompt must not overlap). */
+const KEEP_CLEAR = 6;
 
 /** A walkable spot near (tx, ty) inside territory `t`'s rect, with a little room around it. */
 function freeSpot(t: (typeof TERRITORIES)[number], tx: number, ty: number): { x: number; y: number } | undefined {
   const free = (x: number, y: number) => {
     if (x < t.x + 1 || y < t.y + 1 || x >= t.x + t.w - 1 || y >= t.y + t.h - 1) return false;
+    if (PORTAL_SPOTS.some((p) => Math.hypot(p.x - x, p.y - y) < KEEP_CLEAR)) return false; // its own E prompt there
     for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if (isSolidAt((x + 0.5 + dx) * TILE, (y + 0.5 + dy) * TILE)) return false;
     return true;
   };

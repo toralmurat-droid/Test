@@ -77,6 +77,8 @@ export class NpcLayer {
   private q: QuestState;
   readonly objects: QuestObjects;
   private nearObj?: ReturnType<QuestObjects["near"]>;
+  /** A quest NPC or quest object is in reach (other E prompts step aside). */
+  get busy() { return !!this.near || !!this.nearObj; }
   private trackerHtml = "";
   private promptHtml = "";
   private trackQ: QuestState | undefined;

@@ -586,6 +586,7 @@ export class TownRoom extends Room<TownState> {
   onCreate() {
     liveRooms.add(this);
     this.offWar = attachWar(this); // the clan war (server/war.ts) runs on its own; the room only passes on the news
+    this.limitMessages();
     // Clan war heroes (server/warHeroes.ts): oaths, and minutes at the standards reported as valor
     this.clock.setInterval(() => this.warPresence.tick(this.state.players.entries()), 1000);
     this.onMessage("clan", (client, msg: { swear?: unknown }) => {
@@ -594,7 +595,6 @@ export class TownRoom extends Room<TownState> {
       const err = msg && msg.swear !== undefined ? swear(p, msg.swear) : "";
       client.send("clan", { ...clanView(p), err });
     });
-    this.limitMessages();
     this.setState(new TownState());
     copyPatches(this); // each socket gets its own copy of a patch (deflate compresses later; server/patchCopy.ts)
     // Monsters near each hero go out just before every state patch, so both halves of an update arrive together
@@ -629,12 +629,13 @@ export class TownRoom extends Room<TownState> {
       const p = this.state.players.get(client.sessionId);
       if (!p) return;
       p.input = { up: !!msg.up, down: !!msg.down, left: !!msg.left, right: !!msg.right };
+      if (msg.up || msg.down || msg.left || msg.right) p.lastAct = Date.now(); // the clan war counts only heroes at the keys
       const v = inputDir(msg); // point-and-click: exact walking angle
       if (v) { p.input.vx = v[0]; p.input.vy = v[1]; }
       p.seq = msg.seq | 0;
     });
 
-    this.onMessage("attack", (client) => this.playerAttack(client.sessionId));
+    this.onMessage("attack", (client) => { const p = this.state.players.get(client.sessionId); if (p) p.lastAct = Date.now(); this.playerAttack(client.sessionId); });
     // Point-and-click: turn toward a world point (the clicked enemy or spot) before an attack or skill
     this.onMessage("face", (client, msg: { x: number; y: number }) => {
       const p = this.state.players.get(client.sessionId);
@@ -643,7 +644,7 @@ export class TownRoom extends Room<TownState> {
       this.host.face(client.sessionId, x - p.x, y - p.y);
       p.aimDist = Math.hypot(x - p.x, y - p.y);
     });
-    this.onMessage("cast", (client, skill: string) => this.cast(client.sessionId, skill));
+    this.onMessage("cast", (client, skill: string) => { const p = this.state.players.get(client.sessionId); if (p) p.lastAct = Date.now(); this.cast(client.sessionId, skill); });
     this.onMessage("potion", (client) => this.drinkPotion(client.sessionId));
     this.onMessage("manapotion", (client) => this.drinkManaPotion(client.sessionId));
     this.onMessage("dodge", (client) => this.dodge(client.sessionId));
@@ -1038,7 +1039,7 @@ export class TownRoom extends Room<TownState> {
     for (const id of cleanPortals(s.portals)) p.portals.add(id);
     p.bountyDone = Math.max(0, Math.floor(num(s.bountyDone)));
     p.bounty = cleanBounty(s.bounty);
-    Object.assign(p, cleanOath(s.clan, s.clanAt));
+    { const o = cleanOath(s.clan, s.clanAt); p.clan = o.clan; p.clanAt = o.clanAt; } // clan war oath (server/warHeroes.ts)
     p.feast = cleanFeast(s.feast);
     const sv = s as unknown as Record<string, unknown>;
     // Saves from before the guided first quest count it as done

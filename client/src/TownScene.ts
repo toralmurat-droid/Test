@@ -502,10 +502,10 @@ export class TownScene extends Phaser.Scene {
       if (this.bounty?.open) { this.bounty.close(); return; }
       if (this.warStd?.open) { this.warStd.close(); return; }
       if (!this.npcs?.isOpen && this.bounty?.interact()) return; // a bounty board
-      if (!this.npcs?.isOpen && this.warStd?.interact()) return; // a clan war standard
       if (!this.npcs?.isOpen && this.shrine?.interact()) return; // then the forest shrine
       if (!this.npcs?.isOpen && this.portals?.interact()) return; // then a portal stone's travel list
       if (!this.npcs?.isOpen && this.waygates?.interact()) return; // then Act 2's waygate
+      if (!this.npcs?.isOpen && !this.npcs?.busy && this.warStd?.interact()) return; // a clan war standard (anything else here comes first)
       this.npcs?.interact();
     };
     const toggleQuestLog = () => {
@@ -3382,7 +3382,7 @@ export class TownScene extends Phaser.Scene {
       const tx = meEnt.sprite.x / TILE, ty = meEnt.sprite.y / TILE;
       const zdef = zoneAt(Math.floor(tx), Math.floor(ty));
       setMusicZone(zdef?.name, zdef?.mobs, this.areaName, actOfTile(tx, ty));
-      this.warStd?.update(meEnt.state.dead ? undefined : meEnt.sprite, !!this.npcs?.isOpen || !!this.chests?.near || !!this.stash?.near || !!this.bounty?.near, now);
+      this.warStd?.update(meEnt.state.dead ? undefined : meEnt.sprite, !!this.npcs?.isOpen || !!this.npcs?.busy || !!this.chests?.near || !!this.stash?.near || !!this.bounty?.near || !!this.portals?.near || !!this.shrine?.near || !!this.waygates?.near || !!this.dungeon?.nearDoor, now);
       this.warPlaque?.update(tx, ty, this.warStd?.standing(meEnt.sprite)); // the clan war front plaque (warPlaque.ts)
       sfxFrame(this.me, this.entities as any);
       const cls = mine.cls as ClassKind;
