@@ -50,3 +50,23 @@ Orchestrator notes for when it's picked up:
   - what mana potions do;
   - whether it drains when out of combat or on death;
   - how the sims model it (`tools/balance/duel.ts` and `pve.ts` use the mana model today).
+
+### DI-4 (2026-11-14): Verses and Choruses
+- Rename the Songweaver's skills by kind: **attacks are "Verses"** and **auras (songs) are "Choruses"**.
+- **Choruses are mutually exclusive:** only one can be active at a time. This matches today's rule of one song
+  per Songweaver (`SkillRuntime.song`).
+- **The current Chorus always shows a visible effect under the feet.**
+  - Today the caster gets no ring while Dirge plays, because Dirge has no party buff; only allies with the buff
+    get one. So this is a real change, not just a rename.
+
+Orchestrator notes for when it's picked up:
+- Mostly player-facing text:
+  - skill descriptions;
+  - tree and tooltip labels (`client/src/talents.ts`);
+  - the content doc;
+  - the patch note.
+  Ids (`sg_*`) stay as they are.
+- Decide which skills are Verses: every non-song active (notes, Shrill Note, Cracked String, Mending Note …),
+  and whether the basic attack counts as one.
+- Under the feet, layer with DI-1: the Chorus effect is the steady base ring, and the chord-progress rings
+  expand above it.
