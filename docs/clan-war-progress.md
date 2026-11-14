@@ -98,3 +98,11 @@ Open points for M1:
   flips 7.05 -> 7.33 per day. Wardens 23.5 -> 23.8, Redfang 25.6 -> 24.7, Host 11.8 -> 12.0, Veiled 21.9 -> 21.7.
 - Host: raising `hostRaise` to 0.45 / 0.6 moved it only to 12.4% / 12.7%. Its size comes from where its forward
   capitals sit; it is left to the Grey Barrow Moors homeland (roadmap "New Lands").
+
+## M2: Renown (2026-11-14)
+
+- `shared/war/renown.ts`: `RENOWN_RANKS` (Sworn 0, Shieldbearer 30, Standard-bearer 120, Banneret 360, Warlord 900,
+  Hero of the Marches 2000). Each valor report from a standard (one full active minute) adds the same amount of
+  renown (`heroValor`: a quarter when far over-levelled). Saved per hero as optional `renown`; kept on a clan change.
+- The oath panel shows renown and the next rank; the Herald tells the hero in chat on a rank-up. No reward yet beyond
+  the title (ideas: tabard trims by rank, Renown in the name tag once a synced field is free).
