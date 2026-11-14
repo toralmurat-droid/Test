@@ -1,7 +1,7 @@
 import "./party.css";
-import { ELEMENT_NAMES, REACTIONS, REACTION_IDS, REACTION_MARK_MS, REACTION_SELF_FACTOR } from "../../shared/elements";
 import { PARTY } from "../../shared/party";
 import { TRADE } from "../../shared/trade";
+import { nearbyEmptyMessage } from "./hudLogic";
 
 /**
  * Player groups (shared/party.ts): the Group button / P key opens a panel to invite nearby heroes or leave,
@@ -109,14 +109,12 @@ export class PartyUI {
       html += `<ul>${group.map(([id, p]) => `<li>${esc(p.name)} <small>${p.cls} Lv${p.level}${id === myId ? " (you)" : ""}</small></li>`).join("")}</ul>`
         + `<button data-act="leave">Leave group</button>`;
     } else html += `<p class="help">You are not in a group. Group members can't hurt each other and share kill XP in the same zone, but monsters fight harder against a group.</p>`;
-    // Elemental reactions (shared/elements.ts REACTIONS): the one place in game that says how elements combine
-    html += `<p class="help">Elemental reactions: an elemental hit marks a monster for ${REACTION_MARK_MS / 1000}s; another element on the mark reacts (${REACTION_IDS.map((r) => `${REACTIONS[r].els.map((e) => ELEMENT_NAMES[e]).join(" + ")} = ${REACTIONS[r].name}`).join(", ")}). Full effect on another hero's mark, ${Math.round(REACTION_SELF_FACTOR * 100)}% on your own.</p>`;
     html += `<h3>Heroes nearby</h3>`;
     html += near.length
       ? `<ul>${near.map(([id, p, d]) => `<li>${esc(p.name)} <small>${p.cls} Lv${p.level}${p.party ? " · in a group" : ""}</small>`
         + ` <span class="pbtns">${p.party || full ? "" : `<button data-inv="${esc(id)}">Invite</button>`}`
         + `${d <= TRADE.range ? ` <button data-trade="${esc(id)}">Trade</button>` : ""}</span></li>`).join("")}</ul>`
-      : `<p class="help">Nobody close by. You can also type /invite name or /trade name in chat.</p>`;
+      : `<p class="help">${nearbyEmptyMessage(group.filter(([id, p]) => id !== myId && Math.hypot(p.x - mine.x, p.y - mine.y) <= NEAR_PX).length)}</p>`;
     html += `<p class="help">Max ${PARTY.maxSize} heroes · /leave in chat · P or Esc to close <button data-act="close">Close</button></p>`;
     if (html !== this.lastHtml) { this.panel.innerHTML = html; this.lastHtml = html; }
   }
