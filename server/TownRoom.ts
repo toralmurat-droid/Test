@@ -39,7 +39,7 @@ import { isDecorSolidAt, npcById, npcNear, TALK_RANGE } from "../shared/npcs";
 import { beyondWall, WATCH, WATCH_POSTS, WatchPost } from "../shared/watch";
 import { inVillage, WRATH } from "../shared/wrath";
 import { sellPrice, shopBuys, shopFuses, SHOPS } from "../shared/shops";
-import { BLOB_KINDS, CHAINS, CROWN_CHAIN, packQuest, chainOpen, chainState, inZone, isBlob, npcPresent, QuestState, questStep, stepGoal, Summon, type BossVoice, TUT_CHAIN, TUT_QUESTS, USE_RANGE } from "../shared/quests";
+import { BLOB_KINDS, CHAINS, CROWN_CHAIN, packQuest, chainOpen, chainState, cleanMentor, inZone, isBlob, type MentorState, npcPresent, QuestState, questStep, stepGoal, Summon, type BossVoice, TUT_CHAIN, TUT_QUESTS, USE_RANGE } from "../shared/quests";
 import { findHideSpot, HIDE, MOTHER_KEEP_OUT, noMobsAt, spawnPoint, SPAWN_ZONES, villageDist, zoneCap } from "../shared/spawns";
 import { blocked, moveStep } from "../shared/movement";
 import { NIGHT_RAID, raiderByKey, raiderIgnores, RAIDERS } from "../shared/raiders";
@@ -79,6 +79,9 @@ import { Champions, type ChampState } from "./champions";
 import { QuestSteps, setMeta } from "./questSteps";
 import { Tide } from "./tide";
 import { Rumours } from "./rumours";
+import { Apprentice } from "./apprentice";
+import { titleMsg } from "./titles";
+import { cleanOwned } from "../shared/cosmetics";
 import { cleanRumour, rumourDay, RUMOURS, type RumourState } from "../shared/rumours";
 import { TIDE } from "../shared/tide";
 import { world, worldChanged } from "./worldStore";
@@ -198,6 +201,8 @@ export class Player extends Schema {
   portals = new Set<string>(); // portal stones this hero has woken (shared/portals.ts; saved, never synced)
   bounty?: BountyState; // bounty board hunt in progress (shared/bounty.ts; saved, sent by message)
   rumour?: RumourState; // Tavern Rumours (server/rumours.ts): today's offers, which are done, the one under way (saved, sent by message)
+  titles = 0; // titles earned, bit i = TITLES[i] (shared/cosmetics.ts; saved, sent as "title"); the shown one is arcs "$c"
+  mentor?: MentorState; // The Apprentice (server/apprentice.ts): mentoring on, recruits counted (saved, sent as "mentor")
   bountyDone = 0;
   lastSpecial = -Infinity;
   // Hidden initiative / poise (shared/combat.ts)
@@ -676,6 +681,8 @@ export class TownRoom extends Room<TownState> {
   private tide!: Tide;
   /** Tavern Rumours (server/rumours.ts): Mags' three daily side quests. */
   private rumours!: Rumours;
+  /** The Apprentice (server/apprentice.ts): veterans standing by recruits at their first boss. */
+  private apprentice!: Apprentice;
 
   onCreate() {
     liveRooms.add(this);
@@ -719,6 +726,21 @@ export class TownRoom extends Room<TownState> {
       removeMob: (id) => { const m = this.state.mobs.get(id); if (!m || m.dead) return; m.dead = true; m.hp = 0; this.clock.setTimeout(() => this.state.mobs.delete(id), 500); },
       send: (pid, type, msg) => this.clients.find((cl) => cl.sessionId === pid)?.send(type, msg),
       pay: (pid, gold, rune) => this.payHero(pid, gold, rune), dayFrac: (now) => worldDayFrac(now),
+      save: (pid) => { const p = this.state.players.get(pid); if (p) saveHero(p.name, p.cls, this.snapshot(p)); },
+    });
+    this.apprentice = new Apprentice({
+      hero: (pid) => this.state.players.get(pid),
+      group: (pid) => { const p = this.state.players.get(pid); return p?.party ? this.members(p.party) : [pid]; },
+      together: (a, b) => { const p = this.state.players.get(a), o = this.state.players.get(b); return !!p && !!o && !o.dead && together(p.x, p.y, o.x, o.y); },
+      send: (pid, type, msg) => this.clients.find((cl) => cl.sessionId === pid)?.send(type, msg),
+      note: (pid, text) => this.note(pid, text),
+      reward: (pid, gold, potions) => {
+        const p = this.state.players.get(pid);
+        if (!p) return;
+        p.gold += gold;
+        const rs = dropSize(p.level, () => 0.5), left = potions - this.addPotions(p, "potion", rs, potions); // sized like quest reward potions
+        if (left > 0) this.dropItem("potion", p.x, p.y + 8, left, String(rs));
+      },
       save: (pid) => { const p = this.state.players.get(pid); if (p) saveHero(p.name, p.cls, this.snapshot(p)); },
     });
     this.setState(new TownState());
@@ -804,6 +826,10 @@ export class TownRoom extends Room<TownState> {
     this.onMessage("bounty", (client, msg: { take?: number; drop?: boolean }) => this.bountyMsg(client, msg ?? {}));
     // Tavern Rumours: {take: 0..2} by Mags, {drop: true}, {} = resend (checked in server/rumours.ts)
     this.onMessage("rumour", (client, msg: unknown) => { if (this.allow("ask", client)) this.rumours.msg(client.sessionId, msg); });
+    // The Apprentice: {on: boolean} by Captain Hale, {} = resend (checked in server/apprentice.ts)
+    this.onMessage("mentor", (client, msg: unknown) => { if (this.allow("ask", client)) this.apprentice.msg(client.sessionId, msg); });
+    // Titles: {i} shows an earned title (0 = none), {} = resend; the reply is "title" {i, owned} (server/titles.ts)
+    this.onMessage("title", (client, msg: unknown) => { const p = this.state.players.get(client.sessionId); if (p && this.allow("ask", client)) client.send("title", titleMsg(p, msg)); });
     this.onMessage("shrine", (client) => client.send("shrine", { left: Math.max(0, this.shrineReadyAt - Date.now()) }));
     // The client is ready (loading screen gone): a hero on the first step of First Steps gets its banner
     this.onMessage("tutorial", (client) => {
@@ -1018,6 +1044,7 @@ export class TownRoom extends Room<TownState> {
     this.sendBoard(client); // the Ideas board is ready as soon as it is opened
     this.tide.join(client.sessionId); // the Gloam Tide's meter (server/tide.ts)
     this.rumours.join(client.sessionId); // today's rumours (server/rumours.ts)
+    this.apprentice.join(client.sessionId); // mentoring state (server/apprentice.ts)
     if (Object.keys(p.feast).length) client.send("feast", { feast: p.feast }); // Devour: what this hero has eaten
     console.log(`${p.name} the ${CLASSES[p.cls].name} joined (${this.clients.length} online)`);
   }
@@ -1030,6 +1057,7 @@ export class TownRoom extends Room<TownState> {
     this.partyLeave(client.sessionId);
     this.qsteps.leave(client.sessionId);
     this.rumours.leave(client.sessionId);
+    this.apprentice.leave(client.sessionId);
     this.lastDrainFx.delete(client.sessionId);
     this.invites.delete(client.sessionId);
     this.lootFilters.delete(client.sessionId);
@@ -1114,6 +1142,7 @@ export class TownRoom extends Room<TownState> {
       bounty: p.bounty, bountyDone: p.bountyDone, wear: p.wear, feast: { ...p.feast }, rumour: p.rumour && { ...p.rumour },
       // the reserved arcs numbers (shared/questSteps.ts META): choices made, cosmetics; missing = 0
       flags: metaOf(p, META.flags) || undefined, cosm: metaOf(p, META.cosm) || undefined,
+      titles: p.titles || undefined, mentor: p.mentor && { ...p.mentor, names: [...p.mentor.names] },
       ...(p.cls === "summoner" ? { grimoire: this.grimoireOf(p), suTree: SUMMONER_TREE } : {}),
     };
   }
@@ -1153,6 +1182,8 @@ export class TownRoom extends Room<TownState> {
     p.rumour = cleanRumour(s.rumour, rumourDay(Date.now()), p.level); // another day's rumours start over
     p.feast = cleanFeast(s.feast);
     setMeta(p, META.flags, num(s.flags)); setMeta(p, META.cosm, num(s.cosm)); // choices and cosmetics, kept apart from the arcs' progress
+    p.titles = cleanOwned(s.titles, num(s.cosm)); // titles earned; saves from before the list own the one they show
+    p.mentor = cleanMentor(s.mentor);
     const sv = s as unknown as Record<string, unknown>;
     // Saves from before the guided first quest count it as done
     if (sv.tutVer === undefined) sv.tutId = TUT_QUESTS.length;
@@ -2741,6 +2772,7 @@ export class TownRoom extends Room<TownState> {
     this.qsteps.tick(now, dtMs); // carried lanterns, hold runs (server/questSteps.ts)
     this.tide.tick(now); // the Gloam Tide's march (server/tide.ts)
     this.rumours.tick(now); // rumours: reach steps, ambushers, walking up to Mags (server/rumours.ts)
+    this.apprentice.tick(now); // mentoring state for heroes who just joined (server/apprentice.ts)
     this.state.items.forEach((it, id) => { if (now > it.expires) this.state.items.delete(id); });
     const tick = ++this.tickNo;
     // Live heroes, gathered once so each monster's "anyone near?" check is a plain array scan
@@ -5080,6 +5112,7 @@ export class TownRoom extends Room<TownState> {
     if (a) onKill(this.host, attackerId); // Bloodlust
     if (m.owner && !m.charmUntil) { this.mobDied(m, targetId, attackerId, a?.name ?? ""); return; } // a summon: no XP, no loot, no quest credit
     if (a && !m.tide) for (let c = 0; c < CHAINS.length; c++) this.questKill(attackerId, a, m, c); // marchers fill no quest or bounty
+    if (a && !m.tide) this.ownerCredit(attackerId, a, m); // someone's own quest monster, felled by their group (decision 9)
     if (a && !m.tide) this.bountyKill(attackerId, a, m);
     if (a) this.tide.kill(attackerId, m); // a blob fills the Gloam Tide's meter (server/tide.ts)
     if (a) this.rumours.kill(attackerId, targetId); // a rumour's ambusher (server/rumours.ts)
@@ -5879,16 +5912,32 @@ export class TownRoom extends Room<TownState> {
     }
   }
 
-  /** A monster died to this player: count it, or maybe drop a quest item only they can see. */
-  private questKill(id: string, p: Player, m: Mob, c: number) {
+  /**
+   * A monster died to this player: count it, or maybe drop a quest item only they can see. `ownOnly`: the kill was a
+   * group member's (ownerCredit), so only this hero's own-boss step may take it.
+   */
+  private questKill(id: string, p: Player, m: Mob, c: number, ownOnly = false) {
     const q = this.qs(p, c), s = questStep(q);
     // Kills and drops count anywhere on the map: only the monster's type matters (Murat's rule)
     if (!s || !s.kinds?.includes(m.kind)) return;
+    if (ownOnly && !(s.type === "kill" && s.own)) return;
     if (s.type === "kill" && (m.merged ?? 1) < (s.fused ?? 1)) return;
     if (s.type === "kill" && s.own && (m.summonFor !== id || m.summonChain !== c)) return; // a named leader: only the one summoned for this player on this chain (not a rumour's or a wrong grave's)
+    if (s.type === "kill" && s.own && q.questCount + 1 >= stepGoal(s)) this.apprentice.bossDown(id); // a mentor standing by pays out (server/apprentice.ts), while it still is their first
     if (s.type === "kill" && s.gift && q.questCount + 1 >= stepGoal(s)) this.giveGift(id, p, s.gift, m);
     if (s.type === "kill") this.questProgress(id, p, c, q.questCount + 1);
     else if (s.type === "collect" && Math.random() < (s.chance?.[m.kind] ?? 0)) this.dropItem("quest", m.x, m.y, 1, s.item!, id);
+  }
+
+  /**
+   * Decision 9: a hero's own quest monster felled by a member of their group who stands with them (shared/party.ts
+   * together) counts for that hero, on its own chain only. Rumour and wrong-grave ambushers (summonChain < 0) and hold
+   * waves never count; questKill still checks summonFor and summonChain.
+   */
+  private ownerCredit(id: string, a: Player, m: Mob) {
+    const oid = m.summonFor, o = oid && oid !== id ? this.state.players.get(oid) : undefined;
+    if (!o || o.dead || !a.party || o.party !== a.party || m.qwave || !CHAINS[m.summonChain] || !together(a.x, a.y, o.x, o.y)) return;
+    this.questKill(oid, o, m, m.summonChain, true);
   }
 
   /** A quest step's gift: straight into the bag with a "+item" pop at the monster (on the ground if the bag is full). */

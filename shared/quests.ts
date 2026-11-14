@@ -2616,3 +2616,75 @@ export function objectDone(o: QuestObject, p: Quester | undefined): boolean {
   const st = quests[owner].steps[si];
   return st.type === "use" && !!(q!.questCount & (1 << st.objects!.indexOf(o)));
 }
+
+// ---- The Apprentice (docs/quest-concepts-progress.md #9; server/apprentice.ts runs it) ----
+
+/**
+ * A veteran who turned mentoring on with Captain Hale stands by a recruit (a group member `gap` levels lower who has
+ * beaten no quest boss yet) at the recruit's first own boss: the recruit gets gold and potions, the veteran counts the
+ * recruit's account once and earns titles. No XP for anyone (decision 11): levelling stays slow.
+ */
+export const MENTOR = {
+  npc: "captain", minLevel: 11, gap: 10, gold: 60, potions: 3,
+  /** Recruit account names a veteran remembers (oldest forgotten past this); `n` keeps counting. */
+  names: 50,
+  /** Recruits counted -> TITLES index (shared/cosmetics.ts): Mentor, Captain's Own, Warden of Oakvale. */
+  titles: [{ at: 1, title: 1 }, { at: 5, title: 2 }, { at: 15, title: 3 }],
+} as const;
+/** A veteran's mentoring (HeroSave.mentor): switched on, recruits counted, their account names (lower case). */
+export interface MentorState { on: boolean; n: number; names: string[] }
+
+/** A saved MentorState made safe (missing or garbage = off, none counted). */
+export function cleanMentor(v: unknown): MentorState | undefined {
+  if (!v || typeof v !== "object") return undefined;
+  const o = v as { on?: unknown; n?: unknown; names?: unknown };
+  const n = typeof o.n === "number" && Number.isFinite(o.n) ? Math.max(0, Math.floor(o.n)) : 0;
+  const names = Array.isArray(o.names) ? [...new Set(o.names.filter((x): x is string => typeof x === "string" && x.length > 0 && x.length <= 40).map((x) => x.toLowerCase()))].slice(-MENTOR.names) : [];
+  return { on: o.on === true, n, names };
+}
+/** The next mentor title and the count it comes at, or undefined once all are earned. */
+export const mentorNext = (n: number) => MENTOR.titles.find((t) => t.at > n);
+
+/** An own-boss step: a named quest monster raised for this hero alone (QuestStep.own). */
+const ownBoss = (s: QuestStep) => s.type === "kill" && !!s.own;
+/**
+ * How many own-boss steps this hero has behind them on every chain (steps of a choice not taken don't count).
+ * Read from the chain states alone, so old saves need nothing new.
+ */
+export function bossesBeaten(p: Quester | undefined): number {
+  let n = 0;
+  CHAINS.forEach((ch, c) => {
+    const q = chainState(p, c);
+    if (!q) return;
+    ch.quests.forEach((d, i) => {
+      if (i > q.questId) return;
+      d.steps.forEach((s, k) => {
+        if (!ownBoss(s) || (i === q.questId && k >= q.questStage - 1)) return;
+        if (s.onlyIf && !s.onlyIf.v.includes(choiceOf(p, s.onlyIf.flag))) return;
+        n++;
+      });
+    });
+  });
+  return n;
+}
+/** Does `r` count as `vet`'s recruit (levels only; the server checks the group and the place)? */
+export const isRecruit = (vet: { level: number }, r: Quester & { level: number }) => vet.level >= MENTOR.minLevel && vet.level - r.level >= MENTOR.gap && bossesBeaten(r) === 0;
+
+/**
+ * Hale's word on mentoring (draft text) for a hero of this level, mentoring or not: the page's text and one button that
+ * sends "mentor" {on: send}. Undefined below MENTOR.minLevel (Hale has nothing to ask of them).
+ */
+export function mentorOffer(level: number, on: boolean): { text: string[]; button: string; send: boolean } | undefined {
+  if (level < MENTOR.minLevel) return undefined;
+  if (on) return {
+    text: ["You've been bringing the young ones along. Good. Stand by them at their first real fight; I hear about it either way."],
+    button: "Stop taking recruits", send: false,
+  };
+  return {
+    text: [
+      "Every week some farm lad walks out the gate with a stick and a prayer. Most come back. Some don't.",
+      `Take one under your wing. Group up with someone ${MENTOR.gap} levels greener, stand by them when they face their first named horror, and the watch will see them right.`,
+    ],
+    button: "I'll watch over recruits", send: true,
+  };
+}

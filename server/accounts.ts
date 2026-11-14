@@ -1,5 +1,6 @@
 import type { BountyState } from "../shared/bounty";
 import type { RumourState } from "../shared/rumours";
+import type { MentorState } from "../shared/quests";
 // Player accounts: name + password, with one saved hero per class.
 // Saves live in a JSON file on the server (SAVE_FILE, default data/saves.json).
 import path from "node:path";
@@ -55,6 +56,10 @@ export interface HeroSave {
   cosm?: number;
   /** Tavern Rumours (shared/rumours.ts): the day, its offers' level, done bits, the one under way, all finished; another day's loads fresh. */
   rumour?: RumourState;
+  /** Titles earned, bit i = shared/cosmetics.ts TITLES[i] (the shown one is in `cosm`); missing = only the shown title. */
+  titles?: number;
+  /** The Apprentice (shared/quests.ts MENTOR): mentoring switched on, recruits counted, their account names (<= 50); missing = off, none. */
+  mentor?: MentorState;
 }
 
 interface Account {

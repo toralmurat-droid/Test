@@ -1,10 +1,10 @@
 import { stepGoal, stepProgress, tutorialDone, USE_RANGE, type Summon } from "../shared/quests";
 import { npcById, TALK_RANGE } from "../shared/npcs";
-import { isDark, META, metaOf } from "../shared/questSteps";
-import { withTitle } from "../shared/cosmetics";
+import { isDark } from "../shared/questSteps";
 import { rollRune } from "../shared/runes";
 import { cleanRumour, RUMOUR_GIVER, RUMOUR_TITLE, rumourDay, rumoursFor, rumourStep, RUMOURS, type Rumour, type RumourState } from "../shared/rumours";
-import { setMeta, type StepHero } from "./questSteps";
+import { type StepHero } from "./questSteps";
+import { award } from "./titles";
 
 /**
  * Tavern Rumours (shared/rumours.ts has the rumours and the numbers): Mags' three daily side quests, one at a time per
@@ -161,7 +161,7 @@ export class Rumours {
     st.done |= 1 << r.i; st.n++;
     this.clear(pid, st);
     let title: string | undefined;
-    if (st.n === RUMOURS.titleAt && RUMOUR_TITLE > 0) { setMeta(p, META.cosm, withTitle(metaOf(p, META.cosm), RUMOUR_TITLE)); title = "Rumour-Chaser"; }
+    if (st.n === RUMOURS.titleAt && RUMOUR_TITLE > 0) { award(p, RUMOUR_TITLE); title = "Rumour-Chaser"; } // shown only if no title is (server/titles.ts)
     this.send(pid, p, { why: "done", name: r.title, gold: r.reward.gold, outro: r.outro, ...(rune ? { rune } : {}), ...(title ? { title } : {}) });
     this.h.save(pid);
   }

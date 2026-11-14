@@ -30,3 +30,31 @@ export const hasTrait = (n: number, t: TraitId) => !!(unpackCosmetics(n).traits 
 export const withTrait = (n: number, t: TraitId) => { const c = unpackCosmetics(n); return packCosmetics({ ...c, traits: c.traits | (1 << TRAITS[t]) }); };
 /** The packed number with this title (0 = none). */
 export const withTitle = (n: number, title: number) => packCosmetics({ ...unpackCosmetics(n), title });
+
+/**
+ * Titles a hero has earned: bit i = TITLES[i] (bit 0 unused), saved as HeroSave.titles. Earning one shows it only
+ * when no title is showing, so a later title never pushes out the one the hero chose; "title" {i} swaps between owned ones.
+ */
+const okTitle = (i: number) => Number.isInteger(i) && i > 0 && i < TITLES.length && i < 32;
+/** Has the hero earned title i? */
+export const ownsTitle = (owned: number, i: number) => okTitle(i) && !!((owned >>> i) & 1);
+/** The owned titles as TITLES indices (for the client's picker). */
+export const ownedTitles = (owned: number) => TITLES.map((_, i) => i).filter((i) => ownsTitle(owned, i));
+/** Title i earned: the new owned mask and `$c` number, and whether it is new to this hero. */
+export function earnTitle(cosm: number, owned: number, i: number): { cosm: number; owned: number; fresh: boolean } {
+  if (!okTitle(i)) return { cosm, owned, fresh: false };
+  const fresh = !ownsTitle(owned, i), shown = unpackCosmetics(cosm).title;
+  return { cosm: shown ? cosm : withTitle(cosm, i), owned: (owned | (1 << i)) >>> 0, fresh };
+}
+/** The `$c` number showing title i (0 = none), or undefined when the hero hasn't earned it. */
+export function pickTitle(cosm: number, owned: number, i: number): number | undefined {
+  if (i === 0) return withTitle(cosm, 0);
+  return ownsTitle(owned, i) ? withTitle(cosm, i) : undefined;
+}
+/** The owned mask from a save: garbage reads as none, and a title already showing (saves from before the list) counts as earned. */
+export function cleanOwned(v: unknown, cosm: number): number {
+  const n = typeof v === "number" && Number.isFinite(v) ? v >>> 0 : 0, shown = unpackCosmetics(cosm).title;
+  let out = 0;
+  for (let i = 1; i < TITLES.length && i < 32; i++) if ((n >>> i) & 1 || i === shown) out |= 1 << i;
+  return out >>> 0;
+}
