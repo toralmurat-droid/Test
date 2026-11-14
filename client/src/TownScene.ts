@@ -640,6 +640,7 @@ export class TownScene extends Phaser.Scene {
     this.torches = new GateTorches(this); // torches at the gates, lit by the watch at dusk
     this.watch.torches = this.torches;
     this.room.onMessage("quest", (msg) => this.npcs?.onQuest(msg));
+    this.room.onMessage("choice", (msg) => this.npcs?.onChoice(msg));
     this.room.onMessage("questuse", ({ id }) => this.npcs?.objects.burst(id));
     this.room.onMessage("shop", (msg) => this.npcs?.onShop(msg));
     this.chests = new ChestLayer(this, (type, msg) => this.room.send(type, msg));

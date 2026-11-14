@@ -1,5 +1,6 @@
 import { npcById } from "../../shared/npcs";
 import { act2Missing } from "../../shared/act2";
+import { stepOn } from "../../shared/questSteps";
 import { icon as pxIcon } from "./pixelicons";
 import { CHAINS, chainOpen, chainState, SUN_CHAIN, tutorialDone, QuestDef, questObjective, Quester, QuestState as QState, stepGoal, stepProgress } from "../../shared/quests";
 
@@ -95,7 +96,9 @@ export class QuestLog {
       const hint = hints.map((h) => `<p class="ql-next">${h}</p>`).join("");
       // Only steps already reached are shown; later ones stay hidden until the quest gets there
       const reached = done ? d.steps.length : stage;
+      // (steps a choice skipped, QuestStep.onlyIf, are left out)
       const steps = d.steps.slice(0, reached).map((st, i) => {
+        if (!stepOn(st, p)) return "";
         const state = done || i + 1 < stage ? "done" : "now";
         const icon = state === "done" ? pxIcon("check") : "➜";
         const goal = stepGoal(st), n = state === "done" ? goal : stepProgress(st, count);

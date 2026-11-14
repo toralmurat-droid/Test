@@ -6,6 +6,7 @@ import "@fontsource/pixelify-sans/700.css";
 import "./npcs.css";
 import { pixelText } from "./pixeltext";
 import Phaser from "phaser";
+import { META, metaOf } from "../../shared/questSteps";
 import { CAMP_PIVOT, TX as CAMP_TX, witchCampTextures } from "./witchCamp";
 import { worldPropTextures } from "./worldProps";
 import { ANVIL_TOP, FORGE_FLUE, SMITHY_ORIGIN, TX as SMITHY_TX, smithyTextures } from "./smithy";
@@ -104,6 +105,17 @@ export class NpcLayer {
     this.toast.id = "questtoast";
     hud.append(this.prompt, this.dialog, this.tracker, this.toast, this.pointer);
     this.prompt.onclick = () => this.interact();
+    // 1-3 press the option buttons of an open dialog; the capture listener runs before the skill hotbar sees the key
+    window.addEventListener("keydown", (ev) => {
+      if (!this.optKeys.length || ev.repeat || ev.ctrlKey || ev.metaKey || ev.altKey || !this.isOpen) return;
+      const a = document.activeElement;
+      if (a instanceof HTMLInputElement || a instanceof HTMLTextAreaElement) return;
+      const i = /^(?:Digit|Numpad)([1-3])$/.exec(ev.code)?.[1];
+      const v = i ? this.optKeys[Number(i) - 1] : undefined;
+      if (v === undefined) return;
+      ev.preventDefault(); ev.stopImmediatePropagation();
+      this.answer(v);
+    }, true);
     // Click a quest's title to fold it down to that line (remembered); anywhere else opens the quest log
     // Each quest is a card: its follow button marks the objective on the ground, its header folds / opens it,
     // anywhere else opens the quest log
@@ -228,12 +240,13 @@ export class NpcLayer {
     }
   }
 
-  get isOpen() { return !!this.talking; }
+  get isOpen() { return !!this.talking || !!this.choice; }
   /** Another prompt (a loot chest) has the spot this frame. */
   hidePrompt = false;
 
   /** E key: use the quest object you stand next to, talk to the NPC next to you, or close the dialog. */
   interact() {
+    if (this.choice) return; // a field choice is answered with its buttons (or 1-3), not dismissed by E
     if (this.story) this.closeStory();
     else if (this.talking) this.close();
     else if (this.nearObj) this.send("use", { id: this.nearObj.id });
@@ -250,7 +263,47 @@ export class NpcLayer {
   close() {
     if (this.shopOpen) { this.shopOpen = false; this.onPreview?.(); this.onShopOpen?.(false); }
     this.talking = undefined;
+    this.choice = undefined;
+    this.optKeys = [];
     this.dialog.classList.remove("open");
+  }
+
+  /** Values of the option buttons on screen, in order: keys 1-3 press them (see the capture listener in the constructor). */
+  private optKeys: number[] = [];
+  private optChain = 0;
+  /** A choice that belongs to no NPC (server "choice" message: the Hide-Mother's bargain in the field). */
+  private choice?: { chain: number; title: string; text: string[]; options: { label: string; v: number }[] };
+
+  /** Option buttons of a choice: one per row (they hold whole sentences), each answers with the intent {chain, opt}. */
+  private optionsHtml(options: { label: string; v: number }[]) {
+    return `<div class="nd-opts">${options.map((o, i) => `<button class="nd-opt" data-v="${o.v}">${i < 3 ? `<kbd>${i + 1}</kbd>` : ""}${o.label}</button>`).join("")}</div>`;
+  }
+  private bindOptions(chain: number, options: { label: string; v: number }[]) {
+    this.optChain = chain;
+    this.optKeys = options.slice(0, 3).map((o) => o.v);
+    for (const b of this.dialog.querySelectorAll<HTMLButtonElement>(".nd-opt")) b.onclick = () => this.answer(Number(b.dataset.v));
+  }
+  /** Send the pick as an intent; the server moves the quest on. A field choice closes by itself, a talk page redraws. */
+  private answer(v: number) {
+    if (!this.dialog.classList.contains("open")) return;
+    this.send("quest", { chain: this.optChain, opt: v });
+    for (const b of this.dialog.querySelectorAll<HTMLButtonElement>(".nd-opt")) b.disabled = true;
+    this.optKeys = [];
+    if (this.choice) { this.choice = undefined; this.dialog.classList.remove("open"); }
+  }
+
+  /** Server "choice" message: a modal with the same look as a talk, answered with {chain, opt}. */
+  onChoice(msg: { chain?: number; title?: string; text?: string[]; options?: { label: string; v: number }[] }) {
+    const options = (Array.isArray(msg?.options) ? msg.options : []).filter((o) => o && typeof o.label === "string" && Number.isInteger(o.v)).slice(0, 6);
+    if (!options.length) return;
+    if (this.talking) this.close();
+    this.story = undefined;
+    const chain = Number.isInteger(msg.chain) ? msg.chain! : 0, title = String(msg.title ?? "");
+    this.choice = { chain, title, text: (msg.text ?? []).map(String), options };
+    this.dialog.classList.remove("shop");
+    this.dialog.innerHTML = `<div class="nd-head"><span class="nd-name">${title}</span></div>` + this.choice.text.map((t) => `<p>${t}</p>`).join("") + this.optionsHtml(options);
+    this.bindOptions(chain, options);
+    this.dialog.classList.add("open");
   }
 
   /**
@@ -435,16 +488,19 @@ export class NpcLayer {
     if (n.shop && (this.trading || !page)) return this.renderShop(n, q);
     this.dialog.classList.remove("shop");
     if (this.shopOpen) { this.shopOpen = false; this.onPreview?.(); }
-    const key = JSON.stringify([n.id, questSig(q), q?.level]);
+    const key = JSON.stringify([n.id, questSig(q), q?.level, metaOf(q, META.flags)]);
     if (key === this.stage) return;
     this.stage = key;
     const p = page ?? { text: ["Good day to you."], bye: "Farewell", chain: 0 };
     this.dialog.innerHTML = this.head(n) +
       p.text.map((t) => `<p>${t}</p>`).join("") +
+      (p.options?.length ? this.optionsHtml(p.options) : "") +
       `<div class="nd-btns">${p.accept ? `<button class="nd-accept">${p.accept}</button>` : ""}` +
       `${n.shop ? `<button class="nd-trade">Trade</button>` : ""}<button class="nd-bye">${p.bye} <kbd>E</kbd></button></div>`;
     const acc = this.dialog.querySelector<HTMLButtonElement>(".nd-accept");
     if (acc) acc.onclick = () => { this.send("quest", { chain: p.chain }); acc.disabled = true; };
+    this.optKeys = [];
+    if (p.options?.length) this.bindOptions(p.chain, p.options);
     const trade = this.dialog.querySelector<HTMLButtonElement>(".nd-trade");
     if (trade) trade.onclick = () => { this.trading = true; this.stage = -1; };
     this.dialog.querySelector<HTMLButtonElement>(".nd-bye")!.onclick = () => this.close();
