@@ -1,7 +1,0 @@
-{
-  "date": "2026-11-14",
-  "title": "Faster return visits",
-  "changes": [
-    "The game's art and music now stay in your browser between visits and updates, so coming back loads much faster. Only art that changed in an update is downloaded again."
-  ]
-}

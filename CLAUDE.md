@@ -89,6 +89,13 @@ All of these must pass (CI runs 1–3 and the Postgres smoke test):
   hands every client a view of one shared buffer. `server/patchCopy.ts` makes the room send copies
   (`tests/patchcopy.test.ts` guards it). Keep that call when touching the serializer or upgrading Colyseus. The
   errors are no longer expected noise: if one shows up, report it.
+- Every client socket is wrapped in `onJoin` by `guardSendBacklog` (`server/sendBacklog.ts`): with per-message deflate a
+  socket that falls behind stops compressing, or its send queue only grows and the transport drops the client. A
+  client that gets a new socket any other way (for example `allowReconnection`) must be guarded too.
+- The start screen (`client/src/main.ts`) must not import Phaser or anything that does: the game loads through
+  `import("./game")`. After touching its imports, check that the built `main-*.js` stays small (about 85 kB).
+- Art, music and font URLs go through `assetUrl()` (`client/src/assetUrl.ts`): the `?v=<content hash>` is what lets the
+  browser keep them. A plain `assets/...` URL still works but is fetched again on every visit.
 - Big features that span several sessions keep a progress log in `docs/` (see `docs/summoner-rework-progress.md`).
 
 ## Working with agents

@@ -313,3 +313,32 @@ Open:
   26.8 / 12.1 at 19.1 ticks/s.
 - Found while re-running the bench: N7 above. The bench used to print normal-looking numbers after losing all its
   bots; it now reports `botsDropped` and `sendBacklogKbMax` and marks such a run invalid.
+
+2026-11-14, night
+- Second wave merged as PR #403 (GitHub Actions had stopped starting jobs for the repository for some hours; the
+  checks passed on a re-run).
+- Third wave on a local integration branch, on top of the merged default branch: N7, L2, L1.
+  - L1 (asset caching): `?v=<8 hex of sha256>` on every art, music, font and clip URL from a build-time manifest
+    (1,333 files, 13 kB gzip, its own chunk); the server answers `immutable` only when `v` is the hash of the file
+    it sends. Second visit: art and music requests reaching the server 137 to 0. A clean rebuild gives the same
+    manifest, so a deploy no longer invalidates unchanged art. Cost: any art change renames the scripts that import
+    the manifest chunk (main, game), so they are downloaded again once.
+  - L2 (login split): entry script 414 kB gzip to 34 kB (about 55 kB with its static imports); Phaser and the scene
+    load through `import("./game")`, started at page load. Form wired at about 0.4 s instead of 1.4-2.0 s
+    (localhost, cache off); the main thread is then busy about 1.6 s on this machine while the game chunk
+    evaluates. Page open to play unchanged: median 25.1 s before, 24.2 s after (5 alternating runs, software GL).
+    The update notice no longer pre-downloads the game chunk (it is not named in `index.html`).
+  - N7 (send backlog). The byte-limit idea in the table above did not work: the cost is per message. What is in:
+    `guardSendBacklog` (at most 2 compressed sends unfinished per socket, later ones uncompressed) and
+    `concurrencyLimit: 256` for `ws`'s zlib queue (the default 10 made every socket wait behind all the others).
+    Bench bots now compress every message, like browsers. 20 casting bots: dropped in 8 of 9 runs before, 0 of 8
+    after; send delay p99 about 0.1-0.2 s, wire/payload 0.55 instead of 0.51 when the server keeps up.
+    Not solved: the incoming side. The server inflates each client message one at a time per socket and reads a
+    pong only after the messages before it. 40 casting bots (server over budget, 13-16 ticks/s): all dropped when
+    each sends about 45 messages a second; none dropped at about 9 a second (`CAST_EVERY=5`), but pongs were
+    4.8-7.8 s late against a cut-off of 6-9 s. A real browser could not be measured here (the sandbox's Chromium
+    stalls by itself). Options left for the owner: more missed pings allowed before the cut (`pingMaxRetries`),
+    or compression off (about 35% more bytes).
+  - Review of the third wave: NOT OK at first. A request path with `%00` made the new `?v=` middleware reject
+    unhandled, which shuts the server down. Fixed (`versionedCache` never rejects, tests for hostile paths, checked
+    against a running server). Also fixed: second launch after a successful start, a throw while starting the game.

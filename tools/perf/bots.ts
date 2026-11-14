@@ -51,11 +51,15 @@ async function main() {
   }
   process.send!({ joined: true });
   let seq = 0;
+  // CAST_EVERY=5: press the cast keys every 500 ms instead of every 100 ms (closer to a player; default 1 is a key-masher's 40 messages a second)
+  const castEvery = Math.max(1, Number(process.env.CAST_EVERY) || 1);
+  let beat = 0;
   setInterval(() => {
+    beat++;
     for (const r of rooms) {
       if (Math.random() < 0.1) r.send("input", { up: Math.random() < 0.5, down: Math.random() < 0.3, left: Math.random() < 0.5, right: Math.random() < 0.5, seq: ++seq });
       if (Math.random() < 0.15) r.send("attack");
-      for (const sk of cast) r.send("cast", sk); // the server drops it while on cooldown
+      if (beat % castEvery === 0) for (const sk of cast) r.send("cast", sk); // the server drops it while on cooldown
     }
   }, 100);
   setInterval(() => { wire = 0; for (const t of socks) { wire += t[0].bytesRead - t[1]; t[1] = t[0].bytesRead; } process.send!({ bytes, wire, dropped }); bytes = 0; }, 500);
