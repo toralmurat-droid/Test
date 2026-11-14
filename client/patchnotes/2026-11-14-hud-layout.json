@@ -1,5 +1,6 @@
 {
   "date": "2026-11-14",
+  "patch": 226,
   "title": "A tidier screen",
   "changes": [
     "Every part of the screen now has its own place: prompts, the level-up note, chords and buffs no longer pile on top of each other.",
