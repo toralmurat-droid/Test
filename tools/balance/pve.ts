@@ -1,6 +1,6 @@
 /**
  * PvE balance simulator: bot heroes play the first zone (Lv 1-30) against its monsters and bosses.
- * Run: npx tsx tools/balance/pve.ts [runsPerCase] [--bosses] [--zones] [--act2] [--champions] [--class=vampire] [--build=0|1|2] [--boss=king] [--no-execute]
+ * Run: npx tsx tools/balance/pve.ts [runsPerCase] [--bosses] [--zones] [--act2] [--champions] [--class=vampire] [--build=0|1|2] [--boss=king] [--no-execute] [--songweaver]
  * --champions: one fight against each champion (shared/champions.ts, a 1D version of its affixes) beside the same plain monster.
  *
  * It reuses the PvP simulator (tools/balance/duel.ts): the same hero bot, skill engine, builds (rushing one branch),
@@ -17,7 +17,7 @@ import { NIGHT_RAID } from "../../shared/raiders";
 import { ACTIVE_CLASSES, ClassKind } from "../../shared/classes";
 import { BANDIT_AI, BANDIT_ROLES, CHIEF } from "../../shared/bandits";
 import { BEAST, BLOB_AI, DEMON, ELITE, HOLLOW_KING, MOB_ATTACK_RANGE, MOB_LEVEL, MOBS, MobKind, mobScale, MOTHER, SKELETON_AI, SKELETON_BOW, SKELETON_WEAPONS, SkeletonWeapon, SUNWRIGHT, REGEN_DELAY_MS, REGEN_PER_STA } from "../../shared/constants";
-import { MOB_COMBAT, mobBody, POISE, poiseSpeed } from "../../shared/combat";
+import { MOB_COMBAT, mobBody, mobSound, POISE, poiseSpeed } from "../../shared/combat";
 import { POTION_COOLDOWN_MS, POTION_SIZES } from "../../shared/potions";
 import { activeSkills, SKILLS } from "../../shared/skills";
 import { canPay, manaRegen, skillCost } from "../../shared/mana";
@@ -127,6 +127,7 @@ export class MobF extends F {
     this.s = { sta: 0, str: 0, mag: 0, dex: 0 };
     this.body = spec.body;
     this.mob = { reach: spec.reach, ranged: !!spec.ranged, boss: !!spec.boss };
+    this.sound = mobSound(spec.kind, !!spec.boss); // how it hears the Songweaver (shared/combat.ts MOB_COMBAT sound)
     for (const s of spec.specials) this.next[s.name] = s.first ?? 1500 + Math.random() * 2000;
   }
   get poiseMax() { return this.spec.poise; }
@@ -480,7 +481,8 @@ if (process.argv.includes("--no-execute")) SIM.execute = false;
 const argOf = (k: string) => process.argv.find((a) => a.startsWith(`--${k}=`))?.split("=")[1];
 const ONLY = argOf("class") as ClassKind | undefined;
 const BUILD = argOf("build") !== undefined ? (Number(argOf("build")) as Build) : undefined;
-const CLASSES = ONLY ? [ONLY] : ACTIVE_CLASSES;
+// --songweaver is still accepted, as a no-op: the Songweaver is in ACTIVE_CLASSES
+const CLASSES: ClassKind[] = ONLY ? [ONLY] : ACTIVE_CLASSES;
 const buildOf = (i: number) => BUILD ?? ((i % 3) as Build);
 
 if (process.argv[1]?.includes("pve")) {

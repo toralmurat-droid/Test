@@ -19,15 +19,16 @@ const done = (c: number) => packQuest(CHAINS[c].quests.length, 0, 0);
 const bx = (DEN.x + 0.5) * TILE, by = (DEN.y - 1.5) * TILE;
 const until = async (f: () => unknown, ms = 15_000) => { const t = Date.now(); while (!f() && Date.now() - t < ms) await wait(50); return !!f(); };
 
-const stories = () => ({ questId: CHAINS[0].quests.length, bone: done(1), red: done(2), crown: done(CROWN_CHAIN) });
+/** The stories the Hollow Crown and act 2 wait for, as quests-map entries (QuestChain.packed keys). */
+const stories = () => ({ gloam: done(0), bone: done(1), red: done(2), crown: done(CROWN_CHAIN) });
 /** A level-30 hero on the Hide-Mother's kill step, close to the den and unkillable (her blows must not move the test). */
 function setup(p: any) {
-  Object.assign(p, stories());
-  p.tut = done(TUT);
+  for (const [k, v] of Object.entries(stories())) p.quests.set(k, v);
+  p.quests.set("tut", done(TUT));
   p.level = 30;
   p.hp = p.maxHp = 10_000_000;
   p.invulnUntil = Date.now() + 600_000;
-  p.beast = packQuest(MOTHER, 3, 0);
+  p.quests.set("beast", packQuest(MOTHER, 3, 0));
   p.x = bx + 3 * TILE; p.y = by;
   p.nextSummon = 0;
 }
@@ -58,9 +59,9 @@ test("invariants: Hide Rite step count, version, Hidebound off and its beast lis
 });
 
 test("gates: Hide Rite, act 2 and the Second Sun read the same whichever way the Bargain went", () => {
-  const base = { ...stories(), level: 30, tut: done(TUT), beast: done(B) };
+  const base = { level: 30, quests: { ...stories(), tut: done(TUT), beast: done(B) } };
   for (const v of [0, 1, 2, 3]) {
-    const h = { ...base, arcs: v ? { $f: withChoice(0, "bargain", v) } : {} } as any;
+    const h = { ...base, flags: v ? withChoice(0, "bargain", v) : 0 } as any;
     assert.equal(chainDone(h, B), true, `bargain ${v}: Hide Rite done`);
     assert.equal(act2Open(h), true, `bargain ${v}: act 2`);
     assert.equal(chainOpen(h, SUN_CHAIN), true, `bargain ${v}: Second Sun`);
@@ -68,12 +69,12 @@ test("gates: Hide Rite, act 2 and the Second Sun read the same whichever way the
 });
 
 test("penance gate: needs bargain 1 and the Hide Rite handed in", () => {
-  const base = { ...stories(), level: 30, tut: done(TUT), beast: done(B) };
-  const open = (o: any) => chainOpen({ ...base, ...o } as any, PEN);
-  assert.equal(open({ arcs: {} }), false, "bargain 0");
-  assert.equal(open({ arcs: { $f: withChoice(0, "bargain", 2) } }), false, "bargain 2 (refused)");
-  assert.equal(open({ arcs: { $f: withChoice(0, "bargain", 1) } }), true, "bargain 1 after the hand-in");
-  assert.equal(open({ beast: packQuest(MOTHER, 4, 0), arcs: { $f: withChoice(0, "bargain", 1) } }), false, "not before the hand-in");
+  const base = { level: 30, quests: { ...stories(), tut: done(TUT), beast: done(B) } };
+  const open = (o: any, beast?: number) => chainOpen({ ...base, ...o, quests: { ...base.quests, ...(beast === undefined ? {} : { beast }) } } as any, PEN);
+  assert.equal(open({}), false, "bargain 0");
+  assert.equal(open({ flags: withChoice(0, "bargain", 2) }), false, "bargain 2 (refused)");
+  assert.equal(open({ flags: withChoice(0, "bargain", 1) }), true, "bargain 1 after the hand-in");
+  assert.equal(open({ flags: withChoice(0, "bargain", 1) }, packQuest(MOTHER, 4, 0)), false, "not before the hand-in");
 });
 
 test("bargain: one prompt, bad answers ignored, resend, accept, Hale hand-in", async () => {
@@ -85,7 +86,7 @@ test("bargain: one prompt, bad answers ignored, resend, accept, Hale hand-in", a
     a.onMessage("sfx", (m: any) => { if (m.ev === "bargain") sfx.push(m); });
     await wait(250);
     const room = srv.room, pid = a.sessionId, p = room.state.players.get(pid), po = room.state.players.get(o.sessionId);
-    setup(p); setup(po); po.beast = packQuest(MOTHER, 2, 0); po.x = bx + 2 * TILE; // the other hero is not on the kill step
+    setup(p); setup(po); po.quests.set("beast", packQuest(MOTHER, 2, 0)); po.x = bx + 2 * TILE; // the other hero is not on the kill step
     assert.ok(await until(() => ursk(room, pid)), "Ursk rises");
     const [mid, m] = ursk(room, pid)!;
     assert.ok(await until(() => choices.length >= 1), "prompt arrives");
@@ -198,9 +199,9 @@ test("penance: offered after a bargain, charms from beast-folk only for the hero
     await wait(250);
     const room = srv.room, pid = a.sessionId, p = room.state.players.get(pid);
     setup(p);
-    p.beast = done(B);
-    p.arcs.set("$f", withChoice(0, "bargain", 1));
-    p.arcs.set("$c", withTrait(0, "beast"));
+    p.quests.set("beast", done(B));
+    p.flags = withChoice(0, "bargain", 1);
+    p.cosm = withTrait(0, "beast");
     p.nextSummon = 1e18; // no Ursk needed here
     const hale = npcById("captain")!, rowan = npcById("druid")!;
     p.x = hale.x; p.y = hale.y;
@@ -248,9 +249,9 @@ test("saves: flags and trait round-trip; an old save gets bargain 0 and no promp
     b.onMessage("choice", (m: any) => gb.push(m)); c.onMessage("choice", (m: any) => gc.push(m));
     await wait(300);
     const room = srv.room, pa = room.state.players.get(a.sessionId), pb = room.state.players.get(b.sessionId), pc = room.state.players.get(c.sessionId);
-    pa.beast = done(B);
-    pa.arcs.set("$f", withChoice(0, "bargain", 1));
-    pa.arcs.set("$c", withTrait(0, "beast"));
+    pa.quests.set("beast", done(B));
+    pa.flags = withChoice(0, "bargain", 1);
+    pa.cosm = withTrait(0, "beast");
     const snap = JSON.parse(JSON.stringify(room.snapshot(pa)));
     room.restore(pb, snap);
     assert.equal(choiceOf(pb, "bargain"), 1, "flag restored");
@@ -264,7 +265,7 @@ test("saves: flags and trait round-trip; an old save gets bargain 0 and no promp
     assert.equal(choiceOf(pb, "bargain"), 0, "old save: bargain 0");
     assert.equal(hasTrait(metaOf(pb, META.cosm), "beast"), false);
     assert.equal(chainDone(pb, B), true, "old save: Hide Rite still done");
-    setup(pb); pb.beast = done(B);
+    setup(pb); pb.quests.set("beast", done(B));
     await wait(BARGAIN.resendMs / 2);
     assert.equal(gb.length, 0, "old save: no prompt");
     assert.equal(ursk(room, b.sessionId), undefined, "old save: no Ursk");
@@ -286,20 +287,20 @@ test("Hidebound in damagePlayer: off = same damage; on = 0.95 from beast-folk on
     const a = await srv.join({ cls: "knight" });
     await wait(250);
     const room = srv.room, pid = a.sessionId, p = room.state.players.get(pid);
-    p.tut = done(TUT); p.level = 30;
+    p.quests.set("tut", done(TUT)); p.level = 30;
     p.x = bx + 3 * TILE; p.y = by + 6 * TILE;
     const mk = (kind: string) => { const id = room.summonFused(pid, { parts: [kind], level: 25, x: p.x + 200, y: p.y }, 0); const m = room.state.mobs.get(id); m.summonFor = "nobody"; m.stunUntil = Date.now() + 1e6; return id; };
     const gn = mk("gnawkin"), cr = mk("crowseer"), other = mk("hornbrute");
     const hit = (from: string) => { p.hp = p.maxHp = 1_000_000; p.invulnUntil = 0; p.lastHurt = 0; p.guarding = false; const h0 = p.hp; room.damagePlayer(pid, 1000, "t", [0, 0], 0, { from, dot: true }); return h0 - p.hp; };
     const base = [hit(gn), hit(cr), hit(other)];
-    p.arcs.set("$c", withTrait(0, "beast"));
+    p.cosm = withTrait(0, "beast");
     assert.deepEqual([hit(gn), hit(cr), hit(other)], base, "off: the trait changes nothing");
     const was = TRAIT_TALENTS.hidebound.taken;
     TRAIT_TALENTS.hidebound.taken = 0.95;
     try {
       const on = [hit(gn), hit(cr), hit(other)];
       assert.equal(on[0], Math.round(base[0] * 0.95)); assert.equal(on[1], Math.round(base[1] * 0.95)); assert.equal(on[2], base[2]);
-      p.arcs.delete("$c");
+      p.cosm = 0;
       assert.deepEqual([hit(gn), hit(cr), hit(other)], base, "on, but no trait: no change");
     } finally { TRAIT_TALENTS.hidebound.taken = was; }
     await a.leave();

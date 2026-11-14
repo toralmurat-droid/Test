@@ -17,7 +17,7 @@ const ci = (id: string) => CHAINS.findIndex((c) => c.id === id);
 const HUNT = ci("hunt"), BONES = ci("bones"), MILL = ci("mill"), RED = ci("redfang");
 const drag = CHAINS[HUNT].quests.find((q) => q.id === "dragmark")!, dragStep = drag.steps[0];
 const dragIdx = CHAINS[HUNT].quests.indexOf(drag);
-const tutDone = (p: any) => { p.tut = packQuest(CHAINS[ci("tutorial")].quests.length, 0, 0); };
+const tutDone = (p: any) => { p.quests.set("tut", packQuest(CHAINS[ci("tutorial")].quests.length, 0, 0)); };
 const [T_MENTOR, T_CAPTAIN, T_WARDEN] = MENTOR.titles.map((t) => t.title);
 const T_RUMOUR = TITLES.length - 1; // Rumour-Chaser: a title that is not a mentor title
 const asc = (a: number[]) => [...a].sort((x, y) => x - y);
@@ -33,23 +33,23 @@ async function until(f: () => boolean, what: string, ms = 20_000) {
 test("bossesBeaten: only own-boss steps behind the hero count", () => {
   assert.equal(dragStep.own, true);
   assert.equal(bossesBeaten(undefined as any), 0);
-  assert.equal(bossesBeaten({ level: 5, arcs: {} } as any), 0);
-  assert.equal(bossesBeaten({ level: 5, arcs: { hunt: packQuest(dragIdx, 1, 0) } } as any), 0, "on the boss step: not beaten yet");
-  assert.equal(bossesBeaten({ level: 5, arcs: { hunt: packQuest(dragIdx, 2, 0) } } as any), 1, "past the boss step");
-  assert.equal(bossesBeaten({ level: 5, arcs: { hunt: packQuest(dragIdx + 1, 0, 0) } } as any), 1, "next quest");
-  assert.equal(bossesBeaten({ level: 30, redId: 0, red: packQuest(CHAINS[RED].quests.length, 0, 0), arcs: {} } as any), 1, "a finished Redfang chain");
-  assert.equal(bossesBeaten({ level: 30, bone: packQuest(CHAINS[BONES].quests.length, 0, 0), arcs: {} } as any), 0, "main-story bosses are not own");
-  const two = { level: 10, arcs: { mill: packQuest(CHAINS[MILL].quests.length, 0, 0), hunt: packQuest(CHAINS[HUNT].quests.length, 0, 0) } } as any;
+  assert.equal(bossesBeaten({ level: 5, quests: {} } as any), 0);
+  assert.equal(bossesBeaten({ level: 5, quests: { hunt: packQuest(dragIdx, 1, 0) } } as any), 0, "on the boss step: not beaten yet");
+  assert.equal(bossesBeaten({ level: 5, quests: { hunt: packQuest(dragIdx, 2, 0) } } as any), 1, "past the boss step");
+  assert.equal(bossesBeaten({ level: 5, quests: { hunt: packQuest(dragIdx + 1, 0, 0) } } as any), 1, "next quest");
+  assert.equal(bossesBeaten({ level: 30, quests: { red: packQuest(CHAINS[RED].quests.length, 0, 0) } } as any), 1, "a finished Redfang chain");
+  assert.equal(bossesBeaten({ level: 30, quests: { bone: packQuest(CHAINS[BONES].quests.length, 0, 0) } } as any), 0, "main-story bosses are not own");
+  const two = { level: 10, quests: { mill: packQuest(CHAINS[MILL].quests.length, 0, 0), hunt: packQuest(CHAINS[HUNT].quests.length, 0, 0) } } as any;
   assert.ok(bossesBeaten(two) >= 2, "arcs add up");
 });
 
 test("isRecruit: the level gap is exactly MENTOR's, the veteran's minimum holds, a boss behind rules it out", () => {
-  const fresh = { level: 5, arcs: {} } as any;
+  const fresh = { level: 5, quests: {} } as any;
   assert.ok(isRecruit({ level: 5 + MENTOR.gap } as any, fresh), "gap exactly MENTOR.gap");
   assert.ok(!isRecruit({ level: 5 + MENTOR.gap - 1 } as any, fresh), "one short");
-  assert.ok(!isRecruit({ level: MENTOR.minLevel - 1 } as any, { level: 1, arcs: {} } as any), "veteran below the minimum level");
-  assert.ok(isRecruit({ level: MENTOR.minLevel } as any, { level: Math.max(1, MENTOR.minLevel - MENTOR.gap), arcs: {} } as any), "veteran at the minimum");
-  assert.ok(!isRecruit({ level: 30 } as any, { level: 5, arcs: { hunt: packQuest(CHAINS[HUNT].quests.length, 0, 0) } } as any), "already beat a boss");
+  assert.ok(!isRecruit({ level: MENTOR.minLevel - 1 } as any, { level: 1, quests: {} } as any), "veteran below the minimum level");
+  assert.ok(isRecruit({ level: MENTOR.minLevel } as any, { level: Math.max(1, MENTOR.minLevel - MENTOR.gap), quests: {} } as any), "veteran at the minimum");
+  assert.ok(!isRecruit({ level: 30 } as any, { level: 5, quests: { hunt: packQuest(CHAINS[HUNT].quests.length, 0, 0) } } as any), "already beat a boss");
 });
 
 test("mentor state, offers and titles (pure)", () => {
@@ -102,7 +102,7 @@ function boss(srv: any, R: H) {
   const room = srv.room;
   return {
     /** The recruit stands on the boss step (nothing beaten). */
-    onBoss: () => R.p.arcs.set("hunt", packQuest(dragIdx, 1, 0)),
+    onBoss: () => R.p.quests.set("hunt", packQuest(dragIdx, 1, 0)),
     summon: () => room.summonFused(R.id, sm, HUNT) as string,
     kill: (by: string, mid: string) => { const m = room.state.mobs.get(mid); m.stunUntil = Date.now() + 60_000; room.hitTarget(by, mid, 1e9, [0, 0]); },
     /** The boss step is done (the quest moved on or the step advanced). */

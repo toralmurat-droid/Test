@@ -129,12 +129,12 @@
 #shrineprompt .why { display: block; margin-top: 2px; color: #9cf3dc; font-weight: normal; }
 
 /* Portal stones (client/src/portal.ts): prompt, travel list and "Portal awakened" banner */
-#portalprompt { display: none; position: absolute; left: 50%; bottom: 120px; transform: translateX(-50%); padding: 6px 12px; pointer-events: auto; cursor: pointer;
+#portalprompt, #gateprompt { display: none; position: absolute; left: 50%; bottom: 120px; transform: translateX(-50%); padding: 6px 12px; pointer-events: auto; cursor: pointer;
   background: rgba(30,14,6,.9); border: 2px solid #f2761c; border-radius: 4px; color: #fff0a8; font: 18px var(--pixel-font); white-space: nowrap;
   -webkit-font-smoothing: none; -moz-osx-font-smoothing: grayscale; }
-#portalprompt.open { display: block; }
-#portalprompt kbd { display: inline-block; padding: 0 5px; margin-right: 4px; border: 1px solid #ffa22e; border-radius: 3px; background: #6e1a0a; color: #fff; font: 18px var(--pixel-font); }
-#portalprompt .why { display: block; margin-top: 2px; color: #ffa22e; font-weight: normal; }
+#portalprompt.open, #gateprompt.open { display: block; }
+#portalprompt kbd, #gateprompt kbd { display: inline-block; padding: 0 5px; margin-right: 4px; border: 1px solid #ffa22e; border-radius: 3px; background: #6e1a0a; color: #fff; font: 18px var(--pixel-font); }
+#portalprompt .why, #gateprompt .why { display: block; margin-top: 2px; color: #ffa22e; font-weight: normal; }
 #portalmenu { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: min(340px, calc(100% - 32px)); max-height: calc(100vh - 140px); overflow-y: auto;
   padding: 10px 12px 12px; pointer-events: auto; background: rgba(22,12,8,.95); border: 2px solid #a82c0c; border-radius: 4px; box-shadow: 0 0 0 2px #000, 0 0 24px rgba(242,118,28,.35);
   color: #fff0a8; font: 18px var(--pixel-font); -webkit-font-smoothing: none; -moz-osx-font-smoothing: grayscale; }

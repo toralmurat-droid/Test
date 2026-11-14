@@ -1,4 +1,6 @@
+import { hotbarWidth } from "./hudcache";
 import "./orbs.css";
+import { orbNeedsRedraw, orbTexts } from "./hudLogic";
 
 /**
  * Bottom HUD in the Diablo style (Murat 2026-11-07, from his reference picture): a red health orb on the left and a
@@ -141,7 +143,7 @@ export class OrbHud {
   private plate: HTMLElement;
   private root: HTMLElement;
   private level: HTMLElement;
-  private last = { hp: -1, mp: -1, at: 0, w: -1 };
+  private last = { hp: -1, mp: -1, at: 0, w: -1, hpTxt: "", mpTxt: "" };
 
   constructor(hud: HTMLElement) {
     addEventListener("resize", () => requestAnimationFrame(() => this.layout()));
@@ -184,8 +186,7 @@ export class OrbHud {
 
   /** The plate is as wide as the skill bar laid over it; the orbs sit at its ends. Also run on window resize. */
   layout() {
-    const bar = document.getElementById("hudbar") ?? document.getElementById("hotbar");
-    const w = bar ? bar.offsetWidth : 0;
+    const w = hotbarWidth();
     if (w > 0 && w !== this.last.w) { document.body.style.setProperty("--barw", `${w}px`); this.last.w = w; } // the menu buttons use it too
     // Room left of the health orb: too little for chat beside the demon statue -> the statue goes, chat moves up
     const tight = w > 0 && (innerWidth - w) / 2 - 112 < 330;
@@ -196,13 +197,13 @@ export class OrbHud {
     const now = performance.now();
     const fh = maxHp > 0 ? hp / maxHp : 0, fm = maxMp > 0 ? mp / maxMp : 0;
     this.layout();
-    const moving = (fh > 0 && fh < 1) || (fm > 0 && fm < 1);
-    if (Math.abs(fh - this.last.hp) < 0.004 && Math.abs(fm - this.last.mp) < 0.004 && (!moving || now - this.last.at < 120)) return;
+    const { hpTxt, mpTxt } = orbTexts(hp, maxHp, mp, maxMp);
+    if (!orbNeedsRedraw(this.last, fh, fm, hpTxt, mpTxt, now)) return;
     const t = now / 1000;
     drawOrb(this.hp.getContext("2d")!, fh, RED, t);
     drawOrb(this.mp.getContext("2d")!, fm, BLUE, t + 1.7);
-    this.hpTxt.textContent = `${Math.ceil(hp)} / ${Math.round(maxHp)}`;
-    this.mpTxt.textContent = `${Math.floor(mp)} / ${Math.round(maxMp)}`;
-    this.last.hp = fh; this.last.mp = fm; this.last.at = now;
+    this.hpTxt.textContent = hpTxt;
+    this.mpTxt.textContent = mpTxt;
+    this.last.hp = fh; this.last.mp = fm; this.last.at = now; this.last.hpTxt = hpTxt; this.last.mpTxt = mpTxt;
   }
 }

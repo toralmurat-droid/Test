@@ -2,6 +2,7 @@ import { col, Iso, planks, rng, stones, type Pt as IPt } from "./smoothProps";
 import { hiResTexture } from "./smooth";
 import { pixelize } from "./pixelize";
 import { SMOOTH } from "./isoflag";
+import { staticObj } from "./staticChunks";
 import Phaser from "phaser";
 import { TILE } from "../../shared/constants";
 import { BARNS, OBJECTS, T, TILE_COUNT } from "../../shared/map";
@@ -476,7 +477,7 @@ function sliced(scene: Phaser.Scene, key: string, X0: number, Y0: number, X1: nu
     const s = P(wx, wy);
     const img = scene.add.image(wx, wy, key).setOrigin((s.x - left) / cw, (s.y - topY) / ch).setDepth(wy + 0.5);
     img.setCrop(x, 0, Math.min(SW, cw - x), ch);
-    b.strips.push(img);
+    b.strips.push(staticObj(scene, img));
   }
   if (fade) BUILDINGS.push(b);
 }
@@ -1017,7 +1018,7 @@ function barnWall(scene: Phaser.Scene, b: typeof BARNS[number], tx: number, ty: 
   if (back && east) corner(32, 0);
   tex.refresh();
   const cx = (tx + 0.5) * TILE, cy = (ty + 0.5) * TILE;
-  scene.add.image(cx, cy, key).setOrigin(0.5, (16 + PAD) / CH).setDepth(cy);
+  staticObj(scene, scene.add.image(cx, cy, key).setOrigin(0.5, (16 + PAD) / CH).setDepth(cy));
 }
 
 function barnRoofImage(scene: Phaser.Scene, b: typeof BARNS[number]) {

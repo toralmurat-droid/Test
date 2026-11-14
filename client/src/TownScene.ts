@@ -13,13 +13,19 @@ import { canPay, shortOf, MANA, manaRegen, maxManaFor, skillCost, unpackMana } f
 import { nextSize, potionAmount, PotionKind, potionName, POTION_SIZES, total, unpackPotions } from "../../shared/potions";
 import { GROUND, areaAt, isSafeZone } from "../../shared/map";
 import { heroPoise, meleeReach, mobBody, POISE, pvpProtected } from "../../shared/combat";
-import { respecCost, wearMult } from "../../shared/upkeep";
+import { respecCost } from "../../shared/upkeep";
 import { ESSENCE, isSummonKind } from "../../shared/summons";
 import { FEAST, FEAST_MAX, type Family } from "../../shared/devour";
 import { moveStep } from "../../shared/movement";
 import { SPAWN_ZONES, zoneAt } from "../../shared/spawns";
 import { musicCombat, setMusicZone } from "./music";
 import { bindSfx, play as playSfx, sfxFrame } from "./sfx";
+import { songweaverSfx } from "./sfx";
+import { ChordHud } from "./chordHud";
+import { SoundCues } from "./soundCues";
+import { CHORD_NAMES, MODE_COLOR, soundOf } from "./songTables";
+
+const SONG_SFX = new Set(["note", "chord", "resonate", "bounce", "soundhit", "shieldbreak"]);
 import { attackMult, cooldownMult, critChance, heroSpeed, STATS, magicMult, STAT_KINDS, STAT_NAMES, StatKind, statPoints, HP_PER_STR } from "../../shared/powers";
 import { NEED_TEXT, pointRange, SkillDef, skillOf, skillTarget, MAX_STACKS, STACK_DECAY_MS, STACK_NAME, talentBonus, withMods } from "../../shared/skills";
 import { SkillFx } from "./skillfx";
@@ -30,6 +36,7 @@ import { CRAWL_CROP, heroTexture, itemTexture, potionTex, makeTileset, MOB_LOOK,
 import { Minimap } from "./minimap";
 import { fullscreenSupported, isFullscreen, onFullscreen, toggleFullscreen } from "./fullscreen";
 import { SCREEN_SIZES, isSharp, onWorldScale, pct, setWorldScale, uiScale, worldScale, worldScaleName, worldScaleSetting } from "./worldscale";
+import { showLevelNote } from "./hudLogic";
 import { GameMenu } from "./gamemenu";
 import { showMusicPanel, musicPanelOpen } from "./music";
 import { DayDial } from "./daydial";
@@ -56,7 +63,7 @@ import { updateHidebound } from "./questConceptArt";
 import { ART_K, CHAR_GROW, CHAR_SCALE, CHARACTERS, CHAR_ORIGIN, CharacterName, createArtAnims, ensureCharSheet, HD_CHARS, playCharAnim, preloadArt } from "./artAssets";
 import { Ambient } from "./ambient";
 import { Details } from "./details";
-import { activeOf, GearLayer, reqInfoOf, GearMenu, iconCanvas, itemColor, preloadGear, RARITY_HEX } from "./gear";
+import { activeOf, GearLayer, reqInfoOf, statsOf, GearMenu, iconCanvas, itemColor, preloadGear, RARITY_HEX } from "./gear";
 /** pickSlot value while the slot list is choosing the left-click action. */
 const LEFT_PICK = -2;
 /** pickSlot value while the slot list is choosing the right-click (and Space) action. */
@@ -85,7 +92,8 @@ import { StashUI, TradeUI } from "./trade";
 import { STASH, STASH_RANGE } from "../../shared/trade";
 import { afterLoading, hideLoading, loadingActive, loadingFor, setLoading, showLoading } from "./loading";
 import { WaygateLayer } from "./waygate";
-import { ISO, IsoView, isoAnchor, isoInput, isoX, isoY, screenDir, screenDir8 } from "./iso";
+import { WAYGATE_RANGE, WAYGATES } from "../../shared/act2";
+import { ISO, IsoView, isoAnchor, isoInput, isoX, isoY, screenDir, screenDir8, setBaseDepth } from "./iso";
 import { SMOOTH } from "./isoflag";
 import { addPixelGrid } from "./pixelgrid";
 import { paintSmoothProps } from "./smoothProps";
@@ -109,6 +117,7 @@ import { ChampionFx } from "./championFx";
 import { championFullName } from "../../shared/champions";
 import { bindBeastFx } from "./beastFx";
 import { bindRaiderFx, raiderTrail } from "./raiderFx";
+import { hudRects, invalidateHud } from "./hudcache";
 import { DungeonView } from "./dungeon";
 import { TEXT_FONT, TEXT_PX, WT } from "./pixelfont";
 import { parseRune, RUNES, RuneKey } from "../../shared/runes";
@@ -350,6 +359,7 @@ export class TownScene extends Phaser.Scene {
   private moves!: SkillMoves; // melee skill micro sequences (skillMoves.ts)
   private forms!: BeastForms; // the vampire's Bat Form / Wolf Form (beastForms.ts)
   private gearFx!: GearFx; // item level effects on heroes
+  private attackHoldUntil = 0; // local clock (ms) the shared attack timer is estimated to run until
   private lastCast: Record<string, number> = {}; // local clock (ms) of my last cast of each skill, for cooldowns
   private mobByMeAt = -1e9; // last time a monster stood right by my hero (my name label hides then)
   private items = new Map<string, Phaser.GameObjects.Image>();
@@ -370,6 +380,8 @@ export class TownScene extends Phaser.Scene {
   private grimoire?: GrimoirePanel;
   private resBars?: ResourceBars;
   private heatGauge?: OverloadGauge;
+  private chordHud?: ChordHud;
+  private soundCues = new SoundCues();
   private statsShown = "";
   private deathTimer?: number;
   private iso?: IsoView;
@@ -410,7 +422,7 @@ export class TownScene extends Phaser.Scene {
     // The Mawdeep Warrens below the woods: cave walls, braziers, ropes and stairs, and the dark down there
     this.dungeon = new DungeonView(this, {
       me: () => { const e = this.entities.get(this.me); return e ? { x: e.sprite.x, y: e.sprite.y } : undefined; },
-      heroes: () => [...this.entities.values()].filter((e) => !e.mob && e.sprite.visible).map((e) => ({ x: e.sprite.x, y: e.sprite.y })),
+      eachHero: (fn) => { for (const e of this.entities.values()) if (!e.mob && e.sprite.visible) fn(e.sprite.x, e.sprite.y); },
     }, PIXEL_FONT);
 
     const cam = this.cameras.main;
@@ -487,6 +499,7 @@ export class TownScene extends Phaser.Scene {
       if (!this.npcs?.isOpen && this.bounty?.interact()) return; // a bounty board
       if (!this.npcs?.isOpen && this.shrine?.interact()) return; // then the forest shrine
       if (!this.npcs?.isOpen && this.portals?.interact()) return; // then a portal stone's travel list
+      if (!this.npcs?.isOpen && this.waygates?.interact()) return; // then Act 2's waygate
       this.npcs?.interact();
     };
     const toggleQuestLog = () => {
@@ -511,7 +524,7 @@ export class TownScene extends Phaser.Scene {
       const b = (ev.target as HTMLElement).closest("button");
       if (b?.dataset.stat) this.room?.send("stat", b.dataset.stat);
       else if (b?.id === "statreset") this.room?.send("resetstats");
-      else if (b?.dataset.title !== undefined) this.room?.send("title", { i: Number(b.dataset.title) }); // the server answers "title"; the label follows $c
+      else if (b?.dataset.title !== undefined) this.room?.send("title", { i: Number(b.dataset.title) }); // the server answers "title"; the label follows Player.cosm
     });
     // Hovering a + shows in the side panel's stats block what that point would change
     heroEl.addEventListener("mouseover", (ev) => {
@@ -712,7 +725,7 @@ export class TownScene extends Phaser.Scene {
       else if (id === this.me) { this.portals?.close(); this.jumped(); this.arrive(40, 14, 4, 700); } // warm glow, then the new place
     });
     // Act 2's waygate (shared/act2.ts): through to the other act; the loading screen stays up while that land is drawn
-    this.waygates = new WaygateLayer(this);
+    this.waygates = new WaygateLayer(this, (type) => this.room?.send(type));
     this.room.onMessage("waygate", ({ id, to, x, y }) => {
       const e = this.entities.get(id);
       if (!e) return;
@@ -872,7 +885,7 @@ export class TownScene extends Phaser.Scene {
       }
       if (kind === "gear" && parseRune(gear)) {
         this.floatText(x, y - 6, `+${name}`, runeCss(parseRune(gear)!), PIXEL_FONT);
-        this.feed(`Found a ${name}! Open the bag (G), click it, then click an item to set it in`);
+        this.feed(`Found a ${name}! Open the bag (G), click it, then click an item to set the rune into it`);
         return;
       }
       if (kind === "gear") {
@@ -1324,13 +1337,21 @@ export class TownScene extends Phaser.Scene {
       if (e) this.squash(e, 1.15, 0.85, 120, 1);
     });
     this.room.onMessage("swing", ({ id, step, variant, ax, ay, w }) => {
-      if (id === this.me) this.pointer?.swung(); // the server took the click-attack
+      if (id === this.me) {
+        this.pointer?.swung(); // the server took the click-attack
+        // the swing holds the shared attack timer (the strum 850 ms): skill keys look unavailable until it ends (an estimate, the server decides)
+        const mine = this.room?.state.players.get(this.me), def = mine && attackProfile(mine.cls, activeOf(mine));
+        if (def) this.attackHoldUntil = performance.now() + (def.combo[step ?? 0]?.cooldownMs ?? def.attackCooldownMs);
+      }
       this.showSwing(id, step ?? 0, variant ?? 0, ax, ay, w);
     });
     this.room.onMessage("sfx", (ev) => this.onSkillFx(ev));
     // The Summoner's grimoire on the HUD (client/src/grimoire.ts): its news, asked again now that we listen
     this.grimoire = new GrimoirePanel(document.getElementById("hud")!, (slot, el) => this.room.send("grimoire", { slot, el }));
     this.room.onMessage("golems", (m) => this.grimoire?.news(m));
+    // The Songweaver's chord tracker (owner only, chordHud.ts)
+    this.chordHud = new ChordHud(document.getElementById("hud")!);
+    this.room.onMessage("chord", (m) => this.chordHud?.set(m));
     this.room.send("golems");
     bindSfx(this.room, () => this.me, this.entities as any); // sound effects (client/src/sfx.ts)
     this.room.onMessage("boom", ({ x, y, r, kind, imb }) => this.fx.impact(x, y, kind, r, imb) ||
@@ -1363,12 +1384,17 @@ export class TownScene extends Phaser.Scene {
         this.levelFrom = Math.min(this.levelFrom ?? Infinity, from ?? level - 1);
         const note = document.getElementById("lvlnote")!;
         note.textContent = `⬆ Level ${level}! Press ${actionKey("hero")} to assign your stat points`;
-        note.hidden = false;
+        note.hidden = false; this.noteAt = performance.now();
       }
     });
     this.room.onMessage("hit", ({ id, dmg, blocked, crit, dot, kx, ky, el, ex }) => {
       const e = this.entities.get(id);
       if (!e) return;
+      if (dmg === 0 && !ex) { // a shield took the whole hit (shared/skillEngine.ts absorbDamage): no wound, no flinch
+        this.floatText(e.sprite.x, e.sprite.y - 14, "absorbed", "#9ad1ff", PIXEL_FONT, 1, true);
+        this.fx.absorbed(e);
+        return;
+      }
       if (ex) { // an execution (shared/combat.ts EXECUTE): its own number and flash instead of the usual ones
         this.execReady.delete(id);
         this.floatText(e.sprite.x, e.sprite.y - 16, `EXECUTE -${dmg}`, "#ff4d3d", PIXEL_FONT, 2, true);
@@ -1379,9 +1405,11 @@ export class TownScene extends Phaser.Scene {
       const meE = this.entities.get(this.me);
       if (id === this.me) musicCombat(3);
       else if (e.mob && meE && Math.hypot(e.sprite.x - meE.sprite.x, e.sprite.y - meE.sprite.y) < 10 * TILE) musicCombat(1);
-      if (!ex) this.floatText(e.sprite.x, e.sprite.y - 14, crit ? `CRIT -${dmg}` : `-${dmg}`,
+      if (e.culled) return; // off screen: no number, flash or flinch to draw (sounds come from sfx.ts, unchanged)
+      const num = ex ? undefined : this.floatText(e.sprite.x, e.sprite.y - 14, crit ? `CRIT -${dmg}` : `-${dmg}`,
         blocked ? "#9ad1ff" : crit ? "#ffd60a" : id === this.me ? "#ff5d5d" : el && ELEMENT_COLORS[el as Element] ? `#${ELEMENT_COLORS[el as Element].toString(16).padStart(6, "0")}` : "#ffffff",
         PIXEL_FONT, crit ? 1.8 : dot ? 0.9 : 1.3, true);
+      if (e.mob) this.soundCues.numberShown(id, num, this.time.now); // Songweaver: ringing / muffled tint from "soundhit"
       // damage type (shared/elements.ts): embers, frost shards, venom splash or a holy glint on the target
       if (el && ELEMENT_COLORS[el as Element] && el !== "physical") this.gearFx.impact(e.sprite.x, e.sprite.y, e.top, el as Element, !!dot);
       // Hit feel without freezes or camera effects (Murat wants fluid combat): a short white flash,
@@ -1646,6 +1674,7 @@ export class TownScene extends Phaser.Scene {
         for (const b of BOARDS) out.push({ x: b.x, y: b.y, w: BOARD_W, h: BOARD_H, range: BOARD_RANGE, act: () => { if (!this.bounty?.open) this.bounty?.interact(); } });
         out.push({ x: STASH.x, y: STASH.y, w: 22, h: 18, range: STASH_RANGE, act: () => { if (!this.stash?.open) this.stash?.interact(); } });
         for (const o of PORTALS) out.push({ x: o.x, y: o.y, w: 26, h: 40, range: PORTAL_RANGE, act: () => this.portals?.interact() });
+        for (const g of WAYGATES) out.push({ x: g.x, y: g.y, w: 70, h: 96, range: WAYGATE_RANGE, act: () => this.waygates?.interact() });
         for (const { o } of usableObjects(p)) out.push({ x: o.x, y: o.y, w: 22, h: 22, range: USE_RANGE, act: () => this.room?.send("use", { id: o.id }) });
         return out;
       },
@@ -1763,12 +1792,17 @@ export class TownScene extends Phaser.Scene {
     if (e.mob) this.squash(e, crit ? 1.12 : 1.06, crit ? 0.88 : 0.94, 60);
   }
 
-  private floatText(x: number, y: number, text: string, color: string, font = PIXEL_FONT, size = 1, jitter = false) {
+  private floatText(x: number, y: number, text: string, color: string, font = PIXEL_FONT, size = 1, jitter = false): Phaser.GameObjects.Text {
     // Damage numbers spread a little sideways so fast hits don't print on top of each other
     if (jitter) x += (Math.random() - 0.5) * 10;
-    const t = this.add.text(x, y, text, {
+    // Pooled: a Text owns a canvas and a GL texture, and every hit prints one
+    let t = this.floatPool.pop();
+    if (t) t.setPosition(x, y).setText(text).setColor(color).setFontFamily(font).setAlpha(1).setVisible(true).setActive(true);
+    else t = this.add.text(x, y, text, {
       fontFamily: font, fontSize: `${TEXT_PX}px`, color, stroke: "#000", strokeThickness: 2,
-    }).setOrigin(0.5, 1).setScale(WT * Math.max(1, Math.round(size))).setResolution(1).setDepth(30000);
+    }).setOrigin(0.5, 1).setResolution(1).setDepth(30000);
+    t.setScale(WT * Math.max(1, Math.round(size)));
+    const txt = t;
     // iso view: callers lift the text above a hero's feet; rise straight up from there on screen
     isoAnchor(t, { x, y: y + 14 });
     if (size > 1.5) {
@@ -1777,8 +1811,13 @@ export class TownScene extends Phaser.Scene {
       t.setScale(WT * Math.round(size) * 1.5);
       this.tweens.add({ targets: t, scale: WT * Math.round(size), duration: 120, ease: "Back.easeOut" });
     }
-    this.tweens.add({ targets: t, y: y - 10, alpha: 0, duration: size > 1.5 ? 1000 : 800, delay: size > 1.5 ? 150 : 0, onComplete: () => t.destroy() });
+    this.tweens.add({ targets: t, y: y - 10, alpha: 0, duration: size > 1.5 ? 1000 : 800, delay: size > 1.5 ? 150 : 0, onComplete: () => {
+      txt.setVisible(false).setActive(false);
+      if (this.floatPool.length < 48) this.floatPool.push(txt); else txt.destroy();
+    } });
+    return t;
   }
+  private floatPool: Phaser.GameObjects.Text[] = [];
 
   /** Merged blob: paint the swallowed blobs' colours, eyes and mouths over its body (follows squash tweens). */
   private drawBlobParts(e: Entity, id: string, p: any, x: number, y: number) {
@@ -2304,7 +2343,7 @@ export class TownScene extends Phaser.Scene {
         this.gameMenu?.open || this.talentMenu?.open);
   }
 
-  /** Owned titles as small buttons (plus None); a pick is an intent, the server answers "title" and the label follows `$c`. */
+  /** Owned titles as small buttons (plus None); a pick is an intent, the server answers "title" and the label follows `Player.cosm`. */
   private titlePickerHtml(mine: any) {
     if (!this.titlesOwned.length) return "";
     const cur = unpackCosmetics(metaOf(mine, META.cosm)).title;
@@ -2318,10 +2357,10 @@ export class TownScene extends Phaser.Scene {
     if (!mine) return;
     this.heroFrom = from;
     const cls = mine.cls as ClassKind, lvl = mine.level as number;
-    const st = { sta: mine.sta, str: mine.str, mag: mine.mag, dex: mine.dex ?? 0 }; // includes gear bonuses
+    const st = statsOf(mine); // includes gear bonuses
     const free = statPoints(lvl) - (mine.ptSta + mine.ptStr + mine.ptMag + (mine.ptDex ?? 0));
     // Rebuild only when something shown changed (called every frame while open)
-    const sig = [this.titlesOwned.join(), unpackCosmetics(metaOf(mine, META.cosm)).title, lvl, mine.xp, Math.ceil(mine.hp), mine.maxHp, mine.mp, st.sta, st.str, st.mag, st.dex, free, mine.kills, mine.gold, mine.wear, from].join("|");
+    const sig = [this.titlesOwned.join(), unpackCosmetics(metaOf(mine, META.cosm)).title, lvl, mine.xp, Math.ceil(mine.hp), mine.maxHp, mine.mp, st.sta, st.str, st.mag, st.dex, free, mine.kills, mine.gold, from].join("|");
     const el = document.getElementById("hero")!;
     if (!el.hidden && sig === this.heroSig) return;
     this.heroSig = sig;
@@ -2363,7 +2402,6 @@ export class TownScene extends Phaser.Scene {
       ["Initiative", `${heroPoise(cls, lvl)} · dizzy at 0`],
       ["Move speed", `${speed}`],
       ["Kills · Gold", `${mine.kills} · ${mine.gold}`],
-      ["Gear condition", `${100 - (mine.wear ?? 0)}%${mine.wear ? ` · gear stats −${Math.round((1 - wearMult(mine.wear)) * 100)}% · repair at Brann's smithy` : ""}`],
     ];
     // health, mana and experience as bars over the detail list
     const mp = unpackMana(mine.mp);
@@ -2532,7 +2570,7 @@ export class TownScene extends Phaser.Scene {
   /** Something to talk to, open or use right here (one of the "E: ..." prompts is up, or a dialog is open)? */
   private canUse(): boolean {
     return !!this.npcs?.isOpen || !!this.bounty?.open || !!this.dungeon?.nearDoor ||
-      !!document.querySelector("#npcprompt.open, #chestprompt.open, #boardprompt.open, #portalprompt.open, #shrineprompt.open, #stashprompt.open");
+      !!document.querySelector("#npcprompt.open, #chestprompt.open, #boardprompt.open, #portalprompt.open, #gateprompt.open, #shrineprompt.open, #stashprompt.open");
   }
 
   /** A game key of the current keyboard layout (client/src/keymode.ts) was pressed. */
@@ -2651,7 +2689,9 @@ export class TownScene extends Phaser.Scene {
   /** Skill bar at the bottom: potions, the left-click cell and the 10 slots (the old text list of actions is gone, Murat 2026-11-04). */
   private renderActions(mine: any, cls: ClassKind, cdm: number, now: number) {
     const pools = { energy: mine.energy, mana: unpackMana(mine.mp).mana };
+    const blocked = !!(mine.stunned || mine.broken) || performance.now() < this.attackHoldUntil; // the server refuses a press now: dim the keys
     const slots: string[] = [...(mine.slots ?? [])];
+    this.cdTrack.length = 0;
     // Slot bar at the bottom: 10 cells, cooldown shading, click to choose a skill
     const locked = !!this.qcarry?.carrying(this.me), lockTip = locked ? LOCK_TIP : "";
     const cells = Array.from({ length: slotCount() }, (_, i) => {
@@ -2660,12 +2700,14 @@ export class TownScene extends Phaser.Scene {
       if (!skill) return `<div class="slot empty${picking}" data-slot="${i}" title="Click to put a skill on key ${slotKey(i)}"><kbd>${slotKey(i)}</kbd><i>+</i></div>`;
       const h = this.skillHud(cls, skill, cdm);
       const left = Math.max(0, h.cdMs - (now - h.last));
-      const shade = left > 0 ? `<div class="cd" style="height:${(left / h.cdMs) * 100}%"></div>` : "";
-      const wait = (left > 0 || !canPay(pools, h.cost) ? " wait" : "") + (shortOf(pools, h.cost) === "heat" ? " hot" : "");
+      // the shade height and the seconds are filled in per frame (below), so the markup only changes when a cooldown starts or ends
+      const shade = left > 0 ? `<div class="cd" data-cdk="s${i}"></div>` : "";
+      const wait = (left > 0 || blocked || !canPay(pools, h.cost) ? " wait" : "") + (shortOf(pools, h.cost) === "heat" ? " hot" : "");
       const power = skill;
       const unarmed = this.unarmedFor(mine, cls, skill);
+      if (left > 0) this.cdTrack.push({ k: `s${i}`, left, cd: h.cdMs });
       return `<div class="slot${locked ? " locked" : ""}${h.ult ? " ult" : ""}${wait}${unarmed ? " unarmed" : ""}${picking}" data-slot="${i}" data-skill="${skill}" data-tiphead="${h.name}" data-tip="${tipEsc(lockTip + (unarmed ? `${unarmed}. ` : "") + (skillOf(cls, skill)?.desc ?? ""))}" data-tiphint="Key ${slotKey(i)} · click to change · wheel to scroll · right-click to clear">` +
-        `${iconImg(power)}${shade}${unarmed ? `<i class="xout"></i>` : ""}<kbd>${slotKey(i)}</kbd>${left > 0 && !unarmed ? `<b>${Math.ceil(left / 1000)}</b>` : ""}</div>`;
+        `${iconImg(power)}${shade}${unarmed ? `<i class="xout"></i>` : ""}<kbd>${slotKey(i)}</kbd>${left > 0 && !unarmed ? `<b data-cnk="s${i}"></b>` : ""}</div>`;
     }).join("");
     // Left- and right-click cells first: the weapon, or the spell / skill picked for that click
     const clickCell = (side: ClickSide) => {
@@ -2676,8 +2718,9 @@ export class TownScene extends Phaser.Scene {
       if (sk) {
         const h = this.skillHud(cls, sk, cdm);
         const left = Math.max(0, h.cdMs - (now - h.last));
-        const shade = left > 0 && h.cdMs >= 1000 ? `<div class="cd" style="height:${(left / h.cdMs) * 100}%"></div>` : "";
+        const shade = left > 0 && h.cdMs >= 1000 ? `<div class="cd" data-cdk="${key}"></div>` : "";
         const unarmed = this.unarmedFor(mine, cls, sk);
+        if (shade) this.cdTrack.push({ k: key, left, cd: h.cdMs });
         return `<div class="slot lmb ${side}${locked ? " locked" : ""}${!canPay(pools, h.cost) ? " wait" : ""}${shortOf(pools, h.cost) === "heat" ? " hot" : ""}${unarmed ? " unarmed" : ""}${pk}" data-slot="${key}" data-tiphead="${Side}: ${h.name}" data-tip="${tipEsc(lockTip + (unarmed ? `${unarmed}. ` : "") + (skillOf(cls, sk)?.desc ?? ""))}" data-tiphint="Click to change · wheel to scroll · right-click: back to the weapon">` +
           `${iconImg(sk)}${shade}${unarmed ? `<i class="xout"></i>` : ""}<kbd>${label}</kbd></div>`;
       }
@@ -2690,8 +2733,24 @@ export class TownScene extends Phaser.Scene {
     const bar = document.getElementById("hotbar")!;
     // vertical separators between the click attacks, the skill keys and the potions (Murat 2026-11-07)
     const all = this.chargeCell(mine, cls, [ls, rs], slots, now) + lcell + `<i class="hsep"></i>` + cells + `<i class="hsep"></i>` + this.potionCells(mine); // potions right of the skill keys (Murat 2026-11-04)
-    if (this.hotbarHtml !== all) { bar.innerHTML = all; this.hotbarHtml = all; }
+    if (this.hotbarHtml !== all) {
+      bar.innerHTML = all; this.hotbarHtml = all;
+      this.cdEls = this.cdTrack.map((t) => ({ shade: bar.querySelector<HTMLElement>(`[data-cdk="${t.k}"]`), num: bar.querySelector<HTMLElement>(`[data-cnk="${t.k}"]`), pct: -1, sec: -1 }));
+      invalidateHud(); // the bar width may have changed
+    }
+    // Per frame only the cooldown shade height and seconds, and only when the rounded value changes
+    for (let i = 0; i < this.cdTrack.length; i++) {
+      const t = this.cdTrack[i], el = this.cdEls[i];
+      if (!el) continue;
+      const pct = Math.round((t.left / t.cd) * 100);
+      if (el.shade && pct !== el.pct) { el.shade.style.height = `${pct}%`; el.pct = pct; }
+      const sec = Math.ceil(t.left / 1000);
+      if (el.num && sec !== el.sec) { el.num.textContent = String(sec); el.sec = sec; }
+    }
   }
+  /** Cooldown cells of the last renderActions call (values) and their elements (cached while the markup stays the same). */
+  private cdTrack: { k: string; left: number; cd: number }[] = [];
+  private cdEls: { shade: HTMLElement | null; num: HTMLElement | null; pct: number; sec: number }[] = [];
 
   private showDodge(msg: { id: string; dir: string }) {
     const e = this.entities.get(msg.id);
@@ -2714,6 +2773,7 @@ export class TownScene extends Phaser.Scene {
   /** Skill visual event from the server (shared/skillEngine.ts): drawn by SkillFx, plus the hero's cast animation. */
   private onSkillFx(ev: any) {
     if (typeof ev.ev === "string" && ev.ev.startsWith("tide")) { this.tideFx(ev); return; }
+    if (SONG_SFX.has(ev.ev)) this.songEvent(ev);
     if (ev.ev === "cast") {
       const e = this.entities.get(ev.id);
       if (ev.id === this.me) this.lastCast[ev.s] = this.time.now;
@@ -2741,15 +2801,64 @@ export class TownScene extends Phaser.Scene {
     this.tweens.add({ targets: ring, scale: 6, alpha: 0, duration: 1400, ease: "Sine.easeOut", onComplete: () => ring.destroy() });
   }
 
+  /** True when another Songweaver within earshot plays in a different mode: their notes are then voiced as open fifths. */
+  private modeClash(ev: any): boolean {
+    if (!ev.mode || ev.x === undefined) return false;
+    const players = (this.room?.state as any)?.players;
+    let clash = false;
+    players?.forEach?.((p: any, id: string) => {
+      if (clash || id === ev.id || p.cls !== "songweaver") return;
+      const m = /(?:^|\s|,)mode:(\w+)/.exec(p.fx ?? "")?.[1];
+      if (m && m !== ev.mode && Math.hypot(p.x - ev.x, p.y - ev.y) < 480) clash = true;
+    });
+    return clash;
+  }
+
+  /** Songweaver sfx events (contract in docs/songweaver-progress.md): sound, HUD flash, sound-hit cues. The drawing is in skillfx.ts. */
+  private songEvent(ev: any) {
+    songweaverSfx(ev, this.me, this.modeClash(ev));
+    if (ev.ev === "chord") {
+      const c = (MODE_COLOR[ev.mode] ?? MODE_COLOR.major).toString(16).padStart(6, "0");
+      const e = this.entities.get(ev.id);
+      if (ev.id === this.me) this.chordHud?.fired(ev.prog);
+      if (e) this.floatText(e.sprite.x, e.sprite.y - e.top - 14, CHORD_NAMES[ev.prog] ?? ev.prog, `#${c}`, PIXEL_FONT, 1.3);
+    } else if (ev.ev === "soundhit") {
+      const e = this.entities.get(ev.id), meE = this.entities.get(this.me);
+      const mineSong = (this.room.state as any).players?.get(this.me)?.cls === "songweaver";
+      const near = !!e && !!meE && Math.hypot(e.sprite.x - meE.sprite.x, e.sprite.y - meE.sprite.y) < 12 * TILE;
+      const hint = mineSong && near && e?.mob ? { kind: e.state.kind as string, name: MOBS[e.state.kind as MobKind]?.name ?? "It" } : undefined;
+      const say = this.soundCues.onSoundHit(ev, this.time.now, (text, col) => { if (e) this.floatText(e.sprite.x, e.sprite.y - 28, text, col, PIXEL_FONT, 1); }, hint);
+      if (say) this.chatNote(say, "#9fd8ff");
+    }
+  }
+
+  /** A line in the chat log that no player wrote (hints). */
+  private chatNote(text: string, color: string) {
+    const log = document.getElementById("chatlog");
+    if (!log) return;
+    const el = document.createElement("div");
+    el.textContent = text; el.style.color = color;
+    log.appendChild(el);
+    while (log.children.length > 8) log.firstChild!.remove();
+  }
+
+  private feedAt = 0;
+  private noteAt = 0;
+
   private feed(text: string) {
     const el = document.createElement("div");
     el.textContent = text;
-    const feed = document.getElementById("feed")!;
-    // The feed sits under the quest tracker on the right, never behind it (it was hidden there)
-    const qt = document.getElementById("questtracker"), r = qt && qt.offsetParent ? qt.getBoundingClientRect() : undefined;
-    feed.style.top = r && r.height ? `${Math.round(r.bottom / uiScale() + 8)}px` : ""; // the HUD is zoomed (worldscale.ts)
-    feed.prepend(el);
+    this.placeFeed();
+    document.getElementById("feed")!.prepend(el);
     setTimeout(() => el.remove(), 5000);
+  }
+
+  /** The feed sits under the quest tracker on the right whatever its height; re-measured while it grows or folds. */
+  private placeFeed() {
+    const feed = document.getElementById("feed")!;
+    const qt = document.getElementById("questtracker"), r = qt && qt.offsetParent ? qt.getBoundingClientRect() : undefined;
+    const top = r && r.height ? `${Math.round(r.bottom / uiScale() + 8)}px` : ""; // the HUD is zoomed (worldscale.ts)
+    if (feed.style.top !== top) feed.style.top = top;
   }
 
   private chatMessage(id: string, name: string, text: string) {
@@ -2758,6 +2867,7 @@ export class TownScene extends Phaser.Scene {
     el.textContent = `${name}: ${text}`;
     log.appendChild(el);
     while (log.children.length > 8) log.firstChild!.remove();
+    if (id.startsWith("npc:")) { this.npcs?.say(id.slice(4), text); return; } // a villager answering a busker
     const e = this.entities.get(id);
     if (!e) return;
     e.bubble?.destroy();
@@ -2915,8 +3025,8 @@ export class TownScene extends Phaser.Scene {
       // where the hero stands on the screen, in HUD px (the quest pointer circles it)
       if (this.npcs) {
         if (meSprite && !me?.dead) {
-          const cam = this.cameras.main, cv = this.game.canvas, cr = cv.getBoundingClientRect();
-          const hud = document.getElementById("hud")!, hr = hud.getBoundingClientRect(), k = hr.width / (hud.offsetWidth || hr.width) || 1;
+          const cam = this.cameras.main, cv = this.game.canvas, { cr, hr, hudW } = hudRects(cv);
+          const k = hr.width / (hudW || hr.width) || 1;
           const wx = ISO ? isoX(meSprite.x, meSprite.y) : meSprite.x, wy = ISO ? isoY(meSprite.x, meSprite.y) : meSprite.y;
           // camera px: zoom around the camera's middle (scroll is in iso space; worldView is not, at this point)
           const px = (wx - cam.scrollX - cam.width / 2) * cam.zoom + cam.width / 2, py = (wy - cam.scrollY - cam.height / 2) * cam.zoom + cam.height / 2;
@@ -2959,6 +3069,7 @@ export class TownScene extends Phaser.Scene {
     stepInterpDelay(step);
     // An easing written for 60 fps (k per frame), adjusted so it pulls just as hard at 30, 120 or 144 fps
     const ease = (k: number) => 1 - Math.pow(1 - k, step / (1000 / 60));
+    this.soundCues.hideIcons();
     for (const [id, e] of this.entities) {
       const p = e.state;
       const rooted = (typeof p.fx === "string" && p.fx.includes("charge")) || (id === this.me && this.time.now < this.rootUntil); // a buildup roots the hero, a dash glides
@@ -3077,7 +3188,7 @@ export class TownScene extends Phaser.Scene {
         if (e.mob) e.sprite.setVisible(!p.dead && !p.hidden);
         else e.sprite.setAlpha(p.dead ? 0.35 : 1).setAngle(p.dead ? 90 : 0);
       }
-      e.sprite.setDepth(e.sprite.y);
+      setBaseDepth(e.sprite, e.sprite.y);
       if (e.mob && p.kind === "nightraider" && !p.dead && e.sprite.visible) raiderTrail(this.fx, e as any, moving, now);
       // Status effects: yellow flicker for stunned, blue for slowed, red pulse for raging. A monster winding up shows
       // it in its pose; only sheets without attack frames (?pixel=1) still flash red.
@@ -3105,7 +3216,7 @@ export class TownScene extends Phaser.Scene {
       const x = Math.round(e.sprite.x), y = Math.round(e.sprite.y);
       // Monsters: HP bar over the head, level tag just above it
       const mobBarY = y - e.top - 4;
-      e.label?.setPosition(x, e.mob ? mobBarY - 1 : y - e.top - (p.hat ? 4 : 2)).setDepth(e.sprite.y + 1);
+      if (e.label) setBaseDepth(e.label.setPosition(x, e.mob ? mobBarY - 1 : y - e.top - (p.hat ? 4 : 2)), e.sprite.y + 1);
       if (e.mob && e.label) {
         // Level tag coloured by how tough it is for me: grey easy, white even, orange tougher, red dangerous
         const diff = (p.level ?? 1) - ((this.room.state as any).players?.get(this.me)?.level ?? 1);
@@ -3134,24 +3245,29 @@ export class TownScene extends Phaser.Scene {
         const col = myParty && p.party === myParty ? "#7cfc00" : "#ffffff";
         if (e.lvlColor !== col) { e.label.setColor(col); e.lvlColor = col; }
       }
-      if (e.titleLabel) { // the shown title (arcs $c, synced) sits right over the head; the name moves up above it
+      if (e.titleLabel) { // the shown title (Player.cosm, public) sits right over the head; the name moves up above it
         const t = TITLES[unpackCosmetics(metaOf(p as any, META.cosm)).title] ?? "";
         if (e.titleLabel.text !== t) e.titleLabel.setText(t);
         const lift = t ? 9 : 0;
-        e.titleLabel.setPosition(x, y - e.top - (p.hat ? 4 : 2)).setDepth(e.sprite.y + 1).setVisible(!!t && !p.dead && !p.hidden && (id !== this.me || !!e.label?.visible));
+        setBaseDepth(e.titleLabel.setPosition(x, y - e.top - (p.hat ? 4 : 2)), e.sprite.y + 1).setVisible(!!t && !p.dead && !p.hidden && (id !== this.me || !!e.label?.visible));
         if (e.label) e.label.setY(e.label.y - lift);
         e.nameLift = lift;
       }
       e.bubble?.setPosition(x, y - e.top - 12 - (e.nameLift ?? 0)); // above the name label
-      e.bar.clear().setDepth(e.sprite.y + 1);
+      setBaseDepth(e.bar.clear(), e.sprite.y + 1);
       if (e.mob) this.champFx?.sync(id, e, p, x, y, mobBarY, now);
       this.fx.status(e, e.bar, dtMs / 1000);
+      // Songweaver: how this monster hears (ear tier + pitch arrow) beside its name while hovered / targeted
+      if (e.mob && e.label && !p.dead && !p.hidden && (id === this.pointer?.hoverId || id === this.pointer?.targetId)
+        && (this.room.state as any).players?.get(this.me)?.cls === "songweaver" && soundOf(p.kind)) {
+        this.soundCues.drawIcons(this, e.label, p.kind, e.sprite.y + 3, id === this.pointer?.hoverId, PIXEL_FONT, e.sprite);
+      }
       // (Stacks built by basic hits are shown by the skill keys, see chargeCell: no pips under the hero, Murat 2026-11-04)
       const maxHp = p.maxHp;
       if (!e.mob) {
         if (p.guarding && !p.dead) {
           e.shield ??= isoAnchor(this.add.graphics(), e.sprite) as Phaser.GameObjects.Graphics;
-          e.shield.clear().lineStyle(1, 0x9ad1ff, 0.9).strokeCircle(x, y - e.top / 2, e.top / 2 + 3).setDepth(e.sprite.y + 2);
+          setBaseDepth(e.shield.clear().lineStyle(1, 0x9ad1ff, 0.9).strokeCircle(x, y - e.top / 2, e.top / 2 + 3), e.sprite.y + 2);
         } else if (e.shield) { e.shield.destroy(); e.shield = undefined; }
       }
       if (p.broken && !p.dead) {
@@ -3241,14 +3357,15 @@ export class TownScene extends Phaser.Scene {
     this.shrine?.update(meEnt && !meEnt.state.dead && !this.chests?.near ? meEnt.sprite : undefined, !!this.npcs?.isOpen);
     this.stash?.update(meEnt && !meEnt.state.dead ? meEnt.sprite : undefined, !!this.npcs?.isOpen || !!this.chests?.near);
     this.bounty?.update(meEnt && !meEnt.state.dead ? meEnt.sprite : undefined, !!this.npcs?.isOpen || !!this.chests?.near || !!this.stash?.near);
-    if (this.npcs) { this.npcs.hidePrompt = !!this.chests?.near || !!this.shrine?.near || !!this.portals?.near || !!this.stash?.near || !!this.bounty?.near; this.npcs.extraBlock = (this.bounty?.trackerBlock() ?? "") + (this.qcarry?.trackerBlock(this.me, (id) => this.entities.get(id)?.state?.name ?? "A friend") ?? ""); }
+    if (this.npcs) { this.npcs.hidePrompt = !!this.chests?.near || !!this.shrine?.near || !!this.portals?.near || !!this.waygates?.near || !!this.stash?.near || !!this.bounty?.near; this.npcs.extraBlock = (this.bounty?.trackerBlock() ?? "") + (this.qcarry?.trackerBlock(this.me, (id) => this.entities.get(id)?.state?.name ?? "A friend") ?? ""); }
     this.npcs?.objects.setHidden(LANTERN_OBJECT, !!this.qcarry?.update(this.me, (id) => this.entities.get(id)));
     this.npcs?.update(meEnt && !meEnt.state.dead ? meEnt.sprite : undefined, meEnt?.state);
     this.grimoire?.update(meEnt?.state?.cls);
-    this.waygates?.update(meEnt?.state);
+    this.waygates?.update(meEnt?.state, meEnt && !meEnt.state.dead ? meEnt.sprite : undefined, !!this.npcs?.isOpen || !!this.chests?.near);
     this.portals?.update(meEnt && !meEnt.state.dead ? meEnt.sprite : undefined, !!this.npcs?.isOpen || !!this.chests?.near || !!this.shrine?.near);
     if (this.minimap && this.npcs) this.minimap.markers = [...this.npcs.markers, ...(this.portals?.markers() ?? []), ...(this.bounty?.markers() ?? []), ...(this.dungeon?.markers() ?? []), ...(this.waygates?.markers() ?? []), ...(this.qcarry?.markers() ?? []), ...(this.tide?.markers() ?? [])];
 
+    if (now >= this.feedAt) { this.feedAt = now + 200; this.placeFeed(); }
     const mine = meEnt?.state;
     if (mine) {
       this.gearMenu?.refresh(mine);
@@ -3271,13 +3388,15 @@ export class TownScene extends Phaser.Scene {
       const hb = document.getElementById("herobadge")!;
       hb.hidden = freeStats <= 0;
       hb.textContent = String(freeStats);
+      if (!showLevelNote(freeStats) && performance.now() - this.noteAt > 1500) { // (a moment of grace: the stat points sync a tick after the message)
+         const ln = document.getElementById("lvlnote")!; if (!ln.hidden) ln.hidden = true; } // nothing left to assign
       // Zone under the hero drives the music
       const tx = meEnt.sprite.x / TILE, ty = meEnt.sprite.y / TILE;
       const zdef = zoneAt(Math.floor(tx), Math.floor(ty));
       setMusicZone(zdef?.name, zdef?.mobs, this.areaName, actOfTile(tx, ty));
       sfxFrame(this.me, this.entities as any);
       const cls = mine.cls as ClassKind;
-      const cdm = cooldownMult(cls, { sta: mine.sta, str: mine.str, mag: mine.mag, dex: mine.dex ?? 0 }, mine.talents);
+      const cdm = cooldownMult(cls, statsOf(mine), mine.talents);
       // Top-left bars (resourceBars.ts): red HP, blue Mana (spells, shared/mana.ts), green XP
       const mn = unpackMana(mine.mp);
       (this.resBars ??= new ResourceBars(document.getElementById("hud")!)).update({
@@ -3289,7 +3408,8 @@ export class TownScene extends Phaser.Scene {
       const flip = (this.heatGauge ??= new OverloadGauge(document.getElementById("hud")!)).update(mine.energy ?? 0);
       if (flip) playSfx(flip);
       this.renderActions(mine, cls, cdm, now);
-      (this.buffBar ??= new BuffBar(document.getElementById("hud")!)).update(mine.timers ?? "");
+      (this.buffBar ??= new BuffBar(document.getElementById("hud")!)).update(mine.me?.timers ?? ""); // owner-only: in `me` (server/player.ts)
+      this.chordHud?.tick();
     }
   }
 }

@@ -15,7 +15,7 @@ export {
 export const TRAIT_TALENTS: Record<"hidebound", { trait: TraitId; from: readonly MobKind[]; taken: number }> = {
   hidebound: { trait: "beast", from: ["gnawkin", "tuskborn", "silkwretch", "duskwing", "crowseer"], taken: 1.0 },
 };
-/** Damage taken multiplier from a monster of `kind` for a hero with cosmetics number `cosm` (Player.arcs "$c"); 1 = none. */
+/** Damage taken multiplier from a monster of `kind` for a hero with cosmetics number `cosm` (Player.cosm); 1 = none. */
 export function traitTakenMult(kind: MobKind, cosm: number): number {
   let k = 1;
   for (const t of Object.values(TRAIT_TALENTS)) if (t.taken !== 1 && t.from.includes(kind) && hasTrait(cosm, t.trait)) k *= t.taken;

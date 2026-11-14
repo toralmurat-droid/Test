@@ -27,7 +27,6 @@ import type { MapMarker } from "./minimap";
 import { QuestLog } from "./questlog";
 import { MASTER_LEVELS, SHOPS, sellPrice, shopBuys, shopFuses } from "../../shared/shops";
 import { GEAR_SLOTS, GearSlot, gearDef, gearName, itemLevel, itemRarity, itemText, reqProblem, TIER_NAMES } from "../../shared/gear";
-import { repairCost, WEAR, wearMult } from "../../shared/upkeep";
 import { CHAR_GROW, CHAR_SCALE, CHAR_ORIGIN, CharacterName, playCharAnim } from "./artAssets";
 import { iconCanvas, itemColor, rarityLabel, reqInfoOf } from "./gear";
 import { fuseCost, fuseProblem, looseRuneCounts, parseRune, RUNE_FUSE_COUNT, RUNE_KIND_NAMES, RUNES, runeName, runeText } from "../../shared/runes";
@@ -36,13 +35,14 @@ import { itemTexture, potionTex } from "./textures";
 import { potionAmount, potionName, potionSlots, slotsAfter, total, unpackPotions } from "../../shared/potions";
 import { BAG_SIZE } from "../../shared/gear";
 import { isoAnchor } from "./iso";
+import { speechBubble } from "./weathered";
 import { msUntilUndeadNight } from "../../shared/daynight";
 import { dayTime } from "./details";
 import { TEXT_FONT, TITLE_FONT, TEXT_PX, TITLE_PX, WT } from "./pixelfont";
 
 type Me = { x: number; y: number } | undefined;
 /** The local player's synced state (only the fields NPCs care about). */
-type QuestState = (Quester & { gold?: number; potions?: number; cls?: string; bag?: Iterable<string>; wear?: number } & Partial<Record<GearSlot, string>>) | undefined;
+type QuestState = (Quester & { gold?: number; potions?: number; cls?: string; bag?: Iterable<string> } & Partial<Record<GearSlot, string>>) | undefined;
 
 /**
  * Village NPCs (shared/npcs.ts): sprites by the bonfire, "!"/"?" quest markers, an "E Talk" prompt when close,
@@ -61,6 +61,7 @@ for (const a of ZONE_ARCS) ZONE_GIVERS.set(a.quests[0].giver, [...(ZONE_GIVERS.g
 export const arcFits = (giver: string, level: number) => (ZONE_GIVERS.get(giver) ?? []).some((l) => level >= l && level <= l + 6);
 
 export class NpcLayer {
+  private bubbles = new Map<string, Phaser.GameObjects.Image>();
   private sprites = new Map<string, { sprite: Phaser.GameObjects.Sprite; label: Phaser.GameObjects.Text; mark: Phaser.GameObjects.Text }>();
   private prompt = document.createElement("div");
   private dialog = document.createElement("div");
@@ -79,6 +80,9 @@ export class NpcLayer {
   private trackerHtml = "";
   /** Title of the quest just advanced: scrolled to the top of the tracker once its block is drawn. */
   private reveal = "";
+  private promptHtml = "";
+  private trackQ: QuestState | undefined;
+  private trackAt = 0;
   /**
    * Folding in the tracker (Murat 2026-11-07): a quest is folded to its title by default and opens once it is started;
    * a click on the title flips that, remembered per title ("opened" for folded-by-default ones, "folded" for started ones).
@@ -134,7 +138,7 @@ export class NpcLayer {
         const k = (fb.closest(".qt-block") as HTMLElement).dataset.key ?? "";
         this.followed = this.followed === k ? "" : k;
         try { localStorage.setItem("qtfollow", this.followed); } catch { /* storage off */ }
-        this.trackerHtml = "";
+        this.trackerHtml = ""; this.trackAt = 0;
         return;
       }
       const t = el.closest(".qt-head") as HTMLElement | null;
@@ -145,7 +149,7 @@ export class NpcLayer {
       const set = started ? this.folded : this.opened;
       if (set.has(key)) set.delete(key); else set.add(key);
       try { localStorage.setItem("qtfolded", JSON.stringify([...this.folded])); localStorage.setItem("qtopened", JSON.stringify([...this.opened])); } catch { /* storage off */ }
-      this.trackerHtml = ""; // redraw on the next update
+      this.trackerHtml = ""; this.trackAt = 0; // redraw on the next update
       block.classList.toggle("folded", this.isFolded(key, started));
     };
     for (const n of NPCS) {
@@ -295,6 +299,18 @@ export class NpcLayer {
   hidePrompt = false;
 
   /** E key: use the quest object you stand next to, talk to the NPC next to you, or close the dialog. */
+  /** A villager speaks (server `chat` from `npc:<id>`): a speech bubble over its sprite for a few seconds. */
+  say(id: string, text: string): boolean {
+    const s = this.sprites.get(id);
+    if (!s) return false;
+    this.bubbles.get(id)?.destroy();
+    const b = speechBubble(this.scene, s.sprite.x, s.sprite.y - Math.round(21 * CHAR_GROW) - 14, text).setDepth(s.sprite.depth + 5);
+    isoAnchor(b, s.sprite);
+    this.bubbles.set(id, b);
+    this.scene.time.delayedCall(4000, () => { if (this.bubbles.get(id) === b) { b.destroy(); this.bubbles.delete(id); } });
+    return true;
+  }
+
   interact() {
     if (this.choice) return; // a field choice is answered with its buttons (or 1-3), not dismissed by E
     if (this.story) this.closeStory();
@@ -447,7 +463,7 @@ export class NpcLayer {
     const bag = [...(q?.bag ?? [])];
     // masterwork: one level shown at a time (picked with the buttons), by default the best one the hero can wear
     const master = this.masterLv ?? [...MASTER_LEVELS].reverse().find((l) => l <= (q?.level ?? 1)) ?? MASTER_LEVELS[0];
-    const key = JSON.stringify([n.id, master, gold, potions, bag, q?.level, (q as any)?.ptSta, (q as any)?.ptStr, (q as any)?.ptMag, (q as any)?.ptDex, q?.wear, ...GEAR_SLOTS.map((s) => q?.[s]), this.shopMsg, questSig(q)]);
+    const key = JSON.stringify([n.id, master, gold, potions, bag, q?.level, (q as any)?.ptSta, (q as any)?.ptStr, (q as any)?.ptMag, (q as any)?.ptDex, ...GEAR_SLOTS.map((s) => q?.[s]), this.shopMsg, questSig(q)]);
     if (key === this.stage) return;
     this.stage = key;
     const row = (icon: string, name: string, color: string, desc: string, btn: string, cls2: string, i: number, off: boolean) =>
@@ -501,16 +517,10 @@ export class NpcLayer {
       ? `<h4>Rune fusion</h4><p class="sh-empty">${RUNE_FUSE_COUNT} identical loose runes and gold make one rune of the next rank. Runes set in items don't count.</p>` +
         (fuseRows || `<p class="sh-empty">No loose runes in your bag.</p>`)
       : "";
-    const wear = q?.wear ?? 0, fix = shop.repairs ? repairCost(GEAR_SLOTS.map((s) => q?.[s]), wear) : 0;
-    const repair = shop.repairs
-      ? `<h4>Repairs</h4><div class="sh-row"><span class="sh-info"><b>Your gear: ${100 - wear}% condition</b>` +
-        `<small>${wear ? `Worn gear gives ${Math.round((1 - wearMult(wear)) * 100)}% less of its stats. Each death wears it ${WEAR.perDeath}%.` : "Like new. Each death wears it a little."}</small></span>` +
-        `<button class="sh-repair"${!fix || gold < fix ? " disabled" : ""}>${fix ? `Repair ${fix}${pxIcon("coin")}` : "Nothing to mend"}</button></div>`
-      : "";
     const quest = questDialog(n.id, q);
     this.dialog.innerHTML = this.head(n) + `<p>${shop.greeting}</p>` +
       `<div class="sh-gold">Your gold: <b>${gold}${pxIcon("coin")}</b> ${this.shopMsg}</div>` +
-      `<h4>For sale</h4><div class="sh-list">${buy}</div>${sell}${fuse}${repair}` +
+      `<h4>For sale</h4><div class="sh-list">${buy}</div>${sell}${fuse}` +
       `<div class="nd-btns">${quest ? `<button class="nd-talk">Talk</button>` : ""}<button class="nd-bye">Goodbye <kbd>E</kbd></button></div>`;
     this.dialog.classList.add("shop");
     const talk = this.dialog.querySelector<HTMLButtonElement>(".nd-talk");
@@ -534,8 +544,6 @@ export class NpcLayer {
     for (const b of this.dialog.querySelectorAll<HTMLButtonElement>(".sh-fuse")) {
       b.onclick = () => { this.send("fuse", { id: b.dataset.id }); b.disabled = true; };
     }
-    const fixBtn = this.dialog.querySelector<HTMLButtonElement>(".sh-repair");
-    if (fixBtn) fixBtn.onclick = () => { this.send("repair", {}); fixBtn.disabled = true; };
     this.dialog.querySelector<HTMLButtonElement>(".nd-bye")!.onclick = () => this.close();
   }
 
@@ -601,9 +609,10 @@ export class NpcLayer {
     const showPrompt = (!!this.near || !!this.nearObj) && !this.talking && !this.hidePrompt;
     this.prompt.classList.toggle("open", showPrompt);
     if (showPrompt) {
-      this.prompt.innerHTML = this.nearObj
+      const html = this.nearObj
         ? `<kbd>E</kbd> ${this.nearObj.verb}: ${this.nearObj.name}`
         : `<kbd>E</kbd> ${this.near!.shop ? "Trade with" : "Talk to"} ${this.near!.name}`;
+      if (html !== this.promptHtml) { this.promptHtml = html; this.prompt.innerHTML = html; }
     }
     if (this.talking) this.renderDialog(q);
 
@@ -616,6 +625,10 @@ export class NpcLayer {
       const mark = here ? npcQuestMark(n.id, q) : "";
       if (s.mark.text !== mark) s.mark.setText(mark);
     }
+    // Markers and the tracker are rebuilt about 8 times a second (or at once when the quest state or the tracker changed)
+    const t = performance.now();
+    if (q === this.trackQ && t - this.trackAt < 125) { this.drawPointer(); this.drawGoal(); return; }
+    this.trackQ = q; this.trackAt = t;
     // Map markers: "!" / "?" on NPCs, coins on traders, and the current quest targets of every chain
     // A story waiting for the guided first quest (chainOpen) shows nothing yet
     const states = CHAINS.map((_, c) => chainState(q, c)).map((st, c) => (st && st.questStage === 0 && !chainOpen(q, c) ? undefined : st));
@@ -628,9 +641,9 @@ export class NpcLayer {
       if (n.shop) return { x: n.x, y: n.y, glyph: "$", color: "#f2c14e", label: n.title };
       return { x: n.x, y: n.y, glyph: "•", color: "#b9f27c", label: n.name };
     });
-    for (const t of targets) {
-      if (t.kind === "area") this.markers.push({ x: t.x, y: t.y, r: t.r, glyph: "", color: "#ffd166", label: t.label, track: true });
-      else if (t.kind === "object") this.markers.push({ x: t.x, y: t.y, glyph: "◆", color: "#7ff3ff", label: t.label, track: true });
+    for (const g of targets) {
+      if (g.kind === "area") this.markers.push({ x: g.x, y: g.y, r: g.r, glyph: "", color: "#ffd166", label: g.label, track: true });
+      else if (g.kind === "object") this.markers.push({ x: g.x, y: g.y, glyph: "◆", color: "#7ff3ff", label: g.label, track: true });
     }
     for (const t of this.rumours.targets()) {
       if (t.kind === "area") this.markers.push({ x: t.x, y: t.y, r: t.r, glyph: "", color: "#e8a45a", label: t.label, track: true });

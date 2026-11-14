@@ -56,14 +56,22 @@ export function addPixelGrid(cam: Phaser.Cameras.Scene2D.Camera) {
   const copy = () => { ui.setZoom(cam.zoom); ui.setScroll(cam.scrollX, cam.scrollY); ui.setRoundPixels(cam.roundPixels); };
   cam.on(Phaser.Cameras.Scene2D.Events.FOLLOW_UPDATE, copy);
   scene.scale.on(Phaser.Scale.Events.RESIZE, (s: Phaser.Structs.Size) => ui.setSize(s.width, s.height));
+  const pick = (o: any) => {
+    const text = (o.type === "Text" || o.__worldText) && o.scrollFactorX !== 0;
+    o.cameraFilter = text ? mainBit : uiBit; // bits set = cameras that skip the object
+  };
+  // Set once when an object joins the display list (checked at the next frame, once its creator has flagged it),
+  // not on every object every frame
+  let fresh: any[] = [];
+  const list = scene.sys.displayList;
+  scene.events.on(Phaser.Scenes.Events.ADDED_TO_SCENE, (o: any) => fresh.push(o));
   const sync = () => {
     fx.size = Math.max(1, Math.round(cam.zoom * ART_PX));
     copy();
-    for (const o of scene.children.list as any[]) {
-      const text = (o.type === "Text" || o.__worldText) && o.scrollFactorX !== 0;
-      o.cameraFilter = text ? mainBit : uiBit; // bits set = cameras that skip the object
-    }
+    if (!fresh.length) return;
+    const add = fresh; fresh = [];
+    for (const o of add) if (o.displayList === list && !o.parentContainer) pick(o);
   };
-  sync();
+  for (const o of scene.children.list) pick(o);
   scene.events.on(Phaser.Scenes.Events.PRE_RENDER, sync);
 }

@@ -2,7 +2,7 @@
 export type HeadGear = "crown" | "greathelm" | "ninjahood" | "wizardhat" | "hood" | "horned" | "cap" | "helm" | "bandana" | "wide" | "witch" | "none";
 export type TorsoKind = "plate" | "wrap" | "robe" | "jerkin" | "bare" | "shirt" | "mail" | "leather" | "tailcoat";
 export type LegKind = "trousers" | "mail" | "wrapped" | "robe" | "fur" | "dress" | "bare";
-export type WeaponKind = "katana" | "sword" | "staff" | "wand" | "bow" | "axe" | "hammer" | "spear" | "dagger" | "druidstaff" | "witchstaff" | "boneblade" | "spade" | "none";
+export type WeaponKind = "katana" | "sword" | "staff" | "wand" | "bow" | "axe" | "hammer" | "spear" | "dagger" | "druidstaff" | "witchstaff" | "boneblade" | "spade" | "lute" | "none";
 
 export interface Look {
   skin: number;
@@ -17,7 +17,7 @@ export interface Look {
   sleeve: number; arms: "plate" | "cloth" | "bare" | "wrap"; glove?: number; bracer?: number;
   weapon: WeaponKind;
   shield?: { col: number; trim: number; emblem: number; style: "kite" | "round" };
-  back?: "cape" | "quiver" | "pelt"; capeCol?: number;
+  back?: "cape" | "quiver" | "pelt"; capeCol?: number; capeShort?: boolean;
   orb?: number;   // glowing staff stone
   lips?: number;    // painted lips (front view)
   corset?: number;   // laced waist cincher over the bodice
@@ -306,6 +306,8 @@ export const HERO_BODIES: Record<string, Look> = {
   vampire: bare({ skin: 0xd6c3bd, eye: 0xc0182a, hair: 0x15111a, hairStyle: "short", build: 0.97, weaponKind: "sword", fx: 0xff5a6a }),
   // ash-pale hair, violet eyes (the body of look C, 2026-11-07; the Void Lord kit dresses it as a warlock)
   summoner: bare({ skin: 0xe8c4a2, eye: 0xb68cff, hair: 0xd8d0c0, hairStyle: "long", weaponKind: "witchstaff", orb: 0xb68cff, fx: 0xd8c4ff }),
+  // the Songweaver (Oakvale minstrel): sun-freckled, curly chestnut hair, green eyes; the lute's sound is warm gold
+  songweaver: bare({ skin: 0xeabf98, lips: 0xc4705e, eye: 0x2a7a56, hair: 0x5a3018, hairStyle: "short", weaponKind: "lute", fx: 0xffd27a }),
 };
 
 /**
@@ -361,6 +363,18 @@ export const KITS: Record<string, Partial<Record<"weapon" | "shield" | "armour" 
     },
     shoes: { boots: 0x110f15, bootStyle: "leather" },
     weapon: { weapon: "witchstaff", palmFlame: 0xb68cff },
+  },
+  // the Songweaver: a travelling minstrel of Oakvale. Teal cap with a long red feather, an ochre doublet over cream
+  // billowing sleeves, russet hose, a short rust-red cape and a lute (warm folk colours, apart from the three casters)
+  songweaver: {
+    hat: { head: "cap", headCol: 0x2e7d74, headTrim: 0xd9482f },
+    armour: {
+      torso: "jerkin", torsoCol: 0xd09a34, trim: 0x8a5a1c, vest: 0x2e7d74, belt: 0x5a3a22, buckle: 0xe8d070,
+      legs: "trousers", legCol: 0x7a3b22, sleeve: 0xe8dcc0, arms: "cloth", glove: 0x8a5a2c, bracer: 0x8a5a2c,
+      back: "cape", capeCol: 0xa8402a, capeShort: true,
+    },
+    shoes: { boots: 0x4e3220, bootStyle: "leather" },
+    weapon: { weapon: "lute" },
   },
   // a noble of the night: dark wine coat with old-gold trim, black cape with a tall blood-red collar, iron circlet, thin blade
   vampire: {

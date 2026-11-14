@@ -1,0 +1,71 @@
+# Keeps the public skills page (play.fmtpa.ch/skills, client/skills.html) in step with the game: after a merge, if
+# the skills or their looks changed (tools/skill-clips/sources.ts hashes those files), every skill is filmed again
+# in the built game (tools/skill-clips/capture.ts) and the new clips are committed to the default branch.
+# auto-merge.yml starts it (workflow_dispatch) because its merges start no push runs.
+# Pushes made with GITHUB_TOKEN do not start other workflows, so this never loops.
+name: Skill clips
+
+on:
+  push:
+    branches: [claude/relaxed-wozniak-cjs85z]
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Film again even if no skill changed"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: skill-clips
+  cancel-in-progress: true # a newer merge films the newer game
+
+jobs:
+  film:
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: claude/relaxed-wozniak-cjs85z
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install
+        run: npm ci --no-audit --no-fund
+      - name: Did the skills change?
+        id: hash
+        run: |
+          now=$(npx tsx tools/skill-clips/sources.ts)
+          was=$(node -e "try{console.log(require('./client/public/skills/clips.json').sources)}catch{console.log('')}")
+          echo "now=$now was=$was"
+          [ "$now" = "$was" ] && [ "${{ inputs.force }}" != "true" ] && echo "same=1" >> "$GITHUB_OUTPUT" || echo "same=0" >> "$GITHUB_OUTPUT"
+      - name: Build
+        if: steps.hash.outputs.same != '1'
+        run: npm run build
+      - name: Browser and ffmpeg (for this job only, not game dependencies)
+        if: steps.hash.outputs.same != '1'
+        run: |
+          npm i --no-save --no-audit --no-fund playwright@1.49.1
+          npx playwright install --with-deps chromium
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+      - name: Film every skill
+        if: steps.hash.outputs.same != '1'
+        run: npx tsx tools/skill-clips/capture.ts
+      - name: Commit the new clips
+        if: steps.hash.outputs.same != '1'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898297+github-actions[bot]@users.noreply.github.com"
+          git add client/public/skills
+          if git diff --cached --quiet; then echo "No clip changed."; exit 0; fi
+          git commit -m "Refilm skill clips for the skills page [no patch note]"
+          for i in 1 2 3 4 5; do
+            if git push origin HEAD:claude/relaxed-wozniak-cjs85z; then exit 0; fi
+            sleep $((i * 5))
+            git pull --rebase origin claude/relaxed-wozniak-cjs85z
+          done
+          exit 1

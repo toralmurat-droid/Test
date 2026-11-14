@@ -265,6 +265,7 @@ export const HIDE = {
   minMs: 10000, maxMs: 25000, // how long it stays hidden if nobody comes by
   regenPerSec: 0.04, // fraction of max HP healed per second while hidden
   seekMs: 7000, // give up walking to a spot after this long
+  retryMs: 400, // after a search found no free spot, the same monster looks again no sooner than this (server CPU)
 };
 
 export interface HideSpot { key: string; x: number; y: number; outX: number; outY: number }

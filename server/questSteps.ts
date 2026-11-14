@@ -17,7 +17,9 @@ import { noMobsAt } from "../shared/spawns";
 
 /** The parts of a hero this module reads (TownRoom's Player). */
 export type StepHero = Quester & {
-  x: number; y: number; dead: boolean; arcs: { get(k: string): number | undefined; set(k: string, v: number): unknown; delete(k: string): unknown };
+  x: number; y: number; dead: boolean;
+  /** Choices made (owner-only Player.me.flags) and cosmetics (public Player.cosm): written through setMeta */
+  flags: number; cosm: number;
   /** Carrying something (carry): no skills, no ranged shots (TownRoom cast / useSlot / fireRanged); basic attacks still work */
   qlock?: boolean;
   /** Blob aggro range multiplier on this hero (TownRoom pickTarget); 1 = normal */
@@ -87,10 +89,13 @@ const rint = (a: number, b: number) => a + Math.floor(Math.random() * (b - a + 1
 /** How close a hero must stand to an NPC to answer them, and to an object to use it (the same slack as TownRoom). */
 const TALK_R = TALK_RANGE * 1.5, USE_R = USE_RANGE * 1.5;
 
-/** Write a reserved arcs number (`$f` choices, `$c` cosmetics). Not through qset: 0 is a value here, kept as no key. */
+/**
+ * Write the choices (`flags`) or cosmetics (`cosm`) number: a whole number >= 0, never undefined (both are synced
+ * Player fields, shared/questSteps.ts META).
+ */
 export function setMeta(p: StepHero, key: MetaKey, v: number) {
   const n = Number.isFinite(v) ? Math.max(0, Math.floor(v)) >>> 0 : 0;
-  if (n) p.arcs.set(key, n); else p.arcs.delete(key);
+  if (key === META.flags) p.flags = n; else p.cosm = n;
 }
 
 export class QuestSteps {

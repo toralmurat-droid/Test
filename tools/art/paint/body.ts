@@ -541,20 +541,21 @@ function backItem(c: C2, r: Rig, front: boolean) {
   coatTails(c, r, front);
   if (L.scarf) scarfEnds(c, r, front);
   if (L.back === "cape") {
+    const hp = hipY + (L.capeShort ? -4.2 : 0); // a short shoulder cape ends at the waist
     const col = C(L.capeCol!), flut = Math.sin(r.p.t * 1.1) * 0.5 + (r.p.run ? 1.2 : 0) + Math.abs(r.p.stride) * 0.4;
     if (r.dir === "up" && front) {
-      const s = blobPath([[cx - 3.4 * r.b, sy - 0.8], [cx + 3.4 * r.b, sy - 0.8], [cx + 3.9 * r.b + flut * 0.3, sy + 6], [cx + 3.6, hipY + 5.6], [cx, hipY + 6.4 + flut * 0.3], [cx - 3.6, hipY + 5.6], [cx - 3.9 * r.b - flut * 0.3, sy + 6]]);
-      vol(c, s, col, [cx - 4, sy - 1, 8, hipY - sy + 7], { ao: 0.35 });
-      grain(c, s, [cx - 4, sy - 1, 8, hipY - sy + 7], col, r.seed + 21, 30, 0.18, 1.4, 1.5);
-      for (let k = -1; k <= 1; k++) curve(c, [cx + k * 1.6, sy + 1], [cx + k * 2.0, sy + 6], [cx + k * 2.3, hipY + 5.4], sh(col, 0.55), 0.3, 0.55);
+      const s = blobPath([[cx - 3.4 * r.b, sy - 0.8], [cx + 3.4 * r.b, sy - 0.8], [cx + 3.9 * r.b + flut * 0.3, sy + 6], [cx + 3.6, hp + 5.6], [cx, hp + 6.4 + flut * 0.3], [cx - 3.6, hp + 5.6], [cx - 3.9 * r.b - flut * 0.3, sy + 6]]);
+      vol(c, s, col, [cx - 4, sy - 1, 8, hp - sy + 7], { ao: 0.35 });
+      grain(c, s, [cx - 4, sy - 1, 8, hp - sy + 7], col, r.seed + 21, 30, 0.18, 1.4, 1.5);
+      for (let k = -1; k <= 1; k++) curve(c, [cx + k * 1.6, sy + 1], [cx + k * 2.0, sy + 6], [cx + k * 2.3, hp + 5.4], sh(col, 0.55), 0.3, 0.55);
     } else if (r.dir === "right" && !front) {
-      const s = blobPath([[cx - 1.4, sy - 0.9], [cx + 0.6, sy - 0.6], [cx - 1.5, hipY + 4.8], [cx - 3.3 - flut, hipY + 5.4], [cx - 3.9 - flut * 1.3, hipY + 1.5], [cx - 2.4 - flut * 0.5, sy + 2]]);
-      vol(c, s, col, [cx - 4.5, sy - 1, 5, hipY - sy + 7], { ao: 0.35 });
-      curve(c, [cx - 1.6, sy + 1], [cx - 2.4 - flut * 0.5, sy + 5], [cx - 2.8 - flut, hipY + 4.8], sh(col, 0.55), 0.3, 0.55);
+      const s = blobPath([[cx - 1.4, sy - 0.9], [cx + 0.6, sy - 0.6], [cx - 1.5, hp + 4.8], [cx - 3.3 - flut, hp + 5.4], [cx - 3.9 - flut * 1.3, hp + 1.5], [cx - 2.4 - flut * 0.5, sy + 2]]);
+      vol(c, s, col, [cx - 4.5, sy - 1, 5, hp - sy + 7], { ao: 0.35 });
+      curve(c, [cx - 1.6, sy + 1], [cx - 2.4 - flut * 0.5, sy + 5], [cx - 2.8 - flut, hp + 4.8], sh(col, 0.55), 0.3, 0.55);
     } else if (r.dir === "down" && !front) {
       // only the edges show beside the legs
-      const s = blobPath([[cx - 3.6 * r.b, sy - 0.4], [cx + 3.6 * r.b, sy - 0.4], [cx + 4.1 + flut * 0.2, hipY + 5.3], [cx, hipY + 5.8], [cx - 4.1 - flut * 0.2, hipY + 5.3]]);
-      vol(c, s, sh(col, 0.75), [cx - 4, sy, 8, hipY - sy + 6], { ao: 0.3 });
+      const s = blobPath([[cx - 3.6 * r.b, sy - 0.4], [cx + 3.6 * r.b, sy - 0.4], [cx + 4.1 + flut * 0.2, hp + 5.3], [cx, hp + 5.8], [cx - 4.1 - flut * 0.2, hp + 5.3]]);
+      vol(c, s, sh(col, 0.75), [cx - 4, sy, 8, hp - sy + 6], { ao: 0.3 });
     }
     if (L.collar !== undefined) capeCollar(c, r, front);
   } else if (L.back === "quiver") {
@@ -1476,6 +1477,7 @@ function weapon(c: C2, r: Rig) {
       if (W.glowing) glowAlong(-4, len, W.accent);
       break;
     }
+    case "lute": drawFormWeapon({ c, h, u, n, kind: "lute", f: {}, blade: 0, accent: 0, long: 1, attack: r.p.attack, C }); break; // art: paint/weaponArt.ts
     case "bow": {
       const ph = r.p.attack, ch = r.p.move === "a3", pull = ph === 0 ? (ch ? 4 : 2) : ph === 1 ? (ch ? 5 : 4) : 0;
       const half = 7.6 * W.long, wood = W.g ? W.blade : C(0x6b4423);
@@ -1736,6 +1738,21 @@ function heroFx(c: C2, r: Rig) {
       if (ph === 1) { glow(c, o[0], o[1], 4.2, orb, 0.75); glow(c, o[0] - 2.5, o[1] - 2.2, 0.8, 0xc8fbff, 0.9); glow(c, o[0] + 2.6, o[1] - 1.5, 0.8, 0xc8fbff, 0.9); }
       if (ph === 2) { const b: P = [o[0] + u[0] * 5, o[1] + u[1] * 5]; glow(c, b[0], b[1], 5.5, 0x9a6bff, 0.6); glow(c, b[0], b[1], 3, orb, 0.9); glow(c, b[0], b[1], 1.3, 0xffffff, 1); }
       if (ph === 3) { const b: P = [o[0] + u[0] * 7, o[1] + u[1] * 7]; for (let k = 0; k < 8; k++) { const t = k * Math.PI / 4; glow(c, b[0] + Math.cos(t) * 3.4, b[1] + Math.sin(t) * 3.4, 0.8, 0xc8fbff, 0.8); } }
+      return;
+    }
+    case "lute": {
+      // plucked sound: a few notes drift off the strings at rest, then gold arcs ring out along the aim
+      const bt = ph < 0 ? 3.1 : -3.9, b: P = [hx + u[0] * bt, hy + u[1] * bt], gold = L.fx; // at rest the belly is carried at the waist (weaponArt lute)
+      const arcs = (d0: number, k: number, al: number) => { for (let i = 0; i < k; i++) {
+        const d = d0 + i * 2.4, rr = 2.2 + i * 0.9;
+        c.beginPath(); c.arc(hx + u[0] * d, hy + u[1] * d, rr, rad(a - 52), rad(a + 52));
+        c.strokeStyle = css(i ? gold : 0xffffff, al * (1 - i * 0.25)); c.lineWidth = 0.55 - i * 0.08; c.lineCap = "round"; c.stroke();
+      } };
+      if (ph < 0) { if (p.t % 4 === 0) glow(c, b[0] + 2.2, b[1] - 2.8, 0.8, gold, 0.8); return; }
+      if (ph === 0) glow(c, b[0], b[1], 3.0, gold, 0.4);
+      if (ph === 1) { glow(c, b[0], b[1], 4.0, gold, 0.55); arcs(-1, 1, 0.5); }
+      if (ph === 2) { glow(c, b[0], b[1], 4.5, gold, 0.5); arcs(8, 3, 0.95); }
+      if (ph === 3) arcs(14, 2, 0.6);
       return;
     }
     case "bow":
@@ -2078,7 +2095,7 @@ export function paintWeaponIcon(d: GearDef, kind: string, px: number): Uint8Clam
   c.scale(S, S);
   const u: P = [Math.SQRT1_2, -Math.SQRT1_2], n: P = [Math.SQRT1_2, Math.SQRT1_2];
   const long = d.style.startsWith("long") ? 1 + (d.bonus.reach ?? 0) * 0.9 : 1;
-  const ok = drawFormWeapon({ c, h: [17, 31], u, n, kind, f, blade: d.color, accent: d.accent, long, attack: -1, C: (x) => x });
+  const ok = drawFormWeapon({ c, h: [17, 31], u, n, kind, f, blade: d.color, accent: d.accent, long, attack: -1, C: (x) => x, icon: true });
   if (!ok) return null;
   // fit the painted weapon into the icon, keeping its aspect
   const img = c.getImageData(0, 0, N, N).data;

@@ -1,5 +1,6 @@
 import { ClassKind } from "./classes";
 import { MobKind } from "./constants";
+import { MODES, type ModeFamily, type ModeId, type Pitch } from "./songs";
 
 /**
  * Initiative ("poise"): a hidden bar on every hero and monster that decides who controls a fight.
@@ -29,52 +30,97 @@ export const POISE = {
 } as const;
 
 /** Base poise per hero (+12% per level above 1, so it keeps up with damage growth). Heavy fighters hold their ground longer. */
-export const HERO_POISE: Record<ClassKind, number> = { knight: 90, barbarian: 80, archer: 55, ninja: 90, wizard: 55, vampire: 70, summoner: 55 };
+export const HERO_POISE: Record<ClassKind, number> = { knight: 90, barbarian: 80, archer: 55, ninja: 90, wizard: 55, vampire: 70, summoner: 55, songweaver: 60 };
 export const heroPoise = (cls: ClassKind, level: number) => Math.round(HERO_POISE[cls] * (1 + 0.12 * (Math.max(1, level) - 1)));
 
+/**
+ * Sound (the Songweaver, Plan v2): how a monster hears. `tier` scales the damage, crowd control and resonance of sound
+ * hits (SOUND_TIER); a hit of the same `pitch` deals x1.2 and resonates x1.5; a hit in a mode of the monster's `mode`
+ * family (undead: major, beasts and fey: minor) resonates x1.3.
+ */
+export type SoundTier = "deaf" | "dull" | "normal" | "keen" | "fragile";
+export const SOUND_TIERS: SoundTier[] = ["deaf", "dull", "normal", "keen", "fragile"];
+export interface MobSound { tier: SoundTier; pitch?: "L" | "M" | "H"; mode?: ModeFamily }
+
 /** Monster poise (scaled like HP by level) and attack wind-up. */
-export const MOB_COMBAT: Record<MobKind, { poise: number; windupMs: number }> = {
-  golem_fire: { poise: 140, windupMs: 420 }, golem_cold: { poise: 160, windupMs: 420 },
-  golem_poison: { poise: 140, windupMs: 420 }, golem_shock: { poise: 120, windupMs: 380 }, golem_colossus: { poise: 400, windupMs: 560 },
-  bride: { poise: 60, windupMs: 140 },
-  wisp: { poise: 30, windupMs: 0 },
-  slime: { poise: 30, windupMs: 350 },
-  skeleton: { poise: 55, windupMs: 300 },
-  crawler: { poise: 20, windupMs: 320 },
-  demon: { poise: 260, windupMs: 520 },
-  motherblob: { poise: 110, windupMs: 500 },
-  blobling: { poise: 8, windupMs: 220 },
-  shooterblob: { poise: 25, windupMs: 450 },
-  warriorblob: { poise: 75, windupMs: 380 },
-  healerblob: { poise: 25, windupMs: 300 },
-  venomblob: { poise: 35, windupMs: 400 },
-  frostblob: { poise: 90, windupMs: 420 },
-  fireblob: { poise: 80, windupMs: 380 },
-  stormblob: { poise: 45, windupMs: 260 },
-  bandit: { poise: 60, windupMs: 300 },
-  skeletonmage: { poise: 30, windupMs: 450 },
-  necromancer: { poise: 220, windupMs: 500 },
-  banditchief: { poise: 260, windupMs: 420 },
-  hollowking: { poise: 420, windupMs: 480 },
-  gnawkin: { poise: 30, windupMs: 240 },
-  tuskborn: { poise: 110, windupMs: 420 },
-  silkwretch: { poise: 45, windupMs: 340 },
-  duskwing: { poise: 40, windupMs: 280 },
-  crowseer: { poise: 40, windupMs: 420 },
-  gnasher: { poise: 220, windupMs: 340 },
-  weaver: { poise: 230, windupMs: 380 },
-  packlord: { poise: 240, windupMs: 360 },
-  hornbrute: { poise: 320, windupMs: 480 },
-  hidemother: { poise: 400, windupMs: 460 },
-  nomad: { poise: 50, windupMs: 260 },
-  scorpion: { poise: 90, windupMs: 380 },
-  sanddead: { poise: 70, windupMs: 340 },
-  veiled: { poise: 40, windupMs: 420 },
-  camelfolk: { poise: 140, windupMs: 440 },
-  sphinx: { poise: 160, windupMs: 420 },
-  sunwright: { poise: 460, windupMs: 480 },
-  nightraider: { poise: 3000, windupMs: 460 }, // barely flinches: a hero alone can hardly break it
+export const MOB_COMBAT: Record<MobKind, { poise: number; windupMs: number; sound: MobSound }> = {
+  golem_fire: { poise: 140, windupMs: 420, sound: { tier: "dull", pitch: "L" } }, golem_cold: { poise: 160, windupMs: 420, sound: { tier: "fragile", pitch: "H" } },
+  golem_poison: { poise: 140, windupMs: 420, sound: { tier: "normal", pitch: "L" } }, golem_shock: { poise: 120, windupMs: 380, sound: { tier: "keen", pitch: "H" } }, golem_colossus: { poise: 400, windupMs: 560, sound: { tier: "dull", pitch: "L" } },
+  bride: { poise: 60, windupMs: 140, sound: { tier: "keen", pitch: "H" } },
+  wisp: { poise: 30, windupMs: 0, sound: { tier: "fragile", pitch: "H" } },
+  slime: { poise: 30, windupMs: 350, sound: { tier: "dull", pitch: "L" } },
+  skeleton: { poise: 55, windupMs: 300, sound: { tier: "fragile", pitch: "H", mode: "major" } },
+  crawler: { poise: 20, windupMs: 320, sound: { tier: "keen", pitch: "H" } },
+  demon: { poise: 260, windupMs: 520, sound: { tier: "dull", pitch: "L", mode: "major" } },
+  motherblob: { poise: 110, windupMs: 500, sound: { tier: "deaf", pitch: "L" } },
+  blobling: { poise: 8, windupMs: 220, sound: { tier: "deaf", pitch: "L" } },
+  shooterblob: { poise: 25, windupMs: 450, sound: { tier: "dull", pitch: "M" } },
+  warriorblob: { poise: 75, windupMs: 380, sound: { tier: "dull", pitch: "L" } },
+  healerblob: { poise: 25, windupMs: 300, sound: { tier: "normal", pitch: "M" } },
+  venomblob: { poise: 35, windupMs: 400, sound: { tier: "dull", pitch: "L" } },
+  frostblob: { poise: 90, windupMs: 420, sound: { tier: "fragile", pitch: "H" } },
+  fireblob: { poise: 80, windupMs: 380, sound: { tier: "normal", pitch: "M" } },
+  stormblob: { poise: 45, windupMs: 260, sound: { tier: "keen", pitch: "H" } },
+  bandit: { poise: 60, windupMs: 300, sound: { tier: "normal", pitch: "M" } },
+  skeletonmage: { poise: 30, windupMs: 450, sound: { tier: "fragile", pitch: "H", mode: "major" } },
+  necromancer: { poise: 220, windupMs: 500, sound: { tier: "normal", pitch: "M", mode: "major" } },
+  banditchief: { poise: 260, windupMs: 420, sound: { tier: "normal", pitch: "M" } },
+  hollowking: { poise: 420, windupMs: 480, sound: { tier: "dull", pitch: "L", mode: "major" } },
+  gnawkin: { poise: 30, windupMs: 240, sound: { tier: "keen", pitch: "H" } },
+  tuskborn: { poise: 110, windupMs: 420, sound: { tier: "normal", pitch: "L" } },
+  silkwretch: { poise: 45, windupMs: 340, sound: { tier: "keen", pitch: "H" } },
+  duskwing: { poise: 40, windupMs: 280, sound: { tier: "keen", pitch: "H" } },
+  crowseer: { poise: 40, windupMs: 420, sound: { tier: "keen", pitch: "H" } },
+  gnasher: { poise: 220, windupMs: 340, sound: { tier: "normal", pitch: "L" } },
+  weaver: { poise: 230, windupMs: 380, sound: { tier: "keen", pitch: "H" } },
+  packlord: { poise: 240, windupMs: 360, sound: { tier: "keen", pitch: "M", mode: "minor" } },
+  hornbrute: { poise: 320, windupMs: 480, sound: { tier: "dull", pitch: "L" } },
+  hidemother: { poise: 400, windupMs: 460, sound: { tier: "dull", pitch: "L" } },
+  nomad: { poise: 50, windupMs: 260, sound: { tier: "normal", pitch: "M" } },
+  scorpion: { poise: 90, windupMs: 380, sound: { tier: "dull", pitch: "H" } },
+  sanddead: { poise: 70, windupMs: 340, sound: { tier: "normal", pitch: "L", mode: "major" } },
+  veiled: { poise: 40, windupMs: 420, sound: { tier: "normal", pitch: "M", mode: "minor" } },
+  camelfolk: { poise: 140, windupMs: 440, sound: { tier: "normal", pitch: "L" } },
+  sphinx: { poise: 160, windupMs: 420, sound: { tier: "keen", pitch: "M", mode: "minor" } },
+  sunwright: { poise: 460, windupMs: 480, sound: { tier: "dull", pitch: "L", mode: "major" } },
+  nightraider: { poise: 3000, windupMs: 460, sound: { tier: "deaf" } }, // barely flinches: a hero alone can hardly break it
 };
+
+/**
+ * Sound tiers: x damage, x resonance, x crowd control (slows) of a sound hit. Deaf monsters never resonate; fragile
+ * ones take the most and shatter when their resonance bursts (shared/songs.ts RESONANCE.shatterMult).
+ */
+export const SOUND_TIER: Record<SoundTier, { dmg: number; res: number; cc: number }> = {
+  deaf: { dmg: 0.75, res: 0, cc: 0.75 },
+  dull: { dmg: 0.9, res: 0.5, cc: 0.9 },
+  normal: { dmg: 1, res: 1, cc: 1 },
+  keen: { dmg: 1.2, res: 1.3, cc: 1.2 },
+  fragile: { dmg: 1.35, res: 2, cc: 1.35 },
+};
+export const SOUND_MATCH = { dmg: 1.2, res: 1.5, affinity: 1.3, boss: 0.75, ear: 0.5 };
+/** Who a sound hit lands on: a monster's MobSound (+ boss), or a hero (normal; the Songweaver has Trained Ear). */
+export interface SoundProfile extends MobSound { boss?: boolean; ear?: boolean }
+/** What a sound hit carries (HitEffects.sound). */
+export interface SoundHit { pitch?: Pitch; mode?: ModeId }
+/** How a hero hears: normal; the Songweaver has Trained Ear (half the resonance on herself). */
+export const heroSound = (cls?: string): SoundProfile => (cls === "songweaver" ? { tier: "normal", ear: true } : { tier: "normal" });
+/** How a monster hears (MOB_COMBAT sound); bosses resonate at half. */
+export const mobSound = (kind: MobKind, boss: boolean): SoundProfile => (boss ? { ...MOB_COMBAT[kind].sound, boss } : MOB_COMBAT[kind].sound);
+
+/**
+ * Multipliers of one sound hit on a target: damage, resonance, crowd control, and whether its pitch matched.
+ * Only hits with HitEffects.sound use this (only the Songweaver's), so no other class changes.
+ */
+export function soundMult(p: SoundProfile | undefined, hit: SoundHit): { dmg: number; res: number; cc: number; match: boolean } {
+  const t = SOUND_TIER[p?.tier ?? "normal"];
+  let dmg = t.dmg, res = t.res;
+  const match = !!p?.pitch && !!hit.pitch && (hit.pitch === "any" || hit.pitch === p.pitch);
+  if (match) { dmg *= SOUND_MATCH.dmg; res *= SOUND_MATCH.res; }
+  if (p?.mode && hit.mode && MODES[hit.mode].family === p.mode) res *= SOUND_MATCH.affinity;
+  if (p?.boss) res *= SOUND_MATCH.boss;
+  if (p?.ear) res *= SOUND_MATCH.ear;
+  return { dmg, res, cc: t.cc, match };
+}
 
 /** Attack speed multiplier from the poise fraction (1 above half, down to minSpeed at 0). */
 export function poiseSpeed(frac: number): number {
@@ -147,7 +193,7 @@ export const EXECUTE = {
   critMult: 2,
   heatBack: 0.3, // share of OVERLOAD.max
   manaBack: 0.1, // share of max Mana
-  manaClasses: { wizard: true, summoner: true } as Partial<Record<ClassKind, true>>,
+  manaClasses: { wizard: true, summoner: true, songweaver: true } as Partial<Record<ClassKind, true>>,
 };
 
 /** What an execution needs to know about the blow (server HitOpts / skillEngine HitOpts fit). */

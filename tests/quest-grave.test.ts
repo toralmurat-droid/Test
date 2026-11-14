@@ -18,7 +18,7 @@ test("the Empty Grave: pick step, ambush that outlives the step, mourners in any
     const c = await srv.join({ cls: "knight" });
     await wait(200);
     const room = srv.room, p = room.state.players.get(c.sessionId);
-    p.tut = packQuest(CHAINS.find((x) => x.id === "tutorial")!.quests.length, 0, 0);
+    p.quests.set("tut", packQuest(CHAINS.find((x) => x.id === "tutorial")!.quests.length, 0, 0));
     p.level = quest.minLevel;
     p.hp = p.maxHp = 1_000_000;
     const put = (o: { x: number; y: number }) => { p.x = o.x; p.y = o.y; };
@@ -130,7 +130,7 @@ test("the Empty Grave: bad messages are ignored", async () => {
     const c = await srv.join({ cls: "knight" });
     await wait(200);
     const room = srv.room, p = room.state.players.get(c.sessionId);
-    p.tut = packQuest(CHAINS.find((x) => x.id === "tutorial")!.quests.length, 0, 0);
+    p.quests.set("tut", packQuest(CHAINS.find((x) => x.id === "tutorial")!.quests.length, 0, 0));
     p.level = 20;
     room.qset(p, G, { questId: 0, questStage: 3, questCount: 0 });
     p.x = WRONG.x; p.y = WRONG.y;

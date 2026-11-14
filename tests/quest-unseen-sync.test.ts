@@ -14,7 +14,7 @@ const ci = (id: string) => CHAINS.findIndex((c) => c.id === id);
 const U = ci("unseen"), H = ci("twohands");
 const unseen = CHAINS[U].quests[0].steps[1].unseen!, sync = CHAINS[H].quests[0].steps[1].sync!;
 const cps = unseen.checkpoints, seals = sync.seals;
-const tutDone = (p: any) => { p.tut = packQuest(CHAINS.find((x) => x.id === "tutorial")!.quests.length, 0, 0); };
+const tutDone = (p: any) => { p.quests.set("tut", packQuest(CHAINS.find((x) => x.id === "tutorial")!.quests.length, 0, 0)); };
 
 /** Poll until `f` is true (generous timeout: the room ticks on real time). */
 async function until(f: () => boolean, what: string, ms = 6000) {
@@ -39,9 +39,9 @@ const sfxCount = (h: any, ev: string) => h.msgs.filter((m: any) => m.T === "sfx"
 const lastQ = (h: any, k: string) => h.msgs.filter((m: any) => m.T === "qstate" && m.k === k).pop();
 
 /** On the climb (stage 2 of the Unseen quest) with the Thornspire arc far enough to open it. */
-function onClimb(p: any, count = 0) { p.arcs.set("spire", packQuest(1, 0, 0)); p.arcs.set("unseen", packQuest(0, 2, count)); }
+function onClimb(p: any, count = 0) { p.quests.set("spire", packQuest(1, 0, 0)); p.quests.set("unseen", packQuest(0, 2, count)); }
 /** On the seal step of Two Hands, with the Under arc far enough to open it. */
-function onSeals(p: any) { p.arcs.set("under", packQuest(4, 0, 0)); p.arcs.set("twohands", packQuest(0, 2, 0)); }
+function onSeals(p: any) { p.quests.set("under", packQuest(4, 0, 0)); p.quests.set("twohands", packQuest(0, 2, 0)); }
 const at = (p: any, a: { x: number; y: number }) => { p.x = a.x; p.y = a.y; };
 
 test("spec: stealth multiplier, sync window, and the walk between the seals fits the solo time", () => {

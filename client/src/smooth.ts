@@ -7,7 +7,7 @@ import Phaser from "phaser";
  * diagonals and curves, and then drawn with linear filtering. Frame coordinates stay the same, so nothing else changes.
  */
 const MAX_AREA = 512 * 512; // bigger canvases (tilesets, baked chunks) are only filtered, not enlarged
-const SKIP = /^(sg_|tiles_iso|__|hd_)/;
+const SKIP = /^(sg_|tiles_iso|__|hd_|dg_dark)/;
 
 function scale2x(src: Uint32Array, w: number, h: number): Uint32Array {
   const out = new Uint32Array(w * h * 4), W = w * 2;
@@ -155,7 +155,7 @@ export function installSmoothTextures() {
     if (SKIP.test(key) || src.isRenderTexture || src.isVideo || src.isGLTexture || src.compressionAlgorithm) return false;
     if (!src.renderer?.gl) return false;
     // Already-detailed art (64px heroes, NPCs, gear) only needs filtering
-    if (/^(knight|ninja|wizard|archer|barbarian|vampire|summoner|blacksmith|merchant|villager|guard|druid|witch|gear_|hero)/.test(key) && !src.isCanvas) return false;
+    if (/^(knight|ninja|wizard|archer|barbarian|vampire|summoner|songweaver|blacksmith|merchant|villager|guard|druid|witch|gear_|hero)/.test(key) && !src.isCanvas) return false;
     return src.image instanceof HTMLCanvasElement || src.image instanceof HTMLImageElement;
   };
   const init = TS.init;

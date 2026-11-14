@@ -1,0 +1,58 @@
+/* The public skills page, in the look of the game menus (menus.css): bronze frames, gold pixel titles, parchment text */
+html, body { margin: 0; background: #0d0a07; color: #eadfc8; font: 18px/1.35 var(--pixel-font); text-shadow: 2px 2px #050302; }
+body { min-height: 100vh; background: radial-gradient(ellipse at top, #241a10 0, #0d0a07 70%) fixed; }
+a { color: #e3bf6a; }
+#sk-head { max-width: 1180px; margin: 0 auto; padding: 24px 16px 8px; text-align: center; }
+#sk-title { margin: 0; font: 44px var(--title-font); color: #e3bf6a; letter-spacing: 2px; text-shadow: var(--px-outline); }
+.sk-help { color: #a8977a; margin: 6px 0; }
+#sk-tabs { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin-top: 12px; }
+#sk-tabs button { border: 6px solid transparent; border-image: var(--wf-btn) 4 fill / 6px / 0 repeat; image-rendering: pixelated; background: none;
+  color: #eadfc8; font: 18px var(--pixel-font); text-shadow: 2px 2px #050302; padding: 2px 14px; cursor: pointer; }
+#sk-tabs button:hover { color: #ffd98a; filter: brightness(1.25); }
+#sk-tabs button.on { color: #ffd98a; filter: brightness(1.4); }
+#sk-main { max-width: 1180px; margin: 0 auto; padding: 0 16px 24px; }
+.sk-class > h2 { margin: 16px 0 0; text-align: center; font-size: 33px; color: #e3bf6a; letter-spacing: 2px; border-bottom: 2px solid #45331e; padding-bottom: 6px; }
+.sk-class > .sk-help { text-align: center; }
+.sk-branch { margin: 22px 0 8px; color: #c9a45a; letter-spacing: 2px; border-bottom: 2px solid #45331e; padding-bottom: 2px; }
+.sk-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
+.sk-card { border: 18px solid transparent; border-image: var(--wf-bronze) 9 fill / 18px / 0 repeat; image-rendering: pixelated; display: flex; flex-direction: column; min-width: 0; }
+.sk-view { aspect-ratio: 4 / 3; background: #050302; box-shadow: 0 0 0 2px #45331e; overflow: hidden; }
+.sk-clip { display: block; width: 100%; height: 100%; object-fit: cover; image-rendering: pixelated; }
+.sk-still { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; color: #a8977a;
+  background: radial-gradient(circle, color-mix(in srgb, var(--branch) 25%, transparent) 0, transparent 60%); }
+.sk-still img { width: 96px; height: 96px; image-rendering: pixelated; }
+.sk-text h3 { display: flex; align-items: center; gap: 8px; margin: 10px 0 2px; color: #e3bf6a; }
+.sk-text h3 small { margin-left: auto; color: var(--branch); }
+.sk-icon { width: 48px; height: 48px; image-rendering: pixelated; flex: none; }
+.sk-text p { margin: 4px 0; }
+.sk-facts { color: #c9a45a; }
+.sk-rank { color: #a8977a; }
+#sk-foot { text-align: center; padding: 8px 16px 32px; }
+@media (max-width: 600px) { #sk-title { font-size: 33px; } .sk-grid { grid-template-columns: 1fr; } }
+/* Wiki home cards (wikiPage.ts) are links */
+.wk-card { color: inherit; text-decoration: none; }
+.wk-card:hover h3 { color: #ffd98a; }
+.wk-card:hover { filter: brightness(1.15); }
+#sk-crumb { display: block; text-align: left; margin-bottom: 4px; }
+/* Roadmap page (roadmapPage.ts) */
+.rm-now p { margin: 4px 0; }
+.rm-bar { height: 12px; background: #050302; box-shadow: 0 0 0 2px #45331e; margin: 8px 0; }
+.rm-bar i { display: block; height: 100%; background: linear-gradient(#f0c060, #c08a30); }
+.rm-wait { color: #f08a5a; }
+.rm-ms { display: flex; flex-direction: column; gap: 12px; }
+.rm-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px; }
+.rm-head h3 { margin: 0; color: #e3bf6a; }
+.rm-id { font: 22px var(--title-font); color: #d9822b; }
+.rm-when { margin-left: auto; color: #a8977a; }
+.rm-card p { margin: 6px 0; }
+.rm-list { list-style: none; margin: 6px 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.rm-item { display: grid; grid-template-columns: 120px 1fr minmax(120px, 30%); gap: 10px; align-items: baseline; padding: 4px 0; border-bottom: 1px solid #2a1f14; }
+.rm-badge { font-size: 15px; padding: 0 6px; text-align: center; color: #0d0a07; text-shadow: none; background: #6a5a44; }
+.rm-done .rm-badge { background: #7fbf6a; } .rm-doing .rm-badge { background: #f0c060; } .rm-next .rm-badge { background: #8fb8e0; }
+.rm-blocked .rm-badge { background: #f08a5a; }
+.rm-done .rm-name { color: #a8977a; }
+.rm-name small { display: block; color: #a8977a; font-size: 15px; }
+.rm-owner { color: #c9a45a; font-size: 16px; }
+.rm-pr { color: #8fe0a6; }
+.rm-exit { color: #a8977a; }
+@media (max-width: 600px) { .rm-item { grid-template-columns: 1fr; gap: 2px; } .rm-badge { justify-self: start; } .rm-when { margin-left: 0; } }

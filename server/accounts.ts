@@ -42,7 +42,7 @@ export interface HeroSave {
   act?: number;
   /** Bounty board hunt in progress (shared/bounty.ts) and how many this hero has finished. */
   bounty?: BountyState; bountyDone?: number;
-  /** Gear wear 0-100 (shared/upkeep.ts). */
+  /** Gear wear 0-100: removed 2026-11-13, old saves may still carry it; ignored on load and no longer written. */
   wear?: number;
   /** Devour (shared/devour.ts): monsters eaten per family. */
   feast?: Record<string, number>;
@@ -50,9 +50,9 @@ export interface HeroSave {
   grimoire?: string;
   /** Summoner skill tree version (shared/summons.ts SUMMONER_TREE): an older save gets its skill points back. */
   suTree?: number;
-  /** Choices made in quests, 2 bits each (shared/questSteps.ts CHOICES), kept in Player.arcs "$f"; missing = none made. */
+  /** Choices made in quests, 2 bits each (shared/questSteps.ts CHOICES), kept in the owner-only Player.me.flags; missing = none made. */
   flags?: number;
-  /** Cosmetics: title and look traits (shared/cosmetics.ts), kept in Player.arcs "$c"; missing = none. */
+  /** Cosmetics: title and look traits (shared/cosmetics.ts), kept in the public Player.cosm; missing = none. */
   cosm?: number;
   /** Tavern Rumours (shared/rumours.ts): the day, its offers' level, done bits, the one under way, all finished; another day's loads fresh. */
   rumour?: RumourState;
@@ -60,6 +60,10 @@ export interface HeroSave {
   titles?: number;
   /** The Apprentice (shared/quests.ts MENTOR): mentoring switched on, recruits counted, their account names (<= 50); missing = off, none. */
   mentor?: MentorState;
+  /** Songweaver skill tree version (shared/songs.ts SONGWEAVER_TREE): an older save gets its skill points back. */
+  swTree?: number;
+  /** Songweaver mode (shared/songs.ts MODE_IDS); missing or no longer known = Major. */
+  swMode?: string;
 }
 
 interface Account {

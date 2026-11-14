@@ -169,7 +169,7 @@ test("marchers fill no bounty and no quest kill step, and give TIDE.xpMult of th
   try {
     const { kill, p } = t;
     p.bounty = { zone: "North Meadow", kind: "slime", goal: 50, minLevel: 1, xp: 0, gold: 0, n: 0 };
-    p.arcs.set("hunt", packQuest(0, 2, 0)); // Cold Ashes, step 2: kill blobs anywhere
+    p.quests.set("hunt", packQuest(0, 2, 0)); // Cold Ashes, step 2: kill blobs anywhere
     const hunt = () => chainState(p, CHAINS.findIndex((c) => c.id === "hunt"))!.questCount;
     const base = Math.round(MOBS.slime.xp * mobScale(3, "xp"));
     let xp0 = p.xp;

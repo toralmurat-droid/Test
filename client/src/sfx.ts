@@ -36,7 +36,7 @@ let voices = 0;
 const MAX_VOICES = 28;
 const lastPlay = new Map<string, number>();
 /** Sounds that ring for seconds (kept connected longer). */
-const LONG = new Set(["lootRare", "lootLegendary", "horn", "ritual", "ritualCall", "demonRise", "demonRoar", "shrine", "portalTravel", "portalWake", "necroWind", "heroDie", "levelup", "owl", "chime", "warcry", "motherInflate", "demonFire", "skelDie"]);
+const LONG = new Set(["lootRare", "lootLegendary", "horn", "ritual", "ritualCall", "demonRise", "demonRoar", "shrine", "portalTravel", "portalWake", "necroWind", "heroDie", "levelup", "owl", "chime", "warcry", "motherInflate", "demonFire", "skelDie", "lutePluck", "swResonate", "swShatter", "swBounce", "swSnap"]);
 const AMBIENT = new Set(["crackle", "bird", "cricket", "chime", "owl", "step", "skelIdle", "blobGurgle", "crawl"]);
 
 const TOWNS = ["Oakvale", "Market Square", "Chapel of the Dawn", "The Rusty Tankard", "The Smithy", "Saltmere", "Hunter's Camp"];
@@ -295,7 +295,80 @@ function styleChime(out: Out, t: number, style: string, vol: number, big = 1) {
 
 type Recipe = (o: Out, t: number, v: number, arg?: any) => void;
 
+/** Karplus-Strong string, computed into a buffer (a DelayNode loop cannot go below one 128-frame render quantum, ~344 Hz). */
+function ksBuffer(freq: number, dur: number, bright: number, decay: number): AudioBuffer {
+  const c = ctx!, sr = c.sampleRate, n = Math.floor(sr * dur), len = Math.max(2, Math.round(sr / freq));
+  const buf = c.createBuffer(1, n, sr), d = buf.getChannelData(0), ring = new Float32Array(len);
+  // the pluck: a short burst of noise, smoothed more for a soft finger (low `bright`), left sharp for a pick
+  let prev = 0;
+  for (let i = 0; i < len; i++) { const w = Math.random() * 2 - 1; prev = prev + (w - prev) * (0.35 + 0.65 * bright); ring[i] = prev; }
+  let p = 0;
+  for (let i = 0; i < n; i++) {
+    const nx = (p + 1) % len, v = ring[p];
+    d[i] = v;
+    ring[p] = (v + ring[nx]) * 0.5 * decay; // the averaging is the loop's low-pass: highs die first, like a real string
+    p = nx;
+  }
+  // soft fade at the very end, so a long note never clicks off
+  for (let i = 0; i < Math.min(n, 400); i++) d[n - 1 - i] *= i / 400;
+  return buf;
+}
+
 const R: Record<string, Recipe> = {
+  // ---- the Songweaver's lute: arg = { note (MIDI), dur?, bright? 0..1, decay? }
+  lutePluck: (o, t, v, a) => {
+    const c = ctx!, note = a?.note ?? 60, f = 440 * 2 ** ((note - 69) / 12), dur = a?.dur ?? 1.5, bright = a?.bright ?? 0.6;
+    const src = c.createBufferSource();
+    // the lower the string, the longer it rings; a touch more decay than 1 - 1/(f*dur) keeps the tail from running on
+    src.buffer = ksBuffer(f, dur, bright, a?.decay ?? Math.min(0.9995, 0.996 + f / 400000));
+    const body = c.createBiquadFilter(); // the lute's wooden belly: a warm resonance low in the range
+    body.type = "peaking"; body.frequency.value = 220; body.Q.value = 1.2; body.gain.value = 5;
+    const g = c.createGain(); g.gain.value = 0.55 * v * (a?.vol ?? 1);
+    src.connect(body).connect(g).connect(o);
+    src.start(t);
+    noise(o, t, { type: "bandpass", f: 1800, q: 2, dur: 0.02, vol: 0.05 * (a?.vol ?? 1) }); // the fingernail
+  },
+  // ---- Songweaver events (see the music engine below)
+  // resonance burst: a hum that climbs, then a bell-like bloom (the tonic A, so it sits in the song's key)
+  swResonate: (o, t, v) => {
+    tone(o, t, { type: "sine", f: 220, f2: 880, dur: 0.5, vol: 0.18 * v, att: 0.35, vib: 6, vibHz: 7 });
+    tone(o, t, { type: "triangle", f: 440, f2: 1760, dur: 0.5, vol: 0.06 * v, att: 0.4 });
+    bell(o, t + 0.5, 1760, 1.3, 0.26 * v); bell(o, t + 0.5, 880, 1.6, 0.2 * v);
+    noise(o, t + 0.5, { type: "highpass", f: 6000, dur: 0.25, vol: 0.1 * v });
+  },
+  // shatter: glass breaking (a crack, then a spray of tinkling shards)
+  swShatter: (o, t, v) => {
+    noise(o, t, { type: "highpass", f: 3500, dur: 0.12, vol: 0.5 * v, att: 0.001 });
+    tone(o, t, { type: "square", f: 2400, f2: 900, dur: 0.06, vol: 0.08 * v });
+    for (let i = 0; i < 9; i++) {
+      const tt = t + 0.03 + i * 0.045 + rnd(0, 0.03), f = rnd(2600, 6200);
+      tone(o, tt, { f, dur: rnd(0.08, 0.22), vol: 0.1 * v * (1 - i / 14), att: 0.001 });
+      noise(o, tt, { type: "bandpass", f, q: 12, dur: 0.05, vol: 0.12 * v });
+    }
+    thud(o, t, 90, 0.3 * v, 0.14);
+  },
+  // wave bounce: stone is bright, wood dull, metal rings
+  swBounce: (o, t, v, mat) => {
+    if (mat === "wood") { tone(o, t, { type: "triangle", f: 320, f2: 200, dur: 0.07, vol: 0.2 * v }); noise(o, t, { type: "lowpass", f: 700, dur: 0.05, vol: 0.2 * v }); }
+    else if (mat === "metal") { bell(o, t, 1650, 0.55, 0.14 * v); noise(o, t, { type: "highpass", f: 4000, dur: 0.03, vol: 0.2 * v }); }
+    else { tone(o, t, { type: "triangle", f: 2600, f2: 1900, dur: 0.05, vol: 0.18 * v }); noise(o, t, { type: "bandpass", f: 4200, q: 3, dur: 0.035, vol: 0.28 * v }); tone(o, t + 0.01, { f: 1500, dur: 0.12, vol: 0.05 * v }); }
+  },
+  // a sound hit: a glassy ping when the monster hears well (or the pitch matches), a muffled thud when it does not
+  swSoundHit: (o, t, v, a) => {
+    const tier = a?.tier;
+    if (tier === "deaf" || tier === "dull") { thud(o, t, tier === "deaf" ? 85 : 120, 0.4 * v, 0.14); noise(o, t, { type: "lowpass", f: 380, dur: 0.1, vol: 0.2 * v }); }
+    else if (tier === "keen" || tier === "fragile" || a?.match) {
+      const f = a?.match ? 2637 : 2093;
+      bell(o, t, f, a?.match ? 0.55 : 0.4, 0.2 * v); tone(o, t, { f: f * 1.5, dur: 0.25, vol: 0.06 * v });
+      if (tier === "fragile") noise(o, t, { type: "highpass", f: 5500, dur: 0.08, vol: 0.14 * v });
+    } else { tone(o, t, { type: "triangle", f: 880, f2: 700, dur: 0.07, vol: 0.14 * v }); noise(o, t, { type: "bandpass", f: 2200, q: 2, dur: 0.04, vol: 0.14 * v }); }
+  },
+  // a lute string snapping: a sharp crack, a falling twang and a buzz
+  swSnap: (o, t, v) => {
+    noise(o, t, { type: "highpass", f: 2500, dur: 0.05, vol: 0.45 * v, att: 0.001 });
+    tone(o, t, { type: "sawtooth", f: 900, f2: 160, dur: 0.22, vol: 0.12 * v, att: 0.002, vib: 30, vibHz: 55 });
+    tone(o, t + 0.02, { type: "triangle", f: 220, f2: 150, dur: 0.3, vol: 0.12 * v });
+  },
   // ---- heroes and plain combat
   swing: (o, t, v, heavy) => whoosh(o, t, heavy ? 350 : 700, heavy ? 1100 : 2600, heavy ? 0.26 : 0.16, 0.5 * v),
   hitFlesh: (o, t, v) => { thud(o, t, rnd(120, 170), 0.55 * v, 0.14); noise(o, t, { type: "bandpass", f: 1800, q: 2, dur: 0.05, vol: 0.3 * v }); },
@@ -554,6 +627,134 @@ export function play(name: string, x?: number, y?: number, vol = 1, arg?: any, o
 }
 
 // ---------------------------------------------------------------------------------------------------------
+// The Songweaver's lute. No key is built in: callers pass MIDI notes (60 = middle C).
+
+export interface PluckOpts { x?: number; y?: number; vol?: number; delay?: number; dur?: number; bright?: number; decay?: number }
+
+/** MIDI note -> note of a scale: `scale(60, [0,2,4,5,7,9,11], 9)` is the major scale's 10th degree from C4. Any root, any steps. */
+export function scale(root: number, steps: readonly number[], degree: number): number {
+  const n = steps.length, oct = Math.floor(degree / n);
+  return root + oct * 12 + steps[((degree % n) + n) % n];
+}
+
+let pluckSeq = 0;
+/** One lute note (Karplus-Strong string). Placed in the world when x/y are given, else on our hero; `delay` in seconds. */
+export function pluck(midiNote: number, o: PluckOpts = {}) {
+  if (!Number.isFinite(midiNote)) return;
+  const note = Math.max(24, Math.min(108, midiNote));
+  // own key per note so a chord or a fast run is not thinned out by the one-per-45ms gate
+  play("lutePluck", o.x, o.y, o.vol ?? 1, { note, dur: o.dur, bright: o.bright, decay: o.decay }, { key: `lute${pluckSeq++ & 15}`, minGap: 0, delay: o.delay, reach: 1.1 });
+}
+
+/**
+ * Several notes one after another, 15-30 ms apart (a strummed chord). `dir` "down" plays them low to high as given,
+ * "up" reverses them; `gap` is seconds between notes (clamped to 0.015-0.03).
+ */
+export function strum(notes: readonly number[], o: PluckOpts & { dir?: "down" | "up"; gap?: number } = {}) {
+  const gap = Math.max(0.015, Math.min(0.03, o.gap ?? 0.022));
+  const list = o.dir === "up" ? [...notes].reverse() : notes;
+  list.forEach((n, i) => pluck(n, { ...o, vol: (o.vol ?? 1) * (1 - i * 0.04), delay: (o.delay ?? 0) + i * gap }));
+}
+
+// ---------------------------------------------------------------------------------------------------------
+// The Songweaver's music engine. One tonic (A, MIDI 45 = A2); the server sends a degree and a mode, we pick the pitch.
+
+export type SwMode = "major" | "minor" | "lydian" | "dorian" | "phrygian";
+export type SwDegree = "I" | "i" | "ii" | "bII" | "IV" | "V" | "vi";
+export type SwPitch = "L" | "M" | "H" | "any";
+export type SwProg = "amen" | "encore" | "shatter" | "resolve" | "sleight";
+
+export const SW_TONIC = 45;
+/** Semitones above the tonic of each mode's seven degrees. */
+export const SW_MODES: Record<SwMode, readonly number[]> = {
+  major: [0, 2, 4, 5, 7, 9, 11], minor: [0, 2, 3, 5, 7, 8, 10], lydian: [0, 2, 4, 6, 7, 9, 11],
+  dorian: [0, 2, 3, 5, 7, 9, 10], phrygian: [0, 1, 3, 5, 7, 8, 10],
+};
+const SW_DEG: Record<SwDegree, number> = { I: 0, i: 0, ii: 1, bII: -1, IV: 3, V: 4, vi: 5 };
+/** Progression -> its three chords (the 3rd is the resolution). */
+export const SW_PROGS: Record<SwProg, readonly SwDegree[]> = {
+  amen: ["vi", "IV", "I"], encore: ["ii", "V", "I"], shatter: ["bII", "V", "i"], resolve: ["IV", "V", "I"], sleight: ["IV", "V", "vi"],
+};
+const SW_BASE: Record<SwPitch, number> = { L: SW_TONIC, M: SW_TONIC + 12, H: SW_TONIC + 24, any: SW_TONIC + 12 };
+
+/**
+ * MIDI notes [root, third, fifth] of a degree's diatonic triad in a mode. L sits in octave 2-3, M in 3, H in 4.
+ * bII is the Neapolitan major triad on B-flat in every mode.
+ */
+export function swTriad(deg: SwDegree, mode: SwMode, pitch: SwPitch = "M"): [number, number, number] {
+  const base = SW_BASE[pitch] ?? SW_BASE.M, st = SW_MODES[mode] ?? SW_MODES.major, d = SW_DEG[deg];
+  if (d === undefined) return [base, base + 4, base + 7];
+  if (d < 0) return [base + 1, base + 5, base + 8];
+  const at = (k: number) => st[k % 7] + 12 * Math.floor(k / 7);
+  return [base + at(d), base + at(d + 2), base + at(d + 4)];
+}
+
+/** Open voicing (root, fifth, octave): no third, so Songweavers in different modes never clash. */
+export const openFifths = (root: number): [number, number, number] => [root, root + 7, root + 12];
+
+export interface NoteOpts { chord?: boolean; open?: boolean; vol?: number; delay?: number; dur?: number; bright?: number }
+
+/**
+ * One Songweaver note. Plucks the root; `chord` strums the whole triad (skill casts); `open` (other Songweavers
+ * nearby in a different mode, decided by the caller) plays root, fifth and octave instead.
+ */
+export function playNote(deg: SwDegree, mode: SwMode, pitch: SwPitch, x?: number, y?: number, o: NoteOpts = {}) {
+  const tri = swTriad(deg, mode, pitch), po = { x, y, vol: o.vol, delay: o.delay, dur: o.dur, bright: o.bright };
+  if (o.open) strum(openFifths(tri[0]), po);
+  else if (o.chord) strum(tri, po);
+  else pluck(tri[0], po);
+}
+
+/**
+ * A progression's flourish: two short chords, then the resolution rings (its root doubled two octaves up).
+ * `open` voices every chord as open fifths.
+ */
+export function playChord(prog: SwProg, mode: SwMode, x?: number, y?: number, o: { open?: boolean; vol?: number } = {}) {
+  const degs = SW_PROGS[prog];
+  if (!degs) return;
+  degs.forEach((deg, i) => {
+    const last = i === degs.length - 1, tri = swTriad(deg, mode, "M");
+    const notes = o.open ? openFifths(tri[0]) : [...tri, tri[0] + 12];
+    strum(notes, { x, y, vol: (o.vol ?? 1) * (last ? 1.1 : 0.85), delay: i * 0.13 + (last ? 0.03 : 0), dur: last ? 3 : 0.7, bright: last ? 0.8 : 0.6, decay: last ? 0.9996 : undefined, dir: i === 1 ? "up" : "down", gap: 0.02 });
+  });
+  const lastDeg = swTriad(degs[degs.length - 1], mode, "M")[0];
+  if (!o.open) pluck(lastDeg + 24, { x, y, vol: 0.4 * (o.vol ?? 1), delay: 0.3, dur: 3, bright: 0.3 });
+}
+
+/** Twelve-Tone Storm: all twelve semitones in a rising sweep, ending in a dissonant cluster and a snap. */
+export function playTwelveTone(x?: number, y?: number, vol = 1) {
+  for (let i = 0; i < 12; i++) pluck(SW_TONIC + 12 + i, { x, y, vol: vol * (0.45 + i * 0.03), delay: i * 0.04, dur: 0.9, bright: 0.9 });
+  for (const n of [SW_TONIC + 24, SW_TONIC + 25, SW_TONIC + 26]) pluck(n, { x, y, vol: 0.5 * vol, delay: 0.52, dur: 1.4, bright: 1 });
+  play("swSnap", x, y, 0.4 * vol, undefined, { key: "sw12", minGap: 0, delay: 0.52 });
+}
+
+const SW_TREE_SKILLS = new Set(["sg_ballad", "sg_mend", "sg_pedal", "sg_lydian", "sg_legato", "sg_chorale", "sg_march", "sg_jig", "sg_call", "sg_dorian", "sg_accel", "sg_anthem", "sg_dirge", "sg_shrill", "sg_crack", "sg_phrygian", "sg_sympathy", "sg_twelve", "sg_modulate"]);
+
+/**
+ * Plays a Songweaver "sfx" event from the interface contract (docs/songweaver-progress.md); returns true if it was one.
+ * `me` is our session id (our own sounds play on our hero), `open` says other Songweavers nearby are in another mode.
+ * A "note" from a tree skill (or modulate) strums the triad; any other source (the basic attack) plucks the root.
+ */
+export function songweaverSfx(ev: any, me?: string, open = false): boolean {
+  if (!ev) return false;
+  const own = me !== undefined && ev.id === me, x = own ? undefined : ev.x, y = own ? undefined : ev.y;
+  switch (ev.ev) {
+    case "note":
+      if (ev.s === "sg_twelve") playTwelveTone(x, y);
+      else playNote(ev.deg, ev.mode, ev.pitch, x, y, { chord: SW_TREE_SKILLS.has(ev.s), open });
+      return true;
+    case "chord": playChord(ev.prog, ev.mode, x, y, { open }); return true;
+    case "resonate": play(ev.shatter ? "swShatter" : "swResonate", ev.x, ev.y, 1, undefined, { key: "swres" + ev.id, minGap: 80, reach: 1.1 }); return true;
+    case "bounce": play("swBounce", ev.x, ev.y, 0.8, ev.mat, { key: "swbounce", minGap: 40 }); return true;
+    case "soundhit": play("swSoundHit", ev.x, ev.y, 0.8, { tier: ev.tier, match: !!ev.match }, { key: "swhit" + (ev.id ?? ""), minGap: 60 }); return true;
+    case "shieldbreak":
+      if (typeof ev.s === "string" && ev.s.startsWith("sg_")) { play("swSnap", ev.x, ev.y, 1, undefined, { key: "swsnap", minGap: 80 }); return true; }
+      return false;
+  }
+  return false;
+}
+
+// ---------------------------------------------------------------------------------------------------------
 // Environment: beds that follow the hero
 
 interface Bed { g: GainNode; f?: BiquadFilterNode }
@@ -695,7 +896,7 @@ interface Ent { sprite: { x: number; y: number }; state: any; mob?: boolean; her
 const UNDEAD = new Set(["skeleton", "skeletonmage", "necromancer", "crawler", "sanddead"]);
 const isBlob = (k: string) => k === "slime" || k === "blobling" || k.endsWith("blob");
 const blobPitch = (st: any) => (st.kind === "motherblob" ? 0.55 : st.kind === "blobling" ? 1.5 : 1) / Math.sqrt(st.merged || 1);
-const HERO_PITCH: Record<string, number> = { ninja: 1.1, wizard: 0.95, knight: 0.85, archer: 1.15, barbarian: 0.75, vampire: 0.9, summoner: 1.0 };
+const HERO_PITCH: Record<string, number> = { ninja: 1.1, wizard: 0.95, knight: 0.85, archer: 1.15, barbarian: 0.75, vampire: 0.9, summoner: 1.0, songweaver: 1.05 };
 const hpitch = (st: any) => (HERO_PITCH[st?.cls] ?? 1) * (0.97 + (st?.name?.length ?? 0) % 5 * 0.015);
 
 /** Bandit voices differ a little per bandit (seeded by id). */

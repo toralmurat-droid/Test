@@ -63,9 +63,15 @@ export class CarriedLantern {
 }
 
 // ---- hide-bound beast trait overlay
+/**
+ * Which drawn overlay each hero wears. The Songweaver has none of her own yet: her sheet is the wizard's body
+ * (tools/art/characters.ts SONGWEAVER = { ...wizard }), so the wizard's mantle sits right on her. Any other class
+ * (archived ones) falls back to the wizard's too, so a trait is never silently left undrawn.
+ */
+const HIDE_BODY: Record<string, string> = { wizard: "wizard", vampire: "vampire", summoner: "summoner", songweaver: "wizard" };
 /** Texture key of the overlay for a class and facing; created on first use. */
 export function hideboundKey(scene: Phaser.Scene, cls: string, dir: HideDir): string {
-  const c = ["wizard", "vampire", "summoner"].includes(cls) ? cls : "wizard", key = `hidebound_${c}_${dir}`;
+  const c = HIDE_BODY[cls] ?? "wizard", key = `hidebound_${c}_${dir}`;
   canvasTex(scene, key, HIDE_FRAME, HIDE_FRAME, (ctx) => { for (const [x, y, col] of hideboundPixels(c, dir)) { ctx.fillStyle = hex(col); ctx.fillRect(x, y, 1, 1); } });
   return key;
 }

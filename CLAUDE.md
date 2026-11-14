@@ -29,8 +29,15 @@ Pixel Town Brawl: an online multiplayer pixel-art action RPG in the browser.
    `this.allow(...)` in `TownRoom.ts` (built on `server/ratelimit.ts`) when a player could spam it.
 
 ## Hard limits (break these and things fail quietly)
-- **`Player` schema is at the 64-field cap** (`@colyseus/schema`). Don't add synced fields: pack new data into an
-  existing one (see `Player.attune`) or send it as a message.
+- **`Player` schema: 64 synced fields max** (`@colyseus/schema` packs the field index into 6 bits, so indexes 0–63).
+  Count the `@type` fields before adding one. Never put a collection or child schema at index 63 (it collides with
+  an encoder control byte). Quest chains share one `quests` map: a new chain costs no field. When space runs low,
+  prefer a map or child schema over packing several values into one number.
+- **Owner-only player data goes in `Player.me`** (`server/player.ts`, `@view()`, one `StateView` per client in
+  `onJoin`): other clients never receive it. Never replace `me` or a collection inside it after join, and never set a
+  synced Player field to `undefined`/`null` (with a `@view` field, Player's deletes reach only the owner). Views need
+  `Encoder.BUFFER_SIZE` (set once, in `server/patchCopy.ts`) big enough that a patch never resizes (a library bug corrupts resized view patches); a
+  `@colyseus/schema buffer overflow` warning in the logs means raise it. `tests/view.test.ts` guards both.
 - **Synced `Mob` fields:** new ones go at the end of the class and of `MOB_FIELDS` in `shared/mobView.ts`, in the same
   order (`tests/mobview.test.ts` checks it).
 - **Skill tree layout:** each branch is at most 3 deep, the slab fits 4 rows (`tests/treeLayout.test.ts`).
@@ -39,7 +46,7 @@ Pixel Town Brawl: an online multiplayer pixel-art action RPG in the browser.
   default; when a change invalidates old data (XP curve, skill tree), bump a version field and migrate on load
   (examples: `xpv` / `XP_CURVE_VERSION`, `SUMMONER_TREE`: fields in `server/accounts.ts`, migration on load in `server/TownRoom.ts`). Never drop or rename a save field
   without a migration.
-- **Active classes:** only `ACTIVE_CLASSES` in `shared/classes.ts` (currently wizard, vampire, summoner) can be played.
+- **Active classes:** only `ACTIVE_CLASSES` in `shared/classes.ts` (currently wizard, vampire, summoner, songweaver) can be played.
   Archived classes keep their code, art and saves; don't delete them. Balance sims cover active classes only.
 
 ## Adding things
@@ -72,12 +79,16 @@ All of these must pass (CI runs 1–3 and the Postgres smoke test):
 5. Combat, skill, monster or XP changes: run `npx tsx tools/balance/duel.ts` and/or `tools/balance/pve.ts` and put
    the before/after numbers in the PR.
 6. Load-heavy changes (more monsters, per-tick work): `npm run bench` before/after.
-7. UI changes: check on a phone-sized screen too (`tools/e2e-summoner-mobile.cjs` shows how).
+7. UI changes: check on desktop at 1920×1080 and 1366×768. The game is desktop only; don't design or test for phones.
 8. A patch note in `client/patchnotes/` (rules in `client/patchnotes/README.md`), or `[no patch note]` in the title.
 
 ## Gotchas
 - e2e scripts need a fresh save file per run; walking out of town can stall (the scripts re-route).
-- Colyseus decode errors (`refId not found`) show up now and then in e2e runs; still unexplained. Note it if you see it.
+- Colyseus decode errors (`refId not found`, `definition mismatch`, invalid UTF-8) meant corrupted state patches:
+  with per-message deflate on, `ws` compresses a frame some time after `send()` without copying it, and Colyseus
+  hands every client a view of one shared buffer. `server/patchCopy.ts` makes the room send copies
+  (`tests/patchcopy.test.ts` guards it). Keep that call when touching the serializer or upgrading Colyseus. The
+  errors are no longer expected noise: if one shows up, report it.
 - Big features that span several sessions keep a progress log in `docs/` (see `docs/summoner-rework-progress.md`).
 
 ## Working with agents

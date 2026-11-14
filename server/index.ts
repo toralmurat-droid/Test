@@ -59,6 +59,10 @@ if (process.env.NODE_ENV === "production") {
     else res.setHeader("Cache-Control", "no-cache");
     res.end(body);
   });
+  // The game wiki (client/wiki.html) and its skills page (client/skills.html): short addresses, like play.fmtpa.ch/skills
+  app.get("/wiki", (_req, res) => res.sendFile(path.join(dist, "wiki.html")));
+  app.get("/skills", (_req, res) => res.sendFile(path.join(dist, "skills.html")));
+  app.get("/roadmap", (_req, res) => res.sendFile(path.join(dist, "roadmap.html")));
   app.use(express.static(dist, {
     setHeaders: (res, file) => { if (/[\\/]assets[\\/][^\\/]+-[A-Za-z0-9_-]{8}\.\w+$/.test(file)) res.setHeader("Cache-Control", "public, max-age=31536000, immutable"); },
   }));

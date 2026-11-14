@@ -8,7 +8,7 @@ import { SIEGE_SITES } from "../shared/siege";
 import { CHESTS } from "../shared/chests";
 
 const ids = Object.keys(CHOICES) as ChoiceId[];
-const hero = (flags: number) => ({ level: 50, arcs: { [META.flags]: flags } }) as any;
+const hero = (flags: number) => ({ level: 50, flags }) as any;
 
 test("choices round-trip and never clobber their neighbours", () => {
   assert.deepEqual({ ...CHOICES }, { letters: 0, bargain: 1, grave: 2 }, "indices are append-only");
@@ -24,8 +24,11 @@ test("choices round-trip and never clobber their neighbours", () => {
   assert.equal(choiceOf(undefined, "letters"), 0);
   assert.equal(choiceOf({ level: 1 } as any, "letters"), 0);
   assert.equal(metaOf(hero(5), META.flags), 5);
-  assert.equal(metaOf({ level: 1, arcs: { [META.flags]: NaN } } as any, META.flags), 0, "garbage reads as 0");
-  assert.equal(metaOf({ level: 1, arcs: new Map([[META.cosm, 9]]) } as any, META.cosm), 9, "a map-like arcs works too");
+  assert.equal(metaOf({ level: 1, flags: NaN } as any, META.flags), 0, "garbage reads as 0");
+  assert.equal(metaOf({ level: 1, cosm: 9 } as any, META.cosm), 9);
+  assert.equal(metaOf({ level: 1, me: { flags: 6 } } as any, META.flags), 6, "a client's own hero keeps its flags in me");
+  assert.equal(metaOf({ level: 1, cosm: 9 } as any, META.flags), 0, "flags and cosmetics never mix");
+  assert.equal(metaOf({ level: 1, flags: 6 } as any, META.cosm), 0);
 });
 
 test("stepOn and nextStage skip steps for another choice", () => {
@@ -82,9 +85,17 @@ test("cosmetics pack and unpack", () => {
   assert.equal(withTrait(n, "beast"), n, "idempotent");
 });
 
-test("no chain id starts with $ (reserved arcs keys)", () => {
-  for (const c of CHAINS) assert.ok(!c.id.startsWith("$"), c.id);
-  for (const id of ["grave", "sandcrown", "letters"]) assert.ok(CHAINS.some((c) => c.id === id), id);
+test("the new chains live in the shared quests map, each under its own key", () => {
+  for (const id of ["grave", "sandcrown", "lantern", "wheel", "unseen", "twohands", "letters", "penance"]) {
+    const c = CHAINS.find((ch) => ch.id === id);
+    assert.ok(c, id);
+    assert.equal(c!.packed, id, `${id} keyed by its id`);
+    assert.equal(c!.local, true);
+    assert.deepEqual([...c!.keys, c!.verKey], [`${id}Id`, `${id}Stage`, `${id}Count`, `${id}Ver`], `${id} saved under its own names`);
+  }
+  // the side arcs come after every zone arc (the client sends chain indices: append-only)
+  const ix = (id: string) => CHAINS.findIndex((ch) => ch.id === id);
+  assert.ok(ix("letters") > ix("twohands") && ix("penance") === ix("letters") + 1);
 });
 
 // Positions are pinned on purpose: a quest or map change that moves a siege site, a catapult or a chest must update

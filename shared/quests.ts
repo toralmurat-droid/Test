@@ -15,8 +15,8 @@ import { type BargainSpec, type CarrySpec, type ChoiceId, type ChoiceSpec, choic
  * four pieces that tore free when the Brood Heart burned, east across the river into the elemental wilds (ELEMENT_LANDS):
  * Blightmire Fen (poison, Lv 14) → Rimewater Hollow (frost, Lv 17) → Cinder Scar (fire, Lv 20) → Stormbreak Crags (storm, Lv 23).
  *
- * Progress lives on the server: Player.questId = index in QUESTS, Player.questStage = 0 before the quest is
- * accepted, then 1..steps.length for the step being worked on (stage s = steps[s - 1]); Player.questCount =
+ * Progress lives on the server (Player.quests, see chainState): questId = index in QUESTS, questStage = 0 before the quest is
+ * accepted, then 1..steps.length for the step being worked on (stage s = steps[s - 1]); questCount =
  * progress on that step (kills / items, or a bitmask of the objects already used). Claiming the reward at
  * the last step moves on to the next quest (questId + 1, stage 0). questId === QUESTS.length = chain done.
  */
@@ -2158,7 +2158,7 @@ export const ZONE_ARCS: { id: string; name: string; quests: QuestDef[]; needs?: 
   { id: "twohands", name: "Two Hands", quests: TWOHANDS_QUESTS, needs: (p) => (chainState(p, chainIx("under"))?.questId ?? 0) >= UNDER_QUESTS.findIndex((d) => d.id === "canopic") },
 ];
 
-// ---- Side arcs: short local chains that may end on a hand-in (unlike ZONE_ARCS), packed in Player.arcs the same way ----
+// ---- Side arcs: short local chains that may end on a hand-in (unlike ZONE_ARCS), stored in the shared Player.quests map the same way ----
 
 // Two Letters (Lv 19, after the Redfang Debt; docs/quest-concepts-progress.md #5): law or mercy for Saltmere's informer
 const LETTER_QUESTS: QuestDef[] = [
@@ -2289,8 +2289,13 @@ export const TUT_QUESTS: QuestDef[] = [
   },
 ];
 export const TUT_CHAIN = 3;
-/** Is the guided first quest done (or from before it existed)? */
-export const tutorialDone = (p: Quester | undefined) => p?.tut === undefined || unpackQuest(p.tut).questId >= TUT_QUESTS.length;
+/**
+ * Is the guided first quest done? Something with no quest map at all (no hero, or a bare object) counts as done, as an
+ * unset `tut` field did; a hero whose map lacks the key has not started it (old `tut === 0`). A client-side hero whose
+ * owner-only `me` has not arrived (the field exists, still empty) is not done: no flash of every story opening.
+ */
+export const tutorialDone = (p: Quester | undefined) =>
+  questsOf(p) ? chainState(p, TUT_CHAIN)!.questId >= TUT_QUESTS.length : !p || !("me" in p);
 /** Can this chain offer new quests yet? Every story waits for the guided first quest. */
 export const chainOpen = (p: Quester | undefined, c: number) =>
   c === TUT_CHAIN || (tutorialDone(p) && (c !== CROWN_CHAIN || STORY_CHAINS.every((s) => storyDone(p, s)))
@@ -2315,28 +2320,29 @@ export interface QuestChain {
   id: string;
   name: string;
   quests: QuestDef[];
-  /** Player fields holding this chain's quest index, stage and step progress */
+  /** The save file's names for this chain's quest index, stage and step progress */
   keys: [string, string, string];
   /** Bump when this chain's steps change (saved as `verKey`): older saves restart their current quest at the offer */
   version: number; verKey: string;
   /**
-   * One synced Player field holding all three numbers (id * 10000 + stage * 100 + count), for chains added after the
-   * Player schema ran out of fields (Colyseus allows 64). `keys` are then only the save file's names.
+   * This chain's key in the synced Player.quests map, which holds all three numbers packed (packQuest): every chain
+   * shares that one schema field instead of each taking its own. Unique across CHAINS (checked below).
    */
-  packed?: string;
+  packed: string;
   /**
    * A zone quest arc (Murat 2026-11-10): a few quests given out in one zone by someone who lives there, each leading on
-   * to the next. Its packed progress lives in the Player.arcs map under `packed` (one synced field for every arc).
+   * to the next. Only changes how the UI offers it; stored like every other chain.
    */
   local?: boolean;
   /** An arc's first offer waits for this (ZONE_ARCS / SIDE_ARCS `needs`): another story far enough along */
   needs?: (p: Quester | undefined) => boolean;
 }
-/** Pack / unpack a chain's progress into one number (QuestChain.packed). */
+/** Pack / unpack a chain's progress into one number (QuestChain.packed). Stage and count must stay under 100. */
 export const packQuest = (id: number, stage: number, count: number) => id * 10000 + Math.min(99, stage) * 100 + Math.min(99, count);
 export const unpackQuest = (n: number) => ({ questId: Math.floor(n / 10000), questStage: Math.floor(n / 100) % 100, questCount: n % 100 });
 export const CHAINS: QuestChain[] = [
-  { id: "gloam", name: "The Gloam", quests: QUESTS, keys: ["questId", "questStage", "questCount"], version: QUEST_VERSION, verKey: "questVer" },
+  // the first chain kept its old save names (it had three schema fields of its own before Player.quests)
+  { id: "gloam", name: "The Gloam", quests: QUESTS, keys: ["questId", "questStage", "questCount"], version: QUEST_VERSION, verKey: "questVer", packed: "gloam" },
   { id: "bones", name: "The Pale Marshal", quests: BONE_QUESTS, keys: ["boneId", "boneStage", "boneCount"], version: 2, verKey: "boneVer", packed: "bone" },
   // packed since Act 2 (the Second Sun needed a synced field): saves keep the same three names
   { id: "redfang", name: "The Redfang Debt", quests: RED_QUESTS, keys: ["redId", "redStage", "redCount"], version: 3, verKey: "redVer", packed: "red" },
@@ -2344,23 +2350,27 @@ export const CHAINS: QuestChain[] = [
   { id: "crown", name: "The Hollow Crown", quests: CROWN_QUESTS, keys: ["crownId", "crownStage", "crownCount"], version: 2, verKey: "crownVer", packed: "crown" },
   { id: "beast", name: "The Hide Rite", quests: BEAST_QUESTS, keys: ["beastId", "beastStage", "beastCount"], version: 2, verKey: "beastVer", packed: "beast" },
   { id: "sun", name: "The Second Sun", quests: SUN_QUESTS, keys: ["sunId", "sunStage", "sunCount"], version: 2, verKey: "sunVer", packed: "sun" },
-  // the zone arcs (ZONE_ARCS), CHAINS[7..]: progress in the Player.arcs map, saved together under "arcs"
+  // the zone arcs (ZONE_ARCS), CHAINS[7..]: keyed by arc id
   ...ZONE_ARCS.map((a): QuestChain => ({ id: a.id, name: a.name, quests: a.quests, keys: [`${a.id}Id`, `${a.id}Stage`, `${a.id}Count`], version: 1, verKey: `${a.id}Ver`, packed: a.id, local: true, needs: a.needs })),
-  // the side arcs (SIDE_ARCS) after them, kept the same way
+  // the side arcs (SIDE_ARCS) after them, kept the same way (append-only: the client sends chain indices)
   ...SIDE_ARCS.map((a): QuestChain => ({ id: a.id, name: a.name, quests: a.quests, keys: [`${a.id}Id`, `${a.id}Stage`, `${a.id}Count`], version: 1, verKey: `${a.id}Ver`, packed: a.id, local: true, needs: a.needs })),
 ];
+// Two chains on one map key would share progress without a word: fail at load instead (an arc id equal to a story's key)
+if (new Set(CHAINS.map((ch) => ch.packed)).size !== CHAINS.length) throw new Error("shared/quests.ts: two CHAINS share a Player.quests key");
 
-// Player.arcs keeps reserved numbers under "$" keys (shared/questSteps.ts META): no chain may take one
-for (const ch of CHAINS) if (ch.id.startsWith("$") || ch.packed?.startsWith("$")) throw new Error(`quest chain id ${ch.id}: "$" keys are reserved`);
-
-/** Progress on one chain (chain undefined = the blob chain, so a Player passed as is reads as chain 0). */
+/** Progress on one chain, as chainState unpacks it (chain undefined = the blob chain). */
 export interface QuestState { questId: number; questStage: number; questCount: number; level?: number; chain?: number }
-/** A player's progress on every chain: the Player schema fields (CHAINS[].keys). */
-/** The zone arcs' packed progress by arc id: the Player's synced MapSchema, or a plain object in saves and tests. */
-export type ArcMap = { get(k: string): number | undefined } | Record<string, number>;
-export type Quester = { level?: number; questId?: number; questStage?: number; questCount?: number; bone?: number; redId?: number; redStage?: number; redCount?: number; tut?: number; crown?: number; beast?: number; red?: number; sun?: number; arcs?: ArcMap };
-/** One arc's packed number out of the arcs map. */
-export const arcValue = (m: ArcMap | undefined, k: string): number => {
+/** Every chain's packed progress by QuestChain.packed key: the Player's synced MapSchema, or a plain object in tests. */
+export type QuestMap = { get(k: string): number | undefined } | Record<string, number>;
+/**
+ * A player's progress on every chain, as the shared rules read it (a Player, server or client side). The server's
+ * Player has `quests`; on the client the map sits in the owner-only `me` (server/player.ts PlayerPrivate).
+ */
+export type Quester = { level?: number; quests?: QuestMap; flags?: number; cosm?: number; me?: { quests?: QuestMap; flags?: number } };
+/** The quests map wherever this Quester keeps it (undefined: none, or the client's `me` not here yet). */
+export const questsOf = (p: Quester | undefined): QuestMap | undefined => p?.quests ?? p?.me?.quests;
+/** One chain's packed number out of the quests map (0 = not begun: missing keys are never stored). */
+export const questValue = (m: QuestMap | undefined, k: string): number => {
   if (!m) return 0;
   const v = typeof (m as { get?: unknown }).get === "function" ? (m as { get(k: string): number | undefined }).get(k) : (m as Record<string, number>)[k];
   return typeof v === "number" ? v : 0;
@@ -2369,13 +2379,10 @@ export const arcValue = (m: ArcMap | undefined, k: string): number => {
 /** Every chain's progress in one string: redraw keys for the dialog and the shop. */
 export const questSig = (p: Quester | undefined) => CHAINS.map((_, c) => { const q = chainState(p, c); return q ? `${q.questId}.${q.questStage}.${q.questCount}` : ""; }).join(",");
 
-/** One chain's progress, read from the player's fields. */
+/** One chain's progress, read from the player's quests map. */
 export function chainState(p: Quester | undefined, c: number): QuestState | undefined {
   if (!p) return undefined;
-  const [a, b, n] = CHAINS[c].keys, r = p as Record<string, number | undefined>, pk = CHAINS[c].packed;
-  if (pk && CHAINS[c].local) return { chain: c, ...unpackQuest(arcValue(p.arcs, pk)), level: p.level };
-  if (pk) return { chain: c, ...unpackQuest(r[pk] ?? 0), level: p.level };
-  return { chain: c, questId: r[a] ?? 0, questStage: r[b] ?? 0, questCount: r[n] ?? 0, level: p.level };
+  return { chain: c, ...unpackQuest(questValue(questsOf(p), CHAINS[c].packed)), level: p.level };
 }
 const chainOf = (q: QuestState | undefined) => CHAINS[q?.chain ?? 0];
 

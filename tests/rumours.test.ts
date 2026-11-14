@@ -14,7 +14,7 @@ import { META, metaOf } from "../shared/questSteps";
 import { cleanRumour, RUMOUR_GIVER, RUMOUR_TITLE, rumourDay, rumourGround, rumourObjects, rumoursFor, RUMOURS, type Rumour } from "../shared/rumours";
 
 const TUT = CHAINS.findIndex((c) => c.id === "tutorial");
-const tutDone = (p: any) => { p.tut = packQuest(CHAINS[TUT].quests.length, 0, 0); };
+const tutDone = (p: any) => { p.quests.set("tut", packQuest(CHAINS[TUT].quests.length, 0, 0)); };
 const mags = npcById(RUMOUR_GIVER)!;
 const at = (p: any, x: number, y: number) => { p.x = x; p.y = y; };
 const byMags = (p: any) => at(p, mags.x, mags.y + 8);
@@ -275,7 +275,7 @@ test("a rumour can't be taken before the first quest is done", () => onDay([], a
   const srv = await startRoom();
   try {
     const { c, p, room } = await hero(srv, "wizard");
-    p.tut = 0; p.rumour = { day, lv: 1, done: 0, n: 0 };
+    p.quests.delete("tut"); p.rumour = { day, lv: 1, done: 0, n: 0 };
     byMags(p);
     c.send("rumour", { take: 0 });
     await scans(room, 3);

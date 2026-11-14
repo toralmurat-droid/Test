@@ -17,21 +17,21 @@ const ci = (id: string) => CHAINS.findIndex((c) => c.id === id);
 const LAN = ci("lantern"), WHEEL = ci("wheel"), MILL = ci("mill");
 const carryStep = CHAINS[LAN].quests[0].steps[1], carry = carryStep.carry!;
 const holdStep = CHAINS[WHEEL].quests[0].steps[1], hold = holdStep.hold!;
-const tutDone = (p: any) => { p.tut = packQuest(CHAINS.find((x) => x.id === "tutorial")!.quests.length, 0, 0); };
+const tutDone = (p: any) => { p.quests.set("tut", packQuest(CHAINS.find((x) => x.id === "tutorial")!.quests.length, 0, 0)); };
 const near = (a: { x: number; y: number }, b: { x: number; y: number }, d: number) => Math.hypot(a.x - b.x, a.y - b.y) <= d;
 
 /** Put a hero on the lantern's carry step, standing by the lantern, with nothing in the way. */
 function onCarry(p: any) {
   tutDone(p); p.level = 10;
-  p.arcs.set("lantern", packQuest(0, 2, 0)); // stage 2 = the carry step
+  p.quests.set("lantern", packQuest(0, 2, 0)); // stage 2 = the carry step
   p.x = carry.take.x + 4; p.y = carry.take.y; p.invulnUntil = Date.now() + 600_000; p.lastHurt = 0;
 }
 /** Put a hero on the hold step (stage 2 of Hold the Wheel), inside the area, safe from the waves. */
 function onHold(p: any, dx = 10, dy = 10) {
   const odo = npcById(hold.npc)!;
   tutDone(p); p.level = 4;
-  p.arcs.set("mill", packQuest(CHAINS[MILL].quests.length, 0, 0));
-  p.arcs.set("wheel", packQuest(0, 2, 0));
+  p.quests.set("mill", packQuest(CHAINS[MILL].quests.length, 0, 0));
+  p.quests.set("wheel", packQuest(0, 2, 0));
   p.x = odo.x + dx; p.y = odo.y + dy; p.invulnUntil = Date.now() + 600_000;
 }
 const gone = (room: any, ids: string[]) => ids.every((id) => { const m = room.state.mobs.get(id); return !m || m.dead; });
@@ -84,7 +84,7 @@ test("carry: take-up locks skills, attacks still work, the lantern blocks portal
     A.x = P1.x; A.y = P1.y; a.send("travel", { to: P2.id }); await wait(250);
     assert.ok(near(A, P1, 40), "travel blocked");
     for (const k of ["tutorial", "crown", "beast"]) { const c = ci(k); room.qset(A, c, { questId: CHAINS[c].quests.length, questStage: 0, questCount: 0 }); }
-    const g = WAYGATES[0]; A.x = g.x; A.y = g.y; room.useWaygates(a.sessionId, A);
+    const g = WAYGATES[0]; A.x = g.x; A.y = g.y; A.lastHurt = 0; a.send("waygate"); await wait(250); // used with E / a click
     assert.ok(near(A, g, 1), "waygate blocked");
     const ln = LINKS[0]; A.x = ln.x; A.y = ln.y; A.linkLock = ""; room.useLinks(a.sessionId, A);
     assert.ok(near(A, ln, 1), "rope / stair blocked");
@@ -95,6 +95,8 @@ test("carry: take-up locks skills, attacks still work, the lantern blocks portal
     // control: with qlock off the same portal works
     A.qlock = false; A.x = P1.x; A.y = P1.y; a.send("travel", { to: P2.id }); await wait(250);
     assert.ok(Math.hypot(A.x - P1.x, A.y - P1.y) > 100, "travel works without the lantern");
+    A.x = g.x; A.y = g.y; A.lastHurt = 0; a.send("waygate"); await wait(250);
+    assert.ok(Math.hypot(A.x - g.x, A.y - g.y) > 100, "the waygate works without the lantern");
     await a.leave();
   } finally { await srv.stop(); }
 });
@@ -235,7 +237,7 @@ test("hold: waves, cap of 6, Odo hurt, Odo down ends the run, leaving resets, 90
     c.onMessage("sfx", (m: any) => sfx.push(m)); c.onMessage("qstate", (m: any) => qs.push(m));
     await wait(300);
     const room = srv.room, P = room.state.players.get(c.sessionId), odo = npcById(hold.npc)!;
-    tutDone(P); P.level = 4; P.arcs.set("mill", packQuest(CHAINS[MILL].quests.length, 0, 0));
+    tutDone(P); P.level = 4; P.quests.set("mill", packQuest(CHAINS[MILL].quests.length, 0, 0));
     P.x = odo.x + 10; P.y = odo.y + 10; P.invulnUntil = Date.now() + 600_000;
     await wait(100);
     c.send("quest", { chain: WHEEL }); await wait(200);

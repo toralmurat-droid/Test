@@ -1,6 +1,6 @@
 /**
  * Cosmetics (docs/quest-concepts-progress.md, decision 12): a title shown under the name and permanent look traits.
- * One number in the reserved arcs key `$c` (shared/questSteps.ts META.cosm), so nothing new is synced on Player:
+ * One number in the public synced Player.cosm (shared/questSteps.ts META.cosm), since other clients draw both:
  * bits 0-7 = the title (index in TITLES, 0 = none), bits 8-23 = one bit per trait (TRAITS). Both lists are append-only.
  * Traits come from quests (beast: took the Hide-Mother's bargain, server/questSteps.ts); a trait may bring a talent
  * (shared/talents.ts TRAIT_TALENTS). Titles come with the Apprentice (WP7) and the rumours (WP6).
@@ -14,12 +14,12 @@ export interface Cosmetics { title: number; traits: number }
 
 const TITLE_MASK = 0xff, TRAIT_SHIFT = 8, TRAIT_MASK = 0xffff;
 
-/** Pack a title and trait bits into the `$c` number (out-of-range titles are dropped). */
+/** Pack a title and trait bits into the cosm number (out-of-range titles are dropped). */
 export function packCosmetics(c: Cosmetics): number {
   const title = Number.isInteger(c.title) && c.title > 0 && c.title < TITLES.length ? c.title : 0;
   return (title | ((c.traits & TRAIT_MASK) << TRAIT_SHIFT)) >>> 0;
 }
-/** The `$c` number back into a title and trait bits (garbage reads as none). */
+/** The cosm number back into a title and trait bits (garbage reads as none). */
 export function unpackCosmetics(n: number): Cosmetics {
   const v = Number.isFinite(n) ? n >>> 0 : 0, title = v & TITLE_MASK;
   return { title: title < TITLES.length ? title : 0, traits: (v >>> TRAIT_SHIFT) & TRAIT_MASK };
@@ -40,13 +40,13 @@ const okTitle = (i: number) => Number.isInteger(i) && i > 0 && i < TITLES.length
 export const ownsTitle = (owned: number, i: number) => okTitle(i) && !!((owned >>> i) & 1);
 /** The owned titles as TITLES indices (for the client's picker). */
 export const ownedTitles = (owned: number) => TITLES.map((_, i) => i).filter((i) => ownsTitle(owned, i));
-/** Title i earned: the new owned mask and `$c` number, and whether it is new to this hero. */
+/** Title i earned: the new owned mask and cosm number, and whether it is new to this hero. */
 export function earnTitle(cosm: number, owned: number, i: number): { cosm: number; owned: number; fresh: boolean } {
   if (!okTitle(i)) return { cosm, owned, fresh: false };
   const fresh = !ownsTitle(owned, i), shown = unpackCosmetics(cosm).title;
   return { cosm: shown ? cosm : withTitle(cosm, i), owned: (owned | (1 << i)) >>> 0, fresh };
 }
-/** The `$c` number showing title i (0 = none), or undefined when the hero hasn't earned it. */
+/** The cosm number showing title i (0 = none), or undefined when the hero hasn't earned it. */
 export function pickTitle(cosm: number, owned: number, i: number): number | undefined {
   if (i === 0) return withTitle(cosm, 0);
   return ownsTitle(owned, i) ? withTitle(cosm, i) : undefined;

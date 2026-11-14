@@ -3,7 +3,7 @@ import { META, metaOf } from "../shared/questSteps";
 import { setMeta, type StepHero } from "./questSteps";
 
 /**
- * Titles on a hero (shared/cosmetics.ts has the rules): the shown one in arcs `$c` (synced), the earned ones in the
+ * Titles on a hero (shared/cosmetics.ts has the rules): the shown one in Player.cosm (public), the earned ones in the
  * plain Player.titles mask (saved, sent as "title"). Every title award (rumours, the Apprentice) goes through `award`,
  * so a new title never covers the one a hero picked.
  */

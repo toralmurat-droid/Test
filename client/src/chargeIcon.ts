@@ -13,6 +13,7 @@ const PAL: Record<ClassKind, [string, string, string]> = {
   barbarian: ["#4a1408", "#d0601e", "#ffe08a"],
   vampire: ["#2a0610", "#a8102a", "#ff9aa8"],
   summoner: ["#2a2236", "#9a7ad6", "#f0e6ff"],
+  songweaver: ["#4a1c10", "#e0a02e", "#fff0b0"], // Tempo: a golden lute-string crystal (not the barbarian orange: warmer, yellower, brighter glint)
 };
 
 // Crystal shape: o = outline, d = dark facet, b = body, l = light facet, w = glint

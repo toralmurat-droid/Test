@@ -17,7 +17,7 @@ import { activeSkills, canLearn, levelPower, rankPower, scalePower, skillById, S
 import { addHeat, coolHeat, isOverheated, OVERLOAD } from "../../shared/overload";
 import { canPay, manaRegen, maxManaFor, skillCost } from "../../shared/mana";
 import {
-  afterHit, atkSpeedMult, blocking, buffLifesteal, buffRegen, castSkill, ccImmune, charging, winding, cooldownLeft, counterHit, dealtMult, FieldInst, HitOpts,
+  absorbDamage, afterHit, atkSpeedMult, blocking, buffLifesteal, buffRegen, castSkill, ccImmune, charging, winding, cooldownLeft, counterHit, dealtMult, FieldInst, HitOpts,
   newRuntime, shotEnd, shotHit, shotPulse, ShotSpec, SkillHost, speedMult, takenMult, tickField, tickUnit,
   formOf, gainEssence, toVoid, voidSlip, buffCdr,
 } from "../../shared/skillEngine";
@@ -26,7 +26,10 @@ import { newWisp, openArsenal, wispEnd, wispTick, type WispMind } from "../../sh
 import { Equipped, GEAR, gearBlock, gearDef, gearReachMult, gearSpeedMult, gearStats, meetsReq, withLevel } from "../../shared/gear";
 import { canExecute, executeDamage, executeRefund, heroPoise, POISE, poiseLevelMult, poiseSpeed, pvpDamageMult } from "../../shared/combat";
 import { COMBAT_REGEN_PER_STA, HIT_RADIUS, MOBS, mobScale, PLAYER_SPEED, REGEN_DELAY_MS, REGEN_PER_STA, REGEN_RAMP_MS } from "../../shared/constants";
-import { MOB_COMBAT, mobBody } from "../../shared/combat";
+import { heroSound, MOB_COMBAT, mobBody, soundMult, type SoundProfile } from "../../shared/combat";
+import { buffPoise, castSkill as cast2, knownModesOf } from "../../shared/skillEngine";
+import { MODES, modeColour, PHRYGIAN, PROGRESSIONS, RESONANCE, type Progression } from "../../shared/songs";
+import type { SoundFx } from "../../shared/skills";
 import { ARSENAL, bondShare, ESSENCE, GOLEM, GOLEM_OF, golemSlots, parseGrimoire, PORTAL, SUMMON, summonElement, summonScaleLevel, WISP, wispEls, type AttuneElement, type SummonKind } from "../../shared/summons";
 
 const TICK = 50; // ms, server runs at 20 Hz
@@ -37,7 +40,14 @@ const TICK = 50; // ms, server runs at 20 Hz
  * melee creature closing in, as from a melee hero (session E: the bot used to stand and shoot the Summoner while their
  * golems beat it, 90-100 % Summoner wins against the Wizard that even a halved golem did not move).
  */
-export const SIM = { golemBlock: 1, kitePets: true, aimHero: false, execute: true }; // execute: false = without EXECUTE (pve.ts --no-execute)
+export const SIM = { golemBlock: 1, kitePets: true, aimHero: false, execute: true, bounceHit: 0.3 }; // execute: false = without EXECUTE (pve.ts --no-execute)
+/**
+ * `bounceHit`: the 1D line has no walls, so a wave that may bounce (ShotDef.bounce, server updateProjectile) comes back
+ * as an expected value: when it lands or runs out, each bounce it has hits the nearest foe in reach again with this
+ * chance, x0.8 per bounce (stone and wood falloff).
+ */
+/** Classes in the duel tables: the active ones, the Songweaver among them (--songweaver is still accepted, as a no-op). */
+export const SIM_CLASSES: ClassKind[] = ACTIVE_CLASSES;
 const MAX_MS = 60000;
 const ARENA = 480; // px: fights happen between walls / obstacles, so kiting can't go on forever // a duel longer than this is decided on HP %
 const REACT = 0.55; // chance per tick that a bot acts (about 40ms average reaction delay)
@@ -45,7 +55,7 @@ const KB_PX = PLAYER_SPEED * 0.12; // knockback distance per kb unit (moveStep(.
 
 type Ranks = Record<string, number>;
 type Build = 0 | 1 | 2; // the branch the build rushes up first
-interface Shot { owner: F; x: number; dir: number; speed: number; range: number; traveled: number; pulsed?: number; radius: number; dmg: number; kb: number; miss: boolean; hit: boolean; basic: boolean; spec?: ShotSpec; pierced: boolean; past?: F[] }
+interface Shot { owner: F; x: number; dir: number; speed: number; range: number; traveled: number; pulsed?: number; radius: number; dmg: number; kb: number; miss: boolean; hit: boolean; basic: boolean; spec?: ShotSpec; pierced: boolean; past?: F[]; sound?: SoundFx }
 interface Pending { at: number; fn: () => void }
 
 export class F {
@@ -74,6 +84,8 @@ export class F {
   grimoire = "fire,fire";
   golemAt = [0, 0];
   bondEssenceAt = -1e9;
+  /** How it hears a sound hit (shared/combat.ts): heroes normal (the Songweaver: Trained Ear), monsters their MOB_COMBAT sound. */
+  sound?: SoundProfile;
 }
 
 /**
@@ -175,7 +187,8 @@ export class Duel {
         if (A && o?.skill && !o.dot && !o.crit && this.rnd() < critChance(A.s, talentBonus(A.cls, A.t, "crit"))) { dmg *= 2; o = { ...o, crit: true }; }
         if (T) this.hit(A, T, dmg, Math.sign(push[0]) || 0, o);
       },
-      heal: (id, amount) => { const u = f(id); if (u && !u.dead) u.hp = Math.min(u.maxHp, u.hp + amount); },
+      // no allies in a duel: `from` (who heals) only matters on the server
+      heal: (id, amount, _from) => { const u = f(id); if (u && !u.dead) u.hp = Math.min(u.maxHp, u.hp + amount); },
       aim: (id) => [f(id)?.face ?? 1, 0],
       // the Summoner throws its Black Hole on the foe (a player clicks on them); other classes keep their default reach
       aimDist: (id) => { const u = f(id); return u && (u.cls === "summoner" || SIM.aimHero) && !(u instanceof GolemF) && !u.mob ? Math.abs(this.other(u).x - u.x) : undefined; },
@@ -197,6 +210,7 @@ export class Duel {
         this.shots.push({ owner: o, x: sp.x, dir, speed: sp.speed, range: sp.range, traveled: 0, radius: sp.radius, dmg: sp.dmg, kb: sp.kb ?? 1, miss, hit: false, basic: false, spec: sp, pierced: false });
       },
       addField: (fi) => this.fields.push(fi),
+      soundOf: (id) => { const u = f(id); return !u ? undefined : u instanceof GolemF ? MOB_COMBAT[u.kind].sound : u.sound ?? heroSound(u.cls); },
       fear: (id, ms) => { const u = f(id); if (u) { u.slowUntil = Math.max(u.slowUntil, this.now + ms); u.sk.weakUntil = Math.max(u.sk.weakUntil, this.now + ms); } },
       weaponHit: (id) => { const u = f(id)!; return CLASSES[u.cls].damage * attackMult(u.cls, u.s); },
       magic: (id) => { const u = f(id)!; return magicMult(u.cls, u.s); },
@@ -339,6 +353,7 @@ export class Duel {
     }
     const block = gearBlock(t.eq);
     if (block) dmg = Math.max(1, Math.round(dmg * (1 - block)));
+    dmg = absorbDamage(this.host, t.id, dmg); // shields (server damagePlayer)
     const unstoppable = ccImmune(t, now);
     if (o.stunMs && !guarded && !unstoppable) t.stunUntil = Math.max(t.stunUntil, now + o.stunMs);
     if (o.slowMs && !unstoppable) t.slowUntil = Math.max(t.slowUntil, now + o.slowMs);
@@ -346,7 +361,7 @@ export class Duel {
     t.hp = Math.max(0, t.hp - dmg);
     t.lastHurt = now;
     if (!unstoppable) {
-      const pd = dmg * (o.skill ? POISE.skillMult : 1) * (guarded ? POISE.guardMult : 1) * poiseLevelMult(by?.level ?? t.level, t.level);
+      const pd = dmg * (o.skill ? POISE.skillMult : 1) * (guarded ? POISE.guardMult : 1) * poiseLevelMult(by?.level ?? t.level, t.level) * (o.poiseMul ?? 1) * (1 - buffPoise(t, now));
       if (pd > 0 && !t.broken && now >= t.steadyUntil) {
         t.poiseLost += pd; t.lastPoiseHit = now;
         if (t.poiseLost >= t.poiseMax) { t.poiseLost = t.poiseMax; t.broken = true; t.brokenUntil = now + POISE.heroBrokenMs; t.execSpent = false; }
@@ -369,6 +384,11 @@ export class Duel {
   hit(a: F | undefined, t: F, dmg: number, push: number, o: HitOpts = {}) {
     if (a && o.basic && basicDrain(a.cls)) o = { ...o, drain: (o.drain ?? 0) + basicDrain(a.cls) }; // vampire trait, like server hitTarget
     if (a) dmg = dmg * talentMult(a.cls, a.t, "dmg") * (o.skill && !o.dot ? talentMult(a.cls, a.t, "skill") : 1) * dealtMult(a, this.now);
+    if (o.sound) { // a Songweaver's sound (server hitTarget): the target's hearing scales it
+      const m = soundMult(this.host.soundOf!(t.id), o.sound);
+      dmg *= m.dmg;
+      o = { ...o, slowMs: o.slowMs && o.slowMs * m.cc, poiseMul: a && o.sound.mode === "phrygian" ? 1 + PHRYGIAN.poise * modeColour("phrygian", (k) => a.t[k] ?? 0) : undefined };
+    }
     if (a && !a.mob && !t.mob) dmg *= pvpDamageMult(a.level, t.level); // hero vs hero, like server hitTarget
     // A Summoner's creatures on a hero, and a hero's blow on a creature (server hitTarget, SUMMON.pvp)
     if (a && !a.mob && o.pet && !(t instanceof GolemF) && !t.mob) { dmg *= SUMMON.pvp.dmg; if (o.stunMs) o = { ...o, stunMs: o.stunMs * SUMMON.pvp.cc }; }
@@ -399,7 +419,12 @@ export class Duel {
     const crit = this.rnd() < critChance(a.s, talentBonus(a.cls, a.t, "crit"));
     if (crit) dmg *= 2;
     if (h.lunge) a.x += a.face * h.lunge;
-    if (def.projectile) return this.shoot(a, dmg, h.knockback, h.shotScale ?? 1);
+    if (def.projectile) {
+      this.shoot(a, dmg, h.knockback, h.shotScale ?? 1);
+      // the Songweaver's lute (server playerAttack): a sound wave, the strum rings twice as much
+      if (a.cls === "songweaver") this.shots[this.shots.length - 1].sound = { pitch: "M", deg: step === 1 ? "V" : "I", mode: a.sk.mode ?? "major", basic: true, res: step === 2 ? RESONANCE.basic : 0 };
+      return;
+    }
     const rm = gearReachMult(a.eq);
     const reach = (h.range ?? def.attackRange) * rm;
     const hx = a.x + a.face * 12 * rm;
@@ -436,6 +461,11 @@ export class Duel {
 
   /** Would skill `s` reach the target from here (facing it)? A rough bot judgement. */
   useful(a: F, s: SkillDef, d: number, incoming: boolean, tReach: number): boolean {
+    if (s.modulate) return false; // the Songweaver bot picks its mode itself
+    if (s.song) return d < 140 && !(a.sk.song && a.sk.song.f.until > this.now); // never swaps the running song by itself
+    if (s.mend) return a.hp < a.maxHp * 0.85;
+    if (s.chorale) return a.hp < a.maxHp * 0.6;
+    if (s.buff?.party || s.buff?.shield) return d < 150;
     if (s.summon) { const g = this.golemsOf(a).filter((x) => x.slot >= 0 || x.kind === "golem_colossus"); return g.length < golemSlots(a.level, a.t["su_twin"] ?? 0) && !g.some((x) => x.kind === "golem_colossus") || g.some((x) => x.hp < x.maxHp * 0.3); }
     if (s.colossus) return this.golemsOf(a).filter((x) => x.slot >= 0).length >= 1 && (d < 120 || a.hp < a.maxHp * 0.5);
     if (s.field?.hole) return d <= 140; // Black Hole / Event Horizon: thrown at the foe (aimDist)
@@ -464,9 +494,49 @@ export class Duel {
     return false;
   }
 
+  /** SIM.bounceHit: a bouncing wave comes back off the walls the 1D line doesn't have (expected value). */
+  bounceBack(s: Shot) {
+    const sp = s.spec!;
+    for (let b = 1; b <= Math.min(3, sp.bounce ?? 0); b++) {
+      if (this.rnd() >= SIM.bounceHit) continue;
+      const t = this.foes(s.owner).filter((u) => !u.dead && Math.abs(u.x - s.x) <= 100).sort((p, q) => Math.abs(p.x - s.x) - Math.abs(q.x - s.x))[0];
+      if (t) shotHit(this.host, { ...sp, dmg: sp.dmg * Math.pow(0.8, b) }, t.id);
+    }
+  }
+
+  /**
+   * Songweaver bot: keep a song up (Dirge when it has it), play in Phrygian or Minor, and play its branch's progression
+   * (Discord: Neapolitan, Hymnal: Amen, Folk: Turnaround; else any it can). True when it cast something.
+   */
+  songweaver(a: F, d: number): boolean {
+    const now = this.now, known = knownModesOf(a);
+    const want = known.includes("phrygian") ? "phrygian" : known.includes("minor") ? "minor" : "major";
+    if ((a.sk.mode ?? "major") !== want && known.length >= 2 && cast2(this.host, a.id, "sg_modulate")) return true;
+    const sg = a.sk.song, songId = a.t.sg_dirge ? "sg_dirge" : a.t.sg_march ? "sg_march" : "sg_ballad";
+    if ((!sg || sg.f.until < now + 1000) && d < 140 && cast2(this.host, a.id, songId)) return true;
+    const mine = activeSkills(a.cls).filter((s) => !s.cantrip && (a.t[s.id] ?? 0) > 0 && s.degree);
+    const has = (p: Progression) => p.notes.every((n) => mine.some((s) => s.degree === n));
+    const by = [0, 1, 2].map((b) => SKILLS.songweaver.filter((s) => s.branch === b).reduce((n, s) => n + (a.t[s.id] ?? 0), 0));
+    const main = by.indexOf(Math.max(...by));
+    const pref = PROGRESSIONS.find((p) => p.id === (["amen", "encore", "shatter"] as const)[main]);
+    const prog = pref && has(pref) ? pref : PROGRESSIONS.find(has);
+    if (!prog || d > 160) return false;
+    let k = 2;
+    while (k > 0 && !prog.notes.slice(0, k).every((n, i) => a.sk.notes[a.sk.notes.length - k + i] === n)) k--;
+    const next = prog.notes[k];
+    for (const s of mine.filter((x) => x.degree === next).sort((x, y) => y.req - x.req)) {
+      if (cooldownLeft(s, a.sk, now, cooldownMult(a.cls, a.s, a.t) * buffCdr(a, now)) > 0 || !canPay(a, skillCost(s))) continue;
+      if (s.song && s.id !== songId && sg && now - sg.at < 2000) continue;
+      a.face = Math.sign(this.other(a).x - a.x) || 1;
+      if (cast2(this.host, a.id, s.id)) return true;
+    }
+    return false;
+  }
+
   /** Bot: cast the best ready skill (highest level first). */
   castSkills(a: F, d: number, toward: number, incoming: boolean, tReach: number) {
     if (charging(a, this.now)) return;
+    if (a.cls === "songweaver" && !(a instanceof GolemF) && !a.mob && this.songweaver(a, d)) return;
     const ready = activeSkills(a.cls).filter((s) => (s.cantrip || (a.t[s.id] ?? 0) > 0) && cooldownLeft(s, a.sk, this.now, cooldownMult(a.cls, a.s, a.t) * buffCdr(a, this.now)) <= 0 && canPay(a, skillCost(s)))
       .sort((x, y) => y.req - x.req);
     const form = formOf(a, this.now) ? a.sk.buffs.find((b) => b.b.form) : undefined;
@@ -614,7 +684,7 @@ export class Duel {
       const total = s.speed * TICK / 1000, n = Math.max(1, Math.ceil(total / 4));
       for (let i = 0; i < n && !s.hit; i++) {
         s.x += s.dir * total / n; s.traveled += total / n;
-        if (s.traveled >= s.range) { s.hit = true; if (s.spec) shotEnd(this.host, s.spec, s.x, 0); break; }
+        if (s.traveled >= s.range) { s.hit = true; if (s.spec) { this.bounceBack(s); shotEnd(this.host, s.spec, s.x, 0); } break; }
         // a Black Hole of someone this shot's owner fights swallows it (server TownRoom.holeEats)
         if (this.fields.some((fi) => fi.def.hole && fi.owner !== s.owner.id && this.foes(s.owner).some((u) => u.id === fi.owner) && Math.abs(s.x - fi.x) <= fi.def.r)) { s.hit = true; break; }
         if (s.spec?.pulse && s.traveled - (s.pulsed ?? 0) >= s.spec.pulse.every) { s.pulsed = s.traveled; shotPulse(this.host, s.spec, s.x, 0); }
@@ -623,11 +693,12 @@ export class Duel {
         if (t && !s.miss && !s.pierced) {
           if (s.spec) {
             shotHit(this.host, s.spec, t.id);
+            this.bounceBack(s);
             if (s.spec.pierce > 0) { s.pierced = true; continue; }
             s.hit = true; shotEnd(this.host, s.spec, s.x, 0);
           } else {
             s.hit = true;
-            this.hit(s.owner, t, s.dmg, s.dir, { kb: s.kb, basic: s.basic });
+            this.hit(s.owner, t, s.dmg, s.dir, { kb: s.kb, basic: s.basic, sound: s.sound });
           }
         }
       }
@@ -660,7 +731,10 @@ export function golemPower(o: F) {
 
 export function make(id: string, cls: ClassKind, level: number, build: Build) {
   const pts = pointsFor(cls, level, build);
-  return new F(id, cls, level, talentsFor(cls, level, build), gearFor(cls, level, pts), pts);
+  const f = new F(id, cls, level, talentsFor(cls, level, build), gearFor(cls, level, pts), pts);
+  // the Songweaver's mode is saved (swMode): she comes to a fight in the one she plays (Phrygian, else Minor)
+  if (cls === "songweaver") { const k = knownModesOf(f); f.sk.mode = k.includes("phrygian") ? "phrygian" : k.includes("minor") ? "minor" : "major"; }
+  return f;
 }
 
 /** Win rate of `x` against `y` (draws count half), side swapped every fight; each hero picks a random build. */
@@ -681,7 +755,7 @@ const pct = (v: number) => `${Math.round(v * 100)}%`.padStart(5);
 /** Overall win rate of every class against the others at one level (random builds unless `build` is set). */
 export function overallAt(level: number, n: number, build?: Build): Record<ClassKind, number> {
   const out = {} as Record<ClassKind, number>;
-  for (const x of ACTIVE_CLASSES) out[x] = ACTIVE_CLASSES.filter((y) => y !== x).reduce((s, y) => s + winRate(x, y, level, n, build), 0) / (ACTIVE_CLASSES.length - 1);
+  for (const x of SIM_CLASSES) out[x] = SIM_CLASSES.filter((y) => y !== x).reduce((s, y) => s + winRate(x, y, level, n, build), 0) / (SIM_CLASSES.length - 1);
   return out;
 }
 
@@ -689,27 +763,27 @@ if (process.argv[1]?.includes("duel")) {
   const n = Number(process.argv[2]) || 400;
   const brief = process.argv.includes("--brief");
   const levels = [1, 5, 10, 15, 20, 25, 30, 40, 50];
-  const summary: Record<string, string[]> = Object.fromEntries(ACTIVE_CLASSES.map((c) => [c, []]));
+  const summary: Record<string, string[]> = Object.fromEntries(SIM_CLASSES.map((c) => [c, []]));
   for (const level of levels) {
     if (!brief) {
       console.log(`\nLevel ${level} (random builds): row hero's win rate vs column hero`);
-      console.log("          " + ACTIVE_CLASSES.map((c) => c.slice(0, 6).padStart(7)).join("") + "  overall");
+      console.log("          " + SIM_CLASSES.map((c) => c.slice(0, 6).padStart(7)).join("") + "  overall");
     }
-    for (const x of ACTIVE_CLASSES) {
-      const row = ACTIVE_CLASSES.map((y) => (x === y ? 0.5 : winRate(x, y, level, n)));
-      const overall = row.reduce((s, v, i) => s + (ACTIVE_CLASSES[i] === x ? 0 : v), 0) / (ACTIVE_CLASSES.length - 1);
+    for (const x of SIM_CLASSES) {
+      const row = SIM_CLASSES.map((y) => (x === y ? 0.5 : winRate(x, y, level, n)));
+      const overall = row.reduce((s, v, i) => s + (SIM_CLASSES[i] === x ? 0 : v), 0) / (SIM_CLASSES.length - 1);
       summary[x].push(pct(overall));
-      if (!brief) console.log(x.padEnd(10) + row.map((v, i) => (ACTIVE_CLASSES[i] === x ? "    -  " : pct(v) + "  ")).join("") + pct(overall));
+      if (!brief) console.log(x.padEnd(10) + row.map((v, i) => (SIM_CLASSES[i] === x ? "    -  " : pct(v) + "  ")).join("") + pct(overall));
     }
   }
   console.log("\nOverall PvP win rate by level (random builds)");
   console.log("          " + levels.map((l) => `Lv${l}`.padStart(6)).join(""));
-  for (const c of ACTIVE_CLASSES) console.log(c.padEnd(10) + summary[c].map((v) => v.padStart(6)).join(""));
+  for (const c of SIM_CLASSES) console.log(c.padEnd(10) + summary[c].map((v) => v.padStart(6)).join(""));
   if (process.argv.includes("--branches")) for (const b of [0, 1, 2] as Build[]) {
     console.log(`\nBranch ${b + 1} builds, overall`);
     for (const level of [10, 20, 30]) {
       const o = overallAt(level, n, b);
-      console.log(`Lv${level}`.padEnd(6) + ACTIVE_CLASSES.map((c) => `${c.slice(0, 6)} ${pct(o[c])}`).join("  "));
+      console.log(`Lv${level}`.padEnd(6) + SIM_CLASSES.map((c) => `${c.slice(0, 6)} ${pct(o[c])}`).join("  "));
     }
   }
 }

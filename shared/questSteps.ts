@@ -1,7 +1,7 @@
 import { TILE, type MobKind } from "./constants";
 import { isUndeadNight } from "./daynight";
 import { GROUND, OBJECTS, T } from "./map";
-import type { ArcMap, QuestDef, QuestObject, Quester, QuestStep, Summon } from "./quests";
+import type { QuestDef, QuestObject, Quester, QuestStep, Summon } from "./quests";
 import type { TraitId } from "./cosmetics";
 
 /**
@@ -45,20 +45,24 @@ export interface ChoiceSpec { flag: ChoiceId; options: { label: string; v: numbe
 export interface BargainSpec { flag: ChoiceId; say: string[]; options: { label: string; v: number }[]; accept: number; refuse: number; trait?: TraitId }
 
 /**
- * The hero's choices, 2 bits each in the reserved arcs key `$f` (0 = not made). Append-only: a new choice takes the
- * next index, an old one never moves (saves keep the packed number).
+ * The hero's choices, 2 bits each in one number (0 = not made): the owner-only Player.me.flags (server/player.ts),
+ * saved as HeroSave.flags. Append-only: a new choice takes the next index, an old one never moves (saves keep the number).
  */
 export const CHOICES = { letters: 0, bargain: 1, grave: 2 } as const;
 export type ChoiceId = keyof typeof CHOICES;
-/** Reserved keys in Player.arcs for numbers that are not arc progress (arc ids never start with "$"). */
-export const META = { flags: "$f", cosm: "$c" } as const;
+/**
+ * The two numbers that are not chain progress: `flags` (choices, owner-only in Player.me) and `cosm` (cosmetics,
+ * shared/cosmetics.ts, public on Player because every client draws a hero's title and traits).
+ */
+export const META = { flags: "flags", cosm: "cosm" } as const;
 export type MetaKey = (typeof META)[keyof typeof META];
 
-/** A reserved number out of the arcs map (missing = 0). */
+/**
+ * One of those numbers (missing or garbage = 0). The server's Player and test heroes have `flags` / `cosm` at the top;
+ * on the client a hero's flags sit in its owner-only `me` (undefined for other heroes, read as none).
+ */
 export function metaOf(p: Quester | undefined, key: MetaKey): number {
-  const m: ArcMap | undefined = p?.arcs;
-  if (!m) return 0;
-  const v = typeof (m as { get?: unknown }).get === "function" ? (m as { get(k: string): number | undefined }).get(key) : (m as Record<string, number>)[key];
+  const v = key === META.flags ? (p?.flags ?? p?.me?.flags) : p?.cosm;
   return typeof v === "number" && Number.isFinite(v) ? v : 0;
 }
 
