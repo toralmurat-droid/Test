@@ -120,7 +120,8 @@ export class WarTroops {
     const v = this.view!, r2 = TROOP.viewRange * TROOP.viewRange;
     for (const [t, s] of this.squads) {
       const k = CLAN_KEYS[v.owner[t]];
-      if (!k || !this.near(t, me, r2 * 4)) { // kept out to twice the range: a long leg's middle is far from both stops this.destroy(s); this.squads.delete(t); continue; }
+      // kept out to twice the range: a long leg's middle is far from both stops
+      if (!k || !this.near(t, me, r2 * 4)) { this.destroy(s); this.squads.delete(t); continue; }
       if (s.sig !== this.sigOf(t)) { s.target = 0; this.dying.push(s); this.squads.delete(t); }
     }
     for (let t = 0; t < v.owner.length; t++) {
