@@ -1,5 +1,6 @@
 {
   "date": "2026-11-14",
+  "patch": 221,
   "title": "Smoother play",
   "changes": [
     "The game runs smoother: only the scenery around you is drawn and updated, and the hotbar, damage numbers and spell effects do far less work every frame.",
