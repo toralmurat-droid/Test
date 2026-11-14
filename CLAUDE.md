@@ -36,7 +36,7 @@ Pixel Town Brawl: an online multiplayer pixel-art action RPG in the browser.
 - **Owner-only player data goes in `Player.me`** (`server/player.ts`, `@view()`, one `StateView` per client in
   `onJoin`): other clients never receive it. Never replace `me` or a collection inside it after join, and never set a
   synced Player field to `undefined`/`null` (with a `@view` field, Player's deletes reach only the owner). Views need
-  `Encoder.BUFFER_SIZE` big enough that a patch never resizes (a library bug corrupts resized view patches); a
+  `Encoder.BUFFER_SIZE` (set once, in `server/patchCopy.ts`) big enough that a patch never resizes (a library bug corrupts resized view patches); a
   `@colyseus/schema buffer overflow` warning in the logs means raise it. `tests/view.test.ts` guards both.
 - **Synced `Mob` fields:** new ones go at the end of the class and of `MOB_FIELDS` in `shared/mobView.ts`, in the same
   order (`tests/mobview.test.ts` checks it).

@@ -109,7 +109,7 @@ test("a late joiner decodes a full state near the worst case (guards the Encoder
     const host = await srv.join({ cls: "wizard" }); // the room exists once someone joined
     await wait(200);
     const room = srv.room;
-    // 120 heavy heroes (full bag, many talents): a join full state near the ~150 KB worst case. If the buffer is too
+    // 120 heavy heroes (full bag, many talents): a join full state of about 80 KB. If the buffer is too
     // small the per-view encode resizes and the late joiner's state comes out truncated (server/patchCopy.ts). Fails at
     // 64 KB, passes from 128 KB.
     for (let i = 0; i < 120; i++) {

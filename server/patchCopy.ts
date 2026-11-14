@@ -19,7 +19,9 @@ import type { Room } from "colyseus";
 // With StateViews (Player.me is @view) the overflow path is not just slow but wrong: encodeView / encodeAllView keep
 // slicing the old buffer after the re-encode and lose the view's visibility changes, so clients fail with
 // `"refId" not found`. So start big enough that no patch or full state ever resizes: the bench at 40 bots peaks around
-// 32 KB, a full state with 50 heavy heroes and ~1500 ground items about 150 KB. `tests/view.test.ts` guards it.
+// 32 KB, a full state with 50 heavy heroes and ~1500 ground items about 150 KB. Per tick the buffer holds the shared
+// patch plus every client's view part (applyPatches shares one offset), so size it for that sum when owner-only data
+// grows. `tests/view.test.ts` guards it.
 Encoder.BUFFER_SIZE = Math.max(Encoder.BUFFER_SIZE, 256 * 1024);
 
 const WRAPPED = Symbol("patchCopy");
