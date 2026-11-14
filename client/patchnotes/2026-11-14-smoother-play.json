@@ -1,0 +1,11 @@
+{
+  "date": "2026-11-14",
+  "patch": 221,
+  "title": "Smoother play",
+  "changes": [
+    "The game runs smoother: only the scenery around you is drawn and updated, and the hotbar, damage numbers and spell effects do far less work every frame.",
+    "Fix: when the server was busy, heroes could show wrong or stuck positions and health until you reconnected. Updates now always arrive intact.",
+    "The server no longer spends time on monsters that no hero is near, so a quiet world costs about half as much.",
+    "Curious how it runs for you? Add ?perf=1 to the game's address for a small performance readout with a Copy button."
+  ]
+}

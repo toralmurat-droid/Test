@@ -38,6 +38,11 @@ Work that spans several sessions:
 - keep it on one branch and one draft PR until it's ready;
 - record decisions with name and date ("Murat 2026-11-09: balance later"), so the next session knows why.
 
+## Roadmap
+The development plan is public at `/roadmap` (play.fmtpa.ch/roadmap), built from `client/src/roadmap.ts`. When a PR
+starts or finishes a roadmap item, update its `status` (and `pr`) in the same PR. New milestones or items need the
+Game Director's (Murat's) OK.
+
 ## Patch notes
 Every PR players can notice adds one file in `client/patchnotes/` — see
 [client/patchnotes/README.md](client/patchnotes/README.md). Written for players, in English, 1–4 short lines.

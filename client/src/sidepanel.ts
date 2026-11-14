@@ -2,7 +2,7 @@ import { ClassKind } from "../../shared/classes";
 import { Equipped, GEAR_SLOTS } from "../../shared/gear";
 import { heroSheet, Sheet, SheetHero, SHEET_ROWS } from "../../shared/heroSheet";
 import { fillIcons } from "./pixelicons";
-import { ELEMENTS, ELEMENT_NAMES, type Element } from "../../shared/elements";
+import { ELEMENTS, ELEMENT_NAMES, REACTIONS, REACTION_IDS, REACTION_MARK_MS, REACTION_SELF_FACTOR, type Element } from "../../shared/elements";
 import { Feast, feastLines } from "../../shared/devour";
 
 /** What my hero has eaten with Devour (the server sends it as "feast"). */
@@ -34,6 +34,9 @@ export function talentsOf(state: any): Record<string, number> {
   return out;
 }
 export const wornOf = (state: any): Equipped => Object.fromEntries(GEAR_SLOTS.filter((s) => state[s]).map((s) => [s, state[s]]));
+
+/** Elemental reactions (shared/elements.ts REACTIONS): the one place in game that says how elements combine. */
+const reactionHelp = () => `An elemental hit marks a monster for ${REACTION_MARK_MS / 1000}s; another element on the mark reacts (${REACTION_IDS.map((r) => `${REACTIONS[r].els.map((e) => ELEMENT_NAMES[e]).join(" + ")} = ${REACTIONS[r].name}`).join(", ")}). Full effect on another hero's mark, ${Math.round(REACTION_SELF_FACTOR * 100)}% on your own.`;
 
 export class SidePanel {
   private el = document.getElementById("sidepanel")!;
@@ -115,6 +118,7 @@ export class SidePanel {
       sec("Defense", sheetRow("hp", "Health") + sheetRow("mana", "Mana") + sheetRow("def", "Damage blocked", true) + sheetRow("speed", "Move speed")) +
       sec("Attributes", st("str", "Strength") + st("sta", "Stamina") + st("mag", "Magic") + st("dex", "Dexterity")) +
       sec("Resistances", `<div class="spreses">${ELEMENTS.map(rs).join("")}</div>`) +
+      sec("Reactions", `<div class="sprow"><span>${reactionHelp()}</span></div>`) +
       (fed.length ? sec("Devoured", fed.map((l) => `<div class="sprow"><span>${l}</span></div>`).join("")) : "") +
       `<div class="spnote">${p ? `If you ${p.label}` : "Hover an item or a skill to see what it changes"}</div>`;
   }

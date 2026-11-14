@@ -1,6 +1,13 @@
 // Server load bench: runs the game server, connects N bot heroes (tools/perf/bots.ts, in a child process),
 // then prints the time per server tick, CPU, memory and the bytes each player receives per second.
 //   npm run bench -- [bots=5] [seconds=15]        SPREAD=1 scatters the bots over the whole map (worst case)
+//   kbPerPlayerPerSec = payload after inflate (what the game decodes); wireKbPerPlayerPerSec = bytes read from the socket (frame headers, after deflate)
+//   DEFLATE=1: per-message deflate with the production settings (server/index.ts: threshold 256, level 1); off by default so numbers stay comparable.
+//     The server copies each state patch before deflate (server/patchCopy.ts) and the bots copy each send (tools/perf/bots.ts);
+//     without those copies `ws` compressed reused buffers late, giving "refId not found" decode errors and garbled bot inputs.
+//   PHASES=1: also prints a second JSON line with the time per phase of the tick (wraps TownRoom methods). The wrappers add overhead, so the
+//     totals in this mode are INFLATED (more for the hot, tiny ones); use it to see shares, not absolute ms. PHASES=fine adds the hot per-mob helpers.
+//   BENCH_PORT=2656: listen on another port (default 2599), e.g. when two benches run on one machine
 //   CAST=1 SPREAD=1: the Summoner bots cast wisps, blades, black holes and the Void Arsenal non-stop (tools/perf/bots.ts)
 //   SONGWEAVER=1 (PARTY=1): Songweaver bots too; PARTY=1 groups them
 import os from "node:os";
@@ -10,7 +17,7 @@ import { fork } from "node:child_process";
 import { performance } from "node:perf_hooks";
 
 async function main() {
-  const BOTS = Number(process.argv[2] ?? 5), SECS = Number(process.argv[3] ?? 15), PORT = 2599;
+  const BOTS = Number(process.argv[2] ?? 5), SECS = Number(process.argv[3] ?? 15), PORT = Number(process.env.BENCH_PORT ?? 2599);
   process.env.SAVE_FILE = path.join(os.tmpdir(), `bench-saves-${process.pid}.json`);
   process.env.IDEAS_FILE = path.join(os.tmpdir(), `bench-ideas-${process.pid}.json`);
   const colyseus: any = await import("colyseus");
@@ -22,15 +29,34 @@ async function main() {
 
   const ticks: number[] = [], patches: number[] = [];
   let room: any;
+  // PHASES: accumulating timers. A stack gives each phase's own time (self) next to the inclusive time (nested phases subtracted from self)
+  const PH = process.env.PHASES, ph = new Map<string, { n: number; incl: number; self: number; out: boolean }>(), stack: number[] = [], skipped: string[] = [];
+  let inUpdate = false;
+  const timed = (obj: any, name: string, label = name, out = false) => {
+    const fn = obj?.[name];
+    if (typeof fn !== "function") { skipped.push(label); return; }
+    const rec = { n: 0, incl: 0, self: 0, out }; ph.set(label, rec);
+    obj[name] = function (this: any, ...a: unknown[]) {
+      if (!inUpdate && !out) return fn.apply(this, a);
+      const t = performance.now(); stack.push(0);
+      try { return fn.apply(this, a); } finally { const el = performance.now() - t, kids = stack.pop()!; rec.n++; rec.incl += el; rec.self += el - kids; if (stack.length) stack[stack.length - 1] += el; }
+    };
+  };
   const proto = TownRoom.prototype as any, update = proto.update;
+  if (PH) {
+    for (const n of ["tradeTick", "autoGolems", "golemNews", "checkQuestPlace", "wakePortals", "useLinks", "pickUp", "updateWrath", "markWarm", "buildFeudGrid", "assignFlanks",
+      "updateUndeadNight", "updateRaids", "bossVoices", "checkRituals", "updateMob", "pickTarget", "claimSpot", "updateSummon", "updateZones", "updateGuards", "updateWatch",
+      "updateProjectile", "updateHazards", ...(PH === "fine" ? ["cold", "dozing", "heroNear", "equipped", "syncMana"] : [])]) timed(proto, n);
+  }
   proto.update = function (dt: number) {
     if (room !== this) {
       room = this;
       // Time each state patch: wrapped on the room itself (Colyseus 0.16 calls this.broadcastPatch() from its own timer)
       const bp = this.broadcastPatch;
+      if (PH) { timed(this.mobView, "send", "mobView.send (outside update)", true); timed(this.champs, "update", "champs.update"); }
       this.broadcastPatch = function (...a: unknown[]) { const t = performance.now(); const r = bp.apply(this, a); patches.push(performance.now() - t); return r; };
     }
-    const t = performance.now(); update.call(this, dt); ticks.push(performance.now() - t);
+    const t = performance.now(); inUpdate = true; try { update.call(this, dt); } finally { inUpdate = false; } ticks.push(performance.now() - t);
   };
 
   const httpServer = http.createServer();
@@ -40,13 +66,13 @@ async function main() {
 
   const botsFile = path.join(__dirname, "bots.cjs");
   const child = fork(botsFile, [String(BOTS), String(PORT)], { stdio: ["ignore", "ignore", "inherit", "ipc"] });
-  let bytes = 0;
-  await new Promise<void>((r) => child.on("message", (m: any) => { if (m.joined) r(); else if (m.bytes !== undefined) bytes += m.bytes; }));
+  let bytes = 0, wire = 0;
+  await new Promise<void>((r) => child.on("message", (m: any) => { if (m.joined) r(); else if (m.bytes !== undefined) { bytes += m.bytes; wire += m.wire ?? 0; } }));
   if (process.env.SPREAD) room.state.players.forEach((p: any) => {
     for (let i = 0; i < 500; i++) { const x = Math.random() * MAP_W * TILE, y = Math.random() * MAP_H * TILE; if (!isSolidAt(x, y)) { p.x = x; p.y = y; break; } }
   });
   await new Promise((r) => setTimeout(r, 3000));
-  ticks.length = 0; patches.length = 0; bytes = 0;
+  ticks.length = 0; patches.length = 0; bytes = 0; wire = 0; for (const r of ph.values()) r.n = r.incl = r.self = 0;
   const cpu0 = process.cpuUsage(), t0 = performance.now();
   await new Promise((r) => setTimeout(r, SECS * 1000));
   const cpu = process.cpuUsage(cpu0), wall = performance.now() - t0;
@@ -57,8 +83,20 @@ async function main() {
   console.log(JSON.stringify({
     bots: BOTS, spread: !!process.env.SPREAD, ticksPerSec: (ticks.length / (wall / 1000)).toFixed(1), tickAvgMs: avg(ticks), tickP95Ms: q(0.95),
     patchAvgMs: avg(patches), cpuPct: (((cpu.user + cpu.system) / 1000) / wall * 100).toFixed(0), rssMB: (process.memoryUsage().rss / 1e6).toFixed(0),
-    kbPerPlayerPerSec: (bytes / BOTS / (wall / 1000) / 1024).toFixed(1), mobs: room.state.mobs.size, activeMobs: active,
+    kbPerPlayerPerSec: (bytes / BOTS / (wall / 1000) / 1024).toFixed(1), wireKbPerPlayerPerSec: (wire / BOTS / (wall / 1000) / 1024).toFixed(1), deflate: !!process.env.DEFLATE, mobs: room.state.mobs.size, activeMobs: active,
   }));
+  if (PH) {
+    const T = ticks.length || 1, f = (x: number) => +(x / T).toFixed(3), phases: any = {};
+    let inSelf = 0;
+    for (const [k, r] of [...ph].sort((a, b) => b[1].incl - a[1].incl)) {
+      if (!r.n) continue;
+      phases[k] = { inclMsPerTick: f(r.incl), selfMsPerTick: f(r.self), callsPerTick: f(r.n) };
+      if (!r.out) inSelf += r.self;
+    }
+    const upd = ticks.reduce((x, y) => x + y, 0);
+    phases["rest of update (inline loops, tickUnit, heroes, fields)"] = { selfMsPerTick: f(upd - inSelf) };
+    console.log(JSON.stringify({ phasesNote: "INFLATED by the wrappers; inclusive = with nested phases, self = own time; selfs + rest = update total", updateMsPerTick: f(upd), phases, skipped }));
+  }
   child.send("stop");
   setTimeout(() => process.exit(0), 500);
 }

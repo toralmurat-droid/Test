@@ -1,0 +1,11 @@
+{
+  "date": "2026-11-14",
+  "patch": 220,
+  "title": "HUD fixes",
+  "changes": [
+    "The health and mana orbs now show the right numbers when your maximum grows.",
+    "Kill and loot messages no longer draw over the quest tracker.",
+    "The level-up note goes away once you have spent your stat points.",
+    "The Group panel no longer mentions elemental reactions (they are on the Hero tab now) and says when everyone nearby is already in your group."
+  ]
+}

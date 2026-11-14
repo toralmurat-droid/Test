@@ -31,8 +31,8 @@ const DW = 220; // darkness canvas width (texels): soft, scaled up
 export interface DungeonHost {
   /** The local hero's feet (world px). */
   me(): { x: number; y: number } | undefined;
-  /** Every hero's feet in view (they carry a light). */
-  heroes(): { x: number; y: number }[];
+  /** Calls `fn` with every hero's feet in view (they carry a light); no per-frame arrays. */
+  eachHero(fn: (x: number, y: number) => void): void;
 }
 
 const DOOR_TILES = new Set(DOORS.flatMap((d) => d.tiles));
@@ -439,10 +439,10 @@ export class DungeonView {
       hole(l.x, l.y, l.r * f, 0.92);
     }
     const tf = 1 + (Math.sin(now / 70) * 0.5 + Math.sin(now / 23 + 1.3) * 0.3) * 0.05; // a flame's flicker
-    for (const h of this.host.heroes()) {
-      const mine = !!me && h.x === me.x && h.y === me.y;
-      hole(h.x, h.y - 8, (mine ? (this.torch ? 8.5 * tf : 5.2) : 3.6) * TILE, mine && this.torch ? 0.97 : 0.88);
-    }
+    this.host.eachHero((hx, hy) => {
+      const mine = !!me && hx === me.x && hy === me.y;
+      hole(hx, hy - 8, (mine ? (this.torch ? 8.5 * tf : 5.2) : 3.6) * TILE, mine && this.torch ? 0.97 : 0.88);
+    });
     this.darkTex.refresh();
   }
 }

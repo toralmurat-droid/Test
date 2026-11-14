@@ -93,6 +93,9 @@ export class NpcLayer {
   readonly objects: QuestObjects;
   private nearObj?: ReturnType<QuestObjects["near"]>;
   private trackerHtml = "";
+  private promptHtml = "";
+  private trackQ: QuestState | undefined;
+  private trackAt = 0;
   /**
    * Folding in the tracker (Murat 2026-11-07): a quest is folded to its title by default and opens once it is started;
    * a click on the title flips that, remembered per title ("opened" for folded-by-default ones, "folded" for started ones).
@@ -137,7 +140,7 @@ export class NpcLayer {
         const k = (fb.closest(".qt-block") as HTMLElement).dataset.key ?? "";
         this.followed = this.followed === k ? "" : k;
         try { localStorage.setItem("qtfollow", this.followed); } catch { /* storage off */ }
-        this.trackerHtml = "";
+        this.trackerHtml = ""; this.trackAt = 0;
         return;
       }
       const t = el.closest(".qt-head") as HTMLElement | null;
@@ -148,7 +151,7 @@ export class NpcLayer {
       const set = started ? this.folded : this.opened;
       if (set.has(key)) set.delete(key); else set.add(key);
       try { localStorage.setItem("qtfolded", JSON.stringify([...this.folded])); localStorage.setItem("qtopened", JSON.stringify([...this.opened])); } catch { /* storage off */ }
-      this.trackerHtml = ""; // redraw on the next update
+      this.trackerHtml = ""; this.trackAt = 0; // redraw on the next update
       block.classList.toggle("folded", this.isFolded(key, started));
     };
     for (const n of NPCS) {
@@ -524,9 +527,10 @@ export class NpcLayer {
     const showPrompt = (!!this.near || !!this.nearObj) && !this.talking && !this.hidePrompt;
     this.prompt.classList.toggle("open", showPrompt);
     if (showPrompt) {
-      this.prompt.innerHTML = this.nearObj
+      const html = this.nearObj
         ? `<kbd>E</kbd> ${this.nearObj.verb}: ${this.nearObj.name}`
         : `<kbd>E</kbd> ${this.near!.shop ? "Trade with" : "Talk to"} ${this.near!.name}`;
+      if (html !== this.promptHtml) { this.promptHtml = html; this.prompt.innerHTML = html; }
     }
     if (this.talking) this.renderDialog(q);
 
@@ -539,6 +543,10 @@ export class NpcLayer {
       const mark = here ? npcQuestMark(n.id, q) : "";
       if (s.mark.text !== mark) s.mark.setText(mark);
     }
+    // Markers and the tracker are rebuilt about 8 times a second (or at once when the quest state or the tracker changed)
+    const t = performance.now();
+    if (q === this.trackQ && t - this.trackAt < 125) { this.drawPointer(); this.drawGoal(); return; }
+    this.trackQ = q; this.trackAt = t;
     // Map markers: "!" / "?" on NPCs, coins on traders, and the current quest targets of every chain
     // A story waiting for the guided first quest (chainOpen) shows nothing yet
     const states = CHAINS.map((_, c) => chainState(q, c)).map((st, c) => (st && st.questStage === 0 && !chainOpen(q, c) ? undefined : st));
@@ -551,9 +559,9 @@ export class NpcLayer {
       if (n.shop) return { x: n.x, y: n.y, glyph: "$", color: "#f2c14e", label: n.title };
       return { x: n.x, y: n.y, glyph: "•", color: "#b9f27c", label: n.name };
     });
-    for (const t of targets) {
-      if (t.kind === "area") this.markers.push({ x: t.x, y: t.y, r: t.r, glyph: "", color: "#ffd166", label: t.label, track: true });
-      else if (t.kind === "object") this.markers.push({ x: t.x, y: t.y, glyph: "◆", color: "#7ff3ff", label: t.label, track: true });
+    for (const g of targets) {
+      if (g.kind === "area") this.markers.push({ x: g.x, y: g.y, r: g.r, glyph: "", color: "#ffd166", label: g.label, track: true });
+      else if (g.kind === "object") this.markers.push({ x: g.x, y: g.y, glyph: "◆", color: "#7ff3ff", label: g.label, track: true });
     }
     this.log.render(q);
 

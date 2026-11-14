@@ -20,7 +20,7 @@ export type SpecialKind = "guard" | "dash" | "nova" | "volley" | "rage" | "drain
 /**
  * One hit of the 3-hit attack combo. Pressing attack again within COMBO_WINDOW_MS after the previous hit's
  * cooldown chains to the next hit; otherwise the combo restarts at hit 1. Art convention: the client plays
- * the attack animation for `Player.combo` (0, 1, 2) and the "swing" message carries `step`.
+ * the attack animation for the "swing" message's `step` (0, 1, 2); `Player.combo` is server-only.
  */
 export interface ComboHit {
   damage: number; // multiplier on the class damage

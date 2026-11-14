@@ -3,6 +3,7 @@ import { MAP_H, MAP_W, TILE, WORLD_H } from "../../shared/constants";
 import { T, TILE_COUNT } from "../../shared/map";
 import { ROWS, ANIMATED_TILES, animatedRows } from "./tileset";
 import { refreshRegions } from "./texupload";
+import { StaticChunks, staticObj } from "./staticChunks";
 import { BUILDINGS, buildBarns, buildHouses, buildStalls, ruinWallTexture } from "./isobuild";
 import { buildBridges } from "./isobridge";
 
@@ -47,6 +48,16 @@ const anchors = new WeakMap<Phaser.GameObjects.GameObject, { x: number; y: numbe
 export function isoAnchor(g: Phaser.GameObjects.GameObject, to: { x: number; y: number }) {
   if (ISO) anchors.set(g, to);
   return g;
+}
+
+/**
+ * setDepth for things placed every frame (heroes, monsters, their labels and bars): skipped when the depth before the
+ * iso projection is unchanged, because every setDepth makes Phaser re-sort the whole display list.
+ */
+export function setBaseDepth<O extends Phaser.GameObjects.GameObject & { depth: number; setDepth(d: number): unknown }>(o: O, d: number): O {
+  const r = o as any, cur = r.__isoD !== undefined && r.__isoD === r.depth ? r.__isoO : r.depth;
+  if (cur !== d) o.setDepth(d);
+  return o;
 }
 
 // Things already drawn in screen (iso) coordinates, e.g. chunks of upright grass and flowers: left as they are.
@@ -153,6 +164,7 @@ export class IsoView {
 
   /** Iso tilemap layers in place of the square ones (same data, same tile indices). */
   static tilemap(scene: Phaser.Scene, ground: number[][], objects: number[][]) {
+    StaticChunks.of(scene); // before the first static object, so creation order is known for depth ties
     bakeIsoTiles(scene);
     // The orientation has to be known when the Tilemap is built (it picks its coordinate helpers then)
     const data = new Phaser.Tilemaps.MapData({
@@ -231,6 +243,7 @@ export class IsoView {
     const flatContainers = this.flatSet;
     const frame = ++this.frame;
     const cam = this.scene.cameras.main as any, follow = cam._follow;
+    StaticChunks.get(this.scene)?.sync(cam, follow); // static objects near the view join the list, far ones leave
     const v = cam.worldView as Phaser.Geom.Rectangle, M = 256; // world box seen last frame (set in post), plus a margin
     const vx0 = v.x - M, vy0 = v.y - M, vx1 = v.right + M, vy1 = v.bottom + M;
     const saved = this.saved as any[], hidden = this.hidden as any[];
@@ -656,7 +669,7 @@ export function isoStanding(scene: Phaser.Scene, objects: number[][]): number[][
       const variant = t === T.PALISADE ? ((tx * 73856093) ^ (ty * 19349663)) >>> 0 : 0;
       const key = stakesTexture(scene, t !== T.PALISADE, mask, broken, outDir, variant % 6);
       const H = t === T.PALISADE ? 30 : 12;
-      scene.add.image(cx, cy, key).setOrigin(0.5, (H + IH / 2) / (IH + H)).setDepth(cy);
+      staticObj(scene, scene.add.image(cx, cy, key).setOrigin(0.5, (H + IH / 2) / (IH + H)).setDepth(cy));
       out[ty][tx] = -1;
     } else if (h !== undefined) {
       let key: string;
@@ -666,7 +679,7 @@ export function isoStanding(scene: Phaser.Scene, objects: number[][]): number[][
         const mask = (same(tx, ty - 1) ? 1 : 0) | (same(tx + 1, ty) ? 2 : 0) | (same(tx, ty + 1) ? 4 : 0) | (same(tx - 1, ty) ? 8 : 0);
         const w = ruinWallTexture(scene, t === T.RUIN, mask, tx, ty);
         const img = scene.add.image(cx, cy, w.key);
-        img.setOrigin(0.5, w.up / img.height).setDepth(cy);
+        staticObj(scene, img.setOrigin(0.5, w.up / img.height).setDepth(cy));
         out[ty][tx] = -1;
         continue;
       } else {
@@ -674,14 +687,14 @@ export function isoStanding(scene: Phaser.Scene, objects: number[][]): number[][
         key = blockTexture(scene, `blk_${index}_${h}`, tileSrc(index), tileSrc(index), h!);
       }
       // origin = the centre of the footprint diamond, so the block stands on its tile
-      scene.add.image(cx, cy, key).setOrigin(0.5, (IH / 2 + h) / (IH + h)).setDepth(cy);
+      staticObj(scene, scene.add.image(cx, cy, key).setOrigin(0.5, (IH / 2 + h) / (IH + h)).setDepth(cy));
       out[ty][tx] = -1;
     } else if (UPRIGHT.has(t)) {
       // 3/4 view art: its bottom edge stands on the tile's centre, a little forward
       const v = (((tx * 2654435761) ^ (ty * 40503)) >>> 0) % 4;
       const painted = SMOOTH ? uprightTexture(scene, t, v) : undefined; // detailed iso art in place of the 3/4 tile
-      if (painted) scene.add.image(cx, cy, painted).setOrigin(0.5, UPRIGHT_OY).setDepth(cy).setFlipX(t !== T.SIGN && t !== T.SIGNPOST && v >= 2);
-      else scene.add.image(cx, cy, "tiles", tileFrame(scene, index)).setOrigin(0.5, 0.85).setDepth(cy);
+      if (painted) staticObj(scene, scene.add.image(cx, cy, painted).setOrigin(0.5, UPRIGHT_OY).setDepth(cy).setFlipX(t !== T.SIGN && t !== T.SIGNPOST && v >= 2));
+      else staticObj(scene, scene.add.image(cx, cy, "tiles", tileFrame(scene, index)).setOrigin(0.5, 0.85).setDepth(cy));
       out[ty][tx] = -1;
     }
   }
@@ -708,7 +721,7 @@ function isoDesert(scene: Phaser.Scene, t: number, tx: number, ty: number, at: (
     const deep = (x: number, y: number) => id(at(x, y)) === T.CLIFF && cd(x, y) > CLIFF_DEPTH;
     const faces = (deep(tx, ty + 1) ? 0 : 1) | (deep(tx + 1, ty) ? 0 : 2);
     const key = cliffTexture(scene, h, faces, cliffVariant(tx, ty));
-    scene.add.image(cx, cy, key).setOrigin(0.5, (IH / 2 + h) / (IH + h)).setDepth(cy + d * 0.5);
+    staticObj(scene, scene.add.image(cx, cy, key).setOrigin(0.5, (IH / 2 + h) / (IH + h)).setDepth(cy + d * 0.5));
     return true;
   }
   const isHouse = (x: number, y: number) => { const n = id(at(x, y)); return n === T.ADOBE || (n === T.DOOR && y >= DESERT_Y0); };
@@ -717,24 +730,24 @@ function isoDesert(scene: Phaser.Scene, t: number, tx: number, ty: number, at: (
     const edges = (isHouse(tx, ty - 1) ? 0 : 1) | (isHouse(tx + 1, ty) ? 0 : 2) | (isHouse(tx, ty + 1) ? 0 : 4) | (isHouse(tx - 1, ty) ? 0 : 8);
     const key = adobeTexture(scene, faces, edges, t === T.DOOR && !isHouse(tx, ty + 1), v);
     const h = ADOBE_H + 4;
-    scene.add.image(cx, cy, key).setOrigin(0.5, (IH / 2 + h) / (IH + h)).setDepth(cy);
+    staticObj(scene, scene.add.image(cx, cy, key).setOrigin(0.5, (IH / 2 + h) / (IH + h)).setDepth(cy));
     return true;
   }
   if (t === T.ADOBE_WALL) {
     const same = (x: number, y: number) => id(at(x, y)) === T.ADOBE_WALL;
     const mask = (same(tx, ty - 1) ? 1 : 0) | (same(tx + 1, ty) ? 2 : 0) | (same(tx, ty + 1) ? 4 : 0) | (same(tx - 1, ty) ? 8 : 0);
     const h = ADOBE_WALL_H + 4;
-    scene.add.image(cx, cy, adobeWallTexture(scene, mask, v % 2)).setOrigin(0.5, (IH / 2 + h) / (IH + h)).setDepth(cy);
+    staticObj(scene, scene.add.image(cx, cy, adobeWallTexture(scene, mask, v % 2)).setOrigin(0.5, (IH / 2 + h) / (IH + h)).setDepth(cy));
     return true;
   }
-  if (t === T.TENT) { scene.add.image(cx, cy, tentTexture(scene, v)).setOrigin(0.5, 56 / 70).setDepth(cy); return true; }
-  if (t === T.BONES) { scene.add.image(cx, cy, bonesTexture(scene, v)).setOrigin(0.5, 30 / 40).setDepth(cy).setFlipX(v >= 2); return true; }
+  if (t === T.TENT) { staticObj(scene, scene.add.image(cx, cy, tentTexture(scene, v)).setOrigin(0.5, 56 / 70).setDepth(cy)); return true; }
+  if (t === T.BONES) { staticObj(scene, scene.add.image(cx, cy, bonesTexture(scene, v)).setOrigin(0.5, 30 / 40).setDepth(cy).setFlipX(v >= 2)); return true; }
   if (t === T.ROCK && (Math.hypot(tx - SUNSTONE.x, ty - D(SUNSTONE.y)) < 10 || Math.hypot(tx - FURNACE.x, ty - D(FURNACE.y)) < FURNACE.r + 1)) {
-    scene.add.image(cx, cy, sunStoneTexture(scene, v)).setOrigin(0.5, 78 / 90).setDepth(cy);
+    staticObj(scene, scene.add.image(cx, cy, sunStoneTexture(scene, v)).setOrigin(0.5, 78 / 90).setDepth(cy));
     return true;
   }
-  if (t === T.ROCK) { scene.add.image(cx, cy, desertRockTexture(scene, v)).setOrigin(0.5, DESERT_UPRIGHT_OY).setDepth(cy).setFlipX(v >= 2); return true; }
-  if (t === T.STUMP) { scene.add.image(cx, cy, deadTreeTexture(scene, v)).setOrigin(0.5, 46 / 58).setDepth(cy).setFlipX(v >= 2); return true; }
+  if (t === T.ROCK) { staticObj(scene, scene.add.image(cx, cy, desertRockTexture(scene, v)).setOrigin(0.5, DESERT_UPRIGHT_OY).setDepth(cy).setFlipX(v >= 2)); return true; }
+  if (t === T.STUMP) { staticObj(scene, scene.add.image(cx, cy, deadTreeTexture(scene, v)).setOrigin(0.5, 46 / 58).setDepth(cy).setFlipX(v >= 2)); return true; }
   return false;
 }
 
@@ -798,6 +811,6 @@ function isoCrops(scene: Phaser.Scene, ground: number[][], objects: number[][]) 
     if ((g !== T.FIELD && g !== T.CROPS) || objects[ty][tx] >= 0) continue;
     const key = make(g === T.FIELD ? "wheat" : "veg", (tx * 7 + ty * 3) % 4);
     const cx = (tx + 0.5) * TILE, cy = (ty + 0.5) * TILE;
-    scene.add.image(cx, cy, key).setOrigin(0.5, (UP + IH / 2) / H).setDepth(cy);
+    staticObj(scene, scene.add.image(cx, cy, key).setOrigin(0.5, (UP + IH / 2) / H).setDepth(cy));
   }
 }

@@ -26,6 +26,8 @@ export interface Chest {
 export const CHEST_RANGE = TILE * 1.1; // px from the chest's feet to open it
 export const CHEST_RESPAWN_MS = 30 * 60 * 1000;
 export const GUARD_RESPAWN_MS = 4 * 60 * 1000;
+/** How often the server counts lair guardians to see who is missing (their timers run in minutes). */
+export const GUARD_CHECK_MS = 1000;
 export const CHEST_NAMES = ["", "Wooden Chest", "Iron-bound Chest", "Gilded Chest"];
 
 export const chestTier = (level: number): ChestTier => (level >= 11 ? 3 : level >= 5 ? 2 : 1);

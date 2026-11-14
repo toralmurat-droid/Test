@@ -32,10 +32,10 @@ for (const name of Object.keys(fixture)) {
       room.restore(p, structuredClone(save));
       assert.deepEqual(pick(room.snapshot(p), save), pick(save, save), "same chain keys and values");
       await wait(300);
-      const me = c.state.players.get(c.sessionId);
+      const own = c.state.players.get(c.sessionId).me; // owner-only child schema (server/player.ts PlayerPrivate)
       for (const ch of CHAINS) {
         const [a, b, n] = ch.keys, want = a in save ? packQuest(save[a] as number, save[b] as number, save[n] as number) : 0;
-        assert.equal(me.quests.get(ch.packed) ?? 0, want, `client sees ${ch.packed}`);
+        assert.equal(own.quests.get(ch.packed) ?? 0, want, `client sees ${ch.packed}`);
         assert.equal(p.quests.has(ch.packed), want !== 0, `${ch.packed} key present only when non-zero`);
       }
       await c.leave();

@@ -5,6 +5,7 @@ import { toggleChordLegend } from "./chordHud";
 import { icon as pxIcon } from "./pixelicons";
 import { slotKey } from "./keymode";
 import { Stats } from "../../shared/powers";
+import { statsOf } from "./gear";
 import { iconImg } from "./skillIcons";
 import { Node, slabWidth, treeLayout } from "./treeLayout";
 import { SheetPreview, talentsOf } from "./sidepanel";
@@ -77,8 +78,7 @@ export class TalentMenu {
   reset(state: any) { this.sig = ""; this.refresh(state); }
 
   private stats(): Stats {
-    const m = this.state;
-    return { sta: m.sta, str: m.str, mag: m.mag, dex: m.dex ?? 0 };
+    return statsOf(this.state);
   }
 
   /** Rebuild only when something shown changed. */

@@ -1,7 +1,7 @@
 /**
  * HUD buff row (Murat 2026-11-04): every timed effect on your hero (skill buffs, counter stances, the shrine's
  * Blessing of the Wind, and debuffs like stun or burn) shows its pixel icon, a dark sweep that fills as it runs out,
- * and the time left in the pixel font. Data comes from Player.timers (shared/buffTimers.ts).
+ * and the time left in the pixel font. Data comes from Player.me.timers (owner-only, shared/buffTimers.ts).
  */
 import { decodeTimers, formatLeft, isDebuff, isLasting, STATUS_NAMES } from "../../shared/buffTimers";
 import { skillById } from "../../shared/skills";
@@ -32,7 +32,7 @@ export class BuffBar {
     parent.appendChild(this.root);
   }
 
-  /** Call every frame with my Player.timers string. */
+  /** Call every frame with my Player.me.timers string. */
   update(timers: string) {
     const now = performance.now();
     if (timers !== this.raw) { this.raw = timers; this.rebuild(decodeTimers(timers), now); }
