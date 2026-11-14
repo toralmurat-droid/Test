@@ -480,8 +480,8 @@ export class Minimap {
     g.save();
     if (ISO) { g.translate(cw / 2, ch / 2); g.rotate(Math.PI / 4); g.scale(K, K); g.translate(-cw / 2, -ch / 2); }
     g.drawImage(this.colors, -R.x * BIG, -R.y * BIG, MAP_W * BIG, MAP_H * BIG);
+    if (this.war && warTableOn()) drawWarTable(g, this.war, BIG, R.x, R.y, now); // under the fog: unexplored land stays hidden
     g.drawImage(this.fog, -R.x * BIG, -R.y * BIG, MAP_W * BIG, MAP_H * BIG);
-    if (this.war && warTableOn()) drawWarTable(g, this.war, BIG, R.x, R.y, now);
     this.turned = ISO;
     this.drawMarkers(g, BIG, R.x, R.y, false);
     this.turned = false;
