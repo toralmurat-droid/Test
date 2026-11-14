@@ -5,6 +5,8 @@ import { isoAnchor } from "./iso";
 import { CHAR_GROW } from "./artAssets";
 import { CarriedLantern } from "./questConceptArt";
 import { pixelText } from "./pixeltext";
+import { chainState, questStep } from "../../shared/quests";
+import type { MapMarker } from "./minimap";
 
 /** The lantern's quest object (shared/quests.ts LAST_LANTERN): its take-spot copy is hidden while the lantern is out. */
 export const LANTERN_OBJECT = "lantern_last";
@@ -13,8 +15,23 @@ export const DROP_KEY = "Z";
 /** Hotbar tooltip lead-in while the lantern is carried (cosmetic: the server blocks the skills). */
 export const LOCK_TIP = "Locked while you carry the lantern. Put it down to use skills (basic attacks still work). ";
 
-interface Carry { chain: number; holder: string; x: number; y: number; light: number; max: number }
-interface Hold { chain: number; t: number; hp: number; max: number; at: number }
+interface Carry { key: string; chain: number; holder: string; x: number; y: number; light: number; max: number }
+interface Hold { key: string; chain: number; t: number; hp: number; max: number; at: number }
+interface Unseen { chain: number; armed: boolean; cp: number; cps: number; cover: boolean; dark: boolean; key: string }
+interface Sync { chain: number; turned: [number, number]; window: number; at: number; key: string }
+/** Pixel eye for the stealth badge ('#' lid, 'w' white, 'i' iris, 'p' pupil). */
+const EYE_OPEN = ["...#####...", ".##wwwww##.", "#wwwiiiwww#", "#wwiippiww#", "#wwwiiiwww#", ".##wwwww##.", "...#####..."];
+const EYE_SHUT = ["...........", "...........", ".##.....##.", "#..#####..#", "...........", "...........", "..........."];
+const EYE_PX = 3;
+function eyeCanvas(rows: string[], iris: string): HTMLCanvasElement {
+  const c = document.createElement("canvas"); c.width = 11; c.height = 7; c.className = "qeye";
+  const g = c.getContext("2d")!, col: Record<string, string> = { "#": "#e8e0d0", w: "#f4f0e8", i: iris, p: "#0a0608" };
+  rows.forEach((r, y) => [...r].forEach((ch, x) => { if (col[ch]) { g.fillStyle = col[ch]; g.fillRect(x, y, 1, 1); } }));
+  c.style.width = `${11 * EYE_PX}px`; c.style.height = `${7 * EYE_PX}px`;
+  return c;
+}
+/** Chain key (quest id + stage): changes when the quest moves on, not when a step's count goes up. */
+const stepKey = (q: { questId: number; questStage: number } | undefined) => q ? `${q.questId}.${q.questStage}` : "";
 type Ent = { sprite: Phaser.GameObjects.Sprite; state?: any };
 
 /**
@@ -30,6 +47,15 @@ export class QuestCarry {
   private groundGlow: Phaser.GameObjects.Arc;
   private odoBar: Phaser.GameObjects.Graphics;
   private odoAt: { x: number; y: number };
+  private unseen?: Unseen;
+  private sync?: Sync;
+  private rings: Phaser.GameObjects.Graphics;
+  private sealGlow: Phaser.GameObjects.Arc[];
+  private badge = document.createElement("div");
+  private vignette = document.createElement("div");
+  private eyeOpen = eyeCanvas(EYE_OPEN, "#e0603a");
+  private eyeShut = eyeCanvas(EYE_SHUT, "#6fb7d8");
+  private badgeText = document.createElement("span");
   private btn = document.createElement("button");
   private banner = document.createElement("div");
   private bannerTimer?: ReturnType<typeof setTimeout>;
@@ -42,26 +68,58 @@ export class QuestCarry {
     this.odoAt = { x: odo.x, y: odo.y };
     this.odoBar = isoAnchor(scene.add.graphics(), this.odoAt) as Phaser.GameObjects.Graphics;
     this.odoBar.setDepth(odo.y + 2);
+    this.rings = scene.add.graphics().setDepth(2);
+    this.sealGlow = [0, 1].map(() => scene.add.circle(0, 0, 16, 0xffd166, 0.3).setBlendMode(Phaser.BlendModes.ADD).setVisible(false));
+    this.badge.id = "qstealth"; this.badge.hidden = true; this.badge.append(this.eyeOpen, this.eyeShut, this.badgeText);
+    this.vignette.id = "qvignette";
     this.btn.id = "qdrop"; this.btn.hidden = true;
     this.btn.innerHTML = `<kbd>${DROP_KEY}</kbd>Put down`;
     this.btn.onclick = (ev) => { ev.stopPropagation(); this.drop(); this.btn.blur(); };
     this.banner.id = "qbanner";
-    hud.append(this.btn, this.banner);
+    hud.append(this.vignette, this.badge, this.btn, this.banner);
   }
 
   /** "qstate" from the server. */
   onState(m: any) {
     if (!m || typeof m !== "object") return;
-    if (m.k === "carry") {
+    const key = stepKey(this.lastQ(+m.chain));
+    if (m.k === "unseen") {
+      if (m.end) {
+        this.unseen = undefined;
+        if (m.end === "seen") this.say("Seen!", "Dragged back to your last hiding place.", "#ff7a6a");
+        else if (m.end === "done") this.say("Not a soul saw you", "You reached the wall unseen.", "#b9f27c");
+        return;
+      }
+      this.unseen = { chain: m.chain, armed: !!m.armed, cp: +m.cp || 0, cps: +m.cps || 4, cover: !!m.cover, dark: !!m.dark, key };
+    } else if (m.k === "sync") {
+      if (m.end) { this.sync = undefined; if (m.end === "done") this.say("Both seals turned", "The vault door stirs.", "#ffd166"); return; }
+      const t = Array.isArray(m.turned) ? m.turned : [];
+      this.sync = { chain: m.chain, turned: [+t[0] >= 0 ? +t[0] : -1, +t[1] >= 0 ? +t[1] : -1], window: +m.window || 6000, at: this.scene.time.now, key };
+    } else if (m.k === "carry") {
       if (m.end) { this.carry = undefined; if (m.end === "out") this.say("The lantern burnt out", "It is lit again where you found it.", "#f0b030"); return; }
-      this.carry = { chain: m.chain, holder: String(m.holder ?? ""), x: +m.x || 0, y: +m.y || 0, light: +m.light || 0, max: +m.max || 100 };
+      this.carry = { key, chain: m.chain, holder: String(m.holder ?? ""), x: +m.x || 0, y: +m.y || 0, light: +m.light || 0, max: +m.max || 100 };
     } else if (m.k === "hold") {
-      if (m.on) { this.hold = { chain: m.chain, t: +m.t || 0, hp: +m.hp || 0, max: +m.max || 1, at: this.scene.time.now }; return; }
+      if (m.on) { this.hold = { key, chain: m.chain, t: +m.t || 0, hp: +m.hp || 0, max: +m.max || 1, at: this.scene.time.now }; return; }
       this.hold = undefined;
       if (m.end === "done") this.say("The wheel holds!", "Odo is safe. The mill turns again.", "#b9f27c");
       else if (m.end === "fail") this.say("Odo was overrun", "Go back to the mill to try again.", "#ff7a6a");
       else if (m.end === "reset") this.say("The run starts over", "You left the mill. Go back to try again.", "#ffd166");
     }
+  }
+
+  private hero?: any; // the hero's synced state, for the quest checks below
+  private lastQ(chain: number) { return Number.isInteger(chain) && chain >= 0 ? chainState(this.hero, chain) : undefined; }
+
+  /**
+   * A missing "end" must never leave a stale HUD: a state is dropped when its chain has moved to another quest or stage
+   * and that step is no longer of its kind. (A state can arrive just before the patch that starts its step, so a
+   * changed key whose step does match just adopts the new key.)
+   */
+  private expire(kind: string, o: { chain: number; key: string } | undefined): boolean {
+    if (!o || !this.hero) return false;
+    const q = this.lastQ(o.chain), type = questStep(q)?.type, key = stepKey(q);
+    if (type === kind) { o.key = key; return false; }
+    return key !== o.key;
   }
 
   /** Is this hero carrying the lantern (skills are locked; the server enforces it)? */
@@ -79,6 +137,12 @@ export class QuestCarry {
 
   /** Every frame: lantern over its holder or on the ground, Odo's bar, the drop button. True while the take-spot lantern should be hidden. */
   update(me: string, ent: (id: string) => Ent | undefined): boolean {
+    this.hero = ent(me)?.state;
+    if (this.expire("carry", this.carry)) this.carry = undefined;
+    if (this.expire("hold", this.hold)) this.hold = undefined;
+    if (this.expire("unseen", this.unseen)) this.unseen = undefined;
+    if (this.expire("sync", this.sync)) this.sync = undefined;
+    this.drawUnseen(); this.drawSync();
     const c = this.carry, holder = c?.holder ? ent(c.holder) : undefined;
     const light = c ? Math.max(0, Math.min(1, c.light / c.max)) : 0;
     if (c && holder && holder.sprite.visible && !holder.state?.dead) this.lantern.update(holder.sprite, light);
@@ -100,6 +164,52 @@ export class QuestCarry {
     return !!c;
   }
 
+  private checkpoints() { const u = this.unseen; return u ? questStep(this.lastQ(u.chain))?.unseen?.checkpoints ?? [] : []; }
+
+  private seals() { const sy = this.sync; return sy ? questStep(this.lastQ(sy.chain))?.sync?.seals : undefined; }
+
+  /** Stealth badge and vignette while armed (hidden), soft rings at the checkpoints: next one bright, reached ones dim. */
+  private drawUnseen() {
+    const u = this.unseen, g = this.rings.clear(), t = this.scene.time.now / 1000;
+    this.badge.hidden = !u; this.vignette.classList.toggle("on", !!u?.armed); this.vignette.classList.toggle("deep", !!u?.armed && (u.cover || u.dark));
+    if (!u) return;
+    const shade = u.cover || u.dark;
+    this.eyeOpen.style.display = u.armed ? "none" : ""; this.eyeShut.style.display = u.armed ? "" : "none";
+    this.badge.className = u.armed ? (shade ? "deep" : "hid") : "seen";
+    this.badgeText.textContent = u.armed ? (shade ? "Hidden: in shadow" : "Hidden") : "In the open";
+    this.checkpoints().forEach((c, i) => {
+      const next = i === u.cp, done = i < u.cp, col = next ? 0xffe08a : done ? 0x7f8aa0 : 0x5b6578;
+      const pulse = next ? 0.5 + 0.2 * Math.sin(t * 3) : 0;
+      g.fillStyle(col, next ? 0.2 + 0.1 * Math.sin(t * 3) : done ? 0.1 : 0.08).fillCircle(c.x, c.y, c.r);
+      g.lineStyle(next ? 3 : 2, col, next ? 0.6 + pulse * 0.4 : done ? 0.45 : 0.35).strokeCircle(c.x, c.y, c.r);
+      if (next) g.lineStyle(1, 0xffe08a, 0.3).strokeCircle(c.x, c.y, c.r * (0.6 + 0.4 * ((t * 0.8) % 1)));
+    });
+  }
+
+  /** Turned seals glow while inside the window; a ring around each shrinks with the time left. */
+  private drawSync() {
+    const sy = this.sync, g = this.rings, seals = sy ? this.seals() : undefined;
+    this.sealGlow.forEach((c) => c.setVisible(false));
+    if (!sy || !seals) return;
+    const el = this.scene.time.now - sy.at;
+    seals.forEach((o, i) => {
+      const left = this.left(sy, i, el);
+      if (left <= 0) return;
+      const f = left / sy.window;
+      isoAnchor(this.sealGlow[i].setPosition(o.x, o.y - 14).setDepth(o.y + 1).setVisible(true).setAlpha(0.18 + 0.2 * f).setScale(0.8 + 0.4 * f), { x: o.x, y: o.y });
+      g.lineStyle(2, f > 0.3 ? 0xffd166 : 0xff7a4a, 0.85).beginPath().arc(o.x, o.y, 22, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * f).strokePath();
+    });
+  }
+
+  /** ms left in a seal's window (0 = not turned / run out), from the msAgo the server sent and the time since. */
+  private left(sy: Sync, i: number, el: number) { const a = sy.turned[i]; return a < 0 ? 0 : Math.max(0, sy.window - a - el); }
+
+  /** Minimap and world-map rings for the hiding places that are not already marked as quest targets (the next and last reached are). */
+  markers(): MapMarker[] {
+    const u = this.unseen;
+    return !u ? [] : this.checkpoints().flatMap((c, i) => i < u.cp - 1 ? [{ x: c.x, y: c.y, r: c.r, glyph: "", color: "#7f8aa0", label: c.label }] : []);
+  }
+
   /** Tracker blocks (HTML) for the light meter and the hold countdown; "" when neither is on. */
   trackerBlock(me: string, nameOf: (id: string) => string): string {
     let html = "";
@@ -115,6 +225,18 @@ export class QuestCarry {
       const secs = Math.max(0, Math.ceil((h.t - (this.scene.time.now - h.at)) / 1000));
       html += `<div class="qt-block"><div class="qt-title">Hold the Wheel</div><div class="qt-obj">• Hold the mill: ${secs} s</div>` +
         `<div class="qt-bar odo"><div style="width:${Math.max(0, Math.min(1, h.hp / h.max)) * 100}%"></div></div><div class="qt-dir">Odo: ${Math.max(0, Math.ceil(h.hp))} / ${h.max}. Keep the slimes off him.</div></div>`;
+    }
+    const u = this.unseen;
+    if (u) {
+      html += `<div class="qt-block"><div class="qt-title">Unseen</div><div class="qt-obj">• Checkpoints ${Math.min(u.cp, u.cps)} / ${u.cps}</div>` +
+        `<div class="qt-dir">${u.armed ? (u.cover || u.dark ? "You are hidden in shadow." : "You are hidden.") : "You are in the open."} Stand in the ring to hide.</div></div>`;
+    }
+    const sy = this.sync;
+    if (sy) {
+      const el = this.scene.time.now - sy.at, best = Math.max(this.left(sy, 0, el), this.left(sy, 1, el)), secs = Math.round(sy.window / 1000);
+      const n = (i: number) => this.left(sy, i, el) > 0;
+      html += `<div class="qt-block"><div class="qt-title">Two Hands</div><div class="qt-obj">• Seals: ${n(0) ? "turned" : "still"} / ${n(1) ? "turned" : "still"}</div>` +
+        `<div class="qt-bar light${best / sy.window < 0.3 ? " low" : ""}"><div style="width:${(best / sy.window) * 100}%"></div></div><div class="qt-dir">Turn both seals within ${secs} s.</div></div>`;
     }
     return html;
   }

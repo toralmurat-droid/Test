@@ -684,12 +684,13 @@ export class TownScene extends Phaser.Scene {
     // Portal stones: woken one by one on foot, then fast travel between the woken ones
     this.portals = new PortalLayer(this, (type, msg) => this.room.send(type, msg));
     this.room.onMessage("portals", ({ found, woke }) => this.portals?.setFound(found ?? [], woke));
-    this.room.onMessage("travel", ({ id, from, to, x, y }) => {
-      this.portals?.travelled(from, to);
+    this.room.onMessage("travel", ({ id, from, to, x, y, why }) => {
+      if (!why) this.portals?.travelled(from, to); // a quest warp (seen while unseen) has no stone at either end
       const e = this.entities.get(id);
       if (!e) return;
       e.sprite.setPosition(x, y); e.tx = x; e.ty = y; e.lastX = x; e.lastY = y; // a jump, not a walk
-      if (id === this.me) { this.portals?.close(); this.jumped(); this.arrive(40, 14, 4, 700); } // warm glow, then the new place
+      if (id === this.me && why) { this.jumped(); this.arrive(18, 4, 8, 650); } // seen, dragged back: a short dark-red fade
+      else if (id === this.me) { this.portals?.close(); this.jumped(); this.arrive(40, 14, 4, 700); } // warm glow, then the new place
     });
     // Act 2's waygate (shared/act2.ts): through to the other act; the loading screen stays up while that land is drawn
     this.waygates = new WaygateLayer(this);
@@ -3189,7 +3190,7 @@ export class TownScene extends Phaser.Scene {
     this.grimoire?.update(meEnt?.state?.cls);
     this.waygates?.update(meEnt?.state);
     this.portals?.update(meEnt && !meEnt.state.dead ? meEnt.sprite : undefined, !!this.npcs?.isOpen || !!this.chests?.near || !!this.shrine?.near);
-    if (this.minimap && this.npcs) this.minimap.markers = [...this.npcs.markers, ...(this.portals?.markers() ?? []), ...(this.bounty?.markers() ?? []), ...(this.dungeon?.markers() ?? []), ...(this.waygates?.markers() ?? [])];
+    if (this.minimap && this.npcs) this.minimap.markers = [...this.npcs.markers, ...(this.portals?.markers() ?? []), ...(this.bounty?.markers() ?? []), ...(this.dungeon?.markers() ?? []), ...(this.waygates?.markers() ?? []), ...(this.qcarry?.markers() ?? [])];
 
     const mine = meEnt?.state;
     if (mine) {

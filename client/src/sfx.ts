@@ -763,7 +763,7 @@ export function bindSfx(room: any, me: () => string, ents: Map<string, Ent>) {
   on("pickup", ({ kind }) => play(kind === "gold" ? "coins" : kind === "gear" ? "gear" : "pickup"));
   on("chestopen", () => play("chest"));
   on("shrine", ({ boon, by }) => { if (boon) P("shrine", by); });
-  on("travel", ({ id }) => P("portalTravel", id));
+  on("travel", ({ id, why }) => { if (!why) P("portalTravel", id); }); // a quest warp has its own sound ("seen")
   on("portals", ({ woke }) => { if (woke) play("portalWake"); });
   on("boom", ({ x, y, kind }) => {
     const name = kind === "fireball" || kind === "sunbolt" ? "boomFire" : kind === "arrow" || kind === "knife" || kind === "bolt" || kind === "stone" ? "boomThunk"
