@@ -35,6 +35,7 @@ Defaults picked so work isn't blocked (Claude 2026-11-13). Murat owns game direc
 12. Cosmetics: titles + the beast trait only.
 13. Lantern tuning (Claude 2026-11-14): lure 1.5 -> 1.25, ground drain x3 -> x2. Sim: vampire with basic attacks only clears 16% of Brinewood encounters (wizard 97%, summoner 100%), so dropping the lantern to fight with skills must stay affordable.
 14. Unseen: dying ends the hide (respawn in town as always); the saved checkpoint stays. No respawn-point change.
+15. Phones out of scope for this feature (Mehmet 2026-11-14: "Phones irrelevant."): no phone-size checks from WP5 on; phone layout polish dropped.
 
 ## Plan
 Written by the planner agent (2026-11-13). Code facts below were read from the tree at a4ebcf1.
