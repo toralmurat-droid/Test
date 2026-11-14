@@ -43,8 +43,9 @@ export function guardSendBacklog(client: { ref?: unknown }, max = MAX_COMPRESSIN
     if (typeof opts === "function") { cb = opts; opts = undefined; }
     if (opts?.compress === false) return send.call(this, data, opts, cb);
     if (pending >= max) return send.call(this, data, { ...opts, compress: false }, cb);
-    pending++;
     const done = cb;
-    return send.call(this, data, opts, (err?: Error) => { pending--; done?.(err); });
+    const r = send.call(this, data, opts, (err?: Error) => { pending--; done?.(err); });
+    pending++; // after the call: a send that throws (socket still connecting) must not take a slot for good
+    return r;
   };
 }

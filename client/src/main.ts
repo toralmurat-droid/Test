@@ -329,7 +329,7 @@ addEventListener("keydown", (e: KeyboardEvent) => {
 });
 
 let launching = false;
-/** The one way into the game: waits for the game chunk, then starts Phaser. Ignored while a launch is under way. */
+/** The one way into the game: waits for the game chunk, then starts Phaser. Ignored while a launch is under way or the game runs. */
 function launch(name: string, password: string, newGame: boolean, back = false) {
   if (launching) return;
   launching = true;
@@ -339,9 +339,10 @@ function launch(name: string, password: string, newGame: boolean, back = false) 
   initMusic(name);
   status.textContent = "Connecting…";
   showLoading(back ? "Back to where you stood…" : undefined); // covers everything until the world is fully drawn (TownScene hides it)
-  loadGame().then((g) => { launching = false; g.startGame({ name, password, color, cls, newGame }); }, () => {
+  // `launching` stays set once the game runs: a second Phaser game on this page is never right (a reload starts over)
+  loadGame().then((g) => g.startGame({ name, password, color, cls, newGame })).catch(() => {
     // The game files did not arrive (offline, or a deploy is under way). The browser remembers a failed import() until
-    // the page is reloaded, so the retry is a reload (which also picks up a new build).
+    // the page is reloaded, so the retry is a reload (which also picks up a new build). Same if starting it threw.
     launching = false;
     hideLoading(true);
     nameEl.value = name; pwEl.value = password;

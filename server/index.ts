@@ -11,7 +11,7 @@ import { ideaLog, publicLog } from "./ideaStore";
 import { allAccounts, flushFinal, initAccounts, peek, requestReset, resetPassword, setEmail } from "./accounts";
 import { writeHandoff } from "./handoff";
 import { clientIp } from "./ratelimit";
-import { fileHashes, versionedCacheControl } from "./assetVersions";
+import { versionedCache } from "./assetVersions";
 import { PER_MESSAGE_DEFLATE } from "./sendBacklog";
 
 const PORT = Number(process.env.PORT ?? 2567);
@@ -47,17 +47,12 @@ if (process.env.NODE_ENV === "production") {
   // Art, music, fonts and clips are asked for as `file?v=<content hash>` (client/src/assetUrl.ts): when the hash is
   // that of the file on disk, the browser may keep it for a year without asking again (server/assetVersions.ts).
   // Without `v`, or with another one, the normal headers below apply.
-  const hashOf = fileHashes();
-  app.use(async (req, res, next) => {
-    const v = req.query.v;
-    if ((req.method !== "GET" && req.method !== "HEAD") || typeof v !== "string") return next();
-    let rel: string;
-    try { rel = decodeURIComponent(req.path); } catch { return next(); }
-    const file = path.join(dist, path.normalize(rel));
-    if (!file.startsWith(dist + path.sep) || /\.html?$/.test(file)) return next();
-    const cc = versionedCacheControl(v, await hashOf(file));
-    if (cc) res.setHeader("Cache-Control", cc); // express.static and the gzip step below keep a header set here
-    next();
+  const versioned = versionedCache(dist);
+  app.use((req, res, next) => {
+    void versioned(req.method, req.path, req.query.v).then((cc) => {
+      if (cc) res.setHeader("Cache-Control", cc); // express.static and the gzip step below keep a header set here
+      next();
+    });
   });
   app.use(async (req, res, next) => {
     if (req.method !== "GET" || !/\bgzip\b/.test(String(req.headers["accept-encoding"] ?? ""))) return next();

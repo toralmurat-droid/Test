@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { buildAssetManifest, contentHash, fileHashes, IMMUTABLE, versionedCacheControl } from "../server/assetVersions";
+import { buildAssetManifest, contentHash, fileHashes, IMMUTABLE, versionedCache, versionedCacheControl } from "../server/assetVersions";
 import { assetUrl, versionedUrl } from "../client/src/assetUrl";
 
 const tmpPublic = () => {
@@ -72,4 +72,37 @@ test("client URLs get their version; unlisted files stay plain and are reported"
   assert.equal(missed.length, 1);
   // outside a Vite build there is no manifest at all
   assert.equal(assetUrl("/assets/music/blob-slayer.mp3"), "/assets/music/blob-slayer.mp3");
+});
+
+test("a request earns the year-long header only for a real file with its own hash; hostile paths never throw", async () => {
+  const dir = tmpPublic(), cache = versionedCache(dir), hash = contentHash("slime v1");
+  const url = "/assets/hd/mobs/slime.webp";
+  assert.equal(await cache("GET", url, hash), IMMUTABLE);
+  assert.equal(await cache("HEAD", url, hash), IMMUTABLE);
+  assert.equal(await cache("GET", "/assets/hd/mobs/slime%2Ewebp", hash), IMMUTABLE, "an encoded path is the same file");
+  assert.equal(await cache("POST", url, hash), undefined);
+  assert.equal(await cache("GET", url, "00000000"), undefined, "another version's hash");
+  assert.equal(await cache("GET", url, undefined), undefined);
+  assert.equal(await cache("GET", url, [hash, hash]), undefined, "?v=a&v=b");
+  assert.equal(await cache("GET", url, hash.toUpperCase() + "x"), undefined, "not shaped like a hash: the disk is not touched");
+  assert.equal(await cache("GET", "/assets/page.html", contentHash("<html>")), undefined, "HTML is never kept");
+  assert.equal(await cache("GET", "/assets/missing.webp", hash), undefined);
+  assert.equal(await cache("GET", "/assets/hd/mobs", hash), undefined, "a folder");
+  // A NUL byte makes fs throw synchronously; unhandled, that rejection shut the whole game server down
+  assert.equal(await cache("GET", "/a%00.png", hash), undefined);
+  assert.equal(await cache("GET", "/assets/hd/mobs/slime.webp%00", hash), undefined);
+  assert.equal(await cache("GET", "/%E0%A4%A", hash), undefined, "broken percent-encoding");
+  // outside the folder: a sibling file with a known hash must not be reachable
+  fs.writeFileSync(path.join(dir, "../assetv-outside.txt"), "secret");
+  assert.equal(await cache("GET", "/../assetv-outside.txt", contentHash("secret")), undefined);
+  assert.equal(await cache("GET", "/%2e%2e/assetv-outside.txt", contentHash("secret")), undefined);
+  assert.equal(await cache("GET", "/assets/../../assetv-outside.txt", contentHash("secret")), undefined);
+  fs.rmSync(path.join(dir, "../assetv-outside.txt"));
+});
+
+test("fileHashes never rejects, whatever the path", async () => {
+  const hashOf = fileHashes();
+  assert.equal(await hashOf("/tmp/x\0.png"), null);
+  assert.equal(await hashOf(os.tmpdir()), null, "a folder");
+  assert.equal(await hashOf(path.join(os.tmpdir(), "no-such-file-assetv")), null);
 });

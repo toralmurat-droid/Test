@@ -39,7 +39,8 @@ export function versionedCacheControl(v: unknown, hash: string | null | undefine
 
 /**
  * contentHash of files on disk, computed once per file (the built files never change while the server runs); null if
- * unreadable. Only real files are remembered, so made-up paths cannot grow the memo.
+ * unreadable. Never rejects and never throws, whatever the path (a NUL byte makes createReadStream throw at once).
+ * Only real files are remembered, so made-up paths cannot grow the memo.
  */
 export function fileHashes() {
   const memo = new Map<string, Promise<string | null>>();
@@ -47,12 +48,34 @@ export function fileHashes() {
     let p = memo.get(file);
     if (!p) {
       p = new Promise<string | null>((ok) => {
-        const h = crypto.createHash("sha256");
-        fs.createReadStream(file).on("error", () => { memo.delete(file); ok(null); })
-          .on("data", (c) => h.update(c)).on("end", () => ok(h.digest("hex").slice(0, 8)));
+        const fail = () => { memo.delete(file); ok(null); };
+        try {
+          const h = crypto.createHash("sha256");
+          fs.createReadStream(file).on("error", fail).on("data", (c) => h.update(c)).on("end", () => ok(h.digest("hex").slice(0, 8)));
+        } catch { fail(); }
       });
       memo.set(file, p);
     }
     return p;
+  };
+}
+
+/**
+ * The Cache-Control a request for a file under `dist` earns through its `?v=`, or undefined for the normal headers.
+ * One place for every check, and it never rejects: this runs on requests from anyone, in the game server's process,
+ * where an unhandled rejection shuts the server down (a path with %00 did exactly that before it was caught here).
+ * Only a `v` shaped like a hash reaches the disk; HTML pages are never cached; paths outside `dist` are ignored.
+ */
+export function versionedCache(dist: string) {
+  const hashOf = fileHashes();
+  return async (method: string, reqPath: string, v: unknown): Promise<string | undefined> => {
+    try {
+      if ((method !== "GET" && method !== "HEAD") || typeof v !== "string" || !/^[0-9a-f]{8}$/.test(v)) return undefined;
+      const rel = decodeURIComponent(reqPath);
+      if (rel.includes("\0")) return undefined;
+      const file = path.join(dist, path.normalize(rel));
+      if (!file.startsWith(dist + path.sep) || /\.html?$/.test(file)) return undefined;
+      return versionedCacheControl(v, await hashOf(file));
+    } catch { return undefined; }
   };
 }
