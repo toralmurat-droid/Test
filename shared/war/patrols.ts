@@ -1,7 +1,8 @@
 /**
- * Clan troop patrols (cosmetic): each territory's holder sends small squads walking a loop from its Hold past its
- * standards and back. Only the client draws them; the server never imports this. Routes come from the map alone
- * (tile BFS), so every client sees the same loops.
+ * Clan troop patrols: each territory's holder sends small squads walking a loop from its Hold past its standards and
+ * back. The routes, guard posts and looks are shared: the client draws the squads (and the cosmetic siege battles), the
+ * server's real troops (server/warTroops.ts, shared/war/troops.ts) march the same loops. Routes come from the map alone
+ * (tile BFS), so server and every client get the same loops.
  */
 import { TILE } from "../constants";
 import { isSolidAt, isSolidTile } from "../map";
@@ -283,3 +284,9 @@ export const TROOP_LOOK: Record<ClanKey, { kinds: string[]; officer: string }> =
   hidekin: { kinds: ["gnawkin_folk", "tuskborn_folk"], officer: "tuskborn_folk" },
   veiled: { kinds: ["veiled", "nomad_folk"], officer: "nomad_folk" },
 };
+
+/** The sprite kind soldier number `seed` of clan `clan` wears (the officer has his own): the one rule client and server share. */
+export function troopLook(clan: ClanKey, seed: number, officer = false): string {
+  const l = TROOP_LOOK[clan];
+  return officer ? l.officer : l.kinds[Math.abs(Math.floor(seed)) % l.kinds.length];
+}

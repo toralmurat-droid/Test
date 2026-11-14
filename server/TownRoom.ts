@@ -103,8 +103,9 @@ import { ASK_BURST, ASK_PER_SEC, Bucket, CHAT_BURST, CHAT_PER_SEC, CRAFT_BURST, 
 
 import { Player } from "./player";
 import { byPart, hitBy } from "./hitBy";
-import { attachWar, warNow } from "./war";
+import { attachWar, onWar, warNow } from "./war";
 import { clanView, cleanOath, Presence, swear } from "./warHeroes";
+import { WarTroops } from "./warTroops";
 import { cleanRenown } from "../shared/war/renown";
 export { Player, PlayerPrivate } from "./player"; // moved out; tests and tools import them from here
 
@@ -609,10 +610,23 @@ export class TownRoom extends Room<TownState> {
 
   private offWar?: () => void;
   private warPresence = new Presence();
+  /** Clan troops that fight (server/warTroops.ts): the holders' soldiers on the lands near heroes, as real monsters. */
+  private warTroops = new WarTroops({
+    spawn: (id, level, x, y, weapon) => { this.spawnMob("trooper", -1, id, { x, y, level }); const m = this.state.mobs.get(id); if (m) m.weapon = weapon; return m; },
+    remove: (id) => { this.state.mobs.delete(id); },
+    mob: (id) => this.state.mobs.get(id), mobsInBox: (x, y, r) => this.state.mobs.inBox(x, y, r),
+    heroes: () => this.state.players.entries(), hero: (id) => this.state.players.get(id),
+    hidden: (id, now) => inVoid(this.state.players.get(id), now),
+    strikeHero: (mid, pid, dmg, by) => { const m = this.state.mobs.get(mid); if (m) { this.broadcast("swing", { id: mid }); this.damagePlayer(pid, dmg, by, DIR_OFFSET[m.dir], 1, { atkLevel: m.level, from: mid }); } },
+    strikeMob: (mid, tid, dmg) => { const m = this.state.mobs.get(mid), o = this.state.mobs.get(tid); if (m && o && !o.dead) { this.broadcast("swing", { id: mid }); this.mobHitsMob(m, mid, o, tid, dmg); } },
+    note: (pid, text) => this.clients.getById(pid)?.send("chat", { id: "", name: "Herald", text }),
+    ranked: (pid, rank) => { const c = this.clients.getById(pid), p = this.state.players.get(pid); if (c && p) { c.send("clan", clanView(p)); c.send("chat", { id: "", name: "Herald", text: `Your renown grows: you are now ${rank}.` }); } },
+  });
 
   onCreate() {
     liveRooms.add(this);
-    this.offWar = attachWar(this); // the clan war (server/war.ts) runs on its own; the room only passes on the news
+    const offNews = attachWar(this), offTroops = onWar((v) => this.warTroops.onWar(v)); // the clan war (server/war.ts) runs on its own; the room passes on the news
+    this.offWar = () => { offNews(); offTroops(); };
     this.limitMessages();
     this.qsteps = new QuestSteps({
       player: (pid) => this.state.players.get(pid),
@@ -676,6 +690,7 @@ export class TownRoom extends Room<TownState> {
         const c = this.clients.getById(id), p = this.state.players.get(id);
         if (c && p) { c.send("clan", clanView(p)); c.send("chat", { id: "", name: "Herald", text: `Your renown grows: you are now ${rank}.` }); }
       }
+      this.warTroops.tick(Date.now());
     }, 1000);
     this.onMessage("clan", (client, msg: { swear?: unknown }) => {
       const p = this.state.players.get(client.sessionId);
@@ -1037,6 +1052,7 @@ export class TownRoom extends Room<TownState> {
     this.tradeStop(client.sessionId, "The other hero left: trade cancelled.");
     this.tradeAsks.delete(client.sessionId);
     this.state.players.delete(client.sessionId);
+    this.warTroops.forget(client.sessionId);
     this.unsummon(client.sessionId);
     this.dismissAll(client.sessionId);
     this.addrs.delete(client.sessionId);
@@ -1774,9 +1790,9 @@ export class TownRoom extends Room<TownState> {
       const score = Math.max(0, 1 - d / def.aggroRange) + SUMMON.taunt + hated + (sid === m.foe ? AGGRO.stick : 0);
       if (score > best) { best = score; target = ""; foe = sid; }
     });
-    // A Night Rider that cut into it: the living fight back (the dead are never touched by them)
+    // A Night Rider (or a clan trooper) that cut into it: the living fight back (the dead are never touched by them)
     const rider = m.hateId && m.hate > 0 && !m.perch && !m.mergeInto && !m.summonFor ? this.state.mobs.get(m.hateId) : undefined;
-    if (rider?.kind === "nightraider" && !rider.dead && Math.hypot(rider.x - m.x, rider.y - m.y) < FEUD.range * 2 && Math.hypot(rider.x - m.homeX, rider.y - m.homeY) < def.leash) {
+    if ((rider?.kind === "nightraider" || rider?.kind === "trooper") && !rider.dead && Math.hypot(rider.x - m.x, rider.y - m.y) < FEUD.range * 2 && Math.hypot(rider.x - m.homeX, rider.y - m.homeY) < def.leash) {
       const score = m.hate + (m.hateId === m.foe ? AGGRO.stick : 0);
       if (score > best) { best = score; target = ""; foe = m.hateId; }
     }
@@ -1830,7 +1846,7 @@ export class TownRoom extends Room<TownState> {
   private voidHop(owner: string, tid: string, swallowed: boolean, x: number, y: number): boolean {
     const p = this.state.players.get(tid), m = p ? undefined : this.state.mobs.get(tid);
     const u = p ?? m;
-    if (!u || u.dead || (m && (m.owner || BOSS[m.kind]))) return false; // bosses are too big to swallow
+    if (!u || u.dead || (m && (m.owner || BOSS[m.kind] || !this.canHurtMob(owner, m)))) return false; // bosses are too big to swallow; own clan's troops are spared
     const [min, max] = p ? [3 * TILE, 4 * TILE] : [2 * TILE, 4 * TILE];
     for (let i = 0; i < 16; i++) {
       const a = Math.random() * Math.PI * 2, d = min + Math.random() * (max - min);
@@ -1873,6 +1889,11 @@ export class TownRoom extends Room<TownState> {
     if (!a || !o) return !!a;
     if (a.party && a.party === o.party) return false;
     return !pvpProtected(a.level, o.level) && !isSafeZone(m.x, m.y);
+  }
+
+  /** May this hero hurt that monster? The one gate for every hero blow: summons (canHurtSummon) and clan troopers (WarTroops.canHurt). */
+  private canHurtMob(heroId: string, m: Mob): boolean {
+    return m.owner ? this.canHurtSummon(heroId, m) : m.kind !== "trooper" || this.warTroops.canHurt(heroId, m);
   }
 
   /**
@@ -2052,14 +2073,14 @@ export class TownRoom extends Room<TownState> {
   /** Can the vampire eat / turn this monster? Not heroes, summons and thralls, elites and bosses, quest monsters, the fleshless. */
   private fangable(tid: string): Mob | undefined {
     const m = this.state.mobs.get(tid);
-    if (!m || m.dead || m.owner || m.summonFor || m.servant || ELITE[m.kind] || BOSS[m.kind] || !familyOf(m.kind)) return undefined;
+    if (!m || m.dead || m.owner || m.summonFor || m.servant || m.kind === "trooper" || ELITE[m.kind] || BOSS[m.kind] || !familyOf(m.kind)) return undefined;
     return m;
   }
 
   /** Can a vampire Charm this monster? Not heroes, summons and thralls, elites and bosses, quest monsters or the Hollow King's servants. */
   private charmable(tid: string): Mob | undefined {
     const m = this.state.mobs.get(tid);
-    if (!m || m.dead || m.owner || m.summonFor || m.servant || m.hidden || ELITE[m.kind] || BOSS[m.kind]) return undefined;
+    if (!m || m.dead || m.owner || m.summonFor || m.servant || m.hidden || m.kind === "trooper" || ELITE[m.kind] || BOSS[m.kind]) return undefined;
     return m;
   }
 
@@ -2277,7 +2298,8 @@ export class TownRoom extends Room<TownState> {
     const near = (x: number, y: number) => Math.hypot(x - m.x, y - m.y) < R && Math.hypot(x - o.x, y - o.y) < SUMMON.leash;
     for (const [tid, t] of this.state.mobs.inBox(m.x, m.y, R)) {
       if (t === m || t.dead || t.hidden) continue;
-      if (t.owner ? !this.canHurtSummon(ownerId, t) : isSafeZone(t.x, t.y)) continue;
+      if (t.owner || t.kind === "trooper" ? !this.canHurtMob(ownerId, t) : isSafeZone(t.x, t.y)) continue;
+      if (t.kind === "trooper" && !this.warTroops.hostile(ownerId, t)) continue; // creatures leave troops alone that leave their owner alone
       if (!near(t.x, t.y)) continue;
       const score = 1 - Math.hypot(t.x - m.x, t.y - m.y) / R + (t.target === ownerId || t.foe === ownerId ? 1 : 0) + (tid === m.target ? AGGRO.stick : 0) + whim();
       if (score > bs) { bs = score; best = tid; }
@@ -2369,7 +2391,7 @@ export class TownRoom extends Room<TownState> {
     if (!o) return out;
     for (const [tid, t] of this.state.mobs.inBox(x, y, r)) {
       if (t === m || t.dead || t.hidden || Math.hypot(t.x - x, t.y - y) > r) continue;
-      if (t.owner ? this.canHurtSummon(m.owner, t) : !isSafeZone(t.x, t.y)) out.push(tid);
+      if (t.owner || t.kind === "trooper" ? this.canHurtMob(m.owner, t) : !isSafeZone(t.x, t.y)) out.push(tid);
     }
     this.state.players.forEach((t, tid) => {
       if (tid === m.owner || t.dead || isSafeZone(t.x, t.y) || (o.party && t.party === o.party) || pvpProtected(o.level, t.level)) return;
@@ -2774,7 +2796,7 @@ export class TownRoom extends Room<TownState> {
    * not burning, stunned, walking to a rite, being banished or merging. Mirrors the early returns of updateMob.
    */
   private dozing(m: Mob, heroes: Player[], now: number): boolean {
-    if (m.kind === "nightraider" || m.tide) return false; // a rider never sleeps (there are at most two), nor a Gloam Tide marcher (at most TIDE.maxAlive)
+    if (m.kind === "nightraider" || m.kind === "trooper" || m.tide) return false; // a rider never sleeps (nor a clan trooper: its land sleeps instead) (there are at most two), nor a Gloam Tide marcher (at most TIDE.maxAlive)
     if (m.dead || m.target || m.foe || m.banishAt || m.ritual || m.mergeInto || m.spot || m.specialAt || m.windUntil) return false;
     if (now < m.stunUntil || now < m.sk.burnUntil || m.broken || m.moving) return false;
     return !this.heroNear(m, heroes);
@@ -2940,7 +2962,7 @@ export class TownRoom extends Room<TownState> {
       const m = (WATCH.leashTiles + 2) * TILE, x0 = VILLAGE.x0 * TILE - m, x1 = (VILLAGE.x1 + 1) * TILE + m, y0 = VILLAGE.y0 * TILE - m, y1 = (VILLAGE.y1 + 1) * TILE + m;
       // (the squares round the stockade only, in map order: the same monsters and order as a full scan)
       this.watchSeen = this.state.mobs.inBox((x0 + x1) / 2, (y0 + y1) / 2, Math.max(x1 - x0, y1 - y0) / 2)
-        .filter(([, o]) => !o.dead && !o.hidden && o.x > x0 && o.x < x1 && o.y > y0 && o.y < y1);
+        .filter(([, o]) => !o.dead && !o.hidden && o.kind !== "trooper" && o.x > x0 && o.x < x1 && o.y > y0 && o.y < y1); // the watch leaves the clans' troops be
     }
     this.outlaws = [];
     this.state.players.forEach((p, pid) => { if (p.outlaw && !p.dead) this.outlaws.push([pid, p]); });
@@ -3213,6 +3235,7 @@ export class TownRoom extends Room<TownState> {
     if (m.dead) { m.moving = false; m.winding = false; m.windUntil = 0; return; }
     if (m.owner) return this.updateSummon(m, id, dt, now);
     if (this.dummies.has(id)) { m.moving = false; m.winding = false; return; } // skill clip targets stand still
+    if (m.kind === "trooper") return this.warTroops.step(m, id, dt, now); // clan troops (server/warTroops.ts)
     if (m.banishAt && now >= m.banishAt && !m.specialAt) {
       // the summoned demon's time is up: it sinks back into the ground
       this.broadcast("banish", { id, x: Math.round(m.x), y: Math.round(m.y) });
@@ -3269,7 +3292,7 @@ export class TownRoom extends Room<TownState> {
       m.target = ""; t = undefined;
     }
     const foeKind = m.foe ? this.state.mobs.get(m.foe) : undefined;
-    let foe: Mob | undefined = (FACTION[m.kind] || foeKind?.owner || foeKind?.kind === "nightraider") && !t ? this.foeOf(m, def) : undefined;
+    let foe: Mob | undefined = (FACTION[m.kind] || foeKind?.owner || foeKind?.kind === "nightraider" || foeKind?.kind === "trooper") && !t ? this.foeOf(m, def) : undefined;
     // Aggro: pick whoever it hates most, hero or rival monster
     if (m.hate > 0) m.hate = Math.max(0, m.hate - AGGRO.decayPerSec * dt);
     if (now >= m.nextAggro) {
@@ -4971,7 +4994,7 @@ export class TownRoom extends Room<TownState> {
       for (let j = 0; j < n; j++) {
         let best = "", bd = 96;
         for (const [oid, o] of this.state.mobs.inBox(fx, fy, bd)) { // the starting box; it shrinks as nearer foes turn up
-          if (hit.has(oid) || o.dead || o.hidden || (o.owner && !this.canHurtSummon(aid, o)) || Math.abs(o.x - fx) > bd || Math.abs(o.y - fy) > bd) continue;
+          if (hit.has(oid) || o.dead || o.hidden || !this.canHurtMob(aid, o) || Math.abs(o.x - fx) > bd || Math.abs(o.y - fy) > bd) continue;
           const d = Math.hypot(o.x - fx, o.y - fy);
           if (d < bd) { bd = d; best = oid; }
         }
@@ -5160,7 +5183,7 @@ export class TownRoom extends Room<TownState> {
     });
     // Only the monsters in the squares around (bodies < 64 px), not the thousands on the map
     for (const [mid, m] of this.state.mobs.inBox(x, y, mobPad ? r + 64 : r)) {
-      if (m.owner && me && !this.canHurtSummon(exclude, m)) continue; // own / group / protected heroes' summons
+      if (me && !this.canHurtMob(exclude, m)) continue; // own / group / protected heroes' summons, own clan's troops
       if (!m.dead && !m.hidden && Math.hypot(m.x - x, m.y - y) <= r + (mobPad ? mobPad(m) : 0)) out.push(mid);
     }
     return out;
@@ -5260,7 +5283,8 @@ export class TownRoom extends Room<TownState> {
     }
     const m = this.state.mobs.get(targetId);
     if (!m || m.dead) return;
-    if (m.owner && a && !this.canHurtSummon(attackerId, m)) return;
+    if (a && !this.canHurtMob(attackerId, m)) return;
+    if (a && m.kind === "trooper") this.warTroops.hit(attackerId, m); // an unsworn hero's blow: that clan's grudge
     if (m.owner && a) dmg = Math.max(1, Math.round(dmg / SUMMON.pvp.hp)); // a hero's blow on someone's creature (SUMMON.pvp)
     const def = mobDef(m);
     if (a && (m.camp || m.kind === "banditchief")) this.banditShout(m, targetId, attackerId, Date.now());
@@ -5301,7 +5325,7 @@ export class TownRoom extends Room<TownState> {
     this.broadcast("hit", { id: targetId, dmg, crit: !!opts.crit && !exec, dot: !!opts.dot, el: opts.el, ...(exec ? { ex: 1 } : {}), ...(opts.dot ? {} : hitDir(push)), ...byPart(hitBy(this.state.players, this.state.mobs, attackerId)) });
     if (m.hp > 0) { afterHit(this.host, attackerId, targetId, opts); return; }
     if (a) onKill(this.host, attackerId); // Bloodlust
-    if (m.owner && !m.charmUntil) { this.mobDied(m, targetId, attackerId, a?.name ?? ""); return; } // a summon: no XP, no loot, no quest credit
+    if ((m.owner && !m.charmUntil) || m.kind === "trooper") { this.mobDied(m, targetId, attackerId, a?.name ?? ""); return; } // a summon or a clan trooper: no XP, no loot, no quest credit
     if (a && !m.tide) for (let c = 0; c < CHAINS.length; c++) this.questKill(attackerId, a, m, c); // marchers fill no quest or bounty
     if (a && !m.tide) this.ownerCredit(attackerId, a, m); // someone's own quest monster, felled by their group (decision 9)
     if (a && !m.tide) this.bountyKill(attackerId, a, m);
@@ -5414,6 +5438,7 @@ export class TownRoom extends Room<TownState> {
     if (m.kind === "sunwright" && m.uPhase) this.bossSay(targetId, SUNWRIGHT.lines.death);
     if (m.voice) this.bossSay(targetId, m.voice.death);
     if (m.kind === "nightraider") this.raiderGone(m, targetId, true, killerName);
+    if (m.kind === "trooper") this.warTroops.killed(m, targetId, attackerId); // its slot refills at the Hold; valor for a sworn killer
     if (m.champ) this.champs.died(m, targetId); // its ballista falls with it
     m.dead = true; m.hp = 0;
     if (m.owner) this.summons.delete(targetId);
@@ -6316,6 +6341,7 @@ export class TownRoom extends Room<TownState> {
     }
     if (riseAgain(this.host, tid)) return false; // Blood Pact: a killing blow leaves the vampire standing
     t.dead = true;
+    this.warTroops.forget(tid); // the troops are done with a fallen hero (grudges end)
     this.qsteps.died(tid); // a carried lantern falls here, a hold run may fail (server/questSteps.ts)
     if (opts.from && this.state.players.has(opts.from)) onKill(this.host, opts.from); // Bloodlust
     const killer = opts.from ? this.state.mobs.get(opts.from) : undefined;

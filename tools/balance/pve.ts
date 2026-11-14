@@ -1,6 +1,7 @@
 /**
  * PvE balance simulator: bot heroes play the first zone (Lv 1-30) against its monsters and bosses.
- * Run: npx tsx tools/balance/pve.ts [runsPerCase] [--bosses] [--zones] [--act2] [--champions] [--class=vampire] [--build=0|1|2] [--boss=king] [--no-execute] [--songweaver]
+ * Run: npx tsx tools/balance/pve.ts [runsPerCase] [--bosses] [--zones] [--act2] [--champions] [--troops] [--class=vampire] [--build=0|1|2] [--boss=king] [--no-execute] [--songweaver]
+ * --troops: the hero alone against 1 and 3 clan troopers of its level (shared/war/troops.ts), at Lv 8 / 20 / 45.
  * --champions: one fight against each champion (shared/champions.ts, a 1D version of its affixes) beside the same plain monster.
  *
  * It reuses the PvP simulator (tools/balance/duel.ts): the same hero bot, skill engine, builds (rushing one branch),
@@ -466,6 +467,18 @@ function bossRun(cls: ClassKind, b: BossDef, build: Build, potions = 5): RunResu
   return { won, kills: won ? 1 : 0, hpLostPerKill: 0, secPerKill: d.now / 1000, heals: pack.healUsed, manas: pack.manaUsed, bossLeft: m.hp / m.maxHp };
 }
 
+/** Clan troopers (shared/war/troops.ts): the hero alone against `n` of its level, 5 heal + 5 mana potions. */
+function troopRun(cls: ClassKind, level: number, n: number, build: Build, potions = 5): RunResult {
+  const h = make("h", cls, level, build);
+  const pack: Pack = { heal: potions, mana: potions, healUsed: 0, manaUsed: 0, size: potionSize(level), lastDrink: -1e9 };
+  const ms = Array.from({ length: n }, (_, k) => new MobF(mobSpec("trooper", level), "t" + k));
+  const d = new PveDuel(h, ms, pack, 0), hp0 = h.hp;
+  let w: F | null | undefined;
+  while (d.now < 120000 && (w = d.step()) === undefined) { /* fight */ }
+  const kills = ms.filter((m) => m.dead).length;
+  return { won: w === h, kills, hpLostPerKill: Math.max(0, hp0 - h.hp) / h.maxHp / Math.max(1, kills), secPerKill: d.now / 1000 / Math.max(1, kills), heals: pack.healUsed, manas: pack.manaUsed };
+}
+
 const pct = (v: number) => `${Math.round(v * 100)}%`;
 /** Try other numbers without editing the game: --hp=0.4 --dmg=0.15 (MOB_LEVEL per-level growth). */
 for (const a of process.argv) {
@@ -489,7 +502,21 @@ const buildOf = (i: number) => BUILD ?? ((i % 3) as Build);
 if (process.argv[1]?.includes("pve")) {
   const n = Number(process.argv[2]) || 30;
   const CHAMPS = process.argv.includes("--champions");
-  const doBosses = !CHAMPS && !process.argv.includes("--zones"), doZones = !CHAMPS && !process.argv.includes("--bosses");
+  const TROOPS = process.argv.includes("--troops");
+  const doBosses = !CHAMPS && !TROOPS && !process.argv.includes("--zones"), doZones = !CHAMPS && !TROOPS && !process.argv.includes("--bosses");
+  if (TROOPS) {
+    console.log("Clan troopers: the hero alone vs N troopers of its level, 5 heal + 5 mana potions. Cell = win% / HP lost per kill / s per kill");
+    console.log("".padEnd(16) + CLASSES.map((c) => c.padEnd(20)).join(""));
+    for (const L of [8, 20, 45]) for (const k of [1, 3]) {
+      let line = `Lv${L} x${k}`.padEnd(16);
+      for (const c of CLASSES) {
+        let won = 0, hp = 0, sec = 0;
+        for (let i = 0; i < n; i++) { const r = troopRun(c, L, k, buildOf(i)); won += r.won ? 1 : 0; hp += r.hpLostPerKill; sec += r.secPerKill; }
+        line += `${pct(won / n)}/${pct(hp / n)}/${(sec / n).toFixed(1)}s`.padEnd(20);
+      }
+      console.log(line);
+    }
+  }
   if (CHAMPS) {
     console.log("Champions: the hero alone at the monster's level, 3 heal + 3 mana potions. Cell = win% / HP lost / fight s (plain -> champion)");
     console.log("".padEnd(34) + CLASSES.map((c) => c.padEnd(32)).join(""));
