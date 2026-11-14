@@ -36,7 +36,7 @@ const PORT = process.argv[2], OUT = process.argv[3];
   for (let i = 0; i < 120; i++) { await page.waitForTimeout(500); where = (await page.textContent("#location"))?.trim() ?? ""; const me = await page.evaluate(() => { const s = window.__game.scene.scenes.find((x) => x.entities); const p = s.entities.get(s.me).state; return p.x; }); if (me > 96 * 32) break; if (i % 10 === 9) await walk(); }
   await page.waitForTimeout(1500);
   errors.push("area: " + where);
-  const mine = () => page.evaluate(() => { const s = window.__game.scene.scenes.find((x) => x.entities); const out = []; s.entities.forEach((e) => { if (e.state.owner === s.me && !e.state.dead) out.push({ kind: e.state.kind, el: e.state.weapon, tex: e.sprite.texture.key, label: e.label?.text }); }); return out; });
+  const mine = () => page.evaluate(() => { const s = window.__game.scene.scenes.find((x) => x.entities); const out = []; s.entities.forEach((e) => { if (e.state.owner === s.me && !e.state.dead) out.push({ kind: e.state.kind, el: e.state.weapon, tex: e.sprite.texture.key, label: e.label?.text ?? "(none: monster labels live in the top bar)" }); }); return out; });
   // the grimoire on the HUD (client/src/grimoire.ts), clicked like a player: frost on page 1, storm on page 2 (Twin Bond at /max)
   await page.waitForTimeout(2000);
   await page.click('#grimoire [data-slot="0"]'); await page.click('#grimoire [data-el="cold"]'); await page.waitForTimeout(900);
@@ -57,7 +57,7 @@ const PORT = process.argv[2], OUT = process.argv[3];
   await page.waitForTimeout(5000); // mana
   await send("cast", "su_colossus"); await page.waitForTimeout(2000);
   await page.screenshot({ path: OUT + "/colossus.png" });
-  const info2 = await page.evaluate(() => { const s = window.__game.scene.scenes.find((x) => x.entities); const out = []; s.entities.forEach((e) => { if (e.state.owner && !e.state.dead) out.push({ kind: e.state.kind, tex: e.sprite.texture.key, label: e.label?.text }); }); return out; });
+  const info2 = await page.evaluate(() => { const s = window.__game.scene.scenes.find((x) => x.entities); const out = []; s.entities.forEach((e) => { if (e.state.owner && !e.state.dead) out.push({ kind: e.state.kind, tex: e.sprite.texture.key, label: e.label?.text ?? "(none: monster labels live in the top bar)" }); }); return out; });
   console.log(JSON.stringify({ label, badge, golems: info, wisps, arsenal, colossus: info2, errors: errors.slice(0, 8) }, null, 1));
   await browser.close();
   const kinds = info.map((g) => g.kind).sort().join();
