@@ -15,10 +15,17 @@ export const WIKI: WikiShelf[] = [
     ],
   },
   {
+    name: "Development",
+    help: "How the game is being built and what comes next.",
+    pages: [
+      { title: "Roadmap", href: "/roadmap", img: "/design/riven-marches/img/faction-banners.png", blurb: "The studio plan: team, milestones, what is in progress and what shipped last." },
+    ],
+  },
+  {
     name: "Design",
     help: "Ideas and plans being shaped, before they are built.",
     pages: [
-      { title: "The Riven Marches", href: "/design/riven-marches/", img: "/design/riven-marches/img/riven-marches-map.png", blurb: "Clan war: five factions fight over a shared borderland." },
+      { title: "The Riven Marches", href: "/design/riven-marches/", img: "/design/riven-marches/img/riven-marches-map.png", blurb: "Clan war: five AI-led clans fight over the whole world, without end." },
     ],
   },
 ];
