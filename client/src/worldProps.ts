@@ -1,4 +1,5 @@
 import Phaser from "phaser";
+import { staticObj } from "./staticChunks";
 import { TILE } from "../../shared/constants";
 import { AREAS, EMPTY, GROUND, HOLLOW, HOLLOW_WARDS, OBJECTS, REDFANG_TOWERS, SIGNPOSTS, T, VILLAGE, WRECK } from "../../shared/map";
 import { standingStone, STONE_H, STONE_W, throne, THRONE_H, THRONE_W } from "./throneArt";
@@ -695,6 +696,7 @@ export function addWorldProps(scene: Phaser.Scene, light?: (x: number, y: number
     const spr = scene.add.sprite(s.x, s.y, s.kind, 0).setOrigin(0.5, 1).setScale(1 / TX).setDepth(s.y).setFlipX(!!s.flip);
     // out of step with each other, so a row of them doesn't move as one
     spr.play({ key: `${s.kind}_idle`, startFrame: Math.floor(hash(Math.round(s.x), Math.round(s.y), 9) * N) });
+    staticObj(scene, spr); // animated only while near the view (staticChunks.ts)
     // the glow sits in the lantern: it hangs at texel x 22 of 32 (6 right of the sprite's centre), its middle ~71 texels above the foot
     if (s.kind === "wp_lantern_pole") light?.(s.x, s.y, LANTERN_LIFT, LANTERN_DX);
   }

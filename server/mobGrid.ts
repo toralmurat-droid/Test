@@ -10,6 +10,9 @@ export interface GridUnit {
   _gid: string;
   _gk: number;
   _gs: number;
+  /** In the grid's busy set (see MobGrid.wake), and the number of the pass that last listed it. */
+  _gb: boolean;
+  _gv: number;
 }
 
 const keyOf = (x: number, y: number) => Math.floor(x / MOB_CELL) * 65536 + Math.floor(y / MOB_CELL);
@@ -32,8 +35,10 @@ export class MobGrid<T extends GridUnit> extends Map<string, T> {
     super.set(id, m);
     if (m._gm && m._gm !== this) m._gm.delete(m._gid); // moved over from another map
     else if (m._gm === this) { super.delete(m._gid); this.unlink(m); } // the same monster under a new id
+    if (old) old._gm = null; // the monster it replaced is out: its moves must not put it back into a square
     m._gm = this; m._gid = id; m._gs = order;
     this.link(m, keyOf(m.x, m.y));
+    this.wake(m); // new (or back): it gets a visit, like a Map.forEach running now would give it
     return this;
   }
 
@@ -41,20 +46,113 @@ export class MobGrid<T extends GridUnit> extends Map<string, T> {
     const m = super.get(id);
     if (!m) return false;
     this.unlink(m);
+    this.rest(m);
     m._gm = null;
     return super.delete(id);
   }
 
   clear() {
-    this.forEach((m) => { m._gm = null; });
+    this.forEach((m) => { m._gm = null; m._gb = false; });
     this.cells.clear();
+    this.busy.clear();
     super.clear();
   }
 
   /** Called by the monster when x or y changed. */
   moved(m: T) {
     const k = keyOf(m.x, m.y);
-    if (k !== m._gk) { this.unlink(m); this.link(m, k); }
+    if (k === m._gk) return;
+    this.unlink(m); this.link(m, k);
+    if (this.cur >= 0 && m._gs > this.cur) this.schedule(m); // may have walked (or been pushed) into a warm square ahead of the pass
+  }
+
+  /** The monsters in one MOB_CELL square (cx, cy), in no particular order; undefined when empty. Read only. */
+  cell(cx: number, cy: number): ReadonlyMap<string, T> | undefined { return this.cells.get(cx * 65536 + cy); }
+
+  // ---- Passes: visiting only the monsters that may have something to do (TownRoom.update) ----
+  // The room's tick used to walk every monster and drop the frozen ones (dozing, no target, no hero near) on the
+  // first line. A pass lists instead the busy set (every monster that may be doing something wherever it is) plus
+  // whoever stands in the squares the room names, in map order, so the visits, their order and the random numbers
+  // drawn come out exactly as before. The room keeps the busy set right: a monster joins it when it is set into the
+  // grid and when it is woken (Mob.target, a dozing monster waking up), and leaves it when the room finds it frozen.
+
+  /** Monsters that may have something to do wherever they are. */
+  private busy = new Set<T>();
+  /** The open pass: its monsters and their places in map order (sorted), how far runPass got (-1: no pass open). */
+  private pm: T[] = []; private pg: number[] = []; private pn = 0;
+  private cur = -1;
+  /** Monsters woken ahead of the running pass's cursor, sorted by place, with the place they were woken at. */
+  private lm: T[] = []; private lg: number[] = [];
+
+  /** Puts a monster in the busy set (and into the open pass if that has not reached it yet). */
+  wake(m: T) {
+    if (m._gm !== this) return;
+    if (!m._gb) { m._gb = true; this.busy.add(m); }
+    if (this.cur >= 0 && m._gs > this.cur) this.schedule(m);
+  }
+
+  /** Takes a monster out of the busy set: it was seen frozen. */
+  rest(m: T) { if (m._gb) { m._gb = false; this.busy.delete(m); } }
+
+
+  /** Opens a pass: the busy set to start with; add squares with passCells, then sortPass. */
+  beginPass() {
+    const pm = this.pm, v = ++this.pn;
+    pm.length = 0; this.lm.length = 0; this.lg.length = 0;
+    this.cur = 0; // every place is > 0: from here on a woken monster joins the pass
+    for (const m of this.busy) { if (m._gm === this) { m._gv = v; pm.push(m); } else this.rest(m); }
+  }
+
+  /** Adds every monster in the squares cx0..cx1, cy0..cy1 (inclusive) to the open pass. */
+  passCells(cx0: number, cy0: number, cx1: number, cy1: number) {
+    const pm = this.pm, v = this.pn;
+    for (let cx = cx0; cx <= cx1; cx++) for (let cy = cy0; cy <= cy1; cy++) {
+      const c = this.cells.get(cx * 65536 + cy);
+      if (c) for (const m of c.values()) if (m._gv !== v) { m._gv = v; pm.push(m); }
+    }
+  }
+
+  /** Puts the open pass in map order (call once, after the last passCells). */
+  sortPass() {
+    const pm = this.pm, pg = this.pg;
+    pm.sort((a, b) => a._gs - b._gs);
+    pg.length = pm.length;
+    for (let i = 0; i < pm.length; i++) pg[i] = pm[i]._gs;
+  }
+
+  /** The open pass as listed (no one woken since): what a Map.forEach would visit among them, in its order. */
+  eachPass(fn: (m: T, id: string) => void) {
+    const pm = this.pm, pg = this.pg;
+    for (let i = 0; i < pm.length; i++) { const m = pm[i]; if (m._gm === this && m._gs === pg[i]) fn(m, m._gid); }
+  }
+
+  /**
+   * Visits the open pass in map order, plus every monster woken or set into the grid ahead of the cursor meanwhile,
+   * at its place (as Map.forEach visits an entry added while it runs), skipping the deleted. Closes the pass.
+   */
+  runPass(fn: (m: T, id: string) => void) {
+    const pm = this.pm, pg = this.pg, lm = this.lm, lg = this.lg;
+    let i = 0, j = 0;
+    try {
+      for (;;) {
+        let m: T, g: number;
+        if (j < lm.length && (i >= pm.length || lg[j] < pg[i])) { m = lm[j]; g = lg[j++]; }
+        else if (i < pm.length) { m = pm[i]; g = pg[i++]; }
+        else break;
+        if (g <= this.cur || m._gm !== this || m._gs !== g) continue; // listed twice, gone, or back under a later place
+        this.cur = g;
+        fn(m, m._gid);
+      }
+    } finally { this.cur = -1; lm.length = 0; lg.length = 0; }
+  }
+
+  /** Adds a monster to the running pass at its place (late list, kept sorted; it holds the few woken meanwhile). */
+  private schedule(m: T) {
+    const lm = this.lm, lg = this.lg, g = m._gs;
+    let k = lg.length;
+    while (k > 0 && lg[k - 1] > g) k--;
+    if (k > 0 && lg[k - 1] === g && lm[k - 1] === m) return; // already in
+    lm.splice(k, 0, m); lg.splice(k, 0, g);
   }
 
   /**

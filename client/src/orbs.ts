@@ -1,3 +1,4 @@
+import { hotbarWidth } from "./hudcache";
 import "./orbs.css";
 import { orbNeedsRedraw, orbTexts } from "./hudLogic";
 
@@ -185,8 +186,7 @@ export class OrbHud {
 
   /** The plate is as wide as the skill bar laid over it; the orbs sit at its ends. Also run on window resize. */
   layout() {
-    const bar = document.getElementById("hudbar") ?? document.getElementById("hotbar");
-    const w = bar ? bar.offsetWidth : 0;
+    const w = hotbarWidth();
     if (w > 0 && w !== this.last.w) { document.body.style.setProperty("--barw", `${w}px`); this.last.w = w; } // the menu buttons use it too
     // Room left of the health orb: too little for chat beside the demon statue -> the statue goes, chat moves up
     const tight = w > 0 && (innerWidth - w) / 2 - 112 < 330;

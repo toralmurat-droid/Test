@@ -79,7 +79,11 @@ All of these must pass (CI runs 1–3 and the Postgres smoke test):
 
 ## Gotchas
 - e2e scripts need a fresh save file per run; walking out of town can stall (the scripts re-route).
-- Colyseus decode errors (`refId not found`) show up now and then in e2e runs; still unexplained. Note it if you see it.
+- Colyseus decode errors (`refId not found`, `definition mismatch`, invalid UTF-8) meant corrupted state patches:
+  with per-message deflate on, `ws` compresses a frame some time after `send()` without copying it, and Colyseus
+  hands every client a view of one shared buffer. `server/patchCopy.ts` makes the room send copies
+  (`tests/patchcopy.test.ts` guards it). Keep that call when touching the serializer or upgrading Colyseus. The
+  errors are no longer expected noise: if one shows up, report it.
 - Big features that span several sessions keep a progress log in `docs/` (see `docs/summoner-rework-progress.md`).
 
 ## Working with agents
