@@ -1,9 +1,10 @@
 {
   "date": "2026-11-13",
-  "title": "Graves, letters and a crown",
+  "title": "Graves, letters, lanterns and a crown",
   "changes": [
-    "New quest The Empty Grave in Gravemoor Cemetery (level 15): listen to the mourners, then dig the right grave. A wrong guess wakes the dead.",
-    "New quest Two Letters from Old Garrick, after the Redfang Chief: give one letter to the law or the other to mercy. Your choice changes who trades with you and what folk say afterwards.",
+    "New quests The Empty Grave in Gravemoor Cemetery (level 15) and Two Letters from Old Garrick, after the Redfang Chief: dig the right grave, then choose who gets a letter. Your choice changes who trades with you.",
+    "New quest The Last Lantern (level 10, Brother Aldric): carry the last spirit lantern from Misty Marsh to Saint Elow's shrine in Brinewood. Water, night and setting it down dim it, and blobs follow the light.",
+    "New quest Hold the Wheel (level 4, Odo the miller): stay close and keep the blobs off Odo for 90 seconds, then face the Millrace Glutton.",
     "New quest The Crown in the Sand in Kharsun (levels 38 to 39): a crowned seal in the desert leads to Ostrevar's Envoy."
   ]
 }
