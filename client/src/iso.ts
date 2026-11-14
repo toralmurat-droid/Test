@@ -727,6 +727,8 @@ export function isoStanding(scene: Phaser.Scene, objects: number[][]): number[][
       // origin = the centre of the footprint diamond, so the block stands on its tile
       staticObj(scene, scene.add.image(cx, cy, key).setOrigin(0.5, (IH / 2 + h) / (IH + h)).setDepth(cy));
       out[ty][tx] = -1;
+    } else if (t === T.WHEEL) {
+      out[ty][tx] = -1; // the mill's wheel is a world prop (millArt.ts)
     } else if (UPRIGHT.has(t)) {
       // 3/4 view art: its bottom edge stands on the tile's centre, a little forward
       const v = (((tx * 2654435761) ^ (ty * 40503)) >>> 0) % 4;

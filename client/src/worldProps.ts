@@ -1,12 +1,14 @@
 import Phaser from "phaser";
 import { staticObj } from "./staticChunks";
 import { TILE } from "../../shared/constants";
-import { AREAS, EMPTY, GROUND, HOLLOW, HOLLOW_WARDS, OBJECTS, REDFANG_TOWERS, SIGNPOSTS, T, VILLAGE, WRECK } from "../../shared/map";
+import { AREAS, BARNS, EMPTY, GROUND, HOLLOW, HOLLOW_WARDS, OBJECTS, REDFANG_TOWERS, SIGNPOSTS, T, VILLAGE, WRECK } from "../../shared/map";
 import { standingStone, STONE_H, STONE_W, throne, THRONE_H, THRONE_W } from "./throneArt";
 import { NPCS, NPC_DECOR } from "../../shared/npcs";
 import { CHESTS } from "../../shared/chests";
 import { SIEGE_SITES } from "../../shared/siege";
 import { ELEMENT_LANDS } from "../../shared/map";
+import { COW_FOOT_U, COW_FOOT_V, COW_H, COW_W, cow } from "./farmArt";
+import { MILL_FOOT_U, MILL_FOOT_V, MILL_H, MILL_W, millWheel } from "./millArt";
 import { BLACKR, dummy, lanternPole, netRack, REDR, skullPike, spearRack, warPennant, watchtower as watchtowerArt } from "./isoProps";
 import { emberVent, iceSpikes, ICE_H, ICE_W, stormStone, STORM_H, STORM_W, venomCaps, VENOM_H, VENOM_W, VENT_H, VENT_W } from "./elementArt";
 
@@ -307,9 +309,9 @@ function shipwreck(p: Pen, f: number) {
 }
 
 // ---- placement -------------------------------------------------------------------------------------------
-type Kind = "wp_hollow_throne" | "wp_crownstone0" | "wp_crownstone1" | "wp_crownstone2" | "wp_shipwreck" | "wp_spear_rack" | "wp_pennant_red" | "wp_pennant_black" | "wp_dummy" | "wp_lantern_pole" | "wp_skull_pike" | "wp_net_rack" | "wp_spears_ground" | "wp_watchtower"
+type Kind = "wp_hollow_throne" | "wp_crownstone0" | "wp_crownstone1" | "wp_crownstone2" | "wp_shipwreck" | "wp_spear_rack" | "wp_pennant_red" | "wp_pennant_black" | "wp_dummy" | "wp_lantern_pole" | "wp_skull_pike" | "wp_net_rack" | "wp_spears_ground" | "wp_watchtower" | "wp_millwheel" | "wp_cow0" | "wp_cow1"
   | "wp_venom_caps" | "wp_ice_spikes" | "wp_ember_vent" | "wp_storm_stone";
-interface Spot { kind: Kind; x: number; y: number; flip?: boolean }
+interface Spot { kind: Kind; x: number; y: number; flip?: boolean; depth?: number }
 
 const hash = (x: number, y: number, s: number) => { let h = (x * 374761393 + y * 668265263 + s * 2147483647) | 0; h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; };
 const BAD_GROUND = new Set<number>([T.WATER, T.COBBLE, T.BRIDGE, T.CROPS, T.FIELD]);
@@ -382,6 +384,19 @@ function spots(): Spot[] {
     const tx = HOLLOW.cx + 0.5 + Math.cos(a) * HOLLOW.r * 1.1, ty = HOLLOW.cy + 0.5 + Math.sin(a) * HOLLOW.r;
     out.push({ kind: `wp_crownstone${i % 3}` as Kind, x: tx * TILE, y: ty * TILE, flip: hash(i, 3, 7) < 0.5 });
   }
+  // Millbrook: the water wheel and its lean-to on pilings, against the mill's east wall (millArt.ts)
+  const mill = AREAS.find((r) => r.name === "Millbrook Mill");
+  if (mill) {
+    let x1 = -1, y0 = 1e9, y1 = -1;
+    for (let ty = mill.y; ty < mill.y + mill.h; ty++) for (let tx = mill.x; tx < mill.x + mill.w; tx++) {
+      const o = OBJECTS[ty]?.[tx];
+      if (o === T.ROOF_THATCH || o === T.DOOR || o === T.WALL_TIMBER || o === T.WINDOW_TIMBER) { x1 = Math.max(x1, tx); y0 = Math.min(y0, ty); y1 = Math.max(y1, ty); }
+    }
+    if (x1 >= 0) out.push({ kind: "wp_millwheel", x: (x1 + 1) * TILE + MILL_FOOT_U, y: (y0 + y1 + 1) / 2 * TILE + MILL_FOOT_V, depth: (y1 + 1) * TILE + 2 });
+  }
+  // Goldenreach barn: two cows in the straw, out of the doorway's line (farmArt.ts)
+  for (const b of BARNS) for (const [du, dv, k, fl] of [[2.6, 2.2, 0, false], [b.w - 3.4, 3.6, 1, true]] as const)
+    out.push({ kind: `wp_cow${k}`, x: (b.x + du) * TILE + (fl ? -COW_FOOT_U : COW_FOOT_U), y: (b.y + dv) * TILE + COW_FOOT_V, flip: fl });
   // Saltmere: nets drying by the beach, lantern poles on the lane
   scatter(out, "Saltmere", "wp_net_rack", 3, 5);
   scatter(out, "Saltmere", "wp_lantern_pole", 3, 6);
@@ -396,14 +411,14 @@ const SIZE: Record<Kind, number> = {
   wp_hollow_throne: THRONE_H / TX, wp_crownstone0: STONE_H / TX, wp_crownstone1: STONE_H / TX, wp_crownstone2: STONE_H / TX,
   wp_shipwreck: WRECK_H / TX,
   wp_spear_rack: 80, wp_pennant_red: 100, wp_pennant_black: 100, wp_dummy: 58, wp_lantern_pole: 90, wp_skull_pike: 72, wp_net_rack: 50, wp_spears_ground: 54,
-  wp_watchtower: 84,
+  wp_watchtower: 84, wp_millwheel: MILL_H / TX, wp_cow0: COW_H / TX, wp_cow1: COW_H / TX,
   wp_venom_caps: VENOM_H / TX, wp_ice_spikes: ICE_H / TX, wp_ember_vent: VENT_H / TX, wp_storm_stone: STORM_H / TX,
 };
 const FPS: Record<Kind, number> = {
   wp_hollow_throne: 6, wp_crownstone0: 1, wp_crownstone1: 1, wp_crownstone2: 1,
   wp_shipwreck: 4,
   wp_spear_rack: 6, wp_pennant_red: 7, wp_pennant_black: 6, wp_dummy: 3, wp_lantern_pole: 3, wp_skull_pike: 6, wp_net_rack: 3, wp_spears_ground: 5,
-  wp_watchtower: 6,
+  wp_watchtower: 6, wp_millwheel: 5, wp_cow0: 2, wp_cow1: 2,
   wp_venom_caps: 4, wp_ice_spikes: 4, wp_ember_vent: 6, wp_storm_stone: 8,
 };
 
@@ -418,6 +433,9 @@ const LANTERN_LIFT = 71 / TX, LANTERN_DX = 6 / TX;
 export function addWorldProps(scene: Phaser.Scene, light?: (x: number, y: number, lift: number, dx: number) => void) {
   makeTextures(scene);
   watchtower(scene);
+  sheet(scene, "wp_millwheel", MILL_W, MILL_H, N, millWheel, 0);
+  sheet(scene, "wp_cow0", COW_W, COW_H, N, cow(false), 0);
+  sheet(scene, "wp_cow1", COW_W, COW_H, N, cow(true), 0);
   sheet(scene, "wp_shipwreck", WRECK_W, WRECK_H, N, shipwreck, 0);
   sheet(scene, "wp_hollow_throne", THRONE_W, THRONE_H, N, throne, 0);
   for (const v of [0, 1, 2]) sheet(scene, `wp_crownstone${v}`, STONE_W, STONE_H, N, (p, f) => standingStone(p, f, 0, v), 0);
@@ -426,7 +444,7 @@ export function addWorldProps(scene: Phaser.Scene, light?: (x: number, y: number
     if (!scene.anims.exists(key)) scene.anims.create({ key, frames: scene.anims.generateFrameNumbers(kind, { start: 0, end: N - 1 }), frameRate: FPS[kind], repeat: -1 });
   }
   for (const s of WORLD_PROP_SPOTS) {
-    const spr = scene.add.sprite(s.x, s.y, s.kind, 0).setOrigin(0.5, 1).setScale(1 / TX).setDepth(s.y).setFlipX(!!s.flip);
+    const spr = scene.add.sprite(s.x, s.y, s.kind, 0).setOrigin(0.5, 1).setScale(1 / TX).setDepth(s.depth ?? s.y).setFlipX(!!s.flip);
     // out of step with each other, so a row of them doesn't move as one
     spr.play({ key: `${s.kind}_idle`, startFrame: Math.floor(hash(Math.round(s.x), Math.round(s.y), 9) * N) });
     staticObj(scene, spr); // animated only while near the view (staticChunks.ts)

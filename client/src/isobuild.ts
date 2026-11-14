@@ -5,7 +5,8 @@ import { SMOOTH } from "./isoflag";
 import { staticObj } from "./staticChunks";
 import Phaser from "phaser";
 import { TILE } from "../../shared/constants";
-import { BARNS, OBJECTS, T, TILE_COUNT } from "../../shared/map";
+import { AREAS, BARNS, OBJECTS, T, TILE_COUNT } from "../../shared/map";
+import { dressHouse, type HouseStyle, openDoor, storeyBeam } from "./houseLife";
 
 /**
  * Iso buildings (phase 4 polish): whole houses with walls and a pitched roof, and the materials used for
@@ -116,6 +117,17 @@ export interface Building {
 export const BUILDINGS: Building[] = [];
 
 const WALL_H = 34;
+/**
+ * Houses of these places are two storeys high with an open door and their trade on the walls (Murat 2026-11-13:
+ * "thinner and higher, as if the characters had to go inside"). The rest keep the low cottage look.
+ */
+const STYLE_AREAS: Record<string, HouseStyle> = { Saltmere: "fisher", "Millbrook Mill": "mill", "Redfang Hollow": "barracks" };
+const houseStyle = (x: number, y: number): HouseStyle | undefined => {
+  const a = AREAS.find((r) => STYLE_AREAS[r.name] && x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h);
+  return a && STYLE_AREAS[a.name];
+};
+/** Height of one storey of a tall house (world px). */
+const STOREY = 30;
 
 /** Houses as whole buildings: one per connected roof, with the facade rows under it. Returns the tiles they cover. */
 export function buildHouses(scene: Phaser.Scene): Set<number> {
@@ -354,9 +366,11 @@ function house(scene: Phaser.Scene, x0: number, y0: number, x1: number, yb: numb
   const wTiles = x1 - x0 + 1, dTiles = yb - y0 + 1;
   const alongX = wTiles >= dTiles; // ridge direction: along the longer side
   const half = (alongX ? Y1 - Y0 : X1 - X0) / 2;
-  const RH = Math.round(half * 0.8) + 4; // ridge height above the walls
+  const style = houseStyle(x0, y0), wallH = style ? STOREY * 2 + (style === "barracks" ? 4 : 0) : WALL_H;
+  // ridge height above the walls: tall houses get a steeper roof, the barracks a plainer, lower one
+  const RH = Math.round(half * (!style ? 0.8 : style === "barracks" ? 0.7 : 1.05)) + 4;
   const o = 6; // eaves overhang
-  const top = WALL_H + RH, eave = WALL_H - 3;
+  const top = wallH + RH, eave = wallH - 3;
   // canvas covering the whole building
   const left = P(X0 - o, Y1 + o).x - 2, right = P(X1 + o, Y0 - o).x + 2;
   const topY = P(X0, Y0, top + 26).y - 4, bottom = P(X1 + o, Y1 + o).y + 4;
@@ -408,24 +422,45 @@ function house(scene: Phaser.Scene, x0: number, y0: number, x1: number, yb: numb
     else chim((X0 + X1) / 2 - 10, Y0 + TILE * 1.2);
   }
 
-  // 4. walls: south facade (left face) and east side (right face)
-  const facadeH = WALL_H;
-  for (let i = 0; i < wTiles; i++) {
-    const a = S(X0 + i * TILE, Y1, facadeH), b = S(X0 + (i + 1) * TILE, Y1, facadeH);
-    const poly = [a, b, S(X0 + (i + 1) * TILE, Y1, 0), S(X0 + i * TILE, Y1, 0)];
-    texPoly(ctx, poly, src, tsx(facadeRow(i) >= 0 ? facadeRow(i) : wallId), tsy(0), a, scale(sub(b, a), 1 / TILE), { x: 0, y: facadeH / TILE }, 1, 1, 0.1);
+  // 4. walls: south facade (left face) and east side (right face); a tall house stacks two storeys, the upper one
+  // from the facade's upper row (its windows), the lower one from the bottom row (door, windows)
+  const facadeH = wallH;
+  const bands: [number, number, number][] = style ? [[0, STOREY, 0], [STOREY, wallH, 1]] : [[0, facadeH, 0]];
+  const upperArt = (i: number) => { const t = obj(x0 + i, yb - 1); return t === T.WINDOW_TIMBER || t === T.WINDOW_STONE ? t : (i % 2 ? winId : wallId); };
+  for (const [z0, z1, up] of bands) {
+    for (let i = 0; i < wTiles; i++) {
+      const a = S(X0 + i * TILE, Y1, z1), b = S(X0 + (i + 1) * TILE, Y1, z1);
+      const poly = [a, b, S(X0 + (i + 1) * TILE, Y1, z0), S(X0 + i * TILE, Y1, z0)];
+      const art = up ? upperArt(i) : facadeRow(i) >= 0 ? facadeRow(i) : wallId;
+      texPoly(ctx, poly, src, tsx(art), up ? tsy(art) : tsy(0), a, scale(sub(b, a), 1 / TILE), { x: 0, y: (z1 - z0) / TILE }, 1, 1, 0.1);
+    }
+    for (let j = 0; j < dTiles; j++) {
+      const a = S(X1, Y0 + j * TILE, z1), b = S(X1, Y0 + (j + 1) * TILE, z1);
+      const poly = [a, b, S(X1, Y0 + (j + 1) * TILE, z0), S(X1, Y0 + j * TILE, z0)];
+      const art = (up ? j % 2 === 1 && dTiles >= 3 : dTiles >= 4 && j % 2 === 1) && j < dTiles - 1 ? winId : wallId;
+      texPoly(ctx, poly, src, tsx(art), tsy(art), a, scale(sub(b, a), 1 / TILE), { x: 0, y: (z1 - z0) / TILE }, 1, 1, 0.34);
+    }
   }
-  for (let j = 0; j < dTiles; j++) {
-    const a = S(X1, Y0 + j * TILE, facadeH), b = S(X1, Y0 + (j + 1) * TILE, facadeH);
-    const poly = [a, b, S(X1, Y0 + (j + 1) * TILE, 0), S(X1, Y0 + j * TILE, 0)];
-    const art = dTiles >= 4 && j % 2 === 1 && j < dTiles - 1 ? winId : wallId;
-    texPoly(ctx, poly, src, tsx(art), tsy(art), a, scale(sub(b, a), 1 / TILE), { x: 0, y: facadeH / TILE }, 1, 1, 0.34);
+  // the barracks are built of dark tarred logs, not plaster: a wash and the log seams over the wall art
+  if (style === "barracks") {
+    quad(ctx, [S(X0, Y1, facadeH), S(X1, Y1, facadeH), S(X1, Y1, 0), S(X0, Y1, 0)], "rgba(46,28,16,0.72)");
+    quad(ctx, [S(X1, Y1, facadeH), S(X1, Y0, facadeH), S(X1, Y0, 0), S(X1, Y1, 0)], "rgba(30,18,10,0.76)");
+    for (let z = 3; z < facadeH; z += 4.5) {
+      line(ctx, S(X0, Y1, z), S(X1, Y1, z), "rgba(14,8,4,0.7)", 0.8); line(ctx, S(X0, Y1, z + 1.2), S(X1, Y1, z + 1.2), "rgba(150,110,70,0.22)", 0.6);
+      line(ctx, S(X1, Y1, z), S(X1, Y0, z), "rgba(10,6,2,0.7)", 0.8);
+    }
   }
   // corner post and wall foot
   line(ctx, S(X1, Y1, facadeH), S(X1, Y1, 0), "rgba(40,26,16,0.8)", 2);
   line(ctx, S(X0, Y1, 0), S(X1, Y1, 0), "rgba(30,20,12,0.5)");
   line(ctx, S(X1, Y1, 0), S(X1, Y0, 0), "rgba(30,20,12,0.5)");
   if (SMOOTH) houseWalls(ctx, S, { X0, X1, Y0, Y1, facadeH, stone: wallId === T.WALL_STONE }, x0 * 31 + y0 * 7);
+  const doorAt = [...Array(wTiles).keys()].find((i) => facadeRow(i) === T.DOOR);
+  if (style) {
+    storeyBeam(ctx, S, X0, X1, Y0, Y1, STOREY);
+    if (doorAt !== undefined) openDoor(ctx, left, topY, S, X0 + doorAt * TILE, Y1, style, x0 * 13 + y0);
+    dressHouse(ctx, left, topY, style, { X0, X1, Y0, Y1, wallH, door: doorAt }, x0 * 29 + y0 * 3);
+  }
 
   // 5. gable end (triangle of wall under the roof) and the front slope
   const gableArt = { id: wallId };
@@ -450,10 +485,7 @@ function house(scene: Phaser.Scene, x0: number, y0: number, x1: number, yb: numb
     line(ctx, S(X1 + o, Y0 - o, eave), S(X1 + o, Y1 + o, eave), "rgba(30,20,12,0.6)", 1);
   }
   if (SMOOTH) houseRoof(ctx, S, { X0, X1, Y0, Y1, o, top, eave, alongX }, x0 * 53 + y0 * 11);
-  if (SMOOTH) {
-    const di = [...Array(wTiles).keys()].find((i) => facadeRow(i) === T.DOOR);
-    if (di !== undefined) porch(ctx, S, X0 + di * TILE, X0 + (di + 1) * TILE, Y1, x0 * 7 + y0);
-  }
+  if (SMOOTH && doorAt !== undefined && !style) porch(ctx, S, X0 + doorAt * TILE, X0 + (doorAt + 1) * TILE, Y1, x0 * 7 + y0);
   if (SMOOTH) weatherHouse(ctx, S, { X0, X1, Y0, Y1, o, top, eave, facadeH, alongX }, x0 * 131 + y0 * 17);
   tex.refresh();
 
