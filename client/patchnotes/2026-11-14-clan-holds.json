@@ -1,5 +1,6 @@
 {
   "date": "2026-11-14",
+  "patch": 232,
   "title": "Clan Holds",
   "changes": [
     "Every war zone now has a Hold in the style of the clan that owns it: a Warden watchtower, a Redfang war camp, an Ossuary tower, a Hide-Kin burrow or a Veiled shrine.",
