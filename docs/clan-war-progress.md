@@ -86,7 +86,7 @@ Open points for M1:
 ## M1 step 4: Holds (2026-11-14)
 
 - `client/src/holdArt.ts`: five Hold sprites in the clan styles (Warden watchtower, Redfang war camp, Ossuary tower,
-  Hide-Kin burrow, Veiled shrine), generated pixel art in the bonfire style (`paintHold` draws one without Phaser).
+  Hide-Kin burrow, Veiled shrine), generated pixel art in the bonfire style (rebuilt as iso forts later the same day, see below).
 - `shared/war/standards.ts` `HOLDS`: one spot per territory near the middle, on clear ground, at least 5 tiles from its standards. The
   sprite follows the owner. Look only: no collision, no siege mechanics at the Hold yet (M2: siege works, gates).
 
@@ -117,3 +117,12 @@ Open points for M1:
   siege turns the patrol into attacker/defender pairs clashing at each standard. Hidden underground.
 - Next: own trooper sheets (tabards) for Wardens/Redfang/Veiled; later interactive server troops (fight monsters and
   enemy-sworn heroes; needs sims and bench).
+
+## M2: Armies and forts (2026-11-14, Murat: "three troops is light", "holds look terrible")
+
+- `TROOP`/`SIEGE_FIGHT` in `shared/war/patrols.ts`: columns of 8 two abreast with an officer, 4–6 guards round the
+  Hold (`garrisonSpots`), sieges as 8 v 8 lines per standard with falls and reinforcements (`siegeLife`), fewer
+  defenders when control is low. Sprites pooled per land in `client/src/warTroops.ts` (≤ 40 near a siege).
+- `client/src/holdArt.ts` rebuilt with the iso painter: ~7-tile forts/camps per clan (Warden palisade fort, Redfang
+  war camp, Ossuary bone keep, Hide-Kin burrow earthworks, Veiled walled shrine), ground + standing layer
+  (`holdKeys`, `paintHoldLayers`); preview `tools/art/preview/holds-sheet.ts`. `buildHolds` clears a 7×7 area.
