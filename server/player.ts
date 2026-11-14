@@ -22,11 +22,26 @@ export class PlayerPrivate extends Schema {
   // chain's QuestChain.packed key, one synced field for all of them. A chain not begun has no key (qset drops zeros).
   // readonly: a replaced map would be a new tree the owner's view never saw (see Player.me)
   @type({ map: "number" }) readonly quests = new MapSchema<number>();
+  @type("number") kills = 0;
+  @type("number") xp = 0;
+  @type("number") gold = 0;
+  // Healing and mana potions by size (shared/potions.ts), packed in one synced number (packPotions); Player.pots is the server copy
+  @type("number") potions = 0;
+  // Mana (shared/mana.ts): current, max and mana potions packed in one synced number (packMana); Player.mana / maxMana
+  // are the server-side values. Took the old `raging` flag's place (the client reads Rage from `fx`).
+  @type("number") mp = 0;
+  @type("number") energy = 0; // Heat / overload (shared/overload.ts): 0..100, below 0 = overheated; spells spend mana
+  // Skills (shared/skillEngine.ts): stacks built by basic hits, and the speed multiplier from buffs and passives (own
+  // movement prediction; other heroes are drawn from their synced x / y, never predicted)
+  @type("number") stacks = 0;
+  @type("number") spd = 1;
+  @type("number") seq = 0; // last processed input sequence (own client's reconciliation and ping)
 }
 
 /**
  * A hero as the room syncs it. Fields only the owner needs live in `me`, which the per-client StateView (TownRoom
- * onJoin) sends to that hero's client alone; the `timers` / `quests` accessors keep server code reading them as before.
+ * onJoin) sends to that hero's client alone; the forwarding accessors at the end (timers, quests, kills, xp, gold, potions,
+ * mp, energy, stacks, spd, seq) keep server code reading them as before. The client reads them as `player.me`.
  */
 export class Player extends Schema {
   @type("string") name = "";
@@ -44,17 +59,11 @@ export class Player extends Schema {
   @type("number") maxHp = 100;
   @type("boolean") dead = false;
   @type("boolean") guarding = false; // knight shield up
-  @type("number") kills = 0;
-  @type("number") xp = 0;
   @type("number") level = 1;
   @type("string") emote = ""; // current emote animation ("" = none)
   @type("boolean") outlaw = false; // cast a skill inside Oakvale: the village attacks until they leave (shared/wrath.ts)
   combo = 0; // which hit of the 3-hit combo was thrown last (0..2); server only (the client never reads it)
-  @type("number") gold = 0;
-  // Healing and mana potions by size (shared/potions.ts), packed in one synced number (packPotions); `pots` is the server copy
-  @type("number") potions = 0;
-  pots: Potions = noPotions();
-  @type("number") seq = 0; // last processed input sequence (for client reconciliation)
+  pots: Potions = noPotions(); // healing and mana potions by size (shared/potions.ts); synced packed as me.potions
   // Stats with gear (shared/gear.ts heroStats), set by applyStats. Server only: the client computes the same numbers
   // from synced cls, level, ptSta..ptDex and the gear slots
   sta = 0;
@@ -68,19 +77,14 @@ export class Player extends Schema {
   @type("number") ptDex = 0;
   @type("boolean") stunned = false;
   @type("boolean") slowed = false;
-  // Mana (shared/mana.ts): current, max and mana potions packed in one synced number (packMana), to keep the schema
-  // small (Colyseus caps it at 64). Took the old `raging` flag's place (the client reads Rage from `fx`). Server-side values below.
-  @type("number") mp = 0;
+  // Mana (shared/mana.ts), server-side values; synced packed as me.mp (packMana)
   mana = 0;
   maxMana = 0;
   lastManaPotion = 0;
   @type("boolean") rolling = false; // dodge roll in progress
   @type("boolean") broken = false; // poise broken: dizzy, can't attack (shared/combat.ts)
-  @type("number") energy = 0; // Heat / overload (shared/overload.ts): 0..100, below 0 = overheated; spells spend mana (above)
-  // Skills (shared/skillEngine.ts): stacks built by basic hits, speed multiplier from buffs and passives (client
-  // prediction), and status words for the effects on screen (burn, mark, active auras and enchantments...)
-  @type("number") stacks = 0;
-  @type("number") spd = 1;
+  // Skills (shared/skillEngine.ts): status words for the effects on screen (burn, mark, active auras and enchantments...),
+  // seen by everyone. Stacks and the speed multiplier are owner-only, in `me`.
   @type("string") fx = "";
   // Owner-only data (PlayerPrivate): the per-client view (onJoin) sends it to this hero's client alone
   // Owner-only (StateView in TownRoom onJoin). Two traps, both silent: never replace `me` or a collection inside it after
@@ -148,4 +152,28 @@ export class Player extends Schema {
   set timers(v: string) { this.me.timers = v; }
   /** Every quest chain's progress, kept in `me` (owner-only). Never replace the map: the client's view holds this one. */
   get quests() { return this.me.quests; }
+  // Owner-only numbers kept in `me` (other clients never get them): server code, saves and tests read them here as before
+  get kills() { return this.me.kills; }
+  set kills(v: number) { this.me.kills = v; }
+  get xp() { return this.me.xp; }
+  set xp(v: number) { this.me.xp = v; }
+  get gold() { return this.me.gold; }
+  set gold(v: number) { this.me.gold = v; }
+  /** Potions packed for the owner's HUD (packPotions); the server's own copy is `pots`. */
+  get potions() { return this.me.potions; }
+  set potions(v: number) { this.me.potions = v; }
+  /** Mana packed for the owner's HUD (packMana); the server's own values are `mana` / `maxMana`. */
+  get mp() { return this.me.mp; }
+  set mp(v: number) { this.me.mp = v; }
+  /** Heat (shared/overload.ts); skill engine code reads it as Unit.energy. */
+  get energy() { return this.me.energy; }
+  set energy(v: number) { this.me.energy = v; }
+  get stacks() { return this.me.stacks; }
+  set stacks(v: number) { this.me.stacks = v; }
+  /** Speed multiplier: only the owner predicts its own movement with it. */
+  get spd() { return this.me.spd; }
+  set spd(v: number) { this.me.spd = v; }
+  /** Last processed input: only the owner's client acks it. */
+  get seq() { return this.me.seq; }
+  set seq(v: number) { this.me.seq = v; }
 }

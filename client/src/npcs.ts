@@ -35,10 +35,11 @@ import { speechBubble } from "./weathered";
 import { msUntilUndeadNight } from "../../shared/daynight";
 import { dayTime } from "./details";
 import { TEXT_FONT, TITLE_FONT, TEXT_PX, TITLE_PX, WT } from "./pixelfont";
+import { own } from "./own";
 
 type Me = { x: number; y: number } | undefined;
 /** The local player's synced state (only the fields NPCs care about). */
-type QuestState = (Quester & { gold?: number; potions?: number; cls?: string; bag?: Iterable<string> } & Partial<Record<GearSlot, string>>) | undefined;
+type QuestState = (Quester & { cls?: string; bag?: Iterable<string> } & Partial<Record<GearSlot, string>>) | undefined;
 
 /**
  * Village NPCs (shared/npcs.ts): sprites by the bonfire, "!"/"?" quest markers, an "E Talk" prompt when close,
@@ -333,7 +334,7 @@ export class NpcLayer {
   /** Shop page: stock to buy, and (for traders who buy) the player's matching bag items to sell. */
   private renderShop(n: Npc, q: QuestState) {
     const shop = SHOPS[n.shop!];
-    const gold = q?.gold ?? 0, potions = q?.potions ?? 0, cls = q?.cls, pots = unpackPotions(potions);
+    const { gold, potions } = own(q), cls = q?.cls, pots = unpackPotions(potions);
     const bag = [...(q?.bag ?? [])];
     // masterwork: one level shown at a time (picked with the buttons), by default the best one the hero can wear
     const master = this.masterLv ?? [...MASTER_LEVELS].reverse().find((l) => l <= (q?.level ?? 1)) ?? MASTER_LEVELS[0];
