@@ -396,7 +396,8 @@ function spots(): Spot[] {
   }
   // Goldenreach barn: two cows in the straw, out of the doorway's line (farmArt.ts)
   for (const b of BARNS) for (const [du, dv, k, fl] of [[2.6, 2.2, 0, false], [b.w - 3.4, 3.6, 1, true]] as const)
-    out.push({ kind: `wp_cow${k}`, x: (b.x + du) * TILE + (fl ? -COW_FOOT_U : COW_FOOT_U), y: (b.y + dv) * TILE + COW_FOOT_V, flip: fl });
+    // a flipped iso sprite swaps u and v, so its foot offset swaps too
+    out.push({ kind: `wp_cow${k}`, x: (b.x + du) * TILE + (fl ? COW_FOOT_V : COW_FOOT_U), y: (b.y + dv) * TILE + (fl ? COW_FOOT_U : COW_FOOT_V), flip: fl });
   // Saltmere: nets drying by the beach, lantern poles on the lane
   scatter(out, "Saltmere", "wp_net_rack", 3, 5);
   scatter(out, "Saltmere", "wp_lantern_pole", 3, 6);

@@ -380,6 +380,7 @@ function buildWorld() {
   // ---------- 8. Millbrook watermill ----------
   const millDoor = building(mill.x, mill.y + 1, 6, 5, T.ROOF_THATCH, T.WALL_TIMBER, T.WINDOW_TIMBER);
   setO(riverCenter(44) - 2, 44, T.WHEEL);
+  for (let y = 43; y <= 45; y++) for (let x = mx + 6; x <= mx + 7; x++) if (objects[y][x] === EMPTY) setO(x, y, T.WHEEL); // under the wheel's deck on pilings (client/src/millArt.ts)
   doorPath(millDoor);
   setO(mx - 1, 45, T.CRATE); setO(mx - 1, 46, T.BARREL);
 

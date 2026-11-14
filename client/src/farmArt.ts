@@ -50,6 +50,4 @@ export const cow = (brown: boolean) => (p: Pen, f: number) => {
   q.blob(P(-16.6, tv, 5.6), 1.1 * K, 1.1 * K, 1.8 * K, mat(brown ? BROWN : PIEBALD, -0.05));
   // a wisp of straw in the mouth while it chews
   if (graze > 0.6) q.rod(P(hu + 6, -1, hz - 2), P(hu + 7.5, 1.5, hz - 3), 0.35 * K, mat(STRAWR, 0.1));
-  // a soft shadow on the straw, only where the cow isn't
-  void hsh;
 };
