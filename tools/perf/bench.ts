@@ -63,16 +63,21 @@ async function main() {
   const gs = new Server({ transport: new WebSocketTransport({ server: httpServer, ...(process.env.DEFLATE ? { perMessageDeflate: { threshold: 256, zlibDeflateOptions: { level: 1 } } } : {}) } as any) });
   gs.define("town", TownRoom);
   await gs.listen(PORT);
+  // Worst send backlog of any connection (bytes accepted by send() and not yet written). With DEFLATE=1 each socket
+  // compresses one message at a time in the background; when the tick loop leaves it no time, the backlog only grows,
+  // pings wait behind it and the transport drops the clients (docs/optimisation-plan.md N7).
+  let backlog = 0;
+  setInterval(() => { for (const c of (gs as any).transport.wss.clients) backlog = Math.max(backlog, c.bufferedAmount); }, 500).unref();
 
   const botsFile = path.join(__dirname, "bots.cjs");
   const child = fork(botsFile, [String(BOTS), String(PORT)], { stdio: ["ignore", "ignore", "inherit", "ipc"] });
-  let bytes = 0, wire = 0;
-  await new Promise<void>((r) => child.on("message", (m: any) => { if (m.joined) r(); else if (m.bytes !== undefined) { bytes += m.bytes; wire += m.wire ?? 0; } }));
+  let bytes = 0, wire = 0, dropped = 0;
+  await new Promise<void>((r) => child.on("message", (m: any) => { if (m.joined) r(); else if (m.bytes !== undefined) { bytes += m.bytes; wire += m.wire ?? 0; dropped = m.dropped ?? 0; } }));
   if (process.env.SPREAD) room.state.players.forEach((p: any) => {
     for (let i = 0; i < 500; i++) { const x = Math.random() * MAP_W * TILE, y = Math.random() * MAP_H * TILE; if (!isSolidAt(x, y)) { p.x = x; p.y = y; break; } }
   });
   await new Promise((r) => setTimeout(r, 3000));
-  ticks.length = 0; patches.length = 0; bytes = 0; wire = 0; for (const r of ph.values()) r.n = r.incl = r.self = 0;
+  ticks.length = 0; patches.length = 0; bytes = 0; wire = 0; backlog = 0; for (const r of ph.values()) r.n = r.incl = r.self = 0;
   const cpu0 = process.cpuUsage(), t0 = performance.now();
   await new Promise((r) => setTimeout(r, SECS * 1000));
   const cpu = process.cpuUsage(cpu0), wall = performance.now() - t0;
@@ -84,7 +89,9 @@ async function main() {
     bots: BOTS, spread: !!process.env.SPREAD, ticksPerSec: (ticks.length / (wall / 1000)).toFixed(1), tickAvgMs: avg(ticks), tickP95Ms: q(0.95),
     patchAvgMs: avg(patches), cpuPct: (((cpu.user + cpu.system) / 1000) / wall * 100).toFixed(0), rssMB: (process.memoryUsage().rss / 1e6).toFixed(0),
     kbPerPlayerPerSec: (bytes / BOTS / (wall / 1000) / 1024).toFixed(1), wireKbPerPlayerPerSec: (wire / BOTS / (wall / 1000) / 1024).toFixed(1), deflate: !!process.env.DEFLATE, mobs: room.state.mobs.size, activeMobs: active,
+    sendBacklogKbMax: +(backlog / 1024).toFixed(0), botsDropped: dropped,
   }));
+  if (dropped) console.error(`BENCH INVALID: ${dropped} of ${BOTS} bots lost their connection during the run, so the numbers above are not a measurement`);
   if (PH) {
     const T = ticks.length || 1, f = (x: number) => +(x / T).toFixed(3), phases: any = {};
     let inSelf = 0;

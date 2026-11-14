@@ -37,7 +37,7 @@ export const MILESTONES: Milestone[] = [
       { name: "Riven Marches concept and Murat's decisions", owner: "Producer", status: "done", pr: 394 },
       { name: "Roadmap page on the wiki", owner: "Producer", status: "done" },
       { name: "Saves in a database (code already supports it)", owner: "Server & Live Ops", status: "done", note: "server/store.ts with DATABASE_URL" },
-      { name: "Turn on Postgres on Railway", owner: "Game Director", status: "blocked", note: "Murat adds the database on Railway, or says go" },
+      { name: "Turn on Postgres on Railway", owner: "Game Director", status: "done", note: "Live since 14 Nov 2026: 5 accounts moved over" },
       { name: "War data model: territories from every zone, sanctuaries, capitals (shared/war/)", owner: "Gameplay Engineers", status: "done", note: "31 territories, 5 clans with a capital per act" },
       { name: "War sim tools/balance/war.ts with scripted leaders", owner: "Balance & Economy", status: "done", note: "Stalemate goal met: one clan dominates in 0.5% of wars" },
     ],

@@ -3,7 +3,7 @@ import { BEAST_KINDS, DESERT_KINDS, TILE } from "../../shared/constants";
 import { RAIDERS } from "../../shared/raiders";
 import { AFFIX_KEYS, AFFIXES, CHAMP_WEAPON_SHEETS as CHAMP_SHEETS } from "../../shared/champions";
 import { TILE_COUNT } from "../../shared/map";
-import { ROWS, drawTileset } from "./tileset";
+import { COMMON_ROWS, ROWS, drawTileset } from "./tileset";
 import { SMOOTH } from "./isoflag";
 import { hiResTexture } from "./smooth";
 
@@ -11,8 +11,9 @@ const hex = (c: number) => "#" + c.toString(16).padStart(6, "0");
 
 /** Registers the procedural tileset (see tileset.ts) as a Phaser texture. */
 export function makeTileset(scene: Phaser.Scene) {
-  const tex = scene.textures.createCanvas("tiles", TILE * TILE_COUNT, TILE * ROWS)!;
-  drawTileset(tex.getContext());
+  const rows = SMOOTH ? COMMON_ROWS : ROWS; // smooth iso never reads the palisade and signpost rows (see COMMON_ROWS)
+  const tex = scene.textures.createCanvas("tiles", TILE * TILE_COUNT, TILE * rows)!;
+  drawTileset(tex.getContext(), rows);
   tex.refresh();
 }
 

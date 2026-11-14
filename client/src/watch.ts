@@ -1,5 +1,5 @@
 import Phaser from "phaser";
-import { CHAR_ORIGIN, CHAR_SCALE, playCharAnim } from "./artAssets";
+import { CHAR_ORIGIN, CHAR_SCALE, ensureCharSheet, playCharAnim, SHEET_RANGE } from "./artAssets";
 import { ISO, screenDir8 } from "./iso";
 import { WATCH_POSTS } from "../../shared/watch";
 import type { GateTorches } from "./gateTorches";
@@ -21,10 +21,12 @@ export class WatchLayer {
   private men = new Map<string, Man>();
   /** Gate torches: at dusk each watchman walks over and lights his (gateTorches.ts). */
   torches?: GateTorches;
+  /** The "watchman" sheet loads when the hero is near a watchman; until then the men stay hidden. */
+  private sheet: "far" | "asked" | "ready" = "far";
 
   constructor(private scene: Phaser.Scene, watch: any) {
     watch?.onAdd((s: any, id: string) => {
-      const sprite = scene.add.sprite(s.x, s.y, "watchman", 0).setOrigin(CHAR_ORIGIN.x, CHAR_ORIGIN.y).setScale(CHAR_SCALE).setDepth(s.y);
+      const sprite = scene.add.sprite(s.x, s.y, this.sheet === "ready" ? "watchman" : "__DEFAULT", 0).setOrigin(CHAR_ORIGIN.x, CHAR_ORIGIN.y).setScale(CHAR_SCALE).setDepth(s.y).setVisible(this.sheet === "ready");
       const m: Man = { id, sprite, s, x: s.x, y: s.y, swing: s.swing, face: faceOf(s.ax, s.ay), anim: "", busyUntil: 0, striking: false };
       this.men.set(id, m);
       this.play(m, "idle");
@@ -42,7 +44,19 @@ export class WatchLayer {
   /** True while this post's watchman kneels striking a light at his torch. */
   striking(id: string) { return !!this.men.get(id)?.striking; }
 
-  update(dtMs: number) {
+  /** Loads the sheet once the hero is within SHEET_RANGE of any watchman, then draws them all. */
+  private loadSheet(me?: { x: number; y: number }) {
+    if (this.sheet !== "far" || !me || ![...this.men.values()].some((m) => Math.hypot(m.x - me.x, m.y - me.y) < SHEET_RANGE)) return;
+    this.sheet = "asked";
+    const show = () => {
+      this.sheet = "ready";
+      for (const m of this.men.values()) { m.sprite.setTexture("watchman", 0).setVisible(true); m.anim = ""; this.play(m, "idle"); }
+    };
+    if (ensureCharSheet(this.scene, "watchman", show, 300)) show();
+  }
+
+  update(dtMs: number, me?: { x: number; y: number }) {
+    this.loadSheet(me);
     const now = this.scene.time.now, k = 1 - Math.pow(0.001, dtMs / 1000 * 4); // smooth follow of the 20 Hz server
     for (const m of this.men.values()) {
       const s = m.s;
