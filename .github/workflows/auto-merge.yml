@@ -1,7 +1,8 @@
 # Automatically merges pull requests opened by Claude threads.
 # Only PRs from claude/* branches in THIS repo (never forks) into the
-# default branch are merged. Drafts are skipped (checked live). If the PR has conflicts
-# or a check fails, nothing is merged; it retries on the next push.
+# default branch are merged. Drafts are skipped (checked live). Before merging, the PR is
+# tested again on top of the latest default branch when that has moved. If the PR has
+# conflicts or a check fails, nothing is merged; it retries on the next push.
 name: Auto-merge Claude PRs
 
 on:
@@ -25,6 +26,7 @@ jobs:
       github.event.pull_request.head.repo.full_name == github.repository &&
       startsWith(github.event.pull_request.head.ref, 'claude/')
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     steps:
       # Draft state is read live, not from the event: a push sent right next
       # to "ready for review" can cancel the real run (cancel-in-progress),
@@ -67,22 +69,73 @@ jobs:
           done
           echo "Timed out waiting for checks."; exit 1
 
-      - name: Merge the PR
+      # CI tested the PR's own head. If the default branch has moved since, the PR is tested
+      # again here on top of the latest default branch (a temporary merge, never pushed), so
+      # two PRs that pass alone but break together don't both merge. The PR branch is never
+      # touched, so sessions still pushing to it are not disturbed.
+      - uses: actions/checkout@v4
+        if: steps.draft.outputs.draft != 'true'
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        if: steps.draft.outputs.draft != 'true'
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Test on top of the latest default branch, then merge
         if: steps.draft.outputs.draft != 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR: ${{ github.event.pull_request.number }}
           SHA: ${{ github.event.pull_request.head.sha }}
+          BASE: claude/relaxed-wozniak-cjs85z
         run: |
-          for i in 1 2 3 4 5 6; do
-            if gh pr merge "$PR" --repo "$GITHUB_REPOSITORY" --merge --match-head-commit "$SHA"; then
-              echo "Merged."
-              # Merges made with GITHUB_TOKEN start no push workflows, so start patch numbering here.
-              gh workflow run patch-numbers.yml --repo "$GITHUB_REPOSITORY" --ref claude/relaxed-wozniak-cjs85z || true
-              # and refilm the skills page clips if the skills changed (skill-clips.yml)
-              gh workflow run skill-clips.yml --repo "$GITHUB_REPOSITORY" --ref claude/relaxed-wozniak-cjs85z || true
-              exit 0
+          git config user.name "auto-merge"; git config user.email "auto-merge@users.noreply.github.com"
+          # Commits that bots push to the default branch after a merge (patch numbers, skill clips)
+          # touch only these paths and can't break a PR, so they don't force a new test.
+          botonly() { git diff --name-only "$1" "$2" | grep -Ev '^client/(patchnotes|public/skills)/' | grep -q . && return 1 || return 0; }
+          tested=""
+          for attempt in 1 2 3; do
+            git fetch -q origin "$BASE"; base=$(git rev-parse FETCH_HEAD)
+            if git merge-base --is-ancestor "$base" "$SHA"; then
+              echo "The PR already contains the latest default branch: CI tested this exact code."
+              tested="$base"
+            elif botonly "$(git merge-base "$base" "$SHA")" "$base"; then
+              echo "Only bot commits landed since the PR branched: CI tested the same code."
+              tested="$base"
+            elif [ -n "$tested" ] && botonly "$tested" "$base"; then
+              echo "The default branch only got bot commits since the test; still good."
+            else
+              git reset -q --hard "$SHA"
+              if ! git merge -q --no-edit "$base"; then
+                echo "::error::Conflicts with the default branch. Merge it into the PR branch and push."; exit 1
+              fi
+              echo "Testing the PR on top of the default branch at $base (attempt $attempt)"
+              npm ci --no-audit --no-fund
+              if ! (npm test && npm run build && node tools/smoke.mjs); then
+                echo "::error::The PR passes alone but fails on top of the latest default branch ($base). Merge the default branch into the PR branch, fix, and push."
+                exit 1
+              fi
+              tested="$base"
             fi
-            sleep 10
+            # The default branch may have moved while we tested: test again if it did (bot commits aside).
+            now=$(gh api "repos/$GITHUB_REPOSITORY/branches/$BASE" --jq .commit.sha)
+            if [ "$now" != "$base" ] && ! { [ -n "$tested" ] && git fetch -q origin "$BASE" && botonly "$tested" "$now"; }; then
+              echo "The default branch moved during the test; testing again."; continue
+            fi
+            for i in 1 2 3 4 5 6; do
+              if gh pr merge "$PR" --repo "$GITHUB_REPOSITORY" --merge --match-head-commit "$SHA"; then
+                echo "Merged."
+                # Merges made with GITHUB_TOKEN start no push workflows, so start patch numbering here.
+                gh workflow run patch-numbers.yml --repo "$GITHUB_REPOSITORY" --ref "$BASE" || true
+                # and refilm the skills page clips if the skills changed (skill-clips.yml)
+                gh workflow run skill-clips.yml --repo "$GITHUB_REPOSITORY" --ref "$BASE" || true
+                exit 0
+              fi
+              sleep 10
+            done
+            echo "::error::Could not merge. Will retry on the next push."; exit 1
           done
-          echo "Could not merge (conflicts?). Will retry on the next push."; exit 1
+          echo "::error::The default branch kept moving during testing; not merging. Will retry on the next push."; exit 1
