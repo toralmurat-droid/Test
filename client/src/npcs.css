@@ -28,6 +28,9 @@
 #questtracker { display: none; position: absolute; top: 330px; right: 12px; width: 240px; padding: 6px 9px; background: rgba(0,0,0,.55);
   border-left: 3px solid #ffd166; border-radius: 3px; font: 18px var(--pixel-font); text-shadow: 2px 2px #000; }
 #questtracker.open { display: block; }
+/* Never grows behind the orbs and hotbar: capped above the bottom HUD (~150px), the rest scrolls (the advanced quest is scrolled into view) */
+#questtracker { max-height: max(90px, calc(100vh - 330px - 150px)); overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: #8a6a32 transparent; box-sizing: border-box; }
+#questtracker::-webkit-scrollbar { width: 4px; } #questtracker::-webkit-scrollbar-thumb { background: #8a6a32; }
 #questtracker .qt-title { color: #ffd166;  margin-bottom: 2px; }
 #questtracker .qt-obj { color: #fff; }
 #questtracker .qt-where { font-size: 15px; color: #c8bfa8; }
@@ -35,7 +38,7 @@
 #questtoast.show { opacity: 1; animation: cleared-pop .5s ease-out; }
 #questtoast .big { font-size: 22px; font-family: var(--title-font);  color: #b9f27c; }
 #questtoast .small { font-size: 18px; font-family: var(--pixel-font); color: #fff; margin-top: 4px; }
-@media (max-width: 600px) { #questtracker { top: 214px; width: 176px; } #feed { top: 200px; } #npcdialog { bottom: 60px; font-size: 18px; font-family: var(--pixel-font); } }
+@media (max-width: 600px) { #questtracker { top: 214px; width: 176px; max-height: max(80px, calc(100vh - 214px - 170px)); } #feed { top: 200px; } #npcdialog { bottom: 60px; font-size: 18px; font-family: var(--pixel-font); } }
 
 /* Shops (weapons merchant, potion witch) */
 #npcdialog.shop { width: min(520px, calc(100% - 32px)); max-height: calc(100vh - 160px); overflow-y: auto; border-color: #8b5e34; }
