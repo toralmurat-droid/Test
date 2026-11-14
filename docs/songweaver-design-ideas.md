@@ -70,3 +70,34 @@ Orchestrator notes for when it's picked up:
   and whether the basic attack counts as one.
 - Under the feet, layer with DI-1: the Chorus effect is the steady base ring, and the chord-progress rings
   expand above it.
+
+### DI-5 (2026-11-14): Songweaver equipment rethink, an evolving lute
+Problem (owner, 2026-11-14): itemisation doesn't fit the class.
+- Untyped weapons do turn into lutes, but no loot touches the music (keys, notes, resonance, bounce, songs,
+  chords).
+- Typed wands and staves replace her sound waves with their own basic attack.
+- The shield slot competes with the Songbook (DI-2).
+
+Direction:
+- The Songweaver **can't equip non-musical weapons or shields**.
+- Weapon slot: the lute only. Shield slot: books only (DI-2).
+- Instead of lute drops, the **lute evolves**.
+
+Orchestrator notes for when it's picked up:
+- Open:
+  - **What drives the evolution:** level, chords played, resonance bursts, songs collected (DI-2), materials
+    from monsters, or a luthier NPC in Oakvale.
+  - **What it gives:** stats growing with level (so it keeps pace with drops), plus musical traits: extra
+    bounces, wider song radius, resonance gain, a note register, a key affinity. These are a natural home for the
+    "tuned lutes" from owner question 13.
+  - **Choice or fixed track:** branching upgrades per play style, like the books.
+  - **Look:** the lute art changes per stage (generated in `tools/art`).
+  - **Armour, hat, shoes:** still normal drops?
+- Loot impact: weapon and shield drops become useless to her. Either sell value, or a conversion into evolution
+  material, so loot still feels rewarding.
+- Constraints:
+  - `canWear` in `shared/gear.ts` gets a class rule;
+  - saves need a migration for Songweavers already holding a non-lute weapon or a shield (unequip them to the bag);
+  - lute state saved as an optional field or encoded in the item id (ids must round-trip, as in
+    `tests/runes.test.ts`);
+  - balance: the sims use gear stats.
