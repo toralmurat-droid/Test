@@ -46,7 +46,13 @@ export const RUMOUR_GIVER = "alewife";
 /** The title after RUMOURS.titleAt rumours (shared/cosmetics.ts TITLES index). */
 export const RUMOUR_TITLE = TITLES.indexOf("Rumour-Chaser");
 
-export type RumourKind = "lost" | "missing" | "light";
+/** Mags's own lines for the dialog: when the hero walks up, and when all of today's rumours are done. */
+export const MAGS_LINES = {
+  greeting: "Come in, love, mind the cart. Folk tell me things over a cup, and I pass on what's worth passing. Three bits of gossip today. Fancy a look?",
+  allDone: "That's the lot for today, love. You've heard all I have. Come back tomorrow; the valley never runs short of trouble, or of tongues.",
+};
+
+export type RumourKind ="lost" | "missing" | "light";
 export const RUMOUR_KINDS: RumourKind[] = ["lost", "missing", "light"];
 
 /**
@@ -79,15 +85,15 @@ const LOST: LostTale[] = [
     a: { kind: "clue", name: "Trampled campsite", verb: "Search", obj: "Search the tinker's camp" },
     b: { kind: "urn", name: "Tinker's satchel", verb: "Take", obj: "Find the satchel" },
     outro: "The letters are dry. He says he'll stand you a drink for that. Make it a big one." },
-  { title: "A Ring in the Grass", text: ["Young Pell went out to {zone} to ask his girl to marry him. He sneezed, and the ring went flying.", "She said yes anyway. He'd still like the ring."],
-    a: { kind: "clue", name: "Flattened grass", verb: "Search", obj: "Find where Pell knelt" },
+  { title: "A Ring in the Grass", text: ["Young Tam went out to {zone} to ask his girl to marry him. He sneezed, and the ring went flying.", "She said yes anyway. He'd still like the ring."],
+    a: { kind: "clue", name: "Flattened grass", verb: "Search", obj: "Find where Tam knelt" },
     b: { kind: "cairn", name: "Stone with a glint beside it", verb: "Look under", obj: "Find the ring" },
-    outro: "A plain band, bent a little. Pell will cry. Don't tell him I said so." },
+    outro: "A plain band, bent a little. Tam will cry. Don't tell him I said so." },
   { title: "The Shepherd's Bell", text: ["Old Hobb's lead ewe lost her bell in {zone}, and now the flock won't follow her.", "Sheep. Stupid as sacks, the lot of them. Hobb loves them."],
     a: { kind: "clue", name: "Tufts of wool on a thorn", verb: "Follow", obj: "Follow the wool" },
     b: { kind: "bell", name: "Shepherd's bell", verb: "Take", obj: "Find the bell" },
     outro: "One ring and every sheep in the valley looked up. Hobb owes you a cheese." },
-  { title: "Grandmother's Recipe", text: ["Someone lifted Nan Ostler's recipe jar and dropped it running through {zone}.", "Her honey cake. If that recipe's lost, so is half the village's reason to live."],
+  { title: "Grandmother's Recipe", text: ["Some thief lifted Nan Ostler's recipe jar and dropped it running through {zone}.", "Her honey cake. Lose that recipe and half of Oakvale loses its reason to get up."],
     a: { kind: "clue", name: "Torn recipe pages", verb: "Gather", obj: "Gather the torn pages" },
     b: { kind: "urn", name: "Clay recipe jar", verb: "Take", obj: "Find the recipe jar" },
     outro: "Most of the pages, and the jar. She can fill in the rest from memory. Probably." },
@@ -95,6 +101,26 @@ const LOST: LostTale[] = [
     a: { kind: "clue", name: "Hoofprints off the road", verb: "Follow", obj: "Follow the hoofprints" },
     b: { kind: "clue", name: "Dropped dispatch pouch", verb: "Take", obj: "Find the pouch" },
     outro: "Seal unbroken. Captain Hale will never know. Our secret." },
+  { title: "The Drover's Whistle", text: ["Big Edda the drover lost her good whistle somewhere in {zone}.", "Her dogs won't work for anyone else. They just sit and look at her."],
+    a: { kind: "clue", name: "Dog tracks in the dust", verb: "Follow", obj: "Follow the dog tracks" },
+    b: { kind: "urn", name: "Bone whistle in the weeds", verb: "Take", obj: "Find the whistle" },
+    outro: "One blast and three dogs came running from nowhere. Edda cried and blamed the dust." },
+  { title: "The Widow's Spoons", text: ["Mother Brack buried her husband's silver spoons in {zone} years back, when the dead were marching for the Pale Marshal.", "She's old now and can't recall where. She wants them for her grandson's wedding."],
+    a: { kind: "clue", name: "A scratched marker-stone", verb: "Search", obj: "Find her old marker" },
+    b: { kind: "cairn", name: "Loose earth under a flat stone", verb: "Dig", obj: "Dig up the spoons" },
+    outro: "Seven spoons, black with tarnish. She says that's six more than she expected." },
+  { title: "A Lantern Borrowed", text: ["My cousin lent his father's old lantern to a friend bound for {zone}. The friend came back. The lantern didn't.", "It's got a dent shaped like a horse's head. He's been sulking for a week."],
+    a: { kind: "clue", name: "Ashes of a small fire", verb: "Search", obj: "Search the old fire" },
+    b: { kind: "urn", name: "Dented lantern", verb: "Take", obj: "Find the lantern" },
+    outro: "Dented, as promised. He'll polish it every night and tell the story twice as long." },
+  { title: "The Apprentice's Chisel", text: ["The mason's apprentice took his master's best chisel out to {zone} to practise on a rock. The chisel's gone.", "Master says the boy can carve with his teeth until it's found."],
+    a: { kind: "clue", name: "Chipped rocks", verb: "Search", obj: "Look over the chipped rocks" },
+    b: { kind: "cairn", name: "A glint among the stones", verb: "Look under", obj: "Find the chisel" },
+    outro: "Not a nick on it. The boy hugged it like a puppy. His master pretended not to watch." },
+  { title: "The Letter Never Sent", text: ["Berta wrote to her brother in Saltmere and gave it to a carter. The carter lost a wheel in {zone}, and the letter with it.", "She won't write another. Says it'd come out wrong the second time."],
+    a: { kind: "clue", name: "A broken cart wheel", verb: "Search", obj: "Search the broken cart" },
+    b: { kind: "clue", name: "A folded letter in the grass", verb: "Take", obj: "Find the letter" },
+    outro: "Damp, but readable. Berta's already hunting for a better carter." },
 ];
 const MISSING: MissingTale[] = [
   { title: "Where Did Wil Go?", text: ["Wil the woodcutter went into {zone} two days back and hasn't come home.", "His wife's been in every night asking. I've no answers for her. Maybe you'll find some."],
@@ -112,6 +138,21 @@ const MISSING: MissingTale[] = [
   { title: "The Pedlar's Mule", text: ["A pedlar's mule bolted into {zone} with every ware he owns on its back.", "He'd go himself, but he says the mule bites. The mule's not the problem out there."],
     seen: "the hoofprints in the mud", foe: "Hollowjaw", find: { kind: "clue", name: "Saddlebags in the brush", verb: "Take", obj: "Find the mule's packs" },
     outro: "The mule came home on its own an hour later, smug as you like. The packs are the thing." },
+  { title: "The Hunter's Hound", text: ["Ansel's hound never came back from {zone}. Ansel did, white as milk, and won't say why he left her.", "He'd go back, but his legs have other ideas."],
+    seen: "the torn-up ground", foe: "Black Maw", find: { kind: "clue", name: "A frayed leash on a branch", verb: "Follow the trail", obj: "Find the hound" },
+    outro: "Lame, hungry, and furious. She's with Ansel now. Neither will say who forgave whom." },
+  { title: "The Pilgrim's Road", text: ["A pilgrim stopped in for one drink, then set off through {zone}. That was Tuesday.", "Quiet sort. Had a bell and a great deal of faith. I'd like to know it was enough."],
+    seen: "the pilgrim's dropped bell", foe: "Widow Gnash", find: { kind: "cairn", name: "A prayer scratched in a stone", verb: "Look behind", obj: "Find the pilgrim" },
+    outro: "Sheltering behind a rock, praying out loud. He says that's what kept him alive. I say it was the rock." },
+  { title: "The Runaway Bride", text: ["Pretty Maren said she'd go out to {zone} for some air, an hour before her own wedding.", "The groom's sitting in my corner, turning his hat in his hands. Poor lamb."],
+    seen: "the flowers dropped on the path", foe: "Redhand Jack", find: { kind: "clue", name: "A veil caught on a bush", verb: "Follow the trail", obj: "Find Maren" },
+    outro: "She wasn't running away. She was running from that thing. The wedding's on for Sunday." },
+  { title: "Two Boys and a Dare", text: ["Two lads dared each other to spend a night in {zone}. One's home, with a very good story.", "The other one's mother has stopped believing the story."],
+    seen: "the boys' ring of stones", foe: "Old Gristle", find: { kind: "cairn", name: "A narrow gap between rocks", verb: "Look in", obj: "Find the second boy" },
+    outro: "Wedged in a gap, cold and proud. He'll tell it better than his friend did. Both of them are grounded." },
+  { title: "The Lamplighter's Round", text: ["Our lamplighter walks his round at dusk. Last night he walked it out past the edge, into {zone}, and I haven't seen him since.", "Without him half the lamps stay cold. I don't like cold lamps. Not these days."],
+    seen: "the last lit lamp", foe: "Cold Tom", find: { kind: "cairn", name: "A shuttered lantern in a hollow", verb: "Look in", obj: "Find the lamplighter" },
+    outro: "He'd kept his lamp covered and himself still. Says the dark was patient. He's lit every lamp in town since." },
 ];
 const LIGHT: LightTale[] = [
   { title: "Lights over the Grass", text: ["Three drovers swear they saw a green light in {zone} after dark.", "Swamp gas, says I. But it moved against the wind."],
@@ -129,6 +170,21 @@ const LIGHT: LightTale[] = [
   { title: "The Watcher's Lantern", text: ["Someone keeps a lantern lit in {zone} at night, and it goes out the moment you get close.", "I don't like it. Ale's cheaper when I'm not nervous."],
     seen: "where the lantern was seen", find: { kind: "wardlamp", name: "A dead lantern post", verb: "Relight", obj: "Relight the lantern post" },
     outro: "Lit, it showed nothing but grass and your own shadow. Whoever kept it has gone. Or is waiting for dark again." },
+  { title: "The Humming Light", text: ["A light hangs in {zone} after sundown, low and steady, and they say it hums.", "The first druids hung lanterns to keep something in its place, so the tale goes. Make of that what you will."],
+    seen: "where the humming starts", find: { kind: "wardlamp", name: "A lantern gone dark", verb: "Light", obj: "Light the old lantern" },
+    outro: "The hum stopped the moment the flame caught. Whatever it was leaning on, it let go." },
+  { title: "The Fallen Star", text: ["Old Marl swears a star fell in {zone} last week and never went out. Pale as a fish-belly, he says.", "Marl also swears he caught a pike the size of a door. Still. Go and look."],
+    seen: "where the star fell", find: { kind: "lastlantern", name: "A pale glowing lamp", verb: "Snuff", obj: "Put out the pale light" },
+    outro: "Only a lamp, burning with no oil, and a bad feeling to go with it. Marl says he told you so." },
+  { title: "Footprints and a Flame", text: ["Fresh prints lead into {zone}, and where they stop there's a little flame burning on bare ground.", "A watchman showed me. He wouldn't go near it, and neither would I."],
+    seen: "where the prints end", find: { kind: "lastlantern", name: "A flame on bare ground", verb: "Snuff", obj: "Snuff the lonely flame" },
+    outro: "A wick, no lamp, and a heap of cold ash. Whoever lit it wanted to be found. Or wanted somebody else lost." },
+  { title: "The Lamp That Won't Burn", text: ["Hale's lads put a ward-lamp up in {zone} a month back. It won't stay lit.", "Every night someone snuffs it, and in the morning there's not a footprint near it."],
+    seen: "the unlit ward-lamp", find: { kind: "wardlamp", name: "A ward-lamp, cold and dark", verb: "Light", obj: "Light the ward-lamp" },
+    outro: "It caught on the first try and burned steady. Hale will want to know what changed. So would I." },
+  { title: "Beacon of the Dead", text: ["There was a fight in {zone} long before you or I. Now a beacon-fire shows there in the dark, as if for an army still on its way.", "Old soldiers cross themselves. Old soldiers drink more, too."],
+    seen: "the old beacon", find: { kind: "lastlantern", name: "A beacon-brazier", verb: "Snuff", obj: "Put out the beacon" },
+    outro: "Cold ashes and a scrap of rust-red cloth. The Pale Marshal's men flew colours like that, they say. Best not to dwell." },
 ];
 
 // ---- Where rumours happen ----
