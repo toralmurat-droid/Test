@@ -3,8 +3,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { AFFIXES, packAffixes, championFullName } from "../shared/champions";
+import { TIDE } from "../shared/tide";
+import { hintFor } from "../client/src/songTables";
 import { affinityText } from "../shared/elements";
-import { isMineOrGroup, levelTone, monsterInfo, RECENT_HIT_MS, showWorldBar, type InfoCtx, type MobLike } from "../client/src/monsterInfo";
+import { affinityLine, detailLines, extraLine, hpText, isMineOrGroup, levelTone, monsterInfo, plateRows, statusLine, RECENT_HIT_MS, showWorldBar, type InfoCtx, type MobLike } from "../client/src/monsterInfo";
 
 const ctx: InfoCtx = { myLevel: 10, playerName: (id) => ({ p1: "Aldo", p2: "Bera" } as Record<string, string>)[id] };
 const mob = (o: Partial<MobLike> & { kind: string }): MobLike => ({ level: 10, hp: 50, maxHp: 100, ...o });
@@ -25,8 +27,7 @@ test("a plain monster: name, level, tone, hp, bronze frame", () => {
   assert.equal(i.level, 12);
   assert.equal(i.tone, "tough");
   assert.equal(i.rank, "normal");
-  assert.equal(i.frame, "bronze");
-  assert.equal(i.badge, "");
+  assert.equal(i.frame, "normal");
   assert.deepEqual([i.hp, i.maxHp], [50, 100]);
 });
 
@@ -36,7 +37,7 @@ test("a two-affix champion: name with epithet, both affixes with their text", ()
   assert.equal(i.name, championFullName("Morgrul", champion));
   assert.ok(i.name.startsWith("Morgrul "));
   assert.equal(i.rank, "champion");
-  assert.equal(i.frame, "gold");
+  assert.equal(i.frame, "champion");
   assert.equal(i.sub, "Skeleton");
   assert.deepEqual(i.affixes.map((a) => a.key).sort(), ["risen", "siege"]);
   for (const a of i.affixes) { assert.equal(a.text, AFFIXES[a.key].text); assert.equal(a.icon.length, 5); }
@@ -44,15 +45,69 @@ test("a two-affix champion: name with epithet, both affixes with their text", ()
 
 test("elite, boss and quest title badges", () => {
   const elite = monsterInfo(mob({ kind: "necromancer" }), ctx);
-  assert.equal(elite.badge, "ELITE");
-  assert.equal(elite.frame, "gold");
+  assert.equal(elite.rank, "elite");
+  assert.equal(elite.frame, "elite");
   const boss = monsterInfo(mob({ kind: "hollowking" }), ctx);
-  assert.equal(boss.badge, "BOSS");
-  assert.equal(boss.frame, "blood");
+  assert.equal(boss.rank, "boss");
+  assert.equal(boss.frame, "boss");
   const quest = monsterInfo(mob({ kind: "bandit", title: "Gorrik the Lame" }), ctx);
   assert.equal(quest.name, "Gorrik the Lame");
   assert.equal(quest.sub, "Bandit");
   assert.equal(quest.rank, "quest");
+  assert.equal(quest.frame, "quest");
+});
+
+test("named tier: titled Night Raiders, not quest targets; Tide marchers and own summons stay plain", () => {
+  const raider = monsterInfo(mob({ kind: "nightraider", title: "Ashen Rider" }), ctx);
+  assert.equal(raider.rank, "named");
+  assert.equal(raider.frame, "named");
+  assert.equal(raider.name, "Ashen Rider");
+  assert.equal(monsterInfo(mob({ kind: "slime", title: TIDE.title }), ctx).frame, "normal");
+  assert.equal(monsterInfo(mob({ kind: "golem_colossus", owner: "p1" }), ctx).frame, "normal");
+  assert.equal(monsterInfo(mob({ kind: "skeleton", owner: "p2" }), ctx).frame, "normal");
+});
+
+test("rows: B only for ranked monsters with something to say, C while Alt is held", () => {
+  const sw = { ...ctx, myClass: "songweaver" };
+  const plain = monsterInfo(mob({ kind: "skeleton" }), sw);
+  assert.deepEqual(plateRows(plain, false), { traits: false, details: false });
+  assert.deepEqual(plateRows(plain, true), { traits: false, details: true });
+  const champ = monsterInfo(mob({ kind: "skeleton", title: "Morgrul", champion: packAffixes(["risen"]) }), ctx);
+  assert.deepEqual(plateRows(champ, false), { traits: true, details: false });
+  assert.deepEqual(plateRows(champ, true), { traits: false, details: true });
+  const elite = monsterInfo(mob({ kind: "necromancer" }), ctx);
+  assert.equal(plateRows(elite, false).traits, false, "an elite with no affixes and no ear has no row B");
+  assert.equal(plateRows(monsterInfo(mob({ kind: "necromancer" }), sw), false).traits, true, "...but a Songweaver gets the ear icons");
+});
+
+test("icon lists for a skeleton and a blob", () => {
+  const sk = monsterInfo(mob({ kind: "skeleton", stunned: true, slowed: true, fx: "burn,bleed,mark,em_cold" }), ctx);
+  assert.deepEqual(sk.weak.sort(), ["faith", "fire"]);
+  assert.deepEqual(sk.resist.sort(), ["cold", "poison"]);
+  assert.deepEqual(sk.states.map((s) => s.glyph), ["stun", "slow", "burn", "bleed", "mark", "mark"]);
+  const blob = monsterInfo(mob({ kind: "slime" }), ctx);
+  assert.deepEqual(blob.states, []);
+  assert.ok(blob.weak.length + blob.resist.length >= 0);
+});
+
+test("Alt details: the full affinity line, weapon, extras, status, HP numbers, affix texts", () => {
+  const sk = monsterInfo(mob({ kind: "skeleton", weapon: "spear", guard: "c1", hp: 822, maxHp: 1370, stunned: true, fx: "burn" }), ctx);
+  assert.equal(affinityLine(sk), `Weak to Fire, Faith \u00b7 resists Cold, Poison${sk.hits.length ? " \u00b7 hits with " + sk.hits.map((h) => ({ fire: "Fire", cold: "Cold", poison: "Poison", faith: "Faith", shock: "Electric" } as Record<string, string>)[h]).join(", ") : ""}`);
+  assert.equal(extraLine(sk), "Wields Spear \u00b7 Guards a chest");
+  assert.equal(statusLine(sk), "Stunned, Burning");
+  assert.equal(hpText(822, 1370), "822 / 1370");
+  assert.equal(detailLines(sk).hp, "822 / 1370");
+  const champion = packAffixes(["risen", "siege"]);
+  const ch = detailLines(monsterInfo(mob({ kind: "skeleton", title: "Morgrul", champion }), ctx));
+  assert.deepEqual(ch.affixes.map((a) => a.text).sort(), [AFFIXES.risen.text, AFFIXES.siege.text].sort());
+  assert.equal(affinityLine(monsterInfo(mob({ kind: "nothing" }), ctx)), "");
+});
+
+test("the Songweaver sound hint is in the details for a Songweaver only", () => {
+  const sw = monsterInfo(mob({ kind: "skeleton" }), { ...ctx, myClass: "songweaver" });
+  assert.equal(detailLines(sw).hint, hintFor("skeleton"));
+  assert.ok(detailLines(sw).hint.length > 10);
+  assert.equal(detailLines(monsterInfo(mob({ kind: "skeleton" }), { ...ctx, myClass: "wizard" })).hint, "");
 });
 
 test("owner and summon naming", () => {

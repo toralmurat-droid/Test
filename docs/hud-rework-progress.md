@@ -41,7 +41,7 @@ no damage/XP estimate in the bar; NPC/hero label edge clamping out of scope.
 - New modules: `client/src/monsterInfo.ts` (pure), `monsterBar.ts/.css`, `floatLanes.ts`. Hover re-picks every 100 ms
   in `pointer.ts`. Update `tools/e2e-songweaver-fx.cjs` and `tools/e2e-summoner.cjs` (read removed labels).
 
-## D – monster plate redesign (decided 2026-11-14, not built yet)
+## D – monster plate redesign (decided 2026-11-14, built 2026-11-15)
 Mockup scripts: session scratchpad `hud/C/mock.cjs`, `frames2.cjs`, `frames5.cjs` (render inside the running game).
 Owner decisions:
 - Layout: A (compact plate: level tile, name, weak/resist/status icons, thin HP bar, no numbers) for every monster,
@@ -55,8 +55,13 @@ Owner decisions:
   and the right half on the right, plinth **flush with the frame's bottom**. Angel: scaled so the top of its halo is
   flush with the frame's top. Demon: large (2x), colour as is. Quest and named: no statues.
 
+D as built: `monsterBar.ts/.css` (layout A/B/C, Alt held = C, 120 ms appear delay), `plateArt.ts` (six frames, crests, fins,
+scroll ends, orb statue halves from `orbs.ts` `drawAngel` / `drawDemon`, 7x7 glyphs), `monsterInfo.ts` (tiers, `plateRows`,
+`detailLines`). "Named" = a titled `nightraider` (`NAMED_KINDS`); the client cannot tell other quest targets from other
+unique monsters (`Mob.summonFor` is not synced), so every other titled monster is "quest". Gloam Tide marchers (title
+"Gloam Tide") show as plain monsters. Songweaver sound hints are in the Alt details, no longer in chat.
+
 ## To do (owner's list)
-- Build D above.
 - Chat log: a small toggle to hide it (owner, 2026-11-14).
 - War plaque (`warPlaque.ts`, and the war news notice under it, `warNotice.ts`) moves to the **top left** of the screen
   instead of hiding under the monster plate. Check against the party frame there.

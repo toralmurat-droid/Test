@@ -98,11 +98,13 @@ const SETUPS = [
       if (!found) return { found: false };
       await chat(`/tp ${Math.floor(found.x / 32) - 3} ${Math.floor(found.y / 32)}`);
       await page.waitForTimeout(800);
-      // hover a second monster of the kind (not hit yet): the top monster bar (#monsterbar .mb-ear) shows the ear and note icons with the tooltip
+      // hover a second monster of the kind (not hit yet): the monster plate (#monsterbar) shows the ear and note icons and the sound hint with Alt held (the hint no longer goes to chat)
       await page.evaluate(([kind, id]) => { const S = window.S, m = S.entities.get(S.me); let bd = 1e9; window.__hover = id; S.entities.forEach((e, k) => { if (!e.mob || e.culled || e.state.dead || e.state.kind !== kind || k === id) return; const d = Math.hypot(e.sprite.x - m.sprite.x, e.sprite.y - m.sprite.y); if (d < bd) { bd = d; window.__hover = k; } }); }, [kind, found.id]);
+      await page.keyboard.down("Alt");
       await page.waitForTimeout(1500); // the headless frame rate is 2-3 fps
-      result[tag + "-ear"] = await page.evaluate(() => { const bar = document.querySelector("#monsterbar"), ear = bar?.querySelector(".mb-ear"); return bar && !bar.hidden && ear ? { vis: true, icons: ear.querySelectorAll("img").length, tip: ear.textContent, name: bar.querySelector(".mb-name")?.textContent } : { vis: false }; });
+      result[tag + "-ear"] = await page.evaluate(() => { const bar = document.querySelector("#monsterbar"), ear = bar?.querySelector(".mb-hint"); return bar && !bar.hidden && ear ? { vis: true, icons: ear.querySelectorAll("img").length, tip: ear.textContent, name: bar.querySelector(".mb-name")?.textContent } : { vis: false }; });
       await shot(`${tag}-ear`);
+      await page.keyboard.up("Alt");
       for (let i = 0; i < 14; i++) {
         const t = await page.evaluate((id) => { const e = window.S.entities.get(id); return e && !e.state.dead ? { x: e.state.x, y: e.state.y } : null; }, found.id);
         if (!t) break;

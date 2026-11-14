@@ -1917,7 +1917,7 @@ export class TownScene extends Phaser.Scene {
     if (e) {
       this.barId = pid;
       const players = (this.room.state as any).players, me = players?.get(this.me);
-      bar.show(monsterInfo(e.state as any, { myLevel: me?.level ?? 1, myClass: me?.cls, playerName: (id) => players?.get(id)?.name }), now);
+      bar.show(monsterInfo(e.state as any, { myLevel: me?.level ?? 1, myClass: me?.cls, playerName: (id) => players?.get(id)?.name }), now, pid);
     } else if (this.barId && !live(this.barId)) { this.barId = undefined; bar.hide(); } // it died or left the view: no lingering
     else bar.show(undefined, now);
   }
@@ -2959,12 +2959,8 @@ export class TownScene extends Phaser.Scene {
       const e = this.entities.get(ev.id);
       if (e) this.floatText(e.sprite.x, e.sprite.y - e.top - 14, CHORD_NAMES[ev.prog] ?? ev.prog, `#${c}`, PIXEL_FONT, 1.3);
     } else if (ev.ev === "soundhit") {
-      const e = this.entities.get(ev.id), meE = this.entities.get(this.me);
-      const mineSong = (this.room.state as any).players?.get(this.me)?.cls === "songweaver";
-      const near = !!e && !!meE && Math.hypot(e.sprite.x - meE.sprite.x, e.sprite.y - meE.sprite.y) < 12 * TILE;
-      const hint = mineSong && near && e?.mob ? { kind: e.state.kind as string, name: MOBS[e.state.kind as MobKind]?.name ?? "It" } : undefined;
-      const say = this.soundCues.onSoundHit(ev, this.time.now, (text, col) => { if (e) this.floatText(e.sprite.x, e.sprite.y - 28, text, col, PIXEL_FONT, 1); }, hint);
-      if (say) this.chatNote(say, "#9fd8ff");
+      const e = this.entities.get(ev.id);
+      this.soundCues.onSoundHit(ev, this.time.now, (text, col) => { if (e) this.floatText(e.sprite.x, e.sprite.y - 28, text, col, PIXEL_FONT, 1); });
     }
   }
 
