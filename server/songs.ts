@@ -1,5 +1,3 @@
-import { MOB_COMBAT, type SoundProfile } from "../shared/combat";
-import type { MobKind } from "../shared/constants";
 import { isMode, MODES, SONGWEAVER_TREE, type ModeId } from "../shared/songs";
 import { knownModesOf, type ShotSpec, type SkillRuntime, type Unit } from "../shared/skillEngine";
 import { skillById, type AreaDef, type FieldDef, type HitEffects, type SkillDef } from "../shared/skills";
@@ -119,10 +117,8 @@ export function bounceWave(s: BounceShot, px: number, py: number, emit: (ev: Rec
 
 // ---- Hearing ---------------------------------------------------------------------------------------------------
 
-/** How a hero hears: normal; the Songweaver has Trained Ear (half the resonance on herself). */
-export const heroSound = (cls: string): SoundProfile => (cls === "songweaver" ? { tier: "normal", ear: true } : { tier: "normal" });
-/** How a monster hears (MOB_COMBAT sound); bosses resonate at half. */
-export const mobSound = (kind: MobKind, boss: boolean): SoundProfile => (boss ? { ...MOB_COMBAT[kind].sound, boss } : MOB_COMBAT[kind].sound);
+/** How heroes and monsters hear: the rule lives in shared/combat.ts, so the sims use the same one. */
+export { heroSound, mobSound } from "../shared/combat";
 
 // ---- Saves (server/accounts.ts swTree / swMode) ---------------------------------------------------------------------
 

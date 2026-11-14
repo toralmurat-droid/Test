@@ -102,7 +102,10 @@ export const SOUND_MATCH = { dmg: 1.2, res: 1.5, affinity: 1.3, boss: 0.75, ear:
 export interface SoundProfile extends MobSound { boss?: boolean; ear?: boolean }
 /** What a sound hit carries (HitEffects.sound). */
 export interface SoundHit { pitch?: Pitch; mode?: ModeId }
-export const HERO_SOUND: SoundProfile = { tier: "normal" };
+/** How a hero hears: normal; the Songweaver has Trained Ear (half the resonance on herself). */
+export const heroSound = (cls?: string): SoundProfile => (cls === "songweaver" ? { tier: "normal", ear: true } : { tier: "normal" });
+/** How a monster hears (MOB_COMBAT sound); bosses resonate at half. */
+export const mobSound = (kind: MobKind, boss: boolean): SoundProfile => (boss ? { ...MOB_COMBAT[kind].sound, boss } : MOB_COMBAT[kind].sound);
 
 /**
  * Multipliers of one sound hit on a target: damage, resonance, crowd control, and whether its pitch matched.

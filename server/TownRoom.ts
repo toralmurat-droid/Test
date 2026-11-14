@@ -2720,7 +2720,8 @@ export class TownRoom extends Room<TownState> {
     this.state.fields.forEach((f, id) => {
       if (!tickField(this.host, f.inst)) { this.state.fields.delete(id); return; }
       if (f.follow) { f.x = f.inst.x; f.y = f.inst.y; }
-      if (f.r !== f.inst.def.r) f.r = f.inst.def.r; // a Dorian song reaches further (Modulate)
+      const r = f.inst.reach ?? f.inst.def.r; // a Dorian song (Modulate) or one near a well reaches further
+      if (f.r !== r) f.r = r;
     });
     // Timed skill steps (waves, buildups, multi-hits)
     if (this.pending.length) {

@@ -8,7 +8,7 @@ import { pay, skillCost } from "./mana";
 import { auraBuffs, isAuraId, BLADE_EL, BLADES_BASE, ESSENCE, SUMMON, WISP, type AttuneElement } from "./summons";
 import { addResonance, knownModes, LYDIAN_SHIELD, DORIAN_RADIUS, MODES, modeColour, modulate, noteCast, NOTES, PHRYGIAN, RESONANCE, resonanceOf, resWord, SONG,
   type Degree, type ModeId, type Pitch, type Progression } from "./songs";
-import { HERO_SOUND, SOUND_TIER, soundMult, type SoundProfile } from "./combat";
+import { heroSound, SOUND_TIER, soundMult, type SoundProfile } from "./combat";
 import { acousticsAt } from "./acoustics";
 
 /**
@@ -101,6 +101,8 @@ export interface FieldInst {
   tune?: { base: number; def: FieldDef; mode: ModeId; pitch?: Pitch; crescendo?: number };
   song?: boolean; // a song (SkillDef.song): Tempo quickens it (Accelerando), tiles around colour it (shared/acoustics.ts)
   ticks?: number; // ticks so far (Anthem's crescendo)
+  /** The radius its last tick reached (a song near a well reaches further); the server syncs it so the ring matches. */
+  reach?: number;
 }
 
 export interface SkillHost {
@@ -407,7 +409,7 @@ function songTick(f: FieldInst, o: Unit | undefined): number {
 function resonate(h: SkillHost, from: string, tid: string, o: HitOpts) {
   const t = h.unit(tid), a = h.unit(from), snd = o.sound!;
   if (!t || !a) return;
-  const prof = h.soundOf ? h.soundOf(tid) : HERO_SOUND, m = soundMult(prof, snd), now = h.now();
+  const prof = h.soundOf ? h.soundOf(tid) : heroSound(t.cls), m = soundMult(prof, snd), now = h.now();
   if (!t.cls && !o.dot) h.fx({ ev: "soundhit", id: tid, x: Math.round(t.x), y: Math.round(t.y), tier: prof?.tier ?? "normal", match: m.match });
   if (m.res <= 0) return; // deaf: it never rings
   const sym = a.cls ? talentBonus(a.cls, a.talents ?? {}, "sympathy") : 0;
@@ -1001,6 +1003,7 @@ export function tickField(h: SkillHost, f: FieldInst): boolean {
     if (ac.radius !== 1 || ac.slow !== 1 || (ac.low !== 1 && f.tune?.pitch === "L"))
       d = { ...d, r: d.r * ac.radius, slowMs: d.slowMs && d.slowMs * ac.slow, dmg: d.dmg && (f.tune?.pitch === "L" ? d.dmg * ac.low : d.dmg) };
   }
+  f.reach = d.r;
   if (d.link && f.ally) {
     // Transfusion: the vampire's blood runs down the cord into the ally (never below 1 HP of his own)
     const give = Math.round((o!.maxHp ?? 0) * (d.link.give ?? 0) / 100);

@@ -2,7 +2,7 @@
 // through the skill engine (afterHit) and the real room's damage code.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { HERO_SOUND, MOB_COMBAT, SOUND_MATCH, SOUND_TIER, SOUND_TIERS, soundMult, type SoundProfile } from "../shared/combat";
+import { heroSound, MOB_COMBAT, SOUND_MATCH, SOUND_TIER, SOUND_TIERS, soundMult, type SoundProfile } from "../shared/combat";
 import { addResonance, consonant, RESONANCE, resonanceOf } from "../shared/songs";
 import { afterHit, HitOpts, newRuntime, SkillHost, statusOf, Unit } from "../shared/skillEngine";
 import { isSafeZone, isSolidAt, VILLAGE } from "../shared/map";
@@ -19,7 +19,7 @@ test("tiers scale damage, resonance and crowd control; deaf never resonates", ()
   assert.deepEqual(SOUND_TIER.deaf, { dmg: 0.75, res: 0, cc: 0.75 });
   assert.equal(SOUND_TIER.fragile.res, 2);
   assert.equal(soundMult({ tier: "deaf", pitch: "L" }, { pitch: "L", mode: "major" }).res, 0, "deaf: no resonance even matched");
-  assert.equal(soundMult(HERO_SOUND, {}).dmg, 1, "heroes hear normally");
+  assert.equal(soundMult(heroSound("wizard"), {}).dmg, 1, "heroes hear normally");
 });
 
 test("pitch match x1.2 damage / x1.5 resonance ('any' matches every pitch); mode affinity x1.3; bosses x0.75 and Trained Ear x0.5", () => {
