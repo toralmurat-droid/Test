@@ -4,7 +4,7 @@ import type { SkillRuntime } from "./skillEngine";
  * Timed buffs and debuffs on a hero, for the HUD buff row (client/src/buffbar.ts, Murat 2026-11-04):
  * every effect with a duration shows its pixel icon and a countdown.
  *
- * The server writes Player.timers only when the set of effects or their end times change, as
+ * The server writes Player.timers (synced as Player.me.timers, owner only; server/player.ts) only when the set of effects or their end times change, as
  * "seq|id:msLeft,id:msLeft". The client anchors msLeft to its own clock, so no server time is needed.
  */
 export const DEBUFFS = ["stun", "slow", "burn", "mark", "weak"] as const;
