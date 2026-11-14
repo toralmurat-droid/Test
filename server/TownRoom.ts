@@ -16,7 +16,7 @@ import { MANA_POTION_DROP, manaRegen, maxManaFor, packMana, pay } from "../share
 import { Counts, dropSize, Potions, nextSize, noPotions, packPotions, potionAmount, potionName, PotionKind, potionSlots, POTION_COOLDOWN_MS, POTION_STACK, slotsAfter, SIZES, total } from "../shared/potions";
 /** Potion size from a ground item's `gear` field ("0".."2"). */
 const potSize = (g: string) => Math.max(0, Math.min(SIZES - 1, Math.floor(Number(g) || 0)));
-import { attackMult, cooldownMult, critChance, heroSpeed, magicMult, maxHpFromStats, SLOW_MOB, STATS, statsFor, statPoints } from "../shared/powers";
+import { attackMult, cooldownMult, critChance, heroSpeed, magicMult, maxHpFromStats, SLOW_MOB, STATS, statPoints } from "../shared/powers";
 import { AttackProfile, attackProfile, weaponAttackMult, weaponOk } from "../shared/weapons";
 import { Element, ElemPart, ELEMENT_FX, mobAffinity, MOB_MELEE_ELEMENT, MOB_SHOT_ELEMENT } from "../shared/elements";
 import { applyElementHit, corrodeBonus, lingerReaction, newReactState, purifies, REACTIONS, reactionWords, steamMiss, type ReactionHit, type ReactState } from "../shared/elements";
@@ -60,7 +60,7 @@ import { SLOT_COUNT } from "../shared/slots";
 import { groupDmgMult, groupHpMult, PARTY, together } from "../shared/party";
 import { canExecute, executeDamage, executeRefund, heroPoise, MOB_COMBAT, mobBody, POISE, poiseLevelMult, poiseSpeed, PVP_PROTECT_LEVEL, pvpDamageMult, pvpProtected, SWING_AHEAD } from "../shared/combat";
 import {
-  BAG_SIZE, Equipped, gearDef, GEAR_SLOTS, activeGear, reqProblem, itemLevel, HeroReqInfo, GearSlot, gearBlock, gearName, gearReachMult, gearSpeedMult, gearStats, isGearId, potionChance, rollGear, canWear, starterKit,
+  BAG_SIZE, Equipped, gearDef, GEAR_SLOTS, activeGear, heroStats, reqProblem, itemLevel, HeroReqInfo, GearSlot, gearBlock, gearName, gearReachMult, gearSpeedMult, isGearId, potionChance, rollGear, canWear, starterKit,
   isBagItem, socketProblem, itemRunes, withRunes, runeEffects, stripRunes, GEAR_DROP,
 } from "../shared/gear";
 import { fuseRunes, parseRune, rollMobRune, rollRune, RUNE_DROP, runeId, runeIdName, RUNES, RuneKey } from "../shared/runes";
@@ -106,17 +106,18 @@ export class Player extends Schema {
   @type("number") level = 1;
   @type("string") emote = ""; // current emote animation ("" = none)
   @type("boolean") outlaw = false; // cast a skill inside Oakvale: the village attacks until they leave (shared/wrath.ts)
-  @type("number") combo = 0; // which hit of the 3-hit combo was thrown last (0..2)
+  combo = 0; // which hit of the 3-hit combo was thrown last (0..2); server only (the client never reads it)
   @type("number") gold = 0;
   // Healing and mana potions by size (shared/potions.ts), packed in one synced number (packPotions); `pots` is the server copy
   @type("number") potions = 0;
   pots: Potions = noPotions();
   @type("number") seq = 0; // last processed input sequence (for client reconciliation)
-  // Stats, auto-allocated on level up (see shared/powers.ts)
-  @type("number") sta = 0;
-  @type("number") str = 0;
-  @type("number") mag = 0;
-  @type("number") dex = 0; // Dexterity: critical hit chance
+  // Stats with gear (shared/gear.ts heroStats), set by applyStats. Server only: the client computes the same numbers
+  // from synced cls, level, ptSta..ptDex and the gear slots
+  sta = 0;
+  str = 0;
+  mag = 0;
+  dex = 0; // Dexterity: critical hit chance
   // Stat points the player assigned in the hero panel (shared/powers.ts statPoints)
   @type("number") ptSta = 0;
   @type("number") ptStr = 0;
@@ -5840,9 +5841,7 @@ export class TownRoom extends Room<TownState> {
 
   /** Recompute stats and max HP from class + level + equipped gear. */
   private applyStats(p: Player) {
-    const st = statsFor(p.cls, { sta: p.ptSta, str: p.ptStr, mag: p.ptMag, dex: p.ptDex });
-    const g = gearStats(p.cls, this.equipped(p));
-    st.sta += g.sta; st.str += g.str; st.mag += g.mag; st.dex += g.dex;
+    const st = heroStats(this.reqInfo(p));
     p.sta = st.sta; p.str = st.str; p.mag = st.mag; p.dex = st.dex;
     const newMax = Math.round(maxHpFromStats(p.cls, st, p.level) * talentMult(p.cls, p.talents, "hp") * feastMult(p.feast, "hp"));
     p.hp = Math.min(newMax, p.hp + Math.max(0, newMax - p.maxHp));
