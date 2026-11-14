@@ -38,7 +38,7 @@ import { DOORS, DOOR_RANGE, doorById, doorDist, doorWorkable, isSafeZone, isSoli
 import { isDecorSolidAt, npcById, npcNear, TALK_RANGE } from "../shared/npcs";
 import { beyondWall, WATCH, WATCH_POSTS, WatchPost } from "../shared/watch";
 import { inVillage, WRATH } from "../shared/wrath";
-import { bounceWave, busking, BuskingLines, ChordSync, heroSound, mobSound, oldSongTree, restoreMode, songSave } from "./songs";
+import { afterRespec, bounceWave, busking, buskingAudience, BuskingLines, ChordSync, heroSound, mobSound, oldSongTree, restoreMode, songSave } from "./songs";
 import { modeColour, PHRYGIAN, RESONANCE } from "../shared/songs";
 import { soundMult } from "../shared/combat";
 import type { SoundFx } from "../shared/skills";
@@ -4523,8 +4523,11 @@ export class TownRoom extends Room<TownState> {
       this.questDo(id, "cast");
       // No magic in Oakvale, but a Songweaver may busk (server/songs.ts busking)
       if (!p.outlaw && inVillage(p.x, p.y) && !busking(p.cls, p.sk.mode, def!, out.chord)) this.setOutlaw(id, p, true);
-      // ...and the villagers close by answer a bright tune (a chat line from the NPC, id "npc:<id>")
-      this.buskers.heard(p.cls, p.sk.mode, def!, p.x, p.y, Date.now(), (n, text) => this.broadcast("chat", { id: `npc:${n.id}`, name: n.name, text }), out.chord);
+      // ...and the villagers close by answer a bright tune (a chat line from the NPC, id "npc:<id>", to heroes nearby)
+      this.buskers.heard(p.cls, p.sk.mode, def!, p.x, p.y, Date.now(), (n, text) => {
+        const near = buskingAudience(n, id, this.state.players.entries());
+        for (const c of this.clients) if (near.has(c.sessionId)) c.send("chat", { id: `npc:${n.id}`, name: n.name, text });
+      }, out.chord);
     }
   }
 
@@ -4574,6 +4577,7 @@ export class TownRoom extends Room<TownState> {
     if (!p.talents.size) return;
     if (!this.payReset(id, p, "skill points")) return;
     p.talents.clear();
+    afterRespec(p as unknown as Unit); // the Songweaver's mode and song (server/songs.ts)
     for (let i = 0; i < SLOT_COUNT; i++) p.slots[i] = "";
     this.applyStats(p);
   }

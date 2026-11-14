@@ -56,6 +56,16 @@ export class BuskingLines {
   }
 }
 
+/**
+ * Who hears a villager's busking line: heroes within BUSKING.hearRange of the villager, and always the Songweaver
+ * (`singer`) who played. The line is local chatter, so the rest of the server doesn't get it.
+ */
+export function buskingAudience(n: Npc, singer: string, heroes: Iterable<[string, { x: number; y: number }]>): Set<string> {
+  const out = new Set([singer]);
+  for (const [id, h] of heroes) if (Math.hypot(h.x - n.x, h.y - n.y) <= BUSKING.hearRange) out.add(id);
+  return out;
+}
+
 // ---- The owner-only "chord" message: { notes, mode, lockMs }, sent when it changes -------------------------------
 
 export interface ChordMsg { notes: string[]; mode: ModeId; lockMs: number }
@@ -122,6 +132,15 @@ export function songSave(cls: string, sk: SkillRuntime): { swTree?: number; swMo
 }
 /** A save from another tree version gets every skill point back (like the Summoner's suTree). */
 export const oldSongTree = (cls: string, swTree: unknown) => cls === "songweaver" && swTree !== SONGWEAVER_TREE;
+/**
+ * After a skill reset: the mode must still be known (else Major), and a running song ends, since every song is a tree
+ * skill she just unlearned (otherwise it would keep playing in the old mode, e.g. a Phrygian aura with no Discord).
+ */
+export function afterRespec(u: Unit) {
+  if (u.cls !== "songweaver") return;
+  restoreMode(u, u.sk.mode);
+  if (u.sk.song) { u.sk.song.f.until = 0; u.sk.song = undefined; }
+}
 /** The saved mode, if the hero still knows it (a refund or an unknown value falls back to Major). */
 export function restoreMode(u: Unit, swMode: unknown) {
   if (u.cls !== "songweaver") return;

@@ -10,6 +10,7 @@ import { isSafeZone, isSolidAt, VILLAGE } from "../shared/map";
 import { TILE } from "../shared/constants";
 import { inVillage } from "../shared/wrath";
 import { BUSKING, BUSKING_LINES, npcById } from "../shared/npcs";
+import { respecCost } from "../shared/upkeep";
 import { startRoom, wait } from "./helpers/room";
 
 // ---- A tiny world for the skill engine (no room) --------------------------------------------------------------------
@@ -473,16 +474,28 @@ test("Mending Note heals the singer, then jumps to the nearest group ally", asyn
   } finally { await t.done(); }
 });
 
-test("Oakvale: a busking tune near a villager gets its BUSKING_LINES line, once per cooldown", async () => {
-  const t = await setup(1);
-  const lines: { id: string; name: string; text: string }[] = [];
+test("Oakvale: a busking tune near a villager gets its BUSKING_LINES line, once per cooldown, heard nearby only", async () => {
+  const t = await setup(2);
+  // what the server sends each client (the line goes to heroes near the villager, not to everyone)
+  const got = new Map<string, { id: string; name: string; text: string }[]>(t.ids.map((id) => [id, []]));
+  for (const c of t.room.clients) {
+    const send = c.send.bind(c);
+    c.send = (type: any, msg?: any, ...rest: any[]) => {
+      if (type === "chat" && String(msg?.id).startsWith("npc:")) got.get(c.sessionId)?.push(msg);
+      return send(type, msg, ...rest);
+    };
+  }
+  const lines = got.get(t.ids[0])!, far = got.get(t.ids[1])!;
   const bc = t.room.broadcast;
+  let broadcasts = 0;
   t.room.broadcast = function (type: string, msg: any, ...rest: unknown[]) {
-    if (type === "chat" && String(msg?.id).startsWith("npc:")) lines.push(msg);
+    if (type === "chat" && String(msg?.id).startsWith("npc:")) broadcasts++;
     return bc.call(this, type, msg, ...rest);
   };
   try {
-    const [a] = t.ids, p = t.ps[0], druid = npcById("druid")!;
+    const [a] = t.ids, p = t.ps[0], druid = npcById("druid")!, q = t.ps[1];
+    [q.x, q.y] = [20 * TILE, 20 * TILE];
+    assert.ok(Math.hypot(druid.x - q.x, druid.y - q.y) > BUSKING.hearRange, "the second hero stands far from the druid");
     const again = () => { p.sk.last = {}; p.attackReadyAt = 0; if (p.sk.song) p.sk.song.at -= SONG.changeMs; p.outlaw = false; };
     [p.x, p.y] = [druid.x + TILE, druid.y];
     p.sk.mode = "major";
@@ -505,5 +518,50 @@ test("Oakvale: a busking tune near a villager gets its BUSKING_LINES line, once 
     assert.equal(lines.length, 0, "too far from every villager");
     again(); [p.x, p.y] = [druid.x, druid.y + TILE]; p.sk.mode = "lydian"; t.room.cast(a, "sg_march");
     assert.deepEqual(lines.map((l) => l.id), ["npc:druid"], "Lydian is bright too; after the cooldown the druid speaks again");
+    assert.equal(far.length, 0, "a hero far from the villager hears none of it");
+    assert.equal(broadcasts, 0, "never a server-wide line");
+    // a hero standing near the villager (not the singer) hears it too
+    for (const id of Object.keys(BUSKING_LINES)) t.room.buskers.next.set(id, Date.now() - 1);
+    lines.length = 0;
+    [q.x, q.y] = [druid.x + 6 * TILE, druid.y];
+    again(); t.room.cast(a, "sg_ballad");
+    assert.deepEqual(far.map((l) => l.id), ["npc:druid"], "within 12 tiles of the villager: heard");
   } finally { t.room.broadcast = bc; await t.done(); }
+});
+
+test("respec: the mode falls back to Major, the running song ends, a Hymnal song in Oakvale stays lawful", async () => {
+  const t = await setup(1);
+  try {
+    const [a] = t.ids, p = t.ps[0];
+    const again = () => { p.sk.last = {}; p.attackReadyAt = 0; if (p.sk.song) p.sk.song.at -= SONG.changeMs; p.outlaw = false; };
+    p.talents.clear(); p.talents.set("sg_dirge", 1); // Dirge has no parent; it brings Minor
+    p.sk.mode = "major";
+    t.room.cast(a, "sg_dirge");
+    assert.equal(p.sk.song?.id, "sg_dirge", "the Dirge plays");
+    again(); t.room.cast(a, "sg_modulate");
+    assert.equal(p.sk.mode, "minor");
+    assert.equal(p.sk.song?.f.tune?.mode, "minor", "the song took Minor");
+    const song = p.sk.song!.f;
+    p.lastHurt = 0; p.gold = respecCost(p.level);
+    t.room.respec(a);
+    assert.equal(p.talents.size, 0, "reset went through");
+    assert.equal(p.sk.mode, "major", "Minor is no longer known: back to Major");
+    assert.equal(p.sk.song, undefined, "no song running");
+    assert.ok(song.until <= Date.now(), "the Dirge ended");
+    await wait(150);
+    const live = t.songFields(a).filter((f) => f.inst.until > Date.now());
+    assert.ok(live.every((f) => f.inst.tune?.mode !== "minor"), "no minor-coloured song left");
+    // in Oakvale with a freshly learned Hearth Ballad: Major, so busking
+    let spot: [number, number] | undefined;
+    for (let tx = VILLAGE.x0 + 2; tx < VILLAGE.x1 - 1 && !spot; tx++) for (let ty = VILLAGE.y0 + 2; ty < VILLAGE.y1 - 1 && !spot; ty++) {
+      const x = (tx + 0.5) * TILE, y = (ty + 0.5) * TILE;
+      if (!isSolidAt(x, y) && inVillage(x, y)) spot = [x, y];
+    }
+    [p.x, p.y] = spot!;
+    p.talents.set("sg_ballad", 1);
+    again(); t.room.cast(a, "sg_ballad");
+    assert.equal(p.sk.song?.id, "sg_ballad", "cast");
+    assert.equal(p.sk.song?.f.tune?.mode, "major");
+    assert.equal(p.outlaw, false, "a Hymnal song after the reset is busking");
+  } finally { await t.done(); }
 });

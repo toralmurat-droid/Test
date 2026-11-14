@@ -1,7 +1,7 @@
 // Bot heroes for tools/perf/bench.ts (runs in its own process): join, roam at random, swing now and then.
 //   CAST=v_bats,su_mote: each bot goes "/max" and casts those skills non-stop (those of its class; the others are ignored)
 //   CAST=1: the Summoner's heaviest load (wisps, Void Arsenal, Void Blades, Black Hole); with SPREAD=1 they stand out of the safe zone
-//   SONGWEAVER=1: every third bot is a Songweaver (not an active class yet: bench.ts lets the server allow it); with
+//   SONGWEAVER=1: every third bot is a Songweaver (otherwise only Vampires and Summoners); with
 //     CAST=1 they play songs, notes and chords non-stop (Dirge, Ballad, Shrill Note, Cracked String, Mending Note...)
 //   PARTY=1: the bots form groups of four (pinvite / paccept), so party auras and party buffs reach each other
 import { Client } from "colyseus.js";
@@ -11,7 +11,7 @@ const SONG_CASTS = ["sg_dirge", "sg_ballad", "sg_march", "sg_pedal", "sg_mend", 
 
 async function main() {
   const [n, port] = process.argv.slice(2).map(Number);
-  // only active classes can join (shared/classes.ts ACTIVE_CLASSES), the Songweaver only when bench.ts allows it
+  // only active classes can join (shared/classes.ts ACTIVE_CLASSES); the Songweaver is one, SONGWEAVER=1 adds her to the mix
   const classes = process.env.SONGWEAVER ? ["vampire", "summoner", "songweaver"] : ["vampire", "summoner"];
   const rooms: any[] = [];
   const base = process.env.CAST === "1" ? ["su_wisps", "su_arsenal", "su_blades", "su_blackhole"] : (process.env.CAST ?? "").split(",").filter(Boolean);

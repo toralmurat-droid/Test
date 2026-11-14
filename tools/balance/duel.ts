@@ -47,8 +47,8 @@ export const SIM = { golemBlock: 1, kitePets: true, aimHero: false, execute: tru
  * as an expected value: when it lands or runs out, each bounce it has hits the nearest foe in reach again with this
  * chance, x0.8 per bounce (stone and wood falloff).
  */
-/** Classes in the duel tables: the active ones, plus the Songweaver with --songweaver (not active yet). */
-export const SIM_CLASSES: ClassKind[] = process.argv.includes("--songweaver") ? [...ACTIVE_CLASSES, "songweaver"] : ACTIVE_CLASSES;
+/** Classes in the duel tables: the active ones, the Songweaver among them (--songweaver is still accepted, as a no-op). */
+export const SIM_CLASSES: ClassKind[] = ACTIVE_CLASSES;
 const MAX_MS = 60000;
 const ARENA = 480; // px: fights happen between walls / obstacles, so kiting can't go on forever // a duel longer than this is decided on HP %
 const REACT = 0.55; // chance per tick that a bot acts (about 40ms average reaction delay)
