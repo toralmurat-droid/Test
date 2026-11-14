@@ -434,6 +434,8 @@ function zoneRun(cls: ClassKind, level: number, build: Build, mobLevel: (i: numb
 export interface BossDef { name: string; kind: MobKind; level: number; hero: number; hpMult?: number; weapon?: string; plain?: boolean } // plain: an ordinary monster on the server (no quest title): full executions
 export const BOSSES: BossDef[] = [
   { name: "Mother Blob Lv8", kind: "motherblob", level: 8, hero: 7, plain: true },
+  // fused quest blob (Hold the Wheel): hpMult = sum(parts' maxHp) × 0.7 / host maxHp, as summonFused builds it
+  { name: "Millrace Glutton Lv5", kind: "motherblob", level: 5, hero: 4, hpMult: 1.12 },
   { name: "Bone Demon Lv14", kind: "demon", level: 14, hero: 13 },
   { name: "Raiser (Necro) Lv16", kind: "necromancer", level: 16, hero: 15 },
   { name: "Gravemoor Horror Lv19", kind: "demon", level: 19, hero: 18, hpMult: 1.6 },
