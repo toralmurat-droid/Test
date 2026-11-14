@@ -193,8 +193,10 @@ test("champions on the server: zone spawns, 2.5x HP, the rune, and every affix a
       const twin = room.state.mobs.get((ev.find((e: any) => e.ev === "split" && e.id === id) as any).twin);
       assert.equal(twin.kind, "warriorblob"); assert.equal(twin.champion, 0, "the twin is plain");
       assert.ok(twin.banishAt > Date.now(), "a helper leaves again if nobody kills it");
+      // counted right before the hit: the world keeps spawning and despawning during the awaits above
+      const n1 = room.state.mobs.size;
       room.hitTarget(pid, id, 1, [0, 0]);
-      assert.equal(room.state.mobs.size, n0 + 1, "only one split");
+      assert.equal(room.state.mobs.size, n1, "only one split");
     }
     // Hide-Stitched: its other skin at half health, faster
     {

@@ -9,6 +9,9 @@ const dir = fs.mkdtempSync(path.join(os.tmpdir(), "room-test-"));
 process.env.SAVE_FILE ??= path.join(dir, "saves.json");
 process.env.ALLOW_ARCHIVED_CLASSES ??= "1"; // tests still cover the archived classes
 process.env.IDEAS_FILE ??= path.join(dir, "ideas.json");
+// The room's logs ("X joined") go to stderr: node:test reads its own messages from a test file's stdout, and log
+// lines interleaved with them made whole room-test files fail now and then ("Unable to deserialize cloned data").
+console.log = console.info = (...a: unknown[]) => { process.stderr.write(a.map(String).join(" ") + "\n"); };
 
 export async function startRoom() {
   const { Server } = await import("colyseus");
