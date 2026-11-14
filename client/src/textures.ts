@@ -326,6 +326,9 @@ const PAINTED_LOOK: Record<string, { top: number; bar: number; oy: number; scale
   gnasher: { top: 50, bar: 28, oy: 35.5 / 38, scale: 1.4 }, weaver: { top: 52, bar: 30, oy: 37.5 / 40, scale: 1.45 },
   packlord: { top: 48, bar: 28, oy: 34 / 36, scale: 1.4 }, hornbrute: { top: 56, bar: 32, oy: 37.5 / 40, scale: 1.45 },
   hidemother: { top: 66, bar: 38, oy: 44 / 48, scale: 1.6 },
+  // the clan war's soldiers (tools/art/paint/warLooks.ts): art-only keys, not MobKinds; line soldiers 36x32 frames, officers 36x34
+  ...Object.fromEntries(["war_warden", "war_redfang", "war_host", "war_hidekin", "war_veiled"].map((k) => [k, { top: 27, bar: 14, oy: 30 / 32 }])),
+  ...Object.fromEntries(["war_warden_cap", "war_redfang_chief", "war_host_cap", "war_hidekin_chief", "war_veiled_adept"].map((k) => [k, { top: 30, bar: 16, oy: 32 / 34 }])),
   // Act 2, the Sunscar
   nomad: { top: 24, bar: 14, oy: 27.5 / 30 }, sanddead: { top: 24, bar: 14, oy: 27.5 / 30 }, veiled: { top: 26, bar: 14, oy: 31.2 / 32 },
   camelfolk: { top: 36, bar: 18, oy: 33.5 / 36 }, sphinx: { top: 38, bar: 18, oy: 36.5 / 40 }, scorpion: { top: 20, bar: 18, oy: 27 / 30 },
@@ -371,6 +374,26 @@ export function mobTexture(scene: Phaser.Scene, kind: string, level = 1, weapon 
     if (done) return done;
   }
   return pixelMobTexture(scene, kind === "demon" || kind === "hollowking" || kind === "sunwright" ? "necromancer" : BEAST_KINDS.includes(kind as any) || DESERT_KINDS.includes(kind as any) || kind === "bride" || kind === "nightraider" ? (kind === "sanddead" ? "skeleton" : "bandit") : kind, level); // no pixel demon sheet: a necromancer stands in
+}
+
+const warAsked = new Set<string>();
+/**
+ * A clan soldier's painted sheet (art key "war_warden"...: see shared/war/patrols.ts TROOP_LOOK, not a MobKind): fetched on
+ * first ask, so only players near a war land pay for it (about 15 KB a sheet). Null until it is loaded; 14 frames
+ * (the 12 of a monster sheet, then 12 = staggering and 13 = fallen, facing right).
+ */
+export function warSoldierTexture(scene: Phaser.Scene, name: string): string | null {
+  if (!SMOOTH) return null;
+  const key = `mob_${name}`;
+  if (!scene.textures.exists(`hd_${key}`)) {
+    if (!warAsked.has(key) && scene.cache.json.exists("hd_mobs")) {
+      warAsked.add(key);
+      scene.load.image(`hd_${key}`, `assets/hd/mobs/${key}.webp`);
+      if (!scene.load.isLoading()) scene.load.start();
+    }
+    return null;
+  }
+  return paintedSheet(scene, key);
 }
 
 /** A champion affix's painted detail (tools/art/paint/mobs.ts champOverlay, 2 frames), or null (pixel look, not loaded). */

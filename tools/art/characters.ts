@@ -945,6 +945,9 @@ export const MOB_POSES: Record<string, Hero> = {
   duskwing_folk: mobPose("duskwing_folk", "dagger"), crowseer: mobPose("crowseer", "staff"), gnasher: mobPose("gnasher", "axe"), weaver: mobPose("weaver", "staff"),
   packlord: mobPose("packlord", "axe"), hornbrute: mobPose("hornbrute", "hammer"), hidemother: mobPose("hidemother", "staff"),
   nomad: mobPose("nomad", "axe"), nomad_folk: mobPose("nomad_folk", "bow"), sanddead: mobPose("sanddead", "axe"),
+  war_warden: mobPose("war_warden", "spear"), war_warden_cap: mobPose("war_warden_cap", "axe"), war_redfang: mobPose("war_redfang", "axe"), war_redfang_chief: mobPose("war_redfang_chief", "axe"),
+  war_host: mobPose("war_host", "spear"), war_host_cap: mobPose("war_host_cap", "axe"), war_hidekin: mobPose("war_hidekin", "hammer"), war_hidekin_chief: mobPose("war_hidekin_chief", "hammer"),
+  war_veiled: mobPose("war_veiled", "axe"), war_veiled_adept: mobPose("war_veiled_adept", "staff"),
   veiled: mobPose("veiled", "staff"), camelfolk: mobPose("camelfolk", "spear"), sphinx: mobPose("sphinx", "axe"), sunwright: mobPose("sunwright", "staff"),
 };
 /** Poses for the humanoid champions' sheets (paint/look.ts CHAMP_WEAPONS): the grip follows their champion weapon. */

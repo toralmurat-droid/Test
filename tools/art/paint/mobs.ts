@@ -9,6 +9,7 @@ import { paintWisp, WISP_H, WISP_W, type WispElement } from "./wisps";
 import { RAIDERS } from "../../../shared/raiders";
 import { AFFIX_KEYS, AFFIXES, type AffixKey } from "../../../shared/champions";
 import { CHAMP_WEAPONS } from "./look";
+import { WAR_SOLDIERS } from "./warLooks";
 
 /**
  * Monster sheets for the iso look. Same textures as client/src/textures.ts mobTexture (6 frames:
@@ -22,6 +23,8 @@ const HI = 8, TX = 1.5;
 let SH: C2 | null = null;
 const DIRS: Dir[] = ["down", "down", "up", "up", "right", "right"];
 const FRAMES = 12;
+/** Soldiers (warLooks.ts) get two more frames after the 12: 12 staggers, 13 lies fallen (side view, facing right). */
+const FALL_FRAMES = 2;
 /** Facing and pose of sheet frame f. */
 function frameOf(f: number): { dir: Dir; pose: "stand" | "step" | "wind" | "strike" } {
   if (f < 6) return { dir: DIRS[f], pose: f % 2 ? "step" : "stand" };
@@ -47,27 +50,33 @@ const RIP: Record<"down" | "up" | "right", { hold: [P, P]; snap: [P, P]; don: [P
 const PK = 5; // painter resolution for these
 /** `lift`: flyers hover this many px above their shadow, bobbing with each wingbeat. */
 const HUMANOIDS = new Map<string, [number, number, number, number, boolean, number]>(); // sheet key -> its frame and scale (champion sheets copy them)
-function humanoid(key: string, kind: string, w: number, h: number, oy: number, scale: number, rip = false, lift = 0): Sheet {
+function humanoid(key: string, kind: string, w: number, h: number, oy: number, scale: number, rip = false, lift = 0, fall = false): Sheet {
   HUMANOIDS.set(key, [w, h, oy, scale, rip, lift]);
+  const nf = FRAMES + (rip ? RIP_FRAMES : 0) + (fall ? FALL_FRAMES : 0);
   // Frames are painted on first use, so rebuilding a few sheets (buildMobs ONLY) doesn't paint every humanoid
   let frames: ReturnType<typeof humanoidFrame>[] | undefined;
   const hands: number[][] = [];
-  const paint = () => frames ??= [...Array(FRAMES + (rip ? RIP_FRAMES : 0)).keys()].map((f) => {
-    const fr = humanoidFrame(kind, f);
+  const paint = () => frames ??= [...Array(nf).keys()].map((f) => {
+    const fr = humanoidFrame(kind, f, fall);
     // the hands in sheet px (world px from the frame's top-left): where the client puts the skeleton it holds
     const toSheet = (q: P) => [+(w / 2 + (q[0] - 16) * scale).toFixed(2), +(oy * h + (q[1] - 29) * scale).toFixed(2)];
     if (rip && lastRig) hands.push([...toSheet(lastRig.nearH), ...toSheet(lastRig.farH)]);
     return fr;
   });
   return {
-    key, w, h, frames: FRAMES + (rip ? RIP_FRAMES : 0), get hands() { if (!rip) return undefined; paint(); return hands; },
+    key, w, h, frames: nf, get hands() { if (!rip) return undefined; paint(); return hands; },
     draw: (c, f) => {
       const fr = paint()[f], n = createCanvas(fr.w, fr.h), x = n.getContext("2d"), img = x.createImageData(fr.w, fr.h);
       img.data.set(fr.data); x.putImageData(img, 0, 0);
       if (SH) { SH.save(); SH.translate(w / 2, oy * h); SH.scale(1, 0.3); SH.fillStyle = "rgba(0,0,0,0.42)"; SH.beginPath(); SH.arc(0, 0, 6.5 * scale, 0, Math.PI * 2); SH.fill(); SH.restore(); }
       // logical unit (16, 29) = the feet -> (w/2, oy*h) in world px
       const up = lift ? lift + Math.sin(f * 1.7) * 1.2 : 0;
-      c.save(); c.translate(w / 2, oy * h - up); c.scale(scale, scale); c.translate(-16, -29);
+      c.save(); c.translate(w / 2, oy * h - up);
+      if (fall && f >= FRAMES) { // fall frames: the body topples backwards (to the left) about its feet
+        const k = f - FRAMES, a = (k ? -86 : -24) * Math.PI / 180;
+        c.translate(k ? 9 : 2, k ? -1.4 : 0); c.rotate(a);
+      }
+      c.scale(scale, scale); c.translate(-16, -29);
       c.imageSmoothingEnabled = true; (c as any).imageSmoothingQuality = "high";
       c.drawImage(n, 0, 0, 32, 32);
       c.restore();
@@ -75,7 +84,10 @@ function humanoid(key: string, kind: string, w: number, h: number, oy: number, s
   };
 }
 
-function humanoidFrame(kind: string, f: number) {
+function humanoidFrame(kind: string, f: number, fall = false) {
+  if (fall && f >= FRAMES) { // soldiers' fall (sheet frames 12 = staggering, 13 = down): the side view, rotated by the sheet code
+    return posed(MOB_POSES[kind], { dir: "right", t: f, crouch: f === FRAMES ? 1 : 2, lean: 1, expr: "squint", attack: -1 }, false);
+  }
   if (f >= FRAMES) {
     const k = f - FRAMES, dir = (["down", "up", "right"] as const)[Math.floor(k / 3)], step = (["hold", "snap", "don"] as const)[k % 3];
     const [hand, farHand] = RIP[dir][step];
@@ -617,6 +629,8 @@ export function buildMobs(out: string, ONLY?: string[]) {
     humanoid("mob_camelfolk", "camelfolk", 34, 36, 33.5 / 36, 1.08),
     humanoid("mob_sphinx", "sphinx", 40, 40, 36.5 / 40, 1.12), // winged: a wider, taller frame
     humanoid("mob_sunwright", "sunwright", 44, 48, 42 / 48, 1.25), // Act 2's final boss, drawn big like the Hollow King
+    // the clan war's soldiers (warLooks.ts): 36 px wide so the fallen body fits; officers are taller
+    ...WAR_SOLDIERS.map((k) => k.endsWith("_cap") || k.endsWith("_chief") || k.endsWith("_adept") ? humanoid(`mob_${k}`, k, 36, 34, 32 / 34, 0.95, false, 0, true) : humanoid(`mob_${k}`, k, 36, 32, 30 / 32, 0.9, false, 0, true)),
     { key: "mob_scorpion", w: 36, h: 30, draw: (c: C2, f: number) => scorpionFrame(c, 36, 30, f) },
     // the Night Raiders (raiders.ts): one sheet for each of the Seven
     ...RAIDERS.map((R) => ({ key: `mob_nightraider_${R.key}`, w: RAIDER_W, h: RAIDER_H, draw: (c: C2, f: number) => { const { dir, pose } = frameOf(f); paintRaider(c, SH, R, dir as "down" | "up" | "right", pose, f); } })),
@@ -650,7 +664,7 @@ export function buildMobs(out: string, ONLY?: string[]) {
       const c = body.getContext("2d"), sc = shadow.getContext("2d");
       c.scale(HI, HI); sc.scale(HI, HI);
       SH = sc; s.draw(c, f); SH = null;
-      const blob = !/wisp|skeleton|bandit|bride|necromancer|demon|crawler|hollowking|gnawkin|tuskborn|silkwretch|duskwing|packlord|hornbrute|hidemother|crowseer|gnasher|weaver|nomad|scorpion|sanddead|veiled|camelfolk|sphinx|sunwright|nightraider/.test(s.key);
+      const blob = !/wisp|war_|skeleton|bandit|bride|necromancer|demon|crawler|hollowking|gnawkin|tuskborn|silkwretch|duskwing|packlord|hornbrute|hidemother|crowseer|gnasher|weaver|nomad|scorpion|sanddead|veiled|camelfolk|sphinx|sunwright|nightraider/.test(s.key);
       const b = shrink(body, "mb", tw, th);
       if (s.key.startsWith("mob_champ_")) pixelize(b, tw, th, true); // a detail, not a body: no ground grime
       else pixelize(b, tw, th, true, blob ? { y0: Math.round(th * 0.7), y1: th, mud: 0.14, sat: 0.9 } : { y0: Math.round(th * 0.72), y1: th, mud: s.key.includes("bandit") ? 0.38 : 0.2 });
