@@ -8,8 +8,7 @@ import { targetsOf } from "../shared/war/rules";
 import { CLAN_KEYS } from "../shared/war/clans";
 import { TERRITORIES } from "../shared/war/territories";
 import { isSolidAt } from "../shared/map";
-import { _resetWar, step, warState, addValor } from "../server/war";
-void addValor;
+import { _resetWar, step, warState } from "../server/war";
 import { cleanOath, Presence, swear, type WarHero } from "../server/warHeroes";
 
 test("standards: every territory has one, on free ground inside it", () => {
