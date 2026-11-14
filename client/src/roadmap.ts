@@ -63,9 +63,9 @@ export const MILESTONES: Milestone[] = [
     exit: "Without players no clan holds over 30% of the map for more than three days in the sim and live.",
     items: [
       { name: "Ossuary Host siege works, Hide-Kin tunnels, Veiled rituals", owner: "Gameplay Engineers", status: "later" },
-      { name: "Swear to a clan, tabards, Renown ranks", owner: "Gameplay + Art", status: "later" },
+      { name: "Swear to a clan, tabards, Renown ranks", owner: "Gameplay + Art", status: "doing", note: "Oaths live since M1" },
       { name: "War writs on bounty boards, caravans on supply roads", owner: "Gameplay + Narrative", status: "later" },
-      { name: "War table map (world map overlay)", owner: "Client & UI", status: "later" },
+      { name: "War table map (world map overlay)", owner: "Client & UI", status: "done" },
       { name: "Night Raiders hunt the leading clan; Rally for the weakest", owner: "Gameplay Engineers", status: "later" },
       { name: "Clan troops and holds for all five clans", owner: "Art Director", status: "later" },
     ],

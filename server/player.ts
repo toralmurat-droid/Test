@@ -133,6 +133,7 @@ export class Player extends Schema {
   bountyDone = 0;
   clan?: ClanKey; // clan war oath (shared/war/standards.ts; saved, sent by message)
   clanAt = 0;
+  renown = 0; // clan war renown (shared/war/renown.ts; saved, sent with the "clan" message)
   lastAct = 0; // last move, attack or cast (ms): heroes away from the keys add no valor
   lastSpecial = -Infinity;
   // Hidden initiative / poise (shared/combat.ts)

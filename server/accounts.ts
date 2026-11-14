@@ -42,6 +42,8 @@ export interface HeroSave {
   bounty?: BountyState; bountyDone?: number;
   /** Clan war oath (shared/war/clans.ts key) and when it was sworn (ms). */
   clan?: string; clanAt?: number;
+  /** Clan war renown (shared/war/renown.ts); kept when the hero changes clan. */
+  renown?: number;
   /** Gear wear 0-100: removed 2026-11-13, old saves may still carry it; ignored on load and no longer written. */
   wear?: number;
   /** Devour (shared/devour.ts): monsters eaten per family. */

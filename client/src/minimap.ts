@@ -6,6 +6,8 @@ import { createTilesetCanvas, tileColors } from "./tileset";
 import { ISO } from "./isoflag";
 import { pixelText } from "./pixeltext";
 import { clasp, frameBorderImage, plaque, FRAME } from "./mapframe";
+import { drawWarLegend, drawWarTable, warTableOn, setWarTableOn } from "./warTable";
+import type { WarView } from "../../shared/war/view";
 
 const VIEW_W = 56, VIEW_H = 56; // tiles shown around the player on the (round) minimap
 const PX = 3; // minimap canvas pixels per tile (56x56 tiles -> 168x168)
@@ -56,6 +58,8 @@ export class Minimap {
   private view = MIN_VIEW; // tiles currently shown across the minimap (eases towards the explored size)
   /** Quest and NPC markers, set by the NPC layer every frame. */
   markers: MapMarker[] = [];
+  /** The clan war snapshot, for the war table layer (warTable.ts). */
+  war?: WarView;
   /** Last positions given to draw(): the world map redraws every frame while open. */
   private me?: P;
   private others: OtherHero[] = [];
@@ -99,7 +103,7 @@ export class Minimap {
     // Big world map overlay
     this.overlay = document.createElement("div");
     this.overlay.id = "worldmap";
-    this.overlay.innerHTML = `<div class="wm-box"><div class="wm-title"></div><canvas class="wm-map"></canvas><div class="wm-hint"><button type="button" class="wm-center" tabindex="-1" title="Centre on your hero (C)">◎ Centre</button><span class="wm-keys">Drag or I J K L to move · Wheel or + / − to zoom · C or double-click to centre · M / Esc to close</span><span class="wm-touch">Drag · Pinch to zoom · Double-tap to centre</span></div></div>`;
+    this.overlay.innerHTML = `<div class="wm-box"><div class="wm-title"></div><canvas class="wm-map"></canvas><div class="wm-hint"><button type="button" class="wm-center" tabindex="-1" title="Centre on your hero (C)">◎ Centre</button><button type="button" class="wm-war" tabindex="-1" title="Show who holds each land in the clan war">War table</button><span class="wm-keys">Drag or I J K L to move · Wheel or + / − to zoom · C or double-click to centre · M / Esc to close</span><span class="wm-touch">Drag · Pinch to zoom · Double-tap to centre</span></div></div>`;
     this.big = this.overlay.querySelector("canvas")!;
     // Ornate frame: iron-bound oak with gem corners, a title plaque on top and clasps on the sides
     const box = this.overlay.querySelector<HTMLDivElement>(".wm-box")!;
@@ -118,6 +122,10 @@ export class Minimap {
     const centre = this.overlay.querySelector<HTMLButtonElement>(".wm-center")!;
     centre.addEventListener("mousedown", (ev) => ev.preventDefault());
     centre.addEventListener("click", () => { centre.blur(); this.recentre(); });
+    const war = this.overlay.querySelector<HTMLButtonElement>(".wm-war")!;
+    war.classList.toggle("on", warTableOn());
+    war.addEventListener("mousedown", (ev) => ev.preventDefault());
+    war.addEventListener("click", () => { war.blur(); setWarTableOn(!warTableOn()); war.classList.toggle("on", warTableOn()); });
     this.bindMapInput();
     el.addEventListener("click", () => this.toggle(true));
     el.title = "Open map (M)";
@@ -472,6 +480,7 @@ export class Minimap {
     g.save();
     if (ISO) { g.translate(cw / 2, ch / 2); g.rotate(Math.PI / 4); g.scale(K, K); g.translate(-cw / 2, -ch / 2); }
     g.drawImage(this.colors, -R.x * BIG, -R.y * BIG, MAP_W * BIG, MAP_H * BIG);
+    if (this.war && warTableOn()) drawWarTable(g, this.war, BIG, R.x, R.y, now); // under the fog: unexplored land stays hidden
     g.drawImage(this.fog, -R.x * BIG, -R.y * BIG, MAP_W * BIG, MAP_H * BIG);
     this.turned = ISO;
     this.drawMarkers(g, BIG, R.x, R.y, false);
@@ -494,6 +503,7 @@ export class Minimap {
       g.fillStyle = "#000"; g.fillText(a.name, lx + 1, ly + 1);
       g.fillStyle = "#ffe8a3"; g.fillText(a.name, lx, ly);
     }
+    if (this.war && warTableOn()) drawWarLegend(g, this.war, PF);
     // Other online heroes: name above their dot (the dots are drawn with the map, above)
     g.font = `11px ${PF}`; g.textAlign = "center"; g.textBaseline = "alphabetic";
     for (const o of others) {
