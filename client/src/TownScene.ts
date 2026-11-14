@@ -68,6 +68,7 @@ import { hasTrait, TITLES, unpackCosmetics } from "../../shared/cosmetics";
 import { META, metaOf } from "../../shared/questSteps";
 import { updateHidebound } from "./questConceptArt";
 import { WarPlaque } from "./warPlaque";
+import { WarTroops } from "./warTroops";
 import { WarStandards } from "./warStandards";
 import { WarNotice } from "./warNotice";
 import type { WarView } from "../../shared/war/view";
@@ -408,6 +409,7 @@ export class TownScene extends Phaser.Scene {
   private heatGauge?: OverloadGauge;
   private warPlaque?: WarPlaque;
   private warStd?: WarStandards;
+  private warTroops?: WarTroops;
   private warLast?: WarView;
   private soundCues = new SoundCues();
   private statsShown = "";
@@ -1549,7 +1551,8 @@ export class TownScene extends Phaser.Scene {
     this.room.onStateChange(alive);
     this.room.onMessage("hb", alive);
     this.warStd = new WarStandards(this, (type, msg) => this.room.send(type, msg)); // clan war standards and oaths
-    this.room.onMessage("war", (v) => { (this.warPlaque ??= new WarPlaque(document.getElementById("hud")!)).set(v); this.warStd?.setWar(v); this.warLast = v; });
+    this.warTroops = new WarTroops(this); // cosmetic clan patrols, derived from the war snapshot
+    this.room.onMessage("war", (v) => { this.warTroops?.setWar(v); (this.warPlaque ??= new WarPlaque(document.getElementById("hud")!)).set(v); this.warStd?.setWar(v); this.warLast = v; });
     this.room.onMessage("clan", (m) => this.warStd?.setClan(m));
     const warNotice = new WarNotice(document.getElementById("hud")!);
     this.room.onMessage("warev", (e) => warNotice.show(e, this.entities.get(this.me)?.sprite));
@@ -3497,6 +3500,7 @@ export class TownScene extends Phaser.Scene {
       const zdef = zoneAt(Math.floor(tx), Math.floor(ty));
       setMusicZone(zdef?.name, zdef?.mobs, this.areaName, actOfTile(tx, ty));
       this.warStd?.update(meEnt.state.dead ? undefined : meEnt.sprite, !!this.npcs?.isOpen || !!this.npcs?.busy || !!this.chests?.near || !!this.stash?.near || !!this.bounty?.near || !!this.portals?.near || !!this.shrine?.near || !!this.waygates?.near || !!this.dungeon?.nearDoor, now);
+      this.warTroops?.update(meEnt.state.dead ? undefined : meEnt.sprite, now);
       this.warPlaque?.update(tx, ty, this.warStd?.standing(meEnt.sprite)); // the clan war front plaque (warPlaque.ts)
       sfxFrame(this.me, this.entities as any);
       const cls = mine.cls as ClassKind;
