@@ -306,3 +306,17 @@ Agents build against this in parallel. Changing it needs the orchestrator.
   - Amen and Turnaround (ally-only finishers) stay lawful in a bright mode.
   - The "stuck Modulate" in the e2e was the outlaw stun and poise-break from villagers, not a bug.
   - A room test now checks the mode cycle at real gaps.
+- 2026-11-14: client finish merged:
+  - busking speech bubble (`NpcLayer.say`);
+  - symmetric 4-seat class picker, phone fix;
+  - `?archived=1` removed;
+  - keys dim during stun, poise break and the shared attack hold (the hold is a client estimate);
+  - the e2e Modulate loop moved outside Oakvale; a busking step was added.
+
+  The default branch (32 commits) was merged in without conflicts.
+  - Checks: `npm test` 173 pass; build OK; smoke OK.
+  - The Songweaver e2e passes at all 3 sizes.
+  - `e2e-summoner-mobile.cjs` failed one setup per run: the hero was killed by the village watch in town. Not yet
+    shown to predate this branch.
+
+  Reviewer started on `f08b430...claude/songweaver-brief`.
