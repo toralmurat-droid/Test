@@ -447,6 +447,7 @@ export const BOSSES: BossDef[] = [
   // quest summons from the quest concepts (shared/quests.ts): the wrong-grave ambush and the Crown in the Sand finale
   { name: "Disturbed Dead Lv17", kind: "skeleton", level: 17, hero: 15, hpMult: 3 },
   { name: "Ostrevar's Envoy Lv39", kind: "sanddead", level: 39, hero: 38, hpMult: 7 },
+  { name: "Keeper of the Twin Seals Lv43", kind: "sanddead", level: 43, hero: 42, hpMult: 7 },
   // the Night Raiders (shared/raiders.ts): always Lv 50, close to unbeatable for one hero alone (Murat 2026-11-08)
   { name: "Night Raider vs Lv30", kind: "nightraider", level: 50, hero: 30 },
   { name: "Night Raider vs Lv50", kind: "nightraider", level: 50, hero: 50 },

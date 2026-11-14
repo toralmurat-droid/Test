@@ -2105,7 +2105,7 @@ const TWOHANDS_QUESTS: QuestDef[] = [
     acceptText: "Fight",
     steps: [
       { type: "kill", zone: VAULT.name, kinds: ["sanddead"], goal: 1, own: true,
-        summon: { parts: ["sanddead"], level: 43, title: "Keeper of the Twin Seals", hpMult: 3, ...sumAt(...inRoom(VAULT, 1, 0, 1)) },
+        summon: { parts: ["sanddead"], level: 43, title: "Keeper of the Twin Seals", hpMult: 7, ...sumAt(...inRoom(VAULT, 1, 0, 1)) },
         text: "Slay the Keeper of the Twin Seals", banner: ["New quest", "The Keeper of the Twin Seals"], obj: "The Keeper slain: {n} / {goal}", nag: "In the hall of the twin seals." },
     ],
     outro: ["The Keeper folds down onto the stair it kept. Behind it, the Water-Kings' door stands open on a dry room full of gold."],
