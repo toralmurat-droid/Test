@@ -240,6 +240,7 @@ export class NpcLayer {
   say(id: string, text: string): boolean {
     const s = this.sprites.get(id);
     if (!s) return false;
+    if (!this.ready.has(id)) return true; // not drawn yet (sheet loading): the chat log has the words, no bubble over nothing
     this.bubbles.get(id)?.destroy();
     const b = speechBubble(this.scene, s.sprite.x, s.sprite.y - Math.round(21 * CHAR_GROW) - 14, text).setDepth(s.sprite.depth + 5);
     isoAnchor(b, s.sprite);

@@ -2838,7 +2838,7 @@ export class TownScene extends Phaser.Scene {
     while (log.children.length > 8) log.firstChild!.remove();
     if (id.startsWith("npc:")) { this.npcs?.say(id.slice(4), text); return; } // a villager answering a busker
     const e = this.entities.get(id);
-    if (!e) return;
+    if (!e || e.waiting) return; // a hero still waiting for his sheet is not drawn: no bubble over nothing
     e.bubble?.destroy();
     e.bubble = speechBubble(this, e.sprite.x, e.sprite.y - e.top - 12, text);
     isoAnchor(e.bubble, e.sprite);

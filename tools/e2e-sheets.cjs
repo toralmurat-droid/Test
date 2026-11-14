@@ -38,7 +38,7 @@ async function login(browser, name, cls, failFirst = []) {
   page.on("pageerror", (e) => errors.push(`${name}: ${e.message}`));
   page.on("console", (m) => { if ((m.type() === "error" && !/Failed to load resource/.test(m.text())) || /refId|definition mismatch/.test(m.text())) errors.push(`${name} console: ${m.text()}`); });
   await page.addInitScript((c) => { try { localStorage.setItem("cls", c); } catch { /* ignore */ } window.__longTasks = []; try { new PerformanceObserver((l) => { for (const e of l.getEntries()) window.__longTasks.push([Math.round(e.startTime), Math.round(e.duration)]); }).observe({ entryTypes: ["longtask"] }); } catch { /* no longtask */ } }, cls);
-  await page.goto(`http://localhost:${PORT}/`);
+  await page.goto(`http://localhost:${PORT}/${process.env.QS || ""}`);
   await page.waitForSelector("#name");
   await page.fill("#name", name);
   await page.fill("#password", "sheetspass1");
@@ -62,7 +62,7 @@ async function login(browser, name, cls, failFirst = []) {
   }
   const browser = await chromium.launch({ args: ["--enable-precise-memory-info"] });
   try {
-    const A = await login(browser, "SheetA" + (Date.now() % 10000), "summoner", ["elder"]);
+    const A = await login(browser, "SheetA" + (Date.now() % 10000), process.env.CLS_A || "summoner", ["elder"]);
     const page = A.page;
     report.loginToPlayMs = A.ms;
     await wait(1000);
@@ -92,18 +92,19 @@ async function login(browser, name, cls, failFirst = []) {
       const me = r.npcs.find((n) => n.id === id);
       report.visits.push({ id, d: me && me.d, vis: me && me.vis, tex: me && me.tex, bad: r.bad, sheetCount: r.sheetCount });
       await page.screenshot({ path: path.join(OUT, `npc-${id}-${W}.png`) });
-      if (id === "armourer") { // the druid's route is often blocked by the bonfire crowd; any NPC will do to see the dialog
+      if (me && me.vis && me.d < 45) { // any NPC we reached: talk to it
         await page.keyboard.press("KeyE");
         await wait(1200);
-        report.dialog = await page.evaluate(() => { const d = document.getElementById("npcdialog"); return { open: d.classList.contains("open"), text: d.innerText.slice(0, 80) }; });
-        await page.screenshot({ path: path.join(OUT, `dialog-${W}.png`) });
+        const dlg = await page.evaluate(() => { const d = document.getElementById("npcdialog"); return { open: d.classList.contains("open"), text: d.innerText.slice(0, 60) }; });
+        (report.dialogs = report.dialogs || []).push({ id, ...dlg }); report.dialog = dlg;
+        await page.screenshot({ path: path.join(OUT, `dialog-${id}-${W}.png`) });
         await page.evaluate(() => { const b = document.querySelector("#npcdialog .nd-bye"); if (b) b.click(); });
         await wait(300);
       }
     }
 
     // a second player of another class appears: the first looks at them
-    const B = await login(browser, "SheetB" + (Date.now() % 10000), "wizard");
+    const B = await login(browser, "SheetB" + (Date.now() % 10000), process.env.CLS_B || "wizard");
     report.second = { loginToPlayMs: B.ms };
     await wait(2500);
     // bring A next to B's spawn is not needed (both spawn in Oakvale); look at what A has
@@ -115,6 +116,13 @@ async function login(browser, name, cls, failFirst = []) {
     report.afterSecond = await page.evaluate(probe);
     await page.screenshot({ path: path.join(OUT, `a-sees-b-${W}.png`) });
     await B.page.screenshot({ path: path.join(OUT, `b-${W}.png`) });
+    // out of town into the meadow (grass and ground must be there; use QS="?time=day" to see it by day)
+    const out = () => page.evaluate(() => { const s = window.__game.scene.scenes.find((x) => x.entities); const g = { kind: "walk", x: 101 * 32, y: 59.5 * 32 }; s.pointer.goal = g; s.pointer.route(g); });
+    await out();
+    for (let i = 0; i < 100; i++) { await wait(500); if (i % 10 === 9) await out(); const x = await page.evaluate(() => { const s = window.__game.scene.scenes.find((q) => q.entities); return s.entities.get(s.me).state.x; }); if (x > 100 * 32) break; }
+    await wait(2500);
+    await page.screenshot({ path: path.join(OUT, `meadow-${W}.png`) });
+    report.afterMeadow = await page.evaluate(probe);
     report.longTasks = await page.evaluate(() => window.__longTasks);
     report.errors = errors.slice(0, 12);
     fs.writeFileSync(path.join(OUT, `report-${W}.json`), JSON.stringify(report, null, 1));
