@@ -61,3 +61,16 @@ export function matTexture(scene: Phaser.Scene, id: string, grey = false): strin
   c!.refresh();
   return key;
 }
+
+let tip: HTMLDivElement | undefined;
+/** Hover tooltip of a ground material (HTML; call with no text to hide). */
+export function matTip(html?: string) {
+  if (!tip) {
+    tip = document.createElement("div");
+    tip.id = "mattip";
+    tip.style.cssText = "position:fixed;left:50%;bottom:150px;transform:translateX(-50%);z-index:60;pointer-events:none;max-width:90vw;padding:4px 8px;background:rgba(15,10,6,.95);border:2px solid #6a5232;font:normal 13px var(--pixel-font);line-height:15px;color:#d9c79a;text-shadow:1px 1px 0 #000";
+    document.body.appendChild(tip);
+  }
+  tip.hidden = !html;
+  if (html) tip.innerHTML = html;
+}
