@@ -669,6 +669,11 @@ const DRAW: Record<number, (p: Painter, f: number, v: number) => void> = {
  * A tilemap index is `row * TILE_COUNT + id`.
  */
 export const ROWS = 128;
+/**
+ * Rows the smooth iso view reads from the square tileset: the ground and object layers use rows 0-15, and its
+ * palisades and signposts are painted as sprites, so the 112 palisade/signpost mask rows are never drawn there.
+ */
+export const COMMON_ROWS = 16;
 const VARIED = new Set<number>([T.GRASS, T.TALL_GRASS, T.FLOWERS, T.DIRT, T.COBBLE, T.SAND, T.WATER, T.FLOOR, T.FLAGS, T.FIELD, T.BRIDGE]);
 const CONNECTED = new Set<number>([T.RUIN, T.BEAM, T.PALISADE]);
 const LIGHT = new Set<number>([T.GRASS, T.TALL_GRASS, T.FLOWERS]);
@@ -688,12 +693,12 @@ const paint = (ctx: CanvasRenderingContext2D, id: number, row: number, f: number
   ctx.restore();
 };
 
-/** Paints every tile and variant onto the given context (TILE_COUNT × ROWS tiles). */
-export function drawTileset(ctx: CanvasRenderingContext2D) {
-  ctx.clearRect(0, 0, TILE * TILE_COUNT, TILE * ROWS);
+/** Paints every tile and variant onto the given context (TILE_COUNT × `maxRows` tiles). */
+export function drawTileset(ctx: CanvasRenderingContext2D, maxRows = ROWS) {
+  ctx.clearRect(0, 0, TILE * TILE_COUNT, TILE * maxRows);
   for (let i = 0; i < TILE_COUNT; i++) {
     const rows = VARIED.has(i) ? 4 : i === T.PALISADE ? 128 : i === T.SIGNPOST ? 64 : CONNECTED.has(i) || i === T.GRASS_DARK || i === T.RUBBLE ? 16 : 1;
-    for (let r = 0; r < rows; r++) paint(ctx, i, r, 0);
+    for (let r = 0; r < Math.min(rows, maxRows); r++) paint(ctx, i, r, 0);
   }
 }
 
@@ -742,10 +747,10 @@ export function drawTileFrame(ctx: CanvasRenderingContext2D, id: number, f: numb
   for (let r = 0; r < rows; r++) { ctx.clearRect(id * TILE, r * TILE, TILE, TILE); paint(ctx, id, r, f); }
 }
 
-export function createTilesetCanvas(): HTMLCanvasElement {
+export function createTilesetCanvas(maxRows = ROWS): HTMLCanvasElement {
   const c = document.createElement("canvas");
-  c.width = TILE * TILE_COUNT; c.height = TILE * ROWS;
-  drawTileset(c.getContext("2d")!);
+  c.width = TILE * TILE_COUNT; c.height = TILE * maxRows;
+  drawTileset(c.getContext("2d")!, maxRows);
   return c;
 }
 
