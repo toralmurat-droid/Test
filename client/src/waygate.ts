@@ -5,6 +5,7 @@ import { hiResTexture } from "./smooth";
 import { isoAnchor, isoX, isoY, IsoView } from "./iso";
 import type { MapMarker } from "./minimap";
 import { paintWaygate, WG_H, WG_OX, WG_OY, WG_W } from "./waygateArt";
+import { hudSlot } from "./hudSlots";
 
 /**
  * Act 2's waygates (shared/act2.ts): an old stone arch south of Oakvale and its twin in the desert's Sunstone
@@ -38,7 +39,7 @@ export class WaygateLayer {
   constructor(private scene: Phaser.Scene, private send: (type: string) => void) {
     this.prompt.id = "gateprompt";
     this.prompt.onclick = () => this.interact();
-    document.getElementById("hud")!.append(this.prompt);
+    hudSlot("promptstack").append(this.prompt);
     for (const g of WAYGATES) {
       const t = texFor(scene, g, false);
       const img = scene.add.sprite(g.x, g.y, t.key).setOrigin(t.ox, t.oy).setDepth(g.y);

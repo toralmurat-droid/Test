@@ -33,6 +33,18 @@ import { DESERT_H, DESERT_Y0 } from "../../shared/constants";
 
 export const isoX = (x: number, y: number) => x - y;
 export const isoY = (x: number, y: number) => (x + y) / 2;
+/**
+ * Where a world point is on the window (CSS px), through the camera zoom and the canvas's size on the page.
+ * `cr` = the canvas's bounding rect; pass it when asking for many points in one frame.
+ */
+export function screenOf(cam: Phaser.Cameras.Scene2D.Camera, wx: number, wy: number, cr?: { left: number; top: number; width: number; height: number }) {
+  const cv = cam.scene.game.canvas;
+  cr ??= cv.getBoundingClientRect();
+  const ix = ISO ? isoX(wx, wy) : wx, iy = ISO ? isoY(wx, wy) : wy;
+  // camera px: zoom around the camera's middle (scroll is in iso space)
+  const px = (ix - cam.scrollX - cam.width / 2) * cam.zoom + cam.width / 2, py = (iy - cam.scrollY - cam.height / 2) * cam.zoom + cam.height / 2;
+  return { x: cr.left + (cam.x + px) * (cr.width / cv.width), y: cr.top + (cam.y + py) * (cr.height / cv.height) };
+}
 /** Screen point back to the world (inverse of the projection). */
 export const fromIso = (sx: number, sy: number) => ({ x: sy + sx / 2, y: sy - sx / 2 });
 

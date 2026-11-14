@@ -1,0 +1,10 @@
+{
+  "date": "2026-11-14",
+  "title": "A tidier screen",
+  "changes": [
+    "Every part of the screen now has its own place: prompts, the level-up note, chords and buffs no longer pile on top of each other.",
+    "The top right is one neat column: online count, minimap, place name, quests and the kill feed, with nothing running off the edge.",
+    "Skill bar numbers stay readable on smaller screens, and cooldown and potion counts stay inside their slots.",
+    "Chat and group frames get a light backing so they are easier to read, and names hide when they would sit under the minimap."
+  ]
+}

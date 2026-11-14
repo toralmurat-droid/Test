@@ -4,6 +4,7 @@ import { ART_K as K } from "../../shared/constants";
 import { shrineTextures, SHRINE_FOOT } from "./shrineArt";
 import { isoAnchor } from "./iso";
 import { TEXT_FONT, TEXT_PX, WT } from "./pixelfont";
+import { hudSlot } from "./hudSlots";
 
 /**
  * The Whispering Woods shrine (shared/shrine.ts). Ready: the wisp flame burns, the rune glows and every rune stone
@@ -33,7 +34,7 @@ export class ShrineLayer {
     isoAnchor(this.timer, { x, y });
     this.prompt.id = "shrineprompt";
     this.prompt.onclick = () => this.interact();
-    document.getElementById("hud")!.append(this.prompt);
+    hudSlot("promptstack").append(this.prompt);
     this.draw(SHRINE_RUNES);
   }
 

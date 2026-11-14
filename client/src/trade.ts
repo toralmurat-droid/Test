@@ -8,6 +8,7 @@ import { runeCanvas, runeCss } from "./runeArt";
 import { chestImage, setChestOpen } from "./chests";
 import { isoAnchor } from "./iso";
 import { TEXT_FONT, TEXT_PX, WT } from "./pixelfont";
+import { hudSlot } from "./hudSlots";
 
 /**
  * Player trading and the account stash (shared/trade.ts; the server checks everything).
@@ -227,7 +228,7 @@ export class StashUI {
     this.prompt.id = "stashprompt";
     this.prompt.innerHTML = `<kbd>E</kbd> Open your stash`;
     this.prompt.onclick = () => this.interact();
-    document.getElementById("hud")!.append(this.prompt);
+    hudSlot("promptstack").append(this.prompt);
   }
 
   get open() { return !this.el.hidden; }
