@@ -1,0 +1,9 @@
+{
+  "date": "2026-11-14",
+  "title": "Clan armies and forts",
+  "changes": [
+    "Every clan's Hold is now a large isometric fort or war camp in its own style: Warden palisade, Redfang hide tents, Ossuary bone keep, Hide-Kin earthworks, Veiled sandstone shrine.",
+    "The clan that holds a land marches a column of soldiers from its Hold past its standards, and a few guards stand watch outside the walls. A weakly held land keeps fewer.",
+    "When a siege is called, a battle breaks out at each standard: both clans trade blows, some fall, reinforcements walk in. It is only for show."
+  ]
+}

@@ -3,8 +3,8 @@ import assert from "node:assert/strict";
 import { TILE } from "../shared/constants";
 import { isSolidAt } from "../shared/map";
 import { CLAN_KEYS } from "../shared/war/clans";
-import { patrolOf, patrolPos, patrols, TROOP, TROOP_LOOK, type Patrol } from "../shared/war/patrols";
-import { HOLDS, STANDARD, STANDARDS } from "../shared/war/standards";
+import { garrisonCount, garrisonSpots, patrolCount, patrolOf, patrolPos, patrols, SIEGE_FIGHT, siegeCounts, siegeLife, TROOP, TROOP_LOOK, type Patrol } from "../shared/war/patrols";
+import { HOLD_FORT_PX, HOLDS, STANDARD, STANDARDS } from "../shared/war/standards";
 import { TERRITORIES } from "../shared/war/territories";
 
 const seg = (p: Patrol, i: number) => [p.pts[i], p.pts[(i + 1) % p.pts.length]] as const;
@@ -15,7 +15,7 @@ const toSeg = (q: { x: number; y: number }, a: { x: number; y: number }, b: { x:
   return Math.hypot(a.x + (b.x - a.x) * f - q.x, a.y + (b.y - a.y) * f - q.y);
 };
 
-test("patrols: every territory with a Hold and a standard has one; Hold first, stops at each standard", () => {
+test("patrols: every territory with a Hold and a standard has one; gate first (just outside the Hold's walls), stops at each standard", () => {
   const all = patrols();
   for (const t of TERRITORIES) {
     if (!HOLDS.some((h) => h.t === t.id) || !STANDARDS.some((s) => s.t === t.id)) continue;
@@ -23,7 +23,9 @@ test("patrols: every territory with a Hold and a standard has one; Hold first, s
     assert.ok(p, `${t.name} has a patrol`);
     assert.equal(patrolOf(t.id), p);
     const hold = HOLDS.find((h) => h.t === t.id)!;
-    assert.deepEqual(p.pts[0], { x: hold.x, y: hold.y }, `${t.name} starts at its Hold`);
+    const g = p.pts[0], gd = Math.max(Math.abs(g.x - hold.x), Math.abs(g.y - hold.y));
+    assert.ok(gd >= HOLD_FORT_PX && gd <= HOLD_FORT_PX + 5 * TILE, `${t.name} starts just outside its fort (${gd.toFixed(0)} px)`);
+    assert.ok(!isSolidAt(g.x, g.y), `${t.name} gate spot walkable`);
     assert.equal(p.stops[0], 0);
     assert.ok(p.pts.length >= 2 && p.len > 0);
     // the loop closes back on pts[0] (len counts the closing segment)
@@ -37,7 +39,7 @@ test("patrols: every territory with a Hold and a standard has one; Hold first, s
       assert.ok(near <= STANDARD.range, `${t.name} passes standard ${s.id} (${near.toFixed(0)} px)`);
     }
     for (const [k, i] of p.stops.entries()) {
-      const target = k === 0 ? hold : mine[k - 1];
+      const target = k === 0 ? p.pts[0] : mine[k - 1];
       assert.deepEqual(p.pts[i], { x: target.x, y: target.y }, `${t.name} stop ${k}`);
     }
   }
@@ -91,5 +93,42 @@ test("patrols: building twice gives the same routes", () => {
 
 test("troops: look covers every clan; settings sane", () => {
   for (const k of CLAN_KEYS) assert.ok(TROOP_LOOK[k]?.kinds.length, k);
-  assert.ok(TROOP.perPatrol >= 1 && TROOP.speed > 0 && TROOP.gap > 0 && TROOP.pauseMs >= 0 && TROOP.viewRange > 0);
+  assert.ok(TROOP.perPatrol >= 1 && TROOP.speed > 0 && TROOP.rankGap > 0 && TROOP.lateral > 0 && TROOP.pauseMs >= 0 && TROOP.viewRange > 0);
+});
+
+test("troops: counts scale with control, siege fits the sprite budget", () => {
+  assert.equal(patrolCount(100), TROOP.perPatrol);
+  assert.ok(patrolCount(0) >= TROOP.patrolMin && patrolCount(0) < patrolCount(100));
+  assert.equal(garrisonCount(0), TROOP.garrisonMin);
+  assert.equal(garrisonCount(100), TROOP.garrisonMax);
+  for (const n of [1, 2, 3]) for (const c of [0, 50, 100]) {
+    const k = siegeCounts(n, c);
+    assert.ok(n * (k.atk + k.def) <= SIEGE_FIGHT.budget || k.atk + k.def <= 2 * SIEGE_FIGHT.minDefenders * 2);
+    assert.ok(k.def <= k.atk && k.def >= 1);
+  }
+  assert.deepEqual(siegeCounts(2, 100), { atk: 8, def: 8 });
+  for (const k of CLAN_KEYS) assert.ok(TROOP_LOOK[k].officer);
+});
+
+test("garrisonSpots: outside the fort, walkable, distinct, deterministic", () => {
+  for (const t of TERRITORIES) {
+    if (!HOLDS.some((h) => h.t === t.id)) continue;
+    const g = garrisonSpots(t.id, TROOP.garrisonMax);
+    assert.ok(g.length >= TROOP.garrisonMin, `${t.name} has room for ${g.length} guards`);
+    const h = HOLDS.find((x) => x.t === t.id)!;
+    for (const p of g) { assert.ok(!isSolidAt(p.x, p.y)); assert.ok(Math.max(Math.abs(p.x - h.x), Math.abs(p.y - h.y)) >= HOLD_FORT_PX, `${t.name} guard outside the fort`); assert.ok(Math.abs(Math.hypot(p.fx, p.fy) - 1) < 1e-9); }
+    assert.deepEqual(garrisonSpots(t.id, 3), g.slice(0, 3));
+  }
+});
+
+test("siegeLife: deterministic; fallen fighters leave and are replaced by walkers; some fall, most fight", () => {
+  const seen = { walk: 0, fight: 0, down: 0, gone: 0 };
+  for (let slot = 0; slot < 16; slot++) for (let ms = 0; ms < 120000; ms += 250) {
+    const a = siegeLife(7, slot, ms);
+    assert.deepEqual(a, siegeLife(7, slot, ms));
+    seen[a.s]++;
+  }
+  for (const k of Object.keys(seen) as (keyof typeof seen)[]) assert.ok(seen[k] > 0, k);
+  const total = seen.walk + seen.fight + seen.down + seen.gone;
+  assert.ok(seen.fight / total > 0.6, "mostly fighting");
 });

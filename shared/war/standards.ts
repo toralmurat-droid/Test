@@ -67,25 +67,35 @@ function build(): Standard[] {
 
 export const STANDARDS: Standard[] = build();
 
-/** Where each territory's Hold stands (px, foot of the sprite): near the middle, on clear ground, away from its standards. */
+
 export interface Hold { t: number; x: number; y: number }
-/** Ground a Hold sprite covers (tiles around and above its foot tile; the sprite is about 4 x 4 tiles). */
-const HOLD_COVER = { left: 2, right: 1, up: 3 };
+/** Tiles the Hold's compound covers round its middle (client/src/holdArt.ts paints about 7 tiles across). */
+export const HOLD_RADIUS = 3;
+/** Half-size of the fort in px (its 7x7 clearing): troops and guards keep outside this square. */
+export const HOLD_FORT_PX = (HOLD_RADIUS + 0.5) * TILE;
+/** Where each territory's Hold stands (px, the middle of its fort). */
 function buildHolds(): Hold[] {
   const out: Hold[] = [];
+  const INNER = 2; // the inner 5x5 must hold no solid tile at all: the ground layer paints over map objects there
   for (const t of TERRITORIES) {
     const mine = STANDARDS.filter((s) => s.t === t.id);
     let best: { x: number; y: number; score: number } | undefined;
-    for (let ty = t.y + HOLD_COVER.up + 1; ty < t.y + t.h - 1; ty++) for (let tx = t.x + HOLD_COVER.left + 1; tx < t.x + t.w - HOLD_COVER.right - 1; tx++) {
-      if (PORTAL_SPOTS.some((p) => Math.hypot(p.x - tx, p.y - ty) < KEEP_CLEAR)) continue; // leave the portal stone room
-      let solid = 0;
-      for (let dy = -HOLD_COVER.up; dy <= 0; dy++) for (let dx = -HOLD_COVER.left; dx <= HOLD_COVER.right; dx++) if (isSolidAt((tx + dx + 0.5) * TILE, (ty + dy + 0.5) * TILE)) solid++;
-      if (solid > 1 || isSolidAt((tx + 0.5) * TILE, (ty + 0.5) * TILE)) continue; // the foot must be free, the cover nearly so
-      const x = (tx + 0.5) * TILE, y = (ty + 0.5) * TILE;
-      const far = Math.min(Infinity, ...mine.map((s) => Math.hypot(s.x - x, s.y - y))) / TILE;
-      // away from the rings first (up to 7 tiles counts), then close to the middle, then clear ground
-      const score = Math.min(far, 7) * 10 - Math.hypot(tx - t.cx, ty - t.cy) - solid * 3;
-      if (!best || score > best.score) best = { x, y, score };
+    // only the outer ring of the 7x7 clearing may relax and the fort may hang over the land's edge by a tile before the land gets none
+    for (const [ringMax, edge] of [[3, HOLD_RADIUS + 1], [8, HOLD_RADIUS + 1], [24, HOLD_RADIUS + 1], [24, INNER + 1], [24, 1]]) {
+      for (let ty = t.y + edge; ty < t.y + t.h - edge; ty++) for (let tx = t.x + edge; tx < t.x + t.w - edge; tx++) {
+        if (PORTAL_SPOTS.some((p) => Math.hypot(p.x - tx, p.y - ty) < KEEP_CLEAR)) continue; // leave the portal stone room
+        let inner = 0, ring = 0;
+        for (let dy = -HOLD_RADIUS; dy <= HOLD_RADIUS; dy++) for (let dx = -HOLD_RADIUS; dx <= HOLD_RADIUS; dx++)
+          if (isSolidAt((tx + dx + 0.5) * TILE, (ty + dy + 0.5) * TILE)) { if (Math.max(Math.abs(dx), Math.abs(dy)) <= INNER) inner++; else ring++; }
+        if (inner || ring > ringMax) continue;
+        const x = (tx + 0.5) * TILE, y = (ty + 0.5) * TILE;
+        const far = Math.min(Infinity, ...mine.map((s) => Math.hypot(s.x - x, s.y - y))) / TILE;
+        // away from the rings first (up to 8 tiles counts), then close to the middle, then clear ground
+        if (far * TILE <= STANDARD.range + 2 * TILE) continue; // never inside a standard's ring or right at it
+        const score = Math.min(far, 8) * 10 - Math.hypot(tx - t.cx, ty - t.cy) - ring * 3;
+        if (!best || score > best.score) best = { x, y, score };
+      }
+      if (best) break;
     }
     if (best) out.push({ t: t.id, x: best.x, y: best.y });
   }

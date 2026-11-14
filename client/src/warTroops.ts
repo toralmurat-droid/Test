@@ -1,15 +1,18 @@
 /**
- * Clan troops in the world (shared/war/patrols.ts): soldiers of each land's holder walk a loop from its Hold past its
- * standards, and in a siege both clans clash at the standards. Pure decoration: every client derives the same picture
+ * Clan troops in the world (shared/war/patrols.ts): each land's holder marches a column (two abreast, pennant and
+ * officer in front) from its Hold past its standards, keeps a few guards at the Hold, and in a siege both clans fight
+ * a battle at every standard (loose lines, duels, some fall, reinforcements walk in). Sprites are created and destroyed per land when a squad changes. Pure decoration: every client derives the same picture
  * from the "war" snapshot and the wall clock, nothing goes to the server, and the soldiers are plain sprites (no HP
  * bar, no name, never in the way). Only lands with a stop near the hero have sprites.
  */
 import Phaser from "phaser";
 import { CLAN_KEYS, type ClanKey } from "../../shared/war/clans";
-import { patrolOf, patrolPos, TROOP, TROOP_LOOK, type Patrol } from "../../shared/war/patrols";
+import { garrisonCount, garrisonSpots, mix, patrolCount, patrolOf, patrolPos, SIEGE_FIGHT, siegeCounts, siegeLife, TROOP, TROOP_LOOK, type Patrol } from "../../shared/war/patrols";
 import { HOLDS, STANDARDS } from "../../shared/war/standards";
 import type { WarView } from "../../shared/war/view";
 import { underground } from "../../shared/dungeon";
+import { isSolidAt } from "../../shared/map";
+import { TERRITORIES } from "../../shared/war/territories";
 import { CHAR_ORIGIN, CHAR_SCALE, ensureCharSheet, playCharAnim } from "./artAssets";
 import { ISO, screenDir, setBaseDepth } from "./iso";
 import { MOB_LOOK, mobTexture } from "./textures";
@@ -48,11 +51,20 @@ function flagTexture(scene: Phaser.Scene, k: ClanKey): string {
   return key;
 }
 
+interface Pt { x: number; y: number }
+/** One siege fighter's fixed layout: its slot seed, line spot, the spot it duels at, where its reinforcements start. */
+interface Fight { seed: number; slot: number; pos: Pt; mate: Pt; from: Pt; h: number; tilt: number }
+/** A Hold guard's post and facing (away from the Hold, or toward it for the odd one chatting). */
+interface Guard { pos: Pt; fx: number; fy: number; h: number }
+
 interface Soldier {
   spr: Phaser.GameObjects.Sprite;
   char: boolean; kind: string; weapon: string;
-  face: string; key: string; frame: number; x: number; y: number;
+  face: string; key: string; frame: number; x: number; y: number; ang: number;
   flag?: Phaser.GameObjects.Image;
+  mode: "march" | "guard" | "fight";
+  rank: number; side: number; // march: rank from the front, -1 / +1 file
+  guard?: Guard; fight?: Fight;
 }
 
 interface Squad {
@@ -64,8 +76,6 @@ interface Squad {
   arcs?: number[];
   cycle: number; // virtual loop length: the route plus one pause (as distance) per stop
   phase: number;
-  /** Siege pairs: soldier i fights i ^ 1 (even = attacker, left on screen). */
-  duel?: { x: number; y: number }[];
   alpha: number; target: number;
 }
 
@@ -87,11 +97,14 @@ export class WarTroops {
   /** The war snapshot: owners and sieges decide who walks where. Squads that no longer match fade out at the next check. */
   setWar(v: WarView) { this.view = v; this.dirty = true; }
 
-  /** What a land's squad looks like now: holder, and the attacker while a siege is called. */
+  /** Sprites alive now (for the perf check). */
+  get sprites(): number { let n = 0; for (const s of this.squads.values()) n += s.men.length; for (const s of this.dying) n += s.men.length; return n; }
+
+  /** What a land's squad looks like now: holder, the attacker while a siege is called, and the strength by control. */
   private sigOf(t: number): string {
-    const v = this.view!;
+    const v = this.view!, c = v.control?.[t] ?? 100, n = STANDARDS.filter((s) => s.t === t).length;
     const sg = v.sieges.find((s) => s[0] === t);
-    return `${v.owner[t]}|${sg ? sg[1] : ""}`;
+    return `${v.owner[t]}|${sg ? sg[1] : ""}|${patrolCount(c)}|${garrisonCount(c)}|${siegeCounts(n, c).def}`;
   }
 
   update(me: { x: number; y: number } | undefined, _now: number) {
@@ -138,33 +151,41 @@ export class WarTroops {
     return false;
   }
 
-  private soldier(clan: ClanKey, i: number): Soldier {
-    const name = TROOP_LOOK[clan].kinds[i % TROOP_LOOK[clan].kinds.length];
+  private soldier(clan: ClanKey, i: number, mode: Soldier["mode"], officer = false): Soldier {
+    const name = officer ? TROOP_LOOK[clan].officer : TROOP_LOOK[clan].kinds[i % TROOP_LOOK[clan].kinds.length];
     const char = name === SHEET, [kind, weapon] = split(name);
     const spr = char
       ? this.scene.add.sprite(0, 0, "__DEFAULT").setOrigin(CHAR_ORIGIN.x, CHAR_ORIGIN.y).setScale(CHAR_SCALE)
       : this.scene.add.sprite(0, 0, mobTexture(this.scene, kind, 1, weapon), 0).setOrigin(0.5, MOB_LOOK[kind]?.oy ?? 0.85).setScale(MOB_LOOK[kind]?.scale ?? 1);
     spr.setVisible(false).setAlpha(0);
-    return { spr, char, kind, weapon, face: "down", key: "", frame: -1, x: 0, y: 0 };
+    return { spr, char, kind, weapon, face: "down", key: "", frame: -1, x: 0, y: 0, ang: 0, mode, rank: 0, side: 0 };
+  }
+
+  /** Walkable version of a wanted point: pulled toward `home` until it is, else `home` itself. */
+  private ground(p: Pt, home: Pt): Pt {
+    for (const f of [1, 0.7, 0.4]) { const x = home.x + (p.x - home.x) * f, y = home.y + (p.y - home.y) * f; if (!isSolidAt(x, y)) return { x, y }; }
+    return home;
+  }
+
+  /** The unit world vector from land `t` toward the nearest land `atk` holds (the battle's attacker side), else a screen-horizontal one. */
+  private attackAxis(t: number, atk: number): Pt {
+    const v = this.view!, me = TERRITORIES[t];
+    let best: Pt | undefined, bd = Infinity;
+    for (const u of TERRITORIES) {
+      if (u.id === t || v.owner[u.id] !== atk) continue;
+      const d = Math.hypot(u.cx - me.cx, u.cy - me.cy);
+      if (d < bd) { bd = d; best = { x: u.cx - me.cx, y: u.cy - me.cy }; }
+    }
+    if (best && bd > 0) return { x: best.x / bd, y: best.y / bd };
+    return ISO ? { x: -Math.SQRT1_2, y: Math.SQRT1_2 } : { x: -1, y: 0 }; // attackers on the left of the screen
   }
 
   private build(t: number): Squad | undefined {
-    const v = this.view!, clan = CLAN_KEYS[v.owner[t]], p = patrolOf(t);
+    const v = this.view!, clan = CLAN_KEYS[v.owner[t]], p = patrolOf(t), c = v.control?.[t] ?? 100;
     if (!clan || !p) return undefined;
     const sg = v.sieges.find((s) => s[0] === t), atk = sg ? CLAN_KEYS[sg[1]] : undefined;
     const sq: Squad = { t, sig: this.sigOf(t), men: [], cycle: 0, phase: 0, alpha: 0, target: 1 };
-    if (atk) {
-      // siege: pairs at each standard, the attackers on the left of the screen, the holders on the right
-      sq.duel = [];
-      const n = TROOP.skirmishPerStandard, std = STANDARDS.filter((s) => s.t === t);
-      const ax = ISO ? Math.SQRT1_2 : 1, ay = ISO ? -Math.SQRT1_2 : 0; // the screen's horizontal, in world terms
-      for (const s of std) for (let j = 0; j < n; j++) {
-        const off = (j - (n - 1) / 2) * 34, cx = s.x - ay * off, cy = s.y + ax * off; // pairs side by side across the line of fire
-        sq.men.push(this.soldier(atk, j), this.soldier(clan, j));
-        sq.duel.push({ x: cx - ax * 13, y: cy - ay * 13 }, { x: cx + ax * 13, y: cy + ay * 13 });
-      }
-      return sq;
-    }
+    if (atk) { this.buildSiege(sq, t, clan, atk, sg![1], c); return sq; }
     sq.patrol = p;
     sq.arcs = [];
     let acc = 0;
@@ -173,9 +194,49 @@ export class WarTroops {
     sq.arcs.sort((a, b) => a - b);
     sq.cycle = p.len + sq.arcs.length * this.pauseD();
     sq.phase = (t * 977) % sq.cycle;
-    for (let i = 0; i < TROOP.perPatrol; i++) sq.men.push(this.soldier(clan, i));
+    const n = patrolCount(c);
+    for (let i = 0; i < n; i++) {
+      const m = this.soldier(clan, i, "march", i === 0); // the officer leads with the pennant
+      m.rank = i >> 1; m.side = i & 1 ? 1 : -1;
+      sq.men.push(m);
+    }
     sq.men[0].flag = this.scene.add.image(0, 0, flagTexture(this.scene, clan)).setOrigin(0.5, 1).setVisible(false).setAlpha(0);
+    garrisonSpots(t, garrisonCount(c)).forEach((g, i) => {
+      const m = this.soldier(clan, i + 1, "guard", i === 0);
+      const inward = i % 3 === 2;
+      m.guard = { pos: { x: g.x, y: g.y }, fx: inward ? -g.fx : g.fx, fy: inward ? -g.fy : g.fy, h: mix(t, i, 7) };
+      sq.men.push(m);
+    });
     return sq;
+  }
+
+  /** A battle at each standard: attackers (side +1 of the axis) against defenders, as two loose lines. */
+  private buildSiege(sq: Squad, t: number, clan: ClanKey, atk: ClanKey, atkIdx: number, control: number) {
+    const F = SIEGE_FIGHT, std = STANDARDS.filter((s) => s.t === t), hold = HOLDS.find((h) => h.t === t);
+    const ax = this.attackAxis(t, atkIdx), px = -ax.y, py = ax.x, cnt = siegeCounts(std.length, control);
+    std.forEach((s, si) => {
+      const seed = t * 31 + si;
+      const lines = [cnt.atk, cnt.def].map((n, sideIdx) => {
+        const sd = sideIdx === 0 ? 1 : -1;
+        return Array.from({ length: n }, (_, i) => {
+          const h = mix(seed, i, sideIdx), lat = (i - (n - 1) / 2) * F.spacing + ((h % 9) - 4);
+          const dep = sd * (F.lineGap / 2 + (i & 1 ? 5 : 0)) + (((h >> 8) % 7) - 3);
+          return this.ground({ x: s.x + ax.x * dep + px * lat, y: s.y + ax.y * dep + py * lat }, s);
+        });
+      });
+      [atk, clan].forEach((k, sideIdx) => {
+        const sd = sideIdx === 0 ? 1 : -1, mine = lines[sideIdx], other = lines[1 - sideIdx];
+        mine.forEach((pos, i) => {
+          const j = Math.max(0, Math.min(other.length - 1, Math.round(i / Math.max(1, mine.length - 1) * (other.length - 1))));
+          let dx = sd * ax.x, dy = sd * ax.y; // reinforcements: attackers from their side, defenders from the Hold when it is near enough
+          if (sideIdx === 1 && hold) { const hx = hold.x - pos.x, hy = hold.y - pos.y, hl = Math.hypot(hx, hy); if (hl > 60) { dx = hx / hl; dy = hy / hl; } }
+          const from = this.ground({ x: pos.x + dx * F.walkFrom, y: pos.y + dy * F.walkFrom }, { x: pos.x + dx * 30, y: pos.y + dy * 30 });
+          const h = mix(seed, i, 40 + sideIdx), m = this.soldier(k, i, "fight", i === 0);
+          m.fight = { seed: seed * 2 + sideIdx, slot: i, pos, mate: other[j], from, h, tilt: h & 1 ? 1 : -1 };
+          sq.men.push(m);
+        });
+      });
+    });
   }
 
   /** A pause as a distance at walking speed: the time -> distance map is one speed with pauses spliced in. */
@@ -198,9 +259,7 @@ export class WarTroops {
 
   private draw(s: Squad, wall: number, dt: number, sheetReady: boolean) {
     s.alpha += Math.sign(s.target - s.alpha) * Math.min(Math.abs(s.target - s.alpha), dt / FADE_MS);
-    const patrol = s.patrol;
-    let lead: { d: number; paused: boolean } | undefined;
-    if (patrol) lead = this.lead(s, wall);
+    const lead = s.patrol ? this.lead(s, wall) : undefined;
     for (let i = 0; i < s.men.length; i++) {
       const m = s.men[i];
       if (m.char && !sheetReady) { // the watchman sheet is on its way: hide the Wardens' soldiers until it is here
@@ -209,24 +268,48 @@ export class WarTroops {
         continue;
       }
       if (m.char && m.frame < 0) { m.spr.setTexture(SHEET, 0); m.frame = 0; }
-      let x: number, y: number, face: string, anim: "walk" | "idle" | "attack";
-      let strike = false;
-      if (patrol && lead) {
-        const q = patrolPos(patrol, lead.d - i * TROOP.gap); // soldiers wait in file behind the stop, then follow the leader
+      let x = m.x, y = m.y, face = m.face, alpha = s.alpha, ang = 0, lift = 0;
+      let anim: "walk" | "idle" | "attack" = "idle", strike = false;
+      if (m.mode === "march" && lead) {
+        const q = patrolPos(s.patrol!, lead.d - m.rank * TROOP.rankGap); // ranks wait behind the stop, then follow the leader
         x = q.x; y = q.y;
+        if (m.side) { // two abreast: sideways by the path normal, unless that lands in a wall
+          const ox = q.x - q.dy * m.side * TROOP.lateral, oy = q.y + q.dx * m.side * TROOP.lateral;
+          if (!isSolidAt(ox, oy)) { x = ox; y = oy; }
+        }
         face = this.facing(m, q.dx, q.dy);
         anim = lead.paused ? "idle" : "walk";
-      } else {
-        const at = s.duel![i], mate = s.duel![i ^ 1], left = !(i & 1);
-        const cyc = (wall + i * 370 + (i >> 1) * 250) % 1100;
-        strike = cyc > 600;
-        const lunge = strike ? 3 : 0;
-        x = at.x + (mate.x - at.x) / 26 * lunge; y = at.y + (mate.y - at.y) / 26 * lunge;
-        face = left ? "right" : "left";
-        anim = "attack";
+      } else if (m.mode === "guard") {
+        const g = m.guard!, cyc = (wall + g.h % 9000) % 9000;
+        x = g.pos.x; y = g.pos.y;
+        strike = cyc < 700; // now and then a guard drills a swing
+        anim = strike ? "attack" : "idle";
+        face = this.facing(m, g.fx, g.fy);
+      } else if (m.mode === "fight") {
+        const f = m.fight!, life = siegeLife(f.seed, f.slot, wall);
+        if (life.s === "gone") { m.spr.setVisible(false); continue; }
+        const dx = f.mate.x - f.pos.x, dy = f.mate.y - f.pos.y, dl = Math.hypot(dx, dy) || 1;
+        if (life.s === "walk") {
+          x = f.from.x + (f.pos.x - f.from.x) * life.u; y = f.from.y + (f.pos.y - f.from.y) * life.u;
+          face = this.facing(m, f.pos.x - f.from.x, f.pos.y - f.from.y); anim = "walk";
+          alpha *= Math.min(1, life.u * 5);
+        } else if (life.s === "fight") {
+          const per = 700 + (f.h % 500), cyc = (wall + f.h % 1000) % per;
+          strike = cyc > per * 0.5;
+          const reach = strike ? 2 + (f.h >> 4) % 4 : -(f.h >> 6) % 2; // lunge in, sometimes shuffle back
+          x = f.pos.x + dx / dl * reach; y = f.pos.y + dy / dl * reach;
+          face = this.facing(m, dx, dy); anim = "attack";
+        } else {
+          const F = SIEGE_FIGHT, k = Math.min(1, life.t / F.fallMs);
+          x = f.pos.x; y = f.pos.y + (life.t > F.fallMs ? 2 : 0);
+          ang = 90 * k * f.tilt; face = this.facing(m, dx, dy);
+          lift = 0;
+          alpha *= life.t > F.fallMs + F.lieMs ? Math.max(0, 1 - (life.t - F.fallMs - F.lieMs) / F.fadeMs) : 1;
+        }
       }
-      m.spr.setVisible(true).setAlpha(s.alpha);
-      if (x !== m.x || y !== m.y) { m.x = x; m.y = y; m.spr.setPosition(x, y); setBaseDepth(m.spr, y); }
+      m.spr.setVisible(true).setAlpha(alpha);
+      if (x !== m.x || y !== m.y) { m.x = x; m.y = y; m.spr.setPosition(x, y + lift); setBaseDepth(m.spr, y); }
+      if (ang !== m.ang) { m.ang = ang; m.spr.setAngle(ang); }
       if (m.char) {
         const key = `${anim}|${face}`;
         if (key !== m.key || !m.spr.anims.isPlaying) { m.key = key; playCharAnim(m.spr, SHEET as any, anim === "attack" ? (strike ? "attack3" : "attack") : anim, face); }
@@ -239,7 +322,7 @@ export class WarTroops {
       }
       if (m.flag) {
         const f = m.flag;
-        f.setVisible(true).setAlpha(s.alpha).setPosition(x + (ISO ? 7 : 9), y + (ISO ? -7 : 0));
+        f.setVisible(true).setAlpha(alpha).setPosition(x + (ISO ? 7 : 9), y + (ISO ? -7 : 0));
         setBaseDepth(f, y + 0.5);
       }
     }

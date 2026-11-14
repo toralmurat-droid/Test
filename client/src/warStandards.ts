@@ -7,7 +7,7 @@ import Phaser from "phaser";
 import { CLANS, CLAN_KEYS, type ClanKey } from "../../shared/war/clans";
 import { RENOWN_RANKS, rankOf } from "../../shared/war/renown";
 import { HOLDS, STANDARD, STANDARDS, type Standard } from "../../shared/war/standards";
-import { HOLD_FOOT, holdTexture } from "./holdArt";
+import { ensureHold, HOLD_ORIGIN, holdKeys, HOLD_RANGE, HOLD_SCALE } from "./holdAssets";
 import { targetsOf, type WarState } from "../../shared/war/rules";
 import { TERRITORIES } from "../../shared/war/territories";
 import type { WarView } from "../../shared/war/view";
@@ -46,11 +46,13 @@ function standardTexture(scene: Phaser.Scene, k: ClanKey): string {
 
 export class WarStandards {
   private poles = new Map<number, Phaser.GameObjects.Image>();
-  private holds = new Map<number, Phaser.GameObjects.Image>();
+  private holds = new Map<number, { ground: Phaser.GameObjects.Image; stand: Phaser.GameObjects.Image }>();
   private rings = new Map<number, Phaser.GameObjects.Ellipse>();
   private prompt = document.createElement("div");
   private el = document.createElement("div");
   private view?: WarView;
+  private hero?: { x: number; y: number };
+  private holdAt = 0;
   clan: ClanKey | "" = "";
   private next = 0;
   private minLevel = 5;
@@ -91,19 +93,30 @@ export class WarStandards {
       const cl = CLANS[k], col = k === "redfang" ? cl.sigil : cl.trim;
       this.rings.get(s.id)!.setVisible(true).setFillStyle(col, 0.07).setStrokeStyle(2, col, 0.45);
     }
-    // Each land's Hold, in its holder's style (holdArt.ts): it changes with the land
+    this.syncHolds(this.hero);
+    if (this.open) this.render();
+  }
+
+  /**
+   * Each land's Hold, in its holder's style (baked PNGs, holdAssets.ts): the layers of a Hold near the hero load in the
+   * background (one clan at a time) and the Hold appears when they are in; it changes with the land. Cheap when nothing is new.
+   */
+  private syncHolds(me: { x: number; y: number } | undefined) {
+    const v = this.view;
+    if (!v || !me) return;
     for (const h of HOLDS) {
       const k = CLAN_KEYS[v.owner[h.t]];
-      if (!k) continue;
-      const key = holdTexture(this.scene, k);
+      if (!k || Math.hypot(h.x - me.x, h.y - me.y) > HOLD_RANGE) continue;
+      if (!ensureHold(this.scene, k, () => this.syncHolds(this.hero))) continue;
+      const keys = holdKeys(k);
       let img = this.holds.get(h.t);
       if (!img) {
-        img = this.scene.add.image(h.x, h.y, key).setOrigin(0.5, HOLD_FOOT).setDepth(h.y);
-        isoAnchor(img, { x: h.x, y: h.y });
+        // the trampled ground lies under everything (heroes walk the compound); the standing parts sort by the foot
+        const mk = (key: string, depth: number) => isoAnchor(this.scene.add.image(h.x, h.y, key).setOrigin(HOLD_ORIGIN.x, HOLD_ORIGIN.y).setScale(HOLD_SCALE).setDepth(depth), { x: h.x, y: h.y }) as Phaser.GameObjects.Image;
+        img = { ground: mk(keys.ground, -0.5), stand: mk(keys.stand, h.y) };
         this.holds.set(h.t, img);
-      } else if (img.texture.key !== key) img.setTexture(key);
+      } else if (img.stand.texture.key !== keys.stand) { img.ground.setTexture(keys.ground); img.stand.setTexture(keys.stand); }
     }
-    if (this.open) this.render();
   }
 
   /** The server's oath state. */
@@ -177,6 +190,8 @@ export class WarStandards {
 
   /** Every frame: the prompt, and the ring of the standard you hold pulses. */
   update(me: { x: number; y: number } | undefined, blocked: boolean, now: number) {
+    this.hero = me;
+    if (now >= this.holdAt) { this.holdAt = now + 500; this.syncHolds(me); }
     let near: Standard | undefined;
     if (me && !blocked) near = this.ringAt(me.x, me.y);
     if (near !== this.near) { this.near = near; if (!near) this.close(); }

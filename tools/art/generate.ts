@@ -6,6 +6,7 @@ import { buildPainted, PAINT_K } from "./paint/sheets";
 import { buildPoseVariants } from "./paint/pose-variants";
 import { buildSkillMoves } from "./paint/skill-moves";
 import { buildMobs } from "./paint/mobs";
+import { buildHolds } from "./holds";
 
 const OUT = "client/public/assets";
 mkdirSync(`${OUT}/characters`, { recursive: true });
@@ -48,6 +49,7 @@ buildPainted(OUT + "/hd", { only: hdOnly ? args.slice(1) : [] });
 buildPoseVariants(OUT + "/hd", hdOnly ? args.slice(1) : []); // other weapon stances (archer-melee...), slow: ~20 s a sheet
 buildSkillMoves(OUT + "/hd", hdOnly ? args.slice(1) : []); // big melee skill poses (client/src/skillMoveData.ts)
 buildMobs(OUT + "/hd/mobs");
+buildHolds(OUT + "/holds"); // clan Holds, loaded lazily by the client (holdAssets.ts)
 writeFileSync(`${OUT}/hd/characters/characters.json`, JSON.stringify({
   ...JSON.parse(readFileSync(`${OUT}/characters/characters.json`, "utf8")),
   image: "{name}.webp", frameWidth: FW / K * PAINT_K, frameHeight: FH / K * PAINT_K, artScale: PAINT_K,
