@@ -4,6 +4,7 @@ import { T, TILE_COUNT } from "../../shared/map";
 import { ROWS, ANIMATED_TILES, animatedRows } from "./tileset";
 import { refreshRegions } from "./texupload";
 import { StaticChunks, staticObj } from "./staticChunks";
+import { specialRuin, specialRuinTexture } from "./chapelRuin";
 import { BUILDINGS, buildBarns, buildHouses, buildStalls, ruinWallTexture } from "./isobuild";
 import { buildBridges } from "./isobridge";
 
@@ -715,7 +716,8 @@ export function isoStanding(scene: Phaser.Scene, objects: number[][]): number[][
         // Broken walls: thin stone or charred timber walls along the wall line, with rubble
         const same = (x: number, y: number) => id(at(x, y)) === t;
         const mask = (same(tx, ty - 1) ? 1 : 0) | (same(tx + 1, ty) ? 2 : 0) | (same(tx, ty + 1) ? 4 : 0) | (same(tx - 1, ty) ? 8 : 0);
-        const w = ruinWallTexture(scene, t === T.RUIN, mask, tx, ty);
+        const special = SMOOTH ? specialRuin(tx, ty) : undefined; // the chapel and the tavern have their own walls
+        const w = special ? specialRuinTexture(scene, special, mask, tx, ty) : ruinWallTexture(scene, t === T.RUIN, mask, tx, ty);
         const img = scene.add.image(cx, cy, w.key);
         staticObj(scene, img.setOrigin(0.5, w.up / img.height).setDepth(cy));
         out[ty][tx] = -1;
