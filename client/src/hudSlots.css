@@ -1,6 +1,10 @@
 /* HUD places (client/src/hudSlots.ts). Every HUD element has its own spot; nothing is placed with its own
    absolute offsets any more. Loaded after every other stylesheet, selectors are "body #id" like weathered.css. */
 
+/* ---- Top centre: the monster bar (monsterBar.css) takes the first 10 + ~100 px; --topband is where notices may start. */
+:root { --topband: 112px; }
+body #partytoast { top: var(--topband); }
+
 /* ---- Top right: one column, pill -> minimap + dial -> location -> respawn line -> tracker -> feed.
    The feed follows the tracker whatever its height, so no script measures it. 264 = the online pill at its widest (the dial is 234 px, right-aligned, 8 px from the edge). */
 body #topright { position: absolute; top: 8px; right: 8px; width: 264px; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; pointer-events: none; }

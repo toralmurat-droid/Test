@@ -1,0 +1,9 @@
+{
+  "date": "2026-11-14",
+  "title": "A bar for the monster under your mouse",
+  "changes": [
+    "A bar at the top of the screen now tells you about the monster you point at: its name, level, health, what it is weak to, and anything special about it. Champions list each of their traits there.",
+    "Monsters no longer carry name tags. A health bar shows only when you point at one, or for 4 seconds after you or your group hurt it. Your own golems always show a small one.",
+    "Damage numbers are whole numbers, and floating words like Broken! no longer print on top of each other."
+  ]
+}

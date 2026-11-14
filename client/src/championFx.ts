@@ -8,7 +8,7 @@ import { champOverlayTexture } from "./textures";
 
 /**
  * Champions on screen (shared/champions.ts, server/champions.ts). (a) the family tint, a glowing outline (WebGL glow,
- * else a stronger ring), a ring of the family's colour under the feet and one small icon per affix over the HP bar;
+ * else a stronger ring), a ring of the family's colour under the feet (the affix icons and texts are in the top monster bar, monsterBar.ts);
  * (b) a humanoid carries its champion weapon (its own sheet, textures.ts mobTexture); blobs and scorpions get the
  * painted detail of their affix (tools/art/paint/mobs.ts champOverlay) laid over them. Plus the
  * affixes' moments: puddles, the ballista, getting back up, splitting, sinking into the sand, the brand flaring.
@@ -38,26 +38,20 @@ export class ChampionFx {
   }
 
   /** Every frame for a monster on screen: returns true when it drew it as a champion (the caller skips its own tint). */
-  sync(id: string, e: Ent, p: any, x: number, y: number, mobBarY: number, now: number): boolean {
+  sync(id: string, e: Ent, p: any, x: number, y: number, now: number): boolean {
     const n = p.champion | 0;
     let L = this.looks.get(id);
     if (L && (L.key !== n || p.dead)) { this.drop(id); L = undefined; }
     if (!n || p.dead) return false;
     if (!L) L = this.build(id, e, n, p.kind);
     const show = !p.hidden && e.sprite.visible;
-    // (a) tint (status flickers win), ring under the feet, icons over the bar
+    // (a) tint (status flickers win), ring under the feet
     if (!e.statusTint) e.sprite.setTint(L.tint);
     L.ring.clear().setVisible(show).setDepth(e.sprite.y - 1);
     if (show) {
       const w = Math.max(16, e.top * 0.9), pulse = 0.2 + 0.08 * Math.sin(now / 260);
       L.ring.fillStyle(L.aura, L.glow ? pulse : pulse + 0.12).fillEllipse(x, y, w, w * 0.38);
       if (!L.glow) L.ring.lineStyle(1, L.aura, 0.8).strokeEllipse(x, y, w, w * 0.38);
-      const iy = mobBarY - 18; // above the name label (which ends just over the bar)
-      L.affixes.forEach((k, i) => {
-        const A = AFFIXES[k], ix = Math.round(x - L!.affixes.length * 3.5 + i * 7 + 1);
-        e.bar.fillStyle(0x000000, 0.65).fillRect(ix - 1, iy - 1, 7, 7);
-        A.icon.forEach((bits, r) => { for (let b = 0; b < 5; b++) if (bits & (1 << (4 - b))) e.bar.fillStyle(A.color).fillRect(ix + b, iy + r, 1, 1); });
-      });
     }
     // (b) the painted details, following its feet and its facing
     const frame = Math.floor(now / 320) % 2;

@@ -25,6 +25,8 @@ export interface PointerHost {
   me(): { x: number; y: number; sx: number; sy: number; state: any } | undefined;
   enemies(): ClickEnemy[];
   enemy(id: string): ClickEnemy | undefined;
+  /** Monsters that can be inspected but not attacked (your own and your group's summons). */
+  friendlies?(): ClickEnemy[];
   spots(): ClickSpot[];
   speed(): number;
   /** Flight speed (px/s) of the shot the basic attack / right click fires, 0 for melee and skills. */
@@ -69,8 +71,13 @@ export class PointerControls {
   private stuckPos?: Pt;
   private stuck = 0;
   private hovered?: string; // enemy under the mouse
+  private friendly?: string; // friendly summon under the mouse (inspect only)
+  private lastPick = 0;
+  private outside = true; // the mouse is not over the game canvas (until it first moves)
   /** The enemy under the mouse (its label shows its name). */
   get hoverId() { return this.hovered; }
+  /** What the monster bar describes: the enemy under the mouse, else a friendly summon under it. */
+  get inspectId() { return this.hovered ?? this.friendly; }
   /** The enemy being chased or attacked by a click. */
   get targetId() { return this.goal?.kind === "enemy" ? this.goal.id : undefined; }
   private rtt = 150; // ms, click to server swing and back (measured in swung)
@@ -100,8 +107,8 @@ export class PointerControls {
     scene.input.mouse?.disableContextMenu();
     scene.input.on("pointerdown", (p: Phaser.Input.Pointer) => this.down(p));
     scene.input.on("pointerup", (p: Phaser.Input.Pointer) => { if (p.button === this.held) this.held = -1; });
-    scene.input.on("gameout", () => { this.held = -1; });
-    scene.input.on("pointermove", (p: Phaser.Input.Pointer) => this.hover(p));
+    scene.input.on("gameout", () => { this.held = -1; this.outside = true; this.hovered = this.friendly = undefined; });
+    scene.input.on("pointermove", (p: Phaser.Input.Pointer) => { this.outside = false; this.hover(p); });
     // After the scene's update: the monster's frame, flip and squash for this frame are set by then
     scene.events.on(Phaser.Scenes.Events.POST_UPDATE, () => this.syncOutline());
   }
@@ -164,10 +171,32 @@ export class PointerControls {
 
   private hover(p: Phaser.Input.Pointer) {
     const canvas = this.scene.game.canvas;
-    if (this.host.blocked()) { setWorldCursor(canvas, false); this.hovered = undefined; return; }
+    this.lastPick = this.scene.time.now;
+    if (this.outside || this.host.blocked()) { setWorldCursor(canvas, false); this.hovered = this.friendly = undefined; return; }
     const enemy = this.pick(p).enemy;
     this.hovered = enemy?.id;
+    this.friendly = enemy ? undefined : this.pickFriendly(p)?.id;
     setWorldCursor(canvas, !!enemy);
+  }
+
+  /** The friendly summon under the mouse (a click does nothing to it; the monster bar describes it). */
+  private pickFriendly(p: Phaser.Input.Pointer): ClickEnemy | undefined {
+    const list = this.host.friendlies?.();
+    if (!list?.length) return undefined;
+    const s = this.screen(p);
+    let best: ClickEnemy | undefined, bd = Infinity;
+    for (const e of list) {
+      if (e.dead) continue;
+      const h = Math.max(18, e.h + 4), d = this.inBox(s, e.x, e.y, Math.max(22, h * 0.9), h);
+      if (d !== undefined && d < bd) { bd = d; best = e; }
+    }
+    return best;
+  }
+
+  /** Every 100 ms: look again under the still mouse (a monster walked under it or away from it). Called each frame. */
+  repick() {
+    if (this.scene.time.now - this.lastPick < 100) return;
+    this.hover(this.scene.input.activePointer);
   }
 
   /** A pixel outline around the enemy being attacked (red) or under the mouse (faint gold), so it's clear who gets hit. */
@@ -298,6 +327,7 @@ export class PointerControls {
 
   /** The movement the mouse wants this frame, or undefined when the mouse is not steering. */
   update(stepMs: number): InputState | undefined {
+    this.repick();
     this.drawRing();
     const goal = this.goal;
     if (!goal) return undefined;
