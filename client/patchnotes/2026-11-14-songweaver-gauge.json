@@ -1,5 +1,6 @@
 {
   "date": "2026-11-14",
+  "patch": 233,
   "title": "Songweaver: song gauge, books and a growing lute",
   "changes": [
     "The Songweaver's mana bubble is now a song gauge. Notes fill it, chords fill it faster, and when it is full your book's gift rings out. Wear a Songbook, Hymnal, War March or Dissonance book to choose the gift.",
