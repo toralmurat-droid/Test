@@ -5,11 +5,13 @@ import { impactMs, nightBuff, passiveBlood, talentBonus, LEAP_MS, pointRange, sk
 } from "./skills";
 import { Stats, STATS } from "./powers";
 import { pay, skillCost, usesGauge } from "./mana";
-import { gearDef } from "./gear";
+import { gearDef, luteTraits } from "./gear";
+import { LUTE_FX, type LuteTraitId } from "./lute";
 import { auraBuffs, isAuraId, BLADE_EL, BLADES_BASE, ESSENCE, SUMMON, WISP, type AttuneElement } from "./summons";
 import { addResonance, chordProgress, GAUGE, knownModes, PROGRESSIONS, LYDIAN_SHIELD, DORIAN_RADIUS, MODES, modeColour, modulate, noteCast, NOTES, PHRYGIAN, RESONANCE, resonanceOf, resWord, SONG,
   type Degree, type ModeId, type Pitch, type Progression } from "./songs";
 import { heroSound, SOUND_TIER, soundMult, type SoundProfile } from "./combat";
+import { progressionsFor } from "./songbook";
 import { acousticsAt } from "./acoustics";
 
 /**
@@ -59,6 +61,10 @@ export interface SkillRuntime {
   gaugeAt: number; gaugeTick: number;
   /** The book she wears (the host mirrors the shield slot here): its GearDef.book.full fires when the gauge fills. */
   book?: string;
+  /** Songs she collected (shared/songbook.ts, the host mirrors them): their progressions count while her book holds songs. */
+  songs?: string[];
+  /** The lute she plays (the host mirrors the weapon slot here): its fitted traits (shared/lute.ts LUTE_FX) change her music. */
+  lute?: string;
 }
 export const newRuntime = (): SkillRuntime => ({
   last: {}, buffs: [], chargeUntil: 0, windUntil: 0, stacks: 0, stackAt: 0,
@@ -261,7 +267,7 @@ export function castSkill(h: SkillHost, id: string, skillId: string, out?: CastO
   // re-playing the Chorus that still has more than GAUGE.refreshMs to run logs no note and fills nothing
   const sg0 = u.sk.song, refresh = !!s.song && !!sg0 && sg0.id === s.id && sg0.f.until - now > GAUGE.refreshMs;
   const power = rankPower(rank) * levelPower(s) * (s.power ?? 1) * synergyPower(s, u.talents) * scalePower(s, h.stats?.(id), STATS[u.cls].base) *
-    (s.consume && !s.buff?.perStack ? 1 + STACK_POWER * stacks : 1) * gauge;
+    (s.consume && !s.buff?.perStack ? 1 + STACK_POWER * stacks : 1) * gauge * (s.pitch === "L" && luteHas(u, "deep") ? LUTE_FX.deepLow : 1);
   h.fx({ ev: "cast", id, s: s.id, rank, stacks, charge: s.chargeMs ?? 0, wind: s.windMs ?? 0, x: u.x, y: u.y });
   // A buildup charges (rooted, a stun breaks it). A big melee blow winds up first, so it lands with the animation's
   // strike (client/src/skillMoves.ts): the hero keeps moving and can't swing or cast meanwhile, and nothing breaks it
@@ -299,7 +305,7 @@ function playNote(h: SkillHost, id: string, u: Unit, s: SkillDef, now: number): 
   h.fx({ ev: "note", id, s: s.id, deg: s.degree, mode, pitch: s.pitch ?? "M", x: Math.round(u.x), y: Math.round(u.y) });
   u.sk.gaugeAt = now;
   if (s.modulate) return undefined; // a key change fills nothing
-  const p = noteCast(u.sk, s.degree!, now);
+  const p = noteCast(u.sk, s.degree!, now, progressionsFor(u.sk));
   const fin = p ? fireChord(h, id, p) : undefined;
   fillGauge(h, id, GAUGE.note);
   return fin;
@@ -309,7 +315,7 @@ function playNote(h: SkillHost, id: string, u: Unit, s: SkillDef, now: number): 
 export function playableProgs(u: Unit): Progression[] {
   if (!u.cls) return [];
   const degs = new Set(SKILLS[u.cls].filter((s) => s.degree && !s.passive && rankOf(u.talents, s.id) > 0).map((s) => s.degree));
-  return PROGRESSIONS.filter((p) => p.notes.every((n) => degs.has(n)));
+  return progressionsFor(u.sk).filter((p) => p.notes.every((n) => degs.has(n)));
 }
 
 /** A progression fired: its finisher goes off (power from its level and Magic, like a skill). Returns its id if it did. */
@@ -318,8 +324,19 @@ export function fireChord(h: SkillHost, id: string, p: Progression): string | un
   if (!u?.cls || !fin) return undefined;
   h.fx({ ev: "chord", id, prog: p.id, mode: modeOf(u), x: Math.round(u.x), y: Math.round(u.y) });
   release(h, id, fin, 1, levelPower(fin) * scalePower(fin, h.stats?.(id), STATS[u.cls].base), 0);
-  fillGauge(h, id, GAUGE.chord);
+  fillGauge(h, id, GAUGE.chord * (luteHas(u, "horn") ? LUTE_FX.hornChord : 1));
   return fin.id;
+}
+
+// ---- The evolving lute's traits (DI-5, shared/lute.ts LUTE_FX) ----------------------------------------------------
+
+/** Has this Songweaver's lute (SkillRuntime.lute) the trait fitted? */
+export const luteHas = (u: Unit | undefined, t: LuteTraitId): boolean => u?.cls === "songweaver" && !!u.sk.lute && luteTraits(u.sk.lute).includes(t);
+
+/** A mode's split for this Songweaver: MODES ally / foe, with Bright Tuning in the bright keys and Dark Tuning in the dark ones. */
+export function toneOf(u: Unit | undefined, mode: ModeId): { ally: number; foe: number } {
+  const md = MODES[mode], fam = md.family;
+  return { ally: md.ally * (fam === "major" && luteHas(u, "bright") ? LUTE_FX.brightAlly : 1), foe: md.foe * (fam === "minor" && luteHas(u, "dark") ? LUTE_FX.darkFoe : 1) };
 }
 
 // ---- The song gauge (DI-3, shared/songs.ts GAUGE) ----------------------------------------------------------------
@@ -350,7 +367,7 @@ function swell(h: SkillHost, id: string, u: Unit) {
   u.mana = 0;
   const bk = u.sk.book ? gearDef(u.sk.book)?.book : undefined, fin = bk ? skillById(bk.full) : undefined;
   h.fx({ ev: "swell", id, book: fin ? u.sk.book : null, x: Math.round(u.x), y: Math.round(u.y), ...(fin ? {} : { fizzle: true }) });
-  if (fin && u.cls) release(h, id, fin, 1, levelPower(fin) * scalePower(fin, h.stats?.(id), STATS[u.cls].base), 0);
+  if (fin && u.cls) release(h, id, fin, 1, levelPower(fin) * scalePower(fin, h.stats?.(id), STATS[u.cls].base) * (luteHas(u, "bonepegs") ? LUTE_FX.pegsFull : 1), 0);
 }
 
 /** Every tick: a gauge filled from outside the engine (an execution, the Echo rune) swells; idle, it drains. */
@@ -360,7 +377,7 @@ function tickGauge(h: SkillHost, id: string, u: Unit, now: number) {
   if (u.maxMana !== GAUGE.max) u.maxMana = GAUGE.max;
   const v = u.mana ?? 0;
   if (v >= GAUGE.max) { swell(h, id, u); return; }
-  const idleFrom = sk.gaugeAt + GAUGE.idleMs;
+  const idleFrom = sk.gaugeAt + GAUGE.idleMs + (luteHas(u, "bonepegs") ? LUTE_FX.pegsIdleMs : 0);
   if (v > 0 && now > idleFrom) u.mana = Math.max(0, v - GAUGE.drainPerSec * (now - Math.max(last, idleFrom)) / 1000);
 }
 
@@ -394,17 +411,17 @@ export function scaleBuff(b: BuffDef, k: number, radius = 1): BuffDef {
 const dorianReach = (u: Unit | undefined, mode: ModeId | undefined) => (mode === "dorian" && u ? 1 + DORIAN_RADIUS * modeColour("dorian", ranksOf(u)) : 1);
 
 /** A Songweaver field in its mode: radius (Dorian) and the mode its hits carry. */
-function tuneDef(d: FieldDef, mode: ModeId, u: Unit | undefined): FieldDef {
-  const k = dorianReach(u, mode);
+function tuneDef(d: FieldDef, mode: ModeId, u: Unit | undefined, song?: boolean): FieldDef {
+  const k = dorianReach(u, mode) * (song && luteHas(u, "wide") ? LUTE_FX.wideRadius : 1); // Wide Bowl: a Chorus reaches further
   return { ...d, r: d.r * k, sound: d.sound && { ...d.sound, mode } };
 }
 
 /** Puts a Songweaver field in `mode`: its damage, heal and buff powers and its radius follow (Modulate recolours songs). */
 function applyTune(f: FieldInst, u: Unit | undefined) {
   if (!f.tune) return;
-  const md = MODES[f.tune.mode];
+  const md = toneOf(u, f.tune.mode);
   f.power = f.tune.base * md.foe; f.allyPower = f.tune.base * md.ally;
-  f.def = tuneDef(f.tune.def, f.tune.mode, u);
+  f.def = tuneDef(f.tune.def, f.tune.mode, u, f.song);
 }
 
 /** Modulate went off: the next known mode, and the song being played takes it. */
@@ -499,7 +516,7 @@ function resonate(h: SkillHost, from: string, tid: string, o: HitOpts) {
   const sym = a.cls ? talentBonus(a.cls, a.talents ?? {}, "sympathy") : 0;
   const phry = snd.mode === "phrygian" ? 1 + PHRYGIAN.res * modeColour("phrygian", ranksOf(a)) : 1;
   const base = snd.basic ? RESONANCE.basic : o.dot ? RESONANCE.tick : RESONANCE.perHit;
-  const amt = (base * phry * (1 + sym / 100) + (snd.res ?? 0)) * m.res;
+  const amt = (base * phry * (1 + sym / 100) + (snd.res ?? 0)) * m.res * (luteHas(a, "gut") ? LUTE_FX.gutRes : 1); // Gut Strings ring foes faster
   if (!addResonance(t.sk, amt, now, { deg: snd.deg, pitch: snd.pitch })) return;
   const shatter = prof?.tier === "fragile";
   h.fx({ ev: "resonate", id: tid, by: from, x: Math.round(t.x), y: Math.round(t.y), shatter });
@@ -604,7 +621,7 @@ function release(h: SkillHost, id: string, s: SkillDef, rank: number, power: num
   const u = live(h, id);
   if (!u) return;
   // A Songweaver's mode splits the cast: `ally` for heals, shields and buffs, `foe` for damage (every other class: both = power)
-  const mode = modeOf(u), md = mode ? MODES[mode] : undefined;
+  const mode = modeOf(u), md = mode ? toneOf(u, mode) : undefined;
   const ally = md ? power * md.ally : power, foe = md ? power * md.foe : power;
   if (mode && (s.pitch || s.finisher)) s = withSound(s, { pitch: s.pitch, deg: s.degree, mode });
   if (s.modulate) doModulate(h, u);

@@ -1069,6 +1069,29 @@ export const FINISHERS: SkillDef[] = [
   { id: "sg_g_refrain", name: "Refrain", type: "Ultimate", branch: 0, row: 3, req: 1, style: "holy", finisher: true, target: "self", refrain: { beats: 3 },
     desc: "The Songbook's refrain. The Chorus you are playing beats three times at once and starts over. With no Chorus playing, you and your party close by are healed.",
     buff: { ms: 1000, heal: 8, party: 130 } },
+  // Collected songs' finishers (shared/songbook.ts SONG_SOURCES): their progressions count once the song is in her Songbook
+  { id: "sg_f_hum", name: "Gloam's Hum", type: "Ultimate", branch: 0, row: 3, req: 1, style: "nature", finisher: true, target: "self",
+    desc: "The jelly's old tune, played by you. Foes around you are hurt and left ringing, and you are mended.",
+    areas: [{ r: 60, dmg: 22, kb: 0.5, look: "nova", sound: { res: 35 } }], buff: { ms: 1000, heal: 10 } },
+  { id: "sg_f_round", name: "Miller's Round", type: "Ultimate", branch: 1, row: 3, req: 1, style: "wind", finisher: true, target: "self",
+    desc: "A round the whole mill can step to. You and your party close by hit harder and move faster.",
+    buff: { ms: 8000, dmg: 15, speed: 15, party: 130 } },
+  { id: "sg_f_undertow", name: "Undertow", type: "Ultimate", branch: 2, row: 3, req: 1, style: "frost", finisher: true, target: "self",
+    desc: "The pond pulls back. Foes around you are drawn in, slowed and left ringing.",
+    areas: [{ r: 76, dmg: 12, pull: 30, slowMs: 2500, look: "nova", sound: { res: 30 } }] },
+  { id: "sg_f_picardy", name: "Picardy", type: "Ultimate", branch: 0, row: 3, req: 1, style: "holy", finisher: true, target: "self",
+    desc: "A sad tune ends on a bright chord. Foes around you are blasted, and you and your party close by are healed.",
+    areas: [{ r: 64, dmg: 30, kb: 0.8, look: "nova", sound: { res: 20 } }], buff: { ms: 1000, heal: 14, party: 130 } },
+  // the found books' gifts (shared/gear.ts bk_*, docs/songweaver-di-plan.md DI-2)
+  { id: "sg_g_bless", name: "Benediction", type: "Ultimate", branch: 0, row: 3, req: 1, style: "holy", finisher: true, target: "self",
+    desc: "The Hymnal's gift. You and your party close by are healed and shielded.",
+    buff: { ms: 6000, heal: 22, shield: 12, party: 130 } },
+  { id: "sg_g_rally", name: "Rally", type: "Ultimate", branch: 1, row: 3, req: 1, style: "wind", finisher: true, target: "self",
+    desc: "The War March's gift. You and your party close by hit harder, strike faster and move quicker for a few seconds.",
+    buff: { ms: 8000, dmg: 18, atkspd: 18, speed: 10, party: 130 } },
+  { id: "sg_g_cacoph", name: "Cacophony", type: "Ultimate", branch: 2, row: 3, req: 1, style: "arcane", finisher: true, target: "self",
+    desc: "Dissonance's gift. A harsh blast hurts and stuns foes around you, and leaves them ringing and weak.",
+    areas: [{ r: 64, dmg: 40, stunMs: 500, weakMs: 3000, kb: 0.8, look: "nova", sound: { res: 40 } }] },
 ];
 for (const f of FINISHERS) f.scale = { stat: "mag", per: 2 };
 

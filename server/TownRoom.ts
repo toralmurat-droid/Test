@@ -35,15 +35,18 @@ import {
 } from "../shared/items";
 import { bountyCounts, bountyOffers, cleanBounty, nearestBoard, type BountyState } from "../shared/bounty";
 import { DOORS, DOOR_RANGE, doorById, doorDist, doorWorkable, isSafeZone, isSolidAt, randomSpawn, setDoorOpen, VILLAGE, type Door } from "../shared/map";
-import { isDecorSolidAt, npcById, npcNear, TALK_RANGE } from "../shared/npcs";
+import { isDecorSolidAt, npcById, npcNear, TALK_RANGE, type Npc } from "../shared/npcs";
 import { beyondWall, WATCH, WATCH_POSTS, WatchPost } from "../shared/watch";
 import { inVillage, WRATH } from "../shared/wrath";
-import { afterRespec, bounceWave, busking, buskingAudience, BuskingLines, ChordSync, heroSound, migrateSongweaver, mobSound, oldSongTree, restoreMode, SONG_POTION_TEXT, songSave } from "./songs";
+import { afterRespec, bounceWave, busking, buskingAudience, BuskingLines, ChordSync, heroSound, migrateSongweaver, mobSound, oldSongTree, relevelLute, restoreMode, SONG_POTION_TEXT, SongCollector, songSave, stowItem, stringShot, SW_KIT_VERSION } from "./songs";
+import { songById } from "../shared/songbook";
+import { matItemId, rollMats } from "../shared/lutemaker";
+import { atLutemaker, breakItem, fitTrait, pickMat } from "./lutemaker";
 import { GAUGE, modeColour, PHRYGIAN, RESONANCE } from "../shared/songs";
 import { soundMult } from "../shared/combat";
 import type { SoundFx } from "../shared/skills";
 import { sellPrice, shopBuys, shopFuses, SHOPS } from "../shared/shops";
-import { BLOB_KINDS, CHAINS, CROWN_CHAIN, packQuest, chainDone, chainOpen, chainState, inZone, isBlob, npcPresent, QuestState, questStep, stepGoal, Summon, type BossVoice, TUT_CHAIN, TUT_QUESTS, USE_RANGE } from "../shared/quests";
+import { BLOB_KINDS, CHAINS, CROWN_CHAIN, packQuest, chainDone, chainOpen, chainState, inZone, isBlob, npcPresent, QuestState, questFinished, questStep, stepFor, stepGoal, Summon, type BossVoice, TUT_CHAIN, TUT_QUESTS, USE_RANGE } from "../shared/quests";
 import { findHideSpot, HIDE, MOTHER_KEEP_OUT, noMobsAt, spawnPoint, SPAWN_ZONES, villageDist, zoneCap } from "../shared/spawns";
 import { blocked, moveStep } from "../shared/movement";
 import { NIGHT_RAID, raiderByKey, raiderIgnores, RAIDERS } from "../shared/raiders";
@@ -60,7 +63,7 @@ import { SLOT_COUNT } from "../shared/slots";
 import { groupDmgMult, groupHpMult, PARTY, together } from "../shared/party";
 import { canExecute, executeDamage, executeRefund, heroPoise, MOB_COMBAT, mobBody, POISE, poiseLevelMult, poiseSpeed, PVP_PROTECT_LEVEL, pvpDamageMult, pvpProtected, SWING_AHEAD } from "../shared/combat";
 import {
-  BAG_SIZE, Equipped, gearDef, GEAR_SLOTS, activeGear, reqProblem, itemLevel, HeroReqInfo, GearSlot, gearBlock, gearName, gearReachMult, gearSpeedMult, gearStats, isGearId, potionChance, rollGear, canWear, starterKit,
+  BAG_SIZE, baseId, isLute, wearProblem, Equipped, gearDef, GEAR_SLOTS, activeGear, reqProblem, itemLevel, HeroReqInfo, GearSlot, gearBlock, gearName, gearReachMult, gearSpeedMult, gearStats, isGearId, potionChance, rollGear, canWear, starterKit,
   isBagItem, isBound, socketProblem, itemRunes, withRunes, runeEffects, stripRunes, GEAR_DROP,
 } from "../shared/gear";
 import { fuseRunes, parseRune, rollMobRune, rollRune, RUNE_DROP, runeId, runeIdName, RUNES, RuneKey } from "../shared/runes";
@@ -83,7 +86,7 @@ import { Champions, type ChampState } from "./champions";
 import { AFFIX_FX, CHAMPION } from "../shared/champions";
 /** A champion's helpers (its Splitting twin, a Ringleader's cutthroats) leave this long after they came. */
 const CHAMP_HELPER_MS = 90_000;
-import { ASK_BURST, ASK_PER_SEC, Bucket, CHAT_BURST, CHAT_PER_SEC, clientIp, isLocalIp, MSG_BURST, MSG_KICK_AFTER, MSG_KICK_WINDOW_MS, MSG_PER_SEC } from "./ratelimit";
+import { ASK_BURST, ASK_PER_SEC, Bucket, CHAT_BURST, CHAT_PER_SEC, CRAFT_BURST, CRAFT_PER_SEC, clientIp, isLocalIp, MSG_BURST, MSG_KICK_AFTER, MSG_KICK_WINDOW_MS, MSG_PER_SEC } from "./ratelimit";
 
 export class Player extends Schema {
   @type("string") name = "";
@@ -328,6 +331,7 @@ export class Projectile extends Schema {
   pulsed = 0; // distance at the last pulse (ShotSpec.pulse)
   sound?: SoundFx; // a Songweaver's basic wave: a sound hit
   bounced = 0; bouncedAt = 0; // wall bounces so far, distance flown at the last one (ShotSpec.bounce)
+  bounces = 0; keep = false; // a basic wave's own bounces (Steel Strings), bounces lose no damage (Silk Strings): server/songs.ts stringShot
   speed = 0;
   range = 0;
   radius = 0;
@@ -741,6 +745,9 @@ export class TownRoom extends Room<TownState> {
     this.onMessage("buy", (client, msg: { i: number }) => this.shopBuy(client, msg?.i));
     this.onMessage("sell", (client, msg: { i: number }) => this.shopSell(client, msg?.i));
     this.onMessage("fuse", (client, msg: { id?: unknown }) => this.fuseRunesMsg(client, msg?.id));
+    // Wren the lute-maker (server/lutemaker.ts): break a bag item into material, fit a trait to the lute
+    this.onMessage("break", (client, msg: { bag?: unknown }) => { if (this.allow("craft", client)) this.breakMsg(client, msg?.bag); });
+    this.onMessage("lutefit", (client, msg: { trait?: unknown }) => { if (this.allow("craft", client)) this.luteFitMsg(client, msg?.trait); });
     // Trading between players and the account stash (shared/trade.ts)
     this.onMessage("trade", (client, msg: { id?: string; name?: string }) => { if (this.allow("ask", client)) this.tradeAsk(client.sessionId, msg); });
     this.onMessage("tradeyes", (client, msg: { from?: string }) => this.tradeAnswer(client.sessionId, msg?.from, true));
@@ -829,6 +836,7 @@ export class TownRoom extends Room<TownState> {
   private msgBuckets = new Map<string, { b: Bucket; over: number; since: number }>();
   private chatBuckets = new Map<string, Bucket>();
   private askBuckets = new Map<string, Bucket>();
+  private craftBuckets = new Map<string, Bucket>(); // Wren's break / lutefit (CRAFT_PER_SEC)
 
   /**
    * Every message handler registered after this goes through a per-client budget: past it, messages are dropped,
@@ -850,10 +858,10 @@ export class TownRoom extends Room<TownState> {
   }
 
   /** Chat lines, invites: a smaller budget per client (each one reaches other players' screens). */
-  private allow(kind: "chat" | "ask", c: Client) {
-    const map = kind === "chat" ? this.chatBuckets : this.askBuckets;
+  private allow(kind: "chat" | "ask" | "craft", c: Client) {
+    const map = kind === "chat" ? this.chatBuckets : kind === "ask" ? this.askBuckets : this.craftBuckets;
     let b = map.get(c.sessionId);
-    if (!b) map.set(c.sessionId, (b = kind === "chat" ? new Bucket(CHAT_PER_SEC, CHAT_BURST) : new Bucket(ASK_PER_SEC, ASK_BURST)));
+    if (!b) map.set(c.sessionId, (b = kind === "chat" ? new Bucket(CHAT_PER_SEC, CHAT_BURST) : kind === "ask" ? new Bucket(ASK_PER_SEC, ASK_BURST) : new Bucket(CRAFT_PER_SEC, CRAFT_BURST)));
     if (b.take()) return true;
     if (kind === "chat") c.send("chat", { id: "", name: "Oakvale", text: "You are talking too fast. Wait a moment." });
     return false;
@@ -957,6 +965,7 @@ export class TownRoom extends Room<TownState> {
     if (back?.group.length) this.regroupOnJoin(client.sessionId, p, back.group);
     this.sendBoard(client); // the Ideas board is ready as soon as it is opened
     if (Object.keys(p.feast).length) client.send("feast", { feast: p.feast }); // Devour: what this hero has eaten
+    if (p.cls === "songweaver") client.send("songbook", this.songs.msg(p)); // her songs and materials (owner only)
     console.log(`${p.name} the ${CLASSES[p.cls].name} joined (${this.clients.length} online)`);
   }
 
@@ -979,6 +988,7 @@ export class TownRoom extends Room<TownState> {
     this.msgBuckets.delete(client.sessionId);
     this.chatBuckets.delete(client.sessionId);
     this.askBuckets.delete(client.sessionId);
+    this.craftBuckets.delete(client.sessionId);
   }
 
   onDispose() {
@@ -1049,13 +1059,16 @@ export class TownRoom extends Room<TownState> {
       bounty: p.bounty, bountyDone: p.bountyDone, feast: { ...p.feast },
       ...(p.cls === "summoner" ? { grimoire: this.grimoireOf(p), suTree: SUMMONER_TREE } : {}),
       ...songSave(p.cls, p.sk),
+      ...this.songs.save(p),
     };
   }
 
   /** Loads a save into the hero. Returns chat lines about items a migration moved (the room sends them on join). */
   private restore(p: Player, s: HeroSave): string[] {
     const num = (v: unknown, d = 0) => (typeof v === "number" && Number.isFinite(v) ? v : d);
-    const gear = (v: unknown) => (typeof v === "string" && isGearId(v) && canWear(p.cls, v) ? v : "");
+    // gear she may not wear (a kit of another class, the Songweaver's musical-only rule) goes to the bag, not away
+    const misfit: string[] = [];
+    const gear = (v: unknown) => (typeof v !== "string" || !isGearId(v) ? "" : canWear(p.cls, v) ? v : (misfit.push(v), ""));
     p.color = num(s.color, p.color);
     p.level = capLevel(num(s.level, 1)); p.kills = num(s.kills);
     // Saves from before the slower XP curve (2026-11-08) keep their level and their share of the way to the next one
@@ -1067,19 +1080,26 @@ export class TownRoom extends Room<TownState> {
     p.pots = s.pots ? { potion: cnt(s.pots.potion), mpotion: cnt(s.pots.mpotion) } : { potion: [Math.min(50, num(s.potions)), 0, 0], mpotion: [Math.min(50, num(s.mpotions, 2)), 0, 0] };
     // The Songweaver's kit (server/songs.ts): before the gear filter, so a shield she wore moves instead of vanishing
     let stash: ReturnType<typeof loadStash> | undefined;
-    const moved = migrateSongweaver(p, s, (item) => {
+    const toStash = (item: string) => {
       stash ??= loadStash(p.name);
       if (stash.items.length >= STASH_SIZE) return false;
       stash.items.push(item);
       return true;
-    });
+    };
+    const kitWas = typeof s.swKit === "number" ? s.swKit : 0;
+    const moved = migrateSongweaver(p, s, toStash);
     p.ptSta = num(s.ptSta); p.ptStr = num(s.ptStr); p.ptMag = num(s.ptMag); p.ptDex = num(s.ptDex);
     // A hero saved above today's level cap spent more points than his level gives: hand them back to place again
     if (p.ptSta + p.ptStr + p.ptMag + p.ptDex > statPoints(p.level)) p.ptSta = p.ptStr = p.ptMag = p.ptDex = 0;
     p.weapon = gear(s.weapon); p.armour = gear(s.armour); p.shoes = gear(s.shoes);
     p.hat = gear(s.hat); p.shield = gear(s.shield); p.ranged = gear(s.ranged);
     // The bag may hold items for other classes (bought, traded or taken from the stash for another hero)
-    if (Array.isArray(s.bag)) setBag(p, s.bag.filter((v): v is string => isBagItem(v)).slice(0, BAG_SIZE));
+    const bag = Array.isArray(s.bag) ? s.bag.filter((v): v is string => isBagItem(v)).slice(0, BAG_SIZE) : [];
+    for (const v of misfit) moved.push(stowItem(p, bag, v, toStash, "you can't wear it."));
+    const loose: string[] = [];
+    relevelLute(p, bag, loose); // the Songweaver's lute is at her level (DI-5)
+    for (const v of loose) moved.push(stowItem(p, bag, v, toStash, "your lute had fewer sockets."));
+    if (Array.isArray(s.bag) || bag.length) setBag(p, bag);
     // Old saves (before the skill tree rework) had other skill ids: those points come back to spend again
     // The Summoner's tree was rebuilt (Void Lord, 2026-11-08): a save from the old tree gets every skill point back
     const oldTree = (p.cls === "summoner" && s.suTree !== SUMMONER_TREE) || oldSongTree(p.cls, s.swTree);
@@ -1106,6 +1126,8 @@ export class TownRoom extends Room<TownState> {
       if (num(sv[ch.verKey], 1) !== ch.version && st.questStage > 0) { st.questStage = 0; st.questCount = 0; }
       this.qset(p, c, st);
     });
+    // collected songs and materials (server/songs.ts SongCollector); kit v3: songs of quests finished before them
+    this.songs.load(p, s, (q) => questFinished(p, q), kitWas < SW_KIT_VERSION);
     // an item the migration put in the stash: stash and hero are written together, so it can't end up in both
     if (stash) saveStash(p.name, stash, p.cls, this.snapshot(p));
     return moved;
@@ -4303,6 +4325,8 @@ export class TownRoom extends Room<TownState> {
       const gear = rollGear(kind, level);
       if (gear) this.dropItem("gear", x, y, 1, gear);
     }
+    // Songweaver materials lie on the ground too (shared/lutemaker.ts, LOOT[kind].mats)
+    for (const m of rollMats(def.mats)) this.dropItem("mat", x, y, m.n, matItemId(m.mat));
     // Runes (shared/runes.ts) lie on the ground like gear
     const rune = rollMobRune(GEAR_DROP[kind]?.chance ?? 0, level);
     if (rune) this.dropItem("gear", x, y, 1, rune);
@@ -4326,6 +4350,14 @@ export class TownRoom extends Room<TownState> {
         if (c < 0) return; // left over from an earlier step
         this.clients.find((cl) => cl.sessionId === pid)?.send("pickup", { kind: it.kind, amount: 1, x: it.x, y: it.y, gear: it.gear, name: "" });
         this.questProgress(pid, p, c, this.qs(p, c).questCount + 1);
+        return;
+      }
+      if (it.kind === "mat") { // a Songweaver's material (DI-5): into her counters, nobody else picks it up
+        const got = pickMat(p, it.gear, it.amount, this.songs);
+        if (!got?.n) return;
+        this.state.items.delete(id);
+        this.broadcast("sfx", { ev: "matpick", id: pid, mat: got.mat, n: got.n, x: Math.round(it.x), y: Math.round(it.y) });
+        this.sendSongbook(pid, p);
         return;
       }
       if (it.kind === "potion" || it.kind === "mpotion") {
@@ -4543,10 +4575,10 @@ export class TownRoom extends Room<TownState> {
       this.questDo(id, "cast");
       lawful(out.chord);
       // ...and the villagers close by answer a bright tune (a chat line from the NPC, id "npc:<id>", to heroes nearby)
-      this.buskers.heard(p.cls, p.sk.mode, def!, p.x, p.y, Date.now(), (n, text) => {
-        const near = buskingAudience(n, id, this.state.players.entries());
-        for (const c of this.clients) if (near.has(c.sessionId)) c.send("chat", { id: `npc:${n.id}`, name: n.name, text });
-      }, out.chord);
+      this.buskers.heard(p.cls, p.sk.mode, def!, p.x, p.y, Date.now(), (n, text) => this.npcSay(n, id, text), out.chord);
+      // a Chorus can earn a song: Odo hears a bright one, Mirror Pond's shore takes any (server/songs.ts SongCollector)
+      for (const sd of this.songs.chorus(p, def!, p.sk.mode ?? "major", p.x, p.y, Date.now(), (npc, text) => { const n = npcById(npc); if (n) this.npcSay(n, id, text); }))
+        this.songLearned(id, p, sd.id);
     }
   }
 
@@ -4605,7 +4637,7 @@ export class TownRoom extends Room<TownState> {
 
   /** Fills the empty slots with the class's starting kit (shared/gear.ts starterKit); kit items already carried are not doubled. */
   private wearKit(p: Player) {
-    const have = new Set([...GEAR_SLOTS.map((s) => p[s]), ...bagItems(p)].map((id) => stripRunes(id ?? "")));
+    const have = new Set([...GEAR_SLOTS.map((s) => p[s]), ...bagItems(p)].map((id) => baseId(id ?? ""))); // a levelled lute is still the lute
     for (const [slot, id] of Object.entries(starterKit(p.cls)) as [GearSlot, string][]) if (!p[slot] && !have.has(id)) p[slot] = id;
   }
 
@@ -4623,7 +4655,9 @@ export class TownRoom extends Room<TownState> {
     const p = this.state.players.get(id);
     if (!p || typeof i !== "number" || i < 0 || i >= p.bag.length) return;
     const gid = p.bag.at(i), def = gid ? gearDef(gid) : undefined;
-    if (!gid || !def || !canWear(p.cls, gid)) return;
+    if (!gid || !def) return;
+    const no = wearProblem(p.cls, gid); // a kit of another class, the Songweaver's musical-only rule
+    if (no) { this.clients.find((c) => c.sessionId === id)?.send("gearno", { text: no }); return; }
     const why = reqProblem(gid, this.reqInfo(p)); // item level and stat requirements
     if (why) { this.clients.find((c) => c.sessionId === id)?.send("gearno", { text: why }); return; }
     const slot: GearSlot = def.slot;
@@ -5206,6 +5240,32 @@ export class TownRoom extends Room<TownState> {
     }
   }
 
+  // ---- Wren the lute-maker (server/lutemaker.ts) -------------------------------
+
+  /** "break" { bag }: at Wren's stall, a Songweaver breaks the bag item at that index into material. */
+  private breakMsg(client: Client, i: unknown) {
+    const p = this.state.players.get(client.sessionId);
+    if (!p || p.dead || typeof i !== "number" || !Number.isInteger(i) || i < 0 || i >= p.bag.length || !atLutemaker(p)) return;
+    const bag = [...bagItems(p)], r = breakItem(p, bag, i, this.songs, potionSlots(p.pots));
+    if (!("mat" in r)) { client.send("shop", { ok: false, text: r.text }); return; }
+    setBag(p, bag);
+    client.send("shop", { ok: true, text: r.text });
+    this.broadcast("sfx", { ev: "break", id: client.sessionId, mat: r.mat, n: r.n });
+    this.sendSongbook(client.sessionId, p);
+  }
+
+  /** "lutefit" { trait }: at Wren's stall, fit a trait to the lute in her hands (gold and materials paid). */
+  private luteFitMsg(client: Client, trait: unknown) {
+    const p = this.state.players.get(client.sessionId);
+    if (!p || p.dead || typeof trait !== "string" || trait.length > 16 || !atLutemaker(p)) return;
+    const r = fitTrait(p, this.songs, trait);
+    if (!r.ok) { client.send("shop", { ok: false, text: r.text }); return; }
+    this.applyStats(p); // the engine's lute (SkillRuntime.lute) takes the new trait
+    client.send("shop", { ok: true, text: r.text });
+    this.broadcast("sfx", { ev: "lutefit", id: client.sessionId, trait: r.trait });
+    this.sendSongbook(client.sessionId, p);
+  }
+
   // ---- Shops (shared/shops.ts) ----------------------------------------------
 
   /** The shop of the trader the player stands next to. */
@@ -5460,6 +5520,7 @@ export class TownRoom extends Room<TownState> {
       return;
     }
     p.gold += d.reward.gold;
+    if (d.reward.song) this.learnSong(id, p, d.reward.song); // a Songweaver learns the quest's song (shared/songbook.ts)
     // Reward potions fit the hero's level; what the bag can't hold is put down at their feet
     const rs = dropSize(p.level, () => 0.5);
     for (const [kind, n] of [["potion", d.reward.potions], ["mpotion", Math.ceil(d.reward.potions / 2)]] as const) {
@@ -5816,7 +5877,8 @@ export class TownRoom extends Room<TownState> {
     if (!s || !s.kinds?.includes(m.kind)) return;
     if (s.type === "kill" && (m.merged ?? 1) < (s.fused ?? 1)) return;
     if (s.type === "kill" && s.own && m.summonFor !== id) return; // a named leader: only the one summoned for this player
-    if (s.type === "kill" && s.gift && q.questCount + 1 >= stepGoal(s)) this.giveGift(id, p, s.gift, m);
+    const gift = stepFor(s, p.cls).gift; // the Songweaver's first gift is a book (shared/quests.ts byCls)
+    if (s.type === "kill" && gift && q.questCount + 1 >= stepGoal(s)) this.giveGift(id, p, gift, m);
     if (s.type === "kill") this.questProgress(id, p, c, q.questCount + 1);
     else if (s.type === "collect" && Math.random() < (s.chance?.[m.kind] ?? 0)) this.dropItem("quest", m.x, m.y, 1, s.item!, id);
   }
@@ -5840,6 +5902,7 @@ export class TownRoom extends Room<TownState> {
     if (lvl > p.level) {
       const from = p.level;
       p.level = lvl;
+      this.relevel(p);
       this.applyStats(p); // new stat points are assigned by the player in the hero panel
       if (!p.dead) p.hp = p.maxHp; // full heal on level up
       this.broadcast("levelup", { id, level: lvl, from });
@@ -5852,15 +5915,51 @@ export class TownRoom extends Room<TownState> {
     }
   }
 
+  /** A villager's line (chat id "npc:<id>") to the hero it answers and the heroes close by (server/songs.ts buskingAudience). */
+  private npcSay(n: Npc, singer: string, text: string) {
+    const near = buskingAudience(n, singer, this.state.players.entries());
+    for (const c of this.clients) if (near.has(c.sessionId)) c.send("chat", { id: `npc:${n.id}`, name: n.name, text });
+  }
+
+  /** A Songweaver learns a song from a quest: the teacher's lines first, then the song (songLearned). */
+  private learnSong(id: string, p: Player, song: string) {
+    const sd = songById(song);
+    if (!sd || p.cls !== "songweaver" || !this.songs.learn(p, song)) return;
+    const cl = this.clients.find((c) => c.sessionId === id);
+    for (const text of sd.teach ?? []) cl?.send("chat", { id: "", name: sd.teacher ?? "Oakvale", text });
+    this.songLearned(id, p, song);
+  }
+
+  /** A song went into her Songbook: the "newsong" event, the learned line, the owner's "songbook" message. */
+  private songLearned(id: string, p: Player, song: string) {
+    const sd = songById(song);
+    this.broadcast("sfx", { ev: "newsong", id, song });
+    if (sd) this.note(id, sd.learned);
+    this.sendSongbook(id, p);
+  }
+
+  /** The owner-only "songbook" message { songs, mats } (on join and on every change). */
+  private sendSongbook(id: string, p: Player) {
+    this.clients.find((c) => c.sessionId === id)?.send("songbook", this.songs.msg(p));
+  }
+
   /** A line in one player's chat from the game itself. */
   private note(id: string, text: string) {
     this.clients.find((c) => c.sessionId === id)?.send("chat", { id: "", name: "Oakvale", text });
   }
 
+  /** The Songweaver's lute follows her level (server/songs.ts relevelLute); runes it can no longer hold go to the bag. */
+  private relevel(p: Player) {
+    const bag = [...bagItems(p)], loose: string[] = [];
+    if (!relevelLute(p, bag, loose)) return;
+    for (const r of loose) if (bag.length + potionSlots(p.pots) < BAG_SIZE) bag.push(r);
+    setBag(p, bag);
+  }
+
   /** Recompute stats and max HP from class + level + equipped gear. */
   private applyStats(p: Player) {
     const st = statsFor(p.cls, { sta: p.ptSta, str: p.ptStr, mag: p.ptMag, dex: p.ptDex });
-    const g = gearStats(p.cls, this.equipped(p));
+    const eq = this.equipped(p), g = gearStats(p.cls, eq);
     st.sta += g.sta; st.str += g.str; st.mag += g.mag; st.dex += g.dex;
     p.sta = st.sta; p.str = st.str; p.mag = st.mag; p.dex = st.dex;
     const newMax = Math.round(maxHpFromStats(p.cls, st, p.level) * talentMult(p.cls, p.talents, "hp") * feastMult(p.feast, "hp"));
@@ -5872,7 +5971,8 @@ export class TownRoom extends Room<TownState> {
       p.mana = Math.min(newMana, p.mana + Math.max(0, newMana - p.maxMana));
       p.maxMana = newMana;
     }
-    p.sk.book = p.shield || undefined; // the book she wears fires when her song gauge fills (shared/skillEngine.ts swell)
+    p.sk.book = eq.shield || undefined; // the book she can read fires when her song gauge fills (shared/skillEngine.ts swell)
+    p.sk.lute = isLute(p.weapon) ? p.weapon : undefined; // her lute's traits (shared/lute.ts LUTE_FX)
     this.syncMana(p);
   }
 
@@ -6030,6 +6130,7 @@ export class TownRoom extends Room<TownState> {
         // the Songweaver's lute: a sound wave, and the combo step is a note (pluck, pluck, strum)
         const mode = a.sk.mode ?? "major", deg = step === 1 ? "V" : "I";
         s.sound = { pitch: "M", deg, mode, basic: true, res: step === 2 ? RESONANCE.basic : 0, strum: step === 2 };
+        stringShot(s, a as unknown as Unit, true); // Steel and Silk Strings (DI-5)
         this.broadcast("sfx", { ev: "note", id, s: "basic", deg, mode, pitch: "M", x: Math.round(a.x), y: Math.round(a.y) });
       }
       return;
@@ -6122,6 +6223,7 @@ export class TownRoom extends Room<TownState> {
   private pending: { at: number; fn: () => void }[] = [];
   private fieldSeq = 0;
   private buskers = new BuskingLines(); // Oakvale villagers answer a busking tune (server/songs.ts)
+  private songs = new SongCollector(); // collected songs and materials per hero (server/songs.ts)
   private chords = new ChordSync(); // the Songweaver's owner-only "chord" message (server/songs.ts)
 
   /** What the skill engine needs from the room. */
@@ -6239,6 +6341,7 @@ export class TownRoom extends Room<TownState> {
       s.kind = spec.kind; s.size = spec.size; s.speed = spec.speed; s.range = spec.range; s.radius = spec.radius;
       s.damage = spec.dmg; s.knockback = spec.kb ?? 1; s.pierce = spec.pierce; s.spec = spec;
       s.imb = spec.imb?.style ?? "";
+      stringShot(s, this.state.players.get(spec.owner) as unknown as Unit | undefined, false); // Silk Strings (DI-5)
       this.state.projectiles.set(`s${++this.shotSeq}`, s);
     },
     addField: (inst) => {

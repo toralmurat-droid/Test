@@ -1,9 +1,13 @@
 import { isMode, MODES, SONGWEAVER_TREE, type ModeId } from "../shared/songs";
-import { knownModesOf, type ShotSpec, type SkillRuntime, type Unit } from "../shared/skillEngine";
+import { knownModesOf, luteHas, type ShotSpec, type SkillRuntime, type Unit } from "../shared/skillEngine";
+import { LUTE_FX } from "../shared/lute";
+import type { SoundFx } from "../shared/skills";
 import { skillById, type AreaDef, type FieldDef, type HitEffects, type SkillDef } from "../shared/skills";
 import { BOUNCE, BOUNCE_RULES, reflectAxis, wallAt } from "../shared/acoustics";
 import { BUSKING, BUSKING_LINES, npcById, type Npc } from "../shared/npcs";
-import { BAG_SIZE, gearName, isBagItem, starterKit } from "../shared/gear";
+import { isSongId, ODO_LINES, pondShore, SONG_SOURCES, type SongDef, type SongId } from "../shared/songbook";
+import { isMaterial, type MaterialId } from "../shared/lute";
+import { BAG_SIZE, gearName, isBagItem, isBook, isLute, luteAtLevel, starterKit } from "../shared/gear";
 import { potionSlots, type Potions } from "../shared/potions";
 import { sellPrice } from "../shared/shops";
 
@@ -92,8 +96,18 @@ export class ChordSync {
 
 // ---- Waves bounce off walls (Plan v2) ----------------------------------------------------------------------------
 
-/** The projectile fields a bounce reads and turns (server TownRoom Projectile). */
-export interface BounceShot { x: number; y: number; vx: number; vy: number; dir: string; traveled: number; bounced: number; bouncedAt: number; damage: number; spec?: ShotSpec }
+/**
+ * The projectile fields a bounce reads and turns (server TownRoom Projectile). `bounces`: walls a basic wave may bounce
+ * off (Steel Strings; a skill wave keeps it in spec.bounce); `keep`: bounces lose no damage (Silk Strings).
+ */
+export interface BounceShot { x: number; y: number; vx: number; vy: number; dir: string; traveled: number; bounced: number; bouncedAt: number; damage: number; spec?: ShotSpec;
+  bounces?: number; keep?: boolean; sound?: SoundFx }
+
+/** A Songweaver's wave takes her lute's strings (DI-5): Steel lets a basic wave bounce, Silk keeps a bounce's damage. */
+export function stringShot(s: BounceShot, u: Unit | undefined, basic: boolean) {
+  if (basic && luteHas(u, "steel")) s.bounces = LUTE_FX.steelBounce;
+  if (luteHas(u, "silk")) s.keep = true;
+}
 
 /**
  * A wave that may still bounce (ShotSpec.bounce) ran into a wall between (px, py) and where it is: off stone, wood and
@@ -102,8 +116,8 @@ export interface BounceShot { x: number; y: number; vx: number; vy: number; dir:
  * most BOUNCE_RULES.max. True when it bounced.
  */
 export function bounceWave(s: BounceShot, px: number, py: number, emit: (ev: Record<string, unknown>) => void): boolean {
-  const spec = s.spec;
-  if (!spec?.bounce || s.bounced >= Math.min(BOUNCE_RULES.max, spec.bounce) || (s.bounced && s.traveled - s.bouncedAt < BOUNCE_RULES.minFlight)) return false;
+  const spec = s.spec, max = spec ? spec.bounce ?? 0 : s.bounces ?? 0;
+  if (!max || s.bounced >= Math.min(BOUNCE_RULES.max, max) || (s.bounced && s.traveled - s.bouncedAt < BOUNCE_RULES.minFlight)) return false;
   const mat = wallAt(s.x, s.y), fall = BOUNCE[mat];
   if (!fall) return false;
   const { fx, fy } = reflectAxis(px, py, s.x, s.y);
@@ -112,8 +126,11 @@ export function bounceWave(s: BounceShot, px: number, py: number, emit: (ev: Rec
   if (fy) s.vy = -s.vy;
   s.dir = Math.abs(s.vx) > Math.abs(s.vy) ? (s.vx > 0 ? "right" : "left") : s.vy > 0 ? "down" : "up";
   s.bounced++; s.bouncedAt = s.traveled;
-  spec.vx = s.vx; spec.vy = s.vy; spec.dmg *= fall.dmg; s.damage *= fall.dmg;
-  if (fall.res && spec.sound) spec.sound = { ...spec.sound, res: (spec.sound.res ?? 0) + fall.res };
+  const loss = s.keep ? 1 : fall.dmg;
+  s.damage *= loss;
+  if (spec) { spec.vx = s.vx; spec.vy = s.vy; spec.dmg *= loss; }
+  if (fall.res && spec?.sound) spec.sound = { ...spec.sound, res: (spec.sound.res ?? 0) + fall.res };
+  else if (fall.res && !spec && s.sound) s.sound = { ...s.sound, res: (s.sound.res ?? 0) + fall.res };
   emit({ ev: "bounce", x: Math.round(px), y: Math.round(py), mat });
   return true;
 }
@@ -132,34 +149,82 @@ export function songSave(cls: string, sk: SkillRuntime): { swTree?: number; swMo
 
 // ---- Kit migrations (docs/songweaver-di-plan.md "State and saves") ---------------------------------------------------
 
-/** Save format of the Songweaver's kit (save field swKit). 1: the Songbook sits in the shield slot (DI-3). */
-export const SW_KIT_VERSION = 1;
+/**
+ * Save format of the Songweaver's kit (save field swKit). 1: the Songbook sits in the shield slot (DI-3). 2: the
+ * musical-only rule and the evolving lute (DI-5): her weapon slot holds her lute, at her level. 3: collected songs
+ * (DI-2): a save from before gets the songs of the quests it had already finished (SongCollector.load).
+ */
+export const SW_KIT_VERSION = 3;
 
-/** What a hero needs for migrateSongweaver: the class, potions (they take bag slots) and gold (a sold item pays). */
-export interface KitHero { cls: string; gold: number; pots: Potions }
+/** What a hero needs for migrateSongweaver: the class, her level (the lute's), potions (they take bag slots) and gold (a sold item pays). */
+export interface KitHero { cls: string; level: number; gold: number; pots: Potions }
 /** The parts of a save it moves (server/accounts.ts HeroSave). */
-export interface KitSave { shield?: unknown; bag?: unknown; swKit?: unknown }
+export interface KitSave { weapon?: unknown; shield?: unknown; bag?: unknown; swKit?: unknown }
+
+/**
+ * Puts an item she can't keep in her hands where it is not lost: the bag while it has room (`bag` is changed), else
+ * the stash (`toStash`, false when it is full too), else it is sold at sellPrice. Returns the chat line, `why` ending it.
+ */
+export function stowItem(p: KitHero, bag: string[], item: string, toStash: (item: string) => boolean, why: string): string {
+  const name = gearName(item, p.cls);
+  if (bag.length + potionSlots(p.pots) < BAG_SIZE) { bag.push(item); return `Your ${name} went to your bag: ${why}`; }
+  if (toStash(item)) return `Your bag was full, so your ${name} went to your stash: ${why}`;
+  const g = sellPrice(item);
+  p.gold += g;
+  return `Your bag and stash were full, so your ${name} was sold for ${g} gold: ${why}`;
+}
+const WHY_BOOK = "a Songweaver carries her Songbook in that hand now.";
+const WHY_LUTE = "a minstrel carries a lute and a book.";
 
 /**
  * Brings an older Songweaver save up to SW_KIT_VERSION. Runs in TownRoom.restore BEFORE the gear filter, on the save
- * itself, so nothing she owned is lost. v1: the shield she wore goes to the bag; with the bag full, to the stash
- * (`toStash`, false when it is full too); else it is sold at sellPrice. The Songbook takes the shield slot. Returns
- * chat lines for her, one per moved item.
+ * itself, so nothing she owned is lost (stowItem: bag, else stash, else sold). Returns chat lines, one per moved item.
+ *  - v1: the shield she wore is stowed; the Songbook takes the shield slot.
+ *  - v2: a weapon that is not her lute is stowed, and so is a shield that is not a book (the Songbook comes back to the
+ *    slot); her lute goes back in her hands (from the bag, else a new one) at her level.
  */
 export function migrateSongweaver(p: KitHero, s: KitSave, toStash: (item: string) => boolean): string[] {
-  if (p.cls !== "songweaver" || (typeof s.swKit === "number" && s.swKit >= SW_KIT_VERSION)) return [];
-  const notes: string[] = [], book = starterKit("songweaver").shield!;
-  const bag = Array.isArray(s.bag) ? s.bag.filter((v): v is string => isBagItem(v) && v !== book) : [];
-  const old = typeof s.shield === "string" && s.shield !== book && isBagItem(s.shield) ? s.shield : "";
-  if (old) {
-    const name = gearName(old, p.cls);
-    if (bag.length + potionSlots(p.pots) < BAG_SIZE) { bag.push(old); notes.push(`Your ${name} went to your bag: a Songweaver carries her Songbook in that hand now.`); }
-    else if (toStash(old)) notes.push(`Your bag was full, so your ${name} went to your stash: a Songweaver carries her Songbook in that hand now.`);
-    else { const g = sellPrice(old); p.gold += g; notes.push(`Your bag and stash were full, so your ${name} was sold for ${g} gold: a Songweaver carries her Songbook in that hand now.`); }
+  const ver = typeof s.swKit === "number" ? s.swKit : 0;
+  if (p.cls !== "songweaver" || ver >= SW_KIT_VERSION) return [];
+  const notes: string[] = [], kit = starterKit("songweaver"), book = kit.shield!;
+  let bag = Array.isArray(s.bag) ? s.bag.filter((v): v is string => isBagItem(v)) : [];
+  const worn = (v: unknown) => (typeof v === "string" && isBagItem(v) ? v : "");
+  if (ver < 1) {
+    const old = worn(s.shield);
+    if (old && old !== book) notes.push(stowItem(p, bag, old, toStash, WHY_BOOK));
+    s.shield = book;
   }
-  s.bag = bag; s.shield = book; s.swKit = SW_KIT_VERSION;
+  if (ver < 2) {
+    const sh = worn(s.shield);
+    if (sh && !isBook(sh)) { notes.push(stowItem(p, bag, sh, toStash, WHY_LUTE)); s.shield = book; }
+    if (!worn(s.shield)) s.shield = book;
+    let lute = worn(s.weapon);
+    if (lute && !isLute(lute)) { notes.push(stowItem(p, bag, lute, toStash, WHY_LUTE)); lute = ""; }
+    if (!lute) { // the lute she put away comes back to her hands; a lost one is made anew
+      const k = bag.findIndex((v) => isLute(v));
+      lute = k >= 0 ? bag.splice(k, 1)[0] : kit.weapon!;
+    }
+    const loose: string[] = [];
+    s.weapon = luteAtLevel(lute, p.level, loose);
+    for (const r of loose) notes.push(stowItem(p, bag, r, toStash, "your lute had fewer sockets."));
+  }
+  if (s.shield === book) bag = bag.filter((v) => v !== book); // the Songbook in her hand is not in her bag too
+  s.bag = bag; s.swKit = SW_KIT_VERSION;
   return notes;
 }
+
+/**
+ * Her lute follows her level (DI-5): the worn one and any in the bag are rewritten (on level-up and login). Runes past
+ * the stage's sockets come out into `loose`. Returns true when something changed (the caller re-applies stats).
+ */
+export function relevelLute(p: { cls: string; level: number; weapon: string }, bag: string[], loose: string[]): boolean {
+  if (p.cls !== "songweaver") return false;
+  let changed = false;
+  if (isLute(p.weapon)) { const v = luteAtLevel(p.weapon, p.level, loose); if (v !== p.weapon) { p.weapon = v; changed = true; } }
+  for (let i = 0; i < bag.length; i++) if (isLute(bag[i])) { const v = luteAtLevel(bag[i], p.level, loose); if (v !== bag[i]) { bag[i] = v; changed = true; } }
+  return changed;
+}
+
 /** A save from another tree version gets every skill point back (like the Summoner's suTree). */
 export const oldSongTree = (cls: string, swTree: unknown) => cls === "songweaver" && swTree !== SONGWEAVER_TREE;
 /**
@@ -179,3 +244,107 @@ export function restoreMode(u: Unit, swMode: unknown) {
 
 /** What a Songweaver is told when she reaches for a mana potion (sent as "gearno"): her bubble is the song gauge. */
 export const SONG_POTION_TEXT = "Your song gauge fills with music, not potions";
+
+// ---- Collected songs and materials (DI-2 / DI-5; shared/songbook.ts, shared/lute.ts) -------------------------------
+
+/** The owner-only "songbook" message: the songs she collected and her material counters. Sent on join and on change. */
+export interface SongbookMsg { songs: string[]; mats: Record<string, number> }
+interface Book { songs: SongId[]; mats: Partial<Record<MaterialId, number>>; darkAt: number }
+/** Most of one material a hero can hold (a counter, not bag items). */
+export const MAT_CAP = 9999;
+/** How often (ms) Odo grumbles about a dark Chorus. */
+const ODO_DARK_MS = 30_000;
+
+/**
+ * Per hero (keyed by the Player object, so nothing is synced and no Player field is needed): the songs she collected,
+ * mirrored into the engine as SkillRuntime.songs, and her material counters. Saved as swSongs / swMats. Only a
+ * Songweaver collects songs or materials.
+ */
+export class SongCollector {
+  private by = new WeakMap<object, Book>();
+  private of(p: object): Book {
+    let b = this.by.get(p);
+    if (!b) this.by.set(p, (b = { songs: [], mats: {}, darkAt: -Infinity }));
+    return b;
+  }
+
+  /**
+   * On load: the save's songs and materials, cleaned. `oldKit`: a save from before kit v3, which gets the songs of the
+   * quests it had already finished (`done`).
+   */
+  load(p: { cls: string; sk: SkillRuntime }, s: { swSongs?: unknown; swMats?: unknown }, done: (quest: string) => boolean, oldKit: boolean) {
+    const b = this.of(p);
+    b.songs = []; b.mats = {};
+    if (p.cls !== "songweaver") { p.sk.songs = undefined; return; }
+    if (Array.isArray(s.swSongs)) for (const v of s.swSongs) if (isSongId(v) && !b.songs.includes(v)) b.songs.push(v);
+    if (oldKit) for (const d of SONG_SOURCES) if (d.source.kind === "quest" && done(d.source.quest) && !b.songs.includes(d.id)) b.songs.push(d.id);
+    if (s.swMats && typeof s.swMats === "object") for (const [k, v] of Object.entries(s.swMats as Record<string, unknown>)) {
+      if (isMaterial(k) && typeof v === "number" && Number.isFinite(v) && v > 0) b.mats[k] = Math.min(MAT_CAP, Math.floor(v));
+    }
+    p.sk.songs = [...b.songs];
+  }
+
+  /** Save fields (none for other classes). */
+  save(p: { cls: string }): { swSongs?: string[]; swMats?: Record<string, number> } {
+    if (p.cls !== "songweaver") return {};
+    const b = this.of(p);
+    return { swSongs: [...b.songs], swMats: { ...b.mats } as Record<string, number> };
+  }
+
+  msg(p: object): SongbookMsg {
+    const b = this.of(p);
+    return { songs: [...b.songs], mats: { ...b.mats } as Record<string, number> };
+  }
+
+  has(p: object, song: string): boolean { return this.of(p).songs.includes(song as SongId); }
+
+  /** She learns a song. False for another class, an unknown id or a song she has. */
+  learn(p: { cls: string; sk: SkillRuntime }, song: string): boolean {
+    const b = this.of(p);
+    if (p.cls !== "songweaver" || !isSongId(song) || b.songs.includes(song)) return false;
+    b.songs.push(song);
+    p.sk.songs = [...b.songs];
+    return true;
+  }
+
+  /**
+   * A Chorus went off (`s.song`) at (x, y) in `mode`: the songs it earns (Odo hears a bright one within reach, Mirror
+   * Pond's shore takes any), and what a villager says about a dark one. `say` gets the villager id and its line.
+   */
+  chorus(p: { cls: string; sk: SkillRuntime }, s: SkillDef, mode: ModeId, x: number, y: number, now: number, say: (npc: string, text: string) => void): SongDef[] {
+    if (p.cls !== "songweaver" || !s.song) return [];
+    const b = this.of(p), out: SongDef[] = [];
+    for (const d of SONG_SOURCES) {
+      if (b.songs.includes(d.id)) continue;
+      const src = d.source;
+      if (src.kind === "place" && src.place === "pond" && pondShore(x, y)) out.push(d);
+      if (src.kind === "npc") {
+        const n = npcById(src.npc);
+        if (!n || Math.hypot(n.x - x, n.y - y) > src.range) continue;
+        if (MODES[mode].family === src.family) out.push(d);
+        else if (now - b.darkAt >= ODO_DARK_MS) { b.darkAt = now; say(src.npc, ODO_LINES.dark); }
+      }
+    }
+    return out.filter((d) => this.learn(p, d.id));
+  }
+
+  // ---- materials (earned and spent by the lute-maker rules, server/lutemaker.ts) ----
+  mats(p: object): Partial<Record<MaterialId, number>> { return this.of(p).mats; }
+  /** Adds `n` of a material (a Songweaver only). Returns what was added. */
+  addMat(p: { cls: string }, mat: MaterialId, n: number): number {
+    if (p.cls !== "songweaver" || n <= 0) return 0;
+    const m = this.of(p).mats, had = m[mat] ?? 0;
+    m[mat] = Math.min(MAT_CAP, had + Math.floor(n));
+    return m[mat]! - had;
+  }
+  /** Spends materials if she has them all; false (nothing spent) otherwise. */
+  spend(p: object, cost: Partial<Record<MaterialId, number>>): boolean {
+    const m = this.of(p).mats;
+    if (Object.entries(cost).some(([k, v]) => (m[k as MaterialId] ?? 0) < (v ?? 0))) return false;
+    for (const [k, v] of Object.entries(cost)) {
+      const left = (m[k as MaterialId] ?? 0) - (v ?? 0);
+      if (left > 0) m[k as MaterialId] = left; else delete m[k as MaterialId];
+    }
+    return true;
+  }
+}

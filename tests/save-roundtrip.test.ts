@@ -107,14 +107,14 @@ test("Songweaver kit v1: the old shield moves to the bag, else the stash, else i
   const pots = { potion: [0, 0, 0], mpotion: [0, 0, 0] } as any;
   // pure: other classes and up-to-date saves are left alone
   const keep = { shield: "sh_iron", bag: [] as string[] };
-  assert.deepEqual(migrateSongweaver({ cls: "wizard", gold: 0, pots }, keep, () => true), []);
+  assert.deepEqual(migrateSongweaver({ cls: "wizard", level: 1, gold: 0, pots }, keep, () => true), []);
   assert.equal(keep.shield, "sh_iron");
   const done = { shield: "sh_wood", bag: [], swKit: SW_KIT_VERSION };
-  assert.deepEqual(migrateSongweaver({ cls: "songweaver", gold: 0, pots }, done, () => true), []);
+  assert.deepEqual(migrateSongweaver({ cls: "songweaver", level: 1, gold: 0, pots }, done, () => true), []);
   assert.equal(done.shield, "sh_wood", "an already migrated save keeps what she chose since");
   // no shield at all: just the Songbook
   const bare: Record<string, unknown> = { bag: ["a_leather"] };
-  assert.deepEqual(migrateSongweaver({ cls: "songweaver", gold: 0, pots }, bare, () => true), []);
+  assert.deepEqual(migrateSongweaver({ cls: "songweaver", level: 1, gold: 0, pots }, bare, () => true), []);
   assert.deepEqual([bare.shield, bare.bag, bare.swKit], ["songweaver_shield", ["a_leather"], SW_KIT_VERSION]);
 
   const srv = await startRoom();
@@ -144,10 +144,11 @@ test("Songweaver kit v1: the old shield moves to the bag, else the stash, else i
     assert.equal(p.gold, gold + sellPrice("sh_dragon"));
     assert.match(moved[0], /sold for \d+ gold/);
     assert.equal(p.shield, "songweaver_shield");
-    // 4. the migrated save loads as is: no second move, a shield she picked later stays
-    moved = room.restore(p, { ...room.snapshot(p), shield: "sh_wood" });
-    assert.deepEqual(moved, []);
-    assert.equal(p.shield, "sh_wood");
+    // 4. the migrated save loads as is: no second migration; a shield she wears anyway goes to the bag (DI-5 rule)
+    moved = room.restore(p, { ...room.snapshot(p), shield: "sh_wood", bag: [] });
+    assert.equal(moved.length, 1);
+    assert.equal(p.shield, "");
+    assert.ok([...p.bag].includes("sh_wood"), "not deleted: in the bag");
     await c.leave();
   } finally { await srv.stop(); }
 });

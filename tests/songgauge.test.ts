@@ -79,7 +79,8 @@ test("data: no Songweaver skill costs Mana; Storm spends the gauge; the Songbook
   assert.deepEqual(book.bonus, {}, "no stats");
   assert.deepEqual(book.book, { full: "sg_g_refrain", songs: true });
   assert.ok(isBound("songweaver_shield"));
-  assert.ok(!isBound("sh_wood") && !isBound("songweaver_weapon") && !isBound(undefined));
+  assert.ok(!isBound("sh_wood") && !isBound(undefined));
+  assert.ok(isBound("songweaver_weapon@12#steel"), "the evolving lute is bound too (DI-5)");
   const refrain = FINISHERS.find((f) => f.id === "sg_g_refrain")!;
   assert.ok(refrain && refrain.refrain?.beats === 3 && refrain.finisher, "a hidden full-gauge skill");
 });

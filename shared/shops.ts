@@ -166,6 +166,12 @@ export const SHOPS: Record<string, Shop> = {
     // Act 2's rune buyer (and so rune fuser, Lot C), like Morwen in Oakvale
     buys: ["rune"],
   },
+  // Wren the lute-maker (DI-5, shared/lutemaker.ts): the books, and she buys weapons and shields (breaking them is hers too)
+  lutemaker: {
+    greeting: "Books on the left, spare strings on the right. Anything you can't use, I'll buy or break.",
+    stock: weapons(["bk_hymnal", "bk_march", "bk_dissonance"]),
+    buys: ["weapon", "shield"],
+  },
   witch: {
     greeting: "Fresh from the still, darling. Red for your blood, blue for your magic. Try not to stare. Found a carved stone out there? I pay well for runes, or fuse four alike into a stronger one.",
     stock: [
