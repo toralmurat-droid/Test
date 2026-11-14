@@ -90,6 +90,7 @@ import { ASK_BURST, ASK_PER_SEC, Bucket, CHAT_BURST, CHAT_PER_SEC, clientIp, isL
 import { Player } from "./player";
 import { byPart, hitBy } from "./hitBy";
 import { attachWar, warNow } from "./war";
+import { clanView, cleanOath, Presence, swear } from "./warHeroes";
 export { Player, PlayerPrivate } from "./player"; // moved out; tests and tools import them from here
 
 export class Mob extends Schema {
@@ -581,11 +582,20 @@ export class TownRoom extends Room<TownState> {
   private itemSeq = 0;
 
   private offWar?: () => void;
+  private warPresence = new Presence();
 
   onCreate() {
     liveRooms.add(this);
     this.offWar = attachWar(this); // the clan war (server/war.ts) runs on its own; the room only passes on the news
     this.limitMessages();
+    // Clan war heroes (server/warHeroes.ts): oaths, and minutes at the standards reported as valor
+    this.clock.setInterval(() => this.warPresence.tick(this.state.players.entries()), 1000);
+    this.onMessage("clan", (client, msg: { swear?: unknown }) => {
+      const p = this.state.players.get(client.sessionId);
+      if (!p || !this.allow("ask", client)) return;
+      const err = msg && msg.swear !== undefined ? swear(p, msg.swear) : "";
+      client.send("clan", { ...clanView(p), err });
+    });
     this.setState(new TownState());
     copyPatches(this); // each socket gets its own copy of a patch (deflate compresses later; server/patchCopy.ts)
     // Monsters near each hero go out just before every state patch, so both halves of an update arrive together
@@ -620,12 +630,13 @@ export class TownRoom extends Room<TownState> {
       const p = this.state.players.get(client.sessionId);
       if (!p) return;
       p.input = { up: !!msg.up, down: !!msg.down, left: !!msg.left, right: !!msg.right };
+      if (msg.up || msg.down || msg.left || msg.right) p.lastAct = Date.now(); // the clan war counts only heroes at the keys
       const v = inputDir(msg); // point-and-click: exact walking angle
       if (v) { p.input.vx = v[0]; p.input.vy = v[1]; }
       p.seq = msg.seq | 0;
     });
 
-    this.onMessage("attack", (client) => this.playerAttack(client.sessionId));
+    this.onMessage("attack", (client) => { const p = this.state.players.get(client.sessionId); if (p) p.lastAct = Date.now(); this.playerAttack(client.sessionId); });
     // Point-and-click: turn toward a world point (the clicked enemy or spot) before an attack or skill
     this.onMessage("face", (client, msg: { x: number; y: number }) => {
       const p = this.state.players.get(client.sessionId);
@@ -634,7 +645,7 @@ export class TownRoom extends Room<TownState> {
       this.host.face(client.sessionId, x - p.x, y - p.y);
       p.aimDist = Math.hypot(x - p.x, y - p.y);
     });
-    this.onMessage("cast", (client, skill: string) => this.cast(client.sessionId, skill));
+    this.onMessage("cast", (client, skill: string) => { const p = this.state.players.get(client.sessionId); if (p) p.lastAct = Date.now(); this.cast(client.sessionId, skill); });
     this.onMessage("potion", (client) => this.drinkPotion(client.sessionId));
     this.onMessage("manapotion", (client) => this.drinkManaPotion(client.sessionId));
     this.onMessage("dodge", (client) => this.dodge(client.sessionId));
@@ -896,6 +907,7 @@ export class TownRoom extends Room<TownState> {
     this.sendBoard(client); // the Ideas board is ready as soon as it is opened
     if (Object.keys(p.feast).length) client.send("feast", { feast: p.feast }); // Devour: what this hero has eaten
     const war = warNow(); if (war) client.send("war", war); // the clan war front plaque (client/src/warPlaque.ts)
+    client.send("clan", clanView(p));
     console.log(`${p.name} the ${CLASSES[p.cls].name} joined (${this.clients.length} online)`);
   }
 
@@ -990,6 +1002,7 @@ export class TownRoom extends Room<TownState> {
       })) as Record<string, number> & Pick<HeroSave, "questStage" | "questCount">, // CHAINS[0] always writes these two
       portals: [...p.portals], act: actAt(p.y, p.x),
       bounty: p.bounty, bountyDone: p.bountyDone, feast: { ...p.feast },
+      ...(p.clan ? { clan: p.clan, clanAt: p.clanAt } : {}),
       ...(p.cls === "summoner" ? { grimoire: this.grimoireOf(p), suTree: SUMMONER_TREE } : {}),
       ...songSave(p.cls, p.sk),
     };
@@ -1027,6 +1040,7 @@ export class TownRoom extends Room<TownState> {
     for (const id of cleanPortals(s.portals)) p.portals.add(id);
     p.bountyDone = Math.max(0, Math.floor(num(s.bountyDone)));
     p.bounty = cleanBounty(s.bounty);
+    { const o = cleanOath(s.clan, s.clanAt); p.clan = o.clan; p.clanAt = o.clanAt; } // clan war oath (server/warHeroes.ts)
     p.feast = cleanFeast(s.feast);
     const sv = s as unknown as Record<string, unknown>;
     // Saves from before the guided first quest count it as done

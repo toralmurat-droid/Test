@@ -40,6 +40,8 @@ export interface HeroSave {
   act?: number;
   /** Bounty board hunt in progress (shared/bounty.ts) and how many this hero has finished. */
   bounty?: BountyState; bountyDone?: number;
+  /** Clan war oath (shared/war/clans.ts key) and when it was sworn (ms). */
+  clan?: string; clanAt?: number;
   /** Gear wear 0-100: removed 2026-11-13, old saves may still carry it; ignored on load and no longer written. */
   wear?: number;
   /** Devour (shared/devour.ts): monsters eaten per family. */

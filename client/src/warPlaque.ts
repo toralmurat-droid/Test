@@ -46,12 +46,12 @@ export class WarPlaque {
   set(v: WarView) { this.view = v; this.shown = ""; }
 
   /** Call every frame with the hero's tile; it only redraws when something on it changes. */
-  update(tx: number, ty: number, now = Date.now()) {
+  update(tx: number, ty: number, standing = "", now = Date.now()) {
     const v = this.view, t = v && territoryAt(Math.floor(tx), Math.floor(ty));
     if (!v || !t || v.owner[t.id] === undefined) { if (!this.el.hidden) this.el.hidden = true; this.shown = ""; return; }
     const own = CLAN_KEYS[v.owner[t.id]], ctl = v.control[t.id], sg = v.sieges.find((s) => s[0] === t.id);
     const line = sg ? `siege:${sg[1]}:${mins(sg[2] - now)}` : `tick:${mins(v.next - now)}`;
-    const key = `${t.id}|${own}|${ctl}|${line}`;
+    const key = `${t.id}|${own}|${ctl}|${line}|${standing}`;
     if (key === this.shown) return;
     this.shown = key;
     const cl = CLANS[own];
@@ -65,6 +65,7 @@ export class WarPlaque {
     if (sg) { foot.classList.add("siege"); foot.textContent = `${CLANS[CLAN_KEYS[sg[1]]].name} besiege it: ${mins(sg[2] - now)} min`; }
     else foot.textContent = t.capitalOf ? "A capital never falls" : `Fronts move in ${mins(v.next - now)} min`;
     const text = document.createElement("div"); text.className = "wp-text"; text.append(name, held, bar, foot);
+    if (standing) { const me = document.createElement("div"); me.className = "wp-me" + (standing.startsWith("You hold") ? "" : " no"); me.textContent = standing; text.append(me); }
     this.el.replaceChildren(pennant(own), text);
     this.el.hidden = false;
   }

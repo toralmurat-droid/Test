@@ -1,12 +1,12 @@
 /* Trading and the stash (client/src/trade.ts). Pixel font like all on-screen text. */
-#tradepanel, #stashpanel, #tradeask, #tradetoast, #stashprompt, #tradepanel button, #stashpanel button, #tradeask button, #bountypanel, #boardprompt, #bountypanel button {
+#tradepanel, #stashpanel, #tradeask, #tradetoast, #stashprompt, #tradepanel button, #stashpanel button, #tradeask button, #bountypanel, #warpanel, #boardprompt, #warprompt, #bountypanel button , #warpanel button {
   font-family: var(--pixel-font); -webkit-font-smoothing: none; -moz-osx-font-smoothing: grayscale; }
-#tradepanel, #stashpanel, #bountypanel { position: absolute; left: 50%; top: calc(50% - 30px); transform: translate(-50%, -50%); width: min(460px, calc(100% - 32px));
+#tradepanel, #stashpanel, #bountypanel , #warpanel { position: absolute; left: 50%; top: calc(50% - 30px); transform: translate(-50%, -50%); width: min(460px, calc(100% - 32px));
   max-height: calc(100% - 110px); overflow: auto; background: rgba(28,22,18,.97); border: 3px solid #6b5a3a; box-shadow: 0 0 0 2px #1a1210, 4px 4px 0 #000;
   padding: 10px 14px; pointer-events: auto; z-index: 9; font-size: 18px; font-family: var(--pixel-font); color: #eadfc8; }
-#tradepanel h2, #stashpanel h2, #bountypanel h2 { margin: 0 0 6px; font-size: 22px; font-family: var(--title-font); color: #ffd166; text-shadow: 2px 2px #000; }
-#tradepanel h3, #stashpanel h3, #bountypanel h3 { margin: 8px 0 4px; font-size: 18px; font-family: var(--pixel-font); color: #e9c35a; font-weight: normal; }
-#tradepanel .help, #stashpanel .help, #bountypanel .help { color: #a89c86; font-size: 18px; font-family: var(--pixel-font); margin: 4px 0; }
+#tradepanel h2, #stashpanel h2, #bountypanel h2 , #warpanel h2 { margin: 0 0 6px; font-size: 22px; font-family: var(--title-font); color: #ffd166; text-shadow: 2px 2px #000; }
+#tradepanel h3, #stashpanel h3, #bountypanel h3 , #warpanel h3 { margin: 8px 0 4px; font-size: 18px; font-family: var(--pixel-font); color: #e9c35a; font-weight: normal; }
+#tradepanel .help, #stashpanel .help, #bountypanel .help , #warpanel .help { color: #a89c86; font-size: 18px; font-family: var(--pixel-font); margin: 4px 0; }
 .tcols { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .tside { border: 2px solid #3a3024; padding: 4px 6px; background: rgba(0,0,0,.25); }
 .tside.ready { border-color: #7cfc00; }
@@ -21,11 +21,11 @@
 .tgold { margin: 4px 0 0; color: #ffd166; }
 .trow { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin: 6px 0; }
 .trow .tsp { margin-left: 6px; }
-#tradepanel button, #stashpanel button:not(.gcell), #tradeask button, #bountypanel button:not(.gcell) { font-size: 18px; font-family: var(--pixel-font); background: #15110d; color: #eadfc8; border: 1px solid #6b5a3a; cursor: pointer; padding: 2px 8px; }
-#tradepanel button:not(.gcell):hover, #stashpanel button:not(.gcell):hover, #tradeask button:hover, #bountypanel button:not(.gcell):hover { border-color: #ffd166; }
-#tradepanel .tcell, #stashpanel .tcell, #bountypanel .tcell { padding: 2px; }
+#tradepanel button, #stashpanel button:not(.gcell), #tradeask button, #bountypanel button:not(.gcell) , #warpanel button:not(.gcell) { font-size: 18px; font-family: var(--pixel-font); background: #15110d; color: #eadfc8; border: 1px solid #6b5a3a; cursor: pointer; padding: 2px 8px; }
+#tradepanel button:not(.gcell):hover, #stashpanel button:not(.gcell):hover, #tradeask button:hover, #bountypanel button:not(.gcell):hover , #warpanel button:not(.gcell):hover { border-color: #ffd166; }
+#tradepanel .tcell, #stashpanel .tcell, #bountypanel .tcell , #warpanel .tcell { padding: 2px; }
 .tact { justify-content: center; }
-#tradepanel .tbig, #stashpanel .tbig, #bountypanel .tbig { font-size: 18px; font-family: var(--pixel-font); padding: 4px 18px; }
+#tradepanel .tbig, #stashpanel .tbig, #bountypanel .tbig , #warpanel .tbig { font-size: 18px; font-family: var(--pixel-font); padding: 4px 18px; }
 #tradepanel .tbig.go { border-color: #7cfc00; color: #b9ff8a; }
 .tinfo { min-height: 30px; margin: 4px 0; font-size: 18px; font-family: var(--pixel-font); line-height: 1.35; }
 .tnote { margin: 2px 0; min-height: 0; }
@@ -37,18 +37,18 @@
   opacity: 0; transition: opacity .3s; pointer-events: none; z-index: 11; white-space: nowrap; }
 #tradetoast.ok { color: #b9ff8a; }
 #tradetoast.show { opacity: 1; }
-#stashprompt, #boardprompt { display: none; padding: 6px 12px; pointer-events: auto; cursor: pointer;
+#stashprompt, #boardprompt , #warprompt { display: none; padding: 6px 12px; pointer-events: auto; cursor: pointer;
   background: rgba(32,22,8,.88); border: 2px solid #c9962b; border-radius: 4px; color: #fff3cf; font: 18px var(--pixel-font); white-space: nowrap; }
-#stashprompt.open, #boardprompt.open { display: block; }
-#stashprompt kbd, #boardprompt kbd { display: inline-block; padding: 0 5px; margin-right: 4px; border: 1px solid #e9c35a; border-radius: 3px; background: #4a3410; color: #fff; font: 18px var(--pixel-font); }
+#stashprompt.open, #boardprompt.open , #warprompt.open { display: block; }
+#stashprompt kbd, #boardprompt kbd , #warprompt kbd { display: inline-block; padding: 0 5px; margin-right: 4px; border: 1px solid #e9c35a; border-radius: 3px; background: #4a3410; color: #fff; font: 18px var(--pixel-font); }
 
 /* Bounty boards (client/src/bounty.ts) */
-#bountypanel { width: min(440px, calc(100% - 32px)); }
-#bountypanel .bt-help { color: #a8977a; font-size: 18px; font-family: var(--pixel-font); margin: 4px 0 6px; }
-#bountypanel .bt-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 4px; border-top: 1px solid #45331e; }
-#bountypanel .bt-title { color: #eadfc8; font-size: 18px; font-family: var(--pixel-font); }
-#bountypanel .bt-sub { color: #a8977a; font-size: 18px; font-family: var(--pixel-font); margin-top: 2px; }
-#bountypanel .bt-xp { color: #b9f27c; }
-#bountypanel .bt-gold { color: #f2c14e; }
-#bountypanel .bt-right { color: #e3bf6a; white-space: nowrap; }
-#bountypanel .bt-btns { text-align: center; margin: 6px 0; }
+#bountypanel , #warpanel { width: min(440px, calc(100% - 32px)); }
+#bountypanel .bt-help , #warpanel .bt-help { color: #a8977a; font-size: 18px; font-family: var(--pixel-font); margin: 4px 0 6px; }
+#bountypanel .bt-row , #warpanel .bt-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 4px; border-top: 1px solid #45331e; }
+#bountypanel .bt-title , #warpanel .bt-title { color: #eadfc8; font-size: 18px; font-family: var(--pixel-font); }
+#bountypanel .bt-sub , #warpanel .bt-sub { color: #a8977a; font-size: 18px; font-family: var(--pixel-font); margin-top: 2px; }
+#bountypanel .bt-xp , #warpanel .bt-xp { color: #b9f27c; }
+#bountypanel .bt-gold , #warpanel .bt-gold { color: #f2c14e; }
+#bountypanel .bt-right , #warpanel .bt-right { color: #e3bf6a; white-space: nowrap; }
+#bountypanel .bt-btns , #warpanel .bt-btns { text-align: center; margin: 6px 0; }
