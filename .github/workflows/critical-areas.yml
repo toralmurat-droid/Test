@@ -1,0 +1,41 @@
+# Labels each PR with the critical areas it touches and warns (one comment) when another open PR touches the same
+# area. Drafts too: an early draft PR is how a session claims an area. Warning only; it never blocks a merge.
+# The area list lives in tools/ci/critical-areas.mjs and in CLAUDE.md ("Critical areas").
+name: Critical areas
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, ready_for_review]
+    branches: [claude/relaxed-wozniak-cjs85z]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: critical-areas-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  areas:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          sparse-checkout: tools/ci
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Label and warn
+        # A failure here (GitHub API hiccup) must not hold up the PR
+        continue-on-error: true
+        timeout-minutes: 8
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR: ${{ github.event.pull_request.number }}
+          BASE: claude/relaxed-wozniak-cjs85z
+        run: node tools/ci/critical-areas.mjs
