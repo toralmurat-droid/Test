@@ -56,7 +56,7 @@ import { PORTALS, PORTAL_RANGE } from "../../shared/portals";
 import { PointerControls, type ClickEnemy, type ClickSpot } from "./pointer";
 import { warmPaths } from "./pathfind";
 import { pixelText } from "./pixeltext";
-import { speechBubble } from "./weathered";
+import { speechBubble } from "./speechBubble";
 import { ART_K, CHAR_GROW, CHAR_SCALE, CHARACTERS, CHAR_ORIGIN, CharacterName, createArtAnims, ensureCharSheet, HD_CHARS, playCharAnim, preloadArt } from "./artAssets";
 import { Ambient } from "./ambient";
 import { Details } from "./details";

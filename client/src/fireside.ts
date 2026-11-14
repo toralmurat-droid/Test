@@ -3,7 +3,7 @@
 // The ground is painted once per screen size on the bonfire's cell grid; heroes use their own sheets at 4/3 of a cell
 // (the same proportion as in game), so both stay crisp at whole device pixels.
 import { ACTIVE_CLASSES, CLASSES, ClassKind } from "../../shared/classes";
-import { CHAR_BASE, CHAR_EXT, HD_CHARS } from "./artAssets";
+import { CHAR_BASE, CHAR_EXT, HD_CHARS } from "./isoflag";
 import { GEAR_SLOTS, starterKit } from "../../shared/gear";
 import { bonfireStrip, FRAMES, FW, FH } from "./loading";
 import { hash, vnoise, dith, FIRE } from "./bonfireArt";

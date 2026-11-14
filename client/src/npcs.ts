@@ -31,7 +31,7 @@ import { itemTexture, potionTex } from "./textures";
 import { potionAmount, potionName, potionSlots, slotsAfter, total, unpackPotions } from "../../shared/potions";
 import { BAG_SIZE } from "../../shared/gear";
 import { isoAnchor } from "./iso";
-import { speechBubble } from "./weathered";
+import { speechBubble } from "./speechBubble";
 import { msUntilUndeadNight } from "../../shared/daynight";
 import { dayTime } from "./details";
 import { TEXT_FONT, TITLE_FONT, TEXT_PX, TITLE_PX, WT } from "./pixelfont";

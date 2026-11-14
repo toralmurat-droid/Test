@@ -1,8 +1,8 @@
-import Phaser from "phaser";
+// The start screen. It must not import Phaser, TownScene or sfx (directly or through a helper), or the login form
+// waits for the whole game: those live in game.ts, which loadGame() fetches while the player types.
 import { initMusic, skipIntro, startMusic } from "./music";
-import { initSfx } from "./sfx";
 import { takeBackToStart, takeRejoin } from "./reconnect";
-import { showLoading } from "./loading";
+import { hideLoading, showLoading } from "./loading";
 import { installCursors } from "./cursors";
 import { installWeatheredFrames } from "./weathered";
 import { installTooltips } from "./tooltip";
@@ -12,18 +12,23 @@ import "./menus.css";
 installCursors();
 installWeatheredFrames();
 installTooltips();
-import { TownScene } from "./TownScene";
-import "./heropanel.css"; // the hero panel redesign, after every other stylesheet
 import { ACTIVE_CLASSES, ARCHIVED_CLASSES, CLASSES, ClassKind, isActiveClass } from "../../shared/classes";
 import { mountFireside } from "./fireside";
 import { pixelText } from "./pixeltext";
-import { SMOOTH } from "./isoflag";
-import { installSmoothTextures } from "./smooth";
 import "@fontsource/pixelify-sans/400.css";
 import "./pixelfont.css";
-import { fontsReady } from "./pixelfont";
-import { attachWorldScale, initWorldScale, worldCanvasSize } from "./worldscale";
-import { perfHud } from "./perfHud";
+
+/**
+ * The game chunk (Phaser + TownScene), requested once, right when the start screen opens, so it downloads while the
+ * player types. Every way into the game (Play, Resume, rejoin after a restart, update reload) awaits this same promise.
+ * A failed fetch (offline, deploy in progress) clears it so the next launch tries again.
+ */
+let gameChunk: Promise<typeof import("./game")> | null = null;
+function loadGame() {
+  if (!gameChunk) gameChunk = import("./game").catch((e) => { gameChunk = null; throw e; });
+  return gameChunk;
+}
+void loadGame().catch(() => {}); // a failure here shows up (with a retry) when the player launches
 
 const COLORS = [0xe74c3c, 0x3498db, 0x2ecc71, 0xf1c40f, 0x9b59b6, 0xe67e22, 0x1abc9c, 0xecf0f1];
 let color = COLORS[Math.floor(Math.random() * COLORS.length)];
@@ -323,28 +328,28 @@ addEventListener("keydown", (e: KeyboardEvent) => {
   } else if (e.key === "Enter") { begin(); e.preventDefault(); }
 });
 
+let launching = false;
+/** The one way into the game: waits for the game chunk, then starts Phaser. Ignored while a launch is under way. */
 function launch(name: string, password: string, newGame: boolean, back = false) {
+  if (launching) return;
+  launching = true;
   // if the server turns the hero away, the login form is what shows under the loading screen
   show("login");
   playBtn.setAttribute("disabled", "");
   initMusic(name);
-  initSfx(name);
   status.textContent = "Connecting…";
   showLoading(back ? "Back to where you stood…" : undefined); // covers everything until the world is fully drawn (TownScene hides it)
-  if (SMOOTH) installSmoothTextures();
-  initWorldScale(); // the world canvas is 1/k of the window, scaled up by k (game menu: World size)
-  // the pixel fonts must be ready first, or the world's name labels bake in a fallback font
-  // window.__game: lets the browser tests (and the console) look at the running game
-  void fontsReady.then(() => attachWorldScale((window as any).__game = new Phaser.Game({
-    type: Phaser.AUTO,
-    parent: "game",
-    pixelArt: !SMOOTH,
-    antialias: SMOOTH,
-    backgroundColor: "#1b1b24",
-    scale: { mode: Phaser.Scale.RESIZE, ...worldCanvasSize() },
-    scene: [new TownScene({ name, password, color, cls, newGame })],
-  })));
-  void fontsReady.then(() => perfHud()); // `?perf=1` perf readout; does nothing without the flag
+  loadGame().then((g) => { launching = false; g.startGame({ name, password, color, cls, newGame }); }, () => {
+    // The game files did not arrive (offline, or a deploy is under way). The browser remembers a failed import() until
+    // the page is reloaded, so the retry is a reload (which also picks up a new build).
+    launching = false;
+    hideLoading(true);
+    nameEl.value = name; pwEl.value = password;
+    status.textContent = "Could not load the game. Check your connection, then reload to try again.";
+    playBtn.textContent = "Reload";
+    playBtn.onclick = () => location.reload();
+    playBtn.removeAttribute("disabled");
+  });
 }
 
 document.getElementById("play")!.onclick = start;

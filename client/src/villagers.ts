@@ -5,7 +5,7 @@ import { isDecorSolidAt, NPCS } from "../../shared/npcs";
 import { CHAR_ORIGIN, CHAR_SCALE, CharacterName, ensureCharSheet, playCharAnim, SHEET_RANGE } from "./artAssets";
 import { faceOf } from "./watch";
 import { isoAnchor } from "./iso";
-import { speechBubble } from "./weathered";
+import { speechBubble } from "./speechBubble";
 import { WRATH } from "../../shared/wrath";
 
 

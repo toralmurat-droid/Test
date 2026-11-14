@@ -1,4 +1,4 @@
-import Phaser from "phaser";
+import type Phaser from "phaser";
 import { hiResTexture } from "./smooth";
 /**
  * Hand-built pixel bonfire (village square and camp fires): a sunk ash pit ringed with heat-cracked field stones,
