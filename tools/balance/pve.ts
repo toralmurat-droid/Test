@@ -1,6 +1,7 @@
 /**
  * PvE balance simulator: bot heroes play the first zone (Lv 1-30) against its monsters and bosses.
- * Run: npx tsx tools/balance/pve.ts [runsPerCase] [--bosses] [--zones] [--act2] [--champions] [--class=vampire] [--build=0|1|2] [--boss=king] [--no-execute] [--songweaver]
+ * Run: npx tsx tools/balance/pve.ts [runsPerCase] [--bosses] [--zones] [--act2] [--champions] [--troops] [--class=vampire] [--build=0|1|2] [--boss=king] [--no-execute] [--songweaver]
+ * --troops: the hero alone against a clan soldier, a captain and 3 soldiers of its level (shared/war/troops.ts), at Lv 8 / 20 / 45 (--clans: each clan at Lv 20).
  * --champions: one fight against each champion (shared/champions.ts, a 1D version of its affixes) beside the same plain monster.
  *
  * It reuses the PvP simulator (tools/balance/duel.ts): the same hero bot, skill engine, builds (rushing one branch),
@@ -27,6 +28,8 @@ import { Duel, F, GolemF, make, SIM } from "./duel";
 import { SUMMON } from "../../shared/summons";
 import { AFFIX_FX as CF, CHAMPION, type AffixKey } from "../../shared/champions";
 import { addHeat } from "../../shared/overload";
+import { CLAN_KEYS, type ClanKey } from "../../shared/war/clans";
+import { TROOP_OFFICER, troopStats, WAR_TROOPS } from "../../shared/war/troops";
 
 type Build = 0 | 1 | 2;
 
@@ -466,6 +469,26 @@ function bossRun(cls: ClassKind, b: BossDef, build: Build, potions = 5): RunResu
   return { won, kills: won ? 1 : 0, hpLostPerKill: 0, secPerKill: d.now / 1000, heals: pack.healUsed, manas: pack.manaUsed, bossLeft: m.hp / m.maxHp };
 }
 
+/** Clan troopers (shared/war/troops.ts): the hero alone against `n` of its level (clans in turn), 5 heal + 5 mana potions. */
+function troopRun(cls: ClassKind, level: number, n: number, build: Build, seed: number, officer = false, clan?: ClanKey, potions = 5): RunResult {
+  const h = make("h", cls, level, build);
+  const pack: Pack = { heal: potions, mana: potions, healUsed: 0, manaUsed: 0, size: potionSize(level), lastDrink: -1e9 };
+  const ms = Array.from({ length: n }, (_, k) => {
+    const sp = mobSpec("trooper", level), st = troopStats(clan ?? CLAN_KEYS[(seed + k) % CLAN_KEYS.length], level, officer);
+    const R = WAR_TROOPS.rush;
+    const J = WAR_TROOPS.javelin;
+    Object.assign(sp, { hp: st.hp, dmg: st.dmg, speed: st.speed, cd: st.cd, lunge: { min: R.min, max: R.max, every: R.everyMs, mult: R.dmgMult } });
+    sp.specials.push({ name: "Javelin", every: J.everyMs, windup: J.windupMs, min: J.min, max: J.max, radius: J.radius + 4, mult: J.dmgMult, at: "target", shot: { speed: J.speed, radius: J.radius } });
+    if (officer) sp.poise *= TROOP_OFFICER.hp;
+    return new MobF(sp, "t" + k);
+  });
+  const d = new PveDuel(h, ms, pack, 0), hp0 = h.hp;
+  let w: F | null | undefined;
+  while (d.now < 120000 && (w = d.step()) === undefined) { /* fight */ }
+  const kills = ms.filter((m) => m.dead).length;
+  return { won: w === h, kills, hpLostPerKill: Math.max(0, hp0 - h.hp) / h.maxHp / Math.max(1, kills), secPerKill: d.now / 1000 / Math.max(1, kills), heals: pack.healUsed, manas: pack.manaUsed };
+}
+
 const pct = (v: number) => `${Math.round(v * 100)}%`;
 /** Try other numbers without editing the game: --hp=0.4 --dmg=0.15 (MOB_LEVEL per-level growth). */
 for (const a of process.argv) {
@@ -489,7 +512,23 @@ const buildOf = (i: number) => BUILD ?? ((i % 3) as Build);
 if (process.argv[1]?.includes("pve")) {
   const n = Number(process.argv[2]) || 30;
   const CHAMPS = process.argv.includes("--champions");
-  const doBosses = !CHAMPS && !process.argv.includes("--zones"), doZones = !CHAMPS && !process.argv.includes("--bosses");
+  const TROOPS = process.argv.includes("--troops");
+  const doBosses = !CHAMPS && !TROOPS && !process.argv.includes("--zones"), doZones = !CHAMPS && !TROOPS && !process.argv.includes("--bosses");
+  if (TROOPS) {
+    console.log("Clan troopers: the hero alone vs N troopers of its level (clans in turn), 5 heal + 5 mana potions. Cell = win% / HP lost (whole fight) / fight s");
+    console.log("".padEnd(18) + CLASSES.map((c) => c.padEnd(20)).join(""));
+    const row = (label: string, L: number, k: number, officer: boolean, clan?: ClanKey) => {
+      let line = label.padEnd(18);
+      for (const c of CLASSES) {
+        let won = 0, hp = 0, sec = 0;
+        for (let i = 0; i < n; i++) { const r = troopRun(c, L, k, buildOf(i), i, officer, clan); won += r.won ? 1 : 0; hp += r.hpLostPerKill * Math.max(1, r.kills); sec += r.secPerKill * Math.max(1, r.kills); }
+        line += `${pct(won / n)}/${pct(hp / n)}/${(sec / n).toFixed(1)}s`.padEnd(20);
+      }
+      console.log(line);
+    };
+    for (const L of [8, 20, 45]) { row(`Lv${L} soldier`, L, 1, false); row(`Lv${L} captain`, L, 1, true); row(`Lv${L} x3`, L, 3, false); }
+    if (process.argv.includes("--clans")) for (const k of CLAN_KEYS) row(`Lv20 ${k}`, 20, 1, false, k);
+  }
   if (CHAMPS) {
     console.log("Champions: the hero alone at the monster's level, 3 heal + 3 mana potions. Cell = win% / HP lost / fight s (plain -> champion)");
     console.log("".padEnd(34) + CLASSES.map((c) => c.padEnd(32)).join(""));

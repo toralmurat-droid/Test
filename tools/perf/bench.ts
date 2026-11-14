@@ -8,6 +8,7 @@
 //   PHASES=1: also prints a second JSON line with the time per phase of the tick (wraps TownRoom methods). The wrappers add overhead, so the
 //     totals in this mode are INFLATED (more for the hot, tiny ones); use it to see shares, not absolute ms. PHASES=fine adds the hot per-mob helpers.
 //   BENCH_PORT=2656: listen on another port (default 2599), e.g. when two benches run on one machine
+//   WAR=1: a fresh clan war is running (server/war.ts), so clan troops march and fight near the bots (server/warTroops.ts)
 //   CAST=1 SPREAD=1: the Summoner bots cast wisps, blades, black holes and the Void Arsenal non-stop (tools/perf/bots.ts)
 //   TIDE=1: a Gloam Tide march is out the whole time, its last wave all at once (TIDE.maxAlive marchers, server/tide.ts)
 //   SONGWEAVER=1 (PARTY=1): Songweaver bots too; PARTY=1 groups them
@@ -54,7 +55,7 @@ async function main() {
       room = this;
       // Time each state patch: wrapped on the room itself (Colyseus 0.16 calls this.broadcastPatch() from its own timer)
       const bp = this.broadcastPatch;
-      if (PH) { timed(this.mobView, "send", "mobView.send (outside update)", true); timed(this.champs, "update", "champs.update"); }
+      if (PH) { timed(this.mobView, "send", "mobView.send (outside update)", true); timed(this.champs, "update", "champs.update"); timed(this.warTroops, "step", "warTroops.step"); timed(this.warTroops, "tick", "warTroops.tick (outside update)", true); }
       this.broadcastPatch = function (...a: unknown[]) { const t = performance.now(); const r = bp.apply(this, a); patches.push(performance.now() - t); return r; };
     }
     const t = performance.now(); inUpdate = true; try { update.call(this, dt); } finally { inUpdate = false; } ticks.push(performance.now() - t);
@@ -63,6 +64,7 @@ async function main() {
   const httpServer = http.createServer();
   const gs = new Server({ transport: new WebSocketTransport({ server: httpServer, ...(process.env.DEFLATE ? { perMessageDeflate: { threshold: 256, zlibDeflateOptions: { level: 1 } } } : {}) } as any) });
   gs.define("town", TownRoom);
+  if (process.env.WAR) (await import("../../server/war"))._resetWar();
   await gs.listen(PORT);
   // Worst send backlog of any connection (bytes accepted by send() and not yet written). With DEFLATE=1 each socket
   // compresses one message at a time in the background; when the tick loop leaves it no time, the backlog only grows,
@@ -86,14 +88,15 @@ async function main() {
   const s = [...ticks].sort((a, b) => a - b), q = (p: number) => s[Math.floor(s.length * p)]?.toFixed(1);
   const avg = (a: number[]) => (a.reduce((x, y) => x + y, 0) / a.length).toFixed(2);
   let active = 0;
-  let marchers = 0;
-  room.state.mobs.forEach((m: any) => { if (!m.dead && (m.moving || m.target)) active++; if (!m.dead && m.tide) marchers++; });
+  let marchers = 0, troopers = 0;
+  room.state.mobs.forEach((m: any) => { if (!m.dead && (m.moving || m.target)) active++; if (!m.dead && m.tide) marchers++; if (!m.dead && m.kind === "trooper") troopers++; });
   console.log(JSON.stringify({
     bots: BOTS, spread: !!process.env.SPREAD, ticksPerSec: (ticks.length / (wall / 1000)).toFixed(1), tickAvgMs: avg(ticks), tickP95Ms: q(0.95),
     patchAvgMs: avg(patches), cpuPct: (((cpu.user + cpu.system) / 1000) / wall * 100).toFixed(0), rssMB: (process.memoryUsage().rss / 1e6).toFixed(0),
     kbPerPlayerPerSec: (bytes / BOTS / (wall / 1000) / 1024).toFixed(1), wireKbPerPlayerPerSec: (wire / BOTS / (wall / 1000) / 1024).toFixed(1), deflate: !!process.env.DEFLATE, mobs: room.state.mobs.size, activeMobs: active,
     sendBacklogKbMax: +(backlog / 1024).toFixed(0), botsDropped: dropped,
     ...(process.env.TIDE ? { tide: true, tideMarchers: marchers } : {}),
+    ...(process.env.WAR ? { war: true, troopers } : {}),
   }));
   if (dropped) console.error(`BENCH INVALID: ${dropped} of ${BOTS} bots lost their connection during the run, so the numbers above are not a measurement`);
   if (PH) {

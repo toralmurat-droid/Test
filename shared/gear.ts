@@ -293,6 +293,7 @@ export const GEAR_DROP: Record<MobKind, { chance: number; tiers: [number, number
   sphinx: { chance: 0.24, tiers: [0.12, 0.45, 0.43] },
   sunwright: { chance: 1, tiers: [0, 0.2, 0.8] },
   nightraider: { chance: 1, tiers: [0, 0.35, 0.65] },
+  trooper: { chance: 0, tiers: [1, 0, 0] },
 };
 
 export function isGearId(v: unknown): v is string {

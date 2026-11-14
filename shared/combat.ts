@@ -84,6 +84,7 @@ export const MOB_COMBAT: Record<MobKind, { poise: number; windupMs: number; soun
   camelfolk: { poise: 140, windupMs: 440, sound: { tier: "normal", pitch: "L" } },
   sphinx: { poise: 160, windupMs: 420, sound: { tier: "keen", pitch: "M", mode: "minor" } },
   sunwright: { poise: 460, windupMs: 480, sound: { tier: "dull", pitch: "L", mode: "major" } },
+  trooper: { poise: 200, windupMs: 300, sound: { tier: "normal", pitch: "M" } },
   nightraider: { poise: 3000, windupMs: 460, sound: { tier: "deaf" } }, // barely flinches: a hero alone can hardly break it
 };
 

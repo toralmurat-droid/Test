@@ -3,7 +3,9 @@
  * officer in front) from its Hold past its standards, keeps a few guards at the Hold, and in a siege both clans fight
  * a battle at every standard (loose lines, duels, some fall, reinforcements walk in). Sprites are created and destroyed per land when a squad changes. Pure decoration: every client derives the same picture
  * from the "war" snapshot and the wall clock, nothing goes to the server, and the soldiers are plain sprites (no HP
- * bar, no name, never in the way). Only lands with a stop near the hero have sprites.
+ * bar, no name, never in the way). Only lands with a stop near the hero have sprites. With WAR_TROOPS.live the server's real
+ * troops (server/warTroops.ts, drawn by TownScene as "trooper" monsters) replace the column and the guards: only the siege
+ * battles are still drawn here.
  */
 import Phaser from "phaser";
 import { CLAN_KEYS, type ClanKey } from "../../shared/war/clans";
@@ -13,9 +15,10 @@ import type { WarView } from "../../shared/war/view";
 import { underground } from "../../shared/dungeon";
 import { isSolidAt } from "../../shared/map";
 import { TERRITORIES } from "../../shared/war/territories";
+import { WAR_TROOPS } from "../../shared/war/troops";
 import { CHAR_ORIGIN, CHAR_SCALE, ensureCharSheet, playCharAnim } from "./artAssets";
 import { ISO, screenDir, setBaseDepth } from "./iso";
-import { MOB_LOOK, mobTexture, warSoldierTexture } from "./textures";
+import { MOB_LOOK, mobTexture, WAR_LEGACY, warSoldierTexture } from "./textures";
 import { SMOOTH } from "./isoflag";
 import { faceOf } from "./watch";
 import { pennant } from "./warPlaque";
@@ -27,10 +30,7 @@ const FRAME_BASE: Record<string, number> = { down: 0, up: 2, right: 4, left: 4 }
 const ATTACK_BASE: Record<string, number> = { down: 6, up: 8, right: 10, left: 10 };
 const FLAG_H = 44;
 /** The look without painted art (`?pixel=1`): each art key's older stand-in (watchman and monster sheets). */
-const LEGACY: Record<string, string> = {
-  war_warden: "watchman", war_warden_cap: "watchman", war_redfang: "bandit", war_redfang_chief: "bandit_brute", war_host: "skeleton_spear", war_host_cap: "skeleton",
-  war_hidekin: "gnawkin_folk", war_hidekin_chief: "tuskborn_folk", war_veiled: "veiled", war_veiled_adept: "nomad_folk",
-};
+const LEGACY = WAR_LEGACY;
 
 /** Where each land's stops are (Hold and standards): used to find nearby lands without building any patrol. */
 const STOPS = new Map<number, { x: number; y: number }[]>();
@@ -200,6 +200,8 @@ export class WarTroops {
     const sg = v.sieges.find((s) => s[0] === t), atk = sg ? CLAN_KEYS[sg[1]] : undefined;
     const sq: Squad = { t, sig: this.sigOf(t), men: [], cycle: 0, phase: 0, alpha: 0, target: 1 };
     if (atk) { this.buildSiege(sq, t, clan, atk, sg![1], c); return sq; }
+    // the server fields real troops (server/warTroops.ts) on every land this close to a hero: no painted column or guards over them
+    if (WAR_TROOPS.live) return sq;
     sq.patrol = p;
     sq.arcs = [];
     let acc = 0;
