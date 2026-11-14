@@ -68,14 +68,23 @@
   </div>
 
   <div id="hud" hidden>
-    <div id="stats"></div>
-    <div id="mapbox"><canvas id="daydial"></canvas><canvas id="minimap"></canvas><div id="location"></div><button id="questbtn"><i data-icon="scroll"></i>Quests <small>[J]</small></button></div>
+    <div id="topright">
+      <div id="online" title="Heroes online right now"><i data-icon="people"></i><span id="onlinecount">1</span><span id="onlinelbl">&nbsp;online</span><span id="ping" title="Connection: time for a message to reach the server and come back"></span><span id="fps" title="Frames per second your computer draws (60 is smooth; low numbers also make the ping look higher)"></span></div>
+      <div id="mapbox"><canvas id="daydial"></canvas><canvas id="minimap"></canvas></div>
+      <div id="location"></div>
+      <div id="stats"></div>
+      <div id="feed"></div>
+    </div>
+    <button id="questbtn"><i data-icon="scroll"></i>Quests <small>[J]</small></button>
+    <div id="midstack">
+      <div id="promptstack"><button id="lvlnote" hidden></button></div>
+      <div id="statusrow"></div>
+    </div>
     <div id="area"></div>
     <div id="cleared"><div class="big"></div><div class="small"></div></div>
     <div id="death" hidden><div class="big">You died</div><div class="by"></div><div class="back"></div></div>
     <div id="hotbar"></div>
     <div id="slotpick" hidden></div>
-    <button id="lvlnote" hidden></button>
     <div id="sidepanel" hidden>
       <div id="sptabs">
         <button data-tab="hero"><i data-icon="shield"></i>Character <small>[C]</small></button>
@@ -128,10 +137,8 @@
       <button id="bagbtn"><i data-icon="bag"></i>Bag <small>[G]</small></button>
       <button id="partybtn"><i data-icon="swords"></i>Group <small>[P]</small></button>
     </div>
-    <div id="feed"></div>
     <div id="chatlog"></div>
     <input id="chat" maxlength="300" placeholder="Press Enter to chat" autocomplete="off" />
-    <div id="online" title="Heroes online right now"><i data-icon="people"></i><span id="onlinecount">1</span><span id="onlinelbl">&nbsp;online</span><span id="ping" title="Connection: time for a message to reach the server and come back"></span><span id="fps" title="Frames per second your computer draws (60 is smooth; low numbers also make the ping look higher)"></span></div>
   </div>
 
   <script type="module" src="/src/main.ts"></script>

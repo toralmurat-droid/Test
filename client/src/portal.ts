@@ -9,6 +9,7 @@ const PORTAL_LOOK = new URLSearchParams(location.search).has("look");
 import { isoAnchor } from "./iso";
 import { pixelText } from "./pixeltext";
 import type { MapMarker } from "./minimap";
+import { hudSlot } from "./hudSlots";
 
 /**
  * Portal stones (shared/portals.ts). Stones this hero has not found stand dark; walking up to one wakes it (the server
@@ -51,7 +52,8 @@ export class PortalLayer {
       this.close();
     });
     this.toast.id = "portaltoast";
-    hud.append(this.prompt, this.menu, this.toast);
+    hudSlot("promptstack").append(this.prompt);
+    hud.append(this.menu, this.toast);
   }
 
   get isOpen() { return !this.menu.hidden; }

@@ -1,6 +1,6 @@
 /* Songweaver chord tracker (client/src/chordHud.ts): above the skill bar, compact for phones */
-#chordhud { --mc: #ffd24d; position: absolute; left: 50%; bottom: 124px; transform: translateX(-50%); width: 132px; box-sizing: border-box;
-  padding: 3px 6px 4px; background: rgba(15, 10, 6, .86); border: 2px solid #6a5232; box-shadow: 0 0 0 1px #080504; pointer-events: none; z-index: 8;
+#chordhud { --mc: #ffd24d; position: relative; flex: none; width: 132px; box-sizing: border-box;
+  padding: 3px 6px 4px; background: rgba(15, 10, 6, .86); border: 2px solid #6a5232; box-shadow: 0 0 0 1px #080504; pointer-events: none;
   font: normal 13px var(--pixel-font); color: #e3bf6a; text-shadow: 1px 1px 0 #000; }
 #chordhud[hidden] { display: none; }
 #chordhud .ch-top { display: flex; justify-content: space-between; align-items: baseline; gap: 6px; min-height: 15px; white-space: nowrap; }
@@ -17,9 +17,7 @@
 #chordhud.flash { border-color: var(--mc); animation: ch-flash .22s steps(2) 3; }
 @keyframes ch-flash { 50% { box-shadow: 0 0 10px 3px var(--mc), 0 0 0 1px #080504; background: rgba(60, 44, 18, .95); } }
 #chordhud { width: auto; min-width: 116px; max-width: 220px; }
-/* short landscape phones: the NPC dialog fills the bottom middle, so the tracker moves to the left above the chat box */
-@media (max-height: 520px) { #chordhud { left: 8px; transform: none; bottom: 84px; } }
-@media (max-width: 600px) { #chordhud { bottom: 200px; min-width: 110px; font-size: 12px; } #chordhud .ch-notes b { font-size: 13px; line-height: 17px; height: 17px; } }
+@media (max-width: 600px) { #chordhud { min-width: 110px; font-size: 12px; } #chordhud .ch-notes b { font-size: 13px; line-height: 17px; height: 17px; } }
 #chordhud .ch-help { pointer-events: auto; cursor: pointer; font: inherit; font-size: 11px; line-height: 13px; width: 15px; height: 15px; padding: 0; margin-left: 4px; color: #e3bf6a; background: rgba(0, 0, 0, .5); border: 1px solid #6a5232; }
 #chordhud.named .ch-help { display: none; }
 #chordhud .ch-hint { font-size: 11px; color: #c9b27a; min-height: 0; white-space: normal; line-height: 12px; }

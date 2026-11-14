@@ -34,11 +34,13 @@ import { runeCanvas, runeCss } from "./runeArt";
 import { itemTexture, potionTex } from "./textures";
 import { potionAmount, potionName, potionSlots, slotsAfter, total, unpackPotions } from "../../shared/potions";
 import { BAG_SIZE } from "../../shared/gear";
-import { isoAnchor } from "./iso";
+import { isoAnchor, screenOf } from "./iso";
+import { hudRects } from "./hudcache";
 import { speechBubble } from "./weathered";
 import { msUntilUndeadNight } from "../../shared/daynight";
 import { dayTime } from "./details";
 import { TEXT_FONT, TITLE_FONT, TEXT_PX, TITLE_PX, WT } from "./pixelfont";
+import { hudOccludes, hudSlot } from "./hudSlots";
 import { own } from "./own";
 
 type Me = { x: number; y: number } | undefined;
@@ -121,7 +123,9 @@ export class NpcLayer {
     this.tracker.id = "questtracker";
     this.pointer.id = "questpointer";
     this.toast.id = "questtoast";
-    hud.append(this.prompt, this.dialog, this.tracker, this.toast, this.pointer);
+    hud.append(this.dialog, this.toast, this.pointer);
+    hudSlot("promptstack").append(this.prompt);
+    hudSlot("topright").append(this.tracker); // under the location line (flex order, hudSlots.css)
     this.prompt.onclick = () => this.interact();
     // 1-3 press the option buttons of an open dialog; the capture listener runs before the skill hotbar sees the key
     window.addEventListener("keydown", (ev) => {
@@ -654,11 +658,14 @@ export class NpcLayer {
     if (this.talking) this.renderDialog(q);
 
     // "!" = quest to pick up, "?" = come and talk to me
+    const cam = this.scene.cameras.main, cr = hudRects(this.scene.game.canvas).cr;
     for (const n of NPCS) {
       const s = this.sprites.get(n.id);
       if (!s) continue;
       const here = present(n) && this.ready.has(n.id); // the "!" / "?" and the name wait for the body
-      s.sprite.setVisible(here); s.label.setVisible(here); s.mark.setVisible(here);
+      // a name under the minimap, dial or quest tracker would be hard to read: hidden there
+      const sp = here ? screenOf(cam, s.label.x, s.label.y, cr, s.sprite) : undefined;
+      s.sprite.setVisible(here); s.label.setVisible(here && !hudOccludes(sp!.x, sp!.y)); s.mark.setVisible(here);
       const mark = here ? npcQuestMark(n.id, q) : "";
       if (s.mark.text !== mark) s.mark.setText(mark);
     }
