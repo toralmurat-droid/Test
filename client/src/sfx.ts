@@ -755,17 +755,6 @@ export function playTwelveTone(x?: number, y?: number, vol = 1) {
   play("swSnap", x, y, 0.4 * vol, undefined, { key: "sw12", minGap: 0, delay: 0.52 });
 }
 
-/** The song gauge is full ("swell", DI-3): one flourish per book; no book = a small flat puff. Rising notes above SW_TONIC. */
-const SWELL_NOTES: Record<string, number[]> = {
-  songweaver_shield: [0, 7, 12, 16], bk_hymnal: [0, 4, 7, 12, 16], bk_march: [0, 7, 12, 7, 12, 19], bk_dissonance: [0, 1, 6, 11, 13],
-};
-export function playSwell(ev: { book?: string | null; fizzle?: boolean }, x?: number, y?: number) {
-  if (ev.fizzle || !ev.book) { pluck(SW_TONIC + 5, { x, y, vol: 0.35, dur: 0.25, bright: 0.2 }); play("swSnap", x, y, 0.15, undefined, { key: "swfizz", minGap: 200 }); return; }
-  const notes = SWELL_NOTES[ev.book] ?? SWELL_NOTES.songweaver_shield, fast = ev.book === "bk_march";
-  notes.forEach((n, i) => pluck(SW_TONIC + 12 + n, { x, y, vol: 0.55, delay: i * (fast ? 0.05 : 0.08), dur: ev.book === "bk_hymnal" ? 1.6 : 0.8, bright: ev.book === "bk_dissonance" ? 0.9 : 0.5 }));
-  if (ev.book === "bk_dissonance") play("swSnap", x, y, 0.5, undefined, { key: "swswell", minGap: 100, delay: 0.3 });
-}
-
 const SW_TREE_SKILLS = new Set(["sg_ballad", "sg_mend", "sg_pedal", "sg_lydian", "sg_legato", "sg_chorale", "sg_march", "sg_jig", "sg_call", "sg_dorian", "sg_accel", "sg_anthem", "sg_dirge", "sg_shrill", "sg_crack", "sg_phrygian", "sg_sympathy", "sg_twelve", "sg_modulate"]);
 
 /** Chord that blooms per book after the rise: Songbook open A major, Hymnal high and bright, War March a bare fifth, Dissonance a cluster. */
@@ -811,7 +800,6 @@ export function songweaverSfx(ev: any, me?: string, open = false): boolean {
       else playNote(ev.deg, ev.mode, ev.pitch, x, y, { chord: SW_TREE_SKILLS.has(ev.s), open });
       return true;
     case "chord": playChord(ev.prog, ev.mode, x, y, { open }); return true;
-    case "swell": playSwell(ev, x, y); return true;
     case "resonate": play(ev.shatter ? "swShatter" : "swResonate", ev.x, ev.y, 1, undefined, { key: "swres" + ev.id, minGap: 80, reach: 1.1 }); return true;
     case "bounce": play("swBounce", ev.x, ev.y, 0.8, ev.mat, { key: "swbounce", minGap: 40 }); return true;
     case "soundhit": play("swSoundHit", ev.x, ev.y, 0.8, { tier: ev.tier, match: !!ev.match }, { key: "swhit" + (ev.id ?? ""), minGap: 60 }); return true;
