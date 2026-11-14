@@ -77,7 +77,8 @@ import { ARSENAL, ATTUNE_ORDER, attuneOf, bondShare, DEFAULT_GRIMOIRE, SUMMONER_
 import { cleanFeast, familyOf, type Feast, feastMult, THRALL, thrallMax } from "../shared/devour";
 import { Champions, type ChampState } from "./champions";
 import { QuestSteps, setMeta } from "./questSteps";
-import { META, metaOf, nextStage } from "../shared/questSteps";
+import { META, metaOf, nextStage, withChoice } from "../shared/questSteps";
+import { traitTakenMult } from "../shared/talents";
 import { AFFIX_FX, CHAMPION } from "../shared/champions";
 /** A champion's helpers (its Splitting twin, a Ringleader's cutthroats) leave this long after they came. */
 const CHAMP_HELPER_MS = 90_000;
@@ -5459,6 +5460,7 @@ export class TownRoom extends Room<TownState> {
       return;
     }
     p.gold += d.reward.gold;
+    if (d.sets) setMeta(p, META.flags, withChoice(metaOf(p, META.flags), d.sets.flag, d.sets.v)); // QuestDef.sets: e.g. Penance done
     // Reward potions fit the hero's level; what the bag can't hold is put down at their feet
     const rs = dropSize(p.level, () => 0.5);
     for (const [kind, n] of [["potion", d.reward.potions], ["mpotion", Math.ceil(d.reward.potions / 2)]] as const) {
@@ -5812,7 +5814,7 @@ export class TownRoom extends Room<TownState> {
         p.nextSummon = now + 15000;
         let mine = false;
         this.state.mobs.forEach((m) => { if (m.summonFor === id && m.summonChain === c && !m.dead) mine = true; });
-        if (!mine) this.summonFused(id, s.summon, c);
+        if (!mine) this.qsteps.rose(id, c, this.summonFused(id, s.summon, c)); // a boss with a bargain makes its offer (server/questSteps.ts)
       }
       return;
     }
@@ -5912,6 +5914,8 @@ export class TownRoom extends Room<TownState> {
     // Weakened monsters hit softer
     const fromMob = opts.from ? this.state.mobs.get(opts.from) : undefined;
     if (fromMob) dmg *= dealtMult(fromMob, now);
+    // A quest trait's talent (shared/talents.ts TRAIT_TALENTS, Hidebound): x1 while it is off
+    if (fromMob) dmg *= traitTakenMult(fromMob.kind, metaOf(t, META.cosm));
     // ...and hit a group harder
     if (fromMob && t.party) dmg *= groupDmgMult(this.groupNear(tid, fromMob.x, fromMob.y).length);
     const guarded = blocking(t, now);

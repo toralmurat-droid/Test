@@ -1,8 +1,9 @@
 import { CHAINS, questDef, questStep, USE_RANGE, npcPresent, type Quester, type QuestState, type QuestStep, type Summon } from "../shared/quests";
 import { npcById, TALK_RANGE } from "../shared/npcs";
-import { CARRY, coverAt, HOLD, isDark, lightDrain, META, metaOf, type MetaKey, QSTATE_MS, sayFor, stealthMult, SYNC, syncOk, UNSEEN, wetAt, withChoice } from "../shared/questSteps";
+import { BARGAIN, CARRY, choiceOf, coverAt, HOLD, isDark, lightDrain, META, metaOf, type MetaKey, QSTATE_MS, sayFor, stealthMult, SYNC, syncOk, UNSEEN, wetAt, withChoice } from "../shared/questSteps";
 import { dayFrac as clockDayFrac } from "../shared/daynight";
 import { isSafeZone, isSolidAt } from "../shared/map";
+import { withTrait } from "../shared/cosmetics";
 import { noMobsAt } from "../shared/spawns";
 
 /**
@@ -23,7 +24,7 @@ export type StepHero = Quester & {
   aggroMul?: number;
 };
 /** The parts of a monster this module reads. */
-export interface StepMob { x: number; y: number; dead: boolean; target: string }
+export interface StepMob { x: number; y: number; dead: boolean; target: string; hp: number; maxHp: number }
 
 export interface StepHost {
   player(pid: string): StepHero | undefined;
@@ -70,6 +71,8 @@ interface HoldRun { c: number; s: QuestStep; owners: string[]; lead: string; sta
 interface Sneak { c: number; s: QuestStep; armed: boolean; seen: boolean; rearmAt: number; cover: boolean; dark: boolean; sentAt: number; sig: string }
 /** A hero's seal turns on a sync step: when each seal last turned for them (0 = not). Transient. */
 interface Turns { c: number; s: QuestStep; t: [number, number]; sentAt: number; sig: string }
+/** A boss's bargain on offer to one hero (QuestStep.bargain): its monster, when it opened, when the prompt last went out. Transient. */
+interface Bargain { c: number; s: QuestStep; mob: string; at: number; sentAt: number }
 /** Chains with a carry or hold step: the only ones the per-tick scan looks at. */
 const TIMED = CHAINS.flatMap((ch, c) => ch.quests.some((d) => d.steps.some((s) => s.carry || s.hold)) ? [c] : []);
 /** Chains with an unseen step (the scan looks for heroes reaching a checkpoint). */
@@ -112,6 +115,8 @@ export class QuestSteps {
   /** Heroes on an unseen step, and heroes with seal turns on a sync step, by hero id. */
   private sneaks = new Map<string, Sneak>();
   private turns = new Map<string, Turns>();
+  /** Bargains on offer, by hero id (at most one each: one boss per hero and step). */
+  private bargains = new Map<string, Bargain>();
 
   /** Per-tick work of the timed steps: carried light, hold runs, hidden heroes, seal windows; a few times a second, who walked onto one. */
   tick(now: number, dtMs: number) {
@@ -120,6 +125,7 @@ export class QuestSteps {
     for (const r of [...this.holds]) this.tickHold(r, now);
     for (const [pid, k] of [...this.sneaks]) this.tickSneak(pid, k, now);
     for (const [pid, t] of [...this.turns]) this.tickTurns(pid, t, now);
+    for (const [pid, b] of [...this.bargains]) this.tickBargain(pid, b, now);
   }
 
   /**
@@ -129,8 +135,11 @@ export class QuestSteps {
   talk(pid: string, c: number, opt?: number): boolean {
     const p = this.h.player(pid);
     if (!p || p.dead) return false;
+    const b = this.bargains.get(pid);
+    if (b && b.c === c) { if (opt !== undefined) this.answer(pid, b, opt, Date.now()); return true; } // nothing else while a boss waits for an answer
     const s = questStep(this.h.qs(p, c));
     if (s?.type === "choose") { if (opt !== undefined) this.choose(pid, c, opt); return true; }
+    if (opt !== undefined) return true; // an answer with no question open: ignored
     if (s?.type !== "talk" || !s.npcs) return false;
     const q = this.h.qs(p, c);
     const i = s.npcs.findIndex((id, k) => !(q.questCount & (1 << k)) && this.near(p, id));
@@ -216,6 +225,7 @@ export class QuestSteps {
     this.holdOut.delete(pid);
     this.sneaks.delete(pid); // the checkpoint count is saved; hidden is not
     this.turns.delete(pid);
+    this.bargains.delete(pid); // nothing recorded: leaving is no answer, the boss asks again when it next rises for them
     for (const l of [...this.lanterns]) {
       if (l.holder === pid) { const p = this.h.player(pid); if (p) this.putDown(l, p); else l.holder = ""; }
       l.owners = l.owners.filter((o) => o !== pid);
@@ -550,6 +560,64 @@ export class QuestSteps {
     const sig = `${turned.map((x) => +(x >= 0)).join("")}|${win}`;
     if (t) { if (!force && sig === t.sig) return; t.sig = sig; t.sentAt = now; }
     this.h.send(pid, "qstate", { chain: c, k: "sync", turned, window: win });
+  }
+
+  // ---- bargain: a boss offers a deal as it rises (QuestStep.bargain) ----
+
+  /**
+   * The step's monster `mob` just rose for the hero on chain c (TownRoom checkQuestPlace): if the step has a bargain the
+   * hero has not answered yet (choice 0, so old saves and heroes past it never see one), the boss makes its offer.
+   */
+  rose(pid: string, c: number, mob: string) {
+    const p = this.h.player(pid), s = p && questStep(this.h.qs(p, c));
+    if (!p || !s?.bargain || choiceOf(p, s.bargain.flag) !== 0 || this.bargains.has(pid)) return;
+    const now = Date.now(), b: Bargain = { c, s, mob, at: now, sentAt: now };
+    if (!this.bargainOpen(pid, b, now)) return;
+    this.bargains.set(pid, b);
+    this.sendBargain(pid, b);
+  }
+
+  /** Still on offer: the hero alive, on the step and within reach, the boss up at full HP, and the time not run out. */
+  private bargainOpen(pid: string, b: Bargain, now: number) {
+    const p = this.h.player(pid), m = this.h.mob?.(b.mob);
+    return !!p && !p.dead && this.onStep(pid, b.c, b.s) && !!m && !m.dead && m.hp >= m.maxHp
+      && now - b.at < BARGAIN.ms && Math.hypot(m.x - p.x, m.y - p.y) <= BARGAIN.r;
+  }
+
+  /** "choice" {chain, title, text, options}: the boss's name over its words, one button per option. */
+  private sendBargain(pid: string, b: Bargain) {
+    const spec = b.s.bargain!;
+    this.h.send(pid, "choice", { chain: b.c, title: b.s.summon?.title ?? "", text: spec.say, options: spec.options.map((o) => ({ label: o.label, v: o.v })) });
+  }
+
+  private tickBargain(pid: string, b: Bargain, now: number) {
+    if (!this.bargainOpen(pid, b, now)) return this.closeBargain(pid, b, b.s.bargain!.refuse);
+    if (now - b.sentAt >= BARGAIN.resendMs) { b.sentAt = now; this.sendBargain(pid, b); } // closed with Esc? it comes back
+  }
+
+  /**
+   * The hero's answer: an integer that is one of the offer's options, while the offer is open (else the window closes
+   * as a refusal). Accept: the choice and the trait recorded, the boss goes (nextStep unsummons it), the step is done.
+   */
+  private answer(pid: string, b: Bargain, opt: number, now: number) {
+    const spec = b.s.bargain!;
+    if (!Number.isInteger(opt) || !spec.options.some((o) => o.v === opt)) return;
+    if (!this.bargainOpen(pid, b, now)) return this.closeBargain(pid, b, spec.refuse);
+    if (opt !== spec.accept) return this.closeBargain(pid, b, opt);
+    const p = this.h.player(pid)!, m = this.h.mob!(b.mob)!;
+    this.bargains.delete(pid);
+    setMeta(p, META.flags, withChoice(this.flags(p), spec.flag, opt));
+    if (spec.trait) setMeta(p, META.cosm, withTrait(metaOf(p, META.cosm), spec.trait));
+    this.h.broadcast("sfx", { ev: "bargain", id: pid, x: Math.round(m.x), y: Math.round(m.y) });
+    this.h.nextStep(pid, b.c);
+  }
+
+  /** The offer is over without a deal: `v` recorded (the refusal), the fight goes on; `close` tells the client to drop its prompt. */
+  private closeBargain(pid: string, b: Bargain, v: number) {
+    this.bargains.delete(pid);
+    const p = this.h.player(pid);
+    if (p) setMeta(p, META.flags, withChoice(this.flags(p), b.s.bargain!.flag, v));
+    this.h.send(pid, "choice", { chain: b.c, close: true });
   }
 
   // ---- shared bits ----

@@ -5,7 +5,7 @@ import { npcById } from "./npcs";
 import { chamberAt, COCOONS, CRYPT_FLOORS, DEN, FLOORS, HIGH_CHOIR, SINKHOLE, TOTEMS, UNDER_FLOORS, WATER_THRONE } from "./dungeon";
 import { D, FURNACE, KEL_ASHAR } from "./desert";
 import { xpStep } from "./classes";
-import { type CarrySpec, type ChoiceId, type ChoiceSpec, choiceOf, type HoldSpec, nextStage, type PickSpec, sayFor, stepObjects, type SyncSpec, type UnseenSpec } from "./questSteps";
+import { type BargainSpec, type CarrySpec, type ChoiceId, type ChoiceSpec, choiceOf, type HoldSpec, nextStage, type PickSpec, sayFor, stepObjects, type SyncSpec, type UnseenSpec } from "./questSteps";
 
 /**
  * The blob quest chain. Quests are done one after the other, each in a blob zone a little further from
@@ -208,6 +208,8 @@ export interface QuestStep {
   levelTo?: number;
   /** The new step kinds' specs (shared/questSteps.ts); `choose` also takes `npc` and `say` (the choice is made in their dialog) */
   carry?: CarrySpec; hold?: HoldSpec; pick?: PickSpec; unseen?: UnseenSpec; sync?: SyncSpec; choose?: ChoiceSpec;
+  /** own kill: the boss offers a deal as it rises (server/questSteps.ts); accepting ends the step without the fight */
+  bargain?: BargainSpec;
   /** talk: these NPCs, in any order (a bit each in the step count); `says` = each one's lines, else `say` */
   npcs?: string[];
   says?: Record<string, string[]>;
@@ -242,6 +244,8 @@ export interface QuestDef {
   outro?: string[];
   /** `after` by the hero's choice (a giver who remembers what you did) */
   afterBy?: { flag: ChoiceId; lines: Record<number, string> };
+  /** Finishing the quest records this choice value (Penance: the Bargain paid for) */
+  sets?: { flag: ChoiceId; v: number };
 }
 
 const FZ = QUEST_ZONE.name;
@@ -1023,15 +1027,32 @@ export const BEAST_QUESTS: QuestDef[] = [
       { type: "kill", kinds: ["hidemother"], zone: DENF.name, goal: 1, own: true,
         summon: { parts: ["hidemother"], level: 30, title: "Grandam Ursk, the Hide-Mother", hpMult: 2, x: (DEN.x + 0.5) * TILE, y: (DEN.y - 1.5) * TILE },
         text: "Defeat the Hide-Mother", banner: ["THE HIDE-MOTHER WAKES", "Defeat Grandam Ursk"], obj: "The Hide-Mother defeated: {n} / {goal}",
-        nag: "She is awake. End her!" },
-      back("captain", "Captain Hale", "east gate", [
+        nag: "She is awake. End her!",
+        // The Bargain (docs/quest-concepts-progress.md #6): as she rises she offers a deal; taking it ends the step (draft text)
+        bargain: { flag: "bargain", accept: 1, refuse: 2, trait: "beast",
+          say: [
+            "Hold, little hunter. Put down your fire and hear an old woman out before you cut her.",
+            "I fed this valley when the winter ate its dogs. I can feed you too. Let me sleep, and I will sew a little of the hide into you: a bear's thick skin, so my children's teeth bite shallow.",
+            "Go up and tell your captain Ursk is dead. He will believe it. Men always want to.",
+          ],
+          options: [{ label: "Take the hide, and let her sleep", v: 1 }, { label: "No bargains. The rite ends tonight", v: 2 }] } },
+      { ...back("captain", "Captain Hale", "east gate", [
         "You're back. You're... mostly you. Good.",
         "The hunters say the woods went quiet last night. Not a rat-squeal, not a howl. Even the sinkhole stopped breathing out that warm stink.",
         "Ursk is gone and her rite with her. Whatever's left down there are beasts now, nothing more. Take this. You've earned the whole valley's thanks, and the trappers' most of all.",
       ], "Claim reward"),
+        // took Ursk's bargain: Hale pays, coldly (draft text; dialog only, nothing is blocked)
+        sayBy: { flag: "bargain", lines: { 1: [
+          "You're back. The woods went quiet, they tell me. Not a rat-squeal, not a howl.",
+          "Funny thing. Wenn says she smelled the den on you when you came up the rope. Not the smoke. The hide.",
+          "You say the rite is ended, and I'll write it down so. The watch pays what it promised. Don't expect me to shake your hand.",
+        ] } } },
     ],
     reward: { xp: 4200, gold: 900, potions: 5 },
     after: "The trappers have taken to wearing bells. And the old stone arch outside Oakvale's south gate hums at night now. Once the Hollow King is gone too, they say it will open.",
+    afterBy: { flag: "bargain", lines: {
+      1: "The trappers wear bells now. Some of them cross the street when they hear you coming. The old arch outside the south gate hums at night; once the Hollow King is gone too, they say it will open.",
+    } },
   },
 ];
 
@@ -2176,9 +2197,44 @@ const LETTER_QUESTS: QuestDef[] = [
     after: "Done is done. One letter in the fire, one out in the world. Sit a while, friend.",
   },
 ];
+// Penance (Lv 25, after the Hide Rite for a hero who took Ursk's bargain; docs/quest-concepts-progress.md #6): draft text
+const PENANCE_QUESTS: QuestDef[] = [
+  {
+    id: "penance", title: "Penance", giver: "captain", zone: HALLS.name, minLevel: 25,
+    description: "Captain Hale knows what you brought up out of the Mawdeep. The beast-folk still wear Ursk's charms sewn into their skins. Take six back, let Elder Rowan burn them, and maybe the watch will look you in the eye again.",
+    offer: [
+      "I've been thinking about you. About that smell, and how quiet it's gone down the sinkhole.",
+      "The beast-folk still wear her charms, sewn into their skins. Every one of those was a trapper's, once. Cut six of them loose and bring them up.",
+      "Rowan knows the old rites. He'll burn them properly. Then come and see me, and maybe I'll sleep better.",
+    ],
+    acceptText: "I'll bring them up",
+    steps: [
+      { type: "collect", item: "charm", kinds: BEAST_FOLK, chance: { gnawkin: 0.3, tuskborn: 0.45, silkwretch: 0.4, duskwing: 0.4 }, zone: HALLS.name, goal: 6,
+        text: "Take 6 Hide Charms from the beast-folk", banner: ["Penance", "Take 6 Hide Charms"], obj: "Hide Charms: {n} / {goal}",
+        nag: "{n} of {goal}. The Gnawing Halls are still full of them." },
+      { type: "talk", npc: "druid", text: "Bring the charms to Elder Rowan", banner: ["Six charms", "Bring them to Elder Rowan"],
+        obj: "Bring the charms to Elder Rowan (the village bonfire)",
+        say: [
+          "Hide Charms. Six of them. Hale sent you, then.",
+          "Bone needle and gut thread. Give them here. The fire takes back what the rite gave. Not all of it: what she sewed into you stays. That was the price.",
+          "But these men's names go up with the smoke. That much we can give them.",
+        ],
+        accept: "Give the charms to the fire" },
+      back("captain", "Captain Hale", "east gate", [
+        "Rowan says it's done. The charms are ash, and the smoke went straight up. He says that's a good sign.",
+        "I won't forget what you did down there. But I'll stop counting it. That's the best the watch can do.",
+        "Here. The watch pays its debts, even the awkward ones.",
+      ], "Claim reward", "Rowan first. Then we'll talk."),
+    ],
+    reward: { xp: 0, gold: 300, potions: 3 },
+    after: "Quiet on the walls today. Quiet in the sinkhole too. I'll take both.",
+    sets: { flag: "bargain", v: 3 }, // penance done: the cold lines end (the trait stays)
+  },
+];
 /** Side arcs (QuestChain.local, after ZONE_ARCS in CHAINS): `needs` gates the first offer. */
 export const SIDE_ARCS: { id: string; name: string; quests: QuestDef[]; needs?: (p: Quester | undefined) => boolean }[] = [
   { id: "letters", name: "Two Letters", quests: LETTER_QUESTS, needs: (p) => chainDone(p, RED_CHAIN) },
+  { id: "penance", name: "Penance", quests: PENANCE_QUESTS, needs: (p) => choiceOf(p, "bargain") === 1 && chainDone(p, BEAST_CHAIN) },
 ];
 const ARC_OBJECTS: QuestObject[] = [...ZONE_ARCS, ...SIDE_ARCS].flatMap((a) => a.quests.flatMap((d) => d.steps.flatMap(stepObjects)));
 
@@ -2424,8 +2480,17 @@ const IDLE: Record<string, string> = {
   mourner3: "I build boats. Corin built better ones. I keep thinking he'll walk up the lane and say so.",
   ilka: "Don't look at me like that. Keep walking.",
 };
-/** A finished quest's `after` line for this hero (QuestDef.afterBy). */
-const afterFor = (d: QuestDef, p: Quester | undefined) => (d.afterBy && d.afterBy.lines[choiceOf(p, d.afterBy.flag)]) || d.after;
+/**
+ * Idle lines by the hero's choice, also said instead of a finished chain's plain `after` (with every story done, that
+ * is what a giver usually says). Hale is cold with a hero who took Ursk's bargain until the Penance (draft text).
+ */
+const IDLE_BY: Record<string, { flag: ChoiceId; lines: Record<number, string> }> = {
+  captain: { flag: "bargain", lines: { 1: "Quiet on the walls today. The men keep upwind of you. I can't say I blame them." } },
+};
+const moodFor = (id: string, p: Quester | undefined) => { const b = IDLE_BY[id]; return b && b.lines[choiceOf(p, b.flag)]; };
+const idleFor = (id: string, p: Quester | undefined) => moodFor(id, p) || IDLE[id];
+/** A finished quest's `after` line for this hero (QuestDef.afterBy; then, at the end of its chain, the giver's mood). */
+const afterFor = (d: QuestDef, p: Quester | undefined, id?: string) => (d.afterBy && d.afterBy.lines[choiceOf(p, d.afterBy.flag)]) || (id && moodFor(id, p)) || d.after;
 
 /** What an NPC says about one chain, or undefined if nothing. */
 function chainDialog(id: string, q: QuestState, p: Quester | undefined): DialogPage | undefined {
@@ -2433,7 +2498,7 @@ function chainDialog(id: string, q: QuestState, p: Quester | undefined): DialogP
   const qid = q.questId, stage = q.questStage, count = q.questCount;
   const d = quests[qid];
   const last = quests[quests.length - 1];
-  if (!d) return last.giver === id ? { text: [afterFor(last, p)], bye: "Farewell", chain: c } : undefined;
+  if (!d) return last.giver === id ? { text: [afterFor(last, p, id)], bye: "Farewell", chain: c } : undefined;
   if (stage === 0) {
     if (d.giver === id) {
       if ((q.level ?? 1) < d.minLevel) return { text: [`There is more to do, but it is dangerous out there. Come back when you are level ${d.minLevel}.`], bye: "I'll train", chain: c };
@@ -2473,7 +2538,8 @@ export function questDialog(id: string, p: Quester | undefined): DialogPage | un
   }).filter((x): x is DialogPage => !!x);
   const best = pages.find((x) => x.accept || x.options) ?? pages[0];
   if (best) return best;
-  return IDLE[id] ? { text: [IDLE[id]], bye: "Farewell", chain: 0 } : undefined;
+  const idle = idleFor(id, p);
+  return idle ? { text: [idle], bye: "Farewell", chain: 0 } : undefined;
 }
 
 export interface QuestTarget {

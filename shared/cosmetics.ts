@@ -2,10 +2,11 @@
  * Cosmetics (docs/quest-concepts-progress.md, decision 12): a title shown under the name and permanent look traits.
  * One number in the reserved arcs key `$c` (shared/questSteps.ts META.cosm), so nothing new is synced on Player:
  * bits 0-7 = the title (index in TITLES, 0 = none), bits 8-23 = one bit per trait (TRAITS). Both lists are append-only.
- * Skeleton for now: what earns a title or a trait comes with the Bargain (WP4), the Apprentice (WP7) and the rumours (WP6).
+ * Traits come from quests (beast: took the Hide-Mother's bargain, server/questSteps.ts); a trait may bring a talent
+ * (shared/talents.ts TRAIT_TALENTS). Titles come with the Apprentice (WP7) and the rumours (WP6).
  */
 export const TITLES = ["", "Mentor", "Captain's Own", "Warden of Oakvale"] as const;
-/** Trait bit per id. */
+/** Trait bit per id (beast: the hide sewn in at the Hide-Mother's bargain; permanent, Penance keeps it). */
 export const TRAITS = { beast: 0 } as const;
 export type TraitId = keyof typeof TRAITS;
 

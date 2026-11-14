@@ -2,6 +2,7 @@ import { TILE, type MobKind } from "./constants";
 import { isUndeadNight } from "./daynight";
 import { GROUND, OBJECTS, T } from "./map";
 import type { ArcMap, QuestDef, QuestObject, Quester, QuestStep, Summon } from "./quests";
+import type { TraitId } from "./cosmetics";
 
 /**
  * Quest steps that ask more than kill / collect / use (docs/quest-concepts-progress.md): the step specs, the choice
@@ -30,6 +31,13 @@ export interface UnseenSpec { checkpoints: Area[]; night: number; cover: number;
 export interface SyncSpec { seals: [QuestObject, QuestObject]; windowMs: number; soloMs: number; summonReach: number }
 /** choose: one of `options` (v 1..3, 0 = not chosen yet) is written to choice `flag`; the "quest" message carries it as `opt`. */
 export interface ChoiceSpec { flag: ChoiceId; options: { label: string; v: number }[] }
+/**
+ * bargain (on an `own` kill step, no step of its own: the quest's step count stays): as the boss rises for a hero whose
+ * `flag` is still 0, it offers a deal, a "choice" prompt with `say` and `options` (window: BARGAIN). `accept` ends the
+ * step without the fight (flag = accept, `trait` added to the hero's look); `refuse`, or the window closing, records
+ * `refuse` and the fight goes on as before.
+ */
+export interface BargainSpec { flag: ChoiceId; say: string[]; options: { label: string; v: number }[]; accept: number; refuse: number; trait?: TraitId }
 
 /**
  * The hero's choices, 2 bits each in the reserved arcs key `$f` (0 = not made). Append-only: a new choice takes the
@@ -87,6 +95,12 @@ export const HOLD = {
   /** Wave monsters on the whole server at most (each run is capped by its own maxAlive too) */
   serverCap: 30,
 };
+/**
+ * A boss's bargain (QuestStep.bargain) is open while the boss is at full HP, the hero within `r` (px) and alive, and
+ * less than `ms` have passed. The client's choice modal can be closed with Esc and has no way back, so while the
+ * window is open and unanswered the prompt goes out again every `resendMs`.
+ */
+export const BARGAIN = { ms: 20_000, r: 8 * TILE, resendMs: 6000 };
 /** "qstate" goes out at most this often (ms) per carry / hold run, and only when something changed. */
 export const QSTATE_MS = 250;
 
