@@ -9,6 +9,7 @@
 //     totals in this mode are INFLATED (more for the hot, tiny ones); use it to see shares, not absolute ms. PHASES=fine adds the hot per-mob helpers.
 //   BENCH_PORT=2656: listen on another port (default 2599), e.g. when two benches run on one machine
 //   CAST=1 SPREAD=1: the Summoner bots cast wisps, blades, black holes and the Void Arsenal non-stop (tools/perf/bots.ts)
+//   SONGWEAVER=1 (PARTY=1): Songweaver bots too; PARTY=1 groups them
 import os from "node:os";
 import path from "node:path";
 import http from "node:http";

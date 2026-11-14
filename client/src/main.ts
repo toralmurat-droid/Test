@@ -45,7 +45,7 @@ for (const c of COLORS) {
 // Start screens, all by the fire: log in -> resume a saved hero or start a new game -> pick a hero round the fire -> loading
 let saved: string | null = null;
 try { saved = localStorage.getItem("cls"); } catch { /* ignore */ }
-let cls: ClassKind = isActiveClass(saved) ? saved : ACTIVE_CLASSES[0];
+let cls: ClassKind = isActiveClass(saved) ? saved as ClassKind : ACTIVE_CLASSES[0];
 
 document.getElementById("fstitle")!.appendChild(pixelText("Pixel Town Brawl", "#ffcf52", 12, 2));
 const fireside = mountFireside(document.getElementById("fireside") as HTMLCanvasElement, document.getElementById("fslabels")!, (k) => pickHero(k));

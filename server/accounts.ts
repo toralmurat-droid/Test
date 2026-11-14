@@ -40,7 +40,7 @@ export interface HeroSave {
   act?: number;
   /** Bounty board hunt in progress (shared/bounty.ts) and how many this hero has finished. */
   bounty?: BountyState; bountyDone?: number;
-  /** Gear wear 0-100 (shared/upkeep.ts). */
+  /** Gear wear 0-100: removed 2026-11-13, old saves may still carry it; ignored on load and no longer written. */
   wear?: number;
   /** Devour (shared/devour.ts): monsters eaten per family. */
   feast?: Record<string, number>;
@@ -48,6 +48,10 @@ export interface HeroSave {
   grimoire?: string;
   /** Summoner skill tree version (shared/summons.ts SUMMONER_TREE): an older save gets its skill points back. */
   suTree?: number;
+  /** Songweaver skill tree version (shared/songs.ts SONGWEAVER_TREE): an older save gets its skill points back. */
+  swTree?: number;
+  /** Songweaver mode (shared/songs.ts MODE_IDS); missing or no longer known = Major. */
+  swMode?: string;
 }
 
 interface Account {

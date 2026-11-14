@@ -29,8 +29,10 @@ Pixel Town Brawl: an online multiplayer pixel-art action RPG in the browser.
    `this.allow(...)` in `TownRoom.ts` (built on `server/ratelimit.ts`) when a player could spam it.
 
 ## Hard limits (break these and things fail quietly)
-- **`Player` schema is at the 64-field cap** (`@colyseus/schema`). Don't add synced fields: pack new data into an
-  existing one (see `Player.attune`) or send it as a message.
+- **`Player` schema: 64 synced fields max** (`@colyseus/schema` packs the field index into 6 bits, so indexes 0–63).
+  Count the `@type` fields before adding one. Never put a collection or child schema at index 63 (it collides with
+  an encoder control byte). Quest chains share one `quests` map: a new chain costs no field. When space runs low,
+  prefer a map or child schema over packing several values into one number.
 - **Synced `Mob` fields:** new ones go at the end of the class and of `MOB_FIELDS` in `shared/mobView.ts`, in the same
   order (`tests/mobview.test.ts` checks it).
 - **Skill tree layout:** each branch is at most 3 deep, the slab fits 4 rows (`tests/treeLayout.test.ts`).
@@ -39,7 +41,7 @@ Pixel Town Brawl: an online multiplayer pixel-art action RPG in the browser.
   default; when a change invalidates old data (XP curve, skill tree), bump a version field and migrate on load
   (examples: `xpv` / `XP_CURVE_VERSION`, `SUMMONER_TREE`: fields in `server/accounts.ts`, migration on load in `server/TownRoom.ts`). Never drop or rename a save field
   without a migration.
-- **Active classes:** only `ACTIVE_CLASSES` in `shared/classes.ts` (currently wizard, vampire, summoner) can be played.
+- **Active classes:** only `ACTIVE_CLASSES` in `shared/classes.ts` (currently wizard, vampire, summoner, songweaver) can be played.
   Archived classes keep their code, art and saves; don't delete them. Balance sims cover active classes only.
 
 ## Adding things
@@ -72,7 +74,7 @@ All of these must pass (CI runs 1–3 and the Postgres smoke test):
 5. Combat, skill, monster or XP changes: run `npx tsx tools/balance/duel.ts` and/or `tools/balance/pve.ts` and put
    the before/after numbers in the PR.
 6. Load-heavy changes (more monsters, per-tick work): `npm run bench` before/after.
-7. UI changes: check in a browser at a desktop window size. The game targets computers only; no phone checks.
+7. UI changes: check on desktop at 1920×1080 and 1366×768. The game is desktop only; don't design or test for phones.
 8. A patch note in `client/patchnotes/` (rules in `client/patchnotes/README.md`), or `[no patch note]` in the title.
 
 ## Gotchas

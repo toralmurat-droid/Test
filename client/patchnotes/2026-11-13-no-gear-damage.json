@@ -1,0 +1,11 @@
+{
+  "date": "2026-11-13",
+  "patch": 211,
+  "pr": 383,
+  "title": "Gear no longer adds damage",
+  "changes": [
+    "Weapons and other gear no longer give attack or flat elemental damage. Your damage now comes from your hero, stat points, talents and skills.",
+    "Old items lose their damage bonuses; their other bonuses stay. New drops no longer roll damage bonuses.",
+    "Weapons still decide how you attack, their reach and their element, and ranged weapons still fire their shots."
+  ]
+}

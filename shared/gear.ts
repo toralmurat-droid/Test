@@ -55,14 +55,15 @@ export interface GearDef {
 }
 
 /** Weapon kinds. The equipped main-hand weapon decides the basic attack for every class (shared/weapons.ts). */
-export type WeaponType = "sword" | "katana" | "axe" | "bow" | "staff" | "wand" | "fists";
-export const WEAPON_TYPE_NAMES: Record<WeaponType, string> = { sword: "Sword", katana: "Katana", axe: "Axe", bow: "Bow", staff: "Staff", wand: "Wand", fists: "Fists" };
+export type WeaponType = "sword" | "katana" | "axe" | "bow" | "staff" | "wand" | "fists" | "lute";
+export const WEAPON_TYPE_NAMES: Record<WeaponType, string> = { sword: "Sword", katana: "Katana", axe: "Axe", bow: "Bow", staff: "Staff", wand: "Wand", fists: "Fists", lute: "Lute" };
 /** Short words for what the weapon does in any hero's hands (item tooltip). */
 export const WEAPON_USE: Record<WeaponType, string> = {
   sword: "melee", katana: "fast melee", axe: "heavy melee", bow: "shoots arrows", staff: "fireballs", wand: "magic bolts, costs mana", fists: "punches",
+  lute: "sound waves",
 };
 /** The weapon each class is trained with: its class weapon and kit take this shape. */
-export const NATIVE_WEAPON: Record<ClassKind, WeaponType> = { knight: "sword", ninja: "katana", wizard: "staff", archer: "bow", barbarian: "axe", vampire: "sword", summoner: "staff" };
+export const NATIVE_WEAPON: Record<ClassKind, WeaponType> = { knight: "sword", ninja: "katana", wizard: "staff", archer: "bow", barbarian: "axe", vampire: "sword", summoner: "staff", songweaver: "lute" };
 /** Weapon kind in a hero's hand: none = fists, an old class weapon = the class's own kind. */
 export function weaponType(cls: string, weaponId?: string): WeaponType {
   if (!weaponId) return "fists";
@@ -70,8 +71,8 @@ export function weaponType(cls: string, weaponId?: string): WeaponType {
   if (!d || d.slot !== "weapon") return "fists";
   return d.wtype ?? NATIVE_WEAPON[(d.cls ?? cls) as ClassKind] ?? "sword";
 }
-/** Magic weapons (staves, wands) hit with Magic; everything else with Strength. */
-export const weaponStat = (t: WeaponType): "mag" | "str" => (t === "staff" || t === "wand" ? "mag" : "str");
+/** Magic weapons (staves, wands, the Songweaver's lute) hit with Magic; everything else with Strength. */
+export const weaponStat = (t: WeaponType): "mag" | "str" => (t === "staff" || t === "wand" || t === "lute" ? "mag" : "str");
 
 const G = (d: GearDef) => d;
 export const GEAR: Record<string, GearDef> = Object.fromEntries([
@@ -159,6 +160,11 @@ function starterKits(): GearDef[] {
     k("summoner", "armour", "Warlock's Tailcoat", 0x38323f, 0x9a6cff, "tailcoat"),
     k("summoner", "hat", "Void Scarf", 0x5b2f8f, 0xc8a8ff, "scarf"),
     k("summoner", "shoes", "Warlock's Boots", 0x1e1a24, 0x5a3a6a, "plain"),
+    // the Songweaver's minstrel kit (art: tools/art/paint/look.ts KITS.songweaver)
+    k("songweaver", "weapon", "Minstrel's", 0x8a5a2c, 0xe8d070, "lute"),
+    k("songweaver", "armour", "Minstrel's Doublet", 0xd09a34, 0xa8402a, "trim"),
+    k("songweaver", "hat", "Feathered Cap", 0x2e7d74, 0xd9482f, "cap"),
+    k("songweaver", "shoes", "Minstrel's Boots", 0x4e3220, 0x8a5a2c, "plain"),
   ];
 }
 
@@ -472,6 +478,14 @@ export function ownStats(h: HeroReqInfo): Stats {
 function statsWith(h: HeroReqInfo, eq: Equipped): Stats {
   const s = ownStats(h), g = gearStats(h.cls, eq);
   return { sta: s.sta + g.sta, str: s.str + g.str, mag: s.mag + g.mag, dex: s.dex + g.dex };
+}
+
+/**
+ * A hero's Stamina/Strength/Magic/Dexterity: class base, assigned points and the worn pieces whose requirements are met.
+ * The server and the client both call it, so the four stats need no synced fields (Player.sta... are server-only).
+ */
+export function heroStats(h: HeroReqInfo): Stats {
+  return statsWith(h, activeGear(h.worn ?? {}, h));
 }
 
 function problemWith(id: string, h: HeroReqInfo, st: Stats): string {

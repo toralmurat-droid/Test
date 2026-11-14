@@ -10,6 +10,11 @@ process.env.SAVE_FILE ??= path.join(dir, "saves.json");
 process.env.ALLOW_ARCHIVED_CLASSES ??= "1"; // tests still cover the archived classes
 process.env.IDEAS_FILE ??= path.join(dir, "ideas.json");
 
+// `node --test` frames its results on the child's stdout. The room logs ("X joined", trades, ideas) with console.log,
+// and those raw lines can land inside a frame; the runner then dies with "Unable to deserialize cloned data"
+// (about every second full run). Send console.log to stderr, which is not framed.
+console.log = console.info = (...a: unknown[]) => console.error(...a);
+
 export async function startRoom() {
   const { Server } = await import("colyseus");
   const { WebSocketTransport } = await import("@colyseus/ws-transport");

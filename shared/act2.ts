@@ -14,7 +14,8 @@ export const WAYGATES: Waygate[] = [
   { id: "oakvale", ...px(WAYGATE_OAKVALE), to: "desert", label: "Step through the waygate to the Sunscar" },
   { id: "desert", ...px(WAYGATE_DESERT), to: "oakvale", label: "Step through the waygate home to Oakvale" },
 ];
-export const WAYGATE_RANGE = 0.8 * TILE;
+/** How close a hero must stand to use a waygate (click it or press E), like a portal stone's PORTAL_RANGE. */
+export const WAYGATE_RANGE = 1.6 * TILE;
 export const waygateById = (id: string) => WAYGATES.find((g) => g.id === id);
 /** Where a hero coming out of gate `g` stands: a few steps south of it, off the gate. */
 export const waygateArrival = (g: Waygate) => ({ x: g.x, y: g.y + 2.4 * TILE });

@@ -55,7 +55,7 @@ export function mountFireside(canvas: HTMLCanvasElement, labelHost: HTMLElement,
     cw = Math.ceil(wd / S); ch = Math.ceil(hd / S);
     canvas.width = wd; canvas.height = hd;
     cx = Math.round(cw / 2);
-    cy = Math.round(ch > cw * 1.3 ? ch * 0.36 + 34 : ch * 0.45 + 40); // portrait: keep the ring clear of the panel below
+    cy = Math.round(ch > cw * 1.3 ? ch * 0.36 + 18 : ch * 0.45 + 40); // portrait: keep the ring clear of the panel below
     squeeze = Math.min(1, (cw / 2 - 30) / 128); // narrow screens: pull the ring in so every hero shows
     ground = [paintGround(1), paintGround(0.93)];
   }
@@ -135,7 +135,7 @@ export function mountFireside(canvas: HTMLCanvasElement, labelHost: HTMLElement,
 
   // ---- heroes ----
   // only playable classes sit by the fire; with few of them they take the seats nearest the middle
-  const seats = ACTIVE_CLASSES.length <= 2 ? [2, 4] : ACTIVE_CLASSES.length <= 3 ? [2, 3, 4] : SLOTS.map((_, i) => i);
+  const seats = ACTIVE_CLASSES.length <= 2 ? [2, 4] : ACTIVE_CLASSES.length <= 3 ? [2, 3, 4] : ACTIVE_CLASSES.length === 4 ? [1, 2, 4, 5] : SLOTS.map((_, i) => i);
   const heroes: Hero[] = ACTIVE_CLASSES.map((k, i) => {
     const label = document.createElement("div");
     label.className = "fs-label";

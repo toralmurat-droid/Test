@@ -753,7 +753,9 @@ const guard = human({
 
 // The Summoner casts like the wizard (staff bolts, the same poses and float); its painted look is look.ts summoner
 const summoner: Hero = { ...wizard, name: "summoner", aura: 0xb68cff, weaponKind: "witchstaff" };
-export const HEROES: Hero[] = [ninja, wizard, knight, archer, barbarian, vampire, summoner];
+/** The Songweaver (minstrel, caster pose family: a plucked wave from mid range, then a strum); look and kit in paint/look.ts. */
+export const SONGWEAVER: Hero = { ...wizard, name: "songweaver", aura: 0xffd27a, weaponKind: "lute" };
+export const HEROES: Hero[] = [ninja, wizard, knight, archer, barbarian, vampire, summoner, SONGWEAVER];
 
 /**
  * A hero holding a weapon of another family (shared/weapons.ts POSE_FAMILY): same body and look, but the idle stance
@@ -1129,31 +1131,41 @@ function rot90(src: Canvas, k: number, cy = 20): Canvas {
 }
 
 /** Face-down fall: rotate counter-clockwise so the head ends up on the left. */
-function fallForward(src: Canvas): Canvas {
-  const r = mk();
-  r.blit(src, 0, 0, (x, y) => [y, FW - 1 - x]);
-  let maxY = 0, minX = FW, maxX = 0;
-  for (let y = 0; y < FH; y++) for (let x = 0; x < FW; x++) if (r.alpha(x, y)) { maxY = Math.max(maxY, y); minX = Math.min(minX, x); maxX = Math.max(maxX, x); }
+/**
+ * Where a lying frame sits on the ground comes from the rotated figure's bounding box. Gear changes that box (a hat, a
+ * staff, a lute), which used to shift the whole body by a pixel, so every item overlay carried the entire body and hid
+ * the other items. The first render of a frame (the plain sheet, always built first) fixes its offset; the same frame
+ * wearing something reuses it, so overlays hold only what the item changes.
+ */
+const lyingAt = new Map<string, [number, number]>();
+function layDown(r: Canvas, key: string): Canvas {
+  let maxY = 0, minX = FW, maxX = 0, any = false; // an empty frame (the pose-recording pass of 3/4 facings) fixes nothing
+  for (let y = 0; y < FH; y++) for (let x = 0; x < FW; x++) if (r.alpha(x, y)) { any = true; maxY = Math.max(maxY, y); minX = Math.min(minX, x); maxX = Math.max(maxX, x); }
+  const k = `${key}|${diagUse?.dir ?? ""}|${K}|${PAINTED}`;
+  let at = lyingAt.get(k);
+  if (!at) at = [Math.round((FW - 1 - maxX - minX) / 2) / K, (30 * K + K - 1 - maxY) / K];
+  if (any && !lyingAt.has(k)) lyingAt.set(k, at);
   const out = mk();
   groundShadow(out, 16, 29, 11, 1.5, 70);
-  out.blit(r, Math.round((FW - 1 - maxX - minX) / 2) / K, (30 * K + K - 1 - maxY) / K);
+  out.blit(r, at[0], at[1]);
   return out;
+}
+
+function fallForward(src: Canvas, key: string): Canvas {
+  const r = mk();
+  r.blit(src, 0, 0, (x, y) => [y, FW - 1 - x]);
+  return layDown(r, key);
 }
 
 function dust(c: Canvas, x: number, y: number, size: number, alpha = 170) {
   for (const [dx, dy] of [[0, 0], [-1, -1], [1, -1], [-2, 0], [2, 0], [0, -2]].slice(0, 2 + size * 2)) c.px(x + dx, y + dy, 0xd9cdb4, alpha);
 }
 
-function rotateLying(src: Canvas): Canvas {
+function rotateLying(src: Canvas, key: string): Canvas {
   // rotate 90° clockwise so the head ends up on the right, then sit it on the ground line
   const r = mk();
   r.blit(src, 0, 0, (x, y) => [FW - 1 - y, x]);
-  let maxY = 0, minX = FW, maxX = 0;
-  for (let y = 0; y < FH; y++) for (let x = 0; x < FW; x++) if (r.alpha(x, y)) { maxY = Math.max(maxY, y); minX = Math.min(minX, x); maxX = Math.max(maxX, x); }
-  const out = mk();
-  groundShadow(out, 16, 29, 11, 1.5, 70);
-  out.blit(r, Math.round((FW - 1 - maxX - minX) / 2) / K, (30 * K + K - 1 - maxY) / K);
-  return out;
+  return layDown(r, key);
 }
 
 function stars(c: Canvas, t: number) {
@@ -1365,7 +1377,7 @@ export function animFrames(hero: Hero, anim: string, dir: Dir): Canvas[] {
     case "sit": return [0, 0, 1, 1].map((bob, t) => renderFrame(hero, { ...B(t), crouch: 4, bob, expr: t === 3 ? "blink" : "n" }));
     case "sleep": {
       return [0, 1, 2, 3].map((t) => {
-        const f = rotateLying(renderFrame(hero, { ...B(t), expr: "blink" }, false));
+        const f = rotateLying(renderFrame(hero, { ...B(t), expr: "blink" }, false), `${hero.name}|${hero.weaponKind}|${dir}|sleep${t}`);
         const zs = [[0, 0], [3, -4], [6, -8]];
         zs.forEach(([x, y], i) => { if (i <= t % 3 + (t === 3 ? 0 : 0)) zLetter(f, 21 + x, 13 + y - (t % 2), i === 2 ? 4 : 3); });
         return f;
@@ -1439,8 +1451,8 @@ export function animFrames(hero: Hero, anim: string, dir: Dir): Canvas[] {
       return [a, b, c];
     }
     case "ko2": {
-      const lying = fallForward(renderFrame(hero, { ...B(0), expr: "x" }, false));
-      const last = fallForward(renderFrame(hero, { ...B(0), expr: "x" }, false));
+      const lying = fallForward(renderFrame(hero, { ...B(0), expr: "x" }, false), `${hero.name}|${hero.weaponKind}|${dir}|ko2`);
+      const last = fallForward(renderFrame(hero, { ...B(0), expr: "x" }, false), `${hero.name}|${hero.weaponKind}|${dir}|ko2`);
       dust(lying, 6, 29, 2); dust(lying, 26, 29, 2);
       stars(last, 1);
       return [
@@ -1496,8 +1508,8 @@ export function animFrames(hero: Hero, anim: string, dir: Dir): Canvas[] {
       return [a, renderFrame(hero, { ...B(1), lean: 1, expr: "squint" })];
     }
     case "ko": {
-      const lying = rotateLying(renderFrame(hero, { ...B(0), expr: "x" }, false));
-      const last = rotateLying(renderFrame(hero, { ...B(0), expr: "x" }, false));
+      const lying = rotateLying(renderFrame(hero, { ...B(0), expr: "x" }, false), `${hero.name}|${hero.weaponKind}|${dir}|ko`);
+      const last = rotateLying(renderFrame(hero, { ...B(0), expr: "x" }, false), `${hero.name}|${hero.weaponKind}|${dir}|ko`);
       stars(last, 0);
       return [
         renderFrame(hero, { ...B(0), lean: 2, expr: "squint" }),

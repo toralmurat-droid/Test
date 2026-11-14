@@ -194,7 +194,9 @@ test("champions on the server: zone spawns, 2.5x HP, the rune, and every affix a
       assert.equal(twin.kind, "warriorblob"); assert.equal(twin.champion, 0, "the twin is plain");
       assert.ok(twin.banishAt > Date.now(), "a helper leaves again if nobody kills it");
       room.hitTarget(pid, id, 1, [0, 0]);
-      assert.equal(room.state.mobs.size, n0 + 1, "only one split");
+      // not the herd size: the world spawns and reaps mobs between ticks, so under load the count drifts
+      await wait(100);
+      assert.equal(ev.filter((e) => e.ev === "split" && e.id === id).length, 1, "only one split");
     }
     // Hide-Stitched: its other skin at half health, faster
     {

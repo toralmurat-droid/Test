@@ -128,6 +128,25 @@ export function isDecorSolidAt(px: number, py: number): boolean {
   return false;
 }
 
+/**
+ * What Oakvale's villagers say when a Songweaver plays a major-key song near them (by NPC id, like the idle lines in
+ * shared/quests.ts). A minor key or Discord in town gets no line. server/songs.ts BuskingLines says them (BUSKING).
+ */
+export const BUSKING_LINES: Record<string, string> = {
+  druid: "A lute on the square. The bonfire has not heard a tune like that since my knees were young.",
+  weaponsmith: "Play on, minstrel. The hammer keeps better time with a song.",
+  witch: "Hm. Mind the notes near my jars. Some of them hum when you do.",
+  armourer: "My stall has been quiet all morning. Your tune has the whole square lingering.",
+  captain: "Hymns and jigs, fine. Play a sour note near the gate and we will have words.",
+  fisher: "You play like my mother sang. Thank you for that.",
+};
+
+/**
+ * Busking lines: how near (px) the villager must stand to hear the tune, how long (ms) before it speaks again, and how
+ * near (px) a hero must stand to the villager to hear its answer (a local line, not a server-wide one).
+ */
+export const BUSKING = { range: 4 * TILE, cooldownMs: 60_000, hearRange: 12 * TILE };
+
 /** How close (px) a player must stand to talk to an NPC. */
 export const TALK_RANGE = 1.1 * TILE;
 

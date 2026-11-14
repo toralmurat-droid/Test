@@ -6,10 +6,10 @@
 import { skillById } from "../../shared/skills";
 import { PALETTE } from "./skillfx";
 import { paintSkill, paintStatus, ICON } from "./skillArt";
-
-type Icon = { pal: Record<string, string>; px: string[] };
+import { SONG_SMALL, Icon } from "./songIcons";
 
 const ICONS: Record<string, Icon> = {
+  ...SONG_SMALL, // Songweaver: mode badges (sgmode_*), ear tiers (sgear_*), pitch arrows (sgpitch_*)
   // Knight Shield: steel kite shield with a gold cross
   guard: {
     pal: { o: "#1b1b2a", s: "#a9b8d0", d: "#6d7d99", g: "#ffd166" },
