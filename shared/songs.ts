@@ -125,6 +125,28 @@ export function songKind(s: { song?: boolean; modulate?: boolean; passive?: unkn
   return s.degree ? "Verse" : undefined;
 }
 
+// ---- The song gauge (DI-3, owner 2026-11-14: it replaces Mana and Tempo) ------------------------------------------
+
+/**
+ * The Songweaver's gauge lives in `mana` / `maxMana` (shared/mana.ts usesGauge): it starts empty and never regenerates.
+ * Notes, landed basic waves, chords and executions fill it; after `idleMs` with no note and no swing it drains. When it
+ * is full the equipped book's effect fires (GearDef.book.full, the "swell" event) and it empties. Twelve-Tone Storm
+ * spends it instead. Accelerando reads its fill: a full gauge counts as `accelStacks` of the old Tempo.
+ */
+export const GAUGE = {
+  max: 100,
+  note: 8, // a note that sounded (a charged skill: when it goes off)
+  basic: 2, // a landed basic wave
+  strum: 4, // ...the strum (third step of the combo)
+  chord: 20,
+  execute: 10, // executing a broken monster (shared/combat.ts EXECUTE)
+  idleMs: 4000, // no note and no swing for this long: it drains
+  drainPerSec: 20,
+  refreshMs: 10_000, // casting the Chorus that plays again with more than this left: no note, no fill
+  stormBase: 0.7, stormPerFill: 0.6, // Twelve-Tone Storm power x(stormBase + stormPerFill x fill / max)
+  accelStacks: 5,
+};
+
 // ---- Resonance ----------------------------------------------------------------------------------------------
 
 /** Semitones above the tonic, for intervals. */

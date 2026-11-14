@@ -12,7 +12,7 @@ import { ambushRoomAt, arrivalAt, CRACK_OPEN_MS, LINK_RANGE, linkById, LINKS, SH
 import {
   ATTACK_VARIANTS, basicDrain, CLASSES, ClassKind, COMBO_WINDOW_MS, DODGE, EMOTES, DASH_INVULN_MS, GUARD_REDUCTION, isActiveClass, isClassKind, levelFromXp, MAX_XP, XP_CURVE_VERSION, convertOldXp, capLevel, PVP_KILL_XP, xpForLevel,
 } from "../shared/classes";
-import { MANA_POTION_DROP, manaRegen, maxManaFor, packMana, pay } from "../shared/mana";
+import { MANA_POTION_DROP, manaRegen, maxManaFor, packMana, pay, usesGauge } from "../shared/mana";
 import { Counts, dropSize, Potions, nextSize, noPotions, packPotions, potionAmount, potionName, PotionKind, potionSlots, POTION_COOLDOWN_MS, POTION_STACK, slotsAfter, SIZES, total } from "../shared/potions";
 /** Potion size from a ground item's `gear` field ("0".."2"). */
 const potSize = (g: string) => Math.max(0, Math.min(SIZES - 1, Math.floor(Number(g) || 0)));
@@ -26,7 +26,7 @@ import { activeSkills, canLearn, classSkills, cleanRanks, levelPower, REPLACED_S
 import {
   afterHit, atkSpeedMult, blocking, bloodCost, buffLifesteal, buffRegen, castSkill, CastOut, ccImmune, fangTarget, onKill, riseAgain, charging, winding, counterHit, dealtMult, FieldInst, newRuntime,
   imbueOf, buffPoise, shotEnd, shotHit, shotPulse, ShotSpec, SkillHost, speedMult, statusOf, takenMult, tickField, tickUnit, Unit,
-  gainEssence, toVoid, voidSlip, inVoid, absorbDamage,
+  gainEssence, toVoid, voidSlip, inVoid, absorbDamage, fillGauge, gaugeSwing,
 } from "../shared/skillEngine";
 import { golemDeath, golemStrike, golemTick, newMind, type GolemMind } from "../shared/golemAI";
 import { newWisp, openArsenal, wispEnd, wispTick, type WispMind } from "../shared/voidConjure";
@@ -38,8 +38,8 @@ import { DOORS, DOOR_RANGE, doorById, doorDist, doorWorkable, isSafeZone, isSoli
 import { isDecorSolidAt, npcById, npcNear, TALK_RANGE } from "../shared/npcs";
 import { beyondWall, WATCH, WATCH_POSTS, WatchPost } from "../shared/watch";
 import { inVillage, WRATH } from "../shared/wrath";
-import { afterRespec, bounceWave, busking, buskingAudience, BuskingLines, ChordSync, heroSound, mobSound, oldSongTree, restoreMode, songSave } from "./songs";
-import { modeColour, PHRYGIAN, RESONANCE } from "../shared/songs";
+import { afterRespec, bounceWave, busking, buskingAudience, BuskingLines, ChordSync, heroSound, migrateSongweaver, mobSound, oldSongTree, restoreMode, songSave } from "./songs";
+import { GAUGE, modeColour, PHRYGIAN, RESONANCE } from "../shared/songs";
 import { soundMult } from "../shared/combat";
 import type { SoundFx } from "../shared/skills";
 import { sellPrice, shopBuys, shopFuses, SHOPS } from "../shared/shops";
@@ -61,7 +61,7 @@ import { groupDmgMult, groupHpMult, PARTY, together } from "../shared/party";
 import { canExecute, executeDamage, executeRefund, heroPoise, MOB_COMBAT, mobBody, POISE, poiseLevelMult, poiseSpeed, PVP_PROTECT_LEVEL, pvpDamageMult, pvpProtected, SWING_AHEAD } from "../shared/combat";
 import {
   BAG_SIZE, Equipped, gearDef, GEAR_SLOTS, activeGear, reqProblem, itemLevel, HeroReqInfo, GearSlot, gearBlock, gearName, gearReachMult, gearSpeedMult, gearStats, isGearId, potionChance, rollGear, canWear, starterKit,
-  isBagItem, socketProblem, itemRunes, withRunes, runeEffects, stripRunes, GEAR_DROP,
+  isBagItem, isBound, socketProblem, itemRunes, withRunes, runeEffects, stripRunes, GEAR_DROP,
 } from "../shared/gear";
 import { fuseRunes, parseRune, rollMobRune, rollRune, RUNE_DROP, runeId, runeIdName, RUNES, RuneKey } from "../shared/runes";
 /** "Frost Katana Lv 17" for pickup messages. */
@@ -931,7 +931,8 @@ export class TownRoom extends Room<TownState> {
     // "New game" on the login screen: start this class over (the old save is overwritten right away) and refill all chests
     if (options?.newGame) resetChests(p.name);
     const save = options?.newGame ? undefined : loadHero(p.name, p.cls);
-    if (save) this.restore(p, save);
+    const moved = save ? this.restore(p, save) : [];
+    for (const text of moved) client.send("chat", { id: "", name: "Oakvale", text }); // what a save migration moved
     this.syncPotions(p);
     // A new hero (or New game) starts the guided first quest right away; heroes from before it existed skip it
     if (!save) this.qset(p, TUT_CHAIN, { questId: 0, questStage: 1, questCount: 0 });
@@ -1005,7 +1006,7 @@ export class TownRoom extends Room<TownState> {
     if (fin(s.x) && fin(s.y) && !isSolidAt(s.x, s.y) && !isDecorSolidAt(s.x, s.y)) { p.x = s.x; p.y = s.y; }
     if (s.dir === "up" || s.dir === "down" || s.dir === "left" || s.dir === "right") p.dir = s.dir;
     if (fin(s.hp)) p.hp = Math.max(1, Math.min(p.maxHp, Math.round(s.hp)));
-    if (fin(s.mana)) { p.mana = Math.max(0, Math.min(p.maxMana, s.mana)); this.syncMana(p); }
+    if (fin(s.mana) && !usesGauge(p.cls)) { p.mana = Math.max(0, Math.min(p.maxMana, s.mana)); this.syncMana(p); } // a song gauge starts empty
     // Heat (s.energy) is not restored: saves from before the overload gauge held full Stamina (100), which would read as
     // nearly overheated; a hero comes back cool.
   }
@@ -1051,7 +1052,8 @@ export class TownRoom extends Room<TownState> {
     };
   }
 
-  private restore(p: Player, s: HeroSave) {
+  /** Loads a save into the hero. Returns chat lines about items a migration moved (the room sends them on join). */
+  private restore(p: Player, s: HeroSave): string[] {
     const num = (v: unknown, d = 0) => (typeof v === "number" && Number.isFinite(v) ? v : d);
     const gear = (v: unknown) => (typeof v === "string" && isGearId(v) && canWear(p.cls, v) ? v : "");
     p.color = num(s.color, p.color);
@@ -1063,6 +1065,14 @@ export class TownRoom extends Room<TownState> {
     // Potions by size; saves from before potion sizes had plain counts (all Minor), and a few mana potions for heroes older than mana
     const cnt = (v: unknown): Counts => (Array.isArray(v) ? [0, 1, 2].map((i) => Math.min(120, Math.max(0, Math.floor(num(v[i]))))) : [0, 0, 0]) as Counts;
     p.pots = s.pots ? { potion: cnt(s.pots.potion), mpotion: cnt(s.pots.mpotion) } : { potion: [Math.min(50, num(s.potions)), 0, 0], mpotion: [Math.min(50, num(s.mpotions, 2)), 0, 0] };
+    // The Songweaver's kit (server/songs.ts): before the gear filter, so a shield she wore moves instead of vanishing
+    let stash: ReturnType<typeof loadStash> | undefined;
+    const moved = migrateSongweaver(p, s, (item) => {
+      stash ??= loadStash(p.name);
+      if (stash.items.length >= STASH_SIZE) return false;
+      stash.items.push(item);
+      return true;
+    });
     p.ptSta = num(s.ptSta); p.ptStr = num(s.ptStr); p.ptMag = num(s.ptMag); p.ptDex = num(s.ptDex);
     // A hero saved above today's level cap spent more points than his level gives: hand them back to place again
     if (p.ptSta + p.ptStr + p.ptMag + p.ptDex > statPoints(p.level)) p.ptSta = p.ptStr = p.ptMag = p.ptDex = 0;
@@ -1096,6 +1106,9 @@ export class TownRoom extends Room<TownState> {
       if (num(sv[ch.verKey], 1) !== ch.version && st.questStage > 0) { st.questStage = 0; st.questCount = 0; }
       this.qset(p, c, st);
     });
+    // an item the migration put in the stash: stash and hero are written together, so it can't end up in both
+    if (stash) saveStash(p.name, stash, p.cls, this.snapshot(p));
+    return moved;
   }
 
   /** A spawn spot in the zone away from every hero, or null if none turned up (the hero stands in a small zone). */
@@ -2628,7 +2641,7 @@ export class TownRoom extends Room<TownState> {
       p.stunned = now < p.stunUntil;
       p.slowed = now < p.slowUntil;
       p.guarding = blocking(p, now);
-      p.stacks = p.sk.stacks;
+      p.stacks = usesGauge(p.cls) ? 0 : p.sk.stacks; // the Songweaver has no Tempo: her song gauge is in mana
       const fx = statusOf(p, now);
       if (p.fx !== fx) p.fx = fx;
       this.chords.tick(pid, p as unknown as Unit, now, (m) => this.clients.find((c) => c.sessionId === pid)?.send("chord", m));
@@ -2637,12 +2650,12 @@ export class TownRoom extends Room<TownState> {
       const spd = Math.round(speedMult(p, now) * talentMult(p.cls, p.talents, "speed") * feastMult(p.feast, "speed") * 1000) / 1000;
       if (p.spd !== spd) p.spd = spd;
       tickPoise(p, heroPoiseMax(p), dt, now);
-      if (p.dead) { p.moving = false; p.energy = 0; p.mana = p.maxMana; this.syncMana(p); return; }
+      if (p.dead) { p.moving = false; p.energy = 0; p.mana = usesGauge(p.cls) ? 0 : p.maxMana; this.syncMana(p); return; }
       for (let c = 0; c < CHAINS.length; c++) this.checkQuestPlace(pid, p, c);
       this.wakePortals(pid, p);
       this.useLinks(pid, p);
       if (p.energy !== 0) coolHeat(p, p.cls, dt);
-      if (p.mana < p.maxMana) {
+      if (p.mana < p.maxMana && !usesGauge(p.cls)) { // a song gauge never regenerates
         const resting = now - p.lastHurt > REGEN_DELAY_MS;
         p.mana = Math.min(p.maxMana, p.mana + manaRegen(this.stats(p), resting, talentBonus(p.cls, p.talents, "mana")) * dt);
       }
@@ -4369,7 +4382,10 @@ export class TownRoom extends Room<TownState> {
   private drinkManaPotion(id: string) {
     const p = this.state.players.get(id);
     const now = Date.now();
-    if (!p || p.dead || p.mana >= p.maxMana || now - p.lastManaPotion < POTION_COOLDOWN_MS) return;
+    if (!p || p.dead) return;
+    // the Songweaver's bubble is a song gauge (DI-3): a potion does nothing for it, so none is drunk
+    if (usesGauge(p.cls)) { this.note(id, "Your song gauge fills with music, not potions."); return; }
+    if (p.mana >= p.maxMana || now - p.lastManaPotion < POTION_COOLDOWN_MS) return;
     const amount = this.drink(p, "mpotion");
     if (!amount) return;
     p.lastManaPotion = now;
@@ -4459,7 +4475,7 @@ export class TownRoom extends Room<TownState> {
     const p = this.state.players.get(id);
     if (!p) return;
     const [tx, ty] = CAPTURE_SPOT, x = (tx + 0.5) * TILE, y = (ty + 0.5) * TILE;
-    p.x = x - 1.5 * TILE; p.y = y; p.dead = false; p.hp = p.maxHp; p.mana = p.maxMana; p.energy = 0; this.syncMana(p);
+    p.x = x - 1.5 * TILE; p.y = y; p.dead = false; p.hp = p.maxHp; p.mana = usesGauge(p.cls) ? 0 : p.maxMana; p.energy = 0; this.syncMana(p);
     p.sk.last = {}; p.sk.buffs = []; p.sk.counter = undefined; p.sk.chargeUntil = 0; p.sk.windUntil = 0;
     this.state.fields.forEach((f, fid) => { if (f.owner === id) this.state.fields.delete(fid); }); // the last clip's black hole, pools...
     this.state.mobs.forEach((m, mid) => {
@@ -4749,7 +4765,8 @@ export class TownRoom extends Room<TownState> {
   private runesOnCast(id: string, p: Player) {
     const v = this.runeRoll(id, p, "echo");
     if (!v) return;
-    p.mana = Math.min(p.maxMana, p.mana + p.maxMana * v);
+    if (usesGauge(p.cls)) fillGauge(this.host, id, GAUGE.max * v); // the Songweaver's song gauge fills by the rune's share
+    else p.mana = Math.min(p.maxMana, p.mana + p.maxMana * v);
     this.syncMana(p);
     this.runeFx("echo", p.x, p.y, { id });
   }
@@ -4785,6 +4802,7 @@ export class TownRoom extends Room<TownState> {
   private dropGear(id: string, i: number) {
     const p = this.state.players.get(id);
     if (!p || typeof i !== "number" || i < 0 || i >= p.bag.length) return;
+    if (isBound(p.bag.at(i))) return this.note(id, "That stays with you: it is bound to you."); // the Songbook
     const items = [...bagItems(p)];
     const [gid] = items.splice(i, 1);
     setBag(p, items);
@@ -4797,7 +4815,7 @@ export class TownRoom extends Room<TownState> {
   private dropGears(id: string, list: number[]) {
     const p = this.state.players.get(id);
     if (!p || !Array.isArray(list)) return;
-    const idx = new Set(list.filter((i) => Number.isInteger(i) && i >= 0 && i < p.bag.length));
+    const idx = new Set(list.filter((i) => Number.isInteger(i) && i >= 0 && i < p.bag.length && !isBound(p.bag.at(i))));
     if (!idx.size) return;
     const items = [...bagItems(p)];
     setBag(p, items.filter((_, i) => !idx.has(i)));
@@ -5384,6 +5402,7 @@ export class TownRoom extends Room<TownState> {
     const st = loadStash(p.name), bag = bagItems(p);
     if (dir === "put") {
       if (i >= bag.length || !isBagItem(bag[i])) return;
+      if (isBound(bag[i])) return this.stashSend(client, "That stays with you: it is bound to you");
       if (st.items.length >= STASH_SIZE) return this.stashSend(client, "The stash is full");
       st.items.push(bag.splice(i, 1)[0]);
     } else {
@@ -5604,13 +5623,13 @@ export class TownRoom extends Room<TownState> {
     if (!p || p.dead || Math.hypot(SHRINE.x - p.x, SHRINE.y - p.y) > SHRINE_RANGE * 1.5) return;
     if (now < this.shrineReadyAt) { client.send("shrine", { left: this.shrineReadyAt - now }); return; }
     this.shrineReadyAt = now + SHRINE_COOLDOWN_MS;
-    const boon = rollBoon(p.hp < p.maxHp || p.energy !== 0 || p.mana < p.maxMana);
+    const boon = rollBoon(p.hp < p.maxHp || p.energy !== 0 || (p.mana < p.maxMana && !usesGauge(p.cls)));
     let amount = 0;
     if (boon === "heal") {
       amount = Math.round(p.maxHp - p.hp);
       p.hp = p.maxHp;
       p.energy = 0;
-      p.mana = p.maxMana;
+      if (!usesGauge(p.cls)) p.mana = p.maxMana; // a song gauge is played full, not prayed full
       this.syncMana(p);
       if (amount > 0) this.broadcast("heal", { id, amount });
     } else if (boon === "xp") {
@@ -5847,9 +5866,13 @@ export class TownRoom extends Room<TownState> {
     const newMax = Math.round(maxHpFromStats(p.cls, st, p.level) * talentMult(p.cls, p.talents, "hp") * feastMult(p.feast, "hp"));
     p.hp = Math.min(newMax, p.hp + Math.max(0, newMax - p.maxHp));
     p.maxHp = newMax;
-    const newMana = maxManaFor(st, p.level);
-    p.mana = Math.min(newMana, p.mana + Math.max(0, newMana - p.maxMana));
-    p.maxMana = newMana;
+    if (usesGauge(p.cls)) { p.maxMana = GAUGE.max; p.mana = Math.min(GAUGE.max, Math.max(0, p.mana)); } // a song gauge: no pool to grow
+    else {
+      const newMana = maxManaFor(st, p.level);
+      p.mana = Math.min(newMana, p.mana + Math.max(0, newMana - p.maxMana));
+      p.maxMana = newMana;
+    }
+    p.sk.book = p.shield || undefined; // the book she wears fires when her song gauge fills (shared/skillEngine.ts swell)
     this.syncMana(p);
   }
 
@@ -5938,6 +5961,7 @@ export class TownRoom extends Room<TownState> {
       if (!this.state.players.has(tid)) return;
       const s = actAt(t.y, t.x) === 2 ? desertSpawn() : randomSpawn(); // back at the act's own town
       t.x = s.x; t.y = s.y; t.hp = t.maxHp; t.dead = false;
+      if (usesGauge(t.cls)) { t.mana = 0; this.syncMana(t); } // the song gauge starts over empty
     }, RESPAWN_MS);
     return true;
   }
@@ -5949,7 +5973,7 @@ export class TownRoom extends Room<TownState> {
     if (now < a.attackReadyAt) return;
     // The main-hand weapon decides the attack (shared/weapons.ts): bow = arrows, sword = melee, wand = magic bolts...
     const def = attackProfile(a.cls, this.equipped(a));
-    if (def.mana) { // a wand spends mana on every bolt (shared/mana.ts)
+    if (def.mana && !usesGauge(a.cls)) { // a wand spends mana on every bolt (shared/mana.ts); a song gauge is not Mana
       if (!pay(a, { mana: def.mana })) return;
       this.syncMana(a);
     }
@@ -5987,6 +6011,7 @@ export class TownRoom extends Room<TownState> {
       }
       a.lastVariant = variant;
     }
+    gaugeSwing(a as unknown as Unit, now); // a Songweaver's swing holds her song gauge's drain off (DI-3)
     this.broadcast("swing", { id, step, variant, ax: off[0], ay: off[1], w: def.type });
 
     if (hit.lunge) {
@@ -6004,7 +6029,7 @@ export class TownRoom extends Room<TownState> {
       if (s && def.type === "lute" && a.cls === "songweaver") {
         // the Songweaver's lute: a sound wave, and the combo step is a note (pluck, pluck, strum)
         const mode = a.sk.mode ?? "major", deg = step === 1 ? "V" : "I";
-        s.sound = { pitch: "M", deg, mode, basic: true, res: step === 2 ? RESONANCE.basic : 0 };
+        s.sound = { pitch: "M", deg, mode, basic: true, res: step === 2 ? RESONANCE.basic : 0, strum: step === 2 };
         this.broadcast("sfx", { ev: "note", id, s: "basic", deg, mode, pitch: "M", x: Math.round(a.x), y: Math.round(a.y) });
       }
       return;

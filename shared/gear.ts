@@ -52,6 +52,13 @@ export interface GearDef {
   wtype?: WeaponType;
   /** Starting kit: only this class can wear it, it never drops from monsters or chests, and it is what makes the hero look like its class. */
   cls?: string;
+  /**
+   * A Songweaver book (DI-2/DI-3, shield slot): `full` is the hidden skill (shared/skills.ts FINISHERS) it fires when
+   * her song gauge fills; `songs`: it holds the songs she collects (the Songbook).
+   */
+  book?: { full: string; songs?: boolean };
+  /** Bound to its hero (isBound): it can't be dropped, sold, traded or put in the stash. */
+  bound?: boolean;
 }
 
 /** Weapon kinds. The equipped main-hand weapon decides the basic attack for every class (shared/weapons.ts). */
@@ -165,6 +172,8 @@ function starterKits(): GearDef[] {
     k("songweaver", "armour", "Minstrel's Doublet", 0xd09a34, 0xa8402a, "trim"),
     k("songweaver", "hat", "Feathered Cap", 0x2e7d74, 0xd9482f, "cap"),
     k("songweaver", "shoes", "Minstrel's Boots", 0x4e3220, 0x8a5a2c, "plain"),
+    // the Songbook (DI-3): no stats, its full-gauge effect is the Refrain
+    { ...k("songweaver", "shield", "Songbook", 0x6b3a22, 0xe8d070, "book"), book: { full: "sg_g_refrain", songs: true }, bound: true },
   ];
 }
 
@@ -180,6 +189,9 @@ export function canWear(cls: string, id: string): boolean {
   const d = gearDef(id);
   return !!d && (!d.cls || d.cls === cls);
 }
+
+/** Bound items (the Songbook): kept by their hero, never dropped, sold, traded or stashed. Runes and affixes don't change it. */
+export const isBound = (id: string | undefined): boolean => !!id && !!gearDef(id)?.bound;
 
 export const BAG_SIZE = 24;
 /** Base item grade (Bronze < Frost < Dragonfire). The item's colour comes from its rarity (RARITY_NAMES). */

@@ -25,6 +25,12 @@ export const MANA = {
   restMult: 2, // regen out of combat (not hurt for REGEN_DELAY_MS)
 };
 
+/**
+ * The Songweaver plays without Mana (DI-3): her `mana` / `maxMana` hold the song gauge (shared/songs.ts GAUGE), so
+ * regen, potions, respawn, bonfires and every other refill skip her.
+ */
+export const usesGauge = (cls: string | undefined) => cls === "songweaver";
+
 /** A mana potion drops this often compared with a healing potion (LOOT potionChance). */
 export const MANA_POTION_DROP = 0.8;
 
