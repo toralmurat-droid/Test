@@ -21,11 +21,10 @@ import { SPAWN_ZONES, zoneAt } from "../../shared/spawns";
 import { musicCombat, setMusicZone } from "./music";
 import { bindSfx, play as playSfx, sfxFrame } from "./sfx";
 import { songweaverSfx } from "./sfx";
-import { ChordHud } from "./chordHud";
 import { SoundCues } from "./soundCues";
 import { CHORD_NAMES, MODE_COLOR, soundOf } from "./songTables";
 
-const SONG_SFX = new Set(["note", "chord", "resonate", "bounce", "soundhit", "shieldbreak"]);
+const SONG_SFX = new Set(["note", "chord", "swell", "resonate", "bounce", "soundhit", "shieldbreak"]);
 import { attackMult, cooldownMult, critChance, heroSpeed, STATS, magicMult, STAT_KINDS, STAT_NAMES, StatKind, statPoints, HP_PER_STR } from "../../shared/powers";
 import { NEED_TEXT, pointRange, SkillDef, skillOf, skillTarget, MAX_STACKS, STACK_DECAY_MS, STACK_NAME, talentBonus, withMods } from "../../shared/skills";
 import { SkillFx } from "./skillfx";
@@ -367,7 +366,6 @@ export class TownScene extends Phaser.Scene {
   private grimoire?: GrimoirePanel;
   private resBars?: ResourceBars;
   private heatGauge?: OverloadGauge;
-  private chordHud?: ChordHud;
   private soundCues = new SoundCues();
   private statsShown = "";
   private deathTimer?: number;
@@ -1321,9 +1319,8 @@ export class TownScene extends Phaser.Scene {
     // The Summoner's grimoire on the HUD (client/src/grimoire.ts): its news, asked again now that we listen
     this.grimoire = new GrimoirePanel(document.getElementById("hud")!, (slot, el) => this.room.send("grimoire", { slot, el }));
     this.room.onMessage("golems", (m) => this.grimoire?.news(m));
-    // The Songweaver's chord tracker (owner only, chordHud.ts)
-    this.chordHud = new ChordHud(document.getElementById("hud")!);
-    this.room.onMessage("chord", (m) => this.chordHud?.set(m));
+    // The chord panel is gone (DI-1, rings under the feet); the server may still send its progress, ignored
+    this.room.onMessage("chord", () => {});
     this.room.send("golems");
     bindSfx(this.room, () => this.me, this.entities as any); // sound effects (client/src/sfx.ts)
     this.room.onMessage("boom", ({ x, y, r, kind, imb }) => this.fx.impact(x, y, kind, r, imb) ||
@@ -2345,7 +2342,7 @@ export class TownScene extends Phaser.Scene {
       ["Level", lvl >= MAX_LEVEL ? `${MAX_LEVEL} (max)` : `${lvl} · XP ${mine.xp - cur}/${next - cur}`],
       ["Health", `${Math.ceil(mine.hp)} / ${mine.maxHp}`],
       ["HP regen", `${regenFromStamina(st.sta)[1].toFixed(1)}/s resting · ${regenFromStamina(st.sta)[0].toFixed(1)}/s in a fight`],
-      ["Mana", `${unpackMana(mine.mp).mana} / ${unpackMana(mine.mp).maxMana} · ${manaRegen(st, false, talentBonus(cls, mine.talents, "mana")).toFixed(1)}/s (×${MANA.restMult} resting)`],
+      [cls === "songweaver" ? "Song gauge" : "Mana", `${unpackMana(mine.mp).mana} / ${unpackMana(mine.mp).maxMana} · ${manaRegen(st, false, talentBonus(cls, mine.talents, "mana")).toFixed(1)}/s (×${MANA.restMult} resting)`],
       ["Attack", `${dmg} damage · ${WEAPON_TYPE_NAMES[wp.type]}: ${ATTACK_WORDS[wp.type]}`],
       ["Attack speed", `${(1000 / wp.attackCooldownMs).toFixed(1)} hits/s`],
       ["Critical hits", `${Math.round(critChance(st, talentBonus(cls, mine.talents, "crit")) * 100)}% chance, double damage`],
@@ -2616,6 +2613,7 @@ export class TownScene extends Phaser.Scene {
    * click) spends them (Murat 2026-11-04).
    */
   private chargeCell(mine: any, cls: ClassKind, clicks: string[], slots: string[], now: number): string {
+    if (cls === "songweaver") return ""; // HOOK(di): the Songweaver has no Tempo charge any more (the gauge replaces it)
     const n = Math.max(0, Math.min(MAX_STACKS, mine.stacks | 0));
     if (n > this.chargeSeen.n) this.chargeSeen.at = now; // a hit built one (the server's clock isn't sent)
     this.chargeSeen.n = n;
@@ -2739,7 +2737,6 @@ export class TownScene extends Phaser.Scene {
     if (ev.ev === "chord") {
       const c = (MODE_COLOR[ev.mode] ?? MODE_COLOR.major).toString(16).padStart(6, "0");
       const e = this.entities.get(ev.id);
-      if (ev.id === this.me) this.chordHud?.fired(ev.prog);
       if (e) this.floatText(e.sprite.x, e.sprite.y - e.top - 14, CHORD_NAMES[ev.prog] ?? ev.prog, `#${c}`, PIXEL_FONT, 1.3);
     } else if (ev.ev === "soundhit") {
       const e = this.entities.get(ev.id), meE = this.entities.get(this.me);
@@ -3291,7 +3288,8 @@ export class TownScene extends Phaser.Scene {
       // Top-left bars (resourceBars.ts): red HP, blue Mana (spells, shared/mana.ts), green XP
       const mn = unpackMana(mine.mp);
       (this.resBars ??= new ResourceBars(document.getElementById("hud")!)).update({
-        level: mine.level, hp: mine.hp, maxHp: mine.maxHp, mp: mn.mana, maxMp: mn.maxMana,
+        song: cls === "songweaver", level: mine.level, hp: mine.hp, maxHp: mine.maxHp, mp: mn.mana, maxMp: mn.maxMana, // HOOK(di): the gauge lives in mana / maxMana (contract); shows mana until the server lands
+       
         xpFrac: mine.level >= MAX_LEVEL ? 1 : (mine.xp - cur) / Math.max(1, next - cur),
         xp: mine.xp - cur, xpNeed: mine.level >= MAX_LEVEL ? undefined : next - cur,
       });
@@ -3300,7 +3298,6 @@ export class TownScene extends Phaser.Scene {
       if (flip) playSfx(flip);
       this.renderActions(mine, cls, cdm, now);
       (this.buffBar ??= new BuffBar(document.getElementById("hud")!)).update(mine.timers ?? "");
-      this.chordHud?.tick();
     }
   }
 }

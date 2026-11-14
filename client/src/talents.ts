@@ -1,6 +1,7 @@
 import { respecCost } from "../../shared/upkeep";
 import { ClassKind, CLASSES } from "../../shared/classes";
-import { DEGREE_GLOSS } from "./songTables";
+import { DEGREE_GLOSS, songKindLabel } from "./songTables";
+import { toggleChordLegend } from "./chordHud";
 import { icon as pxIcon } from "./pixelicons";
 import { slotKey } from "./keymode";
 import { Stats } from "../../shared/powers";
@@ -36,6 +37,7 @@ export class TalentMenu {
   private tipTimer = 0;
 
   constructor(private send: (type: string, msg?: unknown) => void, private preview: (p?: SheetPreview) => void = () => {}) {
+    this.el.addEventListener("click", (ev) => { if ((ev.target as HTMLElement).closest(".chhelp")) toggleChordLegend(); });
     this.el.addEventListener("mouseover", (ev) => {
       const t = (ev.target as HTMLElement).closest("[data-talent]") as HTMLElement | null;
       const was = this.hover;
@@ -98,9 +100,9 @@ export class TalentMenu {
     document.getElementById("treetitle")!.textContent = `${CLASSES[cls].name} skills`;
     document.getElementById("treepoints")!.innerHTML = (free > 0
       ? `<b class="free">${free} skill point${free > 1 ? "s" : ""} to spend</b>`
-      : state.level < 2 ? "You start with a basic attack only. Reach level 2 for your first skill point." : "No points left. You get 1 point per level.") +
+      : state.level < 2 ? `You start with a ${cls === "songweaver" ? "Verse" : "basic attack"} only. Reach level 2 for your first skill point.` : "No points left. You get 1 point per level.") +
       `<span class="treehint">Follow the stone paths: a node needs the one before it. Upgrades change the spell at the start of their path. ` +
-      (cls === "summoner" ? `Your creatures going back to the Void build Essence (up to 5) for the ultimates.</span>` : cls === "songweaver" ? `Every skill is a note on the scale. Three in the right order ring a chord by themselves. Hover a skill to see its step.</span>` : `Basic hits build ${STACK_NAME[cls]} (up to 5) for some skills.</span>`);
+      (cls === "summoner" ? `Your creatures going back to the Void build Essence (up to 5) for the ultimates.</span>` : cls === "songweaver" ? `Every skill is a note on the scale. Three in the right order ring a chord by themselves. Hover a skill to see its step. Songs are Choruses, single notes are Verses. <button type="button" class="chhelp" title="Chord legend" aria-label="Chord legend">?</button></span>` : `Basic hits build ${STACK_NAME[cls]} (up to 5) for some skills.</span>`);
 
     const W = slabWidth(cls);
     const { nodes: layout, cols } = treeLayout(cls, W, H);
@@ -299,8 +301,8 @@ export class TalentMenu {
     const keyNote = !s.passive && r > 0 ? (slot >= 0 ? ` · on key ${slotKey(slot)}` : ` · hover it and press ${slotKey(0)}-${slotKey(8)} to put it on a key`) : "";
     const pips = Array.from({ length: maxRank(s) }, (_, i) => `<i class="${i < r ? "on" : ""}"></i>`).join("");
     return `<div class="ihead" style="--c:${color}">${iconImg(s.id, "iicon")}<div><b>${s.name}</b>` +
-      `<span class="ttype${s.passive ? " pas" : ""}">${s.type} · Lv ${s.req}</span><span class="pips">${pips}</span></div></div>` +
-      `<p class="idesc"><b class="iname" style="color:${color}">${s.name}</b> <span class="ttype">· ${s.type}${maxRank(s) > 1 ? ` · rank ${r} of ${maxRank(s)}` : ""}</span> ${s.desc}</p>${s.needs ? `<p class="idesc ineed">Needs ${NEED_TEXT[s.needs]} in hand.</p>` : ""}${rows.join("")}<p class="istat ${why === "" ? "can" : ""}">${status}${keyNote}</p>`;
+      `<span class="ttype${s.passive ? " pas" : ""}">${(this.cls === "songweaver" && songKindLabel(s)) || s.type} · Lv ${s.req}</span><span class="pips">${pips}</span></div></div>` +
+      `<p class="idesc"><b class="iname" style="color:${color}">${s.name}</b> <span class="ttype">· ${(this.cls === "songweaver" && songKindLabel(s)) || s.type}${maxRank(s) > 1 ? ` · rank ${r} of ${maxRank(s)}` : ""}</span> ${s.desc}</p>${s.needs ? `<p class="idesc ineed">Needs ${NEED_TEXT[s.needs]} in hand.</p>` : ""}${rows.join("")}<p class="istat ${why === "" ? "can" : ""}">${status}${keyNote}</p>`;
   }
 }
 

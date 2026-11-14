@@ -59,3 +59,10 @@ body #stats { top: 280px; left: auto; right: 40px; text-align: right; }
 body.hud-tight #orbhud .garg { display: none; }
 body.hud-tight.orbhud-on #chat { bottom: 132px; width: min(300px, 30vw); }
 body.hud-tight.orbhud-on #chatlog { bottom: 170px; width: min(300px, 30vw); }
+
+/* Songweaver: the right orb is the song gauge (gold, labelled "Song", pulses when nearly full) */
+#orbhud .orb .olabel { display: none; position: absolute; left: 0; right: 0; top: 18%; text-align: center; font-style: normal; color: #ffe27a;
+  font-size: 13px; font-family: var(--pixel-font); text-shadow: 1px 1px 0 #000, -1px -1px 0 #000; pointer-events: none; }
+#orbhud .orb.song .olabel { display: block; }
+#orbhud .orb.song.full { animation: orb-song-full .7s steps(2) infinite; }
+@keyframes orb-song-full { 50% { filter: drop-shadow(0 0 8px #ffe27a) drop-shadow(0 4px 6px rgba(0,0,0,.75)) brightness(1.25); } }

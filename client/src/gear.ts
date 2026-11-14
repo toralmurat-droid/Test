@@ -1,3 +1,4 @@
+import { slotName } from "./songTables";
 import { icon } from "./pixelicons";
 import { drawSongGearIcon } from "./songGearIcons";
 import { actionKey } from "./keymode";
@@ -261,7 +262,7 @@ export class GearMenu {
         const runes = runeHtml(id);
         const pr = this.pickRune >= 0 ? parseRune(bagItems[this.pickRune]) : undefined, sockWhy = pr ? socketProblem(id, pr) : "";
         const tip = pr ? (sockWhy ? `<span class="gbad">${sockWhy}</span>` : `Click: set the ${runeName(pr)} in this item`) : extra;
-        info.innerHTML = `<b style="color:${itemColor(id)}">${gearName(id, cls)}</b> <span class="glvl">Lv ${itemLevel(id)}</span> · ${rarityLabel(id)}${TIER_NAMES[d.tier]} ${SLOT_NAMES[d.slot]}<br>` +
+        info.innerHTML = `<b style="color:${itemColor(id)}">${gearName(id, cls)}</b> <span class="glvl">Lv ${itemLevel(id)}</span> · ${rarityLabel(id)}${TIER_NAMES[d.tier]} ${slotName(d.slot, cls, id)}<br>` +
           `${itemText(id) || "No bonus"}<br>${aff ? `${aff}<br>` : ""}${runes ? `${runes}<br>` : ""}<span class="${why ? "gbad" : "gok"}">${why || reqText(id, cls, hero)}</span>${tip ? `<br><small>${tip}</small>` : ""}`;
       };
       el.onmouseleave = () => { this.preview(); if (info) info.textContent = ""; };
@@ -290,7 +291,7 @@ export class GearMenu {
       txt.innerHTML = id
         ? `<b style="color:${itemColor(id)}">${gearName(id, cls)}</b>${itemLevel(id) > 1 ? ` <span class="glvl">Lv ${itemLevel(id)}</span>` : ""}<br>` +
           (why ? `<small class="gbad">Inactive: ${why}</small>` : `<small>${itemText(id)}</small>`)
-        : `<b>${SLOT_NAMES[slot]}</b><br><small>empty</small>`;
+        : `<b>${slotName(slot, cls)}</b><br><small>empty</small>`;
       row.appendChild(txt);
       const pips = id ? socketPips(id, (n) => this.act("unsocket", { slot, n })) : undefined;
       if (pips) row.appendChild(pips);

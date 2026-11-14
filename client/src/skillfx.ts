@@ -5,6 +5,7 @@ import { paintSigil, ICON } from "./skillArt";
 import { ELEMENT_COLORS, type Element } from "../../shared/elements";
 import { drawSoundWaveSheet, SOUND_WAVE_FLIGHT, SOUND_WAVE_FRAMES, SOUND_WAVE_H, SOUND_WAVE_IMPACT, SOUND_WAVE_W } from "./soundWaveArt";
 import { modeColor, SHIELD_BUFFS, SONG_BUFFS } from "./songTables";
+import { NOTES } from "../../shared/songs";
 import { MIST_DISSOLVE_MS, MIST_LINGER_MS, MIST_REFORM_AT_MS, MIST_REFORM_MS, MIST_REVEAL_MS } from "./skillMoveData";
 
 /**
@@ -51,6 +52,10 @@ interface P {
 
 interface Emitter { until: number; next: number; every: number; fn: () => void }
 
+interface SongRingState {
+  g: Phaser.GameObjects.Graphics; rings: { born: number }[]; bursts: { born: number; i: number }[];
+  color: number; lastNote: number; held: number; lockFrom: number;
+}
 export interface FxEntity {
   sprite: Phaser.GameObjects.Sprite; top: number; state: any; hero?: string;
   gear?: { each(fn: (s: Phaser.GameObjects.Sprite) => void): void }; // worn gear overlays (gear.ts GearLayer)
@@ -2313,6 +2318,7 @@ export class SkillFx {
         const [hx, hy] = e ? this.hand(e) : [x, y], c = modeColor(ev.mode);
         this.notesUp(hx, hy, c, 1);
         this.glow(hx, hy, 8, 7, c, 200, 0.5);
+        if (ev.id) this.noteRing(ev.id, ev.mode);
         return true;
       }
       case "chord": {
@@ -2322,6 +2328,41 @@ export class SkillFx {
         this.glow(x, y, 4, 30, c, 480, 0.8, true);
         this.glow(x, y, 10, 14, 0xffffff, 200, 0.8);
         this.notesUp(x, y, c, 3, 14);
+        if (ev.id) this.chordRings(ev.id, ev.mode);
+        return true;
+      }
+      case "swell": {
+        // The song gauge is full (DI-3): a burst round the caster, one look per book; no book = a small grey puff
+        if (x === undefined || y === undefined) return true;
+        const z = e ? e.top * 0.5 : 8;
+        if (ev.fizzle || !ev.book) {
+          for (let i = 0; i < 6; i++) this.p(x + rnd(-6, 6), y + rnd(-2, 2), z + rnd(-4, 4), pick([0x9a9a9a, 0xbdbdbd]), { vx: rnd(-14, 14), vz: rnd(6, 16), life: 420, size: 2, size1: 3, alpha: 0.45, add: false });
+          this.tintRing(x, y, 16, 0x9a9a9a, 10, 300, 3);
+          return true;
+        }
+        switch (ev.book) {
+          case "bk_hymnal": // light: a column of gold-white
+            this.tintRing(x, y, 44, 0xfff3b0, 30, 600, 3);
+            this.glow(x, y, z, 30, 0xfff3b0, 600, 0.8, true);
+            for (let i = 0; i < 16; i++) this.p(x + rnd(-14, 14), y + rnd(-3, 3), 2, pick([0xffffff, 0xfff3b0, 0xffd24d]), { vz: rnd(30, 70), life: rnd(500, 900), size: pick([1, 2]), size1: 0 });
+            this.notesUp(x, y, 0xfff3b0, 4, 10);
+            break;
+          case "bk_march": // wind: two quick green rings and streaks
+            this.tintRing(x, y, 40, 0x6fdc8c, 30, 380, 3);
+            this.tintRing(x, y, 58, 0xd0ffd8, 30, 520, 3);
+            for (let i = 0; i < 10; i++) this.p(x, y, rnd(2, 14), 0xd0ffd8, { vx: Math.cos(i * 0.63) * 150, vy: Math.sin(i * 0.63) * 70, life: 280, size: 1, size1: 0, drag: 2 });
+            this.glow(x, y, z, 20, 0x6fdc8c, 360, 0.7);
+            break;
+          case "bk_dissonance": // jagged red and violet shards
+            this.tintRing(x, y, 46, 0xd8203c, 34, 420, 3);
+            this.glow(x, y, z, 26, 0xa03cff, 420, 0.8);
+            this.shards(x, y, z, [0xd8203c, 0xa03cff, 0xffffff, 0x4a0a2a], 22, 110);
+            break;
+          default: // the Songbook's own Refrain: gold notes and a ring
+            this.tintRing(x, y, 38, 0xffd24d, 28, 520, 3);
+            this.glow(x, y, z, 24, 0xffd24d, 480, 0.8);
+            this.notesUp(x, y, 0xffd24d, 5, 10);
+        }
         return true;
       }
       case "resonate": {
@@ -2359,6 +2400,86 @@ export class SkillFx {
       }
     }
     return false;
+  }
+
+  // ---- note rings (DI-1): one ring under the caster per note, up to 3; a chord bursts them; a lockout closes in ----
+
+  private songRings = new Map<string, SongRingState>();
+  private ringState(id: string): SongRingState {
+    let rs = this.songRings.get(id);
+    if (!rs) { rs = { g: this.scene.add.graphics(), rings: [], bursts: [], color: modeColor(undefined), lastNote: -1e9, held: 0, lockFrom: 0 }; this.songRings.set(id, rs); }
+    return rs;
+  }
+
+  /** A "note" event: ring k (the k-th note so far, 3 at most) opens under the caster. */
+  private noteRing(id: string, mode?: string) {
+    const rs = this.ringState(id);
+    if (this.t - rs.lastNote > NOTES.idleMs) rs.rings = [];
+    rs.lastNote = this.t; rs.color = modeColor(mode);
+    if (rs.rings.length >= 3) rs.rings.shift();
+    rs.rings.push({ born: this.t });
+  }
+
+  /** A "chord" event: all three rings flash and burst outwards, then the lockout starts. */
+  private chordRings(id: string, mode?: string) {
+    const rs = this.ringState(id);
+    rs.color = modeColor(mode);
+    for (let i = 0; i < 3; i++) rs.bursts.push({ born: this.t, i });
+    rs.rings = []; rs.lockFrom = this.t;
+  }
+
+  /** Draws every caster's rings (called each frame from update). */
+  private tickRings() {
+    const chorus = new Set<string>();
+    for (const { f } of this.fields.values()) if (f.owner && skillById(f.skill)?.song) chorus.add(f.owner);
+    for (const id of chorus) if (!this.songRings.has(id) && this.ent(id)) this.ringState(id);
+    const flat = ISO ? 0.5 : 0.6, t = this.t;
+    for (const [id, rs] of this.songRings) {
+      const e = this.ent(id);
+      if (!e) { rs.g.destroy(); this.songRings.delete(id); continue; }
+      if (e.state.dead) { rs.g.clear(); rs.rings = []; continue; }
+      const words: string[] = e.state.fx ? String(e.state.fx).split(",") : [];
+      let mode = "", held = 0, lock = false;
+      for (const w of words) {
+        if (w.startsWith("mode:")) mode = w.slice(5);
+        else if (w === "ch1") held = Math.max(held, 1);
+        else if (w === "ch2") held = Math.max(held, 2);
+        else if (w === "chlock") lock = true; // HOOK(di): contract fx word `chlock`
+      }
+      // server progress wins: a held note (ch1/ch2) keeps its ring alive, a late joiner gets rings it never saw born
+      while (rs.rings.length < held) rs.rings.push({ born: t - 400 });
+      rs.held = held;
+      if (mode) rs.color = modeColor(mode);
+      if (lock && !rs.lockFrom) rs.lockFrom = t; // late joiner: time it from the first sight
+      if (!lock) rs.lockFrom = 0;
+      const g = rs.g, x = Math.round(e.sprite.x), y = Math.round(e.sprite.y);
+      g.clear().setDepth(e.sprite.depth - 0.5);
+      const ell = (r: number, w: number, col: number, a: number) => { if (a > 0.01) g.lineStyle(w, col, Math.min(1, a)).strokeEllipse(x, y, r * 2, r * 2 * flat); };
+      // Chorus: a steady base ring under the owner, drawn first so chord rings sit above it
+      const base = chorus.has(id);
+      if (base) {
+        const pulse = 0.5 + 0.5 * Math.sin(t / 420);
+        g.fillStyle(rs.color, 0.05).fillEllipse(x, y, 62, 62 * flat);
+        ell(31, 1, rs.color, 0.4 + 0.15 * pulse);
+      }
+      if (lock && rs.lockFrom) {
+        const p = Math.min(1, (t - rs.lockFrom) / NOTES.lockMs);
+        ell(42 - 28 * p, 1, 0x8a8a8a, 0.45 - 0.15 * p);
+      }
+      rs.rings.forEach((r, i) => {
+        const age = t - r.born, k = i + 1, R = 14 + 4 * i, open = Math.min(1, age / 350);
+        const rad = R * (0.35 + 0.65 * (1 - (1 - open) * (1 - open)));
+        let a = Math.max(0, 1 - age / 2500);
+        if (held >= k) a = Math.max(a, 0.3); // still counting toward a chord
+        ell(rad, k === 1 ? 1.5 : 2, rs.color, a * (0.5 + 0.17 * k));
+      });
+      rs.bursts = rs.bursts.filter((b) => t - b.born < 520);
+      for (const b of rs.bursts) {
+        const age = t - b.born, u = age / 520, flash = age < 140 ? 0xffffff : rs.color;
+        ell(14 + 4 * b.i + 34 * u, 2, flash, 1 - u);
+      }
+      if (!rs.bursts.length && !lock && !base && t - rs.lastNote > 15000 && !held) { rs.g.destroy(); this.songRings.delete(id); }
+    }
   }
 
   /** Song rings, resonance glow and shield bubbles from the status words (`words` is the entity's fx split on ","). */
@@ -2497,6 +2618,7 @@ export class SkillFx {
     for (const em of this.emitters) if (this.t >= em.next) { em.next = this.t + em.every; em.fn(); }
     this.emitters = this.emitters.filter((em) => this.t < em.until);
     this.tickFields(dt);
+    this.tickRings();
     this.tickShots(dt);
     const out: P[] = [];
     for (const p of this.parts) {
