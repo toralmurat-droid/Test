@@ -42,6 +42,9 @@ export const WAR = {
   rally: 0.8, // income bonus of a clan with no land at all, shrinking to 0 at a fair share (1/5 of the land)
   leaderShare: 0.3, // above this share of the land a clan is "the leader": everyone's target, the Raiders' prey
   raidersHit: 0.03, // share of the leader's army the Night Raiders cut down each night tick
+  // Players (server/war.ts): valor is hero-minutes at a standard; a few heroes tip a front, a crowd cannot swamp it
+  valorScale: 20, // valor at which players bring ~63% of valorCap
+  valorCap: 60, // troops players can add to one territory per clan per tick (a clan's army is ~150-600)
 };
 
 export interface Siege { by: ClanKey; at: number }
@@ -107,8 +110,8 @@ export function targetsOf(s: WarState, k: ClanKey): number[] {
 /** Own territories that touch an enemy (where defenders stand). */
 export const bordersOf = (s: WarState, k: ClanKey) => TERRITORIES.filter((t) => s.owner[t.id] === k && t.near.some((n) => s.owner[n] !== k)).map((t) => t.id);
 
-const timeBonus = (k: ClanKey, tick: number) => {
-  const d = CLANS[k].doctrine, p = phaseOf(tick);
+const timeBonus = (k: ClanKey, p: number) => {
+  const d = CLANS[k].doctrine;
   return (d === "siege" && p === 2) || (d === "ritual" && p === 0) ? WAR.doctrine : 1;
 };
 const finite = (v: unknown, lo: number, hi: number): number | undefined => (typeof v === "number" && Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : undefined);
@@ -127,9 +130,18 @@ export function cleanOrders(o: Orders | undefined): Orders {
 }
 const fortCap = (k: ClanKey) => WAR.fortMax * (CLANS[k].doctrine === "palisade" ? WAR.palisadeFort : 1);
 
+/**
+ * What the live game adds to a tick. `phase`: the real time of day (the sim counts it from the tick). `valor`: the
+ * players' effort per territory and clan this tick (standards held, see server/war.ts), turned into troops there.
+ */
+export interface TickExtra { phase?: number; valor?: Partial<Record<ClanKey, number>>[] }
+
+/** Troops that `v` valor is worth: each point counts, but a crowd adds less and less (WAR.valorCap at most). */
+export const valorForce = (v: number) => (v > 0 ? WAR.valorCap * (1 - Math.exp(-v / WAR.valorScale)) : 0);
+
 /** One war tick. Mutates and returns `s`. A clan missing from `orders` (or with broken orders) only defends. */
-export function warTick(s: WarState, orders: Partial<Record<ClanKey, Orders>>): WarState {
-  const supply = supplyMap(s), lead = leaderOf(s);
+export function warTick(s: WarState, orders: Partial<Record<ClanKey, Orders>>, extra: TickExtra = {}): WarState {
+  const supply = supplyMap(s), lead = leaderOf(s), phase = extra.phase ?? phaseOf(s.tick);
   const land = Object.fromEntries(CLAN_KEYS.map((k) => [k, landOf(s, k)])) as Record<ClanKey, number>;
   // 1. Income and upkeep
   for (const k of CLAN_KEYS) {
@@ -139,7 +151,7 @@ export function warTick(s: WarState, orders: Partial<Record<ClanKey, Orders>>): 
     inc *= 1 + WAR.rally * Math.max(0, 1 - land[k] / (s.owner.length / CLAN_KEYS.length));
     s.army[k] = s.army[k] * (1 - WAR.upkeep) + inc;
   }
-  if (lead && phaseOf(s.tick) === 2) s.army[lead] *= 1 - WAR.raidersHit;
+  if (lead && phase === 2) s.army[lead] *= 1 - WAR.raidersHit;
   // 2. Where the armies stand: defenders spread over the borders by last tick's pressure, attackers on their targets
   const attack: Partial<Record<ClanKey, number>>[] = TERRITORIES.map(() => ({}));
   const defence = Array<number>(TERRITORIES.length).fill(0);
@@ -154,16 +166,27 @@ export function warTick(s: WarState, orders: Partial<Record<ClanKey, Orders>>): 
     for (const a of shares) {
       const src = Math.max(WAR.cutOff, ...TERRITORIES[a.t].near.filter((n) => s.owner[n] === k).map((n) => supply[n]));
       const vs = s.owner[a.t];
-      const mult = timeBonus(k, s.tick) * (CLANS[k].counters === vs ? WAR.counter : 1);
+      const mult = timeBonus(k, phase) * (CLANS[k].counters === vs ? WAR.counter : 1);
       attack[a.t][k] = (attack[a.t][k] ?? 0) + ((force * a.share) / Math.max(1, ssum)) * src * mult;
     }
   }
+  // Players: valor for the owner defends, valor for a clan that may attack this territory pushes for that clan
+  extra.valor?.forEach((vs, id) => {
+    if (!vs || id >= TERRITORIES.length) return;
+    const legal = (k: ClanKey) => targetsOf(s, k).includes(id);
+    for (const [k, v] of Object.entries(vs) as [ClanKey, number][]) {
+      const f = valorForce(v ?? 0);
+      if (!f || !CLANS[k]) continue;
+      if (s.owner[id] === k) defence[id] += f;
+      else if (legal(k)) attack[id][k] = (attack[id][k] ?? 0) + f;
+    }
+  });
   // 3. Fights, Control, sieges
   for (const t of TERRITORIES) {
     const id = t.id, own = s.owner[id], atk = attack[id];
     const total = Object.values(atk).reduce((a, b) => a + (b ?? 0), 0);
     s.pressure[id] = total;
-    const def = defence[id] * supply[id] * WAR.defender * timeBonus(own, s.tick) * (1 + s.fort[id]);
+    const def = defence[id] * supply[id] * WAR.defender * timeBonus(own, phase) * (1 + s.fort[id]);
     if (total <= 0) {
       s.control[id] = Math.min(100, s.control[id] + WAR.regrow);
       s.fort[id] = Math.min(fortCap(own), s.fort[id] + WAR.fortGrow * (CLANS[own].doctrine === "palisade" ? WAR.palisadeFort : 1));

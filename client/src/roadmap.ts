@@ -47,9 +47,9 @@ export const MILESTONES: Milestone[] = [
     goal: "One real front in Act 1: Wardens against Redfang over four territories, led by scripted doctrine.",
     exit: "Players can hold standards, see Control move every 10 minutes and join a siege window; it feels good to play.",
     items: [
-      { name: "War tick, Control, pressure formula, siege windows in the live game", owner: "Gameplay Engineers", status: "next", note: "Rules exist in shared/war/rules.ts; next: run them on the server" },
-      { name: "Standards (capture rings) and Holds in two clan styles", owner: "Art + Gameplay", status: "later" },
-      { name: "Front plaque HUD and siege countdown", owner: "Client & UI", status: "later" },
+      { name: "War tick, Control, pressure formula, siege windows in the live game", owner: "Gameplay Engineers", status: "done", note: "server/war.ts runs the whole war (all five clans, both acts) every 10 minutes and saves it" },
+      { name: "Standards (capture rings) and Holds in two clan styles", owner: "Art + Gameplay", status: "doing" },
+      { name: "Front plaque HUD and siege countdown", owner: "Client & UI", status: "done" },
       { name: "Banners and standards in the world (pixel art)", owner: "Art Director", status: "later" },
       { name: "War horn and siege sounds", owner: "Audio", status: "later" },
       { name: "Hale and the Redfang Chief speak as clan leaders", owner: "Narrative", status: "later" },

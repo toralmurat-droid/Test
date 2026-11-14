@@ -88,6 +88,7 @@ const CHAMP_HELPER_MS = 90_000;
 import { ASK_BURST, ASK_PER_SEC, Bucket, CHAT_BURST, CHAT_PER_SEC, clientIp, isLocalIp, MSG_BURST, MSG_KICK_AFTER, MSG_KICK_WINDOW_MS, MSG_PER_SEC } from "./ratelimit";
 
 import { Player } from "./player";
+import { attachWar, warNow } from "./war";
 export { Player, PlayerPrivate } from "./player"; // moved out; tests and tools import them from here
 
 export class Mob extends Schema {
@@ -572,8 +573,11 @@ export class TownRoom extends Room<TownState> {
   });
   private itemSeq = 0;
 
+  private offWar?: () => void;
+
   onCreate() {
     liveRooms.add(this);
+    this.offWar = attachWar(this); // the clan war (server/war.ts) runs on its own; the room only passes on the news
     this.limitMessages();
     this.setState(new TownState());
     copyPatches(this); // each socket gets its own copy of a patch (deflate compresses later; server/patchCopy.ts)
@@ -884,6 +888,7 @@ export class TownRoom extends Room<TownState> {
     if (back?.group.length) this.regroupOnJoin(client.sessionId, p, back.group);
     this.sendBoard(client); // the Ideas board is ready as soon as it is opened
     if (Object.keys(p.feast).length) client.send("feast", { feast: p.feast }); // Devour: what this hero has eaten
+    const war = warNow(); if (war) client.send("war", war); // the clan war front plaque (client/src/warPlaque.ts)
     console.log(`${p.name} the ${CLASSES[p.cls].name} joined (${this.clients.length} online)`);
   }
 
@@ -913,6 +918,7 @@ export class TownRoom extends Room<TownState> {
 
   onDispose() {
     liveRooms.delete(this);
+    this.offWar?.();
     this.state.players.forEach((p) => saveHero(p.name, p.cls, this.snapshot(p)));
     return flushFinal();
   }

@@ -101,3 +101,41 @@ async function upsert<A>(pool: pg.Pool, changed: Record<string, A>) {
     c.release();
   }
 }
+
+/**
+ * Small named documents that are not accounts (the clan war's state): a row of table `kv` with DATABASE_URL, else
+ * a JSON file per key next to the saves file (SAVE_FILE's folder, default data/).
+ */
+export interface Kv { get<T>(key: string): Promise<T | undefined>; set(key: string, value: unknown): Promise<void>; setSync?(key: string, value: unknown): void }
+
+export async function openKv(url = process.env.DATABASE_URL): Promise<Kv> {
+  if (url) {
+    const pool = new pg.Pool({ connectionString: url, max: 2 });
+    pool.on("error", (e) => console.error("Postgres pool error:", e));
+    await pool.query("CREATE TABLE IF NOT EXISTS kv (key text PRIMARY KEY, data jsonb NOT NULL, updated_at timestamptz NOT NULL DEFAULT now())");
+    return {
+      async get<T>(key: string) {
+        const r = await pool.query<{ data: T }>("SELECT data FROM kv WHERE key = $1", [key]);
+        return r.rows[0]?.data;
+      },
+      async set(key, value) {
+        await pool.query("INSERT INTO kv (key, data, updated_at) VALUES ($1, $2::jsonb, now()) ON CONFLICT (key) DO UPDATE SET data = EXCLUDED.data, updated_at = now()", [key, JSON.stringify(value)]);
+      },
+    };
+  }
+  const dir = path.dirname(path.resolve(process.env.SAVE_FILE ?? path.join(__dirname, "../data/saves.json")));
+  const file = (key: string) => path.join(dir, `${key.replace(/[^a-z0-9_-]/gi, "_")}.json`);
+  return {
+    get: async <T>(key: string) => (fs.existsSync(file(key)) ? (readJsonFile(file(key)) as unknown as T) : undefined),
+    async set(key, value) {
+      await fs.promises.mkdir(dir, { recursive: true });
+      await fs.promises.writeFile(file(key) + ".tmp", JSON.stringify(value));
+      await fs.promises.rename(file(key) + ".tmp", file(key));
+    },
+    setSync(key, value) {
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(file(key) + ".sync.tmp", JSON.stringify(value));
+      fs.renameSync(file(key) + ".sync.tmp", file(key));
+    },
+  };
+}

@@ -57,6 +57,7 @@ import { PointerControls, type ClickEnemy, type ClickSpot } from "./pointer";
 import { warmPaths } from "./pathfind";
 import { pixelText } from "./pixeltext";
 import { speechBubble } from "./weathered";
+import { WarPlaque } from "./warPlaque";
 import { ART_K, CHAR_GROW, CHAR_SCALE, CHARACTERS, CHAR_ORIGIN, CharacterName, createArtAnims, ensureCharSheet, HD_CHARS, playCharAnim, preloadArt } from "./artAssets";
 import { Ambient } from "./ambient";
 import { Details } from "./details";
@@ -380,6 +381,7 @@ export class TownScene extends Phaser.Scene {
   private grimoire?: GrimoirePanel;
   private resBars?: ResourceBars;
   private heatGauge?: OverloadGauge;
+  private warPlaque?: WarPlaque;
   private chordHud?: ChordHud;
   private soundCues = new SoundCues();
   private statsShown = "";
@@ -1487,6 +1489,7 @@ export class TownScene extends Phaser.Scene {
     const alive = () => { lastPatch = Date.now(); };
     this.room.onStateChange(alive);
     this.room.onMessage("hb", alive);
+    this.room.onMessage("war", (v) => (this.warPlaque ??= new WarPlaque(document.getElementById("hud")!)).set(v));
     this.room.onMessage("mv", alive);
     this.startPing();
     window.setInterval(() => { if (!this.quitting && Date.now() - lastPatch > 15_000) reconnectSoon(login); }, 3000);
@@ -3378,6 +3381,7 @@ export class TownScene extends Phaser.Scene {
       const tx = meEnt.sprite.x / TILE, ty = meEnt.sprite.y / TILE;
       const zdef = zoneAt(Math.floor(tx), Math.floor(ty));
       setMusicZone(zdef?.name, zdef?.mobs, this.areaName, actOfTile(tx, ty));
+      this.warPlaque?.update(tx, ty); // the clan war front plaque (warPlaque.ts)
       sfxFrame(this.me, this.entities as any);
       const cls = mine.cls as ClassKind;
       const cdm = cooldownMult(cls, statsOf(mine), mine.talents);
