@@ -102,3 +102,47 @@ test("Player schema guard: at most 64 synced fields, no collection or child sche
   const at63 = fields.find((f) => f.index === 63);
   if (at63) assert.equal(typeof at63.type, "string", `field ${at63.name} at 63 must be a primitive`);
 });
+
+test("a late joiner decodes a full state far above the old 8 KB buffer (guards the Encoder.BUFFER_SIZE workaround)", async () => {
+  const srv = await startRoom();
+  try {
+    const host = await srv.join({ cls: "wizard" }); // the room exists once someone joined
+    await wait(200);
+    const room = srv.room;
+    // 60 heavy heroes (full bag, many talents): the join full state is tens of KB. With the library default buffer the
+    // per-view encode resizes and the late joiner's state comes out truncated (server/player.ts, BUFFER_SIZE note).
+    for (let i = 0; i < 60; i++) {
+      const p = new Player();
+      p.name = `Heavy${i}`; p.cls = "wizard"; p.x = 2600 + i; p.y = 1800;
+      for (let k = 0; k < 24; k++) p.bag.push(`w_frost`);
+      for (let k = 0; k < 30; k++) p.talents.set(`t${k}`, 1);
+      room.state.players.set(`heavy${i}`, p);
+    }
+    await wait(200);
+    const c = await srv.join({ cls: "wizard" }), w = watch([c]);
+    await wait(600);
+    w.stop();
+    assert.deepEqual(w.errs, [], "no decode errors");
+    assert.equal(c.state.players.size, room.state.players.size, "every hero decoded");
+    assert.equal(c.state.players.get("heavy59")?.bag.length, 24, "the last heavy hero arrived whole");
+    assert.ok(c.state.players.get(c.sessionId)?.me?.quests, "own me arrived");
+    await c.leave(); await host.leave();
+  } finally { await srv.stop(); }
+});
+
+test("a quest key dropped on the server (progress back to 0) is removed on the owner's client", async () => {
+  const srv = await startRoom();
+  try {
+    const c = await srv.join({ cls: "wizard" });
+    await wait(300);
+    const room = srv.room, p = room.state.players.get(c.sessionId);
+    room.qset(p, 0, { questId: 2, questStage: 1, questCount: 3 });
+    await wait(300);
+    const own = () => c.state.players.get(c.sessionId).me;
+    assert.ok(own().quests.has("gloam"), "set arrives");
+    room.qset(p, 0, { questId: 0, questStage: 0, questCount: 0 });
+    await wait(300);
+    assert.equal(own().quests.has("gloam"), false, "delete arrives");
+    await c.leave();
+  } finally { await srv.stop(); }
+});

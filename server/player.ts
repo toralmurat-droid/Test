@@ -11,7 +11,9 @@ import { SLOT_COUNT } from "../shared/slots";
 // @colyseus/schema 3.0.76 bug: when a per-client view encode (encodeView / encodeAllView, used because Player.me is
 // @view) overflows the shared buffer, the resize re-encodes from the view's offset into a new buffer but the caller keeps
 // slicing the old one, and the view's visibility changes are lost: clients then fail with `"refId" not found`. Without
-// views the resize path is safe. Start big enough that a patch never resizes (the bench at 40 bots peaks around 32 KB).
+// views a resize only costs a re-alloc (every overflowing tick: the library never keeps the bigger buffer). Start big
+// enough that a patch never resizes: the bench at 40 bots peaks around 32 KB, a full state with 50 heavy heroes and
+// ~1500 ground items about 150 KB. A `@colyseus/schema buffer overflow` warning in the logs means this is too small.
 Encoder.BUFFER_SIZE = 256 * 1024;
 
 /**
@@ -23,7 +25,8 @@ export class PlayerPrivate extends Schema {
   @type("string") timers = "";
   // Every quest chain's progress (shared/quests.ts CHAINS, read with chainState): packed quest, step and count under the
   // chain's QuestChain.packed key, one synced field for all of them. A chain not begun has no key (qset drops zeros).
-  @type({ map: "number" }) quests = new MapSchema<number>();
+  // readonly: a replaced map would be a new tree the owner's view never saw (see Player.me)
+  @type({ map: "number" }) readonly quests = new MapSchema<number>();
 }
 
 /**
@@ -85,7 +88,10 @@ export class Player extends Schema {
   @type("number") spd = 1;
   @type("string") fx = "";
   // Owner-only data (PlayerPrivate): the per-client view (onJoin) sends it to this hero's client alone
-  @view() @type(PlayerPrivate) me = new PlayerPrivate();
+  // Owner-only (StateView in TownRoom onJoin). Two traps, both silent: never replace `me` or a collection inside it after
+  // join (the owner's view only holds the trees it was given), and never set a synced Player field to undefined / null
+  // (with a @view field on the class, every DELETE on Player goes to the filtered changes, so only the owner sees it).
+  @view() @type(PlayerPrivate) readonly me = new PlayerPrivate();
   // Dedupe for me.timers (shared/buffTimers.ts timerSig): rewritten only when the set of effects changes
   timerSig = "";
   timerSeq = 0;
