@@ -17,8 +17,10 @@ import { WATCH_POSTS } from "./watch";
 export interface TideWave { level: [number, number]; n: number; kinds: Partial<Record<MobKind, number>> }
 
 export const TIDE = {
-  /** Blob kills that fill the meter (Decision 8). */
-  goal: 1500,
+  /** Blob kills that fill the meter (Decision 8; 1500 -> 600, Claude 2026-11-14: one farmer filled 1500 in ~5 h). */
+  goal: 600,
+  /** Kill XP from a marcher, times this: 130 kills in 3 min would level a Lv 10 hero ~8 times (Decision 11). */
+  xpMult: 0.5,
   /** Lv 4 -> 12; the last wave is exactly maxAlive, so it is all out at once (and the bench's worst case). */
   waves: [
     { level: [4, 5], n: 24, kinds: { slime: 14, shooterblob: 5, warriorblob: 5 } },
@@ -36,7 +38,7 @@ export const TIDE = {
   /** Pause between a cleared wave and the next. */
   waveGapMs: 15_000,
   /** The march gives up (and pays what was earned) this long after it began. */
-  limitMs: 12 * 60_000,
+  limitMs: 6 * 60_000, // clears take 2.5-3.5 min in the sim
   /** A march missed by more than this (the server was down at dusk) waits for the next dusk instead. */
   lateMs: 3 * 60_000,
   /** The point they march to: this many tiles west of the west gate, on the King's Road. */

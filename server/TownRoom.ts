@@ -5079,12 +5079,12 @@ export class TownRoom extends Room<TownState> {
     if (m.hp > 0) { afterHit(this.host, attackerId, targetId, opts); return; }
     if (a) onKill(this.host, attackerId); // Bloodlust
     if (m.owner && !m.charmUntil) { this.mobDied(m, targetId, attackerId, a?.name ?? ""); return; } // a summon: no XP, no loot, no quest credit
-    if (a) for (let c = 0; c < CHAINS.length; c++) this.questKill(attackerId, a, m, c);
-    if (a) this.bountyKill(attackerId, a, m);
+    if (a && !m.tide) for (let c = 0; c < CHAINS.length; c++) this.questKill(attackerId, a, m, c); // marchers fill no quest or bounty
+    if (a && !m.tide) this.bountyKill(attackerId, a, m);
     if (a) this.tide.kill(attackerId, m); // a blob fills the Gloam Tide's meter (server/tide.ts)
     if (a) this.rumours.kill(attackerId, targetId); // a rumour's ambusher (server/rumours.ts)
     // Kill XP: every group member in the same zone gets it (the killer alone when solo)
-    const xp = Math.round(def.xp * mobScale(m.level, "xp"));
+    const xp = Math.round(def.xp * mobScale(m.level, "xp") * (m.tide ? TIDE.xpMult : 1));
     for (const pid of a?.party ? this.groupNear(attackerId, m.x, m.y) : [attackerId]) this.grantXp(pid, xp, m);
     this.dropLoot(m.kind, m.x, m.y, mobScale(m.level, "gold") * (m.kind === "bandit" ? BANDIT_ROLES[roleOf(m.weapon)].loot : 1) * (m.champion ? CHAMPION.goldMult : 1), m.level);
     if (m.champion) this.champLoot(m); // a champion: more gold, gear rolls, a potion and a rune

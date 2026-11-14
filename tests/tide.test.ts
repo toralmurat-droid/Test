@@ -7,7 +7,8 @@ import path from "node:path";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { startRoom, wait } from "./helpers/room"; // first: sets SAVE_FILE / IDEAS_FILE to a temp dir
-import { TILE } from "../shared/constants";
+import { MOBS, mobScale, TILE } from "../shared/constants";
+import { CHAINS, chainState, packQuest } from "../shared/quests";
 import { DAY_CYCLE_MS, DUSK } from "../shared/daynight";
 import { WATCH, WATCH_POSTS } from "../shared/watch";
 import { actAt } from "../shared/act2";
@@ -160,6 +161,27 @@ test("meter: +1 per blob a hero kills; summons, hold waves, marchers, non-blobs 
     room.summonStrike(g, sumId, "petprey", room.state.mobs.get("petprey"), { damage: 50 });
     assert.ok(room.state.mobs.get("petprey").dead, "the golem killed it");
     assert.equal(w.tide, 3, "a pet's kill counts for its owner");
+  } finally { await t.srv.stop(); }
+});
+
+test("marchers fill no bounty and no quest kill step, and give TIDE.xpMult of their kill XP", async () => {
+  const t = await setup();
+  try {
+    const { kill, p } = t;
+    p.bounty = { zone: "North Meadow", kind: "slime", goal: 50, minLevel: 1, xp: 0, gold: 0, n: 0 };
+    p.arcs.set("hunt", packQuest(0, 2, 0)); // Cold Ashes, step 2: kill blobs anywhere
+    const hunt = () => chainState(p, CHAINS.findIndex((c) => c.id === "hunt"))!.questCount;
+    const base = Math.round(MOBS.slime.xp * mobScale(3, "xp"));
+    let xp0 = p.xp;
+    kill("slime", { tide: true });
+    assert.equal(p.bounty.n, 0, "a marcher fills no bounty");
+    assert.equal(hunt(), 0, "a marcher fills no quest kill step");
+    assert.equal(p.xp - xp0, Math.round(base * TIDE.xpMult), "a marcher gives xpMult of its kill XP");
+    xp0 = p.xp;
+    kill("slime");
+    assert.equal(p.bounty.n, 1, "a plain slime still counts for the bounty");
+    assert.equal(hunt(), 1, "and for the quest");
+    assert.equal(p.xp - xp0, base, "and gives its full XP");
   } finally { await t.srv.stop(); }
 });
 

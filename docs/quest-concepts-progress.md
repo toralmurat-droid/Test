@@ -36,6 +36,7 @@ Defaults picked so work isn't blocked (Claude 2026-11-13). Murat owns game direc
 13. Lantern tuning (Claude 2026-11-14): lure 1.5 -> 1.25, ground drain x3 -> x2. Sim: vampire with basic attacks only clears 16% of Brinewood encounters (wizard 97%, summoner 100%), so dropping the lantern to fight with skills must stay affordable.
 14. Unseen: dying ends the hide (respawn in town as always); the saved checkpoint stays. No respawn-point change.
 15. Phones out of scope for this feature (Mehmet 2026-11-14: "Phones irrelevant."): no phone-size checks from WP5 on; phone layout polish dropped.
+16. Tide tuning (Claude 2026-11-14, pending Murat): goal 1500 -> 600 (one farmer filled 1500 in ~5 h), limit 12 -> 6 min (clears take 2.5-3.5 min), marcher kill XP x0.5 (a surviving Lv 10 solo hero gained ~8 levels in one march). Marchers fill no bounty or quest kill step (bug fix). Open for Murat: payout gold is ~6% of what marchers drop (proposal 40 + 20 x level, cap 800); Lv 30 heroes face no risk (option: scale marcher level to the heroes at the gate).
 
 ## Plan
 Written by the planner agent (2026-11-13). Code facts below were read from the tree at a4ebcf1.
