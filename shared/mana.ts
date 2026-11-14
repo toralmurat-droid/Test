@@ -13,8 +13,8 @@ import { addHeat, isOverheated } from "./overload";
  * A skill (shared/skills.ts SkillDef) costs `cost` Heat and/or `mana` Mana, on top of its cooldown. Cheap skills
  * have short cooldowns and are limited by the pools; big skills are limited by their cooldown.
  *
- * Player.mp (synced) packs current mana, max mana and mana potions into one number (packMana), because the Player
- * schema is at Colyseus's 64-field limit.
+ * Player.me.mp (synced to the owner only, server/player.ts) packs current mana, max mana and mana potions into one
+ * number (packMana): one field instead of three, and it changes as one.
  */
 export const MANA = {
   base: 50, // max mana of a hero with 0 Magic

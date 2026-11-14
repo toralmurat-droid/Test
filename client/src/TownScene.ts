@@ -219,11 +219,16 @@ function patchTime(): number {
   if (stamp > now) lateness = Math.max(stamp - now, lateness); // early stamps (a bunch after a late one) need the slack too
   return stamp;
 }
-/** Record a server position for an entity (several field changes of one update count once). */
+/**
+ * Record a server position for an entity (several field changes of one update count once). An entity that stood still
+ * sends no updates, so before the first step after a pause the old spot is stamped again one tick earlier: otherwise
+ * the blend runs over the whole pause and the first step jumps.
+ */
 function pushSnap(e: { snaps?: Snap[] }, x: number, y: number) {
-  const s = (e.snaps ??= []), t = patchTime();
+  const s = (e.snaps ??= []), t = patchTime(), tick = 1000 / TICK_RATE;
   const last = s[s.length - 1];
   if (last && t - last.t < 1) { last.x = x; last.y = y; return; }
+  if (last && t - last.t > 2 * tick && (last.x !== x || last.y !== y)) s.push({ t: t - tick, x: last.x, y: last.y });
   s.push({ t, x, y });
   if (s.length > 12) s.splice(0, s.length - 12);
 }
@@ -3357,8 +3362,8 @@ export class TownScene extends Phaser.Scene {
       const ow = own(mine), mn = unpackMana(ow.mp); // owner-only numbers, in `me` (server/player.ts)
       (this.resBars ??= new ResourceBars(document.getElementById("hud")!)).update({
         level: mine.level, hp: mine.hp, maxHp: mine.maxHp, mp: mn.mana, maxMp: mn.maxMana,
-        xpFrac: mine.level >= MAX_LEVEL ? 1 : (ow.xp - cur) / Math.max(1, next - cur),
-        xp: ow.xp - cur, xpNeed: mine.level >= MAX_LEVEL ? undefined : next - cur,
+        xpFrac: mine.level >= MAX_LEVEL ? 1 : Math.max(0, Math.min(1, (ow.xp - cur) / Math.max(1, next - cur))),
+        xp: Math.max(0, ow.xp - cur), xpNeed: mine.level >= MAX_LEVEL ? undefined : next - cur,
       });
       // Heat / overload gauge on the left (overloadGauge.ts, shared/overload.ts)
       const flip = (this.heatGauge ??= new OverloadGauge(document.getElementById("hud")!)).update(ow.energy);
