@@ -308,7 +308,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     await shot("18-swell-hymnal");
 
     // ---- a material from the ground: skeletons drop bone (stand 3 tiles off so it is not picked up on the spot) ----
-    await tp(100, 103);
+    await tp(140, 60); // the Old Ruins (Stonecrag Quarry is a clan-war hold now, its skeletons kept away)
     let bone = 0, seenOnGround = false;
     const skip = new Set(); // ground items the keys could not reach (behind a wall): left alone
     const t0 = Date.now();
