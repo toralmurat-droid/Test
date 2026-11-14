@@ -101,3 +101,42 @@ Orchestrator notes for when it's picked up:
   - lute state saved as an optional field or encoded in the item id (ids must round-trip, as in
     `tests/runes.test.ts`);
   - balance: the sims use gear stats.
+
+## Owner answers (2026-11-14)
+Unanswered questions take the orchestrator's default (marked *default*).
+
+**DI-1**
+- 1.1 *default*: the lockout shows as a dim ring slowly closing in.
+- 1.2 *default*: rings are tinted by the current mode, each new one a step larger and brighter; a finished chord
+  flashes all three and bursts.
+
+**DI-2**
+- 2.1 Songs come from **quests, villagers and special places, never a plain drop**.
+- 2.2 A collected song gives a **new chord progression or finisher**.
+- 2.3 *default*: the first books are Hymnal (healing), War March (party buffs) and Dissonance (solo damage).
+- 2.4 Books are **not class-locked**. They have a **very low block stat**, so for other classes they work only as
+  a poor shield.
+
+**DI-3**
+- 3.1 *default*: Songweaver skills are limited by cooldowns only.
+- 3.2 **Open: to discuss** (gauge vs Tempo).
+- 3.3 The special effect is **set by the equipped book**.
+- 3.4 **Basic attacks fill a little.**
+- 3.5 **Chords fill it faster.**
+- 3.6 Mana potions do **nothing for now** (design space for later).
+- 3.7 **It drains after a short time with no action.**
+
+**DI-4**
+- 4.1 **The basic attack is a Verse.**
+- 4.2 *default*: Verse = every skill that isn't a song.
+- 4.3 *default*: the Chorus is the steady base ring; the chord rings expand on top of it.
+
+**DI-5**
+- 5.1 **Levels unlock options at a lute-maker**; more exotic options **also cost monster materials**.
+- 5.2 Growth gives **stats that keep up with drops, plus musical traits**.
+- 5.3 Traits chosen at the lute-maker are **mutually exclusive or limited in number**, so a player can't have
+  everything at once.
+- 5.4 **No new look per stage for now.**
+- 5.5 **Armour, hat and shoes still drop as normal.**
+- 5.6 Weapon and shield drops are **sold for gold or broken into material** (for the lute-maker).
+- 5.7 *default*: on login, a Songweaver's non-lute weapon or shield moves to the bag.
