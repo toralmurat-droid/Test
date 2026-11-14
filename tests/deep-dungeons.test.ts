@@ -71,9 +71,9 @@ test("deep dungeons: the Hollow Abbot rises for his hero by day (no day undergro
     await wait(200);
     const room = srv.room, p = room.state.players.get(c.sessionId);
     const ci = CHAINS.findIndex((x) => x.id === "crypt"), arc = ZONE_ARCS.find((a) => a.id === "crypt")!;
-    p.tut = packQuest(CHAINS.find((x) => x.id === "tutorial")!.quests.length, 0, 0);
+    p.quests.set("tut", packQuest(CHAINS.find((x) => x.id === "tutorial")!.quests.length, 0, 0));
     p.level = 17;
-    p.arcs.set("crypt", packQuest(arc.quests.length - 1, 1, 0)); // on the last quest, step 1: the Abbot
+    p.quests.set("crypt", packQuest(arc.quests.length - 1, 1, 0)); // on the last quest, step 1: the Abbot
     room.undeadUp = false; // broad day above
     const s = arc.quests[arc.quests.length - 1].steps[0].summon!;
     p.x = s.x; p.y = s.y + 3 * TILE;

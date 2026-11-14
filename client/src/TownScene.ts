@@ -13,7 +13,7 @@ import { canPay, shortOf, MANA, manaRegen, maxManaFor, skillCost, unpackMana } f
 import { nextSize, potionAmount, PotionKind, potionName, POTION_SIZES, total, unpackPotions } from "../../shared/potions";
 import { GROUND, areaAt, isSafeZone } from "../../shared/map";
 import { heroPoise, meleeReach, mobBody, POISE, pvpProtected } from "../../shared/combat";
-import { respecCost, wearMult } from "../../shared/upkeep";
+import { respecCost } from "../../shared/upkeep";
 import { ESSENCE, isSummonKind } from "../../shared/summons";
 import { FEAST, FEAST_MAX, type Family } from "../../shared/devour";
 import { moveStep } from "../../shared/movement";
@@ -86,6 +86,7 @@ import { StashUI, TradeUI } from "./trade";
 import { STASH, STASH_RANGE } from "../../shared/trade";
 import { afterLoading, hideLoading, loadingActive, loadingFor, setLoading, showLoading } from "./loading";
 import { WaygateLayer } from "./waygate";
+import { WAYGATE_RANGE, WAYGATES } from "../../shared/act2";
 import { ISO, IsoView, isoAnchor, isoInput, isoX, isoY, screenDir, screenDir8 } from "./iso";
 import { SMOOTH } from "./isoflag";
 import { addPixelGrid } from "./pixelgrid";
@@ -484,6 +485,7 @@ export class TownScene extends Phaser.Scene {
       if (!this.npcs?.isOpen && this.bounty?.interact()) return; // a bounty board
       if (!this.npcs?.isOpen && this.shrine?.interact()) return; // then the forest shrine
       if (!this.npcs?.isOpen && this.portals?.interact()) return; // then a portal stone's travel list
+      if (!this.npcs?.isOpen && this.waygates?.interact()) return; // then Act 2's waygate
       this.npcs?.interact();
     };
     const toggleQuestLog = () => {
@@ -695,7 +697,7 @@ export class TownScene extends Phaser.Scene {
       if (id === this.me) { this.portals?.close(); this.jumped(); this.arrive(40, 14, 4, 700); } // warm glow, then the new place
     });
     // Act 2's waygate (shared/act2.ts): through to the other act; the loading screen stays up while that land is drawn
-    this.waygates = new WaygateLayer(this);
+    this.waygates = new WaygateLayer(this, (type) => this.room?.send(type));
     this.room.onMessage("waygate", ({ id, to, x, y }) => {
       const e = this.entities.get(id);
       if (!e) return;
@@ -1643,6 +1645,7 @@ export class TownScene extends Phaser.Scene {
         for (const b of BOARDS) out.push({ x: b.x, y: b.y, w: BOARD_W, h: BOARD_H, range: BOARD_RANGE, act: () => { if (!this.bounty?.open) this.bounty?.interact(); } });
         out.push({ x: STASH.x, y: STASH.y, w: 22, h: 18, range: STASH_RANGE, act: () => { if (!this.stash?.open) this.stash?.interact(); } });
         for (const o of PORTALS) out.push({ x: o.x, y: o.y, w: 26, h: 40, range: PORTAL_RANGE, act: () => this.portals?.interact() });
+        for (const g of WAYGATES) out.push({ x: g.x, y: g.y, w: 70, h: 96, range: WAYGATE_RANGE, act: () => this.waygates?.interact() });
         for (const { o } of usableObjects(p)) out.push({ x: o.x, y: o.y, w: 22, h: 22, range: USE_RANGE, act: () => this.room?.send("use", { id: o.id }) });
         return out;
       },
@@ -2307,7 +2310,7 @@ export class TownScene extends Phaser.Scene {
     const st = { sta: mine.sta, str: mine.str, mag: mine.mag, dex: mine.dex ?? 0 }; // includes gear bonuses
     const free = statPoints(lvl) - (mine.ptSta + mine.ptStr + mine.ptMag + (mine.ptDex ?? 0));
     // Rebuild only when something shown changed (called every frame while open)
-    const sig = [lvl, mine.xp, Math.ceil(mine.hp), mine.maxHp, mine.mp, st.sta, st.str, st.mag, st.dex, free, mine.kills, mine.gold, mine.wear, from].join("|");
+    const sig = [lvl, mine.xp, Math.ceil(mine.hp), mine.maxHp, mine.mp, st.sta, st.str, st.mag, st.dex, free, mine.kills, mine.gold, from].join("|");
     const el = document.getElementById("hero")!;
     if (!el.hidden && sig === this.heroSig) return;
     this.heroSig = sig;
@@ -2349,7 +2352,6 @@ export class TownScene extends Phaser.Scene {
       ["Initiative", `${heroPoise(cls, lvl)} · dizzy at 0`],
       ["Move speed", `${speed}`],
       ["Kills · Gold", `${mine.kills} · ${mine.gold}`],
-      ["Gear condition", `${100 - (mine.wear ?? 0)}%${mine.wear ? ` · gear stats −${Math.round((1 - wearMult(mine.wear)) * 100)}% · repair at Brann's smithy` : ""}`],
     ];
     // health, mana and experience as bars over the detail list
     const mp = unpackMana(mine.mp);
@@ -2518,7 +2520,7 @@ export class TownScene extends Phaser.Scene {
   /** Something to talk to, open or use right here (one of the "E: ..." prompts is up, or a dialog is open)? */
   private canUse(): boolean {
     return !!this.npcs?.isOpen || !!this.bounty?.open || !!this.dungeon?.nearDoor ||
-      !!document.querySelector("#npcprompt.open, #chestprompt.open, #boardprompt.open, #portalprompt.open, #shrineprompt.open, #stashprompt.open");
+      !!document.querySelector("#npcprompt.open, #chestprompt.open, #boardprompt.open, #portalprompt.open, #gateprompt.open, #shrineprompt.open, #stashprompt.open");
   }
 
   /** A game key of the current keyboard layout (client/src/keymode.ts) was pressed. */
@@ -3250,10 +3252,10 @@ export class TownScene extends Phaser.Scene {
     this.shrine?.update(meEnt && !meEnt.state.dead && !this.chests?.near ? meEnt.sprite : undefined, !!this.npcs?.isOpen);
     this.stash?.update(meEnt && !meEnt.state.dead ? meEnt.sprite : undefined, !!this.npcs?.isOpen || !!this.chests?.near);
     this.bounty?.update(meEnt && !meEnt.state.dead ? meEnt.sprite : undefined, !!this.npcs?.isOpen || !!this.chests?.near || !!this.stash?.near);
-    if (this.npcs) { this.npcs.hidePrompt = !!this.chests?.near || !!this.shrine?.near || !!this.portals?.near || !!this.stash?.near || !!this.bounty?.near; this.npcs.extraBlock = this.bounty?.trackerBlock() ?? ""; }
+    if (this.npcs) { this.npcs.hidePrompt = !!this.chests?.near || !!this.shrine?.near || !!this.portals?.near || !!this.waygates?.near || !!this.stash?.near || !!this.bounty?.near; this.npcs.extraBlock = this.bounty?.trackerBlock() ?? ""; }
     this.npcs?.update(meEnt && !meEnt.state.dead ? meEnt.sprite : undefined, meEnt?.state);
     this.grimoire?.update(meEnt?.state?.cls);
-    this.waygates?.update(meEnt?.state);
+    this.waygates?.update(meEnt?.state, meEnt && !meEnt.state.dead ? meEnt.sprite : undefined, !!this.npcs?.isOpen || !!this.chests?.near);
     this.portals?.update(meEnt && !meEnt.state.dead ? meEnt.sprite : undefined, !!this.npcs?.isOpen || !!this.chests?.near || !!this.shrine?.near);
     if (this.minimap && this.npcs) this.minimap.markers = [...this.npcs.markers, ...(this.portals?.markers() ?? []), ...(this.bounty?.markers() ?? []), ...(this.dungeon?.markers() ?? []), ...(this.waygates?.markers() ?? [])];
 

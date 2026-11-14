@@ -43,7 +43,7 @@ import { modeColour, PHRYGIAN, RESONANCE } from "../shared/songs";
 import { soundMult } from "../shared/combat";
 import type { SoundFx } from "../shared/skills";
 import { sellPrice, shopBuys, shopFuses, SHOPS } from "../shared/shops";
-import { BLOB_KINDS, CHAINS, CROWN_CHAIN, packQuest, chainOpen, chainState, inZone, isBlob, npcPresent, QuestState, questStep, stepGoal, Summon, type BossVoice, TUT_CHAIN, TUT_QUESTS, USE_RANGE } from "../shared/quests";
+import { BLOB_KINDS, CHAINS, CROWN_CHAIN, packQuest, chainDone, chainOpen, chainState, inZone, isBlob, npcPresent, QuestState, questStep, stepGoal, Summon, type BossVoice, TUT_CHAIN, TUT_QUESTS, USE_RANGE } from "../shared/quests";
 import { findHideSpot, HIDE, MOTHER_KEEP_OUT, noMobsAt, spawnPoint, SPAWN_ZONES, villageDist, zoneCap } from "../shared/spawns";
 import { blocked, moveStep } from "../shared/movement";
 import { NIGHT_RAID, raiderByKey, raiderIgnores, RAIDERS } from "../shared/raiders";
@@ -76,7 +76,7 @@ import { hashAddr, ideaLog, saveIdeas } from "./ideaStore";
 import { dropLive, LiveState, rememberLive, takeLive } from "./handoff";
 import { MobView } from "./mobView";
 import { act2Missing, act2Open, actAt, desertSpawn, WAYGATE_RANGE, waygateArrival, waygateById, WAYGATES } from "../shared/act2";
-import { repairCost, respecCost, WEAR, wearMult } from "../shared/upkeep";
+import { respecCost } from "../shared/upkeep";
 import { ARSENAL, ATTUNE_ORDER, attuneOf, bondShare, DEFAULT_GRIMOIRE, SUMMONER_TREE, ESSENCE, GOLEM, GOLEM_OF, golemSlots, isElement, isSummonKind, parseGrimoire, PORTAL, SUMMON, summonElement, summonScaleLevel, WISP, wispEls, type AttuneElement, type SummonKind } from "../shared/summons";
 import { cleanFeast, familyOf, type Feast, feastMult, THRALL, thrallMax } from "../shared/devour";
 import { Champions, type ChampState } from "./champions";
@@ -124,8 +124,8 @@ export class Player extends Schema {
   @type("number") ptDex = 0;
   @type("boolean") stunned = false;
   @type("boolean") slowed = false;
-  // Mana (shared/mana.ts): current, max and mana potions packed in one synced number (packMana), because the schema is at
-  // the 64-field limit. Took the old `raging` flag's place (the client reads Rage from `fx`). Server-side values below.
+  // Mana (shared/mana.ts): current, max and mana potions packed in one synced number (packMana), to keep the schema
+  // small (Colyseus caps it at 64). Took the old `raging` flag's place (the client reads Rage from `fx`). Server-side values below.
   @type("number") mp = 0;
   mana = 0;
   maxMana = 0;
@@ -144,7 +144,7 @@ export class Player extends Schema {
   timerSeq = 0;
   @type("string") party = ""; // player group id ("" = solo); shared/party.ts
   // Summoner grimoire (shared/summons.ts): the elements of golem 1 and golem 2, packed as el1 + 4 x el2 (indexes into
-  // ATTUNE_ORDER; attuneOf(attune) is golem 1's). One number because the schema is at its 64-field limit.
+  // ATTUNE_ORDER; attuneOf(attune) is golem 1's). One number to keep the schema small (Colyseus caps it at 64).
   @type("number") attune = 0;
   golemAt = [0, 0]; // Summoner: when each golem slot rises again (0 = not waiting); server only
   golemSig = ""; // Summoner: the grimoire HUD last sent to them ("golems" message), to send it only when it changes
@@ -161,27 +161,9 @@ export class Player extends Schema {
   @type(["string"]) bag = new ArraySchema<string>();
   // Skill tree (shared/talents.ts): ranks per talent id
   @type({ map: "number" }) talents = new MapSchema<number>();
-  // Blob quest chain (shared/quests.ts): quest index, step (0 = not accepted) and progress on the step
-  @type("number") questId = 0;
-  @type("number") questStage = 0;
-  @type("number") questCount = 0;
-  // Skeleton quest chain (the Pale Marshal), CHAINS[1]: packed (QuestChain.packed) since the zone arcs needed a field
-  @type("number") bone = 0;
-  // The zone quest arcs (shared/quests.ts ZONE_ARCS, QuestChain.local): each arc's packed progress under its id, all in one field
-  @type({ map: "number" }) arcs = new MapSchema<number>();
-  // Redfang chain (Old Garrick of Saltmere), CHAINS[2]: packed (QuestChain.packed) since Act 2 freed two fields for the Second Sun
-  @type("number") red = 0;
-  // The Second Sun (CHAINS[6], Act 2's story in Kel Ashar): packed the same way
-  @type("number") sun = 0;
-  // The guided first quest (First Steps), CHAINS[3] (TUT_CHAIN). New heroes start on step 1.
-  // ...packed like the Hollow Crown below (QuestChain.packed), which freed two fields for the Hide Rite chain
-  @type("number") tut = 0;
-  // The Hollow Crown (CHAINS[4], the first zone's last story): id, stage and count packed in one number (QuestChain.packed),
-  // because the Player schema is at Colyseus's 64-field limit. This is the 64th: a new synced field needs one packed too.
-  @type("number") crown = 0;
-  // The Hide Rite (CHAINS[5], the Mawdeep Warrens' beast-folk): packed the same way
-  @type("number") beast = 0;
-  @type("number") wear = 0; // gear wear 0-100 (shared/upkeep.ts): each death adds some, the smith repairs it for gold
+  // Every quest chain's progress (shared/quests.ts CHAINS, read with chainState): packed quest, step and count under the
+  // chain's QuestChain.packed key, one synced field for all of them. A chain not begun has no key (qset drops zeros).
+  @type({ map: "number" }) quests = new MapSchema<number>();
   gateNoteAt = 0; // last "the waygate is cold" note (Act 2, shared/act2.ts)
   linkLock = ""; // the Mawdeep rope/stair a hero just came out of (shared/dungeon.ts LINKS): not taken again until they step off it
   nextSummon = 0; // when the server may bring back this player's quest fused blob (QuestStep.summon)
@@ -617,6 +599,8 @@ const meleeOf = (m: Mob) => {
 /** A trade between players a and b (server only). `v` goes up with every change of an offer. */
 interface Trade { a: string; b: string; v: number; offer: Record<string, Offer>; ready: Record<string, boolean> }
 
+/** Skill clip capture: an open meadow south-east of Oakvale, outside the village (no magic there). */
+const CAPTURE_SPOT: [number, number] = [101, 72];
 const liveRooms = new Set<TownRoom>();
 let announced = false;
 /** The server is about to restart for an update: tell every player right away (TownScene shows the update notice). */
@@ -634,6 +618,8 @@ export class TownRoom extends Room<TownState> {
   private mobSeq = 0;
   private shotSeq = 0;
   private mobView = new MobView();
+  /** Skill clip capture (stageCapture): blobs that only stand and take the hits. */
+  private dummies = new Set<string>();
   /** Champions (shared/champions.ts, server/champions.ts): the room lends them a few of its powers. */
   private champs = new Champions({
     mob: (id) => this.state.mobs.get(id),
@@ -743,6 +729,7 @@ export class TownRoom extends Room<TownState> {
     this.onMessage("pray", (client) => this.pray(client));
     this.onMessage("portals", (client) => this.sendPortals(client));
     this.onMessage("travel", (client, msg: { to?: string }) => this.travel(client, msg?.to));
+    this.onMessage("waygate", (client) => this.useWaygate(client));
     this.onMessage("bounty", (client, msg: { take?: number; drop?: boolean }) => this.bountyMsg(client, msg ?? {}));
     this.onMessage("shrine", (client) => client.send("shrine", { left: Math.max(0, this.shrineReadyAt - Date.now()) }));
     // The client is ready (loading screen gone): a hero on the first step of First Steps gets its banner
@@ -753,7 +740,6 @@ export class TownRoom extends Room<TownState> {
     });
     this.onMessage("buy", (client, msg: { i: number }) => this.shopBuy(client, msg?.i));
     this.onMessage("sell", (client, msg: { i: number }) => this.shopSell(client, msg?.i));
-    this.onMessage("repair", (client) => this.repairGear(client));
     this.onMessage("fuse", (client, msg: { id?: unknown }) => this.fuseRunesMsg(client, msg?.id));
     // Trading between players and the account stash (shared/trade.ts)
     this.onMessage("trade", (client, msg: { id?: string; name?: string }) => { if (this.allow("ask", client)) this.tradeAsk(client.sessionId, msg); });
@@ -790,8 +776,22 @@ export class TownRoom extends Room<TownState> {
       const v = text.trim().match(/^\/(up|down|unvote)\s+#?(\d+)$/i);
       if (v) return this.voteIdea(client, Number(v[2]), v[1].toLowerCase() === "up" ? 1 : v[1].toLowerCase() === "down" ? -1 : 0);
       if (/^\/max$/i.test(text.trim())) return this.maxHero(client);
+      // Skill clip capture only (tools/skill-clips, SKILL_CAPTURE=1, never set on the live server): a fresh stage per clip
+      const stage = process.env.SKILL_CAPTURE === "1" && text.trim().match(/^\/stage(\s+weak)?$/i);
+      if (stage) return this.stageCapture(client.sessionId, !!stage[1]);
       const tp = process.env.NODE_ENV !== "production" && text.trim().match(/^\/tp\s+(\d+)\s+(\d+)$/i); // dev servers only: jump to a tile
       if (tp) { p.x = (Number(tp[1]) + 0.5) * TILE; p.y = (Number(tp[2]) + 0.5) * TILE; return; }
+      // Secret cheat (Murat 2026-11-13): wakes the waygate to Act 2 for this hero, on the live server too. The code is
+      // private (never shown in chat or patch notes); ACT2_CODE on the server overrides it. A wrong code says nothing.
+      const gate = text.trim().match(/^\/waygate\s+(\S+)$/i);
+      if (gate) {
+        if (gate[1] === (process.env.ACT2_CODE || "sunscar-ember-7731")) {
+          for (const id of ["tutorial", "crown", "beast"]) { const c = CHAINS.findIndex((ch) => ch.id === id); if (!chainDone(p, c)) this.qset(p, c, { questId: CHAINS[c].quests.length, questStage: 0, questCount: 0 }); }
+          saveHero(p.name, p.cls, this.snapshot(p));
+          client.send("chat", { id: "", name: "Waygate", text: "The waygate south of Oakvale is awake for this hero." });
+        }
+        return;
+      }
       if (process.env.NODE_ENV !== "production" && /^\/act2open$/i.test(text.trim())) { // dev servers only: both Act 1 finales done
         for (const id of ["tutorial", "crown", "beast"]) { const c = CHAINS.findIndex((ch) => ch.id === id); this.qset(p, c, { questId: CHAINS[c].quests.length, questStage: 0, questCount: 0 }); }
         return;
@@ -1038,16 +1038,14 @@ export class TownRoom extends Room<TownState> {
       ptSta: p.ptSta, ptStr: p.ptStr, ptMag: p.ptMag, ptDex: p.ptDex,
       weapon: p.weapon, armour: p.armour, shoes: p.shoes, hat: p.hat, shield: p.shield, ranged: p.ranged,
       bag: p.bag.toArray(), talents, slots: p.slots.toArray(),
-      questId: p.questId, questStage: p.questStage, questCount: p.questCount, questVer: CHAINS[0].version,
       kit: 1,
-      // packed chains (the Pale Marshal, Redfang, First Steps, the Hollow Crown, the Hide Rite, the Second Sun, the zone arcs) are saved under their own three names
+      // every chain is saved under its own three names (CHAINS[].keys: questId/questStage/questCount for the Gloam) and its verKey
       ...Object.fromEntries(CHAINS.flatMap((ch, c) => {
-        if (!ch.packed) return [];
         const q = this.qs(p, c), [a, b, n] = ch.keys;
         return [[a, q.questId], [b, q.questStage], [n, q.questCount], [ch.verKey, ch.version]];
-      })),
+      })) as Record<string, number> & Pick<HeroSave, "questStage" | "questCount">, // CHAINS[0] always writes these two
       portals: [...p.portals], act: actAt(p.y, p.x),
-      bounty: p.bounty, bountyDone: p.bountyDone, wear: p.wear, feast: { ...p.feast },
+      bounty: p.bounty, bountyDone: p.bountyDone, feast: { ...p.feast },
       ...(p.cls === "summoner" ? { grimoire: this.grimoireOf(p), suTree: SUMMONER_TREE } : {}),
       ...songSave(p.cls, p.sk),
     };
@@ -1084,7 +1082,6 @@ export class TownRoom extends Room<TownState> {
     });
     for (const id of cleanPortals(s.portals)) p.portals.add(id);
     p.bountyDone = Math.max(0, Math.floor(num(s.bountyDone)));
-    p.wear = Math.min(WEAR.max, Math.max(0, Math.round(num(s.wear))));
     p.bounty = cleanBounty(s.bounty);
     p.feast = cleanFeast(s.feast);
     const sv = s as unknown as Record<string, unknown>;
@@ -1092,7 +1089,9 @@ export class TownRoom extends Room<TownState> {
     if (sv.tutVer === undefined) sv.tutId = TUT_QUESTS.length;
     CHAINS.forEach((ch, c) => {
       const [a, b, n] = ch.keys;
-      const st = { questId: Math.min(ch.quests.length, num(sv[a])), questStage: num(sv[b]), questCount: num(sv[n]) };
+      // whole numbers in packQuest's range, so a corrupt save can't spill one value into another
+      const whole = (v: unknown, max: number) => Math.max(0, Math.min(max, Math.floor(num(v))));
+      const st = { questId: whole(sv[a], ch.quests.length), questStage: whole(sv[b], 99), questCount: whole(sv[n], 99) };
       // The steps of a quest changed since this save: start the current quest again from its offer
       if (num(sv[ch.verKey], 1) !== ch.version && st.questStage > 0) { st.questStage = 0; st.questCount = 0; }
       this.qset(p, c, st);
@@ -2993,6 +2992,7 @@ export class TownRoom extends Room<TownState> {
     tickPoise(m, mobPoiseMax(m), dt, now);
     if (m.dead) { m.moving = false; m.winding = false; m.windUntil = 0; return; }
     if (m.owner) return this.updateSummon(m, id, dt, now);
+    if (this.dummies.has(id)) { m.moving = false; m.winding = false; return; } // skill clip targets stand still
     if (m.banishAt && now >= m.banishAt && !m.specialAt) {
       // the summoned demon's time is up: it sinks back into the ground
       this.broadcast("banish", { id, x: Math.round(m.x), y: Math.round(m.y) });
@@ -3730,7 +3730,6 @@ export class TownRoom extends Room<TownState> {
 
   /** Walking onto a rope or stair takes the hero to its other end (not straight back: they must step off first). */
   private useLinks(pid: string, p: Player) {
-    this.useWaygates(pid, p);
     if (p.linkLock) {
       const l = linkById(p.linkLock);
       if (l && Math.hypot(l.x - p.x, l.y - p.y) <= LINK_RANGE * 1.6) return;
@@ -3750,23 +3749,26 @@ export class TownRoom extends Room<TownState> {
   }
 
   /**
-   * Act 2's waygates (shared/act2.ts): walking into one takes the hero to the other act, once they have beaten the
-   * first zone's two last bosses. Before that, the gate is cold: a note says who still stands in the way.
+   * Act 2's waygates (shared/act2.ts): used like a portal stone, by clicking it or pressing E next to it (Murat
+   * 2026-11-13), which takes the hero to the other act once they have beaten the first zone's two last bosses.
+   * Walking into it used to cross, and a hero still walking north came out next to the other gate and went straight
+   * back. Before Act 2 is open, the gate is cold: a note says who still stands in the way.
    */
-  private useWaygates(pid: string, p: Player) {
-    for (const g of WAYGATES) {
-      if (Math.abs(g.x - p.x) > WAYGATE_RANGE || Math.abs(g.y - p.y) > WAYGATE_RANGE) continue;
-      if (!act2Open(p)) {
-        const now = Date.now();
-        if (now - p.gateNoteAt > 8000) { p.gateNoteAt = now; this.note(pid, `The waygate's stones are cold. It will wake when ${act2Missing(p).join(" and ")} ${act2Missing(p).length > 1 ? "are" : "is"} beaten.`); }
-        return;
-      }
-      const dest = waygateById(g.to)!, at = waygateArrival(dest);
-      p.x = at.x; p.y = at.y; p.moving = false;
-      p.rollUntil = 0; p.rolling = false; p.emote = "";
-      this.broadcast("waygate", { id: pid, to: dest.id, x: Math.round(at.x), y: Math.round(at.y) });
+  private useWaygate(client: Client) {
+    const pid = client.sessionId, p = this.state.players.get(pid);
+    if (!p || p.dead) return;
+    const g = WAYGATES.find((o) => Math.hypot(o.x - p.x, o.y - p.y) <= WAYGATE_RANGE * 1.5);
+    if (!g) return;
+    if (!act2Open(p)) {
+      const now = Date.now();
+      if (now - p.gateNoteAt > 3000) { p.gateNoteAt = now; this.note(pid, `The waygate's stones are cold. It will wake when ${act2Missing(p).join(" and ")} ${act2Missing(p).length > 1 ? "are" : "is"} beaten.`); }
       return;
     }
+    if (Date.now() - p.lastHurt < PORTAL_COMBAT_MS) { client.send("travelno", { why: "fight" }); return; }
+    const dest = waygateById(g.to)!, at = waygateArrival(dest);
+    p.x = at.x; p.y = at.y; p.moving = false;
+    p.rollUntil = 0; p.rolling = false; p.emote = "";
+    this.broadcast("waygate", { id: pid, to: dest.id, x: Math.round(at.x), y: Math.round(at.y) });
   }
 
   /** The sickness, bleeding or venom a beast's plain bite leaves (BEAST.plague / bleed / venom). */
@@ -4445,6 +4447,31 @@ export class TownRoom extends Room<TownState> {
     if (!p.dead) p.hp = p.maxHp;
     if (p.level > from) this.broadcast("levelup", { id: client.sessionId, level: p.level, from });
     client.send("chat", { id: "", name: "Test", text: `Level ${p.level}, every skill at max rank, ${pts} stat points spread over all stats.` });
+  }
+
+  /**
+   * Skill clip capture (tools/skill-clips/capture.mjs): the hero stands rested on an open meadow (CAPTURE_SPOT) with
+   * fresh cooldowns, mana and no buffs, every other monster around is cleared and three blobs wait in front of him.
+   * They hold a lot of life so they live through the clip; `weak` leaves them low for Devour and Bite.
+   */
+  private stageCapture(id: string, weak: boolean) {
+    const p = this.state.players.get(id);
+    if (!p) return;
+    const [tx, ty] = CAPTURE_SPOT, x = (tx + 0.5) * TILE, y = (ty + 0.5) * TILE;
+    p.x = x - 1.5 * TILE; p.y = y; p.dead = false; p.hp = p.maxHp; p.mana = p.maxMana; p.energy = 0; this.syncMana(p);
+    p.sk.last = {}; p.sk.buffs = []; p.sk.counter = undefined; p.sk.chargeUntil = 0; p.sk.windUntil = 0;
+    this.state.fields.forEach((f, fid) => { if (f.owner === id) this.state.fields.delete(fid); }); // the last clip's black hole, pools...
+    this.state.mobs.forEach((m, mid) => {
+      if (m.owner || Math.hypot(m.x - x, m.y - y) > 14 * TILE) return;
+      m.dead = true; m.hp = 0; m.target = ""; m.moving = false;
+      this.clock.setTimeout(() => { this.state.mobs.delete(mid); this.dummies.delete(mid); }, 300);
+    });
+    for (const [dx, dy] of [[0.8, 0], [1.6, -1], [1.6, 1]]) {
+      const mid = `m${++this.mobSeq}`;
+      this.spawnMob("slime", -1, mid, { x: x + dx * TILE, y: y + dy * TILE, level: p.level });
+      const m = this.state.mobs.get(mid);
+      if (m) { m.maxHp = 1_000_000; m.hp = weak ? 2000 : m.maxHp; this.dummies.add(mid); }
+    }
   }
 
   private learnTalent(id: string, tid: string) {
@@ -5162,20 +5189,6 @@ export class TownRoom extends Room<TownState> {
     return n?.shop ? SHOPS[n.shop] : undefined;
   }
 
-  /** The smith mends all worn gear for gold (shared/upkeep.ts repairCost). */
-  private repairGear(client: Client) {
-    const p = this.state.players.get(client.sessionId);
-    const shop = p && !p.dead ? this.shopNear(p) : undefined;
-    if (!p || !shop?.repairs) return;
-    const cost = repairCost(GEAR_SLOTS.map((s) => p[s]), p.wear);
-    if (!cost) return client.send("shop", { ok: false, text: "Your gear is in good shape" });
-    if (p.gold < cost) return client.send("shop", { ok: false, text: `Repairs cost ${cost} gold` });
-    p.gold -= cost;
-    p.wear = 0;
-    this.applyStats(p);
-    client.send("shop", { ok: true, text: `Repaired for ${cost} gold` });
-  }
-
   private shopBuy(client: Client, i: unknown) {
     const p = this.state.players.get(client.sessionId);
     const shop = p && !p.dead ? this.shopNear(p) : undefined;
@@ -5395,16 +5408,8 @@ export class TownRoom extends Room<TownState> {
   /** One chain's progress on this player. */
   private qs(p: Player, c: number): QuestState { return chainState(p, c)!; }
   private qset(p: Player, c: number, v: Partial<QuestState>) {
-    const [a, b, n] = CHAINS[c].keys, r = p as unknown as Record<string, number>, pk = CHAINS[c].packed;
-    if (pk) {
-      const q = { ...this.qs(p, c), ...v }, n = packQuest(q.questId, q.questStage, q.questCount);
-      if (!CHAINS[c].local) r[pk] = n;
-      else if (n) p.arcs.set(pk, n); else p.arcs.delete(pk); // a zone arc not begun takes no room in the map
-      return;
-    }
-    if (v.questId !== undefined) r[a] = v.questId;
-    if (v.questStage !== undefined) r[b] = v.questStage;
-    if (v.questCount !== undefined) r[n] = v.questCount;
+    const q = { ...this.qs(p, c), ...v }, n = packQuest(q.questId, q.questStage, q.questCount), k = CHAINS[c].packed;
+    if (n) p.quests.set(k, n); else p.quests.delete(k); // a chain not begun takes no room in the map
   }
 
   private sendQuest(id: string, p: Player, c: number, done = false, auto = false) {
@@ -5829,8 +5834,8 @@ export class TownRoom extends Room<TownState> {
   /** Recompute stats and max HP from class + level + equipped gear. */
   private applyStats(p: Player) {
     const st = statsFor(p.cls, { sta: p.ptSta, str: p.ptStr, mag: p.ptMag, dex: p.ptDex });
-    const g = gearStats(p.cls, this.equipped(p)), wm = wearMult(p.wear); // worn gear gives less (shared/upkeep.ts)
-    st.sta += Math.round(g.sta * wm); st.str += Math.round(g.str * wm); st.mag += Math.round(g.mag * wm); st.dex += Math.round(g.dex * wm);
+    const g = gearStats(p.cls, this.equipped(p));
+    st.sta += g.sta; st.str += g.str; st.mag += g.mag; st.dex += g.dex;
     p.sta = st.sta; p.str = st.str; p.mag = st.mag; p.dex = st.dex;
     const newMax = Math.round(maxHpFromStats(p.cls, st, p.level) * talentMult(p.cls, p.talents, "hp") * feastMult(p.feast, "hp"));
     p.hp = Math.min(newMax, p.hp + Math.max(0, newMax - p.maxHp));
@@ -5919,11 +5924,6 @@ export class TownRoom extends Room<TownState> {
     t.guarding = false;
     // No magic in Oakvale: dying pays for it, the hero comes back a free citizen (villagers and watch stand down)
     this.setOutlaw(tid, t, false);
-    // Dying wears the gear (shared/upkeep.ts): it gives less until the smith repairs it
-    if (t.wear < WEAR.max) {
-      t.wear = Math.min(WEAR.max, t.wear + WEAR.perDeath);
-      this.applyStats(t);
-    }
     this.broadcast("kill", { killer: byName, victim: t.name });
     // The victim gets a "You died - killed by ..." screen until they respawn
     this.clients.find((c) => c.sessionId === tid)?.send("died", { by: byName, ms: RESPAWN_MS });

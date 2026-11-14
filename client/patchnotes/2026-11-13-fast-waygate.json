@@ -1,0 +1,11 @@
+{
+  "date": "2026-11-13",
+  "patch": 215,
+  "pr": 387,
+  "title": "Faster waygate crossing",
+  "changes": [
+    "The waygate between Oakvale and the Sunscar is now used like a portal stone: click it or press E next to it.",
+    "Walking past the waygate no longer throws you back and forth between the two lands.",
+    "The land on the other side is drawn while you approach the gate, so crossing takes about a second instead of several."
+  ]
+}

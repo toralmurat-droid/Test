@@ -15,6 +15,8 @@ export default defineConfig({
       input: {
         main: fileURLToPath(new URL("./client/index.html", import.meta.url)),
         map: fileURLToPath(new URL("./client/map.html", import.meta.url)),
+        skills: fileURLToPath(new URL("./client/skills.html", import.meta.url)),
+        wiki: fileURLToPath(new URL("./client/wiki.html", import.meta.url)),
       },
     },
   },

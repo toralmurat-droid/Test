@@ -23,7 +23,6 @@ import type { MapMarker } from "./minimap";
 import { QuestLog } from "./questlog";
 import { MASTER_LEVELS, SHOPS, sellPrice, shopBuys, shopFuses } from "../../shared/shops";
 import { GEAR_SLOTS, GearSlot, gearDef, gearName, itemLevel, itemRarity, itemText, reqProblem, TIER_NAMES } from "../../shared/gear";
-import { repairCost, WEAR, wearMult } from "../../shared/upkeep";
 import { CHAR_GROW, CHAR_SCALE, CHAR_ORIGIN, CharacterName, playCharAnim } from "./artAssets";
 import { iconCanvas, itemColor, rarityLabel, reqInfoOf } from "./gear";
 import { fuseCost, fuseProblem, looseRuneCounts, parseRune, RUNE_FUSE_COUNT, RUNE_KIND_NAMES, RUNES, runeName, runeText } from "../../shared/runes";
@@ -39,7 +38,7 @@ import { TEXT_FONT, TITLE_FONT, TEXT_PX, TITLE_PX, WT } from "./pixelfont";
 
 type Me = { x: number; y: number } | undefined;
 /** The local player's synced state (only the fields NPCs care about). */
-type QuestState = (Quester & { gold?: number; potions?: number; cls?: string; bag?: Iterable<string>; wear?: number } & Partial<Record<GearSlot, string>>) | undefined;
+type QuestState = (Quester & { gold?: number; potions?: number; cls?: string; bag?: Iterable<string> } & Partial<Record<GearSlot, string>>) | undefined;
 
 /**
  * Village NPCs (shared/npcs.ts): sprites by the bonfire, "!"/"?" quest markers, an "E Talk" prompt when close,
@@ -335,7 +334,7 @@ export class NpcLayer {
     const bag = [...(q?.bag ?? [])];
     // masterwork: one level shown at a time (picked with the buttons), by default the best one the hero can wear
     const master = this.masterLv ?? [...MASTER_LEVELS].reverse().find((l) => l <= (q?.level ?? 1)) ?? MASTER_LEVELS[0];
-    const key = JSON.stringify([n.id, master, gold, potions, bag, q?.level, (q as any)?.ptSta, (q as any)?.ptStr, (q as any)?.ptMag, (q as any)?.ptDex, q?.wear, ...GEAR_SLOTS.map((s) => q?.[s]), this.shopMsg, questSig(q)]);
+    const key = JSON.stringify([n.id, master, gold, potions, bag, q?.level, (q as any)?.ptSta, (q as any)?.ptStr, (q as any)?.ptMag, (q as any)?.ptDex, ...GEAR_SLOTS.map((s) => q?.[s]), this.shopMsg, questSig(q)]);
     if (key === this.stage) return;
     this.stage = key;
     const row = (icon: string, name: string, color: string, desc: string, btn: string, cls2: string, i: number, off: boolean) =>
@@ -389,16 +388,10 @@ export class NpcLayer {
       ? `<h4>Rune fusion</h4><p class="sh-empty">${RUNE_FUSE_COUNT} identical loose runes and gold make one rune of the next rank. Runes set in items don't count.</p>` +
         (fuseRows || `<p class="sh-empty">No loose runes in your bag.</p>`)
       : "";
-    const wear = q?.wear ?? 0, fix = shop.repairs ? repairCost(GEAR_SLOTS.map((s) => q?.[s]), wear) : 0;
-    const repair = shop.repairs
-      ? `<h4>Repairs</h4><div class="sh-row"><span class="sh-info"><b>Your gear: ${100 - wear}% condition</b>` +
-        `<small>${wear ? `Worn gear gives ${Math.round((1 - wearMult(wear)) * 100)}% less of its stats. Each death wears it ${WEAR.perDeath}%.` : "Like new. Each death wears it a little."}</small></span>` +
-        `<button class="sh-repair"${!fix || gold < fix ? " disabled" : ""}>${fix ? `Repair ${fix}${pxIcon("coin")}` : "Nothing to mend"}</button></div>`
-      : "";
     const quest = questDialog(n.id, q);
     this.dialog.innerHTML = this.head(n) + `<p>${shop.greeting}</p>` +
       `<div class="sh-gold">Your gold: <b>${gold}${pxIcon("coin")}</b> ${this.shopMsg}</div>` +
-      `<h4>For sale</h4><div class="sh-list">${buy}</div>${sell}${fuse}${repair}` +
+      `<h4>For sale</h4><div class="sh-list">${buy}</div>${sell}${fuse}` +
       `<div class="nd-btns">${quest ? `<button class="nd-talk">Talk</button>` : ""}<button class="nd-bye">Goodbye <kbd>E</kbd></button></div>`;
     this.dialog.classList.add("shop");
     const talk = this.dialog.querySelector<HTMLButtonElement>(".nd-talk");
@@ -422,8 +415,6 @@ export class NpcLayer {
     for (const b of this.dialog.querySelectorAll<HTMLButtonElement>(".sh-fuse")) {
       b.onclick = () => { this.send("fuse", { id: b.dataset.id }); b.disabled = true; };
     }
-    const fixBtn = this.dialog.querySelector<HTMLButtonElement>(".sh-repair");
-    if (fixBtn) fixBtn.onclick = () => { this.send("repair", {}); fixBtn.disabled = true; };
     this.dialog.querySelector<HTMLButtonElement>(".nd-bye")!.onclick = () => this.close();
   }
 

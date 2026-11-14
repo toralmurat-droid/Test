@@ -20,8 +20,6 @@ export interface Shop {
   stock: ShopEntry[];
   /** Gear slots this shop buys from the player's bag, "rune" = loose runes (none = buys nothing) */
   buys?: string[];
-  /** This shop mends worn gear (shared/upkeep.ts) */
-  repairs?: boolean;
   /** Stock is listed under one heading per item level (the armourers) */
   levelHeads?: boolean;
 }
@@ -130,7 +128,6 @@ export const SHOPS: Record<string, Shop> = {
       ...MASTER_LEVELS.flatMap(masterwork),
     ],
     buys: ["weapon", "ranged", "shield", "armour", "hat", "shoes"],
-    repairs: true,
   },
   // Kel Ashar (Act 2): desert-forged stock at Lv 30 / 36 / 42 by tier, and Greater flasks the valley's witch never sells
   desertsmith: {
@@ -138,28 +135,24 @@ export const SHOPS: Record<string, Shop> = {
     stock: desertStock(["w_bronze", "w_frost", "w_long", "w_dragon", "w_sky", "ws_arming", "wx_hand", "wb_hunt", "wf_oak", "r_knives", "r_crossbow",
       "sh_iron", "sh_dragon", "a_leather", "a_chain", "a_royal", "h_cap", "h_helm", "h_crown", "s_leather", "s_swift", "s_winged"]),
     buys: ["weapon", "ranged", "shield", "armour", "hat", "shoes"],
-    repairs: true,
   },
-  // the armourers: one in each village, armour slots only, mends worn gear like the smiths
+  // the armourers: one in each village, armour slots only
   armourer: {
     greeting: "Mail, plate, good boots. Steel keeps the blood on the inside, love. Try something on.",
     stock: armourStock("armourer"),
     buys: ARMOUR_SLOTS,
-    repairs: true,
     levelHeads: true,
   },
   saltarmourer: {
     greeting: "Salt eats iron, so I oil every ring twice. Armour for the hard roads east, if you've the coin.",
     stock: armourStock("saltarmourer"),
     buys: ARMOUR_SLOTS,
-    repairs: true,
     levelHeads: true,
   },
   sandarmourer: {
     greeting: "Brass scale and doubled linen. Valley plate cooks a man alive out here. Mine lets him breathe.",
     stock: armourStock("sandarmourer"),
     buys: ARMOUR_SLOTS,
-    repairs: true,
     levelHeads: true,
   },
   spicetrader: {
