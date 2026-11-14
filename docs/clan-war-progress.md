@@ -89,3 +89,11 @@ Open points for M1:
   Hide-Kin burrow, Veiled shrine), generated pixel art in the bonfire style (`paintHold` draws one without Phaser).
 - `shared/war/standards.ts` `HOLDS`: one spot per territory near the middle, on clear ground, at least 5 tiles from its standards. The
   sprite follows the owner. Look only: no collision, no siege mechanics at the Hold yet (M2: siege works, gates).
+
+## M2: Renown (2026-11-14)
+
+- `shared/war/renown.ts`: `RENOWN_RANKS` (Sworn 0, Shieldbearer 30, Standard-bearer 120, Banneret 360, Warlord 900,
+  Hero of the Marches 2000). Each valor report from a standard (one full active minute) adds the same amount of
+  renown (`heroValor`: a quarter when far over-levelled). Saved per hero as optional `renown`; kept on a clan change.
+- The oath panel shows renown and the next rank; the Herald tells the hero in chat on a rank-up. No reward yet beyond
+  the title (ideas: tabard trims by rank, Renown in the name tag once a synced field is free).
