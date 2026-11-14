@@ -14,7 +14,7 @@ import { xpStep } from "./classes";
  * four pieces that tore free when the Brood Heart burned, east across the river into the elemental wilds (ELEMENT_LANDS):
  * Blightmire Fen (poison, Lv 14) → Rimewater Hollow (frost, Lv 17) → Cinder Scar (fire, Lv 20) → Stormbreak Crags (storm, Lv 23).
  *
- * Progress lives on the server (Player.quests, see chainState): questId = index in QUESTS, questStage = 0 before the quest is
+ * Progress lives on the server (Player.quests, synced to the owner as Player.me.quests; see chainState): questId = index in QUESTS, questStage = 0 before the quest is
  * accepted, then 1..steps.length for the step being worked on (stage s = steps[s - 1]); questCount =
  * progress on that step (kills / items, or a bitmask of the objects already used). Claiming the reward at
  * the last step moves on to the next quest (questId + 1, stage 0). questId === QUESTS.length = chain done.
@@ -1952,7 +1952,7 @@ export interface QuestChain {
   /** Bump when this chain's steps change (saved as `verKey`): older saves restart their current quest at the offer */
   version: number; verKey: string;
   /**
-   * This chain's key in the synced Player.quests map, which holds all three numbers packed (packQuest): every chain
+   * This chain's key in the Player.quests map (synced to the owner only, as Player.me.quests), which holds all three numbers packed (packQuest): every chain
    * shares that one schema field instead of each taking its own. Unique across CHAINS (checked below).
    */
   packed: string;

@@ -35,7 +35,7 @@ little life"). Session D done in the same session as B; C done 2026-11-09 in its
   Hole swallow / close (host `voidHop`), Gravity, Void Edge extra blades, Void Velocity buff on blink, `voidSlip`,
   `inVoid`, `HitOpts.pet`.
 - `server/TownRoom.ts`: slot golems (`autoGolems`, `recallGolems`, `golemFell`, `splitColossus`), grimoire message
-  (`grimoire` {slot, el}, throttled, packed in `Player.attune` = el1 + 4·el2 because Player is at 64 fields),
+  (`grimoire` {slot, el}, throttled, packed in `Player.attune` = el1 + 4·el2, from when Player was at 64 fields),
   `voidHop`, `holeEats` (projectiles), `loseHero` (Void Slip), PvP multipliers in `hitTarget`, Stone Bond talent +
   Essence, save `grimoire` / `suTree` with free reset of old trees.
 - Client: provisional icons (`BORROWED` in `client/src/skillArt.ts`). Unknown sfx events (golemfire, golemdeath,
@@ -221,7 +221,8 @@ Out of scope, worth a task: the Wizard is the weakest class (6-55 % overall) and
 21 % (Lv50).
 
 ## Pitfalls
-- Player schema is at the 64-field limit: pack new synced data into existing fields.
+- Player schema: 64 synced fields max (30 in use since the 2026-11 restructure). Owner-only data goes in `Player.me`;
+  see CLAUDE.md "Hard limits" (this line used to say the schema was full; it no longer is).
 - `cleanRanks` drops a skill whose parent is missing: tests must set parents too.
 - The skill tree slab fits 4 rows: keep each branch at depth ≤ 3 (tests/treeLayout.test.ts).
 - `MOB_FIELDS` order: new synced Mob fields go at the end (none added in sessions A and B).
