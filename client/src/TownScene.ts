@@ -3,7 +3,7 @@ import { MobFeed } from "./mobFeed";
 import type { MobViewMsg } from "../../shared/mobView";
 import { quake } from "./camfx";
 import { chargeIcon } from "./chargeIcon";
-import { leaving, noteBuild, reconnectSoon, returnToStart, takeCarried, upgradeAnnounced } from "./reconnect";
+import { leaving, noteBuild, reconnectSoon, returnToStart, takeCarried, upgradeAnnounced, failToStart } from "./reconnect";
 import { Client, getStateCallbacks, Room } from "colyseus.js";
 /** Beast-folk that lurk in the Mawdeep's ambush rooms (their eyes show through the dark). */
 const LURKERS = new Set<string>(["gnawkin", "tuskborn", "silkwretch", "duskwing", "crowseer"]);
@@ -609,10 +609,7 @@ export class TownScene extends Phaser.Scene {
       this.room.send("lootfilter", lootFilter());
     } catch (e: any) {
       const msg = typeof e?.message === "string" && e.message && !/websocket|connect/i.test(e.message) ? e.message : "Could not connect to server.";
-      document.getElementById("status")!.textContent = msg;
-      document.getElementById("play")!.removeAttribute("disabled");
-      hideLoading(true); // back to the login form
-      this.game.destroy(true);
+      failToStart(msg, this.opts); // back to the login form through a reload: this scene has already bound page listeners
       return;
     }
     this.me = this.room.sessionId;

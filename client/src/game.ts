@@ -14,11 +14,10 @@ import { perfHud } from "./perfHud";
 export interface GameStart { name: string; password: string; color: number; cls: ClassKind; newGame: boolean }
 
 /**
- * Boots Phaser with the TownScene for this login. Called by main.ts's launch(), which lets one game live at a time:
- * `onGone` tells it this game was destroyed (TownScene does that when the server refuses the join), so the player can
- * try again. Rejects if Phaser or the scene cannot be built.
+ * Boots Phaser with the TownScene for this login. Called once per page by main.ts's launch(): a join that fails
+ * reloads the page (reconnect.ts failToStart). Rejects if Phaser or the scene cannot be built.
  */
-export function startGame(opts: GameStart, onGone: () => void): Promise<void> {
+export function startGame(opts: GameStart): Promise<void> {
   initSfx(opts.name);
   if (SMOOTH) installSmoothTextures(Phaser);
   initWorldScale(); // the world canvas is 1/k of the window, scaled up by k (game menu: World size)
@@ -34,8 +33,6 @@ export function startGame(opts: GameStart, onGone: () => void): Promise<void> {
       scene: [new TownScene(opts)],
     });
     (window as any).__game = game; // lets the browser tests (and the console) look at the running game
-    // a destroyed game must leave the world-scale helper, or the next start (and any window resize) calls into it
-    game.events.once(Phaser.Core.Events.DESTROY, () => { attachWorldScale(undefined); onGone(); });
     attachWorldScale(game);
     perfHud(); // `?perf=1` perf readout; does nothing without the flag
   });

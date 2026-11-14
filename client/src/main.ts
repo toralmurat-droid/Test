@@ -1,7 +1,7 @@
 // The start screen. It must not import Phaser, TownScene or sfx (directly or through a helper), or the login form
 // waits for the whole game: those live in game.ts, which loadGame() fetches while the player types.
 import { initMusic, skipIntro, startMusic } from "./music";
-import { takeBackToStart, takeRejoin } from "./reconnect";
+import { takeBackToStart, takeRejoin, takeStartNote } from "./reconnect";
 import { hideLoading, showLoading } from "./loading";
 import { installCursors } from "./cursors";
 import { installWeatheredFrames } from "./weathered";
@@ -329,7 +329,7 @@ addEventListener("keydown", (e: KeyboardEvent) => {
 });
 
 let launching = false;
-/** The one way into the game: waits for the game chunk, then starts Phaser. Ignored while a launch is under way or a game lives. */
+/** The one way into the game: waits for the game chunk, then starts Phaser. Ignored while a launch is under way or once the game is built. */
 function launch(name: string, password: string, newGame: boolean, back = false) {
   if (launching) return;
   launching = true;
@@ -339,9 +339,9 @@ function launch(name: string, password: string, newGame: boolean, back = false) 
   initMusic(name);
   status.textContent = "Connecting…";
   showLoading(back ? "Back to where you stood…" : undefined); // covers everything until the world is fully drawn (TownScene hides it)
-  // `launching` stays set while that game lives (two Phaser games on one page are never right) and is freed when it is
-  // destroyed: the scene does that when the server turns the hero away, and the player may then try again.
-  loadGame().then((g) => g.startGame({ name, password, color, cls, newGame }, () => { launching = false; })).catch((e) => {
+  // `launching` stays set once the game is built: a page holds one game. If the server then turns the hero away, the
+  // scene reloads the page and the reason shows on the start screen (reconnect.ts failToStart / takeStartNote below).
+  loadGame().then((g) => g.startGame({ name, password, color, cls, newGame })).catch((e) => {
     console.error("game start failed", e);
     // The game files did not arrive (offline, or a deploy is under way). The browser remembers a failed import() until
     // the page is reloaded, so the retry is a reload (which also picks up a new build). Same if building the game threw.
@@ -351,6 +351,7 @@ function launch(name: string, password: string, newGame: boolean, back = false) 
     status.textContent = "Could not load the game. Check your connection, then reload to try again.";
     playBtn.textContent = "Reload";
     playBtn.onclick = () => location.reload();
+    pwEl.onkeydown = (e) => { if (e.key === "Enter") location.reload(); };
     playBtn.removeAttribute("disabled");
   });
 }
@@ -372,3 +373,6 @@ if (rejoin) {
 // Back from the game menu's "Save and return to start screen": log in again and show Resume / New game
 const back = rejoin ? null : takeBackToStart();
 if (back) { nameEl.value = back.name; pwEl.value = back.password; void start(); }
+// Back from a join the server refused or that never connected: say why, with the form ready for another try
+const note = takeStartNote();
+if (note && !rejoin && !back) { nameEl.value = note.name; pwEl.value = note.password; status.textContent = note.text; pwEl.focus(); }

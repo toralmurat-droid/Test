@@ -343,9 +343,12 @@ Open:
     unhandled, which shuts the server down. Fixed (`versionedCache` never rejects, tests for hostile paths, checked
     against a running server). Also fixed: a throw while building the game (reload message instead of an endless loading screen).
   - Second review: NOT OK again, for a regression from the first fix round: `launching` stayed set after a start,
-    so after a refused join ("already playing", server not up yet) Resume did nothing until a manual reload. Now
-    one game may live at a time and Phaser's destroy event frees the launch. Replaying it in a browser (two tabs,
-    same hero) showed the retry had not worked before this wave either: `worldscale.ts` kept the destroyed game and
-    the next start threw on it. The destroyed game now leaves the helper; refused twice, in on the third try once
-    the hero is free, one canvas, no reload. Left: a `reading 'renderer'` page error when the game is destroyed
-    during boot (harmless, not looked into).
+    so after a refused join ("already playing", server not up yet) Resume did nothing until a manual reload.
+    Replaying it in a browser (two tabs, same hero) showed the retry had not worked before this wave either:
+    `worldscale.ts` kept the destroyed game and the next start threw on it, leaving the loading screen up.
+  - Third review: NOT OK, for the fix to that: freeing the launch on Phaser's destroy event let a second game start
+    on a page that still carried the first scene's window listeners and HUD parts (chat lines lost, three game
+    menus). Final design: a join that fails reloads the page (`reconnect.ts` `failToStart`), and the start screen
+    shows the reason with the form filled in (`takeStartNote`); a page builds one game. Browser replay: refused
+    twice (one reload each, message and form filled), in on the third try once the hero is free, one canvas, one
+    game menu button, chat sends, Esc opens one menu, no page errors.

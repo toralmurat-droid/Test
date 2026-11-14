@@ -157,5 +157,29 @@ export function takeBackToStart(): { name: string; password: string } | null {
   } catch { return null; }
 }
 
+const NOTE_KEY = "startnote";
+
+/**
+ * A join that failed (hero already playing, server not reachable). By then the scene has bound page listeners and
+ * added HUD parts that destroying the Phaser game leaves behind, and a second game on the same page would double them
+ * (chat lines lost, three game menus). So the way back to a clean start screen is a reload; the start screen shows
+ * the reason with the form filled in (takeStartNote).
+ */
+export function failToStart(text: string, login: { name: string; password: string }) {
+  try { sessionStorage.setItem(NOTE_KEY, JSON.stringify({ text, name: login.name, password: login.password, at: Date.now() })); } catch { /* ignore */ }
+  location.reload();
+}
+
+/** The reason left by failToStart (read once). */
+export function takeStartNote(): { text: string; name: string; password: string } | null {
+  try {
+    const raw = sessionStorage.getItem(NOTE_KEY);
+    sessionStorage.removeItem(NOTE_KEY);
+    if (!raw) return null;
+    const r = JSON.parse(raw);
+    return Date.now() - (r.at ?? 0) < 60_000 && typeof r.text === "string" ? r : null;
+  } catch { return null; }
+}
+
 /** True once the game is leaving on purpose or reconnecting (later drops are ignored). */
 export function leaving() { return started; }
