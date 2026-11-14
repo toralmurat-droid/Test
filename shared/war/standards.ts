@@ -77,6 +77,7 @@ function buildHolds(): Hold[] {
     const mine = STANDARDS.filter((s) => s.t === t.id);
     let best: { x: number; y: number; score: number } | undefined;
     for (let ty = t.y + HOLD_COVER.up + 1; ty < t.y + t.h - 1; ty++) for (let tx = t.x + HOLD_COVER.left + 1; tx < t.x + t.w - HOLD_COVER.right - 1; tx++) {
+      if (PORTAL_SPOTS.some((p) => Math.hypot(p.x - tx, p.y - ty) < KEEP_CLEAR)) continue; // leave the portal stone room
       let solid = 0;
       for (let dy = -HOLD_COVER.up; dy <= 0; dy++) for (let dx = -HOLD_COVER.left; dx <= HOLD_COVER.right; dx++) if (isSolidAt((tx + dx + 0.5) * TILE, (ty + dy + 0.5) * TILE)) solid++;
       if (solid > 1 || isSolidAt((tx + 0.5) * TILE, (ty + 0.5) * TILE)) continue; // the foot must be free, the cover nearly so
