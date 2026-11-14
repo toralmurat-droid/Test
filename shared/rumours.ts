@@ -148,7 +148,7 @@ const MISSING: MissingTale[] = [
     seen: "the flowers dropped on the path", foe: "Redhand Jack", find: { kind: "clue", name: "A veil caught on a bush", verb: "Follow the trail", obj: "Find Maren" },
     outro: "She wasn't running away. She was running from that thing. The wedding's on for Sunday." },
   { title: "Two Boys and a Dare", text: ["Two lads dared each other to spend a night in {zone}. One's home, with a very good story.", "The other one's mother has stopped believing the story."],
-    seen: "the boys' ring of stones", foe: "The Hollow King", find: { kind: "cairn", name: "A narrow gap between rocks", verb: "Look in", obj: "Find the second boy" },
+    seen: "the boys' ring of stones", foe: "Old Gristle", find: { kind: "cairn", name: "A narrow gap between rocks", verb: "Look in", obj: "Find the second boy" },
     outro: "Wedged in a gap, cold and proud. He'll tell it better than his friend did. Both of them are grounded." },
   { title: "The Lamplighter's Round", text: ["Our lamplighter walks his round at dusk. Last night he walked it out past the edge, into {zone}, and I haven't seen him since.", "Without him half the lamps stay cold. I don't like cold lamps. Not these days."],
     seen: "the last lit lamp", foe: "Cold Tom", find: { kind: "cairn", name: "A shuttered lantern in a hollow", verb: "Look in", obj: "Find the lamplighter" },
