@@ -196,3 +196,15 @@ body.shopping #npcdialog.shop { left: 12px; top: 12px; bottom: auto; transform: 
 #npcdialog .sh-lvpick button { padding: 2px 8px; font: 15px var(--pixel-font); background: #f5ecd2; }
 #npcdialog .sh-lvpick button.on { background: #8b5e34; color: #ffe9a8; border-color: #5a3a1e; }
 #npcdialog .sh-need { color: #b3262e; }
+
+/* Tavern Rumours (client/src/rumours.ts): Mags' three offers as option cards, the errand under way */
+#npcdialog button.rm-offer { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; padding: 6px 10px; }
+#npcdialog button.rm-offer .rm-t { font-size: 18px; color: #fff; }
+#npcdialog button.rm-offer .rm-x { font-size: 15px; color: #e3ecd0; opacity: .9; white-space: normal; }
+#npcdialog button.rm-offer .rm-m { font-size: 15px; color: #ffd98a; }
+#npcdialog button.rm-offer kbd { position: absolute; left: 8px; top: 6px; }
+#npcdialog button.rm-offer { position: relative; padding-left: 34px; }
+#npcdialog button.rm-offer:disabled { background: #7a8466; }
+#npcdialog .rm-done { font-style: normal; color: #ffe8a3; text-transform: uppercase; font-size: 14px; letter-spacing: 1px; margin-left: 6px; }
+#npcdialog .rm-now { margin: 8px 0; padding: 6px 8px; background: rgba(120, 90, 40, .15); border-left: 3px solid #8b5e34; }
+#questtracker .qt-block[data-key^="Rumour:"] { border-left-color: #e8a45a; }

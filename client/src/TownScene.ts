@@ -650,6 +650,7 @@ export class TownScene extends Phaser.Scene {
     this.room.onMessage("quest", (msg) => this.npcs?.onQuest(msg));
     this.room.onMessage("choice", (msg) => this.npcs?.onChoice(msg));
     this.room.onMessage("questuse", ({ id }) => this.npcs?.objects.burst(id));
+    this.room.onMessage("rumour", (m) => this.npcs?.rumours.onMessage(m)); // Mags' tavern rumours (client/src/rumours.ts)
     this.room.onMessage("shop", (msg) => this.npcs?.onShop(msg));
     this.chests = new ChestLayer(this, (type, msg) => this.room.send(type, msg));
     this.room.onMessage("chests", (left) => this.chests?.setOpened(left));

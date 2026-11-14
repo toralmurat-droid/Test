@@ -20,6 +20,8 @@ export class QuestLog {
   private sel = "";
   /** Chains whose active quest is hidden from the tracker and the map */
   private untracked = new Set<string>();
+  /** Tavern Rumours (client/src/rumours.ts): detail page, active flag; undefined until Mags has sent anything */
+  rumours?: { html: () => string; active: () => boolean };
 
   constructor() {
     this.el.id = "questlog";
@@ -81,7 +83,15 @@ export class QuestLog {
       }
     });
     let body: string;
-    if (!active.length && !finished.length) {
+    const rum = this.rumours;
+    const all0 = [...active, ...finished];
+    const rumourSel = !!rum && (this.sel === "rumour" || !all0.length);
+    const rumourItem = rum ? `<div class="ql-cat">Rumours</div><div class="ql-item${rumourSel ? " sel" : ""}${rum.active() ? " tracked" : ""}" data-q="rumour"><span class="ql-name">Tavern rumours</span></div>` : "";
+    if (rumourSel) {
+      const plain = (e: Entry) => `<div class="ql-item" data-q="${e.key}"><span class="ql-name">${e.d.title}</span></div>`;
+      body = `<div class="ql-list">${active.length ? `<div class="ql-cat">Active</div>${active.map(plain).join("")}` : ""}` +
+        `${finished.length ? `<div class="ql-cat">Completed</div>${finished.map(plain).join("")}` : ""}${rumourItem}</div><div class="ql-detail">${rum!.html()}</div>`;
+    } else if (!active.length && !finished.length) {
       body = `<p class="ql-none">No quests yet. Look for a <b class="bang">!</b> over someone's head: Elder Rowan by the village bonfire needs help.</p>`;
     } else {
       const all = [...active, ...finished];
@@ -111,7 +121,7 @@ export class QuestLog {
         `<div class="ql-list">` +
         (active.length ? `<div class="ql-cat">Active <span class="ql-cathint">track</span></div>${active.map(item).join("")}` : "") +
         (finished.length ? `<div class="ql-cat">Completed</div>${finished.map(item).join("")}` : "") +
-        `${hint}</div>` +
+        `${rumourItem}${hint}</div>` +
         `<div class="ql-detail">` +
         `<h3>${d.title} ${done ? `<span class="ql-badge">Complete</span>` : ""}</h3>` +
         `<div class="ql-meta">${CHAINS[q.chain ?? 0].name} · Given by ${npcById(d.giver)?.name} · ${d.zone} · Lv ${d.minLevel}+</div>` +

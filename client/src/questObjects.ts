@@ -349,9 +349,35 @@ export class QuestObjects {
     for (const d of this.drawn) if (d.o.kind === "lantern" && !d.light) d.light = light(d.o.x, d.o.y, LANTERN_LIFT)?.setVisible(!!d.done);
   }
 
+  /**
+   * The active tavern rumour's objects (client/src/rumours.ts), rebuilt from `rumoursFor`: only these are drawn, each with its
+   * done look. Cosmetic: the server decides what a use does. An empty list clears them.
+   */
+  private rum = new Map<string, Drawn>();
+  setRumour(list: { o: QuestObject; done: boolean }[]) {
+    const keep = new Set(list.map((x) => x.o.id));
+    for (const [id, d] of this.rum) if (!keep.has(id)) { d.img.destroy(); d.glow?.destroy(); this.rum.delete(id); }
+    for (const { o, done } of list) {
+      let d = this.rum.get(o.id);
+      if (!d) {
+        const img = this.scene.add.image(o.x, o.y, START[o.kind] ?? "qobj_clue").setOrigin(0.5, 1).setScale(SCALE[o.kind] ?? 1.4).setDepth(o.y);
+        d = { o, img };
+        if (GLOW[o.kind]) {
+          d.glow = isoAnchor(this.scene.add.circle(o.x, o.y - img.displayHeight * 0.6, 14, GLOW[o.kind], 0.22).setDepth(o.y + 1).setBlendMode(Phaser.BlendModes.ADD), o) as Phaser.GameObjects.Arc;
+          this.scene.tweens.add({ targets: d.glow, scale: 1.3, alpha: 0.1, duration: 700, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
+        }
+        this.rum.set(o.id, d);
+      }
+      if (d.done === done) continue;
+      d.done = done;
+      d.img.setTexture(done ? DONE[o.kind] ?? START[o.kind] : START[o.kind]);
+      d.glow?.setVisible(GLOW_WHEN_DONE.has(o.kind) ? done : !done);
+    }
+  }
+
   /** Burst of sparks when an object is used. */
   burst(id: string) {
-    const o = allObjects().find((x) => x.id === id);
+    const o = allObjects().find((x) => x.id === id) ?? this.rum.get(id)?.o;
     if (!o) return;
     const d = { o };
     const color = d.o.kind === "shard" ? ({ poison: 0x9be564, cold: 0xd6f6ff, fire: 0xffa848, shock: 0xbcd0ff } as Record<string, number>)[d.o.id.slice(6)] ?? 0xffffff : d.o.kind === "lantern" ? 0x7ff3ff : d.o.kind === "shrine" || d.o.kind === "crypt" ? 0xffd166
