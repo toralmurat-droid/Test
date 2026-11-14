@@ -58,6 +58,7 @@ import { warmPaths } from "./pathfind";
 import { pixelText } from "./pixeltext";
 import { speechBubble } from "./weathered";
 import { WarPlaque } from "./warPlaque";
+import { WarStandards } from "./warStandards";
 import { ART_K, CHAR_GROW, CHAR_SCALE, CHARACTERS, CHAR_ORIGIN, CharacterName, createArtAnims, ensureCharSheet, HD_CHARS, playCharAnim, preloadArt } from "./artAssets";
 import { Ambient } from "./ambient";
 import { Details } from "./details";
@@ -383,6 +384,7 @@ export class TownScene extends Phaser.Scene {
   private resBars?: ResourceBars;
   private heatGauge?: OverloadGauge;
   private warPlaque?: WarPlaque;
+  private warStd?: WarStandards;
   private chordHud?: ChordHud;
   private soundCues = new SoundCues();
   private statsShown = "";
@@ -498,7 +500,9 @@ export class TownScene extends Phaser.Scene {
       if (!this.npcs?.isOpen && this.dungeon?.nearDoor) { this.room?.send("door", { id: this.dungeon.nearDoor.id }); return; } // a Mawdeep gate
       if (!this.npcs?.isOpen && this.stash?.interact()) return; // the account stash on the square
       if (this.bounty?.open) { this.bounty.close(); return; }
+      if (this.warStd?.open) { this.warStd.close(); return; }
       if (!this.npcs?.isOpen && this.bounty?.interact()) return; // a bounty board
+      if (!this.npcs?.isOpen && this.warStd?.interact()) return; // a clan war standard
       if (!this.npcs?.isOpen && this.shrine?.interact()) return; // then the forest shrine
       if (!this.npcs?.isOpen && this.portals?.interact()) return; // then a portal stone's travel list
       if (!this.npcs?.isOpen && this.waygates?.interact()) return; // then Act 2's waygate
@@ -1490,7 +1494,9 @@ export class TownScene extends Phaser.Scene {
     const alive = () => { lastPatch = Date.now(); };
     this.room.onStateChange(alive);
     this.room.onMessage("hb", alive);
-    this.room.onMessage("war", (v) => (this.warPlaque ??= new WarPlaque(document.getElementById("hud")!)).set(v));
+    this.warStd = new WarStandards(this, (type, msg) => this.room.send(type, msg)); // clan war standards and oaths
+    this.room.onMessage("war", (v) => { (this.warPlaque ??= new WarPlaque(document.getElementById("hud")!)).set(v); this.warStd?.setWar(v); });
+    this.room.onMessage("clan", (m) => this.warStd?.setClan(m));
     this.room.onMessage("mv", alive);
     this.startPing();
     window.setInterval(() => { if (!this.quitting && Date.now() - lastPatch > 15_000) reconnectSoon(login); }, 3000);
@@ -2338,6 +2344,7 @@ export class TownScene extends Phaser.Scene {
     this.trade?.close();
     this.stash?.close();
     this.bounty?.close();
+    this.warStd?.close();
     this.patchNotes?.close();
     this.portals?.close();
     this.gameMenu?.close();
@@ -2360,7 +2367,7 @@ export class TownScene extends Phaser.Scene {
     const shown = (id: string) => { const e = document.getElementById(id); return !!e && !e.hidden; };
     return shown("hero") || shown("tree") || shown("slotpick") || musicPanelOpen() ||
       !!(this.npcs?.isOpen || this.npcs?.log.open || this.gearMenu?.open || this.ideaBoard?.open || this.party?.open ||
-        this.trade?.open || this.stash?.open || this.bounty?.open || this.patchNotes?.open || this.portals?.isOpen || this.minimap?.isOpen ||
+        this.trade?.open || this.stash?.open || this.bounty?.open || this.warStd?.open || this.patchNotes?.open || this.portals?.isOpen || this.minimap?.isOpen ||
         this.gameMenu?.open || this.talentMenu?.open);
   }
 
@@ -3375,7 +3382,8 @@ export class TownScene extends Phaser.Scene {
       const tx = meEnt.sprite.x / TILE, ty = meEnt.sprite.y / TILE;
       const zdef = zoneAt(Math.floor(tx), Math.floor(ty));
       setMusicZone(zdef?.name, zdef?.mobs, this.areaName, actOfTile(tx, ty));
-      this.warPlaque?.update(tx, ty); // the clan war front plaque (warPlaque.ts)
+      this.warStd?.update(meEnt.state.dead ? undefined : meEnt.sprite, !!this.npcs?.isOpen || !!this.chests?.near || !!this.stash?.near || !!this.bounty?.near, now);
+      this.warPlaque?.update(tx, ty, this.warStd?.standing(meEnt.sprite)); // the clan war front plaque (warPlaque.ts)
       sfxFrame(this.me, this.entities as any);
       const cls = mine.cls as ClassKind;
       const cdm = cooldownMult(cls, statsOf(mine), mine.talents);

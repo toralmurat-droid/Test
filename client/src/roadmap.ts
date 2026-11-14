@@ -48,7 +48,8 @@ export const MILESTONES: Milestone[] = [
     exit: "Players can hold standards, see Control move every 10 minutes and join a siege window; it feels good to play.",
     items: [
       { name: "War tick, Control, pressure formula, siege windows in the live game", owner: "Gameplay Engineers", status: "done", note: "server/war.ts runs the whole war (all five clans, both acts) every 10 minutes and saves it" },
-      { name: "Standards (capture rings) and Holds in two clan styles", owner: "Art + Gameplay", status: "doing" },
+      { name: "Standards with capture rings, oath to a clan", owner: "Art + Gameplay", status: "done", note: "Two per zone; a minute in a ring is valor for the next war tick" },
+      { name: "Holds in the clan styles", owner: "Art + Gameplay", status: "later" },
       { name: "Front plaque HUD and siege countdown", owner: "Client & UI", status: "done" },
       { name: "Banners and standards in the world (pixel art)", owner: "Art Director", status: "later" },
       { name: "War horn and siege sounds", owner: "Audio", status: "later" },

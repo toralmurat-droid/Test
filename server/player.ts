@@ -7,6 +7,7 @@ import type { Feast } from "../shared/devour";
 import { noPotions, type Potions } from "../shared/potions";
 import { newRuntime } from "../shared/skillEngine";
 import { SLOT_COUNT } from "../shared/slots";
+import type { ClanKey } from "../shared/war/clans";
 
 // Per-client views need a schema buffer that never resizes (a library bug corrupts resized view patches):
 // Encoder.BUFFER_SIZE is set in server/patchCopy.ts, imported by the room before its state is created.
@@ -125,6 +126,8 @@ export class Player extends Schema {
   portals = new Set<string>(); // portal stones this hero has woken (shared/portals.ts; saved, never synced)
   bounty?: BountyState; // bounty board hunt in progress (shared/bounty.ts; saved, sent by message)
   bountyDone = 0;
+  clan?: ClanKey; // clan war oath (shared/war/standards.ts; saved, sent by message)
+  clanAt = 0;
   lastSpecial = -Infinity;
   // Hidden initiative / poise (shared/combat.ts)
   poiseLost = 0;
