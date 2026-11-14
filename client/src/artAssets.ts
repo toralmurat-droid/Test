@@ -1,6 +1,7 @@
 import Phaser from "phaser";
-import { SMOOTH } from "./isoflag";
+import { CHAR_BASE, CHAR_EXT, HD_CHARS } from "./isoflag";
 import { assetUrl } from "./assetUrl";
+export { CHAR_BASE, CHAR_EXT, HD_CHARS }; // defined in isoflag.ts: the start screen reads them without loading Phaser
 
 /**
  * Generated pixel art (see tools/art, run `npm run art`).
@@ -23,7 +24,6 @@ export const ART_K = 2;
  * unless `?pixel=1`: 48px frames, WebP, 8 facings and 8-frame walk cycles.
  * Character sprites are scaled by 1/CHAR_K so they keep the same size on screen either way.
  */
-export const HD_CHARS = SMOOTH;
 export const CHAR_K = HD_CHARS ? 1.5 : ART_K;
 /** Iso characters stand a third taller (about one tile) than the old 24px heroes, for more detail. */
 export const CHAR_GROW = HD_CHARS ? 4 / 3 : 1;
@@ -31,8 +31,6 @@ export const CHAR_GROW = HD_CHARS ? 4 / 3 : 1;
 export const CHAR_SCALE = (0.75 * CHAR_GROW) / CHAR_K;
 /** Size of one character frame in the sheets. */
 export const CHAR_FRAME = 32 * CHAR_K;
-export const CHAR_BASE = HD_CHARS ? "assets/hd/characters" : "assets/characters";
-export const CHAR_EXT = HD_CHARS ? "webp" : "png";
 export const CHAR_ORIGIN = { x: 0.5, y: 29 / 32 }; // feet
 
 const BASE = "assets";

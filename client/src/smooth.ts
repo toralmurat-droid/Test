@@ -1,5 +1,5 @@
 import { pixelize } from "./pixelize";
-import Phaser from "phaser";
+import type Phaser from "phaser";
 
 /**
  * Smooth look for textures still drawn as pixel art (props, trees, buildings, monsters…): when such a texture goes
@@ -144,11 +144,12 @@ export function overrideTexture(scene: Phaser.Scene, key: string, hi: HTMLCanvas
 }
 
 let installed = false;
-/** Patches Phaser's texture upload so every eligible texture goes up smoothed. Call before the game starts. */
-export function installSmoothTextures() {
+/** Patches Phaser's texture upload so every eligible texture goes up smoothed. Call before the game starts.
+ * Takes the Phaser module as an argument so this file has no runtime Phaser import (the start screen loads it for hiResTexture). */
+export function installSmoothTextures(P: typeof Phaser) {
   if (installed) return;
   installed = true;
-  const TS = (Phaser.Textures as any).TextureSource.prototype;
+  const TS = (P.Textures as any).TextureSource.prototype;
   const eligible = (src: any) => {
     const key = src.texture?.key ?? "";
     if (HI.has(key)) return true;

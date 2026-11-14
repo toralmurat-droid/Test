@@ -20,3 +20,8 @@ export const SMOOTH = ISO && (() => {
   }
   try { return localStorage.getItem("pixel") !== "1"; } catch { return true; }
 })();
+
+/** Iso characters (assets/hd, WebP) unless `?pixel=1`. Here, not in artAssets.ts, so the start screen can read them without Phaser. */
+export const HD_CHARS = SMOOTH;
+export const CHAR_BASE = HD_CHARS ? "assets/hd/characters" : "assets/characters";
+export const CHAR_EXT = HD_CHARS ? "webp" : "png";
