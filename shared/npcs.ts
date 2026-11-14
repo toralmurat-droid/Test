@@ -40,6 +40,8 @@ export const NPCS: Npc[] = [
   { id: "witch", name: "Morwen", title: "Potion witch", sprite: "witch", x: 71.95 * TILE, y: 63.95 * TILE, dir: "right", where: "Oakvale, at her tent by the square", shop: "witch" },
   // Hilda the armourer, behind the market stall on the square's east side: armour for the first half of Act 1
   { id: "armourer", name: "Hilda", title: "Armour merchant", sprite: "armourer", x: 84.9 * TILE, y: 57.5 * TILE, dir: "down", shop: "armourer" },
+  // Wren the lute-maker, at her stall on the square's south-east side between her bench and her rack of lutes (DI-5)
+  { id: "lutemaker", name: "Wren", title: "Lute-maker", sprite: "lutemaker", x: 85.6 * TILE, y: 64.7 * TILE, dir: "down", where: "Oakvale, in her workshop by the square", shop: "lutemaker" },
   // Tobin the fisherman: only home once you free him from the blob cocoon at Sunken Lake (shared/quests.ts npcPresent)
   { id: "fisher", name: "Tobin", title: "Fisherman", sprite: "villager", x: 85.5 * TILE, y: 61.4 * TILE, dir: "left" },
   // Captain Hale of the watch, just inside the east gate: gives the skeleton quest chain (shared/quests.ts BONE_QUESTS)
@@ -91,6 +93,9 @@ export const NPC_DECOR: NpcDecor[] = [
   // The armourers' wares (client/src/armoury.ts): an armour stand in the village's best coat and a rack of shields
   { prop: "ar_stand_oak", x: 86.5, y: 57.6, scale: 0.82, animated: true, solid: [86.2, 57.4, 0.6, 0.35] },
   { prop: "ar_rack_oak", x: 83.1, y: 57.3, scale: 0.88, animated: true, solid: [82.45, 57.1, 1.3, 0.35] },
+  // Wren's stall (client/src/lutierArt.ts): a workbench with a lute being built and a rack of finished lutes
+  { prop: "lu_bench", x: 83.9, y: 64.6, scale: 1, animated: true, solid: [83.0, 64.35, 1.8, 0.35] },
+  { prop: "lu_rack", x: 88.0, y: 64.2, scale: 1, animated: true, solid: [87.0, 63.95, 2.0, 0.3] },
   { prop: "ar_stand_salt", x: 143.0, y: 183.7, scale: 0.82, animated: true, solid: [142.7, 183.5, 0.6, 0.35] },
   { prop: "ar_rack_salt", x: 139.8, y: 183.5, scale: 0.88, animated: true, solid: [139.15, 183.3, 1.3, 0.35] },
   { prop: "ar_stand_sand", x: 150.9, y: D(112.6), scale: 0.82, animated: true, solid: [150.6, D(112.4), 0.6, 0.35] },

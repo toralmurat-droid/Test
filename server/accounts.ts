@@ -54,6 +54,12 @@ export interface HeroSave {
   swTree?: number;
   /** Songweaver mode (shared/songs.ts MODE_IDS); missing or no longer known = Major. */
   swMode?: string;
+  /** Songweaver kit version (server/songs.ts SW_KIT_VERSION): missing or older = migrateSongweaver on load. */
+  swKit?: number;
+  /** Songweaver: the songs she collected (shared/songbook.ts SongId); missing = none. */
+  swSongs?: string[];
+  /** Songweaver: her lute-maker materials, id -> count (shared/lute.ts MaterialId); missing = none. */
+  swMats?: Record<string, number>;
 }
 
 interface Account {

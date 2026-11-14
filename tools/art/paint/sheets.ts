@@ -4,6 +4,7 @@ import type { Canvas } from "../canvas";
 import { buildSheet, HEROES, NPCS, setPainted } from "../characters";
 import { diff } from "../gear";
 import { GEAR, GEAR_IDS } from "../../../shared/gear";
+import { gearDefs } from "./books";
 import { setPaintForm, setPaintGear, setPaintKit } from "./body";
 import { KITS } from "./look";
 
@@ -38,8 +39,8 @@ export function buildPainted(out: string, opts: { gear?: boolean; only?: string[
     saveWebp(plain, `${out}/characters/${h.name}.webp`);
     console.log("painted", h.name);
     if (opts.gear === false || !HEROES.includes(h)) continue;
-    for (const id of GEAR_IDS) {
-      const d = GEAR[id];
+    for (const d of gearDefs()) {
+      const id = d.id;
       if (d.cls && d.cls !== h.name) continue; // class kits only fit their own class
       wear(d);
       saveWebp(diff(plain, buildSheet(h)), `${out}/gear/${h.name}_${id}.webp`, 88);

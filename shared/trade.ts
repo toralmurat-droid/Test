@@ -1,7 +1,7 @@
 import { TILE } from "./constants";
 import { EMPTY, isSolidTile, OBJECTS, SAFE_ZONE } from "./map";
 import { NPCS } from "./npcs";
-import { BAG_SIZE, isBagItem } from "./gear";
+import { BAG_SIZE, isBagItem, isBound } from "./gear";
 
 /**
  * Player trading and the account stash (Murat 2026-11-04, from the expert review).
@@ -60,13 +60,17 @@ export function takeItems(bag: string[], take: string[]): string[] | null {
   return left;
 }
 
-/** Clean an offer from the client: bag indices -> item ids (each index once), whole gold within what the hero has. */
-export function offerFrom(bag: string[], gold: number, items: unknown, coins: unknown): Offer {
+/**
+ * Clean an offer from the client: bag indices -> item ids (each index once), whole gold within what the hero has.
+ * `keep`: the bound items that must stay, given the ones already offered (gear.ts keepsBoundOf); by default every
+ * bound item stays.
+ */
+export function offerFrom(bag: string[], gold: number, items: unknown, coins: unknown, keep: (id: string, chosen: readonly string[]) => boolean = isBound): Offer {
   const idx = Array.isArray(items) ? items : [];
   const seen = new Set<number>(), out: string[] = [];
   for (const v of idx) {
     if (typeof v !== "number" || !Number.isInteger(v) || v < 0 || v >= bag.length || seen.has(v)) continue;
-    if (!isBagItem(bag[v])) continue;
+    if (!isBagItem(bag[v]) || keep(bag[v], out)) continue; // bound items (her lute, the Songbook) stay with their hero
     seen.add(v); out.push(bag[v]);
     if (out.length >= TRADE.maxItems) break;
   }
