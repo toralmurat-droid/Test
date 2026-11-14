@@ -2031,8 +2031,8 @@ export class TownRoom extends Room<TownState> {
    * The grimoire HUD (client/src/grimoire.ts): each Summoner is told, only when it changes, the element of each golem
    * slot and what it is doing: "up" (out and fighting), "wait" (back in `ms`), "town" (resting, safe zone or dead),
    * "colossus" (fused), or why slot 2 is shut ("lv" before GOLEM.twinLevel, "twin" without Twin Bond).
-   * Sent as a message to that Summoner only (it changes per tick while a golem is down; a field in Player.me could
-   * replace it, see CLAUDE.md "Owner-only player data").
+   * Sent as a message to that Summoner only, and only when it changes; it could become a field in Player.me (CLAUDE.md
+   * "Owner-only player data").
    */
   private golemNews(now: number) {
     this.state.players.forEach((p, pid) => {
