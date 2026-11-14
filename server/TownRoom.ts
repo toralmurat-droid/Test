@@ -4517,13 +4517,15 @@ export class TownRoom extends Room<TownState> {
       if (now - p.lastWeaponNo > 1000) { p.lastWeaponNo = now; this.clients.find((c) => c.sessionId === id)?.send("gearno", { text: def!.devour ? "Nothing to eat here" : "Nothing to bite here" }); }
       return;
     }
-    const out: CastOut = {}; // a finisher the cast set off counts too
+    // No magic in Oakvale, but a Songweaver may busk (server/songs.ts busking); a finisher the cast set off counts too,
+    // also one a charged note completes when it goes off
+    const lawful = (chord?: string) => { if (!p.outlaw && inVillage(p.x, p.y) && !busking(p.cls, p.sk.mode, def!, chord)) this.setOutlaw(id, p, true); };
+    const out: CastOut = { onChord: lawful };
     if (castSkill(this.host, id, skill, out)) {
       p.emote = "";
       this.runesOnCast(id, p);
       this.questDo(id, "cast");
-      // No magic in Oakvale, but a Songweaver may busk (server/songs.ts busking)
-      if (!p.outlaw && inVillage(p.x, p.y) && !busking(p.cls, p.sk.mode, def!, out.chord)) this.setOutlaw(id, p, true);
+      lawful(out.chord);
       // ...and the villagers close by answer a bright tune (a chat line from the NPC, id "npc:<id>", to heroes nearby)
       this.buskers.heard(p.cls, p.sk.mode, def!, p.x, p.y, Date.now(), (n, text) => {
         const near = buskingAudience(n, id, this.state.players.entries());

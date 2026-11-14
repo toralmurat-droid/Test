@@ -362,6 +362,56 @@ test("Oakvale: a finisher with an enemy part outlaws even when the note that fir
   } finally { await t.done(); }
 });
 
+test("a charged note counts at release: a stunned Chorale logs no note and fires no Amen; a released one does, and the Oakvale rule sees it", async () => {
+  const t = await setup(1);
+  try {
+    const [a] = t.ids, p = t.ps[0];
+    let town: [number, number] | undefined;
+    for (let tx = VILLAGE.x0 + 2; tx < VILLAGE.x1 - 1 && !town; tx++) for (let ty = VILLAGE.y0 + 2; ty < VILLAGE.y1 - 1 && !town; ty++) {
+      const x = (tx + 0.5) * TILE, y = (ty + 0.5) * TILE;
+      if (!isSolidAt(x, y) && inVillage(x, y)) town = [x, y];
+    }
+    const fired: string[] = [], fizzled: string[] = [];
+    const bc = t.room.broadcast;
+    t.room.broadcast = function (type: string, msg: any, ...rest: unknown[]) {
+      if (type === "sfx" && msg?.ev === "chord") fired.push(msg.prog);
+      if (type === "sfx" && msg?.ev === "fizzle") fizzled.push(msg.s);
+      return bc.call(this, type, msg, ...rest);
+    };
+    const again = () => { p.sk.last = {}; p.attackReadyAt = 0; p.stunUntil = 0; p.mana = 9999; if (p.sk.song) p.sk.song.at -= SONG.changeMs; };
+    const fresh = () => { p.sk.notes = []; p.sk.chordLock = 0; p.outlaw = false; p.sk.mode = "major"; fired.length = 0; };
+    const charge = SKILLS.songweaver.find((s) => s.id === "sg_chorale")!.chargeMs!;
+    try {
+      // vi, IV, then Chorale (I) stunned during its charge: it fizzles, the I is never logged, no Amen
+      fresh(); [p.x, p.y] = [t.x, t.y];
+      again(); t.room.cast(a, "sg_pedal"); again(); t.room.cast(a, "sg_mend");
+      again(); t.room.cast(a, "sg_chorale");
+      assert.deepEqual(fired, [], "no Amen at the start of the charge");
+      p.stunUntil = Date.now() + 5000;
+      await wait(charge + 300);
+      assert.deepEqual(fizzled, ["sg_chorale"], "the stun broke the Chorale");
+      assert.deepEqual(fired, [], "a fizzled Chorale fires no Amen");
+      assert.equal(p.sk.notes.length, 2, "the fizzled I is not logged");
+      // the same without the stun: Amen fires when the Chorale goes off
+      fresh();
+      again(); t.room.cast(a, "sg_pedal"); again(); t.room.cast(a, "sg_mend");
+      again(); t.room.cast(a, "sg_chorale");
+      assert.deepEqual(fired, [], "not before the release");
+      await wait(charge + 300);
+      assert.deepEqual(fired, ["amen"], "Amen fires on release");
+      // Perfect Cadence (IV V I, it hurts foes): IV and V outside, the Chorale's I in town outlaws when it goes off
+      fresh();
+      again(); t.room.cast(a, "sg_mend"); again(); t.room.cast(a, "sg_call");
+      [p.x, p.y] = town!;
+      again(); t.room.cast(a, "sg_chorale");
+      assert.equal(p.outlaw, false, "the Chorale itself is lawful");
+      await wait(charge + 300);
+      assert.deepEqual(fired, ["resolve"], "Perfect Cadence fired on release");
+      assert.equal(p.outlaw, true, "the finisher a charged note set off outlaws");
+    } finally { t.room.broadcast = bc; }
+  } finally { await t.done(); }
+});
+
 test("swTree / swMode: saved, loaded, an old tree refunds, an unknown mode falls back to Major", async () => {
   const t = await setup(1);
   try {

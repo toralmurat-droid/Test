@@ -208,8 +208,11 @@ export function cooldownLeft(s: SkillDef, sk: SkillRuntime, now: number, cdm: nu
  */
 export const WIND_REACH = 6;
 
-/** What a cast set off besides itself: `chord` = the Songweaver finisher it completed (the room's Oakvale rule reads it). */
-export interface CastOut { chord?: string }
+/**
+ * What a cast set off besides itself: `chord` = the Songweaver finisher it completed (the room's Oakvale rule reads it).
+ * A charged skill logs its note only when it goes off, so a finisher it completes then reaches `onChord` instead.
+ */
+export interface CastOut { chord?: string; onChord?: (fin: string) => void }
 
 /** A hero presses a skill. Returns true if it was cast; `out` learns what else it set off. */
 export function castSkill(h: SkillHost, id: string, skillId: string, out?: CastOut): boolean {
@@ -254,7 +257,7 @@ export function castSkill(h: SkillHost, id: string, skillId: string, out?: CastO
   // A buildup charges (rooted, a stun breaks it). A big melee blow winds up first, so it lands with the animation's
   // strike (client/src/skillMoves.ts): the hero keeps moving and can't swing or cast meanwhile, and nothing breaks it
   // (rooting it or letting stuns cancel it cost knights and barbarians up to 10% of their duels, tools/balance/duel.ts)
-  const hold = (s.chargeMs ?? 0) + (s.windMs ?? 0);
+  const hold = (s.chargeMs ?? 0) + (s.windMs ?? 0), sings = !!s.degree && u.cls === "songweaver";
   if (hold > 0) {
     if (s.chargeMs) u.sk.chargeUntil = now + hold;
     if (s.windMs) u.sk.windUntil = now + hold;
@@ -262,9 +265,11 @@ export function castSkill(h: SkillHost, id: string, skillId: string, out?: CastO
       u.sk.chargeUntil = 0; u.sk.windUntil = 0;
       if (s.chargeMs && !h.canAct(id)) { h.fx({ ev: "fizzle", id, s: s.id }); return; } // a stun breaks the buildup
       release(h, id, s, rank, power, stacks, at);
+      // a charged note counts only if it sounded: a fizzled one logs nothing and fires no chord
+      if (s.chargeMs && sings) { const fin = playNote(h, id, u, s, h.now()); if (fin) out?.onChord?.(fin); }
     });
   } else release(h, id, s, rank, power, stacks, at);
-  if (s.degree && u.cls === "songweaver") { const fin = playNote(h, id, u, s, now); if (out && fin) out.chord = fin; }
+  if (sings && !s.chargeMs) { const fin = playNote(h, id, u, s, now); if (out && fin) out.chord = fin; }
   return true;
 }
 
