@@ -43,13 +43,13 @@ export const MILESTONES: Milestone[] = [
     ],
   },
   {
-    id: "M1", name: "First Front (vertical slice)", target: "30 Nov – 20 Dec 2026",
-    goal: "One real front in Act 1: Wardens against Redfang over four territories, led by scripted doctrine.",
+    id: "M1", name: "The War Goes Live", target: "14 Nov – 20 Dec 2026",
+    goal: "The war runs live over Act 1 and Act 2 (all five clans, scripted doctrine) and players can take part.",
     exit: "Players can hold standards, see Control move every 10 minutes and join a siege window; it feels good to play.",
     items: [
-      { name: "War tick, Control, pressure formula, siege windows in the live game", owner: "Gameplay Engineers", status: "next", note: "Rules exist in shared/war/rules.ts; next: run them on the server" },
-      { name: "Standards (capture rings) and Holds in two clan styles", owner: "Art + Gameplay", status: "later" },
-      { name: "Front plaque HUD and siege countdown", owner: "Client & UI", status: "later" },
+      { name: "War tick, Control, pressure formula, siege windows in the live game", owner: "Gameplay Engineers", status: "done", note: "server/war.ts runs the whole war (all five clans, both acts) every 10 minutes and saves it" },
+      { name: "Standards (capture rings) and Holds in two clan styles", owner: "Art + Gameplay", status: "doing" },
+      { name: "Front plaque HUD and siege countdown", owner: "Client & UI", status: "done" },
       { name: "Banners and standards in the world (pixel art)", owner: "Art Director", status: "later" },
       { name: "War horn and siege sounds", owner: "Audio", status: "later" },
       { name: "Hale and the Redfang Chief speak as clan leaders", owner: "Narrative", status: "later" },
@@ -58,7 +58,7 @@ export const MILESTONES: Milestone[] = [
   },
   {
     id: "M2", name: "Five Banners (alpha)", target: "Jan – Feb 2027",
-    goal: "All five clans fight over every zone of Act 1 and Act 2.",
+    goal: "Each clan plays its own way and players live the war: sworn ranks, writs, caravans, the war table.",
     exit: "Without players no clan holds over 30% of the map for more than three days in the sim and live.",
     items: [
       { name: "Ossuary Host siege works, Hide-Kin tunnels, Veiled rituals", owner: "Gameplay Engineers", status: "later" },
@@ -67,6 +67,19 @@ export const MILESTONES: Milestone[] = [
       { name: "War table map (world map overlay)", owner: "Client & UI", status: "later" },
       { name: "Night Raiders hunt the leading clan; Rally for the weakest", owner: "Gameplay Engineers", status: "later" },
       { name: "Clan troops and holds for all five clans", owner: "Art Director", status: "later" },
+    ],
+  },
+  {
+    id: "NL", name: "New Lands of the Marches", target: "Dec 2026 – 2027, alongside the milestones",
+    goal: "The Riven Marches as one continent (Murat 2026-11-14): Act 1 is the Wardens' homeland, Act 2 the Veiled Circle's; three new lands and the Crown complete it.",
+    exit: "Every clan fights from its own homeland; the war table shows the whole continent; each new land has zones, a village, quests and its own levels.",
+    items: [
+      { name: "Continent design: regions, borders between regions, level bands, design page v0.3", owner: "Lead Designer", status: "done" },
+      { name: "Regions in the war map: territories grouped by land, links between lands, capitals move home", owner: "Gameplay Engineers", status: "next" },
+      { name: "The Red Badlands (Redfang homeland, west)", owner: "World + Art + Narrative", status: "later" },
+      { name: "The Grey Barrow Moors (Ossuary Host homeland, north-east)", owner: "World + Art + Narrative", status: "later" },
+      { name: "The Mawdeep Sinkholes (Hide-Kin homeland, south)", owner: "World + Art + Narrative", status: "later" },
+      { name: "The Crown of the Marches (neutral prize in the middle)", owner: "World + Gameplay", status: "later" },
     ],
   },
   {

@@ -299,3 +299,14 @@ at Lv 10, `duel.ts` only if Hidebound goes on. Bench: WP2 and WP5 (`TIDE=1`, `SP
   rim are unchanged (117 of 148 tiles open, the new wheel deck tiles are solid and outside the rim). Map-metrics identical to the
   default branch; chests and siege sites as before (only our two new chests differ from the default). Clan war is not wired into
   the server yet (no travel paths): when it is, any new teleport must call `lanternHeld`.
+- 2026-11-14: merged the default branch a third time (PR #410 clan war's first front, #412 Kel Ashar houses and wall, #411
+  monster bar, #409 one continent). #410 also moved stat points, `bag`, `talents` and `slots` into `me`: `flags` is now the
+  last PlayerPrivate field (after `slots`), `cosm` the last Player field. Player 31 synced fields (cosm is index 30),
+  PlayerPrivate 19 (flags is index 18). The war loop (`server/war.ts`) moves no hero: no teleport, travel or waygate path, so
+  `lanternHeld` needs no new call; it only broadcasts "war" and Herald chat lines, and its territories are SPAWN_ZONES
+  monster zones (we added none; villages, lairs and dungeon floors are sanctuaries), so the Tide, Unseen, hold waves and
+  rumours are untouched. Stores: the war is key "war" in Postgres table `kv` or `war.json` in the saves folder; the world is
+  table `world` or `world.json` (WORLD_FILE): no shared file, table or env var (`tests/world-war-store.test.ts`). Startup
+  loads accounts and the world, then starts the war, then listens; shutdown flushes war, accounts, world. Kel Ashar's houses
+  and wall are new textures on the same tiles (`client/src/desertArt.ts`, `iso.ts`): `shared/` map unchanged, our quest
+  spots identical to our branch alone (none within 12 tiles of a Kel Ashar building), map-metrics identical to the default.

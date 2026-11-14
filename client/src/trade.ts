@@ -114,7 +114,7 @@ export class TradeUI {
     this.view = v;
     this.el.hidden = false;
     // My picked bag cells follow the server's offer (each offered item matched to one bag slot)
-    const bag: string[] = Array.from(this.mine()?.bag ?? []);
+    const bag: string[] = Array.from(own(this.mine()).bag);
     const used = new Set<number>();
     this.picked = [];
     for (const id of v.mine.items) {
@@ -144,7 +144,7 @@ export class TradeUI {
     }
     const v = this.view, me = this.mine();
     if (!v || this.el.hidden || !me) return;
-    const bag: string[] = Array.from(me.bag ?? []);
+    const bag: string[] = Array.from(own(me).bag);
     const sig = JSON.stringify([v, bag, own(me).gold, me.level, me.cls]);
     if (sig === this.sig) return;
     this.sig = sig;
@@ -261,7 +261,7 @@ export class StashUI {
     if (!this.open) return;
     const st = this.mine();
     if (!st) return;
-    const bag: string[] = Array.from(st.bag ?? []);
+    const bag: string[] = Array.from(own(st).bag);
     const sig = JSON.stringify([this.items, this.gold, this.note, bag, own(st).gold, st.cls, st.level]);
     if (sig === this.sig) return;
     this.sig = sig;

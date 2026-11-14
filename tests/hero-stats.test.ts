@@ -1,4 +1,5 @@
 // Player.sta/str/mag/dex are server-only: the client computes them with shared heroStats from synced fields.
+// (the stat points it reads are the owner-only me.ptSta..ptDex)
 // This checks both sides agree after gear, stat points and level changes (including gear whose requirements are unmet).
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -7,7 +8,7 @@ import { ACTIVE_CLASSES } from "../shared/classes";
 import { startRoom, wait } from "./helpers/room";
 
 const clientStats = (s: any) => heroStats({
-  cls: s.cls, level: s.level, pts: { sta: s.ptSta, str: s.ptStr, mag: s.ptMag, dex: s.ptDex },
+  cls: s.cls, level: s.level, pts: { sta: s.me.ptSta, str: s.me.ptStr, mag: s.me.ptMag, dex: s.me.ptDex },
   worn: Object.fromEntries(GEAR_SLOTS.map((k) => [k, s[k]])),
 });
 const serverStats = (p: any) => ({ sta: p.sta, str: p.str, mag: p.mag, dex: p.dex });

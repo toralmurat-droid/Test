@@ -28,7 +28,7 @@ import { ISO, SMOOTH } from "./isoflag";
 import { SmoothGround } from "./smoothground";
 import { hiResTexture } from "./smooth";
 import { uprightTexture, UPRIGHT_OY } from "./smoothProps";
-import { ADOBE_H, ADOBE_WALL_H, adobeTexture, adobeWallTexture, bonesTexture, CLIFF_DEPTH, cliffDistance, cliffHeight, cliffTexture, cliffVariant, deadTreeTexture, desertRockTexture, sunStoneTexture, tentTexture } from "./desertArt";
+import { ADOBE_PAD, ADOBE_WALL_H, adobeHead, adobeTexture, adobeWallTexture, bonesTexture, CLIFF_DEPTH, cliffDistance, cliffHeight, cliffTexture, cliffVariant, deadTreeTexture, desertRockTexture, sunStoneTexture, tentTexture } from "./desertArt";
 import { D, FURNACE, SUNSTONE } from "../../shared/desert";
 import { DESERT_H, DESERT_Y0 } from "../../shared/constants";
 
@@ -784,16 +784,25 @@ function isoDesert(scene: Phaser.Scene, t: number, tx: number, ty: number, at: (
   if (t === T.ADOBE || t === T.DOOR) {
     const faces = (isHouse(tx, ty + 1) ? 0 : 1) | (isHouse(tx + 1, ty) ? 0 : 2);
     const edges = (isHouse(tx, ty - 1) ? 0 : 1) | (isHouse(tx + 1, ty) ? 0 : 2) | (isHouse(tx, ty + 1) ? 0 : 4) | (isHouse(tx - 1, ty) ? 0 : 8);
-    const key = adobeTexture(scene, faces, edges, t === T.DOOR && !isHouse(tx, ty + 1), v);
-    const h = ADOBE_H + 4;
-    staticObj(scene, scene.add.image(cx, cy, key).setOrigin(0.5, (IH / 2 + h) / (IH + h)).setDepth(cy));
+    // the house's north-west corner names it, so its tint and upper storey are the same on every tile
+    let x0 = tx, y0 = ty;
+    while (isHouse(x0 - 1, ty)) x0--;
+    while (isHouse(x0, y0 - 1)) y0--;
+    const hv = Math.floor(hashXY(x0 * 7 + 3, y0 * 5 + 1) * 4);
+    const inner = (x: number, y: number) => { for (let j = -1; j <= 1; j++) for (let i = -1; i <= 1; i++) if (!isHouse(x + i, y + j)) return false; return true; };
+    const inn = inner(tx, ty);
+    const uf = inn ? (inner(tx, ty + 1) ? 0 : 1) | (inner(tx + 1, ty) ? 0 : 2) : 0;
+    const ue = inn ? (inner(tx, ty - 1) ? 0 : 1) | (inner(tx + 1, ty) ? 0 : 2) | (inner(tx, ty + 1) ? 0 : 4) | (inner(tx - 1, ty) ? 0 : 8) : 0;
+    const look = { hv, inner: inn, uf, ue }, head = adobeHead(look);
+    const key = adobeTexture(scene, faces, edges, t === T.DOOR && !isHouse(tx, ty + 1), v, look);
+    staticObj(scene, scene.add.image(cx, cy, key).setOrigin(0.5, (IH / 2 + head) / (IH + head + ADOBE_PAD)).setDepth(cy));
     return true;
   }
   if (t === T.ADOBE_WALL) {
     const same = (x: number, y: number) => id(at(x, y)) === T.ADOBE_WALL;
     const mask = (same(tx, ty - 1) ? 1 : 0) | (same(tx + 1, ty) ? 2 : 0) | (same(tx, ty + 1) ? 4 : 0) | (same(tx - 1, ty) ? 8 : 0);
-    const h = ADOBE_WALL_H + 4;
-    staticObj(scene, scene.add.image(cx, cy, adobeWallTexture(scene, mask, v % 2)).setOrigin(0.5, (IH / 2 + h) / (IH + h)).setDepth(cy));
+    const h = ADOBE_WALL_H + 10, broken = (mask === 5 || mask === 10) && hashXY(tx * 3 + 11, ty * 5 + 7) < 0.3; // straight runs crumble here and there
+    staticObj(scene, scene.add.image(cx, cy, adobeWallTexture(scene, mask, v % 2, broken)).setOrigin(0.5, (IH / 2 + h) / (IH + h + ADOBE_PAD)).setDepth(cy));
     return true;
   }
   if (t === T.TENT) { staticObj(scene, scene.add.image(cx, cy, tentTexture(scene, v)).setOrigin(0.5, 56 / 70).setDepth(cy)); return true; }

@@ -2,7 +2,7 @@ import { addHeat, coolHeat, isOverheated, OVERLOAD } from "../shared/overload";
 import { MOB_CELL, MobGrid, trackSchemaMoves } from "./mobGrid";
 import { fastFields } from "./schemaFast";
 import { type AuthContext, Client, Room } from "colyseus";
-import { ArraySchema, MapSchema, Schema, StateView, type } from "@colyseus/schema";
+import { MapSchema, Schema, StateView, type } from "@colyseus/schema";
 import {
   AGGRO, aggroLevelFactor, BLOB_AI, BONES, DEMON, BROOD, Dir, FACTION, FEUD, MERGE, MobDef, MOTHER, SKELETON_AI, HIT_RADIUS, mobScale, regionMobLevel, regionSpecialLevel, InputState, MOB_ATTACK_RANGE, MOBS, MobKind, rollSkeletonWeapon, SKELETON_BOW, SKELETON_WEAPONS, SkeletonWeapon, REGEN_DELAY_MS, REGEN_RAMP_MS, regenFromStamina, SAFE_REGEN_MULT,
   RESPAWN_MS, TICK_RATE, TILE,
@@ -99,6 +99,8 @@ const CHAMP_HELPER_MS = 90_000;
 import { ASK_BURST, ASK_PER_SEC, Bucket, CHAT_BURST, CHAT_PER_SEC, clientIp, isLocalIp, MSG_BURST, MSG_KICK_AFTER, MSG_KICK_WINDOW_MS, MSG_PER_SEC } from "./ratelimit";
 
 import { Player } from "./player";
+import { byPart, hitBy } from "./hitBy";
+import { attachWar, warNow } from "./war";
 export { Player, PlayerPrivate } from "./player"; // moved out; tests and tools import them from here
 
 export class Mob extends Schema {
@@ -393,14 +395,20 @@ function drainPoise(t: Poised, max: number, amount: number, now: number, brokenM
 
 const poiseFrac = (t: Poised, max: number) => (t.broken ? 0 : Math.max(0, 1 - t.poiseLost / max));
 
-/**
- * Replace the whole bag instead of editing it in place: several in-place edits of an ArraySchema in one patch
- * (e.g. a double-click sending two swaps) desync the client copy and showed the same item in several cells.
- */
 const bagItems = (p: Player): string[] => p.bag.toArray().filter((g): g is string => !!g);
 
+/**
+ * Rewrite the whole bag as one clear + push: several piecemeal edits of an ArraySchema in one patch (e.g. a
+ * double-click sending two swaps) desynced the client copy and showed the same item in several cells. It used to
+ * swap in a new ArraySchema, but the bag lives in the owner-only `me` now: a new array is a tree the owner's view never
+ * saw (server/player.ts), so it is edited in place. clear() drops the patch's earlier ops on it and queues a CLEAR,
+ * the pushes ADD 0..n-1 after it, so a patch carries the whole new bag whatever else changed it that tick.
+ */
 function setBag(p: Player, items: string[]) {
-  p.bag = new ArraySchema<string>(...items);
+  const bag = p.bag;
+  if (bag.length === items.length && items.every((g, i) => bag.at(i) === g)) return; // nothing to send
+  bag.clear();
+  bag.push(...items);
 }
 
 function dirFromInput(i: InputState, fallback: Dir): Dir {
@@ -593,8 +601,11 @@ export class TownRoom extends Room<TownState> {
   /** The Apprentice (server/apprentice.ts): veterans standing by recruits at their first boss. */
   private apprentice!: Apprentice;
 
+  private offWar?: () => void;
+
   onCreate() {
     liveRooms.add(this);
+    this.offWar = attachWar(this); // the clan war (server/war.ts) runs on its own; the room only passes on the news
     this.limitMessages();
     this.qsteps = new QuestSteps({
       player: (pid) => this.state.players.get(pid),
@@ -974,6 +985,7 @@ export class TownRoom extends Room<TownState> {
     this.rumours.join(client.sessionId); // today's rumours (server/rumours.ts)
     this.apprentice.join(client.sessionId); // mentoring state (server/apprentice.ts)
     if (Object.keys(p.feast).length) client.send("feast", { feast: p.feast }); // Devour: what this hero has eaten
+    const war = warNow(); if (war) client.send("war", war); // the clan war front plaque (client/src/warPlaque.ts)
     console.log(`${p.name} the ${CLASSES[p.cls].name} joined (${this.clients.length} online)`);
   }
 
@@ -1007,6 +1019,7 @@ export class TownRoom extends Room<TownState> {
   onDispose() {
     liveRooms.delete(this);
     this.tide?.release(); // another room may own the Gloam Tide now (server/tide.ts)
+    this.offWar?.();
     this.state.players.forEach((p) => saveHero(p.name, p.cls, this.snapshot(p)));
     return flushFinal();
   }
@@ -1729,7 +1742,7 @@ export class TownRoom extends Room<TownState> {
     const d = Math.hypot(o.x - m.x, o.y - m.y) || 1;
     const k = moveStep(o.x, o.y, pushInput([(o.x - m.x) / d, (o.y - m.y) / d]), 0.05);
     if (!isSafeZone(k.x, k.y) && !noMobsAt(k.x, k.y)) { o.x = k.x; o.y = k.y; }
-    this.broadcast("hit", { id: oid, dmg, crit: false, dot: false });
+    this.broadcast("hit", { id: oid, dmg, crit: false, dot: false, ...byPart(hitBy(this.state.players, this.state.mobs, id)) }); // a hero's creature: its owner
     if (o.hp <= 0) { this.mobDied(o, oid, id, MOBS[m.kind].name); m.foe = ""; }
   }
 
@@ -5196,7 +5209,7 @@ export class TownRoom extends Room<TownState> {
       const k = moveStep(m.x, m.y, pushInput(push), 0.1 * kb);
       if (!isSafeZone(k.x, k.y) && !noMobsAt(k.x, k.y)) { m.x = k.x; m.y = k.y; }
     }
-    this.broadcast("hit", { id: targetId, dmg, crit: !!opts.crit && !exec, dot: !!opts.dot, el: opts.el, ...(exec ? { ex: 1 } : {}), ...(opts.dot ? {} : hitDir(push)) });
+    this.broadcast("hit", { id: targetId, dmg, crit: !!opts.crit && !exec, dot: !!opts.dot, el: opts.el, ...(exec ? { ex: 1 } : {}), ...(opts.dot ? {} : hitDir(push)), ...byPart(hitBy(this.state.players, this.state.mobs, attackerId)) });
     if (m.hp > 0) { afterHit(this.host, attackerId, targetId, opts); return; }
     if (a) onKill(this.host, attackerId); // Bloodlust
     if (m.owner && !m.charmUntil) { this.mobDied(m, targetId, attackerId, a?.name ?? ""); return; } // a summon: no XP, no loot, no quest credit
@@ -6120,7 +6133,7 @@ export class TownRoom extends Room<TownState> {
       const kb = moveStep(t.x, t.y, pushInput(push), 0.12 * kbMul);
       t.x = kb.x; t.y = kb.y;
     }
-    this.broadcast("hit", { id: tid, dmg, blocked: guarded, crit: !!opts.crit, dot: !!opts.dot, el: opts.el ?? opts.mobEl, ...(opts.dot ? {} : hitDir(push)) });
+    this.broadcast("hit", { id: tid, dmg, blocked: guarded, crit: !!opts.crit, dot: !!opts.dot, el: opts.el ?? opts.mobEl, ...(opts.dot ? {} : hitDir(push)), ...byPart(hitBy(this.state.players, this.state.mobs, opts.from)) });
     if (t.hp > 0) {
       this.qsteps.hurt(tid); // unseen steps (server/questSteps.ts)
       afterHit(this.host, opts.from, tid, opts);

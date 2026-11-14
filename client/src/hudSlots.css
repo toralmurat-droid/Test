@@ -1,8 +1,12 @@
 /* HUD places (client/src/hudSlots.ts). Every HUD element has its own spot; nothing is placed with its own
    absolute offsets any more. Loaded after every other stylesheet, selectors are "body #id" like weathered.css. */
 
+/* ---- Top centre: the monster bar (monsterBar.css) takes the first 10 + ~100 px; --topband is where notices may start. */
+:root { --topband: 128px; }
+body #partytoast { top: max(var(--topband), 15%); } /* clear of the tallest bar (champion, two affixes, ear line) */
+
 /* ---- Top right: one column, pill -> minimap + dial -> location -> respawn line -> tracker -> feed.
-   The feed follows the tracker whatever its height, so no script measures it. 264 = the online pill at its widest (the dial is 234 px, right-aligned, 8 px from the edge). */
+   The feed follows the tracker whatever its height, so no script measures it. 264 = room for the online pill (261 px measured at its widest; the dial is 234 px, right-aligned, 8 px from the edge). */
 body #topright { position: absolute; top: 8px; right: 8px; width: 264px; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; pointer-events: none; }
 body #topright > #online { order: 1; pointer-events: auto; }
 body #topright > #mapbox { order: 2; }
@@ -41,3 +45,6 @@ body #signpanel, body #gear { bottom: calc(140px * var(--barzoom, 1)); }
 body #partyask { bottom: calc(170px * var(--barzoom, 1)); }
 body #musicpanel { bottom: calc(52px * var(--barzoom, 1)); }
 body #patchnotice { bottom: calc(56px * var(--barzoom, 1)); }
+/* the side panel and the centred panels stop above the (larger) bar and its level medallion; same as before at 100% */
+body.orbhud-on #sidepanel { max-height: calc(100% - 205px * var(--barzoom, 1)); }
+body #tradepanel, body #stashpanel, body #bountypanel, body #partypanel { max-height: calc(100% - (200px * var(--barzoom, 1) - 90px)); }

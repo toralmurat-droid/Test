@@ -105,12 +105,12 @@ ul { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 
   <div class="eyebrow">Concept design · Clan war open world</div>
   <h1>The Riven Marches</h1>
   <p class="lede">A slow war that never ends, between five clans, across the whole world: Oakvale, the Sunscar and every act still to come. AI warlords lead the clans and try to conquer each other's territory. Left alone, they mostly hold each other in check. Players tip the balance by taking war writs, joining battles at the front, or escorting a single caravan.</p>
-  <div class="meta"><span>Version 0.2 · 14 Nov 2026 (Murat's decisions added)</span><span>Design only, no code changed</span><span>Built on the live game at play.fmtpa.ch</span></div>
+  <div class="meta"><span>Version 0.3 · 14 Nov 2026 (one continent, the acts are regions of it)</span><span>Building: see the roadmap</span><span>Built on the live game at play.fmtpa.ch</span></div>
 </header>
 
 <figure style="margin-top:28px">
-  <img class="px" src="img/riven-marches-map.png" alt="Pixel war-table map of the Riven Marches: five faction homelands around a neutral crown, with front lines in ember and battle markers on the borders">
-  <figcaption>War table sketch, showing the style (the real territories follow the zones of each act). Five capitals, the neutral Crown in the middle. Ember lines are front lines; crossed swords mark open battles.</figcaption>
+  <img class="px" src="img/riven-marches-map.png" alt="Pixel war-table map of the Riven Marches: five homelands around a neutral crown; Act 1 is the Wardens' homeland in the north-west, Act 2 the Veiled Circle's in the south-east, the other three are new lands">
+  <figcaption>The Riven Marches as one continent (sketch). Act 1 (Oakvale lands) is the Wardens' homeland, Act 2 (the Sunscar) the Veiled Circle's. The Grey Barrow Moors, the Red Badlands and the Mawdeep Sinkholes are new lands to build, with the Crown in the middle. Ember lines are front lines; crossed swords mark open battles.</figcaption>
 </figure>
 
 <section>
@@ -150,11 +150,12 @@ ul { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 
   <div class="eyebrow">The world</div>
   <h2>The whole world is the Marches</h2>
   <div class="col stack">
-    <p><b>Murat 2026-11-14:</b> the war runs across the full map, not in a separate region. Every monster zone of Act 1 and Act 2 becomes a territory, and every future act adds its zones as new regions of the same war. "The Riven Marches" is the name of the war and of the war table.</p>
-    <p><b>Territories.</b> About 24 in Act 1 (one per zone in <code>SPAWN_ZONES</code>, big zones split in two) and about 15 in Act 2. The owner decides which clan's troops spawn there, whose banners fly and whose writs are posted. Zone names, levels and quest areas stay as they are.</p>
+    <p><b>Murat 2026-11-14:</b> the Riven Marches is one big continent, and the acts are regions inside it. Act 1 (Oakvale lands) is the Wardens' homeland in the north-west, Act 2 (the Sunscar) the Veiled Circle's in the south-east. Three new lands complete it: the <b>Grey Barrow Moors</b> (Ossuary Host, north-east), the <b>Red Badlands</b> (Redfang, west) and the <b>Mawdeep Sinkholes</b> (Hide-Kin, south), with the <b>Crown of the Marches</b> in the middle. Each new land is built like an act: its own map band, zones, levels, a village and quests, reached by roads and waygates from its neighbours.</p>
+    <p><b>Territories.</b> Every monster zone of every region is a territory: 21 in Act 1 and 10 in Act 2 today, about 10 per new land, about 50 when the continent is complete. The owner decides which clan's troops spawn there, whose banners fly and whose writs are posted. Zone names, levels and quest areas stay as they are. Regions border each other on the war table even where the map bands are apart in the game (a waygate or road links them).</p>
+    <p><b>Until the new lands exist.</b> All five clans already fight over Act 1 and Act 2 (live since 14 Nov). Clans whose homeland is not built yet hold a forward capital there: Redfang Hollow, Greywatch Keep and Thornwood in Act 1, Dustrider Camp, Kharsun and the Humpback Mesas in Act 2. When a homeland is built, its capital moves there and the forward capital becomes an ordinary territory.</p>
     <p><b>Sanctuaries that never flip.</b> Villages (Oakvale, Saltmere, Kel Ashar), dungeons (Mawdeep, the deep crypts), quest-boss lairs and the waygates. New heroes can always level and finish the story; the war is around them, not in their way.</p>
     <p><b>Levels.</b> Each territory keeps its zone level. Clan troops spawn at that level, so a level 8 meadow is a small skirmish and a level 45 dune is a hard front. Players fight where their level fits; high-level heroes can push low territories but earn little there.</p>
-    <p><b>Crowns.</b> One ruined stronghold per act (to pick with the map thread, outside any boss lair) is a Crown: a neutral prize that gives the holder a world-wide boon while held.</p>
+    <p><b>The Crown.</b> The Crown of the Marches, a ruined stronghold in the middle of the continent, is a neutral prize that gives its holder a world-wide boon while held. Until the Crown is built, one ruin per act stands in for it.</p>
   </div>
   <div class="two">
     <div class="stack">
@@ -171,7 +172,7 @@ ul { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 
       <h3>Special places</h3>
       <ul>
         <li><b>Capitals.</b> One per clan. They can be besieged but never fall, so no clan is ever wiped out.</li>
-        <li><b>Crowns.</b> One per act. Holding one gives a world-wide boon for the holder's sworn heroes while it is held.</li>
+        <li><b>The Crown.</b> In the middle of the continent. Holding it gives a world-wide boon for the holder's sworn heroes while it is held.</li>
         <li><b>Warrens.</b> Hide-Kin tunnels that link territories that aren't next to each other. They can be found and collapsed.</li>
         <li><b>Wells and oases.</b> Veiled ritual sites that change weather over nearby territories.</li>
       </ul>
@@ -561,7 +562,8 @@ supply(A)   = 1 / (1 + 0.06 × road distance from capital)    ← overextension<
   <h2>Building it in steps</h2>
   <div class="phases">
     <div class="phase"><div class="n">0</div><div><h3>Foundations</h3><p>Saves to a database, war state as its own small service, a war sim in <code>tools/balance</code>. Nothing visible to players yet.</p></div></div>
-    <div class="phase"><div class="n">1</div><div><h3>The Marches and scripted clans</h3><p>The map band, 49 territories, Holds, standards, ticks and sieges, led by simple scripted doctrine. Prove the stalemate in the sim and live.</p></div></div>
+    <div class="phase"><div class="n">1</div><div><h3>The war goes live</h3><p>The war on Act 1 and Act 2: ticks, sieges, standards, Holds, the front plaque, led by simple scripted doctrine. Prove the stalemate in the sim and live.</p></div></div>
+    <div class="phase"><div class="n">1b</div><div><h3>New lands</h3><p>The Red Badlands, the Grey Barrow Moors, the Mawdeep Sinkholes and the Crown, one at a time, each built like an act and joined to the war map as it opens.</p></div></div>
     <div class="phase"><div class="n">2</div><div><h3>Players at war</h3><p>Swearing, tabards, war writs, caravans, Renown ranks, the war table map, the front plaque.</p></div></div>
     <div class="phase"><div class="n">3</div><div><h3>AI councils</h3><p>First in shadow mode: councils plan and we compare with the scripted doctrine. Then they lead, with herald lines and the chronicle page.</p></div></div>
     <div class="phase"><div class="n">4</div><div><h3>The Forge</h3><p>Codex, recipe checks, art from parameters, hot-loaded content packs.</p></div></div>
