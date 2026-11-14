@@ -1,8 +1,8 @@
-import { isBound, songItemHtml } from "./songbookData";
+import { songItemHtml } from "./songItems";
 import { slotName } from "./songTables";
 import Phaser from "phaser";
 import "./trade.css";
-import { BAG_SIZE, canWear, gearDef, gearName, itemLevel, itemRarity, itemText, RARITY_NAMES, reqProblem, SLOT_NAMES, TIER_NAMES } from "../../shared/gear";
+import { BAG_SIZE, canWear, isBound, gearDef, gearName, itemLevel, itemRarity, itemText, RARITY_NAMES, reqProblem, SLOT_NAMES, TIER_NAMES } from "../../shared/gear";
 import { STASH, STASH_RANGE, STASH_SIZE, TRADE } from "../../shared/trade";
 import { affixHtml, iconCanvas, itemColor, looseRuneHtml, reqInfoOf, runeHtml } from "./gear";
 import { parseRune } from "../../shared/runes";
@@ -49,7 +49,7 @@ function cell(scene: Phaser.Scene, id: string | undefined, info: HTMLElement, st
   if (itemLevel(id) > 1) b.appendChild(Object.assign(document.createElement("span"), { className: "gcelllvl", textContent: String(itemLevel(id)) }));
   b.onmouseenter = () => { info.innerHTML = itemHtml(id, state); };
   b.onmouseleave = () => { info.textContent = ""; };
-  if (onClick && !isBound(id)) b.onclick = (ev) => { if (ev.detail !== 0) onClick(); }; // HOOK(di): the lute and the Songbook are bound: no Trade, no Stash
+  if (onClick && !isBound(id)) b.onclick = (ev) => { if (ev.detail !== 0) onClick(); }; // the lute and the Songbook are bound: no Trade, no Stash
   else b.classList.add("still");
   return b;
 }

@@ -1,6 +1,6 @@
 /* Songweaver songbook reader (client/src/songbookReader.ts): chord legend, songs, materials. 360x640 safe. */
-#songbook { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 330px; max-width: 96vw; max-height: 92vh; overflow-y: auto; box-sizing: border-box;
-  padding: 6px 8px 8px; z-index: 60; background: rgba(15, 10, 6, .97); border: 2px solid #6a5232; box-shadow: 0 0 0 1px #080504;
+#songbook { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 330px; max-width: 96vw; max-height: calc(100vh - 16px); overflow-y: auto; box-sizing: border-box;
+  padding: 6px 8px 8px; z-index: 200; background: rgba(15, 10, 6, .97); border: 2px solid #6a5232; box-shadow: 0 0 0 1px #080504;
   font: normal 13px var(--pixel-font); line-height: 15px; color: #d9c79a; text-shadow: 1px 1px 0 #000; }
 #songbook[hidden] { display: none; }
 #songbook h3 { margin: 6px 0 3px; font: inherit; font-size: 14px; color: #ffd24d; border-bottom: 1px solid #3a2812; }

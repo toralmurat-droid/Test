@@ -1,9 +1,9 @@
 import { npcById } from "../../shared/npcs";
 import { act2Missing } from "../../shared/act2";
 import { icon as pxIcon } from "./pixelicons";
-import { CHAINS, chainOpen, chainState, SUN_CHAIN, tutorialDone, QuestDef, questObjective, Quester, QuestState as QState, stepGoal, stepProgress } from "../../shared/quests";
+import { CHAINS, chainOpen, chainState, SUN_CHAIN, tutorialDone, QuestDef, questObjective, Quester, stepFor, QuestState as QState, stepGoal, stepProgress } from "../../shared/quests";
 
-type QuestState = Quester | undefined;
+type QuestState = (Quester & { cls?: string }) | undefined;
 
 /** Old switch: "1" = nothing tracked */
 const OLD_TRACK_KEY = "quest:untracked";
@@ -101,7 +101,7 @@ export class QuestLog {
         const goal = stepGoal(st), n = state === "done" ? goal : stepProgress(st, count);
         const extra = goal > 1 && state === "now"
           ? `<div class="ql-bar"><div style="width:${(n / goal) * 100}%"></div><span>${n} / ${goal}</span></div>` : "";
-        return `<li class="${state}"><span class="ic">${icon}</span>${st.text}${extra}</li>`;
+        return `<li class="${state}"><span class="ic">${icon}</span>${stepFor(st, p?.cls).text}${extra}</li>`;
       }).join("");
       const r = d.reward;
       body =
@@ -114,7 +114,7 @@ export class QuestLog {
         `<div class="ql-meta">${CHAINS[q.chain ?? 0].name} · Given by ${npcById(d.giver)?.name} · ${d.zone} · Lv ${d.minLevel}+</div>` +
         `<p>${d.description}</p>` +
         `<h4>Objectives</h4><ul class="ql-steps">${steps}</ul>` +
-        (done ? "" : `<p class="ql-now">${questObjective(q)}</p>`) +
+        (done ? "" : `<p class="ql-now">${questObjective(q, p?.cls)}</p>`) +
         `<h4>Reward${done ? " (received)" : ""}</h4><div class="ql-reward"><span>${pxIcon("star")}${r.xp} XP</span><span>${pxIcon("coin")}${r.gold} gold</span><span>${pxIcon("potion")}${r.potions} potions</span></div>` +
         (done ? "" : `<button class="ql-trackbtn${this.isTracked(q.chain ?? 0) ? " on" : ""}" data-track="${q.chain ?? 0}">${this.isTracked(q.chain ?? 0) ? `${pxIcon("check")} Tracked on screen and map` : "Track this quest"}</button>`) +
         `</div>`;

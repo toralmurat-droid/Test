@@ -1,10 +1,9 @@
 import type Phaser from "phaser";
-import { MATS } from "./songbookData";
 import { drawSongItem } from "./songItemArt";
 
 /**
  * Songweaver material sprites (tonewood, brass, bone, silk, horn, sunglass), 16x16 pixel art.
- * HOOK(di): PLACEHOLDER painted in code, keyed by the contract ids. Swap for the art agent's sprites when they land (same ids).
+ * The generated sprites (songItemArt.ts) are used; the shapes below are the fallback if one is missing.
  */
 const SHAPE: Record<string, string[]> = {
   // a log slice / plank
@@ -21,15 +20,20 @@ const SHAPE: Record<string, string[]> = {
   sunglass: ["................", "......oo........", ".....oaao.......", "....oabbao......", "...oabbbbao.....", "...oabaabbo.....", "..oabbaabbao....", "..oabbbbbbao....", "...oabbbbbao....", "...oaabbbaao....", "....oaabbao.....", ".....oaaao......", "......ooo.......", "................", "................", "................"],
 };
 const hex = (n: number) => `#${n.toString(16).padStart(6, "0")}`;
+/** Main and accent colour per material: the fallback sprite, the ground glow and the pickup sparks (cosmetic only). */
+export const MAT_COLOR: Record<string, { color: number; accent: number }> = {
+  tonewood: { color: 0xb88048, accent: 0x5a3a1a }, brass: { color: 0xe8c040, accent: 0x8a6a10 }, bone: { color: 0xe8e2d0, accent: 0x9a9280 },
+  silk: { color: 0xf0f0ff, accent: 0x9fb0d8 }, horn: { color: 0xd8c8a0, accent: 0x7a6a40 }, sunglass: { color: 0xffb84a, accent: 0xffe9a0 },
+};
 
 /** A material sprite on a canvas `size` px wide, drawn crisp. `grey` = a monster drop only a Songweaver can use. */
 export function drawMat(ctx: CanvasRenderingContext2D, id: string, size: number, grey = false) {
-  const m = MATS[id], art = SHAPE[id];
+  const m = MAT_COLOR[id], art = SHAPE[id];
   if (!m) return;
   if (!drawSongItem(ctx, `mat_${id}`, size) && art) drawPlaceholder(ctx, m, art, size);
   if (grey) greyOut(ctx, size);
 }
-function drawPlaceholder(ctx: CanvasRenderingContext2D, m: (typeof MATS)[string], art: string[], size: number) {
+function drawPlaceholder(ctx: CanvasRenderingContext2D, m: { color: number; accent: number }, art: string[], size: number) {
   const pal: Record<string, string> = { o: "#1b120a", a: hex(m.color), b: hex(m.accent) };
   const k = size / 16;
   art.forEach((row, y) => [...row].forEach((ch, x) => {

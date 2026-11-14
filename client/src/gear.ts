@@ -1,11 +1,11 @@
 import { slotName } from "./songTables";
 import { icon } from "./pixelicons";
 import { drawSongGearIcon } from "./songGearIcons";
-import { isBound, isSongbook, songCantWear, songItemHtml, songItemName, BOUND_LINE } from "./songbookData";
+import { isSongbook, songItemHtml, BOUND_LINE } from "./songItems";
 import { openSongbook } from "./songbookReader";
 import { actionKey } from "./keymode";
 import Phaser from "phaser";
-import { gearDef, itemText, LOOT_IDS, canWear, GEAR_SLOTS, gearName, gearStats, gearSpeedMult, GearSlot, BAG_SIZE, SLOT_NAMES, TIER_NAMES, baseId, itemRarity, RARITY_NAMES, affixLines, itemLevel, reqProblem, reqText, activeGear, HeroReqInfo, Equipped, weaponElements, gearResist, weaponType } from "../../shared/gear";
+import { gearDef, itemText, LOOT_IDS, canWear, isBound, wearProblem, GEAR_SLOTS, gearName, gearStats, gearSpeedMult, GearSlot, BAG_SIZE, SLOT_NAMES, TIER_NAMES, baseId, itemRarity, RARITY_NAMES, affixLines, itemLevel, reqProblem, reqText, activeGear, HeroReqInfo, Equipped, weaponElements, gearResist, weaponType } from "../../shared/gear";
 import { ELEMENTS, ELEMENT_NAMES } from "../../shared/elements";
 import { nativeFamily, weaponFamily } from "../../shared/weapons";
 import { STAT_NAMES, StatKind } from "../../shared/powers";
@@ -260,9 +260,9 @@ export class GearMenu {
         else if (canWear(cls, id)) this.preview({ label: `wear ${gearName(id, cls)}${reqProblem(id, hero) ? " (once you meet its needs)" : ""}`, eq: wearing(worn, id) });
         if (!info) return;
         const d = gearDef(id); if (!d) return;
-        const cant = songCantWear(cls, d.slot, id, d.wtype), why = cant || reqProblem(id, hero); // HOOK(di): musical-only rule, the server decides too
+        const cant = wearProblem(cls, id), why = cant || reqProblem(id, hero); // the server decides too
         const aff = affixHtml(id), song = songItemHtml(id, cls);
-        const nm = songItemName(id) ?? gearName(id, cls);
+        const nm = gearName(id, cls);
         const runes = runeHtml(id);
         const pr = this.pickRune >= 0 ? parseRune(bagItems[this.pickRune]) : undefined, sockWhy = pr ? socketProblem(id, pr) : "";
         const tip = pr ? (sockWhy ? `<span class="gbad">${sockWhy}</span>` : `Click: set the ${runeName(pr)} in this item`) : extra;
@@ -291,9 +291,9 @@ export class GearMenu {
       const icon = id ? iconCanvas(this.scene, id) : Object.assign(document.createElement("span"), { className: "gicon" });
       row.appendChild(icon);
       const txt = document.createElement("span");
-      const why = id ? songCantWear(cls, slot, id, gearDef(id)?.wtype) || reqProblem(id, hero) : "";
+      const why = id ? wearProblem(cls, id) || reqProblem(id, hero) : "";
       txt.innerHTML = id
-        ? `<b style="color:${itemColor(id)}">${songItemName(id) ?? gearName(id, cls)}</b>${itemLevel(id) > 1 ? ` <span class="glvl">Lv ${itemLevel(id)}</span>` : ""}<br>` +
+        ? `<b style="color:${itemColor(id)}">${gearName(id, cls)}</b>${itemLevel(id) > 1 ? ` <span class="glvl">Lv ${itemLevel(id)}</span>` : ""}<br>` +
           (why ? `<small class="gbad">Inactive: ${why}</small>` : `<small>${itemText(id)}</small>`)
         : `<b>${slotName(slot, cls)}</b><br><small>empty</small>`;
       row.appendChild(txt);
@@ -394,12 +394,12 @@ export class GearMenu {
         cell.onmouseleave = () => { if (info) info.textContent = ""; };
         cell.onclick = () => { this.pickRune = this.pickRune === i ? -1 : i; this.sig = ""; this.refresh(state); };
         cell.oncontextmenu = (ev) => { ev.preventDefault(); this.pickRune = -1; this.act("dropgear", i); };
-      } else if (id && gearDef(id)) { // HOOK(di): ids the shared tables do not know yet (bk_*, lute with #traits) stay blank until the server side lands
+      } else if (id && gearDef(id)) {
         const d = gearDef(id)!;
         cell.appendChild(iconCanvas(this.scene, id));
         cell.style.borderColor = itemColor(id);
         if (itemRarity(id) >= 2) cell.style.boxShadow = `inset 0 0 6px ${itemColor(id)}`;
-        const cant = songCantWear(cls, d.slot, id, d.wtype), fits = canWear(cls, id) && !cant, why = fits ? reqProblem(id, hero) : "";
+        const cant = wearProblem(cls, id), fits = canWear(cls, id), why = fits ? reqProblem(id, hero) : "";
         if (itemLevel(id) > 1) cell.appendChild(Object.assign(document.createElement("span"), { className: "gcelllvl" + (why ? " gbad" : ""), textContent: String(itemLevel(id)) }));
         hover(cell, id, (junk.has(i) ? "Useless: raises no stat · " : "") + (itemRunes(id).length ? "Click a rune stone to take the rune out · " : "") + (isBound(id) ? `${BOUND_LINE} Click: equip` : "") + (isBound(id) ? "" : fits ? (why ? "Too strong for you yet · Right-click: drop" : "Click: equip · Right-click: drop") : cant ? `${cant} · Right-click: drop` : `Only a ${d.cls} can wear this · Right-click: drop`));
         if (this.marks && junk.has(i)) cell.classList.add("gjunk");
