@@ -54,10 +54,11 @@ const GATE_HINT: Record<1 | 2, string> = {
   2: "Step through the waygate in the Sunstone Circle, south-west of Kel Ashar",
 };
 
-/** Who gives a zone arc (shared/quests.ts ZONE_ARCS), and the first quest's level of their arc. */
-const ZONE_GIVERS = new Map(ZONE_ARCS.map((a) => [a.quests[0].giver, a.quests[0].minLevel]));
+/** Who gives a zone arc (shared/quests.ts ZONE_ARCS), and the first quest's level of each of their arcs (some give two). */
+const ZONE_GIVERS = new Map<string, number[]>();
+for (const a of ZONE_ARCS) ZONE_GIVERS.set(a.quests[0].giver, [...(ZONE_GIVERS.get(a.quests[0].giver) ?? []), a.quests[0].minLevel]);
 /** A zone arc fits a hero from its first quest's level to a few levels past it (beyond that it is only a "!" on the map). */
-export const arcFits = (giver: string, level: number) => { const l = ZONE_GIVERS.get(giver); return l !== undefined && level >= l && level <= l + 6; };
+export const arcFits = (giver: string, level: number) => (ZONE_GIVERS.get(giver) ?? []).some((l) => level >= l && level <= l + 6);
 
 export class NpcLayer {
   private sprites = new Map<string, { sprite: Phaser.GameObjects.Sprite; label: Phaser.GameObjects.Text; mark: Phaser.GameObjects.Text }>();
@@ -196,7 +197,7 @@ export class NpcLayer {
     const o = mentorOffer(q?.level ?? 1, !!this.mentor?.on);
     if (!o) return "";
     const m = this.mentor;
-    const next = m?.next ? ` Next title: <b>${this.titleName(m.next.title)}</b> at ${m.next.at} recruits.` : m ? " All mentor titles earned." : "";
+    const next = m?.next ? ` Next title: <b>${this.titleName(m.next.title)}</b> at ${m.next.at} recruit${m.next.at === 1 ? "" : "s"}.` : m ? " All mentor titles earned." : "";
     const status = m ? `<div class="nd-mstat">Mentoring: <b class="${m.on ? "on" : "off"}">${m.on ? "on" : "off"}</b> · Recruits: <b>${m.n}</b>.${next}</div>` : "";
     return `<div class="nd-mentor"><h5>Mentoring</h5>${o.text.map((t) => `<p>${t}</p>`).join("")}${status}<button class="nd-mbtn" data-on="${o.send ? 1 : 0}">${o.button}</button></div>`;
   }

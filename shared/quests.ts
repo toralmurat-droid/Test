@@ -2677,7 +2677,7 @@ export const isRecruit = (vet: { level: number }, r: Quester & { level: number }
 export function mentorOffer(level: number, on: boolean): { text: string[]; button: string; send: boolean } | undefined {
   if (level < MENTOR.minLevel) return undefined;
   if (on) return {
-    text: ["You've been bringing the young ones along. Good. Stand by them at their first real fight; I hear about it either way."],
+    text: ["You're watching over the young ones. Good. Stand by them at their first real fight; I hear about it either way."],
     button: "Stop taking recruits", send: false,
   };
   return {

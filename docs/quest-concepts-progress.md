@@ -4,20 +4,35 @@ Eleven new quests and activities that ask more than kill / collect / use (Mehmet
 One branch (`claude/brave-hypatia-dkkcd3`), one draft PR until all work packages land, tested and reviewed.
 
 ## Status
+All seven work packages are done: server, client, text and tests for all 11 concepts (2026-11-14).
 | WP | Concepts | State |
 |---|---|---|
-| WP1 framework + choices + puzzles | #5 Two Letters, #3 Empty Grave, #11 Crown in the Sand | done (server, client, text, tests) |
-| WP2 carry + hold | #1 Last Lantern, #2 Hold the Wheel | done (server, client, text, tests); bench pending |
-| WP3 unseen + sync | #4 Unseen, #8 Two Hands | server, text, tests done; client next |
-| WP4 Bargain + Penance | #6 | server, text, tests done; client next |
-| WP5 Tide | #7 | server, client, tests done; tuning + bench next |
-| WP6 Rumours | #10 | server done; client, text, tests next |
-| WP7 Apprentice | #9 | server done; client, text, tests next |
+| WP1 framework + choices + puzzles | #5 Two Letters, #3 Empty Grave, #11 Crown in the Sand | done |
+| WP2 carry + hold | #1 Last Lantern, #2 Hold the Wheel | done |
+| WP3 unseen + sync | #4 Unseen, #8 Two Hands | done |
+| WP4 Bargain + Penance | #6 | done (Hidebound talent off until Murat approves) |
+| WP5 Tide | #7 | done (tuned; gold payout open for Murat) |
+| WP6 Rumours | #10 | done |
+| WP7 Apprentice | #9 | done |
+
+Open for a later session: titles are only earned from Rumours and the Apprentice; a hold-wave monster broadcasts a
+`blobmerge` with `merged: 1` (cosmetic); party members can farm a rumour ambusher about as fast as grinding; the
+Apprentice's party credit covers every own boss, main story included (decision 9).
 
 ## Baseline (commit a4ebcf1, before any change)
 - `npm run bench` (5 bots, no SPREAD): 19.7 ticks/s, tick avg 7.39 ms, p95 10.4 ms, patch 4.50 ms, CPU 35%, RSS 319 MB, 20.9 kB/player/s, 5767 mobs / 79 active.
 - `npx tsx tools/balance/pve.ts` and `duel.ts` (defaults): raw output kept by the orchestrator; key cells go in the PR.
   Known pre-existing oddities: Lv 1 duels lopsided (vampire 97-99%), Night Raider near-unwinnable (sim quirk vs vampire).
+
+## After (HEAD, 2026-11-14, quiet machine, base a4ebcf1 run alongside)
+`npm run bench -- 5 15` and `SPREAD=1 npm run bench -- 10 20`; tick avg / p95 in ms.
+| Run | base a4ebcf1 | HEAD |
+|---|---|---|
+| 5 bots (2 runs) | 9.95 / 13.9, 8.85 / 13.0 | 8.95 / 13.5, 8.58 / 11.9 |
+| 10 bots SPREAD (6 runs, mean) | 13.4 / 19.6 (range 11.4-16.8) | 14.2 / 21.3 (range 12.1-15.3) |
+| 5 bots TIDE=1 (40 marchers, 2 runs) | — | 9.41 / 14.0, 10.08 / 15.1 |
+| 10 bots TIDE=1 SPREAD (2 runs) | — | 13.58 / 20.4, 12.01 / 17.4 |
+Ticks/s 19.5-19.8 in every run. kB/player/s during a march 27-32 (22-24 without).
 
 ## Decisions (pending Murat unless noted)
 Defaults picked so work isn't blocked (Claude 2026-11-13). Murat owns game direction and balance; any of these can be reversed.
@@ -266,3 +281,4 @@ at Lv 10, `duel.ts` only if Hidebound goes on. Bench: WP2 and WP5 (`TIDE=1`, `SP
 - 2026-11-14: WP5 Tide server landed. Numbers in `shared/tide.ts` `TIDE` (goal 1500, 4 waves 24/30/36/40 Lv 4-12, ≤ 40 alive, 12 min limit, gold 15 + 8 × level capped 350, runes Lv 12 for the top 3). Goal point 10 tiles west of the west gate, 11.2 tiles from the nearest watch post (sight 6). A march is lost if the server restarts mid-march (next dusk is booked). Several rooms would share one meter.
 - 2026-11-14: WP6 Rumours server landed. Errands are keyed by (UTC day, zone): everyone offered the same zone that day gets the same errand. Act 1 overworld zones only (no crypts or warrens: no night underground). 365 days x Lv 1-30 checked: every object in its zone, on open ground and reachable on foot. `questKill` own-steps now also need `m.summonChain === c`, so rumour and grave ambushers can't fill a chain's own-boss step (keep this in WP7). Reaching 7 rumours overwrites any earlier title (no owned-titles list yet).
 - 2026-11-14: WP7 Apprentice server landed. Own-boss credit for a `together` party member goes through `ownerCredit`; rumour (-2) and grave (-1) ambushers and hold waves never count. A recruit is a hero with no `own`-boss step passed (main-story bosses aren't `own`). Titles are now owned (bitmask `HeroSave.titles`, `server/titles.ts`): earning one shows it only if none is shown; `"title" {i}` picks. Rumour ambusher "The Hollow King" renamed (Ostrevar's title).
+- 2026-11-14: reviewer verdict OK TO MERGE (code), with bench and balance numbers required in the PR. Fixed from the review: minimap arc arrows for givers of two arcs, one room owns the Tide, inline numbers moved to shared tables, Unseen hide ends away from the climb.
