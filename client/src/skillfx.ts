@@ -335,6 +335,22 @@ export class SkillFx {
         this.glow(ev.x, ev.y, 8, 20, 0x5a2a6b, 450, 0.55);
         break;
       }
+      // Unseen and Two Hands (docs/quest-concepts-progress.md): no shake, sounds are in sfx.ts
+      case "seen": // spotted: a cold flash and a ring of shadow where the hero stood, just before the drag back
+        this.ring(ev.x, ev.y, 26, "shadow", 16, { up: 16, life: 420, size: 2 });
+        this.burst(ev.x, ev.y, 14, "shadow", 12, 50, 550);
+        this.glow(ev.x, ev.y, 14, 18, 0xff5a4a, 380, 0.45);
+        break;
+      case "sealturn": // a seal grinds round: dust at its foot and a gold pulse
+        this.burst(ev.x, ev.y, 2, "earth", 12, 45, 600, 2);
+        this.ring(ev.x, ev.y, 18, "holy", 12, { up: 10, life: 500 });
+        this.glow(ev.x, ev.y, 12, 20, 0xffd166, 600, 0.55);
+        break;
+      case "sealsync": // both seals turned together: light rises from the midpoint
+        this.rise(ev.x, ev.y, 14, "holy", 22, 46, 1000);
+        this.ring(ev.x, ev.y, 40, "holy", 22, { up: 20, life: 700, size: 2 });
+        this.glow(ev.x, ev.y, 12, 30, 0xfff3b0, 800, 0.65);
+        break;
       // The Last Lantern and Hold the Wheel (docs/quest-concepts-progress.md); sounds are in sfx.ts
       case "lanterndim": // the flame gutters: a few cold motes and a short dip of light
         this.burst(ev.x, ev.y, 26, "spirit", 5, 18, 500);

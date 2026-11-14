@@ -12,3 +12,16 @@ body #questtracker .qt-bar.light div { background: #f0b030; }
 body #questtracker .qt-bar.light.low div { background: #d8452c; }
 body #questtracker .qt-bar.odo div { background: #c8503a; }
 @media (max-width: 600px) { #qbanner { top: 17%; } }
+
+/* Unseen: stealth badge and vignette */
+#qvignette { position: absolute; inset: 0; pointer-events: none; opacity: 0; transition: opacity .6s; z-index: 1;
+  background: radial-gradient(ellipse at center, rgba(0,0,0,0) 45%, rgba(8,10,30,.55) 100%); }
+#qvignette.on { opacity: .6; }
+#qvignette.on.deep { opacity: 1; }
+#qstealth { position: absolute; top: 74px; left: 50%; transform: translateX(-50%); z-index: 8; pointer-events: none; display: flex; align-items: center; gap: 8px;
+  padding: 4px 10px; font-family: var(--pixel-font); font-size: 14px; color: #ffd0c0; background: rgba(15, 10, 6, .85); border: 2px solid #8a3a2a; box-shadow: 0 0 0 1px #080504; white-space: nowrap; }
+#qstealth[hidden] { display: none; }
+#qstealth.hid { color: #bfe6f6; border-color: #3f7f9a; }
+#qstealth.deep { color: #d8c8ff; border-color: #6a4fb0; }
+#qstealth .qeye { image-rendering: pixelated; }
+@media (max-width: 600px) { #qstealth { top: 58px; font-size: 12px; padding: 3px 8px; } }

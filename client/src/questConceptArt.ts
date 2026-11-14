@@ -44,17 +44,17 @@ export class CarriedLantern {
   private glow: Phaser.GameObjects.Arc;
   constructor(private scene: Phaser.Scene) {
     conceptTextures(scene);
-    this.img = scene.add.image(0, 0, "qobj_lamp_small").setOrigin(0.5, 0.5).setScale(2).setVisible(false);
-    this.glow = scene.add.circle(0, 0, 13, LAMP_COLOR, 0.25).setBlendMode(Phaser.BlendModes.ADD).setVisible(false);
+    this.img = scene.add.image(0, 0, "qobj_lamp_small").setOrigin(0.5, 0.5).setScale(3.5).setVisible(false);
+    this.glow = scene.add.circle(0, 0, 20, LAMP_COLOR, 0.25).setBlendMode(Phaser.BlendModes.ADD).setVisible(false);
   }
   update(hero: { x: number; y: number; depth?: number } | undefined, light: number) {
     if (!hero) return this.hide();
     const l = Math.max(0, Math.min(1, light)), t = this.scene.time.now;
-    const x = hero.x + 11 + Math.sin(t / 420) * 0.6, y = hero.y - 30 + Math.sin(t / 310) * 1.2;
+    const x = hero.x + 17 + Math.sin(t / 420) * 0.6, y = hero.y - 22 + Math.sin(t / 310) * 1.2; // beside the hero, clear of the name label
     const depth = hero.y + 2; // world depth: the iso pass turns it into the screen one
     isoAnchor(this.img, hero); isoAnchor(this.glow, hero); // iso view: the offset above is in screen pixels around the hero
     const flicker = l > 0 ? 0.9 + 0.1 * Math.sin(t / 90 + hero.x) : 1;
-    this.img.setTexture("qobj_lamp_small").setPosition(x, y).setDepth(depth).setVisible(true).setScale(2);
+    this.img.setTexture("qobj_lamp_small").setPosition(x, y).setDepth(depth).setVisible(true).setScale(3.5);
     if (l <= 0.03) this.img.setTint(0x3c3c44); else this.img.clearTint(); // burnt out: the same lamp, dark
     this.glow.setPosition(x, y).setDepth(depth - 1).setVisible(l > 0.03).setAlpha((0.05 + 0.25 * l) * flicker).setScale(0.45 + 0.55 * l);
   }
