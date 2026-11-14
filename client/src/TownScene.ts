@@ -182,7 +182,7 @@ interface Entity {
 }
 
 /** A server position and the local time it arrived. */
-interface Snap { t: number; x: number; y: number }
+interface Snap { t: number; x: number; y: number; rest?: boolean }
 /**
  * Other heroes and monsters are drawn this far in the past, so there is always a newer server position to glide
  * towards. The server sends 20 updates a second (one per 50 ms) and some arrive late; 2 updates of slack hides that.
@@ -222,13 +222,16 @@ function patchTime(): number {
 /**
  * Record a server position for an entity (several field changes of one update count once). An entity that stood still
  * sends no updates, so before the first step after a pause the old spot is stamped again one tick earlier: otherwise
- * the blend runs over the whole pause and the first step jumps.
+ * the blend runs over the whole pause and the first step jumps. Only after a real stop (the last two snaps at one
+ * spot, or a single snap), so a stall in the updates of a moving entity doesn't pull it back; marked `rest` so
+ * interpolate doesn't carry a one-off step (a knockback) on at that one-tick speed.
  */
 function pushSnap(e: { snaps?: Snap[] }, x: number, y: number) {
   const s = (e.snaps ??= []), t = patchTime(), tick = 1000 / TICK_RATE;
   const last = s[s.length - 1];
   if (last && t - last.t < 1) { last.x = x; last.y = y; return; }
-  if (last && t - last.t > 2 * tick && (last.x !== x || last.y !== y)) s.push({ t: t - tick, x: last.x, y: last.y });
+  const prev = s[s.length - 2], stood = !prev || (prev.x === last?.x && prev.y === last?.y);
+  if (last && stood && t - last.t > 2 * tick && (last.x !== x || last.y !== y)) s.push({ t: t - tick, x: last.x, y: last.y, rest: true });
   s.push({ t, x, y });
   if (s.length > 12) s.splice(0, s.length - 12);
 }
@@ -257,7 +260,7 @@ function interpolate(s: Snap[], t: number): { x: number; y: number } | undefined
   }
   // Past the newest update (a late one): keep the last speed a moment so the entity doesn't stop and jump
   const b = s[s.length - 1], a = s[s.length - 2];
-  if (!a || b.t - a.t < 1) return b;
+  if (!a || a.rest || b.t - a.t < 1) return b; // a first step from rest: no speed to carry on yet
   const over = Math.min(t - b.t, 1000 / TICK_RATE * 1.5), k = over / Math.max(1, b.t - a.t);
   return { x: b.x + (b.x - a.x) * k, y: b.y + (b.y - a.y) * k };
 }
