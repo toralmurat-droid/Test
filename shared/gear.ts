@@ -59,6 +59,8 @@ export interface GearDef {
   book?: { full: string; songs?: boolean };
   /** Bound to its hero (isBound): it can't be dropped, sold, traded or put in the stash. */
   bound?: boolean;
+  /** The stat its requirement asks for instead of the slot's (REQ_STAT): books want a mind for magic, not Strength. */
+  req?: StatKind;
 }
 
 /** Weapon kinds. The equipped main-hand weapon decides the basic attack for every class (shared/weapons.ts). */
@@ -123,6 +125,11 @@ export const GEAR: Record<string, GearDef> = Object.fromEntries([
   G({ id: "ws_pilgrim", slot: "weapon", tier: 1, wtype: "sword", name: "Pilgrim's Sword", bonus: { atk: 2 }, elem: { el: "faith", share: 0.3 }, color: 0xd8d2c0, accent: 0xf2d27a, style: "plain" }),
   G({ id: "wx_ember", slot: "weapon", tier: 2, wtype: "axe", name: "Ember Axe", bonus: { atk: 4 }, elem: { el: "fire", share: 0.35 }, color: 0x8a7064, accent: 0xff8a3c, style: "axe" }),
   G({ id: "wb_thorn", slot: "weapon", tier: 2, wtype: "bow", name: "Thornbow", bonus: { atk: 4 }, elem: { el: "poison", share: 0.4 }, color: 0x3e4a26, accent: 0x9bdc4a, style: "bow" }),
+  // Books (DI-2, shield slot, any class): a poor shield, but a Songweaver's full song gauge fires the book's gift
+  // (GearDef.book.full, shared/skills.ts FINISHERS). Colours match tools/art/paint/books.ts BOOKS.
+  G({ id: "bk_hymnal", slot: "shield", tier: 2, name: "Hymnal", bonus: { mag: 2, sta: 1, block: 0.03 }, req: "mag", book: { full: "sg_g_bless" }, color: 0xf1e9d0, accent: 0xe0a82c, style: "book" }),
+  G({ id: "bk_march", slot: "shield", tier: 2, name: "War March", bonus: { mag: 2, sta: 1, block: 0.03 }, req: "mag", book: { full: "sg_g_rally" }, color: 0xa8402a, accent: 0xd9a93a, style: "book" }),
+  G({ id: "bk_dissonance", slot: "shield", tier: 2, name: "Dissonance", bonus: { mag: 3, block: 0.02 }, req: "mag", book: { full: "sg_g_cacoph" }, color: 0x5a2a8c, accent: 0xb890f0, style: "book" }),
   ...starterKits(),
 ].map((d) => [d.id, d]));
 export const GEAR_IDS = Object.keys(GEAR);
@@ -469,7 +476,7 @@ export interface GearReq { level: number; stat: StatKind; points: number }
 export function gearReq(id: string, cls: string): GearReq {
   const d = gearDef(id), l = itemLevel(id);
   const slot = d?.slot ?? "weapon";
-  const want = REQ_STAT[slot];
+  const want = d?.req ?? REQ_STAT[slot];
   const stat: StatKind = want === "attack" ? (STATS as Record<string, { attackStat: StatKind }>)[cls]?.attackStat ?? "str" : want;
   if (!d || d.cls || l <= 1) return { level: 1, stat, points: 0 };
   return { level: l, stat, points: Math.round(l * REQ_PER_LEVEL[d.tier]) };

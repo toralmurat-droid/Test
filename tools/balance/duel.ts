@@ -150,10 +150,19 @@ const GEAR_SETS: Record<1 | 2 | 3, Equipped> = {
   3: { weapon: "w_dragon", armour: "a_royal", shoes: "s_winged", hat: "h_crown", ranged: "r_crossbow", shield: "sh_dragon" },
 };
 const MAIN_SLOTS = new Set(["weapon", "armour"]);
-export function gearFor(cls: ClassKind, level: number, pts?: Stats): Equipped {
-  const book: Equipped = usesGauge(cls) ? { shield: "songweaver_shield" } : {}; // the Songweaver always carries her Songbook
+/** The book a Songweaver build carries from SW_BOOK_LEVEL (DI-2): Hymnal for Hymnal, War March for Folk, Dissonance for Discord. */
+const SW_BOOK: Record<Build, string> = { 0: "bk_hymnal", 1: "bk_march", 2: "bk_dissonance" };
+const SW_BOOK_LEVEL = 6;
+/** The Songweaver's shield slot: her Songbook, or from SW_BOOK_LEVEL the build's book at the highest item level she can read. */
+function bookFor(level: number, who: { cls: ClassKind; level: number; pts: Stats }, build?: Build): string {
+  if (level < SW_BOOK_LEVEL || build === undefined) return "songweaver_shield";
+  for (let l = level - 2; l >= 1; l -= 2) { const id = withLevel(SW_BOOK[build], l); if (meetsReq(id, who)) return id; }
+  return "songweaver_shield";
+}
+export function gearFor(cls: ClassKind, level: number, pts?: Stats, build?: Build): Equipped {
+  const who = { cls, level, pts: pts ?? pointsFor(cls, level, build) };
+  const book: Equipped = usesGauge(cls) ? { shield: bookFor(level, who, build) } : {}; // the Songweaver always carries a book
   if (level < 5) return book;
-  const who = { cls, level, pts: pts ?? pointsFor(cls, level) };
   const out: Equipped = {};
   for (const slot of Object.keys(GEAR_SETS[1]) as (keyof Equipped)[]) {
     const lead = MAIN_SLOTS.has(slot) ? 0 : 5;
@@ -737,7 +746,7 @@ export function golemPower(o: F) {
 
 export function make(id: string, cls: ClassKind, level: number, build: Build) {
   const pts = pointsFor(cls, level, build);
-  const f = new F(id, cls, level, talentsFor(cls, level, build), gearFor(cls, level, pts), pts);
+  const f = new F(id, cls, level, talentsFor(cls, level, build), gearFor(cls, level, pts, build), pts);
   // the Songweaver's mode is saved (swMode): she comes to a fight in the one she plays (Phrygian, else Minor)
   if (cls === "songweaver") { const k = knownModesOf(f); f.sk.mode = k.includes("phrygian") ? "phrygian" : k.includes("minor") ? "minor" : "major"; }
   return f;

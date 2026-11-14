@@ -1069,6 +1069,16 @@ export const FINISHERS: SkillDef[] = [
   { id: "sg_g_refrain", name: "Refrain", type: "Ultimate", branch: 0, row: 3, req: 1, style: "holy", finisher: true, target: "self", refrain: { beats: 3 },
     desc: "The Songbook's refrain. The Chorus you are playing beats three times at once and starts over. With no Chorus playing, you and your party close by are healed.",
     buff: { ms: 1000, heal: 8, party: 130 } },
+  // the found books' gifts (shared/gear.ts bk_*, docs/songweaver-di-plan.md DI-2)
+  { id: "sg_g_bless", name: "Benediction", type: "Ultimate", branch: 0, row: 3, req: 1, style: "holy", finisher: true, target: "self",
+    desc: "The Hymnal's gift. You and your party close by are healed and shielded.",
+    buff: { ms: 6000, heal: 22, shield: 12, party: 130 } },
+  { id: "sg_g_rally", name: "Rally", type: "Ultimate", branch: 1, row: 3, req: 1, style: "wind", finisher: true, target: "self",
+    desc: "The War March's gift. You and your party close by hit harder, strike faster and move quicker for a few seconds.",
+    buff: { ms: 8000, dmg: 18, atkspd: 18, speed: 10, party: 130 } },
+  { id: "sg_g_cacoph", name: "Cacophony", type: "Ultimate", branch: 2, row: 3, req: 1, style: "arcane", finisher: true, target: "self",
+    desc: "Dissonance's gift. A harsh blast hurts and stuns foes around you, and leaves them ringing and weak.",
+    areas: [{ r: 64, dmg: 40, stunMs: 500, weakMs: 3000, kb: 0.8, look: "nova", sound: { res: 40 } }] },
 ];
 for (const f of FINISHERS) f.scale = { stat: "mag", per: 2 };
 

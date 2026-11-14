@@ -5860,7 +5860,7 @@ export class TownRoom extends Room<TownState> {
   /** Recompute stats and max HP from class + level + equipped gear. */
   private applyStats(p: Player) {
     const st = statsFor(p.cls, { sta: p.ptSta, str: p.ptStr, mag: p.ptMag, dex: p.ptDex });
-    const g = gearStats(p.cls, this.equipped(p));
+    const eq = this.equipped(p), g = gearStats(p.cls, eq);
     st.sta += g.sta; st.str += g.str; st.mag += g.mag; st.dex += g.dex;
     p.sta = st.sta; p.str = st.str; p.mag = st.mag; p.dex = st.dex;
     const newMax = Math.round(maxHpFromStats(p.cls, st, p.level) * talentMult(p.cls, p.talents, "hp") * feastMult(p.feast, "hp"));
@@ -5872,7 +5872,7 @@ export class TownRoom extends Room<TownState> {
       p.mana = Math.min(newMana, p.mana + Math.max(0, newMana - p.maxMana));
       p.maxMana = newMana;
     }
-    p.sk.book = p.shield || undefined; // the book she wears fires when her song gauge fills (shared/skillEngine.ts swell)
+    p.sk.book = eq.shield || undefined; // the book she can read fires when her song gauge fills (shared/skillEngine.ts swell)
     this.syncMana(p);
   }
 
