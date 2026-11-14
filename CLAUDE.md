@@ -74,7 +74,7 @@ All of these must pass (CI runs 1–3 and the Postgres smoke test):
 5. Combat, skill, monster or XP changes: run `npx tsx tools/balance/duel.ts` and/or `tools/balance/pve.ts` and put
    the before/after numbers in the PR.
 6. Load-heavy changes (more monsters, per-tick work): `npm run bench` before/after.
-7. UI changes: check on a phone-sized screen too (`tools/e2e-summoner-mobile.cjs` shows how).
+7. UI changes: check on desktop at 1920×1080 and 1366×768. The game is desktop only; don't design or test for phones.
 8. A patch note in `client/patchnotes/` (rules in `client/patchnotes/README.md`), or `[no patch note]` in the title.
 
 ## Gotchas
