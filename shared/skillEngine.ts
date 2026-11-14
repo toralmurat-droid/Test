@@ -6,7 +6,7 @@ import { impactMs, nightBuff, passiveBlood, talentBonus, LEAP_MS, pointRange, sk
 import { Stats, STATS } from "./powers";
 import { pay, skillCost } from "./mana";
 import { auraBuffs, isAuraId, BLADE_EL, BLADES_BASE, ESSENCE, SUMMON, WISP, type AttuneElement } from "./summons";
-import { addResonance, knownModes, LYDIAN_SHIELD, DORIAN_RADIUS, MODES, modeColour, modulate, noteCast, NOTES, PHRYGIAN, RESONANCE, resonanceOf, resWord, SONG,
+import { addResonance, chordProgress, knownModes, PROGRESSIONS, LYDIAN_SHIELD, DORIAN_RADIUS, MODES, modeColour, modulate, noteCast, NOTES, PHRYGIAN, RESONANCE, resonanceOf, resWord, SONG,
   type Degree, type ModeId, type Pitch, type Progression } from "./songs";
 import { heroSound, SOUND_TIER, soundMult, type SoundProfile } from "./combat";
 import { acousticsAt } from "./acoustics";
@@ -291,6 +291,13 @@ function playNote(h: SkillHost, id: string, u: Unit, s: SkillDef, now: number): 
   if (s.modulate) return undefined;
   const p = noteCast(u.sk, s.degree!, now);
   return p ? fireChord(h, id, p) : undefined;
+}
+
+/** The progressions this hero can finish: every note is played by a skill she has learned (Modulate logs no note). */
+export function playableProgs(u: Unit): Progression[] {
+  if (!u.cls) return [];
+  const degs = new Set(SKILLS[u.cls].filter((s) => s.degree && !s.passive && rankOf(u.talents, s.id) > 0).map((s) => s.degree));
+  return PROGRESSIONS.filter((p) => p.notes.every((n) => degs.has(n)));
 }
 
 /** A progression fired: its finisher goes off (power from its level and Magic, like a skill). Returns its id if it did. */
@@ -1311,7 +1318,12 @@ export function statusOf(u: Unit, now: number): string {
   if (sk.counter && now < sk.counter.until) out.push("counter:" + sk.counter.s.id);
   if (now < sk.chargeUntil) out.push("charge");
   for (const b of sk.buffs) if (b.until > now) out.push(b.id);
-  if (u.cls === "songweaver") out.push("mode:" + (sk.mode ?? "major"));
+  if (u.cls === "songweaver") {
+    out.push("mode:" + (sk.mode ?? "major"));
+    // chord progress for everyone to see (DI-1): the lockout, else how many notes into a progression she can finish
+    if (now < sk.chordLock) out.push("chlock");
+    else if (sk.notes.length) { const k = chordProgress(sk, playableProgs(u)); if (k > 0) out.push("ch" + k); }
+  }
   const rw = sk.res > 0 ? resWord(resonanceOf(sk, now)) : "";
   if (rw) out.push(rw);
   return out.join(",");

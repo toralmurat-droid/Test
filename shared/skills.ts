@@ -782,7 +782,7 @@ const S: Record<ClassKind, SkillDef[]> = <Record<ClassKind, SkillDef[]>><unknown
 
     // Folk: speed, attack speed and damage for the group
     { id: "sg_march", name: "Marching Tune", type: "Aura", branch: 1, row: 0, style: "wind", cd: 2000, mana: 14, target: "self", song: true, degree: "I", pitch: "M",
-      desc: "Song: a steady march for 30s. You and your party inside move faster and are harder to push around. Note I.",
+      desc: "Chorus: a steady march for 30s. You and your party inside move faster and are harder to push around. Note I.",
       field: { kind: "march", r: 90, ms: 30000, tickMs: 1000, follow: true, party: { ms: 0, speed: 12, poise: 20 } } },
     { id: "sg_jig", name: "Jig", type: "War cry", branch: 1, row: 1, style: "wind", cd: 12000, mana: 14, target: "self", degree: "ii", pitch: "H",
       desc: "A quick dance tune. You and your party close by strike faster for a few seconds. Note ii.",
@@ -800,7 +800,7 @@ const S: Record<ClassKind, SkillDef[]> = <Record<ClassKind, SkillDef[]>><unknown
 
     // Discord: slows, poise drain and the solo damage
     { id: "sg_dirge", name: "Dirge", type: "Aura", branch: 2, row: 0, style: "shadow", cd: 2000, mana: 14, target: "self", song: true, degree: "i", pitch: "L",
-      desc: "Song: a slow, heavy lament for 30s. Foes inside are slowed, worn down and lose their footing. Learning it opens the Minor key. Note i, home in shadow.",
+      desc: "Chorus: a slow, heavy lament for 30s. Foes inside are slowed, worn down and lose their footing. Learning it opens the Minor key. Note i, home in shadow.",
       field: { kind: "dirge", r: 70, ms: 30000, tickMs: 1000, follow: true, dmg: 8, slowMs: 1100 } },
     { id: "sg_shrill", name: "Shrill Note", type: "Attack", branch: 2, row: 1, style: "arcane", cd: 5000, mana: 14, degree: "V", pitch: "H",
       desc: "A piercing note that runs through foes and bounces off walls. Stone gives it back, wood gives back less, and leaves and water swallow it. Each rank adds a bounce. Note V.",

@@ -101,6 +101,30 @@ export function noteCast(sk: NoteState, deg: Degree, now: number): Progression |
   return p;
 }
 
+/**
+ * How far the latest notes are into a progression (DI-1 rings, `ch1` / `ch2` in statusOf): the longest run of the
+ * most recent notes that is the start of one of `progs` (default: every PROGRESSIONS). 0 = none. A full match fires
+ * its chord at once, so this stays below each progression's length.
+ */
+export function chordProgress(sk: { notes: Degree[] }, progs: { notes: Degree[] }[] = PROGRESSIONS): number {
+  let best = 0;
+  for (const p of progs) for (let k = Math.min(sk.notes.length, p.notes.length - 1); k > best; k--) {
+    const tail = sk.notes.slice(-k);
+    if (tail.every((n, i) => n === p.notes[i])) { best = k; break; }
+  }
+  return best;
+}
+
+/** The Songweaver's skill kinds (DI-4): songs are Choruses, Modulate a Key change, every other note a Verse. */
+export type SongKind = "Chorus" | "Verse" | "Key change";
+/** Player-facing kind of a skill; undefined for passives and for skills that are not notes (other classes, hidden ones). */
+export function songKind(s: { song?: boolean; modulate?: boolean; passive?: unknown; degree?: string }): SongKind | undefined {
+  if (s.passive) return undefined;
+  if (s.song) return "Chorus";
+  if (s.modulate) return "Key change";
+  return s.degree ? "Verse" : undefined;
+}
+
 // ---- Resonance ----------------------------------------------------------------------------------------------
 
 /** Semitones above the tonic, for intervals. */
