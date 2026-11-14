@@ -31,3 +31,23 @@ test("postgres store: imports the JSON file once, upserts changed accounts, load
   assert.equal(Object.keys(await s2.load()).length, 2);
   await s2.close!();
 });
+
+test("postgres store: the world table saves and loads one row, and a bad table name is rejected", { skip: !url }, async () => {
+  const admin = new pg.Client({ connectionString: url });
+  await admin.connect();
+  await admin.query("DROP TABLE IF EXISTS world");
+  await admin.end();
+
+  type World = { v: 1; tide: number; marchAt?: number; marches: number };
+  const s = await postgresStore<World>(url!, undefined, "world");
+  assert.deepEqual(await s.load(), {}, "a new world table is empty");
+  await s.save({ world: { v: 1, tide: 9, marches: 1 } }, {});
+  assert.deepEqual((await s.load()).world, { v: 1, tide: 9, marches: 1 });
+  await s.save({ world: { v: 1, tide: 12, marchAt: 5000, marches: 2 } }, {});
+  const all = await s.load();
+  assert.equal(Object.keys(all).length, 1, "still one row");
+  assert.deepEqual(all.world, { v: 1, tide: 12, marchAt: 5000, marches: 2 });
+  await s.close!();
+
+  for (const bad of ["world; DROP TABLE accounts", "Wor ld", "world1", "a-b"]) await assert.rejects(postgresStore(url!, undefined, bad), /Bad store table name/);
+});
