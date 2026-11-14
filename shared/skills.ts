@@ -72,7 +72,7 @@ export interface HitEffects {
 }
 
 /** What a sound hit carries (HitEffects.sound). */
-export interface SoundFx { pitch?: Pitch; deg?: Degree; mode?: ModeId; res?: number; basic?: boolean }
+export interface SoundFx { pitch?: Pitch; deg?: Degree; mode?: ModeId; res?: number; basic?: boolean; strum?: boolean }
 
 export interface AreaDef extends HitEffects {
   r: number; // radius, px
@@ -298,6 +298,13 @@ export interface SkillDef {
   untouchable?: number;
   /** A chord finisher (shared/songs.ts PROGRESSIONS): fired by its progression, never cast, not in the tree. */
   finisher?: boolean;
+  /**
+   * A full-gauge effect (DI-3, GearDef.book.full): a hidden skill the equipped book fires when the song gauge fills.
+   * Refrain: the Chorus playing beats `beats` times at once and runs SONG.ms again; with none playing, `buff` instead.
+   */
+  refrain?: { beats: number };
+  /** Twelve-Tone Storm: spends the whole song gauge (no book effect), x(GAUGE.stormBase + GAUGE.stormPerFill x fill/max). */
+  spendGauge?: boolean;
 }
 
 /**
@@ -763,57 +770,57 @@ const S: Record<ClassKind, SkillDef[]> = <Record<ClassKind, SkillDef[]>><unknown
   // one at a time; three notes in a progression fire a chord (shared/songs.ts). Texts: docs/songweaver-content.md.
   songweaver: [
     // Hymnal: healing and shields for the group
-    { id: "sg_ballad", name: "Hearth Ballad", type: "Aura", branch: 0, row: 0, style: "holy", cd: 2000, mana: 14, target: "self", song: true, degree: "I", pitch: "M",
+    { id: "sg_ballad", name: "Hearth Ballad", type: "Aura", branch: 0, row: 0, style: "holy", cd: 2000, target: "self", song: true, degree: "I", pitch: "M",
       desc: "Play the old village tune. For 30s it mends you and your party close by with every beat, and it follows you. Note I, the home note.",
       field: { kind: "ballad", r: 90, ms: 30000, tickMs: 1000, follow: true, party: { ms: 0, heal: 1.6 } } },
-    { id: "sg_mend", name: "Mending Note", type: "Aura", branch: 0, row: 1, style: "holy", cd: 6000, mana: 16, target: "self", degree: "IV", pitch: "H",
+    { id: "sg_mend", name: "Mending Note", type: "Aura", branch: 0, row: 1, style: "holy", cd: 6000, target: "self", degree: "IV", pitch: "H",
       desc: "Pluck a clear high note: it heals you, then leaps to the nearest friend. Ranks 3 and 5 add one more friend. Note IV.",
       mend: { heal: 18, hops: 1, range: 110 } },
-    { id: "sg_pedal", name: "Pedal Point", type: "Aura", branch: 0, row: 1, style: "holy", cd: 14000, mana: 18, target: "self", degree: "vi", pitch: "L",
+    { id: "sg_pedal", name: "Pedal Point", type: "Aura", branch: 0, row: 1, style: "holy", cd: 14000, target: "self", degree: "vi", pitch: "L",
       desc: "A held low note, steady while the tune moves above it. It shields you and your party close by. Note vi.",
       buff: { ms: 8000, shield: 28, party: 130 } },
     { id: "sg_lydian", name: "Lydian", type: "Passive", branch: 0, row: 2, style: "holy", passive: { effect: "mode", perRank: 10 },
       desc: "Unlocks the Lydian key: bright and generous. Healing that would go past full life becomes a shield instead. Each rank makes the shield stronger." },
     { id: "sg_legato", name: "Legato", type: "Passive", branch: 0, row: 2, style: "holy", passive: { effect: "legato", perRank: 1 },
       desc: "Played smooth, each note flowing into the next. The gifts of your songs linger on a friend after they step out of the song." },
-    { id: "sg_chorale", name: "Chorale", type: "Ultimate", branch: 0, row: 4, style: "holy", cd: 40000, mana: 45, chargeMs: 400, target: "self", degree: "I", pitch: "M",
+    { id: "sg_chorale", name: "Chorale", type: "Ultimate", branch: 0, row: 4, style: "holy", cd: 40000, chargeMs: 400, target: "self", degree: "I", pitch: "M",
       desc: "Many voices, one hymn. You and your party close by heal, more for every friend standing in it, and keep mending for a few seconds. Note I.",
       chorale: { heal: 18, perAlly: 0.15, r: 140 }, buff: { ms: 8000, regen: 2, party: 140 } },
 
     // Folk: speed, attack speed and damage for the group
-    { id: "sg_march", name: "Marching Tune", type: "Aura", branch: 1, row: 0, style: "wind", cd: 2000, mana: 14, target: "self", song: true, degree: "I", pitch: "M",
-      desc: "Song: a steady march for 30s. You and your party inside move faster and are harder to push around. Note I.",
+    { id: "sg_march", name: "Marching Tune", type: "Aura", branch: 1, row: 0, style: "wind", cd: 2000, target: "self", song: true, degree: "I", pitch: "M",
+      desc: "Chorus: a steady march for 30s. You and your party inside move faster and are harder to push around. Note I.",
       field: { kind: "march", r: 90, ms: 30000, tickMs: 1000, follow: true, party: { ms: 0, speed: 12, poise: 20 } } },
-    { id: "sg_jig", name: "Jig", type: "War cry", branch: 1, row: 1, style: "wind", cd: 12000, mana: 14, target: "self", degree: "ii", pitch: "H",
+    { id: "sg_jig", name: "Jig", type: "War cry", branch: 1, row: 1, style: "wind", cd: 12000, target: "self", degree: "ii", pitch: "H",
       desc: "A quick dance tune. You and your party close by strike faster for a few seconds. Note ii.",
       buff: { ms: 8000, atkspd: 26, party: 130 } },
-    { id: "sg_call", name: "Call", type: "War cry", branch: 1, row: 1, style: "wind", cd: 9000, mana: 12, target: "self", degree: "V", pitch: "H",
+    { id: "sg_call", name: "Call", type: "War cry", branch: 1, row: 1, style: "wind", cd: 9000, target: "self", degree: "V", pitch: "H",
       desc: "Call and response. A ringing shout jolts foes close by, and for a few seconds you and your party answer with harder blows. Note V.",
       cry: { r: 56, dmg: 18, kb: 0.6 }, buff: { ms: 5000, dmg: 26, party: 130 } },
     { id: "sg_dorian", name: "Dorian", type: "Passive", branch: 1, row: 2, style: "wind", passive: { effect: "mode", perRank: 10 },
       desc: "Unlocks the Dorian key: plain and even, fit for the road. Your songs reach farther, and it serves friends and foes alike. Each rank adds reach." },
     { id: "sg_accel", name: "Accelerando", type: "Passive", branch: 1, row: 2, style: "wind", passive: { effect: "accel", perRank: 5 },
-      desc: "Gradually quickening. The more Tempo you build, the faster your songs beat." },
-    { id: "sg_anthem", name: "Anthem", type: "Ultimate", branch: 1, row: 4, style: "wind", cd: 40000, mana: 45, chargeMs: 300, target: "self", degree: "I", pitch: "L",
+      desc: "Gradually quickening. The fuller your song gauge, the faster your songs beat." },
+    { id: "sg_anthem", name: "Anthem", type: "Ultimate", branch: 1, row: 4, style: "wind", cd: 40000, chargeMs: 300, target: "self", degree: "I", pitch: "L",
       desc: "A crescendo that grows louder and prouder with every beat. For a while you and your party inside hit harder and move and strike faster. Note I, played low.",
       crescendo: 0.1, field: { kind: "anthem", r: 120, ms: 10000, tickMs: 1000, follow: true, party: { ms: 0, dmg: 13, speed: 8, atkspd: 11 } } },
 
     // Discord: slows, poise drain and the solo damage
-    { id: "sg_dirge", name: "Dirge", type: "Aura", branch: 2, row: 0, style: "shadow", cd: 2000, mana: 14, target: "self", song: true, degree: "i", pitch: "L",
-      desc: "Song: a slow, heavy lament for 30s. Foes inside are slowed, worn down and lose their footing. Learning it opens the Minor key. Note i, home in shadow.",
+    { id: "sg_dirge", name: "Dirge", type: "Aura", branch: 2, row: 0, style: "shadow", cd: 2000, target: "self", song: true, degree: "i", pitch: "L",
+      desc: "Chorus: a slow, heavy lament for 30s. Foes inside are slowed, worn down and lose their footing. Learning it opens the Minor key. Note i, home in shadow.",
       field: { kind: "dirge", r: 70, ms: 30000, tickMs: 1000, follow: true, dmg: 8, slowMs: 1100 } },
-    { id: "sg_shrill", name: "Shrill Note", type: "Attack", branch: 2, row: 1, style: "arcane", cd: 5000, mana: 14, degree: "V", pitch: "H",
+    { id: "sg_shrill", name: "Shrill Note", type: "Attack", branch: 2, row: 1, style: "arcane", cd: 5000, degree: "V", pitch: "H",
       desc: "A piercing note that runs through foes and bounces off walls. Stone gives it back, wood gives back less, and leaves and water swallow it. Each rank adds a bounce. Note V.",
       shots: { kind: "wave", speed: 260, range: 190, radius: 6, size: 1.2, dmg: 28, pierce: 2, bounce: 1, perRank: { bounce: 1 }, kb: 0.5 } },
-    { id: "sg_crack", name: "Cracked String", type: "Attack", branch: 2, row: 1, style: "arcane", cd: 8000, mana: 16, degree: "bII", pitch: "M",
+    { id: "sg_crack", name: "Cracked String", type: "Attack", branch: 2, row: 1, style: "arcane", cd: 8000, degree: "bII", pitch: "M",
       desc: "Snap a string on purpose. A harsh twang hurts and stuns the foes ahead of you. From rank 3 it rings again, softer, like a canon. Note bII, the sour step above home.",
       areas: [{ r: 28, ahead: 34, dmg: 26, stunMs: 700, kb: 0.8, look: "burst" }], canon: { rank: 3, delayMs: 600, mult: 0.5 } },
     { id: "sg_phrygian", name: "Phrygian", type: "Passive", branch: 2, row: 2, style: "shadow", passive: { effect: "mode", perRank: 10 },
       desc: "Unlocks the Phrygian key: dark, with a flinch in it. Your sound drains more poise and makes foes ring faster. Each rank adds more." },
     { id: "sg_sympathy", name: "Sympathetic Strings", type: "Passive", branch: 2, row: 2, style: "arcane", passive: { effect: "sympathy", perRank: 10 },
       desc: "Strings that hum along with each other. Foes ring faster, and when the ringing bursts it spreads to foes close by. Each rank adds more." },
-    { id: "sg_twelve", name: "Twelve-Tone Storm", type: "Ultimate", branch: 2, row: 4, style: "arcane", cd: 35000, mana: 45, chargeMs: 400, target: "self", degree: "bII", pitch: "any",
-      desc: "Every note at once, none of them at home. Four waves of sound crash around you, and each foe hears the note it likes best. Note bII.",
+    { id: "sg_twelve", name: "Twelve-Tone Storm", type: "Ultimate", branch: 2, row: 4, style: "arcane", cd: 35000, chargeMs: 400, spendGauge: true, target: "self", degree: "bII", pitch: "any",
+      desc: "Every note at once, none of them at home. Four waves of sound crash around you, and each foe hears the note it likes best. It spends your whole song gauge, harder the fuller it was, and your book's effect is lost. Note bII.",
       areas: [{ r: 72, dmg: 16, waves: 4, everyMs: 300, slowMs: 600, kb: 0.4, look: "nova" }] },
   ],
 };
@@ -1032,7 +1039,7 @@ export const CANTRIPS: Record<ClassKind, SkillDef[]> = {
   wizard: [], // the wizard has no basic spells: its three schools are in the tree (Murat 2026-11-07)
   // The Songweaver's one basic spell: switch mode (shared/songs.ts). Locked until a second mode is known.
   songweaver: [
-    { id: "sg_modulate", name: "Modulate", type: "Aura", branch: 0, row: 0, req: 1, style: "holy", cd: 600, mana: 4, cantrip: true, modulate: true, target: "self", degree: "I", pitch: "M",
+    { id: "sg_modulate", name: "Modulate", type: "Aura", branch: 0, row: 0, req: 1, style: "holy", cd: 600, cantrip: true, modulate: true, target: "self", degree: "I", pitch: "M",
       desc: "Change key: switch to the next key you know and recolour the song you are playing. Needs two keys. Major favours friends, the dark keys favour damage.",
     },
   ],
@@ -1058,6 +1065,10 @@ export const FINISHERS: SkillDef[] = [
   { id: "sg_f_sleight", name: "Deceptive Cadence", type: "Ultimate", branch: 1, row: 3, req: 10, style: "shadow", finisher: true, target: "self",
     desc: "You promise home, then step aside. For a moment nothing can touch you, and foes around you flee.",
     untouchable: 1200, cry: { r: 72, fearMs: 1500 } },
+  // Full-gauge effects (DI-3): fired by the equipped book (shared/gear.ts GearDef.book) when the song gauge fills
+  { id: "sg_g_refrain", name: "Refrain", type: "Ultimate", branch: 0, row: 3, req: 1, style: "holy", finisher: true, target: "self", refrain: { beats: 3 },
+    desc: "The Songbook's refrain. The Chorus you are playing beats three times at once and starts over. With no Chorus playing, you and your party close by are healed.",
+    buff: { ms: 1000, heal: 8, party: 130 } },
 ];
 for (const f of FINISHERS) f.scale = { stat: "mag", per: 2 };
 
@@ -1165,7 +1176,7 @@ export const EFFECT_TEXT: Record<TalentEffect, (v: number) => string> = {
   upgrade: () => "",
   mode: (v) => (v > 10 ? `Unlocks its mode; +${v - 10}% to its colour` : "Unlocks its mode"),
   legato: (v) => `Song gifts linger ${v}s longer after leaving the song`,
-  accel: (v) => `Each Tempo stack quickens your song beats by ${v}%`,
+  accel: (v) => `A full song gauge quickens your song beats by ${5 * v}%`,
   sympathy: (v) => `+${v}% resonance; a burst spreads to foes close by`,
 };
 
