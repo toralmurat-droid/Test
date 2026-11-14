@@ -13,9 +13,10 @@ import { ANVIL_TOP, FORGE_FLUE, SMITHY_ORIGIN, TX as SMITHY_TX, smithyTextures }
 import { smokeTexture } from "./bonfireArt";
 import { NPCS, NPC_DECOR, Npc, npcById, npcNear, TALK_RANGE } from "../../shared/npcs";
 import {
-  CHAINS, chainOpen, chainState, questSig, TUT_CHAIN, npcPresent, ZONE_ARCS, npcQuestMark, questDef, questDialog, questObjective, questStep, Quester, QuestTarget, questTargets, stepGoal, stepProgress,
+  CHAINS, chainOpen, chainState, questSig, tutorialDone, USE_RANGE, TUT_CHAIN, npcPresent, ZONE_ARCS, npcQuestMark, questDef, questDialog, questObjective, questStep, Quester, QuestTarget, questTargets, stepGoal, stepProgress,
 } from "../../shared/quests";
 import { QuestObjects } from "./questObjects";
+import { MAGS, RumourBook, type RumourEnd } from "./rumours";
 import { conceptTextures } from "./questConceptArt";
 import { TILE } from "../../shared/constants";
 import { ISO } from "./isoflag";
@@ -69,6 +70,9 @@ export class NpcLayer {
   private trading = false;
   private q: QuestState;
   readonly objects: QuestObjects;
+  /** Tavern Rumours: Mags' offers and the active errand (client/src/rumours.ts) */
+  readonly rumours = new RumourBook();
+  private rumourRev = -1;
   private nearObj?: ReturnType<QuestObjects["near"]>;
   private trackerHtml = "";
   /** Title of the quest just advanced: scrolled to the top of the tracker once its block is drawn. */
@@ -159,6 +163,22 @@ export class NpcLayer {
     }
     this.addSurroundings(scene);
     this.objects = new QuestObjects(scene);
+    this.rumours.onEnd = (e) => this.onRumourEnd(e);
+    this.log.rumours = { html: () => this.rumours.logHtml(), active: () => !!this.rumours.current() };
+  }
+
+  /** A rumour ended (server "rumour" end): banner in the pixel lettering, and the outro as a story card when it was solved. */
+  private onRumourEnd(e: RumourEnd) {
+    const [big, small, color] = RumourBook.endLines(e);
+    this.banner(big, small, color);
+    if (e.why === "done" && e.outro) this.showStory(e.name, "Rumour solved", [e.outro]);
+  }
+
+  private banner(big: string, small: string, color = "#b9f27c") {
+    this.toast.replaceChildren(pixelText(big, color, 13, 3), pixelText(small, "#ffffff", 11, 2));
+    this.toast.classList.remove("show"); void this.toast.offsetWidth; this.toast.classList.add("show");
+    clearTimeout((this.toast as any)._t);
+    (this.toast as any)._t = setTimeout(() => this.toast.classList.remove("show"), 3500);
   }
 
   /** Morwen's tent and alchemy rig, Brann's forge… around the traders, plus Brann hammering at his anvil. */
@@ -273,6 +293,8 @@ export class NpcLayer {
   /** Values of the option buttons on screen, in order: keys 1-3 press them (see the capture listener in the constructor). */
   private optKeys: number[] = [];
   private optChain = 0;
+  /** The open page is Mags' rumour list: option buttons send "rumour" instead of "quest" */
+  private rumourPage = false;
   /** A choice that belongs to no NPC (server "choice" message: the Hide-Mother's bargain in the field). */
   private choice?: { chain: number; title: string; text: string[]; options: { label: string; v: number }[] };
 
@@ -287,10 +309,12 @@ export class NpcLayer {
   }
   /** Send the pick as an intent; the server moves the quest on. A field choice closes by itself, a talk page redraws. */
   private answer(v: number) {
-    if (!this.dialog.classList.contains("open")) return;
-    this.send("quest", { chain: this.optChain, opt: v });
+    if (!this.dialog.classList.contains("open") || !Number.isFinite(v)) return;
+    if (this.talking?.id === MAGS && this.rumourPage) this.send("rumour", v < 0 ? { drop: true } : { take: v });
+    else this.send("quest", { chain: this.optChain, opt: v });
     for (const b of this.dialog.querySelectorAll<HTMLButtonElement>(".nd-opt")) b.disabled = true;
     this.optKeys = [];
+    if (this.rumourPage) setTimeout(() => { this.stage = -1; }, 1500); // a pick the server ignored (too far, not allowed) sends no new state: draw the page again
     if (this.choice) { this.answeredAt.set(this.choice.chain, performance.now()); this.choice = undefined; this.dialog.classList.remove("open"); }
   }
   /** When each chain's field choice was last answered: a resend already in flight must not bring the modal back. */
@@ -503,9 +527,22 @@ export class NpcLayer {
     if (n.shop && (this.trading || !page)) return this.renderShop(n, q);
     this.dialog.classList.remove("shop");
     if (this.shopOpen) { this.shopOpen = false; this.onPreview?.(); }
-    const key = JSON.stringify([n.id, questSig(q), q?.level, metaOf(q, META.flags)]);
+    const rumourBody = n.id === MAGS && !(page?.accept || page?.options) ? this.rumours.dialogHtml(tutorialDone(q)) : "";
+    this.rumourPage = !!rumourBody;
+    const key = JSON.stringify([n.id, questSig(q), q?.level, metaOf(q, META.flags), rumourBody ? this.rumours.rev : 0]);
     if (key === this.stage) return;
     this.stage = key;
+    if (rumourBody) { // Mags: today's three rumours as option buttons, or the one under way with "Drop it"
+      this.dialog.innerHTML = this.head(n) + rumourBody +
+        `<div class="nd-btns"><button class="nd-bye">Farewell <kbd>E</kbd></button></div>`;
+      this.optChain = 0;
+      this.optKeys = this.rumours.current() ? [-1] : this.rumours.st!.offers.slice(0, 3).map((o) => (o.done ? NaN : o.i)); // NaN: a done offer, its key does nothing
+      for (const b of this.dialog.querySelectorAll<HTMLButtonElement>("button[data-take], button[data-drop]")) {
+        b.onclick = () => this.answer(b.dataset.drop ? -1 : Number(b.dataset.take));
+      }
+      this.dialog.querySelector<HTMLButtonElement>(".nd-bye")!.onclick = () => this.close();
+      return;
+    }
     const p = page ?? { text: ["Good day to you."], bye: "Farewell", chain: 0 };
     this.dialog.innerHTML = this.head(n) +
       p.text.map((t) => `<p>${t}</p>`).join("") +
@@ -525,7 +562,9 @@ export class NpcLayer {
     this.q = q;
     const present = (n: Npc) => npcPresent(n.id, q);
     this.objects.update(q);
-    this.nearObj = this.talking ? undefined : this.objects.near(me, q);
+    if (this.rumourRev !== this.rumours.rev) { this.rumourRev = this.rumours.rev; this.objects.setRumour(this.rumours.objects()); }
+    const ro = this.rumours.usable();
+    this.nearObj = this.talking ? undefined : this.objects.near(me, q) ?? (me && ro && Math.hypot(ro.x - me.x, ro.y - me.y) <= USE_RANGE ? ro : undefined);
     this.near = me ? npcNear(me.x, me.y, TALK_RANGE, present) : undefined;
     if (this.talking && (!me || npcNear(me.x, me.y, TALK_RANGE * 1.6, present) !== this.talking)) this.close(); // walked away
     const showPrompt = (!!this.near || !!this.nearObj) && !this.talking && !this.hidePrompt;
@@ -562,6 +601,10 @@ export class NpcLayer {
       if (t.kind === "area") this.markers.push({ x: t.x, y: t.y, r: t.r, glyph: "", color: "#ffd166", label: t.label, track: true });
       else if (t.kind === "object") this.markers.push({ x: t.x, y: t.y, glyph: "◆", color: "#7ff3ff", label: t.label, track: true });
     }
+    for (const t of this.rumours.targets()) {
+      if (t.kind === "area") this.markers.push({ x: t.x, y: t.y, r: t.r, glyph: "", color: "#e8a45a", label: t.label, track: true });
+      else this.markers.push({ x: t.x, y: t.y, glyph: "◆", color: "#e8a45a", label: t.label, track: true });
+    }
     this.log.render(q);
 
     // On-screen tracker: one block per chain with its quest, current objective, progress bar and where to go
@@ -571,6 +614,8 @@ export class NpcLayer {
     {
       // The guided first quest on top; only the quests the player chose to track
       const blocks = [tracked[TUT_CHAIN], ...tracked.filter((_, c) => c !== TUT_CHAIN)].map((st) => this.trackBlock(me, st)).filter(Boolean);
+      const rb = this.rumourBlock(me);
+      if (rb) blocks.push(rb);
       if (this.extraBlock) blocks.push(this.extraBlock);
       if (blocks.length) html = blocks.join("") + `<div class="qt-hint">J: quest log</div>`;
     }
@@ -646,6 +691,23 @@ export class NpcLayer {
 
   private followBtn(follow: boolean) {
     return `<button class="qt-follow" title="${follow ? "Stop following" : "Follow: mark it on the ground"}">${follow ? "◉" : "○"}</button>`;
+  }
+
+  /** Tracker card for the active tavern rumour: step, objective, progress, and "only at night" for a night reach step. */
+  private rumourBlock(me: Me): string {
+    const c = this.rumours.current();
+    if (!c) return "";
+    const key = "Rumour: " + c.r.title, follow = this.followed === key;
+    this.aimAt(me, this.rumours.targets(), follow);
+    const bar = c.a.goal > 1 ? `<div class="qt-bar"><div style="width:${Math.min(1, c.a.count / c.a.goal) * 100}%"></div></div>` : "";
+    let night = "";
+    if (c.a.night) {
+      const ms = msUntilUndeadNight(dayTime(Date.now()));
+      night = `<div class="qt-hint2 qt-night">Only at night.${ms > 0 ? ` The dead rise in ${Math.max(1, Math.ceil(ms / 60000))} min.` : ""}</div>`;
+    }
+    return `<div class="qt-block${this.isFolded(key, true) ? " folded" : ""}${follow ? " following" : ""}" data-key="${key}" data-started="1">` +
+      `<div class="qt-head"><span class="qt-title">${key}</span>${this.followBtn(follow)}</div>` +
+      `<div class="qt-body"><div class="qt-obj">${c.a.obj}</div><div class="qt-where">Step ${c.a.stage} of ${c.a.steps} · ${c.r.zone}</div>${bar}${night}</div></div>`;
   }
 
   private trackBlock(me: Me, q: ReturnType<typeof chainState>): string {
