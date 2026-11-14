@@ -1,7 +1,7 @@
 /**
  * Clan troops in the world (shared/war/patrols.ts): each land's holder marches a column (two abreast, pennant and
  * officer in front) from its Hold past its standards, keeps a few guards at the Hold, and in a siege both clans fight
- * a battle at every standard (loose lines, duels, some fall, reinforcements walk in). Sprites are pooled per land. Pure decoration: every client derives the same picture
+ * a battle at every standard (loose lines, duels, some fall, reinforcements walk in). Sprites are created and destroyed per land when a squad changes. Pure decoration: every client derives the same picture
  * from the "war" snapshot and the wall clock, nothing goes to the server, and the soldiers are plain sprites (no HP
  * bar, no name, never in the way). Only lands with a stop near the hero have sprites.
  */

@@ -6,7 +6,7 @@
 import { TILE } from "../constants";
 import { isSolidAt, isSolidTile } from "../map";
 import type { ClanKey } from "./clans";
-import { HOLDS, STANDARDS } from "./standards";
+import { HOLD_FORT_PX, HOLDS, STANDARDS } from "./standards";
 import { TERRITORIES } from "./territories";
 
 export const TROOP = {
@@ -102,9 +102,9 @@ export function siegeLife(seed: number, slot: number, wall: number): { s: "walk"
 
 export interface Patrol {
   t: number;
-  /** Closed loop of waypoints (px); pts[0] is the Hold, the last point links back to it. */
+  /** Closed loop of waypoints (px); pts[0] is the spot outside the Hold's front gate, the last point links back to it. */
   pts: { x: number; y: number }[];
-  /** Indexes in pts of the Hold and standard stops. */
+  /** Indexes in pts of the gate and standard stops. */
   stops: number[];
   /** Loop length (px), closing segment included. */
   len: number;
@@ -183,22 +183,40 @@ function simplify(b: Box, path: [number, number][]): { x: number; y: number }[] 
   return out;
 }
 
+/** Slack between the fort's walls and the soldiers outside them (px). */
+const FORT_MARGIN = 28;
+
+/** Spots on a square just outside the Hold's walls, the front gate (+x side, toward the viewer in iso) first, then outwards round it. */
+function gateSpots(h: { x: number; y: number }): { x: number; y: number }[] {
+  const d0 = HOLD_FORT_PX + FORT_MARGIN, out: { x: number; y: number }[] = [];
+  for (let d = d0; d <= d0 + 3 * TILE; d += TILE / 2)
+    for (let o = -d; o <= d; o += TILE / 2) out.push({ x: h.x + d, y: h.y + o }, { x: h.x - d, y: h.y + o }, { x: h.x + o, y: h.y + d }, { x: h.x + o, y: h.y - d });
+  const g = { x: h.x + d0, y: h.y + 8 };
+  return out.sort((a, c) => Math.hypot(a.x - g.x, a.y - g.y) - Math.hypot(c.x - g.x, c.y - g.y));
+}
+
 function build(tid: number): Patrol | undefined {
   const t = TERRITORIES[tid], hold = HOLDS.find((h) => h.t === tid);
   if (!t || !hold) return undefined;
   const b = box(t.x - MARGIN, t.y - MARGIN, t.x + t.w - 1 + MARGIN, t.y + t.h - 1 + MARGIN);
   const tile = (p: { x: number; y: number }): [number, number] => [Math.floor(p.x / TILE), Math.floor(p.y / TILE)];
-  const [hx, hy] = tile(hold);
-  const out = STANDARDS.filter((s) => s.t === tid).map((s) => ({ s, path: bfs(b, hx, hy, ...tile(s)) })).filter((r) => r.path);
-  if (!out.length) return undefined;
-  // Hold -> first standard, standard -> next (BFS), last standard -> Hold (the way out, reversed)
+  // the loop starts and ends at a spot outside the fort's gate (never inside the compound, where the layers sort wrong)
+  let gate: { x: number; y: number } | undefined, out: { s: (typeof STANDARDS)[number]; path: [number, number][] | undefined }[] = [];
+  for (const g of gateSpots(hold)) {
+    const [gx, gy] = tile(g);
+    if (!free(b, gx, gy)) continue;
+    const r = STANDARDS.filter((s) => s.t === tid).map((s) => ({ s, path: bfs(b, gx, gy, ...tile(s)) })).filter((x) => x.path);
+    if (r.length) { gate = { x: (gx + 0.5) * TILE, y: (gy + 0.5) * TILE }; out = r; break; }
+  }
+  if (!gate || !out.length) return undefined;
+  // gate -> first standard, standard -> next (BFS), last standard -> gate (the way out, reversed)
   const legs: [number, number][][] = [out[0].path!];
-  for (let i = 0; i + 1 < out.length; i++) legs.push(bfs(b, ...tile(out[i].s), ...tile(out[i + 1].s))!); // both reach the Hold, so each other
+  for (let i = 0; i + 1 < out.length; i++) legs.push(bfs(b, ...tile(out[i].s), ...tile(out[i + 1].s))!); // both reach the gate, so each other
   legs.push([...out[out.length - 1].path!].reverse());
   const pts: { x: number; y: number }[] = [], stops: number[] = [];
   for (const leg of legs) {
     stops.push(pts.length);
-    pts.push(...simplify(b, leg).slice(0, -1)); // the leg's end is the next leg's start (or the Hold again)
+    pts.push(...simplify(b, leg).slice(0, -1)); // the leg's end is the next leg's start (or the gate again)
   }
   let len = 0;
   for (let i = 0; i < pts.length; i++) { const a = pts[i], c = pts[(i + 1) % pts.length]; len += Math.hypot(c.x - a.x, c.y - a.y); }
@@ -238,14 +256,15 @@ export function patrolPos(p: Patrol, dist: number): { x: number; y: number; dx: 
 
 const spots = new Map<number, { x: number; y: number; fx: number; fy: number }[]>();
 /**
- * Up to `n` guard posts around territory `t`'s Hold: deterministic ring points on walkable ground, each with the
+ * Up to `n` guard posts around territory `t`'s Hold, outside its walls: deterministic ring points on walkable ground, each with the
  * unit direction pointing away from the Hold (the way a guard faces). Fewer come back if the ground is cramped.
  */
 export function garrisonSpots(t: number, n: number): { x: number; y: number; fx: number; fy: number }[] {
   if (!spots.has(t)) {
     const hold = HOLDS.find((h) => h.t === t), out: { x: number; y: number; fx: number; fy: number }[] = [];
     if (hold) for (let k = 0; k < 64 && out.length < TROOP.garrisonMax; k++) {
-      const a = k * 2.399963 + t * 0.7, r = 44 + (k % 3) * 20, fx = Math.cos(a), fy = Math.sin(a);
+      // a square ring outside the fort's walls: Chebyshev distance from the Hold, so no guard stands in the compound
+      const a = k * 2.399963 + t * 0.7, fx = Math.cos(a), fy = Math.sin(a), r = (HOLD_FORT_PX + FORT_MARGIN + (k % 3) * 18) / Math.max(Math.abs(fx), Math.abs(fy));
       const x = hold.x + fx * r, y = hold.y + fy * r;
       if (isSolidAt(x, y) || isSolidAt(x + 8, y) || isSolidAt(x - 8, y) || isSolidAt(x, y + 8) || isSolidAt(x, y - 8)) continue;
       if (out.some((o) => Math.hypot(o.x - x, o.y - y) < 28)) continue;

@@ -122,7 +122,13 @@ Open points for M1:
 
 - `TROOP`/`SIEGE_FIGHT` in `shared/war/patrols.ts`: columns of 8 two abreast with an officer, 4–6 guards round the
   Hold (`garrisonSpots`), sieges as 8 v 8 lines per standard with falls and reinforcements (`siegeLife`), fewer
-  defenders when control is low. Sprites pooled per land in `client/src/warTroops.ts` (≤ 40 near a siege).
+  defenders when control is low. Sprites are created and destroyed per land when a squad's signature changes (`client/src/warTroops.ts`, ≤ 40 near a siege).
+- Review fixes: Holds are baked to PNG (`tools/art/holds.ts`, also run by `npm run art` -> `client/public/assets/holds/`,
+  ~700 KB) and loaded lazily per clan by `client/src/holdAssets.ts` when a Hold is within 1100 px of the hero; the
+  painter (`holdArt.ts`) is art-time only. Guards (`garrisonSpots`) and patrols start outside the fort
+  (`HOLD_FORT_PX` in `shared/war/standards.ts`; patrols begin at a spot by the front gate, not the Hold centre).
+  `buildHolds` needs the inner 5x5 free of solid tiles (only the outer ring relaxes); Old Watchtower's fort overhangs
+  its land's edge by 2 tiles, five others by 1.
 - `client/src/holdArt.ts` rebuilt with the iso painter: ~7-tile forts/camps per clan (Warden palisade fort, Redfang
   war camp, Ossuary bone keep, Hide-Kin burrow earthworks, Veiled walled shrine), ground + standing layer
-  (`holdKeys`, `paintHoldLayers`); preview `tools/art/preview/holds-sheet.ts`. `buildHolds` clears a 7×7 area.
+  (`holdKeys`, `paintHoldLayers`, art-time); preview `tools/art/preview/holds-sheet.ts`. `buildHolds` clears a 7×7 area.

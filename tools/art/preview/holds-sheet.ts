@@ -1,7 +1,8 @@
 // Contact sheet of the five clan Holds: npx tsx tools/art/preview/holds-sheet.ts out.png [clan|all] [zoom]
 import { createCanvas } from "@napi-rs/canvas";
 import { writeFileSync } from "node:fs";
-import { HOLD_H, HOLD_W, paintHoldLayers } from "../../../client/src/holdArt";
+import { paintHoldLayers } from "../../../client/src/holdArt";
+import { HOLD_H, HOLD_W } from "../../../client/src/holdAssets";
 import { CLAN_KEYS } from "../../../shared/war/clans";
 const out = process.argv[2] ?? "holds.png", only = process.argv[3], Z = Number(process.argv[4] ?? 1);
 const keys = only && only !== "all" ? CLAN_KEYS.filter((k) => k === only) : CLAN_KEYS;

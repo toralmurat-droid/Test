@@ -1,8 +1,8 @@
-import type Phaser from "phaser";
 import { CLANS, type ClanKey } from "../../shared/war/clans";
 import { dith, hsh, IsoPaint, mat, ramp, type Mat, type V3 } from "./isoPaint";
 import { BONER, BRASSR, IRONR, OLDR, REDR, ROPER, STONER, STRAWR, WOODR, wood } from "./isoProps";
 import type { Pen } from "./worldProps";
+import { HOLD_H, HOLD_OX, HOLD_OY, HOLD_W } from "./holdAssets";
 
 /**
  * The clan war Holds as true isometric forts and camps (Murat 2026-11-14: "the holds look terrible, they should be in
@@ -12,17 +12,10 @@ import type { Pen } from "./worldProps";
  * mound, the Veiled Circle a walled sandstone shrine. About 7 tiles across on the ground.
  *
  * Two layers: the trampled ground (its own image, drawn under heroes so they can walk the compound) and the standing
- * parts (outlined, sorted by the Hold's foot). Units are texels, 1.5 per world px (a tile is 48 units); the compound's
+ * parts (outlined, sorted by the Hold's foot). Only tools/art/holds.ts imports this file; the game loads the baked PNGs. Units are texels, 1.5 per world px (a tile is 48 units); the compound's
  * centre is the origin. Cosmetic only: a Hold has no collision. Seeded hashes only (deterministic).
  */
 const TX = 1.5, T = 48;
-export const HOLD_W = 680, HOLD_H = 500, HOLD_OX = 340, HOLD_OY = 330;
-/** Origin of both images (the compound's middle, on the ground): place at the Hold's tile. */
-export const HOLD_ORIGIN = { x: HOLD_OX / HOLD_W, y: HOLD_OY / HOLD_H };
-/** Scale to draw a texture at (texels back to world px). */
-export const HOLD_SCALE = 1 / TX;
-/** Tiles the compound covers round its middle (shared/war/standards.ts keeps this ground clear). */
-export const HOLD_RADIUS_TILES = 3;
 const OUTLINE = 0x15100d;
 
 const hex = (n: number) => n;
@@ -598,7 +591,7 @@ function veiled(s: Scene) {
 
 const PAINT: Record<ClanKey, (s: Scene) => void> = { wardens, redfang, host, hidekin, veiled };
 
-/** Painted Hold as two RGBA layers (ground and standing), HOLD_W x HOLD_H each, standing layer with its outline. */
+/** Painted Hold as two RGBA layers (art-time only: tools/art/holds.ts bakes them to PNG, the client loads those) (ground and standing), HOLD_W x HOLD_H each, standing layer with its outline. */
 export function paintHoldLayers(k: ClanKey): { ground: Uint8ClampedArray; stand: Uint8ClampedArray } {
   const make = () => { const buf = new Uint32Array(HOLD_W * HOLD_H); return { buf, pen: bufPen(buf) }; };
   const g = make(), q = make();
@@ -630,22 +623,5 @@ function bufPen(buf: Uint32Array): Pen {
     buf[i] = ((0xff << 24) | mixc(o & 0xffffff, c, a)) >>> 0;
   };
   return { px } as Pen;
-}
-
-/** Texture keys of a Hold: `holdg_<k>` (ground, under heroes) and `holds_<k>` (standing parts, sorted by the foot). */
-export const holdKeys = (k: ClanKey) => ({ ground: `holdg_${k}`, stand: `holds_${k}` });
-
-/** Builds (once) both textures of the clan's Hold. Drawn at HOLD_SCALE with origin HOLD_ORIGIN on the Hold's tile. */
-export function holdTexture(scene: Phaser.Scene, k: ClanKey) {
-  const keys = holdKeys(k);
-  if (scene.textures.exists(keys.stand)) return keys;
-  const { ground, stand } = paintHoldLayers(k);
-  for (const [key, data] of [[keys.ground, ground], [keys.stand, stand]] as const) {
-    const tex = scene.textures.createCanvas(key, HOLD_W, HOLD_H)!;
-    tex.getContext().putImageData(new ImageData(data as Uint8ClampedArray<ArrayBuffer>, HOLD_W, HOLD_H), 0, 0);
-    tex.refresh();
-    tex.setFilter(1); // NEAREST: hard pixels like the other painted props
-  }
-  return keys;
 }
 void hex;
