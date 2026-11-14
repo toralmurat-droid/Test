@@ -2471,7 +2471,7 @@ export class SkillFx {
         const rad = R * (0.35 + 0.65 * (1 - (1 - open) * (1 - open)));
         let a = Math.max(0, 1 - age / 2500);
         if (held >= k) a = Math.max(a, 0.3); // still counting toward a chord
-        ell(rad, k === 3 ? 2 : 1, rs.color, a * (0.4 + 0.2 * k));
+        ell(rad, k === 1 ? 1.5 : 2, rs.color, a * (0.5 + 0.17 * k));
       });
       rs.bursts = rs.bursts.filter((b) => t - b.born < 520);
       for (const b of rs.bursts) {
