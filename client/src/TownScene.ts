@@ -50,6 +50,9 @@ import { PointerControls, type ClickEnemy, type ClickSpot } from "./pointer";
 import { warmPaths } from "./pathfind";
 import { pixelText } from "./pixeltext";
 import { speechBubble } from "./weathered";
+import { hasTrait } from "../../shared/cosmetics";
+import { META, metaOf } from "../../shared/questSteps";
+import { updateHidebound } from "./questConceptArt";
 import { ART_K, CHAR_GROW, CHAR_SCALE, CHARACTERS, CHAR_ORIGIN, CharacterName, createArtAnims, ensureCharSheet, HD_CHARS, playCharAnim, preloadArt } from "./artAssets";
 import { Ambient } from "./ambient";
 import { Details } from "./details";
@@ -3053,6 +3056,13 @@ export class TownScene extends Phaser.Scene {
       } else if (e.statusTint) { e.sprite.clearTint(); e.statusTint = false; }
       e.gear?.sync(e.sprite, p);
       if (e.gear) this.gearFx.tick(e, dtMs, moving);
+      if (e.hero) { // the beast trait (took the Hide-Mother's bargain): hide-bound mantle, only for heroes that carry it
+        const on = !p.dead && hasTrait(metaOf(p as any, META.cosm), "beast");
+        if (on || e.sprite.getData("hidebound")) {
+          const k = e.sprite.anims.currentAnim?.key ?? "", i = k.lastIndexOf("_");
+          updateHidebound(this, e.sprite, p.cls, i >= 0 ? k.slice(i + 1) : this.dirOf(e), on && e.sprite.visible);
+        }
+      }
 
       const x = Math.round(e.sprite.x), y = Math.round(e.sprite.y);
       // Monsters: HP bar over the head, level tag just above it

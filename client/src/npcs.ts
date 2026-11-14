@@ -71,6 +71,8 @@ export class NpcLayer {
   readonly objects: QuestObjects;
   private nearObj?: ReturnType<QuestObjects["near"]>;
   private trackerHtml = "";
+  /** Title of the quest just advanced: scrolled to the top of the tracker once its block is drawn. */
+  private reveal = "";
   /**
    * Folding in the tracker (Murat 2026-11-07): a quest is folded to its title by default and opens once it is started;
    * a click on the title flips that, remembered per title ("opened" for folded-by-default ones, "folded" for started ones).
@@ -289,17 +291,28 @@ export class NpcLayer {
     this.send("quest", { chain: this.optChain, opt: v });
     for (const b of this.dialog.querySelectorAll<HTMLButtonElement>(".nd-opt")) b.disabled = true;
     this.optKeys = [];
-    if (this.choice) { this.choice = undefined; this.dialog.classList.remove("open"); }
+    if (this.choice) { this.answeredAt.set(this.choice.chain, performance.now()); this.choice = undefined; this.dialog.classList.remove("open"); }
   }
+  /** When each chain's field choice was last answered: a resend already in flight must not bring the modal back. */
+  private answeredAt = new Map<number, number>();
 
   /** Server "choice" message: a modal with the same look as a talk, answered with {chain, opt}. */
-  onChoice(msg: { chain?: number; title?: string; text?: string[]; options?: { label: string; v: number }[] }) {
+  onChoice(msg: { chain?: number; title?: string; text?: string[]; options?: { label: string; v: number }[]; close?: boolean }) {
+    // The offer ended without a deal (refused, Ursk hit, too far, timeout, death): close that chain's modal
+    if (msg?.close) {
+      if (this.choice && (!Number.isInteger(msg.chain) || this.choice.chain === msg.chain)) { this.choice = undefined; this.optKeys = []; this.dialog.classList.remove("open"); }
+      return;
+    }
     const options = (Array.isArray(msg?.options) ? msg.options : []).filter((o) => o && typeof o.label === "string" && Number.isInteger(o.v)).slice(0, 6);
     if (!options.length) return;
+    const chain = Number.isInteger(msg.chain) ? msg.chain! : 0, title = String(msg.title ?? "");
+    if (performance.now() - (this.answeredAt.get(chain) ?? -1e9) < 2500) return; // just answered: this is a resend that crossed the answer
+    // Server resend (every 6 s while the offer is open): the same prompt while its modal is up changes nothing
+    const text = (msg.text ?? []).map(String);
+    if (this.choice && this.choice.chain === chain && this.dialog.classList.contains("open") && JSON.stringify([this.choice.title, this.choice.text, this.choice.options]) === JSON.stringify([title, text, options])) return;
     if (this.talking) this.close();
     this.story = undefined;
-    const chain = Number.isInteger(msg.chain) ? msg.chain! : 0, title = String(msg.title ?? "");
-    this.choice = { chain, title, text: (msg.text ?? []).map(String), options };
+    this.choice = { chain, title, text, options };
     this.dialog.classList.remove("shop");
     this.dialog.innerHTML = `<div class="nd-head"><span class="nd-name">${title}</span></div>` + this.choice.text.map((t) => `<p>${t}</p>`).join("") + this.optionsHtml(options);
     this.bindOptions(chain, options);
@@ -345,6 +358,8 @@ export class NpcLayer {
       if (m && step?.night && msUntilUndeadNight(dayTime(Date.now())) > 0) m = ["Wait for nightfall", m[1]];
     }
     if (m && m[0] === "New quest") m = ["New quest", quests[msg.qid].title];
+    const adv = quests[msg.done ? msg.qid - 1 : msg.qid]?.title;
+    if (adv) this.reveal = adv;
     this.tracker.classList.remove("flash"); void this.tracker.offsetWidth; this.tracker.classList.add("flash");
     if (m) {
       // Same pixel lettering as the zone banners
@@ -563,6 +578,11 @@ export class NpcLayer {
       this.trackerHtml = html;
       this.tracker.innerHTML = html;
       this.tracker.classList.toggle("open", !!html);
+    }
+    // The quest the player last advanced stays in view inside the capped, scrolling tracker
+    if (this.reveal && html) {
+      const b = [...this.tracker.querySelectorAll<HTMLElement>(".qt-block")].find((el) => el.dataset.key === this.reveal);
+      if (b) { this.tracker.scrollTop = Math.max(0, Math.min(b.offsetTop - 6, this.tracker.scrollHeight)); this.reveal = ""; }
     }
     this.drawPointer();
     this.drawGoal();
