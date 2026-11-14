@@ -38,8 +38,10 @@ import { DOORS, DOOR_RANGE, doorById, doorDist, doorWorkable, isSafeZone, isSoli
 import { isDecorSolidAt, npcById, npcNear, TALK_RANGE, type Npc } from "../shared/npcs";
 import { beyondWall, WATCH, WATCH_POSTS, WatchPost } from "../shared/watch";
 import { inVillage, WRATH } from "../shared/wrath";
-import { afterRespec, bounceWave, busking, buskingAudience, BuskingLines, ChordSync, heroSound, migrateSongweaver, mobSound, oldSongTree, relevelLute, restoreMode, SONG_POTION_TEXT, SongCollector, songSave, stowItem, SW_KIT_VERSION } from "./songs";
+import { afterRespec, bounceWave, busking, buskingAudience, BuskingLines, ChordSync, heroSound, migrateSongweaver, mobSound, oldSongTree, relevelLute, restoreMode, SONG_POTION_TEXT, SongCollector, songSave, stowItem, stringShot, SW_KIT_VERSION } from "./songs";
 import { songById } from "../shared/songbook";
+import { matItemId, rollMats } from "../shared/lutemaker";
+import { atLutemaker, breakItem, fitTrait, pickMat } from "./lutemaker";
 import { GAUGE, modeColour, PHRYGIAN, RESONANCE } from "../shared/songs";
 import { soundMult } from "../shared/combat";
 import type { SoundFx } from "../shared/skills";
@@ -61,7 +63,7 @@ import { SLOT_COUNT } from "../shared/slots";
 import { groupDmgMult, groupHpMult, PARTY, together } from "../shared/party";
 import { canExecute, executeDamage, executeRefund, heroPoise, MOB_COMBAT, mobBody, POISE, poiseLevelMult, poiseSpeed, PVP_PROTECT_LEVEL, pvpDamageMult, pvpProtected, SWING_AHEAD } from "../shared/combat";
 import {
-  BAG_SIZE, baseId, wearProblem, Equipped, gearDef, GEAR_SLOTS, activeGear, reqProblem, itemLevel, HeroReqInfo, GearSlot, gearBlock, gearName, gearReachMult, gearSpeedMult, gearStats, isGearId, potionChance, rollGear, canWear, starterKit,
+  BAG_SIZE, baseId, isLute, wearProblem, Equipped, gearDef, GEAR_SLOTS, activeGear, reqProblem, itemLevel, HeroReqInfo, GearSlot, gearBlock, gearName, gearReachMult, gearSpeedMult, gearStats, isGearId, potionChance, rollGear, canWear, starterKit,
   isBagItem, isBound, socketProblem, itemRunes, withRunes, runeEffects, stripRunes, GEAR_DROP,
 } from "../shared/gear";
 import { fuseRunes, parseRune, rollMobRune, rollRune, RUNE_DROP, runeId, runeIdName, RUNES, RuneKey } from "../shared/runes";
@@ -84,7 +86,7 @@ import { Champions, type ChampState } from "./champions";
 import { AFFIX_FX, CHAMPION } from "../shared/champions";
 /** A champion's helpers (its Splitting twin, a Ringleader's cutthroats) leave this long after they came. */
 const CHAMP_HELPER_MS = 90_000;
-import { ASK_BURST, ASK_PER_SEC, Bucket, CHAT_BURST, CHAT_PER_SEC, clientIp, isLocalIp, MSG_BURST, MSG_KICK_AFTER, MSG_KICK_WINDOW_MS, MSG_PER_SEC } from "./ratelimit";
+import { ASK_BURST, ASK_PER_SEC, Bucket, CHAT_BURST, CHAT_PER_SEC, CRAFT_BURST, CRAFT_PER_SEC, clientIp, isLocalIp, MSG_BURST, MSG_KICK_AFTER, MSG_KICK_WINDOW_MS, MSG_PER_SEC } from "./ratelimit";
 
 export class Player extends Schema {
   @type("string") name = "";
@@ -329,6 +331,7 @@ export class Projectile extends Schema {
   pulsed = 0; // distance at the last pulse (ShotSpec.pulse)
   sound?: SoundFx; // a Songweaver's basic wave: a sound hit
   bounced = 0; bouncedAt = 0; // wall bounces so far, distance flown at the last one (ShotSpec.bounce)
+  bounces = 0; keep = false; // a basic wave's own bounces (Steel Strings), bounces lose no damage (Silk Strings): server/songs.ts stringShot
   speed = 0;
   range = 0;
   radius = 0;
@@ -742,6 +745,9 @@ export class TownRoom extends Room<TownState> {
     this.onMessage("buy", (client, msg: { i: number }) => this.shopBuy(client, msg?.i));
     this.onMessage("sell", (client, msg: { i: number }) => this.shopSell(client, msg?.i));
     this.onMessage("fuse", (client, msg: { id?: unknown }) => this.fuseRunesMsg(client, msg?.id));
+    // Wren the lute-maker (server/lutemaker.ts): break a bag item into material, fit a trait to the lute
+    this.onMessage("break", (client, msg: { bag?: unknown }) => { if (this.allow("craft", client)) this.breakMsg(client, msg?.bag); });
+    this.onMessage("lutefit", (client, msg: { trait?: unknown }) => { if (this.allow("craft", client)) this.luteFitMsg(client, msg?.trait); });
     // Trading between players and the account stash (shared/trade.ts)
     this.onMessage("trade", (client, msg: { id?: string; name?: string }) => { if (this.allow("ask", client)) this.tradeAsk(client.sessionId, msg); });
     this.onMessage("tradeyes", (client, msg: { from?: string }) => this.tradeAnswer(client.sessionId, msg?.from, true));
@@ -830,6 +836,7 @@ export class TownRoom extends Room<TownState> {
   private msgBuckets = new Map<string, { b: Bucket; over: number; since: number }>();
   private chatBuckets = new Map<string, Bucket>();
   private askBuckets = new Map<string, Bucket>();
+  private craftBuckets = new Map<string, Bucket>(); // Wren's break / lutefit (CRAFT_PER_SEC)
 
   /**
    * Every message handler registered after this goes through a per-client budget: past it, messages are dropped,
@@ -851,10 +858,10 @@ export class TownRoom extends Room<TownState> {
   }
 
   /** Chat lines, invites: a smaller budget per client (each one reaches other players' screens). */
-  private allow(kind: "chat" | "ask", c: Client) {
-    const map = kind === "chat" ? this.chatBuckets : this.askBuckets;
+  private allow(kind: "chat" | "ask" | "craft", c: Client) {
+    const map = kind === "chat" ? this.chatBuckets : kind === "ask" ? this.askBuckets : this.craftBuckets;
     let b = map.get(c.sessionId);
-    if (!b) map.set(c.sessionId, (b = kind === "chat" ? new Bucket(CHAT_PER_SEC, CHAT_BURST) : new Bucket(ASK_PER_SEC, ASK_BURST)));
+    if (!b) map.set(c.sessionId, (b = kind === "chat" ? new Bucket(CHAT_PER_SEC, CHAT_BURST) : kind === "ask" ? new Bucket(ASK_PER_SEC, ASK_BURST) : new Bucket(CRAFT_PER_SEC, CRAFT_BURST)));
     if (b.take()) return true;
     if (kind === "chat") c.send("chat", { id: "", name: "Oakvale", text: "You are talking too fast. Wait a moment." });
     return false;
@@ -981,6 +988,7 @@ export class TownRoom extends Room<TownState> {
     this.msgBuckets.delete(client.sessionId);
     this.chatBuckets.delete(client.sessionId);
     this.askBuckets.delete(client.sessionId);
+    this.craftBuckets.delete(client.sessionId);
   }
 
   onDispose() {
@@ -4317,6 +4325,8 @@ export class TownRoom extends Room<TownState> {
       const gear = rollGear(kind, level);
       if (gear) this.dropItem("gear", x, y, 1, gear);
     }
+    // Songweaver materials lie on the ground too (shared/lutemaker.ts, LOOT[kind].mats)
+    for (const m of rollMats(def.mats)) this.dropItem("mat", x, y, m.n, matItemId(m.mat));
     // Runes (shared/runes.ts) lie on the ground like gear
     const rune = rollMobRune(GEAR_DROP[kind]?.chance ?? 0, level);
     if (rune) this.dropItem("gear", x, y, 1, rune);
@@ -4340,6 +4350,14 @@ export class TownRoom extends Room<TownState> {
         if (c < 0) return; // left over from an earlier step
         this.clients.find((cl) => cl.sessionId === pid)?.send("pickup", { kind: it.kind, amount: 1, x: it.x, y: it.y, gear: it.gear, name: "" });
         this.questProgress(pid, p, c, this.qs(p, c).questCount + 1);
+        return;
+      }
+      if (it.kind === "mat") { // a Songweaver's material (DI-5): into her counters, nobody else picks it up
+        const got = pickMat(p, it.gear, it.amount, this.songs);
+        if (!got?.n) return;
+        this.state.items.delete(id);
+        this.broadcast("sfx", { ev: "matpick", id: pid, mat: got.mat, n: got.n, x: Math.round(it.x), y: Math.round(it.y) });
+        this.sendSongbook(pid, p);
         return;
       }
       if (it.kind === "potion" || it.kind === "mpotion") {
@@ -5222,6 +5240,32 @@ export class TownRoom extends Room<TownState> {
     }
   }
 
+  // ---- Wren the lute-maker (server/lutemaker.ts) -------------------------------
+
+  /** "break" { bag }: at Wren's stall, a Songweaver breaks the bag item at that index into material. */
+  private breakMsg(client: Client, i: unknown) {
+    const p = this.state.players.get(client.sessionId);
+    if (!p || p.dead || typeof i !== "number" || !Number.isInteger(i) || i < 0 || i >= p.bag.length || !atLutemaker(p)) return;
+    const bag = [...bagItems(p)], r = breakItem(p, bag, i, this.songs, potionSlots(p.pots));
+    if (!("mat" in r)) { client.send("shop", { ok: false, text: r.text }); return; }
+    setBag(p, bag);
+    client.send("shop", { ok: true, text: r.text });
+    this.broadcast("sfx", { ev: "break", id: client.sessionId, mat: r.mat, n: r.n });
+    this.sendSongbook(client.sessionId, p);
+  }
+
+  /** "lutefit" { trait }: at Wren's stall, fit a trait to the lute in her hands (gold and materials paid). */
+  private luteFitMsg(client: Client, trait: unknown) {
+    const p = this.state.players.get(client.sessionId);
+    if (!p || p.dead || typeof trait !== "string" || trait.length > 16 || !atLutemaker(p)) return;
+    const r = fitTrait(p, this.songs, trait);
+    if (!r.ok) { client.send("shop", { ok: false, text: r.text }); return; }
+    this.applyStats(p); // the engine's lute (SkillRuntime.lute) takes the new trait
+    client.send("shop", { ok: true, text: r.text });
+    this.broadcast("sfx", { ev: "lutefit", id: client.sessionId, trait: r.trait });
+    this.sendSongbook(client.sessionId, p);
+  }
+
   // ---- Shops (shared/shops.ts) ----------------------------------------------
 
   /** The shop of the trader the player stands next to. */
@@ -5928,6 +5972,7 @@ export class TownRoom extends Room<TownState> {
       p.maxMana = newMana;
     }
     p.sk.book = eq.shield || undefined; // the book she can read fires when her song gauge fills (shared/skillEngine.ts swell)
+    p.sk.lute = isLute(p.weapon) ? p.weapon : undefined; // her lute's traits (shared/lute.ts LUTE_FX)
     this.syncMana(p);
   }
 
@@ -6085,6 +6130,7 @@ export class TownRoom extends Room<TownState> {
         // the Songweaver's lute: a sound wave, and the combo step is a note (pluck, pluck, strum)
         const mode = a.sk.mode ?? "major", deg = step === 1 ? "V" : "I";
         s.sound = { pitch: "M", deg, mode, basic: true, res: step === 2 ? RESONANCE.basic : 0, strum: step === 2 };
+        stringShot(s, a as unknown as Unit, true); // Steel and Silk Strings (DI-5)
         this.broadcast("sfx", { ev: "note", id, s: "basic", deg, mode, pitch: "M", x: Math.round(a.x), y: Math.round(a.y) });
       }
       return;
@@ -6295,6 +6341,7 @@ export class TownRoom extends Room<TownState> {
       s.kind = spec.kind; s.size = spec.size; s.speed = spec.speed; s.range = spec.range; s.radius = spec.radius;
       s.damage = spec.dmg; s.knockback = spec.kb ?? 1; s.pierce = spec.pierce; s.spec = spec;
       s.imb = spec.imb?.style ?? "";
+      stringShot(s, this.state.players.get(spec.owner) as unknown as Unit | undefined, false); // Silk Strings (DI-5)
       this.state.projectiles.set(`s${++this.shotSeq}`, s);
     },
     addField: (inst) => {

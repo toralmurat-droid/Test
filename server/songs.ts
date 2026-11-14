@@ -1,5 +1,7 @@
 import { isMode, MODES, SONGWEAVER_TREE, type ModeId } from "../shared/songs";
-import { knownModesOf, type ShotSpec, type SkillRuntime, type Unit } from "../shared/skillEngine";
+import { knownModesOf, luteHas, type ShotSpec, type SkillRuntime, type Unit } from "../shared/skillEngine";
+import { LUTE_FX } from "../shared/lute";
+import type { SoundFx } from "../shared/skills";
 import { skillById, type AreaDef, type FieldDef, type HitEffects, type SkillDef } from "../shared/skills";
 import { BOUNCE, BOUNCE_RULES, reflectAxis, wallAt } from "../shared/acoustics";
 import { BUSKING, BUSKING_LINES, npcById, type Npc } from "../shared/npcs";
@@ -94,8 +96,18 @@ export class ChordSync {
 
 // ---- Waves bounce off walls (Plan v2) ----------------------------------------------------------------------------
 
-/** The projectile fields a bounce reads and turns (server TownRoom Projectile). */
-export interface BounceShot { x: number; y: number; vx: number; vy: number; dir: string; traveled: number; bounced: number; bouncedAt: number; damage: number; spec?: ShotSpec }
+/**
+ * The projectile fields a bounce reads and turns (server TownRoom Projectile). `bounces`: walls a basic wave may bounce
+ * off (Steel Strings; a skill wave keeps it in spec.bounce); `keep`: bounces lose no damage (Silk Strings).
+ */
+export interface BounceShot { x: number; y: number; vx: number; vy: number; dir: string; traveled: number; bounced: number; bouncedAt: number; damage: number; spec?: ShotSpec;
+  bounces?: number; keep?: boolean; sound?: SoundFx }
+
+/** A Songweaver's wave takes her lute's strings (DI-5): Steel lets a basic wave bounce, Silk keeps a bounce's damage. */
+export function stringShot(s: BounceShot, u: Unit | undefined, basic: boolean) {
+  if (basic && luteHas(u, "steel")) s.bounces = LUTE_FX.steelBounce;
+  if (luteHas(u, "silk")) s.keep = true;
+}
 
 /**
  * A wave that may still bounce (ShotSpec.bounce) ran into a wall between (px, py) and where it is: off stone, wood and
@@ -104,8 +116,8 @@ export interface BounceShot { x: number; y: number; vx: number; vy: number; dir:
  * most BOUNCE_RULES.max. True when it bounced.
  */
 export function bounceWave(s: BounceShot, px: number, py: number, emit: (ev: Record<string, unknown>) => void): boolean {
-  const spec = s.spec;
-  if (!spec?.bounce || s.bounced >= Math.min(BOUNCE_RULES.max, spec.bounce) || (s.bounced && s.traveled - s.bouncedAt < BOUNCE_RULES.minFlight)) return false;
+  const spec = s.spec, max = spec ? spec.bounce ?? 0 : s.bounces ?? 0;
+  if (!max || s.bounced >= Math.min(BOUNCE_RULES.max, max) || (s.bounced && s.traveled - s.bouncedAt < BOUNCE_RULES.minFlight)) return false;
   const mat = wallAt(s.x, s.y), fall = BOUNCE[mat];
   if (!fall) return false;
   const { fx, fy } = reflectAxis(px, py, s.x, s.y);
@@ -114,8 +126,11 @@ export function bounceWave(s: BounceShot, px: number, py: number, emit: (ev: Rec
   if (fy) s.vy = -s.vy;
   s.dir = Math.abs(s.vx) > Math.abs(s.vy) ? (s.vx > 0 ? "right" : "left") : s.vy > 0 ? "down" : "up";
   s.bounced++; s.bouncedAt = s.traveled;
-  spec.vx = s.vx; spec.vy = s.vy; spec.dmg *= fall.dmg; s.damage *= fall.dmg;
-  if (fall.res && spec.sound) spec.sound = { ...spec.sound, res: (spec.sound.res ?? 0) + fall.res };
+  const loss = s.keep ? 1 : fall.dmg;
+  s.damage *= loss;
+  if (spec) { spec.vx = s.vx; spec.vy = s.vy; spec.dmg *= loss; }
+  if (fall.res && spec?.sound) spec.sound = { ...spec.sound, res: (spec.sound.res ?? 0) + fall.res };
+  else if (fall.res && !spec && s.sound) s.sound = { ...s.sound, res: (s.sound.res ?? 0) + fall.res };
   emit({ ev: "bounce", x: Math.round(px), y: Math.round(py), mat });
   return true;
 }

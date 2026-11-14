@@ -91,3 +91,11 @@ export function progressionsFor(sk: { book?: string; songs?: readonly string[] }
   if (!sk.songs?.length || !holdsSongs(sk.book)) return PROGRESSIONS;
   return [...PROGRESSIONS, ...SONG_SOURCES.filter((s) => sk.songs!.includes(s.id)).map((s) => s.prog)];
 }
+
+/** Player text of the books (content doc section 3): the gift's name, the book's desc and its full-gauge line. */
+export const BOOK_TEXT: Record<string, { gift: string; desc: string; line: string }> = {
+  songweaver_shield: { gift: "Refrain", desc: "A worn little book of your own tunes. It keeps the songs you find and the legend of your chords.", line: "Refrain: your Chorus beats again at once and its time begins anew. With no Chorus, your party is mended." },
+  bk_hymnal: { gift: "Benediction", desc: "Pages of old hymns, soft with handling. For a minstrel who keeps people on their feet.", line: "Benediction: you and your party close by are healed and shielded." },
+  bk_march: { gift: "Rally", desc: "Drum rhythms and road songs, inked in a hurry. For a minstrel who leads a band.", line: "Rally: you and your party close by hit harder, strike faster and move quicker for a few seconds." },
+  bk_dissonance: { gift: "Cacophony", desc: "Songs written to be played wrong. For a minstrel who plays alone and does not mind the stares.", line: "Cacophony: a harsh blast hurts and stuns foes around you, and leaves them ringing." },
+};
