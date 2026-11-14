@@ -27,7 +27,7 @@ import { ISO, SMOOTH } from "./isoflag";
 import { SmoothGround } from "./smoothground";
 import { hiResTexture } from "./smooth";
 import { uprightTexture, UPRIGHT_OY } from "./smoothProps";
-import { ADOBE_PAD, ADOBE_TOP, ADOBE_WALL_H, adobeTexture, adobeWallTexture, bonesTexture, CLIFF_DEPTH, cliffDistance, cliffHeight, cliffTexture, cliffVariant, deadTreeTexture, desertRockTexture, sunStoneTexture, tentTexture } from "./desertArt";
+import { ADOBE_PAD, ADOBE_WALL_H, adobeHead, adobeTexture, adobeWallTexture, bonesTexture, CLIFF_DEPTH, cliffDistance, cliffHeight, cliffTexture, cliffVariant, deadTreeTexture, desertRockTexture, sunStoneTexture, tentTexture } from "./desertArt";
 import { D, FURNACE, SUNSTONE } from "../../shared/desert";
 import { DESERT_H, DESERT_Y0 } from "../../shared/constants";
 
@@ -777,8 +777,9 @@ function isoDesert(scene: Phaser.Scene, t: number, tx: number, ty: number, at: (
     const inn = inner(tx, ty);
     const uf = inn ? (inner(tx, ty + 1) ? 0 : 1) | (inner(tx + 1, ty) ? 0 : 2) : 0;
     const ue = inn ? (inner(tx, ty - 1) ? 0 : 1) | (inner(tx + 1, ty) ? 0 : 2) | (inner(tx, ty + 1) ? 0 : 4) | (inner(tx - 1, ty) ? 0 : 8) : 0;
-    const key = adobeTexture(scene, faces, edges, t === T.DOOR && !isHouse(tx, ty + 1), v, { hv, inner: inn, uf, ue });
-    staticObj(scene, scene.add.image(cx, cy, key).setOrigin(0.5, (IH / 2 + ADOBE_TOP) / (IH + ADOBE_TOP + ADOBE_PAD)).setDepth(cy));
+    const look = { hv, inner: inn, uf, ue }, head = adobeHead(look);
+    const key = adobeTexture(scene, faces, edges, t === T.DOOR && !isHouse(tx, ty + 1), v, look);
+    staticObj(scene, scene.add.image(cx, cy, key).setOrigin(0.5, (IH / 2 + head) / (IH + head + ADOBE_PAD)).setDepth(cy));
     return true;
   }
   if (t === T.ADOBE_WALL) {

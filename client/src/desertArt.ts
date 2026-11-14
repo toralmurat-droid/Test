@@ -41,7 +41,9 @@ export function cliffHeight(d: number, x: number, y: number): number {
 /** Mud-brick heights: a house's ground storey, the upper storey raised on its inner tiles (by house variant; 0 = none, a palm-frond shade instead), the town wall. */
 export const ADOBE_H = 38, ADOBE_UP = [20, 26, 0, 22], ADOBE_WALL_H = 14;
 /** House texture headroom above the ground plane, and the margin below it (corner piers and spouts stand a little proud of the tile). */
-export const ADOBE_TOP = ADOBE_H + 26 + 12, ADOBE_PAD = 4;
+export const ADOBE_PAD = 4, ADOBE_SIDE = 4;
+/** Headroom a house tile's texture needs above the ground plane (sized per tile: most tiles have no upper storey). */
+export const adobeHead = (look: AdobeLook) => ADOBE_H + (look.inner ? ADOBE_UP[look.hv] : 0) + 12;
 /** Plaster tints by house variant: ochre, rose, pale lime-wash, dusty brown. */
 const PLASTER = [0xb98a5c, 0xb88068, 0xc9a882, 0xa88058];
 
@@ -138,11 +140,13 @@ export interface AdobeLook {
  * W=8 open sides) and the clutter of roof life, or, on a house's inner tiles, a raised upper storey.
  */
 export function adobeTexture(scene: Phaser.Scene, faces: number, edges: number, door: boolean, v: number, look: AdobeLook): string {
-  const { hv, inner, uf, ue } = look, uh = inner ? ADOBE_UP[hv] : 0;
+  const { hv, inner, uf, ue } = look, uh = inner ? ADOBE_UP[hv] : 0, head = adobeHead(look);
+  v &= 1; // two looks per tile kind are plenty: every variant is a texture held in memory
   const key = `dsb_adobe_${faces}_${edges}_${door ? 1 : 0}_${v}_${hv}_${inner ? 1 : 0}_${uf}_${ue}`;
   const h = ADOBE_H, top = h + uh, tint = PLASTER[hv], roofC = col(tint, 0.8);
-  hiResTexture(scene, key, IW, IH + ADOBE_TOP + ADOBE_PAD, 1, 6, (c) => {
-    const I = new Iso(c, IW / 2, ADOBE_TOP + IH / 2), R = rng(faces * 13 + edges * 31 + v * 97 + (door ? 7 : 0) + hv * 211 + uf * 5 + ue * 3);
+  // scale 3, not 6: about a hundred of these, all painted at load (cliffs use 3 for the same reason)
+  hiResTexture(scene, key, IW + 2 * ADOBE_SIDE, IH + head + ADOBE_PAD, 1, 3, (c) => {
+    const I = new Iso(c, IW / 2 + ADOBE_SIDE, head + IH / 2), R = rng(faces * 13 + edges * 31 + v * 97 + (door ? 7 : 0) + hv * 211 + uf * 5 + ue * 3);
     /** A plastered wall on one open face between heights z0 and z1. */
     const wall = (side: "L" | "R", z0: number, z1: number, ground: boolean) => {
       const P = (u: number, z: number) => (side === "L" ? I.p(u, 16, z) : I.p(16, -u, z));
@@ -175,7 +179,7 @@ export function adobeTexture(scene: Phaser.Scene, faces: number, edges: number, 
         I.poly([P(-16, 4.5), P(16, 4.5), P(16, 5.3), P(-16, 5.3)], col(tint, k * 1.25));
         const g = c.createLinearGradient(...P(0, 0), ...P(0, 4));
         g.addColorStop(0, col(0x3a2416, 1, 0.5)); g.addColorStop(1, col(0x3a2416, 1, 0));
-        c.fillStyle = g; c.fillRect(0, 0, IW, IH + ADOBE_TOP + ADOBE_PAD);
+        c.fillStyle = g; c.fillRect(0, 0, IW + 2 * ADOBE_SIDE, IH + head + ADOBE_PAD);
       }
       // a moulded band under the beam ends: lit bead on top, shadow under it
       const sb = z1 - 9.5;
@@ -310,7 +314,7 @@ export function adobeTexture(scene: Phaser.Scene, faces: number, edges: number, 
       }
     }
     // horned corners where two open edges meet (a little pinnacle, the Saharan way)
-    const horn = (u: number, vv: number) => items.push([u + vv + 0.1, () => {
+    const horn = (u: number, vv: number) => items.push([u + vv + 3, () => { // keyed on its far corner, after the parapet boxes it stands in
       I.box(u - 1.6, u + 1.6, vv - 1.6, vv + 1.6, top, top + PH + 3, tint);
       I.box(u - 0.8, u + 0.8, vv - 0.8, vv + 0.8, top + PH + 3, top + PH + 5.5, tint);
     }]);
@@ -413,8 +417,8 @@ function frondShade(I: Iso, c: Ctx, z: number, R: () => number, open: number) {
 export function adobeWallTexture(scene: Phaser.Scene, mask: number, v: number, broken: boolean): string {
   const key = `dsb_awall_${mask}_${v}_${broken ? 1 : 0}`;
   const h = ADOBE_WALL_H;
-  hiResTexture(scene, key, IW, IH + h + 10 + ADOBE_PAD, 1, 6, (c) => {
-    const I = new Iso(c, IW / 2, h + 10 + IH / 2), R = rng(mask * 17 + v * 59 + (broken ? 991 : 1));
+  hiResTexture(scene, key, IW + 2 * ADOBE_SIDE, IH + h + 10 + ADOBE_PAD, 1, 6, (c) => {
+    const I = new Iso(c, IW / 2 + ADOBE_SIDE, h + 10 + IH / 2), R = rng(mask * 17 + v * 59 + (broken ? 991 : 1));
     const t = 4.5, cap = 2.2, step = 2;
     // crest height along a run, from absolute position s (-16..16) and run id: teeth, or a jagged broken line
     const seedA = R() * 10, depth = 0.45 + R() * 0.25;
@@ -435,7 +439,7 @@ export function adobeWallTexture(scene: Phaser.Scene, mask: number, v: number, b
       }
       const g = c.createLinearGradient(...P(0, 0), ...P(0, 4));
       g.addColorStop(0, "rgba(60,36,20,0.55)"); g.addColorStop(1, "rgba(60,36,20,0)");
-      c.fillStyle = g; c.fillRect(0, 0, IW, IH + h + 10 + ADOBE_PAD);
+      c.fillStyle = g; c.fillRect(0, 0, IW + 2 * ADOBE_SIDE, IH + h + 10 + ADOBE_PAD);
     };
     /** A slice of wall [u0,u1]x[v0,v1] up to z1, its two visible faces bricked, its top lit. */
     const slice = (u0: number, u1: number, v0: number, v1: number, z1: number) => {
@@ -453,9 +457,9 @@ export function adobeWallTexture(scene: Phaser.Scene, mask: number, v: number, b
       else for (let a = v0; a < v1 - 0.01; a += step) slice(u0, u1, a, Math.min(v1, a + step), crest(a + step / 2, run));
     };
     // fallen bricks and drifted sand at the foot of a broken stretch, mostly on the visible (south and east) side
-    const rubble = () => {
-      for (let n = 0; n < 9; n++) {
-        const side = R() < 0.7, along = -12 + R() * 24, off = t + 1 + R() * 5;
+    const rubble = (near: boolean) => {
+      for (let n = 0; n < (near ? 6 : 3); n++) {
+        const side = near, along = -12 + R() * 24, off = t + 1 + R() * 5;
         const u = mask & 10 ? along : (side ? off : -off), vv = mask & 10 ? (side ? off : -off) : along;
         const rot = R() < 0.5, w = rot ? 1.4 : 3, d = rot ? 3 : 1.4;
         I.box(u - w / 2, u + w / 2, vv - d / 2, vv + d / 2, 0, 1.2 + (R() < 0.3 ? 1.2 : 0), R() < 0.5 ? 0x9a6a42 : 0xb88a5a);
@@ -465,6 +469,7 @@ export function adobeWallTexture(scene: Phaser.Scene, mask: number, v: number, b
       const [x, y] = I.p(mask & 10 ? 0 : t + 3, mask & 10 ? t + 3 : 0, 0);
       c.fillStyle = col(0xc89a62, 0.9, 0.6); c.beginPath(); c.ellipse(x, y, 13, 4, 0, 0, Math.PI * 2); c.fill();
     }
+    if (broken) rubble(false); // the far side's bricks, behind the wall
     if (mask & 1) arm(-t, t, -16, -t, 1);
     if (mask & 8) arm(-16, -t, -t, t, 2);
     // the post: a stepped pier, or a stump of one where the wall is broken
@@ -474,7 +479,7 @@ export function adobeWallTexture(scene: Phaser.Scene, mask: number, v: number, b
     if (!broken) I.box(-t + 0.8, t - 0.8, -t + 0.8, t - 0.8, ph, ph + 2.4, 0xc9a070);
     if (mask & 2) arm(t + 1, 16, -t, t, 3);
     if (mask & 4) arm(-t, t, t + 1, 16, 4);
-    if (broken) rubble();
+    if (broken) rubble(true);
   });
   return key;
 }
