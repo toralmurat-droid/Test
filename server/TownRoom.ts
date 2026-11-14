@@ -6350,7 +6350,7 @@ export class TownRoom extends Room<TownState> {
     }
     if (riseAgain(this.host, tid)) return false; // Blood Pact: a killing blow leaves the vampire standing
     t.dead = true;
-    this.warTroops.forget(tid); // the troops are done with a fallen hero (grudges end)
+    this.warTroops.forget(tid); // the troops are done with a fallen hero
     this.qsteps.died(tid); // a carried lantern falls here, a hold run may fail (server/questSteps.ts)
     if (opts.from && this.state.players.has(opts.from)) onKill(this.host, opts.from); // Bloodlust
     const killer = opts.from ? this.state.mobs.get(opts.from) : undefined;
