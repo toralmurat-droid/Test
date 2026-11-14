@@ -11,7 +11,8 @@ How we work on Pixel Town Brawl together. The technical rules (architecture, lim
 4. **CI** runs tests, the build and smoke tests (`.github/workflows/ci.yml`), and checks for a patch note.
 5. **Auto-merge:** a non-draft PR from a `claude/*` branch merges by itself once CI is green
    (`.github/workflows/auto-merge.yml`). There is no human review step by default. If the default branch moved
-   since CI ran, the merge job first tests the PR on top of it; a PR that only breaks in combination doesn't merge.
+   since CI ran, the merge job first tests the PR on top of it; a PR that only breaks in combination doesn't merge
+   (it gets a comment saying so). A PR overtaken by another merge is labelled `auto-merge:waiting` and retried.
 6. **Deploy:** Railway rebuilds the live game on every merge ([DEPLOY.md](DEPLOY.md)). Players see a short restart.
 
 Because merging is automatic, **anything merged is live within minutes.**

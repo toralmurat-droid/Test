@@ -3,10 +3,10 @@
 // changes another PR. Run by .github/workflows/critical-areas.yml. The areas are listed in CLAUDE.md too.
 const AREAS = {
   saves: { about: "saves and accounts", files: [/^server\/(accounts|store|handoff)\.ts$/],
-    // the room's save snapshot / restore
-    hunks: { file: /^server\/TownRoom\.ts$/, header: /\b(snapshot|restore)\(/ } },
+    // changed lines in the room that build, load or version a save
+    lines: { file: /^server\/TownRoom\.ts$/, line: /^[+-](?![+-]).*\b(snapshot|loadHero|saveHero|HeroSave|xpv|XP_CURVE_VERSION)\b/ } },
   schema: { about: "synced Player / Mob schema", files: [/^server\/player\.ts$/, /^shared\/mobView\.ts$/],
-    lines: { file: /^server\/TownRoom\.ts$/, line: /^[+-].*@type\(/ } },
+    lines: { file: /^server\/TownRoom\.ts$/, line: /^[+-](?![+-]).*@type\(/ } },
   "skill-engine": { about: "the shared skill engine", files: [/^shared\/skillEngine\.ts$/] },
   map: { about: "the deterministic world map", files: [/^shared\/(map|desert)\.ts$/] },
   deploy: { about: "CI, build and deploy", files: [/^\.github\//, /^Dockerfile$/, /^railway\.json$/, /^package(-lock)?\.json$/,
@@ -35,7 +35,6 @@ export function areasOf(files) {
   const hit = new Set();
   for (const f of files) for (const [key, a] of Object.entries(AREAS)) {
     if (a.files.some((re) => re.test(f.filename))) hit.add(key);
-    if (a.hunks && a.hunks.file.test(f.filename) && (f.patch ?? "").split("\n").some((l) => l.startsWith("@@") && a.hunks.header.test(l))) hit.add(key);
     if (a.lines && a.lines.file.test(f.filename) && (f.patch ?? "").split("\n").some((l) => a.lines.line.test(l))) hit.add(key);
   }
   return [...hit].sort();
@@ -69,4 +68,5 @@ async function main() {
   else await gh(`/issues/${PR}/comments`, { method: "POST", body: JSON.stringify({ body }) });
 }
 
-if (process.env.PR) main().catch((e) => { console.error(e); process.exit(1); });
+import { pathToFileURL } from "node:url";
+if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) main().catch((e) => { console.error(e); process.exit(1); });

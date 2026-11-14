@@ -33,6 +33,7 @@ jobs:
       - name: Label and warn
         # A failure here (GitHub API hiccup) must not hold up the PR
         continue-on-error: true
+        timeout-minutes: 8
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR: ${{ github.event.pull_request.number }}
