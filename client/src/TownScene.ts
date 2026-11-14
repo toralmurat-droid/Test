@@ -88,7 +88,8 @@ import { STASH, STASH_RANGE } from "../../shared/trade";
 import { afterLoading, hideLoading, loadingActive, loadingFor, setLoading, showLoading } from "./loading";
 import { WaygateLayer } from "./waygate";
 import { WAYGATE_RANGE, WAYGATES } from "../../shared/act2";
-import { ISO, IsoView, isoAnchor, isoInput, isoX, isoY, screenDir, screenDir8, setBaseDepth } from "./iso";
+import { ISO, IsoView, isoAnchor, isoInput, isoX, isoY, screenDir, screenDir8, screenOf, setBaseDepth } from "./iso";
+import { hudOccludes, hudSlot } from "./hudSlots";
 import { SMOOTH } from "./isoflag";
 import { addPixelGrid } from "./pixelgrid";
 import { paintSmoothProps } from "./smoothProps";
@@ -1351,7 +1352,7 @@ export class TownScene extends Phaser.Scene {
     this.grimoire = new GrimoirePanel(document.getElementById("hud")!, (slot, el) => this.room.send("grimoire", { slot, el }));
     this.room.onMessage("golems", (m) => this.grimoire?.news(m));
     // The Songweaver's chord tracker (owner only, chordHud.ts)
-    this.chordHud = new ChordHud(document.getElementById("hud")!);
+    this.chordHud = new ChordHud(hudSlot("statusrow"));
     this.room.onMessage("chord", (m) => this.chordHud?.set(m));
     this.room.send("golems");
     bindSfx(this.room, () => this.me, this.entities as any); // sound effects (client/src/sfx.ts)
@@ -2693,7 +2694,7 @@ export class TownScene extends Phaser.Scene {
       : `Built by your basic hits, up to ${MAX_STACKS}. They fade ${STACK_DECAY_MS / 1000} s after your last hit. `) +
       `Spent by ${users.map((u) => u!.name).join(", ")}: each one makes it stronger.`;
     return `<div class="slot charge${n ? "" : " wait"}" data-tiphead="${name} ${n}/${MAX_STACKS}" data-tip="${tipEsc(tip)}">` +
-      `<img class="sicon" src="${chargeIcon(cls)}" alt="" draggable="false">${shade}${n ? `<b>${n}</b>` : ""}<span class="pips">${pips}</span></div>`;
+      `<img class="sicon" src="${chargeIcon(cls)}" alt="" draggable="false">${shade}${n ? `<b class="count">${n}</b>` : ""}<span class="pips">${pips}</span></div>`;
   }
 
   /** Skill bar at the bottom: potions, the left-click cell and the 10 slots (the old text list of actions is gone, Murat 2026-11-04). */
@@ -2716,7 +2717,7 @@ export class TownScene extends Phaser.Scene {
       const unarmed = this.unarmedFor(mine, cls, skill);
       if (left > 0) this.cdTrack.push({ k: `s${i}`, left, cd: h.cdMs });
       return `<div class="slot${h.ult ? " ult" : ""}${wait}${unarmed ? " unarmed" : ""}${picking}" data-slot="${i}" data-skill="${skill}" data-tiphead="${h.name}" data-tip="${tipEsc((unarmed ? `${unarmed}. ` : "") + (skillOf(cls, skill)?.desc ?? ""))}" data-tiphint="Key ${slotKey(i)} · click to change · wheel to scroll · right-click to clear">` +
-        `${iconImg(power)}${shade}${unarmed ? `<i class="xout"></i>` : ""}<kbd>${slotKey(i)}</kbd>${left > 0 && !unarmed ? `<b data-cnk="s${i}"></b>` : ""}</div>`;
+        `${iconImg(power)}${shade}${unarmed ? `<i class="xout"></i>` : ""}<kbd>${slotKey(i)}</kbd>${left > 0 && !unarmed ? `<b class="cdn" data-cnk="s${i}"></b>` : ""}</div>`;
     }).join("");
     // Left- and right-click cells first: the weapon, or the spell / skill picked for that click
     const clickCell = (side: ClickSide) => {
@@ -2841,23 +2842,19 @@ export class TownScene extends Phaser.Scene {
     while (log.children.length > 8) log.firstChild!.remove();
   }
 
-  private feedAt = 0;
+  /** A hero's name label that would be drawn under the top-right HUD column (minimap, dial, tracker) is hidden. */
+  private labelUnderHud(label: Phaser.GameObjects.Text, anchor: { x: number; y: number }) {
+    const p = screenOf(this.cameras.main, label.x, label.y, hudRects(this.game.canvas).cr, anchor);
+    return hudOccludes(p.x, p.y);
+  }
+
   private noteAt = 0;
 
   private feed(text: string) {
     const el = document.createElement("div");
     el.textContent = text;
-    this.placeFeed();
     document.getElementById("feed")!.prepend(el);
     setTimeout(() => el.remove(), 5000);
-  }
-
-  /** The feed sits under the quest tracker on the right whatever its height; re-measured while it grows or folds. */
-  private placeFeed() {
-    const feed = document.getElementById("feed")!;
-    const qt = document.getElementById("questtracker"), r = qt && qt.offsetParent ? qt.getBoundingClientRect() : undefined;
-    const top = r && r.height ? `${Math.round(r.bottom / uiScale() + 8)}px` : ""; // the HUD is zoomed (worldscale.ts)
-    if (feed.style.top !== top) feed.style.top = top;
   }
 
   private chatMessage(id: string, name: string, text: string) {
@@ -3026,12 +3023,9 @@ export class TownScene extends Phaser.Scene {
         if (meSprite && !me?.dead) {
           const cam = this.cameras.main, cv = this.game.canvas, { cr, hr, hudW } = hudRects(cv);
           const k = hr.width / (hudW || hr.width) || 1;
-          const wx = ISO ? isoX(meSprite.x, meSprite.y) : meSprite.x, wy = ISO ? isoY(meSprite.x, meSprite.y) : meSprite.y;
-          // camera px: zoom around the camera's middle (scroll is in iso space; worldView is not, at this point)
-          const px = (wx - cam.scrollX - cam.width / 2) * cam.zoom + cam.width / 2, py = (wy - cam.scrollY - cam.height / 2) * cam.zoom + cam.height / 2;
-          const sx = (cam.x + px) * (cr.width / cv.width), sy = (cam.y + py) * (cr.height / cv.height);
+          const at = screenOf(cam, meSprite.x, meSprite.y, cr);
           const lift = (meSprite.displayHeight * 0.45 * cam.zoom * (cr.height / cv.height)) / k; // half the body, in HUD px
-          this.npcs.heroScreen = { x: (cr.left + sx - hr.left) / k, y: (cr.top + sy - hr.top) / k, lift };
+          this.npcs.heroScreen = { x: (at.x - hr.left) / k, y: (at.y - hr.top) / k, lift };
         } else this.npcs.heroScreen = undefined;
       }
     }
@@ -3232,8 +3226,9 @@ export class TownScene extends Phaser.Scene {
         if (e.lvlColor !== col) { e.label.setColor(col); e.lvlColor = col; }
         e.label.setVisible(!p.dead && !p.hidden);
       } else if (e.label && id === this.me) {
-        e.label.setVisible(now - this.mobByMeAt > 300);
+        e.label.setVisible(now - this.mobByMeAt > 300 && !this.labelUnderHud(e.label, e.sprite));
       } else if (e.label && id !== this.me) {
+        e.label.setVisible(!this.labelUnderHud(e.label, e.sprite));
         // Group members: green name
         const myParty = (this.room.state as any).players?.get(this.me)?.party;
         const col = myParty && p.party === myParty ? "#7cfc00" : "#ffffff";
@@ -3349,7 +3344,6 @@ export class TownScene extends Phaser.Scene {
     this.portals?.update(meEnt && !meEnt.state.dead ? meEnt.sprite : undefined, !!this.npcs?.isOpen || !!this.chests?.near || !!this.shrine?.near);
     if (this.minimap && this.npcs) this.minimap.markers = [...this.npcs.markers, ...(this.portals?.markers() ?? []), ...(this.bounty?.markers() ?? []), ...(this.dungeon?.markers() ?? []), ...(this.waygates?.markers() ?? [])];
 
-    if (now >= this.feedAt) { this.feedAt = now + 200; this.placeFeed(); }
     const mine = meEnt?.state;
     if (mine) {
       this.gearMenu?.refresh(mine);
@@ -3392,7 +3386,7 @@ export class TownScene extends Phaser.Scene {
       const flip = (this.heatGauge ??= new OverloadGauge(document.getElementById("hud")!)).update(ow.energy);
       if (flip) playSfx(flip);
       this.renderActions(mine, cls, cdm, now);
-      (this.buffBar ??= new BuffBar(document.getElementById("hud")!)).update(ow.timers);
+      (this.buffBar ??= new BuffBar(hudSlot("statusrow"))).update(ow.timers);
       this.chordHud?.tick();
     }
   }
