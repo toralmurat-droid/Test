@@ -1,12 +1,12 @@
 # Automatically merges pull requests opened by Claude threads.
 # Only open, non-draft PRs from claude/* branches in THIS repo (never forks) into the default branch.
 #
-#   gate    read-only: checks the PR qualifies and waits for its other checks to pass.
-#   test    read-only token, runs the PR's code: if the default branch moved since CI ran, tests the PR again on a
+#   am-gate    read-only: checks the PR qualifies and waits for its other checks to pass.
+#   am-test    read-only token, runs the PR's code: if the default branch moved since CI ran, tests the PR again on a
 #           temporary merge with it (tests incl. Postgres, build, smoke). Never pushes anything.
-#   merge   write token, runs no PR code: rebuilds that merge commit and pushes it without force, so the push is
+#   am-merge   write token, runs no PR code: rebuilds that merge commit and pushes it without force, so the push is
 #           refused if the default branch moved since the test. Pushing it marks the PR merged.
-#   report  comments on the PR when the combined test fails.
+#   am-report  comments on the PR when the combined test fails.
 #
 # A PR overtaken by another merge (the default branch moved, or an API hiccup) gets the label
 # auto-merge:waiting and is tried again: by itself, after every merge, and by an hourly sweep.
@@ -35,11 +35,11 @@ env:
   MAX_ATTEMPTS: 10
 
 jobs:
-  gate:
+  am-gate:
     if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     timeout-minutes: 25
-    permissions: { contents: read, pull-requests: read, checks: read }
+    permissions: { contents: read, pull-requests: read, checks: read, issues: write }
     outputs:
       go: ${{ steps.g.outputs.go }}
       sha: ${{ steps.g.outputs.sha }}
@@ -52,11 +52,12 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR: ${{ github.event.pull_request.number || inputs.pr }}
         run: |
+          unwait() { gh api -X DELETE "repos/$GITHUB_REPOSITORY/issues/$PR/labels/$(jq -rn --arg l "$WAITING" '$l|@uri')" >/dev/null 2>&1 || true; }
           # Read live, not from the event: draft state and head can change after the event fired.
           pr=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR")
           ok=$(echo "$pr" | jq -r --arg repo "$GITHUB_REPOSITORY" --arg base "$BASE" \
             '.state == "open" and (.draft | not) and .head.repo.full_name == $repo and (.head.ref | startswith("claude/")) and .base.ref == $base')
-          if [ "$ok" != "true" ]; then echo "Not an open, ready claude/* PR into $BASE; nothing to do."; echo "go=false" >> "$GITHUB_OUTPUT"; exit 0; fi
+          if [ "$ok" != "true" ]; then echo "Not an open, ready claude/* PR into $BASE; nothing to do."; echo "go=false" >> "$GITHUB_OUTPUT"; unwait; exit 0; fi
           sha=$(echo "$pr" | jq -r .head.sha)
           { echo "sha=$sha"; echo "ref=$(echo "$pr" | jq -r .head.ref)"; echo "title=$(echo "$pr" | jq -r .title | tr -d '\n')"; } >> "$GITHUB_OUTPUT"
           # Only the latest run of each check counts (highest id per name): a run that a newer run of the same check
@@ -64,9 +65,9 @@ jobs:
           # critical-areas check are not waited on.
           for i in $(seq 1 60); do
             latest=$(gh api "repos/$GITHUB_REPOSITORY/commits/$sha/check-runs?per_page=100" \
-              --jq '[.check_runs[] | select(.name | IN("gate", "test", "merge", "report", "sweep", "areas") | not)] | group_by(.name) | map(max_by(.id))[] | "\(.name) \(.status) \(.conclusion)"') || { sleep 10; continue; }
+              --jq '[.check_runs[] | select(.name | IN("am-gate", "am-test", "am-merge", "am-report", "am-sweep", "areas") | not)] | group_by(.name) | map(max_by(.id))[] | "\(.name) \(.status) \(.conclusion)"') || { sleep 10; continue; }
             if echo "$latest" | grep -Eq ' (failure|timed_out|action_required)$'; then
-              echo "A check failed; not merging."; echo "$latest"; echo "go=false" >> "$GITHUB_OUTPUT"; exit 0
+              echo "A check failed; not merging."; echo "$latest"; echo "go=false" >> "$GITHUB_OUTPUT"; unwait; exit 0
             fi
             # The patch-note and CI checks start on the same event; wait until both exist
             if ! echo "$latest" | grep -q '^patch-note ' || ! echo "$latest" | grep -q '^check '; then sleep 10; continue; fi
@@ -76,11 +77,11 @@ jobs:
             fi
             sleep 20
           done
-          echo "Timed out waiting for checks."; echo "go=false" >> "$GITHUB_OUTPUT"
+          echo "Timed out waiting for checks."; echo "go=false" >> "$GITHUB_OUTPUT"; unwait
 
-  test:
-    needs: gate
-    if: needs.gate.outputs.go == 'true'
+  am-test:
+    needs: am-gate
+    if: needs.am-gate.outputs.go == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     # Read-only on purpose: this job runs the PR's code (npm ci, tests, smoke server).
@@ -98,16 +99,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ needs.gate.outputs.sha }}
+          ref: ${{ needs.am-gate.outputs.sha }}
           fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
+          cache: ${{ github.event_name == 'pull_request' && 'npm' || '' }}
       - name: Test on top of the latest default branch (if it moved)
         id: t
         env:
-          SHA: ${{ needs.gate.outputs.sha }}
+          SHA: ${{ needs.am-gate.outputs.sha }}
           TEST_DATABASE_URL: postgresql://postgres:ci@localhost:5432/postgres
         run: |
           set -eo pipefail
@@ -135,9 +136,9 @@ jobs:
           node tools/smoke.mjs
           DATABASE_URL="$TEST_DATABASE_URL" node tools/smoke.mjs
 
-  merge:
-    needs: [gate, test]
-    if: needs.gate.outputs.go == 'true' && needs.test.result == 'success'
+  am-merge:
+    needs: [am-gate, am-test]
+    if: needs.am-gate.outputs.go == 'true' && needs.am-test.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     # Write access, so it runs no code from the PR: only git and gh.
@@ -152,10 +153,10 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR: ${{ github.event.pull_request.number || inputs.pr }}
           ATTEMPT: ${{ inputs.attempt || 1 }}
-          SHA: ${{ needs.gate.outputs.sha }}
-          REF: ${{ needs.gate.outputs.ref }}
-          TITLE: ${{ needs.gate.outputs.title }}
-          TESTED: ${{ needs.test.outputs.base }}
+          SHA: ${{ needs.am-gate.outputs.sha }}
+          REF: ${{ needs.am-gate.outputs.ref }}
+          TITLE: ${{ needs.am-gate.outputs.title }}
+          TESTED: ${{ needs.am-test.outputs.base }}
         run: |
           set -eo pipefail
           git config user.name "github-actions[bot]"; git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -180,8 +181,22 @@ jobs:
             git merge --abort || true
             wait_retry "Merge conflict with commits that landed since the test."
           fi
-          # Without force: refused if anything landed meanwhile, so only tested code reaches the default branch
-          git push -q origin "HEAD:refs/heads/$BASE" || wait_retry "Another merge landed first."
+          # The PR may have been made draft, closed or pushed to while it was tested: read it live once more.
+          live=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR" --jq '"\(.state) \(.draft) \(.head.sha) \(.base.ref)"') || wait_retry "Could not read the PR."
+          if [ "$live" != "open false $SHA $BASE" ]; then
+            echo "The PR changed during the test ($live); not merging. Its next event starts over."
+            [ "${live%% *}" = open ] && [ "$(echo "$live" | cut -d' ' -f3)" != "$SHA" ] || gh api -X DELETE "repos/$GITHUB_REPOSITORY/issues/$PR/labels/$label_uri" >/dev/null 2>&1 || true
+            exit 0
+          fi
+          if [ -n "$(git diff --name-only "$now" HEAD -- .github/workflows)" ]; then
+            # GITHUB_TOKEN may not push changes to workflow files, but the merge API may. The API can't refuse a moved
+            # base, so check it just before (a ~1 s window, only for PRs that change workflows).
+            [ "$(gh api "repos/$GITHUB_REPOSITORY/branches/$BASE" --jq .commit.sha)" = "$now" ] || wait_retry "The default branch moved."
+            gh pr merge "$PR" --repo "$GITHUB_REPOSITORY" --merge --match-head-commit "$SHA" || wait_retry "The merge API refused."
+          else
+            # Without force: refused if anything landed meanwhile, so only tested code reaches the default branch
+            git push -q origin "HEAD:refs/heads/$BASE" || wait_retry "Another merge landed first."
+          fi
           echo "Merged #$PR."
           gh api -X DELETE "repos/$GITHUB_REPOSITORY/issues/$PR/labels/$label_uri" >/dev/null 2>&1 || true
           # Pushes made with GITHUB_TOKEN start no push workflows, so start them here.
@@ -192,9 +207,9 @@ jobs:
             [ "$n" = "$PR" ] || gh workflow run auto-merge.yml --repo "$GITHUB_REPOSITORY" --ref "$BASE" -f pr="$n" || true
           done
 
-  report:
-    needs: [gate, test]
-    if: always() && needs.gate.outputs.go == 'true' && needs.test.result == 'failure'
+  am-report:
+    needs: [am-gate, am-test]
+    if: always() && needs.am-gate.outputs.go == 'true' && needs.am-test.result == 'failure'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions: { pull-requests: write, issues: write }
@@ -208,7 +223,7 @@ jobs:
           gh api -X DELETE "repos/$GITHUB_REPOSITORY/issues/$PR/labels/$(jq -rn --arg l "$WAITING" '$l|@uri')" >/dev/null 2>&1 || true
           gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" -f body="**Not merged:** this PR conflicts with, or fails on top of, the latest default branch ([run]($RUN)). Merge the default branch into this branch, fix, and push; auto-merge then tries again." >/dev/null
 
-  sweep:
+  am-sweep:
     if: github.event_name == 'schedule'
     runs-on: ubuntu-latest
     timeout-minutes: 5
