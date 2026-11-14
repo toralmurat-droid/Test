@@ -552,13 +552,30 @@ function well(c: Ctx, I: Iso) {
   c.strokeStyle = "#4a3218"; c.lineWidth = 1.4; c.beginPath(); c.moveTo(ax, ay); c.lineTo(bx, by); c.stroke();
   c.strokeStyle = "#8a7a5a"; c.lineWidth = 0.35; c.beginPath(); c.moveTo((ax + bx) / 2, (ay + by) / 2); c.lineTo((ax + bx) / 2, (ay + by) / 2 + 9); c.stroke();
   c.fillStyle = "#4a3824"; c.fillRect((ax + bx) / 2 - 1.3, (ay + by) / 2 + 8, 2.6, 2.6);
-  const ridge = 33, e = 25;
-  const roof: Pt[] = [I.p(-12, 0, ridge), I.p(12, 0, ridge), I.p(12, 7, e), I.p(-12, 7, e)];
-  const rg = c.createLinearGradient(...roof[0], ...roof[3]); rg.addColorStop(0, "#7a4a2e"); rg.addColorStop(1, "#4a2a18");
-  I.poly(roof, rg, "#2a160a", 0.5);
-  c.strokeStyle = "rgba(30,14,6,0.6)"; c.lineWidth = 0.3;
-  for (let k = 1; k < 4; k++) { const a = I.p(-12, k * 1.75, ridge - k * 2), b = I.p(12, k * 1.75, ridge - k * 2); c.beginPath(); c.moveTo(...a); c.lineTo(...b); c.stroke(); }
-  I.poly([I.p(12, 7, e), I.p(12, -7, e), I.p(12, 0, ridge)], "#3a2414");
+  // shingled roof: rows of flat-coloured wooden shakes, each a few art pixels, staggered and uneven, so it reads as
+  // pixel art and not a smooth sheet. Gable end in dark planks, a ridge beam on top.
+  const ridge = 33, e = 25, rows = 5, rr = rng(31 + V * 7);
+  const SH = [0x3a2012, 0x4e2c18, 0x63391f, 0x784628, 0x8c5532];
+  I.poly([I.p(12, 7.6, e - 0.6), I.p(12, -7, e), I.p(12, 0, ridge)], "#2e1a0e");
+  for (let k = 0; k < 3; k++) { c.fillStyle = "#4a2c18"; c.fillRect(...I.p(12, -5 + k * 4.5, e + 2 + (k === 1 ? 4 : 0)), 0.8, 1.6); }
+  for (let k = rows - 1; k >= 0; k--) {
+    const v0 = k * 7.6 / rows - 0.2, v1 = (k + 1) * 7.6 / rows, z0 = ridge - v0 * 8 / 7, z1 = ridge - v1 * 8 / 7 - 0.6;
+    const off = (k % 2) * 1.5;
+    for (let u = -12.5 - off; u < 12.5; u += 3) {
+      const a = Math.max(-12.5, u), b = Math.min(12.5, u + 3 - 0.35);
+      if (b - a < 0.6) continue;
+      const tone = Math.max(0, Math.min(SH.length - 1, Math.round(2.6 - k * 0.45 + (rr() - 0.5) * 1.6 + (V === 2 && rr() < 0.15 ? -2 : 0))));
+      if (V === 3 && k === 2 && u > 2 && u < 6) continue; // a missing shake: the batten shows through
+      const drop = rr() * 0.5;
+      I.poly([I.p(a, v0, z0), I.p(b, v0, z0), I.p(b, v1 + drop, z1 - drop), I.p(a, v1 + drop, z1 - drop)], col(SH[tone]));
+      // lit top edge and dark butt end of each shake
+      const zb = z1 - drop, vb = v1 + drop;
+      I.poly([I.p(a, v0, z0), I.p(b, v0, z0), I.p(b, v0 + 0.4, z0 - 0.45), I.p(a, v0 + 0.4, z0 - 0.45)], col(SH[Math.min(SH.length - 1, tone + 1)]));
+      I.poly([I.p(a, vb - 0.3, zb + 0.35), I.p(b, vb - 0.3, zb + 0.35), I.p(b, vb, zb), I.p(a, vb, zb)], "#24140a");
+    }
+  }
+  if (V === 3) I.poly([I.p(2.5, 3.6, ridge - 4.1), I.p(5.5, 3.6, ridge - 4.1), I.p(5.5, 4.6, ridge - 5.3), I.p(2.5, 4.6, ridge - 5.3)], "#140a04");
+  I.box(-13, 13, -0.6, 0.6, ridge - 0.6, ridge + 0.8, 0x5a3a20);
 }
 
 function signpost(c: Ctx, I: Iso, boards: number) {
