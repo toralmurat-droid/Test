@@ -46,3 +46,26 @@ test("hero stats: client heroStats from synced fields equals the server's stats"
     }
   } finally { await srv.stop(); }
 });
+
+test("hero stats: the real stat-point and equip messages keep client and server in step", async () => {
+  const srv = await startRoom();
+  try {
+    const c = await srv.join({ cls: "wizard", newGame: true });
+    await wait(300);
+    const room = srv.room, p = room.state.players.get(c.sessionId);
+    const agree = async (what: string) => {
+      await wait(300);
+      assert.deepEqual(clientStats(c.state.players.get(c.sessionId)), serverStats(p), what);
+    };
+    p.level = 10; room.applyStats(p);
+    const mag = p.mag;
+    c.send("stat", "mag");
+    await agree("after spending a stat point");
+    assert.equal(p.mag, mag + 1, "the point counted");
+    p.bag.push("w_frost"); // +1 Magic
+    c.send("equip", p.bag.length - 1);
+    await agree("after equipping through the equip message");
+    assert.equal(p.weapon, "w_frost", "equipped");
+    await c.leave();
+  } finally { await srv.stop(); }
+});
