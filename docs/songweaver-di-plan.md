@@ -139,3 +139,14 @@ A runs in parallel with B. The `TownRoom.ts` changes go in order: B → C1 → D
 
 Full per-phase file plans and acceptance criteria: planner report, 2026-11-14 (session log). Rebuild them per
 phase from this summary when a phase starts.
+
+## Owner answers (2026-11-14)
+- Q3: **monster materials drop on the ground** like other loot, to stay consistent with the game's feel. They're
+  picked up as ground items and credited to the material counters on pickup.
+  - Open detail, orchestrator default: everyone sees the drop, but only a Songweaver can pick it up. Other heroes
+    see it greyed, as with gear they can't wear.
+- Q1, Q2, Q4, Q5, Q6: planner's recommendations stand (orchestrator default).
+- **Balance: ignore for now.** Get the game feel right first and rebalance later.
+  - No cooldown retune and no balance targets in these phases.
+  - Still run the duel/PvE sims and put the numbers in each PR, as CLAUDE.md's merge rule requires, as
+    information only.
