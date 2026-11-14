@@ -347,6 +347,7 @@ export class TownScene extends Phaser.Scene {
   private moves!: SkillMoves; // melee skill micro sequences (skillMoves.ts)
   private forms!: BeastForms; // the vampire's Bat Form / Wolf Form (beastForms.ts)
   private gearFx!: GearFx; // item level effects on heroes
+  private attackHoldUntil = 0; // local clock (ms) the shared attack timer is estimated to run until
   private lastCast: Record<string, number> = {}; // local clock (ms) of my last cast of each skill, for cooldowns
   private mobByMeAt = -1e9; // last time a monster stood right by my hero (my name label hides then)
   private items = new Map<string, Phaser.GameObjects.Image>();
@@ -1306,7 +1307,12 @@ export class TownScene extends Phaser.Scene {
       if (e) this.squash(e, 1.15, 0.85, 120, 1);
     });
     this.room.onMessage("swing", ({ id, step, variant, ax, ay, w }) => {
-      if (id === this.me) this.pointer?.swung(); // the server took the click-attack
+      if (id === this.me) {
+        this.pointer?.swung(); // the server took the click-attack
+        // the swing holds the shared attack timer (the strum 850 ms): skill keys look unavailable until it ends (an estimate, the server decides)
+        const mine = this.room?.state.players.get(this.me), def = mine && attackProfile(mine.cls, activeOf(mine));
+        if (def) this.attackHoldUntil = performance.now() + (def.combo[step ?? 0]?.cooldownMs ?? def.attackCooldownMs);
+      }
       this.showSwing(id, step ?? 0, variant ?? 0, ax, ay, w);
     });
     this.room.onMessage("sfx", (ev) => this.onSkillFx(ev));
@@ -2631,6 +2637,7 @@ export class TownScene extends Phaser.Scene {
   /** Skill bar at the bottom: potions, the left-click cell and the 10 slots (the old text list of actions is gone, Murat 2026-11-04). */
   private renderActions(mine: any, cls: ClassKind, cdm: number, now: number) {
     const pools = { energy: mine.energy, mana: unpackMana(mine.mp).mana };
+    const blocked = !!(mine.stunned || mine.broken) || performance.now() < this.attackHoldUntil; // the server refuses a press now: dim the keys
     const slots: string[] = [...(mine.slots ?? [])];
     // Slot bar at the bottom: 10 cells, cooldown shading, click to choose a skill
     const cells = Array.from({ length: slotCount() }, (_, i) => {
@@ -2640,7 +2647,7 @@ export class TownScene extends Phaser.Scene {
       const h = this.skillHud(cls, skill, cdm);
       const left = Math.max(0, h.cdMs - (now - h.last));
       const shade = left > 0 ? `<div class="cd" style="height:${(left / h.cdMs) * 100}%"></div>` : "";
-      const wait = (left > 0 || !canPay(pools, h.cost) ? " wait" : "") + (shortOf(pools, h.cost) === "heat" ? " hot" : "");
+      const wait = (left > 0 || blocked || !canPay(pools, h.cost) ? " wait" : "") + (shortOf(pools, h.cost) === "heat" ? " hot" : "");
       const power = skill;
       const unarmed = this.unarmedFor(mine, cls, skill);
       return `<div class="slot${h.ult ? " ult" : ""}${wait}${unarmed ? " unarmed" : ""}${picking}" data-slot="${i}" data-skill="${skill}" data-tiphead="${h.name}" data-tip="${tipEsc((unarmed ? `${unarmed}. ` : "") + (skillOf(cls, skill)?.desc ?? ""))}" data-tiphint="Key ${slotKey(i)} · click to change · wheel to scroll · right-click to clear">` +
@@ -2769,6 +2776,7 @@ export class TownScene extends Phaser.Scene {
     el.textContent = `${name}: ${text}`;
     log.appendChild(el);
     while (log.children.length > 8) log.firstChild!.remove();
+    if (id.startsWith("npc:")) { this.npcs?.say(id.slice(4), text); return; } // a villager answering a busker
     const e = this.entities.get(id);
     if (!e) return;
     e.bubble?.destroy();

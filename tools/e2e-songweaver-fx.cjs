@@ -1,9 +1,9 @@
 // Real end-to-end check of the Songweaver client effects against a real server, at desktop and phone sizes:
 // songs (ring), the Amen progression (chord HUD, legend), Modulate, waves in flight, a deaf slime and a fragile
 // skeleton (ringing / muffled numbers, ear icon, hint line), and `refId not found` errors.
-// Needs a DEV server (the /tp chat command is off in production) on a fresh save file, with the class playable, and
+// Needs a DEV server (the /tp chat command is off in production) on a fresh save file, and
 // the client (vite dev) in front of it:
-//   ALLOW_ARCHIVED_CLASSES=1 SAVE_FILE=/tmp/saves.json npx tsx server/index.ts      (port 2567)
+//   SAVE_FILE=/tmp/saves.json npx tsx server/index.ts      (port 2567)
 //   npx vite --port 5180
 //   node tools/e2e-songweaver-fx.cjs 5180 docs/art
 // (needs playwright; set PLAYWRIGHT_CHROME=/path/to/chrome if its own browser is not installed)
@@ -25,7 +25,7 @@ const SETUPS = [
     page.on("pageerror", (e) => errors.push(e.message));
     page.on("console", (m) => { if (m.type() === "error" || /refId|decode/i.test(m.text())) errors.push(m.text()); });
     await page.addInitScript(() => { try { localStorage.setItem("cls", "songweaver"); } catch {} });
-    await page.goto(`http://localhost:${PORT}/?archived=1`);
+    await page.goto(`http://localhost:${PORT}/`);
     await page.waitForTimeout(1500);
     await page.fill("#name", "Sw" + name.replace(/[^a-z]/g, "").slice(0, 10));
     await page.fill("#password", "songpass1");
@@ -44,6 +44,8 @@ const SETUPS = [
       // record the sfx events and chat hints the client handled
       const so = S.songEvent.bind(S);
       S.songEvent = (ev) => { window.log.push(ev); return so(ev); };
+      const sy = S.npcs.say.bind(S.npcs);
+      S.npcs.say = (id, t) => { const r = sy(id, t); window.log.push({ ev: "npcsay", id, text: t, shown: r }); return r; };
       const cn = S.chatNote.bind(S);
       S.chatNote = (t, c) => { window.log.push({ ev: "hint", text: t }); return cn(t, c); };
     });
@@ -59,6 +61,14 @@ const SETUPS = [
     await page.waitForTimeout(900);
     result.ballad = (await me()).fx;
     await shot("1-song-ring");
+    // busk next to Elder Rowan at the bonfire (a villager answers within 4 tiles, once a minute)
+    const rowan = await page.evaluate(() => { const sp = window.S.npcs.sprites.get("druid").sprite; return { x: Math.floor(sp.x / 32) + 2, y: Math.floor(sp.y / 32) + 1 }; });
+    await chat(`/tp ${rowan.x} ${rowan.y}`);
+    await page.waitForTimeout(1500);
+    for (let i = 0; i < 6 && !(await page.evaluate(() => window.log.some((e) => e.ev === "npcsay"))); i++) { await send("cast", "sg_ballad"); await page.waitForTimeout(1500); }
+    await page.waitForTimeout(500);
+    result.busking = await page.evaluate(() => window.log.filter((e) => e.ev === "npcsay").slice(0, 2));
+    await shot("1b-busking-bubble");
     // ---- Amen = vi (Pedal Point), IV (Mending Note), I (Hearth Ballad again once the song cooldown is ready) ----
     await send("cast", "sg_pedal");
     await page.waitForTimeout(300);
@@ -75,14 +85,6 @@ const SETUPS = [
     result.hudText = await page.evaluate(() => document.getElementById("chordhud")?.innerText.slice(0, 80));
     await shot("3-chord-hud-legend");
     await page.click("#chordhud .ch-help");
-    // ---- Modulate through every known key ----
-    const modes = [];
-    for (let i = 0; i < 5; i++) {
-      await send("cast", "sg_modulate");
-      await page.waitForTimeout(1000);
-      modes.push(((await me()).fx || "").split(",").find((w) => w.startsWith("mode:")));
-    }
-    result.modes = modes;
     // ---- the deaf slime in the North Meadow ----
     const fightAt = async (tx, ty, kind, tag, skills) => {
       await chat(`/tp ${tx} ${ty}`);
@@ -115,6 +117,14 @@ const SETUPS = [
     };
     await chat("/max");
     result.slime = await fightAt(100, 20, "slime", "4-slime", ["sg_shrill"]);
+    // ---- Modulate through every known key, out in the meadow (not in the Oakvale stockade) ----
+    const modes = [];
+    for (let i = 0; i < 5; i++) {
+      await send("cast", "sg_modulate");
+      await page.waitForTimeout(1000);
+      modes.push(((await me()).fx || "").split(",").find((w) => w.startsWith("mode:")));
+    }
+    result.modes = modes;
     result.skeleton = await fightAt(94, 100, "skeleton", "5-skeleton", ["sg_shrill", "sg_crack"]);
     result.events = await page.evaluate(() => {
       const c = {}; for (const e of window.log) c[e.ev === "soundhit" ? `soundhit:${e.tier}${e.match ? "+match" : ""}` : e.ev] = (c[e.ev === "soundhit" ? `soundhit:${e.tier}${e.match ? "+match" : ""}` : e.ev] ?? 0) + 1;
