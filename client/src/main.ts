@@ -333,7 +333,7 @@ let launching = false;
 function launch(name: string, password: string, newGame: boolean, back = false) {
   if (launching) return;
   launching = true;
-  // if the server turns the hero away, the login form is what shows under the loading screen
+  // (if the server turns the hero away, the scene reloads the page: reconnect.ts failToStart)
   show("login");
   playBtn.setAttribute("disabled", "");
   initMusic(name);
