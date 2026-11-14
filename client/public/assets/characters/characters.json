@@ -39,7 +39,8 @@
   "dunescout",
   "defector",
   "monk",
-  "tombrobber"
+  "tombrobber",
+  "lutemaker"
  ],
  "image": "{name}.png",
  "frameWidth": 64,

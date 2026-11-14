@@ -5,7 +5,7 @@ import { addHeat, isOverheated } from "./overload";
 /**
  * Mana and Heat: what skills cost besides their cooldown (Murat 2026-11-04: "skills should be a mix of mana + cooldown").
  *
- *   Heat (Player.energy, shared/overload.ts): replaced Stamina on 2026-11-07. Physical skills and the dodge roll build
+ *   Heat (Player.energy, synced as Player.me.energy; shared/overload.ts): replaced Stamina on 2026-11-07. Physical skills and the dodge roll build
  *     it; it cools by itself; past the top the hero overloads and those skills lock for a few seconds.
  *   Mana (this file): a slow pool that grows with Magic. Pays for spells: the whole Wizard book, and the holy, spirit,
  *     jutsu and nature skills of the other classes. Mana potions (V, shared/potions.ts) refill it.
@@ -13,8 +13,8 @@ import { addHeat, isOverheated } from "./overload";
  * A skill (shared/skills.ts SkillDef) costs `cost` Heat and/or `mana` Mana, on top of its cooldown. Cheap skills
  * have short cooldowns and are limited by the pools; big skills are limited by their cooldown.
  *
- * Player.mp (synced) packs current mana, max mana and mana potions into one number (packMana), because the Player
- * schema is at Colyseus's 64-field limit.
+ * Player.me.mp (synced to the owner only, server/player.ts) packs current mana, max mana and mana potions into one
+ * number (packMana): one field instead of three, and it changes as one.
  */
 export const MANA = {
   base: 50, // max mana of a hero with 0 Magic
@@ -24,6 +24,12 @@ export const MANA = {
   regenPerMag: 0.4, // ...plus this per point of Magic
   restMult: 2, // regen out of combat (not hurt for REGEN_DELAY_MS)
 };
+
+/**
+ * The Songweaver plays without Mana (DI-3): her `mana` / `maxMana` hold the song gauge (shared/songs.ts GAUGE), so
+ * regen, potions, respawn, bonfires and every other refill skip her.
+ */
+export const usesGauge = (cls: string | undefined) => cls === "songweaver";
 
 /** A mana potion drops this often compared with a healing potion (LOOT potionChance). */
 export const MANA_POTION_DROP = 0.8;

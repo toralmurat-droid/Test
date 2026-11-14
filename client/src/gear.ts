@@ -1,8 +1,11 @@
+import { slotName } from "./songTables";
 import { icon } from "./pixelicons";
 import { drawSongGearIcon } from "./songGearIcons";
+import { isSongbook, songItemHtml, BOUND_LINE } from "./songItems";
+import { openSongbook } from "./songbookReader";
 import { actionKey } from "./keymode";
 import Phaser from "phaser";
-import { gearDef, itemText, LOOT_IDS, canWear, GEAR_SLOTS, gearName, gearStats, gearSpeedMult, GearSlot, BAG_SIZE, SLOT_NAMES, TIER_NAMES, baseId, itemRarity, RARITY_NAMES, affixLines, itemLevel, reqProblem, reqText, activeGear, heroStats, HeroReqInfo, Equipped, weaponElements, gearResist, weaponType } from "../../shared/gear";
+import { gearDef, itemText, LOOT_IDS, canWear, keepsBoundOf, wearProblem, GEAR_SLOTS, gearName, gearStats, gearSpeedMult, GearSlot, BAG_SIZE, SLOT_NAMES, TIER_NAMES, baseId, itemRarity, RARITY_NAMES, affixLines, itemLevel, reqProblem, reqText, activeGear, heroStats, HeroReqInfo, Equipped, weaponElements, gearResist, weaponType } from "../../shared/gear";
 import { ELEMENTS, ELEMENT_NAMES } from "../../shared/elements";
 import { nativeFamily, weaponFamily } from "../../shared/weapons";
 import { STAT_NAMES, StatKind } from "../../shared/powers";
@@ -16,6 +19,7 @@ import { itemRunes, socketsOf, socketProblem } from "../../shared/gear";
 import { parseRune, Rune, RUNE_KIND_NAMES, RUNES, runeName, runeText } from "../../shared/runes";
 import { runeCanvas, runeCss, runeStone } from "./runeArt";
 import { assetUrl } from "./assetUrl";
+import { own } from "./own";
 
 /** Rune lines of an item for tooltips (shared/runes.ts): what each set rune does, and the free sockets. */
 export function runeHtml(id: string): string {
@@ -100,25 +104,39 @@ function ensureGear(scene: Phaser.Scene, hero: string, id: string, done?: () => 
 /** Overlay texture of an item on a hero (every item level of an item looks the same; gearfx.ts adds the effects). */
 export const gearKey = (hero: string, id: string) => `gear_${hero}_${baseId(id)}`;
 
-/** Level, own stat points and worn items of a hero state, for the item requirements. */
-export const reqInfoOf = (state: any): HeroReqInfo =>
-  ({ cls: state.cls, level: state.level ?? 1, pts: { sta: state.ptSta ?? 0, str: state.ptStr ?? 0, mag: state.ptMag ?? 0, dex: state.ptDex ?? 0 }, worn: Object.fromEntries(GEAR_SLOTS.map((s) => [s, state[s]])) });
+/**
+ * Level, stat points and worn items of our own hero's state, for the item requirements. The points are owner-only
+ * (Player.me, read through own()): for another hero's state they read 0, so don't judge other heroes with it.
+ */
+export const reqInfoOf = (state: any): HeroReqInfo => {
+  const o = own(state);
+  return { cls: state.cls, level: state.level ?? 1, pts: { sta: o.ptSta, str: o.ptStr, mag: o.ptMag, dex: o.ptDex }, worn: Object.fromEntries(GEAR_SLOTS.map((s) => [s, state[s]])) };
+};
 
-/** A hero state's stats with gear, the same numbers the server uses (shared/gear.ts heroStats; not synced). */
+/** Our own hero's stats with gear, the same numbers the server uses (shared/gear.ts heroStats; not synced). */
 export const statsOf = (state: any) => heroStats(reqInfoOf(state));
 
 const activeCache = new WeakMap<object, { sig: string; res: Equipped }>();
 /**
- * The worn items that count for a hero state (requirements met). Called many times a frame, so the result is cached
- * per hero state and recomputed only when what it reads changes (worn ids, level, stat points, class). Callers must
- * not change the returned object.
+ * The worn items that count for a hero state. Called many times a frame, so the result is cached per hero state and
+ * recomputed only when what it reads changes (worn ids, level, stat points, class). Callers must not change the
+ * returned object.
+ *
+ * Our own hero: the items whose requirements are met (shared/gear.ts activeGear), as the server counts them.
+ * Another hero: everything worn, requirements not checked. Their stat points are owner-only (they live in Player.me,
+ * which only that hero's client receives), so the check can't be made here; the server only lets a hero wear what
+ * their class can, and what this feeds for other heroes is cosmetic (gear effects in gearfx.ts, stance sheet, attack
+ * swing drawing). A state without `me` counts as another hero: that is also our own hero for the moment before the
+ * view's first patch lands.
  */
 export const activeOf = (state: any): Equipped => {
-  let sig = `${state.cls}|${state.level ?? 1}|${state.ptSta ?? 0}|${state.ptStr ?? 0}|${state.ptMag ?? 0}|${state.ptDex ?? 0}`;
+  const mine = state.me !== undefined && state.me !== null, o = own(state);
+  let sig = mine ? `${state.cls}|${state.level ?? 1}|${o.ptSta}|${o.ptStr}|${o.ptMag}|${o.ptDex}` : "other";
   for (const s of GEAR_SLOTS) sig += `|${state[s] ?? ""}`;
   const c = activeCache.get(state);
   if (c && c.sig === sig) return c.res;
-  const res = activeGear(Object.fromEntries(GEAR_SLOTS.map((s) => [s, state[s]])), reqInfoOf(state));
+  const worn: Equipped = Object.fromEntries(GEAR_SLOTS.filter((s) => state[s]).map((s) => [s, state[s]]));
+  const res = mine ? activeGear(worn, reqInfoOf(state)) : worn; // other heroes: as worn, see above
   activeCache.set(state, { sig, res });
   return res;
 };
@@ -255,9 +273,11 @@ export class GearMenu {
   /** Rebuild only when something gear-related changed. */
   refresh(state: any) {
     if (!this.open || !state) return;
-    const bagItems: string[] = Array.from(state.bag ?? []);
+    const o = own(state); // bag, talents, points, gold and potions are owner-only (Player.me)
+    const bagItems: string[] = Array.from(o.bag);
+    const kept = keepsBoundOf(state.cls, [state.weapon, state.shield], bagItems); // her last lute and Songbook stay; a spare can go
     if (this.pickRune >= 0 && !parseRune(bagItems[this.pickRune])) this.pickRune = -1;
-    const sig = [this.pickRune, this.sorted, this.marks, this.dropAsk > performance.now(), lootFilter().minRarity, lootFilter().ownClass, JSON.stringify(Array.from(state.talents?.entries?.() ?? [])), state.cls, state.level, state.ptSta, state.ptStr, state.ptMag, state.ptDex, ...GEAR_SLOTS.map((s) => state[s]), ...bagItems, state.potions, state.gold, state.maxHp].join("|");
+    const sig = [this.pickRune, this.sorted, this.marks, this.dropAsk > performance.now(), lootFilter().minRarity, lootFilter().ownClass, JSON.stringify(Array.from(o.talents.entries())), state.cls, state.level, o.ptSta, o.ptStr, o.ptMag, o.ptDex, ...GEAR_SLOTS.map((s) => state[s]), ...bagItems, o.potions, o.gold, state.maxHp].join("|");
     if (sig === this.sig) return;
     this.sig = sig;
     this.busyUntil = 0; // the server answered, accept clicks again
@@ -273,13 +293,15 @@ export class GearMenu {
         if (slot) { const eq = { ...worn }; delete eq[slot]; this.preview({ label: `take off ${gearName(id, cls)}`, eq }); }
         else if (canWear(cls, id)) this.preview({ label: `wear ${gearName(id, cls)}${reqProblem(id, hero) ? " (once you meet its needs)" : ""}`, eq: wearing(worn, id) });
         if (!info) return;
-        const d = gearDef(id)!, why = reqProblem(id, hero);
-        const aff = affixHtml(id);
+        const d = gearDef(id); if (!d) return;
+        const cant = wearProblem(cls, id), why = cant || reqProblem(id, hero); // the server decides too
+        const aff = affixHtml(id), song = songItemHtml(id, cls);
+        const nm = gearName(id, cls);
         const runes = runeHtml(id);
         const pr = this.pickRune >= 0 ? parseRune(bagItems[this.pickRune]) : undefined, sockWhy = pr ? socketProblem(id, pr) : "";
         const tip = pr ? (sockWhy ? `<span class="gbad">${sockWhy}</span>` : `Click: set the ${runeName(pr)} in this item`) : extra;
-        info.innerHTML = `<b style="color:${itemColor(id)}">${gearName(id, cls)}</b> <span class="glvl">Lv ${itemLevel(id)}</span> · ${rarityLabel(id)}${TIER_NAMES[d.tier]} ${SLOT_NAMES[d.slot]}<br>` +
-          `${itemText(id) || "No bonus"}<br>${aff ? `${aff}<br>` : ""}${runes ? `${runes}<br>` : ""}<span class="${why ? "gbad" : "gok"}">${why || reqText(id, cls, hero)}</span>${tip ? `<br><small>${tip}</small>` : ""}`;
+        info.innerHTML = `<b style="color:${itemColor(id)}">${nm}</b> <span class="glvl">Lv ${itemLevel(id)}</span> · ${rarityLabel(id)}${TIER_NAMES[d.tier]} ${slotName(d.slot, cls, id)}<br>` +
+          `${itemText(id) || "No bonus"}<br>${song ? `${song}<br>` : ""}${aff ? `${aff}<br>` : ""}${runes ? `${runes}<br>` : ""}<span class="${why ? "gbad" : "gok"}">${why || reqText(id, cls, hero)}</span>${tip ? `<br><small>${tip}</small>` : ""}`;
       };
       el.onmouseleave = () => { this.preview(); if (info) info.textContent = ""; };
     };
@@ -303,14 +325,19 @@ export class GearMenu {
       const icon = id ? iconCanvas(this.scene, id) : Object.assign(document.createElement("span"), { className: "gicon" });
       row.appendChild(icon);
       const txt = document.createElement("span");
-      const why = id ? reqProblem(id, hero) : "";
+      const why = id ? wearProblem(cls, id) || reqProblem(id, hero) : "";
       txt.innerHTML = id
         ? `<b style="color:${itemColor(id)}">${gearName(id, cls)}</b>${itemLevel(id) > 1 ? ` <span class="glvl">Lv ${itemLevel(id)}</span>` : ""}<br>` +
           (why ? `<small class="gbad">Inactive: ${why}</small>` : `<small>${itemText(id)}</small>`)
-        : `<b>${SLOT_NAMES[slot]}</b><br><small>empty</small>`;
+        : `<b>${slotName(slot, cls)}</b><br><small>empty</small>`;
       row.appendChild(txt);
       const pips = id ? socketPips(id, (n) => this.act("unsocket", { slot, n })) : undefined;
       if (pips) row.appendChild(pips);
+      if (id && isSongbook(id)) { // the equipped Songbook opens its reader (songs, materials, chord legend)
+        const rd = Object.assign(document.createElement("span"), { className: "sbbtn", textContent: "Read", title: "Open the Songbook" });
+        rd.onclick = (ev) => { ev.stopPropagation(); openSongbook(); };
+        txt.appendChild(rd);
+      }
       const pr = this.pickRune >= 0 ? parseRune(bagItems[this.pickRune]) : undefined;
       if (id && pr && !socketProblem(id, pr)) row.classList.add("gfit");
       if (id) {
@@ -341,10 +368,10 @@ export class GearMenu {
     const bag = document.getElementById("gearbag")!;
     bag.innerHTML = "";
     // Potion stacks (shared/potions.ts) take the bag slots after the gear, 10 of one size per slot
-    const stacks = potionStacks(unpackPotions(state.potions));
-    document.getElementById("gearbagtitle")!.innerHTML = `Bag ${bagItems.length + stacks.length}/${BAG_SIZE} <span class="gbgold">${icon("coin")}${state.gold ?? 0} gold</span>`;
+    const stacks = potionStacks(unpackPotions(own(state).potions));
+    document.getElementById("gearbagtitle")!.innerHTML = `Bag ${bagItems.length + stacks.length}/${BAG_SIZE} <span class="gbgold">${icon("coin")}${own(state).gold} gold</span>`;
     // Useless items: wearing them would raise no number on the sheet (or the class can't wear them)
-    this.junk = bagItems.map((id, i) => (uselessItem(sh, worn, id) ? i : -1)).filter((i) => i >= 0);
+    this.junk = bagItems.map((id, i) => (uselessItem(sh, worn, id) && !kept(id) ? i : -1)).filter((i) => i >= 0);
     const junk = new Set(this.junk);
     // Display order: as picked up, or sorted by slot, then rarity and level (the server keeps its own order)
     const order = bagItems.map((_, i) => i);
@@ -371,6 +398,7 @@ export class GearMenu {
       const cell = document.createElement("button");
       cell.className = "gcell";
       const stack = id ? undefined : stacks[n - bagItems.length];
+      if (stack && cls === "songweaver" && stack[0] === "mpotion") { cell.disabled = true; bag.appendChild(cell); continue; } // the gauge is not mana: no potion cell
       if (stack) {
         const [kind, size, n] = stack;
         const c = document.createElement("canvas");
@@ -401,14 +429,14 @@ export class GearMenu {
         cell.onmouseleave = () => { if (info) info.textContent = ""; };
         cell.onclick = () => { this.pickRune = this.pickRune === i ? -1 : i; this.sig = ""; this.refresh(state); };
         cell.oncontextmenu = (ev) => { ev.preventDefault(); this.pickRune = -1; this.act("dropgear", i); };
-      } else if (id) {
+      } else if (id && gearDef(id)) {
         const d = gearDef(id)!;
         cell.appendChild(iconCanvas(this.scene, id));
         cell.style.borderColor = itemColor(id);
         if (itemRarity(id) >= 2) cell.style.boxShadow = `inset 0 0 6px ${itemColor(id)}`;
-        const fits = canWear(cls, id), why = fits ? reqProblem(id, hero) : "";
+        const cant = wearProblem(cls, id), fits = canWear(cls, id), why = fits ? reqProblem(id, hero) : "";
         if (itemLevel(id) > 1) cell.appendChild(Object.assign(document.createElement("span"), { className: "gcelllvl" + (why ? " gbad" : ""), textContent: String(itemLevel(id)) }));
-        hover(cell, id, (junk.has(i) ? "Useless: raises no stat · " : "") + (itemRunes(id).length ? "Click a rune stone to take the rune out · " : "") + (fits ? (why ? "Too strong for you yet · Right-click: drop" : "Click: equip · Right-click: drop") : `Only a ${d.cls} can wear this · Right-click: drop`));
+        hover(cell, id, (junk.has(i) ? "Useless: raises no stat · " : "") + (itemRunes(id).length ? "Click a rune stone to take the rune out · " : "") + (kept(id) ? `${BOUND_LINE} Click: equip` : "") + (kept(id) ? "" : fits ? (why ? "Too strong for you yet · Right-click: drop" : "Click: equip · Right-click: drop") : cant ? `${cant} · Right-click: drop` : `Only a ${d.cls} can wear this · Right-click: drop`));
         if (this.marks && junk.has(i)) cell.classList.add("gjunk");
         if (!fits) cell.style.opacity = "0.5";
         else if (why) cell.classList.add("glocked");
@@ -418,9 +446,10 @@ export class GearMenu {
         if (pr && !socketProblem(id, pr)) cell.classList.add("gfit");
         cell.onclick = () => {
           if (this.pickRune >= 0) { this.act("socket", { rune: this.pickRune, item: i }); this.pickRune = -1; this.sig = ""; return; }
+          if (cant) { if (info) info.innerHTML = `<span class="gbad">${cant}</span>`; return; } // the server refuses too
           this.act("equip", i);
         };
-        cell.oncontextmenu = (ev) => { ev.preventDefault(); this.act("dropgear", i); };
+        cell.oncontextmenu = (ev) => { ev.preventDefault(); if (kept(id)) { if (info) info.innerHTML = `<span class="glvl">${BOUND_LINE}</span>`; return; } this.act("dropgear", i); };
       } else cell.disabled = true;
       bag.appendChild(cell);
     }

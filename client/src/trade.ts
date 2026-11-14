@@ -1,6 +1,8 @@
+import { songItemHtml } from "./songItems";
+import { slotName } from "./songTables";
 import Phaser from "phaser";
 import "./trade.css";
-import { BAG_SIZE, canWear, gearDef, gearName, itemLevel, itemRarity, itemText, RARITY_NAMES, reqProblem, SLOT_NAMES, TIER_NAMES } from "../../shared/gear";
+import { BAG_SIZE, canWear, keepsBoundOf, gearDef, gearName, itemLevel, itemRarity, itemText, RARITY_NAMES, reqProblem, SLOT_NAMES, TIER_NAMES } from "../../shared/gear";
 import { STASH, STASH_RANGE, STASH_SIZE, TRADE } from "../../shared/trade";
 import { affixHtml, iconCanvas, itemColor, looseRuneHtml, reqInfoOf, runeHtml } from "./gear";
 import { parseRune } from "../../shared/runes";
@@ -8,6 +10,8 @@ import { runeCanvas, runeCss } from "./runeArt";
 import { chestImage, setChestOpen } from "./chests";
 import { isoAnchor } from "./iso";
 import { TEXT_FONT, TEXT_PX, WT } from "./pixelfont";
+import { hudSlot } from "./hudSlots";
+import { own } from "./own";
 
 /**
  * Player trading and the account stash (shared/trade.ts; the server checks everything).
@@ -30,12 +34,13 @@ function itemHtml(id: string, state: any): string {
   const who = d.cls && !canWear(state?.cls ?? "", id) ? `<span class="gbad">Only a ${d.cls} can wear this</span>` : "";
   const why = !who && state ? reqProblem(id, reqInfoOf(state)) : "";
   return `<b style="color:${itemColor(id)}">${esc(gearName(id, d.cls ?? state?.cls))}</b> <span class="glvl">Lv ${itemLevel(id)}</span> · `
-    + `${r ? `<span style="color:${itemColor(id)}">${RARITY_NAMES[r]}</span> ` : ""}${TIER_NAMES[d.tier]} ${SLOT_NAMES[d.slot]}<br>`
-    + `${itemText(id) || "No bonus"}${aff ? `<br>${aff}` : ""}${runeHtml(id) ? `<br>${runeHtml(id)}` : ""}${who ? `<br>${who}` : why ? `<br><span class="gbad">${why}</span>` : ""}`;
+    + `${r ? `<span style="color:${itemColor(id)}">${RARITY_NAMES[r]}</span> ` : ""}${TIER_NAMES[d.tier]} ${slotName(d.slot, undefined, id)}<br>`
+    + `${itemText(id) || "No bonus"}${songItemHtml(id, state?.cls) ? `<br>${songItemHtml(id, state?.cls)}` : ""}${aff ? `<br>${aff}` : ""}${runeHtml(id) ? `<br>${runeHtml(id)}` : ""}${who ? `<br>${who}` : why ? `<br><span class="gbad">${why}</span>` : ""}`;
 }
 
 /** One item cell (icon, rarity border, level), or an empty one. */
-function cell(scene: Phaser.Scene, id: string | undefined, info: HTMLElement, state: any, onClick?: () => void, picked = false): HTMLButtonElement {
+/** `kept`: the bound items this hero must keep (shared/gear.ts keepsBoundOf); only cells that would part with an item pass it. */
+function cell(scene: Phaser.Scene, id: string | undefined, info: HTMLElement, state: any, onClick?: () => void, picked = false, kept?: (id: string) => boolean): HTMLButtonElement {
   const b = document.createElement("button");
   b.className = "gcell tcell" + (picked ? " picked" : "");
   b.tabIndex = -1;
@@ -47,7 +52,7 @@ function cell(scene: Phaser.Scene, id: string | undefined, info: HTMLElement, st
   if (itemLevel(id) > 1) b.appendChild(Object.assign(document.createElement("span"), { className: "gcelllvl", textContent: String(itemLevel(id)) }));
   b.onmouseenter = () => { info.innerHTML = itemHtml(id, state); };
   b.onmouseleave = () => { info.textContent = ""; };
-  if (onClick) b.onclick = (ev) => { if (ev.detail !== 0) onClick(); };
+  if (onClick && !kept?.(id)) b.onclick = (ev) => { if (ev.detail !== 0) onClick(); }; // her last lute and Songbook are bound: no Trade, no Stash (a spare can go)
   else b.classList.add("still");
   return b;
 }
@@ -112,7 +117,7 @@ export class TradeUI {
     this.view = v;
     this.el.hidden = false;
     // My picked bag cells follow the server's offer (each offered item matched to one bag slot)
-    const bag: string[] = Array.from(this.mine()?.bag ?? []);
+    const bag: string[] = Array.from(own(this.mine()).bag);
     const used = new Set<number>();
     this.picked = [];
     for (const id of v.mine.items) {
@@ -142,8 +147,8 @@ export class TradeUI {
     }
     const v = this.view, me = this.mine();
     if (!v || this.el.hidden || !me) return;
-    const bag: string[] = Array.from(me.bag ?? []);
-    const sig = JSON.stringify([v, bag, me.gold, me.level, me.cls]);
+    const bag: string[] = Array.from(own(me).bag);
+    const sig = JSON.stringify([v, bag, own(me).gold, me.level, me.cls]);
     if (sig === this.sig) return;
     this.sig = sig;
 
@@ -170,16 +175,17 @@ export class TradeUI {
     );
 
     // My bag: click to offer / take back
-    const bt = Object.assign(document.createElement("h3"), { textContent: `Your bag (click to offer) · ${me.gold} gold` });
+    const bt = Object.assign(document.createElement("h3"), { textContent: `Your bag (click to offer) · ${own(me).gold} gold` });
     const bg = document.createElement("div");
     bg.className = "tgrid tbag";
+    const keep = keepsBoundOf(me.cls, [me.weapon, me.shield], bag), offered = this.picked.map((k) => bag[k]).filter(Boolean);
     for (let i = 0; i < BAG_SIZE; i++) {
       const pickedAt = this.picked.indexOf(i);
       bg.appendChild(cell(this.scene, bag[i], info, me, () => {
         if (pickedAt >= 0) this.picked.splice(pickedAt, 1);
         else if (this.picked.length < TRADE.maxItems) this.picked.push(i);
         this.offer();
-      }, pickedAt >= 0));
+      }, pickedAt >= 0, pickedAt >= 0 ? undefined : (id) => keep(id, offered)));
     }
 
     // Gold buttons
@@ -187,11 +193,11 @@ export class TradeUI {
     gr.className = "trow";
     const coin = (label: string, f: (g: number) => number) => {
       const b = Object.assign(document.createElement("button"), { textContent: label, tabIndex: -1 });
-      b.onclick = (ev) => { if (ev.detail === 0) return; const n = Math.max(0, Math.min(me.gold, f(this.gold))); if (n !== this.gold) { this.gold = n; this.offer(); } };
+      b.onclick = (ev) => { if (ev.detail === 0) return; const n = Math.max(0, Math.min(own(me).gold, f(this.gold))); if (n !== this.gold) { this.gold = n; this.offer(); } };
       gr.appendChild(b);
     };
     gr.append(Object.assign(document.createElement("span"), { textContent: "Gold:" }));
-    coin("-100", (g) => g - 100); coin("-10", (g) => g - 10); coin("+10", (g) => g + 10); coin("+100", (g) => g + 100); coin("+1000", (g) => g + 1000); coin("All", () => me.gold); coin("None", () => 0);
+    coin("-100", (g) => g - 100); coin("-10", (g) => g - 10); coin("+10", (g) => g + 10); coin("+100", (g) => g + 100); coin("+1000", (g) => g + 1000); coin("All", () => own(me).gold); coin("None", () => 0);
 
     // Ready / Cancel
     const act = document.createElement("div");
@@ -227,7 +233,7 @@ export class StashUI {
     this.prompt.id = "stashprompt";
     this.prompt.innerHTML = `<kbd>E</kbd> Open your stash`;
     this.prompt.onclick = () => this.interact();
-    document.getElementById("hud")!.append(this.prompt);
+    hudSlot("promptstack").append(this.prompt);
   }
 
   get open() { return !this.el.hidden; }
@@ -259,8 +265,8 @@ export class StashUI {
     if (!this.open) return;
     const st = this.mine();
     if (!st) return;
-    const bag: string[] = Array.from(st.bag ?? []);
-    const sig = JSON.stringify([this.items, this.gold, this.note, bag, st.gold, st.cls, st.level]);
+    const bag: string[] = Array.from(own(st).bag);
+    const sig = JSON.stringify([this.items, this.gold, this.note, bag, own(st).gold, st.cls, st.level]);
     if (sig === this.sig) return;
     this.sig = sig;
 
@@ -272,10 +278,10 @@ export class StashUI {
     const g1 = document.createElement("div");
     g1.className = "tgrid tstash";
     for (let i = 0; i < STASH_SIZE; i++) g1.appendChild(cell(this.scene, this.items[i], info, st, () => this.send("stashtake", { i })));
-    const t2 = Object.assign(document.createElement("h3"), { textContent: `Bag ${bag.length}/${BAG_SIZE} · ${st.gold} gold (click to store)` });
+    const t2 = Object.assign(document.createElement("h3"), { textContent: `Bag ${bag.length}/${BAG_SIZE} · ${own(st).gold} gold (click to store)` });
     const g2 = document.createElement("div");
     g2.className = "tgrid tbag";
-    for (let i = 0; i < BAG_SIZE; i++) g2.appendChild(cell(this.scene, bag[i], info, st, () => this.send("stashput", { i })));
+    for (let i = 0; i < BAG_SIZE; i++) g2.appendChild(cell(this.scene, bag[i], info, st, () => this.send("stashput", { i }), false, keepsBoundOf(st.cls, [st.weapon, st.shield], bag)));
     const row = document.createElement("div");
     row.className = "trow";
     const coin = (label: string, n: () => number) => {
@@ -284,7 +290,7 @@ export class StashUI {
       row.appendChild(b);
     };
     row.append(Object.assign(document.createElement("span"), { textContent: "Store:" }));
-    coin("100", () => 100); coin("1000", () => 1000); coin("All", () => st.gold);
+    coin("100", () => 100); coin("1000", () => 1000); coin("All", () => own(st).gold);
     row.append(Object.assign(document.createElement("span"), { textContent: " Take:", className: "tsp" }));
     coin("100", () => -100); coin("1000", () => -1000); coin("All", () => -this.gold);
     const note = Object.assign(document.createElement("p"), { className: "gbad tnote", textContent: this.note });

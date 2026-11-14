@@ -40,6 +40,10 @@ export interface HeroSave {
   act?: number;
   /** Bounty board hunt in progress (shared/bounty.ts) and how many this hero has finished. */
   bounty?: BountyState; bountyDone?: number;
+  /** Clan war oath (shared/war/clans.ts key) and when it was sworn (ms). */
+  clan?: string; clanAt?: number;
+  /** Clan war renown (shared/war/renown.ts); kept when the hero changes clan. */
+  renown?: number;
   /** Gear wear 0-100: removed 2026-11-13, old saves may still carry it; ignored on load and no longer written. */
   wear?: number;
   /** Devour (shared/devour.ts): monsters eaten per family. */
@@ -52,6 +56,12 @@ export interface HeroSave {
   swTree?: number;
   /** Songweaver mode (shared/songs.ts MODE_IDS); missing or no longer known = Major. */
   swMode?: string;
+  /** Songweaver kit version (server/songs.ts SW_KIT_VERSION): missing or older = migrateSongweaver on load. */
+  swKit?: number;
+  /** Songweaver: the songs she collected (shared/songbook.ts SongId); missing = none. */
+  swSongs?: string[];
+  /** Songweaver: her lute-maker materials, id -> count (shared/lute.ts MaterialId); missing = none. */
+  swMats?: Record<string, number>;
 }
 
 interface Account {

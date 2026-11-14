@@ -3,7 +3,7 @@
 Owner request 2026-11-14: rework the in-game HUD. Desktop only (1920×1080, 1366×768); no phone work.
 Shipped as three PRs, one after another on one branch: A (bugs) → B (layout) → C (monster info).
 
-## A – bugs
+## A – bugs (merged, toralmurat-droid/Test#397)
 - Orbs kept old numbers when the max grew at full HP/mana (`orbs.ts`, `hudLogic.ts`).
 - Kill feed drew over the quest tracker (`placeFeed()` in `TownScene.ts`; B replaces it with a flex column).
 - Level-up note now hides when no stat points are free.
@@ -11,7 +11,7 @@ Shipped as three PRs, one after another on one branch: A (bugs) → B (layout) �
 - Rune pickup sentence finished.
 - Open: stray grey "-28" near the HP orb in town, source not found (only `floatText` in the "hit" handler makes `-N`).
 
-## B – layout (planned)
+## B – layout (done)
 - Bottom centre, from the bar up: `#statusrow` (chord widget left, buffs right), then `#promptstack`
   (interact prompt, then `#lvlnote`). All seven `*prompt` elements mount in the stack.
 - Top right: `#topright` flex column: online/ping/fps pill (fixed-width cells), minimap + dial (kept on screen),
@@ -20,8 +20,10 @@ Shipped as three PRs, one after another on one branch: A (bugs) → B (layout) �
 - Bottom bar never draws below 100% (`barScale`, `--barzoom`); one slot text style: key label and counts 12 px tiny,
   cooldown 18 px, same outline; counts stay inside the slot.
 - New modules: `client/src/hudSlots.ts`, `hudSlots.css`. Tests: `tests/hudSlots.test.ts`.
+- Name labels are isoAnchor'ed to their sprite: test them with `screenOf(cam, label.x, label.y, cr, sprite)`.
+- Not verified: other window sizes, dpr 1.25, several prompts at once (code keeps them exclusive).
 
-## C – monster info (planned)
+## C – monster info (built and reviewed; server `by` on "hit" ships with it, `server/hitBy.ts`)
 Owner rules: monster HP bars only on hover or damage; a top-of-screen bar shows the hovered monster's level, health
 and characteristics; monster specifics (helper text, icons) only in that bar.
 Owner decisions:

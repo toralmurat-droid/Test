@@ -10,6 +10,7 @@ import { installSmoothTextures } from "./smooth";
 import { fontsReady } from "./pixelfont";
 import { attachWorldScale, initWorldScale, worldCanvasSize } from "./worldscale";
 import { perfHud } from "./perfHud";
+import "./hudSlots.css"; // HUD places and the slot text style: after every other stylesheet
 
 export interface GameStart { name: string; password: string; color: number; cls: ClassKind; newGame: boolean }
 

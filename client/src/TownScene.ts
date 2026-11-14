@@ -9,7 +9,7 @@ import { Client, getStateCallbacks, Room } from "colyseus.js";
 const LURKERS = new Set<string>(["gnawkin", "tuskborn", "silkwretch", "duskwing", "crowseer"]);
 import { BOSS, ELITE, InputState, MERGE, MOBS, type MobKind, URSK, SUNWRIGHT, DESERT_Y0, DESERT_H, actOfTile, MAP_H, MAP_W, regenFromStamina, TICK_RATE, TILE } from "../../shared/constants";
 import { CLASSES, ClassKind, MAX_LEVEL, xpForLevel } from "../../shared/classes";
-import { canPay, shortOf, MANA, manaRegen, maxManaFor, skillCost, unpackMana } from "../../shared/mana";
+import { canPay, shortOf, MANA, manaRegen, maxManaFor, skillCost, unpackMana, usesGauge } from "../../shared/mana";
 import { nextSize, potionAmount, PotionKind, potionName, POTION_SIZES, total, unpackPotions } from "../../shared/potions";
 import { GROUND, areaAt, isSafeZone } from "../../shared/map";
 import { heroPoise, meleeReach, mobBody, POISE, pvpProtected } from "../../shared/combat";
@@ -21,11 +21,18 @@ import { SPAWN_ZONES, zoneAt } from "../../shared/spawns";
 import { musicCombat, setMusicZone } from "./music";
 import { bindSfx, play as playSfx, sfxFrame } from "./sfx";
 import { songweaverSfx } from "./sfx";
-import { ChordHud } from "./chordHud";
+import { DI_EVENTS, diEvent } from "./songbookFx";
+import { setSongbook } from "./songbookData";
+import { matOfItem } from "../../shared/lutemaker";
+import { MATERIALS } from "../../shared/lute";
+import { MAT_COLOR, matTexture, matTip } from "./matArt";
 import { SoundCues } from "./soundCues";
-import { CHORD_NAMES, MODE_COLOR, soundOf } from "./songTables";
+import { MonsterBar } from "./monsterBar";
+import { isMineOrGroup, monsterInfo, showWorldBar } from "./monsterInfo";
+import { placeFloat, type FloatBox } from "./floatLanes";
+import { CHORD_NAMES, MODE_COLOR } from "./songTables";
 
-const SONG_SFX = new Set(["note", "chord", "resonate", "bounce", "soundhit", "shieldbreak"]);
+const SONG_SFX = new Set(["note", "chord", "swell", "newsong", "matpick", "lutefit", "break", "resonate", "bounce", "soundhit", "shieldbreak"]);
 import { attackMult, cooldownMult, critChance, heroSpeed, STATS, magicMult, STAT_KINDS, STAT_NAMES, StatKind, statPoints, HP_PER_STR } from "../../shared/powers";
 import { NEED_TEXT, pointRange, SkillDef, skillOf, skillTarget, MAX_STACKS, STACK_DECAY_MS, STACK_NAME, talentBonus, withMods } from "../../shared/skills";
 import { SkillFx } from "./skillfx";
@@ -57,6 +64,10 @@ import { PointerControls, type ClickEnemy, type ClickSpot } from "./pointer";
 import { warmPaths } from "./pathfind";
 import { pixelText } from "./pixeltext";
 import { speechBubble } from "./speechBubble";
+import { WarPlaque } from "./warPlaque";
+import { WarStandards } from "./warStandards";
+import { WarNotice } from "./warNotice";
+import type { WarView } from "../../shared/war/view";
 import { ART_K, CHAR_GROW, CHAR_SCALE, CHARACTERS, CHAR_ORIGIN, CharacterName, createArtAnims, ensureCharSheet, HD_CHARS, playCharAnim, preloadArt } from "./artAssets";
 import { Ambient } from "./ambient";
 import { Details } from "./details";
@@ -88,7 +99,8 @@ import { STASH, STASH_RANGE } from "../../shared/trade";
 import { afterLoading, hideLoading, loadingActive, loadingFor, setLoading, showLoading } from "./loading";
 import { WaygateLayer } from "./waygate";
 import { WAYGATE_RANGE, WAYGATES } from "../../shared/act2";
-import { ISO, IsoView, isoAnchor, isoInput, isoX, isoY, screenDir, screenDir8, setBaseDepth } from "./iso";
+import { ISO, IsoView, isoAnchor, isoInput, isoX, isoY, screenDir, screenDir8, screenOf, setBaseDepth } from "./iso";
+import { hudOccludes, hudSlot } from "./hudSlots";
 import { SMOOTH } from "./isoflag";
 import { addPixelGrid } from "./pixelgrid";
 import { paintSmoothProps } from "./smoothProps";
@@ -109,7 +121,6 @@ import { ResourceBars } from "./resourceBars";
 import { OverloadGauge } from "./overloadGauge";
 import { bindElemFx } from "./elemFx";
 import { ChampionFx } from "./championFx";
-import { championFullName } from "../../shared/champions";
 import { bindBeastFx } from "./beastFx";
 import { bindRaiderFx, raiderTrail } from "./raiderFx";
 import { hudRects, invalidateHud } from "./hudcache";
@@ -117,6 +128,7 @@ import { DungeonView } from "./dungeon";
 import { TEXT_FONT, TEXT_PX, WT } from "./pixelfont";
 import { parseRune, RUNES, RuneKey } from "../../shared/runes";
 import { runeCss, runeTexture } from "./runeArt";
+import { own } from "./own";
 
 /** One painted bit on a merged blob, in body-relative units (-1..1 across the body). */
 interface BlobPart { kind: "patch" | "eye" | "mouth"; u: number; v: number; r: number; col: number }
@@ -182,7 +194,7 @@ interface Entity {
 }
 
 /** A server position and the local time it arrived. */
-interface Snap { t: number; x: number; y: number }
+interface Snap { t: number; x: number; y: number; rest?: boolean }
 /**
  * Other heroes and monsters are drawn this far in the past, so there is always a newer server position to glide
  * towards. The server sends 20 updates a second (one per 50 ms) and some arrive late; 2 updates of slack hides that.
@@ -219,11 +231,19 @@ function patchTime(): number {
   if (stamp > now) lateness = Math.max(stamp - now, lateness); // early stamps (a bunch after a late one) need the slack too
   return stamp;
 }
-/** Record a server position for an entity (several field changes of one update count once). */
+/**
+ * Record a server position for an entity (several field changes of one update count once). An entity that stood still
+ * sends no updates, so before the first step after a pause the old spot is stamped again one tick earlier: otherwise
+ * the blend runs over the whole pause and the first step jumps. Only after a real stop (the last two snaps at one
+ * spot, or a single snap), so a stall in the updates of a moving entity doesn't pull it back; marked `rest` so
+ * interpolate doesn't carry a one-off step (a knockback) on at that one-tick speed.
+ */
 function pushSnap(e: { snaps?: Snap[] }, x: number, y: number) {
-  const s = (e.snaps ??= []), t = patchTime();
+  const s = (e.snaps ??= []), t = patchTime(), tick = 1000 / TICK_RATE;
   const last = s[s.length - 1];
   if (last && t - last.t < 1) { last.x = x; last.y = y; return; }
+  const prev = s[s.length - 2], stood = !prev || (prev.x === last?.x && prev.y === last?.y);
+  if (last && stood && t - last.t > 2 * tick && (last.x !== x || last.y !== y)) s.push({ t: t - tick, x: last.x, y: last.y, rest: true });
   s.push({ t, x, y });
   if (s.length > 12) s.splice(0, s.length - 12);
 }
@@ -252,7 +272,7 @@ function interpolate(s: Snap[], t: number): { x: number; y: number } | undefined
   }
   // Past the newest update (a late one): keep the last speed a moment so the entity doesn't stop and jump
   const b = s[s.length - 1], a = s[s.length - 2];
-  if (!a || b.t - a.t < 1) return b;
+  if (!a || a.rest || b.t - a.t < 1) return b; // a first step from rest: no speed to carry on yet
   const over = Math.min(t - b.t, 1000 / TICK_RATE * 1.5), k = over / Math.max(1, b.t - a.t);
   return { x: b.x + (b.x - a.x) * k, y: b.y + (b.y - a.y) * k };
 }
@@ -301,6 +321,7 @@ export class TownScene extends Phaser.Scene {
   // Reconciling our predicted hero with the server while walking (see reconcile)
   private sentAt = new Map<number, number>(); // input seq -> performance.now() it left
   private ackSeq = 0; // newest input seq the server has echoed back
+  private reconciledAt = -1; // patchSeq of the update reconcile last ran for
   private rtt = 150; // smoothed ms from sending an input to seeing it in a server update
   private predHist: Snap[] = []; // where our predicted hero stood, recent frames (performance.now())
   private corrX = 0; private corrY = 0; // server - prediction still to be blended in
@@ -353,7 +374,11 @@ export class TownScene extends Phaser.Scene {
   private gearFx!: GearFx; // item level effects on heroes
   private attackHoldUntil = 0; // local clock (ms) the shared attack timer is estimated to run until
   private lastCast: Record<string, number> = {}; // local clock (ms) of my last cast of each skill, for cooldowns
-  private mobByMeAt = -1e9; // last time a monster stood right by my hero (my name label hides then)
+  private monsterBar?: MonsterBar;
+  private barId?: string; // the monster the top bar described last frame
+  /** When I or my group last hurt each monster (ms, scene time): its world HP bar stays for RECENT_HIT_MS (monsterInfo.ts). */
+  private lastMineHit = new Map<string, number>();
+  private floatLive: FloatBox[] = [];
   private items = new Map<string, Phaser.GameObjects.Image>();
   private lastDodge = -Infinity;
   private rootUntil = 0; // local clock: my dash is gliding to the server's spot until then (no prediction)
@@ -370,7 +395,9 @@ export class TownScene extends Phaser.Scene {
   private grimoire?: GrimoirePanel;
   private resBars?: ResourceBars;
   private heatGauge?: OverloadGauge;
-  private chordHud?: ChordHud;
+  private warPlaque?: WarPlaque;
+  private warStd?: WarStandards;
+  private warLast?: WarView;
   private soundCues = new SoundCues();
   private statsShown = "";
   private deathTimer?: number;
@@ -485,10 +512,12 @@ export class TownScene extends Phaser.Scene {
       if (!this.npcs?.isOpen && this.dungeon?.nearDoor) { this.room?.send("door", { id: this.dungeon.nearDoor.id }); return; } // a Mawdeep gate
       if (!this.npcs?.isOpen && this.stash?.interact()) return; // the account stash on the square
       if (this.bounty?.open) { this.bounty.close(); return; }
+      if (this.warStd?.open) { this.warStd.close(); return; }
       if (!this.npcs?.isOpen && this.bounty?.interact()) return; // a bounty board
       if (!this.npcs?.isOpen && this.shrine?.interact()) return; // then the forest shrine
       if (!this.npcs?.isOpen && this.portals?.interact()) return; // then a portal stone's travel list
       if (!this.npcs?.isOpen && this.waygates?.interact()) return; // then Act 2's waygate
+      if (!this.npcs?.isOpen && !this.npcs?.busy && this.warStd?.interact()) return; // a clan war standard (anything else here comes first)
       this.npcs?.interact();
     };
     const toggleQuestLog = () => {
@@ -519,7 +548,7 @@ export class TownScene extends Phaser.Scene {
       const k = ((ev.target as HTMLElement).closest("button") as HTMLElement | null)?.dataset.stat as StatKind | undefined;
       const mine = this.entities.get(this.me)?.state;
       if (!k || !mine) { this.side?.setPreview(); return; }
-      const pts = { sta: mine.ptSta, str: mine.ptStr, mag: mine.ptMag, dex: mine.ptDex ?? 0 };
+      const pts = { sta: own(mine).ptSta, str: own(mine).ptStr, mag: own(mine).ptMag, dex: own(mine).ptDex };
       pts[k]++;
       this.side?.setPreview({ label: `add a point to ${STAT_NAMES[k]}`, pts });
     });
@@ -557,6 +586,7 @@ export class TownScene extends Phaser.Scene {
     const toggleIdeas = () => { if (!this.ideaBoard!.open) this.closeMenus(); this.ideaBoard!.toggle(); };
     this.input.keyboard!.on("keydown-I", () => { if (!this.chatting()) toggleIdeas(); });
     // Player groups: invite nearby heroes / leave (P or the Group button)
+    this.monsterBar = new MonsterBar(document.getElementById("hud")!);
     this.party = new PartyUI((type, msg) => this.room?.send(type, msg), () => (this.room?.state as any)?.players, () => this.me,
       (id) => { this.party?.close(); this.trade?.askTo(id); });
     const toggleParty = () => { if (!this.party!.open) this.closeMenus(); this.party!.toggle(); };
@@ -738,6 +768,22 @@ export class TownScene extends Phaser.Scene {
         // Snap on respawn / large correction
         if (teleported(e, p.x, p.y)) { e.sprite.setPosition(p.x, p.y); e.snaps = [{ t: patchTime(), x: p.x, y: p.y }]; }
       });
+      if (id !== this.me) return;
+      // Our input ack (seq) lives in `me` (owner-only), whose changes don't fire Player's onChange: an update where only
+      // seq moved (walking into a wall) must still ack the input and feed the RTT. Hooked on the `me` instance itself:
+      // at once if it's here already, else when it lands (listen). Callbacks run after the whole patch is decoded, so
+      // reconcile sees x / y and seq of the same update either way; reconciledAt keeps it to once per update.
+      let hooked: unknown, off: (() => void) | undefined;
+      const hookMe = (me: any) => {
+        if (!me || me === hooked) return;
+        hooked = me; off?.();
+        off = $(me).onChange(() => {
+          const e = this.entities.get(id);
+          if (e && id === this.me) this.reconcile(e, p);
+        });
+      };
+      hookMe(p.me);
+      $(p).listen("me", (me: any) => { hooked = undefined; hookMe(me); }); // the decoded instance: (re)hook on it for sure
     });
     players.onRemove((_p: any, id: string) => this.removeEntity(id));
 
@@ -794,9 +840,13 @@ export class TownScene extends Phaser.Scene {
     const items = $(this.room.state).items;
     items.onAdd((it: any, id: string) => {
       if (it.kind === "quest" && it.owner !== this.room.sessionId) return; // someone else's quest drop
-      const gear = it.kind === "gear" && gearDef(it.gear);
+      const mat = it.kind === "mat" ? matOfItem(it.gear) : undefined; // a Songweaver material: Item.gear is `mat_<id>`, Item.amount the count
+      const gear = !mat && it.kind === "gear" && gearDef(it.gear);
       const rune = it.kind === "gear" ? parseRune(it.gear) : undefined; // a loose rune (shared/runes.ts)
-      const img = rune
+      const matGrey = !!mat && this.opts.cls !== "songweaver"; // only a Songweaver can pick it up: others see it greyed
+      const img = mat
+        ? this.add.image(it.x, it.y, matTexture(this, mat, matGrey)).setScale(0.9).setDepth(it.y - 8)
+        : rune
         ? this.add.image(it.x, it.y, runeTexture(this, rune)).setScale(0.6).setDepth(it.y - 8)
         : gear
         ? this.add.image(it.x, it.y, "gear_icons", baseId(it.gear)).setScale(0.6 / ART_K).setDepth(it.y - 8)
@@ -812,6 +862,15 @@ export class TownScene extends Phaser.Scene {
         const glow = this.add.circle(it.x, it.y, 6, 0xffd166, 0.3).setDepth(it.y - 9).setBlendMode(Phaser.BlendModes.ADD);
         this.tweens.add({ targets: glow, scale: 1.4, alpha: 0.1, duration: 600, yoyo: true, repeat: -1 });
         img.once("destroy", () => glow.destroy());
+      }
+      if (mat) {
+        img.setData("mat", mat);
+        img.setInteractive({ useHandCursor: false }); // tooltip on hover (content doc, section 7)
+        img.on("pointerover", () => matTip(`<b>${MATERIALS[mat].name}${it.amount > 1 ? ` x${it.amount}` : ""}</b><br>${MATERIALS[mat].desc}<br>${MATERIALS[mat].source}${matGrey ? `<br><span class="gbad">Only a minstrel can use this.</span>` : ""}`));
+        img.on("pointerout", () => matTip());
+        img.once("destroy", () => matTip());
+        if (matGrey) img.setAlpha(0.55);
+        else { const glow = this.add.circle(it.x, it.y, 5, MAT_COLOR[mat].color, 0.3).setDepth(it.y - 9).setBlendMode(Phaser.BlendModes.ADD); this.tweens.add({ targets: glow, scale: 1.5, alpha: 0.08, duration: 700, yoyo: true, repeat: -1 }); img.once("destroy", () => glow.destroy()); }
       }
       const rarity = gear ? itemRarity(it.gear) : 0;
       if (gear) img.setData("gear", it.gear);
@@ -1318,12 +1377,12 @@ export class TownScene extends Phaser.Scene {
       this.showSwing(id, step ?? 0, variant ?? 0, ax, ay, w);
     });
     this.room.onMessage("sfx", (ev) => this.onSkillFx(ev));
+    this.room.onMessage("songbook", (m) => setSongbook(m)); // owner-only { songs, mats }, on join and on change
     // The Summoner's grimoire on the HUD (client/src/grimoire.ts): its news, asked again now that we listen
     this.grimoire = new GrimoirePanel(document.getElementById("hud")!, (slot, el) => this.room.send("grimoire", { slot, el }));
     this.room.onMessage("golems", (m) => this.grimoire?.news(m));
-    // The Songweaver's chord tracker (owner only, chordHud.ts)
-    this.chordHud = new ChordHud(document.getElementById("hud")!);
-    this.room.onMessage("chord", (m) => this.chordHud?.set(m));
+    // The chord panel is gone (DI-1, rings under the feet); the server may still send its progress, ignored
+    this.room.onMessage("chord", () => {});
     this.room.send("golems");
     bindSfx(this.room, () => this.me, this.entities as any); // sound effects (client/src/sfx.ts)
     this.room.onMessage("boom", ({ x, y, r, kind, imb }) => this.fx.impact(x, y, kind, r, imb) ||
@@ -1359,9 +1418,11 @@ export class TownScene extends Phaser.Scene {
         note.hidden = false; this.noteAt = performance.now();
       }
     });
-    this.room.onMessage("hit", ({ id, dmg, blocked, crit, dot, kx, ky, el, ex }) => {
+    this.room.onMessage("hit", ({ id, dmg: rawDmg, blocked, crit, dot, kx, ky, el, ex, by }) => {
       const e = this.entities.get(id);
       if (!e) return;
+      const dmg = rawDmg > 0 ? Math.max(1, Math.round(rawDmg)) : 0; // whole numbers on screen (a town guard's hit was -58.7326...)
+      if (e.mob && by && isMineOrGroup(by, this.me, this.groupIds())) this.lastMineHit.set(id, this.time.now);
       if (dmg === 0 && !ex) { // a shield took the whole hit (shared/skillEngine.ts absorbDamage): no wound, no flinch
         this.floatText(e.sprite.x, e.sprite.y - 14, "absorbed", "#9ad1ff", PIXEL_FONT, 1, true);
         this.fx.absorbed(e);
@@ -1458,6 +1519,11 @@ export class TownScene extends Phaser.Scene {
     const alive = () => { lastPatch = Date.now(); };
     this.room.onStateChange(alive);
     this.room.onMessage("hb", alive);
+    this.warStd = new WarStandards(this, (type, msg) => this.room.send(type, msg)); // clan war standards and oaths
+    this.room.onMessage("war", (v) => { (this.warPlaque ??= new WarPlaque(document.getElementById("hud")!)).set(v); this.warStd?.setWar(v); this.warLast = v; });
+    this.room.onMessage("clan", (m) => this.warStd?.setClan(m));
+    const warNotice = new WarNotice(document.getElementById("hud")!);
+    this.room.onMessage("warev", (e) => warNotice.show(e, this.entities.get(this.me)?.sprite));
     this.room.onMessage("mv", alive);
     this.startPing();
     window.setInterval(() => { if (!this.quitting && Date.now() - lastPatch > 15_000) reconnectSoon(login); }, 3000);
@@ -1496,8 +1562,11 @@ export class TownScene extends Phaser.Scene {
    * 48 px, then the hero jumped back to a stale spot (and on any lag spike, since the gap is speed x ping).
    */
   private reconcile(e: Entity, p: any) {
+    // Called from Player's and from me's onChange: when both changed in one update, only the first one counts
+    if (this.reconciledAt === patchSeq) return;
+    this.reconciledAt = patchSeq;
     const now = performance.now();
-    const s = p.seq ?? 0;
+    const s = own(p).seq;
     if (s > this.ackSeq) {
       const t0 = this.sentAt.get(s);
       if (t0 !== undefined) this.rtt += (Math.min(1000, Math.max(20, now - t0)) - this.rtt) * 0.2;
@@ -1637,6 +1706,12 @@ export class TownScene extends Phaser.Scene {
         return out;
       },
       enemy: (id) => { const e = this.entities.get(id); return e && attackable(id, e) ? asEnemy(id, e) : undefined; },
+      // my own and my group's summons: not attackable, but the monster bar can describe them
+      friendlies: () => {
+        const out: ClickEnemy[] = [];
+        for (const [id, e] of this.entities) if (e.mob && e.state.owner && !e.culled && !e.state.hidden && !attackable(id, e)) out.push(asEnemy(id, e));
+        return out;
+      },
       spots: () => {
         const p = meEnt()?.state;
         const out: ClickSpot[] = [];
@@ -1652,7 +1727,7 @@ export class TownScene extends Phaser.Scene {
       },
       speed: () => {
         const p = meEnt()?.state;
-        return p ? heroSpeed(p.cls as ClassKind, p.slowed, p.spd ?? 1) * gearSpeedMult(activeOf(p)) : 80;
+        return p ? heroSpeed(p.cls as ClassKind, p.slowed, own(p).spd) * gearSpeedMult(activeOf(p)) : 80;
       },
       shotSpeed: (secondary) => {
         const p = meEnt()?.state;
@@ -1767,6 +1842,9 @@ export class TownScene extends Phaser.Scene {
   private floatText(x: number, y: number, text: string, color: string, font = PIXEL_FONT, size = 1, jitter = false): Phaser.GameObjects.Text {
     // Damage numbers spread a little sideways so fast hits don't print on top of each other
     if (jitter) x += (Math.random() - 0.5) * 10;
+    // A text that would start on top of a live one is lifted clear of it (floatLanes.ts)
+    const lift = placeFloat(this.floatLive, { x, y: y - 5, w: text.length * 6 * Math.max(1, Math.round(size)), h: 10 * Math.max(1, Math.round(size)), t: this.time.now });
+    y -= lift;
     // Pooled: a Text owns a canvas and a GL texture, and every hit prints one
     let t = this.floatPool.pop();
     if (t) t.setPosition(x, y).setText(text).setColor(color).setFontFamily(font).setAlpha(1).setVisible(true).setActive(true);
@@ -1790,6 +1868,27 @@ export class TownScene extends Phaser.Scene {
     return t;
   }
   private floatPool: Phaser.GameObjects.Text[] = [];
+
+  /** Session ids of the players in my group (me not included). */
+  private groupIds(): Set<string> {
+    const out = new Set<string>(), players = (this.room?.state as any)?.players, party = players?.get(this.me)?.party;
+    if (party) players.forEach((q: any, id: string) => { if (id !== this.me && q.party === party) out.add(id); });
+    return out;
+  }
+
+  /** The top bar describes the monster under the mouse (or a friendly summon), else my click target while it lives. */
+  private updateMonsterBar(now: number) {
+    const bar = this.monsterBar, ptr = this.pointer;
+    if (!bar) return;
+    const live = (id?: string) => { const e = id ? this.entities.get(id) : undefined; return e?.mob && !e.state.dead && !e.state.hidden && !e.culled ? e : undefined; };
+    const pid = [ptr?.inspectId, ptr?.targetId].find((id) => live(id)), e = live(pid);
+    if (e) {
+      this.barId = pid;
+      const players = (this.room.state as any).players, me = players?.get(this.me);
+      bar.show(monsterInfo(e.state as any, { myLevel: me?.level ?? 1, myClass: me?.cls, playerName: (id) => players?.get(id)?.name }), now);
+    } else if (this.barId && !live(this.barId)) { this.barId = undefined; bar.hide(); } // it died or left the view: no lingering
+    else bar.show(undefined, now);
+  }
 
   /** Merged blob: paint the swallowed blobs' colours, eyes and mouths over its body (follows squash tweens). */
   private drawBlobParts(e: Entity, id: string, p: any, x: number, y: number) {
@@ -1894,6 +1993,7 @@ export class TownScene extends Phaser.Scene {
     this.siege?.clear(id);
     this.champFx?.drop(id);
     this.forms?.drop(id);
+    this.lastMineHit.delete(id);
     e.sprite.destroy(); e.label?.destroy(); e.bar.destroy(); e.parts?.destroy(); e.bubble?.destroy(); e.shield?.destroy(); e.gear?.destroy();
     this.entities.delete(id);
   }
@@ -2302,6 +2402,7 @@ export class TownScene extends Phaser.Scene {
     this.trade?.close();
     this.stash?.close();
     this.bounty?.close();
+    this.warStd?.close();
     this.patchNotes?.close();
     this.portals?.close();
     this.gameMenu?.close();
@@ -2324,7 +2425,7 @@ export class TownScene extends Phaser.Scene {
     const shown = (id: string) => { const e = document.getElementById(id); return !!e && !e.hidden; };
     return shown("hero") || shown("tree") || shown("slotpick") || musicPanelOpen() ||
       !!(this.npcs?.isOpen || this.npcs?.log.open || this.gearMenu?.open || this.ideaBoard?.open || this.party?.open ||
-        this.trade?.open || this.stash?.open || this.bounty?.open || this.patchNotes?.open || this.portals?.isOpen || this.minimap?.isOpen ||
+        this.trade?.open || this.stash?.open || this.bounty?.open || this.warStd?.open || this.patchNotes?.open || this.portals?.isOpen || this.minimap?.isOpen ||
         this.gameMenu?.open || this.talentMenu?.open);
   }
 
@@ -2335,9 +2436,10 @@ export class TownScene extends Phaser.Scene {
     this.heroFrom = from;
     const cls = mine.cls as ClassKind, lvl = mine.level as number;
     const st = statsOf(mine); // includes gear bonuses
-    const free = statPoints(lvl) - (mine.ptSta + mine.ptStr + mine.ptMag + (mine.ptDex ?? 0));
+    const o = own(mine); // owner-only numbers, in `me` (server/player.ts)
+    const free = statPoints(lvl) - (o.ptSta + o.ptStr + o.ptMag + o.ptDex);
     // Rebuild only when something shown changed (called every frame while open)
-    const sig = [lvl, mine.xp, Math.ceil(mine.hp), mine.maxHp, mine.mp, st.sta, st.str, st.mag, st.dex, free, mine.kills, mine.gold, from].join("|");
+    const sig = [lvl, o.xp, Math.ceil(mine.hp), mine.maxHp, o.mp, st.sta, st.str, st.mag, st.dex, free, o.kills, o.gold, from].join("|");
     const el = document.getElementById("hero")!;
     if (!el.hidden && sig === this.heroSig) return;
     this.heroSig = sig;
@@ -2350,10 +2452,10 @@ export class TownScene extends Phaser.Scene {
       sta: `${mine.maxHp} max HP, regen ${regenFromStamina(st.sta)[1].toFixed(1)} HP/s`,
       str: STATS[cls].attackStat === "str" ? `attack ×${attackMult(cls, st).toFixed(2)}, +${HP_PER_STR} HP each` : `+${HP_PER_STR} HP per point`,
       mag: `${STATS[cls].attackStat === "mag" ? `attack ×${attackMult(cls, st).toFixed(2)}, +${HP_PER_STR} HP each, ` : ""}skills ×${magicMult(cls, st).toFixed(2)}, ` +
-        `cooldowns −${Math.round((1 - cooldownMult(cls, st, mine.talents)) * 100)}%, ${maxManaFor(st, lvl)} max mana`,
-      dex: `${Math.round(critChance(st, talentBonus(cls, mine.talents, "crit")) * 100)}% critical hits (double damage), skills too`,
+        `cooldowns −${Math.round((1 - cooldownMult(cls, st, o.talents)) * 100)}%, ${maxManaFor(st, lvl)} max mana`,
+      dex: `${Math.round(critChance(st, talentBonus(cls, o.talents, "crit")) * 100)}% critical hits (double damage), skills too`,
     };
-    const pts: Record<StatKind, number> = { sta: mine.ptSta, str: mine.ptStr, mag: mine.ptMag, dex: mine.ptDex ?? 0 };
+    const pts: Record<StatKind, number> = { sta: o.ptSta, str: o.ptStr, mag: o.ptMag, dex: o.ptDex };
     // attribute cards (Murat 2026-11-08 redesign): badge, name and total, where it comes from, what it does, a big +
     const fromGear = gearStats(cls, activeOf(mine));
     const BADGE: Record<StatKind, string> = { str: "STR", sta: "STA", mag: "MAG", dex: "DEX" };
@@ -2366,29 +2468,30 @@ export class TownScene extends Phaser.Scene {
     }).join("");
     const wp = attackProfile(cls, activeOf(mine));
     const next = xpForLevel(lvl + 1), cur = xpForLevel(lvl);
-    const dmg = Math.round(wp.damage * weaponAttackMult(cls, st, wp.type) * talentMult(cls, mine.talents, "dmg"));
-    const speed = Math.round(heroSpeed(cls, false, mine.spd ?? 1) * gearSpeedMult(activeOf(mine)));
+    const dmg = Math.round(wp.damage * weaponAttackMult(cls, st, wp.type) * talentMult(cls, o.talents, "dmg"));
+    const speed = Math.round(heroSpeed(cls, false, o.spd) * gearSpeedMult(activeOf(mine)));
     const rows: [string, string][] = [
-      ["Level", lvl >= MAX_LEVEL ? `${MAX_LEVEL} (max)` : `${lvl} · XP ${mine.xp - cur}/${next - cur}`],
+      ["Level", lvl >= MAX_LEVEL ? `${MAX_LEVEL} (max)` : `${lvl} · XP ${o.xp - cur}/${next - cur}`],
       ["Health", `${Math.ceil(mine.hp)} / ${mine.maxHp}`],
       ["HP regen", `${regenFromStamina(st.sta)[1].toFixed(1)}/s resting · ${regenFromStamina(st.sta)[0].toFixed(1)}/s in a fight`],
-      ["Mana", `${unpackMana(mine.mp).mana} / ${unpackMana(mine.mp).maxMana} · ${manaRegen(st, false, talentBonus(cls, mine.talents, "mana")).toFixed(1)}/s (×${MANA.restMult} resting)`],
+      usesGauge(cls) ? ["Song gauge", `${unpackMana(o.mp).mana} / ${unpackMana(o.mp).maxMana} · no regen`]
+        : ["Mana", `${unpackMana(o.mp).mana} / ${unpackMana(o.mp).maxMana} · ${manaRegen(st, false, talentBonus(cls, o.talents, "mana")).toFixed(1)}/s (×${MANA.restMult} resting)`],
       ["Attack", `${dmg} damage · ${WEAPON_TYPE_NAMES[wp.type]}: ${ATTACK_WORDS[wp.type]}`],
       ["Attack speed", `${(1000 / wp.attackCooldownMs).toFixed(1)} hits/s`],
-      ["Critical hits", `${Math.round(critChance(st, talentBonus(cls, mine.talents, "crit")) * 100)}% chance, double damage`],
+      ["Critical hits", `${Math.round(critChance(st, talentBonus(cls, o.talents, "crit")) * 100)}% chance, double damage`],
       ["Initiative", `${heroPoise(cls, lvl)} · dizzy at 0`],
       ["Move speed", `${speed}`],
-      ["Kills · Gold", `${mine.kills} · ${mine.gold}`],
+      ["Kills · Gold", `${o.kills} · ${o.gold}`],
     ];
     // health, mana and experience as bars over the detail list
-    const mp = unpackMana(mine.mp);
-    const xpFrac = lvl >= MAX_LEVEL ? 1 : Math.max(0, Math.min(1, (mine.xp - cur) / Math.max(1, next - cur)));
+    const mp = unpackMana(o.mp);
+    const xpFrac = lvl >= MAX_LEVEL ? 1 : Math.max(0, Math.min(1, (o.xp - cur) / Math.max(1, next - cur)));
     const bar = (cls2: string, label: string, val: string, f: number) =>
       `<div class="hbar ${cls2}"><div class="hbar-l"><span>${label}</span><b>${val}</b></div><div class="hbar-t"><i style="width:${Math.round(f * 100)}%"></i></div></div>`;
     document.getElementById("herochar")!.innerHTML =
       `<div class="hbars">${bar("hp", "Health", `${Math.ceil(mine.hp)} / ${mine.maxHp}`, mine.hp / Math.max(1, mine.maxHp))}` +
       bar("mp", "Mana", `${mp.mana} / ${mp.maxMana}`, mp.mana / Math.max(1, mp.maxMana)) +
-      bar("xp", "Experience", lvl >= MAX_LEVEL ? "Max level" : `${mine.xp - cur} / ${next - cur}`, xpFrac) + `</div>` +
+      bar("xp", "Experience", lvl >= MAX_LEVEL ? "Max level" : `${o.xp - cur} / ${next - cur}`, xpFrac) + `</div>` +
       `<div class="hrows">${rows.filter(([k]) => k !== "Level" && k !== "Health").map(([k, v]) => `<span>${k}</span><b>${v}</b>`).join("")}</div>`;
     const rc = respecCost(lvl), rcEl = document.getElementById("statresetcost");
     if (rcEl) rcEl.textContent = rc ? `${rc} gold` : "free (up to level 5)";
@@ -2430,7 +2533,7 @@ export class TownScene extends Phaser.Scene {
       if (!cell || !mine) return;
       ev.preventDefault();
       const cls = mine.cls as ClassKind;
-      const choices = ["", ...activeSkills(cls).filter((a) => skillLearned(cls, mine.talents, a.id)).map((a) => a.id)];
+      const choices = ["", ...activeSkills(cls).filter((a) => skillLearned(cls, own(mine).talents, a.id)).map((a) => a.id)];
       if (choices.length < 2) return;
       if (cell.dataset.slot === "L" || cell.dataset.slot === "R") {
         const side: ClickSide = cell.dataset.slot === "L" ? "left" : "right";
@@ -2439,7 +2542,7 @@ export class TownScene extends Phaser.Scene {
         return;
       }
       const n = Number(cell.dataset.slot);
-      const cur = Math.max(0, choices.indexOf(mine.slots?.at(n) ?? ""));
+      const cur = Math.max(0, choices.indexOf(own(mine).slots.at(n) ?? ""));
       const next = choices[(cur + (ev.deltaY > 0 ? 1 : -1) + choices.length) % choices.length];
       this.room?.send("assign", { slot: n, skill: next });
     }, { passive: false });
@@ -2467,9 +2570,9 @@ export class TownScene extends Phaser.Scene {
     if (!mine) return;
     const cls = mine.cls as ClassKind;
     if (n === LEFT_PICK || n === RIGHT_PICK) { this.openClickPicker(mine, cls, n === LEFT_PICK ? "left" : "right"); return; }
-    const slots: string[] = [...(mine.slots ?? [])];
+    const slots: string[] = [...own(mine).slots];
     const opts = activeSkills(cls).map((a) => {
-      const learned = skillLearned(cls, mine.talents, a.id);
+      const learned = skillLearned(cls, own(mine).talents, a.id);
       const at = slots.indexOf(a.id);
       const where = !learned ? `${icon("lock")}learn it in the tree (${actionKey("tree")}), Lv ${a.req}` : at === n ? "in this slot" : at >= 0 ? `now on key ${slotKey(at)}` : "not on a key yet"
       const need = a.needs ? ` · needs ${NEED_TEXT[a.needs]}` : "";
@@ -2499,7 +2602,7 @@ export class TownScene extends Phaser.Scene {
     const weapon = `<button class="opt${cur ? "" : " cur"}" data-pick="" data-tiphead="${WEAPON_TYPE_NAMES[w.type]}" data-tip="${tipEsc(`Basic attack with what you hold: ${ATTACK_WORDS[w.type]}.`)}">` +
       `${this.weaponIcon(mine, "picon")}<span><b>Weapon attack</b><small>${WEAPON_TYPE_NAMES[w.type]}: ${ATTACK_WORDS[w.type]}</small></span></button>`;
     const opts = activeSkills(cls).map((a) => {
-      const learned = skillLearned(cls, mine.talents, a.id);
+      const learned = skillLearned(cls, own(mine).talents, a.id);
       const where = !learned ? `${icon("lock")}learn it in the tree (${actionKey("tree")}), Lv ${a.req}` : a.cantrip ? `basic spell · ${a.mana ?? 0} mana` : a.id === cur ? `on ${side} click` : costWords(a) + (a.needs ? ` · needs ${NEED_TEXT[a.needs]}` : "");
       return `<button class="opt${learned ? "" : " locked"}${a.id === cur ? " cur" : ""}" data-pick="${a.id}" data-tiphead="${a.name}" data-tip="${tipEsc(a.desc)}">` +
         `${iconImg(a.id, "picon")}<span><b>${a.name}</b><small>${where}</small></span></button>`;
@@ -2530,7 +2633,7 @@ export class TownScene extends Phaser.Scene {
       pick = this.clickPick[side] = { hero, skill: saved };
     }
     const id = pick.skill;
-    return id && skillLearned(mine.cls, mine.talents, id) && !skillOf(mine.cls, id)?.passive ? id : "";
+    return id && skillLearned(mine.cls, own(mine).talents, id) && !skillOf(mine.cls, id)?.passive ? id : "";
   }
   private leftSkill() { return this.clickSkill("left"); }
   private rightSkill() { return this.clickSkill("right"); }
@@ -2575,7 +2678,7 @@ export class TownScene extends Phaser.Scene {
   /** Skill key 1..0: cast that slot's skill now, aimed at the mouse cursor (self skills just go off). */
   private castSlot(n: number) {
     const mine = this.entities.get(this.me)?.state;
-    const id = mine?.slots?.at?.(n);
+    const id = own(mine).slots.at(n);
     const s = id ? skillOf(mine.cls, id) : undefined;
     if (!s || !this.room || loadingActive()) return;
     if (skillTarget(s) !== "self") { const aim = this.pointer?.cursorAim(); if (aim) this.room.send("face", aim); }
@@ -2595,7 +2698,7 @@ export class TownScene extends Phaser.Scene {
 
   /** Healing (Q) and mana (V) potion cells right of the skill bar: the flask in pixel art, how many you carry. */
   private potionCells(mine: any) {
-    const pots = unpackPotions(mine.potions);
+    const pots = unpackPotions(own(mine).potions);
     const cell = (kind: PotionKind, key: string) => {
       const c = pots[kind], n = total(c), next = Math.max(0, nextSize(c)), tex = potionTex(kind, next);
       const name = n ? potionName(kind, next) : kind === "mpotion" ? "Mana potion" : "Healing potion";
@@ -2631,7 +2734,7 @@ export class TownScene extends Phaser.Scene {
   /** Name, cooldown and cost of an active skill for the HUD. */
   private skillHud(cls: ClassKind, skill: string, cdm: number) {
     const s = skillOf(cls, skill);
-    const m = s && withMods(cls, this.entities.get(this.me)?.state?.talents, s); // upgrade nodes change cooldown and cost
+    const m = s && withMods(cls, own(this.entities.get(this.me)?.state).talents, s); // upgrade nodes change cooldown and cost
     return { name: s?.name ?? "?", cdMs: (m?.cd ?? 0) * cdm, last: this.lastCast[skill] ?? -Infinity, cost: m ? skillCost(m) : { heat: 0, mana: 0 }, ult: s?.row === 4 };
   }
 
@@ -2643,11 +2746,12 @@ export class TownScene extends Phaser.Scene {
    * click) spends them (Murat 2026-11-04).
    */
   private chargeCell(mine: any, cls: ClassKind, clicks: string[], slots: string[], now: number): string {
-    const n = Math.max(0, Math.min(MAX_STACKS, mine.stacks | 0));
+    if (cls === "songweaver") return ""; // the Songweaver has no Tempo charge any more (the gauge replaces it)
+    const n = Math.max(0, Math.min(MAX_STACKS, own(mine).stacks | 0));
     if (n > this.chargeSeen.n) this.chargeSeen.at = now; // a hit built one (the server's clock isn't sent)
     this.chargeSeen.n = n;
     const users = [...clicks, ...slots].filter((id, i, a) => id && a.indexOf(id) === i)
-      .map((id) => skillOf(cls, id)).filter((sd) => sd?.consume && skillLearned(cls, mine.talents, sd.id));
+      .map((id) => skillOf(cls, id)).filter((sd) => sd?.consume && skillLearned(cls, own(mine).talents, sd.id));
     if (!users.length) return "";
     const name = STACK_NAME[cls];
     // The Summoner's Void Essence comes from the Void, not from basic hits, and lasts longer (shared/summons.ts ESSENCE)
@@ -2660,14 +2764,14 @@ export class TownScene extends Phaser.Scene {
       : `Built by your basic hits, up to ${MAX_STACKS}. They fade ${STACK_DECAY_MS / 1000} s after your last hit. `) +
       `Spent by ${users.map((u) => u!.name).join(", ")}: each one makes it stronger.`;
     return `<div class="slot charge${n ? "" : " wait"}" data-tiphead="${name} ${n}/${MAX_STACKS}" data-tip="${tipEsc(tip)}">` +
-      `<img class="sicon" src="${chargeIcon(cls)}" alt="" draggable="false">${shade}${n ? `<b>${n}</b>` : ""}<span class="pips">${pips}</span></div>`;
+      `<img class="sicon" src="${chargeIcon(cls)}" alt="" draggable="false">${shade}${n ? `<b class="count">${n}</b>` : ""}<span class="pips">${pips}</span></div>`;
   }
 
   /** Skill bar at the bottom: potions, the left-click cell and the 10 slots (the old text list of actions is gone, Murat 2026-11-04). */
   private renderActions(mine: any, cls: ClassKind, cdm: number, now: number) {
-    const pools = { energy: mine.energy, mana: unpackMana(mine.mp).mana };
+    const pools = { energy: own(mine).energy, mana: unpackMana(own(mine).mp).mana };
     const blocked = !!(mine.stunned || mine.broken) || performance.now() < this.attackHoldUntil; // the server refuses a press now: dim the keys
-    const slots: string[] = [...(mine.slots ?? [])];
+    const slots: string[] = [...own(mine).slots];
     this.cdTrack.length = 0;
     // Slot bar at the bottom: 10 cells, cooldown shading, click to choose a skill
     const cells = Array.from({ length: slotCount() }, (_, i) => {
@@ -2683,7 +2787,7 @@ export class TownScene extends Phaser.Scene {
       const unarmed = this.unarmedFor(mine, cls, skill);
       if (left > 0) this.cdTrack.push({ k: `s${i}`, left, cd: h.cdMs });
       return `<div class="slot${h.ult ? " ult" : ""}${wait}${unarmed ? " unarmed" : ""}${picking}" data-slot="${i}" data-skill="${skill}" data-tiphead="${h.name}" data-tip="${tipEsc((unarmed ? `${unarmed}. ` : "") + (skillOf(cls, skill)?.desc ?? ""))}" data-tiphint="Key ${slotKey(i)} · click to change · wheel to scroll · right-click to clear">` +
-        `${iconImg(power)}${shade}${unarmed ? `<i class="xout"></i>` : ""}<kbd>${slotKey(i)}</kbd>${left > 0 && !unarmed ? `<b data-cnk="s${i}"></b>` : ""}</div>`;
+        `${iconImg(power)}${shade}${unarmed ? `<i class="xout"></i>` : ""}<kbd>${slotKey(i)}</kbd>${left > 0 && !unarmed ? `<b class="cdn" data-cnk="s${i}"></b>` : ""}</div>`;
     }).join("");
     // Left- and right-click cells first: the weapon, or the spell / skill picked for that click
     const clickCell = (side: ClickSide) => {
@@ -2749,6 +2853,7 @@ export class TownScene extends Phaser.Scene {
   /** Skill visual event from the server (shared/skillEngine.ts): drawn by SkillFx, plus the hero's cast animation. */
   private onSkillFx(ev: any) {
     if (SONG_SFX.has(ev.ev)) this.songEvent(ev);
+    if (DI_EVENTS.has(ev.ev)) this.diEvent(ev); // newsong, matpick, lutefit, break
     if (ev.ev === "cast") {
       const e = this.entities.get(ev.id);
       if (ev.id === this.me) this.lastCast[ev.s] = this.time.now;
@@ -2765,6 +2870,17 @@ export class TownScene extends Phaser.Scene {
       if (ev.ev === "move" && ev.kind === "dash" && ev.id === this.me) this.rootUntil = Math.max(this.rootUntil, this.time.now + 140);
     }
     this.fx.onEvent(ev);
+  }
+
+  /** DI-2 / DI-5 events: new song banner, material pickups, lute fitting, breaking (songbookFx.ts). */
+  private diEvent(ev: any) {
+    diEvent(ev, {
+      me: this.me,
+      pos: (id) => { const e = this.entities.get(id); return e ? { x: e.sprite.x, y: e.sprite.y - e.top } : undefined; },
+      float: (x, y, text, color) => { this.floatText(x, y, text, color, PIXEL_FONT, 1.1); },
+      burst: (x, y, r, color, ms) => this.burst(x, y, r, color, ms),
+      feed: (text) => this.feed(text),
+    });
   }
 
   /** True when another Songweaver within earshot plays in a different mode: their notes are then voiced as open fifths. */
@@ -2786,7 +2902,6 @@ export class TownScene extends Phaser.Scene {
     if (ev.ev === "chord") {
       const c = (MODE_COLOR[ev.mode] ?? MODE_COLOR.major).toString(16).padStart(6, "0");
       const e = this.entities.get(ev.id);
-      if (ev.id === this.me) this.chordHud?.fired(ev.prog);
       if (e) this.floatText(e.sprite.x, e.sprite.y - e.top - 14, CHORD_NAMES[ev.prog] ?? ev.prog, `#${c}`, PIXEL_FONT, 1.3);
     } else if (ev.ev === "soundhit") {
       const e = this.entities.get(ev.id), meE = this.entities.get(this.me);
@@ -2808,23 +2923,19 @@ export class TownScene extends Phaser.Scene {
     while (log.children.length > 8) log.firstChild!.remove();
   }
 
-  private feedAt = 0;
+  /** A hero's name label that would be drawn under the top-right HUD column (minimap, dial, tracker) is hidden. */
+  private labelUnderHud(label: Phaser.GameObjects.Text, anchor: { x: number; y: number }) {
+    const p = screenOf(this.cameras.main, label.x, label.y, hudRects(this.game.canvas).cr, anchor);
+    return hudOccludes(p.x, p.y);
+  }
+
   private noteAt = 0;
 
   private feed(text: string) {
     const el = document.createElement("div");
     el.textContent = text;
-    this.placeFeed();
     document.getElementById("feed")!.prepend(el);
     setTimeout(() => el.remove(), 5000);
-  }
-
-  /** The feed sits under the quest tracker on the right whatever its height; re-measured while it grows or folds. */
-  private placeFeed() {
-    const feed = document.getElementById("feed")!;
-    const qt = document.getElementById("questtracker"), r = qt && qt.offsetParent ? qt.getBoundingClientRect() : undefined;
-    const top = r && r.height ? `${Math.round(r.bottom / uiScale() + 8)}px` : ""; // the HUD is zoomed (worldscale.ts)
-    if (feed.style.top !== top) feed.style.top = top;
   }
 
   private chatMessage(id: string, name: string, text: string) {
@@ -2993,12 +3104,9 @@ export class TownScene extends Phaser.Scene {
         if (meSprite && !me?.dead) {
           const cam = this.cameras.main, cv = this.game.canvas, { cr, hr, hudW } = hudRects(cv);
           const k = hr.width / (hudW || hr.width) || 1;
-          const wx = ISO ? isoX(meSprite.x, meSprite.y) : meSprite.x, wy = ISO ? isoY(meSprite.x, meSprite.y) : meSprite.y;
-          // camera px: zoom around the camera's middle (scroll is in iso space; worldView is not, at this point)
-          const px = (wx - cam.scrollX - cam.width / 2) * cam.zoom + cam.width / 2, py = (wy - cam.scrollY - cam.height / 2) * cam.zoom + cam.height / 2;
-          const sx = (cam.x + px) * (cr.width / cv.width), sy = (cam.y + py) * (cr.height / cv.height);
+          const at = screenOf(cam, meSprite.x, meSprite.y, cr);
           const lift = (meSprite.displayHeight * 0.45 * cam.zoom * (cr.height / cv.height)) / k; // half the body, in HUD px
-          this.npcs.heroScreen = { x: (cr.left + sx - hr.left) / k, y: (cr.top + sy - hr.top) / k, lift };
+          this.npcs.heroScreen = { x: (at.x - hr.left) / k, y: (at.y - hr.top) / k, lift };
         } else this.npcs.heroScreen = undefined;
       }
     }
@@ -3019,7 +3127,7 @@ export class TownScene extends Phaser.Scene {
       : isoInput(k.UP.isDown, k.DOWN.isDown, k.LEFT.isDown, k.RIGHT.isDown); // spell keys: W/E/R/T cast, the mouse (or arrows) walks
     // Point-and-click: the mouse steers until a movement key is pressed
     let want = next;
-    if (next.up || next.down || next.left || next.right) { this.pointer?.cancel(); this.pointer?.drawRing(); }
+    if (next.up || next.down || next.left || next.right) { this.pointer?.cancel(); this.pointer?.drawRing(); this.pointer?.repick(); } // hover follows the scrolling world
     else want = this.pointer?.update(Math.min(dtMs, 100)) ?? next;
     // A skill key held down keeps casting toward the mouse, like holding a spell in Diablo 2 (the server drops
     // the tries that come before the cooldown or without the mana, so asking often just means no wasted time)
@@ -3031,18 +3139,18 @@ export class TownScene extends Phaser.Scene {
 
     const now = this.time.now, wall = performance.now();
     this.countFps(wall);
+    this.updateMonsterBar(now);
     // Long frames (a hiccup, a hidden tab) are capped so prediction never leaps through a wall
     const step = Math.min(dtMs, 100);
     stepInterpDelay(step);
     // An easing written for 60 fps (k per frame), adjusted so it pulls just as hard at 30, 120 or 144 fps
     const ease = (k: number) => 1 - Math.pow(1 - k, step / (1000 / 60));
-    this.soundCues.hideIcons();
     for (const [id, e] of this.entities) {
       const p = e.state;
       const rooted = (typeof p.fx === "string" && p.fx.includes("charge")) || (id === this.me && this.time.now < this.rootUntil); // a buildup roots the hero, a dash glides
       if (id === this.me && !p.dead && !p.stunned && !p.rolling && !rooted) {
         // Client-side prediction with the same movement code the server runs
-        const r = moveStep(e.sprite.x, e.sprite.y, this.input_, step / 1000, heroSpeed(p.cls as ClassKind, p.slowed, p.spd ?? 1) * gearSpeedMult(activeOf(p)));
+        const r = moveStep(e.sprite.x, e.sprite.y, this.input_, step / 1000, heroSpeed(p.cls as ClassKind, p.slowed, own(p).spd) * gearSpeedMult(activeOf(p)));
         e.sprite.setPosition(r.x, r.y);
         if (this.corrX || this.corrY) {
           // Blend in the server's correction; the history moves with it so the next update doesn't count it twice
@@ -3054,7 +3162,7 @@ export class TownScene extends Phaser.Scene {
         // Just stopped: the server's hero is still walking up behind ours (it hasn't read the stop yet, and its last
         // update is older still). Easing toward that stale spot slid the hero back a step before each attack (Murat).
         // So wait until the server has the stop and stands still too, then settle on its spot.
-        const settled = ((p.seq ?? 0) >= this.stopSeq && !p.moving) || now - this.stoppedAt > 1000;
+        const settled = (own(p).seq >= this.stopSeq && !p.moving) || now - this.stoppedAt > 1000;
         if (!r.moving && settled) {
           this.corrX = this.corrY = 0;
           // Ease toward authoritative position while idle (same pull at any frame rate)
@@ -3092,12 +3200,6 @@ export class TownScene extends Phaser.Scene {
           continue;
         }
         if (e.culled) { e.culled = false; e.bubble?.setVisible(true); e.bar.setVisible(true); }
-        if (!e.label) {
-          e.label = this.add.text(e.sprite.x, e.sprite.y, "", {
-            fontFamily: TEXT_FONT, fontSize: `${TEXT_PX}px`, color: "#ffffff", stroke: "#000", strokeThickness: 2,
-          }).setOrigin(0.5, 1).setScale(WT).setResolution(1);
-          isoAnchor(e.label, e.sprite);
-        }
       }
 
       const moving = id === this.me ? (this.input_.up || this.input_.down || this.input_.left || this.input_.right) : p.moving;
@@ -3175,46 +3277,23 @@ export class TownScene extends Phaser.Scene {
       if (e.gear) this.gearFx.tick(e, dtMs, moving);
 
       const x = Math.round(e.sprite.x), y = Math.round(e.sprite.y);
-      // Monsters: HP bar over the head, level tag just above it
+      // Monsters: HP bar over the head (only while it matters, see showWorldBar); their name and level are in the top bar
       const mobBarY = y - e.top - 4;
-      if (e.label) setBaseDepth(e.label.setPosition(x, e.mob ? mobBarY - 1 : y - e.top - (p.hat ? 4 : 2)), e.sprite.y + 1);
-      if (e.mob && e.label) {
-        // Level tag coloured by how tough it is for me: grey easy, white even, orange tougher, red dangerous
-        const diff = (p.level ?? 1) - ((this.room.state as any).players?.get(this.me)?.level ?? 1);
-        const col = p.owner ? (p.owner === this.me || (this.room.state as any).players?.get(p.owner)?.party && (this.room.state as any).players?.get(p.owner)?.party === (this.room.state as any).players?.get(this.me)?.party ? "#7cfc00" : "#ff8a65")
-          : diff >= 3 ? "#ff5252" : diff >= 1 ? "#ffb74d" : diff >= -2 ? "#ffffff" : "#9e9e9e";
-        // The monster under the mouse or being attacked also shows its name (just "LvN" otherwise: less clutter)
-        const named = id === this.pointer?.hoverId || id === this.pointer?.targetId;
-        const kindName = named ? (MOBS[p.kind as MobKind]?.name ?? "") : "";
-        const lv = `Lv${p.level ?? 1}`;
-        const owner = p.owner ? (this.room.state as any).players?.get(p.owner) : undefined;
-        const txt = owner ? `${owner.name}'s ${MOBS[p.kind as MobKind]?.name ?? "Golem"}${isSummonKind(p.kind) || p.kind === "bride" || p.kind === "wisp" ? "" : " thrall"}` : p.champion ? `${named ? championFullName(p.title, p.champion) : p.title} ${lv}` // a champion: its short name, the epithet only under the mouse
-          : p.title ? `${p.title} ${lv}` : BOSS[p.kind as keyof typeof BOSS] ? `${kindName || "Boss"} ${lv}` : ELITE[p.kind as keyof typeof ELITE] ? `Elite ${kindName ? kindName + " " : ""}${lv}` : kindName ? `${kindName} ${lv}` : lv;
-        // A monster right next to my hero: my own name steps aside so the two labels never overlap
-        const meS = this.entities.get(this.me)?.sprite;
-        if (meS && !p.dead && Math.abs(e.sprite.x - meS.x) < 1.5 * TILE && Math.abs(e.sprite.y - meS.y) < 1.5 * TILE) this.mobByMeAt = now;
-        // A Summoner's wisps come four at a time and stick to their owner: their name only under the mouse
-        const shown = p.kind === "wisp" && !named ? "" : txt;
-        if (e.label.text !== shown) e.label.setText(shown);
-        if (e.lvlColor !== col) { e.label.setColor(col); e.lvlColor = col; }
-        e.label.setVisible(!p.dead && !p.hidden);
-      } else if (e.label && id === this.me) {
-        e.label.setVisible(now - this.mobByMeAt > 300);
-      } else if (e.label && id !== this.me) {
-        // Group members: green name
-        const myParty = (this.room.state as any).players?.get(this.me)?.party;
-        const col = myParty && p.party === myParty ? "#7cfc00" : "#ffffff";
-        if (e.lvlColor !== col) { e.label.setColor(col); e.lvlColor = col; }
+      if (e.label) {
+        // Heroes: the name over the head, hidden when it would be drawn under the top-right HUD column
+        setBaseDepth(e.label.setPosition(x, y - e.top - (p.hat ? 4 : 2)), e.sprite.y + 1);
+        e.label.setVisible(!this.labelUnderHud(e.label, e.sprite));
+        if (id !== this.me) {
+          // Group members: green name
+          const myParty = (this.room.state as any).players?.get(this.me)?.party;
+          const col = myParty && p.party === myParty ? "#7cfc00" : "#ffffff";
+          if (e.lvlColor !== col) { e.label.setColor(col); e.lvlColor = col; }
+        }
       }
       e.bubble?.setPosition(x, y - e.top - 12); // above the name label
       setBaseDepth(e.bar.clear(), e.sprite.y + 1);
-      if (e.mob) this.champFx?.sync(id, e, p, x, y, mobBarY, now);
+      if (e.mob) this.champFx?.sync(id, e, p, x, y, now);
       this.fx.status(e, e.bar, dtMs / 1000);
-      // Songweaver: how this monster hears (ear tier + pitch arrow) beside its name while hovered / targeted
-      if (e.mob && e.label && !p.dead && !p.hidden && (id === this.pointer?.hoverId || id === this.pointer?.targetId)
-        && (this.room.state as any).players?.get(this.me)?.cls === "songweaver" && soundOf(p.kind)) {
-        this.soundCues.drawIcons(this, e.label, p.kind, e.sprite.y + 3, id === this.pointer?.hoverId, PIXEL_FONT, e.sprite);
-      }
       // (Stacks built by basic hits are shown by the skill keys, see chargeCell: no pips under the hero, Murat 2026-11-04)
       const maxHp = p.maxHp;
       if (!e.mob) {
@@ -3261,13 +3340,16 @@ export class TownScene extends Phaser.Scene {
         else if (p.kind === "demon" && p.bones && !e.sprite.texture.key.startsWith("mob_demon")) this.drawDemonBones(e, p, x, y); // painted sheets wear them
 
         const bw = Math.min(40, (MOB_LOOK[p.kind]?.bar || 14) * (1 + MERGE.growPerBlob * ((p.merged || 1) - 1)));
-        if (ELITE[p.kind as keyof typeof ELITE]) e.bar.fillStyle(BOSS[p.kind as keyof typeof BOSS] ? 0xc62828 : 0xffc93c).fillRect(x - bw / 2 - 1, mobBarY - 1, bw + 2, 4); // elite: gold frame, boss: red
+        const showBar = showWorldBar({ hovered: id === this.pointer?.hoverId || id === this.pointer?.inspectId, targeted: id === this.pointer?.targetId, lastMineHitAt: this.lastMineHit.get(id), now, dead: !!p.dead, hidden: !!p.hidden, ownSummon: p.owner === this.me });
+        if (showBar && ELITE[p.kind as keyof typeof ELITE]) e.bar.fillStyle(BOSS[p.kind as keyof typeof BOSS] ? 0xc62828 : 0xffc93c).fillRect(x - bw / 2 - 1, mobBarY - 1, bw + 2, 4); // elite: gold frame, boss: red
         if (e.rallyUntil && now < e.rallyUntil) {
           // rallied by the chief's War Cry: a red glow under the feet
           e.bar.fillStyle(0xff3d2e, 0.18 + 0.1 * Math.sin(now / 120)).fillEllipse(x, y, 22, 9);
         }
-        e.bar.fillStyle(0x000000).fillRect(x - bw / 2, mobBarY, bw, 2);
-        e.bar.fillStyle(0xf4a261).fillRect(x - bw / 2, mobBarY, bw * (p.hp / maxHp), 2);
+        if (showBar) {
+          e.bar.fillStyle(0x000000).fillRect(x - bw / 2, mobBarY, bw, 2);
+          e.bar.fillStyle(0xf4a261).fillRect(x - bw / 2, mobBarY, bw * (p.hp / maxHp), 2);
+        }
       } else if (!e.mob && !p.dead && p.hp < maxHp) {
         e.bar.fillStyle(0x000000).fillRect(x - 7, y + 3, 14, 2);
         e.bar.fillStyle(0xe63946).fillRect(x - 7, y + 3, 14 * (p.hp / maxHp), 2);
@@ -3314,9 +3396,9 @@ export class TownScene extends Phaser.Scene {
     this.grimoire?.update(meEnt?.state?.cls);
     this.waygates?.update(meEnt?.state, meEnt && !meEnt.state.dead ? meEnt.sprite : undefined, !!this.npcs?.isOpen || !!this.chests?.near);
     this.portals?.update(meEnt && !meEnt.state.dead ? meEnt.sprite : undefined, !!this.npcs?.isOpen || !!this.chests?.near || !!this.shrine?.near);
+    if (this.minimap) this.minimap.war = this.warLast; // the war table layer (warTable.ts)
     if (this.minimap && this.npcs) this.minimap.markers = [...this.npcs.markers, ...(this.portals?.markers() ?? []), ...(this.bounty?.markers() ?? []), ...(this.dungeon?.markers() ?? []), ...(this.waygates?.markers() ?? [])];
 
-    if (now >= this.feedAt) { this.feedAt = now + 200; this.placeFeed(); }
     const mine = meEnt?.state;
     if (mine) {
       this.gearMenu?.refresh(mine);
@@ -3331,11 +3413,11 @@ export class TownScene extends Phaser.Scene {
       const statsHtml = mine.dead ? "Respawning… " : ""; // (the safe zone line was removed, Murat 2026-11-07)
       void safe;
       if (statsHtml !== this.statsShown) { this.statsShown = statsHtml; document.getElementById("stats")!.innerHTML = statsHtml; }
-      const freePts = talentPoints(mine.level) - spentPoints(cls0, mine.talents);
+      const freePts = talentPoints(mine.level) - spentPoints(cls0, own(mine).talents);
       const badge = document.getElementById("treebadge")!;
       badge.hidden = freePts <= 0;
       badge.textContent = String(freePts);
-      const freeStats = statPoints(mine.level) - (mine.ptSta + mine.ptStr + mine.ptMag + (mine.ptDex ?? 0));
+      const freeStats = statPoints(mine.level) - (own(mine).ptSta + own(mine).ptStr + own(mine).ptMag + own(mine).ptDex);
       const hb = document.getElementById("herobadge")!;
       hb.hidden = freeStats <= 0;
       hb.textContent = String(freeStats);
@@ -3345,22 +3427,23 @@ export class TownScene extends Phaser.Scene {
       const tx = meEnt.sprite.x / TILE, ty = meEnt.sprite.y / TILE;
       const zdef = zoneAt(Math.floor(tx), Math.floor(ty));
       setMusicZone(zdef?.name, zdef?.mobs, this.areaName, actOfTile(tx, ty));
+      this.warStd?.update(meEnt.state.dead ? undefined : meEnt.sprite, !!this.npcs?.isOpen || !!this.npcs?.busy || !!this.chests?.near || !!this.stash?.near || !!this.bounty?.near || !!this.portals?.near || !!this.shrine?.near || !!this.waygates?.near || !!this.dungeon?.nearDoor, now);
+      this.warPlaque?.update(tx, ty, this.warStd?.standing(meEnt.sprite)); // the clan war front plaque (warPlaque.ts)
       sfxFrame(this.me, this.entities as any);
       const cls = mine.cls as ClassKind;
-      const cdm = cooldownMult(cls, statsOf(mine), mine.talents);
+      const cdm = cooldownMult(cls, statsOf(mine), own(mine).talents);
       // Top-left bars (resourceBars.ts): red HP, blue Mana (spells, shared/mana.ts), green XP
-      const mn = unpackMana(mine.mp);
+      const ow = own(mine), mn = unpackMana(ow.mp); // owner-only numbers, in `me` (server/player.ts)
       (this.resBars ??= new ResourceBars(document.getElementById("hud")!)).update({
-        level: mine.level, hp: mine.hp, maxHp: mine.maxHp, mp: mn.mana, maxMp: mn.maxMana,
-        xpFrac: mine.level >= MAX_LEVEL ? 1 : (mine.xp - cur) / Math.max(1, next - cur),
-        xp: mine.xp - cur, xpNeed: mine.level >= MAX_LEVEL ? undefined : next - cur,
+        song: cls === "songweaver", level: mine.level, hp: mine.hp, maxHp: mine.maxHp, mp: mn.mana, maxMp: mn.maxMana, // the gauge lives in mana / maxMana (shared/mana.ts usesGauge)
+        xpFrac: mine.level >= MAX_LEVEL ? 1 : Math.max(0, Math.min(1, (ow.xp - cur) / Math.max(1, next - cur))),
+        xp: Math.max(0, ow.xp - cur), xpNeed: mine.level >= MAX_LEVEL ? undefined : next - cur,
       });
       // Heat / overload gauge on the left (overloadGauge.ts, shared/overload.ts)
-      const flip = (this.heatGauge ??= new OverloadGauge(document.getElementById("hud")!)).update(mine.energy ?? 0);
+      const flip = (this.heatGauge ??= new OverloadGauge(document.getElementById("hud")!)).update(ow.energy);
       if (flip) playSfx(flip);
       this.renderActions(mine, cls, cdm, now);
-      (this.buffBar ??= new BuffBar(document.getElementById("hud")!)).update(mine.me?.timers ?? ""); // owner-only: in `me` (server/player.ts)
-      this.chordHud?.tick();
+      (this.buffBar ??= new BuffBar(hudSlot("statusrow"))).update(ow.timers);
     }
   }
 }

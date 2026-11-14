@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { ACTIVE_CLASSES, CLASSES } from "../shared/classes";
 import { CANTRIPS, cleanRanks, FINISHERS, SKILLS, skillById, skillOf } from "../shared/skills";
 import { afterHit, castSkill, FieldInst, HitOpts, newRuntime, ShotSpec, SkillHost, statusOf, tickField, tickUnit, Unit } from "../shared/skillEngine";
-import { knownModes, MODE_IDS, MODES, NOTES, PROGRESSIONS, SONG, SONGWEAVER_TREE } from "../shared/songs";
+import { GAUGE, knownModes, MODE_IDS, MODES, NOTES, PROGRESSIONS, SONG, SONGWEAVER_TREE } from "../shared/songs";
 import { isSafeZone, isSolidAt, VILLAGE } from "../shared/map";
 import { TILE } from "../shared/constants";
 import { inVillage } from "../shared/wrath";
@@ -55,12 +55,14 @@ function world() {
 /** Every Songweaver skill at rank 1 (parents included, so cleanRanks keeps them all). */
 const allRanks = () => cleanRanks("songweaver", 30, Object.fromEntries(SKILLS.songweaver.map((s) => [s.id, 1])));
 const singer = (w: ReturnType<typeof world>, talents: Record<string, number> = allRanks(), x = 0) =>
-  w.add("sw", x, { cls: "songweaver", talents });
+  w.add("sw", x, { cls: "songweaver", talents, mana: 0, maxMana: GAUGE.max }); // her bubble is the song gauge (DI-3)
 /** Casts and clears its cooldown, so a test can play notes back to back. */
 const play = (w: ReturnType<typeof world>, id: string, skill: string) => {
   const u = w.units.get(id)!;
-  u.sk.last = {}; u.attackReadyAt = 0; u.mana = 9999;
+  u.sk.last = {}; u.attackReadyAt = 0;
   if (u.sk.song) u.sk.song.at -= SONG.changeMs; // past the song-change wait
+  // the same Chorus again with more than GAUGE.refreshMs left logs no note (songgauge.test.ts): play it as a real replay
+  if (u.sk.song?.id === skill) u.sk.song.f.until = Math.min(u.sk.song.f.until, w.now + GAUGE.refreshMs);
   const ok = castSkill(w.h, id, skill);
   w.step(500); // let buildups (Chorale, Anthem, Twelve-Tone Storm) land
   return ok;
@@ -224,7 +226,7 @@ async function setup(n: number) {
   const ids = cs.map((c) => c.sessionId);
   const ps = ids.map((id) => room.state.players.get(id));
   for (const p of ps) {
-    p.x = x; p.y = y; p.level = 30; p.invulnUntil = 0; p.sk.buffs = []; p.mana = p.maxMana = 9999;
+    p.x = x; p.y = y; p.level = 30; p.invulnUntil = 0; p.sk.buffs = []; p.mana = 0;
     for (const [k, v] of Object.entries(allRanks())) p.talents.set(k, v);
   }
   const buff = (i: number, s: string) => ps[i].sk.buffs.find((b: { id: string; until: number }) => b.id === s && b.until > Date.now());
@@ -344,7 +346,8 @@ test("Oakvale: a finisher with an enemy part outlaws even when the note that fir
       return bc.call(this, type, msg, ...rest);
     };
     const again = () => { p.sk.last = {}; p.attackReadyAt = 0; if (p.sk.song) p.sk.song.at -= SONG.changeMs; };
-    const fresh = () => { p.sk.notes = []; p.sk.chordLock = 0; p.outlaw = false; p.sk.mode = "major"; };
+    // (a Chorus replayed with more than GAUGE.refreshMs left logs no note: cut the running one short first)
+    const fresh = () => { p.sk.notes = []; p.sk.chordLock = 0; p.outlaw = false; p.sk.mode = "major"; if (p.sk.song) p.sk.song.f.until = Math.min(p.sk.song.f.until, Date.now() + GAUGE.refreshMs); };
     try {
       // Perfect Cadence (IV V I: heals, and hurts foes): IV and V played outside the stockade, the lawful I inside
       fresh(); [p.x, p.y] = [t.x, t.y];
@@ -378,7 +381,7 @@ test("a charged note counts at release: a stunned Chorale logs no note and fires
       if (type === "sfx" && msg?.ev === "fizzle") fizzled.push(msg.s);
       return bc.call(this, type, msg, ...rest);
     };
-    const again = () => { p.sk.last = {}; p.attackReadyAt = 0; p.stunUntil = 0; p.mana = 9999; if (p.sk.song) p.sk.song.at -= SONG.changeMs; };
+    const again = () => { p.sk.last = {}; p.attackReadyAt = 0; p.stunUntil = 0; if (p.sk.song) p.sk.song.at -= SONG.changeMs; };
     const fresh = () => { p.sk.notes = []; p.sk.chordLock = 0; p.outlaw = false; p.sk.mode = "major"; fired.length = 0; };
     const charge = SKILLS.songweaver.find((s) => s.id === "sg_chorale")!.chargeMs!;
     try {
@@ -436,7 +439,7 @@ test("swTree / swMode: saved, loaded, an old tree refunds, an unknown mode falls
     assert.equal(p.talents.size, 0, "old tree: skill points come back");
     assert.equal(p.sk.mode, "major");
     // other classes never get the fields
-    const w = { ...p, cls: "wizard" };
+    const w = Object.create(p, { cls: { value: "wizard" } }); // keeps the Player accessors (a spread drops them)
     assert.equal(t.room.snapshot(w).swTree, undefined);
   } finally { await t.done(); }
 });
@@ -449,7 +452,7 @@ test("the owner-only chord message: notes, mode and lockout, sent when they chan
     c.onMessage("chord", (m: any) => got.push(m));
     await wait(200);
     const p = srv.room.state.players.get(c.sessionId), [x, y] = openSpot();
-    p.x = x; p.y = y; p.level = 30; p.mana = p.maxMana = 9999;
+    p.x = x; p.y = y; p.level = 30; p.mana = 0;
     for (const [k, v] of Object.entries(allRanks())) p.talents.set(k, v);
     await wait(150);
     const n0 = got.length;
@@ -463,17 +466,23 @@ test("the owner-only chord message: notes, mode and lockout, sent when they chan
   } finally { await wait(50); }
 });
 
-test("Accelerando: Tempo quickens a song's beat, never below 500 ms", () => {
+test("Accelerando: the song gauge's fill quickens a song's beat, never below 500 ms", () => {
   const w = world();
-  const u = singer(w, { sg_march: 1, sg_call: 1, sg_accel: 3 }); // 15% per Tempo stack
+  const u = singer(w, { sg_march: 1, sg_call: 1, sg_accel: 3 }); // 15% per old Tempo stack, a full gauge = 5 of them
   play(w, "sw", "sg_march");
   const f = w.fields.find((x) => x.skill === "sg_march")!;
-  u.sk.stacks = 2; u.sk.stackAt = w.now;
+  u.mana = 40; // 2 stacks' worth
   f.nextTick = 0; tickField(w.h, f);
   assert.equal(f.nextTick - w.now, Math.round(1000 * (1 - 0.15 * 2)));
-  u.sk.stacks = 5; u.sk.stackAt = w.now;
+  u.mana = 99.9; // nearly 5 stacks: 75% faster, held at the floor
   f.nextTick = 0; tickField(w.h, f);
   assert.equal(f.nextTick - w.now, SONG.tickFloorMs, "floor");
+  u.mana = 0;
+  f.nextTick = 0; tickField(w.h, f);
+  assert.equal(f.nextTick - w.now, 1000, "an empty gauge: the plain beat");
+  u.sk.stacks = 5; // Tempo stacks mean nothing to her any more
+  f.nextTick = 0; tickField(w.h, f);
+  assert.equal(f.nextTick - w.now, 1000);
 });
 
 test("Modulate through the room at real gaps: every press advances the mode, the fx word and the chord message follow", async () => {
@@ -486,7 +495,7 @@ test("Modulate through the room at real gaps: every press advances the mode, the
     c.onMessage("chord", (m: { mode: string }) => chords.push(m));
     await wait(200);
     const p = srv.room.state.players.get(c.sessionId), [x, y] = openSpot();
-    p.x = x; p.y = y; p.level = 30; p.mana = p.maxMana = 9999; p.hp = p.maxHp = 99999;
+    p.x = x; p.y = y; p.level = 30; p.mana = 0; p.hp = p.maxHp = 99999;
     p.invulnUntil = Date.now() + 60_000; // no stray monster blow (flinch, poise break) holds a press back
     for (const [k, v] of Object.entries(ranks)) if (v > 0) p.talents.set(k, v);
     const known = knownModes((id) => Number(ranks[id] ?? 0));

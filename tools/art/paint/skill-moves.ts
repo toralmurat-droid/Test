@@ -9,6 +9,7 @@ import type { Canvas } from "../canvas";
 import { buildMovesSheet, HEROES, MOVE_HEROES, setPainted } from "../characters";
 import { diff } from "../gear";
 import { GEAR, GEAR_IDS, weaponType } from "../../../shared/gear";
+import { gearDefs } from "./books";
 import { nativeFamily, weaponFamily } from "../../../shared/weapons";
 import type { ClassKind } from "../../../shared/classes";
 import { PAINT_K, wear } from "./sheets";
@@ -32,8 +33,8 @@ export function buildSkillMoves(OUT: string, want: string[] = []) {
     const plain = buildMovesSheet(h);
     saveWebp(plain, `${OUT}/characters/${cls}-moves.webp`, 90);
     let n = 0;
-    for (const id of GEAR_IDS) {
-      const d = GEAR[id];
+    for (const d of gearDefs()) {
+      const id = d.id;
       if (d.cls && d.cls !== cls) continue; // class kits only fit their own class
       if (d.slot === "weapon" && weaponFamily(weaponType(cls, id)) !== nativeFamily(cls)) continue; // melee skills need a melee weapon
       wear(d);

@@ -12,7 +12,9 @@ import { FxEntity, PALETTE, SkillFx } from "./skillfx";
  *   Lv 22+  flame:  the weapon burns / freezes / crackles all the time, an aura rises off armour, embers off the hat
  *   Lv 28+  mythic: combo finishers burst into a shockwave and pillar of light, boots leave afterimages,
  *                   a glow under the feet
- * Only worn items whose requirements are met count (activeOf). Particles are SkillFx's, so they work in iso too.
+ * Our hero: only worn items whose requirements are met count (activeOf). Other heroes: everything they wear shows,
+ * since their stat points are owner-only (Player.me) and the check can't be made here. Particles are SkillFx's, so they
+ * work in iso too.
  *
  * Damage types (shared/elements.ts) pick the look: a fire weapon sheds embers, a cold one frost mist and flakes, a
  * poison one drips venom, a faith one floats golden motes. Even a Lv 1 elemental weapon shows a faint sign of its

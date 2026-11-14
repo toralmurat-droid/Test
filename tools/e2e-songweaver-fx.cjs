@@ -1,5 +1,5 @@
-// Real end-to-end check of the Songweaver client effects against a real server, at desktop and phone sizes:
-// songs (ring), the Amen progression (chord HUD, legend), Modulate, waves in flight, a deaf slime and a fragile
+// Real end-to-end check of the Songweaver client effects against a real server, at the two desktop sizes:
+// songs (ring), the Amen progression (note rings, legend behind the "?" on the skills page), Modulate, waves in flight, a deaf slime and a fragile
 // skeleton (ringing / muffled numbers, ear icon, hint line), and `refId not found` errors.
 // Needs a DEV server (the /tp chat command is off in production) on a fresh save file, and
 // the client (vite dev) in front of it:
@@ -7,12 +7,12 @@
 //   npx vite --port 5180
 //   node tools/e2e-songweaver-fx.cjs 5180 docs/art
 // (needs playwright; set PLAYWRIGHT_CHROME=/path/to/chrome if its own browser is not installed)
-const { chromium, devices } = require("playwright");
+const { chromium } = require("playwright");
 const PORT = process.argv[2], OUT = process.argv[3];
 const SETUPS = [
-  ["desktop", { viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1 }],
-  ["phone-portrait", devices["iPhone 13"]],
-  ["phone-landscape", devices["iPhone 13 landscape"]],
+  // desktop only (mouse and keyboard): the two screen sizes CLAUDE.md asks for
+  ["desktop", { viewport: { width: 1920, height: 1080 }, deviceScaleFactor: 1 }],
+  ["desktop-1366", { viewport: { width: 1366, height: 768 }, deviceScaleFactor: 1 }],
 ];
 (async () => {
   const browser = await chromium.launch(process.env.PLAYWRIGHT_CHROME ? { executablePath: process.env.PLAYWRIGHT_CHROME } : {});
@@ -39,8 +39,9 @@ const SETUPS = [
       const S = window.__game.scene.scenes.find((s) => s.entities);
       window.S = S;
       window.log = [];
-      // the mouse is not over any monster in a headless run: pin the hovered monster (its nameplate shows the ear icons)
+      // the mouse is not over any monster in a headless run: pin the hovered monster (the top monster bar shows the ear icons)
       Object.defineProperty(S.pointer, "hoverId", { get: () => window.__hover });
+      Object.defineProperty(S.pointer, "inspectId", { get: () => window.__hover });
       // record the sfx events and chat hints the client handled
       const so = S.songEvent.bind(S);
       S.songEvent = (ev) => { window.log.push(ev); return so(ev); };
@@ -52,7 +53,7 @@ const SETUPS = [
     const send = (t, m) => page.evaluate(([t, m]) => window.S.room.send(t, m), [t, m]);
     const chat = (t) => send("chat", t);
     const shot = (n) => page.screenshot({ path: `${OUT}/songweaver-e2e-${name}-${n}.png` });
-    const me = () => page.evaluate(() => { const p = window.S.room.state.players.get(window.S.me); return { cls: p.cls, level: p.level, fx: p.fx, x: p.x, y: p.y, mana: p.mp ?? p.mana }; });
+    const me = () => page.evaluate(() => { const p = window.S.room.state.players.get(window.S.me); return { cls: p.cls, level: p.level, fx: p.fx, x: p.x, y: p.y, mana: p.me?.mp }; });
     const result = { cls: (await me()).cls };
     await chat("/max");
     await page.waitForTimeout(1200);
@@ -80,11 +81,11 @@ const SETUPS = [
     await shot("2-chord-fired");
     await page.waitForTimeout(2500);
     // legend: open through the real "?" button
-    await page.click("#chordhud .ch-help");
+    await page.keyboard.press("t"); await page.waitForTimeout(500); await page.click(".chhelp"); // the legend moved behind a "?" on the skills page (DI-1)
     await page.waitForTimeout(300);
-    result.hudText = await page.evaluate(() => document.getElementById("chordhud")?.innerText.slice(0, 80));
+    result.hudText = await page.evaluate(() => document.getElementById("chordlegend")?.innerText.slice(0, 80));
     await shot("3-chord-hud-legend");
-    await page.click("#chordhud .ch-help");
+    await page.click("#chordlegend"); await page.keyboard.press("t");
     // ---- the deaf slime in the North Meadow ----
     const fightAt = async (tx, ty, kind, tag, skills) => {
       await chat(`/tp ${tx} ${ty}`);
@@ -97,10 +98,10 @@ const SETUPS = [
       if (!found) return { found: false };
       await chat(`/tp ${Math.floor(found.x / 32) - 3} ${Math.floor(found.y / 32)}`);
       await page.waitForTimeout(800);
-      // hover a second monster of the kind (not hit yet): its nameplate shows the ear and note icons with the tooltip
+      // hover a second monster of the kind (not hit yet): the top monster bar (#monsterbar .mb-ear) shows the ear and note icons with the tooltip
       await page.evaluate(([kind, id]) => { const S = window.S, m = S.entities.get(S.me); let bd = 1e9; window.__hover = id; S.entities.forEach((e, k) => { if (!e.mob || e.culled || e.state.dead || e.state.kind !== kind || k === id) return; const d = Math.hypot(e.sprite.x - m.sprite.x, e.sprite.y - m.sprite.y); if (d < bd) { bd = d; window.__hover = k; } }); }, [kind, found.id]);
       await page.waitForTimeout(1500); // the headless frame rate is 2-3 fps
-      result[tag + "-ear"] = await page.evaluate(() => { const c = window.S.soundCues, e = window.S.entities.get(window.__hover); return c.ear && { vis: c.ear.visible, x: Math.round(c.ear.x), y: Math.round(c.ear.y), sc: c.ear.scaleX, lab: e?.label && [Math.round(e.label.x), Math.round(e.label.y)], tex: c.ear.texture.key, note: c.note?.visible }; });
+      result[tag + "-ear"] = await page.evaluate(() => { const bar = document.querySelector("#monsterbar"), ear = bar?.querySelector(".mb-ear"); return bar && !bar.hidden && ear ? { vis: true, icons: ear.querySelectorAll("img").length, tip: ear.textContent, name: bar.querySelector(".mb-name")?.textContent } : { vis: false }; });
       await shot(`${tag}-ear`);
       for (let i = 0; i < 14; i++) {
         const t = await page.evaluate((id) => { const e = window.S.entities.get(id); return e && !e.state.dead ? { x: e.state.x, y: e.state.y } : null; }, found.id);

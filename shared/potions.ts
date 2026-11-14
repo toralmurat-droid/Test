@@ -4,8 +4,8 @@
  * bag slot. Q drinks a healing potion and V a mana potion, always the smallest size you carry, so the big ones are
  * kept for later. Healing potions can be drunk back to back with no cooldown; the heal lands instantly.
  *
- * Synced: Player.potions packs the six counts in one number (packPotions), because the Player schema is at its
- * 64-field limit. Ground items: kind "potion" / "mpotion", the size index in Item.gear ("0".."2").
+ * Synced to the owner only: Player.me.potions (server/player.ts) packs the six counts in one number (packPotions).
+ * Ground items: kind "potion" / "mpotion", the size index in Item.gear ("0".."2").
  */
 export type PotionKind = "potion" | "mpotion";
 export const POTION_KINDS: PotionKind[] = ["potion", "mpotion"];

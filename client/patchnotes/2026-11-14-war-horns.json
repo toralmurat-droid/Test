@@ -1,0 +1,10 @@
+{
+  "date": "2026-11-14",
+  "patch": 231,
+  "title": "War horns and clan leaders",
+  "changes": [
+    "A war horn sounds and a notice shows when a siege is called, a land falls or holds where you stand or next to it.",
+    "Clan leaders speak in the chat: Captain Hale, the Redfang Chief, the Pale Marshal, the Hide-Mother and the Veiled Oracle call their clans to arms and boast of their wins.",
+    "During a siege's hour of warning, heroes at that land's standards count half again as much."
+  ]
+}

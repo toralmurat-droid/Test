@@ -9,6 +9,7 @@ import type { Canvas } from "../canvas";
 import { buildSheet, HEROES, poseVariant, setPainted } from "../characters";
 import { diff } from "../gear";
 import { GEAR, GEAR_IDS } from "../../../shared/gear";
+import { gearDefs } from "./books";
 import { nativeFamily, POSE_FAMILIES, weaponFamily } from "../../../shared/weapons";
 import { weaponType } from "../../../shared/gear";
 import type { ClassKind } from "../../../shared/classes";
@@ -33,8 +34,8 @@ for (const h of HEROES) for (const fam of POSE_FAMILIES) {
   const plain = buildSheet(v);
   saveWebp(plain, `${OUT}/characters/${name}.webp`, 90);
   let n = 0;
-  for (const id of GEAR_IDS) {
-    const d = GEAR[id];
+  for (const d of gearDefs()) {
+    const id = d.id;
     if (d.cls && d.cls !== cls) continue; // class kits only fit their own class
     if (d.slot === "weapon" && weaponFamily(weaponType(cls, id)) !== fam) continue; // that weapon never shows in this stance
     wear(d);

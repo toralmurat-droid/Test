@@ -2,6 +2,9 @@ import { MAP_H as FULL_H, MAP_W, PLAYER_RADIUS, TILE, UNDER_END, WORLD_H, type M
 import { CRYPT_DOOR, FLOORS, LAIRS, SEA_END, SHORTCUTS, SINKHOLE, UNDER_SHAFT, type Floor } from "./dungeon";
 import { buildDesert, D, inDesertRow, KEL_MARKET, WAYGATE_OAKVALE } from "./desert";
 
+/** Mirror Pond, in tiles (centre and radii of its water): the Songweaver's Mirror Pond Air is played on its shore (shared/songbook.ts). */
+export const MIRROR_POND = { x: 24, y: 94, rx: 9, ry: 6 };
+
 /** The overworld's rows: the world generator (and everything above ground) works on these; under them lies the Mawdeep (shared/dungeon.ts). */
 const MAP_H = WORLD_H;
 
@@ -55,6 +58,8 @@ function noise(x: number, y: number, scale: number, seed: number) {
 
 /** Oakvale's palisade bounds (tiles, inclusive). */
 export const VILLAGE = { x0: 68, y0: 50, x1: 92, y1: 70 };
+/** Footprints of Oakvale's two named ruins (their walls get their own art: client/src/chapelRuin.ts). */
+export const CHAPEL_RUIN = { x: 87, y: 51, w: 5, h: 4 }, TANKARD_RUIN = { x: 87, y: 66, w: 5, h: 4 };
 /** Where the two main roads cross the village: King's Road runs west↔east near row RY+1, North Road north↔south near column RX+1. */
 export const ROADS = { RX: 79, RY: 59 };
 /** Cobbled square in the middle of the ruined village. It is the safe zone. */
@@ -240,7 +245,7 @@ function buildWorld() {
     each(cx - 2, y, 4, 1, (x) => setG(x, y, T.WATER));
     for (const x of [cx - 3, cx + 2]) if (ground[y][x] !== T.WATER) setG(x, y, T.SAND);
   }
-  const pond = { x: 24, y: 94, rx: 9, ry: 6 };
+  const pond = MIRROR_POND;
   disk(pond.x, pond.y, pond.rx * 1.3, pond.ry * 1.35, (x, y) => setG(x, y, T.SAND));
   disk(pond.x, pond.y, pond.rx, pond.ry, (x, y) => setG(x, y, T.WATER));
   const marsh = { x: 36, y: 92, w: 38, h: 22 };
@@ -337,12 +342,12 @@ function buildWorld() {
   };
 
   // Four small ruins in the corners of the stockade, doorways facing the square
-  ruinBuilding(87, 51, 5, 4, true, false, 101);  // Chapel of the Dawn
+  ruinBuilding(CHAPEL_RUIN.x, CHAPEL_RUIN.y, CHAPEL_RUIN.w, CHAPEL_RUIN.h, true, false, 101);  // Chapel of the Dawn
   setO(89, 52, T.GRAVE); // the old altar stone
   for (const [gx, gy] of [[95, 51], [96, 53], [95, 55]]) setO(gx, gy, T.GRAVE); // graveyard just outside
   ruinBuilding(69, 51, 5, 4, true, false, 102);  // the Smithy
   setO(71, 52, T.ANVIL);
-  ruinBuilding(87, 66, 5, 4, false, true, 103);  // The Rusty Tankard
+  ruinBuilding(TANKARD_RUIN.x, TANKARD_RUIN.y, TANKARD_RUIN.w, TANKARD_RUIN.h, false, true, 103);  // The Rusty Tankard
   setO(88, 68, T.BARREL); setO(90, 68, T.CRATE);
   ruinBuilding(69, 66, 5, 4, false, true, 104);  // a cottage
 
@@ -378,8 +383,9 @@ function buildWorld() {
   fenceBox(12, 65, 16, 11, sideGaps(12, 65, 16, 11));
 
   // ---------- 8. Millbrook watermill ----------
-  const millDoor = building(mill.x, mill.y, 6, 6, T.ROOF_THATCH, T.WALL_TIMBER, T.WINDOW_TIMBER);
+  const millDoor = building(mill.x, mill.y + 1, 6, 5, T.ROOF_THATCH, T.WALL_TIMBER, T.WINDOW_TIMBER);
   setO(riverCenter(44) - 2, 44, T.WHEEL);
+  for (let y = 43; y <= 45; y++) for (let x = mx + 6; x <= mx + 7; x++) if (objects[y][x] === EMPTY) setO(x, y, T.WHEEL); // under the wheel's deck on pilings (client/src/millArt.ts)
   doorPath(millDoor);
   setO(mx - 1, 45, T.CRATE); setO(mx - 1, 46, T.BARREL);
 
@@ -530,7 +536,7 @@ function buildWorld() {
   each(salt.x, salt.y, salt.w, coastY(salt.x + 17) - salt.y - 3, (x, y) => { if (isGrass(ground[y][x]) && hash(x, y, 185) < 0.3) setG(x, y, T.GRASS); });
   const saltHouses: { x: number; y: number }[] = [];
   for (const [hx, hy, roof] of [[128, 178, T.ROOF_SLATE], [135, 177, T.ROOF_THATCH], [143, 178, T.ROOF_SLATE], [150, 177, T.ROOF_THATCH]] as const)
-    saltHouses.push(house(hx, hy, 5, 4, roof));
+    saltHouses.push(house(hx, hy + 1, 4, 3, roof)); // narrow two-storey fishers' houses (client/src/houseLife.ts)
   const lane = 186; // the lane along the beach
   curve([[salt.x - 1, lane], [salt.x + 12, lane + 1], [salt.x + 24, lane], [salt.x + salt.w, lane + 1]], 1);
   for (const d of saltHouses) doorPath(d);
@@ -557,7 +563,7 @@ function buildWorld() {
       if (edge && !gap(i, j) && (corner || hash(i, j, 77) > 0.08)) setO(i, j, T.PALISADE);
     });
   }
-  const bandHuts = [house(band.x + 2, band.y + 2, 4, 4, T.ROOF_THATCH), house(band.x + 9, band.y + 2, 5, 4, T.ROOF_RED), house(band.x + 17, band.y + 2, 4, 4, T.ROOF_THATCH)];
+  const bandHuts = [house(band.x + 2, band.y + 3, 4, 3, T.ROOF_THATCH), house(band.x + 9, band.y + 3, 5, 3, T.ROOF_RED), house(band.x + 17, band.y + 3, 4, 3, T.ROOF_THATCH)]; // tall barracks
   rectG(band.x + 1, band.y + 7, band.w - 2, 1, T.DIRT);
   for (const d of bandHuts) setG(d.x, d.y + 1, T.DIRT);
   setO(band.x + 12, band.y + 11, T.CAMPFIRE);

@@ -20,3 +20,13 @@ test("the Summoner's combo ends in an elemental burst", () => {
   assert.equal(c.length, 3);
   assert.ok((c[2].attune ?? 0) > 0 && (c[2].shotScale ?? 1) > 1 && c[2].damage > c[0].damage);
 });
+
+test("the Songweaver plays her lute only (DI-5): her kit lute shoots waves, any other weapon is refused", async () => {
+  const { canWear, NATIVE_WEAPON, weaponType } = await import("../shared/gear");
+  assert.equal(NATIVE_WEAPON.songweaver, "lute");
+  assert.equal(weaponType("songweaver", "songweaver_weapon@24#steel"), "lute", "the evolving lute is still a lute");
+  for (const w of ["w_frost", "wb_hunt", "ws_arming", "wx_hand", "wk_tanto", "wf_oak", "ww_ash"]) assert.ok(!canWear("songweaver", w), w);
+  assert.ok(canWear("knight", "ww_ash") && canWear("wizard", "wb_hunt"), "other classes keep every weapon");
+  const { gearFor } = await import("../tools/balance/duel");
+  assert.equal(gearFor("songweaver", 22, undefined, 1).weapon, "songweaver_weapon@22", "the sims give her the lute too");
+});

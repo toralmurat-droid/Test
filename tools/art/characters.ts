@@ -883,10 +883,17 @@ const tombrobber = human({
   hat: { kind: "bandana", col: 0x5a3a2a, trim: 0x2e1e14 }, shirt: 0x8a7656, vest: 0x3a2e24, pants: 0x5a4a38, boots: 0x3a2a1a, belt: 0x2a1c12,
   weapon: "dagger", gait: "swagger",
 });
+// Wren the lute-maker of Oakvale (shared/npcs.ts "lutemaker"): a young luthier in a teal head-scarf, linen shirt and a
+// leather apron dusted with sawdust
+const lutemaker = human({
+  name: "lutemaker", skin: 0xe6b08a, hair: 0x7a3a22, hairStyle: "ponytail", eye: 0x2a6a4a,
+  hat: { kind: "bandana", col: 0x2e7d74, trim: 0xe8d070 }, shirt: 0xeadfc4, vest: 0x6a4a2a, apron: 0x7a5230, pants: 0x4a4a3a, boots: 0x3a2717, belt: 0x4a2e1a,
+  weapon: "none", gait: "stroll", hipHand: true,
+});
 export const ZONE_NPCS = ["huntsman", "miller", "forester", "beachcomber", "prospector", "caravaneer", "hermit", "dunescout", "defector", "monk", "tombrobber"] as const;
 
 export const NPCS: Hero[] = [blacksmith, merchant, villager, guard, druid, witch, watchman, ...FOLK.map((n) => folk(n)), wellkeeper, sandcaptain, spicetrader, desertsmith, armourer, saltarmourer, sandarmourer,
-  huntsman, miller, forester, beachcomber, prospector, caravaneer, hermit, dunescout, defector, monk, tombrobber];
+  huntsman, miller, forester, beachcomber, prospector, caravaneer, hermit, dunescout, defector, monk, tombrobber, lutemaker];
 /** Pose data for monsters painted with the character painter (paint/mobs.ts); never drawn as pixel art. */
 const mobPose = (name: string, weapon: HumanOpts["weapon"]) => human({ name, skin: 0, hair: 0, hairStyle: "bald", shirt: 0, pants: 0, boots: 0, weapon });
 export const MOB_POSES: Record<string, Hero> = {

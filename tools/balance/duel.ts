@@ -15,7 +15,7 @@ import { basicDrain, CLASSES, ACTIVE_CLASSES, ClassKind, COMBO_WINDOW_MS, DODGE,
 import { attackMult, cooldownMult, critChance, heroSpeed, magicMult, maxHpFromStats, statPoints, statsFor, STATS, Stats } from "../../shared/powers";
 import { activeSkills, canLearn, levelPower, rankPower, scalePower, skillById, SKILLS, SkillDef, talentBonus, talentMult, talentReduce } from "../../shared/skills";
 import { addHeat, coolHeat, isOverheated, OVERLOAD } from "../../shared/overload";
-import { canPay, manaRegen, maxManaFor, skillCost } from "../../shared/mana";
+import { canPay, manaRegen, maxManaFor, skillCost, usesGauge } from "../../shared/mana";
 import {
   absorbDamage, afterHit, atkSpeedMult, blocking, buffLifesteal, buffRegen, castSkill, ccImmune, charging, winding, cooldownLeft, counterHit, dealtMult, FieldInst, HitOpts,
   newRuntime, shotEnd, shotHit, shotPulse, ShotSpec, SkillHost, speedMult, takenMult, tickField, tickUnit,
@@ -23,12 +23,13 @@ import {
 } from "../../shared/skillEngine";
 import { golemDeath, golemStrike, golemTick, newMind, type GolemMind } from "../../shared/golemAI";
 import { newWisp, openArsenal, wispEnd, wispTick, type WispMind } from "../../shared/voidConjure";
+import { LUTE_ID } from "../../shared/lute";
 import { Equipped, GEAR, gearBlock, gearDef, gearReachMult, gearSpeedMult, gearStats, meetsReq, withLevel } from "../../shared/gear";
 import { canExecute, executeDamage, executeRefund, heroPoise, POISE, poiseLevelMult, poiseSpeed, pvpDamageMult } from "../../shared/combat";
 import { COMBAT_REGEN_PER_STA, HIT_RADIUS, MOBS, mobScale, PLAYER_SPEED, REGEN_DELAY_MS, REGEN_PER_STA, REGEN_RAMP_MS } from "../../shared/constants";
 import { heroSound, MOB_COMBAT, mobBody, soundMult, type SoundProfile } from "../../shared/combat";
-import { buffPoise, castSkill as cast2, knownModesOf } from "../../shared/skillEngine";
-import { MODES, modeColour, PHRYGIAN, PROGRESSIONS, RESONANCE, type Progression } from "../../shared/songs";
+import { buffPoise, castSkill as cast2, gaugeSwing, knownModesOf } from "../../shared/skillEngine";
+import { GAUGE, MODES, modeColour, PHRYGIAN, PROGRESSIONS, RESONANCE, type Progression } from "../../shared/songs";
 import type { SoundFx } from "../../shared/skills";
 import { ARSENAL, bondShare, ESSENCE, GOLEM, GOLEM_OF, golemSlots, parseGrimoire, PORTAL, SUMMON, summonElement, summonScaleLevel, WISP, wispEls, type AttuneElement, type SummonKind } from "../../shared/summons";
 
@@ -76,7 +77,9 @@ export class F {
     this.s = st;
     this.maxHp = Math.round(maxHpFromStats(cls, st, level) * talentMult(cls, t, "hp"));
     this.hp = this.maxHp;
-    this.mana = this.maxMana = maxManaFor(st, level);
+    // the Songweaver's bubble is her song gauge (DI-3): it starts empty; her book (shield slot) fires when it fills
+    if (usesGauge(cls)) { this.mana = 0; this.maxMana = GAUGE.max; this.sk.book = eq.shield; }
+    else this.mana = this.maxMana = maxManaFor(st, level);
   }
   get poiseMax() { return heroPoise(this.cls, this.level); }
   get ranged() { return this.mob ? this.mob.ranged : !!CLASSES[this.cls].projectile; }
@@ -148,9 +151,20 @@ const GEAR_SETS: Record<1 | 2 | 3, Equipped> = {
   3: { weapon: "w_dragon", armour: "a_royal", shoes: "s_winged", hat: "h_crown", ranged: "r_crossbow", shield: "sh_dragon" },
 };
 const MAIN_SLOTS = new Set(["weapon", "armour"]);
-export function gearFor(cls: ClassKind, level: number, pts?: Stats): Equipped {
-  if (level < 5) return {};
-  const who = { cls, level, pts: pts ?? pointsFor(cls, level) };
+/** The book a Songweaver build carries from SW_BOOK_LEVEL (DI-2): Hymnal for Hymnal, War March for Folk, Dissonance for Discord. */
+const SW_BOOK: Record<Build, string> = { 0: "bk_hymnal", 1: "bk_march", 2: "bk_dissonance" };
+const SW_BOOK_LEVEL = 6;
+/** The Songweaver's shield slot: her Songbook, or from SW_BOOK_LEVEL the build's book at the highest item level she can read. */
+function bookFor(level: number, who: { cls: ClassKind; level: number; pts: Stats }, build?: Build): string {
+  if (level < SW_BOOK_LEVEL || build === undefined) return "songweaver_shield";
+  for (let l = level - 2; l >= 1; l -= 2) { const id = withLevel(SW_BOOK[build], l); if (meetsReq(id, who)) return id; }
+  return "songweaver_shield";
+}
+export function gearFor(cls: ClassKind, level: number, pts?: Stats, build?: Build): Equipped {
+  const who = { cls, level, pts: pts ?? pointsFor(cls, level, build) };
+  // the Songweaver always plays her evolving lute (at her level) and carries a book (DI-5 musical-only rule)
+  const book: Equipped = usesGauge(cls) ? { weapon: withLevel(LUTE_ID, level), shield: bookFor(level, who, build) } : {};
+  if (level < 5) return book;
   const out: Equipped = {};
   for (const slot of Object.keys(GEAR_SETS[1]) as (keyof Equipped)[]) {
     const lead = MAIN_SLOTS.has(slot) ? 0 : 5;
@@ -160,7 +174,7 @@ export function gearFor(cls: ClassKind, level: number, pts?: Stats): Equipped {
       if (meetsReq(id, who)) { out[slot] = id; break search; }
     }
   }
-  return out;
+  return { ...out, ...book };
 }
 
 // ---- Duel -----------------------------------------------------------------------------------------------
@@ -422,7 +436,10 @@ export class Duel {
     if (def.projectile) {
       this.shoot(a, dmg, h.knockback, h.shotScale ?? 1);
       // the Songweaver's lute (server playerAttack): a sound wave, the strum rings twice as much
-      if (a.cls === "songweaver") this.shots[this.shots.length - 1].sound = { pitch: "M", deg: step === 1 ? "V" : "I", mode: a.sk.mode ?? "major", basic: true, res: step === 2 ? RESONANCE.basic : 0 };
+      if (a.cls === "songweaver") {
+        this.shots[this.shots.length - 1].sound = { pitch: "M", deg: step === 1 ? "V" : "I", mode: a.sk.mode ?? "major", basic: true, res: step === 2 ? RESONANCE.basic : 0, strum: step === 2 };
+        gaugeSwing(a, now); // a swing holds the song gauge's drain off (server playerAttack)
+      }
       return;
     }
     const rm = gearReachMult(a.eq);
@@ -655,7 +672,7 @@ export class Duel {
       if (f.broken && now >= f.brokenUntil) { f.broken = false; f.poiseLost = 0; f.steadyUntil = now + POISE.steadyMs; }
       else if (!f.broken && f.poiseLost > 0 && now - f.lastPoiseHit >= POISE.regenDelayMs) f.poiseLost = Math.max(0, f.poiseLost - f.poiseMax * POISE.regenPerSec * TICK / 1000);
       coolHeat(f, f.cls, TICK / 1000);
-      f.mana = Math.min(f.maxMana, f.mana + manaRegen(f.s, false, talentBonus(f.cls, f.t, "mana")) * TICK / 1000);
+      if (!usesGauge(f.cls)) f.mana = Math.min(f.maxMana, f.mana + manaRegen(f.s, false, talentBonus(f.cls, f.t, "mana")) * TICK / 1000); // no regen for a song gauge
     }
     const order = this.rnd() < 0.5 ? this.units() : this.units().reverse();
     const moves = new Map<F, number>();
@@ -731,7 +748,7 @@ export function golemPower(o: F) {
 
 export function make(id: string, cls: ClassKind, level: number, build: Build) {
   const pts = pointsFor(cls, level, build);
-  const f = new F(id, cls, level, talentsFor(cls, level, build), gearFor(cls, level, pts), pts);
+  const f = new F(id, cls, level, talentsFor(cls, level, build), gearFor(cls, level, pts, build), pts);
   // the Songweaver's mode is saved (swMode): she comes to a fight in the one she plays (Phrygian, else Minor)
   if (cls === "songweaver") { const k = knownModesOf(f); f.sk.mode = k.includes("phrygian") ? "phrygian" : k.includes("minor") ? "minor" : "major"; }
   return f;

@@ -1,0 +1,50 @@
+/* HUD places (client/src/hudSlots.ts). Every HUD element has its own spot; nothing is placed with its own
+   absolute offsets any more. Loaded after every other stylesheet, selectors are "body #id" like weathered.css. */
+
+/* ---- Top centre: the monster bar (monsterBar.css) takes the first 10 + ~100 px; --topband is where notices may start. */
+:root { --topband: 128px; }
+body #partytoast { top: max(var(--topband), 15%); } /* clear of the tallest bar (champion, two affixes, ear line) */
+
+/* ---- Top right: one column, pill -> minimap + dial -> location -> respawn line -> tracker -> feed.
+   The feed follows the tracker whatever its height, so no script measures it. 264 = room for the online pill (261 px measured at its widest; the dial is 234 px, right-aligned, 8 px from the edge). */
+body #topright { position: absolute; top: 8px; right: 8px; width: 264px; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; pointer-events: none; }
+body #topright > #online { order: 1; pointer-events: auto; }
+body #topright > #mapbox { order: 2; }
+body #topright > #location { order: 3; }
+body #topright > #stats { order: 4; }
+body #topright > #questtracker { order: 6; }
+body #topright > #feed { order: 7; width: 100%; }
+body #stats:empty { display: none; }
+body #stats { pointer-events: none; }
+/* the pill keeps one width: icon, count, ping and fps each have a fixed, right-aligned cell */
+body #online { padding: 0 6px; }
+body #online #onlinecount { display: inline-block; width: 38px; text-align: right; }
+body #online #ping, body #online #fps { display: inline-block; text-align: right; margin-left: 6px; padding-left: 6px; }
+body #online #ping { width: 92px; } /* "9999ms" */
+body #online #fps { width: 82px; } /* "120fps" */
+
+/* ---- Bottom centre, from the bar up: status row (chord widget left, buffs right), then the prompt stack
+   (interact prompt nearest the bar, level-up note above). Anchored to the plate (--slot), so it always clears the
+   orb plate, level medallion and XP bar. Hidden prompts take no room. */
+body #midstack { position: absolute; left: 50%; transform: translateX(-50%); bottom: calc((var(--slot, 44px) * 0.9 + 58px) * var(--barzoom, 1));
+  display: flex; flex-direction: column; align-items: center; gap: 6px; max-width: calc(100% - 32px); pointer-events: none; z-index: 8; }
+body #promptstack { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+body #promptstack > #lvlnote { order: -1; }
+body #promptstack > * { flex: none; }
+body #statusrow { display: flex; align-items: flex-end; justify-content: center; max-width: 100%; }
+body #statusrow > * { flex: none; }
+body #statusrow > #chordhud:not([hidden]) + #buffs:not(:empty) { margin-left: 14px; }
+
+/* ---- Bottom bar: never drawn below 100% (--barzoom = barScale(k, dpr) / k, set by hudSlots.ts) ---- */
+body #orbhud, body #hudbar, body #orblevel, body #xpbar { zoom: var(--barzoom, 1); }
+/* the Summoner's grimoire sits above the plate, so it rises with it */
+body.orbhud-on #grimoire { bottom: calc(150px * var(--barzoom, 1)); }
+/* panels that open just above the bar keep their gap when the bar is drawn larger than the rest of the HUD */
+body #npcdialog { bottom: calc(100px * var(--barzoom, 1)); }
+body #signpanel, body #gear { bottom: calc(140px * var(--barzoom, 1)); }
+body #partyask { bottom: calc(170px * var(--barzoom, 1)); }
+body #musicpanel { bottom: calc(52px * var(--barzoom, 1)); }
+body #patchnotice { bottom: calc(56px * var(--barzoom, 1)); }
+/* the side panel and the centred panels stop above the (larger) bar and its level medallion; same as before at 100% */
+body.orbhud-on #sidepanel { max-height: calc(100% - 205px * var(--barzoom, 1)); }
+body #tradepanel, body #stashpanel, body #bountypanel, body #partypanel { max-height: calc(100% - (200px * var(--barzoom, 1) - 90px)); }

@@ -1,5 +1,6 @@
 {
   "date": "2026-11-14",
+  "patch": 223,
   "title": "Lighter and quicker",
   "changes": [
     "The game needs far less graphics memory: characters are loaded when they come near instead of all at once, so someone far off can appear a moment after you arrive.",

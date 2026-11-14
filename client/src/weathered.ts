@@ -65,6 +65,11 @@ export function installWeatheredFrames() {
     c.width = 24; c.height = 24;
     paintPanel(c.getContext("2d")!, 24, 24, RAMPS[k]);
     root.style.setProperty(`--wf-${k}`, `url(${c.toDataURL()})`);
+    // Thin version (12x12 art px, slice 5, no rivets) for slim strips like the monster bar
+    const t = document.createElement("canvas");
+    t.width = 12; t.height = 12;
+    paintPanel(t.getContext("2d")!, 12, 12, RAMPS[k], false);
+    root.style.setProperty(`--wf-thin-${k}`, `url(${t.toDataURL()})`);
   }
   // Small button frame (12x12, slice 4): raised dark leather with a bronze lip
   const b = document.createElement("canvas");

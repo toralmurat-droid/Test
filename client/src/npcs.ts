@@ -1,4 +1,5 @@
 import { armouryTextures, armouryOrigin, AR_TX } from "./armoury";
+import { lutierTextures, lutierOrigin, LU_TX } from "./lutierArt";
 import "@fontsource/pixelify-sans/400.css";
 import { actionKey } from "./keymode";
 import { icon as pxIcon } from "./pixelicons";
@@ -12,7 +13,7 @@ import { ANVIL_TOP, FORGE_FLUE, SMITHY_ORIGIN, TX as SMITHY_TX, smithyTextures }
 import { smokeTexture } from "./bonfireArt";
 import { NPCS, NPC_DECOR, Npc, npcById, npcNear, TALK_RANGE } from "../../shared/npcs";
 import {
-  CHAINS, chainOpen, chainState, questSig, TUT_CHAIN, npcPresent, ZONE_ARCS, npcQuestMark, questDef, questDialog, questObjective, questStep, Quester, QuestTarget, questTargets, stepGoal, stepProgress,
+  CHAINS, chainOpen, chainState, questSig, TUT_CHAIN, npcPresent, ZONE_ARCS, npcQuestMark, questDef, questDialog, questObjective, questStep, stepFor, DialogPage, Quester, QuestTarget, questTargets, stepGoal, stepProgress,
 } from "../../shared/quests";
 import { QuestObjects } from "./questObjects";
 import { TILE } from "../../shared/constants";
@@ -22,7 +23,7 @@ import { actAt, WAYGATES } from "../../shared/act2";
 import type { MapMarker } from "./minimap";
 import { QuestLog } from "./questlog";
 import { MASTER_LEVELS, SHOPS, sellPrice, shopBuys, shopFuses } from "../../shared/shops";
-import { GEAR_SLOTS, GearSlot, gearDef, gearName, itemLevel, itemRarity, itemText, reqProblem, TIER_NAMES } from "../../shared/gear";
+import { GEAR_SLOTS, GearSlot, keepsBoundOf, gearDef, gearName, itemLevel, itemRarity, itemText, reqProblem, TIER_NAMES } from "../../shared/gear";
 import { CHAR_GROW, CHAR_SCALE, CHAR_ORIGIN, CharacterName, ensureCharSheet, playCharAnim, SHEET_RANGE } from "./artAssets";
 import { iconCanvas, itemColor, rarityLabel, reqInfoOf } from "./gear";
 import { fuseCost, fuseProblem, looseRuneCounts, parseRune, RUNE_FUSE_COUNT, RUNE_KIND_NAMES, RUNES, runeName, runeText } from "../../shared/runes";
@@ -30,15 +31,40 @@ import { runeCanvas, runeCss } from "./runeArt";
 import { itemTexture, potionTex } from "./textures";
 import { potionAmount, potionName, potionSlots, slotsAfter, total, unpackPotions } from "../../shared/potions";
 import { BAG_SIZE } from "../../shared/gear";
-import { isoAnchor } from "./iso";
+import { isoAnchor, screenOf } from "./iso";
+import { hudRects } from "./hudcache";
 import { speechBubble } from "./speechBubble";
 import { msUntilUndeadNight } from "../../shared/daynight";
 import { dayTime } from "./details";
+import { lmTabsHtml, lutemakerBody, LmState, LmTab } from "./lutemaker";
+import { getSongbook } from "./songbookData";
+import { matCanvas } from "./matArt";
 import { TEXT_FONT, TITLE_FONT, TEXT_PX, TITLE_PX, WT } from "./pixelfont";
+import { hudOccludes, hudSlot } from "./hudSlots";
+import { own } from "./own";
 
 type Me = { x: number; y: number } | undefined;
 /** The local player's synced state (only the fields NPCs care about). */
-type QuestState = (Quester & { gold?: number; potions?: number; cls?: string; bag?: Iterable<string> } & Partial<Record<GearSlot, string>>) | undefined;
+type QuestState = (Quester & { cls?: string } & Partial<Record<GearSlot, string>>) | undefined; // bag, gold, points: own(q)
+
+/**
+ * What an NPC says, as this hero's class hears it. shared `questDialog` has no class, so the Songweaver's `byCls`
+ * words (`say`, `nag`) are swapped in here for the step that gave the page.
+ */
+function pageFor(id: string, q: QuestState): DialogPage | undefined {
+  const page = questDialog(id, q);
+  const cls = q?.cls;
+  if (!page || !cls) return page;
+  for (let c = 0; c < CHAINS.length; c++) {
+    const st = chainState(q, c), s = st && questStep(st);
+    const o = s && st ? s.byCls?.[cls] : undefined;
+    if (!s || !st || !o) continue;
+    const fillT = (t: string) => t.replace("{n}", String(stepProgress(s, st.questCount))).replace("{goal}", String(stepGoal(s)));
+    if (o.say && page.text === s.say) return { ...page, text: o.say };
+    if (o.nag && s.nag && page.text.length === 1 && page.text[0] === fillT(s.nag)) return { ...page, text: [fillT(o.nag)] };
+  }
+  return page;
+}
 
 /**
  * Village NPCs (shared/npcs.ts): sprites by the bonfire, "!"/"?" quest markers, an "E Talk" prompt when close,
@@ -74,6 +100,8 @@ export class NpcLayer {
   private q: QuestState;
   readonly objects: QuestObjects;
   private nearObj?: ReturnType<QuestObjects["near"]>;
+  /** A quest NPC or quest object is in reach (other E prompts step aside). */
+  get busy() { return !!this.near || !!this.nearObj; }
   private trackerHtml = "";
   private promptHtml = "";
   private trackQ: QuestState | undefined;
@@ -110,7 +138,9 @@ export class NpcLayer {
     this.tracker.id = "questtracker";
     this.pointer.id = "questpointer";
     this.toast.id = "questtoast";
-    hud.append(this.prompt, this.dialog, this.tracker, this.toast, this.pointer);
+    hud.append(this.dialog, this.toast, this.pointer);
+    hudSlot("promptstack").append(this.prompt);
+    hudSlot("topright").append(this.tracker); // under the location line (flex order, hudSlots.css)
     this.prompt.onclick = () => this.interact();
     // Click a quest's title to fold it down to that line (remembered); anywhere else opens the quest log
     // Each quest is a card: its follow button marks the objective on the ground, its header folds / opens it,
@@ -160,6 +190,7 @@ export class NpcLayer {
     witchCampTextures(scene);
     smithyTextures(scene);
     armouryTextures(scene);
+    lutierTextures(scene);
     for (const d of NPC_DECOR) {
       const x = d.x * TILE, y = d.y * TILE;
       if (d.prop.startsWith("wc_")) { // pixel-art camp props, 1.5 texels per world px
@@ -175,6 +206,11 @@ export class NpcLayer {
       if (d.prop.startsWith("ar_")) { // the armourers' stands and racks (armoury.ts), same pixel grid
         const [ox, oy] = armouryOrigin(d.prop);
         scene.add.sprite(x, y, d.prop, 0).setOrigin(ox, oy).setScale(d.scale / AR_TX).setDepth(y).setFlipX(!!d.flip).play({ key: `${d.prop}_idle`, startFrame: Math.floor(d.x * 5) % 12 });
+        continue;
+      }
+      if (d.prop.startsWith("lu_")) { // Wren's bench and lute rack (lutierArt.ts)
+        const [ox, oy] = lutierOrigin(d.prop);
+        scene.add.sprite(x, y, d.prop, 0).setOrigin(ox, oy).setScale(d.scale / LU_TX).setDepth(y).setFlipX(!!d.flip).play({ key: `${d.prop}_idle`, startFrame: Math.floor(d.x * 5) % 6 });
         continue;
       }
       if (d.prop === "weapon_rack") { // pixel-art rack shared with the camps (worldProps.ts)
@@ -302,7 +338,7 @@ export class NpcLayer {
     let m: [string, string] | undefined;
     if (msg.done) m = ["Quest complete", quests[msg.qid - 1]?.title ?? ""];
     else {
-      const step = quests[msg.qid]?.steps[msg.stage - 1];
+      const step = stepFor(quests[msg.qid]?.steps[msg.stage - 1], this.q?.cls);
       m = step?.banner;
       // A night step reached by day (the Hollow King, the Marshal...): nothing rises yet, so the banner says to wait
       if (m && step?.night && msUntilUndeadNight(dayTime(Date.now())) > 0) m = ["Wait for nightfall", m[1]];
@@ -326,7 +362,7 @@ export class NpcLayer {
 
   private open(n: Npc) {
     this.talking = n;
-    this.trading = !questDialog(n.id, this.q);
+    this.trading = !pageFor(n.id, this.q);
     this.shopMsg = "";
     this.stage = -1; // force a redraw
     this.dialog.classList.add("open");
@@ -339,11 +375,11 @@ export class NpcLayer {
   /** Shop page: stock to buy, and (for traders who buy) the player's matching bag items to sell. */
   private renderShop(n: Npc, q: QuestState) {
     const shop = SHOPS[n.shop!];
-    const gold = q?.gold ?? 0, potions = q?.potions ?? 0, cls = q?.cls, pots = unpackPotions(potions);
-    const bag = [...(q?.bag ?? [])];
+    const o = own(q), { gold, potions } = o, cls = q?.cls, pots = unpackPotions(potions);
+    const bag = [...o.bag];
     // masterwork: one level shown at a time (picked with the buttons), by default the best one the hero can wear
     const master = this.masterLv ?? [...MASTER_LEVELS].reverse().find((l) => l <= (q?.level ?? 1)) ?? MASTER_LEVELS[0];
-    const key = JSON.stringify([n.id, master, gold, potions, bag, q?.level, (q as any)?.ptSta, (q as any)?.ptStr, (q as any)?.ptMag, (q as any)?.ptDex, ...GEAR_SLOTS.map((s) => q?.[s]), this.shopMsg, questSig(q)]);
+    const key = JSON.stringify([n.id, master, gold, potions, bag, q?.level, o.ptSta, o.ptStr, o.ptMag, o.ptDex, ...GEAR_SLOTS.map((s) => q?.[s]), this.shopMsg, questSig(q)]);
     if (key === this.stage) return;
     this.stage = key;
     const row = (icon: string, name: string, color: string, desc: string, btn: string, cls2: string, i: number, off: boolean) =>
@@ -371,7 +407,7 @@ export class NpcLayer {
       return head + row(e.item, gearName(e.item, cls), itemColor(e.item), `${rarityLabel(e.item)}${TIER_NAMES[d.tier]} · Lv ${itemLevel(e.item)} · ${itemText(e.item)}${why ? ` · <span class="sh-need">${why}</span>` : ""}`,
         `${e.price.toLocaleString("en-US")}${pxIcon("coin")}`, "sh-buy", i, gold < e.price);
     }).join("");
-    const sellable = shop.buys ? bag.map((id, i) => [id, i] as const).filter(([id]) => shopBuys(shop, id)) : [];
+    const sellable = shop.buys ? bag.map((id, i) => [id, i] as const).filter(([id]) => shopBuys(shop, id, true) && !keepsBoundOf(q?.cls ?? "", [q?.weapon, q?.shield], bag)(id)) : [];
     const sellRow = (id: string, i: number) => {
       const r = parseRune(id); // a loose rune (shared/runes.ts): Morwen buys them
       return r
@@ -397,12 +433,15 @@ export class NpcLayer {
       ? `<h4>Rune fusion</h4><p class="sh-empty">${RUNE_FUSE_COUNT} identical loose runes and gold make one rune of the next rank. Runes set in items don't count.</p>` +
         (fuseRows || `<p class="sh-empty">No loose runes in your bag.</p>`)
       : "";
-    const quest = questDialog(n.id, q);
-    this.dialog.innerHTML = this.head(n) + `<p>${shop.greeting}</p>` +
+    const quest = pageFor(n.id, q);
+    const lm = n.id === "lutemaker"; // Wren's shop is a tab of her panel
+    this.dialog.innerHTML = this.head(n) + (lm ? lmTabsHtml("shop", true) : "") + `<p>${lm ? "Books on the left, spare strings on the right. Anything you can't use, I'll buy or break." : shop.greeting}</p>` +
       `<div class="sh-gold">Your gold: <b>${gold}${pxIcon("coin")}</b> ${this.shopMsg}</div>` +
       `<h4>For sale</h4><div class="sh-list">${buy}</div>${sell}${fuse}` +
       `<div class="nd-btns">${quest ? `<button class="nd-talk">Talk</button>` : ""}<button class="nd-bye">Goodbye <kbd>E</kbd></button></div>`;
     this.dialog.classList.add("shop");
+    this.dialog.classList.toggle("lm", lm);
+    this.bindLmTabs();
     const talk = this.dialog.querySelector<HTMLButtonElement>(".nd-talk");
     if (talk) talk.onclick = () => { this.trading = false; this.stage = -1; };
     for (const b of this.dialog.querySelectorAll<HTMLButtonElement>(".sh-lvpick button")) b.onclick = () => { this.masterLv = Number(b.dataset.lv); this.stage = -1; };
@@ -427,6 +466,38 @@ export class NpcLayer {
     this.dialog.querySelector<HTMLButtonElement>(".nd-bye")!.onclick = () => this.close();
   }
 
+  /** Lute-maker (Wren): Traits and Break tabs (lutemaker.ts); the Shop tab is renderShop. */
+  private lmTab: LmTab = "traits";
+  private lmAsk = -1; // bag index waiting for the second "Break" click
+  private bindLmTabs() {
+    for (const b of this.dialog.querySelectorAll<HTMLButtonElement>(".lm-tab")) b.onclick = () => { this.lmTab = b.dataset.tab as LmTab; this.lmAsk = -1; this.stage = -1; };
+  }
+  private renderLute(n: Npc, q: QuestState) {
+    if (this.lmTab === "shop" && !(n.shop && SHOPS[n.shop])) this.lmTab = "traits";
+    const bag = [...own(q).bag], sb = getSongbook();
+    const st: LmState = { tab: this.lmTab, gold: own(q).gold, level: q?.level ?? 1, cls: q?.cls, weapon: q?.weapon, shield: q?.shield, bag, mats: sb.mats, msg: this.shopMsg, breakAsk: this.lmAsk, hasShop: !!(n.shop && SHOPS[n.shop]) };
+    const key = JSON.stringify([n.id, st]);
+    if (key === this.stage) return;
+    this.stage = key;
+    const hi = q?.cls === "songweaver" ? "Mind the shavings. You have a lute? Let me see it. Oh, you do play it, don't you? Good." : "I make lutes, friend. Do you play?";
+    this.dialog.innerHTML = this.head(n) + lmTabsHtml(this.lmTab, st.hasShop) + `<p>${this.lmTab === "break" ? "Break it into something useful? It cannot be put back." : hi}</p>` + lutemakerBody(st) +
+      `<div class="nd-btns"><button class="nd-bye">Goodbye <kbd>E</kbd></button></div>`;
+    this.dialog.classList.add("shop", "lm");
+    if (this.shopOpen) { this.shopOpen = false; this.onPreview?.(); this.onShopOpen?.(false); }
+    this.bindLmTabs();
+    for (const el of this.dialog.querySelectorAll<HTMLElement>(".lm-mat")) el.appendChild(matCanvas(this.scene, el.dataset.mat!, 24));
+    for (const el of this.dialog.querySelectorAll<HTMLElement>(".sh-icon")) el.appendChild(iconCanvas(this.scene, el.dataset.icon!, 32));
+    for (const b of this.dialog.querySelectorAll<HTMLButtonElement>(".lm-fit")) b.onclick = () => { this.send("lutefit", { trait: b.dataset.trait }); b.disabled = true; };
+    for (const b of this.dialog.querySelectorAll<HTMLButtonElement>(".lm-break")) {
+      b.onclick = () => {
+        const i = Number(b.dataset.i);
+        if (this.lmAsk !== i) { this.lmAsk = i; this.stage = -1; return; }
+        this.lmAsk = -1; this.send("break", { bag: i }); b.disabled = true;
+      };
+    }
+    this.dialog.querySelector<HTMLButtonElement>(".nd-bye")!.onclick = () => this.close();
+  }
+
   private potionIcon(kind = "potion"): HTMLCanvasElement {
     const c = document.createElement("canvas");
     c.width = c.height = 32;
@@ -439,9 +510,10 @@ export class NpcLayer {
 
   private renderDialog(q: QuestState) {
     const n = this.talking!;
-    const page = questDialog(n.id, q);
+    if (n.id === "lutemaker" && !(this.lmTab === "shop" && n.shop && SHOPS[n.shop])) return this.renderLute(n, q);
+    const page = pageFor(n.id, q);
     if (n.shop && (this.trading || !page)) return this.renderShop(n, q);
-    this.dialog.classList.remove("shop");
+    this.dialog.classList.remove("shop", "lm");
     if (this.shopOpen) { this.shopOpen = false; this.onPreview?.(); }
     const key = JSON.stringify([n.id, questSig(q), q?.level]);
     if (key === this.stage) return;
@@ -506,11 +578,14 @@ export class NpcLayer {
     if (this.talking) this.renderDialog(q);
 
     // "!" = quest to pick up, "?" = come and talk to me
+    const cam = this.scene.cameras.main, cr = hudRects(this.scene.game.canvas).cr;
     for (const n of NPCS) {
       const s = this.sprites.get(n.id);
       if (!s) continue;
       const here = present(n) && this.ready.has(n.id); // the "!" / "?" and the name wait for the body
-      s.sprite.setVisible(here); s.label.setVisible(here); s.mark.setVisible(here);
+      // a name under the minimap, dial or quest tracker would be hard to read: hidden there
+      const sp = here ? screenOf(cam, s.label.x, s.label.y, cr, s.sprite) : undefined;
+      s.sprite.setVisible(here); s.label.setVisible(here && !hudOccludes(sp!.x, sp!.y)); s.mark.setVisible(here);
       const mark = here ? npcQuestMark(n.id, q) : "";
       if (s.mark.text !== mark) s.mark.setText(mark);
     }
@@ -616,7 +691,7 @@ export class NpcLayer {
   }
 
   private trackBlock(me: Me, q: ReturnType<typeof chainState>): string {
-    const def = questDef(q), step = questStep(q), obj = questObjective(q);
+    const cls = this.q?.cls, def = questDef(q), step = questStep(q, cls), obj = questObjective(q, cls);
     if (!def || !q) return "";
     if (step && obj) {
       const goal = stepGoal(step), n = stepProgress(step, q.questCount);

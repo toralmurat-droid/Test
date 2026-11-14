@@ -13,6 +13,7 @@ import { writeHandoff } from "./handoff";
 import { clientIp } from "./ratelimit";
 import { versionedCache } from "./assetVersions";
 import { PER_MESSAGE_DEFLATE } from "./sendBacklog";
+import { flushWar, startWar, warLog, warNow } from "./war";
 
 const PORT = Number(process.env.PORT ?? 2567);
 const app = express();
@@ -87,6 +88,12 @@ app.get("/health", (_req, res) => {
   res.setHeader("Cache-Control", "no-store");
   res.send("ok");
 });
+// The clan war for the wiki and tools: who holds what, sieges, and the latest events (read-only)
+app.get("/war.json", (_req, res) => {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Cache-Control", "no-store");
+  res.json({ war: warNow() ?? null, log: warLog(50) });
+});
 // The player idea log (read-only), newest first
 app.get("/ideas.json", (_req, res) => { res.json(publicLog()); });
 
@@ -141,10 +148,11 @@ gameServer.define("town", TownRoom);
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 gameServer.onBeforeShutdown(async () => { announceUpgrade(); await wait(400); });
 // The rooms are gone by now (everyone saved and remembered where they stood): hand those spots to the next server
-gameServer.onShutdown(async () => { writeHandoff(); await flushFinal(); await wait(800); });
+gameServer.onShutdown(async () => { writeHandoff(); flushWar(); await flushFinal(); await wait(800); });
 
 // Accounts first (Postgres when DATABASE_URL is set): players must never join before their saves are loaded
 initAccounts()
+  .then(() => startWar())
   .then(() => gameServer.listen(PORT))
   .then(() => console.log(`Game server on http://localhost:${PORT}`))
   .catch((e) => { console.error("Could not start:", e); process.exit(1); });

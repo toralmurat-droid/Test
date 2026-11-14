@@ -4,6 +4,7 @@ import { heroSheet, Sheet, SheetHero, SHEET_ROWS } from "../../shared/heroSheet"
 import { fillIcons } from "./pixelicons";
 import { ELEMENTS, ELEMENT_NAMES, REACTIONS, REACTION_IDS, REACTION_MARK_MS, REACTION_SELF_FACTOR, type Element } from "../../shared/elements";
 import { Feast, feastLines } from "../../shared/devour";
+import { own } from "./own";
 
 /** What my hero has eaten with Devour (the server sends it as "feast"). */
 let myFeast: Feast = {};
@@ -20,17 +21,19 @@ export const SIDE_TABS: SideTab[] = ["hero", "gear", "tree"];
 
 export interface SheetPreview { label: string; eq?: Equipped; talents?: Record<string, number>; pts?: SheetHero["pts"]; /** show the gear's stats even if the hero can't wear it yet */ ignoreReq?: boolean }
 
-/** Hero state -> the input of shared/heroSheet.ts. */
+/** Our own hero's state -> the input of shared/heroSheet.ts (points and talents are owner-only, in Player.me). */
 export function sheetHero(state: any): SheetHero {
+  const o = own(state);
   return {
     cls: state.cls as ClassKind, level: state.level ?? 1,
-    pts: { sta: state.ptSta ?? 0, str: state.ptStr ?? 0, mag: state.ptMag ?? 0, dex: state.ptDex ?? 0 },
+    pts: { sta: o.ptSta, str: o.ptStr, mag: o.ptMag, dex: o.ptDex },
     talents: talentsOf(state), feast: myFeast,
   };
 }
+/** Our own hero's talent ranks as a plain record (empty until `me` arrives). */
 export function talentsOf(state: any): Record<string, number> {
   const out: Record<string, number> = {};
-  state.talents?.forEach?.((v: number, k: string) => { out[k] = v; });
+  own(state).talents.forEach((v: number, k: string) => { out[k] = v; });
   return out;
 }
 export const wornOf = (state: any): Equipped => Object.fromEntries(GEAR_SLOTS.filter((s) => state[s]).map((s) => [s, state[s]]));
