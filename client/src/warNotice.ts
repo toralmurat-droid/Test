@@ -36,7 +36,7 @@ export class WarNotice {
     if (!t || !me) return;
     const here = territoryAt(Math.floor(me.x / TILE), Math.floor(me.y / TILE));
     if (!here || (here.id !== t.id && !t.near.includes(here.id))) return;
-    play("horn", t.cx * TILE, t.cy * TILE, 0.8, undefined, { reach: 6, minGap: 4000 });
+    play("horn", undefined, undefined, 0.8, undefined, { minGap: 4000 }); // heard by the hero wherever they stand in the land (lands are big)
     this.el.textContent = WarNotice.text(e);
     this.el.className = e.kind;
     this.el.hidden = false;

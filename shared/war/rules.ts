@@ -46,7 +46,7 @@ export const WAR = {
   valorScale: 20, // valor at which players bring ~63% of valorCap
   siegeValor: 1.5, // players count more at a territory under siege (the hour's notice is for them)
   valorPerAdd: 10, // most valor one hero can bring in one report (ten minutes at a standard)
-  valorCap: 60, // troops players can add to one territory per clan per tick (a clan's army is ~150-600)
+  valorCap: 60, // troops players can add to one territory per clan per tick (x siegeValor during a siege) (a clan's army is ~150-600)
 };
 
 export interface Siege { by: ClanKey; at: number }
