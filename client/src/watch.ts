@@ -1,5 +1,5 @@
 import Phaser from "phaser";
-import { CHAR_ORIGIN, CHAR_SCALE, ensureCharSheet, playCharAnim } from "./artAssets";
+import { CHAR_ORIGIN, CHAR_SCALE, ensureCharSheet, playCharAnim, SHEET_RANGE } from "./artAssets";
 import { ISO, screenDir8 } from "./iso";
 import { WATCH_POSTS } from "../../shared/watch";
 import type { GateTorches } from "./gateTorches";
@@ -44,9 +44,9 @@ export class WatchLayer {
   /** True while this post's watchman kneels striking a light at his torch. */
   striking(id: string) { return !!this.men.get(id)?.striking; }
 
-  /** Loads the sheet once the hero is within 700 px of any watchman, then draws them all. */
+  /** Loads the sheet once the hero is within SHEET_RANGE of any watchman, then draws them all. */
   private loadSheet(me?: { x: number; y: number }) {
-    if (this.sheet !== "far" || !me || ![...this.men.values()].some((m) => Math.hypot(m.x - me.x, m.y - me.y) < 700)) return;
+    if (this.sheet !== "far" || !me || ![...this.men.values()].some((m) => Math.hypot(m.x - me.x, m.y - me.y) < SHEET_RANGE)) return;
     this.sheet = "asked";
     const show = () => {
       this.sheet = "ready";

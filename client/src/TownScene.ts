@@ -1576,7 +1576,7 @@ export class TownScene extends Phaser.Scene {
       return e && !e.state.dead ? e : undefined;
     };
     const attackable = (id: string, e: Entity) => {
-      if (e.state.dead || id === this.me) return false;
+      if (e.state.dead || id === this.me || e.waiting) return false; // waiting: a hero not drawn yet (its sheet is loading) is no target
       // A monster tucked into a grave or tree can't be hurt (the server skips it): don't let a click swing at it
       const m = meEnt();
       // Summons (shared/summons.ts): never my own or my group's, nor a newcomer's (the server skips them too)

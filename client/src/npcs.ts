@@ -23,7 +23,7 @@ import type { MapMarker } from "./minimap";
 import { QuestLog } from "./questlog";
 import { MASTER_LEVELS, SHOPS, sellPrice, shopBuys, shopFuses } from "../../shared/shops";
 import { GEAR_SLOTS, GearSlot, gearDef, gearName, itemLevel, itemRarity, itemText, reqProblem, TIER_NAMES } from "../../shared/gear";
-import { CHAR_GROW, CHAR_SCALE, CHAR_ORIGIN, CharacterName, ensureCharSheet, playCharAnim } from "./artAssets";
+import { CHAR_GROW, CHAR_SCALE, CHAR_ORIGIN, CharacterName, ensureCharSheet, playCharAnim, SHEET_RANGE } from "./artAssets";
 import { iconCanvas, itemColor, rarityLabel, reqInfoOf } from "./gear";
 import { fuseCost, fuseProblem, looseRuneCounts, parseRune, RUNE_FUSE_COUNT, RUNE_KIND_NAMES, RUNES, runeName, runeText } from "../../shared/runes";
 import { runeCanvas, runeCss } from "./runeArt";
@@ -459,7 +459,7 @@ export class NpcLayer {
   }
 
   /** NPCs whose sheet is this near (world px) get it loaded: at zoom 3 the screen shows about 330 px each way. */
-  private static readonly LOAD_RANGE = 700;
+  private static readonly LOAD_RANGE = SHEET_RANGE;
 
   /** Asks for the sheets of NPCs near the hero (nearest first, one at a time: see ensureCharSheet), about 5 times a second. */
   private loadSheets(me: Me, present: (n: Npc) => boolean) {

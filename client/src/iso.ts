@@ -194,7 +194,9 @@ export class IsoView {
     const water = buildBridges(scene, ground); // bridges stand over the water
     // rows the layers use (at least the 4 look-alike rows the animation re-bakes), and no more than "tiles" has
     const srcRows = Math.round((scene.textures.get("tiles").getSourceImage() as HTMLCanvasElement).height / TILE);
-    isoRows = Math.min(srcRows, Math.max(4, usedRows(water), usedRows(flatObjects)));
+    const need = Math.max(4, usedRows(water), usedRows(flatObjects));
+    if (need > srcRows) console.warn(`iso tiles: the layers use ${need} variant rows but "tiles" has ${srcRows}; the rows beyond draw nothing (tileset.ts COMMON_ROWS)`);
+    isoRows = Math.min(srcRows, need);
     bakeIsoTiles(scene);
     const tiles = ISO_KEYS.slice(0, Math.ceil(isoRows / ISO_PER)).map((key, i) =>
       map.addTilesetImage(key, key, IW + BLEED * 2, IH + BLEED * 2, 0, 0, i * ISO_PER * TILE_COUNT, { x: BLEED, y: BLEED })!);

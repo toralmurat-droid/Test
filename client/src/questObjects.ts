@@ -1,5 +1,5 @@
 import Phaser from "phaser";
-import { CHAR_SCALE, CHAR_ORIGIN, ensureCharSheet, playCharAnim } from "./artAssets";
+import { CHAR_SCALE, CHAR_ORIGIN, ensureCharSheet, playCharAnim, SHEET_RANGE } from "./artAssets";
 import { allObjects, cocoonPresent, objectDone, QuestObject, Quester, usableObjects, USE_RANGE } from "../../shared/quests";
 
 import "../../shared/siege"; // puts the quest's siege engines (ENGINES) on the skeletons' work sites
@@ -367,7 +367,7 @@ export class QuestObjects {
 
   update(q: QuestState | undefined, me?: { x: number; y: number }) {
     const there = cocoonPresent(q);
-    if (this.tobin && this.tobinAt && this.tobinState === "far" && me && Math.hypot(this.tobinAt.x - me.x, this.tobinAt.y - me.y) < 700) {
+    if (this.tobin && this.tobinAt && this.tobinState === "far" && me && Math.hypot(this.tobinAt.x - me.x, this.tobinAt.y - me.y) < SHEET_RANGE) {
       this.tobinState = "asked";
       const show = () => { this.tobinState = "ready"; this.tobin?.setTexture("villager", 0); if (this.tobin) playCharAnim(this.tobin, "villager", "idle", "down"); };
       if (ensureCharSheet(this.scene, "villager", show, 500)) show();

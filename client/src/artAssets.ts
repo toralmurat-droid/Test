@@ -90,6 +90,12 @@ export const sheetLog: { name: string; loadMs: number; registerMs: number }[] = 
  * so walking into town decodes a couple of 8.85 MB sheets at a time instead of ten in one frame; prio < 0 starts at once.
  * A failed download is retried with growing pauses and never throws.
  */
+/**
+ * How near (world px) the hero must be before a standing character's sheet is asked for. The far corner of the view is
+ * about 340 px away at the default Screen size and about 680 px at the smallest (50%), so this leaves time to load.
+ */
+export const SHEET_RANGE = 900;
+
 export function ensureCharSheet(scene: Phaser.Scene, name: string, done?: () => void, prio = 0): boolean {
   if (scene.anims.exists(`${name}_idle_down`)) return true;
   if (!HD_CHARS) return false;

@@ -2,7 +2,7 @@ import Phaser from "phaser";
 import { TILE } from "../../shared/constants";
 import { isSolidAt, SAFE_ZONE } from "../../shared/map";
 import { isDecorSolidAt, NPCS } from "../../shared/npcs";
-import { CHAR_ORIGIN, CHAR_SCALE, CharacterName, ensureCharSheet, playCharAnim } from "./artAssets";
+import { CHAR_ORIGIN, CHAR_SCALE, CharacterName, ensureCharSheet, playCharAnim, SHEET_RANGE } from "./artAssets";
 import { faceOf } from "./watch";
 import { isoAnchor } from "./iso";
 import { speechBubble } from "./weathered";
@@ -58,7 +58,7 @@ export class Villagers {
     if (!me || t - this.loadAt < 300) return;
     this.loadAt = t;
     const cx = (AREA.x0 + AREA.x1) / 2 * TILE, cy = (AREA.y0 + AREA.y1) / 2 * TILE;
-    if (Math.hypot(cx - me.x, cy - me.y) > 700) return;
+    if (Math.hypot(cx - me.x, cy - me.y) > SHEET_RANGE + 350) return; // measured from the square's centre: its people stand up to about 340 px from there
     for (const f of this.folk) {
       if (f.ready || f.asked) continue;
       f.asked = true;
