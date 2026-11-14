@@ -36,6 +36,7 @@ import { CRAWL_CROP, heroTexture, itemTexture, potionTex, makeTileset, MOB_LOOK,
 import { Minimap } from "./minimap";
 import { fullscreenSupported, isFullscreen, onFullscreen, toggleFullscreen } from "./fullscreen";
 import { SCREEN_SIZES, isSharp, onWorldScale, pct, setWorldScale, uiScale, worldScale, worldScaleName, worldScaleSetting } from "./worldscale";
+import { showLevelNote } from "./hudLogic";
 import { GameMenu } from "./gamemenu";
 import { showMusicPanel, musicPanelOpen } from "./music";
 import { DayDial } from "./daydial";
@@ -857,7 +858,7 @@ export class TownScene extends Phaser.Scene {
       }
       if (kind === "gear" && parseRune(gear)) {
         this.floatText(x, y - 6, `+${name}`, runeCss(parseRune(gear)!), PIXEL_FONT);
-        this.feed(`Found a ${name}! Open the bag (G), click it, then click an item to set it in`);
+        this.feed(`Found a ${name}! Open the bag (G), click it, then click an item to set the rune into it`);
         return;
       }
       if (kind === "gear") {
@@ -1356,7 +1357,7 @@ export class TownScene extends Phaser.Scene {
         this.levelFrom = Math.min(this.levelFrom ?? Infinity, from ?? level - 1);
         const note = document.getElementById("lvlnote")!;
         note.textContent = `⬆ Level ${level}! Press ${actionKey("hero")} to assign your stat points`;
-        note.hidden = false;
+        note.hidden = false; this.noteAt = performance.now();
       }
     });
     this.room.onMessage("hit", ({ id, dmg, blocked, crit, dot, kx, ky, el, ex }) => {
@@ -2761,15 +2762,23 @@ export class TownScene extends Phaser.Scene {
     while (log.children.length > 8) log.firstChild!.remove();
   }
 
+  private feedAt = 0;
+  private noteAt = 0;
+
   private feed(text: string) {
     const el = document.createElement("div");
     el.textContent = text;
-    const feed = document.getElementById("feed")!;
-    // The feed sits under the quest tracker on the right, never behind it (it was hidden there)
-    const qt = document.getElementById("questtracker"), r = qt && qt.offsetParent ? qt.getBoundingClientRect() : undefined;
-    feed.style.top = r && r.height ? `${Math.round(r.bottom / uiScale() + 8)}px` : ""; // the HUD is zoomed (worldscale.ts)
-    feed.prepend(el);
+    this.placeFeed();
+    document.getElementById("feed")!.prepend(el);
     setTimeout(() => el.remove(), 5000);
+  }
+
+  /** The feed sits under the quest tracker on the right whatever its height; re-measured while it grows or folds. */
+  private placeFeed() {
+    const feed = document.getElementById("feed")!;
+    const qt = document.getElementById("questtracker"), r = qt && qt.offsetParent ? qt.getBoundingClientRect() : undefined;
+    const top = r && r.height ? `${Math.round(r.bottom / uiScale() + 8)}px` : ""; // the HUD is zoomed (worldscale.ts)
+    if (feed.style.top !== top) feed.style.top = top;
   }
 
   private chatMessage(id: string, name: string, text: string) {
@@ -3259,6 +3268,7 @@ export class TownScene extends Phaser.Scene {
     this.portals?.update(meEnt && !meEnt.state.dead ? meEnt.sprite : undefined, !!this.npcs?.isOpen || !!this.chests?.near || !!this.shrine?.near);
     if (this.minimap && this.npcs) this.minimap.markers = [...this.npcs.markers, ...(this.portals?.markers() ?? []), ...(this.bounty?.markers() ?? []), ...(this.dungeon?.markers() ?? []), ...(this.waygates?.markers() ?? [])];
 
+    if (now >= this.feedAt) { this.feedAt = now + 200; this.placeFeed(); }
     const mine = meEnt?.state;
     if (mine) {
       this.gearMenu?.refresh(mine);
@@ -3281,6 +3291,8 @@ export class TownScene extends Phaser.Scene {
       const hb = document.getElementById("herobadge")!;
       hb.hidden = freeStats <= 0;
       hb.textContent = String(freeStats);
+      if (!showLevelNote(freeStats) && performance.now() - this.noteAt > 1500) { // (a moment of grace: the stat points sync a tick after the message)
+         const ln = document.getElementById("lvlnote")!; if (!ln.hidden) ln.hidden = true; } // nothing left to assign
       // Zone under the hero drives the music
       const tx = meEnt.sprite.x / TILE, ty = meEnt.sprite.y / TILE;
       const zdef = zoneAt(Math.floor(tx), Math.floor(ty));
