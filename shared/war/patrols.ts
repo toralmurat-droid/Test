@@ -10,19 +10,95 @@ import { HOLDS, STANDARDS } from "./standards";
 import { TERRITORIES } from "./territories";
 
 export const TROOP = {
-  /** Soldiers in one squad: enough to read as a troop, few enough to stay cheap to draw. */
-  perPatrol: 3,
+  /** Soldiers in a full-strength patrol column (marching two abreast). */
+  perPatrol: 8,
+  /** Smallest column a weakly held land still sends. */
+  patrolMin: 4,
+  /** Sideways offset of each file from the path (px): two abreast, one on each side. */
+  lateral: 10,
   /** Walking speed (px/s): a slow march, well under a hero's pace, so squads read as scenery. */
   speed: 30,
-  /** Spacing between soldiers along the route (px): just under a tile, so a squad looks like a file. */
-  gap: 28,
+  /** Distance between ranks along the route (px): a rank is two soldiers side by side. */
+  rankGap: 24,
   /** Pause at each stop (Hold, standard): the squad "checks in" there before moving on. */
   pauseMs: 2500,
-  /** Extra skirmish squads per standard in a contested territory (the client decides when one is contested). */
-  skirmishPerStandard: 2,
+  /** Hold guards of a land at control 0 and at control 100 (px ring around the Hold, see garrisonSpots). */
+  garrisonMin: 4,
+  garrisonMax: 6,
+  /** Fraction of a column / siege defence a land at control 0 still fields (scales linearly up to 1 at control 100). */
+  weakShare: 0.5,
   /** The client draws squads whose territory has a stop this close to the hero (px); farther ones are off screen. */
   viewRange: 22 * TILE,
 };
+
+/** Siege battle at one standard (cosmetic): two loose lines clash, some fall, reinforcements walk in. */
+export const SIEGE_FIGHT = {
+  /** Fighters per side per standard (defenders are scaled by the land's control). */
+  perSide: 8,
+  /** Sprites a land may show in a siege (both sides, all standards): perSide shrinks to fit. */
+  budget: 40,
+  /** Fewest defenders that still make a line. */
+  minDefenders: 4,
+  /** Distance between the two lines (px) and between neighbours in a line. */
+  lineGap: 44,
+  spacing: 18,
+  /** Chance (%) that a fighter falls in one life cycle. */
+  dieChance: 40,
+  /** One life cycle of a slot (ms) plus a per-slot stretch, so the fight never pulses in step. */
+  cycleMs: 14000,
+  cycleJitter: 5000,
+  /** A reinforcement's walk to the line, and how far away it starts (px). */
+  walkMs: 2400,
+  walkFrom: 130,
+  /** Earliest a fighter falls after reaching the line; fall, lie and fade durations; shortest gap before the next arrival. */
+  fightMinMs: 2500,
+  fallMs: 500,
+  lieMs: 1800,
+  fadeMs: 700,
+  goneMinMs: 1500,
+};
+
+/** Share (0..1) of full strength a land fields at `control` (0..100). */
+export function troopShare(control: number): number {
+  const c = Math.max(0, Math.min(100, Number.isFinite(control) ? control : 100)) / 100;
+  return TROOP.weakShare + (1 - TROOP.weakShare) * c;
+}
+/** Soldiers in a land's patrol column at `control`. */
+export const patrolCount = (control: number) => Math.max(TROOP.patrolMin, Math.round(TROOP.perPatrol * troopShare(control)));
+/** Hold guards at `control`. */
+export const garrisonCount = (control: number) =>
+  Math.round(TROOP.garrisonMin + (TROOP.garrisonMax - TROOP.garrisonMin) * Math.max(0, Math.min(100, control)) / 100);
+/** Fighters per side at each of a land's `stds` standards; defenders shrink with the land's control, attackers do not. */
+export function siegeCounts(stds: number, control: number): { atk: number; def: number } {
+  const per = Math.max(1, Math.min(SIEGE_FIGHT.perSide, Math.floor(SIEGE_FIGHT.budget / (2 * Math.max(1, stds)))));
+  return { atk: per, def: Math.min(per, Math.max(SIEGE_FIGHT.minDefenders, Math.round(per * troopShare(control)))) };
+}
+
+/** Small integer hash (deterministic noise for looks): 0..2^32-1. */
+export function mix(a: number, b: number, c = 0): number {
+  let h = Math.imul(a | 0, 0x9e3779b1) ^ Math.imul(b | 0, 0x85ebca6b) ^ Math.imul(c | 0, 0xc2b2ae35);
+  h ^= h >>> 15; h = Math.imul(h, 0x2c1b3c6d); h ^= h >>> 12; h = Math.imul(h, 0x297a2d39); h ^= h >>> 15;
+  return h >>> 0;
+}
+
+/**
+ * Where a siege fighter's slot is at wall time `wall`: walking in as a reinforcement ("walk", u 0..1), fighting
+ * ("fight"), fallen ("down", t ms since the fall) or away ("gone"). Each cycle a slot dies with dieChance %; a slot
+ * whose last cycle ended in a death arrives by walking at the start of the next one. Same on every client.
+ */
+export function siegeLife(seed: number, slot: number, wall: number): { s: "walk" | "fight" | "down" | "gone"; t: number; u: number } {
+  const F = SIEGE_FIGHT, P = F.cycleMs + (mix(seed, slot, 1) % F.cycleJitter);
+  const x = wall + (mix(seed, slot, 2) % P), n = Math.floor(x / P), tc = x - n * P;
+  const dies = (c: number) => mix(seed, slot, 100 + c) % 100 < F.dieChance;
+  const walk = dies(n - 1) ? F.walkMs : 0;
+  if (tc < walk) return { s: "walk", t: tc, u: tc / walk };
+  if (!dies(n)) return { s: "fight", t: tc - walk, u: 1 };
+  const last = P - (F.fallMs + F.lieMs + F.fadeMs) - F.goneMinMs, first = walk + F.fightMinMs;
+  const at = first + (mix(seed, slot, 5000 + n) % Math.max(1, last - first));
+  if (tc < at) return { s: "fight", t: tc - walk, u: 1 };
+  const d = tc - at;
+  return d < F.fallMs + F.lieMs + F.fadeMs ? { s: "down", t: d, u: 1 } : { s: "gone", t: 0, u: 1 };
+}
 
 export interface Patrol {
   t: number;
@@ -160,11 +236,31 @@ export function patrolPos(p: Patrol, dist: number): { x: number; y: number; dx: 
   return { x: p.pts[0].x, y: p.pts[0].y, dx: 1, dy: 0 };
 }
 
+const spots = new Map<number, { x: number; y: number; fx: number; fy: number }[]>();
+/**
+ * Up to `n` guard posts around territory `t`'s Hold: deterministic ring points on walkable ground, each with the
+ * unit direction pointing away from the Hold (the way a guard faces). Fewer come back if the ground is cramped.
+ */
+export function garrisonSpots(t: number, n: number): { x: number; y: number; fx: number; fy: number }[] {
+  if (!spots.has(t)) {
+    const hold = HOLDS.find((h) => h.t === t), out: { x: number; y: number; fx: number; fy: number }[] = [];
+    if (hold) for (let k = 0; k < 64 && out.length < TROOP.garrisonMax; k++) {
+      const a = k * 2.399963 + t * 0.7, r = 44 + (k % 3) * 20, fx = Math.cos(a), fy = Math.sin(a);
+      const x = hold.x + fx * r, y = hold.y + fy * r;
+      if (isSolidAt(x, y) || isSolidAt(x + 8, y) || isSolidAt(x - 8, y) || isSolidAt(x, y + 8) || isSolidAt(x, y - 8)) continue;
+      if (out.some((o) => Math.hypot(o.x - x, o.y - y) < 28)) continue;
+      out.push({ x, y, fx, fy });
+    }
+    spots.set(t, out);
+  }
+  return spots.get(t)!.slice(0, n);
+}
+
 /** Sprite kinds (texture keys from tools/art/characters.ts) each clan's soldiers wear; the client picks per soldier. */
-export const TROOP_LOOK: Record<ClanKey, { kinds: string[] }> = {
-  wardens: { kinds: ["watchman"] },
-  redfang: { kinds: ["bandit", "bandit_brute"] },
-  host: { kinds: ["skeleton_spear", "skeleton"] },
-  hidekin: { kinds: ["gnawkin_folk", "tuskborn_folk"] },
-  veiled: { kinds: ["veiled", "nomad_folk"] },
+export const TROOP_LOOK: Record<ClanKey, { kinds: string[]; officer: string }> = {
+  wardens: { kinds: ["watchman"], officer: "watchman" },
+  redfang: { kinds: ["bandit", "bandit_brute"], officer: "bandit_brute" },
+  host: { kinds: ["skeleton_spear", "skeleton"], officer: "skeleton" },
+  hidekin: { kinds: ["gnawkin_folk", "tuskborn_folk"], officer: "tuskborn_folk" },
+  veiled: { kinds: ["veiled", "nomad_folk"], officer: "nomad_folk" },
 };

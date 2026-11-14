@@ -1,9 +1,9 @@
 {
   "date": "2026-11-14",
-  "title": "Clan troops on patrol",
+  "title": "Clan armies",
   "changes": [
-    "Soldiers of the clan that holds a land now patrol it, marching between its Hold and its standards and stopping at each.",
-    "When a land changes hands, its soldiers change with it.",
-    "When a siege is called, soldiers of both clans clash at the land's standards. It is only for show: they cannot be fought."
+    "The clan that holds a land now marches a column of eight soldiers, two abreast, from its Hold past its standards. An officer leads with the clan pennant.",
+    "A few guards stand watch around every Hold. A weakly held land keeps a smaller column and fewer guards.",
+    "When a siege is called, a real battle breaks out at each standard: lines of both clans trade blows, some fall, and reinforcements walk in. It is only for show: they cannot be fought."
   ]
 }
