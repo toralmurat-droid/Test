@@ -88,6 +88,7 @@ const CHAMP_HELPER_MS = 90_000;
 import { ASK_BURST, ASK_PER_SEC, Bucket, CHAT_BURST, CHAT_PER_SEC, clientIp, isLocalIp, MSG_BURST, MSG_KICK_AFTER, MSG_KICK_WINDOW_MS, MSG_PER_SEC } from "./ratelimit";
 
 import { Player } from "./player";
+import { byPart, hitBy } from "./hitBy";
 export { Player, PlayerPrivate } from "./player"; // moved out; tests and tools import them from here
 
 export class Mob extends Schema {
@@ -1625,7 +1626,7 @@ export class TownRoom extends Room<TownState> {
     const d = Math.hypot(o.x - m.x, o.y - m.y) || 1;
     const k = moveStep(o.x, o.y, pushInput([(o.x - m.x) / d, (o.y - m.y) / d]), 0.05);
     if (!isSafeZone(k.x, k.y) && !noMobsAt(k.x, k.y)) { o.x = k.x; o.y = k.y; }
-    this.broadcast("hit", { id: oid, dmg, crit: false, dot: false });
+    this.broadcast("hit", { id: oid, dmg, crit: false, dot: false, ...byPart(hitBy(this.state.players, this.state.mobs, id)) }); // a hero's creature: its owner
     if (o.hp <= 0) { this.mobDied(o, oid, id, MOBS[m.kind].name); m.foe = ""; }
   }
 
@@ -5074,7 +5075,7 @@ export class TownRoom extends Room<TownState> {
       const k = moveStep(m.x, m.y, pushInput(push), 0.1 * kb);
       if (!isSafeZone(k.x, k.y) && !noMobsAt(k.x, k.y)) { m.x = k.x; m.y = k.y; }
     }
-    this.broadcast("hit", { id: targetId, dmg, crit: !!opts.crit && !exec, dot: !!opts.dot, el: opts.el, ...(exec ? { ex: 1 } : {}), ...(opts.dot ? {} : hitDir(push)) });
+    this.broadcast("hit", { id: targetId, dmg, crit: !!opts.crit && !exec, dot: !!opts.dot, el: opts.el, ...(exec ? { ex: 1 } : {}), ...(opts.dot ? {} : hitDir(push)), ...byPart(hitBy(this.state.players, this.state.mobs, attackerId)) });
     if (m.hp > 0) { afterHit(this.host, attackerId, targetId, opts); return; }
     if (a) onKill(this.host, attackerId); // Bloodlust
     if (m.owner && !m.charmUntil) { this.mobDied(m, targetId, attackerId, a?.name ?? ""); return; } // a summon: no XP, no loot, no quest credit
@@ -5944,7 +5945,7 @@ export class TownRoom extends Room<TownState> {
       const kb = moveStep(t.x, t.y, pushInput(push), 0.12 * kbMul);
       t.x = kb.x; t.y = kb.y;
     }
-    this.broadcast("hit", { id: tid, dmg, blocked: guarded, crit: !!opts.crit, dot: !!opts.dot, el: opts.el ?? opts.mobEl, ...(opts.dot ? {} : hitDir(push)) });
+    this.broadcast("hit", { id: tid, dmg, blocked: guarded, crit: !!opts.crit, dot: !!opts.dot, el: opts.el ?? opts.mobEl, ...(opts.dot ? {} : hitDir(push)), ...byPart(hitBy(this.state.players, this.state.mobs, opts.from)) });
     if (t.hp > 0) {
       afterHit(this.host, opts.from, tid, opts);
       if (struck) this.runesStruck(tid, t, opts.from!, dmg);
