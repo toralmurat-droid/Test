@@ -111,7 +111,7 @@ Open points for M1:
 
 - `shared/war/patrols.ts`: per territory a deterministic loop Hold → standards → Hold (tile BFS inside the land + 2
   tiles, no corner cutting, line-of-sight simplified), built lazily per land (`patrolOf`), ~50 ms for all 31.
-  `TROOP` numbers and `TROOP_LOOK` (which existing sprites each clan uses).
+  `TROOP` numbers and `TROOP_LOOK` (art keys of each clan's painted soldier sheets, `war_*`, since the soldier art PR).
 - `client/src/warTroops.ts`: look only. Three soldiers of the holder walk the loop near the hero, phase from wall
   time (same on every client), pauses at each stop; the lead carries the clan pennant. A flip fades squads over; a
   siege turns the patrol into attacker/defender pairs clashing at each standard. Hidden underground.

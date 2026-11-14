@@ -388,6 +388,10 @@ export function warSoldierTexture(scene: Phaser.Scene, name: string): string | n
   if (!scene.textures.exists(`hd_${key}`)) {
     if (!warAsked.has(key) && scene.cache.json.exists("hd_mobs")) {
       warAsked.add(key);
+      // a failed fetch (network blip) frees the key after a while, so the clan's soldiers are asked for again
+      const onErr = (f: Phaser.Loader.File) => { if (f.key !== `hd_${key}`) return; scene.load.off(Phaser.Loader.Events.FILE_LOAD_ERROR, onErr); setTimeout(() => warAsked.delete(key), 15_000); };
+      scene.load.on(Phaser.Loader.Events.FILE_LOAD_ERROR, onErr);
+      scene.load.once(`filecomplete-image-hd_${key}`, () => scene.load.off(Phaser.Loader.Events.FILE_LOAD_ERROR, onErr));
       scene.load.image(`hd_${key}`, `assets/hd/mobs/${key}.webp`);
       if (!scene.load.isLoading()) scene.load.start();
     }
