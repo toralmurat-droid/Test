@@ -1,5 +1,5 @@
 {
- "sources": "1471092137232342",
+ "sources": "fb4ebf01579c98db",
  "clips": {
   "w_firebolt": {
    "ms": 2200,
@@ -128,6 +128,58 @@
   "su_arsenal": {
    "ms": 3600,
    "frames": 43
+  },
+  "sg_modulate": {
+   "ms": 2200,
+   "frames": 26
+  },
+  "sg_ballad": {
+   "ms": 3000,
+   "frames": 36
+  },
+  "sg_mend": {
+   "ms": 2200,
+   "frames": 26
+  },
+  "sg_pedal": {
+   "ms": 3000,
+   "frames": 36
+  },
+  "sg_chorale": {
+   "ms": 3000,
+   "frames": 36
+  },
+  "sg_march": {
+   "ms": 3000,
+   "frames": 36
+  },
+  "sg_jig": {
+   "ms": 3000,
+   "frames": 36
+  },
+  "sg_call": {
+   "ms": 3000,
+   "frames": 36
+  },
+  "sg_anthem": {
+   "ms": 3000,
+   "frames": 36
+  },
+  "sg_dirge": {
+   "ms": 3000,
+   "frames": 36
+  },
+  "sg_shrill": {
+   "ms": 2200,
+   "frames": 26
+  },
+  "sg_crack": {
+   "ms": 2200,
+   "frames": 26
+  },
+  "sg_twelve": {
+   "ms": 3000,
+   "frames": 36
   }
  }
 }
