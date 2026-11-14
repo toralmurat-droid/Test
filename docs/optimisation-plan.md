@@ -271,3 +271,20 @@ Open:
   gotcha are reworded accordingly.
 - QA in a browser runs before the PR for the first wave.
 - Second wave started: S4, L3, C5; then L2, C7, L1, L4.
+
+2026-11-14, later
+- First wave merged to the default branch as PR #398 (CI green). `ws` is now a declared dev dependency.
+- Second wave is on the work branch, on top of the new default branch (which had gained the Songweaver class):
+  - S4 (awake-monster fast paths, `server/schemaFast.ts`). The Songweaver work added a resonance status word, a
+    mode word and note forgetting; `statusOf`'s early return and `quietUnit` skipped them and three Songweaver
+    tests failed after the merge. Fixed; `tests/mobtick.test.ts` now fails if either is forgotten. Re-checked on the
+    new base: replays with fixed random numbers give identical hashes before and after in six scenarios (5 bots,
+    20 spread, cast, night, Songweavers casting, Songweavers in parties); seeded `duel.ts` and `pve.ts` md5s match.
+    Update CPU per tick in those replays: 11.1 to 8.9 ms (5 bots), 28 to 19.7 (20 spread), 53 to 36.7 (cast).
+    Bench, 20 spread: tick about 31.6 to 17.9 ms. The cast case still misses the 50 ms budget in most runs.
+  - C5 (grass chunks at 2x, tileset rows, hidden ground layer): about 634 to 504 MB in town, 720 to 555 MB in a
+    meadow, counting chunk render textures (the probe's texture figure leaves those out). Grass was compared at
+    night only.
+  - L3 (character sheets on demand): texture manager in town about 497 to 203-233 MB. Being re-checked on the new
+    base (Songweaver sheet, NPC speech bubbles).
+- Still to do for the second wave: reviewer, desktop QA (1920x1080 and 1366x768), patch note, PR.
