@@ -150,3 +150,41 @@ phase from this summary when a phase starts.
   - No cooldown retune and no balance targets in these phases.
   - Still run the duel/PvE sims and put the numbers in each PR, as CLAUDE.md's merge rule requires, as
     information only.
+
+## Build (owner, 2026-11-14: "start whatever you can in parallel, build to end")
+- Integration branch: `claude/songweaver-ideas`, one PR at the end.
+- Phase order for `shared/` and `server/` (one gameplay engineer at a time): A-shared → B → C1 → D1 → C2 → D2.
+- Client, art, sound and text work runs in parallel against the contract below.
+
+## Interface contract (orchestrator). Agents build against it; changes go through the orchestrator.
+- **`fx` status words (all units):**
+  - `ch1`, `ch2`: notes so far toward a known progression;
+  - `chlock`: chords locked.
+- **Helpers:**
+  - `songKind(s): "Chorus" | "Verse" | "Key change" | undefined` (`shared/songs.ts`);
+  - `chordProgress(sk, progs?)`.
+- **Gauge:** the Songweaver's gauge lives in `mana` / `maxMana` (max 100, starts at 0); `p.stacks` stays 0.
+- **Events (`broadcast("sfx", …)`):**
+  - `{ ev: "swell", id, book, x, y, fizzle? }`: gauge full; `book` = equipped book id or `null` (then
+    `fizzle: true`);
+  - `{ ev: "newsong", id, song }`: a song collected;
+  - `{ ev: "matpick", id, mat, n, x, y }`: materials picked up;
+  - `{ ev: "lutefit", id, trait }`: a trait fitted;
+  - `{ ev: "break", id, mat, n }`: an item broken.
+- **Hidden skills (in `FINISHERS`):**
+  - full-gauge effects: `sg_g_refrain` (Songbook), `sg_g_bless` (Hymnal), `sg_g_rally` (War March),
+    `sg_g_cacoph` (Dissonance);
+  - song finishers: `sg_f_hum`, `sg_f_round`, `sg_f_undertow`, `sg_f_picardy`, with `prog` values `hum`,
+    `round`, `undertow`, `picardy`.
+- **Items:**
+  - Songbook kit: `songweaver_shield`; books: `bk_hymnal`, `bk_march`, `bk_dissonance`.
+  - Lute: `songweaver_weapon@<lvl>#<trait>.<trait>` (`#` segment before `^` runes).
+- **Lute traits:** `steel`, `gut`, `silk` (Strings) · `wide`, `deep`, `horn` (Body) · `bright`, `dark`,
+  `bonepegs` (Tuning).
+- **Materials:** `tonewood`, `brass`, `bone`, `silk`, `horn`, `sunglass`. Ground items carry the id `mat_<id>`
+  (e.g. `mat_silk`); only a Songweaver can pick them up.
+- **Songs:** `song_hum`, `song_round`, `song_pond`, `song_lament`.
+- **NPC:** `lutemaker` (Wren, Lute-maker), in Oakvale.
+- **Messages:**
+  - server→owner: `"songbook" { songs: string[], mats: Record<string, number> }`, on join and on change;
+  - client→server: `"break" { bag: number }`, `"lutefit" { trait: string }`.
