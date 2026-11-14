@@ -7,6 +7,9 @@
 //     without those copies `ws` compressed reused buffers late, giving "refId not found" decode errors and garbled bot inputs.
 //   PHASES=1: also prints a second JSON line with the time per phase of the tick (wraps TownRoom methods). The wrappers add overhead, so the
 //     totals in this mode are INFLATED (more for the hot, tiny ones); use it to see shares, not absolute ms. PHASES=fine adds the hot per-mob helpers.
+//   Latency (DEFLATE=1 matters): sendMsP50/P99/Max = send() to written, per message; pongAgeMsMax = oldest unanswered
+//     transport ping (it terminates a socket at ~6 s); sendQueueMax = longest ws send queue (messages);
+//     compressedOutPct / compressedInPct = share of messages deflated by the server / by the bots
 //   BENCH_PORT=2656: listen on another port (default 2599), e.g. when two benches run on one machine
 //   CAST=1 SPREAD=1: the Summoner bots cast wisps, blades, black holes and the Void Arsenal non-stop (tools/perf/bots.ts)
 //   SONGWEAVER=1 (PARTY=1): Songweaver bots too; PARTY=1 groups them
@@ -69,6 +72,31 @@ async function main() {
   // pings wait behind it and the transport drops the clients (docs/optimisation-plan.md N7).
   let backlog = 0;
   setInterval(() => { for (const c of (gs as any).transport.wss.clients) backlog = Math.max(backlog, c.bufferedAmount); }, 500).unref();
+  // How far behind the sockets are: send() to written (its callback) per message, the oldest unanswered ping (the
+  // transport terminates a socket whose pong is ~6 s late) and the longest ws send queue. Plus the share of messages
+  // compressed each way (zlib calls / messages; compressedInPct 100 = the bots compress like browsers).
+  const WS: any = (await import("ws")).default, PMD: any = require(path.join(path.dirname(require.resolve("ws")), "lib/permessage-deflate.js"));
+  const lat = { delays: [] as number[], pongMax: 0, queueMax: 0, sends: 0, zOut: 0, msgsIn: 0, zIn: 0 };
+  const wsSend = WS.prototype.send, wsPing = WS.prototype.ping, pmdC = PMD.prototype.compress, pmdD = PMD.prototype.decompress;
+  WS.prototype.send = function (this: any, data: unknown, opts: any, cb: any) {
+    if (typeof opts === "function") { cb = opts; opts = undefined; }
+    const t = performance.now(); lat.sends++;
+    return wsSend.call(this, data, opts, (e?: Error) => { lat.delays.push(performance.now() - t); cb?.(e); });
+  };
+  WS.prototype.ping = function (this: any, ...a: unknown[]) { (this.benchPings ??= []).push(performance.now()); return wsPing.apply(this, a); };
+  PMD.prototype.compress = function (this: any, ...a: unknown[]) { lat.zOut++; return pmdC.apply(this, a); };
+  PMD.prototype.decompress = function (this: any, ...a: unknown[]) { lat.zIn++; return pmdD.apply(this, a); };
+  (gs as any).transport.wss.on("connection", (c: any) => {
+    c.on("message", () => lat.msgsIn++);
+    c.on("pong", () => { const t = c.benchPings?.shift(); if (t !== undefined) lat.pongMax = Math.max(lat.pongMax, performance.now() - t); });
+  });
+  setInterval(() => {
+    const now = performance.now();
+    for (const c of (gs as any).transport.wss.clients as Set<any>) {
+      if (c.benchPings?.length) lat.pongMax = Math.max(lat.pongMax, now - c.benchPings[0]);
+      lat.queueMax = Math.max(lat.queueMax, c._sender?._queue?.length ?? 0);
+    }
+  }, 100).unref();
 
   const botsFile = path.join(__dirname, "bots.cjs");
   const child = fork(botsFile, [String(BOTS), String(PORT)], { stdio: ["ignore", "ignore", "inherit", "ipc"] });
@@ -78,12 +106,14 @@ async function main() {
     for (let i = 0; i < 500; i++) { const x = Math.random() * MAP_W * TILE, y = Math.random() * MAP_H * TILE; if (!isSolidAt(x, y)) { p.x = x; p.y = y; break; } }
   });
   await new Promise((r) => setTimeout(r, 3000));
-  ticks.length = 0; patches.length = 0; bytes = 0; wire = 0; backlog = 0; for (const r of ph.values()) r.n = r.incl = r.self = 0;
+  ticks.length = 0; patches.length = 0; bytes = 0; wire = 0; backlog = 0; Object.assign(lat, { delays: [], pongMax: 0, queueMax: 0, sends: 0, zOut: 0, msgsIn: 0, zIn: 0 }); for (const r of ph.values()) r.n = r.incl = r.self = 0;
   const cpu0 = process.cpuUsage(), t0 = performance.now();
   await new Promise((r) => setTimeout(r, SECS * 1000));
   const cpu = process.cpuUsage(cpu0), wall = performance.now() - t0;
   const s = [...ticks].sort((a, b) => a - b), q = (p: number) => s[Math.floor(s.length * p)]?.toFixed(1);
   const avg = (a: number[]) => (a.reduce((x, y) => x + y, 0) / a.length).toFixed(2);
+  const ds = lat.delays.sort((a, b) => a - b), dq = (p: number) => +(ds[Math.min(ds.length - 1, Math.floor(ds.length * p))] ?? 0).toFixed(1);
+  const pct = (a: number, b: number) => b ? +(100 * a / b).toFixed(0) : 0;
   let active = 0;
   room.state.mobs.forEach((m: any) => { if (!m.dead && (m.moving || m.target)) active++; });
   console.log(JSON.stringify({
@@ -91,6 +121,8 @@ async function main() {
     patchAvgMs: avg(patches), cpuPct: (((cpu.user + cpu.system) / 1000) / wall * 100).toFixed(0), rssMB: (process.memoryUsage().rss / 1e6).toFixed(0),
     kbPerPlayerPerSec: (bytes / BOTS / (wall / 1000) / 1024).toFixed(1), wireKbPerPlayerPerSec: (wire / BOTS / (wall / 1000) / 1024).toFixed(1), deflate: !!process.env.DEFLATE, mobs: room.state.mobs.size, activeMobs: active,
     sendBacklogKbMax: +(backlog / 1024).toFixed(0), botsDropped: dropped,
+    sendMsP50: dq(0.5), sendMsP99: dq(0.99), sendMsMax: dq(1), pongAgeMsMax: +lat.pongMax.toFixed(0), sendQueueMax: lat.queueMax,
+    compressedOutPct: pct(lat.zOut, lat.sends), compressedInPct: pct(lat.zIn, lat.msgsIn),
   }));
   if (dropped) console.error(`BENCH INVALID: ${dropped} of ${BOTS} bots lost their connection during the run, so the numbers above are not a measurement`);
   if (PH) {

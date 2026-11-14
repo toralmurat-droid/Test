@@ -4,6 +4,7 @@
 //   SONGWEAVER=1: every third bot is a Songweaver (otherwise only Vampires and Summoners); with
 //     CAST=1 they play songs, notes and chords non-stop (Dirge, Ballad, Shrill Note, Cracked String, Mending Note...)
 //   PARTY=1: the bots form groups of four (pinvite / paccept), so party auras and party buffs reach each other
+//   BROWSERLIKE=1: every bot message is deflated, as browsers do (see the note in the loop below)
 import zlib from "node:zlib";
 import WebSocket from "ws";
 
@@ -31,6 +32,9 @@ async function main() {
     const room = await new Client(`ws://localhost:${port}`).joinOrCreate("town", { name: `bot${i}p${process.pid % 10000}`, password: "benchpass1", cls: classes[i % classes.length], newGame: true });
     (room.connection as any).transport.ws.addEventListener("message", (e: any) => { const b = Buffer.from(e.data); bytes += b.length; if (process.env.DEFLATE_EST) { raw += b.length; packed += b.length > 256 ? zlib.deflateRawSync(b, { level: 1 }).length : b.length; } });
     const sock = (room.connection as any).transport.ws._socket; if (sock) socks.push([sock, sock.bytesRead]);
+    // BROWSERLIKE=1: compress every message, as browsers do (no size threshold). Already what `ws` does while the server
+    // keeps client context takeover (server/sendBacklog.ts); without it `ws` would skip messages under 1 KB
+    if (process.env.BROWSERLIKE) { const pm = (room.connection as any).transport.ws._extensions?.["permessage-deflate"]; if (pm) pm._threshold = 0; }
     room.onMessage("*", () => {});
     room.onLeave((code: number) => { if (!stopping) { dropped++; console.error(`bot${i} lost its connection (close code ${code})`); } });
     room.send("mvready"); // be fed the monsters near it, like the game client

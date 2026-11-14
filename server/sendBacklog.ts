@@ -1,4 +1,4 @@
-// Keeps a client's send queue from growing without end when per-message deflate falls behind.
+// Keeps a client's send queue short when per-message deflate falls behind.
 //
 // Why: `ws` compresses one message per socket at a time, in the background (zlib on the thread pool), and every later
 // send on that socket (pings too) waits in its queue until that compression is done. Each compression costs a few
@@ -8,21 +8,28 @@
 // (close code 1006). A limit in bytes (`bufferedAmount`) does not help: the cost is per message and messages are small.
 // So a socket may have at most MAX_COMPRESSING compressed messages on their way; later ones go out uncompressed: they
 // still wait for the compressions ahead of them, but then leave in one go, so the queue empties and order is kept.
-// A server that keeps up compresses everything as before.
+// A server that keeps up compresses nearly everything as before.
+// Mixing is valid: RFC 7692 marks each message as compressed or not (RSV1 on its first frame), the deflate window
+// (context takeover) only ever holds compressed messages on both sides, and `ws` takes `compress` per `send`.
 //
 // Uses only the public `ws` API: `send(data, { compress }, cb)`, whose callback fires once the frame is written.
+//
+// NOT solved here: what clients send. Browsers compress every message they send (no size threshold), the server
+// inflates them one at a time per socket, and a pong is read only after the messages before it. The bench bots
+// compress everything too (tools/perf/bots.ts): 20 non-stop casting bots stay connected, 40 are dropped with pongs
+// ~10 s late. Real players send far fewer messages than those bots, but no real browser has been measured.
 
 /** Per-message deflate settings, shared by the server (server/index.ts) and the bench (tools/perf/bench.ts). Level 1 is
- * the fastest. `ws` applies `threshold` only to a side without context takeover, so the server compresses every message
- * it sends. `clientNoContextTakeover` makes `ws` clients (the bench bots) send messages under their own 1 KB threshold
- * as they are; without it every input is inflated on the server, one at a time per socket, a pong waits behind those
- * and the bench drops every bot even when sends are bounded. Client messages are tiny, so the reset costs nothing. */
-export const PER_MESSAGE_DEFLATE = { threshold: 256, zlibDeflateOptions: { level: 1 }, clientNoContextTakeover: true };
+ * the fastest. No `threshold`: `ws` applies it only to a side without context takeover, so it never applied here.
+ * `concurrencyLimit`: zlib jobs (both ways, all sockets) that may run at once. With the default 10 every socket waited
+ * its turn behind all the others: 40 casting bots saw 1-3 s per message and pongs 2-5 s late, against 0.1-0.6 s and
+ * 0.2-0.3 s with 256 (and no more memory). Each job is microseconds of zlib work; the wait was the queue. */
+export const PER_MESSAGE_DEFLATE = { zlibDeflateOptions: { level: 1 }, concurrencyLimit: 256 };
 
 /** Compressed messages one socket may have queued or in flight before the next is sent uncompressed. Transport tuning,
- * not a gameplay value: a few ticks of messages to one hero, few enough that a ping never waits long (the bench kept a
- * little more compression and steadier ticks with 8 than with 4). */
-export const MAX_COMPRESSING = 8;
+ * not a gameplay value: 2 kept send delays and pong ages lowest under load (bench, against 4 and 8), for a little less
+ * compression when the server keeps up (wire/payload about 0.54 instead of 0.51). */
+export const MAX_COMPRESSING = 2;
 
 type Cb = (err?: Error) => void;
 type SendFn = (data: unknown, opts?: Record<string, unknown> | Cb, cb?: Cb) => void;

@@ -31,6 +31,12 @@ test("past MAX_COMPRESSING unfinished sends, messages go out uncompressed; optio
   assert.deepEqual(done, [3, 4, 0, 1]);
 });
 
+test("deflate settings: no threshold (ws ignores it with context takeover), zlib not throttled to 10 jobs", () => {
+  assert.equal((PER_MESSAGE_DEFLATE as Record<string, unknown>).threshold, undefined);
+  assert.ok(PER_MESSAGE_DEFLATE.concurrencyLimit >= 64);
+  assert.equal((PER_MESSAGE_DEFLATE as Record<string, unknown>).clientNoContextTakeover, undefined, "only helped ws bots, not browsers");
+});
+
 test("send(data, cb), sends already marked uncompressed, idempotence and non-sockets", () => {
   const { calls, sock } = fakeSocket();
   guardSendBacklog({ ref: sock }, 1);
@@ -47,7 +53,7 @@ test("send(data, cb), sends already marked uncompressed, idempotence and non-soc
 });
 
 /** A real `ws` pair with the production deflate settings; `guard` wraps the server's socket. */
-async function burst(guard: boolean, n: number) {
+async function burst(guard: boolean, n: number, size = 600) {
   const httpServer = http.createServer();
   const wss = new WebSocketServer({ server: httpServer, perMessageDeflate: PER_MESSAGE_DEFLATE });
   await new Promise<void>((r) => httpServer.listen(0, r));
@@ -59,7 +65,7 @@ async function burst(guard: boolean, n: number) {
   const got: number[] = [];
   const all = new Promise<void>((r) => client.on("message", (d: Buffer) => { got.push(d.readUInt32LE(0)); if (got.length === n) r(); }));
   const sock = (client as any)._socket, read0 = sock.bytesRead;
-  const msg = (i: number) => { const b = Buffer.alloc(600); b.writeUInt32LE(i, 0); return b; }; // compresses well
+  const msg = (i: number) => { const b = Buffer.alloc(size); b.writeUInt32LE(i, 0); return b; }; // compresses well
   for (let i = 0; i < n; i++) ws.send(msg(i), { binary: true });
   const queued = ws.bufferedAmount;
   await all;
@@ -95,4 +101,29 @@ test("the room guards every joining client's socket", async () => {
     assert.ok(Object.hasOwn(sc.ref, "send"), "only this instance, not the prototype");
     a.leave();
   } finally { await srv.stop(); }
+});
+
+test("one connection with context takeover carries compressed and uncompressed messages mixed (per-message RSV1)", async () => {
+  const httpServer = http.createServer();
+  const wss = new WebSocketServer({ server: httpServer, perMessageDeflate: PER_MESSAGE_DEFLATE });
+  await new Promise<void>((r) => httpServer.listen(0, r));
+  const server = new Promise<WebSocket>((r) => wss.once("connection", r));
+  const client = new WebSocket(`ws://localhost:${(httpServer.address() as { port: number }).port}`);
+  const ws = await server;
+  await new Promise((r) => client.once("open", r));
+  guardSendBacklog({ ref: ws });
+  const sock = (client as any)._socket;
+  try {
+    // Every third message goes out as it is (as when the socket is behind); the others are compressed against a deflate
+    // window that holds only the compressed ones, on both sides
+    for (let i = 0; i < 60; i++) {
+      const plain = i % 3 === 2, size = plain ? 100 : 700, sent = Buffer.from(`msg ${i} `.repeat(size).slice(0, size));
+      const read0 = sock.bytesRead;
+      const got = new Promise<Buffer>((r) => client.once("message", (d: Buffer) => r(d)));
+      ws.send(sent, plain ? { binary: true, compress: false } : { binary: true });
+      assert.ok((await got).equals(sent), `message ${i} intact`);
+      const wire = sock.bytesRead - read0;
+      if (plain) assert.equal(wire, 102, "as it is (100 bytes + header)"); else assert.ok(wire < 200, `compressed (${wire} bytes)`);
+    }
+  } finally { client.close(); wss.close(); httpServer.close(); }
 });
