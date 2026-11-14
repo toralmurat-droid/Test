@@ -102,6 +102,7 @@ Production has per-message deflate on (level 1, frames over 256 bytes).
 | N4 | Stop per-tick writes nobody needs: follow-field `x`/`y` (client ignores them); `hp` regen and `energy` as whole numbers with an unsynced carry (as `mp` already does); projectile `x`/`y` (client flies the shot from origin, direction and a new `speed` field); `zones` out of the synced state (nothing reads it); round item and event coordinates. | `TownRoom.ts:2709`, `:2653`, `:2657`, `:2633`, `:4199`, `:409`, `:4253`; `shared/overload.ts:37-45`; `client/src/TownScene.ts:760-775` | read | No new `Player` fields (cap is 64). `coolHeat` is shared with the duel sim: keep behaviour identical, rerun sims. Projectile change is lockstep. |
 | N5 | Not now: private `Player` fields behind a `StateView` (switches Colyseus to per-client encoding, costs patch CPU); patch rate 10 Hz (shows other heroes 110 ms later, touches hit registration). | | read | High. Revisit only if T1 shows player state dominating wire bytes. |
 | N6 | Ideas board sent on open, not on join and on every vote. | `TownRoom.ts:878-886`, `:949` | read: up to about 10 kB per push | Board badge freshness. |
+| N7 | Bounded send backlog under compression. With per-message deflate each socket compresses one message at a time in the background (two a tick per hero: state patch and monster feed). When the tick loop is about 95% busy the compressor gets no time, the per-socket queue only grows (2,000 messages, about 10 s behind, 300-500 kB), pings wait behind it and the transport cuts every client after two missed pings (close code 1006). Options: send uncompressed while `ws.bufferedAmount` is above a limit (public API, keeps order); one message a tick instead of two (N2/N3); do not ping-kill a socket that still has a backlog. | `server/index.ts` (deflate options), `server/TownRoom.ts` (send path), `@colyseus/ws-transport` heartbeat | measured: `SPREAD=1 CAST=1 DEFLATE=1`, 20 bots: all bots dropped about 9 s after joining in most runs; default branch 3 of 3 runs. Only with a saturated server, so not the single-player slowdown | Compression ratio drops while a client is behind; needs a room test with a slow consumer |
 
 ## Load time, HTTP, saves
 
@@ -271,3 +272,44 @@ Open:
   gotcha are reworded accordingly.
 - QA in a browser runs before the PR for the first wave.
 - Second wave started: S4, L3, C5; then L2, C7, L1, L4.
+
+2026-11-14, later
+- First wave merged to the default branch as PR #398 (CI green). `ws` is now a declared dev dependency.
+- Second wave is on the work branch, on top of the new default branch (which had gained the Songweaver class):
+  - S4 (awake-monster fast paths, `server/schemaFast.ts`). The Songweaver work added a resonance status word, a
+    mode word and note forgetting; `statusOf`'s early return and `quietUnit` skipped them and three Songweaver
+    tests failed after the merge. Fixed; `tests/mobtick.test.ts` now fails if either is forgotten. Re-checked on the
+    new base: replays with fixed random numbers give identical hashes before and after in six scenarios (5 bots,
+    20 spread, cast, night, Songweavers casting, Songweavers in parties); seeded `duel.ts` and `pve.ts` md5s match.
+    Update CPU per tick in those replays: 11.1 to 8.9 ms (5 bots), 28 to 19.7 (20 spread), 53 to 36.7 (cast).
+    Bench, 20 spread: tick about 31.6 to 17.9 ms. The cast case still misses the 50 ms budget in most runs.
+  - C5 (grass chunks at 2x, tileset rows, hidden ground layer): about 634 to 504 MB in town, 720 to 555 MB in a
+    meadow, counting chunk render textures (the probe's texture figure leaves those out). Grass was compared at
+    night only.
+  - L3 (character sheets on demand): texture manager in town about 497 to 203-233 MB. Being re-checked on the new
+    base (Songweaver sheet, NPC speech bubbles).
+- Still to do for the second wave: reviewer, desktop QA (1920x1080 and 1366x768), patch note, PR.
+
+2026-11-14, evening
+- Second wave: reviewer says OK TO MERGE. Follow-ups taken: a hero whose sheet has not arrived cannot be targeted;
+  sheets are requested from 900 px (`SHEET_RANGE`); a console warning when a layer needs more tileset rows than the
+  trimmed tileset has. Follow-ups open: one frame of background colour after a camera jump; a missing sheet is
+  retried forever; a test that fails when new per-monster state is not added to the fast paths; `TownRoom.ts` grew.
+- Desktop QA of the second wave (1920x1080 and 1366x768, production build): login with all four classes, town
+  NPCs, first quest, two heroes seeing each other, ground by day in six places, long walk, Screen size changes,
+  death and respawn, sinkhole, dungeon, combat, `?pixel=1`, `?iso=0`: pass, no console or decode errors.
+  - Grass by day against the default branch, same camera: equal in meadow, bridge and field; tuft edges 4% (town)
+    to 20% (gate) softer by an edge measure, not visible side by side.
+  - Seen once in three respawns (none in three on the default branch): for about a second after the jump part of
+    the screen shows the plain tiles while the painted ground catches up. Software rendering at 1-6 fps; the plain
+    tiles are the intended fallback. Low, to watch.
+  - Not covered: water animation (cannot be told at 1-3 fps, same on both builds), Morwen's dialog, desert and
+    Saltmere by day.
+  - Not from this work, also on the default branch: two level-50 heroes outside the gate lose health quickly with
+    no monster in sight; cause not found.
+- Merged the default branch again (8 commits: `Player` moved to `server/player.ts`, owner-only `Player.me` behind a
+  per-client view, 256 KB encoder buffer). No conflicts; `fastFields(Player)` still applies. 213 tests pass, build
+  and smoke pass. Bench after the merge: 5 bots tick 4.9 / patch 2.3 ms; 20 spread 12.7 / 7.6; 20 spread cast
+  26.8 / 12.1 at 19.1 ticks/s.
+- Found while re-running the bench: N7 above. The bench used to print normal-looking numbers after losing all its
+  bots; it now reports `botsDropped` and `sendBacklogKbMax` and marks such a run invalid.

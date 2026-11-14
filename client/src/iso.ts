@@ -109,26 +109,36 @@ export function isoInput(up: boolean, down: boolean, left: boolean, right: boole
 const BAKE_FROM: Partial<Record<number, number>> = { [T.FLOWERS]: T.GRASS, [T.FIELD]: T.DIRT, [T.CROPS]: T.DIRT };
 
 /**
- * The diamond tileset is split into two textures of ISO_ROWS rows each ("tiles_iso" = rows 0..63, "tiles_iso_b" =
- * rows 64..127): one texture would be 4352 px tall, over the 4096 px limit of many phone GPUs, which then show no ground.
- * The tilemap uses both as two tilesets (the second starts at gid ISO_ROWS * TILE_COUNT), so tile indices are unchanged.
+ * The diamond tileset is split into textures of ISO_PER rows each ("tiles_iso" = rows 0..63, "tiles_iso_b" = rows
+ * 64..127): one texture would be 4352 px tall, over the 4096 px limit of many phone GPUs, which then show no ground.
+ * The tilemap uses them as separate tilesets (the second starts at gid ISO_PER * TILE_COUNT), so tile indices are
+ * unchanged. Only the rows the two layers really use are baked (`isoRows`): the high rows are palisade and signpost
+ * variants, which the iso view draws as sprites, so the ground and object layers never show them.
  */
-const ISO_ROWS = Math.ceil(ROWS / 2);
+const ISO_PER = 64;
 const ISO_KEYS = ["tiles_iso", "tiles_iso_b"];
+let isoRows = ROWS;
+
+/** Number of tileset rows a display grid refers to (highest row + 1). */
+function usedRows(grid: number[][]) {
+  let m = 0;
+  for (const row of grid) for (const g of row) if (g >= 0) m = Math.max(m, Math.floor(g / TILE_COUNT) + 1);
+  return m;
+}
 
 /** Builds the diamond tileset textures from the square "tiles" canvas. */
 function bakeIsoTiles(scene: Phaser.Scene, ids?: number[]) {
   const src = (scene.textures.get("tiles") as Phaser.Textures.CanvasTexture).getSourceImage() as HTMLCanvasElement;
   const CW = IW + BLEED * 2, CH = IH + BLEED * 2;
-  const texs = ISO_KEYS.map((key) => (scene.textures.exists(key) ? scene.textures.get(key) as Phaser.Textures.CanvasTexture
-    : scene.textures.createCanvas(key, TILE_COUNT * CW, ISO_ROWS * CH)!));
+  const texs = ISO_KEYS.slice(0, Math.ceil(isoRows / ISO_PER)).map((key, i) => (scene.textures.exists(key) ? scene.textures.get(key) as Phaser.Textures.CanvasTexture
+    : scene.textures.createCanvas(key, TILE_COUNT * CW, Math.min(ISO_PER, isoRows - i * ISO_PER) * CH)!));
   const cols = ids ?? [...Array(TILE_COUNT).keys()];
   // Animation re-bakes only the rows the animation repaints (tileset.ts animatedRows); the first bake does them all
-  const rows = ids ? Math.max(...ids.map((id) => animatedRows(BAKE_FROM[id] ?? id))) : ROWS;
+  const rows = ids ? Math.max(...ids.map((id) => animatedRows(BAKE_FROM[id] ?? id))) : isoRows;
   for (let row = 0; row < rows; row++) for (const id of cols) {
-    const ctx = texs[Math.floor(row / ISO_ROWS)].getContext();
+    const ctx = texs[Math.floor(row / ISO_PER)].getContext();
     ctx.imageSmoothingEnabled = false;
-    const ox = id * CW, oy = (row % ISO_ROWS) * CH;
+    const ox = id * CW, oy = (row % ISO_PER) * CH;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(ox, oy, CW, CH);
     // (0,0)->(top vertex) (T,0)->(right) (0,T)->(left) (T,T)->(bottom); slightly enlarged into the bleed
@@ -139,7 +149,7 @@ function bakeIsoTiles(scene: Phaser.Scene, ids?: number[]) {
   }
   texs.forEach((tex, i) => {
     tex.getContext().setTransform(1, 0, 0, 1, 0, 0);
-    const n = Math.min(ISO_ROWS, rows - i * ISO_ROWS); // rows baked in this texture
+    const n = Math.min(ISO_PER, rows - i * ISO_PER); // rows baked in this texture
     if (n <= 0) return;
     if (ids) refreshRegions(scene, tex, ids.map((id) => [id * CW, 0, CW, n * CH]));
     else tex.refresh();
@@ -165,6 +175,15 @@ function isoCull(layer: Phaser.Tilemaps.LayerData, camera: Phaser.Cameras.Scene2
   return out;
 }
 
+/**
+ * Animated tiles (see ANIMATED_TILES) the tilemap shows right now. With the smooth painted ground covering the screen
+ * the ground layer is hidden, and only the object layer's animated tiles (none today) still need their repaint and
+ * re-bake every 160 ms. Ambient asks, so it can skip its own repaint too.
+ */
+let groundLayer: Phaser.Tilemaps.TilemapLayer | undefined;
+let objectAnimated: number[] = [];
+export const animatedTilesShown = (): number[] => (groundLayer && !groundLayer.visible ? objectAnimated : ANIMATED_TILES);
+
 export class IsoView {
   static ground?: SmoothGround;
   private flat = new Map<number, Phaser.GameObjects.Container>();
@@ -179,23 +198,32 @@ export class IsoView {
   /** Iso tilemap layers in place of the square ones (same data, same tile indices). */
   static tilemap(scene: Phaser.Scene, ground: number[][], objects: number[][]) {
     StaticChunks.of(scene); // before the first static object, so creation order is known for depth ties
-    bakeIsoTiles(scene);
     // The orientation has to be known when the Tilemap is built (it picks its coordinate helpers then)
     const data = new Phaser.Tilemaps.MapData({
       width: MAP_W, height: MAP_H, tileWidth: IW, tileHeight: IH, orientation: Phaser.Tilemaps.Orientation.ISOMETRIC,
     } as any);
     const map = new Phaser.Tilemaps.Tilemap(scene, data);
-    const tiles = ISO_KEYS.map((key, i) =>
-      map.addTilesetImage(key, key, IW + BLEED * 2, IH + BLEED * 2, 0, 0, i * ISO_ROWS * TILE_COUNT, { x: BLEED, y: BLEED })!);
     const flatObjects = isoStanding(scene, objects);
     isoCrops(scene, ground, objects);
     const water = buildBridges(scene, ground); // bridges stand over the water
+    // rows the layers use (at least the 4 look-alike rows the animation re-bakes), and no more than "tiles" has
+    const srcRows = Math.round((scene.textures.get("tiles").getSourceImage() as HTMLCanvasElement).height / TILE);
+    const need = Math.max(4, usedRows(water), usedRows(flatObjects));
+    if (need > srcRows) console.warn(`iso tiles: the layers use ${need} variant rows but "tiles" has ${srcRows}; the rows beyond draw nothing (tileset.ts COMMON_ROWS)`);
+    isoRows = Math.min(srcRows, need);
+    bakeIsoTiles(scene);
+    const tiles = ISO_KEYS.slice(0, Math.ceil(isoRows / ISO_PER)).map((key, i) =>
+      map.addTilesetImage(key, key, IW + BLEED * 2, IH + BLEED * 2, 0, 0, i * ISO_PER * TILE_COUNT, { x: BLEED, y: BLEED })!);
     if (SMOOTH) IsoView.ground = new SmoothGround(scene, water, (img) => isoScreen(img));
     for (const [name, grid, depth] of [["ground", water, -2], ["objects", flatObjects, -1]] as const) {
       const layer = map.createBlankLayer(name, tiles, -IW / 2, 0)!;
       layer.putTilesAt(grid as number[][], 0, 0).setDepth(depth);
       (layer as any).cullCallback = isoCull;
+      if (name === "ground" && SMOOTH) groundLayer = layer;
     }
+    const inObjects = new Set<number>();
+    for (const row of flatObjects) for (const g of row) if (g >= 0) inObjects.add(g % TILE_COUNT);
+    objectAnimated = ANIMATED_TILES.filter((id) => inObjects.has(id));
     return map;
   }
 
@@ -228,7 +256,17 @@ export class IsoView {
     const cam = this.scene.cameras.main;
     IsoView.ground?.update(cam.midPoint.x, cam.midPoint.y, cam.width / cam.zoom, cam.height / cam.zoom);
     this.tileTimer += dtMs;
-    if (this.tileTimer > 160) { this.tileTimer = 0; bakeIsoTiles(this.scene, ANIMATED_TILES); }
+    // The plain ground tiles show only while painted chunks do not cover the whole view (smoothground.ts)
+    const ground = IsoView.ground;
+    if (ground && groundLayer) {
+      const covered = ground.covered;
+      if (groundLayer.visible === covered) { groundLayer.setVisible(!covered); if (!covered) this.tileTimer = 1e9; } // re-bake at once
+    }
+    if (this.tileTimer > 160) {
+      this.tileTimer = 0;
+      const ids = animatedTilesShown();
+      if (ids.length) bakeIsoTiles(this.scene, ids);
+    }
   }
 
   /** Flat ground painting in world coordinates: skew it into the iso ground plane. */
@@ -703,6 +741,8 @@ export function isoStanding(scene: Phaser.Scene, objects: number[][]): number[][
       // origin = the centre of the footprint diamond, so the block stands on its tile
       staticObj(scene, scene.add.image(cx, cy, key).setOrigin(0.5, (IH / 2 + h) / (IH + h)).setDepth(cy));
       out[ty][tx] = -1;
+    } else if (t === T.WHEEL) {
+      out[ty][tx] = -1; // the mill's wheel is a world prop (millArt.ts)
     } else if (UPRIGHT.has(t)) {
       // 3/4 view art: its bottom edge stands on the tile's centre, a little forward
       const v = (((tx * 2654435761) ^ (ty * 40503)) >>> 0) % 4;

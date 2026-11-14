@@ -2,6 +2,7 @@ import Phaser from "phaser";
 import { ART_K as K } from "../../shared/constants";
 import { hiResTexture } from "./smooth";
 import { dith, OUT, vnoise, type Px } from "./shrineArt";
+import { IsoPaint, ramp, hsh as hash } from "./isoPaint";
 
 /**
  * Hand-built pixel art for the bounty boards (shared/bounty.ts), in the village bonfire's style like the shrine
@@ -17,7 +18,6 @@ const WOOD = ["#2a1a10", "#3d2817", "#553a22", "#6e4d2e", "#8a6640"]; // dark ..
 const PAPER = ["#6b5a3e", "#9c8760", "#c4b083", "#e0d0a4"];
 const SHINGLE = ["#241914", "#3a2a20", "#54402f", "#6d5640"];
 
-const wood = (lit: number, grain: number) => WOOD[Math.max(0, Math.min(4, Math.round(1.6 + lit * 1.6 + grain)))];
 
 function paintBoard(g: CanvasRenderingContext2D) {
   g.save();
@@ -25,70 +25,46 @@ function paintBoard(g: CanvasRenderingContext2D) {
   const cells = new Map<number, string>();
   const px: Px = (x, y, c) => { if (x >= 0 && y >= 0 && x < W && y < H) cells.set(y * W + x, c); };
 
-  // posts: square timbers, lit on the left face, dark on the right
-  for (const pxl of [CX - 19, CX + 15]) {
-    for (let y = 22; y <= BY; y++) for (let x = pxl; x < pxl + 5; x++) {
-      const face = x - pxl < 2 ? 0.7 : x - pxl < 4 ? 0 : -0.8;
-      const gr = (vnoise(x * 0.9, y * 0.18, 999, 7) - 0.5) * 1.2;
-      px(x, y, wood(face, gr));
-      // moss creeping up from the ground
-      if (y > BY - 9 && vnoise(x * 0.7, y * 0.5, 999, 3) + (y - (BY - 9)) * 0.06 > 0.85 && dith(x, y) < 0.7) px(x, y, y > BY - 4 ? "#3f5a26" : "#2f4a1e");
-    }
-  }
-  // the board: four planks with gaps, a frame batten top and bottom
-  const bx0 = CX - 24, bx1 = CX + 24, by0 = 26, by1 = 56;
-  for (let y = by0; y <= by1; y++) for (let x = bx0; x <= bx1; x++) {
-    const plank = Math.floor((y - by0) / 8), edge = (y - by0) % 8 === 7;
-    const lit = 0.35 - (x - bx0) / (bx1 - bx0) * 0.6 - (y - by0) / (by1 - by0) * 0.3;
-    const gr = (vnoise(x * 0.16 + plank * 9, y * 0.9, 999, 11) - 0.5) * 1.6;
-    let c = wood(lit, gr);
-    if (edge) c = WOOD[0];
-    // weathering: grey sun-bleach on the top planks, a split in the third
-    if (plank === 0 && vnoise(x * 0.3, y * 0.6, 999, 5) > 0.62 && dith(x, y) < 0.5) c = "#6f665a";
-    if (plank === 2 && x > CX + 6 && x < CX + 17 && y === by0 + 2 * 8 + 3 + ((x >> 2) & 1)) c = WOOD[0];
-    px(x, y, c);
-  }
-  for (const yy of [by0 - 1, by1 + 1]) for (let x = bx0 - 2; x <= bx1 + 2; x++) px(x, yy, wood(yy < by0 ? 0.6 : -0.5, (vnoise(x * 0.3, yy, 999, 9) - 0.5)));
-  // little shingle roof
-  for (let y = 14; y <= 24; y++) {
-    const half = 27 + (y - 14) * 0.6;
-    for (let x = Math.round(CX - half); x <= Math.round(CX + half); x++) {
-      const row = Math.floor((y - 14) / 3), off = row % 2 ? 2 : 0, seam = ((x + off) % 5 === 0) || (y - 14) % 3 === 2;
-      const lit = x < CX ? 1 : 0;
-      let c = SHINGLE[seam ? 0 : lit + 1 + (vnoise(x * 0.5, y, 999, 13) > 0.6 ? 1 : 0)];
-      if (y === 14 || x === Math.round(CX - half) || x === Math.round(CX + half)) c = OUT;
-      if (!seam && vnoise(x * 0.4, y * 0.7, 999, 17) > 0.78 && dith(x, y) < 0.6) c = "#3d5224"; // moss on the roof
-      px(x, y, c);
-    }
-  }
-  // three notices: parchment, ruled with "writing", nailed at the top
-  const note = (x0: number, y0: number, w: number, h: number, tilt: number, seed: number, mark: "seal" | "map" | "skull") => {
-    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
-      const sx = x0 + x + Math.round(y * tilt), sy = y0 + y;
-      const curl = (x === w - 1 && y > h - 4) || (x === 0 && y === h - 1);
-      if (curl) continue;
-      const shade = (x === w - 1 || y === h - 1) ? 0 : vnoise(x * 0.6 + seed, y * 0.6, 999, seed) > 0.7 ? 1 : 2 + (x < 2 && y < 3 ? 1 : 0);
-      let c = PAPER[shade];
-      if (y >= 4 && y < h - 3 && y % 2 === 0 && x >= 2 && x < w - 2 && vnoise(x * 0.8 + seed * 3, y, 999, seed + 1) > 0.38) c = "#4a3a26"; // writing
-      px(sx, sy, c);
-    }
-    // the drawing at the bottom of the note
-    const mx = x0 + Math.round(w / 2) + Math.round((h - 3) * tilt), my = y0 + h - 5;
-    if (mark === "seal") { for (const [dx, dy] of [[0, 0], [1, 0], [0, 1], [1, 1], [-1, 0], [2, 1], [0, 2], [1, 2], [0, -1], [1, -1]]) px(mx + dx, my + dy + 1, dx === 0 && dy <= 0 ? "#c8443a" : "#8e2a22"); }
-    if (mark === "skull") { for (const [dx, dy] of [[-1, 0], [0, 0], [1, 0], [-1, 1], [1, 1], [0, 2]]) px(mx + dx, my + dy, "#2a1d12"); }
-    if (mark === "map") { for (let i = -3; i <= 3; i++) px(mx + i, my + 1 + (Math.abs(i) === 2 ? -1 : 0), "#7a2a22"); px(mx + 3, my, "#7a2a22"); }
-    // nail
-    px(x0 + (w >> 1), y0, "#1a1410"); px(x0 + (w >> 1), y0 + 1, "#9a9082");
+  // Modelled in 3D (isoPaint.ts; Murat 2026-11-13: the face-on board looked flat): the board faces down-left like the
+  // other village props, two square posts, a little gable roof of shingles over it, the notices nailed on its face.
+  const n = (c: string) => parseInt(c.slice(1), 16), N = (pal: string[]) => pal.map(n);
+  const WOODN = N(WOOD), PAPERN = N(PAPER), SHN = N(SHINGLE);
+  const pen = { px: (x: number, y: number, c: number) => px(Math.round(x), Math.round(y), "#" + c.toString(16).padStart(6, "0")), line() {}, rect() {}, shaft() {} };
+  const q = new IsoPaint(pen, W, H, CX, BY - 1);
+  const timber = (l: number, s: number, t: number, x: number, y: number) => ramp(WOODN, l + (vnoise(s * 3, t * 20, 999, 5) - 0.5) * 0.3, x, y);
+  for (const u of [-14, 14]) { q.box(u - 1.8, u + 1.8, -1.8, 1.8, 0, 50, timber); q.blob([u, 0, 1], 2.8, 2.8, 1.6, (l, _s, _t, x, y) => ramp([0x2a3a1c, 0x3f5a26, 0x5c7a32], l, x, y), 0.5, 1); }
+  // the board: planks running along it, a frame round the edge
+  q.box(-15.5, 15.5, 1.8, 3, 20, 44, (l, s2, t, x, y) => {
+    const edge = s2 < 0.04 || s2 > 0.96 || t < 0.06 || t > 0.94;
+    return ramp(WOODN, l - (edge ? 0 : 0.1) + (Math.floor(t * 8) !== Math.floor((t + 0.012) * 8) ? -0.3 : 0) + (vnoise(s2 * 30, t * 6, 999, 2) - 0.5) * 0.25, x, y);
+  }, 6);
+  // gable roof of shingles along the board, its ridge over the posts
+  for (const side of [-1, 1]) q.quad([-18, 0, 55], [36, 0, 0], [0, side * 7.5, -6], (l, s2, t, x, y) => {
+    const row = Math.floor(t * 4), off = row % 2 ? 0.5 : 0;
+    return ramp(SHN, l + ((Math.floor(s2 * 12 + off) % 2) ? 0.06 : -0.04) - (t * 4 - row > 0.8 ? 0.2 : 0) + (hash(Math.floor(s2 * 24), row, 3) < 0.1 ? -0.25 : 0), x, y);
+  });
+  q.box(-18.5, 18.5, -0.7, 0.7, 54.4, 56, timber); // ridge beam
+  // notices nailed to the face: a sealed decree, a list, a crude map of the quarry
+  const note = (u0: number, z0: number, w: number, h: number, kind: "seal" | "list" | "map") => {
+    q.quad([u0, 3.1, z0], [w, 0, 0], [0, 0.15, -h], (l, s2, t, x, y) => {
+      if (t > 0.92 && hash(Math.floor(s2 * 10), 1, 4) < 0.4) return undefined; // torn bottom edge
+      if (kind === "seal" && Math.hypot(s2 - 0.5, t - 0.8) < 0.14) return ramp([0x3a0a0a, 0x7a1414, 0xb02a20], l + 0.1, x, y);
+      if (kind === "list" && t > 0.15 && t < 0.85 && Math.floor(t * 12) % 2 === 0 && s2 > 0.15 && s2 < 0.85 - hash(Math.floor(t * 12), 0, 7) * 0.4) return 0x4a3a28;
+      if (kind === "map" && (Math.abs(Math.sin(s2 * 9 + t * 3) * 0.3 + 0.5 - t) < 0.05 || Math.hypot(s2 - 0.66, t - 0.4) < 0.08)) return 0x5a2a1a;
+      if (kind === "seal" && t > 0.2 && t < 0.6 && Math.floor(t * 14) % 2 === 0 && s2 > 0.2 && s2 < 0.8) return 0x4a3a28;
+      return ramp(PAPERN, l + 0.05 - t * 0.15, x, y);
+    }, undefined, 0.5);
+    q.plot(u0 + w / 2, 3.4, z0 - 0.6, 0x3a3634, 1);
   };
-  note(CX - 20, 29, 12, 15, 0.06, 3, "skull");
-  note(CX - 5, 27, 11, 17, -0.04, 7, "seal");
-  note(CX + 9, 31, 12, 14, 0.08, 11, "map");
+  note(-13, 42, 8, 10, "seal"); note(-3.5, 41, 7, 12, "list"); note(5, 42.5, 8.5, 9.5, "map");
   // a dagger stuck in the board, pinning one more scrap
-  for (let i = 0; i < 6; i++) px(CX + 18 - i, 46 + i, i < 2 ? "#3b2a1c" : "#b9b4aa");
-  // grass tufts at the posts' feet
-  for (let x = CX - 24; x <= CX + 24; x++) {
-    const h = Math.round(vnoise(x * 0.7, 3, 999, 23) * 5);
-    for (let y = 0; y < h; y++) if (dith(x, y) < 0.8 - y * 0.12) px(x, BY + 1 - y, y > 2 ? "#5c7a32" : "#3f5a26");
+  note(7, 31, 5, 6, "list");
+  q.rod([9.5, 6.5, 30], [9.5, 3, 28.4], 0.35, (l, _s, _t, x, y) => ramp([0x5a5a5e, 0x8a8a90, 0xb9b4aa], l, x, y));
+  q.box(9, 10, 5.8, 7.8, 29.6, 30.4, () => 0x3b2a1c);
+  // grass tufts round the posts' feet
+  for (let i = 0; i < 40; i++) {
+    const u = (hash(i, 1, 23) - 0.5) * 36, v = (hash(i, 2, 23) - 0.5) * 8, h = 1 + Math.round(hash(i, 3, 23) * 3);
+    for (let z = 0; z < h; z++) q.plot(u, v, z, z > 1 ? 0x5c7a32 : 0x3f5a26);
   }
 
   // dark outline round every filled cell (the bonfire style), then a soft shadow under everything

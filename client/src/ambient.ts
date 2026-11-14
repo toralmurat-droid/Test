@@ -5,7 +5,7 @@ import { LAND_TREE_TINT } from "./elementArt";
 import { DESERT_BUSH_TINT, palmTexture } from "./desertArt";
 import { ANIMATED_TILES, animatedRows, drawTileFrame } from "./tileset";
 import { refreshRegions } from "./texupload";
-import { ISO, isoAnchor, isoX, isoY } from "./iso";
+import { ISO, animatedTilesShown, isoAnchor, isoX, isoY } from "./iso";
 import { StaticChunks, staticObj } from "./staticChunks";
 import { SMOOTH } from "./isoflag";
 import { smoothTrees } from "./smoothArt";
@@ -512,12 +512,13 @@ export class Ambient {
       this.frame++;
       const tex = scene.textures.get("tiles") as Phaser.Textures.CanvasTexture;
       const ctx = tex.getContext();
-      for (const id of ANIMATED_TILES) {
+      const shown = animatedTilesShown(); // smooth iso: nothing while the painted ground hides the tile layer
+      for (const id of shown) {
         if (id === T.TALL_GRASS || id === T.FLOWERS) { if (this.frame % 2) continue; drawTileFrame(ctx, id, this.frame >> 1); }
         else drawTileFrame(ctx, id, this.frame);
       }
       // upload just the repainted tiles, not the whole 1440x4096 tileset
-      refreshRegions(scene, tex, ANIMATED_TILES.map((id) => [id * TILE, 0, TILE, animatedRows(id) * TILE]));
+      if (shown.length) refreshRegions(scene, tex, shown.map((id) => [id * TILE, 0, TILE, animatedRows(id) * TILE]));
     }
 
     const cam = scene.cameras.main.worldView;

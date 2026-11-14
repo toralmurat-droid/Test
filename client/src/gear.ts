@@ -15,6 +15,7 @@ import { bagPref, lootFilter, setBagPref, setLootFilter } from "./lootfilter";
 import { itemRunes, socketsOf, socketProblem } from "../../shared/gear";
 import { parseRune, Rune, RUNE_KIND_NAMES, RUNES, runeName, runeText } from "../../shared/runes";
 import { runeCanvas, runeCss, runeStone } from "./runeArt";
+import { own } from "./own";
 
 /** Rune lines of an item for tooltips (shared/runes.ts): what each set rune does, and the free sockets. */
 export function runeHtml(id: string): string {
@@ -256,7 +257,7 @@ export class GearMenu {
     if (!this.open || !state) return;
     const bagItems: string[] = Array.from(state.bag ?? []);
     if (this.pickRune >= 0 && !parseRune(bagItems[this.pickRune])) this.pickRune = -1;
-    const sig = [this.pickRune, this.sorted, this.marks, this.dropAsk > performance.now(), lootFilter().minRarity, lootFilter().ownClass, JSON.stringify(Array.from(state.talents?.entries?.() ?? [])), state.cls, state.level, state.ptSta, state.ptStr, state.ptMag, state.ptDex, ...GEAR_SLOTS.map((s) => state[s]), ...bagItems, state.potions, state.gold, state.maxHp].join("|");
+    const sig = [this.pickRune, this.sorted, this.marks, this.dropAsk > performance.now(), lootFilter().minRarity, lootFilter().ownClass, JSON.stringify(Array.from(state.talents?.entries?.() ?? [])), state.cls, state.level, state.ptSta, state.ptStr, state.ptMag, state.ptDex, ...GEAR_SLOTS.map((s) => state[s]), ...bagItems, own(state).potions, own(state).gold, state.maxHp].join("|");
     if (sig === this.sig) return;
     this.sig = sig;
     this.busyUntil = 0; // the server answered, accept clicks again
@@ -340,8 +341,8 @@ export class GearMenu {
     const bag = document.getElementById("gearbag")!;
     bag.innerHTML = "";
     // Potion stacks (shared/potions.ts) take the bag slots after the gear, 10 of one size per slot
-    const stacks = potionStacks(unpackPotions(state.potions));
-    document.getElementById("gearbagtitle")!.innerHTML = `Bag ${bagItems.length + stacks.length}/${BAG_SIZE} <span class="gbgold">${icon("coin")}${state.gold ?? 0} gold</span>`;
+    const stacks = potionStacks(unpackPotions(own(state).potions));
+    document.getElementById("gearbagtitle")!.innerHTML = `Bag ${bagItems.length + stacks.length}/${BAG_SIZE} <span class="gbgold">${icon("coin")}${own(state).gold} gold</span>`;
     // Useless items: wearing them would raise no number on the sheet (or the class can't wear them)
     this.junk = bagItems.map((id, i) => (uselessItem(sh, worn, id) ? i : -1)).filter((i) => i >= 0);
     const junk = new Set(this.junk);

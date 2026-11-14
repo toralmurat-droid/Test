@@ -1,0 +1,10 @@
+{
+  "date": "2026-11-13",
+  "patch": 222,
+  "title": "Props redrawn in depth",
+  "changes": [
+    "Armour stands, racks, bounty boards, lanterns, pennants, training dummies, net racks, skull pikes, spear racks and the Redfang watchtowers are now drawn in true isometric depth.",
+    "Morwen's alchemy rig and Brann's weapon rack got the same treatment.",
+    "Well roofs are now pixel shingles, nomad tents are whole tents with an open front, and desert palms have new feathered fronds."
+  ]
+}

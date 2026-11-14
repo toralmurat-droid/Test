@@ -118,6 +118,7 @@ import { DungeonView } from "./dungeon";
 import { TEXT_FONT, TEXT_PX, WT } from "./pixelfont";
 import { parseRune, RUNES, RuneKey } from "../../shared/runes";
 import { runeCss, runeTexture } from "./runeArt";
+import { own } from "./own";
 
 /** One painted bit on a merged blob, in body-relative units (-1..1 across the body). */
 interface BlobPart { kind: "patch" | "eye" | "mouth"; u: number; v: number; r: number; col: number }
@@ -160,6 +161,7 @@ interface Entity {
   lvlColor?: string; // monsters: current colour of the "Lv N" label
   mob: boolean;
   hero?: CharacterName; // set when drawn with the animated 32x32 sheets
+  waiting?: CharacterName; // a hero whose sheet is still loading: hidden and not animated until it arrives (sheetReady)
   culled?: boolean; // monster off screen: not drawn this frame
   top: number; // px from the feet to the top of the head, for the name label and chat bubble
   bar: Phaser.GameObjects.Graphics;
@@ -182,7 +184,7 @@ interface Entity {
 }
 
 /** A server position and the local time it arrived. */
-interface Snap { t: number; x: number; y: number }
+interface Snap { t: number; x: number; y: number; rest?: boolean }
 /**
  * Other heroes and monsters are drawn this far in the past, so there is always a newer server position to glide
  * towards. The server sends 20 updates a second (one per 50 ms) and some arrive late; 2 updates of slack hides that.
@@ -219,11 +221,19 @@ function patchTime(): number {
   if (stamp > now) lateness = Math.max(stamp - now, lateness); // early stamps (a bunch after a late one) need the slack too
   return stamp;
 }
-/** Record a server position for an entity (several field changes of one update count once). */
+/**
+ * Record a server position for an entity (several field changes of one update count once). An entity that stood still
+ * sends no updates, so before the first step after a pause the old spot is stamped again one tick earlier: otherwise
+ * the blend runs over the whole pause and the first step jumps. Only after a real stop (the last two snaps at one
+ * spot, or a single snap), so a stall in the updates of a moving entity doesn't pull it back; marked `rest` so
+ * interpolate doesn't carry a one-off step (a knockback) on at that one-tick speed.
+ */
 function pushSnap(e: { snaps?: Snap[] }, x: number, y: number) {
-  const s = (e.snaps ??= []), t = patchTime();
+  const s = (e.snaps ??= []), t = patchTime(), tick = 1000 / TICK_RATE;
   const last = s[s.length - 1];
   if (last && t - last.t < 1) { last.x = x; last.y = y; return; }
+  const prev = s[s.length - 2], stood = !prev || (prev.x === last?.x && prev.y === last?.y);
+  if (last && stood && t - last.t > 2 * tick && (last.x !== x || last.y !== y)) s.push({ t: t - tick, x: last.x, y: last.y, rest: true });
   s.push({ t, x, y });
   if (s.length > 12) s.splice(0, s.length - 12);
 }
@@ -252,7 +262,7 @@ function interpolate(s: Snap[], t: number): { x: number; y: number } | undefined
   }
   // Past the newest update (a late one): keep the last speed a moment so the entity doesn't stop and jump
   const b = s[s.length - 1], a = s[s.length - 2];
-  if (!a || b.t - a.t < 1) return b;
+  if (!a || a.rest || b.t - a.t < 1) return b; // a first step from rest: no speed to carry on yet
   const over = Math.min(t - b.t, 1000 / TICK_RATE * 1.5), k = over / Math.max(1, b.t - a.t);
   return { x: b.x + (b.x - a.x) * k, y: b.y + (b.y - a.y) * k };
 }
@@ -301,6 +311,7 @@ export class TownScene extends Phaser.Scene {
   // Reconciling our predicted hero with the server while walking (see reconcile)
   private sentAt = new Map<number, number>(); // input seq -> performance.now() it left
   private ackSeq = 0; // newest input seq the server has echoed back
+  private reconciledAt = -1; // patchSeq of the update reconcile last ran for
   private rtt = 150; // smoothed ms from sending an input to seeing it in a server update
   private predHist: Snap[] = []; // where our predicted hero stood, recent frames (performance.now())
   private corrX = 0; private corrY = 0; // server - prediction still to be blended in
@@ -383,7 +394,7 @@ export class TownScene extends Phaser.Scene {
 
   preload() {
     this.load.on("progress", (v: number) => setLoading("Loading the art", v * 0.45));
-    preloadArt(this);
+    preloadArt(this, this.opts.cls);
     preloadGear(this);
     preloadPaintedMobs(this);
   }
@@ -741,6 +752,22 @@ export class TownScene extends Phaser.Scene {
         // Snap on respawn / large correction
         if (teleported(e, p.x, p.y)) { e.sprite.setPosition(p.x, p.y); e.snaps = [{ t: patchTime(), x: p.x, y: p.y }]; }
       });
+      if (id !== this.me) return;
+      // Our input ack (seq) lives in `me` (owner-only), whose changes don't fire Player's onChange: an update where only
+      // seq moved (walking into a wall) must still ack the input and feed the RTT. Hooked on the `me` instance itself:
+      // at once if it's here already, else when it lands (listen). Callbacks run after the whole patch is decoded, so
+      // reconcile sees x / y and seq of the same update either way; reconciledAt keeps it to once per update.
+      let hooked: unknown, off: (() => void) | undefined;
+      const hookMe = (me: any) => {
+        if (!me || me === hooked) return;
+        hooked = me; off?.();
+        off = $(me).onChange(() => {
+          const e = this.entities.get(id);
+          if (e && id === this.me) this.reconcile(e, p);
+        });
+      };
+      hookMe(p.me);
+      $(p).listen("me", (me: any) => { hooked = undefined; hookMe(me); }); // the decoded instance: (re)hook on it for sure
     });
     players.onRemove((_p: any, id: string) => this.removeEntity(id));
 
@@ -1499,8 +1526,11 @@ export class TownScene extends Phaser.Scene {
    * 48 px, then the hero jumped back to a stale spot (and on any lag spike, since the gap is speed x ping).
    */
   private reconcile(e: Entity, p: any) {
+    // Called from Player's and from me's onChange: when both changed in one update, only the first one counts
+    if (this.reconciledAt === patchSeq) return;
+    this.reconciledAt = patchSeq;
     const now = performance.now();
-    const s = p.seq ?? 0;
+    const s = own(p).seq;
     if (s > this.ackSeq) {
       const t0 = this.sentAt.get(s);
       if (t0 !== undefined) this.rtt += (Math.min(1000, Math.max(20, now - t0)) - this.rtt) * 0.2;
@@ -1576,7 +1606,7 @@ export class TownScene extends Phaser.Scene {
       return e && !e.state.dead ? e : undefined;
     };
     const attackable = (id: string, e: Entity) => {
-      if (e.state.dead || id === this.me) return false;
+      if (e.state.dead || id === this.me || e.waiting) return false; // waiting: a hero not drawn yet (its sheet is loading) is no target
       // A monster tucked into a grave or tree can't be hurt (the server skips it): don't let a click swing at it
       const m = meEnt();
       // Summons (shared/summons.ts): never my own or my group's, nor a newcomer's (the server skips them too)
@@ -1655,7 +1685,7 @@ export class TownScene extends Phaser.Scene {
       },
       speed: () => {
         const p = meEnt()?.state;
-        return p ? heroSpeed(p.cls as ClassKind, p.slowed, p.spd ?? 1) * gearSpeedMult(activeOf(p)) : 80;
+        return p ? heroSpeed(p.cls as ClassKind, p.slowed, own(p).spd) * gearSpeedMult(activeOf(p)) : 80;
       },
       shotSpeed: (secondary) => {
         const p = meEnt()?.state;
@@ -1853,9 +1883,13 @@ export class TownScene extends Phaser.Scene {
       return;
     }
     // Classes with a generated sheet use it; anything else falls back to the procedural persona
-    const hero = (CHARACTERS as readonly string[]).includes(p.cls) ? (p.cls as CharacterName) : undefined;
+    const sheet = (CHARACTERS as readonly string[]).includes(p.cls) ? (p.cls as CharacterName) : undefined;
+    // Another class's sheet loads when its first hero appears (ensureCharSheet): hidden until then
+    const loaded = !sheet || ensureCharSheet(this, sheet, () => this.sheetReady(id, sheet), id === this.me ? -2 : -1);
+    const hero = loaded ? sheet : undefined;
     const sprite = hero
       ? this.add.sprite(p.x, p.y, hero, 0).setOrigin(CHAR_ORIGIN.x, CHAR_ORIGIN.y).setScale(HERO_SCALE)
+      : sheet ? this.add.sprite(p.x, p.y, "__DEFAULT").setOrigin(CHAR_ORIGIN.x, CHAR_ORIGIN.y).setScale(HERO_SCALE).setVisible(false)
       : this.add.sprite(p.x, p.y, heroTexture(this, p.cls, p.color), 0).setOrigin(0.5, 0.85);
     const label = this.add.text(p.x, p.y, p.name, {
       fontFamily: TEXT_FONT, fontSize: `${TEXT_PX}px`, color: id === this.me ? "#ffd166" : "#ffffff",
@@ -1864,7 +1898,8 @@ export class TownScene extends Phaser.Scene {
     isoAnchor(label, sprite);
     const bar = isoAnchor(this.add.graphics(), sprite) as Phaser.GameObjects.Graphics;
     const gear = hero ? new GearLayer(this, hero) : undefined;
-    this.entities.set(id, { sprite, label, bar, tx: p.x, ty: p.y, snaps: [{ t: patchTime(), x: p.x, y: p.y }], state: p, mob, hero, gear, top: hero ? HERO_TOP : 14 });
+    if (!loaded) label.setVisible(false);
+    this.entities.set(id, { sprite, label, bar, tx: p.x, ty: p.y, snaps: [{ t: patchTime(), x: p.x, y: p.y }], state: p, mob, hero, gear, top: hero ? HERO_TOP : 14, waiting: loaded ? undefined : sheet });
     if (id === this.me) {
       // ?look=tx,ty (map viewing aid, like ?time=): park the camera on a tile instead of following the hero
       const look = new URLSearchParams(location.search).get("look")?.split(",").map(Number);
@@ -1872,6 +1907,18 @@ export class TownScene extends Phaser.Scene {
       this.cameras.main.startFollow(target, true, CAM_LERP, CAM_LERP);
       this.snapCamera(); // start on the hero, not panning over from the map corner
     }
+  }
+
+  /** A hero's class sheet has arrived: dress the hidden stand-in with it (the update loop animates it from the next frame). */
+  private sheetReady(id: string, sheet: CharacterName) {
+    const e = this.entities.get(id);
+    if (!e || e.waiting !== sheet) return;
+    e.waiting = undefined;
+    e.hero = sheet;
+    e.top = HERO_TOP;
+    e.sprite.setTexture(sheet, 0).setVisible(true);
+    e.label?.setVisible(true);
+    e.gear = new GearLayer(this, sheet);
   }
 
   private removeEntity(id: string) {
@@ -2322,8 +2369,9 @@ export class TownScene extends Phaser.Scene {
     const cls = mine.cls as ClassKind, lvl = mine.level as number;
     const st = statsOf(mine); // includes gear bonuses
     const free = statPoints(lvl) - (mine.ptSta + mine.ptStr + mine.ptMag + (mine.ptDex ?? 0));
+    const o = own(mine);
     // Rebuild only when something shown changed (called every frame while open)
-    const sig = [lvl, mine.xp, Math.ceil(mine.hp), mine.maxHp, mine.mp, st.sta, st.str, st.mag, st.dex, free, mine.kills, mine.gold, from].join("|");
+    const sig = [lvl, o.xp, Math.ceil(mine.hp), mine.maxHp, o.mp, st.sta, st.str, st.mag, st.dex, free, o.kills, o.gold, from].join("|");
     const el = document.getElementById("hero")!;
     if (!el.hidden && sig === this.heroSig) return;
     this.heroSig = sig;
@@ -2353,28 +2401,28 @@ export class TownScene extends Phaser.Scene {
     const wp = attackProfile(cls, activeOf(mine));
     const next = xpForLevel(lvl + 1), cur = xpForLevel(lvl);
     const dmg = Math.round(wp.damage * weaponAttackMult(cls, st, wp.type) * talentMult(cls, mine.talents, "dmg"));
-    const speed = Math.round(heroSpeed(cls, false, mine.spd ?? 1) * gearSpeedMult(activeOf(mine)));
+    const speed = Math.round(heroSpeed(cls, false, o.spd) * gearSpeedMult(activeOf(mine)));
     const rows: [string, string][] = [
-      ["Level", lvl >= MAX_LEVEL ? `${MAX_LEVEL} (max)` : `${lvl} · XP ${mine.xp - cur}/${next - cur}`],
+      ["Level", lvl >= MAX_LEVEL ? `${MAX_LEVEL} (max)` : `${lvl} · XP ${o.xp - cur}/${next - cur}`],
       ["Health", `${Math.ceil(mine.hp)} / ${mine.maxHp}`],
       ["HP regen", `${regenFromStamina(st.sta)[1].toFixed(1)}/s resting · ${regenFromStamina(st.sta)[0].toFixed(1)}/s in a fight`],
-      ["Mana", `${unpackMana(mine.mp).mana} / ${unpackMana(mine.mp).maxMana} · ${manaRegen(st, false, talentBonus(cls, mine.talents, "mana")).toFixed(1)}/s (×${MANA.restMult} resting)`],
+      ["Mana", `${unpackMana(o.mp).mana} / ${unpackMana(o.mp).maxMana} · ${manaRegen(st, false, talentBonus(cls, mine.talents, "mana")).toFixed(1)}/s (×${MANA.restMult} resting)`],
       ["Attack", `${dmg} damage · ${WEAPON_TYPE_NAMES[wp.type]}: ${ATTACK_WORDS[wp.type]}`],
       ["Attack speed", `${(1000 / wp.attackCooldownMs).toFixed(1)} hits/s`],
       ["Critical hits", `${Math.round(critChance(st, talentBonus(cls, mine.talents, "crit")) * 100)}% chance, double damage`],
       ["Initiative", `${heroPoise(cls, lvl)} · dizzy at 0`],
       ["Move speed", `${speed}`],
-      ["Kills · Gold", `${mine.kills} · ${mine.gold}`],
+      ["Kills · Gold", `${o.kills} · ${o.gold}`],
     ];
     // health, mana and experience as bars over the detail list
-    const mp = unpackMana(mine.mp);
-    const xpFrac = lvl >= MAX_LEVEL ? 1 : Math.max(0, Math.min(1, (mine.xp - cur) / Math.max(1, next - cur)));
+    const mp = unpackMana(o.mp);
+    const xpFrac = lvl >= MAX_LEVEL ? 1 : Math.max(0, Math.min(1, (o.xp - cur) / Math.max(1, next - cur)));
     const bar = (cls2: string, label: string, val: string, f: number) =>
       `<div class="hbar ${cls2}"><div class="hbar-l"><span>${label}</span><b>${val}</b></div><div class="hbar-t"><i style="width:${Math.round(f * 100)}%"></i></div></div>`;
     document.getElementById("herochar")!.innerHTML =
       `<div class="hbars">${bar("hp", "Health", `${Math.ceil(mine.hp)} / ${mine.maxHp}`, mine.hp / Math.max(1, mine.maxHp))}` +
       bar("mp", "Mana", `${mp.mana} / ${mp.maxMana}`, mp.mana / Math.max(1, mp.maxMana)) +
-      bar("xp", "Experience", lvl >= MAX_LEVEL ? "Max level" : `${mine.xp - cur} / ${next - cur}`, xpFrac) + `</div>` +
+      bar("xp", "Experience", lvl >= MAX_LEVEL ? "Max level" : `${o.xp - cur} / ${next - cur}`, xpFrac) + `</div>` +
       `<div class="hrows">${rows.filter(([k]) => k !== "Level" && k !== "Health").map(([k, v]) => `<span>${k}</span><b>${v}</b>`).join("")}</div>`;
     const rc = respecCost(lvl), rcEl = document.getElementById("statresetcost");
     if (rcEl) rcEl.textContent = rc ? `${rc} gold` : "free (up to level 5)";
@@ -2581,7 +2629,7 @@ export class TownScene extends Phaser.Scene {
 
   /** Healing (Q) and mana (V) potion cells right of the skill bar: the flask in pixel art, how many you carry. */
   private potionCells(mine: any) {
-    const pots = unpackPotions(mine.potions);
+    const pots = unpackPotions(own(mine).potions);
     const cell = (kind: PotionKind, key: string) => {
       const c = pots[kind], n = total(c), next = Math.max(0, nextSize(c)), tex = potionTex(kind, next);
       const name = n ? potionName(kind, next) : kind === "mpotion" ? "Mana potion" : "Healing potion";
@@ -2629,7 +2677,7 @@ export class TownScene extends Phaser.Scene {
    * click) spends them (Murat 2026-11-04).
    */
   private chargeCell(mine: any, cls: ClassKind, clicks: string[], slots: string[], now: number): string {
-    const n = Math.max(0, Math.min(MAX_STACKS, mine.stacks | 0));
+    const n = Math.max(0, Math.min(MAX_STACKS, own(mine).stacks | 0));
     if (n > this.chargeSeen.n) this.chargeSeen.at = now; // a hit built one (the server's clock isn't sent)
     this.chargeSeen.n = n;
     const users = [...clicks, ...slots].filter((id, i, a) => id && a.indexOf(id) === i)
@@ -2651,7 +2699,7 @@ export class TownScene extends Phaser.Scene {
 
   /** Skill bar at the bottom: potions, the left-click cell and the 10 slots (the old text list of actions is gone, Murat 2026-11-04). */
   private renderActions(mine: any, cls: ClassKind, cdm: number, now: number) {
-    const pools = { energy: mine.energy, mana: unpackMana(mine.mp).mana };
+    const pools = { energy: own(mine).energy, mana: unpackMana(own(mine).mp).mana };
     const blocked = !!(mine.stunned || mine.broken) || performance.now() < this.attackHoldUntil; // the server refuses a press now: dim the keys
     const slots: string[] = [...(mine.slots ?? [])];
     this.cdTrack.length = 0;
@@ -2817,7 +2865,7 @@ export class TownScene extends Phaser.Scene {
     while (log.children.length > 8) log.firstChild!.remove();
     if (id.startsWith("npc:")) { this.npcs?.say(id.slice(4), text); return; } // a villager answering a busker
     const e = this.entities.get(id);
-    if (!e) return;
+    if (!e || e.waiting) return; // a hero still waiting for his sheet is not drawn: no bubble over nothing
     e.bubble?.destroy();
     e.bubble = speechBubble(this, e.sprite.x, e.sprite.y - e.top - 12, text);
     isoAnchor(e.bubble, e.sprite);
@@ -2983,10 +3031,11 @@ export class TownScene extends Phaser.Scene {
     }
     this.details?.update(this.time.now, dtMs);
     if (!this.room) return;
-    this.villagers?.update(dtMs, this.outlawSpots());
+    const meSprite0 = this.entities.get(this.me)?.sprite;
+    this.villagers?.update(dtMs, this.outlawSpots(), meSprite0);
     this.party?.update();
     this.trade?.update();
-    this.watch?.update(dtMs);
+    this.watch?.update(dtMs, meSprite0);
     this.torches?.update(this.time.now, (id) => !!this.watch?.striking(id));
     this.fx.update(dtMs);
     const k = this.keys;
@@ -3020,7 +3069,7 @@ export class TownScene extends Phaser.Scene {
       const rooted = (typeof p.fx === "string" && p.fx.includes("charge")) || (id === this.me && this.time.now < this.rootUntil); // a buildup roots the hero, a dash glides
       if (id === this.me && !p.dead && !p.stunned && !p.rolling && !rooted) {
         // Client-side prediction with the same movement code the server runs
-        const r = moveStep(e.sprite.x, e.sprite.y, this.input_, step / 1000, heroSpeed(p.cls as ClassKind, p.slowed, p.spd ?? 1) * gearSpeedMult(activeOf(p)));
+        const r = moveStep(e.sprite.x, e.sprite.y, this.input_, step / 1000, heroSpeed(p.cls as ClassKind, p.slowed, own(p).spd) * gearSpeedMult(activeOf(p)));
         e.sprite.setPosition(r.x, r.y);
         if (this.corrX || this.corrY) {
           // Blend in the server's correction; the history moves with it so the next update doesn't count it twice
@@ -3032,7 +3081,7 @@ export class TownScene extends Phaser.Scene {
         // Just stopped: the server's hero is still walking up behind ours (it hasn't read the stop yet, and its last
         // update is older still). Easing toward that stale spot slid the hero back a step before each attack (Murat).
         // So wait until the server has the stop and stands still too, then settle on its spot.
-        const settled = ((p.seq ?? 0) >= this.stopSeq && !p.moving) || now - this.stoppedAt > 1000;
+        const settled = (own(p).seq >= this.stopSeq && !p.moving) || now - this.stoppedAt > 1000;
         if (!r.moving && settled) {
           this.corrX = this.corrY = 0;
           // Ease toward authoritative position while idle (same pull at any frame rate)
@@ -3057,6 +3106,7 @@ export class TownScene extends Phaser.Scene {
         h.push({ t: wall, x: e.sprite.x, y: e.sprite.y });
         while (h.length > 2 && wall - h[0].t > 1500) h.shift();
       }
+      if (e.waiting) { e.sprite.setVisible(false); e.label?.setVisible(false); continue; } // its sheet is still loading
       // Monsters off screen: hide them and skip the per-frame drawing (there are a lot of them)
       if (e.mob) {
         const v = this.cameras.main.worldView, M = 48;
@@ -3088,7 +3138,7 @@ export class TownScene extends Phaser.Scene {
       if (e.hero) {
         // Holding a weapon of another family switches the stance sheet (an archer with a sword fights like a fighter)
         const stance = (HD_CHARS ? poseSheet(p.cls, activeOf(p)) : p.cls) as CharacterName;
-        if (stance !== e.hero && ensureCharSheet(this, stance)) {
+        if (stance !== e.hero && ensureCharSheet(this, stance, undefined, -1)) {
           const cur = e.sprite.anims.currentAnim?.key.slice(e.hero.length) ?? "";
           e.hero = stance;
           e.gear?.setHero(stance);
@@ -3326,17 +3376,17 @@ export class TownScene extends Phaser.Scene {
       const cls = mine.cls as ClassKind;
       const cdm = cooldownMult(cls, statsOf(mine), mine.talents);
       // Top-left bars (resourceBars.ts): red HP, blue Mana (spells, shared/mana.ts), green XP
-      const mn = unpackMana(mine.mp);
+      const ow = own(mine), mn = unpackMana(ow.mp); // owner-only numbers, in `me` (server/player.ts)
       (this.resBars ??= new ResourceBars(document.getElementById("hud")!)).update({
         level: mine.level, hp: mine.hp, maxHp: mine.maxHp, mp: mn.mana, maxMp: mn.maxMana,
-        xpFrac: mine.level >= MAX_LEVEL ? 1 : (mine.xp - cur) / Math.max(1, next - cur),
-        xp: mine.xp - cur, xpNeed: mine.level >= MAX_LEVEL ? undefined : next - cur,
+        xpFrac: mine.level >= MAX_LEVEL ? 1 : Math.max(0, Math.min(1, (ow.xp - cur) / Math.max(1, next - cur))),
+        xp: Math.max(0, ow.xp - cur), xpNeed: mine.level >= MAX_LEVEL ? undefined : next - cur,
       });
       // Heat / overload gauge on the left (overloadGauge.ts, shared/overload.ts)
-      const flip = (this.heatGauge ??= new OverloadGauge(document.getElementById("hud")!)).update(mine.energy ?? 0);
+      const flip = (this.heatGauge ??= new OverloadGauge(document.getElementById("hud")!)).update(ow.energy);
       if (flip) playSfx(flip);
       this.renderActions(mine, cls, cdm, now);
-      (this.buffBar ??= new BuffBar(hudSlot("statusrow"))).update(mine.me?.timers ?? ""); // owner-only: in `me` (server/player.ts)
+      (this.buffBar ??= new BuffBar(hudSlot("statusrow"))).update(ow.timers);
       this.chordHud?.tick();
     }
   }

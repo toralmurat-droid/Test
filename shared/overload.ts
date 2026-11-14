@@ -6,7 +6,7 @@ import { STAMINA_REGEN, type ClassKind } from "./classes";
  * A skill can always be used while the hero is not overheated, even when it pushes Heat past the top: then the hero
  * overloads and every Heat skill (and the dodge) is locked for OVERLOAD.ventMs while the gauge drains to empty.
  *
- * Player.energy (synced) carries it in one number: 0..max = Heat, below 0 = overheated (-energy = Heat still venting).
+ * Player.me.energy (synced to the owner only, server/player.ts) carries it in one number: 0..max = Heat, below 0 = overheated (-energy = Heat still venting).
  * Shown by client/src/overloadGauge.ts on the left side of the screen.
  */
 export const OVERLOAD = {
