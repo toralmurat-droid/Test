@@ -37,7 +37,7 @@ export class TalentMenu {
   private tipTimer = 0;
 
   constructor(private send: (type: string, msg?: unknown) => void, private preview: (p?: SheetPreview) => void = () => {}) {
-    this.el.addEventListener("click", (ev) => { if ((ev.target as HTMLElement).closest(".chhelp")) toggleChordLegend(); });
+    this.el.addEventListener("click", (ev) => { if ((ev.target as HTMLElement).closest(".chhelp, .sbbtn")) toggleChordLegend(); });
     this.el.addEventListener("mouseover", (ev) => {
       const t = (ev.target as HTMLElement).closest("[data-talent]") as HTMLElement | null;
       const was = this.hover;
@@ -102,7 +102,7 @@ export class TalentMenu {
       ? `<b class="free">${free} skill point${free > 1 ? "s" : ""} to spend</b>`
       : state.level < 2 ? `You start with a ${cls === "songweaver" ? "Verse" : "basic attack"} only. Reach level 2 for your first skill point.` : "No points left. You get 1 point per level.") +
       `<span class="treehint">Follow the stone paths: a node needs the one before it. Upgrades change the spell at the start of their path. ` +
-      (cls === "summoner" ? `Your creatures going back to the Void build Essence (up to 5) for the ultimates.</span>` : cls === "songweaver" ? `Every skill is a note on the scale. Three in the right order ring a chord by themselves. Hover a skill to see its step. Songs are Choruses, single notes are Verses. <button type="button" class="chhelp" title="Chord legend" aria-label="Chord legend">?</button></span>` : `Basic hits build ${STACK_NAME[cls]} (up to 5) for some skills.</span>`);
+      (cls === "summoner" ? `Your creatures going back to the Void build Essence (up to 5) for the ultimates.</span>` : cls === "songweaver" ? `Every skill is a note on the scale. Three in the right order ring a chord by themselves. Hover a skill to see its step. Songs are Choruses, single notes are Verses. <button type="button" class="chhelp" title="Chord legend" aria-label="Chord legend">?</button><button type="button" class="sbbtn" title="Songbook: songs, materials, chord legend">Songbook</button></span>` : `Basic hits build ${STACK_NAME[cls]} (up to 5) for some skills.</span>`);
 
     const W = slabWidth(cls);
     const { nodes: layout, cols } = treeLayout(cls, W, H);
