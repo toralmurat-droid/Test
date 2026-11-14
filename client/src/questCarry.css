@@ -1,0 +1,14 @@
+/* Carry and hold quest steps (client/src/questCarry.ts): drop button, banner, locked hotbar, tracker meter */
+#qdrop { position: absolute; left: 50%; transform: translateX(-50%); bottom: 100px; z-index: 9; pointer-events: auto; padding: 8px 12px; min-height: 44px; font-family: var(--pixel-font); font-size: 16px;
+  color: #ffe8a3; background: rgba(15, 10, 6, .92); border: 2px solid #a8823a; box-shadow: 0 0 0 1px #080504; cursor: pointer; -webkit-font-smoothing: none; }
+#qdrop[hidden] { display: none; }
+#qdrop kbd { font: inherit; color: #e3bf6a; margin-right: 6px; }
+@media (max-width: 600px) { #qdrop { bottom: 130px; } }
+#qbanner { position: absolute; top: 30%; left: 16px; right: 16px; text-align: center; opacity: 0; transition: opacity .5s; pointer-events: none; font-family: var(--pixel-font); text-shadow: 2px 2px #000, 0 0 10px #000; }
+#qbanner.show { opacity: 1; }
+#qbanner canvas { display: block; margin: 0 auto; max-width: calc(100vw - 32px); }
+body #hotbar .slot.locked { filter: grayscale(1) brightness(.55); }
+body #questtracker .qt-bar.light div { background: #f0b030; }
+body #questtracker .qt-bar.light.low div { background: #d8452c; }
+body #questtracker .qt-bar.odo div { background: #c8503a; }
+@media (max-width: 600px) { #qbanner { top: 17%; } }

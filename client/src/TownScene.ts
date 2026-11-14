@@ -67,6 +67,7 @@ import { baseId, canWear, gearName, gearDef, reqProblem, gearReachMult, gearSpee
 import { attackProfile, ATTACK_WORDS, isWeaponType, poseSheet, profileOf, weaponAttackMult, weaponOk } from "../../shared/weapons";
 import { talentMult, talentPoints, spentPoints } from "../../shared/talents";
 import { activeSkills, skillLearned } from "../../shared/slots";
+import { DROP_KEY, LANTERN_OBJECT, LOCK_TIP, QuestCarry } from "./questCarry";
 import { actionKey, actionOfKey, type KeyAction, keyMode, keyModeName, onKeyMode, setKeyMode, slotCount, slotKey, slotOfKey, wasdWalks } from "./keymode";
 import { iconImg } from "./skillIcons";
 import { TalentMenu } from "./talents";
@@ -314,6 +315,7 @@ export class TownScene extends Phaser.Scene {
   private chests?: ChestLayer;
   private shrine?: ShrineLayer;
   private bounty?: BountyUI;
+  private qcarry?: QuestCarry; // carried lantern and held mill (client/src/questCarry.ts)
   private portals?: PortalLayer;
   private waygates?: WaygateLayer;
   private chatEl = document.getElementById("chat") as HTMLInputElement;
@@ -448,6 +450,7 @@ export class TownScene extends Phaser.Scene {
     };
     this.input.keyboard!.on("keydown", (ev: KeyboardEvent) => {
       if (this.chatting() || ev.ctrlKey || ev.metaKey || ev.altKey) return;
+      if (ev.key.toUpperCase() === DROP_KEY && !ev.repeat && this.qcarry?.carrying(this.me)) { this.qcarry.drop(); return; } // put the lantern down
       const n = slotOfKey(ev);
       // Spell keys: E is a spell key, but when a prompt says "E: talk / open / use" right here, E does that instead
       if (n >= 0 && ev.key.toUpperCase() === "E" && keyMode() === "spells" && this.canUse()) { if (!ev.repeat) this.useKey(); return; }
@@ -659,6 +662,8 @@ export class TownScene extends Phaser.Scene {
     this.room.onMessage("stashview", (v) => { if (!this.stash?.open) this.closeMenus(); this.stash?.show(v); });
     // The Whispering Woods shrine: one for everyone, spent for a while after each prayer
     this.shrine = new ShrineLayer(this, (type, msg) => this.room.send(type, msg), PIXEL_FONT);
+    this.qcarry = new QuestCarry(this, document.getElementById("hud")!, (type, msg) => this.room.send(type, msg));
+    this.room.onMessage("qstate", (m) => this.qcarry?.onState(m));
     // Bounty boards on the square and by every portal stone (shared/bounty.ts)
     this.bounty = new BountyUI(this, (type, msg) => this.room.send(type, msg), PIXEL_FONT);
     this.room.onMessage("bounty", (v) => this.bounty?.show(v, (text, color) => {
@@ -2616,6 +2621,7 @@ export class TownScene extends Phaser.Scene {
     const pools = { energy: mine.energy, mana: unpackMana(mine.mp).mana };
     const slots: string[] = [...(mine.slots ?? [])];
     // Slot bar at the bottom: 10 cells, cooldown shading, click to choose a skill
+    const locked = !!this.qcarry?.carrying(this.me), lockTip = locked ? LOCK_TIP : "";
     const cells = Array.from({ length: slotCount() }, (_, i) => {
       const skill = slots[i] ?? "";
       const picking = (this.pickSlot === i ? " picking" : "");
@@ -2626,7 +2632,7 @@ export class TownScene extends Phaser.Scene {
       const wait = (left > 0 || !canPay(pools, h.cost) ? " wait" : "") + (shortOf(pools, h.cost) === "heat" ? " hot" : "");
       const power = skill;
       const unarmed = this.unarmedFor(mine, cls, skill);
-      return `<div class="slot${h.ult ? " ult" : ""}${wait}${unarmed ? " unarmed" : ""}${picking}" data-slot="${i}" data-skill="${skill}" data-tiphead="${h.name}" data-tip="${tipEsc((unarmed ? `${unarmed}. ` : "") + (skillOf(cls, skill)?.desc ?? ""))}" data-tiphint="Key ${slotKey(i)} · click to change · wheel to scroll · right-click to clear">` +
+      return `<div class="slot${locked ? " locked" : ""}${h.ult ? " ult" : ""}${wait}${unarmed ? " unarmed" : ""}${picking}" data-slot="${i}" data-skill="${skill}" data-tiphead="${h.name}" data-tip="${tipEsc(lockTip + (unarmed ? `${unarmed}. ` : "") + (skillOf(cls, skill)?.desc ?? ""))}" data-tiphint="Key ${slotKey(i)} · click to change · wheel to scroll · right-click to clear">` +
         `${iconImg(power)}${shade}${unarmed ? `<i class="xout"></i>` : ""}<kbd>${slotKey(i)}</kbd>${left > 0 && !unarmed ? `<b>${Math.ceil(left / 1000)}</b>` : ""}</div>`;
     }).join("");
     // Left- and right-click cells first: the weapon, or the spell / skill picked for that click
@@ -2640,7 +2646,7 @@ export class TownScene extends Phaser.Scene {
         const left = Math.max(0, h.cdMs - (now - h.last));
         const shade = left > 0 && h.cdMs >= 1000 ? `<div class="cd" style="height:${(left / h.cdMs) * 100}%"></div>` : "";
         const unarmed = this.unarmedFor(mine, cls, sk);
-        return `<div class="slot lmb ${side}${!canPay(pools, h.cost) ? " wait" : ""}${shortOf(pools, h.cost) === "heat" ? " hot" : ""}${unarmed ? " unarmed" : ""}${pk}" data-slot="${key}" data-tiphead="${Side}: ${h.name}" data-tip="${tipEsc((unarmed ? `${unarmed}. ` : "") + (skillOf(cls, sk)?.desc ?? ""))}" data-tiphint="Click to change · wheel to scroll · right-click: back to the weapon">` +
+        return `<div class="slot lmb ${side}${locked ? " locked" : ""}${!canPay(pools, h.cost) ? " wait" : ""}${shortOf(pools, h.cost) === "heat" ? " hot" : ""}${unarmed ? " unarmed" : ""}${pk}" data-slot="${key}" data-tiphead="${Side}: ${h.name}" data-tip="${tipEsc(lockTip + (unarmed ? `${unarmed}. ` : "") + (skillOf(cls, sk)?.desc ?? ""))}" data-tiphint="Click to change · wheel to scroll · right-click: back to the weapon">` +
           `${iconImg(sk)}${shade}${unarmed ? `<i class="xout"></i>` : ""}<kbd>${label}</kbd></div>`;
       }
       const w = attackProfile(cls, activeOf(mine));
@@ -3177,7 +3183,8 @@ export class TownScene extends Phaser.Scene {
     this.shrine?.update(meEnt && !meEnt.state.dead && !this.chests?.near ? meEnt.sprite : undefined, !!this.npcs?.isOpen);
     this.stash?.update(meEnt && !meEnt.state.dead ? meEnt.sprite : undefined, !!this.npcs?.isOpen || !!this.chests?.near);
     this.bounty?.update(meEnt && !meEnt.state.dead ? meEnt.sprite : undefined, !!this.npcs?.isOpen || !!this.chests?.near || !!this.stash?.near);
-    if (this.npcs) { this.npcs.hidePrompt = !!this.chests?.near || !!this.shrine?.near || !!this.portals?.near || !!this.stash?.near || !!this.bounty?.near; this.npcs.extraBlock = this.bounty?.trackerBlock() ?? ""; }
+    if (this.npcs) { this.npcs.hidePrompt = !!this.chests?.near || !!this.shrine?.near || !!this.portals?.near || !!this.stash?.near || !!this.bounty?.near; this.npcs.extraBlock = (this.bounty?.trackerBlock() ?? "") + (this.qcarry?.trackerBlock(this.me, (id) => this.entities.get(id)?.state?.name ?? "A friend") ?? ""); }
+    this.npcs?.objects.setHidden(LANTERN_OBJECT, !!this.qcarry?.update(this.me, (id) => this.entities.get(id)));
     this.npcs?.update(meEnt && !meEnt.state.dead ? meEnt.sprite : undefined, meEnt?.state);
     this.grimoire?.update(meEnt?.state?.cls);
     this.waygates?.update(meEnt?.state);

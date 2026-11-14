@@ -370,6 +370,11 @@ export class QuestObjects {
     return usableObjects(q).map(({ o }) => o).find((o) => Math.hypot(o.x - me.x, o.y - me.y) <= USE_RANGE);
   }
 
+  /** Hide or show one object's drawing (the lantern's take spot while the lantern is out); done/undone looks stay as they are. */
+  setHidden(id: string, hidden: boolean) {
+    for (const d of this.drawn) if (d.o.id === id) d.img.setVisible(!hidden);
+  }
+
   update(q: QuestState | undefined) {
     const there = cocoonPresent(q);
     this.tobin?.setVisible(there);

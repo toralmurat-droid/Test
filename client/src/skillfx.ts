@@ -335,6 +335,31 @@ export class SkillFx {
         this.glow(ev.x, ev.y, 8, 20, 0x5a2a6b, 450, 0.55);
         break;
       }
+      // The Last Lantern and Hold the Wheel (docs/quest-concepts-progress.md); sounds are in sfx.ts
+      case "lanterndim": // the flame gutters: a few cold motes and a short dip of light
+        this.burst(ev.x, ev.y, 26, "spirit", 5, 18, 500);
+        this.glow(ev.x, ev.y, 26, 12, 0xffb040, 420, 0.3);
+        break;
+      case "lanternout": // burnt out: a puff of smoke, the light gone
+        this.rise(ev.x, ev.y, 6, "shadow", 8, 30, 900);
+        this.burst(ev.x, ev.y, 24, "earth", 6, 24, 600);
+        this.glow(ev.x, ev.y, 24, 18, 0x555566, 500, 0.35);
+        break;
+      case "lanternpass": { // the lantern changes hands: warm sparks at the old holder and a bright flash on the new one
+        const from = ev.from ? this.ent(ev.from) : undefined, to = e ?? { sprite: { x: ev.x, y: ev.y }, top: 28 };
+        if (from) this.burst(from.sprite.x, from.sprite.y, 26, "holy", 6, 30, 500);
+        this.burst(to.sprite.x, to.sprite.y, 28, "holy", 10, 40, 600);
+        this.glow(to.sprite.x, to.sprite.y, 28, 16, 0xffd98a, 500, 0.55);
+        break;
+      }
+      case "wavehorn": // a horn at the mill: a ring of dust spreads out of Odo, then the wave
+        this.ring(ev.x, ev.y, 70, "earth", 20, { life: 520, up: 8 });
+        this.glow(ev.x, ev.y, 30, 22, 0xe3bf6a, 400, 0.4);
+        break;
+      case "odohurt": // Odo is struck: red sparks and a flash on him
+        this.burst(ev.x, ev.y, 22, "blood", 8, 50, 400);
+        this.glow(ev.x, ev.y, 20, 14, 0xff5a4a, 260, 0.5);
+        break;
       case "fizzle":
         if (e) this.burst(e.sprite.x, e.sprite.y, e.top * 0.5, "earth", 8, 30, 300);
         break;
