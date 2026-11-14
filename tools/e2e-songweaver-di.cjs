@@ -48,7 +48,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     });
     const send = (t, m) => page.evaluate(([t, m]) => window.S.room.send(t, m), [t, m]);
     const shot = (n) => page.screenshot({ path: `${OUT}/songweaver-di-${name}-${n}.png` });
-    const P = () => page.evaluate(() => { const p = window.S.room.state.players.get(window.S.me); return { x: p.x / 32, y: p.y / 32, level: p.level, gold: p.gold, weapon: p.weapon, shield: p.shield, mana: p.mp % 1000, maxMana: Math.floor(p.mp / 1000) % 1000, fx: p.fx, bag: [...p.bag] }; });
+    const P = () => page.evaluate(() => { const p = window.S.room.state.players.get(window.S.me); return { x: p.x / 32, y: p.y / 32, level: p.level, gold: p.me?.gold, weapon: p.weapon, shield: p.shield, mana: (p.me?.mp ?? 0) % 1000, maxMana: Math.floor((p.me?.mp ?? 0) / 1000) % 1000, fx: p.fx, bag: [...p.bag] }; });
     const fxWords = async () => (await P()).fx.split(",");
     const rings = () => page.evaluate(() => { const r = window.S.fx.songRings.get(window.S.me); return r && { rings: r.rings.length, bursts: r.bursts.length, lock: r.lockFrom > 0, held: r.held }; });
     const count = (ev) => page.evaluate((ev) => window.evs.filter((e) => e.ev === ev).length, ev);

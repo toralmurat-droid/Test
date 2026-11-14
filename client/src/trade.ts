@@ -10,6 +10,7 @@ import { runeCanvas, runeCss } from "./runeArt";
 import { chestImage, setChestOpen } from "./chests";
 import { isoAnchor } from "./iso";
 import { TEXT_FONT, TEXT_PX, WT } from "./pixelfont";
+import { own } from "./own";
 
 /**
  * Player trading and the account stash (shared/trade.ts; the server checks everything).
@@ -146,7 +147,7 @@ export class TradeUI {
     const v = this.view, me = this.mine();
     if (!v || this.el.hidden || !me) return;
     const bag: string[] = Array.from(me.bag ?? []);
-    const sig = JSON.stringify([v, bag, me.gold, me.level, me.cls]);
+    const sig = JSON.stringify([v, bag, own(me).gold, me.level, me.cls]);
     if (sig === this.sig) return;
     this.sig = sig;
 
@@ -173,7 +174,7 @@ export class TradeUI {
     );
 
     // My bag: click to offer / take back
-    const bt = Object.assign(document.createElement("h3"), { textContent: `Your bag (click to offer) · ${me.gold} gold` });
+    const bt = Object.assign(document.createElement("h3"), { textContent: `Your bag (click to offer) · ${own(me).gold} gold` });
     const bg = document.createElement("div");
     bg.className = "tgrid tbag";
     const keep = keepsBoundOf(me.cls, [me.weapon, me.shield], bag), offered = this.picked.map((k) => bag[k]).filter(Boolean);
@@ -191,11 +192,11 @@ export class TradeUI {
     gr.className = "trow";
     const coin = (label: string, f: (g: number) => number) => {
       const b = Object.assign(document.createElement("button"), { textContent: label, tabIndex: -1 });
-      b.onclick = (ev) => { if (ev.detail === 0) return; const n = Math.max(0, Math.min(me.gold, f(this.gold))); if (n !== this.gold) { this.gold = n; this.offer(); } };
+      b.onclick = (ev) => { if (ev.detail === 0) return; const n = Math.max(0, Math.min(own(me).gold, f(this.gold))); if (n !== this.gold) { this.gold = n; this.offer(); } };
       gr.appendChild(b);
     };
     gr.append(Object.assign(document.createElement("span"), { textContent: "Gold:" }));
-    coin("-100", (g) => g - 100); coin("-10", (g) => g - 10); coin("+10", (g) => g + 10); coin("+100", (g) => g + 100); coin("+1000", (g) => g + 1000); coin("All", () => me.gold); coin("None", () => 0);
+    coin("-100", (g) => g - 100); coin("-10", (g) => g - 10); coin("+10", (g) => g + 10); coin("+100", (g) => g + 100); coin("+1000", (g) => g + 1000); coin("All", () => own(me).gold); coin("None", () => 0);
 
     // Ready / Cancel
     const act = document.createElement("div");
@@ -264,7 +265,7 @@ export class StashUI {
     const st = this.mine();
     if (!st) return;
     const bag: string[] = Array.from(st.bag ?? []);
-    const sig = JSON.stringify([this.items, this.gold, this.note, bag, st.gold, st.cls, st.level]);
+    const sig = JSON.stringify([this.items, this.gold, this.note, bag, own(st).gold, st.cls, st.level]);
     if (sig === this.sig) return;
     this.sig = sig;
 
@@ -276,7 +277,7 @@ export class StashUI {
     const g1 = document.createElement("div");
     g1.className = "tgrid tstash";
     for (let i = 0; i < STASH_SIZE; i++) g1.appendChild(cell(this.scene, this.items[i], info, st, () => this.send("stashtake", { i })));
-    const t2 = Object.assign(document.createElement("h3"), { textContent: `Bag ${bag.length}/${BAG_SIZE} · ${st.gold} gold (click to store)` });
+    const t2 = Object.assign(document.createElement("h3"), { textContent: `Bag ${bag.length}/${BAG_SIZE} · ${own(st).gold} gold (click to store)` });
     const g2 = document.createElement("div");
     g2.className = "tgrid tbag";
     for (let i = 0; i < BAG_SIZE; i++) g2.appendChild(cell(this.scene, bag[i], info, st, () => this.send("stashput", { i }), false, keepsBoundOf(st.cls, [st.weapon, st.shield], bag)));
@@ -288,7 +289,7 @@ export class StashUI {
       row.appendChild(b);
     };
     row.append(Object.assign(document.createElement("span"), { textContent: "Store:" }));
-    coin("100", () => 100); coin("1000", () => 1000); coin("All", () => st.gold);
+    coin("100", () => 100); coin("1000", () => 1000); coin("All", () => own(st).gold);
     row.append(Object.assign(document.createElement("span"), { textContent: " Take:", className: "tsp" }));
     coin("100", () => -100); coin("1000", () => -1000); coin("All", () => -this.gold);
     const note = Object.assign(document.createElement("p"), { className: "gbad tnote", textContent: this.note });

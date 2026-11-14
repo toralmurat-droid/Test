@@ -52,7 +52,7 @@ const SETUPS = [
     const send = (t, m) => page.evaluate(([t, m]) => window.S.room.send(t, m), [t, m]);
     const chat = (t) => send("chat", t);
     const shot = (n) => page.screenshot({ path: `${OUT}/songweaver-e2e-${name}-${n}.png` });
-    const me = () => page.evaluate(() => { const p = window.S.room.state.players.get(window.S.me); return { cls: p.cls, level: p.level, fx: p.fx, x: p.x, y: p.y, mana: p.mp ?? p.mana }; });
+    const me = () => page.evaluate(() => { const p = window.S.room.state.players.get(window.S.me); return { cls: p.cls, level: p.level, fx: p.fx, x: p.x, y: p.y, mana: p.me?.mp }; });
     const result = { cls: (await me()).cls };
     await chat("/max");
     await page.waitForTimeout(1200);

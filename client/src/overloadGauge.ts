@@ -161,7 +161,7 @@ export class OverloadGauge {
     this.secs = this.root.querySelector(".ol-secs") as HTMLElement;
   }
 
-  /** `energy` = Player.energy (shared/overload.ts). Returns "overload" / "cooled" on the frame the state flips. */
+  /** `energy` = Player.me.energy (owner-only; shared/overload.ts). Returns "overload" / "cooled" on the frame the state flips. */
   update(energy: number): "" | "overload" | "cooled" {
     const now = performance.now();
     const u = { energy }, hot = isOverheated(u), frac = heatOf(u) / OVERLOAD.max;
