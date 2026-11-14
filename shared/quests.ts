@@ -2042,28 +2042,29 @@ const WHEEL_QUESTS: QuestDef[] = [
 
 // -- Act 2: the Thornspire Heights, Unseen (Lv 43, after the Mirror Path; docs/quest-concepts-progress.md #4). Draft text. --
 /** The way up to the Sanctum's postern, on open ground: hidden at each one, the hero walks to the next without being seen. */
-const UNSEEN_CPS = [at(218, 388, 2.5, "The foot of the climb"), at(214, 380, 2.5, "Under the west cliffs"), at(226, 364, 2.5, "The broken shelf"),
-  at(248, 362, 2.5, "Below the Sanctum's east wall")];
+const UNSEEN_CPS = [at(218, 388, 2.5, "The foot of the climb"), at(214, 380, 2.5, "The goat-track under the west cliffs"), at(226, 364, 2.5, "The broken shelf"),
+  at(248, 362, 2.5, "The rocks below the east wall")];
 const POSTERN = near("spire_postern", "postern", "A postern in the Sanctum wall", "Slip through", 253, 352);
 const UNSEEN_QUESTS: QuestDef[] = [
   {
     id: "unseen", title: "Unseen", giver: "defector", zone: "The Thornspire Heights", minLevel: 43,
-    description: "Nasrin knows a postern in the Veiled Sanctum's east wall, the one the adepts use when they don't want to be counted. Reach it without one of them seeing you.",
+    description: "Nasrin left the Veiled Circle, and she knows its habits. The mirror-watch holds the Thornspire Heights, but there is a postern in the Sanctum's east wall that the adepts use when they do not want to be counted. Climb to it unseen.",
     offer: [
-      "The mirrors are turned. Good. Now the hard part.",
-      "There's a little door in the Sanctum's east wall. The adepts slip out of it at night. Nobody counts who goes through.",
-      "Get to it without being seen. Not one of them, not one sphinx. Keep to the rocks and the dark, and if they spot you, go back to where you last hid.",
+      "The mirrors are turned. Good. Now the hard part: the watch.",
+      "The Circle's mirror-watch sees all the Heights by day. I stood it myself, for nine years. I know where it looks and where it doesn't.",
+      "There are four hiding places on the climb. Stand in one and you slip out of sight. Walk to the next. If anything notices you, a sphinx, an adept, a scorpion, or if anything so much as hurts you, you are dragged back to the last place you hid.",
+      "Go by night if you can. Keep to the trees and the rocks. At the top, in the east wall, is the postern.",
     ],
     acceptText: "I'll go unseen",
     steps: [
       { type: "talk", npc: "defector", zone: "The Thornspire Heights", text: "Tell Nasrin you're ready", banner: ["New quest", "Unseen"], obj: "Tell Nasrin you're ready (foot of the Thornspire)",
-        say: ["Night is better, and rocks are better still. Hide at each marker, then walk to the next. If anything so much as looks at you, start again from the last."], accept: "I'm ready" },
-      { type: "unseen", zone: "The Thornspire Heights", text: "Climb to the Sanctum's east wall without being seen", banner: ["Keep low", "Climb without being seen"],
-        obj: "Hiding places reached unseen: {n} / {goal}", nag: "{n} of {goal}. Keep to the rocks and the dark. If they see you, back to the last hiding place.",
-        hint: "Stand in the marker to hide. Night and cover (trees, rocks, cliffs) make you harder to see. Taking a hit or being targeted sends you back.",
+        say: ["Four hiding places. Stand in one to hide, then walk to the next. Night is better, and cover is better still: trees, rocks, cliffs. If anything sees you or strikes you, you go back to the last one."], accept: "I'm ready" },
+      { type: "unseen", zone: "The Thornspire Heights", text: "Climb the Heights unseen, hiding at each of the four places", banner: ["Keep low", "Climb without being seen"],
+        obj: "Hiding places reached unseen: {n} / {goal}", nag: "{n} of {goal}. Keep to the trees, the rocks and the dark. If you are seen or struck, back to the last hiding place.",
+        hint: "Stand at a hiding place to slip out of sight. If any monster notices you, or anything hurts you, you are dragged back to the last one. Night and cover (trees, rocks) make you harder to spot.",
         unseen: { checkpoints: UNSEEN_CPS, night: 0.65, cover: 0.6, floor: 0.35 } },
-      { type: "use", zone: "The Veiled Sanctum", objects: [POSTERN], chest: true, text: "Slip through the postern into the Sanctum", banner: ["Not a soul saw you", "Find the postern"],
-        obj: "Slip through the postern", nag: "In the Sanctum's east wall." },
+      { type: "use", zone: "The Veiled Sanctum", objects: [POSTERN], chest: true, text: "Slip through the postern into the Sanctum", banner: ["Not a soul saw you", "Open the postern"],
+        obj: "Slip through the postern", nag: "The postern is in the Sanctum's east wall, above the last rocks." },
     ],
     outro: ["The postern opens on a store-room of lamp oil and folded veils. On the shelf, a ledger: every adept who left by this door, and when.", "Nasrin's name is in it. Nine years ago, and never again."],
     reward: arcReward(43),
@@ -2079,34 +2080,34 @@ const TWIN_SEALS: [QuestObject, QuestObject] = [near("vault_seal1", "seal", "Wes
 const TWOHANDS_QUESTS: QuestDef[] = [
   {
     id: "twohands", title: "Two Hands", giver: "tombrobber", zone: VAULT.name, minLevel: 42,
-    description: "Zahir has heard of a door in the Vault that the Water-Kings sealed with two seals, too far apart for one thief to turn at once.",
+    description: "Zahir knows of a door in the Vault of the Water-Kings, sealed with two seals set too far apart for one thief to turn at once.",
     offer: [
       "The Water-Kings trusted nobody. Not even one priest with both keys.",
-      "In the Vault's hall of statues there's a door with two seals, one on each side of the hall. Turn both at once and it opens. Turn one, and it waits, and then it locks again.",
-      "Bring a friend. Or be quick. I was never quick enough.",
+      "In the Vault's hall of statues there's a door with two seals, one on each side of the hall. Turn both within two seconds of each other and it opens. Turn one alone and it waits a little, then locks again.",
+      "Bring a friend, one at each seal. Alone you get six seconds, and you'll have to run for it. I was never quick enough.",
     ],
     acceptText: "Two hands it is",
     steps: [
       { type: "reach", zone: VAULT.name, at: SEAL_HALL, text: "Find the hall of the twin seals in the Vault", banner: ["New quest", "Two Hands"],
-        obj: "Find the hall of the twin seals (the Vault's hall of statues)", nag: "Down in the Vault, the hall of statues past the stair." },
-      { type: "sync", zone: VAULT.name, text: "Turn both seals at once", banner: ["Two seals", "Turn both at once"],
-        obj: "Turn both seals together", nag: "Both at once. A friend at the other seal, or something of yours standing there.",
-        hint: "Alone you have a few seconds to reach the other seal. With a friend on the quest nearby, you must turn them together. A summon standing at the other seal turns it with you.",
+        obj: "Find the hall of the twin seals (the Vault's hall of statues)", nag: "Down in the Vault, in the hall of statues past the stair." },
+      { type: "sync", zone: VAULT.name, text: "Turn both seals within 2 seconds of each other", banner: ["Two seals", "Turn both at once"],
+        obj: "Turn both seals together", nag: "Both together. A friend at the far seal, or a creature of yours standing there.",
+        hint: "With a friend, turn both seals within 2 seconds. Alone, you have 6 seconds to turn one and run to the other. A summoner's pet standing by the far seal turns it at the same moment.",
         sync: { seals: TWIN_SEALS, windowMs: 2000, soloMs: 6000, summonReach: 2 * TILE } },
     ],
-    outro: ["Both seals grind round together, and the floor of the hall slides open on a stair. Something at the bottom of it stands up.", "It has two heads, and they are both looking at you."],
+    outro: ["Both seals grind round together, and the floor of the hall slides open on a stair. Something at the bottom of it stands up.", "It has a hand on each wall, and it is looking at you."],
     reward: arcReward(42),
     after: "Two seals, two hands. The kings were cleverer than me. Not cleverer than you.",
   },
   {
     id: "twinkeeper", title: "The Keeper of the Twin Seals", giver: "tombrobber", zone: VAULT.name, minLevel: 42, auto: true,
     description: "The twin seals guarded something that was left to guard them back.",
-    offer: ["It comes up the stair, slow, one hand on each wall.", "The Water-Kings left it to keep their door. It has kept it for a thousand years."],
+    offer: ["It comes up the stair, slow, one hand on each wall.", "The Water-Kings left it to keep their door. It has kept it for a thousand years, and never let a thief past."],
     acceptText: "Fight",
     steps: [
       { type: "kill", zone: VAULT.name, kinds: ["sanddead"], goal: 1, own: true,
-        summon: { parts: ["sanddead"], level: 43, title: "Keeper of the Twin Seals", hpMult: 7, ...sumAt(...inRoom(VAULT, 1, 0, 1)) },
-        text: "Slay the Keeper of the Twin Seals", banner: ["New quest", "The Keeper of the Twin Seals"], obj: "The Keeper slain: {n} / {goal}", nag: "In the hall of the twin seals." },
+        summon: { parts: ["sanddead"], level: 43, title: "Keeper of the Twin Seals", hpMult: 7, voice: { wake: ["Two hands turned. Two hands... who sent two?"], taunt: ["Thieves count to two. Kings count to one.", "The door is kept. The door is always kept."], half: ["I kept it a thousand years. I can keep it a thousand more."], death: ["The seals... turn... and no one left to ask..."] }, ...sumAt(...inRoom(VAULT, 1, 0, 1)) },
+        text: "Slay the Keeper of the Twin Seals", banner: ["The seals are turned", "The Keeper of the Twin Seals"], obj: "The Keeper slain: {n} / {goal}", nag: "It stands in the hall of the twin seals." },
     ],
     outro: ["The Keeper folds down onto the stair it kept. Behind it, the Water-Kings' door stands open on a dry room full of gold."],
     reward: arcReward(42, true),
