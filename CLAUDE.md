@@ -33,6 +33,11 @@ Pixel Town Brawl: an online multiplayer pixel-art action RPG in the browser.
   Count the `@type` fields before adding one. Never put a collection or child schema at index 63 (it collides with
   an encoder control byte). Quest chains share one `quests` map: a new chain costs no field. When space runs low,
   prefer a map or child schema over packing several values into one number.
+- **Owner-only player data goes in `Player.me`** (`server/player.ts`, `@view()`, one `StateView` per client in
+  `onJoin`): other clients never receive it. Never replace `me` or a collection inside it after join, and never set a
+  synced Player field to `undefined`/`null` (with a `@view` field, Player's deletes reach only the owner). Views need
+  `Encoder.BUFFER_SIZE` (set once, in `server/patchCopy.ts`) big enough that a patch never resizes (a library bug corrupts resized view patches); a
+  `@colyseus/schema buffer overflow` warning in the logs means raise it. `tests/view.test.ts` guards both.
 - **Synced `Mob` fields:** new ones go at the end of the class and of `MOB_FIELDS` in `shared/mobView.ts`, in the same
   order (`tests/mobview.test.ts` checks it).
 - **Skill tree layout:** each branch is at most 3 deep, the slab fits 4 rows (`tests/treeLayout.test.ts`).
