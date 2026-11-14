@@ -1,5 +1,5 @@
 // The hero's synced schema (moved out of TownRoom.ts). Owner-only fields sit in the PlayerPrivate child `me`.
-import { ArraySchema, MapSchema, Schema, type, view } from "@colyseus/schema";
+import { ArraySchema, Encoder, MapSchema, Schema, type, view } from "@colyseus/schema";
 import type { BountyState } from "../shared/bounty";
 import type { ClassKind } from "../shared/classes";
 import type { Dir, InputState } from "../shared/constants";
@@ -7,6 +7,12 @@ import type { Feast } from "../shared/devour";
 import { noPotions, type Potions } from "../shared/potions";
 import { newRuntime } from "../shared/skillEngine";
 import { SLOT_COUNT } from "../shared/slots";
+
+// @colyseus/schema 3.0.76 bug: when a per-client view encode (encodeView / encodeAllView, used because Player.me is
+// @view) overflows the shared buffer, the resize re-encodes from the view's offset into a new buffer but the caller keeps
+// slicing the old one, and the view's visibility changes are lost: clients then fail with `"refId" not found`. Without
+// views the resize path is safe. Start big enough that a patch never resizes (the bench at 40 bots peaks around 32 KB).
+Encoder.BUFFER_SIZE = 256 * 1024;
 
 /**
  * What only the hero's own client needs. Behind `@view()` on Player.me, so other clients never get it (less to
