@@ -188,3 +188,24 @@ phase from this summary when a phase starts.
 - **Messages:**
   - server→owner: `"songbook" { songs: string[], mats: Record<string, number> }`, on join and on change;
   - client→server: `"break" { bag: number }`, `"lutefit" { trait: string }`.
+
+## Build log
+- 2026-11-14: merged into `claude/songweaver-ideas`:
+  - text and the patch note;
+  - client A+B;
+  - all art and sound;
+  - gameplay A-shared+B (song gauge, Songbook and Refrain, no mana or Tempo, kit migration v1);
+  - client C1/C2/D1/D2;
+  - gameplay C1 (books), D1 (musical-only rule, evolving bound lute, migration v2, class-aware tutorial), C2
+    (four songs, `SongCollector`, `"songbook"` message, `swSongs`, kit v3), D2 (Wren, shop, breaking, ground
+    materials `Item.kind "mat"`, the nine traits, the `craft` rate bucket).
+- Checks: `npm test` 225 pass / 1 skipped; build OK; smoke OK; map-metrics unchanged.
+- Sims, information only (the owner deferred balance). Duel Songweaver overall:
+  - before A/B: 13/17/31/32/39/35/45/51/51%;
+  - after B: 15/9/27/24/30/21/30/41/41%;
+  - after D2: 12/11/34/27/34/27/32/43/40%.
+- PvE zones: 100% clear.
+- Bench, 5 bots: tick avg 6.50 → 7.32 ms (active mobs differed 109 vs 88, so this is not a clean comparison).
+- Next: client integration on real data (drop the client table copy, resolve the `HOOK(di)` guards, rework and
+  rerun the e2e with `FAKE=0`), then the reviewer and the PR.
+- Known: flaky under load: songkind "ch1, ch2 then chlock", voidconjure. `POND_HINT` is not sent yet.
