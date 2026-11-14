@@ -1,10 +1,11 @@
 /**
- * The war map: every monster zone of every act becomes a territory (Murat 2026-11-14), built from SPAWN_ZONES so a
- * future act's zones join the war by themselves. Sanctuaries never change hands and are not territories: villages
+ * The war map: every monster zone of every act becomes a territory (Murat 2026-11-14), built from SPAWN_ZONES. A future act
+ * needs its own capitals (Clan.capitals) and a link like the waygate's below to join. Sanctuaries never change hands and are not territories: villages
  * (already outside every zone), dungeon floors, quest-boss lairs (zones with no spawns of their own) and the broad
  * wild zones (countryside, open desert) where new heroes level. Deterministic, like the map.
  */
 import { actOfTile, inDeepRow, UNDER_END, WORLD_H } from "../constants";
+import { WAYGATE_DESERT, WAYGATE_OAKVALE } from "../desert";
 import { SPAWN_ZONES, type SpawnZone } from "../spawns";
 import { CLAN_KEYS, CLANS, type ClanKey } from "./clans";
 
@@ -56,7 +57,7 @@ function build(): Territory[] {
   const a1 = out.filter((t) => t.act === 1), a2 = out.filter((t) => t.act === 2);
   if (a1.length && a2.length) {
     const near = (ts: Territory[], x: number, y: number) => ts.reduce((b, t) => (Math.hypot(t.cx - x, t.cy - y) < Math.hypot(b.cx - x, b.cy - y) ? t : b));
-    link(near(a1, 92, 79).id, near(a2, a2[0].cx, a2[0].cy).id);
+    link(near(a1, WAYGATE_OAKVALE.x, WAYGATE_OAKVALE.y).id, near(a2, WAYGATE_DESERT.x, WAYGATE_DESERT.y).id);
   }
   return out;
 }
@@ -66,7 +67,7 @@ export const territoryByName = (name: string) => TERRITORIES.find((t) => t.name 
 
 /**
  * Who holds what at the very start: clans take turns (the one with the least land first) claiming an unclaimed
- * territory next to their land in the same act, so every clan starts with a fair, connected share around its capitals.
+ * territory next to their land in the same act, so every clan starts with a connected share around its capitals (as even as the map allows: 8/7/6/5/5 today).
  */
 export function initialOwners(): ClanKey[] {
   const owner: (ClanKey | undefined)[] = TERRITORIES.map((t) => t.capitalOf);

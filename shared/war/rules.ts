@@ -111,10 +111,24 @@ const timeBonus = (k: ClanKey, tick: number) => {
   const d = CLANS[k].doctrine, p = phaseOf(tick);
   return (d === "siege" && p === 2) || (d === "ritual" && p === 0) ? WAR.doctrine : 1;
 };
+const finite = (v: unknown, lo: number, hi: number): number | undefined => (typeof v === "number" && Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : undefined);
+/**
+ * Orders from any leader (an AI council later, so never trusted): a missing entry or a value that is not a finite
+ * number means "defend everything"; shares are clamped, unknown targets dropped later as illegal.
+ */
+export function cleanOrders(o: Orders | undefined): Orders {
+  const defend = finite(o?.defend, 0, 1);
+  if (!o || defend === undefined || !Array.isArray(o.attack)) return { defend: 1, attack: [] };
+  const attack = o.attack.slice(0, 8).flatMap((a) => {
+    const t = finite(a?.t, 0, TERRITORIES.length - 1), share = finite(a?.share, 0, 1);
+    return t !== undefined && Number.isInteger(a.t) && share ? [{ t, share }] : [];
+  });
+  return { defend, attack };
+}
 const fortCap = (k: ClanKey) => WAR.fortMax * (CLANS[k].doctrine === "palisade" ? WAR.palisadeFort : 1);
 
-/** One war tick. Mutates and returns `s`. `orders` must hold an entry for every clan. */
-export function warTick(s: WarState, orders: Record<ClanKey, Orders>): WarState {
+/** One war tick. Mutates and returns `s`. A clan missing from `orders` (or with broken orders) only defends. */
+export function warTick(s: WarState, orders: Partial<Record<ClanKey, Orders>>): WarState {
   const supply = supplyMap(s), lead = leaderOf(s);
   const land = Object.fromEntries(CLAN_KEYS.map((k) => [k, landOf(s, k)])) as Record<ClanKey, number>;
   // 1. Income and upkeep
@@ -130,9 +144,10 @@ export function warTick(s: WarState, orders: Record<ClanKey, Orders>): WarState 
   const attack: Partial<Record<ClanKey, number>>[] = TERRITORIES.map(() => ({}));
   const defence = Array<number>(TERRITORIES.length).fill(0);
   for (const k of CLAN_KEYS) {
-    const o = orders[k], legal = new Set(targetsOf(s, k));
+    const o = cleanOrders(orders[k]), legal = new Set(targetsOf(s, k));
+    // Only border land gets defenders: land the Hide-Kin reach by tunnel behind a front stands empty (by design)
     const borders = bordersOf(s, k), weight = borders.map((b) => 1 + s.pressure[b] / 50), wsum = weight.reduce((a, b) => a + b, 0) || 1;
-    const def = s.army[k] * Math.min(1, Math.max(0, o.defend));
+    const def = s.army[k] * o.defend;
     borders.forEach((b, i) => { defence[b] += (def * weight[i]) / wsum; });
     const shares = o.attack.filter((a) => legal.has(a.t) && a.share > 0), ssum = shares.reduce((a, b) => a + b.share, 0);
     const force = s.army[k] - def;

@@ -51,3 +51,19 @@ test("left alone, no clan runs away with the map", () => {
     for (const k of CLAN_KEYS) assert.ok(landOf(s, k) >= 2, `seed ${seed}: ${k} was all but wiped out`);
   }
 });
+
+test("broken or illegal orders never poison the war", () => {
+  const s = newWar(), bad: any = { wardens: { defend: NaN, attack: [{ t: 0, share: Infinity }] }, redfang: { defend: 0.5, attack: [{ t: 9999, share: 1 }, { t: 1.5, share: 1 }] } };
+  for (let i = 0; i < 50; i++) warTick(s, bad); // host, hidekin and veiled send nothing at all
+  for (const k of CLAN_KEYS) assert.ok(Number.isFinite(s.army[k]), k);
+  assert.ok(s.control.every(Number.isFinite));
+});
+
+test("a siege takes a territory when the attack still out-fights the defence", () => {
+  const s = newWar();
+  const t = TERRITORIES.find((x) => !x.capitalOf && x.near.some((n) => s.owner[n] !== s.owner[x.id]))!;
+  const attacker = s.owner[t.near.find((n) => s.owner[n] !== s.owner[t.id])!];
+  s.army[attacker] = 1e6;
+  for (let i = 0; i < WAR.ticksPerDay && s.owner[t.id] !== attacker; i++) warTick(s, { [attacker]: { defend: 0, attack: [{ t: t.id, share: 1 }] } });
+  assert.equal(s.owner[t.id], attacker, `${attacker} took ${t.name}`);
+});

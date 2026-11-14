@@ -15,10 +15,11 @@ Design: https://play.fmtpa.ch/design/riven-marches/ · Plan: https://play.fmtpa.
 Built, not yet wired into the game (nothing players see):
 - `shared/war/clans.ts`: the five clans, colours, doctrine, counter cycle, one capital per act.
 - `shared/war/territories.ts`: 31 territories from `SPAWN_ZONES` (21 in Act 1, 10 in Act 2), borders by zone
-  distance, the waygate joins the acts; fair connected starting land around each capital.
+  distance, the waygate joins the acts; connected starting land around each capital (8/7/6/5/5). A future act needs
+  its own capitals and a link to join.
 - `shared/war/rules.ts`: `warTick` (10-minute tick): income with overextension, upkeep, defence spread by pressure,
   attacks, counter cycle, day/night doctrines, forts, Control, announced sieges, capitals never fall, rally for clans
-  below a fair share, Night Raiders bleed the leader. All numbers in `WAR`.
+  below a fair share, Night Raiders bleed the leader. All numbers in `WAR`. Orders are sanitised (`cleanOrders`): AI leaders will never be trusted.
 - `shared/war/doctrine.ts`: scripted leaders (fallback for the future War Councils) and one ruse for the clever-plan check.
 - `tools/balance/war.ts`: headless war sim. `tests/war.test.ts`.
 
@@ -40,4 +41,8 @@ Sim, 200 wars x 30 war days, no players (`npx tsx tools/balance/war.ts 200 30 --
 Open points for M1:
 - The Host stays the smallest clan (boxed in between two capitals in both acts). Look at its capitals or give it
   the bone-yard growth from the design before tuning numbers.
+- The Hide-Kin never grow past their 6 starting territories (about 60 flips each way in 20 wars, against ~1,500 for
+  Host and Redfang): the tunnel doctrine barely matters. Tunnelled targets stand undefended but the attack arrives at
+  cut-off supply. Rework the tunnel before tuning.
+- The Host churns (many flips both ways) rather than grows.
 - 7 flips a day over 31 territories may feel fast once players watch it; check with the first front.

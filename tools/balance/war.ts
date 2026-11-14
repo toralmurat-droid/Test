@@ -17,6 +17,7 @@ const num = (i: number, d: number) => (args[i] && !args[i].startsWith("--") ? Nu
 const RUNS = num(0, 200), DAYS = num(1, 30);
 const flag = (n: string) => args.find((a) => a.startsWith(`--${n}`))?.split("=")[1];
 const CLEVER = flag("clever") as ClanKey | undefined;
+if (CLEVER && !CLAN_KEYS.includes(CLEVER)) { console.error(`--clever must be one of: ${CLAN_KEYS.join(", ")}`); process.exit(2); }
 const SEED = Number(flag("seed") ?? 1), VERBOSE = args.includes("--verbose");
 const SETTLE_DAYS = 7, STREAK_DAYS = 3;
 
