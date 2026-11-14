@@ -201,6 +201,19 @@ export interface QuestStep {
   night?: boolean;
   /** Finishing this step brings the hero up to at least this level (so the first quest can teach the skill tree) */
   levelTo?: number;
+  /**
+   * Per-class changes to the step (stepFor): the Songweaver can't wear the first quest's weapon (DI-5), so her gift is
+   * a book and the step's words say so.
+   */
+  byCls?: Partial<Record<string, Partial<Pick<QuestStep, "gift" | "text" | "banner" | "obj" | "hint" | "nag" | "say">>>>;
+}
+
+/** The step as this class sees it (QuestStep.byCls on top of the step). */
+export function stepFor(s: QuestStep, cls?: string): QuestStep;
+export function stepFor(s: QuestStep | undefined, cls?: string): QuestStep | undefined;
+export function stepFor(s: QuestStep | undefined, cls?: string): QuestStep | undefined {
+  const o = s && cls ? s.byCls?.[cls] : undefined;
+  return o ? { ...s!, ...o } : s;
 }
 
 export interface Reward { xp: number; gold: number; potions: number }
@@ -1895,24 +1908,32 @@ export const TUT_QUESTS: QuestDef[] = [
           "Go out of the gate and squash three of them. Then come and find me, I have a few more things to show you.",
         ],
         accept: "I'll squash 3 blobs" },
-      { type: "kill", kinds: BLOB_KINDS, zone: FZ, goal: 3, gift: "w_bronze", text: "Kill 3 blobs", banner: ["Quest updated", "Kill 3 blobs"],
+      { type: "kill", kinds: BLOB_KINDS, zone: FZ, goal: 3, gift: "w_bronze", byCls: { songweaver: { gift: "bk_hymnal" } }, text: "Kill 3 blobs", banner: ["Quest updated", "Kill 3 blobs"],
         obj: "Kill blobs: {n} / {goal}",
         hint: `Leave the village ${FZD}. Left-click a blob to attack it, keep clicking to chain a combo. Q drinks a potion.`,
         nag: `{n} of {goal}. ${FZ} lies ${FZD} of the village.` },
       { type: "equip", levelTo: 2, text: "Wear the weapon the blob dropped", banner: ["A blob dropped a weapon!", "Wear it"],
         obj: "Wear your new weapon", hint: "It went into your bag. Press G, then click the weapon to wear it.",
-        nag: "Press G and click that weapon to wear it." },
+        nag: "Press G and click that weapon to wear it.",
+        byCls: { songweaver: { text: "Wear the book the blob dropped", banner: ["A blob dropped a book!", "Wear it"], obj: "Wear your new book",
+          hint: "It went into your bag. Press G, then click the book to wear it. Your lute is already in your hands.",
+          nag: "Press G and click that book to wear it." } } },
       { type: "learn", text: "Learn a skill", banner: ["Level up!", "Learn your first skill"], obj: "Learn an active skill",
         hint: "Each level gives a skill point. Press T and click a skill at the top of the tree to learn it.",
         nag: "Press T and learn a skill with your point." },
       { type: "cast", text: "Use your skill", banner: ["Skill learned!", "Now use it on a blob"], obj: "Use your new skill outside the village",
         hint: "It sits on hotbar key 1. Point the mouse at a blob and press 1 to use it. No magic inside Oakvale: the villagers hate it!",
         nag: "Point at a blob and press 1. But not inside the village!" },
-      back("druid", "Elder Rowan", "village bonfire", [
+      { ...back("druid", "Elder Rowan", "village bonfire", [
         "Look at you! Walking, fighting, a real weapon and a skill of your own.",
         "Each level brings more: stat points in the hero panel (C) and skill points in the tree (T). Your quest log is on J, the map on M.",
         "Take these potions. And sit a moment, friend. There is something else stirring out there.",
       ], "Claim reward"),
+      byCls: { songweaver: { say: [
+        "Look at you! Walking, fighting, a book to your name and a skill of your own.",
+        "Each level brings more: stat points in the hero panel (C) and skill points in the tree (T). Your quest log is on J, the map on M.",
+        "Take these potions. And sit a moment, friend. There is something else stirring out there.",
+      ] } } },
     ],
     reward: { xp: 60, gold: 25, potions: 3 },
     after: "The trees have been whispering to me. Sit by the fire, friend.",
@@ -2004,9 +2025,10 @@ const chainOf = (q: QuestState | undefined) => CHAINS[q?.chain ?? 0];
 
 export const questDef = (q: QuestState | undefined) => chainOf(q).quests[q?.questId ?? 0];
 /** Active step, or undefined before accepting / after the chain. */
-export function questStep(q: QuestState | undefined): QuestStep | undefined {
+/** The step the quest is on; with `cls`, as that class sees it (stepFor). */
+export function questStep(q: QuestState | undefined, cls?: string): QuestStep | undefined {
   const d = questDef(q);
-  return d && q && q.questStage >= 1 ? d.steps[q.questStage - 1] : undefined;
+  return stepFor(d && q && q.questStage >= 1 ? d.steps[q.questStage - 1] : undefined, cls);
 }
 
 export const popcount = (n: number) => { let c = 0; for (let v = n >>> 0; v; v &= v - 1) c++; return c; };
@@ -2020,8 +2042,8 @@ export function stepProgress(s: QuestStep, count: number): number {
 const fill = (t: string, n: number, goal: number) => t.replace("{n}", String(n)).replace("{goal}", String(goal));
 
 /** Objective line for the quest tracker. */
-export function questObjective(q: QuestState | undefined): string {
-  const s = questStep(q);
+export function questObjective(q: QuestState | undefined, cls?: string): string {
+  const s = questStep(q, cls);
   return s ? fill(s.obj, stepProgress(s, q!.questCount), stepGoal(s)) : "";
 }
 

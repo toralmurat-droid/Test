@@ -3,7 +3,8 @@ import { MAX_LEVEL } from "./classes";
 import { STATS, Stats, StatKind, statsFor } from "./powers";
 import type { ClassKind } from "./classes";
 import { Element, ELEMENTS, ELEMENT_EFFECT, ELEMENT_NAMES, MAX_RESIST } from "./elements";
-import { isRuneId, parseRuneCode, Rune, RUNES, runeCode, mergeRunes } from "./runes";
+import { isRuneId, parseRuneCode, Rune, RUNES, runeCode, runeId, mergeRunes } from "./runes";
+import { luteAt, LUTE_GROUPS, LUTE_ID, luteTrait, type LuteTraitId } from "./lute";
 
 /**
  * Equipment: six slots, each item adds stats and is drawn on the hero.
@@ -175,7 +176,8 @@ function starterKits(): GearDef[] {
     k("summoner", "hat", "Void Scarf", 0x5b2f8f, 0xc8a8ff, "scarf"),
     k("summoner", "shoes", "Warlock's Boots", 0x1e1a24, 0x5a3a6a, "plain"),
     // the Songweaver's minstrel kit (art: tools/art/paint/look.ts KITS.songweaver)
-    k("songweaver", "weapon", "Minstrel's", 0x8a5a2c, 0xe8d070, "lute"),
+    // the evolving lute (DI-5, shared/lute.ts): its level follows hers, Wren fits its traits; it never leaves her
+    { ...k("songweaver", "weapon", "Minstrel's", 0x8a5a2c, 0xe8d070, "lute"), bound: true },
     k("songweaver", "armour", "Minstrel's Doublet", 0xd09a34, 0xa8402a, "trim"),
     k("songweaver", "hat", "Feathered Cap", 0x2e7d74, 0xd9482f, "cap"),
     k("songweaver", "shoes", "Minstrel's Boots", 0x4e3220, 0x8a5a2c, "plain"),
@@ -191,11 +193,32 @@ export function starterKit(cls: string): Equipped {
   return out;
 }
 
-/** Class kits only fit their own class; everything else fits anyone. */
+/** Class kits only fit their own class; everything else fits anyone, except the Songweaver's musical-only rule (wearProblem). */
 export function canWear(cls: string, id: string): boolean {
-  const d = gearDef(id);
-  return !!d && (!d.cls || d.cls === cls);
+  return !wearProblem(cls, id);
 }
+
+/** Is this item the Songweaver's lute (any level, any traits, any runes)? */
+export const isLute = (id: string | undefined): boolean => !!id && baseId(id) === LUTE_ID;
+/** Is it a book (DI-2: the Songbook and the found books)? */
+export const isBook = (id: string | undefined): boolean => !!id && !!gearDef(id)?.book;
+
+/**
+ * Why this class can't wear the item at all ("" = it can; level and stat needs are reqProblem). Class kits fit only
+ * their class. DI-5: a Songweaver's weapon slot takes her lute only and her shield slot books only; her ranged slot
+ * stays open, and other classes may wear books.
+ */
+export function wearProblem(cls: string, id: string): string {
+  const d = gearDef(id);
+  if (!d) return "Not an item";
+  if (d.cls && d.cls !== cls) return `Only a ${d.cls} can wear this`;
+  if (cls === "songweaver" && d.slot === "weapon" && !isLute(id)) return NOT_LUTE;
+  if (cls === "songweaver" && d.slot === "shield" && !d.book) return NOT_BOOK;
+  return "";
+}
+/** The Songweaver's refusals (docs/songweaver-di-content.md section 5). */
+export const NOT_LUTE = "That is not a musical instrument. A minstrel plays a lute.";
+export const NOT_BOOK = "A minstrel carries a book, not a shield.";
 
 /** Bound items (the Songbook): kept by their hero, never dropped, sold, traded or stashed. Runes and affixes don't change it. */
 export const isBound = (id: string | undefined): boolean => !!id && !!gearDef(id)?.bound;
@@ -256,6 +279,12 @@ export function isGearId(v: unknown): v is string {
     if (!runes.length || runes.length > socketsOf(bare) || withRunes(bare, runes) !== v) return false;
     if (runes.some((r) => !runeFits(bare, r))) return false;
     return isGearId(bare);
+  }
+  // The lute's traits (shared/lute.ts): one per group, written in group order
+  const t = v.indexOf("#");
+  if (t >= 0) {
+    const head = v.slice(0, t), traits = luteTraits(v);
+    return isLute(head) && isGearId(head) && traits.length > 0 && withTraits(head, traits) === v;
   }
   const base = baseId(v);
   if (!(base in GEAR)) return false;
@@ -401,10 +430,10 @@ export const REQ_PER_LEVEL = [0, 0.35, 0.5, 0.65];
 /** The stat each slot asks for. Weapons ask for the class's attack stat (Strength, or Magic for the Wizard). */
 export const REQ_STAT: Record<GearSlot, StatKind | "attack"> = { weapon: "attack", ranged: "dex", shield: "str", armour: "sta", hat: "sta", shoes: "dex" };
 
-/** The id without its random bonuses ("w_frost@17~R:atk3,dex2" -> "w_frost@17"). */
+/** The id without its random bonuses and lute traits ("w_frost@17~R:atk3,dex2" -> "w_frost@17", "songweaver_weapon@9#gut" -> "songweaver_weapon@9"). */
 export function plainId(id: string): string {
   id = stripRunes(id);
-  const k = id.indexOf("~");
+  const k = id.search(/[~#]/);
   return k < 0 ? id : id.slice(0, k);
 }
 
@@ -422,11 +451,11 @@ export function itemLevel(id: string): number {
   return Number.isInteger(n) ? Math.min(ITEM_MAX_LEVEL, Math.max(1, n)) : 1;
 }
 
-/** Item id for a base item at a level (class kits and level 1 keep the plain id). */
+/** Item id for a base item at a level (class kits and level 1 keep the plain id; the lute is the one kit item with levels). */
 export function withLevel(base: string, level: number): string {
   const b = baseId(base);
   const l = Math.min(ITEM_MAX_LEVEL, Math.max(1, Math.round(level)));
-  return l <= 1 || GEAR[b]?.cls ? b : `${b}@${l}`;
+  return l <= 1 || (GEAR[b]?.cls && b !== LUTE_ID) ? b : `${b}@${l}`;
 }
 
 const growInt = (v: number | undefined, l: number) => (v ? Math.round(v * (1 + ILVL_GROWTH * (l - 1))) : v);
@@ -449,6 +478,11 @@ export function gearDef(id: string): GearDef | undefined {
   const d = GEAR[baseId(id)];
   if (!d) return undefined;
   const l = itemLevel(id);
+  if (d.id === LUTE_ID) { // the lute's stats come from its stage (shared/lute.ts LUTE_STAGES), not from item-level growth
+    const st = luteAt(l), out: GearDef = { ...d, id, name: st.name, bonus: { ...st.bonus } };
+    defCache.set(id, out);
+    return out;
+  }
   const affixes = itemAffixes(id);
   if (l <= 1 && !affixes.length) return d;
   const b = d.bonus;
@@ -733,10 +767,11 @@ export function withRunes(id: string, runes: Rune[]): string {
   return runes.length ? `${bare}^${runes.map(runeCode).join(".")}` : bare;
 }
 
-/** Rune sockets of an item: none on ranged weapons, two on Rare and Legendary items, one on the rest. */
+/** Rune sockets of an item: none on ranged weapons, two on Rare and Legendary items, one on the rest; the lute by its stage. */
 export function socketsOf(id: string): number {
   const d = GEAR[baseId(id)];
   if (!d || d.slot === "ranged") return 0;
+  if (d.id === LUTE_ID) return luteAt(itemLevel(id)).sockets;
   return itemRarity(id) >= 2 ? 2 : 1;
 }
 
@@ -764,3 +799,32 @@ export function runeEffects(eq: Equipped) {
 
 /** Anything a bag can hold besides potions: a piece of gear or a loose rune. */
 export const isBagItem = (v: unknown): v is string => isGearId(v) || isRuneId(v);
+
+// ---- The evolving lute (DI-5, shared/lute.ts) ----------------------------------------------------------------
+/** The traits fitted to a lute id ("songweaver_weapon@12#steel.wide^ember2" -> ["steel", "wide"]); unknown words are skipped. */
+export function luteTraits(id: string | undefined): LuteTraitId[] {
+  const bare = stripRunes(id ?? ""), k = bare.indexOf("#");
+  if (k < 0) return [];
+  return bare.slice(k + 1).split(".").filter((w) => !!luteTrait(w)) as LuteTraitId[];
+}
+/**
+ * A lute id with these traits, keeping its level and runes. One trait per group: a later one replaces an earlier one
+ * of its group (refitting), and they are written in group order so the id is canonical.
+ */
+export function withTraits(id: string, traits: LuteTraitId[]): string {
+  const runes = itemRunes(id), head = plainId(id);
+  const by = new Map<string, LuteTraitId>();
+  for (const t of traits) { const d = luteTrait(t); if (d) by.set(d.group, t); }
+  const list = LUTE_GROUPS.map((g) => by.get(g)).filter((t): t is LuteTraitId => !!t);
+  return withRunes(list.length ? `${head}#${list.join(".")}` : head, runes);
+}
+/**
+ * The lute at another item level (the hero's), traits and runes kept. Runes past the new stage's sockets come out as
+ * loose runes into `out`, so the id stays valid; anything that is not a lute comes back as it is.
+ */
+export function luteAtLevel(id: string, level: number, out?: string[]): string {
+  if (!isLute(id)) return id;
+  const traits = luteTraits(id), runes = itemRunes(id), keep = luteAt(Math.max(1, Math.round(level))).sockets;
+  if (out) for (const r of runes.slice(keep)) out.push(runeId(r.key, r.rank));
+  return withRunes(withTraits(withLevel(LUTE_ID, level), traits), runes.slice(0, keep));
+}

@@ -38,12 +38,12 @@ import { DOORS, DOOR_RANGE, doorById, doorDist, doorWorkable, isSafeZone, isSoli
 import { isDecorSolidAt, npcById, npcNear, TALK_RANGE } from "../shared/npcs";
 import { beyondWall, WATCH, WATCH_POSTS, WatchPost } from "../shared/watch";
 import { inVillage, WRATH } from "../shared/wrath";
-import { afterRespec, bounceWave, busking, buskingAudience, BuskingLines, ChordSync, heroSound, migrateSongweaver, mobSound, oldSongTree, restoreMode, SONG_POTION_TEXT, songSave } from "./songs";
+import { afterRespec, bounceWave, busking, buskingAudience, BuskingLines, ChordSync, heroSound, migrateSongweaver, mobSound, oldSongTree, relevelLute, restoreMode, SONG_POTION_TEXT, songSave, stowItem } from "./songs";
 import { GAUGE, modeColour, PHRYGIAN, RESONANCE } from "../shared/songs";
 import { soundMult } from "../shared/combat";
 import type { SoundFx } from "../shared/skills";
 import { sellPrice, shopBuys, shopFuses, SHOPS } from "../shared/shops";
-import { BLOB_KINDS, CHAINS, CROWN_CHAIN, packQuest, chainDone, chainOpen, chainState, inZone, isBlob, npcPresent, QuestState, questStep, stepGoal, Summon, type BossVoice, TUT_CHAIN, TUT_QUESTS, USE_RANGE } from "../shared/quests";
+import { BLOB_KINDS, CHAINS, CROWN_CHAIN, packQuest, chainDone, chainOpen, chainState, inZone, isBlob, npcPresent, QuestState, questStep, stepFor, stepGoal, Summon, type BossVoice, TUT_CHAIN, TUT_QUESTS, USE_RANGE } from "../shared/quests";
 import { findHideSpot, HIDE, MOTHER_KEEP_OUT, noMobsAt, spawnPoint, SPAWN_ZONES, villageDist, zoneCap } from "../shared/spawns";
 import { blocked, moveStep } from "../shared/movement";
 import { NIGHT_RAID, raiderByKey, raiderIgnores, RAIDERS } from "../shared/raiders";
@@ -60,7 +60,7 @@ import { SLOT_COUNT } from "../shared/slots";
 import { groupDmgMult, groupHpMult, PARTY, together } from "../shared/party";
 import { canExecute, executeDamage, executeRefund, heroPoise, MOB_COMBAT, mobBody, POISE, poiseLevelMult, poiseSpeed, PVP_PROTECT_LEVEL, pvpDamageMult, pvpProtected, SWING_AHEAD } from "../shared/combat";
 import {
-  BAG_SIZE, Equipped, gearDef, GEAR_SLOTS, activeGear, reqProblem, itemLevel, HeroReqInfo, GearSlot, gearBlock, gearName, gearReachMult, gearSpeedMult, gearStats, isGearId, potionChance, rollGear, canWear, starterKit,
+  BAG_SIZE, baseId, wearProblem, Equipped, gearDef, GEAR_SLOTS, activeGear, reqProblem, itemLevel, HeroReqInfo, GearSlot, gearBlock, gearName, gearReachMult, gearSpeedMult, gearStats, isGearId, potionChance, rollGear, canWear, starterKit,
   isBagItem, isBound, socketProblem, itemRunes, withRunes, runeEffects, stripRunes, GEAR_DROP,
 } from "../shared/gear";
 import { fuseRunes, parseRune, rollMobRune, rollRune, RUNE_DROP, runeId, runeIdName, RUNES, RuneKey } from "../shared/runes";
@@ -1055,7 +1055,9 @@ export class TownRoom extends Room<TownState> {
   /** Loads a save into the hero. Returns chat lines about items a migration moved (the room sends them on join). */
   private restore(p: Player, s: HeroSave): string[] {
     const num = (v: unknown, d = 0) => (typeof v === "number" && Number.isFinite(v) ? v : d);
-    const gear = (v: unknown) => (typeof v === "string" && isGearId(v) && canWear(p.cls, v) ? v : "");
+    // gear she may not wear (a kit of another class, the Songweaver's musical-only rule) goes to the bag, not away
+    const misfit: string[] = [];
+    const gear = (v: unknown) => (typeof v !== "string" || !isGearId(v) ? "" : canWear(p.cls, v) ? v : (misfit.push(v), ""));
     p.color = num(s.color, p.color);
     p.level = capLevel(num(s.level, 1)); p.kills = num(s.kills);
     // Saves from before the slower XP curve (2026-11-08) keep their level and their share of the way to the next one
@@ -1067,19 +1069,25 @@ export class TownRoom extends Room<TownState> {
     p.pots = s.pots ? { potion: cnt(s.pots.potion), mpotion: cnt(s.pots.mpotion) } : { potion: [Math.min(50, num(s.potions)), 0, 0], mpotion: [Math.min(50, num(s.mpotions, 2)), 0, 0] };
     // The Songweaver's kit (server/songs.ts): before the gear filter, so a shield she wore moves instead of vanishing
     let stash: ReturnType<typeof loadStash> | undefined;
-    const moved = migrateSongweaver(p, s, (item) => {
+    const toStash = (item: string) => {
       stash ??= loadStash(p.name);
       if (stash.items.length >= STASH_SIZE) return false;
       stash.items.push(item);
       return true;
-    });
+    };
+    const moved = migrateSongweaver(p, s, toStash);
     p.ptSta = num(s.ptSta); p.ptStr = num(s.ptStr); p.ptMag = num(s.ptMag); p.ptDex = num(s.ptDex);
     // A hero saved above today's level cap spent more points than his level gives: hand them back to place again
     if (p.ptSta + p.ptStr + p.ptMag + p.ptDex > statPoints(p.level)) p.ptSta = p.ptStr = p.ptMag = p.ptDex = 0;
     p.weapon = gear(s.weapon); p.armour = gear(s.armour); p.shoes = gear(s.shoes);
     p.hat = gear(s.hat); p.shield = gear(s.shield); p.ranged = gear(s.ranged);
     // The bag may hold items for other classes (bought, traded or taken from the stash for another hero)
-    if (Array.isArray(s.bag)) setBag(p, s.bag.filter((v): v is string => isBagItem(v)).slice(0, BAG_SIZE));
+    const bag = Array.isArray(s.bag) ? s.bag.filter((v): v is string => isBagItem(v)).slice(0, BAG_SIZE) : [];
+    for (const v of misfit) moved.push(stowItem(p, bag, v, toStash, "you can't wear it."));
+    const loose: string[] = [];
+    relevelLute(p, bag, loose); // the Songweaver's lute is at her level (DI-5)
+    for (const v of loose) moved.push(stowItem(p, bag, v, toStash, "your lute had fewer sockets."));
+    if (Array.isArray(s.bag) || bag.length) setBag(p, bag);
     // Old saves (before the skill tree rework) had other skill ids: those points come back to spend again
     // The Summoner's tree was rebuilt (Void Lord, 2026-11-08): a save from the old tree gets every skill point back
     const oldTree = (p.cls === "summoner" && s.suTree !== SUMMONER_TREE) || oldSongTree(p.cls, s.swTree);
@@ -4605,7 +4613,7 @@ export class TownRoom extends Room<TownState> {
 
   /** Fills the empty slots with the class's starting kit (shared/gear.ts starterKit); kit items already carried are not doubled. */
   private wearKit(p: Player) {
-    const have = new Set([...GEAR_SLOTS.map((s) => p[s]), ...bagItems(p)].map((id) => stripRunes(id ?? "")));
+    const have = new Set([...GEAR_SLOTS.map((s) => p[s]), ...bagItems(p)].map((id) => baseId(id ?? ""))); // a levelled lute is still the lute
     for (const [slot, id] of Object.entries(starterKit(p.cls)) as [GearSlot, string][]) if (!p[slot] && !have.has(id)) p[slot] = id;
   }
 
@@ -4623,7 +4631,9 @@ export class TownRoom extends Room<TownState> {
     const p = this.state.players.get(id);
     if (!p || typeof i !== "number" || i < 0 || i >= p.bag.length) return;
     const gid = p.bag.at(i), def = gid ? gearDef(gid) : undefined;
-    if (!gid || !def || !canWear(p.cls, gid)) return;
+    if (!gid || !def) return;
+    const no = wearProblem(p.cls, gid); // a kit of another class, the Songweaver's musical-only rule
+    if (no) { this.clients.find((c) => c.sessionId === id)?.send("gearno", { text: no }); return; }
     const why = reqProblem(gid, this.reqInfo(p)); // item level and stat requirements
     if (why) { this.clients.find((c) => c.sessionId === id)?.send("gearno", { text: why }); return; }
     const slot: GearSlot = def.slot;
@@ -5816,7 +5826,8 @@ export class TownRoom extends Room<TownState> {
     if (!s || !s.kinds?.includes(m.kind)) return;
     if (s.type === "kill" && (m.merged ?? 1) < (s.fused ?? 1)) return;
     if (s.type === "kill" && s.own && m.summonFor !== id) return; // a named leader: only the one summoned for this player
-    if (s.type === "kill" && s.gift && q.questCount + 1 >= stepGoal(s)) this.giveGift(id, p, s.gift, m);
+    const gift = stepFor(s, p.cls).gift; // the Songweaver's first gift is a book (shared/quests.ts byCls)
+    if (s.type === "kill" && gift && q.questCount + 1 >= stepGoal(s)) this.giveGift(id, p, gift, m);
     if (s.type === "kill") this.questProgress(id, p, c, q.questCount + 1);
     else if (s.type === "collect" && Math.random() < (s.chance?.[m.kind] ?? 0)) this.dropItem("quest", m.x, m.y, 1, s.item!, id);
   }
@@ -5840,6 +5851,7 @@ export class TownRoom extends Room<TownState> {
     if (lvl > p.level) {
       const from = p.level;
       p.level = lvl;
+      this.relevel(p);
       this.applyStats(p); // new stat points are assigned by the player in the hero panel
       if (!p.dead) p.hp = p.maxHp; // full heal on level up
       this.broadcast("levelup", { id, level: lvl, from });
@@ -5855,6 +5867,14 @@ export class TownRoom extends Room<TownState> {
   /** A line in one player's chat from the game itself. */
   private note(id: string, text: string) {
     this.clients.find((c) => c.sessionId === id)?.send("chat", { id: "", name: "Oakvale", text });
+  }
+
+  /** The Songweaver's lute follows her level (server/songs.ts relevelLute); runes it can no longer hold go to the bag. */
+  private relevel(p: Player) {
+    const bag = [...bagItems(p)], loose: string[] = [];
+    if (!relevelLute(p, bag, loose)) return;
+    for (const r of loose) if (bag.length + potionSlots(p.pots) < BAG_SIZE) bag.push(r);
+    setBag(p, bag);
   }
 
   /** Recompute stats and max HP from class + level + equipped gear. */

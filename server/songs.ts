@@ -3,7 +3,7 @@ import { knownModesOf, type ShotSpec, type SkillRuntime, type Unit } from "../sh
 import { skillById, type AreaDef, type FieldDef, type HitEffects, type SkillDef } from "../shared/skills";
 import { BOUNCE, BOUNCE_RULES, reflectAxis, wallAt } from "../shared/acoustics";
 import { BUSKING, BUSKING_LINES, npcById, type Npc } from "../shared/npcs";
-import { BAG_SIZE, gearName, isBagItem, starterKit } from "../shared/gear";
+import { BAG_SIZE, gearName, isBagItem, isBook, isLute, luteAtLevel, starterKit } from "../shared/gear";
 import { potionSlots, type Potions } from "../shared/potions";
 import { sellPrice } from "../shared/shops";
 
@@ -132,34 +132,81 @@ export function songSave(cls: string, sk: SkillRuntime): { swTree?: number; swMo
 
 // ---- Kit migrations (docs/songweaver-di-plan.md "State and saves") ---------------------------------------------------
 
-/** Save format of the Songweaver's kit (save field swKit). 1: the Songbook sits in the shield slot (DI-3). */
-export const SW_KIT_VERSION = 1;
+/**
+ * Save format of the Songweaver's kit (save field swKit). 1: the Songbook sits in the shield slot (DI-3). 2: the
+ * musical-only rule and the evolving lute (DI-5): her weapon slot holds her lute, at her level.
+ */
+export const SW_KIT_VERSION = 2;
 
-/** What a hero needs for migrateSongweaver: the class, potions (they take bag slots) and gold (a sold item pays). */
-export interface KitHero { cls: string; gold: number; pots: Potions }
+/** What a hero needs for migrateSongweaver: the class, her level (the lute's), potions (they take bag slots) and gold (a sold item pays). */
+export interface KitHero { cls: string; level: number; gold: number; pots: Potions }
 /** The parts of a save it moves (server/accounts.ts HeroSave). */
-export interface KitSave { shield?: unknown; bag?: unknown; swKit?: unknown }
+export interface KitSave { weapon?: unknown; shield?: unknown; bag?: unknown; swKit?: unknown }
+
+/**
+ * Puts an item she can't keep in her hands where it is not lost: the bag while it has room (`bag` is changed), else
+ * the stash (`toStash`, false when it is full too), else it is sold at sellPrice. Returns the chat line, `why` ending it.
+ */
+export function stowItem(p: KitHero, bag: string[], item: string, toStash: (item: string) => boolean, why: string): string {
+  const name = gearName(item, p.cls);
+  if (bag.length + potionSlots(p.pots) < BAG_SIZE) { bag.push(item); return `Your ${name} went to your bag: ${why}`; }
+  if (toStash(item)) return `Your bag was full, so your ${name} went to your stash: ${why}`;
+  const g = sellPrice(item);
+  p.gold += g;
+  return `Your bag and stash were full, so your ${name} was sold for ${g} gold: ${why}`;
+}
+const WHY_BOOK = "a Songweaver carries her Songbook in that hand now.";
+const WHY_LUTE = "a minstrel carries a lute and a book.";
 
 /**
  * Brings an older Songweaver save up to SW_KIT_VERSION. Runs in TownRoom.restore BEFORE the gear filter, on the save
- * itself, so nothing she owned is lost. v1: the shield she wore goes to the bag; with the bag full, to the stash
- * (`toStash`, false when it is full too); else it is sold at sellPrice. The Songbook takes the shield slot. Returns
- * chat lines for her, one per moved item.
+ * itself, so nothing she owned is lost (stowItem: bag, else stash, else sold). Returns chat lines, one per moved item.
+ *  - v1: the shield she wore is stowed; the Songbook takes the shield slot.
+ *  - v2: a weapon that is not her lute is stowed, and so is a shield that is not a book (the Songbook comes back to the
+ *    slot); her lute goes back in her hands (from the bag, else a new one) at her level.
  */
 export function migrateSongweaver(p: KitHero, s: KitSave, toStash: (item: string) => boolean): string[] {
-  if (p.cls !== "songweaver" || (typeof s.swKit === "number" && s.swKit >= SW_KIT_VERSION)) return [];
-  const notes: string[] = [], book = starterKit("songweaver").shield!;
-  const bag = Array.isArray(s.bag) ? s.bag.filter((v): v is string => isBagItem(v) && v !== book) : [];
-  const old = typeof s.shield === "string" && s.shield !== book && isBagItem(s.shield) ? s.shield : "";
-  if (old) {
-    const name = gearName(old, p.cls);
-    if (bag.length + potionSlots(p.pots) < BAG_SIZE) { bag.push(old); notes.push(`Your ${name} went to your bag: a Songweaver carries her Songbook in that hand now.`); }
-    else if (toStash(old)) notes.push(`Your bag was full, so your ${name} went to your stash: a Songweaver carries her Songbook in that hand now.`);
-    else { const g = sellPrice(old); p.gold += g; notes.push(`Your bag and stash were full, so your ${name} was sold for ${g} gold: a Songweaver carries her Songbook in that hand now.`); }
+  const ver = typeof s.swKit === "number" ? s.swKit : 0;
+  if (p.cls !== "songweaver" || ver >= SW_KIT_VERSION) return [];
+  const notes: string[] = [], kit = starterKit("songweaver"), book = kit.shield!;
+  let bag = Array.isArray(s.bag) ? s.bag.filter((v): v is string => isBagItem(v)) : [];
+  const worn = (v: unknown) => (typeof v === "string" && isBagItem(v) ? v : "");
+  if (ver < 1) {
+    const old = worn(s.shield);
+    if (old && old !== book) notes.push(stowItem(p, bag, old, toStash, WHY_BOOK));
+    s.shield = book;
   }
-  s.bag = bag; s.shield = book; s.swKit = SW_KIT_VERSION;
+  if (ver < 2) {
+    const sh = worn(s.shield);
+    if (sh && !isBook(sh)) { notes.push(stowItem(p, bag, sh, toStash, WHY_LUTE)); s.shield = book; }
+    if (!worn(s.shield)) s.shield = book;
+    let lute = worn(s.weapon);
+    if (lute && !isLute(lute)) { notes.push(stowItem(p, bag, lute, toStash, WHY_LUTE)); lute = ""; }
+    if (!lute) { // the lute she put away comes back to her hands; a lost one is made anew
+      const k = bag.findIndex((v) => isLute(v));
+      lute = k >= 0 ? bag.splice(k, 1)[0] : kit.weapon!;
+    }
+    const loose: string[] = [];
+    s.weapon = luteAtLevel(lute, p.level, loose);
+    for (const r of loose) notes.push(stowItem(p, bag, r, toStash, "your lute had fewer sockets."));
+  }
+  if (s.shield === book) bag = bag.filter((v) => v !== book); // the Songbook in her hand is not in her bag too
+  s.bag = bag; s.swKit = SW_KIT_VERSION;
   return notes;
 }
+
+/**
+ * Her lute follows her level (DI-5): the worn one and any in the bag are rewritten (on level-up and login). Runes past
+ * the stage's sockets come out into `loose`. Returns true when something changed (the caller re-applies stats).
+ */
+export function relevelLute(p: { cls: string; level: number; weapon: string }, bag: string[], loose: string[]): boolean {
+  if (p.cls !== "songweaver") return false;
+  let changed = false;
+  if (isLute(p.weapon)) { const v = luteAtLevel(p.weapon, p.level, loose); if (v !== p.weapon) { p.weapon = v; changed = true; } }
+  for (let i = 0; i < bag.length; i++) if (isLute(bag[i])) { const v = luteAtLevel(bag[i], p.level, loose); if (v !== bag[i]) { bag[i] = v; changed = true; } }
+  return changed;
+}
+
 /** A save from another tree version gets every skill point back (like the Summoner's suTree). */
 export const oldSongTree = (cls: string, swTree: unknown) => cls === "songweaver" && swTree !== SONGWEAVER_TREE;
 /**

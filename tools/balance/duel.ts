@@ -23,6 +23,7 @@ import {
 } from "../../shared/skillEngine";
 import { golemDeath, golemStrike, golemTick, newMind, type GolemMind } from "../../shared/golemAI";
 import { newWisp, openArsenal, wispEnd, wispTick, type WispMind } from "../../shared/voidConjure";
+import { LUTE_ID } from "../../shared/lute";
 import { Equipped, GEAR, gearBlock, gearDef, gearReachMult, gearSpeedMult, gearStats, meetsReq, withLevel } from "../../shared/gear";
 import { canExecute, executeDamage, executeRefund, heroPoise, POISE, poiseLevelMult, poiseSpeed, pvpDamageMult } from "../../shared/combat";
 import { COMBAT_REGEN_PER_STA, HIT_RADIUS, MOBS, mobScale, PLAYER_SPEED, REGEN_DELAY_MS, REGEN_PER_STA, REGEN_RAMP_MS } from "../../shared/constants";
@@ -161,7 +162,8 @@ function bookFor(level: number, who: { cls: ClassKind; level: number; pts: Stats
 }
 export function gearFor(cls: ClassKind, level: number, pts?: Stats, build?: Build): Equipped {
   const who = { cls, level, pts: pts ?? pointsFor(cls, level, build) };
-  const book: Equipped = usesGauge(cls) ? { shield: bookFor(level, who, build) } : {}; // the Songweaver always carries a book
+  // the Songweaver always plays her evolving lute (at her level) and carries a book (DI-5 musical-only rule)
+  const book: Equipped = usesGauge(cls) ? { weapon: withLevel(LUTE_ID, level), shield: bookFor(level, who, build) } : {};
   if (level < 5) return book;
   const out: Equipped = {};
   for (const slot of Object.keys(GEAR_SETS[1]) as (keyof Equipped)[]) {
