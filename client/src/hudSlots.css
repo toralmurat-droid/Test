@@ -33,3 +33,5 @@ body #statusrow > #chordhud:not([hidden]) + #buffs:not(:empty) { margin-left: 14
 
 /* ---- Bottom bar: never drawn below 100% (--barzoom = barScale(k, dpr) / k, set by hudSlots.ts) ---- */
 body #orbhud, body #hudbar, body #orblevel, body #xpbar { zoom: var(--barzoom, 1); }
+/* the Summoner's grimoire sits above the plate, so it rises with it */
+body.orbhud-on #grimoire { bottom: calc(150px * var(--barzoom, 1)); }

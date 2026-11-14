@@ -2795,8 +2795,8 @@ export class TownScene extends Phaser.Scene {
   }
 
   /** A hero's name label that would be drawn under the top-right HUD column (minimap, dial, tracker) is hidden. */
-  private labelUnderHud(label: Phaser.GameObjects.Text) {
-    const p = screenOf(this.cameras.main, label.x, label.y, hudRects(this.game.canvas).cr);
+  private labelUnderHud(label: Phaser.GameObjects.Text, anchor: { x: number; y: number }) {
+    const p = screenOf(this.cameras.main, label.x, label.y, hudRects(this.game.canvas).cr, anchor);
     return hudOccludes(p.x, p.y);
   }
 
@@ -3176,9 +3176,9 @@ export class TownScene extends Phaser.Scene {
         if (e.lvlColor !== col) { e.label.setColor(col); e.lvlColor = col; }
         e.label.setVisible(!p.dead && !p.hidden);
       } else if (e.label && id === this.me) {
-        e.label.setVisible(now - this.mobByMeAt > 300 && !this.labelUnderHud(e.label));
+        e.label.setVisible(now - this.mobByMeAt > 300 && !this.labelUnderHud(e.label, e.sprite));
       } else if (e.label && id !== this.me) {
-        e.label.setVisible(!this.labelUnderHud(e.label));
+        e.label.setVisible(!this.labelUnderHud(e.label, e.sprite));
         // Group members: green name
         const myParty = (this.room.state as any).players?.get(this.me)?.party;
         const col = myParty && p.party === myParty ? "#7cfc00" : "#ffffff";

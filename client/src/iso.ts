@@ -37,10 +37,12 @@ export const isoY = (x: number, y: number) => (x + y) / 2;
  * Where a world point is on the window (CSS px), through the camera zoom and the canvas's size on the page.
  * `cr` = the canvas's bounding rect; pass it when asking for many points in one frame.
  */
-export function screenOf(cam: Phaser.Cameras.Scene2D.Camera, wx: number, wy: number, cr?: { left: number; top: number; width: number; height: number }) {
+export function screenOf(cam: Phaser.Cameras.Scene2D.Camera, wx: number, wy: number, cr?: { left: number; top: number; width: number; height: number }, anchor?: { x: number; y: number }) {
   const cv = cam.scene.game.canvas;
   cr ??= cv.getBoundingClientRect();
-  const ix = ISO ? isoX(wx, wy) : wx, iy = ISO ? isoY(wx, wy) : wy;
+  // an isoAnchor'ed object (name label) is drawn at its offset from the anchor plus the anchor's projection
+  const ax = anchor ? anchor.x : wx, ay = anchor ? anchor.y : wy;
+  const ix = ISO ? wx - ax + isoX(ax, ay) : wx, iy = ISO ? wy - ay + isoY(ax, ay) : wy;
   // camera px: zoom around the camera's middle (scroll is in iso space)
   const px = (ix - cam.scrollX - cam.width / 2) * cam.zoom + cam.width / 2, py = (iy - cam.scrollY - cam.height / 2) * cam.zoom + cam.height / 2;
   return { x: cr.left + (cam.x + px) * (cr.width / cv.width), y: cr.top + (cam.y + py) * (cr.height / cv.height) };

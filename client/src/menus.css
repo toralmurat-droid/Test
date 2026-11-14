@@ -200,7 +200,7 @@ body #tradetoast { color: #ffd98a; font-family: var(--pixel-font); }
 /* ---------- Music panel close button ---------- */
 body #musicpanel #musicclose { padding: 0 2px; line-height: 0; }
 
-/* ---------- Online heroes count, right next to the chat box ---------- */
+/* ---------- Online heroes count (top of the right-hand column, hudSlots.css) ---------- */
 body #chat, body #chatlog { width: min(400px, calc(100% - 140px)); }
 body #online { flex: none; height: 30px; box-sizing: border-box;
   display: flex; align-items: center; padding: 0 8px; font: 18px var(--pixel-font); -webkit-font-smoothing: none; color: #e3bf6a;

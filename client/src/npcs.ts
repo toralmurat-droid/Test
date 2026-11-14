@@ -480,7 +480,7 @@ export class NpcLayer {
       if (!s) continue;
       const here = present(n);
       // a name under the minimap, dial or quest tracker would be hard to read: hidden there
-      const sp = here ? screenOf(cam, s.label.x, s.label.y, cr) : undefined;
+      const sp = here ? screenOf(cam, s.label.x, s.label.y, cr, s.sprite) : undefined;
       s.sprite.setVisible(here); s.label.setVisible(here && !hudOccludes(sp!.x, sp!.y)); s.mark.setVisible(here);
       const mark = here ? npcQuestMark(n.id, q) : "";
       if (s.mark.text !== mark) s.mark.setText(mark);
