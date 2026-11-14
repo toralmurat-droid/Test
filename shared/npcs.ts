@@ -73,8 +73,8 @@ export const NPCS: Npc[] = [
   // the Empty Grave: the sexton at Gravemoor's north gate, three mourners along the wall who won't go in among the dead
   { id: "sexton", name: "Amos", title: "Sexton of Gravemoor", sprite: "sexton", ...standNear(199, 123), dir: "down", where: "Gravemoor Cemetery, at the north gate" },
   { id: "mourner1", name: "Maud", title: "Smith's widow", sprite: "mourner1", ...standNear(190, 123), dir: "down", where: "Gravemoor Cemetery, by the north wall" },
-  { id: "mourner2", name: "Edda", title: "Mourner", sprite: "mourner2", ...standNear(194, 122), dir: "down", where: "Gravemoor Cemetery, by the north wall" },
-  { id: "mourner3", name: "Hollis", title: "Boatwright", sprite: "mourner3", ...standNear(207, 123), dir: "down", where: "Gravemoor Cemetery, by the north wall" },
+  { id: "mourner2", name: "Edda", title: "Nan Hesketh's granddaughter", sprite: "mourner2", ...standNear(194, 122), dir: "down", where: "Gravemoor Cemetery, by the north wall" },
+  { id: "mourner3", name: "Hollis", title: "Boatwright, Corin's partner", sprite: "mourner3", ...standNear(207, 123), dir: "down", where: "Gravemoor Cemetery, by the north wall" },
   // Two Letters: Ilka waits outside the Redfang stockade's west gate; the watch's quartermaster (law) stands beside
   // Captain Hale, the smuggler (mercy) on Saltmere beach
   { id: "ilka", name: "Ilka", title: "Net-mender", sprite: "ilka", ...standNear(234, 113), dir: "right", where: "outside the Redfang fence, by the west gate" },
