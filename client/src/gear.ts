@@ -103,25 +103,39 @@ function ensureGear(scene: Phaser.Scene, hero: string, id: string, done?: () => 
 /** Overlay texture of an item on a hero (every item level of an item looks the same; gearfx.ts adds the effects). */
 export const gearKey = (hero: string, id: string) => `gear_${hero}_${baseId(id)}`;
 
-/** Level, own stat points and worn items of a hero state, for the item requirements. */
-export const reqInfoOf = (state: any): HeroReqInfo =>
-  ({ cls: state.cls, level: state.level ?? 1, pts: { sta: state.ptSta ?? 0, str: state.ptStr ?? 0, mag: state.ptMag ?? 0, dex: state.ptDex ?? 0 }, worn: Object.fromEntries(GEAR_SLOTS.map((s) => [s, state[s]])) });
+/**
+ * Level, stat points and worn items of our own hero's state, for the item requirements. The points are owner-only
+ * (Player.me, read through own()): for another hero's state they read 0, so don't judge other heroes with it.
+ */
+export const reqInfoOf = (state: any): HeroReqInfo => {
+  const o = own(state);
+  return { cls: state.cls, level: state.level ?? 1, pts: { sta: o.ptSta, str: o.ptStr, mag: o.ptMag, dex: o.ptDex }, worn: Object.fromEntries(GEAR_SLOTS.map((s) => [s, state[s]])) };
+};
 
-/** A hero state's stats with gear, the same numbers the server uses (shared/gear.ts heroStats; not synced). */
+/** Our own hero's stats with gear, the same numbers the server uses (shared/gear.ts heroStats; not synced). */
 export const statsOf = (state: any) => heroStats(reqInfoOf(state));
 
 const activeCache = new WeakMap<object, { sig: string; res: Equipped }>();
 /**
- * The worn items that count for a hero state (requirements met). Called many times a frame, so the result is cached
- * per hero state and recomputed only when what it reads changes (worn ids, level, stat points, class). Callers must
- * not change the returned object.
+ * The worn items that count for a hero state. Called many times a frame, so the result is cached per hero state and
+ * recomputed only when what it reads changes (worn ids, level, stat points, class). Callers must not change the
+ * returned object.
+ *
+ * Our own hero: the items whose requirements are met (shared/gear.ts activeGear), as the server counts them.
+ * Another hero: everything worn, requirements not checked. Their stat points are owner-only (they live in Player.me,
+ * which only that hero's client receives), so the check can't be made here; the server only lets a hero wear what
+ * their class can, and what this feeds for other heroes is cosmetic (gear effects in gearfx.ts, stance sheet, attack
+ * swing drawing). A state without `me` counts as another hero: that is also our own hero for the moment before the
+ * view's first patch lands.
  */
 export const activeOf = (state: any): Equipped => {
-  let sig = `${state.cls}|${state.level ?? 1}|${state.ptSta ?? 0}|${state.ptStr ?? 0}|${state.ptMag ?? 0}|${state.ptDex ?? 0}`;
+  const mine = state.me !== undefined && state.me !== null, o = own(state);
+  let sig = mine ? `${state.cls}|${state.level ?? 1}|${o.ptSta}|${o.ptStr}|${o.ptMag}|${o.ptDex}` : "other";
   for (const s of GEAR_SLOTS) sig += `|${state[s] ?? ""}`;
   const c = activeCache.get(state);
   if (c && c.sig === sig) return c.res;
-  const res = activeGear(Object.fromEntries(GEAR_SLOTS.map((s) => [s, state[s]])), reqInfoOf(state));
+  const worn: Equipped = Object.fromEntries(GEAR_SLOTS.filter((s) => state[s]).map((s) => [s, state[s]]));
+  const res = mine ? activeGear(worn, reqInfoOf(state)) : worn; // other heroes: as worn, see above
   activeCache.set(state, { sig, res });
   return res;
 };
@@ -258,10 +272,11 @@ export class GearMenu {
   /** Rebuild only when something gear-related changed. */
   refresh(state: any) {
     if (!this.open || !state) return;
-    const bagItems: string[] = Array.from(state.bag ?? []);
+    const o = own(state); // bag, talents, points, gold and potions are owner-only (Player.me)
+    const bagItems: string[] = Array.from(o.bag);
     const kept = keepsBoundOf(state.cls, [state.weapon, state.shield], bagItems); // her last lute and Songbook stay; a spare can go
     if (this.pickRune >= 0 && !parseRune(bagItems[this.pickRune])) this.pickRune = -1;
-    const sig = [this.pickRune, this.sorted, this.marks, this.dropAsk > performance.now(), lootFilter().minRarity, lootFilter().ownClass, JSON.stringify(Array.from(state.talents?.entries?.() ?? [])), state.cls, state.level, state.ptSta, state.ptStr, state.ptMag, state.ptDex, ...GEAR_SLOTS.map((s) => state[s]), ...bagItems, own(state).potions, own(state).gold, state.maxHp].join("|");
+    const sig = [this.pickRune, this.sorted, this.marks, this.dropAsk > performance.now(), lootFilter().minRarity, lootFilter().ownClass, JSON.stringify(Array.from(o.talents.entries())), state.cls, state.level, o.ptSta, o.ptStr, o.ptMag, o.ptDex, ...GEAR_SLOTS.map((s) => state[s]), ...bagItems, o.potions, o.gold, state.maxHp].join("|");
     if (sig === this.sig) return;
     this.sig = sig;
     this.busyUntil = 0; // the server answered, accept clicks again

@@ -9,6 +9,7 @@ import { statsOf } from "./gear";
 import { iconImg } from "./skillIcons";
 import { Node, slabWidth, treeLayout } from "./treeLayout";
 import { SheetPreview, talentsOf } from "./sidepanel";
+import { own } from "./own";
 import {
   BRANCHES, childrenOf, EFFECT_TEXT, levelPower, lockReason, maxRank, nextRankLevel, RANK_POWER, rankOf, SkillDef, SKILLS, spentPoints, STACK_NAME,
   synergyPower, talentPoints, withMods, type SkillMod,
@@ -85,11 +86,11 @@ export class TalentMenu {
   refresh(state: any) {
     if (!this.open || !state) return;
     this.state = state;
-    const ranks = state.talents;
+    const ranks = own(state).talents; // owner-only, in Player.me
     const cls = state.cls as ClassKind;
     this.cls = cls;
     const nodes = SKILLS[cls];
-    const slots: string[] = [...(state.slots ?? [])];
+    const slots: string[] = [...own(state).slots];
     const st = this.stats();
     const sig = [cls, state.level, slots.join(","), st.sta, st.str, st.mag, st.dex, ...nodes.map((n) => rankOf(ranks, n.id))].join("|");
     if (sig === this.sig) return;
@@ -248,7 +249,7 @@ export class TalentMenu {
     if (!cls || !state) return "";
     const s = SKILLS[cls].find((x) => x.id === id);
     if (!s) return "";
-    const ranks = state.talents, r = rankOf(ranks, s.id);
+    const ranks = own(state).talents, r = rankOf(ranks, s.id);
     const why = lockReason(cls, state.level, ranks, s.id);
     const st = this.stats();
     const color = BRANCHES[cls][s.branch].color;
@@ -293,7 +294,7 @@ export class TalentMenu {
     const missing = (s.requires ?? []).filter((q) => rankOf(ranks, q) < 1).map((q) => SKILLS[cls].find((x) => x.id === q)?.name ?? q);
     const also = (s.requires ?? []).map((q) => SKILLS[cls].find((x) => x.id === q)?.name ?? q);
     rows.push(`<p class="ipath">${parent ? `Grows from ${parent.name}${also.length ? `, and needs ${also.join(" and ")}` : ""}. ` : "Root of the branch. "}${kids.length ? `Leads to ${kids.map((k) => k.name).join(" and ")}.` : "Dead end: nothing grows higher."}</p>`);
-    const slots: string[] = [...(state.slots ?? [])];
+    const slots: string[] = [...own(state).slots];
     const slot = slots.indexOf(s.id);
     const status = why === "max" ? "Fully learned" : why === "" ? "Click to learn" : why === "level" ? `${pxIcon("lock")}${r > 0 ? `Rank ${r + 1} needs level ${nextRankLevel(s, r)}` : `Needs level ${s.req}`}` :
       why === "above" ? `${pxIcon("lock")}Learn ${parent ? parent.name : "the skill below"} first` :

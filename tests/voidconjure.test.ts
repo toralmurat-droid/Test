@@ -7,7 +7,7 @@ import { isSafeZone, isSolidAt, VILLAGE } from "../shared/map";
 import { TILE } from "../shared/constants";
 import { CLASSES } from "../shared/classes";
 import { GOLEM, PORTAL, WISP, wispEls } from "../shared/summons";
-import { startRoom, wait } from "./helpers/room";
+import { startRoom, until, wait } from "./helpers/room";
 
 /** A walkable spot outside the stockade and the safe zone, with room around it. */
 function openSpot(): [number, number] {
@@ -117,16 +117,17 @@ test("Void Arsenal: a circling blade, a piercing lance, a wide axe and all four 
     const far = tough("far", x + 150, y), close = tough("close", x + 40, y);
     const log = spyHits(room);
     room.cast(id, "su_arsenal");
-    await wait(600); // its charge
+    await until(() => p.sk.stacks === 0 && wisps(id).length === 4); // its charge
     assert.equal(p.sk.stacks, 0, "it spent the Essence");
     assert.deepEqual(wisps(id).map((w: any) => w.weapon).sort(), ["cold", "fire", "poison", "shock"], "all four wisps");
     let blade: any;
     room.state.fields.forEach((f: any) => { if (f.skill === "su_arsenal") blade = f; });
     assert.ok(blade && blade.follow, "the blade circles its owner");
-    await wait(2400);
-    const lance = log.some((h) => h.a === id && h.t === "far" && !h.o.pet && h.o.skill);
-    assert.ok(lance, "the lance reached the far skeleton");
-    assert.ok(log.filter((h) => h.t === "close" && h.o.skill && !h.o.dot).length >= 1, "the axe swept the close one");
+    const lance = () => log.some((h) => h.a === id && h.t === "far" && !h.o.pet && h.o.skill);
+    const axe = () => log.some((h) => h.t === "close" && h.o.skill && !h.o.dot);
+    await until(() => lance() && axe());
+    assert.ok(lance(), "the lance reached the far skeleton");
+    assert.ok(axe(), "the axe swept the close one");
     assert.ok(far.hp < 99999 && close.hp < 99999);
     await cs[0].leave();
   } finally {

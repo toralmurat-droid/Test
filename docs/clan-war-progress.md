@@ -46,3 +46,46 @@ Open points for M1:
   cut-off supply. Rework the tunnel before tuning.
 - The Host churns (many flips both ways) rather than grows.
 - 7 flips a day over 31 territories may feel fast once players watch it; check with the first front.
+
+## M1 step 1: the war runs live (2026-11-14)
+
+- `server/war.ts`: one war for the whole server, outside the room. Every 10 minutes the scripted leaders give
+  orders, players' valor of the last ten minutes is added, the war ticks with the real time of day
+  (`shared/war/view.ts` `warPhase`, so the Host's night push matches the game's night). After downtime at most 3
+  ticks are caught up. Saved after every tick (Postgres table `kv`, key `war`; or `data/war.json`). A saved war whose
+  territory count no longer fits the map starts over (log line "War: map changed").
+- Players: `WAR.valorScale` / `WAR.valorCap` in rules.ts turn valor (hero-minutes at a standard) into troops with
+  diminishing returns. `addValor()` exists; standards that feed it come next.
+- Clients get the `war` snapshot on join and after each tick; the front plaque (`client/src/warPlaque.ts`) shows
+  holder, Control and siege countdown in a territory. The Herald posts sieges, holds and conquests in the chat.
+- `GET /war.json`: current snapshot and the last 50 events.
+- Scope note: Murat chose the whole map, so the live war runs all five clans over both acts from the start instead
+  of the single Wardens-Redfang front the roadmap first planned.
+
+## M1 step 2: standards and oaths (2026-11-14)
+
+- `shared/war/standards.ts`: 58 standards (one or two per territory) on free ground, at least 6 tiles from a portal
+  stone. `STANDARD` holds the ring radius, valor per minute, minimum level 5, the one-day oath cooldown, the idle
+  limit (3 min without moving, attacking or casting) and the over-level cut (heroes more than 5 levels above a
+  territory's monsters bring a quarter).
+- `server/warHeroes.ts`: oath validation and save cleaning (`clan`, `clanAt` on the hero save, optional), and
+  `Presence`: a full minute in one ring reports valor; leaving the ring starts the minute over.
+- Client: `client/src/warStandards.ts` (poles in the holder's colours, rings, E prompt, oath panel; other E
+  prompts nearby come first), the plaque tells the hero whether they defend, attack or cannot reach the land.
+- Open: rewards for valor (Renown, M2), tabards so other players see the oath (M2), Holds.
+
+## M1 step 3: horns and leaders (2026-11-14)
+
+- `shared/war/heralds.ts`: a leader per clan (Captain Hale, the Redfang Chief, the Pale Marshal, the Hide-Mother,
+  the Veiled Oracle) with lines per moment; the defender speaks when besieged or holding, the winner when a land
+  falls. Picked by tick, so replays say the same.
+- Each war event: Herald line, leader line, and a `warev` message; `client/src/warNotice.ts` sounds the war horn and
+  shows a notice when it happens in the hero's territory or next to it.
+- `WAR.siegeValor` 1.5: valor counts half again at a territory under siege (the hour's warning is for players).
+
+## M1 step 4: Holds (2026-11-14)
+
+- `client/src/holdArt.ts`: five Hold sprites in the clan styles (Warden watchtower, Redfang war camp, Ossuary tower,
+  Hide-Kin burrow, Veiled shrine), generated pixel art in the bonfire style (`paintHold` draws one without Phaser).
+- `shared/war/standards.ts` `HOLDS`: one spot per territory near the middle, on clear ground, at least 5 tiles from its standards. The
+  sprite follows the owner. Look only: no collision, no siege mechanics at the Hold yet (M2: siege works, gates).

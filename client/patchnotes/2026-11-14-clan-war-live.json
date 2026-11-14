@@ -1,0 +1,10 @@
+{
+  "date": "2026-11-14",
+  "patch": 227,
+  "title": "The clan war begins",
+  "changes": [
+    "Five clans now fight over the monster zones of both acts. The fronts move every 10 minutes, day and night, even while you are away.",
+    "In a contested zone, a plaque at the top of the screen shows who holds it, how firm their grip is, and when a siege is coming.",
+    "The Herald announces sieges and conquests in the chat. Villages, dungeons and the open countryside stay out of the war."
+  ]
+}

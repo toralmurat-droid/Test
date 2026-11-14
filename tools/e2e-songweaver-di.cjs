@@ -48,7 +48,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     });
     const send = (t, m) => page.evaluate(([t, m]) => window.S.room.send(t, m), [t, m]);
     const shot = (n) => page.screenshot({ path: `${OUT}/songweaver-di-${name}-${n}.png` });
-    const P = () => page.evaluate(() => { const p = window.S.room.state.players.get(window.S.me); return { x: p.x / 32, y: p.y / 32, level: p.level, gold: p.me?.gold, weapon: p.weapon, shield: p.shield, mana: (p.me?.mp ?? 0) % 1000, maxMana: Math.floor((p.me?.mp ?? 0) / 1000) % 1000, fx: p.fx, bag: [...p.bag] }; });
+    const P = () => page.evaluate(() => { const p = window.S.room.state.players.get(window.S.me); return { x: p.x / 32, y: p.y / 32, level: p.level, gold: p.me?.gold, weapon: p.weapon, shield: p.shield, mana: (p.me?.mp ?? 0) % 1000, maxMana: Math.floor((p.me?.mp ?? 0) / 1000) % 1000, fx: p.fx, bag: [...(p.me?.bag ?? [])] }; });
     const fxWords = async () => (await P()).fx.split(",");
     const rings = () => page.evaluate(() => { const r = window.S.fx.songRings.get(window.S.me); return r && { rings: r.rings.length, bursts: r.bursts.length, lock: r.lockFrom > 0, held: r.held }; });
     const count = (ev) => page.evaluate((ev) => window.evs.filter((e) => e.ev === ev).length, ev);
@@ -206,7 +206,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     const cellInfo = await page.evaluate(() => [...document.querySelectorAll("#gearbag .gcell:not([disabled])")].map((c, i) => i));
     result.bagCells = cellInfo.length;
     const hoverCell = async (pred) => {
-      const idx = await page.evaluate((src) => { const bag = [...window.S.room.state.players.get(window.S.me).bag]; return bag.findIndex(new Function("b", "return " + src)); }, pred);
+      const idx = await page.evaluate((src) => { const bag = [...(window.S.room.state.players.get(window.S.me).me?.bag ?? [])]; return bag.findIndex(new Function("b", "return " + src)); }, pred);
       const cells = await page.$$("#gearbag .gcell");
       if (idx < 0 || !cells[idx]) return "";
       await cells[idx].hover(); await page.waitForTimeout(250);

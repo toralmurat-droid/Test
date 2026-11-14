@@ -5,7 +5,7 @@ import { addHeat, isOverheated } from "./overload";
 /**
  * Mana and Heat: what skills cost besides their cooldown (Murat 2026-11-04: "skills should be a mix of mana + cooldown").
  *
- *   Heat (Player.energy, shared/overload.ts): replaced Stamina on 2026-11-07. Physical skills and the dodge roll build
+ *   Heat (Player.energy, synced as Player.me.energy; shared/overload.ts): replaced Stamina on 2026-11-07. Physical skills and the dodge roll build
  *     it; it cools by itself; past the top the hero overloads and those skills lock for a few seconds.
  *   Mana (this file): a slow pool that grows with Magic. Pays for spells: the whole Wizard book, and the holy, spirit,
  *     jutsu and nature skills of the other classes. Mana potions (V, shared/potions.ts) refill it.

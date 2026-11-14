@@ -39,8 +39,9 @@ const SETUPS = [
       const S = window.__game.scene.scenes.find((s) => s.entities);
       window.S = S;
       window.log = [];
-      // the mouse is not over any monster in a headless run: pin the hovered monster (its nameplate shows the ear icons)
+      // the mouse is not over any monster in a headless run: pin the hovered monster (the top monster bar shows the ear icons)
       Object.defineProperty(S.pointer, "hoverId", { get: () => window.__hover });
+      Object.defineProperty(S.pointer, "inspectId", { get: () => window.__hover });
       // record the sfx events and chat hints the client handled
       const so = S.songEvent.bind(S);
       S.songEvent = (ev) => { window.log.push(ev); return so(ev); };
@@ -97,10 +98,10 @@ const SETUPS = [
       if (!found) return { found: false };
       await chat(`/tp ${Math.floor(found.x / 32) - 3} ${Math.floor(found.y / 32)}`);
       await page.waitForTimeout(800);
-      // hover a second monster of the kind (not hit yet): its nameplate shows the ear and note icons with the tooltip
+      // hover a second monster of the kind (not hit yet): the top monster bar (#monsterbar .mb-ear) shows the ear and note icons with the tooltip
       await page.evaluate(([kind, id]) => { const S = window.S, m = S.entities.get(S.me); let bd = 1e9; window.__hover = id; S.entities.forEach((e, k) => { if (!e.mob || e.culled || e.state.dead || e.state.kind !== kind || k === id) return; const d = Math.hypot(e.sprite.x - m.sprite.x, e.sprite.y - m.sprite.y); if (d < bd) { bd = d; window.__hover = k; } }); }, [kind, found.id]);
       await page.waitForTimeout(1500); // the headless frame rate is 2-3 fps
-      result[tag + "-ear"] = await page.evaluate(() => { const c = window.S.soundCues, e = window.S.entities.get(window.__hover); return c.ear && { vis: c.ear.visible, x: Math.round(c.ear.x), y: Math.round(c.ear.y), sc: c.ear.scaleX, lab: e?.label && [Math.round(e.label.x), Math.round(e.label.y)], tex: c.ear.texture.key, note: c.note?.visible }; });
+      result[tag + "-ear"] = await page.evaluate(() => { const bar = document.querySelector("#monsterbar"), ear = bar?.querySelector(".mb-ear"); return bar && !bar.hidden && ear ? { vis: true, icons: ear.querySelectorAll("img").length, tip: ear.textContent, name: bar.querySelector(".mb-name")?.textContent } : { vis: false }; });
       await shot(`${tag}-ear`);
       for (let i = 0; i < 14; i++) {
         const t = await page.evaluate((id) => { const e = window.S.entities.get(id); return e && !e.state.dead ? { x: e.state.x, y: e.state.y } : null; }, found.id);

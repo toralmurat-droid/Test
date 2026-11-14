@@ -7,6 +7,7 @@ import type { Feast } from "../shared/devour";
 import { noPotions, type Potions } from "../shared/potions";
 import { newRuntime } from "../shared/skillEngine";
 import { SLOT_COUNT } from "../shared/slots";
+import type { ClanKey } from "../shared/war/clans";
 
 // Per-client views need a schema buffer that never resizes (a library bug corrupts resized view patches):
 // Encoder.BUFFER_SIZE is set in server/patchCopy.ts, imported by the room before its state is created.
@@ -36,12 +37,27 @@ export class PlayerPrivate extends Schema {
   @type("number") stacks = 0;
   @type("number") spd = 1;
   @type("number") seq = 0; // last processed input sequence (own client's reconciliation and ping)
+  // Stat points the player assigned in the hero panel (shared/powers.ts statPoints). Other clients don't get them, so
+  // they draw another hero's worn gear without the requirement check (client/src/gear.ts activeOf).
+  @type("number") ptSta = 0;
+  @type("number") ptStr = 0;
+  @type("number") ptMag = 0;
+  @type("number") ptDex = 0;
+  // Equipment (shared/gear.ts): the unequipped items carried (the worn slots stay public on Player).
+  // readonly like quests: edited in place (server/TownRoom.ts setBag clears and refills it), never replaced
+  @type(["string"]) readonly bag = new ArraySchema<string>();
+  // Skill tree (shared/talents.ts): ranks per talent id. readonly: set / delete / clear, never replaced
+  @type({ map: "number" }) readonly talents = new MapSchema<number>();
+  // Skill slots on keys 1..0 (shared/slots.ts): a skill id or "" (empty). Empty until the player assigns them.
+  // readonly: written by index, never replaced
+  @type(["string"]) readonly slots = new ArraySchema<string>(...Array(SLOT_COUNT).fill(""));
 }
 
 /**
  * A hero as the room syncs it. Fields only the owner needs live in `me`, which the per-client StateView (TownRoom
  * onJoin) sends to that hero's client alone; the forwarding accessors at the end (timers, quests, kills, xp, gold, potions,
- * mp, energy, stacks, spd, seq) keep server code reading them as before. The client reads them as `player.me`.
+ * mp, energy, stacks, spd, seq, ptSta..ptDex, bag, talents, slots) keep server code reading them as before. The client
+ * reads them as `player.me` (client/src/own.ts).
  */
 export class Player extends Schema {
   @type("string") name = "";
@@ -64,17 +80,12 @@ export class Player extends Schema {
   @type("boolean") outlaw = false; // cast a skill inside Oakvale: the village attacks until they leave (shared/wrath.ts)
   combo = 0; // which hit of the 3-hit combo was thrown last (0..2); server only (the client never reads it)
   pots: Potions = noPotions(); // healing and mana potions by size (shared/potions.ts); synced packed as me.potions
-  // Stats with gear (shared/gear.ts heroStats), set by applyStats. Server only: the client computes the same numbers
-  // from synced cls, level, ptSta..ptDex and the gear slots
+  // Stats with gear (shared/gear.ts heroStats), set by applyStats. Server only: the owner's client computes the same
+  // numbers from synced cls, level, me.ptSta..ptDex and the gear slots
   sta = 0;
   str = 0;
   mag = 0;
   dex = 0; // Dexterity: critical hit chance
-  // Stat points the player assigned in the hero panel (shared/powers.ts statPoints)
-  @type("number") ptSta = 0;
-  @type("number") ptStr = 0;
-  @type("number") ptMag = 0;
-  @type("number") ptDex = 0;
   @type("boolean") stunned = false;
   @type("boolean") slowed = false;
   // Mana (shared/mana.ts), server-side values; synced packed as me.mp (packMana)
@@ -102,7 +113,7 @@ export class Player extends Schema {
   golemSig = ""; // Summoner: the grimoire HUD last sent to them ("golems" message), to send it only when it changes
   grimoireAt = 0; // last grimoire change (throttle)
   bondEssenceAt = 0; // last Essence charge from Stone Bond
-  // Equipment (shared/gear.ts): equipped item ids ("" = empty) and the unequipped items carried.
+  // Equipment (shared/gear.ts): equipped item ids ("" = empty); the unequipped items carried are me.bag (owner-only).
   // Each slot must stay a synced @type field, or the client never sees it (the sword vanished from the menu).
   @type("string") weapon = "";
   @type("string") armour = "";
@@ -110,21 +121,19 @@ export class Player extends Schema {
   @type("string") hat = "";
   @type("string") shield = "";
   @type("string") ranged = ""; // secondary ranged weapon, fired with R
-  @type(["string"]) bag = new ArraySchema<string>();
-  // Skill tree (shared/talents.ts): ranks per talent id
-  @type({ map: "number" }) talents = new MapSchema<number>();
   gateNoteAt = 0; // last "the waygate is cold" note (Act 2, shared/act2.ts)
   linkLock = ""; // the Mawdeep rope/stair a hero just came out of (shared/dungeon.ts LINKS): not taken again until they step off it
   nextSummon = 0; // when the server may bring back this player's quest fused blob (QuestStep.summon)
   feast: Feast = {}; // Devour (shared/devour.ts): monsters eaten per family, saved; sent to the owner as "feast"
-  // Skill slots on keys 1..0 (shared/slots.ts): a skill id or "" (empty). Empty until the player assigns them.
-  @type(["string"]) slots = new ArraySchema<string>(...Array(SLOT_COUNT).fill(""));
 
   input: InputState = { up: false, down: false, left: false, right: false };
   lastAttack = 0;
   portals = new Set<string>(); // portal stones this hero has woken (shared/portals.ts; saved, never synced)
   bounty?: BountyState; // bounty board hunt in progress (shared/bounty.ts; saved, sent by message)
   bountyDone = 0;
+  clan?: ClanKey; // clan war oath (shared/war/standards.ts; saved, sent by message)
+  clanAt = 0;
+  lastAct = 0; // last move, attack or cast (ms): heroes away from the keys add no valor
   lastSpecial = -Infinity;
   // Hidden initiative / poise (shared/combat.ts)
   poiseLost = 0;
@@ -176,4 +185,19 @@ export class Player extends Schema {
   /** Last processed input: only the owner's client acks it. */
   get seq() { return this.me.seq; }
   set seq(v: number) { this.me.seq = v; }
+  // Stat points, kept in `me` (owner-only)
+  get ptSta() { return this.me.ptSta; }
+  set ptSta(v: number) { this.me.ptSta = v; }
+  get ptStr() { return this.me.ptStr; }
+  set ptStr(v: number) { this.me.ptStr = v; }
+  get ptMag() { return this.me.ptMag; }
+  set ptMag(v: number) { this.me.ptMag = v; }
+  get ptDex() { return this.me.ptDex; }
+  set ptDex(v: number) { this.me.ptDex = v; }
+  /** Unequipped items, kept in `me`. Getter only: edit in place (setBag in TownRoom.ts), the owner's view holds this array. */
+  get bag() { return this.me.bag; }
+  /** Talent ranks, kept in `me`. Getter only: set / delete / clear in place, never replace. */
+  get talents() { return this.me.talents; }
+  /** Skill hotkeys, kept in `me`. Getter only: write by index, never replace. */
+  get slots() { return this.me.slots; }
 }

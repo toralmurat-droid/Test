@@ -45,7 +45,7 @@ import { own } from "./own";
 
 type Me = { x: number; y: number } | undefined;
 /** The local player's synced state (only the fields NPCs care about). */
-type QuestState = (Quester & { cls?: string; bag?: Iterable<string> } & Partial<Record<GearSlot, string>>) | undefined;
+type QuestState = (Quester & { cls?: string } & Partial<Record<GearSlot, string>>) | undefined; // bag, gold, points: own(q)
 
 /**
  * What an NPC says, as this hero's class hears it. shared `questDialog` has no class, so the Songweaver's `byCls`
@@ -100,6 +100,8 @@ export class NpcLayer {
   private q: QuestState;
   readonly objects: QuestObjects;
   private nearObj?: ReturnType<QuestObjects["near"]>;
+  /** A quest NPC or quest object is in reach (other E prompts step aside). */
+  get busy() { return !!this.near || !!this.nearObj; }
   private trackerHtml = "";
   private promptHtml = "";
   private trackQ: QuestState | undefined;
@@ -373,11 +375,11 @@ export class NpcLayer {
   /** Shop page: stock to buy, and (for traders who buy) the player's matching bag items to sell. */
   private renderShop(n: Npc, q: QuestState) {
     const shop = SHOPS[n.shop!];
-    const { gold, potions } = own(q), cls = q?.cls, pots = unpackPotions(potions);
-    const bag = [...(q?.bag ?? [])];
+    const o = own(q), { gold, potions } = o, cls = q?.cls, pots = unpackPotions(potions);
+    const bag = [...o.bag];
     // masterwork: one level shown at a time (picked with the buttons), by default the best one the hero can wear
     const master = this.masterLv ?? [...MASTER_LEVELS].reverse().find((l) => l <= (q?.level ?? 1)) ?? MASTER_LEVELS[0];
-    const key = JSON.stringify([n.id, master, gold, potions, bag, q?.level, (q as any)?.ptSta, (q as any)?.ptStr, (q as any)?.ptMag, (q as any)?.ptDex, ...GEAR_SLOTS.map((s) => q?.[s]), this.shopMsg, questSig(q)]);
+    const key = JSON.stringify([n.id, master, gold, potions, bag, q?.level, o.ptSta, o.ptStr, o.ptMag, o.ptDex, ...GEAR_SLOTS.map((s) => q?.[s]), this.shopMsg, questSig(q)]);
     if (key === this.stage) return;
     this.stage = key;
     const row = (icon: string, name: string, color: string, desc: string, btn: string, cls2: string, i: number, off: boolean) =>
@@ -472,7 +474,7 @@ export class NpcLayer {
   }
   private renderLute(n: Npc, q: QuestState) {
     if (this.lmTab === "shop" && !(n.shop && SHOPS[n.shop])) this.lmTab = "traits";
-    const bag = [...(q?.bag ?? [])], sb = getSongbook();
+    const bag = [...own(q).bag], sb = getSongbook();
     const st: LmState = { tab: this.lmTab, gold: own(q).gold, level: q?.level ?? 1, cls: q?.cls, weapon: q?.weapon, shield: q?.shield, bag, mats: sb.mats, msg: this.shopMsg, breakAsk: this.lmAsk, hasShop: !!(n.shop && SHOPS[n.shop]) };
     const key = JSON.stringify([n.id, st]);
     if (key === this.stage) return;

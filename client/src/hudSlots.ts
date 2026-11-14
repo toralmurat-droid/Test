@@ -40,6 +40,9 @@ if (typeof document !== "undefined") { // (the pure helpers below are also impor
   applyBarScale();
   onWorldScale(applyBarScale);
   addEventListener("resize", () => { applyBarScale(); refreshHudRects(); });
+  // a move to a screen with another pixel ratio can keep the same Screen size: the crisp bar size still changes
+  const watchDpr = () => matchMedia(`(resolution: ${window.devicePixelRatio || 1}dppx)`).addEventListener("change", () => { applyBarScale(); watchDpr(); }, { once: true });
+  watchDpr();
 }
 
 export interface Box { left: number; top: number; right: number; bottom: number }
