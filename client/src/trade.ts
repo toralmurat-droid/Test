@@ -37,7 +37,8 @@ function itemHtml(id: string, state: any): string {
 }
 
 /** One item cell (icon, rarity border, level), or an empty one. */
-function cell(scene: Phaser.Scene, id: string | undefined, info: HTMLElement, state: any, onClick?: () => void, picked = false): HTMLButtonElement {
+/** `kept`: the bound items this hero must keep (shared/gear.ts keepsBoundOf); only cells that would part with an item pass it. */
+function cell(scene: Phaser.Scene, id: string | undefined, info: HTMLElement, state: any, onClick?: () => void, picked = false, kept?: (id: string) => boolean): HTMLButtonElement {
   const b = document.createElement("button");
   b.className = "gcell tcell" + (picked ? " picked" : "");
   b.tabIndex = -1;
@@ -49,7 +50,7 @@ function cell(scene: Phaser.Scene, id: string | undefined, info: HTMLElement, st
   if (itemLevel(id) > 1) b.appendChild(Object.assign(document.createElement("span"), { className: "gcelllvl", textContent: String(itemLevel(id)) }));
   b.onmouseenter = () => { info.innerHTML = itemHtml(id, state); };
   b.onmouseleave = () => { info.textContent = ""; };
-  if (onClick && !keepsBoundOf(state?.cls ?? "", [state?.weapon, state?.shield], Array.from(state?.bag ?? []))(id)) b.onclick = (ev) => { if (ev.detail !== 0) onClick(); }; // her last lute and Songbook are bound: no Trade, no Stash (a spare can go)
+  if (onClick && !kept?.(id)) b.onclick = (ev) => { if (ev.detail !== 0) onClick(); }; // her last lute and Songbook are bound: no Trade, no Stash (a spare can go)
   else b.classList.add("still");
   return b;
 }
@@ -175,13 +176,14 @@ export class TradeUI {
     const bt = Object.assign(document.createElement("h3"), { textContent: `Your bag (click to offer) · ${me.gold} gold` });
     const bg = document.createElement("div");
     bg.className = "tgrid tbag";
+    const keep = keepsBoundOf(me.cls, [me.weapon, me.shield], bag), offered = this.picked.map((k) => bag[k]).filter(Boolean);
     for (let i = 0; i < BAG_SIZE; i++) {
       const pickedAt = this.picked.indexOf(i);
       bg.appendChild(cell(this.scene, bag[i], info, me, () => {
         if (pickedAt >= 0) this.picked.splice(pickedAt, 1);
         else if (this.picked.length < TRADE.maxItems) this.picked.push(i);
         this.offer();
-      }, pickedAt >= 0));
+      }, pickedAt >= 0, pickedAt >= 0 ? undefined : (id) => keep(id, offered)));
     }
 
     // Gold buttons
@@ -277,7 +279,7 @@ export class StashUI {
     const t2 = Object.assign(document.createElement("h3"), { textContent: `Bag ${bag.length}/${BAG_SIZE} · ${st.gold} gold (click to store)` });
     const g2 = document.createElement("div");
     g2.className = "tgrid tbag";
-    for (let i = 0; i < BAG_SIZE; i++) g2.appendChild(cell(this.scene, bag[i], info, st, () => this.send("stashput", { i })));
+    for (let i = 0; i < BAG_SIZE; i++) g2.appendChild(cell(this.scene, bag[i], info, st, () => this.send("stashput", { i }), false, keepsBoundOf(st.cls, [st.weapon, st.shield], bag)));
     const row = document.createElement("div");
     row.className = "trow";
     const coin = (label: string, n: () => number) => {

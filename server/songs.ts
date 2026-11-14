@@ -7,7 +7,7 @@ import { BOUNCE, BOUNCE_RULES, reflectAxis, wallAt } from "../shared/acoustics";
 import { BUSKING, BUSKING_LINES, npcById, type Npc } from "../shared/npcs";
 import { isSongId, ODO_LINES, pondShore, SONG_SOURCES, type SongDef, type SongId } from "../shared/songbook";
 import { isMaterial, type MaterialId } from "../shared/lute";
-import { BAG_SIZE, gearName, isBagItem, isBook, isLute, luteAtLevel, starterKit } from "../shared/gear";
+import { BAG_SIZE, baseId, gearName, isBagItem, isBook, isGearId, isLute, luteAtLevel, starterKit } from "../shared/gear";
 import { potionSlots, type Potions } from "../shared/potions";
 import { sellPrice } from "../shared/shops";
 import { STASH_SIZE } from "../shared/trade";
@@ -259,12 +259,14 @@ export function relevelLute(p: { cls: string; level: number; weapon: string }, b
  */
 export function refillKit(p: { cls: string; level: number; weapon: string; shield: string }, bag: readonly string[], stashed: readonly string[]): string[] {
   if (p.cls !== "songweaver") return [];
-  const kit = starterKit("songweaver"), all = [p.weapon, p.shield, ...bag, ...stashed], out: string[] = [];
+  // stash items are never validated on load: one a later change made unreadable must not count as "she still has one"
+  const kit = starterKit("songweaver"), all = [p.weapon, p.shield, ...bag, ...stashed.filter(isGearId)], out: string[] = [];
   if (!p.weapon && !all.some(isLute)) {
     p.weapon = luteAtLevel(kit.weapon!, p.level, []);
     out.push(`Your lute was lost, so a new ${gearName(p.weapon, p.cls)} is in your hands.`);
   }
-  if (!p.shield && !all.some(isBook)) {
+  const book = baseId(kit.shield!); // the Songbook itself: other books hold no songs (client openSongbook)
+  if (!p.shield && !all.some((v) => !!v && baseId(v) === book)) {
     p.shield = kit.shield!;
     out.push(`Your Songbook was lost, so a new one is in your hand.`);
   }

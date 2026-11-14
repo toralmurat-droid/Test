@@ -51,12 +51,16 @@ test("refillKit (pure): no lute or book anywhere gives the starter ones back at 
   assert.equal(refillKit(p, [], []).length, 2);
   assert.deepEqual([p.weapon, p.shield], [`${kit.weapon}@14`, kit.shield]);
   p = { cls: "songweaver", level: 14, weapon: "", shield: "" };
-  assert.deepEqual(refillKit(p, ["songweaver_weapon@3#gut"], ["bk_hymnal"]), [], "a lute in the bag, a book in the stash");
+  assert.deepEqual(refillKit(p, ["songweaver_weapon@3#gut"], [BOOK]), [], "a lute in the bag, the Songbook in the stash");
   assert.deepEqual([p.weapon, p.shield], ["", ""], "she fetches them herself");
   p = { cls: "songweaver", level: 14, weapon: "", shield: "" };
   refillKit(p, [], ["songweaver_weapon@9"]);
   assert.equal(p.weapon, "", "a stashed lute is not doubled");
   assert.equal(p.shield, BOOK);
+  p = { cls: "songweaver", level: 14, weapon: "", shield: "" };
+  refillKit(p, [], [`${LUTE}@9#zzz`, "bk_hymnal"]);
+  assert.equal(p.weapon, `${kit.weapon}@14`, "an unreadable stashed lute (no such trait) does not count");
+  assert.equal(p.shield, BOOK, "another book holds no songs: the Songbook comes back");
   const k = { cls: "wizard", level: 5, weapon: "", shield: "" };
   assert.deepEqual(refillKit(k, [], []), []);
   assert.equal(k.weapon, "");
@@ -151,6 +155,36 @@ test("room: a spare lute can be stashed, sold and dropped; her last one can't", 
     room.dropGears(j.client.sessionId, [0, 1]);
     assert.equal(p.bag.length, 1);
   } finally { j.done(); }
+});
+
+test("room: she can take her stashed lute back out", async () => {
+  const a = await account((s) => { s.level = 5; s.weapon = `${LUTE}@5`; s.bag = []; }, [`${LUTE}@3`]);
+  const j = join(a.room, a.name), p = j.p;
+  try {
+    p.x = STASH.x; p.y = STASH.y;
+    a.room.stashMove(j.client, "take", 0);
+    assert.equal([...p.bag].filter(isLute).length, 1, "taking an item into the bag never parts with it");
+  } finally { j.done(); }
+});
+
+test("room: a trade re-checks bound items when it settles, so a spare offered earlier can't carry off her last lute", async () => {
+  const cb = await (await server()).join({ cls: "wizard" }); // the other side: a plain hero, joined first so the room stays up
+  await wait(200);
+  const a = await account((s) => { s.level = 5; s.weapon = `${LUTE}@5`; s.bag = [`${LUTE}@5`]; });
+  const ja = join(a.room, a.name), room: any = a.room;
+  const pb = room.state.players.get(cb.sessionId);
+  try {
+    const t = { a: ja.client.sessionId, b: cb.sessionId, v: 0, offer: { [ja.client.sessionId]: { items: [], gold: 0 }, [cb.sessionId]: { items: [], gold: 0 } }, ready: {} };
+    room.trades.set(t.a, t); room.trades.set(t.b, t);
+    room.tradeOffer(t.a, { items: [0] });
+    assert.equal(t.offer[t.a].items.length, 1, "a spare may be offered");
+    ja.p.weapon = ""; // her worn lute is gone (unequipped and sold): the offered one is now her last
+    room.tradeReady(t.a, { v: t.v, ready: true });
+    room.tradeReady(t.b, { v: t.v, ready: true });
+    assert.equal([...ja.p.bag].filter(isLute).length, 1, "still hers");
+    assert.equal([...pb.bag].filter(isLute).length, 0);
+    assert.equal(t.offer[t.a].items.length, 0, "taken off the offer");
+  } finally { ja.done(); room.trades.clear(); await cb.leave(); }
 });
 
 // ---- 3 and 4. the load is written back, after the position ----------------------------------------------------------

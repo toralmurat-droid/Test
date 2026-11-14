@@ -5387,14 +5387,20 @@ export class TownRoom extends Room<TownState> {
     if (!t.ready[t.a] || !t.ready[t.b]) return this.tradeView(t);
     const pa = this.state.players.get(t.a), pb = this.state.players.get(t.b);
     if (!pa || !pb) return this.tradeStop(id, "Trade cancelled.");
-    const r = settle(
+    // Re-checked now: a spare offered earlier may have become her last lute or Songbook (the other one sold or dropped)
+    const lastKept = ([who, pp]: readonly [string, Player]) => { const keep = this.keeps(pp), gone: string[] = []; return t.offer[who].items.some((g) => { if (keep(g, gone)) return true; gone.push(g); return false; }); };
+    const r = [[t.a, pa], [t.b, pb]].some((e) => lastKept(e as [string, Player])) ? "A bound item can't leave its hero" : settle(
       { bag: bagItems(pa), gold: pa.gold, offer: t.offer[t.a], reserved: potionSlots(pa.pots) },
       { bag: bagItems(pb), gold: pb.gold, offer: t.offer[t.b], reserved: potionSlots(pb.pots) },
     );
     if (typeof r === "string") {
       // Something moved since the offer (an item worn, sold, dropped, gold spent): show the trade again, unready
       t.ready = {}; t.v++;
-      for (const [who, pp] of [[t.a, pa], [t.b, pb]] as const) t.offer[who] = { items: t.offer[who].items.filter((g) => bagItems(pp).includes(g)), gold: Math.min(t.offer[who].gold, pp.gold) };
+      for (const [who, pp] of [[t.a, pa], [t.b, pb]] as const) {
+        const keep = this.keeps(pp), gone: string[] = [];
+        const items = t.offer[who].items.filter((g) => bagItems(pp).includes(g) && !keep(g, gone) && !!gone.push(g));
+        t.offer[who] = { items, gold: Math.min(t.offer[who].gold, pp.gold) };
+      }
       this.tradeNote(t.a, `${r}: check the offers again.`); this.tradeNote(t.b, `${r}: check the offers again.`);
       return this.tradeView(t);
     }
