@@ -60,7 +60,7 @@ import { speechBubble } from "./weathered";
 import { ART_K, CHAR_GROW, CHAR_SCALE, CHARACTERS, CHAR_ORIGIN, CharacterName, createArtAnims, ensureCharSheet, HD_CHARS, playCharAnim, preloadArt } from "./artAssets";
 import { Ambient } from "./ambient";
 import { Details } from "./details";
-import { activeOf, GearLayer, reqInfoOf, GearMenu, iconCanvas, itemColor, preloadGear, RARITY_HEX } from "./gear";
+import { activeOf, GearLayer, reqInfoOf, statsOf, GearMenu, iconCanvas, itemColor, preloadGear, RARITY_HEX } from "./gear";
 /** pickSlot value while the slot list is choosing the left-click action. */
 const LEFT_PICK = -2;
 /** pickSlot value while the slot list is choosing the right-click (and Space) action. */
@@ -2308,7 +2308,7 @@ export class TownScene extends Phaser.Scene {
     if (!mine) return;
     this.heroFrom = from;
     const cls = mine.cls as ClassKind, lvl = mine.level as number;
-    const st = { sta: mine.sta, str: mine.str, mag: mine.mag, dex: mine.dex ?? 0 }; // includes gear bonuses
+    const st = statsOf(mine); // includes gear bonuses
     const free = statPoints(lvl) - (mine.ptSta + mine.ptStr + mine.ptMag + (mine.ptDex ?? 0));
     // Rebuild only when something shown changed (called every frame while open)
     const sig = [lvl, mine.xp, Math.ceil(mine.hp), mine.maxHp, mine.mp, st.sta, st.str, st.mag, st.dex, free, mine.kills, mine.gold, from].join("|");
@@ -3299,7 +3299,7 @@ export class TownScene extends Phaser.Scene {
       setMusicZone(zdef?.name, zdef?.mobs, this.areaName, actOfTile(tx, ty));
       sfxFrame(this.me, this.entities as any);
       const cls = mine.cls as ClassKind;
-      const cdm = cooldownMult(cls, { sta: mine.sta, str: mine.str, mag: mine.mag, dex: mine.dex ?? 0 }, mine.talents);
+      const cdm = cooldownMult(cls, statsOf(mine), mine.talents);
       // Top-left bars (resourceBars.ts): red HP, blue Mana (spells, shared/mana.ts), green XP
       const mn = unpackMana(mine.mp);
       (this.resBars ??= new ResourceBars(document.getElementById("hud")!)).update({

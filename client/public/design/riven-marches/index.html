@@ -104,13 +104,13 @@ ul { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 
   <a href="/wiki" style="color:var(--gold);text-decoration:none">&lt; Wiki</a>
   <div class="eyebrow">Concept design · Clan war open world</div>
   <h1>The Riven Marches</h1>
-  <p class="lede">A slow, persistent war between five clans for the lands between Oakvale and the Sunscar. AI warlords lead the clans and try to conquer each other's territory. Left alone, they mostly hold each other in check. Players tip the balance by taking war writs, joining battles at the front, or escorting a single caravan.</p>
-  <div class="meta"><span>Version 0.1 · 13 Nov 2026</span><span>Design only, no code changed</span><span>Built on the live game at play.fmtpa.ch</span></div>
+  <p class="lede">A slow war that never ends, between five clans, across the whole world: Oakvale, the Sunscar and every act still to come. AI warlords lead the clans and try to conquer each other's territory. Left alone, they mostly hold each other in check. Players tip the balance by taking war writs, joining battles at the front, or escorting a single caravan.</p>
+  <div class="meta"><span>Version 0.2 · 14 Nov 2026 (Murat's decisions added)</span><span>Design only, no code changed</span><span>Built on the live game at play.fmtpa.ch</span></div>
 </header>
 
 <figure style="margin-top:28px">
   <img class="px" src="img/riven-marches-map.png" alt="Pixel war-table map of the Riven Marches: five faction homelands around a neutral crown, with front lines in ember and battle markers on the borders">
-  <figcaption>War table sketch. 49 territories, five capitals, the neutral Crown in the middle. Ember lines are front lines; crossed swords mark open battles.</figcaption>
+  <figcaption>War table sketch, showing the style (the real territories follow the zones of each act). Five capitals, the neutral Crown in the middle. Ember lines are front lines; crossed swords mark open battles.</figcaption>
 </figure>
 
 <section>
@@ -148,11 +148,13 @@ ul { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 
 
 <section>
   <div class="eyebrow">The world</div>
-  <h2>The Riven Marches</h2>
+  <h2>The whole world is the Marches</h2>
   <div class="col stack">
-    <p>The Marches are the old borderlands of a fallen kingdom, east of Oakvale and north of the Sunscar. They are built as a fourth band of the same map (like the desert), so one server room, collisions, pathfinding and portal stones keep working. Waygates lead in from Oakvale and from Kel Ashar.</p>
-    <p><b>Size.</b> About the size of Act 1 (288 × 216 tiles), split into 49 territories of roughly 30 × 30 tiles. A territory is big enough for a fight and small enough to cross in a minute.</p>
-    <p><b>Levels.</b> The edge near Oakvale is level 20–30, the edge near the Sunscar 35–50, and the Crown is 50. Heroes below a territory's band are raised to its floor while they stand in it ("banner-sworn"), keeping their own gear, so a level 22 can help but a level 50 is still stronger.</p>
+    <p><b>Murat 2026-11-14:</b> the war runs across the full map, not in a separate region. Every monster zone of Act 1 and Act 2 becomes a territory, and every future act adds its zones as new regions of the same war. "The Riven Marches" is the name of the war and of the war table.</p>
+    <p><b>Territories.</b> About 24 in Act 1 (one per zone in <code>SPAWN_ZONES</code>, big zones split in two) and about 15 in Act 2. The owner decides which clan's troops spawn there, whose banners fly and whose writs are posted. Zone names, levels and quest areas stay as they are.</p>
+    <p><b>Sanctuaries that never flip.</b> Villages (Oakvale, Saltmere, Kel Ashar), dungeons (Mawdeep, the deep crypts), quest-boss lairs and the waygates. New heroes can always level and finish the story; the war is around them, not in their way.</p>
+    <p><b>Levels.</b> Each territory keeps its zone level. Clan troops spawn at that level, so a level 8 meadow is a small skirmish and a level 45 dune is a hard front. Players fight where their level fits; high-level heroes can push low territories but earn little there.</p>
+    <p><b>Crowns.</b> One ruined stronghold per act (to pick with the map thread, outside any boss lair) is a Crown: a neutral prize that gives the holder a world-wide boon while held.</p>
   </div>
   <div class="two">
     <div class="stack">
@@ -169,7 +171,7 @@ ul { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 
       <h3>Special places</h3>
       <ul>
         <li><b>Capitals.</b> One per clan. They can be besieged but never fall, so no clan is ever wiped out.</li>
-        <li><b>The Crown of the Marches.</b> A ruined royal city in the centre. Holding it at the end of an Age decides the Age's title and a world-wide boon.</li>
+        <li><b>Crowns.</b> One per act. Holding one gives a world-wide boon for the holder's sworn heroes while it is held.</li>
         <li><b>Warrens.</b> Hide-Kin tunnels that link territories that aren't next to each other. They can be found and collapsed.</li>
         <li><b>Wells and oases.</b> Veiled ritual sites that change weather over nearby territories.</li>
       </ul>
@@ -329,7 +331,7 @@ supply(A)   = 1 / (1 + 0.06 × road distance from capital)    ← overextension<
     <ul>
       <li><b>Tick (10 min):</b> Control shifts, garrisons move, caravans arrive.</li>
       <li><b>War day (24 h):</b> each AI leader holds a council and sets its plan.</li>
-      <li><b>Age (about 4 weeks):</b> ends with the Crown Reckoning, a big siege of the Crown. The winner names the Age and the whole world gets a small boon for the next one. Borders relax toward the homelands, but the map is not wiped.</li>
+      <li><b>No end (Murat 2026-11-14):</b> one war that never resets. Once a month the Crown Reckoning is a big siege event at each Crown, but nothing is wiped. The anti-snowball rules (supply, counters, coalitions, Night Raiders, Rally) keep it from freezing into one winner.</li>
     </ul>
   </div>
 </section>
@@ -341,7 +343,7 @@ supply(A)   = 1 / (1 + 0.06 × road distance from capital)    ← overextension<
   <div class="two">
     <div class="stack">
       <h3>Sworn or sellsword</h3>
-      <p>At any war table (one on each village square) a hero can <b>swear to a clan</b> for the rest of the Age. Sworn heroes wear the tabard, are left alone by that clan's troops, and earn Renown ranks with rewards in the clan's style. A hero who doesn't swear is a <b>sellsword</b> who takes writs from anyone and earns gold, not rank. Yes, a hero can swear to the Ossuary Host: the dead accept anyone who brings bones.</p>
+      <p>At any war table (one on each village square) a hero can <b>swear to a clan</b> until they choose to leave (a 7-day cool-down before swearing to another clan). Sworn heroes wear the tabard, are left alone by that clan's troops, and earn Renown ranks with rewards in the clan's style. A hero who doesn't swear is a <b>sellsword</b> who takes writs from anyone and earns gold, not rank. Yes, a hero can swear to the Ossuary Host: the dead accept anyone who brings bones.</p>
     </div>
     <div class="stack">
       <h3>Things to do in one visit</h3>
@@ -379,7 +381,7 @@ supply(A)   = 1 / (1 + 0.06 × road distance from capital)    ← overextension<
     <div class="tier"><h3>Raiders &amp; uprisings</h3><p>Night Raiders and angry hamlets hit the biggest clan.</p></div>
     <div class="tier"><h3>Rally for the weak</h3><p>Players earn more helping the clan that's losing.</p></div>
   </div>
-  <p class="col">This gets tested before any AI is plugged in: a headless war sim (<code>tools/balance/war.ts</code>, next to <code>pve.ts</code> and <code>duel.ts</code>) plays 1,000 Ages with simple scripted leaders. Target: without players, no clan holds more than 30% of the map for more than three war days in a row, and a "clever" scripted plan (feint plus night push) can win a few territories but not the Crown.</p>
+  <p class="col">This gets tested before any AI is plugged in: a headless war sim (<code>tools/balance/war.ts</code>, next to <code>pve.ts</code> and <code>duel.ts</code>) plays 1,000 simulated years of war with simple scripted leaders. Target: without players, no clan holds more than 30% of the map for more than three war days in a row, and a "clever" scripted plan (feint plus night push) can win a few territories but not the Crown.</p>
 </section>
 
 <section>
@@ -397,7 +399,7 @@ supply(A)   = 1 / (1 + 0.06 × road distance from capital)    ← overextension<
       <rect class="box3" x="560" y="30" width="150" height="70"/><text class="svgt" x="576" y="58">Validator</text><text class="svgs" x="576" y="80">budget, legality</text>
       <rect class="box" x="560" y="140" width="310" height="70"/><text class="svgt" x="576" y="168">Tactical executor (server)</text><text class="svgs" x="576" y="190">every 10 min tick, no model calls</text>
       <rect class="box" x="740" y="30" width="130" height="70"/><text class="svgt" x="756" y="58">Fallback</text><text class="svgs" x="756" y="80">scripted doctrine</text>
-      <rect class="box" x="260" y="250" width="610" height="56"/><text class="svgt" x="278" y="276">Players see</text><text class="svgs" x="278" y="296">troop moves, sieges, herald proclamations, war writs, a chronicle page of the Age</text>
+      <rect class="box" x="260" y="250" width="610" height="56"/><text class="svgt" x="278" y="276">Players see</text><text class="svgs" x="278" y="296">troop moves, sieges, herald proclamations, war writs, a chronicle page of the war</text>
       <path d="M115,100 L115,138" stroke="#a39680" stroke-width="2" marker-end="url(#ah2)"/>
       <path d="M210,175 L258,150" stroke="#a39680" stroke-width="2" marker-end="url(#ah2)"/>
       <path d="M510,65 L558,65" stroke="#a39680" stroke-width="2" marker-end="url(#ah2)"/>
@@ -437,7 +439,7 @@ supply(A)   = 1 / (1 + 0.06 × road distance from capital)    ← overextension<
       <li>Councils only see fog-limited intel. They never read player saves, chats or personal data.</li>
       <li>Proclamations go through a short filter and a word limit; they never name real players.</li>
       <li>A daily call budget per clan. If the model is down or over budget, the scripted doctrine leads that day.</li>
-      <li>A kill switch per clan, and Murat can veto any order or proclamation from an admin page.</li>
+      <li>No approval step (Murat 2026-11-14): councils act on their own, everything is logged, and Murat gets an email for significant events plus a daily digest. A kill switch per clan and an undo button for any order on an admin page.</li>
       <li>Councils run on a mid-size Claude model; herald lines on the smallest; a larger one reviews Forge designs. About 5 clans × 2–4 councils a day, so a small, steady cost.</li>
     </ul>
   </div>
@@ -465,8 +467,8 @@ supply(A)   = 1 / (1 + 0.06 × road distance from capital)    ← overextension<
       <li><b>Commission.</b> A council spends resources; research takes 2–5 war days and players see "The Host's forges are burning" in the chronicle. Players can raid the forge to slow it.</li>
       <li><b>Check.</b> Schema and power budget, then the balance sims (<code>pve.ts</code>, <code>duel.ts</code>) and a lore check against a world guide.</li>
       <li><b>Art.</b> Generated by the existing <code>tools/art</code> pipeline from the parameters, at the same pixel size as everything else.</li>
-      <li><b>Release.</b> Hot-loaded as a content pack. Optional rule: Murat approves the first few, then only flagged ones.</li>
-      <li><b>Limits.</b> One active project per clan, a cap of live forged items per clan, and old forged items retire at the end of the Age.</li>
+      <li><b>Release.</b> Hot-loaded as a content pack once the checks pass, no approval. Logged, in the daily email digest, removable in one click.</li>
+      <li><b>Limits.</b> One active project per clan, a cap of live forged items per clan, and the oldest forged item of a clan retires when it forges a new one past the cap.</li>
     </ul>
   </div>
 </section>
@@ -478,10 +480,10 @@ supply(A)   = 1 / (1 + 0.06 × road distance from capital)    ← overextension<
   <div class="tiers">
     <div class="tier"><span class="tag">Tier 1 · Orders</span><h3>Instant</h3><p>Troop moves, writs, proclamations. Just war state. Applied on the next tick, no deploy.</p></div>
     <div class="tier t2"><span class="tag">Tier 2 · Content packs</span><h3>Hot-loaded</h3><p>Forged monsters and weapons, banners, dialogue. Data checked against schemas and sims, loaded by the running server and pushed to clients. No restart. Removable.</p></div>
-    <div class="tier t3"><span class="tag">Tier 3 · Code</span><h3>A new Age</h3><p>A new doctrine mechanic or engine type. Opened as a PR in a sandboxed folder, CI, sims and reviewer agent, then Murat approves. Ships as a new Age players step into.</p></div>
+    <div class="tier t3"><span class="tag">Tier 3 · Code</span><h3>A new Age</h3><p>A new doctrine mechanic or engine type. Opened as a PR in a sandboxed folder, CI, sims and reviewer agent. Ships by itself as a new Age players step into; rolls back by itself if errors rise.</p></div>
   </div>
   <div class="col stack">
-    <p><b>Where AI code is allowed.</b> Clan code lives in plug-in folders (<code>shared/war/clans/&lt;clan&gt;/</code>) behind a fixed interface, like the skill engine. The PR bot may only touch its own clan's folder and data tables, under 200 lines, the same allowlist idea as the /idea feature. These PRs use <code>war/*</code> branches that never auto-merge.</p>
+    <p><b>Where AI code is allowed.</b> Clan code lives in plug-in folders (<code>shared/war/clans/&lt;clan&gt;/</code>) behind a fixed interface, like the skill engine. The PR bot may only touch its own clan's folder and data tables, under 200 lines, the same allowlist idea as the /idea feature. These PRs auto-merge when every check passes, with no approval (Murat 2026-11-14). In return: the code may never touch saves, accounts, money or the core engine; a new Age rolls back automatically if crashes or errors go up after release; and each one is emailed to Murat ("flagged") with what changed.</p>
     <p><b>What changes in hosting.</b> Today one Railway service restarts on each merge and the handoff puts heroes back in a few seconds. To run two versions side by side, saves move from <code>saves.json</code> to a database both can share (Postgres on Railway), and the war state moves into a small separate service that both versions read and write through a versioned API.</p>
   </div>
   <div class="diagram">
@@ -564,18 +566,19 @@ supply(A)   = 1 / (1 + 0.06 × road distance from capital)    ← overextension<
     <div class="phase"><div class="n">3</div><div><h3>AI councils</h3><p>First in shadow mode: councils plan and we compare with the scripted doctrine. Then they lead, with herald lines and the chronicle page.</p></div></div>
     <div class="phase"><div class="n">4</div><div><h3>The Forge</h3><p>Codex, recipe checks, art from parameters, hot-loaded content packs.</p></div></div>
     <div class="phase"><div class="n">5</div><div><h3>Ages</h3><p>Two versions side by side, gateway, opt-in crossing, Vanguard canary, rollback.</p></div></div>
-    <div class="phase"><div class="n">6</div><div><h3>AI-authored code</h3><p>Clan plug-in folders, the PR bot for <code>war/*</code> branches, Murat's approval, release as a new Age.</p></div></div>
+    <div class="phase"><div class="n">6</div><div><h3>AI-authored code</h3><p>Clan plug-in folders, the PR bot, automatic release as a new Age with auto-rollback, email flags and daily digest.</p></div></div>
   </div>
 </section>
 
 <section>
   <div class="eyebrow">Your call</div>
-  <h2>Decisions for Murat</h2>
+  <h2>Decisions</h2>
   <div class="tiers">
-    <div class="ask"><b>Where the war happens</b><span>Recommended: a new Marches band between both acts. Alternative: the war spreads over existing Act 1 and Act 2 zones.</span></div>
-    <div class="ask"><b>Monster clans for players</b><span>Recommended: players may swear to any clan, including the Host and Hide-Kin. Alternative: only to Wardens and Redfang.</span></div>
-    <div class="ask"><b>Age length</b><span>Recommended: 4 weeks, borders relax at the end. Alternative: one endless war.</span></div>
-    <div class="ask"><b>Approval of AI changes</b><span>Recommended: Murat approves all code and the first Forge items; later Forge items go live after the checks.</span></div>
+    <div class="ask"><b>Where the war happens</b><span>Decided (Murat 2026-11-14): across the whole map, all acts, future acts included. Villages, dungeons and quest-boss lairs never flip.</span></div>
+    <div class="ask"><b>Monster clans for players</b><span>Decided: players may swear to any clan, including the Ossuary Host and the Hide-Kin.</span></div>
+    <div class="ask"><b>Length of the war</b><span>Decided: one war that never ends. Monthly Crown Reckoning events, no resets.</span></div>
+    <div class="ask"><b>Approval of AI changes</b><span>Decided: no approval. Everything is logged; significant items are emailed to Murat, plus a daily digest. Code stays sandboxed with automatic rollback.</span></div>
+    <div class="ask"><b>Still open</b><span>Move saves from the file to a database (Postgres on Railway). Needed before two Ages can run side by side.</span></div>
   </div>
 </section>
 
