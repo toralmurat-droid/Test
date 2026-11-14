@@ -212,6 +212,10 @@ export class Player extends Schema {
   stunUntil = 0;
   slowUntil = 0;
   lastUlt = -Infinity;
+  // Quest steps (server/questSteps.ts), not synced: carrying the lantern locks skills and ranged shots, and draws the blobs
+  qlock = false; // cast / useSlot / fireRanged refuse; basic attacks still work
+  lureMul = 1; // blob aggro range multiplier on this hero (pickTarget)
+  qlockNoteAt = 0; // last "walk it" note to a lantern holder at a portal (lanternHeld)
   sk = newRuntime();
 }
 
@@ -239,6 +243,7 @@ export class Mob extends Schema {
   charmUntil = 0; // Charm (v_gaze): a zone monster fighting for a vampire (owner set) until then, then it goes back to being itself
   sPower = 1; // a summon's damage multiplier (skill rank, the owner's Ruin talent, the golems fused into a Colossus)
   summonChain = 0; // ...and the quest chain of that step
+  qwave = false; // a hold step's wave monster (server/questSteps.ts): counts for nothing else (the Tide)
   @type("string") title = ""; // quest boss name shown over it instead of "Elite" (QuestStep.summon.title)
   mergeInto = ""; // answering a call: id of the blob it is rushing to fuse with
   mergeCap = 0; // most blobs this one may hold (set at its first call)
@@ -667,15 +672,21 @@ export class TownRoom extends Room<TownState> {
       qs: (p, c) => this.qs(p as unknown as Player, c),
       nextStep: (pid, c) => { const p = this.state.players.get(pid); if (p) this.nextStep(pid, p, c); },
       setStage: (pid, c, stage, count = 0) => { const p = this.state.players.get(pid); if (!p) return; this.qset(p, c, { questStage: stage, questCount: count }); this.sendQuest(pid, p, c); this.qsteps.changed(pid, c); },
-      summon: (pid, sm, tag, home, lifeMs) => {
+      summon: (pid, sm, tag, home, lifeMs, wave) => {
         const id = this.summonFused(pid, sm, tag), m = this.state.mobs.get(id);
         if (m && home) { m.homeX = home.x; m.homeY = home.y; }
         if (m && lifeMs) m.banishAt = Date.now() + lifeMs; // sinks back if nobody kills it (updateMob)
+        if (m && wave) { m.qwave = true; m.hp = m.maxHp = Math.round(mobDef(m).maxHp * mobScale(m.level, "hp")); } // a plain monster of its kind, not a fused one
         return id;
       },
       removeMob: (id) => { const m = this.state.mobs.get(id); if (!m || m.dead) return; m.dead = true; m.hp = 0; this.clock.setTimeout(() => this.state.mobs.delete(id), 500); },
       send: (pid, type, msg) => this.clients.find((cl) => cl.sessionId === pid)?.send(type, msg),
       broadcast: (type, msg) => this.broadcast(type, msg),
+      forEachHero: (fn) => this.state.players.forEach((p, pid) => fn(pid, p)),
+      mob: (id) => this.state.mobs.get(id),
+      group: (pid) => { const p = this.state.players.get(pid); return p?.party ? this.members(p.party) : [pid]; },
+      together: (a, b) => { const p = this.state.players.get(a), o = this.state.players.get(b); return !!p && !!o && !o.dead && together(p.x, p.y, o.x, o.y); },
+      dayFrac: (now) => worldDayFrac(now),
     });
     this.setState(new TownState());
     // Monsters near each hero go out just before every state patch, so both halves of an update arrive together
@@ -749,6 +760,8 @@ export class TownRoom extends Room<TownState> {
     // opt: a choice step's answer (shared/questSteps.ts ChoiceSpec), an integer the step's options are checked against
     this.onMessage("quest", (client, msg: { chain?: number; opt?: unknown }) => this.advanceQuest(client.sessionId, CHAINS[Number(msg?.chain)] ? Number(msg.chain) : 0, Number.isInteger(msg?.opt) ? (msg.opt as number) : undefined));
     this.onMessage("use", (client, msg: { id?: unknown }) => { if (typeof msg?.id === "string" && msg.id.length <= 40) this.useQuestObject(client.sessionId, msg.id); });
+    // put down what a carry step has you holding (no payload; only its holder can, server/questSteps.ts)
+    this.onMessage("qdrop", (client) => { if (this.allow("ask", client)) this.qsteps.drop(client.sessionId); });
     this.onMessage("chest", (client, msg: { id: string }) => this.openChest(client, msg?.id));
     this.onMessage("chests", (client) => this.sendChests(client));
     this.onMessage("door", (client, msg: { id: string }) => this.workDoor(client, msg?.id));
@@ -1607,17 +1620,18 @@ export class TownRoom extends Room<TownState> {
   private pickTarget(m: Mob, def: MobDef) {
     let best = 0, target = "", foe = "";
     m.threat = 0;
-    const now0 = Date.now(), alerted = now0 < m.alertUntil;
+    const now0 = Date.now(), alerted = now0 < m.alertUntil, blob = isBlob(m.kind);
     this.state.players.forEach((p, pid) => {
       if (p.dead || isSafeZone(p.x, p.y) || Math.hypot(p.x - m.homeX, p.y - m.homeY) >= def.leash || inVoid(p, now0)) return;
       const d = Math.hypot(p.x - m.x, p.y - m.y);
       // a hero the horn (or a shout) called the camp against counts as hated
       const hated = (pid === m.hateId ? m.hate : 0) + (alerted && pid === m.alertHero ? 0.5 : 0);
-      const range = hated > 0 ? def.aggroRange * 2 : def.aggroRange;
+      const reach = blob ? def.aggroRange * p.lureMul : def.aggroRange; // a carried lantern draws the blobs from further (Player.lureMul)
+      const range = hated > 0 ? reach * 2 : reach;
       if (d >= range) return;
       if (d < def.aggroRange) m.threat = Math.max(m.threat, p.level - m.level);
       const lf = m.merged > 1 || m.kind === "demon" ? Math.max(1, aggroLevelFactor(m.level, p.level)) : aggroLevelFactor(m.level, p.level); // a merged blob regrouped to fight, a demon was called against him: no hero scares them
-      const score = Math.max(0, 1 - d / def.aggroRange) * lf + hated + (pid === m.target ? AGGRO.stick : 0);
+      const score = Math.max(0, 1 - d / reach) * lf + hated + (pid === m.target ? AGGRO.stick : 0);
       if (score > best) { best = score; target = pid; }
     });
     const side = m.perch ? undefined : FACTION[m.kind]; // lookouts stay up on their tower
@@ -2682,6 +2696,7 @@ export class TownRoom extends Room<TownState> {
       this.pickUp(p, pid);
       this.updateWrath(pid, p, now);
     });
+    this.qsteps.tick(now, dtMs); // carried lanterns, hold runs (server/questSteps.ts)
     this.state.items.forEach((it, id) => { if (now > it.expires) this.state.items.delete(id); });
     const tick = ++this.tickNo;
     // Live heroes, gathered once so each monster's "anyone near?" check is a plain array scan
@@ -3750,7 +3765,7 @@ export class TownRoom extends Room<TownState> {
     for (const l of LINKS) {
       if (Math.abs(l.x - p.x) > LINK_RANGE || Math.abs(l.y - p.y) > LINK_RANGE || Math.hypot(l.x - p.x, l.y - p.y) > LINK_RANGE) continue;
       const dest = linkById(l.to);
-      if (!dest) return;
+      if (!dest || this.lanternHeld(pid, p)) return;
       const at = arrivalAt(dest);
       p.x = at.x; p.y = at.y; p.moving = false;
       p.rollUntil = 0; p.rolling = false; p.emote = "";
@@ -3758,6 +3773,17 @@ export class TownRoom extends Room<TownState> {
       this.broadcast("descend", { id: pid, from: l.id, to: dest.id, down: l.down, x: Math.round(at.x), y: Math.round(at.y) });
       return;
     }
+  }
+
+  /**
+   * A hero carrying a quest lantern (Player.qlock, server/questSteps.ts) walks it: no portal stone, waygate, rope or stair
+   * takes them (skills are locked already). True = blocked; they hear why, at most every 3 s. The lantern stays in hand.
+   */
+  private lanternHeld(pid: string, p: Player): boolean {
+    if (!p.qlock) return false;
+    const now = Date.now();
+    if (now - p.qlockNoteAt > 3000) { p.qlockNoteAt = now; this.note(pid, "The lantern won't survive the portal. Walk it."); }
+    return true;
   }
 
   /**
@@ -3772,6 +3798,7 @@ export class TownRoom extends Room<TownState> {
         if (now - p.gateNoteAt > 8000) { p.gateNoteAt = now; this.note(pid, `The waygate's stones are cold. It will wake when ${act2Missing(p).join(" and ")} ${act2Missing(p).length > 1 ? "are" : "is"} beaten.`); }
         return;
       }
+      if (this.lanternHeld(pid, p)) return;
       const dest = waygateById(g.to)!, at = waygateArrival(dest);
       p.x = at.x; p.y = at.y; p.moving = false;
       p.rollUntil = 0; p.rolling = false; p.emote = "";
@@ -4470,7 +4497,7 @@ export class TownRoom extends Room<TownState> {
 
   private cast(id: string, skill: string) {
     const p = this.state.players.get(id);
-    if (!p || typeof skill !== "string" || p.rolling) return;
+    if (!p || typeof skill !== "string" || p.rolling || p.qlock) return; // qlock: hands full with a quest lantern (server/questSteps.ts)
     const def = skillOf(p.cls, skill);
     if (def && skillLearned(p.cls, p.talents, skill) && !weaponOk(def, p.cls, this.equipped(p))) {
       // Wrong weapon in hand (a Volley needs a bow): say so, at most once a second while the key is held
@@ -4525,7 +4552,7 @@ export class TownRoom extends Room<TownState> {
   /** Press a slot key: use whatever skill is in that slot. */
   private useSlot(id: string, n: number) {
     const p = this.state.players.get(id);
-    if (!p || typeof n !== "number" || n < 0 || n >= SLOT_COUNT) return;
+    if (!p || typeof n !== "number" || n < 0 || n >= SLOT_COUNT || p.qlock) return;
     const s = p.slots.at(n);
     if (s) this.cast(id, s);
   }
@@ -5666,6 +5693,7 @@ export class TownRoom extends Room<TownState> {
     if (!p || p.dead || !dest || !p.portals.has(dest.id)) return;
     const from = PORTALS.find((o) => p.portals.has(o.id) && Math.hypot(o.x - p.x, o.y - p.y) <= PORTAL_RANGE * 1.5);
     if (!from || from.id === dest.id) return;
+    if (this.lanternHeld(id, p)) return;
     if (now - p.lastHurt < PORTAL_COMBAT_MS) { client.send("travelno", { why: "fight" }); return; }
     const at = arrivalOf(dest);
     p.x = at.x; p.y = at.y; p.moving = false;
@@ -5903,6 +5931,7 @@ export class TownRoom extends Room<TownState> {
     }
     this.broadcast("hit", { id: tid, dmg, blocked: guarded, crit: !!opts.crit, dot: !!opts.dot, el: opts.el ?? opts.mobEl, ...(opts.dot ? {} : hitDir(push)) });
     if (t.hp > 0) {
+      this.qsteps.hurt(tid); // unseen steps (server/questSteps.ts)
       afterHit(this.host, opts.from, tid, opts);
       if (struck) this.runesStruck(tid, t, opts.from!, dmg);
       if (struck && fromMob?.champ) this.champs.struck(fromMob, opts.from!, tid, now); // Sun-Branded
@@ -5912,6 +5941,7 @@ export class TownRoom extends Room<TownState> {
     }
     if (riseAgain(this.host, tid)) return false; // Blood Pact: a killing blow leaves the vampire standing
     t.dead = true;
+    this.qsteps.died(tid); // a carried lantern falls here, a hold run may fail (server/questSteps.ts)
     if (opts.from && this.state.players.has(opts.from)) onKill(this.host, opts.from); // Bloodlust
     const killer = opts.from ? this.state.mobs.get(opts.from) : undefined;
     if (killer?.kind === "hidemother" && !killer.dead) this.bossSay(opts.from!, URSK.lines.kill);
@@ -6065,7 +6095,7 @@ export class TownRoom extends Room<TownState> {
     const now = Date.now();
     const ranged = a ? this.equipped(a).ranged : undefined;
     const shot = ranged ? gearDef(ranged)?.shot : undefined;
-    if (!a || !shot || a.dead || a.stunned || a.broken || a.rolling || now - a.lastRanged < shot.cooldownMs) return;
+    if (!a || !shot || a.dead || a.stunned || a.broken || a.rolling || a.qlock || now - a.lastRanged < shot.cooldownMs) return;
     a.lastRanged = now;
     a.emote = "";
     const off = aimOf(a);

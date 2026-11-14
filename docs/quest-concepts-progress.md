@@ -6,8 +6,8 @@ One branch (`claude/brave-hypatia-dkkcd3`), one draft PR until all work packages
 ## Status
 | WP | Concepts | State |
 |---|---|---|
-| WP1 framework + choices + puzzles | #5 Two Letters, #3 Empty Grave, #11 Crown in the Sand | in progress |
-| WP2 carry + hold | #1 Last Lantern, #2 Hold the Wheel | todo |
+| WP1 framework + choices + puzzles | #5 Two Letters, #3 Empty Grave, #11 Crown in the Sand | done (server, client, text, tests) |
+| WP2 carry + hold | #1 Last Lantern, #2 Hold the Wheel | server done; client, text, tests, bench next |
 | WP3 unseen + sync | #4 Unseen, #8 Two Hands | todo |
 | WP4 Bargain + Penance | #6 | todo |
 | WP5 Tide | #7 | todo |
@@ -253,3 +253,7 @@ at Lv 10, `duel.ts` only if Hidebound goes on. Bench: WP2 and WP5 (`TIDE=1`, `SP
 - 2026-11-13: WP1 gameplay landed in the tree (gameplay-engineer): `shared/questSteps.ts`, `server/questSteps.ts`, `shared/cosmetics.ts`,
   `choose`/`pick`/`npcs`/`onlyIf`/`sayBy`/`afterBy`, `QuestChain.needs`, `SIDE_ARCS` "letters", `ZONE_ARCS` "grave" + "sandcrown", NPCs,
   shops `watch` / `smuggler`, hooks 1 3 4 5 10 (leave) 11 13. Siege sites, engines and chests unchanged; map-metrics unchanged.
+- 2026-11-14: WP2 gameplay landed in the tree (gameplay-engineer): carry + hold in `server/questSteps.ts`, `lightDrain` / `isDark` / `wetAt` /
+  `CARRY` / `HOLD` in `shared/questSteps.ts` (HoldSpec waves take `n` / `level` ranges and `npcDmg`), hooks 2 7 8 9, `qdrop`, `qstate`,
+  `ZONE_ARCS` "lantern" + "wheel". Siege sites and engines unchanged, one new chest `lantern_1_3`; map-metrics unchanged.
+- 2026-11-14: Ostrevar's Envoy hpMult 3 -> 7 (was a walkover: 7-12 s, 100% all classes; now 15-25 s, 100%). Lantern holders can't use portals, waygates or Mawdeep ropes/stairs (Claude 2026-11-14). Choice modal can be closed with Esc and has no reopen: WP4 must resend the Bargain prompt while its window is open.

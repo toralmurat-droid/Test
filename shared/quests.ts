@@ -1957,7 +1957,7 @@ const SANDCROWN_QUESTS: QuestDef[] = [
     acceptText: "On my way",
     steps: [
       { type: "kill", zone: KHARSUN_Z, kinds: ["sanddead"], goal: 1, own: true,
-        summon: { parts: ["sanddead"], level: 39, title: "Ostrevar's Envoy", hpMult: 3, ...sumAt(74, D(183)),
+        summon: { parts: ["sanddead"], level: 39, title: "Ostrevar's Envoy", hpMult: 7, ...sumAt(74, D(183)),
           voice: {
             wake: ["You broke the crowned seals. He felt it, even in the dark.", "You buried his crown in the valley. A crown is not a king."],
             taunt: ["Kharsun paid him in water. Your valley paid him in blood.", "There are lands past the sand you have never seen. He is owed there too.", "I have waited a thousand years. I can wait for you to tire."],
@@ -1973,6 +1973,70 @@ const SANDCROWN_QUESTS: QuestDef[] = [
     ],
     reward: arcReward(39, true),
     after: "Snow, on a map from a desert tomb. I've sold maps all my life. I have never seen that coast.",
+  },
+];
+
+// -- Act 1: Misty Marsh → Brinewood, the Last Lantern (Lv 10; docs/quest-concepts-progress.md #1). Draft text. --
+const LAMP_POST = at(62, 108, 2, "The drowned lamp post");
+const LAST_LANTERN = near("lantern_last", "lastlantern", "The last lamplighter's lantern", "Take up", 60, 110);
+const ELOW_SHRINE = at(34, 171, 2.5, "Saint Elow's shrine");
+const WARD_LAMPS = [near("brine_wardlamp1", "wardlamp", "Cold ward-lamp", "Light", 36, 165), near("brine_wardlamp2", "wardlamp", "Cold ward-lamp", "Light", 40, 175),
+  near("brine_wardlamp3", "wardlamp", "Cold ward-lamp", "Light", 29, 170)];
+const LIGHTS_QUEST = QUESTS.findIndex((d) => d.steps.some((s) => s.objects === LANTERNS));
+const LANTERN_QUESTS: QuestDef[] = [
+  {
+    id: "lastlantern", title: "The Last Lantern", giver: "monk", zone: Z.brine.name, minLevel: 10,
+    description: "Brother Aldric says one lamplighter's lantern still burns, out in the drowned part of Misty Marsh. It has to reach Saint Elow's shrine in Brinewood before it goes out, and the blobs can smell it.",
+    offer: [
+      "You lit the spirit lanterns. Then you've seen what a little light does to them.",
+      "When the lamplighters fell, the last of us left his lantern hanging on a post in the marsh. It's still burning. Forty years, still burning.",
+      "Carry it to Saint Elow's shrine in Brinewood and light the ward-lamps from it. But hear me: the flame won't share your hands with spells, and every blob for a mile will want it.",
+      "Don't put it down in the wet, and don't dawdle after dark. It burns faster for both.",
+    ],
+    acceptText: "I'll carry the light",
+    steps: [
+      { type: "reach", zone: Z.marsh.name, at: LAMP_POST, text: "Find the drowned lamp post in Misty Marsh", banner: ["New quest", "The Last Lantern"],
+        obj: "Find the drowned lamp post in Misty Marsh", nag: "South in the marsh, where the pools run together." },
+      { type: "carry", zone: Z.brine.name, text: "Carry the last lantern to Saint Elow's shrine in Brinewood", banner: ["It still burns", "Carry it to Brinewood"],
+        obj: "Carry the lantern to Saint Elow's shrine", nag: "No spells while you hold it. Keep it out of the wet, and keep moving.",
+        hint: "Press E to take it up. Your skills are locked while you carry it; plain attacks still work. Drop it to fight.",
+        carry: { take: LAST_LANTERN, to: ELOW_SHRINE, light: 100, drain: 0.5, waterMult: 2, darkMult: 1.5, groundMult: 3, lure: 1.5 } },
+      { type: "use", zone: Z.brine.name, objects: WARD_LAMPS, chest: true, text: "Light the 3 ward-lamps round the shrine", banner: ["The shrine is reached", "Light the ward-lamps"],
+        obj: "Ward-lamps lit: {n} / {goal}", nag: "{n} of {goal}. Round Saint Elow's shrine." },
+    ],
+    outro: ["The third ward-lamp catches, and the lantern in your hand gutters out at last, as if it had only been waiting.", "For a moment the pines smell of lamp oil and incense, and the blobs in the wood go quiet."],
+    reward: arcReward(10),
+    after: "Forty years it burned. Now it's yours that lit them. Mind you keep them lit.",
+  },
+];
+
+// -- Act 1: Millbrook Mill, Hold the Wheel (Lv 4, after Millbrook's Bad Water; docs/quest-concepts-progress.md #2). Draft text. --
+const ODO = npcById("miller")!;
+const WHEEL_QUESTS: QuestDef[] = [
+  {
+    id: "holdwheel", title: "Hold the Wheel", giver: "miller", zone: "Millbrook Mill", minLevel: 4,
+    description: "Something upstream keeps sending blobs down the millrace at Odo. He means to clear the sluice himself, if someone keeps them off him while he works.",
+    offer: [
+      "They're coming down the race again. Not clots this time: the live ones, a few at a time.",
+      "I've to open the sluice and clear it by hand, and I can't do that with blobs climbing my legs.",
+      "Stand by me a minute and a half. Keep them off me. Then we'll see what's sending them.",
+    ],
+    acceptText: "I'll stand with you",
+    steps: [
+      { type: "talk", npc: "miller", zone: "Millbrook Mill", text: "Tell Odo when you're ready", banner: ["New quest", "Hold the Wheel"], obj: "Tell Odo you're ready (Millbrook Mill)",
+        say: ["Ready? Once I open the sluice there's no closing it till it's clear. They'll come for me, not you."], accept: "Open the sluice" },
+      { type: "hold", zone: "Millbrook Mill", text: "Keep the blobs off Odo while he clears the sluice", banner: ["Here they come", "Keep the blobs off Odo"],
+        obj: "Hold the mill with Odo", nag: "Stay by me! If you leave, I'm closing it again.",
+        hold: { at: { x: ODO.x, y: ODO.y, r: 7 * TILE, label: "Odo's mill" }, ms: 90_000, npc: "miller", npcHp: 300, npcDmg: 5,
+          waves: { kinds: ["slime"], n: [2, 3], everyMs: 15_000, level: [3, 5] }, maxAlive: 6, leaveMs: 5000 } },
+      { type: "kill", zone: "Millbrook Mill", kinds: BLOB_KINDS, goal: 1, own: true,
+        summon: { parts: ["motherblob", "slime", "slime", "slime"], level: 5, title: "The Millrace Glutton", ...sumAt(108, 41) },
+        text: "Slay the Millrace Glutton", banner: ["The sluice is clear", "Something big comes down the race"], obj: "The Millrace Glutton slain: {n} / {goal}",
+        nag: "It came down the race with the last of the water." },
+    ],
+    outro: ["The Glutton bursts across the mill yard. Inside it: half a sack of Odo's flour and a sluice key he lost in the spring.", "Behind you the wheel takes the full race again and turns, steady and loud."],
+    reward: arcReward(4, true),
+    after: "Hear her? Never ran so sweet. Anyone asks, you stood by Odo.",
   },
 ];
 
@@ -1992,6 +2056,8 @@ export const ZONE_ARCS: { id: string; name: string; quests: QuestDef[]; needs?: 
   // the quest concepts (docs/quest-concepts-progress.md): appended, chain indices are sent by the client
   { id: "grave", name: "The Empty Grave", quests: GRAVE_QUESTS },
   { id: "sandcrown", name: "The Crown in the Sand", quests: SANDCROWN_QUESTS, needs: (p) => (chainState(p, SUN_CHAIN)?.questId ?? 0) > SUN_QUESTS.findIndex((d) => d.id === "kharsun") },
+  { id: "lantern", name: "The Last Lantern", quests: LANTERN_QUESTS, needs: (p) => (chainState(p, 0)?.questId ?? 0) > LIGHTS_QUEST },
+  { id: "wheel", name: "Hold the Wheel", quests: WHEEL_QUESTS, needs: (p) => chainDone(p, chainIx("mill")) },
 ];
 
 // ---- Side arcs: short local chains that may end on a hand-in (unlike ZONE_ARCS), packed in Player.arcs the same way ----
@@ -2359,15 +2425,19 @@ export function questTargets(q: QuestState | undefined): QuestTarget[] {
   if (s.type === "reach") return [{ x: s.at!.x, y: s.at!.y, kind: "area", r: s.at!.r, label: s.at!.label }];
   if (s.type === "use") return objTargets(s.objects!.filter((o, i) => !(q!.questCount & (1 << i))));
   if (s.type === "pick") return objTargets(s.pick!.objects);
+  // carry: the lantern while it waits at its spot (count 0), always where it goes; where it is once taken comes as "qstate"
+  if (s.type === "carry") { const to = s.carry!.to; return [...(q!.questCount ? [] : objTargets([s.carry!.take])), { x: to.x, y: to.y, kind: "area", r: to.r, label: to.label }]; }
+  if (s.type === "hold") { const a = s.hold!.at; return [{ x: a.x, y: a.y, kind: "area", r: a.r, label: a.label }]; }
   const z = zoneByName(s.zone ?? d.zone);
   return [{ x: (z.x + z.w / 2) * TILE, y: (z.y + z.h / 2) * TILE, kind: "area", r: (Math.min(z.w, z.h) / 2) * TILE, label: z.name }];
 }
 
-/** Quest objects this player can use right now on any chain, with their index (bit) in the step (pick: every candidate). */
+/** Quest objects this player can use right now on any chain, with their index (bit) in the step (pick: every candidate; carry: the thing to take up). */
 export function usableObjects(p: Quester | undefined): { o: QuestObject; i: number; chain: number }[] {
   return CHAINS.flatMap((_, c) => {
     const q = chainState(p, c), s = questStep(q);
     if (s?.type === "pick") return s.pick!.objects.map((o, i) => ({ o, i, chain: c }));
+    if (s?.type === "carry") return q!.questCount ? [] : [{ o: s.carry!.take, i: 0, chain: c }]; // taken: it moves (see "qstate")
     if (s?.type !== "use") return [];
     return s.objects!.map((o, i) => ({ o, i, chain: c })).filter(({ i }) => !(q!.questCount & (1 << i)));
   });
