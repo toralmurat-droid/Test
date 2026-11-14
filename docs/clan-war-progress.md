@@ -86,7 +86,6 @@ Open points for M1:
 ## M1 step 4: Holds (2026-11-14)
 
 - `client/src/holdArt.ts`: five Hold sprites in the clan styles (Warden watchtower, Redfang war camp, Ossuary tower,
-  Hide-Kin burrow, Veiled shrine), generated pixel art in the bonfire style. Preview:
-  /mnt/project-files/clan-war/holds-preview.png.
-- `shared/war/standards.ts` `HOLDS`: one spot per territory near the middle, clear of its standards' rings. The
+  Hide-Kin burrow, Veiled shrine), generated pixel art in the bonfire style (`paintHold` draws one without Phaser).
+- `shared/war/standards.ts` `HOLDS`: one spot per territory near the middle, on clear ground, at least 5 tiles from its standards. The
   sprite follows the owner. Look only: no collision, no siege mechanics at the Hold yet (M2: siege works, gates).

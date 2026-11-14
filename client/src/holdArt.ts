@@ -444,7 +444,7 @@ function veiled(a: Art) {
 const PAINT: Record<ClanKey, (a: Art) => void> = { wardens, redfang, host, hidekin, veiled };
 const SEEDS: Record<ClanKey, number> = { wardens: 11, redfang: 23, host: 37, hidekin: 41, veiled: 53 };
 
-/** Draw one Hold on a W x H art-pixel canvas (one canvas pixel per art pixel). Exported for the preview tool. */
+/** Draw one Hold on a W x H art-pixel canvas (one canvas pixel per art pixel). Exported so a page or tool can draw it without Phaser. */
 export function paintHold(k: ClanKey): HTMLCanvasElement {
   const a = new Art(SEEDS[k]);
   PAINT[k](a);

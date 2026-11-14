@@ -67,18 +67,26 @@ function build(): Standard[] {
 
 export const STANDARDS: Standard[] = build();
 
-/** Where each territory's Hold stands (px, foot of the sprite): near the middle, clear of its standards' rings. */
+/** Where each territory's Hold stands (px, foot of the sprite): near the middle, on clear ground, away from its standards. */
 export interface Hold { t: number; x: number; y: number }
+/** Ground a Hold sprite covers (tiles around and above its foot tile; the sprite is about 4 x 4 tiles). */
+const HOLD_COVER = { left: 2, right: 1, up: 3 };
 function buildHolds(): Hold[] {
   const out: Hold[] = [];
   for (const t of TERRITORIES) {
     const mine = STANDARDS.filter((s) => s.t === t.id);
-    const clear = (p: { x: number; y: number }) => mine.every((s) => Math.hypot(s.x - p.x, s.y - p.y) > STANDARD.range + 4 * TILE);
-    // try the middle, then points around it, until one is free and away from the rings
-    const spots = [[0.5, 0.5], [0.5, 0.3], [0.5, 0.7], [0.3, 0.5], [0.7, 0.5], [0.3, 0.3], [0.7, 0.7], [0.3, 0.7], [0.7, 0.3], [0.15, 0.5], [0.85, 0.5], [0.5, 0.15], [0.5, 0.85]]
-      .map(([fx, fy]) => freeSpot(t, Math.floor(t.x + t.w * fx), Math.floor(t.y + t.h * fy)));
-    const at = spots.find((p) => p && clear(p)) ?? spots.find((p) => p); // a small land: the hold may stand by a ring
-    if (at) out.push({ t: t.id, ...at });
+    let best: { x: number; y: number; score: number } | undefined;
+    for (let ty = t.y + HOLD_COVER.up + 1; ty < t.y + t.h - 1; ty++) for (let tx = t.x + HOLD_COVER.left + 1; tx < t.x + t.w - HOLD_COVER.right - 1; tx++) {
+      let solid = 0;
+      for (let dy = -HOLD_COVER.up; dy <= 0; dy++) for (let dx = -HOLD_COVER.left; dx <= HOLD_COVER.right; dx++) if (isSolidAt((tx + dx + 0.5) * TILE, (ty + dy + 0.5) * TILE)) solid++;
+      if (solid > 1 || isSolidAt((tx + 0.5) * TILE, (ty + 0.5) * TILE)) continue; // the foot must be free, the cover nearly so
+      const x = (tx + 0.5) * TILE, y = (ty + 0.5) * TILE;
+      const far = Math.min(Infinity, ...mine.map((s) => Math.hypot(s.x - x, s.y - y))) / TILE;
+      // away from the rings first (up to 7 tiles counts), then close to the middle, then clear ground
+      const score = Math.min(far, 7) * 10 - Math.hypot(tx - t.cx, ty - t.cy) - solid * 3;
+      if (!best || score > best.score) best = { x, y, score };
+    }
+    if (best) out.push({ t: t.id, x: best.x, y: best.y });
   }
   return out;
 }
