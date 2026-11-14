@@ -9,6 +9,11 @@ import type { WorldState } from "./worldStore";
  * march for the next dusk, sends it out wave by wave, counts who fought it near the west gate and pays them at the end.
  * TownRoom calls in at four points (tick, a monster's death, a hit on a marcher, "/tide" on dev servers) through the small
  * TideHost below; the marchers themselves are ordinary monsters with `tide` set (no merging, no dozing; TownRoom).
+ *
+ * The meter is one per world (server/worldStore.ts), but past maxClients there are several TownRooms, each with its own
+ * Tide. One of them owns the event (`owner`: the first to need it, until its room closes): only it schedules, marches
+ * and pays, so the marchers are in its room. Every room still counts its kills toward the meter, sends the meter to its
+ * own Act 1 heroes, and hears the meter fill.
  */
 
 /** The parts of a hero this module reads (TownRoom's Player). */
@@ -42,9 +47,10 @@ interface Result { cleared: boolean; top: { name: string; share: number }[] }
 
 const r3 = (v: number) => Math.round(v * 1000) / 1000;
 const rint = (a: number, b: number) => a + Math.floor(Math.random() * (b - a + 1));
-/** Packs don't come out on top of a hero if they can help it (like zone spawns' NO_SPAWN_RANGE). */
-const CLEAR = 10 * TILE;
-const CHECK_MS = 500;
+
+/** Every live room's Tide, and the one that owns the march (claimed on first use, given up when its room closes). */
+const rooms = new Set<Tide>();
+let owner: Tide | undefined;
 
 export class Tide {
   private m?: March;
@@ -52,20 +58,38 @@ export class Tide {
   private sendAt = 0;
   /** The last "tide" signature each hero in Act 1 was sent (rebuilt every send, so heroes who left drop out). */
   private sent = new Map<string, string>();
+  private gone = false;
 
-  constructor(private h: TideHost) {}
+  constructor(private h: TideHost) { rooms.add(this); }
 
-  /** A march is out: Act 1 Night Raiders stay away (TownRoom updateRaids). */
+  /** A march is out in this room: its Act 1 Night Raiders stay away (TownRoom updateRaids). */
   get marching(): boolean { return !!this.m; }
+
+  /** This room's Tide runs the event (schedules, marches, pays). */
+  get owns(): boolean { return owner === this; }
+
+  /** The room is closing (TownRoom onDispose): its march is dropped and another room may take the event (a full meter rebooks the next dusk). */
+  release() {
+    this.gone = true;
+    rooms.delete(this);
+    this.m = undefined;
+    if (owner === this) owner = undefined;
+  }
+
+  /** The owner of the event: this one if nobody owns it yet (a closed room claims nothing). */
+  private lead(): Tide {
+    if (!owner && !this.gone) owner = this;
+    return owner ?? this;
+  }
 
   /** A monster fell to a hero (or a hero's creature, which kills in its owner's name): a blob fills the meter. */
   kill(_pid: string, m: TideMob, now = Date.now()) {
     if (m.tide || m.owner || m.summonFor || m.qwave || !isBlob(m.kind)) return; // not marchers, summons, quest or hold-wave monsters
-    const w = this.h.world();
-    if (this.m || w.marchAt !== undefined || w.tide >= TIDE.goal) return; // full: it waits for the march
+    const w = this.h.world(), o = this.lead();
+    if (o.m || w.marchAt !== undefined || w.tide >= TIDE.goal) return; // full: it waits for the march
     w.tide++;
     this.h.changed();
-    if (w.tide >= TIDE.goal) this.full(now, true);
+    if (w.tide >= TIDE.goal) o.full(now, true); // the owner books it, whichever room filled it
   }
 
   /** A hero (or their creature) hurt a marcher for `dmg`: it counts for them if they stand within TIDE.creditTiles of the west gate. */
@@ -76,10 +100,11 @@ export class Tide {
     this.m.dmg.set(p.name, (this.m.dmg.get(p.name) ?? 0) + dmg);
   }
 
-  /** Every server tick: the march's waves and end a couple of times a second, the news once a second. */
+  /** Every server tick: (the owner only) the march's waves and end a couple of times a second; (every room) the news once a second. */
   tick(now: number) {
     const w = this.h.world();
-    if (this.m) { if (now >= this.checkAt) { this.checkAt = now + CHECK_MS; this.tickMarch(now); } }
+    if (this.lead() !== this) { /* another room runs the event: this one only sends the news */ }
+    else if (this.m) { if (now >= this.checkAt) { this.checkAt = now + TIDE.checkMs; this.tickMarch(now); } }
     else if (w.marchAt !== undefined && now >= w.marchAt) {
       if (now - w.marchAt > TIDE.lateMs) { w.marchAt = marchTime(now, this.h.dayFrac(now)); this.h.changed(); } // missed (server down at dusk)
       else this.start(now);
@@ -93,8 +118,13 @@ export class Tide {
     this.sendAt = 0;
   }
 
-  /** The march sets out (at dusk; the bench and dev servers force it). `worst`: the last wave, all of it at once (TIDE=1 bench). */
-  start(now: number, worst = false) {
+  /**
+   * The march sets out (at dusk; the bench and dev servers force it), in the owner's room (asked of another room, the
+   * owner starts it). `worst`: the last wave, all of it at once (TIDE=1 bench).
+   */
+  start(now: number, worst = false): void {
+    const o = this.lead();
+    if (o !== this) return o.start(now, worst);
     if (this.m) return;
     const w = this.h.world();
     w.marchAt = undefined;
@@ -110,29 +140,28 @@ export class Tide {
    * the march now, "/tideend" ends one (paid as at the time limit). True = it was one of these.
    */
   dev(text: string, now = Date.now()): boolean {
-    const n = text.match(/^\/tide\s+(\d+)$/i);
+    const n = text.match(/^\/tide\s+(\d+)$/i), o = this.lead();
     if (n) {
-      if (this.m) return true;
+      if (o.m) return true;
       const w = this.h.world();
       w.tide = Math.min(TIDE.goal, Number(n[1])); w.marchAt = undefined;
       this.h.changed();
-      if (w.tide >= TIDE.goal) this.full(now, true);
+      if (w.tide >= TIDE.goal) o.full(now, true);
       this.sendAt = 0;
       return true;
     }
-    if (/^\/tidemarch$/i.test(text)) { this.start(now); return true; }
-    if (/^\/tideend$/i.test(text)) { if (this.m) this.end(false); return true; }
+    if (/^\/tidemarch$/i.test(text)) { o.start(now); return true; }
+    if (/^\/tideend$/i.test(text)) { if (o.m) o.end(false); return true; }
     return false;
   }
 
-  /** The meter is full: the march is called for the next dusk. */
+  /** (The owner) The meter is full: the march is called for the next dusk; `loud`: every room's Act 1 heroes hear it fill. */
   private full(now: number, loud: boolean) {
     const w = this.h.world();
     w.tide = TIDE.goal;
     w.marchAt = marchTime(now, this.h.dayFrac(now));
     this.h.changed();
-    if (loud) this.sfx("tidefull");
-    this.sendAt = 0;
+    for (const t of rooms.has(this) ? rooms : [this]) { if (loud) t.sfx("tidefull"); t.sendAt = 0; }
   }
 
   private tickMarch(now: number) {
@@ -158,12 +187,13 @@ export class Tide {
     if (n <= 0) return;
     const heroes = [...this.h.heroes()].map(([, p]) => p).filter((p) => !p.dead);
     let base = TIDE_SPAWNS[Math.floor(Math.random() * TIDE_SPAWNS.length)];
-    for (let i = 0; i < 8 && heroes.some((p) => Math.abs(p.x - base.x) < CLEAR && Math.abs(p.y - base.y) < CLEAR); i++) base = TIDE_SPAWNS[Math.floor(Math.random() * TIDE_SPAWNS.length)];
-    const near = TIDE_SPAWNS.filter((s) => Math.abs(s.x - base.x) <= 2 * TILE && Math.abs(s.y - base.y) <= 2 * TILE);
+    const clear = TIDE.clearTiles * TILE, spread = TIDE.packTiles * TILE;
+    for (let i = 0; i < 8 && heroes.some((p) => Math.abs(p.x - base.x) < clear && Math.abs(p.y - base.y) < clear); i++) base = TIDE_SPAWNS[Math.floor(Math.random() * TIDE_SPAWNS.length)];
+    const near = TIDE_SPAWNS.filter((s) => Math.abs(s.x - base.x) <= spread && Math.abs(s.y - base.y) <= spread);
     if (M.sent === 0) this.sfx("tidemarch", TIDE_GOAL);
     for (let i = 0; i < n; i++) {
       const { kind, level } = tideMarcher(W), at = near[Math.floor(Math.random() * near.length)];
-      const id = this.h.spawn(kind, level, { x: at.x + (Math.random() - 0.5) * 12, y: at.y + (Math.random() - 0.5) * 12 }, tideHome());
+      const id = this.h.spawn(kind, level, { x: at.x + (Math.random() - 0.5) * TIDE.jitterPx, y: at.y + (Math.random() - 0.5) * TIDE.jitterPx }, tideHome());
       M.sent++;
       if (id) M.ids.push(id);
     }

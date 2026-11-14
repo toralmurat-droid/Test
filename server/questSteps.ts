@@ -1,7 +1,9 @@
 import { CHAINS, questDef, questStep, USE_RANGE, npcPresent, type Quester, type QuestState, type QuestStep, type Summon } from "../shared/quests";
 import { npcById, TALK_RANGE } from "../shared/npcs";
-import { BARGAIN, CARRY, choiceOf, coverAt, HOLD, isDark, lightDrain, META, metaOf, type MetaKey, QSTATE_MS, sayFor, stealthMult, SYNC, syncOk, UNSEEN, wetAt, withChoice } from "../shared/questSteps";
+import { BARGAIN, CARRY, choiceOf, coverAt, HOLD, isDark, lightDrain, META, metaOf, type MetaKey, PICK, QSTATE_MS, sayFor, stealthMult, SYNC, syncOk, UNSEEN, wetAt, withChoice } from "../shared/questSteps";
 import { dayFrac as clockDayFrac } from "../shared/daynight";
+import { actAt } from "../shared/act2";
+import { TILE } from "../shared/constants";
 import { isSafeZone, isSolidAt } from "../shared/map";
 import { withTrait } from "../shared/cosmetics";
 import { noMobsAt } from "../shared/spawns";
@@ -67,8 +69,11 @@ export interface StepHost {
 interface Lantern { c: number; s: QuestStep; owners: string[]; holder: string; last: string; x: number; y: number; light: number; dim: boolean; sentAt: number; sig: string }
 /** A hold run (hold step): one per group on the step, its wave monsters, the guarded NPC's HP. Transient. */
 interface HoldRun { c: number; s: QuestStep; owners: string[]; lead: string; start: number; hp: number; mobs: string[]; nextWave: number; nextHurt: number; outSince: number; sentAt: number; sig: string }
-/** A hero on an unseen step (one at a time): hidden (armed) from a checkpoint until seen, hurt or at the last one. Transient. */
-interface Sneak { c: number; s: QuestStep; armed: boolean; seen: boolean; rearmAt: number; cover: boolean; dark: boolean; sentAt: number; sig: string }
+/**
+ * A hero on an unseen step (one at a time): hidden (armed) from a checkpoint until seen, hurt, at the last one, or gone
+ * from the climb (UNSEEN.leaveTiles, another act: `act` is where they hid). Transient.
+ */
+interface Sneak { c: number; s: QuestStep; armed: boolean; seen: boolean; rearmAt: number; cover: boolean; dark: boolean; act: number; sentAt: number; sig: string }
 /** A hero's seal turns on a sync step: when each seal last turned for them (0 = not). Transient. */
 interface Turns { c: number; s: QuestStep; t: [number, number]; sentAt: number; sig: string }
 /** A boss's bargain on offer to one hero (QuestStep.bargain): its monster, when it opened, when the prompt last went out. Transient. */
@@ -79,8 +84,6 @@ const TIMED = CHAINS.flatMap((ch, c) => ch.quests.some((d) => d.steps.some((s) =
 const SNEAKY = CHAINS.flatMap((ch, c) => ch.quests.some((d) => d.steps.some((s) => s.unseen)) ? [c] : []);
 const rint = (a: number, b: number) => a + Math.floor(Math.random() * (b - a + 1));
 
-/** A wrong grave's ambush stays this long if nobody kills it. */
-export const AMBUSH_MS = 120_000;
 /** How close a hero must stand to an NPC to answer them, and to an object to use it (the same slack as TownRoom). */
 const TALK_R = TALK_RANGE * 1.5, USE_R = USE_RANGE * 1.5;
 
@@ -182,7 +185,7 @@ export class QuestSteps {
         return true;
       }
       // the wrong one: what lies there gets up (it outlives the step: summonChain -1), and the hero starts over at `back`
-      const mid = this.h.summon(pid, { ...pk.wrong, x: o.x, y: o.y }, -1, undefined, AMBUSH_MS);
+      const mid = this.h.summon(pid, { ...pk.wrong, x: o.x, y: o.y }, -1, undefined, PICK.ambushMs);
       (this.ambush.get(pid) ?? this.ambush.set(pid, new Set()).get(pid)!).add(mid);
       this.h.broadcast("sfx", { ev: "gravewrong", id: pid, m: mid, x: Math.round(o.x), y: Math.round(o.y) });
       this.h.setStage(pid, c, Math.max(1, Math.min(pk.back, q.questStage)), 0);
@@ -331,7 +334,7 @@ export class QuestSteps {
         const mate = this.groupOf(pid).map((o) => this.holds.find((r) => r.c === c && r.s === s && r.owners.includes(o))).find((r) => !!r);
         if (mate) { mate.owners.push(pid); mate.sig = ""; continue; }
         const now = Date.now();
-        this.holds.push({ c, s, owners: [pid], lead: pid, start: now, hp: s.hold!.npcHp, mobs: [], nextWave: now + 1500, nextHurt: now + HOLD.hurtMs, outSince: 0, sentAt: 0, sig: "" });
+        this.holds.push({ c, s, owners: [pid], lead: pid, start: now, hp: s.hold!.npcHp, mobs: [], nextWave: now + HOLD.firstWaveMs, nextHurt: now + HOLD.hurtMs, outSince: 0, sentAt: 0, sig: "" });
       }
     });
   }
@@ -380,7 +383,7 @@ export class QuestSteps {
     let made = 0;
     for (let i = 0; i < n; i++) {
       for (let k = 0; k < 8; k++) {
-        const ang = Math.random() * Math.PI * 2, d = a.r * (0.75 + Math.random() * 0.2);
+        const ang = Math.random() * Math.PI * 2, d = a.r * (HOLD.ring[0] + Math.random() * HOLD.ring[1]);
         const x = npc.x + Math.cos(ang) * d, y = npc.y + Math.sin(ang) * d;
         if (isSolidAt(x, y) || isSafeZone(x, y) || noMobsAt(x, y)) continue;
         const kind = W.kinds[Math.floor(Math.random() * W.kinds.length)];
@@ -423,11 +426,11 @@ export class QuestSteps {
         if (s?.type !== "unseen") continue;
         let k = this.sneaks.get(pid);
         if (k && (k.c !== c || k.s !== s)) continue; // hiding on another chain's step
-        if (!k) this.sneaks.set(pid, (k = { c, s, armed: false, seen: false, rearmAt: 0, cover: false, dark: false, sentAt: 0, sig: "" }));
+        if (!k) this.sneaks.set(pid, (k = { c, s, armed: false, seen: false, rearmAt: 0, cover: false, dark: false, act: 0, sentAt: 0, sig: "" }));
         if (k.armed || p.dead || now < k.rearmAt) continue;
         const cps = s.unseen!.checkpoints, at = cps[Math.max(0, Math.min(q.questCount, cps.length) - 1)];
         if (Math.hypot(p.x - at.x, p.y - at.y) > at.r || this.targeted(pid, p).length) continue;
-        k.armed = true; k.seen = false;
+        k.armed = true; k.seen = false; k.act = actAt(p.y, p.x);
         this.sneakMul(p, k, now);
         if (!q.questCount) this.h.setStage(pid, c, q.questStage, 1); // count = checkpoints reached: the first one now
         this.sendSneak(pid, k, now, true);
@@ -453,6 +456,8 @@ export class QuestSteps {
     if (!this.onStep(pid, k.c, k.s)) { this.sneaks.delete(pid); p.aggroMul = 1; this.sendSneak(pid, k, now, true, "off"); return; }
     if (!k.armed) return this.sendSneak(pid, k, now);
     const spec = k.s.unseen!, cps = spec.checkpoints;
+    // gone from the climb (a waygate, a long walk): no longer hidden, and nothing that sees them now warps them back
+    if (actAt(p.y, p.x) !== k.act || cps.every((a) => Math.hypot(p.x - a.x, p.y - a.y) > UNSEEN.leaveTiles * TILE)) return this.disarm(pid, k, now, "off");
     const seenBy = this.targeted(pid, p);
     if (k.seen || seenBy.length) return this.caught(pid, p, k, seenBy, now);
     this.sneakMul(p, k, now);
@@ -476,7 +481,7 @@ export class QuestSteps {
     this.h.warp?.(pid, at.x, at.y);
   }
 
-  private disarm(pid: string, k: Sneak, now: number, end: "seen" | "done" | "dead") {
+  private disarm(pid: string, k: Sneak, now: number, end: "seen" | "done" | "dead" | "off") {
     const p = this.h.player(pid);
     if (p) p.aggroMul = 1;
     k.armed = false; k.seen = false;

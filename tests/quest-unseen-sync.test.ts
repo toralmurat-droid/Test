@@ -7,6 +7,7 @@ import { MOBS, TILE } from "../shared/constants";
 import { ACTIVE_CLASSES, CLASSES } from "../shared/classes";
 import { moveStep } from "../shared/movement";
 import { isSolidAt } from "../shared/map";
+import { actAt } from "../shared/act2";
 import { startRoom, wait } from "./helpers/room";
 
 const ci = (id: string) => CHAINS.findIndex((c) => c.id === id);
@@ -195,6 +196,51 @@ test("unseen: saves keep the count, a restored hero finishes the climb and the p
     await until(() => stage(B.p, U).questId === quest + 1, "the postern step finishes the quest");
     assert.ok(B.p.gold > gold, "and pays its reward");
     await B.c.leave();
+  } finally { delete process.env.DAY_TIME; await srv.stop(); }
+});
+
+test("unseen: a hidden hero who leaves the climb (far from every checkpoint, or another act) is no longer hidden and never warped back", async () => {
+  process.env.DAY_TIME = "day";
+  const srv = await startRoom();
+  try {
+    const A = await hero(srv), room = srv.room, id = A.id, p = A.p;
+    const town = { x: p.x, y: p.y };
+    assert.equal(actAt(town.y, town.x), 1, "a new hero starts in Act 1");
+    p.invulnUntil = Date.now() + 600_000; p.hp = p.maxHp = 1e6;
+    onClimb(p, 2);
+    for (const c of cps) clearMobs(room, c.x, c.y);
+    const sn = () => room.qsteps.sneaks.get(id);
+    const far = (x: number, y: number) => cps.every((c) => Math.hypot(x - c.x, y - c.y) > (UNSEEN.leaveTiles + 5) * TILE);
+    let spot: { x: number; y: number } | undefined;
+    for (let r = UNSEEN.leaveTiles + 6; r < UNSEEN.leaveTiles + 30 && !spot; r++) for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, -1], [1, -1], [-1, 1]]) {
+      const x = cps[1].x + dx * r * TILE, y = cps[1].y + dy * r * TILE;
+      if (!spot && !isSolidAt(x, y) && far(x, y) && actAt(y, x) === actAt(cps[1].y, cps[1].x)) spot = { x, y };
+    }
+    assert.ok(spot, "a walkable spot in the same act, far from every checkpoint");
+    /** Hidden at the second checkpoint, then put at `to` and targeted there: off, not warped, not seen. */
+    const leaveAndGetSeen = async (to: { x: number; y: number }, what: string) => {
+      at(p, cps[1]);
+      await until(() => sn()?.armed === true, `${what}: hidden at the second checkpoint`, UNSEEN.rearmMs + 5000);
+      A.msgs.length = 0;
+      at(p, to);
+      await until(() => sn()?.armed === false, `${what}: no longer hidden`);
+      assert.equal(p.aggroMul, 1, `${what}: aggro back to normal`);
+      await until(() => A.msgs.some((m) => m.T === "qstate" && m.chain === U && m.end === "off"), `${what}: qstate end off`);
+      assert.ok(sn(), `${what}: still on the step (can hide again at the checkpoint)`);
+      const mid = `tgt${Math.random()}`;
+      room.spawnMob("slime", -1, mid, { x: p.x + 3 * TILE, y: p.y, level: 45 });
+      const mob = room.state.mobs.get(mid);
+      mob.target = id; mob.hateId = id; mob.hate = 1;
+      await wait(1000);
+      assert.ok(Math.hypot(p.x - to.x, p.y - to.y) < 2, `${what}: not warped back to the checkpoint`);
+      assert.equal(A.msgs.filter((m) => m.T === "travel").length, 0, `${what}: no travel`);
+      assert.equal(sfxCount(A, "seen"), 0, `${what}: not "seen"`);
+      assert.equal(stage(p, U).questCount, 2, `${what}: the count is kept`);
+      room.state.mobs.delete(mid);
+    };
+    await leaveAndGetSeen(spot!, "far away");
+    await leaveAndGetSeen(town, "another act");
+    await A.c.leave();
   } finally { delete process.env.DAY_TIME; await srv.stop(); }
 });
 

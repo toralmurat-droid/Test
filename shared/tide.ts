@@ -60,6 +60,13 @@ export const TIDE = {
   runeLevel: 12,
   /** "tide" messages go out at most this often (and only when something changed). */
   sendMs: 1000,
+  /** The march's waves and end are checked this often (ms). */
+  checkMs: 500,
+  /** A pack doesn't come out with a hero within this many tiles (each axis) if it can help it (like NO_SPAWN_RANGE). */
+  clearTiles: 10,
+  /** A pack's marchers come out at spawn tiles within this many tiles (each axis) of one picked spot, ±jitterPx/2 off each tile centre. */
+  packTiles: 2,
+  jitterPx: 12,
 };
 
 /** Ms from a time of day t (0..1) until the next dusk begins; 0 while it is dusk. */

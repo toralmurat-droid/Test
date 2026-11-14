@@ -25,6 +25,11 @@ export interface HoldSpec { at: Area; ms: number; npc: string; npcHp: number; np
  * ambush that outlives the step) and sends the hero back to stage `back` (1-based). `sets` is the choice a right pick records.
  */
 export interface PickSpec { objects: QuestObject[]; answer: number; wrong: Summon; back: number; sets?: { flag: ChoiceId; v: number } }
+/** Rules every pick step shares (the per-step numbers are in its spec). */
+export const PICK = {
+  /** A wrong pick's ambush stays this long (ms) if nobody kills it (it outlives the step) */
+  ambushMs: 120_000,
+};
 /** unseen: walk the checkpoints without being targeted; `night` / `cover` scale aggro range, never below `floor`. */
 export interface UnseenSpec { checkpoints: Area[]; night: number; cover: number; floor: number }
 /** sync: both seals turned within `windowMs` (a group) or `soloMs` (alone); a summon within `summonReach` turns one too. */
@@ -94,6 +99,10 @@ export const HOLD = {
   hurtMs: 500, reach: 1.2 * TILE,
   /** Wave monsters on the whole server at most (each run is capped by its own maxAlive too) */
   serverCap: 30,
+  /** The first wave of a run comes this long (ms) after a hero walks in; later ones every waves.everyMs */
+  firstWaveMs: 1500,
+  /** Wave monsters come out this share of the area's radius from the guarded NPC, plus up to ring[1] more */
+  ring: [0.75, 0.2] as [number, number],
 };
 /**
  * A boss's bargain (QuestStep.bargain) is open while the boss is at full HP, the hero within `r` (px) and alive, and
@@ -124,6 +133,11 @@ export const UNSEEN = {
   box: 12 * TILE,
   /** After being seen, the hero can't hide again at the checkpoint for this long (ms): a breath to look round */
   rearmMs: 2000,
+  /**
+   * A hidden hero farther than this (tiles) from every checkpoint of the step (or in another act) is no longer hidden:
+   * the climb is over for now, and being seen there must not warp them back to it. The checkpoints are <= 23 tiles apart.
+   */
+  leaveTiles: 30,
 };
 export const SYNC = {
   /** The same hero turning the same seal again within this (ms) is ignored (no sfx spam from a held E) */

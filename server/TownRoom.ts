@@ -1074,6 +1074,7 @@ export class TownRoom extends Room<TownState> {
 
   onDispose() {
     liveRooms.delete(this);
+    this.tide?.release(); // another room may own the Gloam Tide now (server/tide.ts)
     this.state.players.forEach((p) => saveHero(p.name, p.cls, this.snapshot(p)));
     return flushFinal();
   }

@@ -2,9 +2,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { CHAINS, chainState, objectDone, packQuest, usableObjects, questStep } from "../shared/quests";
-import { choiceOf } from "../shared/questSteps";
+import { choiceOf, PICK } from "../shared/questSteps";
 import { npcById } from "../shared/npcs";
-import { AMBUSH_MS } from "../server/questSteps";
 import { startRoom, wait } from "./helpers/room";
 
 const G = CHAINS.findIndex((c) => c.id === "grave");
@@ -64,8 +63,8 @@ test("the Empty Grave: pick step, ambush that outlives the step, mourners in any
     const amb = myAmbush();
     assert.equal(amb.length, 1);
     assert.equal(amb[0].summonChain, -1);
-    assert.ok(Math.abs(amb[0].banishAt - (t0 + AMBUSH_MS)) < 3000, `banishAt ${amb[0].banishAt - t0} ms ahead`);
-    assert.equal(AMBUSH_MS, 120_000);
+    assert.ok(Math.abs(amb[0].banishAt - (t0 + PICK.ambushMs)) < 3000, `banishAt ${amb[0].banishAt - t0} ms ahead`);
+    assert.equal(PICK.ambushMs, 120_000);
     assert.deepEqual([state().questStage, state().questCount], [1, 0], "back to the first step with nothing done");
     assert.equal(choiceOf(p, "grave"), 0, "a wrong pick records nothing");
     assert.equal(objectDone(RIGHT, p), false);
