@@ -95,7 +95,8 @@ All of these must pass (CI runs 1–3 and the Postgres smoke test):
   socket that falls behind stops compressing, or its send queue only grows and the transport drops the client. A
   client that gets a new socket any other way (for example `allowReconnection`) must be guarded too.
 - The start screen (`client/src/main.ts`) must not import Phaser or anything that does: the game loads through
-  `import("./game")`. After touching its imports, check that the built `main-*.js` stays small (about 85 kB).
+  `import("./game")`. After touching its imports, check the build: the scripts `dist/index.html` preloads stay small
+  (well under 100 kB each) and none of them mentions Phaser.
 - Art, music and font URLs go through `assetUrl()` (`client/src/assetUrl.ts`): the `?v=<content hash>` is what lets the
   browser keep them. A plain `assets/...` URL still works but is fetched again on every visit.
 - Big features that span several sessions keep a progress log in `docs/` (see `docs/summoner-rework-progress.md`).
