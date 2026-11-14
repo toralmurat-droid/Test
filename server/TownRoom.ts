@@ -78,6 +78,8 @@ import { cleanFeast, familyOf, type Feast, feastMult, THRALL, thrallMax } from "
 import { Champions, type ChampState } from "./champions";
 import { QuestSteps, setMeta } from "./questSteps";
 import { Tide } from "./tide";
+import { Rumours } from "./rumours";
+import { cleanRumour, rumourDay, RUMOURS, type RumourState } from "../shared/rumours";
 import { TIDE } from "../shared/tide";
 import { world, worldChanged } from "./worldStore";
 import { META, metaOf, nextStage, withChoice } from "../shared/questSteps";
@@ -195,6 +197,7 @@ export class Player extends Schema {
   lastAttack = 0;
   portals = new Set<string>(); // portal stones this hero has woken (shared/portals.ts; saved, never synced)
   bounty?: BountyState; // bounty board hunt in progress (shared/bounty.ts; saved, sent by message)
+  rumour?: RumourState; // Tavern Rumours (server/rumours.ts): today's offers, which are done, the one under way (saved, sent by message)
   bountyDone = 0;
   lastSpecial = -Infinity;
   // Hidden initiative / poise (shared/combat.ts)
@@ -671,6 +674,8 @@ export class TownRoom extends Room<TownState> {
   private qsteps!: QuestSteps;
   /** The Gloam Tide (server/tide.ts): the world meter from blob kills, and the march on the west gate. */
   private tide!: Tide;
+  /** Tavern Rumours (server/rumours.ts): Mags' three daily side quests. */
+  private rumours!: Rumours;
 
   onCreate() {
     liveRooms.add(this);
@@ -706,10 +711,15 @@ export class TownRoom extends Room<TownState> {
       removeMob: (id) => { const m = this.state.mobs.get(id); if (!m || m.dead) return; m.dead = true; m.hp = 0; this.clock.setTimeout(() => this.state.mobs.delete(id), 500); },
       send: (pid, type, msg) => this.clients.find((cl) => cl.sessionId === pid)?.send(type, msg),
       act1: (p) => actAt(p.y, p.x) === 1, dayFrac: (now) => worldDayFrac(now), world, changed: worldChanged,
-      pay: (pid, gold, rune) => {
-        const p = this.state.players.get(pid);
-        if (p) { p.gold += gold; if (rune) { if (this.bagFull(p)) this.dropItem("gear", p.x, p.y, 1, rune, pid); else setBag(p, [...bagItems(p), rune]); } }
-      },
+      pay: (pid, gold, rune) => this.payHero(pid, gold, rune),
+    });
+    this.rumours = new Rumours({
+      heroes: () => this.state.players.entries(), hero: (pid) => this.state.players.get(pid), mob: (id) => this.state.mobs.get(id),
+      summon: (pid, sm, lifeMs) => { const id = this.summonFused(pid, sm, RUMOURS.tag), m = this.state.mobs.get(id); if (m) m.banishAt = Date.now() + lifeMs; return id; },
+      removeMob: (id) => { const m = this.state.mobs.get(id); if (!m || m.dead) return; m.dead = true; m.hp = 0; this.clock.setTimeout(() => this.state.mobs.delete(id), 500); },
+      send: (pid, type, msg) => this.clients.find((cl) => cl.sessionId === pid)?.send(type, msg),
+      pay: (pid, gold, rune) => this.payHero(pid, gold, rune), dayFrac: (now) => worldDayFrac(now),
+      save: (pid) => { const p = this.state.players.get(pid); if (p) saveHero(p.name, p.cls, this.snapshot(p)); },
     });
     this.setState(new TownState());
     // Monsters near each hero go out just before every state patch, so both halves of an update arrive together
@@ -792,6 +802,8 @@ export class TownRoom extends Room<TownState> {
     this.onMessage("portals", (client) => this.sendPortals(client));
     this.onMessage("travel", (client, msg: { to?: string }) => this.travel(client, msg?.to));
     this.onMessage("bounty", (client, msg: { take?: number; drop?: boolean }) => this.bountyMsg(client, msg ?? {}));
+    // Tavern Rumours: {take: 0..2} by Mags, {drop: true}, {} = resend (checked in server/rumours.ts)
+    this.onMessage("rumour", (client, msg: unknown) => { if (this.allow("ask", client)) this.rumours.msg(client.sessionId, msg); });
     this.onMessage("shrine", (client) => client.send("shrine", { left: Math.max(0, this.shrineReadyAt - Date.now()) }));
     // The client is ready (loading screen gone): a hero on the first step of First Steps gets its banner
     this.onMessage("tutorial", (client) => {
@@ -1005,6 +1017,7 @@ export class TownRoom extends Room<TownState> {
     if (back?.group.length) this.regroupOnJoin(client.sessionId, p, back.group);
     this.sendBoard(client); // the Ideas board is ready as soon as it is opened
     this.tide.join(client.sessionId); // the Gloam Tide's meter (server/tide.ts)
+    this.rumours.join(client.sessionId); // today's rumours (server/rumours.ts)
     if (Object.keys(p.feast).length) client.send("feast", { feast: p.feast }); // Devour: what this hero has eaten
     console.log(`${p.name} the ${CLASSES[p.cls].name} joined (${this.clients.length} online)`);
   }
@@ -1016,6 +1029,7 @@ export class TownRoom extends Room<TownState> {
     if (p && !announced) this.rememberHero(client.sessionId, p); // during an update everyone was remembered together (groups intact)
     this.partyLeave(client.sessionId);
     this.qsteps.leave(client.sessionId);
+    this.rumours.leave(client.sessionId);
     this.lastDrainFx.delete(client.sessionId);
     this.invites.delete(client.sessionId);
     this.lootFilters.delete(client.sessionId);
@@ -1097,7 +1111,7 @@ export class TownRoom extends Room<TownState> {
         return [[a, q.questId], [b, q.questStage], [n, q.questCount], [ch.verKey, ch.version]];
       })),
       portals: [...p.portals], act: actAt(p.y, p.x),
-      bounty: p.bounty, bountyDone: p.bountyDone, wear: p.wear, feast: { ...p.feast },
+      bounty: p.bounty, bountyDone: p.bountyDone, wear: p.wear, feast: { ...p.feast }, rumour: p.rumour && { ...p.rumour },
       // the reserved arcs numbers (shared/questSteps.ts META): choices made, cosmetics; missing = 0
       flags: metaOf(p, META.flags) || undefined, cosm: metaOf(p, META.cosm) || undefined,
       ...(p.cls === "summoner" ? { grimoire: this.grimoireOf(p), suTree: SUMMONER_TREE } : {}),
@@ -1136,6 +1150,7 @@ export class TownRoom extends Room<TownState> {
     p.bountyDone = Math.max(0, Math.floor(num(s.bountyDone)));
     p.wear = Math.min(WEAR.max, Math.max(0, Math.round(num(s.wear))));
     p.bounty = cleanBounty(s.bounty);
+    p.rumour = cleanRumour(s.rumour, rumourDay(Date.now()), p.level); // another day's rumours start over
     p.feast = cleanFeast(s.feast);
     setMeta(p, META.flags, num(s.flags)); setMeta(p, META.cosm, num(s.cosm)); // choices and cosmetics, kept apart from the arcs' progress
     const sv = s as unknown as Record<string, unknown>;
@@ -2725,6 +2740,7 @@ export class TownRoom extends Room<TownState> {
     });
     this.qsteps.tick(now, dtMs); // carried lanterns, hold runs (server/questSteps.ts)
     this.tide.tick(now); // the Gloam Tide's march (server/tide.ts)
+    this.rumours.tick(now); // rumours: reach steps, ambushers, walking up to Mags (server/rumours.ts)
     this.state.items.forEach((it, id) => { if (now > it.expires) this.state.items.delete(id); });
     const tick = ++this.tickNo;
     // Live heroes, gathered once so each monster's "anyone near?" check is a plain array scan
@@ -5066,6 +5082,7 @@ export class TownRoom extends Room<TownState> {
     if (a) for (let c = 0; c < CHAINS.length; c++) this.questKill(attackerId, a, m, c);
     if (a) this.bountyKill(attackerId, a, m);
     if (a) this.tide.kill(attackerId, m); // a blob fills the Gloam Tide's meter (server/tide.ts)
+    if (a) this.rumours.kill(attackerId, targetId); // a rumour's ambusher (server/rumours.ts)
     // Kill XP: every group member in the same zone gets it (the killer alone when solo)
     const xp = Math.round(def.xp * mobScale(m.level, "xp"));
     for (const pid of a?.party ? this.groupNear(attackerId, m.x, m.y) : [attackerId]) this.grantXp(pid, xp, m);
@@ -5551,6 +5568,7 @@ export class TownRoom extends Room<TownState> {
     const p = this.state.players.get(id);
     if (!p || p.dead) return;
     if (this.qsteps.use(id, oid)) return; // pick and the like (server/questSteps.ts)
+    if (this.rumours.use(id, oid)) return; // a rumour's objects (server/rumours.ts)
     for (let c = 0; c < CHAINS.length; c++) {
       const q = this.qs(p, c), s = questStep(q);
       if (s?.type !== "use") continue;
@@ -5683,6 +5701,14 @@ export class TownRoom extends Room<TownState> {
     if (msg.drop) p.bounty = undefined;
     else if (typeof msg.take === "number" && board && !p.bounty && offers[msg.take]) p.bounty = { ...offers[msg.take], n: 0 };
     client.send("bounty", { board: board?.id ?? "", offers, active: p.bounty ?? null });
+  }
+
+  /** Pay a hero (the Tide, rumours): gold, and a rune into the bag, or at their feet if it is full. */
+  private payHero(pid: string, gold: number, rune?: string) {
+    const p = this.state.players.get(pid);
+    if (!p) return;
+    p.gold += gold;
+    if (rune) { if (this.bagFull(p)) this.dropItem("gear", p.x, p.y, 1, rune, pid); else setBag(p, [...bagItems(p), rune]); }
   }
 
   /** A monster died to this hero: does it count for their bounty? The last kill pays out on the spot. */
@@ -5859,7 +5885,7 @@ export class TownRoom extends Room<TownState> {
     // Kills and drops count anywhere on the map: only the monster's type matters (Murat's rule)
     if (!s || !s.kinds?.includes(m.kind)) return;
     if (s.type === "kill" && (m.merged ?? 1) < (s.fused ?? 1)) return;
-    if (s.type === "kill" && s.own && m.summonFor !== id) return; // a named leader: only the one summoned for this player
+    if (s.type === "kill" && s.own && (m.summonFor !== id || m.summonChain !== c)) return; // a named leader: only the one summoned for this player on this chain (not a rumour's or a wrong grave's)
     if (s.type === "kill" && s.gift && q.questCount + 1 >= stepGoal(s)) this.giveGift(id, p, s.gift, m);
     if (s.type === "kill") this.questProgress(id, p, c, q.questCount + 1);
     else if (s.type === "collect" && Math.random() < (s.chance?.[m.kind] ?? 0)) this.dropItem("quest", m.x, m.y, 1, s.item!, id);

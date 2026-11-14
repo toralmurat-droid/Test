@@ -2480,6 +2480,7 @@ const IDLE: Record<string, string> = {
   mourner2: "Gran would've hated all this fuss. She'd have wanted the kettle on.",
   mourner3: "I build boats. Corin built better ones. I keep thinking he'll walk up the lane and say so.",
   ilka: "Don't look at me like that. Keep walking.",
+  alewife: "Ale's cold, the gossip's warm. Pull up a barrel, love. I hear everything sooner or later.",
 };
 /**
  * Idle lines by the hero's choice, also said instead of a finished chain's plain `after` (with every story done, that

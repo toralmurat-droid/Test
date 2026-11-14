@@ -5,7 +5,7 @@
  * Traits come from quests (beast: took the Hide-Mother's bargain, server/questSteps.ts); a trait may bring a talent
  * (shared/talents.ts TRAIT_TALENTS). Titles come with the Apprentice (WP7) and the rumours (WP6).
  */
-export const TITLES = ["", "Mentor", "Captain's Own", "Warden of Oakvale"] as const;
+export const TITLES = ["", "Mentor", "Captain's Own", "Warden of Oakvale", "Rumour-Chaser"] as const;
 /** Trait bit per id (beast: the hide sewn in at the Hide-Mother's bargain; permanent, Penance keeps it). */
 export const TRAITS = { beast: 0 } as const;
 export type TraitId = keyof typeof TRAITS;

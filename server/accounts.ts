@@ -1,4 +1,5 @@
 import type { BountyState } from "../shared/bounty";
+import type { RumourState } from "../shared/rumours";
 // Player accounts: name + password, with one saved hero per class.
 // Saves live in a JSON file on the server (SAVE_FILE, default data/saves.json).
 import path from "node:path";
@@ -52,6 +53,8 @@ export interface HeroSave {
   flags?: number;
   /** Cosmetics: title and look traits (shared/cosmetics.ts), kept in Player.arcs "$c"; missing = none. */
   cosm?: number;
+  /** Tavern Rumours (shared/rumours.ts): the day, its offers' level, done bits, the one under way, all finished; another day's loads fresh. */
+  rumour?: RumourState;
 }
 
 interface Account {

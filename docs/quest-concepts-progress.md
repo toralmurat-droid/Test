@@ -10,8 +10,8 @@ One branch (`claude/brave-hypatia-dkkcd3`), one draft PR until all work packages
 | WP2 carry + hold | #1 Last Lantern, #2 Hold the Wheel | done (server, client, text, tests); bench pending |
 | WP3 unseen + sync | #4 Unseen, #8 Two Hands | server, text, tests done; client next |
 | WP4 Bargain + Penance | #6 | server, text, tests done; client next |
-| WP5 Tide | #7 | server done; client, tests, balance, bench next |
-| WP6 Rumours | #10 | todo |
+| WP5 Tide | #7 | server, client, tests done; tuning + bench next |
+| WP6 Rumours | #10 | server done; client, text, tests next |
 | WP7 Apprentice | #9 | todo |
 
 ## Baseline (commit a4ebcf1, before any change)
@@ -263,3 +263,4 @@ at Lv 10, `duel.ts` only if Hidebound goes on. Bench: WP2 and WP5 (`TIDE=1`, `SP
 - 2026-11-14: WP2 balance: Millrace Glutton 100% all classes (7-11 s); Hold-wave XP ~190/min vs ~160-190 grinding (not an exploit). WP3 server landed. Polish list: carried lantern is small (~10 px); quest warps reuse "travel" and play the portal sound (client should skip when `why` is set); check that a hidden hero can't skip a stretch by portal.
 - 2026-11-14: WP4 server landed. Bargain prompt resends every 6 s while open (the client modal can be closed with Esc); `"choice" {chain, close: true}` when it ends. Ursk keeps fighting during the offer (no free stun opener). Hidebound list of beast kinds is written out in `shared/talents.ts` (can drift from `BEAST_FOLK`). Penance needs bargain 1 AND the Hide Rite handed in. Keeper of the Twin Seals hpMult 3 -> 7 like the Envoy. Test flakes fixed: room logs to stderr, champions split count, Void Arsenal lance poll.
 - 2026-11-14: WP5 Tide server landed. Numbers in `shared/tide.ts` `TIDE` (goal 1500, 4 waves 24/30/36/40 Lv 4-12, ≤ 40 alive, 12 min limit, gold 15 + 8 × level capped 350, runes Lv 12 for the top 3). Goal point 10 tiles west of the west gate, 11.2 tiles from the nearest watch post (sight 6). A march is lost if the server restarts mid-march (next dusk is booked). Several rooms would share one meter.
+- 2026-11-14: WP6 Rumours server landed. Errands are keyed by (UTC day, zone): everyone offered the same zone that day gets the same errand. Act 1 overworld zones only (no crypts or warrens: no night underground). 365 days x Lv 1-30 checked: every object in its zone, on open ground and reachable on foot. `questKill` own-steps now also need `m.summonChain === c`, so rumour and grave ambushers can't fill a chain's own-boss step (keep this in WP7). Reaching 7 rumours overwrites any earlier title (no owned-titles list yet).
