@@ -5,7 +5,8 @@
  */
 import Phaser from "phaser";
 import { CLANS, CLAN_KEYS, type ClanKey } from "../../shared/war/clans";
-import { STANDARD, STANDARDS, type Standard } from "../../shared/war/standards";
+import { HOLDS, STANDARD, STANDARDS, type Standard } from "../../shared/war/standards";
+import { HOLD_FOOT, holdTexture } from "./holdArt";
 import { targetsOf, type WarState } from "../../shared/war/rules";
 import { TERRITORIES } from "../../shared/war/territories";
 import type { WarView } from "../../shared/war/view";
@@ -44,6 +45,7 @@ function standardTexture(scene: Phaser.Scene, k: ClanKey): string {
 
 export class WarStandards {
   private poles = new Map<number, Phaser.GameObjects.Image>();
+  private holds = new Map<number, Phaser.GameObjects.Image>();
   private rings = new Map<number, Phaser.GameObjects.Ellipse>();
   private prompt = document.createElement("div");
   private el = document.createElement("div");
@@ -86,6 +88,18 @@ export class WarStandards {
       } else if (img.texture.key !== key) img.setTexture(key);
       const cl = CLANS[k], col = k === "redfang" ? cl.sigil : cl.trim;
       this.rings.get(s.id)!.setVisible(true).setFillStyle(col, 0.07).setStrokeStyle(2, col, 0.45);
+    }
+    // Each land's Hold, in its holder's style (holdArt.ts): it changes with the land
+    for (const h of HOLDS) {
+      const k = CLAN_KEYS[v.owner[h.t]];
+      if (!k) continue;
+      const key = holdTexture(this.scene, k);
+      let img = this.holds.get(h.t);
+      if (!img) {
+        img = this.scene.add.image(h.x, h.y, key).setOrigin(0.5, HOLD_FOOT).setDepth(h.y);
+        isoAnchor(img, { x: h.x, y: h.y });
+        this.holds.set(h.t, img);
+      } else if (img.texture.key !== key) img.setTexture(key);
     }
     if (this.open) this.render();
   }

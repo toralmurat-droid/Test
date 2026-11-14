@@ -49,12 +49,12 @@ export const MILESTONES: Milestone[] = [
     items: [
       { name: "War tick, Control, pressure formula, siege windows in the live game", owner: "Gameplay Engineers", status: "done", note: "server/war.ts runs the whole war (all five clans, both acts) every 10 minutes and saves it" },
       { name: "Standards with capture rings, oath to a clan", owner: "Art + Gameplay", status: "done", note: "Two per zone; a minute in a ring is valor for the next war tick" },
-      { name: "Holds in the clan styles", owner: "Art + Gameplay", status: "later" },
+      { name: "Holds in the five clan styles", owner: "Art + Gameplay", status: "done", note: "One per zone, changes with the owner (look only for now)" },
       { name: "Front plaque HUD and siege countdown", owner: "Client & UI", status: "done" },
-      { name: "Banners and standards in the world (pixel art)", owner: "Art Director", status: "later" },
+      { name: "Banners and standards in the world (pixel art)", owner: "Art Director", status: "done" },
       { name: "War horn and siege notices", owner: "Audio", status: "done" },
       { name: "Clan leaders speak (Hale, the Redfang Chief, the Pale Marshal, the Hide-Mother, the Veiled Oracle)", owner: "Narrative", status: "done" },
-      { name: "Play-test and tuning", owner: "QA + Balance", status: "later" },
+      { name: "Play-test and tuning", owner: "QA + Balance", status: "doing" },
     ],
   },
   {
