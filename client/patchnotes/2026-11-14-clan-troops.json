@@ -1,5 +1,6 @@
 {
   "date": "2026-11-14",
+  "patch": 236,
   "title": "Clan troops on patrol",
   "changes": [
     "Soldiers of the clan that holds a land now patrol it, marching between its Hold and its standards and stopping at each.",
