@@ -46,3 +46,18 @@ Open points for M1:
   cut-off supply. Rework the tunnel before tuning.
 - The Host churns (many flips both ways) rather than grows.
 - 7 flips a day over 31 territories may feel fast once players watch it; check with the first front.
+
+## M1 step 1: the war runs live (2026-11-14)
+
+- `server/war.ts`: one war for the whole server, outside the room. Every 10 minutes the scripted leaders give
+  orders, players' valor of the last ten minutes is added, the war ticks with the real time of day
+  (`shared/war/view.ts` `warPhase`, so the Host's night push matches the game's night). After downtime at most 3
+  ticks are caught up. Saved after every tick (Postgres table `kv`, key `war`; or `data/war.json`). A saved war whose
+  territory count no longer fits the map starts over (log line "War: map changed").
+- Players: `WAR.valorScale` / `WAR.valorCap` in rules.ts turn valor (hero-minutes at a standard) into troops with
+  diminishing returns. `addValor()` exists; standards that feed it come next.
+- Clients get the `war` snapshot on join and after each tick; the front plaque (`client/src/warPlaque.ts`) shows
+  holder, Control and siege countdown in a territory. The Herald posts sieges, holds and conquests in the chat.
+- `GET /war.json`: current snapshot and the last 50 events.
+- Scope note: Murat chose the whole map, so the live war runs all five clans over both acts from the start instead
+  of the single Wardens-Redfang front the roadmap first planned.

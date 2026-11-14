@@ -1,0 +1,14 @@
+/* Front plaque (warPlaque.ts): small weathered frame at the top centre, clear of the minimap and the bars */
+body #warplaque { position: absolute; top: 8px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 8px;
+  border: 18px solid transparent; border-image: var(--wf-bronze) 9 fill / 18px / 0 repeat; image-rendering: pixelated; padding: 0 6px;
+  color: #eadfc8; text-shadow: 2px 2px #050302; font: 18px var(--pixel-font); -webkit-font-smoothing: none; pointer-events: none; white-space: nowrap; }
+body #warplaque[hidden] { display: none; }
+#warplaque .wp-flag { width: 32px; height: 44px; image-rendering: pixelated; flex: none; }
+#warplaque .wp-text { display: flex; flex-direction: column; gap: 1px; min-width: 210px; }
+#warplaque .wp-name { color: #ffd98a; }
+#warplaque .wp-held { color: #c9b89a; }
+#warplaque .wp-bar { position: relative; height: 12px; background: #120c06; box-shadow: 0 0 0 1px #080504, 0 0 0 2px #6a5232; margin: 3px 2px; }
+#warplaque .wp-bar i { position: absolute; left: 0; top: 0; bottom: 0; }
+#warplaque .wp-bar b { position: absolute; right: 3px; top: -4px; font: 16px var(--pixel-font); font-weight: normal; color: #fff; }
+#warplaque .wp-foot { color: #a8977a; }
+#warplaque .wp-foot.siege { color: #ff8a6a; }
