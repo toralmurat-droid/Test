@@ -39,13 +39,15 @@ export const WAR = {
   raidSteal: 0.02, // Redfang: share of its attack on a territory taken from the defender's army...
   fortGrow: 0.01, fortMax: 1, palisadeFort: 2, // forts grow on quiet land (the Wardens build twice as fast)
   tunnelReach: 2, // the Hide-Kin attack land up to this many borders from their own
+  tunnelSupply: 0.8, // share of the start's supply a tunnel strike keeps
   rally: 0.8, // income bonus of a clan with no land at all, shrinking to 0 at a fair share (1/5 of the land)
   leaderShare: 0.3, // above this share of the land a clan is "the leader": everyone's target, the Raiders' prey
   raidersHit: 0.03, // share of the leader's army the Night Raiders cut down each night tick
   // Players (server/war.ts): valor is hero-minutes at a standard; a few heroes tip a front, a crowd cannot swamp it
   valorScale: 20, // valor at which players bring ~63% of valorCap
+  siegeValor: 1.5, // players count more at a territory under siege (the hour's notice is for them)
   valorPerAdd: 10, // most valor one hero can bring in one report (ten minutes at a standard)
-  valorCap: 60, // troops players can add to one territory per clan per tick (a clan's army is ~150-600)
+  valorCap: 60, // troops players can add to one territory per clan per tick (x siegeValor during a siege) (a clan's army is ~150-600)
 };
 
 export interface Siege { by: ClanKey; at: number }
@@ -165,7 +167,10 @@ export function warTick(s: WarState, orders: Partial<Record<ClanKey, Orders>>, e
     const shares = o.attack.filter((a) => legal.has(a.t) && a.share > 0), ssum = shares.reduce((a, b) => a + b.share, 0);
     const force = s.army[k] - def;
     for (const a of shares) {
-      const src = Math.max(WAR.cutOff, ...TERRITORIES[a.t].near.filter((n) => s.owner[n] === k).map((n) => supply[n]));
+      let src = Math.max(WAR.cutOff, ...TERRITORIES[a.t].near.filter((n) => s.owner[n] === k).map((n) => supply[n]));
+      // Tunnels: a strike two borders away is fed from the own land the tunnel starts at, not from nothing
+      if (CLANS[k].doctrine === "tunnel" && !TERRITORIES[a.t].near.some((n) => s.owner[n] === k))
+        src = Math.max(src, WAR.tunnelSupply * Math.max(0, ...TERRITORIES[a.t].near.flatMap((n) => TERRITORIES[n].near).filter((m) => s.owner[m] === k).map((m) => supply[m])));
       const vs = s.owner[a.t];
       const mult = timeBonus(k, phase) * (CLANS[k].counters === vs ? WAR.counter : 1);
       attack[a.t][k] = (attack[a.t][k] ?? 0) + ((force * a.share) / Math.max(1, ssum)) * src * mult;
@@ -176,7 +181,7 @@ export function warTick(s: WarState, orders: Partial<Record<ClanKey, Orders>>, e
     if (!vs || id >= TERRITORIES.length) return;
     const legal = (k: ClanKey) => targetsOf(s, k).includes(id);
     for (const [k, v] of Object.entries(vs) as [ClanKey, number][]) {
-      const f = valorForce(v ?? 0);
+      const f = valorForce(v ?? 0) * (s.siege[id] ? WAR.siegeValor : 1); // a siege window calls the heroes
       if (!f || !CLANS[k]) continue;
       if (s.owner[id] === k) defence[id] += f;
       else if (legal(k)) attack[id][k] = (attack[id][k] ?? 0) + f;

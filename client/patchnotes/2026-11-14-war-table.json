@@ -1,0 +1,9 @@
+{
+  "date": "2026-11-14",
+  "patch": 235,
+  "title": "The war table",
+  "changes": [
+    "The world map (M) has a War table button: every war zone is tinted in the colours of the clan that holds it, capitals have a double border and lands under siege flash red.",
+    "A legend shows how many lands each clan holds."
+  ]
+}

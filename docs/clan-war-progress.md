@@ -73,3 +73,36 @@ Open points for M1:
 - Client: `client/src/warStandards.ts` (poles in the holder's colours, rings, E prompt, oath panel; other E
   prompts nearby come first), the plaque tells the hero whether they defend, attack or cannot reach the land.
 - Open: rewards for valor (Renown, M2), tabards so other players see the oath (M2), Holds.
+
+## M1 step 3: horns and leaders (2026-11-14)
+
+- `shared/war/heralds.ts`: a leader per clan (Captain Hale, the Redfang Chief, the Pale Marshal, the Hide-Mother,
+  the Veiled Oracle) with lines per moment; the defender speaks when besieged or holding, the winner when a land
+  falls. Picked by tick, so replays say the same.
+- Each war event: Herald line, leader line, and a `warev` message; `client/src/warNotice.ts` sounds the war horn and
+  shows a notice when it happens in the hero's territory or next to it.
+- `WAR.siegeValor` 1.5: valor counts half again at a territory under siege (the hour's warning is for players).
+
+## M1 step 4: Holds (2026-11-14)
+
+- `client/src/holdArt.ts`: five Hold sprites in the clan styles (Warden watchtower, Redfang war camp, Ossuary tower,
+  Hide-Kin burrow, Veiled shrine), generated pixel art in the bonfire style (`paintHold` draws one without Phaser).
+- `shared/war/standards.ts` `HOLDS`: one spot per territory near the middle, on clear ground, at least 5 tiles from its standards. The
+  sprite follows the owner. Look only: no collision, no siege mechanics at the Hold yet (M2: siege works, gates).
+
+## Tuning: tunnels (2026-11-14)
+
+- Hide-Kin tunnel strikes (two borders away) used to arrive at cut-off supply (0.35), so the doctrine barely
+  mattered. Now they keep `WAR.tunnelSupply` (0.8) of the supply of the own land the tunnel starts from.
+- Sim 200 x 30 before / after: Hide-Kin 17.3% -> 17.8% (best day 19.4% -> 22.6%), domination 0.5% -> 0.0%,
+  flips 7.05 -> 7.33 per day. Wardens 23.5 -> 23.8, Redfang 25.6 -> 24.7, Host 11.8 -> 12.0, Veiled 21.9 -> 21.7.
+- Host: raising `hostRaise` to 0.45 / 0.6 moved it only to 12.4% / 12.7%. Its size comes from where its forward
+  capitals sit; it is left to the Grey Barrow Moors homeland (roadmap "New Lands").
+
+## M2: Renown (2026-11-14)
+
+- `shared/war/renown.ts`: `RENOWN_RANKS` (Sworn 0, Shieldbearer 30, Standard-bearer 120, Banneret 360, Warlord 900,
+  Hero of the Marches 2000). Each valor report from a standard (one full active minute) adds the same amount of
+  renown (`heroValor`: a quarter when far over-levelled). Saved per hero as optional `renown`; kept on a clan change.
+- The oath panel shows renown and the next rank; the Herald tells the hero in chat on a rank-up. No reward yet beyond
+  the title (ideas: tabard trims by rank, Renown in the name tag once a synced field is free).

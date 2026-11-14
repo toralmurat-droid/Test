@@ -16,7 +16,7 @@ export interface Look {
   legs: LegKind; legCol: number; boots: number; bootStyle?: "greave" | "leather" | "wrap" | "shoe" | "bare";
   sleeve: number; arms: "plate" | "cloth" | "bare" | "wrap"; glove?: number; bracer?: number;
   weapon: WeaponKind;
-  shield?: { col: number; trim: number; emblem: number; style: "kite" | "round" };
+  shield?: { col: number; trim: number; emblem: number; style: "kite" | "round" | "book"; /** style "book": the id in paint/books.ts BOOKS */ book?: string };
   back?: "cape" | "quiver" | "pelt"; capeCol?: number; capeShort?: boolean;
   orb?: number;   // glowing staff stone
   lips?: number;    // painted lips (front view)
@@ -375,6 +375,8 @@ export const KITS: Record<string, Partial<Record<"weapon" | "shield" | "armour" 
     },
     shoes: { boots: 0x4e3220, bootStyle: "leather" },
     weapon: { weapon: "lute" },
+    // the Songbook (item songweaver_shield): the book itself is drawn by paint/books.ts
+    shield: { shield: { col: 0x8a5a2c, trim: 0xe8d070, emblem: 0xe8d070, style: "book", book: "songweaver_shield" } },
   },
   // a noble of the night: dark wine coat with old-gold trim, black cape with a tall blood-red collar, iron circlet, thin blade
   vampire: {
@@ -589,6 +591,14 @@ export const LOOKS: Record<string, Look> = {
     torso: "robe", torsoCol: 0x4a4038, trim: 0x2e2822, sash: 0x8a6a3a,
     legs: "robe", legCol: 0x3e362e, boots: 0x2a221c, bootStyle: "shoe",
     sleeve: 0x4a4038, arms: "cloth", weapon: "staff", orb: 0xffd070, fx: 0xffd070,
+  },
+  // Wren the lute-maker of Oakvale (shared/npcs.ts "lutemaker"): teal head-scarf, rolled linen sleeves, a sawdusty leather apron
+  lutemaker: {
+    skin: 0xe6b08a, hair: 0x7a3a22, hairStyle: "ponytail", eye: 0x2a6a4a,
+    head: "bandana", headCol: 0x2e7d74, headTrim: 0xe8d070,
+    torso: "shirt", torsoCol: 0xeadfc4, vest: 0x6a4a2a, apron: 0x7a5230, belt: 0x4a2e1a, buckle: 0xe8d070,
+    legs: "trousers", legCol: 0x4a4a3a, boots: 0x3a2717, bootStyle: "leather",
+    sleeve: 0xeadfc4, arms: "cloth", bracer: 0x6a4a2a, weapon: "none", fx: 0xffffff,
   },
   // Zahir the tomb-robber of Kharsun: a dust-brown headscarf, a patched vest, ropes and a long knife
   tombrobber: {

@@ -9,6 +9,7 @@ import { newMinds, scriptedOrders, type Mind } from "../shared/war/doctrine";
 import { newWar, WAR, warTick, type WarState } from "../shared/war/rules";
 import { TERRITORIES } from "../shared/war/territories";
 import { warPhase, warView, type WarView } from "../shared/war/view";
+import { eventVoice, leaderLine } from "../shared/war/heralds";
 import { openKv, type Kv } from "./store";
 
 export interface WarEvent { at: number; tick: number; kind: "siege" | "flip" | "held"; t: number; by: ClanKey; from: ClanKey; text: string }
@@ -96,9 +97,10 @@ function tickOnce(at: number): WarEvent[] {
 }
 
 /** A hero's effort for clan `k` in territory `t` (the room adds it while heroes hold standards). */
-export function addValor(t: number, k: ClanKey, amount: number) {
-  if (!saved || !(t >= 0 && t < TERRITORIES.length) || !CLANS[k] || !(amount > 0)) return;
+export function addValor(t: number, k: ClanKey, amount: number): boolean {
+  if (!saved || !(t >= 0 && t < TERRITORIES.length) || !CLANS[k] || !(amount > 0)) return false;
   valor[t][k] = (valor[t][k] ?? 0) + Math.min(amount, WAR.valorPerAdd);
+  return true;
 }
 
 export const warNow = (): WarView | undefined => (saved ? warView(saved.state, saved.next) : undefined);
@@ -118,6 +120,11 @@ export type { Saved as SavedWar };
 export function attachWar(room: { broadcast(type: string, msg: unknown): void }) {
   return onWar((v, events) => {
     room.broadcast("war", v);
-    for (const e of events) room.broadcast("chat", { id: "", name: "Herald", text: e.text });
+    for (const e of events) {
+      room.broadcast("chat", { id: "", name: "Herald", text: e.text });
+      const v = eventVoice(e.kind, e.by, e.from), line = leaderLine(v.k, v.moment, TERRITORIES[e.t].name, v.foe, e.tick);
+      room.broadcast("chat", { id: "", name: line.name, text: line.text });
+      room.broadcast("warev", { kind: e.kind, t: e.t, by: e.by, from: e.from }); // horn and notice (client/src/warNotice.ts)
+    }
   });
 }

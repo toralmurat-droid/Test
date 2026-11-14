@@ -86,3 +86,38 @@ test("live war: a saved war that no longer fits is kept aside, and a broken tick
   await step(t0);
   assert.ok(warNow()!.next > t0, "the broken tick was skipped, the clock moved on");
 });
+
+test("heralds: every leader has a line for every moment, filled in and capitalised", async () => {
+  const { LEADERS, leaderLine, eventVoice } = await import("../shared/war/heralds");
+  for (const k of CLAN_KEYS) for (const m of Object.keys(LEADERS[k].lines) as any[]) {
+    const l = leaderLine(k, m, "Brinewood", k === "host" ? "wardens" : "host", 3);
+    assert.ok(l.text.length > 10 && !/[{}]/.test(l.text) && l.text[0] === l.text[0].toUpperCase(), `${k} ${m}: ${l.text}`);
+  }
+  assert.deepEqual(eventVoice("siege", "redfang", "wardens"), { k: "wardens", foe: "redfang", moment: "besieged" });
+  assert.deepEqual(eventVoice("flip", "redfang", "wardens"), { k: "redfang", foe: "wardens", moment: "took" });
+});
+
+test("attachWar: each event gives the herald, a leader's voice and a war event to the room", async () => {
+  const { attachWar } = await import("../server/war");
+  const t0 = 6_000_000_000_000;
+  _resetWar(saved(t0));
+  const sent: [string, any][] = [];
+  const off = attachWar({ broadcast: (t, m) => sent.push([t, m]) });
+  for (let i = 0; i < 144 && !sent.some(([t]) => t === "warev"); i++) await step(t0 + i * WAR.tickMs);
+  off();
+  const ev = sent.findIndex(([t]) => t === "warev");
+  assert.ok(ev > 1, "a war event came");
+  assert.equal(sent[ev - 2][1].name, "Herald");
+  assert.ok(sent[ev - 1][1].name && sent[ev - 1][1].name !== "Herald", "a leader spoke");
+});
+
+test("siege windows: valor counts more at a territory under siege", () => {
+  const base = newWar();
+  const k = CLAN_KEYS.find((c) => targetsOf(base, c).some((t) => !TERRITORIES[t].capitalOf))!;
+  const t = targetsOf(base, k).find((x) => !TERRITORIES[x].capitalOf)!;
+  const valor = TERRITORIES.map((_, i) => (i === t ? { [k]: 10 } : {}));
+  const calm = warTick(newWar(), {}, { phase: 0, valor }).pressure[t];
+  const s = newWar(); s.siege[t] = { by: k, at: 99 };
+  const sieged = warTick(s, {}, { phase: 0, valor }).pressure[t];
+  assert.ok(Math.abs(sieged - calm * WAR.siegeValor) < 1e-9, `${sieged} = ${calm} x ${WAR.siegeValor}`);
+});

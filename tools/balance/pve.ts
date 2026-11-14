@@ -20,7 +20,7 @@ import { BEAST, BLOB_AI, DEMON, ELITE, HOLLOW_KING, MOB_ATTACK_RANGE, MOB_LEVEL,
 import { MOB_COMBAT, mobBody, mobSound, POISE, poiseSpeed } from "../../shared/combat";
 import { POTION_COOLDOWN_MS, POTION_SIZES } from "../../shared/potions";
 import { activeSkills, SKILLS } from "../../shared/skills";
-import { canPay, manaRegen, skillCost } from "../../shared/mana";
+import { canPay, manaRegen, skillCost, usesGauge } from "../../shared/mana";
 import { castSkill, cooldownLeft, type HitOpts } from "../../shared/skillEngine";
 import { coolHeat, isOverheated } from "../../shared/overload";
 import { Duel, F, GolemF, make, SIM } from "./duel";
@@ -181,7 +181,7 @@ export class PveDuel extends Duel {
     // Healing potions: no cooldown, instant (drinks until back above 40% or out)
     while (h.hp < h.maxHp * 0.4 && P.heal > 0) { P.heal--; P.healUsed++; h.hp = Math.min(h.maxHp, h.hp + POTION_SIZES[P.size].heal); }
     if (now - P.lastDrink >= POTION_COOLDOWN_MS) {
-      if (h.mana < Math.min(30, h.maxMana * 0.25) && P.mana > 0 && activeSkills(h.cls).some((s) => s.mana && (s.cantrip || (h.t[s.id] ?? 0) > 0))) {
+      if (!usesGauge(h.cls) && h.mana < Math.min(30, h.maxMana * 0.25) && P.mana > 0 && activeSkills(h.cls).some((s) => s.mana && (s.cantrip || (h.t[s.id] ?? 0) > 0))) {
         P.mana--; P.manaUsed++; P.lastDrink = now; h.mana = Math.min(h.maxMana, h.mana + POTION_SIZES[P.size].mana);
       }
     }
@@ -425,7 +425,8 @@ function zoneRun(cls: ClassKind, level: number, build: Build, mobLevel: (i: numb
     const restMs = Math.max(0, gap - REGEN_DELAY_MS);
     h.hp = Math.min(h.maxHp, h.hp + h.s.sta * REGEN_PER_STA * restMs / 1000 * 0.5);
     coolHeat(h, h.cls, gap / 1000);
-    h.mana = Math.min(h.maxMana, h.mana + manaRegen(h.s, false) * gap / 1000);
+    // (a song gauge never refills: its drain over the walk is worked out on the next fight's first tick)
+    if (!usesGauge(h.cls)) h.mana = Math.min(h.maxMana, h.mana + manaRegen(h.s, false) * gap / 1000);
     h.poiseLost = 0; h.broken = false;
     t += gap;
   }

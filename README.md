@@ -18,6 +18,8 @@ npm install
 npm run dev
 ```
 
+Desktop browsers only (mouse and keyboard); phones and tablets are not supported.
+
 Open http://localhost:5173 in two browser tabs to see the multiplayer. The game server runs on port 2567.
 
 `npm run live` instead of `npm run dev` keeps a local game on the latest merged version: it checks GitHub every

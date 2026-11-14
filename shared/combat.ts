@@ -1,6 +1,7 @@
 import { ClassKind } from "./classes";
+import { usesGauge } from "./mana";
 import { MobKind } from "./constants";
-import { MODES, type ModeFamily, type ModeId, type Pitch } from "./songs";
+import { GAUGE, MODES, type ModeFamily, type ModeId, type Pitch } from "./songs";
 
 /**
  * Initiative ("poise"): a hidden bar on every hero and monster that decides who controls a fight.
@@ -182,7 +183,7 @@ export const meleeReach = (range: number, reachMult: number, body = 0) => (SWING
  *    doubled again: the crit is taken back out first (crits deal x`critMult`, shared/powers.ts), so it stays x`mult`;
  *  - it gives the hero some breath back: Heat drops by `heatBack` (a share of OVERLOAD.max, shared/overload.ts; an
  *    overheated hero's vent gets that much shorter). Classes that pay mostly in Mana (`manaClasses`: Wizard, Summoner)
- *    get `manaBack` of their max Mana instead. One rule per class, no mix, so it reads plainly.
+ *    get `manaBack` of their max Mana instead; the Songweaver's song gauge fills by GAUGE.execute. One rule per class.
  *  - One execution per break: the monster must be broken again for the next one.
  * Never on heroes (nor on a hero's creatures), and never from a hero's creatures (golems, wisps), runes, thorns or
  * damage over time: only the hero's own blow.
@@ -193,7 +194,7 @@ export const EXECUTE = {
   critMult: 2,
   heatBack: 0.3, // share of OVERLOAD.max
   manaBack: 0.1, // share of max Mana
-  manaClasses: { wizard: true, summoner: true, songweaver: true } as Partial<Record<ClassKind, true>>,
+  manaClasses: { wizard: true, summoner: true } as Partial<Record<ClassKind, true>>,
 };
 
 /** What an execution needs to know about the blow (server HitOpts / skillEngine HitOpts fit). */
@@ -211,6 +212,11 @@ export const executeDamage = (dmg: number, crit: boolean, boss: boolean) =>
 
 /** Gives the executing hero their breath back (see EXECUTE). `heatMax` = OVERLOAD.max. Returns what came back. */
 export function executeRefund(u: { energy?: number; mana?: number; maxMana?: number }, cls: ClassKind, heatMax: number): { heat: number; mana: number } {
+  if (usesGauge(cls)) { // the Songweaver: her song gauge fills by GAUGE.execute (it swells on her next tick when full)
+    const before = u.mana ?? 0;
+    u.mana = Math.min(GAUGE.max, before + GAUGE.execute);
+    return { heat: 0, mana: u.mana - before };
+  }
   if (EXECUTE.manaClasses[cls]) {
     const max = u.maxMana ?? 0, before = u.mana ?? 0;
     u.mana = Math.min(max, before + max * EXECUTE.manaBack);

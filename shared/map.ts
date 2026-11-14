@@ -2,6 +2,9 @@ import { MAP_H as FULL_H, MAP_W, PLAYER_RADIUS, TILE, UNDER_END, WORLD_H, type M
 import { CRYPT_DOOR, FLOORS, LAIRS, SEA_END, SHORTCUTS, SINKHOLE, UNDER_SHAFT, type Floor } from "./dungeon";
 import { buildDesert, D, inDesertRow, KEL_MARKET, WAYGATE_OAKVALE } from "./desert";
 
+/** Mirror Pond, in tiles (centre and radii of its water): the Songweaver's Mirror Pond Air is played on its shore (shared/songbook.ts). */
+export const MIRROR_POND = { x: 24, y: 94, rx: 9, ry: 6 };
+
 /** The overworld's rows: the world generator (and everything above ground) works on these; under them lies the Mawdeep (shared/dungeon.ts). */
 const MAP_H = WORLD_H;
 
@@ -242,7 +245,7 @@ function buildWorld() {
     each(cx - 2, y, 4, 1, (x) => setG(x, y, T.WATER));
     for (const x of [cx - 3, cx + 2]) if (ground[y][x] !== T.WATER) setG(x, y, T.SAND);
   }
-  const pond = { x: 24, y: 94, rx: 9, ry: 6 };
+  const pond = MIRROR_POND;
   disk(pond.x, pond.y, pond.rx * 1.3, pond.ry * 1.35, (x, y) => setG(x, y, T.SAND));
   disk(pond.x, pond.y, pond.rx, pond.ry, (x, y) => setG(x, y, T.WATER));
   const marsh = { x: 36, y: 92, w: 38, h: 22 };

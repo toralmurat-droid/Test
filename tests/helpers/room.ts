@@ -44,3 +44,9 @@ export async function startRoom() {
 }
 
 export const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+/** Polls `ok` every 50 ms until it holds or `ms` pass, then returns it. Room tests wait on the game loop, which runs
+ *  slower while the whole suite shares the CPU: wait for the event, not for a fixed time. */
+export async function until(ok: () => boolean, ms = 6000) {
+  for (const end = Date.now() + ms; !ok() && Date.now() < end; ) await wait(50);
+  return ok();
+}

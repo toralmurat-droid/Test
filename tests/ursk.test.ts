@@ -3,9 +3,7 @@ import assert from "node:assert/strict";
 import { URSK } from "../shared/constants";
 import { DEN } from "../shared/dungeon";
 import { TILE } from "../shared/constants";
-import { startRoom, wait } from "./helpers/room";
-
-const until = async (f: () => unknown, ms: number) => { const t = Date.now(); while (!f() && Date.now() - t < ms) await wait(50); return !!f(); };
+import { startRoom, until, wait } from "./helpers/room";
 
 test("Grandam Ursk: speaks on waking, enters the Rite and the Bear, hooks a far hero in, sews her brood back to heal", async () => {
   const srv = await startRoom();
@@ -23,7 +21,7 @@ test("Grandam Ursk: speaks on waking, enters the Rite and the Bear, hooks a far 
     p.x = bx + 150; p.y = by; // well out of her claws
     room.summonFused(pid, { parts: ["hidemother"], level: 30, title: "Grandam Ursk, the Hide-Mother", hpMult: 2, x: bx, y: by }, 5);
     const [id, m] = [...room.state.mobs.entries()].find(([, o]: any) => o.kind === "hidemother")!;
-    await until(() => said.length >= 3, 15_000); // her lines come on the room's ticks, which lag under load
+    await until(() => said.length >= 3, 15_000); // she rises (about 4 s); her lines come on the room's ticks, which lag under load
     assert.deepEqual(said.slice(0, 3), [...URSK.lines.wake], "she has her say as she rises");
 
     // the Rite: below 70% she calls her brood and starts hooking heroes in
@@ -49,7 +47,7 @@ test("Grandam Ursk: speaks on waking, enters the Rite and the Bear, hooks a far 
 
     // the Bear
     m.hp = Math.round(m.maxHp * 0.3);
-    for (let i = 0; i < 60 && !phases.includes(3); i++) { await wait(150); m.target = pid; }
+    await until(() => { m.target = pid; return phases.includes(3); }, 9000);
     assert.ok(phases.includes(3), "she becomes the Bear below 35%");
     await c.leave();
   } finally {

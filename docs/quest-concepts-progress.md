@@ -310,3 +310,14 @@ at Lv 10, `duel.ts` only if Hidebound goes on. Bench: WP2 and WP5 (`TIDE=1`, `SP
   loads accounts and the world, then starts the war, then listens; shutdown flushes war, accounts, world. Kel Ashar's houses
   and wall are new textures on the same tiles (`client/src/desertArt.ts`, `iso.ts`): `shared/` map unchanged, our quest
   spots identical to our branch alone (none within 12 tiles of a Kel Ashar building), map-metrics identical to the default.
+- 2026-11-14: merged the default branch a fourth time (Songweaver DI phases with Wren the lute-maker, clan war renown and
+  war table, merge safety, room-test polling). Our Saltmere smuggler (NPC id `smuggler`, sheet `smuggler`, shop `smuggler`)
+  was also called Wren: she is now **Marin** (only the name changed; saves and flags store ids). The lute-maker is id
+  `lutemaker`, sheet `lutemaker`, shop `lutemaker`, in Oakvale: no id, sheet or shop clash, and `shopNear` takes the nearest
+  present NPC's own `shop`. First Steps: the class-aware gift (`stepFor(s, cls).gift`) sits after our own-boss checks in
+  `questKill`; `levelTo`, `nextStage` and the `learn` skip are untouched by `byCls` (it overrides only gift and words).
+  Restore keeps `rumour`, `flags`, `cosm`, `titles`, `mentor` and adds `renown`; the snapshot saves both. `renown` is a
+  plain (unsynced) field: Player 31 synced fields (cosm index 30), PlayerPrivate 19 (flags index 18), unchanged. No new
+  code moves a hero (war renown, Songweaver bounce waves move no one), so no new `lanternHeld` call. Flake tests: the
+  default's versions (shared `until` from `tests/helpers/room.ts`), Ursk with our longer limits; `quest-bargain` now uses the
+  shared poll too. Map-metrics identical to the default.

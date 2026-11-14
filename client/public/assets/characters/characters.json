@@ -47,7 +47,8 @@
   "ilka",
   "quartermaster",
   "smuggler",
-  "alewife"
+  "alewife",
+  "lutemaker"
  ],
  "image": "{name}.png",
  "frameWidth": 64,

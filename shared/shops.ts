@@ -64,12 +64,15 @@ export function gearPrice(id: string): number {
 /** What a shop pays for a loose rune (shared/runes.ts), by rank: Lesser, plain, Greater. Only shops with "rune" in `buys`. */
 export const RUNE_PRICE = [0, 40, 120, 300];
 
-/** True when this shop buys this bag item (a gear slot it lists, or "rune" for loose runes). */
-export function shopBuys(shop: Shop, id: string): boolean {
+/**
+ * True when this shop buys this bag item (a gear slot it lists, or "rune" for loose runes). `spare`: a bound item the
+ * hero may part with (gear.ts keepsBound); other bound items are never sold.
+ */
+export function shopBuys(shop: Shop, id: string, spare = false): boolean {
   if (!shop.buys) return false;
   if (parseRune(id)) return shop.buys.includes("rune");
   const d = gearDef(id);
-  return !!d && shop.buys.includes(d.slot);
+  return !!d && (!d.bound || spare) && shop.buys.includes(d.slot);
 }
 
 /** Rune fusion (shared/runes.ts fuseRunes) is offered by every trader who buys loose runes. */
@@ -184,6 +187,12 @@ export const SHOPS: Record<string, Shop> = {
     greeting: "Ilka says you're all right. Don't ask where any of it came from, and I won't ask where you're taking it.",
     stock: [...potionStock("potion", [0, 1]), ...potionStock("mpotion", [0, 1]), ...weapons(["r_sling", "r_knives", "r_crossbow"])],
     buys: ["weapon", "ranged"],
+  },
+  // Wren the lute-maker (DI-5, shared/lutemaker.ts): the books, and she buys weapons and shields (breaking them is hers too)
+  lutemaker: {
+    greeting: "Books on the left, spare strings on the right. Anything you can't use, I'll buy or break.",
+    stock: weapons(["bk_hymnal", "bk_march", "bk_dissonance"]),
+    buys: ["weapon", "shield"],
   },
   witch: {
     greeting: "Fresh from the still, darling. Red for your blood, blue for your magic. Try not to stare. Found a carved stone out there? I pay well for runes, or fuse four alike into a stronger one.",

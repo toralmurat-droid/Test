@@ -10,14 +10,15 @@ import { act2Open } from "../shared/act2";
 import { npcById } from "../shared/npcs";
 import { DEN } from "../shared/dungeon";
 import { MOBS, TILE } from "../shared/constants";
-import { startRoom, wait } from "./helpers/room";
+import { startRoom, until as poll, wait } from "./helpers/room";
 
 const ix = (id: string) => CHAINS.findIndex((c) => c.id === id);
 const B = BEAST_CHAIN, PEN = ix("penance"), TUT = ix("tutorial");
 const MOTHER = CHAINS[B].quests.findIndex((d) => d.id === "mother");
 const done = (c: number) => packQuest(CHAINS[c].quests.length, 0, 0);
 const bx = (DEN.x + 0.5) * TILE, by = (DEN.y - 1.5) * TILE;
-const until = async (f: () => unknown, ms = 15_000) => { const t = Date.now(); while (!f() && Date.now() - t < ms) await wait(50); return !!f(); };
+/** The shared poll (tests/helpers/room.ts) with a longer default: Ursk rises on the room's ticks, which lag under load. */
+const until = (f: () => unknown, ms = 15_000) => poll(() => !!f(), ms);
 
 /** The stories the Hollow Crown and act 2 wait for, as quests-map entries (QuestChain.packed keys). */
 const stories = () => ({ gloam: done(0), bone: done(1), red: done(2), crown: done(CROWN_CHAIN) });

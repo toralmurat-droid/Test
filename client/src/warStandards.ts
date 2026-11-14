@@ -5,7 +5,9 @@
  */
 import Phaser from "phaser";
 import { CLANS, CLAN_KEYS, type ClanKey } from "../../shared/war/clans";
-import { STANDARD, STANDARDS, type Standard } from "../../shared/war/standards";
+import { RENOWN_RANKS, rankOf } from "../../shared/war/renown";
+import { HOLDS, STANDARD, STANDARDS, type Standard } from "../../shared/war/standards";
+import { HOLD_FOOT, holdTexture } from "./holdArt";
 import { targetsOf, type WarState } from "../../shared/war/rules";
 import { TERRITORIES } from "../../shared/war/territories";
 import type { WarView } from "../../shared/war/view";
@@ -44,6 +46,7 @@ function standardTexture(scene: Phaser.Scene, k: ClanKey): string {
 
 export class WarStandards {
   private poles = new Map<number, Phaser.GameObjects.Image>();
+  private holds = new Map<number, Phaser.GameObjects.Image>();
   private rings = new Map<number, Phaser.GameObjects.Ellipse>();
   private prompt = document.createElement("div");
   private el = document.createElement("div");
@@ -51,6 +54,7 @@ export class WarStandards {
   clan: ClanKey | "" = "";
   private next = 0;
   private minLevel = 5;
+  private renown = 0;
   private err = "";
   near?: Standard;
   open = false;
@@ -87,12 +91,24 @@ export class WarStandards {
       const cl = CLANS[k], col = k === "redfang" ? cl.sigil : cl.trim;
       this.rings.get(s.id)!.setVisible(true).setFillStyle(col, 0.07).setStrokeStyle(2, col, 0.45);
     }
+    // Each land's Hold, in its holder's style (holdArt.ts): it changes with the land
+    for (const h of HOLDS) {
+      const k = CLAN_KEYS[v.owner[h.t]];
+      if (!k) continue;
+      const key = holdTexture(this.scene, k);
+      let img = this.holds.get(h.t);
+      if (!img) {
+        img = this.scene.add.image(h.x, h.y, key).setOrigin(0.5, HOLD_FOOT).setDepth(h.y);
+        isoAnchor(img, { x: h.x, y: h.y });
+        this.holds.set(h.t, img);
+      } else if (img.texture.key !== key) img.setTexture(key);
+    }
     if (this.open) this.render();
   }
 
   /** The server's oath state. */
-  setClan(m: { clan: ClanKey | ""; next: number; minLevel: number; err?: string }) {
-    this.clan = m.clan; this.next = m.next; this.minLevel = m.minLevel; this.err = m.err ?? "";
+  setClan(m: { clan: ClanKey | ""; next: number; minLevel: number; renown?: number; err?: string }) {
+    this.clan = m.clan; this.next = m.next; this.minLevel = m.minLevel; this.renown = m.renown ?? 0; this.err = m.err ?? "";
     if (this.open) this.render();
   }
 
@@ -132,6 +148,12 @@ export class WarStandards {
       ? `Sworn to ${CLANS[this.clan].name}. Every minute in a ring counts at the next war tick.`
       : `Swear (level ${this.minLevel}+), then stand in a ring: you defend your clan's land and attack next to it.`;
     this.el.append(h, help);
+    if (this.clan || this.renown > 0) {
+      const r = rankOf(this.renown), up = RENOWN_RANKS[r + 1], rk = document.createElement("p");
+      rk.className = "help wr-rank";
+      rk.textContent = `Renown ${this.renown}: ${RENOWN_RANKS[r].name}.` + (up ? ` ${up.name} at ${up.at}.` : "");
+      this.el.append(rk);
+    }
     for (const k of CLAN_KEYS) {
       const cl = CLANS[k], row = document.createElement("div");
       row.className = "wr-row" + (k === this.clan ? " mine" : "");

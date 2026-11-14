@@ -22,7 +22,7 @@ test("standards: every territory has one, on free ground inside it", () => {
 });
 
 test("oath: level gate, unknown clans, a day before changing", () => {
-  const p: WarHero = { clanAt: 0, dead: false, level: 3, x: 0, y: 0 };
+  const p: WarHero = { clanAt: 0, dead: false, level: 3, x: 0, y: 0, lastAct: 0, renown: 0 };
   assert.notEqual(swear(p, "wardens", 1000), "");
   p.level = 10;
   assert.notEqual(swear(p, "nope", 1000), "");
@@ -49,7 +49,7 @@ test("presence: ten active minutes in an enemy ring attack it; idle, dead or wan
     await step(t0);
     return warState()!.pressure[std.t]; // attack that reached the territory this tick
   };
-  const active = (i: number): WarHero => ({ clan: k, clanAt: 0, dead: false, level: 1, x: std.x, y: std.y, lastAct: t0 - 600_000 + i * 1000 });
+  const active = (i: number): WarHero => ({ clan: k, clanAt: 0, dead: false, level: 1, x: std.x, y: std.y, lastAct: t0 - 600_000 + i * 1000, renown: 0 });
   const quiet = await run((i) => ({ ...active(i), clan: undefined }));
   assert.ok(await run(active) > quiet, "attacking valor reaches the territory");
   assert.equal(await run((i) => ({ ...active(i), lastAct: 0 })), quiet, "idle hero adds nothing");
@@ -57,4 +57,37 @@ test("presence: ten active minutes in an enemy ring attack it; idle, dead or wan
   assert.equal(await run((i) => ({ ...active(i), x: i % 60 === 59 ? std.x : 0 })), quiet, "a second in the ring per minute is not a minute");
   assert.ok(heroValor(50, std.t) < heroValor(1, std.t), "far over-levelled heroes bring less");
   assert.ok(WAR.valorPerAdd >= STANDARD.valorPerMin);
+});
+
+test("holds: one per territory, on free ground inside it", async () => {
+  const { HOLDS } = await import("../shared/war/standards");
+  assert.equal(HOLDS.length, TERRITORIES.length);
+  for (const h of HOLDS) {
+    const t = TERRITORIES[h.t];
+    assert.ok(h.x / 32 >= t.x && h.x / 32 < t.x + t.w && h.y / 32 >= t.y && h.y / 32 < t.y + t.h, t.name);
+    assert.ok(!isSolidAt(h.x, h.y), `${t.name} hold walkable`);
+    for (const s of STANDARDS.filter((x) => x.t === h.t)) assert.ok(Math.hypot(s.x - h.x, s.y - h.y) > STANDARD.range + 2 * 32, `${t.name} hold clear of standard ${s.id}`);
+  }
+});
+
+test("renown: a full minute at a standard earns it, ranks rise, saves stay clean", async () => {
+  const { RENOWN_RANKS, rankOf, cleanRenown } = await import("../shared/war/renown");
+  const { clanView } = await import("../server/warHeroes");
+  _resetWar({ v: 1, state: newWar(), minds: newMinds(), next: Date.now() + 1e9, log: [] });
+  const std = STANDARDS[0], t0 = 1_000_000;
+  const p: WarHero = { clan: "wardens", clanAt: 0, dead: false, level: 1, x: std.x, y: std.y, lastAct: t0, renown: RENOWN_RANKS[1].at - 1 };
+  const pr = new Presence();
+  let ups: [string, string][] = [];
+  for (let i = 1; i <= 59; i++) ups.push(...pr.tick([["a", p]], t0 + i * 1000));
+  assert.equal(p.renown, RENOWN_RANKS[1].at - 1, "no renown before a full minute");
+  ups.push(...pr.tick([["a", p]], t0 + 60_000));
+  assert.equal(p.renown, RENOWN_RANKS[1].at - 1 + heroValor(1, std.t));
+  assert.deepEqual(ups, [["a", RENOWN_RANKS[1].name]], "the rank-up is reported once");
+  assert.equal(clanView(p).renown, Math.floor(p.renown));
+  const idle = { ...p, renown: 5, lastAct: 0 };
+  for (let i = 1; i <= 120; i++) pr.tick([["b", idle]], t0 + i * 1000);
+  assert.equal(idle.renown, 5, "idle heroes earn nothing");
+  assert.equal(rankOf(0), 0); assert.equal(rankOf(1e9), RENOWN_RANKS.length - 1);
+  for (let i = 1; i < RENOWN_RANKS.length; i++) assert.ok(RENOWN_RANKS[i].at > RENOWN_RANKS[i - 1].at);
+  assert.equal(cleanRenown(undefined), 0); assert.equal(cleanRenown(-3), 0); assert.equal(cleanRenown(NaN), 0); assert.equal(cleanRenown(42.5), 42.5);
 });

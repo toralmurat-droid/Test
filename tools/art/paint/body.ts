@@ -4,6 +4,7 @@ import {
   C2, P, blobPath, canvas, clipTo, css, curve, ellipseP, fillShape, glow, grain, hashStr, ik, limb, line, metal, mix, poly, rad, rng, sh, Shape, vol,
 } from "./brush";
 import { drawFormWeapon, formOf } from "./weaponArt";
+import { BOOKS, paintBook } from "./books";
 import { HeadGear, HERO_BODIES, LINEN, Look, LOOKS, MOB_LOOKS, TorsoKind } from "./look";
 
 /**
@@ -1580,7 +1581,14 @@ function weapon(c: C2, r: Rig) {
 function shield(c: C2, r: Rig) {
   const L = r.L, g = gear?.slot === "shield" ? gear : null;
   if (!L.shield && !g) return;
-  const style = g ? (g.style === "round" ? "round" : "kite") : L.shield!.style;
+  const bookId = g ? g.id : L.shield?.style === "book" ? L.shield.book : undefined;
+  if (bookId && BOOKS[bookId]) { // a book on the arm (paint/books.ts) instead of a shield
+    const fh = r.farH, face = r.face;
+    if (r.R) paintBook(c, bookId, r.cx + 2.6 + (r.p.attack === 0 ? 0.5 : 0), r.sy + 1.4, "edge", C);
+    else paintBook(c, bookId, fh[0] + (r.dir === "down" ? 0.6 : -0.6) + face[0] * 0.3, fh[1] - 1.6, r.dir === "up" ? "back" : "front", C);
+    return;
+  }
+  const style = g ? (g.style === "round" ? "round" : "kite") : L.shield!.style === "round" ? "round" : "kite";
   const col = C(g ? g.color : L.shield!.col), trim = C(g ? g.accent : L.shield!.trim), emb = C(g ? g.accent : L.shield!.emblem);
   const push = r.info.mv.kind === "bash" && r.p.attack >= 0 ? (r.R ? [-1, 2, 2, 1] : [-1, 3, 4, 2])[r.p.attack] : 0;
   const face = r.face;
