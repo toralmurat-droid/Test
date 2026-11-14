@@ -77,6 +77,7 @@ import { hashAddr, ideaLog, saveIdeas } from "./ideaStore";
 import { dropLive, LiveState, rememberLive, takeLive } from "./handoff";
 import { MobView } from "./mobView";
 import { copyPatches } from "./patchCopy";
+import { guardSendBacklog } from "./sendBacklog";
 import { act2Missing, act2Open, actAt, desertSpawn, WAYGATE_RANGE, waygateArrival, waygateById, WAYGATES } from "../shared/act2";
 import { respecCost } from "../shared/upkeep";
 import { ARSENAL, ATTUNE_ORDER, attuneOf, bondShare, DEFAULT_GRIMOIRE, SUMMONER_TREE, ESSENCE, GOLEM, GOLEM_OF, golemSlots, isElement, isSummonKind, parseGrimoire, PORTAL, SUMMON, summonElement, summonScaleLevel, WISP, wispEls, type AttuneElement, type SummonKind } from "../shared/summons";
@@ -848,6 +849,7 @@ export class TownRoom extends Room<TownState> {
   }
 
   onJoin(client: Client, options: { name?: string; color?: number; cls?: string; newGame?: boolean }, auth?: { name: string }) {
+    guardSendBacklog(client); // a socket that falls behind stops compressing until it catches up (server/sendBacklog.ts)
     const p = new Player();
     p.name = auth?.name ?? `Hero${Math.floor(Math.random() * 1000)}`;
     p.color = typeof options?.color === "number" ? options.color : COLORS[Math.floor(Math.random() * COLORS.length)];

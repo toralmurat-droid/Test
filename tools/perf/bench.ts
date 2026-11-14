@@ -2,7 +2,7 @@
 // then prints the time per server tick, CPU, memory and the bytes each player receives per second.
 //   npm run bench -- [bots=5] [seconds=15]        SPREAD=1 scatters the bots over the whole map (worst case)
 //   kbPerPlayerPerSec = payload after inflate (what the game decodes); wireKbPerPlayerPerSec = bytes read from the socket (frame headers, after deflate)
-//   DEFLATE=1: per-message deflate with the production settings (server/index.ts: threshold 256, level 1); off by default so numbers stay comparable.
+//   DEFLATE=1: per-message deflate with the production settings (PER_MESSAGE_DEFLATE in server/sendBacklog.ts); off by default so numbers stay comparable.
 //     The server copies each state patch before deflate (server/patchCopy.ts) and the bots copy each send (tools/perf/bots.ts);
 //     without those copies `ws` compressed reused buffers late, giving "refId not found" decode errors and garbled bot inputs.
 //   PHASES=1: also prints a second JSON line with the time per phase of the tick (wraps TownRoom methods). The wrappers add overhead, so the
@@ -24,6 +24,7 @@ async function main() {
   const { Server } = colyseus.Server ? colyseus : colyseus.default;
   const { WebSocketTransport } = await import("@colyseus/ws-transport");
   const { TownRoom } = await import("../../server/TownRoom");
+  const { PER_MESSAGE_DEFLATE } = await import("../../server/sendBacklog");
   const { isSolidAt } = await import("../../shared/map");
   const { MAP_W, MAP_H, TILE } = await import("../../shared/constants");
 
@@ -60,7 +61,7 @@ async function main() {
   };
 
   const httpServer = http.createServer();
-  const gs = new Server({ transport: new WebSocketTransport({ server: httpServer, ...(process.env.DEFLATE ? { perMessageDeflate: { threshold: 256, zlibDeflateOptions: { level: 1 } } } : {}) } as any) });
+  const gs = new Server({ transport: new WebSocketTransport({ server: httpServer, ...(process.env.DEFLATE ? { perMessageDeflate: PER_MESSAGE_DEFLATE } : {}) } as any) });
   gs.define("town", TownRoom);
   await gs.listen(PORT);
   // Worst send backlog of any connection (bytes accepted by send() and not yet written). With DEFLATE=1 each socket
