@@ -1,0 +1,11 @@
+{
+  "date": "2026-11-14",
+  "patch": 233,
+  "title": "Songweaver: song gauge, books and a growing lute",
+  "changes": [
+    "The Songweaver's mana bubble is now a song gauge. Notes fill it, chords fill it faster, and when it is full your book's gift rings out. Wear a Songbook, Hymnal, War March or Dissonance book to choose the gift.",
+    "Attacks are now Verses and songs are Choruses. Rings under your feet show your Chorus and your chord as you play it, and nearby players can see them.",
+    "Find new songs in the world: from quests, from villagers and from the Mirror Pond. Each one adds a chord of its own.",
+    "Your lute now grows with you. Wren the lute-maker in Oakvale fits strings, bodies and tunings, and breaks old weapons and shields into materials."
+  ]
+}

@@ -19,6 +19,7 @@ const C = SIZE / 2, R_IN = 36, R_OUT = 44;
 type Pal = { deep: number[]; mid: number[]; hi: number[]; empty: number[] };
 const RED: Pal = { deep: [70, 6, 12], mid: [168, 26, 36], hi: [236, 92, 84], empty: [22, 8, 10] };
 const BLUE: Pal = { deep: [8, 16, 64], mid: [32, 72, 176], hi: [110, 160, 240], empty: [8, 10, 24] };
+const GOLD: Pal = { deep: [70, 40, 4], mid: [196, 140, 24], hi: [255, 226, 120], empty: [24, 16, 6] }; // the Songweaver's song gauge
 
 const mix = (a: number[], b: number[], t: number) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
 
@@ -153,7 +154,7 @@ export class OrbHud {
     this.root.innerHTML =
       `<div id="orbplate"></div>` +
       `<div class="orb hp" title="Health"><canvas width="${SIZE}" height="${SIZE}"></canvas><span></span></div>` +
-      `<div class="orb mp" title="Mana"><canvas width="${SIZE}" height="${SIZE}"></canvas><span></span></div>` +
+      `<div class="orb mp" title="Mana"><canvas width="${SIZE}" height="${SIZE}"></canvas><span></span><em class="olabel"></em></div>` +
       `<canvas class="garg left"></canvas><canvas class="garg right"></canvas>`;
     hud.prepend(this.root);
     // One row on the plate: the skill bar, a separator, then the menu buttons (Murat 2026-11-07)
@@ -196,7 +197,22 @@ export class OrbHud {
     if (tight !== document.body.classList.contains("hud-tight")) document.body.classList.toggle("hud-tight", tight);
   }
 
-  update(hp: number, maxHp: number, mp: number, maxMp: number) {
+  private song = false;
+
+  /** The Songweaver's right orb is the song gauge: gold, labelled "Song", pulsing when nearly full. */
+  private setSong(on: boolean) {
+    if (on === this.song) return;
+    this.song = on; this.last.mp = -1;
+    const orb = this.mp.parentElement!;
+    orb.classList.toggle("song", on);
+    orb.title = on ? "Song gauge" : "Mana";
+    (orb.querySelector(".olabel") as HTMLElement).textContent = on ? "Song" : "";
+    if (!on) orb.classList.remove("full");
+  }
+
+  update(hp: number, maxHp: number, mp: number, maxMp: number, song = false) {
+    this.setSong(song);
+    if (song) this.mp.parentElement!.classList.toggle("full", maxMp > 0 && mp / maxMp >= 0.9);
     const now = performance.now();
     const fh = maxHp > 0 ? hp / maxHp : 0, fm = maxMp > 0 ? mp / maxMp : 0;
     this.layout();
@@ -204,7 +220,7 @@ export class OrbHud {
     if (!orbNeedsRedraw(this.last, fh, fm, hpTxt, mpTxt, now)) return;
     const t = now / 1000;
     drawOrb(this.hp.getContext("2d")!, fh, RED, t);
-    drawOrb(this.mp.getContext("2d")!, fm, BLUE, t + 1.7);
+    drawOrb(this.mp.getContext("2d")!, fm, song ? GOLD : BLUE, t + 1.7);
     this.hpTxt.textContent = hpTxt;
     this.mpTxt.textContent = mpTxt;
     this.last.hp = fh; this.last.mp = fm; this.last.at = now; this.last.hpTxt = hpTxt; this.last.mpTxt = mpTxt;

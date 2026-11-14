@@ -73,6 +73,8 @@ export const MSG_KICK_AFTER = 2000, MSG_KICK_WINDOW_MS = 10_000;
 export const CHAT_PER_SEC = 1, CHAT_BURST = 5;
 /** Trade and group invites per client (each one pops up on someone else's screen). */
 export const ASK_PER_SEC = 0.5, ASK_BURST = 4;
+/** Crafting at a trader (Wren's "break" and "lutefit"): each one rewrites the bag or the lute and saves materials. */
+export const CRAFT_PER_SEC = 3, CRAFT_BURST = 6;
 /** Login and account checks per address: 60 at once (a whole school or LAN reconnecting after an update), then 1/s. Wrong passwords are slowed per account too. */
 export const LOGIN_PER_SEC = 1, LOGIN_BURST = 60;
 /** New accounts per address: 10 at once, then one every 2 minutes. */
