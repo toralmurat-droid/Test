@@ -1,4 +1,4 @@
-// Real end-to-end check of the Songweaver client effects against a real server, at desktop and phone sizes:
+// Real end-to-end check of the Songweaver client effects against a real server, at the two desktop sizes:
 // songs (ring), the Amen progression (note rings, legend behind the "?" on the skills page), Modulate, waves in flight, a deaf slime and a fragile
 // skeleton (ringing / muffled numbers, ear icon, hint line), and `refId not found` errors.
 // Needs a DEV server (the /tp chat command is off in production) on a fresh save file, and
@@ -7,12 +7,12 @@
 //   npx vite --port 5180
 //   node tools/e2e-songweaver-fx.cjs 5180 docs/art
 // (needs playwright; set PLAYWRIGHT_CHROME=/path/to/chrome if its own browser is not installed)
-const { chromium, devices } = require("playwright");
+const { chromium } = require("playwright");
 const PORT = process.argv[2], OUT = process.argv[3];
 const SETUPS = [
-  ["desktop", { viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1 }],
-  ["phone-portrait", devices["iPhone 13"]],
-  ["phone-landscape", devices["iPhone 13 landscape"]],
+  // desktop only (mouse and keyboard): the two screen sizes CLAUDE.md asks for
+  ["desktop", { viewport: { width: 1920, height: 1080 }, deviceScaleFactor: 1 }],
+  ["desktop-1366", { viewport: { width: 1366, height: 768 }, deviceScaleFactor: 1 }],
 ];
 (async () => {
   const browser = await chromium.launch(process.env.PLAYWRIGHT_CHROME ? { executablePath: process.env.PLAYWRIGHT_CHROME } : {});

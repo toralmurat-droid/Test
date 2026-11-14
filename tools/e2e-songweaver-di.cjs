@@ -1,21 +1,21 @@
 // E2E for the Songweaver design ideas (DI-1 note rings, DI-3 song gauge and swell, DI-2 books and songs, DI-5 lute and
-// Wren), against the REAL server, at desktop and phone sizes. Nothing is faked: the fx words, the gauge, the events and the
+// Wren), against the REAL server, at the two desktop sizes. Nothing is faked: the fx words, the gauge, the events and the
 // "songbook" message all come from the server. Needs a DEV server (NODE_ENV not production: /max, /god and /tp exist) on a
 // fresh save file, and vite in front of it:
 //   SAVE_FILE=/tmp/saves.json npx tsx server/index.ts      (port 2567)
 //   npx vite --port 5180
-//   node tools/e2e-songweaver-di.cjs 5180 docs/art [desktop|phone-portrait|phone-landscape]
+//   node tools/e2e-songweaver-di.cjs 5180 docs/art [desktop|desktop-1366]
 // The dev commands used: /max (level, skills, 1,000,000 gold), /god, /tp x y. There is no command that grants materials,
 // so tonewood and brass come from breaking bought weapons at Wren, and bone from a real skeleton drop.
 // FAKE is gone: the old fx / event / "songbook" fakes were removed when the server side landed.
 // Needs playwright (or playwright-core); set PLAYWRIGHT_CHROME=/path/to/chrome if its own browser is not installed.
 let pw; try { pw = require("playwright"); } catch { pw = require("playwright-core"); }
-const { chromium, devices } = pw;
+const { chromium } = pw;
 const PORT = process.argv[2], OUT = process.argv[3];
 const SETUPS = [
-  ["desktop", { viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1 }],
-  ["phone-portrait", devices["iPhone 13"]],
-  ["phone-landscape", devices["iPhone 13 landscape"]],
+  // desktop only (mouse and keyboard): the two screen sizes CLAUDE.md asks for
+  ["desktop", { viewport: { width: 1920, height: 1080 }, deviceScaleFactor: 1 }],
+  ["desktop-1366", { viewport: { width: 1366, height: 768 }, deviceScaleFactor: 1 }],
 ];
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 (async () => {

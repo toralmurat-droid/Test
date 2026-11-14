@@ -352,3 +352,8 @@ Agents build against this in parallel. Changing it needs the orchestrator.
   the well ring.
 - 2026-11-14: PR #392 opened as a draft. CI green on c537f85 (check, patch-note, merge), mergeable clean. Marked
   ready per the merge rule (reviewer OK TO MERGE, tester passing, balance numbers in the PR); it merges by itself.
+
+## Desktop only (2026-11-14)
+The game is for desktop computers (mouse and keyboard) only. No phone, tablet or touch work and no mobile checks for the
+Songweaver: `tools/e2e-songweaver-di.cjs` and `tools/e2e-songweaver-fx.cjs` run at 1920×1080 (`desktop`) and 1366×768
+(`desktop-1366`), and a mobile-only failure blocks nothing. Agents working on the Songweaver are briefed the same way.
