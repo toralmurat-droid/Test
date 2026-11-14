@@ -1,5 +1,6 @@
 {
   "date": "2026-11-14",
+  "patch": 229,
   "title": "A bar for the monster under your mouse",
   "changes": [
     "A bar at the top of the screen now tells you about the monster you point at: its name, level, health, what it is weak to, and anything special about it. Champions list each of their traits there.",
