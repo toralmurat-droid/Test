@@ -7,7 +7,7 @@ import Phaser from "phaser";
 import { CLANS, CLAN_KEYS, type ClanKey } from "../../shared/war/clans";
 import { RENOWN_RANKS, rankOf } from "../../shared/war/renown";
 import { HOLDS, STANDARD, STANDARDS, type Standard } from "../../shared/war/standards";
-import { HOLD_FOOT, holdTexture } from "./holdArt";
+import { HOLD_ORIGIN, HOLD_SCALE, holdTexture } from "./holdArt";
 import { targetsOf, type WarState } from "../../shared/war/rules";
 import { TERRITORIES } from "../../shared/war/territories";
 import type { WarView } from "../../shared/war/view";
@@ -46,7 +46,7 @@ function standardTexture(scene: Phaser.Scene, k: ClanKey): string {
 
 export class WarStandards {
   private poles = new Map<number, Phaser.GameObjects.Image>();
-  private holds = new Map<number, Phaser.GameObjects.Image>();
+  private holds = new Map<number, { ground: Phaser.GameObjects.Image; stand: Phaser.GameObjects.Image }>();
   private rings = new Map<number, Phaser.GameObjects.Ellipse>();
   private prompt = document.createElement("div");
   private el = document.createElement("div");
@@ -95,13 +95,14 @@ export class WarStandards {
     for (const h of HOLDS) {
       const k = CLAN_KEYS[v.owner[h.t]];
       if (!k) continue;
-      const key = holdTexture(this.scene, k);
+      const keys = holdTexture(this.scene, k);
       let img = this.holds.get(h.t);
       if (!img) {
-        img = this.scene.add.image(h.x, h.y, key).setOrigin(0.5, HOLD_FOOT).setDepth(h.y);
-        isoAnchor(img, { x: h.x, y: h.y });
+        // the trampled ground lies under everything (heroes walk the compound); the standing parts sort by the foot
+        const mk = (key: string, depth: number) => isoAnchor(this.scene.add.image(h.x, h.y, key).setOrigin(HOLD_ORIGIN.x, HOLD_ORIGIN.y).setScale(HOLD_SCALE).setDepth(depth), { x: h.x, y: h.y }) as Phaser.GameObjects.Image;
+        img = { ground: mk(keys.ground, -0.5), stand: mk(keys.stand, h.y) };
         this.holds.set(h.t, img);
-      } else if (img.texture.key !== key) img.setTexture(key);
+      } else if (img.stand.texture.key !== keys.stand) { img.ground.setTexture(keys.ground); img.stand.setTexture(keys.stand); }
     }
     if (this.open) this.render();
   }
