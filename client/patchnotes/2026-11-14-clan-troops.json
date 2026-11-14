@@ -1,0 +1,9 @@
+{
+  "date": "2026-11-14",
+  "title": "Clan troops on patrol",
+  "changes": [
+    "Soldiers of the clan that holds a land now patrol it, marching between its Hold and its standards and stopping at each.",
+    "When a land changes hands, its soldiers change with it.",
+    "When a siege is called, soldiers of both clans clash at the land's standards. It is only for show: they cannot be fought."
+  ]
+}

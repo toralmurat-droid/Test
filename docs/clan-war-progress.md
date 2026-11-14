@@ -106,3 +106,14 @@ Open points for M1:
   renown (`heroValor`: a quarter when far over-levelled). Saved per hero as optional `renown`; kept on a clan change.
 - The oath panel shows renown and the next rank; the Herald tells the hero in chat on a rank-up. No reward yet beyond
   the title (ideas: tabard trims by rank, Renown in the name tag once a synced field is free).
+
+## M2: Troops on patrol (2026-11-14)
+
+- `shared/war/patrols.ts`: per territory a deterministic loop Hold → standards → Hold (tile BFS inside the land + 2
+  tiles, no corner cutting, line-of-sight simplified), built lazily per land (`patrolOf`), ~50 ms for all 31.
+  `TROOP` numbers and `TROOP_LOOK` (which existing sprites each clan uses).
+- `client/src/warTroops.ts`: look only. Three soldiers of the holder walk the loop near the hero, phase from wall
+  time (same on every client), pauses at each stop; the lead carries the clan pennant. A flip fades squads over; a
+  siege turns the patrol into attacker/defender pairs clashing at each standard. Hidden underground.
+- Next: own trooper sheets (tabards) for Wardens/Redfang/Veiled; later interactive server troops (fight monsters and
+  enemy-sworn heroes; needs sims and bench).
