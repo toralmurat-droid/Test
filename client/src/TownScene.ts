@@ -2370,11 +2370,11 @@ export class TownScene extends Phaser.Scene {
     const xpFrac = lvl >= MAX_LEVEL ? 1 : Math.max(0, Math.min(1, (mine.xp - cur) / Math.max(1, next - cur)));
     const bar = (cls2: string, label: string, val: string, f: number) =>
       `<div class="hbar ${cls2}"><div class="hbar-l"><span>${label}</span><b>${val}</b></div><div class="hbar-t"><i style="width:${Math.round(f * 100)}%"></i></div></div>`;
-    document.getElementById("herochar")!.innerHTML =
+    document.getElementById("herochar")!.innerHTML = this.titlePickerHtml(mine) +
       `<div class="hbars">${bar("hp", "Health", `${Math.ceil(mine.hp)} / ${mine.maxHp}`, mine.hp / Math.max(1, mine.maxHp))}` +
       bar("mp", "Mana", `${mp.mana} / ${mp.maxMana}`, mp.mana / Math.max(1, mp.maxMana)) +
       bar("xp", "Experience", lvl >= MAX_LEVEL ? "Max level" : `${mine.xp - cur} / ${next - cur}`, xpFrac) + `</div>` +
-      `<div class="hrows">${rows.filter(([k]) => k !== "Level" && k !== "Health").map(([k, v]) => `<span>${k}</span><b>${v}</b>`).join("")}</div>` + this.titlePickerHtml(mine);
+      `<div class="hrows">${rows.filter(([k]) => k !== "Level" && k !== "Health").map(([k, v]) => `<span>${k}</span><b>${v}</b>`).join("")}</div>`;
     const rc = respecCost(lvl), rcEl = document.getElementById("statresetcost");
     if (rcEl) rcEl.textContent = rc ? `${rc} gold` : "free (up to level 5)";
     el.hidden = false;
