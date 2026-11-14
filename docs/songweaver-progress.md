@@ -328,3 +328,13 @@ Agents build against this in parallel. Changing it needs the orchestrator.
   - Orchestrator: the shield still letting stun, slow and flinch through on a fully absorbed hit is intended
     (shields absorb damage, not control).
   - The gameplay fixes went to the gameplay-engineer; the docs fixes and nits were done by the orchestrator.
+- 2026-11-14: reviewer second pass: **OK TO MERGE**, no blocking findings.
+  - Should fix, being fixed before the PR:
+    - the sim hard-codes basic resonance;
+    - `heroSound` / `mobSound` belong in `shared/`;
+    - a fizzled charged skill still logs its note and can fire a chord.
+  - Also fixing a cosmetic issue: the song ring near a well is drawn too small.
+  - Known issue for the PR: Pedal Point's shield is uncapped (about 48 / 88 / 129% max HP at Lv 10 / 30 / 50) and
+    stacks with the Amen and Lydian pools. Accepted under the owner's uncapped-PvP decision; watch it in the
+    post-launch tuning.
+  - Bench, final branch: default 5 bots 8.36 ms tick avg; Songweaver party 5 bots 8.21 ms.
