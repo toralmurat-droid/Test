@@ -72,7 +72,7 @@ test("tunnels: a Hide-Kin strike two borders away is fed from where the tunnel s
   const { targetsOf, newWar, warTick, WAR } = await import("../shared/war/rules");
   const s = newWar();
   const far = targetsOf(s, "hidekin").find((t) => !TERRITORIES[t].near.some((n) => s.owner[n] === "hidekin") && !TERRITORIES[t].capitalOf);
-  if (far === undefined) return; // no tunnel target on today's map
-  const out = warTick(newWar(), { hidekin: { defend: 0, attack: [{ t: far, share: 1 }] } }, { phase: 0 });
-  assert.ok(out.pressure[far] > s.army.hidekin * WAR.cutOff, "more than a cut-off strike");
+  assert.ok(far !== undefined, "today's map has a tunnel target");
+  const out = warTick(newWar(), { hidekin: { defend: 0, attack: [{ t: far!, share: 1 }] } }, { phase: 0 });
+  assert.ok(out.pressure[far!] > out.army.hidekin * WAR.cutOff * 1.5, `well above a cut-off strike (${out.pressure[far!]})`);
 });
