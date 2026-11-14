@@ -123,10 +123,12 @@ test("Void Arsenal: a circling blade, a piercing lance, a wide axe and all four 
     let blade: any;
     room.state.fields.forEach((f: any) => { if (f.skill === "su_arsenal") blade = f; });
     assert.ok(blade && blade.follow, "the blade circles its owner");
-    await wait(2400);
-    const lance = log.some((h) => h.a === id && h.t === "far" && !h.o.pet && h.o.skill);
-    assert.ok(lance, "the lance reached the far skeleton");
-    assert.ok(log.filter((h) => h.t === "close" && h.o.skill && !h.o.dot).length >= 1, "the axe swept the close one");
+    // polled, not a fixed wait: under a loaded test run the room's ticks lag behind the wall clock
+    const lanceHit = () => log.some((h) => h.a === id && h.t === "far" && !h.o.pet && h.o.skill);
+    const axeHit = () => log.some((h) => h.t === "close" && h.o.skill && !h.o.dot);
+    for (let t = 0; t < 8000 && !(lanceHit() && axeHit()); t += 100) await wait(100);
+    assert.ok(lanceHit(), "the lance reached the far skeleton");
+    assert.ok(axeHit(), "the axe swept the close one");
     assert.ok(far.hp < 99999 && close.hp < 99999);
     await cs[0].leave();
   } finally {
