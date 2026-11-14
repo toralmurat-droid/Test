@@ -17,7 +17,7 @@ import { NIGHT_RAID } from "../../shared/raiders";
 import { ACTIVE_CLASSES, ClassKind } from "../../shared/classes";
 import { BANDIT_AI, BANDIT_ROLES, CHIEF } from "../../shared/bandits";
 import { BEAST, BLOB_AI, DEMON, ELITE, HOLLOW_KING, MOB_ATTACK_RANGE, MOB_LEVEL, MOBS, MobKind, mobScale, MOTHER, SKELETON_AI, SKELETON_BOW, SKELETON_WEAPONS, SkeletonWeapon, SUNWRIGHT, REGEN_DELAY_MS, REGEN_PER_STA } from "../../shared/constants";
-import { MOB_COMBAT, mobBody, POISE, poiseSpeed } from "../../shared/combat";
+import { MOB_COMBAT, mobBody, mobSound, POISE, poiseSpeed } from "../../shared/combat";
 import { POTION_COOLDOWN_MS, POTION_SIZES } from "../../shared/potions";
 import { activeSkills, SKILLS } from "../../shared/skills";
 import { canPay, manaRegen, skillCost } from "../../shared/mana";
@@ -27,7 +27,6 @@ import { Duel, F, GolemF, make, SIM } from "./duel";
 import { SUMMON } from "../../shared/summons";
 import { AFFIX_FX as CF, CHAMPION, type AffixKey } from "../../shared/champions";
 import { addHeat } from "../../shared/overload";
-import { mobSound } from "../../server/songs";
 
 type Build = 0 | 1 | 2;
 

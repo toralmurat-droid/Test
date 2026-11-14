@@ -26,10 +26,9 @@ import { newWisp, openArsenal, wispEnd, wispTick, type WispMind } from "../../sh
 import { Equipped, GEAR, gearBlock, gearDef, gearReachMult, gearSpeedMult, gearStats, meetsReq, withLevel } from "../../shared/gear";
 import { canExecute, executeDamage, executeRefund, heroPoise, POISE, poiseLevelMult, poiseSpeed, pvpDamageMult } from "../../shared/combat";
 import { COMBAT_REGEN_PER_STA, HIT_RADIUS, MOBS, mobScale, PLAYER_SPEED, REGEN_DELAY_MS, REGEN_PER_STA, REGEN_RAMP_MS } from "../../shared/constants";
-import { MOB_COMBAT, mobBody, soundMult, type SoundProfile } from "../../shared/combat";
+import { heroSound, MOB_COMBAT, mobBody, soundMult, type SoundProfile } from "../../shared/combat";
 import { buffPoise, castSkill as cast2, knownModesOf } from "../../shared/skillEngine";
-import { MODES, modeColour, PHRYGIAN, PROGRESSIONS, type Progression } from "../../shared/songs";
-import { heroSound } from "../../server/songs";
+import { MODES, modeColour, PHRYGIAN, PROGRESSIONS, RESONANCE, type Progression } from "../../shared/songs";
 import type { SoundFx } from "../../shared/skills";
 import { ARSENAL, bondShare, ESSENCE, GOLEM, GOLEM_OF, golemSlots, parseGrimoire, PORTAL, SUMMON, summonElement, summonScaleLevel, WISP, wispEls, type AttuneElement, type SummonKind } from "../../shared/summons";
 
@@ -423,7 +422,7 @@ export class Duel {
     if (def.projectile) {
       this.shoot(a, dmg, h.knockback, h.shotScale ?? 1);
       // the Songweaver's lute (server playerAttack): a sound wave, the strum rings twice as much
-      if (a.cls === "songweaver") this.shots[this.shots.length - 1].sound = { pitch: "M", deg: step === 1 ? "V" : "I", mode: a.sk.mode ?? "major", basic: true, res: step === 2 ? 9 : 0 };
+      if (a.cls === "songweaver") this.shots[this.shots.length - 1].sound = { pitch: "M", deg: step === 1 ? "V" : "I", mode: a.sk.mode ?? "major", basic: true, res: step === 2 ? RESONANCE.basic : 0 };
       return;
     }
     const rm = gearReachMult(a.eq);
