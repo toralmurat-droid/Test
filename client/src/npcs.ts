@@ -23,7 +23,7 @@ import { actAt, WAYGATES } from "../../shared/act2";
 import type { MapMarker } from "./minimap";
 import { QuestLog } from "./questlog";
 import { MASTER_LEVELS, SHOPS, sellPrice, shopBuys, shopFuses } from "../../shared/shops";
-import { GEAR_SLOTS, GearSlot, isBound, gearDef, gearName, itemLevel, itemRarity, itemText, reqProblem, TIER_NAMES } from "../../shared/gear";
+import { GEAR_SLOTS, GearSlot, keepsBoundOf, gearDef, gearName, itemLevel, itemRarity, itemText, reqProblem, TIER_NAMES } from "../../shared/gear";
 import { CHAR_GROW, CHAR_SCALE, CHAR_ORIGIN, CharacterName, playCharAnim } from "./artAssets";
 import { iconCanvas, itemColor, rarityLabel, reqInfoOf } from "./gear";
 import { fuseCost, fuseProblem, looseRuneCounts, parseRune, RUNE_FUSE_COUNT, RUNE_KIND_NAMES, RUNES, runeName, runeText } from "../../shared/runes";
@@ -394,7 +394,7 @@ export class NpcLayer {
       return head + row(e.item, gearName(e.item, cls), itemColor(e.item), `${rarityLabel(e.item)}${TIER_NAMES[d.tier]} · Lv ${itemLevel(e.item)} · ${itemText(e.item)}${why ? ` · <span class="sh-need">${why}</span>` : ""}`,
         `${e.price.toLocaleString("en-US")}${pxIcon("coin")}`, "sh-buy", i, gold < e.price);
     }).join("");
-    const sellable = shop.buys ? bag.map((id, i) => [id, i] as const).filter(([id]) => shopBuys(shop, id) && !isBound(id)) : [];
+    const sellable = shop.buys ? bag.map((id, i) => [id, i] as const).filter(([id]) => shopBuys(shop, id, true) && !keepsBoundOf(q?.cls ?? "", [q?.weapon, q?.shield], bag)(id)) : [];
     const sellRow = (id: string, i: number) => {
       const r = parseRune(id); // a loose rune (shared/runes.ts): Morwen buys them
       return r
@@ -462,7 +462,7 @@ export class NpcLayer {
   private renderLute(n: Npc, q: QuestState) {
     if (this.lmTab === "shop" && !(n.shop && SHOPS[n.shop])) this.lmTab = "traits";
     const bag = [...(q?.bag ?? [])], sb = getSongbook();
-    const st: LmState = { tab: this.lmTab, gold: q?.gold ?? 0, level: q?.level ?? 1, cls: q?.cls, weapon: q?.weapon, bag, mats: sb.mats, msg: this.shopMsg, breakAsk: this.lmAsk, hasShop: !!(n.shop && SHOPS[n.shop]) };
+    const st: LmState = { tab: this.lmTab, gold: q?.gold ?? 0, level: q?.level ?? 1, cls: q?.cls, weapon: q?.weapon, shield: q?.shield, bag, mats: sb.mats, msg: this.shopMsg, breakAsk: this.lmAsk, hasShop: !!(n.shop && SHOPS[n.shop]) };
     const key = JSON.stringify([n.id, st]);
     if (key === this.stage) return;
     this.stage = key;

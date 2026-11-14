@@ -5,7 +5,7 @@ import { isSongbook, songItemHtml, BOUND_LINE } from "./songItems";
 import { openSongbook } from "./songbookReader";
 import { actionKey } from "./keymode";
 import Phaser from "phaser";
-import { gearDef, itemText, LOOT_IDS, canWear, isBound, wearProblem, GEAR_SLOTS, gearName, gearStats, gearSpeedMult, GearSlot, BAG_SIZE, SLOT_NAMES, TIER_NAMES, baseId, itemRarity, RARITY_NAMES, affixLines, itemLevel, reqProblem, reqText, activeGear, heroStats, HeroReqInfo, Equipped, weaponElements, gearResist, weaponType } from "../../shared/gear";
+import { gearDef, itemText, LOOT_IDS, canWear, keepsBoundOf, wearProblem, GEAR_SLOTS, gearName, gearStats, gearSpeedMult, GearSlot, BAG_SIZE, SLOT_NAMES, TIER_NAMES, baseId, itemRarity, RARITY_NAMES, affixLines, itemLevel, reqProblem, reqText, activeGear, heroStats, HeroReqInfo, Equipped, weaponElements, gearResist, weaponType } from "../../shared/gear";
 import { ELEMENTS, ELEMENT_NAMES } from "../../shared/elements";
 import { nativeFamily, weaponFamily } from "../../shared/weapons";
 import { STAT_NAMES, StatKind } from "../../shared/powers";
@@ -258,6 +258,7 @@ export class GearMenu {
   refresh(state: any) {
     if (!this.open || !state) return;
     const bagItems: string[] = Array.from(state.bag ?? []);
+    const kept = keepsBoundOf(state.cls, [state.weapon, state.shield], bagItems); // her last lute and Songbook stay; a spare can go
     if (this.pickRune >= 0 && !parseRune(bagItems[this.pickRune])) this.pickRune = -1;
     const sig = [this.pickRune, this.sorted, this.marks, this.dropAsk > performance.now(), lootFilter().minRarity, lootFilter().ownClass, JSON.stringify(Array.from(state.talents?.entries?.() ?? [])), state.cls, state.level, state.ptSta, state.ptStr, state.ptMag, state.ptDex, ...GEAR_SLOTS.map((s) => state[s]), ...bagItems, state.potions, state.gold, state.maxHp].join("|");
     if (sig === this.sig) return;
@@ -353,7 +354,7 @@ export class GearMenu {
     const stacks = potionStacks(unpackPotions(state.potions));
     document.getElementById("gearbagtitle")!.innerHTML = `Bag ${bagItems.length + stacks.length}/${BAG_SIZE} <span class="gbgold">${icon("coin")}${state.gold ?? 0} gold</span>`;
     // Useless items: wearing them would raise no number on the sheet (or the class can't wear them)
-    this.junk = bagItems.map((id, i) => (uselessItem(sh, worn, id) && !isBound(id) ? i : -1)).filter((i) => i >= 0);
+    this.junk = bagItems.map((id, i) => (uselessItem(sh, worn, id) && !kept(id) ? i : -1)).filter((i) => i >= 0);
     const junk = new Set(this.junk);
     // Display order: as picked up, or sorted by slot, then rarity and level (the server keeps its own order)
     const order = bagItems.map((_, i) => i);
@@ -418,7 +419,7 @@ export class GearMenu {
         if (itemRarity(id) >= 2) cell.style.boxShadow = `inset 0 0 6px ${itemColor(id)}`;
         const cant = wearProblem(cls, id), fits = canWear(cls, id), why = fits ? reqProblem(id, hero) : "";
         if (itemLevel(id) > 1) cell.appendChild(Object.assign(document.createElement("span"), { className: "gcelllvl" + (why ? " gbad" : ""), textContent: String(itemLevel(id)) }));
-        hover(cell, id, (junk.has(i) ? "Useless: raises no stat · " : "") + (itemRunes(id).length ? "Click a rune stone to take the rune out · " : "") + (isBound(id) ? `${BOUND_LINE} Click: equip` : "") + (isBound(id) ? "" : fits ? (why ? "Too strong for you yet · Right-click: drop" : "Click: equip · Right-click: drop") : cant ? `${cant} · Right-click: drop` : `Only a ${d.cls} can wear this · Right-click: drop`));
+        hover(cell, id, (junk.has(i) ? "Useless: raises no stat · " : "") + (itemRunes(id).length ? "Click a rune stone to take the rune out · " : "") + (kept(id) ? `${BOUND_LINE} Click: equip` : "") + (kept(id) ? "" : fits ? (why ? "Too strong for you yet · Right-click: drop" : "Click: equip · Right-click: drop") : cant ? `${cant} · Right-click: drop` : `Only a ${d.cls} can wear this · Right-click: drop`));
         if (this.marks && junk.has(i)) cell.classList.add("gjunk");
         if (!fits) cell.style.opacity = "0.5";
         else if (why) cell.classList.add("glocked");
@@ -431,7 +432,7 @@ export class GearMenu {
           if (cant) { if (info) info.innerHTML = `<span class="gbad">${cant}</span>`; return; } // the server refuses too
           this.act("equip", i);
         };
-        cell.oncontextmenu = (ev) => { ev.preventDefault(); if (isBound(id)) { if (info) info.innerHTML = `<span class="glvl">${BOUND_LINE}</span>`; return; } this.act("dropgear", i); };
+        cell.oncontextmenu = (ev) => { ev.preventDefault(); if (kept(id)) { if (info) info.innerHTML = `<span class="glvl">${BOUND_LINE}</span>`; return; } this.act("dropgear", i); };
       } else cell.disabled = true;
       bag.appendChild(cell);
     }

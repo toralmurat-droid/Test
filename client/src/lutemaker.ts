@@ -1,4 +1,4 @@
-import { gearDef, gearName, isLute, itemLevel, luteTraits, TIER_NAMES } from "../../shared/gear";
+import { gearDef, gearName, isLute, keepsBoundOf, itemLevel, luteTraits, TIER_NAMES } from "../../shared/gear";
 import { LUTE_GROUPS, LUTE_GROUP_NAMES, LUTE_TRAITS, MATERIALS, MATERIAL_IDS, type LuteTrait, type MaterialId } from "../../shared/lute";
 import { breakYield, fitProblem } from "../../shared/lutemaker";
 import { itemColor, rarityLabel } from "./gear";
@@ -9,7 +9,7 @@ import { itemColor, rarityLabel } from "./gear";
  * decides every fit and break; the lock reasons and yields are shared/lutemaker.ts (fitProblem, breakYield).
  */
 export type LmTab = "traits" | "shop" | "break";
-export interface LmState { tab: LmTab; gold: number; level: number; cls?: string; weapon?: string; bag: string[]; mats: Record<string, number>; msg: string; breakAsk: number; hasShop: boolean }
+export interface LmState { tab: LmTab; gold: number; level: number; cls?: string; weapon?: string; shield?: string; bag: string[]; mats: Record<string, number>; msg: string; breakAsk: number; hasShop: boolean }
 
 export function lmTabsHtml(tab: LmTab, hasShop: boolean): string {
   const t = (id: LmTab, label: string) => `<button class="lm-tab${tab === id ? " on" : ""}" data-tab="${id}">${label}</button>`;
@@ -46,7 +46,8 @@ function traitsHtml(s: LmState): string {
 }
 
 function breakHtml(s: LmState): string {
-  const rows = s.bag.map((id, i) => [id, i, breakYield(id)] as const).filter(([, , y]) => !!y).map(([id, i, y]) => {
+  const kept = keepsBoundOf(s.cls ?? "", [s.weapon, s.shield], s.bag); // a spare lute or Songbook can be broken, never the last
+  const rows = s.bag.map((id, i) => [id, i, breakYield(id, !kept(id))] as const).filter(([, , y]) => !!y).map(([id, i, y]) => {
     const d = gearDef(id)!, ask = s.breakAsk === i;
     return `<div class="sh-row"><span class="sh-icon" data-icon="${id}"></span><span class="sh-info"><b style="color:${itemColor(id)}">${gearName(id, s.cls)}</b>` +
       `<small>${rarityLabel(id)}${TIER_NAMES[d.tier]} · Lv ${itemLevel(id)} · gives +${y!.n} ${MATERIALS[y!.mat].name}</small></span>` +
