@@ -36,7 +36,7 @@ let voices = 0;
 const MAX_VOICES = 28;
 const lastPlay = new Map<string, number>();
 /** Sounds that ring for seconds (kept connected longer). */
-const LONG = new Set(["lootRare", "lootLegendary", "horn", "ritual", "ritualCall", "demonRise", "demonRoar", "shrine", "portalTravel", "portalWake", "necroWind", "heroDie", "levelup", "owl", "chime", "warcry", "motherInflate", "demonFire", "skelDie", "lutePluck", "swResonate", "swShatter", "swBounce", "swSnap"]);
+const LONG = new Set(["lootRare", "lootLegendary", "horn", "ritual", "ritualCall", "demonRise", "demonRoar", "shrine", "portalTravel", "portalWake", "necroWind", "heroDie", "levelup", "owl", "chime", "warcry", "motherInflate", "demonFire", "skelDie", "lutePluck", "swResonate", "swShatter", "swBounce", "swSnap", "swSwell"]);
 const AMBIENT = new Set(["crackle", "bird", "cricket", "chime", "owl", "step", "skelIdle", "blobGurgle", "crawl"]);
 
 const TOWNS = ["Oakvale", "Market Square", "Chapel of the Dawn", "The Rusty Tankard", "The Smithy", "Saltmere", "Hunter's Camp"];
@@ -369,6 +369,52 @@ const R: Record<string, Recipe> = {
     tone(o, t, { type: "sawtooth", f: 900, f2: 160, dur: 0.22, vol: 0.12 * v, att: 0.002, vib: 30, vibHz: 55 });
     tone(o, t + 0.02, { type: "triangle", f: 220, f2: 150, dur: 0.3, vol: 0.12 * v });
   },
+  // ---- the Songweaver's gauge, books and lute-maker (docs/songweaver-di-plan.md "Interface contract")
+  // swell: the gauge fills. A rising hum with a texture per book; the chord bloom is strummed by songweaverSfx 0.5 s later.
+  swSwell: (o, t, v, book) => {
+    if (book === "bk_march") { // a drum roll that speeds up
+      for (let i = 0; i < 7; i++) thud(o, t + i * (0.11 - i * 0.008), 95 + i * 6, (0.2 + i * 0.04) * v, 0.1);
+      tone(o, t, { type: "triangle", f: 110, f2: 220, dur: 0.5, vol: 0.1 * v, att: 0.3 });
+    } else if (book === "bk_dissonance") { // a sour rise, two voices a semitone apart
+      tone(o, t, { type: "sawtooth", f: 220, f2: 440, dur: 0.5, vol: 0.06 * v, att: 0.35, vib: 5, vibHz: 9 });
+      tone(o, t, { type: "sawtooth", f: 233, f2: 466, dur: 0.5, vol: 0.05 * v, att: 0.35, vib: 7, vibHz: 6 });
+      noise(o, t, { type: "bandpass", f: 900, f2: 3200, q: 4, dur: 0.5, vol: 0.12 * v, att: 0.35 });
+    } else if (book === "bk_hymnal") { // a choir-like rise with a shimmer
+      tone(o, t, { type: "sine", f: 220, f2: 440, dur: 0.5, vol: 0.18 * v, att: 0.35, vib: 4, vibHz: 6 });
+      tone(o, t, { type: "sine", f: 330, f2: 660, dur: 0.5, vol: 0.1 * v, att: 0.35, vib: 4, vibHz: 5 });
+      noise(o, t + 0.1, { type: "highpass", f: 5000, f2: 9000, dur: 0.4, vol: 0.05 * v, att: 0.3 });
+    } else { // the Songbook (and any other): a warm rise and a flutter of pages
+      tone(o, t, { type: "sine", f: 220, f2: 440, dur: 0.5, vol: 0.18 * v, att: 0.35, vib: 5, vibHz: 7 });
+      tone(o, t, { type: "triangle", f: 440, f2: 880, dur: 0.5, vol: 0.05 * v, att: 0.4 });
+      for (let i = 0; i < 5; i++) noise(o, t + 0.05 + i * 0.07, { type: "bandpass", f: 3200, q: 2, dur: 0.035, vol: 0.07 * v });
+    }
+  },
+  swBell: (o, t, v, f) => bell(o, t, f ?? 1760, 1.2, 0.2 * v),
+  // fizzle: the gauge was full but no book is worn. A soft dead string: a damped thunk and a falling mutter
+  swFizzle: (o, t, v) => {
+    tone(o, t, { type: "triangle", f: 196, f2: 140, dur: 0.18, vol: 0.12 * v });
+    noise(o, t, { type: "lowpass", f: 600, f2: 200, dur: 0.12, vol: 0.18 * v });
+    tone(o, t + 0.04, { type: "sine", f: 98, f2: 80, dur: 0.12, vol: 0.08 * v });
+  },
+  // a soft pick-up: a small wooden tick and a quiet rising pair of tones
+  swMatPick: (o, t, v) => {
+    noise(o, t, { type: "bandpass", f: 1500, q: 3, dur: 0.03, vol: 0.14 * v });
+    tone(o, t, { type: "triangle", f: 784, dur: 0.1, vol: 0.07 * v });
+    tone(o, t + 0.05, { type: "triangle", f: 1175, dur: 0.14, vol: 0.06 * v });
+  },
+  // luthier tap: a hollow knock on wood (the three taps of a lute fitting)
+  swTap: (o, t, v, k) => {
+    const f = 330 + (k ?? 0) * 40;
+    tone(o, t, { type: "triangle", f, f2: f * 0.6, dur: 0.07, vol: 0.2 * v });
+    noise(o, t, { type: "bandpass", f: 1100, q: 2, dur: 0.03, vol: 0.2 * v });
+  },
+  // a lute breaking: a wood crack, splinters and a dull hollow thud
+  swBreak: (o, t, v) => {
+    noise(o, t, { type: "highpass", f: 1800, dur: 0.05, vol: 0.5 * v, att: 0.001 });
+    tone(o, t, { type: "sawtooth", f: 520, f2: 110, dur: 0.12, vol: 0.1 * v, att: 0.001, vib: 40, vibHz: 70 });
+    for (let i = 0; i < 4; i++) noise(o, t + 0.06 + i * 0.045 + rnd(0, 0.02), { type: "bandpass", f: rnd(1400, 3200), q: 5, dur: 0.03, vol: 0.14 * v });
+    thud(o, t + 0.03, 130, 0.3 * v, 0.16);
+  },
   // ---- heroes and plain combat
   swing: (o, t, v, heavy) => whoosh(o, t, heavy ? 350 : 700, heavy ? 1100 : 2600, heavy ? 0.26 : 0.16, 0.5 * v),
   hitFlesh: (o, t, v) => { thud(o, t, rnd(120, 170), 0.55 * v, 0.14); noise(o, t, { type: "bandpass", f: 1800, q: 2, dur: 0.05, vol: 0.3 * v }); },
@@ -637,7 +683,7 @@ export function strum(notes: readonly number[], o: PluckOpts & { dir?: "down" | 
 export type SwMode = "major" | "minor" | "lydian" | "dorian" | "phrygian";
 export type SwDegree = "I" | "i" | "ii" | "bII" | "IV" | "V" | "vi";
 export type SwPitch = "L" | "M" | "H" | "any";
-export type SwProg = "amen" | "encore" | "shatter" | "resolve" | "sleight";
+export type SwProg = "amen" | "encore" | "shatter" | "resolve" | "sleight" | "hum" | "round" | "undertow" | "picardy";
 
 export const SW_TONIC = 45;
 /** Semitones above the tonic of each mode's seven degrees. */
@@ -649,7 +695,11 @@ const SW_DEG: Record<SwDegree, number> = { I: 0, i: 0, ii: 1, bII: -1, IV: 3, V:
 /** Progression -> its three chords (the 3rd is the resolution). */
 export const SW_PROGS: Record<SwProg, readonly SwDegree[]> = {
   amen: ["vi", "IV", "I"], encore: ["ii", "V", "I"], shatter: ["bII", "V", "i"], resolve: ["IV", "V", "I"], sleight: ["IV", "V", "vi"],
+  // the collected songs' progressions (shared/songbook.ts): I-V-I, I-V-vi, i-bII-i, i-V-I with a major last chord
+  hum: ["I", "V", "I"], round: ["I", "V", "vi"], undertow: ["i", "bII", "i"], picardy: ["i", "V", "I"],
 };
+/** Chords whose quality is fixed whatever the mode the server sends: undertow is minor, picardy turns major on V and I. */
+const SW_FORCE: Partial<Record<SwProg, readonly (SwMode | undefined)[]>> = { undertow: ["minor", undefined, "minor"], picardy: ["minor", "major", "major"] };
 const SW_BASE: Record<SwPitch, number> = { L: SW_TONIC, M: SW_TONIC + 12, H: SW_TONIC + 24, any: SW_TONIC + 12 };
 
 /**
@@ -688,12 +738,14 @@ export function playChord(prog: SwProg, mode: SwMode, x?: number, y?: number, o:
   const degs = SW_PROGS[prog];
   if (!degs) return;
   degs.forEach((deg, i) => {
-    const last = i === degs.length - 1, tri = swTriad(deg, mode, "M");
+    const last = i === degs.length - 1, tri = swTriad(deg, SW_FORCE[prog]?.[i] ?? mode, "M");
     const notes = o.open ? openFifths(tri[0]) : [...tri, tri[0] + 12];
     strum(notes, { x, y, vol: (o.vol ?? 1) * (last ? 1.1 : 0.85), delay: i * 0.13 + (last ? 0.03 : 0), dur: last ? 3 : 0.7, bright: last ? 0.8 : 0.6, decay: last ? 0.9996 : undefined, dir: i === 1 ? "up" : "down", gap: 0.02 });
   });
-  const lastDeg = swTriad(degs[degs.length - 1], mode, "M")[0];
+  const lastTri = swTriad(degs[degs.length - 1], SW_FORCE[prog]?.[2] ?? mode, "M"), lastDeg = lastTri[0];
   if (!o.open) pluck(lastDeg + 24, { x, y, vol: 0.4 * (o.vol ?? 1), delay: 0.3, dur: 3, bright: 0.3 });
+  // the Picardy third: the major third rings once more on top, a little light after the minor opening
+  if (prog === "picardy" && !o.open) pluck(lastTri[1] + 12, { x, y, vol: 0.35 * (o.vol ?? 1), delay: 0.38, dur: 2.5, bright: 0.4 });
 }
 
 /** Twelve-Tone Storm: all twelve semitones in a rising sweep, ending in a dissonant cluster and a snap. */
@@ -716,6 +768,35 @@ export function playSwell(ev: { book?: string | null; fizzle?: boolean }, x?: nu
 
 const SW_TREE_SKILLS = new Set(["sg_ballad", "sg_mend", "sg_pedal", "sg_lydian", "sg_legato", "sg_chorale", "sg_march", "sg_jig", "sg_call", "sg_dorian", "sg_accel", "sg_anthem", "sg_dirge", "sg_shrill", "sg_crack", "sg_phrygian", "sg_sympathy", "sg_twelve", "sg_modulate"]);
 
+/** Chord that blooms per book after the rise: Songbook open A major, Hymnal high and bright, War March a bare fifth, Dissonance a cluster. */
+const SW_BLOOM: Record<string, { notes: number[]; vol: number; bright: number; bell?: number }> = {
+  songweaver_shield: { notes: [SW_TONIC + 12, SW_TONIC + 16, SW_TONIC + 19, SW_TONIC + 24], vol: 1, bright: 0.6 },
+  bk_hymnal: { notes: [SW_TONIC + 24, SW_TONIC + 28, SW_TONIC + 31, SW_TONIC + 36], vol: 0.9, bright: 0.8, bell: 1760 },
+  bk_march: { notes: [SW_TONIC, SW_TONIC + 7, SW_TONIC + 12], vol: 1.1, bright: 0.5 },
+  bk_dissonance: { notes: [SW_TONIC + 12, SW_TONIC + 13, SW_TONIC + 18, SW_TONIC + 19], vol: 0.9, bright: 1 },
+};
+/** The gauge is full: a rising swell, then a chord bloom for the worn book. No book: a soft dead string. */
+function swellSfx(ev: any, x?: number, y?: number): boolean {
+  if (ev.fizzle || !ev.book) { play("swFizzle", x, y, 1, undefined, { key: "swfizz" + (ev.id ?? ""), minGap: 150 }); return true; }
+  const b = SW_BLOOM[ev.book] ?? SW_BLOOM.songweaver_shield, k = x === undefined ? 1 : 0.8;
+  play("swSwell", x, y, k, ev.book, { key: "swswell" + (ev.id ?? ""), minGap: 300, reach: 1.1 });
+  strum(b.notes, { x, y, vol: b.vol * k, delay: 0.5, dur: 2.2, bright: b.bright, gap: 0.03 });
+  if (b.bell) play("swBell", x, y, 0.5, b.bell, { key: "swbell" + (ev.id ?? ""), minGap: 0, delay: 0.5 });
+  if (ev.book === "bk_march") play("swTap", x, y, 0.6, 0, { key: "swmarch" + (ev.id ?? ""), minGap: 0, delay: 0.5 });
+  return true;
+}
+/** A song learned: a short rising A major motif, then a held chord. */
+function playNewSong() {
+  [SW_TONIC + 31, SW_TONIC + 36, SW_TONIC + 40, SW_TONIC + 43].forEach((n, i) => pluck(n, { vol: 0.7 + i * 0.08, delay: i * 0.1, dur: 0.8, bright: 0.7 }));
+  strum([SW_TONIC + 24, SW_TONIC + 28, SW_TONIC + 31, SW_TONIC + 36], { vol: 0.9, delay: 0.45, dur: 2.5, bright: 0.6 });
+}
+/** The lute-maker fits a trait: three taps on the wood, then the string brought up to pitch (a flat A, then true). */
+function playLuteFit() {
+  for (let i = 0; i < 3; i++) play("swTap", undefined, undefined, 1, i, { key: "swtap" + i, minGap: 0, delay: i * 0.16 });
+  pluck(SW_TONIC + 11.5, { vol: 0.6, delay: 0.6, dur: 0.7, bright: 0.5 });
+  pluck(SW_TONIC + 12, { vol: 0.8, delay: 0.95, dur: 1.6, bright: 0.6 });
+}
+
 /**
  * Plays a Songweaver "sfx" event from the interface contract (docs/songweaver-progress.md); returns true if it was one.
  * `me` is our session id (our own sounds play on our hero), `open` says other Songweavers nearby are in another mode.
@@ -734,6 +815,11 @@ export function songweaverSfx(ev: any, me?: string, open = false): boolean {
     case "resonate": play(ev.shatter ? "swShatter" : "swResonate", ev.x, ev.y, 1, undefined, { key: "swres" + ev.id, minGap: 80, reach: 1.1 }); return true;
     case "bounce": play("swBounce", ev.x, ev.y, 0.8, ev.mat, { key: "swbounce", minGap: 40 }); return true;
     case "soundhit": play("swSoundHit", ev.x, ev.y, 0.8, { tier: ev.tier, match: !!ev.match }, { key: "swhit" + (ev.id ?? ""), minGap: 60 }); return true;
+    case "swell": return swellSfx(ev, x, y);
+    case "newsong": if (own) playNewSong(); return true;
+    case "matpick": play("swMatPick", x, y, 0.8, undefined, { key: "swmat" + (ev.id ?? ""), minGap: 60 }); return true;
+    case "lutefit": if (own) playLuteFit(); return true;
+    case "break": if (own) play("swBreak", undefined, undefined, 1, undefined, { key: "swbreak", minGap: 80 }); return true;
     case "shieldbreak":
       if (typeof ev.s === "string" && ev.s.startsWith("sg_")) { play("swSnap", ev.x, ev.y, 1, undefined, { key: "swsnap", minGap: 80 }); return true; }
       return false;
