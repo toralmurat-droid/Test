@@ -1,5 +1,6 @@
 {
   "date": "2026-11-13",
+  "patch": 222,
   "title": "Props redrawn in depth",
   "changes": [
     "Armour stands, racks, bounty boards, lanterns, pennants, training dummies, net racks, skull pikes, spear racks and the Redfang watchtowers are now drawn in true isometric depth.",
