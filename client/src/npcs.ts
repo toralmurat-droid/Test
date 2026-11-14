@@ -13,9 +13,10 @@ import { ANVIL_TOP, FORGE_FLUE, SMITHY_ORIGIN, TX as SMITHY_TX, smithyTextures }
 import { smokeTexture } from "./bonfireArt";
 import { NPCS, NPC_DECOR, Npc, npcById, npcNear, TALK_RANGE } from "../../shared/npcs";
 import {
-  CHAINS, chainOpen, chainState, questSig, tutorialDone, USE_RANGE, TUT_CHAIN, npcPresent, ZONE_ARCS, npcQuestMark, questDef, questDialog, questObjective, questStep, Quester, QuestTarget, questTargets, stepGoal, stepProgress,
+  mentorOffer, CHAINS, chainOpen, chainState, questSig, tutorialDone, USE_RANGE, TUT_CHAIN, npcPresent, ZONE_ARCS, npcQuestMark, questDef, questDialog, questObjective, questStep, Quester, QuestTarget, questTargets, stepGoal, stepProgress,
 } from "../../shared/quests";
 import { QuestObjects } from "./questObjects";
+import { TITLES } from "../../shared/cosmetics";
 import { MAGS, RumourBook, type RumourEnd } from "./rumours";
 import { conceptTextures } from "./questConceptArt";
 import { TILE } from "../../shared/constants";
@@ -172,6 +173,32 @@ export class NpcLayer {
     const [big, small, color] = RumourBook.endLines(e);
     this.banner(big, small, color);
     if (e.why === "done" && e.outro) this.showStory(e.name, "Rumour solved", [e.outro]);
+  }
+
+  /** Veteran's mentoring as the server last sent it ("mentor": on, recruits so far, the next title). */
+  private mentor?: { on: boolean; n: number; next?: { at: number; title: number | string } };
+
+  /** Server "mentor": the state for Hale's page; on a payout a banner (the recruit's name, the new title if any). */
+  onMentor(m: { on?: boolean; n?: number; next?: { at: number; title: number | string }; recruit?: string; title?: number | string }) {
+    if (!m || typeof m.n !== "number") return;
+    this.mentor = { on: !!m.on, n: m.n, next: m.next };
+    this.stage = -1; // redraw Hale's page
+    if (m.recruit) {
+      const t = m.title !== undefined ? this.titleName(m.title) : "";
+      this.banner(`${m.recruit} beat their first boss`, `Recruits: ${m.n}${t ? ` · New title: ${t}` : ""}`, "#b9f27c");
+    }
+  }
+  /** TITLES index (or an already spelled name) to the name. */
+  private titleName(t: number | string) { return typeof t === "number" ? TITLES[t] ?? "" : String(t); }
+
+  /** Hale's mentoring block: what he asks, where the hero stands, and the one button. Empty below Lv 11. */
+  private mentorHtml(q: QuestState) {
+    const o = mentorOffer(q?.level ?? 1, !!this.mentor?.on);
+    if (!o) return "";
+    const m = this.mentor;
+    const next = m?.next ? ` Next title: <b>${this.titleName(m.next.title)}</b> at ${m.next.at} recruits.` : m ? " All mentor titles earned." : "";
+    const status = m ? `<div class="nd-mstat">Mentoring: <b class="${m.on ? "on" : "off"}">${m.on ? "on" : "off"}</b> · Recruits: <b>${m.n}</b>.${next}</div>` : "";
+    return `<div class="nd-mentor"><h5>Mentoring</h5>${o.text.map((t) => `<p>${t}</p>`).join("")}${status}<button class="nd-mbtn" data-on="${o.send ? 1 : 0}">${o.button}</button></div>`;
   }
 
   private banner(big: string, small: string, color = "#b9f27c") {
@@ -529,7 +556,7 @@ export class NpcLayer {
     if (this.shopOpen) { this.shopOpen = false; this.onPreview?.(); }
     const rumourBody = n.id === MAGS && !(page?.accept || page?.options) ? this.rumours.dialogHtml(tutorialDone(q)) : "";
     this.rumourPage = !!rumourBody;
-    const key = JSON.stringify([n.id, questSig(q), q?.level, metaOf(q, META.flags), rumourBody ? this.rumours.rev : 0]);
+    const key = JSON.stringify([n.id, questSig(q), q?.level, metaOf(q, META.flags), rumourBody ? this.rumours.rev : 0, n.id === "captain" ? this.mentor : 0]);
     if (key === this.stage) return;
     this.stage = key;
     if (rumourBody) { // Mags: today's three rumours as option buttons, or the one under way with "Drop it"
@@ -547,10 +574,13 @@ export class NpcLayer {
     this.dialog.innerHTML = this.head(n) +
       p.text.map((t) => `<p>${t}</p>`).join("") +
       (p.options?.length ? this.optionsHtml(p.options) : "") +
+      (n.id === "captain" ? this.mentorHtml(q) : "") +
       `<div class="nd-btns">${p.accept ? `<button class="nd-accept">${p.accept}</button>` : ""}` +
       `${n.shop ? `<button class="nd-trade">Trade</button>` : ""}<button class="nd-bye">${p.bye} <kbd>E</kbd></button></div>`;
     const acc = this.dialog.querySelector<HTMLButtonElement>(".nd-accept");
     if (acc) acc.onclick = () => { this.send("quest", { chain: p.chain }); acc.disabled = true; };
+    const mb = this.dialog.querySelector<HTMLButtonElement>(".nd-mbtn");
+    if (mb) mb.onclick = () => { this.send("mentor", { on: mb.dataset.on === "1" }); mb.disabled = true; setTimeout(() => { this.stage = -1; }, 1500); };
     this.optKeys = [];
     if (p.options?.length) this.bindOptions(p.chain, p.options);
     const trade = this.dialog.querySelector<HTMLButtonElement>(".nd-trade");

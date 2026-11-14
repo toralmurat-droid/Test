@@ -50,7 +50,7 @@ import { PointerControls, type ClickEnemy, type ClickSpot } from "./pointer";
 import { warmPaths } from "./pathfind";
 import { pixelText } from "./pixeltext";
 import { speechBubble } from "./weathered";
-import { hasTrait } from "../../shared/cosmetics";
+import { hasTrait, TITLES, unpackCosmetics } from "../../shared/cosmetics";
 import { META, metaOf } from "../../shared/questSteps";
 import { updateHidebound } from "./questConceptArt";
 import { ART_K, CHAR_GROW, CHAR_SCALE, CHARACTERS, CHAR_ORIGIN, CharacterName, createArtAnims, ensureCharSheet, HD_CHARS, playCharAnim, preloadArt } from "./artAssets";
@@ -152,6 +152,8 @@ interface Entity {
   partsKey?: string; partsLayout?: BlobPart[];
   sprite: Phaser.GameObjects.Sprite;
   label?: Phaser.GameObjects.Text;
+  titleLabel?: Phaser.GameObjects.Text; // heroes: the shown title, small and dim, between the name and the head
+  nameLift?: number;
   lvlColor?: string; // monsters: current colour of the "Lv N" label
   mob: boolean;
   hero?: CharacterName; // set when drawn with the animated 32x32 sheets
@@ -356,6 +358,8 @@ export class TownScene extends Phaser.Scene {
   private lastRanged = -Infinity;
   private heroFrom?: number;
   private heroSig = "";
+  /** Titles this hero may pick (TITLES indices, server "title"). */
+  private titlesOwned: number[] = [];
   private levelFrom?: number; // level before the level-ups the player hasn't looked at yet
   private clearedTimer?: number;
   private gearMenu?: GearMenu;
@@ -507,6 +511,7 @@ export class TownScene extends Phaser.Scene {
       const b = (ev.target as HTMLElement).closest("button");
       if (b?.dataset.stat) this.room?.send("stat", b.dataset.stat);
       else if (b?.id === "statreset") this.room?.send("resetstats");
+      else if (b?.dataset.title !== undefined) this.room?.send("title", { i: Number(b.dataset.title) }); // the server answers "title"; the label follows $c
     });
     // Hovering a + shows in the side panel's stats block what that point would change
     heroEl.addEventListener("mouseover", (ev) => {
@@ -651,6 +656,12 @@ export class TownScene extends Phaser.Scene {
     this.room.onMessage("choice", (msg) => this.npcs?.onChoice(msg));
     this.room.onMessage("questuse", ({ id }) => this.npcs?.objects.burst(id));
     this.room.onMessage("rumour", (m) => this.npcs?.rumours.onMessage(m)); // Mags' tavern rumours (client/src/rumours.ts)
+    this.room.onMessage("mentor", (m) => this.npcs?.onMentor(m)); // Hale's mentoring (client/src/npcs.ts)
+    this.room.onMessage("title", (m: { i?: number; owned?: number[] }) => { // owned titles for the picker in the hero panel
+      if (Array.isArray(m?.owned)) this.titlesOwned = m.owned.filter((i) => Number.isInteger(i) && i > 0 && i < TITLES.length);
+      this.heroSig = "";
+    });
+    this.room.send("title", {}); // fetch the owned titles once
     this.room.onMessage("shop", (msg) => this.npcs?.onShop(msg));
     this.chests = new ChestLayer(this, (type, msg) => this.room.send(type, msg));
     this.room.onMessage("chests", (left) => this.chests?.setOpened(left));
@@ -1837,9 +1848,13 @@ export class TownScene extends Phaser.Scene {
       stroke: "#000", strokeThickness: 2,
     }).setOrigin(0.5, 1).setScale(WT).setResolution(1);
     isoAnchor(label, sprite);
+    const titleLabel = this.add.text(p.x, p.y, "", {
+      fontFamily: TEXT_FONT, fontSize: `${TEXT_PX}px`, color: "#b8a98a", stroke: "#000", strokeThickness: 2,
+    }).setOrigin(0.5, 1).setScale(WT * 0.8).setResolution(1).setAlpha(0.85);
+    isoAnchor(titleLabel, sprite);
     const bar = isoAnchor(this.add.graphics(), sprite) as Phaser.GameObjects.Graphics;
     const gear = hero ? new GearLayer(this, hero) : undefined;
-    this.entities.set(id, { sprite, label, bar, tx: p.x, ty: p.y, snaps: [{ t: patchTime(), x: p.x, y: p.y }], state: p, mob, hero, gear, top: hero ? HERO_TOP : 14 });
+    this.entities.set(id, { sprite, label, titleLabel, bar, tx: p.x, ty: p.y, snaps: [{ t: patchTime(), x: p.x, y: p.y }], state: p, mob, hero, gear, top: hero ? HERO_TOP : 14 });
     if (id === this.me) {
       // ?look=tx,ty (map viewing aid, like ?time=): park the camera on a tile instead of following the hero
       const look = new URLSearchParams(location.search).get("look")?.split(",").map(Number);
@@ -1855,7 +1870,7 @@ export class TownScene extends Phaser.Scene {
     this.siege?.clear(id);
     this.champFx?.drop(id);
     this.forms?.drop(id);
-    e.sprite.destroy(); e.label?.destroy(); e.bar.destroy(); e.parts?.destroy(); e.bubble?.destroy(); e.shield?.destroy(); e.gear?.destroy();
+    e.sprite.destroy(); e.label?.destroy(); e.titleLabel?.destroy(); e.bar.destroy(); e.parts?.destroy(); e.bubble?.destroy(); e.shield?.destroy(); e.gear?.destroy();
     this.entities.delete(id);
   }
 
@@ -2289,6 +2304,14 @@ export class TownScene extends Phaser.Scene {
         this.gameMenu?.open || this.talentMenu?.open);
   }
 
+  /** Owned titles as small buttons (plus None); a pick is an intent, the server answers "title" and the label follows `$c`. */
+  private titlePickerHtml(mine: any) {
+    if (!this.titlesOwned.length) return "";
+    const cur = unpackCosmetics(metaOf(mine, META.cosm)).title;
+    const b = (i: number, name: string) => `<button class="titlepick${i === cur ? " on" : ""}" data-title="${i}">${name}</button>`;
+    return `<div id="titlepick"><span>Title</span>${b(0, "None")}${this.titlesOwned.map((i) => b(i, TITLES[i])).join("")}</div>`;
+  }
+
   /** Opens the hero menu. After level-ups (`from` = level before them) it highlights the gains. */
   private showHeroMenu(from?: number) {
     const mine = this.entities.get(this.me)?.state;
@@ -2298,7 +2321,7 @@ export class TownScene extends Phaser.Scene {
     const st = { sta: mine.sta, str: mine.str, mag: mine.mag, dex: mine.dex ?? 0 }; // includes gear bonuses
     const free = statPoints(lvl) - (mine.ptSta + mine.ptStr + mine.ptMag + (mine.ptDex ?? 0));
     // Rebuild only when something shown changed (called every frame while open)
-    const sig = [lvl, mine.xp, Math.ceil(mine.hp), mine.maxHp, mine.mp, st.sta, st.str, st.mag, st.dex, free, mine.kills, mine.gold, mine.wear, from].join("|");
+    const sig = [this.titlesOwned.join(), unpackCosmetics(metaOf(mine, META.cosm)).title, lvl, mine.xp, Math.ceil(mine.hp), mine.maxHp, mine.mp, st.sta, st.str, st.mag, st.dex, free, mine.kills, mine.gold, mine.wear, from].join("|");
     const el = document.getElementById("hero")!;
     if (!el.hidden && sig === this.heroSig) return;
     this.heroSig = sig;
@@ -2347,7 +2370,7 @@ export class TownScene extends Phaser.Scene {
     const xpFrac = lvl >= MAX_LEVEL ? 1 : Math.max(0, Math.min(1, (mine.xp - cur) / Math.max(1, next - cur)));
     const bar = (cls2: string, label: string, val: string, f: number) =>
       `<div class="hbar ${cls2}"><div class="hbar-l"><span>${label}</span><b>${val}</b></div><div class="hbar-t"><i style="width:${Math.round(f * 100)}%"></i></div></div>`;
-    document.getElementById("herochar")!.innerHTML =
+    document.getElementById("herochar")!.innerHTML = this.titlePickerHtml(mine) +
       `<div class="hbars">${bar("hp", "Health", `${Math.ceil(mine.hp)} / ${mine.maxHp}`, mine.hp / Math.max(1, mine.maxHp))}` +
       bar("mp", "Mana", `${mp.mana} / ${mp.maxMana}`, mp.mana / Math.max(1, mp.maxMana)) +
       bar("xp", "Experience", lvl >= MAX_LEVEL ? "Max level" : `${mine.xp - cur} / ${next - cur}`, xpFrac) + `</div>` +
@@ -3111,7 +3134,15 @@ export class TownScene extends Phaser.Scene {
         const col = myParty && p.party === myParty ? "#7cfc00" : "#ffffff";
         if (e.lvlColor !== col) { e.label.setColor(col); e.lvlColor = col; }
       }
-      e.bubble?.setPosition(x, y - e.top - 12); // above the name label
+      if (e.titleLabel) { // the shown title (arcs $c, synced) sits right over the head; the name moves up above it
+        const t = TITLES[unpackCosmetics(metaOf(p as any, META.cosm)).title] ?? "";
+        if (e.titleLabel.text !== t) e.titleLabel.setText(t);
+        const lift = t ? 9 : 0;
+        e.titleLabel.setPosition(x, y - e.top - (p.hat ? 4 : 2)).setDepth(e.sprite.y + 1).setVisible(!!t && !p.dead && !p.hidden && (id !== this.me || !!e.label?.visible));
+        if (e.label) e.label.setY(e.label.y - lift);
+        e.nameLift = lift;
+      }
+      e.bubble?.setPosition(x, y - e.top - 12 - (e.nameLift ?? 0)); // above the name label
       e.bar.clear().setDepth(e.sprite.y + 1);
       if (e.mob) this.champFx?.sync(id, e, p, x, y, mobBarY, now);
       this.fx.status(e, e.bar, dtMs / 1000);
