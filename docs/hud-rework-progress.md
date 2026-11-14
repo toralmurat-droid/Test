@@ -46,16 +46,20 @@ Mockup scripts: session scratchpad `hud/C/mock.cjs`, `frames2.cjs`, `frames5.cjs
 Owner decisions:
 - Layout: A (compact plate: level tile, name, weak/resist/status icons, thin HP bar, no numbers) for every monster,
   B (one extra row of affix icon + name, Songweaver ear/pitch icons) for champions and elites, C (sentence-case
-  details, HP numbers, full weak/resist line) only while **Alt** is held. The plate takes the top-centre slot and the
-  war plaque (`warPlaque.ts`) hides while you point at a monster (D).
+  details, HP numbers, full weak/resist line, Songweaver sound hints) only while **Alt** is held. The plate takes the
+  top-centre slot. The Songweaver sound hints stop going to chat (`soundCues.ts`); they live in the Alt details.
 - Frames in the orb/bar bronze style, more elaborate by rarity, six tiers: normal, elite, champion, named, quest, boss.
   Higher tiers go further. Quest and named get their own frames (quest: wood, parchment edge, wax seal, scroll ends;
   named: steel, violet gems, laurel crest, fins). Named needs a rule: today any titled monster counts as a quest target.
 - Champion and boss: the orb statue (angel / demon) **cut vertically in half**, the left half on the left of the plate
-  and the right half on the right, **large** (2x), plinth **flush with the frame's bottom**. Boss demon needs a lighter
-  outer edge to read on dark ground.
+  and the right half on the right, plinth **flush with the frame's bottom**. Angel: scaled so the top of its halo is
+  flush with the frame's top. Demon: large (2x), colour as is. Quest and named: no statues.
 
 ## To do (owner's list)
 - Build D above.
 - Chat log: a small toggle to hide it (owner, 2026-11-14).
+- War plaque (`warPlaque.ts`, and the war news notice under it, `warNotice.ts`) moves to the **top left** of the screen
+  instead of hiding under the monster plate. Check against the party frame there.
+- Tide tracker ("Tide 104/600 · Blob kills fill it", `tide.ts`) moves into the quest tracker's space in the top-right
+  column, styled like a quest entry.
 - Stray grey "-28" near the HP orb in town: source not found, needs a repro.
