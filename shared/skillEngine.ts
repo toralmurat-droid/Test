@@ -1267,6 +1267,15 @@ export function riseAgain(h: SkillHost, id: string): boolean {
 
 const NIGHT_BUFF_ID = "v_nightborn";
 
+/**
+ * True when tickUnit on this unit, run at `now` or later, would change nothing: alive, no class (a monster), no buffs,
+ * counter or stacks, not burning. Lets a host skip the call (and its unit lookup) for most monsters.
+ */
+export function quietUnit(u: Unit, now: number): boolean {
+  const sk = u.sk;
+  return !u.dead && !u.cls && !sk.buffs.length && !sk.counter && !(sk.stacks > 0) && !(now < sk.burnUntil);
+}
+
 /** Every tick for every hero and monster. */
 export function tickUnit(h: SkillHost, id: string) {
   const u = h.unit(id);
@@ -1304,7 +1313,10 @@ export function tickUnit(h: SkillHost, id: string) {
 
 /** Status words for the client (comma list): burn, mark, weak, counter, charge and active buff skill ids. */
 export function statusOf(u: Unit, now: number): string {
-  const sk = u.sk, out: string[] = [];
+  const sk = u.sk;
+  // nothing on (every quiet monster, every tick): the same "" without building a list
+  if (!sk.buffs.length && !sk.counter && !(now < sk.burnUntil || now < sk.markUntil || now < sk.weakUntil || now < sk.chargeUntil)) return "";
+  const out: string[] = [];
   if (now < sk.burnUntil) out.push(sk.bleed === "boil" ? "boil" : sk.bleed === "drip" ? "bleed" : "burn");
   if (now < sk.markUntil) out.push("mark");
   if (now < sk.weakUntil) out.push("weak");

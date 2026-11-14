@@ -1,5 +1,6 @@
 import { addHeat, coolHeat, isOverheated, OVERLOAD } from "../shared/overload";
 import { MOB_CELL, MobGrid, trackSchemaMoves } from "./mobGrid";
+import { fastFields } from "./schemaFast";
 import { type AuthContext, Client, Room } from "colyseus";
 import { ArraySchema, MapSchema, Schema, type } from "@colyseus/schema";
 import {
@@ -25,7 +26,7 @@ import { cleanFilter, LootFilter, passesFilter } from "../shared/heroSheet";
 import { activeSkills, canLearn, classSkills, cleanRanks, levelPower, REPLACED_SKILLS, maxRank, topRank, NEED_TEXT, rankOf, rankPower, scalePower, skillById, skillLearned, skillOf, talentBonus, talentMult, talentReduce } from "../shared/skills";
 import {
   afterHit, atkSpeedMult, blocking, bloodCost, buffLifesteal, buffRegen, castSkill, CastOut, ccImmune, fangTarget, onKill, riseAgain, charging, winding, counterHit, dealtMult, FieldInst, newRuntime,
-  imbueOf, buffPoise, shotEnd, shotHit, shotPulse, ShotSpec, SkillHost, speedMult, statusOf, takenMult, tickField, tickUnit, Unit,
+  imbueOf, buffPoise, shotEnd, shotHit, shotPulse, ShotSpec, SkillHost, speedMult, statusOf, takenMult, tickField, tickUnit, quietUnit, Unit,
   gainEssence, toVoid, voidSlip, inVoid, absorbDamage,
 } from "../shared/skillEngine";
 import { golemDeath, golemStrike, golemTick, newMind, type GolemMind } from "../shared/golemAI";
@@ -308,6 +309,7 @@ export class Mob extends Schema {
   lastAttack = 0;
 }
 
+fastFields(Player); fastFields(Mob); // the hot loops read their fields all the time (server/schemaFast.ts)
 trackSchemaMoves(Mob); // TownState.mobs (a MobGrid) keeps its squares right as monsters move
 
 export class Projectile extends Schema {
@@ -406,6 +408,7 @@ export class TownState extends Schema {
   @type({ map: Watchman }) watch = new MapSchema<Watchman>();
   @type("string") doors = ""; // open Mawdeep gates, comma separated (shared/map.ts DOORS)
 }
+for (const c of [Projectile, Item, Zone, Field, Watchman, TownState]) fastFields(c);
 
 /** Extra effects of a hit. */
 interface HitOpts {
@@ -450,6 +453,20 @@ type Poised = { poiseLost: number; lastPoiseHit: number; brokenUntil: number; st
 
 const mobPoiseMax = (m: Mob) => MOB_COMBAT[m.kind].poise * mobScale(m.level, "hp") * (m.kind === "bandit" ? BANDIT_ROLES[roleOf(m.weapon)].poise : 1);
 const heroPoiseMax = (p: Player) => heroPoise(p.cls, p.level);
+/**
+ * Drops the [time, x, y] samples older than `before` from the front of a position history, always keeping the newest.
+ * Same result as `while (h.length > 3 && h[0] < before) h.splice(0, 3)`, in one move and without splice's garbage.
+ */
+export function dropOldSamples(h: number[], before: number) {
+  let k = 0;
+  while (h.length - k > 3 && h[k] < before) k += 3;
+  if (!k) return;
+  const len = h.length;
+  for (let i = k; i < len; i++) h[i - k] = h[i];
+  h.length = len - k;
+}
+/** An empty feud grid cell (read only), so the scans of the 9 cells round a monster allocate nothing for empty ones. */
+const NO_FEUD: readonly [string, Mob][] = [];
 
 /** Recover poise over time; end the broken state (poise refills and the target is steady for a moment). */
 function tickPoise(t: Poised, max: number, dt: number, now: number) {
@@ -1637,7 +1654,7 @@ export class TownRoom extends Room<TownState> {
     let best = 0, target = "", foe = "";
     m.threat = 0;
     const now0 = Date.now(), alerted = now0 < m.alertUntil;
-    this.state.players.forEach((p, pid) => {
+    const hero = (p: Player, pid: string) => {
       if (p.dead || isSafeZone(p.x, p.y) || Math.hypot(p.x - m.homeX, p.y - m.homeY) >= def.leash || inVoid(p, now0)) return;
       const d = Math.hypot(p.x - m.x, p.y - m.y);
       // a hero the horn (or a shout) called the camp against counts as hated
@@ -1648,13 +1665,24 @@ export class TownRoom extends Room<TownState> {
       const lf = m.merged > 1 || m.kind === "demon" ? Math.max(1, aggroLevelFactor(m.level, p.level)) : aggroLevelFactor(m.level, p.level); // a merged blob regrouped to fight, a demon was called against him: no hero scares them
       const score = Math.max(0, 1 - d / def.aggroRange) * lf + hated + (pid === m.target ? AGGRO.stick : 0);
       if (score > best) { best = score; target = pid; }
-    });
+    };
+    // In the monster loop: the living heroes in state order (those dead at its start would leave on the first test),
+    // and one at least twice the aggro range away in x or y is out of every range here (the tests above have no effects)
+    const hs = this.loopHeroes;
+    if (hs) {
+      const reach = def.aggroRange * 2, mx = m.x, my = m.y, ids = this.loopIds;
+      for (let i = 0; i < hs.length; i++) {
+        const p = hs[i];
+        if (Math.abs(p.x - mx) >= reach || Math.abs(p.y - my) >= reach) continue;
+        hero(p, ids[i]);
+      }
+    } else this.state.players.forEach(hero);
     const side = m.perch ? undefined : FACTION[m.kind]; // lookouts stay up on their tower
     const fr = m.camp && CAMP_POSTS[m.post]?.route ? BANDIT_AI.patrolFeud : FEUD.range; // patrols go looking for trouble
     if (side && !m.mergeInto && !m.summonFor && Math.hypot(m.x - m.homeX, m.y - m.homeY) <= def.leash) {
       const cx = Math.floor(m.x / FEUD_CELL), cy = Math.floor(m.y / FEUD_CELL);
       for (let gy = cy - 1; gy <= cy + 1; gy++) for (let gx = cx - 1; gx <= cx + 1; gx++) {
-        for (const [oid, o] of this.feudGrid.get(gx * 4096 + gy) ?? []) {
+        for (const [oid, o] of this.feudGrid.get(gx * 4096 + gy) ?? NO_FEUD) {
           if (FACTION[o.kind] === side || o.dead || o.hidden || o.mergeInto) continue;
           const d = Math.hypot(o.x - m.x, o.y - m.y);
           const hated = oid === m.hateId ? m.hate : 0;
@@ -1665,13 +1693,14 @@ export class TownRoom extends Room<TownState> {
       }
     }
     // Heroes' summons are fair game for every monster (they are hit like a rival monster)
-    if (!m.mergeInto && !m.summonFor && !m.perch) for (const [sid, o] of this.summons) {
-      if (o.dead || Math.abs(o.x - m.x) > def.aggroRange || Math.abs(o.y - m.y) > def.aggroRange) continue;
+    // (forEach: same order as for...of, without an [id, summon] pair per summon per monster)
+    if (!m.mergeInto && !m.summonFor && !m.perch) this.summons.forEach((o, sid) => {
+      if (o.dead || Math.abs(o.x - m.x) > def.aggroRange || Math.abs(o.y - m.y) > def.aggroRange) return;
       const d = Math.hypot(o.x - m.x, o.y - m.y), hated = sid === m.hateId ? m.hate : 0;
-      if (d >= (hated > 0 ? def.aggroRange * 2 : def.aggroRange) || Math.hypot(o.x - m.homeX, o.y - m.homeY) >= def.leash) continue;
+      if (d >= (hated > 0 ? def.aggroRange * 2 : def.aggroRange) || Math.hypot(o.x - m.homeX, o.y - m.homeY) >= def.leash) return;
       const score = Math.max(0, 1 - d / def.aggroRange) + SUMMON.taunt + hated + (sid === m.foe ? AGGRO.stick : 0);
       if (score > best) { best = score; target = ""; foe = sid; }
-    }
+    });
     // A Night Rider that cut into it: the living fight back (the dead are never touched by them)
     const rider = m.hateId && m.hate > 0 && !m.perch && !m.mergeInto && !m.summonFor ? this.state.mobs.get(m.hateId) : undefined;
     if (rider?.kind === "nightraider" && !rider.dead && Math.hypot(rider.x - m.x, rider.y - m.y) < FEUD.range * 2 && Math.hypot(rider.x - m.homeX, rider.y - m.homeY) < def.leash) {
@@ -2487,7 +2516,7 @@ export class TownRoom extends Room<TownState> {
       const near: [string, Mob][] = [];
       const gx0 = Math.floor(p.x / FEUD_CELL), gy0 = Math.floor(p.y / FEUD_CELL);
       for (let gy = gy0 - cells; gy <= gy0 + cells; gy++) for (let gx = gx0 - cells; gx <= gx0 + cells; gx++) {
-        for (const [id, m] of this.feudGrid.get(gx * 4096 + gy) ?? []) {
+        for (const [id, m] of this.feudGrid.get(gx * 4096 + gy) ?? NO_FEUD) {
           if (m.dead || m.hidden || m.ritual || m.servant || m.champion || !TownRoom.RITUAL_KINDS.includes(m.kind) || Math.hypot(m.x - p.x, m.y - p.y) > R.near) continue;
           near.push([id, m]);
         }
@@ -2556,7 +2585,7 @@ export class TownRoom extends Room<TownState> {
     let best: [string, Mob] | undefined, bd = r;
     const cells = Math.ceil(r / FEUD_CELL), gx0 = Math.floor(m.x / FEUD_CELL), gy0 = Math.floor(m.y / FEUD_CELL);
     for (let gy = gy0 - cells; gy <= gy0 + cells; gy++) for (let gx = gx0 - cells; gx <= gx0 + cells; gx++) {
-      for (const [id, o] of this.feudGrid.get(gx * 4096 + gy) ?? []) {
+      for (const [id, o] of this.feudGrid.get(gx * 4096 + gy) ?? NO_FEUD) {
         if (o.dead || o.hidden || o.ritual || !TownRoom.RITUAL_KINDS.includes(o.kind)) continue;
         const d = Math.hypot(o.x - m.x, o.y - m.y);
         if (d < bd) { bd = d; best = [id, o]; }
@@ -2678,7 +2707,23 @@ export class TownRoom extends Room<TownState> {
 
   private heroNear(m: Mob, heroes: Player[]): boolean {
     const x = m.x, y = m.y;
-    for (const p of heroes) if (Math.abs(p.x - x) < SLEEP_RANGE && Math.abs(p.y - y) < SLEEP_RANGE) return true;
+    for (const p of heroes) if (Math.abs(p.x - x) < SLEEP_RANGE && Math.abs(p.y - y) < SLEEP_RANGE) { this.nearHero = p; return true; }
+    return false;
+  }
+  /** The hero heroNear last found near the monster being ticked: updateMob tries it first for its own "anyone near?". */
+  private nearHero: Player | undefined;
+  /** During the monster loop: the heroes alive when it began, in state order, and their ids (see heroesNear). */
+  private loopHeroes: Player[] | undefined;
+  private loopIds: string[] = [];
+
+  /**
+   * playerNear, inside the monster loop. A hero can die during the loop but not come back (respawns run on the clock,
+   * before the tick) and nobody joins or leaves in it, so the living heroes are exactly those of loopHeroes not dead.
+   */
+  private heroesNear(x: number, y: number, r: number): boolean {
+    const hs = this.loopHeroes;
+    if (!hs) return this.playerNear(x, y, r);
+    for (const p of hs) if (!p.dead && Math.abs(p.x - x) < r && Math.abs(p.y - y) < r) return true;
     return false;
   }
 
@@ -2736,8 +2781,9 @@ export class TownRoom extends Room<TownState> {
     this.state.items.forEach((it, id) => { if (now > it.expires) this.state.items.delete(id); });
     const tick = ++this.tickNo;
     // Live heroes, gathered once so each monster's "anyone near?" check is a plain array scan
-    const awake: Player[] = [];
-    this.state.players.forEach((p) => { if (!p.dead) awake.push(p); });
+    const awake: Player[] = [], awakeIds = this.loopIds;
+    awakeIds.length = 0;
+    this.state.players.forEach((p, pid) => { if (!p.dead) { awake.push(p); awakeIds.push(pid); } });
     this.markWarm(awake);
     if (tick % 2 === 0) this.buildFeudGrid(); // monsters move a few px per tick, a grid cell is 128 px
     this.assignFlanks();
@@ -2746,34 +2792,41 @@ export class TownRoom extends Room<TownState> {
     if (tick % 10 === 0) this.bossVoices(now);
     this.checkRituals(now);
     const mobs = this.state.mobs;
-    mobs.runPass((m, id) => { // (the monsters that may not be frozen, in map order: see markWarm)
-      // Frozen: dozing where no hero is anywhere near. Nothing to do; it wakes when a hero's warm squares reach it.
-      // It leaves the busy set, unless assignFlanks still has to clear its side
-      if (this.frozen(m)) { if (Number.isNaN(m.flankA)) mobs.rest(m); return; }
-      // A dozing monster far from every hero (nothing it could do this tick) only gets its upkeep every DOZE_EVERY ticks
-      if (m.dozeSlot < 0) m.dozeSlot = this.dozeSeq++ % DOZE_EVERY;
-      const slot = (tick + m.dozeSlot) % DOZE_EVERY === 0;
-      // between its upkeep ticks a dozing monster only checks whether a hero came near
-      if (m.dozy && !slot && !this.heroNear(m, awake)) return;
-      m.dozy = this.dozing(m, awake, now);
-      if (m.dozy) {
-        if (!slot) return;
-        dt = Math.min(600, (now - (m.lastTick || now - dtMs)) / 1000); // poise recovers for the whole time it dozed (or lay frozen); a dozing monster does nothing else with dt
-      } else { dt = dtMs / 1000; mobs.wake(m); } // awake: it must be visited wherever it goes, warm square or not
-      m.lastTick = now;
-      tickUnit(this.host, id);
-      const fx = TownRoom.mobFx(m, now);
-      if (m.fx !== fx) m.fx = fx;
-      this.updateMob(m, id, dt, now);
-      if (m.perch) { m.x = m.homeX; m.y = m.homeY; m.moving = false; } // lookouts never leave their tower
-      // Position history for lag-forgiving swings (only kept while it moves)
-      const h = m.hist, n = h.length;
-      if (m.dead) { if (n) h.length = 0; }
-      else if (!n || h[n - 2] !== m.x || h[n - 1] !== m.y) {
-        h.push(now, m.x, m.y);
-        while (h.length > 3 && h[0] < now - REWIND_MS - 100) h.splice(0, 3);
-      }
-    });
+    this.loopHeroes = awake;
+    try {
+      mobs.runPass((m, id) => { // (the monsters that may not be frozen, in map order: see markWarm)
+        // Frozen: dozing where no hero is anywhere near. Nothing to do; it wakes when a hero's warm squares reach it.
+        // It leaves the busy set, unless assignFlanks still has to clear its side
+        if (this.frozen(m)) { if (Number.isNaN(m.flankA)) mobs.rest(m); return; }
+        // A dozing monster far from every hero (nothing it could do this tick) only gets its upkeep every DOZE_EVERY ticks
+        if (m.dozeSlot < 0) m.dozeSlot = this.dozeSeq++ % DOZE_EVERY;
+        const slot = (tick + m.dozeSlot) % DOZE_EVERY === 0;
+        this.nearHero = undefined;
+        // between its upkeep ticks a dozing monster only checks whether a hero came near
+        if (m.dozy && !slot && !this.heroNear(m, awake)) return;
+        m.dozy = this.dozing(m, awake, now);
+        if (m.dozy) {
+          if (!slot) return;
+          dt = Math.min(600, (now - (m.lastTick || now - dtMs)) / 1000); // poise recovers for the whole time it dozed (or lay frozen); a dozing monster does nothing else with dt
+        } else { dt = dtMs / 1000; mobs.wake(m); } // awake: it must be visited wherever it goes, warm square or not
+        m.lastTick = now;
+        if (!quietUnit(m, now)) tickUnit(this.host, id); // (most monsters have nothing on them: tickUnit would do nothing)
+        const fx = TownRoom.mobFx(m, now);
+        if (m.fx !== fx) m.fx = fx;
+        this.updateMob(m, id, dt, now);
+        if (m.perch) { m.x = m.homeX; m.y = m.homeY; m.moving = false; } // lookouts never leave their tower
+        // Position history for lag-forgiving swings (only kept while it moves)
+        const h = m.hist, n = h.length;
+        if (m.dead) { if (n) h.length = 0; }
+        else {
+          const x = m.x, y = m.y;
+          if (!n || h[n - 2] !== x || h[n - 1] !== y) {
+            h.push(now, x, y);
+            dropOldSamples(h, now - REWIND_MS - 100);
+          }
+        }
+      });
+    } finally { this.loopHeroes = undefined; this.nearHero = undefined; }
     dt = dtMs / 1000;
     this.updateZones(now);
     this.updateGuards(now);
@@ -3033,16 +3086,18 @@ export class TownRoom extends Room<TownState> {
       if (!zone.nextAt || zone.nextAt > now + every) zone.nextAt = now + every;
       if (now >= zone.nextAt) {
         let revived = false, blocked = false;
-        this.state.mobs.forEach((m, id) => {
-          if (revived || blocked || !m.dead || m.zone !== zi) return;
-          if (day && NIGHT_BOSSES.includes(m.kind)) return;
+        // the first dead one of the zone, in map order (it stops there: the rest of the map has nothing to say)
+        for (const [id, m] of this.state.mobs) {
+          if (!m.dead || m.zone !== zi) continue;
+          if (day && NIGHT_BOSSES.includes(m.kind)) continue;
           const at = this.freeSpawnPoint(zi, m.kind);
-          if (!at) { blocked = true; return; }
+          if (!at) { blocked = true; break; }
           this.spawnMob(m.kind, zi, id, at);
           this.champs.roll(m, id); // about one in twenty comes back a champion (shared/champions.ts)
           if (undead) this.broadcast("necroraise", { pts: [[Math.round(m.x), Math.round(m.y)]], rise: 1 }); // climbing out of the ground
           revived = true;
-        });
+          break;
+        }
         if (revived) zone.alive++;
         // No free spot (a hero is standing all over a small zone): try again shortly
         zone.nextAt = blocked ? now + 2000 : zone.alive < cap ? now + every : 0;
@@ -3063,8 +3118,19 @@ export class TownRoom extends Room<TownState> {
     return false;
   }
 
+  /**
+   * playerNear(m.x, m.y, SLEEP_RANGE), asked in updateMob. The hero heroNear just found near this monster (dozing asks
+   * nearly the same) settles it when still alive and near; otherwise the full scan.
+   */
+  private sleepNear(m: Mob): boolean {
+    const w = this.nearHero;
+    this.nearHero = undefined;
+    if (w && !w.dead && Math.abs(w.x - m.x) < SLEEP_RANGE && Math.abs(w.y - m.y) < SLEEP_RANGE) return true;
+    return this.heroesNear(m.x, m.y, SLEEP_RANGE);
+  }
+
   private updateMob(m: Mob, id: string, dt: number, now: number) {
-    tickPoise(m, mobPoiseMax(m), dt, now);
+    tickPoise(m, m.poiseLost > 0 ? mobPoiseMax(m) : 0, dt, now); // (the max only matters while some poise is lost)
     if (m.dead) { m.moving = false; m.winding = false; m.windUntil = 0; return; }
     if (m.owner) return this.updateSummon(m, id, dt, now);
     if (this.dummies.has(id)) { m.moving = false; m.winding = false; return; } // skill clip targets stand still
@@ -3094,7 +3160,7 @@ export class TownRoom extends Room<TownState> {
     if (m.stunned) { m.moving = false; return; }
     if (m.kind === "nightraider") return this.raiderStep(m, id, dt, now);
     // Nobody around: the monster dozes (no wandering, no budding), which keeps big monster counts cheap
-    if (!m.target && !this.playerNear(m.x, m.y, SLEEP_RANGE)) {
+    if (!m.target && !this.sleepNear(m)) {
       if (m.moving) m.moving = false;
       // an ambusher left standing about with nobody (not even a fallen hero) to see: it is back up its tree
       if (m.ambusher && !m.hidden && !m.broken && !this.anyPlayerNear(m.x, m.y, SLEEP_RANGE) && (m.spot || this.treeFor(m, now))) this.hide(m, id, now);

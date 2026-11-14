@@ -15,6 +15,9 @@ function wire(m: any, i: number): unknown {
  */
 const CHANGES = "~changes";
 
+/** A bucket's monsters (map order) with their ids and x, y in tiles, valid for the patch being sent. */
+interface Bucket { m: any[]; id: string[]; x: number[]; y: number[] }
+
 const CELL = 8; // tiles per bucket of the grid used to find the monsters near a hero (rows go out bucket by bucket)
 const PER = (CELL * TILE) / MOB_CELL; // MobGrid squares per bucket side
 
@@ -27,8 +30,8 @@ export class MobView {
   private known = new Map<string, Map<string, unknown[]>>();
   private tick = 0;
   /** This patch's CELL buckets (bucket key -> its monsters in map order), built on first use; arrays are reused. */
-  private buckets = new Map<number, any[]>();
-  private pool: any[][] = [];
+  private buckets = new Map<number, Bucket>();
+  private pool: Bucket[] = [];
   private fed = new Set<string>(); // clients fed this patch
 
   ready(c: Client) { this.known.set(c.sessionId, new Map()); }
@@ -40,7 +43,7 @@ export class MobView {
     const tick = ++this.tick;
     // Only the monsters near some hero are looked at. A monster's wire values are brought up to date the first time
     // it is looked at in a patch (fresh), so what changed while nobody was near still goes out when someone comes
-    for (const b of this.buckets.values()) { b.length = 0; this.pool.push(b); }
+    for (const b of this.buckets.values()) { b.m.length = 0; this.pool.push(b); }
     this.buckets.clear();
     const fed = this.fed;
     fed.clear();
@@ -51,19 +54,21 @@ export class MobView {
       fed.add(c.sessionId);
       const hx = at.x / TILE, hy = at.y / TILE;
       const a: unknown[][] = [], ch: unknown[][] = [], r: string[] = [];
-      const seen = new Set<string>();
+      // monsters still in view this patch: each known entry carries the patch it was last seen in (after the monster),
+      // and they are counted (a monster sits in one bucket only, so none is counted twice)
+      let seen = 0;
       const cx0 = Math.floor((hx - VIEW_DROP) / CELL), cx1 = Math.floor((hx + VIEW_DROP) / CELL);
       const cy0 = Math.floor((hy - VIEW_DROP) / CELL), cy1 = Math.floor((hy + VIEW_DROP) / CELL);
       for (let cx = cx0; cx <= cx1; cx++) for (let cy = cy0; cy <= cy1; cy++) {
-        const b = this.bucket(mobs, cx, cy, tick, n);
-        for (let bi = 0; bi < b.length; bi++) {
-          const m = b[bi], id: string = m._gid;
-          const d = Math.max(Math.abs(m.x / TILE - hx), Math.abs(m.y / TILE - hy));
+        const b = this.bucket(mobs, cx, cy, tick, n), bm = b.m, bid = b.id, bx = b.x, by = b.y;
+        for (let bi = 0; bi < bm.length; bi++) {
+          const m = bm[bi], id = bid[bi];
+          const d = Math.max(Math.abs(bx[bi] - hx), Math.abs(by[bi] - hy));
           let was = known.get(id);
           if (was && was[n] !== m) { r.push(id); known.delete(id); was = undefined; } // same id, another monster: send it fresh
           if (was) {
             if (d > VIEW_DROP) continue; // left the view: removed below
-            seen.add(id);
+            was[n + 1] = tick; seen++;
             if (m._wt !== tick) continue; // nothing changed on it since the last patch
             let row: unknown[] | undefined;
             const cur: unknown[] = m._wv;
@@ -73,15 +78,15 @@ export class MobView {
             }
             if (row) ch.push(row);
           } else if (d <= VIEW_ADD) {
-            seen.add(id);
+            seen++;
             const vals = (m._wv as unknown[]).slice();
             a.push([id, ...vals]);
-            vals.push(m); // (not sent) which monster these values belong to
+            vals.push(m, tick); // (not sent) which monster these values belong to, and when it was last in view
             known.set(id, vals);
           }
         }
       }
-      if (seen.size < known.size) for (const id of known.keys()) if (!seen.has(id)) { known.delete(id); r.push(id); }
+      if (seen < known.size) known.forEach((v, id) => { if (v[n + 1] !== tick) { known.delete(id); r.push(id); } });
       if (!a.length && !ch.length && !r.length) continue;
       const msg: MobViewMsg = {};
       if (a.length) msg.a = a;
@@ -96,17 +101,23 @@ export class MobView {
     });
   }
 
-  /** The monsters in one CELL bucket (PER x PER MobGrid squares), fresh, in map order (the order rows go out in). */
-  private bucket(mobs: MobGrid<any>, bx: number, by: number, tick: number, n: number): any[] {
+  /**
+   * The monsters in one CELL bucket (PER x PER MobGrid squares), fresh, in map order (the order rows go out in), with
+   * their ids and positions in tiles read once here: every hero near the bucket reads those instead of each monster.
+   */
+  private bucket(mobs: MobGrid<any>, bx: number, by: number, tick: number, n: number): Bucket {
     const key = bx * 4096 + by;
     let b = this.buckets.get(key);
     if (b) return b;
-    b = this.pool.pop() ?? [];
+    b = this.pool.pop() ?? { m: [], id: [], x: [], y: [] };
+    const ms = b.m;
     for (let sx = bx * PER; sx < bx * PER + PER; sx++) for (let sy = by * PER; sy < by * PER + PER; sy++) {
       const cell = mobs.cell(sx, sy);
-      if (cell) for (const m of cell.values()) { fresh(m, tick, n); b.push(m); }
+      if (cell) for (const m of cell.values()) { fresh(m, tick, n); ms.push(m); }
     }
-    if (b.length > 1) b.sort((p, q) => p._gs - q._gs);
+    if (ms.length > 1) ms.sort((p, q) => p._gs - q._gs);
+    for (let i = 0; i < ms.length; i++) { const m = ms[i]; b.id[i] = m._gid; b.x[i] = m.x / TILE; b.y[i] = m.y / TILE; }
+    b.id.length = b.x.length = b.y.length = ms.length;
     this.buckets.set(key, b);
     return b;
   }
