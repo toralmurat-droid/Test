@@ -119,3 +119,8 @@ body #spbody #treepoints { font-size: 14px; color: #a08a62; text-align: center; 
 /* the skill info stays a bar under the tree, however wide the panel */
 body #spbody #treebranches { flex-wrap: wrap; justify-content: center; }
 body #spbody #treebranches > #treeinfo { flex: 1 0 100%; }
+body #titlepick { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+body #titlepick span { color: #a8977a; }
+body #titlepick .titlepick { font: 14px var(--pixel-font); padding: 3px 8px; color: #e3bf6a; background: #2a1d10; border: 2px solid #6b4c22; cursor: pointer; }
+body #titlepick .titlepick:hover { background: #3a2914; color: #ffe9a8; }
+body #titlepick .titlepick.on { color: #c8f59a; border-color: #4f7a2a; background: #1a2410; }

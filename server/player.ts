@@ -4,6 +4,8 @@ import type { BountyState } from "../shared/bounty";
 import type { ClassKind } from "../shared/classes";
 import type { Dir, InputState } from "../shared/constants";
 import type { Feast } from "../shared/devour";
+import type { MentorState } from "../shared/quests";
+import type { RumourState } from "../shared/rumours";
 import { noPotions, type Potions } from "../shared/potions";
 import { newRuntime } from "../shared/skillEngine";
 import { SLOT_COUNT } from "../shared/slots";
@@ -51,13 +53,16 @@ export class PlayerPrivate extends Schema {
   // Skill slots on keys 1..0 (shared/slots.ts): a skill id or "" (empty). Empty until the player assigns them.
   // readonly: written by index, never replaced
   @type(["string"]) readonly slots = new ArraySchema<string>(...Array(SLOT_COUNT).fill(""));
+  // Choices made in quests, 2 bits each (shared/questSteps.ts CHOICES; saved as HeroSave.flags). Only the hero's own
+  // dialogs, steps and NPCs depend on them, so they stay owner-only. 0 = none made (a number: never undefined)
+  @type("number") flags = 0;
 }
 
 /**
  * A hero as the room syncs it. Fields only the owner needs live in `me`, which the per-client StateView (TownRoom
  * onJoin) sends to that hero's client alone; the forwarding accessors at the end (timers, quests, kills, xp, gold, potions,
- * mp, energy, stacks, spd, seq, ptSta..ptDex, bag, talents, slots) keep server code reading them as before. The client
- * reads them as `player.me` (client/src/own.ts).
+ * mp, energy, stacks, spd, seq, ptSta..ptDex, bag, talents, slots, flags) keep server code reading them as before. The
+ * client reads them as `player.me` (client/src/own.ts).
  */
 export class Player extends Schema {
   @type("string") name = "";
@@ -125,11 +130,17 @@ export class Player extends Schema {
   linkLock = ""; // the Mawdeep rope/stair a hero just came out of (shared/dungeon.ts LINKS): not taken again until they step off it
   nextSummon = 0; // when the server may bring back this player's quest fused blob (QuestStep.summon)
   feast: Feast = {}; // Devour (shared/devour.ts): monsters eaten per family, saved; sent to the owner as "feast"
+  // Cosmetics (shared/cosmetics.ts packCosmetics): the title shown over the name and look traits (the beast hide), one
+  // number. Public: every client draws them on this hero. Saved as HeroSave.cosm; 0 = none (a number: never undefined)
+  @type("number") cosm = 0;
 
   input: InputState = { up: false, down: false, left: false, right: false };
   lastAttack = 0;
   portals = new Set<string>(); // portal stones this hero has woken (shared/portals.ts; saved, never synced)
   bounty?: BountyState; // bounty board hunt in progress (shared/bounty.ts; saved, sent by message)
+  rumour?: RumourState; // Tavern Rumours (server/rumours.ts): today's offers, which are done, the one under way (saved, sent by message)
+  titles = 0; // titles earned, bit i = TITLES[i] (shared/cosmetics.ts; saved, sent as "title"); the shown one is in `cosm`
+  mentor?: MentorState; // The Apprentice (server/apprentice.ts): mentoring on, recruits counted (saved, sent as "mentor")
   bountyDone = 0;
   clan?: ClanKey; // clan war oath (shared/war/standards.ts; saved, sent by message)
   clanAt = 0;
@@ -155,6 +166,11 @@ export class Player extends Schema {
   stunUntil = 0;
   slowUntil = 0;
   lastUlt = -Infinity;
+  // Quest steps (server/questSteps.ts), not synced: carrying the lantern locks skills and ranged shots, and draws the blobs
+  qlock = false; // cast / useSlot / fireRanged refuse; basic attacks still work
+  lureMul = 1; // blob aggro range multiplier on this hero (pickTarget)
+  aggroMul = 1; // every monster's aggro range multiplier on this hero (pickTarget): below 1 while hidden on an unseen step
+  qlockNoteAt = 0; // last "walk it" note to a lantern holder at a portal (lanternHeld)
   sk = newRuntime();
 
   /** The HUD buff row, kept in `me` (owner-only). */
@@ -201,4 +217,7 @@ export class Player extends Schema {
   get talents() { return this.me.talents; }
   /** Skill hotkeys, kept in `me`. Getter only: write by index, never replace. */
   get slots() { return this.me.slots; }
+  /** Choices made in quests (shared/questSteps.ts CHOICES), kept in `me` (owner-only). */
+  get flags() { return this.me.flags; }
+  set flags(v: number) { this.me.flags = v; }
 }

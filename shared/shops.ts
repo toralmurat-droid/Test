@@ -118,6 +118,12 @@ const armourStock = (shop: string): ShopEntry[] => ARMOUR_STEPS[shop].flatMap(([
 }));
 const ARMOUR_SLOTS = ["shield", "armour", "hat", "shoes"];
 
+/** Flasks of one kind, one and five at a time (the five at 15% off), like the witch's. */
+const potionStock = (item: "potion" | "mpotion", sizes: number[]): ShopEntry[] => sizes.flatMap((size) => [
+  { item, size, qty: 1, price: POTION_SIZES[size].price },
+  { item, size, qty: 5, price: Math.round(POTION_SIZES[size].price * 5 * 0.85) },
+]);
+
 const masterwork = (level: number): ShopEntry[] => Object.keys(MASTER_BASES).map((base) => ({ item: masterItem(base, level), price: masterPrice(level) }));
 
 export const SHOPS: Record<string, Shop> = {
@@ -168,6 +174,19 @@ export const SHOPS: Record<string, Shop> = {
     ],
     // Act 2's rune buyer (and so rune fuser, Lot C), like Morwen in Oakvale
     buys: ["rune"],
+  },
+  // Two Letters (shared/quests.ts SIDE_ARCS): the watch's quartermaster opens for heroes who took the list to Hale
+  // (law), the beach smuggler for those who warned Ilka (mercy). Existing stock only: Saltmere's armour and flasks,
+  // a fence's knives and crossbows.
+  watch: {
+    greeting: "Hale says you're a friend of the watch. Watch kit, then, at watch prices. Sign here. And here.",
+    stock: [...armourStock("saltarmourer"), ...potionStock("potion", [1])],
+    buys: ARMOUR_SLOTS,
+  },
+  smuggler: {
+    greeting: "Ilka says you're all right. Don't ask where any of it came from, and I won't ask where you're taking it.",
+    stock: [...potionStock("potion", [0, 1]), ...potionStock("mpotion", [0, 1]), ...weapons(["r_sling", "r_knives", "r_crossbow"])],
+    buys: ["weapon", "ranged"],
   },
   // Wren the lute-maker (DI-5, shared/lutemaker.ts): the books, and she buys weapons and shields (breaking them is hers too)
   lutemaker: {

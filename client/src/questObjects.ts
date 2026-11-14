@@ -11,6 +11,7 @@ import { standingStone, STONE_H, STONE_W } from "./throneArt";
 import { heartShard, LandEl, SHARD_H, SHARD_W } from "./elementArt";
 import { dungeonQuestTextures } from "./dungeonArt";
 import { isoAnchor } from "./iso";
+import { conceptTextures } from "./questConceptArt";
 import { LANTERN_FRAMES, LANTERN_H, LANTERN_LIFT, LANTERN_W, spiritLantern } from "./lanternArt";
 
 /**
@@ -232,6 +233,7 @@ const URN = [
 ];
 
 function textures(scene: Phaser.Scene) {
+  conceptTextures(scene); // grave, seal, wardlamp, postern, lamp (questConceptArt.ts)
   rowsTexture(scene, "qobj_bell", BELL, { K, B: 0xd8cfb8, W: 0x9a9284, L: 0xc8c0ae, G: 0x7dff6a });
   rowsTexture(scene, "qobj_bell_silent", BELL.map((r, i) => (i >= 4 && i <= 12 && i % 3 === 0 ? r.replace(/[WLG]/g, ".") : r.replace(/G/g, "W"))), { K, B: 0x9a9284, W: 0x6a6458, L: 0x8a8476 });
   rowsTexture(scene, "qobj_urn", URN, { K, S: 0xb8925e, L: 0xdcbc86, D: 0x7a5a36, G: 0x2e6a8a, Y: 0xffd166, R: 0x3a6aa8, W: 0x7ac8ff });
@@ -282,12 +284,18 @@ const START: Record<string, string> = {
   lantern: "qobj_lantern_off", shrine: "qobj_shrine_rot", heart: "qobj_heart",
   engine: "qobj_engine_fire", beacon: "qobj_beacon", crypt: "qobj_crypt", phylactery: "qobj_phylactery", ward: "qobj_ward",
   silk: "qobj_silk", totem: "qobj_totem", sigil: "qobj_sigil", cistern: "qobj_cistern",
+  grave: "qobj_grave", seal: "qobj_seal", wardlamp: "qobj_wardlamp", postern: "qobj_postern", lastlantern: "qobj_lamp",
   clue: "qobj_clue", nest: "qobj_nest", cairn: "qobj_cairn", bell: "qobj_bell", urn: "qobj_urn",
 };
-const DONE: Record<string, string> = { engine: "qobj_engine_fire", beacon: "qobj_beacon_out", crypt: "qobj_crypt_sealed", phylactery: "qobj_phylactery_broken", ward: "qobj_ward_broken", silk: "qobj_silk_cut", totem: "qobj_totem_burnt", sigil: "qobj_sigil_broken", cistern: "qobj_cistern_read", clue: "qobj_clue_searched", nest: "qobj_nest_burnt", cairn: "qobj_cairn_read", bell: "qobj_bell_silent", urn: "qobj_urn_broken" };
-const SCALE: Record<string, number> = { lantern: 1 / 1.5, shard: 1 / 1.5, heart: 2, shrine: 1.5, engine: 2.4, beacon: 1.4, crypt: 1.5, phylactery: 1.3, ward: 1 / 1.5, silk: 1 / 1.5, totem: 1 / 1.5, sigil: 1.6, cistern: 1.5, clue: 1.4, nest: 1.5, cairn: 1.5, bell: 1.5, urn: 1.4 };
+const DONE: Record<string, string> = { grave: "qobj_grave_dug", seal: "qobj_seal_turned", wardlamp: "qobj_wardlamp_lit", postern: "qobj_postern_open", lastlantern: "qobj_lamp_out", engine: "qobj_engine_fire", beacon: "qobj_beacon_out", crypt: "qobj_crypt_sealed", phylactery: "qobj_phylactery_broken", ward: "qobj_ward_broken", silk: "qobj_silk_cut", totem: "qobj_totem_burnt", sigil: "qobj_sigil_broken", cistern: "qobj_cistern_read", clue: "qobj_clue_searched", nest: "qobj_nest_burnt", cairn: "qobj_cairn_read", bell: "qobj_bell_silent", urn: "qobj_urn_broken" };
+const SCALE: Record<string, number> = { grave: 1.5, seal: 1.7, wardlamp: 1.5, postern: 2, lastlantern: 1.5, lantern: 1 / 1.5, shard: 1 / 1.5, heart: 2, shrine: 1.5, engine: 2.4, beacon: 1.4, crypt: 1.5, phylactery: 1.3, ward: 1 / 1.5, silk: 1 / 1.5, totem: 1 / 1.5, sigil: 1.6, cistern: 1.5, clue: 1.4, nest: 1.5, cairn: 1.5, bell: 1.5, urn: 1.4 };
 /** Coloured light some objects give off until done. */
-const GLOW: Record<string, number> = { beacon: 0x7dff6a, crypt: 0x5fe36a, phylactery: 0x7dff6a, ward: 0x9dff6a, totem: 0xff6a2a, sigil: 0xffa040, cistern: 0x5ac8ff, cairn: 0x7ae0ff, bell: 0x7dff6a, urn: 0x5ac8ff };
+const GLOW: Record<string, number> = { seal: 0xffd166, wardlamp: 0x9dff6a, postern: 0xffd166, beacon: 0x7dff6a, crypt: 0x5fe36a, phylactery: 0x7dff6a, ward: 0x9dff6a, totem: 0xff6a2a, sigil: 0xffa040, cistern: 0x5ac8ff, cairn: 0x7ae0ff, bell: 0x7dff6a, urn: 0x5ac8ff };
+
+/** Objects that only glow once done (a turned seal, a lit ward-lamp, an open postern); the others glow until done. */
+const GLOW_WHEN_DONE = new Set(["seal", "wardlamp", "postern"]);
+/** Crown Seals (Ostrevar's crown) are `seal` objects whose id contains "crown". */
+const variant = (o: QuestObject, key: string) => ((o.kind as string) === "seal" && o.id.includes("crown") ? key.replace("qobj_seal", "qobj_seal_crown") : key);
 
 interface Drawn { o: QuestObject; img: Phaser.GameObjects.Image; glow?: Phaser.GameObjects.Arc; light?: Phaser.GameObjects.Image; done?: boolean; anim?: Phaser.GameObjects.Sprite }
 
@@ -311,7 +319,7 @@ export class QuestObjects {
         scene.tweens.add({ targets: this.goo, scaleX: 1.08, scaleY: 0.94, duration: 700, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
         continue;
       }
-      const key = o.kind === "shard" ? `qobj_${o.id}` : START[o.kind];
+      const key = o.kind === "shard" ? `qobj_${o.id}` : variant(o, START[o.kind]);
       const img = scene.add.image(o.x, o.y, key).setOrigin(0.5, 1).setScale(SCALE[o.kind] ?? 1.4).setDepth(o.y);
       const d: Drawn = { o, img };
       if (o.kind === "engine") { img.setVisible(false).setPosition(o.x, o.y - TILE_PX * 0.6).setDepth(o.y + 40); }
@@ -344,9 +352,35 @@ export class QuestObjects {
     for (const d of this.drawn) if (d.o.kind === "lantern" && !d.light) d.light = light(d.o.x, d.o.y, LANTERN_LIFT)?.setVisible(!!d.done);
   }
 
+  /**
+   * The active tavern rumour's objects (client/src/rumours.ts), rebuilt from `rumoursFor`: only these are drawn, each with its
+   * done look. Cosmetic: the server decides what a use does. An empty list clears them.
+   */
+  private rum = new Map<string, Drawn>();
+  setRumour(list: { o: QuestObject; done: boolean }[]) {
+    const keep = new Set(list.map((x) => x.o.id));
+    for (const [id, d] of this.rum) if (!keep.has(id)) { d.img.destroy(); d.glow?.destroy(); this.rum.delete(id); }
+    for (const { o, done } of list) {
+      let d = this.rum.get(o.id);
+      if (!d) {
+        const img = this.scene.add.image(o.x, o.y, START[o.kind] ?? "qobj_clue").setOrigin(0.5, 1).setScale(SCALE[o.kind] ?? 1.4).setDepth(o.y);
+        d = { o, img };
+        if (GLOW[o.kind]) {
+          d.glow = isoAnchor(this.scene.add.circle(o.x, o.y - img.displayHeight * 0.6, 14, GLOW[o.kind], 0.22).setDepth(o.y + 1).setBlendMode(Phaser.BlendModes.ADD), o) as Phaser.GameObjects.Arc;
+          this.scene.tweens.add({ targets: d.glow, scale: 1.3, alpha: 0.1, duration: 700, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
+        }
+        this.rum.set(o.id, d);
+      }
+      if (d.done === done) continue;
+      d.done = done;
+      d.img.setTexture(done ? DONE[o.kind] ?? START[o.kind] : START[o.kind]);
+      d.glow?.setVisible(GLOW_WHEN_DONE.has(o.kind) ? done : !done);
+    }
+  }
+
   /** Burst of sparks when an object is used. */
   burst(id: string) {
-    const o = allObjects().find((x) => x.id === id);
+    const o = allObjects().find((x) => x.id === id) ?? this.rum.get(id)?.o;
     if (!o) return;
     const d = { o };
     const color = d.o.kind === "shard" ? ({ poison: 0x9be564, cold: 0xd6f6ff, fire: 0xffa848, shock: 0xbcd0ff } as Record<string, number>)[d.o.id.slice(6)] ?? 0xffffff : d.o.kind === "lantern" ? 0x7ff3ff : d.o.kind === "shrine" || d.o.kind === "crypt" ? 0xffd166
@@ -363,6 +397,11 @@ export class QuestObjects {
   near(me: { x: number; y: number } | undefined, q: QuestState | undefined): QuestObject | undefined {
     if (!me) return undefined;
     return usableObjects(q).map(({ o }) => o).find((o) => Math.hypot(o.x - me.x, o.y - me.y) <= USE_RANGE);
+  }
+
+  /** Hide or show one object's drawing (the lantern's take spot while the lantern is out); done/undone looks stay as they are. */
+  setHidden(id: string, hidden: boolean) {
+    for (const d of this.drawn) if (d.o.id === id) d.img.setVisible(!hidden);
   }
 
   update(q: QuestState | undefined, me?: { x: number; y: number }) {
@@ -399,8 +438,8 @@ export class QuestObjects {
         if (done) this.scene.tweens.add({ targets: d.img, scaleY: 2.8, scaleX: 2.2, duration: 260, yoyo: true, repeat: -1, ease: "Sine.easeInOut" });
         else this.scene.tweens.killTweensOf(d.img);
       } else if (DONE[d.o.kind]) {
-        d.img.setTexture(done ? DONE[d.o.kind] : START[d.o.kind]);
-        d.glow?.setVisible(!done);
+        d.img.setTexture(variant(d.o, done ? DONE[d.o.kind] : START[d.o.kind]));
+        d.glow?.setVisible(GLOW_WHEN_DONE.has(d.o.kind) ? done : !done);
       } else if (d.o.kind === "heart") {
         d.img.setTexture(done ? "qobj_heart_burnt" : "qobj_heart");
         if (done) { this.scene.tweens.killTweensOf(d.img); d.img.setScale(2); }

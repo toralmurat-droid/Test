@@ -2,7 +2,7 @@
 export type HeadGear = "crown" | "greathelm" | "ninjahood" | "wizardhat" | "hood" | "horned" | "cap" | "helm" | "bandana" | "wide" | "witch" | "none";
 export type TorsoKind = "plate" | "wrap" | "robe" | "jerkin" | "bare" | "shirt" | "mail" | "leather" | "tailcoat";
 export type LegKind = "trousers" | "mail" | "wrapped" | "robe" | "fur" | "dress" | "bare";
-export type WeaponKind = "katana" | "sword" | "staff" | "wand" | "bow" | "axe" | "hammer" | "spear" | "dagger" | "druidstaff" | "witchstaff" | "boneblade" | "lute" | "none";
+export type WeaponKind = "katana" | "sword" | "staff" | "wand" | "bow" | "axe" | "hammer" | "spear" | "dagger" | "druidstaff" | "witchstaff" | "boneblade" | "spade" | "lute" | "none";
 
 export interface Look {
   skin: number;
@@ -607,6 +607,69 @@ export const LOOKS: Record<string, Look> = {
     torso: "shirt", torsoCol: 0x8a7656, vest: 0x3a2e24, belt: 0x2a1c12, buckle: 0xb08a4a, sash: 0x6a2a1e,
     legs: "trousers", legCol: 0x5a4a38, boots: 0x3a2a1a, bootStyle: "wrap",
     sleeve: 0x8a7656, arms: "cloth", glove: 0x3a2a1a, weapon: "dagger", fx: 0xffffff,
+  },
+  // Quest-concept NPCs (docs/quest-concepts-progress.md)
+  // The sexton: a stooped old gravedigger in a mud-brown coat and a battered flat cap, a spade in hand
+  sexton: {
+    skin: 0xd0a07c, hair: 0xb4aea0, hairStyle: "short", beard: 0xc4beb0, beardStyle: "stubble",
+    head: "cap", headCol: 0x3a3028, headTrim: 0x2a221c,
+    torso: "jerkin", torsoCol: 0x4e4234, trim: 0x362c22, belt: 0x2a1c12, buckle: 0x7a6a4a,
+    legs: "trousers", legCol: 0x3a3630, boots: 0x2a2018, bootStyle: "leather",
+    sleeve: 0x5a4c3c, arms: "cloth", glove: 0x3a2a1a, weapon: "spade", fx: 0xffffff,
+  },
+  // Three mourners of the village, all in black but not alike: a hooded widow, an old man in a black wide hat, a young man with a white armband
+  mourner1: {
+    skin: 0xe8c0a0, hair: 0x2a2024, hairStyle: "long",
+    head: "hood", headCol: 0x1c1a24, headTrim: 0x34303e,
+    torso: "shirt", torsoCol: 0x24212c, apron: 0x2c2834, belt: 0x16141c,
+    legs: "dress", legCol: 0x1e1c26, boots: 0x14121a, bootStyle: "shoe",
+    sleeve: 0x24212c, arms: "cloth", weapon: "none", fx: 0xffffff, back: "cape", capeCol: 0x1a1822,
+  },
+  mourner2: {
+    skin: 0xdcb08e, hair: 0xd0ccc4, hairStyle: "short", beard: 0xd4d0c8, beardStyle: "full",
+    head: "wide", headCol: 0x1a1a1e, headTrim: 0x3a3a42,
+    torso: "shirt", torsoCol: 0x2a2a30, vest: 0x1a1a20, belt: 0x141418, buckle: 0x8a8a92,
+    legs: "trousers", legCol: 0x242428, boots: 0x121216, bootStyle: "leather",
+    sleeve: 0x2a2a30, arms: "cloth", weapon: "none", fx: 0xffffff, build: 1.05,
+  },
+  mourner3: {
+    skin: 0xecc4a2, hair: 0x6a3a22, hairStyle: "short",
+    head: "none",
+    torso: "jerkin", torsoCol: 0x3a3844, trim: 0x2a2833, belt: 0x1c1a22, buckle: 0x7a7a88, sash: 0xe8e4dc,
+    legs: "trousers", legCol: 0x2c2a34, boots: 0x18161c, bootStyle: "leather",
+    sleeve: 0x4a4854, arms: "cloth", bracer: 0xe8e4dc, weapon: "none", fx: 0xffffff,
+  },
+  // Ilka, a young Redfang cutpurse: the gang's red mask pulled down to a scarf, red bandana, a dagger
+  ilka: {
+    skin: 0xe2b490, hair: 0x7a2a18, hairStyle: "ponytail", eye: 0x3a5a2a,
+    head: "bandana", headCol: 0x8e1f1a, headTrim: 0x5a1410, scarf: { col: 0xa3231b },
+    torso: "jerkin", torsoCol: 0x5a4030, trim: 0x3a2a20, belt: 0x2b1d14, buckle: 0x9a8a6a,
+    legs: "trousers", legCol: 0x3a3a3a, boots: 0x231a14, bootStyle: "leather",
+    sleeve: 0x4a3a30, arms: "cloth", glove: 0x2b1d14, bracer: 0x8e1f1a, weapon: "dagger", fx: 0xffffff,
+  },
+  // The watch quartermaster: the guard's kit in the watch's blue-grey, a big belly, a brass sash, ledger-keeper not spearman
+  quartermaster: {
+    skin: 0xdcaa80, hair: 0x6a6a68, hairStyle: "short", beard: 0x6a6a68, beardStyle: "full",
+    head: "cap", headCol: 0x3e4e66, headTrim: 0xb08a3a,
+    torso: "mail", torsoCol: 0x7a8490, tabard: { col: 0x2e4468, trim: 0xd9a93a, emblem: 0xf0c75a }, belt: 0x4a2f1c, buckle: 0xd9a93a, sash: 0xb08a3a, belly: true,
+    legs: "trousers", legCol: 0x3a3a46, boots: 0x2a2624, bootStyle: "leather",
+    sleeve: 0x7a8490, arms: "cloth", glove: 0x5a3a22, weapon: "none", fx: 0xffffff, build: 1.1,
+  },
+  // A coast smuggler: a salt-grey hooded oilskin coat, scarf up, a knife at the belt
+  smuggler: {
+    skin: 0xc8a284, hair: 0x2a2a2e, hairStyle: "short", beard: 0x2a2a2e, beardStyle: "stubble",
+    head: "hood", headCol: 0x3a4a52, headTrim: 0x24323a, mask: 0x56666e,
+    torso: "leather", torsoCol: 0x3e5058, trim: 0x2a3a42, belt: 0x1e1810, buckle: 0x9a8a5a,
+    legs: "trousers", legCol: 0x2e3a40, boots: 0x1e1812, bootStyle: "wrap",
+    sleeve: 0x34444c, arms: "cloth", glove: 0x1e1812, weapon: "dagger", fx: 0xffffff, back: "cape", capeCol: 0x2e3e46,
+  },
+  // Mags the alewife: broad and red-cheeked, rolled sleeves, a linen headscarf and a stained apron
+  alewife: {
+    skin: 0xeab08a, hair: 0xb8501e, hairStyle: "long",
+    head: "bandana", headCol: 0xe4dcc4, headTrim: 0xb8aa88,
+    torso: "shirt", torsoCol: 0xd8c8a8, apron: 0xe8e0cc, vest: 0x7a3a2a, belt: 0x5a3a22, buckle: 0xb08a3a, belly: true,
+    legs: "dress", legCol: 0x7a3a2a, boots: 0x3a281a, bootStyle: "shoe",
+    sleeve: 0xeab08a, arms: "bare", bracer: 0x7a5a38, weapon: "none", fx: 0xffffff, build: 1.25,
   },
   // Oren the bladesmith: a bald, soot-darkened smith with a leather apron and a curved blade on his hip
   desertsmith: {

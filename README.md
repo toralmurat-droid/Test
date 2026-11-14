@@ -120,7 +120,8 @@ Players log in with a name and password; a new name creates the account. An opti
 emailed code (`server/mailer.ts`). Each account keeps one saved hero per class.
 
 Saves are written by the server on leave, every 30 seconds and on shutdown: to `data/saves.json` (change with
-`SAVE_FILE=...`), or to Postgres when `DATABASE_URL` is set (`server/accounts.ts`). Passwords are stored hashed
+`SAVE_FILE=...`), or to Postgres when `DATABASE_URL` is set (`server/accounts.ts`). World state (the Tide meter) goes to
+`world.json` next to the save file (`WORLD_FILE=...`), or to a `world` Postgres table (`server/worldStore.ts`). Passwords are stored hashed
 (scrypt). Back up the save file; it is not in git. During a restart, players are handed over through
 `data/handoff.json` and come back where they stood.
 

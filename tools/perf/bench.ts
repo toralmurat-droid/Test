@@ -9,6 +9,7 @@
 //     totals in this mode are INFLATED (more for the hot, tiny ones); use it to see shares, not absolute ms. PHASES=fine adds the hot per-mob helpers.
 //   BENCH_PORT=2656: listen on another port (default 2599), e.g. when two benches run on one machine
 //   CAST=1 SPREAD=1: the Summoner bots cast wisps, blades, black holes and the Void Arsenal non-stop (tools/perf/bots.ts)
+//   TIDE=1: a Gloam Tide march is out the whole time, its last wave all at once (TIDE.maxAlive marchers, server/tide.ts)
 //   SONGWEAVER=1 (PARTY=1): Songweaver bots too; PARTY=1 groups them
 import os from "node:os";
 import path from "node:path";
@@ -76,6 +77,7 @@ async function main() {
   if (process.env.SPREAD) room.state.players.forEach((p: any) => {
     for (let i = 0; i < 500; i++) { const x = Math.random() * MAP_W * TILE, y = Math.random() * MAP_H * TILE; if (!isSolidAt(x, y)) { p.x = x; p.y = y; break; } }
   });
+  if (process.env.TIDE) room.tide.start(Date.now(), true);
   await new Promise((r) => setTimeout(r, 3000));
   ticks.length = 0; patches.length = 0; bytes = 0; wire = 0; backlog = 0; for (const r of ph.values()) r.n = r.incl = r.self = 0;
   const cpu0 = process.cpuUsage(), t0 = performance.now();
@@ -84,12 +86,14 @@ async function main() {
   const s = [...ticks].sort((a, b) => a - b), q = (p: number) => s[Math.floor(s.length * p)]?.toFixed(1);
   const avg = (a: number[]) => (a.reduce((x, y) => x + y, 0) / a.length).toFixed(2);
   let active = 0;
-  room.state.mobs.forEach((m: any) => { if (!m.dead && (m.moving || m.target)) active++; });
+  let marchers = 0;
+  room.state.mobs.forEach((m: any) => { if (!m.dead && (m.moving || m.target)) active++; if (!m.dead && m.tide) marchers++; });
   console.log(JSON.stringify({
     bots: BOTS, spread: !!process.env.SPREAD, ticksPerSec: (ticks.length / (wall / 1000)).toFixed(1), tickAvgMs: avg(ticks), tickP95Ms: q(0.95),
     patchAvgMs: avg(patches), cpuPct: (((cpu.user + cpu.system) / 1000) / wall * 100).toFixed(0), rssMB: (process.memoryUsage().rss / 1e6).toFixed(0),
     kbPerPlayerPerSec: (bytes / BOTS / (wall / 1000) / 1024).toFixed(1), wireKbPerPlayerPerSec: (wire / BOTS / (wall / 1000) / 1024).toFixed(1), deflate: !!process.env.DEFLATE, mobs: room.state.mobs.size, activeMobs: active,
     sendBacklogKbMax: +(backlog / 1024).toFixed(0), botsDropped: dropped,
+    ...(process.env.TIDE ? { tide: true, tideMarchers: marchers } : {}),
   }));
   if (dropped) console.error(`BENCH INVALID: ${dropped} of ${BOTS} bots lost their connection during the run, so the numbers above are not a measurement`);
   if (PH) {

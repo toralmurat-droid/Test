@@ -56,8 +56,8 @@ export const nearestBoard = (x: number, y: number) => {
   return best && bd <= BOARD_RANGE ? best : undefined;
 };
 
-/** The monster a zone's bounty asks for: its most common kind (elites and mothers are left out). */
-function signature(z: SpawnZone): MobKind | undefined {
+/** The monster a zone's bounty asks for: its most common kind (elites and mothers are left out). Rumours (shared/rumours.ts) send it as their ambusher. */
+export function signature(z: SpawnZone): MobKind | undefined {
   let best: MobKind | undefined, bn = 0;
   for (const [k, n] of Object.entries(z.mobs) as [MobKind, number][]) {
     if (k === "motherblob" || k === "necromancer" || !n) continue;
@@ -67,11 +67,16 @@ function signature(z: SpawnZone): MobKind | undefined {
 }
 const GOAL: Partial<Record<MobKind, number>> = { bandit: 6, skeletonmage: 5, tuskborn: 5, crowseer: 3, duskwing: 5, silkwretch: 5 };
 
-/** Small seeded random (offers stay the same until the hero finishes one or levels up). */
-function rng(seed: number) {
+/** Small seeded random (offers stay the same until the hero finishes one or levels up; rumours seed it with the day). */
+export function rng(seed: number) {
   let s = (seed * 2654435761) >>> 0;
   return () => { s = (s + 0x6d2b79f5) >>> 0; let t = Math.imul(s ^ (s >>> 15), 1 | s); t ^= t + Math.imul(t ^ (t >>> 7), 61 | t); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
 }
+
+/** A zone with a monster to hunt (not a wild zone, not an empty lair) in Act 1 (or Act 2 with `desert`). Shared with the rumours. */
+export const huntable = (z: SpawnZone, desert = false) => !z.wild && !!signature(z) && (actOfTile(z.x, z.y) === 2) === desert;
+/** The zone's levels overlap the hero's level ±`by` (bounties and rumours: work about the hero's level). */
+export const nearLevel = (z: SpawnZone, level: number, by = 2) => z.levels[0] <= level + by && z.levels[1] >= level - by;
 
 /**
  * The board's offers for a hero of this level (`done` = bounties finished so far, so each one brings new offers).
@@ -79,7 +84,7 @@ function rng(seed: number) {
  */
 export function bountyOffers(level: number, done: number, desert = false): Bounty[] {
   const L = Math.min(level, MAX_LEVEL);
-  const zones = SPAWN_ZONES.filter((z) => !z.wild && signature(z) && (actOfTile(z.x, z.y) === 2) === desert && z.levels[0] <= L + 2 && z.levels[1] >= L - 2);
+  const zones = SPAWN_ZONES.filter((z) => huntable(z, desert) && nearLevel(z, L));
   const r = rng(L * 1000 + done);
   // closest to the hero's level first, ties shuffled by the seed
   const scored = zones.map((z) => ({ z, s: Math.abs((z.levels[0] + z.levels[1]) / 2 - L) + r() * 1.5 })).sort((a, b) => a.s - b.s);

@@ -335,6 +335,62 @@ export class SkillFx {
         if (ev.charge > 0) this.gather(ev.id, style, ev.charge, tier);
         break;
       }
+      // The Empty Grave pick: a right grave breathes out pale dust and a warm light; a wrong one bursts open (m is what rises)
+      case "graveright":
+        this.rise(ev.x, ev.y, 10, "holy", 14, 34, 900);
+        this.burst(ev.x, ev.y, 4, "earth", 10, 40, 500);
+        this.glow(ev.x, ev.y, 10, 16, 0xffe9a8, 500, 0.6);
+        break;
+      case "gravewrong": {
+        const mob = ev.m ? this.ent(ev.m) : undefined, gx = mob?.sprite.x ?? ev.x, gy = mob?.sprite.y ?? ev.y;
+        this.burst(ev.x, ev.y, 2, "earth", 22, 90, 600, 2);
+        this.ring(ev.x, ev.y, 34, "earth", 18, { up: 30, life: 480, size: 2 });
+        this.burst(gx, gy, 6, "shadow", 12, 50, 600);
+        this.glow(ev.x, ev.y, 8, 20, 0x5a2a6b, 450, 0.55);
+        break;
+      }
+      // Unseen and Two Hands (docs/quest-concepts-progress.md): no shake, sounds are in sfx.ts
+      case "seen": // spotted: a cold flash and a ring of shadow where the hero stood, just before the drag back
+        this.ring(ev.x, ev.y, 26, "shadow", 16, { up: 16, life: 420, size: 2 });
+        this.burst(ev.x, ev.y, 14, "shadow", 12, 50, 550);
+        this.glow(ev.x, ev.y, 14, 18, 0xff5a4a, 380, 0.45);
+        break;
+      case "sealturn": // a seal grinds round: dust at its foot and a gold pulse
+        this.burst(ev.x, ev.y, 2, "earth", 12, 45, 600, 2);
+        this.ring(ev.x, ev.y, 18, "holy", 12, { up: 10, life: 500 });
+        this.glow(ev.x, ev.y, 12, 20, 0xffd166, 600, 0.55);
+        break;
+      case "sealsync": // both seals turned together: light rises from the midpoint
+        this.rise(ev.x, ev.y, 14, "holy", 22, 46, 1000);
+        this.ring(ev.x, ev.y, 40, "holy", 22, { up: 20, life: 700, size: 2 });
+        this.glow(ev.x, ev.y, 12, 30, 0xfff3b0, 800, 0.65);
+        break;
+      case "bargain": this.stitch(e, ev.x, ev.y); break; // the Hide-Mother's deal: threads of hide stitch into the hero, no shake
+      // The Last Lantern and Hold the Wheel (docs/quest-concepts-progress.md); sounds are in sfx.ts
+      case "lanterndim": // the flame gutters: a few cold motes and a short dip of light
+        this.burst(ev.x, ev.y, 26, "spirit", 5, 18, 500);
+        this.glow(ev.x, ev.y, 26, 12, 0xffb040, 420, 0.3);
+        break;
+      case "lanternout": // burnt out: a puff of smoke, the light gone
+        this.rise(ev.x, ev.y, 6, "shadow", 8, 30, 900);
+        this.burst(ev.x, ev.y, 24, "earth", 6, 24, 600);
+        this.glow(ev.x, ev.y, 24, 18, 0x555566, 500, 0.35);
+        break;
+      case "lanternpass": { // the lantern changes hands: warm sparks at the old holder and a bright flash on the new one
+        const from = ev.from ? this.ent(ev.from) : undefined, to = e ?? { sprite: { x: ev.x, y: ev.y }, top: 28 };
+        if (from) this.burst(from.sprite.x, from.sprite.y, 26, "holy", 6, 30, 500);
+        this.burst(to.sprite.x, to.sprite.y, 28, "holy", 10, 40, 600);
+        this.glow(to.sprite.x, to.sprite.y, 28, 16, 0xffd98a, 500, 0.55);
+        break;
+      }
+      case "wavehorn": // a horn at the mill: a ring of dust spreads out of Odo, then the wave
+        this.ring(ev.x, ev.y, 70, "earth", 20, { life: 520, up: 8 });
+        this.glow(ev.x, ev.y, 30, 22, 0xe3bf6a, 400, 0.4);
+        break;
+      case "odohurt": // Odo is struck: red sparks and a flash on him
+        this.burst(ev.x, ev.y, 22, "blood", 8, 50, 400);
+        this.glow(ev.x, ev.y, 20, 14, 0xff5a4a, 260, 0.5);
+        break;
       case "fizzle":
         if (e) this.burst(e.sprite.x, e.sprite.y, e.top * 0.5, "earth", 8, 30, 300);
         break;
@@ -948,6 +1004,33 @@ export class SkillFx {
     this.ripple(x, y, 58, 0xb3ecff, 420);
     this.scene.time.delayedCall(90, () => this.ripple(x, y, 40, 0xffffff, 320));
     this.crawl(x, y, 54, 0x9be8ff, 0x1b1410);
+  }
+
+  /** Hide-stitching threads run from the Hide-Mother (fx, fy) into the hero and pull tight: six curved lines that shorten into him. */
+  private stitch(e: FxEntity | undefined, fx?: number, fy?: number) {
+    if (!e) return;
+    const g = this.scene.add.graphics().setDepth(DEPTH + 2), glowG = this.scene.add.graphics().setDepth(DEPTH + 1).setBlendMode(Phaser.BlendModes.ADD);
+    const seeds = Array.from({ length: 6 }, (_, i) => ({ a: (i / 6) * Math.PI * 2 + rnd(-0.3, 0.3), r: rnd(26, 42), w: rnd(-0.9, 0.9) }));
+    const cols = [0x6b4a32, 0x8a6240, 0xc9a070];
+    this.scene.tweens.addCounter({ from: 0, to: 1, duration: 1100, ease: "Sine.easeInOut",
+      onUpdate: (tw) => {
+        const k = tw.getValue() ?? 0, hx = e.sprite.x, hy = e.sprite.y, z = e.top * 0.55;
+        g.clear(); glowG.clear();
+        seeds.forEach((s, i) => {
+          // start spread around the hero (or pointing at the giver), end drawn into the chest
+          const r = s.r * (1 - k), base = fx !== undefined && fy !== undefined && i < 2 ? Math.atan2(fy - hy, fx - hx) + (i ? 0.5 : -0.5) : s.a;
+          g.lineStyle(i % 2 ? 1 : 2, cols[i % 3], 0.95 * (1 - k * 0.6)).beginPath();
+          for (let j = 0; j <= 8; j++) {
+            const t = j / 8, d = r * t, a = base + Math.sin(t * 5 + k * 6) * s.w * 0.5 * (1 - k);
+            const [sx, sy] = screenDelta(Math.cos(a) * d, Math.sin(a) * d), [lx, ly] = lift(z);
+            if (j === 0) g.moveTo(hx + lx, hy + ly); else g.lineTo(hx + lx + sx, hy + ly + sy);
+            if (j % 2 === 0 && j > 0) glowG.fillStyle(0xe0b88a, 0.5 * (1 - k)).fillRect(hx + lx + sx - 1, hy + ly + sy - 1, 2, 2); // a stitch
+          }
+          g.strokePath();
+        });
+      },
+      onComplete: () => { g.destroy(); glowG.destroy(); } });
+    this.glow(e.sprite.x, e.sprite.y, e.top * 0.5, 16, 0xc9a070, 700, 0.4);
   }
 
   /** A ring running out over the ground from a point (flat, squashed by the iso view). */

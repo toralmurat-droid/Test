@@ -64,6 +64,9 @@ import { PointerControls, type ClickEnemy, type ClickSpot } from "./pointer";
 import { warmPaths } from "./pathfind";
 import { pixelText } from "./pixeltext";
 import { speechBubble } from "./weathered";
+import { hasTrait, TITLES, unpackCosmetics } from "../../shared/cosmetics";
+import { META, metaOf } from "../../shared/questSteps";
+import { updateHidebound } from "./questConceptArt";
 import { WarPlaque } from "./warPlaque";
 import { WarTroops } from "./warTroops";
 import { WarStandards } from "./warStandards";
@@ -86,6 +89,8 @@ import { baseId, canWear, gearName, gearDef, reqProblem, gearReachMult, gearSpee
 import { attackProfile, ATTACK_WORDS, isWeaponType, poseSheet, profileOf, weaponAttackMult, weaponOk } from "../../shared/weapons";
 import { talentMult, talentPoints, spentPoints } from "../../shared/talents";
 import { activeSkills, skillLearned } from "../../shared/slots";
+import { TideHud } from "./tide";
+import { DROP_KEY, LANTERN_OBJECT, LOCK_TIP, QuestCarry } from "./questCarry";
 import { actionKey, actionOfKey, type KeyAction, keyMode, keyModeName, onKeyMode, setKeyMode, slotCount, slotKey, slotOfKey, wasdWalks } from "./keymode";
 import { iconImg } from "./skillIcons";
 import { TalentMenu } from "./talents";
@@ -169,6 +174,8 @@ interface Entity {
   partsKey?: string; partsLayout?: BlobPart[];
   sprite: Phaser.GameObjects.Sprite;
   label?: Phaser.GameObjects.Text;
+  titleLabel?: Phaser.GameObjects.Text; // heroes: the shown title, small and dim, between the name and the head
+  nameLift?: number;
   lvlColor?: string; // monsters: current colour of the "Lv N" label
   mob: boolean;
   hero?: CharacterName; // set when drawn with the animated 32x32 sheets
@@ -346,6 +353,8 @@ export class TownScene extends Phaser.Scene {
   private chests?: ChestLayer;
   private shrine?: ShrineLayer;
   private bounty?: BountyUI;
+  private tide?: TideHud; // the Gloam Tide meter, banners and gate marker (client/src/tide.ts)
+  private qcarry?: QuestCarry; // carried lantern and held mill (client/src/questCarry.ts)
   private portals?: PortalLayer;
   private waygates?: WaygateLayer;
   private chatEl = document.getElementById("chat") as HTMLInputElement;
@@ -386,6 +395,8 @@ export class TownScene extends Phaser.Scene {
   private lastRanged = -Infinity;
   private heroFrom?: number;
   private heroSig = "";
+  /** Titles this hero may pick (TITLES indices, server "title"). */
+  private titlesOwned: number[] = [];
   private levelFrom?: number; // level before the level-ups the player hasn't looked at yet
   private clearedTimer?: number;
   private gearMenu?: GearMenu;
@@ -490,6 +501,7 @@ export class TownScene extends Phaser.Scene {
     };
     this.input.keyboard!.on("keydown", (ev: KeyboardEvent) => {
       if (this.chatting() || ev.ctrlKey || ev.metaKey || ev.altKey) return;
+      if (ev.key.toUpperCase() === DROP_KEY && !ev.repeat && this.qcarry?.carrying(this.me)) { this.qcarry.drop(); return; } // put the lantern down
       const n = slotOfKey(ev);
       // Spell keys: E is a spell key, but when a prompt says "E: talk / open / use" right here, E does that instead
       if (n >= 0 && ev.key.toUpperCase() === "E" && keyMode() === "spells" && this.canUse()) { if (!ev.repeat) this.useKey(); return; }
@@ -544,6 +556,7 @@ export class TownScene extends Phaser.Scene {
       const b = (ev.target as HTMLElement).closest("button");
       if (b?.dataset.stat) this.room?.send("stat", b.dataset.stat);
       else if (b?.id === "statreset") this.room?.send("resetstats");
+      else if (b?.dataset.title !== undefined) this.room?.send("title", { i: Number(b.dataset.title) }); // the server answers "title"; the label follows Player.cosm
     });
     // Hovering a + shows in the side panel's stats block what that point would change
     heroEl.addEventListener("mouseover", (ev) => {
@@ -686,7 +699,15 @@ export class TownScene extends Phaser.Scene {
     this.torches = new GateTorches(this); // torches at the gates, lit by the watch at dusk
     this.watch.torches = this.torches;
     this.room.onMessage("quest", (msg) => this.npcs?.onQuest(msg));
+    this.room.onMessage("choice", (msg) => this.npcs?.onChoice(msg));
     this.room.onMessage("questuse", ({ id }) => this.npcs?.objects.burst(id));
+    this.room.onMessage("rumour", (m) => this.npcs?.rumours.onMessage(m)); // Mags' tavern rumours (client/src/rumours.ts)
+    this.room.onMessage("mentor", (m) => this.npcs?.onMentor(m)); // Hale's mentoring (client/src/npcs.ts)
+    this.room.onMessage("title", (m: { i?: number; owned?: number[] }) => { // owned titles for the picker in the hero panel
+      if (Array.isArray(m?.owned)) this.titlesOwned = m.owned.filter((i) => Number.isInteger(i) && i > 0 && i < TITLES.length);
+      this.heroSig = "";
+    });
+    this.room.send("title", {}); // fetch the owned titles once
     this.room.onMessage("shop", (msg) => this.npcs?.onShop(msg));
     this.chests = new ChestLayer(this, (type, msg) => this.room.send(type, msg));
     this.room.onMessage("chests", (left) => this.chests?.setOpened(left));
@@ -704,6 +725,10 @@ export class TownScene extends Phaser.Scene {
     this.room.onMessage("stashview", (v) => { if (!this.stash?.open) this.closeMenus(); this.stash?.show(v); });
     // The Whispering Woods shrine: one for everyone, spent for a while after each prayer
     this.shrine = new ShrineLayer(this, (type, msg) => this.room.send(type, msg), PIXEL_FONT);
+    this.qcarry = new QuestCarry(this, document.getElementById("hud")!, (type, msg) => this.room.send(type, msg));
+    this.room.onMessage("qstate", (m) => this.qcarry?.onState(m));
+    this.tide = new TideHud(document.getElementById("hud")!);
+    this.room.onMessage("tide", (m) => this.tide?.onTide(m));
     // Bounty boards on the square and by every portal stone (shared/bounty.ts)
     this.bounty = new BountyUI(this, (type, msg) => this.room.send(type, msg), PIXEL_FONT);
     this.room.onMessage("bounty", (v) => this.bounty?.show(v, (text, color) => {
@@ -724,12 +749,13 @@ export class TownScene extends Phaser.Scene {
     // Portal stones: woken one by one on foot, then fast travel between the woken ones
     this.portals = new PortalLayer(this, (type, msg) => this.room.send(type, msg));
     this.room.onMessage("portals", ({ found, woke }) => this.portals?.setFound(found ?? [], woke));
-    this.room.onMessage("travel", ({ id, from, to, x, y }) => {
-      this.portals?.travelled(from, to);
+    this.room.onMessage("travel", ({ id, from, to, x, y, why }) => {
+      if (!why) this.portals?.travelled(from, to); // a quest warp (seen while unseen) has no stone at either end
       const e = this.entities.get(id);
       if (!e) return;
       e.sprite.setPosition(x, y); e.tx = x; e.ty = y; e.lastX = x; e.lastY = y; // a jump, not a walk
-      if (id === this.me) { this.portals?.close(); this.jumped(); this.arrive(40, 14, 4, 700); } // warm glow, then the new place
+      if (id === this.me && why) { this.jumped(); this.arrive(18, 4, 8, 650); } // seen, dragged back: a short dark-red fade
+      else if (id === this.me) { this.portals?.close(); this.jumped(); this.arrive(40, 14, 4, 700); } // warm glow, then the new place
     });
     // Act 2's waygate (shared/act2.ts): through to the other act; the loading screen stays up while that land is drawn
     this.waygates = new WaygateLayer(this, (type) => this.room?.send(type));
@@ -1968,10 +1994,14 @@ export class TownScene extends Phaser.Scene {
       stroke: "#000", strokeThickness: 2,
     }).setOrigin(0.5, 1).setScale(WT).setResolution(1);
     isoAnchor(label, sprite);
+    const titleLabel = this.add.text(p.x, p.y, "", {
+      fontFamily: TEXT_FONT, fontSize: `${TEXT_PX}px`, color: "#b8a98a", stroke: "#000", strokeThickness: 2,
+    }).setOrigin(0.5, 1).setScale(WT * 0.8).setResolution(1).setAlpha(0.85);
+    isoAnchor(titleLabel, sprite);
     const bar = isoAnchor(this.add.graphics(), sprite) as Phaser.GameObjects.Graphics;
     const gear = hero ? new GearLayer(this, hero) : undefined;
     if (!loaded) label.setVisible(false);
-    this.entities.set(id, { sprite, label, bar, tx: p.x, ty: p.y, snaps: [{ t: patchTime(), x: p.x, y: p.y }], state: p, mob, hero, gear, top: hero ? HERO_TOP : 14, waiting: loaded ? undefined : sheet });
+    this.entities.set(id, { sprite, label, titleLabel, bar, tx: p.x, ty: p.y, snaps: [{ t: patchTime(), x: p.x, y: p.y }], state: p, mob, hero, gear, top: hero ? HERO_TOP : 14, waiting: loaded ? undefined : sheet });
     if (id === this.me) {
       // ?look=tx,ty (map viewing aid, like ?time=): park the camera on a tile instead of following the hero
       const look = new URLSearchParams(location.search).get("look")?.split(",").map(Number);
@@ -2000,7 +2030,7 @@ export class TownScene extends Phaser.Scene {
     this.champFx?.drop(id);
     this.forms?.drop(id);
     this.lastMineHit.delete(id);
-    e.sprite.destroy(); e.label?.destroy(); e.bar.destroy(); e.parts?.destroy(); e.bubble?.destroy(); e.shield?.destroy(); e.gear?.destroy();
+    e.sprite.destroy(); e.label?.destroy(); e.titleLabel?.destroy(); e.bar.destroy(); e.parts?.destroy(); e.bubble?.destroy(); e.shield?.destroy(); e.gear?.destroy();
     this.entities.delete(id);
   }
 
@@ -2435,6 +2465,14 @@ export class TownScene extends Phaser.Scene {
         this.gameMenu?.open || this.talentMenu?.open);
   }
 
+  /** Owned titles as small buttons (plus None); a pick is an intent, the server answers "title" and the label follows `Player.cosm`. */
+  private titlePickerHtml(mine: any) {
+    if (!this.titlesOwned.length) return "";
+    const cur = unpackCosmetics(metaOf(mine, META.cosm)).title;
+    const b = (i: number, name: string) => `<button class="titlepick${i === cur ? " on" : ""}" data-title="${i}">${name}</button>`;
+    return `<div id="titlepick"><span>Title</span>${b(0, "None")}${this.titlesOwned.map((i) => b(i, TITLES[i])).join("")}</div>`;
+  }
+
   /** Opens the hero menu. After level-ups (`from` = level before them) it highlights the gains. */
   private showHeroMenu(from?: number) {
     const mine = this.entities.get(this.me)?.state;
@@ -2445,7 +2483,7 @@ export class TownScene extends Phaser.Scene {
     const o = own(mine); // owner-only numbers, in `me` (server/player.ts)
     const free = statPoints(lvl) - (o.ptSta + o.ptStr + o.ptMag + o.ptDex);
     // Rebuild only when something shown changed (called every frame while open)
-    const sig = [lvl, o.xp, Math.ceil(mine.hp), mine.maxHp, o.mp, st.sta, st.str, st.mag, st.dex, free, o.kills, o.gold, from].join("|");
+    const sig = [this.titlesOwned.join(), unpackCosmetics(metaOf(mine, META.cosm)).title, lvl, o.xp, Math.ceil(mine.hp), mine.maxHp, o.mp, st.sta, st.str, st.mag, st.dex, free, o.kills, o.gold, from].join("|");
     const el = document.getElementById("hero")!;
     if (!el.hidden && sig === this.heroSig) return;
     this.heroSig = sig;
@@ -2494,7 +2532,7 @@ export class TownScene extends Phaser.Scene {
     const xpFrac = lvl >= MAX_LEVEL ? 1 : Math.max(0, Math.min(1, (o.xp - cur) / Math.max(1, next - cur)));
     const bar = (cls2: string, label: string, val: string, f: number) =>
       `<div class="hbar ${cls2}"><div class="hbar-l"><span>${label}</span><b>${val}</b></div><div class="hbar-t"><i style="width:${Math.round(f * 100)}%"></i></div></div>`;
-    document.getElementById("herochar")!.innerHTML =
+    document.getElementById("herochar")!.innerHTML = this.titlePickerHtml(mine) +
       `<div class="hbars">${bar("hp", "Health", `${Math.ceil(mine.hp)} / ${mine.maxHp}`, mine.hp / Math.max(1, mine.maxHp))}` +
       bar("mp", "Mana", `${mp.mana} / ${mp.maxMana}`, mp.mana / Math.max(1, mp.maxMana)) +
       bar("xp", "Experience", lvl >= MAX_LEVEL ? "Max level" : `${o.xp - cur} / ${next - cur}`, xpFrac) + `</div>` +
@@ -2780,6 +2818,7 @@ export class TownScene extends Phaser.Scene {
     const slots: string[] = [...own(mine).slots];
     this.cdTrack.length = 0;
     // Slot bar at the bottom: 10 cells, cooldown shading, click to choose a skill
+    const locked = !!this.qcarry?.carrying(this.me), lockTip = locked ? LOCK_TIP : "";
     const cells = Array.from({ length: slotCount() }, (_, i) => {
       const skill = slots[i] ?? "";
       const picking = (this.pickSlot === i ? " picking" : "");
@@ -2792,7 +2831,7 @@ export class TownScene extends Phaser.Scene {
       const power = skill;
       const unarmed = this.unarmedFor(mine, cls, skill);
       if (left > 0) this.cdTrack.push({ k: `s${i}`, left, cd: h.cdMs });
-      return `<div class="slot${h.ult ? " ult" : ""}${wait}${unarmed ? " unarmed" : ""}${picking}" data-slot="${i}" data-skill="${skill}" data-tiphead="${h.name}" data-tip="${tipEsc((unarmed ? `${unarmed}. ` : "") + (skillOf(cls, skill)?.desc ?? ""))}" data-tiphint="Key ${slotKey(i)} · click to change · wheel to scroll · right-click to clear">` +
+      return `<div class="slot${locked ? " locked" : ""}${h.ult ? " ult" : ""}${wait}${unarmed ? " unarmed" : ""}${picking}" data-slot="${i}" data-skill="${skill}" data-tiphead="${h.name}" data-tip="${tipEsc(lockTip + (unarmed ? `${unarmed}. ` : "") + (skillOf(cls, skill)?.desc ?? ""))}" data-tiphint="Key ${slotKey(i)} · click to change · wheel to scroll · right-click to clear">` +
         `${iconImg(power)}${shade}${unarmed ? `<i class="xout"></i>` : ""}<kbd>${slotKey(i)}</kbd>${left > 0 && !unarmed ? `<b class="cdn" data-cnk="s${i}"></b>` : ""}</div>`;
     }).join("");
     // Left- and right-click cells first: the weapon, or the spell / skill picked for that click
@@ -2807,7 +2846,7 @@ export class TownScene extends Phaser.Scene {
         const shade = left > 0 && h.cdMs >= 1000 ? `<div class="cd" data-cdk="${key}"></div>` : "";
         const unarmed = this.unarmedFor(mine, cls, sk);
         if (shade) this.cdTrack.push({ k: key, left, cd: h.cdMs });
-        return `<div class="slot lmb ${side}${!canPay(pools, h.cost) ? " wait" : ""}${shortOf(pools, h.cost) === "heat" ? " hot" : ""}${unarmed ? " unarmed" : ""}${pk}" data-slot="${key}" data-tiphead="${Side}: ${h.name}" data-tip="${tipEsc((unarmed ? `${unarmed}. ` : "") + (skillOf(cls, sk)?.desc ?? ""))}" data-tiphint="Click to change · wheel to scroll · right-click: back to the weapon">` +
+        return `<div class="slot lmb ${side}${locked ? " locked" : ""}${!canPay(pools, h.cost) ? " wait" : ""}${shortOf(pools, h.cost) === "heat" ? " hot" : ""}${unarmed ? " unarmed" : ""}${pk}" data-slot="${key}" data-tiphead="${Side}: ${h.name}" data-tip="${tipEsc(lockTip + (unarmed ? `${unarmed}. ` : "") + (skillOf(cls, sk)?.desc ?? ""))}" data-tiphint="Click to change · wheel to scroll · right-click: back to the weapon">` +
           `${iconImg(sk)}${shade}${unarmed ? `<i class="xout"></i>` : ""}<kbd>${label}</kbd></div>`;
       }
       const w = attackProfile(cls, activeOf(mine));
@@ -2858,6 +2897,7 @@ export class TownScene extends Phaser.Scene {
 
   /** Skill visual event from the server (shared/skillEngine.ts): drawn by SkillFx, plus the hero's cast animation. */
   private onSkillFx(ev: any) {
+    if (typeof ev.ev === "string" && ev.ev.startsWith("tide")) { this.tideFx(ev); return; }
     if (SONG_SFX.has(ev.ev)) this.songEvent(ev);
     if (DI_EVENTS.has(ev.ev)) this.diEvent(ev); // newsong, matpick, lutefit, break
     if (ev.ev === "cast") {
@@ -2876,6 +2916,15 @@ export class TownScene extends Phaser.Scene {
       if (ev.ev === "move" && ev.kind === "dash" && ev.id === this.me) this.rootUntil = Math.max(this.rootUntil, this.time.now + 140);
     }
     this.fx.onEvent(ev);
+  }
+
+  /** Tide sfx: banners from the HUD, a slow violet ring and a burst at the goal point when a wave sets out (no shake). */
+  private tideFx(ev: any) {
+    const at = this.tide?.onSfx(ev);
+    if (!at) return;
+    this.burst(at.x, at.y, 16, 0x9b7ae0, 700);
+    const ring = this.add.circle(at.x, at.y, 20, 0x9b7ae0, 0.18).setStrokeStyle(3, 0xd8c8ff, 0.8).setDepth(at.y + 50);
+    this.tweens.add({ targets: ring, scale: 6, alpha: 0, duration: 1400, ease: "Sine.easeOut", onComplete: () => ring.destroy() });
   }
 
   /** DI-2 / DI-5 events: new song banner, material pickups, lute fitting, breaking (songbookFx.ts). */
@@ -3193,7 +3242,7 @@ export class TownScene extends Phaser.Scene {
         h.push({ t: wall, x: e.sprite.x, y: e.sprite.y });
         while (h.length > 2 && wall - h[0].t > 1500) h.shift();
       }
-      if (e.waiting) { e.sprite.setVisible(false); e.label?.setVisible(false); continue; } // its sheet is still loading
+      if (e.waiting) { e.sprite.setVisible(false); e.label?.setVisible(false); e.titleLabel?.setVisible(false); continue; } // its sheet is still loading
       // Monsters off screen: hide them and skip the per-frame drawing (there are a lot of them)
       if (e.mob) {
         const v = this.cameras.main.worldView, M = 48;
@@ -3281,6 +3330,13 @@ export class TownScene extends Phaser.Scene {
       } else if (e.statusTint) { e.sprite.clearTint(); e.statusTint = false; }
       e.gear?.sync(e.sprite, p);
       if (e.gear) this.gearFx.tick(e, dtMs, moving);
+      if (e.hero) { // the beast trait (took the Hide-Mother's bargain): hide-bound mantle, only for heroes that carry it
+        const on = !p.dead && hasTrait(metaOf(p as any, META.cosm), "beast");
+        if (on || e.sprite.getData("hidebound")) {
+          const k = e.sprite.anims.currentAnim?.key ?? "", i = k.lastIndexOf("_");
+          updateHidebound(this, e.sprite, p.cls, i >= 0 ? k.slice(i + 1) : this.dirOf(e), on && e.sprite.visible);
+        }
+      }
 
       const x = Math.round(e.sprite.x), y = Math.round(e.sprite.y);
       // Monsters: HP bar over the head (only while it matters, see showWorldBar); their name and level are in the top bar
@@ -3296,7 +3352,15 @@ export class TownScene extends Phaser.Scene {
           if (e.lvlColor !== col) { e.label.setColor(col); e.lvlColor = col; }
         }
       }
-      e.bubble?.setPosition(x, y - e.top - 12); // above the name label
+      if (e.titleLabel) { // the shown title (Player.cosm, public) sits right over the head; the name moves up above it
+        const t = TITLES[unpackCosmetics(metaOf(p as any, META.cosm)).title] ?? "";
+        if (e.titleLabel.text !== t) e.titleLabel.setText(t);
+        const lift = t ? 9 : 0;
+        setBaseDepth(e.titleLabel.setPosition(x, y - e.top - (p.hat ? 4 : 2)), e.sprite.y + 1).setVisible(!!t && !p.dead && !p.hidden && (id !== this.me || !!e.label?.visible));
+        if (e.label) e.label.setY(e.label.y - lift);
+        e.nameLift = lift;
+      }
+      e.bubble?.setPosition(x, y - e.top - 12 - (e.nameLift ?? 0)); // above the name label
       setBaseDepth(e.bar.clear(), e.sprite.y + 1);
       if (e.mob) this.champFx?.sync(id, e, p, x, y, now);
       this.fx.status(e, e.bar, dtMs / 1000);
@@ -3382,6 +3446,7 @@ export class TownScene extends Phaser.Scene {
     this.minimap?.draw(now, meEnt?.sprite, others);
     if (online !== this.onlineShown) { this.onlineShown = online; document.getElementById("onlinecount")!.textContent = String(online); }
     this.dial?.draw(now);
+    this.tide?.update(meEnt?.sprite.x, meEnt?.sprite.y);
     if (meEnt) this.showArea(areaAt(meEnt.sprite.x, meEnt.sprite.y));
     this.signPanel.update(meEnt?.sprite);
     if (this.chests) {
@@ -3397,13 +3462,14 @@ export class TownScene extends Phaser.Scene {
     this.shrine?.update(meEnt && !meEnt.state.dead && !this.chests?.near ? meEnt.sprite : undefined, !!this.npcs?.isOpen);
     this.stash?.update(meEnt && !meEnt.state.dead ? meEnt.sprite : undefined, !!this.npcs?.isOpen || !!this.chests?.near);
     this.bounty?.update(meEnt && !meEnt.state.dead ? meEnt.sprite : undefined, !!this.npcs?.isOpen || !!this.chests?.near || !!this.stash?.near);
-    if (this.npcs) { this.npcs.hidePrompt = !!this.chests?.near || !!this.shrine?.near || !!this.portals?.near || !!this.waygates?.near || !!this.stash?.near || !!this.bounty?.near; this.npcs.extraBlock = this.bounty?.trackerBlock() ?? ""; }
+    if (this.npcs) { this.npcs.hidePrompt = !!this.chests?.near || !!this.shrine?.near || !!this.portals?.near || !!this.waygates?.near || !!this.stash?.near || !!this.bounty?.near; this.npcs.extraBlock = (this.bounty?.trackerBlock() ?? "") + (this.qcarry?.trackerBlock(this.me, (id) => this.entities.get(id)?.state?.name ?? "A friend") ?? ""); }
+    this.npcs?.objects.setHidden(LANTERN_OBJECT, !!this.qcarry?.update(this.me, (id) => this.entities.get(id)));
     this.npcs?.update(meEnt && !meEnt.state.dead ? meEnt.sprite : undefined, meEnt?.state);
     this.grimoire?.update(meEnt?.state?.cls);
     this.waygates?.update(meEnt?.state, meEnt && !meEnt.state.dead ? meEnt.sprite : undefined, !!this.npcs?.isOpen || !!this.chests?.near);
     this.portals?.update(meEnt && !meEnt.state.dead ? meEnt.sprite : undefined, !!this.npcs?.isOpen || !!this.chests?.near || !!this.shrine?.near);
     if (this.minimap) this.minimap.war = this.warLast; // the war table layer (warTable.ts)
-    if (this.minimap && this.npcs) this.minimap.markers = [...this.npcs.markers, ...(this.portals?.markers() ?? []), ...(this.bounty?.markers() ?? []), ...(this.dungeon?.markers() ?? []), ...(this.waygates?.markers() ?? [])];
+    if (this.minimap && this.npcs) this.minimap.markers = [...this.npcs.markers, ...(this.portals?.markers() ?? []), ...(this.bounty?.markers() ?? []), ...(this.dungeon?.markers() ?? []), ...(this.waygates?.markers() ?? []), ...(this.qcarry?.markers() ?? []), ...(this.tide?.markers() ?? [])];
 
     const mine = meEnt?.state;
     if (mine) {

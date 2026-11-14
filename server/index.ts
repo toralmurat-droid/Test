@@ -10,6 +10,7 @@ import { TownRoom, announceUpgrade } from "./TownRoom";
 import { ideaLog, publicLog } from "./ideaStore";
 import { allAccounts, flushFinal, initAccounts, peek, requestReset, resetPassword, setEmail } from "./accounts";
 import { writeHandoff } from "./handoff";
+import { flushWorldFinal, initWorld } from "./worldStore";
 import { clientIp } from "./ratelimit";
 import { flushWar, startWar, warLog, warNow } from "./war";
 
@@ -137,10 +138,12 @@ gameServer.define("town", TownRoom);
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 gameServer.onBeforeShutdown(async () => { announceUpgrade(); await wait(400); });
 // The rooms are gone by now (everyone saved and remembered where they stood): hand those spots to the next server
-gameServer.onShutdown(async () => { writeHandoff(); flushWar(); await flushFinal(); await wait(800); });
+gameServer.onShutdown(async () => { writeHandoff(); flushWar(); await flushFinal(); await flushWorldFinal(); await wait(800); });
 
-// Accounts first (Postgres when DATABASE_URL is set): players must never join before their saves are loaded
-initAccounts()
+// Accounts first (Postgres when DATABASE_URL is set): players must never join before their saves are loaded.
+// The world state (the Gloam Tide's meter, server/worldStore.ts) loads with them; the clan war (server/war.ts, its
+// own kv table / data/war.json) starts after both, before the server listens.
+Promise.all([initAccounts(), initWorld()])
   .then(() => startWar())
   .then(() => gameServer.listen(PORT))
   .then(() => console.log(`Game server on http://localhost:${PORT}`))
