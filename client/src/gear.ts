@@ -1,6 +1,8 @@
 import { slotName } from "./songTables";
 import { icon } from "./pixelicons";
 import { drawSongGearIcon } from "./songGearIcons";
+import { isBound, isSongbook, songCantWear, songItemHtml, songItemName, BOUND_LINE } from "./songbookData";
+import { openSongbook } from "./songbookReader";
 import { actionKey } from "./keymode";
 import Phaser from "phaser";
 import { gearDef, itemText, LOOT_IDS, canWear, GEAR_SLOTS, gearName, gearStats, gearSpeedMult, GearSlot, BAG_SIZE, SLOT_NAMES, TIER_NAMES, baseId, itemRarity, RARITY_NAMES, affixLines, itemLevel, reqProblem, reqText, activeGear, HeroReqInfo, Equipped, weaponElements, gearResist, weaponType } from "../../shared/gear";
@@ -257,13 +259,14 @@ export class GearMenu {
         if (slot) { const eq = { ...worn }; delete eq[slot]; this.preview({ label: `take off ${gearName(id, cls)}`, eq }); }
         else if (canWear(cls, id)) this.preview({ label: `wear ${gearName(id, cls)}${reqProblem(id, hero) ? " (once you meet its needs)" : ""}`, eq: wearing(worn, id) });
         if (!info) return;
-        const d = gearDef(id)!, why = reqProblem(id, hero);
-        const aff = affixHtml(id);
+        const d = gearDef(id)!, cant = songCantWear(cls, d.slot, id, d.wtype), why = cant || reqProblem(id, hero); // HOOK(di): musical-only rule, the server decides too
+        const aff = affixHtml(id), song = songItemHtml(id, cls);
+        const nm = songItemName(id) ?? gearName(id, cls);
         const runes = runeHtml(id);
         const pr = this.pickRune >= 0 ? parseRune(bagItems[this.pickRune]) : undefined, sockWhy = pr ? socketProblem(id, pr) : "";
         const tip = pr ? (sockWhy ? `<span class="gbad">${sockWhy}</span>` : `Click: set the ${runeName(pr)} in this item`) : extra;
-        info.innerHTML = `<b style="color:${itemColor(id)}">${gearName(id, cls)}</b> <span class="glvl">Lv ${itemLevel(id)}</span> · ${rarityLabel(id)}${TIER_NAMES[d.tier]} ${slotName(d.slot, cls, id)}<br>` +
-          `${itemText(id) || "No bonus"}<br>${aff ? `${aff}<br>` : ""}${runes ? `${runes}<br>` : ""}<span class="${why ? "gbad" : "gok"}">${why || reqText(id, cls, hero)}</span>${tip ? `<br><small>${tip}</small>` : ""}`;
+        info.innerHTML = `<b style="color:${itemColor(id)}">${nm}</b> <span class="glvl">Lv ${itemLevel(id)}</span> · ${rarityLabel(id)}${TIER_NAMES[d.tier]} ${slotName(d.slot, cls, id)}<br>` +
+          `${itemText(id) || "No bonus"}<br>${song ? `${song}<br>` : ""}${aff ? `${aff}<br>` : ""}${runes ? `${runes}<br>` : ""}<span class="${why ? "gbad" : "gok"}">${why || reqText(id, cls, hero)}</span>${tip ? `<br><small>${tip}</small>` : ""}`;
       };
       el.onmouseleave = () => { this.preview(); if (info) info.textContent = ""; };
     };
@@ -287,14 +290,19 @@ export class GearMenu {
       const icon = id ? iconCanvas(this.scene, id) : Object.assign(document.createElement("span"), { className: "gicon" });
       row.appendChild(icon);
       const txt = document.createElement("span");
-      const why = id ? reqProblem(id, hero) : "";
+      const why = id ? songCantWear(cls, slot, id, gearDef(id)?.wtype) || reqProblem(id, hero) : "";
       txt.innerHTML = id
-        ? `<b style="color:${itemColor(id)}">${gearName(id, cls)}</b>${itemLevel(id) > 1 ? ` <span class="glvl">Lv ${itemLevel(id)}</span>` : ""}<br>` +
+        ? `<b style="color:${itemColor(id)}">${songItemName(id) ?? gearName(id, cls)}</b>${itemLevel(id) > 1 ? ` <span class="glvl">Lv ${itemLevel(id)}</span>` : ""}<br>` +
           (why ? `<small class="gbad">Inactive: ${why}</small>` : `<small>${itemText(id)}</small>`)
         : `<b>${slotName(slot, cls)}</b><br><small>empty</small>`;
       row.appendChild(txt);
       const pips = id ? socketPips(id, (n) => this.act("unsocket", { slot, n })) : undefined;
       if (pips) row.appendChild(pips);
+      if (id && isSongbook(id)) { // the equipped Songbook opens its reader (songs, materials, chord legend)
+        const rd = Object.assign(document.createElement("span"), { className: "sbbtn", textContent: "Read", title: "Open the Songbook" });
+        rd.onclick = (ev) => { ev.stopPropagation(); openSongbook(); };
+        txt.appendChild(rd);
+      }
       const pr = this.pickRune >= 0 ? parseRune(bagItems[this.pickRune]) : undefined;
       if (id && pr && !socketProblem(id, pr)) row.classList.add("gfit");
       if (id) {
@@ -327,7 +335,7 @@ export class GearMenu {
     const stacks = potionStacks(unpackPotions(state.potions));
     document.getElementById("gearbagtitle")!.innerHTML = `Bag ${bagItems.length + stacks.length}/${BAG_SIZE} <span class="gbgold">${icon("coin")}${state.gold ?? 0} gold</span>`;
     // Useless items: wearing them would raise no number on the sheet (or the class can't wear them)
-    this.junk = bagItems.map((id, i) => (uselessItem(sh, worn, id) ? i : -1)).filter((i) => i >= 0);
+    this.junk = bagItems.map((id, i) => (uselessItem(sh, worn, id) && !isBound(id) ? i : -1)).filter((i) => i >= 0);
     const junk = new Set(this.junk);
     // Display order: as picked up, or sorted by slot, then rarity and level (the server keeps its own order)
     const order = bagItems.map((_, i) => i);
@@ -389,9 +397,9 @@ export class GearMenu {
         cell.appendChild(iconCanvas(this.scene, id));
         cell.style.borderColor = itemColor(id);
         if (itemRarity(id) >= 2) cell.style.boxShadow = `inset 0 0 6px ${itemColor(id)}`;
-        const fits = canWear(cls, id), why = fits ? reqProblem(id, hero) : "";
+        const cant = songCantWear(cls, d.slot, id, d.wtype), fits = canWear(cls, id) && !cant, why = fits ? reqProblem(id, hero) : "";
         if (itemLevel(id) > 1) cell.appendChild(Object.assign(document.createElement("span"), { className: "gcelllvl" + (why ? " gbad" : ""), textContent: String(itemLevel(id)) }));
-        hover(cell, id, (junk.has(i) ? "Useless: raises no stat · " : "") + (itemRunes(id).length ? "Click a rune stone to take the rune out · " : "") + (fits ? (why ? "Too strong for you yet · Right-click: drop" : "Click: equip · Right-click: drop") : `Only a ${d.cls} can wear this · Right-click: drop`));
+        hover(cell, id, (junk.has(i) ? "Useless: raises no stat · " : "") + (itemRunes(id).length ? "Click a rune stone to take the rune out · " : "") + (isBound(id) ? `${BOUND_LINE} Click: equip` : "") + (isBound(id) ? "" : fits ? (why ? "Too strong for you yet · Right-click: drop" : "Click: equip · Right-click: drop") : cant ? `${cant} · Right-click: drop` : `Only a ${d.cls} can wear this · Right-click: drop`));
         if (this.marks && junk.has(i)) cell.classList.add("gjunk");
         if (!fits) cell.style.opacity = "0.5";
         else if (why) cell.classList.add("glocked");
@@ -401,9 +409,10 @@ export class GearMenu {
         if (pr && !socketProblem(id, pr)) cell.classList.add("gfit");
         cell.onclick = () => {
           if (this.pickRune >= 0) { this.act("socket", { rune: this.pickRune, item: i }); this.pickRune = -1; this.sig = ""; return; }
+          if (cant) { if (info) info.innerHTML = `<span class="gbad">${cant}</span>`; return; } // the server refuses too
           this.act("equip", i);
         };
-        cell.oncontextmenu = (ev) => { ev.preventDefault(); this.act("dropgear", i); };
+        cell.oncontextmenu = (ev) => { ev.preventDefault(); if (isBound(id)) { if (info) info.innerHTML = `<span class="glvl">${BOUND_LINE}</span>`; return; } this.act("dropgear", i); };
       } else cell.disabled = true;
       bag.appendChild(cell);
     }
