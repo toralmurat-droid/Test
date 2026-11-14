@@ -9,7 +9,7 @@ import { Client, getStateCallbacks, Room } from "colyseus.js";
 const LURKERS = new Set<string>(["gnawkin", "tuskborn", "silkwretch", "duskwing", "crowseer"]);
 import { BOSS, ELITE, InputState, MERGE, MOBS, type MobKind, URSK, SUNWRIGHT, DESERT_Y0, DESERT_H, actOfTile, MAP_H, MAP_W, regenFromStamina, TICK_RATE, TILE } from "../../shared/constants";
 import { CLASSES, ClassKind, MAX_LEVEL, xpForLevel } from "../../shared/classes";
-import { canPay, shortOf, MANA, manaRegen, maxManaFor, skillCost, unpackMana } from "../../shared/mana";
+import { canPay, shortOf, MANA, manaRegen, maxManaFor, skillCost, unpackMana, usesGauge } from "../../shared/mana";
 import { nextSize, potionAmount, PotionKind, potionName, POTION_SIZES, total, unpackPotions } from "../../shared/potions";
 import { GROUND, areaAt, isSafeZone } from "../../shared/map";
 import { heroPoise, meleeReach, mobBody, POISE, pvpProtected } from "../../shared/combat";
@@ -21,14 +21,18 @@ import { SPAWN_ZONES, zoneAt } from "../../shared/spawns";
 import { musicCombat, setMusicZone } from "./music";
 import { bindSfx, play as playSfx, sfxFrame } from "./sfx";
 import { songweaverSfx } from "./sfx";
-import { ChordHud } from "./chordHud";
+import { DI_EVENTS, diEvent } from "./songbookFx";
+import { setSongbook } from "./songbookData";
+import { matOfItem } from "../../shared/lutemaker";
+import { MATERIALS } from "../../shared/lute";
+import { MAT_COLOR, matTexture, matTip } from "./matArt";
 import { SoundCues } from "./soundCues";
 import { MonsterBar } from "./monsterBar";
 import { isMineOrGroup, monsterInfo, showWorldBar } from "./monsterInfo";
 import { placeFloat, type FloatBox } from "./floatLanes";
 import { CHORD_NAMES, MODE_COLOR } from "./songTables";
 
-const SONG_SFX = new Set(["note", "chord", "resonate", "bounce", "soundhit", "shieldbreak"]);
+const SONG_SFX = new Set(["note", "chord", "swell", "newsong", "matpick", "lutefit", "break", "resonate", "bounce", "soundhit", "shieldbreak"]);
 import { attackMult, cooldownMult, critChance, heroSpeed, STATS, magicMult, STAT_KINDS, STAT_NAMES, StatKind, statPoints, HP_PER_STR } from "../../shared/powers";
 import { NEED_TEXT, pointRange, SkillDef, skillOf, skillTarget, MAX_STACKS, STACK_DECAY_MS, STACK_NAME, talentBonus, withMods } from "../../shared/skills";
 import { SkillFx } from "./skillfx";
@@ -392,7 +396,6 @@ export class TownScene extends Phaser.Scene {
   private heatGauge?: OverloadGauge;
   private warPlaque?: WarPlaque;
   private warStd?: WarStandards;
-  private chordHud?: ChordHud;
   private soundCues = new SoundCues();
   private statsShown = "";
   private deathTimer?: number;
@@ -838,9 +841,13 @@ export class TownScene extends Phaser.Scene {
     const items = $(this.room.state).items;
     items.onAdd((it: any, id: string) => {
       if (it.kind === "quest" && it.owner !== this.room.sessionId) return; // someone else's quest drop
-      const gear = it.kind === "gear" && gearDef(it.gear);
+      const mat = it.kind === "mat" ? matOfItem(it.gear) : undefined; // a Songweaver material: Item.gear is `mat_<id>`, Item.amount the count
+      const gear = !mat && it.kind === "gear" && gearDef(it.gear);
       const rune = it.kind === "gear" ? parseRune(it.gear) : undefined; // a loose rune (shared/runes.ts)
-      const img = rune
+      const matGrey = !!mat && this.opts.cls !== "songweaver"; // only a Songweaver can pick it up: others see it greyed
+      const img = mat
+        ? this.add.image(it.x, it.y, matTexture(this, mat, matGrey)).setScale(0.9).setDepth(it.y - 8)
+        : rune
         ? this.add.image(it.x, it.y, runeTexture(this, rune)).setScale(0.6).setDepth(it.y - 8)
         : gear
         ? this.add.image(it.x, it.y, "gear_icons", baseId(it.gear)).setScale(0.6 / ART_K).setDepth(it.y - 8)
@@ -856,6 +863,15 @@ export class TownScene extends Phaser.Scene {
         const glow = this.add.circle(it.x, it.y, 6, 0xffd166, 0.3).setDepth(it.y - 9).setBlendMode(Phaser.BlendModes.ADD);
         this.tweens.add({ targets: glow, scale: 1.4, alpha: 0.1, duration: 600, yoyo: true, repeat: -1 });
         img.once("destroy", () => glow.destroy());
+      }
+      if (mat) {
+        img.setData("mat", mat);
+        img.setInteractive({ useHandCursor: false }); // tooltip on hover (content doc, section 7)
+        img.on("pointerover", () => matTip(`<b>${MATERIALS[mat].name}${it.amount > 1 ? ` x${it.amount}` : ""}</b><br>${MATERIALS[mat].desc}<br>${MATERIALS[mat].source}${matGrey ? `<br><span class="gbad">Only a minstrel can use this.</span>` : ""}`));
+        img.on("pointerout", () => matTip());
+        img.once("destroy", () => matTip());
+        if (matGrey) img.setAlpha(0.55);
+        else { const glow = this.add.circle(it.x, it.y, 5, MAT_COLOR[mat].color, 0.3).setDepth(it.y - 9).setBlendMode(Phaser.BlendModes.ADD); this.tweens.add({ targets: glow, scale: 1.5, alpha: 0.08, duration: 700, yoyo: true, repeat: -1 }); img.once("destroy", () => glow.destroy()); }
       }
       const rarity = gear ? itemRarity(it.gear) : 0;
       if (gear) img.setData("gear", it.gear);
@@ -1362,12 +1378,12 @@ export class TownScene extends Phaser.Scene {
       this.showSwing(id, step ?? 0, variant ?? 0, ax, ay, w);
     });
     this.room.onMessage("sfx", (ev) => this.onSkillFx(ev));
+    this.room.onMessage("songbook", (m) => setSongbook(m)); // owner-only { songs, mats }, on join and on change
     // The Summoner's grimoire on the HUD (client/src/grimoire.ts): its news, asked again now that we listen
     this.grimoire = new GrimoirePanel(document.getElementById("hud")!, (slot, el) => this.room.send("grimoire", { slot, el }));
     this.room.onMessage("golems", (m) => this.grimoire?.news(m));
-    // The Songweaver's chord tracker (owner only, chordHud.ts)
-    this.chordHud = new ChordHud(hudSlot("statusrow"));
-    this.room.onMessage("chord", (m) => this.chordHud?.set(m));
+    // The chord panel is gone (DI-1, rings under the feet); the server may still send its progress, ignored
+    this.room.onMessage("chord", () => {});
     this.room.send("golems");
     bindSfx(this.room, () => this.me, this.entities as any); // sound effects (client/src/sfx.ts)
     this.room.onMessage("boom", ({ x, y, r, kind, imb }) => this.fx.impact(x, y, kind, r, imb) ||
@@ -2459,7 +2475,8 @@ export class TownScene extends Phaser.Scene {
       ["Level", lvl >= MAX_LEVEL ? `${MAX_LEVEL} (max)` : `${lvl} · XP ${o.xp - cur}/${next - cur}`],
       ["Health", `${Math.ceil(mine.hp)} / ${mine.maxHp}`],
       ["HP regen", `${regenFromStamina(st.sta)[1].toFixed(1)}/s resting · ${regenFromStamina(st.sta)[0].toFixed(1)}/s in a fight`],
-      ["Mana", `${unpackMana(o.mp).mana} / ${unpackMana(o.mp).maxMana} · ${manaRegen(st, false, talentBonus(cls, o.talents, "mana")).toFixed(1)}/s (×${MANA.restMult} resting)`],
+      usesGauge(cls) ? ["Song gauge", `${unpackMana(o.mp).mana} / ${unpackMana(o.mp).maxMana} · no regen`]
+        : ["Mana", `${unpackMana(o.mp).mana} / ${unpackMana(o.mp).maxMana} · ${manaRegen(st, false, talentBonus(cls, o.talents, "mana")).toFixed(1)}/s (×${MANA.restMult} resting)`],
       ["Attack", `${dmg} damage · ${WEAPON_TYPE_NAMES[wp.type]}: ${ATTACK_WORDS[wp.type]}`],
       ["Attack speed", `${(1000 / wp.attackCooldownMs).toFixed(1)} hits/s`],
       ["Critical hits", `${Math.round(critChance(st, talentBonus(cls, o.talents, "crit")) * 100)}% chance, double damage`],
@@ -2730,6 +2747,7 @@ export class TownScene extends Phaser.Scene {
    * click) spends them (Murat 2026-11-04).
    */
   private chargeCell(mine: any, cls: ClassKind, clicks: string[], slots: string[], now: number): string {
+    if (cls === "songweaver") return ""; // the Songweaver has no Tempo charge any more (the gauge replaces it)
     const n = Math.max(0, Math.min(MAX_STACKS, own(mine).stacks | 0));
     if (n > this.chargeSeen.n) this.chargeSeen.at = now; // a hit built one (the server's clock isn't sent)
     this.chargeSeen.n = n;
@@ -2836,6 +2854,7 @@ export class TownScene extends Phaser.Scene {
   /** Skill visual event from the server (shared/skillEngine.ts): drawn by SkillFx, plus the hero's cast animation. */
   private onSkillFx(ev: any) {
     if (SONG_SFX.has(ev.ev)) this.songEvent(ev);
+    if (DI_EVENTS.has(ev.ev)) this.diEvent(ev); // newsong, matpick, lutefit, break
     if (ev.ev === "cast") {
       const e = this.entities.get(ev.id);
       if (ev.id === this.me) this.lastCast[ev.s] = this.time.now;
@@ -2852,6 +2871,17 @@ export class TownScene extends Phaser.Scene {
       if (ev.ev === "move" && ev.kind === "dash" && ev.id === this.me) this.rootUntil = Math.max(this.rootUntil, this.time.now + 140);
     }
     this.fx.onEvent(ev);
+  }
+
+  /** DI-2 / DI-5 events: new song banner, material pickups, lute fitting, breaking (songbookFx.ts). */
+  private diEvent(ev: any) {
+    diEvent(ev, {
+      me: this.me,
+      pos: (id) => { const e = this.entities.get(id); return e ? { x: e.sprite.x, y: e.sprite.y - e.top } : undefined; },
+      float: (x, y, text, color) => { this.floatText(x, y, text, color, PIXEL_FONT, 1.1); },
+      burst: (x, y, r, color, ms) => this.burst(x, y, r, color, ms),
+      feed: (text) => this.feed(text),
+    });
   }
 
   /** True when another Songweaver within earshot plays in a different mode: their notes are then voiced as open fifths. */
@@ -2873,7 +2903,6 @@ export class TownScene extends Phaser.Scene {
     if (ev.ev === "chord") {
       const c = (MODE_COLOR[ev.mode] ?? MODE_COLOR.major).toString(16).padStart(6, "0");
       const e = this.entities.get(ev.id);
-      if (ev.id === this.me) this.chordHud?.fired(ev.prog);
       if (e) this.floatText(e.sprite.x, e.sprite.y - e.top - 14, CHORD_NAMES[ev.prog] ?? ev.prog, `#${c}`, PIXEL_FONT, 1.3);
     } else if (ev.ev === "soundhit") {
       const e = this.entities.get(ev.id), meE = this.entities.get(this.me);
@@ -3406,7 +3435,7 @@ export class TownScene extends Phaser.Scene {
       // Top-left bars (resourceBars.ts): red HP, blue Mana (spells, shared/mana.ts), green XP
       const ow = own(mine), mn = unpackMana(ow.mp); // owner-only numbers, in `me` (server/player.ts)
       (this.resBars ??= new ResourceBars(document.getElementById("hud")!)).update({
-        level: mine.level, hp: mine.hp, maxHp: mine.maxHp, mp: mn.mana, maxMp: mn.maxMana,
+        song: cls === "songweaver", level: mine.level, hp: mine.hp, maxHp: mine.maxHp, mp: mn.mana, maxMp: mn.maxMana, // the gauge lives in mana / maxMana (shared/mana.ts usesGauge)
         xpFrac: mine.level >= MAX_LEVEL ? 1 : Math.max(0, Math.min(1, (ow.xp - cur) / Math.max(1, next - cur))),
         xp: Math.max(0, ow.xp - cur), xpNeed: mine.level >= MAX_LEVEL ? undefined : next - cur,
       });
@@ -3415,7 +3444,6 @@ export class TownScene extends Phaser.Scene {
       if (flip) playSfx(flip);
       this.renderActions(mine, cls, cdm, now);
       (this.buffBar ??= new BuffBar(hudSlot("statusrow"))).update(ow.timers);
-      this.chordHud?.tick();
     }
   }
 }

@@ -6,6 +6,8 @@ PRs merge themselves, so these rules stand in for a reviewer. For how work is pl
 
 ## What this is
 Pixel Town Brawl: an online multiplayer pixel-art action RPG in the browser.
+**Desktop only:** computers with mouse and keyboard. No phone, tablet or touch support is planned; don't design,
+build or test for it.
 - `shared/`: game rules and data (classes, skills, monsters, items, map, quests). Imported by server, client, tests and tools.
 - `server/`: Colyseus 0.16 room (`TownRoom.ts`), accounts and saves, HTTP (`index.ts`).
 - `client/`: Phaser 3 + Vite. Draws and sends input; decides nothing.

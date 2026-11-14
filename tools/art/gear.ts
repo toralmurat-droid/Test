@@ -4,7 +4,9 @@ import type { ClassKind } from "../../shared/classes";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { Canvas, HiCanvas, shade } from "./canvas";
 import { buildSheet, GearCtx, GearPart, HEROES, K, Pose, setGearHook } from "./characters";
-import { GEAR, GEAR_IDS, GearDef, LOOT_IDS } from "../../shared/gear";
+import { GEAR, GEAR_IDS, GearDef } from "../../shared/gear";
+import { gearDefs, BOOKS } from "./paint/books";
+import { SONG_ITEM_IDS, songItemIcon } from "../../client/src/songItemArt";
 
 /**
  * Gear overlays. For every hero and item we render the full hero sheet again with that item "worn"
@@ -168,6 +170,13 @@ function shield(item: GearDef, main: Canvas, mask: Canvas, p: Pose, g: GearCtx) 
     return;
   }
   const c = shade(item.color, 1), dk = shade(item.color, 0.72), rim = item.accent;
+  const book = BOOKS[item.id];
+  if (book && p.dir !== "right") { // a small book held on the far arm (the painted look is paint/books.ts)
+    const x = (p.dir === "down" ? 19 : 7) + g.ux, y = 17 + g.uy;
+    main.rect(x, y, 5, 7, c); main.rect(x, y, 1, 7, dk); main.rect(x + 5, y + 1, 1, 6, book.page); main.rect(x, y, 5, 1, rim); main.rect(x, y + 6, 5, 1, rim);
+    if (p.dir === "down") { main.rect(x + 2, y + 2, 2, 3, book.emblem); main.px(x + 2, y + 4, dk); }
+    return;
+  }
   if (p.dir === "right") {
     // Edge-on, held in front
     const x = 19 + g.ux + (p.attack === 0 ? 1 : 0), y = 16 + g.uy;
@@ -328,6 +337,8 @@ const ICONS: Record<string, string[]> = {
 
 function icon(item: GearDef): Canvas {
   const c = new HiCanvas(16, 16, K);
+  const song = songItemIcon(item.id); // books and other Songweaver items have their own pixel art (client/src/songItemArt.ts)
+  if (song) return songIcon(song);
   // weapons: painted with their own form, like on the hero (paint/weaponArt.ts)
   if (item.slot === "weapon") {
     const kind = item.wtype ?? (item.cls ? NATIVE_WEAPON[item.cls as ClassKind] : "sword");
@@ -356,14 +367,25 @@ function icon(item: GearDef): Canvas {
   return c;
 }
 
+/** A songItemArt icon on a HiCanvas: every art pixel becomes a K x K block (12 px trait icons sit centred in the 16 px frame). */
+function songIcon(ic: { n: number; cols: string[] }): Canvas {
+  const c = new HiCanvas(16, 16, K), o = (16 - ic.n) >> 1;
+  ic.cols.forEach((col, i) => { if (col) c.px(o + (i % ic.n), o + Math.floor(i / ic.n), parseInt(col.slice(1), 16)); });
+  return c;
+}
+
 /** The 16x16 item icons atlas (menu, bag, ground drops). */
 export function buildGearIcons(out: string) {
   mkdirSync(out, { recursive: true });
   const frames: Record<string, { frame: { x: number; y: number; w: number; h: number } }> = {};
   const S = 16 * K;
-  const atlas = new Canvas(S * GEAR_IDS.length, S);
-  GEAR_IDS.forEach((id, i) => {
-    atlas.blit(icon(GEAR[id]), i * S, 0);
+  // item table, art-only book stand-ins, then the Songweaver items that are no gear (mat_<id>, trait_<id>)
+  const defs = new Map<string, GearDef>(gearDefs().map((d) => [d.id, d]));
+  const ids = [...defs.keys(), ...SONG_ITEM_IDS.filter((id) => !defs.has(id))];
+  const atlas = new Canvas(S * ids.length, S);
+  ids.forEach((id, i) => {
+    const d = defs.get(id);
+    atlas.blit(d ? icon(d) : songIcon(songItemIcon(id)!), i * S, 0);
     frames[id] = { frame: { x: i * S, y: 0, w: S, h: S } };
   });
   atlas.save(`${out}/icons.png`);
@@ -377,9 +399,10 @@ export function buildGear(out: string) {
     setGearHook(null);
     const plain = buildSheet(hero);
     // old pixel sheets still show the full class look, so class kits get no overlay there
-    for (const id of LOOT_IDS) {
-      setGearHook(gearHook(GEAR[id]));
-      diff(plain, buildSheet(hero)).save(`${out}/${hero.name}_${id}.png`);
+    for (const d of gearDefs()) {
+      if (d.cls) continue;
+      setGearHook(gearHook(d));
+      diff(plain, buildSheet(hero)).save(`${out}/${hero.name}_${d.id}.png`);
     }
   }
   setGearHook(null);

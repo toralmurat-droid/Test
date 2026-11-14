@@ -3,6 +3,8 @@
 How we work on Pixel Town Brawl together. The technical rules (architecture, limits, checks) are in
 [CLAUDE.md](CLAUDE.md); everyone, human or Claude session, follows them.
 
+The game is for **desktop computers only** (mouse and keyboard). Don't spend time on phones, tablets or touch.
+
 ## The flow
 1. **Ask for one thing per thread.** One feature or fix per Claude thread / branch, so PRs stay small and parallel
    work doesn't collide.
