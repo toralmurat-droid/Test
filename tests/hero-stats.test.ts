@@ -3,6 +3,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { GEAR_SLOTS, gearDef, gearReq, gearStats, heroStats, rollGear } from "../shared/gear";
+import { ACTIVE_CLASSES } from "../shared/classes";
 import { startRoom, wait } from "./helpers/room";
 
 const clientStats = (s: any) => heroStats({
@@ -14,7 +15,7 @@ const serverStats = (p: any) => ({ sta: p.sta, str: p.str, mag: p.mag, dex: p.de
 test("hero stats: client heroStats from synced fields equals the server's stats", async () => {
   const srv = await startRoom();
   try {
-    for (const cls of ["wizard", "vampire", "summoner"]) {
+    for (const cls of ACTIVE_CLASSES) {
       const c = await srv.join({ cls, newGame: true });
       await wait(300);
       const room = srv.room, p = room.state.players.get(c.sessionId);
@@ -31,7 +32,7 @@ test("hero stats: client heroStats from synced fields equals the server's stats"
       for (let i = 1; i < 2000 && n < 8; i++) {
         const id = rollGear("demon", 40, () => (i * 0.6180339887) % 1), d = id ? gearDef(id) : undefined;
         if (!id || !d) continue;
-        const g = gearStats(cls as any, { [d.slot]: id });
+        const g = gearStats(cls, { [d.slot]: id });
         if (!g.sta && !g.str && !g.mag && !g.dex) continue;
         if (gearReq(id, cls).level > p.level) unmet++;
         p[d.slot] = id; n++;
