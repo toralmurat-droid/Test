@@ -40,3 +40,22 @@ no damage/XP estimate in the bar; NPC/hero label edge clamping out of scope.
 - No new synced Mob/Player fields; all bar data comes from synced fields + `shared/` tables.
 - New modules: `client/src/monsterInfo.ts` (pure), `monsterBar.ts/.css`, `floatLanes.ts`. Hover re-picks every 100 ms
   in `pointer.ts`. Update `tools/e2e-songweaver-fx.cjs` and `tools/e2e-summoner.cjs` (read removed labels).
+
+## D – monster plate redesign (decided 2026-11-14, not built yet)
+Mockup scripts: session scratchpad `hud/C/mock.cjs`, `frames2.cjs`, `frames5.cjs` (render inside the running game).
+Owner decisions:
+- Layout: A (compact plate: level tile, name, weak/resist/status icons, thin HP bar, no numbers) for every monster,
+  B (one extra row of affix icon + name, Songweaver ear/pitch icons) for champions and elites, C (sentence-case
+  details, HP numbers, full weak/resist line) only while **Alt** is held. The plate takes the top-centre slot and the
+  war plaque (`warPlaque.ts`) hides while you point at a monster (D).
+- Frames in the orb/bar bronze style, more elaborate by rarity, six tiers: normal, elite, champion, named, quest, boss.
+  Higher tiers go further. Quest and named get their own frames (quest: wood, parchment edge, wax seal, scroll ends;
+  named: steel, violet gems, laurel crest, fins). Named needs a rule: today any titled monster counts as a quest target.
+- Champion and boss: the orb statue (angel / demon) **cut vertically in half**, the left half on the left of the plate
+  and the right half on the right, **large** (2x), plinth **flush with the frame's bottom**. Boss demon needs a lighter
+  outer edge to read on dark ground.
+
+## To do (owner's list)
+- Build D above.
+- Chat log: a small toggle to hide it (owner, 2026-11-14).
+- Stray grey "-28" near the HP orb in town: source not found, needs a repro.
