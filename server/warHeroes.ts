@@ -43,10 +43,9 @@ export class Presence {
       const n = e && e.std === s.id ? e.n + 1 : 1;
       if (n >= 60) {
         const v = heroValor(p.level, s.t), was = rankOf(p.renown);
-        addValor(s.t, p.clan!, v);
-        p.renown += v; // the same effort earns the hero renown (shared/war/renown.ts)
-        const now = rankOf(p.renown);
-        if (now > was) ranked.push([id, RENOWN_RANKS[now].name]);
+        if (addValor(s.t, p.clan!, v)) p.renown += v; // effort the war counted earns the hero renown (shared/war/renown.ts)
+        const rank = rankOf(p.renown);
+        if (rank > was) ranked.push([id, RENOWN_RANKS[rank].name]);
         this.secs.set(id, { std: s.id, n: 0 });
       }
       else this.secs.set(id, { std: s.id, n });
