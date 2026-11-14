@@ -44,6 +44,7 @@ export const WAR = {
   raidersHit: 0.03, // share of the leader's army the Night Raiders cut down each night tick
   // Players (server/war.ts): valor is hero-minutes at a standard; a few heroes tip a front, a crowd cannot swamp it
   valorScale: 20, // valor at which players bring ~63% of valorCap
+  valorPerAdd: 10, // most valor one hero can bring in one report (ten minutes at a standard)
   valorCap: 60, // troops players can add to one territory per clan per tick (a clan's army is ~150-600)
 };
 

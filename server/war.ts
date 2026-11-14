@@ -4,7 +4,7 @@
  * players' valor of the last ten minutes is added, and shared/war/rules.ts moves the fronts. The state is saved after
  * every tick (Postgres table kv, or data/war.json) so a deploy never resets the war.
  */
-import { CLANS, type ClanKey } from "../shared/war/clans";
+import { CLANS, CLAN_KEYS, type ClanKey } from "../shared/war/clans";
 import { newMinds, scriptedOrders, type Mind } from "../shared/war/doctrine";
 import { newWar, WAR, warTick, type WarState } from "../shared/war/rules";
 import { TERRITORIES } from "../shared/war/territories";
@@ -37,18 +37,24 @@ function fresh(now: number): Saved {
 
 /** A saved war that still fits today's map (a new zone or act changes the territory count: then the war restarts). */
 function fits(s: Saved | undefined): s is Saved {
-  return !!s && s.v === 1 && s.state?.owner?.length === TERRITORIES.length && s.state.owner.every((k) => !!CLANS[k]);
+  const n = TERRITORIES.length, st = s?.state;
+  return !!s && s.v === 1 && !!st && Number.isFinite(s.next) && Array.isArray(s.log)
+    && [st.owner, st.control, st.fort, st.siege, st.pressure].every((a) => Array.isArray(a) && a.length === n)
+    && st.owner.every((k) => !!CLANS[k]) && CLAN_KEYS.every((k) => Number.isFinite(st.army?.[k]) && !!s.minds?.[k]);
 }
 
 /** Loads the war (or starts it) and starts the clock. Safe to call more than once. */
 export async function startWar(store?: Kv) {
   if (timer) return;
   kv = store ?? (await openKv());
-  const got = await kv.get<Saved>(KEY).catch((e) => { console.error("War: could not load:", e); return undefined; });
+  // A load error stops the start (like the accounts): never let a fresh war overwrite a saved one we failed to read
+  const got = await kv.get<Saved>(KEY);
   saved = fits(got) ? got : fresh(Date.now());
-  if (!fits(got)) console.log(got ? "War: map changed, a new war begins" : "War: a new war begins");
-  else console.log(`War: tick ${saved.state.tick}, next in ${Math.max(0, Math.round((saved.next - Date.now()) / 1000))} s`);
-  timer = setInterval(() => void step(Date.now()), 15_000);
+  if (!fits(got)) {
+    if (got) await kv.set(`${KEY}-old-${Date.now()}`, got); // a war that no longer fits the code: kept aside, not lost
+    console.log(got ? "War: the saved war no longer fits the map, a new war begins (old one kept)" : "War: a new war begins");
+  } else console.log(`War: tick ${saved.state.tick}, next in ${Math.max(0, Math.round((saved.next - Date.now()) / 1000))} s`);
+  timer = setInterval(() => { step(Date.now()).catch((e) => console.error("War: tick failed:", e)); }, 15_000);
   timer.unref?.();
 }
 
@@ -61,8 +67,9 @@ export async function step(now: number) {
   if (late >= CATCH_UP) saved.next = now - (CATCH_UP - 1) * WAR.tickMs;
   const events: WarEvent[] = [];
   while (now >= saved.next) {
-    events.push(...tickOnce(saved.next));
-    saved.next += WAR.tickMs;
+    const at = saved.next;
+    saved.next += WAR.tickMs; // first: a tick that throws is skipped, never retried every 15 s
+    try { events.push(...tickOnce(at)); } catch (e) { console.error("War: tick failed, skipped:", e); }
   }
   saved.log.push(...events);
   if (saved.log.length > LOG_MAX) saved.log.splice(0, saved.log.length - LOG_MAX);
@@ -91,7 +98,7 @@ function tickOnce(at: number): WarEvent[] {
 /** A hero's effort for clan `k` in territory `t` (the room adds it while heroes hold standards). */
 export function addValor(t: number, k: ClanKey, amount: number) {
   if (!saved || !(t >= 0 && t < TERRITORIES.length) || !CLANS[k] || !(amount > 0)) return;
-  valor[t][k] = (valor[t][k] ?? 0) + Math.min(amount, 60);
+  valor[t][k] = (valor[t][k] ?? 0) + Math.min(amount, WAR.valorPerAdd);
 }
 
 export const warNow = (): WarView | undefined => (saved ? warView(saved.state, saved.next) : undefined);

@@ -74,3 +74,15 @@ test("war view: compact snapshot and territory lookup", () => {
   assert.equal(territoryAt(t.x + 1, t.y + 1)?.id, t.id);
   assert.equal(territoryAt(-5, -5), undefined);
 });
+
+test("live war: a saved war that no longer fits is kept aside, and a broken tick never stops the clock", async () => {
+  const { kv, m } = memKv(), t0 = 4_000_000_000_000;
+  const old = saved(t0) as any; delete old.minds.veiled; m.set("war", JSON.stringify(old));
+  const { startWar, stopWar } = await import("../server/war");
+  await startWar(kv); stopWar();
+  assert.ok([...m.keys()].some((k) => k.startsWith("war-old-")), "old war kept");
+  assert.equal(warNow()!.tick, 0);
+  const bad = saved(t0) as any; bad.minds = {}; _resetWar(bad);
+  await step(t0);
+  assert.ok(warNow()!.next > t0, "the broken tick was skipped, the clock moved on");
+});
