@@ -16,7 +16,7 @@ export function orbNeedsRedraw(prev: OrbShown, fh: number, fm: number, hpTxt: st
   const throttled = moving && now - prev.at < 120;
   const textChanged = hpTxt !== prev.hpTxt || mpTxt !== prev.mpTxt;
   const fillSame = Math.abs(fh - prev.hp) < 0.004 && Math.abs(fm - prev.mp) < 0.004;
-  if (textChanged) return !throttled;
+  if (textChanged && fillSame) return !throttled;
   return !(fillSame && (!moving || throttled));
 }
 

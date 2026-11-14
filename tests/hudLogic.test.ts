@@ -25,6 +25,10 @@ test("orbNeedsRedraw: a fill change of 0.004 or more redraws", () => {
   assert.equal(orbNeedsRedraw(prev({ hp: 0.5, mp: 1 }), 0.503, 1, "100 / 100", "50 / 50", 1010), false); // partial fill: throttled
 });
 
+test("orbNeedsRedraw: a hit that moves fill and text redraws at once, even inside the slosh throttle", () => {
+  assert.equal(orbNeedsRedraw(prev({ hp: 0.5, mp: 1, hpTxt: "50 / 100" }), 0.3, 1, "30 / 100", "50 / 50", 1030), true);
+});
+
 test("orbTexts: hp rounds up, mp down, maxima round", () => {
   assert.deepEqual(orbTexts(10.2, 99.5, 7.9, 20.4), { hpTxt: "11 / 100", mpTxt: "7 / 20" });
 });
