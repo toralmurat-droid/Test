@@ -1031,11 +1031,11 @@ export const BEAST_QUESTS: QuestDef[] = [
         // The Bargain (docs/quest-concepts-progress.md #6): as she rises she offers a deal; taking it ends the step (draft text)
         bargain: { flag: "bargain", accept: 1, refuse: 2, trait: "beast",
           say: [
-            "Hold, little hunter. Put down your fire and hear an old woman out before you cut her.",
-            "I fed this valley when the winter ate its dogs. I can feed you too. Let me sleep, and I will sew a little of the hide into you: a bear's thick skin, so my children's teeth bite shallow.",
-            "Go up and tell your captain Ursk is dead. He will believe it. Men always want to.",
+            "Hush, little hunter. I fed this valley through the Long Hunger, and the hunters who followed me down never came up as men.",
+            "You could. Let me sleep, and I will sew a bear's thick hide into yours. Winter will never find you hungry again.",
+            "Tell your captain I am dead. Men always want to believe it.",
           ],
-          options: [{ label: "Take the hide, and let her sleep", v: 1 }, { label: "No bargains. The rite ends tonight", v: 2 }] } },
+          options: [{ label: "Take the hide. Let her sleep", v: 1 }, { label: "Refuse. The rite ends tonight", v: 2 }] } },
       { ...back("captain", "Captain Hale", "east gate", [
         "You're back. You're... mostly you. Good.",
         "The hunters say the woods went quiet last night. Not a rat-squeal, not a howl. Even the sinkhole stopped breathing out that warm stink.",
@@ -1043,15 +1043,15 @@ export const BEAST_QUESTS: QuestDef[] = [
       ], "Claim reward"),
         // took Ursk's bargain: Hale pays, coldly (draft text; dialog only, nothing is blocked)
         sayBy: { flag: "bargain", lines: { 1: [
-          "You're back. The woods went quiet, they tell me. Not a rat-squeal, not a howl.",
-          "Funny thing. Wenn says she smelled the den on you when you came up the rope. Not the smoke. The hide.",
-          "You say the rite is ended, and I'll write it down so. The watch pays what it promised. Don't expect me to shake your hand.",
+          "You're back. The woods went quiet, they tell me. Not a squeal, not a howl.",
+          "Wenn smelled the den on you when you came up the rope. Not the smoke. The hide.",
+          "You say the rite is ended, and I'll write it down so. The watch pays what it promised. Take it and go.",
         ] } } },
     ],
     reward: { xp: 4200, gold: 900, potions: 5 },
     after: "The trappers have taken to wearing bells. And the old stone arch outside Oakvale's south gate hums at night now. Once the Hollow King is gone too, they say it will open.",
     afterBy: { flag: "bargain", lines: {
-      1: "The trappers wear bells now. Some of them cross the street when they hear you coming. The old arch outside the south gate hums at night; once the Hollow King is gone too, they say it will open.",
+      1: "The trappers wear bells now, and they cross the street when they hear you coming. The old arch outside the south gate hums at night; once the Hollow King is gone too, they say it will open.",
     } },
   },
 ];
@@ -2202,11 +2202,11 @@ const LETTER_QUESTS: QuestDef[] = [
 const PENANCE_QUESTS: QuestDef[] = [
   {
     id: "penance", title: "Penance", giver: "captain", zone: HALLS.name, minLevel: 25,
-    description: "Captain Hale knows what you brought up out of the Mawdeep. The beast-folk still wear Ursk's charms sewn into their skins. Take six back, let Elder Rowan burn them, and maybe the watch will look you in the eye again.",
+    description: "Captain Hale knows what you brought up out of the Mawdeep. The beast-folk still wear Ursk's charms sewn into their skins. Take six back, let Elder Rowan burn them, and the watch may trust you again.",
     offer: [
-      "I've been thinking about you. About that smell, and how quiet it's gone down the sinkhole.",
-      "The beast-folk still wear her charms, sewn into their skins. Every one of those was a trapper's, once. Cut six of them loose and bring them up.",
-      "Rowan knows the old rites. He'll burn them properly. Then come and see me, and maybe I'll sleep better.",
+      "Sit. I'll say this once. I can't un-smell what you brought up from the Mawdeep.",
+      "The beast-folk still wear Ursk's charms sewn into their skins. Every one was a trapper's, once. Take six and bring them up.",
+      "Elder Rowan knows the old rites. He'll burn them properly. Then come back to me.",
     ],
     acceptText: "I'll bring them up",
     steps: [
@@ -2216,19 +2216,19 @@ const PENANCE_QUESTS: QuestDef[] = [
       { type: "talk", npc: "druid", text: "Bring the charms to Elder Rowan", banner: ["Six charms", "Bring them to Elder Rowan"],
         obj: "Bring the charms to Elder Rowan (the village bonfire)",
         say: [
-          "Hide Charms. Six of them. Hale sent you, then.",
-          "Bone needle and gut thread. Give them here. The fire takes back what the rite gave. Not all of it: what she sewed into you stays. That was the price.",
+          "Six Hide Charms. Hale sent you, then.",
+          "Bone needle and gut thread. Give them here. The fire takes back what the rite made. Not what she sewed into you: that stays. That was the price.",
           "But these men's names go up with the smoke. That much we can give them.",
         ],
         accept: "Give the charms to the fire" },
       back("captain", "Captain Hale", "east gate", [
-        "Rowan says it's done. The charms are ash, and the smoke went straight up. He says that's a good sign.",
-        "I won't forget what you did down there. But I'll stop counting it. That's the best the watch can do.",
+        "Rowan says it's done. Six charms, six names, and the smoke went straight up.",
+        "The mark stays on you. I've seen it. But I'll stop counting it against you. That's the most the watch can give.",
         "Here. The watch pays its debts, even the awkward ones.",
       ], "Claim reward", "Rowan first. Then we'll talk."),
     ],
     reward: { xp: 0, gold: 300, potions: 3 },
-    after: "Quiet on the walls today. Quiet in the sinkhole too. I'll take both.",
+    after: "Quiet on the walls. The men have stopped keeping upwind of you. I'll take that.",
     sets: { flag: "bargain", v: 3 }, // penance done: the cold lines end (the trait stays)
   },
 ];
@@ -2486,7 +2486,7 @@ const IDLE: Record<string, string> = {
  * is what a giver usually says). Hale is cold with a hero who took Ursk's bargain until the Penance (draft text).
  */
 const IDLE_BY: Record<string, { flag: ChoiceId; lines: Record<number, string> }> = {
-  captain: { flag: "bargain", lines: { 1: "Quiet on the walls today. The men keep upwind of you. I can't say I blame them." } },
+  captain: { flag: "bargain", lines: { 1: "Quiet on the walls. The men keep upwind of you. I don't stop them." } },
 };
 const moodFor = (id: string, p: Quester | undefined) => { const b = IDLE_BY[id]; return b && b.lines[choiceOf(p, b.flag)]; };
 const idleFor = (id: string, p: Quester | undefined) => moodFor(id, p) || IDLE[id];
