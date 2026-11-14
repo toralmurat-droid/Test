@@ -119,7 +119,11 @@ Unanswered questions take the orchestrator's default (marked *default*).
 
 **DI-3**
 - 3.1 *default*: Songweaver skills are limited by cooldowns only.
-- 3.2 **Open: to discuss** (gauge vs Tempo).
+- 3.2 **The gauge replaces Tempo.**
+  - Accelerando speeds up song ticks with how full the gauge is.
+  - Twelve-Tone Storm is the one way to empty the gauge early: it gives up the book's effect for the Storm,
+    which scales with how full the gauge was.
+  - The Tempo counter leaves the HUD.
 - 3.3 The special effect is **set by the equipped book**.
 - 3.4 **Basic attacks fill a little.**
 - 3.5 **Chords fill it faster.**
