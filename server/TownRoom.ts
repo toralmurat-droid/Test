@@ -215,6 +215,7 @@ export class Player extends Schema {
   // Quest steps (server/questSteps.ts), not synced: carrying the lantern locks skills and ranged shots, and draws the blobs
   qlock = false; // cast / useSlot / fireRanged refuse; basic attacks still work
   lureMul = 1; // blob aggro range multiplier on this hero (pickTarget)
+  aggroMul = 1; // every monster's aggro range multiplier on this hero (pickTarget): below 1 while hidden on an unseen step
   qlockNoteAt = 0; // last "walk it" note to a lantern holder at a portal (lanternHeld)
   sk = newRuntime();
 }
@@ -687,6 +688,10 @@ export class TownRoom extends Room<TownState> {
       group: (pid) => { const p = this.state.players.get(pid); return p?.party ? this.members(p.party) : [pid]; },
       together: (a, b) => { const p = this.state.players.get(a), o = this.state.players.get(b); return !!p && !!o && !o.dead && together(p.x, p.y, o.x, o.y); },
       dayFrac: (now) => worldDayFrac(now),
+      mobsNear: (x, y, r) => this.state.mobs.inBox(x, y, r),
+      forget: (mid, pid) => { const m = this.state.mobs.get(mid); if (m && !m.dead && !m.owner) this.forgetHero(m, pid); },
+      warp: (pid, x, y) => this.warp(pid, x, y),
+      summonsOf: (pid) => { const out: { x: number; y: number }[] = []; for (const m of this.summons.values()) if (m.owner === pid && !m.dead) out.push({ x: m.x, y: m.y }); return out; },
     });
     this.setState(new TownState());
     // Monsters near each hero go out just before every state patch, so both halves of an update arrive together
@@ -1626,7 +1631,8 @@ export class TownRoom extends Room<TownState> {
       const d = Math.hypot(p.x - m.x, p.y - m.y);
       // a hero the horn (or a shout) called the camp against counts as hated
       const hated = (pid === m.hateId ? m.hate : 0) + (alerted && pid === m.alertHero ? 0.5 : 0);
-      const reach = blob ? def.aggroRange * p.lureMul : def.aggroRange; // a carried lantern draws the blobs from further (Player.lureMul)
+      // a carried lantern draws the blobs from further (Player.lureMul); a hero going unseen is seen from less far (Player.aggroMul)
+      const reach = def.aggroRange * p.aggroMul * (blob ? p.lureMul : 1);
       const range = hated > 0 ? reach * 2 : reach;
       if (d >= range) return;
       if (d < def.aggroRange) m.threat = Math.max(m.threat, p.level - m.level);
@@ -1695,14 +1701,15 @@ export class TownRoom extends Room<TownState> {
 
   /** Void Slip: every monster after this hero loses them and turns on their nearest golem, if one is close. */
   private loseHero(id: string) {
-    this.state.mobs.forEach((m) => {
-      if (m.dead || m.owner || (m.target !== id && m.hateId !== id)) return;
-      if (m.target === id) m.target = "";
-      if (m.hateId === id) { m.hateId = ""; m.hate = 0; }
-      m.windUntil = 0; m.winding = false;
-      const g = this.guardOf(id, m) ?? this.bondOf(id, m)?.[0];
-      if (g) { m.foe = g; this.addHate(m, g, 10); }
-    });
+    this.state.mobs.forEach((m) => { if (!m.dead && !m.owner && (m.target === id || m.hateId === id)) this.forgetHero(m, id); });
+  }
+  /** One monster stops fighting a hero and forgets its hate (loseHero; an unseen hero who was seen, server/questSteps.ts). */
+  private forgetHero(m: Mob, id: string) {
+    if (m.target === id) m.target = "";
+    if (m.hateId === id) { m.hateId = ""; m.hate = 0; }
+    m.windUntil = 0; m.winding = false;
+    const g = this.guardOf(id, m) ?? this.bondOf(id, m)?.[0];
+    if (g) { m.foe = g; this.addHate(m, g, 10); }
   }
 
   /**
@@ -5700,6 +5707,21 @@ export class TownRoom extends Room<TownState> {
     p.rollUntil = 0; p.rolling = false;
     p.emote = "";
     this.broadcast("travel", { id, from: from.id, to: dest.id, x: at.x, y: at.y });
+  }
+
+  /**
+   * A quest moves the hero (an unseen hero who was seen goes back to their last hiding place, server/questSteps.ts):
+   * the same "travel" message as a portal, so the client snaps instead of walking (from / to "" = no portal stones,
+   * why = what moved them). A lantern carrier is never moved (lanternHeld), as on every other jump across the map.
+   */
+  private warp(pid: string, x: number, y: number): boolean {
+    const p = this.state.players.get(pid);
+    if (!p || p.dead || this.lanternHeld(pid, p)) return false;
+    p.x = x; p.y = y; p.moving = false;
+    p.rollUntil = 0; p.rolling = false;
+    p.emote = "";
+    this.broadcast("travel", { id: pid, from: "", to: "", x: Math.round(x), y: Math.round(y), why: "quest" });
+    return true;
   }
 
   /** A blob called for help / fused ("merge"), or skeletons began a bone ritual ("ritual"), near (x, y): players on that step close by have seen it. */

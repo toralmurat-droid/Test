@@ -2000,7 +2000,7 @@ const LANTERN_QUESTS: QuestDef[] = [
       { type: "carry", zone: Z.brine.name, text: "Carry the last lantern to Saint Elow's shrine in Brinewood", banner: ["It still burns", "Carry it to Brinewood"],
         obj: "Carry the lantern to Saint Elow's shrine", nag: "No spells while you hold it. Keep it out of the wet, and keep moving.",
         hint: "Press E to take it up. Your skills are locked while you carry it; plain attacks still work. Drop it to fight.",
-        carry: { take: LAST_LANTERN, to: ELOW_SHRINE, light: 100, drain: 0.5, waterMult: 2, darkMult: 1.5, groundMult: 3, lure: 1.5 } },
+        carry: { take: LAST_LANTERN, to: ELOW_SHRINE, light: 100, drain: 0.5, waterMult: 2, darkMult: 1.5, groundMult: 2, lure: 1.25 } },
       { type: "use", zone: Z.brine.name, objects: WARD_LAMPS, chest: true, text: "Light the 3 ward-lamps round the shrine", banner: ["The shrine is reached", "Light the ward-lamps"],
         obj: "Ward-lamps lit: {n} / {goal}", nag: "{n} of {goal}. Round Saint Elow's shrine." },
     ],
@@ -2040,6 +2040,80 @@ const WHEEL_QUESTS: QuestDef[] = [
   },
 ];
 
+// -- Act 2: the Thornspire Heights, Unseen (Lv 43, after the Mirror Path; docs/quest-concepts-progress.md #4). Draft text. --
+/** The way up to the Sanctum's postern, on open ground: hidden at each one, the hero walks to the next without being seen. */
+const UNSEEN_CPS = [at(218, 388, 2.5, "The foot of the climb"), at(214, 380, 2.5, "Under the west cliffs"), at(226, 364, 2.5, "The broken shelf"),
+  at(248, 362, 2.5, "Below the Sanctum's east wall")];
+const POSTERN = near("spire_postern", "postern", "A postern in the Sanctum wall", "Slip through", 253, 352);
+const UNSEEN_QUESTS: QuestDef[] = [
+  {
+    id: "unseen", title: "Unseen", giver: "defector", zone: "The Thornspire Heights", minLevel: 43,
+    description: "Nasrin knows a postern in the Veiled Sanctum's east wall, the one the adepts use when they don't want to be counted. Reach it without one of them seeing you.",
+    offer: [
+      "The mirrors are turned. Good. Now the hard part.",
+      "There's a little door in the Sanctum's east wall. The adepts slip out of it at night. Nobody counts who goes through.",
+      "Get to it without being seen. Not one of them, not one sphinx. Keep to the rocks and the dark, and if they spot you, go back to where you last hid.",
+    ],
+    acceptText: "I'll go unseen",
+    steps: [
+      { type: "talk", npc: "defector", zone: "The Thornspire Heights", text: "Tell Nasrin you're ready", banner: ["New quest", "Unseen"], obj: "Tell Nasrin you're ready (foot of the Thornspire)",
+        say: ["Night is better, and rocks are better still. Hide at each marker, then walk to the next. If anything so much as looks at you, start again from the last."], accept: "I'm ready" },
+      { type: "unseen", zone: "The Thornspire Heights", text: "Climb to the Sanctum's east wall without being seen", banner: ["Keep low", "Climb without being seen"],
+        obj: "Hiding places reached unseen: {n} / {goal}", nag: "{n} of {goal}. Keep to the rocks and the dark. If they see you, back to the last hiding place.",
+        hint: "Stand in the marker to hide. Night and cover (trees, rocks, cliffs) make you harder to see. Taking a hit or being targeted sends you back.",
+        unseen: { checkpoints: UNSEEN_CPS, night: 0.65, cover: 0.6, floor: 0.35 } },
+      { type: "use", zone: "The Veiled Sanctum", objects: [POSTERN], chest: true, text: "Slip through the postern into the Sanctum", banner: ["Not a soul saw you", "Find the postern"],
+        obj: "Slip through the postern", nag: "In the Sanctum's east wall." },
+    ],
+    outro: ["The postern opens on a store-room of lamp oil and folded veils. On the shelf, a ledger: every adept who left by this door, and when.", "Nasrin's name is in it. Nine years ago, and never again."],
+    reward: arcReward(43),
+    after: "You walked through them like smoke. I never managed it. Not once in nine years.",
+  },
+];
+
+// -- Act 2: the Vault of the Water-Kings, Two Hands (Lv 42, Undercity arc in the Vault; docs/quest-concepts-progress.md #8). Draft text. --
+/** The seal hall: the Vault's hall of statues (chamber 1), its two seals 11 tiles apart across it (tests: a walk between them beats soloMs). */
+const SEAL_HALL = at(...inRoom(VAULT, 1), 4, "The hall of the twin seals");
+const TWIN_SEALS: [QuestObject, QuestObject] = [near("vault_seal1", "seal", "West seal of the Water-Kings", "Turn", ...inRoom(VAULT, 1, -7, -2)),
+  near("vault_seal2", "seal", "East seal of the Water-Kings", "Turn", ...inRoom(VAULT, 1, 6, -2))];
+const TWOHANDS_QUESTS: QuestDef[] = [
+  {
+    id: "twohands", title: "Two Hands", giver: "tombrobber", zone: VAULT.name, minLevel: 42,
+    description: "Zahir has heard of a door in the Vault that the Water-Kings sealed with two seals, too far apart for one thief to turn at once.",
+    offer: [
+      "The Water-Kings trusted nobody. Not even one priest with both keys.",
+      "In the Vault's hall of statues there's a door with two seals, one on each side of the hall. Turn both at once and it opens. Turn one, and it waits, and then it locks again.",
+      "Bring a friend. Or be quick. I was never quick enough.",
+    ],
+    acceptText: "Two hands it is",
+    steps: [
+      { type: "reach", zone: VAULT.name, at: SEAL_HALL, text: "Find the hall of the twin seals in the Vault", banner: ["New quest", "Two Hands"],
+        obj: "Find the hall of the twin seals (the Vault's hall of statues)", nag: "Down in the Vault, the hall of statues past the stair." },
+      { type: "sync", zone: VAULT.name, text: "Turn both seals at once", banner: ["Two seals", "Turn both at once"],
+        obj: "Turn both seals together", nag: "Both at once. A friend at the other seal, or something of yours standing there.",
+        hint: "Alone you have a few seconds to reach the other seal. With a friend on the quest nearby, you must turn them together. A summon standing at the other seal turns it with you.",
+        sync: { seals: TWIN_SEALS, windowMs: 2000, soloMs: 6000, summonReach: 2 * TILE } },
+    ],
+    outro: ["Both seals grind round together, and the floor of the hall slides open on a stair. Something at the bottom of it stands up.", "It has two heads, and they are both looking at you."],
+    reward: arcReward(42),
+    after: "Two seals, two hands. The kings were cleverer than me. Not cleverer than you.",
+  },
+  {
+    id: "twinkeeper", title: "The Keeper of the Twin Seals", giver: "tombrobber", zone: VAULT.name, minLevel: 42, auto: true,
+    description: "The twin seals guarded something that was left to guard them back.",
+    offer: ["It comes up the stair, slow, one hand on each wall.", "The Water-Kings left it to keep their door. It has kept it for a thousand years."],
+    acceptText: "Fight",
+    steps: [
+      { type: "kill", zone: VAULT.name, kinds: ["sanddead"], goal: 1, own: true,
+        summon: { parts: ["sanddead"], level: 43, title: "Keeper of the Twin Seals", hpMult: 3, ...sumAt(...inRoom(VAULT, 1, 0, 1)) },
+        text: "Slay the Keeper of the Twin Seals", banner: ["New quest", "The Keeper of the Twin Seals"], obj: "The Keeper slain: {n} / {goal}", nag: "In the hall of the twin seals." },
+    ],
+    outro: ["The Keeper folds down onto the stair it kept. Behind it, the Water-Kings' door stands open on a dry room full of gold."],
+    reward: arcReward(42, true),
+    after: "Gold, behind two seals, and you kept your hands. Better than most who came looking.",
+  },
+];
+
 /** The zone arcs, each its own chain (QuestChain.local): Act 1 then Act 2. */
 export const ZONE_ARCS: { id: string; name: string; quests: QuestDef[]; needs?: (p: Quester | undefined) => boolean }[] = [
   { id: "mill", name: "Millbrook's Bad Water", quests: MILL_QUESTS },
@@ -2058,6 +2132,8 @@ export const ZONE_ARCS: { id: string; name: string; quests: QuestDef[]; needs?: 
   { id: "sandcrown", name: "The Crown in the Sand", quests: SANDCROWN_QUESTS, needs: (p) => (chainState(p, SUN_CHAIN)?.questId ?? 0) > SUN_QUESTS.findIndex((d) => d.id === "kharsun") },
   { id: "lantern", name: "The Last Lantern", quests: LANTERN_QUESTS, needs: (p) => (chainState(p, 0)?.questId ?? 0) > LIGHTS_QUEST },
   { id: "wheel", name: "Hold the Wheel", quests: WHEEL_QUESTS, needs: (p) => chainDone(p, chainIx("mill")) },
+  { id: "unseen", name: "Unseen", quests: UNSEEN_QUESTS, needs: (p) => (chainState(p, chainIx("spire"))?.questId ?? 0) > SPIRE_QUESTS.findIndex((d) => d.id === "mirrorpath") },
+  { id: "twohands", name: "Two Hands", quests: TWOHANDS_QUESTS, needs: (p) => (chainState(p, chainIx("under"))?.questId ?? 0) >= UNDER_QUESTS.findIndex((d) => d.id === "canopic") },
 ];
 
 // ---- Side arcs: short local chains that may end on a hand-in (unlike ZONE_ARCS), packed in Player.arcs the same way ----
@@ -2259,7 +2335,8 @@ const bitStep = (s: QuestStep) => s.type === "use" || (s.type === "talk" && !!s.
 export function stepGoal(s: QuestStep): number {
   if (s.type === "use") return s.objects!.length;
   if (s.type === "talk" && s.npcs) return s.npcs.length;
-  if (s.type === "pick" || s.type === "choose") return 1;
+  if (s.type === "pick" || s.type === "choose" || s.type === "sync") return 1;
+  if (s.type === "unseen") return s.unseen!.checkpoints.length; // count = checkpoints reached
   return s.goal ?? 1;
 }
 /** Progress on a step (objects used and NPCs heard count bits). */
@@ -2428,6 +2505,12 @@ export function questTargets(q: QuestState | undefined): QuestTarget[] {
   // carry: the lantern while it waits at its spot (count 0), always where it goes; where it is once taken comes as "qstate"
   if (s.type === "carry") { const to = s.carry!.to; return [...(q!.questCount ? [] : objTargets([s.carry!.take])), { x: to.x, y: to.y, kind: "area", r: to.r, label: to.label }]; }
   if (s.type === "hold") { const a = s.hold!.at; return [{ x: a.x, y: a.y, kind: "area", r: a.r, label: a.label }]; }
+  // unseen: the next checkpoint, and the last one reached (where a hero hides again after being seen); whether they are hidden comes as "qstate"
+  if (s.type === "unseen") {
+    const cps = s.unseen!.checkpoints, n = Math.min(q!.questCount, cps.length - 1);
+    return [n, ...(q!.questCount > 0 && q!.questCount - 1 !== n ? [q!.questCount - 1] : [])].map((i) => ({ x: cps[i].x, y: cps[i].y, kind: "area" as const, r: cps[i].r, label: cps[i].label }));
+  }
+  if (s.type === "sync") return objTargets(s.sync!.seals);
   const z = zoneByName(s.zone ?? d.zone);
   return [{ x: (z.x + z.w / 2) * TILE, y: (z.y + z.h / 2) * TILE, kind: "area", r: (Math.min(z.w, z.h) / 2) * TILE, label: z.name }];
 }
@@ -2438,6 +2521,7 @@ export function usableObjects(p: Quester | undefined): { o: QuestObject; i: numb
     const q = chainState(p, c), s = questStep(q);
     if (s?.type === "pick") return s.pick!.objects.map((o, i) => ({ o, i, chain: c }));
     if (s?.type === "carry") return q!.questCount ? [] : [{ o: s.carry!.take, i: 0, chain: c }]; // taken: it moves (see "qstate")
+    if (s?.type === "sync") return s.sync!.seals.map((o, i) => ({ o, i, chain: c })); // both stay turnable until they turn together
     if (s?.type !== "use") return [];
     return s.objects!.map((o, i) => ({ o, i, chain: c })).filter(({ i }) => !(q!.questCount & (1 << i)));
   });

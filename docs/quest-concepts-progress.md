@@ -7,8 +7,8 @@ One branch (`claude/brave-hypatia-dkkcd3`), one draft PR until all work packages
 | WP | Concepts | State |
 |---|---|---|
 | WP1 framework + choices + puzzles | #5 Two Letters, #3 Empty Grave, #11 Crown in the Sand | done (server, client, text, tests) |
-| WP2 carry + hold | #1 Last Lantern, #2 Hold the Wheel | server done; client, text, tests, bench next |
-| WP3 unseen + sync | #4 Unseen, #8 Two Hands | todo |
+| WP2 carry + hold | #1 Last Lantern, #2 Hold the Wheel | done (server, client, text, tests); bench pending |
+| WP3 unseen + sync | #4 Unseen, #8 Two Hands | server done; client, text, tests, balance next |
 | WP4 Bargain + Penance | #6 | todo |
 | WP5 Tide | #7 | todo |
 | WP6 Rumours | #10 | todo |
@@ -33,6 +33,8 @@ Defaults picked so work isn't blocked (Claude 2026-11-13). Murat owns game direc
 10. Rumours: new alewife NPC on the square, XP 0, gold + 25% rune chance, Act 1 only, reset at UTC midnight.
 11. XP: new zone arcs use `arcReward` like the others; XP 0 for side arcs, rumours, Tide, Apprentice (levelling stays slow).
 12. Cosmetics: titles + the beast trait only.
+13. Lantern tuning (Claude 2026-11-14): lure 1.5 -> 1.25, ground drain x3 -> x2. Sim: vampire with basic attacks only clears 16% of Brinewood encounters (wizard 97%, summoner 100%), so dropping the lantern to fight with skills must stay affordable.
+14. Unseen: dying ends the hide (respawn in town as always); the saved checkpoint stays. No respawn-point change.
 
 ## Plan
 Written by the planner agent (2026-11-13). Code facts below were read from the tree at a4ebcf1.
@@ -155,8 +157,8 @@ param to `server/store.ts postgresStore`, default `"accounts"`, checked `/^[a-z_
 ### Concepts
 1. **The Last Lantern** (`ZONE_ARCS` "lantern", Act 1, giver `monk` Brother Aldric, Lv 10, needs chain 0 past the `LANTERNS` quest).
    reach the drowned lamp post (Misty Marsh) → carry (take `lantern_last` in Misty Marsh, to the Brinewood shrine area, new ids) →
-   use 3 new Brinewood ward-lamps (`chest: true`, finale). Holder: `qlock`, blob `lureMul` 1.5. Drain 0.5/s, ×2 water, ×1.5 dark,
-   ×3 ground, light 100. Party on the step shares one lantern; delivery completes for every `together` member. `arcReward(10)`.
+   use 3 new Brinewood ward-lamps (`chest: true`, finale). Holder: `qlock`, blob `lureMul` 1.25 (was 1.5). Drain 0.5/s, ×2 water, ×1.5 dark,
+   ×2 ground (was ×3), light 100. Party on the step shares one lantern; delivery completes for every `together` member. `arcReward(10)`.
 2. **Hold the Wheel** (`ZONE_ARCS` "wheel", giver `miller` Odo, Lv 4, needs mill arc done). talk Odo → hold (Odo, r 7 tiles, 90 s,
    2-3 slimes Lv 3-5 every 15 s, ≤ 6 alive, `home` = Odo) → kill `own` fused "Millrace Glutton". Odo HP 300, hurt every 500 ms by
    wave mobs within 1.2 tiles with no hero target. Out of the area > 5 s resets. Server cap 30 hold mobs.
@@ -257,3 +259,4 @@ at Lv 10, `duel.ts` only if Hidebound goes on. Bench: WP2 and WP5 (`TIDE=1`, `SP
   `CARRY` / `HOLD` in `shared/questSteps.ts` (HoldSpec waves take `n` / `level` ranges and `npcDmg`), hooks 2 7 8 9, `qdrop`, `qstate`,
   `ZONE_ARCS` "lantern" + "wheel". Siege sites and engines unchanged, one new chest `lantern_1_3`; map-metrics unchanged.
 - 2026-11-14: Ostrevar's Envoy hpMult 3 -> 7 (was a walkover: 7-12 s, 100% all classes; now 15-25 s, 100%). Lantern holders can't use portals, waygates or Mawdeep ropes/stairs (Claude 2026-11-14). Choice modal can be closed with Esc and has no reopen: WP4 must resend the Bargain prompt while its window is open.
+- 2026-11-14: WP2 balance: Millrace Glutton 100% all classes (7-11 s); Hold-wave XP ~190/min vs ~160-190 grinding (not an exploit). WP3 server landed. Polish list: carried lantern is small (~10 px); quest warps reuse "travel" and play the portal sound (client should skip when `why` is set); check that a hidden hero can't skip a stretch by portal.

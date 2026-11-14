@@ -1,6 +1,6 @@
 import { TILE, type MobKind } from "./constants";
 import { isUndeadNight } from "./daynight";
-import { GROUND, T } from "./map";
+import { GROUND, OBJECTS, T } from "./map";
 import type { ArcMap, QuestDef, QuestObject, Quester, QuestStep, Summon } from "./quests";
 
 /**
@@ -102,6 +102,35 @@ export function wetAt(px: number, py: number): boolean {
   if (GROUND[ty]?.[tx] === T.BRIDGE) return true;
   for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if (GROUND[ty + dy]?.[tx + dx] === T.WATER) return true;
   return false;
+}
+
+/** Rules every unseen / sync step shares (the per-step numbers are in its spec). */
+export const UNSEEN = {
+  /** A monster this close (px, each axis) with the hero as its target has seen them; it also blocks arming */
+  box: 12 * TILE,
+  /** After being seen, the hero can't hide again at the checkpoint for this long (ms): a breath to look round */
+  rearmMs: 2000,
+};
+export const SYNC = {
+  /** The same hero turning the same seal again within this (ms) is ignored (no sfx spam from a held E) */
+  turnMs: 500,
+};
+
+/** Map objects a hero can hide beside (unseen cover): trees of every land, dead trees, boulders, cliff faces. */
+const COVER: ReadonlySet<number> = new Set([T.TREE, T.PINE, T.PALM, T.STUMP, T.ROCK, T.CLIFF]);
+/** In cover: a tree or rock within 1 tile of the hero's tile. Reads only the built map, so server and client agree. */
+export function coverAt(px: number, py: number): boolean {
+  const tx = Math.floor(px / TILE), ty = Math.floor(py / TILE);
+  for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) { const o = OBJECTS[ty + dy]?.[tx + dx]; if (o !== undefined && COVER.has(o)) return true; }
+  return false;
+}
+/** Aggro range multiplier on a hero going unseen: 1 by day in the open, `night` after dusk, times `cover` beside cover, never below `floor`. */
+export function stealthMult(s: UnseenSpec, dark: boolean, cover: boolean): number {
+  return Math.max(s.floor, (dark ? s.night : 1) * (cover ? s.cover : 1));
+}
+/** Two seals turned close enough together: both turned (time > 0) and at most `windowMs` apart. */
+export function syncOk(tA: number, tB: number, windowMs: number): boolean {
+  return tA > 0 && tB > 0 && Math.abs(tA - tB) <= windowMs;
 }
 
 /** Every map object a step uses (use objects, pick candidates, sync seals, the carried thing). */
