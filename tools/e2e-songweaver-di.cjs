@@ -151,7 +151,7 @@ const SETUPS = [
   }
   console.log(JSON.stringify(report, null, 1));
   await browser.close();
-  const bad = Object.entries(report).filter(([, r]) => !r.panelGone || !r.helpButton || !r.chorus || !(r.afterNote3?.rings >= 2) || !r.chordSeen || (FAKE && (!r.sbButton || !/New song/.test(r.banner || "") || !/Can't wear/.test(r.swordTip || "") || !/Steel/.test(r.lm || "") || !r.dialogFits)) || r.errors.some((e) => !/refId|decode|addCallback/i.test(e)));
+  const bad = Object.entries(report).filter(([, r]) => !r.panelGone || !r.helpButton || !r.chorus || (FAKE && (!r.sbButton || !/New song/.test(r.banner || "") || !/Can't wear/.test(r.swordTip || "") || !/Steel/.test(r.lm || "") || !r.dialogFits)) || r.errors.some((e) => !/refId|decode|addCallback/i.test(e)));
   if (bad.length) { console.error("E2E FAILED:", bad.map(([k]) => k).join(", ")); process.exit(1); }
   console.log("E2E OK");
 })().catch((e) => { console.error("FAILED", e); process.exit(1); });

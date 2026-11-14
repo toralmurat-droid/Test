@@ -1,5 +1,6 @@
 import type Phaser from "phaser";
 import { MATS } from "./songbookData";
+import { drawSongItem } from "./songItemArt";
 
 /**
  * Songweaver material sprites (tonewood, brass, bone, silk, horn, sunglass), 16x16 pixel art.
@@ -24,7 +25,11 @@ const hex = (n: number) => `#${n.toString(16).padStart(6, "0")}`;
 /** A material sprite on a canvas `size` px wide, drawn crisp. `grey` = a monster drop only a Songweaver can use. */
 export function drawMat(ctx: CanvasRenderingContext2D, id: string, size: number, grey = false) {
   const m = MATS[id], art = SHAPE[id];
-  if (!m || !art) return;
+  if (!m) return;
+  if (!drawSongItem(ctx, `mat_${id}`, size) && art) drawPlaceholder(ctx, m, art, size);
+  if (grey) greyOut(ctx, size);
+}
+function drawPlaceholder(ctx: CanvasRenderingContext2D, m: (typeof MATS)[string], art: string[], size: number) {
   const pal: Record<string, string> = { o: "#1b120a", a: hex(m.color), b: hex(m.accent) };
   const k = size / 16;
   art.forEach((row, y) => [...row].forEach((ch, x) => {
@@ -33,7 +38,9 @@ export function drawMat(ctx: CanvasRenderingContext2D, id: string, size: number,
     ctx.fillStyle = c;
     ctx.fillRect(Math.floor(x * k), Math.floor(y * k), Math.ceil(k), Math.ceil(k));
   }));
-  if (grey) { // desaturate in place
+}
+function greyOut(ctx: CanvasRenderingContext2D, size: number) {
+  { // desaturate in place
     const d = ctx.getImageData(0, 0, size, size);
     for (let i = 0; i < d.data.length; i += 4) { const g = (d.data[i] + d.data[i + 1] + d.data[i + 2]) / 3; d.data[i] = d.data[i + 1] = d.data[i + 2] = g * 0.8; }
     ctx.putImageData(d, 0, 0);

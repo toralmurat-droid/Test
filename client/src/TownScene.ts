@@ -27,7 +27,7 @@ import { matTexture, matTip } from "./matArt";
 import { SoundCues } from "./soundCues";
 import { CHORD_NAMES, MODE_COLOR, soundOf } from "./songTables";
 
-const SONG_SFX = new Set(["note", "chord", "swell", "resonate", "bounce", "soundhit", "shieldbreak"]);
+const SONG_SFX = new Set(["note", "chord", "swell", "newsong", "matpick", "lutefit", "break", "resonate", "bounce", "soundhit", "shieldbreak"]);
 import { attackMult, cooldownMult, critChance, heroSpeed, STATS, magicMult, STAT_KINDS, STAT_NAMES, StatKind, statPoints, HP_PER_STR } from "../../shared/powers";
 import { NEED_TEXT, pointRange, SkillDef, skillOf, skillTarget, MAX_STACKS, STACK_DECAY_MS, STACK_NAME, talentBonus, withMods } from "../../shared/skills";
 import { SkillFx } from "./skillfx";

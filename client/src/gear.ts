@@ -363,6 +363,7 @@ export class GearMenu {
       const cell = document.createElement("button");
       cell.className = "gcell";
       const stack = id ? undefined : stacks[n - bagItems.length];
+      if (stack && cls === "songweaver" && stack[0] === "mpotion") { cell.disabled = true; bag.appendChild(cell); continue; } // the gauge is not mana: no potion cell
       if (stack) {
         const [kind, size, n] = stack;
         const c = document.createElement("canvas");

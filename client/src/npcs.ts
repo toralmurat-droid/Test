@@ -1,4 +1,5 @@
 import { armouryTextures, armouryOrigin, AR_TX } from "./armoury";
+import { lutierTextures, lutierOrigin, LU_TX } from "./lutierArt";
 import "@fontsource/pixelify-sans/400.css";
 import { actionKey } from "./keymode";
 import { icon as pxIcon } from "./pixelicons";
@@ -156,6 +157,7 @@ export class NpcLayer {
     witchCampTextures(scene);
     smithyTextures(scene);
     armouryTextures(scene);
+    lutierTextures(scene);
     for (const d of NPC_DECOR) {
       const x = d.x * TILE, y = d.y * TILE;
       if (d.prop.startsWith("wc_")) { // pixel-art camp props, 1.5 texels per world px
@@ -171,6 +173,11 @@ export class NpcLayer {
       if (d.prop.startsWith("ar_")) { // the armourers' stands and racks (armoury.ts), same pixel grid
         const [ox, oy] = armouryOrigin(d.prop);
         scene.add.sprite(x, y, d.prop, 0).setOrigin(ox, oy).setScale(d.scale / AR_TX).setDepth(y).setFlipX(!!d.flip).play({ key: `${d.prop}_idle`, startFrame: Math.floor(d.x * 5) % 12 });
+        continue;
+      }
+      if (d.prop.startsWith("lu_")) { // Wren's bench and lute rack (lutierArt.ts)
+        const [ox, oy] = lutierOrigin(d.prop);
+        scene.add.sprite(x, y, d.prop, 0).setOrigin(ox, oy).setScale(d.scale / LU_TX).setDepth(y).setFlipX(!!d.flip).play({ key: `${d.prop}_idle`, startFrame: Math.floor(d.x * 5) % 6 });
         continue;
       }
       if (d.prop === "weapon_rack") { // pixel-art rack shared with the camps (worldProps.ts)

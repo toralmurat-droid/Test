@@ -1,4 +1,3 @@
-import { play } from "./sfx";
 import { markNewSong } from "./songbookReader";
 import { MATS, SONGS, TRAITS } from "./songbookData";
 
@@ -35,9 +34,8 @@ export function diEvent(ev: any, c: DiCtx) {
   switch (ev.ev) {
     case "newsong": {
       const s = SONGS.find((x) => x.id === ev.song);
-      if (mine) { showNewSong(s?.name ?? String(ev.song ?? "")); markNewSong(String(ev.song)); if (s) c.feed(s.learned); play("lootRare"); }
+      if (mine) { showNewSong(s?.name ?? String(ev.song ?? "")); markNewSong(String(ev.song)); if (s) c.feed(s.learned); }
       if (at) { c.float(at.x, at.y - 40, "New song!", "#ffd24d"); for (let i = 0; i < 4; i++) c.burst(at.x + (i - 1.5) * 10, at.y - 30 - i * 5, 5, i % 2 ? 0xffd24d : 0x9fd8ff, 800); }
-      if (!mine) play("lutePluck", at?.x, at?.y, 0.5);
       break;
     }
     case "matpick": {
@@ -45,7 +43,6 @@ export function diEvent(ev: any, c: DiCtx) {
       if (x === undefined || y === undefined) break;
       c.float(x, y - 8, `+${Math.max(1, Number(ev.n) || 1)} ${m?.name ?? String(ev.mat)}`, mine ? "#ffe29a" : "#c8b890");
       c.burst(x, y - 4, 4, m?.color ?? 0xffe29a, 350);
-      play("pickup", x, y, mine ? 1 : 0.5);
       if (mine && m) c.feed(m.pick);
       break;
     }
@@ -54,7 +51,6 @@ export function diEvent(ev: any, c: DiCtx) {
       if (!at) break;
       c.float(at.x, at.y - 34, t ? `${t.name} fitted` : "Fitted", "#9fd8ff");
       for (let i = 0; i < 5; i++) c.burst(at.x + (i - 2) * 8, at.y - 14 - (i % 2) * 8, 4, i % 2 ? 0xffd24d : 0xe8d070, 600);
-      play("lutePluck", at.x, at.y, mine ? 1 : 0.6);
       if (mine) c.feed("There. Listen. Hear it? That is a different lute.");
       break;
     }
@@ -63,7 +59,6 @@ export function diEvent(ev: any, c: DiCtx) {
       if (!at) break;
       c.float(at.x, at.y - 34, `Broken: +${Math.max(0, Number(ev.n) || 0)} ${m?.name ?? String(ev.mat)}`, "#ffb86b");
       for (let i = 0; i < 5; i++) c.burst(at.x + (i - 2) * 7, at.y - 10 + (i % 2) * 5, 3, m?.color ?? 0xb88048, 450);
-      play("boneBreak", at.x, at.y, mine ? 0.9 : 0.5);
       if (mine) c.feed(Number(ev.n) > 0 ? "Good wood in there. I'll find a use for it." : "There is not much left in that one.");
       break;
     }
