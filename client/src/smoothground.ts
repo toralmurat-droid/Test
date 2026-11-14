@@ -55,6 +55,14 @@ export class SmoothGround {
     for (const [key, img] of this.live) if (img === null && this.near.has(key)) n++;
     return n;
   }
+  /**
+   * True when every chunk on screen (and the small margin round it) is painted and fully faded in. The painted ground
+   * is opaque, so the plain diamond tiles under it can then stay hidden; they are the fallback while a chunk paints.
+   */
+  get covered() {
+    for (const key of this.near) { const img = this.live.get(key); if (!img || img.alpha < 1) return false; }
+    return true;
+  }
   /** Chunks on screen already painted. */
   get painted() {
     let n = 0;

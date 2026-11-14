@@ -23,7 +23,7 @@ import type { MapMarker } from "./minimap";
 import { QuestLog } from "./questlog";
 import { MASTER_LEVELS, SHOPS, sellPrice, shopBuys, shopFuses } from "../../shared/shops";
 import { GEAR_SLOTS, GearSlot, gearDef, gearName, itemLevel, itemRarity, itemText, reqProblem, TIER_NAMES } from "../../shared/gear";
-import { CHAR_GROW, CHAR_SCALE, CHAR_ORIGIN, CharacterName, playCharAnim } from "./artAssets";
+import { CHAR_GROW, CHAR_SCALE, CHAR_ORIGIN, CharacterName, ensureCharSheet, playCharAnim, SHEET_RANGE } from "./artAssets";
 import { iconCanvas, itemColor, rarityLabel, reqInfoOf } from "./gear";
 import { fuseCost, fuseProblem, looseRuneCounts, parseRune, RUNE_FUSE_COUNT, RUNE_KIND_NAMES, RUNES, runeName, runeText } from "../../shared/runes";
 import { runeCanvas, runeCss } from "./runeArt";
@@ -59,6 +59,11 @@ export const arcFits = (giver: string, level: number) => { const l = ZONE_GIVERS
 export class NpcLayer {
   private bubbles = new Map<string, Phaser.GameObjects.Image>();
   private sprites = new Map<string, { sprite: Phaser.GameObjects.Sprite; label: Phaser.GameObjects.Text; mark: Phaser.GameObjects.Text }>();
+  /** NPCs whose sheet has arrived (only these are drawn, can be talked to and are clicked). */
+  private ready = new Set<string>();
+  /** NPCs whose sheet has been asked for. */
+  private asked = new Set<string>();
+  private loadAt = 0;
   private prompt = document.createElement("div");
   private dialog = document.createElement("div");
   private tracker = document.createElement("div");
@@ -133,9 +138,8 @@ export class NpcLayer {
       block.classList.toggle("folded", this.isFolded(key, started));
     };
     for (const n of NPCS) {
-      const sprite = scene.add.sprite(n.x, n.y, n.sprite, 0).setOrigin(CHAR_ORIGIN.x, CHAR_ORIGIN.y).setScale(CHAR_SCALE).setDepth(n.y);
-      playCharAnim(sprite, n.sprite as CharacterName, "idle", n.dir);
-      sprite.setInteractive({ useHandCursor: true }).on("pointerdown", () => { if (this.near === n) this.open(n); });
+      // The sheet loads when the hero comes near (update): until then a hidden stand-in, no click target
+      const sprite = scene.add.sprite(n.x, n.y, "__DEFAULT").setOrigin(CHAR_ORIGIN.x, CHAR_ORIGIN.y).setScale(CHAR_SCALE).setDepth(n.y).setVisible(false);
       const label = scene.add.text(n.x, n.y - Math.round(21 * CHAR_GROW), n.name, {
         fontFamily: TEXT_FONT, fontSize: `${TEXT_PX}px`, color: n.shop ? "#ffd166" : "#b9f27c", stroke: "#000", strokeThickness: 2,
       }).setOrigin(0.5, 1).setScale(WT).setResolution(1).setDepth(n.y + 1);
@@ -188,12 +192,13 @@ export class NpcLayer {
       // A slower take on his attack swing, so the hammer blow reads clearly
       const dir = brann.dir === "left" ? "right" : brann.dir;
       const key = `${brann.sprite}_hammer_${dir}`;
-      const swing = scene.cache.json.get("characters_meta")?.animations?.[`attack_${dir}`];
-      if (swing && !scene.anims.exists(key)) {
-        scene.anims.create({ key, frames: scene.anims.generateFrameNumbers(brann.sprite, { frames: swing.frames }), frameRate: 7, repeat: 0 });
-      }
       const strike = () => {
-        if (this.talking === brann || !scene.anims.exists(key)) return; // stops to serve customers
+        if (this.talking === brann || !this.ready.has(brann.id)) return; // stops to serve customers; waits for his sheet
+        const swing = scene.cache.json.get("characters_meta")?.animations?.[`attack_${dir}`];
+        if (swing && !scene.anims.exists(key)) {
+          scene.anims.create({ key, frames: scene.anims.generateFrameNumbers(brann.sprite, { frames: swing.frames }), frameRate: 7, repeat: 0 });
+        }
+        if (!scene.anims.exists(key)) return;
         smith.setFlipX(brann.dir === "left");
         smith.play(key);
         smith.once("animationcomplete", () => playCharAnim(smith, brann.sprite as CharacterName, "idle", brann.dir));
@@ -236,6 +241,7 @@ export class NpcLayer {
   say(id: string, text: string): boolean {
     const s = this.sprites.get(id);
     if (!s) return false;
+    if (!this.ready.has(id)) return true; // not drawn yet (sheet loading): the chat log has the words, no bubble over nothing
     this.bubbles.get(id)?.destroy();
     const b = speechBubble(this.scene, s.sprite.x, s.sprite.y - Math.round(21 * CHAR_GROW) - 14, text).setDepth(s.sprite.depth + 5);
     isoAnchor(b, s.sprite);
@@ -453,13 +459,43 @@ export class NpcLayer {
     this.dialog.querySelector<HTMLButtonElement>(".nd-bye")!.onclick = () => this.close();
   }
 
+  /** NPCs whose sheet is this near (world px) get it loaded: at zoom 3 the screen shows about 330 px each way. */
+  private static readonly LOAD_RANGE = SHEET_RANGE;
+
+  /** Asks for the sheets of NPCs near the hero (nearest first, one at a time: see ensureCharSheet), about 5 times a second. */
+  private loadSheets(me: Me, present: (n: Npc) => boolean) {
+    const t = performance.now();
+    if (!me || t - this.loadAt < 200) return;
+    this.loadAt = t;
+    for (const n of NPCS) {
+      if (this.ready.has(n.id) || this.asked.has(n.id) || !present(n)) continue;
+      const d = Math.hypot(n.x - me.x, n.y - me.y);
+      if (d > NpcLayer.LOAD_RANGE) continue;
+      this.asked.add(n.id);
+      if (ensureCharSheet(this.scene, n.sprite, () => this.show(n), d)) this.show(n);
+    }
+  }
+
+  /** The sheet is there: put the NPC in its pose and make it clickable. */
+  private show(n: Npc) {
+    const s = this.sprites.get(n.id);
+    if (!s || this.ready.has(n.id)) return;
+    this.ready.add(n.id);
+    s.sprite.setTexture(n.sprite, 0);
+    playCharAnim(s.sprite, n.sprite as CharacterName, "idle", n.dir);
+    s.sprite.setInteractive({ useHandCursor: true }).on("pointerdown", () => { if (this.near === n) this.open(n); });
+  }
+
   update(me: Me, q: QuestState) {
     this.q = q;
     const present = (n: Npc) => npcPresent(n.id, q);
-    this.objects.update(q);
+    this.objects.update(q, me);
     this.nearObj = this.talking ? undefined : this.objects.near(me, q);
-    this.near = me ? npcNear(me.x, me.y, TALK_RANGE, present) : undefined;
-    if (this.talking && (!me || npcNear(me.x, me.y, TALK_RANGE * 1.6, present) !== this.talking)) this.close(); // walked away
+    this.loadSheets(me, present);
+    // an NPC whose sheet is still on its way is not drawn, so it gets no "Talk" prompt either
+    const drawn = (n: Npc) => present(n) && this.ready.has(n.id);
+    this.near = me ? npcNear(me.x, me.y, TALK_RANGE, drawn) : undefined;
+    if (this.talking && (!me || npcNear(me.x, me.y, TALK_RANGE * 1.6, drawn) !== this.talking)) this.close(); // walked away
     const showPrompt = (!!this.near || !!this.nearObj) && !this.talking && !this.hidePrompt;
     this.prompt.classList.toggle("open", showPrompt);
     if (showPrompt) {
@@ -474,7 +510,7 @@ export class NpcLayer {
     for (const n of NPCS) {
       const s = this.sprites.get(n.id);
       if (!s) continue;
-      const here = present(n);
+      const here = present(n) && this.ready.has(n.id); // the "!" / "?" and the name wait for the body
       s.sprite.setVisible(here); s.label.setVisible(here); s.mark.setVisible(here);
       const mark = here ? npcQuestMark(n.id, q) : "";
       if (s.mark.text !== mark) s.mark.setText(mark);

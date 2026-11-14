@@ -78,7 +78,7 @@ export class Minimap {
     this.ctx = el.getContext("2d")!;
     this.key = "fog:" + (name || "hero");
 
-    const colors = tileColors(createTilesetCanvas());
+    const colors = tileColors(createTilesetCanvas(1)); // colours come from row 0, so only that row is painted
     this.colors.width = this.fog.width = MAP_W;
     this.colors.height = this.fog.height = MAP_H;
     const b = this.colors.getContext("2d")!;

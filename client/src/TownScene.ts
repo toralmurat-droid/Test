@@ -160,6 +160,7 @@ interface Entity {
   lvlColor?: string; // monsters: current colour of the "Lv N" label
   mob: boolean;
   hero?: CharacterName; // set when drawn with the animated 32x32 sheets
+  waiting?: CharacterName; // a hero whose sheet is still loading: hidden and not animated until it arrives (sheetReady)
   culled?: boolean; // monster off screen: not drawn this frame
   top: number; // px from the feet to the top of the head, for the name label and chat bubble
   bar: Phaser.GameObjects.Graphics;
@@ -392,7 +393,7 @@ export class TownScene extends Phaser.Scene {
 
   preload() {
     this.load.on("progress", (v: number) => setLoading("Loading the art", v * 0.45));
-    preloadArt(this);
+    preloadArt(this, this.opts.cls);
     preloadGear(this);
     preloadPaintedMobs(this);
   }
@@ -1604,7 +1605,7 @@ export class TownScene extends Phaser.Scene {
       return e && !e.state.dead ? e : undefined;
     };
     const attackable = (id: string, e: Entity) => {
-      if (e.state.dead || id === this.me) return false;
+      if (e.state.dead || id === this.me || e.waiting) return false; // waiting: a hero not drawn yet (its sheet is loading) is no target
       // A monster tucked into a grave or tree can't be hurt (the server skips it): don't let a click swing at it
       const m = meEnt();
       // Summons (shared/summons.ts): never my own or my group's, nor a newcomer's (the server skips them too)
@@ -1881,9 +1882,13 @@ export class TownScene extends Phaser.Scene {
       return;
     }
     // Classes with a generated sheet use it; anything else falls back to the procedural persona
-    const hero = (CHARACTERS as readonly string[]).includes(p.cls) ? (p.cls as CharacterName) : undefined;
+    const sheet = (CHARACTERS as readonly string[]).includes(p.cls) ? (p.cls as CharacterName) : undefined;
+    // Another class's sheet loads when its first hero appears (ensureCharSheet): hidden until then
+    const loaded = !sheet || ensureCharSheet(this, sheet, () => this.sheetReady(id, sheet), id === this.me ? -2 : -1);
+    const hero = loaded ? sheet : undefined;
     const sprite = hero
       ? this.add.sprite(p.x, p.y, hero, 0).setOrigin(CHAR_ORIGIN.x, CHAR_ORIGIN.y).setScale(HERO_SCALE)
+      : sheet ? this.add.sprite(p.x, p.y, "__DEFAULT").setOrigin(CHAR_ORIGIN.x, CHAR_ORIGIN.y).setScale(HERO_SCALE).setVisible(false)
       : this.add.sprite(p.x, p.y, heroTexture(this, p.cls, p.color), 0).setOrigin(0.5, 0.85);
     const label = this.add.text(p.x, p.y, p.name, {
       fontFamily: TEXT_FONT, fontSize: `${TEXT_PX}px`, color: id === this.me ? "#ffd166" : "#ffffff",
@@ -1892,7 +1897,8 @@ export class TownScene extends Phaser.Scene {
     isoAnchor(label, sprite);
     const bar = isoAnchor(this.add.graphics(), sprite) as Phaser.GameObjects.Graphics;
     const gear = hero ? new GearLayer(this, hero) : undefined;
-    this.entities.set(id, { sprite, label, bar, tx: p.x, ty: p.y, snaps: [{ t: patchTime(), x: p.x, y: p.y }], state: p, mob, hero, gear, top: hero ? HERO_TOP : 14 });
+    if (!loaded) label.setVisible(false);
+    this.entities.set(id, { sprite, label, bar, tx: p.x, ty: p.y, snaps: [{ t: patchTime(), x: p.x, y: p.y }], state: p, mob, hero, gear, top: hero ? HERO_TOP : 14, waiting: loaded ? undefined : sheet });
     if (id === this.me) {
       // ?look=tx,ty (map viewing aid, like ?time=): park the camera on a tile instead of following the hero
       const look = new URLSearchParams(location.search).get("look")?.split(",").map(Number);
@@ -1900,6 +1906,18 @@ export class TownScene extends Phaser.Scene {
       this.cameras.main.startFollow(target, true, CAM_LERP, CAM_LERP);
       this.snapCamera(); // start on the hero, not panning over from the map corner
     }
+  }
+
+  /** A hero's class sheet has arrived: dress the hidden stand-in with it (the update loop animates it from the next frame). */
+  private sheetReady(id: string, sheet: CharacterName) {
+    const e = this.entities.get(id);
+    if (!e || e.waiting !== sheet) return;
+    e.waiting = undefined;
+    e.hero = sheet;
+    e.top = HERO_TOP;
+    e.sprite.setTexture(sheet, 0).setVisible(true);
+    e.label?.setVisible(true);
+    e.gear = new GearLayer(this, sheet);
   }
 
   private removeEntity(id: string) {
@@ -2850,7 +2868,7 @@ export class TownScene extends Phaser.Scene {
     while (log.children.length > 8) log.firstChild!.remove();
     if (id.startsWith("npc:")) { this.npcs?.say(id.slice(4), text); return; } // a villager answering a busker
     const e = this.entities.get(id);
-    if (!e) return;
+    if (!e || e.waiting) return; // a hero still waiting for his sheet is not drawn: no bubble over nothing
     e.bubble?.destroy();
     e.bubble = speechBubble(this, e.sprite.x, e.sprite.y - e.top - 12, text);
     isoAnchor(e.bubble, e.sprite);
@@ -3019,10 +3037,11 @@ export class TownScene extends Phaser.Scene {
     }
     this.details?.update(this.time.now, dtMs);
     if (!this.room) return;
-    this.villagers?.update(dtMs, this.outlawSpots());
+    const meSprite0 = this.entities.get(this.me)?.sprite;
+    this.villagers?.update(dtMs, this.outlawSpots(), meSprite0);
     this.party?.update();
     this.trade?.update();
-    this.watch?.update(dtMs);
+    this.watch?.update(dtMs, meSprite0);
     this.torches?.update(this.time.now, (id) => !!this.watch?.striking(id));
     this.fx.update(dtMs);
     const k = this.keys;
@@ -3093,6 +3112,7 @@ export class TownScene extends Phaser.Scene {
         h.push({ t: wall, x: e.sprite.x, y: e.sprite.y });
         while (h.length > 2 && wall - h[0].t > 1500) h.shift();
       }
+      if (e.waiting) { e.sprite.setVisible(false); e.label?.setVisible(false); continue; } // its sheet is still loading
       // Monsters off screen: hide them and skip the per-frame drawing (there are a lot of them)
       if (e.mob) {
         const v = this.cameras.main.worldView, M = 48;
@@ -3124,7 +3144,7 @@ export class TownScene extends Phaser.Scene {
       if (e.hero) {
         // Holding a weapon of another family switches the stance sheet (an archer with a sword fights like a fighter)
         const stance = (HD_CHARS ? poseSheet(p.cls, activeOf(p)) : p.cls) as CharacterName;
-        if (stance !== e.hero && ensureCharSheet(this, stance)) {
+        if (stance !== e.hero && ensureCharSheet(this, stance, undefined, -1)) {
           const cur = e.sprite.anims.currentAnim?.key.slice(e.hero.length) ?? "";
           e.hero = stance;
           e.gear?.setHero(stance);
