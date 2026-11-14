@@ -3,6 +3,9 @@ import { knownModesOf, type ShotSpec, type SkillRuntime, type Unit } from "../sh
 import { skillById, type AreaDef, type FieldDef, type HitEffects, type SkillDef } from "../shared/skills";
 import { BOUNCE, BOUNCE_RULES, reflectAxis, wallAt } from "../shared/acoustics";
 import { BUSKING, BUSKING_LINES, npcById, type Npc } from "../shared/npcs";
+import { BAG_SIZE, gearName, isBagItem, starterKit } from "../shared/gear";
+import { potionSlots, type Potions } from "../shared/potions";
+import { sellPrice } from "../shared/shops";
 
 /**
  * The Songweaver's room-side rules (shared/songs.ts holds the music itself): the Oakvale busking exemption, the
@@ -123,8 +126,39 @@ export { heroSound, mobSound } from "../shared/combat";
 // ---- Saves (server/accounts.ts swTree / swMode) ---------------------------------------------------------------------
 
 /** Save fields of a Songweaver (none for other classes). */
-export function songSave(cls: string, sk: SkillRuntime): { swTree?: number; swMode?: string } {
-  return cls === "songweaver" ? { swTree: SONGWEAVER_TREE, swMode: sk.mode ?? "major" } : {};
+export function songSave(cls: string, sk: SkillRuntime): { swTree?: number; swMode?: string; swKit?: number } {
+  return cls === "songweaver" ? { swTree: SONGWEAVER_TREE, swMode: sk.mode ?? "major", swKit: SW_KIT_VERSION } : {};
+}
+
+// ---- Kit migrations (docs/songweaver-di-plan.md "State and saves") ---------------------------------------------------
+
+/** Save format of the Songweaver's kit (save field swKit). 1: the Songbook sits in the shield slot (DI-3). */
+export const SW_KIT_VERSION = 1;
+
+/** What a hero needs for migrateSongweaver: the class, potions (they take bag slots) and gold (a sold item pays). */
+export interface KitHero { cls: string; gold: number; pots: Potions }
+/** The parts of a save it moves (server/accounts.ts HeroSave). */
+export interface KitSave { shield?: unknown; bag?: unknown; swKit?: unknown }
+
+/**
+ * Brings an older Songweaver save up to SW_KIT_VERSION. Runs in TownRoom.restore BEFORE the gear filter, on the save
+ * itself, so nothing she owned is lost. v1: the shield she wore goes to the bag; with the bag full, to the stash
+ * (`toStash`, false when it is full too); else it is sold at sellPrice. The Songbook takes the shield slot. Returns
+ * chat lines for her, one per moved item.
+ */
+export function migrateSongweaver(p: KitHero, s: KitSave, toStash: (item: string) => boolean): string[] {
+  if (p.cls !== "songweaver" || (typeof s.swKit === "number" && s.swKit >= SW_KIT_VERSION)) return [];
+  const notes: string[] = [], book = starterKit("songweaver").shield!;
+  const bag = Array.isArray(s.bag) ? s.bag.filter((v): v is string => isBagItem(v) && v !== book) : [];
+  const old = typeof s.shield === "string" && s.shield !== book && isBagItem(s.shield) ? s.shield : "";
+  if (old) {
+    const name = gearName(old, p.cls);
+    if (bag.length + potionSlots(p.pots) < BAG_SIZE) { bag.push(old); notes.push(`Your ${name} went to your bag: a Songweaver carries her Songbook in that hand now.`); }
+    else if (toStash(old)) notes.push(`Your bag was full, so your ${name} went to your stash: a Songweaver carries her Songbook in that hand now.`);
+    else { const g = sellPrice(old); p.gold += g; notes.push(`Your bag and stash were full, so your ${name} was sold for ${g} gold: a Songweaver carries her Songbook in that hand now.`); }
+  }
+  s.bag = bag; s.shield = book; s.swKit = SW_KIT_VERSION;
+  return notes;
 }
 /** A save from another tree version gets every skill point back (like the Summoner's suTree). */
 export const oldSongTree = (cls: string, swTree: unknown) => cls === "songweaver" && swTree !== SONGWEAVER_TREE;
@@ -142,3 +176,6 @@ export function restoreMode(u: Unit, swMode: unknown) {
   if (u.cls !== "songweaver") return;
   u.sk.mode = isMode(swMode) && knownModesOf(u).includes(swMode) ? swMode : "major";
 }
+
+/** What a Songweaver is told when she reaches for a mana potion (sent as "gearno"): her bubble is the song gauge. */
+export const SONG_POTION_TEXT = "Your song gauge fills with music, not potions";

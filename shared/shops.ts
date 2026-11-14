@@ -69,7 +69,7 @@ export function shopBuys(shop: Shop, id: string): boolean {
   if (!shop.buys) return false;
   if (parseRune(id)) return shop.buys.includes("rune");
   const d = gearDef(id);
-  return !!d && shop.buys.includes(d.slot);
+  return !!d && !d.bound && shop.buys.includes(d.slot); // bound items (the Songbook) are never sold
 }
 
 /** Rune fusion (shared/runes.ts fuseRunes) is offered by every trader who buys loose runes. */

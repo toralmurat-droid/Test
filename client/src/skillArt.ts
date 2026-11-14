@@ -1547,6 +1547,75 @@ const SONG_ART: Record<string, [branch: SongBranch, row: number, draw: Draw]> = 
     p.line(9, 18, 12, 19, VIOLET[1]); p.line(12, 19, 15, 18, VIOLET[1]);
     p.outline(); p.spark(21, 3, 2, VIOLET[3]); p.spark(3, 3, 1, VIOLET[3]);
   }],
+  // ===== Hidden full-gauge effects (docs/songweaver-di-plan.md): one per book =====
+  // Refrain (Songbook): the leather songbook with a lute and a repeat loop round it
+  sg_g_refrain: ["song", 4, (p) => {
+    p.rect(5, 6, 14, 14, LEATHER[0]); p.rect(6, 7, 12, 12, LEATHER[1]); p.rect(6, 7, 3, 12, LEATHER[2]); p.rect(6, 7, 12, 1, LEATHER[3]);
+    p.rect(17, 7, 1, 12, BONE[2]); p.rect(16, 8, 1, 10, BONE[1]); // page edge
+    p.ball(11, 15, 2.6, GOLD, 2.2); p.thick(13, 12, 15, 8, 1, GOLD[2]); p.px(15, 7, GOLD[3]); p.px(11, 15, LEATHER[0]);
+    p.rect(5, 6, 14, 1, GOLD[1]); p.rect(5, 19, 14, 1, GOLD[1]);
+    p.outline();
+    p.ring(12, 13, 11, GOLD[3], Math.PI * 1.15, Math.PI * 1.95); p.poly([[20, 6], [23, 9], [18, 9]], GOLD[3]);
+    p.ring(12, 13, 11, GOLD[2], Math.PI * 0.1, Math.PI * 0.9); p.poly([[4, 20], [1, 17], [6, 17]], GOLD[2]);
+    p.spark(20, 17, 1, GOLD[3]);
+  }],
+  // Benediction (Hymnal): an open book of white and gold, a heart of light and rays above it
+  sg_g_bless: ["hymnal", 4, (p) => {
+    p.poly([[3, 14], [12, 17], [12, 22], [3, 19]], BONE[1]); p.poly([[21, 14], [12, 17], [12, 22], [21, 19]], BONE[2]);
+    p.poly([[4, 14], [12, 16.5], [12, 18], [4, 16]], BONE[3]); p.poly([[20, 14], [12, 16.5], [12, 18], [20, 16]], BONE[3]);
+    p.line(12, 17, 12, 22, GOLD[1]); p.line(3, 19, 12, 22, GOLD[1]); p.line(21, 19, 12, 22, GOLD[1]);
+    for (let i = 0; i < 5; i++) { const a = -Math.PI * (0.15 + i * 0.175); p.line(12 + Math.cos(a) * 6, 8 + Math.sin(a) * 5, 12 + Math.cos(a) * 10, 8 + Math.sin(a) * 8, GOLD[2]); }
+    sHeart(p, 12, 8, 3.6, GOLD); p.px(10, 6, "#ffffff");
+    p.outline(); p.spark(4, 6, 2, GOLD[3]); p.spark(20, 5, 1, "#ffffff"); p.px(12, 13, GOLD[3]);
+  }],
+  // Rally (War March): a war drum under a banner, speed chevrons beside it
+  sg_g_rally: ["folk", 4, (p) => {
+    p.disc(12, 20, 7, RUST[0], 2.2); p.rect(5, 13, 14, 7, RUST[1]); p.disc(12, 13, 7, RUST[2], 2.4); p.rect(5, 13, 14, 1, RUST[3]);
+    for (let x = 6; x < 19; x += 3) { p.line(x, 14, x + 1, 19, NAT[2]); p.line(x + 1, 14, x + 2, 19, NAT[1]); }
+    p.thick(12, 2, 12, 11, 1, WOOD[3]);
+    p.poly([[13, 2], [21, 4], [18, 6], [21, 8], [13, 8]], CLOTH_R[1]); p.poly([[13, 2], [21, 4], [20, 5], [13, 5]], CLOTH_R[2]);
+    p.outline();
+    p.line(2, 8, 5, 5, GOLD[3]); p.line(5, 5, 8, 8, GOLD[3]); p.line(2, 12, 5, 9, GOLD[2]); p.line(5, 9, 8, 12, GOLD[2]);
+    p.spark(21, 14, 1, RUST[3]);
+  }],
+  // Cacophony (Dissonance): a violet clef split by a crack, a jagged shock ring
+  sg_g_cacoph: ["discord", 4, (p) => {
+    p.ring(12, 12, 10, VIOLET[1], 0, Math.PI * 0.45); p.ring(12, 12, 10, VIOLET[2], Math.PI * 0.7, Math.PI * 1.35); p.ring(12, 12, 10, VIOLET[1], Math.PI * 1.6, Math.PI * 2);
+    // a clef: stem, upper loop, lower curl
+    p.thick(12, 3, 12, 20, 2, VIOLET[2]); p.ring(12, 8, 4, VIOLET[3], Math.PI * 0.6, Math.PI * 2.1); p.ring(12, 8, 3, VIOLET[2], Math.PI * 0.6, Math.PI * 2.1);
+    p.ring(11, 15, 4, VIOLET[3], Math.PI * 0.2, Math.PI * 1.2); p.ball(10, 20, 1.8, VIOLET, 1.6);
+    p.bolt([[15, 2], [11, 9], [14, 12], [10, 22]], GOLD);
+    p.outline(); p.spark(4, 5, 2, VIOLET[3]); p.spark(20, 19, 2, VIOLET[3]); p.px(20, 6, "#ffffff");
+  }],
+  // ===== Song finishers (each collected song adds a progression and one of these) =====
+  // The Gloam's Hum: a drifting note with soft sound waves, a glimmer of blue and a small heart
+  sg_f_hum: ["song", 4, (p) => {
+    p.ring(8, 12, 4, ARC[2], -1.0, 1.0); p.ring(8, 12, 7, ARC[1], -1.0, 1.0); p.ring(8, 12, 10, ARC[0], -0.9, 0.9);
+    sNote(p, 8, 16, SPIRIT, 10);
+    p.disc(17.8, 15, 1.6, BLOOD[2]); p.disc(20.2, 15, 1.6, BLOOD[2]); p.poly([[16.4, 15.5], [21.6, 15.5], [19, 19.5]], BLOOD[2]); p.px(17, 14, BLOOD[3]);
+    p.outline(); p.spark(18, 6, 2, SPIRIT[3]); p.px(4, 5, SPIRIT[3]); p.px(21, 10, SPIRIT[2]);
+  }],
+  // Miller's Round: three notes chasing each other in a circle
+  sg_f_round: ["folk", 4, (p) => {
+    p.ring(12, 12, 9, NAT[2]); p.ring(12, 12, 8, NAT[1]);
+    for (let i = 0; i < 3; i++) { const a = i / 3 * Math.PI * 2 - Math.PI / 2; sNote(p, 12 + Math.cos(a) * 8, 12 + Math.sin(a) * 8 + 3, RUST, 6, false); }
+    p.poly([[19, 7], [23, 9], [18, 11]], NAT[3]);
+    p.outline(); p.spark(12, 12, 2, GOLD[3]);
+    p.line(1, 12, 4, 12, RUST[3]); p.line(20, 20, 23, 20, RUST[2]);
+  }],
+  // Mirror Pond Air: a pond whirlpool dragging inwards, a pale note sinking into it
+  sg_f_undertow: ["discord", 4, (p) => {
+    for (let k = 0; k < 3; k++) { const r = 10 - k * 3.2; p.ring(12, 12, r, k === 0 ? ICE[1] : k === 1 ? ICE[2] : ICE[3], k * 0.9, k * 0.9 + Math.PI * 1.55, r * 0.7); p.ring(12, 12, r, ICE[0], k * 0.9 + Math.PI, k * 0.9 + Math.PI * 2.45, r * 0.7); }
+    sNote(p, 11, 13, VIOLET, 7, false);
+    p.outline(); p.spark(4, 4, 1, ICE[3]); p.spark(20, 19, 2, VIOLET[3]); p.line(19, 6, 16, 9, ICE[3]);
+  }],
+  // The Hollow King's Lament: a ring of golden rays round a heart (nova and party heal), the minor turning major
+  sg_f_picardy: ["hymnal", 4, (p) => {
+    for (let i = 0; i < 12; i++) { const a = i / 12 * Math.PI * 2; p.line(12 + Math.cos(a) * 7, 12 + Math.sin(a) * 7, 12 + Math.cos(a) * (i % 2 ? 9.5 : 11), 12 + Math.sin(a) * (i % 2 ? 9.5 : 11), i % 2 ? GOLD[2] : GOLD[3]); }
+    p.ring(12, 12, 6, GOLD[1]); p.disc(12, 12, 5, GOLD[0]);
+    sHeart(p, 12, 11, 3.2, BLOOD);
+    p.outline(); p.spark(12, 2, 1, "#ffffff"); p.spark(21, 12, 1, GOLD[3]); p.px(3, 12, GOLD[3]);
+  }],
 };
 
 /** 24x24 colours for a Songweaver skill id (branch-coloured frame by tree row), or undefined. */

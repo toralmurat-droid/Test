@@ -4,9 +4,10 @@ import { impactMs, nightBuff, passiveBlood, talentBonus, LEAP_MS, pointRange, sk
   ShotDef, SkillDef, skillById, skillOf, SKILLS, STACK_DECAY_MS, STACK_POWER, WEAK_DEALT, FANG_BELOW_PER_RANK, FANG_CHANCE_PER_RANK, type SoundFx,
 } from "./skills";
 import { Stats, STATS } from "./powers";
-import { pay, skillCost } from "./mana";
+import { pay, skillCost, usesGauge } from "./mana";
+import { gearDef } from "./gear";
 import { auraBuffs, isAuraId, BLADE_EL, BLADES_BASE, ESSENCE, SUMMON, WISP, type AttuneElement } from "./summons";
-import { addResonance, knownModes, LYDIAN_SHIELD, DORIAN_RADIUS, MODES, modeColour, modulate, noteCast, NOTES, PHRYGIAN, RESONANCE, resonanceOf, resWord, SONG,
+import { addResonance, chordProgress, GAUGE, knownModes, PROGRESSIONS, LYDIAN_SHIELD, DORIAN_RADIUS, MODES, modeColour, modulate, noteCast, NOTES, PHRYGIAN, RESONANCE, resonanceOf, resWord, SONG,
   type Degree, type ModeId, type Pitch, type Progression } from "./songs";
 import { heroSound, SOUND_TIER, soundMult, type SoundProfile } from "./combat";
 import { acousticsAt } from "./acoustics";
@@ -54,11 +55,15 @@ export interface SkillRuntime {
   notes: Degree[]; noteAt: number; chordLock: number;
   /** Resonance on this unit (0..100, any Songweaver's sound hits), when it last grew, its last burst, its last note. */
   res: number; resAt: number; resBurstAt: number; resDeg?: Degree; resPitch?: Pitch;
+  /** Song gauge (DI-3, the value itself is Unit.mana): her last note or swing (the drain waits for it), the last gauge tick. */
+  gaugeAt: number; gaugeTick: number;
+  /** The book she wears (the host mirrors the shield slot here): its GearDef.book.full fires when the gauge fills. */
+  book?: string;
 }
 export const newRuntime = (): SkillRuntime => ({
   last: {}, buffs: [], chargeUntil: 0, windUntil: 0, stacks: 0, stackAt: 0,
   burnUntil: 0, burnDps: 0, burnBy: "", burnNext: 0, markUntil: 0, weakUntil: 0, bleed: "", leechUntil: 0, leechBy: "",
-  notes: [], noteAt: 0, chordLock: 0, res: 0, resAt: 0, resBurstAt: -Infinity,
+  notes: [], noteAt: 0, chordLock: 0, res: 0, resAt: 0, resBurstAt: -Infinity, gaugeAt: 0, gaugeTick: 0,
 });
 
 export interface Unit { x: number; y: number; dead: boolean; level: number; sk: SkillRuntime; cls?: ClassKind; talents?: Ranks; energy?: number; mana?: number; maxMana?: number; hp?: number; maxHp?: number;
@@ -251,13 +256,17 @@ export function castSkill(h: SkillHost, id: string, skillId: string, out?: CastO
   const at = skillTarget(s) === "point" && clicked !== undefined ? Math.max(0, Math.min(pointRange(s), clicked)) : undefined;
   let stacks = 0;
   if (s.consume) { stacks = u.sk.stacks; u.sk.stacks = 0; }
+  // the song gauge (DI-3): Twelve-Tone Storm spends it all, stronger the fuller it was (and the book's effect is lost)
+  const gauge = s.spendGauge && usesGauge(u.cls) ? spendGauge(u) : 1;
+  // re-playing the Chorus that still has more than GAUGE.refreshMs to run logs no note and fills nothing
+  const sg0 = u.sk.song, refresh = !!s.song && !!sg0 && sg0.id === s.id && sg0.f.until - now > GAUGE.refreshMs;
   const power = rankPower(rank) * levelPower(s) * (s.power ?? 1) * synergyPower(s, u.talents) * scalePower(s, h.stats?.(id), STATS[u.cls].base) *
-    (s.consume && !s.buff?.perStack ? 1 + STACK_POWER * stacks : 1);
+    (s.consume && !s.buff?.perStack ? 1 + STACK_POWER * stacks : 1) * gauge;
   h.fx({ ev: "cast", id, s: s.id, rank, stacks, charge: s.chargeMs ?? 0, wind: s.windMs ?? 0, x: u.x, y: u.y });
   // A buildup charges (rooted, a stun breaks it). A big melee blow winds up first, so it lands with the animation's
   // strike (client/src/skillMoves.ts): the hero keeps moving and can't swing or cast meanwhile, and nothing breaks it
   // (rooting it or letting stuns cancel it cost knights and barbarians up to 10% of their duels, tools/balance/duel.ts)
-  const hold = (s.chargeMs ?? 0) + (s.windMs ?? 0), sings = !!s.degree && u.cls === "songweaver";
+  const hold = (s.chargeMs ?? 0) + (s.windMs ?? 0), sings = !!s.degree && u.cls === "songweaver" && !refresh;
   if (hold > 0) {
     if (s.chargeMs) u.sk.chargeUntil = now + hold;
     if (s.windMs) u.sk.windUntil = now + hold;
@@ -288,9 +297,19 @@ export const knownModesOf = (u: Unit) => knownModes(ranksOf(u));
 function playNote(h: SkillHost, id: string, u: Unit, s: SkillDef, now: number): string | undefined {
   const mode = modeOf(u)!;
   h.fx({ ev: "note", id, s: s.id, deg: s.degree, mode, pitch: s.pitch ?? "M", x: Math.round(u.x), y: Math.round(u.y) });
-  if (s.modulate) return undefined;
+  u.sk.gaugeAt = now;
+  if (s.modulate) return undefined; // a key change fills nothing
   const p = noteCast(u.sk, s.degree!, now);
-  return p ? fireChord(h, id, p) : undefined;
+  const fin = p ? fireChord(h, id, p) : undefined;
+  fillGauge(h, id, GAUGE.note);
+  return fin;
+}
+
+/** The progressions this hero can finish: every note is played by a skill she has learned (Modulate logs no note). */
+export function playableProgs(u: Unit): Progression[] {
+  if (!u.cls) return [];
+  const degs = new Set(SKILLS[u.cls].filter((s) => s.degree && !s.passive && rankOf(u.talents, s.id) > 0).map((s) => s.degree));
+  return PROGRESSIONS.filter((p) => p.notes.every((n) => degs.has(n)));
 }
 
 /** A progression fired: its finisher goes off (power from its level and Magic, like a skill). Returns its id if it did. */
@@ -299,7 +318,62 @@ export function fireChord(h: SkillHost, id: string, p: Progression): string | un
   if (!u?.cls || !fin) return undefined;
   h.fx({ ev: "chord", id, prog: p.id, mode: modeOf(u), x: Math.round(u.x), y: Math.round(u.y) });
   release(h, id, fin, 1, levelPower(fin) * scalePower(fin, h.stats?.(id), STATS[u.cls].base), 0);
+  fillGauge(h, id, GAUGE.chord);
   return fin.id;
+}
+
+// ---- The song gauge (DI-3, shared/songs.ts GAUGE) ----------------------------------------------------------------
+
+/** Adds `n` to a Songweaver's song gauge (her `mana`); a full gauge swells at once. Anyone else: nothing. */
+export function fillGauge(h: SkillHost, id: string, n: number) {
+  const u = live(h, id);
+  if (!u || !usesGauge(u.cls) || n <= 0) return;
+  u.mana = Math.min(GAUGE.max, (u.mana ?? 0) + n);
+  if (u.mana >= GAUGE.max) swell(h, id, u);
+}
+
+/** She swung her lute (hit or not): the drain waits GAUGE.idleMs again. The host calls it from its basic attack. */
+export function gaugeSwing(u: Unit, now: number) { if (usesGauge(u.cls)) u.sk.gaugeAt = now; }
+
+/** Twelve-Tone Storm empties the gauge: its power multiplier from how full it was. */
+function spendGauge(u: Unit): number {
+  const fill = Math.max(0, Math.min(GAUGE.max, u.mana ?? 0));
+  u.mana = 0;
+  return GAUGE.stormBase + GAUGE.stormPerFill * fill / GAUGE.max;
+}
+
+/**
+ * The gauge is full: it empties and the book she wears fires its effect (GearDef.book.full, a hidden skill, powered
+ * like a chord finisher), with a "swell" event. No book: the swell fizzles.
+ */
+function swell(h: SkillHost, id: string, u: Unit) {
+  u.mana = 0;
+  const bk = u.sk.book ? gearDef(u.sk.book)?.book : undefined, fin = bk ? skillById(bk.full) : undefined;
+  h.fx({ ev: "swell", id, book: fin ? u.sk.book : null, x: Math.round(u.x), y: Math.round(u.y), ...(fin ? {} : { fizzle: true }) });
+  if (fin && u.cls) release(h, id, fin, 1, levelPower(fin) * scalePower(fin, h.stats?.(id), STATS[u.cls].base), 0);
+}
+
+/** Every tick: a gauge filled from outside the engine (an execution, the Echo rune) swells; idle, it drains. */
+function tickGauge(h: SkillHost, id: string, u: Unit, now: number) {
+  const sk = u.sk, last = sk.gaugeTick || now;
+  sk.gaugeTick = now;
+  if (u.maxMana !== GAUGE.max) u.maxMana = GAUGE.max;
+  const v = u.mana ?? 0;
+  if (v >= GAUGE.max) { swell(h, id, u); return; }
+  const idleFrom = sk.gaugeAt + GAUGE.idleMs;
+  if (v > 0 && now > idleFrom) u.mana = Math.max(0, v - GAUGE.drainPerSec * (now - Math.max(last, idleFrom)) / 1000);
+}
+
+/**
+ * Refrain (the Songbook's full effect): the Chorus she plays beats `beats` times at once and runs SONG.ms again.
+ * Returns false when no Chorus is playing (the skill's buff, a small party heal, goes off instead).
+ */
+function refrain(h: SkillHost, id: string, u: Unit, beats: number): boolean {
+  const now = h.now(), sg = u.sk.song;
+  if (!sg || sg.f.until <= now) return false;
+  for (let i = 0; i < beats; i++) { sg.f.nextTick = now; tickField(h, sg.f); }
+  sg.f.until = now + SONG.ms;
+  return true;
 }
 
 /** Every hit of a Songweaver skill is sound: its pitch, its degree and the caster's mode ride on each one. */
@@ -399,12 +473,17 @@ function choraleHeal(h: SkillHost, id: string, s: SkillDef, power: number) {
 /** Legato: song gifts linger this much longer (ms) after stepping out. */
 const legatoMs = (o: Unit | undefined) => (o?.cls ? talentBonus(o.cls, o.talents ?? {}, "legato") * 1000 : 0);
 
-/** A song's beat (ms): Accelerando quickens it with each Tempo stack, never below SONG.tickFloorMs. */
+/**
+ * A song's beat (ms): Accelerando quickens it with the song gauge's fill (a full gauge = GAUGE.accelStacks of the old
+ * Tempo stacks), never below SONG.tickFloorMs.
+ */
 function songTick(f: FieldInst, o: Unit | undefined): number {
   const base = f.def.tickMs;
-  if (!f.song || !o?.cls || !o.sk.stacks) return base;
+  if (!f.song || !o?.cls) return base;
+  const st = usesGauge(o.cls) ? GAUGE.accelStacks * Math.max(0, Math.min(GAUGE.max, o.mana ?? 0)) / GAUGE.max : o.sk.stacks;
+  if (!st) return base;
   const v = talentBonus(o.cls, o.talents ?? {}, "accel");
-  return v > 0 ? Math.max(SONG.tickFloorMs, base * (1 - v * o.sk.stacks / 100)) : base;
+  return v > 0 ? Math.max(SONG.tickFloorMs, base * (1 - v * st / 100)) : base;
 }
 
 /**
@@ -529,6 +608,7 @@ function release(h: SkillHost, id: string, s: SkillDef, rank: number, power: num
   const ally = md ? power * md.ally : power, foe = md ? power * md.foe : power;
   if (mode && (s.pitch || s.finisher)) s = withSound(s, { pitch: s.pitch, deg: s.degree, mode });
   if (s.modulate) doModulate(h, u);
+  if (s.refrain && refrain(h, id, u, s.refrain.beats)) return;
   if (s.untouchable) h.invuln(id, h.now() + s.untouchable);
   const t = rankTime(rank);
   const x0 = u.x, y0 = u.y;
@@ -1192,7 +1272,9 @@ export function afterHit(h: SkillHost, from: string | undefined, tid: string, o:
   const e: HitEffects[] = [o];
   if (a && o.basic) {
     // Basic hits build stacks and carry enchantments (not the Summoner's Essence: it comes from the Void)
-    if (a.cls !== "summoner") { a.sk.stacks = Math.min(MAX_STACKS, a.sk.stacks + 1); a.sk.stackAt = now; }
+    // the Songweaver has no Tempo: her waves fill the song gauge instead, the strum more (DI-3)
+    if (usesGauge(a.cls)) fillGauge(h, from!, o.sound?.strum ? GAUGE.strum : GAUGE.basic);
+    else if (a.cls !== "summoner") { a.sk.stacks = Math.min(MAX_STACKS, a.sk.stacks + 1); a.sk.stackAt = now; }
     for (const b of buffsOf(a, now)) if (b.b.onHit) {
       e.push(effects(b.b.onHit, rankTime(b.rank)));
       if (b.b.onHit.burn) h.fx({ ev: "enchanthit", id: from, s: b.id, x: t.x, y: t.y });
@@ -1273,7 +1355,10 @@ export function tickUnit(h: SkillHost, id: string) {
   if (!u) return;
   const now = h.now();
   const sk = u.sk;
-  if (u.dead) { sk.burnUntil = 0; sk.buffs = []; sk.counter = undefined; sk.stacks = 0; sk.chargeUntil = 0; sk.windUntil = 0; if (sk.notes?.length) sk.notes = []; sk.res = 0; sk.song = undefined; return; }
+  if (u.dead) { sk.burnUntil = 0; sk.buffs = []; sk.counter = undefined; sk.stacks = 0; sk.chargeUntil = 0; sk.windUntil = 0; if (sk.notes?.length) sk.notes = []; sk.res = 0; sk.song = undefined;
+    if (usesGauge(u.cls)) u.mana = 0; // the song gauge empties on death
+    return; }
+  if (usesGauge(u.cls)) tickGauge(h, id, u, now);
   if (sk.notes?.length && now - sk.noteAt > NOTES.idleMs) sk.notes = []; // forgotten after a long pause
   if (sk.buffs.length && sk.buffs.some((b) => b.until <= now)) sk.buffs = sk.buffs.filter((b) => b.until > now);
   if (sk.counter && now >= sk.counter.until) sk.counter = undefined;
@@ -1311,7 +1396,12 @@ export function statusOf(u: Unit, now: number): string {
   if (sk.counter && now < sk.counter.until) out.push("counter:" + sk.counter.s.id);
   if (now < sk.chargeUntil) out.push("charge");
   for (const b of sk.buffs) if (b.until > now) out.push(b.id);
-  if (u.cls === "songweaver") out.push("mode:" + (sk.mode ?? "major"));
+  if (u.cls === "songweaver") {
+    out.push("mode:" + (sk.mode ?? "major"));
+    // chord progress for everyone to see (DI-1): the lockout, else how many notes into a progression she can finish
+    if (now < sk.chordLock) out.push("chlock");
+    else if (sk.notes.length) { const k = chordProgress(sk, playableProgs(u)); if (k > 0) out.push("ch" + k); }
+  }
   const rw = sk.res > 0 ? resWord(resonanceOf(sk, now)) : "";
   if (rw) out.push(rw);
   return out.join(",");
