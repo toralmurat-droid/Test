@@ -3,8 +3,9 @@
  * one-time hint lines. Everything the client shows here is read from server events and status words
  * (docs/songweaver-progress.md, "Interface contract"); nothing here decides an outcome.
  */
-import * as songsMod from "../../shared/songs";
-import { SLOT_NAMES } from "../../shared/gear";
+import { PROGRESSIONS, songKind } from "../../shared/songs";
+import { SONG_PROGRESSIONS } from "../../shared/songbook";
+import { isBook, SLOT_NAMES } from "../../shared/gear";
 import { MOB_COMBAT, type MobSound, type SoundTier } from "../../shared/combat";
 import type { MobKind } from "../../shared/constants";
 import { CANTRIPS, FINISHERS, SKILLS, skillById, type SkillDef } from "../../shared/skills";
@@ -28,7 +29,7 @@ export const SONG_BUFFS: ReadonlySet<string> = new Set(SONG_SKILLS.filter((s) =>
 export const SHIELD_BUFFS: ReadonlySet<string> = new Set(SONG_SKILLS.filter((s) => s.buff?.shield || s.field?.party?.shield).map((s) => s.id));
 
 /** Finisher names by the `prog` of a chord event: read from the skill table (skillById) so they never drift. */
-const PROG_SKILL: Record<string, string> = { amen: "sg_f_amen", encore: "sg_f_encore", shatter: "sg_f_shatter", resolve: "sg_f_resolve", sleight: "sg_f_sleight" };
+const PROG_SKILL: Record<string, string> = Object.fromEntries([...PROGRESSIONS, ...SONG_PROGRESSIONS].map((p) => [p.id, p.skill]));
 export const CHORD_NAMES: Record<string, string> = Object.fromEntries(Object.entries(PROG_SKILL).map(([k, id]) => [k, skillById(id)?.name ?? k]));
 /** The progression behind each finisher: its name, the notes in order and what the finisher does (section 4). */
 export const PROGRESSIONS_TEXT: { prog: string; name: string; notes: string; line: string; does: string }[] = [
@@ -113,23 +114,11 @@ export function earTip(kind: string): string {
 /** MOB_COMBAT[kind].sound (shared/combat.ts): how a monster hears. */
 export const soundOf = (kind: string): MobSound | undefined => MOB_COMBAT[kind as MobKind]?.sound;
 
-/**
- * Slot label for the UI: a Songweaver's shield slot holds her Songbook or a book ("Book"). HOOK(di): ids `songweaver_shield`
- * and `bk_*` come from the contract; they don't exist in shared/ until the server side lands.
- */
+/** Slot label for the UI: a Songweaver's shield slot holds her Songbook or a book ("Book"). */
 export function slotName(slot: string, cls?: string, id?: string): string {
-  const base = (id ?? "").split(/[@#^]/)[0];
-  if (slot === "shield" && (cls === "songweaver" || base === "songweaver_shield" || base.startsWith("bk_"))) return "Book";
+  if (slot === "shield" && (cls === "songweaver" || isBook(id))) return "Book";
   return (SLOT_NAMES as Record<string, string>)[slot] ?? slot;
 }
 
-/**
- * Player-facing kind of a Songweaver skill: "Chorus" (the 30 s party song), "Verse" (a note skill, the basic attack
- * too) or "Key change" (Modulate). HOOK(di): uses `songKind` from shared/songs.ts as soon as it exists; until then
- * the local rule below.
- */
-export function songKindLabel(s: { song?: boolean; modulate?: boolean; degree?: string; passive?: unknown }): string | undefined {
-  const real = (songsMod as any).songKind as ((s: unknown) => string | undefined) | undefined;
-  if (real) return real(s);
-  return s.song ? "Chorus" : s.modulate ? "Key change" : s.degree && !s.passive ? "Verse" : undefined;
-}
+/** Player-facing kind of a Songweaver skill ("Chorus", "Verse", "Key change"): shared/songs.ts songKind. */
+export const songKindLabel = (s: { song?: boolean; modulate?: boolean; degree?: string; passive?: unknown }): string | undefined => songKind(s);

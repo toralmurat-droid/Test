@@ -209,3 +209,5 @@ body.shopping #npcdialog.shop { left: 12px; top: 12px; bottom: auto; transform: 
   #npcdialog.lm .sh-row button { padding: 3px 6px; font-size: 15px; }
   #npcdialog.lm .nd-name, #npcdialog.lm .nd-title { font-size: 15px; letter-spacing: 1px; }
 }
+/* short screens (phone landscape): Wren's panel starts at the top and uses the height above the hotbar */
+@media (max-height: 520px) { #npcdialog.lm { top: 6px; bottom: auto; max-height: calc(100vh - 92px); } }

@@ -2444,7 +2444,7 @@ export class SkillFx {
         if (w.startsWith("mode:")) mode = w.slice(5);
         else if (w === "ch1") held = Math.max(held, 1);
         else if (w === "ch2") held = Math.max(held, 2);
-        else if (w === "chlock") lock = true; // HOOK(di): contract fx word `chlock`
+        else if (w === "chlock") lock = true; // the lockout after a chord
       }
       // server progress wins: a held note (ch1/ch2) keeps its ring alive, a late joiner gets rings it never saw born
       while (rs.rings.length < held) rs.rings.push({ born: t - 400 });

@@ -22,8 +22,10 @@ import { musicCombat, setMusicZone } from "./music";
 import { bindSfx, play as playSfx, sfxFrame } from "./sfx";
 import { songweaverSfx } from "./sfx";
 import { DI_EVENTS, diEvent } from "./songbookFx";
-import { matOfGround, MATS, setSongbook } from "./songbookData";
-import { matTexture, matTip } from "./matArt";
+import { setSongbook } from "./songbookData";
+import { matOfItem } from "../../shared/lutemaker";
+import { MATERIALS } from "../../shared/lute";
+import { MAT_COLOR, matTexture, matTip } from "./matArt";
 import { SoundCues } from "./soundCues";
 import { CHORD_NAMES, MODE_COLOR, soundOf } from "./songTables";
 
@@ -795,7 +797,7 @@ export class TownScene extends Phaser.Scene {
     const items = $(this.room.state).items;
     items.onAdd((it: any, id: string) => {
       if (it.kind === "quest" && it.owner !== this.room.sessionId) return; // someone else's quest drop
-      const mat = matOfGround(it.gear) ?? matOfGround(it.kind); // HOOK(di): ground item `mat_<id>` (kind "gear" or "mat", id in `gear`)
+      const mat = it.kind === "mat" ? matOfItem(it.gear) : undefined; // a Songweaver material: Item.gear is `mat_<id>`, Item.amount the count
       const gear = !mat && it.kind === "gear" && gearDef(it.gear);
       const rune = it.kind === "gear" ? parseRune(it.gear) : undefined; // a loose rune (shared/runes.ts)
       const matGrey = !!mat && this.opts.cls !== "songweaver"; // only a Songweaver can pick it up: others see it greyed
@@ -821,11 +823,11 @@ export class TownScene extends Phaser.Scene {
       if (mat) {
         img.setData("mat", mat);
         img.setInteractive({ useHandCursor: false }); // tooltip on hover (content doc, section 7)
-        img.on("pointerover", () => matTip(`<b>${MATS[mat].name}</b><br>${MATS[mat].desc}<br>${MATS[mat].source}${matGrey ? `<br><span class="gbad">Only a minstrel can use this.</span>` : ""}`));
+        img.on("pointerover", () => matTip(`<b>${MATERIALS[mat].name}${it.amount > 1 ? ` x${it.amount}` : ""}</b><br>${MATERIALS[mat].desc}<br>${MATERIALS[mat].source}${matGrey ? `<br><span class="gbad">Only a minstrel can use this.</span>` : ""}`));
         img.on("pointerout", () => matTip());
         img.once("destroy", () => matTip());
         if (matGrey) img.setAlpha(0.55);
-        else { const glow = this.add.circle(it.x, it.y, 5, MATS[mat].color, 0.3).setDepth(it.y - 9).setBlendMode(Phaser.BlendModes.ADD); this.tweens.add({ targets: glow, scale: 1.5, alpha: 0.08, duration: 700, yoyo: true, repeat: -1 }); img.once("destroy", () => glow.destroy()); }
+        else { const glow = this.add.circle(it.x, it.y, 5, MAT_COLOR[mat].color, 0.3).setDepth(it.y - 9).setBlendMode(Phaser.BlendModes.ADD); this.tweens.add({ targets: glow, scale: 1.5, alpha: 0.08, duration: 700, yoyo: true, repeat: -1 }); img.once("destroy", () => glow.destroy()); }
       }
       const rarity = gear ? itemRarity(it.gear) : 0;
       if (gear) img.setData("gear", it.gear);
@@ -1332,7 +1334,7 @@ export class TownScene extends Phaser.Scene {
       this.showSwing(id, step ?? 0, variant ?? 0, ax, ay, w);
     });
     this.room.onMessage("sfx", (ev) => this.onSkillFx(ev));
-    this.room.onMessage("songbook", (m) => setSongbook(m)); // HOOK(di): owner-only { songs, mats }, on join and on change
+    this.room.onMessage("songbook", (m) => setSongbook(m)); // owner-only { songs, mats }, on join and on change
     // The Summoner's grimoire on the HUD (client/src/grimoire.ts): its news, asked again now that we listen
     this.grimoire = new GrimoirePanel(document.getElementById("hud")!, (slot, el) => this.room.send("grimoire", { slot, el }));
     this.room.onMessage("golems", (m) => this.grimoire?.news(m));
@@ -2630,7 +2632,7 @@ export class TownScene extends Phaser.Scene {
    * click) spends them (Murat 2026-11-04).
    */
   private chargeCell(mine: any, cls: ClassKind, clicks: string[], slots: string[], now: number): string {
-    if (cls === "songweaver") return ""; // HOOK(di): the Songweaver has no Tempo charge any more (the gauge replaces it)
+    if (cls === "songweaver") return ""; // the Songweaver has no Tempo charge any more (the gauge replaces it)
     const n = Math.max(0, Math.min(MAX_STACKS, mine.stacks | 0));
     if (n > this.chargeSeen.n) this.chargeSeen.at = now; // a hit built one (the server's clock isn't sent)
     this.chargeSeen.n = n;
@@ -2717,7 +2719,7 @@ export class TownScene extends Phaser.Scene {
   /** Skill visual event from the server (shared/skillEngine.ts): drawn by SkillFx, plus the hero's cast animation. */
   private onSkillFx(ev: any) {
     if (SONG_SFX.has(ev.ev)) this.songEvent(ev);
-    if (DI_EVENTS.has(ev.ev)) this.diEvent(ev); // HOOK(di): newsong, matpick, lutefit, break
+    if (DI_EVENTS.has(ev.ev)) this.diEvent(ev); // newsong, matpick, lutefit, break
     if (ev.ev === "cast") {
       const e = this.entities.get(ev.id);
       if (ev.id === this.me) this.lastCast[ev.s] = this.time.now;
@@ -3317,7 +3319,7 @@ export class TownScene extends Phaser.Scene {
       // Top-left bars (resourceBars.ts): red HP, blue Mana (spells, shared/mana.ts), green XP
       const mn = unpackMana(mine.mp);
       (this.resBars ??= new ResourceBars(document.getElementById("hud")!)).update({
-        song: cls === "songweaver", level: mine.level, hp: mine.hp, maxHp: mine.maxHp, mp: mn.mana, maxMp: mn.maxMana, // HOOK(di): the gauge lives in mana / maxMana (contract); shows mana until the server lands
+        song: cls === "songweaver", level: mine.level, hp: mine.hp, maxHp: mine.maxHp, mp: mn.mana, maxMp: mn.maxMana, // the gauge lives in mana / maxMana (shared/mana.ts usesGauge)
        
         xpFrac: mine.level >= MAX_LEVEL ? 1 : (mine.xp - cur) / Math.max(1, next - cur),
         xp: mine.xp - cur, xpNeed: mine.level >= MAX_LEVEL ? undefined : next - cur,

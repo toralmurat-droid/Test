@@ -1,6 +1,9 @@
 import "./chordHud.css";
 import { DEGREE_GLOSS, DEGREE_TEXT, PROGRESSIONS_TEXT } from "./songTables";
-import { getSongbook, MAT_IDS, MATS, onSongbook, SONGS } from "./songbookData";
+import { MATERIAL_IDS, MATERIALS } from "../../shared/lute";
+import { SONG_SOURCES } from "../../shared/songbook";
+import { skillById } from "../../shared/skills";
+import { getSongbook, onSongbook } from "./songbookData";
 import { matCanvas } from "./matArt";
 
 /**
@@ -17,15 +20,20 @@ const VERSES_HELP = "Verse: any skill that strikes once, your basic attack inclu
 function legendHtml(): string {
   const deg = Object.entries(DEGREE_GLOSS).map(([d, g]) => `<div><b>${DEGREE_TEXT[d] ?? d}</b> ${g}</div>`).join("");
   const prog = PROGRESSIONS_TEXT.map((p) => `<div><b>${p.notes}</b> ${p.name}: ${p.does}</div>`).join("");
-  return `<p>Each Chorus or note you play opens a ring under your feet, up to three. Three in the right order ring a chord by themselves, then the strings need a short rest (a grey ring closes in).</p>${deg}<p>Chords</p>${prog}`;
+  // the four collectable chords: unknown until the song is in the Songbook (the "songbook" message)
+  const known = new Set(getSongbook().songs);
+  const found = SONG_SOURCES.map((s) => known.has(s.id)
+    ? `<div><b>${s.prog.notes.join(" ")}</b> ${s.prog.name}: ${skillById(s.prog.skill)?.desc ?? ""}</div>`
+    : `<div class="sb-unknown"><b>? ? ?</b> Not found yet</div>`).join("");
+  return `<p>Each Chorus or note you play opens a ring under your feet, up to three. Three in the right order ring a chord by themselves, then the strings need a short rest (a grey ring closes in).</p>${deg}<p>Chords</p>${prog}<p>Chords from songs</p>${found}`;
 }
 
 function html(): string {
   const sb = getSongbook();
-  const songs = SONGS.map((s) => sb.songs.includes(s.id)
-    ? `<div class="sb-song${fresh === s.id ? " sb-new" : ""}"><b class="sb-name">${s.name}</b><small><span class="sb-prog">${s.prog}</span> · ${s.line}</small><small>Finisher, ${s.finisher}: ${s.fdesc}</small></div>`
+  const songs = SONG_SOURCES.map((s) => sb.songs.includes(s.id)
+    ? `<div class="sb-song${fresh === s.id ? " sb-new" : ""}"><b class="sb-name">${s.name}</b><small><span class="sb-prog">${s.prog.notes.join(" ")}</span> · ${s.line}</small><small>Finisher, ${s.prog.name}: ${skillById(s.prog.skill)?.desc ?? ""}</small></div>`
     : `<div class="sb-song sb-unknown"><b class="sb-name" style="color:#8a7a5a">???</b><small>${s.hint}</small></div>`).join("");
-  const mats = MAT_IDS.map((id) => `<span class="sb-mat" data-mat="${id}" title="${MATS[id].desc} ${MATS[id].source}"><span class="sb-ic"></span>${MATS[id].name} ${sb.mats[id] ?? 0}</span>`).join("");
+  const mats = MATERIAL_IDS.map((id) => `<span class="sb-mat" data-mat="${id}" title="${MATERIALS[id].desc} ${MATERIALS[id].source}"><span class="sb-ic"></span>${MATERIALS[id].name} ${sb.mats[id] ?? 0}</span>`).join("");
   return `<div class="sb-top"><h3>Songbook</h3><button class="sb-x" type="button" aria-label="Close">x</button></div>` +
     `<h3>Songs</h3>${songs}` +
     `<h3>Materials</h3><div class="sb-mats">${mats}</div>` +
