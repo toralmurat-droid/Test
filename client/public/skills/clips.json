@@ -1,185 +1,185 @@
 {
- "sources": "fe2baeff81094d0e",
+ "sources": "8de751c619e05bb3",
  "clips": {
   "w_firebolt": {
-   "ms": 2200,
-   "frames": 26
+   "ms": 3050,
+   "frames": 61
   },
   "w_blizzard": {
-   "ms": 3000,
-   "frames": 36
+   "ms": 4050,
+   "frames": 81
   },
   "w_storm": {
-   "ms": 3000,
-   "frames": 36
+   "ms": 4050,
+   "frames": 82
   },
   "v_leech": {
-   "ms": 2200,
-   "frames": 26
+   "ms": 3050,
+   "frames": 61
   },
   "v_link": {
-   "ms": 3000,
-   "frames": 36
+   "ms": 4050,
+   "frames": 81
   },
   "v_lance": {
-   "ms": 2200,
-   "frames": 26
+   "ms": 3050,
+   "frames": 61
   },
   "v_boil": {
-   "ms": 2200,
-   "frames": 26
+   "ms": 3050,
+   "frames": 62
   },
   "v_exsang": {
-   "ms": 2200,
-   "frames": 26
+   "ms": 3050,
+   "frames": 62
   },
   "v_ward": {
-   "ms": 3000,
-   "frames": 36
+   "ms": 4050,
+   "frames": 82
   },
   "v_tide": {
-   "ms": 3000,
-   "frames": 36
+   "ms": 4050,
+   "frames": 82
   },
   "v_mist": {
-   "ms": 2200,
-   "frames": 26
+   "ms": 3050,
+   "frames": 62
   },
   "v_bats": {
-   "ms": 3000,
-   "frames": 36
+   "ms": 4050,
+   "frames": 82
   },
   "v_gaze": {
-   "ms": 2200,
-   "frames": 26
+   "ms": 3050,
+   "frames": 62
   },
   "v_rats": {
-   "ms": 2200,
-   "frames": 26
+   "ms": 3050,
+   "frames": 62
   },
   "v_batform": {
-   "ms": 3000,
-   "frames": 36
+   "ms": 4050,
+   "frames": 82
   },
   "v_soil": {
-   "ms": 3000,
-   "frames": 36
+   "ms": 4050,
+   "frames": 82
   },
   "v_nightfall": {
-   "ms": 3000,
-   "frames": 36
+   "ms": 4050,
+   "frames": 82
   },
   "v_rend": {
-   "ms": 2200,
-   "frames": 26
+   "ms": 3050,
+   "frames": 62
   },
   "v_thirst": {
-   "ms": 3000,
-   "frames": 36
+   "ms": 4050,
+   "frames": 82
   },
   "v_devour": {
-   "ms": 2200,
-   "frames": 26
+   "ms": 3050,
+   "frames": 61
   },
   "v_pounce": {
-   "ms": 2200,
-   "frames": 26
+   "ms": 3050,
+   "frames": 61
   },
   "v_wolfform": {
-   "ms": 3000,
-   "frames": 36
+   "ms": 4050,
+   "frames": 82
   },
   "v_bite": {
-   "ms": 2200,
-   "frames": 26
+   "ms": 3050,
+   "frames": 62
   },
   "v_brides": {
-   "ms": 3000,
-   "frames": 36
+   "ms": 5250,
+   "frames": 105
   },
   "su_golem": {
-   "ms": 3600,
-   "frames": 43
+   "ms": 5250,
+   "frames": 106
   },
   "su_step": {
-   "ms": 2200,
-   "frames": 26
+   "ms": 3050,
+   "frames": 62
   },
   "su_blackhole": {
-   "ms": 3000,
-   "frames": 36
+   "ms": 4050,
+   "frames": 82
   },
   "su_horizon": {
-   "ms": 3000,
-   "frames": 36
+   "ms": 4050,
+   "frames": 82
   },
   "su_blades": {
-   "ms": 3000,
-   "frames": 36
+   "ms": 4050,
+   "frames": 82
   },
   "su_colossus": {
-   "ms": 3600,
-   "frames": 43
+   "ms": 5250,
+   "frames": 106
   },
   "su_wisps": {
-   "ms": 3600,
-   "frames": 43
+   "ms": 5250,
+   "frames": 105
   },
   "su_arsenal": {
-   "ms": 3600,
-   "frames": 43
+   "ms": 5250,
+   "frames": 106
   },
   "sg_modulate": {
-   "ms": 2200,
-   "frames": 26
+   "ms": 3050,
+   "frames": 62
   },
   "sg_ballad": {
-   "ms": 3000,
-   "frames": 36
+   "ms": 4050,
+   "frames": 81
   },
   "sg_mend": {
-   "ms": 2200,
-   "frames": 26
+   "ms": 3050,
+   "frames": 61
   },
   "sg_pedal": {
-   "ms": 3000,
-   "frames": 36
+   "ms": 4050,
+   "frames": 82
   },
   "sg_chorale": {
-   "ms": 3000,
-   "frames": 36
+   "ms": 4050,
+   "frames": 81
   },
   "sg_march": {
-   "ms": 3000,
-   "frames": 36
+   "ms": 4050,
+   "frames": 82
   },
   "sg_jig": {
-   "ms": 3000,
-   "frames": 36
+   "ms": 4050,
+   "frames": 82
   },
   "sg_call": {
-   "ms": 3000,
-   "frames": 36
+   "ms": 4050,
+   "frames": 82
   },
   "sg_anthem": {
-   "ms": 3000,
-   "frames": 36
+   "ms": 4050,
+   "frames": 81
   },
   "sg_dirge": {
-   "ms": 3000,
-   "frames": 36
+   "ms": 4050,
+   "frames": 81
   },
   "sg_shrill": {
-   "ms": 2200,
-   "frames": 26
+   "ms": 3050,
+   "frames": 62
   },
   "sg_crack": {
-   "ms": 2200,
-   "frames": 26
+   "ms": 3050,
+   "frames": 62
   },
   "sg_twelve": {
-   "ms": 3000,
-   "frames": 36
+   "ms": 4050,
+   "frames": 82
   }
  }
 }

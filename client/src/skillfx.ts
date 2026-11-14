@@ -120,7 +120,8 @@ export class SkillFx {
   /** One particle at world (x, y), height z. */
   p(x: number, y: number, z: number, color: number, o: Partial<{ vx: number; vy: number; vz: number; g: number; drag: number; life: number; size: number; size1: number; alpha: number; add: boolean; depth: number; spin: number }> = {}) {
     if (this.parts.length > 2600) return;
-    const img = this.img().setTint(color).setDepth(o.depth ?? DEPTH).setBlendMode(o.add === false ? Phaser.BlendModes.NORMAL : Phaser.BlendModes.ADD);
+    const img = this.img().setTint(color).setDepth(o.depth ?? (o.add === false ? DEPTH - 0.5 : DEPTH)) // each blend mode on its own depth: one batch run each, not a flush per switch
+      .setBlendMode(o.add === false ? Phaser.BlendModes.NORMAL : Phaser.BlendModes.ADD);
     const size = o.size ?? 1;
     this.parts.push({ img, x, y, z, vx: o.vx ?? 0, vy: o.vy ?? 0, vz: o.vz ?? 0, g: o.g ?? 0, drag: o.drag ?? 0, t: 0, life: o.life ?? 500,
       s0: size, s1: o.size1 ?? size, a0: o.alpha ?? 1, spin: o.spin });
@@ -2494,12 +2495,18 @@ export class SkillFx {
     const dt = Math.min(0.05, dtMs / 1000);
     this.t += dtMs;
     this.srcCur = 1 - this.srcCur; this.srcs[this.srcCur].n = 0; // song colours: last frame's casters become the lookup
-    for (const em of this.emitters) if (this.t >= em.next) { em.next = this.t + em.every; em.fn(); }
-    this.emitters = this.emitters.filter((em) => this.t < em.until);
+    const ems = this.emitters;
+    for (let i = 0; i < ems.length; i++) { const em = ems[i]; if (this.t >= em.next) { em.next = this.t + em.every; em.fn(); } }
+    let ne = 0;
+    for (let i = 0; i < ems.length; i++) if (this.t < ems[i].until) ems[ne++] = ems[i];
+    ems.length = ne;
     this.tickFields(dt);
     this.tickShots(dt);
-    const out: P[] = [];
-    for (const p of this.parts) {
+    const parts = this.parts;
+    let n = 0;
+    const lh = ISO ? -1 : 0; // lift(z) inlined: no tuple per particle
+    for (let i = 0; i < parts.length; i++) {
+      const p = parts[i];
       p.t += dtMs;
       if (p.t >= p.life) { p.img.setVisible(false).setActive(false); this.pool.push(p.img); continue; }
       const k = 1 - p.drag * dt;
@@ -2507,11 +2514,11 @@ export class SkillFx {
       p.x += p.vx * dt; p.y += p.vy * dt; p.z += p.vz * dt;
       if (p.z < 0) { p.z = 0; p.vz = -p.vz * 0.3; p.vx *= 0.6; p.vy *= 0.6; }
       const f = p.t / p.life;
-      const [lx, ly] = lift(p.z);
+      const lx = lh * p.z, ly = -p.z;
       const size = p.s0 + (p.s1 - p.s0) * f;
       p.img.setPosition(p.x + lx, p.y + ly).setDisplaySize(Math.max(0.5, size), Math.max(0.5, size)).setAlpha(p.a0 * (1 - f * f));
-      out.push(p);
+      parts[n++] = p;
     }
-    this.parts = out;
+    parts.length = n;
   }
 }

@@ -106,8 +106,21 @@ export const reqInfoOf = (state: any): HeroReqInfo =>
 /** A hero state's stats with gear, the same numbers the server uses (shared/gear.ts heroStats; not synced). */
 export const statsOf = (state: any) => heroStats(reqInfoOf(state));
 
-/** The worn items that count for a hero state (requirements met). */
-export const activeOf = (state: any): Equipped => activeGear(Object.fromEntries(GEAR_SLOTS.map((s) => [s, state[s]])), reqInfoOf(state));
+const activeCache = new WeakMap<object, { sig: string; res: Equipped }>();
+/**
+ * The worn items that count for a hero state (requirements met). Called many times a frame, so the result is cached
+ * per hero state and recomputed only when what it reads changes (worn ids, level, stat points, class). Callers must
+ * not change the returned object.
+ */
+export const activeOf = (state: any): Equipped => {
+  let sig = `${state.cls}|${state.level ?? 1}|${state.ptSta ?? 0}|${state.ptStr ?? 0}|${state.ptMag ?? 0}|${state.ptDex ?? 0}`;
+  for (const s of GEAR_SLOTS) sig += `|${state[s] ?? ""}`;
+  const c = activeCache.get(state);
+  if (c && c.sig === sig) return c.res;
+  const res = activeGear(Object.fromEntries(GEAR_SLOTS.map((s) => [s, state[s]])), reqInfoOf(state));
+  activeCache.set(state, { sig, res });
+  return res;
+};
 
 /**
  * Drawn order on top of the hero (each overlay already has the right pixels hidden behind the body).
