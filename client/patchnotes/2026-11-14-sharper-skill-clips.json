@@ -1,5 +1,6 @@
 {
   "date": "2026-11-14",
+  "patch": 219,
   "title": "Sharper skill clips, map viewer fixed",
   "changes": [
     "Skill clips on the skills page are now sharp, smooth and in full daylight, and long enough to show the whole effect.",
