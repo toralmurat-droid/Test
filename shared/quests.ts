@@ -216,7 +216,8 @@ export function stepFor(s: QuestStep | undefined, cls?: string): QuestStep | und
   return o ? { ...s!, ...o } : s;
 }
 
-export interface Reward { xp: number; gold: number; potions: number }
+/** `song`: a Songweaver who finishes the quest learns this song (shared/songbook.ts SONG_SOURCES). */
+export interface Reward { xp: number; gold: number; potions: number; song?: string }
 export interface QuestDef {
   id: string;
   title: string;
@@ -328,7 +329,7 @@ export const QUESTS: QuestDef[] = [
         nag: `A big one, two blobs or more in one skin. There is one lurking in ${Z.farms.name}.` },
       back("witch", "Morwen", "her tent", ["This jelly hums, darling. Hums! Like it remembers a song.", "Here, potions from my last batch, and some coin. You earned them. Then go and tell Rowan it hums. He will know what that means."], "Claim reward"),
     ],
-    reward: { xp: 220, gold: 60, potions: 3 },
+    reward: { xp: 220, gold: 60, potions: 3, song: "song_hum" },
     after: "Rowan has gone pale as milk since you told him. Go and see him, darling. And come back for potions. I do not bite. Much.",
   },
   {
@@ -916,7 +917,7 @@ export const CROWN_QUESTS: QuestDef[] = [
         "You came to Oakvale a stranger and you saved this whole valley. Whatever lies beyond it, the road is yours now. Take this, with all our thanks.",
       ], "Claim reward"),
     ],
-    reward: { xp: 6000, gold: 1500, potions: 6 },
+    reward: { xp: 6000, gold: 1500, potions: 6, song: "song_lament" },
     after: "The valley is free, thanks to you. And the old stone arch outside our south gate has started to hum. Once the Hide-Mother of the Mawdeep is gone too, they say it will open. There is always a seat for you at this fire.",
   },
 ];
@@ -1958,6 +1959,14 @@ const STORY_CHAINS = [0, 1, 2];
 export const GLOAM_STORY = 7;
 const storyDone = (p: Quester | undefined, c: number) => c === 0 ? (chainState(p, 0)?.questId ?? 0) >= GLOAM_STORY : chainDone(p, c);
 /** Every quest of this chain done. */
+/** Has this hero finished quest `id` (any chain)? */
+export function questFinished(p: Quester | undefined, id: string): boolean {
+  for (let c = 0; c < CHAINS.length; c++) {
+    const i = CHAINS[c].quests.findIndex((q) => q.id === id);
+    if (i >= 0) return (chainState(p, c)?.questId ?? 0) > i;
+  }
+  return false;
+}
 export const chainDone = (p: Quester | undefined, c: number) => (chainState(p, c)?.questId ?? 0) >= CHAINS[c].quests.length;
 
 // ---- Chains: the blob story and the skeleton story run side by side, each with its own progress ----

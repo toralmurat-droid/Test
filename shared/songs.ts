@@ -70,7 +70,8 @@ export const NOTES = { keep: 3, lockMs: 12_000, idleMs: 10_000 };
 /** Songs (SkillDef.song): one per Songweaver, 30s, and a change of song waits this long after the last one. */
 export const SONG = { ms: 30_000, changeMs: 2000, tickFloorMs: 500 };
 
-export type ProgId = "amen" | "encore" | "shatter" | "resolve" | "sleight";
+/** The chords she knows from the start, then the ones collected songs teach (shared/songbook.ts SONG_SOURCES). */
+export type ProgId = "amen" | "encore" | "shatter" | "resolve" | "sleight" | "hum" | "round" | "undertow" | "picardy";
 export interface Progression { id: ProgId; name: string; notes: [Degree, Degree, Degree]; skill: string }
 export const PROGRESSIONS: Progression[] = [
   { id: "amen", name: "Amen", notes: ["vi", "IV", "I"], skill: "sg_f_amen" }, // heal and shield
@@ -86,15 +87,16 @@ export interface NoteState { notes: Degree[]; noteAt: number; chordLock: number 
 export function resetNotes(sk: NoteState) { sk.notes = []; }
 
 /**
- * A note was played: keep the last NOTES.keep, forget them after a long pause. Returns the progression they complete
- * (and starts the lockout) unless chords are locked.
+ * A note was played: keep the last NOTES.keep, forget them after a long pause. Returns the progression of `progs`
+ * (default: the ones known from the start; shared/songbook.ts progressionsFor adds collected songs) they complete,
+ * and starts the lockout, unless chords are locked.
  */
-export function noteCast(sk: NoteState, deg: Degree, now: number): Progression | undefined {
+export function noteCast(sk: NoteState, deg: Degree, now: number, progs: Progression[] = PROGRESSIONS): Progression | undefined {
   if (now - sk.noteAt > NOTES.idleMs) sk.notes = [];
   sk.notes = [...sk.notes, deg].slice(-NOTES.keep);
   sk.noteAt = now;
   if (now < sk.chordLock || sk.notes.length < NOTES.keep) return undefined;
-  const p = PROGRESSIONS.find((x) => x.notes.every((n, i) => n === sk.notes[i]));
+  const p = progs.find((x) => x.notes.every((n, i) => n === sk.notes[i]));
   if (!p) return undefined;
   sk.chordLock = now + NOTES.lockMs;
   sk.notes = [];

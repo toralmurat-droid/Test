@@ -10,6 +10,7 @@ import { auraBuffs, isAuraId, BLADE_EL, BLADES_BASE, ESSENCE, SUMMON, WISP, type
 import { addResonance, chordProgress, GAUGE, knownModes, PROGRESSIONS, LYDIAN_SHIELD, DORIAN_RADIUS, MODES, modeColour, modulate, noteCast, NOTES, PHRYGIAN, RESONANCE, resonanceOf, resWord, SONG,
   type Degree, type ModeId, type Pitch, type Progression } from "./songs";
 import { heroSound, SOUND_TIER, soundMult, type SoundProfile } from "./combat";
+import { progressionsFor } from "./songbook";
 import { acousticsAt } from "./acoustics";
 
 /**
@@ -59,6 +60,8 @@ export interface SkillRuntime {
   gaugeAt: number; gaugeTick: number;
   /** The book she wears (the host mirrors the shield slot here): its GearDef.book.full fires when the gauge fills. */
   book?: string;
+  /** Songs she collected (shared/songbook.ts, the host mirrors them): their progressions count while her book holds songs. */
+  songs?: string[];
 }
 export const newRuntime = (): SkillRuntime => ({
   last: {}, buffs: [], chargeUntil: 0, windUntil: 0, stacks: 0, stackAt: 0,
@@ -299,7 +302,7 @@ function playNote(h: SkillHost, id: string, u: Unit, s: SkillDef, now: number): 
   h.fx({ ev: "note", id, s: s.id, deg: s.degree, mode, pitch: s.pitch ?? "M", x: Math.round(u.x), y: Math.round(u.y) });
   u.sk.gaugeAt = now;
   if (s.modulate) return undefined; // a key change fills nothing
-  const p = noteCast(u.sk, s.degree!, now);
+  const p = noteCast(u.sk, s.degree!, now, progressionsFor(u.sk));
   const fin = p ? fireChord(h, id, p) : undefined;
   fillGauge(h, id, GAUGE.note);
   return fin;
@@ -309,7 +312,7 @@ function playNote(h: SkillHost, id: string, u: Unit, s: SkillDef, now: number): 
 export function playableProgs(u: Unit): Progression[] {
   if (!u.cls) return [];
   const degs = new Set(SKILLS[u.cls].filter((s) => s.degree && !s.passive && rankOf(u.talents, s.id) > 0).map((s) => s.degree));
-  return PROGRESSIONS.filter((p) => p.notes.every((n) => degs.has(n)));
+  return progressionsFor(u.sk).filter((p) => p.notes.every((n) => degs.has(n)));
 }
 
 /** A progression fired: its finisher goes off (power from its level and Magic, like a skill). Returns its id if it did. */

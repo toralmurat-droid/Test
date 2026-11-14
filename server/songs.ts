@@ -3,6 +3,8 @@ import { knownModesOf, type ShotSpec, type SkillRuntime, type Unit } from "../sh
 import { skillById, type AreaDef, type FieldDef, type HitEffects, type SkillDef } from "../shared/skills";
 import { BOUNCE, BOUNCE_RULES, reflectAxis, wallAt } from "../shared/acoustics";
 import { BUSKING, BUSKING_LINES, npcById, type Npc } from "../shared/npcs";
+import { isSongId, ODO_LINES, pondShore, SONG_SOURCES, type SongDef, type SongId } from "../shared/songbook";
+import { isMaterial, type MaterialId } from "../shared/lute";
 import { BAG_SIZE, gearName, isBagItem, isBook, isLute, luteAtLevel, starterKit } from "../shared/gear";
 import { potionSlots, type Potions } from "../shared/potions";
 import { sellPrice } from "../shared/shops";
@@ -134,9 +136,10 @@ export function songSave(cls: string, sk: SkillRuntime): { swTree?: number; swMo
 
 /**
  * Save format of the Songweaver's kit (save field swKit). 1: the Songbook sits in the shield slot (DI-3). 2: the
- * musical-only rule and the evolving lute (DI-5): her weapon slot holds her lute, at her level.
+ * musical-only rule and the evolving lute (DI-5): her weapon slot holds her lute, at her level. 3: collected songs
+ * (DI-2): a save from before gets the songs of the quests it had already finished (SongCollector.load).
  */
-export const SW_KIT_VERSION = 2;
+export const SW_KIT_VERSION = 3;
 
 /** What a hero needs for migrateSongweaver: the class, her level (the lute's), potions (they take bag slots) and gold (a sold item pays). */
 export interface KitHero { cls: string; level: number; gold: number; pots: Potions }
@@ -226,3 +229,107 @@ export function restoreMode(u: Unit, swMode: unknown) {
 
 /** What a Songweaver is told when she reaches for a mana potion (sent as "gearno"): her bubble is the song gauge. */
 export const SONG_POTION_TEXT = "Your song gauge fills with music, not potions";
+
+// ---- Collected songs and materials (DI-2 / DI-5; shared/songbook.ts, shared/lute.ts) -------------------------------
+
+/** The owner-only "songbook" message: the songs she collected and her material counters. Sent on join and on change. */
+export interface SongbookMsg { songs: string[]; mats: Record<string, number> }
+interface Book { songs: SongId[]; mats: Partial<Record<MaterialId, number>>; darkAt: number }
+/** Most of one material a hero can hold (a counter, not bag items). */
+export const MAT_CAP = 9999;
+/** How often (ms) Odo grumbles about a dark Chorus. */
+const ODO_DARK_MS = 30_000;
+
+/**
+ * Per hero (keyed by the Player object, so nothing is synced and no Player field is needed): the songs she collected,
+ * mirrored into the engine as SkillRuntime.songs, and her material counters. Saved as swSongs / swMats. Only a
+ * Songweaver collects songs or materials.
+ */
+export class SongCollector {
+  private by = new WeakMap<object, Book>();
+  private of(p: object): Book {
+    let b = this.by.get(p);
+    if (!b) this.by.set(p, (b = { songs: [], mats: {}, darkAt: -Infinity }));
+    return b;
+  }
+
+  /**
+   * On load: the save's songs and materials, cleaned. `oldKit`: a save from before kit v3, which gets the songs of the
+   * quests it had already finished (`done`).
+   */
+  load(p: { cls: string; sk: SkillRuntime }, s: { swSongs?: unknown; swMats?: unknown }, done: (quest: string) => boolean, oldKit: boolean) {
+    const b = this.of(p);
+    b.songs = []; b.mats = {};
+    if (p.cls !== "songweaver") { p.sk.songs = undefined; return; }
+    if (Array.isArray(s.swSongs)) for (const v of s.swSongs) if (isSongId(v) && !b.songs.includes(v)) b.songs.push(v);
+    if (oldKit) for (const d of SONG_SOURCES) if (d.source.kind === "quest" && done(d.source.quest) && !b.songs.includes(d.id)) b.songs.push(d.id);
+    if (s.swMats && typeof s.swMats === "object") for (const [k, v] of Object.entries(s.swMats as Record<string, unknown>)) {
+      if (isMaterial(k) && typeof v === "number" && Number.isFinite(v) && v > 0) b.mats[k] = Math.min(MAT_CAP, Math.floor(v));
+    }
+    p.sk.songs = [...b.songs];
+  }
+
+  /** Save fields (none for other classes). */
+  save(p: { cls: string }): { swSongs?: string[]; swMats?: Record<string, number> } {
+    if (p.cls !== "songweaver") return {};
+    const b = this.of(p);
+    return { swSongs: [...b.songs], swMats: { ...b.mats } as Record<string, number> };
+  }
+
+  msg(p: object): SongbookMsg {
+    const b = this.of(p);
+    return { songs: [...b.songs], mats: { ...b.mats } as Record<string, number> };
+  }
+
+  has(p: object, song: string): boolean { return this.of(p).songs.includes(song as SongId); }
+
+  /** She learns a song. False for another class, an unknown id or a song she has. */
+  learn(p: { cls: string; sk: SkillRuntime }, song: string): boolean {
+    const b = this.of(p);
+    if (p.cls !== "songweaver" || !isSongId(song) || b.songs.includes(song)) return false;
+    b.songs.push(song);
+    p.sk.songs = [...b.songs];
+    return true;
+  }
+
+  /**
+   * A Chorus went off (`s.song`) at (x, y) in `mode`: the songs it earns (Odo hears a bright one within reach, Mirror
+   * Pond's shore takes any), and what a villager says about a dark one. `say` gets the villager id and its line.
+   */
+  chorus(p: { cls: string; sk: SkillRuntime }, s: SkillDef, mode: ModeId, x: number, y: number, now: number, say: (npc: string, text: string) => void): SongDef[] {
+    if (p.cls !== "songweaver" || !s.song) return [];
+    const b = this.of(p), out: SongDef[] = [];
+    for (const d of SONG_SOURCES) {
+      if (b.songs.includes(d.id)) continue;
+      const src = d.source;
+      if (src.kind === "place" && src.place === "pond" && pondShore(x, y)) out.push(d);
+      if (src.kind === "npc") {
+        const n = npcById(src.npc);
+        if (!n || Math.hypot(n.x - x, n.y - y) > src.range) continue;
+        if (MODES[mode].family === src.family) out.push(d);
+        else if (now - b.darkAt >= ODO_DARK_MS) { b.darkAt = now; say(src.npc, ODO_LINES.dark); }
+      }
+    }
+    return out.filter((d) => this.learn(p, d.id));
+  }
+
+  // ---- materials (earned and spent by the lute-maker rules, server/lutemaker.ts) ----
+  mats(p: object): Partial<Record<MaterialId, number>> { return this.of(p).mats; }
+  /** Adds `n` of a material (a Songweaver only). Returns what was added. */
+  addMat(p: { cls: string }, mat: MaterialId, n: number): number {
+    if (p.cls !== "songweaver" || n <= 0) return 0;
+    const m = this.of(p).mats, had = m[mat] ?? 0;
+    m[mat] = Math.min(MAT_CAP, had + Math.floor(n));
+    return m[mat]! - had;
+  }
+  /** Spends materials if she has them all; false (nothing spent) otherwise. */
+  spend(p: object, cost: Partial<Record<MaterialId, number>>): boolean {
+    const m = this.of(p).mats;
+    if (Object.entries(cost).some(([k, v]) => (m[k as MaterialId] ?? 0) < (v ?? 0))) return false;
+    for (const [k, v] of Object.entries(cost)) {
+      const left = (m[k as MaterialId] ?? 0) - (v ?? 0);
+      if (left > 0) m[k as MaterialId] = left; else delete m[k as MaterialId];
+    }
+    return true;
+  }
+}

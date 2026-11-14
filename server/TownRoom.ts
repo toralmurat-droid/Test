@@ -35,15 +35,16 @@ import {
 } from "../shared/items";
 import { bountyCounts, bountyOffers, cleanBounty, nearestBoard, type BountyState } from "../shared/bounty";
 import { DOORS, DOOR_RANGE, doorById, doorDist, doorWorkable, isSafeZone, isSolidAt, randomSpawn, setDoorOpen, VILLAGE, type Door } from "../shared/map";
-import { isDecorSolidAt, npcById, npcNear, TALK_RANGE } from "../shared/npcs";
+import { isDecorSolidAt, npcById, npcNear, TALK_RANGE, type Npc } from "../shared/npcs";
 import { beyondWall, WATCH, WATCH_POSTS, WatchPost } from "../shared/watch";
 import { inVillage, WRATH } from "../shared/wrath";
-import { afterRespec, bounceWave, busking, buskingAudience, BuskingLines, ChordSync, heroSound, migrateSongweaver, mobSound, oldSongTree, relevelLute, restoreMode, SONG_POTION_TEXT, songSave, stowItem } from "./songs";
+import { afterRespec, bounceWave, busking, buskingAudience, BuskingLines, ChordSync, heroSound, migrateSongweaver, mobSound, oldSongTree, relevelLute, restoreMode, SONG_POTION_TEXT, SongCollector, songSave, stowItem, SW_KIT_VERSION } from "./songs";
+import { songById } from "../shared/songbook";
 import { GAUGE, modeColour, PHRYGIAN, RESONANCE } from "../shared/songs";
 import { soundMult } from "../shared/combat";
 import type { SoundFx } from "../shared/skills";
 import { sellPrice, shopBuys, shopFuses, SHOPS } from "../shared/shops";
-import { BLOB_KINDS, CHAINS, CROWN_CHAIN, packQuest, chainDone, chainOpen, chainState, inZone, isBlob, npcPresent, QuestState, questStep, stepFor, stepGoal, Summon, type BossVoice, TUT_CHAIN, TUT_QUESTS, USE_RANGE } from "../shared/quests";
+import { BLOB_KINDS, CHAINS, CROWN_CHAIN, packQuest, chainDone, chainOpen, chainState, inZone, isBlob, npcPresent, QuestState, questFinished, questStep, stepFor, stepGoal, Summon, type BossVoice, TUT_CHAIN, TUT_QUESTS, USE_RANGE } from "../shared/quests";
 import { findHideSpot, HIDE, MOTHER_KEEP_OUT, noMobsAt, spawnPoint, SPAWN_ZONES, villageDist, zoneCap } from "../shared/spawns";
 import { blocked, moveStep } from "../shared/movement";
 import { NIGHT_RAID, raiderByKey, raiderIgnores, RAIDERS } from "../shared/raiders";
@@ -957,6 +958,7 @@ export class TownRoom extends Room<TownState> {
     if (back?.group.length) this.regroupOnJoin(client.sessionId, p, back.group);
     this.sendBoard(client); // the Ideas board is ready as soon as it is opened
     if (Object.keys(p.feast).length) client.send("feast", { feast: p.feast }); // Devour: what this hero has eaten
+    if (p.cls === "songweaver") client.send("songbook", this.songs.msg(p)); // her songs and materials (owner only)
     console.log(`${p.name} the ${CLASSES[p.cls].name} joined (${this.clients.length} online)`);
   }
 
@@ -1049,6 +1051,7 @@ export class TownRoom extends Room<TownState> {
       bounty: p.bounty, bountyDone: p.bountyDone, feast: { ...p.feast },
       ...(p.cls === "summoner" ? { grimoire: this.grimoireOf(p), suTree: SUMMONER_TREE } : {}),
       ...songSave(p.cls, p.sk),
+      ...this.songs.save(p),
     };
   }
 
@@ -1075,6 +1078,7 @@ export class TownRoom extends Room<TownState> {
       stash.items.push(item);
       return true;
     };
+    const kitWas = typeof s.swKit === "number" ? s.swKit : 0;
     const moved = migrateSongweaver(p, s, toStash);
     p.ptSta = num(s.ptSta); p.ptStr = num(s.ptStr); p.ptMag = num(s.ptMag); p.ptDex = num(s.ptDex);
     // A hero saved above today's level cap spent more points than his level gives: hand them back to place again
@@ -1114,6 +1118,8 @@ export class TownRoom extends Room<TownState> {
       if (num(sv[ch.verKey], 1) !== ch.version && st.questStage > 0) { st.questStage = 0; st.questCount = 0; }
       this.qset(p, c, st);
     });
+    // collected songs and materials (server/songs.ts SongCollector); kit v3: songs of quests finished before them
+    this.songs.load(p, s, (q) => questFinished(p, q), kitWas < SW_KIT_VERSION);
     // an item the migration put in the stash: stash and hero are written together, so it can't end up in both
     if (stash) saveStash(p.name, stash, p.cls, this.snapshot(p));
     return moved;
@@ -4551,10 +4557,10 @@ export class TownRoom extends Room<TownState> {
       this.questDo(id, "cast");
       lawful(out.chord);
       // ...and the villagers close by answer a bright tune (a chat line from the NPC, id "npc:<id>", to heroes nearby)
-      this.buskers.heard(p.cls, p.sk.mode, def!, p.x, p.y, Date.now(), (n, text) => {
-        const near = buskingAudience(n, id, this.state.players.entries());
-        for (const c of this.clients) if (near.has(c.sessionId)) c.send("chat", { id: `npc:${n.id}`, name: n.name, text });
-      }, out.chord);
+      this.buskers.heard(p.cls, p.sk.mode, def!, p.x, p.y, Date.now(), (n, text) => this.npcSay(n, id, text), out.chord);
+      // a Chorus can earn a song: Odo hears a bright one, Mirror Pond's shore takes any (server/songs.ts SongCollector)
+      for (const sd of this.songs.chorus(p, def!, p.sk.mode ?? "major", p.x, p.y, Date.now(), (npc, text) => { const n = npcById(npc); if (n) this.npcSay(n, id, text); }))
+        this.songLearned(id, p, sd.id);
     }
   }
 
@@ -5470,6 +5476,7 @@ export class TownRoom extends Room<TownState> {
       return;
     }
     p.gold += d.reward.gold;
+    if (d.reward.song) this.learnSong(id, p, d.reward.song); // a Songweaver learns the quest's song (shared/songbook.ts)
     // Reward potions fit the hero's level; what the bag can't hold is put down at their feet
     const rs = dropSize(p.level, () => 0.5);
     for (const [kind, n] of [["potion", d.reward.potions], ["mpotion", Math.ceil(d.reward.potions / 2)]] as const) {
@@ -5864,6 +5871,34 @@ export class TownRoom extends Room<TownState> {
     }
   }
 
+  /** A villager's line (chat id "npc:<id>") to the hero it answers and the heroes close by (server/songs.ts buskingAudience). */
+  private npcSay(n: Npc, singer: string, text: string) {
+    const near = buskingAudience(n, singer, this.state.players.entries());
+    for (const c of this.clients) if (near.has(c.sessionId)) c.send("chat", { id: `npc:${n.id}`, name: n.name, text });
+  }
+
+  /** A Songweaver learns a song from a quest: the teacher's lines first, then the song (songLearned). */
+  private learnSong(id: string, p: Player, song: string) {
+    const sd = songById(song);
+    if (!sd || p.cls !== "songweaver" || !this.songs.learn(p, song)) return;
+    const cl = this.clients.find((c) => c.sessionId === id);
+    for (const text of sd.teach ?? []) cl?.send("chat", { id: "", name: sd.teacher ?? "Oakvale", text });
+    this.songLearned(id, p, song);
+  }
+
+  /** A song went into her Songbook: the "newsong" event, the learned line, the owner's "songbook" message. */
+  private songLearned(id: string, p: Player, song: string) {
+    const sd = songById(song);
+    this.broadcast("sfx", { ev: "newsong", id, song });
+    if (sd) this.note(id, sd.learned);
+    this.sendSongbook(id, p);
+  }
+
+  /** The owner-only "songbook" message { songs, mats } (on join and on every change). */
+  private sendSongbook(id: string, p: Player) {
+    this.clients.find((c) => c.sessionId === id)?.send("songbook", this.songs.msg(p));
+  }
+
   /** A line in one player's chat from the game itself. */
   private note(id: string, text: string) {
     this.clients.find((c) => c.sessionId === id)?.send("chat", { id: "", name: "Oakvale", text });
@@ -6142,6 +6177,7 @@ export class TownRoom extends Room<TownState> {
   private pending: { at: number; fn: () => void }[] = [];
   private fieldSeq = 0;
   private buskers = new BuskingLines(); // Oakvale villagers answer a busking tune (server/songs.ts)
+  private songs = new SongCollector(); // collected songs and materials per hero (server/songs.ts)
   private chords = new ChordSync(); // the Songweaver's owner-only "chord" message (server/songs.ts)
 
   /** What the skill engine needs from the room. */
