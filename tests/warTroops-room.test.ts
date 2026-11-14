@@ -9,6 +9,7 @@ import { newWar } from "../shared/war/rules";
 import { TERRITORIES } from "../shared/war/territories";
 import { parseTroop, WAR_TROOPS } from "../shared/war/troops";
 import { SAFE_ZONE } from "../shared/map";
+import { SPAWN_ZONES } from "../shared/spawns";
 import { _resetWar, warNow, warState } from "../server/war";
 
 /** An Act 1 land with a patrol and guard posts, away from Oakvale. */
@@ -57,7 +58,7 @@ test("war troops (room): a land near a hero fields its holder's troops; they van
   } finally { WAR_TROOPS.sleepMs = sleep; await srv.stop(); }
 });
 
-test("war troops (room): who they fight (own clan, unsworn, grudge, enemy clan); own clan's skills and shots hurt them not", async () => {
+test("war troops (room): who they fight; only enemy-sworn heroes hurt them (own clan's and unsworn heroes' blows, skills and shots deal 0)", async () => {
   const srv = await startRoom();
   freshWar();
   try {
@@ -69,49 +70,85 @@ test("war troops (room): who they fight (own clan, unsworn, grudge, enemy clan);
     const [gid, g] = guardOf(room);
     const post = garrisonSpots(LAND.id, TROOP.garrisonMax).find((s) => Math.hypot(s.x - g.x, s.y - g.y) < 4)!;
     const stand = () => { p.x = post.x + post.fx * 30; p.y = post.y + post.fy * 30; };
-    // sworn to the holder: left alone, and their blows do nothing
-    p.clan = owner; stand();
-    await wait(1500);
-    assert.equal(hits.filter((h) => h === id).length, 0, "own clan never struck");
-    assert.ok(!room.targetsAround(g.x, g.y, 300, id).some((t: string) => t.startsWith("wt") && parseTroop(room.state.mobs.get(t)?.weapon)?.clan === owner), "no own trooper is an AoE target");
-    assert.ok(!room.host.enemies(g.x, g.y, 300, id).includes(gid));
+    const clear = () => {
+      room.state.fields.forEach((_f: any, fid: string) => room.state.fields.delete(fid));
+      room.state.projectiles.forEach((_s: any, sid: string) => room.state.projectiles.delete(sid));
+    };
     const hp0 = g.hp;
-    room.hitTarget(id, gid, 50, [0, 0], { basic: true });
-    room.hitTarget(id, gid, 50, [0, 0], { skill: true });
-    p.talents.set("w_blizzard", 1); p.mana = p.maxMana = 9999; p.sk.last = {};
-    room.cast(id, "w_blizzard"); // the AoE field on the hero, the guard inside it
-    p.ax = -post.fx; p.ay = -post.fy; p.attackReadyAt = 0;
-    room.playerAttack(id); // a basic bolt straight at the guard
-    await wait(1500);
-    assert.equal(g.hp, hp0, "own clan's blows, skills and shots deal 0");
-    assert.equal(chat.length, 0, "no grudge for the own clan");
-    // unsworn: ignored... (the blizzard still raging would earn a grudge: it goes first)
-    room.state.fields.forEach((_f: any, fid: string) => room.state.fields.delete(fid));
-    room.state.projectiles.forEach((_s: any, sid: string) => room.state.projectiles.delete(sid));
-    p.clan = undefined; stand();
-    await wait(1200);
-    assert.equal(hits.filter((h) => h === id).length, 0, "unsworn heroes are left alone");
-    // ...until they strike once: a grudge, a note, and the troops answer
-    room.hitTarget(id, gid, 1, [0, 0], {});
-    assert.ok(g.hp < hp0, "an unsworn hero can hurt them");
-    assert.ok(await until(() => chat.some((t) => /hunt you/.test(t)), 2000), "the grudge note");
-    assert.ok(await until(() => hits.includes(id), 5000), "the troops attack after the grudge");
-    assert.equal(chat.filter((t) => /hunt you/.test(t)).length, 1, "one note");
-    // the same blizzard from an unsworn hero does reach the guard (so the 0 above was the clan rule, not a miss)
-    const hp1 = g.hp; p.sk.last = {}; p.mana = 9999; stand();
+    p.talents.set("w_blizzard", 1);
+    /** Every way the hero can hit the guard: a blow, a skill hit, a Blizzard on it, a bolt at it. */
+    const strike = () => {
+      room.hitTarget(id, gid, 50, [0, 0], { basic: true });
+      room.hitTarget(id, gid, 50, [0, 0], { skill: true });
+      p.mana = p.maxMana = 9999; p.sk.last = {};
+      room.cast(id, "w_blizzard"); // the AoE field on the hero, the guard inside it
+      p.ax = -post.fx; p.ay = -post.fy; p.attackReadyAt = 0;
+      room.playerAttack(id); // a basic bolt straight at the guard
+    };
+    for (const clan of [owner, undefined]) {
+      p.clan = clan; stand();
+      await wait(1200);
+      assert.equal(hits.filter((h) => h === id).length, 0, `${clan ?? "unsworn"}: left alone`);
+      assert.ok(!room.targetsAround(g.x, g.y, 300, id).includes(gid), `${clan ?? "unsworn"}: no AoE target`);
+      assert.ok(!room.host.enemies(g.x, g.y, 300, id).includes(gid));
+      strike();
+      await wait(1500);
+      assert.equal(g.hp, hp0, `${clan ?? "unsworn"}: blows, Blizzard and bolt deal 0`);
+      assert.equal(g.target, "", `${clan ?? "unsworn"}: no fight started`);
+      assert.equal(hits.filter((h) => h === id).length, 0, `${clan ?? "unsworn"}: still left alone after striking`);
+      clear();
+    }
+    assert.equal(chat.length, 0, "no Herald note either");
+    // sworn to another clan: the same Blizzard hurts (so the 0 above was the stance rule, not a miss) and the troops attack
+    p.clan = foe; stand();
+    p.sk.last = {}; p.mana = 9999;
     room.cast(id, "w_blizzard");
-    assert.ok(await until(() => g.dead || g.hp < hp1, 3000), "an unsworn hero's AoE hurts them");
-    // a hero sworn to another clan is attacked on sight
-    const c2 = await srv.join({ cls: "wizard" });
+    assert.ok(await until(() => g.dead || g.hp < hp0, 3000), "an enemy's AoE hurts them");
+    assert.ok(await until(() => hits.includes(id), 5000), "an enemy-sworn hero is struck");
+    await c.leave();
+  } finally { await srv.stop(); }
+});
+
+test("war troops (room): a trooper's kill announces no cleared zone; a shock arc skips troopers the hero may not hurt", async () => {
+  const srv = await startRoom();
+  freshWar();
+  try {
+    const c = await srv.join({ cls: "wizard" });
     await wait(150);
-    const q = room.state.players.get(c2.sessionId);
-    p.clan = owner; // (the grudged hero calls the troops off: sworn to the holder now)
-    assert.ok(await until(() => !!guardOf(room), 4000), "a guard back at its post");
-    const [, g2] = guardOf(room), post2 = garrisonSpots(LAND.id, TROOP.garrisonMax).find((s) => Math.hypot(s.x - g2.x, s.y - g2.y) < 4)!;
-    q.level = 30; q.hp = q.maxHp = 100_000; q.invulnUntil = 0; q.clan = foe;
-    q.x = post2.x + post2.fx * 24; q.y = post2.y + post2.fy * 24;
-    assert.ok(await until(() => hits.includes(c2.sessionId), 5000), "an enemy-sworn hero is struck");
-    await c2.leave(); await c.leave();
+    const room = srv.room as any, id = c.sessionId, p = room.state.players.get(id);
+    p.level = 30;
+    const gate = patrolOf(LAND.id)!.pts[0];
+    p.x = gate.x; p.y = gate.y;
+    room.warTroops.tick(Date.now());
+    const sent: [string, any][] = [], bc = room.broadcast.bind(room);
+    room.broadcast = (t: string, m: any, o?: any) => { sent.push([t, m]); return bc(t, m, o); };
+    const [tid, t] = landTroops(room)[0];
+    const zoneMob = (): [string, any] => { let r: [string, any] | undefined; room.state.mobs.forEach((m: any, mid: string) => { if (!r && !m.dead && m.zone >= 0 && m.kind !== "trooper") r = [mid, m]; }); return r!; };
+    // the last monster of a zone felled by a trooper: no banner
+    const [wid, w] = zoneMob(), zone = room.state.zones.get(SPAWN_ZONES[w.zone].name);
+    zone.alive = 1;
+    room.mobHitsMob(t, tid, w, wid, 1e6);
+    assert.ok(w.dead);
+    assert.ok(!sent.some(([k]) => k === "zonecleared"), "no zonecleared for a trooper's kill");
+    // (the same kill by a hero is announced: the check above is not vacuous)
+    const [wid2, w2] = zoneMob(), zone2 = room.state.zones.get(SPAWN_ZONES[w2.zone].name);
+    zone2.alive = 1;
+    room.mobDied(w2, wid2, id, p.name);
+    assert.ok(sent.some(([k]) => k === "zonecleared"), "a hero's is");
+    // shock: an unsworn hero's arc never leaps onto a trooper (the only other monster near)
+    p.clan = undefined;
+    const [wid3, w3] = zoneMob();
+    room.state.mobs.forEach((m: any, mid: string) => { if (mid !== wid3 && mid !== tid) room.state.mobs.delete(mid); });
+    w3.x = t.x + 20; w3.y = t.y;
+    const hp = t.hp;
+    sent.length = 0;
+    room.shockArc(id, wid3, 500);
+    assert.ok(!sent.some(([k]) => k === "arc"), "no arc onto the neutral trooper");
+    assert.equal(t.hp, hp);
+    p.clan = CLAN_KEYS.find((k) => k !== parseTroop(t.weapon)!.clan);
+    room.shockArc(id, wid3, 500);
+    assert.ok(sent.some(([k]) => k === "arc") && t.hp < hp, "an enemy-sworn hero's arc does leap onto it");
+    await c.leave();
   } finally { await srv.stop(); }
 });
 

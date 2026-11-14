@@ -629,8 +629,6 @@ export class TownRoom extends Room<TownState> {
       if (s) { s.damage = dmg; s.mobName = by; s.troop = clan; }
     },
     strikeMob: (mid, tid, dmg) => { const m = this.state.mobs.get(mid), o = this.state.mobs.get(tid); if (m && o && !o.dead) { this.broadcast("swing", { id: mid }); this.mobHitsMob(m, mid, o, tid, dmg); } },
-    note: (pid, text) => this.clients.getById(pid)?.send("chat", { id: "", name: "Herald", text }),
-    grudge: (pid, clan, ms) => this.clients.getById(pid)?.send("grudge", { clan, ms }),
     ranked: (pid, rank) => { const c = this.clients.getById(pid), p = this.state.players.get(pid); if (c && p) { c.send("clan", clanView(p)); c.send("chat", { id: "", name: "Herald", text: `Your renown grows: you are now ${rank}.` }); } },
   });
 
@@ -2310,7 +2308,6 @@ export class TownRoom extends Room<TownState> {
     for (const [tid, t] of this.state.mobs.inBox(m.x, m.y, R)) {
       if (t === m || t.dead || t.hidden) continue;
       if (t.owner || t.kind === "trooper" ? !this.canHurtMob(ownerId, t) : isSafeZone(t.x, t.y)) continue;
-      if (t.kind === "trooper" && !this.warTroops.hostile(ownerId, t)) continue; // creatures leave troops alone that leave their owner alone
       if (!near(t.x, t.y)) continue;
       const score = 1 - Math.hypot(t.x - m.x, t.y - m.y) / R + (t.target === ownerId || t.foe === ownerId ? 1 : 0) + (tid === m.target ? AGGRO.stick : 0) + whim();
       if (score > bs) { bs = score; best = tid; }
@@ -4490,7 +4487,7 @@ export class TownRoom extends Room<TownState> {
         const now = Date.now();
         let pid = "";
         this.state.players.forEach((p, k) => {
-          if (!pid && !p.dead && !isSafeZone(p.x, p.y) && now >= p.invulnUntil && Math.hypot(p.x - s.x, p.y - s.y) <= s.radius + HIT_RADIUS && (!s.troop || this.warTroops.stance(s.troop, k, now) === "enemy")) pid = k;
+          if (!pid && !p.dead && !isSafeZone(p.x, p.y) && now >= p.invulnUntil && Math.hypot(p.x - s.x, p.y - s.y) <= s.radius + HIT_RADIUS && (!s.troop || this.warTroops.stance(s.troop, k) === "enemy")) pid = k;
         });
         if (pid) {
           if (this.steamMissed(s.owner, pid)) return this.explode(s, id); // Steam: the shot goes wide
@@ -5295,7 +5292,7 @@ export class TownRoom extends Room<TownState> {
     const m = this.state.mobs.get(targetId);
     if (!m || m.dead) return;
     if (a && !this.canHurtMob(attackerId, m)) return;
-    if (a && m.kind === "trooper") this.warTroops.hit(attackerId, m); // an unsworn hero's blow: that clan's grudge
+    if (a && m.kind === "trooper") this.warTroops.hit(attackerId, m); // an enemy hero's blow: the trooper turns on them
     if (m.owner && a) dmg = Math.max(1, Math.round(dmg / SUMMON.pvp.hp)); // a hero's blow on someone's creature (SUMMON.pvp)
     const def = mobDef(m);
     if (a && (m.camp || m.kind === "banditchief")) this.banditShout(m, targetId, attackerId, Date.now());
@@ -5434,6 +5431,7 @@ export class TownRoom extends Room<TownState> {
     let best = "", bd = F.range;
     for (const [oid, o] of this.state.mobs.inBox(from.x, from.y, bd)) { // the starting box; it shrinks as nearer ones turn up
       if (oid === targetId || o.dead || o.hidden || Math.abs(o.x - from.x) > bd || Math.abs(o.y - from.y) > bd) continue;
+      if (this.state.players.has(attackerId) && !this.canHurtMob(attackerId, o)) continue; // never onto a creature or trooper the hero may not hurt
       const d = Math.hypot(o.x - from.x, o.y - from.y);
       if (d < bd) { bd = d; best = oid; }
     }
@@ -5475,7 +5473,7 @@ export class TownRoom extends Room<TownState> {
     if (zone) {
       zone.alive--;
       // Last monster of the zone down: tell everyone (the killer gets a big banner)
-      if (zone.alive <= 0 && attackerId) {
+      if (zone.alive <= 0 && attackerId && this.state.mobs.get(attackerId)?.kind !== "trooper") { // (a clan trooper's kill is no hero's feat)
         const z = SPAWN_ZONES[m.zone];
         this.broadcast("zonecleared", { zone: z.name, by: attackerId, name: killerName, respawnSec: Math.round(z.respawnMs / 1000) });
       }

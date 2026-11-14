@@ -415,13 +415,11 @@ export class TownScene extends Phaser.Scene {
   private warPlaque?: WarPlaque;
   private warStd?: WarStandards;
   private warTroops?: WarTroops;
-  /** Clans whose troops hunt this hero (a "grudge" from the server: they struck one of them), until (local ms). */
-  private grudges = new Map<string, number>();
   /** How a server clan trooper sees this hero (shared/war/troops.ts troopStance), from the oath the "clan" message brought. */
   private troopStanceOf(weapon: string): TroopStance {
     const t = parseTroop(weapon), me = (this.room?.state as any)?.players?.get(this.me);
     if (!t || !me) return "neutral";
-    return troopStance(t.clan, { clan: this.warStd?.clan || undefined, level: me.level }, this.grudges.get(t.clan) ?? 0, Date.now());
+    return troopStance(t.clan, { clan: this.warStd?.clan || undefined, level: me.level });
   }
   private warLast?: WarView;
   private soundCues = new SoundCues();
@@ -1520,7 +1518,6 @@ export class TownScene extends Phaser.Scene {
     });
     // Our hero died: "You died - killed by <monster or player>" with a respawn countdown
     this.room.onMessage("died", ({ by, ms }) => {
-      this.grudges.clear(); // the troops are done with a fallen hero (server/warTroops.ts forget)
       const el = document.getElementById("death")!;
       el.querySelector(".by")!.textContent = `Killed by ${by}`;
       const back = el.querySelector(".back")!;
@@ -1568,7 +1565,6 @@ export class TownScene extends Phaser.Scene {
     this.warTroops = new WarTroops(this); // cosmetic clan patrols, derived from the war snapshot
     this.room.onMessage("war", (v) => { this.warTroops?.setWar(v); (this.warPlaque ??= new WarPlaque(document.getElementById("hud")!)).set(v); this.warStd?.setWar(v); this.warLast = v; });
     this.room.onMessage("clan", (m) => this.warStd?.setClan(m));
-    this.room.onMessage("grudge", (m: { clan?: string; ms?: number }) => { if (parseTroop(m?.clan) && typeof m.ms === "number") this.grudges.set(m.clan!, Date.now() + Math.min(m.ms, 600_000)); });
     const warNotice = new WarNotice(document.getElementById("hud")!);
     this.room.onMessage("warev", (e) => warNotice.show(e, this.entities.get(this.me)?.sprite));
     this.room.onMessage("mv", alive);

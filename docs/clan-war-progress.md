@@ -136,20 +136,22 @@ Open points for M1:
 ## M2: troops fight (2026-11-14)
 
 - Server troops: a land wakes when a hero above ground is within `WAR_TROOPS.wakeTiles` (34) of its rect. Its holder's
-  column (`patrolCount`) and Hold guards (`garrisonCount`; guards only during a siege) appear as real monsters of kind
+  column (`patrolCount`) and Hold guards (`garrisonCount`, both by control; during a siege the column stands down and
+  only the guards stay) appear as real monsters of kind
   `"trooper"`, the clan in `Mob.weapon` (`"redfang"`, `"redfang*"` for the captain), so no schema change. Lands nearest
   the heroes come first, `maxTroops` 80 per room (bench). A land sleeps a minute after the last hero left; the fallen come
   back at the Hold gate after a minute; a flip replaces the whole force (`server/warTroops.ts`, rules and numbers in
   `shared/war/troops.ts`).
 - AI: march the shared patrol loop in rank (`columnLead`, same phase as the old cosmetic squads), guard the posts, pick a
-  foe every 400 ms: heroes sworn to other clans, unsworn heroes with a grudge (2 min after striking a trooper; a Herald
-  note and a `grudge` message), their creatures, troopers of other clans, and wild monsters inside the land + 2 tiles
-  (those fighting friendly heroes first; no elites, bosses, quest monsters or Night Raiders unless they struck first).
+  foe every 400 ms: heroes sworn to other clans, their creatures, troopers of other clans, and wild monsters inside the
+  land + 2 tiles that no hero they leave alone (or that hero's creature) is fighting: troops never steal a neutral's or
+  an ally's kill. No elites, bosses, quest monsters or Night Raiders, unless one struck a trooper first.
   Melee with a rush and a javelin (the javelin only hurts heroes that clan fights). Never in the safe squares, the
   stockade or monster-free ground; never newcomers under the oath level. Troopers farther than `livePx` from every hero
   just hold their place (no unseen fights, cheap).
-- Room rules: one `canHurtMob` gate for every hero blow (own clan's troops take nothing: AoE, shots, runes, Black Hole);
-  no XP / loot / quest credit for troop kills; a sworn hero of another clan earns 1 valor (and renown) per kill in the
+- Room rules: one `canHurtMob` gate for every hero blow (AoE, shots, runes, shock arcs, Black Hole): only heroes the
+  troops fight (`troopStance` "enemy") can hurt them; allies and unsworn heroes can't, so no fight starts by accident;
+  no XP / loot / quest credit for troop kills, and a trooper's kill never announces a cleared zone; a sworn hero of another clan earns 1 valor (and renown) per kill in the
   land, at most 5 per war tick. Charm, Devour and Bite skip troopers; the village watch leaves them alone.
 - Numbers: `troopStats` = MOBS.trooper × level curve × clan (`TROOP_COMBAT`: Wardens tanky, Redfang hard-hitting, Host
   slow and tough, Hide-Kin quick, Veiled strong) × captain (`TROOP_OFFICER`) × veteran ramp (`TROOP_VETERAN`, higher

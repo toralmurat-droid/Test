@@ -28,32 +28,32 @@ export const WAR_TROOPS = {
   mobMarginTiles: 2,
   /** No trooper chases anything farther than this past its land's rect (tiles). */
   leashTiles: 6,
-  /** An unsworn hero who strikes a trooper is that clan's enemy in all its lands for this long. */
-  grudgeMs: 120_000,
   /** Valor a sworn hero earns for their clan by felling a trooper of another clan in its land... */
   killValor: 1,
   /** ...at most this much per hero per war tick (WAR.tickMs). */
   killValorPerTick: 5,
   /** How often a trooper looks for a target (ms). */
   pickMs: 400,
-  /** Score bonus for a wild monster fighting a hero friendly to the clan (the troops help their own). */
-  helpBonus: 1,
+  /** Score bonuses when picking a foe: an enemy hero comes first, then a trooper of another clan, then wild monsters. */
+  heroBonus: 0.5, troopBonus: 0.3,
   /** Score kept by the current target (no flicker between two equal foes). */
   stick: 0.3,
   /** Out of formation by more than this (px), a trooper hurries back at its full speed instead of the march pace. */
   slackPx: 24,
+  /** Back in formation, a trooper walks at the column's pace times this (a little quicker, to catch up). */
+  catchUp: 1.15,
+  /** A trooper's reach (px) past MOB_ATTACK_RANGE: its target's body (mobBody) for a monster, `heroBody` for a hero;
+   * the rush blow lands within `rushSlack` of that, a wound-up blow within `swingSlack` (the foe may step back a little). */
+  heroBody: 4, rushSlack: 4, swingSlack: 6,
   /** A trooper with no hero within this (px, square) just keeps its place in the column: no walking, no fights nobody sees. */
   livePx: 22 * 32,
   /** A trooper this far from its post (px) with no hero within `warpUnseenPx` is put back on it (stuck behind a wall). */
   warpPx: 10 * 32, warpUnseenPx: 18 * 32,
-  /** The soldier's rush: a foe this far off (px) is closed at speedMult for ms, and the blow on arrival hits dmgMult harder. */
-  rush: { min: 36, max: 130, ms: 320, speedMult: 3, everyMs: 4000, dmgMult: 1.3 },
+  /** The soldier's rush: a foe this far off (px) is closed at speedMult for ms, and the blow on arrival hits dmgMult harder
+   * (no arrival within missGraceMs after the rush ends: it missed). */
+  rush: { min: 36, max: 130, ms: 320, speedMult: 3, everyMs: 4000, dmgMult: 1.3, missGraceMs: 250 },
   /** A javelin thrown at an enemy hero this far off (px): wind-up, then a shot that only hurts heroes the troops fight. */
   javelin: { min: 56, max: 150, everyMs: 4500, windupMs: 450, dmgMult: 0.9, speed: 240, radius: 4 },
-  /** Chat lines (Herald notes to one hero). */
-  lines: {
-    grudge: (clan: string, secs: number) => `You struck a soldier of ${clan}. Their troops will hunt you in all their lands for ${Math.round(secs / 60)} minutes.`,
-  },
 };
 
 /**
@@ -102,14 +102,14 @@ export function troopLevel(t: number, officer = false): number {
 
 export type TroopStance = "ally" | "neutral" | "enemy";
 /**
- * How clan `troop`'s soldiers see a hero: their own sworn heroes are allies, heroes sworn elsewhere and heroes with a
- * live grudge (`grudgeUntil` > `now`) are enemies, everyone else (and anyone under STANDARD.minLevel) is left alone.
+ * How clan `troop`'s soldiers see a hero: their own sworn heroes are allies, heroes sworn elsewhere are enemies,
+ * everyone else (unsworn heroes, anyone under STANDARD.minLevel) is left alone and can't hurt them either (the war is
+ * for the sworn: the server's WarTroops.canHurt and the client's attack cursor both read this).
  */
-export function troopStance(troop: ClanKey, hero: { clan?: ClanKey; level: number }, grudgeUntil: number, now: number): TroopStance {
+export function troopStance(troop: ClanKey, hero: { clan?: ClanKey; level: number }): TroopStance {
   if (hero.level < STANDARD.minLevel) return "neutral";
   if (hero.clan === troop) return "ally";
-  if (hero.clan) return "enemy";
-  return grudgeUntil > now ? "enemy" : "neutral";
+  return hero.clan ? "enemy" : "neutral";
 }
 
 /** A short name for a trooper (name label, death messages): "Redfang soldier", "Redfang captain". */

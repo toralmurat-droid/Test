@@ -1,22 +1,23 @@
 /**
  * Clan troops that fight (shared/war/troops.ts has the numbers and the pure rules). A land wakes when a hero comes
  * near it: its holder's patrol column and Hold guards appear as real monsters (kind "trooper", clan in Mob.weapon),
- * march the shared patrol loop, hunt the wild monsters of their land and fight heroes sworn to other clans (and heroes
- * who struck them: a grudge). Fallen troopers come back at the Hold gate; a land with no hero near goes back to sleep.
+ * march the shared patrol loop, hunt the wild monsters of their land (never one a hero they don't fight is busy with)
+ * and fight heroes sworn to other clans; only those heroes can hurt them. Fallen troopers come back at the Hold gate; a
+ * land with no hero near goes back to sleep.
  * TownRoom calls in at a few points (a tick a second, every trooper's turn, a hero's hit on one, its death, the war
  * news, a hero leaving) through the narrow WarTroopsHost below. Troopers give no XP and no loot (TownRoom.hitTarget).
  */
 import { BOSS, dirInput, ELITE, MOB_ATTACK_RANGE, TILE, type Dir, type MobKind } from "../shared/constants";
 import { MOB_COMBAT, mobBody } from "../shared/combat";
+import { SLOW_MOB } from "../shared/powers";
 import { underground } from "../shared/dungeon";
 import { isSafeZone } from "../shared/map";
 import { blocked, moveStep } from "../shared/movement";
 import { noMobsAt } from "../shared/spawns";
 import { inVillage } from "../shared/wrath";
-import { CLAN_KEYS, CLANS, type ClanKey } from "../shared/war/clans";
+import { CLAN_KEYS, type ClanKey } from "../shared/war/clans";
 import { garrisonCount, garrisonSpots, patrolCount, patrolOf, patrolPos, TROOP } from "../shared/war/patrols";
 import { RENOWN_RANKS, rankOf } from "../shared/war/renown";
-import { STANDARD } from "../shared/war/standards";
 import { TERRITORIES } from "../shared/war/territories";
 import { columnLead, parseTroop, troopLevel, troopStats, troopName, troopStance, troopWeapon, WAR_TROOPS, type TroopStance } from "../shared/war/troops";
 import type { WarView } from "../shared/war/view";
@@ -27,7 +28,7 @@ export interface TroopHero { name: string; clan?: ClanKey; level: number; x: num
 /** The parts of a monster this module reads and moves (TownRoom's Mob). */
 export interface TroopMob {
   kind: string; weapon: string; level: number; x: number; y: number; homeX: number; homeY: number; dir: Dir;
-  hp: number; maxHp: number; dead: boolean; hidden: boolean; owner: string; target: string; hateId: string; hate: number;
+  hp: number; maxHp: number; dead: boolean; hidden: boolean; owner: string; target: string; hateId: string; hate: number; foe: string;
   summonFor: string; qwave: boolean; servant: boolean; title: string; tide: boolean;
   moving: boolean; stunned: boolean; slowed: boolean; broken: boolean; winding: boolean;
   windUntil: number; lastAttack: number; stunUntil: number; slowUntil: number;
@@ -49,10 +50,6 @@ export interface WarTroopsHost {
   strikeMob(mobId: string, targetId: string, dmg: number): void;
   /** A javelin from the trooper toward (tx, ty): it only hurts heroes clan `clan` fights. */
   shoot(mobId: string, clan: ClanKey, tx: number, ty: number, dmg: number, byName: string): void;
-  /** A Herald line to one hero. */
-  note(heroId: string, text: string): void;
-  /** Tell the hero clan `clan`'s troops hunt them for `ms` (their client colours those troops as enemies). */
-  grudge(heroId: string, clan: ClanKey, ms: number): void;
   /** A hero reached a new renown rank (the room tells them, as for the standards). */
   ranked(heroId: string, rank: string): void;
 }
@@ -70,8 +67,6 @@ const offLimits = (x: number, y: number) => isSafeZone(x, y) || inVillage(x, y) 
 export class WarTroops {
   private lands = new Map<number, Land>();
   private troops = new Map<string, Troop>();
-  /** Grudges by hero session id: clan -> wall ms it ends. */
-  private grudges = new Map<string, Partial<Record<ClanKey, number>>>();
   /** Kill valor per hero name in the current war tick (WAR_TROOPS.killValorPerTick). */
   private valor = new Map<string, { tick: number; n: number }>();
   private seq = 0;
@@ -81,37 +76,27 @@ export class WarTroops {
   /** Troopers alive now (tests, the bench). */
   get count(): number { return this.troops.size; }
 
-  /** The stance of clan `k`'s troops toward hero `pid`. */
-  stance(k: ClanKey, pid: string, now = Date.now()): TroopStance {
+  /** The stance of clan `k`'s troops toward hero `pid` (troopStance: it depends on the hero's oath and level only). */
+  stance(k: ClanKey, pid: string): TroopStance {
     const p = this.h.hero(pid);
-    return p ? troopStance(k, p, this.grudges.get(pid)?.[k] ?? 0, now) : "neutral";
+    return p ? troopStance(k, p) : "neutral";
   }
 
-  /** May this hero hurt that trooper? Never their own clan's, never one on the safe square. */
+  /**
+   * May this hero hurt that trooper? Only a hero the troops fight (sworn to another clan, of oath level), never on the
+   * safe square: allies and neutrals can't touch them, so nobody starts a fight by a stray Blizzard (the client's
+   * attack cursor reads the same stance).
+   */
   canHurt(heroId: string, m: TroopMob): boolean {
-    const tr = parseTroop(m.weapon), p = this.h.hero(heroId);
-    if (!tr || !p) return true;
-    return p.clan !== tr.clan && !isSafeZone(m.x, m.y);
-  }
-
-  /** Does trooper `m` fight hero `pid` (so the hero's creatures may go for it on their own)? */
-  hostile(pid: string, m: TroopMob, now = Date.now()): boolean {
     const tr = parseTroop(m.weapon);
-    return !!tr && this.stance(tr.clan, pid, now) === "enemy";
+    if (!tr) return true;
+    return this.stance(tr.clan, heroId) === "enemy" && !isSafeZone(m.x, m.y);
   }
 
-  /** A hero's blow landed on a trooper: an unsworn hero earns that clan's grudge (a note the first time), and it turns on them. */
-  hit(heroId: string, m: TroopMob, now = Date.now()) {
-    const tr = parseTroop(m.weapon), p = this.h.hero(heroId);
-    if (!tr || !p) return;
-    if (!p.clan && p.level >= STANDARD.minLevel) { // (newcomers are never fought, so they earn no grudge either)
-      const g = this.grudges.get(heroId) ?? {}, was = g[tr.clan] ?? 0;
-      g[tr.clan] = now + WAR_TROOPS.grudgeMs;
-      this.grudges.set(heroId, g);
-      if (was <= now) this.h.note(heroId, WAR_TROOPS.lines.grudge(CLANS[tr.clan].name, WAR_TROOPS.grudgeMs / 1000));
-      this.h.grudge(heroId, tr.clan, WAR_TROOPS.grudgeMs);
-    }
-    if (this.stance(tr.clan, heroId, now) === "enemy") m.target = heroId;
+  /** A hero's blow landed on a trooper (only an enemy's can, canHurt): it turns on them. */
+  hit(heroId: string, m: TroopMob) {
+    const tr = parseTroop(m.weapon);
+    if (tr && this.stance(tr.clan, heroId) === "enemy") m.target = heroId;
   }
 
   /** A trooper died (by any hand). A hero sworn to another clan standing in its land earns valor for their clan (capped per war tick). */
@@ -124,6 +109,7 @@ export class WarTroops {
     if (!p || !p.clan || p.clan === tr.clan || !t || !v) return;
     const tx = p.x / TILE, ty = p.y / TILE;
     if (tx < t.x || ty < t.y || tx >= t.x + t.w || ty >= t.y + t.h) return;
+    for (const [k, c] of this.valor) if (c.tick !== v.tick) this.valor.delete(k); // counts of past war ticks are done with
     const c = this.valor.get(p.name), used = c && c.tick === v.tick ? c.n : 0;
     const add = Math.min(WAR_TROOPS.killValor, WAR_TROOPS.killValorPerTick - used);
     if (add <= 0) return;
@@ -134,9 +120,8 @@ export class WarTroops {
     if (rank > was) this.h.ranked(killerId, RENOWN_RANKS[rank].name);
   }
 
-  /** A hero left or died: their grudges end and no trooper keeps chasing them. */
+  /** A hero left or died: no trooper keeps chasing them. */
   forget(heroId: string) {
-    this.grudges.delete(heroId);
     for (const id of this.troops.keys()) { const m = this.h.mob(id); if (m && m.target === heroId) m.target = ""; }
   }
 
@@ -237,7 +222,23 @@ export class WarTroops {
     return !!r && tx >= r.x - tiles && ty >= r.y - tiles && tx < r.x + r.w + tiles && ty < r.y + r.h + tiles;
   }
 
-  /** The foe a trooper fights now: an enemy hero, an enemy's creature, a trooper of another clan, or a wild monster of its land. */
+  /**
+   * Is wild monster `o` busy with someone clan `k` doesn't fight (a hero, or a hero's creature)? The troops keep out of
+   * that fight: no stealing a neutral's kill (or its quest credit), no taking sides for an ally.
+   */
+  private busyElsewhere(o: TroopMob, k: ClanKey): boolean {
+    for (const id of [o.target, o.hateId, o.foe]) {
+      if (!id) continue;
+      const owner = this.h.hero(id) ? id : this.h.mob(id)?.owner;
+      if (owner && this.stance(k, owner) !== "enemy") return true;
+    }
+    return false;
+  }
+
+  /**
+   * The foe a trooper fights now: an enemy hero, an enemy's creature, a trooper of another clan, a wild monster of its
+   * land that no hero they leave alone is fighting, or whatever hit it.
+   */
   private pick(m: TroopMob, id: string, tr: Troop, now: number): string {
     const W = WAR_TROOPS, R = W.aggroPx;
     let best = "", bs = 0;
@@ -249,19 +250,18 @@ export class WarTroops {
     };
     for (const [pid, p] of this.h.heroes()) {
       if (p.dead || Math.abs(p.x - m.x) > R * 2 || Math.abs(p.y - m.y) > R * 2) continue;
-      if (troopStance(tr.clan, p, this.grudges.get(pid)?.[tr.clan] ?? 0, now) !== "enemy" || this.h.hidden(pid, now)) continue;
-      consider(pid, p.x, p.y, 0.5); // a soldier goes for the enemy hero first
+      if (troopStance(tr.clan, p) !== "enemy" || this.h.hidden(pid, now)) continue;
+      consider(pid, p.x, p.y, W.heroBonus); // a soldier goes for the enemy hero first
     }
     const hated = m.hateId && m.hate > 0 ? this.h.mob(m.hateId) : undefined; // (the only one it sees from twice as far)
     for (const [oid, o] of hated ? [...this.h.mobsInBox(m.x, m.y, R), [m.hateId, hated] as [string, TroopMob]] : this.h.mobsInBox(m.x, m.y, R)) {
       if (oid === id || o.dead || o.hidden) continue;
-      if (o.kind === "trooper") { const k = parseTroop(o.weapon)?.clan; if (k && k !== tr.clan) consider(oid, o.x, o.y, 0.3); continue; }
-      if (o.owner) { if (this.stance(tr.clan, o.owner, now) === "enemy") consider(oid, o.x, o.y, 0); continue; }
+      if (o.kind === "trooper") { const k = parseTroop(o.weapon)?.clan; if (k && k !== tr.clan) consider(oid, o.x, o.y, W.troopBonus); continue; }
+      if (o.owner) { if (this.stance(tr.clan, o.owner) === "enemy") consider(oid, o.x, o.y, 0); continue; }
       const fought = oid === m.hateId && m.hate > 0; // whatever hit it, it answers (within its leash)
       if (!fought && (o.summonFor || o.qwave || o.servant || o.title || o.tide || ELITE[o.kind as MobKind] || BOSS[o.kind as MobKind] || o.kind === "nightraider")) continue;
-      if (!fought && !this.inLand(tr.t, o.x, o.y, W.mobMarginTiles)) continue;
-      const helps = o.target && this.stance(tr.clan, o.target, now) === "ally" ? W.helpBonus : 0;
-      consider(oid, o.x, o.y, helps);
+      if (!fought && (!this.inLand(tr.t, o.x, o.y, W.mobMarginTiles) || this.busyElsewhere(o, tr.clan))) continue;
+      consider(oid, o.x, o.y, 0);
     }
     return best;
   }
@@ -284,25 +284,25 @@ export class WarTroops {
       m.moving = false; m.windUntil = 0; m.winding = false;
       return;
     }
-    // the target must still be fair game (a grudge can run out, a hero can step onto the safe square)
+    // the target must still be fair game (a hero can swear another oath or step onto the safe square)
     const tp = m.target ? this.h.hero(m.target) : undefined, tm = !tp && m.target ? this.h.mob(m.target) : undefined;
     const t = tp ?? tm;
-    if (m.target && (!t || (tp && (tp.dead || this.stance(tr.clan, m.target, now) !== "enemy" || this.h.hidden(m.target, now)))
+    if (m.target && (!t || (tp && (tp.dead || this.stance(tr.clan, m.target) !== "enemy" || this.h.hidden(m.target, now)))
       || (tm && (tm.dead || tm.hidden)) || offLimits(t.x, t.y) || !this.inLand(tr.t, t.x, t.y, WAR_TROOPS.leashTiles))) { m.target = ""; m.windUntil = 0; m.winding = false; }
-    const st = troopStats(tr.clan, m.level, tr.slot.officer), speed = st.speed * (m.slowed ? 0.5 : 1);
+    const st = troopStats(tr.clan, m.level, tr.slot.officer), speed = st.speed * (m.slowed ? SLOW_MOB : 1);
     let gx: number, gy: number, pace: number;
     if (!m.target) { tr.throwing = false; tr.rushHit = false; }
     if (m.target && t) {
-      const dist = Math.hypot(t.x - m.x, t.y - m.y), reach = MOB_ATTACK_RANGE + (tm ? mobBody(tm.kind as MobKind) : 4);
-      const R = WAR_TROOPS.rush, J = WAR_TROOPS.javelin, by = troopName(tr.clan, tr.slot.officer);
+      const W = WAR_TROOPS, dist = Math.hypot(t.x - m.x, t.y - m.y), reach = MOB_ATTACK_RANGE + (tm ? mobBody(tm.kind as MobKind) : W.heroBody);
+      const R = W.rush, J = WAR_TROOPS.javelin, by = troopName(tr.clan, tr.slot.officer);
       // the rush lands: a blow on arrival, no wind-up
-      if (tr.rushHit && dist <= reach + 4 && !m.broken) {
+      if (tr.rushHit && dist <= reach + W.rushSlack && !m.broken) {
         tr.rushHit = false; tr.rushUntil = 0; m.lastAttack = now;
         const dmg = Math.round(st.dmg * R.dmgMult);
         if (tp) this.h.strikeHero(id, m.target, dmg, by); else this.h.strikeMob(id, m.target, dmg);
         return;
       }
-      if (tr.rushHit && now > tr.rushUntil + 250) tr.rushHit = false; // missed
+      if (tr.rushHit && now > tr.rushUntil + R.missGraceMs) tr.rushHit = false; // missed
       // a javelin at an enemy hero a few steps away
       if (tp && !m.broken && !m.windUntil && !tr.rushHit && (tr.throwing || (now >= tr.nextThrow && dist >= J.min && dist <= J.max))) {
         if (!tr.throwing) { tr.throwing = true; tr.nextThrow = now + J.windupMs; m.winding = true; }
@@ -320,7 +320,7 @@ export class WarTroops {
         if (m.windUntil) {
           if (now >= m.windUntil) {
             m.windUntil = 0; m.winding = false; m.lastAttack = now;
-            if (dist <= reach + 6) {
+            if (dist <= reach + W.swingSlack) {
               if (tp) this.h.strikeHero(id, m.target, st.dmg, by); else this.h.strikeMob(id, m.target, st.dmg);
             }
           }
@@ -332,7 +332,7 @@ export class WarTroops {
       const post = this.postOf(tr.t, tr.slot, now), d = Math.hypot(post.x - m.x, post.y - m.y);
       if (d > WAR_TROOPS.warpPx && !this.seen(m, WAR_TROOPS.warpUnseenPx) && !offLimits(post.x, post.y)) { m.x = post.x; m.y = post.y; m.moving = false; return; }
       gx = post.x; gy = post.y;
-      pace = d > WAR_TROOPS.slackPx ? speed : TROOP.speed * 1.15; // in step with the column, a little quicker to catch up
+      pace = d > WAR_TROOPS.slackPx ? speed : TROOP.speed * WAR_TROOPS.catchUp; // in step with the column, a little quicker to catch up
       if (d < 2) { m.moving = false; this.face(m, tr, now); return; }
     }
     const dx = gx - m.x, dy = gy - m.y, d = Math.hypot(dx, dy);
