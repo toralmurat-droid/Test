@@ -38,7 +38,7 @@ import { DOORS, DOOR_RANGE, doorById, doorDist, doorWorkable, isSafeZone, isSoli
 import { isDecorSolidAt, npcById, npcNear, TALK_RANGE } from "../shared/npcs";
 import { beyondWall, WATCH, WATCH_POSTS, WatchPost } from "../shared/watch";
 import { inVillage, WRATH } from "../shared/wrath";
-import { afterRespec, bounceWave, busking, buskingAudience, BuskingLines, ChordSync, heroSound, migrateSongweaver, mobSound, oldSongTree, restoreMode, songSave } from "./songs";
+import { afterRespec, bounceWave, busking, buskingAudience, BuskingLines, ChordSync, heroSound, migrateSongweaver, mobSound, oldSongTree, restoreMode, SONG_POTION_TEXT, songSave } from "./songs";
 import { GAUGE, modeColour, PHRYGIAN, RESONANCE } from "../shared/songs";
 import { soundMult } from "../shared/combat";
 import type { SoundFx } from "../shared/skills";
@@ -4384,7 +4384,7 @@ export class TownRoom extends Room<TownState> {
     const now = Date.now();
     if (!p || p.dead) return;
     // the Songweaver's bubble is a song gauge (DI-3): a potion does nothing for it, so none is drunk
-    if (usesGauge(p.cls)) { this.note(id, "Your song gauge fills with music, not potions."); return; }
+    if (usesGauge(p.cls)) { this.clients.find((c) => c.sessionId === id)?.send("gearno", { text: SONG_POTION_TEXT }); return; }
     if (p.mana >= p.maxMana || now - p.lastManaPotion < POTION_COOLDOWN_MS) return;
     const amount = this.drink(p, "mpotion");
     if (!amount) return;

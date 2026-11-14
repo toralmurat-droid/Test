@@ -176,3 +176,6 @@ export function restoreMode(u: Unit, swMode: unknown) {
   if (u.cls !== "songweaver") return;
   u.sk.mode = isMode(swMode) && knownModesOf(u).includes(swMode) ? swMode : "major";
 }
+
+/** What a Songweaver is told when she reaches for a mana potion (sent as "gearno"): her bubble is the song gauge. */
+export const SONG_POTION_TEXT = "Your song gauge fills with music, not potions";
