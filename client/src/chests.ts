@@ -2,6 +2,7 @@ import Phaser from "phaser";
 import { Chest, chestLock, CHESTS, CHEST_NAMES, CHEST_RANGE, ChestTier } from "../../shared/chests";
 import type { Quester as QuestState } from "../../shared/quests";
 import { isoAnchor } from "./iso";
+import { hudSlot } from "./hudSlots";
 
 /**
  * Loot chests (shared/chests.ts). The art is rendered here at start-up by casting rays through a small 3D model
@@ -226,7 +227,7 @@ export class ChestLayer {
     }
     this.prompt.id = "chestprompt";
     this.prompt.onclick = () => this.interact();
-    document.getElementById("hud")!.append(this.prompt);
+    hudSlot("promptstack").append(this.prompt);
     // now and then a closed chest near the player glints
     scene.time.addEvent({ delay: 1400, loop: true, callback: () => this.glint() });
   }

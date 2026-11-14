@@ -58,6 +58,8 @@ function noise(x: number, y: number, scale: number, seed: number) {
 
 /** Oakvale's palisade bounds (tiles, inclusive). */
 export const VILLAGE = { x0: 68, y0: 50, x1: 92, y1: 70 };
+/** Footprints of Oakvale's two named ruins (their walls get their own art: client/src/chapelRuin.ts). */
+export const CHAPEL_RUIN = { x: 87, y: 51, w: 5, h: 4 }, TANKARD_RUIN = { x: 87, y: 66, w: 5, h: 4 };
 /** Where the two main roads cross the village: King's Road runs west↔east near row RY+1, North Road north↔south near column RX+1. */
 export const ROADS = { RX: 79, RY: 59 };
 /** Cobbled square in the middle of the ruined village. It is the safe zone. */
@@ -340,12 +342,12 @@ function buildWorld() {
   };
 
   // Four small ruins in the corners of the stockade, doorways facing the square
-  ruinBuilding(87, 51, 5, 4, true, false, 101);  // Chapel of the Dawn
+  ruinBuilding(CHAPEL_RUIN.x, CHAPEL_RUIN.y, CHAPEL_RUIN.w, CHAPEL_RUIN.h, true, false, 101);  // Chapel of the Dawn
   setO(89, 52, T.GRAVE); // the old altar stone
   for (const [gx, gy] of [[95, 51], [96, 53], [95, 55]]) setO(gx, gy, T.GRAVE); // graveyard just outside
   ruinBuilding(69, 51, 5, 4, true, false, 102);  // the Smithy
   setO(71, 52, T.ANVIL);
-  ruinBuilding(87, 66, 5, 4, false, true, 103);  // The Rusty Tankard
+  ruinBuilding(TANKARD_RUIN.x, TANKARD_RUIN.y, TANKARD_RUIN.w, TANKARD_RUIN.h, false, true, 103);  // The Rusty Tankard
   setO(88, 68, T.BARREL); setO(90, 68, T.CRATE);
   ruinBuilding(69, 66, 5, 4, false, true, 104);  // a cottage
 

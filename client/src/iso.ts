@@ -4,6 +4,7 @@ import { T, TILE_COUNT } from "../../shared/map";
 import { ROWS, ANIMATED_TILES, animatedRows } from "./tileset";
 import { refreshRegions } from "./texupload";
 import { StaticChunks, staticObj } from "./staticChunks";
+import { specialRuin, specialRuinTexture } from "./chapelRuin";
 import { BUILDINGS, buildBarns, buildHouses, buildStalls, ruinWallTexture } from "./isobuild";
 import { buildBridges } from "./isobridge";
 
@@ -33,6 +34,20 @@ import { DESERT_H, DESERT_Y0 } from "../../shared/constants";
 
 export const isoX = (x: number, y: number) => x - y;
 export const isoY = (x: number, y: number) => (x + y) / 2;
+/**
+ * Where a world point is on the window (CSS px), through the camera zoom and the canvas's size on the page.
+ * `cr` = the canvas's bounding rect; pass it when asking for many points in one frame.
+ */
+export function screenOf(cam: Phaser.Cameras.Scene2D.Camera, wx: number, wy: number, cr?: { left: number; top: number; width: number; height: number }, anchor?: { x: number; y: number }) {
+  const cv = cam.scene.game.canvas;
+  cr ??= cv.getBoundingClientRect();
+  // an isoAnchor'ed object (name label) is drawn at its offset from the anchor plus the anchor's projection
+  const ax = anchor ? anchor.x : wx, ay = anchor ? anchor.y : wy;
+  const ix = ISO ? wx - ax + isoX(ax, ay) : wx, iy = ISO ? wy - ay + isoY(ax, ay) : wy;
+  // camera px: zoom around the camera's middle (scroll is in iso space)
+  const px = (ix - cam.scrollX - cam.width / 2) * cam.zoom + cam.width / 2, py = (iy - cam.scrollY - cam.height / 2) * cam.zoom + cam.height / 2;
+  return { x: cr.left + (cam.x + px) * (cr.width / cv.width), y: cr.top + (cam.y + py) * (cr.height / cv.height) };
+}
 /** Screen point back to the world (inverse of the projection). */
 export const fromIso = (sx: number, sy: number) => ({ x: sy + sx / 2, y: sy - sx / 2 });
 
@@ -715,7 +730,8 @@ export function isoStanding(scene: Phaser.Scene, objects: number[][]): number[][
         // Broken walls: thin stone or charred timber walls along the wall line, with rubble
         const same = (x: number, y: number) => id(at(x, y)) === t;
         const mask = (same(tx, ty - 1) ? 1 : 0) | (same(tx + 1, ty) ? 2 : 0) | (same(tx, ty + 1) ? 4 : 0) | (same(tx - 1, ty) ? 8 : 0);
-        const w = ruinWallTexture(scene, t === T.RUIN, mask, tx, ty);
+        const special = SMOOTH ? specialRuin(tx, ty) : undefined; // the chapel and the tavern have their own walls
+        const w = special ? specialRuinTexture(scene, special, mask, tx, ty) : ruinWallTexture(scene, t === T.RUIN, mask, tx, ty);
         const img = scene.add.image(cx, cy, w.key);
         staticObj(scene, img.setOrigin(0.5, w.up / img.height).setDepth(cy));
         out[ty][tx] = -1;

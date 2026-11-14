@@ -1,6 +1,7 @@
 import { hotbarWidth } from "./hudcache";
 import "./orbs.css";
 import { orbNeedsRedraw, orbTexts } from "./hudLogic";
+import { uiScale } from "./worldscale";
 
 /**
  * Bottom HUD in the Diablo style (Murat 2026-11-07, from his reference picture): a red health orb on the left and a
@@ -190,7 +191,9 @@ export class OrbHud {
     const w = hotbarWidth();
     if (w > 0 && w !== this.last.w) { document.body.style.setProperty("--barw", `${w}px`); this.last.w = w; } // the menu buttons use it too
     // Room left of the health orb: too little for chat beside the demon statue -> the statue goes, chat moves up
-    const tight = w > 0 && (innerWidth - w) / 2 - 112 < 330;
+    // (w is in the bar's own px: the bar is zoomed by --barzoom, inside the HUD zoom, see hudSlots.ts)
+    const bz = Number(document.documentElement.style.getPropertyValue("--barzoom")) || 1;
+    const tight = w > 0 && (innerWidth / uiScale() - w * bz) / 2 - 112 * bz < 330;
     if (tight !== document.body.classList.contains("hud-tight")) document.body.classList.toggle("hud-tight", tight);
   }
 

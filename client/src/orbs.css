@@ -21,13 +21,13 @@ body { --barw: 640px; }
 body.orbhud-on #hotbar { bottom: 16px; }
 body.orbhud-on #xpbar { bottom: calc(var(--slot) * 0.9 + 24px); z-index: 8; }
 body.orbhud-on #rbars .rb-hp, body.orbhud-on #rbars .rb-mp { display: none; }
-body.orbhud-on #lvlnote { bottom: 176px; }
 body.orbhud-on #grimoire { bottom: 150px; }
 @media (max-width: 600px) { body.orbhud-on #grimoire { bottom: 250px; } }
 /* chat in the bottom-left corner, between the left edge and the demon statue */
-body.orbhud-on #chat { bottom: 8px; left: 8px; width: max(150px, calc(50% - var(--barw) / 2 - 204px)); box-sizing: border-box; }
-body.orbhud-on #chatlog { bottom: 46px; left: 8px; width: max(150px, calc(50% - var(--barw) / 2 - 204px)); font-size: 14px; }
-body.orbhud-on #online { bottom: auto; top: 20px; left: auto; right: 220px; } /* the online count and ping go to the top, left of the minimap */
+/* the chat box has a fixed height, so the log can sit exactly above it (--chat-bottom moves both in the tight layout) */
+body { --chat-bottom: 8px; --chat-h: 41px; --chat-w: max(150px, calc(50% - (var(--barw) / 2 + 204px) * var(--barzoom, 1))); }
+body.orbhud-on #chat { bottom: var(--chat-bottom); left: 8px; width: var(--chat-w); height: var(--chat-h); box-sizing: border-box; }
+body.orbhud-on #chatlog { bottom: calc(var(--chat-bottom) + var(--chat-h) + 6px); left: 8px; width: var(--chat-w); font-size: 14px; }
 /* One wide row on the plate (Murat 2026-11-07): skill bar | menu buttons. Slots grow with the window (--slot) */
 body { --slot: clamp(40px, 3.1vw, 58px); }
 #hudbar { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); display: flex; align-items: center; gap: 8px; z-index: 9; pointer-events: none; }
@@ -54,11 +54,10 @@ body.orbhud-on #rbars .rb-crest { display: none; }
 /* side panels stop above the orb bar (it is about 130 px tall with the statues) */
 body.orbhud-on #sidepanel { max-height: calc(100% - 205px); z-index: 11; } /* above the orb bar and the menu tiles */
 /* "Respawning" under the minimap (the safe zone line is gone) */
-body #stats { top: 280px; left: auto; right: 40px; text-align: right; }
+body #stats { text-align: right; }
 /* little room left of the health orb (orbs.ts sets hud-tight): the statues go and chat moves up above the bar */
 body.hud-tight #orbhud .garg { display: none; }
-body.hud-tight.orbhud-on #chat { bottom: 132px; width: min(300px, 30vw); }
-body.hud-tight.orbhud-on #chatlog { bottom: 170px; width: min(300px, 30vw); }
+body.hud-tight.orbhud-on { --chat-bottom: calc(132px * var(--barzoom, 1)); --chat-w: min(300px, 30vw); }
 
 /* Songweaver: the right orb is the song gauge (gold, labelled "Song", pulses when nearly full) */
 #orbhud .orb .olabel { display: none; position: absolute; left: 0; right: 0; top: 18%; text-align: center; font-style: normal; color: #ffe27a;
