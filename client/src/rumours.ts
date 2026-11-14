@@ -1,5 +1,4 @@
-import * as R from "../../shared/rumours";
-import { rumoursFor, RUMOURS, RUMOUR_GIVER, type Rumour } from "../../shared/rumours";
+import { MAGS_LINES, rumoursFor, RUMOURS, RUMOUR_GIVER, type Rumour } from "../../shared/rumours";
 import type { QuestObject, QuestStep, QuestTarget } from "../../shared/quests";
 
 /** One offer as the server sends it ("rumour" message, server/rumours.ts). */
@@ -10,11 +9,8 @@ export interface RumourMsg { day: number; lv: number; offers: RumourOffer[]; don
 
 /** Mags' NPC id, for the dialog. */
 export const MAGS: string = RUMOUR_GIVER;
-/** Mags' lines (shared/rumours.ts MAGS_LINES, written by the content writer); the fallback keeps this building until it lands. */
-const LINES: { greeting: string; allDone: string } = (R as any).MAGS_LINES ?? {
-  greeting: "Three things I've heard today. Pick one, and bring me what you find.",
-  allDone: "That's all the talk I have today. Come back tomorrow. The tavern never runs dry of it.",
-};
+/** Mags' lines (shared/rumours.ts). */
+const LINES = MAGS_LINES;
 
 const esc = (s: unknown) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
 
