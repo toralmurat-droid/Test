@@ -209,3 +209,5 @@ phase from this summary when a phase starts.
 - Next: client integration on real data (drop the client table copy, resolve the `HOOK(di)` guards, rework and
   rerun the e2e with `FAKE=0`), then the reviewer and the PR.
 - Known: flaky under load: songkind "ch1, ch2 then chlock", voidconjure. `POND_HINT` is not sent yet.
+- 2026-11-14: client integration merged (client reads `shared/` tables, `HOOK(di)` guards resolved, real-server e2e `tools/e2e-songweaver-di.cjs` passes at desktop). Owner waived phone checks for this change. Default branch merged in (Player `me` StateView, `heroStats`); `npm test` 255 pass, build and smoke OK. Reviewer running.
+  - Open: `questDialog` takes no class (client swaps the Songweaver's `byCls` text in `npcs.ts`); `/max` does not re-level the lute; the e2e bone-drop step is probabilistic (`BONE_MS`).
