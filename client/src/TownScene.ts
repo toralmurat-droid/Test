@@ -21,10 +21,13 @@ import { SPAWN_ZONES, zoneAt } from "../../shared/spawns";
 import { musicCombat, setMusicZone } from "./music";
 import { bindSfx, play as playSfx, sfxFrame } from "./sfx";
 import { songweaverSfx } from "./sfx";
+import { DI_EVENTS, diEvent } from "./songbookFx";
+import { matOfGround, MATS, setSongbook } from "./songbookData";
+import { matTexture, matTip } from "./matArt";
 import { SoundCues } from "./soundCues";
 import { CHORD_NAMES, MODE_COLOR, soundOf } from "./songTables";
 
-const SONG_SFX = new Set(["note", "chord", "swell", "resonate", "bounce", "soundhit", "shieldbreak"]);
+const SONG_SFX = new Set(["note", "chord", "swell", "newsong", "matpick", "lutefit", "break", "resonate", "bounce", "soundhit", "shieldbreak"]);
 import { attackMult, cooldownMult, critChance, heroSpeed, STATS, magicMult, STAT_KINDS, STAT_NAMES, StatKind, statPoints, HP_PER_STR } from "../../shared/powers";
 import { NEED_TEXT, pointRange, SkillDef, skillOf, skillTarget, MAX_STACKS, STACK_DECAY_MS, STACK_NAME, talentBonus, withMods } from "../../shared/skills";
 import { SkillFx } from "./skillfx";
@@ -792,9 +795,13 @@ export class TownScene extends Phaser.Scene {
     const items = $(this.room.state).items;
     items.onAdd((it: any, id: string) => {
       if (it.kind === "quest" && it.owner !== this.room.sessionId) return; // someone else's quest drop
-      const gear = it.kind === "gear" && gearDef(it.gear);
+      const mat = matOfGround(it.gear) ?? matOfGround(it.kind); // HOOK(di): ground item `mat_<id>` (kind "gear" or "mat", id in `gear`)
+      const gear = !mat && it.kind === "gear" && gearDef(it.gear);
       const rune = it.kind === "gear" ? parseRune(it.gear) : undefined; // a loose rune (shared/runes.ts)
-      const img = rune
+      const matGrey = !!mat && this.opts.cls !== "songweaver"; // only a Songweaver can pick it up: others see it greyed
+      const img = mat
+        ? this.add.image(it.x, it.y, matTexture(this, mat, matGrey)).setScale(0.9).setDepth(it.y - 8)
+        : rune
         ? this.add.image(it.x, it.y, runeTexture(this, rune)).setScale(0.6).setDepth(it.y - 8)
         : gear
         ? this.add.image(it.x, it.y, "gear_icons", baseId(it.gear)).setScale(0.6 / ART_K).setDepth(it.y - 8)
@@ -810,6 +817,15 @@ export class TownScene extends Phaser.Scene {
         const glow = this.add.circle(it.x, it.y, 6, 0xffd166, 0.3).setDepth(it.y - 9).setBlendMode(Phaser.BlendModes.ADD);
         this.tweens.add({ targets: glow, scale: 1.4, alpha: 0.1, duration: 600, yoyo: true, repeat: -1 });
         img.once("destroy", () => glow.destroy());
+      }
+      if (mat) {
+        img.setData("mat", mat);
+        img.setInteractive({ useHandCursor: false }); // tooltip on hover (content doc, section 7)
+        img.on("pointerover", () => matTip(`<b>${MATS[mat].name}</b><br>${MATS[mat].desc}<br>${MATS[mat].source}${matGrey ? `<br><span class="gbad">Only a minstrel can use this.</span>` : ""}`));
+        img.on("pointerout", () => matTip());
+        img.once("destroy", () => matTip());
+        if (matGrey) img.setAlpha(0.55);
+        else { const glow = this.add.circle(it.x, it.y, 5, MATS[mat].color, 0.3).setDepth(it.y - 9).setBlendMode(Phaser.BlendModes.ADD); this.tweens.add({ targets: glow, scale: 1.5, alpha: 0.08, duration: 700, yoyo: true, repeat: -1 }); img.once("destroy", () => glow.destroy()); }
       }
       const rarity = gear ? itemRarity(it.gear) : 0;
       if (gear) img.setData("gear", it.gear);
@@ -1316,6 +1332,7 @@ export class TownScene extends Phaser.Scene {
       this.showSwing(id, step ?? 0, variant ?? 0, ax, ay, w);
     });
     this.room.onMessage("sfx", (ev) => this.onSkillFx(ev));
+    this.room.onMessage("songbook", (m) => setSongbook(m)); // HOOK(di): owner-only { songs, mats }, on join and on change
     // The Summoner's grimoire on the HUD (client/src/grimoire.ts): its news, asked again now that we listen
     this.grimoire = new GrimoirePanel(document.getElementById("hud")!, (slot, el) => this.room.send("grimoire", { slot, el }));
     this.room.onMessage("golems", (m) => this.grimoire?.news(m));
@@ -2700,6 +2717,7 @@ export class TownScene extends Phaser.Scene {
   /** Skill visual event from the server (shared/skillEngine.ts): drawn by SkillFx, plus the hero's cast animation. */
   private onSkillFx(ev: any) {
     if (SONG_SFX.has(ev.ev)) this.songEvent(ev);
+    if (DI_EVENTS.has(ev.ev)) this.diEvent(ev); // HOOK(di): newsong, matpick, lutefit, break
     if (ev.ev === "cast") {
       const e = this.entities.get(ev.id);
       if (ev.id === this.me) this.lastCast[ev.s] = this.time.now;
@@ -2716,6 +2734,17 @@ export class TownScene extends Phaser.Scene {
       if (ev.ev === "move" && ev.kind === "dash" && ev.id === this.me) this.rootUntil = Math.max(this.rootUntil, this.time.now + 140);
     }
     this.fx.onEvent(ev);
+  }
+
+  /** DI-2 / DI-5 events: new song banner, material pickups, lute fitting, breaking (songbookFx.ts). */
+  private diEvent(ev: any) {
+    diEvent(ev, {
+      me: this.me,
+      pos: (id) => { const e = this.entities.get(id); return e ? { x: e.sprite.x, y: e.sprite.y - e.top } : undefined; },
+      float: (x, y, text, color) => { this.floatText(x, y, text, color, PIXEL_FONT, 1.1); },
+      burst: (x, y, r, color, ms) => this.burst(x, y, r, color, ms),
+      feed: (text) => this.feed(text),
+    });
   }
 
   /** True when another Songweaver within earshot plays in a different mode: their notes are then voiced as open fifths. */

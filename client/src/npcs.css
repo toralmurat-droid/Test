@@ -191,3 +191,21 @@ body.shopping #npcdialog.shop { left: 12px; top: 12px; bottom: auto; transform: 
 #npcdialog .sh-lvpick button { padding: 2px 8px; font: 15px var(--pixel-font); background: #f5ecd2; }
 #npcdialog .sh-lvpick button.on { background: #8b5e34; color: #ffe9a8; border-color: #5a3a1e; }
 #npcdialog .sh-need { color: #b3262e; }
+
+/* Lute-maker panel (client/src/lutemaker.ts): tabs, materials strip, trait rows. Fits 360x640. */
+#npcdialog .lm-tabs { display: flex; gap: 4px; margin-bottom: 6px; }
+#npcdialog .lm-tab { flex: 1; padding: 3px 6px; font: 16px var(--pixel-font); background: #f5ecd2; }
+#npcdialog .lm-tab.on { background: #8b5e34; color: #ffe9a8; border-color: #5a3a1e; }
+#npcdialog .lm-mats { display: flex; flex-wrap: wrap; gap: 3px 8px; margin: 3px 0 4px; font: 16px var(--pixel-font); }
+#npcdialog .lm-matc { display: inline-flex; align-items: center; gap: 2px; }
+#npcdialog .lm-matc small { color: #5a4a30; font-size: 13px; }
+#npcdialog .lm-mat canvas { display: block; width: 24px; height: 24px; image-rendering: pixelated; }
+#npcdialog .lm-lv { color: #7a6a44; font-size: 14px; }
+#npcdialog .lm-cost { font-size: 14px; }
+#npcdialog.lm .sh-info small { font-size: 15px; line-height: 17px; }
+@media (max-width: 600px) {
+  #npcdialog.lm { width: calc(100% - 12px); left: 6px; transform: none; bottom: 6px; max-height: calc(100% - 12px); padding: 6px 8px; font-size: 15px; }
+  #npcdialog.lm .sh-info, #npcdialog.lm .sh-info b, #npcdialog.lm .sh-gold, #npcdialog.lm p { font-size: 15px; line-height: 17px; }
+  #npcdialog.lm .sh-row button { padding: 3px 6px; font-size: 15px; }
+  #npcdialog.lm .nd-name, #npcdialog.lm .nd-title { font-size: 15px; letter-spacing: 1px; }
+}

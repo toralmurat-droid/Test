@@ -1,3 +1,4 @@
+import { isBound, songItemHtml } from "./songbookData";
 import { slotName } from "./songTables";
 import Phaser from "phaser";
 import "./trade.css";
@@ -32,7 +33,7 @@ function itemHtml(id: string, state: any): string {
   const why = !who && state ? reqProblem(id, reqInfoOf(state)) : "";
   return `<b style="color:${itemColor(id)}">${esc(gearName(id, d.cls ?? state?.cls))}</b> <span class="glvl">Lv ${itemLevel(id)}</span> · `
     + `${r ? `<span style="color:${itemColor(id)}">${RARITY_NAMES[r]}</span> ` : ""}${TIER_NAMES[d.tier]} ${slotName(d.slot, undefined, id)}<br>`
-    + `${itemText(id) || "No bonus"}${aff ? `<br>${aff}` : ""}${runeHtml(id) ? `<br>${runeHtml(id)}` : ""}${who ? `<br>${who}` : why ? `<br><span class="gbad">${why}</span>` : ""}`;
+    + `${itemText(id) || "No bonus"}${songItemHtml(id, state?.cls) ? `<br>${songItemHtml(id, state?.cls)}` : ""}${aff ? `<br>${aff}` : ""}${runeHtml(id) ? `<br>${runeHtml(id)}` : ""}${who ? `<br>${who}` : why ? `<br><span class="gbad">${why}</span>` : ""}`;
 }
 
 /** One item cell (icon, rarity border, level), or an empty one. */
@@ -48,7 +49,7 @@ function cell(scene: Phaser.Scene, id: string | undefined, info: HTMLElement, st
   if (itemLevel(id) > 1) b.appendChild(Object.assign(document.createElement("span"), { className: "gcelllvl", textContent: String(itemLevel(id)) }));
   b.onmouseenter = () => { info.innerHTML = itemHtml(id, state); };
   b.onmouseleave = () => { info.textContent = ""; };
-  if (onClick) b.onclick = (ev) => { if (ev.detail !== 0) onClick(); };
+  if (onClick && !isBound(id)) b.onclick = (ev) => { if (ev.detail !== 0) onClick(); }; // HOOK(di): the lute and the Songbook are bound: no Trade, no Stash
   else b.classList.add("still");
   return b;
 }
