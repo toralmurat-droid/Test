@@ -53,8 +53,8 @@ export const TIDE = {
   /** A hero needs at least this share of the damage to be paid. */
   shareFloor: 0.03,
   /** Gold at full pay for a hero of this level (times 0.5 + share, see tideGold); Act 1 levels only, so it stops at 30. */
-  gold: (level: number) => 15 + 8 * Math.max(1, Math.min(30, Math.floor(level))),
-  goldCap: 350,
+  gold: (level: number) => 40 + 20 * Math.max(1, Math.min(30, Math.floor(level))), // was 15 + 8L, cap 350: ~6% of the floor loot (Mehmet 2026-11-14)
+  goldCap: 800,
   /** The best few by share also get a rune of this level (shared/runes.ts rollRune). */
   runeTop: 3,
   runeLevel: 12,

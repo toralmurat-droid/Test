@@ -35,11 +35,10 @@ function setup(p: any) {
 const ursk = (room: any, pid: string) => [...room.state.mobs.entries()].find(([, m]: any) => m.kind === "hidemother" && m.summonFor === pid && !m.dead) as [string, any] | undefined;
 const prompts = (g: any[]) => g.filter((m) => m.options);
 
-test("invariants: Hide Rite step count, version, Hidebound off and its beast list", () => {
+test("invariants: Hide Rite step count, version, Hidebound on at 0.95 and its beast list", () => {
   assert.equal(CHAINS[B].quests[MOTHER].steps.length, 4, "the Hide-Mother quest keeps 4 steps");
   assert.equal(CHAINS[B].version, 2, "the beast chain stays at version 2");
-  assert.equal(TRAIT_TALENTS.hidebound.taken, 1, "ships at 1.0 (off)");
-  assert.equal(traitTakenMult("gnawkin", withTrait(0, "beast")), 1, "off: no effect even with the trait");
+  assert.equal(TRAIT_TALENTS.hidebound.taken, 0.95, "on at 0.95 (Mehmet 2026-11-14)");
   const from = TRAIT_TALENTS.hidebound.from;
   for (const k of from) assert.ok(k in MOBS, `${k} is a real MobKind`);
   // drift check: the beast-folk the Hide Rite quests name (kill and collect steps) + the crowseer
@@ -48,14 +47,16 @@ test("invariants: Hide Rite step count, version, Hidebound off and its beast lis
   assert.deepEqual([...from].sort(), [...named].sort(), "Hidebound list matches the beast-folk the Hide Rite uses");
 
   const was = TRAIT_TALENTS.hidebound.taken;
-  TRAIT_TALENTS.hidebound.taken = 0.95;
-  try {
+  TRAIT_TALENTS.hidebound.taken = 1;
+  try { assert.equal(traitTakenMult("gnawkin", withTrait(0, "beast")), 1, "at 1.0 it is off, even with the trait"); }
+  finally { TRAIT_TALENTS.hidebound.taken = was; }
+  {
     const t = withTrait(0, "beast");
     for (const k of from) { assert.equal(traitTakenMult(k, t), 0.95, k); assert.equal(traitTakenMult(k, 0), 1, `${k} without the trait`); }
     assert.equal(traitTakenMult("slime", t), 1, "other kinds untouched");
     assert.equal(traitTakenMult("hornbrute", t), 1);
-  } finally { TRAIT_TALENTS.hidebound.taken = was; }
-  assert.equal(TRAIT_TALENTS.hidebound.taken, 1, "restored");
+  }
+  assert.equal(TRAIT_TALENTS.hidebound.taken, 0.95, "restored");
 });
 
 test("gates: Hide Rite, act 2 and the Second Sun read the same whichever way the Bargain went", () => {
@@ -294,15 +295,17 @@ test("Hidebound in damagePlayer: off = same damage; on = 0.95 from beast-folk on
     const hit = (from: string) => { p.hp = p.maxHp = 1_000_000; p.invulnUntil = 0; p.lastHurt = 0; p.guarding = false; const h0 = p.hp; room.damagePlayer(pid, 1000, "t", [0, 0], 0, { from, dot: true }); return h0 - p.hp; };
     const base = [hit(gn), hit(cr), hit(other)];
     p.cosm = withTrait(0, "beast");
-    assert.deepEqual([hit(gn), hit(cr), hit(other)], base, "off: the trait changes nothing");
     const was = TRAIT_TALENTS.hidebound.taken;
-    TRAIT_TALENTS.hidebound.taken = 0.95;
-    try {
+    TRAIT_TALENTS.hidebound.taken = 1;
+    try { assert.deepEqual([hit(gn), hit(cr), hit(other)], base, "at 1.0 (off) the trait changes nothing"); }
+    finally { TRAIT_TALENTS.hidebound.taken = was; }
+    assert.equal(TRAIT_TALENTS.hidebound.taken, 0.95, "ships on at 0.95");
+    {
       const on = [hit(gn), hit(cr), hit(other)];
       assert.equal(on[0], Math.round(base[0] * 0.95)); assert.equal(on[1], Math.round(base[1] * 0.95)); assert.equal(on[2], base[2]);
       p.cosm = 0;
       assert.deepEqual([hit(gn), hit(cr), hit(other)], base, "on, but no trait: no change");
-    } finally { TRAIT_TALENTS.hidebound.taken = was; }
+    }
     await a.leave();
   } finally { await srv.stop(); }
 });

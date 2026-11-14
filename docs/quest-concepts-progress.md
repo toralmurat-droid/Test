@@ -10,8 +10,8 @@ All seven work packages are done: server, client, text and tests for all 11 conc
 | WP1 framework + choices + puzzles | #5 Two Letters, #3 Empty Grave, #11 Crown in the Sand | done |
 | WP2 carry + hold | #1 Last Lantern, #2 Hold the Wheel | done |
 | WP3 unseen + sync | #4 Unseen, #8 Two Hands | done |
-| WP4 Bargain + Penance | #6 | done (Hidebound talent off until Murat approves) |
-| WP5 Tide | #7 | done (tuned; gold payout open for Murat) |
+| WP4 Bargain + Penance | #6 | done (Hidebound on at 0.95) |
+| WP5 Tide | #7 | done (tuned; gold 40 + 20 x level, cap 800) |
 | WP6 Rumours | #10 | done |
 | WP7 Apprentice | #9 | done |
 
@@ -52,6 +52,7 @@ Defaults picked so work isn't blocked (Claude 2026-11-13). Murat owns game direc
 14. Unseen: dying ends the hide (respawn in town as always); the saved checkpoint stays. No respawn-point change.
 15. Phones out of scope for this feature (Mehmet 2026-11-14: "Phones irrelevant."): no phone-size checks from WP5 on; phone layout polish dropped.
 16. Tide tuning (Claude 2026-11-14, pending Murat): goal 1500 -> 600 (one farmer filled 1500 in ~5 h), limit 12 -> 6 min (clears take 2.5-3.5 min), marcher kill XP x0.5 (a surviving Lv 10 solo hero gained ~8 levels in one march). Marchers fill no bounty or quest kill step (bug fix). Open for Murat: payout gold is ~6% of what marchers drop (proposal 40 + 20 x level, cap 800); Lv 30 heroes face no risk (option: scale marcher level to the heroes at the gate).
+17. Mehmet 2026-11-14, on the open questions: go with the recommendations. Hidebound on at 0.95; Tide gold 40 + 20 x level (cap 800, was 15 + 8L cap 350); marcher level scaling later; keep the Tide and lantern tuning (decisions 13, 16); keep party own-boss credit for everyone (decision 9, main-story bosses included); keep XP 0 for side arcs, rumours, Tide pay and the Apprentice; Ursk keeps fighting during her offer; keep Ilka as the Saltmere net-mender. Ship when ready.
 
 ## Plan
 Written by the planner agent (2026-11-13). Code facts below were read from the tree at a4ebcf1.
