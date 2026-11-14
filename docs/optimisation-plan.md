@@ -1,6 +1,6 @@
 # Optimisation plan
 
-Status: plan, written 2026-11-13. Since then the private-fields half of N5 was done by the Player schema restructure
+Status: plan. Since it was written, the private-fields half of N5 was done by the Player schema restructure
 (toralmurat-droid/Test#388, #393, #399, #400, #409); check the other items against the code before starting them. Written 2026-11-13 from three read-only audits (server tick, network and
 saves, client runtime) plus measured baselines for server and client. Line numbers are as of commit `a4ebcf1`.
 
