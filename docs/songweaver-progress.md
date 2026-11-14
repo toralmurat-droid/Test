@@ -3,7 +3,7 @@
 New class: the Songweaver, an Oakvale minstrel with a lute. Work follows the orchestrated agent flow in
 [CLAUDE.md](../CLAUDE.md) ("Working with agents"), starting with the planner. QA only on request.
 
-Status: **planned, waiting on the owner's answers** (2026-11-13). No code yet.
+Status: **built and active, in review** (2026-11-14). Plan v2 approved; see the Log for what was done.
 
 ## Decisions (2026-11-13)
 - Songweaver, an **Oakvale minstrel** who plays a **lute**.
@@ -320,3 +320,11 @@ Agents build against this in parallel. Changing it needs the orchestrator.
     shown to predate this branch.
 
   Reviewer started on `f08b430...claude/songweaver-brief`.
+- 2026-11-14: reviewer (first pass): NOT OK TO MERGE.
+  - Blocking: a respec leaves the hero in a mode no longer known.
+  - Should fix: the README class table; this status line; `duel.ts --songweaver` double-counts; busking chat goes
+    to the whole room.
+  - Nits: the patch note date; an unused import.
+  - Orchestrator: the shield still letting stun, slow and flinch through on a fully absorbed hit is intended
+    (shields absorb damage, not control).
+  - The gameplay fixes went to the gameplay-engineer; the docs fixes and nits were done by the orchestrator.

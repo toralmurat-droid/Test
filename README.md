@@ -50,6 +50,7 @@ Only the classes in `ACTIVE_CLASSES` can be played. Archived classes keep their 
 | Wizard | active | Ranged spells | Fire, Frost, Thunder |
 | Vampire | active | Blade and blood magic, lifesteal, Bat and Wolf forms | Blood, Night, Fang |
 | Summoner | active | "Lord of the Void": permanent elemental golems, wisps, Void weapons, black holes (`shared/summons.ts`) | Golems, Void, Conjuration |
+| Songweaver | active | Oakvale minstrel with a lute: party songs, keys (modes) unlocked by the tree, chords from note progressions, sound that bounces and builds resonance (`shared/songs.ts`) | Hymnal, Folk, Discord |
 | Knight, Ninja, Archer, Barbarian | archived | Sword, rapid strikes, bow, axe | — |
 
 ### Progression
