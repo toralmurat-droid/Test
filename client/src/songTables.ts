@@ -4,6 +4,7 @@
  * (docs/songweaver-progress.md, "Interface contract"); nothing here decides an outcome.
  */
 import * as songsMod from "../../shared/songs";
+import { SLOT_NAMES } from "../../shared/gear";
 import { MOB_COMBAT, type MobSound, type SoundTier } from "../../shared/combat";
 import type { MobKind } from "../../shared/constants";
 import { CANTRIPS, FINISHERS, SKILLS, skillById, type SkillDef } from "../../shared/skills";
@@ -111,6 +112,16 @@ export function earTip(kind: string): string {
 
 /** MOB_COMBAT[kind].sound (shared/combat.ts): how a monster hears. */
 export const soundOf = (kind: string): MobSound | undefined => MOB_COMBAT[kind as MobKind]?.sound;
+
+/**
+ * Slot label for the UI: a Songweaver's shield slot holds her Songbook or a book ("Book"). HOOK(di): ids `songweaver_shield`
+ * and `bk_*` come from the contract; they don't exist in shared/ until the server side lands.
+ */
+export function slotName(slot: string, cls?: string, id?: string): string {
+  const base = (id ?? "").split(/[@#^]/)[0];
+  if (slot === "shield" && (cls === "songweaver" || base === "songweaver_shield" || base.startsWith("bk_"))) return "Book";
+  return (SLOT_NAMES as Record<string, string>)[slot] ?? slot;
+}
 
 /**
  * Player-facing kind of a Songweaver skill: "Chorus" (the 30 s party song), "Verse" (a note skill, the basic attack

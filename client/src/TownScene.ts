@@ -24,7 +24,7 @@ import { songweaverSfx } from "./sfx";
 import { SoundCues } from "./soundCues";
 import { CHORD_NAMES, MODE_COLOR, soundOf } from "./songTables";
 
-const SONG_SFX = new Set(["note", "chord", "resonate", "bounce", "soundhit", "shieldbreak"]);
+const SONG_SFX = new Set(["note", "chord", "swell", "resonate", "bounce", "soundhit", "shieldbreak"]);
 import { attackMult, cooldownMult, critChance, heroSpeed, STATS, magicMult, STAT_KINDS, STAT_NAMES, StatKind, statPoints, HP_PER_STR } from "../../shared/powers";
 import { NEED_TEXT, pointRange, SkillDef, skillOf, skillTarget, MAX_STACKS, STACK_DECAY_MS, STACK_NAME, talentBonus, withMods } from "../../shared/skills";
 import { SkillFx } from "./skillfx";
@@ -2342,7 +2342,7 @@ export class TownScene extends Phaser.Scene {
       ["Level", lvl >= MAX_LEVEL ? `${MAX_LEVEL} (max)` : `${lvl} · XP ${mine.xp - cur}/${next - cur}`],
       ["Health", `${Math.ceil(mine.hp)} / ${mine.maxHp}`],
       ["HP regen", `${regenFromStamina(st.sta)[1].toFixed(1)}/s resting · ${regenFromStamina(st.sta)[0].toFixed(1)}/s in a fight`],
-      ["Mana", `${unpackMana(mine.mp).mana} / ${unpackMana(mine.mp).maxMana} · ${manaRegen(st, false, talentBonus(cls, mine.talents, "mana")).toFixed(1)}/s (×${MANA.restMult} resting)`],
+      [cls === "songweaver" ? "Song gauge" : "Mana", `${unpackMana(mine.mp).mana} / ${unpackMana(mine.mp).maxMana} · ${manaRegen(st, false, talentBonus(cls, mine.talents, "mana")).toFixed(1)}/s (×${MANA.restMult} resting)`],
       ["Attack", `${dmg} damage · ${WEAPON_TYPE_NAMES[wp.type]}: ${ATTACK_WORDS[wp.type]}`],
       ["Attack speed", `${(1000 / wp.attackCooldownMs).toFixed(1)} hits/s`],
       ["Critical hits", `${Math.round(critChance(st, talentBonus(cls, mine.talents, "crit")) * 100)}% chance, double damage`],
@@ -2613,6 +2613,7 @@ export class TownScene extends Phaser.Scene {
    * click) spends them (Murat 2026-11-04).
    */
   private chargeCell(mine: any, cls: ClassKind, clicks: string[], slots: string[], now: number): string {
+    if (cls === "songweaver") return ""; // HOOK(di): the Songweaver has no Tempo charge any more (the gauge replaces it)
     const n = Math.max(0, Math.min(MAX_STACKS, mine.stacks | 0));
     if (n > this.chargeSeen.n) this.chargeSeen.at = now; // a hit built one (the server's clock isn't sent)
     this.chargeSeen.n = n;
@@ -3287,7 +3288,8 @@ export class TownScene extends Phaser.Scene {
       // Top-left bars (resourceBars.ts): red HP, blue Mana (spells, shared/mana.ts), green XP
       const mn = unpackMana(mine.mp);
       (this.resBars ??= new ResourceBars(document.getElementById("hud")!)).update({
-        level: mine.level, hp: mine.hp, maxHp: mine.maxHp, mp: mn.mana, maxMp: mn.maxMana,
+        song: cls === "songweaver", level: mine.level, hp: mine.hp, maxHp: mine.maxHp, mp: mn.mana, maxMp: mn.maxMana, // HOOK(di): the gauge lives in mana / maxMana (contract); shows mana until the server lands
+       
         xpFrac: mine.level >= MAX_LEVEL ? 1 : (mine.xp - cur) / Math.max(1, next - cur),
         xp: mine.xp - cur, xpNeed: mine.level >= MAX_LEVEL ? undefined : next - cur,
       });

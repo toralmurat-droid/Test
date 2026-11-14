@@ -2331,6 +2331,40 @@ export class SkillFx {
         if (ev.id) this.chordRings(ev.id, ev.mode);
         return true;
       }
+      case "swell": {
+        // The song gauge is full (DI-3): a burst round the caster, one look per book; no book = a small grey puff
+        if (x === undefined || y === undefined) return true;
+        const z = e ? e.top * 0.5 : 8;
+        if (ev.fizzle || !ev.book) {
+          for (let i = 0; i < 6; i++) this.p(x + rnd(-6, 6), y + rnd(-2, 2), z + rnd(-4, 4), pick([0x9a9a9a, 0xbdbdbd]), { vx: rnd(-14, 14), vz: rnd(6, 16), life: 420, size: 2, size1: 3, alpha: 0.45, add: false });
+          this.tintRing(x, y, 16, 0x9a9a9a, 10, 300, 3);
+          return true;
+        }
+        switch (ev.book) {
+          case "bk_hymnal": // light: a column of gold-white
+            this.tintRing(x, y, 44, 0xfff3b0, 30, 600, 3);
+            this.glow(x, y, z, 30, 0xfff3b0, 600, 0.8, true);
+            for (let i = 0; i < 16; i++) this.p(x + rnd(-14, 14), y + rnd(-3, 3), 2, pick([0xffffff, 0xfff3b0, 0xffd24d]), { vz: rnd(30, 70), life: rnd(500, 900), size: pick([1, 2]), size1: 0 });
+            this.notesUp(x, y, 0xfff3b0, 4, 10);
+            break;
+          case "bk_march": // wind: two quick green rings and streaks
+            this.tintRing(x, y, 40, 0x6fdc8c, 30, 380, 3);
+            this.tintRing(x, y, 58, 0xd0ffd8, 30, 520, 3);
+            for (let i = 0; i < 10; i++) this.p(x, y, rnd(2, 14), 0xd0ffd8, { vx: Math.cos(i * 0.63) * 150, vy: Math.sin(i * 0.63) * 70, life: 280, size: 1, size1: 0, drag: 2 });
+            this.glow(x, y, z, 20, 0x6fdc8c, 360, 0.7);
+            break;
+          case "bk_dissonance": // jagged red and violet shards
+            this.tintRing(x, y, 46, 0xd8203c, 34, 420, 3);
+            this.glow(x, y, z, 26, 0xa03cff, 420, 0.8);
+            this.shards(x, y, z, [0xd8203c, 0xa03cff, 0xffffff, 0x4a0a2a], 22, 110);
+            break;
+          default: // the Songbook's own Refrain: gold notes and a ring
+            this.tintRing(x, y, 38, 0xffd24d, 28, 520, 3);
+            this.glow(x, y, z, 24, 0xffd24d, 480, 0.8);
+            this.notesUp(x, y, 0xffd24d, 5, 10);
+        }
+        return true;
+      }
       case "resonate": {
         if (x === undefined || y === undefined) return true;
         const z = e ? e.top * 0.5 : 6, c = ev.shatter ? 0xffffff : 0xbff3ff;

@@ -1,3 +1,4 @@
+import { slotName } from "./songTables";
 import Phaser from "phaser";
 import "./trade.css";
 import { BAG_SIZE, canWear, gearDef, gearName, itemLevel, itemRarity, itemText, RARITY_NAMES, reqProblem, SLOT_NAMES, TIER_NAMES } from "../../shared/gear";
@@ -30,7 +31,7 @@ function itemHtml(id: string, state: any): string {
   const who = d.cls && !canWear(state?.cls ?? "", id) ? `<span class="gbad">Only a ${d.cls} can wear this</span>` : "";
   const why = !who && state ? reqProblem(id, reqInfoOf(state)) : "";
   return `<b style="color:${itemColor(id)}">${esc(gearName(id, d.cls ?? state?.cls))}</b> <span class="glvl">Lv ${itemLevel(id)}</span> · `
-    + `${r ? `<span style="color:${itemColor(id)}">${RARITY_NAMES[r]}</span> ` : ""}${TIER_NAMES[d.tier]} ${SLOT_NAMES[d.slot]}<br>`
+    + `${r ? `<span style="color:${itemColor(id)}">${RARITY_NAMES[r]}</span> ` : ""}${TIER_NAMES[d.tier]} ${slotName(d.slot, undefined, id)}<br>`
     + `${itemText(id) || "No bonus"}${aff ? `<br>${aff}` : ""}${runeHtml(id) ? `<br>${runeHtml(id)}` : ""}${who ? `<br>${who}` : why ? `<br><span class="gbad">${why}</span>` : ""}`;
 }
 
