@@ -85,6 +85,8 @@ export class NpcLayer {
   readonly rumours = new RumourBook();
   private rumourRev = -1;
   private nearObj?: ReturnType<QuestObjects["near"]>;
+  /** A quest NPC or quest object is in reach (other E prompts step aside). */
+  get busy() { return !!this.near || !!this.nearObj; }
   private trackerHtml = "";
   /** Title of the quest just advanced: scrolled to the top of the tracker once its block is drawn. */
   private reveal = "";

@@ -12,3 +12,15 @@ body #warplaque[hidden] { display: none; }
 #warplaque .wp-bar b { position: absolute; right: 3px; top: -4px; font: 16px var(--pixel-font); font-weight: normal; color: #fff; }
 #warplaque .wp-foot { color: #a8977a; }
 #warplaque .wp-foot.siege { color: #ff8a6a; }
+/* Oath panel at a standard (warStandards.ts) */
+#warpanel .wr-row { display: flex; align-items: center; gap: 8px; padding: 4px 0; border-top: 1px solid #45331e; }
+#warpanel .wr-row.mine .wr-name { color: #ffd98a; }
+#warpanel .wr-row .wp-flag { width: 32px; height: 44px; image-rendering: pixelated; flex: none; }
+#warpanel .wr-txt { flex: 1; min-width: 0; }
+#warpanel .wr-name { color: #eadfc8; }
+#warpanel .wr-sub { color: #a8977a; font-size: 16px; white-space: normal; }
+#warpanel .wr-err { color: #ff8a6a; }
+body #warpanel { width: min(600px, calc(100% - 32px)); max-height: calc(100vh - 220px); overflow-y: auto; }
+#warpanel .wr-row button { flex: none; }
+#warplaque .wp-me { color: #9fe07a; }
+#warplaque .wp-me.no { color: #a8977a; }

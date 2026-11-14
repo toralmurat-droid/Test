@@ -9,6 +9,7 @@ import type { RumourState } from "../shared/rumours";
 import { noPotions, type Potions } from "../shared/potions";
 import { newRuntime } from "../shared/skillEngine";
 import { SLOT_COUNT } from "../shared/slots";
+import type { ClanKey } from "../shared/war/clans";
 
 // Per-client views need a schema buffer that never resizes (a library bug corrupts resized view patches):
 // Encoder.BUFFER_SIZE is set in server/patchCopy.ts, imported by the room before its state is created.
@@ -141,6 +142,9 @@ export class Player extends Schema {
   titles = 0; // titles earned, bit i = TITLES[i] (shared/cosmetics.ts; saved, sent as "title"); the shown one is in `cosm`
   mentor?: MentorState; // The Apprentice (server/apprentice.ts): mentoring on, recruits counted (saved, sent as "mentor")
   bountyDone = 0;
+  clan?: ClanKey; // clan war oath (shared/war/standards.ts; saved, sent by message)
+  clanAt = 0;
+  lastAct = 0; // last move, attack or cast (ms): heroes away from the keys add no valor
   lastSpecial = -Infinity;
   // Hidden initiative / poise (shared/combat.ts)
   poiseLost = 0;

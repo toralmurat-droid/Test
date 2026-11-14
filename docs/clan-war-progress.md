@@ -61,3 +61,15 @@ Open points for M1:
 - `GET /war.json`: current snapshot and the last 50 events.
 - Scope note: Murat chose the whole map, so the live war runs all five clans over both acts from the start instead
   of the single Wardens-Redfang front the roadmap first planned.
+
+## M1 step 2: standards and oaths (2026-11-14)
+
+- `shared/war/standards.ts`: 58 standards (one or two per territory) on free ground, at least 6 tiles from a portal
+  stone. `STANDARD` holds the ring radius, valor per minute, minimum level 5, the one-day oath cooldown, the idle
+  limit (3 min without moving, attacking or casting) and the over-level cut (heroes more than 5 levels above a
+  territory's monsters bring a quarter).
+- `server/warHeroes.ts`: oath validation and save cleaning (`clan`, `clanAt` on the hero save, optional), and
+  `Presence`: a full minute in one ring reports valor; leaving the ring starts the minute over.
+- Client: `client/src/warStandards.ts` (poles in the holder's colours, rings, E prompt, oath panel; other E
+  prompts nearby come first), the plaque tells the hero whether they defend, attack or cannot reach the land.
+- Open: rewards for valor (Renown, M2), tabards so other players see the oath (M2), Holds.
