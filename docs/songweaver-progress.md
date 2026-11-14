@@ -338,3 +338,15 @@ Agents build against this in parallel. Changing it needs the orchestrator.
     stacks with the Amen and Lydian pools. Accepted under the owner's uncapped-PvP decision; watch it in the
     post-launch tuning.
   - Bench, final branch: default 5 bots 8.36 ms tick avg; Songweaver party 5 bots 8.21 ms.
+- 2026-11-14: should-fix items from the second review merged (b0cffe2):
+  - charged notes are logged at release, so a fizzled charge fires no chord, and the Oakvale rule sees
+    release-time finishers;
+  - `heroSound` / `mobSound` moved to `shared/combat.ts`;
+  - the sim uses `RESONANCE.basic`;
+  - the song ring syncs the well-boosted radius.
+
+  Checks: `npm test` 175 pass / 1 skipped; build OK; smoke OK.
+  Duel (n=200) Songweaver before/after: 12/15/31/31/36/37/45/52/51% → 16/16/30/31/35/36/46/49/49%, noise.
+  Delta review: **OK TO MERGE**.
+  Nits left as follow-ups: the ring shows the old radius for up to one tick after a Dorian Modulate; no test for
+  the well ring.
