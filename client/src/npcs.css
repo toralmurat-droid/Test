@@ -208,3 +208,8 @@ body.shopping #npcdialog.shop { left: 12px; top: 12px; bottom: auto; transform: 
 #npcdialog .rm-done { font-style: normal; color: #ffe8a3; text-transform: uppercase; font-size: 14px; letter-spacing: 1px; margin-left: 6px; }
 #npcdialog .rm-now { margin: 8px 0; padding: 6px 8px; background: rgba(120, 90, 40, .15); border-left: 3px solid #8b5e34; }
 #questtracker .qt-block[data-key^="Rumour:"] { border-left-color: #e8a45a; }
+#npcdialog .nd-mentor { margin-top: 12px; padding-top: 8px; border-top: 1px solid #6b4c22; }
+#npcdialog .nd-mentor h5 { margin: 0 0 4px; color: #e3bf6a; font-weight: normal; }
+#npcdialog .nd-mstat { margin: 6px 0; color: #a8977a; }
+#npcdialog .nd-mstat b.on { color: #b9f27c; }
+#npcdialog button.nd-mbtn { background: #4f6b32; color: #fff; }
