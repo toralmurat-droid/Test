@@ -141,8 +141,11 @@ export const BUSKING_LINES: Record<string, string> = {
   fisher: "You play like my mother sang. Thank you for that.",
 };
 
-/** Busking lines: how near (px) the villager must stand to hear the tune, and how long (ms) before it speaks again. */
-export const BUSKING = { range: 4 * TILE, cooldownMs: 60_000 };
+/**
+ * Busking lines: how near (px) the villager must stand to hear the tune, how long (ms) before it speaks again, and how
+ * near (px) a hero must stand to the villager to hear its answer (a local line, not a server-wide one).
+ */
+export const BUSKING = { range: 4 * TILE, cooldownMs: 60_000, hearRange: 12 * TILE };
 
 /** How close (px) a player must stand to talk to an NPC. */
 export const TALK_RANGE = 1.1 * TILE;
