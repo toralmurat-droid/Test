@@ -35,3 +35,9 @@ body #statusrow > #chordhud:not([hidden]) + #buffs:not(:empty) { margin-left: 14
 body #orbhud, body #hudbar, body #orblevel, body #xpbar { zoom: var(--barzoom, 1); }
 /* the Summoner's grimoire sits above the plate, so it rises with it */
 body.orbhud-on #grimoire { bottom: calc(150px * var(--barzoom, 1)); }
+/* panels that open just above the bar keep their gap when the bar is drawn larger than the rest of the HUD */
+body #npcdialog { bottom: calc(100px * var(--barzoom, 1)); }
+body #signpanel, body #gear { bottom: calc(140px * var(--barzoom, 1)); }
+body #partyask { bottom: calc(170px * var(--barzoom, 1)); }
+body #musicpanel { bottom: calc(52px * var(--barzoom, 1)); }
+body #patchnotice { bottom: calc(56px * var(--barzoom, 1)); }
