@@ -32,14 +32,14 @@ export const MILESTONES: Milestone[] = [
   {
     id: "M0", name: "Foundations", target: "16–29 Nov 2026",
     goal: "Everything the war needs underneath, before players see any of it.",
-    exit: "Saves in Postgres on Railway; a war sim runs 1,000 simulated years headless; this page is live.",
+    exit: "Saves in Postgres on Railway; the war sim plays 200 wars of 30 days and no clan dominates; this page is live.",
     items: [
       { name: "Riven Marches concept and Murat's decisions", owner: "Producer", status: "done", pr: 394 },
       { name: "Roadmap page on the wiki", owner: "Producer", status: "done" },
       { name: "Saves in a database (code already supports it)", owner: "Server & Live Ops", status: "done", note: "server/store.ts with DATABASE_URL" },
       { name: "Turn on Postgres on Railway", owner: "Game Director", status: "done", note: "Live since 14 Nov 2026: 5 accounts moved over" },
-      { name: "War data model: territories from every zone, sanctuaries, Crowns (shared/war/)", owner: "Gameplay Engineers", status: "next" },
-      { name: "War sim tools/balance/war.ts with scripted leaders", owner: "Balance & Economy", status: "next" },
+      { name: "War data model: territories from every zone, sanctuaries, capitals (shared/war/)", owner: "Gameplay Engineers", status: "done", note: "31 territories, 5 clans with a capital per act" },
+      { name: "War sim tools/balance/war.ts with scripted leaders", owner: "Balance & Economy", status: "done", note: "Stalemate goal met: one clan dominates in 0.5% of wars" },
     ],
   },
   {
@@ -47,7 +47,7 @@ export const MILESTONES: Milestone[] = [
     goal: "One real front in Act 1: Wardens against Redfang over four territories, led by scripted doctrine.",
     exit: "Players can hold standards, see Control move every 10 minutes and join a siege window; it feels good to play.",
     items: [
-      { name: "War tick, Control, pressure formula, siege windows", owner: "Gameplay Engineers", status: "later" },
+      { name: "War tick, Control, pressure formula, siege windows in the live game", owner: "Gameplay Engineers", status: "next", note: "Rules exist in shared/war/rules.ts; next: run them on the server" },
       { name: "Standards (capture rings) and Holds in two clan styles", owner: "Art + Gameplay", status: "later" },
       { name: "Front plaque HUD and siege countdown", owner: "Client & UI", status: "later" },
       { name: "Banners and standards in the world (pixel art)", owner: "Art Director", status: "later" },
