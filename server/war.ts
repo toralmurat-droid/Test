@@ -97,9 +97,10 @@ function tickOnce(at: number): WarEvent[] {
 }
 
 /** A hero's effort for clan `k` in territory `t` (the room adds it while heroes hold standards). */
-export function addValor(t: number, k: ClanKey, amount: number) {
-  if (!saved || !(t >= 0 && t < TERRITORIES.length) || !CLANS[k] || !(amount > 0)) return;
+export function addValor(t: number, k: ClanKey, amount: number): boolean {
+  if (!saved || !(t >= 0 && t < TERRITORIES.length) || !CLANS[k] || !(amount > 0)) return false;
   valor[t][k] = (valor[t][k] ?? 0) + Math.min(amount, WAR.valorPerAdd);
+  return true;
 }
 
 export const warNow = (): WarView | undefined => (saved ? warView(saved.state, saved.next) : undefined);

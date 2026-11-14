@@ -90,10 +90,12 @@ html, body { margin: 0; height: 100%; background: #1b1b24; color: #eee; font: 18
 #worldmap .wm-b { bottom: -39px; left: 50%; transform: translateX(-50%); }
 #worldmap .wm-hint { color: #c9b89a; font: 18px var(--pixel-font); -webkit-font-smoothing: none; margin-top: 6px; text-shadow: 2px 2px #000;
   display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: center; justify-content: center; cursor: default; }
-#worldmap .wm-center { font: 18px var(--pixel-font); color: #ffd166; background: #2a1d12; border: 2px solid #6b4a2a; padding: 2px 10px; cursor: pointer; text-shadow: 2px 2px #000; }
+#worldmap .wm-center, #worldmap .wm-war { font: 18px var(--pixel-font); color: #ffd166; background: #2a1d12; border: 2px solid #6b4a2a; padding: 2px 10px; cursor: pointer; text-shadow: 2px 2px #000; }
 #worldmap .wm-touch { display: none; }
 @media (hover: none) and (pointer: coarse) { #worldmap .wm-keys { display: none; } #worldmap .wm-touch { display: inline; } }
-#worldmap .wm-center:hover { background: #3a2817; border-color: #e8c27a; }
+#worldmap .wm-war { margin-left: 6px; color: #c9b89a; }
+#worldmap .wm-war.on { color: #ffd166; border-color: #e8c27a; }
+#worldmap .wm-center:hover, #worldmap .wm-war:hover { background: #3a2817; border-color: #e8c27a; }
 #location { width: 234px; max-width: 100%; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 18px; font-family: var(--pixel-font); color: #ffd166; text-shadow: 2px 2px #000; }
 #area { position: absolute; top: 18%; left: 0; right: 0; display: flex; flex-direction: column; align-items: center; gap: 2px;
   pointer-events: none; opacity: 0; transition: opacity .6s; }

@@ -30,6 +30,14 @@ test("clan message: bad payloads ignored, level gate, oath saved and restored", 
     assert.equal(p.clan, "veiled", "restored");
     room.restore(p, { ...structuredClone(save), clan: "nope", clanAt: "x" });
     assert.equal(p.clan, undefined, "a broken oath loads as none");
+    p.renown = 0;
+    assert.equal(room.snapshot(p).renown, undefined, "no renown, no save field");
+    p.renown = 37.25;
+    const s2 = room.snapshot(p); p.renown = 0;
+    room.restore(p, structuredClone(s2));
+    assert.equal(p.renown, 37.25, "renown saved and restored");
+    room.restore(p, { ...structuredClone(s2), renown: "lots" });
+    assert.equal(p.renown, 0, "broken renown loads as 0");
     await c.leave();
   } finally { await srv.stop(); }
 });

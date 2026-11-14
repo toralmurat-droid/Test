@@ -94,6 +94,7 @@ import { Player } from "./player";
 import { byPart, hitBy } from "./hitBy";
 import { attachWar, warNow } from "./war";
 import { clanView, cleanOath, Presence, swear } from "./warHeroes";
+import { cleanRenown } from "../shared/war/renown";
 export { Player, PlayerPrivate } from "./player"; // moved out; tests and tools import them from here
 
 export class Mob extends Schema {
@@ -593,7 +594,12 @@ export class TownRoom extends Room<TownState> {
     this.offWar = attachWar(this); // the clan war (server/war.ts) runs on its own; the room only passes on the news
     this.limitMessages();
     // Clan war heroes (server/warHeroes.ts): oaths, and minutes at the standards reported as valor
-    this.clock.setInterval(() => this.warPresence.tick(this.state.players.entries()), 1000);
+    this.clock.setInterval(() => {
+      for (const [id, rank] of this.warPresence.tick(this.state.players.entries())) {
+        const c = this.clients.getById(id), p = this.state.players.get(id);
+        if (c && p) { c.send("clan", clanView(p)); c.send("chat", { id: "", name: "Herald", text: `Your renown grows: you are now ${rank}.` }); }
+      }
+    }, 1000);
     this.onMessage("clan", (client, msg: { swear?: unknown }) => {
       const p = this.state.players.get(client.sessionId);
       if (!p || !this.allow("ask", client)) return;
@@ -1014,7 +1020,7 @@ export class TownRoom extends Room<TownState> {
       })) as Record<string, number> & Pick<HeroSave, "questStage" | "questCount">, // CHAINS[0] always writes these two
       portals: [...p.portals], act: actAt(p.y, p.x),
       bounty: p.bounty, bountyDone: p.bountyDone, feast: { ...p.feast },
-      ...(p.clan ? { clan: p.clan, clanAt: p.clanAt } : {}),
+      ...(p.clan ? { clan: p.clan, clanAt: p.clanAt } : {}), ...(p.renown > 0 ? { renown: p.renown } : {}),
       ...(p.cls === "summoner" ? { grimoire: this.grimoireOf(p), suTree: SUMMONER_TREE } : {}),
       ...songSave(p.cls, p.sk),
       ...this.songs.save(p),
@@ -1078,7 +1084,7 @@ export class TownRoom extends Room<TownState> {
     for (const id of cleanPortals(s.portals)) p.portals.add(id);
     p.bountyDone = Math.max(0, Math.floor(num(s.bountyDone)));
     p.bounty = cleanBounty(s.bounty);
-    { const o = cleanOath(s.clan, s.clanAt); p.clan = o.clan; p.clanAt = o.clanAt; } // clan war oath (server/warHeroes.ts)
+    { const o = cleanOath(s.clan, s.clanAt); p.clan = o.clan; p.clanAt = o.clanAt; p.renown = cleanRenown(s.renown); } // clan war oath (server/warHeroes.ts)
     p.feast = cleanFeast(s.feast);
     const sv = s as unknown as Record<string, unknown>;
     // Saves from before the guided first quest count it as done

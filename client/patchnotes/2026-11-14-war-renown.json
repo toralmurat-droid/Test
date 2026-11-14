@@ -1,0 +1,10 @@
+{
+  "date": "2026-11-14",
+  "patch": 234,
+  "title": "Renown in the clan war",
+  "changes": [
+    "Every minute you hold a standard now earns you renown. Climb from Sworn to Shieldbearer, Standard-bearer, Banneret, Warlord and Hero of the Marches.",
+    "Your renown and the next rank show in the oath panel at any standard. The herald tells you when you reach a new rank.",
+    "Renown stays with your hero if you change clan."
+  ]
+}

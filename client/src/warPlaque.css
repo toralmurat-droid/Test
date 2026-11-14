@@ -20,6 +20,7 @@ body #warplaque[hidden] { display: none; }
 #warpanel .wr-name { color: #eadfc8; }
 #warpanel .wr-sub { color: #a8977a; font-size: 16px; white-space: normal; }
 #warpanel .wr-err { color: #ff8a6a; }
+#warpanel .wr-rank { color: #ffd98a; }
 body #warpanel { width: min(600px, calc(100% - 32px)); max-height: calc(100vh - 220px); overflow-y: auto; }
 #warpanel .wr-row button { flex: none; }
 #warplaque .wp-me { color: #9fe07a; }

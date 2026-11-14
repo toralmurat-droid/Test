@@ -5,6 +5,7 @@
  */
 import Phaser from "phaser";
 import { CLANS, CLAN_KEYS, type ClanKey } from "../../shared/war/clans";
+import { RENOWN_RANKS, rankOf } from "../../shared/war/renown";
 import { HOLDS, STANDARD, STANDARDS, type Standard } from "../../shared/war/standards";
 import { HOLD_FOOT, holdTexture } from "./holdArt";
 import { targetsOf, type WarState } from "../../shared/war/rules";
@@ -53,6 +54,7 @@ export class WarStandards {
   clan: ClanKey | "" = "";
   private next = 0;
   private minLevel = 5;
+  private renown = 0;
   private err = "";
   near?: Standard;
   open = false;
@@ -105,8 +107,8 @@ export class WarStandards {
   }
 
   /** The server's oath state. */
-  setClan(m: { clan: ClanKey | ""; next: number; minLevel: number; err?: string }) {
-    this.clan = m.clan; this.next = m.next; this.minLevel = m.minLevel; this.err = m.err ?? "";
+  setClan(m: { clan: ClanKey | ""; next: number; minLevel: number; renown?: number; err?: string }) {
+    this.clan = m.clan; this.next = m.next; this.minLevel = m.minLevel; this.renown = m.renown ?? 0; this.err = m.err ?? "";
     if (this.open) this.render();
   }
 
@@ -146,6 +148,12 @@ export class WarStandards {
       ? `Sworn to ${CLANS[this.clan].name}. Every minute in a ring counts at the next war tick.`
       : `Swear (level ${this.minLevel}+), then stand in a ring: you defend your clan's land and attack next to it.`;
     this.el.append(h, help);
+    if (this.clan || this.renown > 0) {
+      const r = rankOf(this.renown), up = RENOWN_RANKS[r + 1], rk = document.createElement("p");
+      rk.className = "help wr-rank";
+      rk.textContent = `Renown ${this.renown}: ${RENOWN_RANKS[r].name}.` + (up ? ` ${up.name} at ${up.at}.` : "");
+      this.el.append(rk);
+    }
     for (const k of CLAN_KEYS) {
       const cl = CLANS[k], row = document.createElement("div");
       row.className = "wr-row" + (k === this.clan ? " mine" : "");
