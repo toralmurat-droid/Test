@@ -74,9 +74,13 @@ const SETUPS = [
     await page.keyboard.press("t");
     await page.waitForTimeout(600);
     await shot("6-skills-page");
+    // HARNESS (FAKE): the owner-only "songbook" message, as the server will send it (two songs found, some materials)
+    const emit = (t, m) => page.evaluate(([t, m]) => window.S.room.onMessageHandlers.emit(t, m), [t, m]);
+    if (FAKE) await emit("songbook", { songs: ["song_hum", "song_pond"], mats: { tonewood: 7, brass: 3, bone: 12, silk: 0, horn: 2, sunglass: 1 } });
+    result.sbButton = !!(await page.$(".sbbtn"));
     const help = await page.$(".chhelp");
     result.helpButton = !!help;
-    if (help) { await help.click(); await page.waitForTimeout(300); await shot("7-legend"); result.legend = await page.evaluate(() => document.getElementById("chordlegend")?.innerText.slice(0, 60)); await page.click("#chordlegend"); }
+    if (help) { await help.click(); await page.waitForTimeout(300); await shot("7-songbook-reader"); result.legend = await page.evaluate(() => document.getElementById("songbook")?.innerText.slice(0, 80)); await page.click("#songbook .sb-x"); }
     await page.keyboard.press("t");
     await page.waitForTimeout(300);
     // ---- song gauge orb: empty, half, nearly full (pulsing) ----
@@ -97,13 +101,57 @@ const SETUPS = [
       await shot(`12-swell-${book ?? "fizzle"}`);
       await page.waitForTimeout(900);
     }
+    // ---- C1 / C2 / D1 / D2 client, with faked server events and a faked lute-maker (the server side lands later) ----
+    if (FAKE) {
+      const me = () => page.evaluate(() => { const m = window.S.entities.get(window.S.me); return { x: m.sprite.x, y: m.sprite.y }; });
+      // new song banner + effect
+      await page.evaluate(() => window.S.onSkillFx({ ev: "newsong", id: window.S.me, song: "song_round" }));
+      await page.waitForTimeout(500);
+      result.banner = await page.evaluate(() => document.getElementById("newsong")?.innerText);
+      await shot("13-newsong");
+      await page.waitForTimeout(3500);
+      // material pickup, lute fit and break effects, all at once
+      await page.evaluate(() => { const m = window.S.entities.get(window.S.me), s = window.S;
+        s.onSkillFx({ ev: "matpick", id: s.me, mat: "silk", n: 2, x: m.sprite.x + 20, y: m.sprite.y });
+        s.onSkillFx({ ev: "lutefit", id: s.me, trait: "steel" });
+        s.onSkillFx({ ev: "break", id: s.me, mat: "tonewood", n: 5 }); });
+      await page.waitForTimeout(400);
+      await shot("14-mat-fit-break-fx");
+      await page.waitForTimeout(1200);
+      // bag: lute (bound) and a sword (can't wear) -> tooltips
+      await page.evaluate(() => { const b = window.S.entities.get(window.S.me).state.bag; b.push("songweaver_weapon"); b.push("w_bronze"); b.push("sh_iron"); });
+      await page.keyboard.press("g");
+      await page.waitForTimeout(800);
+      const cells = await page.$$("#gearbag .gcell:not([disabled])");
+      result.bagCells = cells.length;
+      if (cells.length >= 2) {
+        await cells[0].hover(); await page.waitForTimeout(200);
+        result.luteTip = await page.evaluate(() => document.getElementById("gearinfo").innerText);
+        await cells[1].hover(); await page.waitForTimeout(200);
+        result.swordTip = await page.evaluate(() => document.getElementById("gearinfo").innerText);
+        await shot("15-gear-cant-wear");
+      }
+      await page.keyboard.press("g");
+      await page.waitForTimeout(300);
+      // lute-maker panel (Wren is not in shared/npcs.ts yet: open the panel on a fake NPC)
+      await page.evaluate(() => { const n = window.S.npcs; n.close = () => {}; n.open({ id: "lutemaker", name: "Wren", title: "Lute-maker" }); });
+      await page.waitForTimeout(500);
+      result.lm = await page.evaluate(() => document.getElementById("npcdialog").innerText.slice(0, 700));
+      await shot("16-lutemaker-traits");
+      await page.click(".lm-tab[data-tab=break]");
+      await page.waitForTimeout(400);
+      result.lmBreak = await page.evaluate(() => document.getElementById("npcdialog").innerText.slice(0, 700));
+      await shot("17-lutemaker-break");
+      result.dialogFits = await page.evaluate(() => { const r = document.getElementById("npcdialog").getBoundingClientRect(); return r.left >= 0 && r.right <= innerWidth + 1 && r.top >= 0 && r.bottom <= innerHeight + 1; });
+      await page.evaluate(() => { const n = window.S.npcs; delete n.close; n.close(); });
+    }
     result.errors = errors.slice(0, 8);
     report[name] = result;
     await ctx.close();
   }
   console.log(JSON.stringify(report, null, 1));
   await browser.close();
-  const bad = Object.entries(report).filter(([, r]) => !r.panelGone || !r.helpButton || !r.chorus || !(r.afterNote3?.rings >= 2) || !r.chordSeen || r.errors.some((e) => !/refId|decode|addCallback/i.test(e)));
+  const bad = Object.entries(report).filter(([, r]) => !r.panelGone || !r.helpButton || !r.chorus || !(r.afterNote3?.rings >= 2) || !r.chordSeen || (FAKE && (!r.sbButton || !/New song/.test(r.banner || "") || !/Can't wear/.test(r.swordTip || "") || !/Steel/.test(r.lm || "") || !r.dialogFits)) || r.errors.some((e) => !/refId|decode|addCallback/i.test(e)));
   if (bad.length) { console.error("E2E FAILED:", bad.map(([k]) => k).join(", ")); process.exit(1); }
   console.log("E2E OK");
 })().catch((e) => { console.error("FAILED", e); process.exit(1); });

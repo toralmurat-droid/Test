@@ -259,7 +259,8 @@ export class GearMenu {
         if (slot) { const eq = { ...worn }; delete eq[slot]; this.preview({ label: `take off ${gearName(id, cls)}`, eq }); }
         else if (canWear(cls, id)) this.preview({ label: `wear ${gearName(id, cls)}${reqProblem(id, hero) ? " (once you meet its needs)" : ""}`, eq: wearing(worn, id) });
         if (!info) return;
-        const d = gearDef(id)!, cant = songCantWear(cls, d.slot, id, d.wtype), why = cant || reqProblem(id, hero); // HOOK(di): musical-only rule, the server decides too
+        const d = gearDef(id); if (!d) return;
+        const cant = songCantWear(cls, d.slot, id, d.wtype), why = cant || reqProblem(id, hero); // HOOK(di): musical-only rule, the server decides too
         const aff = affixHtml(id), song = songItemHtml(id, cls);
         const nm = songItemName(id) ?? gearName(id, cls);
         const runes = runeHtml(id);
@@ -392,7 +393,7 @@ export class GearMenu {
         cell.onmouseleave = () => { if (info) info.textContent = ""; };
         cell.onclick = () => { this.pickRune = this.pickRune === i ? -1 : i; this.sig = ""; this.refresh(state); };
         cell.oncontextmenu = (ev) => { ev.preventDefault(); this.pickRune = -1; this.act("dropgear", i); };
-      } else if (id) {
+      } else if (id && gearDef(id)) { // HOOK(di): ids the shared tables do not know yet (bk_*, lute with #traits) stay blank until the server side lands
         const d = gearDef(id)!;
         cell.appendChild(iconCanvas(this.scene, id));
         cell.style.borderColor = itemColor(id);

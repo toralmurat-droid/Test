@@ -34,6 +34,9 @@ import { isoAnchor } from "./iso";
 import { speechBubble } from "./weathered";
 import { msUntilUndeadNight } from "../../shared/daynight";
 import { dayTime } from "./details";
+import { lmTabsHtml, lutemakerBody, LmState, LmTab } from "./lutemaker";
+import { getSongbook, isBound } from "./songbookData";
+import { matCanvas } from "./matArt";
 import { TEXT_FONT, TITLE_FONT, TEXT_PX, TITLE_PX, WT } from "./pixelfont";
 
 type Me = { x: number; y: number } | undefined;
@@ -362,7 +365,7 @@ export class NpcLayer {
       return head + row(e.item, gearName(e.item, cls), itemColor(e.item), `${rarityLabel(e.item)}${TIER_NAMES[d.tier]} · Lv ${itemLevel(e.item)} · ${itemText(e.item)}${why ? ` · <span class="sh-need">${why}</span>` : ""}`,
         `${e.price.toLocaleString("en-US")}${pxIcon("coin")}`, "sh-buy", i, gold < e.price);
     }).join("");
-    const sellable = shop.buys ? bag.map((id, i) => [id, i] as const).filter(([id]) => shopBuys(shop, id)) : [];
+    const sellable = shop.buys ? bag.map((id, i) => [id, i] as const).filter(([id]) => shopBuys(shop, id) && !isBound(id)) : [];
     const sellRow = (id: string, i: number) => {
       const r = parseRune(id); // a loose rune (shared/runes.ts): Morwen buys them
       return r
@@ -389,11 +392,14 @@ export class NpcLayer {
         (fuseRows || `<p class="sh-empty">No loose runes in your bag.</p>`)
       : "";
     const quest = questDialog(n.id, q);
-    this.dialog.innerHTML = this.head(n) + `<p>${shop.greeting}</p>` +
+    const lm = n.id === "lutemaker"; // HOOK(di): Wren's shop is a tab of her panel
+    this.dialog.innerHTML = this.head(n) + (lm ? lmTabsHtml("shop", true) : "") + `<p>${lm ? "Books on the left, spare strings on the right. Anything you can't use, I'll buy or break." : shop.greeting}</p>` +
       `<div class="sh-gold">Your gold: <b>${gold}${pxIcon("coin")}</b> ${this.shopMsg}</div>` +
       `<h4>For sale</h4><div class="sh-list">${buy}</div>${sell}${fuse}` +
       `<div class="nd-btns">${quest ? `<button class="nd-talk">Talk</button>` : ""}<button class="nd-bye">Goodbye <kbd>E</kbd></button></div>`;
     this.dialog.classList.add("shop");
+    this.dialog.classList.toggle("lm", lm);
+    this.bindLmTabs();
     const talk = this.dialog.querySelector<HTMLButtonElement>(".nd-talk");
     if (talk) talk.onclick = () => { this.trading = false; this.stage = -1; };
     for (const b of this.dialog.querySelectorAll<HTMLButtonElement>(".sh-lvpick button")) b.onclick = () => { this.masterLv = Number(b.dataset.lv); this.stage = -1; };
@@ -418,6 +424,38 @@ export class NpcLayer {
     this.dialog.querySelector<HTMLButtonElement>(".nd-bye")!.onclick = () => this.close();
   }
 
+  /** Lute-maker (Wren): Traits and Break tabs (lutemaker.ts); the Shop tab is renderShop. */
+  private lmTab: LmTab = "traits";
+  private lmAsk = -1; // bag index waiting for the second "Break" click
+  private bindLmTabs() {
+    for (const b of this.dialog.querySelectorAll<HTMLButtonElement>(".lm-tab")) b.onclick = () => { this.lmTab = b.dataset.tab as LmTab; this.lmAsk = -1; this.stage = -1; };
+  }
+  private renderLute(n: Npc, q: QuestState) {
+    if (this.lmTab === "shop" && !(n.shop && SHOPS[n.shop])) this.lmTab = "traits";
+    const bag = [...(q?.bag ?? [])], sb = getSongbook();
+    const st: LmState = { tab: this.lmTab, gold: q?.gold ?? 0, level: q?.level ?? 1, cls: q?.cls, weapon: q?.weapon, bag, mats: sb.mats, msg: this.shopMsg, breakAsk: this.lmAsk, hasShop: !!(n.shop && SHOPS[n.shop]) };
+    const key = JSON.stringify([n.id, st]);
+    if (key === this.stage) return;
+    this.stage = key;
+    const hi = q?.cls === "songweaver" ? "Mind the shavings. You have a lute? Let me see it. Oh, you do play it, don't you? Good." : "I make lutes, friend. Do you play?";
+    this.dialog.innerHTML = this.head(n) + lmTabsHtml(this.lmTab, st.hasShop) + `<p>${this.lmTab === "break" ? "Break it into something useful? It cannot be put back." : hi}</p>` + lutemakerBody(st) +
+      `<div class="nd-btns"><button class="nd-bye">Goodbye <kbd>E</kbd></button></div>`;
+    this.dialog.classList.add("shop", "lm");
+    if (this.shopOpen) { this.shopOpen = false; this.onPreview?.(); this.onShopOpen?.(false); }
+    this.bindLmTabs();
+    for (const el of this.dialog.querySelectorAll<HTMLElement>(".lm-mat")) el.appendChild(matCanvas(this.scene, el.dataset.mat!, 24));
+    for (const el of this.dialog.querySelectorAll<HTMLElement>(".sh-icon")) el.appendChild(iconCanvas(this.scene, el.dataset.icon!, 32));
+    for (const b of this.dialog.querySelectorAll<HTMLButtonElement>(".lm-fit")) b.onclick = () => { this.send("lutefit", { trait: b.dataset.trait }); b.disabled = true; };
+    for (const b of this.dialog.querySelectorAll<HTMLButtonElement>(".lm-break")) {
+      b.onclick = () => {
+        const i = Number(b.dataset.i);
+        if (this.lmAsk !== i) { this.lmAsk = i; this.stage = -1; return; }
+        this.lmAsk = -1; this.send("break", { bag: i }); b.disabled = true;
+      };
+    }
+    this.dialog.querySelector<HTMLButtonElement>(".nd-bye")!.onclick = () => this.close();
+  }
+
   private potionIcon(kind = "potion"): HTMLCanvasElement {
     const c = document.createElement("canvas");
     c.width = c.height = 32;
@@ -430,9 +468,10 @@ export class NpcLayer {
 
   private renderDialog(q: QuestState) {
     const n = this.talking!;
+    if (n.id === "lutemaker" && !(this.lmTab === "shop" && n.shop && SHOPS[n.shop])) return this.renderLute(n, q); // HOOK(di)
     const page = questDialog(n.id, q);
     if (n.shop && (this.trading || !page)) return this.renderShop(n, q);
-    this.dialog.classList.remove("shop");
+    this.dialog.classList.remove("shop", "lm");
     if (this.shopOpen) { this.shopOpen = false; this.onPreview?.(); }
     const key = JSON.stringify([n.id, questSig(q), q?.level]);
     if (key === this.stage) return;
