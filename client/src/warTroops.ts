@@ -95,7 +95,7 @@ export class WarTroops {
   }
 
   update(me: { x: number; y: number } | undefined, _now: number) {
-    const wall = Date.now(), dt = this.lastNow ? Math.min(100, wall - this.lastNow) : 16;
+    const wall = Date.now(), dt = this.lastNow ? Math.max(0, Math.min(100, wall - this.lastNow)) : 16;
     this.lastNow = wall;
     if (me && underground(me.y)) { this.clear(); return; } // dungeon floors: no clan troops
     if (this.view && me && (this.dirty || wall >= this.checkAt)) { this.dirty = false; this.checkAt = wall + CHECK_MS; this.sync(me); }
@@ -120,7 +120,7 @@ export class WarTroops {
     const v = this.view!, r2 = TROOP.viewRange * TROOP.viewRange;
     for (const [t, s] of this.squads) {
       const k = CLAN_KEYS[v.owner[t]];
-      if (!k || !this.near(t, me, r2)) { this.destroy(s); this.squads.delete(t); continue; }
+      if (!k || !this.near(t, me, r2 * 4)) { // kept out to twice the range: a long leg's middle is far from both stops this.destroy(s); this.squads.delete(t); continue; }
       if (s.sig !== this.sigOf(t)) { s.target = 0; this.dying.push(s); this.squads.delete(t); }
     }
     for (let t = 0; t < v.owner.length; t++) {
