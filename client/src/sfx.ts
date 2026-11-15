@@ -1276,7 +1276,7 @@ function groundKind(x: number, y: number): string {
   if (g === T.COBBLE) return "stone";
   if (g === T.WATER) return "water";
   if (g === T.SAND) return "sand";
-  return "grass";
+  return "grass"; // incl. MOSS (the sinkholes): soft damp earth, the grass step
 }
 
 /** Once per frame from TownScene.update: our hero's place (the ears), deaths, footsteps, idle monster noises. */

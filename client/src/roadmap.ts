@@ -79,7 +79,7 @@ export const MILESTONES: Milestone[] = [
       { name: "Regions in the war map: territories grouped by land, links between lands, capitals move home", owner: "Gameplay Engineers", status: "done", note: "Oakvale Lands 21, Sunscar 10; forward capitals step down when a homeland is built" },
       { name: "The Red Badlands (Redfang homeland, west)", owner: "World + Art + Narrative", status: "done", note: "Open: the land, the Red Pass, Rustwater Post (shops, portal), eight Redfang-country monsters and a quest chain to Old Rourke. At war: 10 Redfang territories, the Redfang seat at Fangrock, the Red Pass to Oakvale", pr: 446 },
       { name: "The Grey Barrow Moors (Ossuary Host homeland, north-east)", owner: "World + Art + Narrative", status: "done", note: "Open: the Moorgate, Cairnwatch (outpost, portal stone, bounty board), seven new monsters, the Barrow-King and a quest chain. At war: 11 territories, the Host's seat at the Muster, the Wardens' Grey Ring, the Barrowgate to Oakvale", pr: 442 },
-      { name: "The Mawdeep Sinkholes (Hide-Kin homeland, south)", owner: "World + Art + Narrative", status: "later" },
+      { name: "The Mawdeep Sinkholes (Hide-Kin homeland, south)", owner: "World + Art + Narrative", status: "doing", note: "The Sinkway opens at level 30 (a cave on the beach south of Sunken Lake) and leads down to the land; Ropewell, the monsters and the quests come next", pr: 447 },
       { name: "The Crown of the Marches (neutral prize in the middle)", owner: "World + Gameplay", status: "later" },
     ],
   },
