@@ -9,17 +9,26 @@ import { garrisonCount, garrisonSpots, patrolCount, patrolOf, TROOP, TROOP_LOOK,
 import { newWar } from "../shared/war/rules";
 import { STANDARD } from "../shared/war/standards";
 import { TERRITORIES } from "../shared/war/territories";
-import { parseTroop, troopLevel, troopStance, troopWeapon, WAR_TROOPS } from "../shared/war/troops";
+import { parseTroop, troopLevel, troopName, troopStance, troopWeapon, WAR_TROOPS } from "../shared/war/troops";
 import { _resetWar, warState } from "../server/war";
 import { WarTroops, type TroopHero, type TroopMob } from "../server/warTroops";
 
-test("troops: the clan rides in Mob.weapon and round-trips; nothing else parses as a trooper", () => {
+test("troops: the clan and part ride in Mob.weapon and round-trip; nothing else parses as a trooper", () => {
   for (const k of CLAN_KEYS) {
-    for (const officer of [false, true]) assert.deepEqual(parseTroop(troopWeapon(k, officer)), { clan: k, officer, cart: false });
-    assert.equal(troopWeapon(k, false, true), `${k}^`, "a caravan cart");
-    assert.deepEqual(parseTroop(troopWeapon(k, false, true)), { clan: k, officer: false, cart: true });
+    const parts = [
+      { w: troopWeapon(k), part: "soldier", mark: "" }, { w: troopWeapon(k, true), part: "officer", mark: "*" },
+      { w: troopWeapon(k, false, true), part: "cart", mark: "^" }, { w: troopWeapon(k, false, false, true), part: "ram", mark: "#" },
+    ] as const;
+    for (const { w, part, mark } of parts) {
+      assert.equal(w, `${k}${mark}`, `${k} ${part}`);
+      assert.deepEqual(parseTroop(w), { clan: k, part, officer: part === "officer", cart: part === "cart", object: part === "cart" || part === "ram" });
+      const t = parseTroop(w)!;
+      assert.equal(troopWeapon(t.clan, t.officer, t.cart, t.part === "ram"), w, "and back");
+    }
   }
-  for (const w of ["", "folk", "sword", "*", "^", "__proto__", "constructor*", "constructor^", "wardens**", "wardens^^", "wardens^*", "wardens*^", 5, undefined]) assert.equal(parseTroop(w), undefined, String(w));
+  assert.equal(troopName("host", false, false, true), "Ossuary Host bone ram");
+  assert.equal(troopName("redfang", false, true), "Redfang supply cart");
+  for (const w of ["", "folk", "sword", "*", "^", "#", "__proto__", "constructor*", "constructor^", "constructor#", "wardens**", "wardens^^", "wardens^*", "wardens*^", "host##", "host#*", "host^#", 5, undefined]) assert.equal(parseTroop(w), undefined, String(w));
 });
 
 test("troops: stance table (own clan, other clan, unsworn, under the oath level)", () => {

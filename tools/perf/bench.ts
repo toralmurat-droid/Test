@@ -10,6 +10,7 @@
 //   BENCH_PORT=2656: listen on another port (default 2599), e.g. when two benches run on one machine
 //   WAR=1: a fresh clan war is running (server/war.ts), so clan troops march and fight near the bots (server/warTroops.ts)
 //   SIEGE=1 (with WAR=1): a siege is called on an Act 1 land and the first bot stands at its gate, so a siege battle runs (server/warSieges.ts)
+//   SIEGE=host: the same, led by the Ossuary Host, so its bone ram and crew roll too (server/warWorks.ts)
 //   CAST=1 SPREAD=1: the Summoner bots cast wisps, blades, black holes and the Void Arsenal non-stop (tools/perf/bots.ts)
 //   TIDE=1: a Gloam Tide march is out the whole time, its last wave all at once (TIDE.maxAlive marchers, server/tide.ts)
 //   SONGWEAVER=1 (PARTY=1): Songweaver bots too; PARTY=1 groups them
@@ -87,7 +88,7 @@ async function main() {
     const { TERRITORIES } = await import("../../shared/war/territories"), { targetsOf } = await import("../../shared/war/rules"), { CLAN_KEYS } = await import("../../shared/war/clans");
     const st = warState()!;
     for (const t of TERRITORIES) {
-      const atk = CLAN_KEYS.find((k) => k !== st.owner[t.id] && targetsOf(st, k).includes(t.id));
+      const atk = CLAN_KEYS.find((k) => k !== st.owner[t.id] && targetsOf(st, k).includes(t.id) && (process.env.SIEGE !== "host" || k === "host"));
       if (t.act !== 1 || t.capitalOf || !atk || siegeFronts(t.id).length < 3) continue;
       st.siege[t.id] = { by: atk, at: st.tick + 6 }; st.control[t.id] = 30; siegeLand = t.id;
       const g = siegeFronts(t.id).find((f) => f.gate)!, p0 = [...room.state.players.values()][0];

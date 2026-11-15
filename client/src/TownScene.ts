@@ -2070,7 +2070,7 @@ export class TownScene extends Phaser.Scene {
       const key = mobTexture(this, p.kind, p.level, p.weapon);
       if (key.startsWith("mob_war_")) { e.sprite.setTexture(key, 0); e.artOn = true; this.perch(e, p); }
     }
-    if (e.artOn && e.sprite.texture.frameTotal > 14 && parseTroop(p.weapon)?.cart && !p.dead) { // a supply cart: idle frames when still, stagger on a hit
+    if (e.artOn && e.sprite.texture.frameTotal > 14 && parseTroop(p.weapon)?.object && !p.dead) { // a supply cart or a siege ram: idle frames when still, stagger on a hit
       if (e.cartHp !== undefined && p.hp < e.cartHp) e.cartHurtAt = now;
       e.cartHp = p.hp;
       if (now - (e.cartHurtAt ?? -1e9) < 260) e.sprite.setFrame(12);
@@ -2092,7 +2092,7 @@ export class TownScene extends Phaser.Scene {
   private trooperLabel(e: Entity, p: any, x: number, y: number) {
     const t = parseTroop(p.weapon);
     if (!t || p.dead || p.hidden) { e.label?.setVisible(false); return; }
-    if (!e.label) e.label = isoAnchor(this.add.text(x, y, troopName(t.clan, t.officer, t.cart), {
+    if (!e.label) e.label = isoAnchor(this.add.text(x, y, troopName(t.clan, t.officer, t.cart, t.part === "ram"), {
       fontFamily: TEXT_FONT, fontSize: `${TEXT_PX}px`, color: "#c8c8c8", stroke: "#000", strokeThickness: 2,
     }).setOrigin(0.5, 1).setScale(WT * 0.85).setResolution(1), e.sprite) as Phaser.GameObjects.Text;
     const col = TROOP_COLOURS[this.troopStanceOf(p.weapon)];

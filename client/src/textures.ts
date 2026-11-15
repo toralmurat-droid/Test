@@ -335,6 +335,8 @@ const PAINTED_LOOK: Record<string, { top: number; bar: number; oy: number; scale
   ...Object.fromEntries(["war_warden_cap", "war_redfang_chief", "war_host_cap", "war_hidekin_chief", "war_veiled_adept"].map((k) => [k, { top: 30, bar: 16, oy: 32 / 34 }])),
   // the clan war's supply carts (tools/art/paint/warCarts.ts): 72x44 frames, a cart and its beast about 2 tiles long; the ground line is at 40/44
   ...Object.fromEntries(WAR_CART_CLANS.map((c) => [`war_cart_${c}`, { top: 36, bar: 30, oy: 40 / 44 }])),
+  // the Host's siege ram (shared/war/works.ts): the same 72x44 frame layout as the carts
+  war_ram_host: { top: 36, bar: 30, oy: 40 / 44 },
   // Act 2, the Sunscar
   nomad: { top: 24, bar: 14, oy: 27.5 / 30 }, sanddead: { top: 24, bar: 14, oy: 27.5 / 30 }, veiled: { top: 26, bar: 14, oy: 31.2 / 32 },
   camelfolk: { top: 36, bar: 18, oy: 33.5 / 36 }, sphinx: { top: 38, bar: 18, oy: 36.5 / 40 }, scorpion: { top: 20, bar: 18, oy: 27 / 30 },
@@ -367,6 +369,7 @@ export const WAR_LEGACY: Record<string, string> = {
 /** The art key ("war_redfang_chief"...) a server trooper wears: its clan and rank ride in Mob.weapon (shared/war/troops.ts). */
 export function trooperArt(weapon: string): string {
   const t = parseTroop(weapon);
+  if (t?.part === "ram") return warMissing.has(`mob_war_ram_${t.clan}`) ? `war_cart_${t.clan}` : `war_ram_${t.clan}`; // a siege ram: its own sheet, the clan's cart until that exists
   if (t?.cart) return `war_cart_${t.clan}`; // a supply cart: its own sheet (not a soldier's)
   return t ? troopLook(t.clan, 0, t.officer) : "war_warden";
 }
@@ -403,6 +406,8 @@ export function mobTexture(scene: Phaser.Scene, kind: string, level = 1, weapon 
 }
 
 const warAsked = new Set<string>();
+/** Sheets the art manifest does not list (a siege ram before its art lands): trooperArt falls back to the clan's cart. */
+const warMissing = new Set<string>();
 /**
  * A clan soldier's painted sheet (art key "war_warden"...: see shared/war/patrols.ts TROOP_LOOK, not a MobKind): fetched on
  * first ask, so only players near a war land pay for it (about 15 KB a sheet). Null until it is loaded; 14 frames
@@ -412,6 +417,7 @@ export function warSoldierTexture(scene: Phaser.Scene, name: string): string | n
   if (!SMOOTH) return null;
   const key = `mob_${name}`;
   if (!scene.textures.exists(`hd_${key}`)) {
+    if (scene.cache.json.exists("hd_mobs") && !scene.cache.json.get("hd_mobs")?.[key]) { warMissing.add(key); return null; } // not painted yet
     if (!warAsked.has(key) && scene.cache.json.exists("hd_mobs")) {
       warAsked.add(key);
       // a failed fetch (network blip) frees the key after a while, so the clan's soldiers are asked for again
@@ -433,6 +439,11 @@ export function warSoldierTexture(scene: Phaser.Scene, name: string): string | n
  */
 export function warCartTexture(scene: Phaser.Scene, clan: string): string | null {
   return warSoldierTexture(scene, clan.startsWith("war_cart_") ? clan : `war_cart_${clan}`);
+}
+
+/** The Ossuary Host's bone siege ram sheet (art key "war_ram_host"; same 72x44 / 14-frame layout as the carts). Null until loaded. Art only. */
+export function warRamTexture(scene: Phaser.Scene): string | null {
+  return warSoldierTexture(scene, "war_ram_host");
 }
 
 /** A champion affix's painted detail (tools/art/paint/mobs.ts champOverlay, 2 frames), or null (pixel look, not loaded). */

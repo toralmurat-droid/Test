@@ -36,7 +36,7 @@ let voices = 0;
 const MAX_VOICES = 28;
 const lastPlay = new Map<string, number>();
 /** Sounds that ring for seconds (kept connected longer). */
-const LONG = new Set(["lootRare", "lootLegendary", "horn", "ritual", "ritualCall", "demonRise", "demonRoar", "shrine", "portalTravel", "portalWake", "necroWind", "heroDie", "levelup", "owl", "chime", "warcry", "motherInflate", "demonFire", "skelDie", "lutePluck", "swResonate", "swShatter", "swBounce", "swSnap", "swSwell", "caravan_raided", "caravan_arrived", "siege_front"]);
+const LONG = new Set(["lootRare", "lootLegendary", "horn", "ritual", "ritualCall", "demonRise", "demonRoar", "shrine", "portalTravel", "portalWake", "necroWind", "heroDie", "levelup", "owl", "chime", "warcry", "motherInflate", "demonFire", "skelDie", "lutePluck", "swResonate", "swShatter", "swBounce", "swSnap", "swSwell", "caravan_raided", "caravan_arrived", "siege_front", "ram_wrecked", "ram_at_gate"]);
 const AMBIENT = new Set(["crackle", "bird", "cricket", "chime", "owl", "step", "skelIdle", "blobGurgle", "crawl"]);
 
 const TOWNS = ["Oakvale", "Market Square", "Chapel of the Dawn", "The Rusty Tankard", "The Smithy", "Saltmere", "Hunter's Camp"];
@@ -652,6 +652,22 @@ const R: Record<string, Recipe> = {
     noise(o, t, { type: "bandpass", f: 600, q: 2, dur: 1.0, vol: 0.06 * v, att: 0.1 });
     thud(o, t, 65, 0.5 * v, 0.3); thud(o, t + 0.45, 75, 0.35 * v, 0.2);
   },
+  // Siege works (server broadcast("sfx", { ev: "ram_wrecked" | "ram_at_gate", x, y })): the Host's bone ram.
+  // Wrecked: a dry crack of bone, timbers giving way, a heavy fall and loose bones rattling down
+  ram_wrecked: (o, t, v) => {
+    noise(o, t, { type: "highpass", f: 2400, dur: 0.06, vol: 0.45 * v });
+    thud(o, t + 0.02, 60, 0.7 * v, 0.35);
+    for (let i = 0; i < 6; i++) { const tt = t + 0.06 + i * 0.05 + rnd(0, 0.03); noise(o, tt, { type: "bandpass", f: rnd(1400, 3200), q: 7, dur: 0.04, vol: 0.22 * v }); tone(o, tt, { type: "triangle", f: rnd(500, 900), f2: 250, dur: 0.05, vol: 0.07 * v }); }
+    thud(o, t + 0.3, 48, 0.55 * v, 0.3);
+    rattle(o, t + 0.34, 8, 0.6, 0.09 * v, 2600);
+  },
+  // At the gate: the first blow on the gate, a deep hollow boom with a creak of timber, then a low drum
+  ram_at_gate: (o, t, v) => {
+    thud(o, t, 45, 0.8 * v, 0.45);
+    noise(o, t, { type: "lowpass", f: 380, dur: 0.5, vol: 0.3 * v });
+    tone(o, t + 0.08, { type: "sawtooth", f: 140, f2: 95, dur: 0.45, vol: 0.06 * v, att: 0.05, vib: 3, vibHz: 7 });
+    thud(o, t + 0.7, 55, 0.4 * v, 0.25); thud(o, t + 1.05, 55, 0.3 * v, 0.2);
+  },
   // Arrived: a short two-note horn over a bell, the caravan is home
   caravan_arrived: (o, t, v) => {
     [[0, 0.28, 1], [0.3, 0.55, 1.5]].forEach(([s, d, m]) => [1, 2, 3].forEach((k, i) => tone(o, t + s, { type: "sawtooth", f: 196 * m * k, f2: 198 * m * k, dur: d, vol: (0.2 / (1 + i)) * v, att: 0.04, vib: 0.8 * k, vibHz: 5 })));
@@ -1134,6 +1150,8 @@ export function bindSfx(room: any, me: () => string, ents: Map<string, Ent>) {
       case "caravan_roll": pos("caravan_roll", 0.8, undefined, { key: "cr" + (ev.id ?? ""), minGap: 700 }); break;
       case "caravan_raided": pos("caravan_raided", 1, undefined, { key: "cx" + (ev.id ?? ""), minGap: 300, reach: 1.6 }); break;
       case "siege_front": pos("siege_front", 1, undefined, { key: "sf" + (ev.x ?? "") + ":" + (ev.y ?? ""), minGap: 1500, reach: 2 }); break;
+      case "ram_wrecked": pos("ram_wrecked", 1, undefined, { key: "rw" + (ev.x ?? "") + ":" + (ev.y ?? ""), minGap: 500, reach: 1.8 }); break;
+      case "ram_at_gate": pos("ram_at_gate", 1, undefined, { key: "rg" + (ev.x ?? "") + ":" + (ev.y ?? ""), minGap: 1500, reach: 2 }); break;
       case "caravan_arrived": case "caravan_delivered": pos("caravan_arrived", 1, undefined, { key: "ca" + (ev.id ?? ev.clan ?? ""), minGap: 500, reach: 2 }); break;
       case "grimoire": if (ev.id === me()) pos("pageTurn", 1, ({ fire: "fire", cold: "frost", poison: "poison", shock: "lightning" } as Record<string, string>)[ev.el] ?? "arcane"); break;
     }

@@ -51,7 +51,7 @@ export class WarPlaque {
   /** The server's live siege battle ("siege" message): a "Fronts n/m <clan>" line while the hero is in that land. */
   setSiege(m: SiegeView) { this.siege = m; this.shown = ""; }
 
-  /** "Fronts n/m <clan>" for land t: the clan holding the most fronts (the holder on a tie), or "". */
+  /** "Fronts n/m <clan>" for land t: the clan holding the most fronts (the holder on a tie), plus the ram's state if one rolls, or "". */
   private frontsLine(t: number, own: ClanKey): string {
     const m = this.siege;
     if (!m || m.t !== t || !m.fronts?.length) return "";
@@ -59,8 +59,10 @@ export class WarPlaque {
     for (const f of m.fronts) n.set(f.holder, (n.get(f.holder) ?? 0) + 1);
     let best = own as string, bn = n.get(own) ?? 0;
     for (const [k, c] of n) if (c > bn) { best = k; bn = c; }
-    const cl = CLANS[best as ClanKey];
-    return cl ? `Fronts ${bn}/${m.fronts.length} ${cl.name}` : "";
+    const cl = CLANS[best as ClanKey], r = m.ram;
+    // the Host's bone ram (shared/war/works.ts): where it is and how whole
+    const ram = r ? ` · Ram ${r.state === "gate" ? "at the gate" : r.state === "held" ? "held" : "rolling"} ${Math.round((100 * r.hp) / Math.max(1, r.maxHp))}%` : "";
+    return cl ? `Fronts ${bn}/${m.fronts.length} ${cl.name}${ram}` : "";
   }
 
   /** Call every frame with the hero's tile; it only redraws when something on it changes. */

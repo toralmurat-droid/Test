@@ -12,6 +12,7 @@ import { noMobsAt } from "../spawns";
 import { inVillage } from "../wrath";
 import { patrolOf, patrolPos, troopShare, type Patrol } from "./patrols";
 import { TERRITORIES } from "./territories";
+import type { RamView } from "./works";
 
 export const SIEGE_BATTLE = {
   /** Master switch: off, sieges stay virtual (the client's painted battle lines come back). */
@@ -109,10 +110,11 @@ export function siegeApproach(t: number, axis: { x: number; y: number }): { x: n
 
 /**
  * Troopers per front for each side: attackers perFront, defenders by Control (troopShare, at least defMin), then
- * trimmed (the bigger side first) until all fronts fit `budget` (the room's share, at most maxSiegeTroops).
+ * trimmed (the bigger side first) until all fronts fit `budget` (the room's share, at most maxSiegeTroops) less `reserve`
+ * (siege works and their crew, shared/war/works.ts: they count inside maxSiegeTroops too).
  */
-export function siegeForce(fronts: number, control: number, budget: number): { atk: number; def: number } {
-  const S = SIEGE_BATTLE, cap = Math.max(0, Math.min(S.maxSiegeTroops, Math.floor(budget)));
+export function siegeForce(fronts: number, control: number, budget: number, reserve = 0): { atk: number; def: number } {
+  const S = SIEGE_BATTLE, cap = Math.max(0, Math.min(S.maxSiegeTroops, Math.floor(budget)) - Math.max(0, reserve));
   let atk = S.perFront, def = Math.max(S.defMin, Math.round(S.perFront * troopShare(control)));
   const n = Math.max(1, fronts);
   while (n * (atk + def) > cap && atk + def > 0) { if (atk >= def) atk--; else def--; }
@@ -142,5 +144,5 @@ export function frontPay(gate: boolean, heroThere: boolean, used: number): numbe
   return Math.max(0, Math.min(S.frontValor * (gate ? S.gateMult : 1), S.battleValorPerTick - used));
 }
 
-/** What the server sends ("siege"): the live siege's land and fronts with their holders; t -1 and no fronts when none. */
-export interface SiegeView { t: number; fronts: { x: number; y: number; gate: boolean; holder: string }[] }
+/** What the server sends ("siege"): the live siege's land and fronts with their holders, and its ram if one rolls; t -1 and no fronts when none. */
+export interface SiegeView { t: number; fronts: { x: number; y: number; gate: boolean; holder: string }[]; ram?: RamView }
