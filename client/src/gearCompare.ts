@@ -87,7 +87,7 @@ export const cardWidth = (panelLeft: number, max = 320, min = 240, gap = 8): num
  * with no room between it and the panel the card moves right, over the panel's doll area.
  */
 export function cardPlace(item: { top: number }, panelLeft: number, cardW: number, cardH: number, vw: number, vh: number, gap = 8, minLeft = 4): { left: number; top: number } {
-  const left = Math.max(minLeft, Math.min(panelLeft - gap - cardW, vw - cardW - 4));
+  const left = Math.max(4, Math.min(Math.max(minLeft, panelLeft - gap - cardW), vw - cardW - 4)); // the screen edge wins last
   const top = Math.max(4, Math.min(item.top, vh - cardH - 4));
   return { left, top };
 }
