@@ -1,13 +1,15 @@
 /**
  * Clan troops that fight (roadmap: "troops that really fight", PR1). Each awake land's holder fields its patrol column
  * and Hold guards as real monsters (MobKind "trooper", server/warTroops.ts): they march the cosmetic route of
- * shared/war/patrols.ts, guard the Hold, hunt the wild monsters of their land and fight heroes sworn to other clans.
+ * shared/war/patrols.ts, guard the Hold, hunt the wild monsters of their land and fight heroes sworn to clans at war
+ * with theirs, or who provoked them or are Wanted by them (shared/war/feuds.ts, troopStance).
  * The clan rides in the existing Mob.weapon string ("<clanKey>", "<clanKey>*" for the officer), so the synced Mob
  * schema is unchanged. Pure rules and numbers: the room module and the tests read them.
  */
 import { MOBS, mobScale } from "../constants";
 import type { ClanKey } from "./clans";
 import { TROOP, type Patrol } from "./patrols";
+import { atWar, grudgeActive, type FeudState } from "./feuds";
 import { isClan, STANDARD } from "./standards";
 import { TERRITORIES } from "./territories";
 
@@ -116,14 +118,16 @@ export function troopLevel(t: number, officer = false): number {
 
 export type TroopStance = "ally" | "neutral" | "enemy";
 /**
- * How clan `troop`'s soldiers see a hero: their own sworn heroes are allies, heroes sworn elsewhere are enemies,
- * everyone else (unsworn heroes, anyone under STANDARD.minLevel) is left alone and can't hurt them either (the war is
- * for the sworn: the server's WarTroops.canHurt and the client's attack cursor both read this).
+ * How clan `troop`'s soldiers see a hero: their own sworn heroes are allies; heroes sworn to a clan at war with them
+ * (feuds.ts atWar), and anyone they hold a grudge against or want (a provocation, kills: feuds.ts), are enemies;
+ * everyone else (unsworn heroes, heroes of clans far away, anyone under STANDARD.minLevel) is left alone and can't hurt
+ * them either (a stray Blizzard starts no fight: the server's WarTroops.canHurt and the client's attack cursor read this).
  */
-export function troopStance(troop: ClanKey, hero: { clan?: ClanKey; level: number }): TroopStance {
+export function troopStance(troop: ClanKey, hero: { clan?: ClanKey; level: number; feud?: FeudState }, now = Date.now()): TroopStance {
   if (hero.level < STANDARD.minLevel) return "neutral";
   if (hero.clan === troop) return "ally";
-  return hero.clan ? "enemy" : "neutral";
+  if (hero.clan && atWar(hero.clan, troop)) return "enemy";
+  return grudgeActive(hero.feud, troop, now) ? "enemy" : "neutral";
 }
 
 /** A short name for a trooper (name label, death messages): "Redfang soldier", "Redfang captain", "Redfang supply cart", "Ossuary Host bone ram", "Hide-Kin tunnel". */
@@ -133,7 +137,7 @@ export function troopName(k: ClanKey, officer = false, cart = false, ram = false
   return `${TROOP_SHORT[k]} ${cart ? "supply cart" : officer ? "captain" : "soldier"}`;
 }
 /** The word a clan's soldiers go by (name tags): "The Hearthbound Wardens" -> "Warden". */
-const TROOP_SHORT: Record<ClanKey, string> = { wardens: "Warden", redfang: "Redfang", host: "Ossuary", hidekin: "Hide-Kin", veiled: "Veiled" };
+export const TROOP_SHORT: Record<ClanKey, string> = { wardens: "Warden", redfang: "Redfang", host: "Ossuary", hidekin: "Hide-Kin", veiled: "Veiled" };
 
 const arcCache = new WeakMap<Patrol, { arcs: number[]; cycle: number }>();
 /** Per-stop arc positions (px, ascending) and the virtual loop length with one pause per stop. */

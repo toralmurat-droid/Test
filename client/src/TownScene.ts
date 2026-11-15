@@ -41,6 +41,8 @@ import { movesSheet, SkillMoves } from "./skillMoves";
 import { displayGrid } from "./tileset";
 import { CRAWL_CROP, heroTexture, itemTexture, potionTex, makeTileset, MOB_LOOK, mobLook, mobTexture, preloadPaintedMobs } from "./textures";
 import { parseTroop, troopName, troopStance, type TroopStance } from "../../shared/war/troops";
+import { WarFeud } from "./warFeud";
+import { clanOfIndex } from "../../shared/war/view";
 import { Minimap } from "./minimap";
 import { fullscreenSupported, isFullscreen, onFullscreen, toggleFullscreen } from "./fullscreen";
 import { SCREEN_SIZES, isSharp, onWorldScale, pct, setWorldScale, uiScale, worldScale, worldScaleName, worldScaleSetting } from "./worldscale";
@@ -184,6 +186,7 @@ interface Entity {
   label?: Phaser.GameObjects.Text;
   titleLabel?: Phaser.GameObjects.Text; // heroes: the shown title, small and dim, between the name and the head
   pennant?: Phaser.GameObjects.Image; stripe?: Phaser.GameObjects.Image; // heroes sworn to a clan: pennant beside the name, stripe under it (warTabards.ts)
+  feudMark?: Phaser.GameObjects.Text; // "Wanted by ..." over a marked hero's name (warFeud.ts)
   nameLift?: number;
   lvlColor?: string; // monsters: current colour of the "Lv N" label
   artOn?: boolean; // a clan trooper drawn with its painted sheet (until then an old monster look stands in)
@@ -426,11 +429,12 @@ export class TownScene extends Phaser.Scene {
   private tabards?: WarTabards; // clan pennants and Renown titles on heroes' name tags ("oaths")
   private warTroops?: WarTroops;
   private warRituals?: WarRituals; // the Veiled noon ritual circle ("rituals", server/warRituals.ts)
+  private feud?: WarFeud; // feuds: provoke, Wanted badge and marks ("feud", "wanted", server/warFeuds.ts)
   /** How a server clan trooper sees this hero (shared/war/troops.ts troopStance), from the oath the "clan" message brought. */
   private troopStanceOf(weapon: string): TroopStance {
     const t = parseTroop(weapon), me = (this.room?.state as any)?.players?.get(this.me);
     if (!t || !me) return "neutral";
-    return troopStance(t.clan, { clan: this.warStd?.clan || undefined, level: me.level });
+    return troopStance(t.clan, { clan: this.warStd?.clan || undefined, level: me.level, feud: this.feud?.state });
   }
   private warLast?: WarView;
   private soundCues = new SoundCues();
@@ -1584,6 +1588,10 @@ export class TownScene extends Phaser.Scene {
     this.room.onMessage("hb", alive);
     this.warStd = new WarStandards(this, (type, msg) => this.room.send(type, msg)); // clan war standards and oaths
     this.warTroops = new WarTroops(this); // cosmetic clan patrols, derived from the war snapshot
+    this.feud = new WarFeud(this, this.room, { // feuds (client/src/warFeud.ts): Shift+click provoke, Wanted badge and marks
+      me: () => (this.room?.state as any)?.players?.get(this.me), clan: () => this.warStd?.clan || undefined,
+      holder: (t) => clanOfIndex(this.warLast?.owner[t] ?? -1), entities: () => this.entities,
+    });
     this.room.onMessage("war", (v) => {
       // the Hold walls follow the holders (shared/war/holdWalls.ts): prediction and click-to-walk routes see the new forts
       const flipped = setHoldOwners(Array.isArray(v?.owner) ? v.owner : []);
@@ -2078,7 +2086,7 @@ export class TownScene extends Phaser.Scene {
     this.forms?.drop(id);
     this.lastMineHit.delete(id);
     if (e.mob && e.state.kind === "trooper" && e.state.dead && e.artOn && !e.culled) this.trooperCorpse(e);
-    e.sprite.destroy(); e.label?.destroy(); e.titleLabel?.destroy(); e.pennant?.destroy(); e.stripe?.destroy(); e.bar.destroy(); e.parts?.destroy(); e.bubble?.destroy(); e.gear?.destroy();
+    e.sprite.destroy(); e.label?.destroy(); e.titleLabel?.destroy(); e.pennant?.destroy(); e.stripe?.destroy(); e.feudMark?.destroy(); e.bar.destroy(); e.parts?.destroy(); e.bubble?.destroy(); e.gear?.destroy();
     this.entities.delete(id);
   }
 
@@ -2115,10 +2123,10 @@ export class TownScene extends Phaser.Scene {
   private trooperLabel(e: Entity, p: any, x: number, y: number) {
     const t = parseTroop(p.weapon);
     if (!t || p.dead || p.hidden) { e.label?.setVisible(false); return; }
-    if (!e.label) e.label = isoAnchor(this.add.text(x, y, troopName(t.clan, t.officer, t.cart, t.part === "ram", t.part === "mouth"), {
+    if (!e.label) e.label = isoAnchor(this.add.text(x, y, p.title || troopName(t.clan, t.officer, t.cart, t.part === "ram", t.part === "mouth"), { // (manhunters carry a title)
       fontFamily: TEXT_FONT, fontSize: `${TEXT_PX}px`, color: "#c8c8c8", stroke: "#000", strokeThickness: 2,
     }).setOrigin(0.5, 1).setScale(WT * 0.85).setResolution(1), e.sprite) as Phaser.GameObjects.Text;
-    const col = TROOP_COLOURS[this.troopStanceOf(p.weapon)];
+    const col = this.feud?.colour(t.clan) ?? TROOP_COLOURS[this.troopStanceOf(p.weapon)]; // orange: fighting only because the hero provoked them
     if (e.lvlColor !== col) { e.label.setColor(col); e.lvlColor = col; }
     setBaseDepth(e.label.setPosition(x, y - e.top - 2).setVisible(true), e.sprite.y + 1);
   }
@@ -3313,7 +3321,7 @@ export class TownScene extends Phaser.Scene {
         h.push({ t: wall, x: e.sprite.x, y: e.sprite.y });
         while (h.length > 2 && wall - h[0].t > 1500) h.shift();
       }
-      if (e.waiting) { e.sprite.setVisible(false); e.label?.setVisible(false); e.titleLabel?.setVisible(false); e.pennant?.setVisible(false); e.stripe?.setVisible(false); continue; } // its sheet is still loading
+      if (e.waiting) { e.sprite.setVisible(false); e.label?.setVisible(false); e.titleLabel?.setVisible(false); e.pennant?.setVisible(false); e.stripe?.setVisible(false); e.feudMark?.setVisible(false); continue; } // its sheet is still loading
       // Monsters off screen: hide them and skip the per-frame drawing (there are a lot of them)
       if (e.mob) {
         const v = this.cameras.main.worldView, M = 48;
@@ -3437,6 +3445,7 @@ export class TownScene extends Phaser.Scene {
       e.bubble?.setPosition(x, y - e.top - 12 - (e.nameLift ?? 0)); // above the name label
       setBaseDepth(e.bar.clear(), e.sprite.y + 1);
       if (!e.mob) this.tabards?.sync(id, e, !p.dead && !p.hidden);
+      if (!e.mob) this.feud?.sync(id, e, !p.dead && !p.hidden); // "Wanted by ..." over the name
       if (e.mob) this.champFx?.sync(id, e, p, x, y, now);
       this.fx.status(e, e.bar, dtMs / 1000);
       // (Stacks built by basic hits are shown by the skill keys, see chargeCell: no pips under the hero, Murat 2026-11-04)

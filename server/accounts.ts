@@ -47,6 +47,8 @@ export interface HeroSave {
   clan?: string; clanAt?: number;
   /** Clan war renown (shared/war/renown.ts); kept when the hero changes clan. */
   renown?: number;
+  /** Feuds per clan (shared/war/feuds.ts): grudge end, kill points and their last step (ms), UTC day a bounty was paid on them; missing = none. */
+  feud?: Partial<Record<string, { until?: number; pts?: number; at?: number; paid?: number }>>;
   /** War writ in progress (shared/war/writs.ts), and the UTC day / count of writs finished (the daily limit); missing = none. */
   writ?: WritState; writDay?: number; writN?: number;
   /** Gear wear 0-100: removed 2026-11-13, old saves may still carry it; ignored on load and no longer written. */

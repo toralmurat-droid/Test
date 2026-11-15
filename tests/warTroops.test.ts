@@ -6,6 +6,7 @@ import { blocked } from "../shared/movement";
 import { CLAN_KEYS, type ClanKey } from "../shared/war/clans";
 import { newMinds } from "../shared/war/doctrine";
 import { garrisonCount, garrisonSpots, patrolCount, patrolOf, TROOP, TROOP_LOOK, troopLook } from "../shared/war/patrols";
+import { atWar, _resetWarRelations, setWarRelations } from "../shared/war/feuds";
 import { newWar } from "../shared/war/rules";
 import { STANDARD } from "../shared/war/standards";
 import { TERRITORIES } from "../shared/war/territories";
@@ -31,13 +32,17 @@ test("troops: the clan and part ride in Mob.weapon and round-trip; nothing else 
   for (const w of ["", "folk", "sword", "*", "^", "#", "__proto__", "constructor*", "constructor^", "constructor#", "wardens**", "wardens^^", "wardens^*", "wardens*^", "host##", "host#*", "host^#", 5, undefined]) assert.equal(parseTroop(w), undefined, String(w));
 });
 
-test("troops: stance table (own clan, other clan, unsworn, under the oath level)", () => {
+test("troops: stance table (own clan, a clan at war, a clan at peace, unsworn, under the oath level)", () => {
   const L = STANDARD.minLevel;
-  assert.equal(troopStance("redfang", { clan: "redfang", level: 20 }), "ally");
-  assert.equal(troopStance("redfang", { clan: "veiled", level: 20 }), "enemy");
-  assert.equal(troopStance("redfang", { level: 20 }), "neutral");
-  assert.equal(troopStance("redfang", { level: L - 1 }), "neutral", "newcomers are left alone");
-  assert.equal(troopStance("redfang", { clan: "veiled", level: L - 1 }), "neutral");
+  setWarRelations(newWar().owner, 0); // the opening map: Redfang border the Wardens, not the Veiled (shared/war/feuds.ts)
+  try {
+    assert.equal(troopStance("redfang", { clan: "redfang", level: 20 }), "ally");
+    assert.equal(troopStance("redfang", { clan: "wardens", level: 20 }), "enemy", "sworn to a clan at war with them");
+    assert.equal(troopStance("redfang", { clan: "veiled", level: 20 }), "neutral", "since feuds: a clan they don't border leaves its heroes alone");
+    assert.equal(troopStance("redfang", { level: 20 }), "neutral");
+    assert.equal(troopStance("redfang", { level: L - 1 }), "neutral", "newcomers are left alone");
+    assert.equal(troopStance("redfang", { clan: "wardens", level: L - 1 }), "neutral");
+  } finally { _resetWarRelations(); }
 });
 
 test("troops: levels stay inside the land's monster band, officers at the top", () => {
@@ -185,7 +190,7 @@ test("WarTroops: troops never chase into the safe square or the stockade", () =>
     heroes.set("a", hero(inside.x, inside.y));
     wt.tick(1000);
     const [id, m] = [...mobs].find(([mid]) => wt._land(t.id)?.slots.some((x) => x.id === mid))!;
-    heroes.get("a")!.clan = CLAN_KEYS.find((k) => k !== parseTroop(m.weapon)!.clan);
+    heroes.get("a")!.clan = CLAN_KEYS.find((k) => k !== parseTroop(m.weapon)!.clan && atWar(k, parseTroop(m.weapon)!.clan));
     m.x = inside.x - 2 * TILE; m.y = inside.y; // right outside it
     assert.equal(wt.canHurt("a", m), true, "an enemy can hurt it out here...");
     wt.hit("a", m);
@@ -201,7 +206,7 @@ test("WarTroops: troops never chase into the safe square or the stockade", () =>
 test("WarTroops: only heroes the troops fight can hurt them (no own clan, no unsworn hero, no newcomer, never on the safe square)", () => {
   _resetWar({ v: 1, state: newWar(), minds: newMinds(), next: Date.now() + 1e9, log: [] });
   const { wt, mobs, heroes } = fake(), gate = patrolOf(LAND.id)!.pts[0], owner = warState()!.owner[LAND.id] as ClanKey;
-  const foe = CLAN_KEYS.find((k) => k !== owner)!;
+  const foe = CLAN_KEYS.find((k) => k !== owner && atWar(k, owner))!; // (a clan at war with the holder: shared/war/feuds.ts)
   heroes.set("own", hero(gate.x, gate.y, { clan: owner }));
   heroes.set("free", hero(gate.x, gate.y));
   heroes.set("new", hero(gate.x, gate.y, { clan: foe, level: STANDARD.minLevel - 1 }));

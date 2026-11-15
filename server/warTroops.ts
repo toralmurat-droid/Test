@@ -2,7 +2,8 @@
  * Clan troops that fight (shared/war/troops.ts has the numbers and the pure rules). A land wakes when a hero comes
  * near it: its holder's patrol column and Hold guards appear as real monsters (kind "trooper", clan in Mob.weapon),
  * march the shared patrol loop, hunt the wild monsters of their land (never one a hero they don't fight is busy with)
- * and fight heroes sworn to other clans; only those heroes can hurt them. Fallen troopers come back at the Hold gate; a
+ * and fight the heroes their clan fights (troopStance: sworn to a clan at war, provoked, Wanted: shared/war/feuds.ts); only
+ * those heroes can hurt them. A Wanted hero is seen from farther and chased past the leash. Fallen troopers come back at the Hold gate; a
  * land with no hero near goes back to sleep.
  * TownRoom calls in at a few points (a tick a second, every trooper's turn, a hero's hit on one, its death, the war
  * news, a hero leaving) through the narrow WarTroopsHost below. Troopers give no XP and no loot (TownRoom.hitTarget).
@@ -23,10 +24,11 @@ import { TERRITORIES } from "../shared/war/territories";
 import { columnLead, parseTroop, troopLevel, troopStats, troopName, troopStance, troopWeapon, WAR_TROOPS, type TroopStance } from "../shared/war/troops";
 import type { WarView } from "../shared/war/view";
 import { rallyRenown } from "../shared/war/rules";
+import { FEUD, wantedTier, type FeudState } from "../shared/war/feuds";
 import { addValor, warNow, warState } from "./war";
 
 /** The parts of a hero this module reads (TownRoom's Player). */
-export interface TroopHero { name: string; clan?: ClanKey; level: number; x: number; y: number; dead: boolean; renown: number }
+export interface TroopHero { name: string; clan?: ClanKey; level: number; x: number; y: number; dead: boolean; renown: number; feud?: FeudState }
 /** The parts of a monster this module reads and moves (TownRoom's Mob). */
 export interface TroopMob {
   kind: string; weapon: string; level: number; x: number; y: number; homeX: number; homeY: number; dir: Dir;
@@ -64,8 +66,11 @@ interface Slot { role: Role; i: number; officer: boolean; id: string; fellAt: nu
 interface Land { t: number; clan?: ClanKey; lastHero: number; slots: Slot[] }
 /** A soldier's fighting state: a patrol trooper's, or a caravan escort's (server/warCaravans.ts). */
 export interface Fighter { clan: ClanKey; officer: boolean; nextPick: number; near: boolean; nextRush: number; rushUntil: number; rushHit: boolean; nextThrow: number; throwing: boolean }
-/** Where a soldier fights: `leash` holds every foe and chase, `hunt` the wild monsters it goes for unprovoked. */
-export interface FightGround { leash(x: number, y: number): boolean; hunt(x: number, y: number): boolean }
+/**
+ * Where a soldier fights: `leash` holds every foe and chase, `hunt` the wild monsters it goes for unprovoked, `far` (when
+ * given) the wider leash for a hero its clan wants (shared/war/feuds.ts FEUD.leashTiles).
+ */
+export interface FightGround { leash(x: number, y: number): boolean; hunt(x: number, y: number): boolean; far?(x: number, y: number): boolean }
 export const newFighter = (clan: ClanKey, officer: boolean): Fighter => ({ clan, officer, nextPick: 0, near: false, nextRush: 0, rushUntil: 0, rushHit: false, nextThrow: 0, throwing: false });
 interface Troop extends Fighter { t: number; slot: Slot; g: FightGround }
 
@@ -85,7 +90,7 @@ export class WarTroops {
   /** Troopers alive now (tests, the bench). */
   get count(): number { return this.troops.size; }
 
-  /** The stance of clan `k`'s troops toward hero `pid` (troopStance: it depends on the hero's oath and level only). */
+  /** The stance of clan `k`'s troops toward hero `pid` (troopStance: the hero's oath, level and feuds, and the clans at war). */
   stance(k: ClanKey, pid: string): TroopStance {
     const p = this.h.hero(pid);
     return p ? troopStance(k, p) : "neutral";
@@ -209,7 +214,7 @@ export class WarTroops {
     m.hp = m.maxHp = troopStats(clan, level, s.officer).hp;
     s.id = id; s.fellAt = SLEEPING;
     const t = land.t, W = WAR_TROOPS;
-    const g: FightGround = { leash: (x, y) => this.inLand(t, x, y, W.leashTiles), hunt: (x, y) => this.inLand(t, x, y, W.mobMarginTiles) };
+    const g: FightGround = { leash: (x, y) => this.inLand(t, x, y, W.leashTiles), hunt: (x, y) => this.inLand(t, x, y, W.mobMarginTiles), far: (x, y) => this.inLand(t, x, y, W.leashTiles + FEUD.leashTiles) };
     this.troops.set(id, { ...newFighter(clan, s.officer), t, slot: s, g });
   }
 
@@ -258,16 +263,17 @@ export class WarTroops {
   private pick(m: TroopMob, id: string, tr: Fighter, g: FightGround, now: number): string {
     const W = WAR_TROOPS, R = W.aggroPx;
     let best = "", bs = 0;
-    const consider = (tid: string, x: number, y: number, bonus: number) => {
+    const consider = (tid: string, x: number, y: number, bonus: number, wanted = false) => {
       const d = Math.hypot(x - m.x, y - m.y), hated = tid === m.hateId ? m.hate : 0;
-      if (d >= (hated > 0 ? R * 2 : R) || offLimits(x, y) || !g.leash(x, y)) return;
+      if (d >= (hated > 0 ? R * 2 : R) * (wanted ? FEUD.sight : 1) || offLimits(x, y) || !(wanted && g.far ? g.far(x, y) : g.leash(x, y))) return;
       const s = Math.max(0.05, 1 - d / R) + bonus + hated + (tid === m.target ? W.stick : 0);
       if (s > bs) { bs = s; best = tid; }
     };
     for (const [pid, p] of this.h.heroes()) {
-      if (p.dead || Math.abs(p.x - m.x) > R * 2 || Math.abs(p.y - m.y) > R * 2) continue;
-      if (troopStance(tr.clan, p) !== "enemy" || this.h.hidden(pid, now)) continue;
-      consider(pid, p.x, p.y, W.heroBonus); // a soldier goes for the enemy hero first
+      const wanted = wantedTier(p.feud, tr.clan, now) > 0, far = R * 2 * (wanted ? FEUD.sight : 1); // a Wanted hero is seen from farther
+      if (p.dead || Math.abs(p.x - m.x) > far || Math.abs(p.y - m.y) > far) continue;
+      if (troopStance(tr.clan, p, now) !== "enemy" || this.h.hidden(pid, now)) continue;
+      consider(pid, p.x, p.y, W.heroBonus, wanted); // a soldier goes for the enemy hero first
     }
     const hated = m.hateId && m.hate > 0 ? this.h.mob(m.hateId) : undefined; // (the only one it sees from twice as far)
     for (const [oid, o] of hated ? [...this.h.mobsInBox(m.x, m.y, R), [m.hateId, hated] as [string, TroopMob]] : this.h.mobsInBox(m.x, m.y, R)) {
@@ -328,8 +334,9 @@ export class WarTroops {
     // the target must still be fair game (a hero can swear another oath or step onto the safe square)
     const tp = m.target ? this.h.hero(m.target) : undefined, tm = !tp && m.target ? this.h.mob(m.target) : undefined;
     const t = tp ?? tm;
+    const far = !!tp && !!g.far && wantedTier(tp.feud, tr.clan, now) > 0; // a Wanted hero is chased past the usual leash
     if (m.target && (!t || (tp && (tp.dead || this.stance(tr.clan, m.target) !== "enemy" || this.h.hidden(m.target, now)))
-      || (tm && (tm.dead || tm.hidden)) || offLimits(t.x, t.y) || !g.leash(t.x, t.y))) { m.target = ""; m.windUntil = 0; m.winding = false; }
+      || (tm && (tm.dead || tm.hidden)) || offLimits(t.x, t.y) || !(far ? g.far!(t.x, t.y) : g.leash(t.x, t.y)))) { m.target = ""; m.windUntil = 0; m.winding = false; }
     if (!m.target || !t) { tr.throwing = false; tr.rushHit = false; return false; }
     const st = troopStats(tr.clan, m.level, tr.officer), speed = st.speed * (m.slowed ? SLOW_MOB : 1);
     const W = WAR_TROOPS, dist = Math.hypot(t.x - m.x, t.y - m.y), reach = MOB_ATTACK_RANGE + (tm ? mobBody(tm.kind as MobKind) : W.heroBody);

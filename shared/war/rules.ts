@@ -141,7 +141,7 @@ export function supplyMap(s: WarState): number[] {
 }
 
 /** Enemy territories clan `k` can attack: next to its land (within WAR.tunnelReach for the Hide-Kin). */
-export function targetsOf(s: WarState, k: ClanKey): number[] {
+export function targetsOf(s: Pick<WarState, "owner">, k: ClanKey): number[] {
   const reach = CLANS[k].doctrine === "tunnel" ? WAR.tunnelReach : 1;
   const seen = new Set<number>(), out = new Set<number>();
   let frontier = s.owner.flatMap((o, i) => (o === k ? [i] : []));

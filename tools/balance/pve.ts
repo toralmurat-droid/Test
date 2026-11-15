@@ -8,6 +8,7 @@
  *   then the Host's siege ram (shared/war/works.ts): the hero alone vs the ram and its crew.
  * --tunnel: the hero alone collapses a Hide-Kin tunnel mouth (shared/war/tunnels.ts) while its waves come out: win = the mouth falls.
  * --caravan: the hero alone raids a supply cart (shared/war/caravans.ts) with its 3 escorts at Lv 15 / 30 / 45: win = the cart falls.
+ * --hunters: the hero alone against a manhunter squad (shared/war/feuds.ts FEUD.hunt) at each tier that sends one, Lv 15 / 30 / 45.
  * --troops: the hero alone against a clan soldier, a captain and 3 soldiers of its level (shared/war/troops.ts), at Lv 8 / 20 / 45 (--clans: each clan at Lv 20).
  * --champions: one fight against each champion (shared/champions.ts, a 1D version of its affixes) beside the same plain monster.
  *
@@ -37,6 +38,8 @@ import { AFFIX_FX as CF, CHAMPION, type AffixKey } from "../../shared/champions"
 import { addHeat } from "../../shared/overload";
 import { CLAN_KEYS, type ClanKey } from "../../shared/war/clans";
 import { TROOP_OFFICER, troopStats, WAR_TROOPS } from "../../shared/war/troops";
+import { FEUD, WANTED_TIERS } from "../../shared/war/feuds";
+import { MAX_LEVEL } from "../../shared/classes";
 import { CARAVAN, caravanHp } from "../../shared/war/caravans";
 import { mouthHp, TUNNEL } from "../../shared/war/tunnels";
 import { SIEGE_BATTLE } from "../../shared/war/siege";
@@ -608,6 +611,23 @@ function troopRun(cls: ClassKind, level: number, n: number, build: Build, seed: 
   return { won: w === h, kills, hpLostPerKill: Math.max(0, hp0 - h.hp) / h.maxHp / Math.max(1, kills), secPerKill: d.now / 1000 / Math.max(1, kills), heals: pack.healUsed, manas: pack.manaUsed };
 }
 
+/** Manhunters (shared/war/feuds.ts FEUD.hunt): a captain and FEUD.hunt.soldiers[tier] soldiers, FEUD.hunt.levelUp[tier] above the hero (clans in turn), 5 heal + 5 mana potions. */
+function hunterRun(cls: ClassKind, level: number, tier: number, build: Build, seed: number, potions = 5): RunResult {
+  const h = make("h", cls, level, build), clan = CLAN_KEYS[seed % CLAN_KEYS.length], H = FEUD.hunt, L = Math.min(MAX_LEVEL, level + H.levelUp[tier]);
+  const pack: Pack = { heal: potions, mana: potions, healUsed: 0, manaUsed: 0, size: potionSize(level), lastDrink: -1e9 };
+  const ms = Array.from({ length: 1 + H.soldiers[tier] }, (_, k) => {
+    const officer = k === 0, sp = mobSpec("trooper", L), st = troopStats(clan, L, officer), R = WAR_TROOPS.rush, J = WAR_TROOPS.javelin;
+    Object.assign(sp, { hp: st.hp, dmg: st.dmg, speed: st.speed, cd: st.cd, lunge: { min: R.min, max: R.max, every: R.everyMs, mult: R.dmgMult } });
+    sp.specials.push({ name: "Javelin", every: J.everyMs, windup: J.windupMs, min: J.min, max: J.max, radius: J.radius + 4, mult: J.dmgMult, at: "target", shot: { speed: J.speed, radius: J.radius } });
+    if (officer) sp.poise *= TROOP_OFFICER.hp;
+    return new MobF(sp, "hu" + k);
+  });
+  const d = new PveDuel(h, ms, pack, 0), hp0 = h.hp;
+  let w: F | null | undefined;
+  while (d.now < 120000 && (w = d.step()) === undefined) { /* fight */ }
+  return { won: w === h, kills: ms.filter((m) => m.dead).length, hpLostPerKill: Math.max(0, hp0 - h.hp) / h.maxHp, secPerKill: d.now / 1000, heals: pack.healUsed, manas: pack.manaUsed };
+}
+
 /** A caravan raid (shared/war/caravans.ts): the cart stands still and never strikes; the fight is won when it falls. */
 class CaravanDuel extends PveDuel {
   constructor(hero: F, mobs: MobF[], pack: Pack, public cart: MobF) { super(hero, mobs, pack, 0); }
@@ -740,7 +760,23 @@ if (process.argv[1]?.includes("pve")) {
   const CARAVANS = process.argv.includes("--caravan");
   const SIEGE = process.argv.includes("--siege");
   const TUNNELS = process.argv.includes("--tunnel");
-  const doBosses = !CHAMPS && !TROOPS && !CARAVANS && !SIEGE && !TUNNELS && !process.argv.includes("--zones"), doZones = !CHAMPS && !TROOPS && !CARAVANS && !SIEGE && !TUNNELS && !process.argv.includes("--bosses");
+  const HUNTERS = process.argv.includes("--hunters");
+  const special = CHAMPS || TROOPS || CARAVANS || SIEGE || TUNNELS || HUNTERS;
+  const doBosses = !special && !process.argv.includes("--zones"), doZones = !special && !process.argv.includes("--bosses");
+  if (HUNTERS) {
+    const H = FEUD.hunt, tiers = H.soldiers.flatMap((n, t) => (n > 0 ? [t] : []));
+    console.log(`Manhunters: the hero alone vs a captain + N soldiers (${tiers.map((t) => `${WANTED_TIERS[t]}: ${H.soldiers[t]}, +${H.levelUp[t]} Lv`).join("; ")}), clans in turn, 5 heal + 5 mana potions. Cell = win% / HP lost / fight s`);
+    console.log("".padEnd(14) + CLASSES.map((c) => c.padEnd(20)).join(""));
+    for (const L of [15, 30, 45]) for (const t of tiers) {
+      let line = `Lv${L} ${WANTED_TIERS[t]}`.padEnd(14);
+      for (const c of CLASSES) {
+        let won = 0, hp = 0, sec = 0;
+        for (let i = 0; i < n; i++) { const r = hunterRun(c, L, t, buildOf(i), i); won += r.won ? 1 : 0; hp += r.hpLostPerKill; sec += r.secPerKill; }
+        line += `${pct(won / n)}/${pct(hp / n)}/${(sec / n).toFixed(1)}s`.padEnd(20);
+      }
+      console.log(line);
+    }
+  }
   if (TUNNELS) {
     console.log(`Hide-Kin tunnel: the hero alone vs the mouth (x${TUNNEL.mouthHp} soldier HP, no attack) and ${TUNNEL.perWave} soldiers of its level, another wave every ${TUNNEL.waveMs / 1000} s (at most ${TUNNEL.maxTunnelTroops} alive), 5 heal + 5 mana potions. Cell = win% (collapsed) / HP lost / fight s`);
     console.log("".padEnd(10) + CLASSES.map((c) => c.padEnd(20)).join(""));

@@ -1,0 +1,11 @@
+{
+  "date": "2026-11-15",
+  "pr": 462,
+  "title": "Feuds and Wanted heroes",
+  "changes": [
+    "Clans now fight only clans whose land borders theirs: if you are sworn, soldiers of a clan your clan does not border leave you alone. A badge shows how the land's clan sees you.",
+    "Shift+click a soldier or a Hold of a clan that leaves you alone to strike at it on purpose: its soldiers fight you (and your party) for 10 minutes.",
+    "Killing a clan's people makes you Wanted, then Hunted, then Marked by it: its soldiers see you from farther, manhunters march out after you, and other heroes see the mark. It fades over time, or ends when that clan kills you.",
+    "Heroes sworn to a clan earn a bounty for killing someone Wanted by it, once per hero per day."
+  ]
+}

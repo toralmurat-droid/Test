@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { startRoom, until, wait } from "./helpers/room";
 import { TILE, WORLD_H } from "../shared/constants";
 import { CLAN_KEYS, type ClanKey } from "../shared/war/clans";
+import { atWar } from "../shared/war/feuds";
 import { newMinds } from "../shared/war/doctrine";
 import { garrisonSpots, patrolOf, TROOP } from "../shared/war/patrols";
 import { newWar } from "../shared/war/rules";
@@ -63,7 +64,7 @@ test("war troops (room): who they fight; only enemy-sworn heroes hurt them (own 
   freshWar();
   try {
     const { c, room, id, p, chat } = await setup(srv);
-    const owner = warState()!.owner[LAND.id] as ClanKey, foe = CLAN_KEYS.find((k) => k !== owner)!;
+    const owner = warState()!.owner[LAND.id] as ClanKey, foe = CLAN_KEYS.find((k) => k !== owner && atWar(k, owner))!; // (at war with the holder: shared/war/feuds.ts)
     const hits: string[] = []; // [hero id] of every trooper blow on a hero
     const dp = room.damagePlayer.bind(room);
     room.damagePlayer = (tid: string, dmg: number, by: string, push: any, kb: number, o: any = {}) => { if (String(o.from).startsWith("wt")) hits.push(tid); return dp(tid, dmg, by, push, kb, o); };
@@ -145,7 +146,7 @@ test("war troops (room): a trooper's kill announces no cleared zone; a shock arc
     room.shockArc(id, wid3, 500);
     assert.ok(!sent.some(([k]) => k === "arc"), "no arc onto the neutral trooper");
     assert.equal(t.hp, hp);
-    p.clan = CLAN_KEYS.find((k) => k !== parseTroop(t.weapon)!.clan);
+    p.clan = CLAN_KEYS.find((k) => k !== parseTroop(t.weapon)!.clan && atWar(k, parseTroop(t.weapon)!.clan));
     room.shockArc(id, wid3, 500);
     assert.ok(sent.some(([k]) => k === "arc") && t.hp < hp, "an enemy-sworn hero's arc does leap onto it");
     await c.leave();
@@ -157,7 +158,7 @@ test("war troops (room): a trooper kill gives no XP or loot, valor is capped; th
   freshWar();
   try {
     const { room, id, p } = await setup(srv);
-    const s = warState()!, owner = s.owner[LAND.id] as ClanKey, foe = CLAN_KEYS.find((k) => k !== owner)!;
+    const s = warState()!, owner = s.owner[LAND.id] as ClanKey, foe = CLAN_KEYS.find((k) => k !== owner && atWar(k, owner))!;
     p.clan = foe; p.renown = 0;
     p.x = (LAND.x + LAND.w / 2) * TILE; p.y = (LAND.y + LAND.h / 2) * TILE; // inside the land
     const xp0 = p.xp, gold0 = p.gold, lvl0 = p.level;

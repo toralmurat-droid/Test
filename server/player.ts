@@ -11,6 +11,7 @@ import { noPotions, type Potions } from "../shared/potions";
 import { newRuntime } from "../shared/skillEngine";
 import { SLOT_COUNT } from "../shared/slots";
 import type { ClanKey } from "../shared/war/clans";
+import type { FeudState } from "../shared/war/feuds";
 
 // Per-client views need a schema buffer that never resizes (a library bug corrupts resized view patches):
 // Encoder.BUFFER_SIZE is set in server/patchCopy.ts, imported by the room before its state is created.
@@ -149,6 +150,7 @@ export class Player extends Schema {
   clan?: ClanKey; // clan war oath (shared/war/standards.ts; saved, sent by message)
   clanAt = 0;
   renown = 0; // clan war renown (shared/war/renown.ts; saved, sent with the "clan" message)
+  feud: FeudState = {}; // grudges, kill points and the bounty day per clan (shared/war/feuds.ts; saved, sent as "feud" / "wanted", never synced)
   writ?: WritState; // war writ in progress (server/warWrits.ts; saved, sent by message)
   writDay = 0; // UTC day of the last finished war writ, and how many were finished that day (the daily limit)
   writN = 0;

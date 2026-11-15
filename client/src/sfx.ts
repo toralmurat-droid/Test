@@ -36,7 +36,7 @@ let voices = 0;
 const MAX_VOICES = 28;
 const lastPlay = new Map<string, number>();
 /** Sounds that ring for seconds (kept connected longer). */
-const LONG = new Set(["lootRare", "lootLegendary", "horn", "ritual", "ritualCall", "demonRise", "demonRoar", "shrine", "portalTravel", "portalWake", "necroWind", "heroDie", "levelup", "owl", "chime", "warcry", "motherInflate", "demonFire", "skelDie", "lutePluck", "swResonate", "swShatter", "swBounce", "swSnap", "swSwell", "caravan_raided", "caravan_arrived", "siege_front", "ram_wrecked", "ram_at_gate", "tunnel_open", "tunnel_collapse", "ritual_broken", "ritual_done"]);
+const LONG = new Set(["lootRare", "lootLegendary", "horn", "ritual", "ritualCall", "demonRise", "demonRoar", "shrine", "portalTravel", "portalWake", "necroWind", "heroDie", "levelup", "owl", "chime", "warcry", "motherInflate", "demonFire", "skelDie", "lutePluck", "swResonate", "swShatter", "swBounce", "swSnap", "swSwell", "caravan_raided", "caravan_arrived", "siege_front", "ram_wrecked", "ram_at_gate", "tunnel_open", "tunnel_collapse", "ritual_broken", "ritual_done", "wanted_up", "bounty_claimed"]);
 const AMBIENT = new Set(["crackle", "bird", "cricket", "chime", "owl", "step", "skelIdle", "blobGurgle", "crawl"]);
 
 const TOWNS = ["Oakvale", "Market Square", "Chapel of the Dawn", "The Rusty Tankard", "The Smithy", "Saltmere", "Hunter's Camp"];
@@ -716,6 +716,21 @@ const R: Record<string, Recipe> = {
     bell(o, t + 0.35, 1320, 1.6, 0.12 * v); bell(o, t + 0.4, 1760, 1.4, 0.08 * v);
     noise(o, t, { type: "bandpass", f: 2400, q: 1.5, dur: 1.0, vol: 0.06 * v, att: 0.4 });
   },
+  // Feuds (server broadcast("sfx", { ev: "wanted_up" | "bounty_claimed", id, x, y, tier?, clan }), server/warFeuds.ts).
+  // Wanted: two hard drum strokes and a low, sour brass call that climbs a step higher with each tier (arg: tier 1-3)
+  wanted_up: (o, t, v, tier = 1) => {
+    const k = 1 + 0.12 * (Math.max(1, Math.min(3, tier)) - 1);
+    thud(o, t, 60, 0.6 * v, 0.25); thud(o, t + 0.18, 55, 0.55 * v, 0.25);
+    [1, 1.06].forEach((m, i) => tone(o, t + 0.3, { type: "sawtooth", f: 98 * k * m, f2: 123 * k * m, dur: 0.75, vol: (0.16 - i * 0.05) * v, att: 0.06, vib: 2, vibHz: 6 }));
+    noise(o, t + 0.3, { type: "bandpass", f: 500, q: 2, dur: 0.6, vol: 0.05 * v, att: 0.08 });
+  },
+  // Bounty: a purse of coins poured out over a short bright two-note horn
+  bounty_claimed: (o, t, v) => {
+    tone(o, t, { type: "sawtooth", f: 196, f2: 196, dur: 0.22, vol: 0.12 * v, att: 0.03 });
+    tone(o, t + 0.22, { type: "sawtooth", f: 294, f2: 294, dur: 0.5, vol: 0.12 * v, att: 0.03, vib: 2, vibHz: 5 });
+    for (let i = 0; i < 10; i++) bell(o, t + 0.25 + i * 0.05 + rnd(0, 0.03), rnd(2400, 3800), 0.2, rnd(0.04, 0.08) * v);
+    rattle(o, t + 0.25, 6, 0.5, 0.08 * v, 3400);
+  },
   // Hum: a low, soft two-voice drone with a slow beat, near a channelling circle
   ritual_hum: (o, t, v) => {
     tone(o, t, { type: "sine", f: 110, f2: 110, dur: 2.4, vol: 0.05 * v, att: 0.8, vib: 1.5, vibHz: 0.8 });
@@ -1220,6 +1235,8 @@ export function bindSfx(room: any, me: () => string, ents: Map<string, Ent>) {
       case "tunnel_open": pos("tunnel_open", 1, undefined, { key: "to" + (ev.x ?? "") + ":" + (ev.y ?? ""), minGap: 1500, reach: 1.8 }); break;
       case "tunnel_collapse": pos("tunnel_collapse", 1, undefined, { key: "tc" + (ev.x ?? "") + ":" + (ev.y ?? ""), minGap: 1500, reach: 2 }); break;
       case "ritual_broken": pos("ritual_broken", 1, undefined, { key: "rb" + (ev.x ?? "") + ":" + (ev.y ?? ""), minGap: 1500, reach: 1.8 }); break;
+      case "wanted_up": pos("wanted_up", ev.id === me() ? 1 : 0.6, ev.tier, { key: "wu" + (ev.id ?? ""), minGap: 800 }); break;
+      case "bounty_claimed": pos("bounty_claimed", 1, undefined, { key: "bc" + (ev.id ?? ""), minGap: 800, reach: 1.6 }); break;
       case "ritual_done": pos("ritual_done", 1, undefined, { key: "rd" + (ev.x ?? "") + ":" + (ev.y ?? ""), minGap: 1500, reach: 2 }); break;
       case "caravan_arrived": case "caravan_delivered": pos("caravan_arrived", 1, undefined, { key: "ca" + (ev.id ?? ev.clan ?? ""), minGap: 500, reach: 2 }); break;
       case "grimoire": if (ev.id === me()) pos("pageTurn", 1, ({ fire: "fire", cold: "frost", poison: "poison", shock: "lightning" } as Record<string, string>)[ev.el] ?? "arcane"); break;

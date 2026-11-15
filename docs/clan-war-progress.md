@@ -774,3 +774,23 @@ lines, banners, plates, legend with Homelands, hover tooltip. Pan/zoom/Centre ar
 - **A new land needs a `SLOTS` entry** in `client/src/warTableLayout.ts` (`tests/warTableLayout.test.ts` fails
   otherwise). The older notes above that say the war table needs nothing new for a land describe the old overlay.
 - Open: land plates can hide a marker under them (hover still finds it); legend has no height check.
+
+## W2a Feuds and Wanted (2026-11-15, PR #462)
+Murat: attack a clan on your own initiative (enemies attack you, neutral clans only answer), and a "wanted" status for
+killing clan members. `shared/war/feuds.ts` (rules, `FEUD`), `server/warFeuds.ts`, `client/src/warFeud.ts`.
+- **At war:** clans a and b are at war while either can strike the other's land (`targetsOf`: neighbours, two borders for
+  the Hide-Kin), and for `peaceTicks` 6 war ticks after. Opening map: **7 pairs** at war: the 6 that share a border plus
+  hidekin-redfang, because the Hide-Kin's tunnels reach two borders (a pair that can strike the other's land is at war;
+  kept on purpose). The memory is saved with the war (`Saved.rel`); clients take `WarView.wars` as sent.
+- **Stance:** own clan ally; sworn to a clan at war, or a grudge, or Wanted: enemy; else neutral (can't hurt, isn't hurt).
+  Behaviour change: sworn heroes are no longer fought by clans their clan doesn't border. Under Lv 5 always neutral.
+- **Provoke** (Shift+click a neutral trooper or Hold, one confirmation per clan per session; `"provoke"` message, Lv 5+,
+  not on safe ground, within 10 tiles): a grudge for 10 min (`grudgeMs`), shared with the party, renewed by every blow.
+- **Wanted:** kill points per clan (soldier 1, officer / cart / ram / mouth 2, sworn hero 3); a sworn hero's kills of a
+  clan at war with theirs count x1/3 (`warKillWeight`: ordinary war fighting stays below Wanted, 12 straight kills reach
+  it); provoked neutral clans and unsworn heroes count in full. Tiers 4 Wanted / 10 Hunted / 20 Marked, cap 30, -1 per
+  3 min without a kill. Wanted: seen from 2x, chased 4 tiles past the leash. Hunted+: a manhunter squad (captain + 3;
+  Marked + 4 at +2 Lv) from the nearest Hold within 40 tiles; 1 per hero, 2 per room, 5 min cooldown, inside
+  `maxTroops`. Death to that clan settles everything; a sworn killer gets a bounty (15 renown, 3 valor) once per target
+  per UTC day. Saved as optional `HeroSave.feud` (no version bump).
+- Open: no war-map markers for squads or wanted heroes; the Songweaver struggles against Marked squads alone (`pve.ts --hunters`).
