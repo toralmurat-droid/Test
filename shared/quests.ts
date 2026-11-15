@@ -2233,7 +2233,7 @@ const MOOR_QUESTS: QuestDef[] = [
       { type: "kill", zone: "The Cairnfield", kinds: ["cairnlord"], goal: 1, own: true,
         summon: { parts: ["cairnlord"], level: 28, title: "Maelgar, Cairn-Lord of the North Rows", hpMult: 1.5, ...mt(BARROW_FIELDS[0]),
           voice: { wake: ["I was called. I came. Who calls me now?", "The rows are full, living one. There is room for one more."], taunt: ["I stood at the King's shield four hundred years. Do you think you are the first to try me?", "Kneel. It is only dirt."], half: ["Bone is patient. Bone does not bleed. Bone waits."], death: ["The King... will count me... absent..."] } },
-        text: "Put down Maelgar, the Cairn-Lord", banner: ["THE CAIRN-LORD WALKS", "Put down Maelgar"], obj: "The Cairn-Lord put down: {n} / {goal}", nag: "He stands among the mounds. Cut down his wights as they rise, and keep clear of his stomp." },
+        text: "Put down Maelgar, the Cairn-Lord", banner: ["THE CAIRN-LORD WALKS", "Put down Maelgar"], obj: "The Cairn-Lord put down: {n} / {goal}", nag: "He rises among the mounds at night. Cut down his wights as they come, and keep clear of his stomp.", night: true },
     ],
     outro: ["Maelgar falls apart like a dropped sack of stones. On his breastplate, a ring of black iron with a single word cut into it: \"MUSTER\".", "East, then. Where the Fen Road ends, the Host has a camp."],
     reward: arcReward(26, true),
@@ -2250,7 +2250,7 @@ const MOOR_QUESTS: QuestDef[] = [
     acceptText: "I'll light the lamps",
     steps: [
       { type: "use", zone: "Blackwater Fen", objects: MOOR_BEACONS, chest: false, text: "Relight the 3 Wardens' fen-lamps", banner: ["New quest", "Lamps on the Black Water"], obj: "Fen-lamps lit: {n} / {goal}", nag: "{n} of {goal}. They stand along the causeway in the fen." },
-      { type: "kill", zone: "Blackwater Fen", kinds: ["mistwraith"], goal: 6, text: "Kill 6 Mist-Wraiths in the fen", banner: ["Lamps lit", "Kill 6 Mist-Wraiths"], obj: "Mist-Wraiths slain: {n} / {goal}", nag: "{n} of {goal}. They drift in out of the mist. Fight them by the lamps." },
+      { type: "kill", zone: "Blackwater Fen", kinds: ["mistwraith"], goal: 6, text: "Kill 6 Mist Wraiths in the fen", banner: ["Lamps lit", "Kill 6 Mist Wraiths"], obj: "Mist Wraiths slain: {n} / {goal}", nag: "{n} of {goal}. They drift in out of the mist. Fight them by the lamps." },
     ],
     outro: ["The three lamps burn yellow across the black water, and the mist backs off them like a dog from a fire.", "By their light you see how many tracks lead east along the causeway. Hundreds. Marching in step."],
     reward: arcReward(27),
@@ -2267,7 +2267,7 @@ const MOOR_QUESTS: QuestDef[] = [
     acceptText: "I'll read the stones",
     steps: [
       { type: "use", zone: "The Nine Widows", objects: MOOR_WIDOWS, chest: false, text: "Read 3 of the Widow-stones", banner: ["New quest", "The Nine Widows"], obj: "Widow-stones read: {n} / {goal}", nag: "{n} of {goal}. The wraiths cluster at the foot of each." },
-      { type: "kill", zone: "The Nine Widows", kinds: ["mistwraith"], goal: 6, text: "Kill 6 Mist-Wraiths at the Widows", banner: ["The weeping ring", "Kill 6 Mist-Wraiths"], obj: "Mist-Wraiths slain: {n} / {goal}", nag: "{n} of {goal}." },
+      { type: "kill", zone: "The Nine Widows", kinds: ["mistwraith"], goal: 6, text: "Kill 6 Mist Wraiths at the Widows", banner: ["The weeping ring", "Kill 6 Mist Wraiths"], obj: "Mist Wraiths slain: {n} / {goal}", nag: "{n} of {goal}." },
     ],
     outro: ["Three verses, cut in the stone. \"Sleep, King, in the ground you took. Sleep, and the dead will keep your hall.\" And at the foot: \"He wakes when the ring is broken, at night, in his own mound.\"", "The ring is broken. Two of the Widows lie face down in the heather."],
     reward: arcReward(29),
@@ -2546,7 +2546,7 @@ export const CHAINS: QuestChain[] = [
   { id: "sun", name: "The Second Sun", quests: SUN_QUESTS, keys: ["sunId", "sunStage", "sunCount"], version: 2, verKey: "sunVer", packed: "sun" },
   // the zone arcs (ZONE_ARCS), CHAINS[7..]: keyed by arc id
   ...ZONE_ARCS.map((a): QuestChain => ({ id: a.id, name: a.name, quests: a.quests, keys: [`${a.id}Id`, `${a.id}Stage`, `${a.id}Count`], version: 1, verKey: `${a.id}Ver`, packed: a.id, local: true, needs: a.needs })),
-  // the side arcs (SIDE_ARCS) after them, kept the same way (append-only: the client sends chain indices)
+  // the side arcs (SIDE_ARCS) after them, kept the same way. The client sends chain indices: add new arcs at the end of SIDE_ARCS, not ZONE_ARCS, so they never move
   ...SIDE_ARCS.map((a): QuestChain => ({ id: a.id, name: a.name, quests: a.quests, keys: [`${a.id}Id`, `${a.id}Stage`, `${a.id}Count`], version: 1, verKey: `${a.id}Ver`, packed: a.id, local: true, needs: a.needs })),
 ];
 // Two chains on one map key would share progress without a word: fail at load instead (an arc id equal to a story's key)

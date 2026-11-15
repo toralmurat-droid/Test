@@ -131,7 +131,7 @@ const ZONE_MOBS: { name: string; mobs: Partial<Record<MobKind, number>>; respawn
   // ---- Act 3, the Grey Barrow Moors (shared/moors.ts): Lv 20-33, climbing away from Cairnwatch toward the Host's camp on the
   // far eastern moor; the Barrow-King (Lv 35) under Kingsbarrow. The Host's dead (wights, bone hounds, legionaries, the
   // Cairn-Lords) keep the barrows and the stone rings and, like the valley's dead, keep the night (server UNDEAD_ZONES:
-  // a zone of only undead is thin by day). The bog hags and the mist wraiths haunt the fens, which stay full by day.
+  // a zone of only undead is thin by day). The mist wraiths are the Host's dead too; only the zones with bog hags stay full by day.
   { name: "The Grey Ring", mobs: { wight: 6, bonehound: 4 }, respawnMs: 6000, levels: [21, 24] },
   { name: "Sorrow Mire", mobs: { boghag: 6, bonehound: 3 }, respawnMs: 6000, levels: [22, 25] },
   { name: "Thane's Rest", mobs: { wight: 6, legionary: 3 }, respawnMs: 6500, levels: [23, 26] },

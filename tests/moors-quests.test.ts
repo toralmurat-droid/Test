@@ -3,7 +3,10 @@ import assert from "node:assert/strict";
 import { CHAINS, chainState, packQuest, questStep, ZONE_ARCS } from "../shared/quests";
 import { NPCS } from "../shared/npcs";
 import { areaAt } from "../shared/map";
-import { MOORS_KINDS } from "../shared/constants";
+import { MOORS_KINDS, TILE } from "../shared/constants";
+import { NIGHT_BOSSES } from "../shared/daynight";
+import { underground } from "../shared/dungeon";
+import { SPAWN_ZONES } from "../shared/spawns";
 import { startRoom, wait } from "./helpers/room";
 
 const ci = CHAINS.findIndex((c) => c.id === "moors");
@@ -55,5 +58,14 @@ test("moors chain: accepted from Edra Vane, every quest carries on by itself, do
     await c.leave();
   } finally {
     await srv.stop();
+  }
+});
+
+test("quest summons of night bosses above ground say so (the tracker's 'wait for nightfall'), in every chain", () => {
+  const below = (zone: string) => { const z = SPAWN_ZONES.find((o) => o.name === zone); return !!z && underground((z.y + z.h / 2) * TILE); }; // no night down there
+  for (const c of CHAINS) for (const q of c.quests) for (const s of q.steps as any[]) {
+    const parts: string[] = s.summon?.parts ?? [];
+    if (parts.some((k) => (NIGHT_BOSSES as string[]).includes(k)) && !below(s.zone))
+      assert.equal(s.night, true, `${c.id}/${q.id}: summoning ${parts.join("+")} only works at night`);
   }
 });
