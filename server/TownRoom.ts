@@ -61,7 +61,7 @@ import { offerFrom, Offer, settle, STASH, STASH_GOLD_MAX, STASH_RANGE, STASH_SIZ
 import { arrivalOf, cleanPortals, PORTAL_COMBAT_MS, PORTAL_RANGE, PORTAL_WAKE_RANGE, portalById, PORTALS } from "../shared/portals";
 import { rollBoon, shrineXp, SHRINE, SHRINE_COOLDOWN_MS, SHRINE_RANGE, WIND_BLESSING, WIND_BLESSING_ID } from "../shared/shrine";
 import { chestById, chestLock, CHEST_RANGE, CHEST_RESPAWN_MS, CHESTS, GUARD_CHECK_MS, GUARD_RESPAWN_MS, rollChest } from "../shared/chests";
-import { encodeTimers, timerSig, timersOf } from "../shared/buffTimers";
+import { chorusTimers, encodeTimers, timerSig, timersOf } from "../shared/buffTimers";
 import { shieldLeft } from "../shared/shields";
 import { SLOT_COUNT } from "../shared/slots";
 import { groupDmgMult, groupHpMult, PARTY, together } from "../shared/party";
@@ -2989,6 +2989,7 @@ export class TownRoom extends Room<TownState> {
     const now = Date.now();
     this.tradeTick();
     if (now >= this.autoAt) { this.autoAt = now + 500; this.autoGolems(now); this.golemNews(now); }
+    const chorus = chorusTimers(this.state.fields, now); // each Songweaver's own Chorus, for her HUD buff row
     this.state.players.forEach((p, pid) => {
       tickUnit(this.host, pid);
       p.stunned = now < p.stunUntil;
@@ -2998,7 +2999,7 @@ export class TownRoom extends Room<TownState> {
       const fx = statusOf(p, now);
       if (p.fx !== fx) p.fx = fx;
       this.chords.tick(pid, p as unknown as Unit, now, (m) => this.clients.find((c) => c.sessionId === pid)?.send("chord", m));
-      const timers = timersOf(p, now), sig = timerSig(timers);
+      const timers = timersOf(p, now, chorus.get(pid)), sig = timerSig(timers);
       if (sig !== p.timerSig) { p.timerSig = sig; p.timers = encodeTimers(++p.timerSeq, timers, now); }
       const spd = Math.round(speedMult(p, now) * talentMult(p.cls, p.talents, "speed") * feastMult(p.feast, "speed") * 1000) / 1000;
       if (p.spd !== spd) p.spd = spd;
