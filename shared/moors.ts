@@ -6,9 +6,10 @@ import { MAP_W, MOORS_H, MOORS_Y0 } from "./constants";
  * so collisions and pathing need nothing special. Heroes come through the moorgate at Act 1's north-east edge
  * (shared/act2.ts WAYGATES) from hero Lv 20.
  *
- * This file is the land only: zones, the outpost, monsters and quests come later (MOORS_OUTPOST is kept clear for the
- * outpost). Tile ids are passed in (shared/map.ts T) so this file does not import map.ts. Layout constants are in local
- * moors coordinates (0..MAP_W, 0..MOORS_H); `MR(y)` turns a local row into a map row.
+ * This file is the land: its places, Cairnwatch (the outpost) and the Host's camp. Monster zones are in shared/spawns.ts,
+ * the monsters in shared/constants.ts (MOORS_KINDS). Tile ids are passed in (shared/map.ts T) so this file does not
+ * import map.ts. Layout constants are in local moors coordinates (0..MAP_W, 0..MOORS_H); `MR(y)` turns a local row
+ * into a map row.
  */
 export const MR = (y: number) => y + MOORS_Y0;
 /** True for a map row inside the moors band. */
@@ -24,8 +25,23 @@ export const MOORSGATE_OAKVALE = { x: 277, y: 4 };
 export const MOORSGATE_MOORS = { x: MOORGATE.x, y: MR(MOORGATE.y) };
 /** The arrival clearing round the moorgate (local tiles, ellipse): always open ground, nothing stands in it. */
 export const MOORGATE_CLEARING = { x: 52.5, y: 119.5, rx: 10, ry: 8 };
-/** Reserved for the future outpost (local tiles): kept flat and empty, a road runs to it from the moorgate. */
+/**
+ * Cairnwatch, the moors' outpost (local tiles): a palisaded hill-fort of grey stone halls held by the Cairn Wardens,
+ * moor-folk who keep the old cairns and hold out against the Ossuary Host. Gates north, east and south (the road from
+ * the moorgate comes in at the south gate).
+ */
 export const MOORS_OUTPOST = { x: 64, y: 100, w: 26, h: 18 };
+export const CAIRNWATCH = MOORS_OUTPOST;
+/** Cairnwatch's square (local tiles): the moors' safe zone (shared/map.ts isSafeZone), where heroes come back after dying. */
+export const CAIRN_SQUARE = { x: 73, y: 106, w: 12, h: 8 };
+/** Gate gaps in Cairnwatch's palisade (local tiles): x range on the north / south walls, y range on the east wall. */
+export const CAIRN_GATES = { north: [67, 69], south: [76, 78], east: [107, 109] } as const;
+/** Cairnwatch's portal stone (local tile), in the yard west of the square (shared/map.ts PORTAL_SPOTS). */
+export const CAIRN_PORTAL = { x: 69, y: 109 };
+/** The Barrow-King's mound in the heart of Kingsbarrow (local tiles): his lair (shared/spawns.ts), dug open, a ring of bones. */
+export const KINGS_MOUND = { x: 236, y: 50, rx: 4, ry: 3 };
+/** The Ossuary Host's war camp on the far eastern moor (local tiles): bone banners and cairns of skulls round a muster ground. */
+export const HOST_CAMP = { x: 262, y: 82, rx: 12, ry: 9 };
 /** Barrow fields: grassy burial mounds in rows, the Ossuary Host's old dead (local tiles). */
 export const BARROW_FIELDS = [
   { name: "The Cairnfield", x: 104, y: 40, rx: 18, ry: 12 },
@@ -69,9 +85,12 @@ function noise(x: number, y: number, scale: number, seed: number) {
 }
 
 export interface MoorsTiles {
-  GRASS_DARK: number; TALL_GRASS: number; DIRT: number; WATER: number; FLAGS: number; RUBBLE: number;
+  GRASS_DARK: number; TALL_GRASS: number; DIRT: number; WATER: number; FLAGS: number; RUBBLE: number; COBBLE: number;
   ROCK: number; BUSH: number; STUMP: number; CLIFF: number;
-  HEATHER: number; BOG: number; BARROW: number; STANDING_STONE: number; BONE_PILE: number;
+  HEATHER: number; BOG: number; BARROW: number; STANDING_STONE: number; BONE_PILE: number; SIGNPOST: number;
+  // Cairnwatch: grey stone halls under slate, a timber palisade, the yard's props
+  PALISADE: number; ROOF_SLATE: number; WALL_STONE: number; WINDOW_STONE: number; DOOR: number; WELL: number;
+  BARREL: number; CRATE: number; HAY: number; STALL_BLUE: number; BONFIRE: number; CAMPFIRE: number; FENCE: number; TENT: number;
 }
 export interface MoorsArea { name: string; x: number; y: number; w: number; h: number; mobs?: never[] }
 
@@ -170,6 +189,7 @@ export function buildMoors(T: MoorsTiles, ground: number[][], objects: number[][
   for (const b of BARROW_FIELDS) clearDisk(b.x, b.y, b.rx + 3, b.ry + 3);
   for (const r of STONE_RINGS) clearDisk(r.x + 0.5, r.y + 0.5, r.r + 4, r.r + 3);
   for (const f of FENS) clearDisk(f.x, f.y, f.rx + 3, f.ry + 3);
+  clearDisk(HOST_CAMP.x, HOST_CAMP.y, HOST_CAMP.rx + 3, HOST_CAMP.ry + 3);
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (cliff[y * W + x]) setO(x, y, T.CLIFF);
 
   // ---------- 4. Fens: black pools in soft mire, sedge round the edges, drowned trees ----------
@@ -199,7 +219,7 @@ export function buildMoors(T: MoorsTiles, ground: number[][], objects: number[][
     if (Math.abs(sx - MOORGATE.x) < 2 && sy > MOORGATE.y) continue; // never on the arrival spot
     setO(sx, sy, T.STANDING_STONE);
   }
-  // ---------- 6. The outpost's ground: flat, empty turf (the outpost itself comes later) ----------
+  // ---------- 6. The outpost's ground: flat, empty turf (Cairnwatch is raised on it after the roads, step 9b) ----------
   each(O.x, O.y, O.w, O.h, (x, y) => { setO(x, y, EMPTY); open(x, y); setG(x, y, hash(x, y, 771) < 0.75 ? T.GRASS_DARK : T.HEATHER); });
 
   // ---------- 7. Barrow fields: mounds in loose rows, stone-lined mouths, bones heaped by the old doors ----------
@@ -244,6 +264,72 @@ export function buildMoors(T: MoorsTiles, ground: number[][], objects: number[][
   trail([[BARROW_FIELDS[3].x + BARROW_FIELDS[3].rx, BARROW_FIELDS[3].y - 2], [158, 140], [BARROW_FIELDS[2].x - BARROW_FIELDS[2].rx, BARROW_FIELDS[2].y + 2]]);
   trail([[FENS[0].x - 4, FENS[0].y + FENS[0].ry + 2], [156, 94]]);                                                    // a causeway into Blackwater Fen
 
+  trail([[202, 108], [226, 98], [244, 92], [HOST_CAMP.x - HOST_CAMP.rx, HOST_CAMP.y + 2]]);                           // the Host's road east to its camp
+
+  // ---------- 9b. Cairnwatch: a timber palisade round grey stone halls, a paved square with the wardens' fire ----------
+  {
+    const C = CAIRNWATCH, Q = CAIRN_SQUARE, Gt = CAIRN_GATES;
+    const x1 = C.x + C.w - 1, y1 = C.y + C.h - 1;
+    each(C.x, C.y, C.w, C.h, (x, y) => { setO(x, y, EMPTY); open(x, y); setG(x, y, hash(x, y, 771) < 0.75 ? T.GRASS_DARK : T.HEATHER); });
+    // the square, and paths from it to the three gates and the halls
+    each(Q.x, Q.y, Q.w, Q.h, (x, y) => road(x, y, T.COBBLE));
+    for (let y = Q.y + Q.h; y <= y1; y++) road(Gt.south[0] + 1, y);                 // the south gate
+    for (let x = Q.x + Q.w; x <= x1; x++) road(x, Gt.east[0] + 1);                  // the east gate
+    road(Gt.north[0] + 1, C.y); road(Gt.north[0] + 1, C.y + 1);                       // the north gate, then east behind the hall
+    for (let x = Gt.north[0] + 1; x < Q.x; x++) road(x, C.y + 1);
+    for (let y = C.y + 1; y < Q.y; y++) road(Q.x, y);
+    // halls: slate roofs over grey stone, a door in the front wall (two rows of wall, like the valley's houses)
+    const hall = (x: number, y: number, w: number, h: number) => {
+      each(x, y, w, h - 2, (i, j) => setO(i, j, T.ROOF_SLATE));
+      each(x, y + h - 2, w, 2, (i, j) => setO(i, j, T.WALL_STONE));
+      const door = x + Math.floor(w / 2);
+      setO(door, y + h - 1, T.DOOR);
+      for (const wx of [x + 1, x + w - 2]) if (wx !== door) setO(wx, y + h - 1, T.WINDOW_STONE);
+    };
+    hall(65, 102, 7, 4);  // the Wardens' Hall (the captain)
+    hall(75, 102, 5, 4);  // the herbwife's house
+    hall(82, 102, 6, 4);  // the barracks
+    hall(65, 113, 5, 3);  // the cairn-keeper's lodge
+    hall(85, 112, 4, 4);  // the armoury
+    // the timber palisade, broken by the three gates
+    const post = (x: number, y: number) => { if (!roads.has((y + Y0) * W + x)) setO(x, y, T.PALISADE); };
+    for (let x = C.x; x <= x1; x++) {
+      if (x < Gt.north[0] || x > Gt.north[1]) post(x, C.y);
+      if (x < Gt.south[0] || x > Gt.south[1]) post(x, y1);
+    }
+    for (let y = C.y + 1; y < y1; y++) { post(C.x, y); if (y < Gt.east[0] || y > Gt.east[1]) post(x1, y); }
+    // the wardens' fire in the square, a well, stores and the herbwife's stall
+    setO(Q.x + 6, Q.y + 4, T.BONFIRE);
+    setO(Q.x + 1, Q.y + Q.h - 1, T.WELL);
+    setO(Q.x + 3, Q.y, T.STALL_BLUE);
+    for (const [bx, by, t] of [[80, 105, T.BARREL], [81, 105, T.CRATE], [72, 104, T.BARREL], [88, 106, T.HAY], [88, 107, T.HAY], [84, 115, T.CRATE], [71, 116, T.BARREL]] as const) setO(bx, by, t);
+    // the cairns the wardens keep: a ring of grey stones round the portal stone's yard
+    for (const [sx, sy] of [[66, 107], [66, 111], [72, 107]] as const) setO(sx, sy, T.STANDING_STONE);
+    each(CAIRN_PORTAL.x - 2, CAIRN_PORTAL.y - 1, 5, 3, (x, y) => setG(x, y, T.FLAGS));
+  }
+
+  // ---------- 9c. The Barrow-King's mound and the Host's war camp ----------
+  {
+    const K = KINGS_MOUND;
+    disk(K.x + 0.5, K.y + 0.5, K.rx + 1.5, K.ry + 1.5, (x, y, d) => { setO(x, y, EMPTY); open(x, y); setG(x, y, d < 0.5 ? T.FLAGS : hash(x, y, 811) < 0.5 ? T.RUBBLE : T.GRASS_DARK); });
+    for (let k = 0; k < 8; k++) {
+      if (k === 2) continue; // the way in, from the climb up from the south
+      const a = (k / 8) * Math.PI * 2, bx = Math.round(K.x + Math.cos(a) * K.rx), by = Math.round(K.y + Math.sin(a) * K.ry);
+      setO(bx, by, k % 2 ? T.BONE_PILE : T.STANDING_STONE);
+    }
+    const H2 = HOST_CAMP;
+    disk(H2.x, H2.y, H2.rx, H2.ry, (x, y, d) => { setO(x, y, EMPTY); open(x, y); if (d < 0.6 && hash(x, y, 821) < 0.6) setG(x, y, T.DIRT); });
+    setO(H2.x, H2.y, T.CAMPFIRE);
+    for (let k = 0; k < 8; k++) {
+      const a = (k / 8) * Math.PI * 2 + 0.3, tx = Math.round(H2.x + Math.cos(a) * H2.rx * 0.6), ty = Math.round(H2.y + Math.sin(a) * H2.ry * 0.6);
+      setO(tx, ty, k % 3 === 0 ? T.BONE_PILE : T.TENT);
+    }
+    for (let k = 0; k < 6; k++) {
+      const a = (k / 6) * Math.PI * 2, tx = Math.round(H2.x + Math.cos(a) * H2.rx * 0.88), ty = Math.round(H2.y + Math.sin(a) * H2.ry * 0.88);
+      if (getO(tx, ty) === EMPTY) setO(tx, ty, T.STANDING_STONE); // the skull-cairns on the camp's rim
+    }
+  }
+
   // ---------- 10. Scatter: dead trees, gorse, lone stones, bones, boulders at the foot of the crags ----------
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
     if (getO(x, y) !== EMPTY || keep[y * W + x] || roads.has((y + Y0) * W + x) || getG(x, y) === T.WATER) continue;
@@ -283,12 +369,41 @@ export function buildMoors(T: MoorsTiles, ground: number[][], objects: number[][
 
   // ---------- 12. Named areas (specific first) ----------
   const A = (name: string, x: number, y: number, w: number, h: number): MoorsArea => ({ name, x: Math.floor(x), y: Math.floor(y) + Y0, w: Math.ceil(w), h: Math.ceil(h) });
+  const Q = CAIRN_SQUARE, K = KINGS_MOUND, HC = HOST_CAMP;
   const areas: MoorsArea[] = [
+    A("Cairnwatch Square", Q.x, Q.y, Q.w, Q.h),
+    A("Cairnwatch", O.x, O.y, O.w, O.h),
     A("The Moorgate", G.x - G.rx, G.y - G.ry, G.rx * 2, G.ry * 2),
+    A("The Barrow-King's Mound", K.x - K.rx - 1, K.y - K.ry - 1, K.rx * 2 + 3, K.ry * 2 + 3),
+    A("The Host's Muster", HC.x - HC.rx - 2, HC.y - HC.ry - 2, HC.rx * 2 + 4, HC.ry * 2 + 4),
     ...STONE_RINGS.map((r) => A(r.name, r.x - r.r - 2, r.y - r.r - 2, r.r * 2 + 5, r.r * 2 + 4)),
     ...BARROW_FIELDS.map((b) => A(b.name, b.x - b.rx - 2, b.y - b.ry - 2, b.rx * 2 + 4, b.ry * 2 + 4)),
     ...FENS.map((f) => A(f.name, f.x - f.rx - 3, f.y - f.ry - 3, f.rx * 2 + 6, f.ry * 2 + 6)),
     A("The Grey Barrow Moors", 0, 0, W, H),
   ];
-  return { areas, roads };
+  // signposts at the road junctions (local tiles; shared/map.ts puts each on the free tile beside the nearest road)
+  const R = STONE_RINGS, B = BARROW_FIELDS;
+  const wanted: { x: number; y: number; to: string[] }[] = [
+    { x: gate[0] + 3, y: gate[1] + 5, to: ["Cairnwatch", "The Moorgate"] },                                    // out of the moorgate
+    { x: O.x + O.w + 3, y: O.y + 7, to: ["The Grey Ring", "Blackwater Fen", "Cairnwatch"] },                   // Cairnwatch's east gate
+    { x: O.x + 2, y: O.y - 4, to: ["Sorrow Mire", "Cairnwatch"] },                                             // the north-west way
+    { x: ox + 2, y: oy + 4, to: ["Thane's Rest", "Cairnwatch"] },                                              // south-east way
+    { x: R[0].x - 2, y: R[0].y - 8, to: ["The Cairnfield", "The Grey Ring", "Cairnwatch"] },                   // Grey Ring, north way
+    { x: 188, y: 102, to: ["The Hollow Mounds", "The Drowned Hollow", "Blackwater Fen"] },                      // Fen Road fork
+    { x: 204, y: 106, to: ["The Host's Muster", "Kingsbarrow", "The Drowned Hollow"] },                        // the Host's crossroads
+    { x: 224, y: 82, to: ["Kingsbarrow", "The Drowned Hollow"] },                                              // the climb
+    { x: B[1].x - 4, y: B[1].y - B[1].ry - 3, to: ["The Nine Widows", "Kingsbarrow"] },                        // north of Kingsbarrow
+  ];
+  const posts: { x: number; y: number; to: string[] }[] = []; // map tiles, as shared/map.ts SIGNPOSTS wants them
+  for (const p of wanted) {
+    let best: [number, number] | undefined, bd = Infinity;
+    for (let j = -3; j <= 3; j++) for (let i = -3; i <= 3; i++) {
+      const x = p.x + i, y = p.y + j;
+      if (!inBand(x, y) || getO(x, y) !== EMPTY || roads.has((y + Y0) * W + x) || getG(x, y) === T.WATER) continue;
+      if (![[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => roads.has((y + dy + Y0) * W + x + dx))) continue;
+      if (Math.hypot(i, j) < bd) { bd = Math.hypot(i, j); best = [x, y]; }
+    }
+    if (best) { setO(best[0], best[1], T.SIGNPOST); posts.push({ x: best[0], y: best[1] + Y0, to: p.to }); }
+  }
+  return { areas, roads, posts };
 }

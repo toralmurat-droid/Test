@@ -4,7 +4,7 @@ import { CLAN_KEYS } from "../shared/war/clans";
 import { newMinds, scriptedOrders } from "../shared/war/doctrine";
 import { landOf, newWar, WAR, warTick } from "../shared/war/rules";
 import { builtRegions, initialOwners, isSanctuary, TERRITORIES, territoryByName } from "../shared/war/territories";
-import { capitalsOf } from "../shared/war/regions";
+import { capitalsOf, regionOf } from "../shared/war/regions";
 import { SPAWN_ZONES } from "../shared/spawns";
 
 function rng(seed: number) { return () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff; }; }
@@ -23,7 +23,8 @@ test("war map: every capital is a territory, borders are two-way, and every terr
 });
 
 test("sanctuaries stay out of the war: dungeons, boss lairs and wild zones", () => {
-  for (const z of SPAWN_ZONES) assert.equal(!!territoryByName(z.name), !isSanctuary(z), z.name);
+  // (zones of a land that is not built yet, like the moors, stay out too)
+  for (const z of SPAWN_ZONES) assert.equal(!!territoryByName(z.name), !isSanctuary(z) && !!regionOf(z.x + (z.w >> 1), z.y + (z.h >> 1)), z.name);
   for (const n of ["The Gnawing Halls", "Gorehowl's Lair", "The Sun Furnace", "Oakvale Countryside", "The Sunscar"]) assert.equal(territoryByName(n), undefined, n);
 });
 

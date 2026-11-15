@@ -5,6 +5,7 @@ import { addChampPose, MOB_POSES, posed, setPainted, type Dir } from "../charact
 import { C2, P, blobPath, css, ellipseP, poly, fillShape, glow, limb, line, metal, mix, rng, sh, vol } from "./brush";
 import { lastRig, pixelAlpha, pixelize, shrink } from "./body";
 import { paintRaider, RAIDER_H, RAIDER_W } from "./raiders";
+import { HOUND_H, HOUND_W, WRAITH_H, WRAITH_W, paintHound, paintWraith } from "./moors";
 import { paintWisp, WISP_H, WISP_W, type WispElement } from "./wisps";
 import { RAIDERS } from "../../../shared/raiders";
 import { AFFIX_KEYS, AFFIXES, type AffixKey } from "../../../shared/champions";
@@ -632,6 +633,14 @@ export function buildMobs(out: string, ONLY?: string[]) {
     humanoid("mob_camelfolk", "camelfolk", 34, 36, 33.5 / 36, 1.08),
     humanoid("mob_sphinx", "sphinx", 40, 40, 36.5 / 40, 1.12), // winged: a wider, taller frame
     humanoid("mob_sunwright", "sunwright", 44, 48, 42 / 48, 1.25), // Act 2's final boss, drawn big like the Hollow King
+    // Act 3, the Grey Barrow Moors (look.ts wight..barrowking)
+    humanoid("mob_wight", "wight", 24, 30, 27.5 / 30, 0.9),
+    { key: "mob_bonehound", w: HOUND_W, h: HOUND_H, draw: (c: C2, f: number) => { const { dir, pose } = frameOf(f); paintHound(c, SH, dir as "down" | "up" | "right", pose, f); } },
+    { key: "mob_mistwraith", w: WRAITH_W, h: WRAITH_H, draw: (c: C2, f: number) => { const { dir, pose } = frameOf(f); paintWraith(c, SH, dir as "down" | "up" | "right", pose, f); } },
+    humanoid("mob_boghag", "boghag", 26, 32, 31.2 / 32, 0.93),
+    humanoid("mob_legionary", "legionary", 32, 32, 29.5 / 32, 0.95),
+    humanoid("mob_cairnlord", "cairnlord", 38, 40, 37.5 / 40, 1.15),
+    humanoid("mob_barrowking", "barrowking", 46, 48, 42 / 48, 1.25, false, 0),
     // the clan war's soldiers (warLooks.ts): 36 px wide so the fallen body fits; officers are taller
     ...WAR_SOLDIERS.map((k) => k.endsWith("_cap") || k.endsWith("_chief") || k.endsWith("_adept") ? humanoid(`mob_${k}`, k, 36, 34, 32 / 34, 0.95, false, 0, true) : humanoid(`mob_${k}`, k, 36, 32, 30 / 32, 0.9, false, 0, true)),
     // the clan war's supply carts (warCarts.ts): 14 frames, 12 = staggering, 13 = wrecked
@@ -673,7 +682,7 @@ export function buildMobs(out: string, ONLY?: string[]) {
       const c = body.getContext("2d"), sc = shadow.getContext("2d");
       c.scale(HI, HI); sc.scale(HI, HI);
       SH = sc; s.draw(c, f); SH = null;
-      const blob = !/wisp|war_|skeleton|bandit|bride|necromancer|demon|crawler|hollowking|gnawkin|tuskborn|silkwretch|duskwing|packlord|hornbrute|hidemother|crowseer|gnasher|weaver|nomad|scorpion|sanddead|veiled|camelfolk|sphinx|sunwright|nightraider/.test(s.key);
+      const blob = !/wisp|war_|skeleton|bandit|bride|necromancer|demon|crawler|hollowking|gnawkin|tuskborn|silkwretch|duskwing|packlord|hornbrute|hidemother|crowseer|gnasher|weaver|nomad|scorpion|sanddead|veiled|camelfolk|sphinx|sunwright|wight|boghag|bonehound|mistwraith|legionary|cairnlord|barrowking|nightraider/.test(s.key);
       const b = shrink(body, "mb", tw, th);
       if (s.key.startsWith("mob_champ_")) pixelize(b, tw, th, true); // a detail, not a body: no ground grime
       else pixelize(b, tw, th, true, blob ? { y0: Math.round(th * 0.7), y1: th, mud: 0.14, sat: 0.9 } : { y0: Math.round(th * 0.72), y1: th, mud: s.key.includes("bandit") ? 0.38 : 0.2 });

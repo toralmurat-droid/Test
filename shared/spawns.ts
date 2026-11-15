@@ -1,4 +1,4 @@
-import { actOfTile, inDeepRow, act2MobLevel, act2SpecialLevel, DESERT_Y0, ELITE, MobKind, MOORS_LEVEL, moorsMobLevel, moorsSpecialLevel, regionMobLevel, regionSpecialLevel, TILE } from "./constants";
+import { actOfTile, inDeepRow, act2MobLevel, act2SpecialLevel, ELITE, MobKind, MOORS_LEVEL, moorsMobLevel, moorsSpecialLevel, regionMobLevel, regionSpecialLevel, TILE } from "./constants";
 import { D, SUNSTONE } from "./desert";
 import { MOORSGATE_MOORS } from "./moors";
 import { AREAS, isSafeZone, isSolidAt, OBJECTS, T, VILLAGE } from "./map";
@@ -27,7 +27,8 @@ export function rollLevel(z: SpawnZone): number {
 }
 
 /** Peaceful places inside monster zones (with a margin in tiles): nothing spawns or walks in there. */
-export const NO_MOB_AREAS = ["Saltmere", "Kel Ashar", "The Sunstone Circle", "The Sun Furnace"]; // Act 2: the oasis town, the waygate's circle and the final fight's plateau
+export const NO_MOB_AREAS = ["Saltmere", "Kel Ashar", "The Sunstone Circle", "The Sun Furnace", // Act 2: the oasis town, the waygate's circle and the final fight's plateau
+  "Cairnwatch", "The Moorgate"]; // Act 3: the outpost (walls and all) and the moorgate's arrival clearing
 const NO_MOB_RECTS = NO_MOB_AREAS.flatMap((n) => AREAS.filter((a) => a.name === n)).map((a) => ({ x0: a.x - 2, y0: a.y - 2, x1: a.x + a.w + 2, y1: a.y + a.h + 2 }));
 /** True where monsters may not go (pixel coords). */
 export function noMobsAt(px: number, py: number): boolean {
@@ -127,6 +128,25 @@ const ZONE_MOBS: { name: string; mobs: Partial<Record<MobKind, number>>; respawn
   { name: "The Thornspire Heights", mobs: { veiled: 8, camelfolk: 4, sanddead: 3, sphinx: 4 }, respawnMs: 7000, levels: [43, 46] },
   { name: "The Red Wastes", mobs: { nomad: 6, scorpion: 8 }, respawnMs: 6000, wild: true },
   { name: "The Sunscar", mobs: { scorpion: 10, nomad: 6, camelfolk: 2 }, respawnMs: 6000, wild: true }, // the open desert, last
+  // ---- Act 3, the Grey Barrow Moors (shared/moors.ts): Lv 20-33, climbing away from Cairnwatch toward the Host's camp on the
+  // far eastern moor; the Barrow-King (Lv 35) under Kingsbarrow. The Host's dead (wights, bone hounds, legionaries, the
+  // Cairn-Lords) keep the barrows and the stone rings and, like the valley's dead, keep the night (server UNDEAD_ZONES:
+  // a zone of only undead is thin by day). The mist wraiths are the Host's dead too; only the zones with bog hags stay full by day.
+  { name: "The Grey Ring", mobs: { wight: 6, bonehound: 4 }, respawnMs: 6000, levels: [21, 24] },
+  { name: "Sorrow Mire", mobs: { boghag: 6, bonehound: 3 }, respawnMs: 6000, levels: [22, 25] },
+  { name: "Thane's Rest", mobs: { wight: 6, legionary: 3 }, respawnMs: 6500, levels: [23, 26] },
+  { name: "The Cairnfield", mobs: { wight: 8, bonehound: 4, cairnlord: 1 }, respawnMs: 6500, levels: [25, 28] },
+  { name: "Blackwater Fen", mobs: { boghag: 6, mistwraith: 4 }, respawnMs: 6000, levels: [26, 29] },
+  { name: "The Hollow Mounds", mobs: { wight: 6, legionary: 4, mistwraith: 2 }, respawnMs: 6500, levels: [27, 30] },
+  { name: "The Drowned Hollow", mobs: { mistwraith: 6, boghag: 4 }, respawnMs: 6500, levels: [28, 31] },
+  { name: "The Nine Widows", mobs: { mistwraith: 6, wight: 4 }, respawnMs: 6500, levels: [29, 32] },
+  { name: "The Weeping Stones", mobs: { mistwraith: 5, legionary: 4, cairnlord: 1 }, respawnMs: 7000, levels: [30, 33] },
+  // the Barrow-King's own mound: his alone, only at night (NIGHT_BOSSES), a long wait between kings (server SLOW_RISE)
+  { name: "The Barrow-King's Mound", mobs: { barrowking: 1 }, respawnMs: 300000, fixed: true, levels: [35, 35] },
+  { name: "Kingsbarrow", mobs: { wight: 6, legionary: 5, bonehound: 3, cairnlord: 1 }, respawnMs: 7000, levels: [31, 33] },
+  { name: "The Host's Muster", mobs: { legionary: 8, bonehound: 4, cairnlord: 1 }, respawnMs: 7000, levels: [31, 33] },
+  // the open moor: hounds and wights on the heather, a hag or two by every pool (so it stays alive by day); levels by distance
+  { name: "The Grey Barrow Moors", mobs: { bonehound: 6, wight: 5, boghag: 3 }, respawnMs: 6000, wild: true },
 ];
 /** Wild zones that are not map areas (no banner, no map label): their rect in tiles. */
 const WILD_RECTS: Record<string, { x: number; y: number; w: number; h: number }> = {
@@ -137,7 +157,8 @@ const WILD_RECTS: Record<string, { x: number; y: number; w: number; h: number }>
  * Density (Murat wants monsters everywhere): every zone keeps at least one monster per this many walkable tiles.
  * Wild zones are a bit thinner than the named hunting grounds. Elites (necromancers) keep their hand-set count.
  */
-export const DENSITY = { tilesPerMob: 9, wildTilesPerMob: 12, desertTilesPerMob: 18, desertWildTilesPerMob: 28 }; // the desert is wide open: thinner
+export const DENSITY = { tilesPerMob: 9, wildTilesPerMob: 12, desertTilesPerMob: 18, desertWildTilesPerMob: 28, // the desert is wide open: thinner
+  moorsTilesPerMob: 15, moorsWildTilesPerMob: 30 }; // the moors: packs on the barrows and fens, the open heather between them thin
 /** Blob variants only appear from these levels (Murat: shooter + warrior above Lv 3, healer above Lv 5). */
 export const KIND_MIN_LEVEL: Partial<Record<MobKind, number>> = { shooterblob: 4, warriorblob: 4, healerblob: 6, venomblob: 12, frostblob: 14, fireblob: 16, stormblob: 18 };
 
@@ -196,11 +217,14 @@ export const SPAWN_ZONES: SpawnZone[] = ZONE_MOBS.flatMap((z) => {
     if (z.wild) { const l = baseLevelAt(tx, ty); lo = Math.min(lo, l); hi = Math.max(hi, l + 2); }
   }
   const base = Math.max(1, Object.values(z.mobs).reduce((n, c) => n + (c ?? 0), 0));
-  const desert = r.y >= DESERT_Y0 && !inDeepRow(r.y);
-  const want = Math.round(tiles / (desert ? (z.wild ? DENSITY.desertWildTilesPerMob : DENSITY.desertTilesPerMob) : z.wild ? DENSITY.wildTilesPerMob : DENSITY.tilesPerMob));
+  // each act its own density (the Undercity under the desert is hand-set, a dungeon floor like the Mawdeep's)
+  const act = actOfTile(r.x, r.y), desert = act === 2 && !inDeepRow(r.y);
+  const per = act === 3 ? (z.wild ? DENSITY.moorsWildTilesPerMob : DENSITY.moorsTilesPerMob)
+    : desert ? (z.wild ? DENSITY.desertWildTilesPerMob : DENSITY.desertTilesPerMob) : z.wild ? DENSITY.wildTilesPerMob : DENSITY.tilesPerMob;
+  const want = Math.round(tiles / per);
   const f = z.fixed ? 1 : Math.max(1, want / base); // fixed: hand-set count
   const mobs: Partial<Record<MobKind, number>> = {};
-  for (const [k, n] of Object.entries(z.mobs) as [MobKind, number][]) mobs[k] = k === "necromancer" ? n : k === "motherblob" ? Math.max(n, Math.round(n * f / 4)) : Math.round(n * f); // big ones grow slower
+  for (const [k, n] of Object.entries(z.mobs) as [MobKind, number][]) mobs[k] = ELITE[k] ? n : k === "motherblob" ? Math.max(n, Math.round(n * f / 4)) : Math.round(n * f); // elites keep their count, big ones grow slower
   const raw: [number, number] = z.levels ?? (z.wild && hi > 0 ? [lo, hi] : zoneLevels(r));
   const L = levelFns(r.x, r.y), lvl = (Object.keys(z.mobs) as MobKind[]).every((k) => ELITE[k]) ? L.special : L.mob; // an elite's lair: the special ceiling
   const levels: [number, number] = [lvl(raw[0]), lvl(raw[1])];
@@ -265,7 +289,8 @@ export function levelsAt(z: SpawnZone, tx: number, ty: number): [number, number]
  */
 export const HIDE = {
   spots: { skeleton: [T.GRAVE], skeletonmage: [T.GRAVE], slime: [T.TREE, T.PINE], blobling: [T.TREE, T.PINE], shooterblob: [T.TREE, T.PINE], healerblob: [T.TREE, T.PINE], frostblob: [T.PINE],
-    sanddead: [T.BONES, T.GRAVE], scorpion: [T.ROCK] } as Partial<Record<MobKind, number[]>>, // Act 2: the dead sink into the sand by their bones, scorpions creep under rocks
+    sanddead: [T.BONES, T.GRAVE], scorpion: [T.ROCK], // Act 2: the dead sink into the sand by their bones, scorpions creep under rocks
+    wight: [T.BARROW, T.BONE_PILE] } as Partial<Record<MobKind, number[]>>, // Act 3: wights crawl back into their barrows
   idleChance: 0.06, // per wander decision, chance an idle monster goes to hide
   idleRadius: 7, // tiles from home to look for a spot
   fleeRadius: 6, // tiles from the monster when it's dizzy

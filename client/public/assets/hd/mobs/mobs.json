@@ -1286,5 +1286,47 @@
   "h": 44,
   "scale": 1.5,
   "frames": 14
+ },
+ "mob_wight": {
+  "w": 24,
+  "h": 30,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_boghag": {
+  "w": 26,
+  "h": 32,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_legionary": {
+  "w": 32,
+  "h": 32,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_cairnlord": {
+  "w": 38,
+  "h": 40,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_barrowking": {
+  "w": 46,
+  "h": 48,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_bonehound": {
+  "w": 30,
+  "h": 22,
+  "scale": 1.5,
+  "frames": 12
+ },
+ "mob_mistwraith": {
+  "w": 28,
+  "h": 38,
+  "scale": 1.5,
+  "frames": 12
  }
 }

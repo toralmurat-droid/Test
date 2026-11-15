@@ -78,6 +78,9 @@ export const FAMILY_OF: Partial<Record<MobKind, ChampionFamily>> = {
   scorpion: "scorpion",
   nomad: "nomad",
   camelfolk: "camel",
+  // Act 3: the Ossuary Host's raised dead come back Risen, or with a siege engine of their own (a Host siege-clan habit);
+  // their own family (and affix) is still to come. The bog hags never come as champions.
+  wight: "necro", legionary: "necro", mistwraith: "necro", bonehound: "necro",
 };
 
 export interface AffixDef {

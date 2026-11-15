@@ -48,7 +48,10 @@
   "quartermaster",
   "smuggler",
   "alewife",
-  "lutemaker"
+  "lutemaker",
+  "cairncaptain",
+  "moorherbalist",
+  "moorarmourer"
  ],
  "image": "{name}.png",
  "frameWidth": 64,

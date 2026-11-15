@@ -6,8 +6,8 @@ import { MapSchema, Schema, StateView, type } from "@colyseus/schema";
 import {
   AGGRO, aggroLevelFactor, BLOB_AI, BONES, DEMON, BROOD, Dir, FACTION, FEUD, MERGE, MobDef, MOTHER, SKELETON_AI, HIT_RADIUS, mobScale, regionMobLevel, regionSpecialLevel, InputState, MOB_ATTACK_RANGE, MOBS, MobKind, rollSkeletonWeapon, SKELETON_BOW, SKELETON_WEAPONS, SkeletonWeapon, REGEN_DELAY_MS, REGEN_RAMP_MS, regenFromStamina, SAFE_REGEN_MULT,
   RESPAWN_MS, TICK_RATE, TILE,
-  HOLLOW_KING, ELEM_BLOB, ELEM_MOVE, inputDir, DESERT_Y0, ELITE, BOSS, URSK, SUNWRIGHT, act2MobLevel, act2SpecialLevel, BEAST, BEAST_BROOD, BEAST_FOLK, BEAST_KINDS, BEAST_MOVES, BEAST_RIDER, type BeastMove,
-  MAP_W, MAP_H, WORLD_H, inDeepRow, actOfTile, actMobLevel, actSpecialLevel, MOORS_LEVEL,
+  HOLLOW_KING, ELEM_BLOB, ELEM_MOVE, inputDir, ELITE, BOSS, URSK, SUNWRIGHT, act2MobLevel, act2SpecialLevel, BEAST, BEAST_BROOD, BEAST_FOLK, BEAST_KINDS, BEAST_MOVES, BEAST_RIDER, type BeastMove,
+  MAP_W, MAP_H, WORLD_H, inDeepRow, actOfTile, actMobLevel, actSpecialLevel, MOORS_LEVEL, MOORS_AI,
 } from "../shared/constants";
 import { ambushRoomAt, arrivalAt, CRACK_OPEN_MS, LINK_RANGE, linkById, LINKS, SHORTCUT_OPEN_MS, underground } from "../shared/dungeon";
 import {
@@ -467,6 +467,8 @@ function worldDayFrac(now: number): number {
 }
 /** Spawn zones of the dead (every kind in them is undead): they keep the night (shared/daynight.ts). */
 const UNDEAD_ZONES = new Set(SPAWN_ZONES.flatMap((z, zi) => (Object.keys(z.mobs) as MobKind[]).every((k) => FACTION[k] === "undead") && !underground(z.y * TILE) ? [zi] : [])); // below ground there is no day
+/** Lairs of the dead (zones of elites only, the Barrow-King's mound): their boss does not climb straight back out by night. */
+const SLOW_RISE = new Set(SPAWN_ZONES.flatMap((z, zi) => { const k = Object.keys(z.mobs) as MobKind[]; return k.length && k.every((x) => ELITE[x]) ? [zi] : []; }));
 
 /** Monsters with no player within this many px (square) doze until someone comes by. */
 const SLEEP_RANGE = 28 * TILE; // the screen shows about 12 tiles each way, so they are always awake well before they come into view
@@ -500,6 +502,9 @@ const RANGED: Partial<Record<MobKind, RangedCfg>> = {
   necromancer: { ...SKELETON_AI.necro, far: SKELETON_AI.necro.range * 0.8, shot: "shadowbolt", mult: SKELETON_AI.necro.boltMult },
   crowseer: { ...SKELETON_AI.mage, range: 135, keepAway: 70, far: 135 * 0.85, shot: "shadowbolt", mult: 1.1 }, // the crow-folk's hexes
   veiled: { ...SKELETON_AI.mage, range: 140, keepAway: 72, far: 140 * 0.85, shot: "sunbolt", shotSpeed: 160, mult: 1.1 }, // the Veiled Circle's sun-fire
+  // Act 3: the bog hags' rot and the mist wraiths' grave-cold (MOORS_AI)
+  boghag: { ...MOORS_AI.hag, far: MOORS_AI.hag.range * 0.85, shot: "shadowbolt" },
+  mistwraith: { ...MOORS_AI.wraith, far: MOORS_AI.wraith.range * 0.85, shot: "magicbolt" },
 };
 /** Dustrider archers (the nomads' other half, BEAST_FOLK "folk"): short desert bows. */
 const NOMAD_BOW: RangedCfg = { range: 125, keepAway: 60, far: 125 * 0.85, shot: "arrow", shotSpeed: 175, shotRadius: 3, mult: 0.85 };
@@ -3263,7 +3268,7 @@ export class TownRoom extends Room<TownState> {
       // The dead keep the night: by day only a few of them are up and no necromancer walks; by night they climb out fast
       const undead = UNDEAD_ZONES.has(zi), day = undead && !this.undeadUp;
       const cap = day ? this.dayCap(zi, zone.cap) : zone.cap;
-      const every = undead && !day ? Math.min(z.respawnMs, UNDEAD_NIGHT.riseMs) : z.respawnMs;
+      const every = undead && !day && !SLOW_RISE.has(zi) ? Math.min(z.respawnMs, UNDEAD_NIGHT.riseMs) : z.respawnMs;
       if (zone.alive >= cap) { zone.nextAt = 0; if (zone.nextIn) zone.nextIn = 0; return; }
       if (!zone.nextAt || zone.nextAt > now + every) zone.nextAt = now + every;
       if (now >= zone.nextAt) {
@@ -6054,7 +6059,7 @@ export class TownRoom extends Room<TownState> {
     const p = this.state.players.get(client.sessionId);
     if (!p) return;
     const board = nearestBoard(p.x, p.y);
-    const offers = board ? bountyOffers(p.level, p.bountyDone, board.y >= DESERT_Y0 * TILE) : [];
+    const offers = board ? bountyOffers(p.level, p.bountyDone, actOfTile(Math.floor(board.x / TILE), Math.floor(board.y / TILE))) : []; // the board's own act
     if (msg.drop) p.bounty = undefined;
     else if (typeof msg.take === "number" && board && !p.bounty && offers[msg.take]) p.bounty = { ...offers[msg.take], n: 0 };
     client.send("bounty", { board: board?.id ?? "", offers, active: p.bounty ?? null });

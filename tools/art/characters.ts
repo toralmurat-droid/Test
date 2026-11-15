@@ -890,6 +890,20 @@ const lutemaker = human({
   hat: { kind: "bandana", col: 0x2e7d74, trim: 0xe8d070 }, shirt: 0xeadfc4, vest: 0x6a4a2a, apron: 0x7a5230, pants: 0x4a4a3a, boots: 0x3a2717, belt: 0x4a2e1a,
   weapon: "none", gait: "stroll", hipHand: true,
 });
+// Cairnwatch, the Act 3 outpost on the Grey Barrow Moors (shared/npcs.ts): the Wardens' captain, the herbwife, the armourer
+const cairncaptain = human({
+  name: "cairncaptain", skin: 0xd4a888, hair: 0x6a5a4a, hairStyle: "ponytail", eye: 0x3a4a3a,
+  shirt: 0x7a7e7c, vest: 0x4a3a2a, pants: 0x5a5c58, boots: 0x2e2a24, belt: 0x2a2018, weapon: "spear", gait: "march",
+});
+const moorherbalist = human({
+  name: "moorherbalist", skin: 0xd8b090, hair: 0xcfcfd0, hairStyle: "long", eye: 0x3a3a4a,
+  hat: { kind: "hood", col: 0x7a5a8a, trim: 0x5a3e6a }, shirt: 0x6e4e7e, vest: 0x8a6aa0, apron: 0xcbbf9a, pants: 0x4a3a52, boots: 0x3a2a22, belt: 0x4a3a2a, weapon: "none", gait: "stroll", hipHand: true,
+});
+const moorarmourer = human({
+  name: "moorarmourer", skin: 0xc89a76, hair: 0x8a8a88, hairStyle: "short", beard: 0x9a9a98,
+  shirt: 0x6a5a4a, apron: 0x4a3322, pants: 0x4a463c, boots: 0x2a2018, belt: 0x2a1c12, weapon: "hammer", gait: "march",
+});
+export const MOOR_NPCS = ["cairncaptain", "moorherbalist", "moorarmourer"] as const;
 export const ZONE_NPCS = ["huntsman", "miller", "forester", "beachcomber", "prospector", "caravaneer", "hermit", "dunescout", "defector", "monk", "tombrobber"] as const;
 
 // Quest-concept NPCs (docs/quest-concepts-progress.md): a gravedigger, three mourners, a Redfang girl, the watch quartermaster, a smuggler, an alewife
@@ -930,7 +944,7 @@ export const QUEST_NPCS = ["sexton", "mourner1", "mourner2", "mourner3", "ilka",
 
 export const NPCS: Hero[] = [blacksmith, merchant, villager, guard, druid, witch, watchman, ...FOLK.map((n) => folk(n)), wellkeeper, sandcaptain, spicetrader, desertsmith, armourer, saltarmourer, sandarmourer,
   huntsman, miller, forester, beachcomber, prospector, caravaneer, hermit, dunescout, defector, monk, tombrobber,
-  sexton, mourner1, mourner2, mourner3, ilka, quartermaster, smuggler, alewife, lutemaker];
+  sexton, mourner1, mourner2, mourner3, ilka, quartermaster, smuggler, alewife, lutemaker, cairncaptain, moorherbalist, moorarmourer];
 /** Pose data for monsters painted with the character painter (paint/mobs.ts); never drawn as pixel art. */
 const mobPose = (name: string, weapon: HumanOpts["weapon"]) => human({ name, skin: 0, hair: 0, hairStyle: "bald", shirt: 0, pants: 0, boots: 0, weapon });
 export const MOB_POSES: Record<string, Hero> = {
@@ -948,6 +962,7 @@ export const MOB_POSES: Record<string, Hero> = {
   war_warden: mobPose("war_warden", "spear"), war_warden_cap: mobPose("war_warden_cap", "axe"), war_redfang: mobPose("war_redfang", "axe"), war_redfang_chief: mobPose("war_redfang_chief", "axe"),
   war_host: mobPose("war_host", "spear"), war_host_cap: mobPose("war_host_cap", "axe"), war_hidekin: mobPose("war_hidekin", "hammer"), war_hidekin_chief: mobPose("war_hidekin_chief", "hammer"),
   war_veiled: mobPose("war_veiled", "axe"), war_veiled_adept: mobPose("war_veiled_adept", "staff"),
+  wight: mobPose("wight", "axe"), boghag: mobPose("boghag", "staff"), legionary: mobPose("legionary", "spear"), cairnlord: mobPose("cairnlord", "axe"), barrowking: mobPose("barrowking", "hammer"),
   veiled: mobPose("veiled", "staff"), camelfolk: mobPose("camelfolk", "spear"), sphinx: mobPose("sphinx", "axe"), sunwright: mobPose("sunwright", "staff"),
 };
 /** Poses for the humanoid champions' sheets (paint/look.ts CHAMP_WEAPONS): the grip follows their champion weapon. */

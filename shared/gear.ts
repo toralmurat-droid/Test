@@ -294,6 +294,14 @@ export const GEAR_DROP: Record<MobKind, { chance: number; tiers: [number, number
   sunwright: { chance: 1, tiers: [0, 0.2, 0.8] },
   nightraider: { chance: 1, tiers: [0, 0.35, 0.65] },
   trooper: { chance: 0, tiers: [1, 0, 0] },
+  // Act 3, the moors (Lv 20-35): like the Mawdeep's beast-folk and Act 2's regulars; the elite and the boss like Act 1's
+  wight: { chance: 0.17, tiers: [0.25, 0.45, 0.3] },
+  boghag: { chance: 0.17, tiers: [0.25, 0.45, 0.3] },
+  bonehound: { chance: 0.13, tiers: [0.3, 0.45, 0.25] },
+  mistwraith: { chance: 0.17, tiers: [0.25, 0.45, 0.3] },
+  legionary: { chance: 0.2, tiers: [0.2, 0.45, 0.35] },
+  cairnlord: { chance: 0.9, tiers: [0, 0.45, 0.55] },
+  barrowking: { chance: 1, tiers: [0, 0.25, 0.75] },
 };
 
 export function isGearId(v: unknown): v is string {

@@ -534,3 +534,19 @@ sims are unchanged.
   load round trip with names.
 - Sims (`npx tsx tools/balance/war.ts 200 30`, and `--clever=host`): identical before and after but for the run time.
 - Not done: a land's own map, zones and capitals (the homelands themselves); the Crown.
+
+## NL-2: Grey Barrow Moors, Cairnwatch quests and words (2026-11-15, moors PR2)
+- Quest chain `moors` ("The Grey Barrow Road", `MOOR_QUESTS` in `shared/quests.ts`) is a zone arc (`ZONE_ARCS`, last entry:
+  local giver, later quests `auto`, each ends in the field with an `outro`, no report-back). It costs no Player field: it
+  lives in the shared `quests` map under `moors`. Given by Warden-Captain Edra Vane (`cairncaptain`), Lv 20-35, rewards from
+  `arcReward` like the Act 1/2 arcs (a boss fight counts half a level's XP). Eight quests: The Cairns Are Open (Grey Ring,
+  Lv 20), Candles in the Mire (Sorrow Mire, 22), Thane's Rest (23), The Cairn-Lord (Cairnfield, 25, Maelgar), Lamps on the
+  Black Water (Blackwater Fen, 26), The Nine Widows (29), The Road to Kingsbarrow (31), The Barrow-King (33; Aldric
+  Hollowcrown, Lv 35, `night: true` summon in the Barrow-King's Mound). Both summoned bosses talk (`BossVoice`).
+- Two new quest items, `candle` (Corpse-Candle) and `barrowkey` (Barrow-Key); the client draws drops as `q_<id>`.
+- Edra's idle line and the herbwife's and armourer's shop greetings reworded. Nothing in `npcs.ts` but the existing text.
+- Signposts: `buildMoors` returns `posts` (local tiles); `shared/map.ts` sets each beside the nearest road like the desert's.
+  `tools/map-metrics.ts`: the moors stay 100% reachable.
+- Tests: `tests/moors-quests.test.ts` (shape, and the whole chain start to finish), `tests/zone-arcs.test.ts` now reads the
+  act from the giver's tile (Act 3 levels 20-36).
+- Not done: Weeping Stones, Drowned Hollow and the Host's Muster have no quest; the war land (Host territories) is still to come.

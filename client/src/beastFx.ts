@@ -65,16 +65,18 @@ export function bindBeastFx(room: Room, h: BeastFxHost) {
 
   // Wind-ups: the beast gathers itself, the ground shows where the move lands
   room.onMessage("bwind", ({ id, kind, ms, x, y, x2, y2, w, tx, ty, r, ax, ay, reach, half, pts, hero, inner }) => {
-    const e = h.ent(id), [label, col] = CALL[kind] ?? ["", ""];
+    const e = h.ent(id);
+    const shield = kind === "gore" && (e as any)?.state?.kind === "legionary"; // the Host Legionary's rush behind its tower shield
+    const [label, col] = shield ? ["SHIELD RUSH!", "#c8d4e0"] : CALL[kind] ?? ["", ""];
     if (e && label && !(kind === "gore" && (e as any).state?.kind === "scorpion")) h.say(e.sprite.x, e.sprite.y - e.top - 6, label, col);
     const cx = () => e?.sprite.x ?? x, cy = () => e?.sprite.y ?? y;
     if (kind === "gore" || kind === "stampede") {
       if (e) h.squash(id, 1.12, 0.9, ms); // head down, pawing the ground
       for (let i = 0; i < 6; i++) scene.time.delayedCall(i * ms / 6, () => dust(cx(), cy() + 2, 2, 14, 10));
       mark(scene, ms, (g, f) => {
-        g.fillStyle(0x3a1c0c, 0.22); lane(g, x, y, x2, y2, w); g.fillPath();
-        g.lineStyle(1.5, 0xffa060, 0.8); lane(g, x, y, x2, y2, w); g.strokePath();
-        g.fillStyle(0xc8541c, 0.3); lane(g, x, y, x + (x2 - x) * f, y + (y2 - y) * f, w); g.fillPath();
+        g.fillStyle(shield ? 0x1c2430 : 0x3a1c0c, 0.22); lane(g, x, y, x2, y2, w); g.fillPath();
+        g.lineStyle(1.5, shield ? 0xb4c8dc : 0xffa060, 0.8); lane(g, x, y, x2, y2, w); g.strokePath();
+        g.fillStyle(shield ? 0x6c88a8 : 0xc8541c, 0.3); lane(g, x, y, x + (x2 - x) * f, y + (y2 - y) * f, w); g.fillPath();
       });
     } else if (kind === "web" || kind === "pounce") {
       if (e) h.squash(id, kind === "pounce" ? 1.15 : 1.1, kind === "pounce" ? 0.82 : 1.1, ms);
