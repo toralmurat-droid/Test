@@ -2563,7 +2563,7 @@ export class TownScene extends Phaser.Scene {
     const sig = [this.titlesOwned.join(), unpackCosmetics(metaOf(mine, META.cosm)).title, lvl, o.xp, st.sta, st.str, st.mag, st.dex, free, from, mine.name].join("|");
     // the right column shows the sheet (defense, resistances, derived numbers) and the gauge size: key it on what the sheet is made of
     // (all six worn slots, talents, points), not on current hp/mana, so it neither rebuilds every regen tick nor goes stale after a gear change
-    const sigR = [sig, mine.maxHp, unpackMana(o.mp).maxMana, o.kills, o.gold, GEAR_SLOTS.map((g) => mine[g]).join(","), JSON.stringify(Array.from(o.talents.entries())), o.ptSta, o.ptStr, o.ptMag, o.ptDex, this.side?.previewSig ?? "", feastLines(feastOf()).join()].join("|");
+    const sigR = [sig, o.spd, mine.maxHp, unpackMana(o.mp).maxMana, o.kills, o.gold, GEAR_SLOTS.map((g) => mine[g]).join(","), JSON.stringify(Array.from(o.talents.entries())), o.ptSta, o.ptStr, o.ptMag, o.ptDex, this.side?.previewSig ?? "", feastLines(feastOf()).join()].join("|");
     const el = document.getElementById("hero")!;
     if (!el.hidden && sigR === this.heroSig) return;
     const leftSame = !el.hidden && sig === this.heroSigL;
@@ -2573,7 +2573,10 @@ export class TownScene extends Phaser.Scene {
     const next = xpForLevel(lvl + 1), cur = xpForLevel(lvl);
     const fromGear = gearStats(cls, activeOf(mine));
     const pts: Record<StatKind, number> = { sta: o.ptSta, str: o.ptStr, mag: o.ptMag, dex: o.ptDex };
-    const sh = this.side!.sheets(mine);
+    const sh0 = this.side!.sheets(mine);
+    // Move speed as the game moves you: the skill-passive multiplier (own.spd) is not in the sheet; a preview scales by the sheet's own ratio
+    const live = Math.round(heroSpeed(cls, false, o.spd) * gearSpeedMult(activeOf(mine)));
+    const sh = { ...sh0, now: { ...sh0.now, speed: live }, next: sh0.next && { ...sh0.next, speed: sh0.now.speed ? Math.round(live * sh0.next.speed / sh0.now.speed) : live } };
     const mp = unpackMana(o.mp);
     const rest = regenFromStamina(st.sta);
     const parts = heroPanelParts({

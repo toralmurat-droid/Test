@@ -81,9 +81,13 @@ export function compareTakeOff(h: SheetHero, worn: Equipped, slot: GearSlot): Co
 /** Card width that fits left of the panel (at most `max`, at least `min`); the card never covers the panel while there is room. */
 export const cardWidth = (panelLeft: number, max = 320, min = 240, gap = 8): number => Math.max(min, Math.min(max, panelLeft - gap - 4));
 
-/** Where the card goes: left of the panel, top aligned with the hovered item, clamped to the screen. */
-export function cardPlace(item: { top: number }, panelLeft: number, cardW: number, cardH: number, vw: number, vh: number, gap = 8): { left: number; top: number } {
-  const left = Math.max(4, Math.min(panelLeft - gap - cardW, vw - cardW - 4));
+/**
+ * Where the card goes: left of the panel, top aligned with the hovered item, clamped to the screen. `minLeft` is the
+ * right edge of whatever the card must not cover (the shop dialog, whose Buy buttons are the hovered rows' right end):
+ * with no room between it and the panel the card moves right, over the panel's doll area.
+ */
+export function cardPlace(item: { top: number }, panelLeft: number, cardW: number, cardH: number, vw: number, vh: number, gap = 8, minLeft = 4): { left: number; top: number } {
+  const left = Math.max(minLeft, Math.min(panelLeft - gap - cardW, vw - cardW - 4));
   const top = Math.max(4, Math.min(item.top, vh - cardH - 4));
   return { left, top };
 }

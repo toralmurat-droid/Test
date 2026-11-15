@@ -310,7 +310,6 @@ export class GearMenu {
     if (info) info.hidden = true; // the compare card (gearCard.ts) shows item details beside the panel
     hideCard();
     const sh = sheetHero(state), worn = wornOf(state);
-    const fits = (id: string) => canWear(cls, id);
     const hover = (el: HTMLElement, id: string, extra: string, slot?: GearSlot) => {
       el.onmouseenter = () => {
         const pr = this.pickRune >= 0 ? parseRune(bagItems[this.pickRune]) : undefined, sockWhy = pr ? socketProblem(id, pr) : "";

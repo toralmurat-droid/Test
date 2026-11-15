@@ -37,7 +37,8 @@ export function showCard(html: string, anchor: HTMLElement) {
   c.hidden = false;
   c.style.visibility = "hidden";
   const w = c.offsetWidth, h = c.offsetHeight;
-  const p = cardPlace({ top: a.top / z }, edge, w, h, window.innerWidth / z, window.innerHeight / z);
+  const dlg = anchor.closest("#npcdialog")?.getBoundingClientRect(); // a shop row: never cover the dialog (its Buy buttons)
+  const p = cardPlace({ top: a.top / z }, edge, w, h, window.innerWidth / z, window.innerHeight / z, 8, dlg ? dlg.right / z + 8 : 4);
   c.style.left = `${p.left}px`;
   c.style.top = `${p.top}px`;
   c.style.visibility = "";

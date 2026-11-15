@@ -92,3 +92,9 @@ test("compare: Mana and Damage per second lines; take-off lists what you'd lose"
   const off = compareTakeOff(h, { ...worn, armour: "a_royal@20" } as Equipped, "armour");
   assert.ok(off.length > 0 && off.some((l) => !l.good));
 });
+
+test("cardPlace: a shop row keeps the card off the dialog (1366x768: dialog ends at 446, panel starts at 574)", () => {
+  assert.equal(cardPlace({ top: 200 }, 574, 240, 300, 1366, 768, 8, 454).left, 454);
+  assert.equal(cardPlace({ top: 200 }, 1000, 320, 300, 1920, 1080, 8, 454).left, 672); // room: unchanged
+  assert.equal(cardPlace({ top: 200 }, 600, 320, 300, 1920, 1080).left, 272); // the bag case
+});
