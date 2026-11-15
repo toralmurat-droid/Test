@@ -42,7 +42,7 @@
 #monsterbar .mb-gem { position: absolute; width: 4px; height: 4px; background: #fff; opacity: 0; pointer-events: none; animation: mb-glint 3.6s steps(1) infinite; }
 #monsterbar.mb-champion .mb-crest, #monsterbar.mb-named .mb-crest, #monsterbar.mb-named .mb-fin { animation: mb-shimmer 4s ease-in-out infinite; }
 /* boss ember: a glow layer behind the plate that only fades (opacity animates on the compositor; no filter repaint) */
-#monsterbar.mb-boss::after { content: ""; position: absolute; inset: -14px; z-index: -1; pointer-events: none; box-shadow: 0 0 14px 4px rgba(255, 70, 30, .6); animation: mb-ember 2.4s ease-in-out infinite alternate; }
+#monsterbar.mb-boss::after { content: ""; position: absolute; inset: -20px; z-index: -1; pointer-events: none; box-shadow: 0 0 14px 4px rgba(255, 70, 30, .6); animation: mb-ember 2.4s ease-in-out infinite alternate; }
 @keyframes mb-glint { 0%, 86%, 100% { opacity: 0; } 90% { opacity: .9; } 95% { opacity: .4; } }
 @keyframes mb-shimmer { 0%, 100% { filter: brightness(1); } 50% { filter: brightness(1.35); } }
 @keyframes mb-ember { from { opacity: .35; } to { opacity: 1; } }
