@@ -1,7 +1,8 @@
 import Phaser from "phaser";
-import { ART_K as K, BADLANDS_Y0, DESERT_Y0, MAP_H, MAP_W, MOORS_Y0, TILE } from "../../shared/constants";
+import { ART_K as K, BADLANDS_Y0, DESERT_Y0, MAP_H, MAP_W, MOORS_Y0, SINKHOLES_H, SINKHOLES_Y0, TILE } from "../../shared/constants";
 import { gorseTexture, origin } from "./moorsArt";
 import { origin as blOrigin, scrubTexture } from "./badlandsArt";
+import { fernTexture, origin as skOrigin, willowTexture } from "./sinkholesArt";
 import { MIST_HOLLOWS } from "../../shared/moors";
 import { AREAS, elementLandAt, EMPTY, GROUND, OBJECTS, T } from "../../shared/map";
 import { LAND_TREE_TINT } from "./elementArt";
@@ -205,7 +206,8 @@ export class Ambient {
 
   /** The hero's tile: sets how thick the moors mist lies (none outside Act 3, thick in the MIST_HOLLOWS). */
   setHero(tx: number, ty: number) {
-    this.dust = ty >= BADLANDS_Y0 - 4;
+    this.dust = ty >= BADLANDS_Y0 - 4 && ty < SINKHOLES_Y0 - 4;
+    if (ty >= SINKHOLES_Y0 - 4) { this.mistWant = 0.3; return; } // the sinkholes: a thin damp haze (cool tint, no dust)
     if (this.dust) { this.mistWant = 0.55; return; } // the badlands: dust in the heat, no hollows
     if (ty < MOORS_Y0 - 4) { this.mistWant = 0; return; }
     let d = 0.45;
@@ -245,6 +247,28 @@ export class Ambient {
     }
   }
 
+  /** Act 5: pale spores drifting up out of the open pits (cosmetic; only those near the camera move). */
+  private spores: { s: Phaser.GameObjects.Image; x: number; y: number; ph: number; sp: number }[] = [];
+  private buildSpores() {
+    const r = rng(91), pits: [number, number][] = [];
+    for (let y = SINKHOLES_Y0; y < SINKHOLES_Y0 + SINKHOLES_H; y++) for (let x = 0; x < MAP_W; x++) if (OBJECTS[y][x] === T.PIT || GROUND[y][x] === T.WATER) pits.push([x, y]);
+    for (let i = 0; i < Math.min(140, pits.length); i++) {
+      const [x, y] = pits[Math.floor(r() * pits.length)];
+      const s = this.scene.add.image((x + r()) * TILE, (y + r()) * TILE, "glow").setBlendMode(Phaser.BlendModes.ADD).setTint(0xb8d890).setDepth(21000).setScale(0.28 + r() * 0.2).setAlpha(0).setVisible(false);
+      this.spores.push({ s, x: s.x, y: s.y, ph: r() * 100, sp: 0.15 + r() * 0.2 });
+    }
+  }
+  private updateSpores(t: number) {
+    const cam = this.scene.cameras.main.worldView;
+    for (const p of this.spores) {
+      const k = t * p.sp + p.ph, rise = (k % 1) * 26 * K; // each spore climbs ~26 px and fades, then starts over
+      const on = !(p.x < cam.x - 40 || p.x > cam.right + 40 || p.y < cam.y - 40 || p.y > cam.bottom + 80);
+      if (p.s.visible !== on) p.s.setVisible(on);
+      if (!on) continue;
+      p.s.setPosition(p.x + Math.sin(k * 7) * 4 * K, p.y - rise).setAlpha(Math.sin((k % 1) * Math.PI) * (0.35 + this.dark * 0.4));
+    }
+  }
+
   /** 0 by day, 1 at night (fireflies glow brighter in the dark). */
   setDarkness(d: number) { this.dark = d; for (const o of this.fireLit) o.setAlpha(d * 0.6); }
   /** Additive copies of the fires above the night tint, so flames keep their colour in the dark. */
@@ -263,6 +287,7 @@ export class Ambient {
     this.buildShore();
     this.buildTrees();
     this.buildChimneys();
+    this.buildSpores();
     this.buildCampfires();
     this.buildBonfires();
     this.buildButterflies();
@@ -303,12 +328,13 @@ export class Ambient {
       if (!TREES.has(t)) continue;
       const oaks = SMOOTH ? ["oak_a", "oak_b", "oak_c", "oak_d", "oak_e", "oak_a", "oak_b", "oak_f"] : ["oak_a", "oak_b"];
       const pines = SMOOTH ? ["pine", "pine", "pine_b"] : ["pine"];
-      const badl = y >= BADLANDS_Y0 - 4, desert = y >= DESERT_Y0 && y < MOORS_Y0 - 4, moors = y >= MOORS_Y0 - 4 && y < BADLANDS_Y0 - 4;
+      const sink = y >= SINKHOLES_Y0 - 4, badl = y >= BADLANDS_Y0 - 4 && !sink, desert = y >= DESERT_Y0 && y < MOORS_Y0 - 4, moors = y >= MOORS_Y0 - 4 && y < BADLANDS_Y0 - 4;
+      const lush = sink && (t === T.BUSH || t === T.TREE) ? (t === T.TREE ? willowTexture(this.scene, Math.floor(r() * 4)) : fernTexture(this.scene, Math.floor(r() * 3), Math.floor(r() * 4))) : undefined; // the sinkholes' willows and ferns (sinkholesArt.ts)
       const scrub = badl && t === T.BUSH ? scrubTexture(this.scene, Math.floor(r() * 2), Math.floor(r() * 4)) : undefined; // the badlands' thorn scrub and tumbleweed (badlandsArt.ts)
-      const gorse = scrub ?? (moors && t === T.BUSH ? gorseTexture(this.scene, Math.floor(r() * 4)) : undefined); // the moors' gorse (moorsArt.ts) instead of the plain bush
+      const gorse = lush ?? scrub ?? (moors && t === T.BUSH ? gorseTexture(this.scene, Math.floor(r() * 4)) : undefined); // the moors' gorse (moorsArt.ts) instead of the plain bush
       const key = gorse ? gorse.key : t === T.PALM ? palmTexture(this.scene, Math.floor(r() * 3)) : t === T.PINE ? pines[Math.floor(r() * pines.length)] : t === T.BUSH ? "bush" : oaks[Math.floor(r() * oaks.length)];
       const s = this.scene.add.image((x + 0.5) * TILE + (t === T.BUSH ? 0 : Math.round((r() * 2 - 1) * K)), (y + 1) * TILE, key, 0)
-        .setOrigin(gorse ? (scrub ? blOrigin(scrub) : origin(gorse)).x : 0.5, gorse ? (scrub ? blOrigin(scrub) : origin(gorse)).y : 1).setDepth((y + 1) * TILE - 2).setTint(tints[Math.floor(r() * tints.length)]);
+        .setOrigin(gorse ? (lush ? skOrigin(lush) : scrub ? blOrigin(scrub) : origin(gorse)).x : 0.5, gorse ? (lush ? skOrigin(lush) : scrub ? blOrigin(scrub) : origin(gorse)).y : 1).setDepth((y + 1) * TILE - 2).setTint(tints[Math.floor(r() * tints.length)]);
       if (gorse) s.clearTint();
       const land = elementLandAt(x + 0.5, y + 0.5, 3); // the elemental wilds: frosted, blighted, charred or storm-grey trees
       if (land && ((x * 7919 + y * 104729) % 97) / 97 < 0.35 + land.k * 0.65) s.setTint(LAND_TREE_TINT[land.land.el]);
@@ -609,6 +635,7 @@ export class Ambient {
     }
 
     this.updateMist(dtMs, t);
+    this.updateSpores(t);
     if (now > this.nextRipple) { this.ripple(); this.nextRipple = now + 350 + Math.random() * 500; }
     if (now > this.nextFlock) this.spawnFlock(now);
   }

@@ -1,8 +1,9 @@
-import { actOfTile, BADLANDS_LEVEL, MOORS_LEVEL, PLAYER_RADIUS, TILE, type Act } from "./constants";
+import { actOfTile, BADLANDS_LEVEL, MOORS_LEVEL, PLAYER_RADIUS, SINKHOLES_LEVEL, TILE, type Act } from "./constants";
 import { CHAINS, chainDone, type Quester } from "./quests";
 import { KEL_MARKET, D, WAYGATE_DESERT, WAYGATE_OAKVALE } from "./desert";
 import { CAIRN_SQUARE, MOORSGATE_MOORS, MOORSGATE_OAKVALE, MR } from "./moors";
 import { REDPASS_BADLANDS, REDPASS_OAKVALE, BR, RUSTWATER_SQUARE } from "./badlands";
+import { ROPEWELL_SQUARE, SINKWAY_OAKVALE, SINKWAY_SINKHOLES, SR } from "./sinkholes";
 import { isSolidAt } from "./map";
 
 /**
@@ -13,9 +14,11 @@ import { isSolidAt } from "./map";
  * hero Lv 20 (MOORS_LEVEL.min), no quest needed.
  * Act 4: the Red Pass at Act 1's west edge and its twin at the Red Badlands' east edge (shared/badlands.ts), awake
  * from hero Lv 25 (BADLANDS_LEVEL.min), no quest needed.
+ * Act 5: the Sinkway, a cave on the beach south of Sunken Lake, and its far end at the Mawdeep Sinkholes' north-west
+ * (shared/sinkholes.ts), open from hero Lv 30 (SINKHOLES_LEVEL.min), no quest needed.
  * Using an awake gate takes the hero through to its twin, like the Mawdeep's ropes.
  */
-export type WaygateId = "oakvale" | "desert" | "moorsgate" | "moors" | "redpass" | "badlands";
+export type WaygateId = "oakvale" | "desert" | "moorsgate" | "moors" | "redpass" | "badlands" | "sinkway" | "sinkholes";
 export interface Waygate { id: WaygateId; x: number; y: number; to: WaygateId; label: string }
 const px = (t: { x: number; y: number }) => ({ x: (t.x + 0.5) * TILE, y: (t.y + 0.5) * TILE });
 export const WAYGATES: Waygate[] = [
@@ -25,6 +28,8 @@ export const WAYGATES: Waygate[] = [
   { id: "moors", ...px(MOORSGATE_MOORS), to: "moorsgate", label: "Step through the moorgate home to Oakvale" },
   { id: "redpass", ...px(REDPASS_OAKVALE), to: "badlands", label: "Go through the Red Pass to the Red Badlands" },
   { id: "badlands", ...px(REDPASS_BADLANDS), to: "redpass", label: "Go back through the Red Pass home to Oakvale" },
+  { id: "sinkway", ...px(SINKWAY_OAKVALE), to: "sinkholes", label: "Go down the Sinkway to the Mawdeep Sinkholes" },
+  { id: "sinkholes", ...px(SINKWAY_SINKHOLES), to: "sinkway", label: "Go back up the Sinkway home to Oakvale" },
 ];
 /** How close a hero must stand to use a waygate (click it or press E), like a portal stone's PORTAL_RANGE. */
 export const WAYGATE_RANGE = 1.6 * TILE;
@@ -39,6 +44,7 @@ export const waygateArrival = (g: Waygate) => ({ x: g.x, y: g.y + 2.4 * TILE });
 export const HOMELAND_GATES: { act: Act; ids: readonly WaygateId[]; level: number; shut: string }[] = [
   { act: 3, ids: ["moorsgate", "moors"], level: MOORS_LEVEL.min, shut: "The gate is cold." },
   { act: 4, ids: ["redpass", "badlands"], level: BADLANDS_LEVEL.min, shut: "The pass is held shut." },
+  { act: 5, ids: ["sinkway", "sinkholes"], level: SINKHOLES_LEVEL.min, shut: "The tunnel is caved in." },
 ];
 /** The homeland gate pair `g` belongs to (undefined for the Sunscar's waygates). */
 export const homelandGate = (g: Waygate) => HOMELAND_GATES.find((h) => h.ids.includes(g.id));
@@ -46,6 +52,8 @@ export const homelandGate = (g: Waygate) => HOMELAND_GATES.find((h) => h.ids.inc
 export const isMoorsGate = (g: Waygate) => homelandGate(g)?.act === 3;
 /** True for the Red Pass pair (Act 4). */
 export const isBadlandsGate = (g: Waygate) => homelandGate(g)?.act === 4;
+/** True for the Sinkway pair (Act 5). */
+export const isSinkholesGate = (g: Waygate) => homelandGate(g)?.act === 5;
 
 /** The chains that must be finished: the Hollow Crown (Ostrevar) and the Hide Rite (the Hide-Mother). */
 export const ACT2_KEYS = ["crown", "beast"] as const;
@@ -114,7 +122,19 @@ export function badlandsSpawn(): { x: number; y: number } {
   }
   return waygateArrival(waygateById("badlands")!);
 }
+/**
+ * Ropewell's square (shared/sinkholes.ts): where heroes in the sinkholes come back after dying, and where they log in
+ * if they left from Act 5. Ropewell is still bare ground; free ground only, the Sinkway's arrival spot if none is found.
+ */
+export function sinkholesSpawn(): { x: number; y: number } {
+  const Q = ROPEWELL_SQUARE, r = PLAYER_RADIUS;
+  for (let i = 0; i < 60; i++) {
+    const x = (Q.x + 1 + Math.random() * (Q.w - 2)) * TILE, y = (SR(Q.y) + 1 + Math.random() * (Q.h - 2)) * TILE;
+    if (![[-r, -r], [r, -r], [-r, r], [r, r]].some(([dx, dy]) => isSolidAt(x + dx, y + dy))) return { x, y };
+  }
+  return waygateArrival(waygateById("sinkholes")!);
+}
 /** The town (or camp) of an act, for a login or a respawn there; anything else is Oakvale's square (`home`). */
 export function actSpawn(act: number, home: () => { x: number; y: number }): { x: number; y: number } {
-  return act === 4 ? badlandsSpawn() : act === 3 ? moorsSpawn() : act === 2 ? desertSpawn() : home();
+  return act === 5 ? sinkholesSpawn() : act === 4 ? badlandsSpawn() : act === 3 ? moorsSpawn() : act === 2 ? desertSpawn() : home();
 }
