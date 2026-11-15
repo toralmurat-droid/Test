@@ -4,6 +4,7 @@
  * it only shows the server's "war" snapshot (shared/war/view.ts).
  */
 import { CLANS, CLAN_KEYS, type ClanKey } from "../../shared/war/clans";
+import { regionName } from "../../shared/war/regions";
 import { territoryAt, type WarView } from "../../shared/war/view";
 import type { SiegeView } from "../../shared/war/siege";
 import { hudSlot } from "./hudSlots";
@@ -81,7 +82,8 @@ export class WarPlaque {
     if (key === this.shown) return;
     this.shown = key;
     const cl = CLANS[own];
-    const name = document.createElement("div"); name.className = "wp-name"; name.textContent = t.capitalOf ? `${t.name} (capital)` : t.name;
+    const name = document.createElement("div"); name.className = "wp-name"; name.textContent = t.capitalOf ? `${t.name} (${t.forward ? "forward capital" : "capital"})` : t.name;
+    const land = document.createElement("span"); land.className = "wp-land"; land.textContent = ` · ${regionName(t.region)}`; name.append(land);
     const held = document.createElement("div"); held.className = "wp-held"; held.textContent = cl.name;
     const bar = document.createElement("div"); bar.className = "wp-bar"; bar.title = `Control ${ctl}/100`;
     const fill = document.createElement("i"); fill.style.width = `${ctl}%`; fill.style.background = hex(cl.trim === 0x1a1414 ? cl.cloth : cl.trim);
