@@ -41,7 +41,7 @@ jobs:
           cache: npm
       - name: Install
         run: npm ci --no-audit --no-fund
-      - name: Unit tests (2 test files at a time: the runner has 2 cores, Node would run them one by one)
+      - name: Unit tests, 2 files at a time (the runner has 2 cores)
         run: npm run test:ci
       - name: Typecheck and build (same as the Dockerfile)
         run: npm run build
