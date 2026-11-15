@@ -40,7 +40,7 @@ export function heroPanelParts(d: HeroPanelData) {
     const t = ATTR_TAG[a.k];
     const src = [a.placed ? `${a.placed} placed` : "", a.gear ? `${a.gear} from gear` : ""].filter(Boolean).join(", ");
     return `<div class="attr attr-${a.k}${a.k === d.main ? " main" : ""}" style="--ac:${t.color}">` +
-      `<span class="aname"><span class="atag">${t.tag}</span>${a.name}${src ? ` <small class="asrc">${src}</small>` : ""}</span>` +
+      `<span class="aname"${src ? ` data-tip="${src}"` : ""}><span class="atag">${t.tag}</span>${a.name}</span>` + // where the points come from: in the tooltip
       `<b class="aval">${a.value}</b>` +
       `<button class="statplus" data-stat="${a.k}" aria-label="Add a point to ${a.name}"${d.free > 0 ? "" : " disabled"}>+</button>` +
       `<span class="aeff">${attrEffect(a.k, d.cls)}</span></div>`;

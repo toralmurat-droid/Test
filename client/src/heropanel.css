@@ -88,7 +88,9 @@ body #spbody .gslot.slot-armour { grid-column: 1; grid-row: 3; }
 body #spbody .gslot.slot-ranged { grid-column: 3; grid-row: 3; }
 body #spbody .gslot.slot-shoes { grid-column: 2; grid-row: 4; justify-self: center; width: 84px; }
 body #spbody .gslot { background: #15100b; border: 2px solid #3a2812; }
-body #spbody .gslot b { white-space: normal; max-width: 78px; font: 12px/1.15 var(--tiny-font); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; text-overflow: clip; }
+/* a worn item shows its icon only (name, stats and the compare card on hover); an item that does nothing gets a red frame */
+body #spbody .gslot > span:not(.gicon):not(.gpips) { display: none; }
+body #spbody .gslot:has(.gbad) { border-color: #c0392b; box-shadow: inset 0 0 0 1px #6a1a12; }
 body #spbody .gslot.empty .gicon { border: 0; display: grid; place-items: center; }
 body #spbody .gslot.empty .gicon .pxi { width: 30px; height: 30px; opacity: .22; filter: grayscale(.4); }
 body #spbody .gslot.empty:hover .gicon .pxi { opacity: .4; }
