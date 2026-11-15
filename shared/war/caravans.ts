@@ -31,7 +31,7 @@ export const CARAVAN = {
   /** Soldiers marching with each cart (clan soldiers of the destination land's level). */
   escorts: 3,
   /** The cart's hit points: its clan's soldier HP at its level times this. It has no attack. */
-  hpMult: 5,
+  hpMult: 4,
   /** Escorts fight anything within this of the cart (px), and start on wild monsters only within huntPx of it. */
   leashPx: 6 * TILE, huntPx: 3 * TILE,
   /** Formation (px): one escort ahead of the cart, two behind it, one on each side. */

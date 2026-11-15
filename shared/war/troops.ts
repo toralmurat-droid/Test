@@ -73,7 +73,7 @@ export const TROOP_OFFICER = { hp: 1.7, dmg: 1.25 };
  * Veterans: one MOBS entry serves every land from Lv 5 to 50, but heroes outgrow the plain level curve (zone monsters
  * get tougher kinds as you go), so troops of higher lands gain this share per level above `from` on top of mobScale.
  */
-export const TROOP_VETERAN = { from: 8, hp: 0.02, dmg: 0.05 };
+export const TROOP_VETERAN = { from: 8, hp: 0.02, dmg: 0.025 };
 
 /** A trooper's fighting numbers at `level` (server/warTroops.ts and the PvE sim read the same). */
 export function troopStats(k: ClanKey, level: number, officer = false): { hp: number; dmg: number; speed: number; cd: number } {
