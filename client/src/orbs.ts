@@ -2,6 +2,9 @@ import { hotbarWidth } from "./hudcache";
 import "./orbs.css";
 import { orbNeedsRedraw, orbTexts } from "./hudLogic";
 import { uiScale } from "./worldscale";
+import { LockClock } from "./lockClock";
+import { hudSlot } from "./hudSlots";
+import { ModeChip } from "./modeChip";
 
 /**
  * Bottom HUD in the Diablo style (Murat 2026-11-07, from his reference picture): a red health orb on the left and a
@@ -13,6 +16,8 @@ import { uiScale } from "./worldscale";
  * or, while it is not full or empty, a few times a second for the slosh.
  */
 
+/** How long the song gauge takes to run down after a swell or a drain. */
+const DRAIN_MS = 420;
 const SIZE = 92; // orb canvas, CSS px
 const C = SIZE / 2, R_IN = 36, R_OUT = 44;
 
@@ -25,7 +30,7 @@ const mix = (a: number[], b: number[], t: number) => [a[0] + (b[0] - a[0]) * t, 
 
 const buffers = new WeakMap<CanvasRenderingContext2D, ImageData>(); // one pixel buffer per orb, reused (no garbage per redraw)
 
-function drawOrb(ctx: CanvasRenderingContext2D, frac: number, pal: Pal, t: number) {
+function drawOrb(ctx: CanvasRenderingContext2D, frac: number, pal: Pal, t: number, shield = false) {
   let img = buffers.get(ctx);
   if (!img) { img = ctx.createImageData(SIZE, SIZE); buffers.set(ctx, img); }
   const d = img.data;
@@ -52,6 +57,14 @@ function drawOrb(ctx: CanvasRenderingContext2D, frac: number, pal: Pal, t: numbe
       const hx = dx + R_IN * 0.38, hy = dy + R_IN * 0.42;
       if ((hx * hx) / 110 + (hy * hy) / 50 < 1) c = mix(c, [255, 255, 255], 0.5 - ((hx * hx) / 110 + (hy * hy) / 50) * 0.35);
       if (r > R_IN * 0.8 && r < R_IN * 0.9 && dx > 0 && dy > 0 && dx * 0.6 < dy * 1.6 && dy * 0.6 < dx * 1.6) c = mix(c, [255, 255, 255], 0.18);
+      if (shield) {
+        // A Songweaver shield (Pedal Point...): a pale glassy pane over the whole orb, a bright rim, and a glint that sweeps round it.
+        // Drawn in chunky 2 px steps so it stays pixel art. Only presence is known to the client, so the pane is always full.
+        const rim = r > R_IN - 4, a = Math.atan2(dy, dx), sweep = Math.cos(a - t * 1.6);
+        c = mix(c, [190, 226, 255], rim ? 0.55 + 0.3 * Math.max(0, sweep) : 0.12 + 0.04 * Math.sin(t * 2));
+        if (rim && r > R_IN - 2 && sweep > 0.9) c = [255, 255, 255];
+        if (!rim && ((x >> 1) + (y >> 1)) % 6 === 0) c = mix(c, [230, 245, 255], 0.22); // faint glass facets
+      }
     } else {
       // bronze rim: dark edges, light on the top left, rivets
       const k = (r - R_IN) / (R_OUT - R_IN); // 0 inner .. 1 outer
@@ -198,6 +211,39 @@ export class OrbHud {
   }
 
   private song = false;
+  private lock?: LockClock;
+  private chip?: ModeChip;
+  /** The owner's widgets live in the status row above the XP bar (hudSlots.css #statusrow), shared with the buffs. */
+  private group(): HTMLElement { return hudSlot("statusrow"); }
+
+  /** The owner's chord lockout clock (lockClock.ts): `locked` = her chlock status word. */
+  setChordLock(locked: boolean) {
+    if (!locked && !this.lock) return;
+    (this.lock ??= new LockClock(this.group())).update(locked && this.song, performance.now());
+  }
+
+  /** The owner's mode chip (modeChip.ts): `mode` = her `mode:` status word, `rank` her skill ranks. Songweaver only. */
+  setMode(mode: string | undefined, rank: (id: string) => number) {
+    if (!this.song && !this.chip) return;
+    (this.chip ??= new ModeChip(this.group())).update(this.song ? mode : undefined, rank);
+  }
+
+  /** Level to draw for the gauge: a sharp fall (a swell at full, a drain) eases down over DRAIN_MS; rises and slow falls follow at once. */
+  private drainLevel(real: number, song: boolean, now: number): number {
+    const prev = this.seenMp; this.seenMp = real;
+    if (!song) { this.drain = null; return real; }
+    const shown = this.drain ? this.drain.from + (this.drain.to - this.drain.from) * Math.min(1, (now - this.drain.at) / DRAIN_MS) : prev;
+    if (real < prev - 0.12 && !this.drain) this.drain = { from: prev, to: real, at: now };
+    else if (this.drain) {
+      if (real > shown) this.drain = null; // filling again: follow the real level
+      else this.drain.to = real;
+    }
+    const d = this.drain;
+    if (!d) return real;
+    const k = Math.min(1, (now - d.at) / DRAIN_MS);
+    if (k >= 1) { this.drain = null; return real; }
+    return d.from + (d.to - d.from) * (1 - (1 - k) ** 1.6); // fast at first, settling at the bottom
+  }
 
   /** The Songweaver's right orb is the song gauge: gold, labelled "Song", pulsing when nearly full. */
   private setSong(on: boolean) {
@@ -210,16 +256,25 @@ export class OrbHud {
     if (!on) orb.classList.remove("full");
   }
 
-  update(hp: number, maxHp: number, mp: number, maxMp: number, song = false) {
+  /** The song gauge's displayed level while it empties fast (swell / drain): it runs down over DRAIN_MS instead of snapping. */
+  private drain: { from: number; to: number; at: number } | null = null;
+  private seenMp = 0;
+  private shield = false;
+
+  update(hp: number, maxHp: number, mp: number, maxMp: number, song = false, shield = false) {
     this.setSong(song);
     if (song) this.mp.parentElement!.classList.toggle("full", maxMp > 0 && mp / maxMp >= 0.9);
     const now = performance.now();
-    const fh = maxHp > 0 ? hp / maxHp : 0, fm = maxMp > 0 ? mp / maxMp : 0;
+    const fh = maxHp > 0 ? hp / maxHp : 0, realMp = maxMp > 0 ? mp / maxMp : 0;
+    const fm = this.drainLevel(realMp, song, now);
     this.layout();
     const { hpTxt, mpTxt } = orbTexts(hp, maxHp, mp, maxMp);
-    if (!orbNeedsRedraw(this.last, fh, fm, hpTxt, mpTxt, now)) return;
+    const flipped = shield !== this.shield;
+    // a shield glints all the time, and a draining gauge must draw every frame: both skip the 120 ms slosh throttle
+    if (!flipped && !this.drain && !(shield && now - this.last.at >= 60) && !orbNeedsRedraw(this.last, fh, fm, hpTxt, mpTxt, now)) return;
+    this.shield = shield;
     const t = now / 1000;
-    drawOrb(this.hp.getContext("2d")!, fh, RED, t);
+    drawOrb(this.hp.getContext("2d")!, fh, RED, t, shield);
     drawOrb(this.mp.getContext("2d")!, fm, song ? GOLD : BLUE, t + 1.7);
     this.hpTxt.textContent = hpTxt;
     this.mpTxt.textContent = mpTxt;

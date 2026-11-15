@@ -3,7 +3,7 @@
  * one-time hint lines. Everything the client shows here is read from server events and status words
  * (docs/songweaver-progress.md, "Interface contract"); nothing here decides an outcome.
  */
-import { PROGRESSIONS, songKind } from "../../shared/songs";
+import { PROGRESSIONS, songKind, type Degree } from "../../shared/songs";
 import { SONG_PROGRESSIONS } from "../../shared/songbook";
 import { isBook, SLOT_NAMES } from "../../shared/gear";
 import { MOB_COMBAT, type MobSound, type SoundTier } from "../../shared/combat";
@@ -25,8 +25,22 @@ export const modeColor = (m: string | undefined) => MODE_COLOR[m ?? ""] ?? MODE_
  * field gives the party a buff (Anthem). Built from the real skill table; a buff's id is its skill's id.
  */
 export const SONG_BUFFS: ReadonlySet<string> = new Set(SONG_SKILLS.filter((s) => s.song || s.field?.party).map((s) => s.id));
-/** Buff ids that are a shield bubble: any Songweaver skill whose buff has `shield` (Pedal Point, Amen, ...). */
-export const SHIELD_BUFFS: ReadonlySet<string> = new Set(SONG_SKILLS.filter((s) => s.buff?.shield || s.field?.party?.shield).map((s) => s.id));
+/** Lydian's overheal shield: a buff the engine adds under the passive's id (overShield in shared/skillEngine.ts), so no skill table entry flags it. */
+export const LYDIAN_SHIELD_BUFF = "sg_lydian";
+/** Buff ids that are an absorb shield: any Songweaver skill whose buff has `shield` (Pedal Point, Amen, ...), plus Lydian's overheal shield. */
+export const SHIELD_BUFFS: ReadonlySet<string> = new Set([...SONG_SKILLS.filter((s) => s.buff?.shield || s.field?.party?.shield).map((s) => s.id), LYDIAN_SHIELD_BUFF]);
+
+/**
+ * Colour of a note by its scale step (SkillDef.degree), so a progression reads as a run of colours: tonic red, then up the
+ * scale through orange, yellow, green, cyan and violet; the minor tonic is magenta. Bright enough for dark and light ground.
+ */
+export const DEGREE_COLOR: Record<Degree, number> = { I: 0xff5a5a, bII: 0xff9a3c, ii: 0xffe14d, IV: 0x5be07a, V: 0x4fd0ff, vi: 0xa38bff, i: 0xff6ad5 };
+export const degreeColor = (d: string | undefined) => DEGREE_COLOR[d as Degree] ?? 0xffd24d;
+
+/** Does this status word mean a Songweaver absorb shield? (Drawn on the health orb / nameplate bar, no longer as a bubble in the world.) */
+export const isSongShieldWord = (w: string) => SHIELD_BUFFS.has(w) || !!skillById(w)?.buff?.shield;
+/** True when a status string (`Player.fx`, comma separated) carries a Songweaver shield. */
+export const hasSongShield = (fx: string | undefined) => !!fx && fx.split(",").some(isSongShieldWord);
 
 /** Finisher names by the `prog` of a chord event: read from the skill table (skillById) so they never drift. */
 const PROG_SKILL: Record<string, string> = Object.fromEntries([...PROGRESSIONS, ...SONG_PROGRESSIONS].map((p) => [p.id, p.skill]));

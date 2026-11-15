@@ -4,7 +4,8 @@ import { onWorldScale, uiScale } from "./worldscale";
  * HUD places (PR B of the HUD rework): every HUD element has its own spot, so nothing overlaps.
  * - `#topright`: a flex column (online pill, minimap + dial, location, quest tracker, feed).
  * - `#topleft`: a flex column (war plaque, war news notice, party frame).
- * - `#midstack`: bottom centre above the bar: `#promptstack` (interact prompt, level-up note) over `#statusrow` (chord widget, buffs).
+ * - `#midstack`: bottom centre above the bar: `#promptstack` (interact prompt, level-up note).
+ * - `#statusrow`: one row of 48 px chips at the left end of the plate above the XP bar: mode chip, lockout clock, buffs.
  * - The bottom bar (orbs, skill bar, XP bar) is never drawn below 100%: `--barzoom` (see `barScale`).
  */
 
