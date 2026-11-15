@@ -30,8 +30,10 @@ import { hiResTexture } from "./smooth";
 import { uprightTexture, UPRIGHT_OY } from "./smoothProps";
 import { ADOBE_PAD, ADOBE_WALL_H, adobeHead, adobeTexture, adobeWallTexture, bonesTexture, CLIFF_DEPTH, cliffDistance, cliffHeight, cliffTexture, cliffVariant, deadTreeTexture, desertRockTexture, sunStoneTexture, tentTexture } from "./desertArt";
 import { D, FURNACE, SUNSTONE } from "../../shared/desert";
-import { DESERT_H, DESERT_Y0, MOORS_H, MOORS_Y0 } from "../../shared/constants";
+import { BADLANDS_H, BADLANDS_Y0, DESERT_H, DESERT_Y0, MOORS_H, MOORS_Y0 } from "../../shared/constants";
+import { ARCHES, BR } from "../../shared/badlands";
 import { barrowTexture, birchTexture, boneHeapTexture, graniteCliffTexture, origin, standingStoneTexture } from "./moorsArt";
+import { archTexture, bleachedBonesTexture, boulderTexture, cactusTexture, origin as blOrigin, redCliffTexture, snagTexture } from "./badlandsArt";
 
 export const isoX = (x: number, y: number) => x - y;
 export const isoY = (x: number, y: number) => (x + y) / 2;
@@ -708,11 +710,17 @@ export function isoStanding(scene: Phaser.Scene, objects: number[][]): number[][
   const M0 = MOORS_Y0 - 4; // Act 3's band (shared/moors.ts)
   const mdist = cliffDistance(objects.map((r) => r.map(id)), T.CLIFF, MAP_W, M0, MAP_H, CLIFF_DEPTH + 1);
   const md = (x: number, y: number) => (x < 0 || x >= MAP_W || y < M0 || y >= MAP_H ? 9 : mdist[(y - M0) * MAP_W + x]);
+  const B0 = BADLANDS_Y0 - 4; // Act 4's band (shared/badlands.ts): the rows from here down are never the moors'
+  const bdist = cliffDistance(objects.map((r) => r.map(id)), T.CLIFF, MAP_W, B0, MAP_H, CLIFF_DEPTH + 1);
+  const bd = (x: number, y: number) => (x < 0 || x >= MAP_W || y < B0 || y >= MAP_H ? 9 : bdist[(y - B0) * MAP_W + x]);
   for (let ty = 0; ty < MAP_H; ty++) for (let tx = 0; tx < MAP_W; tx++) {
     const index = objects[ty][tx], t = id(index);
     if (t < 0) continue;
-    if (ty >= M0 && (ty < MOORS_Y0 || ty >= MOORS_Y0 + MOORS_H)) { out[ty][tx] = -1; continue; } // the solid rock strips round the moors: ground paints them
-    if (ty >= M0 && isoMoors(scene, t, tx, ty, at, md)) { out[ty][tx] = -1; continue; }
+    if (ty >= B0) { // the badlands band
+      if (ty < BADLANDS_Y0 || ty >= BADLANDS_Y0 + BADLANDS_H) { out[ty][tx] = -1; continue; } // the solid rock strips round the badlands: ground paints them
+      if (isoBadlands(scene, t, tx, ty, at, bd)) { out[ty][tx] = -1; continue; }
+    } else if (ty >= M0 && (ty < MOORS_Y0 || ty >= MOORS_Y0 + MOORS_H)) { out[ty][tx] = -1; continue; } // the solid rock strips round the moors: ground paints them
+    else if (ty >= M0 && isoMoors(scene, t, tx, ty, at, md)) { out[ty][tx] = -1; continue; }
     if ((ty >= WORLD_H && ty < DESERT_Y0) || (ty >= DESERT_Y0 + DESERT_H && ty < M0)) { out[ty][tx] = -1; continue; } // the Mawdeep's rock: cave walls (dungeon.ts), not rocks; then solid rock to the desert
     if (ty >= DESERT_Y0 && ty < M0 && isoDesert(scene, t, tx, ty, at, cd)) { out[ty][tx] = -1; continue; }
     const cx = (tx + 0.5) * TILE, cy = (ty + 0.5) * TILE;
@@ -869,6 +877,44 @@ function isoMoors(scene: Phaser.Scene, t: number, tx: number, ty: number, at: (x
   if (t === T.STANDING_STONE) { const k = hashXY(tx * 5 + 9, ty * 3 + 1); return place(standingStoneTexture(scene, k < 0.12 ? 2 : k < 0.35 ? 1 : 0, 1 + v)); }
   if (t === T.BONE_PILE) return place(boneHeapTexture(scene, 1 + (v % 3)));
   if (t === T.STUMP) return place(birchTexture(scene, [0, 1, 2, 0][v], 1 + v));
+  return false;
+}
+
+// ---------- Act 4: the Red Badlands (shared/badlands.ts, art in badlandsArt.ts) ----------
+
+/** Arch legs (map tiles): the left leg draws the whole arch, the right leg only stands. key = y * MAP_W + x. */
+const ARCH_LEFT = new Map<number, number>(), ARCH_RIGHT = new Set<number>();
+ARCHES.forEach((a, i) => { ARCH_LEFT.set(BR(a.y) * MAP_W + a.x, i); ARCH_RIGHT.add(BR(a.y) * MAP_W + a.x + a.span); });
+/**
+ * Badlands objects that stand up: red mesa cliffs (the desert's terraced cliffs, recoloured), arches (one natural bridge
+ * per pair of legs, drawn from the left leg), boulders, bleached bone heaps, dead mesquite (STUMP) and cacti. Dry scrub
+ * (BUSH) is a tree-like sprite drawn by ambient.ts. Returns false for anything drawn the usual way.
+ */
+function isoBadlands(scene: Phaser.Scene, t: number, tx: number, ty: number, at: (x: number, y: number) => number, cd: (x: number, y: number) => number): boolean {
+  const cx = (tx + 0.5) * TILE, cy = (ty + 0.5) * TILE, v = Math.floor(hashXY(tx, ty) * 4);
+  if (t === T.CLIFF) {
+    const d = cd(tx, ty);
+    if (d > CLIFF_DEPTH) return true; // deep inside the massif: the ground paints the rock top
+    const H = (x: number, y: number) => (id(at(x, y)) !== T.CLIFF ? 0 : cliffHeight(Math.min(cd(x, y), CLIFF_DEPTH + 1), x, y));
+    const h = H(tx, ty), deep = (x: number, y: number) => id(at(x, y)) === T.CLIFF && cd(x, y) > CLIFF_DEPTH;
+    const key = redCliffTexture(scene, h, (deep(tx, ty + 1) ? 0 : 1) | (deep(tx + 1, ty) ? 0 : 2), cliffVariant(tx, ty));
+    staticObj(scene, scene.add.image(cx, cy, key).setOrigin(0.5, (IH / 2 + h) / (IH + h)).setDepth(cy + d * 0.5));
+    return true;
+  }
+  if (t === T.ARCH) {
+    const k = ty * MAP_W + tx;
+    if (ARCH_RIGHT.has(k) && !ARCH_LEFT.has(k)) return true; // the right leg is part of the left leg's sprite
+    const i = ARCH_LEFT.get(k);
+    if (i === undefined) return false;
+    const s = archTexture(scene, ARCHES[i].span, 1 + (i % 3)), o = blOrigin(s);
+    staticObj(scene, scene.add.image(cx, cy, s.key).setOrigin(o.x, o.y).setDepth(cy - 1)); // under the Red Pass gate and any hero standing in the opening
+    return true;
+  }
+  const place = (s: { key: string; ox: number; oy: number; b: { w: number; h: number } }) => { staticObj(scene, scene.add.image(cx, cy + 4, s.key).setOrigin(s.ox / s.b.w, s.oy / s.b.h).setDepth(cy)); return true; };
+  if (t === T.ROCK) return place(boulderTexture(scene, 1 + v));
+  if (t === T.BONES) return place(bleachedBonesTexture(scene, 1 + (v % 3)));
+  if (t === T.STUMP) return place(snagTexture(scene, [0, 1, 2, 0][v], 1 + v));
+  if (t === T.CACTUS) { const k = hashXY(tx * 5 + 3, ty * 7 + 1); return place(cactusTexture(scene, k < 0.3 ? 2 : k < 0.7 ? 0 : 1, 1 + v)); }
   return false;
 }
 

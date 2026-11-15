@@ -7,7 +7,7 @@ import {
   AGGRO, aggroLevelFactor, BLOB_AI, BONES, DEMON, BROOD, Dir, FACTION, FEUD, MERGE, MobDef, MOTHER, SKELETON_AI, HIT_RADIUS, mobScale, regionMobLevel, regionSpecialLevel, InputState, MOB_ATTACK_RANGE, MOBS, MobKind, rollSkeletonWeapon, SKELETON_BOW, SKELETON_WEAPONS, SkeletonWeapon, REGEN_DELAY_MS, REGEN_RAMP_MS, regenFromStamina, SAFE_REGEN_MULT,
   RESPAWN_MS, TICK_RATE, TILE,
   HOLLOW_KING, ELEM_BLOB, ELEM_MOVE, inputDir, ELITE, BOSS, URSK, SUNWRIGHT, act2MobLevel, act2SpecialLevel, BEAST, BEAST_BROOD, BEAST_FOLK, BEAST_KINDS, BEAST_MOVES, BEAST_RIDER, type BeastMove,
-  MAP_W, MAP_H, WORLD_H, inDeepRow, actOfTile, actMobLevel, actSpecialLevel, MOORS_LEVEL, MOORS_AI,
+  MAP_W, MAP_H, WORLD_H, inDeepRow, actOfTile, actMobLevel, actSpecialLevel, MOORS_AI,
 } from "../shared/constants";
 import { ambushRoomAt, arrivalAt, CRACK_OPEN_MS, LINK_RANGE, linkById, LINKS, SHORTCUT_OPEN_MS, underground } from "../shared/dungeon";
 import {
@@ -80,7 +80,7 @@ import { hashAddr, ideaLog, saveIdeas } from "./ideaStore";
 import { dropLive, LiveState, rememberLive, takeLive } from "./handoff";
 import { MobView } from "./mobView";
 import { copyPatches } from "./patchCopy";
-import { act2Missing, act2Open, actAt, actSpawn, desertSpawn, gateOpen, isMoorsGate, moorsOpen, moorsSpawn, WAYGATE_RANGE, waygateArrival, waygateById, WAYGATES } from "../shared/act2";
+import { actAt, actOpen, actSpawn, gateColdNote, gateOpen, WAYGATE_RANGE, waygateArrival, waygateById, WAYGATES } from "../shared/act2";
 import { respecCost } from "../shared/upkeep";
 import { ARSENAL, ATTUNE_ORDER, attuneOf, bondShare, DEFAULT_GRIMOIRE, SUMMONER_TREE, ESSENCE, GOLEM, GOLEM_OF, golemSlots, isElement, isSummonKind, parseGrimoire, PORTAL, SUMMON, summonElement, summonScaleLevel, WISP, wispEls, type AttuneElement, type SummonKind } from "../shared/summons";
 import { cleanFeast, familyOf, type Feast, feastMult, THRALL, thrallMax } from "../shared/devour";
@@ -1085,8 +1085,9 @@ export class TownRoom extends Room<TownState> {
     if (!save?.kit) this.wearKit(p);
     this.applyStats(p);
     p.hp = p.maxHp;
-    // left from the desert: back in Kel Ashar; from the moors: at the moorgate (a save that no longer fits: Oakvale)
-    const s = save?.act === 2 && act2Open(p) ? desertSpawn() : save?.act === 3 && moorsOpen(p) ? moorsSpawn() : randomSpawn();
+    // left from the desert: back in Kel Ashar; from the moors: Cairnwatch; from the badlands: the Rustwater Post
+    // (a save that no longer fits, its gate cold for the hero or an act unknown: Oakvale)
+    const s = save?.act && actOpen(save.act, p) ? actSpawn(save.act, randomSpawn) : randomSpawn();
     p.x = s.x; p.y = s.y;
     // Back after an update (or a dropped connection): right where they stood, as hurt as they were, in their group
     if (options?.newGame) dropLive(p.name, p.cls);
@@ -4098,8 +4099,8 @@ export class TownRoom extends Room<TownState> {
    * Act 2's waygates (shared/act2.ts): used like a portal stone, by clicking it or pressing E next to it (Murat
    * 2026-11-13), which takes the hero to the other act once they have beaten the first zone's two last bosses.
    * Walking into it used to cross, and a hero still walking north came out next to the other gate and went straight
-   * back. Before Act 2 is open, the gate is cold: a note says who still stands in the way. The moorgate (Act 3) works
-   * the same way and wakes at hero Lv 20 (shared/act2.ts moorsOpen).
+   * back. Before Act 2 is open, the gate is cold: a note says who still stands in the way. The homelands' gates (the
+   * moorgate, Act 3; the Red Pass, Act 4) work the same way and wake at their act's hero level (shared/act2.ts HOMELAND_GATES).
    */
   private useWaygate(client: Client) {
     const pid = client.sessionId, p = this.state.players.get(pid);
@@ -4110,7 +4111,7 @@ export class TownRoom extends Room<TownState> {
       const now = Date.now();
       if (now - p.gateNoteAt > 3000) {
         p.gateNoteAt = now;
-        this.note(pid, isMoorsGate(g) ? `The gate is cold. Return at level ${MOORS_LEVEL.min}.` : `The waygate's stones are cold. It will wake when ${act2Missing(p).join(" and ")} ${act2Missing(p).length > 1 ? "are" : "is"} beaten.`);
+        this.note(pid, gateColdNote(g, p));
       }
       return;
     }
@@ -6461,7 +6462,7 @@ export class TownRoom extends Room<TownState> {
     this.clients.find((c) => c.sessionId === tid)?.send("died", { by: byName, ms: RESPAWN_MS });
     this.clock.setTimeout(() => {
       if (!this.state.players.has(tid)) return;
-      const s = actSpawn(actAt(t.y, t.x), randomSpawn); // back at the act's own town (the moors: the moorgate's clearing)
+      const s = actSpawn(actAt(t.y, t.x), randomSpawn); // back at the act's own town (the moors: Cairnwatch; the badlands: the Rustwater Post)
       t.x = s.x; t.y = s.y; t.hp = t.maxHp; t.dead = false;
       if (usesGauge(t.cls)) { t.mana = 0; this.syncMana(t); } // the song gauge starts over empty
     }, RESPAWN_MS);

@@ -6,7 +6,7 @@
  * quest-boss lairs (zones with no spawns of their own, or only their boss) and the broad wild zones (countryside, open desert, open moor)
  * where heroes level. Deterministic, like the map.
  */
-import { actOfTile, BOSS, inDeepRow, UNDER_END, WORLD_H } from "../constants";
+import { actOfTile, type Act, BOSS, inDeepRow, UNDER_END, WORLD_H } from "../constants";
 import { SPAWN_ZONES, type SpawnZone } from "../spawns";
 import { CLAN_KEYS, type ClanKey } from "./clans";
 import { capitalsOf, REGION_LINKS, REGIONS, type Region, type RegionLink } from "./regions";
@@ -14,7 +14,7 @@ import { capitalsOf, REGION_LINKS, REGIONS, type Region, type RegionLink } from 
 export interface Territory {
   id: number;
   name: string; // = the spawn zone's name
-  act: 1 | 2 | 3;
+  act: Act;
   /** The land it lies in (a REGIONS key): borders, starting shares and cart roads stay inside a land. */
   region: string;
   x: number; y: number; w: number; h: number; // tiles

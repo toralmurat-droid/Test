@@ -125,7 +125,9 @@ test("Void Arsenal: a circling blade, a piercing lance, a wide axe and all four 
     assert.ok(blade && blade.follow, "the blade circles its owner");
     const lance = () => log.some((h) => h.a === id && h.t === "far" && !h.o.pet && h.o.skill);
     const axe = () => log.some((h) => h.t === "close" && h.o.skill && !h.o.dot);
-    await until(() => lance() && axe());
+    // the lance flies at the nearest foe: a wild monster wandering in from the countryside would draw it away from "far"
+    const strangers = () => room.state.mobs.forEach((_m: any, mid: string) => { if (mid !== "far" && mid !== "close") room.state.mobs.delete(mid); });
+    await until(() => { strangers(); return lance() && axe(); });
     assert.ok(lance(), "the lance reached the far skeleton");
     assert.ok(axe(), "the axe swept the close one");
     assert.ok(far.hp < 99999 && close.hp < 99999);

@@ -1,6 +1,7 @@
-import { actOfTile, inDeepRow, act2MobLevel, act2SpecialLevel, ELITE, MobKind, MOORS_LEVEL, moorsMobLevel, moorsSpecialLevel, regionMobLevel, regionSpecialLevel, TILE } from "./constants";
+import { actMobLevel, actOfTile, actSpecialLevel, BADLANDS_LEVEL, inDeepRow, ELITE, MobKind, MOORS_LEVEL, TILE } from "./constants";
 import { D, SUNSTONE } from "./desert";
 import { MOORSGATE_MOORS } from "./moors";
+import { REDPASS_BADLANDS } from "./badlands";
 import { AREAS, isSafeZone, isSolidAt, OBJECTS, T, VILLAGE } from "./map";
 import { CAMP_POSTS } from "./bandits";
 import { AMBUSH_ROOMS, chamberAtPx, FLOORS, LAIRS, LANDING, pointInChamber } from "./dungeon";
@@ -173,6 +174,8 @@ export function zoneLevels(a: { x: number; y: number; w: number; h: number }): [
 /** Lowest monster level at a tile, from its distance to the village centre (a spot spans this level to +2). */
 export function baseLevelAt(tx: number, ty: number): number {
   const act = actOfTile(tx, ty);
+  // Act 4: from Lv 25 at the Red Pass (the band's east edge), a level every 16 tiles further on, west toward Fangrock
+  if (act === 4) return BADLANDS_LEVEL.min + Math.floor(Math.max(0, Math.hypot(tx - REDPASS_BADLANDS.x, ty - REDPASS_BADLANDS.y) - 12) / BADLANDS_LEVEL.tilesPerLevel);
   // Act 3: from Lv 20 at the moorgate, a level every 10 tiles further out (held under MOORS_LEVEL by levelFns)
   if (act === 3) return MOORS_LEVEL.min + Math.floor(Math.max(0, Math.hypot(tx - MOORSGATE_MOORS.x, ty - MOORSGATE_MOORS.y) - 12) / MOORS_LEVEL.tilesPerLevel);
   // Act 2: from Lv 30 at the Sunstone Circle, a level every 12 tiles further out
@@ -181,10 +184,10 @@ export function baseLevelAt(tx: number, ty: number): number {
   return 1 + Math.floor(Math.max(0, Math.hypot(tx - cx, ty - cy) - 40) / 8);
 }
 
-/** The level ceilings for a zone or a tile: Oakvale's (regionMobLevel, Lv 25/30), the desert's (ACT2_LEVEL, Lv 30-47/50) or the moors' (MOORS_LEVEL, Lv 20-33/35). */
+/** The level ceilings for a zone or a tile: its act's band (shared/constants.ts ACT_LEVEL: Oakvale Lv 25/30, the desert Lv 30-47/50, the moors Lv 20-33/35, the badlands Lv 25-38/40). */
 const levelFns = (tx: number, ty: number) => {
   const act = actOfTile(tx, ty);
-  return act === 3 ? { mob: moorsMobLevel, special: moorsSpecialLevel } : act === 2 ? { mob: act2MobLevel, special: act2SpecialLevel } : { mob: regionMobLevel, special: regionSpecialLevel };
+  return { mob: (l: number) => actMobLevel(act, l), special: (l: number) => actSpecialLevel(act, l) };
 };
 
 const inRect = (r: { x: number; y: number; w: number; h: number }, tx: number, ty: number) => tx >= r.x && tx < r.x + r.w && ty >= r.y && ty < r.y + r.h;
@@ -217,7 +220,8 @@ export const SPAWN_ZONES: SpawnZone[] = ZONE_MOBS.flatMap((z) => {
     if (z.wild) { const l = baseLevelAt(tx, ty); lo = Math.min(lo, l); hi = Math.max(hi, l + 2); }
   }
   const base = Math.max(1, Object.values(z.mobs).reduce((n, c) => n + (c ?? 0), 0));
-  // each act its own density (the Undercity under the desert is hand-set, a dungeon floor like the Mawdeep's)
+  // each act its own density (the Undercity under the desert is hand-set, a dungeon floor like the Mawdeep's; the badlands,
+  // Act 4, have no zones yet: they get their own DENSITY entries with their zones)
   const act = actOfTile(r.x, r.y), desert = act === 2 && !inDeepRow(r.y);
   const per = act === 3 ? (z.wild ? DENSITY.moorsWildTilesPerMob : DENSITY.moorsTilesPerMob)
     : desert ? (z.wild ? DENSITY.desertWildTilesPerMob : DENSITY.desertTilesPerMob) : z.wild ? DENSITY.wildTilesPerMob : DENSITY.tilesPerMob;

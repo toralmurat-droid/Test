@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  actMobLevel, actOfTile, actSpecialLevel, DEEP_END, DESERT_Y0, MAP_H, MAP_W, MOORS_H, MOORS_LEVEL, MOORS_Y0, TILE, WORLD_H,
+  actMobLevel, actOfTile, actSpecialLevel, BADLANDS_Y0, DEEP_END, DESERT_Y0, MAP_H, MAP_W, MOORS_H, MOORS_LEVEL, MOORS_Y0, TILE, WORLD_H,
 } from "../shared/constants";
 import { EMPTY, GROUND, isSolidAt, isSolidTile, OBJECTS, randomSpawn, T, TILE_COUNT } from "../shared/map";
 import { buildMoors, inMoorsRow, MOORGATE, MOORS_OUTPOST, MOORSGATE_MOORS, MOORSGATE_OAKVALE, MR } from "../shared/moors";
@@ -30,9 +30,9 @@ const tileOf = (p: { x: number; y: number }) => [Math.floor(p.x / TILE), Math.fl
 
 test("moors: its own band under the deep band, built the same every time", () => {
   assert.equal(MOORS_Y0, DEEP_END + 8);
-  assert.equal(MAP_H, MOORS_Y0 + MOORS_H + 4);
+  assert.equal(BADLANDS_Y0, MOORS_Y0 + MOORS_H + 8, "the badlands (Act 4) lie under the moors' rock");
   assert.equal(GROUND.length, MAP_H);
-  assert.equal(TILE_COUNT, 56);
+  assert.ok(TILE_COUNT >= 56);
   for (const id of [T.HEATHER, T.BOG, T.BARROW, T.STANDING_STONE, T.BONE_PILE]) assert.ok(id < TILE_COUNT);
   // two fresh builds of the band are equal, and equal to the live world's
   const fresh = () => {
@@ -55,7 +55,7 @@ test("moors: its own band under the deep band, built the same every time", () =>
   }
 });
 
-test("moors: actOfTile knows all three acts", () => {
+test("moors: actOfTile knows the moors band", () => {
   assert.equal(actOfTile(80, 60), 1, "Oakvale");
   assert.equal(actOfTile(MOORSGATE_OAKVALE.x, MOORSGATE_OAKVALE.y), 1, "the moorgate's Act 1 side");
   assert.equal(actOfTile(50, WORLD_H + 30), 1, "the Mawdeep");
@@ -65,8 +65,10 @@ test("moors: actOfTile knows all three acts", () => {
   assert.equal(actOfTile(DESERT_Y0, DEEP_END - 1), 2, "the deep band's east, last row");
   assert.equal(actOfTile(MOORSGATE_MOORS.x, MOORSGATE_MOORS.y), 3, "the moorgate's moors side");
   assert.equal(actOfTile(10, MOORS_Y0), 3);
-  assert.equal(actOfTile(280, MAP_H - 1), 3, "the last row");
+  assert.equal(actOfTile(280, MOORS_Y0 + MOORS_H - 1), 3, "the moors' last row");
   assert.equal(actOfTile(140, MOORS_Y0 - 3), 3, "the rock strip above the moors");
+  assert.equal(actOfTile(140, MOORS_Y0 + MOORS_H + 3), 3, "the rock strip under the moors, upper half");
+  assert.equal(actOfTile(140, BADLANDS_Y0 - 4), 4, "its lower half is the badlands'");
   assert.equal(actAt(MOORSGATE_MOORS.y * TILE, MOORSGATE_MOORS.x * TILE), 3);
   assert.ok(inMoorsRow(MR(0)) && inMoorsRow(MR(MOORS_H - 1)) && !inMoorsRow(MR(-1)) && !inMoorsRow(MR(MOORS_H)));
 });
@@ -85,7 +87,7 @@ test("moors: every walkable tile is reachable from the moorgate; the Act 1 gate 
   assert.ok(walk > MAP_W * MOORS_H * 0.5, "mostly open land");
   // the band is sealed: nothing walkable in the rock round it
   for (let y = DEEP_END; y < MOORS_Y0; y++) for (let x = 0; x < MAP_W; x++) assert.ok(isSolidTile(x, y), `rock at ${x},${y}`);
-  for (let y = MOORS_Y0 + MOORS_H; y < MAP_H; y++) for (let x = 0; x < MAP_W; x++) assert.ok(isSolidTile(x, y), `rock at ${x},${y}`);
+  for (let y = MOORS_Y0 + MOORS_H; y < BADLANDS_Y0; y++) for (let x = 0; x < MAP_W; x++) assert.ok(isSolidTile(x, y), `rock at ${x},${y}`);
   // Cairnwatch stands on the outpost's ground: every open tile inside its palisade (the square too) is reachable, no water
   for (let y = MOORS_OUTPOST.y; y < MOORS_OUTPOST.y + MOORS_OUTPOST.h; y++) for (let x = MOORS_OUTPOST.x; x < MOORS_OUTPOST.x + MOORS_OUTPOST.w; x++) {
     assert.ok(GROUND[MR(y)][x] !== T.WATER, `no water in Cairnwatch at ${x},${MR(y)}`);
@@ -113,7 +115,7 @@ test("moors: levels 20-35 from the moorgate; gates; each act keeps its own board
   assert.equal(gateOpen(g, { level: 19 } as never), false);
   assert.equal(gateOpen(g, { level: 20 } as never), true);
   assert.equal(gateOpen(waygateById("oakvale")!, { level: 50 } as never), false, "the Sunscar's gate still wants its bosses");
-  assert.equal(WAYGATES.length, 4);
+  assert.equal(WAYGATES.length, 6, "the Sunscar's, the moors' and the badlands' pairs");
   // respawns and logins land in the act's own place (death in the moors: Cairnwatch's square)
   for (const act of [1, 2, 3]) { const q = actSpawn(act, randomSpawn); assert.equal(actAt(q.y, q.x), act, `act ${act} spawn`); }
   // the moors' hunts are only on the moors' board (its act), never on Act 1's or Act 2's

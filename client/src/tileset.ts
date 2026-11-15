@@ -691,6 +691,46 @@ const DRAW: Record<number, (p: Painter, f: number, v: number) => void> = {
     p.rect(4, 9, 8, 1, 0x9aa586); p.rect(5, 11, 7, 1, 0x7a8668); p.disc(6.5, 8.6, 1.9, 1.5, 0xb0bb9c); p.disc(10.5, 9.6, 1.6, 1.3, 0xa0ab8c);
     p.px(6, 8, 0x1c221d); p.px(7, 8, 0x1c221d);
   },
+  // Act 4, the Red Badlands (the iso view draws the objects from badlandsArt.ts; these are the top-down tiles and minimap colours)
+  [T.CLAY]: (p, _f, v) => { // cracked red-ochre clay: polygon plates with dark cracks, a few lit plate edges
+    const C = 11, ox = v * 5, oy = v * 7, hs = (x: number, y: number, s: number) => { let h = (Math.imul(x, 374761393) + Math.imul(y, 668265263) + Math.imul(s, 982451653)) | 0; h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; };
+    p.each((x, y) => {
+      const wx = (x + 0.5) * 2 + ox, wy = (y + 0.5) * 2 + oy, gx = Math.floor(wx / C), gy = Math.floor(wy / C);
+      let d1 = 1e9, d2 = 1e9, id = 0;
+      for (let j = -1; j <= 1; j++) for (let i = -1; i <= 1; i++) {
+        const qx = (gx + i + hs(gx + i, gy + j, 3)) * C, qy = (gy + j + hs(gx + i, gy + j, 4)) * C, d = Math.hypot(wx - qx, wy - qy);
+        if (d < d1) { d2 = d1; d1 = d; id = (gx + i) * 31 + gy + j; } else if (d < d2) d2 = d;
+      }
+      const e = d2 - d1, plate = hs(id, 7, 5), g = hs(Math.floor(wx), Math.floor(wy), 6);
+      if (e < 0.9) return 0x4a2418;
+      if (e < 1.8) return 0x7a4228;
+      const base = plate < 0.33 ? 0x9a5638 : plate < 0.66 ? 0xa8643f : 0xb4704a;
+      return g < 0.1 ? 0x84482e : g > 0.93 ? 0xc48458 : base;
+    });
+  },
+  [T.GRAVEL]: (p) => { // riverbed: grey and tan pebbles packed over dry grit
+    p.fill(0x7a7468);
+    p.speckle(0x625c52, 30); p.speckle(0x938b7a, 20);
+    const cols = [[0x8a8478, 0xb6af9c, 0x56514a], [0xa0865c, 0xcdb184, 0x6e5a3a], [0x6a6a6c, 0x9a9a9c, 0x44444a], [0xa89c88, 0xd2c8b0, 0x6c6454]];
+    for (let k = 0; k < 20; k++) {
+      const x = 1 + p.r() * 14, y = 1 + p.r() * 14, rx = 0.8 + p.r() * 1.5, c = cols[p.ri(4)];
+      p.disc(x + 0.3, y + 0.35, rx, rx * 0.8, c[2]); p.disc(x, y, rx, rx * 0.8, c[0]); p.disc(x - rx * 0.3, y - rx * 0.3, rx * 0.5, rx * 0.35, c[1]);
+    }
+  },
+  [T.ARCH]: (p) => { // a sandstone pier seen from above: banded red rock on a dark footing
+    p.disc(8, 12.5, 7.4, 3.6, SHADOW);
+    p.rect(2, 3, 12, 10, 0x8f4a2e); p.rect(2, 3, 12, 2, 0xcf8450); p.rect(2, 11, 12, 2, 0x4a2218);
+    p.rect(2, 6, 12, 1, 0xb0643a); p.rect(2, 8, 12, 1, 0x6e3322); p.rect(2, 9, 12, 1, 0xb0643a);
+    p.speckle(0xe8a468, 6, 2, 3, 12, 4); p.speckle(0x2a1410, 6, 2, 7, 12, 6);
+  },
+  [T.CACTUS]: (p) => { // a saguaro: ribbed trunk with two upturned arms
+    p.disc(8, 14.5, 5, 1.4, SHADOW);
+    const G = 0x3a7a3a, GL = 0x68a85a, GD = 0x244e2c;
+    p.rect(6.5, 3, 3, 12, G); p.rect(6.5, 3, 1, 12, GL); p.rect(8.5, 3, 1, 12, GD); p.rect(7, 2, 2, 1, GL);
+    p.rect(3, 8, 4, 2, G); p.rect(3, 5, 2, 4, G); p.rect(3, 5, 1, 4, GL); p.rect(3, 4, 2, 1, GL);
+    p.rect(9, 6, 4, 2, G); p.rect(11, 3, 2, 4, G); p.rect(11, 3, 1, 4, GL); p.rect(12, 3, 1, 4, GD);
+    p.speckle(0xe8e0b0, 4, 4, 3, 9, 11); p.px(11.5, 2, 0xd8506a);
+  },
 };
 
 /**
@@ -706,7 +746,7 @@ export const ROWS = 128;
  * palisades and signposts are painted as sprites, so the 112 palisade/signpost mask rows are never drawn there.
  */
 export const COMMON_ROWS = 16;
-const VARIED = new Set<number>([T.GRASS, T.TALL_GRASS, T.FLOWERS, T.DIRT, T.COBBLE, T.SAND, T.WATER, T.FLOOR, T.FLAGS, T.FIELD, T.BRIDGE, T.HEATHER, T.BOG]);
+const VARIED = new Set<number>([T.GRASS, T.TALL_GRASS, T.FLOWERS, T.DIRT, T.COBBLE, T.SAND, T.WATER, T.FLOOR, T.FLAGS, T.FIELD, T.BRIDGE, T.HEATHER, T.BOG, T.CLAY, T.GRAVEL]);
 const CONNECTED = new Set<number>([T.RUIN, T.BEAM, T.PALISADE]);
 const LIGHT = new Set<number>([T.GRASS, T.TALL_GRASS, T.FLOWERS]);
 
