@@ -1,5 +1,6 @@
 {
   "date": "2026-11-15",
+  "patch": 270,
   "title": "Chorus timers and clearer shops",
   "changes": [
     "The Songweaver's active Chorus now shows in the buff row with its real time left, Dirge included.",
