@@ -9,6 +9,12 @@ import { pixelText } from "./pixeltext";
 import { clasp, frameBorderImage, plaque, FRAME } from "./mapframe";
 import { drawWarTable, warTableOn, setWarTableOn } from "./warTable";
 import type { WarView } from "../../shared/war/view";
+import { CLAN_KEYS, type ClanKey } from "../../shared/war/clans";
+const CLAN_KEYS_OF = (i: number): ClanKey | undefined => CLAN_KEYS[i];
+import type { WarPlan, CallToArms } from "../../shared/war/intel";
+import type { MouthView } from "../../shared/war/tunnels";
+import type { WritState } from "../../shared/war/writs";
+import { currentCalls, drawCalls, drawRimArrows, drawTip, drawWarWorld, holdTip, panelLayout, panelRowAt, rimTargets, tipTarget, CLAN_COL, type PanelLayout, type WarMapData } from "./warMap";
 
 /** Moors colours (cool greys and heather) for the minimap and world map; the rest falls back to the tileset. */
 function moorsColor(o: number, g: number, colors: string[]): string {
@@ -97,6 +103,9 @@ export class Minimap {
   markers: MapMarker[] = [];
   /** The clan war snapshot, for the war table layer (warTable.ts). */
   war?: WarView;
+  /** The hero's clan, its plan of attacks ("warplan"), the active writ and the tunnel mouths: the war overlays (warMap.ts). */
+  clan?: ClanKey; plan?: WarPlan; writ?: WritState | null; tunnels?: MouthView[];
+  private calls: CallToArms[] = []; private callBox?: PanelLayout;
   /** Last positions given to draw(): the world map redraws every frame while open. */
   private me?: P;
   private others: OtherHero[] = [];
@@ -274,6 +283,8 @@ export class Minimap {
       if (this.ptrs.size) { const [q] = this.ptrs.values(); this.downAt = q; return; } // pinch to one finger: keep dragging
       c.style.cursor = "grab";
       if (this.dragged || ev.type === "pointercancel") return;
+      const row = panelRowAt(this.callBox, at(ev).x, at(ev).y);
+      if (row >= 0 && this.calls[row]) { this.showAt(this.calls[row].x, this.calls[row].y); return; } // a call to arms: centre there
       // A tap: two in a row (300 ms, close together) centre on the hero
       const p = at(ev), t = performance.now(), l = this.lastTap;
       if (l && t - l.t < 300 && Math.hypot(p.x - l.x, p.y - l.y) < 30) { this.lastTap = undefined; this.recentre(); }
@@ -365,6 +376,13 @@ export class Minimap {
   showAt(px: number, py: number) {
     this.toggle(true);
     this.focus = { x: px / TILE, y: py / TILE };
+  }
+
+  /** Is this tile uncovered in the hero's fog (a Hold there counts as found)? */
+  isSeen(tx: number, ty: number) { return tx >= 0 && ty >= 0 && tx < MAP_W && ty < MAP_H && this.seen[ty * MAP_W + tx] >= 100; }
+
+  private warData(): WarMapData | undefined {
+    return this.war ? { war: this.war, clan: this.clan, plan: this.plan, writ: this.writ, tunnels: this.tunnels, seen: (x, y) => this.isSeen(x, y) } : undefined;
   }
 
   get isOpen() { return this.overlay.classList.contains("open"); }
@@ -518,9 +536,12 @@ export class Minimap {
     c.drawImage(this.colors, -sx * mpx, -sy * mpx, MAP_W * mpx, MAP_H * mpx);
     c.drawImage(this.fog, -sx * mpx, -sy * mpx, MAP_W * mpx, MAP_H * mpx);
     const dot = this.dot.bind(this);
+    const wd = this.warData();
+    if (wd) drawWarWorld(c, wd, { mini: true, s: mpx, ox: sx, oy: sy, now, wall: Date.now(), upright: (g) => { if (ISO) g.rotate(-Math.PI / 4); } });
     // Other online heroes: blue dots with a dark outline, shown even in unexplored parts
     for (const o of others) { dot(c, o, mpx, sx, sy, "#000", 3); dot(c, o, mpx, sx, sy, ALLY, 2); }
     this.drawMarkers(c, mpx, sx, sy, true);
+    if (wd) drawRimArrows(c, rimTargets(wd.war, this.clan, this.writ, me), mpx, sx, sy);
     if (me) { dot(c, me, mpx, sx, sy, "#000", 3); dot(c, me, mpx, sx, sy, "#ffd166", 2); }
     if (ISO) {
       const o = this.ctx, w = this.el.width, h = this.el.height;
@@ -589,6 +610,8 @@ export class Minimap {
     g.drawImage(this.fog, -R.x * BIG, -R.y * BIG, MAP_W * BIG, MAP_H * BIG);
     this.turned = ISO;
     this.drawMarkers(g, BIG, R.x, R.y, false);
+    const wd = this.warData();
+    if (wd) drawWarWorld(g, wd, { mini: false, s: BIG, ox: R.x, oy: R.y, now, wall: Date.now(), upright: (u) => { if (ISO) { u.rotate(-Math.PI / 4); u.scale(1 / K, 1 / K); } } });
     this.turned = false;
     for (const o of others) { dot(g, o, BIG, R.x, R.y, "#000", 5); dot(g, o, BIG, R.x, R.y, ALLY, 3); }
     if (me) { dot(g, me, BIG, R.x, R.y, "#000", 6); dot(g, me, BIG, R.x, R.y, "#ffd166", 4); }
@@ -616,6 +639,18 @@ export class Minimap {
       g.fillStyle = "#000"; g.fillText(o.name, lx + 1, ly + 1);
       g.fillStyle = ALLY; g.fillText(o.name, lx, ly);
     }
+    // War overlay UI in canvas px: the calls-to-arms list and the hold / siege tooltip
+    if (wd) {
+      this.calls = currentCalls(wd, me, now);
+      this.callBox = panelLayout(this.calls.length, cw);
+      const hot = this.hover && !this.ptrs.size ? panelRowAt(this.callBox, this.hover.x, this.hover.y) : -1;
+      if (this.callBox) drawCalls(g, this.calls, this.callBox, Date.now(), hot);
+      if (!this.ptrs.size) this.big.style.cursor = hot >= 0 ? "pointer" : "grab";
+      if (this.hover && hot < 0 && !this.ptrs.size) {
+        const hit = tipTarget(wd, (wx, wy) => T((wx / TILE - R.x) * BIG, (wy / TILE - R.y) * BIG), this.hover.x, this.hover.y);
+        if (hit) { const own = CLAN_KEYS_OF(wd.war.owner[hit[0]]); drawTip(g, holdTip(wd.war, hit[0], Date.now(), hit[1]), this.hover.x, this.hover.y, own ? CLAN_COL[own] : "#e8c27a"); }
+      }
+    } else { this.calls = []; this.callBox = undefined; }
   }
 
   /**

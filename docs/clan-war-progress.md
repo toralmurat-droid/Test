@@ -774,3 +774,12 @@ lines, banners, plates, legend with Homelands, hover tooltip. Pan/zoom/Centre ar
 - **A new land needs a `SLOTS` entry** in `client/src/warTableLayout.ts` (`tests/warTableLayout.test.ts` fails
   otherwise). The older notes above that say the war table needs nothing new for a land describe the old overlay.
 - Open: land plates can hide a marker under them (hover still finds it); legend has no height check.
+
+## W1: war on the map (2026-11-15, PR #463)
+Murat 2026-11-15 wants the war to feel real (plan W1-W7: overlay, free engagement + wanted, growing Holds, roads and
+marching columns, big battles, capturable towns, walkable capitals). W1: `client/src/warMap.ts` draws on the world map
+and minimap: discovered Holds (client fog, `minimap.isSeen`), hover intel (`shared/war/intel.ts` `holdIntel`), siege
+rings + countdowns (shown under fog), `WarView.hot` hatching + `frontEdges` lines, the own clan's last-tick attacks,
+caravans and tunnel mouths from the per-clan `"warplan"` message (`server/warIntel.ts`, sworn heroes only), the writ land,
+and a Calls to arms panel (`callsToArms`). Note: `hot` is public, so other clans see which lands were attacked (not by
+whom or from where). The plan shows last tick's attacks, not the next ones.
