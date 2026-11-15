@@ -1,5 +1,6 @@
 {
   "date": "2026-11-15",
+  "patch": 271,
   "title": "The war table shows the continent",
   "changes": [
     "The war table is now a map of the whole continent: the lands lie round the Crown of the Marches, with each clan's banner standing in its homeland.",
