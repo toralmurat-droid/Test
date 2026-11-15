@@ -1,0 +1,9 @@
+{
+  "date": "2026-11-15",
+  "pr": 453,
+  "title": "See how much shield you have",
+  "changes": [
+    "Your health orb now shows your shield as a band of glass in proportion to how much it can still absorb, and the health number shows it as \"+N\".",
+    "Lydian's overheal shield now shows on your health orb and on other heroes' health bars."
+  ]
+}
