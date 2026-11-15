@@ -7,7 +7,7 @@ import { createTilesetCanvas, tileColors } from "./tileset";
 import { ISO } from "./isoflag";
 import { pixelText } from "./pixeltext";
 import { clasp, frameBorderImage, plaque, FRAME } from "./mapframe";
-import { drawWarLegend, drawWarTable, warLandLabels, warTableOn, setWarTableOn } from "./warTable";
+import { drawWarLegend, drawWarTable, warLandLabels, warLinkLabels, warTableOn, setWarTableOn } from "./warTable";
 import type { WarView } from "../../shared/war/view";
 
 /** Moors colours (cool greys and heather) for the minimap and world map; the rest falls back to the tileset. */
@@ -528,9 +528,17 @@ export class Minimap {
       // the lands' names, upright at the top corner of each land's dashed box (warTable.ts)
       g.font = `15px ${PF}`; g.textAlign = "left"; g.textBaseline = "alphabetic";
       for (const l of warLandLabels()) {
-        const [lx, ly] = T((l.x - R.x) * BIG, (l.y - R.y) * BIG), x = Math.round(lx - g.measureText(l.name).width / 2), y = Math.round(ly) - 6;
+        const [lx, ly] = T((l.x - R.x) * BIG, (l.y - R.y) * BIG), x = Math.round(lx - g.measureText(l.name).width / 2), y0 = Math.round(ly) - 6;
+        if (y0 < -40) continue; // another band's land, far off the top
+        const y = Math.max(16, y0); // a label just above the canvas comes down into it
         g.fillStyle = "#000"; g.fillText(l.name, x + 1, y + 1);
         g.fillStyle = "#ffe8a3"; g.fillText(l.name, x, y);
+      }
+      g.font = `12px ${PF}`; g.textAlign = "center";
+      for (const l of warLinkLabels()) { // the ways between lands, named at their gates
+        const [lx, ly] = T((l.x - R.x) * BIG, (l.y - R.y) * BIG), x = Math.round(lx), y = Math.round(ly) - 22; // above the gate's own map label
+        g.fillStyle = "#000"; g.fillText(l.name, x + 1, y + 1);
+        g.fillStyle = "#96d7ff"; g.fillText(l.name, x, y);
       }
       drawWarLegend(g, this.war, PF);
     }

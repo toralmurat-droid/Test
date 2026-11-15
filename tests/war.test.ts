@@ -11,21 +11,23 @@ function rng(seed: number) { return () => { seed = (seed * 1103515245 + 12345) &
 
 test("war map: every capital is a territory, borders are two-way, and every territory is reachable", () => {
   for (const [n, c] of capitalsOf(builtRegions(TERRITORIES))) assert.equal(territoryByName(n)?.capitalOf, c.clan, `${c.clan} capital ${n}`);
-  for (const k of CLAN_KEYS) assert.equal(TERRITORIES.filter((t) => t.capitalOf === k).length, 2, `${k}: a capital in each built land`);
+  // one capital per built land, but the Host (at home in the moors only: its forward capitals stepped down) and the
+  // Wardens (also the Cairnwatch garrison's Grey Ring)
+  for (const k of CLAN_KEYS) assert.deepEqual(TERRITORIES.filter((t) => t.capitalOf === k).map((t) => t.region).sort(), k === "host" ? ["moors"] : k === "wardens" ? ["moors", "oakvale", "sunscar"] : ["oakvale", "sunscar"], k);
   for (const t of TERRITORIES) {
     assert.ok(t.near.length > 0, `${t.name} has no neighbour`);
     for (const n of t.near) assert.ok(TERRITORIES[n].near.includes(t.id), `${t.name} <-> ${TERRITORIES[n].name}`);
   }
   const seen = new Set([0]), todo = [0];
   while (todo.length) for (const n of TERRITORIES[todo.pop()!].near) if (!seen.has(n)) { seen.add(n); todo.push(n); }
-  assert.equal(seen.size, TERRITORIES.length, "both acts form one connected war map");
-  assert.ok(TERRITORIES.some((t) => t.act === 1) && TERRITORIES.some((t) => t.act === 2));
+  assert.equal(seen.size, TERRITORIES.length, "all three acts form one connected war map");
+  for (const a of [1, 2, 3]) assert.ok(TERRITORIES.some((t) => t.act === a), `Act ${a} is at war`);
 });
 
 test("sanctuaries stay out of the war: dungeons, boss lairs and wild zones", () => {
-  // (zones of a land that is not built yet, like the moors, stay out too)
+  // (zones of a land that is not built yet stay out too)
   for (const z of SPAWN_ZONES) assert.equal(!!territoryByName(z.name), !isSanctuary(z) && !!regionOf(z.x + (z.w >> 1), z.y + (z.h >> 1)), z.name);
-  for (const n of ["The Gnawing Halls", "Gorehowl's Lair", "The Sun Furnace", "Oakvale Countryside", "The Sunscar"]) assert.equal(territoryByName(n), undefined, n);
+  for (const n of ["The Gnawing Halls", "Gorehowl's Lair", "The Sun Furnace", "Oakvale Countryside", "The Sunscar", "The Barrow-King's Mound", "The Grey Barrow Moors"]) assert.equal(territoryByName(n), undefined, n);
 });
 
 test("every clan starts with land around its capitals", () => {

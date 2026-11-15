@@ -1,12 +1,12 @@
 /**
  * The war map: every monster zone of every land becomes a territory (Murat 2026-11-14), built from SPAWN_ZONES and the
- * lands of regions.ts. Borders run between zones of one land; lands meet only through their links (the waygate today).
+ * lands of regions.ts. Borders run between zones of one land; lands meet only through their links (the Waygate, the Barrowgate).
  * A future land needs a region entry (with `contains` and its capitals) and a link: buildTerritories does the rest.
  * Sanctuaries never change hands and are not territories: villages (already outside every zone), dungeon floors,
- * quest-boss lairs (zones with no spawns of their own) and the broad wild zones (countryside, open desert) where new
- * heroes level. Deterministic, like the map.
+ * quest-boss lairs (zones with no spawns of their own, or only their boss) and the broad wild zones (countryside, open desert, open moor)
+ * where heroes level. Deterministic, like the map.
  */
-import { actOfTile, inDeepRow, UNDER_END, WORLD_H } from "../constants";
+import { actOfTile, BOSS, inDeepRow, UNDER_END, WORLD_H } from "../constants";
 import { SPAWN_ZONES, type SpawnZone } from "../spawns";
 import { CLAN_KEYS, type ClanKey } from "./clans";
 import { capitalsOf, REGION_LINKS, REGIONS, type Region, type RegionLink } from "./regions";
@@ -37,7 +37,7 @@ export const WAR_MAP = {
 /** True for zones the war leaves alone (see the module comment). */
 export function isSanctuary(z: SpawnZone): boolean {
   const underground = (z.y >= WORLD_H && z.y < UNDER_END) || inDeepRow(z.y);
-  const lair = Object.values(z.mobs).every((n) => !n);
+  const lair = Object.entries(z.mobs).every(([k, n]) => !n || BOSS[k as keyof typeof BOSS]); // no spawns, or only its boss (the Barrow-King's Mound)
   return underground || lair || !!z.wild;
 }
 
@@ -98,7 +98,7 @@ export const territoryByName = (name: string) => TERRITORIES.find((t) => t.name 
 
 /**
  * Who holds what at the very start: clans take turns (the one with the least land first) claiming an unclaimed
- * territory next to their land in the same land (region), so every clan starts with a connected share around its capitals (as even as the map allows: 8/7/6/5/5 today).
+ * territory next to their land in the same land (region), so every clan starts with a connected share around its capitals (as even as the map allows: 10/9/9/8/6 today).
  */
 export function initialOwners(ts: readonly Territory[] = TERRITORIES): ClanKey[] {
   const owner: (ClanKey | undefined)[] = ts.map((t) => t.capitalOf);

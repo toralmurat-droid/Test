@@ -8,6 +8,7 @@
  */
 import { actOfTile } from "../constants";
 import { WAYGATE_DESERT, WAYGATE_OAKVALE } from "../desert";
+import { MOORSGATE_MOORS, MOORSGATE_OAKVALE } from "../moors";
 import type { ClanKey } from "./clans";
 
 export type RegionKey = "oakvale" | "sunscar" | "moors" | "badlands" | "sinkholes" | "crown";
@@ -45,16 +46,23 @@ export const REGIONS: Region[] = [
     { clan: "hidekin", zone: "The Humpback Mesas", forward: true },
     { clan: "veiled", zone: "The Veiled Sanctum" },
   ] },
+  // The Host's homeland (Act 3): its seat is the war camp on the far eastern moor; the Wardens' garrison at Cairnwatch
+  // holds the Grey Ring. Built, so Greywatch Keep and Kharsun
+  // step down to ordinary territories (capitalsOf); whoever holds them keeps them.
+  { key: "moors", name: "The Grey Barrow Moors", compass: "NE", home: "host", contains: (x, y) => actOfTile(x, y) === 3, capitals: [
+    { clan: "host", zone: "The Host's Muster" },
+    { clan: "wardens", zone: "The Grey Ring" }, // the Cairnwatch garrison holds the ring by the outpost (like Palmshade Oasis in the Sunscar)
+  ] },
   // Planned: no map yet (a homeland's capitals come with its zones)
-  { key: "moors", name: "The Grey Barrow Moors", compass: "NE", home: "host", capitals: [] },
   { key: "badlands", name: "The Red Badlands", compass: "W", home: "redfang", capitals: [] },
   { key: "sinkholes", name: "The Mawdeep Sinkholes", compass: "S", home: "hidekin", capitals: [] },
   { key: "crown", name: "The Crown of the Marches", compass: "C", capitals: [] },
 ];
 
-/** Ways between lands. A link is live only while both of its lands are built. The waygate comes first. */
+/** Ways between lands. A link is live only while both of its lands are built. The waygate comes first (ids follow this order). */
 export const REGION_LINKS: RegionLink[] = [
   { a: "oakvale", b: "sunscar", name: "The Waygate", pa: WAYGATE_OAKVALE, pb: WAYGATE_DESERT },
+  { a: "oakvale", b: "moors", name: "The Barrowgate", pa: MOORSGATE_OAKVALE, pb: MOORSGATE_MOORS },
 ];
 
 /** The land a tile lies in (built lands only). */
