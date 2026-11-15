@@ -210,7 +210,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
       const cells = await page.$$("#gearbag .gcell");
       if (idx < 0 || !cells[idx]) return "";
       await cells[idx].hover(); await page.waitForTimeout(250);
-      return page.evaluate(() => document.getElementById("gearinfo").innerText);
+      return page.evaluate(() => (document.getElementById("itemcard")?.innerText ?? ""));
     };
     result.swordTip = await hoverCell("/^w_dragon|^w_sky/.test(b)");
     check("cantWearTip", /not a musical instrument/.test(result.swordTip), result.swordTip);
@@ -293,7 +293,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     await page.waitForTimeout(700);
     const luteSlot = await page.$("#gearslots .slot-weapon");
     if (luteSlot) { await luteSlot.hover(); await page.waitForTimeout(250); }
-    result.luteTip = await page.evaluate(() => document.getElementById("gearinfo").innerText);
+    result.luteTip = await page.evaluate(() => (document.getElementById("itemcard")?.innerText ?? ""));
     check("luteTip", /Steel Strings/.test(result.luteTip) && /Lute/.test(result.luteTip), result.luteTip);
     await shot("17-lute-tooltip");
     await page.keyboard.press("g");
