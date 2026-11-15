@@ -230,11 +230,13 @@ test("a seq-only change reaches the owner (me.onChange fires) and is invisible t
   } finally { await srv.stop(); }
 });
 
-// 30 + cosm (public: every client draws titles and the beast trait) and 18 + flags (quest choices, owner-only)
-test("schema sizes: Player has 31 synced fields, PlayerPrivate 19 (the owner-only move must not be undone)", () => {
+// 30 + cosm (public: every client draws titles and the beast trait) and 18 + flags (quest choices) + shield (absorb
+// shields left, the owner's health orb), both owner-only
+test("schema sizes: Player has 31 synced fields, PlayerPrivate 20 (the owner-only move must not be undone)", () => {
   const count = (C: any) => Object.keys(C[Symbol.metadata]).filter((k) => /^\d+$/.test(k)).length;
   assert.equal(count(Player), 31);
-  assert.equal(count(PlayerPrivate), 19);
+  assert.equal(count(PlayerPrivate), 20);
+  assert.equal((PlayerPrivate as any)[Symbol.metadata][19].name, "shield", "shield is a number at index 19, far from 63");
   const md = (Player as any)[Symbol.metadata] as Record<string, any>;
   const names = Object.keys(md).filter((k) => /^\d+$/.test(k)).map((k) => md[k].name);
   for (const k of [...PRIVATE, ...MOVED]) assert.ok(!names.includes(k), `Player must not sync ${k}`);

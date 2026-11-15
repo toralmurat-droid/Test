@@ -33,6 +33,11 @@ test("orbTexts: hp rounds up, mp down, maxima round", () => {
   assert.deepEqual(orbTexts(10.2, 99.5, 7.9, 20.4), { hpTxt: "11 / 100", mpTxt: "7 / 20" });
 });
 
+test("orbTexts: a shield adds \" +N\" to the hp text (OrbHud.update splits on it), none at 0", () => {
+  assert.equal(orbTexts(449, 642, 0, 100, 64).hpTxt, "449 / 642 +64");
+  assert.equal(orbTexts(449, 642, 0, 100, 0).hpTxt, "449 / 642");
+});
+
 test("showLevelNote: only while stat points are free", () => {
   assert.equal(showLevelNote(0), false);
   assert.equal(showLevelNote(1), true);

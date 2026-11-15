@@ -10,6 +10,7 @@ export interface Own {
   potions: number; // packPotions (shared/potions.ts)
   mp: number; // packMana (shared/mana.ts)
   energy: number; // Heat (shared/overload.ts)
+  shield?: number; // remaining absorb shields in HP points, 0 when none (absent on an older server)
   stacks: number; spd: number;
   seq: number; // last input the server processed
   timers: string; // HUD buff row (shared/buffTimers.ts)

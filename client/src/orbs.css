@@ -12,6 +12,8 @@ body { --barw: 640px; }
 #orbhud .orb.mp { left: calc(50% + var(--barw) / 2 + 22px - 22px); }
 #orbhud .orb span { position: absolute; left: 0; right: 0; top: 50%; transform: translateY(-50%); text-align: center; color: #fff;
   font-size: 15px; font-family: var(--pixel-font); text-shadow: 2px 2px 0 #000, -1px -1px 0 #000; opacity: 0; transition: opacity .15s; }
+#orbhud .orb span.shd { font-size: 12px; white-space: nowrap; }
+#orbhud .orb span b { color: #bfe4ff; font-weight: normal; }
 #orbhud .orb:hover span, #orbhud.nums .orb span { opacity: 1; }
 #orbhud .garg { position: absolute; bottom: 2px; width: 88px; height: 120px; image-rendering: pixelated; filter: drop-shadow(0 3px 4px rgba(0,0,0,.8)); }
 #orbhud .garg.left { left: calc(50% - var(--barw) / 2 - 22px - 112px + 22px - 76px); }
