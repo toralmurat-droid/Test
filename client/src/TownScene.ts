@@ -1580,6 +1580,7 @@ export class TownScene extends Phaser.Scene {
       if (!m || typeof m.t !== "number" || !Array.isArray(m.fronts)) return;
       this.warTroops?.setSiege(m.fronts.length ? m.t : -1); this.warStd?.setSiege(m); (this.warPlaque ??= new WarPlaque(document.getElementById("hud")!)).setSiege(m);
     });
+    this.room.onMessage("tunnels", (m) => { if (m && Array.isArray(m.mouths)) this.tunnelMouths = m.mouths; }); // Hide-Kin tunnel mouths (server/warTunnels.ts), kept for a war-table marker later
     const warNotice = new WarNotice(document.getElementById("hud")!);
     this.room.onMessage("warev", (e) => warNotice.show(e, this.entities.get(this.me)?.sprite));
     this.room.onMessage("mv", alive);
@@ -2064,16 +2065,21 @@ export class TownScene extends Phaser.Scene {
     this.entities.delete(id);
   }
 
+  /** The Hide-Kin tunnel mouths the server last listed ("tunnels" message): look only, nothing drawn from it yet. */
+  private tunnelMouths: { t: number; x: number; y: number; state: string }[] = [];
+
   /** A clan trooper's sheet: the painted one replaces the stand-in once loaded; fallen, it staggers (frame 12) and lies (13). */
   private trooperFrame(e: Entity, p: any, now: number) {
     if (!e.artOn) {
       const key = mobTexture(this, p.kind, p.level, p.weapon);
       if (key.startsWith("mob_war_")) { e.sprite.setTexture(key, 0); e.artOn = true; this.perch(e, p); }
     }
-    if (e.artOn && e.sprite.texture.frameTotal > 14 && parseTroop(p.weapon)?.object && !p.dead) { // a supply cart or a siege ram: idle frames when still, stagger on a hit
+    const tp = parseTroop(p.weapon);
+    if (e.artOn && e.sprite.texture.frameTotal > 14 && tp?.object && !p.dead) { // a supply cart, a siege ram or a tunnel mouth: idle frames when still, stagger on a hit
       if (e.cartHp !== undefined && p.hp < e.cartHp) e.cartHurtAt = now;
       e.cartHp = p.hp;
       if (now - (e.cartHurtAt ?? -1e9) < 260) e.sprite.setFrame(12);
+      else if (tp.part === "mouth") e.sprite.setFrame(e.sprite.texture.key.includes("tunnel") ? Math.floor(now / 240) % 6 : 6); // the open mouth's idle loop (a cart stand-in just stands)
       else if (!p.moving) { const d = this.dirOf(e); e.sprite.setFrame(d === "down" ? 6 : d === "up" ? 7 : 8); }
     }
     if (!p.dead || !e.artOn || e.sprite.texture.frameTotal <= 14) return; // (frameTotal counts Phaser's __BASE frame)
@@ -2092,7 +2098,7 @@ export class TownScene extends Phaser.Scene {
   private trooperLabel(e: Entity, p: any, x: number, y: number) {
     const t = parseTroop(p.weapon);
     if (!t || p.dead || p.hidden) { e.label?.setVisible(false); return; }
-    if (!e.label) e.label = isoAnchor(this.add.text(x, y, troopName(t.clan, t.officer, t.cart, t.part === "ram"), {
+    if (!e.label) e.label = isoAnchor(this.add.text(x, y, troopName(t.clan, t.officer, t.cart, t.part === "ram", t.part === "mouth"), {
       fontFamily: TEXT_FONT, fontSize: `${TEXT_PX}px`, color: "#c8c8c8", stroke: "#000", strokeThickness: 2,
     }).setOrigin(0.5, 1).setScale(WT * 0.85).setResolution(1), e.sprite) as Phaser.GameObjects.Text;
     const col = TROOP_COLOURS[this.troopStanceOf(p.weapon)];
@@ -3371,7 +3377,7 @@ export class TownScene extends Phaser.Scene {
         else e.sprite.setFrame(FRAME_BASE[dir] + step);
         if (e.mob && p.job >= 0) { const wf = this.siege.update(id, e, p, now, moving); if (wf !== undefined) e.sprite.setFrame(wf); } // siege works
         if (e.mob && p.kind === "trooper") this.trooperFrame(e, p, now);
-        e.sprite.setFlipX(dir === "left");
+        e.sprite.setFlipX(dir === "left" && !(p.kind === "trooper" && parseTroop(p.weapon)?.part === "mouth")); // a tunnel mouth never turns
         if (p.kind === "crawler" && e.sprite.isCropped) e.sprite.setAngle(dir === "left" ? -16 : dir === "right" ? 16 : 0); // leaning on its arms
         if (e.mob) e.sprite.setVisible((!p.dead || (p.kind === "trooper" && !!e.artOn)) && !p.hidden);
         else e.sprite.setAlpha(p.dead ? 0.35 : 1).setAngle(p.dead ? 90 : 0);

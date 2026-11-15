@@ -1,8 +1,9 @@
 /**
  * PvE balance simulator: bot heroes play the first zone (Lv 1-30) against its monsters and bosses.
- * Run: npx tsx tools/balance/pve.ts [runsPerCase] [--bosses] [--zones] [--act2] [--champions] [--troops] [--caravan] [--siege] [--class=vampire] [--build=0|1|2] [--boss=king] [--no-execute] [--songweaver]
+ * Run: npx tsx tools/balance/pve.ts [runsPerCase] [--bosses] [--zones] [--act2] [--champions] [--troops] [--caravan] [--siege] [--tunnel] [--class=vampire] [--build=0|1|2] [--boss=king] [--no-execute] [--songweaver]
  * --siege: a siege front (shared/war/siege.ts): the hero and SIEGE_BATTLE.perFront allied soldiers vs as many attackers, Lv 15 / 30 / 45 (and the soldiers alone);
  *   then the Host's siege ram (shared/war/works.ts): the hero alone vs the ram and its crew.
+ * --tunnel: the hero alone collapses a Hide-Kin tunnel mouth (shared/war/tunnels.ts) while its waves come out: win = the mouth falls.
  * --caravan: the hero alone raids a supply cart (shared/war/caravans.ts) with its 3 escorts at Lv 15 / 30 / 45: win = the cart falls.
  * --troops: the hero alone against a clan soldier, a captain and 3 soldiers of its level (shared/war/troops.ts), at Lv 8 / 20 / 45 (--clans: each clan at Lv 20).
  * --champions: one fight against each champion (shared/champions.ts, a 1D version of its affixes) beside the same plain monster.
@@ -34,6 +35,7 @@ import { addHeat } from "../../shared/overload";
 import { CLAN_KEYS, type ClanKey } from "../../shared/war/clans";
 import { TROOP_OFFICER, troopStats, WAR_TROOPS } from "../../shared/war/troops";
 import { CARAVAN, caravanHp } from "../../shared/war/caravans";
+import { mouthHp, TUNNEL } from "../../shared/war/tunnels";
 import { SIEGE_BATTLE } from "../../shared/war/siege";
 import { ramHp, SIEGE_WORKS } from "../../shared/war/works";
 
@@ -578,6 +580,28 @@ function ramRun(cls: ClassKind, level: number, build: Build, potions = 5): RunRe
   return { won: w === h, kills: ram.dead ? 1 : 0, hpLostPerKill: Math.max(0, hp0 - h.hp) / h.maxHp, secPerKill: d.now / 1000, heals: pack.healUsed, manas: pack.manaUsed };
 }
 
+/** A Hide-Kin tunnel (shared/war/tunnels.ts): the hero alone vs the mouth (no attack) and TUNNEL.perWave soldiers, a new wave every waveMs (up to maxTunnelTroops). */
+function tunnelRun(cls: ClassKind, level: number, build: Build, potions = 5): RunResult {
+  const h = make("h", cls, level, build), clan: ClanKey = "hidekin", T = TUNNEL;
+  const pack: Pack = { heal: potions, mana: potions, healUsed: 0, manaUsed: 0, size: potionSize(level), lastDrink: -1e9 };
+  const ms = mobSpec("trooper", level);
+  Object.assign(ms, { hp: mouthHp(clan, level), dmg: 0, speed: 0, cd: 1e12, label: "mouth" });
+  ms.poise *= T.mouthHp;
+  const mouth = new MobF(ms, "mouth"), wave = (n: number) => Array.from({ length: T.perWave }, (_, k) => soldierF(clan, level, `w${n}_${k}`));
+  const d = new CaravanDuel(h, [...wave(0), mouth], pack, mouth), hp0 = h.hp;
+  const out = (s: MobF) => { s.x = Math.max(0, Math.min(480, mouth.x + (Math.random() - 0.5) * 20)); };
+  mouth.x = Math.max(0, Math.min(480, d.mobs[0].x + Math.sign(d.mobs[0].x - h.x) * 30));
+  d.mobs.forEach((m) => { if (m !== mouth) out(m); });
+  let w: F | null | undefined, next = T.waveMs, n = 1;
+  while (d.now < 120000 && (w = d.step()) === undefined) {
+    if (d.now < next) continue;
+    next += T.waveMs;
+    const alive = d.mobs.filter((m) => !m.dead).length, add = wave(n++).slice(0, Math.max(0, T.maxTunnelTroops - alive));
+    add.forEach(out); d.mobs.push(...add);
+  }
+  return { won: w === h, kills: mouth.dead ? 1 : 0, hpLostPerKill: Math.max(0, hp0 - h.hp) / h.maxHp, secPerKill: d.now / 1000, heals: pack.healUsed, manas: pack.manaUsed };
+}
+
 const pct = (v: number) => `${Math.round(v * 100)}%`;
 /** Try other numbers without editing the game: --hp=0.4 --dmg=0.15 (MOB_LEVEL per-level growth). */
 for (const a of process.argv) {
@@ -604,7 +628,21 @@ if (process.argv[1]?.includes("pve")) {
   const TROOPS = process.argv.includes("--troops");
   const CARAVANS = process.argv.includes("--caravan");
   const SIEGE = process.argv.includes("--siege");
-  const doBosses = !CHAMPS && !TROOPS && !CARAVANS && !SIEGE && !process.argv.includes("--zones"), doZones = !CHAMPS && !TROOPS && !CARAVANS && !SIEGE && !process.argv.includes("--bosses");
+  const TUNNELS = process.argv.includes("--tunnel");
+  const doBosses = !CHAMPS && !TROOPS && !CARAVANS && !SIEGE && !TUNNELS && !process.argv.includes("--zones"), doZones = !CHAMPS && !TROOPS && !CARAVANS && !SIEGE && !TUNNELS && !process.argv.includes("--bosses");
+  if (TUNNELS) {
+    console.log(`Hide-Kin tunnel: the hero alone vs the mouth (x${TUNNEL.mouthHp} soldier HP, no attack) and ${TUNNEL.perWave} soldiers of its level, another wave every ${TUNNEL.waveMs / 1000} s (at most ${TUNNEL.maxTunnelTroops} alive), 5 heal + 5 mana potions. Cell = win% (collapsed) / HP lost / fight s`);
+    console.log("".padEnd(10) + CLASSES.map((c) => c.padEnd(20)).join(""));
+    for (const L of [15, 30, 45]) {
+      let line = `Lv${L}`.padEnd(10);
+      for (const c of CLASSES) {
+        let won = 0, hp = 0, sec = 0;
+        for (let i = 0; i < n; i++) { const r = tunnelRun(c, L, buildOf(i)); won += r.won ? 1 : 0; hp += r.hpLostPerKill; sec += r.secPerKill; }
+        line += `${pct(won / n)}/${pct(hp / n)}/${(sec / n).toFixed(1)}s`.padEnd(20);
+      }
+      console.log(line);
+    }
+  }
   if (SIEGE) {
     const k = SIEGE_BATTLE.perFront;
     console.log(`Siege front: the hero + ${k} allied soldiers vs ${k} attacking soldiers, all of its level (clans in turn), 5 heal + 5 mana potions. Cell = win% (attackers all down) / hero HP lost / fight s / allies lost`);

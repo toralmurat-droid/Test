@@ -1,0 +1,9 @@
+{
+  "date": "2026-11-15",
+  "title": "Hide-Kin Tunnels",
+  "changes": [
+    "When the Hide-Kin strike a land two borders away, their tunnel now breaks out at that land's edge. Come near and its mouth opens, with Hide-Kin soldiers pouring out in waves.",
+    "Heroes sworn against the Hide-Kin can collapse the tunnel for valor and renown. It stays shut until the next war turn.",
+    "Hide-Kin heroes who guard their tunnel earn valor for their clan in that land."
+  ]
+}

@@ -6,8 +6,9 @@
  */
 import { CLANS, CLAN_KEYS, type ClanKey } from "../shared/war/clans";
 import { newMinds, scriptedOrders, type Mind } from "../shared/war/doctrine";
-import { newWar, WAR, warTick, type WarState } from "../shared/war/rules";
+import { newWar, WAR, warTick, type Orders, type WarState } from "../shared/war/rules";
 import { TERRITORIES } from "../shared/war/territories";
+import { tunnelStrikes, type TunnelStrike } from "../shared/war/tunnels";
 import { warPhase, warView, type WarView } from "../shared/war/view";
 import { eventVoice, leaderLine } from "../shared/war/heralds";
 import { openKv, type Kv } from "./store";
@@ -24,6 +25,10 @@ let kv: Kv | undefined;
 let saved: Saved | undefined;
 let timer: NodeJS.Timeout | undefined;
 let valor: Partial<Record<ClanKey, number>>[] = TERRITORIES.map(() => ({}));
+/** The leaders' orders of the last tick (Hide-Kin tunnels, server/warTunnels.ts). Memory only: none after a restart until the next tick. */
+let lastOrders: Partial<Record<ClanKey, Orders>> | undefined;
+/** The tunnel strikes of those orders, read on the state before the tick (as rules.ts warTick saw it). */
+let lastStrikes: TunnelStrike[] = [];
 const listeners = new Set<(v: WarView, events: WarEvent[]) => void>();
 
 /** Small seeded random per tick: the same tick always plays out the same way (easy to replay from the log). */
@@ -83,7 +88,9 @@ export async function step(now: number) {
 function tickOnce(at: number): WarEvent[] {
   const s = saved!.state, before = { owner: [...s.owner], siege: s.siege.map((x) => x && { ...x }) };
   const orders = scriptedOrders(s, saved!.minds, rng(s.tick * 2654435761 + 1));
+  lastStrikes = tunnelStrikes(s, orders); // (before warTick moves the owners: the strikes the rules fed)
   warTick(s, orders, { phase: warPhase(at), valor });
+  lastOrders = orders;
   valor = TERRITORIES.map(() => ({}));
   const out: WarEvent[] = [];
   const name = (k: ClanKey) => CLANS[k].name;
@@ -106,6 +113,10 @@ export function addValor(t: number, k: ClanKey, amount: number): boolean {
 export const warNow = (): WarView | undefined => (saved ? warView(saved.state, saved.next) : undefined);
 export const warLog = (n = 50): WarEvent[] => (saved ? saved.log.slice(-n) : []);
 export const warState = (): WarState | undefined => saved?.state;
+/** The orders the leaders gave in the last war tick (not saved), or undefined before the first tick of this process. */
+export const warOrders = (): Partial<Record<ClanKey, Orders>> | undefined => lastOrders;
+/** The tunnel strikes of the last war tick (server/warTunnels.ts), computed on the state that tick started from. Empty before the first tick. */
+export const warStrikes = (): readonly TunnelStrike[] => lastStrikes;
 /** Called after every war tick with the new view and what happened. Returns an unsubscribe function. */
 export function onWar(f: (v: WarView, events: WarEvent[]) => void) { listeners.add(f); return () => { listeners.delete(f); }; }
 
@@ -113,7 +124,9 @@ export function onWar(f: (v: WarView, events: WarEvent[]) => void) { listeners.a
 export function flushWar() { if (saved && kv?.setSync) try { kv.setSync(KEY, saved); } catch (e) { console.error("War: could not save:", e); } }
 
 /** Tests: start from a given state without a store or a clock. */
-export function _resetWar(s?: Saved, store?: Kv) { stopWar(); saved = s ?? fresh(Date.now()); kv = store; valor = TERRITORIES.map(() => ({})); }
+export function _resetWar(s?: Saved, store?: Kv) { stopWar(); saved = s ?? fresh(Date.now()); kv = store; valor = TERRITORIES.map(() => ({})); lastOrders = undefined; lastStrikes = []; }
+/** Tests: set the last tick's orders. */
+export function _setWarOrders(o: Partial<Record<ClanKey, Orders>> | undefined) { lastOrders = o; lastStrikes = saved ? tunnelStrikes(saved.state, o) : []; }
 /** Tests: valor clan `k` has gathered in territory `t` so far this war tick. */
 export const _valorOf = (t: number, k: ClanKey): number => valor[t]?.[k] ?? 0;
 export type { Saved as SavedWar };
