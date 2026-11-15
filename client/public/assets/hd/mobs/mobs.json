@@ -1280,5 +1280,11 @@
   "h": 44,
   "scale": 1.5,
   "frames": 14
+ },
+ "mob_war_tunnel_hidekin": {
+  "w": 80,
+  "h": 44,
+  "scale": 1.5,
+  "frames": 14
  }
 }

@@ -12,6 +12,7 @@ import { CHAMP_WEAPONS } from "./look";
 import { WAR_SOLDIERS } from "./warLooks";
 import { CART_FRAMES, CART_H, CART_W, WAR_CARTS, paintCart } from "./warCarts";
 import { WAR_RAMS, paintRam } from "./warRam";
+import { TUNNEL_FRAMES, TUNNEL_H, TUNNEL_W, WAR_TUNNELS, paintTunnel } from "./warTunnel";
 
 /**
  * Monster sheets for the iso look. Same textures as client/src/textures.ts mobTexture (6 frames:
@@ -637,6 +638,8 @@ export function buildMobs(out: string, ONLY?: string[]) {
     ...WAR_CARTS.map((k) => ({ key: `mob_${k}`, w: CART_W, h: CART_H, frames: CART_FRAMES, draw: (c: C2, f: number) => paintCart(c, SH, k, f) })),
     // the Ossuary Host's bone siege ram (warRam.ts): same frame size and 14-frame layout
     ...WAR_RAMS.map((k) => ({ key: `mob_${k}`, w: CART_W, h: CART_H, frames: CART_FRAMES, draw: (c: C2, f: number) => paintRam(c, SH, k, f) })),
+    // the Hide-Kin tunnel mouth (warTunnel.ts): 80x44 frames, the same 14-frame layout
+    ...WAR_TUNNELS.map((k) => ({ key: `mob_${k}`, w: TUNNEL_W, h: TUNNEL_H, frames: TUNNEL_FRAMES, draw: (c: C2, f: number) => paintTunnel(c, SH, k, f) })),
     { key: "mob_scorpion", w: 36, h: 30, draw: (c: C2, f: number) => scorpionFrame(c, 36, 30, f) },
     // the Night Raiders (raiders.ts): one sheet for each of the Seven
     ...RAIDERS.map((R) => ({ key: `mob_nightraider_${R.key}`, w: RAIDER_W, h: RAIDER_H, draw: (c: C2, f: number) => { const { dir, pose } = frameOf(f); paintRaider(c, SH, R, dir as "down" | "up" | "right", pose, f); } })),
