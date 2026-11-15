@@ -28,6 +28,18 @@ export const SONG_BUFFS: ReadonlySet<string> = new Set(SONG_SKILLS.filter((s) =>
 /** Buff ids that are a shield bubble: any Songweaver skill whose buff has `shield` (Pedal Point, Amen, ...). */
 export const SHIELD_BUFFS: ReadonlySet<string> = new Set(SONG_SKILLS.filter((s) => s.buff?.shield || s.field?.party?.shield).map((s) => s.id));
 
+/**
+ * Colour of a note by its scale step (SkillDef.degree), so a progression reads as a run of colours: tonic red, then up the
+ * scale through orange, yellow, green, cyan and violet; the minor tonic is magenta. Bright enough for dark and light ground.
+ */
+export const DEGREE_COLOR: Record<string, number> = { I: 0xff5a5a, bII: 0xff9a3c, ii: 0xffe14d, IV: 0x5be07a, V: 0x4fd0ff, vi: 0xa38bff, i: 0xff6ad5 };
+export const degreeColor = (d: string | undefined) => DEGREE_COLOR[d ?? ""] ?? 0xffd24d;
+
+/** Does this status word mean a Songweaver absorb shield? (Drawn on the health orb / nameplate bar, no longer as a bubble in the world.) */
+export const isSongShieldWord = (w: string) => SHIELD_BUFFS.has(w) || (w.startsWith("sg_") && !!skillById(w)?.buff?.shield);
+/** True when a status string (`Player.fx`, comma separated) carries a Songweaver shield. */
+export const hasSongShield = (fx: string | undefined) => !!fx && fx.split(",").some(isSongShieldWord);
+
 /** Finisher names by the `prog` of a chord event: read from the skill table (skillById) so they never drift. */
 const PROG_SKILL: Record<string, string> = Object.fromEntries([...PROGRESSIONS, ...SONG_PROGRESSIONS].map((p) => [p.id, p.skill]));
 export const CHORD_NAMES: Record<string, string> = Object.fromEntries(Object.entries(PROG_SKILL).map(([k, id]) => [k, skillById(id)?.name ?? k]));

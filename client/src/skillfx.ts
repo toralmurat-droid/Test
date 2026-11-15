@@ -1,10 +1,12 @@
 import Phaser from "phaser";
 import { ISO } from "./isoflag";
+import { wallAt } from "../../shared/acoustics";
+import { isoAnchor, setBaseDepth } from "./iso";
 import { AreaLook, BLOOD_RITE_MS, FxStyle, impactMs, LEAP_MS, RAIN_FALL_MS, skillById, SkillDef, SWORD_FALL_MS } from "../../shared/skills";
 import { paintSigil, ICON } from "./skillArt";
 import { ELEMENT_COLORS, type Element } from "../../shared/elements";
 import { drawSoundWaveSheet, SOUND_WAVE_FLIGHT, SOUND_WAVE_FRAMES, SOUND_WAVE_H, SOUND_WAVE_IMPACT, SOUND_WAVE_W } from "./soundWaveArt";
-import { modeColor, SHIELD_BUFFS, SONG_BUFFS } from "./songTables";
+import { degreeColor, isSongShieldWord, modeColor, SONG_BUFFS } from "./songTables";
 import { NOTES } from "../../shared/songs";
 import { MIST_DISSOLVE_MS, MIST_LINGER_MS, MIST_REFORM_AT_MS, MIST_REFORM_MS, MIST_REVEAL_MS } from "./skillMoveData";
 
@@ -53,8 +55,31 @@ interface P {
 interface Emitter { until: number; next: number; every: number; fn: () => void }
 
 interface SongRingState {
-  g: Phaser.GameObjects.Graphics; rings: { born: number }[]; bursts: { born: number; i: number }[];
+  g: Phaser.GameObjects.Graphics; rings: { born: number; dead?: number }[]; bursts: { born: number; i: number }[]; fizz: number[];
   color: number; lastNote: number; held: number; lockFrom: number;
+}
+/** Radii (screen px, horizontal) of the level ground ellipses: note 1, note 2, note 3; the chord bursts out to CHORD_R. */
+const RING_R = [15, 23, 31], CHORD_R = 54, RING_COLLAPSE_MS = 1800;
+const whiten = (c: number, k: number) => { const r = (c >> 16) & 255, g = (c >> 8) & 255, b = c & 255; return (Math.round(r + (255 - r) * k) << 16) | (Math.round(g + (255 - g) * k) << 8) | Math.round(b + (255 - b) * k); };
+/**
+ * A level ground ellipse in pixel art: hard-edged spans of `th` px (2:1 like the iso tile, so it lies flat on the ground),
+ * drawn in screen space round (cx, cy) with no rotation and no antialiasing. A 1 px dark edge keeps it readable on any ground.
+ */
+function pxEllipse(g: Phaser.GameObjects.Graphics, cx: number, cy: number, rx: number, th: number, col: number, a: number, edge = true) {
+  if (a < 0.02 || rx < 2) return;
+  const ry = Math.max(1, Math.round(rx / 2)), vth = Math.max(1, Math.round(th / 2)), rx2 = rx - th, ry2 = ry - vth;
+  cx = Math.round(cx); cy = Math.round(cy);
+  const rows = (rx: number, ry: number, col: number, a: number, rx2: number, ry2: number) => {
+    g.fillStyle(col, a);
+    for (let dy = -ry; dy <= ry; dy++) {
+      const xo = Math.round(rx * Math.sqrt(Math.max(0, 1 - (dy / ry) ** 2)));
+      const xi = ry2 > 0 && rx2 > 0 && Math.abs(dy) < ry2 ? Math.round(rx2 * Math.sqrt(1 - (dy / ry2) ** 2)) : -1;
+      if (xi < 0) g.fillRect(cx - xo, cy + dy, xo * 2 + 1, 1);
+      else { const w = Math.max(1, xo - xi); g.fillRect(cx - xo, cy + dy, w, 1).fillRect(cx + xo - w + 1, cy + dy, w, 1); }
+    }
+  };
+  if (edge) rows(rx + 1, ry + 1, 0x0a0614, Math.min(0.55, a * 0.55), rx - th, ry - vth); // dark rim just outside
+  rows(rx, ry, col, Math.min(1, a), rx2, ry2);
 }
 export interface FxEntity {
   sprite: Phaser.GameObjects.Sprite; top: number; state: any; hero?: string;
@@ -2010,9 +2035,11 @@ export class SkillFx {
     const d = sc.add.graphics();
     switch (look) {
       case "wave": {
-        // The Songweaver's plucked sound wave (soundWaveArt.ts), turned to the shot's angle; tickShots flips its frames
-        const img = sc.add.image(0, 0, this.waveSheet(), "w0").setScale(size / 1.5);
-        return box(light(0xffc54d, 0.5 * size, 0.35), img).setAngle(deg);
+        // The Songweaver's sound wave is a little music note (soundWaveArt.ts), upright, in its skill's scale-step colour
+        // (tickShots keeps the tint and frame current); a few tinted dots trail behind it along the flight line.
+        const tint = this.waveTint(s.owner), img = sc.add.image(0, 0, this.waveSheet(), "w0").setScale(size / 1.5).setTint(tint);
+        const trail = sc.add.container(0, 0, [0, 1, 2].map((i) => sc.add.rectangle(-5 - i * 3.5, 0, 2 - i * 0.4, 2 - i * 0.4, tint).setAlpha(0.8 - i * 0.22))).setAngle(deg);
+        return box(light(tint, 0.45 * size, 0.3), trail, img);
       }
       case "fireball": {
         // Hot white core inside orange flame, flickering (see tickShots)
@@ -2086,7 +2113,12 @@ export class SkillFx {
         if (imb === "fire" && Math.random() < 4 * dt) this.p(x - ax * 5, y - ay * 5, 2, pick([0x4a4a4a, 0x6d6d6d]), { vz: 10, life: 420, size: 2, size1: 3, alpha: 0.3, add: false, depth: DEPTH - 1 });
       }
       switch (look) {
-        case "wave": ((g as any).last as Phaser.GameObjects.Image).setFrame(`w${Math.floor(age / 70) % SOUND_WAVE_FLIGHT}`); break;
+        case "wave": {
+          const img = (g as any).last as Phaser.GameObjects.Image, tint = this.waveTint(s.owner);
+          img.setFrame(`w${Math.floor(age / 70) % SOUND_WAVE_FLIGHT}`).setTint(tint);
+          for (const o of (g as any).list as any[]) { if (o.type === "Container") for (const r of o.list) r.setFillStyle(tint); else if (o !== img) o.setTint(tint); }
+          break;
+        }
         case "shuriken": (g as any).angle += 1400 * dt; if (Math.random() < 0.4) this.p(x, y, 0, 0xffffff, { life: 120, depth: DEPTH - 1 }); break;
         case "net": (g as any).angle += 400 * dt; break;
         case "voidlance": for (let i = 0; i < n(50); i++) this.p(x - ax * rnd(4, 9), y - ay * rnd(4, 9), z + rnd(-1, 1), pick(VOIDC), { vx: -ax * 20 + rnd(-4, 4), vy: -ay * 20 + rnd(-4, 4), life: rnd(140, 260), size: 1, size1: 0 }); break;
@@ -2346,12 +2378,33 @@ export class SkillFx {
     return key;
   }
 
-  /** The wave bursts open where it lands (impact frames), with a few gold sparks. */
+  /** Scale-step colour of each caster's latest note (from its "note" sfx event): the wave it throws takes that colour. */
+  private lastDeg = new Map<string, string>();
+  private lastWave = 0xffd24d;
+  private waveTint(owner: string) { return (this.lastWave = degreeColor(this.lastDeg.get(owner))); }
+
+  /** The note bursts into sparks where it lands (impact frames); on leaves or water it sinks and fades instead. */
   private waveBurst(x: number, y: number) {
-    const [lx, ly] = lift(5);
-    const img = this.scene.add.image(x + lx, y + ly, this.waveSheet(), `w${SOUND_WAVE_FLIGHT}`).setScale(1 / 1.5).setDepth(DEPTH + 1);
+    const [lx, ly] = lift(5), tint = this.lastWave, mat = wallAt(x, y), soft = mat === "foliage" || mat === "water";
+    const img = this.scene.add.image(x + lx, y + ly, this.waveSheet(), `w${SOUND_WAVE_FLIGHT}`).setScale(1 / 1.5).setDepth(DEPTH + 1).setTint(tint);
+    if (soft) {
+      // swallowed: the note drops a few pixels, shrinks and fades; a leaf or a drop falls with it
+      img.setFrame("w0");
+      this.scene.tweens.add({ targets: img, y: img.y + 7, scale: 0.4, alpha: 0, duration: 650, ease: "Sine.easeIn", onComplete: () => img.destroy() });
+      const cols = mat === "water" ? [0x9ad1ff, 0xd6f0ff] : [0x6fae4a, 0x3e7a2e];
+      for (let i = 0; i < 3; i++) this.p(x + rnd(-3, 3), y, 5, pick(cols), { vx: rnd(-8, 8), vz: rnd(-2, 6), g: 40, life: 600, size: 1, size1: 0, add: false });
+      return;
+    }
     this.scene.tweens.addCounter({ from: 0, to: SOUND_WAVE_IMPACT - 0.01, duration: 280, onUpdate: (tw) => img.setFrame(`w${SOUND_WAVE_FLIGHT + Math.floor(tw.getValue() ?? 0)}`), onComplete: () => img.destroy() });
     this.burst(x, y, 4, "holy", 5, 40, 260);
+  }
+
+  /** A "bounce": the note flicks off the wall (a small hop, a tilt, then it fades) besides the material's sparks. */
+  private noteFlick(x: number, y: number) {
+    const [lx, ly] = lift(6), dir = Math.random() < 0.5 ? -1 : 1;
+    const im = this.scene.add.image(x + lx, y + ly, this.waveSheet(), "w0").setScale(0.55).setTint(this.lastWave).setDepth(DEPTH + 3);
+    this.scene.tweens.add({ targets: im, x: im.x + dir * 12, angle: dir * 60, alpha: 0, duration: 420, ease: "Quad.easeOut", onComplete: () => im.destroy() });
+    this.scene.tweens.add({ targets: im, y: im.y - 9, duration: 190, ease: "Quad.easeOut", yoyo: true });
   }
 
   /** A ring of coloured sparks along the ground (ring() takes a palette; this one a single colour). */
@@ -2402,7 +2455,7 @@ export class SkillFx {
         const [hx, hy] = e ? this.hand(e) : [x, y], c = modeColor(ev.mode);
         this.notesUp(hx, hy, c, 1);
         this.glow(hx, hy, 8, 7, c, 200, 0.5);
-        if (ev.id) this.noteRing(ev.id, ev.mode);
+        if (ev.id) { this.noteRing(ev.id, ev.mode); if (ev.deg) this.lastDeg.set(ev.id, ev.deg); }
         return true;
       }
       case "chord": {
@@ -2422,6 +2475,7 @@ export class SkillFx {
         if (ev.fizzle || !ev.book) {
           for (let i = 0; i < 6; i++) this.p(x + rnd(-6, 6), y + rnd(-2, 2), z + rnd(-4, 4), pick([0x9a9a9a, 0xbdbdbd]), { vx: rnd(-14, 14), vz: rnd(6, 16), life: 420, size: 2, size1: 3, alpha: 0.45, add: false });
           this.tintRing(x, y, 16, 0x9a9a9a, 10, 300, 3);
+          if (ev.id) this.ringState(ev.id).fizz.push(this.t); // a grey ring folds in on the caster (tickRings)
           return true;
         }
         switch (ev.book) {
@@ -2463,7 +2517,8 @@ export class SkillFx {
         const cols = ev.mat === "wood" ? [0xc89a5a, 0x8d6a3a, 0xffe0a8] : ev.mat === "metal" ? [0xffffff, 0xbfe6ff, 0x9ad1ff] : [0xffffff, 0xd0d0d0, 0x9a9a9a];
         this.glow(x, y, 4, 9, cols[0], 160, 0.9);
         for (let i = 0; i < 7; i++) this.p(x, y, 4, pick(cols), { vx: rnd(-50, 50), vy: rnd(-30, 30), vz: rnd(10, 40), g: 140, life: rnd(180, 320), size: pick([1, 2]), size1: 0 });
-        this.tintRing(x, y, 12, 0xffc54d, 8, 240, 4);
+        this.tintRing(x, y, 12, this.lastWave, 8, 240, 4);
+        this.noteFlick(x, y);
         return true;
       }
       case "soundhit": {
@@ -2491,7 +2546,7 @@ export class SkillFx {
   private songRings = new Map<string, SongRingState>();
   private ringState(id: string): SongRingState {
     let rs = this.songRings.get(id);
-    if (!rs) { rs = { g: this.scene.add.graphics(), rings: [], bursts: [], color: modeColor(undefined), lastNote: -1e9, held: 0, lockFrom: 0 }; this.songRings.set(id, rs); }
+    if (!rs) { rs = { g: this.scene.add.graphics(), rings: [], bursts: [], fizz: [], color: modeColor(undefined), lastNote: -1e9, held: 0, lockFrom: 0 }; this.songRings.set(id, rs); }
     return rs;
   }
 
@@ -2508,16 +2563,16 @@ export class SkillFx {
   private chordRings(id: string, mode?: string) {
     const rs = this.ringState(id);
     rs.color = modeColor(mode);
-    for (let i = 0; i < 3; i++) rs.bursts.push({ born: this.t, i });
+    for (let i = 0; i < 3; i++) rs.bursts.push({ born: this.t + i * 60, i });
     rs.rings = []; rs.lockFrom = this.t;
   }
 
-  /** Draws every caster's rings (called each frame from update). */
+  /** Draws every caster's rings (called each frame from update). All of them are LEVEL ellipses in screen space (no tilt). */
   private tickRings() {
     const chorus = new Set<string>();
     for (const { f } of this.fields.values()) if (f.owner && skillById(f.skill)?.song) chorus.add(f.owner);
     for (const id of chorus) if (!this.songRings.has(id) && this.ent(id)) this.ringState(id);
-    const flat = ISO ? 0.5 : 0.6, t = this.t;
+    const t = this.t;
     for (const [id, rs] of this.songRings) {
       const e = this.ent(id);
       if (!e) { rs.g.destroy(); this.songRings.delete(id); continue; }
@@ -2531,38 +2586,58 @@ export class SkillFx {
         else if (w === "chlock") lock = true; // the lockout after a chord
       }
       // server progress wins: a held note (ch1/ch2) keeps its ring alive, a late joiner gets rings it never saw born
-      while (rs.rings.length < held) rs.rings.push({ born: t - 400 });
+      while (rs.rings.length < held) rs.rings.push({ born: t - 600 });
       rs.held = held;
       if (mode) rs.color = modeColor(mode);
       if (lock && !rs.lockFrom) rs.lockFrom = t; // late joiner: time it from the first sight
       if (!lock) rs.lockFrom = 0;
+      // The rings sit in screen space round the feet: anchored to the hero so the iso pass moves them, not skews them
+      isoAnchor(rs.g, e.sprite);
       const g = rs.g, x = Math.round(e.sprite.x), y = Math.round(e.sprite.y);
-      g.clear().setDepth(e.sprite.depth - 0.5);
-      const ell = (r: number, w: number, col: number, a: number) => { if (a > 0.01) g.lineStyle(w, col, Math.min(1, a)).strokeEllipse(x, y, r * 2, r * 2 * flat); };
+      g.clear(); setBaseDepth(g, e.sprite.y - 0.5);
+      const col = whiten(rs.color, 0.18); // a little lighter: survives the colour grade and the vignette
       // Chorus: a steady base ring under the owner, drawn first so chord rings sit above it
       const base = chorus.has(id);
       if (base) {
         const pulse = 0.5 + 0.5 * Math.sin(t / 420);
-        g.fillStyle(rs.color, 0.05).fillEllipse(x, y, 62, 62 * flat);
-        ell(31, 1, rs.color, 0.4 + 0.15 * pulse);
+        g.fillStyle(rs.color, 0.07).fillEllipse(x, y, 62, 31);
+        pxEllipse(g, x, y, 31, 1, col, 0.55 + 0.25 * pulse);
       }
       if (lock && rs.lockFrom) {
-        const p = Math.min(1, (t - rs.lockFrom) / NOTES.lockMs);
-        ell(42 - 28 * p, 1, 0x8a8a8a, 0.45 - 0.15 * p);
+        const p = Math.min(1, (t - rs.lockFrom) / NOTES.lockMs); // the lockout ring closes in on her as the strings settle
+        pxEllipse(g, x, y, 40 - 24 * p, 2, 0xb4b4bc, 0.75 - 0.25 * p);
       }
-      rs.rings.forEach((r, i) => {
-        const age = t - r.born, k = i + 1, R = 14 + 4 * i, open = Math.min(1, age / 350);
-        const rad = R * (0.35 + 0.65 * (1 - (1 - open) * (1 - open)));
-        let a = Math.max(0, 1 - age / 2500);
-        if (held >= k) a = Math.max(a, 0.3); // still counting toward a chord
-        ell(rad, k === 1 ? 1.5 : 2, rs.color, a * (0.5 + 0.17 * k));
+      for (let i = rs.fizz.length - 1; i >= 0; i--) {
+        const u = (t - rs.fizz[i]) / 420;
+        if (u >= 1) { rs.fizz.splice(i, 1); continue; }
+        pxEllipse(g, x, y, 34 - 24 * u, 2, 0x9a9aa4, 0.8 * (1 - u)); // an empty swell: a grey ring folds in, nothing blooms
+      }
+      rs.rings = rs.rings.filter((r, i) => {
+        const age = t - r.born;
+        if (i < held || age < 1400) r.dead = undefined; else if (r.dead === undefined) r.dead = t; // lapsed: collapses
+        const R = RING_R[Math.min(2, i)];
+        let rad: number, a = 1;
+        if (r.dead !== undefined) {
+          const u = (t - r.dead) / RING_COLLAPSE_MS;
+          if (u >= 1) return false;
+          rad = R * (1 - 0.8 * u * u * (3 - 2 * u)); a = 1 - u; // slowly inward, fading, no pop
+        } else {
+          const u = Math.min(1, age / 380), c1 = 2.4, c3 = c1 + 1, ease = 1 + c3 * (u - 1) ** 3 + c1 * (u - 1) ** 2; // pulses out past R, settles
+          rad = R * (0.35 + 0.65 * ease);
+          if (age < 520) pxEllipse(g, x, y, R + 4 + 14 * (age / 520), 1, whiten(rs.color, 0.5), 0.75 * (1 - age / 520), false); // the echo that pulses outward
+        }
+        g.fillStyle(rs.color, 0.08 * a).fillEllipse(x, y, rad * 2, rad);
+        pxEllipse(g, x, y, Math.round(rad), 2, col, a * 0.95);
+        return true;
       });
-      rs.bursts = rs.bursts.filter((b) => t - b.born < 520);
+      rs.bursts = rs.bursts.filter((b) => t - b.born < 640);
       for (const b of rs.bursts) {
-        const age = t - b.born, u = age / 520, flash = age < 140 ? 0xffffff : rs.color;
-        ell(14 + 4 * b.i + 34 * u, 2, flash, 1 - u);
+        const age = t - b.born; if (age < 0) continue;
+        const u = age / 640, ease = 1 - (1 - u) ** 3, R0 = RING_R[b.i];
+        // the finished chord pulses widest: each of the three rings runs out past the note rings, the outer one furthest
+        pxEllipse(g, x, y, R0 + (CHORD_R - 8 * (2 - b.i) - R0) * ease, b.i === 2 ? 3 : 2, age < 140 ? 0xffffff : col, 1 - u * u);
       }
-      if (!rs.bursts.length && !lock && !base && t - rs.lastNote > 15000 && !held) { rs.g.destroy(); this.songRings.delete(id); }
+      if (!rs.bursts.length && !rs.rings.length && !rs.fizz.length && !lock && !base && t - rs.lastNote > 15000 && !held) { rs.g.destroy(); this.songRings.delete(id); }
     }
   }
 
@@ -2575,7 +2650,7 @@ export class SkillFx {
       if (w.length > 5 && w.startsWith("mode:")) mode = w.slice(5);
       else if (w.length === 4 && w.startsWith("res")) res = w.charCodeAt(3) - 48;
       else if (SONG_BUFFS.has(w)) ring = true;
-      else if (SHIELD_BUFFS.has(w) || (w.startsWith("sg_") && skillById(w)?.buff?.shield)) shield = true;
+      if (isSongShieldWord(w)) shield = true;
     }
     const chance = (perSec: number) => Math.random() < perSec * dt;
     const pulse = 0.5 + 0.5 * Math.sin(this.t / 260), flat = ISO ? 0.5 : 0.6;
@@ -2599,11 +2674,13 @@ export class SkillFx {
       if (chance(2 + res * 5)) this.p(x + rnd(-6, 6), y + rnd(-1, 1), rnd(2, top), c, { vx: rnd(-8, 8), vz: rnd(4, 14), life: 320, size: 1, size1: 0 });
       if (res >= 3 && chance(3)) this.glow(x, y, top * 0.5, 12, c, 260, 0.45);
     }
-    if (shield) {
-      const rad = top / 2 + 4, cy = ys - Math.round(top / 2);
-      g.fillStyle(0x9ad1ff, 0.1 + 0.04 * pulse).fillCircle(xs, cy, rad);
-      g.lineStyle(1, 0xcfeaff, 0.75).strokeCircle(xs, cy, rad);
-      g.fillStyle(0xffffff, 0.7).fillRect(xs - rad * 0.55, cy - rad * 0.55, 2, 1).fillRect(xs - rad * 0.55, cy - rad * 0.55 + 1, 1, 2);
+    if (shield && this.ent(this.meId()) !== e) {
+      // Songweaver shield: no bubble in the world any more. Your own shows on the health orb (orbs.ts); another hero gets a pale
+      // glass rim round their nameplate bar (the 14 x 2 bar under the feet, TownScene), with a glint running along it.
+      const bx = xs - 8, by = ys + 2, gl = Math.floor((this.t / 90) % 16);
+      g.fillStyle(0xcfeaff, 0.9).fillRect(bx, by, 16, 1).fillRect(bx, by + 3, 16, 1).fillRect(bx, by + 1, 1, 2).fillRect(bx + 15, by + 1, 1, 2);
+      g.fillStyle(0xffffff, 1).fillRect(bx + gl, by, 2, 1);
+      g.fillStyle(0x9ad1ff, 0.3).fillRect(bx + 1, by + 1, 14, 2);
     }
   }
 

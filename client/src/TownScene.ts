@@ -30,7 +30,7 @@ import { SoundCues } from "./soundCues";
 import { MonsterBar } from "./monsterBar";
 import { isMineOrGroup, monsterInfo, showWorldBar } from "./monsterInfo";
 import { placeFloat, type FloatBox } from "./floatLanes";
-import { CHORD_NAMES, MODE_COLOR } from "./songTables";
+import { CHORD_NAMES, MODE_COLOR, hasSongShield } from "./songTables";
 
 const SONG_SFX = new Set(["note", "chord", "swell", "newsong", "matpick", "lutefit", "break", "resonate", "bounce", "soundhit", "shieldbreak"]);
 import { attackMult, cooldownMult, critChance, heroSpeed, STATS, magicMult, STAT_KINDS, STAT_NAMES, StatKind, statPoints, HP_PER_STR } from "../../shared/powers";
@@ -3584,7 +3584,7 @@ export class TownScene extends Phaser.Scene {
       // Top-left bars (resourceBars.ts): red HP, blue Mana (spells, shared/mana.ts), green XP
       const ow = own(mine), mn = unpackMana(ow.mp); // owner-only numbers, in `me` (server/player.ts)
       (this.resBars ??= new ResourceBars(document.getElementById("hud")!)).update({
-        song: cls === "songweaver", level: mine.level, hp: mine.hp, maxHp: mine.maxHp, mp: mn.mana, maxMp: mn.maxMana, // the gauge lives in mana / maxMana (shared/mana.ts usesGauge)
+        song: cls === "songweaver", shield: !mine.dead && hasSongShield(mine.fx), level: mine.level, hp: mine.hp, maxHp: mine.maxHp, mp: mn.mana, maxMp: mn.maxMana, // the gauge lives in mana / maxMana (shared/mana.ts usesGauge)
         xpFrac: mine.level >= MAX_LEVEL ? 1 : Math.max(0, Math.min(1, (ow.xp - cur) / Math.max(1, next - cur))),
         xp: Math.max(0, ow.xp - cur), xpNeed: mine.level >= MAX_LEVEL ? undefined : next - cur,
       });
