@@ -13,6 +13,7 @@ body #warplaque[hidden] { display: none; }
 #warplaque .wp-bar b { position: absolute; right: 3px; top: -4px; font: 16px var(--pixel-font); font-weight: normal; color: #fff; }
 #warplaque .wp-foot { color: #a8977a; }
 #warplaque .wp-foot.siege { color: #ff8a6a; }
+#warplaque .wp-foot.rally { color: #9fe07a; }
 /* Oath panel at a standard (warStandards.ts) */
 #warpanel .wr-row { display: flex; align-items: center; gap: 8px; padding: 4px 0; border-top: 1px solid #45331e; }
 #warpanel .wr-row.mine .wr-name { color: #ffd98a; }

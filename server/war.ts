@@ -7,7 +7,7 @@
  */
 import { CLANS, CLAN_KEYS, type ClanKey } from "../shared/war/clans";
 import { newMinds, scriptedOrders, type Mind } from "../shared/war/doctrine";
-import { newWar, WAR, warTick, type Orders, type WarState } from "../shared/war/rules";
+import { newWar, nightRaid, rallyClan, WAR, warTick, type Orders, type WarState } from "../shared/war/rules";
 import { TERRITORIES, type Territory } from "../shared/war/territories";
 import { regionByKey } from "../shared/war/regions";
 import { tunnelStrikes, type TunnelStrike } from "../shared/war/tunnels";
@@ -15,6 +15,11 @@ import { warPhase, warView, type WarView } from "../shared/war/view";
 import { eventVoice, leaderLine } from "../shared/war/heralds";
 import { openKv, type Kv } from "./store";
 
+/**
+ * What else a tick brought, for the room to announce (not logged, not saved): the Night Raiders' strike on the hunted
+ * clan, and the Rally when the clan it is for changed (`rally` undefined: nobody is rallied any more).
+ */
+export interface WarNews { raid?: { clan: ClanKey; ts: number[] }; rally?: { clan?: ClanKey; was?: ClanKey } }
 export interface WarEvent { at: number; tick: number; kind: "siege" | "flip" | "held"; t: number; by: ClanKey; from: ClanKey; text: string }
 /** `names`: the territory names in id order (optional: saves before 2026-11-15 have none, and their ids are today's). */
 interface Saved { v: 1; state: WarState; minds: Record<ClanKey, Mind>; next: number; log: WarEvent[]; names?: string[] }
@@ -32,7 +37,9 @@ let valor: Partial<Record<ClanKey, number>>[] = TERRITORIES.map(() => ({}));
 let lastOrders: Partial<Record<ClanKey, Orders>> | undefined;
 /** The tunnel strikes of those orders, read on the state before the tick (as rules.ts warTick saw it). */
 let lastStrikes: TunnelStrike[] = [];
-const listeners = new Set<(v: WarView, events: WarEvent[]) => void>();
+/** The lands the Night Raiders struck in the last tick (memory only, like lastOrders: shown on the war table and plaque). */
+let lastRaided: number[] = [];
+const listeners = new Set<(v: WarView, events: WarEvent[], news: WarNews) => void>();
 
 /** Small seeded random per tick: the same tick always plays out the same way (easy to replay from the log). */
 function rng(seed: number) {
@@ -144,25 +151,30 @@ export async function step(now: number) {
   if (!saved || now < saved.next) return;
   const late = Math.floor((now - saved.next) / WAR.tickMs);
   if (late >= CATCH_UP) saved.next = now - (CATCH_UP - 1) * WAR.tickMs;
-  const events: WarEvent[] = [];
+  const events: WarEvent[] = [], news: WarNews = {}, rallyWas = rallyClan(saved.state);
   while (now >= saved.next) {
     const at = saved.next;
     saved.next += WAR.tickMs; // first: a tick that throws is skipped, never retried every 15 s
-    try { events.push(...tickOnce(at)); } catch (e) { console.error("War: tick failed, skipped:", e); }
+    try { events.push(...tickOnce(at, news)); } catch (e) { console.error("War: tick failed, skipped:", e); }
   }
+  const rallyNow = rallyClan(saved.state);
+  if (rallyNow !== rallyWas) news.rally = { clan: rallyNow, was: rallyWas };
   saved.log.push(...events);
   if (saved.log.length > LOG_MAX) saved.log.splice(0, saved.log.length - LOG_MAX);
   if (!process.env.NODE_TEST_CONTEXT) for (const e of events) console.log(`War: ${e.text}`);
-  const view = warView(saved.state, saved.next);
-  listeners.forEach((f) => { try { f(view, events); } catch (e) { console.error("War listener:", e); } });
+  const view = warView(saved.state, saved.next, lastRaided);
+  listeners.forEach((f) => { try { f(view, events, news); } catch (e) { console.error("War listener:", e); } });
   await kv?.set(KEY, saved).catch((e) => console.error("War: could not save:", e));
 }
 
-function tickOnce(at: number): WarEvent[] {
+function tickOnce(at: number, news: WarNews): WarEvent[] {
   const s = saved!.state, before = { owner: [...s.owner], siege: s.siege.map((x) => x && { ...x }) };
-  const orders = scriptedOrders(s, saved!.minds, rng(s.tick * 2654435761 + 1));
+  const orders = scriptedOrders(s, saved!.minds, rng(s.tick * 2654435761 + 1)), phase = warPhase(at);
   lastStrikes = tunnelStrikes(s, orders); // (before warTick moves the owners: the strikes the rules fed)
-  warTick(s, orders, { phase: warPhase(at), valor });
+  const raid = nightRaid(s, phase); // (likewise: the lands warTick strikes)
+  lastRaided = raid?.ts ?? [];
+  if (raid?.ts.length) news.raid = { clan: raid.clan, ts: [...raid.ts] };
+  warTick(s, orders, { phase, valor });
   lastOrders = orders;
   valor = TERRITORIES.map(() => ({}));
   const out: WarEvent[] = [];
@@ -183,7 +195,7 @@ export function addValor(t: number, k: ClanKey, amount: number): boolean {
   return true;
 }
 
-export const warNow = (): WarView | undefined => (saved ? warView(saved.state, saved.next) : undefined);
+export const warNow = (): WarView | undefined => (saved ? warView(saved.state, saved.next, lastRaided) : undefined);
 export const warLog = (n = 50): WarEvent[] => (saved ? saved.log.slice(-n) : []);
 export const warState = (): WarState | undefined => saved?.state;
 /** The orders the leaders gave in the last war tick (not saved), or undefined before the first tick of this process. */
@@ -191,13 +203,13 @@ export const warOrders = (): Partial<Record<ClanKey, Orders>> | undefined => las
 /** The tunnel strikes of the last war tick (server/warTunnels.ts), computed on the state that tick started from. Empty before the first tick. */
 export const warStrikes = (): readonly TunnelStrike[] => lastStrikes;
 /** Called after every war tick with the new view and what happened. Returns an unsubscribe function. */
-export function onWar(f: (v: WarView, events: WarEvent[]) => void) { listeners.add(f); return () => { listeners.delete(f); }; }
+export function onWar(f: (v: WarView, events: WarEvent[], news: WarNews) => void) { listeners.add(f); return () => { listeners.delete(f); }; }
 
 /** Blocking save at shutdown (JSON store only; Postgres saves after every tick anyway). */
 export function flushWar() { if (saved && kv?.setSync) try { kv.setSync(KEY, saved); } catch (e) { console.error("War: could not save:", e); } }
 
 /** Tests: start from a given state without a store or a clock. */
-export function _resetWar(s?: Saved, store?: Kv) { stopWar(); saved = s ?? fresh(Date.now()); saved.names ??= namesNow(); kv = store; valor = TERRITORIES.map(() => ({})); lastOrders = undefined; lastStrikes = []; }
+export function _resetWar(s?: Saved, store?: Kv) { stopWar(); saved = s ?? fresh(Date.now()); saved.names ??= namesNow(); kv = store; valor = TERRITORIES.map(() => ({})); lastOrders = undefined; lastStrikes = []; lastRaided = []; }
 /** Tests: set the last tick's orders. */
 export function _setWarOrders(o: Partial<Record<ClanKey, Orders>> | undefined) { lastOrders = o; lastStrikes = saved ? tunnelStrikes(saved.state, o) : []; }
 /** Tests: valor clan `k` has gathered in territory `t` so far this war tick. */
@@ -206,7 +218,7 @@ export type { Saved as SavedWar };
 
 /** What a room needs: the war snapshot to every client after each tick, and the herald's news in the chat. */
 export function attachWar(room: { broadcast(type: string, msg: unknown): void }) {
-  return onWar((v, events) => {
+  return onWar((v, events, news) => {
     room.broadcast("war", v);
     for (const e of events) {
       room.broadcast("chat", { id: "", name: "Herald", text: e.text });
@@ -214,5 +226,25 @@ export function attachWar(room: { broadcast(type: string, msg: unknown): void })
       room.broadcast("chat", { id: "", name: line.name, text: line.text });
       room.broadcast("warev", { kind: e.kind, t: e.t, by: e.by, from: e.from }); // horn and notice (client/src/warNotice.ts)
     }
+    if (news.raid) {
+      room.broadcast("chat", { id: "", name: "Herald", text: raidLine(news.raid.clan, news.raid.ts) });
+      room.broadcast("warraid", news.raid); // a notice in the struck lands (client/src/warNotice.ts)
+    }
+    if (news.rally) room.broadcast("chat", { id: "", name: "Herald", text: rallyLine(news.rally.clan, news.rally.was) });
   });
 }
+
+/** The Herald's line when the Night Raiders strike the hunted clan's lands. */
+export function raidLine(clan: ClanKey, ts: readonly number[]): string {
+  const lands = ts.map((t) => TERRITORIES[t]?.name).filter(Boolean);
+  const where = lands.length > 1 ? `${lands.slice(0, -1).join(", ")} and ${lands[lands.length - 1]}` : lands[0] ?? "its borders";
+  return `The Night Raiders ride against ${CLANS[clan].name}, the mightiest clan: ${where} bleed.`;
+}
+/** The Herald's line when the Rally passes to another clan (or ends). */
+export function rallyLine(clan: ClanKey | undefined, was: ClanKey | undefined): string {
+  if (!clan) return `${CLANS[was!]?.name ?? "The weakest clan"} stand again: the Rally is over.`;
+  return `Rally for ${CLANS[clan].name}! The weakest clan calls its sworn: their valor and renown count more, its writs pay more.`;
+}
+/** What a hero sworn to the rallied clan is told on joining (and the room tells its own sworn when the Rally comes). */
+export const rallyTell = (clan: ClanKey) =>
+  `Rally! ${CLANS[clan].name} hold the least land: your valor counts x${WAR.rallyValor}, your renown x${WAR.rallyRenown}, and its writs pay more.`;

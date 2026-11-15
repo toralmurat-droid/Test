@@ -7,8 +7,9 @@
  * upkeep, split their army between defending their borders and attacking the targets their leader chose. On each
  * attacked territory attack meets defence (defender's edge, forts, counter cycle, doctrine and time of day); the
  * difference moves Control. Below WAR.siegeAt a siege is announced, and when it comes due the territory flips if the
- * attacker still out-fights the defence there. Capitals never flip. Clans below a fair share get a rally bonus, and the
- * Night Raiders bleed whoever holds the most land.
+ * attacker still out-fights the defence there. Capitals never flip. Clans below a fair share get a rally bonus (the
+ * weakest one also a Rally for its heroes' valor), and the Night Raiders hunt a clan that holds clearly the most land:
+ * by night they bleed its army and strike its weakest border lands (roadmap M2: the brakes on a runaway clan).
  */
 import { CLANS, CLAN_KEYS, type ClanKey } from "./clans";
 import { initialOwners, TERRITORIES, type Territory } from "./territories";
@@ -42,7 +43,18 @@ export const WAR = {
   tunnelSupply: 0.8, // share of the start's supply a tunnel strike keeps
   rally: 0.8, // income bonus of a clan with no land at all, shrinking to 0 at a fair share (1/5 of the land)
   leaderShare: 0.3, // above this share of the land a clan is "the leader": everyone's target, the Raiders' prey
-  raidersHit: 0.03, // share of the leader's army the Night Raiders cut down each night tick
+  raidersHit: 0.03, // share of the hunted clan's army the Night Raiders cut down each night tick
+  // The Night Raiders hunt a clan that holds clearly the most land (huntedClan): over leaderShare, or at least huntShare
+  // and huntLead territories ahead of the next clan. Each night tick they strike huntLands of its border lands
+  huntShare: 0.26,
+  huntLead: 2,
+  huntLands: 2, // (non-capital, weakest Control first)
+  huntControl: 4, // Control each struck land loses (a quiet land wins WAR.regrow back per tick)
+  // Rally for the weakest (rallyClan): the clan with the least land, below rallyBelow x a fair share. Its heroes' valor
+  // counts rallyValor times (valorForce still caps it at valorCap) and their renown grows rallyRenown times (server)
+  rallyBelow: 0.8,
+  rallyValor: 1.3,
+  rallyRenown: 1.25,
   // Players (server/war.ts): valor is hero-minutes at a standard; a few heroes tip a front, a crowd cannot swamp it
   valorScale: 20, // valor at which players bring ~63% of valorCap
   siegeValor: 1.5, // players count more at a territory under siege (the hour's notice is for them)
@@ -78,6 +90,41 @@ export function leaderOf(s: WarState): ClanKey | undefined {
   const best = CLAN_KEYS.reduce((a, b) => (landOf(s, b) > landOf(s, a) ? b : a));
   return landOf(s, best) / s.owner.length > WAR.leaderShare ? best : undefined;
 }
+
+/**
+ * The clan the Night Raiders hunt, if any: one that holds more than WAR.leaderShare, or at least WAR.huntShare of the
+ * land and WAR.huntLead territories more than any other clan. Takes the owners only, so the client can ask it too.
+ */
+export function huntedClan(s: Pick<WarState, "owner">): ClanKey | undefined {
+  const land = CLAN_KEYS.map((k) => s.owner.filter((o) => o === k).length), n = s.owner.length || 1;
+  const top = Math.max(...land), i = land.indexOf(top), second = Math.max(...land.filter((_, j) => j !== i));
+  if (top / n > WAR.leaderShare && top > second) return CLAN_KEYS[i];
+  return top / n >= WAR.huntShare && top - second >= WAR.huntLead ? CLAN_KEYS[i] : undefined;
+}
+
+/** What the Night Raiders do this tick: by night, strike up to WAR.huntLands of the hunted clan's border lands (not its
+ *  capitals), weakest Control first (then the most pressed, then the lowest id). Undefined by day or with nobody hunted. */
+export function nightRaid(s: WarState, phase: number): { clan: ClanKey; ts: number[] } | undefined {
+  const clan = phase === 2 ? huntedClan(s) : undefined;
+  if (!clan) return undefined;
+  const ts = bordersOf(s, clan).filter((t) => TERRITORIES[t].capitalOf !== clan)
+    .sort((a, b) => s.control[a] - s.control[b] || s.pressure[b] - s.pressure[a] || a - b).slice(0, WAR.huntLands);
+  return { clan, ts };
+}
+
+/**
+ * The clan the war rallies for, if any: the one with the least land when that is under WAR.rallyBelow x a fair share.
+ * A tie goes to the first in CLAN_KEYS order (not the smaller army: that would hand the Rally back and forth every tick).
+ * Takes the owners only, so the client and the writ board name the same clan.
+ */
+export function rallyClan(s: Pick<WarState, "owner">): ClanKey | undefined {
+  const land = (k: ClanKey) => s.owner.filter((o) => o === k).length;
+  const k = CLAN_KEYS.reduce((a, b) => (land(b) < land(a) ? b : a));
+  return land(k) < WAR.rallyBelow * (s.owner.length / CLAN_KEYS.length) ? k : undefined;
+}
+/** Renown multiplier for a hero sworn to clan `k` (WAR.rallyRenown while the war rallies for `k`). */
+export const rallyRenown = (s: Pick<WarState, "owner"> | undefined, k: ClanKey | undefined): number =>
+  (s && k && rallyClan(s) === k ? WAR.rallyRenown : 1);
 
 /** Supply of every territory for its owner: 1 at a capital, less per border away, WAR.cutOff when cut off. */
 export function supplyMap(s: WarState): number[] {
@@ -145,7 +192,7 @@ export const valorForce = (v: number) => (v > 0 ? WAR.valorCap * (1 - Math.exp(-
 
 /** One war tick. Mutates and returns `s`. A clan missing from `orders` (or with broken orders) only defends. */
 export function warTick(s: WarState, orders: Partial<Record<ClanKey, Orders>>, extra: TickExtra = {}): WarState {
-  const supply = supplyMap(s), lead = leaderOf(s), phase = extra.phase ?? phaseOf(s.tick);
+  const supply = supplyMap(s), phase = extra.phase ?? phaseOf(s.tick), rally = rallyClan(s);
   const land = Object.fromEntries(CLAN_KEYS.map((k) => [k, landOf(s, k)])) as Record<ClanKey, number>;
   // 1. Income and upkeep
   for (const k of CLAN_KEYS) {
@@ -155,7 +202,12 @@ export function warTick(s: WarState, orders: Partial<Record<ClanKey, Orders>>, e
     inc *= 1 + WAR.rally * Math.max(0, 1 - land[k] / (s.owner.length / CLAN_KEYS.length));
     s.army[k] = s.army[k] * (1 - WAR.upkeep) + inc;
   }
-  if (lead && phase === 2) s.army[lead] *= 1 - WAR.raidersHit;
+  // The Night Raiders hunt the clan that holds clearly the most: its army bleeds, its weakest borders shake
+  const raid = nightRaid(s, phase);
+  if (raid) {
+    s.army[raid.clan] *= 1 - WAR.raidersHit;
+    for (const t of raid.ts) s.control[t] = Math.max(0, s.control[t] - WAR.huntControl);
+  }
   // 2. Where the armies stand: defenders spread over the borders by last tick's pressure, attackers on their targets
   const attack: Partial<Record<ClanKey, number>>[] = TERRITORIES.map(() => ({}));
   const defence = Array<number>(TERRITORIES.length).fill(0);
@@ -182,7 +234,8 @@ export function warTick(s: WarState, orders: Partial<Record<ClanKey, Orders>>, e
     if (!vs || id >= TERRITORIES.length) return;
     const legal = (k: ClanKey) => targetsOf(s, k).includes(id);
     for (const [k, v] of Object.entries(vs) as [ClanKey, number][]) {
-      const f = valorForce(v ?? 0) * (s.siege[id] ? WAR.siegeValor : 1); // a siege window calls the heroes
+      // a siege window calls the heroes; the Rally makes the weakest clan's heroes count more
+      const f = valorForce((v ?? 0) * (k === rally ? WAR.rallyValor : 1)) * (s.siege[id] ? WAR.siegeValor : 1);
       if (!f || !CLANS[k]) continue;
       if (s.owner[id] === k) defence[id] += f;
       else if (legal(k)) attack[id][k] = (attack[id][k] ?? 0) + f;

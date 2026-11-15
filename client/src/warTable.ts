@@ -57,6 +57,13 @@ export function drawWarTable(g: CanvasRenderingContext2D, v: WarView, s: number,
       g.strokeStyle = rgba(edge, 0.55);
       g.strokeRect(x + 3, y + 3, w - 6, h - 6);
     }
+    if (v.raided?.includes(t.id)) { // struck by the Night Raiders last tick: a dark dashed ring inside the border
+      g.lineWidth = Math.max(2, s * 0.8);
+      g.setLineDash([Math.max(3, s * 1.5), Math.max(2, s)]);
+      g.strokeStyle = `rgba(150,60,200,${0.55 + 0.45 * pulse})`;
+      g.strokeRect(x + 2, y + 2, w - 4, h - 4);
+      g.setLineDash([]);
+    }
     if (v.sieges.some((sg) => sg[0] === t.id)) {
       g.lineWidth = Math.max(2, s);
       g.strokeStyle = `rgba(255,80,40,${0.4 + 0.6 * pulse})`;
@@ -95,7 +102,9 @@ export function drawWarLegend(g: CanvasRenderingContext2D, v: WarView, font: str
     const y = H - 14 - (CLAN_KEYS.length - 1 - i) * 18, n = v.owner.filter((o) => CLAN_KEYS[o] === k).length;
     g.fillStyle = "rgba(10,8,6,0.75)"; g.fillRect(6, y - 9, 230, 18);
     g.fillStyle = rgba(MAP[k], 0.9); g.fillRect(10, y - 5, 10, 10);
+    const ci = CLAN_KEYS.indexOf(k), tag = v.hunt === ci ? "  hunted" : v.rally === ci ? "  Rally" : ""; // the war's brakes
     text(`${CLANS[k].name}  ${n}`, 26, y, "#eadfc8");
+    if (tag) text(tag, 26 + g.measureText(`${CLANS[k].name}  ${n}`).width, y, v.hunt === ci ? "#c890ff" : "#9fe07a");
   });
   const nameW = Math.max(...LANDS.map((l) => g.measureText(l.name).width)), chip = 34;
   LANDS.forEach((l, i) => {

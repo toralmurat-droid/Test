@@ -1586,6 +1586,7 @@ export class TownScene extends Phaser.Scene {
     this.room.onMessage("tunnels", (m) => { if (m && Array.isArray(m.mouths)) this.tunnelMouths = m.mouths; }); // Hide-Kin tunnel mouths (server/warTunnels.ts), kept for a war-table marker later
     const warNotice = new WarNotice(document.getElementById("hud")!);
     this.room.onMessage("warev", (e) => warNotice.show(e, this.entities.get(this.me)?.sprite));
+    this.room.onMessage("warraid", (r) => warNotice.raid(r, this.entities.get(this.me)?.sprite)); // the Night Raiders strike the leading clan's lands
     this.room.onMessage("mv", alive);
     this.startPing();
     window.setInterval(() => { if (!this.quitting && Date.now() - lastPatch > 15_000) reconnectSoon(login); }, 3000);

@@ -5,7 +5,7 @@
 import { dayFrac } from "../daynight";
 import { CLAN_KEYS, type ClanKey } from "./clans";
 import type { WarState } from "./rules";
-import { WAR } from "./rules";
+import { huntedClan, rallyClan, WAR } from "./rules";
 import { TERRITORIES, type Territory } from "./territories";
 
 export interface WarView {
@@ -17,12 +17,24 @@ export interface WarView {
   control: number[]; // whole numbers 0..100
   /** Sieges announced: territory id, attacker (CLAN_KEYS index), wall-clock ms when it comes due. */
   sieges: [number, number, number][];
+  /** The clan the Night Raiders hunt (rules.ts huntedClan), as a CLAN_KEYS index; absent when none. */
+  hunt?: number;
+  /** Territories the Night Raiders struck in the last war tick (absent when none). */
+  raided?: number[];
+  /** The clan the war rallies for (rules.ts rallyClan), as a CLAN_KEYS index; absent when none. */
+  rally?: number;
 }
 
-export function warView(s: WarState, next: number): WarView {
+/** `raided`: the lands the Night Raiders struck in the last tick (server/war.ts keeps them; not part of the state). */
+export function warView(s: WarState, next: number, raided: readonly number[] = []): WarView {
   const sieges: [number, number, number][] = [];
   s.siege.forEach((sg, t) => { if (sg) sieges.push([t, CLAN_KEYS.indexOf(sg.by), next + (sg.at - s.tick) * WAR.tickMs]); });
-  return { tick: s.tick, next, owner: s.owner.map((k) => CLAN_KEYS.indexOf(k)), control: s.control.map(Math.round), sieges };
+  const v: WarView = { tick: s.tick, next, owner: s.owner.map((k) => CLAN_KEYS.indexOf(k)), control: s.control.map(Math.round), sieges };
+  const hunt = huntedClan(s), rally = rallyClan(s), hit = raided.filter((t) => Number.isInteger(t) && t >= 0 && t < s.owner.length);
+  if (hunt) v.hunt = CLAN_KEYS.indexOf(hunt);
+  if (hit.length) v.raided = [...hit];
+  if (rally) v.rally = CLAN_KEYS.indexOf(rally);
+  return v;
 }
 
 /** The territory a tile lies in (sanctuaries and villages lie in none). */

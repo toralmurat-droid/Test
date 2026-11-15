@@ -103,7 +103,7 @@ import { ASK_BURST, ASK_PER_SEC, Bucket, CHAT_BURST, CHAT_PER_SEC, CRAFT_BURST, 
 
 import { Player } from "./player";
 import { byPart, hitBy } from "./hitBy";
-import { addValor, attachWar, onWar, warNow, warState } from "./war";
+import { addValor, attachWar, onWar, rallyTell, warNow, warState } from "./war";
 import { clanView, cleanOath, Presence, swear } from "./warHeroes";
 import { WarTroops } from "./warTroops";
 import { WarCaravans } from "./warCaravans";
@@ -113,7 +113,8 @@ import { WarRituals } from "./warRituals";
 import { WarOaths } from "./warOaths";
 import { WarWrits } from "./warWrits";
 import { cleanWrit } from "../shared/war/writs";
-import { WAR_TROOPS } from "../shared/war/troops";
+import { parseTroop, WAR_TROOPS } from "../shared/war/troops";
+import { huntedClan, rallyClan } from "../shared/war/rules";
 import type { ClanKey } from "../shared/war/clans";
 import { cleanRenown } from "../shared/war/renown";
 export { Player, PlayerPrivate } from "./player"; // moved out; tests and tools import them from here
@@ -695,7 +696,11 @@ export class TownRoom extends Room<TownState> {
 
   onCreate() {
     liveRooms.add(this);
-    const offNews = attachWar(this), offTroops = onWar((v) => { this.sieges.tick(Date.now()); this.warTroops.onWar(v); this.writs.onWar(v); }); // the clan war (server/war.ts) runs on its own; the room passes on the news
+    const offNews = attachWar(this), offTroops = onWar((v, _e, news) => {
+      this.sieges.tick(Date.now()); this.warTroops.onWar(v); this.writs.onWar(v);
+      const r = news.rally?.clan; // the Rally came to a clan: its sworn heroes here hear what it means for them
+      if (r) for (const [id, p] of this.state.players.entries()) if (p.clan === r) this.clients.getById(id)?.send("chat", { id: "", name: "Herald", text: rallyTell(r) });
+    }); // the clan war (server/war.ts) runs on its own; the room passes on the news
     this.offWar = () => { offNews(); offTroops(); };
     this.limitMessages();
     this.qsteps = new QuestSteps({
@@ -1112,6 +1117,7 @@ export class TownRoom extends Room<TownState> {
     client.send("tunnels", this.tunnels.view()); // Hide-Kin tunnel mouths (server/warTunnels.ts)
     client.send("rituals", this.rituals.view()); // the Veiled noon ritual circle (server/warRituals.ts)
     client.send("clan", clanView(p));
+    { const ws = warState(); if (p.clan && ws && rallyClan(ws) === p.clan) client.send("chat", { id: "", name: "Herald", text: rallyTell(p.clan) }); } // Rally for the weakest
     this.oaths.sync(); client.send("oaths", this.oaths.full()); // tabards: others learn this hero's oath, this client gets everyone's
     this.writs.join(client.sessionId); // a war writ in progress (or withdrawn while away)
     console.log(`${p.name} the ${CLASSES[p.cls].name} joined (${this.clients.length} online)`);
@@ -3660,20 +3666,21 @@ export class TownRoom extends Room<TownState> {
 
   /** Living things a rider may cut down: every hero, every monster except the dead and the golems. */
   private raiderPrey(m: Mob, id: string, now: number): void {
-    const S = NIGHT_RAID.sight;
+    const S = NIGHT_RAID.sight, ws = warState(), hunt = ws && huntedClan(ws); // the war's leading clan is their prey first (shared/war/rules.ts)
     let best = 0, target = "", foe = "";
     this.state.players.forEach((p, pid) => {
       if (p.dead || isSafeZone(p.x, p.y)) return;
       const d = Math.hypot(p.x - m.x, p.y - m.y), hated = pid === m.hateId ? m.hate : 0;
       if (d >= (hated > 0 ? S * 2 : S)) return;
-      const score = 0.3 + Math.max(0, 1 - d / S) + hated + (pid === m.target ? AGGRO.stick : 0);
+      const score = 0.3 + Math.max(0, 1 - d / S) + hated + (pid === m.target ? AGGRO.stick : 0) + (hunt && p.clan === hunt ? NIGHT_RAID.huntPrey : 0);
       if (score > best) { best = score; target = pid; foe = ""; }
     });
     for (const [oid, o] of this.state.mobs.inBox(m.x, m.y, S)) {
       if (o === m || o.dead || o.hidden || raiderIgnores(o.kind) || o.kind === "bride") continue;
       const d = Math.hypot(o.x - m.x, o.y - m.y);
       if (d >= S) continue;
-      const score = Math.max(0, 1 - d / S) + (oid === m.hateId ? m.hate : 0) + (oid === m.foe ? AGGRO.stick : 0);
+      const prey = hunt && o.kind === "trooper" && parseTroop(o.weapon)?.clan === hunt ? NIGHT_RAID.huntPrey : 0; // the hunted clan's soldiers and carts
+      const score = Math.max(0, 1 - d / S) + (oid === m.hateId ? m.hate : 0) + (oid === m.foe ? AGGRO.stick : 0) + prey;
       if (score > best) { best = score; target = ""; foe = oid; }
     }
     const had = m.target || m.foe;
