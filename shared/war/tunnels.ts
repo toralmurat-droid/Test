@@ -7,7 +7,11 @@
  * "<clan>~" (troops.ts parseTroop part "mouth", an object), so every trooper gate holds. Pure rules, spots and numbers.
  */
 import { MAP_W, TILE } from "../constants";
-import { DOORS, isSolidAt, PORTAL_SPOTS } from "../map";
+import { WAYGATE_DESERT, WAYGATE_OAKVALE } from "../desert";
+import { CRYPT_DOOR, LINKS, SINKHOLE, UNDER_SHAFT, underground } from "../dungeon";
+import { DOORS, isSolidAt, PORTAL_SPOTS, SHRINE_SPOT } from "../map";
+import { NPC_DECOR, NPCS } from "../npcs";
+import { BOARDS } from "../bounty";
 import { caravanOffLimits } from "./caravans";
 import { CLANS, CLAN_KEYS, type ClanKey } from "./clans";
 import { patrolOf } from "./patrols";
@@ -45,6 +49,8 @@ export const TUNNEL = {
   maxValorPerTick: 10,
   /** Mouth spot: this many tiles in from the land's edge toward the start, searched outward up to searchTiles. */
   edgeTiles: 4, searchTiles: 12,
+  /** ...and at least this many tiles from every landmark (tunnelLandmarks: people, props, entrances, waygates, the shrine, boards). */
+  keepTiles: 4,
 };
 
 /** A tunnel strike this war tick: target land t, reached from own land `from` (two borders back), by clan `clan`. */
@@ -85,9 +91,24 @@ const nearDoor = (tx: number, ty: number) => {
   for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) if (doorTiles.has((ty + dy) * MAP_W + tx + dx)) return true;
   return false;
 };
-/** Tile (tx, ty) can carry a mouth: its 3x3 free of solids, not off limits (safe squares, stockade, monster-free ground), no door, no portal stone near. */
+let marks: { x: number; y: number }[] | undefined;
+/**
+ * Overworld spots a mouth keeps TUNNEL.keepTiles from (tile units, fractional): NPCs and their props, the entrances
+ * below ground (every above-ground stair or rope, the sinkhole, the crypt door, the well-shaft), both waygates, the shrine
+ * and the bounty boards. Portal stones keep a wider berth (6 tiles, like the standards).
+ */
+export function tunnelLandmarks(): { x: number; y: number }[] {
+  if (!marks) {
+    const t = (p: { x: number; y: number }) => ({ x: p.x, y: p.y }), px = (p: { x: number; y: number }) => ({ x: p.x / TILE, y: p.y / TILE });
+    marks = [...NPCS.map(px), ...NPC_DECOR.map(t), ...LINKS.filter((l) => !underground(l.y)).map(px), ...BOARDS.map(px),
+      ...[SINKHOLE, CRYPT_DOOR, UNDER_SHAFT, WAYGATE_OAKVALE, WAYGATE_DESERT, SHRINE_SPOT].map((p) => ({ x: p.x + 0.5, y: p.y + 0.5 }))];
+  }
+  return marks;
+}
+/** Tile (tx, ty) can carry a mouth: its 3x3 free of solids, not off limits (safe squares, stockade, monster-free ground), no door, no portal stone or landmark near. */
 function clearTile(tx: number, ty: number): boolean {
   if (nearDoor(tx, ty) || PORTAL_SPOTS.some((p) => Math.hypot(p.x - tx, p.y - ty) < 6)) return false;
+  if (tunnelLandmarks().some((p) => Math.hypot(p.x - (tx + 0.5), p.y - (ty + 0.5)) < TUNNEL.keepTiles)) return false;
   for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
     const x = (tx + dx + 0.5) * TILE, y = (ty + dy + 0.5) * TILE;
     if (isSolidAt(x, y) || caravanOffLimits(x, y)) return false;
@@ -124,8 +145,8 @@ function reachOf(t: number): Set<number> | undefined {
 const mouthCache = new Map<string, { x: number; y: number } | undefined>();
 /**
  * Where the tunnel from own land `from` breaks out in target land t (px, a tile centre): free walkable ground near t's
- * edge facing `from`, inside t's rect, clear of solid tiles, portal stones, safe squares, dungeon doors, the Hold's fort
- * and the standards' rings, and reachable on foot from t's Hold gate. Deterministic (the map alone), cached; undefined
+ * edge facing `from`, inside t's rect, clear of solid tiles, portal stones, landmarks, safe squares, dungeon doors, every
+ * Hold's fort and every standard's ring (territory rects overlap: a neighbour's Hold can stand inside t), and reachable on foot from t's Hold gate. Deterministic (the map alone), cached; undefined
  * when the land has no such ground.
  */
 export function tunnelMouth(t: number, from: number): { x: number; y: number } | undefined {
@@ -138,14 +159,14 @@ export function tunnelMouth(t: number, from: number): { x: number; y: number } |
     // from the middle toward `from` until edgeTiles short of the rect's edge
     const fx = ux ? (ux > 0 ? T.x + T.w - T.cx : T.cx - T.x) / Math.abs(ux) : Infinity, fy = uy ? (uy > 0 ? T.y + T.h - T.cy : T.cy - T.y) / Math.abs(uy) : Infinity;
     const reachTo = Math.max(0, Math.min(fx, fy) - TUNNEL.edgeTiles);
-    const ex = T.cx + ux * reachTo, ey = T.cy + uy * reachTo, hold = HOLDS.find((h) => h.t === t);
+    const ex = T.cx + ux * reachTo, ey = T.cy + uy * reachTo;
     const ok = (tx: number, ty: number, strict: boolean) => {
       if (tx < T.x + 1 || ty < T.y + 1 || tx >= T.x + T.w - 1 || ty >= T.y + T.h - 1 || !reach.has(ty * MAP_W + tx)) return false;
       if ((tx + 0.5 - T.cx) * ux + (ty + 0.5 - T.cy) * uy <= 0) return false; // on the side facing `from`
       if (!clearTile(tx, ty)) return false;
       const x = (tx + 0.5) * TILE, y = (ty + 0.5) * TILE;
-      if (hold && Math.max(Math.abs(hold.x - x), Math.abs(hold.y - y)) < HOLD_FORT_PX + (strict ? 2 * TILE : TILE)) return false;
-      return !strict || !STANDARDS.some((s) => s.t === t && Math.hypot(s.x - x, s.y - y) < STANDARD.range + TILE);
+      if (HOLDS.some((h) => Math.max(Math.abs(h.x - x), Math.abs(h.y - y)) < HOLD_FORT_PX + (strict ? 2 * TILE : TILE))) return false;
+      return !STANDARDS.some((s) => Math.hypot(s.x - x, s.y - y) < STANDARD.range + (strict ? 2 * TILE : TILE));
     };
     for (const strict of [true, false]) {
       let bd = Infinity;

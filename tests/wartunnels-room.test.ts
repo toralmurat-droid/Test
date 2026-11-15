@@ -10,7 +10,7 @@ import { STANDARD } from "../shared/war/standards";
 import { TERRITORIES } from "../shared/war/territories";
 import { parseTroop, troopLevel, WAR_TROOPS } from "../shared/war/troops";
 import { mouthHp, TUNNEL, tunnelMouth, tunnelStrikes } from "../shared/war/tunnels";
-import { _resetWar, _setWarOrders, _valorOf, warState } from "../server/war";
+import { _resetWar, _setWarOrders, _valorOf, step, warOrders, warState, warStrikes } from "../server/war";
 import { _resetTunnels, WarTunnels } from "../server/warTunnels";
 
 const HK: ClanKey = "hidekin";
@@ -268,5 +268,43 @@ test("tunnels (room): caravans, a siege and the tunnel stay within maxTroops; pa
     assert.equal(room.tunnels.count, TUNNEL.maxTunnelTroops);
     room.warTroops.tick(Date.now());
     assert.ok(room.tunnels.count + room.warTroops.count <= WAR_TROOPS.maxTroops);
+  } finally { restore(); await srv.stop(); }
+});
+
+test("tunnels (war): the strikes are read on the state the war tick started from, as rules.ts feeds them", async () => {
+  try {
+    const state = newWar(), t0 = Date.now();
+    _resetWar({ v: 1, state, minds: newMinds(), next: t0, log: [] });
+    let checked = 0;
+    for (let i = 0; i < 40; i++) {
+      const before = JSON.parse(JSON.stringify(warState()));
+      await step(t0 + i * 600_000);
+      assert.equal(warState()!.tick, before.tick + 1);
+      assert.deepEqual(warStrikes(), tunnelStrikes(before, warOrders()), `tick ${before.tick}`);
+      checked += warStrikes().length;
+    }
+    assert.ok(checked > 0, "some ticks had tunnel strikes");
+  } finally { restore(); }
+});
+
+test("tunnels (room): a mouth back after a budget squeeze keeps its wave clock and makes no new opening", async () => {
+  const srv = await startRoom();
+  try {
+    tunnelWar();
+    const { room, at, tn, mouth, soldiers, sent } = await setup(srv, DEF);
+    at(MOUTH);
+    room.tunnels.tick(Date.now());
+    assert.ok(mouth());
+    const wave = tn().nextWave, opens = () => sent.filter(([t, v]) => t === "sfx" && v.ev === "tunnel_open").length;
+    assert.equal(opens(), 1);
+    Object.defineProperty(room.caravans, "count", { get: () => WAR_TROOPS.maxTroops, configurable: true });
+    room.tunnels.tick(Date.now());
+    assert.equal(room.tunnels.count, 0, "squeezed out");
+    Object.defineProperty(room.caravans, "count", { get: () => 0, configurable: true });
+    room.tunnels.tick(Date.now());
+    assert.ok(mouth(), "back");
+    assert.equal(tn().nextWave, wave, "the wave clock is kept");
+    assert.equal(soldiers().length, 0, "no wave at once");
+    assert.equal(opens(), 1, "no second tunnel_open");
   } finally { restore(); await srv.stop(); }
 });

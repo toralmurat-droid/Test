@@ -388,15 +388,18 @@ Open points for M1:
   trooper branch of `updateMob`, `hit`, `mobDied`, `forget` (leave and death), the join message. No schema change, no save
   change, no rules.ts number changed.
 - Orders: `server/war.ts` keeps the last tick's orders in memory (`warOrders()`, not saved; after a restart no tunnels until
-  the next war tick). `tunnelStrikes(st, orders)` lists the attacks rules.ts feeds through a tunnel: a clan with the
+  the next war tick) and their strikes, read on the state the tick started from (`warStrikes()`, exactly what `warTick`
+  fed); a target the tunnel already won (now the striking clan's) gets no mouth. `tunnelStrikes(st, orders)` lists the attacks rules.ts feeds through a tunnel: a clan with the
   tunnel doctrine, a legal target (`targetsOf`, after `cleanOrders`) with a share, and none of its land next to it; `from`
   is its land two borders back with the best supply (the land rules.ts feeds the strike from). The test checks it against
   the attack force `warTick` actually puts on each target.
 - Mouth spot: `tunnelMouth(t, from)` walks from the target's middle toward `from`'s middle to `edgeTiles` (4) short of the
   rect's edge, then takes the nearest tile (rings out to `searchTiles` 12, then the whole land) inside the rect, on the
   side facing `from`, with a free 3x3 (no solid tile, safe square, stockade, monster-free ground), no portal stone within
-  6 tiles, no dungeon door within 2, clear of the Hold's fort (+2 tiles) and the standards' rings (relaxed to +1 tile and
-  no ring check when nothing fits), and reachable on foot from the Hold gate (4-way flood inside the land + 2 tiles).
+  6 tiles, no dungeon door within 2, at least `keepTiles` (4) from every landmark (`tunnelLandmarks`: NPCs and their props,
+  every above-ground stair / rope incl. the sinkhole, crypt door and well-shaft, both waygates, the shrine, the bounty
+  boards), clear of EVERY Hold's fort and EVERY standard's ring (territory rects overlap: Saltwind Coast holds Gullrock
+  Cove) by 2 tiles, relaxed to 1 tile when nothing fits, and reachable on foot from the Hold gate (4-way flood inside the land + 2 tiles).
   Deterministic, cached per pair; all 120 possible pairs have one (~190 ms for all, first use).
 - The mouth: a `"trooper"` with weapon `"hidekin~"` (`troopWeapon(k, false, false, false, true)`, `parseTroop` part
   `mouth`, an object), name "Hide-Kin tunnel". HP = Hide-Kin soldier HP at the land's soldier level x `mouthHp` (3), no
@@ -418,9 +421,11 @@ Open points for M1:
   level within `holdPx` (3 tiles), the Hide-Kin earn `mouthValor` (2) in the target land (legal-gated), at most
   `maxValorPerTick` (10) per land per room per war tick (the collapse valor goes through the same cap, per clan).
 - Budget: caravans, sieges, tunnels, patrols. The tunnel gets `WAR_TROOPS.maxTroops - caravans - sieges` (capped at
-  `maxTunnelTroops`) and drops soldiers (then the mouth) when that shrinks; the patrols' `reserved()` adds the tunnels.
+  `maxTunnelTroops`) and drops soldiers (then the mouth) when that shrinks; the patrols' `reserved()` adds the tunnels. A
+  mouth back after such a squeeze keeps its wave clock and plays no second `tunnel_open`.
 - Message: server -> client `"tunnels"` `{mouths: {t, x, y, state}[]}` (`open` / `shut` / `dormant`) for every ordered
-  tunnel, on change and on join. Nothing comes back. The war-table marker is not drawn yet.
+  tunnel, on change and on join. Nothing comes back. The client keeps it (`TownScene.tunnelMouths`); the war-table marker
+  is not drawn yet.
 - Client: the mouth uses `war_tunnel_hidekin` through `warSoldierTexture` (asset `mob_war_tunnel_hidekin.webp` from the art
   branch, 80x44, frames 0-5 idle loop, 12 hit, 13 rubble); while the art manifest does not list it, `trooperArt` falls
   back to the Hide-Kin cart sheet (standing frame). Sounds `tunnel_open` (earth breaking, clods, a muffled cry) and
