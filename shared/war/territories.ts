@@ -1,9 +1,9 @@
 /**
  * The war map: every monster zone of every land becomes a territory (Murat 2026-11-14), built from SPAWN_ZONES and the
- * lands of regions.ts. Borders run between zones of one land; lands meet only through their links (the Waygate, the Barrowgate, the Red Pass).
+ * lands of regions.ts. Borders run between zones of one land; lands meet only through their links (the Waygate, the Barrowgate, the Red Pass, the Sinkway).
  * A future land needs a region entry (with `contains` and its capitals) and a link: buildTerritories does the rest.
  * Sanctuaries never change hands and are not territories: villages (already outside every zone), dungeon floors,
- * quest-boss lairs (zones with no spawns of their own, or only their boss) and the broad wild zones (countryside, open desert, open moor, open badlands)
+ * quest-boss lairs (zones with no spawns of their own, or only their boss) and the broad wild zones (countryside, open desert, open moor, open badlands, open sinkholes)
  * where heroes level. Deterministic, like the map.
  */
 import { actOfTile, type Act, BOSS, inDeepRow, UNDER_END, WORLD_H } from "../constants";
@@ -98,7 +98,7 @@ export const territoryByName = (name: string) => TERRITORIES.find((t) => t.name 
 
 /**
  * Who holds what at the very start: clans take turns (the one with the least land first) claiming an unclaimed
- * territory next to their land in the same land (region), so every clan starts with a connected share around its capitals (as even as the map allows: 11/11/10/10/10 today).
+ * territory next to their land in the same land (region), so every clan starts with a connected share around its capitals (as even as the map allows: 12/15/15/10/10 today, Wardens to Veiled).
  */
 export function initialOwners(ts: readonly Territory[] = TERRITORIES): ClanKey[] {
   const owner: (ClanKey | undefined)[] = ts.map((t) => t.capitalOf);

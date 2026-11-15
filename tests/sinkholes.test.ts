@@ -14,6 +14,7 @@ import {
 } from "../shared/act2";
 import { baseLevelAt, SPAWN_ZONES } from "../shared/spawns";
 import { TERRITORIES } from "../shared/war/territories";
+import { regionOf } from "../shared/war/regions";
 import { startRoom, until, wait } from "./helpers/room";
 
 /** 4-way flood over free tiles from (sx, sy). */
@@ -137,7 +138,7 @@ test("sinkholes: sealed in rock, every walkable tile reachable from the Sinkway,
   assert.ok(B.y1 < WORLD_H);
 });
 
-test("sinkholes: Lv 30-45 climbing south-east, the Sinkway opens at Lv 30", () => {
+test("sinkholes: Lv 30-45 climbing south-east, the Sinkway opens at Lv 30, a war land of their own", () => {
   assert.equal(baseLevelAt(SINKWAY_SINKHOLES.x, SINKWAY_SINKHOLES.y), 30);
   assert.ok(baseLevelAt(HIDEHALL.x + 10, SR(HIDEHALL.y + 10)) >= 43, "Hidehall: the top of the band");
   assert.ok(baseLevelAt(200, SR(120)) > baseLevelAt(110, SR(40)), "higher further south-east");
@@ -155,9 +156,12 @@ test("sinkholes: Lv 30-45 climbing south-east, the Sinkway opens at Lv 30", () =
   assert.deepEqual(HOMELAND_GATES.map((h) => [h.act, h.level]), [[3, 20], [4, 25], [5, 30]]);
   assert.ok(actOpen(5, { level: 30 } as never) && !actOpen(5, { level: 29 } as never));
   for (const act of [1, 2, 3, 4, 5]) { const q = actSpawn(act, randomSpawn); assert.equal(actAt(q.y, q.x), act, `act ${act} spawn`); }
-  // its own monsters (tests/sinkholes-zones.test.ts), no war down there yet
+  // its own monsters (tests/sinkholes-zones.test.ts); the war reaches the sinkholes as a land of their own
+  // (shared/war/regions.ts): every Act 5 territory is in it, none elsewhere
   assert.ok(SPAWN_ZONES.some((z) => actOfTile(z.x, z.y) === 5), "its own monster zones");
-  assert.ok(!TERRITORIES.some((t) => t.act === 5), "no territories yet");
+  assert.equal(regionOf(SINKWAY_SINKHOLES.x, SINKWAY_SINKHOLES.y)?.key, "sinkholes");
+  assert.ok(TERRITORIES.some((t) => t.act === 5), "the sinkholes are at war");
+  for (const t of TERRITORIES) assert.equal(t.region === "sinkholes", t.act === 5, t.name);
 });
 
 /** onJoin as an account through a fake client (test rooms skip onAuth), like tests/badlands.test.ts. */

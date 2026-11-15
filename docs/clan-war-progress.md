@@ -699,3 +699,61 @@ Sims (`npx tsx tools/balance/war.ts 200 30 [--clever=<clan>]`):
 - The chain ties to Act 1's Hide Rite: the trappers' kin were taken into the warrens. Warden idle line added; the two
   Ropewell traders already had shop greetings. Test: `tests/sinkholes-quests.test.ts`.
 - Open: the sinkholes' war land; Gnawed Bank, Scratchroot Burrows and Rushmere Hollows have no quest.
+
+## NL-7: the Mawdeep Sinkholes at war (2026-11-15, PR #449)
+The sinkholes are the third and last homeland at war: the Hide-Kin fight from home, as the Host does on the moors (NL-3)
+and Redfang in the badlands (NL-5).
+- `shared/war/regions.ts`: "sinkholes" (The Mawdeep Sinkholes, S, home `hidekin`) now has `contains: actOfTile === 5` and
+  one capital, the Hide-Kin seat at **Hidehall** (their warren town in the far south-east). `REGION_LINKS` gains **The
+  Sinkway** (`SINKWAY_OAKVALE` <-> `SINKWAY_SINKHOLES`): Sunken Lake <-> Hollowbrook Dells.
+- With the homeland built, `capitalsOf` drops the Hide-Kin's forward capitals (Thornwood, the Humpback Mesas): ordinary
+  territories now. **No forward capitals are left** (tested); the rule stays in `capitalsOf` for lands to come (the
+  fake-land test in `tests/warregions.test.ts` still checks it).
+- **Footholds** (orchestrator's target: no clan above ~23% average): with every forward capital gone, Oakvale and the
+  Sunscar were the Wardens' and the Veiled's alone, and the Veiled grew to 27.0% (hunted by the Night Raiders on 59% of
+  nights), the Wardens to 24.1%. Two Oakvale capitals that are not forward (they stay, like the Wardens' Grey Ring): the
+  Host's at **Stormbreak Crags**, Redfang's at **Heronwreck Strand**. A foothold near Ropewell (the remedy planned for
+  a Hide-Kin jump, which did not happen) only took land from the Hide-Kin and left the Veiled at 27-28% (table below).
+- Sanctuaries: the Great Maw is the Maw-Father's alone (boss-only, a lair), the open sinkholes are `wild`. Ropewell lies
+  outside every zone (a no-mob area): a safe hub out of the war.
+- 62 territories: Oakvale 21, Sunscar 10, moors 11, badlands 10, sinkholes 10 (ids 52-61; Acts 1-4 keep ids 0-51, so
+  active writs keep their ids): Rootfall Slopes, Hollowbrook Dells, the Old Warren, Tunneltop, Mosslight Fen, the
+  Pitfields, the Gnawed Bank, Scratchroot Burrows, Rushmere Hollows, Hidehall. A new war starts 12/15/15/10/10 (Wardens,
+  Redfang, Host, Hide-Kin, Veiled); the Wardens now also claim Thane's Rest next to the Grey Ring. Golden fingerprint in
+  `tests/warregions.test.ts` refreshed on purpose.
+- Every sinkholes territory has a Hold (`SINK_LANDS` hold patches; `tests/warheroes.test.ts` checks one per territory).
+- Saved war: `migrateWar` by name, as before: Acts 1-4 keep holder, Control, forts, sieges, pressure, the leaders'
+  targets and the log; the sinkholes start at Control 100 with the Hide-Kin; Thornwood and the Humpback Mesas keep their
+  holder. The footholds are capitals, so a save's holder there gives way to the Host / Redfang (Control 100, siege
+  lifted; forts and pressure stay), as a capital always has. `server/war.ts` `PRE_SINKHOLES_NAMES` (frozen, the
+  badlands-era 52) joins `OLD_MAPS`, so an unnamed save of that size is remapped too. The old save is kept as `war-old-<ms>`.
+- Writs: the Ropewell board (act 5) offers sinkholes writs. On a new war the Hide-Kin get hold / clear writs at home, the
+  Wardens raid writs over the Sinkway from Sunken Lake.
+- Tests touched for the new map: `tests/war.test.ts` (the tunnel test now builds its tunnel target: the Hide-Kin's only
+  way out of the sinkholes is far from Hidehall), `tests/warworks-room.test.ts` (the hero's spot outside every front's
+  ring is searched for, not assumed halfway: the picked land changed with the starting owners).
+- Client: nothing new needed; the war table draws every built land and link from `REGIONS` / `LAND_LINKS`.
+
+Sims (`npx tsx tools/balance/war.ts 200 30 [--clever=<clan>]`):
+
+| clan | before avg / most | sinkholes, Hide-Kin only | final (with the Oakvale footholds) |
+|---|---|---|---|
+| Wardens | 21.3% / 25.0% | 24.1% / 27.4% | 21.8% / 27.4% |
+| Redfang | 17.9% / 21.2% | 15.9% / 17.7% | 22.0% / 29.0% |
+| Ossuary Host | 19.1% / 19.2% | 15.7% / 17.7% | 19.9% / 27.4% |
+| Hide-Kin | 19.3% / 26.9% | 17.4% / 19.4% | 16.2% / 17.7% |
+| Veiled Circle | 22.4% / 25.0% | 27.0% / 29.0% | 20.0% / 25.8% |
+
+- Flips per war day 3.21 -> 3.75 (Hide-Kin only) -> 5.59; domination 0.0% throughout. Night Raiders 0.1% -> 58.8% ->
+  1.0% of night ticks.
+- Footholds tried (100 x 30, avg; highest clan): near Ropewell for the Host (Hollowbrook Dells / Rootfall Slopes) Veiled
+  27.5 / 26.8%, Redfang Veiled 27.2 / 27.2%, the Veiled 28.0%, the Wardens Veiled 26.5%; in Oakvale, one only: the Host at
+  Stormbreak Crags Host 23.1% (200 x 30), at Gravemoor Cemetery 24.2%, Blightmire Fen 24.8%, Old Watchtower 25.8%; Redfang
+  at Stormbreak Crags 25.8%, Gullrock Cove 26.2% (domination 9%); the Hide-Kin at Gullrock Cove 26.4% (15%). Two: the Host
+  at Gravemoor + Redfang at Heronwreck Strand 22.2% (200 x 30), the Host at Stormbreak + Redfang at Heronwreck 22.0%
+  (chosen).
+- Ruses, with vs without (final map): Host 20.7 vs 19.9% (pays), Redfang 22.2 vs 22.0% (pays), Hide-Kin 16.2 vs 16.2%,
+  Wardens 19.2 vs 21.8%, Veiled 16.6 vs 20.0%; domination 0.0% in every run (before: Hide-Kin 18.3 vs 19.3%).
+- Open: the Hide-Kin end at 16.2%, about their homeland and no more (they start with no land outside it and the Sinkway is
+  far from Hidehall); not rallied (10 of 62 is just over the line). Gnawed Bank, Scratchroot Burrows and Rushmere Hollows
+  still have no quest.
